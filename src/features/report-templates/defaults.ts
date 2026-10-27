@@ -27,9 +27,18 @@ export type TemplateTokenKey =
  * **항목 칸**(원장 2026-10-26 *"수학보고서 디자인을 영어보고서에도 적용"*) — 수학 새 보고서와 **같은 문장**을 영어 칸 값으로 만든 것.
  * 값은 원스크린이 수학 조각(math-report-pilot-sections.ts)으로 만들어 넘긴다(english-sheet.ts) — 여기는 이름만 안다.
  */
-export type SheetTokenKey = "출결" | "수업평가" | "일일테스트" | "확인테스트" | "수업태도" | "숙제완성도" | "오늘의숙제" | "한마디";
+export type SheetTokenKey =
+  | "출결"
+  | "수업평가"
+  | "태도평가"
+  | "일일테스트"
+  | "확인테스트"
+  | "수업태도"
+  | "숙제완성도"
+  | "오늘의숙제"
+  | "한마디";
 
-export const SHEET_TOKEN_KEYS: readonly SheetTokenKey[] = ["출결", "수업평가", "일일테스트", "확인테스트", "수업태도", "숙제완성도", "오늘의숙제", "한마디"];
+export const SHEET_TOKEN_KEYS: readonly SheetTokenKey[] = ["출결", "수업평가", "태도평가", "일일테스트", "확인테스트", "수업태도", "숙제완성도", "오늘의숙제", "한마디"];
 
 export type TemplateToken = {
   key: TemplateTokenKey;
@@ -57,6 +66,8 @@ export const ENGLISH_TEMPLATE_TOKENS: readonly TemplateToken[] = [
   { key: "코멘트", label: "AI 코멘트", source: "AI가 쓰는 학생별 피드백", ai: true },
   { key: "출결", label: "출결", source: "출석부의 출석·지각·조퇴·공결(+ 사유)을 문장으로 — 출결 기록이 없으면 줄이 빠진다" },
   { key: "수업평가", label: "수업 평가 표", source: "수업 태도·숙제 완성도를 하~상 눈금 표로" },
+  // JJ 수업보고서(원장 2026-10-27 *"숙제완성도도 필요없음"*) — 같은 표에서 숙제 줄을 뺀 것. 숙제 칸을 안 쓰는 반이 '숙제 없음'을 적지 않게.
+  { key: "태도평가", label: "수업 평가 표(태도만)", source: "수업 태도를 하~상 눈금 표로(숙제 완성도 줄 없음)" },
   { key: "일일테스트", label: "일일 테스트 문장", source: "점수 + 한마디. 시험이 없으면 '보지 않았습니다'" },
   { key: "확인테스트", label: "확인 테스트 문장", source: "점수 + 한마디. 없으면 줄이 빠진다" },
   { key: "수업태도", label: "수업 태도 문장", source: "원스크린 태도 칸을 문장으로" },
@@ -73,6 +84,18 @@ export const ENGLISH_TEMPLATE_TOKENS: readonly TemplateToken[] = [
     key: "학습분석지",
     label: "학습 분석지(그림)",
     source: "인재원 30일 학습 분석지 — 저장할 때 인재원에서 받아 이 줄 자리에 그린다. 학습 기록이 없으면 줄이 빠진다",
+    image: true,
+  },
+  {
+    key: "단어백분위",
+    label: "단어 백분위(그림)",
+    source: "인재원 누적 단어·장기기억 단어 수와 학년·반 백분위(기본모드 기준) — 인재원이 순위를 안 주면 줄이 빠진다",
+    image: true,
+  },
+  {
+    key: "학습배지",
+    label: "학습 배지(그림)",
+    source: "인재원 학습 레벨 배지(통과한 학년 과정) — 아직 배지가 없으면 줄이 빠진다. 빼려면 이 줄을 지운다",
     image: true,
   },
 ] as const;
@@ -220,21 +243,29 @@ export const BUILTIN_JJ_SHEET_TEMPLATE_ID = "builtin:english-jj-sheet";
 
 /**
  * **JJ 수업보고서**(원장 2026-10-26 *"jj(영어) 양식 추가 · 기존 srs 디자인 밑에 하고 위에 [수학 보고서 표] 넣고 밑에 srs 사진"*).
- * 위 = 수학 보고서와 같은 표 머리(로고·제목·날짜·반·담임 → 일일 테스트 → 수업 평가), 아래 = SRS(인재원) 결과지·학습 분석지.
+ * 위 = 수학 보고서와 같은 표 머리(로고·제목·날짜·반·담임 → 수업 평가(태도)) → 사랑의 한마디, 아래 = SRS(인재원) 결과지·학습 분석지.
  * 그리는 길은 항목 보고서와 **같다**(parent-report-card → PilotReportSheet — 테스트·수업 평가는 표 머리로, 그림 항목은 TemplateBody로).
- * 🔴 항목 제목('수업 평가'·'일일 테스트')은 수학 `PILOT_SECTION_TITLES`와 글자까지 같아야 표 머리로 올라간다.
+ * 🔴 항목 제목('수업 평가'·'사랑의 한마디')은 수학 `PILOT_SECTION_TITLES`와 글자까지 같아야 표 머리로 올라간다.
  * 🔑 인재원 자료가 없는 날은 그림 항목이 통째로 빠진다(카드가 그림만 든 항목을 거른다 — 빈 띠를 그리지 않는다).
  */
 export const BUILTIN_JJ_SHEET_TEMPLATE: ReportTemplate = {
   id: BUILTIN_JJ_SHEET_TEMPLATE_ID,
   name: "JJ 수업보고서",
   builtIn: true,
+  // 원장 2026-10-27: *"일일테스트 영역 삭제 · 숙제완성도도 필요없음 · 수업태도 밑에 사랑의 한마디 배치해서 작성가능하도록 ·
+  // 작성안하면 영역 삭제"* — 수업 평가 표는 태도 한 줄({태도평가}), 사랑의 한마디는 그 바로 아래 항목(특이사항 칸 원문).
+  // 🔑 한마디가 비면 문단째 빠진다(fill.ts 규칙 3). 🔴 맨 끝 항목이 아니라 카드가 '맨 아래로' 옮기지 않는다(splitPilotNote) — 의도다.
   body: [
     "■ 수업 평가",
-    "{수업평가}",
+    "{태도평가}",
     "",
-    "■ 일일 테스트",
-    "{일일테스트}",
+    "■ 사랑의 한마디",
+    "{한마디}",
+    "",
+    // 단어 순위·학습 배지(원장 2026-10-26) — 인재원이 순위·배지를 줄 때만 선다. 빼려면 그 줄을 지운다(그림 자리 줄 규약).
+    "■ 단어 학습 현황",
+    "{학습배지}",
+    "{단어백분위}",
     "",
     "■ SRS 학습 결과",
     "{시험결과지}",
@@ -286,6 +317,7 @@ export const TEMPLATE_PREVIEW_SAMPLE: Readonly<Record<TemplateTokenKey, string>>
   코멘트: "(AI가 학생 이름을 넣어 오늘의 피드백을 씁니다)",
   출결: "오늘은 조금 늦게 도착했습니다(사유: 병원 진료).",
   수업평가: "(수업 태도·숙제 완성도를 하~상 눈금 표로 그립니다)",
+  태도평가: "(수업 태도를 하~상 눈금 표로 그립니다)",
   일일테스트: "20문제 중 18개 맞음\n대부분 잘 맞혔습니다. 틀린 문제는 다음 시간에 다시 짚고 넘어가겠습니다.",
   확인테스트: "",
   수업태도: "오늘 수업 태도가 좋았습니다. 수업에 성실하게 잘 참여했습니다.",
@@ -294,6 +326,8 @@ export const TEMPLATE_PREVIEW_SAMPLE: Readonly<Record<TemplateTokenKey, string>>
   한마디: "오늘도 끝까지 집중해 줘서 고마웠어요!",
   시험결과지: imageSlotMarker("시험결과지"),
   학습분석지: imageSlotMarker("학습분석지"),
+  단어백분위: imageSlotMarker("단어백분위"),
+  학습배지: imageSlotMarker("학습배지"),
 };
 
 /** 템플릿 본문 상한 — ClassNote 공지 본문 4,000자 fail-closed 선례(notice-actions)와 같은 값. */

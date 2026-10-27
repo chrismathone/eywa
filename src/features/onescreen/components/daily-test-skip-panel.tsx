@@ -9,7 +9,7 @@ import {
   type TestSkipReason,
 } from "../math-report-pilot-sections";
 
-const REASON_KEY: Record<TestSkipReason, SheetDictKey> = {
+export const TEST_SKIP_REASON_KEY: Record<TestSkipReason, SheetDictKey> = {
   sick: "os.card.testSkip.sick",
   slow: "os.card.testSkip.slow",
   parent: "os.card.testSkip.parent",
@@ -68,7 +68,7 @@ export function DailyTestSkipPanel({
                 className={pill(skip.reason === r)}
                 onClick={() => onChange({ ...skip, reason: r })}
               >
-                {t(REASON_KEY[r])}
+                {t(TEST_SKIP_REASON_KEY[r])}
               </button>
             ))}
           </div>

@@ -1,5 +1,6 @@
 "use server";
 
+import { LAST_TEMPLATE_BY_CLASS_PREF, LAST_TEMPLATE_PREF, isTemplateIdShape, readTemplatePrefs, rememberTemplate } from "../last-template";
 import { normalizeNoneMarker } from "../none-marker";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
 import { preserveMakeupSessionEntries, type SessionProgress } from "../makeup-session";
@@ -42,6 +43,7 @@ import {
 import { claimMakeupAnchorChange, finishMakeupAnchor, prepareMakeupAnchor } from "./makeup-anchor-sync";
 import { ingestReport } from "@/features/progress/server/ingest";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { MAKEUP_CHECK_REQUIRED_ERROR, makeupCheckPending } from "@/features/attendance/server/makeup-check-gate";
 import { after } from "next/server";
 import {
   nextTrendOptOut,
@@ -93,8 +95,11 @@ import {
   pilotSection,
   progressLead,
 } from "../math-report-pilot";
-import { pilotBody, pilotLevelsSection, readHomeworkMissReason, readTestSkip, type DailyTestSkip } from "../math-report-pilot-sections";
+import { pilotBody, pilotLevelsSection, readAttitudeNote, readHomeworkMissReason, readTestSkip, type DailyTestSkip } from "../math-report-pilot-sections";
 import { skipStatusOf } from "../progress-status";
+import type { Variety } from "../ment-variants";
+import { prevPhrasingHint } from "../pilot-notes";
+import { fetchPrevReportNotes } from "./prev-notes";
 import { logAction } from "@/features/audit/server/log";
 import { isSlotOnlyEnglishNotes, shouldCaptureJj } from "../jj-capture-plan";
 import { classRouteActive, NO_SEND_CLASS_ERROR, SEND_CLASS_SUBJECTS } from "../send-class";
@@ -171,6 +176,11 @@ export type SaveLessonReportInput = {
   mentSource?: MentSource;
   /** 수학 보고서 시범 — 강사 한줄 멘트(필수, 원장 2026-10-22). 보낼 글 맨 끝에 그대로 붙어 있어야 발송한다. */
   pilotOneLine?: string;
+  /**
+   * JJ 수업보고서로 쓴 영어 글(원장 2026-10-27) — 사랑의 한마디가 **선택**이라 '영어 한마디 필수'를 건너뛴다(비우면 글에서 그 항목이 빠진다).
+   * 화면이 글의 템플릿(templateId)으로 판정해 싣는다. 강사 자신의 선택 칸을 비우는 것뿐이라 화면 판정을 그대로 믿는다.
+   */
+  jjSheet?: boolean;
   /**
    * 새 수학 보고서 발송 조건(화면이 pilot-send-gate.ts로 판정, 원장 2026-10-26) — 자동작성이 지금 칸 값 기준인가 · 시험 없음/숙제 미제출
    * 사유를 다 적었나. 일괄 발송이 화면 게이트를 건너 사유 없는 글·옛 출결 글을 보냈던 구멍을 막는다. **없으면 거절**(옛 화면 = 보내지 않는 쪽).
@@ -858,9 +868,12 @@ export async function saveAndQueueClassnote(
   const pilotRow = isMathReportPilot(input.studentId, input.subject);
   const pilotBlock = !pilotRow
     ? // 영어 — '사랑의 한마디' 필수(원장 2026-10-26). 영어 글은 템플릿이라 끝에 붙었는지는 보지 않고 적었는지만 본다.
-      input.subject === "english" && !(input.pilotOneLine ?? "").trim()
+      input.subject === "english" && !input.jjSheet && !(input.pilotOneLine ?? "").trim()
       ? ENGLISH_ONELINE_REQUIRED_ERROR
-      : null
+      : // 영어 사유 조건(화면이 판정해 싣는다) — 보강 사유는 2026-10-27부터 조건이 아니라 지금은 해당 없음(옛 화면 탭만 false를 싣는다).
+        input.subject === "english" && input.pilotCheck && !input.pilotCheck.reasonsOk
+        ? PILOT_REASON_REQUIRED_ERROR
+        : null
     : saved.mentSource !== "auto" && saved.mentSource !== "auto_edited" // 자동작성 뒤 고친 글도 보낸다(2026-10-23)
       ? PILOT_AUTOWRITE_REQUIRED_ERROR
       : !input.pilotCheck?.factsCurrent // 자동작성 뒤 출결·점수·태도 등이 바뀌었다(옛 값이 적힌 글) — 2026-10-26
@@ -883,6 +896,33 @@ export async function saveAndQueueClassnote(
       }
     }
     return { ok: false, id: saved.id, shareToken: saved.shareToken, ...warn, error: pilotBlock };
+  }
+
+  // 🔴 보강 진행 여부 확인(원장 2026-10-27 *"보강체크를 하지 않으면 보고서 발송 비활성화"*) — 보강이 든 보고서(정규+보강 · 보강 줄)는
+  //    그 반 그날 보강 예약을 선생님이 '보강 했음'으로 확인(0458a `checked_at`)해야 보낸다. 화면 게이트(`needsMakeupCheck`)와 같은 판정의
+  //    서버 겹(#77 — 일괄 발송·옛 화면). 정규 줄은 분리 예약(따로 선 보강 줄의 몫)을 보지 않는다.
+  if (
+    input.makeup &&
+    (await makeupCheckPending({
+      tenantId: user.tenantId,
+      studentId: input.studentId,
+      date: reportDate,
+      classId: input.classId ?? null,
+      makeupClassId: saved.makeupClassId ?? input.makeupClassId ?? null,
+    }))
+  ) {
+    if (prior?.classnote_status === "queued") {
+      try {
+        await supabase
+          .from("lesson_reports")
+          .update({ classnote_status: null, classnote_queued_at: null })
+          .eq("id", saved.id)
+          .eq("classnote_status", "queued");
+      } catch {
+        // best-effort — 어차피 에러 반환이라 강사 재시도가 뒤따른다(옆 게이트와 같다)
+      }
+    }
+    return { ok: false, id: saved.id, shareToken: saved.shareToken, ...warn, error: MAKEUP_CHECK_REQUIRED_ERROR };
   }
 
   // 발송 안전 스위치 — 기본 OFF(dry-run). 원장이 승인(설정 토글)하기 전까지 **저장만** 하고 실제 큐잉(발송) 안 함.
@@ -1363,6 +1403,10 @@ export type SaveOnescreenSessionInput = {
       dailyTestSkip?: { reason: string | null; detail: string } | null;
       /** 숙제 미제출 사유(수학 보고서 시범) — 시범 행만 싣는다. 로스터가 readHomeworkMissReason으로 복원한다. */
       homeworkMissReason?: string;
+      /** 수업 태도 의견(새 수학 보고서, 2026-10-26) — 적은 행만. 로스터가 readAttitudeNote로 복원한다. */
+      attitudeNote?: string;
+      /** 보강 사유(보강 줄, 2026-10-26) — 적은 행만. 로스터가 readMakeupReason으로 복원한다. */
+      makeupReason?: string;
     }
   >;
   dailyScore?: number | null;
@@ -1569,7 +1613,8 @@ export async function generateReportComment(
     classNotice: noticeSplit.rest,
     classContext: input.classContext?.replace(/\s*\n+\s*/g, " ").trim().slice(0, 300) || "",
     // 출결 문장(attendance-sentence.ts가 만든 한 줄) — 클라 값이라 한 줄로 접고 길이를 자른다. 글에 그대로 들어가고 AI에는 안 준다.
-    attendance: input.attendance?.replace(/\s*\n+\s*/g, " ").trim().slice(0, 120) || "",
+    // 보강 문장(결석 날짜 · 시간 · 사유)이 붙으면 길어진다 — 300자까지(2026-10-26).
+    attendance: input.attendance?.replace(/\s*\n+\s*/g, " ").trim().slice(0, 300) || "",
     // 이해도는 시범 대상에만 — 다른 학생 입력에 실려 와도 프롬프트에 안 넣는다(클라 값을 믿지 않는다).
     understanding: pilot
       ? (input.understanding ?? [])
@@ -1580,28 +1625,46 @@ export async function generateReportComment(
   };
   // 수학 보고서 시범 — 항목별 글(math-report-pilot-sections.ts). 테스트·태도·과제는 고른 값을 코드가 옮기고 AI는 '이해도' 항목만 쓴다.
   const pilotSkip: DailyTestSkip | null = pilot ? readTestSkip(input.dailyTestSkip) : null;
-  const composePilot = (understandingText: string, videoReceipt: string | null) =>
+  // 매크로성 반복 금지(원장 2026-10-26) — 직전 보고서 글을 미리 읽어 둔다(AI 호출과 겹쳐 돈다). 코드 문장은 거기 쓴 갈래를 피하고,
+  // AI엔 '다른 표현으로'의 참고로 준다. 시드 = 학생·보고서 날짜·과목(같은 날 다시 눌러도 같은 갈래 — 서명은 값으로 만들어 흔들리지 않는다).
+  const pilotStudentId = pilot ? trendCtx?.studentId : undefined;
+  const prevNotesP: Promise<string | null> = pilotStudentId
+    ? createClient()
+        .then((sb) => fetchPrevReportNotes(sb, pilotStudentId, trendCtx?.subject, resolveReportDate(trendCtx?.date)))
+        .catch(() => null)
+    : Promise.resolve(null);
+  const varietyOf = (prev: string | null): Variety | null =>
+    pilotStudentId ? { seed: `${pilotStudentId}|${resolveReportDate(trendCtx?.date)}|${trendCtx?.subject ?? ""}`, prev } : null;
+  const composePilot = (understandingText: string, videoReceipt: string | null, variety: Variety | null = null) =>
     composePilotMent({
       // 수업 평가 표가 맨 위, 그다음 진도(원장 2026-10-23 *"진도보다 위에 표 형태로"*).
       lead: [
         pilotLevelsSection(safeInput),
         pilotSection(
           PILOT_SECTION_TITLES.progress,
-          progressLead(input.studentName, pilotLessons(input.progress), skipStatusOf(input.progress)),
+          progressLead(input.studentName, pilotLessons(input.progress), skipStatusOf(input.progress), input.progressMode, variety),
         ),
       ]
         .filter(Boolean)
         .join("\n\n"),
       body: pilotBody(
-        { ...safeInput, dailyTestSkip: pilotSkip, homeworkMissReason: readHomeworkMissReason(input.homeworkMissReason) },
-        { understandingText, videoReceipt },
+        {
+          ...safeInput,
+          dailyTestSkip: pilotSkip,
+          homeworkMissReason: readHomeworkMissReason(input.homeworkMissReason),
+          attitudeNote: readAttitudeNote(input.attitudeNote),
+        },
+        { understandingText, videoReceipt, variety },
       ),
       note: pilotNote,
     });
   // 이해도를 하나도 안 매겼으면 AI가 쓸 항목이 없다 — 부르지 않는다(재료 없이 부르면 이해도를 지어낸다). 추세도 이번엔 안 만든다.
   if (pilot && !safeInput.understanding?.length) {
-    const videoReceipt = await getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null);
-    return { ok: true, comment: composePilot("", videoReceipt) };
+    const [videoReceipt, prevNotes] = await Promise.all([
+      getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null),
+      prevNotesP,
+    ]);
+    return { ok: true, comment: composePilot("", videoReceipt, varietyOf(prevNotes)) };
   }
   // AI에는 진도·이해도만 준다 — 다른 사실을 주면 모델이 그 항목을 '이해도' 글에 다시 쓴다(항목이 겹친다).
   const aiInput: ReportCommentInput = pilot
@@ -1619,6 +1682,7 @@ export async function generateReportComment(
         classContext: "",
         dailyTestSkip: undefined,
         homeworkMissReason: undefined,
+        attitudeNote: undefined,
         attendance: "",
       }
     : safeInput;
@@ -1629,13 +1693,14 @@ export async function generateReportComment(
     // 프로파일이 없거나 표가 아직 없으면(미적용) 아무것도 안 붙는다([[#95]]).
     // 멘트 모드 — 강사 본인 오버라이드(users.report_notice_mode) > 학원 기본(report.noticeMode) > 'A'.
     // 설정·모드·말투 세 조회는 서로 독립 — 직렬 워터폴 금지(B4). 겸직 강사뷰의 스코프 판정(쿠키+담당 반)도 이 안에서 돈다.
-    const [settings, { data: meRow }, mentStyle, videoReceipt] = await Promise.all([
+    const [settings, { data: meRow }, mentStyle, videoReceipt, prevNotes] = await Promise.all([
       getTenantSettings(),
       supabase.from("users").select("report_notice_mode").eq("id", user.id).single(),
       opts?.teacherStyle === false
         ? null
         : effectiveTeacherId().then((teacherId) => (teacherId ? loadTeacherMentStyle(createAdminClient(), user.tenantId, teacherId) : null)),
       getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null),
+      prevNotesP,
     ]);
     const styleBlock = mentStyle ? mentStyleDirective(mentStyle) : "";
     // 추세엔 **어조·문장 결만** — 선생님 표현·마무리("다음 시간에 ~하겠습니다")까지 붙이면 추세 금지(계획)에 걸려 버려진다(2026-10-16).
@@ -1703,7 +1768,8 @@ export async function generateReportComment(
       styleBlock,
       toneBlock,
       trend: trendInput,
-      ...(pilot ? { extraDirective: pilotAiDirective(input.studentName) } : {}),
+      // 직전 보고서의 '오늘의 수업' 문단 = 표현 참고(사실 아님) — 같은 말이 매번 나가지 않게(원장 2026-10-26).
+      ...(pilot ? { extraDirective: [pilotAiDirective(input.studentName), prevPhrasingHint(prevNotes)].filter(Boolean).join("\n") } : {}),
     });
     if (sections.length === 0) return { ok: false, error: "생성할 내용이 없습니다" };
 
@@ -1724,7 +1790,7 @@ export async function generateReportComment(
     // 시범 대상 — 항목별 글(진도 → 테스트 → 태도 → 과제 → 이해도(AI) → 오늘 과제 → 선생님 한마디).
     // 이해도 글은 후보정을 거친다 — 점수 숫자·규칙 혼잣말이 든 문장은 빼고, 다 빠지면 정해진 문장으로(2026-10-23 실측 누출).
     const comment = pilot
-      ? composePilot(cleanPilotUnderstanding(res.comment, safeInput.understanding ?? []), videoReceipt)
+      ? composePilot(cleanPilotUnderstanding(res.comment, safeInput.understanding ?? []), videoReceipt, varietyOf(prevNotes))
       : body;
     if (res.dropped)
       console.warn(
@@ -1819,6 +1885,53 @@ export async function setMyOnescreenFontSize(
   const { error } = await admin
     .from("users")
     .update({ ui_prefs: merged })
+    .eq("id", user.id)
+    .eq("tenant_id", user.tenantId);
+  if (error) return { ok: false, error: humanizeDbError(error.message, "저장") };
+  return { ok: true };
+}
+
+/**
+ * 영어 보고서 템플릿 **내 기본값**(원장 2026-10-27 *"사용자 별 자기가 최근 사용한걸 디폴트로"*) — 드롭다운에서 고른 템플릿을
+ * 본인 계정 `users.ui_prefs.onescreen`에 적는다 — 그 반의 기록(`lastTemplateByClass`) + 계정의 마지막 선택(`lastTemplateId`).
+ * 반을 먼저 보는 이유는 last-template.ts. 글씨 크기와 같은 규약(형제 키 보존).
+ * ⚠️ 보기 설정이라 감사로그·revalidatePath 없음(다음에 연 화면의 빈 행 기본값일 뿐 — 이미 쓴 글은 안 바뀐다).
+ */
+export async function setMyLastReportTemplate(
+  templateId: string,
+  classId: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  const user = await getCurrentUser({ teacherView: true });
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  const roError = await readonlyTeacherViewError();
+  if (roError) return { ok: false, error: roError };
+  if (!isTemplateIdShape(templateId)) return { ok: false, error: "잘못된 템플릿입니다" };
+  if (classId !== null && !isTemplateIdShape(classId)) return { ok: false, error: "잘못된 반입니다" };
+
+  const admin = createAdminClient();
+  const { data: row, error: readErr } = await admin
+    .from("users")
+    .select("ui_prefs")
+    .eq("id", user.id)
+    .eq("tenant_id", user.tenantId)
+    .maybeSingle();
+  if (readErr) return { ok: false, error: readErr.message };
+  const raw =
+    row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
+      ? (row.ui_prefs as Record<string, unknown>)
+      : {};
+  const ns =
+    raw.onescreen && typeof raw.onescreen === "object" && !Array.isArray(raw.onescreen)
+      ? { ...(raw.onescreen as Record<string, unknown>) }
+      : {};
+  const prev = readTemplatePrefs(raw);
+  if (prev.last === templateId && (!classId || prev.byClass[classId] === templateId)) return { ok: true };
+  const next = rememberTemplate(prev, templateId, classId);
+  ns[LAST_TEMPLATE_PREF] = next.last;
+  ns[LAST_TEMPLATE_BY_CLASS_PREF] = next.byClass;
+  const { error } = await admin
+    .from("users")
+    .update({ ui_prefs: { ...raw, onescreen: ns } })
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId);
   if (error) return { ok: false, error: humanizeDbError(error.message, "저장") };

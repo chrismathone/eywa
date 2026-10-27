@@ -189,7 +189,7 @@ Vercel은 후불 자동결제라 예산 도달을 이메일로만 알린다. 웹
 
 기반 코드는 로컬 브랜치 **`feat/infra-cost-dashboard`** (커밋 `450937a4`, `origin/main` `6e3a6fab` 기준)에 있다. **main 미머지 · 미푸시.**
 
-- `supabase/migrations/0134a_infra_costs.sql` — 위 4장 DDL + RPC 2개 + 벤더/단가 시드
+- `supabase/migrations/0134a_infra_costs.sql`(보류 브랜치에만 있는 파일 — 시즌1 합본에는 없다 · 재개하면 시즌2 `s2_NNNN`으로) — 위 4장 DDL + RPC 2개 + 벤더/단가 시드
   (⚠️ `0134a`는 그 뒤 수납 회차 이월이 선점 — 재개 시 리네임 필수, 4장 경고 참조)
 - `src/features/infra-costs/calc.ts` — 순수 계산(단가 해석 / 토큰·오디오 비용 / 잔액 추정 / 소진일 / 임계 판정)
 - `src/features/infra-costs/calc.test.ts` — Vitest **30/30 통과**

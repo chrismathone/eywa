@@ -5,6 +5,7 @@ import { canSeePortfolio, classReviewFaces, resolveClassReviewTab } from "@/feat
 import { rotateForDay } from "./server/refresh";
 import { deltaOf, followAnchor, groupByWeek, pickWeek, scoreColor } from "./view";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 /**
  * 직원 포트폴리오 배선 — 원장 2026-10-13: 직원 평가의 내부 탭 둘(직원 평가 / 직원 포트폴리오).
  * 전 강사의 점수와 담당 매출이 실리는 면이라, 열 수 없는 사람에겐 탭도 주소도 통하지 않아야 한다(#77).
@@ -85,19 +86,19 @@ describe("매일 집계", () => {
     const page = read("src/app/(shell)/owner/page.tsx");
     expect(page).toContain('requestedFace === "evaluation" && !(await getPortfolioGate())');
     expect(page).toContain('tab === "evaluation" && showEvaluation ? <EvaluationFace /> : null');
-    const sql = read("supabase/migrations/0359a_teacher_evaluation_settings.sql");
+    const sql = readMigration("0359a_teacher_evaluation_settings.sql");
     expect(sql).not.toMatch(/create policy/i);
     for (const t of ["teacher_evaluation_settings", "teacher_evaluation_entries"]) {
       expect(sql).toContain(`alter table public.${t} enable row level security`);
       expect(sql).toContain(`revoke all on public.${t} from public, anon, authenticated`);
     }
-    const presetSql = read("supabase/migrations/0360a_teacher_evaluation_presets.sql");
+    const presetSql = readMigration("0360a_teacher_evaluation_presets.sql");
     expect(presetSql).not.toMatch(/create policy/i);
     expect(presetSql).toContain("alter table public.teacher_evaluation_presets enable row level security");
     expect(presetSql).toContain("revoke all on public.teacher_evaluation_presets from public, anon, authenticated");
   });
   it("저장 표는 정책 없이 서버만 지나고, 마감한 줄은 DB가 고치지 못하게 막는다", () => {
-    const sql = read("supabase/migrations/0357a_teacher_portfolio_months.sql");
+    const sql = readMigration("0357a_teacher_portfolio_months.sql");
     expect(sql).toContain("enable row level security");
     expect(sql).toContain("revoke all on public.teacher_portfolio_months from public, anon, authenticated");
     expect(sql).not.toMatch(/create policy/i);

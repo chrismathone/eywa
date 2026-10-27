@@ -3,6 +3,7 @@ import { stripTextbookPages } from "../textbook-carry";
 import { DEFAULT_DISPLAY_OPTIONS, readDisplayOptions, type DisplayOptions } from "../display-options";
 import { lessonEndsByClass } from "../send-mark";
 import { readTrendOptOut } from "../trend-optout";
+import { readTemplatePrefs, type TemplatePrefs } from "../last-template";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -60,7 +61,7 @@ import { applyTodaysMathFill, loadTodaysMathFill } from "./todays-math-fill";
 import { studentMarkFromRows } from "../attendance-mark";
 import { classnoteModuleOn, classnoteSendOn } from "@/features/owner/classnote-gate";
 import { readUnderstanding } from "../math-report-pilot";
-import { readHomeworkMissReason, readTestSkip } from "../math-report-pilot-sections";
+import { readAttitudeNote, readHomeworkMissReason, readMakeupReason, readTestSkip } from "../math-report-pilot-sections";
 
 /**
  * 선생님 원스크린 — 실데이터 로더(데모 스냅샷 대체).
@@ -162,6 +163,8 @@ export type TeacherRoster = {
   displayOptions: DisplayOptions;
   // '학습 추세 미발송'으로 켠 `반:학생` 키(원장 2026-09-18) — 글씨 크기와 **같은 행**(ui_prefs)에서 읽어 왕복 0.
   trendOptOut: string[];
+  // 영어 보고서 템플릿 내 기본값 = 마지막으로 고른 템플릿(원장 2026-10-27, last-template.ts) — 같은 ui_prefs 행이라 왕복 0.
+  templatePrefs: TemplatePrefs;
   // ── 카드 뷰 '학부모 미리보기'(2026-08-05 원장 요청) — 오른쪽에 실제 발송물을 그대로 그린다 ──
   // ⚠️ 미리보기는 /r·인쇄와 **같은 컴포넌트**(ParentReportCard)를 쓴다. 그래서 표시 토글도 같은 값이어야
   //    한다 — 여기서 report 설정을 통째로 내려 "미리보기엔 있는데 학부모 화면엔 없는 항목"이 생기지 않게 한다.
@@ -220,6 +223,10 @@ type OnescreenSessionRow = {
       dailyTestSkip?: unknown;
       /** 숙제 미제출 사유(수학 보고서 시범) — 모양은 readHomeworkMissReason이 다시 본다. */
       homeworkMissReason?: unknown;
+      /** 수업 태도 의견(새 수학 보고서, 2026-10-26) — 모양은 readAttitudeNote가 다시 본다. */
+      attitudeNote?: unknown;
+      /** 보강 사유(보강 줄, 2026-10-26) — 모양은 readMakeupReason이 다시 본다. */
+      makeupReason?: unknown;
     }
   > | null;
   daily_score: number | null;
@@ -249,6 +256,7 @@ type RosterSettings = Pick<
   | "fontSize"
   | "displayOptions"
   | "trendOptOut"
+  | "templatePrefs"
   | "reportSettings"
   | "academyName"
   | "logoSrc"
@@ -360,6 +368,7 @@ function emptyRoster(today: string, date: string, teacherName: string, config: R
     fontSize: DEFAULT_ONESCREEN_FONT_SIZE,
     displayOptions: DEFAULT_DISPLAY_OPTIONS,
     trendOptOut: [],
+    templatePrefs: { last: null, byClass: {} },
     // 미리보기 재료의 폴백 — 학원설정을 못 읽은 경로(비로그인)에서도 타입이 완전해야 한다.
     // 실제 값은 위 config가 덮는다(학생 0명 로스터도 '보강 학생 추가'로 보고서를 쓰므로 하드코딩 금지).
     reportSettings: DEFAULT_SETTINGS.report,
@@ -423,6 +432,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   const fontSize = readOnescreenFontSize(meRow?.ui_prefs);
   const displayOptions = readDisplayOptions(meRow?.ui_prefs);
   const trendOptOut = readTrendOptOut(meRow?.ui_prefs);
+  const templatePrefs = readTemplatePrefs(meRow?.ui_prefs);
 
   // 학원설정·강사설정에서 온 값 — 빈 로스터를 포함해 **모든 반환 경로가 이걸 그대로 쓴다**(emptyRoster 주석 참조).
   const config: RosterSettings = {
@@ -448,6 +458,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     fontSize,
     displayOptions,
     trendOptOut,
+    templatePrefs,
     // 카드 뷰 '학부모 미리보기'(2026-08-05) — /r·인쇄와 **같은 컴포넌트**(ParentReportCard)에 넘길 재료.
     // 표시 토글까지 그대로 실어야 미리보기가 발송본과 같은 것을 보여준다(토글 off 항목은 미리보기에도 안 뜬다).
     reportSettings: settings.report,
@@ -1698,7 +1709,9 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         // ⚠️ `!= null`이라 빈 문자열(해제)도 복원한다 — 켰다가 끈 상태가 새로고침에 되살아나면 안 된다.
         if (entry?.mode != null) su.progressMode = entry.mode || null;
         if (entry?.textbook != null) su.textbook = entry.textbook;
-        if (entry?.makeup != null) su.makeup = entry.makeup;
+        // 🔴 반 없는 보강 줄은 늘 보강이다 — '보강 빼기' 표시({makeup:false})가 남은 날 예약·출석부 칸이 같은 줄을 다시 세우면
+        //    그 표시가 줄을 '보강 아님'으로 덮어 반도 보강도 없는 줄이 됐다(적대 리뷰 2026-10-27). 정규 줄의 '정규+보강' 토글만 세션을 따른다.
+        if (entry?.makeup != null && !makeupKey) su.makeup = entry.makeup;
         if (entry?.homeworkToday != null) su.homeworkToday = entry.homeworkToday;
         if (typeof entry?.videoHomework === "boolean") su.videoHomework = entry.videoHomework;
         if (typeof entry?.videoSubmitLink === "boolean") su.videoSubmitLink = entry.videoSubmitLink;
@@ -1733,6 +1746,8 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         if (entry?.understanding !== undefined) su.understanding = readUnderstanding(entry.understanding);
         if (entry?.dailyTestSkip !== undefined) su.dailyTestSkip = readTestSkip(entry.dailyTestSkip);
         if (entry?.homeworkMissReason !== undefined) su.homeworkMissReason = readHomeworkMissReason(entry.homeworkMissReason);
+        if (entry?.attitudeNote !== undefined) su.attitudeNote = readAttitudeNote(entry.attitudeNote);
+        if (entry?.makeupReason !== undefined) su.makeupReason = readMakeupReason(entry.makeupReason);
       }
     }
     // 보강 예약 표식 + 합침('정규+보강') — 🔴 세션 복원 **뒤**(세션은 줄마다 makeup:false를 늘 저장해 앞서 켠 값을 덮는다).

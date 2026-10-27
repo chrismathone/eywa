@@ -1,10 +1,9 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { rateTrend } from "./rate-trend";
 import { parseStatsPeriod } from "@/features/stats/period";
 import { ATTENDED_STATUSES } from "@/lib/calc/attendance";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 const TODAY = "2026-10-20";
 const groupOf = (s: string | null) => (s === "math" || s === "subject_1" ? "math" : s === "english" ? "english" : null);
 
@@ -27,7 +26,7 @@ describe("rateTrend — 등원율 추이", () => {
   });
 
   it("🔴 RPC(0387a)의 분자 상태 = ATTENDED_STATUSES(출석 + 지각) — 한쪽만 바뀌면 카드와 통계가 갈린다", () => {
-    const sql = readFileSync(join(process.cwd(), "supabase/migrations/0387a_attendance_rate_buckets.sql"), "utf8");
+    const sql = readMigration("0387a_attendance_rate_buckets.sql");
     const listed = [...sql.matchAll(/e\.status in \(([^)]*)\)/g)][0]?.[1]?.match(/'([a-z_]+)'/g)?.map((s) => s.slice(1, -1)) ?? [];
     expect(new Set(listed)).toEqual(new Set(ATTENDED_STATUSES));
   });

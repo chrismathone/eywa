@@ -1,9 +1,9 @@
-import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { config } from "dotenv";
 import postgres from "postgres";
 import { expect, it } from "vitest";
 
+import { readMigration } from "../../src/lib/db/migrations-corpus.mjs";
 config({ path: ".env.local", quiet: true });
 
 // 함수 설치·테스트용 테넌트·모든 이동은 한 트랜잭션에 넣고 마지막에 반드시 롤백한다.
@@ -12,8 +12,8 @@ it.skipIf(!process.env.DATABASE_URL)("단체 이동: 실제 RLS·부분 실패·
   const rollback = new Error("rollback_bulk_transfer_test");
   try {
     await expect(db.begin(async (tx) => {
-      await tx.unsafe(readFileSync("supabase/migrations/0285a_class_bulk_transfer.sql", "utf8"));
-      await tx.unsafe(readFileSync("supabase/migrations/0285b_move_enrollments_lock_source.sql", "utf8"));
+      await tx.unsafe(readMigration("0285a_class_bulk_transfer.sql"));
+      await tx.unsafe(readMigration("0285b_move_enrollments_lock_source.sql"));
       const tag = randomUUID();
       const [tenant] = await tx`insert into tenants (slug, name) values (${`transfer-${tag}`}, 'Transfer test') returning id`;
       const [other] = await tx`insert into tenants (slug, name) values (${`other-${tag}`}, 'Other transfer test') returning id`;

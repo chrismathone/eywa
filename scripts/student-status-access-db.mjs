@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import postgres from 'postgres';
+import { readMigration } from "../src/lib/db/migrations-corpus.mjs";
 
 const mode=process.argv[2]??'--test';
 if(!['--test','--test-reports','--test-report-groups','--apply','--check'].includes(mode)) throw new Error('Unknown mode');
@@ -15,7 +16,7 @@ try {
   await db`begin`;
   await db`set local lock_timeout='5s'`;
   await db`set local statement_timeout='60s'`;
-  for(const name of migrations) await db.unsafe(readFileSync(`supabase/migrations/${name}`,'utf8'));
+  for(const name of migrations) await db.unsafe(readMigration(name));
   if(mode.startsWith('--test')) {
    const fixture=mode==='--test'?'student_status_access.sql':mode==='--test-reports'?'withdrawal_reports.sql':'withdrawal_report_groups.sql';
    let testSql=readFileSync(`supabase/tests/${fixture}`,'utf8').replace(/^begin;\s*/im,'').replace(/rollback;\s*$/i,'');

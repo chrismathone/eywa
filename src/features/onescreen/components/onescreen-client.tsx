@@ -31,6 +31,7 @@ import {
   saveOnescreenSession,
   setMyNoticeMode,
   setMyOnescreenFontSize,
+  setMyLastReportTemplate,
   setMyTrendOptOut,
 } from "../server/actions";
 import { DisplayOptionsProvider, useDisplayOptionsState } from "./display-options-context";
@@ -39,9 +40,20 @@ import type { DisplayOptions } from "../display-options";
 import { PreviousContent } from "./previous-content";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { isJjSheetDraft } from "../jj-books";
+import {
+  EMPTY_TEMPLATE_PREFS,
+  implicitTemplateFor,
+  isBuiltinTemplateId,
+  rememberTemplate,
+  retargetImplicit,
+  revertImplicit,
+  settleImplicit,
+  type TemplatePrefs,
+} from "../last-template";
 import { isTrendOptedOut, trendOptOutKey } from "../trend-optout";
 import { removeMakeupEntry } from "../server/makeup-remove-actions";
-import { setReservationReportMode } from "@/features/attendance/server/makeup-reservation-actions";
+import { checkMakeupReservation, moveReservationToRegular, setReservationReportMode } from "@/features/attendance/server/makeup-reservation-actions";
 import { joinMakeupContent, joinText, planJoinMakeup, planSplitMakeup, type MakeupSwitchBlock } from "../makeup-switch";
 import { logOnescreenBulkApply } from "../server/bulk-log-actions";
 import { canRemoveMakeupRow, makeupRemoveBlockReason } from "../makeup-remove-plan";
@@ -78,11 +90,19 @@ import {
   isPilotAutoWritten,
   isPilotGateError,
   pilotRecomposeNote,
+  setAllUnderstanding,
+  hasStoredUnderstanding,
   understandingRows,
   type UnderstandingState,
 } from "../math-report-pilot";
 import { isHomeworkMissed, pilotRowSig, type DailyTestSkip } from "../math-report-pilot-sections";
-import { pilotSendBlocks } from "../pilot-send-gate";
+import { needsMakeupCheck } from "../reserved-makeup";
+import { MAKEUP_CHECK_REQUIRED_ERROR } from "@/features/attendance/makeup-check-error";
+import { REASON_BLOCKS, pilotSendBlocks } from "../pilot-send-gate";
+import { ReasonNoteInput } from "./reason-note-input";
+import { attitudeNeedsNote, needsAttitudeNote } from "../math-report-pilot-sections";
+import { hasMakeupAbsenceDate } from "../attendance-sentence";
+import { rowMakeupFacts } from "../report-comment";
 import { DailyTestSkipPanel } from "./daily-test-skip-panel";
 import { HomeworkMissReasonInput } from "./homework-miss-reason";
 import { ReportCard, type SubjectReport } from "./report-card";
@@ -96,6 +116,7 @@ import {
   type ReportTemplate,
 } from "@/features/report-templates/defaults";
 import { attendanceSentence } from "../attendance-sentence";
+import { progressWithMode } from "../progress-mode";
 import { hasTextBesidesMarkers, stripImageSlots, usedAttachmentNames } from "@/features/report-templates/image-slots";
 import {
   attachmentLineIndex,
@@ -297,9 +318,15 @@ const SWITCH_BLOCK_KEY = {
   optout: "os.switch.blockOptout",
   hasSeparate: "os.switch.blockHasSeparate",
   gone: "os.switch.blockGone",
+  noAnchor: "os.switch.blockNoAnchor",
+  reservedDone: "os.switch.blockReservedDone",
 } as const satisfies Record<MakeupSwitchBlock, string>;
 
-function initReports(students: OneScreenStudent[]): ReportsState {
+/**
+ * @param templatePrefs 영어 보고서 템플릿 내 기본값(반별 마지막 선택, last-template.ts) — **글이 없고 안 보낸** 영어 행에만,
+ *   표시로만(`templateImplicit`) 붙는다(세션엔 안 싣는다).
+ */
+function initReports(students: OneScreenStudent[], templatePrefs: TemplatePrefs = EMPTY_TEMPLATE_PREFS): ReportsState {
   const out: ReportsState = {};
   for (const s of students) {
     out[s.id] = {};
@@ -320,7 +347,10 @@ function initReports(students: OneScreenStudent[]): ReportsState {
         viewCount: su.viewCount,
         attachments: su.attachments ?? [],
         // 영어 템플릿 모드(2026-09-10) — 세션 복원값. 수학 행은 전부 undefined(세션에 키가 없다).
-        templateId: su.templateId,
+        ...((): { templateId?: string; templateImplicit?: true } => {
+          const implicit = implicitTemplateFor(su, templatePrefs);
+          return implicit ? { templateId: implicit, templateImplicit: true } : { templateId: su.templateId };
+        })(),
         nextTest: su.nextTest,
         aiIntro: su.aiIntro,
         aiComment: su.aiComment,
@@ -379,6 +409,7 @@ export function OneScreenClient({
   initialView = "card",
   initialFontSize = DEFAULT_ONESCREEN_FONT_SIZE,
   initialTrendOptOut = [],
+  initialTemplatePrefs = EMPTY_TEMPLATE_PREFS,
   initialDisplayOptions,
   initialClassName = null,
   initialStudentId = null,
@@ -423,6 +454,8 @@ export function OneScreenClient({
   initialFontSize?: OnescreenFontSize;
   /** '학습 추세 미발송'으로 켠 `반:학생` 키(내 계정 ui_prefs, 원장 2026-09-18) — 글씨 크기와 같은 행에서 온다. */
   initialTrendOptOut?: string[];
+  /** 영어 보고서 템플릿 내 기본값 = 반별 마지막으로 고른 템플릿(내 계정 ui_prefs, 원장 2026-10-27) — 빈 행에만 붙는다. */
+  initialTemplatePrefs?: TemplatePrefs;
   initialDisplayOptions?: DisplayOptions;
   /**
    * 진입 시 고를 반 이름(`?class=<반 id>`를 서버가 이름으로 해석해 내림) — '오늘 ECS' 카드에서 넘어올 때
@@ -472,6 +505,8 @@ export function OneScreenClient({
   const fontZoom = ONESCREEN_FONT_SIZE_ZOOM[fontSize];
   // 보강 학생 중 '이전 진도'를 이미 불러온 학생 id — 버튼 숨김·재요청 방지.
   const [prevLoaded, setPrevLoaded] = useState<Set<string>>(new Set());
+  const [makeupPrevBusy, setMakeupPrevBusy] = useState(false); // 보강 학생 이전 진도 일괄 불러오기 중
+  const makeupPrevBusyRef = useRef(false); // 토스트 버튼은 옛 렌더의 함수를 들고 있다 — 중복 실행은 ref로 막는다
   // 진입 시 반·학생 지정(2026-08-07) — '오늘 ECS' 카드에서 넘어올 때 그 반(·그 학생)에서 시작한다.
   // ⚠️ 값 검증은 **서버**가 한다(그 날짜 로스터에 실제로 있는 반/학생만 내려온다) — 여기선 그대로 쓴다.
   const [selId, setSelId] = useState<string>(initialStudentId ?? initial[0]?.id ?? "");
@@ -571,7 +606,7 @@ export function OneScreenClient({
   const absenceSeq = useRef(0);
   /** 수업 후보 조회 응답 순서 가드 — 결석 조회와 같은 규약(늦게 온 옛 응답이 새 창을 덮지 않게). */
   const hostSeq = useRef(0);
-  const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
+  const [reports, setReports] = useState<ReportsState>(() => initReports(initial, initialTemplatePrefs));
   const [genSubject, setGenSubject] = useState<string | null>(null); // AI 멘트 생성 중인 과목(카드 버튼 로딩)
   const [genKey, setGenKey] = useState<string | null>(null); // 표 행별 자동작성 로딩 키(studentId::과목)
   // 영어 템플릿 모드(2026-09-10) — 내 템플릿 목록(맨 앞은 기본). **영어 행이 있을 때만** 한 번 불러온다
@@ -587,6 +622,8 @@ export function OneScreenClient({
   const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
   // 목록을 한 번이라도 받았는가(성공·실패 무관) — 받기 전엔 사용자 템플릿을 "없다"고 단정하지 않는다.
   const [templatesLoaded, setTemplatesLoaded] = useState(false);
+  // 영어 템플릿 내 기본값(반별 마지막 선택) — 고를 때마다 바뀐다. 새로 세우는 행(보강 추가 등)이 지금 값을 쓴다.
+  const templatePrefsRef = useRef<TemplatePrefs>(initialTemplatePrefs);
   const [templateListFailed, setTemplateListFailed] = useState(false);
   const hasEnglishRows = useMemo(
     () => students.some((s) => s.subjects.some((su) => su.subjectKey === "english")),
@@ -601,13 +638,22 @@ export function OneScreenClient({
         if (cancelled) return;
         setEnglishTemplates(res.templates);
         setTemplateNotice(res.notice);
+        // 기본값으로 붙여 둔 사용자 템플릿이 목록에 없으면(지움) — 또는 목록이 불완전하면(notice) — 그 빈 행을 코드 기본 템플릿으로
+        // 되돌린다. 🔴 안 되돌리면 목록 실패 한 번에 반 전체의 자동작성이 '템플릿 목록 실패'로 멈춘다(적대 리뷰 2026-10-27).
+        //    강사가 직접 고른 행은 그대로 둔다(종전대로 알린다).
+        const ids = new Set(res.notice ? [] : res.templates.map((tp) => tp.id));
+        setReports((prev) => revertImplicit(prev, (id) => !isBuiltinTemplateId(id) && !ids.has(id)));
         // 🔴 안내(notice)가 붙은 목록은 기본 템플릿뿐인 **불완전한** 목록이다(DB 오류·표 없음·권한) — 실패로 친다.
         //    안 치면 사용자 템플릿 행에 '삭제됨' 거짓 칩이 서고, 자동작성이 기본 템플릿으로 바꿔 끼워 선택을 잃었다(적대 재리뷰).
         if (res.notice) setTemplateListFailed(true);
       } catch {
         // 목록을 못 받아도 기본 템플릿으로 계속 쓸 수 있다 — 화면을 막지 않되 **알린다**
         // (말없이 기본으로 바꿔 끼우면 고른 템플릿과 다른 글이 나간다).
-        if (!cancelled) setTemplateListFailed(true);
+        if (!cancelled) {
+          setTemplateListFailed(true);
+          // 기본값으로만 붙여 둔 사용자 템플릿은 되돌린다(위와 같은 이유) — 강사가 고른 행은 그대로.
+          setReports((prev) => revertImplicit(prev, (id) => !isBuiltinTemplateId(id)));
+        }
       } finally {
         if (!cancelled) setTemplatesLoaded(true);
       }
@@ -781,7 +827,10 @@ export function OneScreenClient({
               // 영어 템플릿 모드(2026-09-10) — **영어 행만** 싣는다(수학 세션 모양 불변). 로스터가 같은 키로 복원한다.
               ...(su.subjectKey === "english"
                 ? {
-                    templateId: r?.[su.name]?.templateId ?? "",
+                    // 기본값으로만 붙인 템플릿은 싣지 않는다 — 실으면 기본값을 바꿔도 이 행이 옛 기본값에 묶인다(last-template.ts).
+                    //   단 글이 있는 행은 싣는다 — patchReport를 거치지 않고 글이 생긴 행도 그 템플릿으로 쓴 글이다.
+                    templateId:
+                      r?.[su.name]?.templateImplicit && !(r?.[su.name]?.draft ?? "").trim() ? "" : (r?.[su.name]?.templateId ?? ""),
                     nextTest: r?.[su.name]?.nextTest ?? "",
                     aiIntro: r?.[su.name]?.aiIntro ?? "",
                     aiComment: r?.[su.name]?.aiComment ?? "",
@@ -799,6 +848,9 @@ export function OneScreenClient({
               ...(su.dailyTestSkip !== undefined ? { dailyTestSkip: su.dailyTestSkip } : {}),
               // 숙제 미제출 사유(수학 보고서 시범) — 적은 적 있는 행만.
               ...(su.homeworkMissReason !== undefined ? { homeworkMissReason: su.homeworkMissReason } : {}),
+              // 수업 태도 의견 · 보강 사유(2026-10-26) — 적은 적 있는 행만.
+              ...(su.attitudeNote !== undefined ? { attitudeNote: su.attitudeNote } : {}),
+              ...(su.makeupReason !== undefined ? { makeupReason: su.makeupReason } : {}),
               ...(hasRowOverrides(su)
                 ? {
                     attitude: su.attitude,
@@ -1036,7 +1088,8 @@ export function OneScreenClient({
       ...prev,
       [studentId]: {
         ...prev[studentId],
-        [subjectName]: fn(prev[studentId]?.[subjectName] ?? { draft: "", sent: false }),
+        // 기본값으로 붙은 템플릿은 글이 생기는 순간 굳힌다(last-template.ts settleImplicit — 어떤 경로로 글이 생겨도).
+        [subjectName]: settleImplicit(fn(prev[studentId]?.[subjectName] ?? { draft: "", sent: false })),
       },
     }));
     queueSave(studentId);
@@ -1519,7 +1572,7 @@ export function OneScreenClient({
       // 목록에 없던 학생 — 확인을 받았으니 이제 카드를 만든다(취소했으면 여기 안 온다).
       const mk = ask.mk;
       setStudents((prev) => (prev.some((s) => s.id === mk.id) ? prev : [...prev, mk]));
-      setReports((prev) => ({ ...prev, [mk.id]: initReports([mk])[mk.id] ?? {} }));
+      setReports((prev) => ({ ...prev, [mk.id]: initReports([mk], templatePrefsRef.current)[mk.id] ?? {} }));
       setSelId(mk.id);
       if (choice.absentDate && anchorIdNew) {
         void linkMakeupToAbsenceCell(mk.id, anchorIdNew, choice, mk.name, hostNote);
@@ -1783,7 +1836,7 @@ export function OneScreenClient({
       return false;
     }
     patch(studentId, (s) => ({ ...s, subjects: [...s.subjects, ...makeupRows] }));
-    const slots = initReports([{ ...existing, subjects: makeupRows }])[existing.id] ?? {};
+    const slots = initReports([{ ...existing, subjects: makeupRows }], templatePrefsRef.current)[existing.id] ?? {};
     setReports((prev) => ({ ...prev, [studentId]: { ...(prev[studentId] ?? {}), ...slots } }));
     setSelId(studentId);
     // 결석분 연결이 뒤따르는 경로(다이얼로그 '분리')는 그쪽 토스트가 시수까지 밝히므로 여기선 조용히(silent).
@@ -1792,11 +1845,12 @@ export function OneScreenClient({
     return true;
   }
   // 보강 학생 '이전 진도 불러오기' — 직전 회차를 당겨 prev/prevReport/prevScore를 채운다(세션 저장 없음).
-  async function loadMakeupPrev(studentId: string) {
+  //   silent = 일괄 불러오기(아래)가 결과를 모아 한 번에 알린다.
+  async function loadMakeupPrev(studentId: string, silent = false): Promise<"loaded" | "none" | "fail"> {
     const res = await loadMakeupHistory(studentId, date || undefined); // 조회 중인 날짜 기준 직전 회차(과거 백필 정합)
     if (!res.ok || !res.bySubject) {
-      toast.error(res.error ?? t("os.c.prevFail"));
-      return;
+      if (!silent) toast.error(res.error ?? t("os.c.prevFail"));
+      return "fail";
     }
     const bySubject = res.bySubject;
     const prevScore = res.prevScore;
@@ -1819,9 +1873,30 @@ export function OneScreenClient({
       }),
     );
     setPrevLoaded((prev) => new Set(prev).add(studentId));
-    toast.success(
-      Object.keys(bySubject).length ? t("os.c.prevLoaded") : t("os.c.prevNone"),
-    );
+    const found = Object.keys(bySubject).length > 0;
+    if (!silent) toast.success(found ? t("os.c.prevLoaded") : t("os.c.prevNone"));
+    return found ? "loaded" : "none";
+  }
+  // 보강 학생 이전 진도 **일괄** 불러오기(원장 2026-10-27 *"보강학생이 따로 있으면 안내하고 버튼도"*) — 표의 '이전값 가져오기'는
+  // 이전 회차가 있는 행만 채운다. 보강 학생은 그 회차를 따로 불러와야 해서, 안 불러온 보강 학생이 있으면 표 위에 안내 버튼이 선다.
+  async function loadMakeupPrevAll(ids: string[]) {
+    if (makeupPrevBusyRef.current || !ids.length) return;
+    makeupPrevBusyRef.current = true;
+    setMakeupPrevBusy(true);
+    try {
+      let loaded = 0;
+      let failed = 0;
+      for (const id of ids) {
+        const r = await loadMakeupPrev(id, true); // 한 명씩 — 서버 액션은 어차피 줄 서서 돈다
+        if (r === "loaded") loaded++;
+        else if (r === "fail") failed++;
+      }
+      if (failed) toast.error(tf("os.c.makeupPrevAllFail", { n: failed }));
+      if (failed < ids.length) toast.success(tf("os.c.makeupPrevAllDone", { n: loaded, none: ids.length - loaded - failed }));
+    } finally {
+      makeupPrevBusyRef.current = false;
+      setMakeupPrevBusy(false);
+    }
   }
   function setScoreFor(studentId: string, subjectName: string, which: "daily" | "check", v: number | null) {
     patchRowEval(studentId, subjectName, (su) => ({ ...su, [which === "daily" ? "dailyScore" : "checkScore"]: v }));
@@ -2100,8 +2175,24 @@ export function OneScreenClient({
     patchRowEval(studentId, subjectName, (su) => ({ ...su, dailyTestSkip: skip, ...(skip ? { dailyScore: null } : {}) }));
   }
   // 숙제 미제출 사유(수학 보고서 시범, 원장 2026-10-23 *"미제출일경우 사유작성"*) — 숙제 완성도 항목에 그대로 들어간다.
+  function setAttitudeNoteFor(studentId: string, subjectName: string, note: string) {
+    patchRowEval(studentId, subjectName, (su) => ({ ...su, attitudeNote: note }));
+  }
+  function setMakeupReasonFor(studentId: string, subjectName: string, reason: string) {
+    patchRowEval(studentId, subjectName, (su) => ({ ...su, makeupReason: reason }));
+  }
   function setHomeworkMissReasonFor(studentId: string, subjectName: string, reason: string) {
     patchRowEval(studentId, subjectName, (su) => ({ ...su, homeworkMissReason: reason }));
+  }
+  // 이해도 단계 버튼·일괄 입력(원장 2026-10-26) — 그 행 오늘 진도의 소단원 전부에 같은 점수.
+  //   진도는 patch 안의 **그 행 값**에서 읽는다 — 일괄 입력이 같은 차례에 진도를 바꿔도(setProgressFor 직후) 새 차시에 맞춰 채운다.
+  function setAllUnderstandingFor(studentId: string, subjectName: string, score: number) {
+    patch(studentId, (s) => ({
+      ...s,
+      subjects: s.subjects.map((su) =>
+        su.name === subjectName ? { ...su, understanding: setAllUnderstanding(su.today, su.understanding ?? EMPTY_UNDERSTANDING, score) } : su,
+      ),
+    }));
   }
   function toggleUnderstandingFor(studentId: string, subjectName: string, lesson: string, off: boolean) {
     patchUnderstandingFor(studentId, subjectName, (st) => ({
@@ -2258,12 +2349,15 @@ export function OneScreenClient({
     return !!rep?.sent || !canRemoveMakeupRow(rep?.classnoteStatus ?? null);
   };
   function switchBlockText(reason: MakeupSwitchBlock, cls: string): string {
-    return reason === "noRegular" ? tf(SWITCH_BLOCK_KEY.noRegular, { cls }) : t(SWITCH_BLOCK_KEY[reason]);
+    return reason === "noRegular" || reason === "reservedDone" ? tf(SWITCH_BLOCK_KEY[reason], { cls }) : t(SWITCH_BLOCK_KEY[reason]);
   }
   /**
    * 분리 → 합침(원장 2026-10-22 *"보강으로 분리되어있는 보고서도 … 같이 보내고 싶을 수"*) — 보강 줄을 **같은 반** 정규 줄에 합친다(makeup-switch.ts).
    * 🔴 하루 정규 2회여도 추측하지 않는다(앵커 반의 정규 줄 하나) · 시수는 그대로(같은 반 칸에 이미 있다 — 출결은 지우지 않는다).
    * 🔴 예약에서 온 보강이면 예약을 먼저 '합침'으로 바꾼다 — 안 바꾸면 새로고침이 예약대로 '(보강)' 줄을 다시 세운다. 뒤가 실패하면 되돌린다.
+   * 🔑 앵커 반에 오늘 정규 줄이 없는 **예약** 보강은 오늘 같은 과목 정규 반으로 **예약을 옮겨** 합친다(원장 2026-10-27 박지호 건 — `move`).
+   *    정규 반이 둘 이상이면 강사가 고른다. 시수는 서버가 옮긴 반에서 이행한다(출석이 이미 찍혔으면 지금). 옮긴 뒤 보강 줄 정리가 실패하면
+   *    예약은 되돌리지 않고 알린다(새로고침하면 옮긴 반 '정규+보강'으로 선다 — 그게 고른 결과다).
    */
   async function joinMakeupRow(student: OneScreenStudent, subjectName: string) {
     if (readonlyBlocked() || makeupSaving) return;
@@ -2271,18 +2365,40 @@ export function OneScreenClient({
     if (!card) return;
     const src0 = card.subjects.find((x) => x.name === subjectName);
     const anchorName = src0?.makeupClassName ?? todayClasses.find((c) => c.id === src0?.makeupClassId)?.name ?? t("os.switch.otherClass");
-    const plan = planJoinMakeup(card, subjectName, reportLockedOf(card.id));
+    const classNameOf = (row: Subject) => row.className ?? todayClasses.find((c) => c.id === row.classId)?.name ?? row.name;
+    let plan = planJoinMakeup(card, subjectName, reportLockedOf(card.id));
+    if (!plan.ok && plan.reason === "pickRegular") {
+      // 옮겨 합칠 정규 반이 둘 이상 — 추측하지 않고 고르게 한다(번호).
+      const choices = plan.choices;
+      const answer = window.prompt(tf("os.switch.pickRegular", { list: choices.map((c, i) => `${i + 1}. ${classNameOf(c)}`).join("\n") }), "1");
+      if (answer === null) return;
+      const picked = choices[Number(answer.trim()) - 1];
+      if (!picked?.classId) {
+        toast.error(t("os.switch.pickRegularBad"));
+        return;
+      }
+      plan = planJoinMakeup(card, subjectName, reportLockedOf(card.id), picked.classId);
+    }
     if (!plan.ok) {
-      toast.error(switchBlockText(plan.reason, anchorName));
+      toast.error(plan.reason === "pickRegular" ? t("os.switch.blockGone") : switchBlockText(plan.reason, anchorName));
       return;
     }
-    const { source, target } = plan;
-    const cls = target.className ?? todayClasses.find((c) => c.id === target.classId)?.name ?? target.name;
-    if (!window.confirm(tf("os.switch.confirmJoin", { name: card.name, cls }))) return;
+    const { source, target, move } = plan;
+    const cls = classNameOf(target);
+    const ask = move ? tf("os.switch.confirmMove", { name: card.name, from: anchorName, cls }) : tf("os.switch.confirmJoin", { name: card.name, cls });
+    if (!window.confirm(ask)) return;
     setMakeupSaving(true);
     try {
       const reserved = !!source.makeupReserved?.length;
-      if (reserved) {
+      let movedUnits: number | null | undefined;
+      if (move) {
+        const r = await moveReservationToRegular({ studentId: card.id, date: activeDate, fromClassId: source.makeupClassId!, toClassId: target.classId! });
+        if ("error" in r) {
+          toast.error(r.error);
+          return;
+        }
+        movedUnits = r.units;
+      } else if (reserved) {
         const r = await setReservationReportMode({ studentId: card.id, classId: target.classId!, date: activeDate, mode: "merge" });
         if ("error" in r) {
           toast.error(r.error);
@@ -2292,18 +2408,30 @@ export function OneScreenClient({
       // 보강 줄의 명단·미발송 보고서만 지운다 — 출결은 그대로(classId null). 예약에서 막 선 줄은 지울 기록이 없을 수 있다(not_found = 정상).
       const res = await removeMakeupEntry({ studentId: card.id, date: activeDate, classId: null, subject: source.subjectKey ?? null });
       if (!res.ok && !(reserved && res.code === "not_found")) {
+        if (move) {
+          toast.error(tf("os.switch.movedRowLeft", { cls, error: res.error }));
+          return;
+        }
         if (reserved) await setReservationReportMode({ studentId: card.id, classId: target.classId!, date: activeDate, mode: "separate" }).catch(() => null);
         toast.error(res.error);
         return;
       }
       const joined = joinMakeupContent(target, source, card.note ?? "");
-      const reservedList = (target.makeupReserved ?? source.makeupReserved)?.map((r) => ({ ...r, mode: "merge" as const }));
+      // 옮겨 합치면 두 반의 예약이 다르다 — 정규 반에 원래 있던 예약은 제 방식 그대로 두고 옮긴 예약만 '합침'으로 잇는다(리뷰 2026-10-27).
+      const reservedList = move
+        ? [...(target.makeupReserved ?? []), ...(source.makeupReserved ?? []).map((r) => ({ ...r, mode: "merge" as const }))]
+        : (target.makeupReserved ?? source.makeupReserved)?.map((r) => ({ ...r, mode: "merge" as const }));
       patch(card.id, (s) => ({
         ...s,
         subjects: s.subjects
           .filter((x) => x.name !== source.name)
           .map((x) => (x.name === target.name
-            ? { ...x, ...joined, makeup: true, ...(reserved ? { makeupByReservation: true as const, ...(reservedList ? { makeupReserved: reservedList } : {}) } : {}) }
+            ? {
+                ...x, ...joined, makeup: true,
+                ...(reserved ? { makeupByReservation: true as const, ...(reservedList ? { makeupReserved: reservedList } : {}) } : {}),
+                // 옮긴 반에서 지금 이행됐으면(출석이 이미 찍힘) 서버가 맞춘 시수 — 화면 '타임'도 그 값으로.
+                ...(movedUnits !== undefined ? { attendanceUnits: movedUnits } : {}),
+              }
             : x)),
       }));
       // 멘트 초안도 잇는다(보고서 칸은 줄 이름으로 묶인다) — 보강 줄 칸은 지운다.
@@ -2316,7 +2444,7 @@ export function OneScreenClient({
         return { ...prev, [card.id]: mine };
       });
       setSelId(card.id);
-      toast.success(tf("os.switch.joined", { name: card.name, cls }));
+      toast.success(tf(move ? "os.switch.moved" : "os.switch.joined", { name: card.name, cls }));
     } catch {
       toast.error(t("os.c.makeupSaveFail"));
     } finally {
@@ -2382,10 +2510,109 @@ export function OneScreenClient({
           added,
         ],
       }));
-      const slots = initReports([{ ...card, subjects: [added] }])[card.id] ?? {};
+      const slots = initReports([{ ...card, subjects: [added] }], templatePrefsRef.current)[card.id] ?? {};
       setReports((prev) => ({ ...prev, [card.id]: { ...(prev[card.id] ?? {}), ...slots } }));
       setSelId(card.id);
       toast.success(tf("os.switch.splitDone", { name: card.name }));
+    } catch {
+      toast.error(t("os.c.makeupSaveFail"));
+    } finally {
+      setMakeupSaving(false);
+    }
+  }
+  /**
+   * **보강 진행 여부 확인**(원장 2026-10-27 *"보강 예약을 누르면 보강을 했다 안했다 체크"*) — 보강 예약 표식의 '보강 했음 / 보강 못 했음'.
+   * 대상 반 = 정규+보강 줄의 반 · '(보강)' 줄의 앵커 반(예약이 기록된 반). 서버 [`checkMakeupReservation`]:
+   *  · 했음 = 아직 이행 전이면 이행(시수) + 확인 → 표식 '보강 완료' · 발송 게이트가 풀린다.
+   *  · 못 했음 = 보강분 시수를 빼고 예약을 지운다 → 정규 줄은 예약 합침이면 정규로, 그 반의 '(보강)' 줄은 화면에서 빼고 그 줄의 명단·
+   *    미발송 보강 보고서도 '보강 빼기'와 같은 길로 지운다(남기면 새로고침 뒤 확인 게이트 없이 다시 서서 보내진다 — 적대 리뷰 2026-10-27).
+   *    로스터는 마운트 때 한 번 복사돼 새로고침 없이는 안 바뀐다.
+   *  · 했음인데 그날 칸이 없어 서버가 찍었으면(`marked`) 출결 알약도 그 값으로 맞춘다(출석부 스트립 반영과 같은 함수).
+   */
+  async function checkMakeup(student: OneScreenStudent, subjectName: string, outcome: "done" | "missed") {
+    if (readonlyBlocked() || makeupSaving) return;
+    const card = studentsRef.current.find((s) => s.id === student.id);
+    const row = card?.subjects.find((x) => x.name === subjectName);
+    const classId = row ? (row.classId ?? row.makeupClassId ?? null) : null;
+    if (!card || !row || !classId || !row.makeupReserved?.length) {
+      toast.error(t("os.switch.blockGone"));
+      return;
+    }
+    if (outcome === "missed" && !window.confirm(tf("os.reserved.confirmMissed", { name: card.name }))) return;
+    setMakeupSaving(true);
+    try {
+      // 못 했음이면 그 반 '(보강)' 줄의 명단·미발송 보고서를 지운다(없으면 not_found = 정상) — 실패해도 예약은 이미 지워졌으니 알리기만.
+      // 🔴 예약이 그 줄을 세웠을 때만(분리 — 정규 수업일이 아니면 늘 분리) — 모두 합침이면 그 반 '(보강)' 줄은 '+ 보강 학생 추가'로 따로 세운
+      //    실제 보강이라 지우지 않는다(적대 리뷰 2026-10-27).
+      const ownRow = row.makeupReserved.some((m) => m.mode === "separate");
+      const pureRows = ownRow ? card.subjects.filter((x) => x.makeup && !x.classId && x.makeupClassId === classId) : [];
+      let r = await checkMakeupReservation({ studentId: card.id, classId, date: activeDate, outcome });
+      // 정규 수업이 없는 날의 보강 칸이 남았다(`makeup_only`) — 그 '(보강)' 줄을 '보강 빼기'와 같은 길로 칸째 지우고(보강 칸·명단·미발송
+      // 보고서) 다시 묻는다. 칸이 없어진 예약은 서버가 시수 없이 지운다. '보강 빼기'가 막히면(남이 연 칸·발송된 보고서) 그 사유를 보인다.
+      // 🔴 칸이 실제로 지워졌을 때만 다시 묻는다 — 강사는 본인이 찍은 '보강' 칸만 지워지고 '출석'으로 찍힌 칸은 안 지워진다(그때는 서버 안내로
+      //    멈춘다 · 재리뷰). 두 번째 요청이 실패해도 줄은 화면에 남아 바로 다시 누를 수 있다(새로고침하면 비정규일 이행 예약은 표식이 안 선다).
+      let removedFirst = false;
+      if ("error" in r && r.code === "makeup_only" && pureRows.length) {
+        let cellGone = false;
+        for (const x of pureRows) {
+          const rm = await removeMakeupEntry({ studentId: card.id, date: activeDate, classId, subject: x.subjectKey ?? null });
+          if (!rm.ok && rm.code !== "not_found") {
+            toast.error(rm.error);
+            return;
+          }
+          if (rm.ok && rm.attendanceRemoved) cellGone = true;
+        }
+        if (!cellGone) {
+          toast.error(r.error);
+          return;
+        }
+        removedFirst = true;
+        r = await checkMakeupReservation({ studentId: card.id, classId, date: activeDate, outcome });
+      }
+      if ("error" in r) {
+        toast.error(r.error);
+        return;
+      }
+      if (outcome === "missed" && !removedFirst) {
+        for (const x of pureRows) {
+          const rm = await removeMakeupEntry({ studentId: card.id, date: activeDate, classId: null, subject: x.subjectKey ?? null }).catch(() => null);
+          if (rm && !rm.ok && rm.code !== "not_found") toast.error(rm.error);
+        }
+      }
+      const onClass = (x: Subject) => (x.classId ?? x.makeupClassId ?? null) === classId && !!x.makeupReserved?.length;
+      const unitsPatch = r.units !== undefined ? { attendanceUnits: r.units } : {};
+      const dropped = outcome === "missed" ? pureRows.map((x) => x.name) : [];
+      patch(card.id, (s) => ({
+        ...s,
+        subjects: s.subjects
+          .filter((x) => !dropped.includes(x.name))
+          .map((x) => {
+            if (!onClass(x)) return x;
+            if (outcome === "done") {
+              return {
+                ...x,
+                makeupReserved: x.makeupReserved!.map((m) => ({ ...m, done: true, ...(r.checkUnsaved ? {} : { checked: true }) })),
+                ...(x.classId === classId ? unitsPatch : {}),
+              };
+            }
+            const { makeupReserved: _gone, makeupByReservation, ...rest } = x;
+            void _gone;
+            return { ...rest, ...(makeupByReservation ? { makeup: false } : {}), ...(x.classId === classId ? unitsPatch : {}) };
+          }),
+      }));
+      if (dropped.length) {
+        setReports((prev) => {
+          const mine = { ...(prev[card.id] ?? {}) };
+          for (const name of dropped) delete mine[name];
+          return { ...prev, [card.id]: mine };
+        });
+      }
+      if (r.marked) {
+        const cells = [{ studentId: card.id, classId, ...(r.units !== undefined ? { units: r.units } : {}) }];
+        setStudents((prev) => applyAppliedAttendance(prev, cells, r.marked!, attPendingRef.current));
+      }
+      toast.success(tf(outcome === "done" ? "os.reserved.checkedDone" : "os.reserved.checkedMissed", { name: card.name }));
+      if (r.unitsLeft) toast.message(t("os.reserved.unitsLeft"));
     } catch {
       toast.error(t("os.c.makeupSaveFail"));
     } finally {
@@ -2494,6 +2721,7 @@ export function OneScreenClient({
       studentName: student.name,
       teacherName,
       progress: su.today ?? "",
+      progressMode: su.progressMode ?? null,
       homeworkToday: fields.homeworkToday,
       dailyTest: fields.dailyTest,
       checkTest: fields.checkTest,
@@ -2501,7 +2729,8 @@ export function OneScreenClient({
       homework: rowEval.homework,
       note: rowEval.note,
       // 출결(원장 2026-10-26) — 출석부 칸 그대로(수학 보고서와 같은 문장, attendance-sentence.ts).
-      attendance: attendanceSentence(su.attendanceRaw, su.attendanceNote),
+      // 보강 줄이면 결석 날짜·시간·사유를 붙인다(2026-10-26 — 수학과 같은 재료, report-comment.ts rowMakeupFacts).
+      attendance: attendanceSentence(su.attendanceRaw, su.attendanceNote, rowMakeupFacts(student, su)),
       slots: slotFactsFor(
         jjKnownSlots(jjCache[jjDayKey(student.id, activeDate)]),
         rep?.autoDraft ?? rep?.draft ?? "",
@@ -2705,7 +2934,8 @@ export function OneScreenClient({
       try {
         const res = await generateEnglishMent({
           studentName: student.name,
-          progress: facts.progress,
+          // 복습·문제풀이 한 줄까지(aiFactsOf와 같은 값) — AI가 "진도를 나갔다"고 거꾸로 쓰지 않게(원장 2026-10-26).
+          progress: progressWithMode(facts.progress, facts.progressMode),
           homeworkToday: facts.homeworkToday,
           testText: englishTestText({ daily: facts.dailyTest, check: facts.checkTest }),
           nextTest,
@@ -2715,7 +2945,7 @@ export function OneScreenClient({
           specialNote: templateCarriesNote(found0 ?? DEFAULT_ENGLISH_TEMPLATE) ? "" : base.specialNote,
           classContext: (su.classId && classNarratives[su.classId]) || "",
           classNotice: base.classNotice ?? "",
-        });
+        }, { studentId: student.id, reportDate: activeDate }); // 직전 보고서 표현을 피하는 재료(원장 2026-10-26)
         // 지문은 **보낸 사실**로 남긴다 — 기다리는 동안 점수가 바뀌면 곧바로 'AI 코멘트가 옛 값 기준'이 뜬다.
         if (res.ok) ai = { intro: res.intro, comment: res.comment, factsHash: aiFactsHashOf(facts, nextTest) };
       } catch {
@@ -2774,6 +3004,7 @@ export function OneScreenClient({
     patchReport(student.id, subjectName, (r) => ({
       ...r,
       templateId,
+      templateImplicit: undefined, // 글이 됐다 — 이제 강사의 템플릿이다
       draft: text,
       autoDraft: text, // 작성 방식 스냅샷(0214a) — 수학과 같은 규약
       templateHash: templateHashOf(composed),
@@ -2864,6 +3095,7 @@ export function OneScreenClient({
     patchReport(student.id, subjectName, (r) => ({
       ...r,
       templateId: keptId,
+      templateImplicit: undefined,
       draft: text,
       autoDraft: text,
       templateHash: templateHashOf(composed),
@@ -2877,10 +3109,24 @@ export function OneScreenClient({
   }
   /** 템플릿 바꾸기 — 아직 글이 없으면 고르기만(자동작성 때 그 템플릿으로 채워진다), 있으면 다시 채운다. */
   function setEnglishTemplateFor(student: OneScreenStudent, subjectName: string, templateId: string) {
+    // 고른 템플릿이 그 반의 내 기본값이 된다(원장 2026-10-27) — 같은 반의 빈 행도 지금 따라오고, 다음에 여는 빈 행도 이것으로
+    // 시작한다. 실패해도 고르기는 그대로(보기 설정). 반이 없는 행(수업외 보강)은 계정 값만 바뀐다.
+    if (!readonlyView) {
+      const classId = rowClassId(student.id, subjectName);
+      templatePrefsRef.current = rememberTemplate(templatePrefsRef.current, templateId, classId);
+      void setMyLastReportTemplate(templateId, classId).catch(() => undefined);
+      if (classId) {
+        const englishClassOf = (sid: string, name: string) => {
+          const row = studentsRef.current.find((x) => x.id === sid)?.subjects.find((x) => x.name === name);
+          return row?.subjectKey === "english" ? (row.classId ?? null) : null;
+        };
+        setReports((prev) => retargetImplicit(prev, englishClassOf, classId, templateId));
+      }
+    }
     const rep = reportsRef.current[student.id]?.[subjectName];
     // 사진·PDF 줄만 있는 행도 '글 없음' — 고르기만 한다(자동작성 때 그 템플릿으로 채워지고 사진 줄은 따라온다).
     if (!hasTextBesidesAttachments(rep?.draft)) {
-      patchReport(student.id, subjectName, (r) => ({ ...r, templateId, pendingTemplateId: undefined }));
+      patchReport(student.id, subjectName, (r) => ({ ...r, templateId, templateImplicit: undefined, pendingTemplateId: undefined }));
       return;
     }
     void refillEnglishFor(student, subjectName, templateId);
@@ -2952,6 +3198,7 @@ export function OneScreenClient({
           // 일일 테스트 '없음'이면 점수 대신 사유가 나간다(math-report-pilot-sections.ts).
           ...(su?.dailyTestSkip ? { dailyTestSkip: su.dailyTestSkip, dailyTest: "" } : {}),
           homeworkMissReason: su?.homeworkMissReason ?? "",
+          attitudeNote: su?.attitudeNote ?? "",
         }
       : baseInput;
     // 이번 글을 만든 값의 서명 — 발송 게이트(카드·표)가 같은 함수로 지금 값과 대조한다.
@@ -3136,7 +3383,15 @@ export function OneScreenClient({
         subjectIndex: r.subjectIndex,
         subjectKey: r.subject.subjectKey ?? "math",
         today: r.subject.today ?? "",
+        progressMode: r.subject.progressMode ?? null,
+        // 이해도 단계(원장 2026-10-26) — 새 수학 보고서 행에만 넣는다 · '빈 칸만'은 아직 직접 매긴 점수가 없는 행에만.
+        understandingOk: isMathReportPilot(r.student.id, r.subject.subjectKey),
+        understandingStored: hasStoredUnderstanding(r.subject.today, r.subject.understanding),
         attitude: rowEval.attitude,
+        attitudeNote: r.subject.attitudeNote ?? "",
+        attitudeNoteOk: isMathReportPilot(r.student.id, r.subject.subjectKey),
+        homeworkMissReason: r.subject.homeworkMissReason ?? "",
+        dailyTestSkip: r.subject.dailyTestSkip ?? null,
         homework: rowEval.homework,
         textbook: r.subject.textbook ?? "",
         homeworkToday: r.subject.homeworkToday ?? "",
@@ -3181,16 +3436,25 @@ export function OneScreenClient({
       // 🔴 일괄 적용은 **보강 행에도** 적용한다(원장 2026-08-13) — "일괄 적용됐는데 보강만 적용 안 된다는건
       //    일괄 적용이 아님". 이후 강사가 행별로 고치는 건 강사 몫이다.
       if (p.set.attitude !== undefined) setAttitudeValue(p.studentId, p.subjectName, p.set.attitude);
+      if (p.set.attitudeNote !== undefined) setAttitudeNoteFor(p.studentId, p.subjectName, p.set.attitudeNote);
       if (p.set.homework !== undefined) setHomeworkValue(p.studentId, p.subjectName, p.set.homework);
+      if (p.set.homeworkMissReason !== undefined) setHomeworkMissReasonFor(p.studentId, p.subjectName, p.set.homeworkMissReason);
       if (p.set.textbook !== undefined) setTextbookFor(p.studentId, p.subjectName, p.set.textbook);
       if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
       if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
+      if (p.set.progressMode !== undefined) setProgressModeFor(p.studentId, p.subjectIndex, p.set.progressMode);
+      // 이해도 — 진도 **다음에** 넣는다(같은 차례에 바꾼 진도의 소단원에 채워지게, setAllUnderstandingFor는 patch 안의 행 값을 읽는다).
+      if (p.set.understanding !== undefined) setAllUnderstandingFor(p.studentId, p.subjectName, p.set.understanding);
+      // 뺄 소단원(원장 2026-10-27) — 계획이 그 행 진도에 있는 것만 골라 왔다.
+      for (const lesson of p.set.understandingOff ?? []) toggleUnderstandingFor(p.studentId, p.subjectName, lesson, true);
       // 2026-10-02 추가 칸 — 전부 **그 행에만**(행 값). 문항수를 먼저 바꾸고 점수를 넣는다(문항수 변경이 점수를 깎으므로).
       if (p.set.note !== undefined) setNoteFor(p.studentId, p.subjectName, p.set.note);
       if (p.set.dailyMax !== undefined) setMaxFor(p.studentId, p.subjectName, "daily", p.set.dailyMax);
       if (p.set.dailyScore !== undefined) setScoreFor(p.studentId, p.subjectName, "daily", p.set.dailyScore);
       if (p.set.checkMax !== undefined) setMaxFor(p.studentId, p.subjectName, "check", p.set.checkMax);
       if (p.set.checkScore !== undefined) setScoreFor(p.studentId, p.subjectName, "check", p.set.checkScore);
+      // 일일 테스트 '안 봄'(원장 2026-10-27) — null이면 '봄'으로(이번에 점수를 넣은 행, grid.ts planBulkApply).
+      if (p.set.dailyTestSkip !== undefined) setTestSkipFor(p.studentId, p.subjectName, p.set.dailyTestSkip);
       const { videoHomework: bulkVideoHw, videoSubmitLink: bulkVideoLink, videoHomeworkDue: bulkVideoDue } = p.set;
       if (bulkVideoHw !== undefined || bulkVideoLink !== undefined || bulkVideoDue !== undefined)
         patch(p.studentId, (s) => ({
@@ -3330,6 +3594,7 @@ export function OneScreenClient({
         // 같은 반 행에만 복사한다(원장 2026-10-15 — '전체' 보기에서 다른 반 빈 칸까지 채우던 것).
         classKey: classKeyOf(first),
         today: first.subject.today ?? "",
+        progressMode: first.subject.progressMode ?? null,
         textbook: first.subject.textbook ?? "",
         homeworkToday: first.subject.homeworkToday ?? "",
       },
@@ -3340,6 +3605,7 @@ export function OneScreenClient({
         subjectKey: r.subject.subjectKey ?? "math",
         classKey: classKeyOf(r),
         today: r.subject.today ?? "",
+        progressMode: r.subject.progressMode ?? null,
         textbook: r.subject.textbook ?? "",
         homeworkToday: r.subject.homeworkToday ?? "",
         // 🔴 여기서 `isRowActionable(…,"save")`를 쓰면 안 된다(2026-07-23 원장 제보로 발견).
@@ -3375,6 +3641,8 @@ export function OneScreenClient({
     }
     for (const p of res.plan) {
       if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
+      // 복습·문제풀이도 진도와 함께(원장 2026-10-27) — 진도 문장이 이 값으로 갈린다.
+      if (p.set.progressMode !== undefined) setProgressModeFor(p.studentId, p.subjectIndex, p.set.progressMode);
       if (p.set.textbook !== undefined) setTextbookFor(p.studentId, p.subjectName, p.set.textbook);
       if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
     }
@@ -3489,8 +3757,15 @@ export function OneScreenClient({
         currentDraft: reportsRef.current[r.student.id]?.[r.subject.name]?.draft ?? "",
       })),
     );
+    // 보강 학생은 이전 회차를 따로 불러와야 채워진다 — 안 불러온 학생이 대상에 있으면 알리고 그 자리에서 불러오게 한다(원장 2026-10-27).
+    const makeupPending = [...new Set(rows.filter((r) => r.student.isMakeup && !prevLoaded.has(r.student.id)).map((r) => r.student.id))];
+    if (makeupPending.length) {
+      toast.message(tf("os.c.makeupPrevPending", { n: makeupPending.length }), {
+        action: { label: t("os.c.makeupPrevLoadNow"), onClick: () => void loadMakeupPrevAll(makeupPending) },
+      });
+    }
     if (!plan.length && !commentPlan.length) {
-      toast.message(t("os.c.prevFillNone"));
+      if (!makeupPending.length) toast.message(t("os.c.prevFillNone"));
       return;
     }
     let filledCells = 0;
@@ -3655,12 +3930,15 @@ export function OneScreenClient({
         // 수학 보고서 시범 — 강사 한줄 멘트(필수). 서버가 비었거나 글 끝에 안 붙었으면 거절한다.
         // 영어도 같다(원장 2026-10-26 *"영어도 수학이랑 동일하게 … 사랑의 한마디 · 필수"*).
         ...(isMathReportPilot(student.id, su?.subjectKey) || su?.subjectKey === "english" ? { pilotOneLine: rowEval.note } : {}),
+        // JJ 수업보고서 글 — 사랑의 한마디가 선택이다(원장 2026-10-27). 서버가 이 표시로 '영어 한마디 필수'를 건너뛴다.
+        ...(su?.subjectKey === "english" && isJjSheetDraft(existing) ? { jjSheet: true } : {}),
         // 새 수학 보고서 — 화면 발송 조건(자동작성이 지금 값 기준인가 · 사유를 다 적었나)을 서버에도 싣는다(원장 2026-10-26 일괄 발송 구멍).
         //   일괄 발송·행 발송이 모두 이 입력을 지나므로, 어느 길로 보내도 서버가 같은 조건으로 거절한다.
-        ...(isMathReportPilot(student.id, su?.subjectKey)
+        // 영어 줄도 싣는다 — 보강 사유를 서버가 같은 조건으로 본다(2026-10-26). 영어엔 자동작성 조건이 없어 factsCurrent는 늘 참이다.
+        ...(isMathReportPilot(student.id, su?.subjectKey) || su?.subjectKey === "english"
           ? (() => {
-              const blocks = pilotSendBlocks(student, subjectName, { draft, autoDraft: autoSnap, pilotFactsSig: existing?.pilotFactsSig });
-              return { pilotCheck: { factsCurrent: !blocks.includes("autowrite"), reasonsOk: !blocks.includes("testReason") && !blocks.includes("homeworkReason") } };
+              const blocks = pilotSendBlocks(student, subjectName, { draft, autoDraft: autoSnap, pilotFactsSig: existing?.pilotFactsSig, templateId: existing?.templateId });
+              return { pilotCheck: { factsCurrent: !blocks.includes("autowrite"), reasonsOk: !blocks.some((b) => REASON_BLOCKS.includes(b)) } };
             })()
           : {}),
         // 자동작성 후 고친 멘트면 그 자동작성 원문도 싣는다(0370a) — 말투 프로파일이 선생님이 '늘 고치는 것'을 배운다(원장 2026-10-16).
@@ -4225,6 +4503,24 @@ export function OneScreenClient({
       const blockedKeys = new Set(pilotBlockedRows.map((r) => r.key));
       rows = rows.filter((r) => !blockedKeys.has(r.key));
     }
+    // 보강 진행 여부 확인 전 줄 — 행별 발송 버튼은 막는데(send-gate `mkcheck`) 일괄 발송만 안 걸러 서버 거절이 '실패'로 섞였다
+    //   (2026-10-27 표 일괄 점검). 버튼과 **같은 판정**(needsMakeupCheck)으로 미리 빼고 누구인지 알린다.
+    const makeupBlockedRows = rows.filter((r) => {
+      const st = latestRow(r.student.id, r.subject.name) ?? r.student;
+      return needsMakeupCheck(st.subjects.find((s) => s.name === r.subject.name) ?? r.subject);
+    });
+    if (makeupBlockedRows.length) {
+      const blockedKeys = new Set(makeupBlockedRows.map((r) => r.key));
+      rows = rows.filter((r) => !blockedKeys.has(r.key));
+    }
+    const makeupBlockedNames = [...new Set(makeupBlockedRows.map((r) => r.student.name))];
+    const makeupLine = makeupBlockedRows.length
+      ? tf("os.c.lineMakeupCheck", {
+          n: makeupBlockedRows.length,
+          names: makeupBlockedNames.slice(0, 5).join(", "),
+          more: makeupBlockedNames.length > 5 ? tf("os.c.lineMore", { n: makeupBlockedNames.length - 5 }) : "",
+        })
+      : "";
     const pilotBlockedNames = [...new Set(pilotBlockedRows.map((r) => r.student.name))];
     const pilotLine = pilotBlockedRows.length
       ? tf("os.c.linePilot", {
@@ -4234,7 +4530,7 @@ export function OneScreenClient({
         })
       : "";
     if (rows.length === 0) {
-      if (pilotBlockedRows.length) toast.message(`${t("os.c.sendNone")}${pilotLine}`);
+      if (pilotBlockedRows.length || makeupBlockedRows.length) toast.message(`${t("os.c.sendNone")}${pilotLine}${makeupLine}`);
       else toast.message(tf("os.c.sendNoneMent", { n: emptyMentRows.length }));
       return;
     }
@@ -4269,7 +4565,7 @@ export function OneScreenClient({
       !window.confirm(
         tf("os.c.sendConfirm", {
           n: rows.length,
-          lines: `${emptyMentLine}${pilotLine}${progressLine}${uncheckedLine}${gapLine}${aiStaleLine}${absentLine}${sentLine}`,
+          lines: `${emptyMentLine}${pilotLine}${makeupLine}${progressLine}${uncheckedLine}${gapLine}${aiStaleLine}${absentLine}${sentLine}`,
         }),
       )
     )
@@ -4288,6 +4584,7 @@ export function OneScreenClient({
     let noClass = 0; // 반별 발송인데 보낼 반이 없어 막힌 행(원장 2026-09-30 — 담당 반이 없으면 발송 불가)
     let boardWait = 0; // 반 보드 배정·재확인을 기다리는 행(방금 배정된 신입 등 — 배정된 뒤 다시 보내면 된다, 2026-10-03)
     let jjWarn = 0; // 영어 그림 자료를 못 묶은 행(저장은 성공)
+    let makeupSkip = 0; // 보강 진행 여부 확인 전이라 서버가 거절한 행(저장은 됐다)
     let pilotSkip = 0; // 새 보고서 조건(자동작성·사랑의 한마디·사유)에 걸려 서버가 거절한 행 — 화면 판정 뒤에 값이 바뀐 경우
     let windowHint = ""; // 발송 허용 시간창 밖 큐잉 — 마지막 응답의 창 라벨(테넌트 단일 설정이라 동일)
     try {
@@ -4301,6 +4598,8 @@ export function OneScreenClient({
           else if (res.status === "no_class" || isBoardBlockedStatus(res.status)) noClass++;
           // 새 보고서 조건에 걸려 서버가 거절(저장은 됐다) — '실패'로 뭉치지 않고 이유를 따로 센다(원장 2026-10-26).
           else if (isPilotGateError(res.error)) pilotSkip++;
+          // 보강 진행 여부 확인 전(화면 판정 뒤에 예약이 생긴 경우 등) — 서버가 거절, 저장은 됐다.
+          else if (res.error === MAKEUP_CHECK_REQUIRED_ERROR) makeupSkip++;
           else fail++;
         } else if (res.status === "queued") {
           queued++;
@@ -4338,6 +4637,7 @@ export function OneScreenClient({
         (boardWait ? tf("os.c.bulkBoardWait", { n: boardWait }) : "") +
         (noClass ? tf("os.c.bulkNoClass", { n: noClass }) : "") +
         (pilotSkip ? tf("os.c.bulkPilot", { n: pilotSkip }) : "") +
+        (makeupSkip ? tf("os.c.bulkMakeupCheck", { n: makeupSkip }) : "") +
         (fail ? tf("os.c.bulkFail", { n: fail }) : ""),
     );
   }
@@ -4561,7 +4861,8 @@ export function OneScreenClient({
     ]);
     // 자리는 **줄 내용**으로 기억한다(attachment-lines.ts) — 첫 첨부의 자동 저장이 글을 다시 짜거나 올리는 동안 강사가 계속 써도
     // 같은 윗줄 아래에 선다(줄 번호로만 기억하면 머리말과 내용 사이로 갔다 — 적대 리뷰 2026-09-11).
-    const caret = el instanceof HTMLTextAreaElement ? el.selectionStart : null;
+    // 글 칸은 맨 위 '수업 평가' 표를 뗀 본문만 보인다(2026-10-26) — 칸의 커서 위치에 뗀 길이(data-caret-offset)를 더해 전체 글 기준으로.
+    const caret = el instanceof HTMLTextAreaElement ? el.selectionStart + (Number(el.dataset.caretOffset) || 0) : null;
     const placed = insertAttachmentLine(draft0, attachmentLineIndex(draft0, caret), name);
     const named = name === file.name ? file : new File([file], name, { type: file.type });
     const added = await addAttachmentsFor(student, subjectName, [named]);
@@ -4686,6 +4987,10 @@ export function OneScreenClient({
             onAttendance: setAttendanceFor,
             onProgress: setProgressFor,
             onProgressMode: setProgressModeFor,
+            onUnderstandingAll: setAllUnderstandingFor, // 표에서도 카드와 같은 이해도 단계 버튼(2026-10-26)
+            // 소단원별 점수·빼기 — 카드 패널과 같은 setter(원장 2026-10-27 *"학생별 상세에서 각각 변하게"*).
+            onUnderstandingScore: setUnderstandingScoreFor,
+            onUnderstandingToggle: toggleUnderstandingFor,
             onStudyGrade: setStudyGradeFor,
             onScore: setScoreFor,
             onMax: setMaxFor,
@@ -4702,6 +5007,15 @@ export function OneScreenClient({
             onVideoHomework: toggleVideoHomeworkFor,
             onVideoSubmitLink: toggleVideoSubmitLinkFor,
             onVideoHomeworkDue: setVideoHomeworkDueFor,
+            // 새 보고서 필수 칸 — 카드와 같은 setter(원장 2026-10-26 *"카드와 표에서 동일하게"*). 열람 전용이면 안 넘긴다(칸이 안 선다).
+            ...(readonlyView
+              ? {}
+              : {
+                  onDailyTestSkip: setTestSkipFor,
+                  onHomeworkMissReason: setHomeworkMissReasonFor,
+                  onAttitudeNote: setAttitudeNoteFor,
+                  onMakeupReason: setMakeupReasonFor,
+                }),
           }}
           rowActions={{
             onSendRow: sendRow,
@@ -4718,6 +5032,7 @@ export function OneScreenClient({
             onJoinMakeup: (student, subjectName) => void joinMakeupRow(student, subjectName),
             onSplitMakeup: (student, subjectName) => void splitMakeupRow(student, subjectName),
             onPickMakeupClass: (student, subjectName) => void pickMakeupClass(student, subjectName),
+            onCheckMakeup: (student, subjectName, outcome) => void checkMakeup(student, subjectName, outcome),
             canRemoveMakeup: (studentId, subjectName) =>
               canRemoveMakeupRow(reports[studentId]?.[subjectName]?.classnoteStatus ?? null),
             // 영어 행 경고 칩 — 카드 칸·발송 확인과 같은 판정(english-draft.ts).
@@ -4731,6 +5046,18 @@ export function OneScreenClient({
             onBulkApply: bulkApplyValues,
             onCopyFirstRow: copyFirstRowDown,
             onBulkImportPrev: bulkImportPrev,
+            // 안 불러온 보강 학생(표시 중인 반) — 있으면 표 위에 안내 + 일괄 불러오기 버튼(원장 2026-10-27).
+            makeupPrev: (() => {
+              if (readonlyView) return undefined;
+              const ids = [
+                ...new Set(
+                  buildGridRows(visible)
+                    .filter((r) => rowInClass(r.subject, activeClassFilter) && r.student.isMakeup && !prevLoaded.has(r.student.id))
+                    .map((r) => r.student.id),
+                ),
+              ];
+              return ids.length ? { count: ids.length, busy: makeupPrevBusy, onLoad: () => void loadMakeupPrevAll(ids) } : undefined;
+            })(),
             onBulkAttach: (keys, files) => void bulkAttach(keys, files),
           }}
           uploadingAttKey={uploadingAttKey}
@@ -4798,6 +5125,38 @@ selected ? (
                     />
                   ) : null
                 }
+                // 수업 태도 의견(새 수학 보고서, 2026-10-26) — 태도가 하·중하일 때만, 태도 칸 바로 아래에. 3줄 이상(90자) 필수.
+                attitudeExtra={
+                  previewSubject &&
+                  isMathReportPilot(selected.id, previewSubject.subjectKey) &&
+                  attitudeNeedsNote(resolveRowFields(selected, previewSubject).attitude) ? (
+                    <ReasonNoteInput
+                      multiline
+                      value={previewSubject.attitudeNote ?? ""}
+                      done={!needsAttitudeNote(resolveRowFields(selected, previewSubject).attitude, previewSubject.attitudeNote)}
+                      disabled={readonlyView || !isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))}
+                      labelKey="os.card.attNote.label"
+                      placeholderKey="os.card.attNote.ph"
+                      onChange={(v) => setAttitudeNoteFor(selected.id, previewSubject.name, v)}
+                    />
+                  ) : null
+                }
+                // 보강 사유(2026-10-26) — 보강 줄인데 결석 날짜를 예약에서 못 찾을 때만(예약된 보강은 날짜·시간이 자동으로 들어간다).
+                makeupExtra={(() => {
+                  if (!previewSubject) return null;
+                  const mk = rowMakeupFacts(selected, previewSubject);
+                  if (!mk?.row || hasMakeupAbsenceDate(mk)) return null;
+                  return (
+                    <ReasonNoteInput
+                      value={previewSubject.makeupReason ?? ""}
+                      done={(previewSubject.makeupReason ?? "").trim() !== ""}
+                      disabled={readonlyView || !isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))}
+                      labelKey="os.card.mkReason.label"
+                      placeholderKey="os.card.mkReason.ph"
+                      onChange={(v) => setMakeupReasonFor(selected.id, previewSubject.name, v)}
+                    />
+                  );
+                })()}
                 student={selected}
                 reports={reports[selected.id] ?? {}}
                 attitudes={ATTITUDE}
@@ -4813,6 +5172,7 @@ selected ? (
                 onJoinMakeup={(subjectName) => void joinMakeupRow(selected, subjectName)}
                 onSplitMakeup={(subjectName) => void splitMakeupRow(selected, subjectName)}
                 onPickMakeupClass={(subjectName) => void pickMakeupClass(selected, subjectName)}
+                onCheckMakeup={(subjectName, outcome) => void checkMakeup(selected, subjectName, outcome)}
                 canRemoveMakeup={(subjectName) =>
                   canRemoveMakeupRow(reports[selected.id]?.[subjectName]?.classnoteStatus ?? null)
                 }
@@ -4902,6 +5262,7 @@ selected ? (
                         disabled={readonlyView || !isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))}
                         onScore={(lesson, score) => setUnderstandingScoreFor(selected.id, previewSubject.name, lesson, score)}
                         onToggle={(lesson, off) => toggleUnderstandingFor(selected.id, previewSubject.name, lesson, off)}
+                        onAll={(score) => setAllUnderstandingFor(selected.id, previewSubject.name, score)}
                       />
                     ) : null}
                   </>
@@ -4961,7 +5322,12 @@ selected ? (
                   open
                   onOpenChange={setTemplateManagerOpen}
                   templates={englishTemplates}
-                  onTemplatesChange={setEnglishTemplates}
+                  onTemplatesChange={(list) => {
+                    setEnglishTemplates(list);
+                    // 관리 창에서 지운 사용자 템플릿을 기본값으로 붙여 둔 빈 행은 되돌린다(첫 목록 때와 같은 판정).
+                    const ids = new Set(list.map((tp) => tp.id));
+                    setReports((prev) => revertImplicit(prev, (id) => !isBuiltinTemplateId(id) && !ids.has(id)));
+                  }}
                   teacherName={teacherName}
                   notice={templateNotice ?? (templateListFailed ? t("os.tpl.listFailed") : null)}
                   // 미리보기 그림 칸의 예시 자료 날짜 — 보고 있는 날짜로(결과지 제출일·학습 기간이 그 날짜로 적힌다).

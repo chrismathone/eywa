@@ -108,6 +108,16 @@ export type Subject = {
    * 세션 `subject_progress`에 실려 새로고침 뒤에도 남는다(자동작성 재료).
    */
   homeworkMissReason?: string;
+  /**
+   * 수업 태도 의견(새 수학 보고서) — 태도가 하·중하일 때 강사가 3줄 이상 직접 적는다(원장 2026-10-26). '수업 태도' 항목에 그대로 들어간다.
+   * 세션 `subject_progress`에 실린다(homeworkMissReason과 같은 길).
+   */
+  attitudeNote?: string;
+  /**
+   * 보강 사유(보강 행) — 결석 날짜를 예약에서 못 찾을 때 강사가 적는다(원장 2026-10-26). 보고서 '출결' 문장 끝에 "(사유: …)"로 붙는다.
+   * 세션 `subject_progress`에 실린다.
+   */
+  makeupReason?: string;
   dailyScore?: number | null;
   dailyMax?: number;
   /**
@@ -262,8 +272,18 @@ export type ReservedMakeup = {
   absenceDate: string;
   /** 보고서 발송 방식 — 정규 수업일이 아닌 예약은 늘 separate(합칠 정규 보고서가 없다). */
   mode: "merge" | "separate";
-  /** 출결이 찍혀 이행됐다(표식 '보강 완료'). */
+  /**
+   * 출결이 찍혀 이행됐다(시수 반영). 🔴 표식 '보강 완료'는 이것만으로 켜지 않는다 — 예약 끝 시각이 지나야(`reservedShownDone`).
+   * 수학은 하루 한 칸이라 정규 출석을 찍는 순간 이행되는데, 정규 수업 **뒤** 보강(권민서A 18:20~19:15 — 16:24 출석)은 아직 하지 않았다.
+   */
   done: boolean;
+  /** 보강일(YYYY-MM-DD) — 끝 시각이 지났는지 판정. 없으면(옛 값) `done`만 본다. */
+  date?: string;
+  /**
+   * 선생님이 보강을 했다고 확인했나(0458a `checked_at` · 원장 2026-10-27). 없음 = 확인 칸이 아직 없다(종전 판정 · 발송 게이트 없음).
+   * false = 아직 확인 전 → 표식 '보강 진행 여부 확인해 주세요'(끝 시각 뒤) · 그 보강이 든 보고서는 발송 막힘(`needsMakeupCheck`).
+   */
+  checked?: boolean;
 };
 
 export type OneScreenStudent = {

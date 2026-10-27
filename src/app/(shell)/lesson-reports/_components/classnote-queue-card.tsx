@@ -330,7 +330,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
       setChecked(new Set());
     } else if (res.ok) {
       toast.success(
-        `${res.requeued ?? 0}건 재발송 대기${res.skipped ? ` · ${res.skipped}건 제외(오래된 보고서)` : ""}${res.absentSkipped ? ` · ${res.absentSkipped}건 결석 제외` : ""}${res.noClass ? ` · ${res.noClass}건 보낼 반 미지정 제외(원스크린·직접 작성에서 반을 골라 발송)` : ""}`,
+        `${res.requeued ?? 0}건 재발송 대기${res.skipped ? ` · ${res.skipped}건 제외(오래된 보고서)` : ""}${res.absentSkipped ? ` · ${res.absentSkipped}건 결석 제외` : ""}${res.noClass ? ` · ${res.noClass}건 보낼 반 미지정 제외(원스크린·직접 작성에서 반을 골라 발송)` : ""}${res.makeupUnchecked ? ` · ${res.makeupUnchecked}건 보강 진행 여부 확인 전 제외` : ""}`,
       );
       setChecked(new Set());
       resync();

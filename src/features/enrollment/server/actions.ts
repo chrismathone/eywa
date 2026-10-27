@@ -35,6 +35,8 @@ import { logAction } from "@/features/audit/server/log";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { createSchema, buildConsultationRow, type FullForm } from "@/features/enrollment/consultation-form-row";
 import { counselorAutofill } from "@/features/enrollment/consultation-edit";
+import { counselorAccountPatch } from "@/features/enrollment/counselor-account";
+import { resolveCounselorAccount } from "@/features/enrollment/server/counselor-account";
 import { changedColumns, effectiveFollowUp, mergeSubjectDetails, parseEditBase } from "@/features/enrollment/consultation-changed";
 import { parseFollowUpResult, resolveFollowUp, type FollowUpResult } from "@/features/enrollment/follow-up";
 import { summarizeConsultationChanges } from "@/features/enrollment/consultation-audit";
@@ -126,7 +128,8 @@ export async function createEnrollmentConsultation(
       ...(await withSchoolKind(supabase, user.tenantId, buildConsultationRow(parsed.data, await schoolAliases()))),
       ...referrer.cols,
       learning_history: Object.keys(learningHistory).length > 0 ? learningHistory : null,
-      consultant_id: user.id,
+      // 상담자 계정 = 적은 상담자 이름의 직원(딱 한 명일 때) · 없으면 추가한 사람(counselor-account.ts — 할 일·알림이 이 칸을 본다).
+      consultant_id: (await resolveCounselorAccount(supabase, user.tenantId, parsed.data.counselor)) ?? user.id,
       outcome: followUp.outcome,
     })
     .select("id")
@@ -187,7 +190,7 @@ async function createConsultationWithAudio(
       ...(await withSchoolKind(admin, user.tenantId, buildConsultationRow(data, await schoolAliases()))),
       ...referrer,
       learning_history: Object.keys(learningHistory).length > 0 ? learningHistory : null,
-      consultant_id: user.id,
+      consultant_id: (await resolveCounselorAccount(admin, user.tenantId, data.counselor)) ?? user.id,
       // 후속 조치로 고른 상태(등록·미등록이면 녹음 분석이 끝나도 그대로 — 웹훅은 끝난 상태를 지킨다).
       outcome: followUp.outcome,
       // 단일 오디오 컬럼 = "최신 녹음 미러"(목록 🎙️ 배지·StatusWatcher 레거시 소비처용).
@@ -461,6 +464,13 @@ export async function updateEnrollmentConsultation(
   // 후속 조치로 상태가 바뀐 것도 '실제 수정'이다(완료 전환과 같은 결) — 다른 칸을 안 고치고 등록·미등록만 골라도 빈 상담자를 채운다.
   const autofilled = counselorAutofill({ ...existing, ...referrerBefore }, { ...row, learning_history: lh }, user.displayName, promoteToConsulted || !!outcomeTo);
   if (autofilled) row.counselor = autofilled;
+  // 상담자 글자와 계정을 함께 맞춘다(counselor-account.ts) — 계정이 비면 후속 조치 할 일·알림이 원장 전원에게 간다.
+  const account = counselorAccountPatch({
+    beforeAccount: existing.consultant_id, patch: row, autofilled, userId: user.id,
+    resolved: "counselor" in row && !autofilled ? await resolveCounselorAccount(supabase as unknown as SupabaseClient, user.tenantId, row.counselor) : null,
+  });
+  // 폼 칸 목록(buildConsultationRow)엔 계정 칸이 없다 — 이 저장에서만 더한다(감사로그 요약에도 '상담사'로 남는다).
+  if (account !== undefined) (row as Record<string, unknown>).consultant_id = account;
   const { data: saved, error } = await supabase
     .from("enrollment_consultations")
     .update({
@@ -696,6 +706,11 @@ export async function patchConsultationCells(id: string, patch: ConsultationCell
   if (!before) return { error: "상담을 불러오지 못했습니다. 다시 시도해 주세요." };
   const autofilled = counselorAutofill(before, row, user.displayName);
   if (autofilled) row.counselor = autofilled;
+  const account = counselorAccountPatch({
+    beforeAccount: before.consultant_id, patch: row, autofilled, userId: user.id,
+    resolved: "counselor" in row && !autofilled ? await resolveCounselorAccount(supabase as unknown as SupabaseClient, user.tenantId, row.counselor) : null,
+  });
+  if (account !== undefined) row.consultant_id = account;
 
   // RLS 밖(다른 학원)·삭제된 id면 0행 갱신인데 에러가 없다 — select로 실제로 바뀐 행을 확인한다.
   const { data: updated, error } = await supabase

@@ -4,6 +4,7 @@ import {
   defaultReportFilters,
   isAdminSendable,
   REPORT_SORT_KEYS,
+  sortByRating,
   reportOrderSpecs,
 } from "./report-filters";
 
@@ -157,5 +158,31 @@ describe("activeReportFilterCount", () => {
     expect(
       activeReportFilterCount({ page: 0, from: "2026-01-01", sort: "teacher", dir: "desc", subject: "math" }),
     ).toBe(1);
+  });
+});
+
+// 평점 정렬(2026-10-26 원장 "평점 오름차순 내림차순 가능하게") — 서버가 번호 목록 + 평점으로 줄 세운다.
+describe("sortByRating", () => {
+  const r = (id: string, report_date: string, created_at: string | null = null) => ({ id, report_date, created_at });
+  const rows = [r("a", "2026-10-20"), r("b", "2026-10-21"), r("c", "2026-10-22"), r("d", "2026-10-23"), r("e", "2026-10-19")];
+  const points = new Map([["a", 3], ["b", 1], ["c", 5], ["e", 3]]);
+
+  it("오름차순 = 낮은 점수부터 · 같은 점수는 수업일 최신 먼저 · 평점 없는 보고서는 맨 뒤", () => {
+    expect(sortByRating(rows, points, "asc").map((x) => x.id)).toEqual(["b", "a", "e", "c", "d"]);
+  });
+
+  it("내림차순 = 높은 점수부터 · 평점 없는 보고서는 여전히 맨 뒤(방향과 무관 — 규약 ①)", () => {
+    expect(sortByRating(rows, points, "desc").map((x) => x.id)).toEqual(["c", "a", "e", "b", "d"]);
+  });
+
+  it("같은 점수 · 같은 날이면 등록 최신 → id로 끝까지 정해진다(페이지마다 순서가 흔들리지 않게)", () => {
+    const same = [r("x", "2026-10-20", "2026-10-20T01:00:00Z"), r("z", "2026-10-20", null), r("y", "2026-10-20", "2026-10-20T02:00:00Z"), r("w", "2026-10-20", null)];
+    const p = new Map(same.map((x) => [x.id, 2]));
+    expect(sortByRating(same, p, "asc").map((x) => x.id)).toEqual(["y", "x", "z", "w"]);
+    expect(sortByRating([...same].reverse(), p, "asc").map((x) => x.id)).toEqual(["y", "x", "z", "w"]);
+  });
+
+  it("평점은 서버 정렬 명세(reportOrderSpecs)로 나가지 않는다 — 볼 수 없는 계정이 보내면 기본 정렬", () => {
+    expect(reportOrderSpecs("rating", "asc")).toEqual(reportOrderSpecs(undefined, "asc"));
   });
 });

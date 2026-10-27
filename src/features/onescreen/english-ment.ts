@@ -101,7 +101,7 @@ function callExamples(name: string): string {
   return hasBatchim(name) === false ? `"${name}는", "${name}가"` : `"${name}이는", "${name}이가"`;
 }
 
-export function buildEnglishMentPrompt(input: EnglishMentInput, opts: { remindName?: boolean } = {}): string {
+export function buildEnglishMentPrompt(input: EnglishMentInput, opts: { remindName?: boolean; prevHint?: string } = {}): string {
   const s = sanitizeEnglishMentInput(input);
   const callName = englishMentCallName(s.studentName);
   const facts: string[] = [];
@@ -143,6 +143,8 @@ export function buildEnglishMentPrompt(input: EnglishMentInput, opts: { remindNa
     "- 사실에 없는 숫자·백분율·점수를 새로 만들지 않는다. 사실에 적힌 표기(교재명·단원·범위)는 철자 그대로 옮긴다.",
     "- [오늘 사실]에 없는 항목은 언급하지 않는다(\"정보 없음\" 같은 말도 쓰지 않는다).",
   ];
+  // 직전 보고서 표현(사실 아님) — 매번 같은 말이 나가지 않게(원장 2026-10-26). 서버가 항목 보고서일 때만 넘긴다.
+  if (opts.prevHint?.trim()) lines.push("", opts.prevHint.trim());
   if (opts.remindName) {
     lines.push("", `⚠️ 직전 답에 학생 이름 "${callName}"이(가) 빠졌습니다. 이번에는 반드시 한 번 이상 넣으세요.`);
   }

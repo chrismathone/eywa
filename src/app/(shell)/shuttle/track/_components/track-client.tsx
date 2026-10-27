@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { saveStopLocation } from "@/features/shuttle/server/actions";
 import Link from "next/link";
 import { FaceTabs } from "@/components/face-tabs";
 import { Pill } from "@/components/atoms/pill";
@@ -33,6 +35,7 @@ import { useVehiclePositions } from "@/features/shuttle/map/components/use-vehic
 import { getStaffVehiclePositions } from "@/features/shuttle/map/server/vehicle-position-actions";
 import { ageLabel, ageSeconds, STALE_AFTER_S } from "@/features/shuttle/map/vehicle-position";
 import { ACADEMY_LOCATION } from "@/features/shuttle/map/academy-location";
+import { liveLegPath, type LiveLeg } from "@/features/shuttle/map/live-leg";
 import { ShuttleDayNav } from "../../_components/shuttle-day-nav";
 
 /** 빌드에 박히는 값 — 없으면 지도 대신 안내만(학부모 '실시간 차량'과 같은 판정). */
@@ -146,6 +149,8 @@ export function TrackClient({
     return runs.filter((r) => r.run.stops.some((st) => st.stopId && coordStopIds.has(st.stopId))).map((r) => r.run.id);
   }, [vehicle, runPick, coordStopIds]);
   const [roads, setRoads] = useState<Record<string, RunRoadPath>>({});
+  /** 경로를 **다시 받아 오라는** 신호 — 정류장 위치를 옮기면 올린다(사용자 2026-10-21 "위치수정을 하면 노선도 다시 짜줘"). */
+  const [roadsRev, setRoadsRev] = useState(0);
   const routeKey = routeRunIds.join(",");
   useEffect(() => {
     let alive = true;
@@ -157,7 +162,7 @@ export function TrackClient({
     return () => {
       alive = false;
     };
-  }, [routeKey]);
+  }, [routeKey, roadsRev]);
   const routeRows = routeRunIds.map((id) => ({ run: vehicle?.runs.find((r) => r.run.id === id) ?? null, result: roads[id] ?? null }));
 
   /**
@@ -175,6 +180,68 @@ export function TrackClient({
    * 🔑 도는 회차는 위 `board`(운행 현황과 같은 계산)에서 온다 — 아무도 안 타는 노선의 정류장까지 늘어놓지 않는다.
    * 🔑 회차를 골랐으면 **노선 순서 번호**를 이름 앞에 붙인다("2. 칠성초 정문") — 지도에서 도는 순서가 읽힌다.
    */
+  /**
+   * ✏️ **위치 수정 모드**(사용자 2026-10-21) — 지도의 정류장을 끌어 옮기면 바로 저장(기존 saveStopLocation, 주소·반경은 그대로 실어
+   * 보낸다 — 빼면 지워진다). 이름은 안 바뀐다. 저장 뒤엔 도로 경로를 다시 받는다(좌표가 바뀌었으니 옛 경로가 틀린다).
+   */
+  const router = useRouter();
+  const [editStops, setEditStops] = useState(false);
+  const [editMsg, setEditMsg] = useState<string | null>(null);
+  const [saving, startSaving] = useTransition();
+  function moveStop(mapStopId: string, lat: number, lng: number) {
+    const id = mapStopId.split("#")[0]!;
+    const st = stops.find((x) => x.id === id);
+    if (!st) return;
+    const fd = new FormData();
+    fd.set("id", id);
+    fd.set("lat", lat.toFixed(7));
+    fd.set("lng", lng.toFixed(7));
+    fd.set("address", st.address ?? "");
+    if (st.radiusM) fd.set("radiusM", String(st.radiusM));
+    setEditMsg(null);
+    startSaving(async () => {
+      const res = await saveStopLocation(fd);
+      if (res && "error" in res && res.error) setEditMsg(res.error);
+      else {
+        setEditMsg(`${st.name} 위치를 옮겼습니다`);
+        // 🔑 옛 경로를 비우고 **다시 받는다** — 비우기만 하면 routeKey가 그대로라 아무도 다시 안 물어 경로가 사라진 채 남았다.
+        //    서버 길찾기 캐시는 좌표 조합이 키라 옮긴 좌표로 새로 계산된다. 노선도(정류장 좌표)는 refresh로 따라온다.
+        setRoads({});
+        setRoadsRev((v) => v + 1);
+        router.refresh();
+      }
+    });
+  }
+  /**
+   * 🚏 **정류장을 누르면 그 정류장에서 다음 정류장까지만**(사용자 2026-10-21) — [전체 코스 보기]로 되돌린다.
+   * 구간 찾기는 길찾기 결과의 `legStarts`(구간 시작 정류장 이름)로 한다.
+   */
+  const [focusStopId, setFocusStopId] = useState<string | null>(null);
+  /**
+   * 📍 **위치 없는 정류장 찍기**(사용자 2026-10-22 "수정모드에서 지정 안 된 곳을 마커로 찍을 수 있게") — 고른 호차(·회차)의 노선 중
+   * 좌표가 없는 정류장. 하나를 고르고 지도를 누르면 그 자리로 저장한다(moveStop과 같은 저장 경로).
+   */
+  const missingStops = useMemo(() => {
+    if (!vehicle) return [];
+    const runs = runPick ? vehicle.runs.filter((r) => r.run.id === runPick) : vehicle.runs;
+    const seen = new Map<string, string>();
+    for (const r of runs) {
+      for (const st of r.run.stops) {
+        if (st.kind !== "stop" || !st.stopId || coordStopIds.has(st.stopId)) continue;
+        if (!seen.has(st.stopId)) seen.set(st.stopId, st.stopName);
+      }
+    }
+    return [...seen].map(([id, name]) => ({ id, name }));
+  }, [vehicle, runPick, coordStopIds]);
+  const [placingId, setPlacingId] = useState<string | null>(null);
+  const placing = missingStops.find((m) => m.id === placingId) ?? null;
+  function placeAt(lat: number, lng: number) {
+    if (!placing) return;
+    moveStop(placing.id, lat, lng);
+    setPlacingId(null);
+  }
+  const focusName = focusStopId ? (stops.find((x) => x.id === focusStopId.split("#")[0])?.name ?? null) : null;
+
   const mapStops = useMemo<MapStop[]>(() => {
     // 🔑 **[전체]에선 정류장 마커를 찍지 않는다**(사용자 2026-10-14 "호차를 눌렀을 때 보이게, 전체에 말고") — 학원만.
     if (!vehicle) return [];
@@ -206,6 +273,22 @@ export function TrackClient({
     const age = ageSeconds(p.receivedAt, now);
     return [{ key: p.runId, label: owner.vehicleName, lat: p.lat, lng: p.lng, age: ageLabel(age), stale: age > STALE_AFTER_S }];
   });
+
+  /**
+   * 🟢 운행 중 회차의 **지금 위치 → 다음 정류장**(사용자 2026-10-21) — 위치 신호가 살아 있고(끊김 아님) 도로 경로가 있을 때만.
+   * 전체 노선 줄(파랑·주황) **위에** 이 선을 녹색으로 겹친다(처음엔 노선을 숨겼다가 사용자가 되돌렸다, 2026-10-21). 판정은 순수 live-leg.ts(추가 API 호출 없음).
+   */
+  const liveByRun = useMemo(() => {
+    const out = new Map<string, LiveLeg>();
+    for (const { run, result } of routeRows) {
+      if (!run || run.state !== "running" || !result?.ok || !result.legEnds) continue;
+      const p = positions.find((x) => x.runId === run.run.id);
+      if (!p || ageSeconds(p.receivedAt, now) > STALE_AFTER_S) continue;
+      const live = liveLegPath(result.legs, result.legEnds, { lat: p.lat, lng: p.lng });
+      if (live) out.set(run.run.id, live);
+    }
+    return out;
+  }, [routeRows, positions, now]);
 
   const href = (d: string, s: Season = season) => `${SHUTTLE_TRACK_PATH}?d=${d}&season=${s}`;
 
@@ -278,13 +361,82 @@ export function TrackClient({
       )}
 
       {/* 🔑 지도 하나에 학원 + 그날 도는 노선의 정류장 + 운행 중 차(🚌 기사 폰 GPS, 0383a). */}
+      {/* 지도 위 한 줄 — 위치 수정 모드 · 고른 정류장 구간 되돌리기(사용자 2026-10-21). */}
+      {KAKAO_MAP_KEY ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <button
+            type="button"
+            onClick={() => {
+              setEditStops((v) => !v);
+              setEditMsg(null);
+              setFocusStopId(null);
+              setPlacingId(null);
+            }}
+            aria-pressed={editStops}
+            className={`${SHUTTLE_CHIP} ${editStops ? SHUTTLE_CHIP_ON : SHUTTLE_CHIP_OFF}`}
+          >
+            {editStops ? "위치 수정 끝내기" : "위치 수정"}
+          </button>
+          {editStops ? (
+            <span className="text-text-dim break-keep">
+              {vehicle
+                ? "정류장 핀을 끌어 놓으면 바로 저장됩니다 — 이름은 그대로, 위치만 바뀝니다."
+                : "위에서 호차를 고르면 그 노선의 정류장 핀이 뜹니다."}
+              {saving ? " 저장 중…" : ""}
+            </span>
+          ) : focusName ? (
+            <>
+              <span className="text-foreground font-bold break-keep">{focusName} → 다음 정류장 구간만 보는 중</span>
+              <button type="button" onClick={() => setFocusStopId(null)} className={`${SHUTTLE_CHIP} ${SHUTTLE_CHIP_OFF}`}>
+                전체 코스 보기
+              </button>
+            </>
+          ) : vehicle ? (
+            <span className="text-text-faint break-keep">정류장을 누르면 그 정류장에서 다음 정류장까지만 보입니다.</span>
+          ) : null}
+          {editMsg ? <span className="text-primary font-bold">{editMsg}</span> : null}
+        </div>
+      ) : null}
+      {/* 📍 위치 없는 정류장 — 수정 모드 + 호차를 골랐을 때만. 고르고 지도를 누르면 그 자리로 저장. */}
+      {KAKAO_MAP_KEY && editStops && vehicle && missingStops.length > 0 ? (
+        <div className="border-amber/40 bg-amber-soft flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-xs">
+          <span className="text-foreground font-bold">위치 없는 정류장</span>
+          {missingStops.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              aria-pressed={placingId === m.id}
+              onClick={() => setPlacingId((id) => (id === m.id ? null : m.id))}
+              className={`${SHUTTLE_CHIP} ${placingId === m.id ? SHUTTLE_CHIP_ON : SHUTTLE_CHIP_OFF} bg-card`}
+            >
+              {m.name}
+            </button>
+          ))}
+          <span className="text-text-dim break-keep">
+            {placing ? `지도에서 ${placing.name} 자리를 누르세요 — 누른 곳으로 바로 저장됩니다.` : "정류장을 고른 뒤 지도에서 자리를 누르면 위치가 찍힙니다."}
+          </span>
+        </div>
+      ) : null}
       {KAKAO_MAP_KEY ? (
         <ParentLiveMap
           appKey={KAKAO_MAP_KEY}
           academy={ACADEMY_LOCATION}
           stops={mapStops}
-          paths={routeRows.flatMap((x) => (x.result?.ok ? x.result.legs.map((l) => ({ path: l.path, kind: l.kind })) : []))}
+          paths={routeRows.flatMap((x) => {
+            if (!x.result?.ok) return [];
+            if (focusName) {
+              const starts = x.result.legStarts ?? [];
+              return x.result.legs.flatMap((l, i) => (starts[i] === focusName ? [{ path: l.path, kind: l.kind }] : []));
+            }
+            // 운행 중이어도 전체 노선은 그대로 둔다(사용자 2026-10-21 "다시 운행 노선 다 띄우고") — 녹색 다음 정류장 선은 그 위에 겹친다.
+            return x.result.legs.map((l) => ({ path: l.path, kind: l.kind }));
+          })}
+          livePaths={[...liveByRun.values()].map((l) => l.path)}
           vehicles={mapVehicles}
+          editStops={editStops}
+          onStopMove={moveStop}
+          onMapClick={placeAt}
+          onStopClick={vehicle ? setFocusStopId : undefined}
         />
       ) : null}
       {/* 이동 경로 요약 — 회차마다 한 줄. 거리·시간은 카카오 길찾기(추천 경로) 기준 추정치다. */}
@@ -298,6 +450,12 @@ export function TrackClient({
                 🛣️ <b className="text-foreground">{run ? `${firstTime(run.run) || "—"} ${runShortTitle(run.run)}` : "회차"}</b>{" "}
                 {!result ? (
                   "이동 경로를 불러오는 중…"
+                ) : result.ok && run && liveByRun.has(run.run.id) ? (
+                  <>
+                    <span className="text-green font-bold">운행 중 · 다음 정류장 {liveByRun.get(run.run.id)!.nextStop}</span> · 약{" "}
+                    <span className="text-foreground num font-bold">{Math.max(1, Math.round(liveByRun.get(run.run.id)!.remainingS / 60))}분</span>{" "}
+                    (<span className="num">{(liveByRun.get(run.run.id)!.remainingM / 1000).toFixed(1)}km</span>)
+                  </>
                 ) : result.ok ? (
                   <>
                     <span className="text-foreground num font-bold">{(result.distanceM / 1000).toFixed(1)}km</span> · 약{" "}

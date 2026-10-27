@@ -40,6 +40,7 @@ import {
 import { claimMakeupAnchorChange, finishMakeupAnchor, prepareMakeupAnchor } from "@/features/onescreen/server/makeup-anchor-sync";
 import { makeupReportUpsertBlock } from "@/features/makeups/server/adapters/gates";
 import { ensureMakeupAttendanceForReport, resolveMakeupOwner } from "@/features/attendance/server/makeup-pool";
+import { MAKEUP_CHECK_REQUIRED_ERROR, makeupCheckPending } from "@/features/attendance/server/makeup-check-gate";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
 
 /**
@@ -428,6 +429,27 @@ export async function saveAndQueueAdminReport(
   // 과목 opt-in/화이트리스트 — 없으면 저장만.
   if (!isClassnoteSubjectEnabled(input.subject, settings.report.classnoteSubjects)) {
     return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "subject_off" };
+  }
+  // 보강 진행 여부 확인(원장 2026-10-27) — 보강이 든 보고서는 원스크린에서 '보강 했음/못 했음'을 고른 뒤에 보낸다(강사 경로와 같은 판정).
+  if (
+    input.makeup &&
+    (await makeupCheckPending({
+      tenantId: user.tenantId,
+      studentId: input.studentId,
+      date: reportDate,
+      classId: classId ?? null,
+      makeupClassId: saved.makeupClassId ?? null,
+    }))
+  ) {
+    // 대기 중(queued) 재고 회수 — 안 지우면 거절 안내 직후 워커가 이전 대기분을 게시한다(아래 결석 게이트와 같다).
+    if (prior?.classnote_status === "queued") {
+      await supabase
+        .from("lesson_reports")
+        .update({ classnote_status: null, classnote_queued_at: null })
+        .eq("id", saved.id)
+        .eq("classnote_status", "queued");
+    }
+    return { ok: false, id: saved.id, shareToken: saved.shareToken, error: MAKEUP_CHECK_REQUIRED_ERROR };
   }
   // 결석 게이트(#77) — 그날 결석으로 기록된 학생은 저장만 하고 큐잉 안 함(원스크린 게이트의 서버 공용판).
   // 보강 보고서(makeup)는 게이트 제외(결석+같은 날 보강 참석 = 정당한 발송). 조회 실패 = fail-closed(저장은 완료).

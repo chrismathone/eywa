@@ -18,6 +18,8 @@ export type ConstraintMessage = {
 };
 
 const DIRECT: Record<string, ConstraintMessage> = {
+  // Declared and verified against the local 0456a migration; enabled with that migration.
+  student_parent_event_recognitions_student_id_fkey: { message: "설명회 참석 기록이 있어 학생을 삭제할 수 없습니다", op: "delete" },
   // ── 학생 ──
   ux_students_active_natural_key: {
     message: "같은 이름·학교·학년의 학생이 이미 있습니다(퇴원생 제외) — 동명이인이면 이름 뒤에 구분 글자(A·B)를 붙여 주세요",

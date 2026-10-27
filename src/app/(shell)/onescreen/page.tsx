@@ -18,6 +18,8 @@ import { getVideoHomeworkMarks } from "@/features/video-homework/server/queries"
 import { getOthersReportKeys, getVideoHomeworkAssignments } from "@/features/video-homework/server/assignments";
 import { getVideoHomeworkDues, type VideoHomeworkDueUi } from "@/features/video-homework/server/report-due";
 import { readVideoHomeworkCancels } from "@/features/video-homework/server/cancels";
+import { loadEcsTextbookOptions } from "@/features/textbooks/server/ecs-options";
+import { TextbookOptionsProvider } from "@/features/textbooks/textbook-options-context";
 import { pickLessonMarks } from "@/features/video-homework/lesson-marks";
 import { assignmentKey, assignmentOf } from "@/features/video-homework/assignment";
 import { getSubmitLinkUi } from "@/features/video-submit/server/link-choice-db";
@@ -65,7 +67,7 @@ export default async function OneScreenPage({
   // ⚠️ 로스터(전원 핫패스)에 새 컬럼을 넣지 않는다(#95) — 실패해도 sendName=null이라 실명으로 그대로 산다.
   // '다른 강사 뷰'(열람 전용)면 로스터·발송용 이름 모두 그 강사 기준(로스터는 내부에서 같은 판정 공유).
   const viewAs = await viewAsTeacher();
-  const [roster, sendName, jjAccess, classnoteMatch] = await Promise.all([
+  const [roster, sendName, jjAccess, classnoteMatch, mathBooks] = await Promise.all([
     getTeacherRoster(date, all === "1"),
     resolveReportAuthorSettings(user.tenantId, viewAs?.displayName ?? user.displayName),
     // 인재원 짝 잇기 권한 — JJ실 짝 잇기 구역과 **같은 함수**(ijw/server/viewer.ts). 영어 칸 '미연결' 줄의 링크만 켠다.
@@ -73,6 +75,8 @@ export default async function OneScreenPage({
     getJjAccess().catch(() => null),
     // ClassNote 반 보드 매칭(0302a, 'C.N' 알약) — 로스터와 독립(B4). 함수 안에서 실패를 삼켜 라벨만 뺀다(#95 핫패스).
     getClassnoteMatchMap(),
+    // 수학 교재명 칸 제안(원장 2026-10-27, math-book-list.ts) — 교재목록 마스터를 ECS와 같은 캐시 경로로. fail-soft(실패=제안 없음, #95 핫패스).
+    loadEcsTextbookOptions("math"),
   ]);
   // 진입 지정(2026-08-07) — '오늘 ECS' 카드에서 `?class=&student=`로 넘어온다.
   // 🔴 **로스터 안에 실제로 있을 때만** 넘긴다. 남의 반 id를 URL에 적어도 여기서 걸러지고(로스터는 이미
@@ -186,6 +190,8 @@ export default async function OneScreenPage({
         policy={roster.reportSettings.videoHomeworkPolicy} assignments={videoHomeworkAssignments}
         assignmentsKnown={loadedAssignments !== null} submitLinkMode={submitLinkUi.mode} dueReady={videoDueUi.ready} othersReports={othersReportKeys}
         cancelInfo={{ readAt: videoHwCancels.readAt, overridden: cancelOverridden }}>
+      {/* 페이지/시간은 원스크린이 안 쓴다 — 실어 보내지 않는다(RSC payload). 같은 이름은 한 번만(datalist key). */}
+      <TextbookOptionsProvider options={[...new Set(mathBooks.map((b) => b.title))].map((title) => ({ title, pageTime: null }))}>
       <OneScreenClient
       key={roster.date}
       initial={roster.students}
@@ -209,6 +215,7 @@ export default async function OneScreenPage({
       initialFontSize={roster.fontSize}
       initialDisplayOptions={roster.displayOptions}
       initialTrendOptOut={roster.trendOptOut}
+      initialTemplatePrefs={roster.templatePrefs}
       noClassesToday={roster.noClassesToday}
       showingAll={roster.showingAll}
       holidayName={roster.holidayName}
@@ -235,6 +242,7 @@ export default async function OneScreenPage({
         roster.students.map((s) => s.id),
       )}
       />
+      </TextbookOptionsProvider>
       </VideoHomeworkProvider>
     </>
   );

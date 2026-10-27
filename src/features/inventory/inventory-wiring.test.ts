@@ -22,6 +22,7 @@ import { BUILTIN_CATEGORIES } from "./category";
 import { ASSET_STATUS_LABEL } from "./status";
 import { actionNeededAssets, computeAssetStats } from "./stats";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), "utf8");
 
 describe("① 메뉴키 inventory — 다섯 자리 전부", () => {
@@ -87,7 +88,7 @@ describe("④ 시안 숫자 회귀 고정 — 가져오기 규칙 + 스탯 함�
 
 describe("⑧ 자산 분류(0247a) — 코드 고정 enum을 학원별 데이터로", () => {
   it("마이그레이션이 내장 7종을 그대로 시드하고 CHECK를 FK로 바꾼다", () => {
-    const sql = read("supabase", "migrations", "0247a_inventory_categories.sql");
+    const sql = readMigration("0247a_inventory_categories.sql");
     for (const c of BUILTIN_CATEGORIES) {
       expect(sql, `시드에 ${c.label} 없음`).toContain(`'${c.key}'`);
       expect(sql, `시드에 접두 ${c.codePrefix} 없음`).toContain(`'${c.codePrefix}'`);

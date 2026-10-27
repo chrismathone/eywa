@@ -27,6 +27,7 @@ import type { ReportFilterOptions } from "@/features/report-admin/server/queries
 import { ReportViewSettings } from "./report-view-settings";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { RatingCell } from "./rating-cell";
+import { REPORT_RATING_VISIBLE } from "@/features/report-admin/report-rating";
 
 // 시:분(KST). timestamptz → Asia/Seoul HH:mm. 값 없으면 빈 문자열.
 function hhmmKst(iso: string | null): string {
@@ -189,7 +190,8 @@ export function ReportList({
   // 멘트 작성 방식 열(0214a) — 마이그레이션 전엔 전 행 "—"뿐이라 열 자체를 숨긴다(뷰 설정 필터와 같은 게이트).
   const showMent = options.mentSourceReady ?? false;
   // 평점 열(참고용, 0450a) — 서버도 쓰기 권한자에게만 평점을 싣는다(listReports). 화면은 같은 판정으로 열만 감춘다.
-  const showRating = canSend;
+  // 표시 스위치가 꺼져 있으면 열 자체가 없다(2026-10-26 원장 — 새 기준 검증 전까지).
+  const showRating = REPORT_RATING_VISIBLE && canSend;
 
   const toggle = (id: string) =>
     setChecked((prev) => {
@@ -216,6 +218,8 @@ export function ReportList({
       if (res.emptyMent) parts.push(`${res.emptyMent}건 멘트 미작성 제외(강사가 작성 후 발송)`);
       // 반별 발송인데 보낼 반이 안 정해진 행(원장 2026-09-30 — 담당 반이 없으면 발송 불가) — 원스크린·직접 작성에서 반을 골라 보낸다.
       if (res.noClass) parts.push(`${res.noClass}건 보낼 반 미지정 제외(원스크린·직접 작성에서 반을 골라 발송)`);
+      // 보강 진행 여부 확인 전(원장 2026-10-27) — 원스크린에서 보강 표식을 눌러 했음/못 했음을 고른 뒤 보낸다.
+      if (res.makeupUnchecked) parts.push(`${res.makeupUnchecked}건 보강 진행 여부 확인 전 제외(원스크린 보강 표식에서 확인 후 발송)`);
       if (res.skipped) parts.push(`${res.skipped}건 제외(이미 발송·과목 미허용·오래된 보고서)`);
       toast.success(parts.join(" · "));
       setChecked(new Set());
@@ -347,14 +351,12 @@ export function ReportList({
               <th className="px-3 py-2 font-bold">학생 · 과목</th>
               <SortableTh sortKey="class" state={sortState} onSort={onSort}>반</SortableTh>
               <SortableTh sortKey="teacher" state={sortState} onSort={onSort}>강사</SortableTh>
-              {/* 평점(참고용, 0450a) — 정렬 없음(원장 미요청). 근거는 숫자에 마우스를 올리면 카드로 뜬다. */}
+              {/* 평점(참고용, 0450a · 기준 v6 원장 점수표) — 근거는 숫자에 마우스를 올리면 카드로 뜬다.
+                  정렬(원장 2026-10-26)은 서버가 평점 표를 읽어 줄 세운다(listReports) — 평점 없는 보고서는 방향과 무관하게 뒤. */}
               {showRating ? (
-                <th
-                  className="px-3 py-2 font-bold whitespace-nowrap"
-                  title="학부모가 받았을 때 좋은 느낌인가 — AI가 한 번 매긴 참고 값(숫자에 마우스를 올리면 근거)"
-                >
+                <SortableTh sortKey="rating" state={sortState} onSort={onSort} className="whitespace-nowrap">
                   평점
-                </th>
+                </SortableTh>
               ) : null}
               {/* 멘트 작성 방식(0214a) — 정렬 없음(값 3종 + 도입 전 "—"라 필터가 더 정확하다, 뷰 설정에서). */}
               {showMent ? <th className="px-3 py-2 font-bold" title="멘트를 누가 썼는가 — 직접 작성/자동작성(뷰 설정에서 필터)">멘트</th> : null}

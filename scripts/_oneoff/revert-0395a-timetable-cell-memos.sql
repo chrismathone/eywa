@@ -1,4 +1,4 @@
--- 되돌리기 — 0395a 시간표 칸 메모(`supabase/migrations/0395a_timetable_cell_memos.sql`).
+-- 되돌리기 — 0395a 시간표 칸 메모(시즌1 합본 `supabase/migrations/s1_season1.sql`의 `0395a_timetable_cell_memos.sql` 구역).
 -- 🔴 적용 SQL이 아니다. 표를 지우면 메모가 전부 사라진다(이전 내용은 감사로그 metadata.before에만 남는다).
 -- 앱은 표가 없으면 메모 없이 강사뷰를 그대로 연다 — 되돌린 뒤 앱을 따로 되돌릴 필요는 없다.
 begin;

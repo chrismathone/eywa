@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MakeupReservation } from "@/features/attendance/makeup-reservation";
-import { applyReservedMakeup, planReservedMakeup, reservedTimeText, studentReservations } from "./reserved-makeup";
+import { applyReservedMakeup, needsMakeupCheck, planReservedMakeup, reservedShownDone, reservedTagState, reservedTimeText, studentReservations } from "./reserved-makeup";
 import type { OneScreenStudent, Subject } from "./types";
 
 const res = (over: Partial<MakeupReservation> = {}): MakeupReservation => ({
@@ -16,7 +16,7 @@ describe("planReservedMakeup", () => {
     const plan = planReservedMakeup([res()], regular);
     expect([...plan.merge]).toEqual(["s1|BS2G"]);
     expect(plan.separate).toEqual([]);
-    expect(plan.byKey.get("s1|BS2G")).toEqual([{ start: "15:25", end: "16:20", absenceDate: "2026-09-21", mode: "merge", done: false }]);
+    expect(plan.byKey.get("s1|BS2G")).toEqual([{ start: "15:25", end: "16:20", absenceDate: "2026-09-21", mode: "merge", done: false, date: "2026-10-22" }]);
   });
   it("정규 수업일 · 분리 = 정규 줄과 따로 '(보강)' 줄(같은 반 예약 둘이어도 한 줄)", () => {
     const plan = planReservedMakeup([res({ reportMode: "separate" }), res({ id: "r2", slotStart: "14:30", slotEnd: "15:25", reportMode: "separate" })], regular);
@@ -85,5 +85,70 @@ describe("reservedTimeText", () => {
     expect(reservedTimeText(one)).toBe("15:25~16:20");
     const two = planReservedMakeup([res(), res({ id: "r2", slotStart: "16:20", slotEnd: "17:15" })], regular).byKey.get("s1|BS2G")!;
     expect(reservedTimeText(two)).toBe("15:25~16:20 +1");
+  });
+});
+
+// 원장 2026-10-27 — BS2P 정규 16:20~18:10. 권민서A 보강 18:20~19:15(정규 뒤) · 박지호 보강 15:25~16:20(정규 앞). 16:24에 정규 출석을 찍으면 둘 다 이행된다.
+describe("reservedShownDone — '보강 완료'는 끝 시각이 지나야", () => {
+  const booked = (over: Partial<{ start: string; end: string; done: boolean; date?: string }> = {}) => ({
+    start: "18:20", end: "19:15", absenceDate: "2026-10-02", mode: "merge" as const, done: true, date: "2026-10-27", ...over,
+  });
+  it("🔴 정규 뒤 보강(권민서A) — 16:24 출석으로 이행됐어도 19:15 전엔 완료가 아니다", () => {
+    expect(reservedShownDone([booked()], "2026-10-27T16:24")).toBe(false);
+    expect(reservedShownDone([booked()], "2026-10-27T19:14")).toBe(false);
+    expect(reservedShownDone([booked()], "2026-10-27T19:15")).toBe(true);
+    expect(reservedShownDone([booked()], "2026-10-28T09:00")).toBe(true);
+  });
+  it("정규 앞 보강(박지호) — 정규 출석 때는 이미 끝났다", () => {
+    expect(reservedShownDone([booked({ start: "15:25", end: "16:20" })], "2026-10-27T16:24")).toBe(true);
+  });
+  it("이행 전이면 시간이 지나도 완료가 아니다 · 시계 전(null)이면 지나지 않은 것으로 · 날짜 없는 옛 값은 이행만 본다", () => {
+    expect(reservedShownDone([booked({ done: false })], "2026-10-28T09:00")).toBe(false);
+    expect(reservedShownDone([booked()], null)).toBe(false);
+    expect(reservedShownDone([booked({ date: undefined })], null)).toBe(true);
+    expect(reservedShownDone([], "2026-10-28T09:00")).toBe(false);
+  });
+  it("여러 건이면 전부 끝나야 완료", () => {
+    const two = [booked({ start: "15:25", end: "16:20" }), booked()];
+    expect(reservedShownDone(two, "2026-10-27T16:24")).toBe(false);
+    expect(reservedShownDone(two, "2026-10-27T19:20")).toBe(true);
+  });
+});
+
+// 원장 2026-10-27 — '보강 했음/못 했음' 확인(0458a checked_at) · '보강 진행 여부 확인해 주세요' · 확인 전 발송 막기.
+describe("보강 진행 여부 — reservedTagState · needsMakeupCheck", () => {
+  const m = (over: Partial<{ start: string; end: string; done: boolean; checked: boolean; mode: "merge" | "separate"; date: string }> = {}) => ({
+    start: "15:25", end: "16:20", absenceDate: "2026-10-21", mode: "merge" as const, done: false, date: "2026-10-27", ...over,
+  });
+  it("확인 칸이 있으면: 끝 시각 전 = 예약 · 끝 뒤 확인 전 = 확인해 주세요 · 확인 = 완료(시각과 무관)", () => {
+    expect(reservedTagState([m({ checked: false })], "2026-10-27T15:00")).toBe("booked");
+    expect(reservedTagState([m({ checked: false, done: true })], "2026-10-27T16:20")).toBe("needsCheck");
+    expect(reservedTagState([m({ checked: true, done: true })], "2026-10-27T15:00")).toBe("done");
+  });
+  it("🔴 출석으로 이행만 됐고(시수 반영) 확인 전이면 '완료'가 아니다 — 끝 시각이 지나면 확인해 주세요", () => {
+    expect(reservedTagState([m({ checked: false, done: true, start: "18:20", end: "19:15" })], "2026-10-27T19:20")).toBe("needsCheck");
+  });
+  it("확인 칸이 없으면(0458a 미적용) 종전 판정 — 이행 + 끝 시각", () => {
+    expect(reservedTagState([m({ done: true })], "2026-10-27T16:24")).toBe("done");
+    expect(reservedTagState([m({ done: true, start: "18:20", end: "19:15" })], "2026-10-27T16:24")).toBe("booked");
+  });
+  it("여러 건 — 하나라도 확인 전이면 완료가 아니고, 끝난 것 중 확인 전이 있으면 확인해 주세요", () => {
+    const two = [m({ checked: true, done: true }), m({ start: "18:20", end: "19:15", checked: false })];
+    expect(reservedTagState(two, "2026-10-27T17:00")).toBe("booked");
+    expect(reservedTagState(two, "2026-10-27T19:30")).toBe("needsCheck");
+  });
+  it("발송 막힘 = 보강이 든 줄 + 확인 전 · 정규 줄은 합침 예약만(분리는 따로 선 보강 줄의 몫) · 칸 없으면 막지 않음", () => {
+    const merged = { makeup: true, classId: "BS2P", makeupReserved: [m({ checked: false })] };
+    expect(needsMakeupCheck(merged)).toBe(true);
+    expect(needsMakeupCheck({ ...merged, makeupReserved: [m({ checked: true })] })).toBe(false);
+    expect(needsMakeupCheck({ ...merged, makeup: false })).toBe(false);
+    expect(needsMakeupCheck({ ...merged, makeupReserved: [m({ checked: false, mode: "separate" })] })).toBe(false);
+    expect(needsMakeupCheck({ makeup: true, classId: null, makeupReserved: [m({ checked: false, mode: "separate" })] })).toBe(true);
+    expect(needsMakeupCheck({ ...merged, makeupReserved: [m({})] })).toBe(false);
+  });
+  it("planReservedMakeup은 확인 칸을 실어 나른다(없으면 키 없음)", () => {
+    expect(planReservedMakeup([res({ checkedAt: "2026-10-27T10:00:00Z" })], regular).byKey.get("s1|BS2G")?.[0]?.checked).toBe(true);
+    expect(planReservedMakeup([res({ checkedAt: null })], regular).byKey.get("s1|BS2G")?.[0]?.checked).toBe(false);
+    expect(planReservedMakeup([res()], regular).byKey.get("s1|BS2G")?.[0]).not.toHaveProperty("checked");
   });
 });

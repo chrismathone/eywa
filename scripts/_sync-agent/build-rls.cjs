@@ -47,5 +47,9 @@ create policy sync_agent_allow on public.${n} for all to eywa_sync_agent using (
 create policy sync_agent_tenant_boundary on public.${n} as restrictive for all to eywa_sync_agent
   using (${where}) with check (${where} and public.sync_agent_foreign_keys('public.${n}'::regclass,to_jsonb(${n})));`;
 }).join('\n\n');
-fs.writeFileSync('supabase/migrations/0401a_sync_agent_data_boundary.sql',header+'\n'+policies+'\n');
+// 2026-10-27 시즌2: 0401a는 시즌1 합본(s1_season1.sql)의 구역이 됐다 — 다시 만들 일이 있으면 시즌2 파일(s2_NNNN_…)로 쓴다.
+// ⚠️ 만들어지는 SQL은 `create function`·`create policy`(or replace·drop 없음)라 0401a가 적용된 DB에는 그대로 못 돌린다 — 손으로 멱등하게 고쳐 쓴다.
+const out=process.argv[2];
+if(!out||!/^supabase\/migrations\/s2_\d{4}_[a-z0-9_]+\.sql$/.test(out))throw new Error('출력 경로를 시즌2 이름으로 주세요: node scripts/_sync-agent/build-rls.cjs supabase/migrations/s2_NNNN_sync_agent_data_boundary.sql');
+fs.writeFileSync(out,header+'\n'+policies+'\n');
 console.log(`Generated restrictive policies for ${tables.length} tables.`);

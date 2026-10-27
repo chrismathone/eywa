@@ -6,7 +6,7 @@ Coordinator follow-up: automatic onboarding was added at the user's request. `tm
 
 ## Files and migration provenance
 
-- `supabase/migrations/0337a_todays_math_sync_v2.sql`: additive, transactional, repeatable alpha migration. Created with `npx --yes supabase@2.81.3 migration new todays_math_sync_v2` as `20261003083350_todays_math_sync_v2.sql`, then moved to the repository's next alpha number after 0336. It must be applied through the existing alpha deployment procedure; Drizzle's numbered journal does not apply it.
+- `supabase/migrations/s1_season1.sql#0337a_todays_math_sync_v2.sql`: additive, transactional, repeatable alpha migration. Created with `npx --yes supabase@2.81.3 migration new todays_math_sync_v2` as `20261003083350_todays_math_sync_v2.sql`, then moved to the repository's next alpha number after 0336. It must be applied through the existing alpha deployment procedure; Drizzle's numbered journal does not apply it.
 - `scripts/verify-todays-math-sync-sql.mjs` and `supabase/tests/todays_math_sync{,_fixture,_recovery}.sql`: isolated SQL verification using the repository's existing `postgres` dependency and the real source migrations.
 
 ## RPC interface

@@ -24,12 +24,15 @@ type KakaoMaps = {
   LatLng: new (lat: number, lng: number) => LatLng;
   LatLngBounds: new () => LatLngBounds;
   Map: new (el: HTMLElement, opts: { center: LatLng; level: number }) => KakaoMap;
-  Marker: new (opts: { position: LatLng; map: KakaoMap; title?: string }) => object;
+  Marker: new (opts: { position: LatLng; map: KakaoMap; title?: string; draggable?: boolean }) => {
+    getPosition(): { getLat(): number; getLng(): number };
+    setMap(map: KakaoMap | null): void;
+  };
   CustomOverlay: new (opts: { position: LatLng; content: HTMLElement; xAnchor?: number; yAnchor: number; map: KakaoMap; zIndex?: number }) => {
     setMap(map: KakaoMap | null): void;
   };
-  Polyline: new (opts: { path: LatLng[]; map: KakaoMap; strokeWeight: number; strokeColor: string; strokeOpacity: number; strokeStyle?: string }) => object;
-  event: { addListener(target: object, type: string, handler: () => void): void };
+  Polyline: new (opts: { path: LatLng[]; map: KakaoMap; strokeWeight: number; strokeColor: string; strokeOpacity: number; strokeStyle?: string }) => { setMap(map: KakaoMap | null): void };
+  event: { addListener(target: object, type: string, handler: (e?: { latLng?: { getLat(): number; getLng(): number } }) => void): void };
 };
 type KakaoWindow = Window & { kakao?: { maps?: KakaoMaps } };
 
@@ -67,7 +70,7 @@ const ACADEMY_LEVEL = 3;
 /** 지도에 찍을 정류장 — 학부모 화면(우리 아이 정류장)과 직원 '실시간 위치'(오늘 도는 노선 정류장)가 같이 쓴다. */
 export type MapStop = Pick<ParentLiveStop, "stopId" | "name" | "lat" | "lng"> & {
   /** 우리 아이가 **타는 곳 / 내리는 곳**(학부모 화면, 사용자 2026-10-15) — 초록 / 주황 배지로 갈라 보인다. */
-  role?: "board" | "alight";
+  role?: "board" | "alight" | "here";
 };
 
 /**
@@ -76,6 +79,10 @@ export type MapStop = Pick<ParentLiveStop, "stopId" | "name" | "lat" | "lng"> & 
  */
 const ROUTE_COLOR = "#3b5bdb";
 const BACK_COLOR = "#f08c00";
+/** 운행 중 "지금 위치 → 다음 정류장" 선(사용자 2026-10-21) — 운행 중 = 녹색(오늘 등하원 판과 같은 뜻). */
+const LIVE_COLOR = "#0e7c46";
+/** 학부모 '가까운 노선 찾기' 안내선(검색한 곳 → 후보 정류장, 직선 점선) — 학원색(사용자 2026-10-23). */
+const GUIDE_COLOR = "#153e75";
 /** 돌아오는 길을 진행 방향 오른쪽으로 비켜 그리는 거리(m) — 같은 도로를 오가도 두 선이 나란히 보이게. */
 const BACK_OFFSET_M = 9;
 /** 선 단순화 허용 오차(m) — 도로 꼭짓점의 자잘한 꺾임(삐뚤빼뚤)을 펴되 길 모양은 그대로. */
@@ -265,9 +272,13 @@ function academyBadge(name: string): Badge {
  * 정류장 배지 — "3. 이름"이면 번호 동그라미, 아니면 작은 점. 이름표는 흰 바탕.
  * 🔑 `role`이 있으면(우리 아이 탈 곳 / 내릴 곳) 초록 / 주황으로 채운 동그라미 + "탈 곳 · 이름"(사용자 2026-10-15).
  */
-function stopBadge(text: string, role?: "board" | "alight"): Badge {
+function stopBadge(text: string, role?: "board" | "alight" | "here"): Badge {
   const m = /^(\d+)\.\s*(.*)$/.exec(text);
   const name = m ? m[2]! : text;
+  // 📍 학부모가 검색한 곳(가까운 노선 찾기, 2026-10-22) — 학원색 큰 핀, 이름표는 장소 이름만(탈 곳/내릴 곳이 아니다).
+  if (role === "here") {
+    return makeBadge("●", "bg-primary flex size-8 items-center justify-center rounded-full border-[3px] border-white text-xs text-white shadow-lg", name, "bg-primary text-primary-foreground", 4);
+  }
   if (role) {
     const tone = role === "board" ? "bg-green" : "bg-amber";
     return makeBadge(
@@ -308,7 +319,13 @@ export function ParentLiveMap({
   academy,
   stops,
   paths,
+  livePaths,
+  guideLines,
   vehicles,
+  editStops = false,
+  onStopMove,
+  onStopClick,
+  onMapClick,
 }: {
   appKey: string;
   academy: AcademyLocation;
@@ -318,9 +335,38 @@ export function ParentLiveMap({
    * `kind`: 'out' 나가는 길(남색 실선) · 'back' 돌아오는 길(주황 점선) — 같은 도로를 오가도 갈라 보이게(사용자 2026-10-14).
    */
   paths?: { path: [number, number][]; kind: "out" | "back" }[];
+  /**
+   * 운행 중 **지금 위치 → 다음 정류장** 선들(live-leg.ts) — 차가 움직일 때마다 바뀌므로 지도를 새로 만들지 않고 선만 바꿔 끼운다.
+   * 운행 중인 회차는 부르는 쪽이 `paths`에서 빼고 이걸 넘긴다(전체 노선 줄 대신 다음 정류장까지만).
+   */
+  livePaths?: [number, number][][];
+  /**
+   * 안내 **직선**(점선) — 학부모 '가까운 노선 찾기'에서 검색한 곳 → 후보 정류장(사용자 2026-10-23 "직선 코스도 보여줄 수 있어?").
+   * 도로가 아니라 눈대중용 직선이다. 지도를 새로 만들지 않고 선만 바꿔 끼운다.
+   */
+  guideLines?: [number, number][][];
   /** 운행 중 차 위치(기사 폰 GPS, 0383a) — 몇 초마다 바뀌므로 지도를 새로 만들지 않고 🚌만 옮긴다. */
   vehicles?: MapVehicle[];
+  /**
+   * **위치 수정 모드**(사용자 2026-10-21 "지정된 마커들을 수정 · 이름은 그대로 · 위치만") — 정류장마다 끌 수 있는 핀을 세운다.
+   * 놓으면 `onStopMove(stopId, lat, lng)` — 저장은 부르는 쪽(기존 saveStopLocation). 이름은 이 지도가 건드리지 않는다.
+   */
+  editStops?: boolean;
+  onStopMove?: (stopId: string, lat: number, lng: number) => void;
+  /** 정류장 배지를 누르면(수정 모드가 아닐 때) — 부르는 쪽이 그 정류장에서 나가는 구간만 그린다(사용자 2026-10-21). */
+  onStopClick?: (stopId: string) => void;
+  /** 지도 빈 곳을 누르면(수정 모드) — **위치 없는 정류장 찍기**에 쓴다(사용자 2026-10-22). */
+  onMapClick?: (lat: number, lng: number) => void;
 }) {
+  // 콜백은 ref로 — 지도를 새로 만드는 effect의 의존성에 넣으면 부모가 다시 그릴 때마다 지도가 새로 생긴다.
+  const onStopMoveRef = useRef(onStopMove);
+  const onStopClickRef = useRef(onStopClick);
+  const onMapClickRef = useRef(onMapClick);
+  useEffect(() => {
+    onStopMoveRef.current = onStopMove;
+    onStopClickRef.current = onStopClick;
+    onMapClickRef.current = onMapClick;
+  });
   const boxRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<{ maps: KakaoMaps; map: KakaoMap } | null>(null);
   /** 지도를 새로 만들 때마다 +1 — 차 마커를 새 지도에 다시 얹는 신호. */
@@ -352,6 +398,12 @@ export function ParentLiveMap({
         const relayout = () => spreadLabels(badgesRef.current, boxRef.current);
         // 확대·축소·이동이 끝나면(idle) 이름표 자리를 다시 잡는다 — 확대하면 겹침이 풀려 숨겼던 이름표가 다시 나온다.
         maps.event.addListener(map, "idle", relayout);
+        // 📍 수정 모드에서 지도를 누르면 그 좌표를 넘긴다 — 위치 없는 정류장을 여기에 찍는다(부르는 쪽이 고른 정류장이 있을 때만 저장).
+        if (editStops) {
+          maps.event.addListener(map, "click", (e) => {
+            if (e?.latLng) onMapClickRef.current?.(e.latLng.getLat(), e.latLng.getLng());
+          });
+        }
         // 🏫 학원 배지 — 기본 핀 대신 둥근 배지(사용자 2026-10-14 "마커도 좀 더 예쁜 걸로").
         const placed = placedStops.filter((s) => s.lat !== null && s.lng !== null);
         // 학원이 곧 탈 곳/내릴 곳이면(하원 출발 · 등원 도착) 그 배지가 학원 자리를 맡는다 — 배지 두 개가 겹치지 않게.
@@ -397,10 +449,23 @@ export function ParentLiveMap({
           for (const s of placed) {
             const pos = new maps.LatLng(s.lat!, s.lng!);
             // 정류장 배지 — "2. 칠성초 정문"처럼 순서가 붙어 오면 번호 동그라미, 아니면 작은 점 + 이름.
+            bounds.extend(pos);
+            if (editStops) {
+              // ✏️ 수정 모드 — 끌 수 있는 핀(이름은 핀 제목). 놓으면 부르는 쪽이 저장한다.
+              const marker = new maps.Marker({ position: pos, map, title: s.name, draggable: true });
+              maps.event.addListener(marker, "dragend", () => {
+                const p = marker.getPosition();
+                onStopMoveRef.current?.(s.stopId, p.getLat(), p.getLng());
+              });
+              continue;
+            }
             const b = stopBadge(s.name, s.role);
             badges.add(b);
+            if (onStopClickRef.current) {
+              b.el.style.cursor = "pointer";
+              b.el.addEventListener("click", () => onStopClickRef.current?.(s.stopId));
+            }
             new maps.CustomOverlay({ position: pos, content: b.el, xAnchor: 0.5, yAnchor: 0.5, map, zIndex: s.role ? 7 : 5 });
-            bounds.extend(pos);
           }
           map.setBounds(bounds);
         }
@@ -414,7 +479,50 @@ export function ParentLiveMap({
     return () => {
       cancelled = true;
     };
-  }, [appKey, academy.lat, academy.lng, academy.name, stopsKey, pathKey]);
+  }, [appKey, academy.lat, academy.lng, academy.name, stopsKey, pathKey, editStops]);
+
+  // 🟢 지금 위치 → 다음 정류장 선 — 차 마커처럼 지도는 그대로 두고 선만 바꿔 끼운다.
+  const livePathKey = JSON.stringify(livePaths ?? []);
+  useEffect(() => {
+    const ctx = mapRef.current;
+    if (!ctx || mapVersion === 0) return;
+    const lines = JSON.parse(livePathKey) as [number, number][][];
+    const made: { setMap: (m: null) => void }[] = [];
+    for (const raw of lines) {
+      if (raw.length < 2) continue;
+      const line = raw.map(([lat, lng]) => new ctx.maps.LatLng(lat, lng));
+      made.push(new ctx.maps.Polyline({ path: line, map: ctx.map, strokeWeight: 10, strokeColor: "#ffffff", strokeOpacity: 0.95, strokeStyle: "solid" }) as { setMap: (m: null) => void });
+      made.push(new ctx.maps.Polyline({ path: line, map: ctx.map, strokeWeight: 6, strokeColor: LIVE_COLOR, strokeOpacity: 1, strokeStyle: "solid" }) as { setMap: (m: null) => void });
+    }
+    return () => {
+      for (const p of made) p.setMap(null);
+    };
+  }, [livePathKey, mapVersion]);
+
+  // ┄ 안내 직선 — 지도는 그대로 두고 선만 바꿔 끼운다(검색한 곳이 바뀌면 다시 그린다).
+  const guideKey = JSON.stringify(guideLines ?? []);
+  useEffect(() => {
+    const ctx = mapRef.current;
+    if (!ctx || mapVersion === 0) return;
+    const lines = JSON.parse(guideKey) as [number, number][][];
+    // 🔑 **첫 줄 = 가장 가까운 정류장**(부르는 쪽이 거리순으로 넘긴다) — 굵은 실선으로 "여기가 제일 가깝다"를 보인다
+    //    (사용자 2026-10-23 "사람이 이동하는 거라 최단거리로 갈 수 있는 위치로 직선"). 나머지는 옅은 점선.
+    const made = lines
+      .filter((l) => l.length >= 2)
+      .map((raw, i) =>
+        new ctx.maps.Polyline({
+          path: raw.map(([lat, lng]) => new ctx.maps.LatLng(lat, lng)),
+          map: ctx.map,
+          strokeWeight: i === 0 ? 5 : 3,
+          strokeColor: GUIDE_COLOR,
+          strokeOpacity: i === 0 ? 0.95 : 0.55,
+          strokeStyle: i === 0 ? "solid" : "shortdash",
+        }),
+      );
+    return () => {
+      for (const p of made) p.setMap(null);
+    };
+  }, [guideKey, mapVersion]);
 
   // 🚌 차 마커 — 지도는 그대로 두고 마커만 바꿔 끼운다(10초마다 지도를 새로 만들면 깜빡이고 확대가 풀린다).
   useEffect(() => {

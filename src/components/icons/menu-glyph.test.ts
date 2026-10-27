@@ -40,7 +40,7 @@ describe("탭 아이콘 그림 파일", () => {
  *   겹쳤고, 남은 그림(alert·trash)은 뜻이 다르다. 스티커가 생기면 이 줄을 지운다.
  */
 // edit = 원생목록의 영어이름 편집 권한. 독립 메뉴 없이 이름 칸 안에서만 쓰는 조작이다.
-const PENDING_GLYPH = new Set<string>(["bookText", "calendarClock", "edit", "eye", "pieChart"]);
+const PENDING_GLYPH = new Set<string>(["bookText", "calendarClock", "edit", "eye", "pieChart", "search"]); // search = 셔틀 가까운 노선 찾기(2026-10-26) — 스티커 생성 전 선화 폴백
 
   it("메뉴가 쓰는 아이콘 이름은 전부 그림이 있다 — MENU_ICON + 허브 면 override", () => {
     const icons = readFileSync(join(SRC, "components", "icons", "aywa-icons.tsx"), "utf8");

@@ -22,15 +22,19 @@ import { pendingDetails } from "./pending-details";
 import { contributionLessonNames, contributionSubjectEvidence, lessonKey } from "./subject-evidence";
 import { reviewedHistoricalSubject } from "./reviewed-subjects";
 import { enrolledMonthCounts } from "./enrolled-months";
+import { emptyParentEvents, parentEventFacts, type ParentEventSources } from "./parent-events/facts";
 
 export function assembleContribution(input: { tenant: string; today: string; capturedAt: string; core: CoreSources; activity: ActivitySources;
   settings: Awaited<ReturnType<typeof getTenantSettingsByTenantId>>; config: ContributionConfig; stored: StoredContributionMonth[];
-  history: RawHistoryBill[] | null; historyReady: boolean }) {
+  history: RawHistoryBill[] | null; historyReady: boolean; parentEvents?: ParentEventSources }) {
   const { core, activity, today, capturedAt, tenant, config } = input;
   const month = today.slice(0, 7), canonical = contributionIdentity(core.students);
   const known = new Set(core.students.map((s) => s.id));
   const test = new Set(core.students.filter((s) => s.is_test).map((s) => s.id));
   const eligible = (id: string) => known.has(id) && !test.has(id) && !test.has(canonical(id));
+  const events = parentEventFacts({ tenant, today, capturedAt, canonical, eligible, source: input.parentEvents ?? emptyParentEvents() });
+  if (!input.parentEvents?.ready && input.stored.some(r => r.raws.parentSeminarEvents || r.correction.parentSeminarEvents))
+    throw new Error("이전에 연결한 설명회 자료를 읽지 못해 집계를 멈췄습니다. 자료를 확인한 뒤 다시 집계해 주세요.");
   const names = contributionLessonNames(core.invoices, input.history ?? []);
   const staff = core.users.map(u => ({ names: [u.display_name, u.english_name], subjects: u.subjects ?? [] }));
   const evidence = contributionSubjectEvidence({ names, subjects: input.settings.operations.subjects, staff, classes: core.classes, teachers: core.lessonTeachers ?? [] });
@@ -86,20 +90,22 @@ export function assembleContribution(input: { tenant: string; today: string; cap
     return out;
   });
   const ontology = studentOntology({ tenant, today, capturedAt, core, activity, billing: originals.map((b) => b.seed), referrals: referrals.credits, canonical, calendar });
+  ontology.facts.push(...events.facts);
   const factsByStudent = groupBy(ontology.facts, (f) => f.studentId);
   // 점수가 없는 상담·수강·출결도 첫 복원에서 학생의 해당 달에 연결한다.
   const recordMonths = [...new Map(ontology.facts.map((f) => [`${f.studentId}:${f.occurred.value.slice(0, 7)}`, {
     studentId: f.studentId, month: f.occurred.value.slice(0, 7), raws: emptyRaws(), evidenceIds: [] as string[],
   }])).values()];
-  const pointsByStudent = groupBy(contributionFacts(billing, referrals.credits, [...participation, ...recordMonths]), (f) => f.studentId);
+  const pointsByStudent = groupBy(contributionFacts(billing, referrals.credits, [...participation, ...recordMonths, ...events.points]), (f) => f.studentId);
   const storedByStudent = groupBy(input.stored, (r) => r.studentId);
   const seedsByStudent = groupBy(historySeeds, (s) => canonical(s.studentId));
   const unavailable = new Map(participation.map((p) => [`${p.studentId}:${p.month}`, p.unavailable]));
   const coverage: SourceCoverage[] = [
+    events.coverage,
     { source: "makeedu_history_bills", from: "2020-01", through: "2025-12", state: "ready", note: "학생 번호로 연결된 청구만 포함. EiE는 2025-05부터. 청구 달 기준이며 정확한 휴원 기간 기록은 없습니다." },
     { source: "invoices", from: "2026-01", through: month, state: "ready" },
-    { source: "attendance_records", from: "2026-01-01", through: today, state: "ready", note: "정규 일정의 출결이 모두 입력된 달만 개근 판정. 과거 휴원 구간은 별도 기록이 없습니다." },
-    { source: "student_homework_videos", from: activity.assignments.map((a) => a.date).sort()[0] ?? null, through: today, state: "ready", note: "실제 영상 파일 제출 기준" },
+    { source: "attendance_records", from: "2026-01-01", through: today, state: "ready", note: "월~일 예정된 정규 수업에 모두 출석한 주를 인정. 종료된 주만 일요일의 달에 반영하며, 과거 휴원 구간은 별도 기록이 없습니다." },
+    { source: "student_homework_videos", from: activity.assignments.map((a) => a.date).sort()[0] ?? null, through: today, state: "ready", note: "실제 제출 영상이 하나 이상 연결된 숙제마다 1회 인정. 같은 숙제의 여러 영상은 중복 계산하지 않습니다." },
     { source: "student_grades", from: "2026-01-01", through: today, state: "ready" },
     { source: "classnote_parent_messages", from: activity.signalSources.filter((s) => s.source === "parent").map((s) => s.day).sort()[0] ?? null,
       through: today, state: !activity.aiLicensed || activity.pendingSignals.length ? "pending" : "ready", note: "출결 연락 제외 · 원문 변경 시 재판정 필요" },
@@ -118,6 +124,7 @@ export function assembleContribution(input: { tenant: string; today: string; cap
       const corrections = METRICS.filter((key) => r.correction[key] !== 0);
       const inMonth = facts.filter((f) => f.occurred.value.startsWith(r.month));
       const incomplete: Metric[] = [...(unavailable.get(`${student.id}:${r.month}`) ?? [])];
+      if (config.rates.parentSeminarEvents.enabled && events.coverage.state !== "ready") incomplete.push("parentSeminarEvents");
       const ownPending = pendingSignals.filter(s => s.studentId === student.id && (r.month === month || s.day.startsWith(r.month)));
       if (ownPending.some(s => s.source === "parent")) incomplete.push("parentPositiveMonths");
       if (ownPending.some(s => s.source === "teacher")) incomplete.push("teacherPositiveMonths");

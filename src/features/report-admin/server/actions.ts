@@ -5,7 +5,7 @@
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { humanizeDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 import { isClassnoteAllowed, isClassnoteSubjectEnabled } from "@/features/onescreen/classnote-guard";
@@ -16,14 +16,15 @@ import { SENT_STATUS_SUCCESS, UNREAD_MATCHABLE_OR } from "../unread-filter";
 import { parseMentSource } from "@/features/onescreen/ment-source";
 import { mentSourceColumnReady } from "@/features/onescreen/server/ment-source-db";
 import { STUCK_MINUTES } from "../classnote-queue";
-import { IMPORT_FILTER, UNSENT_FILTER, reportOrderSpecs, type ReportListFilters, type ReportListRow } from "../report-filters";
+import { IMPORT_FILTER, UNSENT_FILTER, reportOrderSpecs, sortByRating, type ReportListFilters, type ReportListRow } from "../report-filters";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { getClassnoteQueue, type ClassnoteQueueView } from "./queries";
-import { loadReportRatings } from "./report-ratings";
-import type { ReportRating } from "../report-rating";
+import { loadRatingPoints, loadReportRatings } from "./report-ratings";
+import { REPORT_RATING_VISIBLE, type ReportRating } from "../report-rating";
 import { isSendClassRouteRow, sendClassRow } from "@/features/onescreen/send-class";
 import { blockedForNoSendClass } from "@/features/onescreen/server/send-class";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
+import { makeupUncheckedIds } from "@/features/attendance/server/makeup-check-gate";
 
 /**
  * 실패/오래됨 보고서 재발송 — queued로 되돌려 워커가 다시 잡게 한다. retry_count·error 초기화.
@@ -56,6 +57,8 @@ export async function retryClassnote(
   absentSkipped?: number;
   /** 반별 발송인데 보낼 반이 없어 다시 올리지 않은 건수(원장 2026-09-30) — 원스크린·직접 작성에서 반을 골라 보낸다. */
   noClass?: number;
+  /** 보강 진행 여부 확인 전이라 다시 올리지 않은 보강 보고서 건수(원장 2026-10-27). */
+  makeupUnchecked?: number;
   dryRun?: boolean;
   error?: string;
 }> {
@@ -79,7 +82,7 @@ export async function retryClassnote(
     rows = await fetchInChunks(ids.slice(0, 200), (chunk) =>
       supabase
         .from("lesson_reports")
-        .select("id, report_date, subject, class_id, student_id, makeup, notes, teacher_name, students!lesson_reports_student_id_fkey(name)")
+        .select("id, report_date, subject, class_id, makeup_class_id, student_id, makeup, notes, teacher_name, students!lesson_reports_student_id_fkey(name)")
         .in("id", chunk)
         // 🔴 재발송은 **끝나지 못한 행만**(적대적 리뷰) — 목록 스냅샷이 옛 '실패'를 들고 있는 사이 워커가 이미
         //    게시했거나(success) 게시 중(processing/queued)인 행을 다시 queued로 돌리면 학부모에게 **두 번** 나간다.
@@ -127,7 +130,11 @@ export async function retryClassnote(
   } catch {
     return { ok: false, error: "출결 확인에 실패했습니다 — 다시 시도하세요" };
   }
-  if (requeueIds.length === 0) return { ok: true, requeued: 0, skipped, absentSkipped };
+  // 보강 진행 여부 확인 전인 보강 보고서는 다시 올리지 않는다(원장 2026-10-27 — 원스크린 발송 게이트와 같은 판정, makeup-check-gate.ts).
+  const uncheckedIds = await makeupUncheckedIds(user.tenantId, allowed.filter((r) => requeueIds.includes(r.id as string)));
+  const makeupUnchecked = uncheckedIds.size;
+  if (makeupUnchecked) requeueIds = requeueIds.filter((id) => !uncheckedIds.has(id));
+  if (requeueIds.length === 0) return { ok: true, requeued: 0, skipped, absentSkipped, ...(makeupUnchecked ? { makeupUnchecked } : {}) };
 
   // 보낼 반 게이트(미발송 일괄 발송과 같은 함수) — 반별 발송인데 보낼 반이 없으면 다시 올리지 않는다(워커가 1인 보드로 흘리지 않게).
   const requeueSet = new Set(requeueIds);
@@ -143,9 +150,9 @@ export async function retryClassnote(
   const noClass = noClassIds.size;
   if (noClass) requeueIds = requeueIds.filter((id) => !noClassIds.has(id));
   if (requeueIds.length === 0)
-    return noClass && !absentSkipped && !skipped
+    return noClass && !absentSkipped && !skipped && !makeupUnchecked
       ? { ok: false, requeued: 0, noClass, error: "보낼 반이 없어 다시 보내지 않았습니다 — 원스크린·직접 작성에서 반을 골라 보내세요" }
-      : { ok: true, requeued: 0, skipped, absentSkipped, noClass };
+      : { ok: true, requeued: 0, skipped, absentSkipped, noClass, ...(makeupUnchecked ? { makeupUnchecked } : {}) };
 
   const { data: requeuedRows, error } = await supabase
     .from("lesson_reports")
@@ -163,7 +170,7 @@ export async function retryClassnote(
   if (error) return { ok: false, error: humanizeDbError(error.message, "재발송") };
   // 실제로 갱신된 행만 센다(사이에 워커가 집어 간 행은 빠진다 — 감사로그·토스트 숫자가 거짓이 되지 않게).
   requeueIds = (requeuedRows ?? []).map((r) => r.id as string);
-  if (requeueIds.length === 0) return { ok: true, requeued: 0, skipped, absentSkipped, noClass };
+  if (requeueIds.length === 0) return { ok: true, requeued: 0, skipped, absentSkipped, noClass, ...(makeupUnchecked ? { makeupUnchecked } : {}) };
   // 🔴 학부모 게시판에 **글이 하나 더 붙는** 동작이라 반드시 남긴다. 일괄이므로 **한 줄 요약**
   //    (건별 N줄 금지) — 대신 되짚을 id·이름을 함께 담는다(재발송은 최대 200건이라 id는 50개로 자른다).
   const requeuedSet = new Set(requeueIds);
@@ -184,10 +191,11 @@ export async function retryClassnote(
       skipped,
       absentSkipped,
       ...(noClass ? { noClass } : {}),
+      ...(makeupUnchecked ? { makeupUnchecked } : {}),
       ...(gateOut.rewritten.length ? { makeupRewritten: gateOut.rewritten.slice(0, 50) } : {}),
     },
   });
-  return { ok: true, requeued: requeueIds.length, skipped, absentSkipped, noClass };
+  return { ok: true, requeued: requeueIds.length, skipped, absentSkipped, noClass, ...(makeupUnchecked ? { makeupUnchecked } : {}) };
 }
 
 /**
@@ -216,6 +224,8 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
    * 보고서 반에 살아 있는 반 보드가 없고 '보낼 반'(0303a)도 비어 있는 행. 원스크린·직접 작성에서 반을 골라 보낸다.
    */
   noClass?: number;
+  /** 보강 진행 여부 확인 전이라 큐잉하지 않은 보강 보고서 건수(원장 2026-10-27) — 원스크린에서 '보강 했음/못 했음'을 고른 뒤 보낸다. */
+  makeupUnchecked?: number;
   dryRun?: boolean;
   error?: string;
 }> {
@@ -234,7 +244,7 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
       supabase
         .from("lesson_reports")
         // 학생 이름은 감사로그 라벨용(위 retryClassnote와 같은 이유). 임베드엔 FK 이름 명시(#94).
-        .select("id, report_date, subject, class_id, student_id, makeup, notes, teacher_name, students!lesson_reports_student_id_fkey(name)")
+        .select("id, report_date, subject, class_id, makeup_class_id, student_id, makeup, notes, teacher_name, students!lesson_reports_student_id_fkey(name)")
         .in("id", chunk)
         .is("classnote_status", null)
         .or("source.is.null,source.neq.edutrix_import")
@@ -278,6 +288,10 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
     return { ok: false, error: "출결 확인에 실패했습니다 — 다시 시도하세요" };
   }
   const absentSkipped = eligible.length - sendable.length;
+  // 보강 진행 여부 확인 전인 보강 보고서는 올리지 않는다(원장 2026-10-27 — 원스크린 발송 게이트와 같은 판정, makeup-check-gate.ts).
+  const uncheckedIds = await makeupUncheckedIds(user.tenantId, sendable);
+  const makeupUnchecked = uncheckedIds.size;
+  if (makeupUnchecked) sendable = sendable.filter((r) => !uncheckedIds.has(r.id as string));
   // 반별 발송(ClassNote 모듈 + '수학 발송 경로') — 보낼 반 보드가 없는 행은 **큐에 올리지 않는다**(원스크린과 같은 규칙).
   // 일괄에선 행마다 반을 고를 수 없으니 이미 정해진 '보낼 반'(0303a)이 있을 때만 보낸다. 판정 실패 = fail-closed(그 행 제외).
   const routeRow = (r: (typeof sendable)[number]) => isSendClassRouteRow(settings, r);
@@ -293,7 +307,10 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
   const noClass = noClassIds.size;
   if (noClass) sendable = sendable.filter((r) => !noClassIds.has(r.id as string));
   if (sendable.length === 0)
-    return { ok: true, queued: 0, conflicts: 0, skipped: capped.length - emptyMent - absentSkipped - noClass, absentSkipped, emptyMent, noClass };
+    return {
+      ok: true, queued: 0, conflicts: 0, skipped: capped.length - emptyMent - absentSkipped - noClass - makeupUnchecked,
+      absentSkipped, emptyMent, noClass, ...(makeupUnchecked ? { makeupUnchecked } : {}),
+    };
 
   // 동명이인 감지 — 학생별 1회(중복 제거), 25명 청크로 버스트 제한(학생당 3쿼리).
   const studentIds = [...new Set(sendable.map((r) => r.student_id as string))];
@@ -371,10 +388,11 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
     queued,
     conflicts,
     // E13 — 멘트 미작성(emptyMent)은 따로 세므로 "제외"에서 뺀다(같은 건이 두 사유로 두 번 세지던 것).
-    skipped: capped.length - emptyMent - queued - conflicts - absentSkipped - noClass,
+    skipped: capped.length - emptyMent - queued - conflicts - absentSkipped - noClass - makeupUnchecked,
     absentSkipped,
     emptyMent,
     noClass,
+    ...(makeupUnchecked ? { makeupUnchecked } : {}),
   };
 }
 
@@ -505,35 +523,16 @@ export async function listReports(
   // ment_source(0214a) 적용 여부 — 미적용이면 select·필터에서 빼서 목록이 죽지 않게(#95, probe 캐시 왕복 0).
   // 평점(0450a)은 선생님 보고서를 평가한 참고 값이라 **쓰기(발송) 권한자에게만** 싣는다 — 화면의 canSend와 같은
   // 판정을 서버가 다시 한다(#77). 권한이 없으면 표를 읽지도 않고 행에 평점 칸 자체가 없다.
+  // 표시 스위치(REPORT_RATING_VISIBLE)가 꺼져 있으면 권한자에게도 같다(2026-10-26 원장 — 새 기준 검증 전까지 감춤).
   const [mentReady, canSeeRatings] = await Promise.all([
     mentSourceColumnReady(supabase),
-    canWriteTenant(user.systemRole, "lesson_reports"),
+    REPORT_RATING_VISIBLE ? canWriteTenant(user.systemRole, "lesson_reports") : Promise.resolve(false),
   ]);
 
-  let q = supabase
-    .from("lesson_reports")
-    // ⚠️ `classes!lesson_reports_class_id_fkey(...)` = to-one 임베드(0134a class_id FK). 조인 1회라 별도
-    //    조회가 없고, 반 정렬(reportOrderSpecs "class")이 이 임베드를 정렬 키로 쓴다. 반 없는 행은 null.
-    // ⚠️ **FK 이름을 반드시 붙일 것.** 0171a가 `makeup_class_id`(보강 앵커)를 더하면서 lesson_reports→classes
-    //    FK가 2개가 됐다 — 힌트 없는 `classes(...)`는 PostgREST가 어느 FK인지 못 정해 **HTTP 300 PGRST201로
-    //    쿼리 전체가 실패**한다("more than one relationship was found"). 2026-08-03 목록이 통째로 안 뜬 원인.
-    //    새 FK를 lesson_reports에 더할 땐 이 임베드가 여전히 유일하게 해석되는지 확인할 것.
-    // ⚠️ 반대로 **정렬 문자열엔 `!FK`를 넣으면 안 된다** — order 파서가 '!'를 못 읽어 PGRST100(400)이다.
-    //    select만 힌트로 확정하면 `order=classes(class_name)`은 그 임베드를 가리켜 정상 동작(둘 다 실측).
-    .select(
-      "id, student_id, subject, report_date, created_at, classnote_sent_at, classnote_status, classnote_read_at, teacher_name, share_token, source, class_id" +
-        (mentReady ? ", ment_source" : "") +
-        ", classes!lesson_reports_class_id_fkey(class_name)",
-      { count: "exact" },
-    );
-  // 정렬은 **서버에서** — 30건씩 끊어 주는 목록이라 화면에서 정렬하면 그 페이지 안에서만 정렬된다.
-  // 기본값·헤더 클릭 모두 순수 함수(reportOrderSpecs)가 결정(동률 tiebreak 포함 — 페이징 중복/누락 방지).
-  for (const o of reportOrderSpecs(filters.sort, filters.dir)) {
-    q = q.order(o.column, { ascending: o.ascending, nullsFirst: o.nullsFirst });
-  }
   // 학생 이름 검색 — 이름은 이 표에 없는 값(students 조인)이라 **먼저 id로 해석**한 뒤 거른다.
   // ⚠️ 상한을 두고 **넘치면 조용히 자르지 않고 되돌려 말한다** — 잘라 버리면 "그 학생 보고서가 없다"는
   //    거짓 결과가 되고([[#89]]), 거대 `.in()`은 URL 414로 실패한다(B3).
+  let studentIds: string[] | null = null;
   if (filters.student?.trim()) {
     const term = filters.student.trim();
     const { data: matched, error: nameError } = await supabase
@@ -546,56 +545,71 @@ export async function listReports(
     if (sids.length > STUDENT_SEARCH_CAP)
       return { ok: false, error: `"${term}"에 해당하는 학생이 너무 많습니다 — 이름을 더 입력해 주세요` };
     if (!sids.length) return { ok: true, rows: [], total: 0, page, pageSize: REPORT_PAGE_SIZE };
-    q = q.in("student_id", sids);
+    studentIds = sids;
   }
-  if (filters.from) q = q.gte("report_date", filters.from);
-  if (filters.to) q = q.lte("report_date", filters.to);
-  // "이관" 필터는 source, "미발송"은 NULL(등호로 못 잡는다), 그 외는 classnote_status.
-  if (filters.status === IMPORT_FILTER) q = q.eq("source", "edutrix_import");
-  else if (filters.status === UNSENT_FILTER)
-    // 발송 이력이 없는 native 보고서 = 알림·발송 큐 카드가 말하는 '미발송'과 같은 집합(이관분 제외).
-    q = q.is("classnote_status", null).or("source.is.null,source.neq.edutrix_import");
-  else if (filters.status) q = q.eq("classnote_status", filters.status);
-  if (filters.teacher) q = q.eq("teacher_name", filters.teacher);
-  // 담임 이름 부분검색 — 이름이 이 표의 컬럼(teacher_name)이라 조인·id 해석 없이 한 줄이다.
-  // ⚠️ `%`·`_`는 ilike 와일드카드라 그대로 넣으면 "김_정"이 뜻밖의 이름을 긁는다 → 이스케이프.
-  if (filters.teacherName?.trim()) {
-    const term = filters.teacherName.trim().replace(/[\\%_]/g, (c) => `\\${c}`);
-    q = q.ilike("teacher_name", `%${term}%`);
-  }
-  if (filters.subject) q = q.eq("subject", filters.subject);
   // 반 필터(0134a class_id) — 옵션은 0147a RPC가 "실제 보고서가 붙은 반"만 준다.
   // ⚠️ uuid 형식을 먼저 검사한다: 잘못된 값이 오면 PostgREST가 22P02(invalid input syntax) **영문 원문**을
   //    내고 그게 그대로 토스트에 뜬다(UI에 raw 에러 노출 금지 규칙 위반). 형식이 아니면 한글로 되돌린다.
-  if (filters.classId) {
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(filters.classId)) {
-      return { ok: false, error: "반 필터 값이 올바르지 않습니다 — 뷰 설정에서 반을 다시 골라 주세요" };
-    }
-    q = q.eq("class_id", filters.classId);
+  if (filters.classId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(filters.classId)) {
+    return { ok: false, error: "반 필터 값이 올바르지 않습니다 — 뷰 설정에서 반을 다시 골라 주세요" };
   }
   // 멘트 작성 방식 필터(0214a) — 강사 필터와 조합해 "그 선생님이 직접 쓴 멘트만". 값은 신뢰 경계에서 정규화.
+  let mentFilter: ReturnType<typeof parseMentSource> = undefined;
   if (filters.mentSource) {
-    const ms = parseMentSource(filters.mentSource);
-    if (!ms) return { ok: false, error: "멘트 작성 방식 필터 값이 올바르지 않습니다 — 뷰 설정에서 다시 골라 주세요" };
+    mentFilter = parseMentSource(filters.mentSource);
+    if (!mentFilter) return { ok: false, error: "멘트 작성 방식 필터 값이 올바르지 않습니다 — 뷰 설정에서 다시 골라 주세요" };
     // 미적용 상태에서 걸면 존재하지 않는 컬럼으로 400이 난다 — 조용히 무시(=거짓 '전체')하지 않고 사유를 말한다([[#89]]).
     if (!mentReady) return { ok: false, error: "멘트 작성 방식 필터는 데이터베이스 업데이트(0214a) 적용 후 쓸 수 있습니다" };
-    q = q.eq("ment_source", ms);
   }
-  // 읽음 필터 — "안읽음"은 판정 가능한 행만(발송 성공 + 매칭 키 + 읽음 없음). 매칭 키 없는 옛 이관분은
-  // 동기화 불가 = "안읽음" 아님(report-filters.ts ReportListFilters.read 주석 참조).
-  if (filters.read === "read") q = q.not("classnote_read_at", "is", null);
-  else if (filters.read === "unread") {
-    q = q
-      .eq("classnote_status", SENT_STATUS_SUCCESS)
-      .is("classnote_read_at", null)
-      // 매칭 가능: edutrix분은 edutrix_share_token 백필된 행만, native분(source≠edutrix_import, NULL 포함)은 항상.
-      // 🔴 절 문자열은 [`unread-filter.ts`](../unread-filter) 단일 소스 — 운영실 집계가 같은 값을 쓴다.
-      .or(UNREAD_MATCHABLE_OR);
-  }
-  q = q.range(page * REPORT_PAGE_SIZE, page * REPORT_PAGE_SIZE + REPORT_PAGE_SIZE - 1);
 
-  const { data, count, error } = await q;
-  if (error) return { ok: false, error: humanizeDbError(error.message, "조회") };
+  // ⚠️ `classes!lesson_reports_class_id_fkey(...)` = to-one 임베드(0134a class_id FK). 조인 1회라 별도
+  //    조회가 없고, 반 정렬(reportOrderSpecs "class")이 이 임베드를 정렬 키로 쓴다. 반 없는 행은 null.
+  // ⚠️ **FK 이름을 반드시 붙일 것.** 0171a가 `makeup_class_id`(보강 앵커)를 더하면서 lesson_reports→classes
+  //    FK가 2개가 됐다 — 힌트 없는 `classes(...)`는 PostgREST가 어느 FK인지 못 정해 **HTTP 300 PGRST201로
+  //    쿼리 전체가 실패**한다("more than one relationship was found"). 2026-08-03 목록이 통째로 안 뜬 원인.
+  //    새 FK를 lesson_reports에 더할 땐 이 임베드가 여전히 유일하게 해석되는지 확인할 것.
+  // ⚠️ 반대로 **정렬 문자열엔 `!FK`를 넣으면 안 된다** — order 파서가 '!'를 못 읽어 PGRST100(400)이다.
+  //    select만 힌트로 확정하면 `order=classes(class_name)`은 그 임베드를 가리켜 정상 동작(둘 다 실측).
+  const listCols: string =
+    "id, student_id, subject, report_date, created_at, classnote_sent_at, classnote_status, classnote_read_at, teacher_name, share_token, source, class_id" +
+    (mentReady ? ", ment_source" : "") +
+    ", classes!lesson_reports_class_id_fkey(class_name)";
+  // 필터 = **한 곳** — 평소 목록과 평점 정렬(번호 목록 · 그 페이지 행)이 같은 필터를 지난다(한쪽만 고치면 정렬한 목록과 건수가 어긋난다).
+  const filtered = (cols: string, opts?: { count: "exact" }) => {
+    let q = supabase.from("lesson_reports").select(cols, opts);
+    if (studentIds) q = q.in("student_id", studentIds);
+    if (filters.from) q = q.gte("report_date", filters.from);
+    if (filters.to) q = q.lte("report_date", filters.to);
+    // "이관" 필터는 source, "미발송"은 NULL(등호로 못 잡는다), 그 외는 classnote_status.
+    if (filters.status === IMPORT_FILTER) q = q.eq("source", "edutrix_import");
+    else if (filters.status === UNSENT_FILTER)
+      // 발송 이력이 없는 native 보고서 = 알림·발송 큐 카드가 말하는 '미발송'과 같은 집합(이관분 제외).
+      q = q.is("classnote_status", null).or("source.is.null,source.neq.edutrix_import");
+    else if (filters.status) q = q.eq("classnote_status", filters.status);
+    if (filters.teacher) q = q.eq("teacher_name", filters.teacher);
+    // 담임 이름 부분검색 — 이름이 이 표의 컬럼(teacher_name)이라 조인·id 해석 없이 한 줄이다.
+    // ⚠️ `%`·`_`는 ilike 와일드카드라 그대로 넣으면 "김_정"이 뜻밖의 이름을 긁는다 → 이스케이프.
+    if (filters.teacherName?.trim()) {
+      const term = filters.teacherName.trim().replace(/[\\%_]/g, (c) => `\\${c}`);
+      q = q.ilike("teacher_name", `%${term}%`);
+    }
+    if (filters.subject) q = q.eq("subject", filters.subject);
+    if (filters.classId) q = q.eq("class_id", filters.classId);
+    if (mentFilter) q = q.eq("ment_source", mentFilter);
+    // 읽음 필터 — "안읽음"은 판정 가능한 행만(발송 성공 + 매칭 키 + 읽음 없음). 매칭 키 없는 옛 이관분은
+    // 동기화 불가 = "안읽음" 아님(report-filters.ts ReportListFilters.read 주석 참조).
+    if (filters.read === "read") q = q.not("classnote_read_at", "is", null);
+    else if (filters.read === "unread") {
+      q = q
+        .eq("classnote_status", SENT_STATUS_SUCCESS)
+        .is("classnote_read_at", null)
+        // 매칭 가능: edutrix분은 edutrix_share_token 백필된 행만, native분(source≠edutrix_import, NULL 포함)은 항상.
+        // 🔴 절 문자열은 [`unread-filter.ts`](../unread-filter) 단일 소스 — 운영실 집계가 같은 값을 쓴다.
+        .or(UNREAD_MATCHABLE_OR);
+    }
+    return q;
+  };
+
   // select 문자열이 동적(ment_source 조건부, 0214a)이라 supabase-js 타입 파서가 못 읽는다(GenericStringError)
   // → 행 타입을 명시 캐스트. 아래 매핑이 실제 소비하는 컬럼만 적는다(select와 함께 고칠 것).
   type DbRow = {
@@ -614,7 +628,49 @@ export async function listReports(
     ment_source?: string | null;
     classes?: unknown;
   };
-  const list = (data ?? []) as unknown as DbRow[];
+  let list: DbRow[];
+  let total: number;
+  if (filters.sort === "rating" && canSeeRatings) {
+    // 평점 정렬(2026-10-26 원장) — 평점 표는 정책 0개(쓰기 권한자만 서버가 읽는다)라 PostgREST 임베드로 줄 세울 수 없다.
+    // 그래서 ① 같은 필터의 보고서 번호 전부(fetchAllPaged — 1,000행 침묵 절단 방지 #54) ② 지점의 지금 기준 평점 전부를 받아
+    // 서버에서 줄 세우고 ③ 그 페이지 30건만 다시 읽는다. 평점 없는 보고서는 방향과 무관하게 뒤(규약 ①).
+    let order: { id: string; report_date: string; created_at: string | null }[];
+    let points: Map<string, number>;
+    try {
+      [order, points] = await Promise.all([
+        fetchAllPaged<{ id: string; report_date: string; created_at: string | null }>((from, to) =>
+          filtered("id, report_date, created_at").order("id").range(from, to) as unknown as PromiseLike<{
+            data: { id: string; report_date: string; created_at: string | null }[] | null;
+            error: { message: string } | null;
+          }>,
+        ),
+        loadRatingPoints(user.tenantId),
+      ]);
+    } catch (e) {
+      return { ok: false, error: humanizeDbError(e instanceof Error ? e.message : String(e), "조회") };
+    }
+    const sorted = sortByRating(order, points, filters.dir ?? "asc");
+    total = sorted.length;
+    const pageIds = sorted.slice(page * REPORT_PAGE_SIZE, page * REPORT_PAGE_SIZE + REPORT_PAGE_SIZE).map((r) => r.id);
+    if (!pageIds.length) return { ok: true, rows: [], total, page, pageSize: REPORT_PAGE_SIZE };
+    const { data, error } = await filtered(listCols).in("id", pageIds);
+    if (error) return { ok: false, error: humanizeDbError(error.message, "조회") };
+    const at = new Map(pageIds.map((id, i) => [id, i]));
+    list = ((data ?? []) as unknown as DbRow[]).sort((x, y) => (at.get(x.id) ?? 0) - (at.get(y.id) ?? 0));
+  } else {
+    // 정렬은 **서버에서** — 30건씩 끊어 주는 목록이라 화면에서 정렬하면 그 페이지 안에서만 정렬된다.
+    // 기본값·헤더 클릭 모두 순수 함수(reportOrderSpecs)가 결정(동률 tiebreak 포함 — 페이징 중복/누락 방지).
+    // 평점 정렬을 볼 수 없는 계정이 'rating'을 보내면 기본 정렬로 돌아간다(reportOrderSpecs의 default).
+    let q = filtered(listCols, { count: "exact" });
+    for (const o of reportOrderSpecs(filters.sort, filters.dir)) {
+      q = q.order(o.column, { ascending: o.ascending, nullsFirst: o.nullsFirst });
+    }
+    q = q.range(page * REPORT_PAGE_SIZE, page * REPORT_PAGE_SIZE + REPORT_PAGE_SIZE - 1);
+    const { data, count, error } = await q;
+    if (error) return { ok: false, error: humanizeDbError(error.message, "조회") };
+    list = (data ?? []) as unknown as DbRow[];
+    total = count ?? list.length;
+  }
   const ids = [...new Set(list.map((r) => r.student_id as string))];
   // 학생 이름과 평점은 서로 독립 — 함께 받는다(B4). 평점 조회는 실패해도 빈 값이라 목록을 막지 않는다.
   const [nameRows, ratingById] = await Promise.all([
@@ -648,5 +704,5 @@ export async function listReports(
     mentSource: (r as { ment_source?: string | null }).ment_source ?? null,
     ...(canSeeRatings ? { rating: ratingById.get(r.id) ?? null } : {}),
   }));
-  return { ok: true, rows, total: count ?? rows.length, page, pageSize: REPORT_PAGE_SIZE };
+  return { ok: true, rows, total, page, pageSize: REPORT_PAGE_SIZE };
 }

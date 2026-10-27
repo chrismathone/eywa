@@ -23,7 +23,7 @@ const notes = composePilotMent({
 describe("항목별 글 → 카드 조각(원장 2026-10-23 시안 B)", () => {
   it("자동작성 글을 항목으로 나눈다 — 수업 평가가 맨 앞", () => {
     const s = parsePilotNotes(notes)!;
-    expect(s.map((x) => x.title)).toEqual(["수업 평가", "진도", "일일 테스트", "수업 태도", "숙제 완성도", "오늘의 수업", "오늘의 숙제", "사랑의 한마디"]);
+    expect(s.map((x) => x.title)).toEqual(["수업 평가", "진도", "일일 테스트", "숙제 완성도", "오늘의 수업", "오늘의 숙제", "사랑의 한마디"]);
   });
   it("손으로 쓴 글·빈 글은 null(카드가 글 그대로 그린다)", () => {
     expect(parsePilotNotes("오늘 잘했어요")).toBeNull();

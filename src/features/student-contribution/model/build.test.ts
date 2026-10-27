@@ -18,11 +18,11 @@ it("상담과 수업 시작은 각 달에 쌓이고 배점은 저장하지 않�
     consultedOn: "2026-09-20", startedOn: "2026-10-02" }], []);
   expect(result.map((r) => [r.month, r.raws.referralConsult, r.raws.referralStarted])).toEqual([["2026-09", 1, 0], ["2026-10", 0, 1]]);
 });
-it("달이 끝나야 정해지는 개근은 지난 열린 달에 반영하고 마감한다", () => {
+it("지난 열린 달의 마지막 실적을 반영한 뒤 마감한다", () => {
   const old = { month: "2026-09", raws: emptyRaws(), correction: emptyRaws(), closedAt: null, evidenceIds: [], reconstructed: false };
   const result = buildStudentMonths({ month: "2026-10", capturedAt: "2026-10-01T00:00:00Z", complete: true, stored: [old],
-    facts: [{ studentId: "s", month: "2026-09", raws: { ...emptyRaws(), perfectMonths: 1 }, evidenceIds: ["attendance:a"] }] });
-  expect(result[0]).toMatchObject({ raws: { perfectMonths: 1 }, correction: { perfectMonths: 0 }, closedAt: "2026-10-01T00:00:00Z" });
-  expect(result[1]!.correction.perfectMonths).toBe(0);
+    facts: [{ studentId: "s", month: "2026-09", raws: { ...emptyRaws(), perfectWeeks: 1 }, evidenceIds: ["attendance:a"] }] });
+  expect(result[0]).toMatchObject({ raws: { perfectWeeks: 1 }, correction: { perfectWeeks: 0 }, closedAt: "2026-10-01T00:00:00Z" });
+  expect(result[1]!.correction.perfectWeeks).toBe(0);
   expect(old.closedAt).toBeNull();
 });

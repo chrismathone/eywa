@@ -37,7 +37,7 @@ describe("항목별 글(원장 2026-10-22 — 섹션을 나눠 어떤 것에 어
     ).toBe(
       [
         "■ 일일 테스트\n5문제 중 4개 맞음\n대부분 잘 맞혔습니다. 틀린 문제는 다음 시간에 다시 짚고 넘어가겠습니다.",
-        "■ 수업 태도\n오늘 수업 태도가 매우 좋았습니다. 처음부터 끝까지 집중해서 성실하게 참여했습니다.",
+        // 수업 태도 '매우 좋음'은 문구가 없다(원장 2026-10-26 — 정도는 수업 평가 표가 말한다).
         "■ 숙제 완성도\n지난 시간 과제를 90% 해 왔습니다. 거의 다 해 왔고, 남은 부분은 수업 시간에 함께 확인하겠습니다.",
         "■ 오늘의 수업\n연립방정식을 잘 소화했습니다.",
         "■ 오늘의 숙제\n5p 풀기",
@@ -211,8 +211,8 @@ describe("배선", () => {
     const src = read("./server/actions.ts");
     expect(src).toMatch(/input: aiInput,/);
     expect(src).toMatch(/pilot && !safeInput\.understanding\?\.length/);
-    expect(src).toMatch(/composePilot\(cleanPilotUnderstanding\(res\.comment, safeInput\.understanding \?\? \[\]\), videoReceipt\)/);
-    expect(src).toMatch(/extraDirective: pilotAiDirective\(input\.studentName\)/);
+    expect(src).toMatch(/composePilot\(cleanPilotUnderstanding\(res\.comment, safeInput\.understanding \?\? \[\]\), videoReceipt, varietyOf\(prevNotes\)\)/);
+    expect(src).toMatch(/extraDirective: \[pilotAiDirective\(input\.studentName\), prevPhrasingHint\(prevNotes\)\]/);
   });
   it("세션이 '시험 없음' 사유를 싣고 로스터가 되읽는다 · '없음'이면 점수를 비운다", () => {
     expect(read("./components/onescreen-client.tsx")).toMatch(/dailyTestSkip: su\.dailyTestSkip/);

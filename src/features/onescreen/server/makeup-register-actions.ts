@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { readonlyTeacherViewError } from "@/lib/auth/view-mode";
 import { isValidYmd, kstToday, resolveReportDate } from "@/lib/date-kst";
 import { getTeachingClasses } from "@/features/classes/server/delegation";
-import { addMakeupSessionEntries, type MakeupSessionEntry } from "../makeup-session";
+import { addMakeupSessionEntries, hasMakeupSessionEntry, type MakeupSessionEntry } from "../makeup-session";
 import { changeMakeupSession } from "./makeup-session-store";
 import { makeupDeadlineError } from "@/features/attendance/server/makeup-deadline-gate";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -87,7 +87,7 @@ export async function registerMakeupEntries(input: {
   const saved = await changeMakeupSession(supabase, {
     tenantId: user.tenantId, teacherId: user.id, studentId: input.studentId, date: input.date,
   }, (progress) => {
-    added = new Set(entries.filter((e) => progress[`makeup::${e.subject}`]?.makeup !== true).map((e) => e.subject));
+    added = new Set(entries.filter((e) => !hasMakeupSessionEntry(progress, e.subject)).map((e) => e.subject));
     return addMakeupSessionEntries(progress, entries);
   });
   if (!saved.ok || cellWanted.size === 0) return saved;

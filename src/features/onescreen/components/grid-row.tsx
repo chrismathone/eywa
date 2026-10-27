@@ -18,8 +18,17 @@ import {
   type GridRow,
 } from "../grid";
 import { evaluateSendGate } from "../send-gate";
-import { hasPilotOneLine, isMathReportPilot, pilotCanEdit, pilotNeedsAutoWrite } from "../math-report-pilot";
-import { needsHomeworkMissReason, pilotRowSig, testSkipComplete } from "../math-report-pilot-sections";
+import { hasPilotOneLine, isMathReportPilot, pilotCanEdit, pilotNeedsAutoWrite, understandingPresetOf, understandingRows } from "../math-report-pilot";
+import { UnderstandingPresetButtons } from "./understanding-presets";
+import { UnderstandingPopover } from "./understanding-popover";
+import { attitudeNeedsNote, isHomeworkMissed, needsAttitudeNote, needsHomeworkMissReason, pilotRowSig, testSkipComplete, type DailyTestSkip } from "../math-report-pilot-sections";
+import { hasMakeupAbsenceDate } from "../attendance-sentence";
+import { DailyTestSkipSelect } from "./daily-test-skip-select";
+import { HomeworkMissReasonInput } from "./homework-miss-reason";
+import { ReasonNoteInput } from "./reason-note-input";
+import { rowMakeupFacts } from "../report-comment";
+import { joinLevelsLead, splitLevelsLead } from "../pilot-notes";
+import { LevelsLead } from "./levels-lead";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { rowLockNotice } from "../split-rows";
 import { reportOptoutNotice } from "@/features/classes/report-optout";
@@ -58,7 +67,11 @@ import { TodaysMathMark } from "./todays-math-mark";
 import { todaysMathMarked } from "../todays-math-fill-rules";
 import { MakeupClassTag } from "./makeup-class-tag";
 import { ReservedMakeupTag } from "./reserved-makeup-tag";
+import { needsMakeupCheck } from "../reserved-makeup";
 import { MakeupSwitchButton } from "./makeup-switch-button";
+import { isMathBookRow, useMathBookListId } from "./math-book-list";
+import { JjBookPicker } from "./jj-book-picker";
+import { isJjSheetDraft, isJjSheetReport } from "../jj-books";
 
 const TD_BASE = "px-2 py-1.5 align-top";
 // 학생 묶음 구분선 — 묶음 첫 행(참고행이 꺼져 있을 때는 이 행)의 위쪽만 굵고 진한 회색.
@@ -87,6 +100,11 @@ export type GridFieldHandlers = {
   onProgress: (studentId: string, subjectIndex: number, today: string) => void;
   /** 오늘 수업 성격(복습·문제풀이) — 진도와 함께 사는 별개 축(progress-mode.ts). */
   onProgressMode: (studentId: string, subjectIndex: number, mode: string | null) => void;
+  /** 이해도 단계 버튼 — 그 행 소단원 전부에 같은 점수(카드와 같은 setter). 없으면 버튼을 안 그린다. */
+  onUnderstandingAll?: (studentId: string, subjectName: string, score: number) => void;
+  /** 소단원 하나의 점수(null = 기본값으로) · 빼기/되살리기 — 카드 패널과 같은 setter. 없으면 '소단원별' 창을 안 그린다. */
+  onUnderstandingScore?: (studentId: string, subjectName: string, lesson: string, score: number | null) => void;
+  onUnderstandingToggle?: (studentId: string, subjectName: string, lesson: string, off: boolean) => void;
   onStudyGrade: (studentId: string, grade: string) => void;
   // 🔴 평가값 5종은 **행(수업) 단위**다(2026-08-13) — 보강은 정규와 따로 나가는 다른 보고서라 값도 독립이어야
   //    한다(원장 제보). 그래서 학생 id만이 아니라 **행 이름**까지 받는다. 해석·폴백은 row-fields.ts 단일 소스.
@@ -110,6 +128,15 @@ export type GridFieldHandlers = {
   onVideoSubmitLink?: (studentId: string, subjectName: string) => void;
   /** 영상 숙제 마감(7일 · 다음 수업) 고르기 — '영상 과제'를 켠 행에서만 뜬다. 없으면 칸이 잠긴다. */
   onVideoHomeworkDue?: (studentId: string, subjectName: string, mode: "week" | "next") => void;
+  // ── 새 보고서 필수 칸(원장 2026-10-26 *"카드와 표에서 동일하게"*) — 카드와 **같은 setter**를 넘긴다. 없으면 칸을 안 그린다(읽기 전용·테스트). ──
+  /** 일일 테스트 있음/없음 + 사유(null = 시험 있음). */
+  onDailyTestSkip?: (studentId: string, subjectName: string, skip: DailyTestSkip | null) => void;
+  /** 숙제 미제출 사유. */
+  onHomeworkMissReason?: (studentId: string, subjectName: string, reason: string) => void;
+  /** 수업 태도 의견(하·중하, 3줄 이상). */
+  onAttitudeNote?: (studentId: string, subjectName: string, note: string) => void;
+  /** 보강 사유(결석 날짜를 예약에서 못 찾은 보강 줄). */
+  onMakeupReason?: (studentId: string, subjectName: string, reason: string) => void;
 };
 
 /** 행 단위 액션. */
@@ -131,6 +158,8 @@ export type GridRowActions = {
   onSplitMakeup?: (student: OneScreenStudent, subjectName: string) => void;
   /** 보강 반 고르기(원장 2026-09-30 — 보고서 반 = 출석부 반) — 없으면 반 표시만. */
   onPickMakeupClass?: (student: OneScreenStudent, subjectName: string) => void;
+  /** 보강 진행 여부 확인(원장 2026-10-27 — 보강 예약 표식을 눌러 했음/못 했음) — 없으면 표식은 표시만. */
+  onCheckMakeup?: (student: OneScreenStudent, subjectName: string, outcome: "done" | "missed") => void;
   /** 영어 행 경고 셋(칸 바뀜·AI 코멘트 옛 값·이름 없음) — 카드 칸·발송 확인과 같은 판정(english-draft.ts). */
   englishFlagsOf?: (
     student: OneScreenStudent,
@@ -272,6 +301,7 @@ export function GridBodyRow({
   const classnoteOn = useClassnoteOn();
   const aiOn = useLicenseOn("ai_analysis"); // 꺼진 지점엔 '자동 작성' 버튼이 없다(2026-09-30)
   const tf = useSheetTf();
+  const mathBookList = useMathBookListId(); // 교재명 칸 제안(수학 행만, math-book-list.ts)
   // 이 행에 적용되는 평가값(태도·점수·과제 수행률) — 행 값이 없으면 학생 값 폴백(row-fields.ts).
   const rowEval = resolveRowFields(student, subject);
   const td = groupStart ? TD_GROUP : TD; // 학생 구분선(묶음 첫 행만 굵게)
@@ -300,9 +330,14 @@ export function GridBodyRow({
   //    버튼만 살려 두면 눌러 보고서야 이유를 아는 거짓 어포던스다(원장 2026-07-30 제보의 핵심).
   // 수학 보고서 시범(테스트 학생 한정, math-report-pilot.ts) — 멘트·추세는 보기만, 자동작성 글 그대로여야 발송(카드와 같은 판정).
   const pilot = isMathReportPilot(student.id, subject.subjectKey);
+  const uRows = pilot ? understandingRows(subject.today, subject.understanding) : [];
   const pilotLocked = pilot && !pilotCanEdit(rep?.autoDraft); // 자동작성 전엔 잠금(2026-10-23)
+  const makeupFacts = rowMakeupFacts(student, subject); // 보강 재료(결석 날짜·시간·사유) — 게이트와 보강 사유 칸이 같은 값을 본다
+  const draftLead = splitLevelsLead(rep?.draft); // 맨 위 수업 평가 표 = 읽기 전용(원장 2026-10-26)
   // '사랑의 한마디' 행 — 새 수학 보고서 + 영어(원장 2026-10-26, 카드와 같은 판정).
   const oneLineRow = pilot || subject.subjectKey === "english";
+  // JJ 수업보고서 글 — 사랑의 한마디는 선택(비우면 그 항목이 빠진다, 원장 2026-10-27).
+  const jjOptionalNote = subject.subjectKey === "english" && isJjSheetDraft(rep);
   const sendGate = evaluateSendGate({
     lang,
     needsAutoWrite:
@@ -310,13 +345,16 @@ export function GridBodyRow({
       pilotNeedsAutoWrite(rep?.draft, rep?.autoDraft, {
         studentName: student.name,
         today: subject.today,
+        progressMode: subject.progressMode,
         note: rowEval.note,
         factsSig: pilotRowSig(student, subject.name),
         writtenSig: rep?.pilotFactsSig,
       }),
-    needsOneLine: oneLineRow && !hasPilotOneLine(rowEval.note), // 사랑의 한마디(옛 강사 한줄 멘트) 필수(원장 2026-10-22)
+    needsOneLine: oneLineRow && !jjOptionalNote && !hasPilotOneLine(rowEval.note), // 사랑의 한마디(옛 강사 한줄 멘트) 필수(원장 2026-10-22)
     needsTestReason: pilot && !testSkipComplete(subject.dailyTestSkip), // 일일 테스트 '없음'이면 사유 필수(원장 2026-10-22)
     needsHomeworkReason: pilot && needsHomeworkMissReason(rowEval.homework, subject.homeworkMissReason), // 숙제 미제출이면 사유 필수(원장 2026-10-23)
+    needsAttitudeNote: pilot && needsAttitudeNote(rowEval.attitude, subject.attitudeNote), // 태도 하·중하면 의견 3줄 이상(원장 2026-10-26)
+    needsMakeupCheck: needsMakeupCheck(subject), // 보강 예약이 든 줄은 보강 진행 여부 확인 뒤에(원장 2026-10-27)
     readonlyView: gen.readonlyView, // 열람 전용 — 사유 라벨("열람 전용")까지 게이트가 만든다
     // 발송 대기·게시 중 — 워커 결과 전까지 다시 못 누른다(카드뷰와 같은 판정, 원장 2026-09-29).
     sendInFlight: liveStatus === "queued" || liveStatus === "processing",
@@ -558,8 +596,11 @@ export function GridBodyRow({
           {showClass && subject.className ? (
             <span className="text-text-faint text-xs">{subject.className}</span>
           ) : null}
-          {/* 보강 예약(0264a) — 이 줄에 걸린 그날 보강(원장 2026-10-22 *"표 모드도 동일하게"*). */}
-          <ReservedMakeupTag list={subject.makeupReserved} />
+          {/* 보강 예약(0264a) — 이 줄에 걸린 그날 보강(원장 2026-10-22 *"표 모드도 동일하게"*). 눌러서 보강 진행 여부 확인(2026-10-27). */}
+          <ReservedMakeupTag
+            list={subject.makeupReserved}
+            onCheck={actions.onCheckMakeup && !gen.readonlyView ? (outcome) => actions.onCheckMakeup?.(student, subject.name, outcome) : undefined}
+          />
           {/* 수업 나누기(0351a) — 받는 반 행이면 "← 원래 선생님", 원래 반 행이면 "→ 받는 선생님"(그 시간만). */}
           {subject.splitIn || subject.splitOut ? (
             <span className="bg-blue-soft text-blue rounded-pill px-1 py-px text-xs font-bold">{subject.splitIn ?? subject.splitOut}</span>
@@ -586,6 +627,18 @@ export function GridBodyRow({
             </span>
           ) : null}
         </div>
+        {/* 보강 사유 — 결석 날짜를 예약에서 못 찾은 보강 줄만(카드와 같은 칸, 2026-10-26). */}
+        {fields.onMakeupReason && makeupFacts?.row && !hasMakeupAbsenceDate(makeupFacts) ? (
+          <fieldset disabled={rowLocked} className={LOCK_FS}>
+            <ReasonNoteInput
+              value={subject.makeupReason ?? ""}
+              done={(subject.makeupReason ?? "").trim() !== ""}
+              labelKey="os.card.mkReason.label"
+              placeholderKey="os.card.mkReason.ph"
+              onChange={(v) => fields.onMakeupReason?.(student.id, subject.name, v)}
+            />
+          </fieldset>
+        ) : null}
       </td>
       {/* 수업타임(시수) — **전용 열**(원장 2026-08-05 "타임이 너무 작다"). 이름칸 안에서 pill과 자리를
           다투면 계속 작아진다. 기록할 자리가 없는 행(보강·반 모호)은 왜 없는지 밝힌다(빈 칸 금지). */}
@@ -622,6 +675,29 @@ export function GridBodyRow({
           onStudyGrade={fields.onStudyGrade}
           locked={rowLocked}
         />
+        {/* 이해도 단계 버튼 — 카드와 같은 버튼·같은 함수(원장 2026-10-26 *"카드와 표에서 동일하게"*). 새 수학 보고서 행이고 진도가 있을 때만. */}
+        {/* 소단원별 — 소단원마다 다른 점수·빼기·되살리기(카드와 같은 패널, 원장 2026-10-27). 다 뺐어도 되살릴 수 있게 소단원이 있으면 선다. */}
+        {pilot && fields.onUnderstandingAll && uRows.length ? (
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {uRows.some((r) => !r.off) ? (
+              <UnderstandingPresetButtons
+                compact
+                disabled={rowLocked}
+                active={understandingPresetOf(uRows)}
+                onPick={(score) => fields.onUnderstandingAll?.(student.id, subject.name, score)}
+              />
+            ) : null}
+            {fields.onUnderstandingScore && fields.onUnderstandingToggle ? (
+              <UnderstandingPopover
+                rows={uRows}
+                disabled={rowLocked}
+                onScore={(lesson, score) => fields.onUnderstandingScore?.(student.id, subject.name, lesson, score)}
+                onToggle={(lesson, off) => fields.onUnderstandingToggle?.(student.id, subject.name, lesson, off)}
+                onAll={(score) => fields.onUnderstandingAll?.(student.id, subject.name, score)}
+              />
+            ) : null}
+          </div>
+        ) : null}
       </td>
       {/* 점수·태도·과제 칸은 자체 잠금 prop이 없다 → **td 안에서** fieldset으로 묶어 잠근다(카드 모드와 같은 방식).
           ⚠️ `<tr>`의 자식은 `<td>`여야 해서 행 전체를 fieldset으로 감쌀 수 없다 — 칸마다 감싼다.
@@ -629,9 +705,19 @@ export function GridBodyRow({
       {config.dailyEnabled ? (
         <td className={`${td} text-center`}>
           {/* 수학 보고서 시범 — 카드에서 '시험 없음'을 고른 행은 점수 칸 대신 그 사실을 적는다(점수를 넣어도 읽지 않는다, row-fields.ts). */}
-          {pilot && subject.dailyTestSkip ? (
+          {/* 일일 테스트 '없음' — 표에서도 카드와 같은 판으로 고른다(원장 2026-10-26 *"카드와 표에서 동일하게"*) — 칸에 펼치면 행이 터져 사유는 드롭다운으로(2026-10-27). */}
+          {pilot && subject.dailyTestSkip && fields.onDailyTestSkip ? (
+            <fieldset disabled={rowLocked} className={LOCK_FS}>
+              <DailyTestSkipSelect
+                skip={subject.dailyTestSkip}
+                ariaLabel={tf("os.row.dailyLabel", { name: student.name })}
+                onChange={(skip) => fields.onDailyTestSkip?.(student.id, subject.name, skip)}
+              />
+            </fieldset>
+          ) : pilot && subject.dailyTestSkip ? (
             <span className="text-text-dim text-xs font-bold">{t("os.card.testSkip.no")}</span>
           ) : (
+          <>
           <fieldset disabled={rowLocked} className={LOCK_FS}>
             <ScoreInput
               value={rowEval.tests.daily.score}
@@ -643,6 +729,16 @@ export function GridBodyRow({
               nav={nav.studentRow !== undefined ? { col: "daily", row: nav.studentRow } : undefined}
             />
           </fieldset>
+          {pilot && fields.onDailyTestSkip && !rowLocked ? (
+            <button
+              type="button"
+              onClick={() => fields.onDailyTestSkip?.(student.id, subject.name, { reason: null, detail: "" })}
+              className="text-text-faint hover:text-foreground mt-0.5 block w-full text-center text-xs underline-offset-2 hover:underline"
+            >
+              {t("os.card.testSkip.no")}
+            </button>
+          ) : null}
+          </>
           )}
           {todaysMathMarked(subject, "daily", rowEval.tests.daily) ? <TodaysMathMark /> : null}
         </td>
@@ -680,6 +776,17 @@ export function GridBodyRow({
             legacyHint={t("select.legacy")}
             searchPlaceholder={t("select.search")}
           />
+          {/* 수업 태도 의견 — 하·중하일 때만(카드와 같은 칸, 2026-10-26). */}
+          {pilot && fields.onAttitudeNote && attitudeNeedsNote(rowEval.attitude) ? (
+            <ReasonNoteInput
+              multiline
+              value={subject.attitudeNote ?? ""}
+              done={!needsAttitudeNote(rowEval.attitude, subject.attitudeNote)}
+              labelKey="os.card.attNote.label"
+              placeholderKey="os.card.attNote.ph"
+              onChange={(v) => fields.onAttitudeNote?.(student.id, subject.name, v)}
+            />
+          ) : null}
         </fieldset>
       </td>
       <td className={td}>
@@ -691,6 +798,13 @@ export function GridBodyRow({
             label={tf("os.row.hwLabel", { name: student.name })}
             nav={{ col: "homework", row: nav.row }}
           />
+          {/* 숙제 미제출 사유 — 카드와 같은 칸(2026-10-26 표에도). */}
+          {pilot && fields.onHomeworkMissReason && isHomeworkMissed(rowEval.homework) ? (
+            <HomeworkMissReasonInput
+              value={subject.homeworkMissReason ?? ""}
+              onChange={(r) => fields.onHomeworkMissReason?.(student.id, subject.name, r)}
+            />
+          ) : null}
         </fieldset>
           {subject.classId ? (
             <VideoHomeworkCheck classId={subject.classId} studentId={student.id}
@@ -703,13 +817,23 @@ export function GridBodyRow({
       <td className={td}>
         <div className="flex flex-col gap-1">
           {/* 칸마다 무엇인지 앞에 작은 아이콘(원장 2026-09-30 *"교재 / 과제 / 보강체크 알 수 있게"*) — 값이 차면
-              placeholder가 사라져 두 칸이 구분되지 않았다. 폭 140px라 글자 대신 아이콘 + 툴팁. */}
+              placeholder가 사라져 두 칸이 구분되지 않았다. 폭 160px라 글자 대신 아이콘 + 툴팁. */}
           <div className="flex items-center gap-1">
           <span title={t("os.row.bookPh")} className="text-text-faint inline-flex shrink-0"><EyIcon name="book" size={14} aria-hidden /></span>
+          {isJjSheetReport(rep) ? (
+            // JJ 수업보고서 행 — 교재는 세 권 중에서 고른다(원장 2026-10-27, jj-books.ts).
+            <JjBookPicker
+              value={subject.textbook}
+              onChange={(v) => fields.onTextbook(student.id, subject.name, v)}
+              disabled={rowLocked}
+              label={tf("os.row.bookAria", { name: student.name, subject: subject.name })}
+            />
+          ) : (
           <input
             type="text"
             value={subject.textbook ?? ""}
             onChange={(e) => fields.onTextbook(student.id, subject.name, e.target.value)}
+            list={isMathBookRow(subject.subjectKey) ? mathBookList : undefined}
             readOnly={rowLocked}
             placeholder={t("os.row.bookPh")}
             aria-label={tf("os.row.bookAria", { name: student.name, subject: subject.name })}
@@ -718,6 +842,7 @@ export function GridBodyRow({
             onKeyDown={handleGridNavKey}
             className="border-line bg-card focus:border-primary h-8 w-full min-w-0 rounded-sm border px-2 text-xs outline-none"
           />
+          )}
           </div>
           {/* 오늘 과제(숙제 내용) — 0096a. 과제 셀렉트(수행 상태)와 별개, AI 멘트·학부모 카드 재료. */}
           {/* 진도 셀과 같은 처방 — 시트 초안은 교시마다 과제가 있어 한 줄 input이면 붙어 보인다(2026-08-07). */}
@@ -737,7 +862,7 @@ export function GridBodyRow({
               if (fixed !== e.target.value) fields.onHomeworkToday(student.id, subject.name, fixed);
             }}
             readOnly={rowLocked}
-            // ⚠️ 이 칸은 고정 140px(colgroup) — 예시까지 넣은 긴 placeholder는 **좁아서 잘려서**
+            // ⚠️ 이 칸은 고정 160px(colgroup) — 예시까지 넣은 긴 placeholder는 **좁아서 잘려서**
             // "오늘 과제 (예: 개념편 p"로 끊겼다(원장 제보 2026-08-04).
             // 칸 이름만 남기고 예시는 title(툴팁)로 — 카드 모드(폭 넉넉)는 예시를 그대로 쓴다.
             placeholder={t("os.row.hwTodayPh")}
@@ -804,7 +929,7 @@ export function GridBodyRow({
             value={rowEval.note}
             onChange={(e) => fields.onNote(student.id, subject.name, e.target.value)}
             readOnly={rowLocked}
-            placeholder={rowPlaceholder ?? (oneLineRow ? t("os.row.notePhPilot") : t("os.row.notePh"))}
+            placeholder={rowPlaceholder ?? (jjOptionalNote ? t("os.row.notePhJj") : oneLineRow ? t("os.row.notePhPilot") : t("os.row.notePh"))}
             aria-label={tf("os.row.noteAria", { name: student.name })}
             className={`border-amber/40 focus:border-primary scrollbar-thin min-h-[40px] w-full rounded-sm border px-2 py-1 text-xs leading-snug outline-none ${AUTOSIZE} ${
               lockedTone || "bg-amber-soft/30"
@@ -832,9 +957,12 @@ export function GridBodyRow({
               />
             </>
           ) : (
+            <>
+            {/* 맨 위 '수업 평가' 표는 편집 칸에서 빼서 읽기 전용 요약으로(원장 2026-10-26, 카드와 같은 규칙). */}
+            <LevelsLead lead={draftLead.lead} compact />
             <textarea
-              value={rep?.draft ?? ""}
-              onChange={(e) => fields.onDraft(student.id, subject.name, e.target.value)}
+              value={draftLead.body}
+              onChange={(e) => fields.onDraft(student.id, subject.name, joinLevelsLead(draftLead.lead, e.target.value))}
               // 시범 대상 = 자동작성 전엔 보기만, 뒤엔 고칠 수 있다(카드와 같은 규약, 2026-10-23).
               readOnly={rowLocked || pilotLocked}
               // 말투 반영 안내(0262a)는 프로파일을 읽는 행(영어 밖)에만 — 영어 행은 템플릿 모드라 그 문장이 거짓이 된다.
@@ -842,6 +970,7 @@ export function GridBodyRow({
               aria-label={tf("os.row.mentAria", { name: student.name, subject: subject.name })}
               className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-background"} min-h-[72px]`}
             />
+            </>
           )}
           {englishFlags &&
           (englishFlags.stale || englishFlags.aiStale || englishFlags.nameMissing || englishFlags.needsAi) ? (
@@ -872,7 +1001,8 @@ export function GridBodyRow({
           {isEnglishRow ? null : (
             // 추세 칸 **오른쪽**에 '학습 추세 미발송'(원장 2026-09-18 *"오른쪽에 보기좋은 자리"*).
             // 🔴 반이 없는 행(수업외 보강)엔 안 그린다 — 키가 '같은 반'이라 성립하지 않는다.
-            <div className="flex items-start gap-2">
+            // 좁은 창(표 최소 폭)에선 문구 칸이 ~240px라 체크가 옆에 붙으면 추세 칸이 세 줄로 찌그러졌다(2026-10-27) → 넘치면 아래로.
+            <div className="flex flex-wrap items-start gap-x-2 gap-y-1">
               <textarea
                 value={rep?.trendDraft ?? ""}
                 onChange={(e) => fields.onTrend(student.id, subject.name, e.target.value)}
@@ -880,7 +1010,7 @@ export function GridBodyRow({
                 placeholder={mentPlaceholder ?? t("os.row.trendPh")}
                 aria-label={tf("os.row.trendAria", { name: student.name, subject: subject.name })}
                 title={trendHidden ? t("os.row.trendOptOutOn") : undefined}
-                className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-bg-soft"} min-h-[48px] flex-1 ${
+                className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-bg-soft"} min-h-[48px] min-w-0 grow basis-[200px] ${
                   trendHidden ? "text-text-dim line-through decoration-1" : ""
                 }`}
               />

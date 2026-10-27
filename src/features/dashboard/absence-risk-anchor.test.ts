@@ -11,11 +11,8 @@
  *    고치지 않는다. 나중에 누가 이 함수를 다시 정의하면서 상한을 빠뜨리면 여기서 걸려야 한다.
  * ⚠️ `current_date`는 답이 아니다 — 이 DB의 timezone은 UTC라 KST 00~09시에 하루 어긋난다(0124a 선례).
  */
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-
-const DIR = join(process.cwd(), "supabase/migrations");
+import { migrationFiles } from "@/lib/db/migrations-corpus.mjs";
 
 /** 오늘(KST) 상한 — 마이그레이션에 이 모양 그대로 들어 있어야 한다. */
 const KST_CAP = /session_date\s*<=\s*\(now\(\) at time zone 'Asia\/Seoul'\)::date/;
@@ -27,13 +24,11 @@ const KST_CAP = /session_date\s*<=\s*\(now\(\) at time zone 'Asia\/Seoul'\)::dat
  *    검사 대상이 된다(이 가드를 처음 짤 때 실제로 자기 설명문에 걸렸다). 봐야 할 건 실행되는 SQL뿐이다.
  */
 function newestDefining(fnSignature: string): { file: string; sql: string } {
-  const hits = readdirSync(DIR)
-    .filter((f) => f.endsWith(".sql"))
-    .filter((f) => stripComments(readFileSync(join(DIR, f), "utf8")).includes(fnSignature))
-    .sort(); // 파일명이 0000-패딩이라 사전순 = 번호순
-  const file = hits[hits.length - 1];
-  expect(file, `${fnSignature} 를 정의하는 마이그레이션이 없다`).toBeTruthy();
-  return { file: file!, sql: stripComments(readFileSync(join(DIR, file!), "utf8")) };
+  // 적용 순서(시즌1 합본 구역 → 시즌2 파일) — 마지막이 현재 유효한 정의.
+  const hits = migrationFiles().filter((f) => stripComments(f.sql).includes(fnSignature));
+  const hit = hits[hits.length - 1];
+  expect(hit, `${fnSignature} 를 정의하는 마이그레이션이 없다`).toBeTruthy();
+  return { file: hit!.name, sql: stripComments(hit!.sql) };
 }
 
 /** `--` 줄 주석 제거(문자열 안의 `--`는 이 파일들에 없다 — 있으면 그때 파서를 쓸 것). */

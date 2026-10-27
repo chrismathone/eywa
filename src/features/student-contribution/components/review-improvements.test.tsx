@@ -70,14 +70,14 @@ it("실적 없는 항목만 접고 정정·누적 실적·자료 확인 전 항�
   render(<MonthMetrics selected={selected} through={{ ...emptyRaws(), tenureYears: 1 }} config={DEFAULT_CONFIG} />);
   // 넓은 화면 표와 폰 카드가 같은 항목을 함께 그린다(화면 폭에 따라 하나만 보인다).
   for (const label of ["수업료 기여", "소개 상담", "장기 재원", "학부모 긍정 신호"]) expect(screen.getAllByText(label)).toHaveLength(2);
-  expect(screen.queryAllByText("개근")).toHaveLength(0);
+  expect(screen.queryAllByText("주간 개근")).toHaveLength(0);
   expect(screen.getAllByText("정정 −1건")).toHaveLength(2);
   fireEvent.click(screen.getByRole("button", { name: /실적 없는 .* 항목도 보기/ }));
-  expect(screen.getAllByText("개근")).toHaveLength(2);
+  expect(screen.getAllByText("주간 개근")).toHaveLength(2);
 });
 
 it("저장 위치의 변경 요약에 끈 항목과 배점·인정 기준 차이를 표시한다", () => {
-  const after = structuredClone(DEFAULT_CONFIG); after.rates.tuitionWon.points = 2; after.rates.perfectMonths.enabled = false; after.referrals.months = 24;
+  const after = structuredClone(DEFAULT_CONFIG); after.rates.tuitionWon.points = 2; after.rates.perfectWeeks.enabled = false; after.referrals.months = 24;
   render(<SettingsChangeSummary before={DEFAULT_CONFIG} after={after} delta={35} />);
   const summary = within(screen.getByRole("region", { name: "저장할 변경 사항" }));
   expect(summary.getByText("변경 사항 3개")).toBeTruthy();

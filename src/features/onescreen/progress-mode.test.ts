@@ -3,6 +3,7 @@ import {
   PROGRESS_MODES,
   asProgressMode,
   progressFactLabel,
+  progressWithMode,
   progressPredicate,
 } from "./progress-mode";
 import { SKIP_PROGRESS_STATUSES } from "./progress-status";
@@ -136,5 +137,17 @@ describe("AI 사실 블록 — 라벨만 바뀐다", () => {
     expect(buildFactBlock({ ...base, progress: "월말평가", progressMode: "복습" })).toContain(
       "오늘 수업: 월말평가",
     );
+  });
+});
+
+describe("영어 {진도} — 복습·문제풀이 한 줄(원장 2026-10-26)", () => {
+  it("고르면 진도 아래에 그날 수업 성격 한 줄", () => {
+    expect(progressWithMode("Unit 3 Reading", "복습")).toBe("Unit 3 Reading\n오늘은 위 내용을 복습했습니다.");
+    expect(progressWithMode("Unit 3 Reading", "문제풀이")).toBe("Unit 3 Reading\n오늘은 위 내용의 문제풀이 위주로 수업했습니다.");
+  });
+  it("안 골랐거나 진도가 비면 원문 그대로(빈 진도에 성격 문장만 나가지 않게)", () => {
+    expect(progressWithMode(" Unit 3 ", null)).toBe("Unit 3");
+    expect(progressWithMode("Unit 3", "모름")).toBe("Unit 3");
+    expect(progressWithMode("", "복습")).toBe("");
   });
 });

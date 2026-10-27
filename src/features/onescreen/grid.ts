@@ -3,6 +3,9 @@
  * 카드↔표 토글의 표 쪽 행 구성·발송대상 판정을 순수 함수로 분리(CLAUDE.md: 계산 함수 분리+Vitest).
  */
 import { toHomeworkRateChoice } from "./homework-rate";
+import { asProgressMode } from "./progress-mode";
+import { attitudeNeedsNote, isHomeworkMissed, testSkipComplete, type DailyTestSkip } from "./math-report-pilot-sections";
+import { pilotLessons } from "./math-report-pilot";
 import { resolveRowFields } from "./row-fields";
 import type { OneScreenStudent, PrevReport, Subject } from "./types";
 
@@ -299,6 +302,21 @@ export type BulkPatch = {
   homeworkToday?: string;
   /** 오늘 진도 — 필드명은 모듈 전체 규약(planPrevFill·planCopyFirstRow)과 같은 `today`. */
   today?: string;
+  /** 오늘 수업 성격(복습·문제풀이, progress-mode.ts) — 진도와 같은 과목 행에만(원장 2026-10-26). */
+  progressMode?: string;
+  /** 소단원별 이해도 — 그 행 오늘 진도의 소단원 전부에 같은 점수(0~10, 단계 버튼 우수·보통·나쁨, 원장 2026-10-26). 새 수학 보고서 행에만. */
+  understanding?: number;
+  /** 이해도에서 뺄 소단원(진도칸 원문 차시) — 그 행 오늘 진도에 있는 것만 뺀다. 새 수학 보고서 행에만(원장 2026-10-27). */
+  understandingOff?: string[];
+  /** 수업 태도 의견(하·중하일 때 강사 원문, 2026-10-26) — 태도가 하·중하인(이번에 그렇게 바꾸는 것 포함) 새 수학 보고서 행에만. */
+  attitudeNote?: string;
+  /** 숙제 미제출 사유(원장 2026-10-27 표 일괄 점검) — 숙제가 미제출·0%인(이번에 그렇게 바꾸는 것 포함) 새 수학 보고서 행에만. */
+  homeworkMissReason?: string;
+  /**
+   * 일일 테스트 '안 봄' + 사유(원장 2026-10-27) — 새 수학 보고서 행에만. 사유를 다 고른 값만 넣는다(`testSkipComplete`).
+   * 계획 결과(`set`)에서 null = '봄'으로 되돌림 — 이번 일괄이 그 행에 일일 점수를 넣을 때(점수를 넣었는데 '안 봄'이 남으면 점수가 안 읽힌다).
+   */
+  dailyTestSkip?: DailyTestSkip | null;
   // ── 2026-10-02 추가(원장 *"일괄 입력에 지금 없는거 추가"*) — 전부 **행 단위**. 값이 없으면(undefined) 적용하지 않는다. ──
   /** 특이사항(강사 메모). */
   note?: string;
@@ -324,7 +342,21 @@ export type BulkTarget = {
   /** 진도를 같은 과목 행에만 넣기 위한 키(미지정=math, 진도 셀 분기와 동일 규약). */
   subjectKey: string;
   today: string;
+  /** 지금 수업 성격(복습·문제풀이) — "빈 칸만" 판정용. */
+  progressMode?: string | null;
+  /** 새 수학 보고서 행인가(이해도 칸이 있는 행) — 아니면 이해도를 넣지 않는다. */
+  understandingOk?: boolean;
+  /** 강사가 이해도를 하나라도 직접 매겼나 — '빈 칸만'이면 이런 행은 건너뛴다. */
+  understandingStored?: boolean;
   attitude: string | null;
+  /** 지금 수업 태도 의견 — '빈 칸만' 판정용(2026-10-26). */
+  attitudeNote?: string;
+  /** 태도 의견을 쓰는 행인가(새 수학 보고서) — 아니면 의견을 넣지 않는다. 숙제 미제출 사유·일일 테스트 '안 봄'도 같은 행에만. */
+  attitudeNoteOk?: boolean;
+  /** 지금 숙제 미제출 사유 — '빈 칸만' 판정용. */
+  homeworkMissReason?: string;
+  /** 지금 일일 테스트 '안 봄' 상태 — 있으면 일일 테스트 칸은 '찬' 것으로 본다('빈 칸만'). */
+  dailyTestSkip?: DailyTestSkip | null;
   homework: string;
   textbook: string;
   homeworkToday: string;
@@ -391,7 +423,23 @@ export function planBulkApply(
     if (t.locked) continue; // 잠긴 행엔 아무 값도 넣지 않는다(지울 수 없는 값이 남는다)
     const set: BulkPatch = {};
     if (p.attitude !== undefined && (!onlyEmpty || !t.attitude)) set.attitude = p.attitude;
+    // 수업 태도 의견 — 결과 태도가 하·중하인 행만. '빈 칸만'은 의견이 빈 행에만(적어 둔 의견을 덮지 않는다).
+    if (
+      patch.attitudeNote?.trim() &&
+      t.attitudeNoteOk &&
+      attitudeNeedsNote(set.attitude ?? t.attitude) &&
+      (!onlyEmpty || !(t.attitudeNote ?? "").trim())
+    )
+      set.attitudeNote = patch.attitudeNote;
     if (p.homework !== undefined && (!onlyEmpty || !t.homework)) set.homework = p.homework;
+    // 숙제 미제출 사유 — 결과 숙제가 미제출·0%인 행만(태도 의견과 같은 규칙). '빈 칸만'은 사유가 빈 행에만.
+    if (
+      patch.homeworkMissReason?.trim() &&
+      t.attitudeNoteOk &&
+      isHomeworkMissed(set.homework ?? t.homework) &&
+      (!onlyEmpty || !(t.homeworkMissReason ?? "").trim())
+    )
+      set.homeworkMissReason = patch.homeworkMissReason;
     if (p.textbook !== undefined && (!onlyEmpty || !t.textbook.trim())) set.textbook = p.textbook;
     if (p.homeworkToday !== undefined && (!onlyEmpty || !t.homeworkToday.trim())) set.homeworkToday = p.homeworkToday;
     if (
@@ -401,16 +449,44 @@ export function planBulkApply(
       (!onlyEmpty || !t.today.trim())
     )
       set.today = p.today;
+    // 수업 성격 — 진도와 같은 규칙(고른 과목 행에만 · '빈 칸만'은 성격을 안 고른 행에만).
+    const pm = asProgressMode(patch.progressMode);
+    if (pm && progressSubjectKey !== undefined && t.subjectKey === progressSubjectKey && (!onlyEmpty || !asProgressMode(t.progressMode)))
+      set.progressMode = pm;
+    // 이해도 단계 — 새 수학 보고서 행에만(과목 고르기와 무관: 이해도는 수학에만 있다). '빈 칸만'은 직접 매긴 점수가 없는 행에만.
+    if (patch.understanding !== undefined && t.understandingOk && (!onlyEmpty || !t.understandingStored)) {
+      const u = Math.round(patch.understanding);
+      if (Number.isFinite(u) && u >= 0 && u <= 10) set.understanding = u;
+    }
+    // 이해도에서 뺄 소단원(원장 2026-10-27 *"몇개 선택 빼기"*) — 그 행 오늘 진도(이번에 바꾸면 그 값)에 있는 소단원만.
+    // 빼기는 점수를 덮지 않아 '빈 칸만'과 무관하다(되살리기는 카드·표 행의 소단원별 창에서).
+    if (patch.understandingOff?.length && t.understandingOk) {
+      const lessons = pilotLessons(set.today ?? t.today);
+      const off = patch.understandingOff.filter((l) => lessons.includes(l));
+      if (off.length) set.understandingOff = off;
+    }
     if (p.note !== undefined && (!onlyEmpty || !(t.note ?? "").trim())) set.note = p.note;
     // 테스트 — '빈 칸만'은 **점수가 빈 행**에만(문항수는 늘 값이 있어 빈 칸 판정이 없다 — 점수가 찬 행의 문항수를 바꾸면 그 점수가 깎인다).
     // 점수는 그 행의 문항수(이번에 바꾸면 그 값)를 넘지 않게 맞춘다 — 화면 점수 칸과 같은 규칙.
+    // 일일 테스트 '안 봄'(원장 2026-10-27) — 새 수학 보고서 행에만. 사유를 골라 둔 행은 '빈 칸만'에서 찬 칸이다(점수가 비어 있어도).
+    const skipOk = !!t.attitudeNoteOk;
+    const skipNow = skipOk && !!t.dailyTestSkip;
+    const bulkSkip = skipOk && patch.dailyTestSkip && testSkipComplete(patch.dailyTestSkip) ? patch.dailyTestSkip : null;
+    // '안 봄'을 넣는 일괄에선 그 행에 일일 점수를 넣지 않는다(한 칸의 두 답이다).
+    if (bulkSkip && (!onlyEmpty || (t.dailyScore == null && !skipNow)))
+      set.dailyTestSkip = { reason: bulkSkip.reason, detail: bulkSkip.detail };
     for (const which of ["daily", "check"] as const) {
+      if (which === "daily" && bulkSkip) continue;
       const score = p[`${which}Score`];
       const max = p[`${which}Max`];
-      if ((score === undefined && max === undefined) || (onlyEmpty && t[`${which}Score`] != null)) continue;
+      if ((score === undefined && max === undefined) || (onlyEmpty && (t[`${which}Score`] != null || (which === "daily" && skipNow)))) continue;
       if (max !== undefined) set[`${which}Max`] = max;
       const cap = max ?? t[`${which}Max`];
-      if (score !== undefined) set[`${which}Score`] = cap != null ? Math.min(score, cap) : score;
+      if (score !== undefined) {
+        set[`${which}Score`] = cap != null ? Math.min(score, cap) : score;
+        // 점수를 넣는 행이 '안 봄'이었으면 '봄'으로 — 안 그러면 넣은 점수가 보고서에서 안 읽힌다(row-fields.ts).
+        if (which === "daily" && skipNow) set.dailyTestSkip = null;
+      }
     }
     // 영상 과제 — 토글이 있는 행에만. '빈 칸만'은 고른 적 없는 행(undefined)에만.
     if (patch.videoHomework !== undefined && t.videoOk && (!onlyEmpty || t.videoHomework === undefined))
@@ -554,6 +630,8 @@ export type CopyRowValues = {
    */
   classKey?: string | null;
   today: string;
+  /** 오늘 수업 성격(복습·문제풀이) — 진도와 **함께** 옮긴다(원장 2026-10-27: 진도만 오고 성격이 안 오면 진도 문장이 달라진다). */
+  progressMode?: string | null;
   textbook: string;
   homeworkToday: string;
 };
@@ -569,7 +647,7 @@ export type CopyRowPlan = {
   studentId: string;
   subjectName: string;
   subjectIndex: number;
-  set: { today?: string; textbook?: string; homeworkToday?: string };
+  set: { today?: string; progressMode?: string; textbook?: string; homeworkToday?: string };
 };
 
 export type CopyRowResult = {
@@ -582,9 +660,12 @@ export type CopyRowResult = {
 };
 
 /** 원본 행에서 실제로 복사할 값만 추린다(빈 값은 복사하지 않음 — 지우기가 아니다). */
-export function copyableFields(source: CopyRowValues): { today?: string; textbook?: string; homeworkToday?: string } {
-  const out: { today?: string; textbook?: string; homeworkToday?: string } = {};
+export function copyableFields(source: CopyRowValues): { today?: string; progressMode?: string; textbook?: string; homeworkToday?: string } {
+  const out: { today?: string; progressMode?: string; textbook?: string; homeworkToday?: string } = {};
   if (source.today.trim()) out.today = source.today;
+  // 성격은 진도가 있을 때만 — 진도 없는 성격은 아무 문장도 바꾸지 않는다.
+  const mode = asProgressMode(source.progressMode);
+  if (mode && source.today.trim()) out.progressMode = mode;
   if (source.textbook.trim()) out.textbook = source.textbook;
   if (source.homeworkToday.trim()) out.homeworkToday = source.homeworkToday;
   return out;
@@ -626,6 +707,8 @@ export function planCopyFirstRow(
     }
     const set: CopyRowPlan["set"] = {};
     if (fields.today !== undefined && (opts.overwrite || !t.today.trim())) set.today = fields.today;
+    // 성격 — 진도와 같은 칸 규칙('빈 칸만'은 성격을 안 고른 행에만).
+    if (fields.progressMode !== undefined && (opts.overwrite || !asProgressMode(t.progressMode))) set.progressMode = fields.progressMode;
     if (fields.textbook !== undefined && (opts.overwrite || !t.textbook.trim())) set.textbook = fields.textbook;
     if (fields.homeworkToday !== undefined && (opts.overwrite || !t.homeworkToday.trim()))
       set.homeworkToday = fields.homeworkToday;

@@ -27,6 +27,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), "utf8");
 
 /**
@@ -114,19 +115,19 @@ describe("🔴 화면 언어는 담임 판정을 읽지 않는다 (반대 방향
 describe("🔴 화면 언어 축은 '원어민 여부' 플래그가 아니다 — 이름으로 못박는다", () => {
   it("컬럼·필드 이름에 native/원어민을 쓰지 않는다(그 이름이면 다음 사람이 담임에 끌어다 쓴다)", () => {
     const files = [
-      join("supabase", "migrations", "0248a_teacher_view_lang.sql"),
+      "0248a_teacher_view_lang.sql", // 시즌1 합본 구역
       join("src", "features", "teacher-view", "view-prefs.ts"),
       join("src", "features", "staff", "server", "queries.ts"),
     ];
     for (const f of files) {
-      const src = stripComments(read(f));
+      const src = stripComments(f.endsWith(".sql") ? readMigration(f) : read(f));
       // 식별자로서의 native — 주석은 위에서 제거했으므로 남아 있으면 진짜 코드다.
       expect(src).not.toMatch(/is_native|isNative|nativeSpeaker|native_speaker/);
     }
   });
 
   it("0248a는 세 값(null/ko/en)만 허용한다 — boolean으로 좁히면 '지정 없음'이 사라진다", () => {
-    const sql = read(join("supabase", "migrations", "0248a_teacher_view_lang.sql"));
+    const sql = readMigration("0248a_teacher_view_lang.sql");
     expect(sql).toContain("teacher_view_lang");
     expect(sql).toMatch(/in \('ko', 'en'\)/);
     expect(sql).toContain("is null or");

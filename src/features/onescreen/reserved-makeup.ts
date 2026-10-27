@@ -14,7 +14,7 @@
  */
 import { effectiveReportMode, type MakeupReservation } from "@/features/attendance/makeup-reservation";
 import { MERGEABLE_RAW } from "./makeup-merge-plan";
-import type { OneScreenStudent, ReservedMakeup } from "./types";
+import type { OneScreenStudent, ReservedMakeup, Subject } from "./types";
 
 export type ReservedMakeupPlan = {
   /** `학생|반` → 그 줄에 붙일 예약들(시작 시각 순). */
@@ -42,7 +42,10 @@ export function planReservedMakeup(
     const regular = regularKeys.has(key);
     const mode = regular ? effectiveReportMode(r.reportMode) : "separate";
     const list = byKey.get(key) ?? [];
-    list.push({ start: r.slotStart, end: r.slotEnd, absenceDate: r.absenceDate, mode, done: r.status === "done" });
+    list.push({
+      start: r.slotStart, end: r.slotEnd, absenceDate: r.absenceDate, mode, done: r.status === "done", date: r.makeupDate,
+      ...(r.checkedAt !== undefined ? { checked: !!r.checkedAt } : {}),
+    });
     byKey.set(key, list);
     if (!regular) continue;
     if (mode === "merge") merge.add(key);
@@ -78,6 +81,44 @@ export function applyReservedMakeup(os: OneScreenStudent, plan: ReservedMakeupPl
       if (list) su.makeupReserved = list;
     }
   }
+}
+
+/**
+ * 표식을 **'보강 완료'** 로 보일까 — 모두 이행됐고(출결로 시수 반영) **예약 끝 시각이 지났을 때만**(원장 2026-10-27 *"bs2p가 실제 수업시간이
+ * 16:20~18:10 일텐데. 권민서a는 그 후에 보강하는거고, 박지호는 그 전에 보강하는거야"*). 수학은 정규 출석 한 번에 이행되므로 정규 수업 뒤
+ * 보강은 출석 시각엔 아직 하지 않은 것이다 — 그때까지는 '보강 예약'(툴팁: 시수 미리 반영). 판정만 바꾼다(시수·이행은 종전대로).
+ * `now` = KST "YYYY-MM-DDTHH:MM"(`useLessonClock`) · null(시계 전) = 지나지 않은 것으로. 날짜가 없는 옛 값은 `done`만 본다.
+ */
+export function reservedShownDone(list: readonly ReservedMakeup[], now: string | null): boolean {
+  if (list.length === 0 || !list.every((r) => r.done)) return false;
+  return list.every((r) => !r.date || (now !== null && `${r.date}T${r.end}` <= now));
+}
+
+/**
+ * 표식 상태(원장 2026-10-27 *"보강 예약을 누르면 보강을 했다 안했다 체크"* · *"보강 예약 시간 -> 보강 진행 여부 필요 로 라벨도 바뀌게"*).
+ *  · `done`       = 선생님이 '보강 했음'으로 확인했다 → '보강 완료 HH:MM~HH:MM'
+ *  · `needsCheck` = 확인 전인데 예약 끝 시각이 지났다 → '보강 진행 여부 확인해 주세요'(강조색 · 느린 깜빡임)
+ *  · `booked`     = 그 밖 → '보강 예약 HH:MM~HH:MM'
+ * 확인 칸(0458a)이 아직 없으면(`checked` 없음) 종전 판정 — 이행 + 끝 시각(`reservedShownDone`).
+ */
+export type ReservedTagState = "booked" | "needsCheck" | "done";
+
+export function reservedTagState(list: readonly ReservedMakeup[], now: string | null): ReservedTagState {
+  if (list.length === 0) return "booked";
+  if (list.some((r) => r.checked === undefined)) return reservedShownDone(list, now) ? "done" : "booked";
+  if (list.every((r) => r.checked)) return "done";
+  const ended = (r: ReservedMakeup) => !r.date || (now !== null && `${r.date}T${r.end}` <= now);
+  return list.some((r) => !r.checked && ended(r)) ? "needsCheck" : "booked";
+}
+
+/**
+ * 이 줄의 보고서는 보강 확인 전이라 못 보낸다(원장 2026-10-27 *"보강체크를 하지 않으면 보고서 발송 비활성화"*) — 보강이 든 줄
+ * (정규+보강 · '(보강)' 줄)에 확인 전 예약이 걸렸을 때. 정규 줄의 **분리** 예약은 따로 선 '(보강)' 줄의 몫이라 정규 보고서를 막지 않는다
+ * (`makeup`이 꺼진 정규 줄). 확인 칸이 없으면(`checked` 없음) 요구하지 않는다. 서버(`saveAndQueueClassnote`)도 같은 판정.
+ */
+export function needsMakeupCheck(row: Pick<Subject, "makeup" | "makeupReserved" | "classId">): boolean {
+  // 정규 줄(반 있음)은 합침 예약만 — 분리 예약은 따로 선 '(보강)' 줄의 몫이다(서버 `makeupCheckPending`과 같은 축).
+  return !!row.makeup && (row.makeupReserved ?? []).some((r) => r.checked === false && (!row.classId || r.mode === "merge"));
 }
 
 /** 표식 글자의 시각 — "15:25~16:20"(여러 건이면 앞 것 + "+N" — 강사뷰 영어 화면에도 그대로 읽히게 낱말을 안 붙인다). */

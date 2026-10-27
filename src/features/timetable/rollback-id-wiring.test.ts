@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), "utf8");
 
 /** 주석은 규칙을 **설명**하는 자리라 검사에서 뺀다(경고 문구가 스스로 위반으로 걸리지 않게). */
@@ -25,7 +26,7 @@ const stripTsComments = (s: string) =>
 
 describe("0235a — 반 이동 RPC가 새 수강 id를 돌려준다", () => {
   const sql = stripSqlComments(
-    read("supabase", "migrations", "0235a_move_enrollments_return_new_id.sql"),
+    readMigration("0235a_move_enrollments_return_new_id.sql"),
   );
 
   it("insert가 만든 id를 받아 결과에 싣는다", () => {
@@ -42,7 +43,7 @@ describe("0235a — 반 이동 RPC가 새 수강 id를 돌려준다", () => {
 
 describe("0236a — 되돌리기는 id 우선, 좌표는 폴백", () => {
   const sql = stripSqlComments(
-    read("supabase", "migrations", "0236a_rollback_enrollment_import_by_id.sql"),
+    readMigration("0236a_rollback_enrollment_import_by_id.sql"),
   );
 
   it("moves를 newEnrollmentId로 지운다", () => {

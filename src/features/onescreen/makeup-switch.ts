@@ -6,6 +6,11 @@
  *    하루에 정규 수업이 둘(다른 반)이어도 앵커가 답을 정한다. 같은 반 정규 줄이 없으면 막는다(다른 반에 합치면 보고서 반 ≠ 출석부 반 —
  *    원장 2026-09-30 *"보고서 반 = 출석부 반"*, 그리고 보강 시수가 다른 반 칸에 남는다).
  * 🔑 **시수는 손대지 않는다** — 같은 반이라 보강 시수는 이미 그 반 그날 칸 하나에 들어 있다('+ 보강 학생 추가'의 분리·합침 둘 다).
+ * 🔑 **예약 보강은 오늘 정규 반으로 옮겨 합친다**(원장 2026-10-27 박지호 건 — 수요일 개별 JJ2L 결석분 보강을 화요일 BS2P 정규 수업 직전에
+ *    잡았는데 예약이 결석난 반에 기록돼 합치기가 막혔다 → *"예약 보강도 정규 반으로 옮겨 합치기"*). 예약 창에서 '기록할 반'을 그 정규 반 +
+ *    '함께 발송'으로 다시 잡은 것과 같은 결과다(예약의 기록할 반을 옮기고 합침 — 서버 `moveReservationToRegular`). 조건: 앵커 반에 오늘 정규
+ *    줄이 없고 · 아직 이행 전(출석부에 보강이 안 찍힘) · 같은 과목 정규 줄이 오늘 다른 반에 있다. 그 줄이 둘 이상이면 **추측하지 않고**
+ *    강사가 고른다(`pickRegular`). 예약이 아닌 보강 줄(반을 골라 둔 '+ 보강 학생 추가' 등)은 종전대로 같은 반만 — 그 칸은 이미 앵커 반에 섰다.
  * 🔴 이미 보냈거나 보내는 중인 보고서는 어느 쪽이든 막는다(학부모에게 나간 글은 되돌릴 수 없다).
  * 🔴 합칠 때 정규 줄 출결은 '+ 보강 학생 추가'의 합침과 같은 조건(`MERGEABLE_RAW` — 기록 없음·출석·지각·조퇴).
  * 내용(원장 결정 대기 → 잃지 않는 쪽 = 이어 붙이기): 오늘 과제·특이사항·멘트는 정규 줄 뒤에 잇고, 진도는 정규 줄이 비었을 때만 보강 줄 것을 쓴다
@@ -28,27 +33,64 @@ export type MakeupSwitchBlock =
   /** 같은 과목 보강 줄이 이미 있다(나누기) */
   | "hasSeparate"
   /** 그런 줄이 없다(화면이 그사이 바뀜) */
-  | "gone";
+  | "gone"
+  /** 반이 정해지지 않은 보강('반 미정') — 반부터 고른다 */
+  | "noAnchor"
+  /** 예약 보강이 이미 기록된 반 출석부에 찍혔다(이행) — 다른 반으로 옮기면 시수가 두 번 선다 */
+  | "reservedDone";
 
-/** 분리 → 합침 — 합칠 정규 줄. `isSent(이름)` = 그 줄 보고서를 보냈거나 보내는 중. */
+export type JoinMakeupPlan =
+  /** `move` = 예약을 오늘 정규 반(target)으로 옮겨 합친다(앵커 반 ≠ target 반). */
+  | { ok: true; source: Subject; target: Subject; move: boolean }
+  | { ok: false; reason: MakeupSwitchBlock }
+  /** 옮겨 합칠 정규 줄이 둘 이상 — 강사가 고른 뒤 `pickClassId`로 다시 부른다. */
+  | { ok: false; reason: "pickRegular"; choices: Subject[] };
+
+/**
+ * 분리 → 합침 — 합칠 정규 줄. `isSent(이름)` = 그 줄 보고서를 보냈거나 보내는 중.
+ * `pickClassId` = 옮겨 합칠 정규 반이 둘 이상일 때 강사가 고른 반(`pickRegular` 뒤 다시 부를 때만).
+ */
 export function planJoinMakeup(
   card: Pick<OneScreenStudent, "subjects">,
   makeupRowName: string,
   isSent: (rowName: string) => boolean,
-): { ok: true; source: Subject; target: Subject } | { ok: false; reason: MakeupSwitchBlock } {
+  pickClassId?: string,
+): JoinMakeupPlan {
   const source = card.subjects.find((s) => s.name === makeupRowName && s.makeup && !s.classId);
   if (!source) return { ok: false, reason: "gone" };
   if (isSent(source.name)) return { ok: false, reason: "sent" };
   const anchor = source.makeupClassId;
-  if (!anchor) return { ok: false, reason: "noRegular" };
-  const sameClass = card.subjects.filter((s) => s.classId === anchor && (s.subjectKey ?? "") === (source.subjectKey ?? ""));
-  if (sameClass.some((s) => s.makeup)) return { ok: false, reason: "alreadyMerged" };
-  const target = sameClass.find((s) => !s.makeup);
-  if (!target) return { ok: false, reason: "noRegular" };
+  if (!anchor) return { ok: false, reason: "noAnchor" };
+  const sameSubject = (s: Subject) => (s.subjectKey ?? "") === (source.subjectKey ?? "");
+  const sameClass = card.subjects.filter((s) => s.classId === anchor && sameSubject(s));
+  if (sameClass.length > 0) {
+    if (sameClass.some((s) => s.makeup)) return { ok: false, reason: "alreadyMerged" };
+    return checkTarget(source, sameClass[0]!, isSent, false);
+  }
+  // 앵커 반에 오늘 정규 줄이 없다 — 예약 보강이면 오늘 같은 과목 정규 반으로 옮겨 합친다(머리 주석).
+  const reserved = source.makeupReserved ?? [];
+  if (reserved.length === 0) return { ok: false, reason: "noRegular" };
+  if (reserved.some((r) => r.done)) return { ok: false, reason: "reservedDone" };
+  // 나눔 받는 줄(`splitIn`)은 이 반 수강행이 없는 줄이라 후보가 아니다(applyReservedMakeup과 같은 규칙).
+  const others = card.subjects.filter((s) => !!s.classId && s.classId !== anchor && sameSubject(s) && !s.splitIn);
+  if (others.length === 0) return { ok: false, reason: "noRegular" };
+  // 오늘 이미 '정규+보강'인 줄이 있으면 한 번 더 얹지 않는다(같은 과목 보강이 한 날 둘 — 강사가 따로 보내기로 정리).
+  if (others.some((s) => s.makeup)) return { ok: false, reason: "alreadyMerged" };
+  const open = others.filter((s) => !s.reportOptout);
+  if (open.length === 0) return { ok: false, reason: "optout" };
+  if (pickClassId !== undefined) {
+    const picked = open.find((s) => s.classId === pickClassId);
+    return picked ? checkTarget(source, picked, isSent, true) : { ok: false, reason: "gone" };
+  }
+  if (open.length > 1) return { ok: false, reason: "pickRegular", choices: open };
+  return checkTarget(source, open[0]!, isSent, true);
+}
+
+function checkTarget(source: Subject, target: Subject, isSent: (rowName: string) => boolean, move: boolean): JoinMakeupPlan {
   if (target.splitIn || target.reportOptout) return { ok: false, reason: "optout" };
   if (isSent(target.name)) return { ok: false, reason: "sent" };
   if (!MERGEABLE_RAW.has(target.attendanceRaw ?? "")) return { ok: false, reason: "attendance" };
-  return { ok: true, source, target };
+  return { ok: true, source, target, move };
 }
 
 /** 합침 → 분리 — '정규+보강' 줄을 정규로 되돌리고 같은 반에 앵커를 둔 '(보강)' 줄을 따로 세운다. */

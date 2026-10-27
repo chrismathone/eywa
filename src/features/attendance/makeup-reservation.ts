@@ -67,6 +67,11 @@ export type MakeupReservation = {
    * 반드시 `absenceClassOf`로 읽는다(원장 2026-10-22 — 예약에도 기록할 반 고르기).
    */
   absenceClassId?: string | null;
+  /**
+   * 선생님이 보강을 실제로 했다고 확인한 시각(0458a · 원장 2026-10-27) — null = 아직 확인 안 함(그 보강이 든 보고서는 못 보낸다).
+   * 칸이 없거나 그 칸을 안 읽은 조회는 키 자체가 없다(= 확인을 요구하지 않는다, fail-soft).
+   */
+  checkedAt?: string | null;
 };
 
 /** 보강 예약을 **기록할 반** 후보 한 줄(서버 `reservationHostChoices`가 만든다 — 학생이 그날 다니는 열린 같은 과목 반). */

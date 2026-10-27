@@ -32,7 +32,7 @@ export function ContributionEvidence({ selected, months, through, point, config,
     [`${Number(selected.month.slice(5))}월까지 누적`, `${numberText(point.total)}점`, "현재 배점으로 다시 계산"],
     ["근거 기록", `${facts.length.toLocaleString("ko-KR")}건`, withheld ? `원문·학생 연결을 확인할 수 없는 ${withheld}건은 표시하지 않음` : facts.length ? "원본 기록 링크 제공" : "이 달 근거 기록 없음"],
     ["자료 확인", coverage.length ? `${ready} / ${coverage.length} 출처` : "범위 기록 없음", selected.unavailable.length ? `확인 전 자료가 있는 항목 ${selected.unavailable.length}개 · 확인된 실적만 반영`
-      : ready < coverage.length ? "점수 항목은 모두 확인됨 · 출처별 상태는 아래 참고" : "모든 출처 확인됨"],
+      : ready < coverage.length ? "일부 출처는 추가 확인 중 · 아래 자료 범위 참고" : "모든 출처 확인됨"],
   ];
   return <>
     <section className="@container overflow-hidden rounded-xl border border-line" aria-labelledby="contribution-evidence-title">
@@ -52,8 +52,8 @@ export function ContributionEvidence({ selected, months, through, point, config,
     </section>
     {selected.month >= "2026-01" && <VideoCompletionCheck key={`${studentId}:${selected.month}`} studentId={studentId} month={selected.month} />}
     <section className="overflow-hidden rounded-xl border border-line"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4"><div><h3 className="font-semibold">{monthText(selected.month)} 근거 기록</h3>
-      <p className="mt-1 text-xs">기록을 골라 원본을 확인할 수 있습니다. {selected.closedAt ? "마감 당시 확인한 자료입니다." : "최근 집계에서 확인한 자료입니다."}</p></div><span className="rounded-full bg-secondary px-3 py-1 text-xs tabular-nums">{facts.length}건</span></div>
-      <FactsTable key={selected.month} facts={facts} /></section>
+      <p className="mt-1 text-xs">기록을 골라 원본을 확인할 수 있습니다. {selected.closedAt ? "마감 당시 확인한 자료입니다." : "최근 집계에서 확인한 자료입니다."}{facts.some(f => f.kind === "parent_event") && " 설명회 근거는 최근 확인 상태이며, 뒤늦게 연결한 실적은 연결 후 집계한 달의 정정에 반영됩니다."}</p></div><span className="rounded-full bg-secondary px-3 py-1 text-xs tabular-nums">{facts.length}건</span></div>
+      <FactsTable key={selected.month} facts={facts} canInspectParentEvents={canWrite} /></section>
     <section className="@container rounded-xl border border-line"><div className="border-b border-line px-5 py-4"><h3 className="font-semibold">자료 범위와 확인 상태</h3>
       <p className="mt-1 text-xs">{coverage.length ? `${coverage.length}개 출처 중 ${ready}개 확인 · 확인 전 출처는 확인된 실적만 점수에 반영합니다.` : "이 달의 자료 범위 기록이 없습니다."}</p></div>
       {!!coverage.length && <ul className="grid gap-x-6 gap-y-4 p-5 @2xl:grid-cols-2 @5xl:grid-cols-3">{coverage.map((c) => <li key={c.source} className="min-w-0 space-y-1 text-xs">

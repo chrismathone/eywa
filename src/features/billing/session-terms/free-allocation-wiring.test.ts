@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 // 자유 배분(0279a, 원장 2026-09-21) 배선 가드 — 관리자 이상 게이트·상한 판정이 화면·서버·DB에 같이 있는지.
 const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
 
@@ -18,7 +19,7 @@ describe("자유 배분 배선", () => {
   });
 
   it("🔴 DB 함수도 관리자 이상·상한·확정 반 포함을 다시 본다 — 항목별 함수(0269a)는 손대지 않는다", () => {
-    const sql = read("supabase/migrations/0279a_receipt_allocation_free.sql");
+    const sql = readMigration("0279a_receipt_allocation_free.sql");
     expect(sql).toMatch(/auth_system_role\(\), ''\) in \('master', 'admin'\)/);
     // super_admin은 0021a의 기존 함수로(새 함수를 만들어 두 벌이 되지 않게).
     expect(sql).toContain("public.is_super_admin(auth.uid())");
@@ -29,7 +30,7 @@ describe("자유 배분 배선", () => {
   });
 
   it("🔴 수납 쓰기 권한만으로 회차 행을 직접 고쳐 자유 배분 모양을 만드는 길을 트리거가 막는다(0165a update 정책은 역할을 안 본다)", () => {
-    const sql = read("supabase/migrations/0279a_receipt_allocation_free.sql");
+    const sql = readMigration("0279a_receipt_allocation_free.sql");
     expect(sql).toMatch(/create trigger session_free_allocation_guard before insert or update of allocation_line_index, allocation_amount, allocation_base_amount, allocation_source/);
     // 기준액·스냅샷을 지금 값에 맞춰 쓰면 무효가 된 자유 배분이 관리자 없이 되살아난다.
     expect(sql).toMatch(/old\.allocation_base_amount is distinct from new\.allocation_base_amount or old\.allocation_source is distinct from new\.allocation_source/);
@@ -37,7 +38,7 @@ describe("자유 배분 배선", () => {
   });
 
   it("🔴 미확정 반의 자유 배분도 첫 확정에 기준액을 이어받는다(0267b 트리거를 넓힘) — 안 그러면 확정하는 순간 청구서 전체가 '재확인'", () => {
-    const sql = read("supabase/migrations/0279a_receipt_allocation_free.sql");
+    const sql = readMigration("0279a_receipt_allocation_free.sql");
     const fn = sql.slice(sql.indexOf("function public.adopt_session_receipt_allocation_basis"));
     expect(fn).toMatch(/old\.allocation_line_index is not null or coalesce\(old\.allocation_amount, 0\) > 0/);
     expect(fn).toContain("0시수로 확정할 수 없습니다");

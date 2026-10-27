@@ -14,10 +14,10 @@ import { OntologyExplorer } from "./ontology-explorer";
 import OntologyPage from "@/app/(shell)/student-contribution/ontology/page";
 afterEach(cleanup);
 
-const empty = { students: [] as string[], counts: {}, factCount: 0, tuitionWon: 0, unallocatedTuitionFacts: 0, related: [], studentCounts: {}, basis: { recorded: 0, rule: 0, ai: 0 }, recordedAt: "" };
+const empty = { parentEvents: { events: 0, familyEvents: 0, studentEvents: 0 }, students: [] as string[], counts: {}, factCount: 0, tuitionWon: 0, unallocatedTuitionFacts: 0, related: [], studentCounts: {}, basis: { recorded: 0, rule: 0, ai: 0 }, recordedAt: "" };
 const data: ComponentProps<typeof OntologyExplorer>["data"] = {
   filters: DEFAULT_STUDENT_FILTERS, filterOptions: { grades: [], subjects: [] },
-  tenant: "academy", month: "2026-10", canConfigure: false, historyReady: true, identityIssues: 0,
+  tenant: "academy", month: "2026-10", canConfigure: false, historyReady: true, identityIssues: 0, parentEventNotice: null,
   labels: { student: [{ id: "first", label: "안도현", detail: "침산초4" }, { id: "second", label: "이학생", detail: "달산초5" }, { id: "empty", label: "무기록", detail: "침산초6" }],
     class: [{ id: "c", label: "수학 A" }], teacher: [{ id: "t", label: "선생님 A" }], subject: [{ id: "math", label: "수학" }], academy: [{ id: "academy", label: "학원 전체" }] },
   views: { "student:first": { ...empty, students: ["first"], factCount: 6, counts: { attendance: 6 }, studentCounts: { first: { attendance: 6 } } },

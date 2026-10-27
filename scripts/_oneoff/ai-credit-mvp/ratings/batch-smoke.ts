@@ -5,7 +5,7 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAnthropic } from "@/lib/ai/anthropic";
 import { collectJSONBatch, submitJSONBatch } from "@/lib/ai/generate-batch";
-import { buildRatingPrompt, RATING_BATCH_SIZE } from "@/features/report-rating/harness/prompt";
+import { buildRatingPrompt, RATING_BATCH_SIZE, RATING_SYSTEM } from "@/features/report-rating/harness/prompt";
 import { checklistsOf, ratingInputHash, ratingRow } from "@/features/report-rating/harness/rows";
 import type { RatingReport } from "@/features/report-rating/harness/types";
 import { RATING_FEATURE, ratingRequest } from "@/features/report-rating/server/batch";
@@ -24,7 +24,7 @@ async function main() {
   const groups: RatingReport[][] = [];
   const pick = ids.map((id) => R.get(id)!).sort((a, b) => (a.d + a.id).localeCompare(b.d + b.id)).slice(0, Number(arg("groups", "2")) * RATING_BATCH_SIZE);
   for (let i = 0; i < pick.length; i += RATING_BATCH_SIZE) groups.push(pick.slice(i, i + RATING_BATCH_SIZE));
-  const items = groups.map((g, i) => ({ customId: `smoke_${i}`, opts: ratingRequest(ctx.tenantId, buildRatingPrompt(g).prompt) }));
+  const items = groups.map((g, i) => ({ customId: `smoke_${i}`, opts: ratingRequest(ctx.tenantId, RATING_SYSTEM, buildRatingPrompt(g).prompt) }));
   const t0 = Date.now();
   const sent = await submitJSONBatch(items);
   if (!sent?.batchId) throw new Error(`배치를 보내지 못함: ${JSON.stringify(sent?.rejected)}`);

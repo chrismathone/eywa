@@ -1,12 +1,12 @@
 // Disposable PostgreSQL only; no env load or external connection.
 // node --import tsx scripts/student-contribution/verify-current-scope.mjs <isolated-pglite-module>
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isEnrollmentOnRosterOn } from "../../src/features/enrollments/eligibility.ts";
 import { isDelegationActiveOn } from "../../src/features/classes/delegation-window.ts";
 import { addDays } from "../../src/lib/date-kst.ts";
+import { readMigration } from "../../src/lib/db/migrations-corpus.mjs";
 if (!process.argv[2]) throw new Error("Pass the isolated PGlite module path");
 const { PGlite } = await import(pathToFileURL(resolve(process.argv[2])).href);
 const db = new PGlite(), uid = n => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -62,7 +62,7 @@ try {
     { id:uid(822),fromDate:addDays(today,-1),toDate:today,revokedAt:new Date().toISOString() },
   ];
   for(const d of delegations) await db.query("insert into class_delegations values($1,$2,$3,$4,$5,$6,$7)",[d.id,tenant,classA,delegate,d.fromDate,d.toDate,d.revokedAt]);
-  const migration = await readFile("supabase/migrations/0446a_student_ontology_current_scope.sql","utf8");
+  const migration = readMigration("0446a_student_ontology_current_scope.sql");
   await db.exec(migration); await db.exec(migration); checks++;
   for(const role of ["anon","authenticated"]) { await db.exec(`set role ${role}`); await assert.rejects(call(ids)); checks++; await db.exec("reset role"); }
   await db.exec("set role service_role");

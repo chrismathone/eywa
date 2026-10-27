@@ -1,9 +1,10 @@
 /** Apply actual Drizzle journal then alpha files on an empty owned LOCAL DB; never reads env files. */
 import assert from "node:assert/strict";
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import postgres from "postgres";
 import { fileURLToPath } from "node:url";
+import { migrationFiles, readMigration } from "../../src/lib/db/migrations-corpus.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const output = process.argv[2];
@@ -16,14 +17,14 @@ try {
   assert.equal((await db`select current_database() as name`)[0].name, "makeup_chain");
   await db.unsafe("drop schema if exists makeup_private cascade; drop schema if exists tm_sync_private cascade; drop schema if exists vault cascade; drop schema if exists auth cascade; drop schema if exists storage cascade; drop schema public cascade; create schema public;");
   await db.unsafe(await read("tests/makeup-browser/chain-platform.sql"));
-  const journal = JSON.parse(await read("supabase/migrations/meta/_journal.json"));
-  const base = journal.entries.map(entry => `${entry.tag}.sql`);
-  const alpha = (await readdir(path.join(root, "supabase/migrations")))
-    .filter(file => /^(?:\d{4}[a-z][a-z0-9_]*|\d{14}_[a-z0-9_]+)\.sql$/.test(file)).sort();
+  // 적용 순서 = 시즌1 합본 구역(drizzle 번호본 0000~0027 → alpha) → 시즌2 파일(2026-10-27 시즌2 — 낱개 파일은 합본 구역이 됐고 저널은 지웠다 · 번호본 = 이름에 접미 글자가 없는 구역).
+  const chain = migrationFiles().map(file => file.name);
+  const base = chain.filter(file => /^\d{4}_[a-z0-9_]+\.sql$/.test(file));
+  const alpha = chain.filter(file => !base.includes(file));
   for (const file of [...base, ...alpha]) {
     try {
       // Real journal statement breakpoints preserve its individual statement boundaries.
-      const source = await read(`supabase/migrations/${file}`);
+      const source = readMigration(file);
       if (base.includes(file)) for (const statement of source.split("--> statement-breakpoint")) {
         if (statement.trim()) await db.unsafe(statement);
       }
@@ -39,7 +40,7 @@ try {
   // Historical alpha files reference helpers defined later. Replay those failures after prerequisites exist.
   for (const result of results.filter(result => result.status === "failed")) {
     try {
-      await db.unsafe(await read(`supabase/migrations/${result.file}`));
+      await db.unsafe(readMigration(result.file));
       result.firstFailure = result.message; result.status = "applied_after_prerequisite";
       delete result.message;
     } catch (error) { await db.unsafe("rollback"); result.message = error.message; }

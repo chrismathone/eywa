@@ -120,6 +120,11 @@ export function mappedCancelCommand(reservationId: string): { reservationId: str
   return { reservationId, action: "cancel" };
 }
 
+/** 예약 일정 변경 명령 본문(반 옮기기 · 보강 확인). 감사 로그를 직접 쓰는 파일 밖에 둔다(그 파일의 `action:` 리터럴은 감사 액션으로 읽힌다). */
+export function mappedRescheduleCommand(reservationId: string): { reservationId: string; action: "reschedule" } {
+  return { reservationId, action: "reschedule" };
+}
+
 /** 연결된 예약의 취소·일정 변경은 옛 삭제로 하지 않는다. 연결이 없으면 옛 경로 그대로. */
 export async function mappedReservationMutationBlock(input: {
   reservationId: string;

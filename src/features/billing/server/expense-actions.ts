@@ -154,8 +154,9 @@ function parse(formData: FormData) {
 function validate(f: ReturnType<typeof parse>): ExpenseState {
   if (!f.title) return { fieldErrors: { title: "항목명을 입력해주세요" } };
   if (!f.expenseDate) return { fieldErrors: { expenseDate: "지출일을 입력해주세요" } };
-  if (!Number.isFinite(f.amount) || f.amount < 0) {
-    return { fieldErrors: { amount: "0 이상 숫자만 입력해주세요" } };
+  // 음수도 받는다(원장 2026-10-26 "지출결의서 값 - 도 되게" — 환급·취소분 · DB에 0 이상 제약 없음 · 옛 자료에도 음수 지출이 있다).
+  if (!Number.isFinite(f.amount)) {
+    return { fieldErrors: { amount: "숫자만 입력해주세요" } };
   }
   return undefined;
 }

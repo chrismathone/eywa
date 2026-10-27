@@ -25,17 +25,21 @@ const b = (d: string, over: Partial<StatsBucket> = {}): StatsBucket => ({
 
 describe("상담 통계 모델", () => {
   it("보기 설정은 모르는 값을 기본값으로 접는다(월·건수·상담사)", () => {
-    expect(parseConsultationStatsPrefs(null)).toEqual({ unit: "month", metric: "count", dim: "counselor" });
+    expect(parseConsultationStatsPrefs(null)).toEqual({ unit: "month", metric: "count", dim: "counselor", hrSort: { key: "name", dir: "asc" }, hrFilter: { subject: null, teachers: [], unmetOnly: false, unmetStudentsOnly: false } });
     expect(parseConsultationStatsPrefs({ stats_unit: "week", stats_metric: "follow", stats_dim: "class" })).toEqual({
       unit: "week",
       metric: "follow",
       dim: "class",
+      hrSort: { key: "name", dir: "asc" }, hrFilter: { subject: null, teachers: [], unmetOnly: false, unmetStudentsOnly: false },
     });
     expect(parseConsultationStatsPrefs({ stats_unit: "day", stats_metric: "x", stats_dim: [] })).toEqual({
       unit: "month",
       metric: "count",
       dim: "counselor",
+      hrSort: { key: "name", dir: "asc" }, hrFilter: { subject: null, teachers: [], unmetOnly: false, unmetStudentsOnly: false },
     });
+    expect(parseConsultationStatsPrefs({ hr_sort: "m0" }).hrSort).toEqual({ key: "m0", dir: "asc" });
+    expect(parseConsultationStatsPrefs({ hr_sort: "unmet", hr_dir: "asc" }).hrSort).toEqual({ key: "unmet", dir: "asc" });
   });
 
   it("비율은 분모가 0이면 null(0%라고 적지 않는다)", () => {

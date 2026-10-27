@@ -36,10 +36,10 @@ src/
 │  ├─ permissions.ts            # SystemRole × MenuKey × Access 매트릭스
 │  ├─ navigation.ts             # NAV_GROUPS (사이드바 + 헤더 page title)
 │  └─ ai/anthropic.ts
-supabase/migrations/
-├─ 0000_*.sql, 0001_*.sql, ...  # drizzle-kit generate 결과 (자동)
-├─ 0001a_*.sql, 0002a_*.sql ... # 손수 작성한 RLS/제약/트리거 (drizzle 무관)
-└─ meta/_journal.json           # drizzle 추적 — 손수 파일은 여기 없음
+supabase/migrations/            # 2026-10-27 SQL 시즌2 — 이 셋만 둔다(가드 src/lib/db/migrations-corpus.test.ts)
+├─ s1_season1.sql               # 시즌1 합본(drizzle 0000~0027 + alpha 0001a~0458a, 568구역 · 고치지 않음 · 지문 고정)
+├─ s2_0001_*.sql, s2_0002_* ... # 시즌2 — 새 SQL(다음 빈 번호 · RLS·제약·트리거 포함 · 멱등)
+└─ README.md                    # 적용 기록
 ```
 
 ---
@@ -54,14 +54,18 @@ supabase/migrations/
 > `0029a` 카카오메시징 · `0030a` 교재카탈로그 · `0031a` 운영감사로그 · `0032a` 레벨테스트 · **`0039a` 대시보드 집계 RPC ·
 > `0040a` 상담통계 집계 RPC · **`0041a` 시간표 슬롯 라벨**(`class_schedules.slot_teacher_label/slot_room_label` — 영어 통합뷰
 > 미니그리드용, ijw slotTeachers/slotRooms 백필)**(전부 dev DB 적용·RLS 격리·security invoker + `auth_tenant_id()` 이중격리).
-> drizzle 번호본은 `db:migrate`가 자동, RLS/트리거/확장/GIN trigram 색인 등 `000Na_*` **alpha는 손수** 적용
+> (시즌1 기록) drizzle 번호본은 `db:migrate`가 자동, RLS/트리거/확장/GIN trigram 색인 등 `000Na_*` **alpha는 손수** 적용
 > (신규 DB 셋업 시 누락 주의).
 
-1. **스키마 수정** — `src/lib/db/schema.ts`
-2. **`pnpm db:generate`** — drizzle이 SQL diff 생성 (`supabase/migrations/000N_*.sql`)
-3. **손수 RLS/제약/트리거 작성** — `0001a_*.sql` 같은 alpha suffix 파일로
-4. **`pnpm db:migrate`** — drizzle이 자기 파일만 적용
-5. **`node --env-file=.env.local -e "..."`** 식으로 alpha 파일을 raw SQL 실행 (또는 supabase dashboard SQL editor)
+> 🔴 **2026-10-27 SQL 시즌2** — 시즌1(drizzle 번호본 0000~0027 + alpha 0001a~0458a, 568개)은 `supabase/migrations/s1_season1.sql`
+> 하나로 합쳤다(구역 머리줄 `--@@s1 <원래 이름>` · 고치지 않는다). 새 SQL은 **`supabase/migrations/s2_NNNN_설명.sql`**(0001부터).
+> drizzle 저널·스냅샷은 지웠다(git 기록에만) — `db:generate`는 이제 스키마 **전체**를 `supabase/drizzle-out/`(커밋 안 함)에 처음부터 만든다.
+> 참고용으로만 보고 필요한 문장만 시즌2 파일로 옮긴다.
+
+1. **스키마 수정** — `src/lib/db/schema.ts`(참고용 — 진짜 정의는 SQL)
+2. **시즌2 파일 작성** — `supabase/migrations/s2_NNNN_설명.sql`(다음 빈 번호 · RLS·제약·트리거 포함 · 멱등으로)
+3. **새 DB 셋업** — `pnpm db:alphas` 하나로 시즌1 구역 → 시즌2 파일 순서대로 적용(구역마다 따로 · already exists는 건너뜀 · 🔴 빈 DB 전용 — `public.tenants`가 있으면 멈춘다 · `pnpm db:migrate`는 안내만)
+4. **운영 DB** — 시즌2 파일 **그 하나만** 원장 승인 뒤 적용(`db:alphas`를 운영에 돌리지 않는다 — 시즌1 데이터 보정까지 다시 돈다)
 
 > ⚠️ 옛 6단계 `pnpm db:seed`(`scripts/seed.ts`)는 **2026-09-19 영구 제거**했다 — 테넌트 데이터를 전부 지우고 다시 넣는
 > 구조인데 데모 테넌트가 운영 테넌트 `injaewon`으로 승격돼(2026-07-01) 운영 DB를 날릴 수 있었다. 되살리지 말 것.

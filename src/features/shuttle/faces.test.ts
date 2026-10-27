@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   SHUTTLE_BOARD_PATH,
   SHUTTLE_LIVE_PATH,
+  SHUTTLE_NEARBY_PATH,
   SHUTTLE_PARENT_RIDES_PATH,
   SHUTTLE_TODAY_PATH,
   SHUTTLE_TRACK_PATH,
@@ -32,7 +33,10 @@ describe("셔틀 면 전환", () => {
   it("실시간 위치는 관리자에게만 — track일 때만 끝에 붙는다(2026-10-08)", () => {
     expect(shuttleFaces("term").map((f) => f.key)).not.toContain(SHUTTLE_TRACK_PATH);
     const admin = shuttleFaces("term", { track: true });
-    expect(admin.at(-1)).toEqual({ key: SHUTTLE_TRACK_PATH, label: "실시간 위치", href: "/shuttle/track?season=term" });
+    expect(admin.at(-2)).toEqual({ key: SHUTTLE_TRACK_PATH, label: "실시간 위치", href: "/shuttle/track?season=term" });
+    // 가까운 노선 찾기도 같은 관리자 전용(2026-10-26).
+    expect(shuttleFaces("term").map((f) => f.key)).not.toContain(SHUTTLE_NEARBY_PATH);
+    expect(admin.at(-1)).toEqual({ key: SHUTTLE_NEARBY_PATH, label: "가까운 노선 찾기", href: "/shuttle/nearby?season=term" });
   });
 
   it("원장·관리자 전용 '학부모 관리 현황'은 공용 탭 줄에 없다", () => {
@@ -49,7 +53,7 @@ describe("셔틀 면 전환", () => {
       "/shuttle/parent-rides?season=vacation",
       "/shuttle/live?season=vacation",
     ]);
-    expect(shuttleFaces("vacation", { track: true }).at(-1)?.href).toBe("/shuttle/track?season=vacation");
+    expect(shuttleFaces("vacation", { track: true }).at(-2)?.href).toBe("/shuttle/track?season=vacation");
   });
 
   it("active로 쓰는 상수가 실제 면 키에 있다", () => {

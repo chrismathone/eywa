@@ -28,7 +28,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import { appendMemo, hasMemoLine } from "@/features/onescreen/makeup-absence-link";
 import { userTaughtClassSet } from "@/features/attendance/live/server/write-policy";
-import { mappedCancelCommand, mappedReservationMutationBlock } from "@/features/makeups/server/adapters/gates";
+import { mappedCancelCommand, mappedRescheduleCommand, mappedReservationMutationBlock } from "@/features/makeups/server/adapters/gates";
 import { effectiveAttendanceRecords } from "../effective-records";
 import { isAutoUnitsSubject } from "../auto-units";
 import { getLessonProfile } from "@/features/owner/server/lesson-profile";
@@ -39,20 +39,26 @@ import {
   type ReservationHost,
   contiguousPeriodRange,
   removeMemoLine,
+  reservationAbsenceDoneMemo,
   reservationAbsenceMemo,
+  reservationAutoUnits,
+  reservationMakeupMemo,
   isMakeupReportMode,
   reservationPeriodOptions,
   validateReservationDates,
   type MakeupReportMode,
+  type MakeupReservation,
   type ReservationPeriodOption,
 } from "../makeup-reservation";
 import { statusTextOf, type AttendanceMark } from "../cell-display";
 import { setAttendanceCell } from "./actions";
 import { pickAbsenceNoteTarget } from "./absence-cell";
-import { isMissingColumn, isMissingReservationTable, loadReservationById } from "./makeup-reservation-queries";
+import { isMissingColumn, isMissingReservationTable, loadReservationById, toReservation } from "./makeup-reservation-queries";
 import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { isClassOpenOn } from "../makeup-host";
-import { isRegularLessonDay } from "./makeup-reservation-complete";
+import { completeMakeupReservations, completionKey, isRegularLessonDay } from "./makeup-reservation-complete";
+import { attendanceLockMessage, isWithinAttendanceEditWindow } from "../edit-window";
+import { round1 } from "../session-units";
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 const NOT_APPLIED = "보강 예약 표(0264a)가 아직 적용되지 않았습니다 — 관리자에게 SQL 적용을 요청하세요";
@@ -656,6 +662,498 @@ export async function setReservationReportMode(input: {
     revalidateSurfaces();
   }
   return { ok: true, updated: ids.length };
+}
+
+/**
+ * 보강 예약을 **그날 정규 반으로 옮겨 합친다** — 원스크린 '(보강)' 줄의 '정규에 합치기'(원장 2026-10-27 박지호 건 *"예약 보강도 정규 반으로
+ * 옮겨 합치기"*). 예약 창에서 기록할 반 = 그 정규 반 + '함께 발송'으로 다시 잡은 것과 같은 행 모양: `class_id` = 정규 반 ·
+ * `absence_class_id` = 결석난 반(같으면 비움) · `report_mode` = merge. 결석 칸·'보강 예정' 메모는 결석난 반 그대로(`absenceClassOf`).
+ * 🔴 이행된 예약·기록된 반 출석부에 이미 보강이 찍힌 날은 막는다(옮기면 시수가 두 반에 두 번 선다).
+ * 🔴 합칠 반 = 예약 창의 기록할 반 후보(`reservationHostChoices` — 학생이 그날 다니는 열린 같은 과목 반 · 강사는 그날 담당 반) + 그날 정규 수업일.
+ * 시수: 합칠 반 출석이 이미 찍혀 있으면 지금 이행하고(`completeMakeupReservations` `addToCurrent` — '보강 완료' 메모·결석 칸 '예정 → 완료')
+ * 시수는 '+ 보강 학생 추가' 합침과 같은 규칙으로 **지금 값 + 보강분**. 아직이면 출석을 찍을 때 이행된다(새 칸 = 정규 + 보강 자동값).
+ * 게이트 = 출결 쓰기 + 강사(scoped)는 합칠 반을 그날 맡고, 기록된 반을 그날 맡거나 결석난 반을 결석일에 맡았다(취소와 같은 축) + 출결 수정 기간
+ * (시수는 급여 값 — `setAttendanceCell`과 같은 잠금 · 같은 scoped 기준). 감사로그 `makeup_reserve_host_move`.
+ */
+export async function moveReservationToRegular(input: {
+  studentId: string;
+  date: string;
+  /** 지금 예약이 기록된 반(원스크린 보강 줄의 앵커). */
+  fromClassId: string;
+  /** 합칠 정규 반. */
+  toClassId: string;
+}): Promise<{ ok: true; moved: number; units?: number | null } | { error: string }> {
+  const user = await getCurrentUser({ teacherView: true });
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
+  const { studentId, date, fromClassId, toClassId } = input ?? ({} as typeof input);
+  if (!studentId || !fromClassId || !toClassId || fromClassId === toClassId || !YMD.test(date ?? "")) return { error: "잘못된 요청입니다" };
+  // 🔴 강사(scoped) 출결 수정 기간 — 옮기면 합칠 반 칸의 시수가 바뀐다(적대 리뷰 2026-10-27: 2주 전 날짜를 열고 합치면 옛 칸 시수가 바뀌었다).
+  //    기준은 `setAttendanceCell`과 같은 권한 매트릭스 scoped(역할 이름이 아니다).
+  const scoped = (await accessLevelTenant(user.systemRole, "attendance")) === "scoped";
+  const today = kstToday();
+  if (scoped && !isWithinAttendanceEditWindow(date, today)) return { error: attendanceLockMessage(date, today) };
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return { error: "서버 설정 오류 — 관리자에게 알려 주세요" };
+  }
+  // 칸(0438a·0440a)이 없으면 옮길 수 없다 — 다른 반 기록·합침을 적을 자리가 없다.
+  const { data: rows, error: readErr } = await admin
+    .from("makeup_reservations")
+    .select("id, student_id, class_id, absence_date, makeup_date, slot_start, slot_end, period_label, note, status, created_by, report_mode, absence_class_id")
+    .eq("tenant_id", user.tenantId)
+    .eq("student_id", studentId)
+    .eq("class_id", fromClassId)
+    .eq("makeup_date", date)
+    .in("status", ["reserved", "done"]);
+  if (readErr) {
+    if (isMissingReservationTable(readErr)) return { error: NOT_APPLIED };
+    if (isMissingColumn(readErr, "absence_class_id") || isMissingColumn(readErr, "report_mode")) {
+      return { error: "다른 반에 기록하는 보강 예약은 아직 준비 중입니다 — 관리자에게 알려 주세요" };
+    }
+    console.error("[makeup-reservation] 옮길 예약 조회 실패", readErr.message);
+    return { error: "보강 예약을 읽지 못했습니다 — 잠시 후 다시 시도하세요" };
+  }
+  const list = ((rows ?? []) as unknown as Parameters<typeof toReservation>[0][]).map(toReservation);
+  if (list.length === 0) return { error: "옮길 보강 예약을 찾지 못했습니다 — 새로고침 뒤 다시 시도해 주세요" };
+  const DONE_ERROR = "이 보강은 이미 기록된 반 출석부에 찍혀 있어 다른 반으로 옮길 수 없습니다 — 출석부에서 보강 칸을 먼저 고쳐 주세요";
+  if (list.some((r) => r.status === "done")) return { error: DONE_ERROR };
+
+  const supabase = await createClient();
+  if (scoped) {
+    const teaching = await userTaughtClassSet(supabase, user.id, date);
+    if (!teaching.has(toClassId)) return { error: "담당 반이 아닙니다" };
+    if (!teaching.has(fromClassId)) {
+      for (const r of list) {
+        const then = await userTaughtClassSet(supabase, user.id, r.absenceDate);
+        if (!then.has(absenceClassOf(r))) return { error: "담당 반이 아닙니다" };
+      }
+    }
+  }
+  for (const r of list) {
+    const block = await mappedReservationMutationBlock(mappedRescheduleCommand(r.id));
+    if (block) return { error: block };
+  }
+
+  const [{ data: fromCls }, { data: stu }] = await Promise.all([
+    admin.from("classes").select("subject").eq("tenant_id", user.tenantId).eq("id", fromClassId).maybeSingle(),
+    admin.from("students").select("name").eq("tenant_id", user.tenantId).eq("id", studentId).maybeSingle(),
+  ]);
+  if (!fromCls) return { error: "반을 찾지 못했습니다" };
+  let hosts: ReservationHost[];
+  try {
+    hosts = await reservationHostChoices(supabase, user, { studentId, absenceClassId: absenceClassOf(list[0]!), subject: String(fromCls.subject ?? ""), date });
+  } catch {
+    return { error: "학생의 반을 확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" };
+  }
+  const host = hosts.find((h) => h.classId === toClassId);
+  if (!host) return { error: "합칠 반을 다시 확인해 주세요 — 그날 이 학생이 다니는 같은 과목 반만 됩니다" };
+  const regularDay = await isRegularLessonDay(user.tenantId, { studentId, classId: toClassId, date });
+  if (regularDay === null) return { error: "그날 정규 수업인지 확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" };
+  if (!regularDay) return { error: `그날은 ${host.className} 정규 수업일이 아니라 합칠 수 없습니다` };
+
+  // 기록된 반에 그날 보강이 이미 찍혀 있으면(예약 이행 전 다른 경로로) 옮기면 시수가 두 번 선다. 강사 RLS에 가리지 않게 admin + tenant.
+  const { data: fromDay, error: dayErr } = await admin
+    .from("attendance_records")
+    .select("id, student_id, class_id, session_date, slot_start, status, note, recorded_at")
+    .eq("tenant_id", user.tenantId)
+    .eq("class_id", fromClassId)
+    .eq("student_id", studentId)
+    .eq("session_date", date);
+  if (dayErr) return { error: "출석부를 확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" };
+  if (effectiveAttendanceRecords((fromDay ?? []) as AttRow[]).some((c) => completesReservation(c.status))) return { error: DONE_ERROR };
+
+  const now = new Date().toISOString();
+  const moved: typeof list = [];
+  const undo = async () => {
+    for (const r of moved) {
+      const { error: undoErr } = await admin
+        .from("makeup_reservations")
+        .update({ class_id: r.classId, absence_class_id: r.absenceClassId ?? null, report_mode: r.reportMode ?? null, updated_at: now })
+        .eq("tenant_id", user.tenantId)
+        .eq("id", r.id)
+        .eq("status", "reserved");
+      if (undoErr) console.error("[makeup-reservation] 옮긴 예약을 되돌리지 못했습니다 — 관리자 확인 필요", r.id, undoErr.message);
+    }
+  };
+  for (const r of list) {
+    const absenceId = absenceClassOf(r);
+    const { data: upd, error: updErr } = await admin
+      .from("makeup_reservations")
+      .update({ class_id: toClassId, absence_class_id: absenceId === toClassId ? null : absenceId, report_mode: "merge", updated_at: now })
+      .eq("tenant_id", user.tenantId)
+      .eq("id", r.id)
+      .eq("status", "reserved")
+      .eq("class_id", fromClassId)
+      .select("id");
+    if (updErr || (upd ?? []).length === 0) {
+      await undo().catch(() => undefined);
+      if (updErr?.code === "23505") return { error: `${host.className}에 같은 교시 보강 예약이 이미 있습니다` };
+      if (!updErr) return { error: "그 사이 예약이 바뀌어 옮기지 못했습니다 — 새로고침 뒤 확인해 주세요" };
+      console.error("[makeup-reservation] 예약 옮기기 실패", updErr.message);
+      return { error: "보강 예약을 옮기지 못했습니다 — 잠시 후 다시 시도하세요" };
+    }
+    moved.push(r);
+  }
+
+  // 합칠 반 출석이 이미 찍혀 있으면 지금 이행('보강 완료' 메모 · 결석 칸 '예정 → 완료') — 아직이면 출석을 찍을 때 이행된다(새 칸 = 정규 + 보강 자동값).
+  // 🔴 시수 = 지금 값 + 보강분(`addToCurrent`) — 이행 모듈의 '새 칸·빈 칸에만 자동값'으로는 이미 찍힌 칸에서 보강분이 빠지거나(3교시 반 1.5)
+  //    시간표로 다시 매겨 사람이 친 값이 덮인다. 더하기는 예약을 done으로 바꾼 호출만 한다(동시 출석 저장과 두 번 더하지 않게) — 적대 리뷰 2026-10-27.
+  const completed = await completeMakeupReservations({ tenantId: user.tenantId }, [
+    { studentId, classId: toClassId, date, status: null, unitsExplicit: false, created: false, addToCurrent: true },
+  ]);
+  const units = completed.get(completionKey({ studentId, classId: toClassId, date }));
+  await logAction({
+    action: "makeup_reserve_host_move",
+    targetType: "attendance",
+    ...(stu?.name ? { targetLabel: `${stu.name} · ${host.className}` } : {}),
+    metadata: {
+      studentId,
+      date,
+      fromClassId,
+      classId: toClassId,
+      reservationIds: moved.map((r) => r.id),
+      reportMode: "merge",
+      ...(units !== undefined ? { units } : {}),
+    },
+  });
+  revalidateSurfaces();
+  return { ok: true, moved: moved.length, ...(units !== undefined ? { units } : {}) };
+}
+
+/**
+ * 못 했음 — 정규 수업이 없는 날의 보강 칸이 남아 있다(칸째 지워야 시수·보고서가 함께 정리된다). 코드 `makeup_only`를 받은 화면은 그
+ * '(보강)' 줄을 '보강 빼기'와 같은 길(`removeMakeupEntry` — 보강 칸·명단·미발송 보고서)로 지우고 다시 묻는다. 문구는 그 길이 막혔을 때만 보인다.
+ */
+const MISSED_MAKEUP_ONLY_ERROR = "정규 수업이 없는 날의 보강 출결이 남아 있습니다 — 출석부에서 그 칸을 지운 뒤 다시 눌러 주세요";
+/** 못 했음 — 정규 수업일인데 칸이 '보강'으로 찍혔거나 시수가 보강분뿐이라 정규분을 가려낼 수 없다. */
+const MISSED_MAKEUP_STATUS_ERROR =
+  "그날 출결 칸에서 정규 수업분을 가려낼 수 없습니다(출결이 '보강'이거나 시수가 보강분뿐) — 출석부에서 출결·시수를 고친 뒤 다시 눌러 주세요";
+
+export type CheckMakeupResult =
+  | {
+      ok: true;
+      outcome: "done" | "missed";
+      /** 보강 했음 — 이행이 시수를 바꿨으면 그 값(null = 1). 못 했음 — 보강분을 뺀 값. */
+      units?: number | null;
+      /** 보강 했음 — 그날 칸이 없어 새로 찍은 출결(정규 수업일 = 출석 · 아니면 보강). 화면이 출결 알약을 맞춘다. */
+      marked?: "present" | "makeup";
+      /** 못 했음인데 시수를 사람이 고쳐 둬서(또는 근거를 몰라) 손대지 않았다 — 출석부에서 확인하라고 알린다. */
+      unitsLeft?: true;
+      /** 확인 칸(0458a)이 아직 없어 '했음'을 남기지 못했다(이행·시수는 했다). */
+      checkUnsaved?: true;
+    }
+  | { error: string; code?: "makeup_only" };
+
+/**
+ * **보강 진행 여부 확인** — 원스크린 보강 표식에서 '보강 했음 / 보강 못 했음'(원장 2026-10-27 *"보강을 실제로 진행했는지도 선생님이
+ * 체크할 수 있도록 … 보강 예약을 누르면 보강을 했다 안했다 체크"* · *"보강체크를 하지 않으면 보고서 발송 비활성화"*).
+ * 대상 = 그 학생 · 그 반(예약이 기록된 반) · 그날의 예약 전부.
+ *  · 했음: 아직 이행 전이면 지금 이행한다 — 그 반 그날 칸이 이미 찍혀 있으면 그 칸에 얹는다: 정규 수업일의 정규 칸이면 `addToCurrent`
+ *    (지금 값 + 보강분 — 박지호 10/27처럼 출석이 예약보다 먼저 찍힌 칸), 보강 칸·정규 수업일이 아니면 시수는 두고 이행만(이미 보강분이 든 칸에
+ *    또 더하지 않는다 — 적대 리뷰). 칸이 없으면 찍는다(정규 수업일 = 출석 · 아니면 보강 — 그 이행 훅이 자동값). 결석·공결 날은 막는다.
+ *    그 뒤 `checked_at`·`checked_by`(0458a — 칸이 없으면 이행만 하고 알린다).
+ *  · 못 했음: 예약을 지운다 — 이행된 예약이면 칸마다 묶어 보강분 시수를 뺀다(그 칸의 지금 값이 마지막 이행 값 그대로이고 이행 순서대로
+ *    누적됐을 때만 · 아니면 두고 알린다 — 사람이 고쳤거나 근거를 모른다). '결석분 보강' 메모와 결석 칸의 '보강 예정/완료' 줄을 뺀다
+ *    (결석은 '보강 안 된 결석' — 다시 예약).
+ *    🔴 정규 수업이 없는 날의 보강 칸이 남아 있으면 칸째 지워야 해서 막고 '(보강)' 줄의 '보강 빼기'로 안내한다(칸이 이미 없으면 예약만 지운다).
+ *       정규 수업일인데 칸이 '보강'이면 정규분을 가려낼 수 없어 막고 출석부에서 고치게 한다.
+ *    🔴 조회가 하나라도 실패하면 쓰기 전에 멈춘다(시수는 그대로인 채 예약만 지우면 과지급이 남는다).
+ * 게이트 = 출결 쓰기 + 강사(scoped)는 출결 수정 기간 + **그날 그 반 담당**(시수를 바꾸는 칸의 반 — 출결 저장과 같은 축) · 연결 예약은 막는다.
+ * 감사로그 `makeup_reserve_check`.
+ */
+export async function checkMakeupReservation(input: {
+  studentId: string;
+  /** 예약이 기록된 반(정규+보강 줄의 반 · '(보강)' 줄의 앵커 반). */
+  classId: string;
+  date: string;
+  outcome: "done" | "missed";
+}): Promise<CheckMakeupResult> {
+  const user = await getCurrentUser({ teacherView: true });
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
+  const { studentId, classId, date, outcome } = input ?? ({} as typeof input);
+  if (!studentId || !classId || !YMD.test(date ?? "") || (outcome !== "done" && outcome !== "missed")) return { error: "잘못된 요청입니다" };
+  const scoped = (await accessLevelTenant(user.systemRole, "attendance")) === "scoped";
+  const today = kstToday();
+  if (scoped && !isWithinAttendanceEditWindow(date, today)) return { error: attendanceLockMessage(date, today) };
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return { error: "서버 설정 오류 — 관리자에게 알려 주세요" };
+  }
+  const cols = "id, student_id, class_id, absence_date, makeup_date, slot_start, slot_end, period_label, note, status, created_by, report_mode, absence_class_id";
+  const readList = (select: string) =>
+    admin
+      .from("makeup_reservations")
+      .select(select)
+      .eq("tenant_id", user.tenantId)
+      .eq("student_id", studentId)
+      .eq("class_id", classId)
+      .eq("makeup_date", date)
+      .in("status", ["reserved", "done"]);
+  let checkColumn = true;
+  let { data: rows, error: readErr } = await readList(`${cols}, checked_at`);
+  if (readErr && isMissingColumn(readErr, "checked_at")) {
+    checkColumn = false;
+    ({ data: rows, error: readErr } = await readList(cols));
+  }
+  if (readErr) {
+    if (isMissingReservationTable(readErr)) return { error: NOT_APPLIED };
+    console.error("[makeup-reservation] 확인할 예약 조회 실패", readErr.message);
+    return { error: "보강 예약을 읽지 못했습니다 — 잠시 후 다시 시도하세요" };
+  }
+  const list = ((rows ?? []) as unknown as Parameters<typeof toReservation>[0][]).map(toReservation);
+  if (list.length === 0) return { error: "확인할 보강 예약을 찾지 못했습니다 — 새로고침 뒤 다시 시도해 주세요" };
+
+  const supabase = await createClient();
+  if (scoped && !(await userTaughtClassSet(supabase, user.id, date)).has(classId)) return { error: "담당 반이 아닙니다" };
+  for (const r of list) {
+    const block = await mappedReservationMutationBlock(outcome === "done" ? mappedRescheduleCommand(r.id) : mappedCancelCommand(r.id));
+    if (block) return { error: block };
+  }
+  const [{ data: cls }, { data: stu }, regularDay, profile] = await Promise.all([
+    admin.from("classes").select("subject, class_name").eq("tenant_id", user.tenantId).eq("id", classId).maybeSingle(),
+    admin.from("students").select("name").eq("tenant_id", user.tenantId).eq("id", studentId).maybeSingle(),
+    isRegularLessonDay(user.tenantId, { studentId, classId, date }),
+    getLessonProfile(user.tenantId),
+  ]);
+  if (regularDay === null) return { error: "그날 정규 수업인지 확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" };
+  const subject = (cls?.subject as string | null) ?? null;
+  const label = stu?.name && cls?.class_name ? { targetLabel: `${stu.name} · ${cls.class_name}` } : {};
+  const log = (meta: Record<string, unknown>) =>
+    logAction({
+      action: "makeup_reserve_check",
+      targetType: "attendance",
+      ...label,
+      metadata: { studentId, classId, date, outcome, reservationIds: list.map((r) => r.id), ...meta },
+    });
+
+  if (outcome === "done") {
+    let units: number | null | undefined;
+    let marked: "present" | "makeup" | undefined;
+    if (list.some((r) => r.status === "reserved")) {
+      // 그 반 그날 칸 — 시수 상태(출석·지각·조퇴·보강)가 있으면 그 칸에 얹고, 결석·공결이면 막고, 없으면 찍는다.
+      const { data: dayRows, error: dayErr } = await admin
+        .from("attendance_records")
+        .select("id, student_id, class_id, session_date, slot_start, status, note, recorded_at")
+        .eq("tenant_id", user.tenantId)
+        .eq("class_id", classId)
+        .eq("student_id", studentId)
+        .eq("session_date", date);
+      if (dayErr) return { error: "출석부를 확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" };
+      const day = effectiveAttendanceRecords((dayRows ?? []) as AttRow[]);
+      const counted = day.filter((c) => completesReservation(c.status));
+      if (counted.length > 0) {
+        // 정규 수업일의 정규 칸에만 보강분을 얹는다 — 이미 '보강' 칸이거나 정규 수업일이 아니면 그 칸 시수에 보강분이 들어 있다(이행만).
+        const addOn = regularDay && !counted.some((c) => c.status === "makeup");
+        const completed = await completeMakeupReservations({ tenantId: user.tenantId }, [
+          addOn
+            ? { studentId, classId, date, status: null, unitsExplicit: false, created: false, addToCurrent: true }
+            : { studentId, classId, date, status: null, unitsExplicit: true, created: false },
+        ]);
+        units = completed.get(completionKey({ studentId, classId, date }));
+      } else if (day.some((c) => c.status === "absent" || c.status === "excused")) {
+        return { error: "그날 출결이 결석이라 보강을 했다고 기록할 수 없습니다 — 출결을 먼저 고쳐 주세요" };
+      } else {
+        marked = regularDay ? "present" : "makeup";
+        const cell = await setAttendanceCell({ studentId, classId, sessionDate: date, status: marked, units: "", quiet: true });
+        if ("error" in cell) return { error: cell.error };
+        if ("autoUnits" in cell && cell.autoUnits !== undefined) units = cell.autoUnits;
+      }
+      const { data: still, error: stillErr } = await admin
+        .from("makeup_reservations")
+        .select("id")
+        .eq("tenant_id", user.tenantId)
+        .in("id", list.map((r) => r.id))
+        .eq("status", "reserved");
+      if (stillErr || (still ?? []).length > 0) return { error: "보강을 처리하지 못했습니다 — 출석부에서 그날 출결을 확인해 주세요" };
+    }
+    const extra = { ...(units !== undefined ? { units } : {}), ...(marked ? { marked } : {}) };
+    if (!checkColumn) {
+      await log({ checkUnsaved: true, ...extra });
+      revalidateSurfaces();
+      return { ok: true, outcome, checkUnsaved: true, ...extra };
+    }
+    const now = new Date().toISOString();
+    const { error: chkErr } = await admin
+      .from("makeup_reservations")
+      .update({ checked_at: now, checked_by: user.id, updated_at: now })
+      .eq("tenant_id", user.tenantId)
+      .in("id", list.map((r) => r.id))
+      .eq("status", "done");
+    if (chkErr) {
+      console.error("[makeup-reservation] 보강 확인 저장 실패", chkErr.message);
+      return { error: "보강 확인을 저장하지 못했습니다 — 잠시 후 다시 시도하세요" };
+    }
+    await log(extra);
+    revalidateSurfaces();
+    return { ok: true, outcome, ...extra };
+  }
+
+  // ── 못 했음 ── 막힐 일과 조회를 모두 본 뒤에 쓴다(반쪽 상태 금지 · 조회 실패면 멈춘다).
+  const READ_FAIL = { error: "보강 기록을 읽지 못했습니다 — 잠시 후 다시 시도하세요" } as const;
+  type CellRow = { id: string; slot_start: string | null; status: string; session_units: number | string | null; note: string | null };
+  const doneList = list.filter((r) => r.status === "done");
+  let cellIdOf = new Map<string, string | null>();
+  let cells = new Map<string, CellRow>();
+  /** 연결이 끊긴 이행 예약이 있는데 그 반 그날에 연결 밖 시수 칸이 남아 있다(보강분이 거기 들었는지 모른다). */
+  let orphanCounted = false;
+  if (doneList.length) {
+    const { data: links, error: linkErr } = await admin
+      .from("makeup_reservations")
+      .select("id, attendance_record_id")
+      .eq("tenant_id", user.tenantId)
+      .in("id", doneList.map((r) => r.id));
+    if (linkErr) return READ_FAIL;
+    cellIdOf = new Map(((links ?? []) as { id: string; attendance_record_id: string | null }[]).map((l) => [l.id, l.attendance_record_id]));
+    const cellIds = [...new Set([...cellIdOf.values()].filter((x): x is string => !!x))];
+    if (cellIds.length) {
+      const { data: cellRows, error: cellErr } = await admin
+        .from("attendance_records")
+        .select("id, slot_start, status, session_units, note")
+        .eq("tenant_id", user.tenantId)
+        .in("id", cellIds);
+      if (cellErr) return READ_FAIL;
+      cells = new Map(((cellRows ?? []) as CellRow[]).map((c) => [c.id, c]));
+    }
+    // 연결이 끊긴 이행 예약(연결된 칸이 지워졌다 — '보강 빼기' 등) — 그 반 그날에 다른 시수 칸이 남았는지 다시 본다(다른 교시 · 정정 이력에서
+    // 올라온 행 · '보강 빼기'가 안 지우는 출석 칸). 남았으면 보강분이 거기 들었는지 알 수 없다 — 경고 없이 예약만 지우면 과지급이 숨는다(재리뷰).
+    if (doneList.some((r) => !cells.has(cellIdOf.get(r.id) ?? ""))) {
+      const { data: dayRows, error: dayErr } = await admin
+        .from("attendance_records")
+        .select("id, student_id, class_id, session_date, slot_start, status, note, recorded_at")
+        .eq("tenant_id", user.tenantId)
+        .eq("class_id", classId)
+        .eq("student_id", studentId)
+        .eq("session_date", date);
+      if (dayErr) return READ_FAIL;
+      orphanCounted = effectiveAttendanceRecords((dayRows ?? []) as AttRow[]).some((c) => completesReservation(c.status) && !cells.has(c.id));
+    }
+    // 🔴 보강만 있던 칸 — 그날 정규 수업일이 아니면 그 칸 시수가 보강분뿐이라 칸째 지워야 한다(감사로그와 무관하게 판정).
+    //    칸이 이미 없으면('보강 빼기'로 지웠다) 뺄 시수가 없다 — 예약만 지운다(막으면 막다른 길이다, 적대 리뷰 2026-10-27).
+    if ((cells.size > 0 || orphanCounted) && !regularDay) return { error: MISSED_MAKEUP_ONLY_ERROR, code: "makeup_only" };
+    // 정규 수업일인데 칸이 '보강'으로 찍혔다 — 정규분·보강분을 가려낼 수 없다(칸을 지우라고 하면 정규 출석까지 사라진다).
+    if ([...cells.values()].some((c) => c.status === "makeup")) return { error: MISSED_MAKEUP_STATUS_ERROR };
+  }
+  // 이행이 적은 시수(감사로그 `makeup_reserve_done.autoUnits` · 최신) — 칸마다 묶어 본다.
+  const autoOf = new Map<string, { auto: number; at: string }>();
+  const autoOn = profile.autoUnits;
+  if (autoOn) {
+    for (const r of doneList) {
+      const { data: logs, error: logErr } = await admin
+        .from("audit_logs")
+        .select("metadata, created_at")
+        .eq("tenant_id", user.tenantId)
+        .eq("action", "makeup_reserve_done")
+        .eq("metadata->>reservationId", r.id)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (logErr) return READ_FAIL;
+      const auto = (logs?.[0]?.metadata as { autoUnits?: unknown } | undefined)?.autoUnits;
+      if (typeof auto === "number") autoOf.set(r.id, { auto, at: String(logs?.[0]?.created_at ?? "") });
+    }
+  }
+  type CellPlan = { id: string; units?: number | null; note: string | null; noteChanged: boolean };
+  const plans: CellPlan[] = [];
+  // 정규 수업일에 연결 밖 시수 칸이 남았으면 시수는 두고 알린다(정규 칸일 수도, 보강분이 든 칸일 수도 있다).
+  let unitsLeft = orphanCounted && autoOn;
+  const byCell = new Map<string, typeof doneList>();
+  for (const r of doneList) {
+    const cellId = cellIdOf.get(r.id);
+    if (!cellId || !cells.has(cellId)) continue;
+    byCell.set(cellId, [...(byCell.get(cellId) ?? []), r]);
+  }
+  for (const [cellId, rs] of byCell) {
+    const cell = cells.get(cellId)!;
+    const plan: CellPlan = { id: cell.id, note: cell.note, noteChanged: false };
+    for (const r of rs) {
+      const line = reservationMakeupMemo(r);
+      if (hasMemoLine(plan.note, line)) {
+        plan.note = removeMemoLine(plan.note, line);
+        plan.noteChanged = true;
+      }
+    }
+    if (autoOn && cell.slot_start == null) {
+      // 이 칸에 얹힌 예약이 모두 자동값으로 이행됐고, 이행 순서대로 **누적**됐고(k번째 = k−1번째 + 그 보강분), 칸이 마지막 이행 값
+      // 그대로일 때만 — 그 값에서 보강분 합을 뺀다. 🔴 같은 날 새 칸에 두 예약이 이행되면 두 번째가 `정규 + 자기 보강분`으로 덮어
+      // 감사로그가 누적이 아니다 — 그때 합을 빼면 과차감(정규 출석까지 깎인다)이라 두고 알린다(적대 리뷰 2026-10-27).
+      const resOf = (r: MakeupReservation) => reservationAutoUnits(r, subject) ?? 0;
+      const resSum = round1(rs.reduce((sum, r) => sum + resOf(r), 0));
+      const chain = rs.map((r) => ({ r, log: autoOf.get(r.id) }));
+      const known = chain.every((c) => !!c.log);
+      chain.sort((a, b) => (a.log?.at ?? "").localeCompare(b.log?.at ?? ""));
+      const cumulative = known && chain.every((c, k) => k === 0 || round1(c.log!.auto - chain[k - 1].log!.auto) === round1(resOf(c.r)));
+      const latest = known ? chain[chain.length - 1].log! : undefined;
+      const current = cell.session_units == null ? 1 : Number(cell.session_units);
+      if (latest && cumulative && resSum > 0 && current === latest.auto) {
+        const next = round1(latest.auto - resSum);
+        if (next <= 0) return { error: MISSED_MAKEUP_STATUS_ERROR };
+        plan.units = next === 1 ? null : next;
+      } else if (resSum > 0) {
+        unitsLeft = true;
+      }
+    }
+    plans.push(plan);
+  }
+  let units: number | null | undefined;
+  for (const plan of plans) {
+    const patch: Record<string, unknown> = {};
+    if (plan.noteChanged) patch.note = plan.note;
+    if (plan.units !== undefined) patch.session_units = plan.units;
+    if (Object.keys(patch).length === 0) continue;
+    const { error: cellErr } = await admin.from("attendance_records").update(patch).eq("tenant_id", user.tenantId).eq("id", plan.id);
+    if (cellErr) {
+      console.error("[makeup-reservation] 보강 못 함 — 칸 고치기 실패", plan.id, cellErr.message);
+      return { error: "출석부 칸을 고치지 못했습니다 — 잠시 후 다시 시도하세요" };
+    }
+    if (plan.units !== undefined) units = plan.units;
+  }
+  const { error: delErr } = await admin
+    .from("makeup_reservations")
+    .delete()
+    .eq("tenant_id", user.tenantId)
+    .in("id", list.map((r) => r.id))
+    .in("status", ["reserved", "done"]);
+  if (delErr) {
+    console.error("[makeup-reservation] 보강 못 함 — 예약 지우기 실패", delErr.message);
+    return { error: "보강 예약을 지우지 못했습니다 — 잠시 후 다시 시도하세요" };
+  }
+  // 결석 칸 메모 — 이 보강의 '예정/완료' 줄을 뺀다. 같은 결석 · 같은 보강일의 다른 예약(다른 반)이 남아 있으면 그 줄은 둔다.
+  for (const r of list) {
+    const absenceClassId = absenceClassOf(r);
+    const { data: siblings } = await admin
+      .from("makeup_reservations")
+      .select("id, class_id, absence_class_id, makeup_date")
+      .eq("tenant_id", user.tenantId)
+      .eq("student_id", studentId)
+      .eq("absence_date", r.absenceDate)
+      .eq("makeup_date", r.makeupDate);
+    const kept = ((siblings ?? []) as { class_id: string; absence_class_id: string | null }[]).some(
+      (x) => (x.absence_class_id ?? x.class_id) === absenceClassId,
+    );
+    if (kept) continue;
+    const { data: absRows } = await admin
+      .from("attendance_records")
+      .select("id, note")
+      .eq("tenant_id", user.tenantId)
+      .eq("class_id", absenceClassId)
+      .eq("student_id", studentId)
+      .eq("session_date", r.absenceDate);
+    for (const a of (absRows ?? []) as { id: string; note: string | null }[]) {
+      let note = a.note;
+      for (const line of [reservationAbsenceDoneMemo(r), reservationAbsenceMemo(r)]) {
+        if (hasMemoLine(note, line)) note = removeMemoLine(note, line);
+      }
+      if (note !== a.note) await admin.from("attendance_records").update({ note }).eq("tenant_id", user.tenantId).eq("id", a.id);
+    }
+  }
+  await log({ ...(units !== undefined ? { units } : {}), ...(unitsLeft ? { unitsLeft: true } : {}) });
+  revalidateSurfaces();
+  return { ok: true, outcome, ...(units !== undefined ? { units } : {}), ...(unitsLeft ? { unitsLeft: true as const } : {}) };
 }
 
 function revalidateSurfaces() {

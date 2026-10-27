@@ -9,7 +9,7 @@
  */
 import { z } from "zod";
 import type { ImageSlotKey } from "@/features/report-templates/image-slots";
-import { IJW_SHAPES, type IjwDay, type IjwExamResult, type IjwStudy } from "./contract";
+import { IJW_SHAPES, type IjwDay, type IjwExamResult, type IjwStanding, type IjwStudy } from "./contract";
 
 export type JjReportSnapshot = {
   v: 1;
@@ -25,6 +25,8 @@ export type JjReportSnapshot = {
    * 날짜에 낸 응시 전부 — 종전 동작). 있으면 `exams`는 **고른 응시**다(다른 날 본 시험도 된다 — 보카킹 월례 시험을 며칠 뒤 보고서에).
    */
   pick?: string[] | null;
+  /** 단어 순위·학습 배지(2026-10-26, 인재원 선택 필드) — 없으면 그 그림 자리가 빠진다. 옛 저장본엔 없다. */
+  standing?: IjwStanding | null;
 };
 
 const SnapshotSchema = z.object({
@@ -35,6 +37,8 @@ const SnapshotSchema = z.object({
   study: IJW_SHAPES.study.nullable(),
   exams: z.array(IJW_SHAPES.examResult),
   pick: z.array(z.string()).nullable().optional().catch(null),
+  // 어긋난 순위 자료는 그 자리만 비운다(결과지·분석지까지 안 그리게 만들지 않는다).
+  standing: IJW_SHAPES.standing.nullable().optional().catch(null),
 });
 
 /** 저장본 → 동결본. 모양이 어긋나면 null(그림을 안 그린다). */
@@ -61,6 +65,8 @@ export function snapshotFromDay(
     exams: picked ? picked.exams : day.exams,
     // 기본이면 키를 아예 안 싣는다 — 고르기 전과 같은 저장본(읽을 땐 없음 = 기본).
     ...(picked ? { pick: picked.pick } : {}),
+    // 인재원이 실어 줬을 때만 — 없으면 키를 안 실어 옛 저장본과 같은 모양.
+    ...(day.standing ? { standing: day.standing } : {}),
   };
 }
 
@@ -85,10 +91,14 @@ export function normalizeJjPick(raw: unknown): string[] | null {
  * 그림 자리마다 **그릴 게 있는가** — 없으면 템플릿의 그 줄이 빠진다(빈 그림·0으로 가득한 그림 대신).
  * - 시험결과지: 그날 낸 응시가 한 건이라도 있을 때.
  * - 학습분석지: 30학습일 동안 푼 문제나 본 시험이 하나라도 있을 때.
+ * - 단어백분위: 누적·장기기억 단어 중 하나라도 비교(학년·반)가 실려 있을 때(숫자만 있고 비교가 없으면 '백분위'가 아니다).
+ * - 학습배지: 배지가 있을 때(아직 통과한 과정이 없으면 빠진다 — "배지 없음"을 학부모에게 내보내지 않는다).
  */
 export function slotAvailability(snap: JjReportSnapshot | null | undefined): Record<ImageSlotKey, boolean> {
   return {
     시험결과지: !!snap && snap.exams.length > 0,
     학습분석지: !!snap?.study && (snap.study.totals.answers > 0 || snap.study.exams.length > 0),
+    단어백분위: [snap?.standing?.seenWords, snap?.standing?.longTermWords].some((m) => !!m && (!!m.grade || !!m.class)),
+    학습배지: !!snap?.standing?.badge,
   };
 }

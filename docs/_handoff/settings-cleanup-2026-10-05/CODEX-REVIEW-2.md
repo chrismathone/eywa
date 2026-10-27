@@ -87,7 +87,7 @@
 
 수동 스크립트도 fresh 편집 읽기만으로 보호되지 않는다. 권한 스크립트는 읽어 둔 data 전체를 PATCH하며 CAS/updated_at 갱신이 없다(`scripts/staff-access/grant-class-review.mjs:113`, `scripts/staff-access/grant-class-review.mjs:117`; `scripts/staff-access/grant-seat-attendance.mjs:48`). 과목 기본뷰 스크립트도 같은 방식이다(`scripts/owner-settings/set-subject-default-view.mjs:84`, `scripts/owner-settings/set-subject-default-view.mjs:88`). 액션의 기존 조회 이후 스크립트가 쓰면 새 face/permissions baseline은 이미 검사됐고 최종 CAS는 그 변경을 못 본다. 반대로 스크립트가 먼저 읽고 owner가 쓴 뒤 스크립트가 PATCH하면 owner 변경을 덮는다. **읽기만 했고 어떤 스크립트도 실행하지 않았다.**
 
-최초 DDL과 앱 스키마에는 timestamp 기본값만 있다(`supabase/migrations/0033a_tenant_settings.sql:12`, `src/lib/db/schema.ts:2289`). 실제 DB의 별도 자동 갱신 트리거는 미확인이므로 발생한 사고라고 단정하지 않는다. 계획은 미확인 트리거에 의존하지 않고 코드상 보장을 정해야 한다.
+최초 DDL과 앱 스키마에는 timestamp 기본값만 있다(`supabase/migrations/s1_season1.sql#0033a_tenant_settings.sql:12`, `src/lib/db/schema.ts:2289`). 실제 DB의 별도 자동 갱신 트리거는 미확인이므로 발생한 사고라고 단정하지 않는다. 계획은 미확인 트리거에 의존하지 않고 코드상 보장을 정해야 한다.
 
 **필요한 수정:** 데모의 기존 SQL writer도 같은 트랜잭션에서 수정 표식을 갱신하는 대상으로 포함한다(시트와 같은 좁은 변경이면 된다). 수동 스크립트는 전부 고치도록 범위를 자동 확장할 필요는 없다. 다만 **이번 보호 범위에서 제외하고 owner/cron/시트 저장과 동시 실행하지 않는 전제를 명시**하거나, 보호 대상이면 조회 시점 CAS·updated_at 갱신까지 함께 적용해야 한다. 그러고 나서 `PLAN.md:33`의 “모든 경로”가 가리키는 범위를 정확히 적는다. 모의 DB로 데모 writer가 중앙 액션 조회 뒤 커밋하는 경우 중앙 저장 거절/보존을 확인한다.
 

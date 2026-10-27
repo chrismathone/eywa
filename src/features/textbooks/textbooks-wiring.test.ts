@@ -7,6 +7,7 @@ import { MENU_ICON } from "@/components/icons/aywa-icons";
 import { routeWindowSize } from "@/components/workspace/window-geometry";
 import { resolveTextbookTab, textbookFaces, TEXTBOOK_FACE_DEFS } from "./faces";
 
+import { readMigration } from "@/lib/db/migrations-corpus.mjs";
 /**
  * 교재목록 **배선 가드** — 새 메뉴가 반쯤만 배선되는 것을 막는다(`inventory-wiring.test.ts` 선례).
  *
@@ -186,7 +187,7 @@ describe("교재 배정 — 칸은 요일까지 고른다", () => {
   });
 
   it("저장 칸 이름이 SQL과 앱에서 같다", () => {
-    const sql = read("supabase", "migrations", "0268a_class_textbook_plan_slots.sql");
+    const sql = readMigration("0268a_class_textbook_plan_slots.sql");
     expect(sql).toContain("slot_picks text[]");
     const plan = read("src", "features", "textbooks", "server", "plan-actions.ts");
     expect(plan).toContain("slot_picks: slotPicks");
@@ -333,7 +334,7 @@ describe("교재 배정 — 회차 미루기·당기기", () => {
   const sched = read("src", "features", "textbooks", "lesson-schedule.ts");
 
   it("표식은 (반, 날짜, 교시) 한 칸 단위다 — 배정마다 따로 담지 않는다", () => {
-    const sql = read("supabase", "migrations", "0282a_class_lesson_shifts.sql");
+    const sql = readMigration("0282a_class_lesson_shifts.sql");
     expect(sql).toContain("create table if not exists public.class_lesson_shifts");
     expect(sql).toContain("(tenant_id, class_id, plan_date, slot_start)");
     // 🔴 부분 유니크 금지([[#113]]) — 이 축으로 upsert한다(토글).

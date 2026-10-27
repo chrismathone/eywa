@@ -54,6 +54,8 @@ export const AUDIT_ACTIONS = {
   student_contribution_signal_cancel: "원생 긍정 신호 판정 취소",
   student_contribution_signal_rejudge: "원생 긍정 신호 재판정 요청",
   student_contribution_referral_backfill: "지난 원생 소개 연결",
+  student_parent_events_import: "설명회 참석 연결",
+  student_parent_events_revoke: "설명회 참석 연결 취소",
   student_contribution_referral_link: "원생 소개 확인·연결",
   student_contribution_summary_generate: "학생 기록 요약 생성",
   // 마감한 달에 바뀐 규칙을 얹음(원장 지시 때만 · 운영 스크립트) — 2026-10-14 강사 탓이 아닌 사유(배정·유지 감점 빼기).
@@ -448,6 +450,10 @@ export const AUDIT_ACTIONS = {
   makeup_reserve_revert: "보강 예약 되돌림",
   // 원스크린 보강 보고서 합치기 ↔ 나누기(원장 2026-10-22) — 예약 줄의 발송 방식을 함께 바꾼다.
   makeup_reserve_report_mode: "보강 예약 보고서 방식 변경",
+  // 원스크린 '보강 합치기'가 다른 반에 기록된 예약을 그날 정규 반으로 옮겼다(원장 2026-10-27 박지호 건).
+  makeup_reserve_host_move: "보강 예약 정규 반으로 옮김",
+  // 원스크린 보강 표식의 '보강 했음 / 보강 못 했음'(원장 2026-10-27 — 확인 전엔 보고서를 보내지 않는다).
+  makeup_reserve_check: "보강 진행 여부 확인",
   attendance_makeup_link: "보강–결석분 연결",
   // 수학 자동 시수(원장 2026-09-11 "9월분만 보정") — scripts/_oneoff/backfill-math-auto-units.mjs가 --apply 때 한 줄 남긴다.
   attendance_units_backfill: "수학 출석 시수 자동값 소급 보정",

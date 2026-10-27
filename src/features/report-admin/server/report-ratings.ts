@@ -1,7 +1,8 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { logDbError } from "@/lib/supabase/db-error";
+import { OWNER_RUBRIC_ID } from "@/features/report-rating/harness/owner";
 import { parseRating, type RatingDbRow, type ReportRating } from "../report-rating";
 
 /**
@@ -12,6 +13,7 @@ import { parseRating, type RatingDbRow, type ReportRating } from "../report-rati
  * 🔴 표는 RLS 정책이 0개(의도적)라 세션 클라이언트로는 에러 없이 0행이다(#104) → admin + **tenant_id 필터**.
  * ⚠️ 평점은 참고용이라 목록을 막지 않는다: 표가 없으면(0450a 적용 전, #95) 조용히 빈 값, 그 밖의 오류는
  *    로그만 남기고 빈 값(#138) — 어느 쪽이든 목록은 평점 '—'로 그대로 뜬다.
+ * 🔴 **지금 기준(OWNER_RUBRIC_ID, v6)으로 매긴 줄만** 읽는다 — 옛 기준(v4) 값은 원장이 "전혀 신뢰안가는 점수"라 한 값이다(2026-10-26).
  */
 const COLS = "report_id, points, items, parent_feeling, suggestion, claim, claim_reason, rated_on";
 
@@ -32,7 +34,7 @@ export async function loadReportRatings(tenantId: string, reportIds: readonly st
   try {
     const admin = createAdminClient();
     const rows = await fetchInChunks<RatingDbRow>(ids, (chunk) =>
-      admin.from("lesson_report_ratings").select(COLS).eq("tenant_id", tenantId).in("report_id", chunk),
+      admin.from("lesson_report_ratings").select(COLS).eq("tenant_id", tenantId).eq("rubric", OWNER_RUBRIC_ID).in("report_id", chunk),
     );
     for (const row of rows) {
       const rating = parseRating(row);
@@ -41,6 +43,30 @@ export async function loadReportRatings(tenantId: string, reportIds: readonly st
     return out;
   } catch (e) {
     if (!isMissingRatingsTable(e)) logDbError(e, "report-admin.ratings", { reports: ids.length });
+    return new Map();
+  }
+}
+
+/**
+ * 평점 정렬용 — 그 지점의 지금 기준 평점 전부(보고서 id → 점수). 목록이 서버에서 30건씩 끊어 주므로 정렬은 전체 위에서 해야 한다.
+ * 🔴 호출부가 쓰기 권한을 먼저 확인한다(loadReportRatings와 같다). 행은 수천 건이라 `fetchAllPaged`(1,000행 침묵 절단 방지, #54).
+ * 실패하면 로그만 남기고 빈 값 — 정렬은 '평점 없음'으로만 줄 서고 목록은 뜬다(#138).
+ */
+export async function loadRatingPoints(tenantId: string): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!tenantId) return out;
+  try {
+    const admin = createAdminClient();
+    const rows = await fetchAllPaged<{ report_id: string; points: number | string | null }>((from, to) =>
+      admin.from("lesson_report_ratings").select("report_id, points").eq("tenant_id", tenantId).eq("rubric", OWNER_RUBRIC_ID).order("report_id").range(from, to),
+    );
+    for (const r of rows) {
+      const n = typeof r.points === "number" ? r.points : Number(r.points);
+      if (Number.isFinite(n) && n >= 0 && n <= 5) out.set(r.report_id, n);
+    }
+    return out;
+  } catch (e) {
+    if (!isMissingRatingsTable(e)) logDbError(e, "report-admin.rating-order", {});
     return new Map();
   }
 }

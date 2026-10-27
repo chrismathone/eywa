@@ -15,7 +15,7 @@ const summary = (month: string, student_id = "s") => ({ student_id, month, raws:
   correction_reasons: [{ metric: "subjectMonths", delta: 1, reason: "source" }] });
 function database(summaries = [summary("2026-09"), summary("2026-10")], fail = false, freshSubjects = 1) {
   const calls: { columns: string; filters: Record<string, unknown> }[] = [];
-  const db = { from: () => {
+  const db = { rpc: async () => ({ data: null, error: { code: "PGRST202" } }), from: () => {
     const call = { columns: "", filters: {} as Record<string, unknown> }; calls.push(call);
     const q = { select: (s: string) => { call.columns = s; return q; }, eq: (k: string, v: string) => { call.filters[k] = v; return q; },
       in: (k: string, v: string[]) => { call.filters[k] = v; return q; }, order: () => q, range: () => { const result = { error: fail ? { message: "offline" } : null,

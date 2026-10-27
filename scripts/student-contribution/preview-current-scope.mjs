@@ -2,16 +2,17 @@
 // node --import tsx --env-file=<local-env> scripts/student-contribution/preview-current-scope.mjs
 import postgres from "postgres";
 import assert from "node:assert/strict";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { contributionRoster } from "../../src/features/student-contribution/model/roster.ts";
 import { buildStudentIdentityIndex } from "../../src/features/students/ontology/identity-index.ts";
 import { isEnrollmentOnRosterOn } from "../../src/features/enrollments/eligibility.ts";
 import { validateLiveScope } from "../../src/features/students/ontology/live-scope.ts";
+import { readMigration } from "../../src/lib/db/migrations-corpus.mjs";
 const connection = new URL(process.env.DATABASE_URL ?? "missing:");
 const ref = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "missing:").hostname.split(".")[0];
 if (!ref || !(connection.hostname === `db.${ref}.supabase.co` || decodeURIComponent(connection.username).endsWith(`.${ref}`))) throw new Error("Database project mismatch");
 const tenant = "becaa316-e636-42e9-9d09-08b133e0b094";
-const migration = readFileSync("supabase/migrations/0446a_student_ontology_current_scope.sql","utf8");
+const migration = readMigration("0446a_student_ontology_current_scope.sql");
 let query = migration.slice(migration.indexOf("with roster as"), migration.indexOf("into result from counts c;")) + "from counts c";
 for(const [name,parameter] of Object.entries({p_tenant:"$1::uuid",p_students:"$2::uuid[]",p_kind:"$3::text",p_entity:"$4::text",p_search:"$5::text",p_page:"$6::integer",today:"$7::date"}))
   query=query.replace(new RegExp(`\\b${name}\\b`,"g"),parameter);

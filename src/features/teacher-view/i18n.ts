@@ -2622,6 +2622,12 @@ export const SHEET_DICT = {
   },
   "os.prev.pick": { ko: "선택 {n} 이전값 가져오기", en: "Copy last session into {n}" },
   "os.prev.allRows": { ko: "이전값 일괄 가져오기", en: "Copy last session into all" },
+  "os.prev.makeupLoad": { ko: "보강 {n}명 이전 진도 불러오기", en: "Load last progress for {n} make-up students" },
+  "os.prev.makeupBusy": { ko: "보강 이전 진도 불러오는 중…", en: "Loading make-up history…" },
+  "os.prev.makeupTitle": {
+    ko: "보강 학생은 이전 회차를 따로 불러와야 '이전값 가져오기'·참고행에 들어갑니다",
+    en: "Make-up students need their last session loaded before 'copy last session' can fill them",
+  },
   "os.attach.pick": { ko: "선택 {n} 첨부", en: "Attach to {n}" },
   "os.notice.title": {
     ko: "선택(없으면 표시 전체) 학생 학부모에게 공지 발송 — 진도와 무관",
@@ -2906,6 +2912,30 @@ export const SHEET_DICT = {
   // 보강 예약(0264a) 표식 — 원스크린 왼쪽 목록·카드·표 모드(원장 2026-10-22 *"보강 예약이 잘 되었나 확인할 방법이 없네"*).
   "os.reserved.tag": { ko: "보강 예약 {time}", en: "Makeup booked {time}" },
   "os.reserved.done": { ko: "보강 완료 {time}", en: "Makeup done {time}" },
+  "os.reserved.needsCheck": { ko: "보강 진행 여부 확인해 주세요", en: "Please confirm whether the makeup happened" },
+  // 좁은 자리(표 모드·왼쪽 목록) — 원장 2026-10-27 *"표모드에서는 넘치기 때문에 '보강 진행 여부 확인'으로 줄일것"*.
+  "os.reserved.needsCheckShort": { ko: "보강 진행 여부 확인", en: "Confirm makeup" },
+  "os.reserved.needsCheckTitle": {
+    ko: "눌러서 보강을 했는지 확인해 주세요 — 확인 전엔 이 보강이 든 보고서를 보낼 수 없습니다",
+    en: "Press to confirm whether the makeup happened — reports with this makeup can't be sent until you do",
+  },
+  "os.reserved.checkTitle": { ko: "눌러서 보강 진행 여부를 확인합니다", en: "Press to confirm whether the makeup happened" },
+  "os.reserved.checkDone": { ko: "보강 했음", en: "Makeup done" },
+  "os.reserved.checkMissed": { ko: "보강 못 했음", en: "Makeup didn't happen" },
+  "os.reserved.confirmMissed": {
+    ko: "{name} 보강을 못 했다고 기록할까요?\n\n· 보강분 시수를 빼고 이 보강 예약을 지웁니다.\n· 결석은 '보강 안 된 결석'으로 돌아갑니다(다시 예약할 수 있습니다).\n· 합쳐 둔 보고서는 정규 보고서로 돌아갑니다.\n· 따로 선 '(보강)' 줄은 보강 출결·명단·미발송 보고서와 함께 빠집니다.",
+    en: "Record that {name}'s makeup didn't happen?\n\n· The makeup units are removed and this booking is deleted.\n· The absence goes back to 'not made up' (you can book again).\n· A merged report goes back to a regular report.\n· A separate makeup row is removed with its makeup attendance, roster entry and unsent report.",
+  },
+  "os.reserved.checkedDone": { ko: "{name} 보강을 했다고 기록했습니다", en: "Recorded {name}'s makeup as done" },
+  "os.reserved.checkedMissed": { ko: "{name} 보강을 못 했다고 기록했습니다 — 보강분 시수를 뺐습니다", en: "Recorded {name}'s makeup as not done — the makeup units were removed" },
+  "os.reserved.unitsLeft": {
+    ko: "시수는 자동으로 뺄 수 없어(선생님이 고친 값이거나 같은 날 보강이 여럿) 그대로 두었습니다 — 출석부에서 시수를 확인해 주세요",
+    en: "The units couldn't be adjusted automatically (edited by hand, or several makeups that day), so they were left as is — check them in the register",
+  },
+  "os.reserved.preApplied": {
+    ko: "출석으로 보강 시수가 미리 반영됐습니다 — 보강을 못 하면 출석부에서 시수를 고쳐 주세요",
+    en: "The makeup units were already added with today's attendance — if the makeup doesn't happen, fix the units in the register",
+  },
   "os.reserved.merge": {
     ko: "{date} 결석분 보강 · 정규 보고서에 합쳐 보냅니다(정규+보강). 출석을 찍으면 보강 시수가 이 칸에 함께 들어갑니다.",
     en: "Makeup for the {date} absence · sent in the regular report (regular + makeup). Marking attendance adds the makeup units to this cell.",
@@ -2951,6 +2981,28 @@ export const SHEET_DICT = {
   "os.switch.blockOptout": { ko: "보고서를 보내지 않는 줄이라 합칠 수 없습니다", en: "This row doesn't send reports, so it can't be merged" },
   "os.switch.blockHasSeparate": { ko: "같은 과목 보강 줄이 이미 있습니다", en: "A makeup row for this subject already exists" },
   "os.switch.blockGone": { ko: "화면이 바뀌었습니다 — 새로고침 뒤 다시 해 주세요", en: "The screen changed — refresh and try again" },
+  "os.switch.blockNoAnchor": {
+    ko: "반이 정해지지 않은 보강이라 합칠 수 없습니다 — '반 미정'을 눌러 반부터 고르세요",
+    en: "This makeup has no class yet, so it can't be merged — press 'Class not set' and pick one first",
+  },
+  "os.switch.blockReservedDone": {
+    ko: "이 보강은 이미 {cls} 출석부에 찍혀 있어 다른 반으로 옮겨 합칠 수 없습니다 — 출석부에서 보강 칸을 먼저 고쳐 주세요",
+    en: "This makeup is already marked in the {cls} register, so it can't be moved and merged — fix the makeup cell in the register first",
+  },
+  "os.switch.confirmMove": {
+    ko: "{name} 보강 예약을 {from}에서 오늘 {cls} 정규 수업으로 옮겨 보고서를 합칠까요?\n\n· 보고서는 {cls} 한 건(정규+보강)으로 나갑니다.\n· 보강 시수는 {cls} 오늘 칸에 더해집니다(출석이 이미 찍혀 있으면 지금, 아니면 출석을 찍을 때).\n· 결석 칸과 '보강 예정' 메모는 그대로입니다.\n· 보강 줄에 적은 오늘 과제·특이사항·멘트는 정규 줄 뒤에 이어 붙습니다.",
+    en: "Move {name}'s makeup booking from {from} to today's {cls} regular lesson and merge the reports?\n\n· One {cls} regular + makeup report is sent.\n· The makeup units are added to today's {cls} cell (now if attendance is already marked, otherwise when it is).\n· The absence cell and its 'makeup planned' memo stay as they are.\n· Today's homework, notes and comment written on the makeup row are appended to the regular row.",
+  },
+  "os.switch.moved": { ko: "{name} 보강 예약을 {cls}로 옮겨 정규 보고서에 합쳤습니다", en: "Moved {name}'s makeup booking to {cls} and merged it into the regular report" },
+  "os.switch.movedRowLeft": {
+    ko: "보강 예약은 {cls}로 옮겼지만 보강 줄을 정리하지 못했습니다 — 새로고침해 주세요 ({error})",
+    en: "The makeup booking was moved to {cls}, but the makeup row couldn't be cleaned up — please refresh ({error})",
+  },
+  "os.switch.pickRegular": {
+    ko: "오늘 정규 수업이 여럿입니다 — 어느 수업에 합칠까요? 번호를 적어 주세요.\n{list}",
+    en: "There are several regular lessons today — which one should it merge into? Enter the number.\n{list}",
+  },
+  "os.switch.pickRegularBad": { ko: "목록에 있는 번호를 적어 주세요", en: "Enter a number from the list" },
   "os.switch.otherClass": { ko: "다른 반", en: "another class" },
   "os.reserved.mergeLocked": {
     ko: "보강 예약으로 합쳐진 보고서입니다 — 따로 보내려면 옆의 '따로 보내기'를 누르세요",
@@ -3168,12 +3220,22 @@ export const SHEET_DICT = {
     ko: "결석 학생 — 발송 제외 (기록 저장은 가능)",
     en: "Absent student — left out of the send (the record can still be saved)",
   },
+  "os.gate.need.mkcheck": { ko: "보강 진행 여부", en: "Whether the makeup happened" },
+  "os.gate.hint.mkcheck": {
+    ko: "보강 예약이 든 보고서입니다 — 이름 옆 보강 표식을 눌러 보강을 했는지(보강 했음 / 보강 못 했음) 확인해 주세요",
+    en: "This report includes a booked makeup — press the makeup tag next to the name and confirm whether it happened (done / not done)",
+  },
   "os.gate.need.attendance": { ko: "출결", en: "Attendance" },
   "os.gate.need.progress": { ko: "진도", en: "Progress" },
   "os.gate.need.ment": { ko: "멘트", en: "Message" },
   "os.gate.need.autowrite": { ko: "자동작성", en: "Auto-write" },
   "os.gate.need.oneline": { ko: "사랑의 한마디", en: "A loving word" },
   "os.gate.need.hwreason": { ko: "숙제 미제출 사유", en: "Reason homework was not done" },
+  "os.gate.need.attnote": { ko: "수업 태도 의견", en: "Attitude comment" },
+  "os.gate.hint.attnote": {
+    ko: "수업 태도가 하·중하입니다 — 학생 상세의 수업 태도 아래 '수업 태도 의견'을 3줄 이상(90자 이상) 적어 주세요(보고서에 그대로 들어갑니다)",
+    en: "Attitude is rated low — write the attitude comment under attitude in the student details, 3+ lines (90+ characters); it goes into the report as written",
+  },
   "os.gate.hint.hwreason": {
     ko: "숙제 완성도가 미제출입니다 — 학생 상세의 숙제 완성도 아래 '미제출 사유'를 적어 주세요(보고서에 그대로 들어갑니다)",
     en: "Homework is marked as not done — write the reason under homework in the student details (it goes into the report as written)",
@@ -3252,7 +3314,34 @@ export const SHEET_DICT = {
   "os.card.hwTodayAria": { ko: "{subject} 오늘 과제", en: "{subject} today's homework" },
   "os.card.note": { ko: "특이사항 (메모)", en: "Notes (memo)" },
   "os.card.notePilot": { ko: "사랑의 한마디 (필수)", en: "A loving word (required)" },
+  // JJ 수업보고서(원장 2026-10-27 *"수업태도 밑에 사랑의 한마디 … 작성안하면 영역 삭제"*) — 선택이고, 쓰면 수업 평가 바로 아래에 선다.
+  "os.card.noteJj": { ko: "사랑의 한마디 (선택)", en: "A loving word (optional)" },
+  "os.card.notePhJj": {
+    ko: "예: 오늘 발음이 정말 또렷해졌어요! · 쓰면 보고서의 수업 평가 바로 아래에 실리고, 비우면 그 항목이 빠집니다",
+    en: "e.g. Your pronunciation was so clear today! · Shown right under the class rating; leave it empty to drop the section",
+  },
+  "os.row.notePhJj": {
+    ko: "사랑의 한마디(선택) · 비우면 보고서에서 빠집니다",
+    en: "A loving word (optional) · left out of the report when empty",
+  },
+  // 학부모 문구 위 읽기 전용 '수업 평가' 요약(원장 2026-10-26 — 편집 칸에서 뺐다).
+  "os.lead.title": { ko: "수업 평가", en: "Class rating" },
+  "os.lead.hint": {
+    ko: "수업 평가는 수업 태도·숙제·이해도 칸에서 만들어집니다 — 바꾸려면 그 칸을 고치고 자동작성을 다시 누르세요",
+    en: "Built from the attitude, homework and understanding fields — change those and run auto-write again",
+  },
   "os.card.hwMiss.label": { ko: "미제출 사유 (필수)", en: "Why it was not done (required)" },
+  // 수업 태도 의견(하·중하) · 보강 사유(원장 2026-10-26) — ReasonNoteInput.
+  "os.card.attNote.label": { ko: "수업 태도 의견 (필수 · 3줄 이상)", en: "Attitude comment (required · 3+ lines)" },
+  "os.card.attNote.ph": {
+    ko: "오늘 수업에서 있었던 일과 앞으로 어떻게 지도할지 3줄 이상 적어 주세요 · 보고서 수업 태도에 그대로 들어갑니다",
+    en: "Write 3+ lines on what happened in class and how you will guide the student · goes into the report as written",
+  },
+  "os.card.mkReason.label": { ko: "보강 사유 (선택)", en: "Make-up reason (optional)" },
+  "os.card.mkReason.ph": {
+    ko: "예: 10월 19일 결석 보충 · 보고서 출결에 '(사유: …)'로 들어갑니다",
+    en: "e.g. making up the Oct 19 absence · added to the attendance line as '(reason: …)'",
+  },
   "os.card.hwMiss.ph": {
     ko: "예: 감기로 몸이 좋지 않았다고 합니다 · 보고서 숙제 완성도에 그대로 들어갑니다",
     en: "e.g. was unwell with a cold · added as is to the homework part of the report",
@@ -3276,6 +3365,9 @@ export const SHEET_DICT = {
   "os.card.testSkip.title": { ko: "일일 테스트", en: "Daily test taken?" },
   "os.card.testSkip.yes": { ko: "시험 있음", en: "Test taken" },
   "os.card.testSkip.no": { ko: "시험 없음", en: "No test" },
+  // 표 일일 칸의 사유 드롭다운 버튼(88px 칸 — 짧게, 2026-10-27).
+  "os.row.testSkipPick": { ko: "사유", en: "Reason" },
+  "os.row.testSkipChange": { ko: "변경", en: "Change" },
   "os.card.testSkip.reasonLabel": { ko: "안 친 사유", en: "Why it was not taken" },
   "os.card.testSkip.sick": { ko: "몸이 아픔", en: "Unwell" },
   "os.card.testSkip.slow": { ko: "이해도가 느림", en: "Still learning the concept" },
@@ -3305,6 +3397,29 @@ export const SHEET_DICT = {
   "os.card.understandingRestore": { ko: "되살리기", en: "Put back in the report" },
   "os.card.understandingRemoved": { ko: "뺀 소단원", en: "Removed" },
   "os.card.understandingScoreAria": { ko: "{lesson} 이해도", en: "{lesson} understanding" },
+  // 기본값 10 · 단계 버튼(원장 2026-10-26 *"초기 데이터 값(10)"* · *"우수 보통 나쁨 이런식으로 바로 기입"*).
+  "os.card.understandingHintDefault": {
+    ko: "처음엔 모두 {n}점 — 다르면 바꾸세요 · 빼면 자동작성에 안 들어갑니다",
+    en: "Every lesson starts at {n} — change it if needed · removed lessons are left out",
+  },
+  "os.card.understandingDefaultTitle": { ko: "기본값 {n}점(아직 안 바꿈)", en: "Default {n} (not changed yet)" },
+  "os.card.understandingPresetAria": { ko: "이해도 한 번에 넣기", en: "Set understanding for all lessons" },
+  "os.card.understandingPresetTitle": { ko: "모든 소단원을 {label}({n}점)으로", en: "Set every lesson to {label} ({n})" },
+  "os.card.understandingPreset.good": { ko: "우수", en: "Great" },
+  "os.card.understandingPreset.ok": { ko: "보통", en: "OK" },
+  "os.card.understandingPreset.poor": { ko: "나쁨", en: "Weak" },
+  "os.bulk.understanding": { ko: "이해도 (수학 소단원 전부)", en: "Understanding (all math lessons)" },
+  "os.bulk.understandingOffHint": {
+    ko: "뺄 소단원 — 누르면 빠짐 (그 소단원이 있는 학생만 · 학생마다 다른 점수는 행의 '소단원별')",
+    en: "Lessons to leave out — tap to remove (only for students who have it · per-student scores via 'Per lesson' on the row)",
+  },
+  "os.bulk.understandingOffTitle": { ko: "{lesson} — {n}행에 있음 · 누르면 이해도에서 뺌", en: "{lesson} — in {n} rows · tap to leave it out" },
+  "os.grid.understandingDetail": { ko: "소단원별", en: "Per lesson" },
+  "os.grid.understandingDetailOff": { ko: "소단원별 · {n}개 뺌", en: "Per lesson · {n} out" },
+  "os.grid.understandingDetailTitle": {
+    ko: "소단원마다 다른 점수를 주거나 빼기·되살리기",
+    en: "Score each lesson separately, or leave lessons out / put them back",
+  },
   "os.card.reportOf": { ko: "{subject} 보고서", en: "{subject} report" },
   "os.card.modeBTitle": {
     ko: "2문단 B — 수업 내용과 태도·특이사항을 나눠 작성합니다. 상단 토글에서 바꿀 수 있습니다.",
@@ -3826,6 +3941,12 @@ export const SHEET_DICT = {
   "os.bulk.bookAria": { ko: "일괄 교재명", en: "Bulk book" },
   "os.bulk.hwTodayPh": { ko: "오늘 과제 (비우면 적용 안 함)", en: "Today's homework (leave it empty to skip)" },
   "os.bulk.hwTodayAria": { ko: "일괄 오늘 과제", en: "Bulk today's homework" },
+  "os.bulk.testSkip": { ko: "일일 테스트 시험 없음으로", en: "Mark daily test as not taken" },
+  "os.bulk.testSkipNeedReason": { ko: "시험 없음 사유를 골라야 적용됩니다", en: "Pick a reason for the skipped test first" },
+  "os.bulk.bookHwHint": {
+    ko: "오늘 과제가 쪽수만이면(예: 153-170p) 수학 보고서 '오늘의 숙제'에 교재명이 앞에 붙어 나갑니다.",
+    en: "If today's homework is only pages (e.g. 153-170p), the math report puts the book name in front of it.",
+  },
   "os.bulk.scoreAria": { ko: "일괄 {label} 테스트 맞은 개수", en: "Bulk {label} test score" },
   "os.bulk.maxAria": { ko: "일괄 {label} 테스트 문항수", en: "Bulk {label} test question count" },
   "os.bulk.scorePh": { ko: "개수", en: "Correct" },
@@ -4061,6 +4182,16 @@ export const SHEET_DICT = {
   },
   "os.c.prevFail": { ko: "이전 진도를 불러오지 못했습니다", en: "The last progress could not be loaded" },
   "os.c.prevLoaded": { ko: "이전 진도를 불러왔습니다", en: "The last progress was loaded" },
+  "os.c.makeupPrevPending": {
+    ko: "보강 학생 {n}명은 이전 진도를 아직 안 불러와 비어 있습니다",
+    en: "{n} make-up students have no last session loaded yet",
+  },
+  "os.c.makeupPrevLoadNow": { ko: "지금 불러오기", en: "Load now" },
+  "os.c.makeupPrevAllDone": {
+    ko: "보강 학생 이전 진도: {n}명 불러옴 · 이전 기록 없음 {none}명 — 이제 '이전값 가져오기'를 누르면 채워집니다",
+    en: "Make-up history: {n} loaded · {none} with no history — 'copy last session' will now fill them",
+  },
+  "os.c.makeupPrevAllFail": { ko: "보강 학생 {n}명은 이전 진도를 불러오지 못했습니다", en: "Couldn't load history for {n} make-up students" },
   "os.c.prevNone": { ko: "이전 보고서가 없습니다", en: "There is no earlier report" },
   "os.c.attRecorded": { ko: "기록됨", en: "on record" },
   "os.c.attConflict": {
@@ -4281,6 +4412,15 @@ export const SHEET_DICT = {
     en: " · {n} saved but not sent — redo auto-write, add the note, or add the reason",
   },
   // 일괄 발송 확인창 — 새 보고서 조건에 걸려 빠지는 행(누구인지 명시).
+  // 보강 진행 여부 확인 전 줄(원장 2026-10-27 보강 확인 게이트) — 행별 발송 버튼과 같은 판정으로 일괄 발송에서도 뺀다.
+  "os.c.lineMakeupCheck": {
+    ko: "\n보강을 했는지 아직 확인하지 않은 {n}건은 발송에서 제외됩니다(이름 옆 보강 표식에서 확인) — {names}{more}",
+    en: "\n{n} rows with a make-up class not yet confirmed are left out (confirm it from the mark next to the name) — {names}{more}",
+  },
+  "os.c.bulkMakeupCheck": {
+    ko: " · 보강 진행 여부 확인 필요 {n}건(저장만 됨)",
+    en: " · {n} saved but not sent — confirm the make-up class first",
+  },
   "os.c.linePilot": {
     ko: "\n자동작성 다시·사랑의 한마디·시험 없음/숙제 미제출 사유가 필요한 {n}건은 발송에서 제외됩니다 — {names}{more}",
     en: "\n{n} rows need auto-write again, the closing note, or a reason and are left out — {names}{more}",

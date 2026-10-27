@@ -119,6 +119,31 @@ const StudySummaryRow = z.object({
   seenWords: num,
 });
 
+/**
+ * **단어 순위·학습 배지**(원장 2026-10-26 *"(기본모드 기준) 누적단어 수·장기기억단어 수 — 학년 백분위, 반 백분위"* +
+ * *"단어 암기 수준에 따라 부여하는 배지"*) — 5번 하루치의 **선택 필드**. 인재원이 아직 안 싣거나 모양이 어긋나면 null로 읽어
+ * 그 그림 자리만 빠진다(하루치 전체를 실패로 만들지 않는다 — 결과지·분석지는 그대로 간다).
+ * - 비교(`grade`·`class`) = 그 집단에서 몇 등/몇 명, `topPct` = 상위 몇 %. 표본이 작으면 인재원이 null을 준다.
+ * - `basis` = 무엇으로 셌는가(기본모드 등, 인재원 문장 그대로 작게 적는다). 배지 `grade` = 통과한 학년 단계(인재원 level-badge 2~9).
+ */
+const StandingCompare = z.object({ label: str, rank: num, of: num, topPct: num });
+const StandingMetric = z.object({
+  value: num,
+  grade: StandingCompare.nullable().optional().catch(null),
+  class: StandingCompare.nullable().optional().catch(null),
+});
+const Standing = z.object({
+  basis: str,
+  at: str,
+  seenWords: StandingMetric.nullable().optional().catch(null),
+  longTermWords: StandingMetric.nullable().optional().catch(null),
+  badge: z
+    .object({ grade: num, label: str, imageUrl: z.string().url().nullable().optional().catch(null) })
+    .nullable()
+    .optional()
+    .catch(null),
+});
+
 /** 모든 성공 응답은 `v: 1`로 시작한다(설명서 ③). 다른 버전이면 모양이 바뀐 것이라 읽지 않는다. */
 const v1 = <T extends z.ZodRawShape>(shape: T) => z.object({ v: z.literal(1), ...shape });
 
@@ -134,19 +159,29 @@ export const IJW_SCHEMAS = {
    * 5번 하루치 — 원스크린 일일 보고서용(2026-09-11). `exams`는 그 **KST 달력 날짜**에 낸 응시 **전부**(제출순, 3번 모양),
    * `study`는 4번 모양이고 기본 기간은 그날까지 30학습일이다.
    */
-  day: v1({ ijwId: z.string(), name: str, date: str, exams: z.array(ExamResult), study: Study }),
+  day: v1({
+    ijwId: z.string(),
+    name: str,
+    date: str,
+    exams: z.array(ExamResult),
+    study: Study,
+    // 2026-10-26 선택 필드 — 없거나 어긋나면 null(위 Standing 주석).
+    standing: Standing.nullable().optional().catch(null),
+  }),
 } as const;
 
 /**
  * `v`가 없는 알맹이 모양 — 보고서에 **저장해 둔** 자료(snapshot.ts)를 다시 읽을 때 쓴다(저장본엔 `v: 1` 머리가 없다).
  * 받을 때와 같은 검사를 지나야 화면이 "0분"을 그럴듯하게 그리지 않는다(위 엄격 규칙).
  */
-export const IJW_SHAPES = { study: Study, examResult: ExamResult } as const;
+export const IJW_SHAPES = { study: Study, examResult: ExamResult, standing: Standing } as const;
 
 export type IjwStudent = z.infer<typeof Student>;
 export type IjwExamListItem = z.infer<typeof ExamListItem>;
 export type IjwExamResult = z.infer<typeof ExamResult>;
 export type IjwStudy = z.infer<typeof Study>;
+export type IjwStanding = z.infer<typeof Standing>;
+export type IjwStandingMetric = z.infer<typeof StandingMetric>;
 export type IjwExamSummary = z.infer<typeof ExamSummary>;
 export type IjwDeckResult = z.infer<typeof DeckResult>;
 export type IjwStudySummaryRow = z.infer<typeof StudySummaryRow>;

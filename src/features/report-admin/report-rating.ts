@@ -10,6 +10,14 @@
  */
 import type { TipCard, TipRow } from "@/components/hover-tip/tip";
 
+/**
+ * 평점 표시 스위치 — 꺼지면 목록의 '평점' 열이 없고 서버(listReports)도 평점 표를 읽지 않는다.
+ * 2026-10-26 원장 *"이게 4.0이라고?"* · *"전혀 신뢰안가는 점수"*로 한 번 껐다(옛 기준 v4: 다섯 항목 평균인데 '믿음' 91.5%·'알기 쉬움' 62.5%가
+ * 만점이라 판에 박힌 글도 4.0) → 원장 점수표 44건에 맞춘 기준 v6(report-rating/harness/owner.ts)으로 다시 매기고 다시 켰다(*"진행해"*, 정렬 함께).
+ * 🔴 화면은 **지금 기준(v6)으로 매긴 평점만** 보여 준다(옛 기준 값은 표에 남아도 읽지 않는다 — server/report-ratings.ts).
+ */
+export const REPORT_RATING_VISIBLE = true;
+
 export type RatingClaim = "confirmed" | "needs_check" | "cleared" | "flagged";
 
 /** 항목 하나 — score 0 = 해당 없음(종합 평균에서 빠진 항목). */
@@ -54,10 +62,10 @@ export const CLAIM_LABEL: Record<RatingClaim, string> = {
 };
 
 /**
- * 이 값 **미만**이면 주의 색 — 화면에 보이는 한 자리 값으로 판정한다(2.96이 '3.0'인데 주황이면 어긋난다).
- * 10-22 배치 5,256건은 최저 2.5 · 3.0 미만 108건(2%)이라 "눈에 띄는 소수"가 된다.
+ * 이 값 **미만**이면 주의 색 — 화면에 보이는 값으로 판정한다.
+ * 기준 v6은 1~5 정수이고 무작위 150건이 1점 17% · 2점 26%라, 2점까지 칠하면 목록의 절반 가까이가 주황이 된다 → 1점('성의 없음')만.
  */
-export const LOW_RATING_BELOW = 3;
+export const LOW_RATING_BELOW = 2;
 
 const CLAIMS = new Set<string>(Object.keys(CLAIM_LABEL));
 const text = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
@@ -103,9 +111,10 @@ export function parseRating(row: RatingDbRow): ReportRating | null {
 
 const roundTenth = (n: number) => Math.round(n * 10) / 10;
 
-/** 목록 칸 표기 — `3.4`(소수 한 자리). */
+/** 목록 칸 표기 — 기준 v6은 정수(`3`), 소수가 있는 값만 한 자리(`3.4`). */
 export function formatPoints(points: number): string {
-  return roundTenth(points).toFixed(1);
+  const p = roundTenth(points);
+  return Number.isInteger(p) ? String(p) : p.toFixed(1);
 }
 
 export function isLowRating(points: number): boolean {
@@ -118,9 +127,12 @@ export function claimNeedsAttention(claim: RatingClaim | null): claim is "confir
 }
 
 /**
- * 마우스 오버 근거 카드 — 항목마다 `라벨 점수 · 근거`, 아래에 학부모 느낌·고칠 점·클레임 위험·기준.
+ * 마우스 오버 근거 카드 — 항목마다 `라벨 점수 · 근거`(기준 v6은 '정성·구체성' 하나 — 이유 + 멘트 인용), 아래에 기준.
+ * 학부모 느낌·고칠 점·클레임은 옛 기준(v4)에만 있던 칸이라 값이 있을 때만 적는다.
  * 근거가 여러 줄이라 **넓은 카드**(`wide`)로 띄운다(기본 폭에선 절반 넘게 잘린다).
  */
+export const RATING_BASIS_LINE = "기준: 원장이 직접 매긴 보고서 44건의 눈높이 — 선생님의 정성과 이 아이에 대한 구체적인 이야기";
+
 export function ratingTipCard(r: ReportRating): TipCard {
   const rows: TipRow[] = r.items.map((i) =>
     i.score > 0 ? [`${i.label} ${i.score}`, i.note || "—"] : [i.label, "해당 없음"],
@@ -133,7 +145,7 @@ export function ratingTipCard(r: ReportRating): TipCard {
       r.parentFeeling ? `학부모 느낌: "${r.parentFeeling}"` : null,
       r.suggestion ? `고치면 좋을 점: ${r.suggestion}` : null,
       r.claim ? `클레임 위험(${CLAIM_LABEL[r.claim]})${r.claimReason ? `: ${r.claimReason}` : ""}` : null,
-      `AI가 ${r.ratedOn ? `${r.ratedOn}에 ` : ""}한 번 매긴 값 — 기준: 학부모가 받았을 때 좋은 느낌인가`,
+      `AI가 ${r.ratedOn ? `${r.ratedOn}에 ` : ""}매긴 참고 값 · ${RATING_BASIS_LINE}`,
     ],
     wide: true,
   };

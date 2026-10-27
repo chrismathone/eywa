@@ -1,0 +1,71 @@
+/** In-memory PostgreSQL only. No connection string or network database is used. */
+import assert from "node:assert/strict";
+import { PGlite } from "../../work/sql-check/node_modules/@electric-sql/pglite/dist/index.js";
+import { readMigration } from "../../src/lib/db/migrations-corpus.mjs";
+const db = new PGlite();
+const tenant = "11111111-1111-4111-8111-111111111111", other = "22222222-2222-4222-8222-222222222222";
+const student = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", outsider = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const owner = "cccccccc-cccc-4ccc-8ccc-cccccccccccc", run = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const keys = ["referralConsult", "referralStarted", "tuitionWon", "subjectMonths", "tenureYears", "perfectMonths", "videoMonths", "examMonths", "parentPositiveMonths", "teacherPositiveMonths"];
+const raws = Object.fromEntries(keys.map(k => [k, 0]));
+const h = n => n.toString(16).padStart(64, "0");
+let checks = 0;
+async function rejects(sql, params = []) { await assert.rejects(db.query(sql, params)); checks++; }
+const snapshot = async () => (await db.query("select student_parent_event_snapshot($1) value", [tenant])).rows[0].value;
+try {
+  await db.exec("create role anon; create role authenticated; create role service_role bypassrls; create table tenants(id uuid primary key); create table users(id uuid primary key); create table students(id uuid primary key,tenant_id uuid references tenants(id));");
+  await db.query("insert into tenants values ($1),($2)", [tenant, other]);
+  await db.query("insert into users values ($1)", [owner]);
+  await db.query("insert into students values ($1,$2),($3,$4)", [student, tenant, outsider, other]);
+  for (const file of ["0442a_student_contribution.sql", "0443a_student_contribution_functions.sql", "0456a_student_parent_events.sql"])
+    await db.exec(readMigration(file));
+  assert.deepEqual((await snapshot()).records, []); assert.equal((await snapshot()).ready, false); checks++;
+  const tables = ["student_parent_event_imports", "student_parent_events", "student_parent_event_registrations", "student_parent_event_revisions", "student_parent_event_recognitions"];
+  const security = await db.query("select relname,relrowsecurity from pg_class where relname = any($1)", [tables]);
+  assert.equal(security.rows.length, 5); assert.ok(security.rows.every(r => r.relrowsecurity)); checks++;
+  assert.equal((await db.query("select * from pg_policies where tablename = any($1)", [tables])).rows.length, 0); checks++;
+  await db.exec("set role authenticated");
+  for (const table of tables) await rejects(`select * from ${table}`);
+  await rejects("select student_parent_event_snapshot($1)", [tenant]);
+  await db.exec("reset role");
+  const insertMonth = "insert into student_contribution_months(tenant_id,student_id,month,raws,correction,computed_at,closed_at) values($1,$2,$3,$4,$5,now(),$6)";
+  await db.query(insertMonth, [tenant, student, "2026-09", raws, raws, "2026-10-01"]); checks++;
+  await rejects("update student_contribution_months set raws=$1 where tenant_id=$2", [{ ...raws, parentSeminarEvents: 1 }, tenant]);
+  for (const value of [null, "1", 1.5, 9007199254740992]) await rejects(insertMonth, [tenant, student, "2026-10", { ...raws, parentSeminarEvents: value }, raws, null]);
+  await db.query(insertMonth, [tenant, student, "2026-10", { ...raws, parentSeminarEvents: 2 }, { ...raws, parentSeminarEvents: -1 }, null]);
+  const total = (await db.query("select * from student_contribution_totals($1,$2,$3)", [tenant, [student], "2026-10"])).rows[0];
+  assert.equal(total.raws.parentSeminarEvents, 1); assert.equal(total.recent.parentSeminarEvents, 1); checks++;
+  await db.query("insert into student_parent_event_imports(tenant_id,id,fingerprint,policy_version,status,approved_by,approved_at) values($1,$2,$3,'v2','applied',$4,now())", [tenant, run, h(1), owner]);
+  await db.query("insert into student_parent_events(tenant_id,id,title,event_date,import_id) values($1,'e','test','2025-01-01',$2)", [tenant, run]);
+  for (const id of [2, 3]) await db.query("insert into student_parent_event_registrations(tenant_id,id,event_id,identity_hash,content_hash,source_file,source_sheet,source_row,source_ref,state,attendance_basis,import_id) values($1,$2,'e',$2,$2,'file',1,2,'https://docs.google.com/spreadsheets/d/file/edit','recognized','registration_policy',$3)", [tenant, h(id), run]);
+  const recognize = "insert into student_parent_event_recognitions(tenant_id,event_id,student_id,family_key,basis,source_ids,import_id) values($1,'e',$2,$3,'direct',$4,$5)";
+  await rejects(recognize, [tenant, outsider, h(4), [h(2)], run]);
+  await rejects(recognize, [tenant, student, h(4), [h(9)], run]);
+  await db.query(recognize, [tenant, student, h(4), [h(2), h(3)], run]);
+  let result = await snapshot(); assert.equal(result.records.length, 1); assert.equal(result.valid, true); checks++;
+  assert.equal((await db.query("select student_parent_event_snapshot($1) value", [other])).rows[0].value.records.length, 0); checks++;
+  assert.equal((await db.query("select student_parent_event_snapshot($1,$2,$3) value", [tenant, [student], "2025-01"])).rows[0].value.records.length, 1); checks++;
+  assert.equal((await db.query("select student_parent_event_snapshot($1,$2,$3) value", [tenant, [student], "2025-02"])).rows[0].value.records.length, 0); checks++;
+  assert.equal((await db.query("select student_parent_event_snapshot($1,$2,$3) value", [tenant, [student], "2025-02"])).rows[0].value.coverageFrom, "2025-01-01"); checks++;
+  await db.query("update student_parent_event_imports set summary=$1 where id=$2", [{ pendingRows: 3, states: { review: 8 } }, run]);
+  assert.equal((await snapshot()).pendingRows, 3); checks++;
+  await db.query("update student_parent_event_registrations set state='cancelled',attendance_basis='cancellation' where id=$1", [h(2)]);
+  await rejects("update student_parent_event_registrations set event_id='changed' where id=$1", [h(3)]);
+  await rejects("update student_parent_event_registrations set attendance_basis='unconfirmed' where id=$1", [h(3)]);
+  result = await snapshot(); assert.deepEqual(result.records[0].sourceIds, [h(3)]); checks++;
+  await db.query("update student_parent_events set status='cancelled' where tenant_id=$1", [tenant]);
+  assert.equal((await snapshot()).records.length, 0); checks++;
+  await db.query("update student_parent_events set status='active' where tenant_id=$1", [tenant]);
+  // The RPC returns one JSON value, so REST's row cap cannot truncate these 1,002 recognitions.
+  await db.query("insert into students(id,tenant_id) select md5('student-'||n)::uuid,$1 from generate_series(1,1001) n", [tenant]);
+  await db.query("insert into student_parent_event_recognitions(tenant_id,event_id,student_id,family_key,basis,source_ids,import_id) select $1,'e',md5('student-'||n)::uuid,$2,'sibling',array[$3],$4 from generate_series(1,1001) n", [tenant, h(4), h(3), run]);
+  assert.equal((await snapshot()).records.length, 1002); checks++;
+  await db.query("update student_parent_event_imports set status='revoked',revoked_at=now(),revoke_reason='test rollback' where tenant_id=$1", [tenant]);
+  result = await snapshot(); assert.equal(result.ready, true); assert.equal(result.records.length, 0); checks++;
+  await db.exec("set role service_role");
+  await rejects("delete from student_parent_event_revisions");
+  await rejects("update student_parent_event_revisions set raw='{}'");
+  await rejects("truncate student_parent_event_revisions");
+  await db.exec("reset role");
+  console.log(JSON.stringify({ memoryOnly: true, checks, result: "passed" }));
+} finally { await db.close(); }

@@ -3,7 +3,8 @@ export type EntityKind = "student" | "guardian" | "teacher" | "class" | "subject
 export type EntityRef = { kind: EntityKind; id: string };
 export type StudentSource = "students" | "enrollments" | "enrollment_consultations" | "invoices"
   | "makeedu_history_bills" | "attendance_records" | "student_homework_videos" | "student_grades"
-  | "classnote_parent_messages" | "classnote_parent_replies" | "student_positive_signals" | "lesson_reports" | "class_schedules" | "audit_logs";
+  | "classnote_parent_messages" | "classnote_parent_replies" | "student_positive_signals" | "lesson_reports" | "class_schedules" | "audit_logs"
+  | "student_parent_event_registrations";
 export type EvidenceRef = { source: StudentSource; id: string; /** 원본 학생(병합 전도 보존). */ studentId: string };
 export type StudentFact<Value = unknown> = {
   tenantId: string;
@@ -12,7 +13,7 @@ export type StudentFact<Value = unknown> = {
   id: string;
   /** 출결 상태·청구 순액 등 원본별 타입은 해당 어댑터가 정의한다. */
   value: Value;
-  kind: "consulted" | "referred" | "enrolled" | "tuition" | "attendance" | "homework" | "exam" | "observation";
+  kind: "consulted" | "referred" | "enrolled" | "tuition" | "attendance" | "homework" | "exam" | "observation" | "parent_event";
   /** 발생 시점과 확인 시점은 다르다. 월 원자료를 날짜로 꾸미지 않는다. */
   occurred: { precision: "day" | "month"; value: string };
   recordedAt: string;

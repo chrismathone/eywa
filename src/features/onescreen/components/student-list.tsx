@@ -68,6 +68,8 @@ function StudentRow({
   // 보(보고서) 셀은 과목별 발송 상태로 재정의 가능 (클라이언트가 reportCellById로 전달).
   const cellState = (key: "prog" | "test" | "rep"): CellState =>
     key === "rep" ? (reportCell ?? s.rep) : s[key];
+  const makeupRow = st.subjects.find((su) => su.makeup && !su.classId);
+  const reservations = studentReservations(st);
   return (
     <button
       type="button"
@@ -97,12 +99,6 @@ function StudentRow({
             ⚠️ 학년은 `min-w-0 truncate` — 긴 학교명이 와도 배지를 밀어내 다시 찌그러뜨리지 않게. */}
         <div className="text-text-faint flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
           <span className="min-w-0 truncate">{st.grade}</span>
-          {/* 보강 줄의 보강 반(원장 2026-09-30 — 보강 묶음에 서 있어도 어느 반으로 들어가는지). 표시만(이 줄 전체가 버튼이다). */}
-          {st.subjects.filter((su) => su.makeup && !su.classId).slice(0, 1).map((su) => (
-            <MakeupClassTag key={su.name} subject={su} />
-          ))}
-          {/* 그날 보강 예약(0264a) — 정규 수업일 예약은 정규 줄에 합쳐져 따로 줄이 안 서므로 목록에서 바로 보이게(원장 2026-10-22). */}
-          <ReservedMakeupTag list={studentReservations(st)} />
           <span className="flex shrink-0 items-center gap-0.5">
             {st.subjects.map((su, i) => (
               <span
@@ -138,6 +134,17 @@ function StudentRow({
           </span>
         ))}
       </div>
+      {/* 보강 표식 줄 = 셋째 줄 전체 폭(원장 2026-10-27 *"보강이 라벨 겹침 현상"*). 둘째 줄 왼쪽 칸에 두면 줄바꿈 없는 표식
+          ('보강 예약 18:20~19:15'·보강 반 이름)이 좁은 칸을 넘쳐 오른쪽 진도·테스트·보고서 칩 밑으로 들어갔다.
+          ⚠️ 칩 뒤에 둘 것 — 격자 자동 배치라 칩 앞에 두면 칩이 다음 줄 왼쪽으로 밀린다.
+          · 보강 줄의 보강 반(원장 2026-09-30 — 보강 묶음에 서 있어도 어느 반으로 들어가는지). 표시만(이 줄 전체가 버튼이다).
+          · 그날 보강 예약(0264a) — 정규 수업일 예약은 정규 줄에 합쳐져 따로 줄이 안 서므로 목록에서 바로 보이게(원장 2026-10-22). */}
+      {makeupRow || reservations.length > 0 ? (
+        <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-1 text-xs">
+          {makeupRow ? <MakeupClassTag subject={makeupRow} /> : null}
+          <ReservedMakeupTag list={reservations} />
+        </div>
+      ) : null}
     </button>
   );
 }

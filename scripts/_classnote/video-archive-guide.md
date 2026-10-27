@@ -276,7 +276,7 @@ ClassNote에 올리기 힘든 숙제 영상을 학부모가 로그인 없이 `ht
   ClassNote로도 받았으면 직접 올린 쪽을 지울 것.
 - 파일을 지우거나 다른 폴더로 옮기면 다음 훑기에서 그 기록도 빠진다(Drive가 진실). 워커가 올린 파일(ClassNote 수집분)은 건드리지 않는다.
 - 2026-10-01 이전에 올린 옛 파일(`반 이름.mp4` 꼴, `허주연 선생님` 18개)은 양식을 못 읽으므로 조용히 넘긴다. 이름을 양식대로 고치면 읽는다.
-- DB: `supabase/migrations/0324a_homework_video_manual_drive.sql` 적용 전에는 이 훑기를 건너뛴다(워커 로그에 한 번 안내).
+- DB: `supabase/migrations/s1_season1.sql#0324a_homework_video_manual_drive.sql` 적용 전에는 이 훑기를 건너뛴다(워커 로그에 한 번 안내).
 
 ## 최근 영상 1건 시험
 
@@ -292,6 +292,6 @@ node --env-file=.env.local scripts/_classnote/download-classnote-video.mjs --upl
 
 ## DB 준비
 
-`supabase/migrations/0315a_student_homework_videos.sql` 적용 필요(직접 업로드 영상은 `0324a`까지).
+`supabase/migrations/s1_season1.sql#0315a_student_homework_videos.sql` 적용 필요(직접 업로드 영상은 `0324a`까지).
 영상 큐·폴더/파일 ID 등록부·과거 수집 상태는 모두 tenant 범위, RLS 및 브라우저 직접 접근 차단을 사용한다.
 초기 자동 업로드는 연동 PC에 새 코드와 Drive 로그인이 적용된 뒤 시작한다.

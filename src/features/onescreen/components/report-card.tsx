@@ -35,12 +35,17 @@ import {
   type AttendanceSelection,
 } from "./attendance-pills";
 import { FieldSelect } from "./field-select";
+import { isMathBookRow, useMathBookListId } from "./math-book-list";
+import { JjBookPicker } from "./jj-book-picker";
+import { isJjSheetDraft, isJjSheetReport } from "../jj-books";
 import { HomeworkRateInput } from "./homework-rate-input";
 import { VideoHomeworkCheck } from "@/features/video-homework/components/video-homework-provider";
 import { VideoHomeworkToggle } from "@/features/video-homework/components/video-homework-toggle";
 import { VideoHomeworkDueToggle } from "@/features/video-homework/components/video-homework-due-toggle";
 import { VideoSubmitLinkToggle } from "@/features/video-homework/components/video-submit-link-toggle";
 import { ENGLISH_DRAFT_TEXTAREA_ID, REPORT_ATTACHMENT_MAX, isImageAttachment } from "../attachment-utils";
+import { joinLevelsLead, splitLevelsLead } from "../pilot-notes";
+import { LevelsLead } from "./levels-lead";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { splitComment, joinComment } from "../comment-paragraphs";
 import type { OneScreenStudent } from "../types";
@@ -48,9 +53,10 @@ import { classnoteBadge, type ClassnoteBadge } from "../classnote-badge";
 import { attendanceMarkBadgeClass, attendanceMarkLabel } from "../attendance-mark";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { hasPilotOneLine, isMathReportPilot, pilotCanEdit, pilotNeedsAutoWrite } from "../math-report-pilot";
-import { needsHomeworkMissReason, pilotRowSig, testSkipComplete } from "../math-report-pilot-sections";
+import { needsAttitudeNote, needsHomeworkMissReason, pilotRowSig, testSkipComplete } from "../math-report-pilot-sections";
 import type { SheetLang } from "@/features/teacher-view/i18n";
 import { ReservedMakeupTag } from "./reserved-makeup-tag";
+import { needsMakeupCheck } from "../reserved-makeup";
 import { MakeupSwitchButton } from "./makeup-switch-button";
 
 // shareToken: 저장 시 발급되는 학부모 공개 링크(/r/[token]) 토큰. 세션 내 저장 후에만 존재.
@@ -77,6 +83,11 @@ export type SubjectReport = {
   // ── 영어 템플릿 모드(2026-09-10) — 영어 행에서만 쓴다. 세션에 실려 새로고침에도 남는다. ──
   /** 고른 템플릿 id(없으면 기본 템플릿). */
   templateId?: string;
+  /**
+   * `templateId`가 강사가 고른 것이 아니라 **내 기본값**(반별 마지막 선택, last-template.ts)으로 붙은 것이다(화면 메모리 전용).
+   * 세션에 안 싣고, 고르거나 글을 짜면 지운다. 지운 사용자 템플릿·목록 실패면 기본값을 거둔다.
+   */
+  templateImplicit?: boolean;
   /** 다음 시간 테스트 안내 — 템플릿 `{다음테스트}` 칸. */
   nextTest?: string;
   /** 마지막 AI 인사말·코멘트 — 템플릿을 바꾸거나 다시 채울 때 AI를 다시 부르지 않고 쓴다. */
@@ -156,6 +167,7 @@ export function ReportCard({
   onSplitMakeup,
   canRemoveMakeup,
   onPickMakeupClass,
+  onCheckMakeup,
   onSubjectDraft,
   onSubjectTrend,
   trendOptOut,
@@ -177,6 +189,8 @@ export function ReportCard({
   onSubjectIndex,
   todayInputs,
   homeworkExtra,
+  attitudeExtra,
+  makeupExtra,
   templatePanel,
   shareCopyWarning = null,
   readonlyView = false,
@@ -205,6 +219,8 @@ export function ReportCard({
   canRemoveMakeup?: (subjectName: string) => boolean;
   /** 보강 반 고르기(원장 2026-09-30) — 없으면 반 표시만. */
   onPickMakeupClass?: (subjectName: string) => void;
+  /** 보강 진행 여부 확인(원장 2026-10-27 — 보강 예약 표식을 눌러 했음/못 했음) — 없으면 표식은 표시만. */
+  onCheckMakeup?: (subjectName: string, outcome: "done" | "missed") => void;
   onSubjectDraft: (subjectName: string, text: string) => void;
   onSubjectTrend: (subjectName: string, text: string) => void; // 학습 추세 초안 편집(4a)
   /** '학습 추세 미발송'(원장 2026-09-18) — 표와 **같은 상태**(계정 ui_prefs). 없으면 체크를 안 그린다. */
@@ -244,6 +260,10 @@ export function ReportCard({
   todayInputs?: ReactNode;
   /** 숙제 완성도 칸 바로 아래 자리(수학 보고서 시범의 '미제출 사유', 2026-10-23) — todayInputs와 같은 슬롯 규약. */
   homeworkExtra?: ReactNode;
+  /** 수업 태도 칸 바로 아래 자리('수업 태도 의견' — 하·중하, 2026-10-26). 같은 슬롯 규약. */
+  attitudeExtra?: ReactNode;
+  /** 수업 태도 칸 위 자리('보강 사유' — 결석 날짜를 모르는 보강 줄, 2026-10-26). 같은 슬롯 규약. */
+  makeupExtra?: ReactNode;
   /**
    * 영어 행의 **템플릿 칸**(2026-09-10) — todayInputs와 같은 슬롯 규약(배선은 onescreen-client, 카드는 자리만).
    * 영어 행일 때만 그린다. 수학 행은 이 값을 넘겨도 무시한다.
@@ -264,6 +284,7 @@ export function ReportCard({
   // AI 라이선스가 꺼진 지점엔 '자동 작성' 버튼이 없다(2026-09-30 "꺼지면 흔적 없이") — 서버 generateJSON이 따로 막는다.
   const aiOn = useLicenseOn("ai_analysis");
   const tf = useSheetTf();
+  const mathBookList = useMathBookListId(); // 교재명 칸 제안(수학 행만, math-book-list.ts)
   const [ownIdx, setOwnIdx] = useState(0);
   const selIdx = subjectIndex ?? ownIdx;
   const setSelIdx = onSubjectIndex ?? setOwnIdx;
@@ -311,6 +332,8 @@ export function ReportCard({
   const pilotLocked = pilot && !pilotCanEdit(rep.autoDraft); // 자동작성 전엔 잠금(2026-10-23)
   // '사랑의 한마디' 행 — 새 수학 보고서 + 영어(원장 2026-10-26 *"영어도 수학이랑 동일하게 특이사항 말고 사랑의 한마디 · 밑에 배치 · 필수"*).
   const oneLineRow = pilot || subject.subjectKey === "english";
+  // JJ 수업보고서 글 — 사랑의 한마디는 선택(비우면 그 항목이 빠진다, 원장 2026-10-27).
+  const jjOptionalNote = subject.subjectKey === "english" && isJjSheetDraft(rep);
   const sendGate = evaluateSendGate({
     lang, // 🔴 판정이 아니라 **글자**만 갈린다(canSend·reasons 불변, send-gate.ts)
     needsAutoWrite:
@@ -318,13 +341,16 @@ export function ReportCard({
       pilotNeedsAutoWrite(rep.draft, rep.autoDraft, {
         studentName: student.name,
         today: subject.today,
+        progressMode: subject.progressMode,
         note: cardEval.note,
         factsSig: pilotRowSig(student, subject.name),
         writtenSig: rep?.pilotFactsSig,
       }),
-    needsOneLine: oneLineRow && !hasPilotOneLine(cardEval.note), // 사랑의 한마디(옛 강사 한줄 멘트) 필수(원장 2026-10-22)
+    needsOneLine: oneLineRow && !jjOptionalNote && !hasPilotOneLine(cardEval.note), // 사랑의 한마디(옛 강사 한줄 멘트) 필수(원장 2026-10-22)
     needsTestReason: pilot && !testSkipComplete(subject.dailyTestSkip), // 일일 테스트 '없음'이면 사유 필수(원장 2026-10-22)
     needsHomeworkReason: pilot && needsHomeworkMissReason(cardEval.homework, subject.homeworkMissReason), // 숙제 미제출이면 사유 필수(원장 2026-10-23)
+    needsAttitudeNote: pilot && needsAttitudeNote(cardEval.attitude, subject.attitudeNote), // 태도 하·중하면 의견 3줄 이상(원장 2026-10-26)
+    needsMakeupCheck: needsMakeupCheck(subject), // 보강 예약이 든 줄은 보강 진행 여부 확인 뒤에(원장 2026-10-27)
     readonlyView, // 열람 전용 — 사유 라벨까지 게이트가 만든다(표뷰와 동일)
     recallPending: isRecallInFlight(liveStatus ?? null),
     // 발송 대기·게시 중 — 워커 결과 전까지 다시 못 누른다(표뷰와 같은 판정, 원장 2026-09-29).
@@ -367,18 +393,19 @@ export function ReportCard({
   // 발송 버튼 바로 위)에 둔다(원장 2026-10-23 *"사랑의 한마디를 더 밑으로 내려달라고"*). 그 밖의 행은 종전처럼 맨 위.
   const noteField = (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={`teacher-note-${student.id}`} className="micro text-text-faint">{oneLineRow ? t("os.card.notePilot") : t("os.card.note")}</label>
+      <label htmlFor={`teacher-note-${student.id}`} className="micro text-text-faint">{jjOptionalNote ? t("os.card.noteJj") : oneLineRow ? t("os.card.notePilot") : t("os.card.note")}</label>
       <textarea
         id={`teacher-note-${student.id}`}
         rows={3}
         value={cardEval.note}
         onChange={(e) => onNote(e.target.value)}
-        placeholder={oneLineRow ? t("os.card.notePhPilot") : t("os.card.notePh")}
+        placeholder={jjOptionalNote ? t("os.card.notePhJj") : oneLineRow ? t("os.card.notePhPilot") : t("os.card.notePh")}
         className={`${TEXTAREA_AUTOSIZE} border-line focus:border-primary min-h-20 rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none`}
       />
     </div>
   );
   const paras = splitComment(rep.draft);
+  const draftLead = splitLevelsLead(rep.draft); // 맨 위 수업 평가 표 = 읽기 전용(원장 2026-10-26)
 
   return (
     // @container — 아래 본문 2열 분기는 **창 폭이 아니라 이 카드 폭** 기준(3열 그리드 안이라 브레이크포인트가 안 맞음).
@@ -443,8 +470,12 @@ export function ReportCard({
                   {t("os.row.jump")}
                 </span>
               ) : null}
-              {/* 보강 예약(0264a) — 이 줄에 걸린 그날 보강(원장 2026-10-22). */}
-              <ReservedMakeupTag list={subject.makeupReserved} size="md" />
+              {/* 보강 예약(0264a) — 이 줄에 걸린 그날 보강(원장 2026-10-22). 눌러서 보강 진행 여부 확인(2026-10-27). */}
+              <ReservedMakeupTag
+                list={subject.makeupReserved}
+                size="md"
+                onCheck={onCheckMakeup && !readonlyView ? (outcome) => onCheckMakeup(subject.name, outcome) : undefined}
+              />
               {/* 수업 나누기(0351a) — 이 행이 왜 여기 있는지 / 그 시간이 어디로 가는지를 **글자로**(hover는 모바일에서 없다). */}
               {subject.splitIn || subject.splitOut ? (
                 <span className="bg-blue-soft text-blue rounded-pill px-1.5 py-px text-xs font-bold">
@@ -577,14 +608,27 @@ export function ReportCard({
         <div className="flex flex-col gap-1.5">
           {/* 알약이 셋(정규+보강 · 영상 과제 · 영상 첨부 링크)까지 붙는다 — 좁은 카드에선 교재명 칸을 누르지 않고 아랫줄로 접는다. */}
           <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="text"
-              value={subject.textbook ?? ""}
-              onChange={(e) => onTextbook(subjectName, e.target.value)}
-              placeholder={t("os.card.bookPh")}
-              aria-label={tf("os.card.bookAria", { subject: subjectName })}
-              className="border-line bg-card focus:border-primary h-8 min-w-32 flex-1 rounded-lg border px-2 text-xs outline-none transition-colors"
-            />
+            {isJjSheetReport(rep) ? (
+              // JJ 수업보고서 행 — 교재는 세 권 중에서 고른다(원장 2026-10-27, jj-books.ts).
+              <div className="min-w-32 flex-1">
+                <JjBookPicker
+                  value={subject.textbook}
+                  onChange={(v) => onTextbook(subjectName, v)}
+                  disabled={locked}
+                  label={tf("os.card.bookAria", { subject: subjectName })}
+                />
+              </div>
+            ) : (
+              <input
+                type="text"
+                value={subject.textbook ?? ""}
+                onChange={(e) => onTextbook(subjectName, e.target.value)}
+                list={isMathBookRow(subject.subjectKey) ? mathBookList : undefined}
+                placeholder={t("os.card.bookPh")}
+                aria-label={tf("os.card.bookAria", { subject: subjectName })}
+                className="border-line bg-card focus:border-primary h-8 min-w-32 flex-1 rounded-lg border px-2 text-xs outline-none transition-colors"
+              />
+            )}
             {/* 🔴 옛 '보강' 켜고 끄기 알약은 없앴다(원장 2026-09-30 — 표 모드 체크박스와 같은 이유: 손으로 켜면 타임 없는
                 '(정규+보강)'이 생겼다). 보강은 '보강 추가'에서 정해지고, 여기엔 **합침 취소**만 남긴다. */}
             {subject.makeup && subject.classId && (locked || subject.makeupByReservation) ? (
@@ -653,6 +697,8 @@ export function ReportCard({
               강사가 못 찾는다(원장 제보). 같은 값을 두 번 보여주지 않는다. */}
         </div>
 
+        {makeupExtra}
+
         <div>
           <p className="micro text-text-faint mb-1.5">{t("os.card.attitude")}</p>
           {/* 원장 2026-07-23: 알약 → 드롭다운(표 모드와 동일 규약). 해제는 "선택 안 함". */}
@@ -662,6 +708,7 @@ export function ReportCard({
             onSelect={(v) => onAttitude(v ?? "")}
             ariaLabel={tf("os.card.attitudeAria", { name: student.name })}
           />
+          {attitudeExtra}
         </div>
 
         <div>
@@ -778,11 +825,16 @@ export function ReportCard({
               </label>
             </div>
           ) : (
+            <>
+            {/* 맨 위 '수업 평가' 표는 편집 칸에서 빼서 읽기 전용으로(원장 2026-10-26). 저장 글은 다시 붙인 그대로다. */}
+            <LevelsLead lead={draftLead.lead} />
             <textarea
               // 영어 글 칸 — '사진·PDF 넣기'가 이 칸의 커서 줄을 읽어 그 자리에 첨부 줄을 넣는다(카드는 한 학생만 그린다).
               id={isEnglishRow ? ENGLISH_DRAFT_TEXTAREA_ID : undefined}
-              value={rep.draft}
-              onChange={(e) => onSubjectDraft(subjectName, e.target.value)}
+              // 뗀 표만큼 커서 위치를 보정하라는 표식 — 첨부 줄 넣기가 전체 글 기준 위치를 쓴다(onescreen-client insertEnglishMediaFor).
+              data-caret-offset={draftLead.lead && draftLead.body ? draftLead.lead.length + 2 : 0}
+              value={draftLead.body}
+              onChange={(e) => onSubjectDraft(subjectName, joinLevelsLead(draftLead.lead, e.target.value))}
               // 시범 대상 = 자동작성 전엔 보기만, 자동작성 뒤엔 고칠 수 있다(원장 2026-10-23 *"자동작성하고나면 수정은 할수있게"*).
               readOnly={pilotLocked}
               placeholder={
@@ -797,6 +849,7 @@ export function ReportCard({
                 isEnglishRow ? "min-h-[280px]" : "min-h-[110px]"
               } flex-1 resize-none rounded-lg border ${pilotLocked ? "bg-bg-soft" : "bg-background"} px-3 py-2 text-sm leading-relaxed outline-none`}
             />
+            </>
           )}
         </div>
 

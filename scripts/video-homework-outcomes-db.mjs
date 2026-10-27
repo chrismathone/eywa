@@ -1,9 +1,9 @@
 // node --env-file=.env.local scripts/video-homework-outcomes-db.mjs --test | --apply | --apply-hardening
 // Tests install the migration and synthetic fixtures in one transaction, then roll everything back.
-import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import postgres from 'postgres';
+import { readMigration } from "../src/lib/db/migrations-corpus.mjs";
 
 const mode = process.argv[2] ?? '--test';
 if (!['--test', '--test-current', '--apply', '--apply-hardening'].includes(mode)) throw new Error('Use --test, --test-current, --apply or --apply-hardening.');
@@ -12,8 +12,8 @@ const ref = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'missing:').hostname
 if (!ref || !(connection.hostname === `db.${ref}.supabase.co` || decodeURIComponent(connection.username).endsWith(`.${ref}`)))
   throw new Error('Database and app project do not match.');
 const sql = postgres(connection.toString(), { ssl: 'require', prepare: false, max: 1, connect_timeout: 15, onnotice: () => {} });
-const migration = readFileSync('supabase/migrations/0409a_video_homework_outcomes.sql', 'utf8');
-const hardening = readFileSync('supabase/migrations/0410a_video_homework_manual_transition_alert.sql', 'utf8');
+const migration = readMigration("0409a_video_homework_outcomes.sql");
+const hardening = readMigration("0410a_video_homework_manual_transition_alert.sql");
 const rollback = new Error('ROLLBACK_FIXTURES');
 let assertions = 0;
 const equal = (actual, expected) => { assert.deepEqual(actual, expected); assertions++; };

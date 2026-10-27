@@ -1,11 +1,12 @@
 const fs=require('node:fs');
 const {randomUUID}=require('node:crypto');
+const { readMigration } = require('../src/lib/db/migrations-corpus.mjs');
 const req=require;
 req('dotenv').config({path:'.env.local',quiet:true});
 const sql=req('postgres')(process.env.DATABASE_URL,{max:1,prepare:false,onnotice:()=>{}});
 const root=process.cwd().replaceAll('\\','/')+'/';
 const names=['0338a_homework_video_drive_tenant_config.sql','0340a_homework_video_drive_accounts.sql','0341a_homework_video_drive_account_credentials.sql','0342a_homework_video_drive_account_routes.sql'];
-const migrationText=names.map(n=>fs.readFileSync(root+'supabase/migrations/'+n,'utf8').replace(/^begin;\s*$/mg,'').replace(/^commit;\s*$/mg,'').replace(/^notify pgrst.*$/mg,''));
+const migrationText=names.map(n=>readMigration(n).replace(/^begin;\s*$/mg,'').replace(/^commit;\s*$/mg,'').replace(/^notify pgrst.*$/mg,''));
 let count=0;
 function assert(ok,message){if(!ok)throw Error(message);count++;}
 async function denied(tx,fn,message){let failed=false;try{await tx.savepoint(fn);}catch{failed=true;}assert(failed,message);}

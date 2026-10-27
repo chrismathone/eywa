@@ -35,6 +35,8 @@ export type GridBulkActions = {
   onCopyFirstRow?: (keys: string[], overwrite: boolean) => void;
   // 이전 회차 일괄 가져오기(G5 얕은판) — 선택(없으면 표시 전체) 행의 **빈 칸만** planPrevFill로 채움(특이사항·교재 제외).
   onBulkImportPrev?: (keys?: string[]) => void;
+  // 이전 진도를 아직 안 불러온 보강 학생(원장 2026-10-27) — 보강 학생은 이전 회차를 따로 불러와야 '이전값 가져오기'가 채운다.
+  makeupPrev?: { count: number; busy: boolean; onLoad: () => void };
   // 선택 행 일괄 첨부 — 같은 시험지·판서 사진을 여러 학생에게 한 번에. **선택이 있을 때만** 노출(전체 대상 오첨부 방지).
   onBulkAttach?: (keys: string[], files: File[]) => void;
 };
@@ -128,6 +130,17 @@ export function GridToolbar({
             {selectedKeys.length
               ? tf("os.prev.pick", { n: selectedKeys.length })
               : t("os.prev.allRows")}
+          </Button>
+        ) : null}
+        {actions.makeupPrev ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={actions.makeupPrev.onLoad}
+            disabled={off || actions.makeupPrev.busy}
+            title={t("os.prev.makeupTitle")}
+          >
+            {actions.makeupPrev.busy ? t("os.prev.makeupBusy") : tf("os.prev.makeupLoad", { n: actions.makeupPrev.count })}
           </Button>
         ) : null}
         {/* 일괄 첨부 — 파일을 고르는 즉시 선택 행에 첨부된다(확인 다이얼로그 없음: 첨부는 되돌리기가 쉬운 편이고

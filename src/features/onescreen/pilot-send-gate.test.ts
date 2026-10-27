@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { BUILTIN_JJ_SHEET_TEMPLATE_ID } from "@/features/report-templates/defaults";
 import { pilotSendBlocks } from "./pilot-send-gate";
 import type { OneScreenStudent } from "./types";
 
@@ -27,6 +28,11 @@ describe("새 보고서 발송 조건(원장 2026-10-26 — 일괄 발송도 같
   });
   it("영어는 사랑의 한마디만 본다", () => {
     expect(pilotSendBlocks(student({ subjectKey: "english" }), "수학", null)).toEqual(["oneline"]);
+  });
+  it("JJ 수업보고서 글은 사랑의 한마디가 선택 — 고르는 중인 템플릿은 안 본다(원장 2026-10-27)", () => {
+    expect(pilotSendBlocks(student({ subjectKey: "english" }), "수학", { templateId: BUILTIN_JJ_SHEET_TEMPLATE_ID })).toEqual([]);
+    // 수학 행은 같은 표시가 있어도 그대로 필수
+    expect(pilotSendBlocks(student({}), "수학", { templateId: BUILTIN_JJ_SHEET_TEMPLATE_ID })).toContain("oneline");
   });
 });
 

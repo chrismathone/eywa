@@ -11,6 +11,7 @@ import { contributionReady, SETTINGS_TABLE } from "./store";
 import { getContributionDirectory, getContributionSnapshot } from "./directory";
 import { cachedContributionTotals, cachedEnrolledMonths } from "./snapshot-cache";
 import deployment from "../../../../vercel.json";
+import { hasApprovedParentEventImport } from "./parent-events";
 
 export const getContributionList = cache(async (withEnrolledMonths = true) => {
   const [directory, snapshot] = await Promise.all([getContributionDirectory(), getContributionSnapshot()]);
@@ -31,9 +32,9 @@ export const getContributionList = cache(async (withEnrolledMonths = true) => {
 export async function getContributionSettingsPreview() {
   const gate = await getContributionGate();
   if (!gate?.canConfigure) return null;
-  const list = await getContributionList(false);
+  const [list, parentEventsApproved] = await Promise.all([getContributionList(false), hasApprovedParentEventImport(createAdminClient(), gate.tenantId)]);
   if (!list) return null;
-  return { gate, ready: list.ready, config: list.config, revision: list.revision, historyReady: list.historyReady,
+  return { gate, ready: list.ready, config: list.config, revision: list.revision, historyReady: list.historyReady, parentEventsApproved,
     studentCount: list.rows.length, raws: sumRaws(list.rows.flatMap((r) => r.total ? [r.total.raws] : [])) };
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bodySchema, EMPTY_BODY, requestSchema, batchRequestSchema, automaticExitKind, reportCapabilities, submissionError, missingReportSchema, canRequestReport, directSchema, isBookkeepingReport, isDirectReport, type WithdrawalReport } from "./model";
+import { bodySchema, EMPTY_BODY, requestSchema, batchRequestSchema, automaticExitKind, cancelsAsDirector, reportCapabilities, submissionError, missingReportSchema, canRequestReport, directSchema, isBookkeepingReport, isDirectReport, type WithdrawalReport } from "./model";
 import { CLEANUP_WITHDRAWAL_MEMO } from "@/features/withdrawals/system-bulk";
 const id = "10000000-0000-4000-8000-000000000001";
 const teacher = "10000000-0000-4000-8000-000000000002";
@@ -25,6 +25,19 @@ describe("withdrawal reports", () => {
     expect(automaticExitKind(courses, ["math-a"])).toBe("subject_end");
     expect(automaticExitKind(courses, ["math-a", "math-b"])).toBe("withdrawal");
     expect(automaticExitKind([], [])).toBe("subject_end");
+  });
+  it("요청자 또는 원장 이상이 처리 끝 전이면 어느 단계든 취소한다(원장 2026-10-26)", () => {
+    const other = "someone";
+    for (const status of ["requested", "revision", "manager_pending", "director_pending", "approved", "scheduled", "blocked"] as const) {
+      expect(reportCapabilities({ ...report, status }, report.requested_by, true).cancel, status).toBe(true);
+      expect(reportCapabilities({ ...report, status }, other, true, true).cancel, status).toBe(true);
+      expect(reportCapabilities({ ...report, status }, other, true).cancel, status).toBe(false);
+    }
+    for (const status of ["completed", "canceled"] as const) expect(reportCapabilities({ ...report, status }, other, true, true).cancel).toBe(false);
+    expect(reportCapabilities(report, other, false, true).cancel).toBe(false); // 읽기 전용 보기
+    expect(cancelsAsDirector("master", false)).toBe(true);
+    expect(cancelsAsDirector("master", true)).toBe(false); // 강사뷰로 보는 중
+    expect(cancelsAsDirector("admin", false)).toBe(false);
   });
   it("each appointed reviewer acts once in their stage", () => {
     const multi = { ...report, status: "manager_pending" as const, manager_ids: [manager, "other"], manager_decisions: { [manager]: "2026-10-14" } };
