@@ -23,7 +23,7 @@ import { UnderstandingPresetButtons } from "./understanding-presets";
 import { UnderstandingPopover } from "./understanding-popover";
 import { attitudeNeedsNote, isHomeworkMissed, needsAttitudeNote, needsHomeworkMissReason, pilotRowSig, testSkipComplete, type DailyTestSkip } from "../math-report-pilot-sections";
 import { hasMakeupAbsenceDate } from "../attendance-sentence";
-import { DailyTestSkipPopover } from "./daily-test-skip-popover";
+import { DailyTestSkipSelect } from "./daily-test-skip-select";
 import { HomeworkMissReasonInput } from "./homework-miss-reason";
 import { ReasonNoteInput } from "./reason-note-input";
 import { rowMakeupFacts } from "../report-comment";
@@ -698,12 +698,12 @@ export function GridBodyRow({
       {config.dailyEnabled ? (
         <td className={`${td} text-center`}>
           {/* 수학 보고서 시범 — 카드에서 '시험 없음'을 고른 행은 점수 칸 대신 그 사실을 적는다(점수를 넣어도 읽지 않는다, row-fields.ts). */}
-          {/* 일일 테스트 '없음' — 표에서도 카드와 같은 판으로 고른다(원장 2026-10-26 *"카드와 표에서 동일하게"*) — 칸에 펼치면 행이 터져 창으로 띄운다(2026-10-27). */}
+          {/* 일일 테스트 '없음' — 표에서도 카드와 같은 판으로 고른다(원장 2026-10-26 *"카드와 표에서 동일하게"*) — 칸에 펼치면 행이 터져 사유는 드롭다운으로(2026-10-27). */}
           {pilot && subject.dailyTestSkip && fields.onDailyTestSkip ? (
             <fieldset disabled={rowLocked} className={LOCK_FS}>
-              <DailyTestSkipPopover
+              <DailyTestSkipSelect
                 skip={subject.dailyTestSkip}
-                disabled={rowLocked}
+                ariaLabel={tf("os.row.dailyLabel", { name: student.name })}
                 onChange={(skip) => fields.onDailyTestSkip?.(student.id, subject.name, skip)}
               />
             </fieldset>
