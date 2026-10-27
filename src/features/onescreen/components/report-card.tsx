@@ -35,6 +35,7 @@ import {
   type AttendanceSelection,
 } from "./attendance-pills";
 import { FieldSelect } from "./field-select";
+import { isMathBookRow, useMathBookListId } from "./math-book-list";
 import { HomeworkRateInput } from "./homework-rate-input";
 import { VideoHomeworkCheck } from "@/features/video-homework/components/video-homework-provider";
 import { VideoHomeworkToggle } from "@/features/video-homework/components/video-homework-toggle";
@@ -274,6 +275,7 @@ export function ReportCard({
   // AI 라이선스가 꺼진 지점엔 '자동 작성' 버튼이 없다(2026-09-30 "꺼지면 흔적 없이") — 서버 generateJSON이 따로 막는다.
   const aiOn = useLicenseOn("ai_analysis");
   const tf = useSheetTf();
+  const mathBookList = useMathBookListId(); // 교재명 칸 제안(수학 행만, math-book-list.ts)
   const [ownIdx, setOwnIdx] = useState(0);
   const selIdx = subjectIndex ?? ownIdx;
   const setSelIdx = onSubjectIndex ?? setOwnIdx;
@@ -595,6 +597,7 @@ export function ReportCard({
               type="text"
               value={subject.textbook ?? ""}
               onChange={(e) => onTextbook(subjectName, e.target.value)}
+              list={isMathBookRow(subject.subjectKey) ? mathBookList : undefined}
               placeholder={t("os.card.bookPh")}
               aria-label={tf("os.card.bookAria", { subject: subjectName })}
               className="border-line bg-card focus:border-primary h-8 min-w-32 flex-1 rounded-lg border px-2 text-xs outline-none transition-colors"

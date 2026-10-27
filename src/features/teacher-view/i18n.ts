@@ -3865,6 +3865,10 @@ export const SHEET_DICT = {
   "os.bulk.bookAria": { ko: "일괄 교재명", en: "Bulk book" },
   "os.bulk.hwTodayPh": { ko: "오늘 과제 (비우면 적용 안 함)", en: "Today's homework (leave it empty to skip)" },
   "os.bulk.hwTodayAria": { ko: "일괄 오늘 과제", en: "Bulk today's homework" },
+  "os.bulk.bookHwHint": {
+    ko: "오늘 과제가 쪽수만이면(예: 153-170p) 수학 보고서 '오늘의 숙제'에 교재명이 앞에 붙어 나갑니다.",
+    en: "If today's homework is only pages (e.g. 153-170p), the math report puts the book name in front of it.",
+  },
   "os.bulk.scoreAria": { ko: "일괄 {label} 테스트 맞은 개수", en: "Bulk {label} test score" },
   "os.bulk.maxAria": { ko: "일괄 {label} 테스트 문항수", en: "Bulk {label} test question count" },
   "os.bulk.scorePh": { ko: "개수", en: "Correct" },

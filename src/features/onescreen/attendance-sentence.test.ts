@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { joinLevelsLead, splitLevelsLead } from "./pilot-notes";
 import { attendanceMarkIsEnough, attendanceMarkOf, attendanceSentence } from "./attendance-sentence";
-import { NO_DAILY_TEST_TEXT, NO_HOMEWORK_TEXT, NO_HOMEWORK_TODAY_TEXT, homeworkTodayLine, pilotBody, pilotFactsSig } from "./math-report-pilot-sections";
+import { LEVEL_NONE_HOMEWORK, NO_DAILY_TEST_TEXT, NO_HOMEWORK_TEXT, NO_HOMEWORK_TODAY_TEXT, homeworkTodayLine, levelTableText, pilotBody, pilotFactsSig } from "./math-report-pilot-sections";
 
 describe("출결 문장(원장 2026-10-26)", () => {
   it("지각·조퇴·공결 + 사유 원문", () => {
@@ -27,9 +27,18 @@ describe("빈 항목도 '없었다'로 남긴다(원장 2026-10-26)", () => {
   it("테스트·숙제가 없으면 항목을 지우지 않는다", () => {
     const body = pilotBody(BASE, {});
     expect(body).toContain(`■ 일일 테스트\n${NO_DAILY_TEST_TEXT}`);
-    expect(body).toContain(`■ 숙제 완성도\n${NO_HOMEWORK_TEXT}`);
     expect(body).toContain(`■ 오늘의 숙제\n${NO_HOMEWORK_TODAY_TEXT}`);
-    expect(pilotBody({ ...BASE, homework: "없음" }, {})).toContain(NO_HOMEWORK_TEXT);
+  });
+  it("지난 숙제가 없던 날은 숙제 완성도 항목을 뺀다 — 맨 위 수업 평가 표가 '숙제 없음'을 이미 적는다(원장 2026-10-27)", () => {
+    for (const homework of ["", "없음", "—"]) {
+      const body = pilotBody({ ...BASE, homework }, {});
+      expect(body).not.toContain("■ 숙제 완성도");
+      expect(body).not.toContain(NO_HOMEWORK_TEXT);
+      // 같은 조건에서 표는 그 사실을 적는다 — 둘이 갈라지면 학부모는 숙제 이야기를 아예 못 듣는다.
+      expect(levelTableText({ ...BASE, homework })).toContain(`— ${LEVEL_NONE_HOMEWORK}`);
+    }
+    // 지난 영상 숙제 확인 문장은 표에 없는 사실이라 그것만으로 항목을 세운다.
+    expect(pilotBody(BASE, { videoReceipt: "지난 영상 숙제를 제출했습니다." })).toContain("■ 숙제 완성도\n지난 영상 숙제를 제출했습니다.");
   });
   it("값이 있으면 그 값을 쓴다", () => {
     const body = pilotBody({ ...BASE, dailyTest: "20문제 중 18개 맞음", homework: "100%", homeworkToday: "p.30~32" }, {});

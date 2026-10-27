@@ -38,6 +38,7 @@ import { attendanceLabelOf } from "@/features/class-sheets/lib/attendance-label"
 import { formatSessionUnits } from "@/features/attendance/session-units";
 import { ProgressSelector } from "./progress-selector";
 import { ReasonNoteInput } from "./reason-note-input";
+import { useMathBookListId } from "./math-book-list";
 import { attitudeNeedsNote, attitudeNoteComplete } from "../math-report-pilot-sections";
 import { ProgressModePills } from "./progress-mode-pills";
 import { UnderstandingPresetButtons } from "./understanding-presets";
@@ -126,6 +127,7 @@ export function BulkApplyPopover({
     setGrade(studyGrade);
   }
   const t = useSheetT();
+  const mathBookList = useMathBookListId(); // 교재명 제안(수학 교재목록) — 영어 행에도 들어가는 칸이라 제안일 뿐 강제가 아니다
   const tf = useSheetTf();
   const lang = useSheetLang();
   const [att, setAtt] = useState<BulkAttendanceStatus | null>(null);
@@ -521,22 +523,33 @@ export function BulkApplyPopover({
                 </div>
                 <div className="flex flex-col gap-2.5">
                 <BulkVideoFields config={fields} value={video} onChange={setVideo} checkPlan={videoCheckPlan} />
-                <input
-                  type="text"
-                  value={textbook}
-                  onChange={(e) => setTextbook(e.target.value)}
-                  placeholder={t("os.bulk.bookPh")}
-                  aria-label={t("os.bulk.bookAria")}
-                  className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-xs outline-none"
-                />
-                <input
-                  type="text"
-                  value={homeworkToday}
-                  onChange={(e) => setHomeworkToday(e.target.value)}
-                  placeholder={t("os.bulk.hwTodayPh")}
-                  aria-label={t("os.bulk.hwTodayAria")}
-                  className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-xs outline-none"
-                />
+                {/* 교재명·오늘 과제 — 각 행의 같은 이름 칸에 들어간다(원장 2026-10-27 *"교재명 적으면 어디에 들어가는거임?"*).
+                    placeholder만으로는 값을 적는 순간 무엇이었는지 사라져 칸 이름을 위에 붙이고, 두 칸이 보고서에서
+                    어떻게 합쳐지는지(homeworkTodayLine — 오늘 과제가 쪽수뿐이면 교재명이 앞에 붙는다) 한 줄로 밝힌다. */}
+                <div>
+                  <p className="micro text-text-faint mb-1">{t("os.row.bookPh")}</p>
+                  <input
+                    type="text"
+                    value={textbook}
+                    onChange={(e) => setTextbook(e.target.value)}
+                    list={mathBookList}
+                    placeholder={t("os.bulk.bookPh")}
+                    aria-label={t("os.bulk.bookAria")}
+                    className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-xs outline-none"
+                  />
+                </div>
+                <div>
+                  <p className="micro text-text-faint mb-1">{t("os.row.hwTodayPh")}</p>
+                  <input
+                    type="text"
+                    value={homeworkToday}
+                    onChange={(e) => setHomeworkToday(e.target.value)}
+                    placeholder={t("os.bulk.hwTodayPh")}
+                    aria-label={t("os.bulk.hwTodayAria")}
+                    className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-xs outline-none"
+                  />
+                  <p className="text-text-faint mt-1 text-xs break-keep">{t("os.bulk.bookHwHint")}</p>
+                </div>
                 <input
                   type="text"
                   value={note}

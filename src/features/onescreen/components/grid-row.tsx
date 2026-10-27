@@ -67,6 +67,7 @@ import { todaysMathMarked } from "../todays-math-fill-rules";
 import { MakeupClassTag } from "./makeup-class-tag";
 import { ReservedMakeupTag } from "./reserved-makeup-tag";
 import { MakeupSwitchButton } from "./makeup-switch-button";
+import { isMathBookRow, useMathBookListId } from "./math-book-list";
 
 const TD_BASE = "px-2 py-1.5 align-top";
 // 학생 묶음 구분선 — 묶음 첫 행(참고행이 꺼져 있을 때는 이 행)의 위쪽만 굵고 진한 회색.
@@ -291,6 +292,7 @@ export function GridBodyRow({
   const classnoteOn = useClassnoteOn();
   const aiOn = useLicenseOn("ai_analysis"); // 꺼진 지점엔 '자동 작성' 버튼이 없다(2026-09-30)
   const tf = useSheetTf();
+  const mathBookList = useMathBookListId(); // 교재명 칸 제안(수학 행만, math-book-list.ts)
   // 이 행에 적용되는 평가값(태도·점수·과제 수행률) — 행 값이 없으면 학생 값 폴백(row-fields.ts).
   const rowEval = resolveRowFields(student, subject);
   const td = groupStart ? TD_GROUP : TD; // 학생 구분선(묶음 첫 행만 굵게)
@@ -794,6 +796,7 @@ export function GridBodyRow({
             type="text"
             value={subject.textbook ?? ""}
             onChange={(e) => fields.onTextbook(student.id, subject.name, e.target.value)}
+            list={isMathBookRow(subject.subjectKey) ? mathBookList : undefined}
             readOnly={rowLocked}
             placeholder={t("os.row.bookPh")}
             aria-label={tf("os.row.bookAria", { name: student.name, subject: subject.name })}

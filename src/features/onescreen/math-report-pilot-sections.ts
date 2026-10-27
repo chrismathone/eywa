@@ -315,9 +315,8 @@ export type PilotFacts = {
 export const NO_DAILY_TEST_TEXT = "오늘은 일일 테스트를 보지 않았습니다.";
 export const NO_HOMEWORK_TEXT = "지난 시간에 내준 숙제가 없었습니다.";
 export const NO_HOMEWORK_TODAY_TEXT = "오늘은 숙제가 없습니다.";
-/** 위 셋의 갈래(첫 갈래 = 위 상수) — 매크로성 반복 금지(원장 2026-10-26, ment-variants.ts). */
+/** 갈래(첫 갈래 = 위 상수) — 매크로성 반복 금지(원장 2026-10-26, ment-variants.ts). */
 export const NO_DAILY_TEST_TEXTS: readonly string[] = [NO_DAILY_TEST_TEXT, "오늘은 일일 테스트가 없었습니다.", "오늘 수업에서는 일일 테스트를 따로 보지 않았습니다."];
-export const NO_HOMEWORK_TEXTS: readonly string[] = [NO_HOMEWORK_TEXT, "지난 시간에는 따로 내준 숙제가 없었습니다.", "지난 수업에서 내준 숙제는 없었습니다."];
 export const NO_HOMEWORK_TODAY_TEXTS: readonly string[] = [NO_HOMEWORK_TODAY_TEXT, "오늘은 따로 내준 숙제가 없습니다.", "오늘 수업 뒤 숙제는 없습니다."];
 
 /**
@@ -416,7 +415,7 @@ export function pilotLevelsSection(f: Pick<PilotFacts, "attitude" | "homework" |
 /**
  * 진도 항목과 사랑의 한마디 사이의 항목들 — 원장 2026-10-23 순서 *"진도 → 일일테스트 → 수업태도 → 숙제완성도 → 오늘의 수업 →
  * 오늘의 숙제 → 사랑의 한마디"*. 확인 테스트는 일일 테스트 바로 뒤(값이 있을 때만). (수업 평가 표는 맨 위 — `pilotLevelsSection`.)
- * 일일 테스트·숙제 완성도·오늘의 숙제는 비어도 '없었다'고 적는다(`NO_*_TEXT`, 원장 2026-10-26). 확인 테스트·이해도·출결은 값이 없으면 항목째 뺀다. `understandingText`는 AI가 쓴 이해도 글, `videoReceipt`는 지난 영상 숙제 확인 문장.
+ * 일일 테스트·오늘의 숙제는 비어도 '없었다'고 적는다(`NO_*_TEXT`, 원장 2026-10-26). 숙제 완성도는 지난 숙제가 없으면 항목째 뺀다 — 수업 평가 표가 이미 '숙제 없음'을 적는다(원장 2026-10-27). 확인 테스트·이해도·출결은 값이 없으면 항목째 뺀다. `understandingText`는 AI가 쓴 이해도 글, `videoReceipt`는 지난 영상 숙제 확인 문장.
  * 오늘의 숙제는 숙제 내용만 적는다 — 원장 2026-10-23 *"오늘 내준 과제 및 다음 시간에 잘 해 왔는지 등 멘트 삭제"*.
  */
 /** 쪽수·범위만 적힌 숙제인가 — `153-170p` · `p40-p56` · `128-135p, 140-149p` · `~131p`. 숫자가 하나는 있어야 한다. */
@@ -442,9 +441,11 @@ export function pilotBody(
   const daily =
     (f.dailyTestSkip ? testSkipText(f.dailyTestSkip, v) : scoreText(f.dailyTest, v, ":daily")) ||
     pickVariant(NO_DAILY_TEST_TEXTS, v, "none:daily");
-  const hw =
-    [homeworkSentence(f.homework, f.homeworkMissReason, v), extra.videoReceipt?.trim() ?? ""].filter(Boolean).join(" ") ||
-    pickVariant(NO_HOMEWORK_TEXTS, v, "none:hw");
+  // 숙제가 없던 날은 항목째 뺀다(원장 2026-10-27 *"숙제가 없으면 위에서 이야기했는데 밑에서도 동일하게 계속 나오는데"*) —
+  // 맨 위 수업 평가 표가 같은 조건(levelTableText: 빈칸·'없음'·'—')에서 이미 `숙제 완성도 — 숙제 없음`을 적는다.
+  // 🔴 그 표는 이 경우 항상 선다(숙제 줄이 비지 않는다) — 그래서 여기서 빼도 "안 적은 건지 없던 건지"(2026-10-26)는 안 흐려진다.
+  // 지난 영상 숙제 확인 문장(videoReceipt)이 있으면 그것만으로 항목을 세운다(표에 없는 사실이다).
+  const hw = [homeworkSentence(f.homework, f.homeworkMissReason, v), extra.videoReceipt?.trim() ?? ""].filter(Boolean).join(" ");
   const video = f.videoHomework === true ? `영상 숙제가 있습니다${f.videoHomeworkDue ? `(${f.videoHomeworkDue} 제출)` : ""}.` : "";
   const today = [homeworkTodayLine(f.homeworkToday, f.textbook) || (video ? "" : pickVariant(NO_HOMEWORK_TODAY_TEXTS, v, "none:today")), video]
     .filter(Boolean)
