@@ -43,8 +43,6 @@ export type SendBlockReason =
   | "hwreason"
   /** 새 수학 보고서 — 수업 태도가 하·중하인데 의견(3줄 이상)이 모자라다(원장 2026-10-26). */
   | "attnote"
-  /** 보강 줄 — 결석 날짜를 몰라 보강 사유가 필요한데 비었다(원장 2026-10-26). */
-  | "mkreason"
   | "recall_pending"
   /** 발송 대기·게시 중(queued/processing) — 워커 결과가 나올 때까지 다시 못 누른다(원장 2026-09-29). */
   | "in_flight"
@@ -53,7 +51,7 @@ export type SendBlockReason =
   | "report_optout";
 
 /** 입력이 필요한 사유의 짧은 이름 — 라벨에서 "출결 · 진도 · 멘트 입력 필요"로 이어 붙인다. */
-type NeedReason = "attendance" | "progress" | "testreason" | "hwreason" | "attnote" | "mkreason" | "ment" | "autowrite" | "oneline";
+type NeedReason = "attendance" | "progress" | "testreason" | "hwreason" | "attnote" | "ment" | "autowrite" | "oneline";
 const NEED_KEY: Record<NeedReason, SheetDictKey> = {
   attendance: "os.gate.need.attendance",
   progress: "os.gate.need.progress",
@@ -63,7 +61,6 @@ const NEED_KEY: Record<NeedReason, SheetDictKey> = {
   testreason: "os.gate.need.testreason",
   hwreason: "os.gate.need.hwreason",
   attnote: "os.gate.need.attnote",
-  mkreason: "os.gate.need.mkreason",
 };
 
 export type SendGate = {
@@ -130,8 +127,6 @@ export function evaluateSendGate(args: {
   needsHomeworkReason?: boolean;
   /** 새 수학 보고서 — 수업 태도 하·중하인데 의견이 모자라다(2026-10-26). */
   needsAttitudeNote?: boolean;
-  /** 보강 줄 — 결석 날짜를 몰라 보강 사유가 필요하다(2026-10-26). */
-  needsMakeupReason?: boolean;
   /**
    * 화면 언어 — 없으면 한국어(기존 호출부는 한 글자도 안 바뀐다).
    * 🔴 **판정에는 안 쓴다**: `canSend`·`reasons`는 언어와 무관하고 글자만 갈린다.
@@ -197,7 +192,6 @@ export function evaluateSendGate(args: {
   if (args.needsTestReason) needs.push("testreason");
   if (args.needsHomeworkReason) needs.push("hwreason");
   if (args.needsAttitudeNote) needs.push("attnote");
-  if (args.needsMakeupReason) needs.push("mkreason");
   // 시범 대상은 '멘트를 쓰라'가 아니라 '자동작성을 누르라'다(칸이 잠겨 있어 직접 쓸 수 없다).
   if (args.needsAutoWrite) needs.push("autowrite");
   else if (!args.hasDraft) needs.push("ment");
@@ -215,7 +209,6 @@ export function evaluateSendGate(args: {
       needs.includes("testreason") ? t("os.gate.hint.testreason") : "",
       needs.includes("hwreason") ? t("os.gate.hint.hwreason") : "",
       needs.includes("attnote") ? t("os.gate.hint.attnote") : "",
-      needs.includes("mkreason") ? t("os.gate.hint.mkreason") : "",
       needs.includes("ment") ? t("os.gate.hint.ment") : "",
       needs.includes("autowrite") ? t("os.gate.hint.autowrite") : "",
       needs.includes("oneline") ? t("os.gate.hint.oneline") : "",

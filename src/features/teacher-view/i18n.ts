@@ -3185,11 +3185,6 @@ export const SHEET_DICT = {
     ko: "수업 태도가 하·중하입니다 — 학생 상세의 수업 태도 아래 '수업 태도 의견'을 3줄 이상(90자 이상) 적어 주세요(보고서에 그대로 들어갑니다)",
     en: "Attitude is rated low — write the attitude comment under attitude in the student details, 3+ lines (90+ characters); it goes into the report as written",
   },
-  "os.gate.need.mkreason": { ko: "보강 사유", en: "Make-up reason" },
-  "os.gate.hint.mkreason": {
-    ko: "보강 수업인데 어느 결석의 보강인지 예약에서 찾지 못했습니다 — 학생 상세의 '보강 사유'를 적어 주세요(보고서 출결에 들어갑니다)",
-    en: "This is a make-up class but the missed date was not found in the reservations — write the make-up reason in the student details (it goes into the attendance line)",
-  },
   "os.gate.hint.hwreason": {
     ko: "숙제 완성도가 미제출입니다 — 학생 상세의 숙제 완성도 아래 '미제출 사유'를 적어 주세요(보고서에 그대로 들어갑니다)",
     en: "Homework is marked as not done — write the reason under homework in the student details (it goes into the report as written)",
@@ -3291,7 +3286,7 @@ export const SHEET_DICT = {
     ko: "오늘 수업에서 있었던 일과 앞으로 어떻게 지도할지 3줄 이상 적어 주세요 · 보고서 수업 태도에 그대로 들어갑니다",
     en: "Write 3+ lines on what happened in class and how you will guide the student · goes into the report as written",
   },
-  "os.card.mkReason.label": { ko: "보강 사유 (필수)", en: "Make-up reason (required)" },
+  "os.card.mkReason.label": { ko: "보강 사유 (선택)", en: "Make-up reason (optional)" },
   "os.card.mkReason.ph": {
     ko: "예: 10월 19일 결석 보충 · 보고서 출결에 '(사유: …)'로 들어갑니다",
     en: "e.g. making up the Oct 19 absence · added to the attendance line as '(reason: …)'",
