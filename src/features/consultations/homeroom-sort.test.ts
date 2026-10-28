@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { HomeroomMonth, HomeroomTeacher } from "./homeroom-model";
 import type { HomeroomFilter } from "./homeroom-sort";
-import { filterHomeroomTeachers, nextSort, parseHomeroomFilter, parseHomeroomSortKey, sortHomeroomTeachers } from "./homeroom-sort";
+import { alignHomeroomFilter, filterHomeroomTeachers, nextSort, parseHomeroomFilter, parseHomeroomSortKey, sortHomeroomTeachers, statsLinkOf } from "./homeroom-sort";
 
 const m = (self: number, target: number): HomeroomMonth => ({ self, target, other: 0, none: target - self });
 const t = (name: string, subjects: string[], months: HomeroomMonth[], students = 1): HomeroomTeacher => ({
@@ -64,5 +64,25 @@ describe("filterHomeroomTeachers · parseHomeroomFilter", () => {
       unmetStudentsOnly: false,
     });
     expect(parseHomeroomFilter("junk")).toEqual({ subject: null, teachers: [], unmetOnly: false, unmetStudentsOnly: false });
+  });
+});
+
+describe("담임별 현황 ↔ 위 상담 통계 잇기", () => {
+  const base: HomeroomFilter = { subject: null, teachers: [], unmetOnly: true, unmetStudentsOnly: false };
+  it("담임 한 명만 상담사 조건이 된다 — 여럿·전체는 비운다", () => {
+    expect(statsLinkOf({ ...base, subject: "math", teachers: ["a"] })).toEqual({ who: "a", subject: "math" });
+    expect(statsLinkOf({ ...base, teachers: ["a", "b"] })).toEqual({ who: "", subject: "" });
+  });
+  it("주소에 맞춰 고르기를 맞추고, 같으면 같은 객체", () => {
+    expect(alignHomeroomFilter(base, "a", "math")).toEqual({ ...base, subject: "math", teachers: ["a"] });
+    expect(alignHomeroomFilter({ ...base, teachers: ["a"] }, "", "")).toEqual(base); // 한 명 고른 저장값 + 주소 전체 → 전체
+    const multi = { ...base, teachers: ["a", "b"] };
+    expect(alignHomeroomFilter(multi, "", "")).toBe(multi);
+    expect(alignHomeroomFilter(multi, "c", "")).toEqual({ ...base, teachers: ["c"] });
+  });
+  it("align 뒤 link는 주소와 같다(되돌이 이동 없음)", () => {
+    for (const [who, subject] of [["a", "math"], ["", ""], ["", "english"]] as const) {
+      expect(statsLinkOf(alignHomeroomFilter({ ...base, teachers: ["x", "y"] }, who, subject))).toEqual({ who, subject });
+    }
   });
 });

@@ -1,6 +1,6 @@
 import { FaceTabs } from "@/components/face-tabs";
 import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
-import { requireShuttleView } from "@/features/shuttle/server/access";
+import { isShuttleAdmin, requireShuttleView } from "@/features/shuttle/server/access";
 import { getShuttleBoard } from "@/features/shuttle/server/queries";
 import { SHUTTLE_TOOLBAR } from "@/features/shuttle/control-size";
 import { SHUTTLE_WEEK_PATH, shuttleFaces } from "@/features/shuttle/faces";
@@ -24,7 +24,7 @@ export default async function ShuttleWeekPage({ searchParams }: { searchParams: 
   await requireShuttleView();
   const sp = await searchParams;
   const season: Season = isSeason(sp.season) ? sp.season : "term";
-  const board = await getShuttleBoard(season);
+  const [board, showTrack] = await Promise.all([getShuttleBoard(season), isShuttleAdmin()]);
 
   const isActive = (status: string) => status === "enrolled";
   // 회차는 출발 시각 순(시각이 없으면 회차 번호).
@@ -48,7 +48,8 @@ export default async function ShuttleWeekPage({ searchParams }: { searchParams: 
     <div className="flex min-h-full w-full flex-col gap-3 p-3 md:px-5 md:py-4">
       <div className={SHUTTLE_TOOLBAR}>
         <span className="min-w-0 flex-1 basis-full sm:basis-auto">
-          <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_WEEK_PATH} ariaLabel="셔틀 면 전환" />
+          {/* 관리자 면(실시간 위치·가까운 노선 찾기)도 다른 면들과 같은 판정으로 붙인다 — 빠지면 이 면에서만 뒤쪽 탭이 사라진다. */}
+          <FaceTabs faces={shuttleFaces(season, { track: showTrack })} active={SHUTTLE_WEEK_PATH} ariaLabel="셔틀 면 전환" />
         </span>
         <ToolbarSegment label="시즌">
           {SEASONS.map((s) => (
