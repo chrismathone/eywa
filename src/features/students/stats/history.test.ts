@@ -123,6 +123,47 @@ describe("지난 기록 — 에이와 쪽 월별 값", () => {
     expect(plain!.data).not.toHaveProperty("payingMath");
   });
 
+  it("🔴 과목마다(원장 2026-10-28 *\"과목별로 분리가능한 수준까지\"*) — 그 밖의 과목을 `payingSubject:<키>`로도 · 건너뛴 달은 청구 칸을 비우고 표시만", () => {
+    const subjects = [{ key: "math", label: "수학" }, { key: "english", label: "영어" }, { key: "science", label: "과학" }, { key: "korean", label: "국어" }];
+    const invoices = [
+      inv("a", "2025-03", [lesson("초등 과학 탐구"), lesson("중3 국어 화금2T")]),
+      inv("b", "2025-03", [lesson("중2 국어 정규")]),
+      inv("a", "2025-04", [lesson("초등 과학 탐구")]),
+      inv("c", "2025-05", [lesson("수학 A")]),
+    ];
+    const classify = lessonProgramClassifier(lessonNameWeights(invoices), subjects);
+    const rows = aywaHistoryMonths({
+      months: ["2025-03", "2025-04", "2025-05"], invoices, registrations: [reg("c", "2025-04-03")], started: new Set(["c"]), classify, skipMonths: new Set(["2025-04"]),
+    });
+    expect(rows[0]!.data).toMatchObject({ payingOther: 2, "payingSubject:science": 1, "payingSubject:korean": 2 });
+    // 학생 수 칸 없음 — 0이 아니라 '비움' · 실제로 들어온 수업료(돈)는 센다(비우는 것은 청구 건수 — 리뷰 2026-10-28)
+    expect(rows[1]!.data).toEqual({ newRegistered: 1, newReal: 1, skippedPaying: 1, tuitionPaidGeneral: 100000 });
+    expect(rows[2]!.data).toMatchObject({ payingMath: 1, "payingSubject:science": 0, "payingSubject:korean": 0 });
+    const merged = mergeHistory(rows.map((r) => ({ month: r.month, source: "makeedu" as const, data: r.data })));
+    expect(merged[0]!.subjects).toEqual({ science: 1, korean: 2 });
+    expect(merged[1]!.skipped).toBe(true);
+    expect(merged[1]!.payingGeneral).toBeUndefined();
+    const [y] = yearlyHistory(merged);
+    expect(y!.subjects).toEqual({ science: 1, korean: 1 }); // 값이 있는 달(3·5월) 평균
+    expect(y!.subjectMonths).toEqual({ science: 2, korean: 2 });
+    expect(withoutPaying(merged)[0]!.subjects).toBeUndefined(); // 수납 권한이 없으면 과목 칸도 뺀다
+  });
+
+  it("과목 칸 잇기 — 에이와가 청구 칸을 실으면 과목 묶음도 통째로 그쪽 · 건너뛴 표시도 풀린다 · 모양이 틀린 값은 버린다", () => {
+    const merged = mergeHistory([
+      { month: "2026-01", source: "makeedu", data: { enrolledRecord: 400, skippedPaying: 1, "payingSubject:korean": 3, "payingSubject:science": 2, "payingSubject:bad": -1 } },
+      { month: "2026-01", source: "aywa", data: { payingGeneral: 330, "payingSubject:korean": 9 } },
+      { month: "2026-02", source: "makeedu", data: { payingGeneral: 300, "payingSubject:korean": 3 } },
+      { month: "2026-02", source: "aywa", data: { payingGeneral: 320, payingOther: 5 } }, // 과목 칸 없는 옛 밤 집계 — 메이크에듀 과목과 섞지 않는다
+    ]);
+    expect(merged[0]).toMatchObject({ enrolledRecord: 400, payingGeneral: 330, subjects: { korean: 9 } });
+    expect(merged[0]!.subjects).toEqual({ korean: 9 });
+    expect(merged[0]!.skipped).toBeUndefined();
+    expect(merged[1]).toMatchObject({ payingGeneral: 320, payingOther: 5 });
+    expect(merged[1]!.subjects).toBeUndefined();
+    expect(parseHistoryData({ "payingSubject:": 4, "payingSubject:science": "3" }).subjects).toBeUndefined();
+  });
+
   it("수업료 수납 — 수업 항목의 낸 돈에서 진행 중 환불을 뺀다(취소된 환불은 그대로) · 줄마다 낸 돈이 없으면 머리의 낸 돈을 금액 비율로 · 항목 없는 청구는 머리 전부", () => {
     const refunded = { ...lesson("수학 A", 300000), refunds: [{ status: "active", amount: 100000 }, { status: "cancelled", amount: 50000 }] };
     expect(lessonPaid([refunded, lesson("[EiE] Kopi", 200000), { kind: "교재", description: "교재", amount: 30000, paid: 30000 }], null)).toEqual({ general: 200000, eie: 200000 });

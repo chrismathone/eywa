@@ -15,6 +15,7 @@ export function HistoryTable({
   split,
   programs,
   shown,
+  subjectKeys = [],
 }: {
   years: readonly HistoryYear[];
   hasEie: boolean;
@@ -22,20 +23,31 @@ export function HistoryTable({
   programs: HistoryPrograms;
   /** 차트에 선 칸 — 프로그램 열은 차트와 같은 기준으로 세운다(값이 늘 0인 프로그램은 열도 없다). */
   shown: ReadonlySet<HistoryField>;
+  /** 그 밖의 과목을 과목마다 세운 열(차트의 과목 선과 같은 과목 · 원장 2026-10-28) — 있으면 '그 밖의 과목' 열 대신. */
+  subjectKeys?: readonly string[];
 }) {
   const cell = "px-2 py-1.5";
   const ordered = [...years].reverse();
   const has = (f: HistoryField) => years.some((y) => y[f] !== undefined);
-  const columns: { key: HistoryField; label: string; bold?: boolean }[] = [
-    ...(split && shown.has("payingMath") ? [{ key: "payingMath" as const, label: `${programs.math.label}(월평균)` }] : []),
-    ...(split && shown.has("payingInjaewon") ? [{ key: "payingInjaewon" as const, label: `${programs.injaewon.label}(월평균)` }] : []),
-    ...(split && shown.has("payingOther") ? [{ key: "payingOther" as const, label: "그 밖의 과목(월평균)" }] : []),
-    ...(split && shown.has("payingUnknown") ? [{ key: "payingUnknown" as const, label: "과목 모름(월평균)" }] : []),
-    ...(has("payingGeneral") ? [{ key: "payingGeneral" as const, label: hasEie ? "EiE 외 수업(월평균)" : "수업료가 청구된 학생(월평균)" }] : []),
-    ...(hasEie ? [{ key: "payingEie" as const, label: `${programs.eie.label}(월평균)` }] : []),
-    { key: "newReal", label: "실제 신규", bold: true },
-    ...(has("stoppedPaying") ? [{ key: "stoppedPaying" as const, label: "청구가 끊긴 학생" }] : []),
-    ...(has("enrolledRecord") ? [{ key: "enrolledRecord" as const, label: "메이크에듀 재원생 기록(월평균)" }] : []),
+  type Column = { key: string; label: string; bold?: boolean; value: (y: HistoryYear) => number | undefined; months: (y: HistoryYear) => number | undefined };
+  const field = (key: HistoryField, label: string, bold?: boolean): Column => ({ key, label, bold, value: (y) => y[key], months: (y) => y.fieldMonths[key] });
+  const subject = (k: string): Column => ({
+    key: `subject:${k}`,
+    label: `${programs.subjects?.[k]?.label ?? k}(월평균)`,
+    value: (y) => y.subjects?.[k],
+    months: (y) => y.subjectMonths?.[k],
+  });
+  const columns: Column[] = [
+    ...(split && shown.has("payingMath") ? [field("payingMath", `${programs.math.label}(월평균)`)] : []),
+    ...(split && shown.has("payingInjaewon") ? [field("payingInjaewon", `${programs.injaewon.label}(월평균)`)] : []),
+    ...(split ? subjectKeys.map(subject) : []),
+    ...(split && shown.has("payingOther") && !subjectKeys.length ? [field("payingOther", "그 밖의 과목(월평균)")] : []),
+    ...(split && shown.has("payingUnknown") ? [field("payingUnknown", "과목 모름(월평균)")] : []),
+    ...(has("payingGeneral") ? [field("payingGeneral", hasEie ? "EiE 외 수업(월평균)" : "수업료가 청구된 학생(월평균)")] : []),
+    ...(hasEie ? [field("payingEie", `${programs.eie.label}(월평균)`)] : []),
+    field("newReal", "실제 신규", true),
+    ...(has("stoppedPaying") ? [field("stoppedPaying", "청구가 끊긴 학생")] : []),
+    ...(has("enrolledRecord") ? [field("enrolledRecord", "메이크에듀 재원생 기록(월평균)")] : []),
   ];
   return (
     <details open>
@@ -59,10 +71,10 @@ export function HistoryTable({
                   {y.year}년{y.months < 12 ? <span className="text-muted-foreground"> ({y.months}개월)</span> : null}
                 </td>
                 {columns.map((c) => {
-                  const n = y.fieldMonths[c.key];
+                  const n = c.months(y);
                   return (
                     <td key={c.key} className={`${cell} text-right whitespace-nowrap${c.bold ? " font-bold" : ""}`}>
-                      {fmt(y[c.key])}
+                      {fmt(c.value(y))}
                       {n !== undefined && n < y.months ? <span className="text-muted-foreground font-normal"> ({n}개월)</span> : null}
                     </td>
                   );

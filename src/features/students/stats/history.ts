@@ -28,8 +28,20 @@ export const HISTORY_FIELDS = [
 ] as const;
 export type HistoryField = (typeof HISTORY_FIELDS)[number];
 
-/** 한 달 — 값이 없는 칸은 비운다(0과 '모름'을 가른다). `estimated` = 추정으로 메운 칸. */
-export type HistoryMonth = { month: string; estimated: HistoryField[] } & Partial<Record<HistoryField, number>>;
+/**
+ * 그 밖의 과목을 과목마다 — `payingSubject:<과목 키>`(원장 2026-10-28 *"과목별로 분리가능한 수준까지 쫙 분리"* · 국어·과학…). `payingOther`는 그 합집합
+ * 그대로 둔다(옛 줄·다른 화면 호환). 학원 설정 과목 키라 지점마다 다르다 — 고정 칸이 아니라 묶음으로 읽는다.
+ */
+export const SUBJECT_FIELD_PREFIX = "payingSubject:";
+export const subjectField = (key: string) => `${SUBJECT_FIELD_PREFIX}${key}`;
+/** 건너뛴 달 표시 — 청구가 비정상으로 적어 청구 칸을 비운 달(원장 2026-10-28 *"이상할정도로 적은달은 건너뛰는게 차라리 나음"*). */
+export const SKIPPED_PAYING = "skippedPaying";
+
+/**
+ * 한 달 — 값이 없는 칸은 비운다(0과 '모름'을 가른다). `estimated` = 추정으로 메운 칸 · `subjects` = 그 밖의 과목마다(키 → 학생) ·
+ * `skipped` = 청구 칸을 일부러 비운 달(값이 없는 것과 같지만 화면이 이유를 적는다).
+ */
+export type HistoryMonth = { month: string; estimated: HistoryField[]; subjects?: Record<string, number>; skipped?: boolean } & Partial<Record<HistoryField, number>>;
 export type HistoryRow = { month: string; source: "makeedu" | "aywa"; data: unknown };
 
 const isField = (k: unknown): k is HistoryField => HISTORY_FIELDS.includes(k as HistoryField);
@@ -43,6 +55,12 @@ export function parseHistoryData(raw: unknown): Omit<HistoryMonth, "month"> {
     if (typeof v === "number" && Number.isFinite(v) && v >= 0) out[f] = Math.round(v);
   }
   out.estimated = Array.isArray(o.estimated) ? [...new Set(o.estimated.filter(isField))] : [];
+  for (const [k, v] of Object.entries(o)) {
+    if (!k.startsWith(SUBJECT_FIELD_PREFIX) || typeof v !== "number" || !Number.isFinite(v) || v < 0) continue;
+    const key = k.slice(SUBJECT_FIELD_PREFIX.length);
+    if (key) (out.subjects ??= {})[key] = Math.round(v);
+  }
+  if (o[SKIPPED_PAYING] === 1 || o[SKIPPED_PAYING] === true) out.skipped = true;
   return out;
 }
 
@@ -60,13 +78,29 @@ export function mergeHistory(rows: readonly HistoryRow[]): HistoryMonth[] {
       cur.estimated = cur.estimated.filter((e) => e !== f);
       if (d.estimated.includes(f)) cur.estimated.push(f);
     }
+    // 과목 묶음 — 뒤 출처(에이와)가 청구 칸을 실었으면 과목 묶음도 **통째로** 그쪽(없으면 없음 — 출처가 다른 과목 값을 한 달에 섞지 않는다 ·
+    // 리뷰 2026-10-28). 청구 칸 없이 과목만 실렸으면 더한다. 건너뛴 표시는 뒤 출처가 청구 칸을 실으면 풀린다.
+    const carriesPaying = d.payingGeneral !== undefined || d.payingTotal !== undefined;
+    if (carriesPaying) {
+      if (d.subjects) cur.subjects = { ...d.subjects };
+      else delete cur.subjects;
+    } else if (d.subjects) cur.subjects = { ...(cur.subjects ?? {}), ...d.subjects };
+    if (d.skipped) cur.skipped = true;
+    else if (carriesPaying) delete cur.skipped;
     byMonth.set(r.month, cur);
   }
   return [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month));
 }
 
 /** `months` = 그해 줄이 있는 달 수 · `fieldMonths` = 칸마다 값이 있는 달 수(평균을 낸 달 수 — 칸마다 다를 수 있다). */
-export type HistoryYear = { year: string; months: number; fieldMonths: Partial<Record<HistoryField, number>> } & Partial<Record<HistoryField, number>>;
+export type HistoryYear = {
+  year: string;
+  months: number;
+  fieldMonths: Partial<Record<HistoryField, number>>;
+  /** 그 밖의 과목마다 월평균(값이 있는 달) · `subjectMonths` = 과목마다 평균을 낸 달 수. */
+  subjects?: Record<string, number>;
+  subjectMonths?: Record<string, number>;
+} & Partial<Record<HistoryField, number>>;
 
 /**
  * 연도별 — 학생 수(수업료가 청구된 학생 · 메이크에듀 재원생 기록)는 **값이 있는 달의 평균**(반올림), 신규는 **합**.
@@ -84,6 +118,13 @@ export function yearlyHistory(months: readonly HistoryMonth[]): HistoryYear[] {
       out[f] = f === "newReal" || f === "newRegistered" || f === "stoppedPaying" ? sum : Math.round(sum / vals.length);
       out.fieldMonths[f] = vals.length;
     }
+    const keys = [...new Set(list.flatMap((m) => Object.keys(m.subjects ?? {})))];
+    for (const key of keys) {
+      const vals = list.map((m) => m.subjects?.[key]).filter((v): v is number => v !== undefined);
+      if (!vals.length) continue;
+      (out.subjects ??= {})[key] = Math.round(vals.reduce((a, v) => a + v, 0) / vals.length);
+      (out.subjectMonths ??= {})[key] = vals.length;
+    }
     return out;
   });
 }
@@ -92,6 +133,7 @@ export function yearlyHistory(months: readonly HistoryMonth[]): HistoryYear[] {
 const PAYING_FIELDS: readonly HistoryField[] = ["payingGeneral", "payingEie", "payingTotal", "payingMath", "payingInjaewon", "payingOther", "payingUnknown", "stoppedPaying"];
 export function withoutPaying(months: readonly HistoryMonth[]): HistoryMonth[] {
   return months.map((m) => {
+    // 과목 묶음·건너뛴 표시도 청구에서 나온 것이라 함께 뺀다.
     const out: HistoryMonth = { month: m.month, estimated: m.estimated.filter((f) => !PAYING_FIELDS.includes(f)) };
     for (const f of HISTORY_FIELDS) if (!PAYING_FIELDS.includes(f) && m[f] !== undefined) out[f] = m[f];
     return out;

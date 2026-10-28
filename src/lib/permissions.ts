@@ -57,6 +57,7 @@ export const MENU_KEYS = [
   "ecs",
   "mcs",
   "lesson_reports",
+  "before_class_checklist",
   ...NEW_SETTINGS_ROLE_KEYS,
   "staff",
   "teacher_view",
@@ -107,6 +108,7 @@ export const MENU_LABEL: Record<MenuKey, string> = {
   ecs: "영어 강사 시트",
   mcs: "수학 강사 시트",
   lesson_reports: "수업보고서",
+  before_class_checklist: "비포클래스체크리스트(초안)",
   report_settings: "보고서 설정",
   ai_ment: "AI 멘트",
   profile_settings: "프로필·브랜드 설정",
@@ -168,6 +170,8 @@ export const TEACHER_MENU_KEYS = [
   // 학원설정에서 열어야 보인다. 남의 평가지·평가자 점수는 조회 초크포인트에서 잘려 나간다.
   "class_review",
   "withdrawal_reports",
+  // 비포클래스체크리스트(초안) — 기본 none. 개인별 메뉴 권한으로 연 사람에게만 선다(읽기 = 열람, 전체 = 체크).
+  "before_class_checklist",
   "documents", // 서식 저장소 — 강사는 readonly(빈 양식 다운로드 용도)
 ] as const satisfies readonly MenuKey[];
 
@@ -309,6 +313,9 @@ export const MENU_ACCESS: AccessMatrix = {
   my_learning: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "full" },
   // master 전용 — 출석 키오스크 설정(출석번호 발급·기기 등록·발송 시뮬 피드). 사이드바 미표시(직접 URL).
   kiosk_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  // 비포클래스체크리스트(초안, 원장 2026-10-28) — 수업 전 준비 체크(시트 이식). 새 키 규칙대로 원장만 전체.
+  // 체크하는 사람(전체)·보는 사람(읽기)은 학원 설정 → 역할·권한 → 개인별 메뉴 권한으로 연다. 표는 서버 전용(정책 0개).
+  before_class_checklist: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
 };
 
 // 🔴 **새 권한 키의 기본값 = 원장 '전체' · 나머지 '없음'**(원장 2026-10-06: *"새 권한을 넣으면 '원장' 전체가 디폴트로 하고 나머진 없음을
@@ -394,6 +401,7 @@ const PATH_SEGMENT_TO_MENU: Record<string, MenuKey> = {
   enrollment: "enrollment",
   consultations: "consultations",
   withdrawals: "withdrawals",
+  "before-class": "before_class_checklist",
   "withdrawal-reports": "withdrawal_reports",
   retention: "retention",
   newcomers: "newcomers",

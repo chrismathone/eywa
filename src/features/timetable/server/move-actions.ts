@@ -23,8 +23,11 @@ import {
   toTimeString,
   type PlacedWindow,
 } from "../lib/class-move";
+import { daySplitStudents, nextDay, SLOT_ANCHORS, slotAnchorBlockText, type SlotAnchorHit } from "../lib/slot-anchors";
 import { getTeacherScheduleBlocks, getWeeklyScheduleWithStudents } from "./queries";
 import { logDbError } from "@/lib/supabase/db-error";
+
+const DAY_KEYS = new Set(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]);
 
 /**
  * 반 블록(화면의 한 칸 = 배치 여러 줄)을 **다른 요일·교시로 옮긴다** — 시간표에서 반 이름 머리를 끌어 놓았을 때의 저장 경로.
@@ -36,8 +39,11 @@ import { logDbError } from "@/lib/supabase/db-error";
  *    옛 행은 `valid_to = 적용일 − 1`로 **마감**하고 새 행을 `valid_from = 적용일`로 넣는다. 그래야
  *    **이미 찍힌 출결이 고아가 되지 않는다** — 출결은 `attendance_records.slot_start`로 그 시각에 매달려
  *    있어서([[#126]]), 행을 제자리에서 고치면 지난 기록이 사라진 교시를 가리킨다.
- * 🔴 **적용일 이후에 이미 찍힌 출결이 있으면 거절**한다 — 그 기록은 옛 시각에 매달려 있는데 그날부터
- *    배치가 바뀌면 고아가 된다. 사람이 그 기록을 먼저 정리해야 한다(조용히 옮기지 않는다).
+ * 🔴 **적용일 이후 그 교시에 매달린 기록이 있으면 거절**한다(`SLOT_ANCHORS` — 출결·수업 계획·학생 기록·미룸 표식) — 그 기록은
+ *    옛 시각에 매달려 있는데 그날부터 배치가 바뀌면 고아가 된다. 조용히 옮기지 않고, 마지막 기록 다음 날로 적용일을 권한다.
+ * 🔴 **오늘 수업이 있는 교시는 오늘부터 옮기지 않는다** — 열려 있는 출석·시트 화면이 옛 교시로 저장한다([[#126]]).
+ * 🔴 **분리등원 학생이 있으면 요일을 바꾸지 않는다** — `attendance_days`는 요일만 적어, 요일을 옮기면 학생이 명단에서 빠지거나
+ *    다른 교시에 더해진다(`daySplitStudents`).
  * 🔴 **갈 수 있는 자리인지 서버가 다시 판정한다**(#77) — 학생(전 과목)·강사·강의실·같은 반 넷을 화면과
  *    **같은 함수**(`moveBlockers`)로 확인한다. 화면 색인은 페이지를 연 시점의 스냅샷이라, 그사이 다른
  *    사람이 넣은 배치와 부딪힐 수 있다(가져오기 `applyStructureImport`가 충돌 목록을 재계산하는 것과 같은 결).
@@ -137,9 +143,11 @@ export async function moveClassSlots(input: {
       };
     }
     const toStart = m.toStart.length === 5 ? `${m.toStart}:00` : m.toStart;
-    if (!/^\d{2}:\d{2}:\d{2}$/.test(toStart)) return { ok: false, error: "옮길 시각이 올바르지 않습니다" };
+    if (!/^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/.test(toStart)) return { ok: false, error: "옮길 시각이 올바르지 않습니다" };
+    if (!DAY_KEYS.has(m.toDay)) return { ok: false, error: "옮길 요일이 올바르지 않습니다" };
     const dur = toMinutes(String(row.end_time)) - toMinutes(String(row.start_time));
     if (dur <= 0) return { ok: false, error: "수업 길이를 계산하지 못했습니다" };
+    if (toMinutes(toStart) + dur > 24 * 60) return { ok: false, error: "수업이 자정을 넘깁니다 — 더 이른 시각으로 옮겨 주세요" };
     windows.push({ slotId: m.slotId, day: m.toDay, start: toStart, end: toTimeString(toMinutes(toStart) + dur) });
   }
   const unchanged = windows.every((w) => {
@@ -182,33 +190,93 @@ export async function moveClassSlots(input: {
     return { ok: false, error: `그 자리로는 옮길 수 없습니다 — ${blockersText(blockers)}` };
   }
 
-  // 🔴 적용일 이후 그 칸으로 이미 찍힌 출결 — 옮기면 그 기록이 사라진 교시에 매달린다([[#126]]).
+  // 🔴 오늘 수업이 있는 교시는 오늘부터 옮기지 않는다 — 열려 있는 출석·수업 시트 화면이 옛 교시 목록을 들고 있어 옮긴 뒤에도
+  //    옛 시각으로 저장한다([[#126]] "수업 시간 중에는 배치 시각을 건드리지 말 것" · 되돌린 2분 뒤 없어진 칸에 6명이 찍혔다).
+  if (effective === today && windows.some((w) => byId.get(w.slotId)!.day_of_week === weekdayOf(today))) {
+    return {
+      ok: false,
+      error: `오늘 수업이 있는 교시는 오늘부터 옮길 수 없습니다 — 열려 있는 출석 화면이 옛 교시로 기록합니다. 적용일을 ${nextDay(today)} 이후로 정해 주세요`,
+    };
+  }
+
+  // 🔴 적용일 이후 그 교시에 매달린 기록(`SLOT_ANCHORS` — 출결·수업 계획·학생 기록·미룸 표식 …) — 옮기면 옛 시각에 남아 화면에서
+  //    사라진다([[#126]]). 함께 옮기는 기능이 없어 그동안은 막는다(계획이 몇 달 앞까지 적힌 반은 그만큼 막힌다 — 원장 판단 대기).
   // ⚠️ **요일까지 봐야 한다** — 월·목이 같은 시각인 반은 시각만으로 세면 목요일 기록 때문에 월요일 이동이
-  //    막힌다(적대 리뷰 2026-09-04). 날짜에서 요일을 도출해 그 줄의 요일과 같은 것만 센다.
-  // ⚠️ `slot_start`가 비어 있는 기록은 교시에 매달려 있지 않아 옮겨도 고아가 되지 않는다(대상 아님).
+  //    막힌다(적대 리뷰 2026-09-04). 날짜에서 요일을 도출해 그 줄의 요일과 같은 것만 센다 · 그 배치가 끝나는 날(`valid_to`)까지만.
+  // ⚠️ `slot_start`가 비어 있는 출결(하루 단위 기록)은 교시에 매달려 있지 않다 — 요일을 옮기면 수업 없는 요일 칸에 남지만
+  //    월간 격자는 모든 날짜를 그리고 귀속은 담임으로 가서 사라지지 않는다(대상 아님).
+  // 🔴 날짜 칸은 표마다 다르다(`SLOT_ANCHORS`) — 종전엔 출결을 없는 칸 `date`(실제 `session_date`)로 읽어 PostgREST가 늘 오류를 냈고,
+  //    반 옮기기가 한 번도 저장되지 않았다(운영 감사로그 class_schedule_move 0건 · 3.0 연습본 재현 → 원장 지시로 넘겨받음 2026-10-28).
+  //    칸 이름은 시험이 SQL 정의와 대조한다.
+  const hits = new Map<string, SlotAnchorHit>();
   for (const w of windows) {
     const row = byId.get(w.slotId)!;
-    let rows2: { date: string }[];
-    try {
-      rows2 = await fetchAllPaged<{ date: string }>((from, to) =>
-        admin
-          .from("attendance_records")
-          .select("date")
-          .eq("tenant_id", user.tenantId)
-          .eq("class_id", row.class_id)
-          .gte("date", effective)
-          .eq("slot_start", String(row.start_time))
-          .order("date")
-          .range(from, to),
-      );
-    } catch {
-      return { ok: false, error: "출결 기록을 확인하지 못해 중단했습니다" };
+    const until = row.valid_to ? String(row.valid_to).slice(0, 10) : null;
+    for (const a of SLOT_ANCHORS) {
+      let found: Record<string, unknown>[];
+      try {
+        found = await fetchAllPaged<Record<string, unknown>>((from, to) => {
+          let q = admin
+            .from(a.table)
+            .select(`id, ${a.dateColumn}`)
+            .eq("tenant_id", user.tenantId)
+            .eq("class_id", row.class_id)
+            .eq("slot_start", String(row.start_time))
+            .gte(a.dateColumn, effective);
+          if (until) q = q.lte(a.dateColumn, until);
+          return q.order(a.dateColumn).order("id").range(from, to);
+        });
+      } catch (e) {
+        logDbError(e, `timetable.moveClassSlots.${a.table}`);
+        return { ok: false, error: "옮기기 전에 확인할 기록을 읽지 못해 중단했습니다. 잠시 후 다시 시도해 주세요" };
+      }
+      const dates = found.map((r) => String(r[a.dateColumn]).slice(0, 10)).filter((d) => weekdayOf(d) === row.day_of_week);
+      if (!dates.length) continue;
+      const h = hits.get(a.label) ?? { label: a.label, count: 0, lastDate: "" };
+      h.count += dates.length;
+      h.lastDate = dates.reduce((m, d) => (d > m ? d : m), h.lastDate);
+      hits.set(a.label, h);
     }
-    const stuck = rows2.filter((r) => weekdayOf(String(r.date)) === row.day_of_week).length;
-    if (stuck > 0) {
+  }
+  if (hits.size > 0) return { ok: false, error: slotAnchorBlockText([...hits.values()]) };
+
+  // 🔴 분리등원(요일 지정) 학생 — 요일을 옮기면 그 학생이 블록에서 빠지거나(옛 요일만 다님) 다른 교시에 더해진다(새 요일만 다님).
+  //    학생 충돌 판정(`moveBlockers`)도 도착 요일로 학생을 걸러서 옛 요일 학생은 보지 않는다 — 막아야 둘 다 맞는다(리뷰 2026-10-28).
+  //    ⚠️ "등원 요일을 먼저 바꾸라"고 권하지 않는다 — 등원 요일 편집은 반의 지금 요일만 고르게 하고, `attendance_days`엔 날짜 축이
+  //    없어 미래 적용일 이동엔 맞는 순서가 없다(모든 요일로 풀면 그 즉시 다른 요일 명단에 섞인다).
+  const dayChanges = windows
+    .map((w) => ({ from: byId.get(w.slotId)!.day_of_week, to: w.day }))
+    .filter((c) => c.from !== c.to);
+  if (dayChanges.length > 0) {
+    // 종료일은 넉넉히 읽고 규약 함수로 거른다(반이동 종료일은 그날 이미 새 반 — `isEnrollmentEndedOn`).
+    const { data: enr, error: enrErr } = await admin
+      .from("enrollments")
+      .select("student_id, attendance_days, end_date, is_transferred, student:student_id ( name )")
+      .eq("tenant_id", user.tenantId)
+      .eq("class_id", classId)
+      .or(`end_date.is.null,end_date.gte.${effective}`);
+    if (enrErr) {
+      logDbError(enrErr, "timetable.moveClassSlots.enrollments");
+      return { ok: false, error: "수강생을 확인하지 못해 중단했습니다. 잠시 후 다시 시도해 주세요" };
+    }
+    const names = daySplitStudents(
+      (enr ?? []).map((e) => {
+        const s = (Array.isArray(e.student) ? e.student[0] : e.student) as { name?: string } | null;
+        return {
+          name: s?.name ?? "이름 없음",
+          attendanceDays: (e.attendance_days as string[] | null) ?? null,
+          endDate: (e.end_date as string | null) ?? null,
+          isTransferred: e.is_transferred === true,
+        };
+      }),
+      dayChanges,
+      effective,
+    );
+    if (names.length > 0) {
+      const shown = names.slice(0, 3).join(", ") + (names.length > 3 ? ` 외 ${names.length - 3}명` : "");
       return {
         ok: false,
-        error: `적용일 이후에 이 교시로 찍힌 출결이 ${stuck}건 있습니다 — 그 기록을 먼저 정리한 뒤 옮겨 주세요`,
+        error: `요일을 정해 다니는 학생(분리등원 · ${shown})이 있는 반은 요일을 옮길 수 없습니다 — 옮기면 그 학생이 명단에서 빠지거나 다른 교시에 더해집니다. 같은 요일 안에서 시각만 옮겨 주세요`,
       };
     }
   }
@@ -233,17 +301,23 @@ export async function moveClassSlots(input: {
     | { kind: "closed"; id: string; prevValidTo: string | null }
     | { kind: "deleted"; row: SlotRow }
   )[] = [];
-  const undo = async () => {
+  /** 되짚기 — 실패한 단계가 있으면 false(화면에 "되돌렸습니다"라고 거짓말하지 않는다 · 리뷰 2026-10-28). */
+  const undo = async (): Promise<boolean> => {
+    let clean = true;
+    const check = (error: unknown) => {
+      if (!error) return;
+      clean = false;
+      logDbError(error, "timetable.moveClassSlots.undo", { classId });
+    };
     // 역순으로 되짚는다(넣은 것은 지우고, 마감은 원래 날짜로, 지운 행은 **원래 id 그대로** 다시 넣는다).
     for (const j of [...journal].reverse()) {
       if (j.kind === "inserted") {
-        await admin.from("class_schedules").delete().eq("id", j.id).eq("tenant_id", user.tenantId);
+        check((await admin.from("class_schedules").delete().eq("id", j.id).eq("tenant_id", user.tenantId)).error);
       } else if (j.kind === "closed") {
-        await admin
-          .from("class_schedules")
-          .update({ valid_to: j.prevValidTo })
-          .eq("id", j.id)
-          .eq("tenant_id", user.tenantId);
+        check(
+          (await admin.from("class_schedules").update({ valid_to: j.prevValidTo }).eq("id", j.id).eq("tenant_id", user.tenantId))
+            .error,
+        );
       } else {
         // 🔴 id를 그대로 되살린다 — 예약 스냅샷·감사로그가 그 id를 가리킨다.
         const { error } = await admin.from("class_schedules").insert(j.row);
@@ -251,11 +325,16 @@ export async function moveClassSlots(input: {
         if (error && isMissingColumnError(error)) {
           const withoutLab = { ...j.row };
           delete withoutLab.lab_separate;
-          await admin.from("class_schedules").insert(withoutLab);
-        }
+          check((await admin.from("class_schedules").insert(withoutLab)).error);
+        } else check(error);
       }
     }
+    return clean;
   };
+  const undoneText = async (what: string) =>
+    (await undo())
+      ? `${what} 되돌렸습니다. 잠시 후 다시 시도해 주세요`
+      : `${what} 되돌리기도 일부 실패했습니다 — 시간표를 새로 고쳐 이 반 배치를 확인해 주세요`;
 
   // 줄마다 **넣고 곧바로 마감**한다(짝으로) — 중간에 실패해도 되짚을 것이 명확하다.
   for (const w of windows) {
@@ -284,8 +363,7 @@ export async function moveClassSlots(input: {
       .single();
     if (insErr || !created) {
       logDbError(insErr, "timetable.moveClassSlots");
-      await undo();
-      return { ok: false, error: "새 배치를 넣지 못해 되돌렸습니다. 잠시 후 다시 시도해 주세요" };
+      return { ok: false, error: await undoneText("새 배치를 넣지 못해") };
     }
     journal.push({ kind: "inserted", id: String(created.id) });
 
@@ -297,8 +375,8 @@ export async function moveClassSlots(input: {
         : admin.from("class_schedules").delete().eq("id", row.id).eq("tenant_id", user.tenantId);
     const { error: closeErr } = await closing;
     if (closeErr) {
-      await undo();
-      return { ok: false, error: "옛 배치를 마감하지 못해 되돌렸습니다. 잠시 후 다시 시도해 주세요" };
+      logDbError(closeErr, "timetable.moveClassSlots.close");
+      return { ok: false, error: await undoneText("옛 배치를 마감하지 못해") };
     }
     journal.push(
       validFrom && validFrom < effective
@@ -326,7 +404,13 @@ export async function moveClassSlots(input: {
       newSlotIds: createdIds,
     },
   });
+  // 배치를 읽는 화면 모두(시간표 저장 `master-sheet-actions`와 같은 범위 + 그 반 상세).
   revalidatePath("/timetable");
+  revalidatePath("/classes");
+  revalidatePath(`/classes/${classId}`);
+  revalidatePath("/students", "layout");
+  revalidatePath("/ecs");
+  revalidatePath("/attendance");
   return { ok: true, moved: windows.length };
 }
 

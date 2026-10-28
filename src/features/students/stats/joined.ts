@@ -107,7 +107,12 @@ export function joinNote(history: readonly Point[], months: readonly HistoryMont
   if (rec.length) parts.push(`${monthText(rec[0]!)}~${monthText(rec.at(-1)!)}은 메이크에듀 재원생 기록(휴원·수업 시작 전 포함)`);
   if (pay.length) parts.push(`${monthText(pay[0]!)}~${monthText(pay.at(-1)!)}은 수업료가 청구된 학생 수로 추정(미납 포함 · 휴원·시작 전 제외${paying.some((m) => m.payingTotal === undefined) ? " · 전체 청구 집계가 없는 달은 EiE 제외" : ""})`);
   const head = aywaFrom ? `${monthText(aywaFrom)}부터 에이와 기록으로 세고, 그 전은 지난 기록으로 이었습니다 — ` : "지난 기록으로 이었습니다 — ";
-  return `${head}${parts.join(" · ")}. 점선 구간은 뜻이 조금 달라 에이와 구간과 몇 명 차이가 날 수 있습니다.`;
+  // 비운 달(청구가 비정상으로 적어 청구 칸을 비운 달 — 재원생 기록도 없으면 점이 없다)이 구간 안에 있으면 밝힌다 — 축이 그 달을 건너뛰어
+  // 앞뒤 달이 바로 이어져 보인다(리뷰 2026-10-28).
+  const [first, last] = [history[0]!.key, history.at(-1)!.key];
+  const gaps = months.filter((m) => m.skipped && historyCount(m) === null && m.month > first && m.month < last).map((m) => monthText(m.month));
+  const gapText = gaps.length ? ` ${gaps.join(" · ")}은 청구가 비정상으로 적어 비운 달이라 점이 없습니다(앞뒤 달이 바로 이어집니다).` : "";
+  return `${head}${parts.join(" · ")}. 점선 구간은 뜻이 조금 달라 에이와 구간과 몇 명 차이가 날 수 있습니다.${gapText}`;
 }
 
 /** 구간 경계 표식 — `index` 칸부터 `after` 기준(그 앞은 `before`). 차트가 세로 점선 + 양쪽 짧은 이름으로 그린다. */

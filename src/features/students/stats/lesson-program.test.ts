@@ -9,6 +9,54 @@ const SUBJECTS = [
 ];
 const names = (...rows: [string, number][]) => rows.map(([name, weight]) => ({ name, weight }));
 
+describe("lessonProgramClassifier — 2026-10-28 과목 낱말(메이크에듀 '과목 모름'으로 남던 것)", () => {
+  it("매쓰몽·기벡 = 수학 · 영단어·voca = 영어 · 과목이 갈리는 낱말(SKY·문법)은 정하지 않는다", () => {
+    const classify = lessonProgramClassifier([], SUBJECTS);
+    expect(classify("매쓰몽사고력정규1A/2A(월) / 사고력교과")).toBe("math");
+    expect(classify("하승훈 기벡2T 목토")).toBe("math");
+    expect(classify("(여름특강)중등필수영단어반 화토2T")).toBe("injaewon");
+    expect(classify("Power Voca 반")).toBe("injaewon");
+    expect(classify("초등 SKY 월수목")).toBeNull();
+    expect(classify("중등 핵심문법완성반")).toBeNull();
+  });
+});
+
+describe("lessonProgramClassifier — 옛 강사 `loose`(원장 2026-10-28 \"디올 승헌 수학 · 브라이언 영어 · (임) 수학\")", () => {
+  const former = [
+    { names: ["디올", "Rich", "(임)"], subjects: ["math"], loose: true },
+    { names: ["브라이언"], subjects: ["english"], loose: true },
+  ];
+  it("강사 표시 모양이 아니어도 이름이 보이면 그 과목 — '(디올)'·소문자 'richY'·'브라이언 …'·'금(이)' 꼴 괄호", () => {
+    const cls = lessonProgramClassifier([], SUBJECTS, former);
+    expect(cls("중2 내신대비 주말보충2T 토 (디올)")).toBe("math");
+    expect(cls("중등S특별반_화금 richY")).toBe("math");
+    expect(cls("브라이언 시그니처 MID 1S 2T(3h) 화금")).toBe("injaewon");
+    expect(cls("인재원 초6 중등프리미엄(오끝) 월목2(임)")).toBe("math");
+    expect(cls("인재원 금(임) 특강")).toBe("math");
+  });
+  it("🔴 모름일 때만 — 과목 이름이 적힌 반은 그 과목 · 두 과목 합반·강사 표시가 엇갈린 반은 모름 그대로 · 경계 밖 이름은 아니다", () => {
+    const cls = lessonProgramClassifier([], SUBJECTS, former);
+    expect(cls("디올T 초등 과학 탐구")).toBe("science");
+    expect(cls("수학 영어 통합반 (디올)")).toBeNull();
+    expect(cls("Richard 특강")).toBeNull();
+    expect(cls("Enrich 특강")).toBeNull();
+    expect(cls("이디올 특강")).toBeNull();
+    expect(lessonProgramClassifier([], SUBJECTS, former.map((f) => ({ ...f, loose: false })))("중2 주말보충 (디올)")).toBeNull();
+    const mixed = lessonProgramClassifier([], SUBJECTS, [...former, { names: ["Gana"], subjects: ["english"] }, { names: ["Rama"], subjects: ["math"] }]);
+    expect(mixed("(토) 특강 Gana Rama 디올")).toBeNull(); // 강사 표시 둘이 엇갈림 — 메우지 않는다
+  });
+  it("바깥 라벨(원장 시트 반형태)도 모름일 때만 — 정해진 판정·합반은 그대로", () => {
+    const labels = new Map([["초등 SKY 월수목", "english"], ["중등수학 2T 화금", "english"], ["수학 영어 통합반", "math"], ["서연고 특반 클리닉수업", "math"]]);
+    const cls = lessonProgramClassifier([], SUBJECTS, [], labels);
+    expect(cls("초등 SKY 월수목")).toBe("injaewon");
+    expect(cls("서연고 특반 클리닉수업")).toBe("math");
+    expect(cls("중등수학 2T 화금")).toBe("math"); // 이름에 과목 — 라벨이 뒤집지 않는다
+    expect(cls("수학 영어 통합반")).toBeNull();
+    // 두 과목 옛 강사가 함께 적힌 반도 라벨로 메우지 않는다(리뷰 2026-10-28)
+    expect(lessonProgramClassifier([], SUBJECTS, former, new Map([["(토) 특강 디올 브라이언", "math"]]))("(토) 특강 디올 브라이언")).toBeNull();
+  });
+});
+
 describe("lessonProgramClassifier — 수업명 → 프로그램(지난 기록)", () => {
   it("실제 설정된 중국어와 전각 괄호 과목 라벨을 보존한다", () => {
     const classify = lessonProgramClassifier([], [...SUBJECTS, { key: "chinese", label: "중국어" }, { key: "advanced_korean", label: "국어（심화）" }]);

@@ -133,6 +133,7 @@ export const HUB_GROUPS: HubGroup[] = [
       fromMenu("classes", "반 목록·반 정보 관리"),
       fromMenu("textbooks", "교재·차수별 진도·과제"),
       fromMenu("lesson_reports", "목록·작성률·발송 관리"),
+      fromMenu("before_class_checklist", "수업 전 숙제·준비 체크"),
       fromMenu("class_review", "수업 참관·평가 기록"),
       fromMenu("teacher_onescreen", "담당 학생 수업 마감", { teacherOnly: true }),
       // 출석부의 다른 면 — 자주 쓰는 자리는 위 버튼이고, 나머지는 작은 줄로. 설명도 둔다 — 탭 및 메뉴 구성에서 묶음을 바꾸면 큰 카드로 서는데

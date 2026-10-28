@@ -155,6 +155,12 @@ export async function HistorySection({ stats, parts, settings, scopeLabel }: Ctx
   if (history.error) return <StatCard id="history" title="지난 기록" note="수업료가 청구된 학생 · 실제 신규" error />;
   if (!history.data?.months.length) return null;
   const label = (p: Program) => ({ label: programLabel(p, settings.operations.subjects, stats.eieOn), color: PROGRAM_COLOR[p] });
+  // 그 밖의 과목(국어·과학…) 이름·색 — 재원생 추이 과목별 선과 같은 값(원장 2026-10-28 *"과목별로 분리가능한 수준까지"*).
+  const subjectMaps = buildSubjectMaps(settings.operations.subjects);
+  const tokens = distinctSubjectTokens(settings.operations.subjects.map((s) => ({ key: s.key, color: subjectMaps.colorOf(s.key) })));
+  const subjects = Object.fromEntries(
+    settings.operations.subjects.map((s) => [s.key, { label: subjectMaps.labelOf(s.key), color: tokenColor(tokens.get(s.key) ?? subjectMaps.colorOf(s.key)) }]),
+  );
   return (
     <HistoryBoard
       months={history.data.months}
@@ -163,7 +169,7 @@ export async function HistorySection({ stats, parts, settings, scopeLabel }: Ctx
       payingHidden={history.data.payingHidden}
       initialView={stats.prefs.historyView}
       wide={!!scopeLabel}
-      programs={{ math: label("math"), injaewon: label("injaewon"), eie: label("eie") }}
+      programs={{ math: label("math"), injaewon: label("injaewon"), eie: label("eie"), subjects }}
     />
   );
 }

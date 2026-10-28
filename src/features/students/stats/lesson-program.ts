@@ -28,8 +28,12 @@ import { subjectNameText } from "./lesson-subject-name";
 /** 'eie' · 'injaewon' · 'math' 또는 그 밖의 과목 키(설정 키 그대로). */
 export type LessonProgram = string;
 export type LessonName = { name: string; weight: number };
-/** 직원 한 명 — 이름들(표시 이름·영문 이름)과 담당 과목 키. 담당이 한 묶음일 때만 강사 표시를 가른다. */
-export type LessonStaff = { names: readonly (string | null | undefined)[]; subjects: readonly string[] };
+/**
+ * 직원 한 명 — 이름들(표시 이름·영문 이름)과 담당 과목 키. 담당이 한 묶음일 때만 강사 표시를 가른다.
+ * `loose` = 이름이 강사 표시 모양('OOT'·'(OOO)'·'Brian')이 아니어도 수업명에 보이면 그 강사로 본다 — 지난 기록의 옛 강사('(디올)'·소문자
+ * 'richY' · 운영자 스크립트가 원장 확인으로 넣는다). 판정이 모름일 때만이고 두 과목이 적힌 합반은 그대로 모름이다.
+ */
+export type LessonStaff = { names: readonly (string | null | undefined)[]; subjects: readonly string[]; loose?: boolean };
 
 const LEVEL = "(?:초중등|초등|중등|고등|중고|예비중등|예비고등|예비고|예비중|고[1-3]|중[1-3]|초[1-6])";
 const LETTER = new RegExp(`${LEVEL}\\s*\\d?\\s*([EM])(?![A-Za-z])`);
@@ -37,9 +41,11 @@ const WEEKDAYS = "월화수목금토일";
 /** 한국 성(흔한 것) — 'OOO반'·'(OOO)'를 사람 이름으로 볼 때만('정규반'·'(월목)'·'의치대반'은 강사가 아니다). */
 const SURNAMES = "김이박최정강조윤장임한오서신권황안송류유전홍고문양손배백허남심노하곽성차주우구민진나지엄채원천방공현함변염여추도석선설마길연위표명기반왕금옥육인맹제모탁국어은편용예봉경사부가복태판소라승동피감음빈호상범좌팽";
 /** 한 과목에서만 쓰는 수업 낱말 → 묶음(설정에 그 묶음이 있을 때만) — 과목 이름이 안 적힌 옛 수업명('초5Bridge-TOP'·'[특강] 중1도형특강'). */
+// 2026-10-28(원장 *"과목별로 분리가능한 수준까지 쫙 분리"*): 메이크에듀 2020~2022 '과목 모름'으로 남던 낱말 — '매쓰몽'(수학 프로그램 · 72줄)·
+// '기벡'(기하와 벡터)·'영단어'·'voca'. 과목이 갈리는 낱말('SKY'·'ACE'·'프리미엄'·'수능'·'문법' — 국어 문법도 있다)은 넣지 않는다.
 const SUBJECT_WORDS: readonly [RegExp, string][] = [
-  [/phonics|bridge|브릿지|reading|리딩|영문법|영특|영작|어법|shadowing/i, "english"],
-  [/수\((?:상|하|II?|Ⅰ|Ⅱ)\)|(?:공수|고등수|수학)\s*[12]|(?<![가-힣A-Za-z])수\s*(?:[12]|II?|Ⅰ|Ⅱ)(?![A-Za-z0-9])|미적분?|확통|기하|도형|대수|함수|고등\s*하(?=\s|$)|(?<![A-Za-z])KUT(?![A-Za-z])/i, "math"],
+  [/phonics|bridge|브릿지|reading|리딩|영문법|영특|영작|어법|shadowing|영단어|(?<![a-z])voca/i, "english"],
+  [/수\((?:상|하|II?|Ⅰ|Ⅱ)\)|(?:공수|고등수|수학)\s*[12]|(?<![가-힣A-Za-z])수\s*(?:[12]|II?|Ⅰ|Ⅱ)(?![A-Za-z0-9])|미적분?|확통|기하|기벡|도형|대수|함수|매쓰몽|매스몽|고등\s*하(?=\s|$)|(?<![A-Za-z])KUT(?![A-Za-z])/i, "math"],
 ];
 const PURITY = 0.9;
 const MIN_ROWS = 10;
@@ -138,13 +144,39 @@ function staffTokens(staff: readonly LessonStaff[], subjects: readonly ProgramSu
   return new Map([...seen].filter(([, gs]) => gs.size === 1).map(([k, gs]) => [k, [...gs][0]!]));
 }
 
+const escapeRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/**
+ * `loose` 직원 이름 → 수업명에서 찾을 모양. 영문은 첫 글자 대소문자 무시 · 낱말 경계('Rich' ≠ 'Richard' · 'richY'는 맞다) · 한글은 앞뒤에
+ * 한글이 붙으면 다른 이름('이승헌' ≠ '승헌') — 괄호처럼 한글이 아닌 끝에는 경계를 걸지 않는다('금(이)'도 맞다).
+ */
+function looseMarks(staff: readonly LessonStaff[], subjects: readonly ProgramSubject[]): [RegExp, string][] {
+  const byName = new Map<string, Set<string>>();
+  for (const person of staff) {
+    if (!person.loose) continue;
+    const own = new Set(person.subjects.map((k) => subjectGroupOf(k, subjects)).filter((g): g is string => !!g));
+    if (own.size !== 1) continue;
+    for (const raw of person.names) {
+      const t = raw?.trim();
+      if (t) (byName.get(t) ?? byName.set(t, new Set()).get(t)!).add([...own][0]!);
+    }
+  }
+  const hangul = (c: string) => /[가-힣]/.test(c);
+  return [...byName].filter(([, gs]) => gs.size === 1).map(([n, gs]) => {
+    const body = /^[A-Za-z]/.test(n) ? `(?<![A-Za-z])[${n[0]!.toUpperCase()}${n[0]!.toLowerCase()}]${escapeRe(n.slice(1))}(?![a-z])`
+      : `${hangul(n[0]!) ? "(?<![가-힣])" : ""}${escapeRe(n)}${hangul(n.at(-1)!) ? "(?![가-힣])" : ""}`;
+    return [new RegExp(body), [...gs][0]!];
+  });
+}
+
 /**
  * 판정기를 만든다 — `names`(그 기간에 나온 수업명과 줄 수)에서 강사 표시·프로그램 낱말의 묶음을 배운 뒤, 이름마다 프로그램(모르면 null)을 돌려준다.
+ * `labels` = 수업명 → 묶음(바깥 기록 — 원장 시트의 반형태 · 운영자 스크립트만 넘긴다). 판정이 모름일 때만 쓰고 합반은 그대로 모름.
  */
 export function lessonProgramClassifier(
   names: readonly LessonName[],
   subjects: readonly ProgramSubject[],
   staff: readonly LessonStaff[] = [],
+  labels: ReadonlyMap<string, string> = new Map(),
 ): (name: string) => LessonProgram | null {
   const table = nameTable(subjects);
   const groups = new Set([...table.hangul, ...table.latin].map(([, g]) => g));
@@ -165,9 +197,17 @@ export function lessonProgramClassifier(
     const e = explicitGroup(name, table, groups);
     return e === null ? voteGroup(name, tokens) : e;
   };
+  const loose = looseMarks(staff, subjects);
   return (name) => {
     if (isEieLesson(name)) return "eie";
-    const g = groupOf(name);
+    let g = groupOf(name);
+    if (g === null && loose.length) {
+      const hit = new Set(loose.filter(([re]) => re.test(name)).map(([, lg]) => lg));
+      // 두 과목 강사가 함께 적혔으면 모름 — 운영자 표시(`labels`)로도 메우지 않는다(강사 표시가 엇갈린 반은 한쪽으로 몰지 않는다).
+      if (hit.size === 1) g = [...hit][0]!;
+      else if (hit.size > 1) g = AMBIGUOUS;
+    }
+    if (g === null) g = labels.get(name) ?? null;
     return typeof g === "string" ? programOfGroup(g) : null;
   };
 }
@@ -211,10 +251,10 @@ function learnTokens(names: readonly LessonName[], assigned: ReadonlyMap<string,
   return { teacher, word: pure(tally(names, assigned, wordTokens), MIN_WORD_NAMES) };
 }
 
-/** 강사 표시가 가리키는 묶음 — 강사 표시가 아무것도 못 가리키면 프로그램 낱말로. 하나면 그 묶음, 여럿이면 null. */
-function voteGroup(name: string, tokens: Tokens): string | null {
+/** 강사 표시가 가리키는 묶음 — 강사 표시가 아무것도 못 가리키면 프로그램 낱말로. 하나면 그 묶음, 여럿이면 `AMBIGUOUS`(모름 — `loose` 강사로도 메우지 않는다), 없으면 null. */
+function voteGroup(name: string, tokens: Tokens): Group {
   const vote = (list: string[], map: ReadonlyMap<string, string>) => new Set(list.flatMap((t) => (map.has(t) ? [map.get(t)!] : [])));
   const byTeacher = vote(teacherTokens(name), tokens.teacher);
   const votes = byTeacher.size ? byTeacher : vote(wordTokens(name), tokens.word);
-  return votes.size === 1 ? [...votes][0]! : null;
+  return votes.size === 1 ? [...votes][0]! : votes.size > 1 ? AMBIGUOUS : null;
 }

@@ -26,10 +26,25 @@ describe("반 배치 이동(moveClassSlots) 배선", () => {
     expect(src).toContain("getTeacherScheduleBlocks(");
   });
 
-  it("적용일 이후 그 교시로 찍힌 출결이 있으면 거절한다([[#126]]) — 요일까지 본다", () => {
-    expect(src).toContain("attendance_records");
-    expect(src).toContain("slot_start");
-    expect(src).toContain("weekdayOf(");
+  it("적용일 이후 그 교시에 매달린 기록(출결·수업 계획·학생 기록·미룸)이 있으면 거절한다([[#126]]) — 요일까지 본다", () => {
+    expect(src).toContain("SLOT_ANCHORS");
+    expect(src).toContain('.eq("slot_start", String(row.start_time))');
+    expect(src).toContain("weekdayOf(d) === row.day_of_week");
+    const anchors = read("src/features/timetable/lib/slot-anchors.ts");
+    for (const t of ["attendance_records", "class_sheet_plan_lines", "class_sheet_student_marks", "class_lesson_shifts"]) expect(anchors).toContain(`"${t}"`);
+  });
+
+  it("오늘 수업이 있는 교시는 오늘부터 옮기지 않는다 · 분리등원 학생이 있으면 요일을 바꾸지 않는다(리뷰 2026-10-28)", () => {
+    expect(src).toMatch(/effective === today && windows\.some\(\(w\) => byId\.get\(w\.slotId\)!\.day_of_week === weekdayOf\(today\)\)/);
+    expect(src).toContain("daySplitStudents(");
+    expect(src).toContain('.from("enrollments")');
+    expect(src).not.toContain("등원 요일을 먼저 정리해 주세요"); // 등원 요일 편집은 반의 지금 요일만 고른다 — 맞는 순서가 없다
+  });
+
+  it("🔴 시간표 화면이 실패 **이유**를 그린다 — 개수만 그리면 막힘 안내가 사용자에게 닿지 않는다(리뷰 2026-10-28)", () => {
+    const board = read("src/app/(shell)/timetable/_components/timetable-board.tsx");
+    expect(board).toContain("{failed[0]}");
+    expect(board).not.toContain("실패(시간겹침 등)");
   });
 
   it("옛 행은 마감하고 새 행을 넣는다(temporal) — 제자리 수정이 아니다", () => {
