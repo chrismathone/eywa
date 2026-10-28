@@ -498,6 +498,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     // 보고서 쪽만 잠그는 근거 — 목록에서 빼는 데는 쓰지 않는다(위 주석).
     report_optout: c.reportOptout,
     delegated: c.delegated,
+    jjReport: c.jjReport === true,
     ownerName: c.ownerName,
     delegatedAwayTo: c.delegatedAwayTo,
   }));
@@ -607,7 +608,9 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   // 강사에게 담당 반 7개·학생 37명을 "오늘 목록"처럼 보여줬다(2026-07-22 이수진 사례, 타입 주석 참조).
   // 전체 보기는 남기되 **강사가 명시로 고를 때만**(showAll) — 그때는 화면이 "전체 보기 중"임을 밝힌다.
   // ⚠️ 빈 목록이어도 학원설정(config)은 그대로 실어 보낸다 — 이 화면에서도 '+ 보강 학생 추가'로 발송이 가능하다.
-  const noClassesToday = todayIds.size === 0;
+  // JJ 보고서 담당 반 — 그날 수업이 없어도 늘 세운다(원장 2026-10-28 *"일주일에 한번 보내거나 … 수업이 없어도 떠야함"*, delegation.ts).
+  const jjIds = new Set(allClasses.filter((c) => c.jjReport).map((c) => c.id));
+  const noClassesToday = todayIds.size === 0 && jjIds.size === 0;
   // 🔴 그날 보강 기록이 있으면 "수업 없음"이어도 화면을 비우지 않는다 — 보강만 있는 날엔 그게 유일한 기록이고,
   //    비우면 강사가 방금 발송한 보고서를 찾을 길이 사라진다(원장 2026-08-03). 단 **담당반 전체 폴백은
   //    여전히 금지**(2026-07-22 회귀 방지) — 반 목록은 비우고 보강 행만 싣는다.
@@ -628,7 +631,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     ? showAll
       ? allClasses
       : []
-    : allClasses.filter((c) => todayIds.has(c.id));
+    : allClasses.filter((c) => todayIds.has(c.id) || jjIds.has(c.id));
   const classById = new Map(activeClasses.map((c) => [c.id, c]));
   const activeIds = activeClasses.map((c) => c.id);
 
@@ -654,7 +657,8 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   );
   // 그 요일에 안 오는 학생(분리등원)·휴원은 제외 — 폴백(요일 수업 없음)일 땐 요일 조건 미적용.
   const enrollments = enrollmentRows.filter((e) =>
-    rosterIncludesEnrollment(e, targetDate, dow, todayIds.size > 0),
+    // JJ 담당 반은 등원 요일로 거르지 않는다(수업 없는 날에도 반 전원 — 보고서는 주 단위로 쓴다).
+    rosterIncludesEnrollment(e, targetDate, dow, todayIds.size > 0 && !jjIds.has(e.class_id)),
   );
   // 결정적 정렬(반 시작시각→class_id) — '대표 반'(tag=첫 반)·과목 행 순서를 새로고침 간 안정화(비결정 방지).
   enrollments.sort(
@@ -745,7 +749,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       );
       foreignClasses = rows.map((c) => ({
         id: c.id, class_name: c.class_name, subject: c.subject, is_special: false, report_optout: false,
-        delegated: false, ownerName: null, delegatedAwayTo: null,
+        delegated: false, jjReport: false, ownerName: null, delegatedAwayTo: null,
       }));
     } catch {
       makeupNotice = MAKEUP_UNREAD_NOTICE;
