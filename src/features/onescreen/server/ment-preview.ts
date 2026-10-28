@@ -109,7 +109,9 @@ export async function runMentPreview(
 
   const [rosterRes, teacherRes, mentStyle, history] = await Promise.all([
     teacherId ? db.from("onescreen_daily_sessions").select(SESSION_COLS).eq("tenant_id", tenantId).eq("session_date", reportDate).eq("updated_by", teacherId) : null,
-    teacherId ? db.from("users").select("name, report_notice_mode").eq("tenant_id", tenantId).eq("id", teacherId).maybeSingle() : null,
+    // 🔴 이름 칸은 `display_name`이다 — `name`을 읽어 PostgREST가 오류를 냈고, 작성자가 잡히는 보고서마다 "선생님을(를) 읽지 못했습니다"로
+    //    미리보기가 멈췄다(2026-10-28 · 가짜 DB 시험이 칸을 안 봐서 통과). 시험이 select 칸을 SQL 정의와 대조한다.
+    teacherId ? db.from("users").select("display_name, report_notice_mode").eq("tenant_id", tenantId).eq("id", teacherId).maybeSingle() : null,
     // 운영과 같은 읽기(admin · tenant 필터는 함수 안) — 실패·표 없음은 null(말투 없이)이라 운영과 같다.
     teacherId ? loadTeacherMentStyle(createAdminClient(), tenantId, teacherId) : null,
     fetchScoreHistory(db, studentId, subjectKey || undefined, reportDate, 90, { classId, specialClassIds, lookbackDays: TREND_HISTORY_FETCH_DAYS }),
@@ -195,7 +197,7 @@ export async function runMentPreview(
       mode,
       hasSpecialNote: !!safeInput.specialNote.trim(),
       hasClassNotice: !!safeInput.classNotice?.trim(),
-      styleTeacher: mentStyle && teacher ? str(teacher.name) || null : null,
+      styleTeacher: mentStyle && teacher ? str(teacher.display_name) || null : null,
     }),
   };
 }
