@@ -12,12 +12,12 @@ export const BEFORE_CLASS_ITEMS = [
   { key: "preview_video", label: "예습 영상 촬영 미흡", short: "예습 영상" },
   { key: "concept_note", label: "개념 노트 정리 미흡", short: "개념 노트" },
   { key: "solution_note", label: "풀이 노트 작성 미흡", short: "풀이 노트" },
-  { key: "print_homework", label: "프린트 과제 미흡", short: "프린트 과제" },
+  { key: "print_homework", label: "과제 미흡", short: "과제" },
   { key: "main_solve", label: "본교재 문제풀이 미흡", short: "본교재 풀이" },
   { key: "main_review", label: "본교재 오답정리 미흡", short: "본교재 오답" },
   { key: "sub_solve", label: "부교재 문제풀이 미흡", short: "부교재 풀이" },
   { key: "sub_review", label: "부교재 오답정리 미흡", short: "부교재 오답" },
-  { key: "materials", label: "교재 / 패드 미지참", short: "교재·패드" },
+  { key: "materials", label: "교재 미지참", short: "교재" },
   { key: "deadline", label: "제출 시간 미준수", short: "제출 시간" },
 ] as const;
 
@@ -84,6 +84,31 @@ export function summarizeStudent(checks: readonly BeforeClassCheck[]) {
     absentCount: checks.filter((c) => c.absent).length,
     itemCounts,
   };
+}
+
+/**
+ * 수업보고서 '수업 평가' 표 시안(원장 2026-10-28)의 체크리스트 줄 — 다섯 눈금(하·중하·중·중상·상)으로 옮긴다.
+ * 🔴 **시안용 임시 규칙**이다(원장 확정 전): 항목 하나짜리 줄은 해 옴 = 상 · 미흡 = 하, 본교재·부교재 둘을 묶은 줄은
+ *    둘 다 해 옴 = 상 · 하나 미흡 = 중 · 둘 다 미흡 = 하. 결석이면 줄 값 없음. 기준이 바뀌면 이 표만 고친다.
+ */
+export const REPORT_CHECK_ROWS = [
+  { label: "예습영상", keys: ["preview_video"] },
+  { label: "개념정리", keys: ["concept_note"] },
+  { label: "풀이노트정리", keys: ["solution_note"] },
+  { label: "문제풀이", keys: ["main_solve", "sub_solve"] },
+  { label: "오답정리", keys: ["main_review", "sub_review"] },
+] as const satisfies readonly { label: string; keys: readonly BeforeClassItemKey[] }[];
+
+export type ReportLevel = "하" | "중하" | "중" | "중상" | "상";
+
+export function reportCheckLevels(check: BeforeClassCheck): { label: string; level: ReportLevel | null }[] {
+  const missed = new Set<string>(normalizeMissed(check.missed));
+  return REPORT_CHECK_ROWS.map((row) => {
+    if (check.absent) return { label: row.label, level: null };
+    const miss = row.keys.filter((k) => missed.has(k)).length;
+    const level: ReportLevel = miss === 0 ? "상" : miss === row.keys.length ? "하" : "중";
+    return { label: row.label, level };
+  });
 }
 
 export function percentLabel(rate: number | null): string {

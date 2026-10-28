@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   BEFORE_CLASS_CARDS, BEFORE_CLASS_ITEMS, completionRate, needsSupplement, normalizeMissed, percentLabel,
@@ -14,6 +15,8 @@ const CARD_OPTIONS = [{ value: "", label: "선택 안 함" }, ...BEFORE_CLASS_CA
 /**
  * 하루 체크 표 — 학생 줄 × 미흡 10항목(체크 = 미흡, 시트 그대로) + 결석 + 카드 + 완료율·판정.
  * 읽기 권한이면 칸이 잠긴다(보기 전용). 저장은 부모가 칸마다 즉시 한다.
+ * 체크 칸은 **칸 전체가 누르는 자리**다(원장 2026-10-28) — 상자 대신 칸을 채운 label이 입력을 감싼다.
+ * 결석인 학생은 줄 전체를 노랗게 칠한다(원장 2026-10-28). 이름 칸은 sticky라 같은 색을 따로 준다(불투명 색, [[#74]]).
  */
 export function CheckTable({
   students, checks, canEdit, onChange,
@@ -52,8 +55,8 @@ export function CheckTable({
               onChange(s.id, { ...check, missed: [...next] });
             };
             return (
-              <tr key={s.id} className="border-line-faint border-b">
-                <td className="bg-background sticky left-0 z-10 px-2 py-1.5">
+              <tr key={s.id} className={`border-line-faint border-b ${check.absent ? "bg-report-accent-soft" : ""}`}>
+                <td className={`sticky left-0 z-10 px-2 py-1.5 ${check.absent ? "bg-report-accent-soft" : "bg-background"}`}>
                   <div className="flex items-baseline gap-1.5 whitespace-nowrap">
                     <span className="font-medium">{s.name}</span>
                     <span className="text-text-dim text-xs">{s.schoolGrade}</span>
@@ -61,26 +64,30 @@ export function CheckTable({
                   </div>
                 </td>
                 {BEFORE_CLASS_ITEMS.map((i) => (
-                  <td key={i.key} className={`px-1 py-1.5 text-center ${missed.has(i.key) ? "bg-rose-soft" : ""}`}>
-                    <input
-                      type="checkbox"
-                      className="size-4 cursor-pointer accent-[var(--color-rose)] disabled:cursor-default"
-                      aria-label={`${s.name} ${i.label}`}
-                      checked={missed.has(i.key)}
-                      disabled={!canEdit}
-                      onChange={() => toggle(i.key)}
-                    />
+                  <td key={i.key} className={`p-0 text-center ${missed.has(i.key) ? "bg-rose-soft" : ""}`}>
+                    <CellBox canEdit={canEdit}>
+                      <input
+                        type="checkbox"
+                        className="size-4 cursor-pointer accent-[var(--color-rose)] disabled:cursor-default"
+                        aria-label={`${s.name} ${i.label}`}
+                        checked={missed.has(i.key)}
+                        disabled={!canEdit}
+                        onChange={() => toggle(i.key)}
+                      />
+                    </CellBox>
                   </td>
                 ))}
-                <td className={`px-1 py-1.5 text-center ${check.absent ? "bg-danger-soft" : ""}`}>
-                  <input
-                    type="checkbox"
-                    className="size-4 cursor-pointer accent-[var(--color-danger)] disabled:cursor-default"
-                    aria-label={`${s.name} 결석`}
-                    checked={check.absent}
-                    disabled={!canEdit}
-                    onChange={() => onChange(s.id, { ...check, absent: !check.absent })}
-                  />
+                <td className="p-0 text-center">
+                  <CellBox canEdit={canEdit}>
+                    <input
+                      type="checkbox"
+                      className="size-4 cursor-pointer accent-[var(--color-amber)] disabled:cursor-default"
+                      aria-label={`${s.name} 결석`}
+                      checked={check.absent}
+                      disabled={!canEdit}
+                      onChange={() => onChange(s.id, { ...check, absent: !check.absent })}
+                    />
+                  </CellBox>
                 </td>
                 <td className="px-1 py-1 text-center">
                   {canEdit ? (
@@ -105,5 +112,14 @@ export function CheckTable({
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** 칸을 꽉 채운 누르는 자리 — label이라 칸 어디를 눌러도 안의 체크 상자가 바뀐다([[#66]] 셀을 채우는 것은 칸 자신의 자식). */
+function CellBox({ canEdit, children }: { canEdit: boolean; children: ReactNode }) {
+  return (
+    <label className={`flex min-h-9 w-full items-center justify-center px-1 ${canEdit ? "hover:bg-bg-soft cursor-pointer" : ""}`}>
+      {children}
+    </label>
   );
 }

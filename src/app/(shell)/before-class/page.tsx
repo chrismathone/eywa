@@ -8,6 +8,10 @@ import { defaultCheckDate } from "@/features/before-class/dates";
 import { loadClassMonth, loadTargets } from "@/features/before-class/server/queries";
 import { ClassPicker } from "@/features/before-class/components/class-picker";
 import { ChecklistBoard } from "@/features/before-class/components/board";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { reportLogoPath } from "@/features/owner/report-logo";
+import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
+import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 
 export const metadata = { title: "비포클래스체크리스트(초안) — 에이와" };
 
@@ -28,7 +32,14 @@ export default async function BeforeClassPage({ searchParams }: { searchParams: 
     loadTargets(user.tenantId),
   ]);
   const current = targets.find((t) => t.id === one(sp.class)) ?? targets[0] ?? null;
-  const data = current ? await loadClassMonth(user.tenantId, current.id, month) : null;
+  const [data, settings] = await Promise.all([
+    current ? loadClassMonth(user.tenantId, current.id, month) : Promise.resolve(null),
+    getTenantSettings(),
+  ]);
+  // 보고서 시안의 로고 — 학부모 보고서와 같은 해석(실패해도 로고 없이 그린다).
+  const logoPath = reportLogoPath(settings);
+  const logoSrc = logoPath ? await resolveBrandingSrc(logoPath, user.tenantId).catch(() => null) : null;
+  const academyName = settings.profile.name || NEUTRAL_ACADEMY_NAME;
   const href = (m: string) => `/before-class?${current ? `class=${current.id}&` : ""}month=${m}`;
   const thisMonth = kstMonth();
 
@@ -54,12 +65,14 @@ export default async function BeforeClassPage({ searchParams }: { searchParams: 
           <ChecklistBoard
             key={`${current.id}|${month}`}
             classId={current.id}
+            month={month}
             dates={data.dates}
             students={data.students}
             initialChecks={data.checks}
             initialDate={defaultCheckDate(data.dates, kstToday())}
             today={kstToday()}
             canEdit={level === "full"}
+            report={{ levels: data.reportLevels, className: current.name, teacherName: current.teacherName, logoSrc, academyName }}
           />
         </>
       )}

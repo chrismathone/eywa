@@ -6,7 +6,9 @@ import { Toolbar, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolba
 import { shortDateLabel } from "../dates";
 import { isBlankCheck, needsSupplement, type BeforeClassCheck } from "../items";
 import { saveBeforeClassCheck } from "../server/actions";
-import { checkKey, type RosterStudent } from "../types";
+import { checkKey, type ReportDayLevels, type RosterStudent } from "../types";
+import { DateCalendar } from "./date-calendar";
+import { ReportPreview } from "./report-preview";
 import { CheckTable } from "./check-table";
 import { MonthTable } from "./month-table";
 
@@ -16,19 +18,22 @@ import { MonthTable } from "./month-table";
  * 누르면 늦게 도착한 옛 값이 새 값을 덮을 수 있어서다. 저장이 실패하면 그 칸을 서버가 마지막으로 확인한 값으로 되돌린다.
  */
 export function ChecklistBoard({
-  classId, dates, students, initialChecks, initialDate, today, canEdit,
+  classId, month, dates, students, initialChecks, initialDate, today, canEdit, report,
 }: {
   classId: string;
+  month: string;
   dates: string[];
   students: RosterStudent[];
   initialChecks: Record<string, BeforeClassCheck>;
   initialDate: string | null;
   today: string;
   canEdit: boolean;
+  /** 보고서 시안 재료 — 그날 보고서 값 · 반·담임 · 학원 로고. */
+  report: { levels: Record<string, ReportDayLevels>; className: string; teacherName: string; logoSrc: string | null; academyName: string };
 }) {
   const [checks, setChecks] = useState(initialChecks);
   const [date, setDate] = useState(initialDate);
-  const [view, setView] = useState<"check" | "month">("check");
+  const [view, setView] = useState<"check" | "month" | "report">("check");
   const queues = useRef(new Map<string, Promise<unknown>>());
   // 서버가 확인한 마지막 값 — 실패하면 화면을 여기로 되돌린다(저장된 적 없는 값을 남기지 않는다).
   const saved = useRef(new Map<string, BeforeClassCheck | undefined>(Object.entries(initialChecks)));
@@ -71,22 +76,34 @@ export function ChecklistBoard({
 
   return (
     <div className="space-y-3">
-      <Toolbar>
+      {/* 레일(가로 스크롤 줄)을 끈다 — 레일은 overflow로 달력 팝오버를 툴바 아래에서 잘라 버린다([[#128]]). */}
+      <Toolbar rail={false} className="flex-wrap">
         <ToolbarSegment label="보기">
           <ToolbarSegmentItem active={view === "check"} onClick={() => setView("check")}>체크</ToolbarSegmentItem>
           <ToolbarSegmentItem active={view === "month"} onClick={() => setView("month")}>월별 현황</ToolbarSegmentItem>
+          <ToolbarSegmentItem active={view === "report"} onClick={() => setView("report")}>보고서 시안</ToolbarSegmentItem>
         </ToolbarSegment>
-        {view === "check" && dates.length > 0 ? (
-          <ToolbarSegment label="수업일" wrap>
-            {dates.map((d) => (
-              <ToolbarSegmentItem key={d} active={d === date} onClick={() => setDate(d)}>{shortDateLabel(d)}</ToolbarSegmentItem>
-            ))}
-          </ToolbarSegment>
+        {view !== "month" && dates.length > 0 ? (
+          <DateCalendar month={month} dates={dates} value={date} today={today} onChange={setDate} />
         ) : null}
       </Toolbar>
 
       {dates.length === 0 ? (
         <p className="text-text-dim px-1 py-6 text-sm">이 달에는 이 반의 수업일이 없습니다.</p>
+      ) : view === "report" ? (
+        date ? (
+          <ReportPreview
+            date={date}
+            today={today}
+            students={dayStudents}
+            checks={checks}
+            reportLevels={report.levels}
+            className={report.className}
+            teacherName={report.teacherName}
+            logoSrc={report.logoSrc}
+            academyName={report.academyName}
+          />
+        ) : null
       ) : view === "month" ? (
         <MonthTable dates={dates} students={students} checks={checks} today={today} onPickDate={(d) => { setDate(d); setView("check"); }} />
       ) : (

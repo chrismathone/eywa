@@ -6,6 +6,7 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { enrollmentAttendsOnDay, isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
 import { classDatesInMonth, dayKeyOf } from "../dates";
 import { normalizeCard, normalizeMissed, type BeforeClassCheck } from "../items";
+import { loadReportLevels } from "./report-levels";
 import { checkKey, type ChecklistTarget, type ClassMonth, type RosterStudent } from "../types";
 
 /**
@@ -55,7 +56,8 @@ type EnrollmentRow = {
 export async function loadClassMonth(tenantId: string, classId: string, month: string): Promise<ClassMonth> {
   const admin = createAdminClient();
   const { from, to } = monthRange(month);
-  const [sched, enr, chk] = await Promise.all([
+  const [cls, sched, enr, chk] = await Promise.all([
+    admin.from("classes").select("subject").eq("tenant_id", tenantId).eq("id", classId).maybeSingle(),
     admin.from("class_schedules").select("day_of_week, valid_from, valid_to").eq("tenant_id", tenantId).eq("class_id", classId),
     admin.from("enrollments")
       .select("student_id, start_date, end_date, is_transferred, on_hold, attendance_days")
@@ -64,6 +66,7 @@ export async function loadClassMonth(tenantId: string, classId: string, month: s
       .select("student_id, check_date, missed, absent, card")
       .eq("tenant_id", tenantId).eq("class_id", classId).gte("check_date", from).lte("check_date", to),
   ]);
+  if (cls.error) throw new Error(`classes: ${cls.error.message}`);
   if (sched.error) throw new Error(`class_schedules: ${sched.error.message}`);
   if (enr.error) throw new Error(`enrollments: ${enr.error.message}`);
   if (chk.error && !isMissingTable(chk.error)) throw new Error(`before_class_checks: ${chk.error.message}`);
@@ -72,8 +75,14 @@ export async function loadClassMonth(tenantId: string, classId: string, month: s
   const byStudent = new Map<string, EnrollmentRow[]>();
   for (const e of (enr.data ?? []) as EnrollmentRow[]) byStudent.set(e.student_id, [...(byStudent.get(e.student_id) ?? []), e]);
 
-  const studentRows = await fetchInChunks([...byStudent.keys()], (ids) =>
-    admin.from("students").select("id, name, school, grade, is_test").eq("tenant_id", tenantId).in("id", ids));
+  const enrolledIds = [...byStudent.keys()];
+  // 보고서 값(보고서 시안)은 명단과 함께 읽는다 — 서로 기다리지 않는다(B4). 과목을 모르는 반이면 읽지 않는다.
+  const subject = (cls.data?.subject as string | null | undefined) ?? null;
+  const [studentRows, reportLevels] = await Promise.all([
+    fetchInChunks(enrolledIds, (ids) =>
+      admin.from("students").select("id, name, school, grade, is_test").eq("tenant_id", tenantId).in("id", ids)),
+    subject ? loadReportLevels(tenantId, enrolledIds, subject, from, to) : Promise.resolve({}),
+  ]);
 
   const students: RosterStudent[] = studentRows
     .filter((s) => !s.is_test)
@@ -101,5 +110,5 @@ export async function loadClassMonth(tenantId: string, classId: string, month: s
       card: normalizeCard(c.card),
     };
   }
-  return { dates, students, checks };
+  return { dates, students, checks, reportLevels };
 }
