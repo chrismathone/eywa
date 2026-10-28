@@ -170,12 +170,13 @@ export function PilotSheetHead(p: PilotSheetHeadProps) {
             </td>
             {/* 제목 = "학생이름 수학 보고서"(원장 2026-10-23) — 이름은 흰색, 보고서 제목은 노랑. */}
             <td rowSpan={3} className={`${CELL} bg-primary px-2 py-3 text-white`}>
+              {/* 학교·학년은 이름 위(원장 2026-10-28 *"학생이름 위로 학교이름 위치 변경"*). */}
+              {p.schoolGrade ? <p className="mb-1.5 text-xs font-medium text-white/80">{p.schoolGrade}</p> : null}
               <p className="text-xl leading-snug font-black break-keep">
                 {p.studentName}{" "}
                 {/* 제목은 한 덩어리로 줄을 바꾼다 — 이름 뒤에서 "수학 / 보고서"로 갈라지지 않게(긴 [특강]·보강 제목은 덩어리 안에서 어절 단위로). */}
                 <span className="text-report-accent inline-block">{p.title}</span>
               </p>
-              {p.schoolGrade ? <p className="mt-1.5 text-xs font-medium text-white/80">{p.schoolGrade}</p> : null}
             </td>
             <td colSpan={2} className={`${CELL} bg-report-tint text-primary h-10 px-1 text-base font-black whitespace-nowrap`}>
               {sheetDateLabel(p.date)}
