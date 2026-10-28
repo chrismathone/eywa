@@ -2,13 +2,16 @@ import { BEFORE_CLASS_CARDS, cardLabel, type BeforeClassCard } from "../items";
 
 const BADGE = "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap";
 
-/** 카드 색 = 시트의 카드 이름 그대로(블루·골드·레드·옐로우) · 카드 X는 중립. */
+/**
+ * 카드 색 = 받은 카드 그 색(원장 2026-10-28 *"받은 카드 색상으로"*) — 진한 바탕. 월별 현황 칸의 옅은 판정 색(파랑·주황·빨강)
+ * 위에서도 카드가 따로 읽혀야 해서 옅은 톤을 쓰지 않는다. 카드 X는 중립(테두리).
+ */
 const CARD_TONE: Record<BeforeClassCard, string> = {
-  blue: "bg-blue-soft text-blue",
-  gold: "bg-gold-soft text-gold",
-  red: "bg-danger-soft text-danger",
-  yellow: "bg-amber-soft text-amber",
-  none: "bg-bg-soft text-text-dim",
+  blue: "bg-blue text-white",
+  gold: "bg-gold-bright text-primary-deep",
+  red: "bg-danger text-white",
+  yellow: "bg-report-accent text-primary-deep",
+  none: "bg-card text-text-dim border-line border",
 };
 
 export function CardBadge({ card, count }: { card: BeforeClassCard | null; count?: number }) {

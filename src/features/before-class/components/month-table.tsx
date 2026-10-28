@@ -2,10 +2,11 @@
 
 import { shortDateLabel } from "../dates";
 import {
-  BEFORE_CLASS_ITEMS, cardLabel, completionRate, needsSupplement, percentLabel, summarizeStudent, type BeforeClassCheck,
+  BEFORE_CLASS_ITEMS, completionRate, needsSupplement, percentLabel, summarizeStudent, type BeforeClassCheck,
 } from "../items";
 import { checkKey, type RosterStudent } from "../types";
 import { DONE_CHECK, isRecordedDay } from "../stats";
+import { CardBadge } from "./badges";
 
 /**
  * 월별 현황 — 학생 줄 × 수업일 칸(완료율 · 결석 · 카드) + 평균 · 보충 필요 횟수 · 결석 · 자주 놓친 항목.
@@ -81,7 +82,7 @@ function MonthCell({ active, check }: { active: boolean; check: BeforeClassCheck
   return (
     <td className={`px-1 py-1 text-center ${tone}`}>
       <div className="font-semibold tabular-nums">{check.absent ? "결석" : percentLabel(completionRate(check))}</div>
-      {check.card ? <div className="text-xs">{cardLabel(check.card)}</div> : null}
+      {check.card ? <div className="mt-0.5"><CardBadge card={check.card} /></div> : null}
     </td>
   );
 }
