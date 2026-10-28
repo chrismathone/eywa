@@ -77,16 +77,6 @@ export function SpecialAccessEditor({ value, hiddenUserIds, staffOptions, nameOf
           nameOf={nameOf}
           onChange={(update) => onChange((prev) => ({ ...prev, staffTaskMonitorIds: update(prev.staffTaskMonitorIds ?? []) }))}
         />
-        {/* 🔴 이 칸만 원장 역할도 고를 수 있다 — 원장도 지정해야 본다(원장 2026-10-23 "이승엽만"). */}
-        <SpecialAccessList
-          label="업체리스트"
-          hint="재고관리의 업체리스트(거래처 연락처)를 볼 수 있는 사람입니다. 이 칸은 원장 역할도 지정해야 보입니다. 등록·수정은 재고관리 쓰기 권한도 있어야 합니다."
-          ids={value.vendorViewerIds ?? []}
-          hiddenUserIds={hiddenUserIds}
-          staffOptions={staffOptions.filter((s) => !hidden.has(s.id))}
-          nameOf={nameOf}
-          onChange={(update) => onChange((prev) => ({ ...prev, vendorViewerIds: update(prev.vendorViewerIds ?? []) }))}
-        />
         <SpecialAccessList
           label="JJ 보고서 담당"
           hint="그날 JJ 교시가 있는 반의 수업보고서를 원스크린에서 쓸 수 있는 사람입니다. JJ는 담당 강사를 두지 않는 자리 교시라, 이 칸으로 보고서 작성자를 정합니다. 그 반 담임도 그대로 함께 씁니다."

@@ -42,7 +42,7 @@ export function tabOfHref(href: string): InventoryTab {
  * 붙인다. 건수를 모르면(조회 실패·표 없음) 숫자를 **안 붙인다** — 0을 적으면 "하나도 없다"는 거짓말이 된다.
  */
 export function inventoryFaces(counts?: Partial<Record<InventoryTab, number | null>>, opts?: { showVendors?: boolean }): Face[] {
-  // 업체리스트는 지정한 사람만(원장 2026-10-23) — 안 보이는 사람에겐 탭 자체가 없다. 기본은 감춤(닫힌 쪽).
+  // 업체리스트 탭은 열람 게이트(canViewVendorsNow — 재고관리를 여는 직원 전원)를 통과한 사람에게만. 기본은 감춤(닫힌 쪽).
   return INVENTORY_FACE_DEFS.filter((f) => f.key !== "vendors" || opts?.showVendors === true).map((f) => {
     const n = counts?.[f.key];
     return { key: f.key, label: typeof n === "number" ? `${f.label} ${n}` : f.label, href: f.href };
