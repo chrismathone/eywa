@@ -79,6 +79,7 @@ import { getVideoReceiptComment } from "@/features/video-homework/server/receipt
 import { appendVideoReceiptComment } from "@/features/video-homework/receipt-comment";
 import { videoSubmitLinkColumn } from "@/features/video-submit/server/link-choice-db";
 import { loadTeacherMentStyle } from "./ment-style-db";
+import { expectedVideoDue, videoDueTextMismatch } from "@/features/video-homework/due-text-check";
 import { loadSectionEditExamples, restylePilotSections, type SectionEditExample } from "./pilot-restyle";
 import { transplantRestyle } from "../pilot-restyle-guard";
 import type { MentStyleProfile } from "../ment-style";
@@ -111,6 +112,8 @@ import { classRouteActive, NO_SEND_CLASS_ERROR, SEND_CLASS_SUBJECTS } from "../s
 /** 영상 숙제 마감이 고른 것과 다르게 저장된 줄은 보내지 않는다(saveAndQueueClassnote — 까닭은 화면이 따로 알린다, due-write.ts). */
 const VIDEO_DUE_CHANGED_ERROR = "영상 숙제 마감이 고른 것과 달라져 보내지 않았습니다(저장은 했습니다) — 멘트의 마감을 확인한 뒤 다시 보내 주세요";
 /** 장부에서 취소된 영상 숙제를 이 화면이 모른 채 '있음'으로 보낸 줄 — '없음'을 지키고 보내지 않는다(원장 2026-10-16, cancels.ts). */
+/** 글에 적힌 영상 숙제 마감이 저장한 마감과 다르다(원장 2026-10-28, video-homework/due-text-check.ts) — 글만 고친 마감은 사이트·미수행 판정과 갈린다. */
+const VIDEO_DUE_TEXT_MISMATCH_ERROR = "글에 적힌 영상 숙제 마감이 정한 마감과 달라 보내지 않았습니다(저장은 했습니다) — 글을 고치지 말고 영상 숙제 '기한'(7일 · 다음 수업)을 바꾼 뒤 자동작성을 다시 눌러 주세요";
 const VIDEO_HW_CANCELLED_ERROR = "이 영상 숙제는 영상 제출 현황에서 취소돼 '없음'으로 되돌렸고, 보내지 않았습니다(저장은 했습니다) — 멘트에 영상 숙제 안내가 있으면 고친 뒤 다시 보내 주세요";
 import { classBoardLiveForStudent, explainBoardMissing, resolveMakeupSendClass } from "./send-class";
 import { captureReportJj } from "./jj-capture";
@@ -876,6 +879,25 @@ export async function saveAndQueueClassnote(
     }
     return { ok: false, id: saved.id, shareToken: saved.shareToken, ...warn,
       error: saved.videoHomeworkCancelled ? VIDEO_HW_CANCELLED_ERROR : VIDEO_DUE_CHANGED_ERROR };
+  }
+  // 🔴 글에 적힌 영상 숙제 마감 ↔ 이번 저장이 정한 마감(원장 2026-10-28) — 글의 날짜만 고친 줄은 학부모가 읽는 마감과 사이트·미수행 판정이
+  //    갈린다(10/27 실측 12건). 화면(sendRow)도 막지만 한 겹이다(#77). 마감을 이번 저장이 정했을 때만 본다(모르면 막을 근거가 없다).
+  if (input.videoHomework === true && saved.videoHomeworkDue) {
+    const dueGap = videoDueTextMismatch(input.notes, expectedVideoDue(reportDate, saved.videoHomeworkDue.mode, saved.videoHomeworkDue.date));
+    if (dueGap) {
+      if (prior?.classnote_status === "queued") {
+        try {
+          await supabase
+            .from("lesson_reports")
+            .update({ classnote_status: null, classnote_queued_at: null })
+            .eq("id", saved.id)
+            .eq("classnote_status", "queued");
+        } catch {
+          // best-effort — 옆 게이트와 같다
+        }
+      }
+      return { ok: false, id: saved.id, shareToken: saved.shareToken, ...warn, error: VIDEO_DUE_TEXT_MISMATCH_ERROR };
+    }
   }
 
   // 🔴 수학 보고서 시범(테스트 학생 한정, math-report-pilot.ts) — '자동작성' 글 그대로가 아니면 보내지 않는다(저장은 끝났다).

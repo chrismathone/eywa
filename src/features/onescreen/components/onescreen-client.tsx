@@ -290,6 +290,8 @@ import { ClassnoteOnProvider } from "./classnote-on-context";
 import { useSubmitLinkMode, useVideoHomeworkDueReady, useVideoHomeworkOthersReport, useVideoHomeworkPolicy, useVideoHomeworkSaveOk, useVideoHomeworkStore } from "@/features/video-homework/components/video-homework-provider";
 import { submitLinkChoosable } from "@/features/video-submit/link-choice";
 import { planBulkVideoCheck } from "@/features/video-homework/bulk-check";
+import { expectedVideoDue, videoDueTextMismatch } from "@/features/video-homework/due-text-check";
+import { setMyVideoDueDefault } from "../server/video-due-pref-actions";
 import type { VideoHomeworkStatus } from "@/features/video-homework/types";
 import { isVideoHomeworkEnabled } from "@/features/video-homework/policy";
 
@@ -415,6 +417,7 @@ export function OneScreenClient({
   initialFontSize = DEFAULT_ONESCREEN_FONT_SIZE,
   initialTrendOptOut = [],
   initialTemplatePrefs = EMPTY_TEMPLATE_PREFS,
+  initialVideoDueDefault = "week",
   initialDisplayOptions,
   initialClassName = null,
   initialStudentId = null,
@@ -459,6 +462,8 @@ export function OneScreenClient({
   initialFontSize?: OnescreenFontSize;
   /** '학습 추세 미발송'으로 켠 `반:학생` 키(내 계정 ui_prefs, 원장 2026-09-18) — 글씨 크기와 같은 행에서 온다. */
   initialTrendOptOut?: string[];
+  /** 영상 숙제 마감의 내 기본값(7일 · 다음 수업, 내 계정 ui_prefs, 원장 2026-10-28) — 영상 과제를 새로 켠 줄이 이 값으로 시작한다. */
+  initialVideoDueDefault?: "week" | "next";
   /** 영어 보고서 템플릿 내 기본값 = 반별 마지막으로 고른 템플릿(내 계정 ui_prefs, 원장 2026-10-27) — 빈 행에만 붙는다. */
   initialTemplatePrefs?: TemplatePrefs;
   initialDisplayOptions?: DisplayOptions;
@@ -507,6 +512,13 @@ export function OneScreenClient({
   // 좁은 카드 뷰의 학부모 미리보기. 폭은 CSS가 가르므로 이 값은 열 배치에 쓰지 않는다.
   const [previewOpen, setPreviewOpen] = useState(false);
   const [fontSize, setFontSize] = useState<OnescreenFontSize>(initialFontSize);
+  // 영상 숙제 마감의 내 기본값 — 행에서 마감을 고르면 바뀌고 계정에 저장된다(rememberVideoDue).
+  const videoDueDefaultRef = useRef<"week" | "next">(initialVideoDueDefault);
+  function rememberVideoDue(mode: "week" | "next") {
+    if (readonlyView || videoDueDefaultRef.current === mode) return;
+    videoDueDefaultRef.current = mode;
+    void setMyVideoDueDefault(mode).catch(() => undefined); // 다음 방문용 — 실패해도 지금 화면은 그대로
+  }
   const fontZoom = ONESCREEN_FONT_SIZE_ZOOM[fontSize];
   // 보강 학생 중 '이전 진도'를 이미 불러온 학생 id — 버튼 숨김·재요청 방지.
   const [prevLoaded, setPrevLoaded] = useState<Set<string>>(new Set());
@@ -2660,7 +2672,9 @@ export function OneScreenClient({
       // 마감도 7일로 돌린다 — 끈 채 저장하면 서버가 마감을 지운다. 다시 켜면 7일에서 시작한다(옛 '다음 수업' 날짜가 남지 않게, 적대 리뷰 L3).
       subjects: s.subjects.map((su) => (su.name === subjectName
         ? { ...su, videoHomework: !su.videoHomework, ...(su.videoHomework && su.videoSubmitLink ? { videoSubmitLink: false } : {}),
-          ...(su.videoHomework && su.videoHomeworkDue ? { videoHomeworkDue: "week" as const, videoHomeworkDueDate: undefined } : {}) }
+          ...(su.videoHomework && su.videoHomeworkDue ? { videoHomeworkDue: "week" as const, videoHomeworkDueDate: undefined } : {}),
+          // 새로 켜면 내 기본 마감으로 시작한다(원장 2026-10-28, due-pref.ts) — 옛 '다음 수업' 날짜는 남기지 않는다(L3).
+          ...(!su.videoHomework && videoDueDefaultRef.current === "next" ? { videoHomeworkDue: "next" as const, videoHomeworkDueDate: undefined } : {}) }
         : su)),
     }));
   }
@@ -2674,6 +2688,7 @@ export function OneScreenClient({
   // 영상 숙제 마감(원장 2026-10-15) — 행별 7일 · 다음 수업. '영상 과제'를 켠 행에서만 토글이 뜬다. 자동저장에 실린다.
   function setVideoHomeworkDueFor(studentId: string, subjectName: string, mode: "week" | "next") {
     wt(studentId, subjectName, "homeworkToday");
+    rememberVideoDue(mode);
     patch(studentId, (s) => ({
       ...s,
       subjects: s.subjects.map((su) => (su.name === subjectName ? { ...su, videoHomeworkDue: mode } : su)),
@@ -3556,6 +3571,7 @@ export function OneScreenClient({
       // 일일 테스트 '안 봄'(원장 2026-10-27) — null이면 '봄'으로(이번에 점수를 넣은 행, grid.ts planBulkApply).
       if (p.set.dailyTestSkip !== undefined) setTestSkipFor(p.studentId, p.subjectName, p.set.dailyTestSkip);
       const { videoHomework: bulkVideoHw, videoSubmitLink: bulkVideoLink, videoHomeworkDue: bulkVideoDue } = p.set;
+      if (bulkVideoDue !== undefined) rememberVideoDue(bulkVideoDue);
       if (bulkVideoHw !== undefined || bulkVideoLink !== undefined || bulkVideoDue !== undefined)
         patch(p.studentId, (s) => ({
           ...s,
@@ -4402,6 +4418,17 @@ export function OneScreenClient({
     // 영어 행 — AI 코멘트가 고치기 전 값 기준이면 한 번 묻는다(카드 칩·표 칩·일괄 확인과 같은 판정, english-draft.ts).
     const suRow = student.subjects.find((x) => x.name === subjectName);
     if (!confirmEnglishOutput(student, suRow, "os.tpl.outdatedSend")) return;
+    // 글에 적힌 영상 숙제 마감이 저장될 마감과 다르면 보내지 않는다(원장 2026-10-28, due-text-check.ts) — 서버도 같은 판정으로 한 번 더(#77).
+    if (suRow?.videoHomework === true) {
+      const dueGap = videoDueTextMismatch(
+        reports[student.id]?.[subjectName]?.draft,
+        expectedVideoDue(activeDate, suRow.videoHomeworkDue, suRow.videoHomeworkDueDate),
+      );
+      if (dueGap) {
+        toast.error(tf("os.c.videoDueTextMismatch", { name: student.name, found: dueGap.found, expected: dueGap.expected }));
+        return;
+      }
+    }
     const res = await queueOne(student, subjectName);
     if (!res.ok) {
       toast.error(res.error ?? t("os.c.sendFail"));
