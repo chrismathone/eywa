@@ -57,6 +57,8 @@ export const TEACHER_MENU_LINKS: readonly TeacherMenuLink[] = [
   // 기본 teacher=none이라 학원설정에서 연 학원에서만 보인다.
   { href: "/class-review", labelKey: "menu.item.class_review", icon: MENU_ICON.class_review, menu: "class_review" },
   { href: "/withdrawal-reports", labelKey: "menu.item.withdrawal_reports", icon: MENU_ICON.withdrawal_reports, menu: "withdrawal_reports" },
+  // 비포클래스체크리스트(초안) — 기본 none. 개인별 메뉴 권한으로 연 선생님에게만 선다(읽기 = 열람).
+  { href: "/before-class", labelKey: "menu.item.before_class_checklist", icon: MENU_ICON.before_class_checklist, menu: "before_class_checklist" },
   // 데이터베이스(서식 저장소) — 강사 readonly(빈 양식 다운로드). 테넌트 공용 자료라 스코핑 무관.
   { href: "/documents", labelKey: "menu.item.documents", icon: MENU_ICON.documents, menu: "documents" },
 ];
