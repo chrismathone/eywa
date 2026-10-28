@@ -196,6 +196,24 @@ describe("auditDetail — 액션별 한글 상세", () => {
     expect(auditDetail("class_reopen_term", { classId: SID }, ctx())).toBeNull();
   });
 
+  it("class_schedule_move: 적용일 · 첫 줄 이동 + 줄 수 · 함께 옮긴 기록을 자르지 않는다(폴백은 60자에서 잘랐다 · 2026-10-28)", () => {
+    const carried =
+      "함께 옮긴 기록: 수업 계획 42건 · 학생 기록 118건 · 미룸·당김 표식 3건 · 교시 메모 2건 · 교재 배정 교시 2개 (새 요일이 적용일보다 앞서 블록의 기록을 모두 한 주 뒤 같은 요일로)";
+    const meta = {
+      classId: SID,
+      effectiveDate: "2026-11-06",
+      moves: [
+        { slotId: "a", from: { day: "tue", start: "16:20:00", end: "17:20:00" }, to: { day: "mon", start: "16:20:00", end: "17:20:00" } },
+        { slotId: "b", from: { day: "fri", start: "16:20:00", end: "17:20:00" }, to: { day: "thu", start: "16:20:00", end: "17:20:00" } },
+      ],
+      newSlotIds: ["x", "y"],
+      carried,
+      carriedCounts: { class_sheet_plan_lines: 42 },
+    };
+    expect(auditDetail("class_schedule_move", meta, ctx())).toBe(`적용일 2026-11-06 · 화 16:20 → 월 16:20 외 1줄 · ${carried}`);
+    expect(auditDetail("class_schedule_move", { effectiveDate: "2026-11-06", moves: [] }, ctx())).toBe("적용일 2026-11-06");
+  });
+
   it("exam_scores / student_import / classroom_auto_assign: 건수 풀어쓰기", () => {
     expect(auditDetail("exam_scores", { saved: 12, students: 15 }, ctx())).toBe("학생 15명 중 점수 12건 저장");
     expect(auditDetail("exam_scores", { saved: 12, students: 15, todaysMathSame: 3 }, ctx())).toBe("학생 15명 중 점수 12건 저장 · 오늘 수학 결과와 같은 값 3건");

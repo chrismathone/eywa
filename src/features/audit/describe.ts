@@ -2655,6 +2655,16 @@ export function auditDetail(
         n("trashed") !== null ? `휴지통 ${n("trashed")}개` : null, n("trashFailed") ? `휴지통 이동 실패 ${n("trashFailed")}개` : null);
     }
 
+    case "class_schedule_move": {
+      // 반 블록 옮기기 — 적용일 · 옮긴 교시(첫 줄 + 줄 수) · 함께 옮긴 기록. 폴백은 값을 60자에서 잘라 한 주 밀림 문구가 빠졌다(적대 리뷰 2026-10-28).
+      type At = { day?: unknown; start?: unknown };
+      const moves = Array.isArray(m.moves) ? (m.moves as { from?: At; to?: At }[]) : [];
+      const at = (p?: At) => `${workDaysLabel([String(p?.day ?? "")])} ${String(p?.start ?? "").slice(0, 5)}`.trim();
+      const first = moves[0];
+      const moved = first ? `${at(first.from)} → ${at(first.to)}${moves.length > 1 ? ` 외 ${moves.length - 1}줄` : ""}` : null;
+      return join(str(m.effectiveDate) ? `적용일 ${str(m.effectiveDate)}` : null, moved, str(m.carried));
+    }
+
     case "demo_roster_apply": {
       const label = str(m.label);
       const n = typeof m.students === "number" && Number.isFinite(m.students) ? `재원 ${m.students}명` : null;

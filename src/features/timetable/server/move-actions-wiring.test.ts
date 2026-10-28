@@ -35,7 +35,61 @@ describe("반 배치 이동(moveClassSlots) 배선", () => {
     for (const t of ["attendance_records", "class_sheet_plan_lines", "class_sheet_student_marks", "class_lesson_shifts"]) expect(anchors).toContain(`"${t}"`);
     // 출결(carry 없음)은 막힘 안내로, 나머지는 함께 옮길 목록으로.
     expect(src).toContain("slotAnchorBlockText(");
-    expect(src).toContain("carryOffset(row.day_of_week, w.day, effective)");
+    // 🔴 한 주 밀림은 블록 전체로 한 번(줄마다 정하면 두 요일 블록의 차례가 뒤집힌다 · 적대 리뷰 2026-10-28) + 차례 안전장치.
+    expect(src).toContain("blockCarryOffsets(");
+    expect(src).not.toContain("carryOffset(row.day_of_week");
+    expect(src).toContain("carryKeepsOrder(");
+    // 제자리 줄은 옮기지도 막지도 않는다.
+    expect(src).toContain('if (days === 0 && slot.slice(0, 5) === w.start.slice(0, 5)) continue;');
+  });
+
+  it("🔴 교재 배정의 고른 교시(slot_picks)도 따라간다 — 판정은 쓰기 전 · 쓸 땐 수정 시각을 조건으로 · 되짚기 일지(적대 리뷰 2026-10-28)", () => {
+    const lf = src.replace(/\r\n/g, "\n");
+    const at = (s: string) => lf.indexOf(s);
+    expect(src).toContain("carrySlotPicks(");
+    expect(src).toContain("picksConflictText(");
+    expect(at("carrySlotPicks(")).toBeLessThan(at('.from("class_schedules")\n      .insert('));
+    expect(lf).toMatch(/\.update\(\{ slot_picks: c\.next \}\)[\s\S]{0,200}\.eq\("updated_at", c\.updatedAt\)/);
+    expect(src).toContain('kind: "picks"');
+    expect(src).toContain("update({ slot_picks: j.prev })");
+  });
+
+  it("🔴 옮긴 뒤 비는 회차엔 칸 미룸 표식(lane='' · pos=0 · skip)을 쓴다 — 교재 계산이 옮긴 계획 줄과 한 칸 어긋나지 않게(재리뷰 2026-10-28)", () => {
+    const lf = src.replace(/\r\n/g, "\n");
+    expect(src).toContain("carryGapDates(");
+    expect(lf).toMatch(/kind: "skip",\n\s*lane: "",\n\s*pos: 0,/);
+    // 판정(이미 있는 표식이면 막음)은 쓰기 전, 쓰기는 기록·교재 배정 뒤 · 되짚기는 지운다.
+    expect(lf.indexOf("carryGapDates(")).toBeLessThan(lf.indexOf('.from("class_schedules")\n      .insert('));
+    expect(lf.indexOf('journal.push({ kind: "gapMarks"')).toBeGreaterThan(lf.indexOf('journal.push({ kind: "picks"'));
+    expect(src).toContain('.from("class_lesson_shifts").delete().in("id", j.ids)');
+  });
+
+  it("🔴 비는 회차는 휴원일·배정 시작일·그 반의 마지막 계획 줄까지 본다 — 옮기는 줄에 계획이 없어도(3차 리뷰 2026-10-28)", () => {
+    const lf = src.replace(/\r\n/g, "\n");
+    expect(lf).toContain('.from("class_sheet_plan_lines")\n          .select("plan_date, slot_start")');
+    // 범위는 그 칸을 고르는 배정의 줄까지(반 전체 마지막 줄로 잡으면 끝난 교재 칸까지 막는다 · 재검토 2026-10-28).
+    expect(src).toContain("horizon: cellHorizon");
+    expect(src).toContain("(carry.length > 0 || horizon !== null) &&");
+    expect(src).not.toContain('carry.some((i) => i.table === "class_sheet_plan_lines")');
+    expect(src).toContain("getTenantSettingsByTenantId(user.tenantId, { failOnReadError: true })");
+    expect(src).toContain("carryGapDates({ toDay: w.day, days: daysOf.get(w.slotId)!, effective, until, horizon: cellHorizon, holidays, starts })");
+    expect(src).toContain("옮기면 수업 계획이 휴원일(");
+    expect(src).toContain("교재 배정 시작일(");
+    // 하루 단위 배정은 하루끼리 묶여 가야 한다.
+    expect(src).toContain("dayPaceKeepsDays(");
+  });
+
+  it("🔴 교재 배정 되짚기도 우리가 쓴 수정 시각을 조건으로 건다 — 그사이 남이 고친 배정을 지우지 않는다(3차 리뷰 2026-10-28)", () => {
+    expect(src).toContain('.select("id, updated_at")');
+    expect(src).toContain("updatedAt: String(done![0]!.updated_at)");
+    expect(src).toContain('.eq("updated_at", j.updatedAt)');
+  });
+
+  it("🔴 기록 쓰기·되짚기는 출발(되짚기는 도착) (날짜, 교시)를 조건으로 건다 — 그사이 옮겨진 줄을 덮어쓰지 않는다 · 못 되돌린 기록을 알린다", () => {
+    expect(src).toContain("carryWhere(g.table, g.fromDate, g.fromSlot)");
+    expect(src).toContain("carryWhere(j.table, j.toDate, j.toSlot)");
+    expect(src).toContain("stranded");
+    expect(src).toContain("배치 없는 새 교시에 남아");
   });
 
   it("🔴 함께 옮기기는 판정을 다 끝낸 뒤에 쓴다 — 덮어쓰지 않음(차지한 자리) · 쓰는 순서 · 실패하면 기록과 배치를 함께 되짚는다", () => {
