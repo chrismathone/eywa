@@ -78,16 +78,23 @@ const FORMER_STAFF: Record<string, LessonStaff[]> = {
 };
 /**
  * 반형태 규칙(원장 2026-10-28) — *"단과 내신대비, 순공300, 100점프로젝트는 그냥 기타로 넘겨. 수업이 아닌듯"*.
- *  `other` = 그 반형태의 수납명은 모두 기타(이름 판정이 정해졌어도) · `otherNames` = 반형태와 상관없이 기타.
+ *  `other` = 그 반형태의 수납명은 모두 기타(이름 판정이 정해졌어도) · `otherNames` = 반형태와 상관없이 기타 ·
+ *  `nameSubjects` = 원장이 과목을 정해 준 수납명(이름 판정이 모름일 때만 · 원장 2026-10-28 *"셋 다 수학"*).
+ *  2025-06 뒤 내신대비 반(시트 밖)은 수업 그대로 — 원장 *"김화영은 수학, 국어는 국어"*(이름 판정이 이미 그렇게 센다).
  *  '순공300 프로그램'은 정규 수업 409개에도 붙은 학생 묶음 표시라 반형태로 걸지 않고 과목 없는 반('스터디케어')만 이름으로 건다 — '모름이면
  *  기타'로 걸면 판정이 흔들릴 때 정규 반이 화면에 안 보이게 학생 수에서 빠진다(리뷰 2026-10-28).
  *  강사형 반형태 'Sarah 중고등'은 과목을 정하지 않는다 — 정해진 줄의 72%가 같은 반형태의 Forever 수학 반이다(원장 *"sarah는 영어"*는 강사 이야기 ·
  *  Sarah는 지금 직원 명단에 영어로 있어 이름이 보이는 반은 이미 영어).
  */
-const CLASS_TYPE_RULES: Record<string, { other: string[]; otherNames: RegExp[] }> = {
-  cs: { other: ["단과 내신대비"], otherNames: [/100점\s*프로젝트/, /스터디\s*케어/] },
+const CLASS_TYPE_RULES: Record<string, { other: string[]; otherNames: RegExp[]; nameSubjects: Record<string, string> }> = {
+  cs: {
+    other: ["단과 내신대비"],
+    otherNames: [/100점\s*프로젝트/, /스터디\s*케어/],
+    nameSubjects: { "내신 추가수업 토": "math", "김은정 중등 화 3교시": "math", "중등주말내신보강 2회": "math" },
+  },
 };
 const CLASS_TYPES = arg("class-types");
+const EXPLAIN = arg("explain");
 const sql = postgres(process.env.DATABASE_URL!, { prepare: false, max: 1 });
 const READ_ONLY = !APPLY && !REVERT;
 try {
@@ -140,7 +147,7 @@ try {
     return { hist: h, stitched: [...h, ...appInv] as HistoryInvoice[] };
   };
   // ⑥ 반형태 — 첫 판정(반형태 없이)으로 강사형 반형태의 과목을 배우고, 수납명마다 표시를 정한 뒤 다시 센다.
-  const rules = CLASS_TYPE_RULES[SLUG] ?? { other: [], otherNames: [] };
+  const rules = CLASS_TYPE_RULES[SLUG] ?? { other: [], otherNames: [], nameSubjects: {} };
   const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
   // 공백·대소문자만 다른 시트 수납명은 한 이름 — 반형태 줄 수를 합친다(덮어쓰면 뒤에 온 키 하나가 반 전체의 반형태를 정한다).
   const sheet = new Map<string, Record<string, number>>();
@@ -175,8 +182,13 @@ try {
       otherNames.add(raw);
       continue;
     }
-    if (!type) continue;
     const named = classify0(r.desc);
+    const byName = rules.nameSubjects[raw.trim()];
+    if (byName && named === null) {
+      labels.set(raw.trim(), byName);
+      continue;
+    }
+    if (!type) continue;
     const bySubject = classTypeGroup(type, subjects);
     // 강사형 반형태에서 배운 과목은 이름 판정이 모름일 때만 — EiE로 배워도 그 강사의 인재원·수학 반을 덮지 않는다.
     const g = bySubject ?? (isTeacherClassType(type) && named === null ? learnedTeacher.get(type) : undefined) ?? null;
@@ -205,6 +217,22 @@ try {
   const drift = [...byRaw].filter(([raw]) => !otherNames.has(raw) && !eieNames.has(raw))
     .map(([, r]) => r.desc).filter((d) => classify0(d) !== null && classify(d) !== classify0(d));
   console.log(`  검증(정해진 수업명 판정 바뀜 = 0이어야): ${drift.length}${drift.length ? ` — ${drift.slice(0, 8).join(" · ")}` : ""}`);
+  // --explain=<정규식> — 맞는 수납명마다 청구 기간·줄 수·최종 판정·반형태(원장 확인용 · 반 이름만, 학생 정보 없음).
+  if (EXPLAIN) {
+    const re = new RegExp(EXPLAIN);
+    const span = new Map<string, [string, string]>();
+    for (const b of bills) {
+      const raw = String(b.item_name ?? "");
+      if (!byRaw.has(raw) || !re.test(raw)) continue;
+      const m = ym(b.bill_month);
+      const s = span.get(raw);
+      span.set(raw, s ? [m < s[0] ? m : s[0], m > s[1] ? m : s[1]] : [m, m]);
+    }
+    for (const [raw, [a, z]] of [...span].sort((x, y) => x[1][0].localeCompare(y[1][0]))) {
+      const verdict = otherNames.has(raw) ? "기타" : eieNames.has(raw) ? "eie" : (classify(byRaw.get(raw)!.desc) ?? "모름");
+      console.log(`  설명 ${raw.trim()} | ${a}~${z} | ${byRaw.get(raw)!.weight}줄 | ${verdict} | 반형태 ${typeOf(raw) ?? "-"}`);
+    }
+  }
   const thisMonth = kstMonth();
   const allMonths = monthsBetween(FROM, thisMonth);
   const histMonths = monthsBetween(FROM, THROUGH);
