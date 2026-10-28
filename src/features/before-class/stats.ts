@@ -5,7 +5,10 @@
  * 🔴 **기록한 날** = 이 반에서 체크를 처음 한 날(추적 시작) ~ 오늘. 시트처럼 그 안의 수업일에 체크가 없으면 '모두 해 옴'으로
  *    세지만, 시작 **전** 수업일은 세지 않는다 — 기능을 연 날(10/28) 이전 수업일이 전부 100%로 부풀던 것을 막는다.
  */
-import { BEFORE_CLASS_ITEMS, completionRate, needsSupplement, normalizeMissed, type BeforeClassCheck, type BeforeClassItemKey } from "./items";
+import {
+  BEFORE_CLASS_CARDS, BEFORE_CLASS_ITEMS, completionRate, needsSupplement, normalizeMissed,
+  type BeforeClassCard, type BeforeClassCheck, type BeforeClassItemKey,
+} from "./items";
 
 export type DayRecord = { date: string; check: BeforeClassCheck };
 export type StatUnit = "week" | "month";
@@ -18,6 +21,8 @@ export type PeriodStat = {
   /** 결석 뺀 평균 완료율(0~1) — 출석한 수업이 없으면 null. */
   average: number | null;
   itemCounts: Record<BeforeClassItemKey, number>;
+  /** 받은 카드 수(카드 X 포함) — 결석 날 카드도 센다(카드는 출결과 따로 준다). */
+  cardCounts: Record<BeforeClassCard, number>;
 };
 
 export const DONE_CHECK: BeforeClassCheck = { missed: [], absent: false, card: null };
@@ -67,6 +72,8 @@ export function groupStats(days: readonly DayRecord[], unit: StatUnit): PeriodSt
 export function totalStat(days: readonly DayRecord[], key = "all", label = "전체"): PeriodStat {
   const rates = days.map((d) => completionRate(d.check)).filter((r): r is number => r !== null);
   const itemCounts = emptyItems();
+  const cardCounts = Object.fromEntries(BEFORE_CLASS_CARDS.map((c) => [c.key, 0])) as Record<BeforeClassCard, number>;
+  for (const d of days) if (d.check.card) cardCounts[d.check.card] += 1;
   for (const d of days) {
     if (d.check.absent) continue;
     for (const k of normalizeMissed(d.check.missed)) itemCounts[k] += 1;
@@ -79,5 +86,6 @@ export function totalStat(days: readonly DayRecord[], key = "all", label = "전�
     supplementCount: days.filter((d) => needsSupplement(d.check)).length,
     average: rates.length ? rates.reduce((a, b) => a + b, 0) / rates.length : null,
     itemCounts,
+    cardCounts,
   };
 }

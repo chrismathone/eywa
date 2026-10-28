@@ -27,4 +27,14 @@ describe("학생 통계", () => {
     expect(months[0]!.itemCounts.deadline).toBe(1);
     expect(totalStat([day("2026-10-26", ["deadline"]), day("2026-10-29")]).average).toBeCloseTo(0.95);
   });
+
+  it("카드 = 종류별 개수(결석 날 카드도 센다 · 안 고른 날은 안 센다)", () => {
+    const t = totalStat([
+      { date: "2026-10-26", check: { missed: [], absent: false, card: "blue" as const } },
+      { date: "2026-10-29", check: { missed: [], absent: true, card: "blue" as const } },
+      { date: "2026-11-02", check: { missed: [], absent: false, card: "none" as const } },
+      day("2026-11-05"),
+    ]);
+    expect(t.cardCounts).toEqual({ blue: 2, gold: 0, red: 0, yellow: 0, none: 1 });
+  });
 });

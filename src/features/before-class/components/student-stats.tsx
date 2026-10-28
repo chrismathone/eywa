@@ -7,6 +7,7 @@ import { BEFORE_CLASS_ITEMS, percentLabel } from "../items";
 import { groupStats, totalStat, type DayRecord, type PeriodStat, type StatUnit } from "../stats";
 import { getBeforeClassStudentHistory } from "../server/stats-actions";
 import type { RosterStudent } from "../types";
+import { CardCounts } from "./badges";
 
 type Loaded = { days: DayRecord[]; since: string | null } | { error: string };
 
@@ -89,6 +90,10 @@ function StatsBody({ days, unit, since }: { days: DayRecord[]; unit: StatUnit; s
         <Tile label="보충 필요" value={`${total.supplementCount}회`} />
         <Tile label="결석" value={`${total.absentCount}회`} />
       </dl>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="font-bold">받은 카드</span>
+        <CardCounts counts={total.cardCounts} />
+      </div>
       <p className="text-text-dim text-xs">
         {since ? `${formatKoreanDate(since)}부터의 기록 · ` : ""}체크가 없는 수업일은 모두 해 온 것으로 셉니다(시트와 같은 기준).
       </p>
@@ -126,6 +131,7 @@ function PeriodTable({ periods }: { periods: PeriodStat[] }) {
             <th className="w-[40%] px-2 py-2 text-left font-semibold">완료율</th>
             <th className="px-2 py-2 text-center font-semibold">보충 필요</th>
             <th className="px-2 py-2 text-center font-semibold">결석</th>
+            <th className="px-2 py-2 text-left font-semibold">카드</th>
             <th className="px-2 py-2 text-left font-semibold">자주 놓친 항목</th>
           </tr>
         </thead>
@@ -145,6 +151,7 @@ function PeriodTable({ periods }: { periods: PeriodStat[] }) {
                 </td>
                 <td className={`px-2 py-1.5 text-center tabular-nums ${p.supplementCount ? "text-amber font-semibold" : ""}`}>{p.supplementCount || "—"}</td>
                 <td className="px-2 py-1.5 text-center tabular-nums">{p.absentCount || "—"}</td>
+                <td className="px-2 py-1.5"><CardCounts counts={p.cardCounts} /></td>
                 <td className="px-2 py-1.5 text-xs">{top.length ? top.map((t) => `${t.label} ${t.n}`).join(" · ") : "—"}</td>
               </tr>
             );
