@@ -170,11 +170,13 @@ function looseMarks(staff: readonly LessonStaff[], subjects: readonly ProgramSub
 
 /**
  * 판정기를 만든다 — `names`(그 기간에 나온 수업명과 줄 수)에서 강사 표시·프로그램 낱말의 묶음을 배운 뒤, 이름마다 프로그램(모르면 null)을 돌려준다.
+ * `labels` = 수업명 → 묶음(바깥 기록 — 원장 시트의 반형태 · 운영자 스크립트만 넘긴다). 판정이 모름일 때만 쓰고 합반은 그대로 모름.
  */
 export function lessonProgramClassifier(
   names: readonly LessonName[],
   subjects: readonly ProgramSubject[],
   staff: readonly LessonStaff[] = [],
+  labels: ReadonlyMap<string, string> = new Map(),
 ): (name: string) => LessonProgram | null {
   const table = nameTable(subjects);
   const groups = new Set([...table.hangul, ...table.latin].map(([, g]) => g));
@@ -201,8 +203,11 @@ export function lessonProgramClassifier(
     let g = groupOf(name);
     if (g === null && loose.length) {
       const hit = new Set(loose.filter(([re]) => re.test(name)).map(([, lg]) => lg));
+      // 두 과목 강사가 함께 적혔으면 모름 — 운영자 표시(`labels`)로도 메우지 않는다(강사 표시가 엇갈린 반은 한쪽으로 몰지 않는다).
       if (hit.size === 1) g = [...hit][0]!;
+      else if (hit.size > 1) g = AMBIGUOUS;
     }
+    if (g === null) g = labels.get(name) ?? null;
     return typeof g === "string" ? programOfGroup(g) : null;
   };
 }

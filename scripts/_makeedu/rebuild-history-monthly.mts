@@ -11,8 +11,10 @@
  *     EiE 수업명(ROOKIES·LEADERS·PHONICS·Let's · 레벨 줄임말 (LE)·(LT)…)은 `[EiE]`로 본다 → EiE가 2021-07부터 이어진다(EiE 칸은 2020-01부터 · 그 전은 0).
  *  ② 그 밖의 과목을 과목마다(`payingSubject:<키>` — 국어·과학…).
  *  ③ 청구가 비정상으로 적은 달(앞뒤 3개월 중앙값의 60% 미만 — 2025-04 23% · 2020-02 55%)은 **메우지 않고 비운다**(`skippedPaying`) · 청구가 끊긴 학생은 그 달을 넘어 판정.
- *  ⑤ 지금 직원 명단에 없는 옛 강사의 과목은 원장이 알려 준 대로(`FORMER_STAFF`).
  *  ④ 청구가 끊긴 학생은 2026년 에이와 청구와 **이어서** 판정(원생번호 → 에이와 학생) — 2025-10~12도 셀 수 있다.
+ *  ⑤ 지금 직원 명단에 없는 옛 강사의 과목은 원장이 알려 준 대로(`FORMER_STAFF`).
+ *  ⑥ 원장 시트 '5개년' 탭의 **반형태**(`--class-types=<파일>` — 수납명 → 반형태 줄 수만 · 학생·금액 없음)로 이름 판정이 모름인 반을 메우고
+ *     EiE를 가른다 · 수업이 아닌 반은 기타로(`CLASS_TYPE_RULES` — 원장 2026-10-28).
  * 그대로인 것: `enrolledRecord`(메이크에듀 월별 재원생 기록) · 2026년 메이크에듀 줄 · 에이와 줄.
  * 계산은 앱의 밤 집계와 **같은 함수**(`aywaHistoryMonths` · `lessonProgramClassifier`) — 검증: 같은 길로 2026년 에이와 청구를 다시 세면 저장된
  * 에이와 줄과 같다(드라이런이 함께 대조한다).
@@ -21,15 +23,26 @@
  *   npx tsx --env-file=.env.local scripts/_makeedu/rebuild-history-monthly.mts --tenant=cs --apply         # 백업 뒤 쓰기
  *   npx tsx --env-file=.env.local scripts/_makeedu/rebuild-history-monthly.mts --tenant=cs --revert=<백업.json>
  *   (--backup-dir=<폴더> — 기본 OS 임시 폴더 · 원생 이름·연락처는 읽지도 쓰지도 않는다)
+ *   (--class-types=<파일> — { "수납명": { "반형태": 줄 수 } } JSON · 없으면 ⑥의 반형태 메우기 없이 센다)
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import postgres from "postgres";
 import { aywaHistoryMonths, isLiveTuition, lessonKinds, lessonNameWeights, type HistoryInvoice } from "@/features/students/stats/history-aywa";
-import { lessonProgramClassifier, type LessonStaff } from "@/features/students/stats/lesson-program";
+import { isEieLesson, lessonProgramClassifier, type LessonStaff } from "@/features/students/stats/lesson-program";
 import { resolveSettings } from "@/features/owner/resolve";
-import { historyInvoices, lowBillingMonths, type HistoryBill } from "@/features/students/stats/makeedu-history-bills";
+import {
+  bookTuitionNames,
+  classTypeGroup,
+  dominantClassType,
+  historyInvoices,
+  historyLine,
+  isTeacherClassType,
+  lowBillingMonths,
+  teacherTypeGroups,
+  type HistoryBill,
+} from "@/features/students/stats/makeedu-history-bills";
 
 const ym = (d: Date | string) => (typeof d === "string" ? d.slice(0, 7) : d.toISOString().slice(0, 7));
 const shift = (m: string, n: number) => {
@@ -63,6 +76,18 @@ const FORMER_STAFF: Record<string, LessonStaff[]> = {
     { names: ["브라이언", "Brian"], subjects: ["english"], loose: true },
   ],
 };
+/**
+ * 반형태 규칙(원장 2026-10-28) — *"단과 내신대비, 순공300, 100점프로젝트는 그냥 기타로 넘겨. 수업이 아닌듯"*.
+ *  `other` = 그 반형태의 수납명은 모두 기타(이름 판정이 정해졌어도) · `otherNames` = 반형태와 상관없이 기타.
+ *  '순공300 프로그램'은 정규 수업 409개에도 붙은 학생 묶음 표시라 반형태로 걸지 않고 과목 없는 반('스터디케어')만 이름으로 건다 — '모름이면
+ *  기타'로 걸면 판정이 흔들릴 때 정규 반이 화면에 안 보이게 학생 수에서 빠진다(리뷰 2026-10-28).
+ *  강사형 반형태 'Sarah 중고등'은 과목을 정하지 않는다 — 정해진 줄의 72%가 같은 반형태의 Forever 수학 반이다(원장 *"sarah는 영어"*는 강사 이야기 ·
+ *  Sarah는 지금 직원 명단에 영어로 있어 이름이 보이는 반은 이미 영어).
+ */
+const CLASS_TYPE_RULES: Record<string, { other: string[]; otherNames: RegExp[] }> = {
+  cs: { other: ["단과 내신대비"], otherNames: [/100점\s*프로젝트/, /스터디\s*케어/] },
+};
+const CLASS_TYPES = arg("class-types");
 const sql = postgres(process.env.DATABASE_URL!, { prepare: false, max: 1 });
 const READ_ONLY = !APPLY && !REVERT;
 try {
@@ -109,9 +134,77 @@ try {
   console.log(`재료: 수납 ${bills.length}줄 · 원생 ${links.length}(에이와 연결 ${idOf.size}) · 에이와 청구 ${appInv.length} · 설정 과목 ${subjects.length} · 담당 과목 직원 ${staff.length}`);
 
   // ── 청구 → 학생·달 청구서(메이크에듀 번호 → 연결된 에이와 학생) + 에이와 2026 청구 = 한 줄 ──
-  const hist = historyInvoices(bills).filter(isLiveTuition).map((i) => ({ ...i, student_id: idOf.get(i.student_id) ?? `me:${i.student_id}` }));
-  const stitched: HistoryInvoice[] = [...hist, ...appInv];
-  const classify = lessonProgramClassifier(lessonNameWeights(stitched), subjects, [...staff, ...(FORMER_STAFF[SLUG] ?? [])]);
+  const allStaff = [...staff, ...(FORMER_STAFF[SLUG] ?? [])];
+  const build = (hints?: Parameters<typeof historyInvoices>[1]) => {
+    const h = historyInvoices(bills, hints).filter(isLiveTuition).map((i) => ({ ...i, student_id: idOf.get(i.student_id) ?? `me:${i.student_id}` }));
+    return { hist: h, stitched: [...h, ...appInv] as HistoryInvoice[] };
+  };
+  // ⑥ 반형태 — 첫 판정(반형태 없이)으로 강사형 반형태의 과목을 배우고, 수납명마다 표시를 정한 뒤 다시 센다.
+  const rules = CLASS_TYPE_RULES[SLUG] ?? { other: [], otherNames: [] };
+  const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+  // 공백·대소문자만 다른 시트 수납명은 한 이름 — 반형태 줄 수를 합친다(덮어쓰면 뒤에 온 키 하나가 반 전체의 반형태를 정한다).
+  const sheet = new Map<string, Record<string, number>>();
+  for (const [k, v] of Object.entries(CLASS_TYPES ? (JSON.parse(readFileSync(CLASS_TYPES, "utf8")) as Record<string, Record<string, number>>) : {})) {
+    const cur = sheet.get(norm(k)) ?? sheet.set(norm(k), {}).get(norm(k))!;
+    for (const [type, n] of Object.entries(v)) cur[type] = (cur[type] ?? 0) + n;
+  }
+  const pass0 = build();
+  const classify0 = lessonProgramClassifier(lessonNameWeights(pass0.stitched), subjects, allStaff);
+  const tuition0 = bookTuitionNames(bills);
+  const byRaw = new Map<string, { desc: string; weight: number }>(); // 수업 줄 수납명 → 판정기에 들어갈 수업명(트림) · 줄 수
+  for (const b of bills) {
+    const line = historyLine(b, tuition0);
+    if (line.kind !== "수업") continue;
+    const raw = String(b.item_name ?? "");
+    const cur = byRaw.get(raw) ?? byRaw.set(raw, { desc: line.description.trim(), weight: 0 }).get(raw)!;
+    cur.weight++;
+  }
+  const typeOf = (raw: string) => dominantClassType(sheet.get(norm(raw)));
+  const groupOfProgram = (p: string | null) => (p === "injaewon" ? "english" : p);
+  const learnedTeacher = teacherTypeGroups([...byRaw].flatMap(([raw, r]) => {
+    const type = typeOf(raw);
+    return type ? [{ type, group: groupOfProgram(classify0(r.desc)), weight: r.weight }] : [];
+  }));
+  const eieNames = new Set<string>();
+  const otherNames = new Set<string>();
+  const labels = new Map<string, string>();
+  const eieOverDecided: string[] = []; // 시트 EIE가 이름 판정(수학·그 밖 과목)을 덮은 반 — 드라이런에 보인다
+  for (const [raw, r] of byRaw) {
+    const type = typeOf(raw);
+    if (rules.otherNames.some((re) => re.test(raw)) || (type && rules.other.includes(type))) {
+      otherNames.add(raw);
+      continue;
+    }
+    if (!type) continue;
+    const named = classify0(r.desc);
+    const bySubject = classTypeGroup(type, subjects);
+    // 강사형 반형태에서 배운 과목은 이름 판정이 모름일 때만 — EiE로 배워도 그 강사의 인재원·수학 반을 덮지 않는다.
+    const g = bySubject ?? (isTeacherClassType(type) && named === null ? learnedTeacher.get(type) : undefined) ?? null;
+    if (g === "eie") {
+      if (isEieLesson(r.desc)) continue;
+      eieNames.add(raw);
+      if (named !== null && named !== "injaewon") eieOverDecided.push(`${raw.trim()}(${named})`);
+    } else if (g) labels.set(raw.trim(), g); // 판정기는 트림한 수업명을 받는다(`lessonKinds`)
+  }
+  const rowsOf = (s: Iterable<string>) => [...s].reduce((n, raw) => n + (byRaw.get(raw)?.weight ?? 0), 0);
+  const filled = [...byRaw].filter(([raw, r]) => labels.has(raw.trim()) && classify0(r.desc) === null).map(([raw]) => raw);
+  console.log(`반형태: 수납명 ${[...byRaw.keys()].filter((r) => typeOf(r)).length}/${byRaw.size}개에 있음 · 강사형 과목 배움 ${[...learnedTeacher].map(([t, g]) => `${t.split(" ")[0]}=${g}`).join(" ")}`);
+  console.log(`  기타로 ${otherNames.size}개(${rowsOf(otherNames)}줄) · EiE로 ${eieNames.size}개(${rowsOf(eieNames)}줄) · 모름 → 반형태 과목 ${filled.length}개(${rowsOf(filled)}줄)`);
+  console.log(`  기타로 간 수납명: ${[...otherNames].map((raw) => `${raw.trim()}(${byRaw.get(raw)!.weight})`).join(" · ") || "없음"}`);
+  if (eieOverDecided.length) console.log(`  ⚠️ 시트 EIE가 이름 판정을 덮음: ${eieOverDecided.join(" · ")}`);
+  const { hist, stitched } = build({ eie: eieNames, other: otherNames });
+  const classify = lessonProgramClassifier(lessonNameWeights(stitched), subjects, allStaff, labels);
+  const unknownRows = new Map<string, number>();
+  for (const i of hist) {
+    if (i.period! > THROUGH) continue;
+    for (const l of i.line_items) if (l.kind === "수업" && (l.amount > 0 || l.paid > 0) && !isEieLesson(l.description) && !classify(l.description.trim())) unknownRows.set(l.description.trim(), (unknownRows.get(l.description.trim()) ?? 0) + 1);
+  }
+  const unknownTop = [...unknownRows].sort((a, b) => b[1] - a[1]);
+  console.log(`  남은 과목 모름 수업명 ${unknownTop.length}개(${unknownTop.reduce((s, [, n]) => s + n, 0)}줄) — 상위: ${unknownTop.slice(0, 8).map(([n, c]) => `${n}(${c})`).join(" · ") || "없음"}`);
+  // 검증 — 첫 판정에서 정해진 수업명은 다시 센 판정에서도 같아야 한다(반형태는 모름만 메운다 · 기타·EiE로 보낸 이름은 빼고).
+  const drift = [...byRaw].filter(([raw]) => !otherNames.has(raw) && !eieNames.has(raw))
+    .map(([, r]) => r.desc).filter((d) => classify0(d) !== null && classify(d) !== classify0(d));
+  console.log(`  검증(정해진 수업명 판정 바뀜 = 0이어야): ${drift.length}${drift.length ? ` — ${drift.slice(0, 8).join(" · ")}` : ""}`);
   const thisMonth = kstMonth();
   const allMonths = monthsBetween(FROM, thisMonth);
   const histMonths = monthsBetween(FROM, THROUGH);
@@ -175,7 +268,7 @@ try {
   if (!APPLY) {
     console.log("\n드라이런 — 쓰지 않았다(--apply로 쓴다).");
   } else {
-    if (bad.length) throw new Error("검증이 어긋나 쓰지 않는다");
+    if (bad.length || drift.length) throw new Error("검증이 어긋나 쓰지 않는다");
     mkdirSync(BACKUP_DIR, { recursive: true });
     const file = join(BACKUP_DIR, `history-monthly-${SLUG}-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
     writeFileSync(file, JSON.stringify({

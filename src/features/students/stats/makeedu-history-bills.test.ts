@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { bookTuitionNames, historyInvoices, historyLine, lowBillingMonths, type HistoryBill } from "./makeedu-history-bills";
+import {
+  bookTuitionNames,
+  classTypeGroup,
+  dominantClassType,
+  historyInvoices,
+  historyLine,
+  isTeacherClassType,
+  lowBillingMonths,
+  teacherTypeGroups,
+  type HistoryBill,
+} from "./makeedu-history-bills";
 import { isEieLesson } from "./lesson-program";
 
 const bill = (over: Partial<HistoryBill>): HistoryBill => ({
@@ -42,6 +52,52 @@ describe("메이크에듀 수납 → 지난 기록 청구 줄(원장 2026-10-28)
   it("EiE 낱말은 교재 구분에서 수업료가 된 줄에만 — '수업' 구분 인재원 'Phonics' 수업은 EiE로 넘기지 않는다 · 'Tablets'는 Let's가 아니다", () => {
     expect(historyLine(bill({ item_kind: "lesson", category: "수업", item_name: "초등 Phonics 정규 월수", billed: 200000 })).description).toBe("초등 Phonics 정규 월수");
     expect(historyLine(bill({ item_name: "Tablets 코딩 월수", paid: 150000 })).description).toBe("Tablets 코딩 월수");
+  });
+
+  it("🔴 수납명 표시(원장 시트 반형태·원장 지시) — EiE로 볼 이름은 구분과 상관없이 `[EiE]` · 수업이 아닌 이름은 기타(학생 수·수업료에서 빠진다)", () => {
+    const hints = { eie: new Set(["(N)Pre Junior 월수목 Hazel"]), other: new Set(["25년 100점프로젝트 (1학기 기말)"]) };
+    expect(historyLine(bill({ item_kind: "lesson", category: "수업", item_name: "(N)Pre Junior 월수목 Hazel", billed: 200000 }), undefined, hints).description).toBe("[EiE] (N)Pre Junior 월수목 Hazel");
+    expect(historyLine(bill({ item_kind: "lesson", category: "수업", item_name: "25년 100점프로젝트 (1학기 기말)", billed: 50000, paid: 50000 }), undefined, hints)).toEqual({ kind: "기타", amount: 50000, paid: 50000, description: "25년 100점프로젝트 (1학기 기말)" });
+    expect(historyLine(bill({ item_name: "[EiE] Let`s Speak 1", paid: 39000 }), undefined, hints).kind).toBe("교재"); // 교재는 EiE 표시가 있어도 교재
+  });
+
+  it("반형태 → 묶음 — 과목 이름 · EIE · 매쓰몽 = 수학 · 강사형·과목 아닌 것은 null · 섞인 이름은 정하지 않는다", () => {
+    const subjects = [{ key: "math", label: "수학" }, { key: "english", label: "영어" }, { key: "korean", label: "국어" }, { key: "science", label: "과학" }];
+    expect(classTypeGroup("수학 고등 3", subjects)).toBe("math");
+    expect(classTypeGroup("인재원수학 초등", subjects)).toBe("math");
+    expect(classTypeGroup("영어 초등 정규", subjects)).toBe("english");
+    expect(classTypeGroup("국어 특강", subjects)).toBe("korean");
+    expect(classTypeGroup("EIE얼리버드 초등", subjects)).toBe("eie");
+    expect(classTypeGroup("매쓰몽 정규", subjects)).toBe("math");
+    expect(classTypeGroup("Trevi 중고등", subjects)).toBeNull();
+    expect(classTypeGroup("순공300 프로그램", subjects)).toBeNull();
+    // 수업명 판정과 같은 규칙 — 과목이 아닌 낱말·영문 낱말 조각은 과목이 아니다(리뷰 2026-10-28)
+    expect(classTypeGroup("외국어 특강", subjects)).toBeNull();
+    expect(classTypeGroup("한국어 논술", subjects)).toBeNull();
+    expect(classTypeGroup("과학고 대비반", subjects)).toBeNull();
+    expect(classTypeGroup("Leiea 중등", subjects)).toBeNull();
+    expect(classTypeGroup("Arthur 초등", [...subjects, { key: "art", label: "Art" }])).toBeNull();
+    expect(classTypeGroup("Art 초등", [...subjects, { key: "art", label: "Art" }])).toBe("art");
+    expect(dominantClassType({ "수학 정규": 9, "영어 정규": 1 })).toBe("수학 정규");
+    expect(dominantClassType({ "수학 정규": 5, "수학 정규 ": 5 })).toBe("수학 정규"); // 앞뒤 공백만 다른 반형태는 하나
+    expect(dominantClassType({ "수학 정규": 6, "영어 정규": 4 })).toBeNull();
+    expect(dominantClassType(undefined)).toBeNull();
+  });
+
+  it("강사형 반형태 — 이름 판정이 정한 줄의 95% 이상 · 50줄 이상 · 모름 줄보다 많을 때만(모름은 순도 셈에서 뺀다) · Sarah처럼 두 과목이 섞인 반형태는 정하지 않는다", () => {
+    const rows = [
+      { type: "Trevi 중고등", group: "math", weight: 120 },
+      { type: "Trevi 중고등", group: null, weight: 30 },
+      { type: "Sarah 중고등", group: "math", weight: 72 },
+      { type: "Sarah 중고등", group: "english", weight: 27 },
+      { type: "Neo 중고등", group: "math", weight: 20 }, // 50줄 미만
+      { type: "Omega 중고등", group: "math", weight: 60 },
+      { type: "Omega 중고등", group: null, weight: 500 }, // 정해진 60줄로 모름 500줄을 메우지 않는다
+      { type: "순공300 프로그램", group: "math", weight: 500 }, // 강사형이 아니다
+    ];
+    expect(Object.fromEntries(teacherTypeGroups(rows))).toEqual({ "Trevi 중고등": "math" });
+    expect(isTeacherClassType("Celine 초중등")).toBe(true);
+    expect(isTeacherClassType("기타 청구")).toBe(false);
   });
 
   it("학생·청구월마다 한 장", () => {

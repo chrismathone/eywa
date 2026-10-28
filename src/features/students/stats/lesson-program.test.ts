@@ -45,6 +45,16 @@ describe("lessonProgramClassifier — 옛 강사 `loose`(원장 2026-10-28 \"디
     const mixed = lessonProgramClassifier([], SUBJECTS, [...former, { names: ["Gana"], subjects: ["english"] }, { names: ["Rama"], subjects: ["math"] }]);
     expect(mixed("(토) 특강 Gana Rama 디올")).toBeNull(); // 강사 표시 둘이 엇갈림 — 메우지 않는다
   });
+  it("바깥 라벨(원장 시트 반형태)도 모름일 때만 — 정해진 판정·합반은 그대로", () => {
+    const labels = new Map([["초등 SKY 월수목", "english"], ["중등수학 2T 화금", "english"], ["수학 영어 통합반", "math"], ["서연고 특반 클리닉수업", "math"]]);
+    const cls = lessonProgramClassifier([], SUBJECTS, [], labels);
+    expect(cls("초등 SKY 월수목")).toBe("injaewon");
+    expect(cls("서연고 특반 클리닉수업")).toBe("math");
+    expect(cls("중등수학 2T 화금")).toBe("math"); // 이름에 과목 — 라벨이 뒤집지 않는다
+    expect(cls("수학 영어 통합반")).toBeNull();
+    // 두 과목 옛 강사가 함께 적힌 반도 라벨로 메우지 않는다(리뷰 2026-10-28)
+    expect(lessonProgramClassifier([], SUBJECTS, former, new Map([["(토) 특강 디올 브라이언", "math"]]))("(토) 특강 디올 브라이언")).toBeNull();
+  });
 });
 
 describe("lessonProgramClassifier — 수업명 → 프로그램(지난 기록)", () => {
