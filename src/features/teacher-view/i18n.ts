@@ -2873,6 +2873,10 @@ export const SHEET_DICT = {
     ko: "{name}: 시간표를 읽지 못해 영상 숙제 마감을 7일로 두었습니다 — 잠시 뒤 '다음 수업'을 다시 골라 저장해 주세요",
     en: "{name}: could not read the timetable — the video homework due stays at 7 days. Pick 'Next class' again and save in a moment",
   },
+  "os.c.videoDueTextMismatch": {
+    ko: "{name}: 글의 영상 숙제 마감({found})이 정한 마감({expected})과 달라 보내지 않았습니다 — 글을 고치지 말고 영상 숙제 '기한'(7일 · 다음 수업)을 바꾼 뒤 자동작성을 다시 눌러 주세요",
+    en: "{name}: the video homework due in the message ({found}) differs from the set due ({expected}) — not sent. Change the video homework 'Due' (7 days · Next class) instead of editing the text, then auto-write again",
+  },
   "os.c.videoDueKept": {
     ko: "{name}: 영상 숙제 마감은 이 보고서를 처음 쓴 선생님만 바꿀 수 있어 그대로 두었습니다(나머지는 저장했습니다)",
     en: "{name}: only the teacher who first wrote this report can change the video homework due — kept as is (the rest was saved)",
