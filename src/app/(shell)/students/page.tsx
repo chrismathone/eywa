@@ -88,6 +88,7 @@ const FIELD_OPTION_KEYS = [
   { value: "name", key: "stu.filter.field.name" },
   { value: "school", key: "stu.filter.field.school" },
   { value: "phone", key: "stu.filter.field.phone" },
+  { value: "parent", key: "stu.filter.field.parent" },
   { value: "address", key: "stu.filter.field.address" },
   { value: "email", key: "stu.filter.field.email" },
   { value: "memo", key: "stu.filter.field.memo" },

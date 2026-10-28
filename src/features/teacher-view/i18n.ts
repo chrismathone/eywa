@@ -2397,6 +2397,7 @@ export const SHEET_DICT = {
   "stu.filter.field.name": { ko: "이름", en: "Name" },
   "stu.filter.field.school": { ko: "학교", en: "School" },
   "stu.filter.field.phone": { ko: "전화번호", en: "Phone" },
+  "stu.filter.field.parent": { ko: "학부모명", en: "Parent name" },
   "stu.filter.field.address": { ko: "주소", en: "Address" },
   "stu.filter.field.email": { ko: "이메일", en: "Email" },
   "stu.filter.field.memo": { ko: "메모", en: "Memo" },
@@ -2407,7 +2408,7 @@ export const SHEET_DICT = {
   "stu.sort.grade.asc": { ko: "학년 오름차순 정렬", en: "Sort by grade, ascending" },
   "stu.sort.grade.desc": { ko: "학년 내림차순 정렬", en: "Sort by grade, descending" },
   "stu.filter.noEnrollment": { ko: "미수강 제외", en: "Hide unenrolled" },
-  "stu.filter.searchPh": { ko: "이름·학교·연락처·메모", en: "Name, school, phone or memo" },
+  "stu.filter.searchPh": { ko: "이름·학교·연락처·학부모명·메모", en: "Name, school, phone, parent or memo" },
   // 운영실 KPI ↗가 넘긴 학생 집합 칩(원장 2026-09-11) — 눌러 푼다. 프로그램 이름(EiE·인재원 영어)은 번역하지 않는다.
   "stu.filter.program": { ko: "프로그램", en: "Program" },
   // 수강 과목 열 머리의 '미수강'(원장 2026-09-28) — 지금 수강 중인 과목이 하나도 없는 학생.

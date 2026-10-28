@@ -11,6 +11,7 @@ import { NO_SUBJECT, parseMulti } from "../list-filter-values";
 import { isGradeSort, sortByGrade } from "../grade-sort";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { consultParentMatchStudentIds } from "./parent-search";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
@@ -130,7 +131,7 @@ function orderStudents<T extends { order: (col: string, opts: { ascending: boole
       return qb.order("grade", { ascending: true }).order("name", { ascending: true }).order("id", { ascending: true });
   }
 }
-export type SearchField = "all" | "name" | "school" | "phone" | "address" | "email" | "memo";
+export type SearchField = "all" | "name" | "school" | "phone" | "address" | "email" | "memo" | "parent";
 
 export type StudentListFilters = {
   status?: string; // "all" | "enrolled" | "consulted" | "on_hold" | "withdrawn"
@@ -165,6 +166,7 @@ const SEARCH_FIELD_COLS: Record<SearchField, string[]> = {
   address: ["address"],
   email: ["email"],
   memo: ["notes"],
+  parent: ["parent_name"],
 };
 
 /**
@@ -209,7 +211,7 @@ function searchTerm(q: string | undefined): string {
 }
 
 // 검색어를 선택된 필드(들)에 ilike OR로 적용.
-// 🔑 `memoIds`가 있으면 **그 학생들도 결과에 넣는다**(메모 내용 검색) — 기본 검색(all)에서만 쓴다.
+// 🔑 `memoIds`가 있으면 **그 학생들도 결과에 넣는다**(메모 내용 · 콜&상담 학부모 이름 — `extraSearchIds`).
 function applySearch<T extends { or: (f: string) => T }>(
   qb: T,
   q: string | undefined,
@@ -224,9 +226,23 @@ function applySearch<T extends { or: (f: string) => T }>(
   return qb.or(parts.join(","));
 }
 
-/** 메모 내용까지 훑는 검색인가 — **기본(all)일 때만**. 필드를 콕 집었으면 그 필드만 본다. */
-function searchesMemos(q: string | undefined, field?: SearchField): boolean {
-  return !!searchTerm(q) && (field ?? "all") === "all";
+/**
+ * 검색 컬럼 밖에서 검색어에 걸린 학생 id — 메모 내용(기본 검색만 · 필드를 콕 집었으면 그 필드만) + 연결된 신규 콜&상담의 학부모 이름(기본·학부모명).
+ * 🔴 합쳐서 `MEMO_MATCH_CAP` 안 — 둘 다 `id.in.(…)` 한 줄로 URL에 실린다(상한 주석의 사고).
+ */
+async function extraSearchIds(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  q: string | undefined,
+  field?: SearchField,
+): Promise<string[]> {
+  const term = searchTerm(q);
+  const f = field ?? "all";
+  if (!term || (f !== "all" && f !== "parent")) return [];
+  const [memo, parent] = await Promise.all([
+    f === "all" ? memoMatchStudentIds(supabase, term) : Promise.resolve([]),
+    consultParentMatchStudentIds(supabase, term, MEMO_MATCH_CAP),
+  ]);
+  return [...new Set([...memo, ...parent])].slice(0, MEMO_MATCH_CAP);
 }
 
 /**
@@ -316,9 +332,7 @@ export async function getStudentsList(
   //    학생 전건은 어차피 아래 fetchAllPaged가 받고 있어 추가 왕복이 없다.
   const scopeIds = teacherScope ? new Set(teacherScope.studentIds) : null;
   // 메모 내용까지 훑는 검색(0250a) — 왕복은 검색어가 있을 때만, 상한 안에서.
-  const memoIds = searchesMemos(options?.q, options?.searchField)
-    ? await memoMatchStudentIds(supabase, searchTerm(options?.q))
-    : [];
+  const memoIds = await extraSearchIds(supabase, options?.q, options?.searchField);
   const grades = parseMulti(options?.grade);
   // 학생 전건을 .range()로 페이지네이션 — export·반 상세가 전 학생을 받으므로 1000행 절단 방지.
   const all = await fetchAllPaged((from, to) => {
@@ -520,9 +534,7 @@ export async function getStudentsPage(
     : null;
   const needEnrollmentJoin = excludeNoEnrollment || embed.subjectFilter || embed.teacherFilter;
   // 메모 내용까지 훑는 검색(0250a) — 위 전건 조회와 같은 규약.
-  const memoIds = searchesMemos(options?.q, options?.searchField)
-    ? await memoMatchStudentIds(supabase, searchTerm(options?.q))
-    : [];
+  const memoIds = await extraSearchIds(supabase, options?.q, options?.searchField);
 
   // 강사 스코프 ∩ 담당 강사 필터 → id 화이트리스트. 강사 1인의 담당 학생 수라 URL은 짧다.
   let idWhitelist: string[] | null = null;
