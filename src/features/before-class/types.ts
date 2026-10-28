@@ -10,6 +10,8 @@ export type ClassMonth = {
   students: RosterStudent[];
   checks: Record<string, BeforeClassCheck>;
   reportLevels: Record<string, ReportDayLevels>;
+  /** 이 반 체크 추적 시작일(첫 체크) — 없으면 null. */
+  trackingStart: string | null;
 };
 
 /** 칸 열쇠 = 학생 id | 수업일. */

@@ -109,7 +109,10 @@ export function StatsPanelClient({
         <p className="text-muted-foreground text-xs break-keep">합계·분해는 위 기간 기준입니다. 추이는 {trendWindowText(buckets, prefs.unit)}이며, 나머지 필터는 똑같이 적용됩니다.</p>
       </div>
 
-      <StatsBreakdown dims={dims} dim={prefs.dim} unit={prefs.unit} total={stats.totals.n} onDim={(d) => update({ dim: d })} />
+      {/* 분해 카드는 서버가 축을 안 넘기면 안 그린다(원장 2026-10-28 숨김 — stats-panel.tsx SHOW_BREAKDOWN_AND_GAP). */}
+      {dims.length > 0 ? (
+        <StatsBreakdown dims={dims} dim={prefs.dim} unit={prefs.unit} total={stats.totals.n} onDim={(d) => update({ dim: d })} />
+      ) : null}
     </div>
   );
 }

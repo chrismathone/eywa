@@ -1,10 +1,8 @@
 import { PageHeader } from "@/components/page-header";
-import { PeriodNav } from "@/components/period-nav";
-import { Toolbar } from "@/components/toolbar";
 import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
-import { isValidYm, kstMonth, kstToday, monthLabel, shiftMonth } from "@/lib/date-kst";
-import { defaultCheckDate } from "@/features/before-class/dates";
+import { isValidYm, kstMonth, kstToday } from "@/lib/date-kst";
+import { pickCheckDate } from "@/features/before-class/dates";
 import { loadClassMonth, loadTargets } from "@/features/before-class/server/queries";
 import { ClassPicker } from "@/features/before-class/components/class-picker";
 import { ChecklistBoard } from "@/features/before-class/components/board";
@@ -21,6 +19,7 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 /**
  * 비포클래스체크리스트(초안, 원장 2026-10-28) — 수업 전 숙제·준비 체크(구글 시트 이식). 시험 반(`before_class_targets`)만 선다.
  * 권한 = 메뉴 `before_class_checklist` — 전체면 체크, 읽기면 보기만. 반·달은 주소(`?class=` · `?month=`), 날짜·보기 전환은 화면 안.
+ * 달을 넘나드는 수업일 화살표는 `?date=`(날짜 · `first` · `last`)로 그 달에서 고를 날을 넘긴다.
  */
 export default async function BeforeClassPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const user = await requireAccess("before_class_checklist");
@@ -40,8 +39,6 @@ export default async function BeforeClassPage({ searchParams }: { searchParams: 
   const logoPath = reportLogoPath(settings);
   const logoSrc = logoPath ? await resolveBrandingSrc(logoPath, user.tenantId).catch(() => null) : null;
   const academyName = settings.profile.name || NEUTRAL_ACADEMY_NAME;
-  const href = (m: string) => `/before-class?${current ? `class=${current.id}&` : ""}month=${m}`;
-  const thisMonth = kstMonth();
 
   return (
     <div className="space-y-4">
@@ -52,16 +49,6 @@ export default async function BeforeClassPage({ searchParams }: { searchParams: 
         <p className="text-text-dim px-1 py-6 text-sm">체크리스트를 쓰는 반이 아직 없습니다.</p>
       ) : (
         <>
-          <Toolbar>
-            <ClassPicker targets={targets} current={current.id} month={month} />
-            <PeriodNav
-              label={monthLabel(month)}
-              prevHref={href(shiftMonth(month, -1))}
-              nextHref={href(shiftMonth(month, 1))}
-              currentHref={href(thisMonth)}
-              relation={month < thisMonth ? "past" : month > thisMonth ? "future" : "current"}
-            />
-          </Toolbar>
           <ChecklistBoard
             key={`${current.id}|${month}`}
             classId={current.id}
@@ -69,10 +56,12 @@ export default async function BeforeClassPage({ searchParams }: { searchParams: 
             dates={data.dates}
             students={data.students}
             initialChecks={data.checks}
-            initialDate={defaultCheckDate(data.dates, kstToday())}
+            initialDate={pickCheckDate(data.dates, kstToday(), one(sp.date))}
             today={kstToday()}
+            trackingStart={data.trackingStart}
             canEdit={level === "full"}
             report={{ levels: data.reportLevels, className: current.name, teacherName: current.teacherName, logoSrc, academyName }}
+            classPicker={<ClassPicker targets={targets} current={current.id} month={month} />}
           />
         </>
       )}

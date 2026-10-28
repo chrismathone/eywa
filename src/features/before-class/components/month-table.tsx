@@ -2,22 +2,24 @@
 
 import { shortDateLabel } from "../dates";
 import {
-  BEFORE_CLASS_ITEMS, cardLabel, completionRate, needsSupplement, percentLabel, summarizeStudent, type BeforeClassCheck,
+  BEFORE_CLASS_ITEMS, completionRate, needsSupplement, percentLabel, summarizeStudent, type BeforeClassCheck,
 } from "../items";
 import { checkKey, type RosterStudent } from "../types";
-
-const DONE: BeforeClassCheck = { missed: [], absent: false, card: null };
+import { DONE_CHECK, isRecordedDay } from "../stats";
+import { CardBadge } from "./badges";
 
 /**
  * 월별 현황 — 학생 줄 × 수업일 칸(완료율 · 결석 · 카드) + 평균 · 보충 필요 횟수 · 결석 · 자주 놓친 항목.
  * 시트의 'X열 평균'과 'Y열 항목별 누적'을 한 표로 접었다. 날짜 머리를 누르면 그날 체크 화면으로 간다.
- * 시트처럼 **체크가 없는 칸 = 모두 해 옴**(100%) — 오늘까지의 수업일만. 아직 안 온 날은 '—' · 그날 명단에 없던 학생은 빈 칸.
+ * 시트처럼 **체크가 없는 칸 = 모두 해 옴**(100%) — 추적 시작(이 반 첫 체크) ~ 오늘의 수업일만(stats.ts `isRecordedDay`).
+ * 그 밖의 날은 '—' · 그날 명단에 없던 학생은 빈 칸.
  */
 export function MonthTable({
-  dates, students, checks, today, onPickDate,
+  dates, students, checks, today, trackingStart, onPickDate,
 }: {
   dates: string[];
   today: string;
+  trackingStart: string | null;
   students: RosterStudent[];
   checks: Record<string, BeforeClassCheck>;
   onPickDate: (date: string) => void;
@@ -44,7 +46,7 @@ export function MonthTable({
         </thead>
         <tbody>
           {students.map((s) => {
-            const own = s.activeDates.filter((d) => d <= today).map((d) => checks[checkKey(s.id, d)] ?? DONE);
+            const own = s.activeDates.filter((d) => isRecordedDay(d, today, trackingStart)).map((d) => checks[checkKey(s.id, d)] ?? DONE_CHECK);
             const sum = summarizeStudent(own);
             const top = BEFORE_CLASS_ITEMS
               .map((i) => ({ label: i.short, count: sum.itemCounts.get(i.key) ?? 0 }))
@@ -57,7 +59,7 @@ export function MonthTable({
                   <span className="font-medium">{s.name}</span>
                   <span className="text-text-dim ml-1.5 text-xs">{s.schoolGrade}</span>
                 </td>
-                {dates.map((d) => <MonthCell key={d} active={s.activeDates.includes(d)} check={checks[checkKey(s.id, d)] ?? (d <= today ? DONE : undefined)} />)}
+                {dates.map((d) => <MonthCell key={d} active={s.activeDates.includes(d)} check={checks[checkKey(s.id, d)] ?? (isRecordedDay(d, today, trackingStart) ? DONE_CHECK : undefined)} />)}
                 <td className="px-2 py-1.5 text-center font-semibold tabular-nums">{percentLabel(sum.average)}</td>
                 <td className="px-2 py-1.5 text-center tabular-nums">{sum.supplementCount || "—"}</td>
                 <td className="px-2 py-1.5 text-center tabular-nums">{sum.absentCount || "—"}</td>
@@ -80,7 +82,7 @@ function MonthCell({ active, check }: { active: boolean; check: BeforeClassCheck
   return (
     <td className={`px-1 py-1 text-center ${tone}`}>
       <div className="font-semibold tabular-nums">{check.absent ? "결석" : percentLabel(completionRate(check))}</div>
-      {check.card ? <div className="text-xs">{cardLabel(check.card)}</div> : null}
+      {check.card ? <div className="mt-0.5"><CardBadge card={check.card} /></div> : null}
     </td>
   );
 }

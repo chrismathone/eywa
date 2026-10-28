@@ -78,7 +78,8 @@ const FORMER_STAFF: Record<string, LessonStaff[]> = {
 };
 /**
  * 반형태 규칙(원장 2026-10-28) — *"단과 내신대비, 순공300, 100점프로젝트는 그냥 기타로 넘겨. 수업이 아닌듯"*.
- *  `other` = 그 반형태의 수납명은 모두 기타(이름 판정이 정해졌어도) · `otherNames` = 반형태와 상관없이 기타 ·
+ *  `other` = 그 반형태의 수납명은 모두 기타(이름 판정이 정해졌어도) · `otherNames` = 반형태와 상관없이 기타('한국사특강' — 원장
+ *  *"한국사특강은 그냥 빼. 현재 과목과 안맞는것 같네"* · 시트 반형태가 '국어 특강'이라 국어로 세지던 2021-01 두 반 6줄 → 기타 23개 177줄) ·
  *  `nameSubjects` = 원장이 과목을 정해 준 수납명(이름 판정이 모름일 때만 · 원장 2026-10-28 *"셋 다 수학"*).
  *  2025-06 뒤 내신대비 반(시트 밖)은 수업 그대로 — 원장 *"김화영은 수학, 국어는 국어"*(이름 판정이 이미 그렇게 센다).
  *  '순공300 프로그램'은 정규 수업 409개에도 붙은 학생 묶음 표시라 반형태로 걸지 않고 과목 없는 반('스터디케어')만 이름으로 건다 — '모름이면
@@ -89,7 +90,7 @@ const FORMER_STAFF: Record<string, LessonStaff[]> = {
 const CLASS_TYPE_RULES: Record<string, { other: string[]; otherNames: RegExp[]; nameSubjects: Record<string, string> }> = {
   cs: {
     other: ["단과 내신대비"],
-    otherNames: [/100점\s*프로젝트/, /스터디\s*케어/],
+    otherNames: [/100점\s*프로젝트/, /스터디\s*케어/, /한국사\s*특강/],
     nameSubjects: { "내신 추가수업 토": "math", "김은정 중등 화 3교시": "math", "중등주말내신보강 2회": "math" },
   },
 };
@@ -280,7 +281,7 @@ try {
   console.log("\n달 | 학생(종전→새) | 수학 | 인재원영어 | EiE | 과목들 | 모름 | 끊김 | 등록 | 실제신규");
   for (const n of next) {
     const o = oldBy.get(n.month);
-    const subj = Object.entries(n.data).filter(([k]) => k.startsWith("payingSubject:")).map(([k, v]) => `${k.slice(14)} ${v}`).join("·");
+    const subj = Object.entries(n.data).filter(([k]) => k.startsWith("payingSubject:")).map(([k, v]) => `${k.slice(14)} ${pick(o, k)}→${v}`).join("·");
     const f = (k: string) => `${pick(o, k)}→${pick(n.data, k)}`;
     console.log(`${n.month}${n.data.skippedPaying ? "(비움)" : ""} | ${f("payingTotal")}(${f("payingGeneral")}) | ${f("payingMath")} | ${f("payingInjaewon")} | ${f("payingEie")} | ${subj || "-"} | ${f("payingUnknown")} | ${f("stoppedPaying")} | ${f("newRegistered")} | ${f("newReal")}`);
   }

@@ -5,6 +5,7 @@ import { PilotSheetHead } from "@/features/onescreen/components/pilot-sheet-head
 import type { LevelRow } from "@/features/onescreen/pilot-notes";
 import { reportCheckLevels, type BeforeClassCheck } from "../items";
 import { checkKey, type ReportDayLevels, type RosterStudent } from "../types";
+import { isRecordedDay } from "../stats";
 
 const DONE: BeforeClassCheck = { missed: [], absent: false, card: null };
 
@@ -12,13 +13,14 @@ const DONE: BeforeClassCheck = { missed: [], absent: false, card: null };
  * 보고서 시안(원장 2026-10-28 *"디자인 시안 기존꺼에 데이터만 넣은 형식"*) — 학부모 수학 보고서의 머리 표(`PilotSheetHead`)를
  * **그대로** 쓰고 수업 평가 줄만 7개로 채운다: 수업태도 · 이해도(그날 쓴 보고서 값) + 예습영상 · 개념정리 · 풀이노트정리 ·
  * 문제풀이 · 오답정리(이 체크리스트, 눈금 규칙 = items.ts `reportCheckLevels`). 보기 전용 — 실제 보고서·발송은 바뀌지 않는다.
- * 체크가 없는 지난 수업일은 시트처럼 '모두 해 옴'으로 본다 · 오늘·아직 안 온 날은 '체크 전'.
+ * 체크가 없는 지난 수업일은 시트처럼 '모두 해 옴'으로 본다 · 오늘·아직 안 온 날은 체크리스트 줄을 세우지 않는다.
  */
 export function ReportPreview({
-  date, today, students, checks, reportLevels, className, teacherName, logoSrc, academyName,
+  date, today, trackingStart, students, checks, reportLevels, className, teacherName, logoSrc, academyName,
 }: {
   date: string;
   today: string;
+  trackingStart: string | null;
   students: RosterStudent[];
   checks: Record<string, BeforeClassCheck>;
   reportLevels: Record<string, ReportDayLevels>;
@@ -31,17 +33,17 @@ export function ReportPreview({
   if (students.length === 0) return <p className="text-text-dim px-1 py-6 text-sm">이날 이 반 명단에 학생이 없습니다.</p>;
   const student = students.find((s) => s.id === picked) ?? students[0]!;
   const key = checkKey(student.id, date);
-  // 오늘은 아직 체크 중일 수 있어 지난 날만 '모두 해 옴'으로 본다(오늘 기록이 없으면 '체크 전').
-  const check = checks[key] ?? (date < today ? DONE : null);
+  // 오늘은 아직 체크 중일 수 있어 지난 날만 '모두 해 옴'으로 본다(오늘 기록이 없으면 '체크 전') · 추적 시작 전 날도 '체크 전'.
+  const check = checks[key] ?? (date < today && isRecordedDay(date, today, trackingStart) ? DONE : null);
   const report = reportLevels[key];
-  const fromReport = (label: string, level: ReportDayLevels["attitude"] | undefined): LevelRow =>
-    level ? { label, level } : { label, level: null, none: "평가 없음" };
+  // 값이 없는 줄은 세우지 않는다(원장 2026-10-28 *"내용들이 없으면 … 해당 영역 날리는 게"*) — '평가 없음'·'체크 전' 줄 없음.
+  // 결석이면 체크리스트 다섯 줄 대신 '결석' 한 줄(원장 2026-10-28 *"결석이면 아예 결석 한 줄로"*). 남는 줄이 없으면 평가 표째 뺀다.
   const levels: LevelRow[] = [
-    fromReport("수업태도", report?.attitude),
-    fromReport("이해도", report?.understanding),
-    ...(check
-      ? reportCheckLevels(check).map((r): LevelRow => (r.level ? { label: r.label, level: r.level } : { label: r.label, level: null, none: "결석" }))
-      : reportCheckLevels(DONE).map((r): LevelRow => ({ label: r.label, level: null, none: "체크 전" }))),
+    ...(report?.attitude ? [{ label: "수업태도", level: report.attitude }] : []),
+    ...(report?.understanding ? [{ label: "이해도", level: report.understanding }] : []),
+    ...(!check ? [] : check.absent
+      ? [{ label: "수업 준비", level: null, none: "결석" } as LevelRow]
+      : reportCheckLevels(check).flatMap((r): LevelRow[] => (r.level ? [{ label: r.label, level: r.level }] : []))),
   ];
 
   return (
@@ -73,7 +75,7 @@ export function ReportPreview({
             className={className}
             teacherName={teacherName}
             tests={[]}
-            levels={levels}
+            levels={levels.length ? levels : null}
           />
         </div>
       </div>

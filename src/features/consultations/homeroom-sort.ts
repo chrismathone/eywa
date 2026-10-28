@@ -91,6 +91,25 @@ export function isDefaultHomeroomFilter(f: HomeroomFilter): boolean {
   return !f.subject && f.teachers.length === 0 && !f.unmetOnly && !f.unmetStudentsOnly;
 }
 
+/**
+ * 위 상담 통계(지표·추이)를 담임별 현황의 고르기에 잇는다(원장 2026-10-28 *"주석처리된거 말고 리스트 보이고있는애랑 연결해줘"*).
+ * 통계는 주소의 상담사(한 명)·과목으로 걸리므로 — 담임을 **정확히 한 명** 골랐을 때만 그 사람, 여럿·전체면 상담사 조건을 비운다.
+ */
+export function statsLinkOf(f: HomeroomFilter): { who: string; subject: string } {
+  return { who: f.teachers.length === 1 ? f.teachers[0]! : "", subject: f.subject ?? "" };
+}
+
+/**
+ * 주소(통계 조건)에 현황 고르기를 맞춘다 — 두 카드가 다른 조건을 가리키지 않게(위 드롭다운으로 바꿔도, 저장된 고르기로 열어도).
+ * 여러 명 고른 상태는 주소에 상담사가 없을 때만 남는다(통계는 그때 전체라 어긋나지 않는다). 같으면 같은 객체를 돌려준다.
+ */
+export function alignHomeroomFilter(f: HomeroomFilter, who: string, subject: string): HomeroomFilter {
+  const teachers = who ? [who] : f.teachers.length > 1 ? f.teachers : [];
+  const s = subject || null;
+  if (s === f.subject && teachers.length === f.teachers.length && teachers.every((t, i) => t === f.teachers[i])) return f;
+  return { ...f, subject: s, teachers };
+}
+
 export function filterHomeroomTeachers(teachers: readonly HomeroomTeacher[], f: HomeroomFilter): HomeroomTeacher[] {
   const picked = f.teachers.length ? new Set(f.teachers) : null;
   const last = (t: HomeroomTeacher) => t.months[t.months.length - 1];

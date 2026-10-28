@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { migrationFiles } from "@/lib/db/migrations-corpus.mjs";
+import { schemaColumns, selectColumns } from "@/lib/db/schema-columns";
 import { daySplitStudents, nextDay, SLOT_ANCHORS, slotAnchorBlockText } from "./slot-anchors";
 
 /**
@@ -19,48 +19,6 @@ const root = process.cwd();
 const read = (p: string) => fs.readFileSync(path.join(root, p), "utf8");
 // 교시 메모(`class_sheet_memos`)도 반 블록 옮기기가 함께 옮긴다(2026-10-28) — 열쇠 글자라 SLOT_ANCHORS 밖이지만 조회 칸은 같이 본다.
 const TABLES = [...new Set([...SLOT_ANCHORS.map((a) => a.table), "enrollments", "class_sheet_memos"])];
-const NAME = String.raw`"?([a-z_][a-z0-9_]*)"?`;
-const NOT_COLUMN = /^(constraint|primary|unique|foreign|check|exclude|index|key|if|column)$/i;
-const tableRe = (t: string) => String.raw`(?:only\s+)?(?:(?:public|"public")\.)?"?${t}"?(?![a-z0-9_])`;
-
-/** SQL 전체를 적용 순서대로 훑어 그 표의 지금 칸 이름. `COLUMN` 낱말은 있어도 없어도 된다(`alter table t drop x`). */
-function schemaColumns(table: string): Set<string> {
-  const cols = new Set<string>();
-  const T = tableRe(table);
-  for (const { sql } of migrationFiles()) {
-    const text = sql.replace(/--.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
-    const create = new RegExp(String.raw`create\s+table\s+(?:if\s+not\s+exists\s+)?${T}\s*\(`, "i").exec(text);
-    if (create) {
-      // 칸 목록 = 여는 괄호부터 짝이 맞는 닫는 괄호까지 · 줄마다 첫 낱말(제약 줄 제외).
-      let depth = 0;
-      let j = create.index + create[0].length - 1;
-      const start = j + 1;
-      for (; j < text.length; j++) {
-        if (text[j] === "(") depth++;
-        else if (text[j] === ")" && --depth === 0) break;
-      }
-      for (const line of text.slice(start, j).split(/,\s*\n/)) {
-        const m = new RegExp(String.raw`^\s*${NAME}\s+[a-z"]`, "i").exec(line);
-        if (m && !NOT_COLUMN.test(m[1]!)) cols.add(m[1]!);
-      }
-    }
-    for (const alter of text.matchAll(new RegExp(String.raw`alter\s+table\s+(?:if\s+exists\s+)?${T}\s+([^;]*)`, "gi"))) {
-      const body = alter[1]!;
-      for (const m of body.matchAll(new RegExp(String.raw`(?:^|,)\s*add\s+(?:column\s+)?(?:if\s+not\s+exists\s+)?${NAME}`, "gi"))) {
-        if (!NOT_COLUMN.test(m[1]!)) cols.add(m[1]!);
-      }
-      for (const m of body.matchAll(new RegExp(String.raw`(?:^|,)\s*drop\s+(?:column\s+)?(?:if\s+exists\s+)?${NAME}`, "gi"))) {
-        if (!NOT_COLUMN.test(m[1]!)) cols.delete(m[1]!);
-      }
-      for (const m of body.matchAll(new RegExp(String.raw`rename\s+(?:column\s+)?${NAME}\s+to\s+${NAME}`, "gi"))) {
-        if (NOT_COLUMN.test(m[1]!)) continue;
-        cols.delete(m[1]!);
-        cols.add(m[2]!);
-      }
-    }
-  }
-  return cols;
-}
 
 /** 주석을 같은 길이의 빈칸으로 — 문자열 안의 `//`(주소)는 그대로. 조회 줄 머리부터만 쓴다(파일 전체는 정규식 리터럴의 따옴표에 흔들린다). */
 function stripComments(s: string): string {
@@ -105,11 +63,18 @@ function chainEnd(s: string, i: number): number {
   return s.length;
 }
 
-/** 저장소 코드 파일(시험 제외 · 아직 add 안 한 새 파일 포함 · 한글 경로도 그대로). */
-function codeFiles(): string[] {
+type CodeFile = { f: string; raw: string };
+
+/**
+ * 저장소 코드 파일(시험 제외 · 아직 add 안 한 새 파일 포함 · 한글 경로도 그대로) — **한 번만 읽는다**(표마다 7천 개를 다시 읽으면
+ * 캐시가 찬 디스크에서도 30초를 넘겼다). PostgREST 조회가 없는 파일은 뺀다.
+ */
+function codeFiles(): CodeFile[] {
   return execSync("git -c core.quotePath=false ls-files -z --cached --others --exclude-standard src scripts", { cwd: root, encoding: "utf8" })
     .split("\0")
-    .filter((f) => f && /\.(ts|tsx|mts|mjs|cjs)$/.test(f) && !/\.test\.(ts|tsx)$/.test(f) && fs.existsSync(path.join(root, f)));
+    .filter((f) => f && /\.(ts|tsx|mts|mjs|cjs)$/.test(f) && !/\.test\.(ts|tsx)$/.test(f) && fs.existsSync(path.join(root, f)))
+    .map((f) => ({ f, raw: read(f) }))
+    .filter((c) => c.raw.includes('from("'));
 }
 
 /** 조회 줄 머리(`from("표")` 자리)부터 그 줄 끝까지 — 주석은 지운다. */
@@ -119,11 +84,10 @@ function chainAt(s: string, i: number): string {
 }
 
 /** 그 표의 조회 줄(주석 속 예시 제외). */
-function chains(table: string, files = codeFiles()): { at: string; text: string }[] {
+function chains(table: string, files: readonly CodeFile[]): { at: string; text: string }[] {
   const out: { at: string; text: string }[] = [];
   const needle = `from("${table}")`;
-  for (const f of files) {
-    const raw = read(f);
+  for (const { f, raw } of files) {
     for (let i = raw.indexOf(needle); i >= 0; i = raw.indexOf(needle, i + 1)) {
       if (/\/\/|^\s*(\*|\/\*)/.test(raw.slice(raw.lastIndexOf("\n", i) + 1, i))) continue;
       out.push({ at: `${f}:${raw.slice(0, i).split("\n").length}`, text: chainAt(raw, i) });
@@ -135,25 +99,7 @@ function chains(table: string, files = codeFiles()): { at: string; text: string 
 /** 조회가 칸으로 쓰는 이름 — select 목록(다른 표 끼워 읽기·`*` 제외 · 별칭은 뒤 이름)과 필터·정렬의 첫 인자. */
 function referenced(text: string): string[] {
   const names: string[] = [];
-  for (const m of text.matchAll(/\.select\(\s*"([^"]*)"/g)) {
-    let depth = 0;
-    let cur = "";
-    const parts: string[] = [];
-    for (const ch of m[1]!) {
-      if (ch === "(") depth++;
-      if (ch === ")") depth--;
-      if (ch === "," && depth === 0) {
-        parts.push(cur);
-        cur = "";
-      } else cur += ch;
-    }
-    parts.push(cur);
-    for (const p of parts.map((x) => x.trim())) {
-      if (!p || /[(*!]/.test(p)) continue;
-      const col = (p.includes(":") && !p.includes("::") ? p.split(":")[1]! : p).split("::")[0]!.trim();
-      if (/^[a-z_][a-z0-9_]*$/.test(col)) names.push(col);
-    }
-  }
+  for (const m of text.matchAll(/\.select\(\s*"([^"]*)"/g)) names.push(...selectColumns(m[1]!));
   for (const m of text.matchAll(/\.(eq|neq|gt|gte|lt|lte|in|is|like|ilike|order|not)\(\s*"([a-z_][a-z0-9_]*)"/g)) names.push(m[2]!);
   return names;
 }

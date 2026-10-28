@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classDatesInMonth, defaultCheckDate, shortDateLabel } from "./dates";
+import { classDatesInMonth, defaultCheckDate, pickCheckDate, shortDateLabel } from "./dates";
 import { completionRate, isBlankCheck, needsSupplement, normalizeCard, normalizeMissed, reportCheckLevels, summarizeStudent } from "./items";
 
 describe("비포클래스 판정", () => {
@@ -63,5 +63,18 @@ describe("수업일", () => {
     expect(defaultCheckDate(dates, "2026-10-01")).toBe("2026-10-26");
     expect(defaultCheckDate([], "2026-10-01")).toBeNull();
     expect(shortDateLabel("2026-10-26")).toBe("10/26(월)");
+  });
+});
+
+describe("pickCheckDate — 주소의 날짜", () => {
+  const dates = ["2026-10-05", "2026-10-12", "2026-10-26"];
+  it("first·last는 그 달 첫·마지막 수업일", () => {
+    expect(pickCheckDate(dates, "2026-10-20", "first")).toBe("2026-10-05");
+    expect(pickCheckDate(dates, "2026-10-20", "last")).toBe("2026-10-26");
+  });
+  it("수업일이면 그날, 아니면 기본 날", () => {
+    expect(pickCheckDate(dates, "2026-10-20", "2026-10-26")).toBe("2026-10-26");
+    expect(pickCheckDate(dates, "2026-10-20", "2026-10-13")).toBe("2026-10-12");
+    expect(pickCheckDate([], "2026-10-20", "last")).toBeNull();
   });
 });

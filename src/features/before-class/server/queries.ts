@@ -3,8 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { monthRange } from "@/lib/date-kst";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
-import { enrollmentAttendsOnDay, isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
-import { classDatesInMonth, dayKeyOf } from "../dates";
+import { attendsClassOn } from "../roster";
+import { classDatesInMonth } from "../dates";
 import { normalizeCard, normalizeMissed, type BeforeClassCheck } from "../items";
 import { loadReportLevels } from "./report-levels";
 import { checkKey, type ChecklistTarget, type ClassMonth, type RosterStudent } from "../types";
@@ -49,6 +49,17 @@ export async function loadTargets(tenantId: string): Promise<{ ready: boolean; t
   return { ready: true, targets };
 }
 
+/** 이 반에서 체크를 처음 한 날(추적 시작, stats.ts `isRecordedDay`) — 체크가 없거나 표가 없으면 null. */
+export async function loadTrackingStart(tenantId: string, classId: string): Promise<string | null> {
+  const { data, error } = await createAdminClient().from("before_class_checks").select("check_date")
+    .eq("tenant_id", tenantId).eq("class_id", classId).order("check_date", { ascending: true }).limit(1).maybeSingle();
+  if (error) {
+    if (isMissingTable(error)) return null;
+    throw new Error(`before_class_checks: ${error.message}`);
+  }
+  return (data?.check_date as string | undefined) ?? null;
+}
+
 type EnrollmentRow = {
   student_id: string; start_date: string; end_date: string | null; is_transferred: boolean; on_hold: boolean; attendance_days: string[] | null;
 };
@@ -56,7 +67,7 @@ type EnrollmentRow = {
 export async function loadClassMonth(tenantId: string, classId: string, month: string): Promise<ClassMonth> {
   const admin = createAdminClient();
   const { from, to } = monthRange(month);
-  const [cls, sched, enr, chk] = await Promise.all([
+  const [cls, sched, enr, chk, trackingStart] = await Promise.all([
     admin.from("classes").select("subject").eq("tenant_id", tenantId).eq("id", classId).maybeSingle(),
     admin.from("class_schedules").select("day_of_week, valid_from, valid_to").eq("tenant_id", tenantId).eq("class_id", classId),
     admin.from("enrollments")
@@ -65,6 +76,7 @@ export async function loadClassMonth(tenantId: string, classId: string, month: s
     admin.from("before_class_checks")
       .select("student_id, check_date, missed, absent, card")
       .eq("tenant_id", tenantId).eq("class_id", classId).gte("check_date", from).lte("check_date", to),
+    loadTrackingStart(tenantId, classId),
   ]);
   if (cls.error) throw new Error(`classes: ${cls.error.message}`);
   if (sched.error) throw new Error(`class_schedules: ${sched.error.message}`);
@@ -88,9 +100,7 @@ export async function loadClassMonth(tenantId: string, classId: string, month: s
     .filter((s) => !s.is_test)
     .map((s) => {
       const rows = byStudent.get(s.id as string) ?? [];
-      const activeDates = dates.filter((d) => rows.some((e) =>
-        isEnrollmentOnRosterOn({ startDate: e.start_date, endDate: e.end_date, isTransferred: e.is_transferred }, d)
-        && enrollmentAttendsOnDay(e.attendance_days, dayKeyOf(d))));
+      const activeDates = dates.filter((d) => attendsClassOn(rows, d));
       return {
         id: s.id as string,
         name: s.name as string,
@@ -110,5 +120,5 @@ export async function loadClassMonth(tenantId: string, classId: string, month: s
       card: normalizeCard(c.card),
     };
   }
-  return { dates, students, checks, reportLevels };
+  return { dates, students, checks, reportLevels, trackingStart };
 }
