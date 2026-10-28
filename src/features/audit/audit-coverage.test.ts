@@ -72,6 +72,7 @@ const EXEMPT: Record<string, string> = {
   "src/features/class-sheets/server/actions.ts#saveMemo": CELL,
   "src/features/class-sheets/server/month-memo-actions.ts#saveMonthMemo": CELL,
   "src/features/attendance/seat/server/mark-actions.ts#setSeatJjField": CELL,
+  "src/features/before-class/server/actions.ts#saveBeforeClassCheck": CELL, // 체크 칸 하나 — 누가 체크했는지는 행의 checked_by·updated_at
   "src/features/math-sheets/server/actions.ts#upsertStudentGoal": CELL,
   "src/features/meetings/server/actions.ts#updateMeetingNotepad": CELL,
   // AI 결과 캐시

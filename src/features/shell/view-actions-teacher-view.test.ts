@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   ownClassIds: [] as string[],
   subjects: [] as string[],
   delegated: false,
+  jjManager: false,
   assistant: [] as string[],
   jar: { set: vi.fn(), delete: vi.fn(), get: vi.fn<(key: string) => { value: string } | undefined>() },
 }));
@@ -21,7 +22,10 @@ vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => h.user }
 vi.mock("@/lib/auth/teacher-scope", () => ({
   getTeacherScope: async () => ({ classIds: h.ownClassIds, studentIds: [], subjects: h.subjects }),
 }));
-vi.mock("@/features/classes/server/delegation", () => ({ hasActiveDelegation: async () => h.delegated }));
+vi.mock("@/features/classes/server/delegation", () => ({
+  hasActiveDelegation: async () => h.delegated,
+  isJjReportManager: async () => h.jjManager,
+}));
 // 노출 판정의 담당 반 head 카운트 — 담당 반 목록과 같은 값을 돌려준다(둘은 같은 조건의 조회다).
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
@@ -50,6 +54,7 @@ beforeEach(() => {
   h.ownClassIds = [];
   h.subjects = [];
   h.delegated = false;
+  h.jjManager = false;
   h.assistant = [];
   h.jar.set.mockClear();
   h.jar.delete.mockClear();
@@ -78,6 +83,17 @@ describe("'강사뷰로 전환' — 노출과 진입이 같은 판정", () => {
     h.assistant = ["c-eng"];
     const { switchToTeacherView } = await load();
     expect(await switchToTeacherView()).toBe("home:english");
+  });
+
+  it("🔴 JJ 보고서 담당(담임 반·위임 없음) — 버튼이 서고, 누르면 강사뷰로 들어가 원스크린 갈래로 착지한다(김동후 2026-10-28)", async () => {
+    h.jjManager = true;
+    const { canUseTeacherView, switchToTeacherView, VIEW_MODE_COOKIE } = await load();
+    expect(await canUseTeacherView()).toBe(true);
+    expect(await switchToTeacherView()).toBe("home:-");
+    expect(h.jar.set).toHaveBeenCalledWith(VIEW_MODE_COOKIE, "teacher", expect.anything());
+    h.jar.get.mockImplementation((key) => (key === VIEW_MODE_COOKIE ? { value: "teacher" } : undefined));
+    const again = await load();
+    expect(await again.effectiveTeacherId()).toBe("u-mgr");
   });
 
   it("담당 반이 있으면 종전 그대로 — 담당 과목으로 착지", async () => {
