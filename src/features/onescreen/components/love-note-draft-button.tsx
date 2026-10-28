@@ -34,7 +34,7 @@ export function LoveNoteDraftButton({
   compact?: boolean;
 }) {
   const t = useSheetT();
-  const date = useSearchParams().get("date") ?? "";
+  const date = useSearchParams()?.get("date") ?? "";
   const [busy, setBusy] = useState(false);
 
   async function run() {
