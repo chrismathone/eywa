@@ -31,7 +31,17 @@ export function CheckTable({
   }
   return (
     <div className="overflow-x-auto px-1">
-      <table className="w-full min-w-[1100px] border-collapse text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-line-faint">
+      {/* 체크 칸(미흡 10 + 결석)은 폭을 똑같이 나눈다(원장 2026-10-28 *"칸마다 간격 동일하게"*) — 고정 표 + 나머지 열만 폭을 정한다.
+          자동 폭이면 머리 글자 길이('본교재 오답' vs '과제')만큼 칸이 들쭉날쭉해진다([[#97]]). */}
+      <table className="w-full min-w-[1100px] table-fixed border-collapse text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-line-faint">
+        <colgroup>
+          <col className="w-44" />
+          {BEFORE_CLASS_ITEMS.map((i) => <col key={i.key} />)}
+          <col />
+          <col className="w-32" />
+          <col className="w-18" />
+          <col className="w-24" />
+        </colgroup>
         <thead>
           <tr className="border-line border-b">
             <th className="bg-background sticky left-0 z-10 px-2 py-2 text-left font-semibold">이름</th>
@@ -57,7 +67,7 @@ export function CheckTable({
             return (
               <tr key={s.id} className={`border-line-faint border-b ${check.absent ? "bg-report-accent-soft" : ""}`}>
                 <td className={`sticky left-0 z-10 px-2 py-1.5 ${check.absent ? "bg-report-accent-soft" : "bg-background"}`}>
-                  <div className="flex items-baseline gap-1.5 whitespace-nowrap">
+                  <div className="flex items-baseline gap-1.5 overflow-hidden whitespace-nowrap">
                     <span className="font-medium">{s.name}</span>
                     <span className="text-text-dim text-xs">{s.schoolGrade}</span>
                     {s.onHold ? <span className="text-amber text-xs">휴원</span> : null}
@@ -89,7 +99,7 @@ export function CheckTable({
                     />
                   </CellBox>
                 </td>
-                <td className="px-1 py-1 text-center">
+                <td className="px-2 py-1 text-center">
                   {canEdit ? (
                     <SearchableSelect
                       options={CARD_OPTIONS}
@@ -98,7 +108,8 @@ export function CheckTable({
                       ariaLabel={`${s.name} 카드`}
                       compact
                       portal
-                      className="w-28"
+                      className="w-full"
+                      triggerClassName="border-line bg-card h-(--control-h) rounded-lg border px-2 text-sm"
                     />
                   ) : (
                     <CardBadge card={check.card} />

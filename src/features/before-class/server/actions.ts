@@ -14,8 +14,8 @@ import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidYmd } from "@/lib/date-kst";
-import { enrollmentAttendsOnDay, isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
-import { classDatesInMonth, dayKeyOf } from "../dates";
+import { classDatesInMonth } from "../dates";
+import { attendsClassOn } from "../roster";
 import { BEFORE_CLASS_CARDS, BEFORE_CLASS_ITEMS, isBlankCheck, normalizeMissed } from "../items";
 
 const inputSchema = z.object({
@@ -54,9 +54,7 @@ export async function saveBeforeClassCheck(input: SaveBeforeClassInput): Promise
   if (!target.data) return { ok: false, error: "체크리스트 대상 반이 아닙니다" };
   // 화면과 같은 판정 — 그 달의 수업일이고(배치 이력 포함) 그날 등원하는 학생만.
   if (!classDatesInMonth(date.slice(0, 7), sched.data ?? []).includes(date)) return { ok: false, error: "이 반의 수업일이 아닙니다" };
-  const onRoster = (enr.data ?? []).some((e) =>
-    isEnrollmentOnRosterOn({ startDate: e.start_date, endDate: e.end_date, isTransferred: e.is_transferred }, date)
-    && enrollmentAttendsOnDay(e.attendance_days, dayKeyOf(date)));
+  const onRoster = attendsClassOn(enr.data ?? [], date);
   if (!onRoster) return { ok: false, error: "그날 이 반 명단에 없는 학생입니다" };
 
   const key = { tenant_id: user.tenantId, class_id: classId, student_id: studentId, check_date: date };

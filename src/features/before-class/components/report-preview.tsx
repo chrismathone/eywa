@@ -5,6 +5,7 @@ import { PilotSheetHead } from "@/features/onescreen/components/pilot-sheet-head
 import type { LevelRow } from "@/features/onescreen/pilot-notes";
 import { reportCheckLevels, type BeforeClassCheck } from "../items";
 import { checkKey, type ReportDayLevels, type RosterStudent } from "../types";
+import { isRecordedDay } from "../stats";
 
 const DONE: BeforeClassCheck = { missed: [], absent: false, card: null };
 
@@ -15,10 +16,11 @@ const DONE: BeforeClassCheck = { missed: [], absent: false, card: null };
  * 체크가 없는 지난 수업일은 시트처럼 '모두 해 옴'으로 본다 · 오늘·아직 안 온 날은 '체크 전'.
  */
 export function ReportPreview({
-  date, today, students, checks, reportLevels, className, teacherName, logoSrc, academyName,
+  date, today, trackingStart, students, checks, reportLevels, className, teacherName, logoSrc, academyName,
 }: {
   date: string;
   today: string;
+  trackingStart: string | null;
   students: RosterStudent[];
   checks: Record<string, BeforeClassCheck>;
   reportLevels: Record<string, ReportDayLevels>;
@@ -31,8 +33,8 @@ export function ReportPreview({
   if (students.length === 0) return <p className="text-text-dim px-1 py-6 text-sm">이날 이 반 명단에 학생이 없습니다.</p>;
   const student = students.find((s) => s.id === picked) ?? students[0]!;
   const key = checkKey(student.id, date);
-  // 오늘은 아직 체크 중일 수 있어 지난 날만 '모두 해 옴'으로 본다(오늘 기록이 없으면 '체크 전').
-  const check = checks[key] ?? (date < today ? DONE : null);
+  // 오늘은 아직 체크 중일 수 있어 지난 날만 '모두 해 옴'으로 본다(오늘 기록이 없으면 '체크 전') · 추적 시작 전 날도 '체크 전'.
+  const check = checks[key] ?? (date < today && isRecordedDay(date, today, trackingStart) ? DONE : null);
   const report = reportLevels[key];
   const fromReport = (label: string, level: ReportDayLevels["attitude"] | undefined): LevelRow =>
     level ? { label, level } : { label, level: null, none: "평가 없음" };

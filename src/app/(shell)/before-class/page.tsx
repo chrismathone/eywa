@@ -71,6 +71,7 @@ export default async function BeforeClassPage({ searchParams }: { searchParams: 
             initialChecks={data.checks}
             initialDate={defaultCheckDate(data.dates, kstToday())}
             today={kstToday()}
+            trackingStart={data.trackingStart}
             canEdit={level === "full"}
             report={{ levels: data.reportLevels, className: current.name, teacherName: current.teacherName, logoSrc, academyName }}
           />
