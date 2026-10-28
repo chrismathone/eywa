@@ -5,6 +5,8 @@ import { notifyMakeupEffect } from "./makeup-effect-toast";
 import { setMakeupClass } from "../server/makeup-class-actions";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { beginWriteOrigin, markAutowrite, markWrite, queueWriteTiming, withWriteOrigin } from "../write-timing-store";
+import type { SendMode, WriteField, WriteView } from "../write-timing";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { EyIcon } from "@/components/icons/aywa-icons";
@@ -1102,8 +1104,20 @@ export function OneScreenClient({
     if (!selected) return;
     patch(selected.id, (s) => ({ ...s, progressConfirmed: !s.progressConfirmed }));
   }
+  // 작성 시간 기록(원장 2026-10-28, write-timing.ts) — 칸 세터마다 한 줄. 표 안에서 연 카드 상세는 '카드'로 센다(카드 화면을 쓰는 것이다).
+  function writeView(): WriteView {
+    return view === "grid" && !detailsOpen ? "grid" : "card";
+  }
+  function wt(studentId: string, subjectName: string, field: WriteField) {
+    if (!readonlyView) markWrite(activeDate, studentId, subjectName, field, writeView());
+  }
+  function wtIdx(studentId: string, subjectIndex: number, field: WriteField) {
+    const name = studentsRef.current.find((x) => x.id === studentId)?.subjects[subjectIndex]?.name;
+    if (name) wt(studentId, name, field);
+  }
   // ── studentId 파라미터 핸들러(표=행별 직접 호출, 카드=selected wrapper) — 로직 단일 소스 ──
   function setProgressFor(studentId: string, subjectIndex: number, today: string) {
+    wtIdx(studentId, subjectIndex, "progress");
     patch(studentId, (s) => ({
       ...s,
       subjects: s.subjects.map((su, i) => (i === subjectIndex ? { ...su, today } : su)),
@@ -1111,6 +1125,7 @@ export function OneScreenClient({
   }
   /** 오늘 수업 성격(복습·문제풀이) 토글 — 진도와 **함께** 사는 축이라 진도 값은 건드리지 않는다. */
   function setProgressModeFor(studentId: string, subjectIndex: number, mode: string | null) {
+    wtIdx(studentId, subjectIndex, "progress");
     patch(studentId, (s) => ({
       ...s,
       subjects: s.subjects.map((su, i) => (i === subjectIndex ? { ...su, progressMode: mode } : su)),
@@ -1902,10 +1917,12 @@ export function OneScreenClient({
     }
   }
   function setScoreFor(studentId: string, subjectName: string, which: "daily" | "check", v: number | null) {
+    wt(studentId, subjectName, which === "daily" ? "dailyTest" : "checkTest");
     patchRowEval(studentId, subjectName, (su) => ({ ...su, [which === "daily" ? "dailyScore" : "checkScore"]: v }));
   }
   // 테스트 만점(/N) 변경 — 학원설정 allowTeacherTestMax on일 때만 UI 노출. 점수가 새 만점 초과면 함께 클램프.
   function setMaxFor(studentId: string, subjectName: string, which: "daily" | "check", v: number) {
+    wt(studentId, subjectName, which === "daily" ? "dailyTest" : "checkTest");
     const max = Math.max(1, Math.min(100, Math.round(v) || 1));
     patchRowEval(studentId, subjectName, (su) => {
       const cur = which === "daily" ? su.dailyScore : su.checkScore;
@@ -2153,9 +2170,11 @@ export function OneScreenClient({
   }
   // 표=SET(선택값), 카드=TOGGLE(같은 값 재클릭 시 해제) — 카드 wrapper가 토글을 계산해 SET 호출.
   function setAttitudeValue(studentId: string, subjectName: string, a: string | null) {
+    wt(studentId, subjectName, "attitude");
     patchRowEval(studentId, subjectName, (su) => ({ ...su, attitude: a }));
   }
   function setHomeworkValue(studentId: string, subjectName: string, h: string) {
+    wt(studentId, subjectName, "homework");
     patchRowEval(studentId, subjectName, (su) => ({ ...su, homework: h }));
   }
   // 소단원별 이해도(수학 보고서 시범, math-report-pilot.ts) — 행별. 자동저장(세션)에 실린다.
@@ -2166,6 +2185,7 @@ export function OneScreenClient({
     }));
   }
   function setUnderstandingScoreFor(studentId: string, subjectName: string, lesson: string, score: number | null) {
+    wt(studentId, subjectName, "understanding");
     patchUnderstandingFor(studentId, subjectName, (st) => {
       const scores = { ...st.scores };
       if (score == null) delete scores[lesson];
@@ -2175,21 +2195,26 @@ export function OneScreenClient({
   }
   // 일일 테스트 있음/없음 + 사유(수학 보고서 시범). '없음'으로 바꾸면 점수를 비운다 — 안 비우면 치지 않은 시험 점수가 저장·추세로 나간다.
   function setTestSkipFor(studentId: string, subjectName: string, skip: DailyTestSkip | null) {
+    wt(studentId, subjectName, "dailyTest");
     patchRowEval(studentId, subjectName, (su) => ({ ...su, dailyTestSkip: skip, ...(skip ? { dailyScore: null } : {}) }));
   }
   // 숙제 미제출 사유(수학 보고서 시범, 원장 2026-10-23 *"미제출일경우 사유작성"*) — 숙제 완성도 항목에 그대로 들어간다.
   function setAttitudeNoteFor(studentId: string, subjectName: string, note: string) {
+    wt(studentId, subjectName, "attitude");
     patchRowEval(studentId, subjectName, (su) => ({ ...su, attitudeNote: note }));
   }
   function setMakeupReasonFor(studentId: string, subjectName: string, reason: string) {
+    wt(studentId, subjectName, "makeup");
     patchRowEval(studentId, subjectName, (su) => ({ ...su, makeupReason: reason }));
   }
   function setHomeworkMissReasonFor(studentId: string, subjectName: string, reason: string) {
+    wt(studentId, subjectName, "homework");
     patchRowEval(studentId, subjectName, (su) => ({ ...su, homeworkMissReason: reason }));
   }
   // 이해도 단계 버튼·일괄 입력(원장 2026-10-26) — 그 행 오늘 진도의 소단원 전부에 같은 점수.
   //   진도는 patch 안의 **그 행 값**에서 읽는다 — 일괄 입력이 같은 차례에 진도를 바꿔도(setProgressFor 직후) 새 차시에 맞춰 채운다.
   function setAllUnderstandingFor(studentId: string, subjectName: string, score: number) {
+    wt(studentId, subjectName, "understanding");
     patch(studentId, (s) => ({
       ...s,
       subjects: s.subjects.map((su) =>
@@ -2198,6 +2223,7 @@ export function OneScreenClient({
     }));
   }
   function toggleUnderstandingFor(studentId: string, subjectName: string, lesson: string, off: boolean) {
+    wt(studentId, subjectName, "understanding");
     patchUnderstandingFor(studentId, subjectName, (st) => ({
       ...st,
       off: off ? [...st.off.filter((l) => l !== lesson), lesson] : st.off.filter((l) => l !== lesson),
@@ -2205,6 +2231,7 @@ export function OneScreenClient({
   }
   // 특이사항(강사 메모) — AI 멘트 입력(공지 모드 A/B). **행별**(보강은 다른 수업이라 메모도 다르다).
   function setNoteFor(studentId: string, subjectName: string, text: string) {
+    wt(studentId, subjectName, "note");
     // 수학 보고서 시범 — 칸 이름이 '강사 한줄 멘트(필수)'다. 자동작성 글 맨 끝의 옛 멘트를 그 자리에서 새 멘트로
     // 바꿔 끼운다(원장 2026-10-22 *"자동 작성 후 치면 실시간으로 우측에 반영"*). 바꾸기 전 값을 먼저 읽어 둔다.
     const st = studentsRef.current.find((x) => x.id === studentId);
@@ -2268,6 +2295,7 @@ export function OneScreenClient({
     setHomeworkValue(selected.id, n, cur === h ? "" : h);
   }
   function setDraftFor(studentId: string, subjectName: string, text: string) {
+    wt(studentId, subjectName, "draft");
     patchReport(studentId, subjectName, (r) => ({ ...r, draft: text }));
   }
   function setSubjectDraft(subjectName: string, text: string) {
@@ -2319,6 +2347,7 @@ export function OneScreenClient({
   }
   // 학습 추세(종합분석) 초안 편집 — 멘트(draft)와 별개 필드(4a).
   function setTrendDraftFor(studentId: string, subjectName: string, text: string) {
+    wt(studentId, subjectName, "trend");
     patchReport(studentId, subjectName, (r) => ({ ...r, trendDraft: text }));
   }
   function setSubjectTrend(subjectName: string, text: string) {
@@ -2327,6 +2356,7 @@ export function OneScreenClient({
   }
   // 교재명·보강 — 과목별(subjectName으로 해당 과목만 갱신). 자동저장(patch→queueSave)에 실림.
   function setTextbookFor(studentId: string, subjectName: string, text: string) {
+    wt(studentId, subjectName, "textbook");
     patch(studentId, (s) => ({
       ...s,
       subjects: s.subjects.map((su) => (su.name === subjectName ? { ...su, textbook: text } : su)),
@@ -2643,6 +2673,7 @@ export function OneScreenClient({
   }
   // 영상 숙제 마감(원장 2026-10-15) — 행별 7일 · 다음 수업. '영상 과제'를 켠 행에서만 토글이 뜬다. 자동저장에 실린다.
   function setVideoHomeworkDueFor(studentId: string, subjectName: string, mode: "week" | "next") {
+    wt(studentId, subjectName, "homeworkToday");
     patch(studentId, (s) => ({
       ...s,
       subjects: s.subjects.map((su) => (su.name === subjectName ? { ...su, videoHomeworkDue: mode } : su)),
@@ -2662,6 +2693,7 @@ export function OneScreenClient({
   }
   // 오늘 과제(숙제 내용) — 과목별(0096a). 자동저장에 실리고 AI 멘트·학부모 카드 재료.
   function setHomeworkTodayFor(studentId: string, subjectName: string, text: string) {
+    wt(studentId, subjectName, "homeworkToday");
     patch(studentId, (s) => ({
       ...s,
       subjects: s.subjects.map((su) => (su.name === subjectName ? { ...su, homeworkToday: text } : su)),
@@ -2677,6 +2709,9 @@ export function OneScreenClient({
    *    학생별 기록(`sheetStudentNote`)은 대상이 아니다(개인 메모 자동 삽입 금지).
    */
   function applySheetDraft(subjectIndex: number) {
+    return withWriteOrigin("prev", () => applySheetDraftInner(subjectIndex));
+  }
+  function applySheetDraftInner(subjectIndex: number) {
     if (!selected) return;
     const su = selected.subjects[subjectIndex];
     const sheet = su?.sheetDraft;
@@ -3136,6 +3171,7 @@ export function OneScreenClient({
     void refillEnglishFor(student, subjectName, templateId);
   }
   function setNextTestFor(studentId: string, subjectName: string, text: string) {
+    wt(studentId, subjectName, "nextTest");
     patchReport(studentId, subjectName, (r) => ({ ...r, nextTest: text }));
   }
   /**
@@ -3164,7 +3200,20 @@ export function OneScreenClient({
   }
   // AI 학부모 멘트 + 학습 추세 생성 코어(카드·표 공용) — 멘트 실패 시 결정적 템플릿 폴백,
   // 추세는 표본 부족/실패면 조용히 생략(기존 값 유지). 둘을 학생별 병렬(Promise.all)로 생성해 지연 최소화.
+  /** 자동작성 — 기다린 시간을 작성 시간 기록의 '자동작성' 영역에 적는다(선생님 손 시간과 따로). */
   async function generateDraftFor(
+    student: OneScreenStudent,
+    subjectName: string,
+    opts?: { quiet?: boolean },
+  ): Promise<EnglishGenStatus | undefined> {
+    const startedAt = Date.now();
+    try {
+      return await generateDraftForInner(student, subjectName, opts);
+    } finally {
+      if (!readonlyView) markAutowrite(activeDate, student.id, subjectName, startedAt);
+    }
+  }
+  async function generateDraftForInner(
     student: OneScreenStudent,
     subjectName: string,
     opts?: { quiet?: boolean },
@@ -3480,7 +3529,9 @@ export function OneScreenClient({
       onlyEmpty,
       progressSubjectKey,
     );
-    // 값 칸은 먼저 즉시 반영(출결 왕복을 기다리게 하지 않는다).
+    // 값 칸은 먼저 즉시 반영(출결 왕복을 기다리게 하지 않는다). 작성 시간 기록엔 '일괄'로 센다(write-timing-store).
+    const endBulkOrigin = beginWriteOrigin("bulk");
+    try {
     for (const p of plan) {
       // 🔴 일괄 적용은 **보강 행에도** 적용한다(원장 2026-08-13) — "일괄 적용됐는데 보강만 적용 안 된다는건
       //    일괄 적용이 아님". 이후 강사가 행별로 고치는 건 강사 몫이다.
@@ -3515,6 +3566,9 @@ export function OneScreenClient({
               ...(bulkVideoHw === false && su.videoHomeworkDue ? { videoHomeworkDue: "week" as const, videoHomeworkDueDate: undefined } : {}) }
             : su)),
         }));
+    }
+    } finally {
+      endBulkOrigin();
     }
     const done: string[] = [];
     if (plan.length) {
@@ -3625,6 +3679,9 @@ export function OneScreenClient({
    * ⚠️ 점수·태도·과제 수행·학부모 문구는 **복사하지 않는다**(학생마다 다른 개별 사실 — grid.ts 주석 참조).
    */
   function copyFirstRowDown(keys: string[], overwrite: boolean) {
+    return withWriteOrigin("bulk", () => copyFirstRowDownInner(keys, overwrite));
+  }
+  function copyFirstRowDownInner(keys: string[], overwrite: boolean) {
     if (readonlyBlocked()) return; // #103 세 뒷문 중 하나 — 잠긴 화면에 값을 밀어 넣는 경로
     const all = orderReportRows(buildGridRows(visible), displaySettings.options.sort, classTags.filter(tag => tag !== CLASS_TAG_ALL)).filter((r) => rowInClass(r.subject, activeClassFilter));
     const keySet = new Set(keys);
@@ -3727,6 +3784,9 @@ export function OneScreenClient({
   // 이전 회차 가져오기(1-3) — 그 행의 **빈 칸만** 채움(진도·태도·과제·오늘 과제).
   // ⚠️ 특이사항은 채우지 않음 — prevReport.note는 학부모 발송 본문(notes)이라 특이사항이 아니다.
   function importPrevFor(student: OneScreenStudent, subjectName: string) {
+    return withWriteOrigin("prev", () => importPrevForInner(student, subjectName));
+  }
+  function importPrevForInner(student: OneScreenStudent, subjectName: string) {
     if (readonlyBlocked()) return; // 참고행 '가져오기' — LOCK_FS 밖 버튼이라 여기서 끊는다
     const idx = student.subjects.findIndex((su) => su.name === subjectName);
     const su = student.subjects[idx];
@@ -3760,6 +3820,9 @@ export function OneScreenClient({
   // ⚠️ 멘트(학부모 문구)만 예외로 **확인 다이얼로그**를 거친다 — 나머지 칸은 강사가 오늘 값을 고르는 입력이지만
   // 멘트는 직전에 이미 학부모에게 나간 문장이라, 오늘 진도·점수와 어긋난 채 그대로 발송될 위험이 있다(원장 지시 07-21).
   function bulkImportPrev(keys?: string[]) {
+    return withWriteOrigin("prev", () => bulkImportPrevInner(keys));
+  }
+  function bulkImportPrevInner(keys?: string[]) {
     if (readonlyBlocked() || bulkGen || bulkBusy) return;
     const all = orderReportRows(buildGridRows(visible), displaySettings.options.sort, classTags.filter(tag => tag !== CLASS_TAG_ALL)).filter((r) => rowInClass(r.subject, activeClassFilter));
     const keySet = new Set(keys ?? []);
@@ -3834,6 +3897,9 @@ export function OneScreenClient({
   }
   /** 확인 다이얼로그 '멘트도 가져오기' — 계획대로 초안만 채운다(다른 칸은 위에서 이미 처리됨). */
   function applyPrevComments() {
+    return withWriteOrigin("prev", () => applyPrevCommentsInner());
+  }
+  function applyPrevCommentsInner() {
     const plan = prevCommentPlan ?? [];
     setPrevCommentPlan(null);
     if (!plan.length) return;
@@ -4092,12 +4158,13 @@ export function OneScreenClient({
     }));
   }
   // ── 저장·발송 코어(카드·표 공용) — (학생,과목) 저장/큐잉 + reports state 반영. ──
-  async function saveRecord(student: OneScreenStudent, subjectName: string) {
+  async function saveRecord(student: OneScreenStudent, subjectName: string, mode: SendMode = "single") {
     // 이중 방어(진입부들이 이미 막지만 새 진입부 대비) — 호출부가 res를 바로 쓰므로 실패 객체로 반환.
     if (readonlyView) return { ok: false, error: READONLY_TEACHER_VIEW_ERROR };
     const waited = await refreshJjBeforeOutput(student, subjectName);
     const built = buildSaveInputFor(waited ? latestStudent(student, subjectName) : student, subjectName);
     const res = await saveLessonReport(built.input);
+    if (res.id) queueWriteTiming(res.id, activeDate, student.id, subjectName, { view: writeView(), mode, queued: false });
     applyKeptVideoHomework(student.id, subjectName, res);
     applyVideoHomeworkDue(student.id, subjectName, res);
     if (res.ok) {
@@ -4115,7 +4182,7 @@ export function OneScreenClient({
     }
     return res;
   }
-  async function queueOne(student: OneScreenStudent, subjectName: string) {
+  async function queueOne(student: OneScreenStudent, subjectName: string, mode: SendMode = "single") {
     // 이중 방어 — saveRecord와 같은 이유(호출부 계약 유지: 실패 객체 반환).
     if (readonlyView) return { ok: false, error: READONLY_TEACHER_VIEW_ERROR };
     const waited = await refreshJjBeforeOutput(student, subjectName);
@@ -4146,6 +4213,8 @@ export function OneScreenClient({
         }
       }
     }
+    // 작성 시간 기록(write-timing-store) — 저장된 보고서만(발송이 막혀도 저장됐으면 그때까지 쓴 시간이다).
+    if (res.id) queueWriteTiming(res.id, activeDate, student.id, subjectName, { view: writeView(), mode, queued: res.ok });
     applyKeptVideoHomework(student.id, subjectName, res);
     applyVideoHomeworkDue(student.id, subjectName, res);
     // 보낼 반 안내는 강사뷰 언어로(서버 문장은 한국어 폴백) — status로 사전 키를 고른다.
@@ -4436,7 +4505,7 @@ export function OneScreenClient({
     try {
       for (const r of rows) {
         const student = latestRow(r.student.id, r.subject.name) ?? r.student;
-        const res = await saveRecord(student, r.subject.name);
+        const res = await saveRecord(student, r.subject.name, "bulk");
         if (res.ok) ok++;
         else fail++;
         if (res.ok && res.warning) jjWarn++;
@@ -4640,7 +4709,7 @@ export function OneScreenClient({
     try {
       for (const r of rows) {
         const student = latestRow(r.student.id, r.subject.name) ?? r.student;
-        const res = await queueOne(student, r.subject.name);
+        const res = await queueOne(student, r.subject.name, "bulk");
         if (res.ok && res.warning) jjWarn++;
         if (!res.ok) {
           // 반 보드에 배정되는 중이면 '실패'가 아니라 '기다림'으로 센다. 보류·반을 떠난 학생은 보낼 반이 없는 것이다.

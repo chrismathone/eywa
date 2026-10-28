@@ -39,6 +39,7 @@ const EXEMPT: Record<string, string> = {
   "src/features/inventory/server/prefs.ts#saveInventoryPrefs": VIEW,
   "src/features/onboarding/server/prefs.ts#setOnboardingDismissed": VIEW,
   "src/features/onescreen/server/actions.ts#setMyNoticeMode": VIEW,
+  "src/features/onescreen/server/write-timing-actions.ts#recordReportWriteTimings": OWN_LOG, // 작성 시간 측정값 — 행에 누가·언제가 있다
   "src/features/onescreen/server/actions.ts#setMyOnescreenFontSize": VIEW,
   "src/features/shuttle/today/server/today-prefs.ts#saveShuttleTodayPrefs": VIEW,
   "src/features/staff/list/server/list-prefs.ts#saveStaffListPrefs": VIEW,
