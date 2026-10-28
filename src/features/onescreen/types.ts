@@ -114,6 +114,11 @@ export type Subject = {
    */
   attitudeNote?: string;
   /**
+   * '오늘의 수업' 메모(새 수학 보고서, 원장 2026-10-28) — 그날 수업에서 한 일을 선생님이 짧게 적는다. AI가 '오늘의 수업'에 녹여 쓴다.
+   * 세션 `subject_progress`에 실린다(attitudeNote와 같은 길).
+   */
+  lessonMemo?: string;
+  /**
    * 보강 사유(보강 행) — 결석 날짜를 예약에서 못 찾을 때 강사가 적는다(원장 2026-10-26). 보고서 '출결' 문장 끝에 "(사유: …)"로 붙는다.
    * 세션 `subject_progress`에 실린다.
    */

@@ -16,6 +16,7 @@
 import { skipStatusOf } from "./progress-status";
 import { asProgressMode } from "./progress-mode";
 import { asVariety, pickVariant, type Variety } from "./ment-variants";
+import { NO_HABITS, type TeacherHabits } from "./teacher-habits";
 
 /**
  * 이 학생·과목 행이 새 수학 보고서 대상인가 — **수학 전원**(원장 2026-10-26 *"수학보고서 디자인 전체로 반영"* → *"지금 바로 전원"*).
@@ -243,14 +244,31 @@ export function understandingRows(today: string | null | undefined, st: Understa
   }));
 }
 
-/** 자동작성에 쓰는 이해도 — 빼지 않은 소단원 전부(안 매긴 소단원은 기본값 10). */
+/**
+ * 자동작성에 쓰는 이해도 — 빼지 않은 소단원 전부(안 매긴 소단원은 기본값 10 · `rated: false`).
+ * 수업 평가 표의 '이해도' 줄은 전부로 그린다(원장 2026-10-26 기본값 10). **글로 쓰는 이해도**는 선생님이 매긴 것만이다
+ * (`ratedUnderstanding` — 원장 2026-10-28: 안 매긴 소단원이 "잘 이해했습니다"로 나가 선생님이 지웠다).
+ */
 export function activeUnderstanding(
   today: string | null | undefined,
   st: UnderstandingState | undefined,
-): { title: string; score: number }[] {
+): { title: string; score: number; rated: boolean }[] {
   return understandingRows(today, st)
     .filter((r) => !r.off && r.score != null)
-    .map((r) => ({ title: r.title, score: r.score! }));
+    .map((r) => ({ title: r.title, score: r.score!, rated: !!r.stored }));
+}
+
+/**
+ * 글로 쓸 이해도 — 선생님이 **직접 매긴** 소단원만. `rated`가 없는 항목(이 표식을 모르는 옛 화면이 보낸 값)은 매긴 것으로 본다(종전 그대로).
+ */
+export function ratedUnderstanding<T extends { rated?: boolean }>(items: readonly T[] | undefined): T[] {
+  return (items ?? []).filter((u) => u.rated !== false);
+}
+
+/** '오늘의 수업' 메모 길이 상한 — 한 줄 메모(줄바꿈은 공백으로 접는다). */
+export const LESSON_MEMO_MAX = 300;
+export function readLessonMemo(raw: unknown): string {
+  return typeof raw === "string" ? raw.replace(/\s*\n+\s*/g, " ").trim().slice(0, LESSON_MEMO_MAX) : "";
 }
 
 /**
@@ -386,8 +404,9 @@ export function isPilotAutoWritten(draft: string | null | undefined, autoDraft: 
  *   · *"응용문제 식을 세우는 이런 식의 추측성은 사용 금지 — 학생이 어떤 걸 어려워했는지 모르자나"*(2026-10-22) — 대상은 소단원 이름·개념까지만.
  * 프롬프트 본문(원장 편집 가능) 밖, 섹션 끝에 코드로 붙는다.
  */
-export const PILOT_AI_DIRECTIVE = [
-  "[이번 알림장 추가 규칙]",
+/** 규칙 줄 — 선생님 습관(teacher-habits.ts)·수업 메모에 따라 몇 줄을 바꿔 끼운다. 기본(습관 없음·메모 없음) = 종전 지시 그대로. */
+const PILOT_RULE_HEAD = "[이번 알림장 추가 규칙]";
+const PILOT_RULES: readonly string[] = [
   "- 이 알림장은 항목별로 나뉩니다(수업 평가·진도·일일 테스트·수업 태도·숙제 완성도·오늘의 수업·오늘의 숙제·사랑의 한마디). 진도·테스트·태도·숙제·사랑의 한마디는 따로 붙으니, comment에는 '오늘의 수업' 항목에 들어갈 문장만 쓰세요 — 인사, 진도 나열, 테스트 점수, 수업 태도, 과제 이야기는 쓰지 마세요.",
   "- comment는 학생 이름으로 시작하지 말고, 오늘 수업 이야기부터 바로 시작하세요.",
   // 원장 2026-10-26 *"이해도를 기입하면 오늘의 수업에서 소단원별로 비슷한 워딩이 계속 그냥 나열되기만 하는데 실제 사람이 쓴거처럼 요약 및 문구 정리"*.
@@ -398,7 +417,13 @@ export const PILOT_AI_DIRECTIVE = [
   "- 아이가 잘 못한 부분·과제를 못 해 온 부분도 아이나 가정에 책임을 돌리지 말고, 학원이 책임지고 챙긴다는 어투로 마무리하세요. 가정에 숙제·복습을 부탁하는 말로 끝내지 마세요.",
   "- 점수 숫자·'10점 만점'·'이해도 N점' 같은 표현은 절대 쓰지 마세요. 소단원 이름은 그대로 써도 됩니다.",
   "- comment에는 학부모님께 보낼 문장만 쓰세요. 규칙을 지켰는지에 대한 설명이나 고쳐 쓰겠다는 말은 절대 넣지 마세요.",
-].join("\n");
+];
+const RULE_LIST = PILOT_RULES[2]!;
+const RULE_TWO_STEP = PILOT_RULES[5]!;
+const RULE_RESPONSIBLE = PILOT_RULES[6]!;
+const RULE_NUMBERS = PILOT_RULES[7]!;
+
+export const PILOT_AI_DIRECTIVE = [PILOT_RULE_HEAD, ...PILOT_RULES].join("\n");
 
 /** 부르는 이름 — "학원삼" → "원삼이", "김지수" → "지수"(`topicName`에서 조사 '는'만 뗀 것). 모르면 "". */
 export function callName(fullName: string): string {
@@ -409,10 +434,45 @@ export function callName(fullName: string): string {
  * 이 학생의 AI 지시 — 공통 규칙 + 부르는 이름. 원장 2026-10-23 *"왜 로그인 한 사람의 이름으로 뜨는거지?"* — 사실 입력엔 학생 이름이
  * 없었고, 지시의 예시 이름('우리 승엽이가')을 모델이 그대로 베꼈다. 그래서 예시 이름을 없애고 이 학생의 실제 이름을 준다.
  */
-export function pilotAiDirective(fullName: string): string {
+export function pilotAiDirective(
+  fullName: string,
+  opts?: { habits?: TeacherHabits | null; memo?: string | null },
+): string {
   const call = callName(fullName);
-  return [PILOT_AI_DIRECTIVE, call ? `[부르는 이름] 우리 ${call}` : "[부르는 이름] 없음 — 이름을 부르지 말고 '아이'라고 쓰세요."].join("\n");
+  const h = opts?.habits ?? NO_HABITS;
+  const memo = (opts?.memo ?? "").trim();
+  const rules = PILOT_RULES.map((r) => {
+    // 선생님 습관(원장 2026-10-28 *"자주 지우면 생략"*) — 그 선생님이 늘 지우는 문장은 처음부터 안 쓴다.
+    if (r === RULE_LIST && h.compactUnits) return PILOT_RULE_COMPACT_UNITS;
+    if (r === RULE_TWO_STEP && h.omitPromises) return PILOT_RULE_TWO_STEP_NO_PROMISE;
+    if (r === RULE_RESPONSIBLE && h.omitPromises) return PILOT_RULE_NO_PROMISE_ENDING;
+    if (r === RULE_NUMBERS && memo) return `${r} 단, [선생님 수업 메모]에 적힌 숫자·날짜·교재 이름은 메모에 적힌 그대로 써도 됩니다.`;
+    return r;
+  });
+  if (h.omitFiller) rules.push(PILOT_RULE_NO_FILLER);
+  if (memo) rules.push(PILOT_RULE_MEMO);
+  return [
+    PILOT_RULE_HEAD,
+    ...rules,
+    ...(memo ? [`[선생님 수업 메모] ${memo}`] : []),
+    call ? `[부르는 이름] 우리 ${call}` : "[부르는 이름] 없음 — 이름을 부르지 말고 '아이'라고 쓰세요.",
+  ].join("\n");
 }
+
+/** 소단원 나열을 늘 지우는 선생님 — 이해 정도는 지키되 한 문장으로 묶는다(사실은 남긴다). */
+export const PILOT_RULE_COMPACT_UNITS =
+  "- 소단원을 하나씩 나열하지 마세요. 이해 정도는 잘한 부분과 더 챙길 부분을 한 문장(길어도 두 문장)으로 묶어 짧게 쓰고, 소단원마다 '…은 대체로 따라왔지만 아직 조금 어려워했습니다'·'…을 잘 이해했습니다' 같은 문장을 되풀이하지 마세요.";
+/** 다짐 문장을 늘 지우는 선생님 — 힘들어한 사실만 부드럽게, 다짐(②)은 쓰지 않는다. */
+export const PILOT_RULE_TWO_STEP_NO_PROMISE =
+  "- '대체로 따라왔으나 아직 조금 어려워함'·'어려워함'인 소단원은 아이가 힘들어했다는 사실만 부드럽게 말하세요 — 대상은 소단원 이름(또는 그 소단원의 개념)까지만입니다. 소단원 안의 어느 부분이 어려웠는지는 입력에 없는 정보이므로 절대 추측해서 쓰지 마세요. '이해도가 낮다'·'못한다'·'부족하다' 같은 직접적인 표현은 쓰지 마세요. '다음 시간에 ~하겠습니다'·'챙기겠습니다'·'살펴보겠습니다' 같은 다짐·계획 문장은 쓰지 마세요(이 선생님은 그런 문장을 쓰지 않습니다).";
+export const PILOT_RULE_NO_PROMISE_ENDING =
+  "- 아이가 잘 못한 부분도 아이나 가정에 책임을 돌리지 마세요. 가정에 숙제·복습을 부탁하는 말이나 다짐 문장으로 끝내지 말고, 사실을 말한 문장으로 끝내세요.";
+/** 두루뭉술한 수업 묘사를 늘 지우는 선생님. */
+export const PILOT_RULE_NO_FILLER =
+  "- '배운 개념을 문제에 적용해 보며 실력을 다졌다'·'오늘 배운 내용이 잘 자리 잡도록' 같은 두루뭉술한 수업 묘사는 쓰지 마세요. 입력에 있는 사실만 짧게 쓰세요.";
+/** 선생님 수업 메모(원장 2026-10-28) — 그날 수업에서 실제로 한 일. */
+export const PILOT_RULE_MEMO =
+  "- 아래 [선생님 수업 메모]는 선생님이 오늘 수업에 대해 직접 적은 사실입니다. '오늘의 수업' 앞부분에 그 사실을 살려 자연스러운 문장으로 쓰세요. 뜻을 바꾸거나 부풀리지 말고, 메모에 없는 일을 덧붙이지 마세요."
 
 /** 이해도 점수 → AI에 줄 말. 숫자를 주면 금지해도 '10점 만점에 N점'을 베꼈다(2026-10-23 실측). 경계는 수업 평가 표와 같은 쪽(8↑ · 5~7 · 4↓). */
 export function understandingBandText(score: number): string {
@@ -428,7 +488,7 @@ const LEAK = /\d+\s*점|만점|점수|금지 표현|다시 쓰|제외하고|규�
  * 모델이 아무것도 못 남겼을 때의 이해도 글 — 이해 정도가 같은 소단원끼리 **묶어** 한 문장씩(원장 2026-10-26 *"소단원별로 비슷한 워딩이
  * 나열되기만"* — 소단원마다 같은 문장을 되풀이하지 않는다). 아직 어려워한 묶음이 있으면 학원이 챙긴다는 말로 한 번만 맺는다.
  */
-export function fallbackUnderstanding(items: readonly { title: string; score: number }[]): string {
+export function fallbackUnderstanding(items: readonly { title: string; score: number }[], habits?: TeacherHabits | null): string {
   const group = (pred: (s: number) => boolean) => items.filter((i) => pred(i.score)).map((i) => `'${i.title}'`);
   const topic = (names: string[]) => {
     const last = names[names.length - 1]!;
@@ -442,7 +502,7 @@ export function fallbackUnderstanding(items: readonly { title: string; score: nu
   if (good.length) out.push(`${topic(good)} 잘 이해하고 있습니다.`);
   if (mid.length) out.push(`${topic(mid)} 대체로 잘 따라왔지만 아직 조금 어려워했습니다.`);
   if (low.length) out.push(`${topic(low)} 조금 힘들어했습니다.`);
-  if (mid.length || low.length) out.push("그래서 다음 시간에 한 번 더 짚어 확실히 챙기겠습니다.");
+  if ((mid.length || low.length) && !habits?.omitPromises) out.push("그래서 다음 시간에 한 번 더 짚어 확실히 챙기겠습니다.");
   return out.join(" ");
 }
 
@@ -450,15 +510,26 @@ export function fallbackUnderstanding(items: readonly { title: string; score: nu
  * AI 이해도 글 후보정 — 점수 숫자·규칙 혼잣말이 든 **문장을 통째로** 뺀다(고쳐 쓰지 않는다 — 지어내지 않으려고).
  * 다 빠지면 `fallbackUnderstanding`. 지시가 무시돼도 학부모에게 숫자·혼잣말이 가지 않게 하는 마지막 관문.
  */
-export function cleanPilotUnderstanding(text: string, items: readonly { title: string; score: number }[]): string {
+export function cleanPilotUnderstanding(
+  text: string,
+  items: readonly { title: string; score: number }[],
+  opts?: { habits?: TeacherHabits | null; memo?: string | null },
+): string {
+  const memo = (opts?.memo ?? "").trim();
+  // 메모에 선생님이 적은 점수(예 '월말고사 92점')는 새는 숫자가 아니다 — 걸린 글자가 모두 메모에 그대로 있으면 둔다.
+  const leaks = (sen: string) => {
+    if (!memo) return LEAK.test(sen);
+    const hits = sen.match(new RegExp(LEAK.source, "g")) ?? [];
+    return hits.some((h) => !memo.includes(h));
+  };
   const out = text
     .replace(/\s+/g, " ")
     .trim()
     .split(/(?<=[.!?])\s+/)
-    .filter((sen) => sen && !LEAK.test(sen))
+    .filter((sen) => sen && !leaks(sen))
     .join(" ")
     .trim();
-  return out || (items.length ? fallbackUnderstanding(items) : "");
+  return out || (items.length ? fallbackUnderstanding(items, opts?.habits) : memo);
 }
 
 /** 서버 발송 게이트 거절 문구 — 자동작성 글이 아니거나 고쳐졌다. */

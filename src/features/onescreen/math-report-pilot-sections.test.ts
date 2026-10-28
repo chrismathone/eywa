@@ -218,9 +218,11 @@ describe("배선", () => {
   it("서버는 시범 대상 AI 입력에서 테스트·태도·과제를 비우고 이해도 항목만 받는다", () => {
     const src = read("./server/actions.ts");
     expect(src).toMatch(/input: aiInput,/);
-    expect(src).toMatch(/pilot && !safeInput\.understanding\?\.length/);
-    expect(src).toMatch(/composePilot\(cleanPilotUnderstanding\(res\.comment, safeInput\.understanding \?\? \[\]\), videoReceipt, varietyOf\(prevNotes\)\)/);
-    expect(src).toMatch(/extraDirective: \[pilotAiDirective\(input\.studentName\), prevPhrasingHint\(prevNotes\)\]/);
+    // 매긴 이해도도 메모도 없으면 AI를 부르지 않는다 · 글로 쓰는 이해도는 매긴 것만 · 지시에 선생님 습관·메모(2026-10-28)
+    expect(src).toMatch(/pilot && !ratedItems\.length && !lessonMemo/);
+    expect(src).toMatch(/understanding: ratedItems,/);
+    expect(src).toMatch(/composePilot\(cleanPilotUnderstanding\(res\.comment, ratedItems, \{ habits, memo: lessonMemo \}\), videoReceipt, varietyOf\(prevNotes\), habits\)/);
+    expect(src).toMatch(/extraDirective: \[pilotAiDirective\(input\.studentName, \{ habits, memo: lessonMemo \}\), prevPhrasingHint\(prevNotes\)\]/);
   });
   it("세션이 '시험 없음' 사유를 싣고 로스터가 되읽는다 · '없음'이면 점수를 비운다", () => {
     expect(read("./components/onescreen-client.tsx")).toMatch(/dailyTestSkip: su\.dailyTestSkip/);

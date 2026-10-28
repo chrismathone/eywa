@@ -99,7 +99,11 @@ import {
   PILOT_SECTION_TITLES,
   pilotSection,
   progressLead,
+  ratedUnderstanding,
+  readLessonMemo,
 } from "../math-report-pilot";
+import { applyHabitsToSections, NO_HABITS, type TeacherHabits } from "../teacher-habits";
+import { loadTeacherHabits } from "./teacher-habits-db";
 import { pilotBody, pilotLevelsSection, readAttitudeNote, readHomeworkMissReason, readTestSkip, type DailyTestSkip } from "../math-report-pilot-sections";
 import { skipStatusOf } from "../progress-status";
 import type { Variety } from "../ment-variants";
@@ -1422,6 +1426,8 @@ export type SaveOnescreenSessionInput = {
       homeworkMissReason?: string;
       /** 수업 태도 의견(새 수학 보고서, 2026-10-26) — 적은 행만. 로스터가 readAttitudeNote로 복원한다. */
       attitudeNote?: string;
+      /** '오늘의 수업' 메모(새 수학 보고서, 2026-10-28) — 적은 행만. 로스터가 readLessonMemo로 복원한다. */
+      lessonMemo?: string;
       /** 보강 사유(보강 줄, 2026-10-26) — 적은 행만. 로스터가 readMakeupReason으로 복원한다. */
       makeupReason?: string;
     }
@@ -1640,8 +1646,9 @@ export async function generateReportComment(
     // 이해도는 시범 대상에만 — 다른 학생 입력에 실려 와도 프롬프트에 안 넣는다(클라 값을 믿지 않는다).
     understanding: pilot
       ? (input.understanding ?? [])
-          .map((u) => ({ title: String(u.title ?? "").trim().slice(0, 80), score: clampUnderstanding(u.score) }))
-          .filter((u): u is { title: string; score: number } => !!u.title && u.score != null)
+          // rated = 선생님이 직접 매겼나(원장 2026-10-28 — 안 매긴 기본값 10은 표에만, 글로는 안 쓴다). 표식이 없으면(옛 화면) 매긴 것으로.
+          .map((u) => ({ title: String(u.title ?? "").trim().slice(0, 80), score: clampUnderstanding(u.score), rated: u.rated !== false }))
+          .filter((u): u is { title: string; score: number; rated: boolean } => !!u.title && u.score != null)
           .slice(0, 20)
       : undefined,
   };
@@ -1657,8 +1664,44 @@ export async function generateReportComment(
     : Promise.resolve(null);
   const varietyOf = (prev: string | null): Variety | null =>
     pilotStudentId ? { seed: `${pilotStudentId}|${resolveReportDate(trendCtx?.date)}|${trendCtx?.subject ?? ""}`, prev } : null;
-  const composePilot = (understandingText: string, videoReceipt: string | null, variety: Variety | null = null) =>
-    composePilotMent({
+  // '오늘의 수업' 메모(원장 2026-10-28) — 그날 한 일. 시범 행만, 한 줄 300자.
+  const lessonMemo = pilot ? readLessonMemo(input.lessonMemo) : "";
+  // 글로 쓰는 이해도 = 선생님이 직접 매긴 소단원만(원장 2026-10-28 — 기본값 10이 "잘 이해했습니다"로 나가 선생님이 지웠다). 표는 전부로 그린다.
+  const ratedItems = pilot ? ratedUnderstanding(safeInput.understanding) : [];
+  // 선생님이 늘 지우는 문장(teacher-habits.ts — 다짐·두루뭉술한 묘사·소단원 나열) — 자동작성할 때마다 그 선생님 최근 기록으로 다시 판정한다
+  // (원장 2026-10-28 *"자주 지우면 생략"* — cron 없음, 배포 즉시). 스코프 = 말투 프로파일과 같다(사무실 대리작성은 종전 어투).
+  const habitsP: Promise<TeacherHabits> =
+    pilot && opts?.teacherStyle !== false
+      ? effectiveTeacherId()
+          .then((teacherId) => (teacherId ? loadTeacherHabits(createAdminClient(), user.tenantId, teacherId) : NO_HABITS))
+          .catch(() => NO_HABITS)
+      : Promise.resolve(NO_HABITS);
+  // 선생님이 직접 적은 말 — 습관 문장 떼기에서도 지킨다.
+  const teacherWords = pilot
+    ? [readAttitudeNote(input.attitudeNote), readHomeworkMissReason(input.homeworkMissReason), pilotSkip?.detail ?? "", lessonMemo]
+    : [];
+  /**
+   * `ownUnderstanding` = '오늘의 수업' 글이 선생님이 고친 글이다(값만 다시 맞추기) — 그 항목은 습관으로도 손대지 않는다.
+   * 메모를 적은 날도 '오늘의 수업'은 떼지 않는다(메모에서 온 계획 문장이 다짐 문장으로 보여 지워질 수 있다).
+   */
+  const composePilot = (
+    understandingText: string,
+    videoReceipt: string | null,
+    variety: Variety | null = null,
+    habits: TeacherHabits = NO_HABITS,
+    ownUnderstanding = false,
+  ) =>
+    applyHabitsToSections(composePilotRaw(understandingText, videoReceipt, variety), habits, {
+      skipTitles: [
+        PILOT_SECTION_TITLES.levels,
+        PILOT_SECTION_TITLES.note,
+        PILOT_SECTION_TITLES.attendance,
+        ...(ownUnderstanding || lessonMemo ? [PILOT_SECTION_TITLES.understanding] : []),
+      ],
+      keep: teacherWords,
+    });
+  function composePilotRaw(understandingText: string, videoReceipt: string | null, variety: Variety | null) {
+    return composePilotMent({
       // 수업 평가 표가 맨 위, 그다음 진도(원장 2026-10-23 *"진도보다 위에 표 형태로"*).
       lead: [
         pilotLevelsSection(safeInput),
@@ -1680,6 +1723,7 @@ export async function generateReportComment(
       ),
       note: pilotNote,
     });
+  }
   // 사실 항목 말투(원장 2026-10-28 *"다른 영역도 수정한 사람들 … 그에 맞게 다 말투 언어 모두 학습"*) — 그 선생님이 자동작성 글의 사실 항목을
   // 고쳐 보낸 기록이 있으면, 같은 사실을 그 말투로 다시 쓴다(pilot-restyle.ts — 항목마다 사실 검사를 지난 것만, 아니면 코드 글 그대로).
   // 스코프 = 말투 프로파일과 같은 규칙(effectiveTeacherId · 사무실 대리작성 teacherStyle=false는 안 붙인다). 고친 기록이 없으면 AI를 안 부른다.
@@ -1710,19 +1754,22 @@ export async function generateReportComment(
   // (말투 다시 쓰기는 고친 기록이 있는 선생님에게만 붙는다 — 화면이 항목별로 합칠 때 선생님이 손댄 항목은 어차피 그대로 둔다.)
   if (pilot && typeof opts?.pilotKeepUnderstanding === "string") {
     const keep = opts.pilotKeepUnderstanding.trim().slice(0, 4000);
-    const [videoReceipt, prevNotes] = await Promise.all([
+    const [videoReceipt, prevNotes, habits] = await Promise.all([
       getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null),
       prevNotesP,
+      habitsP,
     ]);
-    return { ok: true, comment: await restyleFacts(composePilot(keep, videoReceipt, varietyOf(prevNotes))) };
+    return { ok: true, comment: await restyleFacts(composePilot(keep, videoReceipt, varietyOf(prevNotes), habits, true)) };
   }
   // 이해도를 하나도 안 매겼으면 AI가 쓸 항목이 없다 — 부르지 않는다(재료 없이 부르면 이해도를 지어낸다). 추세도 이번엔 안 만든다.
-  if (pilot && !safeInput.understanding?.length) {
-    const [videoReceipt, prevNotes] = await Promise.all([
+  // 매긴 이해도가 없어도 '오늘의 수업' 메모가 있으면 AI가 메모로 쓴다(원장 2026-10-28).
+  if (pilot && !ratedItems.length && !lessonMemo) {
+    const [videoReceipt, prevNotes, habits] = await Promise.all([
       getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null),
       prevNotesP,
+      habitsP,
     ]);
-    return { ok: true, comment: await restyleFacts(composePilot("", videoReceipt, varietyOf(prevNotes))) };
+    return { ok: true, comment: await restyleFacts(composePilot("", videoReceipt, varietyOf(prevNotes), habits)) };
   }
   // AI에는 진도·이해도만 준다 — 다른 사실을 주면 모델이 그 항목을 '이해도' 글에 다시 쓴다(항목이 겹친다).
   const aiInput: ReportCommentInput = pilot
@@ -1742,6 +1789,9 @@ export async function generateReportComment(
         homeworkMissReason: undefined,
         attitudeNote: undefined,
         attendance: "",
+        // 매긴 소단원만(위 ratedItems). 메모는 지시(pilotAiDirective)로 따로 준다 — 특이사항 칸은 시범에선 사랑의 한마디다.
+        understanding: ratedItems,
+        lessonMemo: undefined,
       }
     : safeInput;
   try {
@@ -1760,9 +1810,10 @@ export async function generateReportComment(
       getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null),
       prevNotesP,
     ]);
+    const habits = await habitsP;
     // 사실 항목 말투(위 restyleFacts) — '오늘의 수업' 없이 같은 값으로 조립한 사실 글을 지금 다시 써 두고, AI 호출과 나란히 돈다.
     // 최종 글엔 아래에서 옮긴다(transplantRestyle — 항목 글이 글자 그대로 같을 때만). restyleFacts는 던지지 않는다.
-    const factOriginal = pilot ? composePilot("", videoReceipt, varietyOf(prevNotes)) : "";
+    const factOriginal = pilot ? composePilot("", videoReceipt, varietyOf(prevNotes), habits) : "";
     const factRestyledP: Promise<string> = pilot ? restyleFacts(factOriginal) : Promise.resolve("");
     const styleBlock = mentStyle ? mentStyleDirective(mentStyle) : "";
     // 추세엔 **어조·문장 결만** — 선생님 표현·마무리("다음 시간에 ~하겠습니다")까지 붙이면 추세 금지(계획)에 걸려 버려진다(2026-10-16).
@@ -1831,7 +1882,7 @@ export async function generateReportComment(
       toneBlock,
       trend: trendInput,
       // 직전 보고서의 '오늘의 수업' 문단 = 표현 참고(사실 아님) — 같은 말이 매번 나가지 않게(원장 2026-10-26).
-      ...(pilot ? { extraDirective: [pilotAiDirective(input.studentName), prevPhrasingHint(prevNotes)].filter(Boolean).join("\n") } : {}),
+      ...(pilot ? { extraDirective: [pilotAiDirective(input.studentName, { habits, memo: lessonMemo }), prevPhrasingHint(prevNotes)].filter(Boolean).join("\n") } : {}),
     });
     if (sections.length === 0) return { ok: false, error: "생성할 내용이 없습니다" };
 
@@ -1853,7 +1904,7 @@ export async function generateReportComment(
     // 이해도 글은 후보정을 거친다 — 점수 숫자·규칙 혼잣말이 든 문장은 빼고, 다 빠지면 정해진 문장으로(2026-10-23 실측 누출).
     const comment = pilot
       ? transplantRestyle(
-          composePilot(cleanPilotUnderstanding(res.comment, safeInput.understanding ?? []), videoReceipt, varietyOf(prevNotes)),
+          composePilot(cleanPilotUnderstanding(res.comment, ratedItems, { habits, memo: lessonMemo }), videoReceipt, varietyOf(prevNotes), habits),
           factOriginal,
           await factRestyledP,
         )

@@ -60,7 +60,7 @@ import { isFeatureOptedIn } from "@/lib/license/server";
 import { applyTodaysMathFill, loadTodaysMathFill } from "./todays-math-fill";
 import { studentMarkFromRows } from "../attendance-mark";
 import { classnoteModuleOn, classnoteSendOn } from "@/features/owner/classnote-gate";
-import { readUnderstanding } from "../math-report-pilot";
+import { readLessonMemo, readUnderstanding } from "../math-report-pilot";
 import { readAttitudeNote, readHomeworkMissReason, readMakeupReason, readTestSkip } from "../math-report-pilot-sections";
 
 /**
@@ -225,6 +225,8 @@ type OnescreenSessionRow = {
       homeworkMissReason?: unknown;
       /** 수업 태도 의견(새 수학 보고서, 2026-10-26) — 모양은 readAttitudeNote가 다시 본다. */
       attitudeNote?: unknown;
+      /** '오늘의 수업' 메모(새 수학 보고서, 2026-10-28) — 모양은 readLessonMemo가 다시 본다. */
+      lessonMemo?: unknown;
       /** 보강 사유(보강 줄, 2026-10-26) — 모양은 readMakeupReason이 다시 본다. */
       makeupReason?: unknown;
     }
@@ -1747,6 +1749,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         if (entry?.dailyTestSkip !== undefined) su.dailyTestSkip = readTestSkip(entry.dailyTestSkip);
         if (entry?.homeworkMissReason !== undefined) su.homeworkMissReason = readHomeworkMissReason(entry.homeworkMissReason);
         if (entry?.attitudeNote !== undefined) su.attitudeNote = readAttitudeNote(entry.attitudeNote);
+        if (entry?.lessonMemo !== undefined) su.lessonMemo = readLessonMemo(entry.lessonMemo);
         if (entry?.makeupReason !== undefined) su.makeupReason = readMakeupReason(entry.makeupReason);
       }
     }

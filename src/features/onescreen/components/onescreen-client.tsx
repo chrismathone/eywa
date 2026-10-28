@@ -85,6 +85,7 @@ import { ProgressCard } from "./progress-card";
 import { SheetSourceCard } from "./sheet-source-card";
 import { TestCard } from "./test-card";
 import { UnderstandingPanel } from "./understanding-panel";
+import { LessonMemoInput } from "./lesson-memo-input";
 import {
   activeUnderstanding,
   EMPTY_UNDERSTANDING,
@@ -855,6 +856,8 @@ export function OneScreenClient({
               ...(su.homeworkMissReason !== undefined ? { homeworkMissReason: su.homeworkMissReason } : {}),
               // 수업 태도 의견 · 보강 사유(2026-10-26) — 적은 적 있는 행만.
               ...(su.attitudeNote !== undefined ? { attitudeNote: su.attitudeNote } : {}),
+              // '오늘의 수업' 메모(2026-10-28) — 적은 적 있는 행만.
+              ...(su.lessonMemo !== undefined ? { lessonMemo: su.lessonMemo } : {}),
               ...(su.makeupReason !== undefined ? { makeupReason: su.makeupReason } : {}),
               ...(hasRowOverrides(su)
                 ? {
@@ -2203,6 +2206,11 @@ export function OneScreenClient({
     wt(studentId, subjectName, "attitude");
     patchRowEval(studentId, subjectName, (su) => ({ ...su, attitudeNote: note }));
   }
+  // '오늘의 수업' 메모(새 수학 보고서, 원장 2026-10-28) — 그날 한 일을 선생님이 짧게 적으면 AI가 '오늘의 수업'에 녹여 쓴다.
+  function setLessonMemoFor(studentId: string, subjectName: string, memo: string) {
+    wt(studentId, subjectName, "understanding");
+    patchRowEval(studentId, subjectName, (su) => ({ ...su, lessonMemo: memo }));
+  }
   function setMakeupReasonFor(studentId: string, subjectName: string, reason: string) {
     wt(studentId, subjectName, "makeup");
     patchRowEval(studentId, subjectName, (su) => ({ ...su, makeupReason: reason }));
@@ -3252,6 +3260,7 @@ export function OneScreenClient({
           ...(su?.dailyTestSkip ? { dailyTestSkip: su.dailyTestSkip, dailyTest: "" } : {}),
           homeworkMissReason: su?.homeworkMissReason ?? "",
           attitudeNote: su?.attitudeNote ?? "",
+          lessonMemo: su?.lessonMemo ?? "",
         }
       : baseInput;
     // 이번 글을 만든 값의 서명 — 발송 게이트(카드·표)가 같은 함수로 지금 값과 대조한다.
@@ -5134,6 +5143,7 @@ export function OneScreenClient({
                   onHomeworkMissReason: setHomeworkMissReasonFor,
                   onAttitudeNote: setAttitudeNoteFor,
                   onMakeupReason: setMakeupReasonFor,
+                  onLessonMemo: setLessonMemoFor,
                 }),
           }}
           rowActions={{
@@ -5382,6 +5392,15 @@ selected ? (
                         onScore={(lesson, score) => setUnderstandingScoreFor(selected.id, previewSubject.name, lesson, score)}
                         onToggle={(lesson, off) => toggleUnderstandingFor(selected.id, previewSubject.name, lesson, off)}
                         onAll={(score) => setAllUnderstandingFor(selected.id, previewSubject.name, score)}
+                      />
+                    ) : null}
+                    {/* '오늘의 수업' 메모(원장 2026-10-28) — 그날 한 일을 적으면 AI가 '오늘의 수업'에 녹여 쓴다. 표와 같은 칸. */}
+                    {previewSubject && isMathReportPilot(selected.id, previewSubject.subjectKey) ? (
+                      <LessonMemoInput
+                        value={previewSubject.lessonMemo ?? ""}
+                        disabled={readonlyView || !isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))}
+                        ariaLabel={tf("os.memo.aria", { name: selected.name })}
+                        onChange={(v) => setLessonMemoFor(selected.id, previewSubject.name, v)}
                       />
                     ) : null}
                   </>

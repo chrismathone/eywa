@@ -3361,6 +3361,11 @@ export const SHEET_DICT = {
     ko: "예: 오늘 어려운 문제도 끝까지 포기하지 않고 풀어낸 모습이 멋졌어요. 지금처럼만 하면 다음 단원도 충분히 잘할 거예요! · 자동작성 뒤에 적으면 오른쪽 보고서 맨 아래에 바로 반영됩니다",
     en: "e.g. You kept going on the hard problems today and solved them — great work. Keep this up and the next unit will go well too! · After Auto-write, what you type shows up right away at the end of the report",
   },
+  "os.memo.ph": {
+    ko: "오늘의 수업 메모(선택) · 예: 월말평가 오답 첨삭, 오답노트 작성",
+    en: "Lesson memo (optional) · e.g. went over test mistakes, made an error notebook",
+  },
+  "os.memo.aria": { ko: "{name} 오늘의 수업 메모", en: "{name} lesson memo" },
   "os.row.notePhPilot": {
     ko: "사랑의 한마디(필수) · 예: 끝까지 포기하지 않고 풀어낸 모습이 멋졌어요!",
     en: "A loving word (required) · e.g. Great job not giving up on the hard ones!",

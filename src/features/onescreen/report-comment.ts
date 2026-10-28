@@ -72,7 +72,12 @@ export type ReportCommentInput = {
    */
   classNotice?: string;
   /** 소단원별 이해도(10점 만점) — 수학 보고서 시범(math-report-pilot.ts)에서만 채운다. 뺀 소단원·점수 없는 소단원은 이미 빠져 있다. */
-  understanding?: { title: string; score: number }[];
+  understanding?: { title: string; score: number; rated?: boolean }[];
+  /**
+   * '오늘의 수업' 메모(새 수학 보고서, 원장 2026-10-28) — 선생님이 그날 수업에서 한 일을 짧게 적는다(예 '월말평가 오답 첨삭, 오답노트 작성').
+   * AI가 '오늘의 수업' 항목에 그 사실을 녹여 쓴다(pilotAiDirective). 세션 `subject_progress`에 실린다(마이그 0).
+   */
+  lessonMemo?: string;
   /** 일일 테스트 '없음' 사유 — 수학 보고서 시범에서만(math-report-pilot-sections.ts). 있으면 점수 대신 사유 문장이 나간다. */
   dailyTestSkip?: import("./math-report-pilot-sections").DailyTestSkip | null;
   /** 숙제 미제출 사유 — 수학 보고서 시범에서만. 숙제가 미제출일 때 '숙제 완성도' 항목에 원문 그대로 들어간다(AI에는 안 준다). */
