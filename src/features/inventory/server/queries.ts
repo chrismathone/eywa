@@ -33,7 +33,7 @@ export async function getInventoryCounts(): Promise<Record<InventoryTab, number 
   const supabase = await createClient();
   const head = (table: string) =>
     supabase.from(table).select("id", { count: "exact", head: true }).eq("tenant_id", user.tenantId);
-  // 업체리스트는 지정한 사람만(vendor-gate) — 표는 RLS 읽기를 닫아 두어 admin으로 센다(tenant_id 필터 필수).
+  // 업체리스트 열람 게이트(vendor-gate) — 표는 RLS 읽기를 닫아 두어 admin으로 센다(tenant_id 필터 필수).
   const vendorHead = async () =>
     (await canViewVendorsNow())
       ? createAdminClient().from("inventory_vendors").select("id", { count: "exact", head: true }).eq("tenant_id", user.tenantId)
@@ -203,7 +203,7 @@ type VendorRow = {
 export async function getVendors(): Promise<FaceData<InventoryVendor>> {
   const user = await getCurrentUser();
   if (!user) return { status: "failed", rows: [] };
-  // 🔴 지정한 사람만(원장 2026-10-23 "이승엽만") — 호출부가 탭을 감춰도 여기서 한 번 더 닫는다([[#77]]).
+  // 열람 게이트(재고관리를 여는 직원 전원) — 호출부가 탭을 감춰도 여기서 한 번 더 닫는다([[#77]]).
   if (!(await canViewVendorsNow())) return { status: "ok", rows: [] };
   // 표의 RLS 읽기 정책은 닫았다(0449a) — 세션 클라이언트는 0행이라 admin + tenant_id 필터로 읽는다([[#104]]).
   const supabase = createAdminClient();

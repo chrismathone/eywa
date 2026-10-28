@@ -24,8 +24,9 @@ export function VendorDialog({ vendor, categories, onClose }: { vendor?: Invento
     <DialogShell title={isNew ? "업체 등록" : `업체 수정 — ${vendor.name}`} onClose={onClose} wide>
       <form onSubmit={(e) => { e.preventDefault(); void onSubmit(new FormData(e.currentTarget)); }} className="flex flex-col gap-3">
         {vendor ? <input type="hidden" name="id" value={vendor.id} /> : null}
+        <p className="text-text-faint text-xs">업체명만 적으면 등록됩니다. 나머지 칸은 비워 둬도 됩니다.</p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="업체명"><input name="name" defaultValue={vendor?.name ?? ""} required maxLength={80} autoFocus={isNew} className={FIELD} /></Field>
+          <Field label="업체명 (필수)"><input name="name" defaultValue={vendor?.name ?? ""} required maxLength={80} autoFocus={isNew} className={FIELD} /></Field>
           <Field label="분류" hint="예: 서점 · 출판사 · 정수기 · 인테리어">
             <input name="category" list="inventory-vendor-categories" defaultValue={vendor?.category ?? ""} maxLength={40} className={FIELD} />
             <datalist id="inventory-vendor-categories">
@@ -37,7 +38,7 @@ export function VendorDialog({ vendor, categories, onClose }: { vendor?: Invento
           <Field label="담당자"><input name="contactName" defaultValue={vendor?.contactName ?? ""} maxLength={40} className={FIELD} /></Field>
           <Field label="담당자 연락처"><input name="contactPhone" type="tel" inputMode="tel" defaultValue={vendor?.contactPhone ?? ""} maxLength={40} className={`${FIELD} num`} /></Field>
           <Field label="주소" className="sm:col-span-2"><input name="address" defaultValue={vendor?.address ?? ""} maxLength={200} className={FIELD} /></Field>
-          <Field label="이메일" className="sm:col-span-2"><input name="email" type="email" defaultValue={vendor?.email ?? ""} maxLength={120} className={FIELD} /></Field>
+          <Field label="이메일" className="sm:col-span-2"><input name="email" type="text" inputMode="email" defaultValue={vendor?.email ?? ""} maxLength={120} className={FIELD} /></Field>
         </div>
         <Field label="비고" hint="계좌·거래 조건·영업시간 등"><textarea name="note" defaultValue={vendor?.note ?? ""} maxLength={500} className={TEXTAREA} /></Field>
         <FormError error={error} />

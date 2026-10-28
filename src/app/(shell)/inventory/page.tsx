@@ -87,7 +87,7 @@ function loadFace(tab: InventoryTab): Promise<FaceLoad> {
  */
 export default async function InventoryPage({ searchParams }: { searchParams: Promise<Sp> }) {
   const user = await requireAccess("inventory");
-  // 업체리스트는 지정한 사람만(원장 2026-10-23) — 아니면 `?tab=vendors`로 와도 자산 면으로 떨어진다(주소 우회 차단, [[#77]]).
+  // 업체리스트 열람 게이트(재고관리를 여는 직원 전원, 2026-10-28) — 아니면 `?tab=vendors`로 와도 자산 면으로 떨어진다(주소 우회 차단, [[#77]]).
   const showVendors = await canViewVendorsNow();
   const asked = resolveInventoryTab((await searchParams).tab);
   const tab: InventoryTab = asked === "vendors" && !showVendors ? "assets" : asked;
