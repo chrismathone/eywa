@@ -150,7 +150,7 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 
 | 그룹 | 호출부(meta.feature) | 지금 1순위 |
 |---|---|---|
-| `MENT` | classnote_ment · english_ment · ment_prompt_preview · ment_style_profile · lesson_report_rating(평점 정기 처리 · 기본 꺼짐) | Claude(Haiku·Sonnet) |
+| `MENT` | classnote_ment · english_ment · ment_prompt_preview · ment_style_profile · love_note_draft(사랑의 한마디 초안 버튼) · lesson_report_rating(평점 정기 처리 · 기본 꺼짐) | Claude(Haiku·Sonnet) |
 | `MEETING` | meeting_analysis | Claude(Sonnet 5.5) |
 | `ENROLLMENT` | enrollment_analysis · enrollment_form_extract · enrollment_prep_brief | Claude(Sonnet 5.5) |
 | `CONSULTATIONS` | consultation_analysis · student_care | Claude(분석 Sonnet 5.5 · 케어) |

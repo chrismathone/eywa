@@ -62,6 +62,8 @@ export const FEATURE_KEY_GROUP: Readonly<Record<string, AiKeyGroup>> = {
   english_ment: "ment",
   ment_prompt_preview: "ment",
   ment_style_profile: "ment",
+  // 사랑의 한마디 초안(2026-10-28 · 원스크린 [초안] 버튼) — 학부모 멘트와 같은 그룹
+  love_note_draft: "ment",
   // 수업보고서 평점 정기 처리(2026-10-26 · 밤 배치 · 지점 스위치 report_rating) — 멘트를 읽어 매기는 일이라 같은 그룹
   lesson_report_rating: "ment",
   // 회의록 녹음 분석

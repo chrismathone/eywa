@@ -3315,6 +3315,12 @@ export const SHEET_DICT = {
   "os.card.hwTodayAria": { ko: "{subject} 오늘 과제", en: "{subject} today's homework" },
   "os.card.note": { ko: "특이사항 (메모)", en: "Notes (memo)" },
   "os.card.notePilot": { ko: "사랑의 한마디 (필수)", en: "A loving word (required)" },
+  // 사랑의 한마디 [초안] 버튼(원장 2026-10-28, love-note-draft-button.tsx)
+  "os.note.draft": { ko: "초안", en: "Draft" },
+  "os.note.draftBusy": { ko: "초안 쓰는 중…", en: "Drafting…" },
+  "os.note.draftTitle": { ko: "오늘 입력한 값과 선생님이 써 온 한마디로 초안을 만듭니다. 읽고 고쳐서 보내 주세요.", en: "Drafts from today's entries and your past notes. Read and edit before sending." },
+  "os.note.draftReplace": { ko: "지금 적힌 사랑의 한마디를 초안으로 바꿀까요?", en: "Replace the current note with a draft?" },
+  "os.note.draftFail": { ko: "초안을 만들지 못했습니다 — 잠시 뒤 다시 눌러 주세요", en: "Could not draft — please try again shortly" },
   // JJ 수업보고서(원장 2026-10-27 *"수업태도 밑에 사랑의 한마디 … 작성안하면 영역 삭제"*) — 선택이고, 쓰면 수업 평가 바로 아래에 선다.
   "os.card.noteJj": { ko: "사랑의 한마디 (선택)", en: "A loving word (optional)" },
   "os.card.notePhJj": {
