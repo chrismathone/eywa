@@ -1,7 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useTransition, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import { Toolbar, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { shortDateLabel } from "../dates";
 import { isBlankCheck, needsSupplement, type BeforeClassCheck } from "../items";
@@ -19,7 +21,7 @@ import { MonthTable } from "./month-table";
  * 누르면 늦게 도착한 옛 값이 새 값을 덮을 수 있어서다. 저장이 실패하면 그 칸을 서버가 마지막으로 확인한 값으로 되돌린다.
  */
 export function ChecklistBoard({
-  classId, month, dates, students, initialChecks, initialDate, today, trackingStart, canEdit, report,
+  classId, month, dates, students, initialChecks, initialDate, today, trackingStart, canEdit, report, classPicker,
 }: {
   classId: string;
   month: string;
@@ -33,12 +35,22 @@ export function ChecklistBoard({
   canEdit: boolean;
   /** 보고서 시안 재료 — 그날 보고서 값 · 반·담임 · 학원 로고. */
   report: { levels: Record<string, ReportDayLevels>; className: string; teacherName: string; logoSrc: string | null; academyName: string };
+  /** 반 드롭다운 — 같은 툴바 줄 맨 앞에 선다. */
+  classPicker: ReactNode;
 }) {
   const [checks, setChecks] = useState(initialChecks);
   const [date, setDate] = useState(initialDate);
   const [view, setView] = useState<"check" | "month" | "stats" | "report">("check");
   // 저장이 성공할 때마다 올린다 — 학생 통계가 기억한 기록을 다시 받는 신호.
   const [version, setVersion] = useState(0);
+  const router = useRouter();
+  const embed = useEmbed();
+  const [going, startGoing] = useTransition();
+  // 달 이동은 수업일 달력 하나가 맡는다(머리의 ‹ › · 달 경계를 넘는 화살표) — 이전 화면을 둔 채 새 달을 받는다.
+  const goMonth = (m: string, pick?: string) => {
+    const raw = `/before-class?class=${classId}&month=${m}${pick ? `&date=${pick}` : ""}`;
+    startGoing(() => router.push(embed ? withEmbed(raw) : raw));
+  };
   const queues = useRef(new Map<string, Promise<unknown>>());
   // 서버가 확인한 마지막 값 — 실패하면 화면을 여기로 되돌린다(저장된 적 없는 값을 남기지 않는다).
   const saved = useRef(new Map<string, BeforeClassCheck | undefined>(Object.entries(initialChecks)));
@@ -88,18 +100,19 @@ export function ChecklistBoard({
     <div className="space-y-3">
       {/* 레일(가로 스크롤 줄)을 끈다 — 레일은 overflow로 달력 팝오버를 툴바 아래에서 잘라 버린다([[#128]]). */}
       <Toolbar rail={false} className="flex-wrap">
+        {classPicker}
         <ToolbarSegment label="보기">
           <ToolbarSegmentItem active={view === "check"} onClick={() => setView("check")}>체크</ToolbarSegmentItem>
           <ToolbarSegmentItem active={view === "month"} onClick={() => setView("month")}>월별 현황</ToolbarSegmentItem>
           <ToolbarSegmentItem active={view === "stats"} onClick={() => setView("stats")}>학생 통계</ToolbarSegmentItem>
           <ToolbarSegmentItem active={view === "report"} onClick={() => setView("report")}>보고서 시안</ToolbarSegmentItem>
         </ToolbarSegment>
-        {(view === "check" || view === "report") && dates.length > 0 ? (
-          <DateCalendar month={month} dates={dates} value={date} today={today} onChange={setDate} />
+        {view !== "stats" ? (
+          <DateCalendar month={month} dates={dates} value={date} today={today} onChange={setDate} onGo={goMonth} pending={going} />
         ) : null}
       </Toolbar>
 
-      {dates.length === 0 ? (
+      {dates.length === 0 && view !== "stats" ? (
         <p className="text-text-dim px-1 py-6 text-sm">이 달에는 이 반의 수업일이 없습니다.</p>
       ) : view === "stats" ? (
         <StudentStats classId={classId} students={students} version={version} />

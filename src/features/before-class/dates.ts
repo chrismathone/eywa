@@ -44,3 +44,14 @@ export function defaultCheckDate(dates: readonly string[], today: string): strin
   const past = dates.filter((d) => d < today);
   return past.at(-1) ?? dates[0] ?? null;
 }
+
+/**
+ * 주소로 받은 날짜 고르기(`?date=`) — 수업일이면 그날, `first`/`last`면 그 달 첫·마지막 수업일, 그 밖은 `defaultCheckDate`.
+ * 달력 화살표가 달 경계를 넘을 때(10월 첫 수업일에서 ‹ → 9월 마지막 수업일) 쓴다.
+ */
+export function pickCheckDate(dates: readonly string[], today: string, want: string | null | undefined): string | null {
+  if (want === "first") return dates[0] ?? null;
+  if (want === "last") return dates.at(-1) ?? null;
+  if (want && dates.includes(want)) return want;
+  return defaultCheckDate(dates, today);
+}
