@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // AI 멘트 탭 미리보기 = 운영 자동작성과 같은 재료·조립·모델(원장 2026-10-16 후속). DB는 표마다 행을 돌려주는 가짜 —
 // 🔴 거르는 칸이 행에 없으면 그 행을 떨어뜨린다(지점 필터를 빼면 테스트가 깨지게).
+// 🔴 select 칸이 SQL 정의에 없으면 PostgREST처럼 오류를 돌려준다 — 칸을 안 보던 가짜가 `users.name`(실제 `display_name`)을
+//    통과시켜, 작성자가 잡히는 미리보기가 운영에서 늘 "선생님을(를) 읽지 못했습니다"로 멈췄다(2026-10-28).
 const m = vi.hoisted(() => ({ generate: vi.fn(), settings: vi.fn(), history: vi.fn(), style: vi.fn(), receipt: vi.fn(), tpl: vi.fn(), special: vi.fn() }));
 vi.mock("@/lib/ai/generate", () => ({ generateJSON: m.generate }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: m.settings }));
@@ -12,12 +14,20 @@ vi.mock("@/features/video-homework/server/receipt-comment", () => ({ getVideoRec
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 vi.mock("../ment-style-prompt", () => ({ mentStyleDirective: () => "@@말투@@", mentStyleToneDirective: () => "@@어조@@" }));
 import { runMentPreview } from "./ment-preview";
+import { schemaColumns, selectColumns } from "@/lib/db/schema-columns";
 
 type Row = Record<string, unknown>;
 const T = "tenant";
+const schemaOf = new Map<string, Set<string>>();
+const missingColumn = (table: string, cols: readonly string[]) => {
+  const known = schemaOf.get(table) ?? schemaOf.set(table, schemaColumns(table)).get(table)!;
+  return cols.find((c) => !known.has(c)) ?? null;
+};
+
 function fakeDb(tables: Record<string, Row[]>) {
   return {
     from(table: string) {
+      let missing: string | null = null;
       const eqs: [string, unknown][] = [];
       const lts: [string, string][] = [];
       let desc: string | null = null;
@@ -27,14 +37,17 @@ function fakeDb(tables: Record<string, Row[]>) {
         );
         return desc ? [...out].sort((a, b) => String(b[desc!]).localeCompare(String(a[desc!]))) : out;
       };
+      const noColumn = () => ({ data: null, error: { code: "42703", message: `column ${table}.${missing} does not exist` } });
       const b = {
-        select: () => b,
-        eq: (k: string, v: unknown) => (eqs.push([k, v]), b),
-        lt: (k: string, v: string) => (lts.push([k, v]), b),
-        order: (k: string) => ((desc = k), b),
+        // 없는 칸은 select든 필터·정렬이든 PostgREST처럼 오류(첫 칸만 알린다).
+        select: (cols?: string) => ((missing ??= cols ? missingColumn(table, selectColumns(cols)) : null), b),
+        eq: (k: string, v: unknown) => ((missing ??= missingColumn(table, [k])), eqs.push([k, v]), b),
+        lt: (k: string, v: string) => ((missing ??= missingColumn(table, [k])), lts.push([k, v]), b),
+        order: (k: string) => ((missing ??= missingColumn(table, [k])), (desc = k), b),
         limit: () => b,
-        maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),
-        then: (ok: (v: unknown) => unknown, bad?: (e: unknown) => unknown) => Promise.resolve({ data: rows(), error: null }).then(ok, bad),
+        maybeSingle: async () => (missing ? noColumn() : { data: rows()[0] ?? null, error: null }),
+        then: (ok: (v: unknown) => unknown, bad?: (e: unknown) => unknown) =>
+          Promise.resolve(missing ? noColumn() : { data: rows(), error: null }).then(ok, bad),
       };
       return b;
     },
@@ -49,7 +62,7 @@ const report = (o: Row = {}) => ({
 });
 const C1 = "c1aaaaaa-0000-4000-8000-000000000001";
 const session = (student: string, teacher: string, sp: Row) => ({ tenant_id: T, student_id: student, session_date: DATE, updated_by: teacher, class_id: C1, special_note: null, subject_progress: sp });
-const people = { students: [{ tenant_id: T, id: "s1", name: "학원이" }], users: [{ tenant_id: T, id: "t1", name: "이수진", report_notice_mode: null }, { tenant_id: T, id: "t2", name: "박선생", report_notice_mode: null }] };
+const people = { students: [{ tenant_id: T, id: "s1", name: "학원이" }], users: [{ tenant_id: T, id: "t1", display_name: "이수진", report_notice_mode: null }, { tenant_id: T, id: "t2", display_name: "박선생", report_notice_mode: null }] };
 
 beforeEach(() => {
   vi.clearAllMocks();

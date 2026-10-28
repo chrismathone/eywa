@@ -354,8 +354,15 @@ export function DayBoardClient({
       {/* 📐 **폰과 같은 모양**(사용자 2026-10-21 "폰화면에서 보는 뷰랑 최대한 비슷하게 · 굳이 꽉 채우지 않아도 돼") —
           호차 열은 **폰 폭(26rem ≈ 416px)으로 고정**하고 왼쪽부터 나란히 선다. 열이 넓으면 학생 줄이 "이름 | 버튼" 가로 배치로
           바뀌어(@lg/row) 폰과 딴 화면이 됐다. 판이 좁으면(폰) 종전대로 한 열을 꽉 채운다. 호차 하나만 볼 때도 같은 폭. */}
+      {/* ↔️ **전체 = 호차를 한 줄로**(사용자 2026-10-28 "전체로 하면 있는 호차들을 전부 가로로 정렬") — 넓은 판에서도 다음 줄로
+          접지 않고 옆으로 이어 세운다(넘치면 가로 스크롤). 한 호차만 볼 때·폰 폭은 종전 그대로. */}
       <div className="@container/board">
-       <div className="grid grid-cols-1 items-start gap-4 @xl/board:grid-cols-[repeat(auto-fill,26rem)]">
+       <div className={shownKey ? undefined : "@xl/board:overflow-x-auto @xl/board:pb-2"}>
+       <div
+         className={`grid grid-cols-1 items-start gap-4 ${
+           shownKey ? "@xl/board:grid-cols-[repeat(auto-fill,26rem)]" : "@xl/board:grid-flow-col @xl/board:auto-cols-[26rem] @xl/board:grid-cols-none"
+         }`}
+       >
       {groups.map((group) => (
         <section key={group.key} className="flex min-w-0 flex-col gap-2">
           <VehicleHeader group={group} progress={progressByKey.get(group.key) ?? group.progress} />
@@ -391,6 +398,7 @@ export function DayBoardClient({
           </div>
         </section>
       ))}
+       </div>
        </div>
       </div>
     </div>
