@@ -23,11 +23,18 @@ export function groupDigits(n: number): string {
  * 백분위 = 100 − 인재원 상위 %(원장 2026-10-27 *"상위 몇퍼 … 백분위로 변경"* — 꼴찌도 '상위 100%'라 좋은 말처럼 읽혔다).
  * 🔑 숫자는 인재원 상위 %에서 바로 바꾼다(전 학생 자료가 없어 다시 계산하지 않는다).
  */
+/** 이보다 적은 학년은 백분위 대신 등수(1~4명 — 옛 인재원 최소 인원 5명과 같은 선). */
+export const SMALL_COHORT = 5;
+
 export function compareText(c: { label: string; rank: number; of: number; topPct: number }, kind: "학년" | "반") {
   const top = Math.min(100, Math.max(1, Math.round(c.topPct)));
   const pct = 100 - top;
   if (kind === "반") return { label: "반 등수", value: groupDigits(c.rank), unit: "등", sub: `${groupDigits(c.of)}명 중`, fill: pct };
   const grade = c.label.trim();
+  // 인원이 적은 학년(원장 2026-10-28 *"인원 적어도 무조건 나오게"* — 인재원이 최소 5명을 없앴다)은 백분위가 거짓말을 한다
+  // (1명 중 1등 = 백분위 0). {@link SMALL_COHORT}명 미만이면 반처럼 등수로 적는다.
+  if (c.of < SMALL_COHORT)
+    return { label: grade ? `${grade} 학년 등수` : "학년 등수", value: groupDigits(c.rank), unit: "등", sub: `${groupDigits(c.of)}명 중`, fill: Math.round((Math.max(0, c.of - c.rank + 1) / Math.max(1, c.of)) * 100) }; // 막대 = 몇 명을 앞섰나(1명 중 1등 = 가득)
   return { label: grade ? `${grade} 학년 백분위` : "학년 백분위", value: String(pct), unit: "", sub: `${groupDigits(c.of)}명 중 ${groupDigits(c.rank)}등`, fill: pct };
 }
 

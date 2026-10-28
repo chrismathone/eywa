@@ -73,6 +73,10 @@ describe("문구", () => {
     // 원장 2026-10-27 — 하위 학생이 '상위 86%'로 읽히던 것: 8명 중 7등은 백분위 14 · 꼴찌는 0
     expect(compareText({ label: "A반", rank: 7, of: 8, topPct: 86 }, "반").fill).toBe(14);
     expect(compareText({ label: "중2", rank: 8, of: 8, topPct: 100 }, "학년").value).toBe("0");
+    // 인원이 적은 학년(5명 미만)은 등수로 — 1명 중 1등이 '백분위 0'으로 읽히지 않게(원장 2026-10-28).
+    expect(compareText({ label: "초5", rank: 1, of: 1, topPct: 100 }, "학년")).toMatchObject({ label: "초5 학년 등수", value: "1", unit: "등", sub: "1명 중", fill: 100 });
+    expect(compareText({ label: "초5", rank: 3, of: 4, topPct: 75 }, "학년")).toMatchObject({ label: "초5 학년 등수", value: "3", fill: 50 });
+    expect(compareText({ label: "초5", rank: 1, of: 5, topPct: 20 }, "학년").label).toBe("초5 학년 백분위");
     expect(groupDigits(1234567)).toBe("1,234,567");
     expect(badgeGradeLabel("초4 과정 통과")).toBe("초4");
     expect(badgeGradeLabel("중1")).toBe("중1");
