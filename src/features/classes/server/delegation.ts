@@ -5,7 +5,7 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { delegationOverlapsRange, isDelegationActiveOn } from "../delegation-window";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { axisDowOf, isSeatSlot, slotLiveOn } from "@/features/attendance/teacher-axis";
+import { isSeatSlot, slotLiveOn } from "@/features/attendance/teacher-axis";
 import { SELF_STUDY_ROOM_LABEL, specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 
 type ServerClient = Awaited<ReturnType<typeof createServerClient>>;
@@ -54,6 +54,11 @@ export type TeachingClassRow = {
   closedAt?: string | null;
   /** 위임받은 반인가 — 반 칩이 '내 반'과 시각적으로 구분한다(원장 지시 2026-08-03). */
   delegated: boolean;
+  /**
+   * JJ 보고서 담당으로 실린 반인가(`fetchJjManagedClassIds`) — 로스터가 **그날 수업이 없어도** 세우고 등원 요일로 거르지 않는다
+   * (원장 2026-10-28, JJ 보고서는 주 1회 등 아무 날에나 쓴다). 내 담임 반·위임 반이면 false(종전 규칙).
+   */
+  jjReport?: boolean;
   /** 위임 반일 때 원 담임 표시명(없거나 내 반이면 null) — 칩에 "○○ 선생님 반"으로 밝힌다. */
   ownerName: string | null;
   /**
@@ -97,23 +102,22 @@ async function fetchActiveDelegations(supabase: ServerClient, date: string, stri
 }
 
 /**
- * **JJ 보고서 담당**이 그 날짜에 맡는 반 — 그날 JJ 자리 교시가 살아 있는 반(원장 2026-10-26 *"jj관리자로 해서 수업보고서 쓸수있게"*).
+ * **JJ 보고서 담당**이 그 날짜에 맡는 반 — 그 날짜에 JJ 자리 교시가 살아 있는 반(원장 2026-10-26 *"jj관리자로 해서 수업보고서 쓸수있게"*).
+ * 🔴 **요일을 보지 않는다**(원장 2026-10-28 *"일주일에 한번 보내거나 그렇기 때문에 수업이 없어도 떠야함 · 데이터도 srs에서 끌어오니
+ *    언제든지 사용가능해야함"*) — 그 반에 JJ 교시가 **어느 요일이든** 있으면 매일 싣는다. 로스터는 이 반을 `jjReport` 표식으로
+ *    받아 그날 수업이 없어도 세우고 등원 요일(분리등원)로 거르지 않는다(roster.ts).
  * 담당 명단은 학원설정 개인별 기능 권한(`specialAccess.jjReportManagerIds`)이고, 명단에 없으면 조회 없이 [].
  * 🔴 시간표 JJ 칸에 담당을 채우는 방식은 쓰지 않는다 — `isSeatSlot`(담당 없음 + 자리 라벨)이 깨져 자리 출석·시수·포트폴리오가 갈린다.
  * ⚠️ 설정·조회 실패는 [](이 갈래만 닫힌다 — 담임·위임 판정은 그대로). 자리 판정은 출결 축과 **같은 함수**(teacher-axis).
  */
 async function fetchJjManagedClassIds(supabase: ServerClient, userId: string, date: string): Promise<string[]> {
   try {
-    const settings = await getTenantSettings();
-    if (!(settings.permissions.specialAccess.jjReportManagerIds ?? []).includes(userId)) return [];
-    const dow = axisDowOf(date);
-    if (!dow) return [];
+    if (!(await isJjReportManager(userId))) return [];
     const rows = await fetchAllPaged<{ class_id: string; teacher_id: string | null; slot_teacher_label: string | null; valid_from: string; valid_to: string | null }>(
       (from, to) =>
         supabase
           .from("class_schedules")
           .select("class_id, teacher_id, slot_teacher_label, valid_from, valid_to")
-          .eq("day_of_week", dow)
           .is("teacher_id", null)
           .not("slot_teacher_label", "is", null)
           .order("id")
@@ -256,6 +260,8 @@ export async function getTeachingClasses(
       ...jj.filter((id) => !ownSet.has(id)),
     ]),
   ];
+  const delegatedToMe = new Set(active.filter((r) => r.delegate_user_id === userId).map((r) => r.class_id));
+  const jjOnly = new Set(jj.filter((id) => !ownSet.has(id) && !delegatedToMe.has(id)));
   const awayByClass = new Map<string, string>(); // 내 반 → 지금 대신 맡은 강사 id
   for (const r of active) {
     if (ownSet.has(r.class_id) && r.delegate_user_id !== userId) awayByClass.set(r.class_id, r.delegate_user_id);
@@ -320,6 +326,8 @@ export async function getTeachingClasses(
       reportOptout: !!c.report_optout,
       closedAt: c.closed_at ?? null,
       delegated: true,
+      // 위임이 함께 걸린 날은 위임 규칙(그날 수업만)이 이긴다 — JJ 담당으로만 실린 반에만 표식.
+      jjReport: jjOnly.has(c.id),
       ownerName: (c.teacher_id && nameById.get(c.teacher_id)) || null,
       delegatedAwayTo: null, // 받은 반은 '넘긴' 방향이 없다(둘 다 참일 수 없게 위에서 갈랐다)
     })),
