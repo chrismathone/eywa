@@ -1283,6 +1283,8 @@ export const MENU_ICON = {
   withdrawals: "userMinus",
   // 퇴원보고서 — report는 수업보고서·영상 제출 현황 몫이다. 퇴원관리(userMinus)와 다른 사람+X 스티커(2026-10-22).
   withdrawal_reports: "userX",
+  // 비포클래스체크리스트(초안) — 수업 전 준비 체크. listChecks(출결 모드)·clipboardCheck(출석부)와 다른 선택 상자.
+  before_class_checklist: "checkbox",
   retention: "shield",
   // 신규생 관리 — 체크리스트 7항목이 정체성이다(이탈 방어의 "방패"와 뜻이 달라 그림도 다르다).
   newcomers: "userCheck",
