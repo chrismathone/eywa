@@ -26,12 +26,40 @@ describe("반 배치 이동(moveClassSlots) 배선", () => {
     expect(src).toContain("getTeacherScheduleBlocks(");
   });
 
-  it("적용일 이후 그 교시에 매달린 기록(출결·수업 계획·학생 기록·미룸)이 있으면 거절한다([[#126]]) — 요일까지 본다", () => {
+  it("적용일 이후 그 교시에 매달린 기록을 본다([[#126]]) — 요일까지 · 출결은 거절, 나머지는 함께 옮긴다(원장 2026-10-28 (가)안)", () => {
     expect(src).toContain("SLOT_ANCHORS");
-    expect(src).toContain('.eq("slot_start", String(row.start_time))');
-    expect(src).toContain("weekdayOf(d) === row.day_of_week");
+    expect(src).toContain("const slot = String(row.start_time)");
+    expect(src).toContain('.eq("slot_start", slot)');
+    expect(src).toContain("weekdayOf(d) !== row.day_of_week");
     const anchors = read("src/features/timetable/lib/slot-anchors.ts");
     for (const t of ["attendance_records", "class_sheet_plan_lines", "class_sheet_student_marks", "class_lesson_shifts"]) expect(anchors).toContain(`"${t}"`);
+    // 출결(carry 없음)은 막힘 안내로, 나머지는 함께 옮길 목록으로.
+    expect(src).toContain("slotAnchorBlockText(");
+    expect(src).toContain("carryOffset(row.day_of_week, w.day, effective)");
+  });
+
+  it("🔴 함께 옮기기는 판정을 다 끝낸 뒤에 쓴다 — 덮어쓰지 않음(차지한 자리) · 쓰는 순서 · 실패하면 기록과 배치를 함께 되짚는다", () => {
+    const lf = src.replace(/\r\n/g, "\n"); // 작업 사본은 CRLF일 수 있다(autocrlf) — 줄을 넘는 검사는 LF로 맞춰 본다.
+    const at = (s: string) => lf.indexOf(s);
+    const insertNew = '.from("class_schedules")\n      .insert(';
+    // 판정(차지한 자리·순서) → 배치 쓰기 → 기록 옮기기 순서.
+    expect(at("carryConflicts(carry, occupants)")).toBeGreaterThan(0);
+    expect(at("carryRounds(carry)")).toBeGreaterThan(at("carryConflicts(carry, occupants)"));
+    expect(at(insertNew)).toBeGreaterThan(at("carryRounds(carry)"));
+    expect(at("for (const round of rounds)")).toBeGreaterThan(at(insertNew));
+    // 되돌리기 일지에 기록 옮기기가 들어가고, 되짚을 때 원래 (날짜, 교시)로 쓴다.
+    expect(src).toContain('kind: "carried"');
+    expect(src).toContain("carryPatch(j.table, j.fromDate, j.fromSlot)");
+    expect(src).toContain('await undoneText("기록을 새 교시로 옮기지 못해 배치와 기록을")');
+    // 쓰기·되짚기 모두 그 반으로 좁힌다.
+    expect(lf.match(/\.in\("id", (?:g|j)\.ids\)\n\s*\.eq\("tenant_id", user\.tenantId\)\n\s*\.eq\("class_id", classId\)/g)?.length).toBe(2);
+  });
+
+  it("함께 옮긴 기록을 감사로그(한글 요약)와 화면에 알린다", () => {
+    expect(src).toContain("carried, carriedCounts");
+    const board = read("src/app/(shell)/timetable/_components/timetable-board.tsx");
+    expect(board).toContain("res.carried");
+    expect(board).toContain("{notices[0]}");
   });
 
   it("오늘 수업이 있는 교시는 오늘부터 옮기지 않는다 · 분리등원 학생이 있으면 요일을 바꾸지 않는다(리뷰 2026-10-28)", () => {

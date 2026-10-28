@@ -17,7 +17,8 @@ import { daySplitStudents, nextDay, SLOT_ANCHORS, slotAnchorBlockText } from "./
  */
 const root = process.cwd();
 const read = (p: string) => fs.readFileSync(path.join(root, p), "utf8");
-const TABLES = [...new Set([...SLOT_ANCHORS.map((a) => a.table), "enrollments"])];
+// 교시 메모(`class_sheet_memos`)도 반 블록 옮기기가 함께 옮긴다(2026-10-28) — 열쇠 글자라 SLOT_ANCHORS 밖이지만 조회 칸은 같이 본다.
+const TABLES = [...new Set([...SLOT_ANCHORS.map((a) => a.table), "enrollments", "class_sheet_memos"])];
 const NAME = String.raw`"?([a-z_][a-z0-9_]*)"?`;
 const NOT_COLUMN = /^(constraint|primary|unique|foreign|check|exclude|index|key|if|column)$/i;
 const tableRe = (t: string) => String.raw`(?:only\s+)?(?:(?:public|"public")\.)?"?${t}"?(?![a-z0-9_])`;
@@ -165,11 +166,15 @@ describe("배치에 매달린 기록 표 · 수강 표 조회 칸 이름 = SQL �
     expect(cols.has("date")).toBe(false);
   });
 
-  it("🔴 SLOT_ANCHORS의 표·날짜 칸·교시 칸이 SQL에 있다(값으로 들고 다니는 표는 조회 줄 대조가 못 본다)", () => {
+  it("🔴 SLOT_ANCHORS의 표·날짜 칸·교시 칸·유니크 열쇠 칸이 SQL에 있다(값으로 들고 다니는 표는 조회 줄 대조가 못 본다)", () => {
     for (const a of SLOT_ANCHORS) {
       const cols = schemaColumns(a.table);
-      expect([a.table, ...["id", "tenant_id", "class_id", "slot_start", a.dateColumn].filter((c) => !cols.has(c))]).toEqual([a.table]);
+      const keyColumns: readonly string[] = a.carry?.keyColumns ?? [];
+      const need = ["id", "tenant_id", "class_id", "slot_start", a.dateColumn, ...keyColumns];
+      expect([a.table, ...need.filter((c) => !cols.has(c))]).toEqual([a.table]);
     }
+    const memo = schemaColumns("class_sheet_memos");
+    expect(["id", "tenant_id", "class_id", "week_start", "memo_key"].filter((c) => !memo.has(c))).toEqual([]);
   });
 
   it("🔴 저장소의 그 표 PostgREST 조회가 모두 있는 칸만 읽는다", () => {
@@ -204,19 +209,19 @@ describe("배치에 매달린 기록 표 · 수강 표 조회 칸 이름 = SQL �
     expect(src).toMatch(/\.gte\(a\.dateColumn, effective\)/);
     expect(src).not.toMatch(/["']date["']/);
     expect(SLOT_ANCHORS.find((a) => a.table === "attendance_records")?.dateColumn).toBe("session_date");
+    // 🔴 함께 옮기지 않는 것은 출결뿐(실제로 찍힌 기록·급여 — 원장 2026-10-28 (가)안).
+    expect(SLOT_ANCHORS.filter((a) => !a.carry).map((a) => a.table)).toEqual(["attendance_records"]);
   });
 });
 
 describe("반 블록 옮기기 막힘 판정", () => {
-  it("막힘 안내는 기록을 지우라고 하지 않고, 마지막 기록 다음 날을 적용일로 권한다", () => {
-    const text = slotAnchorBlockText([
-      { label: "출결", count: 3, lastDate: "2026-10-28" },
-      { label: "수업 계획", count: 12, lastDate: "2026-11-30" },
-    ]);
-    expect(text).toContain("출결 3건 · 수업 계획 12건");
+  it("출결 막힘 안내는 기록을 지우라고 하지 않고, 마지막 출결 다음 날을 적용일로 권한다 · 출결은 함께 옮기지 않는다고 밝힌다", () => {
+    const text = slotAnchorBlockText([{ label: "출결", count: 3, lastDate: "2026-11-30" }]);
+    expect(text).toContain("출결 3건");
     expect(text).toContain("2026-12-01 이후로");
     expect(text).not.toMatch(/정리|지우|삭제/);
-    expect(text).toContain("함께 옮기는 기능은 아직 없습니다");
+    expect(text).toContain("함께 옮기지 않습니다");
+    expect(text).not.toContain("아직 없습니다");
     expect(nextDay("2026-12-31")).toBe("2027-01-01");
   });
 

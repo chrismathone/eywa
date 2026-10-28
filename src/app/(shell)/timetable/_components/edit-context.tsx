@@ -214,6 +214,8 @@ export interface TimetableEditState {
   saving: boolean;
   error: string | null;
   failed: string[];
+  /** 반 블록 이동이 새 교시로 함께 옮긴 기록 안내(반마다 한 줄) — 다음 편집·저장·취소 때 지운다. */
+  notices: string[];
   /** 이동 적용일(YYYY-MM-DD) — 사용자가 편집 바에서 정한 날짜(예정일). null이면 기본(오늘/조회 주). */
   scheduledDate: string | null;
   setScheduledDate: (d: string | null) => void;
@@ -262,6 +264,7 @@ export const TimetableEditContext = createContext<TimetableEditState>({
   saving: false,
   error: null,
   failed: [],
+  notices: [],
   scheduledDate: null,
   setScheduledDate: noop,
   dateFloor: "",

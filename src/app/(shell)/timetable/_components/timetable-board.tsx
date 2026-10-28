@@ -155,6 +155,7 @@ export function TimetableEditProvider({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [failed, setFailed] = useState<string[]>([]);
+  const [notices, setNotices] = useState<string[]>([]);
   // 사용자가 편집 바에서 정한 적용일(예정일). null이면 기본(조회 주 기준 effectiveDate ?? 오늘).
   const [scheduledDate, setScheduledDate] = useState<string | null>(null);
   const dateFloor = effectiveDate ?? today;
@@ -366,6 +367,7 @@ export function TimetableEditProvider({
     }
     setError(null);
     setFailed([]);
+    setNotices([]);
     setQueue((prev) => {
       // 전부 되돌린(net no-op) 낡은 배치는 새 배치를 시작하기 전에 비운다 — 안 비우면 raw 큐에 남은
       // 낡은 앵커(effectiveOn)가 새 이동의 적용일을 오염시킨다(적대 리뷰 확정 결함의 나머지 반쪽).
@@ -462,6 +464,7 @@ export function TimetableEditProvider({
     setSaving(true);
     setError(null);
     setFailed([]);
+    setNotices([]);
     // 🔴 실패로 중간에 돌아서도 **이미 나간 쓰기**가 있으면 회차 확정 창에 알린다(성공분 기준, finally).
     let changed = false;
     try {
@@ -547,6 +550,8 @@ export function TimetableEditProvider({
             failedIds.add(m.slotId);
           } else {
             changed = true;
+            // 함께 옮긴 기록(수업 계획·학생 기록 …)을 알린다 — 특히 요일이 앞당겨져 한 주 뒤로 간 경우(원장 2026-10-28 (가)안).
+            if (res.carried) setNotices((prev) => [...prev, `${m.className}: ${res.carried}`]);
           }
         }
         if (failedMoves.length > 0) {
@@ -577,6 +582,7 @@ export function TimetableEditProvider({
     }
     setError(null);
     setFailed([]);
+    setNotices([]);
     // 🔴 적용 앵커는 **큐잉 시점의 의도**(이번 주=null·미래 주=그 주 월요일) — 저장이 "지금 보는 주"에 묶이지 않게(F2).
     setClassQueue((prev) => [...prev.filter((x) => x.slotId !== m.slotId), { ...m, effectiveOn: queueIntent }]);
   }
@@ -587,6 +593,7 @@ export function TimetableEditProvider({
     setScheduledDate(null);
     setError(null);
     setFailed([]);
+    setNotices([]);
   }
 
   return (
@@ -606,6 +613,7 @@ export function TimetableEditProvider({
         saving,
         error,
         failed,
+        notices,
         scheduledDate,
         setScheduledDate,
         dateFloor,
@@ -1158,6 +1166,7 @@ export function TimetableEditControls({ rosterHidden = false }: { rosterHidden?:
     saving,
     error,
     failed,
+    notices,
     scheduledDate,
     setScheduledDate,
     dateFloor,
@@ -1180,7 +1189,7 @@ export function TimetableEditControls({ rosterHidden = false }: { rosterHidden?:
   //    둘째 줄로 밀렸다(원장이 우상단에 두라고 한 그 값이다). 드래그 사용법은 도움말이 이미 설명하고,
   //    실제로 끌어 보면 드롭 칸이 보이므로 상시 안내로 세로 한 줄을 살 이유가 없다.
   // ⚠️ 되살리려면 **툴바 밖**에 둘 것(툴바 줄 수를 늘리지 않는 자리) — 여기로 되돌리면 두 줄이 재발한다.
-  if (pendingCount === 0 && !error && failed.length === 0) return null;
+  if (pendingCount === 0 && !error && failed.length === 0 && notices.length === 0) return null;
   return (
     <div className="print:hidden flex flex-wrap items-center gap-2 text-xs">
       {/* 툴바와 가르는 세로줄 — 그릴 게 생겼을 때만 함께 선다(호출부에 두면 빈 줄만 남는다). */}
@@ -1260,6 +1269,13 @@ export function TimetableEditControls({ rosterHidden = false }: { rosterHidden?:
         <span className="text-amber" title={failed.join("\n")}>
           {failed.length}건 실패 — {failed[0]}
           {failed.length > 1 ? ` 외 ${failed.length - 1}건` : ""} · 나머지는 저장됨
+        </span>
+      ) : null}
+      {/* 반 블록 이동이 함께 옮긴 기록 — 첫 줄은 글로, 나머지는 마우스를 올리면(실패 줄과 같은 꼴). */}
+      {notices.length > 0 ? (
+        <span className="text-text-dim" title={notices.join("\n")}>
+          {notices[0]}
+          {notices.length > 1 ? ` 외 ${notices.length - 1}개 반` : ""}
         </span>
       ) : null}
     </div>

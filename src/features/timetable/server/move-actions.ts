@@ -24,6 +24,21 @@ import {
   type PlacedWindow,
 } from "../lib/class-move";
 import { daySplitStudents, nextDay, SLOT_ANCHORS, slotAnchorBlockText, type SlotAnchorHit } from "../lib/slot-anchors";
+import {
+  carryConflicts,
+  carryConflictText,
+  carryGroups,
+  carryOffset,
+  carryRounds,
+  carrySummary,
+  mondayOf,
+  parseSlotMemoKey,
+  shiftYmd,
+  slotMemoKey,
+  weekdayOf,
+  type CarryItem,
+  type CarryOccupant,
+} from "../lib/slot-carry";
 import { getTeacherScheduleBlocks, getWeeklyScheduleWithStudents } from "./queries";
 import { logDbError } from "@/lib/supabase/db-error";
 
@@ -39,8 +54,10 @@ const DAY_KEYS = new Set(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]);
  *    옛 행은 `valid_to = 적용일 − 1`로 **마감**하고 새 행을 `valid_from = 적용일`로 넣는다. 그래야
  *    **이미 찍힌 출결이 고아가 되지 않는다** — 출결은 `attendance_records.slot_start`로 그 시각에 매달려
  *    있어서([[#126]]), 행을 제자리에서 고치면 지난 기록이 사라진 교시를 가리킨다.
- * 🔴 **적용일 이후 그 교시에 매달린 기록이 있으면 거절**한다(`SLOT_ANCHORS` — 출결·수업 계획·학생 기록·미룸 표식) — 그 기록은
- *    옛 시각에 매달려 있는데 그날부터 배치가 바뀌면 고아가 된다. 조용히 옮기지 않고, 마지막 기록 다음 날로 적용일을 권한다.
+ * 🔴 **적용일 이후 그 교시에 매달린 기록은 새 교시로 함께 옮긴다**(`SLOT_ANCHORS` — 수업 계획·학생 기록·미룸 표식·Shouting 체크·
+ *    자리 이동 + 수업 시트 교시 메모 · 원장 2026-10-28 (가)안) — 배치만 옮기면 기록이 옛 시각에 남아 고아가 된다. 요일이 바뀌면
+ *    같은 주의 새 요일로, 그날이 적용일보다 앞이면 다음 주로(`carryOffset`). 옮겨 갈 자리에 기록이 있으면 덮어쓰지 않고 막는다.
+ *    **출결이 있으면 거절**한다(실제로 찍힌 기록·급여 — 시스템이 고치지 않는다) — 마지막 출결 다음 날로 적용일을 권한다.
  * 🔴 **오늘 수업이 있는 교시는 오늘부터 옮기지 않는다** — 열려 있는 출석·시트 화면이 옛 교시로 저장한다([[#126]]).
  * 🔴 **분리등원 학생이 있으면 요일을 바꾸지 않는다** — `attendance_days`는 요일만 적어, 요일을 옮기면 학생이 명단에서 빠지거나
  *    다른 교시에 더해진다(`daySplitStudents`).
@@ -50,7 +67,16 @@ const DAY_KEYS = new Set(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]);
  * 🔴 **길이는 유지**한다 — 목적지 교시가 40분이어도 60분 수업은 60분이다(시수·급여).
  * 🔴 게이트는 `canManageTenant("classes")` — `canWriteTenant`는 scoped 강사도 통과한다(page.tsx와 같은 게이트, #77).
  */
-export type MoveClassSlotResult = { ok: true; moved: number } | { ok: false; error: string };
+/** `carried` = 함께 옮긴 기록 한 줄(없으면 빠진다 — 화면이 알린다). */
+export type MoveClassSlotResult = { ok: true; moved: number; carried?: string } | { ok: false; error: string };
+
+/** 수업 시트 교시 메모 — 날짜·교시가 열쇠 글자(`slot:날짜:HH:MM`)에 들어 있어 `SLOT_ANCHORS` 모양이 아니다. */
+const MEMO_TABLE = "class_sheet_memos";
+const MEMO_LABEL = "교시 메모";
+/** 칸 목록을 값으로 이어 만든 select는 타입이 추론되지 않는다 — 읽은 줄은 칸 이름으로 꺼내 쓴다(저장소 관례: calendar·grades). */
+type RowsPage = PromiseLike<{ data: Record<string, unknown>[] | null; error: { message: string } | null }>;
+/** 함께 옮기기 한 단계에서 동시에 쓰는 묶음 수. */
+const CARRY_PARALLEL = 8;
 
 type SlotRow = {
   id: string;
@@ -199,46 +225,140 @@ export async function moveClassSlots(input: {
     };
   }
 
-  // 🔴 적용일 이후 그 교시에 매달린 기록(`SLOT_ANCHORS` — 출결·수업 계획·학생 기록·미룸 표식 …) — 옮기면 옛 시각에 남아 화면에서
-  //    사라진다([[#126]]). 함께 옮기는 기능이 없어 그동안은 막는다(계획이 몇 달 앞까지 적힌 반은 그만큼 막힌다 — 원장 판단 대기).
-  // ⚠️ **요일까지 봐야 한다** — 월·목이 같은 시각인 반은 시각만으로 세면 목요일 기록 때문에 월요일 이동이
-  //    막힌다(적대 리뷰 2026-09-04). 날짜에서 요일을 도출해 그 줄의 요일과 같은 것만 센다 · 그 배치가 끝나는 날(`valid_to`)까지만.
+  // 🔴 적용일 이후 그 교시에 매달린 기록(`SLOT_ANCHORS`) — 배치만 옮기면 옛 시각에 남아 화면에서 사라진다([[#126]]).
+  //    **출결은 막는다**(실제로 찍힌 기록이고 급여로 흐른다 — 시스템이 고치지 않는다). 나머지(수업 계획·학생 기록·미룸 표식·
+  //    Shouting 체크·자리 이동)와 수업 시트 교시 메모는 **새 교시로 함께 옮긴다**(원장 2026-10-28 (가)안 — 같은 주의 새 요일,
+  //    그날이 적용일보다 앞이면 다음 주 · `carryOffset`). 아래에서 판정을 다 끝낸 뒤 배치를 쓰고 나서 옮긴다.
+  // ⚠️ **요일까지 봐야 한다** — 월·목이 같은 시각인 반은 시각만으로 세면 목요일 기록까지 옮긴다(적대 리뷰 2026-09-04).
+  //    날짜에서 요일을 도출해 그 줄의 요일과 같은 것만 · 그 배치가 끝나는 날(`valid_to`)까지만.
   // ⚠️ `slot_start`가 비어 있는 출결(하루 단위 기록)은 교시에 매달려 있지 않다 — 요일을 옮기면 수업 없는 요일 칸에 남지만
   //    월간 격자는 모든 날짜를 그리고 귀속은 담임으로 가서 사라지지 않는다(대상 아님).
   // 🔴 날짜 칸은 표마다 다르다(`SLOT_ANCHORS`) — 종전엔 출결을 없는 칸 `date`(실제 `session_date`)로 읽어 PostgREST가 늘 오류를 냈고,
   //    반 옮기기가 한 번도 저장되지 않았다(운영 감사로그 class_schedule_move 0건 · 3.0 연습본 재현 → 원장 지시로 넘겨받음 2026-10-28).
-  //    칸 이름은 시험이 SQL 정의와 대조한다.
+  //    칸 이름(유니크 열쇠 칸 포함)은 시험이 SQL 정의와 대조한다.
+  const readFailed = { ok: false as const, error: "옮기기 전에 확인할 기록을 읽지 못해 중단했습니다. 잠시 후 다시 시도해 주세요" };
   const hits = new Map<string, SlotAnchorHit>();
+  const carry: CarryItem[] = [];
+  let pushedWeek = false;
+  // 교시 메모는 그 반 것을 한 번에 읽는다(적용일 주 월요일부터 — 옮겨 갈 자리도 적용일 이후라 같은 목록이 '차지한 자리'를 겸한다).
+  let memos: { id: string; week_start: string; memo_key: string }[];
+  try {
+    memos = await fetchAllPaged<{ id: string; week_start: string; memo_key: string }>((from, to) =>
+      admin
+        .from(MEMO_TABLE)
+        .select("id, week_start, memo_key")
+        .eq("tenant_id", user.tenantId)
+        .eq("class_id", classId)
+        .like("memo_key", "slot:%")
+        .gte("week_start", mondayOf(effective))
+        .order("week_start")
+        .order("id")
+        .range(from, to),
+    );
+  } catch (e) {
+    logDbError(e, `timetable.moveClassSlots.${MEMO_TABLE}`);
+    return readFailed;
+  }
   for (const w of windows) {
     const row = byId.get(w.slotId)!;
     const until = row.valid_to ? String(row.valid_to).slice(0, 10) : null;
+    const slot = String(row.start_time);
+    const offset = carryOffset(row.day_of_week, w.day, effective);
+    const take = (table: string, label: string, id: string, date: string, keyRest: string, slotInKey: boolean) => {
+      carry.push({ table, label, id, fromDate: date, fromSlot: slot, toDate: shiftYmd(date, offset.days), toSlot: w.start, keyRest, slotInKey, until });
+      if (offset.pushedWeek) pushedWeek = true;
+    };
     for (const a of SLOT_ANCHORS) {
+      const keyColumns: readonly string[] = a.carry?.keyColumns ?? [];
       let found: Record<string, unknown>[];
       try {
         found = await fetchAllPaged<Record<string, unknown>>((from, to) => {
           let q = admin
             .from(a.table)
-            .select(`id, ${a.dateColumn}`)
+            .select(["id", a.dateColumn, ...keyColumns].join(", "))
             .eq("tenant_id", user.tenantId)
             .eq("class_id", row.class_id)
-            .eq("slot_start", String(row.start_time))
+            .eq("slot_start", slot)
             .gte(a.dateColumn, effective);
           if (until) q = q.lte(a.dateColumn, until);
-          return q.order(a.dateColumn).order("id").range(from, to);
+          return q.order(a.dateColumn).order("id").range(from, to) as unknown as RowsPage;
         });
       } catch (e) {
         logDbError(e, `timetable.moveClassSlots.${a.table}`);
-        return { ok: false, error: "옮기기 전에 확인할 기록을 읽지 못해 중단했습니다. 잠시 후 다시 시도해 주세요" };
+        return readFailed;
       }
-      const dates = found.map((r) => String(r[a.dateColumn]).slice(0, 10)).filter((d) => weekdayOf(d) === row.day_of_week);
-      if (!dates.length) continue;
-      const h = hits.get(a.label) ?? { label: a.label, count: 0, lastDate: "" };
-      h.count += dates.length;
-      h.lastDate = dates.reduce((m, d) => (d > m ? d : m), h.lastDate);
-      hits.set(a.label, h);
+      for (const r of found) {
+        const d = String(r[a.dateColumn]).slice(0, 10);
+        if (weekdayOf(d) !== row.day_of_week) continue;
+        if (a.carry) {
+          take(a.table, a.label, String(r.id), d, keyColumns.map((c) => String(r[c] ?? "")).join("|"), a.carry.slotInKey);
+          continue;
+        }
+        const h = hits.get(a.label) ?? { label: a.label, count: 0, lastDate: "" };
+        h.count += 1;
+        if (d > h.lastDate) h.lastDate = d;
+        hits.set(a.label, h);
+      }
+    }
+    for (const m of memos) {
+      const p = parseSlotMemoKey(m.memo_key);
+      if (!p || p.slot !== slot || p.date < effective || (until && p.date > until) || weekdayOf(p.date) !== row.day_of_week) continue;
+      take(MEMO_TABLE, MEMO_LABEL, m.id, p.date, "", true);
     }
   }
   if (hits.size > 0) return { ok: false, error: slotAnchorBlockText([...hits.values()]) };
+
+  // 옮겨 갈 자리를 이미 차지한 기록(같은 반 · 도착 날짜 범위 · 모든 교시) — 덮어쓰지 않고, 두 교시가 한 교시로 모이거나 배치가 끝나는
+  // 날 뒤로 넘어가도 막는다(`carryConflicts`). 판정을 다 끝낸 뒤에만 쓴다(쓰는 도중에 막히면 되돌릴 일이 늘어난다).
+  if (carry.length > 0) {
+    const occupants: CarryOccupant[] = [];
+    for (const table of new Set(carry.map((i) => i.table))) {
+      if (table === MEMO_TABLE) {
+        for (const m of memos) {
+          const p = parseSlotMemoKey(m.memo_key);
+          if (p) occupants.push({ table, id: m.id, date: p.date, slot: p.slot, keyRest: "", slotInKey: true });
+        }
+        continue;
+      }
+      const a = SLOT_ANCHORS.find((x) => x.table === table);
+      if (!a?.carry) continue;
+      const keyColumns: readonly string[] = a.carry.keyColumns;
+      const slotInKey = a.carry.slotInKey;
+      const dates = carry.filter((i) => i.table === table).map((i) => i.toDate).sort();
+      let found: Record<string, unknown>[];
+      try {
+        found = await fetchAllPaged<Record<string, unknown>>((from, to) =>
+          admin
+            .from(a.table)
+            .select(["id", a.dateColumn, "slot_start", ...keyColumns].join(", "))
+            .eq("tenant_id", user.tenantId)
+            .eq("class_id", classId)
+            .gte(a.dateColumn, dates[0]!)
+            .lte(a.dateColumn, dates[dates.length - 1]!)
+            .order(a.dateColumn)
+            .order("id")
+            .range(from, to) as unknown as RowsPage,
+        );
+      } catch (e) {
+        logDbError(e, `timetable.moveClassSlots.occupied.${a.table}`);
+        return readFailed;
+      }
+      for (const r of found) {
+        occupants.push({
+          table,
+          id: String(r.id),
+          date: String(r[a.dateColumn]).slice(0, 10),
+          slot: String(r.slot_start),
+          keyRest: keyColumns.map((c) => String(r[c] ?? "")).join("|"),
+          slotInKey,
+        });
+      }
+    }
+    const conflicts = carryConflicts(carry, occupants);
+    if (conflicts.length > 0) return { ok: false, error: carryConflictText(conflicts) };
+  }
+  const rounds = carryRounds(carry);
+  if (!rounds) return { ok: false, error: "기록을 새 교시로 옮길 순서를 정하지 못했습니다 — 블록을 나눠서 옮겨 주세요" };
 
   // 🔴 분리등원(요일 지정) 학생 — 요일을 옮기면 그 학생이 블록에서 빠지거나(옛 요일만 다님) 다른 교시에 더해진다(새 요일만 다님).
   //    학생 충돌 판정(`moveBlockers`)도 도착 요일로 학생을 걸러서 옛 요일 학생은 보지 않는다 — 막아야 둘 다 맞는다(리뷰 2026-10-28).
@@ -290,17 +410,26 @@ export async function moveClassSlots(input: {
     .maybeSingle();
   const className = klass?.class_name ?? null;
 
-  const cutoff = shiftDay(effective, -1);
+  const cutoff = shiftYmd(effective, -1);
   /**
    * 되돌리기 일지 — 트랜잭션이 없으니 **한 것을 그대로 되짚어** 원복한다(보상 트랜잭션).
    * 🔴 옛 코드는 새 행만 지우고 **이미 마감·삭제한 옛 행은 그대로 뒀다** — 중간에 실패하면 그 반이 적용일부터
    *    교시를 잃은 채 화면엔 "되돌렸습니다"가 떴다(삭제분은 복구 불가, 적대 리뷰 2026-09-04).
+   * `carried` = 함께 옮긴 기록 한 묶음(같은 출발·도착 칸) — 되짚을 땐 원래 (날짜, 교시)로. 옮긴 순서를 거꾸로 밟으므로 유니크가
+   * 도중에 부딪히지 않는다(`carryRounds`).
    */
   const journal: (
     | { kind: "inserted"; id: string }
     | { kind: "closed"; id: string; prevValidTo: string | null }
     | { kind: "deleted"; row: SlotRow }
+    | { kind: "carried"; table: string; ids: string[]; fromDate: string; fromSlot: string }
   )[] = [];
+  /** 그 표에서 (날짜, 교시)를 바꾸는 값 — 교시 메모는 열쇠 글자와 주(월요일)를 함께 바꾼다(DB CHECK: 열쇠 날짜가 그 주 안). */
+  const carryPatch = (table: string, date: string, slot: string): Record<string, string> => {
+    if (table === MEMO_TABLE) return { week_start: mondayOf(date), memo_key: slotMemoKey(date, slot) };
+    const a = SLOT_ANCHORS.find((x) => x.table === table)!;
+    return { [a.dateColumn]: date, slot_start: slot };
+  };
   /** 되짚기 — 실패한 단계가 있으면 false(화면에 "되돌렸습니다"라고 거짓말하지 않는다 · 리뷰 2026-10-28). */
   const undo = async (): Promise<boolean> => {
     let clean = true;
@@ -311,7 +440,19 @@ export async function moveClassSlots(input: {
     };
     // 역순으로 되짚는다(넣은 것은 지우고, 마감은 원래 날짜로, 지운 행은 **원래 id 그대로** 다시 넣는다).
     for (const j of [...journal].reverse()) {
-      if (j.kind === "inserted") {
+      if (j.kind === "carried") {
+        if (j.ids.length === 0) continue;
+        check(
+          (
+            await admin
+              .from(j.table)
+              .update(carryPatch(j.table, j.fromDate, j.fromSlot))
+              .in("id", j.ids)
+              .eq("tenant_id", user.tenantId)
+              .eq("class_id", classId)
+          ).error,
+        );
+      } else if (j.kind === "inserted") {
         check((await admin.from("class_schedules").delete().eq("id", j.id).eq("tenant_id", user.tenantId)).error);
       } else if (j.kind === "closed") {
         check(
@@ -384,6 +525,49 @@ export async function moveClassSlots(input: {
         : { kind: "deleted", row },
     );
   }
+  // 기록을 새 교시로 — 배치를 다 쓴 뒤에(여기서 실패하면 기록과 배치를 함께 되짚는다). 단계(`carryRounds`)마다, 같은 출발·도착
+  // 칸끼리 한 번에 쓴다 · 한 단계의 묶음은 서로 무관해 8개씩 동시에(몇 달 치 계획이면 묶음이 수십 개다). 실제로 바뀐 줄만 일지에
+  // 남긴다(그사이 지워진 줄은 되돌릴 것도 없다) — 동시에 쓴 묶음 중 하나가 실패해도 성공한 묶음은 일지에 들어간 뒤 되짚는다.
+  for (const round of rounds) {
+    const groups = carryGroups(round);
+    for (let k = 0; k < groups.length; k += CARRY_PARALLEL) {
+      const batch = groups.slice(k, k + CARRY_PARALLEL);
+      const results = await Promise.all(
+        batch.map((g) =>
+          admin
+            .from(g.table)
+            .update(carryPatch(g.table, g.toDate, g.toSlot))
+            .in("id", g.ids)
+            .eq("tenant_id", user.tenantId)
+            .eq("class_id", classId)
+            .select("id"),
+        ),
+      );
+      let carryErr: unknown = null;
+      results.forEach(({ data: done, error }, n) => {
+        const g = batch[n]!;
+        if (error) {
+          carryErr ??= error;
+          logDbError(error, "timetable.moveClassSlots.carry", { classId, table: g.table });
+          return;
+        }
+        journal.push({
+          kind: "carried",
+          table: g.table,
+          ids: (done ?? []).map((r) => String((r as { id: unknown }).id)),
+          fromDate: g.fromDate,
+          fromSlot: g.fromSlot,
+        });
+      });
+      if (carryErr) return { ok: false, error: await undoneText("기록을 새 교시로 옮기지 못해 배치와 기록을") };
+    }
+  }
+  // 요약은 실제로 바뀐 줄로 센다(판정 뒤 그사이 지워진 줄은 빠진다).
+  const movedIds = new Set(journal.flatMap((j) => (j.kind === "carried" ? j.ids.map((id) => `${j.table}|${id}`) : [])));
+  const carried = carrySummary(
+    carry.filter((i) => movedIds.has(`${i.table}|${i.id}`)),
+    pushedWeek,
+  );
   const createdIds = journal.filter((j) => j.kind === "inserted").map((j) => (j as { id: string }).id);
 
   await logAction({
@@ -402,6 +586,8 @@ export async function moveClassSlots(input: {
         };
       }),
       newSlotIds: createdIds,
+      // 한글 요약은 감사로그 화면이 그대로 보여 준다(영문 키 폴백은 한글 값만 그린다) · 표별 건수는 원문(툴팁)에.
+      ...(carried ? { carried, carriedCounts: countByTable(carry.filter((i) => movedIds.has(`${i.table}|${i.id}`))) } : {}),
     },
   });
   // 배치를 읽는 화면 모두(시간표 저장 `master-sheet-actions`와 같은 범위 + 그 반 상세).
@@ -411,21 +597,18 @@ export async function moveClassSlots(input: {
   revalidatePath("/students", "layout");
   revalidatePath("/ecs");
   revalidatePath("/attendance");
-  return { ok: true, moved: windows.length };
+  if (carried) {
+    // 함께 옮긴 기록을 읽는 화면(수업 시트·월간계획·원스크린 — 수업 시트 저장과 같은 범위).
+    revalidatePath(`/ecs/${classId}`, "layout");
+    revalidatePath("/textbooks");
+    revalidatePath("/onescreen");
+  }
+  return carried ? { ok: true, moved: windows.length, carried } : { ok: true, moved: windows.length };
 }
 
-
-/** `YYYY-MM-DD` → 요일 키(`mon`…) — 출결 기록이 **그 줄의 요일**인지 가르는 데 쓴다(UTC 결정적). */
-function weekdayOf(ymd: string): string {
-  const [y, m, d] = ymd.slice(0, 10).split("-").map(Number);
-  const day = new Date(Date.UTC(y!, (m ?? 1) - 1, d ?? 1)).getUTCDay();
-  return ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][day] ?? "";
-}
-
-/** `YYYY-MM-DD` ± 일수(UTC 결정적 — KST 날짜 문자열 산술의 앱 관례). */
-function shiftDay(ymd: string, delta: number): string {
-  const [y, m, d] = ymd.split("-").map(Number);
-  const t = Date.UTC(y!, (m ?? 1) - 1, (d ?? 1) + delta);
-  const dt = new Date(t);
-  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+/** 표별 건수(감사로그 원문용). */
+function countByTable(items: readonly CarryItem[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const i of items) out[i.table] = (out[i.table] ?? 0) + 1;
+  return out;
 }
