@@ -123,7 +123,8 @@ describe("JJ 수업보고서 카드", () => {
     expect(html).toContain("JJ 영어반");
     expect(html).toContain("김동후");
     expect(html).not.toContain(">일일 테스트<");
-    expect(html).toContain(">수업 평가<");
+    expect(html).not.toContain(">수업 평가<"); // 표 이름 칸은 비운다(원장 2026-10-28)
+    expect(html).toContain(">중상<"); // 눈금 머리는 그대로
     expect(html).toContain('aria-label="중"'); // 수업 태도 '보통'
     expect(html).not.toContain("숙제 완성도");
     expect(html).not.toContain("■");
@@ -133,7 +134,7 @@ describe("JJ 수업보고서 카드", () => {
   it("아래 = SRS 그림이 표 뒤에 · 대괄호를 내보내지 않는다", () => {
     expect(html).toContain("SRS 학습 결과");
     expect(html).toContain("STUDY:2026-09-27");
-    expect(html.indexOf(">수업 평가<")).toBeLessThan(html.indexOf("STUDY:"));
+    expect(html.indexOf(">중상<")).toBeLessThan(html.indexOf("STUDY:"));
     expect(html).not.toContain("[학습분석지]");
     expect(html).toContain("report-capture");
   });
@@ -142,7 +143,7 @@ describe("JJ 수업보고서 카드", () => {
     const h = renderToStaticMarkup(<ParentReportCard {...props(null)} />);
     expect(h).not.toContain("SRS 학습 결과");
     expect(h).not.toContain("[학습분석지]");
-    expect(h).toContain(">수업 평가<");
+    expect(h).toContain(">중상<");
   });
 
   it("사랑의 한마디 = 수업 평가와 SRS 사이 띠", () => {
@@ -151,7 +152,7 @@ describe("JJ 수업보고서 카드", () => {
     const h = renderToStaticMarkup(<ParentReportCard {...p} report={{ ...p.report, notes: withNote }} />);
     expect(h).toContain("사랑의 한마디");
     expect(h).toContain("오늘 정말 잘했어요!");
-    expect(h.indexOf(">수업 평가<")).toBeLessThan(h.indexOf("사랑의 한마디"));
+    expect(h.indexOf(">중상<")).toBeLessThan(h.indexOf("사랑의 한마디"));
     expect(h.indexOf("사랑의 한마디")).toBeLessThan(h.indexOf("STUDY:"));
   });
 

@@ -212,8 +212,10 @@ export function PilotSheetHead(p: PilotSheetHeadProps) {
         {p.levels ? (
           <>
             <tr>
+              {/* 태도 한 줄 표(JJ 수업보고서 {태도평가})는 이름 칸을 비운다(원장 2026-10-28 *"수업평가라는 이름 삭제"*) — 줄 이름 '수업 태도'가 이미 말한다.
+                  수학·영어 항목 보고서는 숙제 줄이 늘 있어(없으면 '숙제 없음' 줄) 그대로 — 옛 태도 값으로 숙제 줄만 남은 수학 표도 그대로. */}
               <th scope="col" className={`${LABEL} h-9`}>
-                수업 평가
+                {p.levels.length === 1 && p.levels[0]!.label.includes("태도") ? null : "수업 평가"}
               </th>
               {LEVELS.map((lv, i) => (
                 <th
