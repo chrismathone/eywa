@@ -38,6 +38,7 @@ import { FieldSelect } from "./field-select";
 import { isMathBookRow, useMathBookListId } from "./math-book-list";
 import { JjBookPicker } from "./jj-book-picker";
 import { isJjSheetDraft, isJjSheetReport } from "../jj-books";
+import { LoveNoteDraftButton } from "./love-note-draft-button";
 import { HomeworkRateInput } from "./homework-rate-input";
 import { VideoHomeworkCheck } from "@/features/video-homework/components/video-homework-provider";
 import { VideoHomeworkToggle } from "@/features/video-homework/components/video-homework-toggle";
@@ -393,7 +394,11 @@ export function ReportCard({
   // 발송 버튼 바로 위)에 둔다(원장 2026-10-23 *"사랑의 한마디를 더 밑으로 내려달라고"*). 그 밖의 행은 종전처럼 맨 위.
   const noteField = (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={`teacher-note-${student.id}`} className="micro text-text-faint">{jjOptionalNote ? t("os.card.noteJj") : oneLineRow ? t("os.card.notePilot") : t("os.card.note")}</label>
+      <div className="flex items-center justify-between gap-2">
+        <label htmlFor={`teacher-note-${student.id}`} className="micro text-text-faint">{jjOptionalNote ? t("os.card.noteJj") : oneLineRow ? t("os.card.notePilot") : t("os.card.note")}</label>
+        {/* 사랑의 한마디 [초안](원장 2026-10-28) — 누를 때만 AI. 잠긴 카드·AI 꺼진 지점엔 안 선다. */}
+        {oneLineRow && aiOn && !locked ? <LoveNoteDraftButton student={student} subject={subject} value={cardEval.note} onFill={onNote} /> : null}
+      </div>
       <textarea
         id={`teacher-note-${student.id}`}
         rows={3}

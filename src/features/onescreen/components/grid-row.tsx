@@ -72,6 +72,7 @@ import { MakeupSwitchButton } from "./makeup-switch-button";
 import { isMathBookRow, useMathBookListId } from "./math-book-list";
 import { JjBookPicker } from "./jj-book-picker";
 import { isJjSheetDraft, isJjSheetReport } from "../jj-books";
+import { LoveNoteDraftButton } from "./love-note-draft-button";
 
 const TD_BASE = "px-2 py-1.5 align-top";
 // 학생 묶음 구분선 — 묶음 첫 행(참고행이 꺼져 있을 때는 이 행)의 위쪽만 굵고 진한 회색.
@@ -925,16 +926,22 @@ export function GridBodyRow({
               타이핑이 `subject.note`에 들어가는데 화면은 `student.note`를 계속 그려 **글자가 아예 안 보였다**
               (원장 제보: *"커서만 깜빡이고 입력이 전혀 안됨"*). 잠금이 아니라 읽기/쓰기 층 불일치였다.
               ⚠️ 이 칸의 value는 onNote가 쓰는 층과 항상 같아야 한다 — 카드 모드는 처음부터 cardEval.note로 읽었다. */}
-          <textarea
-            value={rowEval.note}
-            onChange={(e) => fields.onNote(student.id, subject.name, e.target.value)}
-            readOnly={rowLocked}
-            placeholder={rowPlaceholder ?? (jjOptionalNote ? t("os.row.notePhJj") : oneLineRow ? t("os.row.notePhPilot") : t("os.row.notePh"))}
-            aria-label={tf("os.row.noteAria", { name: student.name })}
-            className={`border-amber/40 focus:border-primary scrollbar-thin min-h-[40px] w-full rounded-sm border px-2 py-1 text-xs leading-snug outline-none ${AUTOSIZE} ${
-              lockedTone || "bg-amber-soft/30"
-            }`}
-          />
+          <div className="flex items-start gap-1">
+            <textarea
+              value={rowEval.note}
+              onChange={(e) => fields.onNote(student.id, subject.name, e.target.value)}
+              readOnly={rowLocked}
+              placeholder={rowPlaceholder ?? (jjOptionalNote ? t("os.row.notePhJj") : oneLineRow ? t("os.row.notePhPilot") : t("os.row.notePh"))}
+              aria-label={tf("os.row.noteAria", { name: student.name })}
+              className={`border-amber/40 focus:border-primary scrollbar-thin min-h-[40px] w-full min-w-0 rounded-sm border px-2 py-1 text-xs leading-snug outline-none ${AUTOSIZE} ${
+                lockedTone || "bg-amber-soft/30"
+              }`}
+            />
+            {/* 사랑의 한마디 [초안](원장 2026-10-28) — 누를 때만 AI. 잠긴 행·AI 꺼진 지점엔 안 선다. */}
+            {oneLineRow && aiOn && !rowLocked ? (
+              <LoveNoteDraftButton student={student} subject={subject} value={rowEval.note} onFill={(n) => fields.onNote(student.id, subject.name, n)} compact />
+            ) : null}
+          </div>
           {config.noticeMode === "B" && !isEnglishRow && !pilot ? (
             // 모드 B — 카드 모드와 동일 계약: 화면만 2칸, 값은 joinComment이 빈 줄로 합친 **단일 문자열**
             // (저장·발송 경로 무변경). 표는 폭이 좁아 칸 제목을 placeholder로 겸한다.
