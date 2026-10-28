@@ -1,11 +1,14 @@
 "use client";
 
 import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { TONE_SOFT } from "@/lib/design/semantic-color";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { HOMEROOM_CELL_META, type HomeroomCell, type HomeroomStats } from "@/features/consultations/homeroom-model";
 import {
+  alignHomeroomFilter,
   filterHomeroomTeachers,
+  statsLinkOf,
   nextSort,
   sortHomeroomTeachers,
   type HomeroomFilter,
@@ -26,22 +29,43 @@ const LEGEND: HomeroomCell[] = ["self", "other", "none", "before"];
  * 담임별 상담 현황(homeroom-model.ts) — 담임 한 줄 = 달별 '담임이 상담한 학생 / 대상 학생'. 줄을 누르면 그 담임의 학생 × 달 표가 펼쳐진다.
  * 열 머리를 누르면 그 열로 정렬, 위 줄에서 골라 보기(과목·담임·미상담만, homeroom-sort.ts) — 둘 다 누르는 순간 계정에 저장([[#90]]).
  * 강사는 본인 한 줄이라 처음부터 펼친다.
+ * 🔗 과목·담임 고르기 = 위 상담 통계(지표·추이)의 과목·상담사 조건(원장 2026-10-28 — 상담사별 분해 카드를 숨기며 이 표에 이었다).
+ *    고르면 주소의 `who`·`subject`를 바꿔 통계가 다시 집계되고, 주소가 바뀌면(위 드롭다운) 이 표의 고르기도 따라온다(`alignHomeroomFilter`).
  */
 export function StatsHomeroom({
   data,
   teacherScoped,
   initialSort,
   initialFilter,
+  linkedWho,
+  linkedSubject,
 }: {
   data: HomeroomStats | null;
   teacherScoped: boolean;
   initialSort: HomeroomSort;
   initialFilter: HomeroomFilter;
+  /** 지금 통계 조건(주소의 상담사·과목) — 이 표의 고르기와 맞물린다. */
+  linkedWho: string;
+  linkedSubject: string;
 }) {
   const subjects = useSubjectMaps();
+  const router = useRouter();
+  const pathname = usePathname() ?? "/consultations/stats";
+  const searchParams = useSearchParams();
   const [open, setOpen] = useState<string | null>(teacherScoped && data?.teachers.length === 1 ? data.teachers[0]!.id : null);
   const [sort, setSort] = useState(initialSort);
-  const [filter, setFilter] = useState(initialFilter);
+  const [filter, setFilter] = useState(() => alignHomeroomFilter(initialFilter, linkedWho, linkedSubject));
+  // 주소가 바뀌면(위 드롭다운 · 이 표가 보낸 이동) 고르기를 맞춘다 — 렌더 중 비교(effect 안 setState 금지 규칙, [[#25]]).
+  const linkKey = `${linkedWho}|${linkedSubject}`;
+  const [seenLink, setSeenLink] = useState(linkKey);
+  // 이 표가 마지막으로 보낸 목적지 — 이동이 도착하기 전(주소가 아직 옛 값)에 또 누르면 옛 주소와 견줘 "같으니 안 보냄"으로 끝나
+  // 앞 이동이 도착하며 고르기를 되돌린다(A를 골랐다 바로 풀면 A로 돌아간다). 그래서 견줄 값은 '보낸 목적지'다. 앞선 이동은 라우터가 버린다.
+  const [sentLink, setSentLink] = useState<string | null>(null);
+  if (seenLink !== linkKey) {
+    setSeenLink(linkKey);
+    setFilter((f) => alignHomeroomFilter(f, linkedWho, linkedSubject));
+  }
+  if (sentLink !== null && sentLink === linkKey) setSentLink(null);
   const sorted = useMemo(
     () => (data ? sortHomeroomTeachers(filterHomeroomTeachers(data.teachers, filter), sort, subjects.labelOf) : []),
     [data, filter, sort, subjects],
@@ -62,6 +86,19 @@ export function StatsHomeroom({
   const onFilter = (next: HomeroomFilter) => {
     setFilter(next);
     void saveConsultationStatsPrefs({ hrFilter: next }).catch(() => undefined);
+    // 통계 조건이 달라질 때만 이동한다(미상담만·펼친 표 거르기는 이 표 안의 일). 다른 조건·embed는 지금 주소 그대로 싣는다([[#133]]).
+    const link = statsLinkOf(next);
+    const target = `${link.who}|${link.subject}`;
+    if (target === (sentLink ?? linkKey)) return;
+    setSentLink(target);
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    for (const [k, v] of Object.entries(link)) {
+      if (v) params.set(k, v);
+      else params.delete(k);
+    }
+    params.delete("page");
+    const s = params.toString();
+    router.push(`${pathname}${s ? `?${s}` : ""}`, { scroll: false });
   };
   const head = (key: HomeroomSortKey, label: ReactNode) => <SortHead key={key} label={label} active={sort.key === key} dir={sort.dir} onClick={() => onSort(key)} />;
   return (
@@ -69,7 +106,7 @@ export function StatsHomeroom({
       <div className="space-y-0.5">
         <p className="text-foreground text-sm font-bold">담임별 상담 현황</p>
         <p className="text-muted-foreground text-xs break-keep">
-          지금 담임 반 재원생 · {months.length > 1 ? `${mLabel(months[0]!)}~${mLabel(months[last]!)}` : `${mLabel(months[0]!)}부터`} · 담임 본인이 쓴 상담 기준 · 부담임·특강·JJ 반 제외 · 위 필터와 무관
+          지금 담임 반 재원생 · {months.length > 1 ? `${mLabel(months[0]!)}~${mLabel(months[last]!)}` : `${mLabel(months[0]!)}부터`} · 담임 본인이 쓴 상담 기준 · 부담임·특강·JJ 반 제외 · 기간·카테고리 필터와 무관 · 과목·담임(한 명)을 고르면 위 상담 통계도 그 조건으로
           {retired.teachers > 0 ? ` · 퇴사한 담임 ${retired.teachers}명의 반 ${retired.classes}개(학생 ${fmt(retired.students)}명) 제외` : ""}
         </p>
         <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs">

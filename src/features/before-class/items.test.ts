@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { classDatesInMonth, defaultCheckDate, shortDateLabel } from "./dates";
-import { completionRate, isBlankCheck, needsSupplement, normalizeCard, normalizeMissed, summarizeStudent } from "./items";
+import { completionRate, isBlankCheck, needsSupplement, normalizeCard, normalizeMissed, reportCheckLevels, summarizeStudent } from "./items";
 
 describe("비포클래스 판정", () => {
   it("완료율 = 체크 안 된 항목 ÷ 10 · 결석이면 null", () => {
@@ -33,6 +33,14 @@ describe("비포클래스 판정", () => {
     expect(s.supplementCount).toBe(1);
     expect(s.absentCount).toBe(1);
     expect(s.itemCounts.get("concept_note")).toBe(2);
+  });
+});
+
+describe("보고서 시안 눈금", () => {
+  it("한 항목 줄 = 상/하 · 묶은 줄 = 상/중/하 · 결석 = 값 없음", () => {
+    const rows = reportCheckLevels({ missed: ["concept_note", "main_solve", "main_review", "sub_review"], absent: false, card: null });
+    expect(rows.map((r) => `${r.label}:${r.level}`)).toEqual(["예습영상:상", "개념정리:하", "풀이노트정리:상", "문제풀이:중", "오답정리:하"]);
+    expect(reportCheckLevels({ missed: [], absent: true, card: null }).every((r) => r.level === null)).toBe(true);
   });
 });
 
