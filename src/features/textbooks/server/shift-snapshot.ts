@@ -15,11 +15,12 @@ import type { PlanLineDTO } from "@/features/class-sheets/server/actions";
 import { mondayOf, shiftDays } from "@/features/timetable/lib/week";
 import { toUndoLine, type ShiftKind, type UndoLine } from "../shift-undo";
 import { markerKeyOfRow } from "../shift-key";
-import { withMarkerCols } from "./shift-markers";
+import { MOVE_GAP_ORIGIN, withMarkerOriginCols } from "./shift-markers";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
-export type ShiftSnapshot = { lines: UndoLine[]; markers: Record<string, ShiftKind> };
+/** `moveGaps` = 반 블록 옮기기가 쓴 비는 회차 표식 키(s2_0005) — 되돌리기가 출처까지 되살린다. */
+export type ShiftSnapshot = { lines: UndoLine[]; markers: Record<string, ShiftKind>; moveGaps: string[] };
 
 /** @param termMode 미룸·당김은 평시만 바꾼다 — 배정 삭제는 그 배정의 시기(내신일 수 있다)를 넘긴다. */
 export async function snapshotShiftState(
@@ -41,7 +42,7 @@ export async function snapshotShiftState(
         .order("id", { ascending: true })
         .range(f, t) as never,
     ),
-    withMarkerCols((cols) =>
+    withMarkerOriginCols((cols) =>
       fetchAllPaged<Record<string, unknown>>((f, t) =>
         admin
           .from("class_lesson_shifts")
@@ -55,12 +56,14 @@ export async function snapshotShiftState(
     ),
   ]);
   const markers: Record<string, ShiftKind> = {};
+  const moveGaps: string[] = [];
   for (const m of markRows) {
     const kind = String(m.kind);
     if (kind !== "skip" && kind !== "advance") continue;
     markers[markerKeyOfRow(m)] = kind;
+    if (kind === "skip" && m.origin === MOVE_GAP_ORIGIN) moveGaps.push(markerKeyOfRow(m));
   }
-  return { lines: lineRows.map(toUndoLine), markers };
+  return { lines: lineRows.map(toUndoLine), markers, moveGaps };
 }
 
 /**

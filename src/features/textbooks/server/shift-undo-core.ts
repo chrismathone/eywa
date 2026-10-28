@@ -14,7 +14,7 @@ import { fetchInChunks } from "@/lib/supabase/batch";
 import { reportError } from "@/lib/observability/report-error";
 import { planShiftUndo, slotOf, toUndoLine, type ShiftKind, type ShiftUndoToken, type UndoLine } from "../shift-undo";
 import { markerKeyOfRow, parseMarkerKey } from "../shift-key";
-import { withMarkerCols, writeMarker } from "./shift-markers";
+import { MOVE_GAP_ORIGIN, withMarkerCols, writeMarker } from "./shift-markers";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -71,7 +71,8 @@ export function validToken(t: unknown, classId: string): t is ShiftUndoToken {
         // 칸 표식(`날짜|교시`) 또는 줄 표식(`날짜|교시|교재|자리`, 0382a) — 모양은 shift-key 한 곳에서 본다.
         parseMarkerKey(m.key) !== null &&
         validKind(m.before) &&
-        validKind(m.after),
+        validKind(m.after) &&
+        (m.moveGap === undefined || m.moveGap === true),
     )
   );
 }
@@ -174,7 +175,15 @@ export async function restoreShiftState(input: {
       }
     }
     for (const m of plan.markers) {
-      const { error } = await writeMarker({ admin, tenantId, classId, key: m.key, kind: m.kind, actor });
+      const { error } = await writeMarker({
+        admin,
+        tenantId,
+        classId,
+        key: m.key,
+        kind: m.kind,
+        actor,
+        ...(m.moveGap ? { origin: MOVE_GAP_ORIGIN } : {}),
+      });
       if (error) throw error;
     }
   } catch (e) {

@@ -410,7 +410,7 @@ export async function deleteClassTextbookPlan(
         removed: out.removed,
         added: [],
         changed: [],
-        markers: out.markers.map((m) => ({ key: m.key, before: m.kind, after: null })),
+        markers: out.markers.map((m) => ({ key: m.key, before: m.kind, after: null, ...(m.moveGap ? { moveGap: true as const } : {}) })),
       };
       if (!isEmptyUndo(token)) linesUndo = token;
       if (out.stopped) warning = "배정은 지웠지만 진도 줄을 지우다 멈췄습니다 — 새로고침해 남은 줄을 확인해 주세요";
@@ -1226,6 +1226,7 @@ export async function setLessonShift(input: {
       after: after.lines,
       markersBefore: before.markers,
       markersAfter: after.markers,
+      moveGapsBefore: before.moveGaps,
     });
     if (isEmptyUndo(token)) return undefined;
     // 툴바 [되돌리기 ▾] 히스토리(원장 2026-10-26 *"미룸·당김이랑 배정삭제도 히스토리에"*) — 알림과 같은 재료.

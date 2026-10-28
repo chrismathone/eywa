@@ -12,6 +12,8 @@ import "server-only";
  * 🔑 **두 벌이다**(원장 2026-09-28 *"계획 놔두고 일정만 밀리게"*) — `baselineByCell`(원래 계획, 미루기
  *    미반영)은 달력·비교·현황의 **기준**이고, `byCell`(일정, 미루기 반영)은 [가져오기]가 옮기는 값이다.
  *    미루기가 원래 계획을 고쳐 쓰면 "얼마나 밀렸나"를 잴 기준이 사라진다.
+ *    단 **시간표 반 블록 옮기기가 비운 회차**(`origin = 'timetable_move'` 칸 skip, s2_0005)는 원래 계획에도 반영한다 —
+ *    시간표가 바뀌어 빈 회차라 강사가 밀린 게 아니다(안 하면 그 회차가 '미작성', 뒤 칸이 책 끝까지 '늦음').
  * 🔴 **실제와 섞지 않는다** — 실제는 `class_sheet_plan_lines` 하나뿐이고, 계획이 거기 들어가는 길은
  *    교재 배정(`applyTextbookFill`, 2026-10-22 배정 = 계획 + 가져오기) 하나뿐이다(writer = `writePlannedCells`).
  *    [월간계획 전체 가져오기] 버튼은 같은 날 없앴다 — 그 자리엔 되돌리기만 남는다.
@@ -19,7 +21,7 @@ import "server-only";
  *    이걸 읽는다. 못 읽으면 계획이 빈 채로 시트가 그대로 돈다.
  */
 import { cellShiftSummary, markerKeyOfRow } from "../shift-key";
-import { withMarkerCols } from "./shift-markers";
+import { MOVE_GAP_ORIGIN, withMarkerOriginCols } from "./shift-markers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { buildHolidayMap } from "@/features/attendance/calendar";
@@ -71,6 +73,8 @@ export type ClassPlanMaterials = {
   scheduleRows: Record<string, unknown>[];
   schedules: MonthScheduleRow[];
   shifts: Record<string, "skip" | "advance">;
+  /** 반 블록 옮기기가 비는 회차에 쓴 칸 skip(`origin = 'timetable_move'`, s2_0005) — **원래 계획에도** 반영한다. */
+  moveGaps: Record<string, "skip">;
 };
 
 export type PlanMaterials = {
@@ -145,17 +149,23 @@ export async function loadPlanMaterials(input: {
 
   const classIds = input.classIds ? [...input.classIds] : [...new Set(plans.map((p) => String(p.class_id)))];
   const byClass = new Map<string, ClassPlanMaterials>(
-    classIds.map((id) => [id, { plans: [], scheduleRows: [], schedules: [], shifts: {} }]),
+    classIds.map((id) => [id, { plans: [], scheduleRows: [], schedules: [], shifts: {}, moveGaps: {} }]),
   );
   for (const p of plans) byClass.get(String(p.class_id))?.plans.push(p);
   if (classIds.length === 0) return { ...empty("ok"), holidays: {} };
 
   const bookIds = [...new Set(plans.map((p) => String(p.textbook_id)))];
-  const [shiftRows, bookRows, lessonRows, settings, schedRows] = await Promise.all([
-    // 🔴 표가 없어도 죽지 않는다(0282a 미적용 = 표식 0개 = 종전 계산) — 그래서 catch로 빈 배열.
-    // 0382a 전이면 `lane`·`pos` 없이 다시 읽는다(전부 칸 표식) — `withMarkerCols`.
-    withMarkerCols((cols) =>
-      fetchAllPagedInChunks<{ class_id: string; plan_date: string; slot_start: string; kind: string; lane?: string; pos?: number }>(
+  const readShiftRows = () =>
+    withMarkerOriginCols((cols) =>
+      fetchAllPagedInChunks<{
+        class_id: string;
+        plan_date: string;
+        slot_start: string;
+        kind: string;
+        lane?: string;
+        pos?: number;
+        origin?: string;
+      }>(
         classIds,
         (chunk, f, t) =>
           admin
@@ -167,7 +177,12 @@ export async function loadPlanMaterials(input: {
             .order("id", { ascending: true })
             .range(f, t) as never,
       ),
-    ).catch(() => []),
+    );
+  const [shiftRows, bookRows, lessonRows, settings, schedRows] = await Promise.all([
+    // 🔴 표가 없어도 죽지 않는다(0282a 미적용 = 표식 0개 = 종전 계산) — 그래서 catch로 빈 배열.
+    // 0382a 전이면 `lane`·`pos` 없이 다시 읽는다(전부 칸 표식) — `withMarkerCols`.
+    // s2_0005 전이면 `origin` 없이 다시 읽는다(전부 강사 표식 = 종전) — `withMarkerOriginCols`.
+    readShiftRows().catch(() => []),
     bookIds.length === 0
       ? Promise.resolve([] as Record<string, unknown>[])
       : fetchInChunks<Record<string, unknown>>(bookIds, (chunk) =>
@@ -208,6 +223,8 @@ export async function loadPlanMaterials(input: {
     if (!m) continue;
     // 키 = 칸 표식 `날짜|교시` 또는 줄 표식 `날짜|교시|교재|자리`(shift-key) — 계산은 키 그대로 쓴다.
     m.shifts[markerKeyOfRow(r)] = String(r.kind) === "advance" ? "advance" : "skip";
+    // 시간표 이동이 비운 회차는 강사가 밀린 게 아니다 — 원래 계획도 그 회차를 건너뛴다(s2_0005 · 3차 적대 리뷰 2026-10-28).
+    if (r.origin === MOVE_GAP_ORIGIN && String(r.kind) === "skip") m.moveGaps[markerKeyOfRow(r)] = "skip";
   }
   // 시간표는 요일·시작시각 순이어야 `slotsByDateOf`가 같은 답을 낸다(페이지 순회는 id 순이라 다시 정렬).
   const sorted = [...schedRows].sort((a, b) =>
@@ -272,7 +289,8 @@ export function planCellsOf(
   };
   return {
     byCell: m.plans.length === 0 ? {} : expandPlans({ ...common, shifts: m.shifts }),
-    baselineByCell: m.plans.length === 0 ? {} : expandPlans({ ...common, shifts: null }),
+    baselineByCell:
+      m.plans.length === 0 ? {} : expandPlans({ ...common, shifts: Object.keys(m.moveGaps).length > 0 ? m.moveGaps : null }),
     lessonIndex: lessonIndexOf(m.plans, materials.books, materials.lessonsByBook),
     // 화면 표시는 칸 단위 — 줄 표식도 그 칸의 표식으로 접는다(계산엔 안 쓴다).
     shiftByCell: cellShiftSummary(m.shifts),

@@ -36,8 +36,11 @@ export type ShiftUndoToken = {
   removed: UndoLine[];
   added: UndoLine[];
   changed: { before: UndoLine; after: UndoLine }[];
-  /** 키 `"YYYY-MM-DD|HH:MM"`. */
-  markers: { key: string; before: ShiftKind | null; after: ShiftKind | null }[];
+  /**
+   * 키 `"YYYY-MM-DD|HH:MM"`. `moveGap` = 지우기 전 표식이 반 블록 옮기기가 쓴 비는 회차 skip(s2_0005) — 되살릴 때 출처도
+   * 되살린다(안 하면 강사 표식으로 되살아나 원래 계획이 그 회차를 다시 세어 '미작성·늦음'이 생긴다 · 리뷰 2026-10-28).
+   */
+  markers: { key: string; before: ShiftKind | null; after: ShiftKind | null; moveGap?: true }[];
 };
 
 export const UNDO_FIELDS = [
@@ -81,7 +84,10 @@ export function diffShift(input: {
   after: readonly UndoLine[];
   markersBefore: Readonly<Record<string, ShiftKind>>;
   markersAfter: Readonly<Record<string, ShiftKind>>;
+  /** 옮기기 전 표식 중 반 블록 옮기기의 비는 회차 표식 키(`ShiftSnapshot.moveGaps`). */
+  moveGapsBefore?: readonly string[];
 }): ShiftUndoToken {
+  const gaps = new Set(input.moveGapsBefore ?? []);
   const before = new Map(input.before.map((l) => [l.id, l]));
   const after = new Map(input.after.map((l) => [l.id, l]));
   const token: ShiftUndoToken = { classId: input.classId, date: input.date, slot: input.slot, removed: [], added: [], changed: [], markers: [] };
@@ -94,7 +100,7 @@ export function diffShift(input: {
   for (const key of new Set([...Object.keys(input.markersBefore), ...Object.keys(input.markersAfter)])) {
     const b = input.markersBefore[key] ?? null;
     const a = input.markersAfter[key] ?? null;
-    if (b !== a) token.markers.push({ key, before: b, after: a });
+    if (b !== a) token.markers.push({ key, before: b, after: a, ...(b === "skip" && gaps.has(key) ? { moveGap: true as const } : {}) });
   }
   return token;
 }
@@ -110,7 +116,7 @@ export type ShiftUndoPlan =
       deletes: string[];
       restores: UndoLine[];
       reinserts: UndoLine[];
-      markers: { key: string; kind: ShiftKind | null }[];
+      markers: { key: string; kind: ShiftKind | null; moveGap?: true }[];
     }
   | { ok: false; reason: "changed" };
 
@@ -148,7 +154,7 @@ export function planShiftUndo(
     deletes: token.added.map((a) => a.id),
     restores: token.changed.map((c) => c.before),
     reinserts: token.removed,
-    markers: token.markers.map((m) => ({ key: m.key, kind: m.before })),
+    markers: token.markers.map((m) => ({ key: m.key, kind: m.before, ...(m.moveGap && m.before === "skip" ? { moveGap: true as const } : {}) })),
   };
 }
 

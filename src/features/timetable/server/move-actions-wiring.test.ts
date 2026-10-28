@@ -62,6 +62,13 @@ describe("반 배치 이동(moveClassSlots) 배선", () => {
     expect(lf.indexOf("carryGapDates(")).toBeLessThan(lf.indexOf('.from("class_schedules")\n      .insert('));
     expect(lf.indexOf('journal.push({ kind: "gapMarks"')).toBeGreaterThan(lf.indexOf('journal.push({ kind: "picks"'));
     expect(src).toContain('.from("class_lesson_shifts").delete().in("id", j.ids)');
+    // 출처 표시 — 원래 계획도 이 회차를 건너뛴다(s2_0005) · 칸이 없으면 없이 다시 쓴다.
+    expect(src).toContain("...(origin ? { origin: MOVE_GAP_ORIGIN } : {})");
+    expect(src).toContain("if (isMissingOriginColumn(error)) ({ data: made, error } = await insertGaps(false));");
+    // 그 칸에 강사 skip이 이미 있으면 출처만 이동으로 바꾸고, 되짚기는 강사 표식으로 돌린다.
+    expect(src).toContain('.update({ origin: MOVE_GAP_ORIGIN })');
+    expect(src).toContain('kind: "gapOrigin"');
+    expect(src).toContain('.update({ origin: "manual" })');
   });
 
   it("🔴 비는 회차는 휴원일·배정 시작일·그 반의 마지막 계획 줄까지 본다 — 옮기는 줄에 계획이 없어도(3차 리뷰 2026-10-28)", () => {
@@ -105,8 +112,8 @@ describe("반 배치 이동(moveClassSlots) 배선", () => {
     expect(src).toContain('kind: "carried"');
     expect(src).toContain("carryPatch(j.table, j.fromDate, j.fromSlot)");
     expect(src).toContain('await undoneText("기록을 새 교시로 옮기지 못해 배치와 기록을")');
-    // 쓰기·되짚기 모두 그 반으로 좁힌다.
-    expect(lf.match(/\.in\("id", (?:g|j)\.ids\)\n\s*\.eq\("tenant_id", user\.tenantId\)\n\s*\.eq\("class_id", classId\)/g)?.length).toBe(2);
+    // 쓰기·되짚기 모두 그 반으로 좁힌다(기록 쓰기 · 기록 되짚기 · 비는 회차 출처 되짚기).
+    expect(lf.match(/\.in\("id", (?:g|j)\.ids\)\n\s*\.eq\("tenant_id", user\.tenantId\)\n\s*\.eq\("class_id", classId\)/g)?.length).toBe(3);
   });
 
   it("함께 옮긴 기록을 감사로그(한글 요약)와 화면에 알린다", () => {

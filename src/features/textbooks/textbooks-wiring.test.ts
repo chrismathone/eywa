@@ -253,8 +253,24 @@ describe("교재 배정 — 계획과 실제를 가른다", () => {
   });
 
   it("🔴 원래 계획은 미루기를 반영하지 않는다 — 일정(가져오기)만 밀린다(원장 2026-09-28)", () => {
-    // 같은 함수를 두 번 — 원래 계획은 shifts 없이, 일정은 shifts로.
-    expect(monthPlan).toContain("expandPlans({ ...common, shifts: null })");
+    // 같은 함수를 두 번 — 원래 계획은 강사 표식 없이(시간표 이동이 비운 회차만 · s2_0005), 일정은 shifts로.
+    expect(monthPlan).toContain("shifts: Object.keys(m.moveGaps).length > 0 ? m.moveGaps : null");
+    expect(monthPlan).toContain('if (r.origin === MOVE_GAP_ORIGIN && String(r.kind) === "skip") m.moveGaps[markerKeyOfRow(r)] = "skip";');
+    // s2_0005 전에도 돈다 — origin 없이 다시 읽는다([[#95]] · 칸 이름이 오류에 있을 때만).
+    expect(monthPlan).toContain("withMarkerOriginCols((cols) =>");
+    const markers = read("src", "features", "textbooks", "server", "shift-markers.ts");
+    expect(markers).toContain("if (!isMissingOriginColumn(e)) throw e;");
+  });
+
+  it("🔴 되돌리기는 반 옮기기의 비는 회차 표식을 출처까지 되살린다 — 강사 표식으로 되살면 원래 계획이 다시 센다(리뷰 2026-10-28)", () => {
+    const snap = read("src", "features", "textbooks", "server", "shift-snapshot.ts");
+    expect(snap).toContain('if (kind === "skip" && m.origin === MOVE_GAP_ORIGIN) moveGaps.push(markerKeyOfRow(m));');
+    expect(plan).toContain("moveGapsBefore: before.moveGaps,");
+    const del = read("src", "features", "textbooks", "server", "plan-delete-lines.ts");
+    expect(del).toContain('row.origin === MOVE_GAP_ORIGIN ? { moveGap: true as const } : {}');
+    const core = read("src", "features", "textbooks", "server", "shift-undo-core.ts");
+    expect(core).toContain("...(m.moveGap ? { origin: MOVE_GAP_ORIGIN } : {}),");
+    expect(core).toContain("(m.moveGap === undefined || m.moveGap === true)");
     expect(monthPlan).toContain("expandPlans({ ...common, shifts: m.shifts })");
     // 달력의 '계획' 표식·비교 배지는 원래 계획을 본다.
     const monthQueries = read("src", "features", "class-sheets", "server", "month-queries.ts");

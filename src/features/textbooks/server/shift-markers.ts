@@ -44,7 +44,32 @@ export async function withMarkerCols<T>(run: (cols: string) => Promise<T>): Prom
 }
 
 /**
+ * 표식 출처(s2_0005) — 반 블록 옮기기가 비는 회차에 쓴 칸 skip. 원래 계획(baseline)도 이 회차를 건너뛴다(`month-plan.ts`).
+ * 🔴 앱은 s2_0005 전에도 돈다([[#95]]) — 읽기는 `origin` 없이 다시 읽고(전부 강사 표식), 쓰기는 없이 다시 쓴다.
+ */
+export const MOVE_GAP_ORIGIN = "timetable_move";
+
+/** s2_0005 전이라 `origin` 칸이 없다는 오류인가(문구에 칸 이름이 있을 때만 — 일시 오류로 조용히 대체하지 않는다). */
+export function isMissingOriginColumn(error: unknown): boolean {
+  if (!error) return false;
+  const e = error as { message?: string };
+  const msg = String(e.message ?? (error instanceof Error ? error.message : error));
+  return /\borigin\b/.test(msg) && /does not exist|schema cache|could not find/i.test(msg);
+}
+
+/** 표식 조회 + `origin` — 칸이 없으면 `origin` 없이(`withMarkerCols`). */
+export async function withMarkerOriginCols<T>(run: (cols: string) => Promise<T>): Promise<T> {
+  try {
+    return await withMarkerCols((cols) => run(`${cols}, origin`));
+  } catch (e) {
+    if (!isMissingOriginColumn(e)) throw e;
+    return withMarkerCols(run);
+  }
+}
+
+/**
  * 표식 한 개를 쓴다(`kind = null`이면 지운다). 성공이면 null, 아니면 화면에 보일 문구.
+ * `origin` — 되돌리기가 반 옮기기의 비는 회차 표식을 되살릴 때만 넘긴다(안 넘기면 있는 행의 출처는 그대로 · 새 행은 강사 표식).
  * @param key `shift-key.ts` 모양(칸 표식 또는 줄 표식).
  */
 export async function writeMarker(input: {
@@ -54,8 +79,9 @@ export async function writeMarker(input: {
   key: string;
   kind: ShiftKind | null;
   actor: string;
+  origin?: typeof MOVE_GAP_ORIGIN;
 }): Promise<{ error: { code?: string; message?: string } | null; laneMissing?: boolean }> {
-  const { admin, tenantId, classId, kind, actor } = input;
+  const { admin, tenantId, classId, kind, actor, origin } = input;
   const p = parseMarkerKey(input.key);
   if (!p) return { error: { message: "invalid marker key" } };
   const cell = { tenant_id: tenantId, class_id: classId, plan_date: p.date, slot_start: p.slot };
@@ -70,6 +96,15 @@ export async function writeMarker(input: {
     return { error: (await table().delete().match(cell)).error };
   }
 
+  if (origin) {
+    const { error } = await table().upsert(
+      { ...cell, lane: p.lane, pos: p.pos, kind, created_by: actor, updated_at: now, origin },
+      { onConflict: "tenant_id,class_id,plan_date,slot_start,lane,pos" },
+    );
+    // s2_0005 전 — 출처 없이 쓴다(종전과 같다).
+    if (!error || !isMissingOriginColumn(error)) return { error };
+    return writeMarker({ ...input, origin: undefined });
+  }
   const { error } = await table().upsert(
     { ...cell, lane: p.lane, pos: p.pos, kind, created_by: actor, updated_at: now },
     { onConflict: "tenant_id,class_id,plan_date,slot_start,lane,pos" },

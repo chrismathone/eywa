@@ -17,7 +17,7 @@ import { isAssignedLine, type RelayBook } from "../lesson-relay";
 import { markersToClear, picksCover } from "../plan-delete";
 import { toUndoLine, type ShiftKind, type UndoLine } from "../shift-undo";
 import { markerKeyOfRow, parseMarkerKey } from "../shift-key";
-import { withMarkerCols } from "./shift-markers";
+import { MOVE_GAP_ORIGIN, withMarkerOriginCols } from "./shift-markers";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -49,7 +49,7 @@ export async function clearPlanLines(input: {
    */
   withLines?: boolean;
   from: string;
-}): Promise<{ removed: UndoLine[]; markers: { key: string; kind: ShiftKind }[]; stopped: boolean }> {
+}): Promise<{ removed: UndoLine[]; markers: { key: string; kind: ShiftKind; moveGap?: true }[]; stopped: boolean }> {
   const { admin, tenantId, classId, from } = input;
   const [bookRes, lessons, lineRows, markRows] = await Promise.all([
     admin.from("textbooks").select("title, skill_area").eq("tenant_id", tenantId).eq("id", input.textbookId).maybeSingle(),
@@ -73,7 +73,7 @@ export async function clearPlanLines(input: {
         .order("id", { ascending: true })
         .range(f, t) as never,
     ),
-    withMarkerCols((cols) =>
+    withMarkerOriginCols((cols) =>
       fetchAllPaged<Record<string, unknown>>((f, t) =>
         admin
           .from("class_lesson_shifts")
@@ -137,7 +137,7 @@ export async function clearPlanLines(input: {
   }
 
   // 표식은 평시 계산에만 쓰인다 — 내신 배정을 지울 땐 건드리지 않는다.
-  const markers: { key: string; kind: ShiftKind }[] = [];
+  const markers: { key: string; kind: ShiftKind; moveGap?: true }[] = [];
   if (input.termMode === "regular") {
     const byKey = new Map<string, Record<string, unknown>>(
       markRows.filter((m) => m.kind === "skip" || m.kind === "advance").map((m) => [markerKeyOfRow(m), m]),
@@ -173,7 +173,14 @@ export async function clearPlanLines(input: {
         reportError(error, { scope: "textbooks.plan-delete.markers", classId });
         return { removed, markers, stopped: true };
       }
-      markers.push(...chunk.map((k) => ({ key: k, kind: byKey.get(k)!.kind as ShiftKind })));
+      // 반 옮기기의 비는 회차 표식이면 되돌릴 때 출처까지 되살린다(s2_0005).
+      markers.push(
+        ...chunk.map((k) => {
+          const row = byKey.get(k)!;
+          const kind = row.kind as ShiftKind;
+          return { key: k, kind, ...(kind === "skip" && row.origin === MOVE_GAP_ORIGIN ? { moveGap: true as const } : {}) };
+        }),
+      );
     }
   }
   return { removed, markers, stopped: false };

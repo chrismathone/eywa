@@ -11,6 +11,7 @@ import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { isMissingOriginColumn, MOVE_GAP_ORIGIN } from "@/features/textbooks/server/shift-markers";
 import {
   blockersText,
   buildClassMoveIndex,
@@ -430,6 +431,8 @@ export async function moveClassSlots(input: {
    *    릴레이가 차수 하나를 잃었다(적대 리뷰 2026-10-28). 그 칸을 고르는 배정이 있고 그 회차 뒤에 그 반의 계획 줄이 있을 때만 쓴다.
    */
   let gapMarks: { date: string; slot: string }[] = [];
+  /** 비는 회차에 이미 있던 강사 칸 skip — 출처만 이동으로 바꾼다(안 바꾸면 원래 계획이 그 회차를 센다 · 리뷰 2026-10-28). */
+  let gapRelabel: string[] = [];
   {
     const [{ data: planRows, error: planErr }, { data: schedRows, error: schedErr }] = await Promise.all([
       admin
@@ -577,13 +580,18 @@ export async function moveClassSlots(input: {
     if (gapMarks.length > 0) {
       // 그 칸에 표식이 이미 있으면(배치 없던 칸의 남은 표식) 덮어쓰지 않고 막는다 — 같은 칸 미룸이면 이미 비어 있으니 건너뛴다.
       const dates = gapMarks.map((g) => g.date).sort();
-      const { data: marks, error: markErr } = await admin
-        .from("class_lesson_shifts")
-        .select("id, plan_date, slot_start, kind, lane")
-        .eq("tenant_id", user.tenantId)
-        .eq("class_id", classId)
-        .gte("plan_date", dates[0]!)
-        .lte("plan_date", dates[dates.length - 1]!);
+      const readMarks = (cols: string) =>
+        admin
+          .from("class_lesson_shifts")
+          .select(cols)
+          .eq("tenant_id", user.tenantId)
+          .eq("class_id", classId)
+          .gte("plan_date", dates[0]!)
+          .lte("plan_date", dates[dates.length - 1]!)
+          .returns<{ id: string; plan_date: string; slot_start: string; kind: string; lane: string; origin?: string }[]>();
+      // s2_0005 전이면 출처 없이(그때는 바꿀 출처도 없다).
+      let { data: marks, error: markErr } = await readMarks("id, plan_date, slot_start, kind, lane, origin");
+      if (isMissingOriginColumn(markErr)) ({ data: marks, error: markErr } = await readMarks("id, plan_date, slot_start, kind, lane"));
       if (markErr) {
         logDbError(markErr, "timetable.moveClassSlots.gapMarks");
         return readFailed;
@@ -598,6 +606,7 @@ export async function moveClassSlots(input: {
       if (taken.length > 0) {
         return { ok: false, error: carryConflictText([{ label: "미룸·당김 표식", kind: "occupied", dates: taken.map((g) => g.date).sort() }]) };
       }
+      gapRelabel = gapMarks.flatMap((g) => at(g).filter((m) => m.origin === "manual").map((m) => String(m.id)));
       gapMarks = gapMarks.filter((g) => at(g).length === 0);
     }
   }
@@ -667,6 +676,7 @@ export async function moveClassSlots(input: {
     | { kind: "carried"; table: string; label: string; ids: string[]; fromDate: string; fromSlot: string; toDate: string; toSlot: string }
     | { kind: "picks"; id: string; prev: string[]; updatedAt: string }
     | { kind: "gapMarks"; ids: string[] }
+    | { kind: "gapOrigin"; ids: string[] }
   )[] = [];
   /** 그 표에서 (날짜, 교시)를 바꾸는 값 — 교시 메모는 열쇠 글자와 주(월요일)를 함께 바꾼다(DB CHECK: 열쇠 날짜가 그 주 안). */
   const carryPatch = (table: string, date: string, slot: string): Record<string, string> => {
@@ -702,7 +712,19 @@ export async function moveClassSlots(input: {
     };
     // 역순으로 되짚는다(넣은 것은 지우고, 마감은 원래 날짜로, 지운 행은 **원래 id 그대로** 다시 넣는다).
     for (const j of [...journal].reverse()) {
-      if (j.kind === "gapMarks") {
+      if (j.kind === "gapOrigin") {
+        check(
+          (
+            await admin
+              .from("class_lesson_shifts")
+              .update({ origin: "manual" })
+              .in("id", j.ids)
+              .eq("tenant_id", user.tenantId)
+              .eq("class_id", classId)
+          ).error,
+          { gapOriginIds: j.ids },
+        );
+      } else if (j.kind === "gapMarks") {
         check(
           (await admin.from("class_lesson_shifts").delete().in("id", j.ids).eq("tenant_id", user.tenantId).eq("class_id", classId))
             .error,
@@ -880,27 +902,47 @@ export async function moveClassSlots(input: {
   }
   // 비는 회차의 칸 미룸 표식 — 맨 끝에(옮겨 떠날 표식이 그 칸을 비운 뒤라 유니크가 안 부딪힌다).
   if (gapMarks.length > 0) {
-    const { data: made, error } = await admin
-      .from("class_lesson_shifts")
-      .insert(
-        gapMarks.map((g) => ({
-          tenant_id: user.tenantId,
-          class_id: classId,
-          plan_date: g.date,
-          slot_start: g.slot,
-          kind: "skip",
-          lane: "",
-          pos: 0,
-          created_by: user.id,
-        })),
-      )
-      .select("id");
+    // `origin = 'timetable_move'` — 원래 계획(달력 판정·비교·현황)도 이 회차를 건너뛴다(s2_0005). 칸이 없으면(적용 전) 없이 쓴다.
+    const insertGaps = (origin: boolean) =>
+      admin
+        .from("class_lesson_shifts")
+        .insert(
+          gapMarks.map((g) => ({
+            tenant_id: user.tenantId,
+            class_id: classId,
+            plan_date: g.date,
+            slot_start: g.slot,
+            kind: "skip",
+            lane: "",
+            pos: 0,
+            created_by: user.id,
+            ...(origin ? { origin: MOVE_GAP_ORIGIN } : {}),
+          })),
+        )
+        .select("id");
+    let { data: made, error } = await insertGaps(true);
+    if (isMissingOriginColumn(error)) ({ data: made, error } = await insertGaps(false));
     if (error || (made ?? []).length !== gapMarks.length) {
       if (error) logDbError(error, "timetable.moveClassSlots.gapMarks", { classId });
       if (made && made.length > 0) journal.push({ kind: "gapMarks", ids: made.map((r) => String(r.id)) });
       return { ok: false, error: await undoneText("비는 회차에 미룸 표식을 쓰지 못해 배치와 기록을") };
     }
     journal.push({ kind: "gapMarks", ids: made!.map((r) => String(r.id)) });
+  }
+  if (gapRelabel.length > 0) {
+    const { data: relabeled, error } = await admin
+      .from("class_lesson_shifts")
+      .update({ origin: MOVE_GAP_ORIGIN })
+      .in("id", gapRelabel)
+      .eq("tenant_id", user.tenantId)
+      .eq("class_id", classId)
+      .eq("origin", "manual")
+      .select("id");
+    if (error) {
+      logDbError(error, "timetable.moveClassSlots.gapOrigin", { classId });
+      return { ok: false, error: await undoneText("비는 회차 미룸 표식의 출처를 바꾸지 못해 배치와 기록을") };
+    }
+    if ((relabeled ?? []).length > 0) journal.push({ kind: "gapOrigin", ids: relabeled!.map((r) => String(r.id)) });
   }
   // 요약은 실제로 바뀐 줄로 센다(판정 뒤 그사이 지워지거나 옮겨진 줄은 빠진다).
   const movedIds = new Set(journal.flatMap((j) => (j.kind === "carried" ? j.ids.map((id) => `${j.table}|${id}`) : [])));
