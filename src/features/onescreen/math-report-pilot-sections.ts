@@ -306,6 +306,8 @@ export type PilotFacts = {
   homeworkMissReason?: string;
   /** 수업 태도 의견(강사 원문) — 태도가 하·중하일 때만 '수업 태도' 항목에 그대로 들어간다(2026-10-26). */
   attitudeNote?: string;
+  /** '오늘의 수업' 메모(2026-10-28) — AI 재료. 서명에만 쓴다(값이 있을 때만 — 없는 행의 서명은 예전과 같다). */
+  lessonMemo?: string;
   homeworkToday: string;
   /** 교재명 — 오늘의 숙제가 쪽수뿐이면 앞에 붙인다(homeworkTodayLine, 2026-10-26). */
   textbook?: string;
@@ -497,6 +499,8 @@ export function pilotFactsSig(f: PilotFacts, understanding: readonly { title: st
     understandingSig(understanding),
     // 출결 — 자동작성 뒤 출석부에서 지각·사유를 고치면 글이 옛 출결을 말한다(발송 게이트가 다시 자동작성을 요구해야 한다).
     (f.attendance ?? "").trim(),
+    // '오늘의 수업' 메모 — 적었을 때만 싣는다(안 적은 행의 서명은 예전 그대로 — 배포로 '자동작성 다시'가 뜨지 않게).
+    ...((f.lessonMemo ?? "").trim() ? [["memo", (f.lessonMemo ?? "").replace(/\s+/g, " ").trim()]] : []),
   ]);
 }
 
@@ -509,7 +513,7 @@ export function pilotRowSig(student: OneScreenStudent, subjectName: string): str
   const su = student.subjects[idx];
   if (!su) return "";
   return pilotFactsSig(
-    { ...buildReportCommentInput(student, idx), dailyTestSkip: su.dailyTestSkip ?? null, homeworkMissReason: su.homeworkMissReason ?? "", attitudeNote: su.attitudeNote ?? "" },
+    { ...buildReportCommentInput(student, idx), dailyTestSkip: su.dailyTestSkip ?? null, homeworkMissReason: su.homeworkMissReason ?? "", attitudeNote: su.attitudeNote ?? "", lessonMemo: su.lessonMemo ?? "" },
     activeUnderstanding(su.today, su.understanding),
   );
 }

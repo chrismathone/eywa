@@ -2873,6 +2873,10 @@ export const SHEET_DICT = {
     ko: "{name}: 시간표를 읽지 못해 영상 숙제 마감을 7일로 두었습니다 — 잠시 뒤 '다음 수업'을 다시 골라 저장해 주세요",
     en: "{name}: could not read the timetable — the video homework due stays at 7 days. Pick 'Next class' again and save in a moment",
   },
+  "os.c.videoDueTextMismatch": {
+    ko: "{name}: 글의 영상 숙제 마감({found})이 정한 마감({expected})과 달라 보내지 않았습니다 — 글을 고치지 말고 영상 숙제 '기한'(7일 · 다음 수업)을 바꾼 뒤 자동작성을 다시 눌러 주세요",
+    en: "{name}: the video homework due in the message ({found}) differs from the set due ({expected}) — not sent. Change the video homework 'Due' (7 days · Next class) instead of editing the text, then auto-write again",
+  },
   "os.c.videoDueKept": {
     ko: "{name}: 영상 숙제 마감은 이 보고서를 처음 쓴 선생님만 바꿀 수 있어 그대로 두었습니다(나머지는 저장했습니다)",
     en: "{name}: only the teacher who first wrote this report can change the video homework due — kept as is (the rest was saved)",
@@ -3361,6 +3365,11 @@ export const SHEET_DICT = {
     ko: "예: 오늘 어려운 문제도 끝까지 포기하지 않고 풀어낸 모습이 멋졌어요. 지금처럼만 하면 다음 단원도 충분히 잘할 거예요! · 자동작성 뒤에 적으면 오른쪽 보고서 맨 아래에 바로 반영됩니다",
     en: "e.g. You kept going on the hard problems today and solved them — great work. Keep this up and the next unit will go well too! · After Auto-write, what you type shows up right away at the end of the report",
   },
+  "os.memo.ph": {
+    ko: "오늘의 수업 메모(선택) · 예: 월말평가 오답 첨삭, 오답노트 작성",
+    en: "Lesson memo (optional) · e.g. went over test mistakes, made an error notebook",
+  },
+  "os.memo.aria": { ko: "{name} 오늘의 수업 메모", en: "{name} lesson memo" },
   "os.row.notePhPilot": {
     ko: "사랑의 한마디(필수) · 예: 끝까지 포기하지 않고 풀어낸 모습이 멋졌어요!",
     en: "A loving word (required) · e.g. Great job not giving up on the hard ones!",

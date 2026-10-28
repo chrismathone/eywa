@@ -4,6 +4,8 @@ import { DEFAULT_DISPLAY_OPTIONS, readDisplayOptions, type DisplayOptions } from
 import { lessonEndsByClass } from "../send-mark";
 import { readTrendOptOut } from "../trend-optout";
 import { readTemplatePrefs, type TemplatePrefs } from "../last-template";
+import { readVideoDueDefault } from "@/features/video-homework/due-pref";
+import type { VideoHomeworkDueMode } from "@/features/video-homework/due";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -60,7 +62,7 @@ import { isFeatureOptedIn } from "@/lib/license/server";
 import { applyTodaysMathFill, loadTodaysMathFill } from "./todays-math-fill";
 import { studentMarkFromRows } from "../attendance-mark";
 import { classnoteModuleOn, classnoteSendOn } from "@/features/owner/classnote-gate";
-import { readUnderstanding } from "../math-report-pilot";
+import { readLessonMemo, readUnderstanding } from "../math-report-pilot";
 import { readAttitudeNote, readHomeworkMissReason, readMakeupReason, readTestSkip } from "../math-report-pilot-sections";
 
 /**
@@ -165,6 +167,8 @@ export type TeacherRoster = {
   trendOptOut: string[];
   // 영어 보고서 템플릿 내 기본값 = 마지막으로 고른 템플릿(원장 2026-10-27, last-template.ts) — 같은 ui_prefs 행이라 왕복 0.
   templatePrefs: TemplatePrefs;
+  // 영상 숙제 마감의 내 기본값(7일 · 다음 수업, 원장 2026-10-28, video-homework/due-pref.ts) — 같은 ui_prefs 행이라 왕복 0.
+  videoDueDefault: VideoHomeworkDueMode;
   // ── 카드 뷰 '학부모 미리보기'(2026-08-05 원장 요청) — 오른쪽에 실제 발송물을 그대로 그린다 ──
   // ⚠️ 미리보기는 /r·인쇄와 **같은 컴포넌트**(ParentReportCard)를 쓴다. 그래서 표시 토글도 같은 값이어야
   //    한다 — 여기서 report 설정을 통째로 내려 "미리보기엔 있는데 학부모 화면엔 없는 항목"이 생기지 않게 한다.
@@ -225,6 +229,8 @@ type OnescreenSessionRow = {
       homeworkMissReason?: unknown;
       /** 수업 태도 의견(새 수학 보고서, 2026-10-26) — 모양은 readAttitudeNote가 다시 본다. */
       attitudeNote?: unknown;
+      /** '오늘의 수업' 메모(새 수학 보고서, 2026-10-28) — 모양은 readLessonMemo가 다시 본다. */
+      lessonMemo?: unknown;
       /** 보강 사유(보강 줄, 2026-10-26) — 모양은 readMakeupReason이 다시 본다. */
       makeupReason?: unknown;
     }
@@ -257,6 +263,7 @@ type RosterSettings = Pick<
   | "displayOptions"
   | "trendOptOut"
   | "templatePrefs"
+  | "videoDueDefault"
   | "reportSettings"
   | "academyName"
   | "logoSrc"
@@ -369,6 +376,7 @@ function emptyRoster(today: string, date: string, teacherName: string, config: R
     displayOptions: DEFAULT_DISPLAY_OPTIONS,
     trendOptOut: [],
     templatePrefs: { last: null, byClass: {} },
+    videoDueDefault: "week",
     // 미리보기 재료의 폴백 — 학원설정을 못 읽은 경로(비로그인)에서도 타입이 완전해야 한다.
     // 실제 값은 위 config가 덮는다(학생 0명 로스터도 '보강 학생 추가'로 보고서를 쓰므로 하드코딩 금지).
     reportSettings: DEFAULT_SETTINGS.report,
@@ -433,6 +441,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   const displayOptions = readDisplayOptions(meRow?.ui_prefs);
   const trendOptOut = readTrendOptOut(meRow?.ui_prefs);
   const templatePrefs = readTemplatePrefs(meRow?.ui_prefs);
+  const videoDueDefault = readVideoDueDefault(meRow?.ui_prefs);
 
   // 학원설정·강사설정에서 온 값 — 빈 로스터를 포함해 **모든 반환 경로가 이걸 그대로 쓴다**(emptyRoster 주석 참조).
   const config: RosterSettings = {
@@ -459,6 +468,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     displayOptions,
     trendOptOut,
     templatePrefs,
+    videoDueDefault,
     // 카드 뷰 '학부모 미리보기'(2026-08-05) — /r·인쇄와 **같은 컴포넌트**(ParentReportCard)에 넘길 재료.
     // 표시 토글까지 그대로 실어야 미리보기가 발송본과 같은 것을 보여준다(토글 off 항목은 미리보기에도 안 뜬다).
     reportSettings: settings.report,
@@ -1747,6 +1757,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         if (entry?.dailyTestSkip !== undefined) su.dailyTestSkip = readTestSkip(entry.dailyTestSkip);
         if (entry?.homeworkMissReason !== undefined) su.homeworkMissReason = readHomeworkMissReason(entry.homeworkMissReason);
         if (entry?.attitudeNote !== undefined) su.attitudeNote = readAttitudeNote(entry.attitudeNote);
+        if (entry?.lessonMemo !== undefined) su.lessonMemo = readLessonMemo(entry.lessonMemo);
         if (entry?.makeupReason !== undefined) su.makeupReason = readMakeupReason(entry.makeupReason);
       }
     }

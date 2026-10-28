@@ -155,6 +155,9 @@ export default async function OneScreenPage({
       const savedDue = videoDueUi.dues[assignmentKey(st.id, roster.date, su.classId)];
       if (su.videoHomeworkDue == null && savedDue) su.videoHomeworkDue = "next";
       if (savedDue) su.videoHomeworkDueDate = savedDue;
+      // 선생님별 기본 마감(원장 2026-10-28, due-pref.ts) — 아직 저장한 보고서가 없는 줄만(저장된 줄의 7일을 '다음 수업'으로 덮지 않는다).
+      if (su.videoHomeworkDue == null && !savedDue && videoDueUi.ready && roster.videoDueDefault === "next"
+        && assignmentOf(videoHomeworkAssignments, st.id, roster.date, su.classId) == null) su.videoHomeworkDue = "next";
       // 링크 넣기도 같은 규약 — 세션에 값이 없을 때만 저장된 보고서 값으로 되채운다.
       if (su.videoSubmitLink == null) {
         const savedLink = assignmentOf(submitLinkUi.choices, st.id, roster.date, su.classId);
@@ -216,6 +219,7 @@ export default async function OneScreenPage({
       initialDisplayOptions={roster.displayOptions}
       initialTrendOptOut={roster.trendOptOut}
       initialTemplatePrefs={roster.templatePrefs}
+      initialVideoDueDefault={roster.videoDueDefault}
       noClassesToday={roster.noClassesToday}
       showingAll={roster.showingAll}
       holidayName={roster.holidayName}

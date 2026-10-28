@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import {
   understandingPresetOf,
   activeUnderstanding,
+  ratedUnderstanding,
+  fallbackUnderstanding,
   clampUnderstanding,
   composePilotMent,
   isMathReportPilot,
@@ -112,15 +114,18 @@ describe("소단원별 이해도", () => {
   it("뺀 소단원은 자동작성에 안 들어가고, 안 매긴 소단원은 기본값 10으로 들어간다(원장 2026-10-26)", () => {
     const st = { scores: { 소수와거듭제곱: 3, "소수와 거듭제곱": 8, 소인수분해: 6, 최대공약수: 9 }, off: ["최대공약수"] };
     expect(activeUnderstanding(today, st)).toEqual([
-      { title: "소수와 거듭제곱", score: 8 },
-      { title: "소인수분해", score: 6 },
+      { title: "소수와 거듭제곱", score: 8, rated: true },
+      { title: "소인수분해", score: 6, rated: true },
     ]);
     // 종전엔 점수 없는 소단원이 빠졌다 — 이제 기본값 10(UNDERSTANDING_DEFAULT)으로 읽는다(저장값엔 없다 = stored false).
     expect(activeUnderstanding(today, { scores: { 소인수분해: 7 }, off: [] })).toEqual([
-      { title: "소수와 거듭제곱", score: UNDERSTANDING_DEFAULT },
-      { title: "소인수분해", score: 7 },
-      { title: "최대공약수", score: UNDERSTANDING_DEFAULT },
+      { title: "소수와 거듭제곱", score: UNDERSTANDING_DEFAULT, rated: false },
+      { title: "소인수분해", score: 7, rated: true },
+      { title: "최대공약수", score: UNDERSTANDING_DEFAULT, rated: false },
     ]);
+    // 글로 쓰는 이해도는 매긴 소단원만(원장 2026-10-28) — 표식이 없는 옛 값은 매긴 것으로 본다.
+    expect(ratedUnderstanding(activeUnderstanding(today, { scores: { 소인수분해: 7 }, off: [] }))).toEqual([{ title: "소인수분해", score: 7, rated: true }]);
+    expect(ratedUnderstanding([{ title: "옛 값", score: 9 }])).toEqual([{ title: "옛 값", score: 9 }]);
     expect(understandingRows(today, { scores: { 소인수분해: 7 }, off: [] }).map((r) => r.stored)).toEqual([false, true, false]);
   });
   it("단계 버튼 — 소단원 전부에 같은 점수, 뺀 소단원 목록은 그대로", () => {
@@ -128,8 +133,8 @@ describe("소단원별 이해도", () => {
     const next = setAllUnderstanding(today, { scores: { 소인수분해: 2 }, off: ["최대공약수"] }, 7);
     expect(next.off).toEqual(["최대공약수"]);
     expect(activeUnderstanding(today, next)).toEqual([
-      { title: "소수와 거듭제곱", score: 7 },
-      { title: "소인수분해", score: 7 },
+      { title: "소수와 거듭제곱", score: 7, rated: true },
+      { title: "소인수분해", score: 7, rated: true },
     ]);
     expect(hasStoredUnderstanding(today, { scores: {}, off: [] })).toBe(false);
     expect(hasStoredUnderstanding(today, next)).toBe(true);
@@ -377,5 +382,32 @@ describe("이해도 단계 버튼 — 카드·표 같은 판정(2026-10-26)", ()
     const grid = readFileSync(`${process.cwd()}/src/features/onescreen/components/grid-row.tsx`, "utf8");
     expect(grid).toMatch(/<UnderstandingPresetButtons/);
     expect(grid).toMatch(/fields\.onUnderstandingAll/);
+  });
+});
+
+describe("선생님 습관·수업 메모 지시(원장 2026-10-28)", () => {
+  const H = { omitPromises: true, omitFiller: true, compactUnits: true };
+  it("습관이 없으면 종전 지시 그대로", () => {
+    expect(pilotAiDirective("학원삼")).toBe(pilotAiDirective("학원삼", { habits: { omitPromises: false, omitFiller: false, compactUnits: false } }));
+    expect(pilotAiDirective("학원삼")).toContain(PILOT_AI_DIRECTIVE);
+  });
+  it("다짐을 늘 지우는 선생님 — '그래서 … 챙기겠습니다' 예시·두 단계 지시가 빠지고 다짐 금지가 들어간다", () => {
+    const d = pilotAiDirective("학원삼", { habits: H });
+    expect(d).not.toMatch(/두 단계/);
+    expect(d).not.toMatch(/그래서 다음 시간에 한 번 더 짚어/);
+    expect(d).toMatch(/다짐·계획 문장은 쓰지 마세요/);
+    expect(d).toMatch(/두루뭉술한 수업 묘사는 쓰지 마세요/);
+    expect(d).toMatch(/한 문장\(길어도 두 문장\)으로 묶어/);
+    expect(d).toMatch(/절대 추측해서 쓰지 마세요/); // 사실 규칙은 그대로
+  });
+  it("메모가 있으면 메모 규칙과 메모 줄이 붙는다", () => {
+    const d = pilotAiDirective("학원삼", { memo: "월말평가 오답 첨삭, 오답노트 작성" });
+    expect(d).toMatch(/\[선생님 수업 메모\] 월말평가 오답 첨삭, 오답노트 작성/);
+    expect(d).toMatch(/메모에 없는 일을 덧붙이지 마세요/);
+  });
+  it("습관이 있으면 대체 글에도 다짐 문장이 없다 · 메모의 점수는 새는 숫자가 아니다", () => {
+    expect(fallbackUnderstanding([{ title: "소인수분해", score: 6 }], H)).not.toMatch(/챙기겠/);
+    expect(cleanPilotUnderstanding("월말고사는 92점이었습니다. 10점 만점입니다.", [], { memo: "월말고사 92점" })).toBe("월말고사는 92점이었습니다.");
+    expect(cleanPilotUnderstanding("만점이었습니다.", [], { memo: "오답노트 작성" })).toBe("오답노트 작성");
   });
 });

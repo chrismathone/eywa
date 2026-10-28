@@ -131,6 +131,21 @@ async function fetchJjManagedClassIds(supabase: ServerClient, userId: string, da
   }
 }
 
+/**
+ * 이 사람이 **JJ 보고서 담당**(학원설정 `specialAccess.jjReportManagerIds`)인가 — 강사뷰 진입 자격용(view-mode.ts).
+ * 🔴 담임 반 없는 관리자(김동후, 2026-10-28)는 이게 없으면 강사뷰에 못 들어가 JJ 반을 실어 둔 원스크린을 못 연다
+ *    (다른 사람이 '다른 강사 뷰'로 보면 보이는데 본인은 안 보이던 것). 요일을 보지 않는다 — JJ 교시가 없는 날은 빈 원스크린.
+ * ⚠️ 설정 조회 실패는 false(이 갈래만 닫힌다).
+ */
+export async function isJjReportManager(userId: string): Promise<boolean> {
+  try {
+    const settings = await getTenantSettings();
+    return (settings.permissions.specialAccess.jjReportManagerIds ?? []).includes(userId);
+  } catch {
+    return false;
+  }
+}
+
 /** 알림 수신자용 위임 한 건 — 반 id·대체 강사·기간. 날짜 판정은 `isDelegationActiveOn`(delegation-window.ts). */
 export type ClassDelegationWindow = {
   id?: string;

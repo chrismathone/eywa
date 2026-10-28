@@ -21,6 +21,7 @@ import { evaluateSendGate } from "../send-gate";
 import { hasPilotOneLine, isMathReportPilot, pilotCanEdit, pilotNeedsAutoWrite, understandingPresetOf, understandingRows } from "../math-report-pilot";
 import { UnderstandingPresetButtons } from "./understanding-presets";
 import { UnderstandingPopover } from "./understanding-popover";
+import { LessonMemoInput } from "./lesson-memo-input";
 import { attitudeNeedsNote, isHomeworkMissed, needsAttitudeNote, needsHomeworkMissReason, pilotRowSig, testSkipComplete, type DailyTestSkip } from "../math-report-pilot-sections";
 import { hasMakeupAbsenceDate } from "../attendance-sentence";
 import { DailyTestSkipSelect } from "./daily-test-skip-select";
@@ -138,6 +139,8 @@ export type GridFieldHandlers = {
   onAttitudeNote?: (studentId: string, subjectName: string, note: string) => void;
   /** 보강 사유(결석 날짜를 예약에서 못 찾은 보강 줄). */
   onMakeupReason?: (studentId: string, subjectName: string, reason: string) => void;
+  /** '오늘의 수업' 메모(새 수학 보고서, 2026-10-28) — 없으면 칸이 안 선다(열람 전용). */
+  onLessonMemo?: (studentId: string, subjectName: string, memo: string) => void;
 };
 
 /** 행 단위 액션. */
@@ -698,6 +701,16 @@ export function GridBodyRow({
               />
             ) : null}
           </div>
+        ) : null}
+        {/* '오늘의 수업' 메모(원장 2026-10-28) — 카드와 같은 칸. 진도 칸 안 맨 아래라 표 열 폭은 그대로다. */}
+        {pilot && fields.onLessonMemo ? (
+          <LessonMemoInput
+            compact
+            value={subject.lessonMemo ?? ""}
+            disabled={rowLocked}
+            ariaLabel={tf("os.memo.aria", { name: student.name })}
+            onChange={(v) => fields.onLessonMemo?.(student.id, subject.name, v)}
+          />
         ) : null}
       </td>
       {/* 점수·태도·과제 칸은 자체 잠금 prop이 없다 → **td 안에서** fieldset으로 묶어 잠근다(카드 모드와 같은 방식).
