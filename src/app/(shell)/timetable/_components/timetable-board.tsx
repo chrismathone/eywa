@@ -1254,8 +1254,13 @@ export function TimetableEditControls({ rosterHidden = false }: { rosterHidden?:
         <span className="text-amber">학생 명단을 접어 둬서 옮긴 줄이 안 보입니다 — 뷰 설정에서 펼치면 표시됩니다.</span>
       ) : null}
       {error ? <span className="text-chart-4">{error}</span> : null}
+      {/* 🔴 실패 **이유**를 그린다 — 종전엔 개수만("시간겹침 등") 그려, 반 옮기기가 늘 실패하던 버그(없는 칸 `date`)도 막힘 안내
+          (권장 적용일·분리등원 학생)도 화면에 닿지 않았다(리뷰 2026-10-28). 첫 이유는 글로, 나머지는 마우스를 올리면. */}
       {failed.length > 0 ? (
-        <span className="text-amber">{failed.length}건 실패(시간겹침 등) — 나머지는 저장됨</span>
+        <span className="text-amber" title={failed.join("\n")}>
+          {failed.length}건 실패 — {failed[0]}
+          {failed.length > 1 ? ` 외 ${failed.length - 1}건` : ""} · 나머지는 저장됨
+        </span>
       ) : null}
     </div>
   );
