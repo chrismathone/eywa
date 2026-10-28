@@ -35,6 +35,16 @@ export function parseJjBooks(value: string | null | undefined): { picked: JjBook
   return { picked: JJ_BOOKS.filter((b) => parts.includes(b)), other: parts.filter((p) => !known.has(p)) };
 }
 
+/**
+ * JJ 글에 **실을** 교재 — 세 권 중 고른 것만(목록 순서). 목록 밖 값은 버린다.
+ * 🔑 교재 칸은 강사 시트(ECS)·직전 보고서의 교재로 미리 채워진다(roster.ts ③④) — JJ 행에도 그 반의 시트 교재가 들어와,
+ *    그날 시트 교재가 마침 세 권 중 하나인 날만 맞게 나갔다(원장 2026-10-28 *"어떤날은 잘뜨고 대부분 이상하게"*).
+ *    미리보기·저장(report-fields.ts)과 서버 저장(actions.ts)이 이 함수 하나로 거른다.
+ */
+export function jjBooksOnly(value: string | null | undefined): string {
+  return parseJjBooks(value).picked.join(JJ_BOOK_SEP);
+}
+
 /** 한 권을 켜고 끈다 — 결과는 목록 순서로(누른 순서가 아니라). 목록 밖 조각은 버린다. */
 export function toggleJjBook(value: string | null | undefined, book: JjBook): string {
   const next = new Set<JjBook>(parseJjBooks(value).picked);

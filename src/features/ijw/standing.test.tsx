@@ -66,11 +66,13 @@ describe("계약 · 저장본", () => {
 
 describe("문구", () => {
   it("백분위 = 100 − 상위 %(반올림, 상위 0%는 1%로) · 꼴찌는 0 · 자릿수 쉼표는 로캘과 무관", () => {
-    expect(compareText({ label: "중2", rank: 3, of: 41, topPct: 7.3 }, "학년")).toMatchObject({ head: "중2 백분위 93", sub: "41명 중 3등", fill: 93 });
-    expect(compareText({ label: "", rank: 1, of: 300, topPct: 0.2 }, "반").head).toBe("반 백분위 99");
-    // 원장 2026-10-27 — 하위 학생이 '상위 86%'로 읽히던 것: 8명 중 7등은 백분위 14
-    expect(compareText({ label: "A반", rank: 7, of: 8, topPct: 86 }, "반")).toMatchObject({ head: "A반 백분위 14", fill: 14 });
-    expect(compareText({ label: "A반", rank: 8, of: 8, topPct: 100 }, "반").head).toBe("A반 백분위 0");
+    expect(compareText({ label: "중2", rank: 3, of: 41, topPct: 7.3 }, "학년")).toMatchObject({ label: "중2 학년 백분위", value: "93", sub: "41명 중 3등", fill: 93 });
+    expect(compareText({ label: "", rank: 1, of: 300, topPct: 0.2 }, "학년")).toMatchObject({ label: "학년 백분위", value: "99" });
+    // 원장 2026-10-28 — 반은 반 이름 없이 '반 등수 N등'(막대는 같은 백분위)
+    expect(compareText({ label: "중등E_초5 의치대", rank: 1, of: 8, topPct: 12.5 }, "반")).toMatchObject({ label: "반 등수", value: "1", unit: "등", sub: "8명 중", fill: 87 });
+    // 원장 2026-10-27 — 하위 학생이 '상위 86%'로 읽히던 것: 8명 중 7등은 백분위 14 · 꼴찌는 0
+    expect(compareText({ label: "A반", rank: 7, of: 8, topPct: 86 }, "반").fill).toBe(14);
+    expect(compareText({ label: "중2", rank: 8, of: 8, topPct: 100 }, "학년").value).toBe("0");
     expect(groupDigits(1234567)).toBe("1,234,567");
     expect(badgeGradeLabel("초4 과정 통과")).toBe("초4");
     expect(badgeGradeLabel("중1")).toBe("중1");
@@ -108,10 +110,11 @@ describe("JJ 수업보고서 · 카드", () => {
     expect(html).toContain('src="https://injaewon.vercel.app/img/level/M1.webp"');
     expect(html).toContain("누적 단어");
     expect(html).toContain("1,234");
-    expect(html).toContain("중2 백분위 93");
+    expect(html).toContain("중2 학년 백분위");
     expect(html).not.toContain("상위");
     expect(html).toContain("41명 중 3등");
-    expect(html).toContain("A반 백분위 89");
+    expect(html).toContain("반 등수");
+    expect(html).not.toContain("A반");
     expect(html).toContain("장기기억 단어");
     // 인재원 계산 기준 문장은 싣지 않는다(원장 2026-10-27)
     expect(html).not.toContain("기본모드(주관식 단어장) 기준");

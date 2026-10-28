@@ -9,6 +9,7 @@
  * 여기 담는 것 = `lesson_reports`의 **표시 필드**뿐이다. 식별자(studentId·classId)·게이트(outOfClass)·
  * 날짜처럼 저장에만 필요한 값은 호출부(`buildSaveInputFor`)가 붙인다.
  */
+import { jjBooksOnly } from "./jj-books";
 import { formatTestScore } from "./report-comment";
 import { normalizeHomeworkPages } from "./homework-pages";
 import type { Subject, Tests } from "./types";
@@ -20,6 +21,8 @@ export type ReportFieldSource = {
   /** 수업 태도(attitude.ts 5단계) — 학생 단위. */
   attitude: string | null;
   tests: Tests;
+  /** JJ 수업보고서 글인가(jj-books.ts) — 그렇다면 교재는 세 권 중 고른 것만 싣는다(시트·직전 교재로 미리 채워진 값은 버린다). */
+  jjSheet?: boolean;
   /** 멘트 초안(학부모 본문). 빈 문자열이면 **빈 채로** 둔다 — 템플릿 자동주입 금지(2026-07-30). */
   draft: string;
   /** 학습 추세(종합분석) 초안. 비면 미저장. */
@@ -69,7 +72,7 @@ export function buildReportFields(src: ReportFieldSource): ReportFields {
   const checkTest =
     showCheckTest && tests.check.score != null ? formatTestScore(tests.check.score, tests.check.max) : "";
   return {
-    textbook: su?.textbook || "",
+    textbook: src.jjSheet ? jjBooksOnly(su?.textbook) : su?.textbook || "",
     makeup: su?.makeup ?? false,
     // 쪽수 후보정 — **저장 직전 마지막 관문**(homework-pages.ts). 화면 blur가 이미 고쳤어도 일괄적용·
     // 첫행복사·시트 가져오기처럼 blur를 안 거치는 경로가 있어, 학부모에게 나가는 값은 여기서 확정한다.

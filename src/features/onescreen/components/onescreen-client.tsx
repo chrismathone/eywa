@@ -40,7 +40,7 @@ import type { DisplayOptions } from "../display-options";
 import { PreviousContent } from "./previous-content";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { isJjSheetDraft } from "../jj-books";
+import { isJjSheetDraft, isJjSheetReport } from "../jj-books";
 import {
   EMPTY_TEMPLATE_PREFS,
   implicitTemplateFor,
@@ -2717,6 +2717,7 @@ export function OneScreenClient({
       attitude: rowEval.attitude,
       tests: rowEval.tests,
       draft: "",
+      jjSheet: isJjSheetReport(rep),
       showDailyTest,
       showCheckTest,
     });
@@ -3928,6 +3929,7 @@ export function OneScreenClient({
       attitude: rowEval.attitude,
       tests: rowEval.tests,
       draft,
+      jjSheet: su?.subjectKey === "english" && isJjSheetDraft(existing),
       trendDraft: existing?.trendDraft,
       // '학습 추세 미발송'(원장 2026-09-18) — ref로 읽는다(디바운스·발송은 비동기라 closure가 옛 값일 수 있다).
       trendHidden: isTrendOptedOut(trendOptOutRef.current, su?.classId, student.id),
@@ -5408,6 +5410,7 @@ selected ? (
         attachmentUrls={attUrls}
         trendRows={trendRows}
         templateMode={previewSubject.subjectKey === "english"}
+        jjSheet={previewSubject.subjectKey === "english" && isJjSheetReport(previewReport)}
         jj={previewSubject.subjectKey === "english" ? englishJjSnapshotOf(selected.id) : null}
       />
     );

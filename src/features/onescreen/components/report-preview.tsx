@@ -58,6 +58,7 @@ export function ReportPreview({
   trendRows,
   templateMode,
   jj,
+  jjSheet = false,
 }: {
   ctx: ReportPreviewContext;
   student: OneScreenStudent;
@@ -80,6 +81,8 @@ export function ReportPreview({
    * 저장본으로 그리므로, 여기 그림은 "지금 저장하면 들어갈 모양"이다.
    */
   jj?: JjReportSnapshot | null;
+  /** JJ 수업보고서 행인가 — 교재를 세 권 중 고른 것만 보인다(저장과 같은 buildReportFields 규칙). */
+  jjSheet?: boolean;
 }) {
   // 🔴 껍데기(머리·안내)만 언어를 탄다 — 아래 ParentReportCard는 **학부모가 보는 것 그대로**라
   //    한국어 고정이다(미리보기가 발송물과 달라지면 미리보기의 존재 이유가 없어진다).
@@ -91,6 +94,7 @@ export function ReportPreview({
     attitude: student.attitude,
     tests: student.tests,
     draft,
+    jjSheet,
     trendDraft,
     trendHidden,
     showDailyTest: ctx.showDailyTest,

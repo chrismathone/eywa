@@ -15,15 +15,20 @@ export function groupDigits(n: number): string {
 }
 
 /**
- * 비교 한 칸의 문구 — "중2 백분위 92" / "41명 중 3등". 원장 2026-10-27 *"상위 몇퍼 이러니까 하위애들도 상위 86퍼 이런식으로 뜸
- * 백분위로 변경"* — '상위 N%'는 꼴찌도 '상위 100%'라 좋은 말처럼 읽혔다. 백분위 = 100 − 인재원 상위 %(높을수록 앞, 0~99).
- * 🔑 숫자는 인재원 상위 %에서 바로 바꾼다(전 학생 자료가 없어 다시 계산하지 않는다). 막대도 같은 값.
+ * 비교 한 칸의 문구 — 이름(`label`) · 큰 값(`value`+`unit`) · 아래 줄(`sub`) · 막대(`fill`).
+ * - 학년 = **"초5 학년 백분위" · 93**(14명 중 1등). 원장 2026-10-28 *"초5 백분위 93 이러니까 잘 안 읽혀서"* — 이름과 숫자를
+ *   한 줄에 붙이지 않고 이름은 작게, 숫자는 크게 가른다.
+ * - 반 = **"반 등수" · 1등**(8명 중). 원장 2026-10-28 *"반이름 삭제 반 등수 x 이런식으로"* — 반 이름(`중등E_초5 의치대`)은
+ *   학부모가 읽을 말이 아니다. 막대는 학년과 같은 백분위로 채운다(칸끼리 같은 눈금).
+ * 백분위 = 100 − 인재원 상위 %(원장 2026-10-27 *"상위 몇퍼 … 백분위로 변경"* — 꼴찌도 '상위 100%'라 좋은 말처럼 읽혔다).
+ * 🔑 숫자는 인재원 상위 %에서 바로 바꾼다(전 학생 자료가 없어 다시 계산하지 않는다).
  */
 export function compareText(c: { label: string; rank: number; of: number; topPct: number }, kind: "학년" | "반") {
   const top = Math.min(100, Math.max(1, Math.round(c.topPct)));
   const pct = 100 - top;
-  const who = c.label.trim() || kind;
-  return { head: `${who} 백분위 ${pct}`, sub: `${groupDigits(c.of)}명 중 ${groupDigits(c.rank)}등`, fill: pct };
+  if (kind === "반") return { label: "반 등수", value: groupDigits(c.rank), unit: "등", sub: `${groupDigits(c.of)}명 중`, fill: pct };
+  const grade = c.label.trim();
+  return { label: grade ? `${grade} 학년 백분위` : "학년 백분위", value: String(pct), unit: "", sub: `${groupDigits(c.of)}명 중 ${groupDigits(c.rank)}등`, fill: pct };
 }
 
 const FRAME = "bg-card border-line shadow-card rounded-2xl border px-5 py-4";
@@ -45,8 +50,12 @@ function MetricRow({ label, unit, m }: { label: string; unit: string; m: IjwStan
       {cmps.length ? (
         <div className="grid grid-cols-2 gap-2">
           {cmps.map((c) => (
-            <div key={c.key} className="bg-bg-soft flex min-w-0 flex-col gap-1 rounded-xl px-3 py-2.5">
-              <span className="text-primary text-base font-black break-keep">{c.head}</span>
+            <div key={c.key} className="bg-bg-soft flex min-w-0 flex-col gap-1.5 rounded-xl px-3 py-2.5">
+              <span className="text-text-dim text-sm font-bold break-keep">{c.label}</span>
+              <span className="text-primary tabular-nums">
+                <span className="text-2xl leading-none font-black">{c.value}</span>
+                {c.unit ? <span className="ml-0.5 text-base font-bold">{c.unit}</span> : null}
+              </span>
               <Meter pct={c.fill} size="sm" />
               <span className="text-text-dim text-xs tabular-nums">{c.sub}</span>
             </div>
