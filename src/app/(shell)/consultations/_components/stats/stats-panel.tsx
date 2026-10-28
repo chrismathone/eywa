@@ -7,7 +7,7 @@ import {
   consultationsStatsHref,
   type ConsultationListParams,
 } from "@/features/consultations/list-href";
-import { getConsultationGap, getConsultationStats, getRetiredStaffIds } from "@/features/consultations/server/stats";
+import { getConsultationStats, getRetiredStaffIds } from "@/features/consultations/server/stats";
 import { getHomeroomConsultStats } from "@/features/consultations/server/homeroom";
 import { loadConsultationStatsPrefs } from "@/features/consultations/server/stats-prefs";
 import type { ConsultationListFilters } from "@/features/consultations/server/queries";
@@ -19,9 +19,11 @@ import {
   type StatsDimView,
 } from "@/features/consultations/stats-model";
 import { StatsPanelClient } from "./stats-panel-client";
-import { StatsGap } from "./stats-gap";
 import { StatsHomeroom } from "./stats-homeroom";
 import { STATS_PANEL_GRID } from "./stats-skeleton";
+
+/** 상담사별 분해·상담 공백 카드(원장 2026-10-28 숨김) — 다시 켤 때 이 값과 아래 `<StatsGap>` 주석을 함께 되살린다. */
+const SHOW_BREAKDOWN_AND_GAP = false;
 
 const DIM_LABEL: Record<StatsDimKey, string> = {
   counselor: "상담사",
@@ -60,7 +62,6 @@ export async function ConsultationStatsPanel({
   try {
     loaded = await Promise.all([
       getConsultationStats(filters),
-      getConsultationGap(),
       loadConsultationStatsPrefs(),
       getTenantSettings(),
       getRetiredStaffIds(),
@@ -79,7 +80,7 @@ export async function ConsultationStatsPanel({
       </p>
     );
   }
-  const [stats, gap, prefs, settings, retiredIds, homeroom] = loaded;
+  const [stats, prefs, settings, retiredIds, homeroom] = loaded;
   const subjects = buildSubjectMaps(settings.operations.subjects);
   // 분해 줄 = 이 화면 안에서 거르기 / 지표 옆 링크 = 목록을 그 값으로 열기.
   const statsHref = (patch: Partial<ConsultationListParams>) => consultationsStatsHref(listParams, patch);
@@ -127,7 +128,10 @@ export async function ConsultationStatsPanel({
     }
   };
   // 꺼진 기능은 흔적 없이 — makeedu가 꺼진 학원엔 '작성 경로' 축이, 반 칸이 없으면(0318a 전) '반' 축이 없다.
-  const dims: StatsDimView[] = stats.full
+  // 🔴 상담사별 분해·상담 공백 카드는 숨겼다(원장 2026-10-28 *"해당 영역 주석처리하고 [담임별 상담 현황]을 당겨줘"*) — 다시 켤 땐
+  //    `SHOW_BREAKDOWN_AND_GAP`만 true로(상담 공백은 `getConsultationGap()`을 Promise.all에 되살리고 `<StatsGap>`을 다시 그린다).
+  //    위 지표·추이는 이제 아래 담임별 상담 현황의 과목·담임 고르기를 따른다(stats-homeroom.tsx).
+  const dims: StatsDimView[] = SHOW_BREAKDOWN_AND_GAP && stats.full
     ? STATS_DIMS.filter((d) => (d !== "source" || syncOn) && (d !== "class" || classOn)).map((d) => {
         const bucket = stats.dims[d];
         const items = bucket?.items ?? [];
@@ -164,8 +168,15 @@ export async function ConsultationStatsPanel({
         overdueHref={listHref({ urg: "overdue" })}
         doneHref={listHref({ urg: "done" })}
       />
-      <StatsGap gap={gap} teacherScoped={teacherScoped} />
-      <StatsHomeroom data={homeroom} teacherScoped={teacherScoped} initialSort={prefs.hrSort} initialFilter={prefs.hrFilter} />
+      {/* <StatsGap gap={gap} teacherScoped={teacherScoped} /> — 숨김(원장 2026-10-28, 위 SHOW_BREAKDOWN_AND_GAP 주석) */}
+      <StatsHomeroom
+        data={homeroom}
+        teacherScoped={teacherScoped}
+        initialSort={prefs.hrSort}
+        initialFilter={prefs.hrFilter}
+        linkedWho={listParams.who}
+        linkedSubject={listParams.subject}
+      />
     </section>
   );
 }

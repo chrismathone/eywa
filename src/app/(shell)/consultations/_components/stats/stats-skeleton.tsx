@@ -14,8 +14,7 @@ export function StatsPanelSkeleton() {
       {/* 추이 카드 = 머리 + 공용 차트 300px + 각주 ≈ 400px(2026-10-21 공용 차트로 바꾸며 h-72 → h-100 · 첫 줄이 밀리지 않게). */}
       <div className="bg-bg-soft/40 h-100 animate-pulse rounded-2xl" />
       <div className="bg-bg-soft/40 h-100 animate-pulse rounded-2xl @5xl/panel:col-span-2" />
-      <div className="bg-bg-soft/40 h-96 animate-pulse rounded-2xl @5xl/panel:col-span-2" />
-      <div className="bg-bg-soft/40 h-96 animate-pulse rounded-2xl" />
+      {/* 분해·상담 공백 카드는 숨겼다(2026-10-28) — 담임별 현황이 바로 아래로 온다. */}
       {/* 담임별 상담 현황(전폭). */}
       <div className="bg-bg-soft/40 col-span-full h-64 animate-pulse rounded-2xl" />
     </div>
