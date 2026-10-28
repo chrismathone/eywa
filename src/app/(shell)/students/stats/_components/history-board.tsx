@@ -19,8 +19,13 @@ const kstDayText = (iso: string) => {
 const axisMonth = (m: string) => `${m.slice(2, 4)}.${m.slice(5, 7)}`;
 /** 나간 학생 칸 이름 — 퇴원일이 아니라 청구로 센 값이라 그 뜻을 이름에 담는다(메이크에듀 퇴원일은 2025년부터만 남아 있다). */
 const STOPPED_NAME = "청구가 끊긴 학생";
-/** 프로그램 이름·색 — 원생 통계 강좌수 선과 같은 값(화면이 학원 설정으로 풀어 넘긴다). */
-export type HistoryPrograms = Record<"math" | "injaewon" | "eie", { label: string; color: string }>;
+/**
+ * 프로그램 이름·색 — 원생 통계 강좌수 선과 같은 값(화면이 학원 설정으로 풀어 넘긴다). `subjects` = 그 밖의 과목(국어·과학…)마다 — 재원생 추이
+ * 과목별 선과 같은 이름·색(원장 2026-10-28 *"과목별로 분리가능한 수준까지 쫙 분리"*).
+ */
+export type HistoryPrograms = Record<"math" | "injaewon" | "eie", { label: string; color: string }> & {
+  subjects?: Record<string, { label: string; color: string }>;
+};
 type Line = { key: HistoryField; name: string; color: string; strong?: boolean };
 
 /**
@@ -83,9 +88,25 @@ export function HistoryBoard({
   const paid = months.filter((m) => m.payingGeneral !== undefined);
   const split = paid.length > 0 && paid.every((m) => m.payingMath !== undefined);
   // 값이 늘 0인 프로그램(수학만 하는 지점의 영어 등)은 선을 세우지 않는다.
-  const paying: ChartSeries[] = historyLines(hasEie, split, programs)
+  // 그 밖의 과목을 과목마다 — '그 밖의 과목' 학생이 있는 **모든 달에** 과목 묶음이 있을 때만 그 한 선 대신 과목마다 선(값이 늘 0인 과목은
+  // 세우지 않는다). 일부 달만 있으면(배포 뒤 첫 밤 집계 전의 에이와 줄 등) 그 달 학생이 빠지므로 종전 한 선으로(리뷰 2026-10-28).
+  const subjectsEverywhere = months.every((m) => !(m.payingOther ?? 0) || m.subjects !== undefined);
+  const subjectKeys = split && subjectsEverywhere ? [...new Set(months.flatMap((m) => Object.keys(m.subjects ?? {})))].filter((k) => months.some((m) => (m.subjects?.[k] ?? 0) > 0)) : [];
+  const pickSubject = (k: string) => (yearly ? years.map((y) => y.subjects?.[k] ?? null) : months.map((m) => m.subjects?.[k] ?? null));
+  const subjectSeries: ChartSeries[] = subjectKeys.map((k) => ({
+    key: `subject:${k}`,
+    name: programs.subjects?.[k]?.label ?? k,
+    color: programs.subjects?.[k]?.color ?? DASHBOARD_SUBJECT_COLORS.other,
+    values: pickSubject(k),
+  }));
+  const lines = historyLines(hasEie, split, programs)
     .filter((l) => (l.key === "enrolledRecord" || l.key === "payingGeneral" ? months.some((m) => m[l.key] !== undefined) : months.some((m) => (m[l.key] ?? 0) > 0)))
-    .map((l) => ({ ...l, values: pick(l.key) }));
+    .filter((l) => !(subjectSeries.length && l.key === "payingOther"));
+  // 과목 선은 '그 밖의 과목' 자리(과목 모름 · 메이크에듀 재원생 기록 앞)에.
+  const tailAt = lines.findIndex((l) => l.key === "payingUnknown" || l.key === "enrolledRecord");
+  const ordered = tailAt < 0 ? [...lines.map((l) => ({ ...l, values: pick(l.key) })), ...subjectSeries]
+    : [...lines.slice(0, tailAt).map((l) => ({ ...l, values: pick(l.key) })), ...subjectSeries, ...lines.slice(tailAt).map((l) => ({ ...l, values: pick(l.key) }))];
+  const paying: ChartSeries[] = ordered;
   // 들어온 학생(실제 신규)과 나간 학생(청구가 끊긴 학생 — 청구 기준 · 수납 권한이 있을 때만 서버가 싣는다)을 한 그래프에.
   const hasStopped = months.some((m) => m.stoppedPaying !== undefined);
   // 연도별에서 셀 수 있는 마지막 달(다음 두 달이 끝난 달)이 든 해는 청구가 끊긴 학생을 다 셀 수 없다 — 신규와 셈한 달 수가 다르면 이름에 밝힌다
@@ -140,7 +161,14 @@ export function HistoryBoard({
           ))}
         </ul>
       ) : null}
-      <HistoryTable years={years} hasEie={hasEie} split={split} programs={programs} shown={new Set(paying.map((l) => l.key as HistoryField))} />
+      <HistoryTable
+        years={years}
+        hasEie={hasEie}
+        split={split}
+        programs={programs}
+        shown={new Set(lines.map((l) => l.key))}
+        subjectKeys={subjectKeys}
+      />
     </StatCard>
   );
 }
@@ -156,6 +184,12 @@ function historyNotes(months: readonly HistoryMonth[], aywaFrom: string | null, 
   }
   const estimated = months.filter((m) => m.estimated.includes("payingGeneral")).map((m) => longMonth(m.month));
   if (estimated.length) out.push(`${estimated.join(" · ")}은 청구 방식이 바뀌어 그달 청구가 비어 있어, 그달 실제로 낸 수업료로 메웠습니다(추정).`);
+  // 건너뛴 달(원장 2026-10-28 *"이상할정도로 적은달은 건너뛰는게 차라리 나음. 애매한것보다"*) — 청구 칸이 비어 선이 끊긴다.
+  const skipped = months.filter((m) => m.skipped).map((m) => longMonth(m.month));
+  if (skipped.length) out.push(`${skipped.join(" · ")}은 그달 청구가 비정상으로 적어(청구 방식이 바뀐 달 · 휴원기 등) 수업료가 청구된 학생 수를 비웠습니다 — 메우지 않았습니다.`);
+  // 메이크에듀 2025-05 전 EiE·일부 수업료는 '교재' 구분으로 청구됐다(원장 2026-10-28 정정) — 다시 센 메이크에듀 줄에서 EiE가 그 전부터 보인다.
+  const eieFirst = firstMonthWith(months, "payingEie");
+  if (eieFirst && eieFirst < "2025-05") out.push("메이크에듀 2025년 5월 전에는 EiE 등 일부 수업료가 '교재' 구분으로 청구돼, 요일·시간 표기가 있거나 8만 원 이상인 교재 줄을 수업료로 셌습니다.");
   const eieFrom = firstMonthWith(months, "payingEie");
   const genFrom = firstMonthWith(months, "payingGeneral");
   const eieLate = !!(eieFrom && genFrom && eieFrom > genFrom);

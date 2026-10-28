@@ -9,6 +9,7 @@
 
 import { isEieLesson, type LessonProgram } from "./lesson-program";
 import { lastJudgedMonth, stoppedPayingByMonth } from "./stopped-paying";
+import { SKIPPED_PAYING, subjectField } from "./history";
 
 export type HistoryInvoice = {
   student_id: string;
@@ -137,9 +138,19 @@ export function aywaHistoryMonths(input: {
   invoices: readonly HistoryInvoice[];
   registrations: readonly HistoryRegistration[];
   started: ReadonlySet<string>;
-  /** 수업명 → 프로그램(`lessonProgramClassifier`) — 주면 프로그램 칸(수학·인재원 영어·그 밖·모름)도 센다. */
+  /**
+   * 수업명 → 프로그램(`lessonProgramClassifier`) — 주면 프로그램 칸(수학·인재원 영어·그 밖·모름)도 센다. 그 밖의 과목은 과목마다
+   * `payingSubject:<키>`로도 싣는다(원장 2026-10-28 *"과목별로 분리가능한 수준까지 쫙 분리"* — `payingOther`는 그 합집합 그대로).
+   */
   classify?: (name: string) => LessonProgram | null;
+  /**
+   * 건너뛸 달 — 청구가 비정상으로 적은 달(원장 2026-10-28 *"이상할정도로 적은달은 건너뛰는게 차라리 나음. 애매한것보다"*). 그달 청구는
+   * 학생 수로 세지 않고 청구 칸을 비운 채 `skippedPaying`을 싣는다(등록 칸·수업료 수납(돈)은 그대로 — 낸 돈은 진짜다) · 청구가 끊긴 학생도
+   * 그 달을 넘어 판정한다. 에이와 밤 집계는 넘기지 않는다.
+   */
+  skipMonths?: ReadonlySet<string>;
 }): { month: string; data: Record<string, number> }[] {
+  const skip = input.skipMonths ?? new Set<string>();
   const general = new Map<string, Set<string>>();
   const eie = new Map<string, Set<string>>();
   const all = new Map<string, Set<string>>();
@@ -148,26 +159,28 @@ export function aywaHistoryMonths(input: {
   const tuition = new Map<string, { general: number; eie: number }>(); // 달 → 수업료 수납(원)
   const paidMonths = new Map<string, Set<string>>(); // 학생 → 수업료 청구가 살아 있는 달(청구가 끊긴 학생 판정)
   const add = (m: Map<string, Set<string>>, month: string, id: string) => m.set(month, (m.get(month) ?? new Set()).add(id));
+  const subjects = new Map<string, Map<string, Set<string>>>(); // 그 밖의 과목 키 → 달 → 학생
   for (const i of input.invoices) {
     if (!isLiveTuition(i)) continue;
     const k = lessonKinds(i.line_items, i.amount_total);
     if (!k.general && !k.eie) continue;
     const month = i.period!;
-    (paidMonths.get(i.student_id) ?? paidMonths.set(i.student_id, new Set()).get(i.student_id)!).add(month);
     const paid = lessonPaid(i.line_items, i.amount_paid);
     const t = tuition.get(month) ?? tuition.set(month, { general: 0, eie: 0 }).get(month)!;
     t.general += paid.general;
     t.eie += paid.eie;
+    if (k.eie) hasEie = true;
+    // 건너뛴 달 — 학생 수는 비우되 실제로 들어온 수업료(돈)는 센다(비우는 것은 청구 '건수' — 리뷰 2026-10-28).
+    if (skip.has(month)) continue;
+    (paidMonths.get(i.student_id) ?? paidMonths.set(i.student_id, new Set()).get(i.student_id)!).add(month);
     if (k.general) add(general, month, i.student_id);
-    if (k.eie) {
-      add(eie, month, i.student_id);
-      hasEie = true;
-    }
+    if (k.eie) add(eie, month, i.student_id);
     add(all, month, i.student_id);
     if (input.classify && k.general) {
       for (const p of lessonPrograms(i.line_items, i.amount_total, input.classify)) {
         const field = programField(p);
         add(programs.get(field) ?? programs.set(field, new Map()).get(field)!, month, i.student_id);
+        if (field === "payingOther") add(subjects.get(p) ?? subjects.set(p, new Map()).get(p)!, month, i.student_id);
       }
     }
   }
@@ -181,8 +194,15 @@ export function aywaHistoryMonths(input: {
   }
   // 청구가 끊긴 학생 — 다음 두 달이 다 끝난 달만(이번 달의 세 달 전까지 · 그 뒤 달은 칸을 비운다).
   const lastMonth = input.months.at(-1);
-  const stopped = lastMonth ? stoppedPayingByMonth(paidMonths, input.months, lastJudgedMonth(lastMonth)) : new Map<string, number>();
+  const stopped = lastMonth ? stoppedPayingByMonth(paidMonths, input.months, lastJudgedMonth(lastMonth), skip) : new Map<string, number>();
   return input.months.map((month) => {
+    if (skip.has(month)) {
+      // 건너뛴 달 — 학생 수 칸은 비우고(0이 아니라 '없음') 등록 칸·수업료 수납(돈)만. 화면은 이 표시로 '그달은 비웠다'고 적는다.
+      const data: Record<string, number> = { newRegistered: reg.get(month) ?? 0, newReal: real.get(month) ?? 0, [SKIPPED_PAYING]: 1 };
+      data.tuitionPaidGeneral = tuition.get(month)?.general ?? 0;
+      if (hasEie) data.tuitionPaidEie = tuition.get(month)?.eie ?? 0;
+      return { month, data };
+    }
     const data: Record<string, number> = {
       payingGeneral: general.get(month)?.size ?? 0,
       payingTotal: all.get(month)?.size ?? 0,
@@ -196,6 +216,8 @@ export function aywaHistoryMonths(input: {
     if (hasEie) data.tuitionPaidEie = tuition.get(month)?.eie ?? 0;
     if (input.classify) {
       for (const field of ["payingMath", "payingInjaewon", "payingOther", "payingUnknown"] as const) data[field] = programs.get(field)?.get(month)?.size ?? 0;
+      // 과목마다 — 지점에 그 과목 청구가 한 번이라도 있을 때만(없는 과목을 0으로 그리지 않게).
+      for (const [key, byMonth] of subjects) data[subjectField(key)] = byMonth.get(month)?.size ?? 0;
     }
     return { month, data };
   });

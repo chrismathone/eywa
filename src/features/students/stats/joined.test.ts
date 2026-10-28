@@ -114,6 +114,18 @@ describe("지난 기록 잇기(원장 2026-10-21 전체 추이)", () => {
     expect(note).toContain("2025년 1월~2025년 2월은 수업료가 청구된 학생 수");
     expect(joinNote([], months, "2026-04")).toBeNull();
   });
+
+  it("🔴 비운 달(재원생 기록도 없어 점이 없는 달)이 구간 안에 있으면 밝힌다 — 축이 그 달을 건너뛰어 앞뒤가 바로 이어진다(리뷰 2026-10-28)", () => {
+    const ms: HistoryMonth[] = [
+      { month: "2020-01", estimated: [], payingTotal: 342 },
+      { month: "2020-02", estimated: [], skipped: true, newReal: 8 },
+      { month: "2020-03", estimated: [], payingTotal: 256 },
+    ];
+    const hp = historyTrendPoints(ms, null).monthly;
+    expect(hp.map((x) => x.key)).toEqual(["2020-01", "2020-03"]);
+    expect(joinNote(hp, ms, null)).toContain("2020년 2월은 청구가 비정상으로 적어 비운 달이라 점이 없습니다");
+    expect(joinNote(historyTrendPoints(months, "2026-04").monthly, months, "2026-04")).not.toContain("비운 달");
+  });
 });
 
 describe("basisMarkers · trendBasisName", () => {
