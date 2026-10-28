@@ -250,7 +250,7 @@ export const BUILTIN_JJ_SHEET_TEMPLATE_ID = "builtin:english-jj-sheet";
  */
 export const BUILTIN_JJ_SHEET_TEMPLATE: ReportTemplate = {
   id: BUILTIN_JJ_SHEET_TEMPLATE_ID,
-  name: "JJ 수업보고서",
+  name: "SRS 보고서",
   builtIn: true,
   // 원장 2026-10-27: *"일일테스트 영역 삭제 · 숙제완성도도 필요없음 · 수업태도 밑에 사랑의 한마디 배치해서 작성가능하도록 ·
   // 작성안하면 영역 삭제"* — 수업 평가 표는 태도 한 줄({태도평가}), 사랑의 한마디는 그 바로 아래 항목(특이사항 칸 원문).
