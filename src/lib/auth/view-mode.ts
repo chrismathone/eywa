@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTeacherScope, type TeacherScope } from "@/lib/auth/teacher-scope";
 import { getTeacherReadScope } from "@/lib/auth/teacher-read-scope";
-import { hasActiveDelegation } from "@/features/classes/server/delegation";
+import { hasActiveDelegation, isJjReportManager } from "@/features/classes/server/delegation";
 import { createClient } from "@/lib/supabase/server";
 import { isFullShellRole, viewAsTeacher, VIEW_MODE_COOKIE } from "@/lib/auth/view-as";
 
@@ -51,7 +51,8 @@ export const effectiveTeacherId = cache(async (): Promise<string | null> => {
   // 담당 반이 0개여도 **오늘 위임받은 반**이 있으면 강사뷰에 들어올 수 있어야 한다(0173a).
   // 안 그러면 담당 반 없는 관리자에게 위임을 걸었을 때 그 사람 화면엔 아무것도 안 뜬다 = 조용한 실패.
   // ⚠️ 여는 것은 **진입 자격뿐** — getTeacherScope의 classIds(ECS·교재요청·시간표 스코프)는 그대로다.
-  return (await hasActiveDelegation(user.id)) ? user.id : null;
+  // JJ 보고서 담당(학원설정 개인별 기능 권한)도 담임 반 없이 들어온다 — 원스크린이 그날 JJ 교시 반을 싣는다(delegation.ts).
+  return (await hasActiveDelegation(user.id)) || (await isJjReportManager(user.id)) ? user.id : null;
 });
 
 /** effectiveTeacherId 기반 스코프 객체(없으면 null). getTeacherScope와 동일 형태(요청당 캐시 공유). */
@@ -94,5 +95,7 @@ export const canUseTeacherView = cache(async (): Promise<boolean> => {
     .eq("teacher_id", user.id);
   if ((count ?? 0) > 0) return true;
   // 오늘 위임받은 반이 있으면 토글을 보여준다 — 안 그러면 위임받은 관리자가 전환 버튼조차 못 찾는다(0173a).
-  return hasActiveDelegation(user.id);
+  if (await hasActiveDelegation(user.id)) return true;
+  // JJ 보고서 담당도 토글을 본다(effectiveTeacherId와 같은 조건).
+  return isJjReportManager(user.id);
 });
