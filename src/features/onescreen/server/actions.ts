@@ -79,6 +79,9 @@ import { getVideoReceiptComment } from "@/features/video-homework/server/receipt
 import { appendVideoReceiptComment } from "@/features/video-homework/receipt-comment";
 import { videoSubmitLinkColumn } from "@/features/video-submit/server/link-choice-db";
 import { loadTeacherMentStyle } from "./ment-style-db";
+import { loadSectionEditExamples, restylePilotSections, type SectionEditExample } from "./pilot-restyle";
+import { transplantRestyle } from "../pilot-restyle-guard";
+import type { MentStyleProfile } from "../ment-style";
 import { mentStyleDirective, mentStyleToneDirective } from "../ment-style-prompt";
 import { prependParentAddress, splitParentAddress } from "../parent-address";
 import {
@@ -1588,7 +1591,8 @@ export async function generateReportComment(
   // 말투 프로파일(0262a)을 붙이면 안 된다. 스코프 판정(effectiveTeacherId)만으론 겸직 관리자가 강사뷰 쿠키를 켠 채 그 화면을 열면 새므로(재리뷰).
   //
   // pilotKeepUnderstanding: 새 수학 보고서에서 선생님이 **고친 글**을 값만 다시 맞출 때(원장 2026-10-27 *"글을 수정하면 자동작성을 다시 누르라고 …
-  // 쓴게 다 없어진데요"*) — AI를 부르지 않고 '오늘의 수업' 항목은 이 글(선생님이 고친 그대로)로, 나머지 사실 항목만 지금 값으로 다시 짠다.
+  // 쓴게 다 없어진데요"*) — '오늘의 수업' AI는 부르지 않고 그 항목은 이 글(선생님이 고친 그대로)로, 나머지 사실 항목만 지금 값으로 다시 짠다
+  // (사실 항목 말투 다시 쓰기 — 2026-10-28 restyleFacts — 는 고친 기록이 있는 선생님에게 여기서도 붙는다).
   // 화면이 이 결과와 고친 글을 항목별로 합친다(pilot-merge.ts). 추세는 만들지 않는다.
   opts?: { teacherStyle?: boolean; pilotKeepUnderstanding?: string },
 ): Promise<{ ok: boolean; comment?: string; trend?: string; trendDropped?: boolean; trendQuiet?: boolean; error?: string }> {
@@ -1676,14 +1680,41 @@ export async function generateReportComment(
       ),
       note: pilotNote,
     });
+  // 사실 항목 말투(원장 2026-10-28 *"다른 영역도 수정한 사람들 … 그에 맞게 다 말투 언어 모두 학습"*) — 그 선생님이 자동작성 글의 사실 항목을
+  // 고쳐 보낸 기록이 있으면, 같은 사실을 그 말투로 다시 쓴다(pilot-restyle.ts — 항목마다 사실 검사를 지난 것만, 아니면 코드 글 그대로).
+  // 스코프 = 말투 프로파일과 같은 규칙(effectiveTeacherId · 사무실 대리작성 teacherStyle=false는 안 붙인다). 고친 기록이 없으면 AI를 안 부른다.
+  // 요청 초반에 시작해 다른 조회와 겹쳐 돈다(B4).
+  const restyleCtxP: Promise<{ examples: SectionEditExample[]; style: MentStyleProfile | null } | null> =
+    pilot && opts?.teacherStyle !== false
+      ? effectiveTeacherId()
+          .then(async (teacherId) => {
+            if (!teacherId) return null;
+            const admin = createAdminClient();
+            const examples = await loadSectionEditExamples(admin, user.tenantId, teacherId);
+            if (!examples.length) return null;
+            return { examples, style: await loadTeacherMentStyle(admin, user.tenantId, teacherId) };
+          })
+          .catch(() => null)
+      : Promise.resolve(null);
+  // 선생님이 직접 적어 글에 그대로 들어간 말 — 다시 쓴 글에도 글자 그대로 남아야 받는다.
+  const restyleMustKeep = pilot
+    ? [readAttitudeNote(input.attitudeNote), readHomeworkMissReason(input.homeworkMissReason), pilotSkip?.detail ?? ""]
+    : [];
+  const restyleFacts = async (composed: string): Promise<string> => {
+    const ctx = await restyleCtxP;
+    return ctx
+      ? restylePilotSections({ composed, examples: ctx.examples, style: ctx.style, studentName: input.studentName, tenantId: user.tenantId, mustKeep: restyleMustKeep })
+      : composed;
+  };
   // 고친 글의 값만 다시 맞추기 — AI 없이 사실 항목만(위 opts 주석). 글은 클라 값이라 한 항목 길이로 자른다.
+  // (말투 다시 쓰기는 고친 기록이 있는 선생님에게만 붙는다 — 화면이 항목별로 합칠 때 선생님이 손댄 항목은 어차피 그대로 둔다.)
   if (pilot && typeof opts?.pilotKeepUnderstanding === "string") {
     const keep = opts.pilotKeepUnderstanding.trim().slice(0, 4000);
     const [videoReceipt, prevNotes] = await Promise.all([
       getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null),
       prevNotesP,
     ]);
-    return { ok: true, comment: composePilot(keep, videoReceipt, varietyOf(prevNotes)) };
+    return { ok: true, comment: await restyleFacts(composePilot(keep, videoReceipt, varietyOf(prevNotes))) };
   }
   // 이해도를 하나도 안 매겼으면 AI가 쓸 항목이 없다 — 부르지 않는다(재료 없이 부르면 이해도를 지어낸다). 추세도 이번엔 안 만든다.
   if (pilot && !safeInput.understanding?.length) {
@@ -1691,7 +1722,7 @@ export async function generateReportComment(
       getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null),
       prevNotesP,
     ]);
-    return { ok: true, comment: composePilot("", videoReceipt, varietyOf(prevNotes)) };
+    return { ok: true, comment: await restyleFacts(composePilot("", videoReceipt, varietyOf(prevNotes))) };
   }
   // AI에는 진도·이해도만 준다 — 다른 사실을 주면 모델이 그 항목을 '이해도' 글에 다시 쓴다(항목이 겹친다).
   const aiInput: ReportCommentInput = pilot
@@ -1729,6 +1760,10 @@ export async function generateReportComment(
       getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null),
       prevNotesP,
     ]);
+    // 사실 항목 말투(위 restyleFacts) — '오늘의 수업' 없이 같은 값으로 조립한 사실 글을 지금 다시 써 두고, AI 호출과 나란히 돈다.
+    // 최종 글엔 아래에서 옮긴다(transplantRestyle — 항목 글이 글자 그대로 같을 때만). restyleFacts는 던지지 않는다.
+    const factOriginal = pilot ? composePilot("", videoReceipt, varietyOf(prevNotes)) : "";
+    const factRestyledP: Promise<string> = pilot ? restyleFacts(factOriginal) : Promise.resolve("");
     const styleBlock = mentStyle ? mentStyleDirective(mentStyle) : "";
     // 추세엔 **어조·문장 결만** — 선생님 표현·마무리("다음 시간에 ~하겠습니다")까지 붙이면 추세 금지(계획)에 걸려 버려진다(2026-10-16).
     const toneBlock = mentStyle ? mentStyleToneDirective(mentStyle) : "";
@@ -1817,7 +1852,11 @@ export async function generateReportComment(
     // 시범 대상 — 항목별 글(진도 → 테스트 → 태도 → 과제 → 이해도(AI) → 오늘 과제 → 선생님 한마디).
     // 이해도 글은 후보정을 거친다 — 점수 숫자·규칙 혼잣말이 든 문장은 빼고, 다 빠지면 정해진 문장으로(2026-10-23 실측 누출).
     const comment = pilot
-      ? composePilot(cleanPilotUnderstanding(res.comment, safeInput.understanding ?? []), videoReceipt, varietyOf(prevNotes))
+      ? transplantRestyle(
+          composePilot(cleanPilotUnderstanding(res.comment, safeInput.understanding ?? []), videoReceipt, varietyOf(prevNotes)),
+          factOriginal,
+          await factRestyledP,
+        )
       : body;
     if (res.dropped)
       console.warn(
