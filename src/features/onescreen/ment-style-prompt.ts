@@ -11,7 +11,8 @@ import type { MentStyleProfile, StyleSample } from "./ment-style";
 // v3(재리뷰 2026-09-12): closing에 인사말을 적지 못하게 — 알림장 규칙(끝인사 금지)과 말투 지침이 같은 프롬프트에서 충돌하지 않게 원천에서 막는다.
 // v4(첫 빌드 2026-09-12): AI 템플릿의 획일성 문구("오늘은"·"오늘 과제는")를 품은 표현을 뺀다(dropTemplatePhrases) — 코드 변경이라 버전을 올려 다시 접는다.
 // v5(2026-10-16): 자동작성 원문(0370a)을 수정 표본 옆에 싣고 '늘 고치는 것'(edits)을 받는다 — 원장 *"한계를 수정할 수 있을까"*.
-export const MENT_STYLE_PROMPT_VERSION = 5;
+// v6(2026-10-28): 표본에서 '■ 사랑의 한마디' 항목을 뺀다(stripLoveNote) — 원장 *"사랑의 한마디를 제외한 … 어투를 학습"*.
+export const MENT_STYLE_PROMPT_VERSION = 6;
 
 /**
  * 표본을 번호 매겨 싣고 JSON 한 덩어리를 받는다.

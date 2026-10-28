@@ -16,6 +16,7 @@ import {
   parseMentStyleProfile,
   pickStyleSamples,
   profileMentionsAny,
+  stripLoveNote,
   styleCorpusHash,
   type StyleSampleRow,
 } from "../ment-style";
@@ -54,14 +55,15 @@ async function fetchTeacherCorpus(admin: SupabaseClient, tenantId: string, teach
       .order("id")
       .limit(limit);
     if (error) throw new Error(`코퍼스 조회 실패(${source}): ${error.message}`);
-    return ((data ?? []) as CorpusRow[]).map<StyleSampleRow>((r) => ({ id: r.id, notes: r.notes, source, createdAt: r.created_at, studentId: r.student_id }));
+    // '■ 사랑의 한마디'는 표본에서 뗀다(stripLoveNote, 2026-10-28) — 보고서 말투만 배운다.
+    return ((data ?? []) as CorpusRow[]).map<StyleSampleRow>((r) => ({ id: r.id, notes: stripLoveNote(r.notes), source, createdAt: r.created_at, studentId: r.student_id }));
   };
   // 두 출처는 서로 독립 — 직렬 금지(B4). 🔴 상한은 **중복 제거 앞**의 행 수라 넉넉해야 한다 — 첫 빌드(2026-09-12)에서 정형 문장 21개를
   //    돌려쓰는 강사(226행 → 서로 다른 글 21개)가 최신 80행만 받아 12건 미만으로 떨어져 '표본 부족'이 됐다. notes는 짧아 페이로드가 작다.
   const [manual, edited] = await Promise.all([pull("manual", MENT_STYLE_MAX_SAMPLES * 4), pull("auto_edited", MENT_STYLE_MAX_EDITED * 4)]);
   // 수정 표본의 자동작성 원문(0370a) — 원문 ↔ 최종을 견줘 '늘 고치는 것'을 뽑는다. 표가 없으면 빈 맵(종전대로 최종 글만).
   const drafts = await loadMentAiDrafts(admin, tenantId, edited.map((r) => r.id));
-  return [...manual, ...edited.map((r) => ({ ...r, draft: drafts.get(r.id) ?? null }))];
+  return [...manual, ...edited.map((r) => ({ ...r, draft: stripLoveNote(drafts.get(r.id) ?? null) }))];
 }
 
 /**
@@ -77,7 +79,14 @@ async function fetchTeacherCorpus(admin: SupabaseClient, tenantId: string, teach
 export async function rebuildTenantMentStyles(
   admin: SupabaseClient,
   tenantId: string,
-  opts: { builtBy: string; budgetMs: number; force?: boolean; concurrency?: number },
+  opts: {
+    builtBy: string;
+    budgetMs: number;
+    force?: boolean;
+    concurrency?: number;
+    /** 이 강사들만 다시 접는다(저장 직후 갱신 — `refreshTeacherMentStyle`). 없으면 창 안에서 멘트를 쓴 계정 전원. */
+    teacherIds?: readonly string[];
+  },
 ): Promise<RebuildSummary> {
   const startedAt = Date.now();
   const since = new Date(startedAt - MENT_STYLE_WINDOW_DAYS * 86_400_000).toISOString();
@@ -91,7 +100,8 @@ export async function rebuildTenantMentStyles(
   const storedHash = new Map((existing.data ?? []).map((r) => [r.teacher_id as string, r.corpus_hash as string]));
 
   // 창 안에서 라벨 있는 멘트를 쓴 계정 — 세려고 전건을 받지 않는다(B2): 컬럼 하나만, 페이징.
-  const authors = await fetchAllPaged<{ created_by: string | null }>((from, to) =>
+  // 강사를 정해 주면(저장 직후 갱신) 그 강사만 — 표본이 모자라면 아래에서 '표본 부족'으로 끝난다.
+  const authors = opts.teacherIds ? opts.teacherIds.map((id) => ({ created_by: id })) : await fetchAllPaged<{ created_by: string | null }>((from, to) =>
     admin
       .from("lesson_reports")
       .select("created_by")
@@ -192,6 +202,41 @@ export async function rebuildTenantMentStyles(
   });
   await Promise.all(workers);
   return { tableMissing: false, teachers };
+}
+
+/** 저장 직후 갱신의 최소 간격 — 한 강사가 연달아 저장할 때 AI를 매번 부르지 않는다. */
+export const MENT_STYLE_SAVE_REFRESH_MS = 60 * 60 * 1000;
+/** 같은 인스턴스 안의 마지막 시도 — 프로파일 행이 안 바뀌는 결과(표본 부족·이름 섞임 거절·실패)에도 저장마다 다시 돌지 않게. */
+const lastSaveRefresh = new Map<string, number>();
+
+/**
+ * **저장 직후** 그 강사의 말투 프로파일을 다시 접는다(원장 2026-10-28 *"추가 수정을 하면 그에 맞게 매번 학습하도록"*).
+ * 원스크린 저장(직접 작성·자동작성 후 수정)이 응답 뒤에(`after`) 부른다 — 주 1회 cron은 그대로 안전망.
+ * 🔑 마지막으로 접은 지 `MENT_STYLE_SAVE_REFRESH_MS`가 안 됐으면 건너뛴다(반 하나를 연달아 저장해도 AI는 한 번).
+ *    표본이 그대로면(지문 같음) AI를 부르지 않는 것은 rebuild의 규칙 그대로다.
+ * 🔴 던지지 않는다 — 저장은 이미 끝났다. 실패는 로그만.
+ */
+export async function refreshTeacherMentStyle(admin: SupabaseClient, tenantId: string, teacherId: string, now = Date.now()): Promise<void> {
+  const key = `${tenantId}:${teacherId}`;
+  if (now - (lastSaveRefresh.get(key) ?? 0) < MENT_STYLE_SAVE_REFRESH_MS) return;
+  lastSaveRefresh.set(key, now);
+  try {
+    const { data, error } = await admin
+      .from("teacher_ment_styles")
+      .select("built_at")
+      .eq("tenant_id", tenantId)
+      .eq("teacher_id", teacherId)
+      .maybeSingle();
+    if (error) {
+      if (!isMentStyleTableMissingError(error)) reportWarning("말투 프로파일 조회 실패(저장 직후 갱신)", { scope: "refreshTeacherMentStyle", teacherId, message: error.message });
+      return;
+    }
+    const builtAt = data?.built_at ? Date.parse(data.built_at as string) : NaN;
+    if (Number.isFinite(builtAt) && now - builtAt < MENT_STYLE_SAVE_REFRESH_MS) return;
+    await rebuildTenantMentStyles(admin, tenantId, { builtBy: "save", budgetMs: 45_000, teacherIds: [teacherId], concurrency: 1 });
+  } catch (e) {
+    reportWarning("말투 프로파일 저장 직후 갱신 실패", { scope: "refreshTeacherMentStyle", teacherId, message: e instanceof Error ? e.message : String(e) });
+  }
 }
 
 /** 감사로그·응답용 집계 — "갱신 2 · 변동 없음 4 · 표본 부족 1". */

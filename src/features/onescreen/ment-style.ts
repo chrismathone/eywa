@@ -235,3 +235,14 @@ export function isMentStyleTableMissingError(err: { code?: string | null; messag
   const m = err.message ?? "";
   return m.includes("teacher_ment_styles") && /does not exist|schema cache|could not find/i.test(m);
 }
+
+/**
+ * 표본 글에서 **'■ 사랑의 한마디' 항목을 뗀다**(원장 2026-10-28 *"사랑의 한마디를 제외한 수정이 많은 애들은 … 어투를 학습"*).
+ * 사랑의 한마디는 선생님이 직접 쓰는 응원 글이라 보고서 말투와 결이 다르고, 프로파일이 그 문구를 '선생님 표현'으로 배우면
+ * 자동작성 본문에 응원 문구가 섞인다. 항목 제목부터 다음 '■' 항목(없으면 글 끝)까지 지운다. 옛 형식 글(항목 없음)은 그대로.
+ */
+export function stripLoveNote(text: string | null | undefined): string | null {
+  if (text == null) return null;
+  const out = text.replace(/(^|\n)■[ \t]*사랑의 한마디[^\n]*(?:\n(?!■)[^\n]*)*/g, "").trim();
+  return out;
+}

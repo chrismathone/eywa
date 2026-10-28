@@ -66,6 +66,7 @@ import { attachExamReportBeforeSend } from "@/features/integrations/todays-math/
 import { resolveMentSource, type MentSource } from "../ment-source";
 import { mentSourceColumnReady } from "./ment-source-db";
 import { recordMentAiDraft } from "./ment-draft-db";
+import { refreshTeacherMentStyle } from "./ment-style-build";
 import { MENT_STYLE_EXCLUDED_SUBJECTS } from "../ment-style";
 import { videoHomeworkColumnReady } from "@/features/video-homework/server/assignments";
 import { videoHomeworkKept } from "@/features/video-homework/report-owner";
@@ -539,6 +540,17 @@ export async function saveLessonReport(
   if (mentSourceFinal === "auto_edited" && input.mentSource === "auto_edited" && aiDraft && !MENT_STYLE_EXCLUDED_SUBJECTS.includes(input.subject ?? "")) {
     const draftRow = { tenantId: user.tenantId, reportId: data.id, teacherId: data.created_by ?? user.id, draft: aiDraft };
     after(() => recordMentAiDraft(createAdminClient(), draftRow));
+  }
+  // 선생님이 직접 쓰거나 고쳐 저장한 글은 **그때마다** 그 강사 말투 프로파일을 다시 접는다(원장 2026-10-28 *"추가 수정을 하면 그에 맞게
+  // 매번 학습"*) — 응답 뒤에 · 강사당 1시간에 한 번까지(refreshTeacherMentStyle). 원문 기록(위)이 먼저 끝나야 '늘 고치는 것'에 든다.
+  if ((mentSourceFinal === "manual" || mentSourceFinal === "auto_edited") && !MENT_STYLE_EXCLUDED_SUBJECTS.includes(input.subject ?? "")) {
+    const styleTenant = user.tenantId;
+    const styleTeacher = data.created_by ?? user.id;
+    after(async () => {
+      // 원문 기록 after가 먼저 등록돼 먼저 돈다 — 그래도 순서를 기대지 않게 잠깐 뒤에 읽는다.
+      await new Promise((r) => setTimeout(r, 1500));
+      await refreshTeacherMentStyle(createAdminClient(), styleTenant, styleTeacher);
+    });
   }
 
   /**

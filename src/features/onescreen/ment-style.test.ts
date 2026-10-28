@@ -9,6 +9,7 @@ import {
   parseMentStyleProfile,
   pickStyleSamples,
   profileMentionsAny,
+  stripLoveNote,
   styleCorpusHash,
   type StyleSampleRow,
 } from "./ment-style";
@@ -305,5 +306,18 @@ describe("isMentStyleTableMissingError", () => {
     expect(isMentStyleTableMissingError({ code: "42501", message: "permission denied for table teacher_ment_styles" })).toBe(false);
     expect(isMentStyleTableMissingError({ code: "23505", message: "duplicate" })).toBe(false);
     expect(isMentStyleTableMissingError(null)).toBe(false);
+  });
+});
+
+describe("stripLoveNote — 말투 표본에서 '사랑의 한마디' 항목을 뗀다(원장 2026-10-28)", () => {
+  it("맨 끝 항목이면 그 뒤를 전부 뗀다", () => {
+    expect(stripLoveNote("■ 진도\n분수를 배웠습니다.\n\n■ 사랑의 한마디\n늘 성실한 모습이 멋집니다.\n둘째 줄")).toBe("■ 진도\n분수를 배웠습니다.");
+  });
+  it("가운데 항목이면 다음 ■ 항목은 남긴다", () => {
+    expect(stripLoveNote("■ 수업 평가\n표\n\n■ 사랑의 한마디\n응원\n\n■ 단어 학습 현황\n[단어백분위]")).toBe("■ 수업 평가\n표\n\n■ 단어 학습 현황\n[단어백분위]");
+  });
+  it("옛 형식(항목 없음)·빈 값은 그대로", () => {
+    expect(stripLoveNote("오늘은 분수를 배웠습니다.")).toBe("오늘은 분수를 배웠습니다.");
+    expect(stripLoveNote(null)).toBeNull();
   });
 });

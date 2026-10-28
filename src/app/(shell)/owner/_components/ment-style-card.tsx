@@ -85,7 +85,7 @@ export function MentStyleCard({ initial, canEdit = true }: { initial: MentStyleV
                 <span className="text-foreground text-sm font-bold">{r.teacherName}</span>
                 <span className="text-text-dim text-xs">
                   표본 {r.sampleCount}건(직접 {r.manualCount} · 수정 {r.editedCount}) · {when(r.builtAt)} 갱신
-                  {r.builtBy === "cron" ? " · 자동" : ""}
+                  {r.builtBy === "cron" ? " · 자동" : r.builtBy === "save" ? " · 저장 때 자동" : ""}
                 </span>
               </button>
               {open === r.teacherId ? (
