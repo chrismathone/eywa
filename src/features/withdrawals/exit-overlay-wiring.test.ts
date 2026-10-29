@@ -28,7 +28,8 @@ const HINT = read("src/app/(shell)/timetable/_components/exit-overlay/exit-overl
 
 describe("시간표 X 겹침 배선", () => {
   it("🔴 줄의 출처 = 운영실 '퇴원생' 기간 조회 + 퇴원관리 수강종료 판정 · 달 창 = 퇴원관리 '이번 달'과 같은 함수", () => {
-    expect(SERVER).toContain("getWithdrawalsInWindow(from, to)");
+    // 시간표 X는 강사평가 퇴원율과 같은 달(퇴원일) — 퇴원월(수강료 기준)이 아니다.
+    expect(SERVER).toContain('getWithdrawalsInWindow(from, to, { basis: "date" })');
     expect(SERVER).toContain("getSubjectEndedStudents({ endedWithin: { from, to } })");
     expect(SERVER).toContain("withdrawalMonthWindow(m, today)");
   });

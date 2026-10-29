@@ -162,7 +162,7 @@ export function filterListItems(items: readonly ListItem[], f: ListFilters, wind
     (i) =>
       (f.status === "all" || i.status === f.status) &&
       (!f.unmapped || i.link === "unmapped") &&
-      inRange({ date: i.date, systemBulk: false }, window) &&
+      inRange({ countDate: i.date, systemBulk: false }, window) &&
       (f.subject === "all" || i.subjects.includes(f.subject)) &&
       (f.teacher === "all" || i.teacher === f.teacher) &&
       (!term || i.search.toLowerCase().includes(term)),

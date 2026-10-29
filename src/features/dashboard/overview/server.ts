@@ -261,7 +261,8 @@ async function monthWithdrawals(
     month,
     rows: includeSubjectEnds(rows
       .filter((row) =>
-        inWithdrawalWindow({ withdrawnAt: row.withdrawnAt, systemBulk: false }, win.from, win.to),
+        // 퇴원월 = 수강료를 낸 마지막 달(`exitDate`, 원장 2026-10-29) — 퇴원관리 '이번 달'과 같은 판정.
+        inWithdrawalWindow({ withdrawnAt: row.exitDate, systemBulk: false }, win.from, win.to),
       )
       .flatMap((row) => (row.exitClasses.length ? row.exitClasses : [{
         subject: row.lastClassSubject,
@@ -297,7 +298,7 @@ async function monthEarlyExits(
   const subjectsOf = (row: WindowWithdrawal) =>
     row.exitClasses.length ? row.exitClasses.map((c) => c.subject) : row.lastClassSubject ? [row.lastClassSubject] : [];
   const inMonth = (row: WindowWithdrawal) =>
-    inWithdrawalWindow({ withdrawnAt: row.withdrawnAt, systemBulk: false }, win.from, win.to);
+    inWithdrawalWindow({ withdrawnAt: row.exitDate, systemBulk: false }, win.from, win.to);
   return {
     month,
     months,
@@ -312,9 +313,9 @@ async function monthEarlyExits(
     })),
     // 달마다 줄은 '등록·퇴원 추이'의 퇴원 막대와 같은 모집단 — 사유 없는 단체 장부 정리는 뺀다(원장 2026-10-20 · 3개월 내 퇴원 ⊆ 그 달 퇴원).
     history: rows
-      .filter((row) => !row.cleanup && row.withdrawnAt < win.from && months.includes(row.withdrawnAt.slice(0, 7)))
+      .filter((row) => !row.cleanup && row.exitDate < win.from && months.includes(row.exitDate.slice(0, 7)))
       .map((row) => ({
-        month: row.withdrawnAt.slice(0, 7),
+        month: row.exitDate.slice(0, 7),
         days: tenureDays(row.enrolledAt, row.withdrawnAt),
         subjects: subjectsOf(row),
       })),
@@ -411,7 +412,8 @@ export async function loadMonthlyChanges(
     monthlyChanges(
       today,
       joined.filter((r) => !pred || inSlice(pred, subjectsOf.get(r.id) ?? [])).map((r) => r.enrolled_at),
-      exits.filter((r) => !pred || inSlice(pred, exitSubjects(r))).map((r) => r.withdrawnAt),
+      // 퇴원 막대의 달 = 퇴원월(수강료를 낸 마지막 달 — `exitDate`, 원장 2026-10-29).
+      exits.filter((r) => !pred || inSlice(pred, exitSubjects(r))).map((r) => r.exitDate),
       months,
     ).map((r) => (startedFrom && r.month >= startedFrom ? { ...r, startedOnly: true } : r));
 }

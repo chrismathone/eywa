@@ -12,6 +12,7 @@ import { isBookkeepingOnlyExit, isCleanupExit, isSystemBulkWithdrawal } from "..
 import { endedTogether, lastEndedByStudent, pickLastEnded, type EndedClassRef } from "../window";
 import { withdrawalSubjects } from "../exit-rows";
 import { lastClassOf, loadEndedEnrollments } from "./window";
+import { loadExitCountDates } from "./exit-month";
 
 // Re-export common types so existing callers don't need to switch import paths
 export type {
@@ -28,6 +29,8 @@ export type WithdrawalRow = {
   grade: string | null;
   enrolledAt: string | null;
   withdrawnAt: string | null;
+  /** 기간 판정 날짜 — 퇴원월(수강료를 낸 마지막 달, `exit-month.ts`)이 앞 달이면 그 달 말일. 목록만 채운다(상세 화면은 안 채운다). */
+  exitDate?: string | null;
   lastClassName: string | null;
   lastClassSubject: string | null;
   /** 마지막 수강 반의 영어 프로그램 구분(0176a) — 퇴원생 프로그램 판정(`withdrawalProgram`) 재료. 상세 화면은 안 채운다. */
@@ -71,7 +74,7 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
     supabase
       .from("students")
       .select(
-        `id, name, school, grade, enrolled_at, withdrawn_at, withdrawal_metadata, notes`,
+        `id, tenant_id, name, school, grade, enrolled_at, withdrawn_at, withdrawal_metadata, notes`,
       )
       // 🔴 퇴원 **예약**(상태 재원·휴원 + 퇴원일)은 싣지 않는다 — 퇴원일 전까지 재원이다(원장 2026-09-28). 그날 cron이
       //    퇴원 처리하면 이 목록에 들어온다. 싣으면 전체 퇴원 수·사유·상담·추이에 미리 섞인다(리뷰 2026-09-28).
@@ -90,7 +93,11 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
 
   // 마지막 종료 수강 = 운영실 '퇴원생'과 **같은 조회·같은 선택**(window.ts) — 청크 × 페이징이라 청크 안 1000행
   // 절단도 없고, 종료일이 같은 두 줄은 결정적 tie-break로 고른다(조회마다 다른 반이 뽑히지 않게).
-  const ended = await loadEndedEnrollments(supabase, students.map((s) => s.id));
+  // 퇴원월(수강료를 낸 마지막 달, 원장 2026-10-29)은 수강과 따로 읽는다(B4).
+  const [ended, exitDates] = await Promise.all([
+    loadEndedEnrollments(supabase, students.map((s) => s.id)),
+    loadExitCountDates(students.map((s) => ({ id: s.id, tenantId: s.tenant_id, withdrawnAt: s.withdrawn_at }))),
+  ]);
   const lastByStudent = lastEndedByStudent(ended);
   const endedByStudent = new Map<string, { endDate: string | null; subject: string | null }[]>();
   for (const e of ended) {
@@ -121,6 +128,7 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
       grade: s.grade,
       enrolledAt: s.enrolled_at,
       withdrawnAt: s.withdrawn_at,
+      exitDate: exitDates.get(s.id) ?? null,
       lastClassName: last.className,
       lastClassSubject: last.subject,
       lastClassEnglishTrack: last.englishTrack,

@@ -244,7 +244,7 @@ export default async function EnrollmentPage({
           intakePromise,
           // 관리현황 '등록 후 퇴원' — 퇴원관리·운영실과 같은 퇴원 목록(같은 원본). 기간 첫날부터 오늘까지(보는 해 뒤에 퇴원해도 센다).
           canSeeExits
-            ? getWithdrawalsInWindow(`${span.from}-01-01`, today).catch((error: unknown) => {
+            ? getWithdrawalsInWindow(`${span.from}-01-01`, today, { basis: "date" }).catch((error: unknown) => {
                 reportWarning("관리현황 퇴원 조회 실패", { scope: "enrollment.managementExits", cause: error instanceof Error ? error.message : String(error) });
                 return null;
               })

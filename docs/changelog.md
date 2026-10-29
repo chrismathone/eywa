@@ -1,5 +1,11 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-29 — 퇴원월 = 수강료를 낸 마지막 달(운영실·퇴원관리·퇴원생 시트)
+
+- 원장 *"퇴원처리는 10월 1일이지만 9월까지 수강료를 냈으면 9월 퇴원생 · 10월 내고 일부 환불했으면 10월 퇴원 · 대시보드 및 퇴원관리 시트 연동도 동일"* — 규칙 한 벌 [`exit-month.ts`](../src/features/withdrawals/exit-month.ts)(낸 달 = 수업료 청구의 수업 순액(낸 돈 − 진행 중 환불, `lessonPaid`) > 0 · 취소·환불 상태 제외 · 퇴원일의 달 이하에서 가장 늦은 달 · 없으면 퇴원일의 달) + 로더 [`server/exit-month.ts`](../src/features/withdrawals/server/exit-month.ts)(admin + `tenant_id` — 청구 표는 수납 권한자만 보여 사람마다 갈리지 않게).
+- 소비처: `getWithdrawalsInWindow`(기본 `basis: "tuition"` · 창 끝 제한 없앰 · 새 칸 `exitDate`) → 운영실 퇴원생 카드·팝업·등록·퇴원 추이·3개월 내 퇴원 달마다 줄·원생 통계 · 원스크린 이달 퇴원(`getMonthlyEnrollmentChanges`) · 퇴원관리 `ExitRow.countDate`(기간 필터·이번 달·월별 추이·올해 카드 · 줄에 'N월 퇴원' 표시) · 퇴원생 시트 탭(학생이 퇴원한 경우만 — 수강종료는 종료일의 달). 화면의 퇴원일·재원 일수는 실제 날짜 그대로.
+- 그대로 둔 곳: 시간표 X(`basis: "date"` — 강사평가 퇴원율과 같은 달) · 관리현황 '등록 후 퇴원'(`basis: "date"`) · 원스크린 4주 추이·재원생 추이 되감기(퇴원일) · 수강종료(종료일). 실측(2026-03~ 퇴원 226명): 7월에 처리한 106명 중 35명이 앞 달분(대부분 6월).
+
 ## 2026-10-29 — 원생 통계: '지난 기록' 카드를 재원생·강좌수·등록퇴원 추이에 합침
 
 - 원장 *"지난기록 말고 그냥 재원생과 강좌수 퇴원생에 반영"* — 카드 없앰(`history-board.tsx`·`history-table.tsx` 삭제) · 세 추이가 지난 기록 구간을 **같은 선**으로 잇고 기준이 바뀌는 달에 세로 점선. 재원생 과목 선·강좌수(처음)도 과목 묶음 청구 기준 추정으로 잇는다(`joined.ts` `historyGroupPoints`·`historyCoursePoints`). 새 칸 `payingEnglish`(인재원 영어 ∪ EiE). 상세 = [decisions/students.md](decisions/students.md).

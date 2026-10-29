@@ -102,7 +102,7 @@ import type { BreakdownAxis } from "@/features/withdrawals/breakdown";
 export const metadata = { title: "퇴원관리 — 에이와" };
 
 /** 최근 12개월 추이(기간 축 제외 모집단) — 모듈 함수라 RSC 본문 아님(new Date 허용, #11). */
-function monthlyExits(rows: { date: string | null }[]): WithdrawalMonthPoint[] {
+function monthlyExits(rows: { countDate: string | null }[]): WithdrawalMonthPoint[] {
   // 🔴 달 축은 **KST** — `new Date().getMonth()`는 서버가 UTC라 매달 1일 새벽에 12개월 창이 한 달 밀린다.
   const thisMonth = kstMonth();
   const months: { key: string; point: WithdrawalMonthPoint }[] = [];
@@ -112,8 +112,9 @@ function monthlyExits(rows: { date: string | null }[]): WithdrawalMonthPoint[] {
   }
   const idx = new Map(months.map((m, i) => [m.key, i]));
   for (const r of rows) {
-    // `date`는 이미 KST 달력 날짜다(퇴원일·수강 종료일 둘 다 date 컬럼) — UTC로 다시 풀지 않는다.
-    const i = idx.get(r.date?.slice(0, 7) ?? "");
+    // `countDate`는 이미 KST 달력 날짜다(퇴원월 기준 날짜·수강 종료일) — UTC로 다시 풀지 않는다.
+    // 퇴원은 퇴원월(수강료를 낸 마지막 달, 원장 2026-10-29)의 막대에 선다.
+    const i = idx.get(r.countDate?.slice(0, 7) ?? "");
     if (i != null) months[i]!.point.count++;
   }
   return months.map((m) => m.point);
@@ -557,7 +558,7 @@ export default async function WithdrawalsPage({
   //    항상 수치에 관한 구체적인 언급이 필요"*). 위 카드 둘(올해 퇴원·올해 수강종료)은 **학원 전체**(필터 무관),
   //    이번 달·상담 미완료·차트는 걸린 필터를 `scopeText`로 밝힌다.
   const yearStart = `${today.slice(0, 4)}-01-01`;
-  const inYear = (r: ExitRow) => !!r.date && r.date >= yearStart && r.date <= today;
+  const inYear = (r: ExitRow) => !!r.countDate && r.countDate >= yearStart && r.countDate <= today;
   const yearWithdrawn = all.filter((r) => r.kind === "withdrawn" && !r.systemBulk && inYear(r)).length;
   const yearBulk = all.filter((r) => r.kind === "withdrawn" && r.systemBulk && inYear(r)).length;
   const yearEnded = all.filter((r) => r.kind === "subject-ended" && inYear(r)).length;
@@ -983,6 +984,8 @@ function ExitRowItem({ row: r, labelOf, today, teacher }: {
 }) {
   // 오늘 이후 날짜 = 퇴원 예정(아직 다니는 중) — '오늘'이라 적으면 거짓이다.
   const ago = r.date && r.date > today ? "예정" : relativeDayKo(r.date, today);
+  // 퇴원월이 퇴원일의 달과 다르면(수강료를 앞 달까지만 냄 — 원장 2026-10-29) 어느 달로 셌는지 적는다.
+  const countedMonth = r.countDate && r.date && r.countDate.slice(0, 7) !== r.date.slice(0, 7) ? `${Number(r.countDate.slice(5, 7))}월 퇴원` : null;
   const where = schoolGradeLabel(r.school, r.grade);
   const ended = r.kind === "subject-ended";
   const reason = reasonFacetOf(r);
@@ -1037,7 +1040,7 @@ function ExitRowItem({ row: r, labelOf, today, teacher }: {
           <>
             <span className="text-foreground num justify-self-end text-sm font-bold whitespace-nowrap">{r.date ?? "—"}</span>
             <span className="text-text-faint num hidden justify-self-end text-sm whitespace-nowrap sm:inline">
-              {ago === r.date ? "" : ago}
+              {countedMonth ?? (ago === r.date ? "" : ago)}
             </span>
           </>
         )}
