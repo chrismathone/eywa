@@ -12,6 +12,10 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-10-29 월간 계획서 제목을 그 달만 고치기 (s2_0007 · ✅ 운영 적용 2026-10-29 · CLI)
+
+`s2_0007_month_plan_title.sql` — 원장 *"수업명을 그냥 커스텀 수정할 수 있게"*(그 달만 · 비우면 수업명을 따른다). `class_month_plan_cells_kind_ck`에 `'title'`을 더한다(꼬리말 0240a와 같은 길 — 새 표 없음 · 라벨월 1일 행). 앱은 미적용이어도 읽기는 그대로(행이 없으니 수업명) · 저장만 거절. 적용 확인: 제약에 title · 기존 칸 927 그대로. 되돌리기 = `scripts/_oneoff/revert-s2_0007-month-plan-title.sql`(title 행을 지운 뒤 옛 CHECK).
+
 ## 2026-10-28 미룸·당김 표식 출처: 시간표 이동이 비운 회차는 원래 계획에도 반영 (s2_0005 · ✅ 운영 적용 2026-10-28)
 
 `s2_0005_lesson_shift_origin.sql` — 원장 *"작업해"*(3차 적대 리뷰 4번: 반 블록 옮기기가 비는 회차에 쓴 칸 미룸 표식이 '원래 계획' 기준 화면 — 달력 판정 칩 · 비교 모달 · 현황 — 엔 반영되지 않아 그 회차가 '미작성', 뒤 칸이 책 끝까지 '1차수 늦음'으로 잡혔다). `class_lesson_shifts.origin text not null default 'manual'` + check(`manual` · `timetable_move`). 반 옮기기가 쓰는 표식만 `timetable_move` → `month-plan.ts`가 원래 계획에도 그 칸을 건너뛴다(kind는 그대로 skip — 일정·릴레이·토글 무변). 앱은 칸이 없어도 돈다(읽기·쓰기 모두 칸 없이 다시 시도) — 적용 순서 무관. 지난 데이터 채움 없음(반 옮기기 운영 저장 0건). 되돌리기 = `scripts/_oneoff/revert-s2_0005-lesson-shift-origin.sql`.

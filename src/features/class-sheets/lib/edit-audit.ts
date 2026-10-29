@@ -41,7 +41,7 @@ export type MarkEditField = (typeof MARK_EDIT_FIELDS)[number];
 export const GOAL_EDIT_FIELDS = ["textbook", "targetProgress"] as const;
 export type GoalEditField = (typeof GOAL_EDIT_FIELDS)[number];
 /** MP에서 **글로 적는** 칸 — `off`(휴강 표식)는 칸이 아니라 토글이라 여기 없다. */
-export const MP_TEXT_KINDS = [...MP_ALL_COLUMNS, "footer"] as const;
+export const MP_TEXT_KINDS = [...MP_ALL_COLUMNS, "footer", "title"] as const;
 export type MpTextKind = (typeof MP_TEXT_KINDS)[number];
 /**
  * 자리(JJ) 출석부 칸 — 영어 시트 학생 기록과 **같은 행·같은 컬럼**이라 칸 이름도 학생 기록 칸 이름을 쓴다
@@ -293,7 +293,7 @@ export const MONTH_MEMO_LABEL = "특이사항 메모";
 
 /** MP 칸 이름 — 값 칸은 원본 문서 표기(`MP_COLUMN_LABEL`), 문서 아래 한 덩어리는 '하단 문구'. */
 export function mpCellLabel(colKind: MpTextKind): string {
-  return colKind === "footer" ? "하단 문구" : MP_COLUMN_LABEL[colKind];
+  return colKind === "footer" ? "하단 문구" : colKind === "title" ? "제목" : MP_COLUMN_LABEL[colKind];
 }
 
 // ── MP 토글(누름이 곧 결심) ─────────────────────────────────────────────────

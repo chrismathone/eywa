@@ -5,6 +5,7 @@ import {
   MP_COLUMN_LABEL,
   mpActiveDates,
   mpCellKey,
+  mpCustomTitle,
   mpCellMapOf,
   mpColumnsForDow,
   mpDayIsOff,
@@ -108,6 +109,19 @@ describe("mpActiveDates — 배정이 있고 휴강이 아닌 날", () => {
     const hasClass = (d: string) => d !== "2026-09-02";
     const isOff = (d: string) => d === "2026-09-25";
     expect(mpActiveDates(dates, hasClass, isOff)).toEqual(["2026-09-01"]);
+  });
+});
+
+describe("계획서 제목 — 그 달만 고친 제목(원장 2026-10-29)", () => {
+  it("고친 제목은 적은 그대로 · 비거나 공백이면 수업명을 따른다(레벨 풀네임)", () => {
+    const cells = { [mpCellKey("2026-11-01", "title")]: "  Let's Express 2 (새 반)  " };
+    expect(mpCustomTitle(cells, "2026-11")).toBe("Let's Express 2 (새 반)");
+    expect(mpDocTitle("LE1", "2026-11", mpCustomTitle(cells, "2026-11"))).toBe("Let's Express 2 (새 반) (November 2026)");
+    expect(mpCustomTitle({ [mpCellKey("2026-11-01", "title")]: "   " }, "2026-11")).toBeNull();
+    expect(mpCustomTitle({}, "2026-11")).toBeNull();
+    expect(mpDocTitle("LE1", "2026-11", null)).toBe("Let's Express 1 (November 2026)");
+    // 그 달만 — 다른 달의 제목 칸은 보지 않는다.
+    expect(mpCustomTitle(cells, "2026-10")).toBeNull();
   });
 });
 

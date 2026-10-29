@@ -9,6 +9,7 @@ import {
   mpColumnsForDow,
   mpDayIsOff,
   mpDayKindOf,
+  mpCustomTitle,
   mpDocTitle,
   mpOffLabel,
   mpOffOverrideOf,
@@ -109,7 +110,9 @@ export function MonthPlanPaper({ data }: { data: MonthPlanPrintData }) {
   const dataColumnCount = Object.values(columnsByDow).reduce((n, c) => n + c.length, 0);
   const docWidth = mpDocWidth(dataColumnCount);
   // 제목은 두 줄(반 이름 / 월)이고, 반 이름은 제목 칸 폭에 맞춰 단계적으로 줄어든다.
-  const title = mpTitleLines(month.className, month.month);
+  // 반이 고친 제목(그 달만) — 없으면 수업명(화면과 같은 함수).
+  const customTitle = mpCustomTitle(cells, month.month);
+  const title = mpTitleLines(month.className, month.month, customTitle);
   const titleFit = mpFitTitle(title.name, title.period, mpTitleBoxPx(dataColumnCount));
 
   return (
@@ -133,7 +136,7 @@ export function MonthPlanPaper({ data }: { data: MonthPlanPrintData }) {
           <h1
             className="flex flex-col items-center justify-center px-2 text-center"
             style={{ ...mpGridBorder(), ...mpTitleStyle() }}
-            title={mpDocTitle(month.className, month.month)}
+            title={mpDocTitle(month.className, month.month, customTitle)}
           >
             <span style={mpTitleNameStyle(titleFit.nameSize)}>{title.name}</span>
             {title.period ? (

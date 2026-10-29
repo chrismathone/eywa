@@ -1257,6 +1257,11 @@ export const SHEET_DICT = {
     en: "This class has no assigned lessons this month — there are no days to plan.",
   },
   "mp.footerEmpty": { ko: "눌러서 하단 문구를 적으세요", en: "Click to write the footer text" },
+  // 계획서 제목 — 이 달만 고친다(원장 2026-10-29). 비우면 수업명을 따른다.
+  "mp.titleAria": { ko: "이 달 계획서 제목", en: "Title of this month's plan" },
+  "mp.titleDefault": { ko: "수업명을 따릅니다 — 눌러서 이 달 제목만 고칩니다", en: "Follows the class name — click to change this month's title only" },
+  "mp.titleCustom": { ko: "직접 고친 제목입니다(수업명이 바뀌어도 그대로) — 눌러서 고치거나 수업명 따라가기", en: "Custom title (stays even if the class name changes) — click to edit or follow the class name" },
+  "mp.titleFollow": { ko: "수업명 따라가기", en: "Follow class name" },
   "mp.ebook.dropConfirm": {
     ko: "{dow}의 e-book 열을 내리면 적어 둔 {n}칸이 함께 지워집니다. 계속할까요?",
     en: "Dropping the e-book column for {dow} also deletes the {n} cells written there. Continue?",
