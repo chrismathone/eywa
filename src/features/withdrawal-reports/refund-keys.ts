@@ -27,6 +27,25 @@ export function lineIds(raw: unknown[]): string[] {
   });
 }
 
+/**
+ * 수납 줄이 어느 반 몫인가 — 줄에 `classId`가 있으면 그것, 없으면 **반 이름으로 시작하는** 줄(뒤에 공백·끝). makeedu 수납명은
+ * 반 이름 뒤에 강사·요일·시간이 붙는다(김덕현 11월: 반 '중등E_중2 심화' ↔ 줄 '중등E_중2 심화 Jane 월수목 16:20-18:10' — 원장 2026-10-29).
+ * 여러 반 이름이 맞으면 가장 긴 이름(‘A’와 ‘A 심화’가 함께 있을 때 ‘A 심화 …’ 줄은 ‘A 심화’ 몫).
+ */
+export function courseOfLine<C extends { classId: string; className: string }>(line: { classId?: unknown; description: string }, courses: readonly C[]): C | null {
+  if (typeof line.classId === "string" && line.classId) {
+    const byId = courses.find(c => c.classId === line.classId);
+    if (byId) return byId; // id로 못 찾으면(반을 다시 만들어 id가 바뀜 등) 이름으로 넘어간다.
+  }
+  const text = norm(line.description);
+  let best: C | null = null;
+  for (const c of courses) {
+    const name = norm(c.className);
+    if (name && (text === name || text.startsWith(`${name} `)) && (!best || name.length > norm(best.className).length)) best = c;
+  }
+  return best;
+}
+
 /** 줄 식별값의 형제 묶음 이름(차례 번호를 뗀 것). */
 export const lineBase = (lineId: string) => lineId.split("-")[0];
 

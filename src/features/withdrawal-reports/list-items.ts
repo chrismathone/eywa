@@ -1,5 +1,6 @@
 import { inRange, resolveRange, type RangeKey, type RangeWindow } from "@/features/withdrawals/exit-rows";
 import { monthRange } from "@/lib/date-kst";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
 import type { ArchiveRow } from "./archive-model";
 import { archiveReason, webReportReason, type ListReason } from "./list-reason";
 import { REPORT_STATUS, directorIds, isDirectReport, managerIds, type ReportListRow, type StaffOption } from "./model";
@@ -16,11 +17,15 @@ export type ListItem = {
   key: string;
   href: string;
   name: string;
+  /** 이름 옆 학교학년(원장 2026-10-29 *"학교 학년이 없음. 학생 옆에 붙어줄것"*) — 없으면 빈칸. */
+  schoolGrade: string;
   /** 이름 아래 한 줄(처리 구분·과목 / 학교학년·반·과목). */
   detail: string;
   /** 기간 필터·정렬 축 = 퇴원·종료일(원문에서 날짜를 못 읽은 기록은 null). */
   date: string | null;
   dateText: string;
+  /** 요청일(원장 2026-10-29 *"퇴원보고서 요청일 열 추가"*) — 웹 보고서가 만들어진 날(KST). 기존 기록은 알 수 없어 '—'. */
+  requestedText: string;
   teacher: string;
   /** 퇴원 사유 칸 — 우리 사유(대분류 · 세부) · 맞는 것이 없으면 기타 + 설명([`list-reason.ts`](./list-reason.ts)). */
   reason: ListReason;
@@ -36,6 +41,8 @@ export type ListItem = {
 };
 
 export const LIST_PAGE_SIZE = 50;
+/** 시각 → KST 날짜(YYYY-MM-DD). */
+const kstDay = (iso: string) => new Date(Date.parse(iso) + 9 * 3_600_000).toISOString().slice(0, 10);
 export const LIST_PATH = "/withdrawal-reports";
 const NO_TEACHER = "미기재";
 const FORMER_STAFF = "이전 담당자";
@@ -64,9 +71,11 @@ export function buildListItems(input: {
       key: `r:${r.id}`,
       href: `${LIST_PATH}/${r.id}`,
       name: r.snapshot.name,
+      schoolGrade: schoolGradeLabel(r.snapshot.school, r.snapshot.grade),
       detail: `${r.exit_kind === "withdrawal" ? "전체 퇴원" : "수강종료"} · ${r.subjects.length ? r.subjects.map(labelOf).join("·") : "다니는 반 없음"}`,
       date: r.effective_date,
       dateText: r.effective_date,
+      requestedText: kstDay(r.created_at),
       teacher,
       reason,
       subjects: r.subjects,
@@ -81,7 +90,7 @@ export function buildListItems(input: {
           ],
       link: null,
       myTurn: ["requested", "revision"].includes(r.status) && r.teacher_id === userId,
-      search: [r.snapshot.name, r.snapshot.school, r.snapshot.grade, ...r.snapshot.courses.map((c) => c.className), teacher, reason.text, reason.note ?? "", direct ? "관리자 바로 처리" : ""].join(" "),
+      search: [r.snapshot.name, r.snapshot.school, r.snapshot.grade, schoolGradeLabel(r.snapshot.school, r.snapshot.grade), ...r.snapshot.courses.map((c) => c.className), teacher, reason.text, reason.note ?? "", direct ? "관리자 바로 처리" : ""].join(" "),
     };
   });
   const archived = input.archives.map((a): ListItem => {
@@ -91,9 +100,11 @@ export function buildListItems(input: {
       key: `a:${a.id}`,
       href: `${LIST_PATH}/archive/${a.id}`,
       name: a.student_name || "이름 미기재",
-      detail: [a.school_grade, className, a.subject ? labelOf(a.subject) : "과목 미기재"].filter(Boolean).join(" · "),
+      schoolGrade: a.school_grade.trim(),
+      detail: [className, a.subject ? labelOf(a.subject) : "과목 미기재"].filter(Boolean).join(" · "),
       date: a.exit_date,
       dateText: a.exit_date || a.raw_exit_date || "미기재",
+      requestedText: "—",
       teacher: staff.find(s => s.id === a.mapped_teacher_id)?.name || a.teacher_name.trim() || NO_TEACHER,
       reason,
       subjects: a.subject ? [a.subject] : [],

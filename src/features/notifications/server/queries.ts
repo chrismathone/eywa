@@ -34,16 +34,31 @@ export async function getMyNotifications(
   // 내 할 일 수(0377a)는 목록과 상관없다 — 먼저 띄워 두고 함께 기다린다(B4).
   const summaryPromise = myTaskSummary();
 
-  const list = supabase
-    .from("notifications")
-    .select("id, type, title, body, link, read_at, created_at")
-    .neq("type", "daily_briefing") // 폐지된 브리핑 알림은 목록 상한을 적용하기 전에 제외한다.
-    .order("created_at", { ascending: false })
-    .limit(clampNotificationLimit(limit));
+  // 안 읽은 알림이 위로(원장 2026-10-29 *"안읽은 알림이 상단에 오도록"*) — 안 읽음을 상한까지 먼저, 남은 자리를 읽은 알림(최근순)으로.
+  //    서버에서 나눠 읽어야 '더 보기'(상한을 늘려 다시 읽음)를 해도 순서가 흔들리지 않는다.
+  const cap = clampNotificationLimit(limit);
+  const page = (read: boolean, size: number) => {
+    const q = supabase
+      .from("notifications")
+      .select("id, type, title, body, link, read_at, created_at")
+      .neq("type", "daily_briefing") // 폐지된 브리핑 알림은 목록 상한을 적용하기 전에 제외한다.
+      .order("created_at", { ascending: false })
+      .limit(size);
+    const scoped = view === "archived" ? q.not("archived_at", "is", null) : q.is("archived_at", null);
+    return read ? scoped.not("read_at", "is", null) : scoped.is("read_at", null);
+  };
+  const listPromise = page(false, cap).then(async (unreadPage) => {
+    if (unreadPage.error) return unreadPage;
+    const first = unreadPage.data ?? [];
+    if (first.length >= cap) return unreadPage;
+    const readPage = await page(true, cap - first.length);
+    // 읽은 쪽만 실패하면 안 읽은 알림이라도 보인다(벨이 통째로 비지 않게).
+    return readPage.error ? { ...unreadPage, data: first } : { ...readPage, data: [...first, ...(readPage.data ?? [])] };
+  });
 
-  // 목록(최근 20)과 안읽음 카운트는 독립 → 병렬(B4). 카운트는 head:true로 행 미수신.
+  // 목록과 안읽음 카운트는 독립 → 병렬(B4). 카운트는 head:true로 행 미수신.
   const [{ data }, { count }] = await Promise.all([
-    view === "archived" ? list.not("archived_at", "is", null) : list.is("archived_at", null),
+    listPromise,
     supabase
       .from("notifications")
       .select("*", { count: "exact", head: true })

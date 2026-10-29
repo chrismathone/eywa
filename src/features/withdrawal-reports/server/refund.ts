@@ -6,7 +6,7 @@ import { receiptRefundState } from "@/features/billing/session-terms/receipt-ref
 import type { RefundPrefillLine } from "@/features/billing/refund-prefill";
 import { INVOICE_CATEGORY_LABEL } from "../prefill";
 import type { WithdrawalReport } from "../model";
-import { REFUND_TAG_PREFIX, claimedKeys, claimedLines, lineBase, lineIds, norm, splitKey } from "../refund-keys";
+import { REFUND_TAG_PREFIX, claimedKeys, claimedLines, courseOfLine, lineBase, lineIds, splitKey } from "../refund-keys";
 
 /**
  * 퇴원월 **뒤** 청구 — 원장 2026-10-29 *"11월까지 납부했는데, 퇴원보고서상에는 10월납부밖에 없음… 이후에 납부한건 혹은 환불한 건에
@@ -20,6 +20,8 @@ export type LaterLine = RefundPrefillLine & {
   key: string;
   /** 이 줄로 낸 돈(줄 기록이 없으면 대신 값 · 청구 납부액을 넘지 않게 맞춤). */
   paidNet: number;
+  /** 과목 수강종료에서 어느 반에도 묶이지 않은 줄(차량비·교재 등) — 보이기만 하고 토글은 기본 꺼짐(원장 2026-10-29). */
+  unbound?: boolean;
   /** 수납(makeedu)에 이미 환불 기록이 있는 줄 — 여기서 다시 환불하지 않는다. */
   billingRefund: boolean;
   refund: RefundRef | null;
@@ -58,7 +60,8 @@ export async function loadLaterInvoices(report: Pick<WithdrawalReport, "id" | "t
   const month = report.effective_date.slice(0, 7);
   const admin = createAdminClient();
   const ended = report.exit_kind === "withdrawal" ? null
-    : new Set(report.snapshot.courses.filter(c => report.subjects.includes(c.subject)).map(c => norm(c.className)));
+    // 끝내는 반(classId) — 줄이 어느 반 몫인지는 courseOfLine(반 id 또는 반 이름으로 시작하는 수납명).
+    : new Set(report.snapshot.courses.filter(c => report.subjects.includes(c.subject)).map(c => c.classId));
   const [{ data: rows, error }, { data: again, error: againError }] = await Promise.all([
     admin.from("invoices").select("id,period,category,status,amount_total,amount_discount,amount_paid,line_items")
       .eq("tenant_id", report.tenant_id).eq("student_id", report.student_id).gt("period", month).neq("status", "void")
@@ -68,6 +71,12 @@ export async function loadLaterInvoices(report: Pick<WithdrawalReport, "id" | "t
   ]);
   if (error) throw new Error(`퇴원 뒤 청구 조회 실패: ${error.message}`);
   if (againError) throw new Error(`재등록 확인 실패: ${againError.message}`);
+  // 과목 수강종료 — 수납 줄의 과목을 가리려고 지점 반 목록(이 학생이 안 다니는 같은 과목 반·보강 반도 맞추게).
+  const { data: tenantClasses, error: classError } = ended
+    ? await admin.from("classes").select("id,class_name,subject").eq("tenant_id", report.tenant_id).limit(2000)
+    : { data: [], error: null };
+  if (classError) throw new Error(`반 목록 조회 실패: ${classError.message}`);
+  const allClasses = (tenantClasses ?? []).map(c => ({ classId: String(c.id), className: String(c.class_name ?? ""), subject: String(c.subject ?? "") }));
   const restart = (again ?? []).find(e => {
     const subject = (e.classes as unknown as { subject: string } | null)?.subject;
     return report.exit_kind === "withdrawal" || (subject != null && report.subjects.includes(subject));
@@ -111,9 +120,18 @@ export async function loadLaterInvoices(report: Pick<WithdrawalReport, "id" | "t
     const taken = claimedLines(ids, claims.get(id));
     const lines: LaterLine[] = [];
     all.forEach((l, i) => {
-      if (ended && !ended.has(norm(l.description))) return;
+      // 과목 수강종료(원장 2026-10-29 *"반에 안 묶인 줄도 보이게 … 같은 과목이면 전부 환불요청 토글 가능하게"*):
+      //   끝내는 반 줄 · 끝내는 과목의 다른 반 줄 → 보임 / 계속 다니는 과목 반 줄 → 뺌 / 어느 반에도 안 묶인 줄 → 보임(화면 표시 '기타 항목').
+      let unbound = false;
+      if (ended) {
+        const line = { classId: (raw[i] as { classId?: unknown } | null)?.classId, description: l.description };
+        const own = courseOfLine(line, report.snapshot.courses);
+        const course = own ?? courseOfLine(line, allClasses);
+        if (course) { if (!(ended.has(course.classId) || report.subjects.includes(course.subject))) return; }
+        else unbound = true;
+      }
       const refund = taken[i];
-      lines.push({ ...l, key: `${id}#${ids[i]}`, paidNet: paid[i], billingRefund: refunded[i], refund });
+      lines.push({ ...l, key: `${id}#${ids[i]}`, paidNet: paid[i], billingRefund: refunded[i], refund, ...(unbound ? { unbound } : {}) });
     });
     if (!lines.length) continue;
     out.push({

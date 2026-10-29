@@ -41,7 +41,7 @@ describe("퇴원보고서 목록 한 벌 — 웹 보고서 + 기존 스프레드
     const [web, old] = build([report()], [archive()]);
     expect(web).toMatchObject({ href: "/withdrawal-reports/r1", name: "김학생", detail: "전체 퇴원 · 수학", teacher: "이성우", status: "pending", link: null });
     expect(old).toMatchObject({
-      href: "/withdrawal-reports/archive/a1", name: "박원생", detail: "경명여중1 · 중1 심화반 · 수학", teacher: "Jane",
+      href: "/withdrawal-reports/archive/a1", name: "박원생", schoolGrade: "경명여중1", requestedText: "—", detail: "중1 심화반 · 수학", teacher: "Jane",
       status: "archive", statusLabel: "스프레드시트 기록", link: "unmapped", dateText: "2026-09-20",
     });
     expect(build([], [archive({ mapped_student_id: "s9", mapping_kind: "manual" })])[0]!.link).toBe("manual");

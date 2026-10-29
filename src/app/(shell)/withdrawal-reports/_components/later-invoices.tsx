@@ -53,13 +53,13 @@ export function LaterInvoices({ reportId, rows, canApprove, deskStaff }: { repor
   }
   const label = (inv: LaterInvoice, l: LaterLine) => `${inv.period} ${INVOICE_CATEGORY_LABEL[inv.category] ?? "기타"} · ${l.description.trim()}`;
   return <section className="space-y-3 rounded-xl border p-5" aria-label="퇴원 뒤 청구">
-    <div><h2 className="text-sm font-semibold">퇴원 뒤 청구</h2><p className="mt-1 text-xs text-muted-foreground">퇴원월 다음 달부터 잡힌 수납 청구입니다{rows.some(r => r.partial) ? "(과목 수강종료라 끝내는 반 몫만)" : ""}. {canApprove ? "환불할 건만 토글로 고른 뒤 환불 승인을 누르세요. 고르지 않으면 아무것도 하지 않습니다." : "환불 승인은 원장만 할 수 있습니다."}</p></div>
+    <div><h2 className="text-sm font-semibold">퇴원 뒤 청구</h2><p className="mt-1 text-xs text-muted-foreground">퇴원월 다음 달부터 잡힌 수납 청구입니다{rows.some(r => r.partial) ? "(과목 수강종료라 끝내는 과목 몫과 기타 항목만)" : ""}. {canApprove ? "환불할 건만 토글로 고른 뒤 환불 승인을 누르세요. 고르지 않으면 아무것도 하지 않습니다." : "환불 승인은 원장만 할 수 있습니다."}</p></div>
     <table className="w-full text-sm">
       <thead><tr className="border-b text-left text-xs text-muted-foreground"><th className="py-2 font-normal">청구</th><th className="font-normal">청구액</th><th className="font-normal">납부</th><th className="font-normal">상태</th><th className="font-normal">환불</th></tr></thead>
       <tbody>{lines.map(({ inv, line }) => {
         const on = picked.has(line.key);
         return <tr key={line.key} className="border-b last:border-0">
-          <td className="py-2">{label(inv, line)}</td>
+          <td className="py-2">{label(inv, line)}{line.unbound && <span className="text-muted-foreground ml-1 text-xs">· 기타 항목</span>}</td>
           <td>{won(line.amount)}{line.discount ? <span className="text-xs text-muted-foreground"> (할인 {won(line.discount)})</span> : null}</td>
           <td>{won(line.paidNet)}</td>
           <td>{lineStatus(inv, line)}</td>

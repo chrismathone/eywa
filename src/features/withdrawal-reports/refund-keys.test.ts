@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LINE_KEY, claimedKeys, claimedLines, lineIds, refundTag } from "./refund-keys";
+import { LINE_KEY, claimedKeys, claimedLines, courseOfLine, lineIds, refundTag } from "./refund-keys";
 
 const inv = "11111111-1111-1111-1111-111111111111";
 const eng = { kind: "수업", classId: "c1", description: "중등E Jane" };
@@ -33,5 +33,19 @@ describe("퇴원보고서 환불 줄 키(리뷰 2026-10-29)", () => {
     expect(claimedLines(ids, new Map([["zzz", "D"]]))).toEqual(["D", "D", "D", "D"]);
     expect(claimedLines(ids, new Map([["all", "E"]]))).toEqual(["E", "E", "E", "E"]);
     expect(claimedLines(ids, undefined)).toEqual([null, null, null, null]);
+  });
+  it("줄 → 반: 반 이름으로 시작하는 수납명(김덕현 11월) · 가장 긴 이름 · classId 우선", () => {
+    const courses = [
+      { classId: "m1", className: "중등M 중2 EL3N" },
+      { classId: "e1", className: "중등E_중2 심화" },
+      { classId: "e0", className: "중등E_중2" },
+    ];
+    expect(courseOfLine({ description: "중등E_중2 심화 Jane 월수목 16:20-18:10" }, courses)?.classId).toBe("e1");
+    expect(courseOfLine({ description: "중등M 중2 EL3N 화금" }, courses)?.classId).toBe("m1");
+    expect(courseOfLine({ description: "중등E_중2" }, courses)?.classId).toBe("e0");
+    expect(courseOfLine({ description: "중등E_중2심화반" }, courses)).toBeNull();
+    expect(courseOfLine({ description: "SRS 프로그램 사용료" }, courses)).toBeNull();
+    expect(courseOfLine({ classId: "m1", description: "중등E_중2 심화 Jane" }, courses)?.classId).toBe("m1");
+    expect(courseOfLine({ classId: "gone", description: "중등E_중2 심화 Jane" }, courses)?.classId).toBe("e1");
   });
 });
