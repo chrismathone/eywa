@@ -1253,7 +1253,7 @@ export function auditDetail(
     }
     // 퇴원보고서 환불 승인(2026-10-29) — 어느 달 청구 · 금액 · 퇴원일. 만든 환불 요청서는 refund_request_create에 같은 documentId로 남는다.
     case "withdrawal_refund_approve":
-      return join(str(m.invoicePeriod) ? `${str(m.invoicePeriod)} 청구` : null, str(m.totalAmount), str(m.effectiveDate) ? `퇴원 ${str(m.effectiveDate)}` : null, "환불 요청서 작성");
+      return join(Array.isArray(m.items) ? `${m.items.slice(0, 3).map(String).join(", ")}${m.items.length > 3 ? ` 외 ${m.items.length - 3}건` : ""}` : str(m.invoicePeriod) ? `${str(m.invoicePeriod)} 청구` : null, str(m.totalAmount), str(m.effectiveDate) ? `퇴원 ${str(m.effectiveDate)}` : null, "환불 요청서 작성");
     // 잘못 만든 수업 이력 **삭제**(원장·super_admin) — 행이 사라지므로 이 로그가 유일한 흔적이다.
     // metadata.snapshot에 삭제된 행 전체가 들어 있다(뷰어 title 툴팁의 원문 JSON으로 확인).
     case "enrollment_delete": {

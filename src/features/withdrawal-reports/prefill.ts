@@ -1,10 +1,11 @@
 import { effectiveAttendanceRecords, type EffectiveAttendanceRecord } from "@/features/attendance/effective-records";
 import { attendanceStatusLabel } from "@/features/attendance/intake/absence-intake";
 import { invoiceOutstanding, type InvoiceSummaryInput } from "@/features/billing/calc";
+import { KIND_LEGACY_LABEL, type RefundPrefillLine } from "@/features/billing/refund-prefill";
 import type { CourseSnapshot, ReportBody } from "./model";
 
 export type AttendancePrefillRow = EffectiveAttendanceRecord & { status: string };
-export type InvoicePrefillRow = InvoiceSummaryInput & { period: string; category: string };
+export type InvoicePrefillRow = InvoiceSummaryInput & { period: string; category: string; lines?: RefundPrefillLine[] };
 
 export function attendancePrefill(rows: AttendancePrefillRow[], courses: CourseSnapshot[], from: string, to: string): string {
   const effective = effectiveAttendanceRecords(rows.filter(row => row.session_date >= from && row.session_date <= to && courses.some(c => c.classId === row.class_id && c.startDate <= row.session_date && (!c.endDate || c.endDate >= row.session_date))));
@@ -18,30 +19,54 @@ export function attendancePrefill(rows: AttendancePrefillRow[], courses: CourseS
 
 export const INVOICE_CATEGORY_LABEL: Record<string, string> = { tuition: "수강료", material: "교재", exam: "시험", other: "기타" };
 
-export function billingPrefill(rows: InvoicePrefillRow[], month: string, checkedOn: string): Partial<ReportBody> {
+const won = (value: number) => `${value.toLocaleString("ko-KR")}원`;
+
+/** 수납 청구 줄 한 줄 — 수납 화면의 구분·수납명·청구·할인·납부·미납을 그대로. */
+function lineText(l: RefundPrefillLine, unpaidOnly = false): string {
+  const head = [KIND_LEGACY_LABEL[l.kind] ?? l.kind, l.description.trim()].filter(Boolean).join(" ");
+  if (unpaidOnly) return `${head} 미납 ${won(l.unpaid ?? 0)}`;
+  return [`${head} ${won(l.amount)}${l.discount ? `(할인 ${won(l.discount)})` : ""}`, l.paid !== undefined && `납부 ${won(l.paid)}`, l.unpaid ? `미납 ${won(l.unpaid)}` : ""].filter(Boolean).join(" · ");
+}
+
+/** 줄 목록을 칸 상한 안에 — 넘치면 남은 줄 수만 적는다. */
+function capLines(head: string, lines: string[], max: number): string {
+  const out = [head];
+  for (let i = 0; i < lines.length; i++) {
+    const next = `· ${lines[i]}`;
+    if ([...out, next].join("\n").length > max - 20) { out.push(`· 외 ${lines.length - i}건`); break; }
+    out.push(next);
+  }
+  return out.join("\n");
+}
+
+/**
+ * 원비·미납 — 원장 2026-10-29 *"원비도 세부 내역을 보여줄것. 수납에서 가져올 수 있으니까 그대로"* ·
+ * *"미납여부 그냥 미납 없음 한마디로 끝. 있을때만 어떤건인지 수납에서 해당건을 그대로 가져와서"*.
+ * - 원비: 퇴원월 수강료 청구 합계 줄 + 청구 줄(구분·수납명·청구·할인·납부·미납).
+ * - 미납 없음 → 메모 없이 '미납 없음'만. 있으면 미납 줄을 달·구분·수납명·미납액으로(줄 기록이 없는 청구는 청구 단위).
+ * - 첫 줄의 '청구 X원 · 미수 Y원' / '미수 Y원'은 제출 뒤 장부 비교(liveBillingForSubmitted)가 읽는다.
+ */
+export function billingPrefill(rows: InvoicePrefillRow[], month: string): Partial<ReportBody> {
   const active = rows.filter(r => r.period <= month && !["void", "refunded"].includes(r.status));
   const tuition = active.filter(r => r.period === month && r.category === "tuition");
-  const won = (value: number) => `${value.toLocaleString("ko-KR")}원`;
   const billed = tuition.reduce((sum, r) => sum + Math.max(0, r.amountTotal - r.amountDiscount), 0);
   const outstanding = active.reduce((sum, r) => sum + invoiceOutstanding(r), 0);
-  // 🔑 어느 청구가 미수인지 — 원장 2026-10-29 *"어떤 건에 대해 미납인지 자세하게… 까지가 아니라 정확하게 언제껀지"*.
-  //    같은 달·같은 항목은 합친다(반이 여럿이면 청구가 여러 줄). 오래된 달부터.
-  const items = new Map<string, number>();
-  for (const r of active) {
+  const unpaid: string[] = [];
+  for (const r of [...active].sort((a, b) => a.period.localeCompare(b.period))) {
     const left = invoiceOutstanding(r);
     if (left <= 0) continue;
-    const key = `${r.period} ${INVOICE_CATEGORY_LABEL[r.category] ?? "기타"}`;
-    items.set(key, (items.get(key) ?? 0) + left);
+    const label = `${r.period} ${INVOICE_CATEGORY_LABEL[r.category] ?? "기타"}`;
+    const lines = (r.lines ?? []).filter(l => (l.unpaid ?? 0) > 0);
+    // 줄 미납 합이 청구 미수와 같을 때만 줄로 적는다(아니면 일부만 보이니 청구 단위로).
+    if (lines.length && lines.reduce((s, l) => s + (l.unpaid ?? 0), 0) === left) unpaid.push(...lines.map(l => `${r.period} ${lineText(l, true)}`));
+    else unpaid.push(`${label} 미납 ${won(left)}`);
   }
-  // 칸 상한(1,000자) 안에 들게 12건까지만 적고 나머지는 건수로(리뷰 2026-10-29).
-  const listed = [...items].sort(([a], [b]) => a.localeCompare(b));
-  const detail = listed.slice(0, 12).map(([key, left]) => `${key} ${won(left)}`).join(", ") + (listed.length > 12 ? ` 외 ${listed.length - 12}건` : "");
   return {
-    tuition: tuition.length ? `${month} 학생 전체 수강료 청구 ${won(billed)} · 미수 ${won(tuition.reduce((sum, r) => sum + invoiceOutstanding(r), 0))}` : `${month} 수강료 청구 기록 없음`,
+    tuition: tuition.length
+      ? capLines(`${month} 수강료 청구 ${won(billed)} · 미수 ${won(tuition.reduce((sum, r) => sum + invoiceOutstanding(r), 0))}`, tuition.flatMap(r => (r.lines ?? []).map(l => lineText(l))), 1000)
+      : `${month} 수강료 청구 기록 없음`,
     arrears: active.length ? outstanding > 0 ? "yes" : "no" : "unknown",
-    arrearsNote: !active.length ? `${checkedOn} 조회 · ${month}까지 유효한 청구 기록 없음`
-      : outstanding > 0 ? `${checkedOn} 조회 · 미수 ${won(outstanding)} — ${detail}`
-      : `${checkedOn} 조회 · ${month}까지 학생 전체 청구 미수 없음`,
+    arrearsNote: outstanding > 0 ? capLines(`미수 ${won(outstanding)}`, unpaid, 1000) : "",
   };
 }
 
@@ -52,15 +77,18 @@ export function billingPrefill(rows: InvoicePrefillRow[], month: string, checked
  */
 export function liveBillingForSubmitted(stored: ReportBody, live: Partial<ReportBody>): Partial<ReportBody> {
   // 문구 형식은 바뀔 수 있다(이번 변경 전 저장본은 '…까지 등록된 학생 전체 청구 기준 미수 X원') — **미납 여부·미수 총액·원비 문구**만 비교한다(리뷰).
-  const owed = (note: string) => {
+  // 2026-10-29 문구가 줄 단위 세부 내역으로 바뀌었다 — 원비는 첫 줄의 청구·미수 금액, 미납은 미납 여부·총액으로만 비교.
+  const owed = (note: string, arrears: ReportBody["arrears"] | undefined) => {
+    if (arrears === "no") return 0;
     const hit = /미수 ([\d,]+)원/.exec(note);
     return hit ? Number(hit[1].replace(/,/g, "")) : /미수 없음/.test(note) ? 0 : null;
   };
-  const tuitionChanged = !!stored.tuition && stored.tuition !== live.tuition;
-  const arrearsChanged = stored.arrears !== live.arrears || owed(stored.arrearsNote) !== owed(live.arrearsNote ?? "");
+  const amounts = (tuition: string) => (tuition.split("\n")[0].match(/[\d,]+원/g) ?? []).join("/") || tuition;
+  const tuitionChanged = !!stored.tuition && amounts(stored.tuition) !== amounts(live.tuition ?? "");
+  const arrearsChanged = stored.arrears !== live.arrears || owed(stored.arrearsNote, stored.arrears) !== owed(live.arrearsNote ?? "", live.arrears);
   if (!tuitionChanged && !arrearsChanged) return live;
-  const before = [stored.tuition && `원비 ${stored.tuition}`, stored.arrearsNote && `미납 ${stored.arrearsNote}`].filter(Boolean).join(" · ");
-  return { ...live, arrearsNote: `${live.arrearsNote ?? ""}\n(제출 때: ${before})` };
+  const before = [stored.tuition && `원비 ${stored.tuition.split("\n")[0]}`, stored.arrearsNote && `미납 ${stored.arrearsNote.split("\n")[0]}`, !stored.arrearsNote && stored.arrears === "no" && "미납 없음"].filter(Boolean).join(" · ");
+  return { ...live, arrearsNote: [live.arrearsNote, `(제출 때: ${before})`].filter(Boolean).join("\n") };
 }
 
 /** 저장·제출 입력에서 수납 칸을 비운다 — 서버가 장부로 다시 채우니, 화면에 보인 긴 장부 문구가 입력 상한에 걸려 저장을 막지 않게(리뷰). */

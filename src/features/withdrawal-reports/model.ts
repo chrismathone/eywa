@@ -19,7 +19,7 @@ export const bodySchema = z.object({
   reasonDetail: z.string().max(80).optional(),
   consultationIds: z.array(z.uuid()).max(20).optional(),
   detail: text, studentConsultation: text, parentConsultation: text,
-  teacherOpinion: text, attendance: text, tuition: z.string().trim().max(200),
+  teacherOpinion: text, attendance: text, tuition: z.string().trim().max(1000),
   arrears: z.enum(["unknown", "no", "yes"]), arrearsNote: z.string().trim().max(1000),
 }).refine(b => !b.reasonDetail || reasonDetailOf(b.reasonDetail)?.reason === b.reason, { message: "퇴원사유에 맞는 세부 사유를 선택해 주세요.", path: ["reasonDetail"] });
 export type ReportBody = z.infer<typeof bodySchema>;
