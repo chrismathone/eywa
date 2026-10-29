@@ -23,7 +23,7 @@
     },
     {
       "path": "/api/cron/todays-math-sync",
-      "schedule": "* * * * *"
+      "schedule": "*/30 * * * *"
     },
     {
       "path": "/api/cron/todays-math-results",

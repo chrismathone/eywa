@@ -12,7 +12,11 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
-## 2026-10-29 퇴원보고서 요청 취소: 원장도 (s2_0009 · 미적용)
+## 2026-10-29 오늘수학 스냅샷: 만들 때 만료분 지우기 (s2_0010 · 미적용)
+
+`s2_0010_tm_sync_prune_expired_snapshots.sql` — DB 메모리 부족 정지(10-29) 조사: `tm_sync_private.pages` 360MB(만료 스냅샷 312개가 지우는 곳 없이 쌓임). 손 정리(만료 1시간 지난 289개 삭제 + VACUUM FULL)로 29MB. 재발 방지로 `tm_sync_create_snapshot`의 insert 앞에 그 연결의 만료 1시간 지난 스냅샷 삭제 한 줄(페이지는 cascade · 대상 줄 1건 확인 뒤 치환). 함께 cron 주기를 1분 → 30분(vercel.json · 원장 "30분정도로 여유있게") — 즉시 wake는 그대로. 되돌리기 = `scripts/_oneoff/revert-s2_0010-tm-sync-prune-expired-snapshots.sql`.
+
+## 2026-10-29 퇴원보고서 요청 취소: 원장도 (s2_0009 · ✅ 운영 적용 2026-10-29 · CLI — 두 함수 새 조건 있음·옛 조건 없음 확인)
 
 `s2_0009_withdrawal_cancel_by_director.sql` — 원장 *"김덕현 기준으로 요청 취소가 왜 안되는지"*. 앱은 원장(master · 강사 화면 아님)에게 '요청 취소'를 주는데 DB 전이 함수 둘이 요청자 본인만 받아 거절했다. 두 함수의 취소 조건 한 줄만 '요청자 **또는** 그 지점 활성 master'로 치환(운영 함수 본문에서 그 줄이 정확히 1건인지 확인한 뒤 · 0369a 방식). 적용 전 확인: 두 함수 모두 대상 줄 1건. 되돌리기 = `scripts/_oneoff/revert-s2_0009-withdrawal-cancel-by-director.sql`.
 
