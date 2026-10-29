@@ -14,6 +14,9 @@
 > 영어 보고서를 만지기 전에 이 문서를 먼저 읽을 것. 배달 레일은 [classnote-integration.md](classnote-integration.md),
 > 데이터 원천은 ECS([0157a](../supabase/migrations/s1_season1.sql#0157a_class_sheets.sql), [features/class-sheets](../src/features/class-sheets)).
 
+> ## 2026-10-29 — 설계 B(배달) 구현: 반 방 경로
+> - 워커가 영어 보고서를 **연결된 반 방의 이 학생 원아에게만** 올린다(s2_0006 · `scripts/_classnote/english-class-route.mjs`). 상세 = changelog 2026-10-29.
+
 ## 확정 결정 (재제안 금지)
 
 1. **배달 = 그룹 반 보드에 학생별 게시.** `(영어)학생명` 1인 보드는 폐기.

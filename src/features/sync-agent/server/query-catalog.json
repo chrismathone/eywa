@@ -967,6 +967,31 @@
       "tenant"
     ]
   },
+  "1c042bd0a64dbd1f30eb218c9916e4e58816195d5ff41921a957dc57bb6a1d37": {
+    "parts": [
+      "select b.board_id, b.board_name from classnote_english_class_boards b\n    join classes c on c.tenant_id = b.tenant_id and c.id = b.class_id\n    where b.tenant_id = ",
+      " and b.class_id = ",
+      " and c.subject = 'english'"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/english-class-route.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant",
+      "classId"
+    ]
+  },
   "1cb050f8987a2cc23ee66c27887dd76135f4365166d7b5d2067587bb10610743": {
     "parts": [
       "update homework_video_reviews set lock_token = null, locked_at = null, attempts = greatest(attempts - 1, 0)\n        where id = ",
@@ -1269,6 +1294,32 @@
     ],
     "expressions": [
       "tenant"
+    ]
+  },
+  "24a20063f466625c040a4363572dd081aa6e3c6ee3c04ca6f28dfb551e4355b4": {
+    "parts": [
+      "select child_id from classnote_child_links where tenant_id = ",
+      " and student_id = ",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/english-class-route.mjs",
+      "scripts/_classnote/classnote-recall-core.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant",
+      "r.student_id"
     ]
   },
   "24a4cfe74d7c3f4ded5c970f04c8c74b487f7d021eb113134c67413c3bd738fc": {
@@ -5773,6 +5824,31 @@
     "parameters": [],
     "expressions": []
   },
+  "9fa3d255c703dc1b7c0d9e549b19c05b63034fdd38daf1a7c4081a773e33d2ae": {
+    "parts": [
+      "select board_id from classnote_english_class_boards\n            where tenant_id = ",
+      " and class_id = ",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/classnote-recall-core.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant",
+      "locClassId"
+    ]
+  },
   "a0098b3fa516efd44b3ce21e94f89601ecbc0352eb7336d2c6367eb04b3610e2": {
     "parts": [
       "select count(*)::int as n from classnote_notices where tenant_id=",
@@ -9098,6 +9174,31 @@
     "expressions": [
       "t.makeedu_id",
       "t.id"
+    ]
+  },
+  "f51166981c3f35993ec1e5f07c46dedcf55cf75cfea72272836b1350410df06e": {
+    "parts": [
+      "update lesson_reports set\n            classnote_retry_count = classnote_retry_count + 1,\n            classnote_status = case when classnote_retry_count + 1 >= 3 then 'failed' else 'queued' end,\n            classnote_error = ",
+      "\n            where id=",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/classnote-core.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "`영어 반 방 연결 확인 실패 — ${msg.slice(0, 160)}`",
+      "r.id"
     ]
   },
   "f59abb620c9d5c19f5262fc323b26450d817cb684978488f69b0189ccd9bba56": {
