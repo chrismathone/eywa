@@ -18,8 +18,10 @@ export const SHUTTLE_LIVE_PATH = "/shuttle/live";
 export const SHUTTLE_TRACK_PATH = "/shuttle/track";
 /** 가까운 노선 찾기(2026-10-26) — 학부모 탭 4와 같은 화면. 🔒 실시간 위치와 같은 관리자 전용. */
 export const SHUTTLE_NEARBY_PATH = "/shuttle/nearby";
+/** 탑승 학생 시간표(2026-10-27) — 셔틀 타는 학생만 이번 주 수업·셔틀을 나란히. 🔒 관리자 전용. */
+export const SHUTTLE_CLASSES_PATH = "/shuttle/classes";
 /** 관리자에게만 서는 면 — 탭 줄은 `track`일 때만 붙인다. */
-const ADMIN_FACE_PATHS: readonly string[] = [SHUTTLE_TRACK_PATH, SHUTTLE_NEARBY_PATH];
+const ADMIN_FACE_PATHS: readonly string[] = [SHUTTLE_TRACK_PATH, SHUTTLE_NEARBY_PATH, SHUTTLE_CLASSES_PATH];
 
 /**
  * 셔틀 면 전환 탭 — 노선 편성 ↔ 오늘 등하원.

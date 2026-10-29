@@ -108,6 +108,9 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
   // 편성이 셔틀의 본체라 출석부(월별 착지)와 같은 결로 둔다.
   shuttle: [
     { label: "노선 편성", href: "/shuttle" },
+    // 탑승 학생 시간표(2026-10-27) — 셔틀 타는 학생의 이번 주 수업·배차(관리자 전용 — 탭 줄은 shuttleFaces가 관리자에게만 세운다).
+    // 노선 편성 바로 뒤(사용자 2026-10-29 "노선편성 뒤로 옮겨 줘").
+    { label: "탑승 학생 시간표", href: "/shuttle/classes" },
     // 주간 시간표(원장 2026-10-08 — 구글 시트 탑승현황처럼 회차마다 정류장 × 요일 표). 편성의 **보기 전용** 면이라 바로 옆에 둔다.
     { label: "주간 시간표", href: "/shuttle/week" },
     { label: "오늘 등하원", href: "/shuttle/today" },
