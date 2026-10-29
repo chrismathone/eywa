@@ -8,11 +8,13 @@
  */
 import { downloadFile } from "./audio-upload";
 import { microphoneErrorMessage, microphoneMessage, refreshMicrophone } from "./microphone";
-import { startRecoverySession, saveChunk, recordingScopeKey, type RecordingMeta, type RecordingOwner, type RecordingScope, type RecoveryKind } from "./recording-recovery";
+import { startRecoverySession, saveChunk, patchRecoveryMeta, recordingScopeKey, type RecordingMeta, type RecordingOwner, type RecordingScope, type RecoveryKind } from "./recording-recovery";
 import {
   announceActivation, announceRelease, announceState, connectRecordingChannel, legacyLockHeld, legacyRecording, reserveTarget,
   type RecordingActivation, type RecordingRelease, type RecordingStatus,
 } from "./browser-recording-channel";
+import { markInterrupt, markPageClosed, markStopRequested, reportLiveInterruption } from "./recording-diagnostics";
+import type { InterruptReason } from "./recording-diagnostics-core";
 
 export type { RecordingStatus } from "./browser-recording-channel";
 export type BrowserRecording = {
@@ -49,6 +51,10 @@ type Session = {
   pauseWhenReady: boolean;
   /** 어느 녹음을 누른 탓에 멈췄나 — 그 녹음이 시작하지 못하면 이 녹음을 되돌린다. 직접 멈췄거나 다시 켰으면 비운다. */
   pausedBy?: string;
+  /** 중단 진단(recording-diagnostics) — 이 녹음에서 처음 본 중단 사유 하나. 마이크 끊김 뒤 이어지는 오류·정지는 덮지 않는다. */
+  interrupt?: { reason: InterruptReason; code?: string };
+  /** 녹음 중 문서가 내려가는 중이다(pagehide) — 끝을 '탭 닫기'로 적는다. */
+  pageClosing?: boolean;
 };
 
 const EMPTY: readonly BrowserRecording[] = [];
@@ -87,6 +93,9 @@ function connect() {
   connectRecordingChannel({ activation: onForeignActivation, release: onForeignRelease, legacy: onLegacyRecording, change: notify });
   window.addEventListener("pagehide", () => {
     const live = entries.filter(recordingIsActive);
+    const closing = [...sessions.values()].filter((s) => s.recorder && s.request.meta && !s.requestedStop);
+    for (const session of closing) session.pageClosing = true;
+    markPageClosed(closing.map((s) => s.request.meta!.id));
     stopBrowserRecording();
     for (const value of live) announceState({ ...value, status: "ready" });
   });
@@ -197,10 +206,34 @@ function finish(session: Session) {
     put({ ...base, status: "failed", error: current.error ?? "녹음된 소리가 없습니다. 마이크를 확인한 뒤 다시 녹음해 주세요." });
     return;
   }
+  recordEnd(session, meta);
   const file = new File([blob], meta.fileName!, { type: mime });
   downloadFile(file);
   put({ ...base, status: "ready", file,
     error: current.error ?? (!session.requestedStop ? "녹음이 예기치 않게 중단되었습니다. 중단 전 녹음은 보관했습니다." : undefined) });
+}
+
+/**
+ * 처음 본 중단 사유를 그 자리에서 백업에 적는다 — onstop 전에 탭이 닫히거나 계정이 바뀌어도 원인이 남게(Codex 3차).
+ * 끝 시각은 아직 비워 둔다(살아 있는 녹음 — 다음 접속 판정은 잠금을 쥔 동안 건드리지 않는다).
+ */
+function noteInterrupt(session: Session, interrupt: NonNullable<Session["interrupt"]>) {
+  session.interrupt = interrupt;
+  const id = session.request.meta?.id;
+  if (!id) return;
+  markInterrupt(id, interrupt.reason);
+  void patchRecoveryMeta(id, { endReason: interrupt.reason, errorCode: interrupt.code });
+}
+
+/** 녹음의 끝을 백업에 적는다 — 중단이면 바로 보낸다(못 보내면 다음 접속 때). 진단 실패는 녹음 결과에 영향이 없다. */
+function recordEnd(session: Session, meta: RecordingMeta) {
+  const endedAt = Date.now();
+  const seconds = secondsOf(session);
+  // 먼저 본 중단(마이크 끊김·오류)이 그 뒤의 탭 닫기보다 원인이다(Codex 2차) — 탭이 내려가 보내기가 끊겨도 끝 기록이 다음 접속에 다시 보낸다.
+  if (!session.interrupt && session.pageClosing) { void patchRecoveryMeta(meta.id, { endReason: "page_closed", endedAt, seconds }); return; }
+  const interrupt = session.interrupt ?? (session.requestedStop ? null : { reason: "unexpected_stop" as const });
+  if (interrupt) void reportLiveInterruption(meta, interrupt.reason, { errorCode: interrupt.code, seconds, endedAt });
+  else void patchRecoveryMeta(meta.id, { endReason: "stopped", endedAt, seconds });
 }
 
 const SAME_TARGET = "이미 녹음하고 있습니다. 녹음 아이콘에서 진행 중인 녹음을 확인해 주세요.";
@@ -258,6 +291,7 @@ export async function startBrowserRecording(kind: RecoveryKind, scope: Recording
     recorder.onerror = (event) => {
       const code = (event as Event & { error?: DOMException }).error?.name ?? "UnknownError";
       patch(session, { errorCode: code, error: "녹음 오류가 발생했습니다. 중단 전 녹음은 보관합니다. 마이크 연결 상태를 확인해 주세요." });
+      if (!session.requestedStop && !session.interrupt) noteInterrupt(session, { reason: "recorder_error", code });
       // MediaRecorder emits its final dataavailable and stop after the error.
       console.error("[browser-recording]", code);
     };
@@ -265,6 +299,7 @@ export async function startBrowserRecording(kind: RecoveryKind, scope: Recording
     const ended = () => {
       if (!alive(session) || session.requestedStop) return;
       patch(session, { error: "마이크 연결이 끊겨 녹음이 중단되었습니다. 중단 전 녹음은 보관합니다." });
+      if (!session.interrupt) noteInterrupt(session, { reason: "track_ended" });
       if (recorder.state !== "inactive") recorder.stop();
     };
     tracks.forEach((track) => track.addEventListener?.("ended", ended));
@@ -278,9 +313,12 @@ export async function startBrowserRecording(kind: RecoveryKind, scope: Recording
       session.segmentStart = Date.now();
       patch(session, { ...session.request, status: "recording" });
     }
+    let savedSeconds = 0;
     session.timer = setInterval(() => {
       const seconds = secondsOf(session);
       if (entryOf(request.requestId)?.seconds !== seconds) patch(session, { seconds });
+      // 진단용 녹음 초 — 끝 기록 없이 사라져도(강제 종료) 대략 몇 분 녹음했는지 남게 30초마다.
+      if (seconds - savedSeconds >= 30) { savedSeconds = seconds; void patchRecoveryMeta(meta.id, { seconds }); }
     }, 1000);
     return null;
   } catch (error) {
@@ -333,6 +371,8 @@ export function stopBrowserRecording(requestId?: string): void {
       else announceRelease({ requestId: session.request.requestId, owner: ownerOf(session) });
       continue;
     }
+    // 직접 끝냄(문서가 내려가며 부른 것이 아니면) — 끝 기록 전에 탭이 닫혀도 정상 종료로 보게(녹음 중단 진단).
+    if (requestId && session.request.meta) markStopRequested(session.request.meta.id);
     settle(session);
     patch(session, { status: "stopping", seconds: secondsOf(session) });
     if (session.recorder.state !== "inactive") session.recorder.stop();
@@ -364,6 +404,12 @@ export function adoptRecordingOwner(next: RecordingOwner): void {
   for (const session of [...sessions.values()]) {
     if (same(session.request.scope)) continue;
     session.retired = true;
+    // 로그인 화면을 벗어나거나 계정이 바뀌어 버린 녹음 — 그 계정이 다시 들어오면 보고한다(recording-diagnostics).
+    if (session.recorder && session.request.meta && !session.requestedStop) {
+      settle(session);
+      // 먼저 본 중단(마이크 끊김 등)이 있으면 그것이 원인이다(Codex 3차).
+      void patchRecoveryMeta(session.request.meta.id, { endReason: session.interrupt?.reason ?? "signed_out", endedAt: Date.now(), seconds: secondsOf(session) });
+    }
     if (session.recorder && session.recorder.state !== "inactive") session.recorder.stop();
     clean(session);
     sessions.delete(session.request.requestId);

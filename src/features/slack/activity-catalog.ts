@@ -98,6 +98,8 @@ const RULES: readonly [string, string][] = [
   ["calendar_", "comms"],
   ["announcement_", "comms"],
   ["meeting_", "comms"],
+  // 녹음 중단 진단(2026-10-29) — 회의·상담 녹음 공용. 슬랙으로는 안 흘린다(FORBID_KEYS · 감사로그 화면에서 분석).
+  ["recording_interrupted", "comms"],
   ["notice_popup_", "comms"],
   ["help_", "comms"],
   ["support_", "comms"],
@@ -136,6 +138,7 @@ const FORBID_KEYS = new Set([
   "student_contribution_summary_generate",
   // 운영 스크립트 정리 기록 — 슬랙으로 흘리지 않는다(감사로그 화면에서만).
   "student_history_rebuild", "video_unknown_class_fix",
+  "recording_interrupted",
   "staff_password_reset",
   "self_password_change",
   "self_email_change",
