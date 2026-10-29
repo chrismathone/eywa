@@ -70,7 +70,7 @@ export function SpecialAccessEditor({ value, hiddenUserIds, staffOptions, nameOf
         />
         <SpecialAccessList
           label="업무 처리 현황"
-          hint="모든 직원의 할 일(보고서 발송 실패 · 상담 후속조치)과 처리 여부를 볼 수 있는 사람입니다. 운영실 강사별 업무 현황과 알림 벨에서 엽니다. 할 일의 원래 내용은 그 메뉴 권한대로 열립니다."
+          hint="모든 직원의 할 일(보고서 발송 실패 · 상담 후속조치)과 처리 여부를 볼 수 있는 사람입니다. 운영실 강사별 업무 현황과 알림 벨에서 엽니다. 매일 아침 '늦은 할 일' 요약 알림도 여기 지정한 사람이 받습니다(아무도 지정하지 않으면 원장). 할 일의 원래 내용은 그 메뉴 권한대로 열립니다."
           ids={value.staffTaskMonitorIds ?? []}
           hiddenUserIds={hiddenUserIds}
           staffOptions={pickable}
