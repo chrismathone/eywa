@@ -38,6 +38,8 @@ const RULES: readonly [string, string][] = [
   ["intake_token_", "consult"],
   ["intake_push_enqueue", "settings"],
   ["student_", "students"],
+  // 반미정 영상 반 정리(운영 스크립트 · 2026-10-29) — 숙제 영상 일이라 보고서 묶음. 슬랙으로는 안 흘린다(FORBID_KEYS).
+  ["video_unknown_class_fix", "reports"],
   ["enrollment_", "students"],
   ["newcomer_", "students"],
   ["withdrawal_", "students"],
@@ -132,6 +134,8 @@ const FORBID_KEYS = new Set([
   "student_contribution_refresh", "student_contribution_settings_save", "student_contribution_signal_cancel",
   "student_contribution_signal_rejudge", "student_contribution_referral_backfill", "student_contribution_referral_link",
   "student_contribution_summary_generate",
+  // 운영 스크립트 정리 기록 — 슬랙으로 흘리지 않는다(감사로그 화면에서만).
+  "student_history_rebuild", "video_unknown_class_fix",
   "staff_password_reset",
   "self_password_change",
   "self_email_change",

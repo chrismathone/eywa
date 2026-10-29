@@ -13,6 +13,21 @@ const unique = (items) => [...new Set(items.filter(Boolean))];
  */
 export const isJjClass = (className) => /JJ/.test(String(className ?? ""));
 
+/** 영상 숙제 배정 창(일) — 앱 `VIDEO_ASSIGNMENT_WINDOW_DAYS`와 같은 값(숙제일 ≤ 게시일 ≤ 숙제일 + 14). */
+export const HOMEWORK_WINDOW_DAYS = 14;
+
+/**
+ * **숙제로 반 정하기**(원장 2026-10-29 *"바로잡는 방법으로 규칙 보강해. 숙제를 기준으로 반미정 해결할것"*) — 반 후보가 여럿이거나
+ * 게시 과목을 모를 때, 그 학생에게 **영상 숙제를 낸 반**(`lesson_reports.video_homework` · 숙제일 ≤ 게시일 ≤ 숙제일 + 14)이
+ * 후보 중 정확히 하나면 그 반이다. 둘 이상이거나 없으면 null(추측하지 않는다 — 종전대로 반미정).
+ * `homeworkClassIds` = 그 창 안에 영상 숙제가 있는 반 id(호출부가 DB로 읽는다) · `candidates` = 후보 반 줄.
+ */
+export function pickHomeworkClass(candidates, homeworkClassIds) {
+  const ids = new Set((homeworkClassIds ?? []).map(String));
+  const hit = unique((candidates ?? []).filter((c) => ids.has(String(c.class_id))).map((c) => String(c.class_id)));
+  return hit.length === 1 ? hit[0] : null;
+}
+
 /**
  * 이름으로 학생을 추측하지 않는다. 게시 반 우선, 1인 보드는 기존 과목 매핑 사용.
  *
@@ -30,7 +45,7 @@ export function chooseVideoTeacher(input) {
   return reportClassId ? { ...route, classId: reportClassId, homeworkDate: input.report.homeworkDate } : route;
 }
 
-function chooseTeacher({ video, tenantId, studentIds, boardClassIds, classes, student = null, reportClassId = null }) {
+function chooseTeacher({ video, tenantId, studentIds, boardClassIds, classes, student = null, reportClassId = null, homeworkClassIds = [] }) {
   const studentId = unique(studentIds).length === 1 ? studentIds[0] : null;
   const identity = { studentName: student?.name ?? null, school: student?.school ?? null, grade: student?.grade ?? null,
     classId: null, className: null };
@@ -45,11 +60,21 @@ function chooseTeacher({ video, tenantId, studentIds, boardClassIds, classes, st
     const group = Object.values(BOARD_GROUPS).find((g) => video.boardName?.startsWith(g.prefix))
       ?? (/^\[EIE\]\s*/i.test(video.boardName ?? "") ? BOARD_GROUPS.english : null);
     // EIE는 기존 영어 보드 규약. 과목 내 담임이 하나일 때만 사용하고 임의 그룹반 이름은 추측하지 않는다.
-    if (!group) return hold("게시 반의 aywa 연결을 확인해야 합니다.");
-    matched = classes.filter((c) => group.subjectKeys.includes(c.subject));
-    // JJ 반은 담임 판정에서 뺀다 — 단 그 과목에 JJ 반뿐이면 그 반을 쓴다. 반 보드에 올라온 글(위 linked)은 그 반 그대로다.
-    const regular = matched.filter((c) => !isJjClass(c.class_name));
-    if (regular.length) matched = regular;
+    // 🔑 **보드 이름이 비었으면**(이력 수집 영상 — 원장 2026-10-29 반미정 정리) 그날 다니는 반 전부가 후보다 — 아래에서 숙제나 반 하나로만
+    //    정한다. 이름이 있는데 그룹을 모르는 보드(aywa 연결 없는 그룹반)는 종전대로 확인 필요(리뷰 2026-10-29).
+    if (!group && video.boardName?.trim()) return hold("게시 반의 aywa 연결을 확인해야 합니다.");
+    matched = group ? classes.filter((c) => group.subjectKeys.includes(c.subject)) : [...classes];
+    // JJ 반은 담임 판정에서 뺀다 — 단 **그 과목에** JJ 반뿐이면 그 반을 쓴다(과목을 모를 때도 과목 안에서만 뺀다 — 수학 JJ를 빼서
+    // 영어 반 하나가 남아 수학 영상이 영어로 가지 않게 · 리뷰 2026-10-29). 반 보드에 올라온 글(위 linked)은 그 반 그대로다.
+    const regularSubjects = new Set(matched.filter((c) => !isJjClass(c.class_name)).map((c) => c.subject));
+    matched = matched.filter((c) => !isJjClass(c.class_name) || !regularSubjects.has(c.subject));
+    // 반 후보가 여럿이면 **영상 숙제를 낸 반**이 그중 하나일 때 그 반(원장 2026-10-29 *"숙제를 기준으로 반미정 해결할것"*).
+    if (unique(matched.map((c) => c.class_id)).length > 1) {
+      const byHomework = pickHomeworkClass(matched, homeworkClassIds);
+      if (byHomework) matched = matched.filter((c) => c.class_id === byHomework);
+    }
+    // 과목을 모르는데 반이 하나로 좁혀지지 않으면 종전대로 확인 필요(과목이 다른 반을 고르지 않는다 — 과목이 둘이면 JJ도 남아 둘이다).
+    if (!group && unique(matched.map((c) => c.class_id)).length !== 1) return hold("게시 반의 aywa 연결을 확인해야 합니다.");
   }
   if (!matched.length) return hold("게시 반·과목에 현재 수강 중인 반이 없습니다.");
   const subjects = unique(matched.map((c) => c.subject));
@@ -84,6 +109,37 @@ export async function resolveVideoTeacher(video) {
   } finally { await sql.end(); }
 }
 
+/** 게시 시각 → KST 날짜(없으면 오늘). */
+export const kstDay = (postedAt) => new Date(postedAt || Date.now()).toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+
+/** 그 날 그 학생이 다니던 반(휴원 수강 · 끝난 수강 · 닫힌 반 제외) — 담임 이름·상태·동명이인 수와 함께. DB는 SELECT만. */
+export async function loadStudentClassesOn(sql, tenantId, studentId, day) {
+  return sql`select c.id as class_id, c.class_name, c.subject, c.teacher_id,
+      u.display_name as teacher_name, u.status as teacher_status,
+      (select count(*) from users names where names.tenant_id = ${tenantId}
+        and names.status = 'active' and names.display_name = u.display_name) as same_name_count
+    from enrollments e
+    join students s on s.id = e.student_id and s.tenant_id = ${tenantId}
+    join classes c on c.id = e.class_id and c.tenant_id = ${tenantId}
+    left join users u on u.id = c.teacher_id and u.tenant_id = ${tenantId}
+    where e.tenant_id = ${tenantId} and e.student_id = ${studentId} and not coalesce(e.on_hold, false)
+      and (e.start_date is null or e.start_date <= ${day}) and (e.end_date is null or e.end_date >= ${day})
+      and (c.closed_at is null or c.closed_at >= ${day})`;
+}
+
+/**
+ * 후보 반 중 그 학생에게 **영상 숙제를 낸 반**(숙제일 ≤ `day` ≤ 숙제일 + 14) — 반이 하나 이하면 읽지 않는다(판정에 안 쓰인다).
+ * 원장 2026-10-29 *"숙제를 기준으로 반미정 해결할것"*. DB는 SELECT만.
+ */
+export async function loadHomeworkClassIds(sql, tenantId, studentId, classes, day) {
+  const ids = unique((classes ?? []).map((c) => c.class_id));
+  if (ids.length < 2) return [];
+  const rows = await sql`select distinct class_id from lesson_reports where tenant_id = ${tenantId} and student_id = ${studentId}
+    and video_homework = true and class_id in ${sql(ids)}
+    and report_date <= ${day}::date and report_date >= ${day}::date - ${HOMEWORK_WINDOW_DAYS}::int`;
+  return rows.map((r) => String(r.class_id));
+}
+
 export async function loadVideoTeacher(sql, tenantId, video) {
     if (!/^[1-9]\d*$/.test(video.childId ?? ""))
       return chooseVideoTeacher({ video, tenantId, studentIds: [], boardClassIds: [], classes: [] });
@@ -101,21 +157,12 @@ export async function loadVideoTeacher(sql, tenantId, video) {
     let classes = [];
     let student = null;
     if (studentIds.length === 1) {
-      const at = new Date(video.postedAt || Date.now());
-      const today = at.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+      const today = kstDay(video.postedAt);
       [student] = await sql`select name, school, grade from students where tenant_id=${tenantId} and id=${studentIds[0]}`;
-      classes = await sql`select c.id as class_id, c.class_name, c.subject, c.teacher_id,
-          u.display_name as teacher_name, u.status as teacher_status,
-          (select count(*) from users names where names.tenant_id = ${tenantId}
-            and names.status = 'active' and names.display_name = u.display_name) as same_name_count
-        from enrollments e
-        join students s on s.id = e.student_id and s.tenant_id = ${tenantId}
-        join classes c on c.id = e.class_id and c.tenant_id = ${tenantId}
-        left join users u on u.id = c.teacher_id and u.tenant_id = ${tenantId}
-        where e.tenant_id = ${tenantId} and e.student_id = ${studentIds[0]} and not coalesce(e.on_hold, false)
-          and (e.start_date is null or e.start_date <= ${today}) and (e.end_date is null or e.end_date >= ${today})
-          and (c.closed_at is null or c.closed_at >= ${today})`;
+      classes = await loadStudentClassesOn(sql, tenantId, studentIds[0], today);
     }
+    // 반 후보가 여럿일 수 있으면 그 학생에게 **영상 숙제를 낸 반**을 읽는다(원장 2026-10-29 숙제 기준).
+    const homeworkClassIds = studentIds.length === 1 ? await loadHomeworkClassIds(sql, tenantId, studentIds[0], classes, kstDay(video.postedAt)) : [];
     // 보고서 글에 댓글로 올린 영상이면 그 보고서(이 학생 · 영상 과제 있음)를 확인한다 — 아니면 null(예전 판정).
     const report = studentIds.length === 1 ? await loadCommentedReport(sql, tenantId, video, studentIds[0]) : null;
     if (report && !classes.some(c => c.class_id === report.classId)) {
@@ -127,5 +174,5 @@ export async function loadVideoTeacher(sql, tenantId, video) {
         where c.tenant_id=${tenantId} and c.id=${report.classId}`;
       classes.push(...historical);
     }
-    return chooseVideoTeacher({ video, tenantId, studentIds, boardClassIds, classes, student, report });
+    return chooseVideoTeacher({ video, tenantId, studentIds, boardClassIds, classes, student, report, homeworkClassIds });
 }

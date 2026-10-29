@@ -295,6 +295,10 @@ const SYSTEM_ACTOR_LABEL: Record<string, string> = {
   "classnote-auto-sync": "ClassNote 반 보드 자동 동기화(연동 PC)",
   // ClassNote 학부모 답글(0317a) — 연동 PC 워커가 게시·수정·삭제 결과를 직접 남긴다.
   "classnote-parent-reply": "ClassNote 학부모 답글(연동 PC)",
+  // 원생 통계 '지난 기록' 다시 세기(메이크에듀 재구성 · 에이와 밤 집계 손 실행) — 원장 지시 때만(2026-10-29).
+  "student-history-rebuild": "원생 통계 지난 기록 다시 세기",
+  // 반미정 영상의 반을 담임 배정·숙제로 정한 정리 스크립트(2026-10-29).
+  "video-unknown-class-fix": "반미정 영상 반 정리",
 };
 const SYSTEM_ACTOR_FALLBACK = "시스템 스크립트";
 
@@ -824,6 +828,14 @@ export function auditDetail(
     case "student_contribution_signal_cancel":
     case "student_contribution_signal_rejudge":
       return typeof m.reason === "string" ? m.reason : null;
+    case "student_history_rebuild": {
+      const what = { makeedu: "메이크에듀 줄 다시 세기", aywa: "에이와 밤 집계 손 실행", revert: "되돌리기" }[String(m.kind)] ?? null;
+      return join(what, typeof m.rows === "number" ? `${m.rows}줄` : null, typeof m.note === "string" ? m.note : null);
+    }
+    case "video_unknown_class_fix": {
+      const how = { 담임배정: "담임 배정", 숙제: "영상 숙제", 반하나: "그날 반 하나", revert: "되돌리기" }[String(m.how)] ?? null;
+      return join(how ? `${how}로` : null, typeof m.className === "string" ? m.className : null, typeof m.postedOn === "string" ? `${m.postedOn} 영상` : null);
+    }
     case "student_contribution_referral_backfill":
     case "student_contribution_referral_link":
       return join(m.source === "backfill" ? "지난 소개 자동 연결" : "소개자 직접 확인", typeof m.evidence === "string" ? m.evidence : null);
