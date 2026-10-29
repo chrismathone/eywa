@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exitCountDate, exitMonthOf, paidTuitionMonths } from "./exit-month";
+import { exitCountDate, exitMonthOf, paidSubjectMonths, paidTuitionMonths, subjectExitCountDate, subjectRunStart } from "./exit-month";
 
 const row = (period: string, status = "paid", amount_paid: number | string = 300000, category = "tuition") => ({ period, status, amount_paid, category });
 
@@ -50,5 +50,55 @@ describe("퇴원월 = 수강료를 낸 마지막 달", () => {
 
   it("2월 말일도 맞게", () => {
     expect(exitCountDate("2026-03-02", ["2026-02"])).toBe("2026-02-28");
+  });
+});
+
+describe("과목 수강종료 = 그 과목 수업료를 낸 마지막 달", () => {
+  const subjects = [{ key: "math", label: "수학" }, { key: "english", label: "영어" }];
+  const lesson = (description: string, paid: number, refund = 0) => ({
+    kind: "수업", description, amount: paid, paid, refunds: refund ? [{ status: "active", type: "full", amount: refund }] : [],
+  });
+  const inv = (period: string, items: unknown[]) => ({ period, status: "paid", category: "tuition", amount_paid: 1, line_items: items });
+
+  it("10/1 수학 종료 · 9월까지만 수학을 냄(10월은 영어만) → 9월", () => {
+    const paid = paidSubjectMonths([
+      inv("2026-09", [lesson("중등M 중1 EL2T 화금 *", 192000), lesson("중등E_중1 정규 B Jennifer", 254000)]),
+      inv("2026-10", [lesson("중등E_중1 정규 B Jennifer", 302000)]),
+    ], subjects);
+    expect(subjectExitCountDate("2026-10-01", "math", paid, subjects)).toBe("2026-09-30");
+    expect(subjectExitCountDate("2026-10-01", "english", paid, subjects)).toBe("2026-10-01");
+  });
+
+  it("10월 수학 줄을 전액 환불했으면 9월 · 일부 환불이면 10월", () => {
+    const full = paidSubjectMonths([inv("2026-09", [lesson("중등M 중3 BS3Q 화금 *", 278000)]), inv("2026-10", [lesson("중등M 중3 BS3Q 화금 *", 278000, 278000)])], subjects);
+    expect(subjectExitCountDate("2026-10-01", "math", full, subjects)).toBe("2026-09-30");
+    const part = paidSubjectMonths([inv("2026-10", [lesson("고등M 고1 BS4F 화금", 336000, 288000)])], subjects);
+    expect(subjectExitCountDate("2026-10-07", "math", part, subjects)).toBe("2026-10-07");
+  });
+
+  it("EiE 줄도 영어 · 과목을 모르는 줄('강의하는아이들')은 어느 과목으로도 세지 않는다", () => {
+    const paid = paidSubjectMonths([
+      inv("2026-09", [lesson("[EIE] Junior Plus 3 *", 260000), lesson("초등M 개별 BS2G 월목 *", 158000)]),
+      inv("2026-10", [lesson("[강아] 강의하는아이들 (허주연) *", 30000)]),
+    ], subjects);
+    expect(subjectExitCountDate("2026-10-01", "english", paid, subjects)).toBe("2026-09-30");
+    expect(subjectExitCountDate("2026-10-01", "math", paid, subjects)).toBe("2026-09-30");
+  });
+
+  it("그 과목을 낸 기록이 없으면 종료일 그대로", () => {
+    expect(subjectExitCountDate("2026-10-01", "math", new Map(), subjects)).toBe("2026-10-01");
+  });
+});
+
+describe("과목을 다시 다닌 경우 — 마지막으로 이어 다닌 시작 전 납부는 보지 않는다", () => {
+  const subjects = [{ key: "math", label: "수학" }];
+  it("3월에 그만두고 9/15에 다시 시작 · 10/1 종료 · 9·10월 미납 → 종료일 그대로(3월로 세지 않는다)", () => {
+    const paid = new Map([["math", ["2026-02", "2026-03"]]]);
+    const since = subjectRunStart([{ startDate: "2025-09-01", endDate: "2026-03-31" }, { startDate: "2026-09-15", endDate: "2026-10-01" }], "2026-09-15");
+    expect(since).toBe("2026-09-15");
+    expect(subjectExitCountDate("2026-10-01", "math", paid, subjects, since)).toBe("2026-10-01");
+  });
+  it("반 이동 사슬(틈 31일 안)은 한 번에 다닌 것 — 앞 반 시작부터 본다", () => {
+    expect(subjectRunStart([{ startDate: "2026-03-02", endDate: "2026-08-04" }, { startDate: "2026-08-04", endDate: "2026-10-01" }], "2026-08-04")).toBe("2026-03-02");
   });
 });

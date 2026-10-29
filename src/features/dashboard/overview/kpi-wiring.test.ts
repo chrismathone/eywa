@@ -152,7 +152,7 @@ describe("② 퇴원&수업종료 — 1일~오늘, 퇴원관리의 과목 전체
     // 운영실 과목 관리자 카드는 종전대로 '모름은 모두에게'(기본값) — 원생 통계만 모르는 기록을 뺀다(2026-10-20).
     expect(SERVER).toContain("unknownToAll = true,");
     expect(SERVER).toContain("unknownToAll ? inSliceAny(pred, subjects)");
-    expect(SERVER).toContain("getSubjectEndedStudents()");
+    expect(SERVER).toContain("getSubjectEndedStudents({ countFrom: win.from })");
     expect(SERVER).toContain("rows: includeSubjectEnds(");
     expect(SERVER).not.toContain("datedWithdrawals");
     expect(WINDOW).toMatch(/inWithdrawalWindow\(/);

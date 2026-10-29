@@ -105,19 +105,33 @@ function refundedOf(item: LessonItem): number {
  * 항목이 없는 청구는 머리의 낸 돈 전부(수업료 한 줄 — `lessonKinds`와 같은 뜻).
  */
 export function lessonPaid(lineItems: unknown, amountPaid: number | null | undefined): { general: number; eie: number } {
-  const items = (Array.isArray(lineItems) ? lineItems : []).filter((x): x is LessonItem => !!x && typeof x === "object");
-  if (!items.length) return { general: Math.round(num(amountPaid)), eie: 0 };
-  const perLine = items.some((x) => x.paid !== undefined && x.paid !== null);
-  const amountSum = items.reduce((s, x) => s + Math.max(0, num(x.amount)), 0);
+  const lines = lessonLinesPaid(lineItems, amountPaid);
+  if (!lines) return { general: Math.round(num(amountPaid)), eie: 0 };
   let general = 0;
   let eie = 0;
+  for (const x of lines) {
+    if (isEieLesson(x.name)) eie += x.paid;
+    else general += x.paid;
+  }
+  return { general: Math.round(general), eie: Math.round(eie) };
+}
+
+/**
+ * 청구 한 장의 **수업 줄마다** 낸 돈(낸 돈 − 진행 중 환불 · `lessonPaid`와 같은 셈) — 수업명과 함께. 항목이 없는 청구는 null(어느 수업인지 모른다).
+ * 과목 수강종료의 퇴원월(그 과목 수업료를 낸 마지막 달 — `exit-month.ts`)이 줄 이름으로 과목을 가른다.
+ */
+export function lessonLinesPaid(lineItems: unknown, amountPaid: number | null | undefined): { name: string; paid: number }[] | null {
+  const items = (Array.isArray(lineItems) ? lineItems : []).filter((x): x is LessonItem => !!x && typeof x === "object");
+  if (!items.length) return null;
+  const perLine = items.some((x) => x.paid !== undefined && x.paid !== null);
+  const amountSum = items.reduce((s, x) => s + Math.max(0, num(x.amount)), 0);
+  const out: { name: string; paid: number }[] = [];
   for (const x of items) {
     if (!isLessonKind(x.kind)) continue;
     const paid = perLine ? num(x.paid) - refundedOf(x) : amountSum > 0 ? (num(amountPaid) * Math.max(0, num(x.amount))) / amountSum : 0;
-    if (isEieLesson(lessonName(x))) eie += paid;
-    else general += paid;
+    out.push({ name: lessonName(x), paid });
   }
-  return { general: Math.round(general), eie: Math.round(eie) };
+  return out;
 }
 
 /** 프로그램 → 지난 기록 칸 — 수학 · 인재원 영어 · 그 밖의 과목(설정 과목 키) · 모름. EiE는 여기 오지 않는다. */

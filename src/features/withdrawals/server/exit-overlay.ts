@@ -42,7 +42,7 @@ export async function getExitOverlay(subject: string, anchor: string, tenantId: 
   const [withdrawn, subjectEnded, judge, settings, holdRows] = await Promise.all([
     // 시간표 X는 강사평가 퇴원율과 같은 달(퇴원일)로 묶는다 — 퇴원월(수강료 기준)로 바꾸면 X의 선생님 판정 달과 갈린다.
     getWithdrawalsInWindow(from, to, { basis: "date" }),
-    getSubjectEndedStudents({ endedWithin: { from, to } }),
+    getSubjectEndedStudents({ endedWithin: { from, to }, basis: "date" }),
     // 퇴원율 분모 = 그 달 앞달 수업일 → 가장 이른 계산 달(줄의 달 또는 그 수강이 끝난 달)의 앞달 1일부터 — 여기에 '함께 끝난 수강'의 폭(`OVERLAY_LOOKBACK_DAYS`)을 더해
     // 7달 전 1일부터 읽는다(지난 열 줄의 넉 달 앞까지 — 기준 달을 넘겨도 같은 줄은 같은 판정). 🔴 끝은 기준 달이 아니라 **이번 달 말일**로
     // 고정한다(강사평가 진행 중인 달과 같은 끝) — 끝이 기준 달을 따라 움직이면 '같은 과목 계속 다님'이 다음 달 수강을

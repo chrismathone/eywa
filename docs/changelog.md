@@ -1,5 +1,9 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-29 — 수강종료도 퇴원월 규칙 · 대시보드 모든 퇴원(재원생 추이·원스크린 4주·관리현황)
+
+- 원장 *"9월 퇴원생 여전히 10월퇴원으로 뜨는데"* — 10월 '퇴원&수업종료' 10명 중 수강종료 6명(10/1 종료)이 그 과목 10월분을 안 냈거나 전액 환불. 수강종료 = 그 과목 수업료를 낸 마지막 달([`paidSubjectMonths`·`subjectExitCountDate`](../src/features/withdrawals/exit-month.ts) · 줄 이름의 과목만 — `lessonLinesPaid`) → `SubjectEndedRow.endedDetail[].countAt`(운영실 · 퇴원관리 'N월 종료' · 퇴원생 시트 수학 수강종료). 재원생 추이 되감기(`TrendStudent.exitAt`) · 원스크린 4주 추이 · 관리현황 '등록 후 퇴원'도 퇴원월로. 시간표 X(`basis: "date"`)·강사평가만 퇴원일.
+
 ## 2026-10-29 — 퇴원월 = 수강료를 낸 마지막 달(운영실·퇴원관리·퇴원생 시트)
 
 - 원장 *"퇴원처리는 10월 1일이지만 9월까지 수강료를 냈으면 9월 퇴원생 · 10월 내고 일부 환불했으면 10월 퇴원 · 대시보드 및 퇴원관리 시트 연동도 동일"* — 규칙 한 벌 [`exit-month.ts`](../src/features/withdrawals/exit-month.ts)(낸 달 = 수업료 청구의 수업 순액(낸 돈 − 진행 중 환불, `lessonPaid`) > 0 · 취소·환불 상태 제외 · 퇴원일의 달 이하에서 가장 늦은 달 · 없으면 퇴원일의 달) + 로더 [`server/exit-month.ts`](../src/features/withdrawals/server/exit-month.ts)(admin + `tenant_id` — 청구 표는 수납 권한자만 보여 사람마다 갈리지 않게).

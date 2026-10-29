@@ -985,9 +985,10 @@ function ExitRowItem({ row: r, labelOf, today, teacher }: {
   // 오늘 이후 날짜 = 퇴원 예정(아직 다니는 중) — '오늘'이라 적으면 거짓이다.
   const ago = r.date && r.date > today ? "예정" : relativeDayKo(r.date, today);
   // 퇴원월이 퇴원일의 달과 다르면(수강료를 앞 달까지만 냄 — 원장 2026-10-29) 어느 달로 셌는지 적는다.
-  const countedMonth = r.countDate && r.date && r.countDate.slice(0, 7) !== r.date.slice(0, 7) ? `${Number(r.countDate.slice(5, 7))}월 퇴원` : null;
-  const where = schoolGradeLabel(r.school, r.grade);
   const ended = r.kind === "subject-ended";
+  const countedMonth =
+    r.countDate && r.date && r.countDate.slice(0, 7) !== r.date.slice(0, 7) ? `${Number(r.countDate.slice(5, 7))}월 ${ended ? "종료" : "퇴원"}` : null;
+  const where = schoolGradeLabel(r.school, r.grade);
   const reason = reasonFacetOf(r);
   const detail = r.detail ? reasonDetailOf(r.detail)?.label : null;
   const reasonText = detail ? `${reason.label} · ${detail}` : reason.label;

@@ -163,6 +163,8 @@ type SubjectEndedInput = {
   endedDetail: {
     subject: string;
     endedAt: string | null;
+    /** 달 판정 날짜 — 그 과목 수업료를 낸 마지막 달(`getSubjectEndedStudents`) · 없으면 종료일. */
+    countAt?: string | null;
     className: string | null;
     englishTrack: string | null;
     reason?: string | null;
@@ -211,7 +213,7 @@ export function toExitRows(withdrawn: readonly WithdrawnInput[], subjectEnded: r
         school: s.school,
         grade: s.grade,
         date: d.endedAt ? d.endedAt.slice(0, 10) : null,
-        countDate: d.endedAt ? d.endedAt.slice(0, 10) : null,
+        countDate: (d.countAt ?? d.endedAt)?.slice(0, 10) ?? null,
         subjects: [d.subject],
         className: d.className,
         programSubject: d.subject,

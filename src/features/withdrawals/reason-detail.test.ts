@@ -135,7 +135,7 @@ describe("배선 가드", () => {
     const q = read("src/features/withdrawals/server/queries.ts");
     const main = q.slice(q.indexOf("export async function getSubjectEndedStudents"), q.indexOf("async function attachEndedNotes"));
     expect(main).not.toMatch(/\.select\([^)]*withdrawal_detail/);
-    expect(read("src/features/dashboard/overview/server.ts")).toContain("getSubjectEndedStudents()");
+    expect(read("src/features/dashboard/overview/server.ts")).toContain("getSubjectEndedStudents({ countFrom: win.from })");
     expect(read("src/app/(shell)/withdrawals/page.tsx")).toContain("getSubjectEndedStudents({ withNotes: true })");
   });
   it("🔴 재원 복구로 다시 연 수강은 세부·메모도 비운다 — 나중에 메모 없이 닫으면 옛 메모가 되살아난다", () => {

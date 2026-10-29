@@ -22,6 +22,11 @@ export type TrendStudent = {
   status: string;
   enrolledAt: string | null;
   withdrawnAt: string | null;
+  /**
+   * 재원에서 빠지는 날 — 퇴원월(수강료를 낸 마지막 달 · 앞 달이면 그 달 말일 · 원장 2026-10-29 *"대시보드 모든 퇴원은 그렇게 계산"*).
+   * 퇴원일과 같으면 싣지 않는다(원본 캐시 크기). 시스템 정리 판정은 실제 퇴원일(`withdrawnAt`)로 한다.
+   */
+  exitAt?: string | null;
   /** 병합 표식을 읽는다 — 흡수된 쪽은 퇴원으로 남아 있어 세면 한 사람이 두 번 든다(퇴원관리·운영실과 같이 뺀다). */
   notes?: string | null;
   /** 병합 판정을 미리 한 값(원본 캐시가 메모 칸을 싣지 않게 — `isMergedStudent(notes)`와 같은 뜻). */
@@ -56,7 +61,7 @@ export function countedOn(s: TrendStudent, en: TrendEnrollments, d: string): boo
     const billed = billedOn(s, en, d);
     if (billed !== null) return billed;
   }
-  const out = s.withdrawnAt?.slice(0, 10);
+  const out = (s.exitAt ?? s.withdrawnAt)?.slice(0, 10);
   if (out && out <= d) return false;
   if (s.status === "withdrawn" && !out) return false; // 퇴원했는데 날짜가 없으면 언제까지 다녔는지 모른다
   if (s.status === "withdrawn" && isSystemBulkWithdrawal({ withdrawnAt: s.withdrawnAt, hasEnrollmentHistory: ended.has(s.id) })) return false;

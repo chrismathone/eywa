@@ -256,7 +256,7 @@ async function monthWithdrawals(
 ): Promise<OverviewData["withdrawals"]> {
   const month = today.slice(0, 7);
   const win = withdrawalMonthWindow(month, today);
-  const [rows, settings, ended] = await Promise.all([rowsPromise, settingsPromise, getSubjectEndedStudents()]);
+  const [rows, settings, ended] = await Promise.all([rowsPromise, settingsPromise, getSubjectEndedStudents({ countFrom: win.from })]);
   return {
     month,
     rows: includeSubjectEnds(rows

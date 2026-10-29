@@ -6,6 +6,7 @@ import { fetchAllPaged } from "@/lib/supabase/batch";
 import { reportWarning } from "@/lib/observability/report-error";
 import { isMergedStudent } from "@/features/students/status/merged";
 import { isCleanupExit } from "@/features/withdrawals/system-bulk";
+import { loadExitCountDates } from "@/features/withdrawals/server/exit-month";
 import type { TrendEnrollment, TrendEnrollments, TrendStudent } from "./enrolled-trend";
 import { loadCleanupBilling, type CleanupBilling } from "./trend-billing-server";
 
@@ -36,7 +37,7 @@ export const inputsOf = (raw: TrendRaw, billing: CleanupBilling | null, today: s
  * 키 판 v4 = 강좌수용 반 id·휴원·영어 프로그램을 더했다(침산 원본 약 0.5MB — 캐시 한도 2MB 안).
  */
 export const loadTrendRawCached = cache((tenantId: string, today: string) =>
-  unstable_cache(() => loadTrendRaw(tenantId, today), ["dashboard-enrolled-trend-raw-v4", tenantId, today], { revalidate: 300 })(),
+  unstable_cache(() => loadTrendRaw(tenantId, today), ["dashboard-enrolled-trend-raw-v5", tenantId, today], { revalidate: 300 })(),
 );
 
 /** 장부 정리 학생의 청구 재료 — 원본과 **따로** 5분 캐시. 실패는 캐시에 남지 않는다(`loadCleanupBilling`이 던진다). */
@@ -93,10 +94,14 @@ export async function loadTrendRaw(tenantId: string, today: string): Promise<Tre
     if (!cur || e.start_date < cur) firstStart.set(e.student_id, e.start_date);
   }
   // 오늘 이후로 적힌 퇴원(퇴원 예약)은 기록의 시작이 아니다 — 새 지점의 첫 퇴원이 예약이면 미래 달이 경계가 되어 화면이 빈다(리뷰 2026-10-20).
+  // 퇴원월(수강료를 낸 마지막 달 — 원장 2026-10-29): 재원에서 빠지는 날을 운영실 퇴원 카드와 같은 판정으로.
+  const exitDates = await loadExitCountDates(
+    students.filter((s) => s.status === "withdrawn" && s.withdrawn_at).map((s) => ({ id: s.id, tenantId, withdrawnAt: s.withdrawn_at })),
+  );
   const firstOut = students.reduce<string | null>((m, s) => (s.withdrawn_at && s.withdrawn_at.slice(0, 10) <= today && (!m || s.withdrawn_at < m) ? s.withdrawn_at : m), null);
   return {
     // 메모 칸(원본의 절반 가까이)은 싣지 않고 병합 판정 값만 싣는다 — 원본 캐시 크기(2MB 한도)·파싱 비용(적대 재리뷰 2026-10-20).
-    students: students.map((s) => ({ id: s.id, status: s.status, enrolledAt: s.enrolled_at, withdrawnAt: s.withdrawn_at, merged: isMergedStudent(s.notes), cleanup: isCleanupExit(s.withdrawal_metadata) })),
+    students: students.map((s) => ({ id: s.id, status: s.status, enrolledAt: s.enrolled_at, withdrawnAt: s.withdrawn_at, ...exitAtOf(exitDates.get(s.id), s.withdrawn_at), merged: isMergedStudent(s.notes), cleanup: isCleanupExit(s.withdrawal_metadata) })),
     enrollments: enrollments.map((e) => {
       const klass = Array.isArray(e.class) ? e.class[0] : e.class;
       return {
@@ -116,4 +121,9 @@ export async function loadTrendRaw(tenantId: string, today: string): Promise<Tre
     recordsFrom: firstOut ? firstOut.slice(0, 7) : null,
     fromYear: firstOut ? Number(firstOut.slice(0, 4)) : Number(today.slice(0, 4)),
   };
+}
+
+/** 퇴원월 날짜가 퇴원일과 다를 때만 싣는다(원본 캐시 크기 — 대부분 같다). */
+function exitAtOf(exitAt: string | undefined, withdrawnAt: string | null): { exitAt?: string } {
+  return exitAt && exitAt !== withdrawnAt?.slice(0, 10) ? { exitAt } : {};
 }

@@ -31,6 +31,8 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 const fetchAllPaged = vi.fn();
 vi.mock("@/lib/supabase/batch", () => ({ fetchAllPaged: (...args: unknown[]) => fetchAllPaged(...args), fetchAllPagedInChunks: vi.fn() }));
 const loadCleanupBilling = vi.fn();
+// 퇴원월(수강료를 낸 마지막 달)은 이 시험의 대상이 아니다 — 퇴원일 그대로(빈 맵).
+vi.mock("@/features/withdrawals/server/exit-month", () => ({ loadExitCountDates: async () => new Map() }));
 vi.mock("./trend-billing-server", () => ({ loadCleanupBilling: (...args: unknown[]) => loadCleanupBilling(...args) }));
 const loadRecordCoverage = vi.fn();
 vi.mock("./record-coverage", () => ({ loadRecordCoverage: (...args: unknown[]) => loadRecordCoverage(...args) }));

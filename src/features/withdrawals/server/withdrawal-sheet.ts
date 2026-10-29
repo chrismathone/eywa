@@ -21,7 +21,8 @@ import { licenseBlockReason } from "@/lib/license/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { reportError } from "@/lib/observability/report-error";
-import { loadExitCountDates } from "./exit-month";
+import { loadExitCountDates, loadSubjectExitCountDates } from "./exit-month";
+import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import {
   alreadyListed,
   colLetter,
@@ -259,15 +260,19 @@ async function writeEntries(spreadsheetId: string, entries: SheetEntry[], date: 
 
 /**
  * 적을 탭의 달 = 퇴원월(수강료를 낸 마지막 달, 원장 2026-10-29 *"퇴원관리 시트 연동도 동일한 조건"*) — 10/1에 그만뒀어도 9월까지만 냈으면
- * '26.9 퇴원' 탭. '최종퇴원일' 칸은 실제 날짜 그대로다. 🔴 **학생이 퇴원한 경우만** — 수학만 그만두고 다른 과목을 계속 다니면(수강종료)
- * 퇴원관리가 종료일로 세듯 종료일의 달 탭이다(적대 리뷰 2026-10-29: 그 달 청구가 아직 안 들어온 날엔 앞 달 탭으로 갈렸다).
+ * '26.9 퇴원' 탭. '최종퇴원일' 칸은 실제 날짜 그대로다. 학생이 퇴원했으면 수업료 전체로, 수학만 그만두고 다른 과목을 계속 다니면(수강종료)
+ * **수학 수업료**를 낸 마지막 달로 본다(원장 2026-10-29 *"9월 퇴원생 여전히 10월퇴원으로 뜨는데"* — 퇴원관리·운영실과 같은 판정).
  * 청구를 못 읽으면 퇴원일의 달(종전 규칙)로 적고 로그를 남긴다 — 시트 기입은 다시 돌지 않아 줄을 잃는 것이 더 나쁘다.
  */
 async function sheetTabDate(tenantId: string, studentId: string, date: string): Promise<string> {
   try {
     const { data, error } = await createAdminClient().from("students").select("status").eq("tenant_id", tenantId).eq("id", studentId).maybeSingle();
     if (error) throw error;
-    if ((data as { status?: string } | null)?.status !== "withdrawn") return date;
+    if ((data as { status?: string } | null)?.status !== "withdrawn") {
+      const settings = await getTenantSettingsByTenantId(tenantId);
+      const ends = [{ studentId, tenantId, subject: "math", endedAt: date }];
+      return (await loadSubjectExitCountDates(ends, settings.operations.subjects)).get(`${studentId}|math`) ?? date;
+    }
     return (await loadExitCountDates([{ id: studentId, tenantId, withdrawnAt: date }])).get(studentId) ?? date;
   } catch (e) {
     reportError(e, { where: "withdrawal-sheet.exit-month", studentId, date });
