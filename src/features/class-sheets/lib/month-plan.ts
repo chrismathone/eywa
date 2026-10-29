@@ -16,10 +16,10 @@ import { dowKeyOf } from "./week";
 
 /**
  * DB `class_month_plan_cells.col_kind`.
- * `off`는 열이 아니라 **그 날의 상태 표식**이고, `footer`는 칸이 아니라 **문서 아래 한 덩어리**다
- * (둘 다 격자에 서지 않는다 — 그래서 `MP_ALL_COLUMNS`와 따로 둔다).
+ * `off`는 열이 아니라 **그 날의 상태 표식**이고, `footer`는 칸이 아니라 **문서 아래 한 덩어리**, `title`은 **문서 맨 위 제목**
+ * (s2_0007 — 반이 고친 제목 · 비면 수업명을 따른다)이다(셋 다 격자에 서지 않는다 — 그래서 `MP_ALL_COLUMNS`와 따로 둔다).
  */
-export type MpColKind = "in_class" | "homework" | "ebook" | "test" | "off" | "footer";
+export type MpColKind = "in_class" | "homework" | "ebook" | "test" | "off" | "footer" | "title";
 
 /**
  * 화면·인쇄에 실제로 열로 서는 칸 — **순서가 곧 열 순서**다(원본 시트 그대로).
@@ -246,8 +246,9 @@ export function mpLevelFullName(className: string): string {
  * ⚠️ 달 표기는 시트와 같은 영문이다(`monthLabel`의 `2026년 9월`이 아니다) — 이 문서는 시트를
  *    그대로 대신하는 학부모 문서라 같은 글자를 쓴다. 달이 모양이 아니면 **월 줄을 통째로 생략**한다.
  */
-export function mpTitleLines(className: string, month: string): { name: string; period: string } {
-  const name = mpLevelFullName(className);
+export function mpTitleLines(className: string, month: string, custom?: string | null): { name: string; period: string } {
+  // 반이 고친 제목은 적은 그대로(레벨 풀네임으로 바꾸지 않는다 — 원장 2026-10-29 커스텀 제목).
+  const name = custom?.trim() ? custom.trim() : mpLevelFullName(className);
   const m = Number(month.slice(5, 7));
   const en = MP_MONTH_EN[m - 1];
   if (!/^\d{4}-\d{2}$/.test(month) || !en) return { name, period: "" };
@@ -255,8 +256,8 @@ export function mpTitleLines(className: string, month: string): { name: string; 
 }
 
 /** 제목 한 줄 표기 — 두 줄을 이어 붙인 것(문서 제목 문자열·스크린리더 이름용). */
-export function mpDocTitle(className: string, month: string): string {
-  const { name, period } = mpTitleLines(className, month);
+export function mpDocTitle(className: string, month: string, custom?: string | null): string {
+  const { name, period } = mpTitleLines(className, month, custom);
   return period ? `${name} ${period}` : name;
 }
 
@@ -314,6 +315,19 @@ export function mpFooterDate(month: string): string {
 export function mpResolveFooter(cells: MpCellMap, month: string, fallback: string): string {
   const saved = cells[mpCellKey(mpFooterDate(month), "footer")];
   return typeof saved === "string" ? saved : fallback;
+}
+
+/** 제목 칸 글자 수 상한 — 서버 저장 검사와 같은 값(한 줄 제목이라 짧다). */
+export const MP_TITLE_MAX = 40; // 60자는 좁은 문서(주 2일)에서 4줄이 되어 띠를 넘어 잘렸다(리뷰 2026-10-29)
+
+/**
+ * 그 달 계획서의 **반이 고친 제목**(원장 2026-10-29 *"자동으로 현재 수업명을 반영하는것을 디폴트로 하고 … 커스텀 된 값은 현재 수업명을
+ * 따라 움직이지 않고 … 다시 디폴트를 적용하기 전까지"*) — 그 달 1일의 `title` 칸(꼬리말과 같은 자리 규칙 · 그 달만).
+ * 🔑 꼬리말과 달리 **빈 값 = 기본(수업명을 따른다)**이다 — 제목은 비워 둘 수 없는 칸이라 '지웠다'는 뜻이 없다. 없으면 null.
+ */
+export function mpCustomTitle(cells: MpCellMap, month: string): string | null {
+  const saved = cells[mpCellKey(mpFooterDate(month), "title")];
+  return typeof saved === "string" && saved.trim() ? saved.trim() : null;
 }
 
 /** 그 달에서 이 반이 실제로 쓰는 날 — 배정이 있고(수업일) 휴강이 아닌 날. */

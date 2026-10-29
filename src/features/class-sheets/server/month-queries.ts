@@ -397,9 +397,9 @@ export async function getClassSheetMonth(
       colKind: String(r.col_kind) as MpColKind,
       body: typeof r.body === "string" ? r.body : "",
     }))
-    // 기간 밖 칸은 이 문서에 섞지 않는다 — 꼬리말만 예외로 **이 라벨월의 것**을 남긴다(옆 달 꼬리말은 버린다).
+    // 기간 밖 칸은 이 문서에 섞지 않는다 — 꼬리말·제목만 예외로 **이 라벨월의 것**을 남긴다(옆 달 것은 버린다).
     .filter((c) =>
-      c.colKind === "footer" ? c.planDate === footerDate : c.planDate >= from && c.planDate <= to,
+      c.colKind === "footer" || c.colKind === "title" ? c.planDate === footerDate : c.planDate >= from && c.planDate <= to,
     );
 
   const roomRows = (roomsRes.data ?? []) as { id: string; name: string }[];

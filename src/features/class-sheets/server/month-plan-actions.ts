@@ -24,7 +24,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { explainDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 import { mpStructuralChange, type MpSaveIntent } from "../lib/edit-audit";
-import { MP_ALL_COLUMNS, type MpColKind } from "../lib/month-plan";
+import { MP_ALL_COLUMNS, MP_TITLE_MAX, type MpColKind } from "../lib/month-plan";
 import { YMD_RE } from "../lib/week";
 import { requireEcsClassAccess } from "./access";
 
@@ -64,7 +64,8 @@ export async function saveMonthPlanCells(input: {
   if (patches.length > MAX_PATCHES) return { ok: false, error: "한 번에 저장할 칸이 너무 많습니다" };
 
   // `off`(상태 표식)·`footer`(문서 아래 한 덩어리, 0240a)는 격자 열이 아니지만 같은 표에 산다.
-  const kinds = new Set<MpColKind>([...MP_ALL_COLUMNS, "off", "footer"]);
+  // `title`(s2_0007 — 반이 고친 제목 · 그 달 1일) — 한 줄이라 짧게 받는다.
+  const kinds = new Set<MpColKind>([...MP_ALL_COLUMNS, "off", "footer", "title"]);
   for (const p of patches) {
     if (!YMD_RE.test(p?.date ?? "")) return { ok: false, error: "잘못된 요청입니다(날짜)" };
     if (!kinds.has(p?.colKind)) return { ok: false, error: "잘못된 요청입니다(칸 종류)" };
@@ -72,6 +73,7 @@ export async function saveMonthPlanCells(input: {
     if ((p.body?.length ?? 0) > MAX_BODY) return { ok: false, error: "입력이 너무 깁니다(2000자 이내)" };
     // 🔴 `off`는 자유 텍스트가 아니라 상태 표식이다 — 아무 글자나 받으면 `readMpOffOverride`가
     //    'auto'로 읽어 **저장은 됐는데 아무 일도 안 일어나는** 칸이 된다.
+    if (p.colKind === "title" && (p.body?.length ?? 0) > MP_TITLE_MAX) return { ok: false, error: `제목은 ${MP_TITLE_MAX}자 이내로 입력하세요` };
     if (p.colKind === "off" && p.body !== null && !OFF_VALUES.has(p.body)) {
       return { ok: false, error: "잘못된 요청입니다(휴강 표시)" };
     }

@@ -7,13 +7,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
 import { getViewerStaffScope } from "@/features/staff/department/server/subject-scope";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { canRequestReport, isBookkeepingReport, isParticipant, missingReportSchema, snapshotMatches, type StudentSnapshot, type WithdrawalReport, type ReportListRow, type ReportEvent, type StaffOption, type StudentOption, type CourseSnapshot } from "../model";
+import { EMPTY_BODY, canRequestReport, isBookkeepingReport, isParticipant, missingReportSchema, snapshotMatches, type StudentSnapshot, type WithdrawalReport, type ReportListRow, type ReportEvent, type StaffOption, type StudentOption, type CourseSnapshot } from "../model";
 import { kstToday } from "@/lib/date-kst";
 import { subjectLabelRecord } from "@/features/owner/subjects";
 import { protectedAccountIds } from "@/lib/auth/protected-accounts";
 import { displayRoleFor } from "@/lib/auth/super-admin";
 import { staffSubjectScopeOf } from "@/features/staff/department/subject-scope";
 import { loadReportPrefill } from "./prefill";
+import { loadReportBilling } from "./billing";
+import { liveBillingForSubmitted } from "../prefill";
 import { reportConsultations } from "./consultations";
 
 // 실험실 판정은 운영 콘솔 배정을 따른다(`isLaboratoryMenuAvailable`) — 예전엔 실험실 사용 여부를 배정과 무관하게 물어서,
@@ -90,10 +92,17 @@ export async function getReport(id: string) {
   ]);
   if (eventError) throw new Error("보고서 처리 이력을 불러오지 못했습니다.");
   const assignmentChanged = !["completed", "canceled"].includes(data.status) && (!current || !snapshotMatches(data.snapshot as StudentSnapshot, current));
-  // 작성 중 수납은 최신 장부를 사용하고, 제출한 보고서는 제출 당시 값을 보존한다.
+  // 작성 중엔 출결·수납을 최신으로 채운다. 제출한 보고서도 **수납은 지금 장부**로 보인다(원장 2026-10-29 "같은 곳을 가르켜야") —
+  // 수납 탭과 다른 숫자를 결재하지 않게. 제출 때와 달라졌으면 그 값을 덧붙인다(liveBillingForSubmitted). 장부를 못 읽으면 저장된 값 그대로.
+  // 완료·취소된 보고서는 끝난 기록이라 저장된 값 그대로다(퇴원 뒤 환불로 장부가 바뀌어도 그때 문서를 바꾸지 않는다).
   const draft = ["requested", "revision"].includes(data.status) && !assignmentChanged;
+  const submitted = !["requested", "revision", "completed", "canceled"].includes(data.status);
   const [prefill, consultations] = await Promise.all([
-    draft ? loadReportPrefill(data as WithdrawalReport, viewer.user.systemRole) : Promise.resolve({ prefill: undefined, prefillWarning: undefined }),
+    draft ? loadReportPrefill(data as WithdrawalReport, viewer.user.systemRole)
+      : !submitted && ["completed", "canceled"].includes(data.status) ? Promise.resolve({ prefill: undefined, prefillWarning: undefined })
+      : loadReportBilling(data as WithdrawalReport)
+        .then(live => ({ prefill: submitted ? liveBillingForSubmitted({ ...EMPTY_BODY, ...(data as WithdrawalReport).body }, live) : live, prefillWarning: undefined }))
+        .catch(() => ({ prefill: undefined, prefillWarning: "수납 정보를 지금 장부에서 불러오지 못해 제출 때 값을 보여줍니다." })),
     reportConsultations(data as WithdrawalReport, viewer),
   ]);
   return { report: data as WithdrawalReport, events: [...(events ?? [])].reverse() as ReportEvent[], assignmentChanged, consultations, ...prefill };

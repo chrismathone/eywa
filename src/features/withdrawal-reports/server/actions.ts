@@ -13,6 +13,7 @@ import { reportViewer, getReport } from "./queries";
 import { completedEnrollmentIds } from "./completed-target";
 import { appliedAuditMeta } from "../audit-meta";
 import { loadReportBilling } from "./billing";
+import { withoutBillingFields } from "../prefill";
 
 export type ReportResult = { ok: true; id: string } | { error: string };
 function refresh() {
@@ -86,7 +87,7 @@ export async function changeWithdrawalReport(id: string, action: ReportAction, r
     return { error: "작성 요청을 보낸 사람이나 원장만 취소할 수 있습니다." };
   const payload: { revision: number; body?: unknown; comment?: string } = { revision };
   if (action === "save" || action === "submit") {
-    const parsed = bodySchema.safeParse(input);
+    const parsed = bodySchema.safeParse(withoutBillingFields(input));
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "보고서 내용을 확인해 주세요." };
     if (action === "submit") { const error = submissionError(parsed.data); if (error) return { error }; }
     const existing = record.report.body.consultationIds ?? [];

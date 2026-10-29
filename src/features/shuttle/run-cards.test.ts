@@ -1,0 +1,35 @@
+import { describe, expect, it } from "vitest";
+import { buildRunCards } from "./run-cards";
+import type { ShuttleRun, ShuttleVehicle } from "./types";
+
+const vehicles: ShuttleVehicle[] = [{ id: "v1", name: "1호차", driverName: null, driverPhone: null, sortOrder: 1 }];
+const rider = (studentId: string, name: string, weekdays: string[] = []) =>
+  ({ id: `r-${studentId}`, studentId, studentName: name, schoolGrade: "칠성초5", ioKind: "in", weekdays, memo: null, studentStatus: "enrolled" }) as never;
+const stop = (sortOrder: number, kind: string, name: string, atTime: string | null, riders: never[] = []) =>
+  ({ id: `${name}`, kind, stopId: name, stopName: name, stopMemo: null, sortOrder, atTime, riders }) as never;
+
+describe("buildRunCards — 회차 × 요일 배차 카드", () => {
+  const runs: ShuttleRun[] = [
+    {
+      id: "in1", vehicleId: "v1", season: "term", runNo: 1, direction: "in", label: null,
+      stops: [stop(1, "stop", "침산초 후문", "14:50:00", [rider("a", "강지호")]), stop(2, "stop", "칠성초 정문", "14:55:00", [rider("b", "김민준", ["mon"])]), stop(3, "arrive", "학원", "15:00:00")],
+    },
+    {
+      id: "out1", vehicleId: "v1", season: "term", runNo: 2, direction: "out", label: null,
+      stops: [stop(1, "depart", "학원", "18:10:00"), stop(2, "stop", "칠성초 정문", "18:20:00", [rider("b", "김민준")]), stop(3, "stop", "침산초 후문", "18:30:00")],
+    },
+  ];
+  const cards = buildRunCards(runs, vehicles);
+  it("등원 = 첫 정류장 ~ 학원 도착 · 그 요일에 타는 아이만(노선 순서)", () => {
+    const mon = cards.find((c) => c.id === "run:in1:mon")!;
+    expect(mon).toMatchObject({ start: "14:50", end: "15:00", academyTime: "15:00", direction: "in", vehicleName: "1호차", runName: "1회차" });
+    expect(mon.riders.map((r) => `${r.name}@${r.stopTime}`)).toEqual(["강지호@14:50", "김민준@14:55"]);
+    expect(cards.find((c) => c.id === "run:in1:tue")!.riders.map((r) => r.name)).toEqual(["강지호"]);
+  });
+  it("하원 = 학원 출발 ~ 마지막 정류장 · 타는 아이가 없는 요일은 카드 없음", () => {
+    expect(cards.find((c) => c.id === "run:out1:fri")).toMatchObject({ start: "18:10", end: "18:30", academyTime: "18:10" });
+    expect(cards.filter((c) => c.runId === "out1")).toHaveLength(5);
+    const empty = buildRunCards([{ ...runs[0]!, stops: [stop(1, "arrive", "학원", "15:00:00")] }], vehicles);
+    expect(empty).toEqual([]);
+  });
+});

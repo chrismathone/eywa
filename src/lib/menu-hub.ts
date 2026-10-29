@@ -257,6 +257,8 @@ export const INNER_TABS: { parent: string; items: HubDest[] }[] = [
   {
     parent: "/shuttle",
     items: keep([
+      // 탑승 학생 시간표(2026-10-27) — 노선 편성 바로 뒤 · 🔒 원장·관리자·총괄 전용(화면은 isShuttleAdmin 404).
+      face("shuttle", "/shuttle/classes", "탑승 학생 시간표", undefined, { icon: "layers", adminOnly: true }),
       face("shuttle", "/shuttle/week", "주간 시간표", undefined, { icon: "calendarClock" }),
       face("shuttle", "/shuttle/today", "오늘 등하원", undefined, { icon: "busStop" }),
       face("shuttle", "/shuttle/parent-rides", "학부모 등하원"),

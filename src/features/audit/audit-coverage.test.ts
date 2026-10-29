@@ -29,6 +29,8 @@ const READ = "읽기 — 쓰기가 없는 RPC";
 
 /** `상대경로#함수` → 이유. 이유 없는 줄·사라진 함수는 실패한다. */
 const EXEMPT: Record<string, string> = {
+  // 내가 마지막에 쓴 보고서 템플릿 기억(반마다) — 내 계정 ui_prefs만 바꾼다(원장 2026-10-29 점검).
+  "src/features/onescreen/server/actions.ts#setMyLastReportTemplate": PERSONAL,
   // 보기 설정
   "src/features/attendance/seat/server/monthly-prefs.ts#saveSeatMonthlyCollapsed": VIEW,
   "src/features/class-review/server/actions.ts#setMyClassReviewFilter": VIEW,
@@ -77,6 +79,8 @@ const EXEMPT: Record<string, string> = {
   "src/features/meetings/server/actions.ts#updateMeetingNotepad": CELL,
   // AI 결과 캐시
   "src/features/attendance/recap/server/actions.ts#generateRecapSummary": AI_CACHE,
+  // 사랑의 한마디 초안 기록(다음 초안이 고친 방식을 배우는 재료) — 강사가 실제로 저장한 보고서는 그쪽에서 남는다(원장 2026-10-29 점검).
+  "src/features/onescreen/server/love-note-actions.ts#suggestLoveNote": AI_CACHE,
   "src/features/enrollment/server/prep-actions.ts#generatePrepBrief": AI_CACHE,
   // 자체 기록
   "src/features/billing/session-terms/server/receipt-allocation-actions.ts#mergeReceiptItems": `${OWN_LOG} (edit_receipt_merge_group이 audit_logs에 쓴다)`,

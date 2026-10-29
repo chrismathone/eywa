@@ -37,6 +37,9 @@ describe("셔틀 면 전환", () => {
     // 가까운 노선 찾기도 같은 관리자 전용(2026-10-26).
     expect(shuttleFaces("term").map((f) => f.key)).not.toContain(SHUTTLE_NEARBY_PATH);
     expect(admin.at(-1)).toEqual({ key: SHUTTLE_NEARBY_PATH, label: "가까운 노선 찾기", href: "/shuttle/nearby?season=term" });
+    // 탑승 학생 시간표는 노선 편성 바로 뒤(사용자 2026-10-29).
+    expect(admin[1]).toEqual({ key: "/shuttle/classes", label: "탑승 학생 시간표", href: "/shuttle/classes?season=term" });
+    expect(shuttleFaces("term").map((f) => f.key)).not.toContain("/shuttle/classes");
   });
 
   it("원장·관리자 전용 '학부모 관리 현황'은 공용 탭 줄에 없다", () => {

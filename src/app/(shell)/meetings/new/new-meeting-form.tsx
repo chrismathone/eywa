@@ -74,9 +74,11 @@ export function NewMeetingForm({ onSuccess, recordingOwner, instance }: {
   const [restored, setRestored] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
   const [recoveryId, setRecoveryId] = useState<string | null>(null);
+  // 녹음 중단 진단 — 이 파일이 어디서 왔나(감사로그에서 중단 기록과 녹음 id로 잇는다 · 원장 2026-10-29).
+  const [fileOrigin, setFileOrigin] = useState<"recorded" | "restored" | null>(null);
   const recordingScope = title.trim() ? { ...recordingOwner, recordKey: `meeting:${JSON.stringify([title.trim(), heldAt.slice(0, 10)])}`, label: title.trim() } : null;
 
-  const recorded = useBrowserRecording("meeting", recordingScope, (f, id) => { setFile(f); setRecoveryId(id); });
+  const recorded = useBrowserRecording("meeting", recordingScope, (f, id) => { setFile(f); setRecoveryId(id); setFileOrigin("recorded"); });
   const microphone = useMicrophone();
   const isRecording = recorded.recording;
   const recordSeconds = recorded.seconds;
@@ -148,6 +150,7 @@ export function NewMeetingForm({ onSuccess, recordingOwner, instance }: {
       return;
     }
     setRecoveryId(null);
+    setFileOrigin(null);
     setFile(f);
   }
 
@@ -269,6 +272,7 @@ export function NewMeetingForm({ onSuccess, recordingOwner, instance }: {
       fd.append("heldAt", heldDate.toISOString());
       fd.append("audioPath", objectName);
       fd.append("audioSizeBytes", String(file.size));
+      if (recoveryId && fileOrigin) { fd.append("recordingSessionId", recoveryId); fd.append("recordingOrigin", fileOrigin); }
       fd.append("notepad", notepad);
 
       // 성공이면 새 회의 id가 온다 — 서버가 redirect하지 않는다(했더니 이 promise가 NEXT_REDIRECT로 reject돼
@@ -314,7 +318,7 @@ export function NewMeetingForm({ onSuccess, recordingOwner, instance }: {
       />
       {recordingOn ? <RecordingRecoveryNotice key={recordingScope?.recordKey ?? "empty"} kind="meeting" scope={recordingScope}
         selectedId={recoveryId ?? recorded.activeRecoveryId} disabled={busy || isRecording}
-        onRestore={(recovered, meta) => { setFile(recovered); setRecoveryId(meta.id); }} /> : null}
+        onRestore={(recovered, meta) => { setFile(recovered); setRecoveryId(meta.id); setFileOrigin("restored"); }} /> : null}
       {recordingOn && recorded.elsewhere ? <p className="text-text-dim text-xs">이 회의는 다른 창이나 탭에서 녹음하고 있습니다.</p> : null}
 
       {/* Title */}

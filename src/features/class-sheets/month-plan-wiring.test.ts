@@ -168,6 +168,10 @@ describe("🔴 인쇄물은 학부모 문서다 — 신호가 실리지 않는�
     // 저장 경로를 새로 만들지 않는다 — 같은 액션·같은 표(col_kind='footer').
     expect(planActions).toContain('"footer"');
     expect(migrationFooter).toContain("'footer'");
+    // 제목(s2_0007 — 그 달만 고친 제목)도 같은 표·같은 액션이다. CHECK에 옛 종류를 빠뜨리면 그 칸 저장이 전부 거절된다.
+    const migrationTitle = readFileSync(join(process.cwd(), "supabase", "migrations", "s2_0007_month_plan_title.sql"), "utf8");
+    expect(migrationTitle).toContain("check (col_kind in ('in_class', 'homework', 'ebook', 'test', 'off', 'footer', 'title'))");
+    expect(planActions).toContain('"footer", "title"');
     // 🔴 세션 줄은 편집 대상이 아니다(날짜라 글자로 굳히면 거짓이 된다).
     expect(planTexts).not.toContain("mpSessionLine");
     expect(planTexts).toContain("export function defaultMonthPlanFooter");
@@ -330,7 +334,7 @@ describe("🔴 기간 축(월/세션, 2026-09-21) — 화면·인쇄·저장이 
   });
 
   it("🔴 꼬리말은 라벨월 1일에 앉으므로 창 밖이어도 남긴다", () => {
-    expect(monthQueries).toContain('c.colKind === "footer" ? c.planDate === footerDate');
+    expect(monthQueries).toContain('c.colKind === "footer" || c.colKind === "title" ? c.planDate === footerDate');
   });
 
   it("🔴 화면이 보던 축을 인쇄 주소에 싣고, 인쇄가 그 축으로 다시 조회한다", () => {

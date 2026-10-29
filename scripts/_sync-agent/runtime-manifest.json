@@ -247,6 +247,7 @@
     "textbook_orders",
     "unnest",
     "user_integrations",
-    "users"
+    "users",
+    "video_homework_extra_issues"
   ]
 }

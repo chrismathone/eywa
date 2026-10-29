@@ -210,6 +210,12 @@ const charsKo = (v: unknown, label: string): string | null => {
   return n === null || n <= 0 ? null : `${label} ${n.toLocaleString("ko-KR")}자`;
 };
 
+/** 회의 녹음 업로드의 파일 출처(녹음 중단 진단 2026-10-29) — 복구본이면 '녹음 중단' 기록과 같은 녹음 id로 잇는다. */
+const recordingOriginKo = (v: unknown): string | null => {
+  const origin = v && typeof v === "object" ? (v as Record<string, unknown>).origin : null;
+  return origin === "restored" ? "복구한 녹음" : origin === "recorded" ? "이 브라우저 녹음" : null;
+};
+
 /** 학생상담 분류·대상 — 🔴 미등록 키는 **null**(영문 원문을 흘리지 않는다). */
 const consultCategoryKo = (v: unknown): string | null => {
   const s = str(v);
@@ -295,6 +301,10 @@ const SYSTEM_ACTOR_LABEL: Record<string, string> = {
   "classnote-auto-sync": "ClassNote 반 보드 자동 동기화(연동 PC)",
   // ClassNote 학부모 답글(0317a) — 연동 PC 워커가 게시·수정·삭제 결과를 직접 남긴다.
   "classnote-parent-reply": "ClassNote 학부모 답글(연동 PC)",
+  // 원생 통계 '지난 기록' 다시 세기(메이크에듀 재구성 · 에이와 밤 집계 손 실행) — 원장 지시 때만(2026-10-29).
+  "student-history-rebuild": "원생 통계 지난 기록 다시 세기",
+  // 반미정 영상의 반을 담임 배정·숙제로 정한 정리 스크립트(2026-10-29).
+  "video-unknown-class-fix": "반미정 영상 반 정리",
 };
 const SYSTEM_ACTOR_FALLBACK = "시스템 스크립트";
 
@@ -824,6 +834,14 @@ export function auditDetail(
     case "student_contribution_signal_cancel":
     case "student_contribution_signal_rejudge":
       return typeof m.reason === "string" ? m.reason : null;
+    case "student_history_rebuild": {
+      const what = { makeedu: "메이크에듀 줄 다시 세기", aywa: "에이와 밤 집계 손 실행", revert: "되돌리기" }[String(m.kind)] ?? null;
+      return join(what, typeof m.rows === "number" ? `${m.rows}줄` : null, typeof m.note === "string" ? m.note : null);
+    }
+    case "video_unknown_class_fix": {
+      const how = { 담임배정: "담임 배정", 숙제: "영상 숙제", 반하나: "그날 반 하나", revert: "되돌리기" }[String(m.how)] ?? null;
+      return join(how ? `${how}로` : null, typeof m.className === "string" ? m.className : null, typeof m.postedOn === "string" ? `${m.postedOn} 영상` : null);
+    }
     case "student_contribution_referral_backfill":
     case "student_contribution_referral_link":
       return join(m.source === "backfill" ? "지난 소개 자동 연결" : "소개자 직접 확인", typeof m.evidence === "string" ? m.evidence : null);
@@ -2469,6 +2487,21 @@ export function auditDetail(
         fileSize(m.sizeBytes) ? `녹음 ${fileSize(m.sizeBytes)}` : null,
         num(m.attendees) ? `참석 ${num(m.attendees)}명` : null,
         charsKo(m.notepadChars, "메모"),
+        recordingOriginKo(m.recording),
+      );
+    }
+    case "recording_interrupted": {
+      // 대상 열이 사유를 보여준다 — 여기는 종류·녹음 분량·오류 코드·화면 상태·브라우저·늦은 보고 여부.
+      const kind = ({ meeting: "회의", consultation: "등록 상담", "student-consultation": "학생 상담" } as Record<string, string>)[String(m.kind)] ?? null;
+      const secs = num(m.seconds);
+      return join(
+        kind ? `${kind} 녹음` : null,
+        secs !== null ? `${Math.floor(secs / 60)}분 ${secs % 60}초 녹음` : null,
+        str(m.errorCode) ? `코드 ${str(m.errorCode)}` : null,
+        m.visibility === "hidden" ? "화면 가려짐" : null,
+        m.online === false ? "오프라인" : null,
+        str(m.browser) && m.browser !== "other" ? String(m.browser) : null,
+        m.late === true ? "다음 접속 때 확인" : null,
       );
     }
     case "meeting_create_text": {

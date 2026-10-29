@@ -122,6 +122,10 @@ try {
           where tenant_id=${t} and source='makeedu' and month=${`${r.month}-01`}::date`;
       }
       for (const m of added) await tx`delete from public.student_history_monthly where tenant_id=${t} and source='makeedu' and month=${`${m}-01`}::date`;
+      // 감사로그(원장 2026-10-29 "오늘 작업건에 대해선 전부 감사로그") — 같은 거래.
+      await tx`insert into public.audit_logs (tenant_id, actor_name, action, target_type, target_label, metadata)
+        values (${t}, 'system:student-history-rebuild', 'student_history_rebuild', 'student_history_monthly', '메이크에듀 지난 기록 되돌리기',
+          ${tx.json({ kind: "revert", rows: backup.rows.length, removed: added.length, backup: REVERT })})`;
     });
     console.log(`되돌림: 메이크에듀 줄 ${backup.rows.length}개를 백업 값으로 · 새로 넣었던 줄 ${added.length}개 지움`);
     await sql.end();
@@ -320,6 +324,10 @@ try {
           values (${t}, ${`${n.month}-01`}::date, 'makeedu', ${tx.json(n.data as never)}, ${now})
           on conflict (tenant_id, month, source) do update set data = excluded.data, computed_at = excluded.computed_at`;
       }
+      // 감사로그 — 같은 거래(쓰기가 실패하면 기록도 없다). 달별 값은 백업 파일에 있다.
+      await tx`insert into public.audit_logs (tenant_id, actor_name, action, target_type, target_label, metadata)
+        values (${t}, 'system:student-history-rebuild', 'student_history_rebuild', 'student_history_monthly', '메이크에듀 지난 기록 다시 세기',
+          ${tx.json({ kind: "makeedu", rows: next.length, skipped: [...skip].filter((m) => !bridge.has(m)), bridged: [...bridge], backup: file })})`;
     });
     const back = await sql`select count(*)::int n from public.student_history_monthly where tenant_id=${t} and source='makeedu' and month <= ${`${THROUGH}-01`}::date and computed_at=${now}`;
     console.log(`썼다: 메이크에듀 줄 ${back[0]!.n}/${next.length} · 되돌리기: --revert=${file}`);

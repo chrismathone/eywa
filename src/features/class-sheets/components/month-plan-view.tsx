@@ -16,10 +16,12 @@ import {
   MP_COLUMN_LABEL,
   MP_DOW_LABEL_EN,
   MP_LOGO_SRC,
+  MP_TITLE_MAX,
   mpCellKey,
   mpColumnsForDow,
   mpDayIsOff,
   mpDayKindOf,
+  mpCustomTitle,
   mpDocTitle,
   mpFooterDate,
   mpOffLabel,
@@ -211,6 +213,90 @@ function FooterBlock({
   );
 }
 
+/**
+ * 계획서 제목의 반 이름 줄 — 눌러서 **이 달만** 고친다(원장 2026-10-29 *"수업명을 그냥 커스텀 수정할 수 있게"*).
+ * 🔑 비우면(또는 '수업명 따라가기') 기본 = 현재 수업명을 따른다. 고친 값은 수업명이 바뀌어도 그대로다.
+ * 🔴 보기는 인쇄물과 같은 글꼴·크기(호출부가 맞춘 `style`)라 누르기 전 모습이 시트와 같다.
+ */
+function TitleName({
+  name,
+  raw,
+  custom,
+  fallback,
+  style,
+  disabled,
+  onChange,
+}: {
+  name: string;
+  /** 저장된 칸 값 그대로(공백 포함) — 입력칸은 이 값을 따른다(저장 실패로 되돌아가면 입력칸도 되돌아간다 · 리뷰 2026-10-29). */
+  raw: string;
+  custom: string | null;
+  /** 수업명을 따를 때의 이름(입력칸 자리 표시). */
+  fallback: string;
+  style: React.CSSProperties;
+  disabled: boolean;
+  onChange: (next: string) => void;
+}) {
+  const t = useSheetT();
+  const [editing, setEditing] = useState(false);
+  if (editing && !disabled) {
+    return (
+      // 버튼은 입력칸 **옆**에 — 아래로 쌓으면 60px 제목 띠를 넘어 위아래가 잘린다(리뷰 2026-10-29).
+      <span className="flex w-full items-center gap-1">
+        <input
+          autoFocus
+          className="min-w-0 flex-1 border-0 bg-white/70 text-center outline-none"
+          style={style}
+          maxLength={MP_TITLE_MAX}
+          spellCheck={false}
+          value={raw}
+          placeholder={fallback}
+          aria-label={t("mp.titleAria")}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur();
+          }}
+          // Tab으로 '수업명 따라가기'에 가면 닫지 않는다(키보드로도 누를 수 있게).
+          onBlur={(e) => {
+            if ((e.relatedTarget as HTMLElement | null)?.dataset?.mpTitleFollow === undefined) setEditing(false);
+          }}
+        />
+        {custom ? (
+          <button
+            type="button"
+            data-mp-title-follow=""
+            className="text-primary shrink-0 text-xs whitespace-nowrap underline"
+            // blur가 먼저 와서 버튼이 사라지지 않게 누르는 순간 막는다.
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              onChange("");
+              setEditing(false);
+            }}
+            onBlur={() => setEditing(false)}
+          >
+            {t("mp.titleFollow")}
+          </button>
+        ) : null}
+      </span>
+    );
+  }
+  return (
+    <span
+      role={disabled ? undefined : "textbox"}
+      tabIndex={disabled ? -1 : 0}
+      aria-label={t("mp.titleAria")}
+      aria-readonly={disabled || undefined}
+      title={disabled ? undefined : custom ? t("mp.titleCustom") : t("mp.titleDefault")}
+      onClick={() => !disabled && setEditing(true)}
+      onFocus={() => !disabled && setEditing(true)}
+      className={disabled ? "" : "cursor-text"}
+      style={style}
+    >
+      {name}
+    </span>
+  );
+}
+
 /** 그 요일에 **수업이 아예 없을 때**(달 밖·배정 밖) 한 칸으로 자리만 지킨다. ⚠️ 휴강은 회색이라 여기가 아니다. */
 const BLANK = { backgroundColor: MP_SHEET_COLOR.paper } as const;
 
@@ -328,7 +414,9 @@ export function MonthPlanView({
   const dataColumnCount = data.dows.reduce((n, dow) => n + columnsByDow[dow].length, 0);
   const docWidth = mpDocWidth(dataColumnCount);
   // 제목은 두 줄(반 이름 / 월)이고 반 이름은 폭에 맞춰 줄어든다 — 인쇄물과 **같은 함수**를 쓴다.
-  const title = mpTitleLines(data.className, data.month);
+  // 반이 고친 제목(그 달만 · 원장 2026-10-29)이 있으면 그것, 없으면 수업명을 따른다.
+  const customTitle = mpCustomTitle(cells, data.month);
+  const title = mpTitleLines(data.className, data.month, customTitle);
   const titleFit = mpFitTitle(title.name, title.period, mpTitleBoxPx(dataColumnCount));
 
   return (
@@ -352,9 +440,17 @@ export function MonthPlanView({
             <h2
               className="flex flex-col items-center justify-center px-2 text-center"
               style={{ ...mpGridBorder(), ...mpTitleStyle() }}
-              title={mpDocTitle(data.className, data.month)}
+              title={mpDocTitle(data.className, data.month, customTitle)}
             >
-              <span style={mpTitleNameStyle(titleFit.nameSize)}>{title.name}</span>
+              <TitleName
+                name={title.name}
+                raw={cells[mpCellKey(mpFooterDate(data.month), "title")] ?? ""}
+                custom={customTitle}
+                fallback={mpTitleLines(data.className, data.month).name}
+                style={mpTitleNameStyle(titleFit.nameSize)}
+                disabled={!canEdit}
+                onChange={(next) => onCell(mpFooterDate(data.month), "title", next)}
+              />
               {title.period ? (
                 <span style={mpTitlePeriodStyle(titleFit.periodSize)}>{title.period}</span>
               ) : null}

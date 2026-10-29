@@ -54,6 +54,9 @@ export const AUDIT_ACTIONS = {
   student_contribution_signal_cancel: "원생 긍정 신호 판정 취소",
   student_contribution_signal_rejudge: "원생 긍정 신호 재판정 요청",
   student_contribution_referral_backfill: "지난 원생 소개 연결",
+  // 운영 스크립트(원장 지시 · 2026-10-29 "오늘 작업건에 대해선 전부 감사로그 배정여부 체크하고 넣을것") — 행위자 = system:<스크립트>.
+  student_history_rebuild: "원생 통계 지난 기록 다시 세기",
+  video_unknown_class_fix: "반미정 영상 반 정리",
   student_parent_events_import: "설명회 참석 연결",
   student_parent_events_revoke: "설명회 참석 연결 취소",
   student_contribution_referral_link: "원생 소개 확인·연결",
@@ -321,6 +324,8 @@ export const AUDIT_ACTIONS = {
   // ⚠️ 메모장 저장(updateMeetingNotepad)은 **일부러 안 남긴다** — 글 쓰는 중 반복해서 눌리는 칸이라
   //    남기면 감사로그가 그 한 사람 타이핑으로 뒤덮여 정작 삭제 같은 줄이 묻힌다.
   meeting_create_audio: "회의 녹음 업로드",
+  // 녹음 중단 진단(원장 2026-10-29 "회의록이 강제로 종료된건 이유 체크") — 회의·상담 녹음 하나에 한 줄. src/lib/recording-diagnostics-core.ts
+  recording_interrupted: "녹음 중단",
   meeting_create_text: "회의록 작성(메모)",
   meeting_delete: "회의록 삭제",
   meeting_retry_transcribe: "회의 전사 다시 실행",
