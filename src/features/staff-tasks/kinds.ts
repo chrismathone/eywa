@@ -55,6 +55,10 @@ export const TASK_KINDS: Record<string, StaffTaskKindInfo> = {
     label: "퇴원보고서",
     doneRule: "작성 차례는 보고서를 제출하면, 승인 차례는 승인하면 처리됩니다. 보완 요청·취소로 차례가 없어지면 취소됩니다. 작성은 이틀, 승인은 다음 날까지 안 하면 늦음입니다.",
   },
+  refund_process: {
+    label: "환불 처리",
+    doneRule: "퇴원보고서에서 원장이 환불을 승인하며 나를 데스크 담당자로 지정한 일입니다. 환불 요청서에 환불완료일자를 넣고 저장하면 처리됩니다. 요청서를 지우면 취소됩니다. 다음 날까지 처리하지 않으면 늦음입니다.",
+  },
   help_question: {
     label: "도움말 질문",
     doneRule: "질문에 답변이 달리거나 답변 완료·닫힘이 되면 처리됩니다. 질문이 지워지면 취소됩니다. 다음 날까지 답하지 않으면 늦음입니다.",
@@ -96,6 +100,7 @@ const CLOSE_REASON: Record<string, string> = {
   too_old: "재발송 기한이 지남",
   deadline: "재발송 기한이 지남",
   followup_done: "후속조치 완료 체크",
+  refund_completed: "환불 요청서에 환불완료일자를 넣음",
   rescheduled: "기한을 다른 날로 옮김",
   cleared: "후속조치 기한을 지움",
   anomaly_resolved: "이상 없음으로 확인",

@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
 import { getViewerStaffScope } from "@/features/staff/department/server/subject-scope";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { EMPTY_BODY, canRequestReport, isBookkeepingReport, isParticipant, missingReportSchema, snapshotMatches, type StudentSnapshot, type WithdrawalReport, type ReportListRow, type ReportEvent, type StaffOption, type StudentOption, type CourseSnapshot } from "../model";
+import { EMPTY_BODY, cancelsAsDirector, canRequestReport, isBookkeepingReport, isParticipant, missingReportSchema, snapshotMatches, type StudentSnapshot, type WithdrawalReport, type ReportListRow, type ReportEvent, type StaffOption, type StudentOption, type CourseSnapshot } from "../model";
 import { kstToday } from "@/lib/date-kst";
 import { subjectLabelRecord } from "@/features/owner/subjects";
 import { protectedAccountIds } from "@/lib/auth/protected-accounts";
@@ -15,7 +15,7 @@ import { displayRoleFor } from "@/lib/auth/super-admin";
 import { staffSubjectScopeOf } from "@/features/staff/department/subject-scope";
 import { loadReportPrefill } from "./prefill";
 import { loadReportBilling } from "./billing";
-import { loadLaterInvoices, type LaterInvoice } from "./refund";
+import { loadDeskStaff, loadLaterInvoices, type LaterInvoice } from "./refund";
 import { liveBillingForSubmitted } from "../prefill";
 import { reportConsultations } from "./consultations";
 
@@ -109,7 +109,11 @@ export async function getReport(id: string) {
   // 퇴원월 뒤 청구(원장 2026-10-29) — 취소된 보고서는 보이지 않는다. 못 읽으면 빈 목록(보고서 화면은 연다).
   const laterInvoices: LaterInvoice[] = data.status === "canceled" ? []
     : await loadLaterInvoices(data as WithdrawalReport).catch((e) => { console.error("[withdrawal-report-later-invoices]", e); return []; });
-  return { report: data as WithdrawalReport, events: [...(events ?? [])].reverse() as ReportEvent[], assignmentChanged, consultations, laterInvoices, ...prefill };
+  // 데스크 담당자 목록은 환불을 승인할 수 있는 원장에게만(이름 목록을 다른 사람에게 내리지 않는다).
+  // 승인 권한과 같은 기준 · 자기 자신은 빼고(자기 알림은 가지 않음 — notifyUsers).
+  const deskStaff = laterInvoices.length && cancelsAsDirector(viewer.user.systemRole, !!viewer.teacherId)
+    ? (await loadDeskStaff(viewer.user.tenantId).catch(() => [])).filter(s => s.id !== viewer.user.id) : [];
+  return { report: data as WithdrawalReport, events: [...(events ?? [])].reverse() as ReportEvent[], assignmentChanged, consultations, laterInvoices, deskStaff, ...prefill };
 }
 export async function reportStaff() {
   const viewer = await reportViewer();

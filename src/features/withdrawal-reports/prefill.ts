@@ -8,12 +8,12 @@ export type InvoicePrefillRow = InvoiceSummaryInput & { period: string; category
 
 export function attendancePrefill(rows: AttendancePrefillRow[], courses: CourseSnapshot[], from: string, to: string): string {
   const effective = effectiveAttendanceRecords(rows.filter(row => row.session_date >= from && row.session_date <= to && courses.some(c => c.classId === row.class_id && c.startDate <= row.session_date && (!c.endDate || c.endDate >= row.session_date))));
-  if (!effective.length) return "등록된 출결 기록 없음";
+  if (!effective.length) return `${from} ~ ${to} 등록된 출결 기록 없음`;
   const counts = ["present", "late", "absent", "excused", "makeup", "early_leave"].flatMap((key, i) => {
     const count = effective.filter(r => r.status === key).length;
     return i < 3 || count ? [`${attendanceStatusLabel(key)} ${count}회`] : [];
   });
-  return `전체 ${effective.length}회 / ${counts.join(" / ")}`;
+  return `${from} ~ ${to} 전체 ${effective.length}회 / ${counts.join(" / ")}`;
 }
 
 export const INVOICE_CATEGORY_LABEL: Record<string, string> = { tuition: "수강료", material: "교재", exam: "시험", other: "기타" };
