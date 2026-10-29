@@ -42,7 +42,6 @@ export function HistoryTable({
     ...(split && shown.has("payingInjaewon") ? [field("payingInjaewon", `${programs.injaewon.label}(월평균)`)] : []),
     ...(split ? subjectKeys.map(subject) : []),
     ...(split && shown.has("payingOther") && !subjectKeys.length ? [field("payingOther", "그 밖의 과목(월평균)")] : []),
-    ...(split && shown.has("payingUnknown") ? [field("payingUnknown", "과목 모름(월평균)")] : []),
     ...(has("payingGeneral") ? [field("payingGeneral", hasEie ? "EiE 외 수업(월평균)" : "수업료가 청구된 학생(월평균)")] : []),
     ...(hasEie ? [field("payingEie", `${programs.eie.label}(월평균)`)] : []),
     field("newReal", "실제 신규", true),

@@ -30,7 +30,7 @@ type Line = { key: HistoryField; name: string; color: string; strong?: boolean }
 
 /**
  * 선 — 프로그램 칸(수업명으로 가른 값 · 원장 2026-10-21 *"수학과 영어로 구분 못하나? 수업명 가지고?"*)이 있으면 **수학 · 인재원 영어 · EiE**
- * (+ 그 밖의 과목 · 과목 모름 — 값이 있을 때만), 없으면 종전대로 EiE 외 수업 · EiE. 메이크에듀 재원생 기록 = 참고(회색).
+ * (+ 그 밖의 과목 — 값이 있을 때만 · 과목 모름은 보이지 않는다), 없으면 종전대로 EiE 외 수업 · EiE. 메이크에듀 재원생 기록 = 참고(회색).
  * EiE 청구가 없는 지점은 EiE를 가르지 않으니 첫 선의 이름이 그냥 '수업료가 청구된 학생'이다(없는 프로그램 이름을 붙이지 않는다).
  */
 function historyLines(hasEie: boolean, split: boolean, programs: HistoryPrograms): Line[] {
@@ -47,7 +47,7 @@ function historyLines(hasEie: boolean, split: boolean, programs: HistoryPrograms
     { key: "payingInjaewon", name: programs.injaewon.label, color: programs.injaewon.color, strong: true },
     { key: "payingEie", name: programs.eie.label, color: programs.eie.color, strong: true },
     { key: "payingOther", name: "그 밖의 과목", color: DASHBOARD_SUBJECT_COLORS.other },
-    { key: "payingUnknown", name: "과목 모름", color: "#b8c0c9" },
+    // 과목 모름은 세우지 않는다(원장 2026-10-29 *"과목 모름은 그냥 제거"* — 선·표 열 모두 · 값은 DB에 그대로).
     reference,
   ];
 }
@@ -102,8 +102,8 @@ export function HistoryBoard({
   const lines = historyLines(hasEie, split, programs)
     .filter((l) => (l.key === "enrolledRecord" || l.key === "payingGeneral" ? months.some((m) => m[l.key] !== undefined) : months.some((m) => (m[l.key] ?? 0) > 0)))
     .filter((l) => !(subjectSeries.length && l.key === "payingOther"));
-  // 과목 선은 '그 밖의 과목' 자리(과목 모름 · 메이크에듀 재원생 기록 앞)에.
-  const tailAt = lines.findIndex((l) => l.key === "payingUnknown" || l.key === "enrolledRecord");
+  // 과목 선은 '그 밖의 과목' 자리(메이크에듀 재원생 기록 앞)에.
+  const tailAt = lines.findIndex((l) => l.key === "enrolledRecord");
   const ordered = tailAt < 0 ? [...lines.map((l) => ({ ...l, values: pick(l.key) })), ...subjectSeries]
     : [...lines.slice(0, tailAt).map((l) => ({ ...l, values: pick(l.key) })), ...subjectSeries, ...lines.slice(tailAt).map((l) => ({ ...l, values: pick(l.key) }))];
   const paying: ChartSeries[] = ordered;
@@ -179,7 +179,7 @@ function historyNotes(months: readonly HistoryMonth[], aywaFrom: string | null, 
   if (payingHidden) out.push("수업료가 청구된 학생 수는 수납 권한이 있으면 보입니다.");
   if (split) {
     out.push(
-      "과목은 청구 항목의 수업 이름으로 가른 값입니다(반 이름 · 과목 이름 · 같은 선생님의 다른 수업으로 — 이름으로 못 가른 수업은 '과목 모름'). 두 과목을 들으면 양쪽에 들어, 선을 모두 더하면 실제 학생 수보다 큽니다.",
+      "과목은 청구 항목의 수업 이름으로 가른 값입니다(반 이름 · 과목 이름 · 같은 선생님의 다른 수업으로 — 이름으로 못 가른 수업은 과목 선에 들지 않습니다). 두 과목을 들으면 양쪽에 들어, 선을 모두 더하면 실제 학생 수보다 큽니다.",
     );
   }
   const estimated = months.filter((m) => m.estimated.includes("payingGeneral")).map((m) => longMonth(m.month));
