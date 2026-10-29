@@ -31,7 +31,8 @@ export function LaterInvoices({ reportId, rows, canApprove, deskStaff }: { repor
   const [desk, setDesk] = useState("");
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
-  if (!rows.length) return null;
+  // 보고서 양식의 '환불 확인' 칸(원장 2026-10-30 *"퇴원보고서 내의 공간을 만들고 거기에 토글"*) — 청구가 없어도 칸은 있다.
+  if (!rows.length) return <span className="text-muted-foreground">퇴원월 뒤 청구 없음 — 환불할 건이 없습니다.</span>;
   const lines = rows.flatMap(inv => inv.lines.map(line => ({ inv, line })));
   const chosen = lines.filter(x => picked.has(x.line.key) && refundable(x.inv, x.line));
   const total = chosen.reduce((s, x) => s + x.line.paidNet, 0);
@@ -52,9 +53,9 @@ export function LaterInvoices({ reportId, rows, canApprove, deskStaff }: { repor
     });
   }
   const label = (inv: LaterInvoice, l: LaterLine) => `${inv.period} ${INVOICE_CATEGORY_LABEL[inv.category] ?? "기타"} · ${l.description.trim()}`;
-  return <section className="space-y-3 rounded-xl border p-5" aria-label="퇴원 뒤 청구">
-    <div><h2 className="text-sm font-semibold">퇴원 뒤 청구</h2><p className="mt-1 text-xs text-muted-foreground">퇴원월 다음 달부터 잡힌 수납 청구입니다{rows.some(r => r.partial) ? "(과목 수강종료라 끝내는 과목 몫과 기타 항목만)" : ""}. {canApprove ? "환불할 건만 토글로 고른 뒤 환불 승인을 누르세요. 고르지 않으면 아무것도 하지 않습니다." : "환불 승인은 원장만 할 수 있습니다."}</p></div>
-    <table className="w-full text-sm">
+  return <div className="space-y-2" aria-label="환불 확인">
+    <div><p className="text-xs text-muted-foreground">퇴원월 다음 달부터 잡힌 수납 청구입니다{rows.some(r => r.partial) ? "(과목 수강종료라 끝내는 과목 몫과 기타 항목만)" : ""}. {canApprove ? "환불할 건만 토글로 고른 뒤 환불 승인을 누르세요. 고르지 않으면 아무것도 하지 않습니다." : "환불 승인은 원장만 할 수 있습니다."}</p></div>
+    <table className="w-full text-xs">
       <thead><tr className="border-b text-left text-xs text-muted-foreground"><th className="py-2 font-normal">청구</th><th className="font-normal">청구액</th><th className="font-normal">납부</th><th className="font-normal">상태</th><th className="font-normal">환불</th></tr></thead>
       <tbody>{lines.map(({ inv, line }) => {
         const on = picked.has(line.key);
@@ -68,7 +69,7 @@ export function LaterInvoices({ reportId, rows, canApprove, deskStaff }: { repor
             : !refundable(inv, line) ? <span className="text-muted-foreground">—</span>
             : canApprove
               ? <button type="button" role="switch" aria-checked={on} aria-label={`${label(inv, line)} 환불`} disabled={pending} onClick={() => toggle(line.key)}
-                  className="inline-flex items-center gap-2 text-sm disabled:opacity-50"><span className={`relative inline-block h-5 w-9 rounded-full transition-colors ${on ? "bg-primary" : "bg-muted-foreground/30"}`}><span className={`absolute top-0.5 size-4 rounded-full bg-background shadow transition-all ${on ? "left-4" : "left-0.5"}`} /></span>{on ? "환불" : "안 함"}</button>
+                  className="inline-flex items-center gap-2 text-sm disabled:opacity-50 print:hidden"><span className={`relative inline-block h-5 w-9 rounded-full transition-colors ${on ? "bg-primary" : "bg-muted-foreground/30"}`}><span className={`absolute top-0.5 size-4 rounded-full bg-background shadow transition-all ${on ? "left-4" : "left-0.5"}`} /></span>{on ? "환불" : "안 함"}</button>
               : <span className="text-muted-foreground">요청서 없음</span>}</td>
         </tr>;
       })}</tbody>
@@ -89,5 +90,5 @@ export function LaterInvoices({ reportId, rows, canApprove, deskStaff }: { repor
       <div className="flex gap-2"><Button disabled={pending || !desk} onClick={approve}>{pending ? "처리 중…" : "환불 승인"}</Button><Button variant="outline" disabled={pending} onClick={() => setAsking(false)}>닫기</Button></div>
     </div>}
     {error && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
-  </section>;
+  </div>;
 }

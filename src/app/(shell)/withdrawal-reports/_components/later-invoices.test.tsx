@@ -16,9 +16,9 @@ const nov = { id, period: "2026-11", category: "tuition", status: "paid", amount
 const desks = [{ id: "22222222-2222-2222-2222-222222222222", name: "데스크A" }];
 
 describe("퇴원 뒤 청구(원장 2026-10-29)", () => {
-  it("청구가 없으면 아무것도 그리지 않는다", () => {
-    const { container } = render(<LaterInvoices reportId="r" rows={[]} canApprove deskStaff={desks} />);
-    expect(container.innerHTML).toBe("");
+  it("청구가 없으면 '환불할 건 없음' 한 줄(보고서 양식의 환불 확인 칸 — 원장 2026-10-30)", () => {
+    render(<LaterInvoices reportId="r" rows={[]} canApprove deskStaff={desks} />);
+    expect(screen.getByText("퇴원월 뒤 청구 없음 — 환불할 건이 없습니다.")).toBeInTheDocument();
   });
   it("수납 줄마다 한 행 · 원장이 아니면 보기만", () => {
     render(<LaterInvoices reportId="r" rows={[nov]} canApprove={false} deskStaff={[]} />);

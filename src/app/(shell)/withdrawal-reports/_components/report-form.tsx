@@ -1,5 +1,7 @@
+import type { ReactNode } from "react";
 import { REASON_DETAILS, reasonDetailOf } from "@/features/withdrawals/reason-detail";
-import { subjectPeriods, type SubjectHistoryRow } from "@/features/withdrawal-reports/course-period";
+import { subjectPeriodGroups, type SubjectHistoryRow } from "@/features/withdrawal-reports/course-period";
+import { PeriodCell } from "./period-cell";
 import type { ReportConsultation } from "@/features/withdrawal-reports/consultation";
 import { GrowingTextarea } from "./growing-textarea";
 import { ConsultationLinks } from "./consultation-links";
@@ -11,8 +13,9 @@ import { TuitionDetail } from "./tuition-detail";
 import { reportCourses } from "@/features/withdrawal-reports/target-courses";
 
 const date = (value: string) => new Date(value).toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
-export function ReportForm({ report: r, body, events, labels, nameOf, editable, pending, onChange, consultations = [], subjectHistory = [] }: {
+export function ReportForm({ report: r, body, events, labels, nameOf, editable, pending, onChange, consultations = [], subjectHistory = [], refundCheck }: {
   consultations?: ReportConsultation[];
+  refundCheck?: ReactNode;
   subjectHistory?: SubjectHistoryRow[];
   report: WithdrawalReport; body: ReportBody; events: ReportEvent[]; labels: Record<string, string>;
   nameOf: (id: string | null) => string; editable: boolean; pending: boolean;
@@ -38,6 +41,7 @@ export function ReportForm({ report: r, body, events, labels, nameOf, editable, 
   const direct = isDirectReport(r);
   const homeroom = [...new Set(courses.map(c => c.teacherName).filter(Boolean))].join(", ") || "—";
   return <ReportSheet
+    refundCheck={refundCheck}
     subject={r.subjects.map(s => labels[s] ?? "기타 과목").join(" · ")}
     consultationLinks={<ConsultationLinks records={consultations} selected={body.consultationIds ?? []} editable={editable} pending={pending} onChange={ids => onChange("consultationIds", ids)} />}
     signatures={direct
@@ -51,9 +55,9 @@ export function ReportForm({ report: r, body, events, labels, nameOf, editable, 
       grade: schoolGradeLabel(r.snapshot.school, r.snapshot.grade),
       className: courses.map(c => c.className).join("\n"),
       exitDate: r.effective_date,
-      period: subjectPeriods(courses, subjectHistory, r.effective_date, s => labels[s] ?? "기타 과목"),
+      period: <PeriodCell groups={subjectPeriodGroups(courses, subjectHistory, r.effective_date, s => labels[s] ?? "기타 과목")} />,
       teacher: direct ? homeroom : nameOf(r.teacher_id),
-      attendance: textField("attendance", "출결·현황"),
+      attendance: textField("attendance", "최근 3개월 출결 현황"),
       reason: editable ? <div className="flex flex-wrap gap-2"><select aria-label="퇴원사유" style={{ flex: "1 1 180px" }} value={body.reason} disabled={pending} onChange={e => { onChange("reason", e.target.value as ReportBody["reason"]); onChange("reasonDetail", ""); }}>{Object.entries(REASON_LABEL).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>{REASON_DETAILS[body.reason].length > 0 && <select aria-label="세부 퇴원사유" style={{ flex: "1 1 240px" }} value={body.reasonDetail ?? ""} disabled={pending} onChange={e => onChange("reasonDetail", e.target.value)}><option value="">세부 사유 선택</option>{REASON_DETAILS[body.reason].map(d => <option key={d.key} value={d.key}>{d.label}</option>)}</select>}</div> : [REASON_LABEL[body.reason], reasonDetailOf(body.reasonDetail)?.label].filter(Boolean).join(" · "),
       detail: <>{textField("detail", "퇴원 상세사유")}{editable && <small>{Array.from(body.detail.trim()).length}자 · 제출 시 200자 이상</small>}</>,
       studentConsultation: textField("studentConsultation", "학생상담"),

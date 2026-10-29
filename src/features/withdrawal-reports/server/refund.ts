@@ -6,7 +6,7 @@ import { receiptRefundState } from "@/features/billing/session-terms/receipt-ref
 import type { RefundPrefillLine } from "@/features/billing/refund-prefill";
 import { INVOICE_CATEGORY_LABEL } from "../prefill";
 import type { WithdrawalReport } from "../model";
-import { REFUND_TAG_PREFIX, claimedKeys, claimedLines, courseOfLine, lineBase, lineIds, splitKey } from "../refund-keys";
+import { REFUND_TAG_PREFIX, claimedKeys, claimedLines, courseOfLine, lineBase, lineIds, norm, splitKey } from "../refund-keys";
 
 /**
  * 퇴원월 **뒤** 청구 — 원장 2026-10-29 *"11월까지 납부했는데, 퇴원보고서상에는 10월납부밖에 없음… 이후에 납부한건 혹은 환불한 건에
@@ -35,6 +35,9 @@ export type LaterInvoice = {
 };
 
 export { LINE_KEY, REFUND_TAG_PREFIX, refundTag } from "../refund-keys";
+
+/** 수업 줄인가 — makeedu 한글 '수업' · 옛 영문 'tuition'. */
+const isLessonKind = (kind: string) => ["수업", "수강료", "tuition"].includes(kind.trim());
 
 /** 줄을 환불할 수 있나 — 낸 돈이 있고 · 환불된 청구·줄이 아니고 · 아직 요청서가 없음. */
 export const lineRefundable = (inv: Pick<LaterInvoice, "status">, l: LaterLine) => l.paidNet > 0 && inv.status !== "refunded" && !l.billingRefund && !l.refund;
@@ -76,6 +79,9 @@ export async function loadLaterInvoices(report: Pick<WithdrawalReport, "id" | "t
     ? await admin.from("classes").select("id,class_name,subject").eq("tenant_id", report.tenant_id).limit(2000)
     : { data: [], error: null };
   if (classError) throw new Error(`반 목록 조회 실패: ${classError.message}`);
+  // 끝내는 반 이름·그 반 강사 이름(두 글자 이상) — 반을 못 찾은 수업 줄이 같은 과목인지 가리는 단서.
+  const endedHints = ended ? [...new Set(report.snapshot.courses.filter(c => ended.has(c.classId))
+    .flatMap(c => [norm(c.className), norm(c.teacherName ?? "")]).filter(h => h.length >= 2))] : [];
   const allClasses = (tenantClasses ?? []).map(c => ({ classId: String(c.id), className: String(c.class_name ?? ""), subject: String(c.subject ?? "") }));
   const restart = (again ?? []).find(e => {
     const subject = (e.classes as unknown as { subject: string } | null)?.subject;
@@ -128,6 +134,10 @@ export async function loadLaterInvoices(report: Pick<WithdrawalReport, "id" | "t
         const own = courseOfLine(line, report.snapshot.courses);
         const course = own ?? courseOfLine(line, allClasses);
         if (course) { if (!(ended.has(course.classId) || report.subjects.includes(course.subject))) return; }
+        // 어느 반에도 안 맞는 '수업' 줄(다른 과목 보강·특강 등 — 김덕현 '이성우반 내신대비 주말보강')은 뺀다.
+        // 기타 항목 = 수업이 아닌 줄(차량비·교재 등)만 — 원장 2026-10-30 *"다른 과목 기납건은 리스트에서 넣지말것 퇴원보고서 작성하거나 기타 항목에 대해서만"*.
+        //   단, 수납명에 끝내는 반 이름이나 그 반 강사 이름이 보이면 같은 과목으로 남긴다(반 이름이 바뀌거나 앞에 글이 붙은 줄 — 리뷰).
+        else if (isLessonKind(l.kind)) { if (!endedHints.some(h => norm(l.description).includes(h))) return; }
         else unbound = true;
       }
       const refund = taken[i];

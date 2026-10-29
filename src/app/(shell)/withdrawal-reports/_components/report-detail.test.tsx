@@ -37,7 +37,7 @@ describe("report submission and review", () => {
     render(<ReportDetail {...props} prefill={{ attendance: "최근 출석 5회", tuition: "청구 300,000원", arrears: "no", arrearsNote: "수납 확인" }} />);
     expect(screen.getByRole("table", { name: "결재란" })).toHaveTextContent("담임관리자원장");
     expect(screen.getByRole("table", { name: "퇴원 보고 내용" })).toHaveTextContent("테스트 학생");
-    expect(screen.getByLabelText("출결·현황")).toHaveValue("최근 출석 5회");
+    expect(screen.getByLabelText("최근 3개월 출결 현황")).toHaveValue("최근 출석 5회");
     expect(screen.getByText("청구 300,000원")).toBeInTheDocument();
     expect(screen.getByText("미납 없음")).toBeInTheDocument();
     expect(screen.queryByLabelText("미납 여부")).not.toBeInTheDocument();
