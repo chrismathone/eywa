@@ -26,7 +26,7 @@ export function ReportForm({ report: r, body, events, labels, nameOf, editable, 
     const decisions = kind === "manager" ? r.manager_decisions : r.director_decisions;
     const legacyAt = kind === "manager" ? r.manager_approved_at : r.director_approved_at;
     return {
-      role: kind === "manager" ? "팀장" : "원장",
+      role: kind === "manager" ? "관리자" : "원장",
       name: ids.map(nameOf).join("\n"),
       date: ids.length ? ids.map(id => `결재일 : ${decisions?.[id] || legacyAt ? date(decisions?.[id] ?? legacyAt!) : ""}`).join("\n") : "결재일 :",
     };

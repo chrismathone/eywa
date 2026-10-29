@@ -12,6 +12,10 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-10-29 퇴원보고서 요청 취소: 원장도 (s2_0009 · 미적용)
+
+`s2_0009_withdrawal_cancel_by_director.sql` — 원장 *"김덕현 기준으로 요청 취소가 왜 안되는지"*. 앱은 원장(master · 강사 화면 아님)에게 '요청 취소'를 주는데 DB 전이 함수 둘이 요청자 본인만 받아 거절했다. 두 함수의 취소 조건 한 줄만 '요청자 **또는** 그 지점 활성 master'로 치환(운영 함수 본문에서 그 줄이 정확히 1건인지 확인한 뒤 · 0369a 방식). 적용 전 확인: 두 함수 모두 대상 줄 1건. 되돌리기 = `scripts/_oneoff/revert-s2_0009-withdrawal-cancel-by-director.sql`.
+
 ## 2026-10-29 연동 PC가 '따로 낸 영상 숙제'를 읽기 (s2_0008 · ✅ 운영 적용 2026-10-29 · CLI)
 
 `s2_0008_sync_agent_read_extra_video_homework.sql` — 원장 *"따로 낸 영상 숙제도 반 지정된 반으로 귀속"*. 반미정 영상의 반을 숙제로 정하는 워커 질의(`video-teacher-route.mjs` loadHomeworkClassIds)가 `video_homework_extra_issues`를 읽는다. 이 표는 서버 전용이라 `eywa_sync_agent`의 읽기 권한·정책이 없었다. 자기 지점 줄 읽기만 연다(s2_0006과 같은 모양 · 앱 사용자 권한 그대로). **AywaSync 1.0.9 게시 전에** 적용한다(1.0.8은 이 표를 읽지 않는다). 적용 확인: 연동 PC 역할 select만(insert·update 없음) · 정책 sync_agent_allow·sync_agent_tenant_boundary · authenticated는 그대로 막힘. 되돌리기 = `scripts/_oneoff/revert-s2_0008-sync-agent-read-extra-video-homework.sql`.

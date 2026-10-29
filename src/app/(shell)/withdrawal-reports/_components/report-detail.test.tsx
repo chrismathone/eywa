@@ -35,7 +35,7 @@ describe("report submission and review", () => {
   });
   it("shows the original table with automatic fields and saves the user's corrections", async () => {
     render(<ReportDetail {...props} prefill={{ attendance: "최근 출석 5회", tuition: "청구 300,000원", arrears: "no", arrearsNote: "수납 확인" }} />);
-    expect(screen.getByRole("table", { name: "결재란" })).toHaveTextContent("담임팀장원장");
+    expect(screen.getByRole("table", { name: "결재란" })).toHaveTextContent("담임관리자원장");
     expect(screen.getByRole("table", { name: "퇴원 보고 내용" })).toHaveTextContent("테스트 학생");
     expect(screen.getByLabelText("출결·현황")).toHaveValue("최근 출석 5회");
     expect(screen.getByText("청구 300,000원")).toBeInTheDocument();
