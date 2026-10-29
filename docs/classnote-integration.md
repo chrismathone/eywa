@@ -7,6 +7,8 @@
 > ⚠️ **영어는 이 문서의 1인 보드 레일을 쓰지 않는다.** 영어 배달은 **그룹 반 보드에 학생별 게시**로 확정됐고
 > (`(영어)학생명` 1인 보드 229개는 게시 0·교사 0인 죽은 보드), 보고서 내용은 **ECS 파생**이다.
 > 설계·착수 트리거·P0 목록 = [`english-report-plan.md`](english-report-plan.md). **영어 발송을 만지기 전 그 문서를 먼저 읽을 것.**
+> **2026-10-29 구현**: 워커가 영어 보고서를 반 방으로 보낸다 — 연결 = s2_0006 `classnote_english_class_boards`(사람이 확인) ·
+> 받는 원아 = 확정 원아(0185a) ∩ 지금 그 방 · 연결 없는 반은 아직 1인 보드([`english-class-route.mjs`](../scripts/_classnote/english-class-route.mjs) · 짝 제안 [`link-english-class-boards.mjs`](../scripts/_classnote/link-english-class-boards.mjs)).
 
 ---
 

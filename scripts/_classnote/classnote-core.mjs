@@ -23,6 +23,7 @@ import { fetchVideoSubmitLine, reportPostContent } from "./report-video-line.mjs
 import { decideRoute, pickRouteClass, ROUTE_BLOCKED_MESSAGE } from "./class-route-decide.mjs";
 import { crossCheckOthers, getClassnoteMathRoute, isClassRouteEligible, resolveClassTargets } from "./classnote-class-route.mjs";
 import { classRouteHaltReason, haltClassRoute } from "./class-route-halt.mjs";
+import { englishAnchorClass, isMissingTable, loadEnglishClassBoard, resolveEnglishClassTargets } from "./english-class-route.mjs";
 
 /**
  * 🔴 게시 엔진 = **워커 내장(내부 API) 단일 경로**. Cloud Run(edutrix Firebase `submitToClassNoteV2`) 분기는
@@ -716,6 +717,32 @@ export async function processQueueOnce(sql, browser, opts) {
         if (!r.classnote_class_id) makeupWriteBack = pick.classId;
       }
     }
+    // 영어 반 방 경로(원장 2026-10-29, english-class-route.mjs) — 보고서 반(보강은 보강 반)에 반 방 연결(s2_0006)이 있으면
+    // 그 반 방의 이 학생 원아에게 1:1로. 연결이 없는 반은 종전 1인 보드. 표가 없으면(SQL 전) 종전 그대로([[#95]]).
+    let englishBoard = null;
+    const englishAnchor = post && route === "personal" ? englishAnchorClass(r) : null;
+    if (englishAnchor) {
+      try {
+        englishBoard = await loadEnglishClassBoard(sql, tenant, englishAnchor);
+      } catch (e) {
+        if (!isMissingTable(e)) {
+          // 연결이 있는지 모르는 채 1인 보드로 보내면 반 방과 섞인다 — 재시도 카운트를 올려 재큐(3회면 failed).
+          const msg = e instanceof Error ? e.message : String(e);
+          await sql`update lesson_reports set
+            classnote_retry_count = classnote_retry_count + 1,
+            classnote_status = case when classnote_retry_count + 1 >= 3 then 'failed' else 'queued' end,
+            classnote_error = ${`영어 반 방 연결 확인 실패 — ${msg.slice(0, 160)}`}
+            where id=${r.id}`;
+          summary.requeued++;
+          log(`  · ${studentName}: 영어 반 방 연결 조회 실패(${msg}) → 재시도+1`);
+          continue;
+        }
+      }
+      if (englishBoard) {
+        route = "class";
+        routeClassId = englishAnchor;
+      }
+    }
     let classTarget = null; // route=class일 때 { boardId, boardName, targets, others }
 
     // ⛔ 프리플라이트 보드 안전 게이트(실게시 모드만) — **스크린샷·게시 전에** 판정(불필요한 캡처 회피).
@@ -737,7 +764,9 @@ export async function processQueueOnce(sql, browser, opts) {
       }
       let ct;
       try {
-        ct = await resolveClassTargets(sql, adminPage, { tenant, centerId, classId: routeClassId, studentId: r.student_id });
+        ct = englishBoard
+          ? await resolveEnglishClassTargets(sql, adminPage, { tenant, centerId, board: englishBoard, studentId: r.student_id })
+          : await resolveClassTargets(sql, adminPage, { tenant, centerId, classId: routeClassId, studentId: r.student_id });
       } catch (e) {
         // 조회 실패(네트워크·표 없음)는 결정적이지 않다 — 재시도 카운트를 올려 재큐(3회면 failed).
         const msg = e instanceof Error ? e.message : String(e);

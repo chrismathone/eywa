@@ -241,6 +241,15 @@ export async function processRecallsOnce(sql, browser, opts) {
           where m.tenant_id = ${tenant} and m.class_id = ${locClassId} and m.student_id = ${r.student_id} and m.child_id is not null`
           .catch(() => []);
         if (rows.length) classLocs.push({ boardId: Number(rows[0].board_id), childIds: [...new Set(rows.map((x) => Number(x.child_id)))] });
+        // 영어 반 방(s2_0006) — 반 방 경로로 간 글은 그 방의 이 학생 원아(0185a 확정 원아) 알림장에 있다. 표가 없으면 건너뛴다.
+        if (r.subject === "english") {
+          const [eb] = await sql`select board_id from classnote_english_class_boards
+            where tenant_id = ${tenant} and class_id = ${locClassId}`.catch(() => []);
+          const kids = eb
+            ? await sql`select child_id from classnote_child_links where tenant_id = ${tenant} and student_id = ${r.student_id}`.catch(() => [])
+            : [];
+          if (eb && kids.length) classLocs.push({ boardId: Number(eb.board_id), childIds: [...new Set(kids.map((x) => Number(x.child_id)))] });
+        }
       }
       const res = await recallOne(page, centerId, boards, children, {
         studentName,
