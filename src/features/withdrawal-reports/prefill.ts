@@ -16,7 +16,7 @@ export function attendancePrefill(rows: AttendancePrefillRow[], courses: CourseS
   return `전체 ${effective.length}회 / ${counts.join(" / ")}`;
 }
 
-const INVOICE_CATEGORY_LABEL: Record<string, string> = { tuition: "수강료", material: "교재", exam: "시험", other: "기타" };
+export const INVOICE_CATEGORY_LABEL: Record<string, string> = { tuition: "수강료", material: "교재", exam: "시험", other: "기타" };
 
 export function billingPrefill(rows: InvoicePrefillRow[], month: string, checkedOn: string): Partial<ReportBody> {
   const active = rows.filter(r => r.period <= month && !["void", "refunded"].includes(r.status));

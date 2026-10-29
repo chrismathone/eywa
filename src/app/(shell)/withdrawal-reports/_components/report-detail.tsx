@@ -7,18 +7,22 @@ import { Button } from "@/components/ui/button";
 import { WindowLink } from "@/components/workspace/window-link";
 import type { ReportConsultation } from "@/features/withdrawal-reports/consultation";
 import { ReportForm } from "./report-form";
+import { LaterInvoices } from "./later-invoices";
+import type { LaterInvoice } from "@/features/withdrawal-reports/server/refund";
 import { fillEmptyReportFields } from "@/features/withdrawal-reports/prefill";
 import { changeWithdrawalReport } from "@/features/withdrawal-reports/server/actions";
 import { EMPTY_BODY, REPORT_STATUS, REPORT_ACTION_LABEL, directorIds, isDirectReport, reportCapabilities, type WithdrawalReport, type ReportEvent, type StaffOption, type ReportAction, type ReportBody } from "@/features/withdrawal-reports/model";
 
 const control = "w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm disabled:bg-muted/20 disabled:text-foreground";
 const dateTime = (v: string) => new Date(v).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
-export function ReportDetail({ report: r, events, staff, labels, userId, writable, directorLevel = false, consultations = [], assignmentChanged = false, prefill = {}, prefillWarning, withdrawalHref }: {
+export function ReportDetail({ report: r, events, staff, labels, userId, writable, directorLevel = false, consultations = [], assignmentChanged = false, prefill = {}, prefillWarning, withdrawalHref, laterInvoices = [] }: {
   report: WithdrawalReport; events: ReportEvent[]; staff: StaffOption[]; labels: Record<string, string>; userId: string; writable: boolean; consultations?: ReportConsultation[]; assignmentChanged?: boolean; prefill?: Partial<ReportBody>; prefillWarning?: string;
   /** 원장 이상(`cancelsAsDirector`) — 남이 요청한 보고서도 취소 버튼이 선다. */
   directorLevel?: boolean;
   /** 학생이 지금 퇴원 상태이고 퇴원관리를 열 수 있을 때만 서버가 넣는다(`withdrawalDetailHref`). */
   withdrawalHref?: string | null;
+  /** 퇴원월 뒤 청구(원장 2026-10-29) — 원장은 환불 승인 토글, 나머지는 보기만. */
+  laterInvoices?: LaterInvoice[];
 }) {
   const router = useRouter();
   const [body, setBody] = useState<ReportBody>(() => fillEmptyReportFields({ ...EMPTY_BODY, ...r.body }, prefill));
@@ -51,6 +55,7 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
     {assignmentChanged && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">요청 이후 학생·수강·담당 강사가 변경되었습니다. 아래 내용은 요청 당시 기록이며, 제출·승인을 진행할 수 없습니다. 요청한 사람이 요청을 취소하고 현재 담당 기준으로 다시 요청해 주세요.</p>}
     {prefillWarning && <p role="alert" className="rounded-lg border p-4 text-sm">{prefillWarning}</p>}
     <ReportForm consultations={consultations} report={r} body={body} events={events} labels={labels} nameOf={nameOf} editable={capabilities.edit} pending={pending} onChange={update} />
+    <LaterInvoices reportId={r.id} rows={laterInvoices} canApprove={writable && directorLevel} />
     {error && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
     <div className="flex flex-wrap gap-2">
       {capabilities.edit && <><Button disabled={pending} variant="outline" onClick={() => change("save")}>임시 저장</Button><Button disabled={pending || assignmentChanged} onClick={() => setDecision("submit")}>관리자에게 제출</Button></>}

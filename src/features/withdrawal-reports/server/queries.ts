@@ -15,6 +15,7 @@ import { displayRoleFor } from "@/lib/auth/super-admin";
 import { staffSubjectScopeOf } from "@/features/staff/department/subject-scope";
 import { loadReportPrefill } from "./prefill";
 import { loadReportBilling } from "./billing";
+import { loadLaterInvoices, type LaterInvoice } from "./refund";
 import { liveBillingForSubmitted } from "../prefill";
 import { reportConsultations } from "./consultations";
 
@@ -105,7 +106,10 @@ export async function getReport(id: string) {
         .catch(() => ({ prefill: undefined, prefillWarning: "수납 정보를 지금 장부에서 불러오지 못해 제출 때 값을 보여줍니다." })),
     reportConsultations(data as WithdrawalReport, viewer),
   ]);
-  return { report: data as WithdrawalReport, events: [...(events ?? [])].reverse() as ReportEvent[], assignmentChanged, consultations, ...prefill };
+  // 퇴원월 뒤 청구(원장 2026-10-29) — 취소된 보고서는 보이지 않는다. 못 읽으면 빈 목록(보고서 화면은 연다).
+  const laterInvoices: LaterInvoice[] = data.status === "canceled" ? []
+    : await loadLaterInvoices(data as WithdrawalReport).catch((e) => { console.error("[withdrawal-report-later-invoices]", e); return []; });
+  return { report: data as WithdrawalReport, events: [...(events ?? [])].reverse() as ReportEvent[], assignmentChanged, consultations, laterInvoices, ...prefill };
 }
 export async function reportStaff() {
   const viewer = await reportViewer();
