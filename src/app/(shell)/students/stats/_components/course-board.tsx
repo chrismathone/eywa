@@ -82,7 +82,10 @@ export function CourseBoard({
   // 막대 = 과목을 **쌓는다**(학생·과목마다 한 번 — 과목 합 = 전체 강좌) · 합계는
   // 값 상자에만(원장 2026-10-21 첫 수업 지적과 같은 꼴). 꺾은선은 합계와 칸마다 같은 선을 뺀다(담당 과목이 하나인 과목 관리자).
   // 표시할 과목 선이 없으면 전체 선 하나로 그린다.
-  const stacked = kind === "bar" && lines.length > 1;
+  // 과목 선 합이 전체보다 큰 칸(인재원 영어 · EiE를 다 듣는 학생은 양쪽 선에 든다 — 원장 2026-10-29 영어 가르기)이 있으면 쌓지 않는다 —
+  // 쌓으면 막대가 전체 강좌보다 높아진다(리뷰 2026-10-29). 그때는 과목마다 나란히.
+  const overlaps = lines[0]!.values.some((t, i) => t !== null && lines.slice(1).reduce((n, l) => n + (l.values[i] ?? 0), 0) > t);
+  const stacked = kind === "bar" && lines.length > 1 && !overlaps;
   const totalValues = lines[0]!.values;
   const rest = totalValues.map((t, i) => (t === null ? null : Math.max(0, t - lines.slice(1).reduce((n, l) => n + (l.values[i] ?? 0), 0))));
   const drawnLines = [
@@ -147,7 +150,7 @@ export function CourseBoard({
       <SeriesChips series={drawnLines.filter((l) => !stacked || l.key !== "total").map((l) => ({ key: l.key, label: l.label, color: l.color }))} off={offNow} onToggle={toggle} />
       <TrendFacts points={totalPoints} range={range} who={hasHistory ? `${totalLabel}(지난 기록 포함)` : totalLabel} unit="개" />
       <p className="text-muted-foreground text-xs break-keep">
-        강좌수 = 그날 재원생이 듣던 반을 학생·과목마다 한 번 센 수(같은 과목 반이 다섯이어도 1개 · 오늘 칸은 휴원 중인 수강을 뺍니다) · 수학 일반·심화는 수학, EiE·인재원 영어는 영어로 묶고 과목 미입력 수강은 제외합니다 · 지난 날짜엔 그때 휴원이었는지 기록이 없어 지금 휴원 중인 수강도 셉니다.
+        강좌수 = 그날 재원생이 듣던 반을 학생·과목마다 한 번 센 수(같은 과목 반이 다섯이어도 1개 · 오늘 칸은 휴원 중인 수강을 뺍니다) · 수학 일반·심화는 수학으로 묶고(영어는 인재원 영어·EiE로 가른 지점이면 선만 둘 — 둘 다 들으면 양쪽 선에 들어 과목 선 합이 전체보다 클 수 있고, 그때 막대는 쌓지 않습니다) 과목 미입력 수강은 제외합니다 · 지난 날짜엔 그때 휴원이었는지 기록이 없어 지금 휴원 중인 수강도 셉니다.
       </p>
       <TrendTable range={range} total={totalPoints} totalLabel={totalLabel} lines={shown.filter((l) => l.key !== "total" && l.key !== "subject:_rest").map((l) => ({ label: l.label, values: l.values }))} />
       {hasHistory && historyNote ? <p className="text-muted-foreground text-xs break-keep">{historyNote}</p> : clipNote ? <p className="text-muted-foreground text-xs break-keep">{clipNote}</p> : null}

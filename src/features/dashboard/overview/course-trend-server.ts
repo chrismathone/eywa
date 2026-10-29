@@ -3,10 +3,10 @@ import { monthlyPoints, weeklyPoints, yearlyPoints } from "./enrolled-trend";
 import { courseBreakdownOf, type CourseRow } from "./course-trend";
 import { DETAIL_MONTHS, DETAIL_WEEKS, type TrendSeriesSet } from "./enrolled-trend-server";
 import { trendInputs } from "./trend-inputs-server";
-import { subjectGroupOf, type ProgramSubject } from "@/features/students/enrollment/program";
+import { ENGLISH_PROGRAM_KEYS, isEnglishProgramKey, programOf, subjectGroupOf, type ProgramSubject } from "@/features/students/enrollment/program";
 
 /** 원생 통계 '강좌수 추이'(원장 2026-10-20 '카드 따로') — 첫 선(학원 전체 · 과목 관리자는 담당 과목 전체) + 과목별 선. */
-export type CourseTrendDetail = { total: TrendSeriesSet; bySubject: ({ key: string } & TrendSeriesSet)[] };
+export type CourseTrendDetail = { total: TrendSeriesSet; bySubject: ({ key: string } & TrendSeriesSet)[]; /** 영어를 인재원 영어 · EiE로 갈랐나. */ englishSplit?: boolean };
 
 /**
  * 강좌수 추이(자세히) — 운영실 '강좌수 추이' 카드와 **같은 원본·같은 판정**(`courseBreakdownOf` → `coursesOn`)을 원생 통계의 긴 창
@@ -20,16 +20,29 @@ export async function loadCourseTrendDetail(
   today: string,
   subjects: readonly ProgramSubject[],
   scope?: (subject: string | null) => boolean,
+  /**
+   * 영어 선을 **인재원 영어 · EiE** 둘로(원장 2026-10-29 — EiE 모듈이 켜진 지점만 호출부가 켠다). 전체 강좌는 그대로(학생마다 영어는 1개) —
+   * 두 프로그램을 다 듣는 학생은 양쪽 선에 들어 과목 선의 합이 전체보다 클 수 있다.
+   */
+  splitEnglish = false,
 ): Promise<CourseTrendDetail> {
   const { raw, en } = await trendInputs(tenantId, today);
   const inRow = scope ? (e: CourseRow) => scope(e.subject) : undefined;
-  const keys = [...new Set([...subjects.map((s) => s.key), ...raw.enrollments.map((e) => e.subject)].map((key) => subjectGroupOf(key, subjects)).filter((key): key is string => key !== null))];
-  const groupOfRow = (e: CourseRow) => subjectGroupOf(e.subject, subjects);
+  const groupKeys = [...new Set([...subjects.map((s) => s.key), ...raw.enrollments.map((e) => e.subject)].map((key) => subjectGroupOf(key, subjects)).filter((key): key is string => key !== null))];
+  const split = splitEnglish && groupKeys.includes("english") && !subjects.some((s) => isEnglishProgramKey(s.key));
+  const keys = split ? groupKeys.flatMap((k) => (k === "english" ? [...ENGLISH_PROGRAM_KEYS] : [k])) : groupKeys;
+  const groupOfRow = (e: CourseRow) => {
+    const g = subjectGroupOf(e.subject, subjects);
+    if (!split || g !== "english") return g;
+    return programOf({ subject: e.subject, englishTrack: e.englishTrack ?? null }, subjects) === "eie" ? "eie" : "injaewon";
+  };
   const count = (points: { key: string; label: string; date: string }[]) =>
     courseBreakdownOf(raw.students, en, raw.enrollments, points, keys, groupOfRow, today, inRow, subjects);
-  const split = { monthly: count(monthlyPoints(today, DETAIL_MONTHS)), weekly: count(weeklyPoints(today, DETAIL_WEEKS)), yearly: count(yearlyPoints(today, raw.fromYear)) };
+  const sets = { monthly: count(monthlyPoints(today, DETAIL_MONTHS)), weekly: count(weeklyPoints(today, DETAIL_WEEKS)), yearly: count(yearlyPoints(today, raw.fromYear)) };
+  const groupOfKey = (key: string) => (split && isEnglishProgramKey(key) ? "english" : key);
   return {
-    total: { monthly: split.monthly.total, weekly: split.weekly.total, yearly: split.yearly.total },
-    bySubject: keys.filter((key) => !scope || subjects.some((s) => scope(s.key) && subjectGroupOf(s.key, subjects) === key)).map((key) => ({ key, monthly: split.monthly.groups[key], weekly: split.weekly.groups[key], yearly: split.yearly.groups[key] })),
+    total: { monthly: sets.monthly.total, weekly: sets.weekly.total, yearly: sets.yearly.total },
+    englishSplit: split,
+    bySubject: keys.filter((key) => !scope || subjects.some((s) => scope(s.key) && subjectGroupOf(s.key, subjects) === groupOfKey(key))).map((key) => ({ key, monthly: sets.monthly.groups[key], weekly: sets.weekly.groups[key], yearly: sets.yearly.groups[key] })),
   };
 }

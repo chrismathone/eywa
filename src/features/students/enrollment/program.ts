@@ -21,6 +21,36 @@ export type Program = "eie" | "injaewon" | "math";
 /** 화면 순서(EiE → 인재원 영어 → 수학). */
 export const PROGRAMS: readonly Program[] = ["eie", "injaewon", "math"];
 
+/**
+ * 영어 묶음을 프로그램으로 가를 때의 선 키(원생 통계 — 원장 2026-10-29 *"영어를 인재원영어 및 eie"*). 과목 키가 아니라 프로그램 이름이다 —
+ * `englishProgramRows`가 영어 반 수강의 과목 칸을 이 키로 바꿔 넘긴다(묶음 판정은 `englishProgramGroup`).
+ */
+export const ENGLISH_PROGRAM_KEYS = ["injaewon", "eie"] as const;
+export type EnglishProgramKey = (typeof ENGLISH_PROGRAM_KEYS)[number];
+export const isEnglishProgramKey = (k: string | null | undefined): k is EnglishProgramKey => k === "injaewon" || k === "eie";
+
+/**
+ * 영어 반 수강 → 과목 칸을 프로그램 키로(인재원 영어 · EiE — `programOf`와 같은 판정 · 반의 `english_track`). 영어 과목 키가 없거나
+ * 설정에 프로그램 키와 같은 과목 키가 있으면 바꾸지 않는다(`englishKeys` 빈 값). 그 밖의 수강은 그대로.
+ */
+export function englishProgramRows<T extends { subject: string | null; englishTrack?: string | null }>(rows: readonly T[], subjects: readonly ProgramSubject[]): { rows: readonly T[]; englishKeys: string[] } {
+  const englishKeys = subjects.map((s) => s.key).filter((k) => subjectGroupOf(k, subjects) === "english");
+  if (!englishKeys.length || subjects.some((s) => isEnglishProgramKey(s.key))) return { rows, englishKeys: [] };
+  return {
+    englishKeys,
+    rows: rows.map((e) => {
+      if (!e.subject || !englishKeys.includes(e.subject)) return e;
+      const p = programOf({ subject: e.subject, englishTrack: e.englishTrack ?? null }, subjects);
+      return isEnglishProgramKey(p) ? { ...e, subject: p } : e;
+    }),
+  };
+}
+
+/** 프로그램 키가 섞인 과목 칸의 묶음 — 프로그램 키는 영어, 그 밖은 `subjectGroupOf`. */
+export function englishProgramGroup(subject: string | null | undefined, subjects: readonly ProgramSubject[]): string | null {
+  return isEnglishProgramKey(subject) ? "english" : subjectGroupOf(subject, subjects);
+}
+
 /** 학원설정 과목 한 줄 — `operations.subjects`의 key·label만 본다. */
 export type ProgramSubject = { key: string; label: string };
 

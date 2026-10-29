@@ -8,6 +8,8 @@ export const DASHBOARD_SUBJECT_COLORS = {
   both: "#9B2EB7",
   unenrolled: "#47505C",
   other: "#687787",
+  /** EiE — 원생 통계에서 영어를 가를 때(원장 2026-10-29 *"eie는 주황색"*). */
+  eie: "#E8770E",
 } as const;
 
 export function dashboardProgramColor(program: Program) {

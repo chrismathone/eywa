@@ -8,7 +8,7 @@ import { hasTrend, type TrendPoint } from "../report-trend";
 import { isImageAttachment, pickInlineAttachments } from "../attachment-utils";
 import { isSkipStatusProgress } from "../progress-status";
 import { collapseProgressRanges } from "../progress-range";
-import { reportTitleText } from "../report-title";
+import { isSrsReportSections, reportTitleText, SRS_REPORT_TITLE } from "../report-title";
 import { videoHomeworkDueLabel } from "../video-homework-label";
 import { isPilotReportSections, parsePilotNotes, splitPilotNote } from "../pilot-notes";
 import { PilotNoteBox, PilotNotesBody } from "./pilot-notes-body";
@@ -146,6 +146,8 @@ export function ParentReportCard({
   const pilotSplit = pilotSections ? splitPilotNote(pilotSections) : null;
   // 위 칸을 감추는 건 **시범 보고서 글이 확실할 때만**(아는 항목 제목이 있을 때) — 손으로 "■"로 시작한 글이 진도 칸을 지우지 않게.
   const pilotOwns = !!pilotSections && isPilotReportSections(pilotSections);
+  // 제목 — SRS 보고서(JJ 양식)는 '어휘 관리 보고서', 그 밖은 과목 보고서(report-title.ts 한 곳). [특강]·보강 꼬리는 둘 다 같다.
+  const title = reportTitleText(templateMode && isSrsReportSections(pilotSections) ? SRS_REPORT_TITLE : rpt.title, report);
   // 섹션 2분할(2026-07-10 원장): '오늘 수업'=교재·진도·오늘 과제 / '평가'=시험점수·지난 과제·수업 태도.
   const showToday = pilotOwns
     ? rpt.showTextbook && report.textbook
@@ -189,7 +191,7 @@ export function ParentReportCard({
           schoolGrade={schoolGrade === "-" ? "" : schoolGrade}
           // 제목 = "학생이름 수학 보고서"(원장 2026-10-23 *"데일리 학습알림이 아니라 학생이름 수학 보고서"*) — 이름 뒤에 기본 카드와
           // **같은 제목 함수**(과목 보고서 · [특강] · 보강 접미사, report-title.ts)를 붙인다. 머리 표가 이름과 이어 그린다.
-          title={reportTitleText(rpt.title, report)}
+          title={title}
           date={report.reportDate}
           // 종강 표식 `(~26.09.29)`은 학원 내부 보관 꼬리라 학부모 문서엔 뗀다(원장 2026-10-23 *"반에 날짜는 왜 들어간거임 빼고"*) — 규칙은 반 이름 쪽 단일 소스.
           className={report.className ? originalClassName(report.className) : null}
@@ -221,7 +223,7 @@ export function ParentReportCard({
             보강이면 접미사를 덧붙여 같은 날 정규 보고서와 학부모가 구분(2026-07-24 원장).
             정규 수업까지 한 날의 보강은 "(정규+보강)"으로 합쳐 **한 번만** 나간다(2026-08-05 원장, makeup-label.ts). */}
         <h1 className="text-foreground text-2xl font-bold tracking-[0.05em]">
-          {[reportDate, reportTitleText(rpt.title, report)].filter(Boolean).join(" ")}
+          {[reportDate, title].filter(Boolean).join(" ")}
         </h1>
       </header>
 

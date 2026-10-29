@@ -59,6 +59,8 @@ const kstMonth = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0
 
 const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 const APPLY = process.argv.includes("--apply");
+/** 비우지 않고 앞뒤 달로 잇는 달(그달 청구 ∪ 앞 달 ∩ 뒤 달) — 청구 방식이 바뀐 달만(원장 2026-10-29). */
+const BRIDGE_MONTHS = ["2025-04"];
 const REVERT = arg("revert");
 const SLUG = arg("tenant") ?? "cs";
 const BACKUP_DIR = arg("backup-dir") ?? join(tmpdir(), "aywa-history-monthly-backups");
@@ -241,8 +243,11 @@ try {
   // ③ 건너뛸 달 — 한 번 세어 본 학생 수로 판정
   const first = aywaHistoryMonths({ months: histMonths, invoices: hist, registrations: [], started: new Set(), classify });
   const skip = new Set(lowBillingMonths(new Map(first.map((r) => [r.month, r.data.payingTotal ?? 0])), histMonths));
-  console.log(`건너뛸 달: ${[...skip].join(", ") || "없음"}`);
-  const rows = aywaHistoryMonths({ months: allMonths, invoices: stitched, registrations: [], started: new Set(), classify, skipMonths: skip })
+  // 2025-04는 비우지 않고 앞뒤 달로 잇는다(원장 2026-10-29 *"일단 그렇게 해줘. 최대한 가깝게"* — 선납 전환으로 4월 수업료가 5월 청구서에
+  // 잡혔다 · 4월에 낸 학생 319명 · 이음 306명 · 3월 307명). 2020-02는 그대로 비운다(대구 코로나 첫 확산 — 실제로 줄었을 수 있다).
+  const bridge = new Set(BRIDGE_MONTHS.filter((m) => skip.has(m)));
+  console.log(`건너뛸 달: ${[...skip].filter((m) => !bridge.has(m)).join(", ") || "없음"} · 앞뒤 달로 이을 달: ${[...bridge].join(", ") || "없음"}`);
+  const rows = aywaHistoryMonths({ months: allMonths, invoices: stitched, registrations: [], started: new Set(), classify, skipMonths: skip, bridgeMonths: bridge })
     .filter((r) => r.month <= THROUGH);
 
   // ── 등록·실제 신규(메이크에듀 규칙 — 결정 students.md: 입학일 달 이후 살아 있는 수업료 청구 · 직전 두 달 청구가 있던 학생 제외) ──
@@ -283,7 +288,7 @@ try {
     const o = oldBy.get(n.month);
     const subj = Object.entries(n.data).filter(([k]) => k.startsWith("payingSubject:")).map(([k, v]) => `${k.slice(14)} ${pick(o, k)}→${v}`).join("·");
     const f = (k: string) => `${pick(o, k)}→${pick(n.data, k)}`;
-    console.log(`${n.month}${n.data.skippedPaying ? "(비움)" : ""} | ${f("payingTotal")}(${f("payingGeneral")}) | ${f("payingMath")} | ${f("payingInjaewon")} | ${f("payingEie")} | ${subj || "-"} | ${f("payingUnknown")} | ${f("stoppedPaying")} | ${f("newRegistered")} | ${f("newReal")}`);
+    console.log(`${n.month}${n.data.skippedPaying ? "(비움)" : n.data.bridgedPaying ? "(이음)" : ""} | ${f("payingTotal")}(${f("payingGeneral")}) | ${f("payingMath")} | ${f("payingInjaewon")} | ${f("payingEie")} | ${subj || "-"} | ${f("payingUnknown")} | ${f("stoppedPaying")} | ${f("newRegistered")} | ${f("newReal")}`);
   }
   // 검증 — 같은 함수로 에이와 2026을 다시 세면 저장된 에이와 줄과 같아야 한다(학생 수 칸).
   const aywa = new Map(stored.filter((r) => r.source === "aywa").map((r) => [r.m as string, r.data as Record<string, number>]));

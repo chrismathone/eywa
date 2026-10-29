@@ -84,7 +84,7 @@ export function JjStandingCard({ standing }: { standing: IjwStanding }) {
     <section className={FRAME}>
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
         {/* 인재원이 주는 계산 기준 문장(`basis`)은 싣지 않는다 — 원장 2026-10-27 *"이거 내용 삭제"*(학부모가 읽을 말이 아니다). */}
-        <h3 className="text-foreground text-lg font-black">단어 학습 순위</h3>
+        <h3 className="text-foreground text-lg font-black">순위</h3>
       </div>
       <div className="divide-line flex flex-col gap-4 divide-y [&>*:not(:first-child)]:pt-4">
         {rows.map((r) => (

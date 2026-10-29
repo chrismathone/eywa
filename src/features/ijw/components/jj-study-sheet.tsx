@@ -40,7 +40,7 @@ export function JjStudySheet({ study, layout = "card" }: { study: IjwStudy; layo
       kind="study"
       layout={layout}
       eyebrow="학습 분석지"
-      title="영어 단어 학습"
+      title="학습기록 정밀분석"
       aside={<span className="num text-foreground text-sm font-bold whitespace-nowrap">{periodLabel(study.from, study.to)}</span>}
     >
       <div className="grid gap-3 @3xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] @3xl:items-stretch">

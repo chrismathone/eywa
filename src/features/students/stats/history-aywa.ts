@@ -9,7 +9,7 @@
 
 import { isEieLesson, type LessonProgram } from "./lesson-program";
 import { lastJudgedMonth, stoppedPayingByMonth } from "./stopped-paying";
-import { SKIPPED_PAYING, subjectField } from "./history";
+import { BRIDGED_PAYING, SKIPPED_PAYING, subjectField } from "./history";
 
 export type HistoryInvoice = {
   student_id: string;
@@ -149,8 +149,25 @@ export function aywaHistoryMonths(input: {
    * 그 달을 넘어 판정한다. 에이와 밤 집계는 넘기지 않는다.
    */
   skipMonths?: ReadonlySet<string>;
+  /**
+   * 건너뛸 달 중 **앞뒤 달로 잇는** 달(`skipMonths`에도 있어야 한다) — 학생 칸 = 그달 청구 ∪ (앞 달 ∩ 뒤 달 청구), 칸마다(과목·영어 묶음도)
+   * (원장 2026-10-29 2025-04 · 선납 전환으로 4월 수업료가 5월 청구서에 잡혔다). 청구가 끊긴 학생 판정은 건너뛴 달 그대로 넘는다(이은 학생은
+   * 실제 청구가 아니다) · `bridgedPaying` 표시. 메이크에듀 재구성만 넘긴다.
+   */
+  bridgeMonths?: ReadonlySet<string>;
 }): { month: string; data: Record<string, number> }[] {
   const skip = input.skipMonths ?? new Set<string>();
+  // 앞뒤 달이 목록에 있고 건너뛴 달이 아닐 때만 잇는다 — 못 이으면 종전대로 비운다(낮은 그달 청구를 '추정'으로 그리지 않게 · 리뷰 2026-10-29).
+  const neighbours = (m: string) => {
+    const i = input.months.indexOf(m);
+    return [input.months[i - 1], input.months[i + 1]] as const;
+  };
+  const bridge = new Set(
+    [...(input.bridgeMonths ?? [])].filter((m) => {
+      const [prev, next] = neighbours(m);
+      return skip.has(m) && !!prev && !!next && !skip.has(prev) && !skip.has(next);
+    }),
+  );
   const general = new Map<string, Set<string>>();
   const eie = new Map<string, Set<string>>();
   const all = new Map<string, Set<string>>();
@@ -171,9 +188,10 @@ export function aywaHistoryMonths(input: {
     t.general += paid.general;
     t.eie += paid.eie;
     if (k.eie) hasEie = true;
-    // 건너뛴 달 — 학생 수는 비우되 실제로 들어온 수업료(돈)는 센다(비우는 것은 청구 '건수' — 리뷰 2026-10-28).
-    if (skip.has(month)) continue;
-    (paidMonths.get(i.student_id) ?? paidMonths.set(i.student_id, new Set()).get(i.student_id)!).add(month);
+    // 건너뛴 달 — 학생 수는 비우되 실제로 들어온 수업료(돈)는 센다(비우는 것은 청구 '건수' — 리뷰 2026-10-28). 이은 달은 그달 청구를
+    // 학생 칸에 넣되(아래에서 앞뒤 달로 메운다) 청구가 끊긴 학생 판정엔 넣지 않는다.
+    if (skip.has(month) && !bridge.has(month)) continue;
+    if (!skip.has(month)) (paidMonths.get(i.student_id) ?? paidMonths.set(i.student_id, new Set()).get(i.student_id)!).add(month);
     if (k.general) add(general, month, i.student_id);
     if (k.eie) add(eie, month, i.student_id);
     if (k.eie) add(english, month, i.student_id);
@@ -187,6 +205,17 @@ export function aywaHistoryMonths(input: {
       }
     }
   }
+  // 이은 달 — 칸마다 그달 ∪ (앞 달 ∩ 뒤 달).
+  for (const m of bridge) {
+    const [prev, next] = neighbours(m);
+    const fill = (byMonth: Map<string, Set<string>>) => {
+      const cur = byMonth.get(m) ?? new Set<string>();
+      const after = byMonth.get(next!);
+      for (const id of byMonth.get(prev!) ?? []) if (after?.has(id)) cur.add(id);
+      byMonth.set(m, cur);
+    };
+    for (const byMonth of [general, eie, all, english, ...programs.values(), ...subjects.values()]) fill(byMonth);
+  }
   const reg = new Map<string, number>();
   const real = new Map<string, number>();
   for (const r of input.registrations) {
@@ -199,7 +228,7 @@ export function aywaHistoryMonths(input: {
   const lastMonth = input.months.at(-1);
   const stopped = lastMonth ? stoppedPayingByMonth(paidMonths, input.months, lastJudgedMonth(lastMonth), skip) : new Map<string, number>();
   return input.months.map((month) => {
-    if (skip.has(month)) {
+    if (skip.has(month) && !bridge.has(month)) {
       // 건너뛴 달 — 학생 수 칸은 비우고(0이 아니라 '없음') 등록 칸·수업료 수납(돈)만. 화면은 이 표시로 '그달은 비웠다'고 적는다.
       const data: Record<string, number> = { newRegistered: reg.get(month) ?? 0, newReal: real.get(month) ?? 0, [SKIPPED_PAYING]: 1 };
       data.tuitionPaidGeneral = tuition.get(month)?.general ?? 0;
@@ -213,6 +242,7 @@ export function aywaHistoryMonths(input: {
       newReal: real.get(month) ?? 0,
     };
     if (hasEie) data.payingEie = eie.get(month)?.size ?? 0;
+    if (bridge.has(month)) data[BRIDGED_PAYING] = 1;
     // 수업료 수납(원) — 수납 통계 '지난 기록'. EiE 칸은 EiE 청구가 있는 지점만(학생 수 칸과 같은 규칙).
     data.tuitionPaidGeneral = tuition.get(month)?.general ?? 0;
     if (stopped.has(month)) data.stoppedPaying = stopped.get(month)!;

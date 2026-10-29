@@ -14,6 +14,17 @@ import { makeupTitleSuffix, type MakeupShape } from "./makeup-label";
 export const SPECIAL_TITLE_PREFIX = "[특강] ";
 export const DEFAULT_REPORT_TITLE = "수업 보고서";
 
+/**
+ * SRS 보고서(JJ 양식) 제목 = **어휘 관리 보고서**(원장 2026-10-29 *"srs 보고서템플릿 jj반에서 보고서 나갈 경우 영어 보고서 → 어휘 관리 보고서"*).
+ * 판정 = 글에 SRS 양식의 항목 제목(`단어 학습 현황` · `SRS 학습 결과`)이 있는가 — 보고서는 고른 템플릿 id를 따로 저장하지 않아서 글로 본다
+ * (report-templates/defaults.ts `BUILTIN_JJ_SHEET_TEMPLATE`의 항목 제목과 글자까지 같아야 한다).
+ */
+export const SRS_REPORT_TITLE = "어휘 관리 보고서";
+const SRS_SECTION_TITLES = new Set(["단어 학습 현황", "SRS 학습 결과"]);
+export function isSrsReportSections(sections: readonly { title: string }[] | null | undefined): boolean {
+  return !!sections?.some((s) => SRS_SECTION_TITLES.has(s.title.trim()));
+}
+
 export function reportTitleText(
   baseTitle: string | null | undefined, r: MakeupShape & { special?: boolean; subjectLabel?: string | null },
 ): string {

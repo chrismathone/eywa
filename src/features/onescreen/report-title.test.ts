@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { reportTitleText, subjectReportLabel } from "./report-title";
+import { isSrsReportSections, reportTitleText, SRS_REPORT_TITLE, subjectReportLabel } from "./report-title";
 
 describe("reportTitleText — 학부모 보고서 제목(원장 2026-09-30 '[특강] 수업보고서')", () => {
   it("정규 = 설정 제목 그대로(없으면 기본)", () => {
@@ -27,5 +27,18 @@ describe("reportTitleText — 학부모 보고서 제목(원장 2026-09-30 '[특
     expect(subjectReportLabel(labelOf, "math")).toBe("수학");
     expect(subjectReportLabel(labelOf, "subject_7")).toBeNull();
     expect(subjectReportLabel(labelOf, null)).toBeNull();
+  });
+});
+
+describe("SRS 보고서 제목 = 어휘 관리 보고서(원장 2026-10-29)", () => {
+  it("SRS 양식 항목이 있으면 SRS 보고서", () => {
+    expect(isSrsReportSections([{ title: "수업 평가" }, { title: "SRS 학습 결과" }])).toBe(true);
+    expect(isSrsReportSections([{ title: "단어 학습 현황" }])).toBe(true);
+    expect(isSrsReportSections([{ title: "수업 평가" }, { title: "인재원 결과지" }])).toBe(false);
+    expect(isSrsReportSections(null)).toBe(false);
+  });
+  it("제목은 과목 보고서 대신, [특강] 꼬리는 그대로", () => {
+    expect(reportTitleText(SRS_REPORT_TITLE, { subjectLabel: "영어" })).toBe("어휘 관리 보고서");
+    expect(reportTitleText(SRS_REPORT_TITLE, { subjectLabel: "영어", special: true })).toBe("[특강] 어휘 관리 보고서");
   });
 });

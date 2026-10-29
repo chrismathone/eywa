@@ -76,13 +76,20 @@ function historyPoints(months: readonly HistoryMonth[], before: string | null, v
 export function historyGroupCount(m: HistoryMonth, group: string): number | null {
   if (group === "math") return m.payingMath ?? null;
   if (group === "english") return m.payingEnglish ?? null;
+  // 영어를 프로그램으로 가른 선(원장 2026-10-29 *"영어를 인재원영어 및 eie"* — `ENGLISH_PROGRAM_KEYS`).
+  if (group === "injaewon") return m.payingInjaewon ?? null;
+  if (group === "eie") return m.payingEie ?? null;
   if (m.subjects) return m.subjects[group] ?? 0;
   return m.payingOther === 0 ? 0 : null;
 }
 
-/** 과목 묶음 → 재원생·강좌수 추이 과목 선에 이을 점(청구 기준 추정). `before` 규칙은 `historyTrendPoints`와 같다. */
+/**
+ * 과목 묶음 → 재원생·강좌수 추이 과목 선에 이을 점(청구 기준 추정). `before` 규칙은 `historyTrendPoints`와 같다.
+ * EiE는 **EiE 수납이 시작된 달부터**(원장 2026-10-29 — 그 전 0을 선으로 그리지 않는다 · 메이크에듀 2021-07).
+ */
 export function historyGroupPoints(months: readonly HistoryMonth[], before: string | null, group: string): HistoryPoints {
-  return historyPoints(months, before, (m) => {
+  const eieFrom = group === "eie" ? (months.find((m) => (m.payingEie ?? 0) > 0)?.month ?? "9999-99") : null;
+  return historyPoints(eieFrom ? months.filter((m) => m.month >= eieFrom) : months, before, (m) => {
     const count = historyGroupCount(m, group);
     return count === null ? null : { count, basis: "paying" };
   });
@@ -105,10 +112,17 @@ export function historyCoursePoints(months: readonly HistoryMonth[], before: str
 }
 
 /** 강좌수 추이의 이은 구간 안내 — 메운 점이 없으면 null. */
-export function courseJoinNote(history: readonly Point[], aywaFrom: string | null): string | null {
+export function courseJoinNote(history: readonly Point[], aywaFrom: string | null, months: readonly HistoryMonth[] = []): string | null {
   if (!history.length) return null;
   const head = aywaFrom ? `${monthText(aywaFrom)}부터 에이와 기록으로 세고, 그 전` : "지금까지";
-  return `${head}(${monthText(history[0]!.key)}~${monthText(history.at(-1)!.key)})은 수업료가 청구된 학생을 과목마다 센 값을 더한 추정입니다(학생마다 같은 과목은 1개 · 미납 포함 · 휴원·시작 전 제외 · 과목을 못 가른 수업 제외). 세로 점선이 기준이 바뀌는 달입니다.`;
+  return `${head}(${monthText(history[0]!.key)}~${monthText(history.at(-1)!.key)})은 수업료가 청구된 학생을 과목마다 센 값을 더한 추정입니다(학생마다 같은 과목은 1개 · 미납 포함 · 휴원·시작 전 제외 · 과목을 못 가른 수업 제외). 세로 점선이 기준이 바뀌는 달입니다.${bridgedText(history, months)}`;
+}
+
+/** 앞뒤 달로 이은 달 안내(그 구간 안에 있을 때만) — 재원생 과목 선·강좌수가 같이 쓴다. */
+export function bridgedText(history: readonly Point[], months: readonly HistoryMonth[], what = ""): string {
+  const used = new Set(history.map((p) => p.key));
+  const bridged = months.filter((m) => m.bridged && (used.has(m.month) || (history.length > 0 && m.month > history[0]!.key && m.month < history.at(-1)!.key))).map((m) => monthText(m.month));
+  return bridged.length ? ` ${what}${bridged.join(" · ")}은 청구 방식이 바뀌어(다음 달 수업료를 미리 청구) 그달 청구가 거의 없어, 그달 청구와 앞뒤 달에 모두 청구된 학생으로 이은 추정입니다.` : "";
 }
 
 /**
@@ -152,7 +166,7 @@ export function joinNote(history: readonly Point[], months: readonly HistoryMont
   const [first, last] = [history[0]!.key, history.at(-1)!.key];
   const gaps = months.filter((m) => m.skipped && historyCount(m) === null && m.month > first && m.month < last).map((m) => monthText(m.month));
   const gapText = gaps.length ? ` ${gaps.join(" · ")}은 청구가 비정상으로 적어 비운 달이라 점이 없습니다(앞뒤 달이 바로 이어집니다).` : "";
-  return `${head}${parts.join(" · ")}. 점선 구간은 뜻이 조금 달라 에이와 구간과 몇 명 차이가 날 수 있습니다.${gapText}`;
+  return `${head}${parts.join(" · ")}. 지난 기록 구간(세로 점선 앞)은 뜻이 조금 달라 에이와 구간과 몇 명 차이가 날 수 있습니다.${gapText}`;
 }
 
 /** 구간 경계 표식 — `index` 칸부터 `after` 기준(그 앞은 `before`). 차트가 세로 점선 + 양쪽 짧은 이름으로 그린다. */

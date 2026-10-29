@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mergeHistory, withoutPaying, type HistoryMonth } from "./history";
-import { basisMarkers, courseJoinNote, historyCount, historyCoursePoints, historyFlowRows, historyGroupCount, historyGroupPoints, historyTrendPoints, joinFlowRows, joinNote, trendBasisName } from "./joined";
+import { basisMarkers, bridgedText, courseJoinNote, historyCount, historyCoursePoints, historyFlowRows, historyGroupCount, historyGroupPoints, historyTrendPoints, joinFlowRows, joinNote, trendBasisName } from "./joined";
 import { availableRanges, flowTotals, joinPoints, pointsFor, withDeltas, type Point, type SeriesSet } from "./model";
 
 const h = (month: string, data: Partial<Omit<HistoryMonth, "month" | "estimated">>): HistoryMonth => ({ month, estimated: [], ...data });
@@ -84,6 +84,26 @@ describe("지난 기록 잇기(원장 2026-10-21 전체 추이)", () => {
     expect(historyGroupCount(h("2024-05", { payingOther: 3 }), "korean")).toBeNull();
     expect(historyGroupCount(h("2024-05", { payingOther: 0 }), "korean")).toBe(0);
     expect(historyGroupCount(h("2020-02", { newReal: 3, skipped: true }), "math")).toBeNull();
+  });
+
+  it("영어를 프로그램으로 — 인재원 영어 · EiE 값 · EiE 선은 EiE 수납이 시작된 달부터(원장 2026-10-29)", () => {
+    const ms = [
+      h("2021-05", { payingInjaewon: 190, payingEie: 0 }),
+      h("2021-06", { payingInjaewon: 195, payingEie: 0 }),
+      h("2021-07", { payingInjaewon: 199, payingEie: 24 }),
+      h("2021-08", { payingInjaewon: 202, payingEie: 37 }),
+    ];
+    expect(historyGroupPoints(ms, null, "injaewon").monthly.map((x) => x.count)).toEqual([190, 195, 199, 202]);
+    expect(historyGroupPoints(ms, null, "eie").monthly.map((x) => [x.key, x.count])).toEqual([["2021-07", 24], ["2021-08", 37]]);
+    expect(historyGroupPoints(ms.slice(0, 2), null, "eie").monthly).toEqual([]);
+  });
+
+  it("이은 달 안내 — 그 구간 안에 이은 달이 있을 때만", () => {
+    const ms = [h("2025-03", { payingMath: 1 }), h("2025-04", { payingMath: 1, bridged: true }), h("2025-05", { payingMath: 1 })];
+    const pts = historyGroupPoints(ms, null, "math").monthly;
+    expect(bridgedText(pts, ms)).toContain("2025년 4월은 청구 방식이 바뀌어");
+    expect(bridgedText(pts.slice(2), ms)).toBe("");
+    expect(courseJoinNote(pts, "2026-04", ms)).toContain("2025년 4월은");
   });
 
   it("강좌수 지난 기록 = 과목 묶음마다 청구된 학생의 합 · 한 묶음이라도 모르는 달은 건너뛴다 · 에이와 첫 달 전만 · 청구 기준 추정", () => {
