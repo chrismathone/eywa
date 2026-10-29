@@ -9,7 +9,8 @@
 /**
  * 칸 — `paying*` = 그달 수업료 청구가 살아 있는 학생. 프로그램 칸(`payingMath`·`payingInjaewon`·`payingOther`·`payingUnknown`)은 청구 줄의
  * **수업명으로** 가른 값(`lesson-program.ts` · 원장 2026-10-21 *"수학과 영어로 구분 못하나? 수업명 가지고?"*) — 두 프로그램 줄이 있는
- * 학생은 양쪽에 든다 · `payingUnknown` = 수업명으로 못 가른 줄이 있는 학생.
+ * 학생은 양쪽에 든다 · `payingUnknown` = 수업명으로 못 가른 줄이 있는 학생 · `payingEnglish` = 인재원 영어 **또는** EiE 학생(한 학생은 한 번 —
+ * 재원생·강좌수 추이의 '영어' 묶음에 잇는다 · 원장 2026-10-29 *"지난기록 말고 그냥 재원생과 강좌수 퇴원생에 반영"*).
  * `stoppedPaying` = 그달을 끝으로 수업료 청구가 끊긴 학생(다음 두 달 청구 없음 · `stopped-paying.ts` — 메이크에듀 퇴원일은 2025년부터만 남아
  * 2020년부터는 청구로 센다 · 원장 2026-10-21 *"다음 후보 계속 진행"*). 청구에서 나온 칸이라 수납 권한이 있을 때만 싣는다.
  */
@@ -21,6 +22,7 @@ export const HISTORY_FIELDS = [
   "payingInjaewon",
   "payingOther",
   "payingUnknown",
+  "payingEnglish",
   "stoppedPaying",
   "newReal",
   "newRegistered",
@@ -130,7 +132,7 @@ export function yearlyHistory(months: readonly HistoryMonth[]): HistoryYear[] {
 }
 
 /** 청구에서 나온 칸(수업료가 청구된 학생) — 수납 권한이 없는 사람에게는 서버가 빼고 보낸다(`load.ts` · 화면에서 가리지 않는다 #77). */
-const PAYING_FIELDS: readonly HistoryField[] = ["payingGeneral", "payingEie", "payingTotal", "payingMath", "payingInjaewon", "payingOther", "payingUnknown", "stoppedPaying"];
+const PAYING_FIELDS: readonly HistoryField[] = ["payingGeneral", "payingEie", "payingTotal", "payingMath", "payingInjaewon", "payingOther", "payingUnknown", "payingEnglish", "stoppedPaying"];
 export function withoutPaying(months: readonly HistoryMonth[]): HistoryMonth[] {
   return months.map((m) => {
     // 과목 묶음·건너뛴 표시도 청구에서 나온 것이라 함께 뺀다.

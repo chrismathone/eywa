@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mergeHistory, withoutPaying, type HistoryMonth } from "./history";
-import { basisMarkers, historyCount, historyFlowRows, historyTrendPoints, joinFlowRows, joinNote, splitBySource, trendBasisName } from "./joined";
+import { basisMarkers, courseJoinNote, historyCount, historyCoursePoints, historyFlowRows, historyGroupCount, historyGroupPoints, historyTrendPoints, joinFlowRows, joinNote, trendBasisName } from "./joined";
 import { availableRanges, flowTotals, joinPoints, pointsFor, withDeltas, type Point, type SeriesSet } from "./model";
 
 const h = (month: string, data: Partial<Omit<HistoryMonth, "month" | "estimated">>): HistoryMonth => ({ month, estimated: [], ...data });
@@ -73,11 +73,36 @@ describe("지난 기록 잇기(원장 2026-10-21 전체 추이)", () => {
     expect(pointsFor(set, "all", "2026-04").map((x) => x.key)).toEqual(["2026-04", "2026-05"]);
   });
 
-  it("splitBySource — 꺾은선은 경계 점을 지난 기록 선도 지나고(bridge) 막대는 안 지난다", () => {
-    const pts: Point[] = [{ ...p("2026-03", 428), source: "history" }, p("2026-04", 410), p("2026-05", 415)];
-    expect(splitBySource(pts, true)).toEqual({ history: [428, 410, null], aywa: [null, 410, 415] });
-    expect(splitBySource(pts, false)).toEqual({ history: [428, null, null], aywa: [null, 410, 415] });
-    expect(splitBySource([p("2026-04", 410)], true)).toEqual({ history: [null], aywa: [410] });
+  it("과목 묶음 값 — 수학 = payingMath · 영어 = payingEnglish · 그 밖 = 과목마다(묶음 있으면 없는 과목은 0) · 가를 수 없으면 null", () => {
+    const m = h("2024-05", { payingMath: 220, payingEnglish: 190, payingOther: 12, subjects: { korean: 12 } });
+    expect(historyGroupCount(m, "math")).toBe(220);
+    expect(historyGroupCount(m, "english")).toBe(190);
+    expect(historyGroupCount(m, "korean")).toBe(12);
+    expect(historyGroupCount(m, "science")).toBe(0);
+    // payingEnglish를 싣기 전 줄 · 과목 묶음 없이 그 밖의 과목 학생이 있는 달 · 건너뛴 달(청구 칸 없음)
+    expect(historyGroupCount(h("2024-05", { payingMath: 220, payingInjaewon: 150, payingEie: 50 }), "english")).toBeNull();
+    expect(historyGroupCount(h("2024-05", { payingOther: 3 }), "korean")).toBeNull();
+    expect(historyGroupCount(h("2024-05", { payingOther: 0 }), "korean")).toBe(0);
+    expect(historyGroupCount(h("2020-02", { newReal: 3, skipped: true }), "math")).toBeNull();
+  });
+
+  it("강좌수 지난 기록 = 과목 묶음마다 청구된 학생의 합 · 한 묶음이라도 모르는 달은 건너뛴다 · 에이와 첫 달 전만 · 청구 기준 추정", () => {
+    const ms = [
+      h("2025-11", { payingMath: 200, payingEnglish: 180, payingOther: 10, subjects: { korean: 10 } }),
+      h("2025-12", { payingMath: 205, payingEnglish: 182, payingOther: 0, subjects: {} }),
+      h("2026-01", { payingMath: 210, payingInjaewon: 100 }), // 영어 묶음 없음 → 건너뜀
+      h("2026-04", { payingMath: 215, payingEnglish: 190, payingOther: 0 }),
+    ];
+    const hp = historyCoursePoints(ms, "2026-04", ["math", "english", "korean"]);
+    expect(hp.monthly.map((x) => [x.key, x.count, x.basis, x.source])).toEqual([
+      ["2025-11", 390, "paying", "history"],
+      ["2025-12", 387, "paying", "history"],
+    ]);
+    expect(hp.yearly.map((x) => [x.key, x.count])).toEqual([["2025", 387]]);
+    expect(historyCoursePoints(ms, "2026-04", []).monthly).toEqual([]);
+    expect(historyGroupPoints(ms, "2026-04", "english").monthly.map((x) => x.count)).toEqual([180, 182]);
+    expect(courseJoinNote(hp.monthly, "2026-04")).toContain("2026년 4월부터 에이와 기록으로 세고, 그 전(2025년 11월~2025년 12월)은");
+    expect(courseJoinNote([], "2026-04")).toBeNull();
   });
 
   it("등록·퇴원 — 지난 기록 달은 등록(newReal)·청구가 끊긴 학생(모르면 null)으로, 에이와 첫 달 앞만 · 합계는 모르는 달을 뺀다", () => {

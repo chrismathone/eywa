@@ -6,7 +6,8 @@ import type { FlowRow, HistoryPoints, Point } from "./model";
  * 재원생 추이·등록·퇴원 추이가 에이와로 정확히 셀 수 있는 달(`countFrom` — 2026-10-20 '2026년 4월부터') **앞**을 '지난 기록'(0385a
  * `student_history_monthly` — 메이크에듀 2020-01~ · 에이와 청구 2026-01~)으로 메운다. 순수 함수(Vitest).
  *
- * 🔑 메우는 값의 뜻은 에이와 점과 **다르다**(화면이 '지난 기록'으로 가려 보인다 · 점에 `source: "history"`):
+ * 🔑 메우는 값의 뜻은 에이와 점과 **다르다**(점에 `source: "history"` · 화면은 같은 선으로 잇고 기준이 바뀌는 달에 세로 점선 — 원장 2026-10-29
+ *    '같은 선 + 경계 세로선' · '지난 기록' 카드는 없앴다 · 과목 선·강좌수도 과목 묶음 청구 기준 추정으로 잇는다 `historyGroupPoints`·`historyCoursePoints`):
  *   · 재원생 = 메이크에듀 **재원생 기록**(`enrolledRecord` · 2025-03~ · 휴원·시작 전 포함) → 없는 달은 **수업료가 청구된 학생**
  *     (`payingTotal` → 옛 집계는 `payingGeneral`(EiE 제외) · 2020-01~ · 미납 포함 · 수납 권한이 없으면 실리지 않는다 — `withoutPaying`).
  *   · 등록 = 수업을 시작한 등록(`newReal` — 에이와 등록 칸과 같은 판정) · 퇴원 칸 = **청구가 끊긴 학생**(`stoppedPaying` — 다음 두 달 청구
@@ -38,13 +39,21 @@ export function historyCount(m: HistoryMonth): number | null {
  * 에이와 점이 없을 때 `joinPoints`가 겹침을 정리한다). 연도별 = 해마다 **그해 마지막 기록 달**의 값(12월이 보통 · 연말 점과 같은 뜻).
  */
 export function historyTrendPoints(months: readonly HistoryMonth[], before: string | null): HistoryPoints {
+  // `basis` = 재원생 기록인지 청구 학생인지 — 둘 사이 경계(침산 2025-02→03)의 증감도 비우게(재리뷰 2026-10-21).
+  return historyPoints(months, before, (m) => {
+    const count = historyCount(m);
+    return count === null ? null : { count, basis: m.enrolledRecord !== undefined ? "record" : "paying" };
+  });
+}
+
+/** 지난 기록 달 → 점(월별 + 연도별 = 그해 마지막 기록 달) — `value`가 null인 달은 건너뛴다. `before` 규칙은 `historyTrendPoints`와 같다. */
+function historyPoints(months: readonly HistoryMonth[], before: string | null, value: (m: HistoryMonth) => { count: number; basis: "record" | "paying" } | null): HistoryPoints {
   const monthly: Point[] = [];
   for (const m of months) {
     if (before && m.month >= before) continue;
-    const count = historyCount(m);
-    if (count === null) continue;
-    // `basis` = 재원생 기록인지 청구 학생인지 — 둘 사이 경계(침산 2025-02→03)의 증감도 비우게(재리뷰 2026-10-21).
-    monthly.push({ key: m.month, label: monthLabel(m.month), date: lastDay(m.month), count, source: "history", basis: m.enrolledRecord !== undefined ? "record" : "paying" });
+    const v = value(m);
+    if (v === null) continue;
+    monthly.push({ key: m.month, label: monthLabel(m.month), date: lastDay(m.month), count: v.count, source: "history", basis: v.basis });
   }
   const yearly: Point[] = [];
   for (const p of monthly) {
@@ -57,6 +66,49 @@ export function historyTrendPoints(months: readonly HistoryMonth[], before: stri
   // 에이와가 세는 해(`before`가 속한 해)는 에이와 연말 점이 맡는다 — 그해 앞 달만 있는 지난 기록 점을 연말 값처럼 세우지 않는다.
   const beforeYear = before?.slice(0, 4);
   return { monthly, yearly: beforeYear ? yearly.filter((p) => p.key < beforeYear) : yearly };
+}
+
+/**
+ * 그달 그 **과목 묶음**(`subjectGroupOf` — math · english · 그 밖은 과목 키)의 수업료가 청구된 학생 — 수학 = `payingMath`(심화 포함) ·
+ * 영어 = `payingEnglish`(인재원 영어 ∪ EiE) · 그 밖 = 과목마다(`payingSubject:<키>`). 과목을 가를 수 없는 달은 null
+ * (과목 묶음이 없는데 그 밖의 과목 학생이 있는 달 · `payingEnglish`를 싣기 전 줄). 원장 2026-10-29 *"지난기록 말고 그냥 재원생과 강좌수 퇴원생에 반영"*.
+ */
+export function historyGroupCount(m: HistoryMonth, group: string): number | null {
+  if (group === "math") return m.payingMath ?? null;
+  if (group === "english") return m.payingEnglish ?? null;
+  if (m.subjects) return m.subjects[group] ?? 0;
+  return m.payingOther === 0 ? 0 : null;
+}
+
+/** 과목 묶음 → 재원생·강좌수 추이 과목 선에 이을 점(청구 기준 추정). `before` 규칙은 `historyTrendPoints`와 같다. */
+export function historyGroupPoints(months: readonly HistoryMonth[], before: string | null, group: string): HistoryPoints {
+  return historyPoints(months, before, (m) => {
+    const count = historyGroupCount(m, group);
+    return count === null ? null : { count, basis: "paying" };
+  });
+}
+
+/**
+ * 강좌수 추이에 이을 점 — 그달 **과목 묶음마다 청구된 학생의 합**(학생마다 같은 과목은 1개 = 강좌수와 같은 셈). `groups` = 강좌수 추이의 과목 묶음
+ * 전부 — 하나라도 셀 수 없는 달은 건너뛴다(합이 낮게 나오지 않게). 과목을 못 가른 수업만 들은 학생은 들지 않는다(강좌수의 '과목 미입력 제외'와 같은 결).
+ */
+export function historyCoursePoints(months: readonly HistoryMonth[], before: string | null, groups: readonly string[]): HistoryPoints {
+  return historyPoints(months, before, (m) => {
+    let count = 0;
+    for (const g of groups) {
+      const n = historyGroupCount(m, g);
+      if (n === null) return null;
+      count += n;
+    }
+    return groups.length ? { count, basis: "paying" } : null;
+  });
+}
+
+/** 강좌수 추이의 이은 구간 안내 — 메운 점이 없으면 null. */
+export function courseJoinNote(history: readonly Point[], aywaFrom: string | null): string | null {
+  if (!history.length) return null;
+  const head = aywaFrom ? `${monthText(aywaFrom)}부터 에이와 기록으로 세고, 그 전` : "지금까지";
+  return `${head}(${monthText(history[0]!.key)}~${monthText(history.at(-1)!.key)})은 수업료가 청구된 학생을 과목마다 센 값을 더한 추정입니다(학생마다 같은 과목은 1개 · 미납 포함 · 휴원·시작 전 제외 · 과목을 못 가른 수업 제외). 세로 점선이 기준이 바뀌는 달입니다.`;
 }
 
 /**
@@ -77,18 +129,6 @@ export function historyFlowRows(months: readonly HistoryMonth[], before: string 
 export function joinFlowRows(history: readonly FlowRow[], aywa: readonly FlowRow[]): FlowRow[] {
   const first = aywa[0]?.month;
   return [...(first ? history.filter((r) => r.month < first) : history), ...aywa];
-}
-
-/**
- * 한 선을 **두 선으로 가른 값** — 지난 기록 점은 `history`에, 에이와 점은 `aywa`에. 꺾은선이 끊기지 않게 지난 기록 선은 **에이와 첫 점까지**
- * 잇는다(경계 점이 양쪽에 선다 · 막대에선 같은 스택이라 두 번 서지 않게 호출부가 `bridge`를 끈다).
- */
-export function splitBySource(points: readonly Point[], bridge: boolean): { history: (number | null)[]; aywa: (number | null)[] } {
-  const firstAywa = points.findIndex((p) => p.source !== "history");
-  return {
-    history: points.map((p, i) => (p.source === "history" || (bridge && i === firstAywa && firstAywa > 0) ? p.count : null)),
-    aywa: points.map((p) => (p.source === "history" ? null : p.count)),
-  };
 }
 
 const monthText = (ym: string) => `${ym.slice(0, 4)}년 ${Number(ym.slice(5, 7))}월`;

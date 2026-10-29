@@ -7,7 +7,7 @@ import { TREND_KEYS, viewFromParam } from "@/features/students/stats/model";
 import { BackToListButton } from "../../consultations/_components/back-to-list-button";
 import { StatCard } from "./_components/stat-card";
 import { SubjectSwitch } from "./_components/subject-switch";
-import { CourseSection, FirstClassSection, FlowSection, HistorySection, SectionSkeleton, TrendSection } from "./_components/sections";
+import { CourseSection, FirstClassSection, FlowSection, SectionSkeleton, TrendSection } from "./_components/sections";
 import { FIRST_CLASS_KEYS } from "@/features/students/stats/first-class-trend";
 import { readPeriodParams } from "@/features/stats/period";
 import { StatsWidthGate } from "./_components/stats-width-gate";
@@ -75,9 +75,6 @@ export default async function StudentStatsPage({ searchParams }: { searchParams:
           </Suspense>
           <Suspense fallback={<SectionSkeleton id="flow" title="등록 · 퇴원 추이" />}>
             <FlowSection {...ctx} boardKey={boardKey} />
-          </Suspense>
-          <Suspense fallback={<SectionSkeleton id="history" title="지난 기록" />}>
-            <HistorySection {...ctx} />
           </Suspense>
         </StatsWidthGate>
       )}

@@ -1,5 +1,9 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-29 — 원생 통계: '지난 기록' 카드를 재원생·강좌수·등록퇴원 추이에 합침
+
+- 원장 *"지난기록 말고 그냥 재원생과 강좌수 퇴원생에 반영"* — 카드 없앰(`history-board.tsx`·`history-table.tsx` 삭제) · 세 추이가 지난 기록 구간을 **같은 선**으로 잇고 기준이 바뀌는 달에 세로 점선. 재원생 과목 선·강좌수(처음)도 과목 묶음 청구 기준 추정으로 잇는다(`joined.ts` `historyGroupPoints`·`historyCoursePoints`). 새 칸 `payingEnglish`(인재원 영어 ∪ EiE). 상세 = [decisions/students.md](decisions/students.md).
+
 ## 2026-10-29 — 원생 통계 '지난 기록': 과목 모름 선·열 뺌
 
 - 원장 *"과목 모름은 그냥 제거"* — 수업료가 청구된 학생 그래프의 '과목 모름' 선과 연도별 표의 '과목 모름(월평균)' 열을 뺐다(`history-board.tsx`·`history-table.tsx`). 값(`payingUnknown`)은 DB·밤 집계에 그대로 남는다. 안내 문구: 이름으로 못 가른 수업은 과목 선에 들지 않는다.

@@ -18,9 +18,6 @@ const signed = (n: number) => `${n > 0 ? "+" : ""}${number(n)}`;
 /** 등록 = 학원 색 · 퇴원 = 위험색(재원생 추이의 과목 색과 겹치지 않게 학원 팔레트 안에서). */
 const ENROLLED = "var(--color-primary)";
 const WITHDRAWN = "var(--color-danger)";
-/** 지난 기록(0385a)으로 메운 달의 색 — 같은 계열을 옅게(뜻이 조금 다른 값: 등록은 같은 판정 · 퇴원 칸은 청구가 끊긴 학생). */
-const ENROLLED_HISTORY = "color-mix(in srgb, var(--color-primary) 45%, var(--color-background))";
-const WITHDRAWN_HISTORY = "color-mix(in srgb, var(--color-danger) 45%, var(--color-background))";
 // 지난 기록 달의 기준 이름 — 등록은 메이크에듀 등록(같은 판정)이지만 퇴원 칸은 청구가 끊긴 학생이라 '추정'을 붙인다.
 const FLOW_HISTORY_NAME = "지난 기록 · 퇴원은 청구 기준 추정";
 const RANGE_LABELS: Record<FlowRange, string> = { all: "전체 기간", m12: "최근 12개월" };
@@ -32,7 +29,8 @@ const RANGE_LABELS: Record<FlowRange, string> = { all: "전체 기간", m12: "�
  * 과목 관리자는 그 과목 반을 다닌(다니는) 학생만 · 과목을 알 수 없는 등록·퇴원은 빼고 센다(load.ts) — 반 배정 전 신입은 반에 들어간 뒤
  * 세므로 운영실 과목 관리자 '등록·퇴원 추이'(모름은 모두에게)와 한두 명 다를 수 있다(재리뷰 2026-10-20 · 정확성을 택했다).
  * 셀 수 있는 달 **앞은 지난 기록**(`source: "history"` — 원장 2026-10-21 전체 추이 · `joined.ts`)으로 이어져 온다: 등록은 같은 판정(수업을 시작한
- * 등록), 퇴원 칸은 **청구가 끊긴 학생**이라 옅은 색으로 가른다. 꺾은선은 경계 달을 양쪽 선이 함께 지나 끊기지 않는다.
+ * 등록), 퇴원 칸은 **청구가 끊긴 학생** — **같은 막대·선**으로 잇고 기준이 바뀌는 달에 세로 점선만 긋는다(원장 2026-10-29 '같은 선 + 경계
+ * 세로선' · 종전엔 옅은 색으로 갈랐다). 값 상자에 그 달의 기준 이름.
  */
 export function FlowBoard({
   rows,
@@ -68,7 +66,10 @@ export function FlowBoard({
   // 지난 기록의 퇴원 칸(청구가 끊긴 학생)은 수납 권한이 없으면 실리지 않는다 — 그때는 그 범례·선·안내를 세우지 않는다.
   const historyWithdrawnKnown = shown.some((r) => r.source === "history" && r.withdrawn !== null);
   const historyBasis = historyWithdrawnKnown ? FLOW_HISTORY_NAME : "지난 등록 기록";
-  const series = flowSeries(shown, kind, historyWithdrawnKnown);
+  const series: ChartSeries[] = [
+    { key: "enrolled", name: "등록", color: ENROLLED, values: shown.map((r) => r.enrolled) },
+    { key: "withdrawn", name: "퇴원", color: WITHDRAWN, values: shown.map((r) => r.withdrawn) },
+  ];
   return (
     <StatCard
       id="flow"
@@ -112,18 +113,10 @@ export function FlowBoard({
         markers={hasHistory ? basisMarkers(shown.map((r) => (r.source === "history" ? historyBasis : "에이와 기록"))) : []}
         legend={false}
       />
-      {/* 범례 = 그래프 아래(원장 2026-10-22 *"다른 화면의 꺾은선도 전부 일치화"*) — 지난 기록 막대가 같은 쌓기라 차트 범례 대신 이 범례. */}
+      {/* 범례 = 그래프 아래(원장 2026-10-22 *"다른 화면의 꺾은선도 전부 일치화"*). */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
         <span className="inline-flex items-center gap-1.5"><i aria-hidden className="inline-block size-2.5 rounded-sm" style={{ background: ENROLLED }} />등록</span>
-        <span className="inline-flex items-center gap-1.5"><i aria-hidden className="inline-block size-2.5 rounded-sm" style={{ background: WITHDRAWN }} />퇴원</span>
-        {hasHistory ? (
-          <>
-            <span className="inline-flex items-center gap-1.5"><i aria-hidden className="inline-block size-2.5 rounded-sm" style={{ background: ENROLLED_HISTORY }} />등록(지난 기록)</span>
-            {historyWithdrawnKnown ? (
-              <span className="inline-flex items-center gap-1.5"><i aria-hidden className="inline-block size-2.5 rounded-sm" style={{ background: WITHDRAWN_HISTORY }} />청구가 끊긴 학생(지난 기록)</span>
-            ) : null}
-          </>
-        ) : null}
+        <span className="inline-flex items-center gap-1.5"><i aria-hidden className="inline-block size-2.5 rounded-sm" style={{ background: WITHDRAWN }} />{hasHistory && historyWithdrawnKnown ? "퇴원(지난 기록 구간은 청구가 끊긴 학생)" : "퇴원"}</span>
       </div>
       {hasHistory && historyFrom ? (
         <p className="text-muted-foreground text-xs break-keep">
@@ -151,31 +144,4 @@ function Total({ label, value, tone }: { label: string; value: string; tone?: st
       <dd className={`num text-lg font-bold ${tone ?? "text-foreground"}`}>{value}</dd>
     </div>
   );
-}
-
-/**
- * 등록·퇴원 선 — 지난 기록 달이 섞이면 **같은 계열을 둘로**(에이와 · 지난 기록) 가른다. 막대는 같은 스택(한 달엔 한쪽만 값이 있어 한 막대) ·
- * 꺾은선은 경계 달(에이와 첫 달)을 지난 기록 선도 지나 끊기지 않는다. 퇴원을 모르는 달(null)은 비운다.
- */
-function flowSeries(rows: readonly FlowRow[], kind: ChartKind, historyWithdrawnKnown: boolean): ChartSeries[] {
-  const hasHistory = rows.some((r) => r.source === "history");
-  if (!hasHistory) {
-    return [
-      { key: "enrolled", name: "등록", color: ENROLLED, values: rows.map((r) => r.enrolled) },
-      { key: "withdrawn", name: "퇴원", color: WITHDRAWN, values: rows.map((r) => r.withdrawn) },
-    ];
-  }
-  const firstAywa = rows.findIndex((r) => r.source !== "history");
-  const bridge = kind === "line";
-  const pick = (r: FlowRow, i: number, history: boolean, value: number | null) =>
-    (r.source === "history") === history || (history && bridge && i === firstAywa && firstAywa > 0) ? value : null;
-  const stack = (id: string) => (kind === "bar" ? { stack: id } : {});
-  return [
-    { key: "enrolled", name: "등록", color: ENROLLED, values: rows.map((r, i) => pick(r, i, false, r.enrolled)), ...stack("e") },
-    { key: "enrolledHistory", name: "등록(지난 기록)", color: ENROLLED_HISTORY, values: rows.map((r, i) => pick(r, i, true, r.enrolled)), dashed: true, hideInLegend: true, ...stack("e") },
-    { key: "withdrawn", name: "퇴원", color: WITHDRAWN, values: rows.map((r, i) => pick(r, i, false, r.withdrawn)), ...stack("w") },
-    ...(historyWithdrawnKnown
-      ? [{ key: "withdrawnHistory", name: "청구가 끊긴 학생(지난 기록)", color: WITHDRAWN_HISTORY, values: rows.map((r, i) => pick(r, i, true, r.withdrawn)), dashed: true, hideInLegend: true as const, ...stack("w") }]
-      : []),
-  ];
 }

@@ -290,8 +290,10 @@ try {
   const aywaClassify = lessonProgramClassifier(lessonNameWeights(appInv), subjects, staff);
   const appMonths = [...aywa.keys()].sort();
   const re = aywaHistoryMonths({ months: appMonths, invoices: appInv, registrations: [], started: new Set(), classify: aywaClassify });
-  const keys = ["payingTotal", "payingGeneral", "payingEie", "payingMath", "payingInjaewon", "payingOther", "payingUnknown"];
-  const bad = re.filter((r) => keys.some((k) => (r.data[k] ?? null) !== (aywa.get(r.month)?.[k] ?? null)));
+  const keys = ["payingTotal", "payingGeneral", "payingEie", "payingMath", "payingInjaewon", "payingOther", "payingUnknown", "payingEnglish"];
+  // 새로 더한 칸(payingEnglish — 2026-10-29)은 밤 집계가 아직 싣지 않은 줄이면 대조하지 않는다(싣고 나면 대조한다).
+  const fresh = new Set(["payingEnglish"]);
+  const bad = re.filter((r) => keys.some((k) => !(fresh.has(k) && aywa.get(r.month)?.[k] === undefined) && (r.data[k] ?? null) !== (aywa.get(r.month)?.[k] ?? null)));
   console.log(`\n검증(에이와 ${appMonths.length}개월 다시 세기 = 저장값): ${bad.length ? `다름 ${bad.map((r) => r.month).join(",")}` : "모두 같음"}`);
 
   if (!APPLY) {

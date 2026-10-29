@@ -117,10 +117,23 @@ describe("지난 기록 — 에이와 쪽 월별 값", () => {
     ];
     const classify = lessonProgramClassifier(lessonNameWeights(invoices), subjects);
     const [row] = aywaHistoryMonths({ months: ["2026-03"], invoices, registrations: [], started: new Set(), classify });
-    expect(row!.data).toMatchObject({ payingGeneral: 4, payingEie: 1, payingMath: 1, payingInjaewon: 1, payingOther: 1, payingUnknown: 2 });
+    expect(row!.data).toMatchObject({ payingGeneral: 4, payingEie: 1, payingMath: 1, payingInjaewon: 1, payingOther: 1, payingUnknown: 2, payingEnglish: 2 });
     expect(lessonPrograms([lesson("[EiE] Kopi")], 0, classify)).toEqual(new Set());
     const [plain] = aywaHistoryMonths({ months: ["2026-03"], invoices, registrations: [], started: new Set() });
     expect(plain!.data).not.toHaveProperty("payingMath");
+    expect(plain!.data).not.toHaveProperty("payingEnglish");
+  });
+
+  it("영어 묶음(payingEnglish) = 인재원 영어 ∪ EiE — 둘 다 들은 학생은 한 번(원장 2026-10-29 강좌수·재원생 추이 잇기)", () => {
+    const subjects = [{ key: "math", label: "수학" }, { key: "english", label: "영어" }];
+    const invoices = [
+      inv("a", "2026-03", [lesson("중등영어 정규"), lesson("[EiE] Kopi")]), // 둘 다 → 1
+      inv("b", "2026-03", [lesson("[EiE] Kopi")]),
+      inv("c", "2026-03", [lesson("수학 A")]),
+    ];
+    const classify = lessonProgramClassifier(lessonNameWeights(invoices), subjects);
+    const [row] = aywaHistoryMonths({ months: ["2026-03"], invoices, registrations: [], started: new Set(), classify });
+    expect(row!.data).toMatchObject({ payingInjaewon: 1, payingEie: 2, payingEnglish: 2, payingMath: 1 });
   });
 
   it("🔴 과목마다(원장 2026-10-28 *\"과목별로 분리가능한 수준까지\"*) — 그 밖의 과목을 `payingSubject:<키>`로도 · 건너뛴 달은 청구 칸을 비우고 표시만", () => {

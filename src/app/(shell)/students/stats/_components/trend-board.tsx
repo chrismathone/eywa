@@ -8,7 +8,7 @@ import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import { paramsForMode, periodQuery, type StatsPeriod } from "@/features/stats/period";
 import { saveStudentStatsPrefs } from "@/features/students/stats/server/prefs-actions";
 import { maskBefore } from "@/features/students/stats/chart-math";
-import { basisMarkers, splitBySource, trendBasisName } from "@/features/students/stats/joined";
+import { basisMarkers, trendBasisName } from "@/features/students/stats/joined";
 import {
   TOTAL_TOKEN,
   TREND_KEYS,
@@ -36,8 +36,8 @@ import { TrendChart } from "./trend-chart";
 import { TrendFacts } from "./trend-facts";
 import { TrendTable } from "./trend-table";
 
-/** 과목 한 줄 · 수강 구성 한 줄 — `key`는 선 키(`subject:math` · `mix:both`). */
-export type TrendLine = { key: string; label: string; color: string; set: SeriesSet };
+/** 과목 한 줄 · 수강 구성 한 줄 — `key`는 선 키(`subject:math` · `mix:both`). `history` = 그 선 앞에 이을 지난 기록(과목 묶음 청구 기준 추정 · 없으면 null). */
+export type TrendLine = { key: string; label: string; color: string; set: SeriesSet; history?: HistoryPoints | null };
 
 const VIEW_LABELS: Record<TrendView, string> = { subject: "과목별", mix: "수강 구성" };
 const NOTES: Record<TrendView, string> = {
@@ -46,16 +46,15 @@ const NOTES: Record<TrendView, string> = {
 };
 const monthText = (ym: string) => `${ym.slice(0, 4)}년 ${Number(ym.slice(5, 7))}월`;
 const dayText = (d: string) => `${Number(d.slice(5, 7))}월 ${Number(d.slice(8, 10))}일`;
-/** 지난 기록으로 메운 구간의 선 색 — 과목·학원 팔레트와 갈리는 회색(뜻이 조금 다른 값임이 보이게). */
-const HISTORY_COLOR = "var(--color-muted-foreground)";
-const HISTORY_KEY = "_history";
 
 /**
  * 재원생 추이(자세히) — 운영실 '재원생 추이'와 같은 판정을 셀 수 있는 달부터 · 주별 · 연도별 · **일별(고른 기간 · 최대 두 달 — 원장 2026-10-21)**로,
  * **첫 선(학원 전체 · 과목 관리자는 담당 과목 전체)과 과목별(또는 수강 구성별) 선을 한 그래프에 색깔별로**(원장 2026-10-20). 선 끝에 이름·값,
  * 마우스를 올리면 그 칸의 값.
  * 🔑 에이와로 정확히 셀 수 있는 달(`countFrom`) **앞은 '지난 기록'(0385a)으로 잇는다**(원장 2026-10-21 *"이어질 수 있는 데이터는 다 이어서"* —
- *    `joined.ts`) — 그 구간은 회색 점선(막대는 회색)이고 뜻이 조금 다르다(안내 `historyNote`). 주별·일별은 에이와 기록만.
+ *    `joined.ts`) — **같은 선**으로 잇고 기준이 바뀌는 달에 세로 점선만 긋는다(원장 2026-10-29 *"메이크에듀 기록으로 따로 분리되어있는데"* →
+ *    '같은 선 + 경계 세로선' · 뜻이 조금 다른 값이라 값 상자에 기준 이름 · 안내 `historyNote`). 과목 선도 과목 묶음 청구 기준 추정으로 잇는다
+ *    (수강 구성은 지난 기록으로 가를 수 없어 비운다). 주별·일별은 에이와 기록만.
  * 🔴 과목·구성 선은 **수강 종료가 처음 기록된 달부터**(`breakdownFrom`) — 그 전에 그만둔 학생은 수강 기록이 없어 과목을 가를 수 없다.
  *    첫 선의 아래 경계(`countFrom`)는 화면(page.tsx)이 정한다. 내내 0인 선은 칩도 세우지 않는다.
  * 범위·보기·선 켜고 끄기·그래프 종류는 클라에서 바꾼다(원본을 한 번에 받아 두었다) · 바꾼 값은 계정에 저장(넘긴 칸만). 일별 기간은 **주소**(`tr…`)에
@@ -122,20 +121,15 @@ export function TrendBoard({
   };
 
   // 일별도 에이와로 셀 수 있는 달 전은 뺀다(경계를 주소로 우회하지 못하게 · 리뷰 2026-10-21) — 지난 기록은 달 단위라 일별엔 잇지 않는다.
-  const pick = (set: SeriesSet, withHistory: boolean): Point[] => (daily ? clipToRecords(set.daily ?? [], countFrom) : pointsFor(set, range, countFrom, withHistory ? history : null));
-  const totalPoints = pick(total, true);
+  const pick = (set: SeriesSet, joined: HistoryPoints | null): Point[] => (daily ? clipToRecords(set.daily ?? [], countFrom) : pointsFor(set, range, countFrom, joined));
+  const totalPoints = pick(total, history);
   const hasHistory = totalPoints.some((p) => p.source === "history");
-  // 지난 기록 구간은 따로 선을 세운다(회색 점선 · 꺾은선은 경계 점을 공유해 끊기지 않게 · 막대는 같은 스택이라 공유하지 않는다).
-  const split = splitBySource(totalPoints, kind === "line");
   const lines = [
-    { key: "total", label: totalLabel, color: tokenColor(TOTAL_TOKEN), values: hasHistory ? split.aywa : totalPoints.map((p) => p.count as number | null), strong: true },
-    ...(view === "subject" ? subjects : mixes).map((l) => ({
-      key: l.key,
-      label: l.label,
-      color: l.color,
-      values: alignTo(totalPoints, maskBefore(pick(l.set, false), breakdownFrom), pick(l.set, false)),
-      strong: false,
-    })),
+    { key: "total", label: totalLabel, color: tokenColor(TOTAL_TOKEN), values: totalPoints.map((p) => p.count as number | null), strong: true },
+    ...(view === "subject" ? subjects : mixes).map((l) => {
+      const own = pick(l.set, l.history ?? null);
+      return { key: l.key, label: l.label, color: l.color, values: alignTo(totalPoints, maskBefore(own, breakdownFrom), own), strong: false };
+    }),
   ].filter((l) => l.key === "total" || l.values.some((v) => v !== null && v > 0));
   // 막대 + 수강 구성 = 구성을 **쌓는다**(영어만·동시수강·수학만·그 밖·미수강은 서로 겹치지 않아 합 = 학원 전체) · 합계는 값 상자에만
   // (합계 막대를 구성 옆에 또 세우면 한 구성뿐인 칸에 같은 막대가 둘 선다 — 원장 2026-10-21 첫 수업 지적과 같은 꼴).
@@ -149,9 +143,8 @@ export function TrendBoard({
   const offNow = keys.some((k) => !off.includes(k)) ? off.filter((k) => !stackMix || k !== "total") : [];
   const shown = drawnLines.filter((l) => !offNow.includes(l.key));
   const parts = shown.filter((l) => l.key !== "total");
-  // 구성을 셀 수 없는 칸(수강 종료 기록 전)은 합계만 회색으로 쌓아 막대 높이가 학원 전체와 같게 — 지난 기록 칸은 지난 기록 막대가 선다.
-  const unsplit = stackMix ? totalValues.map((t, i) => (t !== null && totalPoints[i]!.source !== "history" && parts.every((l) => l.values[i] === null) ? t : null)) : [];
-  const totalShown = shown.some((l) => l.key === "total") || stackMix;
+  // 구성을 셀 수 없는 칸(수강 종료 기록 전 · 지난 기록 칸)은 합계만 회색으로 쌓아 막대 높이가 학원 전체와 같게.
+  const unsplit = stackMix ? totalValues.map((t, i) => (t !== null && parts.every((l) => l.values[i] === null) ? t : null)) : [];
   const series = [
     ...shown.map((l) => ({
       key: l.key,
@@ -159,12 +152,8 @@ export function TrendBoard({
       color: l.color,
       values: l.values,
       strong: l.strong,
-      ...(stackMix ? (l.key === "total" ? { tooltipOnly: true } : { stack: "mix" }) : l.key === "total" && hasHistory && kind === "bar" ? { stack: "total" } : {}),
+      ...(stackMix ? (l.key === "total" ? { tooltipOnly: true } : { stack: "mix" }) : {}),
     })),
-    // 지난 기록 선 — 학원 전체 선과 함께 켜지고 꺼진다(칩은 하나). 막대는 합계와 같은 스택(한 칸에 둘이 서지 않는다 · 쌓은 구성에선 구성 스택에).
-    ...(hasHistory && totalShown
-      ? [{ key: HISTORY_KEY, name: "지난 기록", color: HISTORY_COLOR, values: split.history, strong: true, dashed: true, hideInLegend: true as const, ...(kind === "bar" ? { stack: stackMix ? "mix" : "total" } : {}) }]
-      : []),
     ...(unsplit.some((v) => v !== null) ? [{ key: "_unsplit", name: "구성을 셀 수 없는 칸", color: "#c5ccd4", values: unsplit, stack: "mix" }] : []),
   ];
   const clipped = !!breakdownFrom && totalPoints.some((p) => p.date.slice(0, 7) < breakdownFrom && p.source !== "history") && lines.length > 1;
@@ -243,7 +232,7 @@ export function TrendBoard({
           labels={totalPoints.map((p) => axisLabel(p, labelRange))}
           tooltipLabels={totalPoints.map((p) => (p.source === "history" ? `${longLabel(p, labelRange, today)} · ${trendBasisName(p)}` : longLabel(p, labelRange, today)))}
           series={series}
-          markers={hasHistory && totalShown ? basisMarkers(totalPoints.map(trendBasisName)) : []}
+          markers={hasHistory ? basisMarkers(totalPoints.map(trendBasisName)) : []}
           legend={false}
         />
       )}
@@ -254,7 +243,7 @@ export function TrendBoard({
       <TrendFacts points={totalPoints} range={labelRange} who={hasHistory ? `${totalLabel}(지난 기록 포함)` : totalLabel} />
       <p className="text-muted-foreground text-xs break-keep">
         {NOTES[view]}
-        {clipped && breakdownFrom ? ` ${VIEW_LABELS[view]} 선은 ${monthText(breakdownFrom)}부터입니다 — 그 전에 그만둔 학생은 수강 기록이 남아 있지 않아 과목을 가를 수 없습니다.` : ""}
+        {clipped && breakdownFrom ? ` 에이와 기록 구간의 ${VIEW_LABELS[view]} 선은 ${monthText(breakdownFrom)}부터입니다 — 그 전에 그만둔 학생은 수강 기록이 남아 있지 않아 과목을 가를 수 없습니다.` : ""}
       </p>
       <TrendTable range={labelRange} total={totalPoints} totalLabel={totalLabel} lines={shown.filter((l) => l.key !== "total").map((l) => ({ label: l.label, values: l.values }))} />
       {hasHistory && historyNote ? <p className="text-muted-foreground text-xs break-keep">{historyNote}</p> : clipNote && !daily ? <p className="text-muted-foreground text-xs break-keep">{clipNote}</p> : null}
@@ -264,10 +253,10 @@ export function TrendBoard({
 }
 
 /**
- * 과목·구성 선 값을 첫 선의 칸(지난 기록 칸이 앞에 붙은 축)에 맞춘다 — 지난 기록 칸은 과목을 가를 수 없어 null, 에이와 칸은 그 키의 값.
- * `masked` = 경계 전을 비운 값(`maskBefore`) · `own` = 그 선의 점(키 맞추기용).
+ * 과목·구성 선 값을 첫 선의 칸(지난 기록 칸이 앞에 붙은 축)에 맞춘다 — 그 선의 지난 기록 점(과목 묶음 추정)은 그 값, 에이와 칸은 경계 전을
+ * 비운 값(`masked` — `maskBefore`), 그 선에 없는 칸은 null(수강 구성의 지난 기록 칸 등). `own` = 그 선의 점(키 맞추기용).
  */
 function alignTo(axis: readonly Point[], masked: readonly (number | null)[], own: readonly Point[]): (number | null)[] {
-  const at = new Map(own.map((p, i) => [p.key, masked[i] ?? null]));
-  return axis.map((p) => (p.source === "history" ? null : (at.get(p.key) ?? null)));
+  const at = new Map(own.map((p, i) => [p.key, p.source === "history" ? p.count : (masked[i] ?? null)]));
+  return axis.map((p) => at.get(p.key) ?? null);
 }

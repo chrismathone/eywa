@@ -160,6 +160,7 @@ export function aywaHistoryMonths(input: {
   const paidMonths = new Map<string, Set<string>>(); // 학생 → 수업료 청구가 살아 있는 달(청구가 끊긴 학생 판정)
   const add = (m: Map<string, Set<string>>, month: string, id: string) => m.set(month, (m.get(month) ?? new Set()).add(id));
   const subjects = new Map<string, Map<string, Set<string>>>(); // 그 밖의 과목 키 → 달 → 학생
+  const english = new Map<string, Set<string>>(); // 인재원 영어 ∪ EiE — 달 → 학생(영어 묶음 · 한 학생은 한 번)
   for (const i of input.invoices) {
     if (!isLiveTuition(i)) continue;
     const k = lessonKinds(i.line_items, i.amount_total);
@@ -175,11 +176,13 @@ export function aywaHistoryMonths(input: {
     (paidMonths.get(i.student_id) ?? paidMonths.set(i.student_id, new Set()).get(i.student_id)!).add(month);
     if (k.general) add(general, month, i.student_id);
     if (k.eie) add(eie, month, i.student_id);
+    if (k.eie) add(english, month, i.student_id);
     add(all, month, i.student_id);
     if (input.classify && k.general) {
       for (const p of lessonPrograms(i.line_items, i.amount_total, input.classify)) {
         const field = programField(p);
         add(programs.get(field) ?? programs.set(field, new Map()).get(field)!, month, i.student_id);
+        if (field === "payingInjaewon") add(english, month, i.student_id);
         if (field === "payingOther") add(subjects.get(p) ?? subjects.set(p, new Map()).get(p)!, month, i.student_id);
       }
     }
@@ -216,6 +219,7 @@ export function aywaHistoryMonths(input: {
     if (hasEie) data.tuitionPaidEie = tuition.get(month)?.eie ?? 0;
     if (input.classify) {
       for (const field of ["payingMath", "payingInjaewon", "payingOther", "payingUnknown"] as const) data[field] = programs.get(field)?.get(month)?.size ?? 0;
+      data.payingEnglish = english.get(month)?.size ?? 0;
       // 과목마다 — 지점에 그 과목 청구가 한 번이라도 있을 때만(없는 과목을 0으로 그리지 않게).
       for (const [key, byMonth] of subjects) data[subjectField(key)] = byMonth.get(month)?.size ?? 0;
     }
