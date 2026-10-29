@@ -12,6 +12,10 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-10-29 연동 PC가 '따로 낸 영상 숙제'를 읽기 (s2_0008 · ✅ 운영 적용 2026-10-29 · CLI)
+
+`s2_0008_sync_agent_read_extra_video_homework.sql` — 원장 *"따로 낸 영상 숙제도 반 지정된 반으로 귀속"*. 반미정 영상의 반을 숙제로 정하는 워커 질의(`video-teacher-route.mjs` loadHomeworkClassIds)가 `video_homework_extra_issues`를 읽는다. 이 표는 서버 전용이라 `eywa_sync_agent`의 읽기 권한·정책이 없었다. 자기 지점 줄 읽기만 연다(s2_0006과 같은 모양 · 앱 사용자 권한 그대로). **AywaSync 1.0.9 게시 전에** 적용한다(1.0.8은 이 표를 읽지 않는다). 적용 확인: 연동 PC 역할 select만(insert·update 없음) · 정책 sync_agent_allow·sync_agent_tenant_boundary · authenticated는 그대로 막힘. 되돌리기 = `scripts/_oneoff/revert-s2_0008-sync-agent-read-extra-video-homework.sql`.
+
 ## 2026-10-29 월간 계획서 제목을 그 달만 고치기 (s2_0007 · ✅ 운영 적용 2026-10-29 · CLI)
 
 `s2_0007_month_plan_title.sql` — 원장 *"수업명을 그냥 커스텀 수정할 수 있게"*(그 달만 · 비우면 수업명을 따른다). `class_month_plan_cells_kind_ck`에 `'title'`을 더한다(꼬리말 0240a와 같은 길 — 새 표 없음 · 라벨월 1일 행). 앱은 미적용이어도 읽기는 그대로(행이 없으니 수업명) · 저장만 거절. 적용 확인: 제약에 title · 기존 칸 927 그대로. 되돌리기 = `scripts/_oneoff/revert-s2_0007-month-plan-title.sql`(title 행을 지운 뒤 옛 CHECK).

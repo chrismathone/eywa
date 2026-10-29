@@ -2049,6 +2049,66 @@
       "tenantId"
     ]
   },
+  "384469cec3177de586ea39b7d324ee878800b89ff6cc0e86e1ad91e8afb9cea1": {
+    "parts": [
+      "select c.id as class_id, c.class_name, c.subject, c.teacher_id,\n      u.display_name as teacher_name, u.status as teacher_status,\n      (select count(*) from users names where names.tenant_id = ",
+      "\n        and names.status = 'active' and names.display_name = u.display_name) as same_name_count\n    from enrollments e\n    join students s on s.id = e.student_id and s.tenant_id = ",
+      "\n    join classes c on c.id = e.class_id and c.tenant_id = ",
+      "\n    left join users u on u.id = c.teacher_id and u.tenant_id = ",
+      "\n    where e.tenant_id = ",
+      " and e.student_id = ",
+      " and not coalesce(e.on_hold, false)\n      and (e.start_date is null or e.start_date <= ",
+      ") and (e.end_date is null or e.end_date >= ",
+      ")\n      and (c.closed_at is null or c.closed_at >= ",
+      ")"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/video-teacher-route.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenantId",
+      "tenantId",
+      "tenantId",
+      "tenantId",
+      "tenantId",
+      "studentId",
+      "day",
+      "day",
+      "day"
+    ]
+  },
   "395326015209cf2ddde547ff9426a96e28afd7a8f29b0548741627e813cfff14": {
     "parts": [
       "update homework_video_reviews r set lock_token = ",
@@ -7750,6 +7810,81 @@
     ],
     "expressions": [
       "r.id"
+    ]
+  },
+  "cd289c3b376f18ccf44632c5a6bd8087b6b00fdbf0b768a3f8666872ad1643c3": {
+    "parts": [
+      "select class_id from lesson_reports where tenant_id = ",
+      " and student_id = ",
+      "\n      and video_homework = true and class_id in ",
+      "\n      and report_date <= ",
+      "::date and report_date >= ",
+      "::date - ",
+      "::int\n    union\n    select class_id from video_homework_extra_issues where tenant_id = ",
+      " and student_id = ",
+      "\n      and not coalesce(kept, false) and class_id in ",
+      "\n      and homework_date <= ",
+      "::date and homework_date >= ",
+      "::date - ",
+      "::int"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/video-teacher-route.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "list"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "list"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenantId",
+      "studentId",
+      "sql(ids)",
+      "day",
+      "day",
+      "HOMEWORK_WINDOW_DAYS",
+      "tenantId",
+      "studentId",
+      "sql(ids)",
+      "day",
+      "day",
+      "HOMEWORK_WINDOW_DAYS"
     ]
   },
   "cd70cea4fc78b9d335abda229fc8dd49cbba51adab483deeaa365ec8e98580de": {
