@@ -38,12 +38,17 @@ export const SUBJECT_FIELD_PREFIX = "payingSubject:";
 export const subjectField = (key: string) => `${SUBJECT_FIELD_PREFIX}${key}`;
 /** 건너뛴 달 표시 — 청구가 비정상으로 적어 청구 칸을 비운 달(원장 2026-10-28 *"이상할정도로 적은달은 건너뛰는게 차라리 나음"*). */
 export const SKIPPED_PAYING = "skippedPaying";
+/**
+ * 앞뒤 달로 이은 달 표시 — 청구 방식이 바뀌어 그달 청구가 거의 없는 달(2025-04 · 선납 전환으로 4월에 낸 수업료가 5월 청구서에 잡혔다)의 학생 칸을
+ * 그달 청구 ∪ (앞 달 ∩ 뒤 달 청구)로 메운 달(원장 2026-10-29 *"일단 그렇게 해줘. 최대한 가깝게"*). 화면이 '추정'이라 적는다.
+ */
+export const BRIDGED_PAYING = "bridgedPaying";
 
 /**
  * 한 달 — 값이 없는 칸은 비운다(0과 '모름'을 가른다). `estimated` = 추정으로 메운 칸 · `subjects` = 그 밖의 과목마다(키 → 학생) ·
  * `skipped` = 청구 칸을 일부러 비운 달(값이 없는 것과 같지만 화면이 이유를 적는다).
  */
-export type HistoryMonth = { month: string; estimated: HistoryField[]; subjects?: Record<string, number>; skipped?: boolean } & Partial<Record<HistoryField, number>>;
+export type HistoryMonth = { month: string; estimated: HistoryField[]; subjects?: Record<string, number>; skipped?: boolean; bridged?: boolean } & Partial<Record<HistoryField, number>>;
 export type HistoryRow = { month: string; source: "makeedu" | "aywa"; data: unknown };
 
 const isField = (k: unknown): k is HistoryField => HISTORY_FIELDS.includes(k as HistoryField);
@@ -63,6 +68,7 @@ export function parseHistoryData(raw: unknown): Omit<HistoryMonth, "month"> {
     if (key) (out.subjects ??= {})[key] = Math.round(v);
   }
   if (o[SKIPPED_PAYING] === 1 || o[SKIPPED_PAYING] === true) out.skipped = true;
+  if (o[BRIDGED_PAYING] === 1 || o[BRIDGED_PAYING] === true) out.bridged = true;
   return out;
 }
 
@@ -89,6 +95,9 @@ export function mergeHistory(rows: readonly HistoryRow[]): HistoryMonth[] {
     } else if (d.subjects) cur.subjects = { ...(cur.subjects ?? {}), ...d.subjects };
     if (d.skipped) cur.skipped = true;
     else if (carriesPaying) delete cur.skipped;
+    // 이은 달 표시는 청구 칸을 실은 출처를 따른다(에이와가 그달을 세면 풀린다).
+    if (d.bridged) cur.bridged = true;
+    else if (carriesPaying) delete cur.bridged;
     byMonth.set(r.month, cur);
   }
   return [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month));
@@ -136,7 +145,7 @@ const PAYING_FIELDS: readonly HistoryField[] = ["payingGeneral", "payingEie", "p
 export function withoutPaying(months: readonly HistoryMonth[]): HistoryMonth[] {
   return months.map((m) => {
     // 과목 묶음·건너뛴 표시도 청구에서 나온 것이라 함께 뺀다.
-    const out: HistoryMonth = { month: m.month, estimated: m.estimated.filter((f) => !PAYING_FIELDS.includes(f)) };
+    const out: HistoryMonth = { month: m.month, estimated: m.estimated.filter((f) => !PAYING_FIELDS.includes(f)) }; // 이은 달 표시도 청구 칸 몫이라 뺀다
     for (const f of HISTORY_FIELDS) if (!PAYING_FIELDS.includes(f) && m[f] !== undefined) out[f] = m[f];
     return out;
   });

@@ -136,6 +136,36 @@ describe("지난 기록 — 에이와 쪽 월별 값", () => {
     expect(row!.data).toMatchObject({ payingInjaewon: 1, payingEie: 2, payingEnglish: 2, payingMath: 1 });
   });
 
+  it("앞뒤 달로 잇는 달(2025-04 — 원장 2026-10-29) = 그달 청구 ∪ (앞 달 ∩ 뒤 달) · 칸마다 · 끊김 판정엔 안 넣는다 · 표시", () => {
+    const subjects = [{ key: "math", label: "수학" }, { key: "english", label: "영어" }];
+    const invoices = [
+      inv("a", "2025-03", [lesson("수학 A")]), inv("a", "2025-05", [lesson("수학 A")]), // 앞뒤 다 → 이음
+      inv("b", "2025-03", [lesson("[EiE] Kopi")]), // 앞만 → 안 이음
+      inv("c", "2025-04", [lesson("중등영어 정규")]), // 그달 청구 → 그대로
+      inv("d", "2025-05", [lesson("[EiE] Kopi")]), // 뒤만 → 안 이음
+      inv("e", "2025-03", [lesson("[EiE] Kopi")]), inv("e", "2025-05", [lesson("[EiE] Kopi")]),
+    ];
+    const classify = lessonProgramClassifier(lessonNameWeights(invoices), subjects);
+    const months = ["2025-03", "2025-04", "2025-05"];
+    const rows = aywaHistoryMonths({ months, invoices, registrations: [], started: new Set(), classify, skipMonths: new Set(["2025-04"]), bridgeMonths: new Set(["2025-04"]) });
+    const apr = rows.find((r) => r.month === "2025-04")!.data;
+    expect(apr).toMatchObject({ payingTotal: 3, payingMath: 1, payingInjaewon: 1, payingEie: 1, payingEnglish: 2, bridgedPaying: 1 });
+    expect(apr).not.toHaveProperty("skippedPaying");
+    // 건너뛰기만 하면 종전대로 비운다 · skipMonths에 없는 이음 달은 무시한다.
+    const skipped = aywaHistoryMonths({ months, invoices, registrations: [], started: new Set(), classify, skipMonths: new Set(["2025-04"]) });
+    expect(skipped.find((r) => r.month === "2025-04")!.data).toMatchObject({ skippedPaying: 1 });
+    expect(skipped.find((r) => r.month === "2025-04")!.data).not.toHaveProperty("payingTotal");
+    const plain = aywaHistoryMonths({ months, invoices, registrations: [], started: new Set(), classify, bridgeMonths: new Set(["2025-04"]) });
+    expect(plain.find((r) => r.month === "2025-04")!.data).toMatchObject({ payingTotal: 1 });
+    expect(plain.find((r) => r.month === "2025-04")!.data).not.toHaveProperty("bridgedPaying");
+    expect(mergeHistory([{ month: "2025-04", source: "makeedu", data: apr }])[0]!.bridged).toBe(true);
+    // 앞뒤 달 중 하나가 없거나 건너뛴 달이면 잇지 않고 종전대로 비운다.
+    const edge = aywaHistoryMonths({ months: ["2025-04", "2025-05"], invoices, registrations: [], started: new Set(), classify, skipMonths: new Set(["2025-04"]), bridgeMonths: new Set(["2025-04"]) });
+    expect(edge[0]!.data).toMatchObject({ skippedPaying: 1 });
+    const both = aywaHistoryMonths({ months, invoices, registrations: [], started: new Set(), classify, skipMonths: new Set(["2025-04", "2025-05"]), bridgeMonths: new Set(["2025-04"]) });
+    expect(both.find((r) => r.month === "2025-04")!.data).toMatchObject({ skippedPaying: 1 });
+  });
+
   it("🔴 과목마다(원장 2026-10-28 *\"과목별로 분리가능한 수준까지\"*) — 그 밖의 과목을 `payingSubject:<키>`로도 · 건너뛴 달은 청구 칸을 비우고 표시만", () => {
     const subjects = [{ key: "math", label: "수학" }, { key: "english", label: "영어" }, { key: "science", label: "과학" }, { key: "korean", label: "국어" }];
     const invoices = [

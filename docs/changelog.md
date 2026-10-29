@@ -1,8 +1,13 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-29 — 원생 통계: 2025-04 앞뒤 달로 잇기 · 영어를 인재원 영어 · EiE(주황)로
+
+- 원장 *"일단 그렇게 해줘. 최대한 가깝게"* · *"영어를 인재원영어 및 eie. eie는 주황색"* — 2025-04 학생 칸 = 그달 청구 ∪ (3월 ∩ 5월)(선납 전환 달 · `bridgeMonths`) · 재원생·강좌수 과목 선의 영어를 인재원 영어 · EiE로(`englishProgramRows` · EiE 선은 수납 시작 달부터). 상세 = [decisions/students.md](decisions/students.md).
+
 ## 2026-10-29 — 원생 통계: '지난 기록' 카드를 재원생·강좌수·등록퇴원 추이에 합침
 
 - 원장 *"지난기록 말고 그냥 재원생과 강좌수 퇴원생에 반영"* — 카드 없앰(`history-board.tsx`·`history-table.tsx` 삭제) · 세 추이가 지난 기록 구간을 **같은 선**으로 잇고 기준이 바뀌는 달에 세로 점선. 재원생 과목 선·강좌수(처음)도 과목 묶음 청구 기준 추정으로 잇는다(`joined.ts` `historyGroupPoints`·`historyCoursePoints`). 새 칸 `payingEnglish`(인재원 영어 ∪ EiE). 상세 = [decisions/students.md](decisions/students.md).
+
 ## 2026-10-29 — 영어 ClassNote 발송: 반 방 경로(s2_0006)
 
 - 원장 *"반 방 경로로 영어 발송 만들어줘"* — 영어는 2026-07-29에 '그룹 반 방에 학생별 게시'로 정해 두고도 워커가 `(영어)이름` 1인 보드로만 보내, 1인 보드가 빈 학생은 "연결된 원아가 없습니다"로 실패했다(10/28 김준서A·이준혁).

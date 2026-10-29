@@ -1,12 +1,12 @@
 import type { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { DASHBOARD_SUBJECT_COLORS } from "@/features/dashboard/overview/subject-colors";
-import { subjectGroupOf } from "@/features/students/enrollment/program";
+import { isEnglishProgramKey, programLabel, subjectGroupOf } from "@/features/students/enrollment/program";
 import { distinctSubjectTokens, tokenColor, type TrendView } from "@/features/students/stats/model";
 import type { MixKey } from "@/features/dashboard/overview/enrolled-trend";
 import { courseBounds, flowBounds, trendBounds } from "@/features/students/stats/bounds";
 import { firstFlowMonth, firstNonZeroMonth } from "@/features/students/stats/model";
-import { courseJoinNote, historyCoursePoints, historyFlowRows, historyGroupPoints, historyTrendPoints, joinFlowRows, joinNote } from "@/features/students/stats/joined";
+import { bridgedText, courseJoinNote, historyCoursePoints, historyFlowRows, historyGroupPoints, historyTrendPoints, joinFlowRows, joinNote } from "@/features/students/stats/joined";
 import type { HistoryMonth } from "@/features/students/stats/history";
 import type { StudentStats, StudentStatsParts } from "@/features/students/stats/server/load";
 import { StatCard } from "./stat-card";
@@ -45,10 +45,19 @@ async function trendContext({ stats, parts, scopeLabel }: Ctx) {
 }
 
 /**
+ * 선 이름·색 — 영어 프로그램 키(인재원 영어 · EiE — 원장 2026-10-29 *"영어를 인재원영어 및 eie. eie는 주황색"*)는 프로그램 이름 ·
+ * 인재원 영어 = 영어 빨강 · EiE = 주황. 그 밖은 학원설정 과목 이름·색(`fallback`).
+ */
+function lineMeta(key: string, split: boolean, settings: Ctx["settings"], eieOn: boolean, fallback: () => { label: string; color: string }) {
+  if (!split || !isEnglishProgramKey(key)) return fallback();
+  return { label: programLabel(key, settings.operations.subjects, eieOn), color: key === "eie" ? DASHBOARD_SUBJECT_COLORS.eie : DASHBOARD_SUBJECT_COLORS.english };
+}
+
+/**
  * 과목 선에 이을 지난 기록 — 설정 과목 키 → 그 과목 묶음의 청구 기준 추정 점(원장 2026-10-29 *"지난기록 말고 그냥 재원생과 강좌수 퇴원생에 반영"*).
  * 한 묶음에 설정 과목이 둘 이상이면(수학 · 수학(심화)) 지난 기록이 묶음 값만 있어 가를 수 없다 — 잇지 않는다. 점이 없으면 null.
  */
-function groupHistory(months: readonly HistoryMonth[], before: string | null, settings: Ctx["settings"]) {
+function groupHistory(months: readonly HistoryMonth[], before: string | null, settings: Ctx["settings"], split = false) {
   const subjects = settings.operations.subjects.map((s) => ({ key: s.key, label: s.label }));
   const groupOf = (key: string) => subjectGroupOf(key, subjects);
   const owners = new Map<string, number>();
@@ -60,7 +69,8 @@ function groupHistory(months: readonly HistoryMonth[], before: string | null, se
     groupOf,
     /** `key` = 설정 과목 키(재원생 추이 — 재원생 과목 선은 설정 과목마다라 묶음을 둘 이상이 나누면 못 가른다). */
     of: (key: string) => {
-      const g = groupOf(key);
+      // 프로그램 키는 서버가 영어를 갈랐을 때만 프로그램이다(아니면 그 이름의 설정 과목 — 지난 기록 과목 묶음으로 본다).
+      const g = split && isEnglishProgramKey(key) ? key : groupOf(key);
       if (!months.length || !g || (owners.get(g) ?? 0) > 1) return null;
       const h = historyGroupPoints(months, before, g);
       return h.monthly.length ? h : null;
@@ -86,21 +96,24 @@ export async function TrendSection(props: Ctx & { view: TrendView; boardKey: str
   // 경계가 없으면(퇴원 기록이 처음부터 다 있는 지점) 에이와 첫 학생이 있는 달 — 창 앞쪽의 0인 달이 지난 기록을 덮지 않게(리뷰 2026-10-21).
   const aywaFirst = countFrom ?? firstNonZeroMonth(trend.data.total.monthly) ?? trend.data.total.monthly[0]?.key ?? null;
   const history = historyTrendPoints(months, aywaFirst);
-  const historyNote = joinNote(history.monthly, months, aywaFirst);
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
   const tokens = distinctSubjectTokens(settings.operations.subjects.map((s) => ({ key: s.key, color: subjectMaps.colorOf(s.key) })));
-  const groups = groupHistory(months, aywaFirst, settings);
   const data = trend.data;
+  const split = !!data.englishSplit;
+  const groups = groupHistory(months, aywaFirst, settings, split);
+  const subjectHistory = new Map(data.bySubject.map((s) => [s.key, groups.of(s.key)]));
+  // 이은 달(2025-04) 안내는 과목 선이 실제로 지난 기록을 이었을 때만(학원 전체 선은 그달 메이크에듀 재원생 기록 — 리뷰 2026-10-29).
+  const subjectPoints = [...subjectHistory.values()].flatMap((h) => h?.monthly ?? []);
+  const historyNote = `${joinNote(history.monthly, months, aywaFirst) ?? ""}${bridgedText(subjectPoints, months, "과목 선의 ")}`.trim() || null;
   return (
     <TrendBoard
       key={`trend|${boardKey}`}
       total={data.total}
       subjects={data.bySubject.map((s) => ({
         key: `subject:${s.key}`,
-        label: subjectMaps.labelOf(s.key),
-        color: tokenColor(tokens.get(s.key) ?? subjectMaps.colorOf(s.key)),
+        ...lineMeta(s.key, split, settings, stats.eieOn, () => ({ label: subjectMaps.labelOf(s.key), color: tokenColor(tokens.get(s.key) ?? subjectMaps.colorOf(s.key)) })),
         set: s,
-        history: groups.of(s.key),
+        history: subjectHistory.get(s.key) ?? null,
       }))}
       mixes={[
         ...data.byMix.map((m) => ({ key: `mix:${m.key}`, label: MIX_META[m.key].label, color: MIX_META[m.key].color, set: m })),
@@ -129,12 +142,17 @@ export async function CourseSection(props: Ctx & { boardKey: string }) {
   const { courseFrom, courseClipNote } = courseBounds(ctx.bounds, ctx);
   // 셀 수 있는 첫 달 앞을 지난 기록으로(재원생 추이와 같은 규칙 — 원장 2026-10-29) — 전체 = 과목 묶음마다 청구된 학생의 합.
   const aywaFirst = courseFrom ?? firstNonZeroMonth(courses.data.total.monthly) ?? courses.data.total.monthly[0]?.key ?? null;
-  const history = months.length ? historyCoursePoints(months, aywaFirst, courses.data.bySubject.map((p) => p.key)) : null;
+  // 전체 = 묶음마다 한 번 — 영어를 프로그램으로 갈랐어도 전체는 영어 묶음(인재원 영어 ∪ EiE)으로 센다(강좌수의 '학생마다 영어는 1개').
+  const split = !!courses.data.englishSplit;
+  const courseGroups = [...new Set(courses.data.bySubject.map((p) => (split && isEnglishProgramKey(p.key) ? "english" : p.key)))];
+  const history = months.length ? historyCoursePoints(months, aywaFirst, courseGroups) : null;
   // 강좌수 과목 키는 이미 묶음이다(수학 · 수학(심화)가 한 선 — 리뷰 2026-10-29: 재원생 규칙을 쓰면 수학 몫이 '그 밖의 과목'으로 쌓였다).
   // 과목 선은 전체 선이 선 달만으로 센다 — 연도별 점(그해 마지막 달)이 전체와 같은 달이라 쌓은 합이 전체와 맞는다(같은 리뷰).
   const counted = new Set(history?.monthly.map((p) => p.key) ?? []);
   const courseMonths = months.filter((m) => counted.has(m.month));
   const lineHistory = (group: string) => {
+    // 프로그램 키 이름의 설정 과목(영어를 가르지 않은 지점)은 지난 기록 프로그램 칸이 아니다 — 잇지 않는다.
+    if (!split && isEnglishProgramKey(group)) return null;
     const h = courseMonths.length ? historyGroupPoints(courseMonths, aywaFirst, group) : null;
     return h?.monthly.length ? h : null;
   };
@@ -144,11 +162,16 @@ export async function CourseSection(props: Ctx & { boardKey: string }) {
     <CourseBoard
       key={`courses|${boardKey}`}
       total={courses.data.total}
-      subjects={courses.data.bySubject.map((p) => ({ key: `subject:${p.key}`, label: subjectMaps.labelOf(p.key), color: tokenColor(tokens.get(p.key) ?? subjectMaps.colorOf(p.key)), set: p, history: lineHistory(p.key) }))}
+      subjects={courses.data.bySubject.map((p) => ({
+        key: `subject:${p.key}`,
+        ...lineMeta(p.key, split, settings, stats.eieOn, () => ({ label: subjectMaps.labelOf(p.key), color: tokenColor(tokens.get(p.key) ?? subjectMaps.colorOf(p.key)) })),
+        set: p,
+        history: lineHistory(p.key),
+      }))}
       countFrom={courseFrom}
       clipNote={courseClipNote}
       history={history?.monthly.length ? history : null}
-      historyNote={history ? courseJoinNote(history.monthly, aywaFirst) : null}
+      historyNote={history ? courseJoinNote(history.monthly, aywaFirst, months) : null}
       today={stats.today}
       scopeLabel={scopeLabel}
       initial={{ range: stats.prefs.courseRange, kind: stats.prefs.courseKind, off: stats.prefs.courseOff }}

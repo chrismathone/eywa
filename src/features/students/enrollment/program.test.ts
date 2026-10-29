@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  englishProgramGroup,
+  englishProgramRows,
   PROGRAMS,
   parseProgram,
   programLabel,
@@ -96,5 +98,30 @@ describe("parseProgram · programLabel", () => {
       { key: "math", label: "수학" },
       { key: "english", label: "영어" },
     ]);
+  });
+});
+
+describe("영어를 프로그램으로 가르기(원생 통계 — 원장 2026-10-29)", () => {
+  const subjects = [{ key: "math", label: "수학" }, { key: "english", label: "영어" }, { key: "korean", label: "국어" }];
+  it("영어 반 수강의 과목 칸 → 인재원 영어 · EiE(반의 english_track) · 그 밖은 그대로", () => {
+    const { rows, englishKeys } = englishProgramRows(
+      [
+        { subject: "english", englishTrack: "eie" },
+        { subject: "english", englishTrack: null },
+        { subject: "math", englishTrack: null },
+        { subject: null },
+      ],
+      subjects,
+    );
+    expect(englishKeys).toEqual(["english"]);
+    expect(rows.map((r) => r.subject)).toEqual(["eie", "injaewon", "math", null]);
+    expect(englishProgramGroup("eie", subjects)).toBe("english");
+    expect(englishProgramGroup("injaewon", subjects)).toBe("english");
+    expect(englishProgramGroup("korean", subjects)).toBe("korean");
+  });
+  it("영어 과목이 없거나 설정에 프로그램 키와 같은 과목 키가 있으면 바꾸지 않는다", () => {
+    const rows = [{ subject: "english", englishTrack: "eie" }];
+    expect(englishProgramRows(rows, [{ key: "math", label: "수학" }]).englishKeys).toEqual([]);
+    expect(englishProgramRows(rows, [...subjects, { key: "eie", label: "EiE" }]).rows).toBe(rows);
   });
 });

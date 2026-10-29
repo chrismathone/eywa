@@ -2,7 +2,7 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { MIX_KEYS, breakdownTrendOf, monthlyPoints, subjectTrendOf, trendOf, weeklyPoints, yearlyPoints, type MixKey, type TrendPoint } from "./enrolled-trend";
 import { courseTrendOf } from "./course-trend";
-import { subjectGroupOf, type ProgramSubject } from "@/features/students/enrollment/program";
+import { ENGLISH_PROGRAM_KEYS, englishProgramGroup, englishProgramRows, isEnglishProgramKey, subjectGroupOf, type ProgramSubject } from "@/features/students/enrollment/program";
 import { loadRecordCoverage } from "./record-coverage";
 import { clipTrend } from "./trend-points";
 import { breakdownFromOf, inputsOf, loadBillingCached, loadTrendRaw, trendInputs, warnBilling, warnCoverage } from "./trend-inputs-server";
@@ -94,6 +94,8 @@ export async function loadEnrolledTrendSlicer(tenantId: string, today: string, s
 export type TrendSeriesSet = { monthly: TrendPoint[]; weekly: TrendPoint[]; yearly: TrendPoint[]; daily?: TrendPoint[] };
 export type EnrolledTrendDetail = {
   total: TrendSeriesSet;
+  /** 영어 과목 선을 인재원 영어 · EiE로 갈랐나(`splitEnglish`를 켜고 실제로 가를 수 있었을 때) — 화면은 이 값으로 선 이름·지난 기록을 고른다. */
+  englishSplit?: boolean;
   bySubject: ({ key: string } & TrendSeriesSet)[];
   byMix: ({ key: MixKey } & TrendSeriesSet)[];
   /** 재원생인데 그날 걸린 수강이 없는 학생 — 과목·구성으로 가를 수 없는 인원(화면이 신뢰 구간을 가른다). */
@@ -133,13 +135,22 @@ export async function loadEnrolledTrendDetail(
   scope?: (subject: string | null) => boolean,
   /** 일별로 볼 날들(`YYYY-MM-DD` · 최대 두 달 · 원장 2026-10-21) — 있으면 `daily`를 함께 센다. 오늘 뒤 날은 뺀다. */
   dailyDays?: readonly string[] | null,
+  /**
+   * 영어 과목 선을 **인재원 영어 · EiE** 둘로(원장 2026-10-29 *"영어를 인재원영어 및 eie"* — EiE 모듈이 켜진 지점만 호출부가 켠다). 과목 선만
+   * 바뀐다 — 학원 전체·수강 구성(영어만·동시수강…)은 그대로(프로그램 키도 영어 묶음).
+   */
+  splitEnglish = false,
 ): Promise<EnrolledTrendDetail> {
   const { raw, en } = await trendInputs(tenantId, today);
   const points = { monthly: monthlyPoints(today, DETAIL_MONTHS), weekly: weeklyPoints(today, DETAIL_WEEKS), yearly: yearlyPoints(today, raw.fromYear) };
   const daily = dailyDays ? dailyPoints(dailyDays, today) : null;
-  const keys = subjects.map((s) => s.key);
-  const groupOf = (subject: string | null) => subjectGroupOf(subject, subjects);
-  const breakdown = (pts: readonly { key: string; label: string; date: string }[]) => breakdownTrendOf(raw.students, en, raw.enrollments, pts, keys, groupOf, today);
+  const english = splitEnglish ? englishProgramRows(raw.enrollments, subjects) : { rows: raw.enrollments, englishKeys: [] as string[] };
+  // 영어 과목 키 자리에 프로그램 키 둘(첫 영어 키 자리 · 나머지 영어 키는 빠진다 — 프로그램 키가 그 수강을 다 맡는다).
+  const keys = subjects.flatMap((s) => (s.key === english.englishKeys[0] ? [...ENGLISH_PROGRAM_KEYS] : english.englishKeys.includes(s.key) ? [] : [s.key]));
+  /** 선 키 → 과목 관리자 범위를 볼 과목 키(프로그램 키는 영어 과목 키). */
+  const scopeKey = (key: string) => (isEnglishProgramKey(key) && english.englishKeys.length ? english.englishKeys[0]! : key);
+  const groupOf = (subject: string | null) => (english.englishKeys.length ? englishProgramGroup(subject, subjects) : subjectGroupOf(subject, subjects));
+  const breakdown = (pts: readonly { key: string; label: string; date: string }[]) => breakdownTrendOf(raw.students, en, english.rows, pts, keys, groupOf, today);
   const split = { monthly: breakdown(points.monthly), weekly: breakdown(points.weekly), yearly: breakdown(points.yearly), daily: daily ? breakdown(daily) : null };
   const totalOf = (pts: readonly { key: string; label: string; date: string }[]) =>
     scope ? subjectTrendOf(raw.students, en, raw.enrollments, pts, scope, today) : trendOf(raw.students, en, pts);
@@ -147,8 +158,9 @@ export async function loadEnrolledTrendDetail(
   const withDaily = <T,>(base: T, pick: (d: NonNullable<typeof split.daily>) => TrendPoint[]) => (split.daily ? { ...base, daily: pick(split.daily) } : base);
   return {
     total,
+    englishSplit: english.englishKeys.length > 0,
     bySubject: keys
-      .filter((key) => !scope || scope(key))
+      .filter((key) => !scope || scope(scopeKey(key)))
       .map((key) => withDaily({ key, monthly: split.monthly.bySubject[key]!, weekly: split.weekly.bySubject[key]!, yearly: split.yearly.bySubject[key]! }, (d) => d.bySubject[key]!)),
     byMix: scope ? [] : MIX_KEYS.map((key) => withDaily({ key, monthly: split.monthly.mix[key], weekly: split.weekly.mix[key], yearly: split.yearly.mix[key] }, (d) => d.mix[key])),
     unknown: withDaily({ monthly: split.monthly.unknown, weekly: split.weekly.unknown, yearly: split.yearly.unknown }, (d) => d.unknown),

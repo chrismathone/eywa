@@ -216,8 +216,9 @@ export async function loadStudentStats(requestedSubject?: string, firstParams: P
       const compute = await loadMonthlyChanges(today, null, getWithdrawalsInWindow(fromDate, today), !!scoped, DETAIL_MONTHS, !scoped, coverage);
       return compute(scoped?.pred ?? null);
     }),
-    trend: scopedPart("trend", () => loadEnrolledTrendDetail(user.tenantId, today, programSubjects, scoped?.pred, trendPeriod?.days ?? null)),
-    courses: scopedPart("courses", () => loadCourseTrendDetail(user.tenantId, today, programSubjects, scoped?.pred)),
+    // 영어 선은 EiE 모듈이 켜진 지점만 인재원 영어 · EiE로 가른다(원장 2026-10-29).
+    trend: scopedPart("trend", () => loadEnrolledTrendDetail(user.tenantId, today, programSubjects, scoped?.pred, trendPeriod?.days ?? null, eieOn)),
+    courses: scopedPart("courses", () => loadCourseTrendDetail(user.tenantId, today, programSubjects, scoped?.pred, eieOn)),
     history: part("history", async () => {
       const [history, billing] = await Promise.all([loadStudentHistory(user.tenantId), canBilling]);
       return billing ? { ...history, payingHidden: false } : { ...history, months: withoutPaying(history.months), payingHidden: true };
