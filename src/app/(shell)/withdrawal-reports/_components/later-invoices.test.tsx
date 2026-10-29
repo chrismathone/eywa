@@ -9,9 +9,10 @@ vi.mock("@/features/withdrawal-reports/server/refund-actions", () => ({ approveW
 
 import { LaterInvoices } from "./later-invoices";
 
-const nov = { id: "11111111-1111-1111-1111-111111111111", period: "2026-11", category: "tuition", status: "paid",
-  amountBilled: 315000, amountPaid: 315000, partial: true, refund: null,
-  lines: [{ kind: "수업", description: "중등E_중2 심화 Jane", amount: 325000, discount: 10000, paid: 315000 }] };
+const id = "11111111-1111-1111-1111-111111111111";
+const line = (i: number, description: string, paid: number) => ({ kind: "수업", description, amount: paid + 10000, discount: 10000, paid, key: `${id}#${i}`, paidNet: paid, billingRefund: false, refund: null });
+const nov = { id, period: "2026-11", category: "tuition", status: "paid", amountBilled: 515000, amountPaid: 515000, partial: false,
+  lines: [line(0, "중등E_중2 심화 Jane", 315000), line(1, "중2 수학 A", 200000)] };
 const desks = [{ id: "22222222-2222-2222-2222-222222222222", name: "데스크A" }];
 
 describe("퇴원 뒤 청구(원장 2026-10-29)", () => {
@@ -19,29 +20,39 @@ describe("퇴원 뒤 청구(원장 2026-10-29)", () => {
     const { container } = render(<LaterInvoices reportId="r" rows={[]} canApprove deskStaff={desks} />);
     expect(container.innerHTML).toBe("");
   });
-  it("과목 수강종료는 끝내는 반 몫만 · 원장이 아니면 보기만", () => {
+  it("수납 줄마다 한 행 · 원장이 아니면 보기만", () => {
     render(<LaterInvoices reportId="r" rows={[nov]} canApprove={false} deskStaff={[]} />);
-    expect(screen.getByText("2026-11 수강료(중등E_중2 심화 Jane)")).toBeInTheDocument();
-    expect(screen.getAllByText("315,000원")).toHaveLength(2);
-    expect(screen.getByText("요청서 없음")).toBeInTheDocument();
+    expect(screen.getByText("2026-11 수강료 · 중등E_중2 심화 Jane")).toBeInTheDocument();
+    expect(screen.getByText("2026-11 수강료 · 중2 수학 A")).toBeInTheDocument();
+    expect(screen.getAllByText("요청서 없음")).toHaveLength(2);
     expect(screen.queryByRole("switch")).toBeNull();
   });
-  it("원장: 토글 → 데스크 담당자를 골라야 승인 → 승인 요청", async () => {
+  it("고른 게 없으면 승인 버튼·담당자 선택이 없다", () => {
+    render(<LaterInvoices reportId="r" rows={[nov]} canApprove deskStaff={desks} />);
+    expect(screen.getAllByRole("switch")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "환불 승인" })).toBeNull();
+    expect(screen.queryByRole("combobox")).toBeNull();
+  });
+  it("원장: 줄 토글로 고름 → 환불 승인 → 담당자 골라야 확정 → 고른 줄만 보냄", async () => {
     mocks.approve.mockResolvedValue({ ok: true, documentId: "d" });
     render(<LaterInvoices reportId="r" rows={[nov]} canApprove deskStaff={desks} />);
-    fireEvent.click(screen.getByRole("switch", { name: "2026-11 환불 승인" }));
+    fireEvent.click(screen.getByRole("switch", { name: "2026-11 수강료 · 중등E_중2 심화 Jane 환불" }));
+    expect(screen.getByText("선택 1건 · 환불 315,000원")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "환불 승인" }));
     expect(screen.getByText(/환불을 승인하시겠습니까\?/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "환불 승인" })).toBeDisabled();
     fireEvent.change(screen.getByRole("combobox", { name: "데스크 담당자" }), { target: { value: desks[0].id } });
     fireEvent.click(screen.getByRole("button", { name: "환불 승인" }));
-    await waitFor(() => expect(mocks.approve).toHaveBeenCalledWith("r", nov.id, desks[0].id));
+    await waitFor(() => expect(mocks.approve).toHaveBeenCalledWith("r", [`${id}#0`], desks[0].id));
     await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
   });
-  it("이미 승인한 청구는 담당·완료와 요청서 링크 · 낸 돈이 없는 청구는 토글 없음", () => {
-    render(<LaterInvoices reportId="r" deskStaff={desks} canApprove rows={[
-      { ...nov, refund: { documentId: "doc", deskName: "데스크A", completed: true } },
-      { ...nov, id: "x", period: "2026-12", amountPaid: 0, status: "pending" },
-    ]} />);
+  it("이미 요청서가 있는 줄은 담당·완료와 링크 · 낸 돈이 없는 줄은 토글 없음", () => {
+    render(<LaterInvoices reportId="r" deskStaff={desks} canApprove rows={[{ ...nov, lines: [
+      { ...nov.lines[0], refund: { documentId: "doc", deskName: "데스크A", completed: true } },
+      { ...nov.lines[1], paid: 0, paidNet: 0 },
+      { ...nov.lines[1], key: `${id}#9`, billingRefund: true },
+    ] }]} />);
+    expect(screen.getByText("수납 환불 기록")).toBeInTheDocument();
     expect(screen.getByText("환불 완료 · 담당 데스크A · 요청서").closest("a")).toHaveAttribute("href", "/billing/refunds/doc");
     expect(screen.queryByRole("switch")).toBeNull();
   });

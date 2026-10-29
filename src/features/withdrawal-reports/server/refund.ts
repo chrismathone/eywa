@@ -1,82 +1,151 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { toPrefillLines } from "@/features/billing/server/refund-queries";
+import { receiptHistoryLines } from "@/features/billing/invoice-line-items";
+import { receiptRefundState } from "@/features/billing/session-terms/receipt-refund";
 import type { RefundPrefillLine } from "@/features/billing/refund-prefill";
+import { INVOICE_CATEGORY_LABEL } from "../prefill";
 import type { WithdrawalReport } from "../model";
+import { REFUND_TAG_PREFIX, claimedKeys, claimedLines, lineBase, lineIds, norm, splitKey } from "../refund-keys";
 
 /**
  * 퇴원월 **뒤** 청구 — 원장 2026-10-29 *"11월까지 납부했는데, 퇴원보고서상에는 10월납부밖에 없음… 이후에 납부한건 혹은 환불한 건에
  * 대해서도 표시할 수 있어야함"*(김덕현 — 영어만 수강종료 10-28 · 11월 청구에 영어 반 줄 315,000원 납부). 무효(void) 청구는 뺀다.
- * 환불 요청서(academy_documents · refund_request)는 설명 칸의 표식으로 청구와 잇는다(같은 청구로 두 번 만들지 않게).
+ * 환불은 **청구 줄 단위** — 원장 *"어떤건을 환불할건지 토글토글토글해서 선택선택선택해 그 건을 환불하게"*.
+ * 환불 요청서(academy_documents · refund_request)는 설명 칸의 표식(`lines:<청구id>#<줄 식별값>,…`)으로 줄과 잇는다.
  */
+export type RefundRef = { documentId: string; deskName: string | null; completed: boolean };
+export type LaterLine = RefundPrefillLine & {
+  /** `<청구 id>#<줄 식별값>` — 환불 선택·표식의 단위. 줄 내용(구분·반·수납명·묶음) 기준이라 동기화로 순서가 바뀌어도 같은 줄을 가리킨다. */
+  key: string;
+  /** 이 줄로 낸 돈(줄 기록이 없으면 대신 값 · 청구 납부액을 넘지 않게 맞춤). */
+  paidNet: number;
+  /** 수납(makeedu)에 이미 환불 기록이 있는 줄 — 여기서 다시 환불하지 않는다. */
+  billingRefund: boolean;
+  refund: RefundRef | null;
+};
 export type LaterInvoice = {
   id: string; period: string; category: string; status: string;
-  /** 이 보고서가 끝내는 수업 몫(전체 퇴원 = 청구 전체 · 과목 수강종료 = 끝내는 반 이름 줄만). */
+  /** 보이는 줄 합계(전체 퇴원 = 청구 전체 · 과목 수강종료 = 끝내는 반 이름 줄만). */
   amountBilled: number; amountPaid: number;
-  /** 과목 수강종료일 때 고른 줄(반 이름) — 표·요청서 결제내역에 그대로 쓴다. */
-  lines: RefundPrefillLine[];
+  lines: LaterLine[];
   partial: boolean;
-  refund: { documentId: string; deskName: string | null; completed: boolean } | null;
 };
 
-const norm = (s: string) => s.replace(/\s+/g, " ").trim();
+export { LINE_KEY, REFUND_TAG_PREFIX, refundTag } from "../refund-keys";
 
-export const refundTag =(reportId: string, invoiceId: string) => `퇴원보고서 환불 승인 · report:${reportId} · invoice:${invoiceId}`;
+/** 줄을 환불할 수 있나 — 낸 돈이 있고 · 환불된 청구·줄이 아니고 · 아직 요청서가 없음. */
+export const lineRefundable = (inv: Pick<LaterInvoice, "status">, l: LaterLine) => l.paidNet > 0 && inv.status !== "refunded" && !l.billingRefund && !l.refund;
+
+/** 이 청구들을 건드린 퇴원보고서 환불 요청서 — 지점 전체가 아니라 청구 id로 좁혀 읽는다(상한에 잘려 빠지지 않게). */
+async function docsForInvoices(tenantId: string, invoiceIds: string[]) {
+  if (!invoiceIds.length) return [];
+  const { data, error } = await createAdminClient().from("academy_documents").select("id,description,form_data,created_at")
+    .eq("tenant_id", tenantId).eq("form_type", "refund_request").like("description", `${REFUND_TAG_PREFIX}%`)
+    .or(invoiceIds.map(id => `description.like.*${id}*`).join(",")).order("created_at").limit(1000);
+  if (error) throw new Error(`환불 요청서 조회 실패: ${error.message}`);
+  return data ?? [];
+}
 
 /**
- * - 전체 퇴원: 퇴원월 뒤 청구 전체.
- * - 과목 수강종료: 청구는 학생 단위라, **끝내는 반 이름과 같은 줄**(makeedu 청구 줄 `description` = 반 이름)만 고른다.
- *   그런 줄이 없는 청구는 보이지 않는다(계속 듣는 과목 청구를 환불 대상으로 잡지 않게 · 리뷰 2026-10-29).
- * - 다시 등록하기 전까지만 — 퇴원일 뒤에 시작한 수강이 있으면 그 달부터는 새로 다니는 청구다.
+ * - 전체 퇴원: 퇴원월 뒤 청구 전체 줄.
+ * - 과목 수강종료: 청구는 학생 단위라, **끝내는 반 이름과 같은 줄**(makeedu 청구 줄 `description` = 반 이름)만. 그런 줄이 없는 청구는 빠진다.
+ * - 다시 등록하기 전까지만 — 퇴원일 뒤에 시작한 수강(과목 수강종료면 같은 과목)이 있으면 그 달부터는 새로 다니는 청구다.
+ * - 이미 요청서가 잡은 줄은 어느 보고서가 잡았든 그 요청서를 보인다. 요청서 표식이 지금 줄과 맞지 않으면(동기화로 줄이 바뀜·옛 표식)
+ *   그 청구 전체를 잡힌 것으로 본다 — 같은 돈을 두 번 돌려주지 않는 쪽으로(리뷰 2026-10-29).
  */
 export async function loadLaterInvoices(report: Pick<WithdrawalReport, "id" | "tenant_id" | "student_id" | "effective_date" | "exit_kind" | "subjects" | "snapshot">): Promise<LaterInvoice[]> {
   const month = report.effective_date.slice(0, 7);
   const admin = createAdminClient();
   const ended = report.exit_kind === "withdrawal" ? null
     : new Set(report.snapshot.courses.filter(c => report.subjects.includes(c.subject)).map(c => norm(c.className)));
-  const [{ data: rows, error }, { data: docs, error: docError }, { data: again, error: againError }] = await Promise.all([
+  const [{ data: rows, error }, { data: again, error: againError }] = await Promise.all([
     admin.from("invoices").select("id,period,category,status,amount_total,amount_discount,amount_paid,line_items")
       .eq("tenant_id", report.tenant_id).eq("student_id", report.student_id).gt("period", month).neq("status", "void")
       .order("period").limit(60),
-    admin.from("academy_documents").select("id,description,form_data")
-      .eq("tenant_id", report.tenant_id).eq("form_type", "refund_request").like("description", "퇴원보고서 환불 승인 ·%").limit(500),
-    // 과목 수강종료는 다른 과목을 계속 다니니 '재등록'을 같은 과목에서만 본다.
     admin.from("enrollments").select("start_date, classes!inner(subject)")
       .eq("tenant_id", report.tenant_id).eq("student_id", report.student_id).gt("start_date", report.effective_date).order("start_date").limit(20),
   ]);
   if (error) throw new Error(`퇴원 뒤 청구 조회 실패: ${error.message}`);
-  if (docError) throw new Error(`환불 요청서 조회 실패: ${docError.message}`);
   if (againError) throw new Error(`재등록 확인 실패: ${againError.message}`);
   const restart = (again ?? []).find(e => {
     const subject = (e.classes as unknown as { subject: string } | null)?.subject;
     return report.exit_kind === "withdrawal" || (subject != null && report.subjects.includes(subject));
   });
   const reenrolled = restart?.start_date ? String(restart.start_date).slice(0, 7) : null;
+  const invoices = (rows ?? []).filter(r => !(reenrolled && String(r.period) >= reenrolled));
+  const docs = await docsForInvoices(report.tenant_id, invoices.map(r => String(r.id)));
+
+  // 청구 id → (줄 식별값 | "*") → 요청서. 먼저 만든 요청서가 이긴다(created_at 순).
+  const claims = new Map<string, Map<string, RefundRef>>();
+  for (const d of docs) {
+    const form = (d.form_data ?? {}) as { approval?: { staff?: string }; result?: { completedDate?: string } };
+    const ref: RefundRef = { documentId: String(d.id), deskName: form.approval?.staff?.trim() || null, completed: !!form.result?.completedDate?.trim() };
+    for (const key of claimedKeys(String(d.description ?? ""))) {
+      const [invoiceId, lineId] = splitKey(key);
+      const map = claims.get(invoiceId) ?? new Map<string, RefundRef>();
+      if (!map.has(lineId)) map.set(lineId, ref);
+      claims.set(invoiceId, map);
+    }
+  }
+
   const out: LaterInvoice[] = [];
-  for (const r of rows ?? []) {
-    if (reenrolled && String(r.period) >= reenrolled) continue;
-    // 요청서는 보고서·청구 짝으로 찾는다 — 한 청구로 두 과목을 차례로 끝내도 과목마다 따로(리뷰 2026-10-29).
-    const forInvoice = (docs ?? []).filter(d => String(d.description ?? "").includes(`invoice:${r.id}`));
-    const doc = forInvoice.find(d => String(d.description ?? "").includes(`report:${report.id}`));
-    // 다른 보고서가 이미 환불 승인한 반 줄은 빼서 같은 돈을 두 번 돌려주지 않게.
-    const taken = new Set(forInvoice.filter(d => d !== doc).flatMap(d =>
-      String((d.form_data as { student?: { className?: string } } | null)?.student?.className ?? "").split(",").map(norm).filter(Boolean)));
-    const all = toPrefillLines(r.line_items);
-    const lines = all.filter(l => (!ended || ended.has(norm(l.description))) && !taken.has(norm(l.description)));
-    const partial = !!ended || taken.size > 0;
-    if (partial && !lines.length) continue;
-    // 줄별 납부액이 없는 옛 청구는 완납 청구면 줄 청구액(금액 − 할인)을 낸 것으로 본다.
-    const linePaid = (l: RefundPrefillLine) => l.paid ?? (r.status === "paid" ? Math.max(0, l.amount - (l.discount ?? 0)) : 0);
-    const amountBilled = partial ? lines.reduce((s, l) => s + Math.max(0, l.amount - (l.discount ?? 0)), 0) : Math.max(0, Number(r.amount_total) - Number(r.amount_discount));
-    const amountPaid = partial ? lines.reduce((s, l) => s + linePaid(l), 0) : Number(r.amount_paid);
-    const form = (doc?.form_data ?? {}) as { approval?: { staff?: string }; result?: { completedDate?: string } };
+  for (const r of invoices) {
+    const id = String(r.id);
+    const status = String(r.status);
+    const amountPaidTotal = Number(r.amount_paid);
+    const raw = receiptHistoryLines(r.line_items);
+    let all = toPrefillLines(r.line_items);
+    let ids = lineIds(raw);
+    let refunded = raw.map(v => receiptRefundState(v) !== "none");
+    // 줄 기록이 없는 청구는 청구 한 줄(`all`)로 본다.
+    if (!all.length) {
+      all = [{ kind: "", description: INVOICE_CATEGORY_LABEL[String(r.category)] ?? "기타", amount: Number(r.amount_total), discount: Number(r.amount_discount), paid: amountPaidTotal }];
+      ids = ["all"];
+      refunded = [false];
+    }
+    // 줄별 납부액 — 없으면 한 줄 청구는 청구 납부액, 완납 청구는 줄 청구액. 합이 청구 납부액을 넘으면 비율로 줄인다(청구 할인이 줄에 없을 때 과다 환불 방지).
+    const rawPaid = all.map(l => l.paid ?? (all.length === 1 ? amountPaidTotal : status === "paid" ? Math.max(0, l.amount - (l.discount ?? 0)) : 0));
+    const sum = rawPaid.reduce((s, v) => s + v, 0);
+    const paid = sum > amountPaidTotal ? rawPaid.map(v => Math.floor(v * Math.max(0, amountPaidTotal) / sum)) : rawPaid;
+    const taken = claimedLines(ids, claims.get(id));
+    const lines: LaterLine[] = [];
+    all.forEach((l, i) => {
+      if (ended && !ended.has(norm(l.description))) return;
+      const refund = taken[i];
+      lines.push({ ...l, key: `${id}#${ids[i]}`, paidNet: paid[i], billingRefund: refunded[i], refund });
+    });
+    if (!lines.length) continue;
     out.push({
-      id: String(r.id), period: String(r.period), category: String(r.category), status: String(r.status),
-      amountBilled, amountPaid, lines, partial,
-      refund: doc ? { documentId: String(doc.id), deskName: form.approval?.staff?.trim() || null, completed: !!form.result?.completedDate?.trim() } : null,
+      id, period: String(r.period), category: String(r.category), status,
+      amountBilled: ended ? lines.reduce((s, l) => s + Math.max(0, l.amount - (l.discount ?? 0)), 0) : Math.max(0, Number(r.amount_total) - Number(r.amount_discount)),
+      amountPaid: ended ? lines.reduce((s, l) => s + l.paidNet, 0) : amountPaidTotal,
+      lines, partial: !!ended,
     });
   }
   return out;
+}
+
+/**
+ * 방금 만든 요청서보다 **먼저** 같은 줄(또는 그 청구 전체)을 잡은 요청서가 있나 — 두 창에서 거의 동시에 승인하면 둘 다 미리 보기
+ * 확인을 통과한다(리뷰 2026-10-29). 넣은 뒤 다시 보고, 늦은 쪽이 물러난다(created_at · id 순서가 같은 답을 준다).
+ */
+export async function claimedEarlier(tenantId: string, documentId: string, keys: string[]): Promise<boolean> {
+  const invoiceIds = [...new Set(keys.map(k => splitKey(k)[0]))];
+  const docs = await docsForInvoices(tenantId, invoiceIds);
+  const mine = docs.find(d => String(d.id) === documentId);
+  if (!mine) return false;
+  const at = (d: { created_at: unknown }) => Date.parse(String(d.created_at));
+  // 같은 청구의 같은 식별값 형제면 겹친 것으로 본다(번호 밀림 대비).
+  const want = new Set(keys.map(k => { const [inv, line] = splitKey(k); return `${inv}#${lineBase(line)}`; }));
+  return docs.some(d => {
+    if (String(d.id) === documentId) return false;
+    if (at(d) > at(mine) || (at(d) === at(mine) && String(d.id) > documentId)) return false;
+    return claimedKeys(String(d.description ?? "")).some(k => {
+      const [inv, line] = splitKey(k);
+      return line === "*" ? invoiceIds.includes(inv) : want.has(`${inv}#${lineBase(line)}`);
+    });
+  });
 }
 
 /** 데스크 담당자로 지정할 수 있는 사람 — 같은 지점 재직 직원(강사 제외 · 수납·상담·운영 역할). */

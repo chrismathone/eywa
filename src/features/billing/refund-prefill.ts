@@ -81,7 +81,7 @@ const METHOD_LABEL: Record<string, string> = {
   other: "기타",
 };
 /** 레거시 영문 kind(구 aywa 폼·구 임포터) → 한글. makeedu 산 데이터는 이미 한글이라 그대로 통과. */
-const KIND_LEGACY_LABEL: Record<string, string> = {
+export const KIND_LEGACY_LABEL: Record<string, string> = {
   tuition: "수업",
   material: "교재",
   exam: "시험",
