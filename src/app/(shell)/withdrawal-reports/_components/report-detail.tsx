@@ -9,13 +9,14 @@ import type { ReportConsultation } from "@/features/withdrawal-reports/consultat
 import { ReportForm } from "./report-form";
 import { LaterInvoices } from "./later-invoices";
 import type { LaterInvoice } from "@/features/withdrawal-reports/server/refund";
+import type { SubjectHistoryRow } from "@/features/withdrawal-reports/course-period";
 import { fillEmptyReportFields } from "@/features/withdrawal-reports/prefill";
 import { changeWithdrawalReport } from "@/features/withdrawal-reports/server/actions";
 import { EMPTY_BODY, REPORT_STATUS, REPORT_ACTION_LABEL, directorIds, isDirectReport, reportCapabilities, type WithdrawalReport, type ReportEvent, type StaffOption, type ReportAction, type ReportBody } from "@/features/withdrawal-reports/model";
 
 const control = "w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm disabled:bg-muted/20 disabled:text-foreground";
 const dateTime = (v: string) => new Date(v).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
-export function ReportDetail({ report: r, events, staff, labels, userId, writable, directorLevel = false, consultations = [], assignmentChanged = false, prefill = {}, prefillWarning, withdrawalHref, laterInvoices = [], deskStaff = [] }: {
+export function ReportDetail({ report: r, events, staff, labels, userId, writable, directorLevel = false, consultations = [], assignmentChanged = false, prefill = {}, prefillWarning, withdrawalHref, laterInvoices = [], deskStaff = [], subjectHistory = [] }: {
   report: WithdrawalReport; events: ReportEvent[]; staff: StaffOption[]; labels: Record<string, string>; userId: string; writable: boolean; consultations?: ReportConsultation[]; assignmentChanged?: boolean; prefill?: Partial<ReportBody>; prefillWarning?: string;
   /** 원장 이상(`cancelsAsDirector`) — 남이 요청한 보고서도 취소 버튼이 선다. */
   directorLevel?: boolean;
@@ -25,6 +26,7 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
   laterInvoices?: LaterInvoice[];
   /** 환불 승인 때 고를 데스크 담당자(원장에게만 내려온다). */
   deskStaff?: { id: string; name: string }[];
+  subjectHistory?: SubjectHistoryRow[];
 }) {
   const router = useRouter();
   const [body, setBody] = useState<ReportBody>(() => fillEmptyReportFields({ ...EMPTY_BODY, ...r.body }, prefill));
@@ -56,7 +58,7 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
     {r.status === "approved" && <p className="rounded-lg border bg-muted/20 p-4 text-sm">이 보고서는 승인이 완료되었습니다. 함께 요청한 다른 강사의 보고서 승인까지 모두 끝나면 처리합니다.</p>}
     {assignmentChanged && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">요청 이후 학생·수강·담당 강사가 변경되었습니다. 아래 내용은 요청 당시 기록이며, 제출·승인을 진행할 수 없습니다. 요청한 사람이 요청을 취소하고 현재 담당 기준으로 다시 요청해 주세요.</p>}
     {prefillWarning && <p role="alert" className="rounded-lg border p-4 text-sm">{prefillWarning}</p>}
-    <ReportForm consultations={consultations} report={r} body={body} events={events} labels={labels} nameOf={nameOf} editable={capabilities.edit} pending={pending} onChange={update} />
+    <ReportForm consultations={consultations} report={r} body={body} events={events} labels={labels} nameOf={nameOf} editable={capabilities.edit} pending={pending} onChange={update} subjectHistory={subjectHistory} />
     <LaterInvoices reportId={r.id} rows={laterInvoices} canApprove={writable && directorLevel} deskStaff={deskStaff} />
     {error && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
     <div className="flex flex-wrap gap-2">

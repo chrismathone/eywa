@@ -18,6 +18,8 @@ import { loadReportBilling } from "./billing";
 import { loadDeskStaff, loadLaterInvoices, type LaterInvoice } from "./refund";
 import { liveBillingForSubmitted } from "../prefill";
 import { reportConsultations } from "./consultations";
+import type { SubjectHistoryRow } from "../course-period";
+import { reportCourses } from "../target-courses";
 
 // 실험실 판정은 운영 콘솔 배정을 따른다(`isLaboratoryMenuAvailable`) — 예전엔 실험실 사용 여부를 배정과 무관하게 물어서,
 // 원장이 퇴원보고서를 일반 메뉴로 돌려도(2026-10-23) 실험실을 안 켠 지점에선 계속 닫혀 있었다.
@@ -98,6 +100,8 @@ export async function getReport(id: string) {
   // 완료·취소된 보고서는 끝난 기록이라 저장된 값 그대로다(퇴원 뒤 환불로 장부가 바뀌어도 그때 문서를 바꾸지 않는다).
   const draft = ["requested", "revision"].includes(data.status) && !assignmentChanged;
   const submitted = !["requested", "revision", "completed", "canceled"].includes(data.status);
+  // 그 과목의 전체 수강 이력(지난 반 포함 — 원장 2026-10-29) — 다른 조회와 함께 띄운다. 못 읽으면 빈 목록(수강기간은 지금 반 기준으로).
+  const historyPromise = loadSubjectHistory(data as WithdrawalReport).catch((e) => { console.error("[withdrawal-report-subject-history]", e); return [] as SubjectHistoryRow[]; });
   const [prefill, consultations] = await Promise.all([
     draft ? loadReportPrefill(data as WithdrawalReport, viewer.user.systemRole)
       : !submitted && ["completed", "canceled"].includes(data.status) ? Promise.resolve({ prefill: undefined, prefillWarning: undefined })
@@ -106,6 +110,7 @@ export async function getReport(id: string) {
         .catch(() => ({ prefill: undefined, prefillWarning: "수납 정보를 지금 장부에서 불러오지 못해 제출 때 값을 보여줍니다." })),
     reportConsultations(data as WithdrawalReport, viewer),
   ]);
+  const subjectHistory = await historyPromise;
   // 퇴원월 뒤 청구(원장 2026-10-29) — 취소된 보고서는 보이지 않는다. 못 읽으면 빈 목록(보고서 화면은 연다).
   const laterInvoices: LaterInvoice[] = data.status === "canceled" ? []
     : await loadLaterInvoices(data as WithdrawalReport).catch((e) => { console.error("[withdrawal-report-later-invoices]", e); return []; });
@@ -113,7 +118,22 @@ export async function getReport(id: string) {
   // 승인 권한과 같은 기준 · 자기 자신은 빼고(자기 알림은 가지 않음 — notifyUsers).
   const deskStaff = laterInvoices.length && cancelsAsDirector(viewer.user.systemRole, !!viewer.teacherId)
     ? (await loadDeskStaff(viewer.user.tenantId).catch(() => [])).filter(s => s.id !== viewer.user.id) : [];
-  return { report: data as WithdrawalReport, events: [...(events ?? [])].reverse() as ReportEvent[], assignmentChanged, consultations, laterInvoices, deskStaff, ...prefill };
+  return { report: data as WithdrawalReport, events: [...(events ?? [])].reverse() as ReportEvent[], assignmentChanged, consultations, laterInvoices, deskStaff, subjectHistory, ...prefill };
+}
+/** 이 보고서 과목들에서 학생이 다닌 반 전부(지난 반 포함) — 수강기간 칸(subjectPeriods). */
+async function loadSubjectHistory(report: WithdrawalReport): Promise<SubjectHistoryRow[]> {
+  const subjects = [...new Set(reportCourses(report).map(c => c.subject))];
+  if (!subjects.length) return [];
+  const { data, error } = await createAdminClient().from("enrollments")
+    .select("id,start_date,end_date,classes!inner(class_name,subject)")
+    .eq("tenant_id", report.tenant_id).eq("student_id", report.student_id)
+    .in("classes.subject", subjects).lte("start_date", report.effective_date).order("start_date").limit(200);
+  if (error) throw new Error(error.message);
+  return (data ?? []).flatMap((row) => {
+    const klass = row.classes as unknown as { class_name: string | null; subject: string | null } | null;
+    if (!klass?.subject || !row.start_date) return [];
+    return [{ enrollmentId: String(row.id), subject: klass.subject, className: (klass.class_name ?? "").trim() || "이름 없는 반", startDate: String(row.start_date).slice(0, 10), endDate: row.end_date ? String(row.end_date).slice(0, 10) : null }];
+  });
 }
 export async function reportStaff() {
   const viewer = await reportViewer();
