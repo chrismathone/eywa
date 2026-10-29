@@ -1,5 +1,10 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-29 — 반미정: 따로 낸 영상 숙제도 숙제 반으로 · 감사로그 예외 두 곳 분류
+
+- 원장 *"따로 낸 영상 숙제도 반 지정된 반으로 귀속"* — 숙제로 반 정하기(`loadHomeworkClassIds`)가 보고서 영상 숙제에 더해 `video_homework_extra_issues`(남긴 칸 `kept` 제외)도 본다. 지난 반미정 153건 중 새로 풀리는 것은 0(거의 다 영상 숙제 시작 2026-10-01 전) — 새 영상부터(연동 PC 새 zip 필요).
+- 원장 *"감사로그는 필요한곳에 전부 배선"* — 전수 가드에 걸린 두 곳을 규칙대로 분류: 원스크린 `setMyLastReportTemplate`(내 마지막 템플릿 기억 — 개인 상태) · `suggestLoveNote`(AI 초안 기록 — 실제 저장한 보고서는 그쪽에서 남는다).
+
 ## 2026-10-29 — 반미정 영상: 숙제로 반 정하기 · 지난 영상 정리 · 오늘 작업 감사로그
 
 - 원장 *"숙제를 기준으로 반미정 해결할것"* — 워커 규칙(`video-teacher-route.mjs` · 영상 숙제를 낸 반 하나 · 보드 이름이 없으면 그날 반 하나) + 지난 영상 정리 스크립트(`fix-unknown-class-videos.mjs`). 상세 = [decisions/reports-ai.md](decisions/reports-ai.md).

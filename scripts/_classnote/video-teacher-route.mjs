@@ -128,15 +128,21 @@ export async function loadStudentClassesOn(sql, tenantId, studentId, day) {
 }
 
 /**
- * 후보 반 중 그 학생에게 **영상 숙제를 낸 반**(숙제일 ≤ `day` ≤ 숙제일 + 14) — 반이 하나 이하면 읽지 않는다(판정에 안 쓰인다).
+ * 후보 반 중 그 학생에게 **영상 숙제를 낸 반**(보고서 · 따로 낸 숙제 — 숙제일 ≤ `day` ≤ 숙제일 + 14) — 반이 하나 이하면 읽지 않는다.
  * 원장 2026-10-29 *"숙제를 기준으로 반미정 해결할것"*. DB는 SELECT만.
  */
 export async function loadHomeworkClassIds(sql, tenantId, studentId, classes, day) {
   const ids = unique((classes ?? []).map((c) => c.class_id));
   if (ids.length < 2) return [];
-  const rows = await sql`select distinct class_id from lesson_reports where tenant_id = ${tenantId} and student_id = ${studentId}
-    and video_homework = true and class_id in ${sql(ids)}
-    and report_date <= ${day}::date and report_date >= ${day}::date - ${HOMEWORK_WINDOW_DAYS}::int`;
+  // 보고서로 낸 영상 숙제 + **따로 낸 영상 숙제**(`video_homework_extra_issues` — 원장 2026-10-29 *"따로 낸 영상 숙제도 반 지정된 반으로
+  // 귀속"*). 남긴 칸(`kept` — 손 배정·숙제없음 칸을 지키려 세운 줄)은 낸 숙제가 아니라 뺀다.
+  const rows = await sql`select class_id from lesson_reports where tenant_id = ${tenantId} and student_id = ${studentId}
+      and video_homework = true and class_id in ${sql(ids)}
+      and report_date <= ${day}::date and report_date >= ${day}::date - ${HOMEWORK_WINDOW_DAYS}::int
+    union
+    select class_id from video_homework_extra_issues where tenant_id = ${tenantId} and student_id = ${studentId}
+      and not coalesce(kept, false) and class_id in ${sql(ids)}
+      and homework_date <= ${day}::date and homework_date >= ${day}::date - ${HOMEWORK_WINDOW_DAYS}::int`;
   return rows.map((r) => String(r.class_id));
 }
 
