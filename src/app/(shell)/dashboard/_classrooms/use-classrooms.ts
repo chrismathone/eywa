@@ -2,13 +2,11 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createClient } from "@/lib/supabase/client";
 import { subscribeRecordSaved } from "@/lib/realtime/record-channel";
 import { refreshDelay } from "@/features/dashboard/overview/realtime";
 import { refreshClassroomPreview } from "@/features/dashboard/classroom-preview/actions";
 import type { ClassroomSnapshot } from "@/features/dashboard/classroom-preview/model";
 
-const TABLES = ["classrooms", "class_schedules", "classes", "enrollments", "users", "attendance_records"];
 
 export function useClassrooms(initial: ClassroomSnapshot) {
   const client = useQueryClient();
@@ -24,8 +22,9 @@ export function useClassrooms(initial: ClassroomSnapshot) {
     refetchOnReconnect: "always",
     retry: 1,
   });
+  // 표마다 걸던 DB 변경 구독(6개 · 그중 classrooms는 실시간 발행에 없어 매번 실패)을 뗐다 — 대시보드 운영실과 같은 이유(DB 메모리 · 2026-10-29).
+  // 바닥은 30초 갱신 · 같은 브라우저 저장 신호 · 화면 복귀.
   useEffect(() => {
-    const db = createClient();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let firstSignal = 0;
     const refresh = () => {
@@ -37,18 +36,14 @@ export function useClassrooms(initial: ClassroomSnapshot) {
         void client.invalidateQueries({ queryKey: ["classroom-preview", initial.scope] }, { cancelRefetch: false });
       }, refreshDelay(firstSignal, Date.now()));
     };
-    const channels = TABLES.map((table) => db.channel(`classroom-preview:${initial.scope}:${table}`)
-      .on("postgres_changes", { event: "*", schema: "public", table, filter: `tenant_id=eq.${initial.tenantId}` }, refresh)
-      .subscribe());
     const unsubscribe = subscribeRecordSaved(refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => {
       clearTimeout(timer);
       unsubscribe();
       document.removeEventListener("visibilitychange", refresh);
-      for (const channel of channels) void db.removeChannel(channel);
     };
-  }, [client, initial.scope, initial.tenantId]);
+  }, [client, initial.scope]);
   return query;
 }
 

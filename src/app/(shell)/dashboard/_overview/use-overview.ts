@@ -2,16 +2,12 @@
 
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createClient } from "@/lib/supabase/client";
 import { refreshOverview, refreshSubjectOverview } from "@/features/dashboard/overview/actions";
 import {
   mergeSnapshot,
   type OverviewSnapshot,
 } from "@/features/dashboard/overview/model";
-import {
-  overviewTables,
-  refreshDelay,
-} from "@/features/dashboard/overview/realtime";
+import { refreshDelay } from "@/features/dashboard/overview/realtime";
 import { subscribeRecordSaved } from "@/lib/realtime/record-channel";
 
 /**
@@ -42,11 +38,11 @@ export function useOverview(initial: OverviewSnapshot, { live = true }: { live?:
     refetchOnReconnect: "always",
     retry: 1,
   });
-  const tablesKey = overviewTables(query.data.allowed).join(",");
-
+  // 🔴 표마다 걸던 DB 변경 구독(postgres_changes · 탭 하나에 최대 24개)을 뗐다 — 원장 2026-10-29 DB 메모리 부족 정지(19:02~19:10)
+  //    조사에서 실시간 변경 확인 질의가 DB 시간을 가장 많이 썼다. 바닥은 위의 30초 갱신이고, 같은 브라우저의 저장 신호와
+  //    화면 복귀가 바로 새로 읽는다. 다른 사람의 변경은 30초 안에 보인다.
   useEffect(() => {
     if (!live) return;
-    const db = createClient();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let firstSignal = 0;
     const refresh = () => {
@@ -65,26 +61,6 @@ export function useOverview(initial: OverviewSnapshot, { live = true }: { live?:
         refreshDelay(firstSignal, Date.now()),
       );
     };
-    // Optional tables can be missing during a rolling migration. Isolate subscriptions so one
-    // unavailable table cannot disconnect attendance, payments and the other sources.
-    const channels = tablesKey
-      .split(",")
-      .filter(Boolean)
-      .map((table) =>
-        db
-          .channel(`overview:${initial.scope}:${table}`)
-          .on(
-            "postgres_changes",
-            {
-              event: "*",
-              schema: "public",
-              table,
-              filter: `tenant_id=eq.${initial.tenantId}`,
-            },
-            refresh,
-          )
-          .subscribe(),
-      );
     // Cross-window writes can request a refresh without passing any record payload.
     const unsubscribeSaved = subscribeRecordSaved(refresh);
     const onVisible = () => {
@@ -95,8 +71,7 @@ export function useOverview(initial: OverviewSnapshot, { live = true }: { live?:
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisible);
       unsubscribeSaved();
-      for (const channel of channels) void db.removeChannel(channel);
     };
-  }, [client, initial.scope, initial.tenantId, tablesKey, live]);
+  }, [client, initial.scope, live]);
   return query;
 }
