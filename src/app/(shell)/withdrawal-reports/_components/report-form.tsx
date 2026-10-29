@@ -58,7 +58,7 @@ export function ReportForm({ report: r, body, events, labels, nameOf, editable, 
       parentConsultation: textField("parentConsultation", "학부모상담"),
       teacherOpinion: textField("teacherOpinion", "담임 의견"),
       tuition: body.tuition || "수납 기록 확인 필요",
-      arrears: <><span>{ { unknown: "청구 기록 확인 필요", no: "미납 없음", yes: "미납 있음" }[body.arrears]}</span>{body.arrearsNote && <div>{body.arrearsNote}</div>}</>,
+      arrears: <><span>{ { unknown: "청구 기록 확인 필요", no: "미납 없음", yes: "미납 있음" }[body.arrears]}</span>{body.arrearsNote && <div className="whitespace-pre-line">{body.arrearsNote}</div>}</>,
       processing: r.applied_at ? `${nameOf(applied?.actor_id ?? null)} · ${date(r.applied_at)} 처리 완료${direct ? " (관리자 바로 처리)" : ""}` : `${direct ? "관리자 바로 처리" : "요청"}: ${nameOf(r.requested_by)} · ${r.status === "canceled" ? "요청 취소" : direct ? `${r.effective_date} 처리 예약` : "승인 완료 후 자동 처리"}`,
     }}
   />;
