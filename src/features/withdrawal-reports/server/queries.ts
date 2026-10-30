@@ -189,7 +189,7 @@ export async function reportStaff() {
   if (error) throw new Error("직원 목록을 불러오지 못했습니다.");
   const [protection, settings] = await Promise.all([protectedAccountIds((data ?? []).map(u => u.id)), getTenantSettings()]);
   if (protection.lookupFailed) throw new Error("직원 정보를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-  // 🔴 침산 지점 superadmin(이승엽 · 박소선 등)은 절대 승인자로 넣지 않는다 — 원장 칸에는 진짜 원장만(원장 2026-10-30).
+  // 🔴 침산 지점 superadmin(lsy93@gmail.com · st2000423@gmail.com 등)은 절대 승인자로 넣지 않는다 — 원장 칸에는 진짜 원장만(원장 2026-10-30).
   //    system_role이 master라 그대로 두면 원장 후보가 되고, DB도 관리자 칸은 막지 않는다. 표시 역할을 admin으로 바꿔 원장 후보에서,
   //    승인 과목을 비워 관리자 후보에서 뺀다(요청 화면에 superadmin 여부를 내려보내지 않는다).
   return (data ?? []).map(u => ({ id: u.id, name: u.display_name, role: displayRoleFor(u.id, u.system_role, protection.protectedIds), subjects: u.subjects ?? [],

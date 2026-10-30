@@ -21,7 +21,6 @@ import { attendanceItem, reportItem } from "./duty-items";
 import { counselItem } from "./counsel";
 import { buildReferrals } from "./referrals";
 import { applyPreRecord, scoreTotals, type WorkingPeriod } from "./pre-record";
-import { deepMathKeyOf } from "./receipt";
 import { buildRevenue } from "./revenue";
 import { buildSourceItems } from "./source-items";
 import { buildStudentTracking } from "./students";
@@ -149,7 +148,7 @@ export function buildPortfolio(d: PortfolioSnapshot, opts: {
     ctx,
     revenue: buildRevenue({
       classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, invoices: d.invoices, terms: d.terms,
-      holidays: ctx.holidays, subjectLabel: (key) => labels[key] ?? key, deepMathKey: deepMathKeyOf(d.settings.subjects), owner: ctx.owner,
+      holidays: ctx.holidays, subjectLabel: (key) => labels[key] ?? key, owner: ctx.owner,
     }),
     students,
     churn: (teacherId, w) => ({ id: "churn", max: METRIC_MAX.churn, value: null, ...churn.period(teacherId, w) }),

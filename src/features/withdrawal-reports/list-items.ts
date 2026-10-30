@@ -177,7 +177,6 @@ export type ListFilters = {
   to: string | null;
   subject: string;
   teacher: string;
-  unmapped: boolean;
   /** 구분(원장 2026-10-30 — 퇴원 · 수강종료). */
   kind: "all" | "withdrawal" | "subject_end";
   /** 내 승인 필요만(원장 2026-10-30 "본인의 승인이 필요한 경우 … 구분"). */
@@ -198,7 +197,6 @@ export function parseListFilters(sp: Record<string, string | undefined>, canSeeA
     to: sp.to ?? null,
     subject: sp.subject || "all",
     teacher: sp.teacher || "all",
-    unmapped: canSeeArchive && sp.link === "unmapped",
     kind: sp.kind === "withdrawal" || sp.kind === "subject_end" ? sp.kind : "all",
     mine: sp.mine === "approve",
     q: (sp.q ?? "").trim(),
@@ -219,7 +217,6 @@ export function filterListItems(items: readonly ListItem[], f: ListFilters, wind
   return items.filter(
     (i) =>
       (f.status === "all" || i.status === f.status) &&
-      (!f.unmapped || i.link === "unmapped") &&
       inRange({ countDate: i.date, systemBulk: false }, window) &&
       (f.subject === "all" || i.subjects.includes(f.subject)) &&
       (f.teacher === "all" || i.teacher === f.teacher) &&

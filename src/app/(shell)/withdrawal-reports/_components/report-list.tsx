@@ -10,7 +10,6 @@ const TONE: Record<ListItem["tone"], string> = {
 const LINK_TEXT = {
   auto: { text: "자동 연결", cls: "text-att-present-ink" },
   manual: { text: "직접 연결", cls: "text-att-present-ink" },
-  unmapped: { text: "학생 연결 필요", cls: "text-att-late-ink" },
 } as const;
 
 /**
@@ -72,7 +71,8 @@ export function ReportList({ items }: { items: ListItem[] }) {
                 {r.mine === "approve" && <div className="text-muted-foreground mt-1 text-xs">{r.statusLabel}</div>}
                 {r.mine === "view" && <div className="text-muted-foreground mt-1 text-xs">열람 · 승인 대상 아님</div>}
                 {r.myTurn && <div className="text-primary mt-1 text-xs">내 작성 대기</div>}
-                {r.link && <div className={`mt-1 text-xs ${LINK_TEXT[r.link].cls}`}>{LINK_TEXT[r.link].text}</div>}
+                {/* 미연결은 표시하지 않는다(원장 2026-10-30 "지난 기록이라") — 연결은 기록 상세에서 할 수 있다. */}
+                {r.link && r.link !== "unmapped" && <div className={`mt-1 text-xs ${LINK_TEXT[r.link].cls}`}>{LINK_TEXT[r.link].text}</div>}
               </td>
             </tr>
           ))}

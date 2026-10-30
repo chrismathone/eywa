@@ -24,7 +24,7 @@ describe("퇴원보고서 목록 표 — 웹 보고서와 기존 기록 한 표(
       />,
     );
     expect(screen.getByRole("link", { name: "박원생" })).toHaveAttribute("href", "/withdrawal-reports/archive/9");
-    expect(screen.getByText("학생 연결 필요")).toBeInTheDocument();
+    expect(screen.queryByText("학생 연결 필요")).not.toBeInTheDocument();
     expect(screen.getByText("원본 · 9월 퇴원")).toBeInTheDocument();
     expect(screen.getByText("내 작성 대기")).toBeInTheDocument();
   });

@@ -28,8 +28,6 @@ export function buildRevenue(input: {
   terms: readonly SnapshotTerm[];
   holidays: ReadonlySet<string>;
   subjectLabel: (key: string) => string;
-  /** 학원 설정의 '수학(심화)' 과목 키(없으면 null) — 수납 문구의 과목 판정에 쓴다. */
-  deepMathKey: string | null;
   owner: (c: SnapshotClass, day: string) => string | null;
 }) {
   const { holidays, owner } = input;
@@ -119,7 +117,7 @@ export function buildRevenue(input: {
       weights.push({ id: "unassigned", amount: Math.max(0, gross - sum(weights.map((w) => w.amount))) });
       const amounts = distributeReceipt(invoiceNet, weights);
       for (const t of free) allocate(amounts[t.id], plan(t.classId, invoice.student_id, invoice.period), invoice.period, "저장된 반 배분", classes.get(t.classId)?.subject ?? null);
-      const subjects = new Set(tuition.map((line) => receiptSubject(line, input.deepMathKey)));
+      const subjects = new Set(tuition.map((line) => receiptSubject(line)));
       allocate(amounts.unassigned, [], invoice.period, "청구 항목·반 연결 미확인", subjects.size === 1 ? [...subjects][0] : null);
     } else if (raw.length) {
       for (let i = 0; i < raw.length; i++) {
@@ -143,7 +141,7 @@ export function buildRevenue(input: {
           // 한 줄이 두 반의 매출이 될 수는 없다. 후보가 여럿이면 잇지 않는다.
           const matched = hits.length === 1 ? hits[0] : null;
           const subjects = new Set(hits.map((c) => c.subject));
-          const subject = matched?.subject ?? (subjects.size === 1 ? [...subjects][0] : receiptSubject(child, input.deepMathKey));
+          const subject = matched?.subject ?? (subjects.size === 1 ? [...subjects][0] : receiptSubject(child));
           allocate(childAmount, matched ? plan(matched.id, invoice.student_id, invoice.period) : [], invoice.period,
             matched ? "반명·시간표 연결" : "청구 항목·반 연결 미확인", subject);
         }

@@ -28,7 +28,6 @@ export function ArchiveDetailView({ archive: a, students, canManage = false, wit
     <div className="flex flex-wrap items-center justify-between gap-3">
       <span className="flex flex-wrap items-center gap-3 text-sm">
         <EmbedLink className="text-primary hover:underline" href="/withdrawal-reports">← 퇴원보고서 목록</EmbedLink>
-        {canManage && <EmbedLink className="text-primary hover:underline" href="/withdrawal-reports?link=unmapped">학생 미연결 목록</EmbedLink>}
         {withdrawalHref && <WindowLink className="text-primary hover:underline" href={withdrawalHref}>퇴원 상세</WindowLink>}
       </span>
     </div>

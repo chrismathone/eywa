@@ -26,7 +26,7 @@ type Data = {
   terms: SnapshotTerm[]; holidays: string[];
 };
 const data = (): Data => ({ classes: [klass()], schedules: [slot()], enrollments: [enroll()], invoices: [invoice()], terms: [], holidays: [] });
-const revenue = (d: Data) => buildRevenue({ ...d, holidays: new Set(d.holidays), subjectLabel: (key) => key, deepMathKey: null, owner: (c) => c.teacher_id });
+const revenue = (d: Data) => buildRevenue({ ...d, holidays: new Set(d.holidays), subjectLabel: (key) => key, owner: (c) => c.teacher_id });
 
 describe("매출 기여", () => {
   it("월 수강료를 실제 주간 시간표에 나눈다 — 청구서마다 금액이 보존된다", () => {
@@ -89,8 +89,8 @@ describe("매출 기여", () => {
   it("과목은 문구로 분명할 때만 정한다", () => {
     expect([receiptSubject({ description: "[EiE] Let's Talk" }), receiptSubject({ description: "초등M 개별" }), receiptSubject({ description: "별도 수업" })])
       .toEqual(["english", "math", null]);
-    // '수학(심화)'는 그 과목을 둔 학원에서만 그 키로 — 다른 학원의 과목 키를 짐작하지 않는다.
-    expect([receiptSubject({ description: "수학(심화) 중2" }), receiptSubject({ description: "수학(심화) 중2" }, "subject_7")]).toEqual([null, "subject_7"]);
+    // 지난 수납의 '수학(심화)'도 수학이다(과목을 없앴다).
+    expect(receiptSubject({ description: "수학(심화) 중2" })).toBe("math");
   });
   it("🔴 분모는 담당 과목 전체다 — 다른 과목 매출이 섞이지 않고, 담당 미확인 금액은 분모에 남는다", () => {
     const d = data();

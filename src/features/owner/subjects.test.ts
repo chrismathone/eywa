@@ -7,17 +7,17 @@ const maps = buildSubjectMaps(DEFAULT_SETTINGS.operations.subjects);
 describe("buildSubjectMaps — 레거시 과목 키 표시 폴백", () => {
   it("폐기된 highmath 키는 raw 노출('HIGHMATH') 대신 한글 라벨/색으로 폴백", () => {
     // ijw 베이스 복원 시 classes.subject='highmath'가 잔존할 수 있음(설정엔 subject_1로 통일).
-    expect(maps.labelOf("highmath")).toBe("수학(심화)");
+    expect(maps.labelOf("highmath")).toBe("수학");
     expect(maps.colorOf("highmath")).toBe("primary");
-    expect(subjectLabelRecord(DEFAULT_SETTINGS.operations.subjects).highmath).toBe("수학(심화)");
+    expect(subjectLabelRecord(DEFAULT_SETTINGS.operations.subjects).highmath).toBe("수학");
   });
 
   it("레거시 폴백 키는 선택지(options/filters)에 섞이지 않는다", () => {
     // 폴백은 labelOf/colorOf 표시용일 뿐 — 드롭다운·필터엔 설정 과목만.
     expect(maps.options.some((o) => o.value === "highmath")).toBe(false);
     expect(maps.filters.some((f) => f.value === "highmath")).toBe(false);
-    // 통일된 표준키 subject_1은 설정에 있으므로 선택지에 존재.
-    expect(maps.options.some((o) => o.value === "subject_1")).toBe(true);
+    // 수학(심화) 과목은 없앴다 — 수학 하나만 선택지에 있다.
+    expect(maps.options.some((o) => o.value === "subject_1")).toBe(false);
   });
 
   it("폴백에도 없는 미등록 키는 raw key/neutral로 떨어진다", () => {

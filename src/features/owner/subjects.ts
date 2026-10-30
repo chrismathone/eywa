@@ -13,9 +13,9 @@ const LEGACY_LABELS: Record<string, string> = {
   social: "사회",
   other: "기타",
   etc: "기타",
-  // highmath는 subject_1로 폐기(2026-06-19)됐으나 ijw 베이스 복원 시 잔존할 수 있어 표시 폴백만 유지한다
-  // (선택지 options/filters엔 안 섞임 — subject_1 "수학(심화)"와 동일 라벨·색). 정석 정리는 migrate-highmath-to-subject1.cjs.
-  highmath: "수학(심화)",
+  // 수학(심화) 과목은 없앴다(원장 2026-10-30 "전부 수학"). 옛 키 highmath가 복원 데이터에 남아 있어도 수학으로 읽는다
+  // (선택지 options/filters엔 안 섞임).
+  highmath: "수학",
 };
 const LEGACY_COLORS: Record<string, PillColor> = {
   arts: "amber",

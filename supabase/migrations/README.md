@@ -12,6 +12,10 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-10-30 퇴원보고서: superadmin 승인자 차단 · 원장 바로 승인 알림 · 수학(심화) 기록 정리 (s2_0013 · ✅ 운영 적용 2026-10-30)
+
+`s2_0013_withdrawal_superadmin_block_and_director_notice.sql` — 원장 *"진짜 원장이 원장에 있어야함"* · *"수학(심화)는 없애 … 전부 수학이야"*. 작성 요청 함수 두 개가 super_admin을 승인자로 받지 않고, 원장 칸이 비고 승인자가 전부 원장이면 제출 알림이 '원장 승인 요청'이 된다. 처리(apply) 재검사는 그대로 — 운영 계정의 '바로 처리'가 멈추지 않게. `invoice_session_terms.subject` subject_1 → math 12행(전부 미확정 · 반은 이미 math · 이전 값은 파일 머리말 참고). 되돌리기 = `scripts/_oneoff/revert-s2_0013-withdrawal-superadmin-block.sql`.
+
 ## 2026-10-29 숙제 영상 업로드 실패 알림: 반 담임에게만 (s2_0012 · 적용 2026-10-29)
 
 `s2_0012_homework_video_fail_notify_teacher_only.sql` — 원장 *"내 학생 내 반 이런거 있잖아. 나와 관련있는 알림만."* `record_homework_video_upload_event`의 수신자 조건 한 줄 — 할 일 담당과 같은 순서 — 반 담임 → 업로드 경로의 강사 → 둘 다 없을 때만 원장·관리자(종전: 담임 + 원장·관리자 전원). 운영 함수 본문에서 그 줄 1건 확인 뒤 치환. 되돌리기 = `scripts/_oneoff/revert-s2_0012-homework-video-fail-notify-teacher-only.sql`.
