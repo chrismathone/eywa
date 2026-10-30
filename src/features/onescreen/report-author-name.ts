@@ -12,9 +12,16 @@ export type ReportAuthorRow = {
   displayName: string | null;
   reportDisplayName: string | null;
   includeClassName?: boolean;
+  /** 영문 이름(users.english_name) — 영어 보고서 카드의 '담당자' 칸(원장 2026-10-30). */
+  englishName?: string | null;
 };
 
-export type ReportAuthorSettings = { name: string | null; includeClassName: boolean };
+export type ReportAuthorSettings = {
+  name: string | null;
+  includeClassName: boolean;
+  /** 영문 이름 — 같은 표시 이름의 직원이 정확히 1명일 때만(발송용 이름과 같은 모호 규칙). */
+  englishName?: string | null;
+};
 
 export function pickReportAuthorSettings(
   teacherName: string | null | undefined,
@@ -24,16 +31,22 @@ export function pickReportAuthorSettings(
   return {
     name: pickReportAuthorName(teacherName, rows),
     includeClassName: matches.length === 1 && matches[0]!.includeClassName === true,
+    englishName: matches.length === 1 ? matches[0]!.englishName?.trim() || null : null,
   };
 }
 
-/** 표시 전용. 반은 보고서의 class_id에 해당하는 반이며, 강사 귀속 값은 바꾸지 않는다. */
+/**
+ * 표시 전용. 반은 보고서의 class_id에 해당하는 반이며, 강사 귀속 값은 바꾸지 않는다.
+ * `english` = 영어 보고서(SRS 포함) 카드 — 영문 이름이 있으면 발송용 이름보다 먼저다(원장 2026-10-30
+ * *"영어 srs 보고서는 영어 이름으로 변경"*). 없으면 지금처럼 발송용 이름 → 실명. ClassNote 게시 작성자명(워커)은 그대로다.
+ */
 export function formatReportAuthorName(
   teacherName: string | null | undefined,
   settings: ReportAuthorSettings,
   className?: string | null,
+  opts?: { english?: boolean },
 ): string | null {
-  const name = settings.name || teacherName || null;
+  const name = (opts?.english ? settings.englishName : null) || settings.name || teacherName || null;
   const prefix = settings.includeClassName ? className?.trim() : null;
   return name && prefix ? `${prefix} ${name}` : name;
 }

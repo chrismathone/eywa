@@ -132,7 +132,7 @@ export default async function LessonReportPrintPage({
         <ParentReportCard
           report={{
             reportDate: report.report_date,
-            teacherName: formatReportAuthorName(report.teacher_name, sendName, reportClass?.class_name),
+            teacherName: formatReportAuthorName(report.teacher_name, sendName, reportClass?.class_name, { english: report.subject === "english" }),
             textbook: report.textbook,
             progress: report.progress,
             dailyTest: report.daily_test,

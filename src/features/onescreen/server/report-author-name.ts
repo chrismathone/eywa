@@ -40,14 +40,14 @@ export async function resolveReportAuthorSettings(
     // (퇴사 강사의 옛 공유 링크도 그 사람 이름 규칙을 유지). ⚠️ 워커 복제본과 반드시 같은 필터일 것.
     let { data, error } = await admin
       .from("users")
-      .select("display_name, report_display_name, report_class_name_prefix")
+      .select("display_name, report_display_name, report_class_name_prefix, english_name")
       .eq("tenant_id", tenantId)
       .eq("display_name", name)
       .neq("system_role", "student")
       .limit(2);
     // 새 옵션 칸이 아직 없더라도 기존 발송용 이름은 보존한다(expand/contract).
     if (error && /report_class_name_prefix/.test(error.message) && isColumnMissing(error.message)) {
-      const legacy = await admin.from("users").select("display_name, report_display_name")
+      const legacy = await admin.from("users").select("display_name, report_display_name, english_name")
         .eq("tenant_id", tenantId).eq("display_name", name).neq("system_role", "student").limit(2);
       data = legacy.data?.map((r) => ({ ...r, report_class_name_prefix: false })) ?? null;
       error = legacy.error;
@@ -62,6 +62,7 @@ export async function resolveReportAuthorSettings(
         displayName: r.display_name as string | null,
         reportDisplayName: r.report_display_name as string | null,
         includeClassName: r.report_class_name_prefix === true,
+        englishName: r.english_name as string | null,
       })),
     );
   } catch (e) {

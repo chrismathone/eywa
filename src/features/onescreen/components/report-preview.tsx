@@ -40,6 +40,8 @@ export type ReportPreviewContext = {
   logoSrc: string | null;
   teacherName: string;
   reportClassNamePrefix?: boolean;
+  /** 영문 이름 — 영어 보고서 미리보기의 '담당자' 칸(발송본 /r와 같은 규칙). */
+  teacherEnglishName?: string | null;
   /** 대상 날짜(YYYY-MM-DD) — 발송본 제목의 보고일과 같은 값. */
   reportDate: string;
   showDailyTest: boolean;
@@ -136,7 +138,7 @@ export function ReportPreview({
         <ParentReportCard
           report={{
             reportDate: ctx.reportDate || null,
-            teacherName: formatReportAuthorName(ctx.teacherName, { name: null, includeClassName: ctx.reportClassNamePrefix === true }, subject.className),
+            teacherName: formatReportAuthorName(ctx.teacherName, { name: null, includeClassName: ctx.reportClassNamePrefix === true, englishName: ctx.teacherEnglishName ?? null }, subject.className, { english: !!templateMode }),
             textbook: fields.textbook || null,
             progress: fields.progress || null,
             dailyTest: fields.dailyTest || null,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickReportAuthorName } from "./report-author-name";
+import { formatReportAuthorName, pickReportAuthorName, pickReportAuthorSettings } from "./report-author-name";
 
 describe("pickReportAuthorName — 수업보고서 발송용 이름 매핑", () => {
   it("정확히 1명이 발송용 이름을 정했으면 그 이름", () => {
@@ -49,5 +49,28 @@ describe("pickReportAuthorName — 수업보고서 발송용 이름 매핑", () 
     expect(pickReportAuthorName(null, [])).toBeNull();
     expect(pickReportAuthorName("", [{ displayName: "", reportDisplayName: "X" }])).toBeNull();
     expect(pickReportAuthorName("김민수", [])).toBeNull();
+  });
+});
+
+describe("영어 보고서 '담당자' 칸 = 영문 이름(원장 2026-10-30)", () => {
+  const rows = [{ displayName: "김동후", reportDisplayName: "김쌤", englishName: " Daniel " }];
+  it("영어면 영문 이름이 발송용 이름보다 먼저", () => {
+    const s = pickReportAuthorSettings("김동후", rows);
+    expect(s.englishName).toBe("Daniel");
+    expect(formatReportAuthorName("김동후", s, null, { english: true })).toBe("Daniel");
+    expect(formatReportAuthorName("김동후", s, null)).toBe("김쌤");
+  });
+  it("영문 이름이 없으면 지금처럼 발송용 이름 → 실명", () => {
+    const s = pickReportAuthorSettings("김동후", [{ displayName: "김동후", reportDisplayName: null, englishName: "  " }]);
+    expect(formatReportAuthorName("김동후", s, null, { english: true })).toBe("김동후");
+  });
+  it("같은 표시 이름이 둘이면 영문 이름도 붙이지 않는다", () => {
+    const s = pickReportAuthorSettings("김동후", [...rows, { displayName: "김동후", reportDisplayName: null, englishName: "Tom" }]);
+    expect(s.englishName).toBeNull();
+    expect(formatReportAuthorName("김동후", s, null, { english: true })).toBe("김동후");
+  });
+  it("반 이름 접두 설정은 영문 이름에도 그대로", () => {
+    const s = pickReportAuthorSettings("김동후", [{ ...rows[0]!, includeClassName: true }]);
+    expect(formatReportAuthorName("김동후", s, "JJ 영어반", { english: true })).toBe("JJ 영어반 Daniel");
   });
 });
