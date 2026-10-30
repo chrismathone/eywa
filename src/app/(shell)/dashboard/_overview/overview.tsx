@@ -1020,7 +1020,7 @@ export function Overview({
           />
           <div className={s.smallStats}>
             <span>
-              전체 기록 <b>{number(consultations.total)}건</b>
+              이번 달 상담 <b>{number(consultations.thisMonth)}건</b>
             </span>
             <Jump href="/consultations?urg=overdue">후속조치 확인</Jump>
           </div>

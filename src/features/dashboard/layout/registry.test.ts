@@ -79,7 +79,7 @@ describe("레지스트리 = 운영실 카드 전부", () => {
         expenses: ok({ count: 0 }),
         absences: ok({ anchor: null, rows: [] }),
         admissions: ok({ total: 0, enrolled: 0, rate: null }),
-        consultations: ok({ total: 0, lastWeek: 0, pendingFollowUps: 0, overdueFollowUps: 0 }),
+        consultations: ok({ thisMonth: 0, lastWeek: 0, pendingFollowUps: 0, overdueFollowUps: 0 }),
         newcomers: ok({ total: 0, stages: [], checksAvailable: true, items: [] }),
         homework: ok({ students: 0 }),
         schedule: ok([]),

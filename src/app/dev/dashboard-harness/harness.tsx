@@ -51,7 +51,7 @@ export const FIXTURE = {
     billing: ok([bill("2026-05", 1), bill("2026-06", 2), bill("2026-07", 3), bill("2026-08", 4), bill("2026-09", 5), bill("2026-10", 6)]),
     expenses: ok({ period: "2026-10", count: 4, byCurrency: [{ currency: "KRW", total: 1_200_000, count: 4 }], primaryCurrency: "KRW", byCategory: [{ category: "교재", amount: 800_000, count: 2 }], categoryCount: 1 }),
     absences: ok({ anchor: "2026-09-30", rows: [{ studentId: "s9", studentName: "정유나", absences: 4, unexplained: 3 }] }),
-    consultations: ok({ total: 410, lastWeek: 12, pendingFollowUps: 5, overdueFollowUps: 2 }),
+    consultations: ok({ thisMonth: 41, lastWeek: 12, pendingFollowUps: 5, overdueFollowUps: 2 }),
     schedule: ok([
       { id: "1", classId: "c1", className: "수학 중2A", subject: "math", startTime: "16:00", endTime: "17:40", teacherName: "갑", classroomName: "301", status: "ongoing" },
       { id: "2", classId: "c2", className: "EiE 5", subject: "english", startTime: "16:20", endTime: "17:20", teacherName: "을", classroomName: "602", status: "upcoming" },

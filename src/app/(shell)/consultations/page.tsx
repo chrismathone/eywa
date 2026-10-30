@@ -104,7 +104,7 @@ export default async function ConsultationsPage({
     effectiveTeacherId(),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / size));
-  const { total: totalAll, lastWeek, pendingFollowUps, overdueFollowUps } = counts;
+  const { thisMonth, lastWeek, pendingFollowUps, overdueFollowUps } = counts;
   const listParams: ConsultationListParams = { range, cat, urg, who, subject, q, size, page };
   // 현재 필터 보존 + page만 변경(필터 드롭다운은 FilterSelect 규약대로 page를 리셋한다).
   const pageHref = (p: number) => consultationsHref({ ...listParams, page: p }, DEFAULT_PAGE_SIZE);
@@ -116,7 +116,8 @@ export default async function ConsultationsPage({
     <div className="space-y-5 compact-chrome:space-y-3">
       {/* 핵심 수치 — 지시서 §4 "1차 화면에 남길 것: 현재 상태 + 핵심 KPI". 필터와 무관한 학원 전체 값(아래 요약 띠는 필터를 따른다). */}
       <StatStrip>
-        <BigStat label="전체 상담" value={totalAll} unit="건" tone="primary" icon={<MessagesSquare size={16} strokeWidth={1.8} />} />
+        {/* 누적 '전체 상담' 대신 이번 달(원장 2026-10-30 *"전체 상담 N건은 사실상 크게 궁금하지 않음"*). */}
+        <BigStat label="이번 달 상담" value={thisMonth} unit="건" tone="primary" icon={<MessagesSquare size={16} strokeWidth={1.8} />} />
         <BigStat label="최근 7일" value={lastWeek} unit="건" tone="blue" icon={<CalendarClock size={16} strokeWidth={1.8} />} />
         <BigStat label="진행 중 후속" value={pendingFollowUps} unit="건" tone="gold" icon={<BellRing size={16} strokeWidth={1.8} />} />
         <BigStat
@@ -177,6 +178,7 @@ export default async function ConsultationsPage({
           whoLabel={counselorOptions.find((c) => c.id === who)?.name ?? null}
           teacherScoped={!!teacherId}
           syncOn={syncOn}
+          viewerKey={`${user.id}:${teacherId ?? ""}`}
         />
       </Suspense>
 
