@@ -147,9 +147,11 @@ export function ParentReportCard({
   // 위 칸을 감추는 건 **시범 보고서 글이 확실할 때만**(아는 항목 제목이 있을 때) — 손으로 "■"로 시작한 글이 진도 칸을 지우지 않게.
   const pilotOwns = !!pilotSections && isPilotReportSections(pilotSections);
   // 제목 — SRS 보고서(JJ 양식)는 '어휘 관리 보고서', 그 밖은 과목 보고서(report-title.ts 한 곳). [특강]·보강 꼬리는 둘 다 같다.
-  const title = reportTitleText(templateMode && isSrsReportSections(pilotSections) ? SRS_REPORT_TITLE : rpt.title, report);
-  // 강사 칸 이름 — 영어·SRS 보고서는 '담당자'(원장 2026-10-30). 이름은 호출부가 영문 이름으로 넘긴다(formatReportAuthorName english).
-  const teacherLabel = templateMode ? "담당자" : "담임";
+  const srsReport = templateMode && isSrsReportSections(pilotSections);
+  const title = reportTitleText(srsReport ? SRS_REPORT_TITLE : rpt.title, report);
+  // 강사 칸 이름 — 영어 보고서는 '담당자'(원장 2026-10-30). 이름은 호출부가 영문 이름으로 넘긴다(formatReportAuthorName english).
+  // SRS 보고서는 '보고자'(원장 2026-10-30 *"srs 보고서의 경우 보고자로 이름 변경"*) — 판정은 제목과 같은 기준.
+  const teacherLabel = srsReport ? "보고자" : templateMode ? "담당자" : "담임";
   // 섹션 2분할(2026-07-10 원장): '오늘 수업'=교재·진도·오늘 과제 / '평가'=시험점수·지난 과제·수업 태도.
   const showToday = pilotOwns
     ? rpt.showTextbook && report.textbook
