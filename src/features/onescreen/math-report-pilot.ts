@@ -532,6 +532,50 @@ export function cleanPilotUnderstanding(
   return out || (items.length ? fallbackUnderstanding(items, opts?.habits) : memo);
 }
 
+const QUOTED_RE = /'[^'\n]+'/g;
+const PROGRESS_MODE_WORDS = ["복습", "문제풀이"] as const;
+
+/**
+ * 진도 글의 사실 — 따옴표 안 소단원 이름(순서대로) · 숫자 · 성격 말(복습·문제풀이). 말투 다시 쓰기(pilot-restyle-guard.ts)가 바꿀 수 없는
+ * 것들이고, 발송 게이트가 다시 쓴 진도 글을 지금 값과 견줄 때도 이것으로 본다(원장 2026-10-30 진도 문장도 선생님 말투로).
+ */
+export function progressFacts(text: string): { quotes: string[]; digits: string[]; modes: string[] } {
+  const sq = text.replace(/\s+/g, "");
+  return {
+    quotes: text.match(QUOTED_RE) ?? [],
+    digits: text.match(/\d+/g) ?? [],
+    modes: PROGRESS_MODE_WORDS.filter((w) => sq.includes(w)),
+  };
+}
+
+/** 글에서 한 항목 본문(제목 줄 다음부터 다음 '■' 앞까지). 없으면 null. */
+function sectionBodyOf(text: string, title: string): string | null {
+  const head = `■ ${title}\n`;
+  const at = text.startsWith(head) ? 0 : text.indexOf(`\n${head}`);
+  if (at < 0) return null;
+  const from = at === 0 ? head.length : at + 1 + head.length;
+  const end = text.indexOf("\n■", from);
+  return (end < 0 ? text.slice(from) : text.slice(from, end)).trim();
+}
+
+/**
+ * 말투로 다시 쓴 진도 항목도 지금 값의 글인가 — 첫 문장 글자 대조 대신 사실로 본다: 소단원 이름이 순서까지 같고, 지금 첫 문장의 숫자가
+ * 다 있고, 성격 말(복습·문제풀이)이 지금 값과 맞는다(지금 값에 있으면 글에 있어야 하고, 글 첫 문장에 있으면 지금 값에도 있어야 한다).
+ * 🔴 소단원 이름이 없는 첫 문장(멈춤 수업 '월말평가 수업을 했습니다')은 다시 쓰지 않으므로 여기서도 false — 글자 대조만.
+ */
+export function progressSectionMatches(draft: string, leadHead: string): boolean {
+  const body = sectionBodyOf(draft, PILOT_SECTION_TITLES.progress);
+  if (!body) return false;
+  const want = progressFacts(leadHead);
+  if (!want.quotes.length) return false;
+  const got = progressFacts(body);
+  if (got.quotes.join("\n") !== want.quotes.join("\n")) return false;
+  if (!want.digits.every((n) => got.digits.includes(n))) return false;
+  if (!want.modes.every((m) => got.modes.includes(m))) return false;
+  const firstSentence = body.split("\n")[0]!.split(/(?<=[.!?])\s+/)[0] ?? "";
+  return progressFacts(firstSentence).modes.every((m) => want.modes.includes(m));
+}
+
 /** 서버 발송 게이트 거절 문구 — 자동작성 글이 아니거나 고쳐졌다. */
 export const PILOT_AUTOWRITE_REQUIRED_ERROR =
   "이 학생의 수학 보고서는 '자동작성'을 먼저 해야 보낼 수 있습니다(저장은 됐습니다) — 자동작성을 누른 뒤 다시 보내 주세요";
@@ -559,8 +603,9 @@ export function isPilotDraftCurrent(
   // 첫 문장(사실)만 대조한다 — 마무리 문장은 갈래(ment-variants.ts)라 날마다 다르다(원장 2026-10-26 매크로성 반복 금지).
   const lead = progressLeadHead(now.studentName, pilotLessons(now.today), skipStatusOf(now.today), now.progressMode);
   // 진도 항목은 맨 앞이거나 '수업 평가' 표 바로 뒤(원장 2026-10-23 표를 맨 위로).
+  // 선생님 말투로 다시 쓴 진도(원장 2026-10-30)는 글자가 달라 사실로 견준다(progressSectionMatches).
   const sec = lead ? pilotSection(PILOT_SECTION_TITLES.progress, lead) : "";
-  if (sec && !d.startsWith(sec) && !d.includes(`\n\n${sec}`)) return false;
+  if (sec && !d.startsWith(sec) && !d.includes(`\n\n${sec}`) && !progressSectionMatches(d, lead)) return false;
   if (now.writtenSig !== undefined && now.writtenSig !== now.factsSig) return false;
   const note = (now.note ?? "").trim();
   if (note && !d.endsWith(note)) return false;

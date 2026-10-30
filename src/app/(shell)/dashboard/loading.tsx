@@ -118,7 +118,7 @@ export default function DashboardLoading() {
               <i className={s.dotLive} />
               <span className={T}>
                 자동 갱신
-                <small>00:00 확인 · 30초 주기</small>
+                <small>00:00 확인 · 5분 주기</small>
               </span>
             </div>
             <span className={`${s.refresh} ${T}`} />

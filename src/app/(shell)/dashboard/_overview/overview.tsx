@@ -1463,7 +1463,7 @@ export function Overview({
                     : "자동 갱신"}
                 <small>
                   {lastTime.length
-                    ? `${clock(Math.min(...lastTime))} 확인${preview ? "" : " · 30초 주기"}`
+                    ? `${clock(Math.min(...lastTime))} 확인${preview ? "" : " · 5분 주기"}`
                     : "조회 대기"}
                 </small>
               </span>

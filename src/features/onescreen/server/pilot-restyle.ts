@@ -4,7 +4,8 @@ import { generateJSON } from "@/lib/ai/generate";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { reportWarning } from "@/lib/observability/report-error";
 import { parsePilotSections } from "../pilot-merge";
-import { applyRestyle, RESTYLE_TITLES, restyleTargets } from "../pilot-restyle-guard";
+import { applyRestyle, isStyleOnlyEdit, RESTYLE_TITLES, restyleTargets } from "../pilot-restyle-guard";
+import { PILOT_SECTION_TITLES } from "../math-report-pilot";
 import { MENT_AI_TUNING } from "../prompt-defaults";
 import { mentStyleDirective } from "../ment-style-prompt";
 import type { MentStyleProfile } from "../ment-style";
@@ -91,6 +92,7 @@ export async function loadSectionEditExamples(admin: SupabaseClient, tenantId: s
         if (!RESTYLE_TITLES.includes(s.title)) continue;
         const was = before.get(s.title);
         if (!was || !s.body || norm(was) === norm(s.body)) continue;
+        if (!isStyleOnlyEdit(s.title, was, s.body)) continue;
         const n = perTitle.get(s.title) ?? 0;
         if (n >= PER_SECTION || out.length >= TOTAL) continue;
         perTitle.set(s.title, n + 1);
@@ -114,6 +116,7 @@ function buildPrompt(args: {
   style: MentStyleProfile | null;
   studentName: string;
   mustKeep: string[];
+  omitScore: boolean;
 }): string {
   const ex = args.examples
     .map((e, i) => `예시 ${i + 1} [${e.title}]\n자동작성: ${e.before.replace(/\n/g, " / ")}\n선생님이 고친 글: ${e.after.replace(/\n/g, " / ")}`)
@@ -130,6 +133,10 @@ function buildPrompt(args: {
     "- 예시는 이 선생님이 **어떻게 고치는지**만 보여 줍니다. 예시에 나온 사실(점수·단원·학생 모습)을 옮겨 쓰지 않습니다.",
     `- 학생 이름은 [입력]에 있는 그대로(${args.studentName || "이름"})만 씁니다. '○○'를 쓰지 않습니다.`,
     args.mustKeep.length ? `- 다음 말은 선생님이 직접 적은 말이라 글자 그대로 둡니다: ${args.mustKeep.map((k) => `"${k}"`).join(", ")}` : "",
+    `- [${PILOT_SECTION_TITLES.progress}] 항목은 따옴표 안 소단원 이름(순서까지)·숫자·'복습'·'문제풀이' 말을 글자 그대로 두고, 동사·어미·말 고르기만 이 선생님처럼 바꿉니다.`,
+    args.omitScore
+      ? `- 이 선생님은 테스트 점수 표현을 늘 지웁니다 — [${PILOT_SECTION_TITLES.daily}]·[${PILOT_SECTION_TITLES.check}] 항목에서 '실수 몇 개를 빼면'·'거의 다 맞혔습니다'처럼 맞힌 정도를 말하는 표현은 빼고, 예시처럼 이 선생님 말로 씁니다(시험을 쳤다는 사실·선생님이 적은 사유는 남깁니다).`
+      : "",
     "- 이 선생님이 그 항목을 고친 예시가 없거나 고칠 데가 없으면 [입력] 글을 그대로 돌려줍니다.",
     "- 맞춤법·띄어쓰기는 표준으로(예시의 오탈자는 따라 쓰지 않습니다).",
     args.style ? `\n${mentStyleDirective(args.style)}` : "",
@@ -157,6 +164,8 @@ export async function restylePilotSections(args: {
   studentName: string;
   tenantId: string;
   mustKeep?: string[];
+  /** 점수 줄을 늘 지우는 선생님(teacher-habits.ts `omitScore`) — 테스트 항목의 맞힌 정도 표현도 그 선생님 예시대로 뺀다. */
+  omitScore?: boolean;
 }): Promise<string> {
   if (!args.examples.length) return args.composed;
   const parsed = parsePilotSections(args.composed);
@@ -166,7 +175,7 @@ export async function restylePilotSections(args: {
   if (!targets.length) return args.composed;
   try {
     const { data } = await generateJSON<Record<string, unknown>>({
-      prompt: buildPrompt({ targets, examples: args.examples, style: args.style, studentName: args.studentName, mustKeep }),
+      prompt: buildPrompt({ targets, examples: args.examples, style: args.style, studentName: args.studentName, mustKeep, omitScore: !!args.omitScore }),
       maxTokens: 1500,
       keyName: "default",
       tier: "fast",
