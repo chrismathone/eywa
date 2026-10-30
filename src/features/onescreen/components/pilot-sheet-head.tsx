@@ -118,6 +118,8 @@ export type PilotSheetHeadProps = {
   date: string | null;
   className: string | null;
   teacherName: string | null;
+  /** 담임 칸을 뺀다 — JJ 수업보고서(SRS 양식)는 담임 영역이 없다(원장 2026-10-30 *"jj수업보고서의 경우 담임의 영역이 없어져야함"*). */
+  hideTeacher?: boolean;
   tests: PilotNoteSection[];
   levels: LevelRow[] | null;
   /** 그날 출결 — 날짜 옆 작은 표시(원장 2026-10-26). 모르면 null(표시 없음). */
@@ -155,7 +157,7 @@ export function PilotSheetHead(p: PilotSheetHeadProps) {
         </colgroup>
         <tbody>
           <tr>
-            <td rowSpan={3} className={`${CELL} bg-card px-1.5 py-2.5`}>
+            <td rowSpan={p.hideTeacher ? 2 : 3} className={`${CELL} bg-card px-1.5 py-2.5`}>
               {p.logoSrc ? (
                 // eslint-disable-next-line @next/next/no-img-element -- 공개/인쇄 페이지 외부 로고(최적화 불필요)
                 <img src={p.logoSrc} alt={p.academyName} className="mx-auto block w-full max-w-[118px] object-contain" />
@@ -169,7 +171,7 @@ export function PilotSheetHead(p: PilotSheetHeadProps) {
               ) : null}
             </td>
             {/* 제목 = "학생이름 수학 보고서"(원장 2026-10-23) — 이름은 흰색, 보고서 제목은 노랑. */}
-            <td rowSpan={3} className={`${CELL} bg-primary px-2 py-3 text-white`}>
+            <td rowSpan={p.hideTeacher ? 2 : 3} className={`${CELL} bg-primary px-2 py-3 text-white`}>
               {/* 학교·학년은 이름 위(원장 2026-10-28 *"학생이름 위로 학교이름 위치 변경"*). */}
               {p.schoolGrade ? <p className="mb-1.5 text-xs font-medium text-white/80">{p.schoolGrade}</p> : null}
               <p className="text-xl leading-snug font-black break-keep">
@@ -190,7 +192,7 @@ export function PilotSheetHead(p: PilotSheetHeadProps) {
             </td>
           </tr>
           <InfoRow label="반" value={p.className} />
-          <InfoRow label="담임" value={p.teacherName} />
+          {p.hideTeacher ? null : <InfoRow label="담임" value={p.teacherName} />}
         </tbody>
       </table>
       <table className="-mt-px w-full table-fixed border-collapse tabular-nums">
