@@ -73,14 +73,26 @@ afterEach(() => {
 });
 
 describe("overview live refresh", () => {
-  it("polls a fresh snapshot after 30 seconds even without any database event", async () => {
+  it("polls a fresh snapshot every 5 minutes (not 30 seconds) even without any database event", async () => {
     mocks.refresh.mockImplementation(async () => initial());
     setup();
-    expect(mocks.refresh).not.toHaveBeenCalled();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(30_000);
     });
+    expect(mocks.refresh).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * 60_000 - 30_000);
+    });
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+  it("does not re-read on tab return when the snapshot is under a minute old", async () => {
+    mocks.refresh.mockImplementation(async () => initial());
+    setup();
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(mocks.refresh).not.toHaveBeenCalled();
   });
   it("coalesces save signals from this browser and re-queries", async () => {
     mocks.refresh.mockImplementation(async () => initial());
@@ -102,12 +114,12 @@ describe("overview live refresh", () => {
     const data = initial();
     mocks.refresh.mockResolvedValue({
       ...data,
-      requestedAt: data.requestedAt + 30_000,
+      requestedAt: data.requestedAt + 5 * 60_000,
       sections: { students: { data: null, at: null, error: true } },
     });
     const { result } = setup(data);
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(30_010);
+      await vi.advanceTimersByTimeAsync(5 * 60_000 + 10);
     });
     expect(result.current.data.sections.students?.data?.enrolled).toBe(7);
     expect(result.current.data.sections.students?.error).toBe(true);
