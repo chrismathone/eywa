@@ -57,10 +57,22 @@ describe("compact request overlay and optional principal", () => {
     const extra = { ...students[0].courses[0], id: "second-course", classId: "second-class", className: "수학 보충반", teacherId: secondTeacher };
     render(<RequestDialog {...props} staff={[...staff, { ...staff[0], id: "second-teacher", name: "다른 강사" }]} students={[{ ...students[0], courses: [...students[0].courses, extra] }]} />);
     await fill();
+    expect(screen.getByText("퇴원 · 2개 반 · 보고서 1건")).toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent("수학 2개 반을 한 과목으로 묶어 함께 종료합니다.");
     fireEvent.click(screen.getByRole("checkbox", { name: "수학 보충반 · 수학 · 담당 강사" }));
-    expect(screen.getByText("반 수강종료 · 1개 반 · 보고서 1건")).toBeInTheDocument();
+    expect(screen.getByText("종료할 반을 선택해 주세요.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "강사에게 작성 요청" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "수학반 · 수학 · 담당 강사" }));
     fireEvent.click(screen.getByRole("button", { name: "강사에게 작성 요청" }));
-    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ enrollmentIds: ["course"], subjects: ["math"], teacherIds: ["teacher"] })));
+    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ enrollmentIds: expect.arrayContaining(["course", "second-course"]), subjects: ["math"], teacherIds: ["teacher"] })));
+  });
+  it("skips the manager step when the homeroom teacher is the subject manager", async () => {
+    mocks.request.mockResolvedValue({ ok: true, id: "new-report" });
+    const own = [{ ...students[0], courses: [{ ...students[0].courses[0], teacherId: "manager", teacherName: "관리자" }] }];
+    render(<RequestDialog {...props} students={own} />); await fill();
+    expect(screen.getByRole("note")).toHaveTextContent("관리자 칸을 건너뛰고 원장 승인으로 바로 넘어갑니다.");
+    fireEvent.click(screen.getByRole("button", { name: "강사에게 작성 요청" }));
+    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ teacherIds: ["manager"], managerIds: ["director"], directorIds: [] })));
   });
   it("keeps entered data when the server refuses a duplicate", async () => {
     mocks.request.mockResolvedValue({ error: "진행 중인 보고서가 있습니다." });

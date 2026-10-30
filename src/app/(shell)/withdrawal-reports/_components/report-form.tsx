@@ -13,7 +13,8 @@ import { TuitionDetail } from "./tuition-detail";
 import { reportCourses } from "@/features/withdrawal-reports/target-courses";
 
 const date = (value: string) => new Date(value).toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
-export function ReportForm({ report: r, body, events, labels, nameOf, editable, pending, onChange, consultations = [], subjectHistory = [], refundCheck }: {
+export function ReportForm({ report: r, body, events, labels, nameOf, editable, pending, onChange, consultations = [], subjectHistory = [], refundCheck, managerSkipped = false }: {
+  managerSkipped?: boolean;
   consultations?: ReportConsultation[];
   refundCheck?: ReactNode;
   subjectHistory?: SubjectHistoryRow[];
@@ -48,7 +49,7 @@ export function ReportForm({ report: r, body, events, labels, nameOf, editable, 
       ? [{ role: "바로 처리", name: nameOf(r.requested_by), date: `처리 요청일 : ${date(r.created_at)}` }]
       : [
           { role: "담임", name: nameOf(r.teacher_id), date: `작성일 : ${writtenAt ? date(writtenAt) : ""}` },
-          approvers("manager"), approvers("director"),
+          ...(managerSkipped ? [{ role: "관리자", name: "생략", date: "" }, { ...approvers("manager"), role: "원장" }] : [approvers("manager"), approvers("director")]),
         ]}
     fields={{
       name: r.snapshot.name,

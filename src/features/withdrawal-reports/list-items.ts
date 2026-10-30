@@ -3,7 +3,7 @@ import { monthRange } from "@/lib/date-kst";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import type { ArchiveRow } from "./archive-model";
 import { archiveReason, webReportReason, type ListReason } from "./list-reason";
-import { REPORT_STATUS, directorIds, isDirectReport, isParticipant, managerIds, type ReportListRow, type StaffOption } from "./model";
+import { directorIds, isDirectReport, isParticipant, managerIds, reportStatusLabel, skipsManagerStep, type ReportListRow, type StaffOption } from "./model";
 
 /**
  * 퇴원보고서 목록 한 벌 — 웹에서 작성·승인하는 보고서와 기존 스프레드시트 보고서(원문 보관)를 **한 목록**에 세운다.
@@ -103,11 +103,13 @@ export function buildListItems(input: {
       reason,
       subjects: r.subjects,
       status: r.status === "completed" ? "completed" : r.status === "canceled" ? "canceled" : "pending",
-      statusLabel: REPORT_STATUS[r.status],
+      statusLabel: reportStatusLabel(r, staff),
       tone: r.status === "completed" ? "done" : r.status === "revision" || r.status === "blocked" ? "alert" : "muted",
       approval: direct
         ? [{ text: `관리자 바로 처리 · ${staffName(r.requested_by)}` }, { text: "강사 작성 없음", muted: true }]
-        : [
+        : skipsManagerStep(r, staff)
+          ? [{ text: `원장 ${reviewers(r, "manager")}` }, { text: "관리자 승인 생략", muted: true }]
+          : [
             { text: `관리자 ${reviewers(r, "manager")}` },
             directorIds(r).length ? { text: `원장 ${reviewers(r, "director")}` } : { text: "관리자가 최종 승인", muted: true },
           ],
@@ -117,7 +119,7 @@ export function buildListItems(input: {
       mine: writable && myApprovalTurn(r, userId) ? "approve" : !isParticipant(r, userId) && !["completed", "canceled"].includes(r.status) ? "view" : "none",
       // 검색 = 보이는 칸 + 보고서 본문 글 전부(원장 2026-10-30 *"검색은 내용등 모든것을 검색가능하게"*) — 상담 내용·담임 의견·요청 메모·반려 사유·승인자까지.
       search: [r.snapshot.name, r.snapshot.school, r.snapshot.grade, schoolGradeLabel(r.snapshot.school, r.snapshot.grade), ...r.snapshot.courses.map((c) => c.className), teacher, reason.text, reason.note ?? "", direct ? "관리자 바로 처리" : "",
-        r.exit_kind === "withdrawal" ? "퇴원" : "수강종료", ...r.subjects.map(labelOf), REPORT_STATUS[r.status], staffName(r.requested_by), ...managerIds(r).map(staffName), ...directorIds(r).map(staffName),
+        r.exit_kind === "withdrawal" ? "퇴원" : "수강종료", ...r.subjects.map(labelOf), reportStatusLabel(r, staff), staffName(r.requested_by), ...managerIds(r).map(staffName), ...directorIds(r).map(staffName),
         r.request_note, r.last_comment ?? "", r.body_detail ?? "", r.body_student ?? "", r.body_parent ?? "", r.body_opinion ?? "", r.body_attendance ?? "", r.body_tuition ?? "", r.body_arrears_note ?? ""].join(" "),
     };
   });

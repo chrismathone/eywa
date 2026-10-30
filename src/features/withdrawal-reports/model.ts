@@ -76,7 +76,9 @@ export function isBookkeepingReport(r: Pick<ReportListRow, "teacher_id" | "manag
 export function automaticExitKind(courses: { id: string }[], enrollmentIds: readonly string[]) {
   return courses.length > 0 && courses.every(c => enrollmentIds.includes(c.id)) ? "withdrawal" as const : "subject_end" as const;
 }
-export type CourseSnapshot = { id: string; classId: string; className: string; subject: string; teacherId: string | null; teacherName: string | null; startDate: string; endDate: string | null; onHold: boolean };
+export type CourseSnapshot = { id: string; classId: string; className: string; subject: string; teacherId: string | null; teacherName: string | null; startDate: string; endDate: string | null; onHold: boolean;
+  /** 요청 창에서만 쓴다(저장된 보고서 스냅샷에는 없다) — '수업보고서 미발송' 반(0174a) · EiE 반(사업자가 달라 같은 영어로 묶지 않는다). */
+  reportOptout?: boolean; eie?: boolean };
 export type StudentSnapshot = { name: string; school: string | null; grade: string | null; enrolledAt: string | null; status: string; withdrawnAt: string | null; courses: CourseSnapshot[];
   /** 완료·취소된 보고서의 수강기간 칸 이력 — 처음 열 때 고정(원장 2026-10-30 '완료 시점 값으로 고정'). 없으면 지금 수강 기록으로 센다. */
   subjectHistory?: SubjectHistoryRow[] };
@@ -107,6 +109,17 @@ export function snapshotMatches(a: StudentSnapshot, b: StudentSnapshot) {
 export function canRequestReport(role: SystemRole) { return role === "master" || role === "admin" || role === "manager"; }
 export function managerIds(r: Pick<WithdrawalReport, "manager_id" | "manager_ids">) { return r.manager_ids ?? [r.manager_id]; }
 export function directorIds(r: Pick<WithdrawalReport, "director_id" | "director_ids">) { return r.director_ids ?? (r.director_id ? [r.director_id] : []); }
+/**
+ * 담임이 관리자라 관리자 칸을 건너뛴 보고서(원장 2026-10-30) — 승인자 칸에 원장만 있고 원장 칸은 비어 있다.
+ * DB가 승인자 1명 이상을 요구하므로 요청 창이 원장을 승인자 칸에 넣고, 화면은 이 모양을 '관리자 생략 · 원장 승인'으로 읽는다.
+ */
+export function skipsManagerStep(r: Pick<WithdrawalReport, "manager_id" | "manager_ids" | "director_id" | "director_ids">, staff: readonly Pick<StaffOption, "id" | "role">[]) {
+  const ids = managerIds(r);
+  return ids.length > 0 && directorIds(r).length === 0 && ids.every(id => staff.find(u => u.id === id)?.role === "master");
+}
+export function reportStatusLabel(r: Parameters<typeof skipsManagerStep>[0] & Pick<WithdrawalReport, "status">, staff: readonly Pick<StaffOption, "id" | "role">[]) {
+  return r.status === "manager_pending" && skipsManagerStep(r, staff) ? REPORT_STATUS.director_pending : REPORT_STATUS[r.status];
+}
 export function isParticipant(r: Pick<WithdrawalReport, "requested_by" | "teacher_id" | "manager_id" | "director_id" | "manager_ids" | "director_ids">, userId: string) {
   return [r.requested_by, r.teacher_id, ...managerIds(r), ...directorIds(r)].includes(userId);
 }

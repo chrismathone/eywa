@@ -19,7 +19,8 @@ import { loadDeskStaff, loadLaterInvoices, type LaterInvoice } from "./refund";
 import { liveBillingForSubmitted } from "../prefill";
 import { reportConsultations } from "./consultations";
 import type { SubjectHistoryRow } from "../course-period";
-import { reportCourses } from "../target-courses";
+import { reportCourses, withUnassignedCourses } from "../target-courses";
+import { isReportOptout } from "@/features/classes/report-optout";
 
 // 실험실 판정은 운영 콘솔 배정을 따른다(`isLaboratoryMenuAvailable`) — 예전엔 실험실 사용 여부를 배정과 무관하게 물어서,
 // 원장이 퇴원보고서를 일반 메뉴로 돌려도(2026-10-23) 실험실을 안 켠 지점에선 계속 닫혀 있었다.
@@ -52,13 +53,13 @@ export function canReadReport(r: ReportListRow, viewer: NonNullable<Awaited<Retu
 }
 const REPORT_COLUMNS = "id,enrollment_ids,tenant_id,student_id,requested_by,teacher_id,manager_id,director_id,exit_kind,subjects,effective_date,request_note,snapshot,body,status,revision,manager_approved_at,director_approved_at,applied_at,last_comment,created_at,updated_at,group_id,group_leader,manager_ids,director_ids,manager_decisions,director_decisions";
 const REPORT_LIST_COLUMNS = "id,tenant_id,student_id,requested_by,teacher_id,manager_id,director_id,exit_kind,subjects,effective_date,request_note,snapshot,status,revision,manager_approved_at,director_approved_at,applied_at,last_comment,created_at,updated_at,group_id,group_leader,manager_ids,director_ids,manager_decisions,director_decisions,body_reason:body->>reason,body_detail:body->>detail,body_reason_detail:body->>reasonDetail,body_student:body->>studentConsultation,body_parent:body->>parentConsultation,body_opinion:body->>teacherOpinion,body_attendance:body->>attendance,body_tuition:body->>tuition,body_arrears_note:body->>arrearsNote";
-const COURSE_COLUMNS = "id,start_date,end_date,on_hold,is_transferred,classes!inner(id,class_name,subject,is_active,closed_at,teacher_id,teacher:teacher_id(display_name))";
-type JoinedCourse = { id: string; start_date: string; end_date: string | null; on_hold: boolean; is_transferred: boolean; classes: { id: string; class_name: string; subject: string; is_active: boolean; closed_at: string | null; teacher_id: string | null; teacher: { display_name: string } | null } };
+const COURSE_COLUMNS = "id,start_date,end_date,on_hold,is_transferred,classes!inner(id,class_name,subject,english_track,is_active,closed_at,report_optout,teacher_id,teacher:teacher_id(display_name))";
+type JoinedCourse = { id: string; start_date: string; end_date: string | null; on_hold: boolean; is_transferred: boolean; classes: { id: string; class_name: string; subject: string; english_track: string | null; is_active: boolean; closed_at: string | null; report_optout: boolean | null; teacher_id: string | null; teacher: { display_name: string } | null } };
 function currentCourses(rows: JoinedCourse[]): CourseSnapshot[] {
   return rows.flatMap(e => {
     const c = e.classes;
     if (!c || (e.end_date && (e.end_date < kstToday() || e.is_transferred))) return [];
-    return [{ id: e.id, classId: c.id, className: c.class_name, subject: c.subject, teacherId: c.teacher_id, teacherName: c.teacher?.display_name ?? null, startDate: e.start_date, endDate: e.end_date, onHold: e.on_hold }];
+    return [{ id: e.id, classId: c.id, className: c.class_name, subject: c.subject, teacherId: c.teacher_id, teacherName: c.teacher?.display_name ?? null, startDate: e.start_date, endDate: e.end_date, onHold: e.on_hold, ...(isReportOptout(c) ? { reportOptout: true } : {}), ...(c.english_track === "eie" ? { eie: true } : {}) }];
   });
 }
 async function currentSnapshot(tenant: string, student: string): Promise<StudentSnapshot | null> {
@@ -111,6 +112,11 @@ export async function getReport(id: string) {
   const db = createAdminClient();
   const { data, error } = await db.from("withdrawal_reports").select(REPORT_COLUMNS).eq("tenant_id", viewer.user.tenantId).eq("id", id).maybeSingle();
   if (error || !data || !canReadReport(data as WithdrawalReport, viewer)) return null;
+  if (data.group_id && data.enrollment_ids) {
+    const { data: group, error: groupError } = await db.from("withdrawal_report_groups").select("enrollment_ids,teacher_ids").eq("tenant_id", viewer.user.tenantId).eq("id", data.group_id).maybeSingle();
+    if (groupError) console.error("[withdrawal-report-group]", groupError.message);
+    else if (group) data.enrollment_ids = withUnassignedCourses(data as WithdrawalReport, group);
+  }
   const [{ data: events, error: eventError }, current] = await Promise.all([
     db.from("withdrawal_report_events").select("id,actor_id,action,from_status,to_status,comment,created_at").eq("tenant_id", viewer.user.tenantId).eq("report_id", id).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(300),
     ["completed", "canceled"].includes(data.status) ? Promise.resolve(null) : currentSnapshot(viewer.user.tenantId, data.student_id),
@@ -183,8 +189,11 @@ export async function reportStaff() {
   if (error) throw new Error("직원 목록을 불러오지 못했습니다.");
   const [protection, settings] = await Promise.all([protectedAccountIds((data ?? []).map(u => u.id)), getTenantSettings()]);
   if (protection.lookupFailed) throw new Error("직원 정보를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  // 🔴 침산 지점 superadmin(이승엽 · 박소선 등)은 절대 승인자로 넣지 않는다 — 원장 칸에는 진짜 원장만(원장 2026-10-30).
+  //    system_role이 master라 그대로 두면 원장 후보가 되고, DB도 관리자 칸은 막지 않는다. 표시 역할을 admin으로 바꿔 원장 후보에서,
+  //    승인 과목을 비워 관리자 후보에서 뺀다(요청 화면에 superadmin 여부를 내려보내지 않는다).
   return (data ?? []).map(u => ({ id: u.id, name: u.display_name, role: displayRoleFor(u.id, u.system_role, protection.protectedIds), subjects: u.subjects ?? [],
-    approvalSubjects: staffSubjectScopeOf(u.id, settings.permissions.specialAccess.staffSubjectScopes) ?? u.subjects ?? [] })) as StaffOption[];
+    approvalSubjects: protection.protectedIds.has(u.id) ? [] : staffSubjectScopeOf(u.id, settings.permissions.specialAccess.staffSubjectScopes) ?? u.subjects ?? [] })) as StaffOption[];
 }
 /**
  * 작성 요청·바로 처리 창의 학생 선택지 — 재원·휴원 · 퇴원 예약 없음 · 시험 학생 제외.
