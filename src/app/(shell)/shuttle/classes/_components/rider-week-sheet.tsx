@@ -125,6 +125,17 @@ export function RiderWeekSheet({
     return out;
   }, [classes]);
   const ymdOf = (day: string) => week.find((w) => w.day === day)?.ymd ?? "";
+  /**
+   * 검색 중이면 **찾은 학생 것만** — 카드 명단뿐 아니라 경고(위 알림·카드 안 문구·확인 버튼)도 그 학생 것만(사용자 2026-10-30
+   * *"검색해서 아이들을 볼 때는 해당 학생 내용만"*). 검색이 없으면 null(전부).
+   */
+  const searchIds = useMemo(() => {
+    if (!needle) return null;
+    const out = new Set<string>();
+    for (const s of [...classes.flatMap((c) => c.students), ...runCards.flatMap((r) => r.riders)]) if (hit(s)) out.add(s.id);
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hit는 needle에서 파생
+  }, [classes, runCards, needle]);
   const riderCount = new Set([...classes.flatMap((c) => c.students.map((s) => s.id)), ...runCards.flatMap((r) => r.riders.map((s) => s.id))]).size;
 
   /**
@@ -143,10 +154,11 @@ export function RiderWeekSheet({
     ].filter((c) => {
       const k = conflictKey(c);
       if (acked.has(k) || seen.has(k)) return false;
+      if (searchIds && !searchIds.has(c.studentId)) return false;
       seen.add(k);
       return true;
     });
-  }, [classes, runCards, acked]);
+  }, [classes, runCards, acked, searchIds]);
   /**
    * 알림 글 → 그 수업 카드로 이동·포커스. 거르기(수업만/배차만·선생님·찾기)로 카드가 숨어 있으면 먼저 거르기를 풀고 다음 그림에서 찾는다.
    * 찾은 카드는 잠깐 테두리를 둘러 어디인지 보이게 한다(카드 색은 그대로 — 바깥 링만).
