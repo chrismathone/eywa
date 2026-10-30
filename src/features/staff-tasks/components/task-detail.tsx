@@ -38,7 +38,7 @@ export function TaskDetail({ taskId, onBack, onNavigate }: { taskId: string; onB
             <dt className="text-text-dim">생긴 때</dt><dd>{kstShortStamp(data.item.openedAt) ?? "—"}</dd>
             <dt className="text-text-dim">늦음 기준</dt><dd>{data.item.dueAt ? `${kstShortStamp(data.item.dueAt)} 이후` : "—"}</dd>
             {data.item.closedAt ? <>
-              <dt className="text-text-dim">끝난 때</dt>
+              <dt className="text-text-dim">처리 시각</dt>
               <dd>{kstShortStamp(data.item.closedAt)}{closeReasonLabel(data.item.closeReason) ? ` · ${closeReasonLabel(data.item.closeReason)}` : ""}{data.item.closedBy ? ` · ${data.item.closedBy.name}` : ""}</dd>
             </> : null}
           </dl>

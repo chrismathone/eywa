@@ -120,8 +120,6 @@ export function ChecklistBoard({
         date ? (
           <ReportPreview
             date={date}
-            today={today}
-            trackingStart={start}
             students={dayStudents}
             checks={checks}
             reportLevels={report.levels}

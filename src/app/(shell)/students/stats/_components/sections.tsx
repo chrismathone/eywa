@@ -12,6 +12,8 @@ import type { StudentStats, StudentStatsParts } from "@/features/students/stats/
 import { StatCard } from "./stat-card";
 import { TrendBoard } from "./trend-board";
 import { CourseBoard } from "./course-board";
+import { CourseRevenueCard } from "./course-revenue-card";
+import { courseRevenueMonths, courseRevenueSummary } from "@/features/students/stats/course-revenue";
 import { FlowBoard } from "./flow-board";
 import { FirstClassBoard } from "./first-class-board";
 
@@ -137,7 +139,7 @@ export async function TrendSection(props: Ctx & { view: TrendView; boardKey: str
 /** 강좌수 추이(원장 2026-10-20 '카드 따로') — 재원생 추이와 같은 아래 경계(countFrom)·같은 경계 문장. */
 export async function CourseSection(props: Ctx & { boardKey: string }) {
   const { stats, parts, settings, scopeLabel, boardKey } = props;
-  const [courses, ctx, months] = await Promise.all([parts.courses, trendContext(props), historyMonths(props)]);
+  const [courses, ctx, months, tuition] = await Promise.all([parts.courses, trendContext(props), historyMonths(props), parts.tuition ?? Promise.resolve(null)]);
   if (!courses.data) return courses.error ? <StatCard id="courses" title="강좌수 추이" note="학생마다 같은 과목은 1개" error /> : null;
   const { courseFrom, courseClipNote } = courseBounds(ctx.bounds, ctx);
   // 셀 수 있는 첫 달 앞을 지난 기록으로(재원생 추이와 같은 규칙 — 원장 2026-10-29) — 전체 = 과목 묶음마다 청구된 학생의 합.
@@ -159,7 +161,13 @@ export async function CourseSection(props: Ctx & { boardKey: string }) {
   };
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
   const tokens = distinctSubjectTokens(courses.data.bySubject.map((s) => ({ key: s.key, color: subjectMaps.colorOf(s.key) })));
+  // 과목 수와 매출(원장 2026-10-30) — 학원 전체 값이라 과목 관리자 화면엔 세우지 않는다 · 수납 권한이 있을 때만(tuition null이면 없음).
+  // 영어를 가르지 않은 지점의 injaewon·eie 설정 키는 지난 기록 영어 칸과 겹친다 — 빼고 센다(lineHistory와 같은 규칙) · 이번 달은 뺀다.
+  const revenueGroups = courseGroups.filter((g) => split || !isEnglishProgramKey(g));
+  const revenue =
+    !scopeLabel && tuition?.data ? courseRevenueSummary(courseRevenueMonths(months, tuition.data, revenueGroups, stats.today.slice(0, 7))) : null;
   return (
+    <>
     <CourseBoard
       key={`courses|${boardKey}`}
       total={courses.data.total}
@@ -177,6 +185,8 @@ export async function CourseSection(props: Ctx & { boardKey: string }) {
       scopeLabel={scopeLabel}
       initial={{ range: stats.prefs.courseRange, kind: stats.prefs.courseKind, off: stats.prefs.courseOff }}
     />
+    {revenue ? <CourseRevenueCard summary={revenue} /> : null}
+    </>
   );
 }
 

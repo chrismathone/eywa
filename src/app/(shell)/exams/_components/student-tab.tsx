@@ -1,10 +1,11 @@
 
 import { SheetText } from "@/features/teacher-view/interface-label";
 import Link from "next/link";
-import { aggregateBy, averagePercent, schoolGradeLabel, type UnifiedRow } from "@/features/grades/unified/model";
+import { averagePercent, schoolGradeLabel, type UnifiedRow } from "@/features/grades/unified/model";
+import { subjectSeriesOf, type SubjectSeriesInput } from "@/features/grades/unified/subject-series";
 import { percentTone } from "@/features/grades/unified/kind-color";
 import { DeltaBadge, KindPill, Panel, ScoreLine } from "./tab-parts";
-import { TrendChart } from "./trend-chart";
+import { SubjectTrendChart } from "./subject-trend-chart";
 import { StudentGradeStats } from "./student-stats";
 import { GoalBadge } from "@/features/grades/components/goal-badge";
 import type { GoalView } from "@/features/grades/goals";
@@ -31,24 +32,30 @@ function StudentPicker({ students, rows, href }: { students: UnifiedRow[]; rows:
 }
 
 /** 학생 추이 — 고른 학생의 지표 4칸 · 추이 · 전체 기록. 한 시험 점수는 원래 단위(개·점), 평균·추이는 정답률(%). */
-export function StudentTab({ students, selected, rows, allRows, href, goalViews, goals }: {
+export function StudentTab({ students, selected, rows, allRows, href, goalViews, goals, subjects }: {
   students: UnifiedRow[]; selected: UnifiedRow | undefined; rows: UnifiedRow[]; allRows: UnifiedRow[]; href: Href;
+  /** 과목 이름·색(학원설정) — 지표·추이를 과목으로 가른다(원장 2026-10-30). */
+  subjects: SubjectSeriesInput;
   /** 기록 줄 key → 목표 대비 · 이 학생의 목표 전부(기간과 무관 — codex 합의 7). 원생 상세와 같은 조회·같은 부품. */
   goalViews: Record<string, GoalView>; goals: GradeGoalRow[];
 }) {
   if (!selected) return <StudentPicker students={students} rows={allRows} href={href} />;
+  const series = subjectSeriesOf(rows, subjects);
+  const colorOf = new Map(series.map((s) => [s.key, s.color]));
   return <div className="space-y-4">
     <div className="flex flex-wrap items-center gap-3">
       <Link href={href({ tab: "student", student: "" })} className="text-primary text-sm font-semibold hover:underline"><SheetText value={"← 학생 목록"} /></Link>
       <h2 className="text-xl font-bold">{selected.name} <small className="text-text-dim text-sm font-normal">{schoolGradeLabel(selected.school, selected.grade)}</small></h2>
       <Link href={`/students/${selected.studentId}?tab=grades`} className="text-primary ml-auto text-sm font-semibold hover:underline"><SheetText value={"학생 상세 열기 →"} /></Link>
     </div>
-    <StudentGradeStats rows={rows} />
+    <StudentGradeStats rows={rows} subjectLabelOf={subjects.labelOf} />
     <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
-      <Panel title="성적 흐름" sub="월별 평균 정답률"><TrendChart points={aggregateBy(rows, "academy")[0]?.points ?? []} /></Panel>
+      <Panel title="성적 흐름" sub="과목별 월별 평균 정답률"><SubjectTrendChart series={series} /></Panel>
       <Panel title="시험 기록" sub={`${rows.length}건 · 최신순`}>
         <ul className="divide-line-faint max-h-96 divide-y overflow-auto pr-1">{rows.map((row) => <li key={row.key} className="flex items-center justify-between gap-3 py-2 text-sm">
-          <span className="flex min-w-0 items-center gap-2"><span className="num text-text-dim w-12 shrink-0">{row.date.slice(5).replace("-", "/")}</span><KindPill kind={row.kind} /></span>
+          <span className="flex min-w-0 items-center gap-2"><span className="num text-text-dim w-12 shrink-0">{row.date.slice(5).replace("-", "/")}</span>
+            {/* 과목 — 추이 선과 같은 색(원장 2026-10-30 "영어인지, 수학인지 과목표시"). */}
+            <span className="shrink-0 text-xs font-semibold" style={{ color: colorOf.get(row.subject) }}>{subjects.labelOf(row.subject)}</span><KindPill kind={row.kind} /></span>
           <span className="flex shrink-0 flex-col items-end gap-0.5"><span className="flex items-center gap-2"><ScoreLine row={row} /><DeltaBadge row={row} /></span>
             {goalViews[row.key] ? <GoalBadge goal={goalViews[row.key]!} /> : null}</span>
         </li>)}</ul>

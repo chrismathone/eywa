@@ -74,12 +74,13 @@ export function taskState(status: string, dueAt: string | null, now: number = Da
   return dueAt && Date.parse(dueAt) < now ? "late" : "open";
 }
 
+/** 화면 이름 — 억지 고유어 대신 익숙한 한자어(원장 2026-10-30 *"열린일 늦음 끝나일 … 너무 어색해 … 한자어 써도 됨"*). */
 export const TASK_STATE_LABEL: Record<StaffTaskState, string> = {
-  open: "처리 전",
-  late: "늦음",
-  done: "처리됨",
-  cancelled: "취소됨",
-  expired: "기한 지남",
+  open: "미처리",
+  late: "기한 초과",
+  done: "처리 완료",
+  cancelled: "취소",
+  expired: "기한 만료",
 };
 
 /** 상태 칩 색 = 의미색(design-conventions 의미색 캐논) — 처리 전은 '내 할 일', 늦음·기한 지남은 위험, 취소는 종료. */
@@ -146,7 +147,7 @@ export function taskEventLabel(event: string): string {
 /** 목록 필터 — 주소·요청 값과 같은 글자. */
 export const TASK_FILTERS = ["open", "late", "closed", "all"] as const;
 export type StaffTaskFilter = (typeof TASK_FILTERS)[number];
-export const TASK_FILTER_LABEL: Record<StaffTaskFilter, string> = { open: "열린 일", late: "늦음", closed: "끝난 일", all: "전체" };
+export const TASK_FILTER_LABEL: Record<StaffTaskFilter, string> = { open: "미처리", late: "기한 초과", closed: "처리 완료", all: "전체" };
 export function parseTaskFilter(raw: unknown): StaffTaskFilter {
   return TASK_FILTERS.includes(raw as StaffTaskFilter) ? (raw as StaffTaskFilter) : "open";
 }

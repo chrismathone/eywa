@@ -8,13 +8,14 @@ import {
 } from "@/features/students/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps, subjectLabelRecord } from "@/features/owner/subjects";
-import { aggregateBy, KIND_LABEL } from "@/features/grades/unified/model";
+import { KIND_LABEL } from "@/features/grades/unified/model";
+import { subjectSeriesOf } from "@/features/grades/unified/subject-series";
 import { applyLedgerView, parseLedgerView } from "@/features/grades/unified/ledger-view";
 import { Pagination } from "@/components/pagination";
 import { getStudentUnifiedRows } from "@/features/grades/unified/server/student-records";
 import { goalViewsForRows } from "@/features/grades/server/goals";
 import { StudentGradeStats } from "@/app/(shell)/exams/_components/student-stats";
-import { TrendChart } from "@/app/(shell)/exams/_components/trend-chart";
+import { SubjectTrendChart } from "@/app/(shell)/exams/_components/subject-trend-chart";
 import { GradeForm } from "../_components/grade-form";
 import { GoalsSection } from "../_components/goals-section";
 import { GradeCommentsSection } from "../_components/grade-comments-section";
@@ -44,7 +45,9 @@ export async function GradesTab({ studentId, query, back, embed }: {
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
   const subjectLabels = subjectLabelRecord(settings.operations.subjects);
   const notesById = Object.fromEntries(grades.map((g) => [g.id, g.notes]));
-  const points = aggregateBy(rows, "academy")[0]?.points ?? [];
+  // 과목별 선(원장 2026-10-30 — 영어·수학을 색으로 가른다). 통합 성적관리 '학생 추이'와 같은 함수.
+  const series = subjectSeriesOf(rows, subjectMaps);
+  const pointCount = new Set(series.flatMap((s) => s.points.map((p) => p.month))).size;
 
   // 목록 — 지표·추이는 **학생 전체**, 목록만 열 머리 필터·정렬·쪽(통합 성적관리 원장과 같은 판정 `applyLedgerView`).
   const subject = query.subject ?? "";
@@ -77,13 +80,15 @@ export async function GradesTab({ studentId, query, back, embed }: {
 
       {rows.length > 0 ? (
         <>
-          <StudentGradeStats rows={rows} />
-          {points.length >= 2 ? (
-            <div className="bg-card border-border rounded-2xl border p-4">
-              <p className="micro"><SheetText value={"성적 흐름 · 월별 평균 정답률"} /></p>
-              <TrendChart points={points} />
-            </div>
-          ) : null}
+          <StudentGradeStats rows={rows} subjectLabelOf={subjectMaps.labelOf} />
+          <div className="bg-card border-border rounded-2xl border p-4">
+            <p className="micro"><SheetText value={"성적 흐름 · 과목별 월별 평균 정답률"} /></p>
+            {pointCount >= 2 || series.length > 1 ? <SubjectTrendChart series={series} /> : (
+              <p className="text-muted-foreground mt-2 text-xs">
+                {series.map((s) => `${s.label} ${s.count}건 · 평균 ${s.average ?? "—"}${s.average == null ? "" : "%"}`).join(" · ")} — 두 달 이상 쌓이면 흐름을 그립니다.
+              </p>
+            )}
+          </div>
         </>
       ) : null}
 

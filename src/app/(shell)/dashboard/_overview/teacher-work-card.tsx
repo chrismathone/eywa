@@ -99,7 +99,7 @@ export function TeacherWorkCard({ data, subjects }: { data: TeacherWork; subject
   const tasks = data.tasks;
   return <div ref={ref} className={s.root} data-auto-height data-teacher-work>
     {tasks ? <button type="button" className={s.tasksLink} onClick={() => setTaskTarget({ scope: "all" })}>
-      업무 처리 현황 · 열린 할 일 {tasks.open.toLocaleString("ko-KR")}{tasks.late ? <b> · 늦음 {tasks.late.toLocaleString("ko-KR")}</b> : null} ›
+      업무 처리 현황 · 미처리 {tasks.open.toLocaleString("ko-KR")}{tasks.late ? <b> · 기한 초과 {tasks.late.toLocaleString("ko-KR")}</b> : null} ›
     </button> : null}
     {groups.length ? <DragScrollArea hideBar fadeTone="surface">{groups.map((rows, i) => <table key={i} className={s.table}
       style={{ width: METRIC_COLUMN + columnWidth * Math.max(rows.length, VISIBLE_TEACHERS) }}>
@@ -116,7 +116,7 @@ export function TeacherWorkCard({ data, subjects }: { data: TeacherWork; subject
         })}
       </tr>)}
       {tasks ? <tr data-video>
-        <th scope="row"><span {...tipProps("열린 할 일 — 지금 맡고 있는 할 일(보고서 발송 실패 · 상담 후속조치) 중 아직 처리 안 된 것. 괄호 = 그중 늦음. 처리는 원래 기록(발송 · 완료 체크)으로 저절로 확인됩니다. 누르면 그 선생님의 할 일")}>열린 할 일</span></th>
+        <th scope="row"><span {...tipProps("미처리 업무 — 지금 맡고 있는 업무(보고서 발송 실패 · 상담 후속조치) 중 아직 처리 안 된 것. 괄호 = 그중 기한 초과. 처리는 원래 기록(발송 · 완료 체크)으로 저절로 확인됩니다. 누르면 그 선생님의 업무")}>미처리 업무</span></th>
         {rows.map((r) => {
           const key = `${r.teacherId}:${r.subject}`;
           const c = firstColumn.has(key) && r.teacherId ? tasks.byUser[r.teacherId] ?? { open: 0, late: 0 } : null;

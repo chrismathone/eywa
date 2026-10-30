@@ -64,7 +64,7 @@ export async function sendStaffTaskDigest(admin: SupabaseClient, tenantId: strin
 
   await notifyUsers(recipients.map((recipientId) => ({
     tenantId, recipientId, type: "staff_task_digest" as const,
-    title: `늦은 할 일 ${late.length.toLocaleString("ko-KR")}건`,
+    title: `기한 초과 업무 ${late.length.toLocaleString("ko-KR")}건`,
     body: who ? `${kinds} — ${who}` : kinds,
     link: "/dashboard",
     actorId: null,

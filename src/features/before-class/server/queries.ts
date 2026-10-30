@@ -96,8 +96,11 @@ export async function loadClassMonth(tenantId: string, classId: string, month: s
     subject ? loadReportLevels(tenantId, enrolledIds, subject, from, to) : Promise.resolve({}),
   ]);
 
+  // 테스트 학생은 실제 반 명단에서 뺀다 — 단 **테스트 학생만 있는 반**(학원이·학원삼 테스트 반)은 그대로 세운다
+  // (원장 2026-10-30 *"학원 이 삼 쪽도 체크리스트 추가해서 그걸로 테스트"*).
+  const testOnlyClass = studentRows.length > 0 && studentRows.every((s) => s.is_test);
   const students: RosterStudent[] = studentRows
-    .filter((s) => !s.is_test)
+    .filter((s) => testOnlyClass || !s.is_test)
     .map((s) => {
       const rows = byStudent.get(s.id as string) ?? [];
       const activeDates = dates.filter((d) => attendsClassOn(rows, d));

@@ -22,6 +22,8 @@ import { loadCourseTrendDetail, type CourseTrendDetail } from "@/features/dashbo
 import { isModuleEnabled } from "@/lib/modules";
 import { parseStudentStatsPrefs, type FlowRow, type StudentStatsPrefs } from "../model";
 import { loadStudentHistory, type StudentHistory } from "./history";
+import { loadTuitionHistory } from "@/features/billing/stats/tuition-history-server";
+import type { TuitionMonth } from "@/features/billing/stats/tuition-history";
 import { withoutPaying } from "../history";
 import { loadRecordCoverage } from "@/features/dashboard/overview/record-coverage";
 import { createClient } from "@/lib/supabase/server";
@@ -83,6 +85,8 @@ export type StudentStatsParts = {
   history: Promise<Part<StudentHistory & { payingHidden: boolean }>>;
   /** 첫 수업 추이(원장 2026-10-20) — 운영실 '오늘첫수업'과 같은 판정을 날마다(`first-class-trend.ts`). */
   firstClass: Promise<Part<FirstClassTrend>>;
+  /** 지난 기록 수업료 수납(월별) — '과목 수와 매출' 카드(원장 2026-10-30). 수납 권한이 없으면 null(카드가 서지 않는다). */
+  tuition?: Promise<Part<TuitionMonth[] | null>>;
 };
 
 type User = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
@@ -223,6 +227,7 @@ export async function loadStudentStats(requestedSubject?: string, firstParams: P
       const [history, billing] = await Promise.all([loadStudentHistory(user.tenantId), canBilling]);
       return billing ? { ...history, payingHidden: false } : { ...history, months: withoutPaying(history.months), payingHidden: true };
     }),
+    tuition: part("tuition", async () => ((await canBilling) ? loadTuitionHistory(user.tenantId) : null)),
     firstClass: scopedPart("firstClass", async () => {
       const periodFrom = firstPeriod.grain === "month" ? `${firstPeriod.months[0]}-01` : firstPeriod.from;
       const to = firstPeriod.grain === "month" ? today : firstPeriod.to;

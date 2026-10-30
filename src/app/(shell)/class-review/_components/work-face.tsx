@@ -28,7 +28,7 @@ export function WorkFace({ data, subjects }: { data: TeacherWork; subjects: Reco
     { label: "출결 미입력", value: workRatio(sum((r) => r.attendanceUnrecorded), sum((r) => r.attendanceDays)), note: span(data.attendanceFrom, data.attendanceTo), alert: sum((r) => r.attendanceUnrecorded) > 0 },
     { label: "영상 제출", value: workRatio(sum((r) => r.videoSubmitted), sum((r) => r.videoAssigned)), note: span(data.videoFrom, data.to) },
     { label: "영상 숙제 출제율", value: workRatio(lessonSum((r) => r.videoIssuedReports), lessonSum((r) => r.reportsWritten)) },
-    ...(data.tasks ? [{ label: "열린 할 일", value: `${data.tasks.open.toLocaleString("ko-KR")}건`, note: data.tasks.late ? `늦음 ${data.tasks.late.toLocaleString("ko-KR")}` : undefined, alert: data.tasks.late > 0 }] : []),
+    ...(data.tasks ? [{ label: "미처리 업무", value: `${data.tasks.open.toLocaleString("ko-KR")}건`, note: data.tasks.late ? `기한 초과 ${data.tasks.late.toLocaleString("ko-KR")}` : undefined, alert: data.tasks.late > 0 }] : []),
   ];
   return <div className="space-y-4">
     <section aria-label="학원 전체 업무 현황" className="grid grid-cols-2 gap-3 md:grid-cols-4">

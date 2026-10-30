@@ -58,7 +58,7 @@ function TaskList({ scope, filter, showPeople, onPick }: { scope: TaskScope; fil
 
   if (error) return <p className="text-danger text-sm">{error}</p>;
   if (!items) return <p className="text-text-dim text-sm">불러오는 중…</p>;
-  if (!items.length) return <p className="text-text-dim py-8 text-center text-sm">{filter === "late" ? "늦은 할 일이 없습니다" : filter === "open" ? "열린 할 일이 없습니다" : "할 일이 없습니다"}</p>;
+  if (!items.length) return <p className="text-text-dim py-8 text-center text-sm">{filter === "late" ? "기한 초과 업무가 없습니다" : filter === "open" ? "미처리 업무가 없습니다" : "업무가 없습니다"}</p>;
   return (
     <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto pr-1">
       <ul className="divide-line divide-y">

@@ -705,7 +705,7 @@ export function Overview({
     !(v.courseTrend && v.courseTrend.data === null && v.courseTrend.at !== null) ? (
       <Panel
         title={t("courseTrend", "강좌수 추이")}
-        note={`${courseTrend?.monthlyFrom ? `${ym(courseTrend.monthlyFrom)}부터` : "최근 12개월"} · 달마다 말일 기준(이번 달은 오늘) · 학생마다 같은 과목은 1개`}
+        note={`${courseTrend?.historyFrom ? `${ym(courseTrend.historyFrom)}부터(앞쪽은 지난 기록)` : courseTrend?.monthlyFrom ? `${ym(courseTrend.monthlyFrom)}부터` : "최근 12개월"} · 달마다 말일 기준(이번 달은 오늘) · 학생마다 같은 과목은 1개`}
         href={studentsStatsHref("courses", { subject: view?.activeSubject, teacherView: snapshot.teacherView })}
         sections={[v.courseTrend]}
         className={s.fullRow}
@@ -729,7 +729,11 @@ export function Overview({
               valueLabels="all"
               series={[{ name: "강좌수", color: COLORS[0], values: courseTrend.monthly.map((p) => p.count) }]}
             />
-            {courseTrend.trustFrom ? (
+            {courseTrend.historyFrom && courseTrend.historyTo ? (
+              <p className={s.footnote}>
+                {`${ym(courseTrend.historyFrom)}~${ym(courseTrend.historyTo)}은 지난 기록(그달 과목마다 수업료가 청구된 학생 수의 합 · 과학·국어 포함)으로 센 추정입니다. ${courseTrend.trustFrom ? `${ym(courseTrend.trustFrom)}부터 에이와 수강 기록으로 셉니다.` : ""}`}
+              </p>
+            ) : courseTrend.trustFrom ? (
               <p className={s.footnote}>
                 {courseTrend.cutBy === "records"
                   ? `강좌수는 ${ym(courseTrend.trustFrom)}부터 보입니다 — 그 전에 그만둔 학생은 수강 기록이 남아 있지 않아 과목별 수강을 셀 수 없습니다.`
