@@ -26,8 +26,9 @@ describe("기본 배치", () => {
     }
   });
 
+  // 강사별 업무 현황은 직원 평가 '업무 현황' 면으로 옮겨 대시보드 기본에서 빠졌다(원장 2026-10-29·30).
   it("과목 관리자 기본 = 담당 과목으로 좁혀지는 칸 + 공지(수납·강사 시트·퇴원 명단 없음)", () => {
-    expect(placedIds(defaultItems("subject"))).toEqual(["kpi:students", "kpi:withdrawals", "kpi:firstClass", "kpi:absent", "panel:nowClasses", "panel:repeatAbsence", "panel:notices", "panel:teacherWork"]);
+    expect(placedIds(defaultItems("subject"))).toEqual(["kpi:students", "kpi:withdrawals", "kpi:firstClass", "kpi:absent", "panel:nowClasses", "panel:repeatAbsence", "panel:notices"]);
   });
 
   it("데스크는 학습 운영 칸(보고·학생 상담·강사 시트)도 뺀다 · 실장은 둔다", () => {

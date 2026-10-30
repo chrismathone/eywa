@@ -187,7 +187,7 @@ describe("overview display contracts", () => {
     // 전일 입테 카드는 서지만 ↗(목적지 링크)가 없다.
     expect(html).toContain('aria-label="전일 입테 0건.');
   });
-  it("반복 결석 전체 목록은 별도 팝업에서 회 단위로 표시하고 학생 출결 상세로 연결한다", async () => {
+  it("반복 결석: 첫 화면엔 이름 없이 횟수별 인원 · 명단은 팝업에서 회 단위로, 학생 출결 상세로 연결(원장 2026-10-29)", async () => {
     mocks.data = snapshot();
     mocks.data.sections.absences = {
       at: 100,
@@ -205,13 +205,10 @@ describe("overview display contracts", () => {
     const view = render(<Overview initial={mocks.data} />);
     expect(view.container.textContent).toContain("3회 이상");
     expect(view.container.textContent).not.toContain("일일 브리핑");
-    expect(
-      within(view.container)
-        .getByRole("link", { name: "학생0 출결 상세 · 결석 3회" })
-        .getAttribute("href"),
-    ).toBe("/students/s0?tab=attendance");
+    expect(within(view.container).queryByRole("link", { name: "학생0 출결 상세 · 결석 3회" })).toBeNull();
+    expect(view.container.textContent).toContain("3회 7명 · 4회 0명 · 5회 이상 0명");
     fireEvent.click(
-      screen.getByRole("button", { name: "반복 결석 학생 자세히 보기" }),
+      screen.getByRole("button", { name: "반복 결석 학생 명단 보기 (7명)" }),
     );
     const popup = screen.getByRole("dialog");
     expect(view.container.contains(popup)).toBe(false);

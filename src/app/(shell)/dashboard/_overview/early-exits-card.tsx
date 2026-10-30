@@ -77,15 +77,11 @@ export function EarlyExitsBody({ data, scope = null }: { data: OverviewData["ear
         이번 달 퇴원 {data.rows.length}명 중{unknown ? ` · ${unjudgedText(unknown)}` : ""}
         {scope ? ` · ${scope} 과목만 (퇴원관리 목록은 학원 전체)` : ""}
       </p>
+      {/* 첫 화면엔 이름 없이 — 명단은 눌러서(원장 2026-10-29 *"대시보드 첫 화면에 이름이 직접 뜨지 않게"*). */}
       {early.length ? (
-        <>
-          <Names rows={early.slice(0, 6)} />
-          {early.length > 6 && (
-            <DetailPopup title="등록 후 3개월 내 퇴원" label={`전체 ${early.length}명 보기`}>
-              <Names rows={early} />
-            </DetailPopup>
-          )}
-        </>
+        <DetailPopup title="등록 후 3개월 내 퇴원" label={`명단 보기 (${early.length}명)`} ariaLabel={`등록 후 3개월 내 퇴원 명단 보기 (${early.length}명)`}>
+          <Names rows={early} />
+        </DetailPopup>
       ) : (
         <p className={e.note}>이번 달에는 등록 후 3개월 안에 퇴원한 학생이 없습니다.</p>
       )}

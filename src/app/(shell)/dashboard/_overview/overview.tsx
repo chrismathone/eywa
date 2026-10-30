@@ -22,7 +22,7 @@ import { foldExpenseTotals } from "@/features/dashboard/overview/expense-total";
 import { paymentRateDisplay } from "@/features/billing/calc";
 import { monthDayLabel } from "@/lib/date-kst";
 import { monthAheadNote, monthAheadWindow, windowUntilLabel } from "@/features/dashboard/overview/upcoming-window";
-import { admissionsListKind, isCancelledAdmissionsRow, upcomingAdmissionsRows } from "@/features/dashboard/overview/display";
+import { isCancelledAdmissionsRow, upcomingAdmissionsRows } from "@/features/dashboard/overview/display";
 import { cancelledSuffix } from "@/features/calendar/cancelled";
 import { useOverview } from "./use-overview";
 import { DetailPopup } from "./detail-popup";
@@ -858,26 +858,18 @@ export function Overview({
             }
             danger={v.absences.data.rows.length > 0}
           />
-          <div className={s.riskNames}>
-            {v.absences.data.rows.slice(0, 6).map((row) => (
-              <WindowLink
-                key={row.studentId}
-                href={`/students/${row.studentId}?tab=attendance`}
-                title={`${row.studentName} 출결`}
-                ariaLabel={`${row.studentName} 출결 상세 · 결석 ${row.unexplained}회`}
-              >
-                <span>{row.studentName}</span>
-                <b>
-                  {row.unexplained}
-                  <small>회</small>
-                </b>
-              </WindowLink>
-            ))}
-          </div>
-          {v.absences.data.rows.length > 6 && (
+          {/* 첫 화면엔 이름 없이 결석 횟수별 인원만 — 원장 2026-10-29 *"대시보드 첫 화면에 이름이 직접 뜨지 않게 … 상세를 누르면 개별 리스트"*. */}
+          {v.absences.data.rows.length > 0 && (
+            <p className={s.footnote}>
+              {[3, 4].map((n) => `${n}회 ${v.absences!.data!.rows.filter((row) => row.unexplained === n).length}명`)
+                .concat(`5회 이상 ${v.absences.data.rows.filter((row) => row.unexplained >= 5).length}명`).join(" · ")}
+            </p>
+          )}
+          {v.absences.data.rows.length > 0 && (
             <DetailPopup
               title="반복 결석 학생"
-              label={`전체 ${v.absences.data.rows.length}명 보기`}
+              label={`명단 보기 (${v.absences.data.rows.length}명)`}
+              ariaLabel={`반복 결석 학생 명단 보기 (${v.absences.data.rows.length}명)`}
             >
               <div className={s.riskNames}>
                 {v.absences.data.rows.map((row) => (
@@ -1051,7 +1043,7 @@ export function Overview({
                 key={item.label}
                 title={
                   item.needs.length
-                    ? `확인 필요: ${item.needs.map((p) => p.name).join(", ")}`
+                    ? `확인 필요 ${item.needs.length}명` // 이름은 눌러서 여는 명단에서만(원장 2026-10-29)
                     : "현재 확인이 필요한 학생 없음"
                 }
               >
@@ -1238,17 +1230,18 @@ export function Overview({
       note={monthAheadNote(admissionsRange)}
       sections={[v.calendar]}
     >
-      <AdmissionsSchedule events={admissionsRows ?? []} limit={3} />
+      <AdmissionsSchedule events={admissionsRows ?? []} limit={0} />
       {admissionsRows?.length === 0 && (
         <p className={s.empty}>
           오늘부터 {windowUntilLabel(admissionsRange)} 레벨테스트·첫 수업 일정이 없습니다.
         </p>
       )}
-      {(["levelTest", "firstClass"] as const).some((kind) => (admissionsRows?.filter((event) => admissionsListKind(event) === kind).length ?? 0) > 3) && (
+      {(admissionsRows?.length ?? 0) > 0 && (
         <DetailPopup
           title="레벨테스트 및 첫수업 일정"
           // 열 머리·전일 입테와 같은 축 — 숫자는 살아 있는 일정만, 취소는 " · 취소 N"으로 따로(원장 2026-09-30).
-          label={`전체 ${admissionsRows!.filter((event) => !isCancelledAdmissionsRow(event)).length}개 일정 보기${cancelledSuffix(admissionsRows!.filter(isCancelledAdmissionsRow).length)}`}
+          label={`일정 보기 (${admissionsRows!.filter((event) => !isCancelledAdmissionsRow(event)).length}개)${cancelledSuffix(admissionsRows!.filter(isCancelledAdmissionsRow).length)}`}
+          ariaLabel={`레벨테스트 및 첫수업 일정 보기 (${admissionsRows!.filter((event) => !isCancelledAdmissionsRow(event)).length}개)`}
         >
           <AdmissionsSchedule events={admissionsRows!} />
         </DetailPopup>

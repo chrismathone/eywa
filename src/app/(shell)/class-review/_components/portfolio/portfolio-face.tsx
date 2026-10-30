@@ -1,4 +1,7 @@
+import Link from "next/link";
 import { EmptyState } from "@/components/empty-state";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { subjectLabelRecord } from "@/features/owner/subjects";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import type { SystemRole } from "@/lib/permissions";
 import { kstDateOf, kstTimeOf } from "@/lib/date-kst";
@@ -27,6 +30,33 @@ export async function PortfolioFace({ role, teacherId }: { role: SystemRole; tea
         <EmptyState compact title="아직 집계한 점수가 없습니다" description="매일 새벽에 자동으로 집계합니다. 지금 바로 보려면 집계를 시작하세요."
           action={canRefresh ? <RefreshButton label="지금 집계 시작" /> : undefined} />
       );
+  }
+  // 강사를 고르기 전엔 요약만 — 강사 이름 목록·점수는 [강사별 보기]로(원장 2026-10-29 *"들어갔을 때 개별 리스트가 먼저 뜨지 않게"*).
+  if (!teacherId) {
+    const month = view.teachers.flatMap((t) => Object.keys(t.months)).sort().at(-1) ?? null;
+    const labels = subjectLabelRecord((await getTenantSettings()).operations.subjects);
+    const counted = month ? view.teachers.filter((t) => t.months[month]) : [];
+    const subjectCount = new Map<string, number>();
+    for (const t of counted) for (const s of t.months[month!]!.subjects) subjectCount.set(s, (subjectCount.get(s) ?? 0) + 1);
+    const tiles = [
+      { label: "평가 대상 강사", value: `${view.teachers.length}명` },
+      { label: month ? `${Number(month.slice(5))}월 집계` : "집계", value: `${counted.length}명` },
+      { label: "담당 반", value: `${counted.reduce((s, t) => s + t.months[month!]!.classCount, 0)}개` },
+      { label: "과목별 강사", value: [...subjectCount].map(([s, n]) => `${labels[s] ?? s} ${n}`).join(" · ") || "—" },
+    ];
+    return (
+      <div className="space-y-4">
+        <section aria-label="직원 포트폴리오 요약" className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {tiles.map((t) => <div key={t.label} className="rounded-xl border p-4">
+            <p className="text-text-dim text-xs">{t.label}</p>
+            <p className="mt-1 text-lg font-bold">{t.value}</p>
+          </div>)}
+        </section>
+        <Link href={`/class-review?tab=portfolio&teacher=${view.teachers[0]!.id}`} className="inline-flex rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-muted">
+          강사별 보기 ({view.teachers.length}명)
+        </Link>
+      </div>
+    );
   }
   const computedAt = view.selected.periods[0]?.closing.computedAt ?? null;
   const day = kstDateOf(computedAt);

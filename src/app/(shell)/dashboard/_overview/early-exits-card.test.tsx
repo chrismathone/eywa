@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import type { OverviewData } from "@/features/dashboard/overview/model";
 vi.mock("@/components/workspace/window-link", () => ({
@@ -40,10 +40,13 @@ it("세 칸은 누적 · 퇴원관리의 같은 필터로 가고, 명단은 빨�
   expect(screen.getByRole("link", { name: /2개월 이내 퇴원 2명/ })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /3개월 이내 퇴원 2명/ })).toBeInTheDocument();
   expect(screen.getByText("이번 달 퇴원 4명 중 · 등록일로 판정할 수 없는 1명 제외")).toBeInTheDocument();
-  const names = screen.getAllByRole("link", { name: /퇴원 상세/ }).map((a) => a.getAttribute("href"));
-  expect(names).toEqual(["/withdrawals/b", "/withdrawals/a"]);
   const months = within(screen.getByLabelText("달마다 등록 후 3개월 이내 퇴원")).getAllByRole("listitem");
   expect(months.map((li) => li.textContent)).toEqual(["5월0", "6월0", "7월1", "8월0", "9월1", "10월2"]);
+  // 첫 화면엔 이름 없음 — 명단은 눌러서(원장 2026-10-29)
+  expect(screen.queryAllByRole("link", { name: /퇴원 상세/ })).toHaveLength(0);
+  fireEvent.click(screen.getByRole("button", { name: "등록 후 3개월 내 퇴원 명단 보기 (2명)" }));
+  const names = within(screen.getByRole("dialog")).getAllByRole("link", { name: /퇴원 상세/ }).map((a) => a.getAttribute("href"));
+  expect(names).toEqual(["/withdrawals/b", "/withdrawals/a"]);
 });
 
 it("과목 관리자 화면은 담당 과목으로 좁힌 수라고 밝힌다 — 퇴원관리 목록은 학원 전체(리뷰 2026-10-15)", () => {

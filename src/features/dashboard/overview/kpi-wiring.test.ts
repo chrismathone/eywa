@@ -293,9 +293,9 @@ describe("④ 전일 입테 — 분류기 한 벌, ↗ 없음", () => {
     expect(SERVER).toContain("consultationBasesInTitles(live, consultations, notNames)");
   });
 
-  it("'전체 N개 일정 보기'도 같은 축 — 살아 있는 일정만 세고 취소는 ' · 취소 N'으로 따로", () => {
+  it("'일정 보기 (N개)'도 같은 축 — 살아 있는 일정만 세고 취소는 ' · 취소 N'으로 따로", () => {
     const OVERVIEW_SRC = src("src/app/(shell)/dashboard/_overview/overview.tsx");
-    expect(OVERVIEW_SRC).toContain("admissionsRows!.filter((event) => !isCancelledAdmissionsRow(event)).length}개 일정 보기${cancelledSuffix(");
+    expect(OVERVIEW_SRC).toContain("admissionsRows!.filter((event) => !isCancelledAdmissionsRow(event)).length}개)${cancelledSuffix(");
     expect(OVERVIEW_SRC).not.toContain("전체 ${v.calendar!.data!.length}개 일정 보기");
   });
 });

@@ -31,7 +31,7 @@ import { tenureDays } from "@/features/withdrawals/early-exit";
 import { loadTeacherWork } from "./teacher-work-server";
 import { withStaffTasks } from "@/features/staff-tasks/server/teacher-work";
 import { selectSubjectView } from "../layout/subject-view";
-import { AREA_MENUS } from "@/features/dashboard/layout/registry";
+import { AREA_MENUS, RETIRED_AREAS } from "@/features/dashboard/layout/registry";
 import {
   inWithdrawalWindow,
   withdrawalMonthWindow,
@@ -676,6 +676,8 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   // 조회 계획 = 놓인 카드가 읽는 영역 ∩ 메뉴 권한(`loadPlan`, 순수 — 테스트가 역할별로 잠근다).
   const needed = loadPlan(view, new Set(allowed));
   if (options.full) for (const area of Object.keys(AREA_MENUS) as Area[]) {
+    // 대시보드에서 뺀 카드의 영역은 미리보기도 읽지 않는다(강사별 업무 현황 → 직원 평가 '업무 현황' · 무거운 조회 — 리뷰 2026-10-30).
+    if (RETIRED_AREAS.has(area)) continue;
     if (AREA_MENUS[area].every((menu) => allowed.includes(menu))) needed.add(area);
   }
   const needs = (...areas: Area[]) => areas.some((a) => needed.has(a));
