@@ -16,6 +16,8 @@ import {
   fetchEnrolledStudents,
 } from "@/features/students/server/enrolled-programs";
 import { summarizeCourses } from "@/features/students/enrollment/course-count";
+import { loadStudentHistory } from "@/features/students/stats/server/history";
+import { withCourseHistory } from "./course-history";
 import {
   composeEnrolled,
   notYetStartedStudentIds,
@@ -114,7 +116,7 @@ import { loadPlan, resolveView, type ResolvedView } from "@/features/dashboard/l
 import { shapeSections } from "@/features/dashboard/layout/shape";
 import { inSliceAny, sliceGroupOf, sliceGroupsOf, sliceKey, slicePredicate, subjectsNamedIn, type SlicePredicate, type SliceTable } from "@/features/dashboard/layout/slices";
 import { EMPTY_DASHBOARD } from "@/features/dashboard/layout/types";
-import { programOf, programSubjectsOf, subjectGroupOf } from "@/features/students/enrollment/program";
+import { ENGLISH_PROGRAM_KEYS, isEnglishProgramKey, programOf, programSubjectsOf, subjectGroupOf } from "@/features/students/enrollment/program";
 import {
   admissionsEventBaseKind,
   admissionsEventKind,
@@ -777,8 +779,21 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   // '강좌수 추이'(원장 2026-10-20 '카드 따로') — 재원생 추이와 같은 원본·날짜·시작 달 · 과목 관리자는 그 과목 반만.
   addSliced("courseTrend", ["students"], async () => {
     if (await scopePromise) return () => null;
-    const [academy, slicer] = await trends();
-    return (pred) => (pred && slicer ? slicer(pred) : academy).courses ?? null;
+    // 앞쪽 달(에이와 기록 전)은 지난 기록으로 메운다(원장 2026-10-30 '이전 기록의 과학·국어 반영' — course-history.ts).
+    // 지난 기록의 과목 수는 수납 청구에서 나온 값이라 수납 메뉴를 보는 사람에게만(원생 통계와 같은 규칙) · 학원 전체 카드만.
+    const historyMonths = allowed.includes("billing")
+      ? loadStudentHistory(user.tenantId).then((h) => h.months).catch((error: unknown) => {
+          reportError(error, { scope: "dashboard.course-trend.history" });
+          return null;
+        })
+      : Promise.resolve(null);
+    const [[academy, slicer], months] = await Promise.all([trends(), historyMonths]);
+    // 영어를 펼치는 것은 courseGroupOf가 가르는 지점만(설정에 injaewon·eie 과목 키가 있으면 가르지 않는다 — 리뷰 2026-10-30: EiE 두 번 셈).
+    const ownProgramKeys = sliceSubjects.some((s) => isEnglishProgramKey(s.key));
+    const courseGroups = [...new Set(sliceSubjects.map((s) => subjectGroupOf(s.key, sliceSubjects)).filter((g): g is string => g !== null))]
+      .flatMap((g) => (g === "english" && splitEnglishNow && !ownProgramKeys ? [...ENGLISH_PROGRAM_KEYS] : [g]));
+    const academyCourses = academy.courses && months ? withCourseHistory(academy.courses, months, courseGroups, today) : (academy.courses ?? null);
+    return (pred) => (pred && slicer ? (slicer(pred).courses ?? null) : academyCourses);
   });
   // ── KPI 여섯 칸(원장 2026-09-11) — 카드·팝업·목적지 화면이 같은 함수를 부른다.
   add("withdrawals", ["withdrawals"], () => monthWithdrawals(withdrawalRows, today, settingsPromise));

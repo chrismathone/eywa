@@ -92,7 +92,7 @@ export type OverviewData = {
    */
   courses: import("@/features/students/enrollment/course-count").CourseSummary;
   /** '강좌수 추이' 카드(원장 같은 날 '카드 따로') — 재원생 추이와 같은 원본·날짜·시작 달(`loadEnrolledTrend().courses`) · 강사 스코프면 null. */
-  courseTrend: import("./enrolled-trend-server").CourseTrend | null;
+  courseTrend: import("./course-history").CourseTrendWithHistory | null;
   /** 이번 달 퇴원 또는 과목 전체 수업종료. 과목별 종료 건수이며 반이동·특강 종료·시스템 정리 제외. */
   withdrawals: {
     month: string;
