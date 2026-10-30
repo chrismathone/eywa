@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findRideConflicts } from "./ride-conflicts";
+import { findClassAfterDeparture, findClassBeforeArrival, findRideConflicts } from "./ride-conflicts";
 import type { RunCard } from "./run-cards";
 
 const run = (p: Partial<RunCard>): RunCard => ({
@@ -45,5 +45,42 @@ describe("findRideConflicts — 수업 ↔ 배차 겹침", () => {
   });
   it("시각을 모르면 판정하지 않는다", () => {
     expect(findRideConflicts([cls({ start: "18:00", end: "19:50" })], [run({ academyTime: null })])).toEqual([]);
+  });
+});
+
+describe("findClassBeforeArrival — 등원보다 먼저 시작하는 수업", () => {
+  const inbound = run({ id: "run:in:wed", direction: "in", day: "wed", start: "16:00", end: "16:15", academyTime: "16:15", vehicleName: "1호차", runName: "1회차" });
+  it("🔑 학원 도착 전에 시작하는 수업을 잡는다(바뀌지 않은 수업도)", () => {
+    const r = findClassBeforeArrival([cls({ id: "c1", day: "wed", start: "15:00", end: "16:50" })], [inbound]);
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ studentId: "s1", classId: "c1", runCardId: "run:in:wed" });
+    expect(r[0]!.text).toBe("박도윤: 중등 수학 15:00 시작 — 등원 1호차 1회차 학원 도착 16:15보다 먼저");
+  });
+  it("도착과 같은 시각·뒤에 시작하면 정상 · 하원 차·다른 요일·다른 학생·도착 시각 모름은 무관", () => {
+    expect(findClassBeforeArrival([cls({ day: "wed", start: "16:15" })], [inbound])).toEqual([]);
+    expect(findClassBeforeArrival([cls({ day: "wed", start: "17:00" })], [inbound])).toEqual([]);
+    expect(findClassBeforeArrival([cls({ day: "fri", start: "15:00" })], [run({ start: "15:00" })])).toEqual([]);
+    expect(findClassBeforeArrival([cls({ day: "thu", start: "15:00" })], [inbound])).toEqual([]);
+    expect(findClassBeforeArrival([{ ...cls({ day: "wed", start: "15:00" }), students: [{ id: "s2", name: "남" }] }], [inbound])).toEqual([]);
+    expect(findClassBeforeArrival([cls({ day: "wed", start: "15:00" })], [{ ...inbound, academyTime: null }])).toEqual([]);
+  });
+});
+
+describe("findClassAfterDeparture — 하원 뒤에 남은 수업", () => {
+  // 하원 2호차 2회차 · 금 · 학원 출발 19:00
+  it("🔑 학원 출발 뒤에 끝나는 수업을 잡는다(바뀌지 않은 수업도) · 출발 뒤에 시작하는 수업도", () => {
+    const r = findClassAfterDeparture([cls({ id: "c1", start: "18:00", end: "19:50" })], [run({})]);
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ studentId: "s1", classId: "c1", runCardId: "run:out:fri" });
+    expect(r[0]!.text).toBe("박도윤: 중등 수학 18:00~19:50 — 하원 2호차 2회차 학원 출발 19:00 뒤에도 수업");
+    expect(findClassAfterDeparture([cls({ start: "19:30", end: "20:30" })], [run({})])).toHaveLength(1);
+  });
+  it("출발과 같은 시각·앞에 끝나면 정상 · 등원 차·다른 요일·다른 학생·출발 시각 모름은 무관", () => {
+    expect(findClassAfterDeparture([cls({ end: "19:00" })], [run({})])).toEqual([]);
+    expect(findClassAfterDeparture([cls({})], [run({})])).toEqual([]);
+    expect(findClassAfterDeparture([cls({ start: "18:00", end: "19:50" })], [run({ direction: "in" })])).toEqual([]);
+    expect(findClassAfterDeparture([cls({ day: "thu", end: "19:50" })], [run({})])).toEqual([]);
+    expect(findClassAfterDeparture([{ ...cls({ end: "19:50" }), students: [{ id: "s2", name: "남" }] }], [run({})])).toEqual([]);
+    expect(findClassAfterDeparture([cls({ end: "19:50" })], [run({ academyTime: null })])).toEqual([]);
   });
 });

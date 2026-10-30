@@ -8,7 +8,7 @@ import { SUBJECT_BORDER, SUBJECT_SOFT } from "@/features/owner/subjects";
 import { makeupShift, minutesLabel } from "@/features/shuttle/rider-day-check";
 import { conflictKey } from "@/features/shuttle/conflict-acks";
 import { SHUTTLE_ACTION } from "@/features/shuttle/control-size";
-import { findRideConflicts } from "@/features/shuttle/ride-conflicts";
+import { findClassAfterDeparture, findClassBeforeArrival, findRideConflicts } from "@/features/shuttle/ride-conflicts";
 import { ackRideConflicts } from "@/features/shuttle/server/conflict-acks";
 import type { RunCard } from "@/features/shuttle/run-cards";
 import { dayLabel, DIRECTION_LABEL, type DayCode } from "@/features/shuttle/types";
@@ -133,10 +133,20 @@ export function RiderWeekSheet({
    */
   // 🔑 **바뀐 수업·보강만** 본다(사용자 2026-10-29 "아이들이 배차를 바꾼 건 수정으로 나타내지 않아 — 수업 시간이 바뀌거나 보강일 때만").
   // 확인 버튼으로 접은 겹침은 빼고 센다(카드 안 문구도 함께 사라진다).
-  const conflicts = useMemo(
-    () => findRideConflicts(classes.filter((c) => c.makeup || c.changedFrom), runCards).filter((c) => !acked.has(conflictKey(c))),
-    [classes, runCards, acked],
-  );
+  // + **등원 도착보다 먼저 시작하는 수업**·**하원 출발 뒤까지 남은 수업**은 바뀌지 않은 수업도 함께 잡는다(사용자 2026-10-30). 같은 학생·수업·배차는 한 줄로.
+  const conflicts = useMemo(() => {
+    const seen = new Set<string>();
+    return [
+      ...findRideConflicts(classes.filter((c) => c.makeup || c.changedFrom), runCards),
+      ...findClassBeforeArrival(classes, runCards),
+      ...findClassAfterDeparture(classes, runCards),
+    ].filter((c) => {
+      const k = conflictKey(c);
+      if (acked.has(k) || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }, [classes, runCards, acked]);
   /**
    * 알림 글 → 그 수업 카드로 이동·포커스. 거르기(수업만/배차만·선생님·찾기)로 카드가 숨어 있으면 먼저 거르기를 풀고 다음 그림에서 찾는다.
    * 찾은 카드는 잠깐 테두리를 둘러 어디인지 보이게 한다(카드 색은 그대로 — 바깥 링만).
@@ -266,7 +276,7 @@ export function RiderWeekSheet({
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-danger flex items-center gap-1.5 font-bold">
               <span aria-hidden className="bg-danger inline-block size-2.5 rounded-full motion-safe:animate-ping" />
-              수정된 내용이 있습니다 — 바뀐 수업·보강이 차 타는 시간과 겹치는 곳 {conflicts.length}건
+              수정된 내용이 있습니다 — 차 타는 시간과 맞지 않는 수업 {conflicts.length}건
             </p>
             {/* 확인 = 이 계정에서 이 겹침들을 접는다(사용자 2026-10-29). 수업이 또 바뀌거나 새 보강이 생기면 다시 뜬다. */}
             <button

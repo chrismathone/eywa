@@ -46,3 +46,58 @@ export function findRideConflicts(classes: readonly ClassLike[], runCards: reado
   }
   return out;
 }
+
+/**
+ * **등원보다 먼저 시작하는 수업**(사용자 2026-10-30 *"등원보다 수업이 먼저일 경우도 말이 안 되잖아 — 이것도 경고로"*).
+ * 그 학생이 그날 타는 등원 차의 **학원 도착 시각보다 수업 시작이 이르면** 잡는다(같은 시각은 정상).
+ * 🔑 바뀐 수업·보강만이 아니라 **모든 수업**을 본다 — 처음부터 시간표가 차와 안 맞는 경우다.
+ * 학원 도착 시각을 모르면 판정하지 않는다.
+ */
+export function findClassBeforeArrival(classes: readonly ClassLike[], runCards: readonly RunCard[]): RideConflict[] {
+  const out: RideConflict[] = [];
+  for (const r of runCards) {
+    if (r.direction !== "in" || !r.academyTime) continue;
+    const arrive = toMin(r.academyTime);
+    for (const s of r.riders) {
+      for (const c of classes) {
+        if (c.day !== r.day || !c.students.some((x) => x.id === s.id)) continue;
+        if (!(toMin(c.start) < arrive)) continue;
+        out.push({
+          studentId: s.id,
+          name: s.name,
+          classId: c.id,
+          runCardId: r.id,
+          text: `${s.name}: ${c.makeup ? "보강 " : ""}${c.className} ${c.start} 시작 — 등원 ${r.vehicleName} ${r.runName} 학원 도착 ${r.academyTime}보다 먼저`,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * **하원 뒤에 남은 수업**(사용자 2026-10-30 *"아이가 하원을 하는데 뒤에 수업이 있을 때 알람"*).
+ * 그 학생이 그날 타는 하원 차의 **학원 출발 시각보다 수업이 늦게 끝나면**(출발 뒤에 시작하는 수업 포함) 잡는다(같은 시각에 끝나면 정상).
+ * 🔑 모든 수업을 본다. 학원 출발 시각을 모르면 판정하지 않는다.
+ */
+export function findClassAfterDeparture(classes: readonly ClassLike[], runCards: readonly RunCard[]): RideConflict[] {
+  const out: RideConflict[] = [];
+  for (const r of runCards) {
+    if (r.direction !== "out" || !r.academyTime) continue;
+    const depart = toMin(r.academyTime);
+    for (const s of r.riders) {
+      for (const c of classes) {
+        if (c.day !== r.day || !c.students.some((x) => x.id === s.id)) continue;
+        if (!(toMin(c.end) > depart)) continue;
+        out.push({
+          studentId: s.id,
+          name: s.name,
+          classId: c.id,
+          runCardId: r.id,
+          text: `${s.name}: ${c.makeup ? "보강 " : ""}${c.className} ${c.start}~${c.end} — 하원 ${r.vehicleName} ${r.runName} 학원 출발 ${r.academyTime} 뒤에도 수업`,
+        });
+      }
+    }
+  }
+  return out;
+}
