@@ -105,6 +105,8 @@ import {
 } from "../math-report-pilot";
 import { applyHabitsToSections, dropScoreLines, NO_HABITS, type TeacherHabits } from "../teacher-habits";
 import { loadTeacherHabits } from "./teacher-habits-db";
+import { beforeClassReportEnabled, loadBeforeClassReportRows } from "@/features/before-class/server/report-rows";
+import type { ReportCheckRow } from "@/features/before-class/items";
 import { pilotBody, pilotLevelsSection, readAttitudeNote, readHomeworkMissReason, readTestSkip, type DailyTestSkip } from "../math-report-pilot-sections";
 import { skipStatusOf } from "../progress-status";
 import type { Variety } from "../ment-variants";
@@ -1684,6 +1686,15 @@ export async function generateReportComment(
         .then((sb) => fetchPrevReportNotes(sb, pilotStudentId, trendCtx?.subject, resolveReportDate(trendCtx?.date)))
         .catch(() => null)
     : Promise.resolve(null);
+  // 비포클래스체크리스트(원장 2026-10-30) — 그 반·그날 체크가 있으면 수업 평가 표에 줄을 붙인다(report-rows.ts). 반을 모르면 줄 없음.
+  //   🔴 시험 중 = 운영자 계정의 '다른 강사 뷰'에서만(beforeClassReportEnabled).
+  //   아래 갈래마다 다른 재료와 함께 기다린다(B4) — 받은 값은 `beforeClassRows`에 두고 표를 짤 때 쓴다.
+  const beforeClassRowsP: Promise<ReportCheckRow[]> =
+    pilotStudentId && trendCtx?.classId
+      ? beforeClassReportEnabled().then((on) =>
+          on && trendCtx.classId ? loadBeforeClassReportRows(user.tenantId, trendCtx.classId, pilotStudentId, resolveReportDate(trendCtx.date)) : [])
+      : Promise.resolve([]);
+  let beforeClassRows: ReportCheckRow[] = [];
   const varietyOf = (prev: string | null): Variety | null =>
     pilotStudentId ? { seed: `${pilotStudentId}|${resolveReportDate(trendCtx?.date)}|${trendCtx?.subject ?? ""}`, prev } : null;
   // '오늘의 수업' 메모(원장 2026-10-28) — 그날 한 일. 시범 행만, 한 줄 300자.
@@ -1729,7 +1740,7 @@ export async function generateReportComment(
     return composePilotMent({
       // 수업 평가 표가 맨 위, 그다음 진도(원장 2026-10-23 *"진도보다 위에 표 형태로"*).
       lead: [
-        pilotLevelsSection(safeInput),
+        pilotLevelsSection(safeInput, beforeClassRows),
         pilotSection(
           PILOT_SECTION_TITLES.progress,
           progressLead(input.studentName, pilotLessons(input.progress), skipStatusOf(input.progress), input.progressMode, variety),
@@ -1787,21 +1798,25 @@ export async function generateReportComment(
   // (말투 다시 쓰기는 고친 기록이 있는 선생님에게만 붙는다 — 화면이 항목별로 합칠 때 선생님이 손댄 항목은 어차피 그대로 둔다.)
   if (pilot && typeof opts?.pilotKeepUnderstanding === "string") {
     const keep = opts.pilotKeepUnderstanding.trim().slice(0, 4000);
-    const [videoReceipt, prevNotes, habits] = await Promise.all([
+    const [videoReceipt, prevNotes, habits, bcRows] = await Promise.all([
       getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null),
       prevNotesP,
       habitsP,
+      beforeClassRowsP,
     ]);
+    beforeClassRows = bcRows;
     return { ok: true, comment: await restyleFacts(composePilot(keep, videoReceipt, varietyOf(prevNotes), habits, true)) };
   }
   // 이해도를 하나도 안 매겼으면 AI가 쓸 항목이 없다 — 부르지 않는다(재료 없이 부르면 이해도를 지어낸다). 추세도 이번엔 안 만든다.
   // 매긴 이해도가 없어도 '오늘의 수업' 메모가 있으면 AI가 메모로 쓴다(원장 2026-10-28).
   if (pilot && !ratedItems.length && !lessonMemo) {
-    const [videoReceipt, prevNotes, habits] = await Promise.all([
+    const [videoReceipt, prevNotes, habits, bcRows] = await Promise.all([
       getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null),
       prevNotesP,
       habitsP,
+      beforeClassRowsP,
     ]);
+    beforeClassRows = bcRows;
     return { ok: true, comment: await restyleFacts(composePilot("", videoReceipt, varietyOf(prevNotes), habits)) };
   }
   // AI에는 진도·이해도만 준다 — 다른 사실을 주면 모델이 그 항목을 '이해도' 글에 다시 쓴다(항목이 겹친다).
@@ -1834,7 +1849,7 @@ export async function generateReportComment(
     // 프로파일이 없거나 표가 아직 없으면(미적용) 아무것도 안 붙는다([[#95]]).
     // 멘트 모드 — 강사 본인 오버라이드(users.report_notice_mode) > 학원 기본(report.noticeMode) > 'A'.
     // 설정·모드·말투 세 조회는 서로 독립 — 직렬 워터폴 금지(B4). 겸직 강사뷰의 스코프 판정(쿠키+담당 반)도 이 안에서 돈다.
-    const [settings, { data: meRow }, mentStyle, videoReceipt, prevNotes] = await Promise.all([
+    const [settings, { data: meRow }, mentStyle, videoReceipt, prevNotes, bcRows] = await Promise.all([
       getTenantSettings(),
       supabase.from("users").select("report_notice_mode").eq("id", user.id).single(),
       opts?.teacherStyle === false
@@ -1842,7 +1857,9 @@ export async function generateReportComment(
         : effectiveTeacherId().then((teacherId) => (teacherId ? loadTeacherMentStyle(createAdminClient(), user.tenantId, teacherId) : null)),
       getVideoReceiptComment(user.tenantId, trendCtx ?? {}).catch(() => null),
       prevNotesP,
+      beforeClassRowsP,
     ]);
+    beforeClassRows = bcRows;
     const habits = await habitsP;
     // 사실 항목 말투(위 restyleFacts) — '오늘의 수업' 없이 같은 값으로 조립한 사실 글을 지금 다시 써 두고, AI 호출과 나란히 돈다.
     // 최종 글엔 아래에서 옮긴다(transplantRestyle — 항목 글이 글자 그대로 같을 때만). restyleFacts는 던지지 않는다.
