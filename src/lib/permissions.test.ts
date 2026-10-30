@@ -7,6 +7,7 @@ import {
   MENU_KEYS,
   menuKeyForPath,
   mergeMostPermissive,
+  openOwnGrantsInTeacherView,
   resolveMatrix,
   SYSTEM_ROLES,
   roleHome,
@@ -262,5 +263,37 @@ describe("새 권한의 기본값 = 원장 '전체' · 나머지 '없음'(원장
       expect(access, menu).not.toEqual(expected);
       expect(why.trim().length, `${menu} 근거`).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("openOwnGrantsInTeacherView — 겸직 본인 강사뷰도 개인 메뉴 권한을 따른다(원장 2026-10-30)", () => {
+  const grants: UserPermissionOverride[] = [{ userId: "admin-1", menu: "before_class_checklist", access: "full" }];
+  const actor = applyUserOverrides(MENU_ACCESS, "admin-1", "admin", grants);
+
+  it("관리자에게 준 개인 권한이 강사 행에도 열린다 — 다른 메뉴·다른 역할 줄은 그대로", () => {
+    const m = openOwnGrantsInTeacherView(actor, "admin-1", "admin", grants);
+    expect(m.before_class_checklist.teacher).toBe("full");
+    expect(m.before_class_checklist.manager).toBe("none");
+    for (const menu of MENU_KEYS.filter((k) => k !== "before_class_checklist")) expect(m[menu]).toEqual(actor[menu]);
+  });
+
+  it("다른 사람의 개인 권한·실 강사·이미 넓은 강사 행은 건드리지 않는다(올리기만)", () => {
+    expect(openOwnGrantsInTeacherView(actor, "admin-2", "admin", grants)).toBe(actor);
+    expect(openOwnGrantsInTeacherView(MENU_ACCESS, "t-1", "teacher", [{ userId: "t-1", menu: "before_class_checklist", access: "full" }])).toBe(MENU_ACCESS);
+    const lock: UserPermissionOverride[] = [{ userId: "admin-1", menu: "students", access: "none" }];
+    const narrow = openOwnGrantsInTeacherView(applyUserOverrides(MENU_ACCESS, "admin-1", "admin", lock), "admin-1", "admin", lock);
+    expect(narrow.students.teacher).toBe(MENU_ACCESS.students.teacher);
+  });
+
+  it("강사 '내 메뉴'에 없는 관리자 화면(직원관리)은 개인 예외가 있어도 강사 행을 열지 않는다", () => {
+    const staff: UserPermissionOverride[] = [{ userId: "admin-1", menu: "staff", access: "full" }];
+    const m = openOwnGrantsInTeacherView(applyUserOverrides(MENU_ACCESS, "admin-1", "manager", staff), "admin-1", "manager", staff);
+    expect(m.staff.teacher).toBe(MENU_ACCESS.staff.teacher);
+  });
+
+  it("값은 실제 역할 칸 그대로 — 읽기로 준 권한은 강사뷰에서도 읽기", () => {
+    const ro: UserPermissionOverride[] = [{ userId: "admin-1", menu: "before_class_checklist", access: "readonly" }];
+    const m = openOwnGrantsInTeacherView(applyUserOverrides(MENU_ACCESS, "admin-1", "admin", ro), "admin-1", "admin", ro);
+    expect(m.before_class_checklist.teacher).toBe("readonly");
   });
 });

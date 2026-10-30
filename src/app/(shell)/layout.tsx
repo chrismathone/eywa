@@ -36,7 +36,7 @@ import { TeacherViewExit } from "@/components/other-teacher-view";
 import { teacherViewHome } from "@/lib/auth/teacher-home";
 import { accessFallbackPath } from "@/lib/auth/view-preference";
 import { ecsAssistantClassIds } from "@/features/class-sheets/server/access";
-import { canAccess, menuKeyForPath } from "@/lib/permissions";
+import { canAccess, menuKeyForPath, openOwnGrantsInTeacherView } from "@/lib/permissions";
 import { SETTINGS_ROLE_HREF, SETTINGS_ROLE_KEYS } from "@/lib/settings-role-catalog";
 import { findNavItem, teacherMenuKeysFor } from "@/lib/navigation";
 import { brandColorVars } from "@/lib/color-utils";
@@ -235,6 +235,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 페이지 requireAccess와 같은 캐시를 공유해 추가 쿼리 0. 개인 예외는 자기 역할 행만 패치하므로
   // 아래 강사뷰 가드(canAccess("teacher", …))는 겸직 관리자에게 영향 없음.
   const permMatrix = await getUserPermMatrix();
+  // 본인 강사뷰(겸직)의 '내 메뉴'·뷰-경로 가드 전용 — 그 사람에게 준 개인 메뉴 권한을 강사 행에도 얹는다(관리자 화면에서 열린
+  // 메뉴가 강사뷰에서만 숨지 않게 · 판정은 openOwnGrantsInTeacherView 한 곳). '다른 강사 뷰'는 대상 값을 이미 강사 행에 쓴다.
+  const teacherViewMatrix = viewAs ? permMatrix : openOwnGrantsInTeacherView(permMatrix, user.id, user.systemRole, settings.permissions.userOverrides);
 
   // 셸 크롬 결정 — student=학생 미니셸, teacher(실 강사 or 겸직-강사뷰)=강사 미니셸, 그 외=풀셸.
   // 겸직(관리자 계열 + 담당 반)이 '강사뷰' 쿠키를 켜면 view="teacher"라 아래 미니셸을 탄다(권한은 실 role 유지).
@@ -258,9 +261,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     const pathname = (await headers()).get("x-pathname") ?? "";
     const menu = menuKeyForPath(pathname);
     const hasDelegatedSetting = SETTINGS_ROLE_KEYS.some(key => SETTINGS_ROLE_HREF[key].split("?")[0] === pathname
-      && canAccess("teacher", key, permMatrix) && canAccess(user.systemRole, key, permMatrix));
+      && canAccess("teacher", key, teacherViewMatrix) && canAccess(user.systemRole, key, permMatrix));
     // 설정 화면의 실제 탭은 페이지에서 개별 권한을 다시 검사한다.
-    if (menu && !canAccess("teacher", menu, permMatrix) && !hasDelegatedSetting) {
+    if (menu && !canAccess("teacher", menu, teacherViewMatrix) && !hasDelegatedSetting) {
       // 강사 홈은 담당 과목으로 갈린다(영어 전담=ECS·그 외=원스크린, 2026-08-07) — 하드코딩 금지.
       redirect(accessFallbackPath(pathname, await teacherViewHome()));
     }
@@ -298,7 +301,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 🔴 실제 역할을 빼지 말 것(2026-09-11 전수검사): 페이지 requireAccess는 실제 역할로 여는데 강사 행만 보고 세우면,
   //    겸직 강사뷰·'다른 강사 뷰'(열람 전용 — user는 보는 사람 자신)에서 누르면 강사 홈으로 튕기는 항목이 선다
   //    (상담사는 다섯 개). permMatrix는 페이지 게이트와 같은 사용자 유효 매트릭스라 쿼리 0. 실 강사는 두 축이 같아 불변.
-  const teacherMenus = view === "teacher" ? teacherMenuKeysFor(user.systemRole, permMatrix) : [];
+  const teacherMenus = view === "teacher" ? teacherMenuKeysFor(user.systemRole, teacherViewMatrix) : [];
   const teacherConnectedApps = view === "teacher" ? await connectedAppsPromise : [];
 
   // 강사뷰 화면 언어(원장 2026-09-03) — 크롬('내 메뉴')과 본문이 **한 값**을 봐야 하므로 셸에서 한 번 읽어
