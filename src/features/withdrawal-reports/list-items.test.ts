@@ -133,7 +133,16 @@ describe("퇴원보고서 목록 한 벌 — 웹 보고서 + 기존 스프레드
   it("작성 강사 선택지 = 목록에 나온 이름만, 이름 모름·퇴직자 묶음은 빼고 한국어 정렬", () => {
     const items = build([report(), report({ id: "r2", teacher_id: "gone" })], [archive({ teacher_name: "" }), archive({ id: "a2", teacher_name: "Jane" })]);
     // 한국어 정렬은 한글이 로마자보다 앞이다([[#84]]) — 원문 영어 이름은 뒤로.
-    expect(teacherOptions(items).map((o) => o.value)).toEqual(["이성우", "Jane"]);
+    expect(teacherOptions(items, staff).map((o) => o.value)).toEqual(["이성우", "Jane"]);
+  });
+
+  it("작성 강사 선택지 — 퇴사자는 재직자 뒤 별도 묶음이다", () => {
+    const items = build([report()], [archive({ teacher_name: "가나다" }), archive({ id: "a2", teacher_name: "Jane" })]);
+    expect(teacherOptions(items, staff)).toEqual([
+      { value: "이성우", label: "이성우" },
+      { value: "가나다", label: "가나다", group: "퇴사자" },
+      { value: "Jane", label: "Jane", group: "퇴사자" },
+    ]);
   });
 
   it("목록 주소 — 창(embed)을 지키고 쪽은 처음으로", () => {

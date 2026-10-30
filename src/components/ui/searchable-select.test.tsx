@@ -75,3 +75,22 @@ describe("SearchableSelect 열 맞춤(sideColumns)", () => {
     expect(other.querySelector('span[aria-hidden][class~="size-3.5"]')).toBeNull();
   });
 });
+
+describe("SearchableSelect 묶음 제목", () => {
+  const TEACHERS = [
+    { value: "", label: "전체" },
+    { value: "a", label: "재직강사" },
+    { value: "b", label: "퇴사강사", group: "퇴사자" },
+    { value: "c", label: "다른퇴사", group: "퇴사자" },
+  ];
+  it("묶음 위에 제목이 한 번만 서고, 검색해도 남은 줄 위에 선다", async () => {
+    render(<SearchableSelect options={TEACHERS} value="" ariaLabel="강사" />);
+    fireEvent.click(screen.getByRole("button", { name: /강사/ }));
+    expect(await screen.findAllByText("퇴사자")).toHaveLength(1);
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "다른" } });
+    expect(screen.getByText("퇴사자")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "재직강사" })).toBeNull();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "재직" } });
+    expect(screen.queryByText("퇴사자")).toBeNull();
+  });
+});

@@ -12,6 +12,8 @@ export type FilterSelectOption = {
   label: string;
   /** 라벨만으론 못 찾는 항목의 보조 검색어 겸 부가표시(예: 반 이름 옆 "수학 · 이성우"). */
   hint?: string;
+  /** 묶음 제목(SearchableSelect `group`) — 예: 맨 아래 '퇴사자'. */
+  group?: string;
 };
 
 /**

@@ -227,9 +227,12 @@ export function filterListItems(items: readonly ListItem[], f: ListFilters, wind
 }
 
 /** 작성 강사 선택지 — 목록에 실제로 나온 이름만(기존 기록은 원문 이름 그대로). 이름 모름·퇴직자 묶음은 뺀다. */
-export function teacherOptions(items: readonly ListItem[]): { value: string; label: string }[] {
+export function teacherOptions(items: readonly ListItem[], staff: readonly Pick<StaffOption, "name">[]): { value: string; label: string; group?: string }[] {
   const names = new Set(items.map((i) => i.teacher).filter((n) => n && n !== NO_TEACHER && n !== FORMER_STAFF));
-  return [...names].sort((a, b) => a.localeCompare(b, "ko")).map((n) => ({ value: n, label: n }));
+  const sorted = [...names].sort((a, b) => a.localeCompare(b, "ko"));
+  // 재직자를 먼저, 퇴사자는 맨 아래 별도 묶음으로(원장 2026-10-30) — 검색으로는 찾을 수 있다. 재직자 이름이 아닌 시트 원문 이름도 여기 든다.
+  const current = new Set(staff.map((s) => s.name));
+  return [...sorted.filter((n) => current.has(n)).map((n) => ({ value: n, label: n })), ...sorted.filter((n) => !current.has(n)).map((n) => ({ value: n, label: n, group: "퇴사자" }))];
 }
 
 /**

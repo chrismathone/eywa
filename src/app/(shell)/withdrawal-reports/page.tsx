@@ -101,7 +101,7 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
         filters={filters}
         custom={"custom" in rangeWindow ? rangeWindow.custom : undefined}
         subjects={subjects}
-        teachers={teacherOptions(items)}
+        teachers={teacherOptions(items, staff)}
         archiveStatus={viewer.manage}
         mine={mineCount > 0 || filters.mine ? { href: listHref(sp, filters.mine ? { mine: null } : { mine: "approve", status: null }), count: mineCount } : null}
         resultText={filterActive ? `${found.length}건 / 전체 ${items.length}건` : `전체 ${items.length}건`}
