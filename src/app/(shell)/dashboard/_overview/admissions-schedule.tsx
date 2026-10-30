@@ -40,9 +40,10 @@ export function AdmissionsSchedule({
               {label}
               <span>{active}건{cancelled > 0 ? ` · 취소 ${cancelled}` : ""}</span>
             </h3>
-            <AdmissionEvents events={limit === undefined ? items : items.slice(0, limit)} />
+            {/* limit=0 = 대시보드 첫 화면 — 열 머리 건수만(제목에 학생 이름이 든다 · 원장 2026-10-29 *"첫 화면에 이름이 직접 뜨지 않게"*). */}
+            {limit !== 0 && <AdmissionEvents events={limit === undefined ? items : items.slice(0, limit)} />}
             {items.length === 0 && events.length > 0 ? <p className={s.empty}>예정된 {label}이 없습니다.</p> : null}
-            {limit !== undefined && items.length > limit ? <p className={s.admissionsMore}>외 {items.length - limit}건</p> : null}
+            {limit ? (items.length > limit ? <p className={s.admissionsMore}>외 {items.length - limit}건</p> : null) : null}
           </section>
         );
       })}

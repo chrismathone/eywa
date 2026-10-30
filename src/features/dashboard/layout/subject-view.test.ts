@@ -7,7 +7,7 @@ import { MENU_KEYS } from "@/lib/permissions";
 import { dashboardSchema } from "@/features/owner/settings-types";
 import { subjectLabelRecord } from "@/features/owner/subjects";
 
-const math = [{ id: "panel:teacherWork", w: 24, h: 1 }];
+const math = [{ id: "panel:repeatAbsence", w: 6, h: 1 }];
 const english = [{ id: "panel:notices", w: 6, h: 1 }];
 describe("관리자 과목별 배치", () => {
   it("기존 공통 배치를 보존하면서 수학·영어 카드를 따로 저장·적용한다", () => {

@@ -140,18 +140,19 @@ describe("② 퇴원&수업종료 — 1일~오늘, 퇴원관리의 과목 전체
   it("카드와 추이는 실제 퇴원 조회를 공유하고, 카드는 과목 종료를 추가한다", () => {
     expect(count(SERVER, "getWithdrawalsInWindow(")).toBe(1);
     expect(SERVER).toContain("withdrawalMonthWindow(month, today)");
-    expect(SERVER).toMatch(/inWithdrawalWindow\(\{ withdrawnAt: row\.withdrawnAt, systemBulk: false \}, win\.from, win\.to\)/);
+    expect(SERVER).toMatch(/inWithdrawalWindow\(\{ withdrawnAt: row\.exitDate, systemBulk: false \}, win\.from, win\.to\)/);
     // 추이의 퇴원 칸은 사유 없는 단체 장부 정리를 뺀 목록(원장 2026-10-20) — 카드(이번 달 퇴원 수)는 그대로 센다.
     expect(SERVER).toContain("const exits = withdrawn.filter((r) => !r.cleanup);");
     // 수업을 시작한 등록만(원장 2026-10-20) — 판정 창 안 등록은 수업을 시작한 근거가 있어야 등록 칸에(퇴원 칸은 그대로) · 운영실·원생 통계 둘 다 재료를 넘긴다.
     expect(SERVER).toContain("const joined = counted.filter((r) => !bookkeeping.has(r.id) && isStarted(r.id, r.enrolled_at));");
     expect(SERVER).toContain("loadRecordCoverage(user.tenantId, today).catch(");
     expect(src("src/features/students/stats/server/load.ts")).toContain("DETAIL_MONTHS, !scoped, coverage)");
-    expect(SERVER).toContain("exits.filter((r) => !pred || inSlice(pred, exitSubjects(r))).map((r) => r.withdrawnAt)");
+    // 퇴원 막대의 달 = 퇴원월(수강료를 낸 마지막 달 — `exitDate`, 원장 2026-10-29).
+    expect(SERVER).toContain("exits.filter((r) => !pred || inSlice(pred, exitSubjects(r))).map((r) => r.exitDate)");
     // 운영실 과목 관리자 카드는 종전대로 '모름은 모두에게'(기본값) — 원생 통계만 모르는 기록을 뺀다(2026-10-20).
     expect(SERVER).toContain("unknownToAll = true,");
     expect(SERVER).toContain("unknownToAll ? inSliceAny(pred, subjects)");
-    expect(SERVER).toContain("getSubjectEndedStudents()");
+    expect(SERVER).toContain("getSubjectEndedStudents({ countFrom: win.from })");
     expect(SERVER).toContain("rows: includeSubjectEnds(");
     expect(SERVER).not.toContain("datedWithdrawals");
     expect(WINDOW).toMatch(/inWithdrawalWindow\(/);
@@ -161,7 +162,7 @@ describe("② 퇴원&수업종료 — 1일~오늘, 퇴원관리의 과목 전체
     // 2026-09-28 퇴원·수강종료 한 목록 — 기간 판정은 exit-rows.ts `inRange`가 같은 `inWithdrawalWindow`를 부른다.
     expect(PAGE).toContain("withdrawalMonthWindow(monthKey, today)");
     expect(PAGE).toContain("resolveRange(range, { today, month: monthWindow");
-    expect(EXIT_ROWS).toMatch(/inWithdrawalWindow\(\{ withdrawnAt: row\.date, systemBulk: row\.systemBulk \}, w\.from, w\.to\)/);
+    expect(EXIT_ROWS).toMatch(/inWithdrawalWindow\(\{ withdrawnAt: row\.countDate, systemBulk: row\.systemBulk \}, w\.from, w\.to\)/);
     expect(PAGE).toMatch(/withdrawalProgram\(\s*\{ lastClassSubject: r\.programSubject, lastClassEnglishTrack: r\.englishTrack \},\s*settings\.operations\.subjects,?\s*\)/);
     expect(PAGE).toContain("isValidYm(sp.month)");
   });
@@ -292,9 +293,9 @@ describe("④ 전일 입테 — 분류기 한 벌, ↗ 없음", () => {
     expect(SERVER).toContain("consultationBasesInTitles(live, consultations, notNames)");
   });
 
-  it("'전체 N개 일정 보기'도 같은 축 — 살아 있는 일정만 세고 취소는 ' · 취소 N'으로 따로", () => {
+  it("'일정 보기 (N개)'도 같은 축 — 살아 있는 일정만 세고 취소는 ' · 취소 N'으로 따로", () => {
     const OVERVIEW_SRC = src("src/app/(shell)/dashboard/_overview/overview.tsx");
-    expect(OVERVIEW_SRC).toContain("admissionsRows!.filter((event) => !isCancelledAdmissionsRow(event)).length}개 일정 보기${cancelledSuffix(");
+    expect(OVERVIEW_SRC).toContain("admissionsRows!.filter((event) => !isCancelledAdmissionsRow(event)).length}개)${cancelledSuffix(");
     expect(OVERVIEW_SRC).not.toContain("전체 ${v.calendar!.data!.length}개 일정 보기");
   });
 });

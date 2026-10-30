@@ -227,6 +227,7 @@ export default async function OneScreenPage({
       // 발송용 이름이 있으면 그 이름으로(지금 저장·발송될 보고서 기준) — 저장되는 teacher_name(귀속 축)은 불변.
       teacherName={sendName.name ?? roster.teacherName}
       reportClassNamePrefix={sendName.includeClassName}
+      teacherEnglishName={sendName.englishName ?? null}
       reportSettings={roster.reportSettings}
       academyName={roster.academyName}
       logoSrc={roster.logoSrc}

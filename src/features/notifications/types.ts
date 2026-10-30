@@ -30,6 +30,7 @@ export type NotificationType =
   | "enrollment_followup"
   | "grade_drop" // 같은 과목 성적 15점+ 급락 → master + 담당 강사(Phase 3, cron)
   | "outstanding_alert" // 학생 총 미수 금액 tier 도달 → master + 회계(Phase 3, cron)
+  | "refund_request_approved" // 원장이 퇴원보고서에서 퇴원월 뒤 청구의 환불을 승인 → 환불 요청서 생성 → master + 회계(2026-10-29)
   | "unsent_report" // 저장만 하고 발송 안 한 수업 보고서(발송 콘솔과 동일 게이트) → master + 담당 강사(Phase 3, cron)
   | "progress_anomaly" // 진도 기록 이상(점프·겹침, math ingest) → master + 담당 강사(G2 선알림, cron)
   | "attendance_complete" // 반 출석 전원 입력 완료 → 담당 강사(G4, 저장 액션 전이 훅 — 본인이 찍으면 스킵)
@@ -102,6 +103,7 @@ export const NOTIFICATION_ICON: Record<string, AywaIconName> = {
   followup_due: "clock",
   grade_drop: "trendingDown",
   outstanding_alert: "wallet",
+  refund_request_approved: "wallet",
   unsent_report: "send",
   progress_anomaly: "alert",
   attendance_complete: "userCheck",

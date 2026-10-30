@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { TONE_SOFT } from "@/lib/design/semantic-color";
 import { useSubjectMaps } from "@/features/owner/operations-context";
@@ -52,7 +52,14 @@ export function StatsHomeroom({
   const router = useRouter();
   const pathname = usePathname() ?? "/consultations/stats";
   const searchParams = useSearchParams();
-  const [open, setOpen] = useState<string | null>(teacherScoped && data?.teachers.length === 1 ? data.teachers[0]!.id : null);
+  // 펼친 담임 — 강사(본인 한 줄)이거나, 주소로 한 담임을 골라 들어왔으면(목록 요약 띠 [담임별]의 이름) 그 줄을 펼친 채로.
+  const [open, setOpen] = useState<string | null>(
+    teacherScoped && data?.teachers.length === 1 ? data.teachers[0]!.id : linkedWho && data?.teachers.some((t) => t.id === linkedWho) ? linkedWho : null,
+  );
+  // `#homeroom`으로 들어오면 이 표로 내려간다 — 표가 Suspense 뒤에 늦게 서면 라우터의 해시 스크롤이 놓친다(리뷰 2026-10-30).
+  useEffect(() => {
+    if (window.location.hash === "#homeroom") document.getElementById("homeroom")?.scrollIntoView({ block: "start" });
+  }, []);
   const [sort, setSort] = useState(initialSort);
   const [filter, setFilter] = useState(() => alignHomeroomFilter(initialFilter, linkedWho, linkedSubject));
   // 주소가 바뀌면(위 드롭다운 · 이 표가 보낸 이동) 고르기를 맞춘다 — 렌더 중 비교(effect 안 setState 금지 규칙, [[#25]]).
@@ -102,7 +109,8 @@ export function StatsHomeroom({
   };
   const head = (key: HomeroomSortKey, label: ReactNode) => <SortHead key={key} label={label} active={sort.key === key} dir={sort.dir} onClick={() => onSort(key)} />;
   return (
-    <div className={card}>
+    // id — 목록 요약 띠의 [담임별] 팝업이 여기로 바로 내려온다(`/consultations/stats#homeroom`).
+    <div id="homeroom" className={`${card} scroll-mt-4`}>
       <div className="space-y-0.5">
         <p className="text-foreground text-sm font-bold">담임별 상담 현황</p>
         <p className="text-muted-foreground text-xs break-keep">

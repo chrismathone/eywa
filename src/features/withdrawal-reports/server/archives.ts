@@ -16,7 +16,7 @@ export async function listArchives() {
   if (!viewer || (!viewer.teacherId && !viewer.manage)) return [] as ArchiveRow[];
   const rows: ArchiveRow[] = [];
   for (let offset = 0; ; offset += 400) {
-    let q = createAdminClient().from("withdrawal_report_archives").select("id,spreadsheet_id,sheet_id,sheet_title,source_range,student_name,school_grade,class_name,subject,exit_date,raw_exit_date,teacher_name,mapped_teacher_id,mapped_student_id,mapping_kind,revision,reason_raw:fields->>퇴원사유,detail_raw:fields->>상세사유").eq("tenant_id", viewer.user.tenantId);
+    let q = createAdminClient().from("withdrawal_report_archives").select("id,spreadsheet_id,sheet_id,sheet_title,source_range,student_name,school_grade,class_name,subject,exit_date,raw_exit_date,teacher_name,mapped_teacher_id,mapped_student_id,mapping_kind,revision,reason_raw:fields->>퇴원사유,detail_raw:fields->>상세사유,search_fields:fields").eq("tenant_id", viewer.user.tenantId);
     if (viewer.teacherId) q = q.eq("mapped_teacher_id", viewer.teacherId);
     else if (viewer.scope) q = q.or(`subject.is.null,subject.in.(${viewer.scope.join(",")})`);
     const { data, error } = await q.order("exit_date", { ascending: false, nullsFirst: false }).order("id").range(offset, offset + 399);

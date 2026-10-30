@@ -31,7 +31,7 @@ import { tenureDays } from "@/features/withdrawals/early-exit";
 import { loadTeacherWork } from "./teacher-work-server";
 import { withStaffTasks } from "@/features/staff-tasks/server/teacher-work";
 import { selectSubjectView } from "../layout/subject-view";
-import { AREA_MENUS } from "@/features/dashboard/layout/registry";
+import { AREA_MENUS, RETIRED_AREAS } from "@/features/dashboard/layout/registry";
 import {
   inWithdrawalWindow,
   withdrawalMonthWindow,
@@ -164,7 +164,9 @@ async function courses(
   const [[, open], ending, settings] = await Promise.all([enrolledRows, fetchEndingEnrolledEnrollments(db, today), settingsPromise]);
   const rows = [...open, ...ending];
   const subjects = settings.operations.subjects;
-  return (pred) => summarizeCourses({ rows, scope, subjects, today, ...(pred ? { inSubject: pred } : {}) });
+  // 영어 = 인재원 영어 · EiE 따로(원장 2026-10-30) — EiE 모듈이 켜진 지점만(꺼진 지점은 영어 반이 전부 한 갈래).
+  const splitEnglish = isModuleEnabled(settings.modules.disabled, "eie");
+  return (pred) => summarizeCourses({ rows, scope, subjects, today, splitEnglish, ...(pred ? { inSubject: pred } : {}) });
 }
 
 /** '강좌수 추이' 카드가 따로 읽으므로 '재원생 추이' 영역엔 강좌수를 싣지 않는다(스냅샷을 가볍게). */
@@ -256,12 +258,13 @@ async function monthWithdrawals(
 ): Promise<OverviewData["withdrawals"]> {
   const month = today.slice(0, 7);
   const win = withdrawalMonthWindow(month, today);
-  const [rows, settings, ended] = await Promise.all([rowsPromise, settingsPromise, getSubjectEndedStudents()]);
+  const [rows, settings, ended] = await Promise.all([rowsPromise, settingsPromise, getSubjectEndedStudents({ countFrom: win.from })]);
   return {
     month,
     rows: includeSubjectEnds(rows
       .filter((row) =>
-        inWithdrawalWindow({ withdrawnAt: row.withdrawnAt, systemBulk: false }, win.from, win.to),
+        // 퇴원월 = 수강료를 낸 마지막 달(`exitDate`, 원장 2026-10-29) — 퇴원관리 '이번 달'과 같은 판정.
+        inWithdrawalWindow({ withdrawnAt: row.exitDate, systemBulk: false }, win.from, win.to),
       )
       .flatMap((row) => (row.exitClasses.length ? row.exitClasses : [{
         subject: row.lastClassSubject,
@@ -297,7 +300,7 @@ async function monthEarlyExits(
   const subjectsOf = (row: WindowWithdrawal) =>
     row.exitClasses.length ? row.exitClasses.map((c) => c.subject) : row.lastClassSubject ? [row.lastClassSubject] : [];
   const inMonth = (row: WindowWithdrawal) =>
-    inWithdrawalWindow({ withdrawnAt: row.withdrawnAt, systemBulk: false }, win.from, win.to);
+    inWithdrawalWindow({ withdrawnAt: row.exitDate, systemBulk: false }, win.from, win.to);
   return {
     month,
     months,
@@ -312,9 +315,9 @@ async function monthEarlyExits(
     })),
     // 달마다 줄은 '등록·퇴원 추이'의 퇴원 막대와 같은 모집단 — 사유 없는 단체 장부 정리는 뺀다(원장 2026-10-20 · 3개월 내 퇴원 ⊆ 그 달 퇴원).
     history: rows
-      .filter((row) => !row.cleanup && row.withdrawnAt < win.from && months.includes(row.withdrawnAt.slice(0, 7)))
+      .filter((row) => !row.cleanup && row.exitDate < win.from && months.includes(row.exitDate.slice(0, 7)))
       .map((row) => ({
-        month: row.withdrawnAt.slice(0, 7),
+        month: row.exitDate.slice(0, 7),
         days: tenureDays(row.enrolledAt, row.withdrawnAt),
         subjects: subjectsOf(row),
       })),
@@ -411,7 +414,8 @@ export async function loadMonthlyChanges(
     monthlyChanges(
       today,
       joined.filter((r) => !pred || inSlice(pred, subjectsOf.get(r.id) ?? [])).map((r) => r.enrolled_at),
-      exits.filter((r) => !pred || inSlice(pred, exitSubjects(r))).map((r) => r.withdrawnAt),
+      // 퇴원 막대의 달 = 퇴원월(수강료를 낸 마지막 달 — `exitDate`, 원장 2026-10-29).
+      exits.filter((r) => !pred || inSlice(pred, exitSubjects(r))).map((r) => r.exitDate),
       months,
     ).map((r) => (startedFrom && r.month >= startedFrom ? { ...r, startedOnly: true } : r));
 }
@@ -660,6 +664,8 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   // 과목 값 판정의 과목 목록 = **학원 설정의 과목만**(재리뷰 2026-10-14) — `subjectLabelRecord`의 옛 표시용 라벨(예술·사회·기타)을
   // 섞으면 자유 입력 '기타'가 설정에 있는 과목이 되어 아무 과목 관리자에게도 안 보이고, 미리보기 묶음도 쓸데없이 는다.
   const sliceSubjects = settingsNow.operations.subjects.map((s) => ({ key: s.key, label: s.label }));
+  // 강좌수 추이도 영어를 인재원 영어 · EiE 두 강좌로(강좌수 칸과 같은 판정 — 원장 2026-10-30).
+  const splitEnglishNow = isModuleEnabled(settingsNow.modules.disabled, "eie");
   const groups = [...new Set(viewingSubjects.map(groupOf).filter((g): g is string => g !== null))];
   // 과목별 값(원장 2026-10-14 2단계, `slices.ts`)을 만들 묶음 — 과목 관리자는 담당 묶음 하나(여럿이면 합집합 한 벌),
   // 미리보기 원본(full)은 묶음마다 한 벌(편집기가 과목을 골라 본다). 그 밖의 역할은 만들지 않는다(계산 0).
@@ -674,6 +680,8 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   // 조회 계획 = 놓인 카드가 읽는 영역 ∩ 메뉴 권한(`loadPlan`, 순수 — 테스트가 역할별로 잠근다).
   const needed = loadPlan(view, new Set(allowed));
   if (options.full) for (const area of Object.keys(AREA_MENUS) as Area[]) {
+    // 대시보드에서 뺀 카드의 영역은 미리보기도 읽지 않는다(강사별 업무 현황 → 직원 평가 '업무 현황' · 무거운 조회 — 리뷰 2026-10-30).
+    if (RETIRED_AREAS.has(area)) continue;
     if (AREA_MENUS[area].every((menu) => allowed.includes(menu))) needed.add(area);
   }
   const needs = (...areas: Area[]) => areas.some((a) => needed.has(a));
@@ -758,8 +766,8 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   let slicerOnce: ReturnType<typeof loadEnrolledTrendSlicer> | null = null;
   const trends = () =>
     Promise.all([
-      (trendOnce ??= loadEnrolledTrend(user.tenantId, today, sliceSubjects)),
-      sliceSets.length ? (slicerOnce ??= loadEnrolledTrendSlicer(user.tenantId, today, sliceSubjects)) : Promise.resolve(null),
+      (trendOnce ??= loadEnrolledTrend(user.tenantId, today, sliceSubjects, splitEnglishNow)),
+      sliceSets.length ? (slicerOnce ??= loadEnrolledTrendSlicer(user.tenantId, today, sliceSubjects, splitEnglishNow)) : Promise.resolve(null),
     ]);
   addSliced("enrolledTrend", ["students"], async () => {
     if (await scopePromise) return () => null;

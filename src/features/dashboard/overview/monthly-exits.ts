@@ -15,7 +15,8 @@ export function includeSubjectEnds(
   const extra: OverviewData["withdrawals"]["rows"] = [];
   for (const s of subjectEnded) {
     if (withdrawnIds.has(s.id)) continue;
-    const ended = s.endedDetail.filter(d => !d.isTransferred && inWithdrawalWindow({ withdrawnAt: d.endedAt, systemBulk: false }, window.from, window.to))
+    // 달 판정 = 그 과목 수업료를 낸 마지막 달(`countAt`, 원장 2026-10-29) · 보이는 날짜는 종료일 그대로.
+    const ended = s.endedDetail.filter(d => !d.isTransferred && inWithdrawalWindow({ withdrawnAt: d.countAt ?? d.endedAt, systemBulk: false }, window.from, window.to))
       .sort((a, b) => (b.endedAt ?? "").localeCompare(a.endedAt ?? "") || a.subject.localeCompare(b.subject));
     for (const detail of ended) {
       if (!detail.endedAt) continue;

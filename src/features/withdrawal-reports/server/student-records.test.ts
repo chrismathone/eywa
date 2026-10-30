@@ -26,10 +26,11 @@ function table(name: string, rows: unknown[], error: unknown = null) {
   state.tables[name] = { rows, error, calls };
 }
 function query(name: string) {
-  const t = state.tables[name];
+  const t = state.tables[name] ?? { rows: [], error: null, calls: [] };
   const q: Record<string, unknown> = {};
   for (const m of ["select", "eq", "order", "or"]) q[m] = (...a: unknown[]) => (t.calls.push([m, ...a]), q);
   q.range = async () => ({ data: t.error ? null : t.rows, error: t.error });
+  q.maybeSingle = async () => ({ data: t.error ? null : (t.rows[0] ?? null), error: t.error });
   return q;
 }
 const report = (id: string, teacher: string, extra: Record<string, unknown> = {}) => ({
@@ -73,13 +74,13 @@ describe("퇴원 상세 — 학생별 퇴원보고서", () => {
     expect(state.tables.withdrawal_report_archives.calls).toContainEqual(["eq", "mapped_teacher_id", "actor"]);
   });
 
-  it("관리자는 참여한 보고서만 · 원본은 담당 과목 범위(과목 미기재는 보인다)", async () => {
+  it("관리자는 참여한 보고서 + 담당 과목 보고서(열람, 원장 2026-10-30) · 원본은 담당 과목 범위(과목 미기재는 보인다)", async () => {
     state.user = { id: "manager", tenantId: "tenant", systemRole: "manager" };
     state.scope = ["math"];
-    table("withdrawal_reports", [report("r1", "t1"), report("r2", "t2", { manager_id: "other", manager_ids: ["other"] })]);
+    table("withdrawal_reports", [report("r1", "t1"), report("r2", "t2", { manager_id: "other", manager_ids: ["other"] }), report("r3", "t3", { manager_id: "other", manager_ids: ["other"], subjects: ["english"] })]);
     table("withdrawal_report_archives", [archive("a1", "t1", "math"), archive("a2", "t1", "english"), archive("a3", null, null)]);
     const res = await loadStudentReportRecords("s1");
-    expect(res.status === "ok" && res.reports.map((r) => r.id)).toEqual(["r1"]);
+    expect(res.status === "ok" && res.reports.map((r) => r.id)).toEqual(["r1", "r2"]);
     expect(res.status === "ok" && res.archives.map((a) => a.id)).toEqual(["a1", "a3"]);
   });
 
@@ -96,12 +97,15 @@ describe("퇴원 상세 — 학생별 퇴원보고서", () => {
     expect(await loadStudentReportRecords("s1")).toEqual({ status: "ok", reports: [], archives: [], complete: false });
   });
 
-  it("'없습니다'라고 단정할 수 있는 사람은 다 보는 원장뿐 — 참여 보고서만 보는 관리자·강사는 아니다", async () => {
+  it("'없습니다'라고 단정할 수 있는 사람은 다 보는 사람뿐 — 원장 · 담당 과목 제한 없는 관리자(원장 2026-10-30 열람 확대) / 과목이 걸린 관리자·강사는 아니다", async () => {
     table("withdrawal_reports", []);
     table("withdrawal_report_archives", []);
     state.user = { id: "owner", tenantId: "tenant", systemRole: "master" };
     expect(await loadStudentReportRecords("s1")).toMatchObject({ status: "ok", complete: true });
     state.user = { id: "admin", tenantId: "tenant", systemRole: "admin" };
+    table("users", [{ subjects: ["math"] }]);
     expect(await loadStudentReportRecords("s1")).toMatchObject({ status: "ok", complete: false });
+    table("users", [{ subjects: [] }]);
+    expect(await loadStudentReportRecords("s1")).toMatchObject({ status: "ok", complete: true });
   });
 });

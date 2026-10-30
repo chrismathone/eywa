@@ -7,11 +7,14 @@ import { isMergedStudent } from "@/features/students/status/merged";
 import { REASON_LABEL, normalizeReason, type WithdrawalMetadata } from "../types";
 import { detailFor } from "../reason-detail";
 import { countsForSubjectExit, getEndedSubjects } from "../subject-ended";
+import { subjectRunStart } from "../exit-month";
 import { isSpecialLecture } from "@/features/classes/special-lecture";
 import { isBookkeepingOnlyExit, isCleanupExit, isSystemBulkWithdrawal } from "../system-bulk";
 import { endedTogether, lastEndedByStudent, pickLastEnded, type EndedClassRef } from "../window";
 import { withdrawalSubjects } from "../exit-rows";
 import { lastClassOf, loadEndedEnrollments } from "./window";
+import { loadExitCountDates, loadSubjectExitCountDates } from "./exit-month";
+import { getTenantSettings } from "@/features/owner/server/queries";
 
 // Re-export common types so existing callers don't need to switch import paths
 export type {
@@ -28,6 +31,8 @@ export type WithdrawalRow = {
   grade: string | null;
   enrolledAt: string | null;
   withdrawnAt: string | null;
+  /** 기간 판정 날짜 — 퇴원월(수강료를 낸 마지막 달, `exit-month.ts`)이 앞 달이면 그 달 말일. 목록만 채운다(상세 화면은 안 채운다). */
+  exitDate?: string | null;
   lastClassName: string | null;
   lastClassSubject: string | null;
   /** 마지막 수강 반의 영어 프로그램 구분(0176a) — 퇴원생 프로그램 판정(`withdrawalProgram`) 재료. 상세 화면은 안 채운다. */
@@ -71,7 +76,7 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
     supabase
       .from("students")
       .select(
-        `id, name, school, grade, enrolled_at, withdrawn_at, withdrawal_metadata, notes`,
+        `id, tenant_id, name, school, grade, enrolled_at, withdrawn_at, withdrawal_metadata, notes`,
       )
       // 🔴 퇴원 **예약**(상태 재원·휴원 + 퇴원일)은 싣지 않는다 — 퇴원일 전까지 재원이다(원장 2026-09-28). 그날 cron이
       //    퇴원 처리하면 이 목록에 들어온다. 싣으면 전체 퇴원 수·사유·상담·추이에 미리 섞인다(리뷰 2026-09-28).
@@ -90,7 +95,11 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
 
   // 마지막 종료 수강 = 운영실 '퇴원생'과 **같은 조회·같은 선택**(window.ts) — 청크 × 페이징이라 청크 안 1000행
   // 절단도 없고, 종료일이 같은 두 줄은 결정적 tie-break로 고른다(조회마다 다른 반이 뽑히지 않게).
-  const ended = await loadEndedEnrollments(supabase, students.map((s) => s.id));
+  // 퇴원월(수강료를 낸 마지막 달, 원장 2026-10-29)은 수강과 따로 읽는다(B4).
+  const [ended, exitDates] = await Promise.all([
+    loadEndedEnrollments(supabase, students.map((s) => s.id)),
+    loadExitCountDates(students.map((s) => ({ id: s.id, tenantId: s.tenant_id, withdrawnAt: s.withdrawn_at }))),
+  ]);
   const lastByStudent = lastEndedByStudent(ended);
   const endedByStudent = new Map<string, { endDate: string | null; subject: string | null }[]>();
   for (const e of ended) {
@@ -121,6 +130,7 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
       grade: s.grade,
       enrolledAt: s.enrolled_at,
       withdrawnAt: s.withdrawn_at,
+      exitDate: exitDates.get(s.id) ?? null,
       lastClassName: last.className,
       lastClassSubject: last.subject,
       lastClassEnglishTrack: last.englishTrack,
@@ -230,6 +240,8 @@ export async function getWithdrawalDetail(studentId: string): Promise<Withdrawal
 // === 수강종료(과목 이탈) — 재원 중이지만 특정 과목을 전부 끊은 학생(조기 이탈 신호) ===
 export type SubjectEndedRow = {
   id: string;
+  /** 지점 — 청구를 admin으로 읽을 때 좁히는 열쇠(`loadSubjectExitCountDates`). */
+  tenantId: string;
   name: string;
   school: string | null;
   grade: string | null;
@@ -245,6 +257,13 @@ export type SubjectEndedRow = {
     englishTrack: string | null;
     /** 그 과목 마지막 수강의 종료 사유 원문(`enrollments.withdrawal_reason`). */
     reason: string | null;
+    /**
+     * 기간 판정 날짜 — 그 과목 수업료를 낸 마지막 달(앞 달이면 그 달 말일 · 원장 2026-10-29 · `subjectExitCountDate`). 날짜 기준 조회
+     * (`basis: "date"` — 시간표 X)면 `endedAt` 그대로. 표시하는 종료일은 `endedAt`이다.
+     */
+    countAt: string | null;
+    /** 그 과목을 마지막으로 이어 다닌 시작일(`subjectRunStart`) — 이보다 앞선 납부로 `countAt`을 정하지 않는다. */
+    runStart?: string | null;
     /** 그 마지막 수강 행 id — 세부 사유·메모(`withNotes`)를 읽는 열쇠. */
     enrollmentId?: string;
     /** 세부 사유 키·메모(0367a `withdrawal_detail`·`withdrawal_memo`) — `withNotes`일 때만 채운다. */
@@ -260,7 +279,7 @@ export type SubjectEndedRow = {
 };
 
 type ClassBits = { subject?: string; class_name?: string | null; english_track?: string | null; is_special?: boolean | null };
-type StudentBits = { id: string; name: string; school: string | null; grade: string | null; status: string };
+type StudentBits = { id: string; tenant_id: string; name: string; school: string | null; grade: string | null; status: string };
 
 /**
  * `endedWithin`을 주면 **그 기간에 끝난 수강이 있는 학생만** 후보로 읽는다(시간표 X 겹침 — 석 달 창).
@@ -274,6 +293,16 @@ export async function getSubjectEndedStudents(opts?: {
    * SQL보다 앱이 먼저 나가도 그 화면들이 죽지 않게). 따로 읽고, 실패하면 메모 없이 그린다.
    */
   withNotes?: boolean;
+  /**
+   * 어느 달로 세나 — 기본 `"tuition"`(그 과목 수업료를 낸 마지막 달 · 운영실 '퇴원&수업종료'·퇴원관리) · `"date"` = 종료일(시간표 X — 강사평가
+   * 퇴원율과 같은 달). 퇴원 쪽 `getWithdrawalsInWindow`의 `basis`와 같은 뜻.
+   */
+  basis?: "tuition" | "date";
+  /**
+   * 이 날짜 이후에 끝난 줄만 청구로 다시 판정한다(그 전 줄은 `countAt` = 종료일) — `countAt`은 종료일보다 늦지 않으므로 창 `from` 앞에서 끝난
+   * 줄은 판정해도 창에 들지 않는다. 운영실 이번 달 카드가 전 기간 청구를 읽지 않게(적대 리뷰 2026-10-29).
+   */
+  countFrom?: string;
 }): Promise<SubjectEndedRow[]> {
   const supabase = await createClient();
   const within = opts?.endedWithin;
@@ -283,7 +312,7 @@ export async function getSubjectEndedStudents(opts?: {
       await fetchAllPaged<StudentBits>((from, to) =>
         supabase
           .from("students")
-          .select("id, name, school, grade, status")
+          .select("id, tenant_id, name, school, grade, status")
           .in("status", ["enrolled", "on_hold"])
           .range(from, to),
       );
@@ -369,9 +398,15 @@ export async function getSubjectEndedStudents(opts?: {
         .filter((e) => e.subject === subject)
         .map((e) => ({ ...e, end_date: e.endDate, start_date: e.startDate, is_transferred: e.isTransferred }));
       const best = pickLastEnded(subjectRows);
+      const endedAt = lastEndOf(subject) ?? best?.endDate ?? null;
       return {
         subject,
-        endedAt: lastEndOf(subject) ?? best?.endDate ?? null,
+        endedAt,
+        countAt: endedAt,
+        runStart: subjectRunStart(
+          all.filter((e) => e.subject === subject),
+          best?.startDate ?? null,
+        ),
         className: best?.className ?? null,
         englishTrack: best?.englishTrack ?? null,
         // 그 과목 마지막 수강의 종료 사유(원문) — 퇴원관리 사유 카드·필터가 퇴원 사유와 함께 센다.
@@ -389,6 +424,7 @@ export async function getSubjectEndedStudents(opts?: {
     });
     rows.push({
       id: s.id,
+      tenantId: s.tenant_id,
       name: s.name,
       school: s.school,
       grade: s.grade,
@@ -400,8 +436,24 @@ export async function getSubjectEndedStudents(opts?: {
     });
   }
   rows.sort((a, b) => (b.lastEndedAt ?? "").localeCompare(a.lastEndedAt ?? "")); // 최근 종료순
-  if (opts?.withNotes) await attachEndedNotes(supabase, rows);
+  await Promise.all([
+    opts?.withNotes ? attachEndedNotes(supabase, rows) : null,
+    opts?.basis === "date" ? null : attachSubjectCountDates(rows, opts?.countFrom),
+  ]);
   return rows;
+}
+
+/** 수강종료 줄마다 그 과목 수업료를 낸 마지막 달로 `countAt`을 고친다(원장 2026-10-29). 청구를 못 읽으면 던진다(다른 달에 세지 않는다). */
+async function attachSubjectCountDates(rows: SubjectEndedRow[], countFrom?: string): Promise<void> {
+  const ends = rows.flatMap((r) =>
+    r.endedDetail
+      .filter((d) => !countFrom || (d.endedAt ?? "") >= countFrom)
+      .map((d) => ({ studentId: r.id, tenantId: r.tenantId, subject: d.subject, endedAt: d.endedAt, since: d.runStart })),
+  );
+  if (!ends.length) return;
+  const settings = await getTenantSettings();
+  const dates = await loadSubjectExitCountDates(ends, settings.operations.subjects);
+  for (const r of rows) for (const d of r.endedDetail) d.countAt = dates.get(`${r.id}|${d.subject}`) ?? d.endedAt;
 }
 
 /** 수강 종료 줄의 세부 사유·메모(0367a) — 그 줄의 마지막 수강 행에서. 실패(칸이 아직 없음 등)하면 경고만 남기고 비운 채 둔다. */
@@ -442,7 +494,7 @@ async function loadEndedWithinStudents(
   return fetchAllPagedInChunks<StudentBits>(ids, (chunk, from, to) =>
     supabase
       .from("students")
-      .select("id, name, school, grade, status")
+      .select("id, tenant_id, name, school, grade, status")
       .in("id", chunk)
       .in("status", ["enrolled", "on_hold"])
       .order("id")

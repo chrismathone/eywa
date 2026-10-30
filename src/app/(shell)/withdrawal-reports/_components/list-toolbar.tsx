@@ -18,6 +18,11 @@ const RANGE_OPTIONS: FilterSelectOption[] = [
   { value: "year", label: "최근 1년" },
   { value: "custom", label: "직접 지정" },
 ];
+/** 구분(원장 2026-10-30 — 목록 '구분' 열과 같은 값). 기존 기록은 구분이 없어 고르면 빠진다. */
+const KIND_OPTIONS: FilterSelectOption[] = [
+  { value: "withdrawal", label: "퇴원" },
+  { value: "subject_end", label: "수강종료" },
+];
 const STATUS_OPTIONS: FilterSelectOption[] = [
   { value: "pending", label: "진행 중" },
   { value: "completed", label: "처리 완료" },
@@ -35,6 +40,7 @@ export function ListToolbar({
   subjects,
   teachers,
   unmapped,
+  mine,
   resultText,
   resetHref,
   request,
@@ -45,6 +51,8 @@ export function ListToolbar({
   teachers: FilterSelectOption[];
   /** 기존 기록을 보는 사람만 — 미연결 칩의 주소(누르면 켜고 끈다)와 건수(상태 밖 다른 필터를 건 수). */
   unmapped: { href: string; count: number } | null;
+  /** 지금 내 승인 차례인 보고서 칩(누르면 켜고 끈다) — 0건이고 꺼져 있으면 없다. */
+  mine: { href: string; count: number } | null;
   resultText: string;
   resetHref: string | null;
   request: ReactNode;
@@ -80,6 +88,14 @@ export function ListToolbar({
         ariaLabel="과목 필터"
         {...SELECT_PROPS}
       />
+      <FilterSelect
+        paramName="kind"
+        value={filters.kind === "all" ? "" : filters.kind}
+        options={KIND_OPTIONS}
+        axisLabel="구분"
+        ariaLabel="구분 필터"
+        {...SELECT_PROPS}
+      />
       {teachers.length > 1 || filters.teacher !== "all" ? (
         <FilterSelect
           paramName="teacher"
@@ -92,12 +108,17 @@ export function ListToolbar({
           {...SELECT_PROPS}
         />
       ) : null}
+      {mine ? (
+        <ToolbarChip active={filters.mine} href={mine.href}>
+          내 승인 필요 <span className="num">{mine.count}</span>건
+        </ToolbarChip>
+      ) : null}
       {unmapped ? (
         <ToolbarChip active={filters.unmapped} href={unmapped.href}>
           학생 미연결 <span className="num">{unmapped.count}</span>건
         </ToolbarChip>
       ) : null}
-      <SearchToggle placeholder="학생·학교·반" defaultValue={filters.q} />
+      <SearchToggle placeholder="학생·학교·반·내용" defaultValue={filters.q} />
       {resetHref ? (
         <EmbedLink
           href={resetHref}

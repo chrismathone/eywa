@@ -34,7 +34,8 @@ export function NewcomerBoard({ view, canWrite, initialFilters = EMPTY_FILTERS }
   const [filters, setFilters] = useState(initialFilters);
   const [compact, setCompact] = useState(false);
   const [previousFonts, setPreviousFonts] = useState(false);
-  const [priorityOpen, setPriorityOpen] = useState(true);
+  // 우선 처리는 접힌 채로 시작 — 건수만 보이고 학생 이름은 펼쳐야(원장 2026-10-30 '요약 먼저, 이름은 눌러야').
+  const [priorityOpen, setPriorityOpen] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [notice, setNotice] = useState("");

@@ -242,7 +242,7 @@ export default async function EnrollmentPage({
           // 🔴 상담 분포는 **연도가 적용된다**(재원생 기준이던 때는 연도를 바꿔도 안 변해 화면이 거짓말했다).
           getConsultationDistribution(statsYear, span),
           intakePromise,
-          // 관리현황 '등록 후 퇴원' — 퇴원관리·운영실과 같은 퇴원 목록(같은 원본). 기간 첫날부터 오늘까지(보는 해 뒤에 퇴원해도 센다).
+          // 관리현황 '등록 후 퇴원' — 퇴원관리·운영실과 같은 퇴원 목록(같은 원본 · 퇴원월 = 수강료를 낸 마지막 달). 기간 첫날부터 오늘까지(보는 해 뒤에 퇴원해도 센다).
           canSeeExits
             ? getWithdrawalsInWindow(`${span.from}-01-01`, today).catch((error: unknown) => {
                 reportWarning("관리현황 퇴원 조회 실패", { scope: "enrollment.managementExits", cause: error instanceof Error ? error.message : String(error) });

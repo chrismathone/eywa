@@ -80,7 +80,7 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
 
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
   const canSeeArchive = !!viewer.teacherId || viewer.manage;
-  const items = buildListItems({ reports: list.rows, archives: archives ?? [], staff, labelOf: subjectMaps.labelOf, userId: viewer.user.id });
+  const items = buildListItems({ reports: list.rows, archives: archives ?? [], staff, labelOf: subjectMaps.labelOf, userId: viewer.user.id, writable: viewer.writable });
   const filters = parseListFilters(sp, canSeeArchive);
   const rangeWindow = listWindow(filters, kstToday());
   const found = filterListItems(items, filters, rangeWindow);
@@ -89,8 +89,10 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
   const shown = found.slice((page - 1) * LIST_PAGE_SIZE, page * LIST_PAGE_SIZE);
   // 칩 건수 = 칩을 켰을 때 보일 줄 수(칩은 상태를 걷으므로 상태만 빼고 나머지 필터를 건다).
   const unmappedCount = filterListItems(items, { ...filters, status: "all", unmapped: true }, rangeWindow).length;
+  // '내 승인 필요' 칩 건수 = 칩을 켰을 때 보일 줄 수(상태는 진행 중이라 상태·미연결만 걷는다).
+  const mineCount = filterListItems(items, { ...filters, status: "all", unmapped: false, mine: true }, rangeWindow).length;
   const filterActive =
-    filters.status !== "all" || filters.range !== "all" || filters.subject !== "all" || filters.teacher !== "all" || filters.unmapped || !!filters.q;
+    filters.status !== "all" || filters.range !== "all" || filters.subject !== "all" || filters.teacher !== "all" || filters.unmapped || filters.kind !== "all" || filters.mine || !!filters.q;
   // 과목 선택지 = 학원설정 단일 소스. 과목 범위가 있는 사람은 그 과목만(목록도 그 범위로만 온다).
   const subjects = viewer.scope ? subjectMaps.options.filter((o) => viewer.scope!.includes(o.value)) : subjectMaps.options;
 
@@ -105,9 +107,10 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
         // 미연결 칩 — 켜면 상태 필터는 걷는다(미연결은 기존 기록에만 있다), 다시 누르면 끈다.
         unmapped={
           viewer.manage
-            ? { href: listHref(sp, filters.unmapped ? { link: null } : { link: "unmapped", status: null }), count: unmappedCount }
+            ? { href: listHref(sp, filters.unmapped ? { link: null } : { link: "unmapped", status: null, kind: null, mine: null }), count: unmappedCount }
             : null
         }
+        mine={mineCount > 0 || filters.mine ? { href: listHref(sp, filters.mine ? { mine: null } : { mine: "approve", status: null, link: null }), count: mineCount } : null}
         resultText={filterActive ? `${found.length}건 / 전체 ${items.length}건` : `전체 ${items.length}건`}
         resetHref={filterActive ? listHref(sp.embed ? { embed: sp.embed } : {}, {}) : null}
         request={viewer.request ? <RequestDialog key={requestFor ?? "none"} staff={staff} students={students} labels={labels} scope={viewer.scope} initialStudentId={requestFor} directReady={directReady} /> : null}

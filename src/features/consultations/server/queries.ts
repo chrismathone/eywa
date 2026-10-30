@@ -213,7 +213,11 @@ export function rangeSinceIso(range: ConsultationListFilters["range"]): string |
 }
 
 export type StudentConsultationCounts = {
-  total: number;
+  /**
+   * 이번 달(KST 1일~) 상담 — 누적 '전체 상담' 대신(원장 2026-10-30 *"전체 상담 N건은 사실상 크게 궁금하지 않음"* ·
+   * 쌓이기만 하는 수라 판단에 안 쓰인다).
+   */
+  thisMonth: number;
   lastWeek: number;
   pendingFollowUps: number;
   overdueFollowUps: number;
@@ -239,7 +243,7 @@ export async function getStudentConsultationCounts(opts: { excludeSubjects?: rea
   };
   const results =
     await Promise.all([
-      base(),
+      base().gte("consulted_at", `${today.slice(0, 7)}-01T00:00:00+09:00`),
       base().gte("consulted_at", isoDaysAgo(7)),
       base().eq("follow_up_done", false).not("follow_up_date", "is", null),
       base()
@@ -250,9 +254,9 @@ export async function getStudentConsultationCounts(opts: { excludeSubjects?: rea
   for (const result of results) {
     if (result.error) throw new Error(`상담 집계 실패: ${result.error.message}`);
   }
-  const [{ count: total }, { count: lastWeek }, { count: pending }, { count: overdue }] = results;
+  const [{ count: thisMonth }, { count: lastWeek }, { count: pending }, { count: overdue }] = results;
   return {
-    total: total ?? 0,
+    thisMonth: thisMonth ?? 0,
     lastWeek: lastWeek ?? 0,
     pendingFollowUps: pending ?? 0,
     overdueFollowUps: overdue ?? 0,
@@ -428,6 +432,23 @@ export const getConsultationCounselorOptions = cache(async (): Promise<{ id: str
     .map((u) => ({ id: u.id, name: u.display_name!.trim(), retired: u.status === "inactive" }))
     .sort((a, b) => a.name.localeCompare(b.name, "ko"));
 });
+
+/**
+ * 주소로 골라 들어온 상담사가 선택지(상담 기록이 있는 사람)에 없을 때 — 상담 0건 담임(요약 띠 [담임별] 팝업에서 이름을 눌러 옴)도
+ * 드롭다운·범위 문구에 이름이 서게 덧붙인다(리뷰 2026-10-30). 강사는 선택지가 없으니 덧붙이지 않는다.
+ */
+export async function withCounselorOption(
+  options: { id: string; name: string; retired: boolean }[],
+  who: string,
+): Promise<{ id: string; name: string; retired: boolean }[]> {
+  if (!who || options.length === 0 || options.some((o) => o.id === who) || !/^[0-9a-f-]{36}$/i.test(who)) return options;
+  const supabase = await createClient();
+  const { data } = await supabase.from("users").select("id, display_name, status").eq("id", who).maybeSingle();
+  const name = (data as { display_name: string | null } | null)?.display_name?.trim();
+  if (!data || !name) return options;
+  const extra = { id: who, name, retired: (data as { status: string | null }).status === "inactive" };
+  return [...options, extra].sort((a, b) => a.name.localeCompare(b.name, "ko"));
+}
 
 export type StudentOption = {
   id: string;

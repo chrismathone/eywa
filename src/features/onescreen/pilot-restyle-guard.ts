@@ -5,16 +5,19 @@
  * 사실 항목은 코드가 값에서 만든다(원장 2026-10-26 — 사실을 지키려고). 말투를 입히는 AI는 **표현만** 바꿀 수 있고, 아래 검사 중 하나라도
  * 어기면 그 항목은 코드 글 그대로 둔다(항목 단위 — 한 항목이 틀려도 다른 항목은 쓴다). 제목·순서는 바꾸지 않는다.
  *
- * 🔑 다시 쓰는 항목 = 일일 테스트 · 확인 테스트 · 수업 태도 · 숙제 완성도 · 오늘의 숙제.
- *    빼는 항목: 진도(첫 문장을 화면이 글자 그대로 대조한다 — `isPilotDraftCurrent`) · 출결(카드가 문장 머리로 출결 표시를 읽는다 —
+ * 🔑 다시 쓰는 항목 = 진도 · 일일 테스트 · 확인 테스트 · 수업 태도 · 숙제 완성도 · 오늘의 숙제.
+ *    진도(원장 2026-10-30 *"진도 문장이 바뀌어도 숫자를 제외하고 어투 단어선택 어휘를 학습"*) = 소단원 이름(순서까지)·숫자·성격 말(복습·문제풀이)은
+ *    그대로, 동사·어미만 선생님 말투로. 발송 게이트는 그 사실로 견준다(`progressSectionMatches`). 소단원 이름이 없는 첫 문장(멈춤 수업)은 안 다시 쓴다.
+ *    빼는 항목: 출결(카드가 문장 머리로 출결 표시를 읽는다 —
  *    `attendanceMarkOf`) · 수업 평가(표) · 오늘의 수업(이미 AI) · 사랑의 한마디(선생님 원문).
  * 🔑 글자로 다시 읽히는 줄은 **잠근다**(AI에 안 준다): 테스트 첫 줄의 점수("N문제 중 M개 맞음" — 카드가 점수 블록으로 읽는다)와
  *    오늘의 숙제의 영상 줄("영상 숙제가 있습니다…" — 카드가 숙제 상자 밖으로 뺀다).
  */
-import { PILOT_SECTION_TITLES } from "./math-report-pilot";
+import { PILOT_SECTION_TITLES, progressFacts } from "./math-report-pilot";
 import { isScoreLine } from "./pilot-notes";
 
 export const RESTYLE_TITLES: readonly string[] = [
+  PILOT_SECTION_TITLES.progress,
   PILOT_SECTION_TITLES.daily,
   PILOT_SECTION_TITLES.check,
   PILOT_SECTION_TITLES.attitude,
@@ -66,7 +69,7 @@ const squash = (s: string) => s.replace(/\s+/g, "");
 /**
  * 다시 쓴 글을 받아도 되나. `mustKeep` = 선생님이 직접 적어 글에 그대로 들어간 말(태도 의견·미제출 사유·시험 안 친 사유) — 글자 그대로 남아야 한다.
  */
-export function acceptRestyle(original: string, rewrite: string, mustKeep: readonly string[] = []): boolean {
+export function acceptRestyle(original: string, rewrite: string, mustKeep: readonly string[] = [], title?: string): boolean {
   const o = original.trim();
   const r = rewrite.trim();
   if (!o) return !r;
@@ -91,7 +94,22 @@ export function acceptRestyle(original: string, rewrite: string, mustKeep: reado
     const s = k.trim();
     if (s && o.includes(s) && !r.includes(s)) return false;
   }
+  // 진도 — 소단원 이름은 순서까지 그대로(없던 이름도 안 된다), 성격 말(복습·문제풀이)은 있고 없음이 그대로(진도 ↔ 복습 뒤집기 방지).
+  if (title === PILOT_SECTION_TITLES.progress) {
+    const a = progressFacts(o);
+    const b = progressFacts(r);
+    if (a.quotes.join("\n") !== b.quotes.join("\n")) return false;
+    if (a.modes.join() !== b.modes.join()) return false;
+  }
   return true;
+}
+
+/** 이 고침이 말투만 바꿨나 — 진도의 소단원 이름·성격 말을 바꾼 고침은 사실을 고친 것이라 말투 예시로 쓰지 않는다(그대로 배우면 AI가 사실을 바꾸려 든다). */
+export function isStyleOnlyEdit(title: string, before: string, after: string): boolean {
+  if (title !== PILOT_SECTION_TITLES.progress) return true;
+  const a = progressFacts(before);
+  const b = progressFacts(after);
+  return a.quotes.join("\n") === b.quotes.join("\n") && a.modes.join() === b.modes.join();
 }
 
 /** 다시 쓸 항목들 — 글에서 다시 쓸 수 있는 항목의 '다시 쓸 글'만 뽑는다(AI에 이것만 준다). */
@@ -99,6 +117,8 @@ export function restyleTargets(sections: ReadonlyArray<{ title: string; body: st
   const out: { title: string; text: string }[] = [];
   for (const s of sections) {
     if (!RESTYLE_TITLES.includes(s.title) || !s.body.trim()) continue;
+    // 진도는 소단원 이름이 있는 글만 — 멈춤 수업('월말평가 수업을 했습니다')은 게이트가 글자로만 견준다.
+    if (s.title === PILOT_SECTION_TITLES.progress && !progressFacts(s.body).quotes.length) continue;
     const parts = splitLockedLines(s.title, s.body);
     if (parts?.free) out.push({ title: s.title, text: parts.free });
   }
@@ -123,7 +143,7 @@ export function applyRestyle<S extends { title: string; body: string }>(
     const parts = splitLockedLines(s.title, s.body);
     if (!parts || parts.free !== was) return s;
     const clean = next.replace(/\r\n?/g, "\n").trim();
-    if (!acceptRestyle(was, clean, mustKeep)) return s;
+    if (!acceptRestyle(was, clean, mustKeep, s.title)) return s;
     return { ...s, body: joinLockedLines({ ...parts, free: clean }) };
   });
 }

@@ -4,7 +4,7 @@ import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { isModuleEnabled } from "@/lib/modules";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { getConsultationCounselorOptions, type ConsultationListFilters } from "@/features/consultations/server/queries";
+import { getConsultationCounselorOptions, withCounselorOption, type ConsultationListFilters } from "@/features/consultations/server/queries";
 import { CONSULT_DEFAULT_PAGE_SIZE, consultationsHref, type ConsultationListParams } from "@/features/consultations/list-href";
 import { clampPageSize } from "@/components/page-size";
 import { ConsultationFilters } from "../_components/consultation-filters";
@@ -42,7 +42,9 @@ export default async function ConsultationStatsPage({
     size: clampPageSize(one(sp.size) || undefined, CONSULT_DEFAULT_PAGE_SIZE),
     page: Math.max(1, Number(one(sp.page)) || 1),
   };
-  const [settings, counselorOptions, teacherId] = await Promise.all([getTenantSettings(), getConsultationCounselorOptions(), effectiveTeacherId()]);
+  const [settings, baseCounselorOptions, teacherId] = await Promise.all([getTenantSettings(), getConsultationCounselorOptions(), effectiveTeacherId()]);
+  // 상담 0건 담임으로 들어와도(요약 띠 [담임별]) 상담사 칸·범위 문구에 이름이 선다.
+  const counselorOptions = await withCounselorOption(baseCounselorOptions, listParams.who);
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const filters: ConsultationListFilters = {
     q: "", // 검색어는 통계에 걸지 않는다(집계 RPC에 없다 · 목록 위 요약 띠도 같은 조건).

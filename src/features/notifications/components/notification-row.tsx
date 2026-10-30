@@ -56,7 +56,8 @@ export function NotificationRow({
       <button
         type="button"
         onClick={onOpen}
-        className="hover:bg-bg-soft focus-visible:outline-primary flex w-full items-start gap-2.5 px-3 pt-3 pb-1.5 text-left outline-offset-[-2px] transition"
+        // 읽은 알림은 흐리게(원장 2026-10-29 *"읽은 알림은 약간 흐려져서 비활성화 느낌으로. 작동은 똑같지만"*) — 마우스를 올리면 또렷하게.
+        className={`hover:bg-bg-soft focus-visible:outline-primary flex w-full items-start gap-2.5 px-3 pt-3 pb-1.5 text-left outline-offset-[-2px] transition ${item.read ? "opacity-55 group-hover/item:opacity-100" : ""}`}
       >
         <span className="text-text-dim mt-0.5 flex size-5 shrink-0 items-center justify-center">
           <EyIcon name={NOTIFICATION_ICON[item.type] ?? "bell"} size={15} />
@@ -82,7 +83,7 @@ export function NotificationRow({
       </button>
       <div className="flex items-center justify-between pr-3 pb-2 pl-[42px]">
         <time
-          className="text-text-faint text-xs tabular-nums"
+          className={`text-text-faint text-xs tabular-nums transition ${item.read ? "opacity-55 group-hover/item:opacity-100" : ""}`}
           dateTime={item.createdAt}
           title={new Date(item.createdAt).toLocaleString("ko-KR", {
             timeZone: "Asia/Seoul",

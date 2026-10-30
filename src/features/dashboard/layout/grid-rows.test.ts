@@ -48,14 +48,14 @@ describe("대시보드 행 편집", () => {
     expect(removeGridRows(added, 9, 36)).toEqual(items);
   });
   it("자동 내용 높이는 겹친 카드만 같은 열에서 밀고 반복 계산에도 늘어나지 않는다", () => {
-    const base = [{ id: "panel:teacherWork", x: 0, y: 0, w: 12, h: 4 }, { id: "panel:notices", x: 0, y: 4, w: 12, h: 4 }, { id: "panel:nowClasses", x: 12, y: 4, w: 12, h: 4 }];
-    const next = fitContentRows(base, { "panel:teacherWork": 8 });
+    const base = [{ id: "panel:consultProgress", x: 0, y: 0, w: 12, h: 4 }, { id: "panel:notices", x: 0, y: 4, w: 12, h: 4 }, { id: "panel:nowClasses", x: 12, y: 4, w: 12, h: 4 }];
+    const next = fitContentRows(base, { "panel:consultProgress": 8 });
     expect(next[1].y).toBe(8);
     expect(next[2]).toEqual(base[2]);
     expect(next.some((a, n) => next.slice(n + 1).some((b) => overlaps(a, b)))).toBe(false);
-    expect(fitContentRows(base, { "panel:teacherWork": 8 })).toEqual(next);
-    expect(fitContentRows(base, { "panel:teacherWork": NaN })).toEqual(base);
-    const tall = fitContentRows(base, { "panel:teacherWork": 64 });
+    expect(fitContentRows(base, { "panel:consultProgress": 8 })).toEqual(next);
+    expect(fitContentRows(base, { "panel:consultProgress": NaN })).toEqual(base);
+    const tall = fitContentRows(base, { "panel:consultProgress": 64 });
     const saved = { version: 1, layouts: [{ role: "subject", items: tall }] };
     expect(dashboardSchema.safeParse(saved).success).toBe(true);
     expect(normalizeDashboard(saved).layouts[0].items[0].h).toBe(64);

@@ -31,17 +31,17 @@ describe("withdrawalSubjects — 퇴원 무렵 끝난 과목 전부", () => {
 describe("resolveRange · inRange", () => {
   it("롤링도 끝이 오늘 — 퇴원 예정일은 아직 퇴원이 아니다(시간표 집계와 같은 창, 최다은 10/1)", () => {
     const w = resolveRange("30d", { today, month });
-    expect(inRange({ date: "2026-10-01", systemBulk: false }, w)).toBe(false);
-    expect(inRange({ date: today, systemBulk: false }, w)).toBe(true);
-    expect(inRange({ date: "2026-08-28", systemBulk: false }, w)).toBe(false);
-    expect(inRange({ date: "2026-08-29", systemBulk: false }, w)).toBe(true);
+    expect(inRange({ countDate: "2026-10-01", systemBulk: false }, w)).toBe(false);
+    expect(inRange({ countDate: today, systemBulk: false }, w)).toBe(true);
+    expect(inRange({ countDate: "2026-08-28", systemBulk: false }, w)).toBe(false);
+    expect(inRange({ countDate: "2026-08-29", systemBulk: false }, w)).toBe(true);
   });
   it("이번 달·직접 지정은 양끝 포함, 시스템 정리는 뺀다", () => {
     const w = resolveRange("custom", { today, month, from: "2026-09-01", to: "2026-09-07" });
-    expect(inRange({ date: "2026-09-07", systemBulk: false }, w)).toBe(true);
-    expect(inRange({ date: "2026-09-08", systemBulk: false }, w)).toBe(false);
-    expect(inRange({ date: "2026-09-03", systemBulk: true }, w)).toBe(false);
-    expect(inRange({ date: "2026-09-10", systemBulk: false }, resolveRange("month", { today, month }))).toBe(true);
+    expect(inRange({ countDate: "2026-09-07", systemBulk: false }, w)).toBe(true);
+    expect(inRange({ countDate: "2026-09-08", systemBulk: false }, w)).toBe(false);
+    expect(inRange({ countDate: "2026-09-03", systemBulk: true }, w)).toBe(false);
+    expect(inRange({ countDate: "2026-09-10", systemBulk: false }, resolveRange("month", { today, month }))).toBe(true);
   });
   it("직접 지정 날짜가 비면 최근 30일~오늘, 뒤집히면 바로잡는다", () => {
     expect(resolveRange("custom", { today, month })).toMatchObject({ from: "2026-08-29", to: today });
@@ -50,9 +50,18 @@ describe("resolveRange · inRange", () => {
       to: "2026-09-10",
     });
   });
+  it("퇴원은 퇴원월(수강료 기준) 날짜로 센다 — 10/1 퇴원 · 9월까지 냄은 9월 창", () => {
+    const [r] = toExitRows(
+      [{ id: "s", name: "가", school: null, grade: null, withdrawnAt: "2026-10-01", exitDate: "2026-09-30", lastClassName: null, lastClassSubject: null, withdrawalReason: null, metadata: null, systemBulk: false }],
+      [],
+    );
+    expect(r).toMatchObject({ date: "2026-10-01", countDate: "2026-09-30" });
+    expect(inRange(r!, resolveRange("custom", { today, month, from: "2026-09-01", to: "2026-09-30" }))).toBe(true);
+    expect(inRange(r!, resolveRange("custom", { today, month, from: "2026-10-01", to: "2026-10-31" }))).toBe(false);
+  });
   it("날짜 없는 줄은 기간을 고르면 빠진다", () => {
-    expect(inRange({ date: null, systemBulk: false }, resolveRange("90d", { today, month }))).toBe(false);
-    expect(inRange({ date: null, systemBulk: false }, resolveRange("all", { today, month }))).toBe(true);
+    expect(inRange({ countDate: null, systemBulk: false }, resolveRange("90d", { today, month }))).toBe(false);
+    expect(inRange({ countDate: null, systemBulk: false }, resolveRange("all", { today, month }))).toBe(true);
   });
 });
 

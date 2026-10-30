@@ -142,9 +142,10 @@ export async function CourseSection(props: Ctx & { boardKey: string }) {
   const { courseFrom, courseClipNote } = courseBounds(ctx.bounds, ctx);
   // 셀 수 있는 첫 달 앞을 지난 기록으로(재원생 추이와 같은 규칙 — 원장 2026-10-29) — 전체 = 과목 묶음마다 청구된 학생의 합.
   const aywaFirst = courseFrom ?? firstNonZeroMonth(courses.data.total.monthly) ?? courses.data.total.monthly[0]?.key ?? null;
-  // 전체 = 묶음마다 한 번 — 영어를 프로그램으로 갈랐어도 전체는 영어 묶음(인재원 영어 ∪ EiE)으로 센다(강좌수의 '학생마다 영어는 1개').
+  // 전체 = 선마다 한 번 — 영어를 프로그램으로 갈랐으면 인재원 영어 · EiE를 따로 더한다(원장 2026-10-30 '사업자·금액이 달라 분리' —
+  // 에이와 쪽 전체 선과 같은 판정 · 지난 기록 칸 payingInjaewon · payingEie).
   const split = !!courses.data.englishSplit;
-  const courseGroups = [...new Set(courses.data.bySubject.map((p) => (split && isEnglishProgramKey(p.key) ? "english" : p.key)))];
+  const courseGroups = [...new Set(courses.data.bySubject.map((p) => p.key))];
   const history = months.length ? historyCoursePoints(months, aywaFirst, courseGroups) : null;
   // 강좌수 과목 키는 이미 묶음이다(수학 · 수학(심화)가 한 선 — 리뷰 2026-10-29: 재원생 규칙을 쓰면 수학 몫이 '그 밖의 과목'으로 쌓였다).
   // 과목 선은 전체 선이 선 달만으로 센다 — 연도별 점(그해 마지막 달)이 전체와 같은 달이라 쌓은 합이 전체와 맞는다(같은 리뷰).

@@ -8,7 +8,8 @@ import { taskKindLabel } from "../kinds";
 
 /**
  * 늦은 할 일 아침 요약(0377a 3단계) — 매일 아침 알림 점검 cron이 지점마다 한 번. 늦은 할 일이 있을 때만,
- * 원장(재직) + 업무 처리 현황을 지정받은 사람에게 알림 한 건(슬랙 규칙으로도 보낼 수 있다 — `staff_task_digest`).
+ * 업무 처리 현황을 지정받은 사람에게만 알림 한 건(슬랙 규칙으로도 보낼 수 있다 — `staff_task_digest`).
+ * 원장 전원 사본은 뺐다 — 원장 2026-10-29 *"나와 관련있는 알림만"*. 지정한 사람이 없을 때만 원장(아무도 모르는 일이 없게).
  * 하루 한 번 = notification_events(지점 · 날짜)로 막는다(같은 날 cron이 두 번 돌아도 한 번).
  */
 export async function sendStaffTaskDigest(admin: SupabaseClient, tenantId: string): Promise<number> {
@@ -20,6 +21,24 @@ export async function sendStaffTaskDigest(admin: SupabaseClient, tenantId: strin
     .eq("tenant_id", tenantId).eq("status", "open").lt("due_at", nowIso).order("id").range(from, to));
   if (!late.length) return 0;
 
+  const [links, settings] = await Promise.all([
+    fetchInChunks<{ task_id: string; user_id: string }>(late.map((t) => t.id), (ids) =>
+      admin.from("staff_task_assignees").select("task_id, user_id").eq("tenant_id", tenantId).in("task_id", ids)),
+    getTenantSettingsByTenantId(tenantId),
+  ]);
+  const monitorIds = settings.permissions.specialAccess.staffTaskMonitorIds ?? [];
+  const { data: monitors, error: monitorError } = monitorIds.length
+    ? await admin.from("users").select("id").eq("tenant_id", tenantId).eq("status", "active").in("id", monitorIds)
+    : { data: [], error: null };
+  if (monitorError) throw new Error(`지정한 사람 조회: ${monitorError.message}`);
+  let recipients = [...new Set((monitors ?? []).map((u) => u.id as string))];
+  if (!recipients.length) {
+    const { data: masters, error: masterError } = await admin.from("users").select("id").eq("tenant_id", tenantId).eq("status", "active").eq("system_role", "master");
+    if (masterError) throw new Error(`원장 조회: ${masterError.message}`);
+    recipients = (masters ?? []).map((u) => u.id as string);
+  }
+  if (!recipients.length) return 0;
+  // 하루 한 번 — 받는 사람이 정해진 뒤에 남긴다(받는 사람이 없던 날 기록만 남아 그날 요약이 막히지 않게).
   const today = kstToday();
   const { data: fresh, error } = await admin.from("notification_events")
     .upsert([{ tenant_id: tenantId, event_type: "staff_task_digest", subject_key: tenantId, bucket: today, seeded: false }],
@@ -28,20 +47,6 @@ export async function sendStaffTaskDigest(admin: SupabaseClient, tenantId: strin
   if (error) throw new Error(`요약 중복 막기: ${error.message}`);
   if (!fresh?.length) return 0;
 
-  const [links, settings, masters] = await Promise.all([
-    fetchInChunks<{ task_id: string; user_id: string }>(late.map((t) => t.id), (ids) =>
-      admin.from("staff_task_assignees").select("task_id, user_id").eq("tenant_id", tenantId).in("task_id", ids)),
-    getTenantSettingsByTenantId(tenantId),
-    admin.from("users").select("id").eq("tenant_id", tenantId).eq("status", "active").eq("system_role", "master"),
-  ]);
-  if (masters.error) throw new Error(`원장 조회: ${masters.error.message}`);
-  const monitorIds = settings.permissions.specialAccess.staffTaskMonitorIds ?? [];
-  const { data: monitors, error: monitorError } = monitorIds.length
-    ? await admin.from("users").select("id").eq("tenant_id", tenantId).eq("status", "active").in("id", monitorIds)
-    : { data: [], error: null };
-  if (monitorError) throw new Error(`지정한 사람 조회: ${monitorError.message}`);
-  const recipients = [...new Set([...(masters.data ?? []), ...(monitors ?? [])].map((u) => u.id as string))];
-  if (!recipients.length) return 0;
 
   const perUser = new Map<string, number>();
   for (const l of links) perUser.set(l.user_id, (perUser.get(l.user_id) ?? 0) + 1);

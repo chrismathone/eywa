@@ -510,3 +510,30 @@ export function applyUserOverrides(
   }
   return out;
 }
+
+/**
+ * 겸직(관리자 계열 + 담당 반)의 **본인 강사뷰**에서도 그 사람에게 준 개인 메뉴 권한이 열리게 — 강사 행을 실제 역할 값까지 올린다.
+ * 강사뷰는 '내 메뉴'와 뷰-경로 가드가 강사 행을 보는데 개인 예외는 실제 역할 행에만 얹혀(위 applyUserOverrides),
+ * 관리자 화면에선 보이는 메뉴가 강사뷰에선 숨고 주소로 들어가도 강사 홈으로 튕겼다(원장 2026-10-30 *"비포클래스 허은진도 볼수있게"*).
+ * 올리기만 한다(강사 행이 더 넓으면 그대로) · 개인 예외가 있는 메뉴만 · 값은 캡까지 반영된 실제 역할 칸 그대로.
+ * 🔴 강사 '내 메뉴'에 설 수 있는 메뉴(TEACHER_MENU_KEYS)만 — 직원관리 같은 관리자 화면을 개인 예외로 받은 사람이 강사뷰에서
+ *    그 주소로 들어가면 미니셸이 관리자 화면을 감싸는 깨진 렌더가 된다(레이아웃 뷰-경로 가드가 막던 그것).
+ * ⚠️ 셸 레이아웃의 강사뷰 크롬 판정 전용 — 페이지 게이트(requireAccess)는 원래 실제 역할로 판정한다.
+ */
+export function openOwnGrantsInTeacherView(
+  matrix: AccessMatrix,
+  userId: string,
+  realRole: SystemRole,
+  overrides: readonly UserPermissionOverride[],
+): AccessMatrix {
+  if (realRole === "teacher") return matrix;
+  let out: AccessMatrix | null = null;
+  for (const o of overrides) {
+    if (o.userId !== userId || !matrix[o.menu] || !(TEACHER_MENU_KEYS as readonly MenuKey[]).includes(o.menu)) continue;
+    const real = matrix[o.menu][realRole];
+    if (ACCESS_RANK[real] <= ACCESS_RANK[matrix[o.menu].teacher]) continue;
+    out ??= { ...matrix };
+    out[o.menu] = { ...out[o.menu], teacher: real };
+  }
+  return out ?? matrix;
+}

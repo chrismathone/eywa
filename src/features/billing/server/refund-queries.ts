@@ -99,7 +99,8 @@ type RawInvoice = {
   line_items: unknown;
 };
 
-function toPrefillLines(raw: unknown): RefundPrefillInvoice["lineItems"] {
+/** 청구 line_items(jsonb) → 결제내역 줄 — 퇴원보고서 환불 승인(`withdrawal-reports/server/refund-actions.ts`)도 쓴다. */
+export function toPrefillLines(raw: unknown): RefundPrefillInvoice["lineItems"] {
   if (!Array.isArray(raw)) return [];
   return receiptHistoryLines(raw).map((v) => {
     const li = (v ?? {}) as Record<string, unknown>;

@@ -33,6 +33,10 @@ vi.mock("@/lib/recording-recovery", () => ({
   clearRecovery: (kind: string) => m.clearRecovery(kind),
   recoverRecording: async () => null,
   saveChunk: async () => {},
+  patchRecoveryMeta: async () => {},
+  listOwnerDiagnostics: async () => [],
+  dropClearedMeta: async () => {},
+  readRecoveryMeta: async () => null,
   startRecoverySession: async () => ({ id: "meeting-session", fileName: "회의녹음_주간 회의.webm" }),
 }));
 vi.mock("@/lib/form-draft", async (importOriginal) => ({

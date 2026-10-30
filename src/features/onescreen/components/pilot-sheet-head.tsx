@@ -118,6 +118,8 @@ export type PilotSheetHeadProps = {
   date: string | null;
   className: string | null;
   teacherName: string | null;
+  /** 강사 칸 이름 — 수학 '담임', 영어·SRS 보고서 '담당자'(원장 2026-10-30 *"영어 보고서랑 srs 보고서 담임 -> 담당자"*). */
+  teacherLabel?: string;
   tests: PilotNoteSection[];
   levels: LevelRow[] | null;
   /** 그날 출결 — 날짜 옆 작은 표시(원장 2026-10-26). 모르면 null(표시 없음). */
@@ -190,7 +192,7 @@ export function PilotSheetHead(p: PilotSheetHeadProps) {
             </td>
           </tr>
           <InfoRow label="반" value={p.className} />
-          <InfoRow label="담임" value={p.teacherName} />
+          <InfoRow label={p.teacherLabel ?? "담임"} value={p.teacherName} />
         </tbody>
       </table>
       <table className="-mt-px w-full table-fixed border-collapse tabular-nums">

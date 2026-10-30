@@ -94,7 +94,7 @@ describe("퇴원 집계 조회 배선", () => {
 describe("추세선 배선 — 장부 정리는 퇴원 칸에서 뺀다", () => {
   it.each([
     ["src/features/dashboard/overview/server.ts", "withdrawn.filter((r) => !r.cleanup)"], // 운영실·원생 통계 '등록·퇴원 추이'
-    ["src/features/dashboard/overview/server.ts", "!row.cleanup && row.withdrawnAt < win.from"], // '등록 후 3개월 내 퇴원' 달마다 줄
+    ["src/features/dashboard/overview/server.ts", "!row.cleanup && row.exitDate < win.from"], // '등록 후 3개월 내 퇴원' 달마다 줄
     ["src/app/(shell)/withdrawals/page.tsx", "!r.systemBulk && !r.cleanup"], // 퇴원관리 '월별 추이'
     ["src/features/dashboard/onescreen/server/queries.ts", "!isCleanupExit(r.withdrawal_metadata)"], // 원스크린 4주 등록·퇴원
     ["src/features/withdrawals/server/window.ts", "cleanup: isCleanupExit(s.withdrawal_metadata)"], // 추이가 읽는 표식

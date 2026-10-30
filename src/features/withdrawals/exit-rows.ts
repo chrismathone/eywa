@@ -29,8 +29,13 @@ export type ExitRow = {
   name: string;
   school: string | null;
   grade: string | null;
-  /** 퇴원일 또는 그 과목 수강이 끝난 날(`YYYY-MM-DD`). */
+  /** 퇴원일 또는 그 과목 수강이 끝난 날(`YYYY-MM-DD`). 화면에 보이는 날짜. */
   date: string | null;
+  /**
+   * 기간·달을 판정하는 날짜 — 퇴원은 퇴원월(수강료를 낸 마지막 달, 원장 2026-10-29 · `exit-month.ts`)이 앞 달이면 그 달 말일,
+   * 아니면 `date`와 같다. 수강종료는 늘 `date`. 기간 필터·이번 달·월별 추이·올해 카드가 이 값을 본다.
+   */
+  countDate: string | null;
   /** 과목 키 — 과목 필터·분포가 본다. */
   subjects: string[];
   /** 마지막 반 이름(표시). */
@@ -102,11 +107,12 @@ export function resolveRange(
   }
 }
 
-export function inRange(row: Pick<ExitRow, "date" | "systemBulk">, w: RangeWindow): boolean {
+export function inRange(row: Pick<ExitRow, "countDate" | "systemBulk">, w: RangeWindow): boolean {
   if (w.kind === "all") return true;
-  if (!row.date) return false;
+  if (!row.countDate) return false;
   // 🔴 양끝 창은 운영실 '퇴원생' 카드와 **같은 함수** — 이번 달 판정이 두 화면에서 갈리지 않게(kpi-wiring 가드).
-  return inWithdrawalWindow({ withdrawnAt: row.date, systemBulk: row.systemBulk }, w.from, w.to);
+  //    퇴원은 퇴원월(수강료 기준) 날짜로 판정한다 — 운영실 카드도 같은 날짜(`exitDate`)를 본다.
+  return inWithdrawalWindow({ withdrawnAt: row.countDate, systemBulk: row.systemBulk }, w.from, w.to);
 }
 
 export type TypeKey = "all" | ExitKind;
@@ -130,6 +136,8 @@ type WithdrawnInput = {
   /** 등록일(`students.enrolled_at`) — 조기 퇴원 판정 재료. */
   enrolledAt?: string | null;
   withdrawnAt: string | null;
+  /** 기간 판정 날짜(퇴원월 기준) — 없으면 퇴원일. */
+  exitDate?: string | null;
   lastClassName: string | null;
   lastClassSubject: string | null;
   lastClassEnglishTrack?: string | null;
@@ -155,6 +163,8 @@ type SubjectEndedInput = {
   endedDetail: {
     subject: string;
     endedAt: string | null;
+    /** 달 판정 날짜 — 그 과목 수업료를 낸 마지막 달(`getSubjectEndedStudents`) · 없으면 종료일. */
+    countAt?: string | null;
     className: string | null;
     englishTrack: string | null;
     reason?: string | null;
@@ -176,6 +186,7 @@ export function toExitRows(withdrawn: readonly WithdrawnInput[], subjectEnded: r
       school: r.school,
       grade: r.grade,
       date: r.withdrawnAt ? r.withdrawnAt.slice(0, 10) : null,
+      countDate: r.exitDate ?? (r.withdrawnAt ? r.withdrawnAt.slice(0, 10) : null),
       // 과목을 못 모으면(수강 이력 없음) 마지막 반 과목으로 — 둘 다 없으면 과목 미상.
       subjects: r.exitSubjects?.length ? r.exitSubjects : r.lastClassSubject ? [r.lastClassSubject] : [],
       className: r.lastClassName,
@@ -202,6 +213,7 @@ export function toExitRows(withdrawn: readonly WithdrawnInput[], subjectEnded: r
         school: s.school,
         grade: s.grade,
         date: d.endedAt ? d.endedAt.slice(0, 10) : null,
+        countDate: (d.countAt ?? d.endedAt)?.slice(0, 10) ?? null,
         subjects: [d.subject],
         className: d.className,
         programSubject: d.subject,

@@ -43,8 +43,9 @@ describe("강사별 업무 현황", () => {
     };
     expect(narrowBySubject(sections, ["science"], (key) => key ?? null, false).withdrawals?.data?.rows.map((r) => r.id)).toEqual(["s"]);
     const full = { sections, today: range.to, subjects: { math: "수학", english: "영어", science: "과학" }, allowed: MENU_KEYS } as unknown as OverviewSnapshot;
-    const preview = previewSnapshot(full, { role: "subject", menus: new Set(MENU_KEYS), subject: { key: "math", label: "수학" }, items: [{ id: "panel:teacherWork", w: 12, h: 1 }, { id: "kpi:withdrawals", w: 6, h: 1 }] });
-    expect(preview.sections.teacherWork?.data?.rows.map((r) => r.subject)).toEqual(["math", "math"]);
+    // 강사별 업무 현황 카드는 대시보드에서 빠졌다(직원 평가 '업무 현황' 면 — 2026-10-30) — 과목 좁히기는 그대로 확인한다.
+    expect(narrowBySubject(sections, ["math"], (key) => key ?? null, false).teacherWork?.data?.rows.map((r) => r.subject)).toEqual(["math", "math"]);
+    const preview = previewSnapshot(full, { role: "subject", menus: new Set(MENU_KEYS), subject: { key: "math", label: "수학" }, items: [{ id: "kpi:withdrawals", w: 6, h: 1 }] });
     expect(preview.sections.withdrawals?.data?.rows.map((r) => r.id)).toEqual(["m"]);
   });
 });

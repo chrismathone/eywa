@@ -99,7 +99,6 @@ function StalledList({ rows, subjects }: { rows: StalledConsult[]; subjects: Rec
   );
 }
 
-const STALL_PREVIEW = 6;
 
 /** '상담 진행' 카드 몸통 — 단계별 인원(최근 30일) + 멈춘 상담(60일). */
 export function ConsultProgressBody({ data, subjects }: { data: ConsultProgressData; subjects: Record<string, string> }) {
@@ -129,13 +128,19 @@ export function ConsultProgressBody({ data, subjects }: { data: ConsultProgressD
         <p className="mb-1 text-sm font-bold">
           멈춘 상담 <span className={stalled.length ? "text-danger" : ""}>{number(stalled.length)}</span>건
         </p>
+        {/* 첫 화면엔 이름 없이 사유별 건수만 — 명단은 눌러서(원장 2026-10-29 *"대시보드 첫 화면에 이름이 직접 뜨지 않게"*). */}
         {stalled.length === 0 ? (
           <p className={s.empty}>멈춘 상담이 없습니다.</p>
         ) : (
-          <StalledList rows={stalled.slice(0, STALL_PREVIEW)} subjects={subjects} />
+          <p className={s.footnote}>
+            {(["levelTest", "consulted"] as const).flatMap((reason) => {
+              const n = stalled.filter((row) => row.reason === reason).length;
+              return n ? [`${reason === "levelTest" ? "입테 후 등록 없음" : "상담 후 결정 없음"} ${number(n)}건`] : [];
+            }).join(" · ")}
+          </p>
         )}
-        {stalled.length > STALL_PREVIEW && (
-          <DetailPopup title="멈춘 상담" label={`전체 ${stalled.length}건 보기`}>
+        {stalled.length > 0 && (
+          <DetailPopup title="멈춘 상담" label={`명단 보기 (${stalled.length}건)`} ariaLabel={`멈춘 상담 명단 보기 (${stalled.length}건)`}>
             <StalledList rows={stalled} subjects={subjects} />
           </DetailPopup>
         )}

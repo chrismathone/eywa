@@ -172,8 +172,9 @@ describe("배선 — 레이아웃이 계산하고, 메뉴는 받은 것만 그�
   const menu = read("src", "components", "teacher-menu.tsx");
   const resolver = read("src", "lib", "teacher-navigation.ts");
 
-  it("레이아웃이 **실제 역할**과 사용자 매트릭스로 계산해 넘긴다", () => {
-    expect(layout).toMatch(/teacherMenuKeysFor\(user\.systemRole, permMatrix\)/);
+  it("레이아웃이 **실제 역할**과 사용자 매트릭스(본인 강사뷰는 개인 메뉴 권한을 강사 행에도 얹은 것)로 계산해 넘긴다", () => {
+    expect(layout).toMatch(/teacherMenuKeysFor\(user\.systemRole, teacherViewMatrix\)/);
+    expect(layout).toMatch(/teacherViewMatrix = viewAs \? permMatrix : openOwnGrantsInTeacherView\(permMatrix, user\.id, user\.systemRole,/);
     expect(layout).toMatch(/menus=\{teacherMenus\}/);
   });
 

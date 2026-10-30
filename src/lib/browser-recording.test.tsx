@@ -1,7 +1,7 @@
 import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
-  save: vi.fn(), download: vi.fn(), initialize: vi.fn(),
+  save: vi.fn(), download: vi.fn(), initialize: vi.fn(), patchMeta: vi.fn(), liveReport: vi.fn(), pageClosed: vi.fn(),
   channel: null as null | {
     activation: (value: { requestId: string; owner: { tenantId: string; userId: string }; at: number }) => void;
     release: (value: { requestId: string; owner: { tenantId: string; userId: string } }) => void;
@@ -15,6 +15,15 @@ vi.mock("@/lib/recording-recovery", async (original) => ({
   ...await original<typeof import("@/lib/recording-recovery")>(),
   saveChunk: (...args: unknown[]) => mocks.save(...args),
   startRecoverySession: (...args: unknown[]) => mocks.initialize(...args),
+  patchRecoveryMeta: async (...args: unknown[]) => { mocks.patchMeta(...args); },
+}));
+// 녹음 중단 진단 — 서버로 보내는 것은 붙잡아 둔다(원장 2026-10-29 강제 종료 이유 로그).
+vi.mock("@/lib/recording-diagnostics", () => ({
+  reportLiveInterruption: async (...args: unknown[]) => { mocks.liveReport(...args); },
+  markPageClosed: (...args: unknown[]) => mocks.pageClosed(...args),
+  markInterrupt: () => {},
+  markStopRequested: () => {},
+  scanLeftoverRecordings: async () => {},
 }));
 // 문서 사이 신호는 붙잡아 둔다 — 다른 창·탭이 보낸 '이 녹음을 시작했다'를 직접 흘려 넣는다.
 vi.mock("@/lib/browser-recording-channel", async (original) => ({
@@ -204,10 +213,62 @@ describe("document-owned audio recording", () => {
     expect(latest()?.file?.type).toBe("audio/mp4");
   });
 
+  it("🔴 중단 진단: 한 녹음에 사유 하나 — 마이크 끊김 뒤 이어지는 오류·정지는 덮지 않는다", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await start();
+    act(() => { vi.advanceTimersByTime(3000); track.dispatchEvent(new Event("ended")); recorder().onerror?.({ error: new DOMException("x", "UnknownError") }); });
+    expect(mocks.liveReport).toHaveBeenCalledTimes(1);
+    expect(mocks.liveReport.mock.calls[0][1]).toBe("track_ended");
+    expect(mocks.liveReport.mock.calls[0][2]).toMatchObject({ seconds: 3 });
+  });
+
+  it("중단 진단: 녹음기 오류는 코드와 함께 · 누르지 않은 정지는 unexpected_stop", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await start();
+    act(() => { recorder().onerror?.({ error: new DOMException("device", "NotReadableError") }); recorder().stop(); });
+    expect(mocks.liveReport.mock.calls[0][1]).toBe("recorder_error");
+    expect(mocks.liveReport.mock.calls[0][2]).toMatchObject({ errorCode: "NotReadableError" });
+    await start(scopeB);
+    act(() => { recorder(1).stop(); });
+    expect(mocks.liveReport.mock.calls[1][1]).toBe("unexpected_stop");
+  });
+
+  it("중단 진단: 마이크가 끊긴 뒤 탭이 내려가도 원인은 마이크 끊김", async () => {
+    await start();
+    act(() => {
+      recorder().chunk("before");
+      recorder().stop = function () { this.stopCount++; this.state = "inactive"; }; // 끊김 직후 onstop 전에 탭이 내려간다
+      track.dispatchEvent(new Event("ended"));
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    act(() => { recorder().onstop?.(); });
+    expect(mocks.liveReport).toHaveBeenCalledTimes(1);
+    expect(mocks.liveReport.mock.calls[0][1]).toBe("track_ended");
+  });
+
+  it("중단 진단: 직접 끝내면 보고하지 않고 끝 기록만 '직접 끝냄'", async () => {
+    await start();
+    const id = latest()!.meta!.id;
+    act(() => { vi.advanceTimersByTime(2000); stopBrowserRecording(latest()!.requestId); });
+    expect(mocks.liveReport).not.toHaveBeenCalled();
+    expect(mocks.patchMeta).toHaveBeenCalledWith(id, expect.objectContaining({ endReason: "stopped", seconds: 2 }));
+  });
+
+  it("중단 진단: 녹음 중 탭이 내려가면 동기 표시 + 끝 기록 '탭 닫기'(다음 접속 때 보고)", async () => {
+    await start();
+    const id = latest()!.meta!.id;
+    act(() => { window.dispatchEvent(new Event("pagehide")); });
+    expect(mocks.pageClosed).toHaveBeenCalledWith([id]);
+    expect(mocks.liveReport).not.toHaveBeenCalled();
+    expect(mocks.patchMeta).toHaveBeenCalledWith(id, expect.objectContaining({ endReason: "page_closed" }));
+  });
+
   it("retires the microphone and keeps chunks when a soft logout removes the authenticated shell", async () => {
     const authenticated = render(<RecordingOwnerGuard owner={scopeA} />);
     await start();
     authenticated.unmount();
+    // 중단 진단 — 버린 녹음은 '로그인 화면을 벗어남'으로 적어 둔다(그 계정이 다시 들어오면 보고)
+    expect(mocks.patchMeta).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ endReason: "signed_out" }));
     expect(recorder().state).toBe("inactive");
     expect(latest()).toBeNull();
     expect(mocks.save).toHaveBeenCalled();

@@ -51,7 +51,6 @@ const SUBJECT_ITEMS: readonly Item[] = [
   // 과목별 수강 → 반복 결석 학생(원장 2026-10-15) — 과목이 하나인 관리자에겐 과목별 수강이 재원생 칸의 보조 숫자와 같은 숫자였다.
   newItem("panel:repeatAbsence"),
   newItem("panel:notices"),
-  newItem("panel:teacherWork"),
 ];
 
 /** 편집기가 시작하는 값이자 저장값이 없는 역할의 배치 — 모든 역할에 있다. */

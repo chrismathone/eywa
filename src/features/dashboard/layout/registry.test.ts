@@ -23,7 +23,11 @@ describe("레지스트리 = 운영실 카드 전부", () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids.filter((id) => id.startsWith("kpi:"))).toEqual(KPI_KEYS.map((k) => `kpi:${k}`));
     expect(PANEL_IDS.length).toBeGreaterThanOrEqual(24);
-    for (const p of PANEL_IDS) expect(cardDef(`panel:${p}`), p).toBeDefined();
+    // 대시보드에서 뺀 카드(registry RETIRED_PANELS)는 갤러리에 없다 — 강사별 업무 현황 → 직원 평가 '업무 현황'(2026-10-30).
+    for (const p of PANEL_IDS) {
+      if (p === "teacherWork") expect(cardDef(`panel:${p}`), p).toBeUndefined();
+      else expect(cardDef(`panel:${p}`), p).toBeDefined();
+    }
   });
 
   it("서버 add(영역, 메뉴)와 영역-메뉴 표가 같다(배치 필터가 서버 조회와 어긋나지 않게)", () => {
@@ -75,7 +79,7 @@ describe("레지스트리 = 운영실 카드 전부", () => {
         expenses: ok({ count: 0 }),
         absences: ok({ anchor: null, rows: [] }),
         admissions: ok({ total: 0, enrolled: 0, rate: null }),
-        consultations: ok({ total: 0, lastWeek: 0, pendingFollowUps: 0, overdueFollowUps: 0 }),
+        consultations: ok({ thisMonth: 0, lastWeek: 0, pendingFollowUps: 0, overdueFollowUps: 0 }),
         newcomers: ok({ total: 0, stages: [], checksAvailable: true, items: [] }),
         homework: ok({ students: 0 }),
         schedule: ok([]),

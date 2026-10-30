@@ -144,6 +144,30 @@ async function activeRoleIds(admin: SupabaseClient, tenantId: string, roles: rea
   return [...new Set((data ?? []).map((r) => r.id as string))];
 }
 
+/**
+ * 담당 강사가 없는 이벤트만 — 원장 2026-10-29 *"내가 언급된 일 말고는 전부 알림 꺼버려 … 내 학생 내 반 이런거 있잖아. 나와 관련있는 알림만."*
+ * 역할 전원 사본은 없앴다. 담당 강사가 받는 건은 원장에게 가지 않고, 담당 강사가 없는 학생 건만 원장이 받는다(아무에게도 안 가는 일이 없게).
+ */
+function withoutTeacher<E extends { subjectKey: string }>(
+  events: readonly E[],
+  studentTeachers: ReadonlyMap<string, readonly string[]>,
+  studentIdOf: (event: E) => string = (event) => event.subjectKey,
+): E[] {
+  return events.filter((event) => !(studentTeachers.get(studentIdOf(event))?.length));
+}
+
+/** 반 → 재직 담임(본 테넌트·운영 중 반). 보고서처럼 반이 정해진 건의 '담당 강사 없음' 판정용. */
+async function activeClassTeachers(admin: SupabaseClient, tenantId: string, classIds: readonly string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const unique = [...new Set(classIds.filter(Boolean))];
+  if (!unique.length) return out;
+  const classes = await fetchInChunks<{ id: string; teacher_id: string | null; is_active: boolean }>(unique, (chunk) =>
+    admin.from("classes").select("id, teacher_id, is_active").eq("tenant_id", tenantId).in("id", chunk));
+  const live = await activeUserIds(admin, tenantId, classes.flatMap((c) => (c.is_active && c.teacher_id ? [c.teacher_id] : [])));
+  for (const c of classes) if (c.is_active && c.teacher_id && live.has(c.teacher_id)) out.set(c.id, c.teacher_id);
+  return out;
+}
+
 /** master(활성) 수신자 id 목록. */
 function activeMasterIds(admin: SupabaseClient, tenantId: string): Promise<string[]> {
   return activeRoleIds(admin, tenantId, ["master"]);
@@ -244,30 +268,32 @@ async function detectAbsence(admin: SupabaseClient, tenantId: string): Promise<n
   if (cold || fresh.length === 0) return 0;
 
   const freshEvents = fresh as AbsenceEvent[];
-  const masterBody = absenceDigestBody(freshEvents);
-  if (!masterBody) return 0;
+  if (!absenceDigestBody(freshEvents)) return 0;
 
   const items: NotifyInput[] = [];
-  // ① master 전원 = 신규 이벤트 전체 집계 1건(원장 결정 '운영 벨=master').
-  const masters = await activeMasterIds(admin, tenantId);
-  for (const recipientId of masters) {
-    items.push({
-      tenantId,
-      recipientId,
-      type: "absence_alert",
-      title: "반복 결석 학생",
-      body: masterBody,
-      link: absenceNotificationLink(freshEvents),
-      actorId: null,
-    });
-  }
-  // ② v2 — 담당 강사 = 자기 학생 신규 이벤트만 집계 1건(스코프 격리, 활성 강사만).
   const studentTeachers = await getStudentActiveTeachers(
     admin,
     tenantId,
     [...new Set(freshEvents.map((event) => event.subjectKey))],
     kstToday(),
   );
+  // ① 원장 = 담당 강사가 없는 학생 건만 집계 1건(나와 관련 있는 알림만 — 원장 2026-10-29).
+  const orphan = withoutTeacher(freshEvents, studentTeachers);
+  const masterBody = absenceDigestBody(orphan);
+  if (masterBody) {
+    for (const recipientId of await activeMasterIds(admin, tenantId)) {
+      items.push({
+        tenantId,
+        recipientId,
+        type: "absence_alert",
+        title: "반복 결석 학생",
+        body: masterBody,
+        link: absenceNotificationLink(orphan),
+        actorId: null,
+      });
+    }
+  }
+  // ② v2 — 담당 강사 = 자기 학생 신규 이벤트만 집계 1건(스코프 격리, 활성 강사만).
   for (const [teacherId, teacherEvents] of groupEventsByTeacher(freshEvents, studentTeachers)) {
     const body = absenceDigestBody(teacherEvents);
     if (!body) continue;
@@ -458,20 +484,20 @@ async function detectGradeDrop(admin: SupabaseClient, tenantId: string): Promise
   if (cold || fresh.length === 0) return 0;
 
   const items: NotifyInput[] = [];
-  const masterBody = gradeDropDigestBody(fresh);
-  const masters = await activeMasterIds(admin, tenantId);
-  if (masterBody) {
-    for (const recipientId of masters) {
-      items.push({ tenantId, recipientId, type: "grade_drop", title: "성적 급락", body: masterBody, link: "/retention", actorId: null });
-    }
-  }
-  // 담당 강사 = 자기 학생 성적 급락만(결석 v2와 동일 tenant 격리 역매핑 재사용).
   const studentTeachers = await getStudentActiveTeachers(
     admin,
     tenantId,
     [...new Set(fresh.map((event) => event.subjectKey))],
     today,
   );
+  // 원장 = 담당 강사가 없는 학생 건만(원장 2026-10-29 '나와 관련 있는 알림만').
+  const masterBody = gradeDropDigestBody(withoutTeacher(fresh, studentTeachers));
+  if (masterBody) {
+    for (const recipientId of await activeMasterIds(admin, tenantId)) {
+      items.push({ tenantId, recipientId, type: "grade_drop", title: "성적 급락(담당 강사 없음)", body: masterBody, link: "/retention", actorId: null });
+    }
+  }
+  // 담당 강사 = 자기 학생 성적 급락만(결석 v2와 동일 tenant 격리 역매핑 재사용).
   for (const [teacherId, teacherEvents] of groupEventsByTeacher(fresh, studentTeachers)) {
     const body = gradeDropDigestBody(teacherEvents);
     if (!body) continue;
@@ -530,13 +556,6 @@ async function detectProgressAnomaly(admin: SupabaseClient, tenantId: string): P
   ]);
   const tasksOf = (events: readonly ProgressAnomalyEvent[]) =>
     events.flatMap((event) => taskByEvent.get(`${progressEventId(event)}|`) ?? []);
-  for (const group of byStudent) {
-    const body = progressAnomalyStudentBody(group.studentName, group.events);
-    if (!body) continue;
-    for (const recipientId of masterIds) {
-      items.push({ tenantId, recipientId, type: "progress_anomaly", title: "진도 기록 이상", body, link: progressAnomalyLink(group.studentId), actorId: null, taskIds: tasksOf(group.events) });
-    }
-  }
   // 담당 강사 = 자기 학생의 **수학 반** 강사만(리뷰 확정 #77형: 진도 파이프라인이 math 전용이라
   // 영어만 담당하는 강사에게 보내면 배지도 안 보이고 진도 입력 주체도 아님 = 할 수 없는 일 재촉).
   // "math" = ingest.ts MATH_SUBJECT와 짝(subject_1 등 비math 보고서는 ingest가 skip하므로 이벤트 원천 부재).
@@ -550,6 +569,15 @@ async function detectProgressAnomaly(admin: SupabaseClient, tenantId: string): P
   // 강사도 같은 딥링크 — `/onescreen`은 **오늘 로스터**에만 배지를 다는데 알림은 다음날 도니, 그 학생이
   // 그날 수업이 없으면 원스크린에도 아무 표시가 없다(같은 "눌렀는데 아무것도 없음"). 진도 탭은 항상 보인다.
   // (강사의 students 권한은 scoped — 알림 수신자 자체가 그 학생 담당 강사라 열람 범위 안.)
+  // 원장 = 수학 반 담당 강사가 없는 학생 건만(원장 2026-10-29 '나와 관련 있는 알림만').
+  for (const group of byStudent) {
+    if (studentTeachers.get(group.studentId)?.length) continue;
+    const body = progressAnomalyStudentBody(group.studentName, group.events);
+    if (!body) continue;
+    for (const recipientId of masterIds) {
+      items.push({ tenantId, recipientId, type: "progress_anomaly", title: "진도 기록 이상(담당 강사 없음)", body, link: progressAnomalyLink(group.studentId), actorId: null, taskIds: tasksOf(group.events) });
+    }
+  }
   for (const [teacherId, teacherEvents] of groupEventsByTeacher(fresh, studentTeachers)) {
     for (const group of groupProgressAnomalyByStudent(teacherEvents)) {
       const body = progressAnomalyStudentBody(group.studentName, group.events);
@@ -616,8 +644,9 @@ async function detectOutstanding(admin: SupabaseClient, tenantId: string): Promi
   //  · 여러 명 = 새 '기한 경과만' 필터가 걸린 수납 목록(적어도 미수 목록에 착지)
   const link =
     fresh.length === 1 ? `/students/${fresh[0]!.subjectKey}?tab=billing` : "/billing?overdue=1";
-  // billing 도메인 = master + 회계(accountant). 둘 다 활성만, 각자 전체 집계 1건.
-  const recipients = await activeRoleIds(admin, tenantId, ["master", "accountant"]);
+  // 수납 담당 = 회계(accountant) — 원장 2026-10-29 '나와 관련 있는 알림만'(원장 사본 제거). 회계가 없을 때만 원장.
+  const accountants = await activeRoleIds(admin, tenantId, ["accountant"]);
+  const recipients = accountants.length ? accountants : await activeMasterIds(admin, tenantId);
   const items: NotifyInput[] = recipients.map((recipientId) => ({
     tenantId,
     recipientId,
@@ -734,14 +763,28 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
   if (cold || fresh.length === 0) return 0;
 
   const items: NotifyInput[] = [];
-  const masterBody = unsentReportDigestBody(fresh);
+  const studentTeachers = await getStudentActiveTeachers(
+    admin,
+    tenantId,
+    [...new Set(fresh.map((event) => event.studentId))],
+    today,
+  );
+  // 원장 = 그 보고서 반에 재직 담임이 없는 건만(원장 2026-10-29 '나와 관련 있는 알림만'). 반이 없는 건(보강·이관)도 원장.
+  //    학생의 다른 과목 강사로 판정하지 않는다 — 그 강사는 이 보고서를 보낼 수 없다(리뷰 2026-10-29).
+  const classOfReport = new Map(sendable.map((row) => [row.id, row.classId]));
+  const unsentClassTeacher = await activeClassTeachers(admin, tenantId, [...classOfReport.values()].filter((id): id is string => !!id));
+  const orphanUnsent = fresh.filter((event) => {
+    const classId = classOfReport.get(event.subjectKey);
+    return !classId || !unsentClassTeacher.has(classId);
+  });
+  const masterBody = unsentReportDigestBody(orphanUnsent);
   if (masterBody) {
     for (const recipientId of await activeMasterIds(admin, tenantId)) {
       items.push({
         tenantId,
         recipientId,
         type: "unsent_report",
-        title: "미발송 수업 보고서",
+        title: "미발송 수업 보고서(담당 강사 없음)",
         body: masterBody,
         // ⚠️ 발송 콘솔은 '목록'(tab=list, ReportList가 sendClassnoteForUnsent 호출)이다 —
         // tab=writing은 '작성률' 표라 미발송 목록도 발송 버튼도 없다(적대 리뷰 확정 결함, 2026-07-17).
@@ -749,17 +792,11 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
         // 원장이 "알림엔 미발송이 많은데 들어가면 없다"고 물었다(2026-09-09 — 알림이 옳았다).
         link: `/lesson-reports?tab=list&status=${encodeURIComponent(UNSENT_FILTER)}`,
         actorId: null,
-        taskIds: fresh.flatMap((event) => taskByReport.get(event.subjectKey) ?? []),
+        taskIds: orphanUnsent.flatMap((event) => taskByReport.get(event.subjectKey) ?? []),
       });
     }
   }
   // 담당 강사 = 자기 학생 건만. ⚠️ subjectKey가 보고서 id라 studentIdOf 추출자 필수(안 넘기면 0건).
-  const studentTeachers = await getStudentActiveTeachers(
-    admin,
-    tenantId,
-    [...new Set(fresh.map((event) => event.studentId))],
-    today,
-  );
   for (const [teacherId, teacherEvents] of groupEventsByTeacher(fresh, studentTeachers, (e) => e.studentId)) {
     const body = unsentReportDigestBody(teacherEvents);
     if (!body) continue;
@@ -859,14 +896,26 @@ async function detectSendDeadline(admin: SupabaseClient, tenantId: string): Prom
   const items: NotifyInput[] = [];
   // 타입은 기존 report_send_failed를 그대로 쓴다 — 중요도(important.ts)·배지가 이미 배선돼 있고,
   // 강사에겐 결국 같은 사건이다(새 타입을 만들면 두 줄기가 각자 배선을 요구한다).
-  const masterBody = sendDeadlineDigestBody(fresh);
+  const studentTeachers = await getStudentActiveTeachers(
+    admin,
+    tenantId,
+    [...new Set(fresh.map((event) => event.studentId))],
+    today,
+  );
+  // 원장 = 그 보고서 반에 재직 담임이 없는 건만(원장 2026-10-29 '나와 관련 있는 알림만') — 미발송과 같은 판정.
+  const classOfFailed = new Map(gated.map((row) => [row.id as string, (row.class_id as string | null) ?? null]));
+  const failedClassTeacher = await activeClassTeachers(admin, tenantId, [...classOfFailed.values()].filter((id): id is string => !!id));
+  const masterBody = sendDeadlineDigestBody(fresh.filter((event) => {
+    const classId = classOfFailed.get(event.subjectKey);
+    return !classId || !failedClassTeacher.has(classId);
+  }));
   if (masterBody) {
     for (const recipientId of await activeMasterIds(admin, tenantId)) {
       items.push({
         tenantId,
         recipientId,
         type: "report_send_failed",
-        title: "오늘까지만 재발송 가능",
+        title: "오늘까지만 재발송 가능(담당 강사 없음)",
         body: masterBody,
         link: "/lesson-reports?tab=list", // 재발송 버튼이 있는 유일한 자리
         actorId: null,
@@ -874,12 +923,6 @@ async function detectSendDeadline(admin: SupabaseClient, tenantId: string): Prom
     }
   }
   // 담당 강사 = 자기 학생 건만. ⚠️ subjectKey가 보고서 id라 studentIdOf 추출자 필수(안 넘기면 0건).
-  const studentTeachers = await getStudentActiveTeachers(
-    admin,
-    tenantId,
-    [...new Set(fresh.map((event) => event.studentId))],
-    today,
-  );
   for (const [teacherId, teacherEvents] of groupEventsByTeacher(fresh, studentTeachers, (e) => e.studentId)) {
     for (const event of teacherEvents) {
       items.push({

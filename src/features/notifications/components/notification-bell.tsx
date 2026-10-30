@@ -228,8 +228,9 @@ export function NotificationBell() {
 
   // 전체 삭제 = **지금 뷰 전체**(목록 밖 포함) 영구 삭제. 다른 뷰(받은 알림 ↔ 보관함)는 그대로 둔다.
   function deleteAll() {
-    // 상한 = 보이던 가장 최근 알림(서버 최신순) — 확인 사이 새로 온 알림은 남는다.
-    const upTo = items[0]?.createdAt;
+    // 상한 = 보이던 알림 중 가장 최근 것 — 확인 사이 새로 온 알림은 남는다.
+    //    ⚠️ 목록 첫 줄이 아니다: 안 읽은 알림이 위로 오므로(원장 2026-10-29) 첫 줄이 가장 최근이 아닐 수 있다.
+    const upTo = items.reduce<string | undefined>((max, n) => (!max || n.createdAt > max ? n.createdAt : max), undefined);
     setConfirmClear(false);
     setItems([]);
     if (view === "active") setUnread(0);

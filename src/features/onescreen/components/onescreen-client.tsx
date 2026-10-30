@@ -427,6 +427,7 @@ export function OneScreenClient({
   holidayName = null,
   teacherName = "",
   reportClassNamePrefix = false,
+  teacherEnglishName = null,
   reportSettings,
   academyName = "",
   logoSrc = null,
@@ -480,6 +481,8 @@ export function OneScreenClient({
   // reportSettings가 없으면 미리보기 열이 아예 안 열린다(레이아웃 예전 그대로) → 표시 전용 기능이라 안전한 폴백.
   teacherName?: string;
   reportClassNamePrefix?: boolean;
+  /** 영문 이름 — 영어 보고서 미리보기 '담당자' 칸. */
+  teacherEnglishName?: string | null;
   reportSettings?: ReportSettings;
   academyName?: string;
   logoSrc?: string | null;
@@ -547,12 +550,13 @@ export function OneScreenClient({
             logoSrc,
             teacherName,
             reportClassNamePrefix,
+            teacherEnglishName,
             reportDate: activeDate,
             showDailyTest,
             showCheckTest,
           }
         : undefined,
-    [reportSettings, academyName, logoSrc, teacherName, reportClassNamePrefix, activeDate, showDailyTest, showCheckTest],
+    [reportSettings, academyName, logoSrc, teacherName, reportClassNamePrefix, teacherEnglishName, activeDate, showDailyTest, showCheckTest],
   );
   // 반 공통 서술(G6) — 반 이름→서술. sessionStorage(날짜 키)+외부 스토어(#75 lazy 초기값·#25 effect setState 회피).
   // 생성 재료(기록 아님): 자동작성 시 그 행의 반 서술을 classContext로 동봉, 멘트 생성 후엔 잃어도 무해.

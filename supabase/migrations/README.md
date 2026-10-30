@@ -12,6 +12,22 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-10-29 숙제 영상 업로드 실패 알림: 반 담임에게만 (s2_0012 · 적용 2026-10-29)
+
+`s2_0012_homework_video_fail_notify_teacher_only.sql` — 원장 *"내 학생 내 반 이런거 있잖아. 나와 관련있는 알림만."* `record_homework_video_upload_event`의 수신자 조건 한 줄 — 할 일 담당과 같은 순서 — 반 담임 → 업로드 경로의 강사 → 둘 다 없을 때만 원장·관리자(종전: 담임 + 원장·관리자 전원). 운영 함수 본문에서 그 줄 1건 확인 뒤 치환. 되돌리기 = `scripts/_oneoff/revert-s2_0012-homework-video-fail-notify-teacher-only.sql`.
+
+## 2026-10-29 환불 처리 할 일: 퇴원보고서 원장 환불 승인 → 데스크 담당자의 내 할 일 (s2_0011 · 적용 2026-10-29)
+
+`s2_0011_refund_desk_task.sql` — 원장 *"데스크 담당자를 지정할 수 있게 하면 될듯. 그럼 알림이 자연스럽게 가겠지. 내 할일에 추가되서"*. ① `public.refund_desk_task_open`(service_role만) — 환불 요청서 하나 = 할 일 하나(kind `refund_process`) ② `academy_documents` 트리거 — 요청서에 환불완료일자가 처음 들어가면 처리됨, 지우면 취소. 앱은 SQL 전에도 돈다(할 일만 건너뜀 · 알림은 감). 되돌리기 = `scripts/_oneoff/revert-s2_0011-refund-desk-task.sql`.
+
+## 2026-10-29 오늘수학 스냅샷: 만들 때 만료분 지우기 (s2_0010 · 적용 2026-10-29)
+
+`s2_0010_tm_sync_prune_expired_snapshots.sql` — DB 메모리 부족 정지(10-29) 조사: `tm_sync_private.pages` 360MB(만료 스냅샷 312개가 지우는 곳 없이 쌓임). 손 정리(만료 1시간 지난 289개 삭제 + VACUUM FULL)로 29MB. 재발 방지로 `tm_sync_create_snapshot`의 insert 앞에 그 연결의 만료 1시간 지난 스냅샷 삭제 한 줄(페이지는 cascade · 대상 줄 1건 확인 뒤 치환). 함께 cron 주기를 1분 → 30분(vercel.json · 원장 "30분정도로 여유있게") — 즉시 wake는 그대로. 되돌리기 = `scripts/_oneoff/revert-s2_0010-tm-sync-prune-expired-snapshots.sql`.
+
+## 2026-10-29 퇴원보고서 요청 취소: 원장도 (s2_0009 · ✅ 운영 적용 2026-10-29 · CLI — 두 함수 새 조건 있음·옛 조건 없음 확인)
+
+`s2_0009_withdrawal_cancel_by_director.sql` — 원장 *"김덕현 기준으로 요청 취소가 왜 안되는지"*. 앱은 원장(master · 강사 화면 아님)에게 '요청 취소'를 주는데 DB 전이 함수 둘이 요청자 본인만 받아 거절했다. 두 함수의 취소 조건 한 줄만 '요청자 **또는** 그 지점 활성 master'로 치환(운영 함수 본문에서 그 줄이 정확히 1건인지 확인한 뒤 · 0369a 방식). 적용 전 확인: 두 함수 모두 대상 줄 1건. 되돌리기 = `scripts/_oneoff/revert-s2_0009-withdrawal-cancel-by-director.sql`.
+
 ## 2026-10-29 연동 PC가 '따로 낸 영상 숙제'를 읽기 (s2_0008 · ✅ 운영 적용 2026-10-29 · CLI)
 
 `s2_0008_sync_agent_read_extra_video_homework.sql` — 원장 *"따로 낸 영상 숙제도 반 지정된 반으로 귀속"*. 반미정 영상의 반을 숙제로 정하는 워커 질의(`video-teacher-route.mjs` loadHomeworkClassIds)가 `video_homework_extra_issues`를 읽는다. 이 표는 서버 전용이라 `eywa_sync_agent`의 읽기 권한·정책이 없었다. 자기 지점 줄 읽기만 연다(s2_0006과 같은 모양 · 앱 사용자 권한 그대로). **AywaSync 1.0.9 게시 전에** 적용한다(1.0.8은 이 표를 읽지 않는다). 적용 확인: 연동 PC 역할 select만(insert·update 없음) · 정책 sync_agent_allow·sync_agent_tenant_boundary · authenticated는 그대로 막힘. 되돌리기 = `scripts/_oneoff/revert-s2_0008-sync-agent-read-extra-video-homework.sql`.

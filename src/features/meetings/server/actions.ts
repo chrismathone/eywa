@@ -244,6 +244,13 @@ export async function startMeetingFromAudio(
   const audioSizeBytes = Number(formData.get("audioSizeBytes") ?? 0);
   // 메모장(선택) — 회의 중 작성한 메모. content에 저장돼 나중에 전사와 함께 분석된다.
   const notepad = String(formData.get("notepad") ?? "");
+  // 녹음 중단 진단 — 이 파일의 녹음 id·출처(브라우저 녹음 · 복구본). 감사로그 `recording_interrupted`와 같은 id로 잇는다.
+  // 파일을 직접 고른 것은 보내지 않는다(출처를 단정하지 않는다). 모양이 틀리면 버린다(업로드는 그대로).
+  const recordingSessionId = String(formData.get("recordingSessionId") ?? "").toLowerCase();
+  const recordingOrigin = String(formData.get("recordingOrigin") ?? "");
+  const recording = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(recordingSessionId)
+    && (recordingOrigin === "recorded" || recordingOrigin === "restored")
+    ? { sessionId: recordingSessionId, origin: recordingOrigin } : null;
   const attendeesRaw = String(formData.get("attendees") ?? "");
   const attendees = attendeesRaw
     .split(",")
@@ -308,6 +315,7 @@ export async function startMeetingFromAudio(
       // 🔴 KST 날짜 — `slice(0, 10)`은 UTC라 아침 회의가 하루 전으로 적힌다(kstDateOf 주석).
       heldAt: kstDateOf(heldAt),
       notepadChars: notepad.trim().length,
+      ...(recording ? { recording } : {}),
     },
   });
 

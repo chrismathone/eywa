@@ -35,9 +35,9 @@ describe("report submission and review", () => {
   });
   it("shows the original table with automatic fields and saves the user's corrections", async () => {
     render(<ReportDetail {...props} prefill={{ attendance: "최근 출석 5회", tuition: "청구 300,000원", arrears: "no", arrearsNote: "수납 확인" }} />);
-    expect(screen.getByRole("table", { name: "결재란" })).toHaveTextContent("담임팀장원장");
+    expect(screen.getByRole("table", { name: "결재란" })).toHaveTextContent("담임관리자원장");
     expect(screen.getByRole("table", { name: "퇴원 보고 내용" })).toHaveTextContent("테스트 학생");
-    expect(screen.getByLabelText("출결·현황")).toHaveValue("최근 출석 5회");
+    expect(screen.getByLabelText("최근 3개월 출결 현황")).toHaveValue("최근 출석 5회");
     expect(screen.getByText("청구 300,000원")).toBeInTheDocument();
     expect(screen.getByText("미납 없음")).toBeInTheDocument();
     expect(screen.queryByLabelText("미납 여부")).not.toBeInTheDocument();
@@ -104,7 +104,7 @@ describe("report submission and review", () => {
   it("shows final withdrawal consequences before director approval", async () => {
     render(<ReportDetail {...props} report={{ ...r, status: "director_pending", manager_approved_at: r.created_at }} userId={director} />);
     fireEvent.click(screen.getByRole("button", { name: "승인" }));
-    expect(screen.getByText(/전체 퇴원을 처리합니다/)).toBeInTheDocument();
+    expect(screen.getByText(/퇴원을 처리합니다/)).toBeInTheDocument();
     expect(mocks.change).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "승인 확인" }));
     await waitFor(() => expect(mocks.change).toHaveBeenCalledWith(r.id, "approve", 3, undefined));

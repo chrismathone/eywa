@@ -41,7 +41,7 @@ describe("compact request overlay and optional principal", () => {
     mocks.request.mockResolvedValue({ ok: true, id: "new-report" });
     render(<RequestDialog {...props} />); await fill();
     expect(screen.queryByLabelText("처리 구분")).not.toBeInTheDocument();
-    expect(screen.getByText(/전체 퇴원 · 1개 반 · 보고서 1건/)).toBeInTheDocument();
+    expect(screen.getByText(/퇴원 · 1개 반 · 보고서 1건/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "강사에게 작성 요청" }));
     await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ studentId: "student", teacherIds: ["teacher"], managerIds: ["manager"], directorIds: [], subjects: ["math"] })));
     await waitFor(() => expect(assign).toHaveBeenCalledWith("/withdrawal-reports?embed=1"));
@@ -76,7 +76,7 @@ describe("compact request overlay and optional principal", () => {
     fireEvent.click(screen.getByRole("button", { name: /^작성 강사:/ }));
     fireEvent.click(await screen.findByRole("button", { name: "영어 강사 영어" }));
     await closeOptions();
-    expect(screen.getByText("전체 퇴원 · 2개 반 · 보고서 1건")).toBeInTheDocument();
+    expect(screen.getByText("퇴원 · 2개 반 · 보고서 1건")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "강사에게 작성 요청" }));
     await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ teacherIds: ["teacher"], enrollmentIds: ["course", "english-course"], subjects: ["math", "english"] })));
   });

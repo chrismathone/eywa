@@ -39,9 +39,9 @@ const keys = (items: ListItem[]) => items.map((i) => i.key);
 describe("퇴원보고서 목록 한 벌 — 웹 보고서 + 기존 스프레드시트 기록(원장 2026-10-14)", () => {
   it("두 출처를 한 줄 모양으로 — 기존 기록은 원문 이름·반(줄바꿈 접음)·과목 라벨, 학생 연결 상태", () => {
     const [web, old] = build([report()], [archive()]);
-    expect(web).toMatchObject({ href: "/withdrawal-reports/r1", name: "김학생", detail: "전체 퇴원 · 수학", teacher: "이성우", status: "pending", link: null });
+    expect(web).toMatchObject({ href: "/withdrawal-reports/r1", name: "김학생", detail: "퇴원 · 수학", subjectText: "수학", kindText: "퇴원", classText: "", teacher: "이성우", status: "pending", link: null, mine: "none" });
     expect(old).toMatchObject({
-      href: "/withdrawal-reports/archive/a1", name: "박원생", detail: "경명여중1 · 중1 심화반 · 수학", teacher: "Jane",
+      href: "/withdrawal-reports/archive/a1", name: "박원생", schoolGrade: "경명여중1", requestedText: "—", detail: "중1 심화반 · 수학", subjectText: "수학", kindText: "—", classText: "중1 심화반", teacher: "Jane",
       status: "archive", statusLabel: "스프레드시트 기록", link: "unmapped", dateText: "2026-09-20",
     });
     expect(build([], [archive({ mapped_student_id: "s9", mapping_kind: "manual" })])[0]!.link).toBe("manual");
@@ -141,5 +141,42 @@ describe("퇴원보고서 목록 한 벌 — 웹 보고서 + 기존 스프레드
       "/withdrawal-reports?embed=1&link=unmapped",
     );
     expect(listHref({}, {})).toBe("/withdrawal-reports");
+  });
+});
+
+describe("원장 2026-10-30 — 내 승인 구분 · 요청일 정렬 · 구분/내 승인 필터 · 내용 검색", () => {
+  const as = (userId: string, reports: ReportListRow[], archives: ArchiveRow[] = []) => buildListItems({ reports, archives, staff, labelOf, userId });
+  it("상태 칸 구분 — 내 승인 차례 / 관여했지만 할 일 없음 / 승인자가 아닌 열람", () => {
+    const r = report({ status: "manager_pending", manager_ids: ["m1", "m2"], manager_decisions: { m2: "2026-10-11" } });
+    expect(as("m1", [r])[0]!.mine).toBe("approve");
+    expect(as("m2", [r])[0]!.mine).toBe("none"); // 이미 승인함
+    expect(as("boss", [r])[0]!.mine).toBe("view");
+    const d = report({ status: "director_pending", director_ids: ["boss"], director_decisions: {} });
+    expect(as("boss", [d])[0]!.mine).toBe("approve");
+    expect(as("m1", [d])[0]!.mine).toBe("none"); // 관리자 단계는 끝났다
+  });
+  it("처리되지 않은 것 먼저, 그 안에선 요청일 최신 순 · 처리 완료는 그 아래 · 요청일 없는 기존 기록은 그 뒤", () => {
+    const items = build(
+      [
+        report({ id: "old-pending", created_at: "2026-10-01T00:00:00Z", effective_date: "2026-12-01" }),
+        report({ id: "new-pending", created_at: "2026-10-20T00:00:00Z", effective_date: "2026-10-05" }),
+        report({ id: "done", status: "completed", created_at: "2026-10-25T00:00:00Z" }),
+      ],
+      [archive({ exit_date: "2026-10-28" })],
+    );
+    expect(keys(items)).toEqual(["r:new-pending", "r:old-pending", "r:done", "a:a1"]);
+  });
+  it("구분 필터 · 내 승인 필터 · 본문 내용 검색(상담 내용·원본 칸)", () => {
+    const items = as("m1", [
+      report({ id: "w", status: "manager_pending", body_parent: "어머님이 이사 계획을 말씀하셨다" }),
+      report({ id: "s", exit_kind: "subject_end", status: "director_pending", director_ids: ["boss"] }),
+    ], [archive({ search_fields: { 상담내용: "숙제 부담으로 그만둠" } })]);
+    const win = listWindow(all, "2026-10-30");
+    expect(keys(filterListItems(items, { ...all, kind: "subject_end" }, win))).toEqual(["r:s"]);
+    expect(keys(filterListItems(items, { ...all, mine: true }, win))).toEqual(["r:w"]);
+    expect(keys(filterListItems(items, { ...all, q: "이사 계획" }, win))).toEqual(["r:w"]);
+    expect(keys(filterListItems(items, { ...all, q: "숙제 부담" }, win))).toEqual(["a:a1"]);
+    expect(parseListFilters({ kind: "subject_end", mine: "approve" }, true)).toMatchObject({ kind: "subject_end", mine: true });
+    expect(parseListFilters({ kind: "x" }, true)).toMatchObject({ kind: "all", mine: false });
   });
 });

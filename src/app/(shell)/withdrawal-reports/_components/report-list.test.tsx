@@ -6,7 +6,7 @@ import type { ListItem } from "@/features/withdrawal-reports/list-items";
 import { ReportList } from "./report-list";
 
 const item = (over: Partial<ListItem>): ListItem => ({
-  key: "r:1", href: "/withdrawal-reports/1", name: "김학생", detail: "전체 퇴원 · 수학", date: "2026-10-10", dateText: "2026-10-10",
+  key: "r:1", href: "/withdrawal-reports/1", name: "김학생", schoolGrade: "경명여중1", detail: "퇴원 · 수학", subjectText: "수학", kindText: "퇴원", kind: "withdrawal", classText: "", requestedAt: "2026-10-08T00:00:00Z", mine: "none", date: "2026-10-10", dateText: "2026-10-10", requestedText: "2026-10-08",
   teacher: "이성우", reason: { text: "이사", note: null }, subjects: ["math"], status: "pending", statusLabel: "관리자 승인 대기", tone: "muted",
   approval: [{ text: "관리자 ○ 관리자" }, { text: "관리자가 최종 승인", muted: true }], link: null, myTurn: false, search: "",
   ...over,
@@ -38,6 +38,9 @@ describe("퇴원보고서 목록 표 — 웹 보고서와 기존 기록 한 표(
       />,
     );
     expect(screen.getByRole("columnheader", { name: "퇴원 사유" })).toBeInTheDocument();
+    // 원장 2026-10-29 — 요청일 열(퇴원·종료일 왼쪽) · 이름 옆 학교학년
+    const heads = screen.getAllByRole("columnheader").map((h) => h.textContent);
+    expect(heads.indexOf("요청일")).toBe(heads.indexOf("퇴원·종료일") - 1);
     expect(screen.getByText("이사")).toBeInTheDocument();
     expect(screen.getByText("기타")).toBeInTheDocument();
     const note = screen.getByText("학습태도 불량 / 금전적인 문제(집안사정)");

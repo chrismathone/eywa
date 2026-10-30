@@ -4,6 +4,7 @@ import { fetchAllPaged } from "@/lib/supabase/batch";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isMergedStudent } from "@/features/students/status/merged";
 import { bookkeepingOnlyIds } from "@/features/withdrawals/server/bookkeeping";
+import { loadExitCountDates } from "@/features/withdrawals/server/exit-month";
 import { isCleanupExit } from "@/features/withdrawals/system-bulk";
 import {
   SENT_STATUS_SUCCESS,
@@ -25,8 +26,8 @@ import { buildWeeklyChange, weeklyChangeStart, type WeeklyChangeBucket } from ".
  *
  * 🔴 **집계를 JS에서 하되 창이 조회를 이미 좁힌다** — 4주면 이 학원 기준 수십 행이라 1000행 절단([[#54]])
  *    과 무관하다. 창을 넓힐 일이 생기면 그때는 group-by RPC로 옮길 것(창 없는 전건 select 금지).
- * 🔴 세는 것은 **등록 처리일**(`enrolled_at`)과 **퇴원 처리일**(`withdrawn_at`)이다 — 수강 시작일이
- *    아니다(둘을 섞으면 이 차트와 학생목록이 다른 학원이 된다, 설계서 §8-5).
+ * 🔴 세는 것은 **등록 처리일**(`enrolled_at`)과 **퇴원월 날짜**다 — 수강 시작일이 아니다(둘을 섞으면 이 차트와 학생목록이 다른 학원이
+ *    된다, 설계서 §8-5). 퇴원은 수강료를 낸 마지막 달로 센다(앞 달이면 그 달 말일 · 원장 2026-10-29 *"대시보드 모든 퇴원은 그렇게 계산"*).
  * ⚠️ 퇴원은 `status`를 보지 않고 **날짜가 그 창에 있는지**로 센다 — 퇴원했다가 복구된 학생은 지금
  *    상태가 `enrolled`라 상태로 거르면 그 주의 퇴원이 통째로 사라진다(그 주엔 실제로 나갔다).
  */
@@ -36,7 +37,8 @@ export async function getWeeklyChange(weeks = 4): Promise<WeeklyChangeBucket[]> 
   const supabase = await createClient();
   const [enrolledRes, withdrawnRes] = await Promise.all([
     supabase.from("students").select("id, enrolled_at, notes, withdrawal_metadata").gte("enrolled_at", from),
-    supabase.from("students").select("id, withdrawn_at, notes, withdrawal_metadata").gte("withdrawn_at", from),
+    // 퇴원월 날짜는 퇴원일보다 늦지 않으므로 퇴원일로 좁혀도 창 안 줄을 잃지 않는다.
+    supabase.from("students").select("id, tenant_id, withdrawn_at, notes, withdrawal_metadata").gte("withdrawn_at", from),
   ]);
   // 🔴 조회 실패를 빈 배열로 삼키지 않는다 — 그러면 "이번 달 아무도 안 들어왔다"는 **사실 주장**이 된다.
   //    호출부(페이지)가 실패 허용 래퍼로 감싸 카드만 비운다.
@@ -47,15 +49,18 @@ export async function getWeeklyChange(weeks = 4): Promise<WeeklyChangeBucket[]> 
   //    적도 없다. 한쪽만 빼면 같은 사람이 등록 막대에만 남아 증감이 어긋난다(김지유B가 그랬다).
   const notMerged = (r: unknown): boolean => !isMergedStudent((r as { notes: unknown }).notes as string | null);
   // 수업 기록 없는 장부 정리(단체 정리)도 **양쪽 모두에서** 뺀다 — 병합과 같은 이유(퇴원관리·운영실과 같은 판정 — `isBookkeepingOnlyExit`).
-  type Row = { id: string; enrolled_at?: unknown; withdrawn_at?: unknown; withdrawal_metadata: unknown };
+  type Row = { id: string; tenant_id?: string; enrolled_at?: unknown; withdrawn_at?: unknown; withdrawal_metadata: unknown };
   const enrolledRows = (enrolledRes.data ?? []).filter(notMerged) as Row[];
   const withdrawnRows = (withdrawnRes.data ?? []).filter(notMerged) as Row[];
-  const bookkeeping = await bookkeepingOnlyIds(supabase, [...enrolledRows, ...withdrawnRows]);
+  const [bookkeeping, exitDates] = await Promise.all([
+    bookkeepingOnlyIds(supabase, [...enrolledRows, ...withdrawnRows]),
+    loadExitCountDates(withdrawnRows.map((r) => ({ id: r.id, tenantId: r.tenant_id ?? "", withdrawnAt: ymd(r.withdrawn_at) || null }))),
+  ]);
   return buildWeeklyChange(
     {
       enrolledOn: enrolledRows.filter((r) => !bookkeeping.has(r.id)).map((r) => ymd(r.enrolled_at)),
       // 수업 기록이 있는 장부 정리도 퇴원 막대엔 넣지 않는다 — 추세선은 퇴원일이 장부 날짜인 줄을 세지 않는다(원장 2026-10-20 · 운영실 추이와 같은 규칙).
-      withdrawnOn: withdrawnRows.filter((r) => !bookkeeping.has(r.id) && !isCleanupExit(r.withdrawal_metadata)).map((r) => ymd(r.withdrawn_at)),
+      withdrawnOn: withdrawnRows.filter((r) => !bookkeeping.has(r.id) && !isCleanupExit(r.withdrawal_metadata)).map((r) => exitDates.get(r.id) ?? ymd(r.withdrawn_at)),
     },
     today,
     weeks,

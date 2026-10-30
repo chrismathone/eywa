@@ -118,9 +118,13 @@ describe("JJ 수업보고서 템플릿", () => {
 describe("JJ 수업보고서 카드", () => {
   const html = renderToStaticMarkup(<ParentReportCard {...props()} />);
 
-  it("위 = 표 머리(제목·반·담임·수업 평가 — 태도 한 줄) · 일일 테스트·숙제 완성도 없음", () => {
-    expect(html).toContain("영어 보고서");
+  it("위 = 표 머리(제목·반·보고자·수업 평가 — 태도 한 줄) · 일일 테스트·숙제 완성도 없음", () => {
+    expect(html).toContain("어휘 관리 보고서");
     expect(html).toContain("JJ 영어반");
+    // SRS 보고서의 강사 칸 = '보고자'(원장 2026-10-30 · 다른 영어 보고서는 '담당자'). 영문 이름은 호출부(/r·인쇄)가 넘긴다.
+    expect(html).toContain(">보고자<");
+    expect(html).not.toContain(">담당자<");
+    expect(html).not.toContain(">담임<");
     expect(html).toContain("김동후");
     expect(html).not.toContain(">일일 테스트<");
     expect(html).not.toContain(">수업 평가<"); // 표 이름 칸은 비운다(원장 2026-10-28)

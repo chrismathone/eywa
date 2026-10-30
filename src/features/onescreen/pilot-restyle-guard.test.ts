@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { acceptRestyle, applyRestyle, restyleTargets, splitLockedLines, transplantRestyle } from "./pilot-restyle-guard";
+import { acceptRestyle, applyRestyle, isStyleOnlyEdit, restyleTargets, splitLockedLines, transplantRestyle } from "./pilot-restyle-guard";
 
 describe("acceptRestyle — 말투만 바꾸고 사실은 그대로(원장 2026-10-28)", () => {
   it("숫자·날짜·쪽수가 그대로면 받는다", () => {
@@ -39,7 +39,7 @@ describe("잠근 줄 — 카드가 글자로 다시 읽는 줄은 AI에 안 준�
       tail: ["영상 숙제가 있습니다(10/30 (금)까지 제출)."],
     });
   });
-  it("진도·출결·한마디는 다시 쓰지 않는다", () => {
+  it("소단원 이름 없는 진도·출결·한마디는 다시 쓰지 않는다", () => {
     const t = restyleTargets([
       { title: "진도", body: "우리 지아는 오늘 비례식을 배웠습니다." },
       { title: "출결", body: "오늘 수업에 정상적으로 출석했습니다." },
@@ -78,6 +78,30 @@ describe("transplantRestyle — 미리 다시 쓴 사실 항목을 최종 글에
   it("최종 글의 항목이 다르면 두고 · 다시 안 쓰는 항목은 손대지 않는다", () => {
     const final = "■ 진도\n비례식\n\n■ 수업 태도\n수업 태도가 보통이었습니다.";
     expect(transplantRestyle(final, fact, styled)).toBe(final);
-    expect(transplantRestyle("■ 진도\n비례식", "■ 진도\n비례식", "■ 진도\n비례식을 했어요")).toBe("■ 진도\n비례식");
+    expect(transplantRestyle("■ 출결\n출석", "■ 출결\n출석", "■ 출결\n출석했어요")).toBe("■ 출결\n출석");
+  });
+});
+
+describe("진도도 선생님 말투로(원장 2026-10-30) — 소단원 이름·숫자·성격 말은 그대로", () => {
+  const lead = "우리 세하는 오늘 '다각형'과 '정다각형', 두 소단원 진도를 나갔습니다.";
+  it("소단원 이름이 있는 진도는 다시 쓸 대상", () => {
+    expect(restyleTargets([{ title: "진도", body: lead }])).toEqual([{ title: "진도", text: lead }]);
+  });
+  it("동사·어미만 바뀌면 받는다", () => {
+    expect(acceptRestyle(lead, "우리 세하는 오늘 '다각형'과 '정다각형' 유형을 풀었습니다.", [], "진도")).toBe(true);
+  });
+  it("소단원 이름이 빠지거나 순서가 바뀌거나 성격 말이 바뀌면 버린다", () => {
+    expect(acceptRestyle(lead, "우리 세하는 오늘 '다각형' 유형을 풀었습니다.", [], "진도")).toBe(false);
+    expect(acceptRestyle(lead, "우리 세하는 오늘 '정다각형'과 '다각형' 유형을 풀었습니다.", [], "진도")).toBe(false);
+    expect(acceptRestyle(lead, "우리 세하는 오늘 '다각형'과 '정다각형'을 복습했습니다.", [], "진도")).toBe(false);
+    const solve = "우리 연후는 오늘 '제곱근의 뜻과 성질' 문제풀이 위주로 수업했습니다.";
+    expect(acceptRestyle(solve, "우리 연후는 오늘 '제곱근의 뜻과 성질' 문제풀이 수업했습니다.", [], "진도")).toBe(true);
+    expect(acceptRestyle(solve, "우리 연후는 오늘 '제곱근의 뜻과 성질' 수업했습니다.", [], "진도")).toBe(false);
+  });
+  it("사실을 고친 진도(진도 → 복습 · 소단원 바꿈)는 말투 예시로 안 쓴다", () => {
+    expect(isStyleOnlyEdit("진도", lead, "우리 세하는 오늘 '다각형'과 '정다각형' 유형을 풀었습니다.")).toBe(true);
+    expect(isStyleOnlyEdit("진도", lead, "우리 세하는 오늘 '다각형'과 '정다각형', 두 소단원 복습을 했습니다.")).toBe(false);
+    expect(isStyleOnlyEdit("진도", lead, "우리 세하는 오늘 '다각형' 진도를 나갔습니다.")).toBe(false);
+    expect(isStyleOnlyEdit("수업 태도", "좋았습니다.", "아주 좋았습니다.")).toBe(true);
   });
 });

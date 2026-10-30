@@ -64,7 +64,7 @@ describe("withdrawal reports", () => {
   it("rejects oversized or invalid body values", () => {
     expect(bodySchema.safeParse({ ...EMPTY_BODY, detail: "가".repeat(5001) }).success).toBe(false);
     expect(bodySchema.safeParse({ ...EMPTY_BODY, arrears: "nope" }).success).toBe(false);
-    expect(bodySchema.safeParse({ ...EMPTY_BODY, tuition: "가".repeat(201) }).success).toBe(false);
+    expect(bodySchema.safeParse({ ...EMPTY_BODY, tuition: "가".repeat(1001) }).success).toBe(false);
   });
   it("accepts illness and advised exit reasons from the shared withdrawal catalog", () => {
     expect(bodySchema.safeParse({ ...EMPTY_BODY, reason: "illness" }).success).toBe(true);

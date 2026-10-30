@@ -7,29 +7,18 @@ import { useOverview } from "./use-overview";
 
 const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
-  callbacks: new Map<string, () => void>(),
-  removed: vi.fn(),
+  saved: null as null | (() => void),
+  channel: vi.fn(),
 }));
 vi.mock("@/features/dashboard/overview/actions", () => ({
   refreshOverview: mocks.refresh,
 }));
 vi.mock("@/lib/realtime/record-channel", () => ({
-  subscribeRecordSaved: () => () => {},
+  subscribeRecordSaved: (cb: () => void) => { mocks.saved = cb; return () => { mocks.saved = null; }; },
 }));
+// DB 변경 구독(postgres_changes)은 뗐다(2026-10-29 DB 메모리) — 채널을 열면 이 가짜가 잡는다.
 vi.mock("@/lib/supabase/client", () => ({
-  createClient: () => ({
-    channel: () => {
-      const channel = {
-        on: (_event: string, config: { table: string }, cb: () => void) => {
-          mocks.callbacks.set(config.table, cb);
-          return channel;
-        },
-        subscribe: () => channel,
-      };
-      return channel;
-    },
-    removeChannel: mocks.removed,
-  }),
+  createClient: () => ({ channel: mocks.channel, removeChannel: vi.fn() }),
 }));
 
 function initial(): OverviewSnapshot {
@@ -72,7 +61,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-09-10T12:00:00Z"));
   vi.clearAllMocks();
-  mocks.callbacks.clear();
+  mocks.saved = null;
   Object.defineProperty(document, "visibilityState", {
     configurable: true,
     value: "visible",
@@ -84,22 +73,33 @@ afterEach(() => {
 });
 
 describe("overview live refresh", () => {
-  it("polls a fresh snapshot after 30 seconds even without any database event", async () => {
+  it("polls a fresh snapshot every 5 minutes (not 30 seconds) even without any database event", async () => {
     mocks.refresh.mockImplementation(async () => initial());
     setup();
-    expect(mocks.refresh).not.toHaveBeenCalled();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(30_000);
     });
+    expect(mocks.refresh).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * 60_000 - 30_000);
+    });
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
   });
-  it("coalesces database events and re-queries instead of trusting the event payload", async () => {
+  it("does not re-read on tab return when the snapshot is under a minute old", async () => {
     mocks.refresh.mockImplementation(async () => initial());
     setup();
-    expect(mocks.callbacks.has("invoices")).toBe(false);
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+  it("coalesces save signals from this browser and re-queries", async () => {
+    mocks.refresh.mockImplementation(async () => initial());
+    setup();
     act(() => {
-      mocks.callbacks.get("students")!();
-      mocks.callbacks.get("students")!();
+      mocks.saved!();
+      mocks.saved!();
     });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1199);
@@ -114,21 +114,22 @@ describe("overview live refresh", () => {
     const data = initial();
     mocks.refresh.mockResolvedValue({
       ...data,
-      requestedAt: data.requestedAt + 30_000,
+      requestedAt: data.requestedAt + 5 * 60_000,
       sections: { students: { data: null, at: null, error: true } },
     });
     const { result } = setup(data);
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(30_010);
+      await vi.advanceTimersByTimeAsync(5 * 60_000 + 10);
     });
     expect(result.current.data.sections.students?.data?.enrolled).toBe(7);
     expect(result.current.data.sections.students?.error).toBe(true);
     expect(result.current.data.sections.students?.at).toBe(data.requestedAt);
   });
-  it("removes event subscriptions on unmount", () => {
+  it("🔴 opens no database change subscription (DB memory 2026-10-29) and drops the save signal on unmount", () => {
     const { unmount } = setup();
-    const count = mocks.callbacks.size;
+    expect(mocks.channel).not.toHaveBeenCalled();
+    expect(mocks.saved).not.toBeNull();
     unmount();
-    expect(mocks.removed).toHaveBeenCalledTimes(count);
+    expect(mocks.saved).toBeNull();
   });
 });

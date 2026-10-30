@@ -21,8 +21,8 @@ export async function loadCourseTrendDetail(
   subjects: readonly ProgramSubject[],
   scope?: (subject: string | null) => boolean,
   /**
-   * 영어 선을 **인재원 영어 · EiE** 둘로(원장 2026-10-29 — EiE 모듈이 켜진 지점만 호출부가 켠다). 전체 강좌는 그대로(학생마다 영어는 1개) —
-   * 두 프로그램을 다 듣는 학생은 양쪽 선에 들어 과목 선의 합이 전체보다 클 수 있다.
+   * 영어 선을 **인재원 영어 · EiE** 둘로(원장 2026-10-29 — EiE 모듈이 켜진 지점만 호출부가 켠다). 전체 강좌도 두 강좌로 센다(원장 2026-10-30
+   * *"사업자가 다르고 금액도 상이하므로 분리"* — 운영실 '강좌수' 칸과 같은 판정) — 과목 선의 합 = 전체.
    */
   splitEnglish = false,
 ): Promise<CourseTrendDetail> {

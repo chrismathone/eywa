@@ -9,6 +9,14 @@ import { attendancePrefill, type AttendancePrefillRow } from "../prefill";
 import { loadReportBilling } from "./billing";
 import { reportCourses } from "../target-courses";
 
+/** YYYY-MM-DD를 n개월 옮긴다(말일은 그 달 말일로 — 05-31의 3개월 전 = 02-28). */
+function shiftMonths(day: string, n: number): string {
+  const [y, m, d] = day.split("-").map(Number);
+  const first = new Date(Date.UTC(y, m - 1 + n, 1));
+  const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+  return `${first.getUTCFullYear()}-${String(first.getUTCMonth() + 1).padStart(2, "0")}-${String(Math.min(d, last)).padStart(2, "0")}`;
+}
+
 /** getReport의 지점·작성자/참여자 검증을 통과한 작성 중 보고서에만 호출한다. */
 export async function loadReportPrefill(report: WithdrawalReport, role: SystemRole) {
   const attendanceAllowed = await canAccessTenant(role, "attendance");
@@ -16,7 +24,11 @@ export async function loadReportPrefill(report: WithdrawalReport, role: SystemRo
   const today = kstToday();
   const until = report.effective_date < today ? report.effective_date : today;
   const courses = reportCourses(report);
-  const from = courses.map(c => c.startDate).sort()[0] ?? until;
+  // 출결은 **퇴원일 기준 최근 3개월**만 — 원장 2026-10-29 *"출결 현황도 전체 기간에 대해서도 사실 의미없음. 최근 3개월 출결 현황으로"*.
+  // 수강 시작이 그보다 늦으면 시작일부터.
+  const start = courses.map(c => c.startDate).sort()[0] ?? until;
+  const threeMonths = shiftMonths(until, -3);
+  const from = start > threeMonths ? start : threeMonths;
   const classIds = [...new Set(courses.map(c => c.classId))];
   const results = await Promise.allSettled([
     attendanceAllowed && classIds.length ? fetchAllPagedInChunks<AttendancePrefillRow>(classIds, (ids, start, end) => db.from("attendance_records")

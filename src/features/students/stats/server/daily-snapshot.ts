@@ -1,4 +1,5 @@
 import "server-only";
+import { isModuleEnabled } from "@/lib/modules";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
@@ -82,6 +83,8 @@ async function recordTenant(admin: Admin, tenantId: string, today: string): Prom
     subjects: settings.operations.subjects.map((s) => ({ key: s.key, label: s.label })),
     gradeLevels: settings.operations.gradeLevels,
     today,
+    // 강좌수 = 운영실 '강좌수' 칸과 같은 판정(영어 = 인재원 영어 · EiE 따로 — 원장 2026-10-30, EiE 모듈 켜진 지점).
+    splitEnglish: isModuleEnabled(settings.modules.disabled, "eie"),
   });
   // 상담 진행 · 신규생(2026-10-21) — 같은 줄에 함께 싣는다. 부분 실패는 그 칸만 빠진다(재원생 기록은 그대로 쓴다).
   const ops: OpsDaily = await buildOpsDaily(admin, tenantId, today, settings.operations.subjects).catch((e: unknown) => {

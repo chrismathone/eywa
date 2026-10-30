@@ -1,5 +1,7 @@
+import type { ReactNode } from "react";
 import { REASON_DETAILS, reasonDetailOf } from "@/features/withdrawals/reason-detail";
-import { courseDuration } from "@/features/withdrawal-reports/course-period";
+import { subjectPeriodGroups, type SubjectHistoryRow } from "@/features/withdrawal-reports/course-period";
+import { PeriodCell } from "./period-cell";
 import type { ReportConsultation } from "@/features/withdrawal-reports/consultation";
 import { GrowingTextarea } from "./growing-textarea";
 import { ConsultationLinks } from "./consultation-links";
@@ -7,11 +9,14 @@ import { REASON_LABEL } from "@/features/withdrawals/types";
 import { directorIds, isDirectReport, managerIds, type ReportBody, type ReportEvent, type WithdrawalReport } from "@/features/withdrawal-reports/model";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { ReportSheet } from "./report-sheet";
+import { TuitionDetail } from "./tuition-detail";
 import { reportCourses } from "@/features/withdrawal-reports/target-courses";
 
 const date = (value: string) => new Date(value).toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
-export function ReportForm({ report: r, body, events, labels, nameOf, editable, pending, onChange, consultations = [] }: {
+export function ReportForm({ report: r, body, events, labels, nameOf, editable, pending, onChange, consultations = [], subjectHistory = [], refundCheck }: {
   consultations?: ReportConsultation[];
+  refundCheck?: ReactNode;
+  subjectHistory?: SubjectHistoryRow[];
   report: WithdrawalReport; body: ReportBody; events: ReportEvent[]; labels: Record<string, string>;
   nameOf: (id: string | null) => string; editable: boolean; pending: boolean;
   onChange: <K extends keyof ReportBody>(key: K, value: ReportBody[K]) => void;
@@ -26,7 +31,7 @@ export function ReportForm({ report: r, body, events, labels, nameOf, editable, 
     const decisions = kind === "manager" ? r.manager_decisions : r.director_decisions;
     const legacyAt = kind === "manager" ? r.manager_approved_at : r.director_approved_at;
     return {
-      role: kind === "manager" ? "팀장" : "원장",
+      role: kind === "manager" ? "관리자" : "원장",
       name: ids.map(nameOf).join("\n"),
       date: ids.length ? ids.map(id => `결재일 : ${decisions?.[id] || legacyAt ? date(decisions?.[id] ?? legacyAt!) : ""}`).join("\n") : "결재일 :",
     };
@@ -36,6 +41,7 @@ export function ReportForm({ report: r, body, events, labels, nameOf, editable, 
   const direct = isDirectReport(r);
   const homeroom = [...new Set(courses.map(c => c.teacherName).filter(Boolean))].join(", ") || "—";
   return <ReportSheet
+    refundCheck={refundCheck}
     subject={r.subjects.map(s => labels[s] ?? "기타 과목").join(" · ")}
     consultationLinks={<ConsultationLinks records={consultations} selected={body.consultationIds ?? []} editable={editable} pending={pending} onChange={ids => onChange("consultationIds", ids)} />}
     signatures={direct
@@ -49,16 +55,16 @@ export function ReportForm({ report: r, body, events, labels, nameOf, editable, 
       grade: schoolGradeLabel(r.snapshot.school, r.snapshot.grade),
       className: courses.map(c => c.className).join("\n"),
       exitDate: r.effective_date,
-      period: courses.map(c => `${courses.length > 1 ? `${c.className}: ` : ""}${c.startDate} ~ ${r.effective_date} (${courseDuration(c.startDate, r.effective_date)})`).join("\n"),
+      period: <PeriodCell groups={subjectPeriodGroups(courses, subjectHistory, r.effective_date, s => labels[s] ?? "기타 과목")} />,
       teacher: direct ? homeroom : nameOf(r.teacher_id),
-      attendance: textField("attendance", "출결·현황"),
+      attendance: textField("attendance", "최근 3개월 출결 현황"),
       reason: editable ? <div className="flex flex-wrap gap-2"><select aria-label="퇴원사유" style={{ flex: "1 1 180px" }} value={body.reason} disabled={pending} onChange={e => { onChange("reason", e.target.value as ReportBody["reason"]); onChange("reasonDetail", ""); }}>{Object.entries(REASON_LABEL).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>{REASON_DETAILS[body.reason].length > 0 && <select aria-label="세부 퇴원사유" style={{ flex: "1 1 240px" }} value={body.reasonDetail ?? ""} disabled={pending} onChange={e => onChange("reasonDetail", e.target.value)}><option value="">세부 사유 선택</option>{REASON_DETAILS[body.reason].map(d => <option key={d.key} value={d.key}>{d.label}</option>)}</select>}</div> : [REASON_LABEL[body.reason], reasonDetailOf(body.reasonDetail)?.label].filter(Boolean).join(" · "),
       detail: <>{textField("detail", "퇴원 상세사유")}{editable && <small>{Array.from(body.detail.trim()).length}자 · 제출 시 200자 이상</small>}</>,
       studentConsultation: textField("studentConsultation", "학생상담"),
       parentConsultation: textField("parentConsultation", "학부모상담"),
       teacherOpinion: textField("teacherOpinion", "담임 의견"),
-      tuition: body.tuition || "수납 기록 확인 필요",
-      arrears: <><span>{ { unknown: "청구 기록 확인 필요", no: "미납 없음", yes: "미납 있음" }[body.arrears]}</span>{body.arrearsNote && <div>{body.arrearsNote}</div>}</>,
+      tuition: <TuitionDetail text={body.tuition || "수납 기록 확인 필요"} />,
+      arrears: <><span>{ { unknown: "청구 기록 확인 필요", no: "미납 없음", yes: "미납 있음" }[body.arrears]}</span>{body.arrearsNote && <div className="whitespace-pre-line">{body.arrearsNote}</div>}</>,
       processing: r.applied_at ? `${nameOf(applied?.actor_id ?? null)} · ${date(r.applied_at)} 처리 완료${direct ? " (관리자 바로 처리)" : ""}` : `${direct ? "관리자 바로 처리" : "요청"}: ${nameOf(r.requested_by)} · ${r.status === "canceled" ? "요청 취소" : direct ? `${r.effective_date} 처리 예약` : "승인 완료 후 자동 처리"}`,
     }}
   />;

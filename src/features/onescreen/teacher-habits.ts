@@ -11,10 +11,16 @@
  *    - unitList = 소단원마다 "…은 대체로 따라왔지만 아직 조금 어려워했습니다"·"…을 잘 이해했습니다"를 늘어놓는 것 —
  *                 이해도 사실은 지키고 **한 문장으로 묶어** 짧게 쓴다(지우지 않는다 — 사실이다).
  * 🔴 다짐·틀 문장만 뗀다 — 숫자·날짜·선생님이 적은 말이 든 문장은 건드리지 않는다(stripHabitSentences).
+ * 🔑 넷째 `omitScore`(원장 2026-10-30 *"지우는 쌤들은 자주 바꾸는 표현으로 변경"*) = 테스트 항목 첫 줄의 점수("5문제 중 4개 맞음")를
+ *    늘 지우는 선생님 — 그 줄을 처음부터 안 쓴다(dropScoreLines). 점수는 사실이라 줄만 빼고, 남은 문장의 점수 표현은 말투 다시 쓰기가
+ *    그 선생님 예시대로 다듬는다(pilot-restyle.ts). ⚠️ 그 선생님 글엔 학부모 카드의 점수 블록이 없다(선생님이 지워 보내던 것과 같다).
  */
 
-export type TeacherHabits = { omitPromises: boolean; omitFiller: boolean; compactUnits: boolean };
-export const NO_HABITS: TeacherHabits = { omitPromises: false, omitFiller: false, compactUnits: false };
+export type TeacherHabits = { omitPromises: boolean; omitFiller: boolean; compactUnits: boolean; omitScore: boolean };
+export const NO_HABITS: TeacherHabits = { omitPromises: false, omitFiller: false, compactUnits: false, omitScore: false };
+
+/** 테스트 항목 첫 줄의 점수 — pilot-notes.ts `parseScoreLine`과 같은 꼴(그 모듈은 이 모듈을 거꾸로 import해 여기서 못 쓴다). */
+const SCORE_LINE_RE = /^\d+문제 중 \d+개 맞음$/;
 
 /**
  * 앞으로 하겠다는 다짐(학원이 챙기겠다) — **문장 끝이 '~하겠습니다/~하겠어요'**인 것. 지난 일을 말한 문장('정확하게 짚어 가며 개념을
@@ -43,14 +49,25 @@ export function habitSentences(text: string | null | undefined): string[] {
 }
 
 export type HabitStat = { seen: number; removed: number };
-export type HabitStats = { promise: HabitStat; filler: HabitStat; unitList: HabitStat };
+export type HabitStats = { promise: HabitStat; filler: HabitStat; unitList: HabitStat; score: HabitStat };
 
 /** 원문 ↔ 보낸 글 짝들 → 종류별로 나온 문장 수·지운 문장 수(보낸 글에 그 문장이 공백 무시 그대로 없으면 지운 것). */
 export function habitStats(pairs: readonly { ai: string; final: string }[]): HabitStats {
-  const st: HabitStats = { promise: { seen: 0, removed: 0 }, filler: { seen: 0, removed: 0 }, unitList: { seen: 0, removed: 0 } };
+  const st: HabitStats = {
+    promise: { seen: 0, removed: 0 },
+    filler: { seen: 0, removed: 0 },
+    unitList: { seen: 0, removed: 0 },
+    score: { seen: 0, removed: 0 },
+  };
   for (const p of pairs) {
     const fin = squash(p.final ?? "");
     if (!fin) continue;
+    // 점수 줄은 문장이 아니라 줄이다(마침표가 없다) — 따로 센다. 지운 수 = 원문 점수 줄 수 − 보낸 글 점수 줄 수
+    // (점수를 '고친' 것은 지운 게 아니다 — 줄 글자로 견주면 점수 정정이 지운 것으로 잡힌다).
+    const scoreLines = (s: string) => s.split("\n").filter((l) => SCORE_LINE_RE.test(l.trim())).length;
+    const aiScores = scoreLines(p.ai ?? "");
+    st.score.seen += aiScores;
+    st.score.removed += Math.max(0, aiScores - scoreLines(p.final ?? ""));
     for (const s of habitSentences(p.ai)) {
       const gone = !fin.includes(squash(s));
       const bump = (k: keyof HabitStats) => {
@@ -71,7 +88,29 @@ export function habitQualifies(s: HabitStat): boolean {
 
 export function learnTeacherHabits(pairs: readonly { ai: string; final: string }[]): TeacherHabits {
   const st = habitStats(pairs);
-  return { omitPromises: habitQualifies(st.promise), omitFiller: habitQualifies(st.filler), compactUnits: habitQualifies(st.unitList) };
+  return {
+    omitPromises: habitQualifies(st.promise),
+    omitFiller: habitQualifies(st.filler),
+    compactUnits: habitQualifies(st.unitList),
+    omitScore: habitQualifies(st.score),
+  };
+}
+
+/**
+ * 점수 줄을 늘 지우는 선생님(`omitScore`) — `titles` 항목(일일·확인 테스트)의 점수 줄("5문제 중 4개 맞음")을 뺀다.
+ * 🔴 그 항목에 점수 줄만 있으면 그대로 둔다(항목이 비면 안 된다 — 시험을 쳤다는 사실까지 사라진다).
+ */
+export function dropScoreLines(text: string, titles: readonly string[]): string {
+  return text
+    .split(/\n(?=■)/)
+    .map((b) => {
+      const lines = b.split("\n");
+      if (!titles.includes(lines[0]!.replace(/^■\s*/, "").trim())) return b;
+      const rest = lines.filter((l, i) => i === 0 || !SCORE_LINE_RE.test(l.trim()));
+      if (rest.length === lines.length) return b;
+      return rest.slice(1).some((l) => l.trim()) ? rest.join("\n") : b;
+    })
+    .join("\n");
 }
 
 /**

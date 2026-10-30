@@ -1,4 +1,5 @@
 import "server-only";
+import { loadExitCountDates } from "@/features/withdrawals/server/exit-month";
 import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -109,6 +110,8 @@ type MonthlyChangeRecord = {
   school: string | null;
   enrolled_at?: string | null;
   withdrawn_at?: string | null;
+  /** 퇴원 쪽만 — 퇴원월 판정(`loadExitCountDates`)의 지점. */
+  tenant_id?: string;
   notes: string | null;
   /** 퇴원 쪽만 — 수업 기록 없는 장부 정리 판정(`bookkeepingOnlyIds`). */
   withdrawal_metadata?: unknown;
@@ -142,7 +145,7 @@ export async function getMonthlyEnrollmentChanges(): Promise<EnrollmentChanges> 
     fetchAllPaged<MonthlyChangeRecord>((from, to) =>
       supabase
         .from("students")
-        .select("id, name, grade, school, withdrawn_at, notes, withdrawal_metadata")
+        .select("id, tenant_id, name, grade, school, withdrawn_at, notes, withdrawal_metadata")
         .eq("status", "withdrawn")
         .gte("withdrawn_at", startIso)
         .order("withdrawn_at", { ascending: false })
@@ -153,8 +156,12 @@ export async function getMonthlyEnrollmentChanges(): Promise<EnrollmentChanges> 
   const newStudents = nw.filter((s) => !isMergedStudent(s.notes));
   // 수업 기록 없는 장부 정리는 퇴원으로 세지 않는다(퇴원관리·운영실과 같은 판정 — `isBookkeepingOnlyExit`).
   const wdReal = wd.filter((s) => !isMergedStudent(s.notes));
-  const bookkeeping = await bookkeepingOnlyIds(supabase, wdReal);
-  const withdrawn = wdReal.filter((s) => !bookkeeping.has(s.id));
+  // 퇴원월 = 수강료를 낸 마지막 달(원장 2026-10-29) — 이번 달에 처리했어도 지난달까지만 냈으면 지난달 퇴원이라 뺀다.
+  const [bookkeeping, exitDates] = await Promise.all([
+    bookkeepingOnlyIds(supabase, wdReal),
+    loadExitCountDates(wdReal.map((s) => ({ id: s.id, tenantId: s.tenant_id ?? "", withdrawnAt: s.withdrawn_at ?? null }))),
+  ]);
+  const withdrawn = wdReal.filter((s) => !bookkeeping.has(s.id) && (exitDates.get(s.id) ?? s.withdrawn_at ?? "") >= startIso.slice(0, 10));
   return {
     newCount: newStudents.length,
     withdrawnCount: withdrawn.length,

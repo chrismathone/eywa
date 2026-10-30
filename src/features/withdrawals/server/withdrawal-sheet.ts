@@ -21,6 +21,8 @@ import { licenseBlockReason } from "@/lib/license/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { reportError } from "@/lib/observability/report-error";
+import { loadExitCountDates, loadSubjectExitCountDates } from "./exit-month";
+import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import {
   alreadyListed,
   colLetter,
@@ -257,6 +259,28 @@ async function writeEntries(spreadsheetId: string, entries: SheetEntry[], date: 
 }
 
 /**
+ * 적을 탭의 달 = 퇴원월(수강료를 낸 마지막 달, 원장 2026-10-29 *"퇴원관리 시트 연동도 동일한 조건"*) — 10/1에 그만뒀어도 9월까지만 냈으면
+ * '26.9 퇴원' 탭. '최종퇴원일' 칸은 실제 날짜 그대로다. 학생이 퇴원했으면 수업료 전체로, 수학만 그만두고 다른 과목을 계속 다니면(수강종료)
+ * **수학 수업료**를 낸 마지막 달로 본다(원장 2026-10-29 *"9월 퇴원생 여전히 10월퇴원으로 뜨는데"* — 퇴원관리·운영실과 같은 판정).
+ * 청구를 못 읽으면 퇴원일의 달(종전 규칙)로 적고 로그를 남긴다 — 시트 기입은 다시 돌지 않아 줄을 잃는 것이 더 나쁘다.
+ */
+async function sheetTabDate(tenantId: string, studentId: string, date: string): Promise<string> {
+  try {
+    const { data, error } = await createAdminClient().from("students").select("status").eq("tenant_id", tenantId).eq("id", studentId).maybeSingle();
+    if (error) throw error;
+    if ((data as { status?: string } | null)?.status !== "withdrawn") {
+      const settings = await getTenantSettingsByTenantId(tenantId);
+      const ends = [{ studentId, tenantId, subject: "math", endedAt: date }];
+      return (await loadSubjectExitCountDates(ends, settings.operations.subjects)).get(`${studentId}|math`) ?? date;
+    }
+    return (await loadExitCountDates([{ id: studentId, tenantId, withdrawnAt: date }])).get(studentId) ?? date;
+  } catch (e) {
+    reportError(e, { where: "withdrawal-sheet.exit-month", studentId, date });
+    return date;
+  }
+}
+
+/**
  * 이 학생이 `date`에 수학을 그만뒀으면 그 달 탭에 적는다. `enrollmentIds`를 주면 그 수강들만(수강 종료 화면에서 고른 것).
  * 던지지 않는다 — 결과는 로그로만.
  */
@@ -275,8 +299,9 @@ export async function recordMathWithdrawalToSheet(args: {
     if (await licenseBlockReason(args.tenantId, "google_sheets")) return;
     const entries = await entriesFor(args.tenantId, args.studentId, args.date, args.enrollmentIds);
     if (entries.length === 0) return;
-    const n = await serialized(() => writeEntries(spreadsheetId, entries, args.date));
-    if (n > 0) console.info(`[withdrawal-sheet] ${monthTabTitle(args.date)} 탭에 ${n}줄 기입(student ${args.studentId})`);
+    const tabDate = await sheetTabDate(args.tenantId, args.studentId, args.date);
+    const n = await serialized(() => writeEntries(spreadsheetId, entries, tabDate));
+    if (n > 0) console.info(`[withdrawal-sheet] ${monthTabTitle(tabDate)} 탭에 ${n}줄 기입(student ${args.studentId})`);
   })();
   job.catch(() => {});
   let timer: ReturnType<typeof setTimeout> | undefined;
