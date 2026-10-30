@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SystemRole } from "@/lib/permissions";
+import type { SubjectHistoryRow } from "./course-period";
 import { reasonDetailOf } from "@/features/withdrawals/reason-detail";
 import { REASON_LABEL } from "@/features/withdrawals/types";
 import { CLEANUP_WITHDRAWAL_MEMO } from "@/features/withdrawals/system-bulk";
@@ -76,7 +77,9 @@ export function automaticExitKind(courses: { id: string }[], enrollmentIds: read
   return courses.length > 0 && courses.every(c => enrollmentIds.includes(c.id)) ? "withdrawal" as const : "subject_end" as const;
 }
 export type CourseSnapshot = { id: string; classId: string; className: string; subject: string; teacherId: string | null; teacherName: string | null; startDate: string; endDate: string | null; onHold: boolean };
-export type StudentSnapshot = { name: string; school: string | null; grade: string | null; enrolledAt: string | null; status: string; withdrawnAt: string | null; courses: CourseSnapshot[] };
+export type StudentSnapshot = { name: string; school: string | null; grade: string | null; enrolledAt: string | null; status: string; withdrawnAt: string | null; courses: CourseSnapshot[];
+  /** 완료·취소된 보고서의 수강기간 칸 이력 — 처음 열 때 고정(원장 2026-10-30 '완료 시점 값으로 고정'). 없으면 지금 수강 기록으로 센다. */
+  subjectHistory?: SubjectHistoryRow[] };
 export type WithdrawalReport = {
   id: string; tenant_id: string; student_id: string; requested_by: string; teacher_id: string; manager_id: string; director_id: string | null;
   enrollment_ids?: string[] | null;

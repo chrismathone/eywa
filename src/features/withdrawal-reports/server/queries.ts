@@ -126,7 +126,14 @@ export async function getReport(id: string) {
   const billingOk = viewer.teacherId !== null || viewer.user.systemRole === "master" || isParticipant(data as WithdrawalReport, viewer.user.id)
     || (await canAccessTenant(viewer.user.systemRole, "billing"));
   // 그 과목의 전체 수강 이력(지난 반 포함 — 원장 2026-10-29) — 다른 조회와 함께 띄운다. 못 읽으면 빈 목록(수강기간은 지금 반 기준으로).
-  const historyPromise = loadSubjectHistory(data as WithdrawalReport).catch((e) => { console.error("[withdrawal-report-subject-history]", e); return [] as SubjectHistoryRow[]; });
+  // 완료·취소된 보고서는 처음 열 때의 이력을 보고서에 고정한다(원장 2026-10-30 — 나중에 수강 기록을 고쳐도 끝난 문서가 바뀌지 않게).
+  // 완료는 DB 함수 한 곳이지만 부르는 길이 셋(승인 · 처리일 cron · 바로 처리)이라 여기서 처음 열 때 고정한다. 못 읽은 이력([])은 고정하지 않는다.
+  const finished = ["completed", "canceled"].includes(data.status);
+  const frozen = (data.snapshot as StudentSnapshot).subjectHistory;
+  const historyPromise = finished && Array.isArray(frozen) ? Promise.resolve(frozen)
+    : loadSubjectHistory(data as WithdrawalReport)
+      .then(async (rows) => { if (finished) await freezeSubjectHistory(data as WithdrawalReport, rows); return rows; })
+      .catch((e) => { console.error("[withdrawal-report-subject-history]", e); return [] as SubjectHistoryRow[]; });
   const [prefill, consultations] = await Promise.all([
     draft ? loadReportPrefill(data as WithdrawalReport, viewer.user.systemRole)
       : !submitted && ["completed", "canceled"].includes(data.status) ? Promise.resolve({ prefill: undefined, prefillWarning: undefined })
@@ -145,6 +152,13 @@ export async function getReport(id: string) {
   const deskStaff = laterInvoices.length && cancelsAsDirector(viewer.user.systemRole, !!viewer.teacherId)
     ? (await loadDeskStaff(viewer.user.tenantId).catch(() => [])).filter(s => s.id !== viewer.user.id) : [];
   return { report: data as WithdrawalReport, events: [...(events ?? [])].reverse() as ReportEvent[], assignmentChanged, consultations, laterInvoices, deskStaff, subjectHistory, ...prefill };
+}
+/** 완료·취소된 보고서의 수강기간 이력을 보고서에 고정 — 아직 고정되지 않았을 때만(동시에 열어도 한 번). 실패해도 화면은 지금 이력으로 연다. */
+async function freezeSubjectHistory(report: WithdrawalReport, rows: SubjectHistoryRow[]) {
+  const { error } = await createAdminClient().from("withdrawal_reports")
+    .update({ snapshot: { ...report.snapshot, subjectHistory: rows } })
+    .eq("tenant_id", report.tenant_id).eq("id", report.id).in("status", ["completed", "canceled"]).is("snapshot->subjectHistory", null);
+  if (error) console.error("[withdrawal-report-freeze-history]", error.message);
 }
 /** 이 보고서 과목들에서 학생이 다닌 반 전부(지난 반 포함) — 수강기간 칸(subjectPeriods). */
 async function loadSubjectHistory(report: WithdrawalReport): Promise<SubjectHistoryRow[]> {
