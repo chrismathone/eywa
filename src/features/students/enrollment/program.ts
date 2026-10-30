@@ -98,6 +98,23 @@ export function subjectGroupOf(
   return key;
 }
 
+/**
+ * **강좌** 묶음 — `subjectGroupOf`에 더해, `splitEnglish`면 영어를 **인재원 영어 · EiE 두 강좌**로 센다(원장 2026-10-30 *"영어는 인재원영어와
+ * EIE로 분리되어야 함. 사업자가 다르고 금액도 상이하므로 분리"* — 두 프로그램을 다 듣는 학생은 강좌 2개). 반의 `english_track`으로 가른다
+ * (`programOf`와 같은 판정 · 실측 2026-10-30 침산: EiE 반 28개 = 영문 코드 이름, 인재원 반 = `중등E_`·`고등E_`·`중고E_` — 수업명과 일치).
+ * 설정에 프로그램 키와 같은 과목 키가 있으면 가르지 않는다(`englishProgramRows`와 같은 규약).
+ */
+export function courseGroupOf(
+  subject: string | null | undefined,
+  englishTrack: string | null | undefined,
+  subjects: readonly ProgramSubject[],
+  splitEnglish = false,
+): string | null {
+  const group = subjectGroupOf(subject, subjects);
+  if (!splitEnglish || group !== "english" || subjects.some((s) => isEnglishProgramKey(s.key))) return group;
+  return programOf({ subject, englishTrack: englishTrack ?? null }, subjects) === "eie" ? "eie" : "injaewon";
+}
+
 /** URL 값 정규화 — 모르는 값은 null(필터 없음). */
 export function parseProgram(raw: unknown): Program | null {
   return raw === "eie" || raw === "injaewon" || raw === "math" ? raw : null;

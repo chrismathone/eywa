@@ -69,3 +69,21 @@ describe("summarizeCourses — 상단 '강좌수'", () => {
     expect(summarizeCourses({ rows, scope: null, subjects, today: "2026-10-20" }).total).toBe(1);
   });
 });
+
+describe("영어 = 인재원 영어 · EiE 따로(원장 2026-10-30 — 사업자·금액이 다르다)", () => {
+  const rows = [
+    row("m", "a", "m", "math"),
+    row("e1", "a", "e1", "english", { track: "eie" }), row("e2", "a", "e2", "english"), row("e3", "a", "e3", "english"),
+    row("x", "b", "e1", "english", { track: "eie" }),
+  ];
+  it("가르면 두 프로그램을 다 듣는 학생은 강좌 2개 — 과목 칸 키 injaewon · eie", () => {
+    const v = summarizeCourses({ rows, scope: null, subjects, today: "2026-10-20", splitEnglish: true });
+    expect(v.total).toBe(4); // a: 수학 + 인재원 + EiE · b: EiE
+    expect(v.subjects).toEqual({ math: 1, injaewon: 1, eie: 2 });
+  });
+  it("가르지 않으면(EiE 모듈 꺼짐) 예전처럼 영어 하나", () => {
+    const v = summarizeCourses({ rows, scope: null, subjects, today: "2026-10-20" });
+    expect(v.total).toBe(3);
+    expect(v.subjects).toEqual({ math: 1, english: 2 });
+  });
+});

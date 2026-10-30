@@ -1,4 +1,4 @@
-import { subjectGroupOf, type ProgramSubject } from "@/features/students/enrollment/program";
+import { courseGroupOf, subjectGroupOf, type ProgramSubject } from "@/features/students/enrollment/program";
 import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 import { countedOn, type TrendEnrollment, type TrendEnrollments, type TrendPoint, type TrendStudent } from "./enrolled-trend";
 import { billedExitRows } from "./trend-billing";
@@ -44,11 +44,13 @@ export function courseTrendOf(
   inRow?: (e: CourseRow) => boolean,
   today?: string,
   subjects: readonly ProgramSubject[] = [],
+  /** 영어를 인재원 영어 · EiE 두 강좌로(원장 2026-10-30 — '강좌수' 칸과 같은 판정). */
+  splitEnglish = false,
 ): TrendPoint[] {
   const byStudent = groupRows(enrollments);
   return points.map((p) => {
     let count = 0;
-    for (const s of students) if (countedOn(s, en, p.date)) count += new Set(coursesOn(s, byStudent.get(s.id) ?? [], en, p.date, today, inRow).map((e) => subjectGroupOf(e.subject, subjects)).filter((key) => key !== null)).size;
+    for (const s of students) if (countedOn(s, en, p.date)) count += new Set(coursesOn(s, byStudent.get(s.id) ?? [], en, p.date, today, inRow).map((e) => courseGroupOf(e.subject, e.englishTrack, subjects, splitEnglish)).filter((key) => key !== null)).size;
     return { ...p, count };
   });
 }
@@ -76,10 +78,11 @@ export function courseBreakdownOf<K extends string>(
       const seen = new Set<string>();
       const groupSeats = new Map<K, Set<string>>();
       for (const e of coursesOn(s, byStudent.get(s.id) ?? [], en, p.date, today, inRow)) {
-        const subject = subjectGroupOf(e.subject, subjects);
-        if (!subject) continue;
-        seen.add(subject);
+        if (!subjectGroupOf(e.subject, subjects)) continue;
+        // 강좌 한 칸 = 선 열쇠(영어를 가른 선이면 인재원 영어 · EiE가 따로 — 원장 2026-10-30 '강좌수' 칸과 같은 판정).
         const g = groupOf(e);
+        const subject = g ?? subjectGroupOf(e.subject, subjects)!;
+        seen.add(subject);
         if (g) {
           const seats = groupSeats.get(g) ?? new Set<string>();
           seats.add(subject);

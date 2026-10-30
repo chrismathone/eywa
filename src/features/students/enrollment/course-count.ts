@@ -1,8 +1,11 @@
 import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 import { activeRows, type ActiveEnrollmentRow, type StudentScope } from "./enrolled-composition";
-import { subjectGroupOf, type ProgramSubject } from "./program";
+import { courseGroupOf, type ProgramSubject } from "./program";
 
-/** 강좌수 = 학생 × 과목(2026-10-24). 수학 반 다섯 개 + 영어 + 국어 = 3. 수학 심화도 수학, 영어 프로그램도 영어로 묶는다. */
+/**
+ * 강좌수 = 학생 × 과목(2026-10-24). 수학 반 다섯 개 + 영어 + 국어 = 3. 수학 심화도 수학으로 묶는다.
+ * 영어는 `splitEnglish`(EiE 모듈이 켜진 지점)면 인재원 영어 · EiE를 **따로** 센다(원장 2026-10-30 — 사업자·금액이 다르다) — 과목 칸 키 `injaewon`·`eie`.
+ */
 export type CourseSummary = {
   basis: "student-subject";
   total: number;
@@ -22,12 +25,14 @@ export function summarizeCourses(input: {
   subjects: readonly ProgramSubject[];
   today: string;
   inSubject?: (subject: string | null) => boolean;
+  /** 영어를 인재원 영어 · EiE 두 강좌로(EiE 모듈 켜진 지점). */
+  splitEnglish?: boolean;
 }): CourseSummary {
   const byStudent = new Map<string, Set<string>>();
   for (const [row, klass] of activeRows(input.rows, input.scope, input.today)) {
     if (isEnrollmentEndedOn(row.end_date, input.today, row.is_transferred ?? false)) continue;
     if (input.inSubject && !input.inSubject(klass.subject ?? null)) continue;
-    const subject = subjectGroupOf(klass.subject, input.subjects);
+    const subject = courseGroupOf(klass.subject, klass.english_track, input.subjects, input.splitEnglish);
     if (!subject) continue;
     const mine = byStudent.get(row.student_id) ?? new Set<string>();
     mine.add(subject);

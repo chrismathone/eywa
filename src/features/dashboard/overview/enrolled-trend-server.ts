@@ -34,7 +34,7 @@ export type EnrolledTrend = { monthly: TrendPoint[]; yearly: TrendPoint[]; recor
  * 연도별은 **퇴원 기록이 있는 첫 해**부터 — 그 전 해는 퇴원이 기록되지 않아 재원생이 부풀어 보인다(실측 첫 퇴원 2025-02).
  * 에이와 수강 기록이 갖춰진 달(`trustFrom`) 전 점은 뺀다(원장 2026-10-20 '2026년 4월부터' — 그 전 달은 실제보다 낮게 나온다).
  */
-export async function loadEnrolledTrend(tenantId: string, today: string, subjects: readonly ProgramSubject[] = []): Promise<EnrolledTrend> {
+export async function loadEnrolledTrend(tenantId: string, today: string, subjects: readonly ProgramSubject[] = [], splitEnglish = false): Promise<EnrolledTrend> {
   const [billing, coverage] = await Promise.all([loadBillingCached(tenantId, today).catch(warnBilling), loadRecordCoverage(tenantId, today).catch(warnCoverage)]);
   const trustFrom = coverage?.trustFrom ?? null;
   return unstable_cache(
@@ -46,14 +46,14 @@ export async function loadEnrolledTrend(tenantId: string, today: string, subject
       const clipped = clipTrend(trendOf(raw.students, en, months), trendOf(raw.students, en, years), trustFrom);
       // 강좌수는 수강 행에 기댄다 — 수강 종료가 처음 기록된 달 전(그만둔 학생의 수강 행이 없다)도 자른다(과목 선과 같은 경계, 적대 리뷰 2026-10-20).
       const courses = clipCourses(
-        courseTrendOf(raw.students, en, raw.enrollments, months, undefined, today, subjects),
-        courseTrendOf(raw.students, en, raw.enrollments, years, undefined, today, subjects),
+        courseTrendOf(raw.students, en, raw.enrollments, months, undefined, today, subjects, splitEnglish),
+        courseTrendOf(raw.students, en, raw.enrollments, years, undefined, today, subjects, splitEnglish),
         trustFrom,
         breakdownFromOf(raw, today),
       );
       return { ...clipped, recordsFrom: raw.recordsFrom, courses };
     },
-    ["dashboard-enrolled-trend-v8-subject", tenantId, today, JSON.stringify(subjects), billing ? "billed" : "fallback", trustFrom ?? "-"],
+    ["dashboard-enrolled-trend-v9-english-split", tenantId, today, JSON.stringify(subjects), splitEnglish ? "split" : "joined", billing ? "billed" : "fallback", trustFrom ?? "-"],
     { revalidate: billing ? 300 : 60 },
   )();
 }
@@ -63,7 +63,7 @@ export async function loadEnrolledTrend(tenantId: string, today: string, subject
  * 지점·날짜별 5분 캐시로 받고(학원 전체 추이와 같은 B6 규약), 묶음마다 `subjectTrendOf`로 센다(판정은 순수 함수 한 벌).
  * 강좌수 추이도 그 과목 반만 함께 센다(`courseTrendOf` — 과목 관리자 '강좌수 추이' 카드).
  */
-export async function loadEnrolledTrendSlicer(tenantId: string, today: string, subjects: readonly ProgramSubject[] = []): Promise<(inSubject: (subject: string | null) => boolean) => EnrolledTrend> {
+export async function loadEnrolledTrendSlicer(tenantId: string, today: string, subjects: readonly ProgramSubject[] = [], splitEnglish = false): Promise<(inSubject: (subject: string | null) => boolean) => EnrolledTrend> {
   const [{ raw, en }, coverage] = await Promise.all([trendInputs(tenantId, today), loadRecordCoverage(tenantId, today).catch(warnCoverage)]);
   const trustFrom = coverage?.trustFrom ?? null;
   const months = monthlyPoints(today);
@@ -78,8 +78,8 @@ export async function loadEnrolledTrendSlicer(tenantId: string, today: string, s
       ),
       recordsFrom: raw.recordsFrom,
       courses: clipCourses(
-        courseTrendOf(raw.students, en, raw.enrollments, months, inRow, today, subjects),
-        courseTrendOf(raw.students, en, raw.enrollments, years, inRow, today, subjects),
+        courseTrendOf(raw.students, en, raw.enrollments, months, inRow, today, subjects, splitEnglish),
+        courseTrendOf(raw.students, en, raw.enrollments, years, inRow, today, subjects, splitEnglish),
         trustFrom,
         breakdownFromOf(raw, today),
       ),

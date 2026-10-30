@@ -3,6 +3,7 @@
 import { Fragment } from "react";
 import type { OverviewData } from "@/features/dashboard/overview/model";
 import { COURSE_BUCKETS, type CourseCombo } from "@/features/students/enrollment/course-count";
+import { ENGLISH_TRACK_LABEL } from "@/features/classes/english-track";
 import { number } from "./charts";
 import { CountList, PopupEmpty, PopupTotal } from "./kpi-popup-parts";
 import s from "./overview.module.css";
@@ -17,7 +18,9 @@ export function CoursesPopup({
 }) {
   if (!data) return <PopupEmpty>강좌수 정보를 불러오지 못했습니다.</PopupEmpty>;
   if (data.basis !== "student-subject") return <PopupEmpty>화면을 새로고침해 주세요.</PopupEmpty>;
-  const partLabel = (key: string) => subjectLabels[key] ?? "기타 과목";
+  // 영어를 가른 지점은 과목 칸 키가 `injaewon`·`eie`(원장 2026-10-30) — 프로그램 이름으로.
+  const split = "injaewon" in data.subjects || "eie" in data.subjects;
+  const partLabel = (key: string) => subjectLabels[key] ?? (key === "injaewon" || key === "eie" ? ENGLISH_TRACK_LABEL[key] : "기타 과목");
   return (
     <>
       <PopupTotal label="강좌수" value={data.total} unit="개" />
@@ -26,8 +29,9 @@ export function CoursesPopup({
       <p className={s.popupSummary}>학생당 강좌 수 — 무엇으로 듣는지</p>
       {data.combos ? <ComboTable data={data} partLabel={partLabel} /> : null}
       <p className={s.footnote}>
-        학생마다 과목별로 한 번만 셉니다. 수학 반을 다섯 개와 영어·국어를 들으면 3개입니다. 수학 일반·심화는 수학,
-        EiE·인재원 영어는 영어로 묶습니다. 휴원·시작 전·과목 미입력 수강은 제외하고, 종료일이 적힌 수강은 그날까지 셉니다.
+        학생마다 과목별로 한 번만 셉니다. 수학 반을 다섯 개와 영어·국어를 들으면 3개입니다. 수학 일반·심화는 수학으로 묶고,
+        {split ? " 영어는 인재원 영어와 EiE를 따로 셉니다(사업자·금액이 다릅니다 — 둘 다 들으면 2개)." : " 영어 반은 영어로 묶습니다."}
+        휴원·시작 전·과목 미입력 수강은 제외하고, 종료일이 적힌 수강은 그날까지 셉니다.
         칸마다 조합 인원을 더하면 그 칸의 학생 수입니다.
       </p>
     </>

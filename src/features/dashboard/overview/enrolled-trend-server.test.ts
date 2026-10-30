@@ -71,8 +71,8 @@ describe("loadEnrolledTrend — 청구 재료가 있으면 정상 키 5분, 실�
   it("청구가 있으면 'billed' 키 · 5분 — 장부 정리 학생은 청구가 살아 있는 달에만 센다", async () => {
     loadCleanupBilling.mockResolvedValue({ billingFrom: "2026-01", billed: [["k", ["2026-03"]]] });
     const v = await loadEnrolledTrend("t1", "2026-10-20");
-    const card = cacheCalls.find((c) => c.key[0] === "dashboard-enrolled-trend-v8-subject");
-    expect(card).toMatchObject({ key: ["dashboard-enrolled-trend-v8-subject", "t1", "2026-10-20", "[]", "billed", "-"], revalidate: 300 });
+    const card = cacheCalls.find((c) => c.key[0] === "dashboard-enrolled-trend-v9-english-split");
+    expect(card).toMatchObject({ key: ["dashboard-enrolled-trend-v9-english-split", "t1", "2026-10-20", "[]", "joined", "billed", "-"], revalidate: 300 });
     expect(point(v.monthly, "2026-03")).toBe(2); // a + k(3월 청구)
     expect(point(v.monthly, "2026-05")).toBe(1); // k는 5월 청구가 없다(퇴원일 7/3 전이어도)
     // 강좌수 추이도 같은 원본으로 함께 센다(한 캐시) — 단 수강 행에 기대므로 수강 종료가 처음 기록된 달(이 원본은 2026-07) 전은 자른다
@@ -91,8 +91,8 @@ describe("loadEnrolledTrend — 청구 재료가 있으면 정상 키 5분, 실�
   it("🔴 청구 재료가 실패하면 던지지 않고 'fallback' 키 · 1분 — 종전 규칙(퇴원일)으로 센다 · 경고를 남긴다", async () => {
     loadCleanupBilling.mockRejectedValue(new Error("청구 건수: boom"));
     const v = await loadEnrolledTrend("t1", "2026-10-20");
-    const card = cacheCalls.find((c) => c.key[0] === "dashboard-enrolled-trend-v8-subject");
-    expect(card).toMatchObject({ key: ["dashboard-enrolled-trend-v8-subject", "t1", "2026-10-20", "[]", "fallback", "-"], revalidate: 60 });
+    const card = cacheCalls.find((c) => c.key[0] === "dashboard-enrolled-trend-v9-english-split");
+    expect(card).toMatchObject({ key: ["dashboard-enrolled-trend-v9-english-split", "t1", "2026-10-20", "[]", "joined", "fallback", "-"], revalidate: 60 });
     expect(point(v.monthly, "2026-05")).toBe(2); // 종전 규칙 — 퇴원일(7/3) 전이라 k도 센다
     expect(reportWarning).toHaveBeenCalledTimes(1);
     // 실패는 캐시에 남지 않아 청구는 다시 묻지만, 원본은 대체 키 캐시로 다시 읽지 않는다 · 중첩 없음.
@@ -110,7 +110,7 @@ describe("loadEnrolledTrend — 청구 재료가 있으면 정상 키 5분, 실�
     expect(v.monthlyFrom).toBe("2026-04");
     expect(v.monthly[0]!.key).toBe("2026-04");
     expect(v.yearly.map((p) => p.key)).toEqual(["2026"]);
-    expect(cacheCalls.find((c) => c.key[0] === "dashboard-enrolled-trend-v8-subject")!.key.at(-1)).toBe("2026-04");
+    expect(cacheCalls.find((c) => c.key[0] === "dashboard-enrolled-trend-v9-english-split")!.key.at(-1)).toBe("2026-04");
     store.clear();
     fetchAllPaged.mockResolvedValueOnce(students).mockResolvedValueOnce(enrollments);
     loadRecordCoverage.mockRejectedValue(new Error("boom"));

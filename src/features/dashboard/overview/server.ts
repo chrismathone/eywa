@@ -164,7 +164,9 @@ async function courses(
   const [[, open], ending, settings] = await Promise.all([enrolledRows, fetchEndingEnrolledEnrollments(db, today), settingsPromise]);
   const rows = [...open, ...ending];
   const subjects = settings.operations.subjects;
-  return (pred) => summarizeCourses({ rows, scope, subjects, today, ...(pred ? { inSubject: pred } : {}) });
+  // 영어 = 인재원 영어 · EiE 따로(원장 2026-10-30) — EiE 모듈이 켜진 지점만(꺼진 지점은 영어 반이 전부 한 갈래).
+  const splitEnglish = isModuleEnabled(settings.modules.disabled, "eie");
+  return (pred) => summarizeCourses({ rows, scope, subjects, today, splitEnglish, ...(pred ? { inSubject: pred } : {}) });
 }
 
 /** '강좌수 추이' 카드가 따로 읽으므로 '재원생 추이' 영역엔 강좌수를 싣지 않는다(스냅샷을 가볍게). */
@@ -662,6 +664,8 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   // 과목 값 판정의 과목 목록 = **학원 설정의 과목만**(재리뷰 2026-10-14) — `subjectLabelRecord`의 옛 표시용 라벨(예술·사회·기타)을
   // 섞으면 자유 입력 '기타'가 설정에 있는 과목이 되어 아무 과목 관리자에게도 안 보이고, 미리보기 묶음도 쓸데없이 는다.
   const sliceSubjects = settingsNow.operations.subjects.map((s) => ({ key: s.key, label: s.label }));
+  // 강좌수 추이도 영어를 인재원 영어 · EiE 두 강좌로(강좌수 칸과 같은 판정 — 원장 2026-10-30).
+  const splitEnglishNow = isModuleEnabled(settingsNow.modules.disabled, "eie");
   const groups = [...new Set(viewingSubjects.map(groupOf).filter((g): g is string => g !== null))];
   // 과목별 값(원장 2026-10-14 2단계, `slices.ts`)을 만들 묶음 — 과목 관리자는 담당 묶음 하나(여럿이면 합집합 한 벌),
   // 미리보기 원본(full)은 묶음마다 한 벌(편집기가 과목을 골라 본다). 그 밖의 역할은 만들지 않는다(계산 0).
@@ -762,8 +766,8 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   let slicerOnce: ReturnType<typeof loadEnrolledTrendSlicer> | null = null;
   const trends = () =>
     Promise.all([
-      (trendOnce ??= loadEnrolledTrend(user.tenantId, today, sliceSubjects)),
-      sliceSets.length ? (slicerOnce ??= loadEnrolledTrendSlicer(user.tenantId, today, sliceSubjects)) : Promise.resolve(null),
+      (trendOnce ??= loadEnrolledTrend(user.tenantId, today, sliceSubjects, splitEnglishNow)),
+      sliceSets.length ? (slicerOnce ??= loadEnrolledTrendSlicer(user.tenantId, today, sliceSubjects, splitEnglishNow)) : Promise.resolve(null),
     ]);
   addSliced("enrolledTrend", ["students"], async () => {
     if (await scopePromise) return () => null;

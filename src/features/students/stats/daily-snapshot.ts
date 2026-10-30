@@ -59,6 +59,8 @@ export function buildDailySnapshot(input: {
   subjects: readonly ProgramSubject[];
   gradeLevels: readonly string[];
   today: string;
+  /** 강좌수 영어를 인재원 영어 · EiE 따로(원장 2026-10-30 — EiE 모듈 켜진 지점). */
+  splitEnglish?: boolean;
 }): DailySnapshotV1 {
   const composition = composeEnrolled({ students: input.students, rows: input.rows, scope: null, subjects: input.subjects, today: input.today });
   const visible = composition.students;
@@ -76,6 +78,6 @@ export function buildDailySnapshot(input: {
       composition.programs,
       composition.active,
     ),
-    courses: summarizeCourses({ rows: [...input.rows, ...(input.endingRows ?? [])], scope: null, subjects: input.subjects, today: input.today }),
+    courses: summarizeCourses({ rows: [...input.rows, ...(input.endingRows ?? [])], scope: null, subjects: input.subjects, today: input.today, splitEnglish: input.splitEnglish }),
   };
 }
