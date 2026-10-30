@@ -56,7 +56,7 @@ export function ReportPreview({
         ))}
       </ul>
       <div className="w-full max-w-[520px]">
-        <p className="text-text-dim mb-2 text-xs">시험 중 — 체크리스트 줄은 아직 선생님 수업보고서에 들어가지 않습니다. 수업태도·이해도 = 그날 쓴 수업보고서 값.</p>
+        <p className="text-text-dim mb-2 text-xs">시험 중 — 체크리스트 줄은 지금 테스트 학생(학원이·학원삼) 수업보고서에만 들어갑니다. 수업태도·이해도 = 그날 쓴 수업보고서 값.</p>
         <div className="bg-card border-line-strong overflow-hidden border">
           <PilotSheetHead
             logoSrc={logoSrc}

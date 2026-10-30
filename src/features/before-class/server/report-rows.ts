@@ -15,14 +15,19 @@ import { isMissingTable } from "./queries";
  * 서버 전용 표(정책 0개)라 admin + tenant_id 명시([[#104]]). 보고서 작성을 막지 않는다 — 표가 없거나 조회가 실패하면 줄 없음.
  */
 /**
- * 🔴 **시험 중 게이트**(원장 2026-10-30 *"이승엽으로 로그인 + 이수진 강사뷰 … 이 상태에서만 적용해야함 지금은 테스트라서"*) —
- * 운영자 계정이 '다른 강사 뷰'로 그 선생님 화면을 볼 때만 표에 줄을 붙인다. 선생님 본인·관리자 화면의 보고서는 그대로다.
- * 코드에 사람 이름을 적지 않는다(권한 명단 금지 규칙) — 운영자 계정 + 다른 강사 뷰로 판정. 전원에게 열 땐 이 함수만 true로.
+ * 🔴 **시험 중 게이트**(원장 2026-10-30 *"이승엽으로 로그인 + 이수진 강사뷰 … 이 상태에서만 적용해야함 지금은 테스트라서"* →
+ * *"학원 이 삼 쪽도 체크리스트 추가해서 … 수업보고서도 우리 적용한거처럼"*) — 둘 중 하나일 때만 표에 줄을 붙인다:
+ *   ① 운영자 계정이 '다른 강사 뷰'로 그 선생님 화면을 볼 때 ② 테스트 학생(`students.is_test` — 학원이·학원삼)의 보고서.
+ * 선생님 본인 화면에서 쓰는 실제 학생 보고서는 그대로다. 코드에 사람 이름을 적지 않는다(권한 명단 금지 규칙). 전원에게 열 땐 이 함수만 true로.
  */
-export async function beforeClassReportEnabled(): Promise<boolean> {
+export async function beforeClassReportEnabled(tenantId: string, studentId: string): Promise<boolean> {
   try {
-    const [operator, viewAs] = await Promise.all([isCurrentUserSuperAdmin(), viewAsTeacher()]);
-    return operator && !!viewAs;
+    const [operator, viewAs, student] = await Promise.all([
+      isCurrentUserSuperAdmin(),
+      viewAsTeacher(),
+      createAdminClient().from("students").select("is_test").eq("tenant_id", tenantId).eq("id", studentId).maybeSingle(),
+    ]);
+    return (operator && !!viewAs) || student.data?.is_test === true;
   } catch {
     return false;
   }
