@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bundledGroupLabels, defaultApproverIds, reportAuthorIds, requestApprovers, requestManagers, selfManagedSubjects, toggleCourseGroup } from "./request-options";
+import { bundledGroupLabels, defaultApproverIds, narrowApprovalSubjects, reportAuthorIds, requestApprovers, requestManagers, selfManagedSubjects, toggleCourseGroup } from "./request-options";
 import { reportStatusLabel, skipsManagerStep, type CourseSnapshot, type StaffOption } from "./model";
 import { withUnassignedCourses } from "./target-courses";
 
@@ -109,5 +109,27 @@ describe("withUnassignedCourses — 작성 강사가 없는 반을 같은 과목
   it("작성자가 있는 반은 그 사람 보고서에 두고, 종료 대상이 아닌 반은 붙이지 않는다", () => {
     const group = { enrollment_ids: ["m1", "m2"], teacher_ids: ["A", "D"] };
     expect(withUnassignedCourses({ snapshot, enrollment_ids: ["m1"], subjects: ["math"] }, group)).toEqual(["m1"]);
+  });
+});
+
+describe("narrowApprovalSubjects — 학원 설정 '퇴원보고서 승인자'(원장 2026-10-30)", () => {
+  const people: StaffOption[] = [
+    { id: "vice", name: "부원장", role: "admin", subjects: ["math"] },
+    { id: "other-branch", name: "다른 관", role: "admin", subjects: ["math"] },
+    { id: "head", name: "교수부장", role: "manager", subjects: ["math", "english"] },
+    { id: "eng", name: "영어 관리자", role: "admin", subjects: ["english"] },
+  ];
+  const math = [{ subject: "math", teacherId: "t" }];
+  it("지정한 사람이 맡은 과목은 그 사람만 후보 · 지정이 없는 과목(영어)은 그대로", () => {
+    const narrowed = narrowApprovalSubjects(people, ["vice"]);
+    expect(requestApprovers(narrowed, math, ["math"], ["t"]).candidates.map(u => u.id)).toEqual(["vice"]);
+    expect(requestApprovers(narrowed, [{ subject: "english", teacherId: "t" }], ["english"], ["t"]).candidates.map(u => u.id)).toEqual(["head", "eng"]);
+  });
+  it("지정이 없으면 종전 그대로(과목 관리자 전원)", () => {
+    expect(requestApprovers(narrowApprovalSubjects(people, []), math, ["math"], ["t"]).candidates.map(u => u.id)).toEqual(["vice", "other-branch", "head"]);
+  });
+  it("관리자 역할이 아닌 사람을 지정해도 과목을 빼앗지 않는다", () => {
+    const withTeacher = [...people, { id: "tt", name: "강사", role: "teacher", subjects: ["math"] } as StaffOption];
+    expect(requestApprovers(narrowApprovalSubjects(withTeacher, ["tt"]), math, ["math"], ["t"]).candidates.map(u => u.id)).toEqual(["vice", "other-branch", "head"]);
   });
 });

@@ -39,6 +39,17 @@ export function reportAuthorIds(courses: readonly Pick<CourseSnapshot, "subject"
   }
   return [...new Set([...best.values()].map(c => c.teacherId!))];
 }
+/**
+ * 학원 설정 '퇴원보고서 승인자'(`specialAccess.withdrawalApproverIds`)로 승인 과목을 좁힌다 — 지정한 사람이 승인 담당인 과목은
+ * 다른 사람의 승인 과목에서 뺀다(원장 2026-10-30 *"수학의 경우 허은진 부원장 한명만"*). 지정한 사람이 없는 과목은 그대로.
+ * 승인 후보 판정(`requestApprovers`)은 이 결과의 approvalSubjects만 보므로 창·기본 선택이 함께 따른다.
+ */
+export function narrowApprovalSubjects(staff: readonly StaffOption[], approverIds: readonly string[]): StaffOption[] {
+  const listed = new Set(approverIds);
+  const owned = new Set(staff.filter(u => listed.has(u.id) && canRequestReport(u.role)).flatMap(u => u.approvalSubjects ?? u.subjects));
+  if (!owned.size) return [...staff];
+  return staff.map(u => listed.has(u.id) ? u : { ...u, approvalSubjects: (u.approvalSubjects ?? u.subjects).filter(s => !owned.has(s)) });
+}
 /** 기본 선택 — 과목 관리자 전원 + 대신 승인할 원장이 한 명뿐이면 그 원장(여럿이면 요청자가 고른다). */
 export function defaultApproverIds({ candidates, masters }: Pick<ReturnType<typeof requestApprovers>, "candidates" | "masters">) {
   return [...candidates, ...(masters.length === 1 ? masters : [])].map(u => u.id);

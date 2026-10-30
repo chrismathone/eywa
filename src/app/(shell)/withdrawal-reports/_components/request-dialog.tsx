@@ -38,6 +38,8 @@ export function RequestDialog({ staff, students, labels, scope, initialStudentId
   const [studentId, setStudentId] = useState(initial?.id ?? "");
   const [enrollmentIds, setEnrollments] = useState<string[]>(initialPick.enrollmentIds);
   const [teacherIds, setTeachers] = useState<string[]>(initialPick.teacherIds);
+  // 작성 강사는 고르지 않는다 — 과목마다 담당 선생님(`reportAuthorIds` · 메인반 담임)으로 고정(원장 2026-10-30 *"무조건 담당 선생님만 작성하고 나머지는 해당 보고서에서 반이 다 딸려가서 하나로"*).
+  const authorNames = staff.filter(u => teacherIds.includes(u.id)).map(u => u.name);
   const [managerIds, setManagers] = useState<string[]>(initialPick.managerIds);
   const [directorIds, setDirectors] = useState<string[]>([]);
   const [date, setDate] = useState(kstToday());
@@ -70,16 +72,6 @@ export function RequestDialog({ staff, students, labels, scope, initialStudentId
     if (pending) return;
     setMode(next); setError("");
     if (next === "request" && noCourses) { setStudentId(""); chooseCourses(undefined, []); }
-  }
-  function chooseTeachers(next: string[]) {
-    // 관리자 칸을 건너뛰면 원장은 승인 칸 한 곳에서 고른다 — 숨겨진 '원장 승인' 칸에 값이 남지 않게 비운다.
-    const directorStep = !(selfManagedSubjects(staff, courses, next).length > 0 && requestApprovers(staff, courses, subjects, next).candidates.length === 0);
-    const principals = directorStep ? directorIds.filter(id => !next.includes(id)) : [];
-    const approvers = requestApprovers(staff, courses, subjects, next, principals);
-    const defaults = defaultApproverIds(approvers);
-    // Keep valid manual choices; newly included subjects receive their default managers.
-    setManagers([...approvers.candidates, ...approvers.masters].filter(u => managerIds.includes(u.id) || (defaults.includes(u.id) && !managers.some(previous => previous.id === u.id))).map(u => u.id));
-    setTeachers(next); setDirectors(principals); setError("");
   }
   const go = (path: string) => window.location.assign(inFrame ? withEmbed(path) : path);
   function submit() {
@@ -116,7 +108,7 @@ export function RequestDialog({ staff, students, labels, scope, initialStudentId
   return <Dialog open={open} onOpenChange={v => { if (!pending) setOpen(v); }}>
     <DialogTrigger render={<Button />}>+ 보고서 작성 요청</DialogTrigger>
     <DialogContent className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl" showCloseButton={false}>
-      <div className="border-b px-5 py-4"><DialogTitle>{direct ? "강사 작성 없이 바로 처리" : "강사에게 보고서 작성 요청"}</DialogTitle><DialogDescription className="mt-1">{direct ? "종료할 반과 사유를 정해 바로 퇴원·수강종료합니다. 처리 내용은 퇴원보고서 기록으로 남습니다." : "종료할 반과 작성 강사를 선택합니다. 지정한 승인자가 모두 승인하면 선택한 반을 종료합니다."}</DialogDescription></div>
+      <div className="border-b px-5 py-4"><DialogTitle>{direct ? "강사 작성 없이 바로 처리" : "강사에게 보고서 작성 요청"}</DialogTitle><DialogDescription className="mt-1">{direct ? "종료할 반과 사유를 정해 바로 퇴원·수강종료합니다. 처리 내용은 퇴원보고서 기록으로 남습니다." : "종료할 반을 선택하면 과목마다 담당 선생님에게 작성을 요청합니다. 지정한 승인자가 모두 승인하면 선택한 반을 종료합니다."}</DialogDescription></div>
       <div className={`min-h-0 space-y-4 overflow-y-auto overscroll-contain p-5 ${pending ? "pointer-events-none opacity-60" : ""}`} aria-busy={pending}>
         {directReady && <fieldset className="flex flex-wrap gap-x-5 gap-y-2 text-sm" aria-label="처리 방식">
           <label className="flex items-center gap-2"><input type="radio" name="report-mode" checked={!direct} onChange={() => chooseMode("request")} />강사에게 작성 요청</label>
@@ -131,11 +123,11 @@ export function RequestDialog({ staff, students, labels, scope, initialStudentId
         {!noCourses && bundled.length > 0 && <p role="note" className="border-line rounded-lg border border-dashed px-3 py-2 text-sm">{bundled.join(" · ")}을 한 과목으로 묶어 함께 종료합니다.{direct ? "" : " 보고서는 과목마다 작성 강사 한 명이 쓰고, 다른 반 담임에게는 작성 요청이 가지 않습니다."}</p>}
         {direct ? <DirectFields formRef={reasonForm} future={date > kstToday()} noCourses={noCourses} /> : <>
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="space-y-1 text-sm"><p>작성 강사</p><SearchableSelect portal options={staffOptions(eligible)} value="" multiValues={teacherIds} ariaLabel="작성 강사" placeholder="담당 강사 선택" onValueChange={id => { if (!pending && eligible.some(u => u.id === id)) chooseTeachers(toggle(teacherIds, id)); }} /></div>
-            <div className="space-y-1 text-sm"><p>{directorOnly ? "원장 승인" : "관리자 승인"}</p><SearchableSelect portal options={staffOptions(managers)} value="" multiValues={selectedManagers} ariaLabel="관리자 승인" placeholder={directorOnly ? "승인할 원장 선택" : teacherIds.length ? "해당 과목 관리자 선택" : "담당 강사를 먼저 선택"} onValueChange={id => { if (!pending && managers.some(u => u.id === id)) setManagers(toggle(selectedManagers, id)); }} /></div>
+            <div className="space-y-1 text-sm"><p>작성 강사</p><p className="border-line bg-muted/30 rounded-md border px-3 py-2" aria-label="작성 강사">{authorNames.length ? authorNames.join(", ") : <span className="text-muted-foreground">반을 선택하면 정해집니다</span>}</p></div>
+            <div className="space-y-1 text-sm"><p>{directorOnly ? "원장 승인" : "관리자 승인"}</p><SearchableSelect portal options={staffOptions(managers)} value="" multiValues={selectedManagers} ariaLabel="관리자 승인" placeholder={directorOnly ? "승인할 원장 선택" : teacherIds.length ? "해당 과목 관리자 선택" : "반을 먼저 선택"} onValueChange={id => { if (!pending && managers.some(u => u.id === id)) setManagers(toggle(selectedManagers, id)); }} /></div>
             {!directorOnly && <div className="space-y-1 text-sm"><p>원장 승인 <span className="text-muted-foreground">(선택)</span></p><SearchableSelect portal options={staffOptions(directors)} value="" multiValues={directorIds} ariaLabel="원장 승인" placeholder="선택하지 않음" onValueChange={id => { if (!pending) setDirectors(v => toggle(v, id)); }} /></div>}
           </div>
-          <p className="text-xs text-muted-foreground">{teacherIds.length === 1 ? "선택한 강사 한 명이 모든 선택 반을 묶어 보고서 한 건을 작성합니다. 다른 담임의 보고서는 요청하지 않습니다." : "선택한 강사마다 담당 반의 보고서를 요청합니다. 작성자를 선택하지 않은 반도 종료 대상에 포함됩니다."}</p>
+          <p className="text-xs text-muted-foreground">{teacherIds.length > 1 ? "과목마다 담당 선생님 한 명이 그 과목의 반을 모두 묶어 보고서를 작성합니다. 다른 반 담임에게는 요청하지 않습니다." : "담당 선생님 한 명이 선택한 반을 모두 묶어 보고서 한 건을 작성합니다. 다른 반 담임에게는 요청하지 않습니다."}</p>
           {skipManagers && <p role="note" className="border-line rounded-lg border border-dashed px-3 py-2 text-sm">{directorOnly ? "작성 강사가 그 과목 관리자이므로 관리자 칸을 건너뛰고 원장 승인으로 바로 넘어갑니다." : "작성 강사가 관리자인 과목이 있어 원장 승인이 필요합니다. 원장을 선택해 주세요."}</p>}
           {!directorOnly && <p className="text-xs text-muted-foreground">{directorIds.length ? "관리자 전원 승인 후, 선택한 원장 전원이 승인합니다." : "원장을 선택하지 않으면 지정한 관리자들이 최종 승인합니다."}</p>}
           {teacherIds.length > 0 && managers.length === 0 && <p className="text-sm text-att-late-ink">선택할 수 있는 해당 과목 관리자가 없습니다. 담당 과목과 승인자 선택을 확인해 주세요.</p>}

@@ -21,6 +21,7 @@ import { reportConsultations } from "./consultations";
 import type { SubjectHistoryRow } from "../course-period";
 import { reportCourses, withUnassignedCourses } from "../target-courses";
 import { isReportOptout } from "@/features/classes/report-optout";
+import { narrowApprovalSubjects } from "../request-options";
 
 // 실험실 판정은 운영 콘솔 배정을 따른다(`isLaboratoryMenuAvailable`) — 예전엔 실험실 사용 여부를 배정과 무관하게 물어서,
 // 원장이 퇴원보고서를 일반 메뉴로 돌려도(2026-10-23) 실험실을 안 켠 지점에선 계속 닫혀 있었다.
@@ -192,8 +193,10 @@ export async function reportStaff() {
   // 🔴 침산 지점 superadmin(이승엽 · 박소선 등)은 절대 승인자로 넣지 않는다 — 원장 칸에는 진짜 원장만(원장 2026-10-30).
   //    system_role이 master라 그대로 두면 원장 후보가 되고, DB도 관리자 칸은 막지 않는다. 표시 역할을 admin으로 바꿔 원장 후보에서,
   //    승인 과목을 비워 관리자 후보에서 뺀다(요청 화면에 superadmin 여부를 내려보내지 않는다).
-  return (data ?? []).map(u => ({ id: u.id, name: u.display_name, role: displayRoleFor(u.id, u.system_role, protection.protectedIds), subjects: u.subjects ?? [],
-    approvalSubjects: protection.protectedIds.has(u.id) ? [] : staffSubjectScopeOf(u.id, settings.permissions.specialAccess.staffSubjectScopes) ?? u.subjects ?? [] })) as StaffOption[];
+  //    학원 설정 '퇴원보고서 승인자'가 있으면 그 사람이 맡은 과목은 그 사람만 승인 후보(`narrowApprovalSubjects`).
+  return narrowApprovalSubjects((data ?? []).map(u => ({ id: u.id, name: u.display_name, role: displayRoleFor(u.id, u.system_role, protection.protectedIds), subjects: u.subjects ?? [],
+    approvalSubjects: protection.protectedIds.has(u.id) ? [] : staffSubjectScopeOf(u.id, settings.permissions.specialAccess.staffSubjectScopes) ?? u.subjects ?? [] })) as StaffOption[],
+    settings.permissions.specialAccess.withdrawalApproverIds ?? []);
 }
 /**
  * 작성 요청·바로 처리 창의 학생 선택지 — 재원·휴원 · 퇴원 예약 없음 · 시험 학생 제외.

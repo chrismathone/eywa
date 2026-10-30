@@ -82,21 +82,20 @@ describe("compact request overlay and optional principal", () => {
     expect(assign).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "대상 학생: 학생" })).toBeInTheDocument();
   });
-  it("sends all selected classes to one author after omitting another homeroom teacher", async () => {
+  it("fixes the author to each subject's homeroom teacher — there is no author picker", async () => {
     mocks.request.mockResolvedValue({ ok: true, id: "new-report" });
     render(<RequestDialog {...multiProps} />); await fill();
-    fireEvent.click(screen.getByRole("button", { name: /^작성 강사:/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "영어 강사 영어" }));
-    await closeOptions();
-    expect(screen.getByText("퇴원 · 2개 반 · 보고서 1건")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^작성 강사:/ })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("작성 강사")).toHaveTextContent("담당 강사, 영어 강사");
+    expect(screen.getByText("퇴원 · 2개 반 · 보고서 2건")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "강사에게 작성 요청" }));
-    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ teacherIds: ["teacher"], enrollmentIds: ["course", "english-course"], subjects: ["math", "english"] })));
+    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ teacherIds: ["teacher", "english-teacher"], enrollmentIds: ["course", "english-course"], subjects: ["math", "english"] })));
   });
   it("shows managers only for selected authors' target subjects and respects personal approval scopes", async () => {
     render(<RequestDialog {...multiProps} />);
     fireEvent.click(screen.getByRole("button", { name: "+ 보고서 작성 요청" }));
     await screen.findByRole("dialog");
-    fireEvent.click(screen.getByRole("button", { name: "관리자 승인: 담당 강사를 먼저 선택" }));
+    fireEvent.click(screen.getByRole("button", { name: "관리자 승인: 반을 먼저 선택" }));
     expect(await screen.findByText("결과 없음")).toBeInTheDocument();
     await closeOptions();
     fireEvent.click(screen.getByRole("button", { name: /^대상 학생:/ }));
@@ -107,27 +106,6 @@ describe("compact request overlay and optional principal", () => {
     expect(screen.getByRole("button", { name: "수학 관리자2 수학" })).toBeInTheDocument();
     for (const name of [/^영어 관리자 /, /^영어 범위 관리자 /, /^과목 미지정 관리자/, /^원장$/, /^담당 강사 /])
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
-  });
-  it("reconciles manager selections after changing authors while preserving valid manual choices", async () => {
-    mocks.request.mockResolvedValue({ ok: true, id: "new-report" });
-    render(<RequestDialog {...multiProps} />); await fill();
-    fireEvent.click(screen.getByRole("button", { name: /^관리자 승인:/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "수학 관리자2 수학" }));
-    await closeOptions();
-    fireEvent.click(screen.getByRole("button", { name: /^작성 강사:/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "영어 강사 영어" }));
-    await closeOptions();
-    expect(screen.getByRole("button", { name: "강사에게 작성 요청" })).toBeEnabled();
-    expect(screen.getByText(/모든 선택 반을 묶어 보고서 한 건/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /^관리자 승인:/ }));
-    expect(await screen.findByRole("button", { name: "수학 관리자2 수학" })).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByRole("button", { name: "영어 관리자 영어" })).toBeInTheDocument();
-    await closeOptions();
-    fireEvent.click(screen.getByRole("button", { name: /^작성 강사:/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "영어 강사 영어" }));
-    await closeOptions();
-    fireEvent.click(screen.getByRole("button", { name: "강사에게 작성 요청" }));
-    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ teacherIds: ["teacher", "english-teacher"], managerIds: ["manager", "english-manager", "restricted-manager"], subjects: ["math", "english"] })));
   });
   it("blocks requesting when no manager is assigned to the selected subject", async () => {
     render(<RequestDialog {...props} staff={staff.filter(u => u.id !== "manager")} />);
