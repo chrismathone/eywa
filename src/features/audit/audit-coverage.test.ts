@@ -43,6 +43,8 @@ const EXEMPT: Record<string, string> = {
   "src/features/onescreen/server/actions.ts#setMyNoticeMode": VIEW,
   "src/features/onescreen/server/write-timing-actions.ts#recordReportWriteTimings": OWN_LOG, // 작성 시간 측정값 — 행에 누가·언제가 있다
   "src/features/onescreen/server/actions.ts#setMyOnescreenFontSize": VIEW,
+  // 탑승 학생 시간표 "수정된 내용" 확인 — 내 계정 ui_prefs에 확인한 열쇠만 더한다(경고 접기 · 데이터 무변경, 원장 2026-10-30).
+  "src/features/shuttle/server/conflict-acks.ts#ackRideConflicts": VIEW,
   "src/features/shuttle/today/server/today-prefs.ts#saveShuttleTodayPrefs": VIEW,
   "src/features/staff/list/server/list-prefs.ts#saveStaffListPrefs": VIEW,
   "src/features/students/list/server/list-prefs.ts#saveStudentListPrefs": VIEW,
