@@ -1,6 +1,6 @@
 "use server";
 
-import { jjBooksOnly } from "../jj-books";
+import { isSrsDraftText, jjBooksOnly } from "../jj-books";
 import { LAST_TEMPLATE_BY_CLASS_PREF, LAST_TEMPLATE_PREF, isTemplateIdShape, readTemplatePrefs, rememberTemplate } from "../last-template";
 import { normalizeNoneMarker } from "../none-marker";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
@@ -485,7 +485,11 @@ export async function saveLessonReport(
         subject: input.subject || null,
         class_id: input.classId || null,
         // JJ 수업보고서 글은 세 권 중 고른 것만(jj-books.ts) — 화면도 거르지만 서버가 한 번 더 거른다(#77).
-        textbook: (input.subject === "english" && input.jjSheet ? jjBooksOnly(input.textbook) : input.textbook) || null,
+        // 글이 SRS 양식이면 표시가 없어도 거른다(복사한 사용자 템플릿 · 옛 화면, 원장 2026-10-30).
+        textbook:
+          (input.subject === "english" && (input.jjSheet || isSrsDraftText(input.notes))
+            ? jjBooksOnly(input.textbook)
+            : input.textbook) || null,
         makeup: input.makeup ?? false,
         // 자유입력 자리표시자(`-`·`X` 등)를 "없음" 하나로 표준화(none-marker.ts 규약, 원장 2026-07-23) —
         // 그대로 두면 학부모 카드에 "오늘 과제: -"가 나가고 AI 멘트가 그걸 사실로 받는다.
