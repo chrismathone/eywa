@@ -40,31 +40,46 @@ export function buildRunCards(runs: readonly ShuttleRun[], vehicles: readonly Sh
     const all = stops.map((s) => hm(s.atTime)).filter((t): t is string => !!t);
     const arrive = hm(stops.find((s) => s.kind === "arrive")?.atTime);
     const depart = hm(stops.find((s) => s.kind === "depart")?.atTime);
-    const academyTime = run.direction === "in" ? (arrive ?? all.at(-1) ?? null) : (depart ?? all[0] ?? null);
-    const start = run.direction === "in" ? (stopTimes[0] ?? all[0] ?? null) : academyTime;
-    const end = run.direction === "in" ? academyTime : (stopTimes.at(-1) ?? all.at(-1) ?? null);
-    for (const day of WEEKDAYS) {
-      const riders: RunCardRider[] = [];
-      for (const s of stops)
-        for (const r of s.riders) {
-          const days = r.weekdays.length ? r.weekdays : WEEKDAYS;
-          if (!days.includes(day) || riders.some((x) => x.id === r.studentId)) continue;
-          riders.push({ id: r.studentId, name: r.studentName, schoolGrade: r.schoolGrade, stopName: s.stopName, stopTime: hm(s.atTime) });
-        }
-      if (riders.length === 0) continue;
-      out.push({
-        id: `run:${run.id}:${day}`,
-        runId: run.id,
-        vehicleId: v.id,
-        vehicleName: v.name,
-        runName: runShortTitle(run),
-        direction: run.direction,
-        day,
-        start,
-        end,
-        academyTime,
-        riders,
-      });
+    /**
+     * 🔴 **등원/하원은 학생 줄(`rider.ioKind`)로 가른다 — 회차의 `direction`이 아니다**(오늘 등하원 `filterByDirection`과 같은 규약).
+     * 한 회차에 둘이 섞일 수 있다(학원 출발 → 정류장 → 학원 도착 순환: 등원 아이를 태우면서 하원 아이를 내려 준다).
+     * 회차 성격 쪽은 종전 시각 그대로, 반대쪽은 그 아이들의 정류장 시각과 학원 출발·도착 칸만으로 잡는다(없으면 시각 미정 — 지어내지 않는다).
+     * 사용자 2026-10-30 *"등원을 타고 왔는데 다음 차는 하원인데 학생 시간표는 둘 다 등원으로 찍힌다"*.
+     */
+    for (const io of run.direction === "in" ? (["in", "out"] as const) : (["out", "in"] as const)) {
+      const primary = io === run.direction;
+      const ioTimes = stops
+        .filter((s) => s.riders.some((r) => r.ioKind === io))
+        .map((s) => hm(s.atTime))
+        .filter((t): t is string => !!t);
+      const academyTime = io === "in" ? (arrive ?? (primary ? (all.at(-1) ?? null) : null)) : (depart ?? (primary ? (all[0] ?? null) : null));
+      const start = io === "in" ? (primary ? (stopTimes[0] ?? all[0] ?? null) : (ioTimes[0] ?? null)) : academyTime;
+      const end = io === "in" ? academyTime : primary ? (stopTimes.at(-1) ?? all.at(-1) ?? null) : (ioTimes.at(-1) ?? null);
+      for (const day of WEEKDAYS) {
+        const riders: RunCardRider[] = [];
+        for (const s of stops)
+          for (const r of s.riders) {
+            if (r.ioKind !== io) continue;
+            const days = r.weekdays.length ? r.weekdays : WEEKDAYS;
+            if (!days.includes(day) || riders.some((x) => x.id === r.studentId)) continue;
+            riders.push({ id: r.studentId, name: r.studentName, schoolGrade: r.schoolGrade, stopName: s.stopName, stopTime: hm(s.atTime) });
+          }
+        if (riders.length === 0) continue;
+        out.push({
+          // 회차 성격 쪽은 종전 id 그대로(확인한 경고 열쇠가 이어진다).
+          id: primary ? `run:${run.id}:${day}` : `run:${run.id}:${io}:${day}`,
+          runId: run.id,
+          vehicleId: v.id,
+          vehicleName: v.name,
+          runName: runShortTitle(run),
+          direction: io,
+          day,
+          start,
+          end,
+          academyTime,
+          riders,
+        });
+      }
     }
   }
   return out;

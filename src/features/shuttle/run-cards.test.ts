@@ -3,8 +3,8 @@ import { buildRunCards } from "./run-cards";
 import type { ShuttleRun, ShuttleVehicle } from "./types";
 
 const vehicles: ShuttleVehicle[] = [{ id: "v1", name: "1호차", driverName: null, driverPhone: null, sortOrder: 1 }];
-const rider = (studentId: string, name: string, weekdays: string[] = []) =>
-  ({ id: `r-${studentId}`, studentId, studentName: name, schoolGrade: "칠성초5", ioKind: "in", weekdays, memo: null, studentStatus: "enrolled" }) as never;
+const rider = (studentId: string, name: string, weekdays: string[] = [], ioKind: "in" | "out" = "in") =>
+  ({ id: `r-${studentId}`, studentId, studentName: name, schoolGrade: "칠성초5", ioKind, weekdays, memo: null, studentStatus: "enrolled" }) as never;
 const stop = (sortOrder: number, kind: string, name: string, atTime: string | null, riders: never[] = []) =>
   ({ id: `${name}`, kind, stopId: name, stopName: name, stopMemo: null, sortOrder, atTime, riders }) as never;
 
@@ -16,7 +16,7 @@ describe("buildRunCards — 회차 × 요일 배차 카드", () => {
     },
     {
       id: "out1", vehicleId: "v1", season: "term", runNo: 2, direction: "out", label: null,
-      stops: [stop(1, "depart", "학원", "18:10:00"), stop(2, "stop", "칠성초 정문", "18:20:00", [rider("b", "김민준")]), stop(3, "stop", "침산초 후문", "18:30:00")],
+      stops: [stop(1, "depart", "학원", "18:10:00"), stop(2, "stop", "칠성초 정문", "18:20:00", [rider("b", "김민준", [], "out")]), stop(3, "stop", "침산초 후문", "18:30:00")],
     },
   ];
   const cards = buildRunCards(runs, vehicles);
@@ -31,5 +31,24 @@ describe("buildRunCards — 회차 × 요일 배차 카드", () => {
     expect(cards.filter((c) => c.runId === "out1")).toHaveLength(5);
     const empty = buildRunCards([{ ...runs[0]!, stops: [stop(1, "arrive", "학원", "15:00:00")] }], vehicles);
     expect(empty).toEqual([]);
+  });
+  it("🔑 한 회차에 등·하원이 섞이면 학생 줄(ioKind)대로 카드를 나눈다 — 하원 아이는 학원 출발 ~ 자기 정류장", () => {
+    const loop: ShuttleRun = {
+      id: "loop", vehicleId: "v1", season: "term", runNo: 1, direction: "in", label: null,
+      stops: [stop(0, "depart", "학원", "14:30:00"), stop(2, "stop", "침산초 후문", "14:50:00", [rider("a", "강지호"), rider("c", "오민서", [], "out")]), stop(3, "arrive", "학원", "15:00:00")],
+    };
+    const got = buildRunCards([loop], vehicles).filter((c) => c.day === "mon");
+    expect(got.map((c) => [c.id, c.direction, c.start, c.end, c.academyTime, c.riders.map((r) => r.name).join()])).toEqual([
+      ["run:loop:mon", "in", "14:50", "15:00", "15:00", "강지호"],
+      ["run:loop:out:mon", "out", "14:30", "14:50", "14:30", "오민서"],
+    ]);
+  });
+  it("반대쪽 아이의 학원 시각 칸이 없으면 시각 미정(지어내지 않는다)", () => {
+    const noDepart: ShuttleRun = {
+      id: "nd", vehicleId: "v1", season: "term", runNo: 1, direction: "in", label: null,
+      stops: [stop(1, "stop", "침산초 후문", "14:50:00", [rider("a", "강지호"), rider("c", "오민서", [], "out")]), stop(2, "arrive", "학원", "15:00:00")],
+    };
+    const outCard = buildRunCards([noDepart], vehicles).find((c) => c.id === "run:nd:out:mon")!;
+    expect(outCard).toMatchObject({ direction: "out", start: null, academyTime: null, end: "14:50" });
   });
 });
