@@ -126,6 +126,19 @@ describe("수업 평가 표(원장 2026-10-22 — 하·중하·중·중상·상)
     expect(legacy).toContain("— 숙제 없음");
     expect(pilotBody(facts, {})).not.toContain("■ 수업 평가");
   });
+  it("비포클래스체크리스트 줄은 이해도 뒤에 붙고 카드가 그대로 읽는다(원장 2026-10-30)", () => {
+    const text = levelTableText({ attitude: "좋음", homework: "80%", understanding: [] }, [
+      { label: "예습영상", level: "상" },
+      { label: "문제풀이", level: "중" },
+    ]);
+    expect(parseLevelRows(text)?.map((r) => r.label)).toEqual(["수업 태도", "숙제 완성도", "이해도", "예습영상", "문제풀이"]);
+    expect(parseLevelRows(text)?.at(-1)).toEqual({ label: "문제풀이", level: "중" });
+    const absent = parseLevelRows(levelTableText({ attitude: "", homework: "" }, [{ label: "수업 준비", level: null, none: "결석" }]));
+    expect(pilotLevelsSection({ attitude: "", homework: "" }, [{ label: "수업 준비", level: null, none: "결석" }])).toMatch(/수업　준비　+— 결석/);
+    expect(absent?.at(-1)).toEqual({ label: "수업 준비", level: null, none: "결석" });
+    // 줄을 안 넘기면 표는 예전 그대로.
+    expect(levelTableText({ attitude: "좋음", homework: "" }, [])).toBe(levelTableText({ attitude: "좋음", homework: "" }));
+  });
   it("'없음' 줄은 카드가 그대로 읽는다", () => {
     const rows = parseLevelRows(levelTableText({ attitude: "좋음", homework: "", understanding: [] }));
     expect(rows).toEqual([

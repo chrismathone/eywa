@@ -111,6 +111,22 @@ export function reportCheckLevels(check: BeforeClassCheck): { label: string; lev
   });
 }
 
+/** 수업 평가 표에 붙는 체크리스트 줄 — 값이 있는 줄(눈금) 또는 결석 한 줄. 화면 시안과 실제 보고서가 같은 함수를 쓴다. */
+export type ReportCheckRow = { label: string; level: ReportLevel; none?: undefined } | { label: string; level: null; none: string };
+
+/** 아무것도 체크하지 않은 칸 — 저장된 행이 없는 학생은 '모두 해 옴'이다(시트와 같은 뜻). */
+export const DONE_CHECK: BeforeClassCheck = { missed: [], absent: false, card: null };
+
+/**
+ * 한 학생·한 수업일의 체크 → 보고서 '수업 평가' 표 줄(원장 2026-10-28 결석 한 줄 · 2026-10-30 실제 보고서에 적용).
+ * 체크 없음(null) → 줄 없음 · 결석 → `수업 준비 — 결석` 한 줄 · 그 밖 → 다섯 줄(눈금 규칙 = reportCheckLevels).
+ */
+export function reportCheckRows(check: BeforeClassCheck | null): ReportCheckRow[] {
+  if (!check) return [];
+  if (check.absent) return [{ label: "수업 준비", level: null, none: "결석" }];
+  return reportCheckLevels(check).flatMap((r): ReportCheckRow[] => (r.level ? [{ label: r.label, level: r.level }] : []));
+}
+
 export function percentLabel(rate: number | null): string {
   return rate === null ? "—" : `${Math.round(rate * 100)}%`;
 }

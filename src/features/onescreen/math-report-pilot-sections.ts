@@ -393,9 +393,16 @@ export const LEVEL_NONE = "평가 없음";
 /** 값이 없는 줄에서 이름과 표기 사이 기호 — 카드가 이 기호로 '없음' 줄을 알아본다(pilot-notes.ts parseLevelRows). */
 export const LEVEL_NONE_SEP = "—";
 
-/** 평가표 본문 — 표 모양(머리 줄 + 항목 줄, 고른 칸에 ●). 값이 없는 줄은 `이름 — 숙제 없음`. 줄이 하나도 없으면 "" (항목째 빠진다). */
+/** 표 끝에 덧붙는 줄 — 비포클래스체크리스트(예습영상·개념정리 …, before-class/items.ts `reportCheckRows`). */
+export type ExtraLevelRow = { label: string; level: Level; none?: undefined } | { label: string; level: null; none: string };
+
+/**
+ * 평가표 본문 — 표 모양(머리 줄 + 항목 줄, 고른 칸에 ●). 값이 없는 줄은 `이름 — 숙제 없음`. 줄이 하나도 없으면 "" (항목째 빠진다).
+ * `extra` = 그 반·그날 비포클래스체크리스트 줄(원장 2026-10-30 *"해당 반의 비포클래스가 체크되어있으면 수업보고서 해당 표 보고서에 적용"*) — 이해도 뒤에 붙는다.
+ */
 export function levelTableText(
   f: Pick<PilotFacts, "attitude" | "understanding"> & Partial<Pick<PilotFacts, "homework">>,
+  extra: readonly ExtraLevelRow[] = [],
 ): string {
   // 값이 없는 줄도 지우지 않는다(원장 2026-10-26 *"여기서는 그냥 사라지자나 없다는거 여기서 표시해줘"*) — `이름 — 숙제 없음`.
   //   단 값은 있는데 정도를 모르는 옛 자유입력(예: '완료')은 지어내지 않고 그 줄을 뺀다(종전대로).
@@ -408,6 +415,7 @@ export function levelTableText(
   }
   // 표의 줄 이름은 짧게 — 항목 제목은 '오늘의 수업'
   if (f.understanding !== undefined) rows.push(["이해도", understandingLevel(f.understanding) ?? LEVEL_NONE]);
+  for (const r of extra) rows.push([r.label, r.level ?? r.none]);
   const filled = rows.filter((r): r is [string, string] => r[1] != null);
   if (!filled.length) return "";
   const w = Math.max(2, ...filled.map(([l]) => [...l].length));
@@ -422,8 +430,11 @@ export function levelTableText(
 }
 
 /** 맨 위 '수업 평가' 항목 — 원장 2026-10-23 *"진도보다 위에 표 형태로"*. 진도 항목 앞에 붙는다(actions.ts composePilot). */
-export function pilotLevelsSection(f: Pick<PilotFacts, "attitude" | "homework" | "understanding">): string {
-  return pilotSection(T.levels, levelTableText(f));
+export function pilotLevelsSection(
+  f: Pick<PilotFacts, "attitude" | "homework" | "understanding">,
+  extra: readonly ExtraLevelRow[] = [],
+): string {
+  return pilotSection(T.levels, levelTableText(f, extra));
 }
 
 /**
