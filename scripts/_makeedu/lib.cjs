@@ -110,14 +110,13 @@ function isNonClass(name) {
 }
 
 // makeedu 수업명(+담임) → aywa operations.subjects 키.
-// 인재원 subjects = math / subject_1(수학심화) / english / science / korean.
+// 인재원 subjects = math / english / science / korean. 수학(심화)는 없앴다(원장 2026-10-30) — 수학이다.
 // makeedu 접두/토큰: [EiE]·중등E·고등E·초등E=영어 / [강아]·중등M·고등M·초등M·…반=수학(강의하는아이들) / [과학]=과학 / 국어=국어.
 function subjectFromName(name, teacher) {
   const s = `${name || ""} ${teacher || ""}`;
   if (/과학|science/i.test(s)) return "science";
   if (/국어|korean/i.test(s)) return "korean";
   if (/\beie\b|\[eie\]|영어|english|등e[_\s]|초등e|중등e|고등e/i.test(s)) return "english";
-  if (/수학\s*\(?\s*심화/i.test(s)) return "subject_1";
   // 나머지(강아·M계열·…반·수학)는 math 폴백
   return "math";
 }

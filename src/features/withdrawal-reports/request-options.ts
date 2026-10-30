@@ -81,7 +81,7 @@ export function requestManagers(
 
 /**
  * 승인자 후보를 과목 관리자와 대신 승인할 원장으로 나눈다 — 원장 계정이 여럿이라 원장은 전원을 기본 선택하지 않는다.
- * 🔴 침산 지점 superadmin(이승엽 · 박소선 등)을 여기에 넣으면 안 된다 — `reportStaff`가 역할을 admin으로, 승인 과목을 빈 값으로 넘겨 후보에서 빠진다.
+ * 🔴 침산 지점 superadmin(lsy93@gmail.com · st2000423@gmail.com 등)을 여기에 넣으면 안 된다 — `reportStaff`가 역할을 admin으로, 승인 과목을 빈 값으로 넘겨 후보에서 빠진다.
  *    `role`을 실제 system_role로 바꾸거나 다른 직원 목록을 넘기면 이 보호가 사라진다.
  */
 export function requestApprovers(

@@ -11,30 +11,23 @@ export type Line = Record<string, unknown>;
 export const asLine = (value: unknown): Line => (value && typeof value === "object" ? (value as Line) : {});
 export const sum = (values: readonly number[]) => values.reduce((n, x) => n + x, 0);
 const textOf = (line: Line) => String(line.description ?? line.name ?? "");
-const DEEP_MATH = /수학\s*\(?\s*심화/;
 
 export const isTuitionLine = (line: unknown) => ["", "수업", "수강료", "tuition"].includes(String(asLine(line).kind ?? ""));
 /** 과목 매출의 30% 이상이면 10점. 그 아래는 비중 ÷ 0.3 × 10. */
 export const revenuePoints = (amount: number, total: number) =>
   total > 0 ? (amount / total >= 0.3 ? 10 : Math.min(9.9, round1(Math.max(0, (amount / total / 0.3) * 10)))) : 0;
 
-/** 학원 설정에서 '수학(심화)' 과목의 키. 그런 과목이 없는 학원은 null. */
-export function deepMathKeyOf(subjects: readonly { key: string; label: string }[]): string | null {
-  return subjects.find((s) => DEEP_MATH.test(s.label))?.key ?? null;
-}
-
 /**
  * 과목이 문구로 분명할 때만 돌려준다. 수납 가져오기의 '모르면 수학' 기본값은 쓰지 않는다.
- * '수학(심화)'는 그 과목을 둔 학원에서만 그 키로 — 없으면 수학으로도 짐작하지 않는다.
+ * 지난 수납의 '수학(심화)'도 수학이다 — 그 과목을 없앴다(원장 2026-10-30 "전부 수학").
  */
-export function receiptSubject(source: unknown, deepMathKey: string | null = null): string | null {
+export function receiptSubject(source: unknown): string | null {
   const s = textOf(asLine(source));
   const hits: (string | null)[] = [];
   if (/과학|\bscience\b/i.test(s)) hits.push("science");
   if (/국어|\bkorean\b/i.test(s)) hits.push("korean");
   if (/\beie\b|영어|\benglish\b|(?:초등|중등|고등|중고)E(?:[_\s]|$)/i.test(s)) hits.push("english");
-  if (DEEP_MATH.test(s)) hits.push(deepMathKey);
-  else if (/수학|\bmath\b|\[강아\]|강의하는\s*아이들|(?:초등|중등|고등|중고)M(?:[_\s]|$)/i.test(s)) hits.push("math");
+  if (/수학|\bmath\b|\[강아\]|강의하는\s*아이들|(?:초등|중등|고등|중고)M(?:[_\s]|$)/i.test(s)) hits.push("math");
   return hits.length === 1 ? hits[0] : null;
 }
 

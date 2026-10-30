@@ -127,7 +127,7 @@ describe("침산 불변 — 저장 행이 있는 학원은 오늘과 같다", ()
     expect(DEFAULT_SETTINGS.preset).toBe("chinsan");
     expect(DEFAULT_SETTINGS.billing.sessionPrices.length).toBeGreaterThan(0);
     expect(DEFAULT_SETTINGS.notifications.serviceTerms.length).toBeGreaterThan(0);
-    expect(DEFAULT_SETTINGS.operations.subjects.some((s) => s.key === "subject_1")).toBe(true);
+    expect(DEFAULT_SETTINGS.operations.subjects.some((s) => s.key === "subject_1")).toBe(false);
     expect(DEFAULT_SETTINGS.modules.disabled).toEqual([]);
     expect(DEFAULT_SETTINGS.operations.periodStyle).toBe("chinsan");
   });

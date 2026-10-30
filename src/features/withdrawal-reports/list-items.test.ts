@@ -92,14 +92,14 @@ describe("퇴원보고서 목록 한 벌 — 웹 보고서 + 기존 스프레드
     expect(by("archive")).toEqual(["a:a1"]);
   });
 
-  it("미연결 — 학생에 안 붙은 기존 기록만", () => {
+  it("미연결 필터는 없앴다 — 옛 주소가 남아 있어도 전부 보인다", () => {
     const items = build([report()], [archive(), archive({ id: "a2", mapped_student_id: "s2", mapping_kind: "auto" })]);
     const f = parseListFilters({ link: "unmapped" }, true);
-    expect(keys(filterListItems(items, f, listWindow(f, "2026-10-14")))).toEqual(["a:a1"]);
+    expect(filterListItems(items, f, listWindow(f, "2026-10-14"))).toHaveLength(3);
   });
 
-  it("기존 기록을 못 보는 사람은 주소에 값이 남아 있어도 미연결·스프레드시트 기록 필터가 없다", () => {
-    expect(parseListFilters({ link: "unmapped", status: "archive" }, false)).toMatchObject({ unmapped: false, status: "all" });
+  it("기존 기록을 못 보는 사람은 주소에 값이 남아 있어도 스프레드시트 기록 필터가 없다", () => {
+    expect(parseListFilters({ status: "archive" }, false)).toMatchObject({ status: "all" });
   });
 
   it("기간 — 퇴원관리와 같은 창 계산 · 이번 달은 말일까지(처리 예약 포함) · 날짜 모르는 원문은 기간을 고르면 빠진다", () => {
@@ -137,8 +137,8 @@ describe("퇴원보고서 목록 한 벌 — 웹 보고서 + 기존 스프레드
   });
 
   it("목록 주소 — 창(embed)을 지키고 쪽은 처음으로", () => {
-    expect(listHref({ embed: "1", page: "3", status: "pending" }, { link: "unmapped", status: null })).toBe(
-      "/withdrawal-reports?embed=1&link=unmapped",
+    expect(listHref({ embed: "1", page: "3", status: "pending" }, { kind: "withdrawal", status: null })).toBe(
+      "/withdrawal-reports?embed=1&kind=withdrawal",
     );
     expect(listHref({}, {})).toBe("/withdrawal-reports");
   });
