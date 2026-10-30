@@ -36,7 +36,7 @@ export function DemoRosterSwitch({ control }: { control: DemoRosterControl }) {
       }
       setAppliedId(id);
       setAsk(null);
-      // 운영실 숫자는 30초 주기 조회라, 구성을 바꾼 뒤에는 그 주기를 기다리지 않고 바로 다시 읽는다.
+      // 운영실 숫자는 5분 주기 조회라, 구성을 바꾼 뒤에는 그 주기를 기다리지 않고 바로 다시 읽는다.
       await queryClient.refetchQueries({ queryKey: ["dashboard-overview"], type: "active" });
       router.refresh();
     });
