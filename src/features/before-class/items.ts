@@ -118,12 +118,12 @@ export type ReportCheckRow = { label: string; level: ReportLevel; none?: undefin
 export const DONE_CHECK: BeforeClassCheck = { missed: [], absent: false, card: null };
 
 /**
- * 한 학생·한 수업일의 체크 → 보고서 '수업 평가' 표 줄(원장 2026-10-28 결석 한 줄 · 2026-10-30 실제 보고서에 적용).
- * 체크 없음(null) → 줄 없음 · 결석 → `수업 준비 — 결석` 한 줄 · 그 밖 → 다섯 줄(눈금 규칙 = reportCheckLevels).
+ * 한 학생·한 수업일의 체크 → 보고서 '수업 평가' 표 줄(2026-10-30 실제 보고서에 적용).
+ * 체크 없음(null) → 줄 없음 · **결석 → 줄 없음**(원장 2026-10-30 *"jj는 결석 1A는 출석이면 우리 비포클래스 양식 안들어가고"* —
+ * 10-28의 '결석 한 줄'을 뒤집음: 체크하는 반(JJ)에 안 왔으면 보고서(MS)에 체크리스트가 없다) · 그 밖 → 다섯 줄(눈금 규칙 = reportCheckLevels).
  */
 export function reportCheckRows(check: BeforeClassCheck | null): ReportCheckRow[] {
-  if (!check) return [];
-  if (check.absent) return [{ label: "수업 준비", level: null, none: "결석" }];
+  if (!check || check.absent) return [];
   return reportCheckLevels(check).flatMap((r): ReportCheckRow[] => (r.level ? [{ label: r.label, level: r.level }] : []));
 }
 

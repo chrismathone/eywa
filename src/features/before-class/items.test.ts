@@ -80,9 +80,9 @@ describe("pickCheckDate — 주소의 날짜", () => {
 });
 
 describe("reportCheckRows — 수업보고서 '수업 평가' 표에 붙는 줄(원장 2026-10-30)", () => {
-  it("체크 없음 = 줄 없음 · 결석 = 한 줄 · 모두 해 옴 = 다섯 줄 상", () => {
+  it("체크 없음 = 줄 없음 · 결석 = 줄 없음 · 모두 해 옴 = 다섯 줄 상", () => {
     expect(reportCheckRows(null)).toEqual([]);
-    expect(reportCheckRows({ missed: [], absent: true, card: null })).toEqual([{ label: "수업 준비", level: null, none: "결석" }]);
+    expect(reportCheckRows({ missed: [], absent: true, card: null })).toEqual([]);
     expect(reportCheckRows(DONE_CHECK).map((r) => `${r.label}:${r.level}`)).toEqual(["예습영상:상", "개념정리:상", "풀이노트정리:상", "문제풀이:상", "오답정리:상"]);
   });
   it("미흡 항목은 눈금으로 — 한 항목 줄 미흡 = 하 · 묶은 줄 하나 미흡 = 중", () => {
