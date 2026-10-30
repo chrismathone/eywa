@@ -257,6 +257,16 @@ describe("자동작성 뒤에 칸을 바꾸면 다시 눌러야 한다", () => {
   it("서명이 없으면(새로고침 뒤) 서명 대조는 건너뛴다", () => {
     expect(isPilotDraftCurrent(draft, { ...now, writtenSig: undefined, factsSig: "B" })).toBe(true);
   });
+  it("🔑 선생님 말투로 다시 쓴 진도(원장 2026-10-30)도 같은 사실이면 최신 — 새로고침 뒤(서명 없음)에도", () => {
+    const styled = composePilotMent({ lead: pilotSection("진도", "승엽이는 '소인수분해' 문제를 풀었습니다."), body: "본문", note: "잘했어요" });
+    expect(isPilotDraftCurrent(styled, now)).toBe(true);
+    expect(isPilotDraftCurrent(styled, { ...now, writtenSig: undefined })).toBe(true);
+    expect(isPilotDraftCurrent(styled, { ...now, today: "최대공약수" })).toBe(false);
+    expect(isPilotDraftCurrent(styled, { ...now, progressMode: "복습" })).toBe(false);
+    const styledReview = composePilotMent({ lead: pilotSection("진도", "승엽이는 '소인수분해'를 복습했습니다."), body: "본문", note: "잘했어요" });
+    expect(isPilotDraftCurrent(styledReview, { ...now, progressMode: "복습" })).toBe(true);
+    expect(isPilotDraftCurrent(styledReview, now)).toBe(false);
+  });
 });
 
 describe("배선", () => {
@@ -386,9 +396,9 @@ describe("이해도 단계 버튼 — 카드·표 같은 판정(2026-10-26)", ()
 });
 
 describe("선생님 습관·수업 메모 지시(원장 2026-10-28)", () => {
-  const H = { omitPromises: true, omitFiller: true, compactUnits: true };
+  const H = { omitPromises: true, omitFiller: true, compactUnits: true, omitScore: false };
   it("습관이 없으면 종전 지시 그대로", () => {
-    expect(pilotAiDirective("학원삼")).toBe(pilotAiDirective("학원삼", { habits: { omitPromises: false, omitFiller: false, compactUnits: false } }));
+    expect(pilotAiDirective("학원삼")).toBe(pilotAiDirective("학원삼", { habits: { omitPromises: false, omitFiller: false, compactUnits: false, omitScore: false } }));
     expect(pilotAiDirective("학원삼")).toContain(PILOT_AI_DIRECTIVE);
   });
   it("다짐을 늘 지우는 선생님 — '그래서 … 챙기겠습니다' 예시·두 단계 지시가 빠지고 다짐 금지가 들어간다", () => {

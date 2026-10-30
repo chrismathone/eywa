@@ -103,7 +103,7 @@ import {
   ratedUnderstanding,
   readLessonMemo,
 } from "../math-report-pilot";
-import { applyHabitsToSections, NO_HABITS, type TeacherHabits } from "../teacher-habits";
+import { applyHabitsToSections, dropScoreLines, NO_HABITS, type TeacherHabits } from "../teacher-habits";
 import { loadTeacherHabits } from "./teacher-habits-db";
 import { pilotBody, pilotLevelsSection, readAttitudeNote, readHomeworkMissReason, readTestSkip, type DailyTestSkip } from "../math-report-pilot-sections";
 import { skipStatusOf } from "../progress-status";
@@ -1712,8 +1712,8 @@ export async function generateReportComment(
     variety: Variety | null = null,
     habits: TeacherHabits = NO_HABITS,
     ownUnderstanding = false,
-  ) =>
-    applyHabitsToSections(composePilotRaw(understandingText, videoReceipt, variety), habits, {
+  ) => {
+    const text = applyHabitsToSections(composePilotRaw(understandingText, videoReceipt, variety), habits, {
       skipTitles: [
         PILOT_SECTION_TITLES.levels,
         PILOT_SECTION_TITLES.note,
@@ -1722,6 +1722,9 @@ export async function generateReportComment(
       ],
       keep: teacherWords,
     });
+    // 테스트 점수 줄을 늘 지우는 선생님은 처음부터 안 쓴다(원장 2026-10-30 — teacher-habits.ts `omitScore`).
+    return habits.omitScore ? dropScoreLines(text, [PILOT_SECTION_TITLES.daily, PILOT_SECTION_TITLES.check]) : text;
+  };
   function composePilotRaw(understandingText: string, videoReceipt: string | null, variety: Variety | null) {
     return composePilotMent({
       // 수업 평가 표가 맨 위, 그다음 진도(원장 2026-10-23 *"진도보다 위에 표 형태로"*).
@@ -1767,9 +1770,17 @@ export async function generateReportComment(
     ? [readAttitudeNote(input.attitudeNote), readHomeworkMissReason(input.homeworkMissReason), pilotSkip?.detail ?? ""]
     : [];
   const restyleFacts = async (composed: string): Promise<string> => {
-    const ctx = await restyleCtxP;
+    const [ctx, habits] = await Promise.all([restyleCtxP, habitsP]);
     return ctx
-      ? restylePilotSections({ composed, examples: ctx.examples, style: ctx.style, studentName: input.studentName, tenantId: user.tenantId, mustKeep: restyleMustKeep })
+      ? restylePilotSections({
+          composed,
+          examples: ctx.examples,
+          style: ctx.style,
+          studentName: input.studentName,
+          tenantId: user.tenantId,
+          mustKeep: restyleMustKeep,
+          omitScore: habits.omitScore,
+        })
       : composed;
   };
   // 고친 글의 값만 다시 맞추기 — AI 없이 사실 항목만(위 opts 주석). 글은 클라 값이라 한 항목 길이로 자른다.
