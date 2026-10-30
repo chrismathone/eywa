@@ -33,14 +33,13 @@ export default async function RetentionPage() {
   const todayIso = isoToday();
 
   // 액션 큐: 위험·관심 또는 상담 30일+ 공백 또는 재등록 위험 (부원장 isActionable)
-  const queue = roster
-    .filter(
-      (r) =>
-        r.risk.level !== "ok" ||
-        (r.signals.daysSinceCounsel ?? 0) >= 30 ||
-        r.risk.renewal.tone === "risk",
-    )
-    .slice(0, 10);
+  const actionable = roster.filter(
+    (r) =>
+      r.risk.level !== "ok" ||
+      (r.signals.daysSinceCounsel ?? 0) >= 30 ||
+      r.risk.renewal.tone === "risk",
+  );
+  const queue = actionable.slice(0, 10);
 
   const overdueSrc = roster.filter(
     (r): r is RosterStudent & { nextContactDate: string } =>
@@ -94,11 +93,14 @@ export default async function RetentionPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.5fr_1fr]">
         <section className="bg-card shadow-card overflow-hidden rounded-2xl">
-          <header className="border-line border-b px-3 py-2">
-            <p className="micro">오늘 큐</p>
-            <h2 className="text-foreground mt-1 text-base font-bold">누구부터 챙길까</h2>
-          </header>
-          <ActionQueue rows={queue} />
+          {/* 명단은 펼쳐야 — 위 게이지·타일(요약)이 먼저(원장 2026-10-30 '요약 먼저, 이름은 눌러야'). */}
+          <details>
+            <summary className="border-line cursor-pointer border-b px-3 py-2">
+              <p className="micro inline">오늘 큐</p>
+              <h2 className="text-foreground mt-1 text-base font-bold">누구부터 챙길까 <span className="text-text-dim text-sm font-normal">· {actionable.length}명{actionable.length > queue.length ? ` 중 상위 ${queue.length}명` : ""} · 눌러서 보기</span></h2>
+            </summary>
+            <ActionQueue rows={queue} />
+          </details>
         </section>
 
         <div className="space-y-4">

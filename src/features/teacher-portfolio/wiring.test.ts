@@ -14,12 +14,15 @@ const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 
 describe("내부 탭", () => {
   it("볼 수 있는 사람에겐 두 면, 아니면 종전 화면 하나뿐이다", () => {
-    expect(classReviewFaces({ portfolio: true }).map((f) => f.label)).toEqual(["직원 평가", "직원 포트폴리오"]);
+    expect(classReviewFaces({ portfolio: true }).map((f) => f.label)).toEqual(["직원 평가", "직원 포트폴리오", "업무 현황"]);
     expect(classReviewFaces({ portfolio: false }).map((f) => f.key)).toEqual(["review"]);
   });
   it("주소로 강제해도 열 수 없는 면은 직원 평가로 돌아간다", () => {
     expect(resolveClassReviewTab("portfolio", { portfolio: true })).toBe("portfolio");
     expect(resolveClassReviewTab("portfolio", { portfolio: false })).toBe("review");
+    // 업무 현황(대시보드 강사별 업무 현황을 옮김 — 원장 2026-10-30 "원장만")도 포트폴리오와 같은 판정.
+    expect(resolveClassReviewTab("work", { portfolio: true })).toBe("work");
+    expect(resolveClassReviewTab("work", { portfolio: false })).toBe("review");
     expect(resolveClassReviewTab("nope", { portfolio: true })).toBe("review");
   });
   it("🔴 원장 역할이 자기 눈으로 볼 때만 연다 — '다른 강사 뷰'로 원장을 빌려도, 개인 예외로도 안 열린다", () => {

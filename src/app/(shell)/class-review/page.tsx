@@ -16,7 +16,13 @@ import {
 import { GRADE_CUTS, GRADE_FALLBACK } from "@/features/class-review/checklist";
 import { classReviewFaces, resolveClassReviewTab } from "@/features/class-review/faces";
 import { PortfolioFace } from "./_components/portfolio/portfolio-face";
+import { WorkFace } from "./_components/work-face";
+import { loadTeacherWork } from "@/features/dashboard/overview/teacher-work-server";
+import { withStaffTasks } from "@/features/staff-tasks/server/teacher-work";
+import { subjectLabelRecord } from "@/features/owner/subjects";
+import { kstToday } from "@/lib/date-kst";
 import { ReviewTable } from "./_components/review-table";
+import { ReviewSummaryGate } from "./_components/review-summary-gate";
 
 type Sp = { tab?: string; teacher?: string };
 
@@ -25,7 +31,7 @@ type Sp = { tab?: string; teacher?: string };
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Sp> }) {
   const [sp, priv] = await Promise.all([searchParams, getReviewPrivileges()]);
   const tab = resolveClassReviewTab(sp.tab, { portfolio: priv.seePortfolio });
-  return { title: `직원 평가${tab === "portfolio" ? " · 직원 포트폴리오" : ""} — 에이와` };
+  return { title: `직원 평가${tab === "portfolio" ? " · 직원 포트폴리오" : tab === "work" ? " · 업무 현황" : ""} — 에이와` };
 }
 
 // 포트폴리오의 [지금 집계]가 이 화면에서 도는 서버 액션이다 — 기본 상한으로는 집계가 끝나기 전에 끊긴다.
@@ -63,6 +69,23 @@ export default async function ClassReviewPage({ searchParams }: { searchParams: 
       </div>
     );
   }
+  // 업무 현황 — 대시보드 '강사별 업무 현황'을 옮겨 온 면(원장 2026-10-29·30 · 원장만 = 포트폴리오와 같은 판정).
+  if (resolveClassReviewTab(sp.tab, faceOptions) === "work") {
+    const settings = await getTenantSettings();
+    const data = await withStaffTasks(loadTeacherWork(viewer.tenantId, kstToday(), null, settings));
+    return (
+      <div className="w-full min-w-0 space-y-5 p-6">
+        <PageHeader
+          eyebrow="운영"
+          title="업무 현황"
+          description="학원 전체 합계를 먼저 보고, 강사별 표는 [강사별 보기]로 엽니다. 보고서·영상은 최근 7일, 출결은 어제까지 7일 기준입니다."
+          embedLabel="업무 현황"
+        />
+        {faceTabs}
+        <WorkFace data={data} subjects={subjectLabelRecord(settings.operations.subjects)} />
+      </div>
+    );
+  }
   // 자기 평가 전용 판정·평가지 소유 id는 서버 단일 소스에서('다른 강사 뷰'면 그 강사의 눈, #77).
   const [{ rows }, settings, priv, myFilter, rv] = await Promise.all([
     listClassReviews(),
@@ -76,6 +99,25 @@ export default async function ClassReviewPage({ searchParams }: { searchParams: 
   const cutsLabel =
     GRADE_CUTS.map((c) => `${c.grade}≥${c.min}`).join(" · ") + ` · 미만 ${GRADE_FALLBACK}`;
 
+  const reviewRows = rows.map((r) => {
+            const mine = myScoreSlot(r, rv.id);
+            return {
+              id: r.id,
+              date: r.header.date,
+              teacherName: r.header.teacherName,
+              subjectLabel: r.header.subject ? subjects.labelOf(r.header.subject) : null,
+              subjectColor: r.header.subject ? subjects.colorOf(r.header.subject) : null,
+              mode: r.header.observerMode === "open" ? ("open" as const) : ("assigned" as const),
+              // ⚠️ 인원을 글자로 박지 말 것 — 정원은 평가마다 다르다(생성 시 선택, 문서에 동결).
+              modeLabel:
+                r.header.observerMode === "open" ? `선착순 ${observerLimitOf(r)}명` : "평가자 지정",
+              myTurn: !!mine && !mine.submitted,
+              incomplete: r.submittedCount < r.observerSlots,
+              submitted: `${r.submittedCount}/${r.observerSlots}`,
+              percent: r.averages ? r.averages.percent.toFixed(1) : null,
+              grade: r.averages ? r.averages.grade : null,
+            };
+  });
   return (
     <div className="w-full min-w-0 space-y-5 p-6">
       <PageHeader
@@ -119,28 +161,9 @@ export default async function ClassReviewPage({ searchParams }: { searchParams: 
           </p>
         </div>
       ) : (
-        <ReviewTable
-          initialFilter={myFilter}
-          rows={rows.map((r) => {
-            const mine = myScoreSlot(r, rv.id);
-            return {
-              id: r.id,
-              date: r.header.date,
-              teacherName: r.header.teacherName,
-              subjectLabel: r.header.subject ? subjects.labelOf(r.header.subject) : null,
-              subjectColor: r.header.subject ? subjects.colorOf(r.header.subject) : null,
-              mode: r.header.observerMode === "open" ? ("open" as const) : ("assigned" as const),
-              // ⚠️ 인원을 글자로 박지 말 것 — 정원은 평가마다 다르다(생성 시 선택, 문서에 동결).
-              modeLabel:
-                r.header.observerMode === "open" ? `선착순 ${observerLimitOf(r)}명` : "평가자 지정",
-              myTurn: !!mine && !mine.submitted,
-              incomplete: r.submittedCount < r.observerSlots,
-              submitted: `${r.submittedCount}/${r.observerSlots}`,
-              percent: r.averages ? r.averages.percent.toFixed(1) : null,
-              grade: r.averages ? r.averages.grade : null,
-            };
-          })}
-        />
+        // 요약 먼저 — 강사 이름 목록은 눌러서(원장 2026-10-29). 자기 평가 전용(강사)은 본인 평가지뿐이라 목록 그대로.
+        selfOnly ? <ReviewTable initialFilter={myFilter} rows={reviewRows} />
+          : <ReviewSummaryGate rows={reviewRows}><ReviewTable initialFilter={myFilter} rows={reviewRows} /></ReviewSummaryGate>
       )}
       <p className="text-text-dim text-xs">
         {selfOnly
@@ -150,3 +173,4 @@ export default async function ClassReviewPage({ searchParams }: { searchParams: 
     </div>
   );
 }
+

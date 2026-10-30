@@ -148,6 +148,15 @@ const KPIS: Record<KpiKey, KpiSpec> = {
   makeup: { label: "보강예정", subjectScope: "subject" },
 };
 
+/**
+ * 대시보드에서 뺀 카드 — 갤러리에 없고, 저장된 배치에 남아 있어도 모르는 카드로 걸러진다(view.ts · 영역도 읽지 않는다).
+ * - teacherWork(강사별 업무 현황): 직원 평가 '업무 현황' 면으로 옮김 — 원장 2026-10-29 *"강사 자료는 강사평가로"* ·
+ *   2026-10-30 *"원장만"*(class_review 권한 · 포트폴리오와 같은 판정).
+ */
+const RETIRED_PANELS: ReadonlySet<PanelId> = new Set<PanelId>(["teacherWork"]);
+/** 뺀 카드만 읽던 영역 — 대시보드 관리 미리보기(full)도 조회하지 않는다. */
+export const RETIRED_AREAS: ReadonlySet<Area> = new Set<Area>(["teacherWork"]);
+
 /** 편집기 갤러리 순서 = KPI 9칸(운영실 순서) → 패널(배열 순서). */
 export const CARDS: readonly CardDef[] = [
   ...KPI_KEYS.map(
@@ -165,7 +174,7 @@ export const CARDS: readonly CardDef[] = [
       size: { w: 3, h: 1 },
     }),
   ),
-  ...(Object.keys(PANELS) as PanelId[]).map(
+  ...(Object.keys(PANELS) as PanelId[]).filter((k) => !RETIRED_PANELS.has(k)).map(
     (k): CardDef => ({
       id: `panel:${k}`,
       kind: "panel",

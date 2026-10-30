@@ -3,7 +3,7 @@ import type { Face } from "@/components/face-tabs";
 /** 직원 평가의 라우트 — 면은 `?tab=`으로 가른다(재고관리·수납관리와 같은 메커니즘). */
 export const CLASS_REVIEW_PATH = "/class-review";
 
-export const CLASS_REVIEW_TABS = ["review", "portfolio"] as const;
+export const CLASS_REVIEW_TABS = ["review", "portfolio", "work"] as const;
 export type ClassReviewTab = (typeof CLASS_REVIEW_TABS)[number];
 
 /**
@@ -16,6 +16,8 @@ export type ClassReviewTab = (typeof CLASS_REVIEW_TABS)[number];
 const FACE_DEFS: ReadonlyArray<{ key: ClassReviewTab; label: string; href: string }> = [
   { key: "review", label: "직원 평가", href: CLASS_REVIEW_PATH },
   { key: "portfolio", label: "직원 포트폴리오", href: `${CLASS_REVIEW_PATH}?tab=portfolio` },
+  // 대시보드 '강사별 업무 현황'을 옮겨 온 면 — 원장 2026-10-29 *"강사 자료는 강사평가로"* · 2026-10-30 *"원장만"*(포트폴리오와 같은 판정).
+  { key: "work", label: "업무 현황", href: `${CLASS_REVIEW_PATH}?tab=work` },
 ];
 
 /**
@@ -32,10 +34,10 @@ export function canSeePortfolio(viewer: { role: string; viewAs: boolean; selfOnl
 
 /** 이 사람이 열 수 있는 면만. 포트폴리오를 못 보면 면이 하나라 탭 줄 자체를 그리지 않는다. */
 export function classReviewFaces(opts: { portfolio: boolean }): Face[] {
-  return FACE_DEFS.filter((face) => face.key !== "portfolio" || opts.portfolio);
+  return FACE_DEFS.filter((face) => face.key === "review" || opts.portfolio);
 }
 
 /** `?tab=` 값 → 면. 주소를 믿지 않는다 — 열 수 없는 면·모르는 값은 직원 평가로. */
 export function resolveClassReviewTab(raw: unknown, opts: { portfolio: boolean }): ClassReviewTab {
-  return raw === "portfolio" && opts.portfolio ? "portfolio" : "review";
+  return (raw === "portfolio" || raw === "work") && opts.portfolio ? raw : "review";
 }

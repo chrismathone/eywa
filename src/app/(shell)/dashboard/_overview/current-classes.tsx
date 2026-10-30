@@ -12,7 +12,8 @@ type Slot = OverviewData["schedule"][number];
 /** 전체 일정 팝업이 열리면 이 표식이 붙은 줄로 스크롤한다(지금 진행 중인 첫 수업, 없으면 다음 수업). */
 const NOW_ANCHOR = "js-now-anchor";
 
-function ClassRow({ slot, now = false, anchor = false }: { slot: Slot; now?: boolean; anchor?: boolean }) {
+/** `hideTeacher` = 대시보드 첫 화면(강사 이름은 '전체 보기' 팝업에서만 — 원장 2026-10-30). */
+function ClassRow({ slot, now = false, anchor = false, hideTeacher = false }: { slot: Slot; now?: boolean; anchor?: boolean; hideTeacher?: boolean }) {
   return (
     <WindowLink
       href={`/classes/${slot.classId}`}
@@ -35,7 +36,7 @@ function ClassRow({ slot, now = false, anchor = false }: { slot: Slot; now?: boo
       <span>
         <b>{slot.className}</b>
         <small>
-          {slot.teacherName ?? "강사 미정"} ·{" "}
+          {hideTeacher ? null : <>{slot.teacherName ?? "강사 미정"} ·{" "}</>}
           {slot.classroomName ?? "교실 미정"}
         </small>
       </span>
@@ -123,7 +124,7 @@ export function CurrentClasses({
                 </span>
               </div>
               {visible.slice(0, 2).map((slot) => (
-                <ClassRow key={slot.id} slot={slot} />
+                <ClassRow key={slot.id} slot={slot} hideTeacher />
               ))}
               {visible.length > 2 && (
                 <DetailPopup

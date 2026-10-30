@@ -110,6 +110,9 @@ describe("실제 신규생 보드 상호작용", () => {
   it("우선 업무가 필터에 가려져도 이유를 알리고 정확한 상세를 연다", async () => {
     render(<NewcomerBoard view={testView()} canWrite initialFilters={{ ...EMPTY_FILTERS, subject: "english" }} />);
     const strip = screen.getByRole("region", { name: "우선 처리 업무" });
+    // 우선 처리는 접힌 채로 시작 — 건수만, 이름은 펼쳐야(원장 2026-10-30)
+    expect(within(strip).queryByRole("button", { name: /테스트가A/ })).toBeNull();
+    fireEvent.click(within(strip).getByRole("button", { name: /우선 처리/ }));
     fireEvent.click(within(strip).getByRole("button", { name: /D\+6.*테스트가A.*수학.*사전 콜/ }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByRole("combobox", { name: "상세 관리 업무" })).toHaveValue("pre_call");

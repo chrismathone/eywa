@@ -27,6 +27,11 @@ export function ContributionList({ data }: { data: Data }) {
   const [filters, update] = useContributionListState();
   const { page, pageSize } = filters;
   const [message, setMessage] = useState(""), [busy, start] = useTransition();
+  // 학생 순위표는 눌러서 연다 — 원장 2026-10-29 *"원생 정보도 … 전체(요약)가 먼저 뜨고, 필요해서 누르고 들어가면 개별 리스트"*.
+  // 주소에 거르기·쪽이 실려 있으면(학생 상세에서 돌아옴 · 화면이 떠 있는 채 주소만 바뀜 포함) 펼친 채로 — 숫자만 줄고 거르기 칸이 숨는 일이 없게(리뷰).
+  const [opened, setListOpen] = useState(false);
+  const listOpen = opened || (Object.keys(DEFAULT_LIST_STATE) as (keyof typeof DEFAULT_LIST_STATE)[])
+    .some((key) => key !== "pageSize" && JSON.stringify(filters[key]) !== JSON.stringify(DEFAULT_LIST_STATE[key]));
   const router = useRouter();
   const recent = useRecentContribution(data, filters.period), periodLabel = changePeriodLabel(filters.period);
   const filter = (patch: Partial<typeof filters>) => update({ ...patch, page: 1 });
@@ -55,7 +60,7 @@ export function ContributionList({ data }: { data: Data }) {
     {(!data.ready || !data.historyReady) && <p className="rounded-lg bg-primary-softer px-4 py-3 text-sm">{!data.ready ? "기여도 기록 저장이 아직 준비되지 않았습니다." : "첫 집계를 준비 중입니다. 완료 전에는 일부 기록만 표시될 수 있습니다."}</p>}
     {message && <p role="status" className="rounded-lg border border-line p-3 text-sm">{message}</p>}
     <div className="grid grid-cols-1 items-stretch gap-5 2xl:grid-cols-[minmax(0,1fr)_22rem]">
-    <section className="@container flex min-w-0 flex-col overflow-hidden rounded-xl border border-line bg-card" aria-label="원생 기여도 목록">
+    {listOpen ? <section className="@container flex min-w-0 flex-col overflow-hidden rounded-xl border border-line bg-card" aria-label="원생 기여도 목록">
       <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">
         <StudentFilterFields filters={filters} options={data} onChange={filter} onReset={reset}>
         <select aria-label="정렬" value={filters.sort} onChange={(e) => filter({ sort: e.target.value === "recent" ? "recent" : "total" })} className={fieldClass}><option value="total">누적 기여도</option><option value="recent">기간별 증감</option></select>
@@ -85,7 +90,10 @@ export function ContributionList({ data }: { data: Data }) {
       </div>
       <div className="mt-auto flex flex-wrap items-center justify-between border-t border-line px-4 py-2 text-xs"><span>점수 단위: 점 · 현재 배점 기준</span><label className="flex items-center gap-2">한 페이지<select aria-label="학생 목록 표시 수" value={pageSize} onChange={(e) => update({ pageSize: Number(e.target.value), page: 1 })} className="rounded border border-line bg-card px-2 py-1">{[10, 20, 50].map((n) => <option key={n} value={n}>{n}명</option>)}</select></label></div>
       <ListPager page={current} total={rows.length} pageSize={pageSize} onChange={(next) => update({ page: next })} label="학생 목록" unit="명" />
-    </section>
+    </section> : <section className="flex min-w-0 flex-col items-center justify-center gap-3 rounded-xl border border-line bg-card p-10 text-center" aria-label="원생 기여도 목록">
+      <p className="text-sm">학생별 점수 순위는 눌러서 봅니다.</p>
+      <Button variant="outline" onClick={() => setListOpen(true)}>학생 목록 보기 ({rows.length}명)</Button>
+    </section>}
     <aside className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-line bg-card"><div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4 text-sm"><h2 className="font-semibold">조회한 학생의 점수 구성</h2><span>{rows.length}명</span></div><ScoreBreakdown raws={raws} config={data.config} contained /><p className="border-t border-line px-5 py-3 text-xs leading-relaxed">검색과 필터에 해당하는 학생 전체의 누적 실적입니다. 페이지를 넘겨도 구성은 같습니다.</p></aside>
     </div>
     <details className="rounded-xl border border-line p-4 text-xs leading-relaxed"><summary className="cursor-pointer text-sm font-medium">점수와 자료 범위 안내</summary><div className="mt-3 space-y-2">
