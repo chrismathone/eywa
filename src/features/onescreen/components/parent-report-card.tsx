@@ -147,7 +147,8 @@ export function ParentReportCard({
   // 위 칸을 감추는 건 **시범 보고서 글이 확실할 때만**(아는 항목 제목이 있을 때) — 손으로 "■"로 시작한 글이 진도 칸을 지우지 않게.
   const pilotOwns = !!pilotSections && isPilotReportSections(pilotSections);
   // 제목 — SRS 보고서(JJ 양식)는 '어휘 관리 보고서', 그 밖은 과목 보고서(report-title.ts 한 곳). [특강]·보강 꼬리는 둘 다 같다.
-  const title = reportTitleText(templateMode && isSrsReportSections(pilotSections) ? SRS_REPORT_TITLE : rpt.title, report);
+  const srsReport = templateMode && isSrsReportSections(pilotSections);
+  const title = reportTitleText(srsReport ? SRS_REPORT_TITLE : rpt.title, report);
   // 섹션 2분할(2026-07-10 원장): '오늘 수업'=교재·진도·오늘 과제 / '평가'=시험점수·지난 과제·수업 태도.
   const showToday = pilotOwns
     ? rpt.showTextbook && report.textbook
@@ -196,6 +197,8 @@ export function ParentReportCard({
           // 종강 표식 `(~26.09.29)`은 학원 내부 보관 꼬리라 학부모 문서엔 뗀다(원장 2026-10-23 *"반에 날짜는 왜 들어간거임 빼고"*) — 규칙은 반 이름 쪽 단일 소스.
           className={report.className ? originalClassName(report.className) : null}
           teacherName={report.teacherName}
+          // JJ 수업보고서(SRS 양식)는 담임 칸을 뺀다 — 제목 판정과 같은 기준(원장 2026-10-30).
+          hideTeacher={srsReport}
           // 인재원 자료가 없는 영어 보고서는 그림 자리만 든 항목('인재원 결과지')을 뺀다 — 빈 띠에 '작성된 보고 내용이 없습니다'가 서면 안 된다.
           sections={templateMode && !jj ? pilotSplit.main.filter((s) => !onlyImageSlots(s.body)) : pilotSplit.main}
           note={pilotSplit.note}
@@ -230,7 +233,7 @@ export function ParentReportCard({
       <Section title="학생 정보">
         <Field label="이름" value={parentStudent?.name || "-"} />
         <Field label="학교 · 학년" value={schoolGrade} />
-        <Field label="담임" value={report.teacherName || "-"} />
+        {srsReport ? null : <Field label="담임" value={report.teacherName || "-"} />}
       </Section>
 
       {/* 템플릿 모드(영어) — 조립된 글이 곧 본문이다. 아래 '오늘 수업'·'평가'·학습 추이·'학부모 전달 내용'·

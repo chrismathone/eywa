@@ -118,10 +118,13 @@ describe("JJ 수업보고서 템플릿", () => {
 describe("JJ 수업보고서 카드", () => {
   const html = renderToStaticMarkup(<ParentReportCard {...props()} />);
 
-  it("위 = 표 머리(제목·반·담임·수업 평가 — 태도 한 줄) · 일일 테스트·숙제 완성도 없음", () => {
-    expect(html).toContain("영어 보고서");
+  it("위 = 표 머리(제목·반·수업 평가 — 태도 한 줄) · 담임 칸 없음 · 일일 테스트·숙제 완성도 없음", () => {
+    expect(html).toContain("어휘 관리 보고서");
     expect(html).toContain("JJ 영어반");
-    expect(html).toContain("김동후");
+    // JJ 수업보고서는 담임 영역이 없다(원장 2026-10-30) — 칸째 빼고 로고·제목 칸은 두 줄만 걸친다.
+    expect(html).not.toContain(">담임<");
+    expect(html).not.toContain("김동후");
+    expect(html).not.toContain('rowSpan="3"');
     expect(html).not.toContain(">일일 테스트<");
     expect(html).not.toContain(">수업 평가<"); // 표 이름 칸은 비운다(원장 2026-10-28)
     expect(html).toContain(">중상<"); // 눈금 머리는 그대로
