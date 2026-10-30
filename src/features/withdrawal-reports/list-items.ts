@@ -3,7 +3,7 @@ import { monthRange } from "@/lib/date-kst";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import type { ArchiveRow } from "./archive-model";
 import { archiveReason, webReportReason, type ListReason } from "./list-reason";
-import { REPORT_STATUS, directorIds, isDirectReport, managerIds, type ReportListRow, type StaffOption } from "./model";
+import { REPORT_STATUS, directorIds, isDirectReport, isParticipant, managerIds, type ReportListRow, type StaffOption } from "./model";
 
 /**
  * 퇴원보고서 목록 한 벌 — 웹에서 작성·승인하는 보고서와 기존 스프레드시트 보고서(원문 보관)를 **한 목록**에 세운다.
@@ -19,13 +19,23 @@ export type ListItem = {
   name: string;
   /** 이름 옆 학교학년(원장 2026-10-29 *"학교 학년이 없음. 학생 옆에 붙어줄것"*) — 없으면 빈칸. */
   schoolGrade: string;
-  /** 이름 아래 한 줄(처리 구분·과목 / 학교학년·반·과목). */
+  /** 이름 아래 한 줄(처리 구분·과목 / 학교학년·반·과목) — 검색·옛 표면용. 목록 표는 아래 칸들로 나눠 보인다. */
   detail: string;
+  /** 목록 열 나누기(원장 2026-10-30 *"과목 열, 이름 열, 학교학년, 상태 열로 4개로 … 영어 / 김덕현 / 성광중2 / 퇴원(혹은 수강종료)"*). */
+  subjectText: string;
+  /** 퇴원 · 수강종료(원장 *"전체 퇴원 -> 퇴원"*) — 기존 기록(스프레드시트)은 구분이 없어 '—'. */
+  kindText: string;
+  /** 구분 필터 축 — 기존 기록은 null(구분 필터를 걸면 빠진다). */
+  kind: "withdrawal" | "subject_end" | null;
+  /** 기존 기록의 반 이름(이름 아래 작게) — 웹 보고서는 빈칸. */
+  classText: string;
   /** 기간 필터·정렬 축 = 퇴원·종료일(원문에서 날짜를 못 읽은 기록은 null). */
   date: string | null;
   dateText: string;
   /** 요청일(원장 2026-10-29 *"퇴원보고서 요청일 열 추가"*) — 웹 보고서가 만들어진 날(KST). 기존 기록은 알 수 없어 '—'. */
   requestedText: string;
+  /** 요청 시각(정렬 축 — 원장 2026-10-30 *"요청일이 있으면 요청일 기준으로 최신 요청이 상단"*) · 기존 기록은 null. */
+  requestedAt: string | null;
   teacher: string;
   /** 퇴원 사유 칸 — 우리 사유(대분류 · 세부) · 맞는 것이 없으면 기타 + 설명([`list-reason.ts`](./list-reason.ts)). */
   reason: ListReason;
@@ -37,6 +47,11 @@ export type ListItem = {
   /** 기존 기록만 — 학생 연결 상태. 웹 보고서는 늘 학생에서 출발하므로 null. */
   link: ListLink | null;
   myTurn: boolean;
+  /**
+   * 상태 칸 구분(원장 2026-10-30 *"본인의 승인이 필요한 경우와, 승인이 필요하지 않은 경우를 구분 … 상태란을 다르게 표시"*) —
+   * `approve` = 지금 내 승인 차례 · `view` = 승인자·요청자·작성자가 아닌 열람 · `none` = 그 밖(관여했지만 지금 할 일 없음).
+   */
+  mine: "approve" | "view" | "none";
   search: string;
 };
 
@@ -53,8 +68,11 @@ export function buildListItems(input: {
   staff: readonly StaffOption[];
   labelOf: (key: string) => string;
   userId: string;
+  /** 쓰기 권한(읽기 전용 보기면 '내 승인 필요'를 세우지 않는다 — 상세에 승인 버튼이 없다). 기본 true. */
+  writable?: boolean;
 }): ListItem[] {
   const { staff, labelOf, userId } = input;
+  const writable = input.writable ?? true;
   const staffName = (id: string) => staff.find((s) => s.id === id)?.name ?? FORMER_STAFF;
   const reviewers = (r: ReportListRow, kind: "manager" | "director") => {
     const ids = kind === "manager" ? managerIds(r) : directorIds(r);
@@ -72,10 +90,15 @@ export function buildListItems(input: {
       href: `${LIST_PATH}/${r.id}`,
       name: r.snapshot.name,
       schoolGrade: schoolGradeLabel(r.snapshot.school, r.snapshot.grade),
-      detail: `${r.exit_kind === "withdrawal" ? "전체 퇴원" : "수강종료"} · ${r.subjects.length ? r.subjects.map(labelOf).join("·") : "다니는 반 없음"}`,
+      detail: `${r.exit_kind === "withdrawal" ? "퇴원" : "수강종료"} · ${r.subjects.length ? r.subjects.map(labelOf).join("·") : "다니는 반 없음"}`,
+      subjectText: r.subjects.length ? r.subjects.map(labelOf).join("·") : "다니는 반 없음",
+      kindText: r.exit_kind === "withdrawal" ? "퇴원" : "수강종료",
+      kind: r.exit_kind,
+      classText: "",
       date: r.effective_date,
       dateText: r.effective_date,
       requestedText: kstDay(r.created_at),
+      requestedAt: r.created_at,
       teacher,
       reason,
       subjects: r.subjects,
@@ -90,7 +113,12 @@ export function buildListItems(input: {
           ],
       link: null,
       myTurn: ["requested", "revision"].includes(r.status) && r.teacher_id === userId,
-      search: [r.snapshot.name, r.snapshot.school, r.snapshot.grade, schoolGradeLabel(r.snapshot.school, r.snapshot.grade), ...r.snapshot.courses.map((c) => c.className), teacher, reason.text, reason.note ?? "", direct ? "관리자 바로 처리" : ""].join(" "),
+      // 열람 표시는 진행 중에만(끝난 보고서엔 승인할 일이 없다 — 리뷰).
+      mine: writable && myApprovalTurn(r, userId) ? "approve" : !isParticipant(r, userId) && !["completed", "canceled"].includes(r.status) ? "view" : "none",
+      // 검색 = 보이는 칸 + 보고서 본문 글 전부(원장 2026-10-30 *"검색은 내용등 모든것을 검색가능하게"*) — 상담 내용·담임 의견·요청 메모·반려 사유·승인자까지.
+      search: [r.snapshot.name, r.snapshot.school, r.snapshot.grade, schoolGradeLabel(r.snapshot.school, r.snapshot.grade), ...r.snapshot.courses.map((c) => c.className), teacher, reason.text, reason.note ?? "", direct ? "관리자 바로 처리" : "",
+        r.exit_kind === "withdrawal" ? "퇴원" : "수강종료", ...r.subjects.map(labelOf), REPORT_STATUS[r.status], staffName(r.requested_by), ...managerIds(r).map(staffName), ...directorIds(r).map(staffName),
+        r.request_note, r.last_comment ?? "", r.body_detail ?? "", r.body_student ?? "", r.body_parent ?? "", r.body_opinion ?? "", r.body_attendance ?? "", r.body_tuition ?? "", r.body_arrears_note ?? ""].join(" "),
     };
   });
   const archived = input.archives.map((a): ListItem => {
@@ -102,9 +130,14 @@ export function buildListItems(input: {
       name: a.student_name || "이름 미기재",
       schoolGrade: a.school_grade.trim(),
       detail: [className, a.subject ? labelOf(a.subject) : "과목 미기재"].filter(Boolean).join(" · "),
+      subjectText: a.subject ? labelOf(a.subject) : "과목 미기재",
+      kindText: "—",
+      kind: null,
+      classText: className,
       date: a.exit_date,
       dateText: a.exit_date || a.raw_exit_date || "미기재",
       requestedText: "—",
+      requestedAt: null,
       teacher: staff.find(s => s.id === a.mapped_teacher_id)?.name || a.teacher_name.trim() || NO_TEACHER,
       reason,
       subjects: a.subject ? [a.subject] : [],
@@ -114,15 +147,21 @@ export function buildListItems(input: {
       approval: [{ text: `원본 · ${a.sheet_title}`, muted: true }],
       link: a.mapped_student_id ? (a.mapping_kind === "manual" ? "manual" : "auto") : "unmapped",
       myTurn: false,
-      search: [a.student_name, a.school_grade, a.class_name, a.teacher_name, a.mapped_teacher_id ? staffName(a.mapped_teacher_id) : "", a.sheet_title, reason.text, reason.note ?? "", a.reason_raw ?? ""].join(" "),
+      mine: "none",
+      search: [a.student_name, a.school_grade, a.class_name, a.teacher_name, a.mapped_teacher_id ? staffName(a.mapped_teacher_id) : "", a.sheet_title, reason.text, reason.note ?? "", a.reason_raw ?? "",
+        a.subject ? labelOf(a.subject) : "", ...Object.values(a.search_fields ?? {}).map((v) => (typeof v === "string" ? v : ""))].join(" "),
     };
   });
   // 🔑 진행 중(처리할 일)이 먼저 — 기본 보기가 '전체'라 지난 날짜로 요청된 진행 중 보고서가 기존 기록 사이로 묻히지 않게.
   // 그다음 퇴원·종료일 늦은 순(날짜 없는 원문은 맨 뒤) → 이름 → 키 — 웹 보고서와 기존 기록이 섞여도 순서가 결정적이다.
-  const rank = (i: ListItem) => (i.status === "pending" ? 0 : i.date === null ? 2 : 1);
+  // 원장 2026-10-30 *"처리되지 않은 것이 상단으로. 처리완료는 그 아래 … 요청일 기준으로 최신 요청이 상단"* — 묶음 안에선 요청일 늦은 순,
+  // 요청일이 없는 기존 기록은 그 뒤에 퇴원·종료일 늦은 순.
+  const rank = (i: ListItem) => (i.status === "pending" ? 0 : i.requestedAt === null && i.date === null ? 2 : 1);
   return [...web, ...archived].sort(
     (a, b) =>
       rank(a) - rank(b) ||
+      Number(a.requestedAt === null) - Number(b.requestedAt === null) ||
+      (b.requestedAt ?? "").localeCompare(a.requestedAt ?? "") ||
       (b.date ?? "").localeCompare(a.date ?? "") ||
       a.name.localeCompare(b.name, "ko") ||
       a.key.localeCompare(b.key),
@@ -137,6 +176,10 @@ export type ListFilters = {
   subject: string;
   teacher: string;
   unmapped: boolean;
+  /** 구분(원장 2026-10-30 — 퇴원 · 수강종료). */
+  kind: "all" | "withdrawal" | "subject_end";
+  /** 내 승인 필요만(원장 2026-10-30 "본인의 승인이 필요한 경우 … 구분"). */
+  mine: boolean;
   q: string;
 };
 
@@ -154,6 +197,8 @@ export function parseListFilters(sp: Record<string, string | undefined>, canSeeA
     subject: sp.subject || "all",
     teacher: sp.teacher || "all",
     unmapped: canSeeArchive && sp.link === "unmapped",
+    kind: sp.kind === "withdrawal" || sp.kind === "subject_end" ? sp.kind : "all",
+    mine: sp.mine === "approve",
     q: (sp.q ?? "").trim(),
   };
 }
@@ -176,6 +221,8 @@ export function filterListItems(items: readonly ListItem[], f: ListFilters, wind
       inRange({ countDate: i.date, systemBulk: false }, window) &&
       (f.subject === "all" || i.subjects.includes(f.subject)) &&
       (f.teacher === "all" || i.teacher === f.teacher) &&
+      (f.kind === "all" || i.kind === f.kind) &&
+      (!f.mine || i.mine === "approve") &&
       (!term || i.search.toLowerCase().includes(term)),
   );
 }
@@ -199,4 +246,11 @@ export function listHref(sp: Record<string, string | undefined>, patch: Record<s
   }
   const s = params.toString();
   return s ? `${LIST_PATH}?${s}` : LIST_PATH;
+}
+
+/** 지금 이 사람의 승인 차례인가 — 관리자 단계면 관리자 명단에 있고 아직 결정 전, 원장 단계면 원장 명단에 있고 결정 전(DB 처리 함수와 같은 판정). */
+export function myApprovalTurn(r: Pick<ReportListRow, "status" | "manager_id" | "manager_ids" | "director_id" | "director_ids" | "manager_decisions" | "director_decisions">, userId: string): boolean {
+  if (r.status === "manager_pending") return managerIds(r).includes(userId) && !r.manager_decisions?.[userId];
+  if (r.status === "director_pending") return directorIds(r).includes(userId) && !r.director_decisions?.[userId];
+  return false;
 }

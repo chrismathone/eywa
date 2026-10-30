@@ -103,8 +103,8 @@ export function RequestDialog({ staff, students, labels, scope, initialStudentId
   }
   const staffOptions = (people: StaffOption[]) => people.map(u => ({ value: u.id, label: u.name, hint: (u.approvalSubjects ?? u.subjects).map(s => labels[s] ?? s).join("·") }));
   const ready = !!studentId && (noCourses ? direct : courses.length > 0);
-  const summary = !student ? "학생과 종료할 반을 선택해 주세요." : noCourses ? "전체 퇴원 · 다니는 반 없음 · 강사 작성 없음"
-    : courses.length ? `${kind === "withdrawal" ? "전체 퇴원" : "반 수강종료"} · ${courses.length}개 반 · ${direct ? "강사 작성 없음" : `보고서 ${teacherIds.length}건`}` : "종료할 반을 선택해 주세요.";
+  const summary = !student ? "학생과 종료할 반을 선택해 주세요." : noCourses ? "퇴원 · 다니는 반 없음 · 강사 작성 없음"
+    : courses.length ? `${kind === "withdrawal" ? "퇴원" : "반 수강종료"} · ${courses.length}개 반 · ${direct ? "강사 작성 없음" : `보고서 ${teacherIds.length}건`}` : "종료할 반을 선택해 주세요.";
   return <Dialog open={open} onOpenChange={v => { if (!pending) setOpen(v); }}>
     <DialogTrigger render={<Button />}>+ 보고서 작성 요청</DialogTrigger>
     <DialogContent className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl" showCloseButton={false}>
@@ -119,7 +119,7 @@ export function RequestDialog({ staff, students, labels, scope, initialStudentId
           <div className="space-y-1 text-sm"><p>대상 학생</p><SearchableSelect portal options={choices.map(s => ({ value: s.id, label: s.name, hint: `${s.school ?? ""} ${s.grade ?? ""}`.trim() }))} value={studentId} ariaLabel="대상 학생" placeholder="학생 검색·선택" searchPlaceholder="이름·학교로 검색" onValueChange={id => { if (pending) return; const s = choices.find(x => x.id === id); setStudentId(id); chooseCourses(s, s?.courses.filter(c => !scope || scope.includes(c.subject)).map(c => c.id) ?? []); }} /></div>
           <label className="space-y-1 text-sm">퇴원·수강종료일<input className={control} type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
         </div>
-        {student && !noCourses && <fieldset className="rounded-lg border px-3 py-2"><legend className="px-1 text-sm">종료할 반</legend><div className="flex flex-wrap gap-x-5 gap-y-2">{student.courses.map(c => <label key={c.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={enrollmentIds.includes(c.id)} disabled={!!scope && !scope.includes(c.subject)} onChange={() => chooseCourses(student, toggle(enrollmentIds, c.id))} />{c.className} · {labels[c.subject] ?? c.subject} · {c.teacherName ?? "담당자 미지정"}</label>)}</div><p className="mt-2 text-xs text-muted-foreground">선택한 반의 수강만 종료합니다. 모든 수강을 선택하면 전체 퇴원으로 처리합니다.</p></fieldset>}
+        {student && !noCourses && <fieldset className="rounded-lg border px-3 py-2"><legend className="px-1 text-sm">종료할 반</legend><div className="flex flex-wrap gap-x-5 gap-y-2">{student.courses.map(c => <label key={c.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={enrollmentIds.includes(c.id)} disabled={!!scope && !scope.includes(c.subject)} onChange={() => chooseCourses(student, toggle(enrollmentIds, c.id))} />{c.className} · {labels[c.subject] ?? c.subject} · {c.teacherName ?? "담당자 미지정"}</label>)}</div><p className="mt-2 text-xs text-muted-foreground">선택한 반의 수강만 종료합니다. 모든 수강을 선택하면 퇴원으로 처리합니다.</p></fieldset>}
         {direct ? <DirectFields formRef={reasonForm} future={date > kstToday()} noCourses={noCourses} /> : <>
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1 text-sm"><p>작성 강사</p><SearchableSelect portal options={staffOptions(eligible)} value="" multiValues={teacherIds} ariaLabel="작성 강사" placeholder="담당 강사 선택" onValueChange={id => { if (!pending && eligible.some(u => u.id === id)) chooseTeachers(toggle(teacherIds, id)); }} /></div>

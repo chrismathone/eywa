@@ -52,7 +52,7 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
   }
   return <>
     <div className="flex flex-wrap items-center justify-between gap-3"><span className="flex flex-wrap items-center gap-3 text-sm"><Link className="text-primary hover:underline" href="/withdrawal-reports">← 보고서 목록</Link>{withdrawalHref && <WindowLink href={withdrawalHref} className="text-primary hover:underline">퇴원 상세</WindowLink>}</span><span className="flex items-center gap-2">{capabilities.cancel && <Button variant="outline" size="sm" disabled={pending} onClick={() => setDecision("cancel")}>요청 취소</Button>}<span className="rounded-full bg-muted px-3 py-1.5 text-sm">{REPORT_STATUS[r.status]}</span></span></div>
-    <p className="text-sm">{r.exit_kind === "withdrawal" ? "전체 퇴원" : "반 수강종료"} · {r.subjects.length ? r.subjects.map(s => labels[s] ?? "기타 과목").join(" · ") : "다니는 반 없음"}</p>
+    <p className="text-sm">{r.exit_kind === "withdrawal" ? "퇴원" : "반 수강종료"} · {r.subjects.length ? r.subjects.map(s => labels[s] ?? "기타 과목").join(" · ") : "다니는 반 없음"}</p>
     {/* 관리자 바로 처리(강사 작성 없이, 원장 2026-10-23) — 누가·언제 처리했는지 먼저 말한다(양식의 상담·담임 의견 칸은 비어 있다). */}
     {isDirectReport(r) && <p className="rounded-lg border bg-muted/20 p-4 text-sm">관리자 바로 처리 · {nameOf(r.requested_by)} · {dateTime(r.created_at)} — 강사 작성과 승인 없이 처리한 기록입니다.</p>}
     {r.request_note && <div className="rounded-lg border bg-muted/20 p-4 text-sm"><div className="mb-2 font-medium">작성 요청 · {nameOf(r.requested_by)}</div><p className="whitespace-pre-wrap">{r.request_note}</p></div>}
@@ -69,7 +69,7 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
       {capabilities.approve && <><Button disabled={pending || assignmentChanged} onClick={() => setDecision("approve")}>승인</Button><Button disabled={pending} variant="outline" onClick={() => setDecision("reject")}>반려</Button></>}
     </div>
     {decision && <section ref={decisionRef} className="space-y-3 rounded-xl border bg-muted/20 p-5" aria-label="처리 확인">
-      <p className="text-sm">{decision === "submit" ? "보고서를 제출하면 관리자 검토가 시작됩니다. 이후 수정은 반려 후 가능합니다." : decision === "approve" ? `이 보고서를 승인합니다. ${r.status === "manager_pending" && directorIds(r).length ? "관리자 전원 승인 후 원장 검토로 넘어갑니다." : `함께 요청한 보고서와 모든 승인자의 승인이 끝나면 ${r.effective_date}에 ${r.exit_kind === "withdrawal" ? "전체 퇴원" : "선택 과목 수강종료"}을 처리합니다. 처리일이 지났다면 즉시 반영됩니다.`}` : decision === "cancel" ? "함께 요청한 모든 강사의 보고서를 취소합니다. 학생의 수강 상태는 유지됩니다." : "수정이 필요한 내용을 적어 주세요. 이 보고서의 승인을 초기화하고 강사가 수정 후 다시 제출합니다."}</p>
+      <p className="text-sm">{decision === "submit" ? "보고서를 제출하면 관리자 검토가 시작됩니다. 이후 수정은 반려 후 가능합니다." : decision === "approve" ? `이 보고서를 승인합니다. ${r.status === "manager_pending" && directorIds(r).length ? "관리자 전원 승인 후 원장 검토로 넘어갑니다." : `함께 요청한 보고서와 모든 승인자의 승인이 끝나면 ${r.effective_date}에 ${r.exit_kind === "withdrawal" ? "퇴원" : "선택 과목 수강종료"}을 처리합니다. 처리일이 지났다면 즉시 반영됩니다.`}` : decision === "cancel" ? "함께 요청한 모든 강사의 보고서를 취소합니다. 학생의 수강 상태는 유지됩니다." : "수정이 필요한 내용을 적어 주세요. 이 보고서의 승인을 초기화하고 강사가 수정 후 다시 제출합니다."}</p>
       {decision === "reject" && <textarea className={control} aria-label="반려 사유" rows={3} maxLength={1000} value={comment} onChange={e => setComment(e.target.value)} />}
       <div className="flex gap-2"><Button disabled={pending || (decision === "reject" && !comment.trim())} onClick={() => change(decision)}>{pending ? "처리 중…" : `${REPORT_ACTION_LABEL[decision]} 확인`}</Button><Button variant="outline" disabled={pending} onClick={() => setDecision(null)}>닫기</Button></div>
     </section>}

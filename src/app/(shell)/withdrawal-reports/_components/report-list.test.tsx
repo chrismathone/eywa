@@ -6,7 +6,7 @@ import type { ListItem } from "@/features/withdrawal-reports/list-items";
 import { ReportList } from "./report-list";
 
 const item = (over: Partial<ListItem>): ListItem => ({
-  key: "r:1", href: "/withdrawal-reports/1", name: "김학생", schoolGrade: "경명여중1", detail: "전체 퇴원 · 수학", date: "2026-10-10", dateText: "2026-10-10", requestedText: "2026-10-08",
+  key: "r:1", href: "/withdrawal-reports/1", name: "김학생", schoolGrade: "경명여중1", detail: "퇴원 · 수학", subjectText: "수학", kindText: "퇴원", kind: "withdrawal", classText: "", requestedAt: "2026-10-08T00:00:00Z", mine: "none", date: "2026-10-10", dateText: "2026-10-10", requestedText: "2026-10-08",
   teacher: "이성우", reason: { text: "이사", note: null }, subjects: ["math"], status: "pending", statusLabel: "관리자 승인 대기", tone: "muted",
   approval: [{ text: "관리자 ○ 관리자" }, { text: "관리자가 최종 승인", muted: true }], link: null, myTurn: false, search: "",
   ...over,

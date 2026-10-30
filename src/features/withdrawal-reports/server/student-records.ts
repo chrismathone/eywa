@@ -103,7 +103,8 @@ export async function loadStudentReportRecords(studentId: string): Promise<Stude
     if (archives.error) return failure(archives.error, "withdrawal-reports.student-archives");
     return {
       status: "ok",
-      complete: viewer.user.systemRole === "master" && !viewer.teacherId && !viewer.scope,
+      // 다 보는 사람만 '없습니다'를 단정한다 — 원장, 그리고 열람 과목 제한이 없는 관리자급(원장 2026-10-30 열람 확대).
+      complete: !viewer.teacherId && (viewer.user.systemRole === "master" ? !viewer.scope : viewer.manage && !viewer.readScope),
       reports: reports.rows
         .filter((r) => canReadReport(r, viewer))
         .map((r) => ({

@@ -75,7 +75,7 @@ function ReportLine({ report: r, labelOf }: { report: StudentReportItem; labelOf
   return (
     <div>
       <WindowLink href={`/withdrawal-reports/${r.id}`} className={LINK}>
-        {r.exitKind === "withdrawal" ? "전체 퇴원" : "과목 수강종료"}
+        {r.exitKind === "withdrawal" ? "퇴원" : "과목 수강종료"}
         {r.subjects.length ? ` · ${r.subjects.map(labelOf).join(" · ")}` : ""}
       </WindowLink>
       <p className={META}>

@@ -104,7 +104,7 @@ describe("report submission and review", () => {
   it("shows final withdrawal consequences before director approval", async () => {
     render(<ReportDetail {...props} report={{ ...r, status: "director_pending", manager_approved_at: r.created_at }} userId={director} />);
     fireEvent.click(screen.getByRole("button", { name: "승인" }));
-    expect(screen.getByText(/전체 퇴원을 처리합니다/)).toBeInTheDocument();
+    expect(screen.getByText(/퇴원을 처리합니다/)).toBeInTheDocument();
     expect(mocks.change).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "승인 확인" }));
     await waitFor(() => expect(mocks.change).toHaveBeenCalledWith(r.id, "approve", 3, undefined));

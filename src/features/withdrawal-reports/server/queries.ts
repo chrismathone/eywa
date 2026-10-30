@@ -28,14 +28,30 @@ export const reportViewer = cache(async () => {
   if (!user || !(await canAccessTenant(user.systemRole, "withdrawal_reports")) || !(await isLaboratoryMenuAvailable(user.tenantId, "withdrawal_reports"))) return null;
   const [writable, scope, teacherId] = await Promise.all([canWriteTenant(user.systemRole, "withdrawal_reports"), getViewerStaffScope(user), effectiveTeacherId()]);
   const manage = !teacherId && canRequestReport(user.systemRole);
-  return { user, writable, scope, teacherId, manage, request: manage && writable };
+  // 열람 과목(원장 2026-10-30 "각 과목 관리자급은 … 열람") — 승인 담당 과목(`reportStaff`의 approvalSubjects)과 같은 기준:
+  // 특수권한 과목 범위 → 없으면 직원의 담당 과목 → 둘 다 없으면 전 과목. 원장은 늘 전부.
+  let readScope: readonly string[] | null = scope;
+  if (manage && user.systemRole !== "master" && !scope) {
+    const { data } = await createAdminClient().from("users").select("subjects").eq("tenant_id", user.tenantId).eq("id", user.id).maybeSingle();
+    const own = ((data as { subjects: string[] | null } | null)?.subjects ?? []).filter(Boolean);
+    readScope = own.length ? own : null;
+  }
+  return { user, writable, scope, readScope, teacherId, manage, request: manage && writable };
 });
 
+/**
+ * 보고서 열람 — 강사는 본인 배정만. 원장은 전부. **관리자급(관리자·매니저)도 승인자로 지정되지 않은 보고서를 '열람'으로 본다**
+ * (원장 2026-10-30 *"각 과목 관리자급은 요청서 승인이 없어도 '열람'형식으로 볼 수 있게 … 원장급도 마찬가지"*) — 담당 과목 범위가
+ * 걸린 관리자는 그 과목 보고서만(범위 없으면 전부). 쓰기(작성·승인·취소)는 DB 처리 함수가 행위자를 따로 검사하므로 열람이 넓어져도
+ * 그대로다(transition_withdrawal_report — 작성 = 배정 강사 · 승인 = 지정 승인자의 차례 · 취소 = 요청자·원장).
+ */
 export function canReadReport(r: ReportListRow, viewer: NonNullable<Awaited<ReturnType<typeof reportViewer>>>) {
-  return viewer.teacherId ? r.teacher_id === viewer.teacherId : viewer.user.systemRole === "master" || isParticipant(r, viewer.user.id);
+  if (viewer.teacherId) return r.teacher_id === viewer.teacherId;
+  if (viewer.user.systemRole === "master" || isParticipant(r, viewer.user.id)) return true;
+  return viewer.manage && (!viewer.readScope || (r.subjects ?? []).some((s) => viewer.readScope!.includes(s)));
 }
 const REPORT_COLUMNS = "id,enrollment_ids,tenant_id,student_id,requested_by,teacher_id,manager_id,director_id,exit_kind,subjects,effective_date,request_note,snapshot,body,status,revision,manager_approved_at,director_approved_at,applied_at,last_comment,created_at,updated_at,group_id,group_leader,manager_ids,director_ids,manager_decisions,director_decisions";
-const REPORT_LIST_COLUMNS = "id,tenant_id,student_id,requested_by,teacher_id,manager_id,director_id,exit_kind,subjects,effective_date,request_note,snapshot,status,revision,manager_approved_at,director_approved_at,applied_at,last_comment,created_at,updated_at,group_id,group_leader,manager_ids,director_ids,manager_decisions,director_decisions,body_reason:body->>reason,body_detail:body->>detail,body_reason_detail:body->>reasonDetail";
+const REPORT_LIST_COLUMNS = "id,tenant_id,student_id,requested_by,teacher_id,manager_id,director_id,exit_kind,subjects,effective_date,request_note,snapshot,status,revision,manager_approved_at,director_approved_at,applied_at,last_comment,created_at,updated_at,group_id,group_leader,manager_ids,director_ids,manager_decisions,director_decisions,body_reason:body->>reason,body_detail:body->>detail,body_reason_detail:body->>reasonDetail,body_student:body->>studentConsultation,body_parent:body->>parentConsultation,body_opinion:body->>teacherOpinion,body_attendance:body->>attendance,body_tuition:body->>tuition,body_arrears_note:body->>arrearsNote";
 const COURSE_COLUMNS = "id,start_date,end_date,on_hold,is_transferred,classes!inner(id,class_name,subject,is_active,closed_at,teacher_id,teacher:teacher_id(display_name))";
 type JoinedCourse = { id: string; start_date: string; end_date: string | null; on_hold: boolean; is_transferred: boolean; classes: { id: string; class_name: string; subject: string; is_active: boolean; closed_at: string | null; teacher_id: string | null; teacher: { display_name: string } | null } };
 function currentCourses(rows: JoinedCourse[]): CourseSnapshot[] {
@@ -57,7 +73,13 @@ export async function listReports() {
   const base = () => {
     let q = createAdminClient().from("withdrawal_reports").select(REPORT_LIST_COLUMNS).eq("tenant_id", viewer.user.tenantId);
     if (viewer.teacherId) q = q.eq("teacher_id", viewer.teacherId);
-    else if (viewer.user.systemRole !== "master") q = q.or([...(["requested_by", "teacher_id", "manager_id", "director_id"].map(k => `${k}.eq.${viewer.user.id}`)), `manager_ids.cs.{${viewer.user.id}}`, `director_ids.cs.{${viewer.user.id}}`].join(","));
+    else if (viewer.user.systemRole !== "master" && !(viewer.manage && !viewer.readScope)) {
+      // 관리자급은 담당 과목 보고서도 열람(canReadReport와 같은 규칙) — 과목 키는 따옴표로 감싼다(PostgREST 배열 값).
+      // 배열 문법을 깨는 글자(따옴표·역슬래시·중괄호)가 든 키는 싣지 않는다(목록 전체가 400으로 죽지 않게 — 그 과목은 canReadReport가 못 보게 둔다).
+      const keys = viewer.manage ? (viewer.readScope ?? []).filter((s) => !/["\\{}]/.test(s)) : [];
+      const subjectScope = keys.length ? [`subjects.ov.{${keys.map((s) => `"${s}"`).join(",")}}`] : [];
+      q = q.or([...(["requested_by", "teacher_id", "manager_id", "director_id"].map(k => `${k}.eq.${viewer.user.id}`)), `manager_ids.cs.{${viewer.user.id}}`, `director_ids.cs.{${viewer.user.id}}`, ...subjectScope].join(","));
+    }
     return q;
   };
   const rows: ReportListRow[] = [];
@@ -100,11 +122,15 @@ export async function getReport(id: string) {
   // 완료·취소된 보고서는 끝난 기록이라 저장된 값 그대로다(퇴원 뒤 환불로 장부가 바뀌어도 그때 문서를 바꾸지 않는다).
   const draft = ["requested", "revision"].includes(data.status) && !assignmentChanged;
   const submitted = !["requested", "revision", "completed", "canceled"].includes(data.status);
+  // 승인자가 아닌 열람자(원장 2026-10-30 열람 확대)는 수납 메뉴를 볼 수 있을 때만 지금 장부·퇴원 뒤 청구를 본다.
+  const billingOk = viewer.teacherId !== null || viewer.user.systemRole === "master" || isParticipant(data as WithdrawalReport, viewer.user.id)
+    || (await canAccessTenant(viewer.user.systemRole, "billing"));
   // 그 과목의 전체 수강 이력(지난 반 포함 — 원장 2026-10-29) — 다른 조회와 함께 띄운다. 못 읽으면 빈 목록(수강기간은 지금 반 기준으로).
   const historyPromise = loadSubjectHistory(data as WithdrawalReport).catch((e) => { console.error("[withdrawal-report-subject-history]", e); return [] as SubjectHistoryRow[]; });
   const [prefill, consultations] = await Promise.all([
     draft ? loadReportPrefill(data as WithdrawalReport, viewer.user.systemRole)
       : !submitted && ["completed", "canceled"].includes(data.status) ? Promise.resolve({ prefill: undefined, prefillWarning: undefined })
+      : !billingOk ? Promise.resolve({ prefill: undefined, prefillWarning: undefined })
       : loadReportBilling(data as WithdrawalReport)
         .then(live => ({ prefill: submitted ? liveBillingForSubmitted({ ...EMPTY_BODY, ...(data as WithdrawalReport).body }, live) : live, prefillWarning: undefined }))
         .catch(() => ({ prefill: undefined, prefillWarning: "수납 정보를 지금 장부에서 불러오지 못해 제출 때 값을 보여줍니다." })),
@@ -112,7 +138,7 @@ export async function getReport(id: string) {
   ]);
   const subjectHistory = await historyPromise;
   // 퇴원월 뒤 청구(원장 2026-10-29) — 취소된 보고서는 보이지 않는다. 못 읽으면 빈 목록(보고서 화면은 연다).
-  const laterInvoices: LaterInvoice[] = data.status === "canceled" ? []
+  const laterInvoices: LaterInvoice[] = data.status === "canceled" || !billingOk ? []
     : await loadLaterInvoices(data as WithdrawalReport).catch((e) => { console.error("[withdrawal-report-later-invoices]", e); return []; });
   // 데스크 담당자 목록은 환불을 승인할 수 있는 원장에게만(이름 목록을 다른 사람에게 내리지 않는다).
   // 승인 권한과 같은 기준 · 자기 자신은 빼고(자기 알림은 가지 않음 — notifyUsers).
@@ -190,7 +216,7 @@ export async function studentReportEntry(studentId: string): Promise<
   const viewer = await reportViewer();
   if (!viewer) return null;
   const { data, error } = await createAdminClient().from("withdrawal_reports")
-    .select("id,tenant_id,student_id,requested_by,teacher_id,manager_id,director_id,manager_ids,director_ids,status,group_leader")
+    .select("id,tenant_id,student_id,requested_by,teacher_id,manager_id,director_id,manager_ids,director_ids,status,group_leader,subjects")
     .eq("tenant_id", viewer.user.tenantId).eq("student_id", studentId).not("status", "in", "(completed,canceled)")
     .order("group_leader", { ascending: false }).order("created_at", { ascending: false }).limit(20);
   if (missingReportSchema(error)) return null;

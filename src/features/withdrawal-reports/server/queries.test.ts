@@ -67,7 +67,21 @@ describe("report read boundaries", () => {
     expect(canReadReport({ ...report, teacher_id: "teacher", manager_id: "actor" }, viewer)).toBe(true);
     expect(canReadReport({ ...report, teacher_id: "teacher", manager_id: "actor", subjects: ["english"] }, viewer)).toBe(true);
     expect(canReadReport({ ...report, teacher_id: "teacher", manager_ids: ["actor", "manager"] }, viewer)).toBe(true);
-    expect(canReadReport({ ...report, teacher_id: "teacher", manager_ids: ["manager"] }, viewer)).toBe(false);
+    // 원장 2026-10-30 — 관리자급은 승인자가 아니어도 담당 과목 보고서를 '열람'(쓰기는 DB 처리 함수가 따로 막는다).
+    expect(canReadReport({ ...report, teacher_id: "teacher", manager_ids: ["manager"] }, viewer)).toBe(true);
+    expect(canReadReport({ ...report, teacher_id: "teacher", manager_ids: ["manager"], subjects: ["english"] }, viewer)).toBe(false);
+  });
+  it("a manager reads by assigned subjects (no special scope → own subjects → none = all); a non-manager role reads only participation", async () => {
+    state.user.systemRole = "manager"; state.scope = null;
+    let own: string[] = ["math"];
+    const users = { select: () => users, eq: () => users, maybeSingle: async () => ({ data: { subjects: own }, error: null }) };
+    state.db.mockReturnValue({ from: () => users });
+    expect(canReadReport({ ...report, teacher_id: "teacher", manager_ids: ["manager"], subjects: ["english"] }, (await reportViewer())!)).toBe(false);
+    expect(canReadReport({ ...report, teacher_id: "teacher", manager_ids: ["manager"], subjects: ["math"] }, (await reportViewer())!)).toBe(true);
+    own = [];
+    expect(canReadReport({ ...report, teacher_id: "teacher", manager_ids: ["manager"], subjects: ["english"] }, (await reportViewer())!)).toBe(true);
+    state.user.systemRole = "counselor";
+    expect(canReadReport({ ...report, teacher_id: "teacher", manager_ids: ["manager"] }, (await reportViewer())!)).toBe(false);
   });
   it("principal reads reports in their tenant query", async () => {
     state.user.systemRole = "master";
