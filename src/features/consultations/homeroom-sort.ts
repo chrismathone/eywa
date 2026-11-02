@@ -32,9 +32,9 @@ export function nextSort(cur: HomeroomSort, key: HomeroomSortKey): HomeroomSort 
 }
 
 // '평균' 열은 뺐다(원장 2026-11-02 *"무슨 평균인지 모르겠음"*) — 저장돼 있던 `avg` 정렬은 파서가 버려 이름순으로 돌아간다.
-/** 보기 — 표(달별 줄) / 게이지(담임 카드 + 계기판). 계정에 남는다(`ui_prefs.consultations.hr_view`). */
+/** 보기 — 게이지(담임 카드 + 계기판, 기본 · 원장 2026-11-02) / 표(달별 줄). 계정에 남는다(`ui_prefs.consultations.hr_view`, 기본값은 저장 안 함). */
 export type HomeroomView = "table" | "gauge";
-export const parseHomeroomView = (raw: unknown): HomeroomView => (raw === "gauge" ? "gauge" : "table");
+export const parseHomeroomView = (raw: unknown): HomeroomView => (raw === "table" ? "table" : "gauge");
 
 export function sortHomeroomTeachers(
   teachers: readonly HomeroomTeacher[],

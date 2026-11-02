@@ -93,11 +93,6 @@ export function StatsHomeroom({
     setView(next);
     void saveConsultationStatsPrefs({ hrView: next }).catch(() => undefined);
   };
-  // 게이지 카드를 누르면 표로 돌아가 그 담임을 펼친다(학생 × 달 표는 표 보기에만 있다).
-  const openInTable = (id: string) => {
-    onView("table");
-    setOpen(id);
-  };
   const onSort = (key: HomeroomSortKey) => {
     const next = nextSort(sort, key);
     setSort(next);
@@ -161,7 +156,7 @@ export function StatsHomeroom({
           {data.teachers.length > 0 ? "고른 조건에 맞는 담임이 없습니다" : teacherScoped ? "담임을 맡은 반이 없습니다" : "담임 반이 없습니다"}
         </p>
       ) : view === "gauge" ? (
-        <HomeroomGaugeGrid teachers={sorted} months={months} prevMonth={data.prevMonth} onOpen={openInTable} />
+        <HomeroomGaugeGrid teachers={sorted} months={months} prevMonth={data.prevMonth} />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-max border-collapse text-sm">

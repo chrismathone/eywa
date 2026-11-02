@@ -11,7 +11,7 @@ import { reportLogoPath } from "@/features/owner/report-logo";
 import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 
-export const metadata = { title: "비포클래스체크리스트(초안) — 에이와" };
+export const metadata = { title: "비포클래스체크리스트 — 에이와" };
 
 type SearchParams = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
@@ -42,7 +42,7 @@ export default async function BeforeClassPage({ searchParams }: { searchParams: 
 
   return (
     <div className="space-y-4">
-      <PageHeader title="비포클래스체크리스트(초안)" description="수업 전 숙제·준비 체크 — 미흡 3개 이상이면 보충 필요" />
+      <PageHeader title="비포클래스체크리스트" description="수업 전 숙제·준비 체크 — 미흡 3개 이상이면 보충 필요" />
       {!ready ? (
         <p className="text-text-dim px-1 py-6 text-sm">준비 중입니다 — 저장 공간이 아직 만들어지지 않았습니다.</p>
       ) : !current || !data ? (

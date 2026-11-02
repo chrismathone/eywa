@@ -705,7 +705,9 @@ export function auditDetail(
       const head = before && before.length > 40 ? `${before.slice(0, 40)}…` : before;
       return head ? `이전 내용 "${head}"` : "";
     }
-    case "timetable_lab_draft_save": {
+    case "timetable_lab_draft_save":
+    case "timetable_lab_draft_overwrite":
+    case "timetable_lab_draft_delete": {
       // 연습본 이름은 '대상' 칸이 보여 준다 — 여기선 규모만(운영 시간표는 안 바뀐다).
       const parts = [
         num(m.classCount) !== null ? `반 ${num(m.classCount)}개` : null,

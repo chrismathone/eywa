@@ -1,4 +1,4 @@
-import { createDraft, listDrafts } from '@/features/timetable-lab/server/drafts';
+import { canManageDraft, createDraft, listDrafts, managesEnglishDrafts } from '@/features/timetable-lab/server/drafts';
 import { draftError, draftHeaders, draftUser, readDraftBody } from '@/features/timetable-lab/server/draft-http';
 import { logAction } from '@/features/audit/server/log';
 import { logDbError } from '@/lib/supabase/db-error';
@@ -10,7 +10,10 @@ export async function GET(request: Request) {
   if (!/^\d+$/.test(offsetText) || !/^\d+$/.test(limitText) || !Number.isSafeInteger(offset) || offset > 100000 || limit < 1 || limit > 50) {
     return draftError('불러올 목록 범위를 확인해 주세요.', 400);
   }
-  try { return Response.json(await listDrafts(auth.user.tenantId, offset, limit), { headers: draftHeaders }); }
+  try {
+    const [list, subjectManager] = await Promise.all([listDrafts(auth.user.tenantId, offset, limit), managesEnglishDrafts(auth.user)]);
+    return Response.json({ ...list, items: list.items.map(item => ({ ...item, manageable: canManageDraft(auth.user.id, item.createdBy, subjectManager) })) }, { headers: draftHeaders });
+  }
   catch (error) { logDbError(error, 'timetable-lab-draft-list'); return draftError('저장된 연습본 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.', 503); }
 }
 export async function POST(request: Request) {
@@ -24,5 +27,5 @@ export async function POST(request: Request) {
   await logAction({ action: 'timetable_lab_draft_save', targetType: 'timetable_lab_draft', targetLabel: saved.item.name,
     metadata: { draftId: saved.item.id, lessonCount: saved.item.lessonCount, classCount: saved.item.classCount,
       studentCount: saved.item.studentCount, referenceDate: saved.item.referenceDate } });
-  return Response.json(saved, { status: 201, headers: draftHeaders });
+  return Response.json({ item: { ...saved.item, manageable: true } }, { status: 201, headers: draftHeaders });
 }

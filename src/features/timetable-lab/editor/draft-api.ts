@@ -12,7 +12,7 @@ async function request(path: string, init?: RequestInit) {
     return data;
   } catch (error) {
     // 저장 요청만 서버에 이미 반영됐을 수 있다. 읽기는 다시 시도하면 된다.
-    if (timeout.aborted) throw new Error(init?.method === 'POST' ? '응답이 늦어 결과를 확인하지 못했습니다. 목록을 다시 읽어 저장됐는지 먼저 확인해 주세요.'
+    if (timeout.aborted) throw new Error(init?.method ? '응답이 늦어 결과를 확인하지 못했습니다. 목록을 다시 읽어 저장됐는지 먼저 확인해 주세요.'
       : '응답이 늦어 연습본을 읽지 못했습니다. 잠시 후 다시 시도해 주세요.');
     // 연결이 끊기면 브라우저가 영문 오류를 던진다 — 그대로 보이지 않게 바꾼다. 요청을 스스로 거둔 것(창 닫기)은 그대로 넘긴다.
     if (init?.signal?.aborted) throw error;
@@ -22,10 +22,19 @@ async function request(path: string, init?: RequestInit) {
 export async function listDrafts(offset = 0, signal?: AbortSignal): Promise<{ items: DraftSummary[]; nextOffset: number | null }> {
   return request(`?offset=${offset}&limit=20`, { signal });
 }
-export async function saveDraft(name: string, draft: Draft): Promise<DraftSummary> {
+function draftBody(name: string, draft: Draft) {
   const body = JSON.stringify({ version: 1, name, snapshot: draft });
   if (new TextEncoder().encode(body).length > 2 * 1024 * 1024) throw new Error('연습본이 너무 큽니다. 불필요한 수업 배치를 줄여 주세요.');
-  return (await request('', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })).item;
+  return body;
+}
+export async function saveDraft(name: string, draft: Draft): Promise<DraftSummary> {
+  return (await request('', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: draftBody(name, draft) })).item;
+}
+export async function overwriteDraft(id: string, name: string, draft: Draft): Promise<DraftSummary> {
+  return (await request(`/${encodeURIComponent(id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: draftBody(name, draft) })).item;
+}
+export async function deleteDraft(id: string): Promise<void> {
+  await request(`/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 export async function loadDraft(id: string): Promise<{ item: DraftSummary; draft: Draft }> {
   const data = await request(`/${encodeURIComponent(id)}`);

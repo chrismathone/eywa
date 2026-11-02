@@ -1,15 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { Pill } from "@/components/atoms/pill";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import type { HomeroomMonth, HomeroomTeacher } from "@/features/consultations/homeroom-model";
 import { bucketLabel, pct } from "@/features/consultations/stats-model";
+import { HomeroomGaugeModal } from "./stats-homeroom-gauge-modal";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 const mLabel = (ym: string) => bucketLabel(`${ym}-01`, "month");
 /** 카드에 세우는 달 수 — 지난달 + 이번 달(진행 중). 기간이 길어져도 카드 폭이 그대로다(달별 전부는 '표' 보기). */
 const GAUGE_MONTHS = 2;
-const INLINE_NAMES = 8;
 
 // 반원 게이지 기하 — 중심(100,100) · 바깥 90 · 안 62. 값 0%가 왼쪽 끝, 100%가 오른쪽 끝.
 const CX = 100;
@@ -49,7 +50,7 @@ export function RateGauge({ rate, label }: { rate: number | null; label: string 
   });
   const tip = v === null ? null : point(v, R_OUT - 8);
   return (
-    <svg viewBox="0 0 200 108" className="w-full" role="img" aria-label={`${label} ${v === null ? "대상 없음" : `${Math.round(v)}%`}`}>
+    <svg viewBox="0 0 200 110" className="mx-auto block w-full max-w-48" role="img" aria-label={`${label} ${v === null ? "대상 없음" : `${Math.round(v)}%`}`}>
       {bands.map((b) => (
         <path key={`bg${b.i}`} d={arc(b.from, b.to)} fill="var(--muted)" />
       ))}
@@ -60,42 +61,41 @@ export function RateGauge({ rate, label }: { rate: number | null; label: string 
         : null}
       {tip ? (
         <>
-          <line x1={CX} y1={CY} x2={tip[0]} y2={tip[1]} stroke="var(--foreground)" strokeWidth={6} strokeLinecap="round" />
-          <circle cx={CX} cy={CY} r={7} fill="var(--foreground)" />
+          <line x1={CX} y1={CY} x2={tip[0]} y2={tip[1]} stroke="var(--foreground)" strokeWidth={5} strokeLinecap="round" />
+          <circle cx={CX} cy={CY} r={6} fill="var(--foreground)" />
         </>
       ) : null}
     </svg>
   );
 }
 
-function MonthGauge({ ym, m, current }: { ym: string; m: HomeroomMonth; current: boolean }) {
+export function MonthGauge({ ym, m, current }: { ym: string; m: HomeroomMonth; current: boolean }) {
   const rate = pct(m.self, m.target);
   const label = current ? `${mLabel(ym)}(진행 중)` : mLabel(ym);
   return (
-    <div className="min-w-0 flex-1 text-center" title={`담임 상담 ${m.self} · 담임 아닌 직원이 상담 ${m.other} · 미상담 ${m.none}`}>
-      <p className="text-muted-foreground text-xs font-medium">{label}</p>
+    <span className="block min-w-0 flex-1 text-center" title={`담임 상담 ${m.self} · 담임 아닌 직원이 상담 ${m.other} · 미상담 ${m.none}`}>
+      <span className="block text-muted-foreground mb-1 text-xs font-medium">{label}</span>
       <RateGauge rate={rate} label={label} />
-      <p className="num -mt-1 text-xl font-bold">{rate === null ? "—" : `${Math.round(rate)}%`}</p>
-      <p className="num text-muted-foreground text-xs">
+      <span className="block num mt-1 text-xl leading-tight font-bold">{rate === null ? "—" : `${Math.round(rate)}%`}</span>
+      <span className="block num text-muted-foreground text-xs">
         {m.self}/{m.target}명
-      </p>
-    </div>
+      </span>
+    </span>
   );
 }
 
-/** 담임 한 명 = 카드 한 장 — 지난달·이번 달 상담률 계기판 + 학생 수·퇴원·미상담. 카드를 누르면 표 보기에서 그 담임을 펼친다. */
+/** 담임 한 명 = 카드 한 장 — 지난달·이번 달 상담률 계기판 + 학생 수·퇴원·미상담. 카드를 누르면 상세 모달(달별 계기판·학생 표). */
 function TeacherGaugeCard({ t, months, prevMonth, onOpen }: { t: HomeroomTeacher; months: string[]; prevMonth: string; onOpen: () => void }) {
   const subjects = useSubjectMaps();
   const last = t.months.length - 1;
   const now = t.months[last]!;
   const start = Math.max(0, months.length - GAUGE_MONTHS);
-  const unmet = t.students.filter((s) => s.cells[last] === "none").map((s) => s.name);
   return (
     <button
       type="button"
       onClick={onOpen}
       className="border-line hover:bg-bg-soft flex flex-col gap-2 rounded-2xl border p-3 text-left"
-      title={`${t.classNames.join(", ")} — 누르면 표에서 학생별로 펼칩니다`}
+      title={`${t.classNames.join(", ")} — 누르면 학생별 상세를 엽니다`}
     >
       <span className="flex items-center gap-1.5">
         <span className="text-foreground text-sm font-bold">{t.name}</span>
@@ -126,12 +126,6 @@ function TeacherGaugeCard({ t, months, prevMonth, onOpen }: { t: HomeroomTeacher
           <span className={`num font-bold ${now.none > 0 ? "text-danger" : "text-muted-foreground"}`}>{fmt(now.none)}명</span>
         </span>
       </span>
-      {unmet.length > 0 ? (
-        <span className="text-muted-foreground text-xs break-keep" title={unmet.join(", ")}>
-          {unmet.slice(0, INLINE_NAMES).join(" · ")}
-          {unmet.length > INLINE_NAMES ? ` 외 ${unmet.length - INLINE_NAMES}명` : ""}
-        </span>
-      ) : null}
     </button>
   );
 }
@@ -141,18 +135,22 @@ export function HomeroomGaugeGrid({
   teachers,
   months,
   prevMonth,
-  onOpen,
 }: {
   teachers: readonly HomeroomTeacher[];
   months: string[];
   prevMonth: string;
-  onOpen: (id: string) => void;
 }) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  // 골라 보기로 그 담임이 빠지면 모달도 닫힌다(없는 사람의 상세가 떠 있지 않게).
+  const opened = teachers.find((t) => t.id === openId) ?? null;
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(17rem,1fr))] gap-3">
-      {teachers.map((t) => (
-        <TeacherGaugeCard key={t.id} t={t} months={months} prevMonth={prevMonth} onOpen={() => onOpen(t.id)} />
-      ))}
-    </div>
+    <>
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(17rem,1fr))] gap-3">
+        {teachers.map((t) => (
+          <TeacherGaugeCard key={t.id} t={t} months={months} prevMonth={prevMonth} onOpen={() => setOpenId(t.id)} />
+        ))}
+      </div>
+      <HomeroomGaugeModal t={opened} months={months} prevMonth={prevMonth} onClose={() => setOpenId(null)} />
+    </>
   );
 }
