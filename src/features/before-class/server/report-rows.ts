@@ -1,7 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
-import { viewAsTeacher } from "@/lib/auth/view-as";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import { reportCheckRows, type ReportCheckRow } from "../items";
 import { pickReportCheck, type DayCheckRow } from "../report-pick";
 import { attendsClassOn, type RosterEnrollment } from "../roster";
@@ -16,19 +15,21 @@ import { loadAutoExcusedKeys } from "./prev-absence";
  * 서버 전용 표(정책 0개)라 admin + tenant_id 명시([[#104]]). 보고서 작성을 막지 않는다 — 표가 없거나 조회가 실패하면 줄 없음.
  */
 /**
- * 🔴 **시험 중 게이트**(원장 2026-10-30 *"이승엽으로 로그인 + 이수진 강사뷰 … 이 상태에서만 적용해야함 지금은 테스트라서"* →
- * *"학원 이 삼 쪽도 체크리스트 추가해서 … 수업보고서도 우리 적용한거처럼"*) — 둘 중 하나일 때만 표에 줄을 붙인다:
- *   ① 운영자 계정이 '다른 강사 뷰'로 그 선생님 화면을 볼 때 ② 테스트 학생(`students.is_test` — 학원이·학원삼)의 보고서.
- * 선생님 본인 화면에서 쓰는 실제 학생 보고서는 그대로다. 코드에 사람 이름을 적지 않는다(권한 명단 금지 규칙). 전원에게 열 땐 이 함수만 true로.
+ * 🔴 **누구의 보고서에 붙이나**(원장 2026-11-02 *"전체선생님이 아니라 이수진 선생님만 보고서에"* — 10-30 시험 게이트를 대신한다).
+ * 둘 중 하나일 때만 표에 줄을 붙인다:
+ *   ① 보고서를 쓰는 선생님(`teacherId` = 강사뷰 기준 사용자 — 운영자가 '다른 강사 뷰'로 열면 그 선생님)이
+ *      학원 설정 → 역할·권한 → 개인별 기능 권한 '비포클래스 보고서 표'(`permissions.specialAccess.beforeClassReportIds`)에 있을 때
+ *   ② 테스트 학생(`students.is_test` — 학원이·학원삼)의 보고서.
+ * 코드에 사람 이름을 적지 않는다(권한 명단 금지 규칙). 지정한 사람이 없으면 ②만.
  */
-export async function beforeClassReportEnabled(tenantId: string, studentId: string): Promise<boolean> {
+export async function beforeClassReportEnabled(tenantId: string, studentId: string, teacherId: string): Promise<boolean> {
   try {
-    const [operator, viewAs, student] = await Promise.all([
-      isCurrentUserSuperAdmin(),
-      viewAsTeacher(),
+    const [settings, student] = await Promise.all([
+      getTenantSettings(),
       createAdminClient().from("students").select("is_test").eq("tenant_id", tenantId).eq("id", studentId).maybeSingle(),
     ]);
-    return (operator && !!viewAs) || student.data?.is_test === true;
+    if ((settings.permissions.specialAccess.beforeClassReportIds ?? []).includes(teacherId)) return true;
+    return student.data?.is_test === true;
   } catch {
     return false;
   }

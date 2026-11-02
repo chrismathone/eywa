@@ -274,6 +274,7 @@ function diffPermissions(before: unknown, after: unknown): SettingsDiff {
         ["staffTaskMonitorIds", "업무 처리 현황"],
         ["vendorViewerIds", "업체리스트"],
         ["jjReportManagerIds", "JJ 보고서 담당"],
+        ["beforeClassReportIds", "비포클래스 보고서 표"],
         ["withdrawalApproverIds", "퇴원보고서 승인자"],
       ] as const) {
         const ids = key === "payslipManagerIds" ? effectivePayslipManagerIds(v.specialAccess) : v.specialAccess[key];

@@ -625,6 +625,10 @@ const specialAccessSchema = z.object({
   // 수업보고서를 원스크린에서 쓸 수 있다(시간표 JJ 칸은 그대로 — 담당을 채우면 자리 판정이 깨진다). 없음 = 아무도 아니다.
   // 소비처 = `getTeachingClassIds`·`getTeachingClasses`(classes/server/delegation.ts)의 JJ 갈래.
   jjReportManagerIds: z.array(z.string().uuid()).max(80).optional(),
+  // 비포클래스 보고서 표(원장 2026-11-02 *"전체선생님이 아니라 이수진 선생님만 보고서에"*) — 여기 지정한 선생님이 쓰는
+  // 수학 보고서에만 '수업 평가' 표에 비포클래스체크리스트 줄을 붙인다(체크리스트 반 · 그날 체크가 있을 때). 없음 = 아무도 아니다
+  // (테스트 학생 보고서는 종전대로 붙는다). 소비처 = `beforeClassReportEnabled`(before-class/server/report-rows.ts).
+  beforeClassReportIds: z.array(z.string().uuid()).max(80).optional(),
   // 퇴원보고서 승인자(원장 2026-10-30 *"관리자는 수학의 경우 허은진 부원장 한명만 승인하면 끝나도록"*) — 과목 단위로 좁힌다:
   // 여기 지정한 사람이 승인 담당인 과목은 그 사람들만 관리자 승인 후보, 지정한 사람이 없는 과목은 종전대로 그 과목 관리자 전원.
   // 없음 = 빈 명단 = 종전 그대로. 소비처 = `reportStaff`(withdrawal-reports/server/queries.ts) → `narrowApprovalSubjects`.
@@ -632,7 +636,7 @@ const specialAccessSchema = z.object({
   staffSubjectScopes: z.array(staffSubjectScopeSchema).max(80).default([]),
 });
 /** 사람 id 목록인 칸(과목 범위는 줄 모양이 달라 따로 다룬다). */
-export const SPECIAL_ACCESS_ID_LISTS = ["payslipViewerIds", "payslipManagerIds", "leaveAdjusterIds", "classSplitterIds", "enrollmentDateEditorIds", "studentStatusManagerIds", "staffTaskMonitorIds", "vendorViewerIds", "jjReportManagerIds", "withdrawalApproverIds"] as const;
+export const SPECIAL_ACCESS_ID_LISTS = ["payslipViewerIds", "payslipManagerIds", "leaveAdjusterIds", "classSplitterIds", "enrollmentDateEditorIds", "studentStatusManagerIds", "staffTaskMonitorIds", "vendorViewerIds", "jjReportManagerIds", "beforeClassReportIds", "withdrawalApproverIds"] as const;
 export const permissionsSchema = z
   .object({
     overrides: z.array(permissionOverrideSchema).max(MENU_KEYS.length * SYSTEM_ROLES.length),
