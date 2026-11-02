@@ -14,6 +14,8 @@ export type ClassMonth = {
   trackingStart: string | null;
   /** '지난 수업 결석'이라 자동 제외인 칸(열쇠 = checkKey) — 저장하지 않은 판정(excuse.ts). */
   autoExcused: string[];
+  /** 쉰 휴일(학원 휴일 + 그 반 기록 없음) — 날짜 → 휴일 이름. 통계·'지난 수업'에서 빠진다(server/off-days.ts). */
+  offDays: Record<string, string>;
 };
 
 /** 칸 열쇠 = 학생 id | 수업일. */

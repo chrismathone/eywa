@@ -21,7 +21,7 @@ import { MonthTable } from "./month-table";
  * 누르면 늦게 도착한 옛 값이 새 값을 덮을 수 있어서다. 저장이 실패하면 그 칸을 서버가 마지막으로 확인한 값으로 되돌린다.
  */
 export function ChecklistBoard({
-  classId, month, dates, students, initialChecks, autoExcused, initialDate, today, trackingStart, canEdit, report, classPicker,
+  classId, month, dates, students, initialChecks, autoExcused, offDays, initialDate, today, trackingStart, canEdit, report, classPicker,
 }: {
   classId: string;
   month: string;
@@ -30,6 +30,8 @@ export function ChecklistBoard({
   initialChecks: Record<string, BeforeClassCheck>;
   /** '지난 수업 결석' 자동 제외 칸 열쇠(서버 판정 · 저장 안 함). */
   autoExcused: string[];
+  /** 쉰 휴일(날짜 → 이름) — 통계에서 빠진다. 칸은 그대로(그날 수업했다면 체크하면 수업한 날이 된다). */
+  offDays: Record<string, string>;
   initialDate: string | null;
   today: string;
   /** 이 반 첫 체크 날(서버) — 이 화면에서 처음 체크하면 아래에서 앞당긴다. */
@@ -120,7 +122,7 @@ export function ChecklistBoard({
           <ToolbarSegmentItem active={view === "report"} onClick={() => setView("report")}>보고서 시안</ToolbarSegmentItem>
         </ToolbarSegment>
         {view !== "stats" ? (
-          <DateCalendar month={month} dates={dates} value={date} today={today} onChange={setDate} onGo={goMonth} pending={going} />
+          <DateCalendar month={month} dates={dates} offDays={offDays} value={date} today={today} onChange={setDate} onGo={goMonth} pending={going} />
         ) : null}
       </Toolbar>
 
@@ -143,11 +145,13 @@ export function ChecklistBoard({
           />
         ) : null
       ) : view === "month" ? (
-        <MonthTable dates={dates} students={students} checks={viewChecks} today={today} trackingStart={start} onPickDate={(d) => { setDate(d); setView("check"); }} />
+        <MonthTable dates={dates} offDays={offDays} students={students} checks={viewChecks} today={today} trackingStart={start} onPickDate={(d) => { setDate(d); setView("check"); }} />
       ) : (
         <>
           <p className="text-text-dim px-1 text-sm">
-            {date ? shortDateLabel(date) : ""} · 학생 {dayStudents.length}명 · 보충 필요 {supplement}명 · 결석 {absent}명{excused ? ` · 체크 제외 ${excused}명` : ""}
+            {date ? shortDateLabel(date) : ""}
+            {date && offDays[date] ? <span className="text-danger font-semibold"> · 휴일({offDays[date]}) — 수업했다면 그대로 체크하세요(통계에서 빠진 날)</span> : null}
+            {" "}· 학생 {dayStudents.length}명 · 보충 필요 {supplement}명 · 결석 {absent}명{excused ? ` · 체크 제외 ${excused}명` : ""}
             {canEdit ? " · 체크한 칸 = 미흡(누르면 바로 저장)" : " · 보기 전용"}
           </p>
           {/* 날짜마다 새로 — 사유 글 상자가 다른 날 글을 들고 가지 않게. */}

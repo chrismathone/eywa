@@ -7,6 +7,7 @@ import { attendsClassOn } from "../roster";
 import { classDatesInMonth } from "../dates";
 import { checkFromRow, type BeforeClassCheck } from "../items";
 import { loadAutoExcusedKeys } from "./prev-absence";
+import { loadOffDays } from "./off-days";
 import { loadReportLevels } from "./report-levels";
 import { checkKey, type ChecklistTarget, type ClassMonth, type RosterStudent } from "../types";
 
@@ -80,7 +81,7 @@ export async function loadClassMonth(tenantId: string, classId: string, month: s
   const readChecks = (cols: string) => admin.from("before_class_checks")
     .select(`student_id, check_date, ${cols}`)
     .eq("tenant_id", tenantId).eq("class_id", classId).gte("check_date", from).lte("check_date", to);
-  const [cls, sched, enr, chkFirst, trackingStart, autoKeys] = await Promise.all([
+  const [cls, sched, enr, chkFirst, trackingStart, autoKeys, offDays] = await Promise.all([
     admin.from("classes").select("subject").eq("tenant_id", tenantId).eq("id", classId).maybeSingle(),
     admin.from("class_schedules").select("day_of_week, valid_from, valid_to").eq("tenant_id", tenantId).eq("class_id", classId),
     admin.from("enrollments")
@@ -89,6 +90,7 @@ export async function loadClassMonth(tenantId: string, classId: string, month: s
     readChecks(CHECK_COLUMNS),
     loadTrackingStart(tenantId, classId),
     loadAutoExcusedKeys(tenantId, [classId], from, to),
+    loadOffDays(tenantId, [classId], from, to),
   ]);
   const chk = isMissingColumn(chkFirst.error) ? await readChecks(CHECK_COLUMNS_V1) : chkFirst;
   if (cls.error) throw new Error(`classes: ${cls.error.message}`);
@@ -134,5 +136,5 @@ export async function loadClassMonth(tenantId: string, classId: string, month: s
   }
   const prefix = `${classId}|`;
   const autoExcused = [...autoKeys].filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length));
-  return { dates, students, checks, reportLevels, trackingStart, autoExcused };
+  return { dates, students, checks, reportLevels, trackingStart, autoExcused, offDays: offDays.get(classId) ?? {} };
 }

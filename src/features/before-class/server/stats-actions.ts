@@ -18,6 +18,7 @@ import { attendsClassOn } from "../roster";
 import { DONE_CHECK, isRecordedDay, type DayRecord } from "../stats";
 import { CHECK_COLUMNS, CHECK_COLUMNS_V1, loadTrackingStart } from "./queries";
 import { loadAutoExcusedKeys } from "./prev-absence";
+import { loadOffDays } from "./off-days";
 
 const inputSchema = z.object({ classId: z.uuid(), studentId: z.uuid() });
 const MAX_MONTHS = 6;
@@ -47,7 +48,7 @@ export async function getBeforeClassStudentHistory(
     const readChecks = (cols: string) => fetchAllPaged((a, b) => admin.from("before_class_checks").select(`check_date, ${cols}`)
       .eq("tenant_id", user.tenantId).eq("class_id", classId).eq("student_id", studentId)
       .gte("check_date", from).lte("check_date", today).order("check_date").range(a, b));
-    const [sched, enr, checks, autoKeys] = await Promise.all([
+    const [sched, enr, checks, autoKeys, offDays] = await Promise.all([
       admin.from("class_schedules").select("day_of_week, valid_from, valid_to").eq("tenant_id", user.tenantId).eq("class_id", classId),
       admin.from("enrollments").select("start_date, end_date, is_transferred, attendance_days")
         .eq("tenant_id", user.tenantId).eq("class_id", classId).eq("student_id", studentId),
@@ -55,7 +56,9 @@ export async function getBeforeClassStudentHistory(
       // fetchAllPaged는 오류 코드를 글로만 넘긴다 — 옛 칸으로 한 번 더 읽고, 그것도 실패하면 그 오류를 던진다.
       readChecks(CHECK_COLUMNS).catch(() => readChecks(CHECK_COLUMNS_V1)),
       loadAutoExcusedKeys(user.tenantId, [classId], from, today, studentId),
+      loadOffDays(user.tenantId, [classId], from, today),
     ]);
+    const off = offDays.get(classId) ?? {};
     if (sched.error) throw new Error(sched.error.message);
     if (enr.error) throw new Error(enr.error.message);
 
@@ -64,7 +67,8 @@ export async function getBeforeClassStudentHistory(
     const days: DayRecord[] = [];
     for (let month = from.slice(0, 7); month <= today.slice(0, 7); month = shiftMonth(month, 1)) {
       for (const date of classDatesInMonth(month, sched.data ?? [])) {
-        if (date < from || !isRecordedDay(date, today, trackingStart) || !attendsClassOn(enr.data ?? [], date)) continue;
+        // 쉰 휴일은 수업이 아니다 — '체크 없는 날 = 모두 해 옴'으로 세지 않는다(원장 2026-11-02).
+        if (date < from || off[date] || !isRecordedDay(date, today, trackingStart) || !attendsClassOn(enr.data ?? [], date)) continue;
         const check = byDate.get(date) ?? DONE_CHECK;
         // '지난 수업 결석' 자동 제외는 저장하지 않은 판정이라 여기서 붙인다(화면과 같은 판정).
         days.push({ date, check: autoKeys.has(`${classId}|${studentId}|${date}`) ? { ...check, autoExcused: true } : check });

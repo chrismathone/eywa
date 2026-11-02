@@ -57,6 +57,7 @@ export default async function BeforeClassPage({ searchParams }: { searchParams: 
             students={data.students}
             initialChecks={data.checks}
             autoExcused={data.autoExcused}
+            offDays={data.offDays}
             initialDate={pickCheckDate(data.dates, kstToday(), one(sp.date))}
             today={kstToday()}
             trackingStart={data.trackingStart}

@@ -16,9 +16,11 @@ import { CardBadge } from "./badges";
  * 그 밖의 날은 '—' · 그날 명단에 없던 학생은 빈 칸.
  */
 export function MonthTable({
-  dates, students, checks, today, trackingStart, onPickDate,
+  dates, offDays, students, checks, today, trackingStart, onPickDate,
 }: {
   dates: string[];
+  /** 쉰 휴일 — 칸은 '휴일', 평균·횟수에서 뺀다(그날 체크가 생기면 서버가 수업한 날로 돌린다). */
+  offDays: Record<string, string>;
   today: string;
   trackingStart: string | null;
   students: RosterStudent[];
@@ -37,6 +39,7 @@ export function MonthTable({
                 <button type="button" className="hover:text-primary underline-offset-2 hover:underline" onClick={() => onPickDate(d)}>
                   {shortDateLabel(d)}
                 </button>
+                {offDays[d] ? <div className="text-danger text-xs font-normal">휴일</div> : null}
               </th>
             ))}
             <th className="px-2 py-2 text-center text-xs font-semibold">평균</th>
@@ -47,7 +50,7 @@ export function MonthTable({
         </thead>
         <tbody>
           {students.map((s) => {
-            const own = s.activeDates.filter((d) => isRecordedDay(d, today, trackingStart)).map((d) => checks[checkKey(s.id, d)] ?? DONE_CHECK);
+            const own = s.activeDates.filter((d) => !offDays[d] && isRecordedDay(d, today, trackingStart)).map((d) => checks[checkKey(s.id, d)] ?? DONE_CHECK);
             const sum = summarizeStudent(own);
             const top = BEFORE_CLASS_ITEMS
               .map((i) => ({ label: i.short, count: sum.itemCounts.get(i.key) ?? 0 }))
@@ -60,7 +63,9 @@ export function MonthTable({
                   <span className="font-medium">{s.name}</span>
                   <span className="text-text-dim ml-1.5 text-xs">{s.schoolGrade}</span>
                 </td>
-                {dates.map((d) => <MonthCell key={d} active={s.activeDates.includes(d)} check={checks[checkKey(s.id, d)] ?? (isRecordedDay(d, today, trackingStart) ? DONE_CHECK : undefined)} />)}
+                {dates.map((d) => offDays[d] && s.activeDates.includes(d)
+                  ? <td key={d} className="bg-bg-soft text-text-dim px-1 py-1.5 text-center text-xs" data-tip={encodeTip(offDays[d])}>휴일</td>
+                  : <MonthCell key={d} active={s.activeDates.includes(d)} check={checks[checkKey(s.id, d)] ?? (isRecordedDay(d, today, trackingStart) ? DONE_CHECK : undefined)} />)}
                 <td className="px-2 py-1.5 text-center font-semibold tabular-nums">{percentLabel(sum.average)}</td>
                 <td className="px-2 py-1.5 text-center tabular-nums">{sum.supplementCount || "—"}</td>
                 <td className="px-2 py-1.5 text-center tabular-nums">{sum.absentCount || "—"}</td>

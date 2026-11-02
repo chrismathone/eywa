@@ -4,11 +4,13 @@ import { fetchAllPaged } from "@/lib/supabase/batch";
 import { classDatesInMonth, type ScheduleRow } from "../dates";
 import { attendanceAbsentKeys, prevAbsentDates, PREV_LESSON_LOOKBACK_DAYS, shiftYmd, type AttendanceRow } from "../excuse";
 import { attendsClassOn, type RosterEnrollment } from "../roster";
+import { loadOffDays } from "./off-days";
 
 /**
  * '지난 수업 결석' 자동 제외 대상(원장 2026-11-02) — 열쇠 `${classId}|${studentId}|${date}`의 모음, [from, to] 안의 날만.
  * 판정 규칙은 excuse.ts(순수). 여기는 재료(반 수업일 · 명단 · 체크리스트 결석 · 출석부 기록)만 읽는다 — 서버 전용 표라
  * admin + tenant_id 명시([[#104]]). 지난 수업을 찾으려고 from 앞으로 45일을 더 읽는다.
+ * 쉰 휴일(off-days.ts — 학원 휴일인데 그 반 기록이 없는 날)은 수업일이 아니다 — 그 앞 수업이 '지난 수업'이다.
  * 🔴 실패해도 화면·보고서를 막지 않는다 — 빈 모음(자동 제외 없음)으로 돌리고 로그만 남긴다(선생님이 직접 켤 수 있다).
  */
 export async function loadAutoExcusedKeys(
@@ -22,7 +24,7 @@ export async function loadAutoExcusedKeys(
     let enrQ = admin.from("enrollments").select("class_id, student_id, start_date, end_date, is_transferred, attendance_days")
       .eq("tenant_id", tenantId).in("class_id", ids).lte("start_date", to).or(`end_date.is.null,end_date.gte.${since}`);
     if (studentId) enrQ = enrQ.eq("student_id", studentId);
-    const [sched, enr, checks, attendance] = await Promise.all([
+    const [sched, enr, checks, attendance, offDays] = await Promise.all([
       admin.from("class_schedules").select("class_id, day_of_week, valid_from, valid_to").eq("tenant_id", tenantId).in("class_id", ids),
       enrQ,
       fetchAllPaged((a, b) => {
@@ -37,6 +39,7 @@ export async function loadAutoExcusedKeys(
         if (studentId) q = q.eq("student_id", studentId);
         return q.order("id").range(a, b);
       }),
+      loadOffDays(tenantId, ids, since, to),
     ]);
     if (sched.error) throw new Error(`class_schedules: ${sched.error.message}`);
     if (enr.error) throw new Error(`enrollments: ${enr.error.message}`);
@@ -51,7 +54,8 @@ export async function loadAutoExcusedKeys(
     const datesOf = new Map<string, string[]>();
     for (const id of ids) {
       const rows = schedByClass.get(id) ?? [];
-      datesOf.set(id, months.flatMap((m) => classDatesInMonth(m, rows)).filter((d) => d >= since && d <= to));
+      const off = offDays.get(id) ?? {};
+      datesOf.set(id, months.flatMap((m) => classDatesInMonth(m, rows)).filter((d) => d >= since && d <= to && !off[d]));
     }
 
     const enrByPair = new Map<string, RosterEnrollment[]>();
