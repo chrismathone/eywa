@@ -9,13 +9,14 @@ import { draftSnapshotSchema, boundedJson } from '../draft-schema';
 import { openMasterDb } from '@/features/timetable/server/master-sheet-store';
 import { normalizeApplyTime } from '../apply-time';
 import { buildApplyPlan } from '../apply-plan';
+import { rebaseDraft } from '../apply-rebase';
 import { readApplyContext, contextFingerprint, fingerprint } from './apply-context';
 import { policyHash, runApplyJob, validateOperatingLinks, lockLabApply, appliedViewPatch } from './apply-store';
 import { timeLabel } from '../editor/model';
 import type { Draft } from '../editor/model';
 
-export type ApplyReview = { hash: string; at: string; date: string; hour: number; summary: ReturnType<typeof buildApplyPlan>['summary']; changes: string[]; warnings: string[] };
-export type ApplyJobSummary = { id: string; at: string; status: 'pending' | 'applied' | 'failed' | 'cancelled'; error: string | null };
+export type ApplyReview = { hash: string; at: string; date: string; hour: number; summary: ReturnType<typeof buildApplyPlan>['summary']; changes: string[]; warnings: string[]; skipped: string[]; notices: string[] };
+export type ApplyJobSummary = { id: string; at: string; status: 'pending' | 'applied' | 'failed' | 'cancelled'; error: string | null; skipped?: string[] };
 type Request = { draft: Draft; date: string; hour: number };
 const friendly = (error: unknown) => error instanceof Error && !('code' in error) ? error.message : '자료를 읽거나 저장하지 못했습니다. 잠시 후 다시 확인해 주세요.';
 
@@ -31,15 +32,15 @@ async function prepare(input: Request) {
   if (Buffer.byteLength(text) > 2 * 1024 * 1024) throw new Error('연습본이 너무 크거나 형식이 올바르지 않습니다.');
   const parsed = draftSnapshotSchema.safeParse(input.draft);
   if (!parsed.success) throw new Error('연습본의 형식을 확인해 주세요.');
-  const draft = parsed.data as Draft;
-  if (draft.source?.tenantId !== user.tenantId) throw new Error('현재 학원의 시간표만 적용할 수 있습니다.');
+  const saved = parsed.data as Draft;
+  if (saved.source?.tenantId !== user.tenantId) throw new Error('현재 학원의 시간표만 적용할 수 있습니다.');
   const time = normalizeApplyTime(input.date, input.hour);
   if ('error' in time) throw new Error(time.error);
   const sql = openMasterDb();
   try {
     const context = await readApplyContext(sql, user.tenantId), version = contextFingerprint(context);
-    if (version !== draft.source.baselineHash) throw new Error('원본 시간표가 변경되었습니다. 기존 시간표를 다시 불러와 주세요.');
-    const plan = buildApplyPlan(draft, context, time.date);
+    const latest = rebaseDraft(saved, context, time.date, version !== saved.source.baselineHash), draft = latest.draft;
+    const plan = buildApplyPlan(draft, latest.context, time.date);
     if (plan.people.length && !(await canManageTenant(user.systemRole, 'staff'))) throw new Error('강사 이름 변경은 직원관리 권한이 필요합니다.');
     if (plan.students.length && !(await canManageTenant(user.systemRole, 'students'))) throw new Error('학생 등록·이름 변경은 원생관리 권한이 필요합니다.');
     const actor = context.people.find(person => person.id === user.id);
@@ -47,7 +48,7 @@ async function prepare(input: Request) {
     const policy = policyHash(context.settings, actor.role);
     const [account] = await sql<{ prefs: unknown }[]>`select ui_prefs as prefs from users where tenant_id=${user.tenantId} and id=${user.id}`;
     const viewPatch = appliedViewPatch(draft,account?.prefs,new Map()), display = viewPatch.editorView?.english;
-    const hash = fingerprint({ draft, plan, viewPatch, time, user: user.id, tenant: user.tenantId, policy });
+    const hash = fingerprint({ draft: saved, plan, skipped: latest.skipped, viewPatch, time, user: user.id, tenant: user.tenantId, policy });
     const changes = [
       ...plan.schedules.map(row => `${row.before ? '수업 변경' : '수업 추가'} · ${row.item.name} · ${row.item.day} ${timeLabel(row.item.start)}~${timeLabel(row.item.end)} · ${row.item.teacher}${row.item.labSeparate && row.item.teacher==='LAB' ? ' (*LAB)' : ''} · ${row.item.room || '강의실 미정'}`),
       ...plan.removedSchedules.map(row => `수업 삭제 · ${context.classes.find(group => group.id === row.classId)?.name ?? '반'}`),
@@ -69,9 +70,9 @@ async function prepare(input: Request) {
       ...(viewPatch.hideStudents!==undefined ? [`학생 명단 ${viewPatch.hideStudents?'접기':'펼치기'}`] : []),
       ...(viewPatch.hideEmptyDays!==undefined ? [`빈 요일 ${viewPatch.hideEmptyDays?'접기':'펼치기'}`] : []),
     ];
-    const review: ApplyReview = { hash, at: time.at, date: time.date, hour: time.hour, summary: plan.summary, changes, warnings: [...new Set(plan.warnings)] };
-    if (!changes.length) throw new Error('적용할 변경 사항이 없습니다. 연습본을 수정한 뒤 검사해 주세요.');
-    return { user, actorRole: actor.role, draft, time, plan, version, policy, review };
+    const review: ApplyReview = { hash, at: time.at, date: time.date, hour: time.hour, summary: plan.summary, changes, warnings: [...new Set(plan.warnings)], skipped: latest.skipped, notices: latest.notices };
+    if (!changes.length) throw new Error(latest.skipped.length ? `적용할 변경 사항이 없습니다. ${latest.skipped.join(' ')}` : '적용할 변경 사항이 없습니다. 연습본을 수정한 뒤 검사해 주세요.');
+    return { user, actorRole: actor.role, draft: saved, time, plan, version, policy, review };
   } finally { await sql.end({ timeout: 5 }); }
 }
 
@@ -88,7 +89,7 @@ export async function queueTimetableLabApply(input: Request & { expectedHash: st
   try {
     const prepared = await prepare(input);
     if (prepared.review.hash !== input.expectedHash) throw new Error('변경 내용이 달라졌습니다. 다시 검사해 주세요.');
-    if (prepared.review.warnings.length && !input.acknowledgeWarnings) throw new Error('겹침 경고를 확인한 뒤 적용해 주세요.');
+    if ((prepared.review.warnings.length || prepared.review.skipped.length) && !input.acknowledgeWarnings) throw new Error('경고를 확인한 뒤 적용해 주세요.');
     const sql = openMasterDb();
     try {
       const job = await sql.begin('isolation level serializable', async tx => {
@@ -121,7 +122,7 @@ export async function listTimetableLabApplyJobs(): Promise<{ jobs: ApplyJobSumma
     const user = await getCurrentUser();
     if (!user || !(await canUseTimetableEditor(user.systemRole))) throw new Error('시간표를 관리할 권한이 필요합니다.');
     const sql = openMasterDb();
-    try { return { jobs: await sql<ApplyJobSummary[]>`select id,apply_at::text as at,status,error from timetable_lab_apply_jobs where tenant_id=${user.tenantId} and actor_id=${user.id} order by created_at desc limit 10` }; }
+    try { return { jobs: await sql<ApplyJobSummary[]>`select id,apply_at::text as at,status,error,case when jsonb_typeof(result->'skipped')='array' then result->'skipped' else '[]'::jsonb end as skipped from timetable_lab_apply_jobs where tenant_id=${user.tenantId} and actor_id=${user.id} order by created_at desc limit 10` }; }
     finally { await sql.end({ timeout: 5 }); }
   } catch (error) { return { error: friendly(error) }; }
 }
