@@ -84,7 +84,7 @@ export type GapStats =
 
 /** 보기 설정(계정 귀속 `users.ui_prefs.consultations`) — 기본값(월·건수·상담사·담임 이름순)은 저장하지 않는다. */
 export type ConsultationStatsPrefs = { unit: StatsUnit; metric: StatsMetric; dim: StatsDimKey; hrSort: HomeroomSort; hrFilter: HomeroomFilter; hrView: HomeroomView };
-export const DEFAULT_STATS_PREFS: ConsultationStatsPrefs = { unit: "month", metric: "count", dim: "counselor", hrSort: DEFAULT_HOMEROOM_SORT, hrFilter: DEFAULT_HOMEROOM_FILTER, hrView: "table" };
+export const DEFAULT_STATS_PREFS: ConsultationStatsPrefs = { unit: "month", metric: "count", dim: "counselor", hrSort: DEFAULT_HOMEROOM_SORT, hrFilter: DEFAULT_HOMEROOM_FILTER, hrView: "gauge" };
 export const STATS_METRICS: readonly StatsMetric[] = ["count", "perStudent", "follow", "media", "sync", "class"];
 export const STATS_DIMS: readonly StatsDimKey[] = ["counselor", "subject", "class", "category", "audience", "source"];
 
