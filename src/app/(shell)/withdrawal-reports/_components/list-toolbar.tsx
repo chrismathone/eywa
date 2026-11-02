@@ -41,6 +41,7 @@ export function ListToolbar({
   teachers,
   archiveStatus,
   mine,
+  hideCanceled,
   resultText,
   resetHref,
   request,
@@ -53,6 +54,8 @@ export function ListToolbar({
   archiveStatus: boolean;
   /** 지금 내 승인 차례인 보고서 칩(누르면 켜고 끈다) — 0건이고 꺼져 있으면 없다. */
   mine: { href: string; count: number } | null;
+  /** 요청 취소 숨기기 칩(기본 켜짐) — 상태를 따로 고르면 뜻이 없어 없다. `count` = 지금 조건의 요청 취소 건수. */
+  hideCanceled: { active: boolean; href: string; count: number } | null;
   resultText: string;
   resetHref: string | null;
   request: ReactNode;
@@ -109,6 +112,11 @@ export function ListToolbar({
       {mine ? (
         <ToolbarChip active={filters.mine} href={mine.href}>
           내 승인 필요 <span className="num">{mine.count}</span>건
+        </ToolbarChip>
+      ) : null}
+      {hideCanceled ? (
+        <ToolbarChip active={hideCanceled.active} href={hideCanceled.href}>
+          요청 취소 숨기기 <span className="num">{hideCanceled.count}</span>건
         </ToolbarChip>
       ) : null}
       <SearchToggle placeholder="학생·학교·반·내용" defaultValue={filters.q} />

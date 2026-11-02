@@ -92,6 +92,18 @@ describe("퇴원보고서 목록 한 벌 — 웹 보고서 + 기존 스프레드
     expect(by("archive")).toEqual(["a:a1"]);
   });
 
+  it("요청 취소는 기본으로 숨긴다 — 끄면 보이고 · 상태를 '요청 취소'로 고르면 그대로 보인다(원장 2026-11-02)", () => {
+    const items = build([report(), report({ id: "r3", status: "canceled" })], [archive()]);
+    const shown = (sp: Record<string, string>) => {
+      const f = parseListFilters(sp, true);
+      return keys(filterListItems(items, f, listWindow(f, "2026-10-14"))).sort();
+    };
+    expect(parseListFilters({}, true).hideCanceled).toBe(true);
+    expect(shown({})).toEqual(["a:a1", "r:r1"]);
+    expect(shown({ canceled: "show" })).toEqual(["a:a1", "r:r1", "r:r3"]);
+    expect(shown({ status: "canceled" })).toEqual(["r:r3"]);
+  });
+
   it("미연결 필터는 없앴다 — 옛 주소가 남아 있어도 전부 보인다", () => {
     const items = build([report()], [archive(), archive({ id: "a2", mapped_student_id: "s2", mapping_kind: "auto" })]);
     const f = parseListFilters({ link: "unmapped" }, true);

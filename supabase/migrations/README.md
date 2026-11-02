@@ -12,6 +12,10 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-11-02 퇴원보고서: 상세사유 제출 기준 200자 → 100자 (s2_0014 · ⏳ 미적용)
+
+`s2_0014_withdrawal_detail_min_100.sql` — 원장 *"퇴원보고서 상세사유 100자 이상으로"*. 전이 함수 두 개(묶음 · `_v1`)의 글자 수 검사와 거절 문구만 치환한다. 🔴 앱 배포 전에 적용(반대면 그 사이 100~199자 제출이 200자 문구로 거절된다). 되돌리기 = `scripts/_oneoff/revert-s2_0014-withdrawal-detail-min-100.sql`.
+
 ## 2026-10-30 퇴원보고서: superadmin 승인자 차단 · 원장 바로 승인 알림 · 수학(심화) 기록 정리 (s2_0013 · ✅ 운영 적용 2026-10-30)
 
 `s2_0013_withdrawal_superadmin_block_and_director_notice.sql` — 원장 *"진짜 원장이 원장에 있어야함"* · *"수학(심화)는 없애 … 전부 수학이야"*. 작성 요청 함수 두 개가 super_admin을 승인자로 받지 않고, 원장 칸이 비고 승인자가 전부 원장이면 제출 알림이 '원장 승인 요청'이 된다. 처리(apply) 재검사는 그대로 — 운영 계정의 '바로 처리'가 멈추지 않게. `invoice_session_terms.subject` subject_1 → math 12행(전부 미확정 · 반은 이미 math · 이전 값은 파일 머리말 참고). 되돌리기 = `scripts/_oneoff/revert-s2_0013-withdrawal-superadmin-block.sql`.
