@@ -271,13 +271,18 @@ function buildDayView(
       }[]
     | null,
   today: string,
+  /** 반 id → 종강일. 종강일이 지난 반은 **종강일 기준**으로 판정한다 — 종강이 배치를 그날로 닫아서(2026-11-02),
+   *  오늘 기준이면 유효 행이 0이라 옛 학기 요일까지 합친 흐린 칸이 된다(적대 리뷰 2026-11-02 · [[#88]]). */
+  closedAt?: ReadonlyMap<string, string | null>,
 ): { live: Map<string, Map<string, string | null>>; any: Map<string, Map<string, string | null>> } {
   const rows = scheds ?? [];
-  const isLive = (r: { valid_from?: string | null; valid_to?: string | null }) => {
+  const isLive = (r: { class_id: string; valid_from?: string | null; valid_to?: string | null }) => {
+    const closed = closedAt?.get(r.class_id)?.slice(0, 10);
+    const day = closed && closed < today ? closed : today;
     const to = r.valid_to ? String(r.valid_to).slice(0, 10) : null;
-    if (to && to < today) return false;
+    if (to && to < day) return false;
     const from = r.valid_from ? String(r.valid_from).slice(0, 10) : null;
-    return !(from && from > today);
+    return !(from && from > day);
   };
   return { live: buildDaySlots(rows.filter(isLive)), any: buildDaySlots(rows) };
 }
@@ -369,7 +374,11 @@ export async function getClassesList(options?: ClassListFilters): Promise<ClassL
         .range(from, to),
     );
     // 운영 기간이 지난 교시를 현재처럼 그리지 않는다([[#88]]) — 유효 행 우선, 없으면 흐리게.
-    dayView = buildDayView(scheds, kstToday());
+    dayView = buildDayView(
+      scheds,
+      kstToday(),
+      new Map(classes.map((c) => [c.id, (c as { closed_at?: string | null }).closed_at ?? null])),
+    );
   }
 
   let rows = classes.map((c) => {
@@ -594,7 +603,11 @@ export async function getClassesPage(
       counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
     }
     // 운영 기간이 지난 교시를 현재처럼 그리지 않는다([[#88]]).
-    dayView = buildDayView(scheds, kstToday());
+    dayView = buildDayView(
+      scheds,
+      kstToday(),
+      new Map(matched.map((c) => [c.id, (c as { closed_at?: string | null }).closed_at ?? null])),
+    );
   }
 
   const rows = matched.map((c) => {

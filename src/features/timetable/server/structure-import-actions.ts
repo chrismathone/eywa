@@ -71,10 +71,14 @@ async function loadStructureContext(
 
   // 🔴 라벨맵 = '시트 반영'(export)이 강사 밴드를 쓸 때 쓰는 것과 **같은 해석기**(queries.ts와 한 소스).
   //    안 태우면 시트엔 `추민아`가 적히는데 DB엔 `Jane`이 남아 비교가 전건 어긋난다(아래 slotTeacherDisplay).
-  const [classes, users, rooms, sched, labelMap] = await Promise.all([
-    fetchAllPaged<{ id: string; class_name: string; subject: string; teacher_id: string | null; classroom_id: string | null }>(
+  // 🔴 **종강일이 적용일 전인 반은 없는 반이다**(시간표가 그날부터 숨긴다 · 영어 시트 반영 master-sheet-store와 같은 기준).
+  //    is_active만 보면 종강(closed_at)한 반의 남은 배치가 "시트에 없다 → 제거(종료)"로 떠서, 시간표에도 시트에도 없는 반을
+  //    지운다고 나왔다(원장 2026-11-02 LS4b · *"없는 반인데 갑자기 삭제를 한다고?"*). 종강은 이제 배치도 닫지만 옛 기록이 남는다.
+  const openOn = (closedAt: string | null | undefined) => !closedAt || String(closedAt).slice(0, 10) >= today;
+  const [allClasses, users, rooms, allSched, labelMap] = await Promise.all([
+    fetchAllPaged<{ id: string; class_name: string; subject: string; teacher_id: string | null; classroom_id: string | null; closed_at: string | null }>(
       (from, to) =>
-        supabase.from("classes").select("id, class_name, subject, teacher_id, classroom_id").eq("subject", SUBJECT).eq("is_active", true).range(from, to),
+        supabase.from("classes").select("id, class_name, subject, teacher_id, classroom_id, closed_at").eq("subject", SUBJECT).eq("is_active", true).range(from, to),
     ),
     fetchAllPaged<{ id: string; display_name: string; english_name: string | null; system_role: string }>(
       (from, to) => supabase.from("users").select("id, display_name, english_name, system_role").eq("status", "active").range(from, to),
@@ -92,12 +96,12 @@ async function loadStructureContext(
       id: string; class_id: string; day_of_week: string; start_time: string; end_time: string;
       teacher_id: string | null; classroom_id: string | null; slot_teacher_label: string | null;
       slot_room_label: string | null; merge_group: string | null; valid_from: string; valid_to: string | null;
-      class?: { class_name?: string; subject?: string; is_active?: boolean } | { class_name?: string }[];
+      class?: { class_name?: string; subject?: string; is_active?: boolean; closed_at?: string | null } | { class_name?: string; closed_at?: string | null }[];
     }>((from, to) =>
       supabase
         .from("class_schedules")
         .select(
-          "id, class_id, day_of_week, start_time, end_time, teacher_id, classroom_id, slot_teacher_label, slot_room_label, merge_group, valid_from, valid_to, class:class_id!inner ( class_name, subject, is_active )",
+          "id, class_id, day_of_week, start_time, end_time, teacher_id, classroom_id, slot_teacher_label, slot_room_label, merge_group, valid_from, valid_to, class:class_id!inner ( class_name, subject, is_active, closed_at )",
         )
         .eq("class.subject", SUBJECT)
         .eq("class.is_active", true)
@@ -108,6 +112,8 @@ async function loadStructureContext(
     ),
     getTeacherLabelMapStrict(),
   ]);
+  const classes = allClasses.filter((c) => openOn(c.closed_at));
+  const sched = allSched.filter((s) => openOn((Array.isArray(s.class) ? s.class[0] : s.class)?.closed_at));
 
   const ctx: ExistingContext = {
     classes: classes.map((c) => ({ id: c.id, className: c.class_name, subject: c.subject, teacherId: c.teacher_id, classroomId: c.classroom_id })),
