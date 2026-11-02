@@ -2,10 +2,11 @@
 
 import { shortDateLabel } from "../dates";
 import {
-  BEFORE_CLASS_ITEMS, completionRate, effectiveCard, needsSupplement, percentLabel, summarizeStudent, type BeforeClassCheck,
+  BEFORE_CLASS_ITEMS, completionRate, effectiveCard, excuseText, isExcused, needsSupplement, percentLabel, summarizeStudent, type BeforeClassCheck,
 } from "../items";
 import { checkKey, type RosterStudent } from "../types";
 import { DONE_CHECK, isRecordedDay } from "../stats";
+import { encodeTip } from "@/components/hover-tip/tip";
 import { CardBadge } from "./badges";
 
 /**
@@ -78,6 +79,10 @@ export function MonthTable({
 function MonthCell({ active, check }: { active: boolean; check: BeforeClassCheck | undefined }) {
   if (!active) return <td className="bg-bg-soft px-1 py-1.5" />;
   if (!check) return <td className="text-text-dim px-1 py-1.5 text-center">—</td>;
+  if (isExcused(check)) {
+    // 체크 제외 — 완료율·카드 없이 '제외'(사유는 마우스 오버 카드).
+    return <td className="bg-bg-soft text-text-dim px-1 py-1.5 text-center text-xs" data-tip={encodeTip({ title: "체크 제외", lines: [excuseText(check) || "사유 없음"] })}>제외</td>;
+  }
   const tone = check.absent ? "bg-danger-soft text-danger" : needsSupplement(check) ? "bg-amber-soft text-amber" : "bg-blue-soft text-blue";
   return (
     <td className={`px-1 py-1 text-center ${tone}`}>

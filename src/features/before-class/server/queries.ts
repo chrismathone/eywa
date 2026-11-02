@@ -5,7 +5,8 @@ import { fetchInChunks } from "@/lib/supabase/batch";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { attendsClassOn } from "../roster";
 import { classDatesInMonth } from "../dates";
-import { normalizeCard, normalizeMissed, type BeforeClassCheck } from "../items";
+import { checkFromRow, type BeforeClassCheck } from "../items";
+import { loadAutoExcusedKeys } from "./prev-absence";
 import { loadReportLevels } from "./report-levels";
 import { checkKey, type ChecklistTarget, type ClassMonth, type RosterStudent } from "../types";
 
@@ -20,6 +21,15 @@ import { checkKey, type ChecklistTarget, type ClassMonth, type RosterStudent } f
 export function isMissingTable(e: { code?: string; message?: string } | null | undefined): boolean {
   return !!e && (e.code === "42P01" || e.code === "PGRST205");
 }
+
+/** 칸이 없다(SQL 미적용) — 제외 칸(s2_0016) 읽기·쓰기를 옛 모양으로 되돌릴 때 본다([[#95]]). */
+export function isMissingColumn(e: { code?: string; message?: string } | null | undefined): boolean {
+  return !!e && (e.code === "42703" || e.code === "PGRST204");
+}
+
+/** 체크 행 읽는 칸 — 제외 칸(s2_0016)까지. 그 칸이 없으면 `CHECK_COLUMNS_V1`로 다시 읽는다. */
+export const CHECK_COLUMNS = "missed, absent, card, excused, excuse_reason, excuse_note";
+export const CHECK_COLUMNS_V1 = "missed, absent, card";
 
 export async function loadTargets(tenantId: string): Promise<{ ready: boolean; targets: ChecklistTarget[] }> {
   const admin = createAdminClient();
@@ -67,17 +77,20 @@ type EnrollmentRow = {
 export async function loadClassMonth(tenantId: string, classId: string, month: string): Promise<ClassMonth> {
   const admin = createAdminClient();
   const { from, to } = monthRange(month);
-  const [cls, sched, enr, chk, trackingStart] = await Promise.all([
+  const readChecks = (cols: string) => admin.from("before_class_checks")
+    .select(`student_id, check_date, ${cols}`)
+    .eq("tenant_id", tenantId).eq("class_id", classId).gte("check_date", from).lte("check_date", to);
+  const [cls, sched, enr, chkFirst, trackingStart, autoKeys] = await Promise.all([
     admin.from("classes").select("subject").eq("tenant_id", tenantId).eq("id", classId).maybeSingle(),
     admin.from("class_schedules").select("day_of_week, valid_from, valid_to").eq("tenant_id", tenantId).eq("class_id", classId),
     admin.from("enrollments")
       .select("student_id, start_date, end_date, is_transferred, on_hold, attendance_days")
       .eq("tenant_id", tenantId).eq("class_id", classId).lte("start_date", to).or(`end_date.is.null,end_date.gte.${from}`),
-    admin.from("before_class_checks")
-      .select("student_id, check_date, missed, absent, card")
-      .eq("tenant_id", tenantId).eq("class_id", classId).gte("check_date", from).lte("check_date", to),
+    readChecks(CHECK_COLUMNS),
     loadTrackingStart(tenantId, classId),
+    loadAutoExcusedKeys(tenantId, [classId], from, to),
   ]);
+  const chk = isMissingColumn(chkFirst.error) ? await readChecks(CHECK_COLUMNS_V1) : chkFirst;
   if (cls.error) throw new Error(`classes: ${cls.error.message}`);
   if (sched.error) throw new Error(`class_schedules: ${sched.error.message}`);
   if (enr.error) throw new Error(`enrollments: ${enr.error.message}`);
@@ -116,12 +129,10 @@ export async function loadClassMonth(tenantId: string, classId: string, month: s
     .sort((a, b) => a.name.localeCompare(b.name, "ko"));
 
   const checks: Record<string, BeforeClassCheck> = {};
-  for (const c of chk.data ?? []) {
-    checks[checkKey(c.student_id as string, c.check_date as string)] = {
-      missed: normalizeMissed(c.missed as string[] | null),
-      absent: !!c.absent,
-      card: normalizeCard(c.card),
-    };
+  for (const c of (chk.data ?? []) as unknown as ({ student_id: string; check_date: string } & Parameters<typeof checkFromRow>[0])[]) {
+    checks[checkKey(c.student_id, c.check_date)] = checkFromRow(c);
   }
-  return { dates, students, checks, reportLevels, trackingStart };
+  const prefix = `${classId}|`;
+  const autoExcused = [...autoKeys].filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length));
+  return { dates, students, checks, reportLevels, trackingStart, autoExcused };
 }

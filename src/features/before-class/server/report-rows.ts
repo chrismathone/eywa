@@ -5,7 +5,8 @@ import { viewAsTeacher } from "@/lib/auth/view-as";
 import { reportCheckRows, type ReportCheckRow } from "../items";
 import { pickReportCheck, type DayCheckRow } from "../report-pick";
 import { attendsClassOn, type RosterEnrollment } from "../roster";
-import { isMissingTable } from "./queries";
+import { CHECK_COLUMNS, CHECK_COLUMNS_V1, isMissingColumn, isMissingTable } from "./queries";
+import { loadAutoExcusedKeys } from "./prev-absence";
 
 /**
  * 수업보고서 자동작성의 '수업 평가' 표에 붙일 비포클래스체크리스트 줄(원장 2026-10-30 *"해당 반의 비포클래스가 체크되어있으면
@@ -47,12 +48,14 @@ export async function loadBeforeClassReportRows(
     const targetIds = (targets.data ?? []).map((t) => t.class_id as string);
     if (!targetIds.includes(classId)) return [];
     // 짝 반(JJ)의 체크를 MS 보고서에 — 그 학생이 그날 명단에 있는 체크리스트 반 전부를 본다(report-pick.ts).
-    const [checks, enr] = await Promise.all([
-      admin.from("before_class_checks").select("class_id, student_id, missed, absent, card")
-        .eq("tenant_id", tenantId).in("class_id", targetIds).eq("check_date", date),
+    const readChecks = (cols: string) => admin.from("before_class_checks").select(`class_id, student_id, ${cols}`)
+      .eq("tenant_id", tenantId).in("class_id", targetIds).eq("check_date", date);
+    const [checksFirst, enr] = await Promise.all([
+      readChecks(CHECK_COLUMNS),
       admin.from("enrollments").select("class_id, start_date, end_date, is_transferred, attendance_days")
         .eq("tenant_id", tenantId).in("class_id", targetIds).eq("student_id", studentId),
     ]);
+    const checks = isMissingColumn(checksFirst.error) ? await readChecks(CHECK_COLUMNS_V1) : checksFirst;
     if (checks.error || enr.error) {
       console.error("[before-class] 보고서 줄 조회 실패 — 줄 없이 작성", checks.error ?? enr.error);
       return [];
@@ -61,7 +64,12 @@ export async function loadBeforeClassReportRows(
     const byClass = new Map<string, RosterEnrollment[]>();
     for (const e of enr.data ?? []) byClass.set(e.class_id as string, [...(byClass.get(e.class_id as string) ?? []), e as RosterEnrollment]);
     const rosterClassIds = new Set([...byClass].filter(([, list]) => attendsClassOn(list, date)).map(([id]) => id));
-    return reportCheckRows(pickReportCheck(checks.data as DayCheckRow[], rosterClassIds, studentId));
+    const check = pickReportCheck(checks.data as unknown as DayCheckRow[], rosterClassIds, studentId);
+    if (!check || check.absent || check.excused === false) return reportCheckRows(check);
+    // 지난 수업 결석이면 자동 제외 — 줄 없음(원장 2026-11-02 *"아무줄도 넣지마"*). 그날 명단에 선 체크리스트 반 중 어디서든 결석이었으면.
+    const auto = await loadAutoExcusedKeys(tenantId, [...rosterClassIds], date, date, studentId);
+    const autoExcused = [...rosterClassIds].some((id) => auto.has(`${id}|${studentId}|${date}`));
+    return reportCheckRows(autoExcused ? { ...check, autoExcused: true } : check);
   } catch (e) {
     console.error("[before-class] 보고서 줄 조회 실패 — 줄 없이 작성", e);
     return [];

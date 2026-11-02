@@ -12,6 +12,8 @@ export type ClassMonth = {
   reportLevels: Record<string, ReportDayLevels>;
   /** 이 반 체크 추적 시작일(첫 체크) — 없으면 null. */
   trackingStart: string | null;
+  /** '지난 수업 결석'이라 자동 제외인 칸(열쇠 = checkKey) — 저장하지 않은 판정(excuse.ts). */
+  autoExcused: string[];
 };
 
 /** 칸 열쇠 = 학생 id | 수업일. */

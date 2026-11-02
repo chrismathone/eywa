@@ -13,10 +13,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstToday, shiftMonth } from "@/lib/date-kst";
 import { classDatesInMonth } from "../dates";
-import { normalizeCard, normalizeMissed } from "../items";
+import { checkFromRow } from "../items";
 import { attendsClassOn } from "../roster";
 import { DONE_CHECK, isRecordedDay, type DayRecord } from "../stats";
-import { loadTrackingStart } from "./queries";
+import { CHECK_COLUMNS, CHECK_COLUMNS_V1, loadTrackingStart } from "./queries";
+import { loadAutoExcusedKeys } from "./prev-absence";
 
 const inputSchema = z.object({ classId: z.uuid(), studentId: z.uuid() });
 const MAX_MONTHS = 6;
@@ -43,25 +44,30 @@ export async function getBeforeClassStudentHistory(
     const floor = `${shiftMonth(today.slice(0, 7), -(MAX_MONTHS - 1))}-01`;
     const from = trackingStart > floor ? trackingStart : floor;
 
-    const [sched, enr, checks] = await Promise.all([
+    const readChecks = (cols: string) => fetchAllPaged((a, b) => admin.from("before_class_checks").select(`check_date, ${cols}`)
+      .eq("tenant_id", user.tenantId).eq("class_id", classId).eq("student_id", studentId)
+      .gte("check_date", from).lte("check_date", today).order("check_date").range(a, b));
+    const [sched, enr, checks, autoKeys] = await Promise.all([
       admin.from("class_schedules").select("day_of_week, valid_from, valid_to").eq("tenant_id", user.tenantId).eq("class_id", classId),
       admin.from("enrollments").select("start_date, end_date, is_transferred, attendance_days")
         .eq("tenant_id", user.tenantId).eq("class_id", classId).eq("student_id", studentId),
-      fetchAllPaged((a, b) => admin.from("before_class_checks").select("check_date, missed, absent, card")
-        .eq("tenant_id", user.tenantId).eq("class_id", classId).eq("student_id", studentId)
-        .gte("check_date", from).lte("check_date", today).order("check_date").range(a, b)),
+      // 제외 칸(s2_0016)이 아직 없으면 옛 칸으로 다시 읽는다([[#95]]).
+      // fetchAllPaged는 오류 코드를 글로만 넘긴다 — 옛 칸으로 한 번 더 읽고, 그것도 실패하면 그 오류를 던진다.
+      readChecks(CHECK_COLUMNS).catch(() => readChecks(CHECK_COLUMNS_V1)),
+      loadAutoExcusedKeys(user.tenantId, [classId], from, today, studentId),
     ]);
     if (sched.error) throw new Error(sched.error.message);
     if (enr.error) throw new Error(enr.error.message);
 
-    const byDate = new Map(checks.map((c) => [c.check_date as string, {
-      missed: normalizeMissed(c.missed as string[] | null), absent: !!c.absent, card: normalizeCard(c.card),
-    }]));
+    const byDate = new Map((checks as unknown as ({ check_date: string } & Parameters<typeof checkFromRow>[0])[])
+      .map((c) => [c.check_date, checkFromRow(c)]));
     const days: DayRecord[] = [];
     for (let month = from.slice(0, 7); month <= today.slice(0, 7); month = shiftMonth(month, 1)) {
       for (const date of classDatesInMonth(month, sched.data ?? [])) {
         if (date < from || !isRecordedDay(date, today, trackingStart) || !attendsClassOn(enr.data ?? [], date)) continue;
-        days.push({ date, check: byDate.get(date) ?? DONE_CHECK });
+        const check = byDate.get(date) ?? DONE_CHECK;
+        // '지난 수업 결석' 자동 제외는 저장하지 않은 판정이라 여기서 붙인다(화면과 같은 판정).
+        days.push({ date, check: autoKeys.has(`${classId}|${studentId}|${date}`) ? { ...check, autoExcused: true } : check });
       }
     }
     // since = 실제로 센 첫날(6개월 상한에 잘렸으면 그 날) — 화면의 "~부터의 기록".
