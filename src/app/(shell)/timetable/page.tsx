@@ -125,6 +125,8 @@ import { applyGradeFilter } from "@/features/timetable/lib/view-prefs";
 import { getTimetableEntryPreferences } from "@/features/timetable/server/view-prefs-queries";
 import { WeekNav } from "./_components/week-nav";
 import { ScheduledImportBadge } from "./_components/scheduled-import-badge";
+import { LabApplyBadge } from "./_components/lab-apply-badge";
+import { getPendingLabApplies } from "@/features/timetable-lab/server/apply-queries";
 import { SplitListBadge } from "./_components/split-list-badge";
 import { getScheduledImports } from "@/features/timetable/server/scheduled-import-queries";
 import { WeekdayGroupTables } from "./_components/weekday-group-tables";
@@ -484,6 +486,8 @@ export default async function TimetablePage({
   // 시간표 편집기(연습본) 바로가기 — 편집기는 아직 **영어 전용**이라 영어를 볼 때만, 편집기 화면·연습본 API와
   // **같은 판정**(`canUseTimetableEditor` = 시간표·반 관리)을 통과한 사람에게만 보인다(#77: 눌러도 튕기는 죽은 버튼 금지).
   const showEditorShortcut = subject === "english" && (await canUseTimetableEditor(user.systemRole));
+  // 실행을 기다리는 연습본 예약 — 시트 반영 배지 옆에 띄운다(원장 2026-11-02). 예약이 없으면 0행이다.
+  const labApplies = showEditorShortcut ? await getPendingLabApplies(user.tenantId) : [];
   // X 겹침(석 달 퇴원 — 수강종료 포함, 원장 2026-10-14) — 퇴원관리를 볼 수 있는 사람만(액션이 같은 판정으로 한 번 더 막는다).
   // 강사 화면(본인·'다른 강사 뷰')엔 없다 — 그 화면은 강사 범위인데 겹침은 과목 전체라서.
   const showExitOverlay = !teacherId && (await canAccessTenant(user.systemRole, "withdrawals"));
@@ -781,6 +785,9 @@ export default async function TimetablePage({
             sheetUrl={sheetUrl}
             canCancel={(canSync && canManageImport) || canMasterImport}
           />
+        ))}
+        {labApplies.map((job) => (
+          <LabApplyBadge key={job.id} id={job.id} at={job.at} today={today} canCancel={job.actorId === user.id} />
         ))}
         {/* 그 주의 '수업 나누기' — 누가 어느 시간에 어느 선생님 반으로 가는지 한 목록(× = 해제). 없으면 안 그린다. */}
         {activeSplits.length > 0 ? <SplitListBadge lines={activeSplits} canEnd={canSplit} /> : null}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { kstClock, nextApplyHour, normalizeApplyTime } from './apply-time';
+import { kstClock, labApplyLabel, nextApplyHour, normalizeApplyTime } from './apply-time';
 
 describe('연습본 적용 · KST 정시', () => {
   it('KST 자정·23시를 서버 타임존과 무관하게 UTC로 바꾼다', () => {
@@ -18,5 +18,12 @@ describe('연습본 적용 · KST 정시', () => {
     const now = new Date('2026-10-08T14:50:00Z');
     expect(nextApplyHour(now)).toEqual({ date: '2026-10-09', hour: 0 });
     expect(normalizeApplyTime('2026-10-08', 23, new Date('2026-10-08T14:00:00Z'))).toMatchObject({ hour: 23 });
+  });
+});
+
+describe('연습본 예약 배지 문구', () => {
+  it('UTC로 저장된 예약 시각을 KST로 읽는다', () => {
+    expect(labApplyLabel('2026-11-02T07:00:00+00:00', '2026-11-02')).toBe('11/2 16시 연습본 적용 예정');
+    expect(labApplyLabel('2026-11-02T15:00:00+00:00', '2026-11-02')).toBe('11/3 0시 연습본 적용 예정');
   });
 });

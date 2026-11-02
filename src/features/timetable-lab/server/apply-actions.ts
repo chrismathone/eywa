@@ -151,7 +151,8 @@ export async function getTimetableLabApplyRevision(): Promise<string | null | un
     const user = await getCurrentUser();
     if (!user) return undefined;
     const sql = openMasterDb();
-    try { return (await sql<{ id: string }[]>`select id from timetable_lab_apply_jobs where tenant_id=${user.tenantId} and status='applied' order by finished_at desc,id desc limit 1`)[0]?.id ?? null; }
+    // 예약·취소·실패도 시간표 배지를 바꾸므로 적용 완료만 보지 않는다.
+    try { const [row] = await sql<{ id: string; status: string }[]>`select id,status from timetable_lab_apply_jobs where tenant_id=${user.tenantId} order by greatest(created_at,finished_at) desc,id desc limit 1`; return row ? `${row.id}:${row.status}` : null; }
     finally { await sql.end({ timeout: 5 }); }
   } catch { return undefined; }
 }

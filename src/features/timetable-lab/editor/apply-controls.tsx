@@ -8,7 +8,8 @@ const statusLabel = { pending: '적용 예약', applied: '적용 완료', failed
 const kstLabel = (at: string) => new Date(at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: 'numeric', hour12: false });
 export function ApplyControls({ store, saved }: { store: DraftStore; saved: (draft: Draft, name: string) => void }) {
   const { draft } = useSyncExternalStore(store.subscribe, store.getSnapshot);
-  const [open, setOpen] = useState(false), [history, setHistory] = useState(false), [jobs, setJobs] = useState<ApplyJobSummary[]>([]), [error, setError] = useState('');
+  // 시간표 배지에서 들어오면 적용 내역부터 보여 준다.
+  const [open, setOpen] = useState(false), [history, setHistory] = useState(() => new URLSearchParams(window.location.search).has('history')), [jobs, setJobs] = useState<ApplyJobSummary[]>([]), [error, setError] = useState('');
   const seen = useRef(new Set<string>());
   const load = useCallback(async () => {
     const response = await listTimetableLabApplyJobs();
