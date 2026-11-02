@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { Pill } from "@/components/atoms/pill";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import type { HomeroomTeacher } from "@/features/consultations/homeroom-model";
-import { averageRate } from "@/features/consultations/homeroom-sort";
 import { pct } from "@/features/consultations/stats-model";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
@@ -37,7 +36,7 @@ export function SortHead({ label, active, dir, onClick }: { label: ReactNode; ac
  * 담임 한 줄 — 달별 '담임이 상담한 학생 / 대상' + 이번 달 미상담 수 · 담임 아닌 직원이 상담한 수 · **미상담 학생 이름**
  * (원장 2026-10-27 *"나머지는 학생 이름이나 이런 것들 해서 보이는 방향"* — 펼치지 않아도 누구를 챙길지 줄에서 바로 읽힌다).
  */
-export function HomeroomTeacherRow({ t, showAvg, open, onToggle }: { t: HomeroomTeacher; showAvg: boolean; open: boolean; onToggle: () => void }) {
+export function HomeroomTeacherRow({ t, open, onToggle }: { t: HomeroomTeacher; open: boolean; onToggle: () => void }) {
   const subjects = useSubjectMaps();
   const last = t.months.length - 1;
   const now = t.months[last]!;
@@ -70,7 +69,6 @@ export function HomeroomTeacherRow({ t, showAvg, open, onToggle }: { t: Homeroom
           <span className="num text-muted-foreground ml-1 text-xs">{rateText(pct(m.self, m.target))}</span>
         </td>
       ))}
-      {showAvg ? <td className="num text-foreground px-2 py-1.5 text-center font-medium">{rateText(averageRate(t))}</td> : null}
       <td className="px-2 py-1.5 text-center">
         <span className={`num font-bold ${now.none > 0 ? "text-danger" : "text-muted-foreground"}`}>{fmt(now.none)}명</span>
       </td>

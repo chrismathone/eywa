@@ -174,6 +174,7 @@ export async function ConsultationStatsPanel({
         teacherScoped={teacherScoped}
         initialSort={prefs.hrSort}
         initialFilter={prefs.hrFilter}
+        initialView={prefs.hrView}
         linkedWho={listParams.who}
         linkedSubject={listParams.subject}
       />

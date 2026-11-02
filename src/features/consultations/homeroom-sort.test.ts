@@ -27,8 +27,8 @@ describe("sortHomeroomTeachers", () => {
     expect(names("m0", "asc")).toEqual(["가", "다", "나"]);
     expect(names("m0", "desc")).toEqual(["다", "가", "나"]);
   });
-  it("평균·미상담", () => {
-    expect(names("avg", "asc")).toEqual(["다", "가", "나"]); // 2/6 < 3/6 = 1/2(같으면 이름)
+  it("미상담 · 옛 평균 정렬은 버린다", () => {
+    expect(parseHomeroomSortKey("avg")).toBeNull();
     expect(names("unmet", "desc")).toEqual(["가", "다", "나"]);
   });
 });
