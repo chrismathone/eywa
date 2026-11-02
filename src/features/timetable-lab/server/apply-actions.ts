@@ -13,6 +13,7 @@ import { rebaseDraft } from '../apply-rebase';
 import { readApplyContext, contextFingerprint, fingerprint } from './apply-context';
 import { policyHash, runApplyJob, validateOperatingLinks, lockLabApply, appliedViewPatch } from './apply-store';
 import { timeLabel } from '../editor/model';
+import type { AttendanceMove } from '@/features/timetable/import/master/attendance-types';
 import type { Draft } from '../editor/model';
 
 export type ApplyReview = { hash: string; at: string; date: string; hour: number; summary: ReturnType<typeof buildApplyPlan>['summary']; changes: string[]; warnings: string[]; skipped: string[]; notices: string[] };
@@ -72,16 +73,18 @@ async function prepare(input: Request) {
     ];
     const review: ApplyReview = { hash, at: time.at, date: time.date, hour: time.hour, summary: plan.summary, changes, warnings: [...new Set(plan.warnings)], skipped: latest.skipped, notices: latest.notices };
     if (!changes.length) throw new Error(latest.skipped.length ? `적용할 변경 사항이 없습니다. ${latest.skipped.join(' ')}` : '적용할 변경 사항이 없습니다. 연습본을 수정한 뒤 검사해 주세요.');
-    return { user, actorRole: actor.role, draft: saved, time, plan, version, policy, review };
+    return { user, actorRole: actor.role, draft: saved, time, plan, context: latest.context, version, policy, review };
   } finally { await sql.end({ timeout: 5 }); }
 }
 
 export async function previewTimetableLabApply(input: Request): Promise<{ review: ApplyReview } | { error: string }> {
   try {
     const prepared = await prepare(input), sql = openMasterDb();
-    try { await sql.begin(async tx => { await lockLabApply(tx); await validateOperatingLinks(tx, prepared.user.tenantId, prepared.time.date, prepared.plan); }); }
+    let moves: AttendanceMove[] = [];
+    try { await sql.begin(async tx => { await lockLabApply(tx); moves = (await validateOperatingLinks(tx, prepared.user.tenantId, prepared.time.date, prepared.plan, prepared.context)).moves; }); }
     finally { await sql.end({ timeout: 5 }); }
-    return { review: prepared.review };
+    const lines = moves.map(move => `출결 이동 · ${move.studentName} · ${move.date} ${move.fromClassName} ${move.fromTime ?? ''} → ${move.toClassName} ${move.toTime ?? ''}`);
+    return { review: { ...prepared.review, changes: [...prepared.review.changes, ...lines], notices: moves.length ? [...prepared.review.notices, `이미 입력된 출결 ${moves.length}칸을 새 교시로 옮깁니다. 상태·메모·입력자는 그대로입니다.`] : prepared.review.notices } };
   } catch (error) { return { error: friendly(error) }; }
 }
 
@@ -97,7 +100,7 @@ export async function queueTimetableLabApply(input: Request & { expectedHash: st
         await tx`select pg_advisory_xact_lock(hashtextextended(${`${prepared.user.tenantId}:english-master`},0))`;
         const context = await readApplyContext(tx, prepared.user.tenantId);
         if (contextFingerprint(context) !== prepared.version || policyHash(context.settings, prepared.actorRole) !== prepared.policy) throw new Error('검사 이후 자료 또는 권한이 변경되었습니다. 다시 검사해 주세요.');
-        await validateOperatingLinks(tx, prepared.user.tenantId, prepared.time.date, prepared.plan);
+        await validateOperatingLinks(tx, prepared.user.tenantId, prepared.time.date, prepared.plan, prepared.context);
         const [row] = await tx<{ id: string; at: string; status: ApplyJobSummary['status']; error: string | null }[]>`insert into timetable_lab_apply_jobs(tenant_id,actor_id,actor_role,policy_hash,request_hash,baseline_hash,apply_at,effective_date,payload,summary) values(${prepared.user.tenantId},${prepared.user.id},${prepared.actorRole},${prepared.policy},${prepared.review.hash},${prepared.version},${prepared.time.at}::timestamptz,${prepared.time.date}::date,${tx.json(prepared.draft as never)}::jsonb,${tx.json(prepared.review.summary)}::jsonb) on conflict(tenant_id,actor_id,request_hash,apply_at) where status='pending' do update set request_hash=excluded.request_hash returning id,apply_at::text as at,status,error`;
         return row!;
       });
