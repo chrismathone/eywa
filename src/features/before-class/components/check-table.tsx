@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
-  BEFORE_CLASS_CARDS, BEFORE_CLASS_ITEMS, EXCUSE_NOTE_MAX, EXCUSE_REASONS, autoCard, cardLabel, completionRate, effectiveCard, excuseReasonOf,
+  BEFORE_CLASS_CARDS, BEFORE_CLASS_ITEMS, EXCUSE_NOTE_MAX, EXCUSE_REASONS, autoCard, completionRate, effectiveCard, excuseReasonOf,
   excuseText, isExcused, needsSupplement, normalizeMissed, percentLabel,
   type BeforeClassCard, type BeforeClassCheck, type ExcuseReason,
 } from "../items";
@@ -12,11 +12,12 @@ import { CardBadge, VerdictBadge } from "./badges";
 
 const EMPTY: BeforeClassCheck = { missed: [], absent: false, card: null };
 const CARD_CHOICES = BEFORE_CLASS_CARDS.map((c) => ({ value: c.key, label: c.label }));
-/** 첫 칸 = 자동(완료율 카드, 원장 2026-11-02) — 고르지 않으면 완료율이 바뀔 때마다 따라간다. 결석이면 자동 카드 없음. */
-const cardOptions = (check: BeforeClassCheck) => {
-  const auto = autoCard(check);
-  return [{ value: "", label: auto ? `자동 · ${cardLabel(auto)}` : "선택 안 함" }, ...CARD_CHOICES];
-};
+/**
+ * 카드 칸 = 지금 카드 그대로(완료율 자동 카드 · "자동" 문구 없음, 원장 2026-11-02 *"체크될때마다 그냥 온체인지로 바뀌는건데 자동이라는 멘트는 없애"*).
+ * 자동 카드와 같은 카드를 고르면 저장하지 않는다(null) — 계속 완료율을 따라간다. 다른 카드를 고르면 그 카드가 이긴다.
+ * 자동 카드가 없을 때(결석)만 "선택 안 함"을 둔다.
+ */
+const cardOptions = (check: BeforeClassCheck) => (autoCard(check) ? CARD_CHOICES : [{ value: "", label: "선택 안 함" }, ...CARD_CHOICES]);
 
 /**
  * 하루 체크 표 — 학생 줄 × 미흡 10항목(체크 = 미흡, 시트 그대로) + 결석 + 카드 + 완료율·판정.
@@ -136,8 +137,8 @@ export function CheckTable({
                   {canEdit && !excused ? (
                     <SearchableSelect
                       options={cardOptions(check)}
-                      value={check.card ?? ""}
-                      onValueChange={(v) => onChange(s.id, { ...check, card: (v || null) as BeforeClassCard | null })}
+                      value={check.card ?? autoCard(check) ?? ""}
+                      onValueChange={(v) => onChange(s.id, { ...check, card: (!v || v === autoCard(check) ? null : v) as BeforeClassCard | null })}
                       ariaLabel={`${s.name} 카드`}
                       compact
                       portal
