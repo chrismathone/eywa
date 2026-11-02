@@ -29,7 +29,7 @@ export async function saveConsultationStatsPrefs(p: {
     const f = parseHomeroomFilter(p.hrFilter); // 클라가 준 값을 그대로 믿지 않는다 — 같은 파서로 다시 거른다.
     patch.hr_filter = isDefaultHomeroomFilter(f) ? undefined : f;
   }
-  if (p.hrView === "table" || p.hrView === "gauge") patch.hr_view = p.hrView === "gauge" ? "gauge" : undefined;
+  if (p.hrView === "table" || p.hrView === "gauge") patch.hr_view = p.hrView === "table" ? "table" : undefined;
   if (Object.keys(patch).length === 0) return { ok: false, error: "잘못된 값입니다" };
   return patchMyUiPrefs("consultations", patch);
 }
