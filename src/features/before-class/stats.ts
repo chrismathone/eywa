@@ -6,7 +6,7 @@
  *    세지만, 시작 **전** 수업일은 세지 않는다 — 기능을 연 날(10/28) 이전 수업일이 전부 100%로 부풀던 것을 막는다.
  */
 import {
-  BEFORE_CLASS_CARDS, BEFORE_CLASS_ITEMS, completionRate, needsSupplement, normalizeMissed,
+  BEFORE_CLASS_CARDS, BEFORE_CLASS_ITEMS, completionRate, effectiveCard, needsSupplement, normalizeMissed,
   type BeforeClassCard, type BeforeClassCheck, type BeforeClassItemKey,
 } from "./items";
 
@@ -21,7 +21,7 @@ export type PeriodStat = {
   /** 결석 뺀 평균 완료율(0~1) — 출석한 수업이 없으면 null. */
   average: number | null;
   itemCounts: Record<BeforeClassItemKey, number>;
-  /** 받은 카드 수(카드 X 포함) — 결석 날 카드도 센다(카드는 출결과 따로 준다). */
+  /** 받은 카드 수(카드 X 포함 · 안 고른 날은 자동 카드) — 결석 날은 고른 카드만 센다(카드는 출결과 따로 준다). */
   cardCounts: Record<BeforeClassCard, number>;
 };
 
@@ -73,7 +73,10 @@ export function totalStat(days: readonly DayRecord[], key = "all", label = "전�
   const rates = days.map((d) => completionRate(d.check)).filter((r): r is number => r !== null);
   const itemCounts = emptyItems();
   const cardCounts = Object.fromEntries(BEFORE_CLASS_CARDS.map((c) => [c.key, 0])) as Record<BeforeClassCard, number>;
-  for (const d of days) if (d.check.card) cardCounts[d.check.card] += 1;
+  for (const d of days) {
+    const card = effectiveCard(d.check);
+    if (card) cardCounts[card] += 1;
+  }
   for (const d of days) {
     if (d.check.absent) continue;
     for (const k of normalizeMissed(d.check.missed)) itemCounts[k] += 1;

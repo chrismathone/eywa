@@ -2,7 +2,7 @@
 
 import { shortDateLabel } from "../dates";
 import {
-  BEFORE_CLASS_ITEMS, completionRate, needsSupplement, percentLabel, summarizeStudent, type BeforeClassCheck,
+  BEFORE_CLASS_ITEMS, completionRate, effectiveCard, needsSupplement, percentLabel, summarizeStudent, type BeforeClassCheck,
 } from "../items";
 import { checkKey, type RosterStudent } from "../types";
 import { DONE_CHECK, isRecordedDay } from "../stats";
@@ -82,7 +82,7 @@ function MonthCell({ active, check }: { active: boolean; check: BeforeClassCheck
   return (
     <td className={`px-1 py-1 text-center ${tone}`}>
       <div className="font-semibold tabular-nums">{check.absent ? "결석" : percentLabel(completionRate(check))}</div>
-      {check.card ? <div className="mt-0.5"><CardBadge card={check.card} /></div> : null}
+      {effectiveCard(check) ? <div className="mt-0.5"><CardBadge card={effectiveCard(check)} /></div> : null}
     </td>
   );
 }

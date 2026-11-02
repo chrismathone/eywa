@@ -3,14 +3,19 @@
 import type { ReactNode } from "react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
-  BEFORE_CLASS_CARDS, BEFORE_CLASS_ITEMS, completionRate, needsSupplement, normalizeMissed, percentLabel,
+  BEFORE_CLASS_CARDS, BEFORE_CLASS_ITEMS, autoCard, cardLabel, completionRate, effectiveCard, needsSupplement, normalizeMissed, percentLabel,
   type BeforeClassCard, type BeforeClassCheck,
 } from "../items";
 import type { RosterStudent } from "../types";
 import { CardBadge, VerdictBadge } from "./badges";
 
 const EMPTY: BeforeClassCheck = { missed: [], absent: false, card: null };
-const CARD_OPTIONS = [{ value: "", label: "선택 안 함" }, ...BEFORE_CLASS_CARDS.map((c) => ({ value: c.key, label: c.label }))];
+const CARD_CHOICES = BEFORE_CLASS_CARDS.map((c) => ({ value: c.key, label: c.label }));
+/** 첫 칸 = 자동(완료율 카드, 원장 2026-11-02) — 고르지 않으면 완료율이 바뀔 때마다 따라간다. 결석이면 자동 카드 없음. */
+const cardOptions = (check: BeforeClassCheck) => {
+  const auto = autoCard(check);
+  return [{ value: "", label: auto ? `자동 · ${cardLabel(auto)}` : "선택 안 함" }, ...CARD_CHOICES];
+};
 
 /**
  * 하루 체크 표 — 학생 줄 × 미흡 10항목(체크 = 미흡, 시트 그대로) + 결석 + 카드 + 완료율·판정.
@@ -102,7 +107,7 @@ export function CheckTable({
                 <td className="px-2 py-1 text-center">
                   {canEdit ? (
                     <SearchableSelect
-                      options={CARD_OPTIONS}
+                      options={cardOptions(check)}
                       value={check.card ?? ""}
                       onValueChange={(v) => onChange(s.id, { ...check, card: (v || null) as BeforeClassCard | null })}
                       ariaLabel={`${s.name} 카드`}
@@ -112,7 +117,7 @@ export function CheckTable({
                       triggerClassName="border-line bg-card h-(--control-h) rounded-lg border px-2 text-sm"
                     />
                   ) : (
-                    <CardBadge card={check.card} />
+                    <CardBadge card={effectiveCard(check)} />
                   )}
                 </td>
                 <td className="px-1 py-1.5 text-center tabular-nums">{check.absent ? "결석" : percentLabel(completionRate(check))}</td>

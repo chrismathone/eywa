@@ -61,6 +61,31 @@ export function completionRate(check: BeforeClassCheck): number | null {
   return (BEFORE_CLASS_ITEMS.length - missed) / BEFORE_CLASS_ITEMS.length;
 }
 
+/**
+ * 완료율로 정하는 자동 카드(원장 2026-11-02 *"완료률 25 퍼센트 단위로 100퍼부터 골드 블루 옐로우 레드 카드 자동배정"*).
+ * 100% 위에서부터 25%씩 — 75% 이상 골드 · 50% 이상 블루 · 25% 이상 옐로우 · 그 아래 레드(경계는 위 칸에 넣는다).
+ * 결석이면 null(카드는 사람이 따로 고른다).
+ */
+export const AUTO_CARD_BANDS = [
+  { min: 0.75, card: "gold" },
+  { min: 0.5, card: "blue" },
+  { min: 0.25, card: "yellow" },
+  { min: 0, card: "red" },
+] as const satisfies readonly { min: number; card: BeforeClassCard }[];
+
+export function autoCard(check: BeforeClassCheck): BeforeClassCard | null {
+  const rate = completionRate(check);
+  if (rate === null) return null;
+  // 10항목 비율(0.1 단위)의 부동소수 오차로 경계가 아래 칸으로 떨어지지 않게 백분율 정수로 비교한다.
+  const pct = Math.round(rate * 100);
+  return AUTO_CARD_BANDS.find((b) => pct >= Math.round(b.min * 100))?.card ?? "red";
+}
+
+/** 화면·통계가 보여 주는 카드 — 사람이 고른 카드(저장값)가 이기고, 안 골랐으면 자동 카드. */
+export function effectiveCard(check: BeforeClassCheck): BeforeClassCard | null {
+  return check.card ?? autoCard(check);
+}
+
 export function needsSupplement(check: BeforeClassCheck): boolean {
   return !check.absent && normalizeMissed(check.missed).length >= SUPPLEMENT_THRESHOLD;
 }
