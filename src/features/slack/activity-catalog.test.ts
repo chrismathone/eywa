@@ -62,6 +62,8 @@ describe("슬랙 활동 분류", () => {
   it("시간표 연습본 저장은 개인 사본이라 고를 수 없다 — 같은 분류의 가져오기 반영은 그대로 고를 수 있다", () => {
     expect(activityCategoryOf("timetable_lab_draft_save")).toBe("classes");
     expect(activityGradeOf("timetable_lab_draft_save")).toBe("forbid");
+    expect(activityGradeOf("timetable_lab_draft_overwrite")).toBe("forbid");
+    expect(activityGradeOf("timetable_lab_draft_delete")).toBe("forbid");
     expect(activityGradeOf("timetable_import_apply")).toBe("safe");
   });
 

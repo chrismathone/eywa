@@ -607,6 +607,8 @@ describe("auditDetail — 시간표 연습본 저장(개인 사본)", () => {
     const meta = { draftId: SID, lessonCount: 12, classCount: 5, studentCount: 31, referenceDate: "2026-09-28" };
     expect(auditDetail("timetable_lab_draft_save", meta, ctx())).toBe("개인 연습본 · 반 5개 · 수업 12개 · 학생 31명");
     expect(auditDetail("timetable_lab_draft_save", {}, ctx())).toBe("개인 연습본");
+    expect(auditDetail("timetable_lab_draft_overwrite", meta, ctx())).toBe("개인 연습본 · 반 5개 · 수업 12개 · 학생 31명");
+    expect(auditDetail("timetable_lab_draft_delete", meta, ctx())).toBe("개인 연습본 · 반 5개 · 수업 12개 · 학생 31명");
     expect(AUDIT_TYPE_LABEL.timetable_lab_draft).toBe("시간표 연습본");
   });
 });

@@ -7,6 +7,7 @@
 - `GET /api/timetable/lab/drafts?offset=0&limit=20`: `{ items: DraftSummary[], nextOffset: number | null }`. 최대 50개와 다음 페이지 확인용 1행만 읽고, 목록 조회에는 시간표 JSON을 포함하지 않는다. 정렬은 작성 시각·ID 내림차순이다.
 - `POST /api/timetable/lab/drafts`: `{ version: 1, name, snapshot }` → `201 { item: DraftSummary }`. 같은 이름도 별도 ID와 작성 시각으로 저장한다.
 - `GET /api/timetable/lab/drafts/[id]`: `{ version: 1, item: DraftSummary, snapshot }`. 다른 사람·다른 지점·없는 ID는 모두 404다.
+- `PUT /api/timetable/lab/drafts/[id]`(본문은 POST와 같다) · `DELETE /api/timetable/lab/drafts/[id]`: 덮어쓰기·삭제(2026-11-02 추가). 저장한 사람과 영어 과목 관리자 이상만 가능하고(과목 범위는 퇴원보고서 열람과 같은 기준) 그 밖에는 403이다. DB 권한은 그대로(일반 계정은 읽기·추가만)이고, 라우트가 확인한 뒤 관리 클라이언트로 쓴다. 덮어쓰면 저장자·저장 시각이 마지막 저장으로 바뀌고 이전 값은 감사로그(`timetable_lab_draft_overwrite`·`timetable_lab_draft_delete`)에 남는다.
 - `DraftSummary`: `id, name, subject: 'english', createdAt, lessonCount, classCount, studentCount, referenceDate`.
 - 비로그인은 401, 시간표 또는 반 전체 관리 권한이 없으면 403, 잘못된 구조는 400, 2MiB를 넘는 요청은 413이다. 오류 응답은 `{ error: string }`이다. 모든 응답은 `private, no-store`다.
 

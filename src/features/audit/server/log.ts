@@ -359,6 +359,9 @@ export const AUDIT_ACTIONS = {
   // 시간표 연습실 — 작성자만 보는 개인 사본(timetable_lab_drafts)이라 운영 시간표는 안 바뀐다.
   // 라벨에 "연습본"을 반드시 남길 것(위 '계획'과 같은 이유) · 슬랙으로는 안 나간다(activity-catalog forbid).
   timetable_lab_draft_save: "시간표 연습본 저장",
+  // 덮어쓰기·삭제는 되돌릴 수 없어 이전 저장자·규모를 metadata에 남긴다(시간표 내용은 싣지 않는다).
+  timetable_lab_draft_overwrite: "시간표 연습본 덮어쓰기",
+  timetable_lab_draft_delete: "시간표 연습본 삭제",
   // 연습본을 운영에 나중에 적용하도록 예약 · 그 예약 취소(즉시 적용은 timetable_structure_apply로 남는다).
   timetable_lab_apply_schedule: "시간표 연습본 적용 예약",
   timetable_lab_apply_cancel: "시간표 연습본 적용 예약 취소",

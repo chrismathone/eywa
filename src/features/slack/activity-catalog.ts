@@ -151,6 +151,8 @@ const FORBID_KEYS = new Set([
   "data_export_download",
   // 연습본은 작성자 본인만 읽는 개인 사본이다 — 이름을 채널로 흘리지 않는다(운영 시간표 변경으로 읽힐 수도 있다).
   "timetable_lab_draft_save",
+  "timetable_lab_draft_overwrite",
+  "timetable_lab_draft_delete",
   // 메모 시트는 자동 저장이라(고칠 때마다) 채널로 내보내면 줄이 쏟아진다 — 고를 수 없게 둔다.
   "timetable_memo_sheet_save",
   // 칸 메모도 자동 저장이다(입력하는 대로) — 같은 이유로 고를 수 없게 둔다.

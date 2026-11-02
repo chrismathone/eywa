@@ -34,7 +34,7 @@ export function App({ store, onDirtyChange, loginHref = '/login', applyControls,
   const scale = draft.appearance?.scale ?? 1, zoom = scale * fontScale;
   const [search, setSearch] = useState('');
   const [library, showLibrary] = useState(false), [comparison, setComparison] = useState<[ComparedDraft, ComparedDraft] | null>(null);
-  const [savedDraft, setSavedDraft] = useState(draft), [savedName, setSavedName] = useState('');
+  const [savedDraft, setSavedDraft] = useState(draft), [savedName, setSavedName] = useState(''), [savedId, setSavedId] = useState<string | null>(null);
   const markSaved = useCallback((draft: Draft, name: string) => { setSavedDraft(draft); setSavedName(name); }, []);
   const [adding, setAdding] = useState<AddSeed | null>(null), [managing, setManaging] = useState<ManageTab | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null), [focus, setFocus] = useState<string | null>(null);
@@ -81,7 +81,7 @@ export function App({ store, onDirtyChange, loginHref = '/login', applyControls,
     window.addEventListener('keydown', undo); return () => window.removeEventListener('keydown', undo);
   }, [store]);
   function loaded(next: Draft) {
-    store.commit('기존 시간표 불러오기', next); select([]); setFocus(null);
+    store.commit('기존 시간표 불러오기', next); setSavedId(null); select([]); setFocus(null);
     showLoad(false); announce('기존 시간표를 연습안으로 복사했습니다. 원본과 별개로 자유롭게 옮겨 보세요.');
   }
   /** 되돌릴 수 있는 변경의 목록 — 고른 지점까지 한꺼번에 되돌린다. */
@@ -141,8 +141,9 @@ export function App({ store, onDirtyChange, loginHref = '/login', applyControls,
       <span>{selected.length > 0 ? `${selected.length}개 선택 · ` : ''}빈 칸을 끌어 새 수업 · Shift+끌기 여러 개 고르기 · 끝을 끌어 길이 · Alt+끌기 복제 · 우클릭 메뉴 · Ctrl+C / X / V · Ctrl+Z</span>
       <b>{dirty ? '저장하지 않은 변경 있음' : savedName ? `저장됨 · ${savedName}` : '이름을 붙여 연습본을 저장하세요'}</b></footer>
     {loading && <SourceDialog close={() => showLoad(false)} apply={loaded} loginHref={loginHref} />}
-    {library && <DraftLibrary store={store} close={() => showLibrary(false)} saved={(name, value) => { setSavedDraft(value); setSavedName(name); announce(`“${name}”을 저장했습니다.`); }}
-        loaded={(name, value) => { store.commit('저장한 연습본 불러오기', value); setSavedDraft(store.getSnapshot().draft); setSavedName(name); select([]); setFocus(null); setPanel(null); showLibrary(false); announce(`“${name}”을 불러왔습니다. 이어서 편집하고 새 연습본으로 저장할 수 있습니다.`); }}
+    {library && <DraftLibrary store={store} close={() => showLibrary(false)} currentId={savedId} saved={(name, value, id) => { setSavedDraft(value); setSavedName(name); setSavedId(id); announce(`“${name}”을 저장했습니다.`); }}
+        removed={id => { if (id === savedId) { setSavedId(null); setSavedName(''); } }}
+        loaded={(name, value, id) => { store.commit('저장한 연습본 불러오기', value); setSavedDraft(store.getSnapshot().draft); setSavedName(name); setSavedId(id); select([]); setFocus(null); setPanel(null); showLibrary(false); announce(`“${name}”을 불러왔습니다. 이어서 편집한 뒤 덮어쓰거나 새 연습본으로 저장할 수 있습니다.`); }}
         compare={(a, b) => { setComparison([a, b]); showLibrary(false); }} />}
     {comparison && <ComparisonView left={comparison[0]} right={comparison[1]} close={() => setComparison(null)} />}
     {managing && <ManageDialog store={store} initial={managing} actions={actions} close={() => setManaging(null)} />}
