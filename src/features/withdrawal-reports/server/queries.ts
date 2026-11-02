@@ -22,6 +22,7 @@ import type { SubjectHistoryRow } from "../course-period";
 import { reportCourses, withUnassignedCourses } from "../target-courses";
 import { isReportOptout } from "@/features/classes/report-optout";
 import { narrowApprovalSubjects } from "../request-options";
+import { loadOpenReportScopes, withOpenReports, type OpenReportScope } from "./open-reports";
 
 // 실험실 판정은 운영 콘솔 배정을 따른다(`isLaboratoryMenuAvailable`) — 예전엔 실험실 사용 여부를 배정과 무관하게 물어서,
 // 원장이 퇴원보고서를 일반 메뉴로 돌려도(2026-10-23) 실험실을 안 켠 지점에선 계속 닫혀 있었다.
@@ -113,17 +114,19 @@ export async function getReport(id: string) {
   const db = createAdminClient();
   const { data, error } = await db.from("withdrawal_reports").select(REPORT_COLUMNS).eq("tenant_id", viewer.user.tenantId).eq("id", id).maybeSingle();
   if (error || !data || !canReadReport(data as WithdrawalReport, viewer)) return null;
+  // 대조 과목 = 묶음의 과목(DB 처리 함수와 같다) — 못 읽으면 이 보고서의 과목.
+  let groupSubjects: string[] | null = null;
   if (data.group_id && data.enrollment_ids) {
-    const { data: group, error: groupError } = await db.from("withdrawal_report_groups").select("enrollment_ids,teacher_ids").eq("tenant_id", viewer.user.tenantId).eq("id", data.group_id).maybeSingle();
+    const { data: group, error: groupError } = await db.from("withdrawal_report_groups").select("enrollment_ids,teacher_ids,subjects").eq("tenant_id", viewer.user.tenantId).eq("id", data.group_id).maybeSingle();
     if (groupError) console.error("[withdrawal-report-group]", groupError.message);
-    else if (group) data.enrollment_ids = withUnassignedCourses(data as WithdrawalReport, group);
+    else if (group) { data.enrollment_ids = withUnassignedCourses(data as WithdrawalReport, group); groupSubjects = group.subjects; }
   }
   const [{ data: events, error: eventError }, current] = await Promise.all([
     db.from("withdrawal_report_events").select("id,actor_id,action,from_status,to_status,comment,created_at").eq("tenant_id", viewer.user.tenantId).eq("report_id", id).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(300),
     ["completed", "canceled"].includes(data.status) ? Promise.resolve(null) : currentSnapshot(viewer.user.tenantId, data.student_id),
   ]);
   if (eventError) throw new Error("보고서 처리 이력을 불러오지 못했습니다.");
-  const assignmentChanged = !["completed", "canceled"].includes(data.status) && (!current || !snapshotMatches(data.snapshot as StudentSnapshot, current));
+  const assignmentChanged = !["completed", "canceled"].includes(data.status) && (!current || !snapshotMatches(data.snapshot as StudentSnapshot, current, data.exit_kind === "withdrawal" ? undefined : groupSubjects ?? data.subjects));
   // 작성 중엔 출결·수납을 최신으로 채운다. 제출한 보고서도 **수납은 지금 장부**로 보인다(원장 2026-10-29 "같은 곳을 가르켜야") —
   // 수납 탭과 다른 숫자를 결재하지 않게. 제출 때와 달라졌으면 그 값을 덧붙인다(liveBillingForSubmitted). 장부를 못 읽으면 저장된 값 그대로.
   // 완료·취소된 보고서는 끝난 기록이라 저장된 값 그대로다(퇴원 뒤 환불로 장부가 바뀌어도 그때 문서를 바꾸지 않는다).
@@ -208,6 +211,8 @@ export async function requestStudents() {
   if (!viewer?.request) return [] as StudentOption[];
   const db = createAdminClient();
   const result: StudentOption[] = [];
+  // 진행 중인 보고서를 못 읽어도 창은 연다 — 같은 과목 요청은 DB가 거절한다.
+  const openReports = loadOpenReportScopes(viewer.user.tenantId).catch((e: unknown) => { console.error("[withdrawal-open-reports]", e); return new Map<string, OpenReportScope>(); });
   for (let offset = 0; ; offset += 400) {
     const { data, error } = await db.from("students")
       .select(`id,name,school,grade,enrollments(${COURSE_COLUMNS})`)
@@ -215,9 +220,12 @@ export async function requestStudents() {
       .eq("enrollments.tenant_id", viewer.user.tenantId).eq("enrollments.classes.tenant_id", viewer.user.tenantId).eq("enrollments.classes.teacher.tenant_id", viewer.user.tenantId)
       .order("id").range(offset, offset + 399);
     if (error) throw new Error("학생의 수강 정보를 불러오지 못했습니다.");
+    const open = await openReports;
     for (const student of data ?? []) {
       const courses = currentCourses((student.enrollments as unknown as JoinedCourse[]).filter(e => e.classes?.is_active && !e.classes.closed_at));
-      if (viewer.scope ? courses.some(c => viewer.scope!.includes(c.subject)) : true) result.push({ id: student.id, name: student.name, school: student.school, grade: student.grade, courses });
+      if (!(viewer.scope ? courses.some(c => viewer.scope!.includes(c.subject)) : true)) continue;
+      const option = withOpenReports({ id: student.id, name: student.name, school: student.school, grade: student.grade, courses }, open.get(student.id));
+      if (option && (!viewer.scope || option.courses.some(c => viewer.scope!.includes(c.subject)))) result.push(option);
     }
     if (!data || data.length < 400) break;
   }

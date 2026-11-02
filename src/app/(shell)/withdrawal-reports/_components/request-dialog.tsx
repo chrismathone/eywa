@@ -62,7 +62,9 @@ export function RequestDialog({ staff, students, labels, scope, initialStudentId
   const skipManagers = selfManagedSubjects(staff, courses, teacherIds).length > 0;
   const needsDirector = requestApprovers(staff, courses, subjects, teacherIds, directorIds).needsDirector;
   const directorOnly = skipManagers && !needsDirector;
-  const kind = noCourses ? "withdrawal" : automaticExitKind(student?.courses ?? [], enrollmentIds);
+  // 진행 중인 다른 과목 보고서의 반도 남은 반으로 센다 — 그 보고서까지 끝나 남은 반이 없으면 DB가 그때 퇴원으로 마무리한다(s2_0014).
+  const busy = student?.busyCourses ?? [];
+  const kind = noCourses ? "withdrawal" : automaticExitKind([...(student?.courses ?? []), ...busy], enrollmentIds);
   function chooseCourses(s: StudentOption | undefined, next: string[]) {
     const pick = selectionFor(staff, s, next);
     setEnrollments(pick.enrollmentIds); setTeachers(pick.teacherIds); setManagers(pick.managerIds);
@@ -119,7 +121,7 @@ export function RequestDialog({ staff, students, labels, scope, initialStudentId
           <div className="space-y-1 text-sm"><p>대상 학생</p><SearchableSelect portal options={choices.map(s => ({ value: s.id, label: s.name, hint: `${s.school ?? ""} ${s.grade ?? ""}`.trim() }))} value={studentId} ariaLabel="대상 학생" placeholder="학생 검색·선택" searchPlaceholder="이름·학교로 검색" onValueChange={id => { if (pending) return; const s = choices.find(x => x.id === id); setStudentId(id); chooseCourses(s, s?.courses.filter(c => !scope || scope.includes(c.subject)).map(c => c.id) ?? []); }} /></div>
           <label className="space-y-1 text-sm">퇴원·수강종료일<input className={control} type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
         </div>
-        {student && !noCourses && <fieldset className="rounded-lg border px-3 py-2"><legend className="px-1 text-sm">종료할 반</legend><div className="flex flex-wrap gap-x-5 gap-y-2">{student.courses.map(c => <label key={c.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={enrollmentIds.includes(c.id)} disabled={!!scope && !scope.includes(c.subject)} onChange={() => chooseCourses(student, toggleCourseGroup(student.courses, enrollmentIds, c.id))} />{c.className} · {labels[c.subject] ?? c.subject} · {c.teacherName ?? "담당자 미지정"}{c.reportOptout && <span className="text-muted-foreground">(수업보고서 미발송)</span>}</label>)}</div><p className="mt-2 text-xs text-muted-foreground">한 반을 고르면 같은 과목의 반도 함께 종료합니다. 모든 과목을 고르면 퇴원으로 처리합니다.</p></fieldset>}
+        {student && !noCourses && <fieldset className="rounded-lg border px-3 py-2"><legend className="px-1 text-sm">종료할 반</legend><div className="flex flex-wrap gap-x-5 gap-y-2">{student.courses.map(c => <label key={c.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={enrollmentIds.includes(c.id)} disabled={!!scope && !scope.includes(c.subject)} onChange={() => chooseCourses(student, toggleCourseGroup(student.courses, enrollmentIds, c.id))} />{c.className} · {labels[c.subject] ?? c.subject} · {c.teacherName ?? "담당자 미지정"}{c.reportOptout && <span className="text-muted-foreground">(수업보고서 미발송)</span>}</label>)}</div><p className="mt-2 text-xs text-muted-foreground">한 반을 고르면 같은 과목의 반도 함께 종료합니다. 모든 과목을 고르면 퇴원으로 처리합니다.</p>{busy.length > 0 && <p role="note" className="mt-1 text-xs text-muted-foreground">{[...new Set(busy.map(c => labels[c.subject] ?? c.subject))].join("·")} 반({busy.map(c => c.className).join(", ")})은 진행 중인 퇴원보고서가 있어 여기서 고를 수 없습니다. 그 보고서까지 끝나 남은 반이 없으면 퇴원으로 처리됩니다.</p>}</fieldset>}
         {!noCourses && bundled.length > 0 && <p role="note" className="border-line rounded-lg border border-dashed px-3 py-2 text-sm">{bundled.join(" · ")}을 한 과목으로 묶어 함께 종료합니다.{direct ? "" : " 보고서는 과목마다 작성 강사 한 명이 쓰고, 다른 반 담임에게는 작성 요청이 가지 않습니다."}</p>}
         {direct ? <DirectFields formRef={reasonForm} future={date > kstToday()} noCourses={noCourses} /> : <>
           <div className="grid gap-3 sm:grid-cols-3">

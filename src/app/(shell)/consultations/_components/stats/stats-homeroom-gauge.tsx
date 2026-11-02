@@ -50,7 +50,7 @@ export function RateGauge({ rate, label }: { rate: number | null; label: string 
   });
   const tip = v === null ? null : point(v, R_OUT - 8);
   return (
-    <svg viewBox="0 0 200 108" className="w-full" role="img" aria-label={`${label} ${v === null ? "대상 없음" : `${Math.round(v)}%`}`}>
+    <svg viewBox="0 0 200 110" className="mx-auto block w-full max-w-48" role="img" aria-label={`${label} ${v === null ? "대상 없음" : `${Math.round(v)}%`}`}>
       {bands.map((b) => (
         <path key={`bg${b.i}`} d={arc(b.from, b.to)} fill="var(--muted)" />
       ))}
@@ -61,8 +61,8 @@ export function RateGauge({ rate, label }: { rate: number | null; label: string 
         : null}
       {tip ? (
         <>
-          <line x1={CX} y1={CY} x2={tip[0]} y2={tip[1]} stroke="var(--foreground)" strokeWidth={6} strokeLinecap="round" />
-          <circle cx={CX} cy={CY} r={7} fill="var(--foreground)" />
+          <line x1={CX} y1={CY} x2={tip[0]} y2={tip[1]} stroke="var(--foreground)" strokeWidth={5} strokeLinecap="round" />
+          <circle cx={CX} cy={CY} r={6} fill="var(--foreground)" />
         </>
       ) : null}
     </svg>
@@ -73,14 +73,14 @@ export function MonthGauge({ ym, m, current }: { ym: string; m: HomeroomMonth; c
   const rate = pct(m.self, m.target);
   const label = current ? `${mLabel(ym)}(진행 중)` : mLabel(ym);
   return (
-    <div className="min-w-0 flex-1 text-center" title={`담임 상담 ${m.self} · 담임 아닌 직원이 상담 ${m.other} · 미상담 ${m.none}`}>
-      <p className="text-muted-foreground text-xs font-medium">{label}</p>
+    <span className="block min-w-0 flex-1 text-center" title={`담임 상담 ${m.self} · 담임 아닌 직원이 상담 ${m.other} · 미상담 ${m.none}`}>
+      <span className="block text-muted-foreground mb-1 text-xs font-medium">{label}</span>
       <RateGauge rate={rate} label={label} />
-      <p className="num -mt-1 text-xl font-bold">{rate === null ? "—" : `${Math.round(rate)}%`}</p>
-      <p className="num text-muted-foreground text-xs">
+      <span className="block num mt-1 text-xl leading-tight font-bold">{rate === null ? "—" : `${Math.round(rate)}%`}</span>
+      <span className="block num text-muted-foreground text-xs">
         {m.self}/{m.target}명
-      </p>
-    </div>
+      </span>
+    </span>
   );
 }
 

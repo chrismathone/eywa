@@ -56,6 +56,28 @@ describe('운영 적용 계획', () => {
     context.enrollments.push({ ...context.enrollments[0], id:uid(41), start:'2026-10-09' });
     expect(()=>buildApplyPlan(draft,context,'2026-10-08')).toThrow('예약');
   });
+  it('영어 마지막 수업을 연습본으로 끝내면 반이동·퇴원보고서를 안내하고 막는다', () => {
+    const { draft, context } = applyFixture();
+    draft.placements[0].studentIds = []; draft.students[uid(1)] = [];
+    expect(() => buildApplyPlan(draft, context, '2026-10-08')).toThrow('학생: 이 과목의 마지막 수업');
+    expect(() => buildApplyPlan(draft, context, '2026-10-08')).toThrow("'반 이동' 메뉴");
+  });
+  it('다른 영어 수강이 남거나 새 반으로 옮기면 막지 않는다', () => {
+    const left = applyFixture();
+    left.draft.placements[0].studentIds = []; left.draft.students[uid(1)] = [];
+    left.context.enrollments.push({ ...left.context.enrollments[0], id: uid(41), classId: uid(3) });
+    expect(buildApplyPlan(left.draft, left.context, '2026-10-08').enrollments.filter(row => row.remove)).toHaveLength(1);
+    const moved = applyFixture();
+    expect(buildApplyPlan(moveClassStudent(moved.draft, uid(50), uid(1), uid(2)), moved.context, '2026-10-08').enrollments).toHaveLength(2);
+  });
+  it('이미 퇴원한 학생의 남은 수강 정리와 특강 종료는 막지 않는다', () => {
+    const gone = applyFixture(); gone.context.students[0].status = 'withdrawn';
+    gone.draft.placements[0].studentIds = []; gone.draft.students[uid(1)] = [];
+    expect(buildApplyPlan(gone.draft, gone.context, '2026-10-08').enrollments).toHaveLength(1);
+    const special = applyFixture(); special.context.classes[0].special = true;
+    special.draft.placements[0].studentIds = []; special.draft.students[uid(1)] = [];
+    expect(buildApplyPlan(special.draft, special.context, '2026-10-08').enrollments).toHaveLength(1);
+  });
   it('*LAB의 별도 수업 표시는 운영 배치 변경에 포함된다', () => {
     const { draft, context } = applyFixture(); draft.cells[1][4].text='LAB'; draft.placements[0].kind='seat'; draft.placements[0].labSeparate=true;
     expect(buildApplyPlan(draft,context,'2026-10-08').schedules[0]).toMatchObject({ teacherId:null, item:{labSeparate:true} });
