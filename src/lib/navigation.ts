@@ -212,7 +212,7 @@ export const NAV_GROUPS: NavGroup[] = [
       // 수업보고서 = 학원 전체 보고서 발송 총괄(구 학원설정 ?tab=report_mgmt에서 승격, 옛 Edutrix 외부링크 대체).
       { href: "/lesson-reports", label: "수업보고서", icon: MENU_ICON.lesson_reports, menuKey: "lesson_reports" },
       // 비포클래스체크리스트(초안, 원장 2026-10-28) — 수업 전 숙제·준비 체크. 기본은 원장만, 나머지는 개인별 메뉴 권한으로 연다.
-      { href: "/before-class", label: "비포클래스체크리스트(초안)", icon: MENU_ICON.before_class_checklist, menuKey: "before_class_checklist", aliases: ["수업 전 체크"] },
+      { href: "/before-class", label: "비포클래스체크리스트", icon: MENU_ICON.before_class_checklist, menuKey: "before_class_checklist", aliases: ["수업 전 체크"] },
     ],
   },
   {

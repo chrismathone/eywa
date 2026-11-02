@@ -194,7 +194,7 @@ export const SHEET_DICT = {
   "menu.item.approvals": { ko: "전자결재", en: "Approvals" },
   "menu.item.class_review": { ko: "직원 평가", en: "Staff review" },
   "menu.item.withdrawal_reports": { ko: "퇴원보고서", en: "Withdrawal reports" },
-  "menu.item.before_class_checklist": { ko: "비포클래스체크리스트(초안)", en: "Before-class checklist (draft)" },
+  "menu.item.before_class_checklist": { ko: "비포클래스체크리스트", en: "Before-class checklist" },
   "menu.item.documents": { ko: "데이터베이스", en: "Documents" },
 
   // ── 면 전환(주간 | 달력 | 진도표 | 계획) ──────────────────────────
