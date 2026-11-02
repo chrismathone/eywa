@@ -1691,11 +1691,11 @@ export async function generateReportComment(
         .catch(() => null)
     : Promise.resolve(null);
   // 비포클래스체크리스트(원장 2026-10-30) — 그 반·그날 체크가 있으면 수업 평가 표에 줄을 붙인다(report-rows.ts). 반을 모르면 줄 없음.
-  //   🔴 시험 중 = 운영자 계정의 '다른 강사 뷰' 또는 테스트 학생에게만(beforeClassReportEnabled).
+  //   🔴 개인별 기능 권한 '비포클래스 보고서 표'에 지정한 선생님(강사뷰 기준 user) 또는 테스트 학생에게만(beforeClassReportEnabled).
   //   아래 갈래마다 다른 재료와 함께 기다린다(B4) — 받은 값은 `beforeClassRows`에 두고 표를 짤 때 쓴다.
   const beforeClassRowsP: Promise<ReportCheckRow[]> =
     pilotStudentId && trendCtx?.classId
-      ? beforeClassReportEnabled(user.tenantId, pilotStudentId).then((on) =>
+      ? beforeClassReportEnabled(user.tenantId, pilotStudentId, user.id).then((on) =>
           on && trendCtx.classId ? loadBeforeClassReportRows(user.tenantId, trendCtx.classId, pilotStudentId, resolveReportDate(trendCtx.date)) : [])
       : Promise.resolve([]);
   let beforeClassRows: ReportCheckRow[] = [];
