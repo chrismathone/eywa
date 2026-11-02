@@ -17,7 +17,7 @@ import type { AttendanceMove } from '@/features/timetable/import/master/attendan
 import type { Draft } from '../editor/model';
 
 export type ApplyReview = { hash: string; at: string; date: string; hour: number; summary: ReturnType<typeof buildApplyPlan>['summary']; changes: string[]; warnings: string[]; skipped: string[]; notices: string[] };
-export type ApplyJobSummary = { id: string; at: string; status: 'pending' | 'applied' | 'failed' | 'cancelled'; error: string | null; skipped?: string[] };
+export type ApplyJobSummary = { id: string; at: string; status: 'pending' | 'applied' | 'failed' | 'cancelled'; error: string | null; skipped?: string[]; actorName?: string | null; mine?: boolean };
 type Request = { draft: Draft; date: string; hour: number };
 const friendly = (error: unknown) => error instanceof Error && !('code' in error) ? error.message : '자료를 읽거나 저장하지 못했습니다. 잠시 후 다시 확인해 주세요.';
 
@@ -125,7 +125,8 @@ export async function listTimetableLabApplyJobs(): Promise<{ jobs: ApplyJobSumma
     const user = await getCurrentUser();
     if (!user || !(await canUseTimetableEditor(user.systemRole))) throw new Error('시간표를 관리할 권한이 필요합니다.');
     const sql = openMasterDb();
-    try { return { jobs: await sql<ApplyJobSummary[]>`select id,apply_at::text as at,status,error,case when jsonb_typeof(result->'skipped')='array' then result->'skipped' else '[]'::jsonb end as skipped from timetable_lab_apply_jobs where tenant_id=${user.tenantId} and actor_id=${user.id} order by created_at desc limit 10` }; }
+    // 연습본은 지점 공유이고 시간표 배지도 편집 권한자 모두에게 보인다 — 내역도 지점 전체를 보여 준다(원장 2026-11-02). 취소만 예약한 본인.
+    try { return { jobs: await sql<ApplyJobSummary[]>`select j.id,j.apply_at::text as at,j.status,j.error,case when jsonb_typeof(j.result->'skipped')='array' then j.result->'skipped' else '[]'::jsonb end as skipped,u.display_name as "actorName",j.actor_id=${user.id} as mine from timetable_lab_apply_jobs j left join users u on u.id=j.actor_id where j.tenant_id=${user.tenantId} order by j.created_at desc limit 10` }; }
     finally { await sql.end({ timeout: 5 }); }
   } catch (error) { return { error: friendly(error) }; }
 }
@@ -163,7 +164,7 @@ export async function readTimetableLabApplyDraft(id: string): Promise<{ draft: D
     if (!user || !(await canUseTimetableEditor(user.systemRole))) throw new Error('시간표를 관리할 권한이 필요합니다.');
     const sql = openMasterDb();
     try {
-      const [row] = await sql<{ payload: unknown }[]>`select payload from timetable_lab_apply_jobs where tenant_id=${user.tenantId} and actor_id=${user.id} and id=${id}::uuid`;
+      const [row] = await sql<{ payload: unknown }[]>`select payload from timetable_lab_apply_jobs where tenant_id=${user.tenantId} and id=${id}::uuid`;
       if (!row || !boundedJson(row.payload)) throw new Error('저장된 연습본을 찾지 못했습니다.');
       const parsed = draftSnapshotSchema.safeParse(row.payload);
       if (!parsed.success) throw new Error('저장된 연습본의 형식을 확인해 주세요.');

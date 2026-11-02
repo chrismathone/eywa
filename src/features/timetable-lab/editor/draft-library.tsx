@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { reasonOf } from './reason';
 import { deleteDraft, listDrafts, loadDraft, overwriteDraft, saveDraft, type DraftSummary } from './draft-api';
 import type { ComparedDraft } from './comparison-view';
@@ -6,10 +6,11 @@ import type { Draft } from './model';
 import type { DraftStore } from './store';
 type Props = { store: DraftStore; close: () => void; loaded: (name: string, draft: Draft, id: string) => void; saved: (name: string, draft: Draft, id: string) => void;
   /** 지금 편집 중인 저장본 — 있으면 저장의 기본 동작이 덮어쓰기다(저장할 때마다 새 저장본이 쌓이지 않게, 원장 2026-11-02). */ currentId?: string | null;
+  /** 적용 대기 목록 — 운영 연결 화면에서만 넘어온다. */ pending?: ReactNode;
   removed?: (id: string) => void; compare: (left: ComparedDraft, right: ComparedDraft) => void };
 const dateText = (text: string) => new Date(text).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 const draftLabel = (item: DraftSummary) => `${item.name} · 저장자 ${item.createdByName || '정보 없음'} · ${dateText(item.createdAt)}`;
-export function DraftLibrary({ store, close, loaded, saved, removed, currentId = null, compare }: Props) {
+export function DraftLibrary({ store, close, loaded, saved, removed, currentId = null, compare, pending }: Props) {
   const dialog = useRef<HTMLDialogElement>(null), [base] = useState(() => store.getSnapshot());
   const [items, setItems] = useState<DraftSummary[]>([]), [nextOffset, setNextOffset] = useState<number | null>(null);
   const [busy, setBusy] = useState(true), [error, setError] = useState(''), [message, setMessage] = useState('');
@@ -63,7 +64,7 @@ export function DraftLibrary({ store, close, loaded, saved, removed, currentId =
     {error && <p role="alert" className="load-error">{error}</p>}{message && <p role="status" className="clear-check">{message}</p>}
     {asking && <div role="alert" className="draft-confirm"><p>{asking.kind === 'overwrite' ? `“${asking.item.name}”을 지금 화면의 내용으로 덮어씁니다. 이전 내용은 되돌릴 수 없습니다.` : `“${asking.item.name}”을 삭제합니다. 되돌릴 수 없습니다.`}</p>
       <div><button className="primary" disabled={busy} onClick={() => { const target = asking; void run(() => confirmed(target)); }}>{asking.kind === 'overwrite' ? '덮어쓰기 확인' : '삭제 확인'}</button><button disabled={busy} onClick={() => setAsking(null)}>취소</button></div></div>}
-    <h3>지점 공유 연습본</h3>{busy && <p role="status">연습본을 처리하는 중…</p>}
+    {pending}<h3>지점 공유 연습본</h3>{busy && <p role="status">연습본을 처리하는 중…</p>}
     {!busy && !items.length && !error && <p>이 지점에 저장된 연습본이 없습니다. 이름을 붙여 첫 연습본을 저장해 보세요.</p>}
     <ul className="draft-list">{items.map(item => <li key={item.id}><div><strong>{item.name}</strong><small>저장자 {item.createdByName || '정보 없음'} · <time dateTime={item.createdAt}>{dateText(item.createdAt)}</time></small><small>반 {item.classCount}개 · 수업 {item.lessonCount}개 · 학생 {item.studentCount}명{item.id === currentId ? ' · 지금 편집 중' : ''}</small></div>
       <span className="draft-actions"><button disabled={busy} onClick={() => void run(() => open(item.id))}>불러오기<span className="sr-only"> {draftLabel(item)}</span></button>
