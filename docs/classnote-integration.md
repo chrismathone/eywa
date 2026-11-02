@@ -711,7 +711,7 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 
 | 구성 | 파일 | 역할 |
 |---|---|---|
-| 계획(순수) | [`class-board-plan.mjs`](../scripts/_classnote/class-board-plan.mjs) | 가드 ①1인 보드 원아만 ②보호자 전화(운영관리 carer1 ↔ aywa 4칸) ③생년 ±1 ④역방향 유일성 ⑤같은 반 기본이름 겹침 = 보류 ⑥이름 연속성(형제 계정). 전부 AND, 모르면 보류 |
+| 계획(순수) | [`class-board-plan.mjs`](../scripts/_classnote/class-board-plan.mjs) | 가드 ①1인 보드 원아만(1인 보드가 없거나 비면 0302a에서 이미 확인된 원아 중 **기록된 그 반 보드에 지금도 있는 원아** — 2026-11-02 1인 보드 배정 해제 대비 · 그 원아는 1인 보드 재확인을 건너뛴다 · ④는 기록에서 지금 대상 반의 다른 학생에게 확인된 원아인지도 본다 · 🔴 잘못 붙은 원아를 떼려면 그 학생의 **기록된 반 보드 전부**에서 뗀다(한 곳에라도 남으면 다시 붙는다)) ②보호자 전화(운영관리 carer1 ↔ aywa 4칸) ③생년 ±1 ④역방향 유일성 ⑤같은 반 기본이름 겹침 = 보류 ⑥이름 연속성(형제 계정). 전부 AND, 모르면 보류 |
 | 생성·배정 | [`provision-math-class-boards.mjs`](../scripts/_classnote/provision-math-class-boards.mjs) | 드라이런 기본 · `--apply --only --limit` · 반마다 원아 정확히 대조 · 끝에 1인 보드 무변경 확인 · `--sync-db` = 0302a 기록 |
 | 담임 연결 | [`provision-math-class-teachers.mjs`](../scripts/_classnote/provision-math-class-teachers.mjs) | 확인된 대응표만(`TEACHER_MAP` — 김은정=셀린·이수진=수진T) · 선생님별 연결 수 +N 검증 |
 | 대상 반 | [`math-class-boards-load.mjs`](../scripts/_classnote/math-class-boards-load.mjs) | 활성 수학 · 보고서 발송 · **특강 포함**(2026-09-30) · **종강(closed_at) 제외**(종강 반 6개를 만들었다 지운 사고 — 이미 연결된 종강 반은 보드가 살아 있는 동안 연결 유지) |

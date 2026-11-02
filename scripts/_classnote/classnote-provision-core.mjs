@@ -30,6 +30,9 @@ import {
   norm,
   CLASSNOTE_BASE,
 } from "./classnote-admin-core.mjs";
+import { getClassnoteMathRoute } from "./classnote-class-route.mjs";
+import { loadVerifiedChildren } from "./math-class-boards-load.mjs";
+import { dropVerifiedTargets } from "./class-board-plan.mjs";
 
 /** 역방향 유일성 검사용 우주 — **status·과목 무필터 전 학생 유효이름**(퇴원 포함).
  *  타깃 목록만 쓰면 퇴원 동명이인(F1)·과목 필터 뒤 동명(F2)·동명 보류 제외분(F3)이 안 보인다. */
@@ -105,6 +108,36 @@ async function expectedFor(sql, tenant, keys, prefix) {
 }
 
 /**
+ * 수학이 반별 발송(class)이면 **반 보드에서 원아 확인을 마친 학생**은 1인 보드를 만들지도 채우지도 않는다(원장 2026-11-02 —
+ * 1인 보드 원아 배정 해제 → 12월 보드 삭제). 반 보드 동기화가 그 학생은 확인 기록으로 원아를 판정한다(class-board-plan.mjs ①).
+ * 안 빼면 비운 1인 보드를 "가입했는데 빈 보드"로 보고 다시 배정하고(학부모 앱에 반 배정 알림이 갈 수 있다), 지운 보드는 다시 만든다.
+ * 확인 기록이 없는 학생(신입·보류)은 그대로 둔다 — 1인 보드가 그 원아를 처음 확인하는 출처다.
+ * 🔴 경로·기록을 못 읽으면 그날 **수학을 통째로 건너뛴다**(모르는 채로 비운 보드를 다시 채우지 않는다 — 신입 보드는 다음 날 만든다).
+ */
+async function dropRetiredMathTargets(sql, tenant, plans, log) {
+  const math = plans.find((p) => p.group.prefix === BOARD_GROUPS.math.prefix);
+  if (!math || !math.targets.length) return;
+  let route;
+  try {
+    ({ route } = await getClassnoteMathRoute(sql, tenant));
+  } catch {
+    math.targets = [];
+    log("[provision] 수학 발송 경로를 읽지 못해 오늘은 수학 1인 보드 준비를 건너뜀");
+    return;
+  }
+  if (route !== "class") return;
+  const verified = await loadVerifiedChildren(sql, tenant);
+  if (!verified) {
+    math.targets = [];
+    log("[provision] 반 보드 확인 기록을 읽지 못해 오늘은 수학 1인 보드 준비를 건너뜀");
+    return;
+  }
+  const before = math.targets.length;
+  math.targets = dropVerifiedTargets(math.targets, verified);
+  if (before !== math.targets.length) log(`[provision] 반 보드에서 확인된 수학 학생 ${before - math.targets.length}명은 1인 보드 준비 제외(반별 발송)`);
+}
+
+/**
  * 일일 1회 실행(가드 내장) — 데몬이 매 폴 불러도 대부분 즉시 no-op. force=true는 가드 무시(수동 점검용).
  * 반환: { ran, created?, assigned?, held?, remaining? }.
  *
@@ -145,6 +178,7 @@ export async function provisionDailyOnce(sql, browser, { tenant, post, log = con
     plans.push({ group: g, targets });
     if (!only) for (const c of collisions) held.push(`${g.prefix}${c.name}(동명이인 ${c.count}명)`);
   }
+  await dropRetiredMathTargets(sql, tenant, plans, log);
   // 지금 동기화(범위 지정)인데 대상이 하나도 없다(발송 과목이 아닌 학생뿐 등) — ClassNote에 로그인조차 하지 않는다(과부하 방지).
   if (studentIds && !plans.some((p) => p.targets.length)) {
     log("[provision] 지금 동기화 — 1인 보드 준비 대상 없음(ClassNote 조회 안 함)");

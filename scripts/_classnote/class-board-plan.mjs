@@ -6,6 +6,10 @@
 // 🔴 이 계획의 유일한 위험은 **같은 반의 동명이인**이다(원장: 과거 실제로 겹친 적이 있다 — "삼중사중 가드도
 //    아까울 정도로"). 반 보드 안에서 이름으로 원아를 고르는 순간 김근우·김근우A가 섞인다. 그래서:
 //   ① 원아 출처 = 그 학생의 1인 보드 `(수학)유효이름`에 **이미 배정된 원아만**(반 보드 안에서 이름 검색 금지).
+//      1인 보드가 없거나 비었으면(원장 2026-11-02 — 1인 보드 원아 배정 해제 · 12월 보드 삭제) 그 학생이 반 보드 기록(0302a)에서
+//      이미 '정상'으로 확인된 원아 중 **기록된 그 반 보드에 지금도 있는 원아**로 대신한다(`verifiedChildren`, source "verified").
+//      아래 ②~⑥은 그 원아에도 똑같이 다시 건다. ④는 기록에서 다른 학생에게 확인된 원아인지도 본다.
+//      ⚠️ 0302a는 반 기록이라 휴원·반 사이 공백이면 사라진다 — 12월 보드 삭제 전에 반 기록과 별개인 확인 표가 필요하다(#150).
 //   ② 보호자 전화 일치 필수 — ClassNote 운영관리 carer1_phone ∈ aywa 전화 4칸. 모르면 보류.
 //   ③ 생년 일치 필수 — 학년에서 역산 ±1년. 모르면 보류.
 //   ④ 역방향 유일성 — 그 원아가 **다른 학생의** 1인 보드에 있거나 계획상 두 학생에게 잡히면 둘 다 보류.
@@ -53,21 +57,73 @@ function personalBoardOwner(boardName) {
 }
 
 /**
- * 학생 1명의 원아 판정 — 반과 무관하게 한 번만 한다(같은 학생이 반 3개면 같은 원아를 세 반에 싣는다).
- * @returns {{ok:boolean, reasons:string[], children:Array<{id:number,name:string}>}}
+ * 확인 기록 역색인 — 원아 id → 그 원아가 '정상'으로 기록된 학생 id들(④ 역방향 가드용).
+ * `keep(sid)` = 비교 상대로 셀 학생 — 지금 대상 반에 다니는 학생만(종강했지만 연결을 지키는 반·병합된 학생의 옛 기록은 다시 쓰이지 않아
+ * 그대로 두면 물려받은 원아가 영구히 보류된다).
  */
-export function resolveStudentChildren(student, { boards, membersByBoard, admissions, schoolYear }) {
+export function verifiedOwnersOf(verifiedChildren, keep = () => true) {
+  const out = new Map();
+  for (const [sid, list] of verifiedChildren ?? []) {
+    if (!keep(sid)) continue;
+    for (const v of list ?? []) out.set(Number(v.id), new Set([...(out.get(Number(v.id)) ?? []), sid]));
+  }
+  return out;
+}
+
+/**
+ * 1인 보드 대신 쓸 원아 — 반 보드 기록(0302a)에서 이 학생에게 '정상'으로 확인된 원아 중 **기록된 그 반 보드에 지금도 있는 원아만**.
+ * 🔴 지금 그 보드에 있어야 쓴다: 사람이 잘못 붙은 원아를 반 보드에서 떼면 다음 동기화가 기록만 보고 다시 붙이면 안 되고(떼는 것이
+ *    유일한 처방이다), 기관에서 빠진 원아를 새 반에 넣으려다 실패하면 동기화 전체가 멈춘다. 이름·생년도 지금 ClassNote 값으로 대조한다.
+ * @returns {{ members: object[], recorded: number }}  recorded = 기록에 있던 원아 수(보드에 없어 못 쓴 것 포함)
+ */
+function verifiedMembers(student, verifiedChildren, membersByBoard) {
+  const list = verifiedChildren?.get?.(student.id) ?? [];
+  const members = [];
+  for (const v of list) {
+    let live = null;
+    for (const bid of v.boardIds ?? []) {
+      const m = (membersByBoard.get(Number(bid)) ?? []).find((x) => Number(x.id) === Number(v.id));
+      if (m) { live = m; break; }
+    }
+    if (live) members.push({ ...live, id: Number(live.id) });
+  }
+  return { members, recorded: list.length };
+}
+
+/**
+ * 학생 1명의 원아 판정 — 반과 무관하게 한 번만 한다(같은 학생이 반 3개면 같은 원아를 세 반에 싣는다).
+ * `verifiedChildren`(학생 id → [{id,name,boardIds}], 0302a ok) = 1인 보드가 없거나 비었을 때만 쓰는 대신 출처. 없으면 종전 그대로.
+ * `verifiedOwners`(원아 id → 학생 id들) = ④ 역방향 — 1인 보드가 비면 1인 보드 소속으로는 못 잡으니 기록으로도 본다.
+ * @returns {{ok:boolean, reasons:string[], children:Array<{id:number,name:string}>, source:"personal"|"verified"|null}}
+ *   source = 원아를 어디서 가져왔나(배정 직전 1인 보드 재확인은 "personal"일 때만 — math-class-boards-apply.mjs).
+ */
+export function resolveStudentChildren(student, { boards, membersByBoard, admissions, schoolYear, verifiedChildren = null, verifiedOwners = null }) {
   const reasons = [];
   const want = normBoard(personalBoardName(student.name));
   const hit = (boards ?? []).filter((b) => normBoard(b.name) === want);
-  if (hit.length === 0) return { ok: false, reasons: ["1인 보드 없음"], children: [] };
-  if (hit.length > 1) return { ok: false, reasons: [`1인 보드 ${hit.length}개(중복)`], children: [] };
+  if (hit.length > 1) return { ok: false, reasons: [`1인 보드 ${hit.length}개(중복)`], children: [], source: null };
 
-  const members = membersByBoard.get(hit[0].id);
-  if (!Array.isArray(members)) return { ok: false, reasons: ["1인 보드 원아 조회 실패"], children: [] };
-  if (members.length === 0) return { ok: false, reasons: ["ClassNote 미가입·미배정(1인 보드 원아 0명)"], children: [] };
+  let members = [];
+  let source = "personal";
+  if (hit.length === 1) {
+    members = membersByBoard.get(hit[0].id);
+    if (!Array.isArray(members)) return { ok: false, reasons: ["1인 보드 원아 조회 실패"], children: [], source: null };
+  }
+  if (members.length === 0) {
+    // 1인 보드가 없거나 비었다 — 반 보드에서 이미 확인한 원아로 판정한다(그것도 없으면 종전 사유 그대로 보류).
+    const v = verifiedMembers(student, verifiedChildren, membersByBoard);
+    members = v.members;
+    source = "verified";
+    if (!members.length && v.recorded)
+      return { ok: false, reasons: ["반 보드에서 확인된 원아가 지금 그 반 보드에 없음 — 확인 필요"], children: [], source: null };
+    // 🔴 사유 문장은 글자 그대로 — 앱이 이 원문으로 '가입 대기'를 가린다(board-missing.ts · 잠금 = board-missing.test.ts).
+    if (!members.length)
+      return hit.length
+        ? { ok: false, reasons: ["ClassNote 미가입·미배정(1인 보드 원아 0명)"], children: [], source: null }
+        : { ok: false, reasons: ["1인 보드 없음"], children: [], source: null };
+  }
   if (members.length > MAX_CHILDREN_PER_STUDENT)
-    return { ok: false, reasons: [`1인 보드 원아 ${members.length}명 — 사람 확인 필요`], children: [] };
+    return { ok: false, reasons: [`${source === "verified" ? "반 보드에서 확인된" : "1인 보드"} 원아 ${members.length}명 — 사람 확인 필요`], children: [], source: null };
 
   const expected = expectedBirthYear(student.grade, schoolYear);
   for (const m of members) {
@@ -95,11 +151,15 @@ export function resolveStudentChildren(student, { boards, membersByBoard, admiss
         .filter((o) => o && o !== normBoard(student.name));
       if (others.length) reasons.push(`${who} 다른 학생 1인 보드에도 있음(${others.map((o) => `(수학)${o}`).join(", ")})`);
     }
+    // ④ 역방향(기록) — 반 보드 기록에서 이 원아가 다른 학생에게 '정상'으로 잡혀 있다(1인 보드가 비면 위 검사로는 못 잡는다).
+    const recordedFor = [...(verifiedOwners?.get?.(Number(m.id)) ?? [])].filter((sid) => sid !== student.id);
+    if (recordedFor.length) reasons.push(`${who} 반 보드 기록에서 다른 학생에게 확인된 원아입니다`);
   }
   return {
     ok: reasons.length === 0,
     reasons,
     children: members.map((m) => ({ id: m.id, name: m.name ?? "" })),
+    source,
   };
 }
 
@@ -125,15 +185,20 @@ export function reservedBoardName(name) {
  * @param {Map<number,Array<{id:number,name?:string,date_birth?:string|null}>>} p.membersByBoard  조회한 보드의 원아
  * @param {Map<number,{phone:string|null, boardNames:string[]}>} p.admissions  운영관리 명부(원아 id → 보호자 전화·소속 보드)
  * @param {number} p.schoolYear
+ * @param {Map<string,Array<{id:number,name:string,boardIds:number[]}>>|null} [p.verifiedChildren]  반 보드에서 확인된 원아(0302a ok) — 1인 보드가 없거나 빈 학생만 쓴다
+ * @param {Set<string>|null} [p.verifiedOwnerScope]  ④(기록) 비교 상대 학생 — 전체 대상 반의 학생(없으면 이번 계획 반의 학생)
  */
-export function planClassBoards({ classes, students, boards, membersByBoard, admissions, schoolYear, linkedBoardByClass = new Map() }) {
+export function planClassBoards({ classes, students, boards, membersByBoard, admissions, schoolYear, linkedBoardByClass = new Map(), verifiedChildren = null, verifiedOwnerScope = null }) {
   // 1) 학생별 원아 판정(한 번씩)
   const byStudent = new Map();
+  // 비교 상대 = 지금 대상 반에 다니는 학생(일부 반만 보는 실행은 호출부가 전체 대상 반 기준으로 넘긴다 — verifiedOwnerScope).
+  const ownerScope = verifiedOwnerScope ?? new Set(classes.flatMap((c) => c.studentIds));
+  const verifiedOwners = verifiedOwnersOf(verifiedChildren, (sid) => ownerScope.has(sid));
   for (const c of classes)
     for (const sid of c.studentIds) {
       if (byStudent.has(sid)) continue;
       const s = students.get(sid);
-      byStudent.set(sid, s ? resolveStudentChildren(s, { boards, membersByBoard, admissions, schoolYear }) : { ok: false, reasons: ["학생 정보 없음"], children: [] });
+      byStudent.set(sid, s ? resolveStudentChildren(s, { boards, membersByBoard, admissions, schoolYear, verifiedChildren, verifiedOwners }) : { ok: false, reasons: ["학생 정보 없음"], children: [], source: null });
     }
 
   // ④-b 계획 안에서 한 원아가 두 학생에게 잡히면 둘 다 보류
@@ -225,6 +290,7 @@ export function planClassBoards({ classes, students, boards, membersByBoard, adm
           studentId: sid,
           name: s.name,
           children: v.children.map((ch) => ({ ...ch, already: currentIds.has(ch.id) })),
+          source: v.source,
         });
     }
     // 보류된 학생의 원아도 "그 반 학생의 가족"이라 잉여가 아니다 — 잉여 = 이 반 누구의 원아도 아닌 것.
@@ -266,4 +332,15 @@ export function closedClassesToKeep({ closedIds, planClassIds, linkedBoardByClas
   const inPlan = new Set(planClassIds);
   const live = new Set([...liveBoardIds].map(Number));
   return closedIds.filter((id) => !inPlan.has(id) && linkedBoardByClass.has(id) && live.has(Number(linkedBoardByClass.get(id))));
+}
+
+/**
+ * 1인 보드 준비(매일 05시 provision)에서 뺄 수학 학생 — 반 보드에서 원아 확인을 마친 학생(원장 2026-11-02: 1인 보드 원아 배정 해제 → 12월 보드 삭제).
+ * 그 학생은 반 보드 동기화가 확인 기록으로 원아를 판정하므로 1인 보드가 필요 없다. 안 빼면 비운 1인 보드를 다시 채우고, 지운 보드를 다시 만든다.
+ * 확인 기록이 없는 학생(신입·보류)은 그대로 둔다 — 1인 보드가 아직 그 학생 원아를 처음 확인하는 유일한 출처다.
+ * @param {Array<{studentId:string}>} targets
+ * @param {Map<string, unknown[]>} verifiedChildren  학생 id → 확인된 원아(0302a ok)
+ */
+export function dropVerifiedTargets(targets, verifiedChildren) {
+  return (targets ?? []).filter((t) => !((verifiedChildren?.get?.(t.studentId) ?? []).length > 0));
 }

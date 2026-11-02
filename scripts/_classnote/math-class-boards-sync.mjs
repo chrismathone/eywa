@@ -13,7 +13,7 @@
 import fs from "node:fs";
 import { fetchCenterId, loginClassnote } from "./classnote-admin-core.mjs";
 import { stateFile } from "./classnote-paths.mjs";
-import { loadAywa, loadClosedLinked, loadLinkedBoards, loadPlan } from "./math-class-boards-load.mjs";
+import { loadAywa, loadClosedLinked, loadLinkedBoards, loadPlan, loadVerifiedChildren } from "./math-class-boards-load.mjs";
 import { closedClassesToKeep } from "./class-board-plan.mjs";
 import { applyClassBoardPlans } from "./math-class-boards-apply.mjs";
 import { writeClassBoardSnapshot, writeReleaseNames } from "./math-class-boards-db.mjs";
@@ -158,7 +158,14 @@ export async function syncMathClassBoards(sql, page, { tenant, apply = false, lo
   // strict(개명 감사 G9) — 연결표 조회 실패를 빈 지도로 삼키면 계획이 **이름으로 후퇴**해 개명한 반은 새 보드를 만들고
   // 같은 이름 보드를 채택하면서 다른 반 연결을 빼앗는다. 실패 = 오늘 동기화를 건너뛴다.
   const linkedBoardByClass = await loadLinkedBoards(sql, tenant, { strict: true });
-  const first = await loadPlan(page, centerId, aywa, { linkedBoardByClass });
+  // 1인 보드가 없거나 빈 학생의 원아 출처(원장 2026-11-02) — 이번 기록(0302a)을 다시 쓰기 **전에** 한 번 읽어 두 계획에 같이 쓴다.
+  // 🔴 못 읽으면 오늘 동기화를 건너뛴다 — 그대로 돌면 1인 보드가 빈 학생을 전부 보류로 적어 그 학생들의 확인 기록이 지워지고
+  //    (다음 날도 못 되살린다) 발송이 막힌다. 연결표 strict와 같은 규칙.
+  const verifiedChildren = await loadVerifiedChildren(sql, tenant);
+  if (!verifiedChildren) throw new Error("반 보드 확인 기록을 읽지 못했다 — 오늘 동기화를 건너뛴다(그대로 돌면 확인 기록이 지워진다)");
+  // ④(기록) 비교 상대 = **전체** 대상 반의 학생 — 일부 반만 보는 실행에서도 다른 반 학생에게 확인된 원아를 잡는다.
+  const verifiedOwnerScope = new Set(all.classes.flatMap((c) => c.studentIds));
+  const first = await loadPlan(page, centerId, aywa, { linkedBoardByClass, verifiedChildren, verifiedOwnerScope });
   const { plans, boards, membersByBoard, failed } = first;
   if (failed) throw new Error(`원아 조회 실패 ${failed}건 — 오늘 동기화를 건너뛴다`);
   // 자동 해제 — 스위치가 켜져 있고 멈춤 표식이 없을 때만.
@@ -233,7 +240,7 @@ export async function syncMathClassBoards(sql, page, { tenant, apply = false, lo
     // 방금 만든 보드는 아직 연결표에 없다 — 번호로 얹어 준다(ClassNote가 이름을 다르게 적었어도 다음 날 또 만들지 않게, G8).
     const linkedAfter = await loadLinkedBoards(sql, tenant, { strict: true });
     for (const d of done) if (d.created && d.boardId != null) linkedAfter.set(d.classId, Number(d.boardId));
-    const fresh = await loadPlan(page, centerId, aywa, { linkedBoardByClass: linkedAfter });
+    const fresh = await loadPlan(page, centerId, aywa, { linkedBoardByClass: linkedAfter, verifiedChildren, verifiedOwnerScope });
     if (fresh.failed) throw new Error(`원아 재조회 실패 ${fresh.failed}건 — 기록 갱신을 건너뛴다`);
     reported = fresh.plans;
 

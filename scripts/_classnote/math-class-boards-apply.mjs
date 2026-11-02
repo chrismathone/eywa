@@ -1,7 +1,7 @@
 // scripts/_classnote/math-class-boards-apply.mjs — 반 보드 계획 **실행**(ClassNote 쓰기) — 수동 스크립트와 매일 동기화가 같은 코드.
 //
 // 한 반씩: ① 반 만들기(DOM '반 추가하기') 또는 ② 반 이름 바꾸기(PATCH — aywa에서 반 이름이 바뀐 경우) →
-// ③ 원아 추가 배정(직전에 1인 보드를 다시 읽어 계획과 같은지 확인) → ④ 반 원아가 계획과 정확히 같은지 확인.
+// ③ 원아 추가 배정(직전에 1인 보드를 다시 읽어 계획과 같은지 확인 — 원아를 1인 보드에서 가져온 학생만) → ④ 반 원아가 계획과 정확히 같은지 확인.
 // 끝에 건드린 1인 보드가 **하나도 안 바뀌었는지** 확인한다. 이상하면 `ClassBoardStop`을 던진다(다음 반으로 넘어가지 않는다).
 // 🔑 해제(원아·선생님)는 여기서 하지 않는다 — 배정·기록이 끝난 뒤 class-board-release-apply.mjs가 따로 한다(원장 2026-10-02 자동 해제).
 import { CLASSNOTE_BASE, createBoard, dismissHonorificDialog, enrollChild, fetchBoardChildren, fetchBoards } from "./classnote-admin-core.mjs";
@@ -36,9 +36,13 @@ async function renameBoard(page, centerId, boardId, name) {
  * @returns {Promise<Array<{className, boardId, created:boolean, renamed:string|null, enrolled:Array<{name,childId}>, held:number}>>}
  */
 export async function applyClassBoardPlans({ page, centerId, targets, boards, membersByBoard, students, log = console.log, out = [] }) {
+  // 1인 보드 재확인은 **원아를 1인 보드에서 가져온 학생만** 한다. 반 보드 확인 기록에서 가져온 학생(source "verified" — 1인 보드가
+  // 없거나 비었다, 원장 2026-11-02)은 1인 보드가 출처가 아니라서, 다시 읽으면 늘 "계획과 다르다"로 동기화 전체가 멈춘다.
+  const fromPersonal = (a) => (a.source ?? "personal") === "personal";
   const personalBefore = new Map();
   for (const p of targets)
     for (const a of p.assign) {
+      if (!fromPersonal(a)) continue;
       const pid = personalBoardId(boards, students.get(a.studentId).name);
       if (pid != null && !personalBefore.has(pid)) personalBefore.set(pid, ids(membersByBoard.get(pid)));
     }
@@ -99,10 +103,12 @@ export async function applyClassBoardPlans({ page, centerId, targets, boards, me
 
     const want = new Set();
     for (const a of p.assign) {
-      const pid = personalBoardId(boards, students.get(a.studentId).name);
-      const live = ids(await fetchBoardChildren(page, centerId, pid));
-      const planned = new Set(a.children.map((c) => c.id));
-      if (!sameSet(live, planned)) throw new ClassBoardStop(`${a.name}: 1인 보드 원아가 계획과 다르다(그 사이 변경) — 중단`);
+      if (fromPersonal(a)) {
+        const pid = personalBoardId(boards, students.get(a.studentId).name);
+        const live = ids(await fetchBoardChildren(page, centerId, pid));
+        const planned = new Set(a.children.map((c) => c.id));
+        if (!sameSet(live, planned)) throw new ClassBoardStop(`${a.name}: 1인 보드 원아가 계획과 다르다(그 사이 변경) — 중단`);
+      }
       for (const c of a.children) {
         want.add(c.id);
         if (c.already) continue;

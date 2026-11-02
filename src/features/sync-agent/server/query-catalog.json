@@ -9033,6 +9033,26 @@
       "p.classId"
     ]
   },
+  "ecf8900f4cfb70ccafa24b6f7d8b5a9ef8afe29171d564922b3b49f4969d296d": {
+    "parts": [
+      "select student_id, child_id, child_name, board_id from classnote_class_board_members\n    where tenant_id = ",
+      " and status = 'ok' and child_id is not null"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/math-class-boards-load.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant"
+    ]
+  },
   "ed6a4ddcb771d01aa6e8e6772bb89b31ad09b5870acd0c6b074adbb1d9f976d5": {
     "parts": [
       "\n        insert into audit_logs (tenant_id, actor_id, actor_name, action, target_type, target_label, metadata)\n        values (",

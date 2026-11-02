@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { baseName, childNameConsistent, closedClassesToKeep, planClassBoards, reservedBoardName, resolveStudentChildren, summarizePlan } from "./class-board-plan.mjs";
+import { baseName, childNameConsistent, closedClassesToKeep, dropVerifiedTargets, planClassBoards, reservedBoardName, resolveStudentChildren, summarizePlan, verifiedOwnersOf } from "./class-board-plan.mjs";
 
 const SY = 2026; // 중1 = 2013생, 초6 = 2014생
 const P1 = "010-1111-1111";
@@ -348,5 +348,92 @@ describe("closedClassesToKeep — 종강 반 연결은 ClassNote 보드가 살�
   });
   it("🔴 ClassNote에서 보드가 지워졌으면 지키지 않는다(연결이 걷혀 앱이 보낼 반 고르기를 띄운다)", () => {
     expect(closedClassesToKeep({ closedIds: ["closedB"], planClassIds: [], linkedBoardByClass: linked, liveBoardIds: [11] })).toEqual([]);
+  });
+});
+
+describe("1인 보드가 없거나 빈 학생 — 반 보드에서 확인된 원아로 판정(원장 2026-11-02)", () => {
+  // s1 김근우A의 1인 보드를 비우고, 반 보드(#21)에 이미 있는 원아 101을 확인 기록(0302a ok, 보드 #21)으로 둔다.
+  function emptied({ dropBoard = false } = {}) {
+    const w = world();
+    if (dropBoard) w.boards = w.boards.filter((b) => b.id !== 11);
+    w.boards.push({ id: 21, name: "중등M 중1 BS3E" });
+    w.membersByBoard.set(11, []);
+    w.membersByBoard.set(21, [{ id: 101, name: "김근우", date_birth: "2013-05-01" }, { id: 102, name: "박준후", date_birth: "2013-02-01" }]);
+    w.verifiedChildren = new Map([["s1", [{ id: 101, name: "옛이름", boardIds: [21] }]]]);
+    return w;
+  }
+  const judge = (w, sid = "s1") => resolveStudentChildren(w.students.get(sid), { ...w, verifiedOwners: verifiedOwnersOf(w.verifiedChildren) });
+  it("1인 보드가 비었으면 확인된 원아로 통과하고 출처를 verified로 적는다 — 이름·생년은 지금 반 보드 값", () => {
+    expect(judge(emptied())).toMatchObject({ ok: true, source: "verified", children: [{ id: 101, name: "김근우" }] });
+  });
+  it("1인 보드가 지워졌어도(12월 삭제) 확인된 원아로 통과한다", () => {
+    expect(judge(emptied({ dropBoard: true }))).toMatchObject({ ok: true, source: "verified" });
+  });
+  it("확인 기록도 없으면 종전 사유 그대로 보류", () => {
+    const w = emptied();
+    w.verifiedChildren = new Map();
+    expect(judge(w)).toMatchObject({ ok: false, reasons: ["ClassNote 미가입·미배정(1인 보드 원아 0명)"], source: null });
+    const w2 = emptied({ dropBoard: true });
+    w2.verifiedChildren = null;
+    expect(judge(w2)).toMatchObject({ ok: false, reasons: ["1인 보드 없음"] });
+  });
+  it("🔴 사람이 반 보드에서 원아를 떼면 기록만 보고 다시 붙이지 않는다(보류)", () => {
+    const w = emptied();
+    w.membersByBoard.set(21, [{ id: 102, name: "박준후", date_birth: "2013-02-01" }]);
+    expect(judge(w)).toMatchObject({ ok: false, reasons: ["반 보드에서 확인된 원아가 지금 그 반 보드에 없음 — 확인 필요"], source: null });
+  });
+  it("🔴 기록된 보드가 아닌 다른 보드에 있는 것만으로는 쓰지 않는다", () => {
+    const w = emptied();
+    w.verifiedChildren = new Map([["s1", [{ id: 101, name: "김근우", boardIds: [99] }]]]);
+    expect(judge(w).ok).toBe(false);
+  });
+  it("🔴 확인된 원아에도 가드를 다시 건다 — 보호자 전화가 다르면 보류", () => {
+    const w = emptied();
+    w.admissions.set(101, { phone: "010-9999-9999", boardNames: ["중등M 중1 BS3E"] });
+    expect(judge(w).reasons.join()).toContain("보호자 전화 불일치");
+  });
+  it("🔴 확인된 원아가 다른 학생 1인 보드에 있으면 보류(역방향)", () => {
+    const w = emptied();
+    w.admissions.set(101, { phone: "01011111111", boardNames: ["(수학)박준후"] });
+    expect(judge(w).reasons.join()).toContain("다른 학생 1인 보드에도 있음");
+  });
+  it("🔴 반 보드 기록에서 다른 학생에게 확인된 원아면 보류(1인 보드가 비어도 역방향을 잡는다) — 1인 보드 출처에도", () => {
+    const w = emptied();
+    w.verifiedChildren.set("s2", [{ id: 101, name: "김근우", boardIds: [21] }]);
+    expect(judge(w).reasons.join()).toContain("다른 학생에게 확인된 원아");
+    const p = world();
+    p.verifiedChildren = new Map([["s2", [{ id: 101, name: "김근우", boardIds: [21] }]]]);
+    expect(judge(p).reasons.join()).toContain("다른 학생에게 확인된 원아");
+  });
+  it("④(기록)은 지금 대상 반 학생만 비교한다 — 종강 유지 반·병합 학생의 옛 기록은 무시", () => {
+    const w = emptied();
+    w.verifiedChildren.set("gone", [{ id: 101, name: "김근우", boardIds: [77] }]);
+    const [p] = planClassBoards({ ...w, classes: cls(["s1", "s2"]) });
+    expect(p.hold).toEqual([]);
+    const [q] = planClassBoards({ ...w, classes: cls(["s1"]), verifiedOwnerScope: new Set(["s1", "gone"]) });
+    expect(q.hold.map((h) => h.name)).toEqual(["김근우A"]);
+  });
+  it("1인 보드에 원아가 있으면 확인 기록은 보지 않는다(출처 personal)", () => {
+    const w = world();
+    w.verifiedChildren = new Map([["s1", [{ id: 101, name: "김근우", boardIds: [21] }]]]);
+    expect(judge(w)).toMatchObject({ ok: true, source: "personal", children: [{ id: 101, name: "김근우" }] });
+  });
+  it("계획: 확인된 원아는 이미 반 보드에 있는 원아로 배정되고 '명단 밖 원아'로 잡히지 않는다", () => {
+    const w = emptied();
+    const [p] = planClassBoards({ ...w, classes: cls(["s1", "s2"]) });
+    expect(p.board).toMatchObject({ action: "exists", id: 21 });
+    expect(p.hold).toEqual([]);
+    expect(p.assign.find((a) => a.studentId === "s1")).toMatchObject({ source: "verified", children: [{ id: 101, already: true }] });
+    expect(p.assign.find((a) => a.studentId === "s2")).toMatchObject({ source: "personal" });
+    expect(p.extras).toEqual([]);
+  });
+});
+
+describe("dropVerifiedTargets — 1인 보드 준비에서 뺄 학생", () => {
+  it("확인된 원아가 있는 학생만 뺀다(신입·보류는 남긴다)", () => {
+    const targets = [{ studentId: "s1" }, { studentId: "s2" }, { studentId: "s3" }];
+    const verified = new Map([["s1", [{ id: 1 }]], ["s2", []]]);
+    expect(dropVerifiedTargets(targets, verified).map((t) => t.studentId)).toEqual(["s2", "s3"]);
+    expect(dropVerifiedTargets(targets, null).length).toBe(3);
   });
 });

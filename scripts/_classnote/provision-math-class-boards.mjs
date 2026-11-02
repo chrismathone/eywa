@@ -17,7 +17,7 @@ import postgres from "postgres";
 import { fetchCenterId, launchAdminBrowser, loginClassnote } from "./classnote-admin-core.mjs";
 import { resolveTenant } from "./classnote-core.mjs";
 import { closedClassesToKeep, summarizePlan } from "./class-board-plan.mjs";
-import { loadAywa, loadClosedLinked, loadLinkedBoards, loadPlan } from "./math-class-boards-load.mjs";
+import { loadAywa, loadClosedLinked, loadLinkedBoards, loadPlan, loadVerifiedChildren } from "./math-class-boards-load.mjs";
 import { applyClassBoardPlans, ClassBoardStop } from "./math-class-boards-apply.mjs";
 import { writeClassBoardSnapshot } from "./math-class-boards-db.mjs";
 
@@ -40,7 +40,10 @@ try {
   const centerId = await fetchCenterId(page);
   // strict(개명 감사 G9) — 조회 실패를 빈 지도로 삼키면 이름으로 후퇴해 개명한 반을 새로 만든다.
   const linkedBoardByClass = await loadLinkedBoards(sql, tenant, { strict: true });
-  const { plans, boards, membersByBoard, failed, lookedUp } = await loadPlan(page, centerId, aywa, { linkedBoardByClass });
+  // 1인 보드가 없거나 빈 학생의 원아 출처 — 매일 동기화와 같은 판정(원장 2026-11-02, class-board-plan.mjs ①).
+  const verifiedChildren = await loadVerifiedChildren(sql, tenant);
+  if (!verifiedChildren) throw new ClassBoardStop("반 보드 확인 기록을 읽지 못했다 — 중단(그대로 계획하면 1인 보드가 빈 학생이 전부 보류로 기록된다)");
+  const { plans, boards, membersByBoard, failed, lookedUp } = await loadPlan(page, centerId, aywa, { linkedBoardByClass, verifiedChildren });
   console.log(`센터 ${centerId} · 보드 ${boards.length}개 · 원아 조회 보드 ${lookedUp}개(실패 ${failed}) · 연결표 ${linkedBoardByClass.size}개 반`);
 
   const s = summarizePlan(plans);
@@ -73,7 +76,7 @@ try {
     // 방금 만든 보드는 번호로 얹는다(이름이 달라도 연결 — 매일 동기화와 같은 규약, G8).
     const linkedAfter = await loadLinkedBoards(sql, tenant, { strict: true });
     for (const d of done) if (d.created && d.boardId != null) linkedAfter.set(d.classId, Number(d.boardId));
-    const fresh = await loadPlan(page, centerId, aywa, { linkedBoardByClass: linkedAfter });
+    const fresh = await loadPlan(page, centerId, aywa, { linkedBoardByClass: linkedAfter, verifiedChildren });
     if (fresh.failed) throw new ClassBoardStop(`원아 조회 실패 ${fresh.failed}건 — DB 기록을 건너뛴다(불완전한 판정으로 초록불을 켜지 않는다)`);
     // 종강 반 연결 — ClassNote 보드가 살아 있으면 지킨다(원장 2026-09-30, 매일 동기화와 같은 판정).
     const keepClassIds = closedClassesToKeep({

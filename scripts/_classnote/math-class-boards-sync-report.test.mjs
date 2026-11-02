@@ -18,6 +18,7 @@ vi.mock("./math-class-boards-load.mjs", () => ({
   loadAywa: async () => ({ classes: [{ classId: "c1", className: "가반", studentIds: [] }, { classId: "c2", className: "나반", studentIds: [] }], students: new Map() }),
   loadLinkedBoards: async () => new Map(),
   loadClosedLinked: async () => [],
+  loadVerifiedChildren: async () => new Map(),
   loadPlan: async () => ({ plans: plans(), boards: [], membersByBoard: new Map(), admissions: new Map(), failed: 0 }),
 }));
 vi.mock("./class-board-release.mjs", () => ({
