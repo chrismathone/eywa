@@ -9,11 +9,12 @@ import { teacherColumns } from '../editor/teachers';
 import { appearanceOf } from '../editor/appearance';
 import { timeLabel, type Draft } from '../editor/model';
 import { buildApplyPlan, type ApplyPlan } from '../apply-plan';
+import { rebaseDraft } from '../apply-rebase';
 import { fingerprint, contextFingerprint, readApplyContext, type ApplyContext } from './apply-context';
 import { shiftDays } from '@/features/timetable/lib/week';
 import { parseEditorViewPref, type TimetableEditorView } from '@/features/timetable/lib/editor-view-prefs';
 
-export type ApplyJob = { id: string; tenant_id: string; actor_id: string; actor_role: string; policy_hash: string; baseline_hash: string; request_hash: string; effective_date: string; apply_at: string; payload: Draft; status: string };
+export type ApplyJob = { id: string; tenant_id: string; actor_id: string; actor_role: string; policy_hash: string; baseline_hash: string; request_hash: string; effective_date: string; apply_at: string; payload: Draft; status: string; summary: { teacherNames?: number; students?: number } | null };
 export const policyHash = (settings: Record<string, unknown>, role: string) => fingerprint({ role, permissions: settings.permissions, modules: settings.modules });
 const equal = (a: unknown, b: unknown) => fingerprint(a ?? null) === fingerprint(b ?? null);
 
@@ -77,7 +78,7 @@ export async function validateOperatingLinks(tx: postgres.TransactionSql, tenant
   if (nativeLinks.some(row => !!row.classId && (scheduleClasses.has(row.classId) || rosterPairs.has(`${row.classId}:${row.studentId}`)))) throw new Error('변경할 반이나 학생에 보강 일정·교시 고정·자리 이동이 연결되어 있습니다. 해당 내역을 먼저 확인해 주세요.');
 }
 
-async function commitPlan(tx: postgres.TransactionSql, job: ApplyJob, context: ApplyContext, plan: ApplyPlan) {
+async function commitPlan(tx: postgres.TransactionSql, job: ApplyJob, context: ApplyContext, plan: ApplyPlan, skipped: string[]) {
   const tenant = job.tenant_id, date = job.effective_date, dayBefore = shiftDays(date, -1), draft = job.payload;
   const actor = context.people.find(person => person.id === job.actor_id)!;
   const slotIds = new Map<string, string>(), studentIds = new Map<string, string>();
@@ -125,9 +126,11 @@ async function commitPlan(tx: postgres.TransactionSql, job: ApplyJob, context: A
   if (!user) throw new Error('계정 정보를 다시 확인해 주세요.');
   const raw = user.prefs ?? {}, patch = appliedViewPatch(draft, raw, slotIds), prefs = serializeViewPrefs(mergeViewPrefs(parseViewPrefs(raw), patch));
   await tx`update users set ui_prefs=${tx.json({ ...raw, timetable: prefs } as never)}::jsonb where tenant_id=${tenant} and id=${job.actor_id}`;
-  const result = { ...plan.summary, effectiveDate: date, appliedAt: new Date().toISOString() };
+  const result = { ...plan.summary, skipped, effectiveDate: date, appliedAt: new Date().toISOString() };
   await tx`insert into audit_logs(tenant_id,actor_id,actor_name,action,target_type,target_label,metadata) values(${tenant},${job.actor_id},${actor.name},'timetable_structure_apply','timetable','시간표 연습본 적용',${tx.json({ jobId: job.id, ...result } as never)}::jsonb)`;
-  await tx`update timetable_lab_apply_jobs set status='applied',finished_at=now(),result=${tx.json(result)}::jsonb,error=null where tenant_id=${tenant} and id=${job.id} and status='pending'`;
+  // 실제로 넣은 새 수업만 남긴다 — 이번에 제외된 수업은 충돌이 풀리면 다시 넣을 수 있어야 한다(`appliedNewIds`).
+  const newLessonIds = [...plan.schedules, ...plan.blocks].flatMap(row => row.before ? [] : [row.item.id]);
+  await tx`update timetable_lab_apply_jobs set status='applied',finished_at=now(),result=${tx.json({ ...result, newLessonIds })}::jsonb,error=null where tenant_id=${tenant} and id=${job.id} and status='pending'`;
   return result;
 }
 
@@ -148,11 +151,14 @@ export async function runApplyJob(id: string) {
       await tx`select set_config('request.jwt.claims',${JSON.stringify({ sub: job.actor_id, role: 'authenticated' })},true)`;
       const context = await readApplyContext(tx, job.tenant_id), actor = context.people.find(person => person.id === job.actor_id);
       if (!actor || actor.status !== 'active' || actor.role !== job.actor_role || policyHash(context.settings, actor.role) !== job.policy_hash) throw new Error('예약 이후 계정 또는 권한이 변경되었습니다. 다시 확인해 주세요.');
-      if (contextFingerprint(context) !== job.baseline_hash) throw new Error('예약 이후 원본 시간표가 변경되었습니다. 다시 불러와 적용해 주세요.');
       if (job.payload.source?.tenantId !== job.tenant_id) throw new Error('현재 학원의 시간표만 적용할 수 있습니다.');
-      const plan = buildApplyPlan(job.payload, context, job.effective_date);
+      // 예약 뒤에 운영이 바뀌어도 막지 않는다 — 실행 시점의 최신 자료로 다시 맞춘다.
+      const latest = rebaseDraft(job.payload, context, job.effective_date, contextFingerprint(context) !== job.payload.source?.baselineHash);
+      const plan = buildApplyPlan(latest.draft, latest.context, job.effective_date);
+      // 강사·학생 이름 변경은 예약할 때 권한을 봤다 — 그때보다 늘면 권한을 지나지 않은 쓰기다.
+      if (plan.people.length > (job.summary?.teacherNames ?? 0) || plan.students.length > (job.summary?.students ?? 0)) throw new Error('예약 이후 강사·학생 이름 변경 내용이 달라졌습니다. 다시 검사해 주세요.');
       await validateOperatingLinks(tx, job.tenant_id, job.effective_date, plan);
-      return await commitPlan(tx, job, context, plan);
+      return await commitPlan(tx, { ...job, payload: latest.draft }, context, plan, latest.skipped);
     });
   } catch (error) {
     const message = error instanceof Error && !('code' in error) ? error.message : '자료가 변경되었거나 저장에 실패했습니다. 다시 불러와 확인해 주세요.';
