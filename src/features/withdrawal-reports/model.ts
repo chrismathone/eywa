@@ -100,10 +100,16 @@ export type ReportListRow = Omit<WithdrawalReport, "body"> & {
   body_student?: string | null; body_parent?: string | null; body_opinion?: string | null; body_attendance?: string | null; body_tuition?: string | null; body_arrears_note?: string | null;
 };
 export type StaffOption = { id: string; name: string; role: SystemRole; subjects: string[]; approvalSubjects?: string[] };
-export type StudentOption = { id: string; name: string; school: string | null; grade: string | null; courses: CourseSnapshot[] };
-export function snapshotMatches(a: StudentSnapshot, b: StudentSnapshot) {
+export type StudentOption = { id: string; name: string; school: string | null; grade: string | null; courses: CourseSnapshot[];
+  /** 진행 중인 다른 퇴원보고서가 맡은 과목의 반(s2_0014 — 과목이 다르면 따로 요청한다) · 여기서는 고를 수 없고 처리 구분(퇴원/수강종료)만 센다. */
+  busyCourses?: CourseSnapshot[] };
+/**
+ * 요청 이후 학생·수강이 그대로인가 — `subjects`를 주면 그 과목의 수강만 대조한다(과목 수강종료 묶음 · DB `withdrawal_report_scope`와 같은 규칙 s2_0014:
+ * 다른 과목 보고서가 먼저 끝나 그 과목 수강이 닫혀도 이 보고서는 바뀐 것이 아니다). 퇴원 묶음은 학생 전체를 대조한다.
+ */
+export function snapshotMatches(a: StudentSnapshot, b: StudentSnapshot, subjects?: readonly string[]) {
   const key = (s: StudentSnapshot) => JSON.stringify([s.name, s.school, s.grade, s.enrolledAt, s.status, s.withdrawnAt,
-    [...s.courses].sort((x, y) => x.id.localeCompare(y.id)).map(c => [c.id, c.classId, c.className, c.subject, c.teacherId, c.teacherName, c.startDate, c.endDate, c.onHold])]);
+    [...s.courses].filter(c => !subjects || subjects.includes(c.subject)).sort((x, y) => x.id.localeCompare(y.id)).map(c => [c.id, c.classId, c.className, c.subject, c.teacherId, c.teacherName, c.startDate, c.endDate, c.onHold])]);
   return key(a) === key(b);
 }
 export function canRequestReport(role: SystemRole) { return role === "master" || role === "admin" || role === "manager"; }

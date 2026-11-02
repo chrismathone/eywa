@@ -1926,7 +1926,7 @@ export const withdrawalReportGroups = pgTable("withdrawal_report_groups", {
   teacherIds: uuid("teacher_ids").array().notNull(), managerIds: uuid("manager_ids").array().notNull(), directorIds: uuid("director_ids").array().notNull().default(sql`'{}'::uuid[]`),
   subjects: text("subjects").array().notNull(), effectiveDate: date("effective_date").notNull(), exitKind: text("exit_kind").notNull(), snapshot: jsonb("snapshot").notNull(),
   status: text("status").notNull().default("pending"), createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(), appliedAt: timestamp("applied_at", { withTimezone: true }),
-}, t => [uniqueIndex("withdrawal_report_groups_pending").on(t.tenantId, t.studentId).where(sql`status not in ('completed','canceled')`)]);
+}, t => [index("withdrawal_report_groups_open").on(t.tenantId, t.studentId).where(sql`status not in ('completed','canceled')`)]);
 export const withdrawalReports = pgTable("withdrawal_reports", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
