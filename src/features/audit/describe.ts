@@ -1345,7 +1345,14 @@ export function auditDetail(
     }
     case "class_end_term": {
       const d = str(m.closedAt);
-      return d ? `종강일 ${d}` : null;
+      // 2026-11-02~ 종강이 시간표 배치도 닫는다(`schedules` = 닫은 줄). 이름·수강은 그대로이고 배치만 닫은 기록
+      // (밤 정리가 옛 종강 반의 남은 배치를 거둔 것)은 두 번째 종강처럼 읽히지 않게 '정리'로 적는다.
+      const n = Array.isArray(m.schedules) ? m.schedules.length : 0;
+      const tidyOnly = n > 0 && str(m.fromName) === str(m.toName) && m.affectedStudents === 0;
+      return join(
+        d ? `종강일 ${d}` : null,
+        n > 0 ? (tidyOnly ? `남은 시간표 배치 ${n}줄 정리` : `시간표 배치 ${n}줄 닫음`) : null,
+      );
     }
     // 반 운영 기간이 끝나 그 반 수강을 닫음(0274a, 2026-09-18 — 매일 밤 cron, 행위자 '시스템(운영 기간 종료)').
     case "class_period_enrollments": {

@@ -133,11 +133,14 @@ export default async function ClassDetailPage({
     })
     .sort((a, b) => Number(b.isSubjectMatch) - Number(a.isSubjectMatch));
   const today = todayIso();
+  // 시간표 요약의 기준일 — 종강일이 지난 반은 **종강일**. 종강이 배치를 그날로 닫아(2026-11-02) 오늘 기준이면
+  // '현재' 배치가 비고 옛 학기 요일이 섞인다(적대 리뷰 2026-11-02). 랩 분리 판정·요약·등원 요일이 같은 날을 쓴다.
+  const scheduleDay = klass.closedAt && klass.closedAt.slice(0, 10) < today ? klass.closedAt.slice(0, 10) : today;
   const handoverDue = !!klass.pendingTeacherDate && klass.pendingTeacherDate <= today;
   // '따로 수업(*LAB)' 교시(오늘 유효 + 아직 시작 전) — 아래 시간표 요약과 EiE 토글이 **같은 판정**을 쓴다.
   //    ⚠️ **지난 배치(만료 행)는 빼지 않는다** — 그건 '지난 배치 N개는 숨김' 숫자의 재료라(아래 요약 주석).
   const isLiveLabSeparate = (s: (typeof klass.scheduleSlots)[number]) =>
-    isLabSeparateSlot(s.slotTeacherLabel, s.labSeparate) && slotPhase(s, today) !== "past";
+    isLabSeparateSlot(s.slotTeacherLabel, s.labSeparate) && slotPhase(s, scheduleDay) !== "past";
   const labSeparateSlots = klass.scheduleSlots.filter(isLiveLabSeparate);
   // EiE 토글(LAB '따로 수업(*LAB)' 학생 배정, 0271b) — **EiE 반이고 *LAB 교시가 있을 때만** 세운다(원장 2026-09-17
   // *"EiE 수업이 아니면 EiE 토글은 없어도"*). *LAB 교시가 없는 반에선 켜도 아무 일이 없어 거짓 약속이 된다(lab-split.ts).
@@ -193,16 +196,16 @@ export default async function ClassDetailPage({
   //    조용히 줄어든다(재리뷰 2026-09-17). 표식을 끄면 켜진 채 마감된 행이 실제로 남는다. 판정 = 위 `isLiveLabSeparate`.
   const schedule = summarizeSchedule(
     klass.scheduleSlots.filter((s) => !isLiveLabSeparate(s)),
-    today,
+    scheduleDay,
   );
   // 회차는 **오늘 유효한** 교시만 센다 — 아직 시작 전인 표식 교시뿐이면 0이라, 그땐 교시 수로 적는다(빼고 침묵 금지).
-  const labSeparateSessions = labSeparateSlots.length > 0 ? summarizeSchedule(labSeparateSlots, today).sessions : 0;
+  const labSeparateSessions = labSeparateSlots.length > 0 ? summarizeSchedule(labSeparateSlots, scheduleDay).sessions : 0;
   // 반 운영 요일(분리등원 후보) — 배정 다이얼로그 + 학생별 등원요일 배지에 사용.
   // ⚠️ **현재 유효한 슬롯 기준**. 만료 요일까지 세면 이제 안 하는 요일이 등원 후보로 뜬다(실측 1반).
   // ⚠️ 등원 요일 후보는 **전체 시간표**(따로 수업 LAB 포함) 기준 그대로 — 산정에서 뺀 건 요약 숫자뿐이다
   //    (LAB으로만 도는 요일을 후보에서 지우면 그날 오는 학생의 등원 요일을 못 고른다, 리뷰 2026-09-17).
   const classDays =
-    labSeparateSlots.length > 0 ? summarizeSchedule(klass.scheduleSlots, today).days : schedule.days;
+    labSeparateSlots.length > 0 ? summarizeSchedule(klass.scheduleSlots, scheduleDay).days : schedule.days;
   /**
    * 운영 기간(반 수정의 운영 기간 그대로 — 원장 2026-09-18). 카드와 학생 줄이 **같은 값**을 쓴다.
    * 🔑 기간이 아직 안 끝났으면 수강 종료일은 **저장하지 않고**(0274a — 앱 26곳이 "종료일 비었음 = 수강 중"으로 판정한다)
