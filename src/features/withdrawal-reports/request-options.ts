@@ -14,15 +14,18 @@ export function toggleCourseGroup(courses: readonly CourseSnapshot[], selected: 
   return selected.includes(id) ? selected.filter(x => !group.includes(x)) : [...new Set([...selected, ...group])];
 }
 
-/** 안내 문구용 — 반이 둘 이상 묶인 과목만 `수학 3개 반`으로. */
-export function bundledGroupLabels(courses: readonly Pick<CourseSnapshot, "subject" | "eie">[], labels: Readonly<Record<string, string>>) {
-  const counts = new Map<string, { name: string; n: number }>();
+/**
+ * 안내 문구용 — 고른 과목마다 함께 종료되는 수업 이름(원장 2026-11-02 *"같은 과목의 이름 뜨면서 해당 수업 모두 종료라는거 알려줘"* —
+ * 권하윤 MS2A만 끝나고 짝 JJ2A가 남은 일 뒤). 반이 하나뿐인 과목도 적는다.
+ */
+export function subjectEndGroups(courses: readonly Pick<CourseSnapshot, "subject" | "eie" | "className">[], labels: Readonly<Record<string, string>>) {
+  const groups = new Map<string, { name: string; classNames: string[] }>();
   for (const c of courses) {
     const key = courseGroupKey(c);
-    const name = `${labels[c.subject] ?? c.subject}${c.eie ? " EiE" : ""}`;
-    counts.set(key, { name, n: (counts.get(key)?.n ?? 0) + 1 });
+    const group = groups.get(key) ?? groups.set(key, { name: `${labels[c.subject] ?? c.subject}${c.eie ? " EiE" : ""}`, classNames: [] }).get(key)!;
+    group.classNames.push(c.className);
   }
-  return [...counts.values()].filter(g => g.n > 1).map(g => `${g.name} ${g.n}개 반`);
+  return [...groups.values()];
 }
 
 /**

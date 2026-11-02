@@ -58,7 +58,7 @@ describe("compact request overlay and optional principal", () => {
     render(<RequestDialog {...props} staff={[...staff, { ...staff[0], id: "second-teacher", name: "다른 강사" }]} students={[{ ...students[0], courses: [...students[0].courses, extra] }]} />);
     await fill();
     expect(screen.getByText("퇴원 · 2개 반 · 보고서 1건")).toBeInTheDocument();
-    expect(screen.getByRole("note")).toHaveTextContent("수학 2개 반을 한 과목으로 묶어 함께 종료합니다.");
+    expect(screen.getAllByRole("note")[0]).toHaveTextContent(/수학 수업 2개를 모두 종료합니다 — .*수학 보충반/);
     fireEvent.click(screen.getByRole("checkbox", { name: "수학 보충반 · 수학 · 담당 강사" }));
     expect(screen.getByText("종료할 반을 선택해 주세요.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "강사에게 작성 요청" })).toBeDisabled();
@@ -70,7 +70,7 @@ describe("compact request overlay and optional principal", () => {
     mocks.request.mockResolvedValue({ ok: true, id: "new-report" });
     const own = [{ ...students[0], courses: [{ ...students[0].courses[0], teacherId: "manager", teacherName: "관리자" }] }];
     render(<RequestDialog {...props} students={own} />); await fill();
-    expect(screen.getByRole("note")).toHaveTextContent("관리자 칸을 건너뛰고 원장 승인으로 바로 넘어갑니다.");
+    expect(screen.getByText(/관리자 칸을 건너뛰고 원장 승인으로 바로 넘어갑니다\./)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "강사에게 작성 요청" }));
     await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ teacherIds: ["manager"], managerIds: ["director"], directorIds: [] })));
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bundledGroupLabels, defaultApproverIds, narrowApprovalSubjects, reportAuthorIds, requestApprovers, requestManagers, selfManagedSubjects, toggleCourseGroup } from "./request-options";
+import { subjectEndGroups, defaultApproverIds, narrowApprovalSubjects, reportAuthorIds, requestApprovers, requestManagers, selfManagedSubjects, toggleCourseGroup } from "./request-options";
 import { reportStatusLabel, skipsManagerStep, type CourseSnapshot, type StaffOption } from "./model";
 import { withUnassignedCourses } from "./target-courses";
 
@@ -43,12 +43,15 @@ describe("reportAuthorIds — 과목마다 작성자 한 명", () => {
   });
 });
 
-describe("bundledGroupLabels — 안내 문구", () => {
-  it("둘 이상 묶인 과목만 적는다", () => {
-    expect(bundledGroupLabels([math1, math2, lab, eng], { math: "수학", english: "영어" })).toEqual(["수학 3개 반"]);
+describe("subjectEndGroups — 함께 종료되는 수업 안내", () => {
+  it("과목마다 함께 끝나는 수업 이름을 모두 적는다(반 하나뿐인 과목도)", () => {
+    expect(subjectEndGroups([math1, math2, lab, eng], { math: "수학", english: "영어" })).toEqual([
+      { name: "수학", classNames: [math1.className, math2.className, lab.className] },
+      { name: "영어", classNames: [eng.className] },
+    ]);
   });
-  it("EiE는 영어와 따로 센다", () => {
-    expect(bundledGroupLabels([eng, eie], { english: "영어" })).toEqual([]);
+  it("EiE는 영어와 따로 묶는다", () => {
+    expect(subjectEndGroups([eng, eie], { english: "영어" }).map(g => g.name)).toEqual(["영어", "영어 EiE"]);
   });
 });
 
