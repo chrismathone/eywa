@@ -12,6 +12,7 @@ import { KeepaliveStage } from "./keepalive-stage";
 import { useKeepaliveFollow } from "./use-keepalive-follow";
 import { FloatingWindow } from "./floating-window";
 import { iframeRegistry } from "./route-window";
+import { openLinkWindow } from "./open-menu-window";
 import { noteDirtyOwner } from "./window-signals-core";
 import { isFromCurrentDocument, WINDOW_DIRTY_MESSAGE } from "./window-bridge";
 import { WindowSwitcher } from "./window-switcher";
@@ -230,7 +231,7 @@ export function WorkspaceCanvas({ owner, homeHref = "/dashboard" }: { owner: str
         // "새 X" 작성 폼(autoClose)은 그 메뉴의 작성 창이 전부 녹음 중이면 새 작성 창을 한 벌 더(openForm — 원장 2026-10-16).
         if (data.newInstance === true) st.openNewInstance("route", params);
         else if (params.autoClose) st.openForm("route", params);
-        else st.open("route", params);
+        else openLinkWindow(params);
         return;
       }
     };

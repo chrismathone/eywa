@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { endScopeText, endScopeViaReport, type EndScopeResult } from "@/features/timetable/lib/end-scope-text";
+import { endScopeText, endScopeViaReport, fetchEndScope, type EndScopeResult } from "@/features/timetable/lib/end-scope-text";
 
 /**
  * 수강 종료 확인 팝업의 한 줄 — 이걸 끝내면 **이 반만 종강인지 / 그 과목 수강종료인지 / 퇴원인지** 사실대로 말한다
@@ -22,15 +22,9 @@ export function EndScopeNote({ enrollmentId, date }: { enrollmentId: string; dat
     if (!enrollmentId || !date) return;
     let alive = true;
     const timer = setTimeout(() => {
-      const q = new URLSearchParams({ enrollmentId, date });
-      void fetch(`/api/timetable/end-scope?${q.toString()}`, { cache: "no-store" })
-        .then((r) => (r.ok ? (r.json() as Promise<{ result: EndScopeResult | null }>) : { result: null }))
-        .then(({ result }) => {
-          if (alive) setAnswer({ key, result });
-        })
-        .catch(() => {
-          if (alive) setAnswer({ key, result: null });
-        });
+      void fetchEndScope(enrollmentId, date).then((result) => {
+        if (alive) setAnswer({ key, result });
+      });
     }, ASK_DEBOUNCE_MS);
     return () => {
       alive = false;
