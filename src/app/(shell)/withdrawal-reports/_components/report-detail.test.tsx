@@ -82,8 +82,14 @@ describe("report submission and review", () => {
     await waitFor(() => expect(mocks.change).toHaveBeenCalledWith(r.id, "submit", r.revision, expect.objectContaining({ studentConsultation: "학생 상담 완료", detail: "상담 결과 ".repeat(40) })));
     await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
   });
+  it("shows the detail length rule as a placeholder, not as a label note", () => {
+    render(<ReportDetail {...props} />);
+    expect(screen.getByLabelText("퇴원 상세사유")).toHaveAttribute("placeholder", "100자 이상 작성해 주세요");
+    expect(screen.getByRole("rowheader", { name: "퇴원 상세 사유" })).toBeInTheDocument();
+    expect(screen.queryByText(/10pt/)).not.toBeInTheDocument();
+  });
   it("displays server rejection and preserves the written text", async () => {
-    mocks.change.mockResolvedValue({ error: "퇴원 상세사유를 200자 이상 작성해 주세요." });
+    mocks.change.mockResolvedValue({ error: "퇴원 상세사유를 100자 이상 작성해 주세요." });
     render(<ReportDetail {...props} />);
     fireEvent.change(screen.getByLabelText("퇴원 상세사유"), { target: { value: "짧은 사유" } });
     fireEvent.click(screen.getByRole("button", { name: "관리자에게 제출" }));

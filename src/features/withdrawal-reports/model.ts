@@ -68,7 +68,7 @@ export function isDirectReport(r: Pick<WithdrawalReport, "teacher_id" | "manager
 /**
  * 관리 도구 장부 정리(수강 없는 재원생 일괄 퇴원)가 남긴 바로 처리 보고서인가 — 바로 처리 · 사유 '기타' · 메모 = 장부 정리 메모.
  * 퇴원보고서 목록에서는 조용히 뺀다(원장 2026-10-15 *"장부 정리는 그냥 미출력되게"* — 퇴원관리와 같은 결 · 학생 기록·퇴원 상세엔 남는다).
- * 정상 보고서의 상세사유는 200자 이상이라 이 짧은 메모와 겹치지 않는다.
+ * 정상 보고서의 상세사유는 제출 기준(`MIN_DETAIL_LENGTH`) 이상이라 이 짧은 메모와 겹치지 않는다.
  */
 export function isBookkeepingReport(r: Pick<ReportListRow, "teacher_id" | "manager_id" | "requested_by" | "body_reason" | "body_detail">) {
   return isDirectReport(r) && r.body_reason === "other" && (r.body_detail ?? "").trim() === CLEANUP_WITHDRAWAL_MEMO;
@@ -143,8 +143,10 @@ export function reportCapabilities(r: WithdrawalReport, userId: string, writable
     cancel: writable && (r.requested_by === userId || directorLevel) && !["completed", "canceled"].includes(r.status),
   };
 }
+/** 퇴원 상세사유 제출 기준 글자 수 — DB 전이 함수 두 개(s2_0015)도 같은 값으로 거른다. 바꿀 땐 함께 바꾼다. */
+export const MIN_DETAIL_LENGTH = 100;
 export function submissionError(body: ReportBody): string | null {
-  if (Array.from(body.detail.trim()).length < 200) return "퇴원 상세사유를 200자 이상 작성해 주세요.";
+  if (Array.from(body.detail.trim()).length < MIN_DETAIL_LENGTH) return `퇴원 상세사유를 ${MIN_DETAIL_LENGTH}자 이상 작성해 주세요.`;
   if (!body.studentConsultation.trim() || !body.parentConsultation.trim() || !body.teacherOpinion.trim())
     return "학생·학부모 상담 결과와 담임 의견을 작성해 주세요. 상담하지 못했다면 그 사유를 적어 주세요.";
   return null;

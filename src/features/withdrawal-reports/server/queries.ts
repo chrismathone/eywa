@@ -175,14 +175,14 @@ async function loadSubjectHistory(report: WithdrawalReport): Promise<SubjectHist
   const subjects = [...new Set(reportCourses(report).map(c => c.subject))];
   if (!subjects.length) return [];
   const { data, error } = await createAdminClient().from("enrollments")
-    .select("id,start_date,end_date,classes!inner(class_name,subject)")
+    .select("id,start_date,end_date,classes!inner(class_name,subject,is_special)")
     .eq("tenant_id", report.tenant_id).eq("student_id", report.student_id)
     .in("classes.subject", subjects).lte("start_date", report.effective_date).order("start_date").limit(200);
   if (error) throw new Error(error.message);
   return (data ?? []).flatMap((row) => {
-    const klass = row.classes as unknown as { class_name: string | null; subject: string | null } | null;
+    const klass = row.classes as unknown as { class_name: string | null; subject: string | null; is_special: boolean | null } | null;
     if (!klass?.subject || !row.start_date) return [];
-    return [{ enrollmentId: String(row.id), subject: klass.subject, className: (klass.class_name ?? "").trim() || "이름 없는 반", startDate: String(row.start_date).slice(0, 10), endDate: row.end_date ? String(row.end_date).slice(0, 10) : null }];
+    return [{ enrollmentId: String(row.id), subject: klass.subject, className: (klass.class_name ?? "").trim() || "이름 없는 반", startDate: String(row.start_date).slice(0, 10), endDate: row.end_date ? String(row.end_date).slice(0, 10) : null, isSpecial: klass.is_special === true }];
   });
 }
 export async function reportStaff() {

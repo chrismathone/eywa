@@ -52,14 +52,15 @@ describe("withdrawal reports", () => {
     expect(requestSchema.safeParse({ ...request, effectiveDate: "2026-02-30" }).success).toBe(false);
     expect(requestSchema.safeParse({ ...request, subjects: [] }).success).toBe(false);
   });
-  it("saves incomplete drafts but requires 200 characters and consultations to submit", () => {
+  it("saves incomplete drafts but requires 100 characters and consultations to submit", () => {
     expect(bodySchema.safeParse(EMPTY_BODY).success).toBe(true);
-    expect(submissionError(EMPTY_BODY)).toContain("200자");
-    expect(submissionError({ ...EMPTY_BODY, detail: "가".repeat(200) })).toContain("상담");
-    expect(submissionError({ ...EMPTY_BODY, detail: "가".repeat(200), studentConsultation: "상담하지 못함: 연락 불가", parentConsultation: "상담 완료", teacherOpinion: "검토 의견" })).toBeNull();
+    expect(submissionError(EMPTY_BODY)).toContain("100자");
+    expect(submissionError({ ...EMPTY_BODY, detail: "가".repeat(99) })).toContain("100자");
+    expect(submissionError({ ...EMPTY_BODY, detail: "가".repeat(100) })).toContain("상담");
+    expect(submissionError({ ...EMPTY_BODY, detail: "가".repeat(100), studentConsultation: "상담하지 못함: 연락 불가", parentConsultation: "상담 완료", teacherOpinion: "검토 의견" })).toBeNull();
   });
   it("does not count padding as a detailed reason", () => {
-    expect(submissionError({ ...EMPTY_BODY, detail: " ".repeat(200) + "이유" })).toContain("200자");
+    expect(submissionError({ ...EMPTY_BODY, detail: " ".repeat(100) + "이유" })).toContain("100자");
   });
   it("rejects oversized or invalid body values", () => {
     expect(bodySchema.safeParse({ ...EMPTY_BODY, detail: "가".repeat(5001) }).success).toBe(false);

@@ -181,6 +181,8 @@ export type ListFilters = {
   kind: "all" | "withdrawal" | "subject_end";
   /** 내 승인 필요만(원장 2026-10-30 "본인의 승인이 필요한 경우 … 구분"). */
   mine: boolean;
+  /** 요청 취소 건 숨기기 — 기본 켜짐(원장 2026-11-02). 상태를 따로 고르면 그 상태가 이긴다('요청 취소'를 고르면 보인다). */
+  hideCanceled: boolean;
   q: string;
 };
 
@@ -199,6 +201,7 @@ export function parseListFilters(sp: Record<string, string | undefined>, canSeeA
     teacher: sp.teacher || "all",
     kind: sp.kind === "withdrawal" || sp.kind === "subject_end" ? sp.kind : "all",
     mine: sp.mine === "approve",
+    hideCanceled: sp.canceled !== "show",
     q: (sp.q ?? "").trim(),
   };
 }
@@ -216,7 +219,7 @@ export function filterListItems(items: readonly ListItem[], f: ListFilters, wind
   const term = f.q.toLowerCase();
   return items.filter(
     (i) =>
-      (f.status === "all" || i.status === f.status) &&
+      (f.status === "all" ? !(f.hideCanceled && i.status === "canceled") : i.status === f.status) &&
       inRange({ countDate: i.date, systemBulk: false }, window) &&
       (f.subject === "all" || i.subjects.includes(f.subject)) &&
       (f.teacher === "all" || i.teacher === f.teacher) &&

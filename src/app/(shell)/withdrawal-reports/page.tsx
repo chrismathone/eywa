@@ -90,7 +90,11 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
   // '내 승인 필요' 칩 건수 = 칩을 켰을 때 보일 줄 수(상태는 진행 중이라 상태만 걷는다).
   const mineCount = filterListItems(items, { ...filters, status: "all", mine: true }, rangeWindow).length;
   const filterActive =
-    filters.status !== "all" || filters.range !== "all" || filters.subject !== "all" || filters.teacher !== "all" || filters.kind !== "all" || filters.mine || !!filters.q;
+    filters.status !== "all" || filters.range !== "all" || filters.subject !== "all" || filters.teacher !== "all" || filters.kind !== "all" || filters.mine || !filters.hideCanceled || !!filters.q;
+  // 요청 취소 숨기기(원장 2026-11-02) — 숨긴 만큼 '전체 N건'에서도 뺀다(상태를 바꿔도 같은 기준). 상태를 '요청 취소'로 고르면 숨기지 않는다.
+  const hiding = filters.hideCanceled && filters.status !== "canceled";
+  const total = hiding ? items.filter((i) => i.status !== "canceled").length : items.length;
+  const canceledCount = filterListItems(items, { ...filters, status: "canceled" }, rangeWindow).length;
   // 과목 선택지 = 학원설정 단일 소스. 과목 범위가 있는 사람은 그 과목만(목록도 그 범위로만 온다).
   const subjects = viewer.scope ? subjectMaps.options.filter((o) => viewer.scope!.includes(o.value)) : subjectMaps.options;
 
@@ -104,7 +108,8 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
         teachers={teacherOptions(items, staff)}
         archiveStatus={viewer.manage}
         mine={mineCount > 0 || filters.mine ? { href: listHref(sp, filters.mine ? { mine: null } : { mine: "approve", status: null }), count: mineCount } : null}
-        resultText={filterActive ? `${found.length}건 / 전체 ${items.length}건` : `전체 ${items.length}건`}
+        hideCanceled={filters.status === "all" ? { active: hiding, href: listHref(sp, { canceled: hiding ? "show" : null }), count: canceledCount } : null}
+        resultText={found.length === total ? `전체 ${total}건` : `${found.length}건 / 전체 ${total}건`}
         resetHref={filterActive ? listHref(sp.embed ? { embed: sp.embed } : {}, {}) : null}
         request={viewer.request ? <RequestDialog key={requestFor ?? "none"} staff={staff} students={students} labels={labels} scope={viewer.scope} initialStudentId={requestFor} directReady={directReady} /> : null}
       />
