@@ -1,15 +1,25 @@
 // scripts/_classnote/class-board-plan.mjs — 수학 **반 보드** 생성·배정 계획(순수 함수, 의존성 = 순수 모듈만).
 //
 // 원장 2026-09-29: 수학 발송을 `(수학)학생명` 1인 보드에서 **aywa 반과 이름까지 똑같은 반 보드**로 옮긴다.
-// 1인 보드는 해제하지 않고 반 보드에 **추가 배정**한다. 반을 2~3개 다니면 **모든 반에 따로** 배정한다.
+// 반을 2~3개 다니면 **모든 반에 따로** 배정한다. (그때는 1인 보드를 해제하지 않았다 — 2026-11-02 원장이 1인 보드 원아 배정을
+// 해제했고 12월에 보드를 지운다. 원아 신분은 아래 ①의 확인 기록 + 원아 연결로 대신한다.)
 //
 // 🔴 이 계획의 유일한 위험은 **같은 반의 동명이인**이다(원장: 과거 실제로 겹친 적이 있다 — "삼중사중 가드도
 //    아까울 정도로"). 반 보드 안에서 이름으로 원아를 고르는 순간 김근우·김근우A가 섞인다. 그래서:
-//   ① 원아 출처 = 그 학생의 1인 보드 `(수학)유효이름`에 **이미 배정된 원아만**(반 보드 안에서 이름 검색 금지).
-//      1인 보드가 없거나 비었으면(원장 2026-11-02 — 1인 보드 원아 배정 해제 · 12월 보드 삭제) 그 학생이 반 보드 기록(0302a)에서
-//      이미 '정상'으로 확인된 원아 중 **기록된 그 반 보드에 지금도 있는 원아**로 대신한다(`verifiedChildren`, source "verified").
-//      아래 ②~⑥은 그 원아에도 똑같이 다시 건다. ④는 기록에서 다른 학생에게 확인된 원아인지도 본다.
-//      ⚠️ 0302a는 반 기록이라 휴원·반 사이 공백이면 사라진다 — 12월 보드 삭제 전에 반 기록과 별개인 확인 표가 필요하다(#150).
+//   ① 원아 출처(반 보드 안에서 이름 검색 금지) — 앞에서부터 하나만 쓴다:
+//      a. 그 학생의 1인 보드 `(수학)유효이름`에 **이미 배정된 원아**(source "personal" — 남은 1인 보드).
+//      b. 1인 보드가 없거나 비면 반 보드 기록(0302a)에서 이미 '정상'으로 확인된 원아 중 **기록된 그 반 보드에 지금도 있는 원아**
+//         (`verifiedChildren`, source "verified"). 기록은 있는데 그 보드에 지금 없으면 '확인 필요' 보류 — ⚠️ **그 회차만**이다: 보류 줄엔
+//         원아 번호가 없어 다음 회차엔 '기록이 아예 없는 학생'이 되고 c(원아 연결)로 같은 원아를 다시 붙인다(1인 보드 시절에도 05시 준비가
+//         다시 채웠다). 사람이 뗀 원아를 영구히 막으려면 원아 연결도 고친다 — 보류 줄에 원아 번호를 남기는 수리는 후속 과제(2026-11-02 리뷰).
+//      c. 확인 기록이 **아예 없는** 학생만 — 원아 연결(0185a `classnote_child_links`, 운영관리 명부의 이름·생년·보호자 전화로
+//         만든 원아 → 학생 연결)의 원아(`childLinks`, source "link", 원장 2026-11-02 A안). 신입의 첫 배정과 확인 기록이 보류로
+//         지워진 학생(휴원·반 사이 공백)이 이 길로 신분을 되찾는다. 반 보드에 아직 없어도 된다.
+//         🔴 연결은 보호자 전화가 같은 **형제**에게 잘못 붙을 수 있다(2026-11-02 실측 3건) — 그래서 ②③⑥을 반드시 다시 걸고, ⑥은 명부 이름과
+//         학부모 프로필 이름 **둘 다**(프로필은 읽은 보드 또는 원아 상세 GET — 모르면 보류) · 명부에 없는 옛 계정 원아는 뺀다.
+//         ⚠️ 연결로 처음 넣은 원아는 그 회차에 0302a ok로 적혀 다음부터는 b(확인 기록 — 보드의 프로필 이름 하나)로 판정된다.
+//      셋 다 없으면 '가입 대기'(`JOIN_WAIT_REASON`). 아래 ②~⑥은 어느 출처의 원아에도 똑같이 건다. ④는 기록에서 다른 학생에게
+//      확인된 원아인지도 본다.
 //   ② 보호자 전화 일치 필수 — ClassNote 운영관리 carer1_phone ∈ aywa 전화 4칸. 모르면 보류.
 //   ③ 생년 일치 필수 — 학년에서 역산 ±1년. 모르면 보류.
 //   ④ 역방향 유일성 — 그 원아가 **다른 학생의** 1인 보드에 있거나 계획상 두 학생에게 잡히면 둘 다 보류.
@@ -31,6 +41,19 @@ export const MAX_CHILDREN_PER_STUDENT = 2;
 
 /** 1인 보드 이름 — 발송 워커 boardClassName("math", 이름)과 같은 모양. */
 export const personalBoardName = (effName) => `(수학)${effName}`;
+
+/**
+ * 보류 사유 — **원아를 찾을 출처가 하나도 없다**(1인 보드 원아·반 보드 확인 기록·원아 연결 모두 없음 = 학부모 가입 대기,
+ * 또는 가입했지만 원아 연결이 아직 안 만들어졌다 — 연결은 하루 한 번 만든다).
+ * 🔴 글자 그대로 — 'ClassNote 미가입'으로 시작해야 한다: 앱(`src/features/onescreen/send-class.ts` `JOIN_HOLD_REASON`)과
+ *    지금 동기화(`sync-request-plan.mjs` `JOIN_WAIT`)가 이 머리로 '가입 대기'를 가린다(옛 앱도 그대로 알아본다 — 배포 순서 무관).
+ *    옛 문장 둘('1인 보드 없음' · 'ClassNote 미가입·미배정(1인 보드 원아 0명)')은 더 쓰지 않지만, 다시 쓰이기 전의 기록에
+ *    남아 있어 두 곳 모두 계속 알아본다. 잠금 = board-missing.test.ts · sync-request-plan.test.mjs.
+ */
+export const JOIN_WAIT_REASON = "ClassNote 미가입 — 이 학생으로 확인된 원아가 아직 없음";
+
+/** 보류 사유 — 반 보드 기록은 있는데 기록된 반 보드에 그 원아가 지금 없다(사람이 뗐다 · 이 회차만 멈춘다 — 다음 회차엔 원아 연결로 다시 판정, 머리 주석 ① b). */
+export const VERIFIED_GONE_REASON = "반 보드에서 확인된 원아가 지금 그 반 보드에 없음 — 확인 필요";
 
 /** 기본이름 — 동명이인 접미사(끝 알파벳)를 뗀 이름. `김근우A`→`김근우`, `박서준C`→`박서준`. */
 export function baseName(effName) {
@@ -91,13 +114,61 @@ function verifiedMembers(student, verifiedChildren, membersByBoard) {
 }
 
 /**
- * 학생 1명의 원아 판정 — 반과 무관하게 한 번만 한다(같은 학생이 반 3개면 같은 원아를 세 반에 싣는다).
- * `verifiedChildren`(학생 id → [{id,name,boardIds}], 0302a ok) = 1인 보드가 없거나 비었을 때만 쓰는 대신 출처. 없으면 종전 그대로.
- * `verifiedOwners`(원아 id → 학생 id들) = ④ 역방향 — 1인 보드가 비면 1인 보드 소속으로는 못 잡으니 기록으로도 본다.
- * @returns {{ok:boolean, reasons:string[], children:Array<{id:number,name:string}>, source:"personal"|"verified"|null}}
- *   source = 원아를 어디서 가져왔나(배정 직전 1인 보드 재확인은 "personal"일 때만 — math-class-boards-apply.mjs).
+ * 원아 연결(0185a)이 이 학생에게 붙인 원아 — 확인 기록이 아예 없는 학생의 마지막 출처(source "link").
+ * 이름·생년은 **지금 ClassNote 값**으로 싣는다: 이름 = 운영관리 명부의 원아 이름(연결을 만든 바로 그 이름) · 생년 = 학부모 프로필 생년
+ * (명부 생년은 ③이 따로 본다). 반 보드에 아직 없어도 된다(신입의 첫 배정).
+ * 학부모 프로필(이름·생년) = 이번에 읽은 보드에서 찾은 값, 없으면 `childProfiles`(loadPlan이 원아 상세 GET으로 읽은 값 — 신입·일부 반만
+ * 보는 실행). `nameChecks` = ⑥에 거는 이름 전부 = 명부 이름 + 프로필 이름. 🔴 둘 다 학생과 이어져야 통과한다:
+ *   2026-11-02 실측 형제 3건(박세하↔박세인 · 윤현소/윤정인)은 명부 이름과 프로필 이름이 형제끼리 뒤바뀌어 있었다 — 명부 이름은 연결을
+ *   만든 바로 그 입력이라 혼자서는 뒤바뀐 명부를 못 잡는다. 🔴 그래서 **프로필을 모르면 보류**한다(`profileKnown` false → 아래 가드).
+ * 🔴 명부(운영관리 활성 원아)에 **없는** 원아만 뺀다 — 퇴원 때 명부에서 내린 옛 계정(재등록하면 새 원아 번호가 생긴다)이라 배정할 수도
+ *    없고, 남기면 학생 전체가 '명부에 없음'으로 영구 보류된다(적대적 리뷰 2026-11-02). 남은 연결이 없으면 '가입 대기'.
+ *    그 밖(전화·생년·이름 불일치)은 거르지 않고 그대로 돌려줘 아래 가드가 **사유와 함께 보류**하게 한다(조용히 빼면 형제 계정에 잘못
+ *    붙은 연결이 '가입 대기'로 숨는다).
+ * @param {Map<number,string>|null} childLinks  원아 id → 학생 id(`loadChildLinks`)
+ * @param {Map<number,{name:string,date_birth:string|null}|null>|null} childProfiles  원아 id → 학부모 프로필(null = 조회 실패)
  */
-export function resolveStudentChildren(student, { boards, membersByBoard, admissions, schoolYear, verifiedChildren = null, verifiedOwners = null }) {
+function linkMembers(student, childLinks, admissions, membersByBoard, childProfiles) {
+  const out = [];
+  for (const [cid, sid] of childLinks ?? []) {
+    if (sid !== student.id) continue;
+    const id = Number(cid);
+    if (!Number.isSafeInteger(id) || id <= 0) continue;
+    if (!admissions?.get?.(id)) continue; // 명부에 없는 옛 계정 — 위 주석
+    let seen = null;
+    for (const list of membersByBoard.values()) {
+      const m = Array.isArray(list) ? list.find((x) => Number(x.id) === id) : null;
+      if (m) { seen = m; break; }
+    }
+    const profile = seen ?? childProfiles?.get?.(id) ?? null;
+    const admName = String(admissions.get(id)?.name ?? "").trim();
+    const profileName = String(profile?.name ?? "").trim();
+    out.push({
+      id,
+      name: admName || profileName,
+      date_birth: profile?.date_birth ?? null,
+      // 명부 이름은 비어 있어도 넣는다(빈 이름 = ⑥ 탈락) — 프로필 이름 하나로 통과시키지 않는다. 빈 프로필은 `profileKnown`이 따로 막는다.
+      nameChecks: [...new Set([admName, profileName].filter((n, i) => i === 0 || n))],
+      profileKnown: Boolean(profileName),
+    });
+  }
+  return out.sort((a, b) => a.id - b.id);
+}
+
+/** 원아 수 상한을 넘었을 때의 사유 머리 — 출처마다 무엇이 많은지 말한다. */
+const SOURCE_LABEL = { personal: "1인 보드", verified: "반 보드에서 확인된", link: "이 학생과 연결된" };
+
+/**
+ * 학생 1명의 원아 판정 — 반과 무관하게 한 번만 한다(같은 학생이 반 3개면 같은 원아를 세 반에 싣는다).
+ * 출처 순서 = 1인 보드(personal) → 반 보드 확인 기록(verified) → 원아 연결(link). 머리 주석 ① 참조.
+ * `verifiedChildren`(학생 id → [{id,name,boardIds}], 0302a ok) = 1인 보드가 없거나 비었을 때 쓰는 출처.
+ * `childLinks`(원아 id → 학생 id, 0185a) = 확인 기록이 **아예 없는** 학생만 쓰는 출처. 기록은 있는데 그 보드에 원아가 없으면
+ *   그 회차는 '확인 필요' 보류다(보류 줄엔 원아 번호가 없어 다음 회차엔 원아 연결로 다시 판정한다 — 머리 주석 ① b).
+ * `verifiedOwners`(원아 id → 학생 id들) = ④ 역방향 — 1인 보드가 비면 1인 보드 소속으로는 못 잡으니 기록으로도 본다.
+ * @returns {{ok:boolean, reasons:string[], children:Array<{id:number,name:string}>, source:"personal"|"verified"|"link"|null}}
+ *   source = 원아를 어디서 가져왔나(배정 직전 재확인이 출처마다 다르다 — math-class-boards-apply.mjs).
+ */
+export function resolveStudentChildren(student, { boards, membersByBoard, admissions, schoolYear, verifiedChildren = null, verifiedOwners = null, childLinks = null, childProfiles = null }) {
   const reasons = [];
   const want = normBoard(personalBoardName(student.name));
   const hit = (boards ?? []).filter((b) => normBoard(b.name) === want);
@@ -110,24 +181,27 @@ export function resolveStudentChildren(student, { boards, membersByBoard, admiss
     if (!Array.isArray(members)) return { ok: false, reasons: ["1인 보드 원아 조회 실패"], children: [], source: null };
   }
   if (members.length === 0) {
-    // 1인 보드가 없거나 비었다 — 반 보드에서 이미 확인한 원아로 판정한다(그것도 없으면 종전 사유 그대로 보류).
+    // 1인 보드가 없거나 비었다 — 반 보드에서 이미 확인한 원아로 판정한다.
     const v = verifiedMembers(student, verifiedChildren, membersByBoard);
-    members = v.members;
-    source = "verified";
-    if (!members.length && v.recorded)
-      return { ok: false, reasons: ["반 보드에서 확인된 원아가 지금 그 반 보드에 없음 — 확인 필요"], children: [], source: null };
-    // 🔴 사유 문장은 글자 그대로 — 앱이 이 원문으로 '가입 대기'를 가린다(board-missing.ts · 잠금 = board-missing.test.ts).
-    if (!members.length)
-      return hit.length
-        ? { ok: false, reasons: ["ClassNote 미가입·미배정(1인 보드 원아 0명)"], children: [], source: null }
-        : { ok: false, reasons: ["1인 보드 없음"], children: [], source: null };
+    if (v.members.length) {
+      members = v.members;
+      source = "verified";
+    } else if (v.recorded) {
+      return { ok: false, reasons: [VERIFIED_GONE_REASON], children: [], source: null };
+    } else {
+      // 확인 기록도 없다 — 원아 연결로 판정한다(가드는 아래에서 똑같이). 그것도 없으면 가입 대기.
+      members = linkMembers(student, childLinks, admissions, membersByBoard, childProfiles);
+      source = "link";
+      // 🔴 사유 문장은 글자 그대로 — 앱이 이 원문으로 '가입 대기'를 가린다(send-class.ts · 잠금 = board-missing.test.ts).
+      if (!members.length) return { ok: false, reasons: [JOIN_WAIT_REASON], children: [], source: null };
+    }
   }
   if (members.length > MAX_CHILDREN_PER_STUDENT)
-    return { ok: false, reasons: [`${source === "verified" ? "반 보드에서 확인된" : "1인 보드"} 원아 ${members.length}명 — 사람 확인 필요`], children: [], source: null };
+    return { ok: false, reasons: [`${SOURCE_LABEL[source]} 원아 ${members.length}명 — 사람 확인 필요`], children: [], source: null };
 
   const expected = expectedBirthYear(student.grade, schoolYear);
   for (const m of members) {
-    const who = `원아 "${m.name ?? "?"}"`;
+    const who = `원아 "${m.name || "?"}"`;
     // ③ 생년 — 관리자 화면의 생년월일(운영관리 명부 child_date_birth)이 먼저, 학부모 프로필(date_birth)은 보조.
     //    둘 중 하나라도 맞으면 통과(원장 2026-09-29: 관리자 화면에서 고친 생년이 안 먹었다 — 두 값이 따로 산다).
     const toYear = (v) => { const y = Number(String(v ?? "").slice(0, 4)); return Number.isFinite(y) && y >= 1900 ? y : null; };
@@ -136,8 +210,13 @@ export function resolveStudentChildren(student, { boards, membersByBoard, admiss
     else if (!years.length) reasons.push(`${who} 생년 없음`);
     else if (!years.some((y) => Math.abs(y - expected) <= BIRTH_TOLERANCE))
       reasons.push(`${who} 생년 불일치(${years[0]}년생, 기대 ${expected}년생)`);
-    // ⑥ 이름 연속성
-    if (!childNameConsistent(student.name, m.name)) reasons.push(`${who} 이름이 학생(${student.name})과 다름 — 형제 계정일 수 있어 확인 필요`);
+    // ⑥ 이름 연속성 — 원아 연결 출처는 명부 이름·프로필 이름 둘 다(linkMembers `nameChecks`), 그 밖은 보드에서 읽은 이름 하나.
+    const names = Array.isArray(m.nameChecks) && m.nameChecks.length ? m.nameChecks : [m.name];
+    // findIndex — 이름이 비어(undefined) 걸린 원아도 놓치지 않는다(find는 걸린 값 자체가 undefined면 '없음'과 구별이 안 된다).
+    const off = names.findIndex((n) => !childNameConsistent(student.name, n));
+    if (off >= 0) reasons.push(`원아 "${names[off] || "?"}" 이름이 학생(${student.name})과 다름 — 형제 계정일 수 있어 확인 필요`);
+    // ⑥-b 원아 연결 출처는 학부모 프로필 이름까지 봐야 통과한다(linkMembers) — 못 읽었으면 보류(다음 동기화가 다시 읽는다).
+    if (m.profileKnown === false) reasons.push(`${who} 학부모 프로필(이름)을 확인하지 못함 — 다음 동기화에서 다시 확인`);
     // ② 전화 — 값은 절대 사유에 싣지 않는다(일치 여부만)
     const adm = admissions.get(m.id);
     if (!adm) reasons.push(`${who} 운영관리 명부에 없음 — 보호자 전화 대조 불가`);
@@ -187,8 +266,12 @@ export function reservedBoardName(name) {
  * @param {number} p.schoolYear
  * @param {Map<string,Array<{id:number,name:string,boardIds:number[]}>>|null} [p.verifiedChildren]  반 보드에서 확인된 원아(0302a ok) — 1인 보드가 없거나 빈 학생만 쓴다
  * @param {Set<string>|null} [p.verifiedOwnerScope]  ④(기록) 비교 상대 학생 — 전체 대상 반의 학생(없으면 이번 계획 반의 학생)
+ * @param {Map<number,string>|null} [p.childLinks]  원아 연결(0185a, 원아 id → 학생 id) — 확인 기록이 아예 없는 학생만 쓴다.
+ *   명부(`admissions`)에 없는 원아는 빼고, ⑥은 명부 이름(`name`) + 학부모 프로필 이름 둘 다로 건다(프로필을 모르면 보류).
+ * @param {Map<number,{name:string,date_birth:string|null}|null>|null} [p.childProfiles]  이번에 읽은 보드에 없는 연결 원아의 학부모 프로필
+ *   (loadPlan이 원아 상세 GET으로 읽는다 · null = 조회 실패 → 그 학생 보류).
  */
-export function planClassBoards({ classes, students, boards, membersByBoard, admissions, schoolYear, linkedBoardByClass = new Map(), verifiedChildren = null, verifiedOwnerScope = null }) {
+export function planClassBoards({ classes, students, boards, membersByBoard, admissions, schoolYear, linkedBoardByClass = new Map(), verifiedChildren = null, verifiedOwnerScope = null, childLinks = null, childProfiles = null }) {
   // 1) 학생별 원아 판정(한 번씩)
   const byStudent = new Map();
   // 비교 상대 = 지금 대상 반에 다니는 학생(일부 반만 보는 실행은 호출부가 전체 대상 반 기준으로 넘긴다 — verifiedOwnerScope).
@@ -198,12 +281,17 @@ export function planClassBoards({ classes, students, boards, membersByBoard, adm
     for (const sid of c.studentIds) {
       if (byStudent.has(sid)) continue;
       const s = students.get(sid);
-      byStudent.set(sid, s ? resolveStudentChildren(s, { boards, membersByBoard, admissions, schoolYear, verifiedChildren, verifiedOwners }) : { ok: false, reasons: ["학생 정보 없음"], children: [], source: null });
+      byStudent.set(sid, s ? resolveStudentChildren(s, { boards, membersByBoard, admissions, schoolYear, verifiedChildren, verifiedOwners, childLinks, childProfiles }) : { ok: false, reasons: ["학생 정보 없음"], children: [], source: null });
     }
 
   // ④-b 계획 안에서 한 원아가 두 학생에게 잡히면 둘 다 보류
+  // 🔴 원아 연결 출처인데 자기 가드에 이미 걸린 학생은 세지 않는다 — 형제에게 잘못 붙은 연결 하나가 **확인 기록·1인 보드로 멀쩡히
+  //    받던 형제**까지 보류시키면 안 된다(그 학생은 이미 보류이고, 연결이 틀렸다는 사유는 그 학생 줄에 남는다).
   const owners = new Map();
-  for (const [sid, v] of byStudent) for (const ch of v.children) owners.set(ch.id, [...(owners.get(ch.id) ?? []), sid]);
+  for (const [sid, v] of byStudent) {
+    if (v.source === "link" && !v.ok) continue;
+    for (const ch of v.children) owners.set(ch.id, [...(owners.get(ch.id) ?? []), sid]);
+  }
   for (const [cid, sids] of owners) {
     if (sids.length < 2) continue;
     const names = sids.map((sid) => students.get(sid)?.name ?? "?").join(", ");
@@ -335,12 +423,16 @@ export function closedClassesToKeep({ closedIds, planClassIds, linkedBoardByClas
 }
 
 /**
- * 1인 보드 준비(매일 05시 provision)에서 뺄 수학 학생 — 반 보드에서 원아 확인을 마친 학생(원장 2026-11-02: 1인 보드 원아 배정 해제 → 12월 보드 삭제).
- * 그 학생은 반 보드 동기화가 확인 기록으로 원아를 판정하므로 1인 보드가 필요 없다. 안 빼면 비운 1인 보드를 다시 채우고, 지운 보드를 다시 만든다.
- * 확인 기록이 없는 학생(신입·보류)은 그대로 둔다 — 1인 보드가 아직 그 학생 원아를 처음 확인하는 유일한 출처다.
- * @param {Array<{studentId:string}>} targets
- * @param {Map<string, unknown[]>} verifiedChildren  학생 id → 확인된 원아(0302a ok)
+ * 매일 05시 1인 보드 준비(classnote-provision-core.mjs)가 오늘 **수학을 건너뛸까**(순수) — 원장 2026-11-02 A안.
+ * · `"class"`   = 수학 발송 경로가 반별 — `(수학)이름` 1인 보드를 만들지도 원아를 배정하지도 않는다(원아 신분 = ① b·c).
+ * · `"unknown"` = 경로를 못 읽었다 — 모르는 채로 1인 보드를 만들거나 채우지 않는다(그날 수학만 건너뛴다).
+ * · `null`      = 기존(personal)·일부 선생님만 반별(pilot) — 1인 보드로 보내는 선생님이 있으니 종전대로 준비한다.
+ * 영어는 이 판정과 무관하다(영어 `(영어)` 준비는 그대로).
+ * @param {string|null|undefined} route  `getClassnoteMathRoute().route`(못 읽었으면 null)
+ * @returns {"class"|"unknown"|null}
  */
-export function dropVerifiedTargets(targets, verifiedChildren) {
-  return (targets ?? []).filter((t) => !((verifiedChildren?.get?.(t.studentId) ?? []).length > 0));
+export function mathPersonalProvisionOff(route) {
+  if (route === "class") return "class";
+  if (route === "personal" || route === "pilot") return null;
+  return "unknown";
 }

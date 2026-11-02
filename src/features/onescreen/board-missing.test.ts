@@ -100,8 +100,14 @@ describe("까닭 가리기(순수)", () => {
   it("보류는 사유로 가른다 — '다음 동기화 때 배정'은 배정 중 · 학부모 가입 대기 · 그 밖(사람 확인)", () => {
     const hold = (holdReason: string | null) => classifyBoardMissing({ ...base, memberStatuses: ["hold"], holdReason });
     expect(hold("반 보드 배정 전 — 다음 동기화 때 배정됩니다")).toBe("enrolling");
+    // 가입 대기 = 지금 문장(2026-11-02~ 원아 연결까지 없음) + 옛 문장 둘(다시 쓰이기 전 기록) — 배포 순서와 무관하게 셋 다
+    expect(hold("ClassNote 미가입 — 이 학생으로 확인된 원아가 아직 없음")).toBe("hold_join");
     expect(hold("ClassNote 미가입·미배정(1인 보드 원아 0명)")).toBe("hold_join");
     expect(hold("1인 보드 없음")).toBe("hold_join");
+    // 원아 연결은 있는데 가드에 걸림(형제 계정 등) · 기록된 원아를 사람이 뗌 = 관리자 확인
+    expect(hold('원아 "박세인" 이름이 학생(박세하)과 다름 — 형제 계정일 수 있어 확인 필요')).toBe("hold_other");
+    expect(hold("이 학생과 연결된 원아 3명 — 사람 확인 필요")).toBe("hold_other");
+    expect(hold("반 보드에서 확인된 원아가 지금 그 반 보드에 없음 — 확인 필요")).toBe("hold_other");
     expect(hold("(수학)김민수 생년 불일치(2012년생, 기대 2013년생)")).toBe("hold_other");
     expect(hold("같은 원아(id 123)가 여러 학생에게 잡힘: 박세인, 박세하")).toBe("hold_other");
     expect(hold("1인 보드 2개(중복)")).toBe("hold_other"); // '1인 보드 없음'과 다르다
@@ -113,8 +119,10 @@ describe("까닭 가리기(순수)", () => {
   it("🔴 사유 문장은 워커 원문과 같아야 한다 — 워커가 문장·잇는 글자를 바꾸면 조용히 '관리자 확인'으로 떨어진다", () => {
     const plan = readFileSync(join(process.cwd(), "scripts/_classnote/class-board-plan.mjs"), "utf8");
     const dbw = readFileSync(join(process.cwd(), "scripts/_classnote/math-class-boards-db.mjs"), "utf8");
-    expect(plan).toContain('reasons: ["1인 보드 없음"]');
-    expect(plan).toContain('reasons: ["ClassNote 미가입·미배정(1인 보드 원아 0명)"]');
+    // 가입 대기 문장(2026-11-02~) — 워커가 이 상수로 적는다. 'ClassNote 미가입'으로 시작해야 옛 앱도 가입 대기로 알아본다.
+    expect(plan).toContain('export const JOIN_WAIT_REASON = "ClassNote 미가입 — 이 학생으로 확인된 원아가 아직 없음";');
+    expect(plan).toContain("reasons: [JOIN_WAIT_REASON]");
+    expect(classifyBoardMissing({ ...base, memberStatuses: ["hold"], holdReason: "ClassNote 미가입 — 이 학생으로 확인된 원아가 아직 없음" })).toBe("hold_join");
     expect(dbw).toContain('reason: "반 보드 배정 전 — 다음 동기화 때 배정됩니다"');
     expect(dbw).toContain('h.reasons.join(" / ")');
   });
@@ -180,7 +188,12 @@ describe("안내 문장 — 사실만 약속한다", () => {
     expect(boardMissingNotice("unknown", true)).toEqual({ status: "board_missing", error: BOARD_MISSING_ERROR });
   });
   it("모든 문장은 '저장은 됐습니다'로 끝난다(발송만 막혔다) · 영문 코드·내부 번호가 없다 — 실제 워커 사유로", () => {
-    const reasons = ["ClassNote 미가입·미배정(1인 보드 원아 0명)", "같은 원아(id 123)가 여러 학생에게 잡힘: 가, 나", "반 보드 특정 불가 — 같은 이름 보드(#1317083) 원아 조회 실패 — 채택 보류"];
+    const reasons = [
+      "ClassNote 미가입 — 이 학생으로 확인된 원아가 아직 없음",
+      "ClassNote 미가입·미배정(1인 보드 원아 0명)",
+      "같은 원아(id 123)가 여러 학생에게 잡힘: 가, 나",
+      "반 보드 특정 불가 — 같은 이름 보드(#1317083) 원아 조회 실패 — 채택 보류",
+    ];
     const all = [
       boardMissingNotice("enrolling", true),
       boardMissingNotice("enrolling", false),

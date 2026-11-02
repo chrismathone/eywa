@@ -60,6 +60,19 @@ function markRun(d) {
   }
 }
 
+/**
+ * 오늘 정기 동기화가 돌 차례면 **오늘 날짜(KST)**, 아니면 null — `syncMathClassBoardsDaily`의 하루 1회 판정과 같은 조건(force 아님).
+ * 데몬(watch-classnote-queue.mjs)이 이 값이 있을 때 **바로 앞에서** 원아 연결(0185a)을 한 번 새로 만든다(원장 2026-11-02 A안 —
+ * 신입의 첫 배정 출처가 원아 연결이라, 20시간 주기 그대로면 어제 가입한 원아가 오늘 새벽 배정을 놓친다).
+ * 🔴 데몬은 돌려받은 날짜로 **자기 표식**을 따로 둔다 — 정기 동기화가 '오늘 함' 표식을 남기기 전에 실패하면(연결표 조회 실패 등)
+ *    이 값이 계속 참이라, 표식 없이 따르면 폴마다 ClassNote에 로그인한다(적대적 리뷰 2026-11-02).
+ * @returns {string|null}
+ */
+export function classBoardSyncDueToday({ post }) {
+  const today = kstDate();
+  return Boolean(post) && kstHour() >= RUN_AFTER_HOUR_KST && lastRun() !== today ? today : null;
+}
+
 /** 자동 해제 스위치 — 기본 켜짐. 연동 PC에서 `CLASSNOTE_BOARD_AUTO_RELEASE=off`(또는 false·0·no)면 해제만 건너뛴다. */
 export const autoReleaseEnabled = () => !["off", "false", "0", "no"].includes(String(process.env.CLASSNOTE_BOARD_AUTO_RELEASE ?? "").trim().toLowerCase());
 
@@ -163,9 +176,14 @@ export async function syncMathClassBoards(sql, page, { tenant, apply = false, lo
   //    (다음 날도 못 되살린다) 발송이 막힌다. 연결표 strict와 같은 규칙.
   const verifiedChildren = await loadVerifiedChildren(sql, tenant);
   if (!verifiedChildren) throw new Error("반 보드 확인 기록을 읽지 못했다 — 오늘 동기화를 건너뛴다(그대로 돌면 확인 기록이 지워진다)");
+  // 확인 기록이 아예 없는 학생의 원아 출처 = 원아 연결(0185a, 원장 2026-11-02 A안) — 두 계획에 같은 값을 쓴다.
+  // 🔴 못 읽으면 확인 기록과 같은 규칙으로 오늘을 건너뛴다 — 연결 없이 돌면 신입·기록이 지워진 학생이 전부 '가입 대기'로 적힌다.
+  const childLinks = await loadChildLinks(sql, tenant).catch((e) => {
+    throw new Error(`원아 연결을 읽지 못했다 — 오늘 동기화를 건너뛴다(${String(e?.message ?? e).slice(0, 120)})`);
+  });
   // ④(기록) 비교 상대 = **전체** 대상 반의 학생 — 일부 반만 보는 실행에서도 다른 반 학생에게 확인된 원아를 잡는다.
   const verifiedOwnerScope = new Set(all.classes.flatMap((c) => c.studentIds));
-  const first = await loadPlan(page, centerId, aywa, { linkedBoardByClass, verifiedChildren, verifiedOwnerScope });
+  const first = await loadPlan(page, centerId, aywa, { linkedBoardByClass, verifiedChildren, verifiedOwnerScope, childLinks });
   const { plans, boards, membersByBoard, failed } = first;
   if (failed) throw new Error(`원아 조회 실패 ${failed}건 — 오늘 동기화를 건너뛴다`);
   // 자동 해제 — 스위치가 켜져 있고 멈춤 표식이 없을 때만.
@@ -234,13 +252,14 @@ export async function syncMathClassBoards(sql, page, { tenant, apply = false, lo
   }
 
   async function run() {
-    await applyClassBoardPlans({ page, centerId, targets, boards, membersByBoard, students: aywa.students, log, out: done });
+    // 원아 연결에서 가져온 학생은 배정 직전에 연결을 다시 읽어 계획한 원아가 아직 그 학생 것인지 본다(사람이 그 사이 고쳤으면 멈춘다).
+    await applyClassBoardPlans({ page, centerId, targets, boards, membersByBoard, students: aywa.students, log, out: done, reloadChildLinks: () => loadChildLinks(sql, tenant) });
 
     // 담임 — 동기화 뒤 보드 번호로(새로 만든 반 포함).
     // 방금 만든 보드는 아직 연결표에 없다 — 번호로 얹어 준다(ClassNote가 이름을 다르게 적었어도 다음 날 또 만들지 않게, G8).
     const linkedAfter = await loadLinkedBoards(sql, tenant, { strict: true });
     for (const d of done) if (d.created && d.boardId != null) linkedAfter.set(d.classId, Number(d.boardId));
-    const fresh = await loadPlan(page, centerId, aywa, { linkedBoardByClass: linkedAfter, verifiedChildren, verifiedOwnerScope });
+    const fresh = await loadPlan(page, centerId, aywa, { linkedBoardByClass: linkedAfter, verifiedChildren, verifiedOwnerScope, childLinks });
     if (fresh.failed) throw new Error(`원아 재조회 실패 ${fresh.failed}건 — 기록 갱신을 건너뛴다`);
     reported = fresh.plans;
 

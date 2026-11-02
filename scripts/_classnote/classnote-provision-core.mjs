@@ -5,6 +5,8 @@
  *   ① 재원 + 발송 opt-in 과목 활성 수강인데 보드 없는 학생 → `(과목)이름` 빈 보드 생성(DOM)
  *   ② 학부모 가입까지 됐는데 자기 보드가 비어있는 학생 → 배정(POST /api/v1/enrollments/, ID 기반)
  * 동명이인(aywa 유효이름 중복·ClassNote 동명 원아)은 자동 처리 안 하고 로그로 보류 — 오발송 방지.
+ * 🔴 수학 발송 경로가 반별(class)이면 **수학은 하지 않는다**(원장 2026-11-02 — 1인 보드 원아 배정 해제 · 12월 보드 삭제,
+ *    `dropRetiredMathTargets`). 영어 `(영어)` 준비만 남는다.
  * 학부모 초대(가입)만 사람 몫으로 남는다. 수동 실행판 = provision/assign-classnote-*.mjs (동일 기준).
  *
  * 실행 조건: 데몬 --post 모드에서만(dry-run 데몬은 아무것도 안 만짐). 발송 스위치(classnoteSendEnabled)와는
@@ -31,8 +33,7 @@ import {
   CLASSNOTE_BASE,
 } from "./classnote-admin-core.mjs";
 import { getClassnoteMathRoute } from "./classnote-class-route.mjs";
-import { loadVerifiedChildren } from "./math-class-boards-load.mjs";
-import { dropVerifiedTargets } from "./class-board-plan.mjs";
+import { mathPersonalProvisionOff } from "./class-board-plan.mjs";
 
 /** 역방향 유일성 검사용 우주 — **status·과목 무필터 전 학생 유효이름**(퇴원 포함).
  *  타깃 목록만 쓰면 퇴원 동명이인(F1)·과목 필터 뒤 동명(F2)·동명 보류 제외분(F3)이 안 보인다. */
@@ -108,33 +109,29 @@ async function expectedFor(sql, tenant, keys, prefix) {
 }
 
 /**
- * 수학이 반별 발송(class)이면 **반 보드에서 원아 확인을 마친 학생**은 1인 보드를 만들지도 채우지도 않는다(원장 2026-11-02 —
- * 1인 보드 원아 배정 해제 → 12월 보드 삭제). 반 보드 동기화가 그 학생은 확인 기록으로 원아를 판정한다(class-board-plan.mjs ①).
- * 안 빼면 비운 1인 보드를 "가입했는데 빈 보드"로 보고 다시 배정하고(학부모 앱에 반 배정 알림이 갈 수 있다), 지운 보드는 다시 만든다.
- * 확인 기록이 없는 학생(신입·보류)은 그대로 둔다 — 1인 보드가 그 원아를 처음 확인하는 출처다.
- * 🔴 경로·기록을 못 읽으면 그날 **수학을 통째로 건너뛴다**(모르는 채로 비운 보드를 다시 채우지 않는다 — 신입 보드는 다음 날 만든다).
+ * 수학이 반별 발송(class)이면 `(수학)이름` 1인 보드를 **만들지도, 원아를 배정하지도 않는다**(원장 2026-11-02 A안 —
+ * 1인 보드 원아 배정 해제 → 12월 보드 삭제). 반 보드 동기화가 원아 신분을 반 보드 확인 기록 + 원아 연결(0185a)로 판정한다
+ * (class-board-plan.mjs ① — 신입의 첫 배정도 원아 연결로 한다). 그대로 두면 비운 1인 보드를 "가입했는데 빈 보드"로 보고 다시
+ * 배정하고(학부모 앱에 반 배정 알림이 갈 수 있다), 12월에 지운 보드를 다시 만든다.
+ * 영어 `(영어)` 준비는 그대로다. 이미 남아 있는 수학 1인 보드는 건드리지 않는다(읽지도 쓰지도 않는다).
+ * 🔴 경로를 못 읽으면 그날 **수학을 통째로 건너뛴다**(모르는 채로 1인 보드를 만들거나 채우지 않는다 — 기존 경로면 다음 날 한다).
+ * 판정은 `mathPersonalProvisionOff` 한 곳(순수 — class-board-plan.mjs, 테스트가 잠근다).
  */
 async function dropRetiredMathTargets(sql, tenant, plans, log) {
   const math = plans.find((p) => p.group.prefix === BOARD_GROUPS.math.prefix);
   if (!math || !math.targets.length) return;
-  let route;
+  let route = null;
   try {
     ({ route } = await getClassnoteMathRoute(sql, tenant));
   } catch {
-    math.targets = [];
-    log("[provision] 수학 발송 경로를 읽지 못해 오늘은 수학 1인 보드 준비를 건너뜀");
-    return;
+    route = null; // 못 읽음 = 아래 판정이 건너뛴다
   }
-  if (route !== "class") return;
-  const verified = await loadVerifiedChildren(sql, tenant);
-  if (!verified) {
-    math.targets = [];
-    log("[provision] 반 보드 확인 기록을 읽지 못해 오늘은 수학 1인 보드 준비를 건너뜀");
-    return;
-  }
-  const before = math.targets.length;
-  math.targets = dropVerifiedTargets(math.targets, verified);
-  if (before !== math.targets.length) log(`[provision] 반 보드에서 확인된 수학 학생 ${before - math.targets.length}명은 1인 보드 준비 제외(반별 발송)`);
+  const off = mathPersonalProvisionOff(route);
+  if (!off) return;
+  math.targets = [];
+  log(off === "unknown"
+    ? "[provision] 수학 발송 경로를 읽지 못해 오늘은 수학 1인 보드 준비를 건너뜀"
+    : "[provision] 수학은 반별 발송 — (수학) 1인 보드는 만들지도 배정하지도 않음(원아 신분은 반 보드 동기화가 확인 기록·원아 연결로 판정)");
 }
 
 /**
