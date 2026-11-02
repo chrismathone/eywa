@@ -194,7 +194,11 @@ export function buildApplyPlan(draft: Draft, context: ApplyContext, date: string
     const before = id.startsWith('block:') ? oldBlocks.get(id.slice(6))! : oldSchedules.get(id)!;
     if (before.validTo && before.validTo < date && (changedSources.has(id) || ('classId' in before && changedRosterClasses.has(before.classId)))) throw new Error('변경할 배치가 적용일에는 이미 종료되어 있습니다. 적용할 주의 시간표를 다시 불러와 주세요.');
   }
-  if (context.schedules.some(row => touched.has(row.classId) && row.validFrom > date) || context.enrollments.some(row => touched.has(row.classId) && row.start > date)) throw new Error('적용일 이후의 배치 또는 수강 예약이 있습니다. 기존 예약을 먼저 확인해 주세요.');
+  // 시작 전 수강을 덮어쓰는 것은 명단이 바뀌거나 닫히는 반뿐이다. 수업만 바뀌면 그 학생은 시작일에 새 시간표를 따른다 — 예약 뒤 시작일을 고쳐도 적용이 실패하지 않는다(원장 2026-11-02).
+  const rosterLocked = new Set([...changedRosterClasses, ...plan.closedClasses.map(row => row.id)]);
+  const daysAfter = (classId: string) => new Set([...context.schedules.filter(row => row.classId === classId && !changedSources.has(row.id) && row.validFrom <= date && (!row.validTo || row.validTo >= date)).map(row => row.day), ...plan.schedules.filter(row => row.item.classId === classId).map(row => row.day)]);
+  const losesDay = (row: { classId: string; days: string[] | null }) => touched.has(row.classId) && !!row.days?.some(day => !daysAfter(row.classId).has(day));
+  if (context.schedules.some(row => touched.has(row.classId) && row.validFrom > date) || context.enrollments.some(row => row.start > date && (rosterLocked.has(row.classId) || losesDay(row)))) throw new Error('적용일 이후의 배치 또는 수강 예약이 있습니다. 기존 예약을 먼저 확인해 주세요.');
   plan.summary = { schedules: plan.schedules.length + plan.removedSchedules.length, blocks: plan.blocks.length + plan.removedBlocks.length, classes: plan.classes.length + plan.closedClasses.length, students: plan.students.length, enrollments: plan.enrollments.length, teacherNames: plan.people.length };
   return plan;
 }

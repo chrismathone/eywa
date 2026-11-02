@@ -52,9 +52,22 @@ describe('운영 적용 계획', () => {
   it('이미 종료된 원본과 미래 수강 예약을 덮어쓰지 않는다', () => {
     const { draft, context } = applyFixture(); context.schedules[0].validTo='2026-10-07';draft.cells[1][2].text='11:10';
     expect(()=>buildApplyPlan(draft,context,'2026-10-08')).toThrow('종료');
-    context.schedules[0].validTo=null; draft.cells[1][2].text='11:10';
-    context.enrollments.push({ ...context.enrollments[0], id:uid(41), start:'2026-10-09' });
+    const moved = applyFixture(); moved.context.enrollments.push({ ...moved.context.enrollments[0], id:uid(41), studentId:uid(51), classId:uid(2), start:'2026-10-09' });
+    expect(()=>buildApplyPlan(moveClassStudent(moved.draft,uid(50),uid(1),uid(2)),moved.context,'2026-10-08')).toThrow('예약');
+  });
+  it('수업만 바뀌는 반은 시작 전 수강이 있어도 막지 않는다 — 예약 뒤 시작일을 고쳐도 적용된다', () => {
+    const { draft, context } = applyFixture(); draft.cells[1][2].text='11:10';
+    context.enrollments.push({ ...context.enrollments[0], id:uid(41), studentId:uid(51), start:'2026-10-09' });
+    expect(buildApplyPlan(draft,context,'2026-10-08').schedules).toHaveLength(1);
+    context.enrollments[1].days = ['mon'];
+    expect(buildApplyPlan(draft,context,'2026-10-08').schedules).toHaveLength(1);
+  });
+  it('시작 전 수강의 등원 요일이 시간표에서 사라지면 막는다', () => {
+    const { draft, context } = applyFixture(); draft.cells[2][2].text='12:10';
+    context.enrollments.push({ ...context.enrollments[0], id:uid(41), studentId:uid(51), classId:uid(2), start:'2026-10-09', days:['tue'] });
     expect(()=>buildApplyPlan(draft,context,'2026-10-08')).toThrow('예약');
+    context.enrollments[1].days = null;
+    expect(buildApplyPlan(draft,context,'2026-10-08').schedules).toHaveLength(1);
   });
   it('영어 마지막 수업을 연습본으로 끝내면 반이동·퇴원보고서를 안내하고 막는다', () => {
     const { draft, context } = applyFixture();
