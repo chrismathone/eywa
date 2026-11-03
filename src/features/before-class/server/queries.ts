@@ -1,7 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { monthRange } from "@/lib/date-kst";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { attendsClassOn } from "../roster";
 import { classDatesInMonth } from "../dates";
@@ -137,4 +137,24 @@ export async function loadClassMonth(tenantId: string, classId: string, month: s
   const prefix = `${classId}|`;
   const autoExcused = [...autoKeys].filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length));
   return { dates, students, checks, reportLevels, trackingStart, autoExcused, offDays: offDays.get(classId) ?? {} };
+}
+
+/**
+ * 반 넣기 후보 — 지금 운영 중인 반(폐지·종강 제외) 중 아직 체크리스트에 없는 반. 반 관리 권한이 있을 때만 페이지가 부른다.
+ * 반이 수백 개일 수 있어 페이지로 다 읽는다(B2) · 담임 이름은 청크로(B3).
+ */
+export async function loadTargetChoices(tenantId: string, exclude: string[], today: string): Promise<ChecklistTarget[]> {
+  const admin = createAdminClient();
+  const rows = await fetchAllPaged((a, b) => admin.from("classes").select("id, class_name, teacher_id, closed_at")
+    .eq("tenant_id", tenantId).eq("is_active", true).order("id").range(a, b));
+  const skip = new Set(exclude);
+  const open = (rows as { id: string; class_name: string; teacher_id: string | null; closed_at: string | null }[])
+    .filter((c) => !skip.has(c.id) && (!c.closed_at || c.closed_at > today));
+  const teacherIds = [...new Set(open.map((c) => c.teacher_id).filter((v): v is string => !!v))];
+  const teachers = await fetchInChunks(teacherIds, (ids) =>
+    admin.from("users").select("id, display_name").eq("tenant_id", tenantId).in("id", ids));
+  const nameOf = new Map(teachers.map((t) => [t.id as string, t.display_name as string]));
+  return open
+    .map((c) => ({ id: c.id, name: c.class_name, teacherName: (c.teacher_id && nameOf.get(c.teacher_id)) || "" }))
+    .sort((a, b) => a.name.localeCompare(b.name, "ko"));
 }
