@@ -30,12 +30,13 @@
 
 /* ② 고르기 — 고르지 않은 조각은 제자리에서 물러나고(조금 줄며 사라진다), **고른 조각만 가운데로 미끄러져 들어간다**(도넛 중심 축으로 줄어들면
  *    자연히 중심을 향한다). 그 위로 같은 색의 둥근 원(`.orb`)이 자라나 가운데 원 크기가 되고, 가운데 원이 새 이름을 받는다. */
+/* ⚠️ 두 클래스는 `.sectorOuter` **위에 덧붙는다**(축은 그대로 도넛 중심) — 그래서 scale이 곧 "가운데로 빨려 들어감"이다. */
 .sectorOuterLeave {
   animation: sector-leave 300ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
 }
 
 .sectorOuterLeaveChosen {
-  animation: sector-leave-chosen 520ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: sector-leave-chosen 560ms cubic-bezier(0.45, 0, 0.2, 1) forwards;
 }
 
 @keyframes sector-leave {
@@ -46,13 +47,17 @@
 }
 
 @keyframes sector-leave-chosen {
-  55% {
+  0% {
     opacity: 1;
-    transform: scale(0.42);
+    transform: scale(1);
   }
-  to {
+  60% {
+    opacity: 1;
+    transform: scale(0.36);
+  }
+  100% {
     opacity: 0;
-    transform: scale(0.3);
+    transform: scale(0.22);
   }
 }
 

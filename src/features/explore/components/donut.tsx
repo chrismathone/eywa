@@ -107,7 +107,9 @@ export function ExploreDonut({ center, sectors, selected, onSelect, onZoom, onCe
           const g = geo[i];
           const isSel = s.key === selected;
           const isFocus = s.key === focus;
-          const outerCls = leaving ? (leaving.key === s.key ? styles.sectorOuterLeaveChosen : styles.sectorOuterLeave) : styles.sectorOuter;
+          // 🔴 바깥 <g>는 늘 `.sectorOuter`를 지닌다(변형 축 = 도넛 중심). 떠날 때 그 클래스를 떼면 축이 좌상단(0,0)으로 떨어져
+          //    고른 조각이 가운데가 아니라 **왼쪽 위로** 빨려 갔다(원장 2026-11-03 캡처).
+          const outerCls = `${styles.sectorOuter} ${leaving ? (leaving.key === s.key ? styles.sectorOuterLeaveChosen : styles.sectorOuterLeave) : ""}`;
           return (
             <g key={s.key} className={outerCls} style={{ animationDelay: leaving ? `${(n - 1 - i) * 18}ms` : `${i * STAGGER_MS}ms` }}>
               <g

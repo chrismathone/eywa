@@ -25,6 +25,9 @@ export async function GET(req: Request) {
   try {
     const admin = createAdminClient();
     const tenants = await fetchAllPaged<{ id: string }>((from, to) => admin.from("tenants").select("id").order("id").range(from, to));
+    // 후보는 지점마다 먼저 모으고, 실행은 **지점을 번갈아**(round-robin) — 한 호출이 7초 안팎이라 지점 하나가 시간 예산(300초)을 다
+    //    쓰면 뒤 지점은 매일 0명이 된다(dev 실측 2026-11-03: 첫 지점 38명에 4.7분, 나머지 지점 0).
+    const queues: { tenantId: string; ids: string[]; stopped: boolean }[] = [];
     for (const t of tenants) {
       const tally = { updated: 0, unchanged: 0, empty: 0, failed: 0 };
       summary[t.id] = tally;
@@ -36,12 +39,19 @@ export async function GET(req: Request) {
         reportError(e, { where: "student-flow-insights", tenantId: t.id });
         return [] as string[];
       });
-      for (const studentId of ids) {
-        if (Date.now() - started > 270_000) break;
-        const r = await refreshFlowInsight({ tenantId: t.id, studentId, kind: "timeline", reason: "nightly" });
-        tally[r.status] += 1;
+      if (ids.length > 0) queues.push({ tenantId: t.id, ids, stopped: false });
+    }
+    for (let round = 0; queues.some((q) => !q.stopped && round < q.ids.length); round++) {
+      for (const q of queues) {
+        if (q.stopped || round >= q.ids.length) continue;
+        if (Date.now() - started > 270_000) {
+          q.stopped = true;
+          continue;
+        }
+        const r = await refreshFlowInsight({ tenantId: q.tenantId, studentId: q.ids[round], kind: "timeline", reason: "nightly" });
+        summary[q.tenantId][r.status] += 1;
         // 라이선스·키 문제는 학생마다 되풀이될 뿐이라 그 지점은 멈춘다.
-        if (r.status === "failed" && /라이선스|license|API key|api key/i.test(r.error)) break;
+        if (r.status === "failed" && /라이선스|license|API key|api key/i.test(r.error)) q.stopped = true;
       }
     }
     return NextResponse.json({ ok: true, summary });
