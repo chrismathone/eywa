@@ -3,6 +3,8 @@ import {
   DEFAULT_SECTOR,
   EXPLORE_KINDS,
   SECTOR_DEFS,
+  buildGroupModel,
+  encodeTrail,
   exploreHref,
   monthDayKo,
   nextTrail,
@@ -13,6 +15,8 @@ import {
   sectorAngles,
   sectorOffset,
   sectorPath,
+  splitSelKey,
+  wedgesOf,
 } from "./model";
 
 describe("조각 표 — 시안의 수와 차례", () => {
@@ -56,6 +60,60 @@ describe("도넛 기하", () => {
   });
 });
 
+describe("쐐기 — 같은 과목의 반은 조각 안에서 다시 n분할", () => {
+  const base = { icon: "graduationCap" as const, tone: "blue" as const, state: "ready" as const };
+  const target = (id: string) => ({ kind: "class" as const, id, label: id.toUpperCase() });
+  it("parts가 둘 이상인 조각만 쪼개지고, 각도는 그 조각 안에서 등분", () => {
+    const sectors = [
+      { key: "subject:math", label: "수학", summary: "2개 반", ...base, parts: [{ key: "a", label: "A", summary: "", target: target("a") }, { key: "b", label: "B", summary: "", target: target("b") }] },
+      { key: "attendance", label: "출결", summary: "100%", ...base },
+      { key: "grades", label: "성적", summary: "—", ...base, parts: [{ key: "x", label: "X", summary: "", target: target("x") }] },
+    ];
+    const w = wedgesOf(sectors);
+    expect(w.map((x) => x.selKey)).toEqual(["subject:math#a", "subject:math#b", "attendance", "grades#x"]);
+    expect(w[0].angles.end - w[0].angles.start).toBeCloseTo(60);
+    expect(w[0].angles.start).toBeCloseTo(-150);
+    expect(w[1].angles.start).toBeCloseTo(-90);
+    expect(w[2].angles.end - w[2].angles.start).toBeCloseTo(120);
+    expect(w[0].eyebrow).toBe("수학");
+    expect(w[2].eyebrow).toBeNull();
+    // 반이 하나인 과목도 같은 꼴(작게 과목 · 굵게 반 이름) — 각도는 조각 그대로.
+    expect(w[3]).toMatchObject({ eyebrow: "성적", label: "X" });
+    expect(w[3].angles.end - w[3].angles.start).toBeCloseTo(120);
+    expect(splitSelKey("subject:math#a")).toEqual({ sectorKey: "subject:math", partKey: "a" });
+    expect(splitSelKey("attendance")).toEqual({ sectorKey: "attendance", partKey: null });
+  });
+
+  it("조각이 하나면 고리 전체(두 호)로 그린다", () => {
+    const p = sectorPath(320, 320, 130, 300, -270, 90);
+    expect((p.match(/A /g) ?? []).length).toBe(4);
+    expect(p.endsWith("Z")).toBe(true);
+  });
+
+  it("영역 중심 모델 — 작은 조각·묶음·읽기 줄이 조각이 되고, 12개를 넘으면 '나머지'가 패널을 맡는다", () => {
+    const parent = {
+      center: { kind: "student" as const, id: "s1", name: "김민준", subtitle: null, status: null, icon: "user" as const, detailHref: "/students/s1", detailLabel: "원생 상세 열기" },
+      sectors: [
+        { key: "subject:math", label: "수학", summary: "2개 반", ...base, parts: [{ key: "a", label: "A", summary: "", target: target("a") }, { key: "b", label: "B", summary: "", target: target("b") }], targets: [target("a"), target("b")], groups: [{ label: "지난 수업", targets: [target("old")] }], links: [{ href: "/students/s1?tab=classes", label: "수업 탭 열기" }] },
+        { key: "attendance", label: "출결", summary: "100%", ...base, rows: Array.from({ length: 14 }, (_, i) => ({ id: `r${i}`, title: `줄 ${i}`, right: `${i}` })) },
+      ],
+      defaultSector: "subject:math",
+      asOf: "2026-11-03",
+    };
+    const g = buildGroupModel(parent, "subject:math")!;
+    expect(g.center.name).toBe("김민준 · 수학");
+    expect(g.center.group).toBe("subject:math");
+    expect(g.sectors.map((s) => s.label)).toEqual(["A", "B", "OLD"]);
+    expect(g.sectors[2].focus?.meta).toBe("지난 수업");
+    expect(g.sectors[0].targets).toBeUndefined();
+    expect(g.panelDefault?.key).toBe("subject:math");
+    const a = buildGroupModel(parent, "attendance")!;
+    expect(a.sectors).toHaveLength(12);
+    expect(a.sectors[11].label).toBe("나머지 3");
+    expect(buildGroupModel(parent, "nope")).toBeNull();
+  });
+});
+
 describe("탐색 경로 주소", () => {
   const s = { kind: "student" as const, id: "11111111-1111-4111-8111-111111111111" };
   const c = { kind: "class" as const, id: "22222222-2222-4222-8222-222222222222" };
@@ -68,6 +126,16 @@ describe("탐색 경로 주소", () => {
     expect(parseTrail(`guardian:abc,student:${s.id},student:${s.id},class:bad id`)).toEqual([s]);
     expect(parseTrail(undefined)).toEqual([]);
     expect(exploreHref(s)).toBe(`/explore/student/${s.id}`);
+  });
+
+  it("영역 중심(kind:id:sector)도 경로에 실린다 — 과목 조각 key의 ':'까지 그대로", () => {
+    const g = { ...s, sector: "subject:math" };
+    // `:`는 인코딩해 보낸다 — Next 16이 경로 매개변수를 `subject%3Amath`로 넘기므로 받는 쪽(page)이 푼다.
+    expect(exploreHref(g)).toBe(`/explore/student/${s.id}/subject%3Amath`);
+    expect(parseTrail(encodeTrail([s, g, c]))).toEqual([s, g, c]);
+    expect(parseTrail(`student:${s.id}:bad key`)).toEqual([]);
+    expect(nextTrail([s], g, c)).toEqual([s, g]);
+    expect(nextTrail([s, g], c, g)).toEqual([s]);
   });
 
   it("다음 경로 — 앞으로 가면 지금 중심을 붙이고, 경로에 있던 대상으로 가면 거기까지 되감는다", () => {

@@ -85,6 +85,10 @@ export type ExploreRow = {
   detail?: string | null;
   date?: string | null;
   right?: string | null;
+  /** 전문(상담 요약·메모·진도) — 영역 중심에서 이 줄을 고르면 패널에 그대로 펼친다(원장 2026-11-03 *"선택했을 때 자세히"*). */
+  body?: string | null;
+  /** 이 줄의 내역(출결 '기록' 33건의 날짜·반·상태 …) — 영역 중심에서 이 줄을 고르면 패널이 이 목록을 펼친다. */
+  items?: ExploreRow[];
 };
 
 /**
@@ -94,6 +98,9 @@ export type SectorState = "ready" | "empty" | "denied" | "error";
 
 export type ExploreLink = { href: string; label: string };
 
+/** 같은 과목 안의 반 하나 — 조각을 다시 n분할한 작은 조각(원장 2026-11-03 *"같은 과목이면 그 안에서 다시 n분할"*). `rows` = 패널에 펼칠 그 반 요약. */
+export type ExplorePart = { key: string; label: string; summary: string; target: ExploreTarget; rows?: ExploreRow[] };
+
 export type ExploreSector = {
   key: string;
   label: string;
@@ -102,8 +109,12 @@ export type ExploreSector = {
   /** 조각 안의 한 줄 요약(길면 화면이 말줄임). */
   summary: string;
   state: SectorState;
+  /** 있으면 이 조각을 각도로 n분할해 작은 조각마다 다른 대상(반)을 둔다 — 각 작은 조각이 더블클릭 흡수의 단위. */
+  parts?: ExplorePart[];
   /** 실제 대상 — 하나면 바로 중심 전환, 여럿이면 패널 목록. */
   targets?: ExploreTarget[];
+  /** 패널 제목이 곧 이 대상일 때(반 하나짜리 조각 · 2단계 조각) — 이름을 되풀이하지 않고 '중심으로 보기' 동작만 둔다. */
+  focus?: ExploreTarget;
   /** 주 목록 뒤에 따로 묶어 보이는 대상(배정 예정 · 지난 수업 …). */
   groups?: { label: string; targets: ExploreTarget[] }[];
   rows?: ExploreRow[];
@@ -122,6 +133,8 @@ export type ExploreCenter = {
   /** 기존 상세 화면(원생 상세 · 수업 상세 · 직원 상세). 권한이 없으면 null. */
   detailHref: string | null;
   detailLabel: string;
+  /** 영역 중심(2단계 도넛)이면 그 영역의 조각 key — 예: 김민서G의 '수업'. 실제 대상 중심이면 없음. */
+  group?: string;
 };
 
 /** 넓은 화면 왼쪽 열(원장 2026-11-03 *"공간이 많이 남으니까"*) — 고정 사실 몇 줄 + (원생) AI 흐름 분석 카드. */
@@ -143,6 +156,8 @@ export type ExploreModel = {
   /** 판정 기준일(KST). */
   asOf: string;
   aside?: ExploreAside;
+  /** 아무 조각도 안 골랐을 때 패널에 펼칠 것 — 영역 중심은 그 영역 전체(목록·링크), 없으면 `defaultSector` 조각. */
+  panelDefault?: ExploreSector;
 };
 
 // ───────────────────────── 조각 표(제목 · 그림 · 색 · 시계 방향 순서) ─────────────────────────
@@ -191,6 +206,68 @@ export function sectorDef(kind: ExploreKind, key: string): SectorDef {
   return def;
 }
 
+/** 원생 도넛의 과목 조각 key — `subject:<과목 키>`(원장 2026-11-03 *"다른 과목이면 n분할을 한 칸 더"*). */
+export const subjectSectorKey = (subjectKey: string) => `subject:${subjectKey}`;
+export const subjectOfSectorKey = (key: string): string | null => (key.startsWith("subject:") ? key.slice("subject:".length) : null);
+/** 조각 key 모양 — 표의 고정 key 또는 `subject:<키>`. 주소에서 온 값은 이 모양만 받는다. */
+const SECTOR_KEY_OK = /^[a-z_]+(?::[A-Za-z0-9_-]{1,40})?$/;
+export const isSectorKeyShape = (v: string) => SECTOR_KEY_OK.test(v);
+
+/** 조각 안 작은 조각(반)의 선택 key — `<조각 key>#<작은 조각 key>`. */
+export const partSelKey = (sectorKey: string, partKey: string) => `${sectorKey}#${partKey}`;
+export function splitSelKey(sel: string): { sectorKey: string; partKey: string | null } {
+  const at = sel.indexOf("#");
+  return at < 0 ? { sectorKey: sel, partKey: null } : { sectorKey: sel.slice(0, at), partKey: sel.slice(at + 1) };
+}
+
+/** 화면이 그리는 쐐기 하나 — 조각 그대로이거나, 조각을 n분할한 작은 조각(반). */
+export type Wedge = {
+  selKey: string;
+  sector: ExploreSector;
+  part: ExplorePart | null;
+  angles: SectorAngles;
+  label: string;
+  summary: string;
+  /** 작은 조각이면 위에 작게 적는 과목 이름. */
+  eyebrow: string | null;
+  icon: AywaIconName;
+  tone: ExploreTone;
+};
+
+/**
+ * 조각 목록 → 쐐기 목록. 조각은 같은 크기로 n등분(맨 위부터 시계 방향), `parts`가 있는 조각은 **그 각도 안에서** 다시 k등분.
+ * 🔑 돌출·올리기·흡수·펼치기 모두 쐐기 단위다(작은 조각 하나가 곧 더블클릭 흡수의 단위).
+ */
+export function wedgesOf(sectors: readonly ExploreSector[]): Wedge[] {
+  const n = sectors.length;
+  const out: Wedge[] = [];
+  sectors.forEach((s, i) => {
+    const a = sectorAngles(n, i);
+    const parts = s.parts && s.parts.length > 0 ? s.parts : null;
+    if (!parts) {
+      out.push({ selKey: s.key, sector: s, part: null, angles: a, label: s.label, summary: s.summary, eyebrow: null, icon: s.icon, tone: s.tone });
+      return;
+    }
+    // 반이 하나뿐인 과목도 같은 꼴(작게 과목명 · 굵게 수업명)로 — 반 수에 따라 생김새가 갈리지 않게(원장 2026-11-03 *"수학과 영어의 일관성"*).
+    const step = (a.end - a.start) / parts.length;
+    parts.forEach((p, j) => {
+      const start = a.start + step * j;
+      out.push({
+        selKey: partSelKey(s.key, p.key),
+        sector: s,
+        part: p,
+        angles: { start, end: start + step, mid: start + step / 2 },
+        label: p.label,
+        summary: p.summary,
+        eyebrow: s.label,
+        icon: s.icon,
+        tone: s.tone,
+      });
+    });
+  });
+  return out;
+}
+
 // ───────────────────────── 도넛 기하(순수) ─────────────────────────
 
 /** 도넛 좌표계 — viewBox 한 변. 조각 돌출(px)은 이 단위라, 640px 안팎으로 그려지는 화면에서 시안의 12~18px와 같다. */
@@ -218,14 +295,31 @@ export function polar(cx: number, cy: number, r: number, deg: number): { x: numb
   return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
 }
 
-/** 고리 조각(피자 조각에서 가운데를 뺀 모양)의 SVG path. */
+/** 고리 조각(피자 조각에서 가운데를 뺀 모양)의 SVG path. 조각이 하나(360°)면 호가 제자리로 돌아와 안 그려지므로 반씩 두 호로. */
 export function sectorPath(cx: number, cy: number, rInner: number, rOuter: number, startDeg: number, endDeg: number): string {
+  const f = (n: number) => n.toFixed(2);
+  if (endDeg - startDeg >= 360) {
+    const mid = startDeg + 180;
+    const o1 = polar(cx, cy, rOuter, startDeg);
+    const o2 = polar(cx, cy, rOuter, mid);
+    const i1 = polar(cx, cy, rInner, startDeg);
+    const i2 = polar(cx, cy, rInner, mid);
+    return [
+      `M ${f(o1.x)} ${f(o1.y)}`,
+      `A ${rOuter} ${rOuter} 0 1 1 ${f(o2.x)} ${f(o2.y)}`,
+      `A ${rOuter} ${rOuter} 0 1 1 ${f(o1.x)} ${f(o1.y)}`,
+      "Z",
+      `M ${f(i1.x)} ${f(i1.y)}`,
+      `A ${rInner} ${rInner} 0 1 0 ${f(i2.x)} ${f(i2.y)}`,
+      `A ${rInner} ${rInner} 0 1 0 ${f(i1.x)} ${f(i1.y)}`,
+      "Z",
+    ].join(" ");
+  }
   const large = endDeg - startDeg > 180 ? 1 : 0;
   const o1 = polar(cx, cy, rOuter, startDeg);
   const o2 = polar(cx, cy, rOuter, endDeg);
   const i1 = polar(cx, cy, rInner, endDeg);
   const i2 = polar(cx, cy, rInner, startDeg);
-  const f = (n: number) => n.toFixed(2);
   return [
     `M ${f(o1.x)} ${f(o1.y)}`,
     `A ${rOuter} ${rOuter} 0 ${large} 1 ${f(o2.x)} ${f(o2.y)}`,
@@ -243,32 +337,36 @@ export function sectorOffset(midDeg: number, offset: number): { dx: number; dy: 
 
 // ───────────────────────── 주소 · 탐색 경로(순수) ─────────────────────────
 
-export type TrailItem = { kind: ExploreKind; id: string };
+/** 중심 하나 — 실제 대상(`kind:id`) 또는 영역 중심(`kind:id:sector`, 예: 김민서G의 '수업'). */
+export type TrailItem = { kind: ExploreKind; id: string; sector?: string };
 export type TrailLabel = TrailItem & { label: string };
 
 /** 탐색 경로에 남기는 이전 중심의 수 — 그보다 길면 오래된 것부터 버린다. */
 export const TRAIL_MAX = 8;
 const ID_OK = /^[A-Za-z0-9_-]{1,64}$/;
 
-/** `?t=student:<id>,class:<id>` → 항목. 모르는 종류·이상한 id는 조용히 버린다(주소는 누구나 적는다). */
+export const sameCenter = (a: TrailItem, b: TrailItem) => a.kind === b.kind && a.id === b.id && (a.sector ?? "") === (b.sector ?? "");
+
+/** `?t=student:<id>,class:<id>,student:<id>:classes` → 항목. 모르는 종류·이상한 id·모르는 영역은 조용히 버린다(주소는 누구나 적는다). */
 export function parseTrail(raw: string | string[] | undefined | null): TrailItem[] {
   const text = Array.isArray(raw) ? raw[0] : raw;
   if (!text) return [];
   const out: TrailItem[] = [];
   for (const part of text.split(",")) {
-    const at = part.indexOf(":");
-    if (at <= 0) continue;
-    const kind = part.slice(0, at);
-    const id = part.slice(at + 1);
-    if (!isExploreKind(kind) || !ID_OK.test(id)) continue;
-    if (out.some((o) => o.kind === kind && o.id === id)) continue;
-    out.push({ kind, id });
+    // `kind:id` 또는 `kind:id:<조각 key>` — 조각 key 자체에 `:`가 있을 수 있어(`subject:math`) 앞 둘만 자르고 나머지는 통째로.
+    const [kind, id, ...sectorParts] = part.split(":");
+    if (!kind || !id || !isExploreKind(kind) || !ID_OK.test(id)) continue;
+    const sector = sectorParts.length > 0 ? sectorParts.join(":") : undefined;
+    if (sector !== undefined && !isSectorKeyShape(sector)) continue;
+    const item: TrailItem = sector ? { kind, id, sector } : { kind, id };
+    if (out.some((o) => sameCenter(o, item))) continue;
+    out.push(item);
   }
   return out.slice(-TRAIL_MAX);
 }
 
 export function encodeTrail(items: readonly TrailItem[]): string {
-  return items.map((i) => `${i.kind}:${i.id}`).join(",");
+  return items.map((i) => (i.sector ? `${i.kind}:${i.id}:${i.sector}` : `${i.kind}:${i.id}`)).join(",");
 }
 
 /**
@@ -276,8 +374,8 @@ export function encodeTrail(items: readonly TrailItem[]): string {
  * 아니면 지금 중심을 뒤에 붙인다. 같은 대상이면 그대로.
  */
 export function nextTrail(trail: readonly TrailItem[], current: TrailItem, target: TrailItem): TrailItem[] {
-  if (current.kind === target.kind && current.id === target.id) return [...trail];
-  const at = trail.findIndex((t) => t.kind === target.kind && t.id === target.id);
+  if (sameCenter(current, target)) return [...trail];
+  const at = trail.findIndex((t) => sameCenter(t, target));
   if (at >= 0) return trail.slice(0, at);
   return [...trail, current].slice(-TRAIL_MAX);
 }
@@ -291,7 +389,91 @@ export function exploreHref(
   if (opts.sector) params.set("sector", opts.sector);
   if (opts.embed) params.set("embed", "1");
   const q = params.toString();
-  return `/explore/${target.kind}/${encodeURIComponent(target.id)}${q ? `?${q}` : ""}`;
+  // 영역 key(`subject:math`)의 `:`는 id처럼 인코딩 — Next 16은 경로 매개변수를 디코딩하지 않고 `subject%3Amath`로 넘긴다(받는 쪽이 푼다).
+  const path = `/explore/${target.kind}/${encodeURIComponent(target.id)}${target.sector ? `/${encodeURIComponent(target.sector)}` : ""}`;
+  return `${path}${q ? `?${q}` : ""}`;
+}
+
+/** 영역 중심의 이름 — "김민서G · 수업". 경로(빵 부스러기)와 가운데 원이 같은 말을 쓴다. */
+export function groupCenterName(parentName: string, sectorLabel: string): string {
+  return `${parentName} · ${sectorLabel}`;
+}
+
+/** 조각 key의 화면 이름 — 표의 고정 조각은 표에서, 과목 조각은 과목 라벨로(호출부가 `labelOf`를 준다). */
+export function sectorLabelOf(kind: ExploreKind, key: string, subjectLabelOf: (k: string) => string): string {
+  const subject = subjectOfSectorKey(key);
+  if (subject) return subjectLabelOf(subject);
+  return SECTOR_DEFS[kind].find((d) => d.key === key)?.label ?? key;
+}
+
+/** 2단계 도넛의 조각 수 상한 — 그보다 많으면 마지막 조각이 '나머지 N'을 맡고 전체는 패널 목록에. */
+export const GROUP_PIECE_MAX = 12;
+const PIECE_TONES: readonly ExploreTone[] = ["blue", "green", "purple", "rose", "gold", "primary", "amber"];
+
+/**
+ * 영역 중심 모델(원장 2026-11-03 *"전부 다 더블클릭 흡수 동작"*) — 실제 대상 중심의 조각 하나를 가운데로 놓고, 그 조각의
+ * 연결 대상(실제 대상 → 더블클릭하면 그 대상이 중심) · 묶음(배정 예정 · 지난 수업) · 읽기 줄(출결 통계 등) · 링크를 주변 조각으로 펼친다.
+ * 서버 조회는 그대로 쓴다(같은 모델에서 자른다) — 숫자·문구가 1단계와 같다.
+ */
+export function buildGroupModel(parent: ExploreModel, sectorKey: string): ExploreModel | null {
+  const sector = parent.sectors.find((s) => s.key === sectorKey);
+  if (!sector) return null;
+  const pieces: ExploreSector[] = [];
+  const tone = () => PIECE_TONES[pieces.length % PIECE_TONES.length];
+  const pushTarget = (t: ExploreTarget, meta?: string | null, rows?: ExploreRow[]) =>
+    pieces.push({
+      key: `t:${t.kind}:${t.id}:${pieces.length}`,
+      label: t.label,
+      icon: KIND_ICON[t.kind],
+      tone: tone(),
+      summary: [meta ?? t.meta, t.detail].filter(Boolean).join(" · ") || KIND_LABEL[t.kind],
+      state: "ready",
+      // 패널 제목이 곧 이 대상 — 이름을 되풀이하지 않고(원장 2026-11-03) 요약 줄 + '중심으로 보기'만.
+      focus: { ...t, ...(meta ? { meta } : {}) },
+      rows: rows ?? [{ id: "about", title: t.detail || KIND_LABEL[t.kind], detail: meta ?? t.meta ?? null }, ...(t.facts ?? []).map((f, i) => ({ id: `f${i}`, title: f }))],
+      note: `더블클릭하면 ${t.label}이(가) 중심이 됩니다.`,
+    });
+  // 작은 조각(같은 과목의 반들)이 있으면 그것이 곧 대상 목록이다(targets에도 같은 반이 있어 둘 다 돌면 겹친다).
+  if (sector.parts && sector.parts.length > 0) for (const p of sector.parts) pushTarget(p.target, null, p.rows);
+  else for (const t of sector.targets ?? []) pushTarget(t);
+  for (const g of sector.groups ?? []) for (const t of g.targets) pushTarget(t, `${g.label}${t.meta ? ` · ${t.meta}` : ""}`);
+  for (const r of sector.rows ?? [])
+    pieces.push({
+      key: `r:${r.id}`,
+      label: r.title,
+      icon: sector.icon,
+      tone: tone(),
+      summary: [r.right, r.date, r.detail].filter(Boolean).join(" · ") || sector.label,
+      state: "ready",
+      // 요약함 — 내역(items)이 있으면 그 목록, 전문(body)이 있으면 그대로, 아니면 그 줄 하나.
+      rows: r.items && r.items.length > 0 ? r.items : [r],
+      note: r.items && r.items.length > 0 ? `${r.title} ${r.items.length}건` : null,
+    });
+  if (pieces.length === 0)
+    for (const l of sector.links ?? [])
+      pieces.push({ key: `l:${l.href}`, label: l.label, icon: sector.icon, tone: tone(), summary: "더블클릭하면 엽니다", state: "ready", links: [l] });
+  if (pieces.length === 0) pieces.push({ key: "empty", label: sector.label, icon: sector.icon, tone: tone(), summary: sector.summary, state: sector.state });
+  const shown = pieces.length > GROUP_PIECE_MAX
+    ? [...pieces.slice(0, GROUP_PIECE_MAX - 1), { key: "more", label: `나머지 ${pieces.length - (GROUP_PIECE_MAX - 1)}`, icon: sector.icon, tone: "primary" as const, summary: "패널 목록에서 고르세요", state: "ready" as const, targets: sector.targets, groups: sector.groups, rows: sector.rows }]
+    : pieces;
+  return {
+    center: {
+      kind: parent.center.kind,
+      id: parent.center.id,
+      name: groupCenterName(parent.center.name, sector.label),
+      subtitle: sector.summary,
+      status: parent.center.status,
+      icon: sector.icon,
+      detailHref: sector.links?.[0]?.href ?? parent.center.detailHref,
+      detailLabel: sector.links?.[0]?.label ?? parent.center.detailLabel,
+      group: sectorKey,
+    },
+    sectors: shown,
+    defaultSector: shown[0].key,
+    asOf: parent.asOf,
+    aside: parent.aside,
+    panelDefault: sector,
+  };
 }
 
 export function exploreLandingHref(embed = false): string {

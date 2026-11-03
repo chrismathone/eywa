@@ -1,7 +1,9 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { KIND_LABEL, type ExploreKind, type TrailItem, type TrailLabel } from "../model";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
+import { KIND_LABEL, groupCenterName, sectorLabelOf, type ExploreKind, type TrailItem, type TrailLabel } from "../model";
 import { loadStudentCenter } from "./student";
 import { loadClassCenter } from "./class";
 import { loadTeacherCenter } from "./teacher";
@@ -36,5 +38,10 @@ export async function resolveTrailLabels(trail: readonly TrailItem[]): Promise<T
   for (const s of students.ok ? students.value : []) names.set(`student:${s.id}`, s.name);
   for (const c of classes.ok ? classes.value : []) names.set(`class:${c.id}`, c.class_name);
   for (const t of teachers.ok ? teachers.value : []) names.set(`teacher:${t.id}`, t.display_name);
-  return trail.map((t) => ({ ...t, label: names.get(`${t.kind}:${t.id}`) ?? KIND_LABEL[t.kind] }));
+  // 영역 중심(`kind:id:sector`)의 이름 = "김민서G · 수업" — 과목 조각은 학원 설정 과목 라벨로(가운데 원과 같은 말).
+  const subjects = trail.some((t) => t.sector) ? buildSubjectMaps((await getTenantSettings()).operations.subjects) : null;
+  return trail.map((t) => {
+    const base = names.get(`${t.kind}:${t.id}`) ?? KIND_LABEL[t.kind];
+    return { ...t, label: t.sector && subjects ? groupCenterName(base, sectorLabelOf(t.kind, t.sector, subjects.labelOf)) : base };
+  });
 }

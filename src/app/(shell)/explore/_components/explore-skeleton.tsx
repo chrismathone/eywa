@@ -1,7 +1,7 @@
 import { PageHeaderSkeleton } from "@/components/page-header";
 
-/** 첫 페인트용 뼈대(B7) — 중심 전환은 `startTransition`이라 이 뼈대가 다시 뜨지 않고 옛 화면이 흐려진 채 기다린다. */
-export default function Loading() {
+/** 첫 페인트용 뼈대(B7) — `explore/layout.tsx`의 Suspense 폴백. 문서를 새로 열 때만 보이고, 탐색 안 중심 전환엔 뜨지 않는다. */
+export function ExploreSkeleton() {
   return (
     <div className="space-y-4" role="status" aria-label="연결 탐색 불러오는 중">
       <div className="bg-bg-soft mx-1 h-5 w-64 animate-pulse rounded" />

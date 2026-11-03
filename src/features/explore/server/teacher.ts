@@ -177,7 +177,7 @@ export async function loadTeacherCenter(id: string): Promise<ExploreLoad> {
         state: reportRows.value.length > 0 ? "ready" : "empty",
         rows: reportRows.value.map((r) => ({ id: r.id as string, title: nameOf.get(r.student_id as string) ?? "학생 확인 필요", date: String(r.report_date).slice(0, 10) })),
         links: [{ href: "/lesson-reports", label: "수업보고서 열기" }],
-        note: "작성자 기준(created_by) · 오늘 포함 7일 · 최근 5건",
+        note: "작성자 기준 · 오늘 포함 7일 · 최근 5건",
       });
     })(),
     (() => {

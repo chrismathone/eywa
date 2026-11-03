@@ -4,7 +4,7 @@ import { EyIcon } from "@/components/icons/aywa-icons";
 import { ChevronRight, ExternalLink } from "@/components/icons/aywa-icon-compat";
 import { Pill } from "@/components/atoms/pill";
 import { WindowLink } from "@/components/workspace/window-link";
-import { KIND_ICON, TONE_BG_CLASS, TONE_INK_CLASS, type ExploreCenter, type ExploreSector, type ExploreTarget } from "../model";
+import { KIND_ICON, KIND_LABEL, TONE_BG_CLASS, TONE_INK_CLASS, type ExploreCenter, type ExploreSector, type ExploreTarget } from "../model";
 
 type Props = {
   sector: ExploreSector;
@@ -27,7 +27,12 @@ export function ExploreSidePanel({ sector, center, onNavigate, pending }: Props)
   const unit = targets[0]?.kind === "student" ? "명" : "개";
 
   return (
-    <aside className="bg-card shadow-card flex min-h-[32rem] flex-col rounded-2xl p-4 lg:p-5" aria-labelledby="explore-panel-title" aria-busy={pending || undefined}>
+    // 1920×1080에서 페이지 스크롤이 안 생기게(원장 2026-11-03) — 패널은 화면 높이 안에서 제 스크롤.
+    <aside
+      className="bg-card shadow-card flex max-h-[calc(100dvh-13rem)] min-h-[20rem] flex-col overflow-y-auto rounded-2xl p-4 lg:p-5"
+      aria-labelledby="explore-panel-title"
+      aria-busy={pending || undefined}
+    >
       <header className="flex items-center gap-2.5 pb-3">
         <span className={`flex size-10 shrink-0 items-center justify-center rounded-full ${TONE_BG_CLASS[sector.tone]}`}>
           <EyIcon name={sector.icon} size={22} className={TONE_INK_CLASS[sector.tone]} />
@@ -52,6 +57,16 @@ export function ExploreSidePanel({ sector, center, onNavigate, pending }: Props)
           <Notice tone="neutral" title={sector.summary} body={links.length > 0 ? "아래 화면에서 기록을 확인하거나 입력할 수 있어요." : "아직 이어진 기록이 없어요."} />
         ) : null}
 
+        {sector.focus ? (
+          <button
+            type="button"
+            onClick={() => onNavigate(sector.focus!)}
+            className="bg-primary text-primary-foreground hover:bg-primary-deep focus-visible:ring-ring flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-bold transition focus-visible:ring-2 focus-visible:outline-none"
+          >
+            이 {KIND_LABEL[sector.focus.kind]}을 중심으로 보기
+            <ChevronRight className="size-4" />
+          </button>
+        ) : null}
         {targets.length > 0 ? <TargetList targets={targets} onNavigate={onNavigate} /> : null}
         {groups.map((g) => (
           <section key={g.label} className="space-y-2">
@@ -64,7 +79,7 @@ export function ExploreSidePanel({ sector, center, onNavigate, pending }: Props)
           <ul className="divide-line-faint divide-y">
             {rows.map((r) => (
               <li key={r.id} className="flex items-start justify-between gap-3 py-2">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="text-foreground text-sm font-medium break-keep">{r.title}</p>
                   {r.date || r.detail ? (
                     <p className="text-text-dim text-xs break-keep">
@@ -73,6 +88,8 @@ export function ExploreSidePanel({ sector, center, onNavigate, pending }: Props)
                       {r.detail}
                     </p>
                   ) : null}
+                  {/* 전문(상담·메모·진도) — 영역 중심에서 그 줄을 골랐을 때 그대로 읽힌다. */}
+                  {r.body ? <p className="text-foreground mt-1 text-sm leading-relaxed break-keep whitespace-pre-wrap">{r.body}</p> : null}
                 </div>
                 {r.right ? <span className="num text-foreground shrink-0 text-sm font-bold">{r.right}</span> : null}
               </li>
@@ -92,7 +109,7 @@ export function ExploreSidePanel({ sector, center, onNavigate, pending }: Props)
               <ChevronRight className="size-3.5" />
             </WindowLink>
           ))}
-          {center.detailHref ? (
+          {center.detailHref && !links.some((l) => l.href === center.detailHref) ? (
             <WindowLink href={center.detailHref} title={center.detailLabel} frameTarget="window" className="text-foreground ml-auto inline-flex items-center gap-1 hover:underline">
               <ExternalLink className="size-3.5" />
               {center.detailLabel}

@@ -2,8 +2,10 @@ import "server-only";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, canAccessTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
-import { fetchInChunks } from "@/lib/supabase/batch";
-import { kstToday } from "@/lib/date-kst";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { addDays, kstToday } from "@/lib/date-kst";
+import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
+import { attendanceStatusLabel, formatSlotStart } from "@/features/students/detail/attendance-tab";
 import { isModuleEnabled } from "@/lib/modules";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { getClassAttendanceStats, getClassDetail, getClassStudents, type ClassScheduleSlot } from "@/features/classes/server/queries";
@@ -14,8 +16,13 @@ import { isLabSeparateSlot } from "@/features/timetable/lib/lab-separate";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { sheetDowLabel, sheetT } from "@/features/teacher-view/i18n";
-import { DEFAULT_SECTOR, SECTOR_DEFS, monthDayKo, othersLabel, type ExploreSector, type ExploreTarget } from "../model";
+import { DEFAULT_SECTOR, SECTOR_DEFS, monthDayKo, othersLabel, type ExploreRow, type ExploreSector, type ExploreTarget } from "../model";
 import { NOT_FOUND, deniedSector, distinct, errorSector, forbidden, makeSector, settle, type ExploreLoad } from "./shared";
+
+type AttRow = {
+  id: string; student_id: string; class_id: string; session_date: string; slot_start: string | null; recorded_at: string; status: string; note: string | null;
+  student: { name?: string } | { name?: string }[] | null;
+};
 
 /**
  * 수업 중심 — 반 상세와 같은 조회(getClassDetail · getClassStudents · getClassAttendanceStats 30일 · getClassDelegationList).
@@ -37,7 +44,7 @@ export async function loadClassCenter(id: string): Promise<ExploreLoad> {
   const slotTeacherIds = distinct(liveSlots.map((s) => s.teacherId)).filter((t) => t !== klass.teacherId);
   const roomIds = distinct(liveSlots.map((s) => s.classroomId));
   const supabase = await createClient();
-  const [students, stats, delegations, settings, teacherRows, roomRows, canEcs, canMcs, canAttendance, canTimetable] = await Promise.all([
+  const [students, stats, delegations, settings, teacherRows, roomRows, canEcs, canMcs, canAttendance, canTimetable, attRows] = await Promise.all([
     settle("explore.class.students", getClassStudents(id)),
     settle("explore.class.attendance", getClassAttendanceStats(id, 30)),
     settle("explore.class.delegations", getClassDelegationList(id)),
@@ -48,6 +55,10 @@ export async function loadClassCenter(id: string): Promise<ExploreLoad> {
     canAccessTenant(user.systemRole, "mcs"),
     canAccessTenant(user.systemRole, "attendance"),
     canAccessTenant(user.systemRole, "timetable"),
+    // 출결 내역(학생·날짜·상태) — 통계(getClassAttendanceStats)와 같은 30일 창·같은 정정 접기. 영역 중심의 요약함 재료.
+    settle("explore.class.attendanceRows", fetchAllPaged<AttRow>((from, to) =>
+      supabase.from("attendance_records").select("id, student_id, class_id, session_date, slot_start, recorded_at, status, note, student:student_id ( name )")
+        .eq("class_id", id).gte("session_date", addDays(today, -30)).order("id").range(from, to))),
   ]);
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const [dStudents, dTeacher, dTimetable, dRoom, dAttendance, dSheet] = SECTOR_DEFS.class;
@@ -129,15 +140,24 @@ export async function loadClassCenter(id: string): Promise<ExploreLoad> {
     (() => {
       if (!stats.ok) return errorSector(dAttendance);
       const a = stats.value;
+      const recs = attRows.ok ? effectiveAttendanceRecords(attRows.value) : null;
+      const item = (r: AttRow): ExploreRow => ({
+        id: r.id,
+        title: (Array.isArray(r.student) ? r.student[0] : r.student)?.name ?? "학생 확인 필요",
+        date: r.session_date,
+        right: attendanceStatusLabel(r.status),
+        detail: [r.slot_start ? formatSlotStart(r.slot_start) : null, r.note].filter(Boolean).join(" · ") || null,
+      });
+      const pick = (pred: (s: string) => boolean) => (recs ? recs.filter((r) => pred(r.status)).sort((x, y) => y.session_date.localeCompare(x.session_date)).map(item) : undefined);
       return makeSector(dAttendance, {
         summary: a.total > 0 ? `최근 30일 ${a.rate.toFixed(0)}%` : "30일 기록 없음",
         state: a.total > 0 ? "ready" : "empty",
         rows: [
-          { id: "total", title: "기록", right: `${a.total}건` },
-          { id: "present", title: "출석", right: `${a.present}건` },
-          { id: "late", title: "지각", right: `${a.late}건` },
-          { id: "absent", title: "결석", right: `${a.absent}건` },
-          { id: "excused", title: "인정결석", right: `${a.excused}건` },
+          { id: "total", title: "기록", right: `${a.total}건`, items: pick(() => true) },
+          { id: "present", title: "출석", right: `${a.present}건`, items: pick((s) => s === "present") },
+          { id: "late", title: "지각", right: `${a.late}건`, items: pick((s) => s === "late") },
+          { id: "absent", title: "결석", right: `${a.absent}건`, items: pick((s) => s === "absent") },
+          { id: "excused", title: "인정결석", right: `${a.excused}건`, items: pick((s) => s === "excused") },
         ],
         links: canAttendance ? [{ href: `/attendance/${today}/${klass.id}`, label: "오늘 출석부 열기" }] : [],
         note: canAttendance ? null : "출석부를 열 권한이 없어 통계만 보입니다.",
