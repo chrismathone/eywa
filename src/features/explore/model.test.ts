@@ -17,6 +17,7 @@ import {
   sectorPath,
   splitSelKey,
   wedgesOf,
+  zoomPlan,
 } from "./model";
 
 describe("조각 표 — 시안의 수와 차례", () => {
@@ -150,6 +151,46 @@ describe("탐색 경로 주소", () => {
     const many = Array.from({ length: 9 }, (_, i) => ({ kind: "student" as const, id: `id-${i}` }));
     expect(parseTrail(many.map((m) => `${m.kind}:${m.id}`).join(",")).map((m) => m.id)[0]).toBe("id-1");
     expect(nextTrail(many.slice(0, 8), c, t)).toHaveLength(8);
+  });
+});
+
+describe("흡수 계획 — 더블클릭이 갈 곳과 한 번 클릭이 미리 받을 주소가 같은 함수에서 나온다", () => {
+  const base = { icon: "graduationCap" as const, tone: "blue" as const, state: "ready" as const };
+  const target = (id: string) => ({ kind: "class" as const, id, label: id.toUpperCase() });
+  const model = {
+    center: { kind: "student" as const, id: "s1", name: "김민준", subtitle: null, status: null, icon: "user" as const, detailHref: "/students/s1", detailLabel: "원생 상세 열기" },
+    sectors: [
+      { key: "subject:math", label: "수학", summary: "2개 반", ...base, parts: [{ key: "a", label: "A", summary: "", target: target("a") }, { key: "b", label: "B", summary: "", target: target("b") }], targets: [target("a"), target("b")] },
+      { key: "subject:english", label: "영어", summary: "E", ...base, targets: [target("e")] },
+      { key: "attendance", label: "출결", summary: "100%", ...base, icon: "calendarCheck" as const, rows: [{ id: "r1", title: "줄", right: "1" }], links: [{ href: "/students/s1?tab=attendance", label: "출결 탭 열기" }] },
+    ],
+    defaultSector: "subject:math",
+    asOf: "2026-11-03",
+  };
+
+  it("작은 조각 → 그 반이 중심 · 경로엔 지금 중심 · 떠나는 쐐기 key는 고른 것", () => {
+    expect(zoomPlan(model, "subject:math#b", [], false)).toEqual({
+      go: "/explore/class/b?t=student%3As1",
+      to: { kind: "class", id: "b" },
+      leaving: { key: "subject:math#b", kind: "class", label: "B" },
+    });
+  });
+
+  it("대상이 하나인 조각 → 그 대상 · 대상이 없는 조각(1단계) → 영역 중심(조각 그림을 든다) · 창 안이면 embed", () => {
+    expect(zoomPlan(model, "subject:english", [], false)).toMatchObject({ go: "/explore/class/e?t=student%3As1", to: { kind: "class", id: "e" } });
+    expect(zoomPlan(model, "attendance", [{ kind: "class", id: "c0" }], true)).toEqual({
+      go: "/explore/student/s1/attendance?t=class%3Ac0%2Cstudent%3As1&embed=1",
+      to: { kind: "student", id: "s1", sector: "attendance" },
+      leaving: { key: "attendance", kind: "student", label: "출결", icon: "calendarCheck" },
+    });
+  });
+
+  it("영역 중심(2단계) — 대상 조각은 그 대상, 통계 줄 조각은 그 영역의 업무 화면 링크 · 모르는 조각은 null", () => {
+    const g = buildGroupModel(model, "subject:math")!;
+    expect(zoomPlan(g, g.sectors[0].key, [], false)).toMatchObject({ go: "/explore/class/a?t=student%3As1%3Asubject%3Amath", to: { kind: "class", id: "a" } });
+    const a = buildGroupModel(model, "attendance")!;
+    expect(zoomPlan(a, a.sectors[0].key, [], false)).toEqual({ link: "/students/s1?tab=attendance" });
+    expect(zoomPlan(model, "nope", [], false)).toBeNull();
   });
 });
 

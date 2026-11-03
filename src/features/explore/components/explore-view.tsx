@@ -1,7 +1,9 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState, useTransition } from "react";
+import { Fragment, use, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+// `router.prefetch`의 `kind`는 Next 내부 enum 타입만 받는다 — 타입만 빌리고 값은 그 enum의 문자열("full")을 그대로 적는다(런타임 import 없음).
+import type { PrefetchKind } from "next/dist/client/components/router-reducer/router-reducer-types";
 import { PageHeader } from "@/components/page-header";
 import { EmbedLink } from "@/components/embed-link";
 import { EyIcon } from "@/components/icons/aywa-icons";
@@ -11,14 +13,19 @@ import { ExploreDonut, type Leaving } from "./donut";
 import { ExploreSidePanel } from "./side-panel";
 import { ExploreSearch } from "./explore-search";
 import { AsideColumn } from "./aside-column";
+import { beginHandoff, endHandoff, takeHandoffFor } from "./transition-handoff";
 import styles from "./explore.module.css";
 import {
   KIND_LABEL,
   KIND_TITLE,
+  LEAVE_STAGGER_MS,
+  centerTrailItem,
   exploreHref,
   exploreLandingHref,
   nextTrail,
   splitSelKey,
+  wedgesOf,
+  zoomPlan,
   type ExploreKind,
   type ExploreModel,
   type ExploreSector,
@@ -34,15 +41,19 @@ type Props = {
   initialSector: string | null;
 };
 
-/** 접히는 모션이 끝난 뒤에 주소를 옮긴다 — 그 사이 새 중심을 읽기 시작해도 되지만, 옛 화면이 사라지기 전에 모션이 끝나야 자연스럽다. */
+/**
+ * 고른 조각이 가운데로 들어가는 모션의 길이(`sector-leave-chosen`) — 새 화면은 이것이 **끝난 뒤에** 뜬다(그 사이 새 중심을 읽는다 ·
+ * [`transition-handoff.ts`](./transition-handoff.ts)). 조각은 `LEAVE_STAGGER_MS`씩 벌려 시작하므로 붙드는 시간은 조각 수만큼 더한다
+ * (프로덕션 실측: 미리 받아 둔 전환이 접힘 끝보다 ~100ms 일찍 떠서 꼬리가 잘렸다).
+ */
 const LEAVE_MS = 560;
 
 /**
  * 연결 탐색 본체 — 중심 전환은 **주소 이동**이다(`/explore/<종류>/<id>[/<영역>]?t=<경로>`): 새로고침·직접 접근·브라우저 뒤로 가기가 그대로 된다.
- * 고르면 ① 쐐기들이 접히고 고른 쐐기가 가운데로 들어와 원이 된다(`leaving`) → ② `startTransition` 안의 `router.push`로 새 중심을 읽어
- * 이름·조각·패널이 **한 번에** 바뀐다(옛 정보가 새 이름 아래 잠깐 보이지 않는다) → ③ 새 화면이 뜨며 조각이 차례로 펼쳐진다(donut.tsx).
- * 빠르게 연속으로 골라도 마지막 주소가 이긴다(타이머를 덮어쓴다). 고른 쐐기는 `?sector=`로 남긴다(서버를 다시 부르지 않는 `replaceState` —
- * 이동 중엔 손대지 않는다, Next 16).
+ * 고르면 ① 쐐기들이 접히고 고른 쐐기가 가운데로 들어와 원이 된다(`leaving`) — **동시에** `startTransition` 안의 `router.push`로 새 중심을
+ * 읽기 시작한다 → ② 새 화면은 접힘이 끝날 때까지 그리기를 미룬다(`use(handoff.ready)` — 트랜지션 안이라 옛 화면이 그대로) →
+ * ③ 이름·조각·패널이 **한 번에** 바뀌며 조각이 차례로 펼쳐진다(donut.tsx). 한 번 클릭(고르기) 때 흡수 목적지를 미리 받아 두므로(prefetch)
+ * 더블클릭 땐 대개 서버를 기다리지 않는다. 고른 쐐기는 `?sector=`로 남긴다(서버를 다시 부르지 않는 `replaceState` — 이동 중엔 손대지 않는다, Next 16).
  */
 export function ExploreView({ model, trail, initialSector }: Props) {
   const router = useRouter();
@@ -52,58 +63,51 @@ export function ExploreView({ model, trail, initialSector }: Props) {
   //    패널은 기본 영역을 펼쳐 두되, 도넛은 사람이 올리거나 누른 쐐기만 띄운다. 주소에 `?sector=`가 있으면 그 쐐기.
   const [selected, setSelected] = useState<string | null>(() => (initialSector && isValidSel(model, initialSector) ? initialSector : null));
   const [leaving, setLeaving] = useState<Leaving | null>(null);
-  const timer = useRef<number | null>(null);
-  useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current); }, []);
-
-  const current: TrailItem = model.center.group
-    ? { kind: model.center.kind, id: model.center.id, sector: model.center.group }
-    : { kind: model.center.kind, id: model.center.id };
+  const current = centerTrailItem(model.center);
+  // 이어달리기 — 떠난 화면이 접히는 동안 도착했으면 접힘이 끝날 때까지 그리기를 미룬다(트랜지션 안이라 옛 화면이 그대로 남는다).
+  const [handoff] = useState(() => takeHandoffFor(current));
+  if (handoff) use(handoff.ready);
+  useEffect(() => {
+    if (handoff) endHandoff(handoff);
+  }, [handoff]);
   const sector = panelSectorOf(model, selected);
 
-  /** 접힘 → 주소 이동. 모션을 끄는 설정이면 바로 간다. */
-  const leaveTo = (href: string, next: Leaving) => {
+  /** 접힘 시작 + **바로** 새 중심 읽기 — 서버가 접히는 동안 돈다. 모션을 끄는 설정이면 바로 뜬다. */
+  const leaveTo = (href: string, to: TrailItem, next: Leaving) => {
     setLeaving(next);
-    if (timer.current !== null) window.clearTimeout(timer.current);
-    const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    timer.current = window.setTimeout(() => startTransition(() => router.push(href)), reduce ? 0 : LEAVE_MS);
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const hold = LEAVE_MS + (wedgesOf(model.sectors).length - 1) * LEAVE_STAGGER_MS + 16;
+    beginHandoff(to, reduce ? 0 : hold);
+    startTransition(() => router.push(href));
   };
-  const navigate = (target: ExploreTarget | TrailLabel, viaSel: string | null = selected ?? sector.key) =>
-    leaveTo(exploreHref(target, { trail: nextTrail(trail, current, target), embed }), { key: viaSel, kind: target.kind, label: target.label });
+  /**
+   * 한 번 클릭 때 흡수 목적지를 미리 받아 둔다 — 동적 페이지라 `full`(기본 `auto`는 정적 껍데기만 받는다). 바로 더블클릭해도 `router.push`가
+   * 진행 중인 이 요청을 이어받는다(프로덕션 실측: 요청 1회분 · 접힘이 끝나자마자 새 도넛). 같은 주소는 라우터 캐시가 한 번만.
+   * ⚠️ Next는 **개발 모드에서 prefetch를 하지 않는다**(`createPrefetchURL` — 컴파일 성능 때문) — dev에선 요청이 안 보이는 게 정상, 프로덕션에서만 돈다.
+   */
+  const warm = (href: string) => router.prefetch(href, { kind: "full" as PrefetchKind });
+  const navigate = (target: ExploreTarget | TrailLabel, viaSel: string | null = selected ?? sector.key) => {
+    const to: TrailItem = "sector" in target && target.sector ? { kind: target.kind, id: target.id, sector: target.sector } : { kind: target.kind, id: target.id };
+    leaveTo(exploreHref(to, { trail: nextTrail(trail, current, to), embed }), to, { key: viaSel, kind: target.kind, label: target.label });
+  };
   const selectSector = (key: string) => {
     if (leaving) return;
     setSelected(key);
     syncSectorParam(key);
+    const plan = zoomPlan(model, key, trail, embed);
+    if (plan && "go" in plan) warm(plan.go);
   };
   /**
-   * 흡수(더블클릭·Enter — 원장 2026-11-03 *"전부 다 더블클릭 흡수 동작"*): 쐐기가 가운데로 들어와 새 중심이 된다.
-   * · 작은 조각(같은 과목의 반)·대상이 하나인 조각 → 그 대상이 중심.
-   * · 그 밖의 조각(출결·상담·대상 여럿 …) → 그 **영역**이 중심(2단계 도넛 `/explore/<종류>/<id>/<영역>`), 주변엔 그 영역의 항목들.
-   * · 영역 중심 안에서 대상이 없는 항목(통계 줄 등)은 그 영역의 업무 화면을 연다.
+   * 흡수(더블클릭·Enter — 원장 2026-11-03 *"전부 다 더블클릭 흡수 동작"*): 쐐기가 가운데로 들어와 새 중심이 된다 — 갈 곳은 `zoomPlan`이
+   * 정한다(한 번 클릭의 prefetch와 같은 함수 · 같은 주소). 대상이 없는 항목(영역 중심의 통계 줄 등)은 그 영역의 업무 화면을 연다.
    */
   const zoom = (sel: string) => {
     if (leaving) return;
-    const { sectorKey, partKey } = splitSelKey(sel);
-    const s = model.sectors.find((x) => x.key === sectorKey);
-    if (!s) return;
+    const plan = zoomPlan(model, sel, trail, embed);
+    if (!plan) return;
     setSelected(sel);
-    const part = partKey ? s.parts?.find((p) => p.key === partKey) : null;
-    if (part) {
-      navigate(part.target, sel);
-      return;
-    }
-    // 영역 중심의 대상 조각은 `focus`로 대상을 든다(목록이 아니라 그 하나) — 안내 문구("더블클릭하면 중심이 됩니다")와 같은 동작.
-    const only = s.focus ?? (s.targets?.length === 1 && !(s.groups?.length) && !(s.parts?.length) ? s.targets[0] : null);
-    if (only) {
-      navigate(only, sel);
-      return;
-    }
-    if (!model.center.group) {
-      const groupItem: TrailItem = { kind: model.center.kind, id: model.center.id, sector: s.key };
-      leaveTo(exploreHref(groupItem, { trail: nextTrail(trail, current, groupItem), embed }), { key: sel, kind: model.center.kind, label: s.label, icon: s.icon });
-      return;
-    }
-    const href = s.links?.[0]?.href ?? model.center.detailHref;
-    if (href) openPanelLink(href);
+    if ("go" in plan) leaveTo(plan.go, plan.to, plan.leaving);
+    else if (plan.link) openPanelLink(plan.link);
   };
   /** 가운데 원 더블클릭 = 지금 중심의 상세 화면(패널 아래 같은 링크를 누른 것과 같다 — 창 규약을 그 링크가 안다). */
   const centerZoom = () => {
@@ -126,7 +130,8 @@ export function ExploreView({ model, trail, initialSector }: Props) {
             <ChevronRight className="text-text-dim size-3.5" aria-hidden="true" />
             <button
               type="button"
-              onClick={() => leaveTo(exploreHref(t, { trail: trail.slice(0, i), embed }), { key: null, kind: t.kind, label: t.label })}
+              onMouseEnter={() => warm(exploreHref(t, { trail: trail.slice(0, i), embed }))}
+              onClick={() => leaveTo(exploreHref(t, { trail: trail.slice(0, i), embed }), t, { key: null, kind: t.kind, label: t.label })}
               className="text-foreground hover:text-primary rounded px-0.5 font-medium hover:underline"
             >
               {crumbLabel(t, trail[i - 1])}
@@ -145,7 +150,16 @@ export function ExploreView({ model, trail, initialSector }: Props) {
       {/* 1920×1080 기준(원장 2026-11-03 *"스크롤 안 생기게"*): 도넛은 화면 높이에 맞춰 줄고(donut.tsx max-width), 패널·왼쪽 열은 제 안에서 스크롤. 위쪽 안내 알약은 뺐다(세로 낭비). */}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,25rem)] lg:items-start 2xl:grid-cols-[20rem_minmax(0,1fr)_minmax(20rem,25rem)]">
         <section aria-label="연결 도넛" className="min-w-0 space-y-2 lg:col-start-1 lg:row-start-1 2xl:col-start-2">
-          <ExploreDonut center={model.center} sectors={model.sectors} selected={selected} onSelect={selectSector} onZoom={zoom} onCenterZoom={centerZoom} leaving={leaving} />
+          <ExploreDonut
+            center={model.center}
+            sectors={model.sectors}
+            selected={selected}
+            onSelect={selectSector}
+            onZoom={zoom}
+            onCenterZoom={centerZoom}
+            leaving={leaving}
+            arrived={!!handoff}
+          />
           <p className="text-text-dim px-1 text-center text-xs break-keep">
             클릭 = 오른쪽에 펼치기 · 더블클릭 = 흡수(그 조각이 중심) · 가운데 더블클릭 = 상세 열기 · 기준일 <span className="num">{model.asOf}</span>
           </p>

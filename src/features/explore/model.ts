@@ -394,6 +394,42 @@ export function exploreHref(
   return `${path}${q ? `?${q}` : ""}`;
 }
 
+/** 접힐 때 조각마다 벌리는 간격(ms) — 도넛(모션)과 화면(새 화면을 붙드는 시간)이 같은 값을 쓴다. */
+export const LEAVE_STAGGER_MS = 14;
+
+/** 지금 중심의 경로 항목 — 영역 중심이면 영역 key까지. */
+export const centerTrailItem = (c: ExploreCenter): TrailItem => (c.group ? { kind: c.kind, id: c.id, sector: c.group } : { kind: c.kind, id: c.id });
+
+/**
+ * 흡수(더블클릭·Enter)가 할 일 — 화면은 이것을 그대로 실행하고, 한 번 클릭(고르기) 때는 `go` 주소만 **미리 받아 둔다**(prefetch —
+ * 둘이 같은 함수를 지나야 미리 받은 주소와 실제로 가는 주소가 글자까지 같다).
+ * · 작은 조각(같은 과목의 반) · 대상 하나인 조각(`focus` 또는 단일 target) → 그 대상이 중심.
+ * · 그 밖의 조각(1단계 중심) → 그 **영역**이 중심(2단계 도넛 `/explore/<종류>/<id>/<영역>`).
+ * · 영역 중심 안에서 대상이 없는 항목(통계 줄 등) → 그 영역의 업무 화면 링크(없으면 지금 중심의 상세).
+ */
+export type ZoomPlan =
+  | { go: string; to: TrailItem; leaving: { key: string; kind: ExploreKind; label: string; icon?: AywaIconName } }
+  | { link: string | null };
+
+export function zoomPlan(model: ExploreModel, sel: string, trail: readonly TrailItem[], embed: boolean): ZoomPlan | null {
+  const { sectorKey, partKey } = splitSelKey(sel);
+  const s = model.sectors.find((x) => x.key === sectorKey);
+  if (!s) return null;
+  const current = centerTrailItem(model.center);
+  const go = (to: TrailItem, label: string, icon?: AywaIconName): ZoomPlan => ({
+    go: exploreHref(to, { trail: nextTrail(trail, current, to), embed }),
+    to,
+    leaving: { key: sel, kind: to.kind, label, ...(icon ? { icon } : {}) },
+  });
+  const part = partKey ? s.parts?.find((p) => p.key === partKey) : null;
+  if (part) return go({ kind: part.target.kind, id: part.target.id }, part.target.label);
+  // 영역 중심의 대상 조각은 `focus`로 대상을 든다(목록이 아니라 그 하나) — 안내 문구("더블클릭하면 중심이 됩니다")와 같은 동작.
+  const only = s.focus ?? (s.targets?.length === 1 && !(s.groups?.length) && !(s.parts?.length) ? s.targets[0] : null);
+  if (only) return go({ kind: only.kind, id: only.id }, only.label);
+  if (!model.center.group) return go({ kind: model.center.kind, id: model.center.id, sector: s.key }, s.label, s.icon);
+  return { link: s.links?.[0]?.href ?? model.center.detailHref };
+}
+
 /** 영역 중심의 이름 — "김민서G · 수업". 경로(빵 부스러기)와 가운데 원이 같은 말을 쓴다. */
 export function groupCenterName(parentName: string, sectorLabel: string): string {
   return `${parentName} · ${sectorLabel}`;

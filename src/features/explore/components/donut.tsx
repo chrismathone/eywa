@@ -12,6 +12,7 @@ import {
   DONUT_SIZE,
   KIND_ICON,
   KIND_LABEL,
+  LEAVE_STAGGER_MS,
   OFFSET_HOVER,
   OFFSET_SELECTED,
   TONE_FILL,
@@ -41,6 +42,8 @@ type Props = {
   /** 가운데 원 더블클릭 — 지금 중심의 기존 상세 화면을 연다. */
   onCenterZoom: () => void;
   leaving: Leaving | null;
+  /** 떠난 화면에서 이어 받아 뜬 화면 — 가운데 원은 이미 이 이름으로 떠 있었으니 등장 모션을 건너뛴다(조각 펼침은 그대로). */
+  arrived?: boolean;
 };
 
 /**
@@ -50,7 +53,7 @@ type Props = {
  * 바깥 <g>(도넛 중심 축)과 안쪽 <g>(제 중심 축)을 겹쳐 펼침·흡수와 올리기가 서로의 축을 건드리지 않는다.
  * 키보드 — Tab으로 도넛에 들어오면 고른 쐐기에 초점, ←→↑↓로 옆 쐐기, Enter/Space로 고르기·흡수. 선택은 색만이 아니라 돌출·테두리·그림자·`aria-pressed`로도.
  */
-export function ExploreDonut({ center, sectors, selected, onSelect, onZoom, onCenterZoom, leaving }: Props) {
+export function ExploreDonut({ center, sectors, selected, onSelect, onZoom, onCenterZoom, leaving, arrived = false }: Props) {
   const [hover, setHover] = useState<string | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
   const refs = useRef<(SVGGElement | null)[]>([]);
@@ -113,7 +116,7 @@ export function ExploreDonut({ center, sectors, selected, onSelect, onZoom, onCe
           //    고른 조각이 가운데가 아니라 **왼쪽 위로** 빨려 갔다(원장 2026-11-03 캡처).
           const outerCls = `${styles.sectorOuter} ${leaving ? (leaving.key === w.selKey ? styles.sectorOuterLeaveChosen : styles.sectorOuterLeave) : ""}`;
           return (
-            <g key={w.selKey} className={outerCls} style={{ animationDelay: leaving ? `${(n - 1 - i) * 14}ms` : `${i * stagger}ms` }}>
+            <g key={w.selKey} className={outerCls} style={{ animationDelay: leaving ? `${(n - 1 - i) * LEAVE_STAGGER_MS}ms` : `${i * stagger}ms` }}>
               <g
                 ref={(el) => {
                   refs.current[i] = el;
@@ -200,7 +203,7 @@ export function ExploreDonut({ center, sectors, selected, onSelect, onZoom, onCe
       <div
         className={`bg-card shadow-card ring-primary-softer absolute top-1/2 left-1/2 flex aspect-square w-[40%] flex-col items-center justify-center gap-1.5 rounded-full px-4 text-center ring-8 ${
           center.detailHref ? "cursor-pointer" : ""
-        } ${leaving ? styles.centerSwap : styles.centerEnter}`}
+        } ${leaving ? styles.centerSwap : arrived ? "" : styles.centerEnter}`}
         style={leaving ? undefined : { transform: "translate(-50%, -50%)" }}
         onDoubleClick={() => onCenterZoom()}
         title={center.detailHref ? `더블클릭: ${center.detailLabel}` : undefined}

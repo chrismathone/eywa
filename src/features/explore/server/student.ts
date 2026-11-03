@@ -41,17 +41,17 @@ import { NOT_FOUND, deniedSector, errorSector, forbidden, makeSector, settle, wo
 export async function loadStudentCenter(id: string): Promise<ExploreLoad> {
   const user = await getCurrentUser();
   if (!user) return forbidden("로그인이 필요합니다.");
-  const student = await getStudentById(id);
-  if (!student) {
-    if ((await accessLevelTenant(user.systemRole, "students")) === "scoped") {
-      return forbidden("담당 학생만 열람할 수 있어요. 이 학생은 내 반(담임·교시 담당·임시 위임) 수강생이 아니거나, 수강이 끝난 지 오래됐어요.");
-    }
-    return NOT_FOUND;
-  }
   const today = kstToday();
-  // '수납'은 원생 권한이 아니라 **수납 권한**으로 잠근다(원생 상세와 같은 규칙) — 요약·건수도 내리지 않는다.
-  const canSeeBilling = await canAccessTenant(user.systemRole, "billing");
-  const [enrollments, attendance, grades, reports, consultations, memos, invoices, timeline, settings, classDetails, attendanceFull] = await Promise.all([
+  const since = addDays(today, -30);
+  // 권한 둘은 요청 캐시(즉시) — 아래 묶음의 분기에 먼저 쓴다. '수납'은 원생 권한이 아니라 **수납 권한**으로 잠근다(원생 상세와 같은
+  // 규칙 — 요약·건수도 내리지 않는다). 흐름 분석은 모든 상담을 읽은 결과라 **원생상담을 전체로 보는 사람**(full·readonly)만 —
+  // 강사(scoped)는 자기 상담만 보는 사람이라 권한 없음으로.
+  const [canSeeBilling, consultLevel] = await Promise.all([canAccessTenant(user.systemRole, "billing"), accessLevelTenant(user.systemRole, "consultations")]);
+  const flowAllowed = consultLevel === "full" || consultLevel === "readonly";
+  // 🔴 학생 조회·조각 조회·흐름 분석을 **한 묶음**으로(B4) — 학생 → 조각 묶음 → 흐름의 직렬 3단이 전환마다 왕복 둘을 더하고 있었다
+  //    (2026-11-03 실측). 학생을 못 읽으면(없음 · 담당 밖) 나머지 결과는 버린다 — 조각 조회도 같은 RLS·게이트를 지나므로 새는 것이 없다.
+  const [student, enrollments, attendance, grades, reports, consultations, memos, invoices, timeline, settings, classDetails, attendanceFull, flowRows] = await Promise.all([
+    getStudentById(id),
     settle("explore.student.enrollments", getStudentEnrollments(id)),
     settle("explore.student.attendance", getStudentAttendanceStats(id, 30)),
     settle("explore.student.grades", getStudentUnifiedRows(id)),
@@ -63,9 +63,17 @@ export async function loadStudentCenter(id: string): Promise<ExploreLoad> {
     getTenantSettings(),
     // 반마다 요약(요일·교시·강의실·등원 요일) — 원생 상세 수업 탭과 같은 조회. 실패해도 조각은 선다(요약 줄만 빠진다).
     settle("explore.student.classDetails", getStudentClassesDetail(id)),
-    // 출결 내역(날짜·반·상태) — 출결 탭과 같은 조회(정정 줄은 최신 하나만). 영역 중심에서 '기록 33건'을 고르면 이 목록이 요약함에 선다.
-    settle("explore.student.attendanceFull", getStudentAttendanceFull(id)),
+    // 출결 내역(날짜·반·상태) — 출결 탭과 같은 조회(정정 줄은 최신 하나만)를 **통계와 같은 30일 창**으로만. 영역 중심에서 '기록 33건'을 고르면
+    // 이 목록이 요약함에 선다.
+    settle("explore.student.attendanceFull", getStudentAttendanceFull(id, { since })),
+    flowAllowed ? settle("explore.student.flow", readFlowInsights(user.tenantId, id)) : Promise.resolve(null),
   ]);
+  if (!student) {
+    if ((await accessLevelTenant(user.systemRole, "students")) === "scoped") {
+      return forbidden("담당 학생만 열람할 수 있어요. 이 학생은 내 반(담임·교시 담당·임시 위임) 수강생이 아니거나, 수강이 끝난 지 오래됐어요.");
+    }
+    return NOT_FOUND;
+  }
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const base = `/students/${id}`;
   const [dClasses, dAttendance, dGrades, dProgress, dConsult, dMemos, dBilling, dTimeline] = SECTOR_DEFS.student;
@@ -77,7 +85,6 @@ export async function loadStudentCenter(id: string): Promise<ExploreLoad> {
       const a = attendance.value;
       const attended = attendedCount({ present: a.present, late: a.late });
       // 요약함 재료(원장 2026-11-03 *"선택했을 때 자세히"*) — 같은 30일 창의 출결 내역(날짜·반·상태). 못 읽었으면 숫자만.
-      const since = addDays(today, -30);
       const recs = attendanceFull.ok ? attendanceFull.value.filter((r) => r.date >= since) : null;
       const item = (r: NonNullable<typeof recs>[number]): ExploreRow => ({
         id: `${r.date}-${r.classId}-${r.slotStart ?? ""}`,
@@ -223,11 +230,7 @@ export async function loadStudentCenter(id: string): Promise<ExploreLoad> {
   ];
 
   const status = studentStatusMeta(student.status);
-  // 왼쪽 열 — 고정 사실 + AI 흐름 분석(저장된 결과만). 합산 분석은 모든 상담을 읽은 결과라 **원생상담을 전체로 보는 사람**(full·readonly)만
-  // 본다 — 강사(scoped)는 자기 상담만 보는 사람이라 권한 없음으로.
-  const consultLevel = await accessLevelTenant(user.systemRole, "consultations");
-  const flowAllowed = consultLevel === "full" || consultLevel === "readonly";
-  const flowRows = flowAllowed ? await settle("explore.student.flow", readFlowInsights(user.tenantId, id)) : null;
+  // 왼쪽 열 — 고정 사실 + AI 흐름 분석(저장된 결과만 · 권한 판정은 위).
   const flow: NonNullable<ExploreAside["flow"]> = !flowAllowed
     ? { state: "denied", items: [], canRefresh: false }
     : !flowRows || !flowRows.ok
