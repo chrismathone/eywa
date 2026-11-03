@@ -14,7 +14,9 @@ describe("데스크 담당자 후보 = 수납 쓰기 권한이 있는 직원(리
   });
   it("지점 역할 덮어쓰기 · 개인별 권한이 반영된다", () => {
     expect(ids(billingWriters(staff, new Set(), settings({ overrides: [{ menu: "billing", role: "manager", access: "full" }] })))).toContain("mgr");
-    expect(ids(billingWriters(staff, new Set(), settings({ userOverrides: [{ userId: "cns", menu: "billing", access: "full" }] })))).toContain("cns");
+    expect(ids(billingWriters(staff, new Set(), settings({ userOverrides: [{ userId: "mgr", menu: "billing", access: "full" }] })))).toContain("mgr");
+    // 상담사는 수납 쓰기를 받아도 요청서 RLS(원장·관리자·매니저·회계)가 막아 처리하지 못한다 — 후보가 아니다.
+    expect(ids(billingWriters(staff, new Set(), settings({ userOverrides: [{ userId: "cns", menu: "billing", access: "full" }] })))).not.toContain("cns");
     expect(ids(billingWriters(staff, new Set(), settings({ userOverrides: [{ userId: "acc", menu: "billing", access: "readonly" }] })))).not.toContain("acc");
   });
   it("운영자 계정은 낮추는 개인 예외를 무시한다(권한 게이트와 같은 병합)", () => {

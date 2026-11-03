@@ -11,7 +11,6 @@ import { checkReasonInput } from "@/features/withdrawals/reason-detail";
 import { canManageStudentStatusNow } from "@/features/students/server/status-access";
 import { reportViewer, getReport } from "./queries";
 import { decideReportApprovals } from "./request-check";
-import { loadRefundSteps } from "./refund-steps";
 import { completedEnrollmentIds } from "./completed-target";
 import { appliedAuditMeta } from "../audit-meta";
 import { loadReportBilling } from "./billing";
@@ -42,14 +41,14 @@ export async function requestWithdrawalReport(input: unknown): Promise<ReportRes
   const parsed = batchRequestSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "입력 내용을 확인해 주세요." };
   if (viewer.scope && parsed.data.subjects.some(s => !viewer.scope!.includes(s))) return { error: "담당 과목의 보고서만 요청할 수 있습니다." };
-  // 보고서마다 승인 관리자(원장 2026-11-03 — 작성 강사가 그 보고서 과목의 관리자면 관리자 승인 생략) — 요청 창과 같은 계산으로 서버가 정한다.
+  // 작성 강사·보고서마다 승인 관리자(원장 2026-11-03 — 작성 강사가 그 보고서 과목의 관리자면 관리자 승인 생략) — 요청 창과 같은 계산으로 서버가 정한다(화면 명단을 믿지 않는다).
   const decision = await decideReportApprovals(viewer.user.tenantId, parsed.data)
     .catch((): { ok: false; error: string } => ({ ok: false, error: "승인 관리자를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." }));
   if (!decision.ok) return { error: decision.error };
   const db = createAdminClient();
   const { data, error } = await db.rpc("request_withdrawal_report_group", {
     p_tenant: viewer.user.tenantId, p_actor: viewer.user.id,
-    p_payload: { ...parsed.data, managerIds: decision.managerIds, reportManagerIds: decision.byTeacher },
+    p_payload: { ...parsed.data, teacherIds: decision.teacherIds, managerIds: decision.managerIds, reportManagerIds: decision.byTeacher },
   });
   if (error) return { error: missingReportSchema(error) ? "퇴원보고서 기능을 준비 중입니다." : error.code === "23505" ? "이 학생의 진행 중인 보고서가 있습니다. 기존 요청을 먼저 확인해 주세요." : describeDbError(error, { fallback: "보고서 작성을 요청하지 못했습니다." }).message };
   const { data: report, error: readError } = await db.from("withdrawal_reports").select("*").eq("tenant_id", viewer.user.tenantId).eq("group_id", data).eq("group_leader", true).single();
@@ -120,13 +119,24 @@ export async function changeWithdrawalReport(id: string, action: ReportAction, r
   return { ok: true, id };
 }
 /**
- * 취소한 묶음의 데스크 환불(원장 2026-11-03) — 아직 끝나지 않은 요청서는 DB가 같은 거래에서 데스크 할 일을 취소하고 담당자에게 '환불 진행 전 확인'을 보냈다.
- * 감사로그에 어느 요청서·누구에게 알렸는지 남긴다(요청서 자체는 남는다 — 돈은 데스크 판단). 못 읽으면 그 사실만 적는다.
+ * 취소한 묶음의 데스크 환불(원장 2026-11-03) — DB가 같은 거래에서 연결된 요청서마다 데스크에 알렸다(끝나지 않은 요청서 = 할 일 취소 + '환불 진행 전 확인',
+ * 끝난 요청서 = 처리한 사람에게 '환불 확인 필요' · 취소한 본인·퇴사자 제외 · s2_0020 `withdrawal_report_refunds_on_cancel`). **실제로 알린 대상**은 DB가 보고서 처리 이력
+ * 'refund_notice'로 남긴다 — 취소 줄과 같은 거래 시각인 그 줄들을 읽어 감사로그에 싣는다(앱이 규칙을 따로 흉내 내지 않게). 못 읽으면 그 사실만 적는다.
  */
 async function cancelRefundAudit(r: WithdrawalReport): Promise<Record<string, unknown>> {
-  const steps = await loadRefundSteps(r.tenant_id, [r]).then(m => m.get(r.group_id ?? r.id) ?? [], () => null);
-  if (steps === null) return { deskRefunds: "확인 실패" };
-  if (!steps.length) return {};
-  const open = steps.filter(s => !s.completedDate);
-  return { deskRefundsNotified: open.map(s => `${s.deskName} · ${s.documentId}`), deskRefundsDone: steps.length - open.length };
+  try {
+    const db = createAdminClient();
+    const ids = r.group_id
+      ? ((await db.from("withdrawal_reports").select("id").eq("tenant_id", r.tenant_id).eq("group_id", r.group_id)).data ?? []).map(x => String(x.id))
+      : [r.id];
+    const { data, error } = await db.from("withdrawal_report_events").select("action,comment,created_at")
+      .eq("tenant_id", r.tenant_id).in("report_id", ids.length ? ids : [r.id]).in("action", ["cancel", "refund_notice"]).order("created_at", { ascending: false }).limit(200);
+    if (error) throw new Error(error.message);
+    const at = (data ?? []).find(e => e.action === "cancel")?.created_at;
+    const notified = (data ?? []).filter(e => e.action === "refund_notice" && e.created_at === at).map(e => String(e.comment ?? ""));
+    return notified.length ? { deskRefundsNotified: notified } : {};
+  } catch (e) {
+    console.error("[withdrawal-report-cancel-audit]", e);
+    return { deskRefunds: "알린 데스크 확인 실패" };
+  }
 }

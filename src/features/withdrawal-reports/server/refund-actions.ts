@@ -106,15 +106,26 @@ export async function approveWithdrawalRefund(reportId: string, keys: string[], 
   }
 
   // 데스크 환불 단계 — 요청서를 보고서에 잇는다(처리 전 묶음이면 환불 완료까지 처리를 기다린다 · s2_0020). 실패하면 요청서를 지우고 그만둔다.
-  const link = await attachRefundStep(report.tenant_id, viewer.user.id, report.id, documentId, desk.id, expectGate);
+  let link = await attachRefundStep(report.tenant_id, viewer.user.id, report.id, documentId, desk.id, expectGate);
   if (!link.ok) {
-    const { error: undoError } = await admin.from("academy_documents").delete().eq("tenant_id", report.tenant_id).eq("id", documentId);
-    await logAction({ action: "refund_request_delete", targetType: "refund_request", targetLabel: refundTitle(data),
-      metadata: { documentId, studentName: snapshot.name, totalAmount: data.refund.totalAmount,
-        source: undoError ? "퇴원보고서 환불 승인 — 데스크 단계 연결 실패, 요청서 되돌리기도 실패(확인 필요)" : "퇴원보고서 환불 승인 — 데스크 단계 연결 실패로 되돌림",
-        reason: link.error } });
-    if (undoError) return { error: `데스크 환불 단계에 잇지 못했고, 만든 환불 요청서를 지우지도 못했습니다. 환불 요청 목록에서 확인해 주세요. (${link.error})` };
-    return { error: link.error ?? "데스크 환불 단계에 잇지 못했습니다. 새로고침 후 다시 확인해 주세요." };
+    // DB에선 이어졌는데 응답만 잃었을 수 있다 — 지우기 전에 실제로 이어졌는지 한 번 더 본다(이어졌으면 지우지 않고 그대로 간다).
+    const recheck = await linkedStep(report.tenant_id, documentId);
+    if (recheck.linked) link = { ok: true, gates: recheck.gates };
+    else {
+      const left = recheck.unknown ? null : await admin.from("academy_documents").delete().eq("tenant_id", report.tenant_id).eq("id", documentId).select("id");
+      const removed = !!left && !left.error && (left.data ?? []).length > 0;
+      if (!removed) {
+        // 요청서가 남았다 — 그 요청서의 생성 기록을 남겨 수납에서 찾을 수 있게(지우지 못한 것을 '삭제'로 적지 않는다).
+        await logAction({ action: "refund_request_create", targetType: "refund_request", targetLabel: refundTitle(data),
+          metadata: { documentId, studentName: snapshot.name, totalAmount: data.refund.totalAmount, requestDate: data.student.requestDate,
+            source: recheck.unknown ? "퇴원보고서 환불 승인 · 보고서 연결 여부 확인 실패 — 요청서가 남음(확인 필요)" : "퇴원보고서 환불 승인 · 보고서 연결 실패 · 되돌리기 실패 — 요청서가 남음(확인 필요)",
+            reason: link.error } });
+        return { error: `데스크 환불 단계에 잇지 못했고, 만든 환불 요청서가 남았습니다. 환불 요청 목록에서 확인해 주세요. (${link.error ?? "연결 실패"})` };
+      }
+      await logAction({ action: "refund_request_delete", targetType: "refund_request", targetLabel: refundTitle(data),
+        metadata: { documentId, studentName: snapshot.name, totalAmount: data.refund.totalAmount, source: "퇴원보고서 환불 승인 — 데스크 단계 연결 실패로 되돌림", reason: link.error } });
+      return { error: link.error ?? "데스크 환불 단계에 잇지 못했습니다. 새로고침 후 다시 확인해 주세요." };
+    }
   }
 
   const items = chosen.map(c => `${c.inv.period} ${c.line.description.trim()} ${won(c.line.paidNet)}`);
@@ -137,6 +148,17 @@ export async function approveWithdrawalRefund(reportId: string, keys: string[], 
   revalidatePath("/withdrawal-reports", "layout");
   revalidatePath("/billing");
   return { ok: true, documentId, gates: link.gates };
+}
+
+/** 그 요청서가 보고서에 실제로 이어졌나(연결 응답을 잃었을 때) — 이어졌으면 묶음이 처리 전(진행 중·처리 예약)인지까지. 못 읽으면 `unknown`(지우지 않는다). */
+async function linkedStep(tenantId: string, documentId: string): Promise<{ linked: boolean; gates: boolean; unknown?: true }> {
+  const db = createAdminClient();
+  const { data, error } = await db.from("withdrawal_report_refunds").select("group_id").eq("tenant_id", tenantId).eq("document_id", documentId).maybeSingle();
+  if (error) return missingReportSchema(error) ? { linked: false, gates: false } : { linked: false, gates: false, unknown: true };
+  if (!data) return { linked: false, gates: false };
+  if (!data.group_id) return { linked: true, gates: false };
+  const { data: group, error: groupError } = await db.from("withdrawal_report_groups").select("status").eq("tenant_id", tenantId).eq("id", data.group_id).maybeSingle();
+  return { linked: true, gates: !groupError && ["pending", "scheduled"].includes(String(group?.status ?? "")) };
 }
 
 /** 데스크 환불 단계 잇기(s2_0020) — 처리 전 묶음이면 `gates`. 화면이 본 상태와 다르거나 옛 DB(함수 없음)·실패면 `ok: false`(호출부가 요청서를 지운다). */

@@ -22,7 +22,10 @@
 --      - 모든 보고서 승인 + 데스크 환불 대기 → 묶음 'pending' 그대로, 알림 '퇴원보고서 데스크 환불 요청'(담임·요청자).
 --      - 'apply'(처리일 cron): 데스크 환불 대기면 오류 없이 그대로 돌려준다(앱이 '미룸'으로 센다).
 --      - 'release'(새 동작): 승인이 끝난 묶음(또는 처리일이 된 예약)의 환불이 끝났으면 지금 처리(미래면 예약 · 바뀌었으면 재검토).
---      - 'cancel': 연결된 미완료 환불 요청서의 데스크 할 일을 '취소'로 닫고 데스크 담당자에게 '환불 진행 전 확인' 알림(요청서는 남긴다 — 돈은 데스크 판단).
+--      - 'cancel': 연결된 환불 요청서마다 — 끝나지 않았으면 데스크 할 일을 '취소'로 닫고 데스크 담당자에게 '환불 진행 전 확인',
+--        끝났으면 처리한 사람(completedBy · 없으면 데스크 담당)에게 '환불 확인 필요' 알림(종류 refund_request_cancelled · 취소한 본인·퇴사자 제외).
+--        실제로 알린 대상은 보고서 처리 이력('refund_notice')에 남는다 — 앱 감사로그가 그 줄을 읽는다. 요청서는 남긴다(돈은 데스크 판단).
+--      - 처리·취소·재검토 알림은 보고서마다 그 보고서의 승인 관리자에게만(다른 과목 관리자에게 무관한 링크가 가지 않게).
 --      - 관리자 0명 보고서는 최종 처리 때 작성 강사가 아직 관리자급인지 다시 본다. 원장 단계(director_pending)는 옛 보고서용(진행 중 0건).
 --   5) `release_withdrawal_report_refunds(지점|null, 요청서|null, 행위자|null)` — 환불이 끝난 묶음을 찾아 release. 묶음을 `skip locked`로 잡고 다시 확인한다
 --      (release끼리·cron과 겹치면 늦은 쪽은 조용히 건너뛴다) · 묶음마다 따로(한 묶음 실패가 다른 묶음을 막지 않음 · 실패는 결과 줄의 error).
@@ -130,26 +133,44 @@ end $$;
 revoke all on function public.attach_withdrawal_report_refund(uuid, uuid, uuid, uuid, uuid, boolean) from public, anon, authenticated;
 grant execute on function public.attach_withdrawal_report_refund(uuid, uuid, uuid, uuid, uuid, boolean) to service_role;
 
--- 묶음 취소 때 — 연결된 미완료 환불 요청서의 데스크 할 일을 '취소'로 닫고, 데스크 담당자에게 '환불 진행 전 확인' 알림. 요청서는 지우지 않는다(돈은 데스크 판단).
+-- 묶음 취소 때 — 연결된 환불 요청서마다 데스크에 알린다. 요청서는 지우지 않는다(돈은 데스크 판단).
+--   끝나지 않은 요청서: 데스크 할 일을 '취소'로 닫고 데스크 담당자에게 '환불 진행 전 확인'.
+--   끝난 요청서: 처리한 사람(form_data.result.completedBy · 없으면 데스크 담당자)에게 '환불 확인 필요'.
+--   받는 사람이 취소한 본인이거나 퇴사자면 알리지 않는다. 실제로 알린 대상 = 그 보고서의 처리 이력 'refund_notice' 한 줄(같은 거래 시각 — 앱 감사로그가 읽는다).
 create or replace function public.withdrawal_report_refunds_on_cancel(p_tenant uuid, p_group uuid, p_actor uuid, p_student text) returns integer
 language plpgsql security invoker set search_path = public as $$
 declare
-  x record; n integer := 0;
+  x record; n integer := 0; recipient uuid; recipient_name text; done boolean;
 begin
   for x in
-    select f.document_id, f.desk_id from public.withdrawal_report_refunds f
+    select f.report_id, f.document_id, f.desk_id, q.status report_status,
+      coalesce(btrim(d.form_data #>> '{result,completedDate}'), '') <> '' completed,
+      btrim(coalesce(d.form_data #>> '{result,completedBy}', '')) completed_by
+      from public.withdrawal_report_refunds f
       join public.academy_documents d on d.id = f.document_id and d.tenant_id = f.tenant_id and d.form_type = 'refund_request'
-     where f.tenant_id = p_tenant and f.group_id = p_group and coalesce(btrim(d.form_data #>> '{result,completedDate}'), '') = ''
+      join public.withdrawal_reports q on q.id = f.report_id and q.tenant_id = f.tenant_id
+     where f.tenant_id = p_tenant and f.group_id = p_group
      order by f.created_at
   loop
-    perform staff_tasks_private.close_task(p_tenant, 'refund_process', x.document_id, null, 'cancelled', 'withdrawal_canceled', p_actor);
-    if x.desk_id is not null and x.desk_id is distinct from p_actor
-       and exists(select 1 from public.users where tenant_id = p_tenant and id = x.desk_id and status = 'active') then
-      insert into public.notifications(tenant_id, recipient_id, type, title, body, link, actor_id)
-        values (p_tenant, x.desk_id, 'refund_request_approved', '퇴원이 취소되었습니다 — 환불 진행 전 확인',
-          coalesce(p_student, '학생') || ' · 퇴원보고서 요청이 취소되었습니다. 환불 요청서는 그대로 남아 있으니 환불을 진행하기 전에 확인해 주세요.',
-          '/billing/refunds/' || x.document_id::text, p_actor);
+    done := x.completed;
+    if not done then
+      perform staff_tasks_private.close_task(p_tenant, 'refund_process', x.document_id, null, 'cancelled', 'withdrawal_canceled', p_actor);
+      recipient := x.desk_id;
+    else
+      recipient := case when x.completed_by ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then x.completed_by::uuid else x.desk_id end;
     end if;
+    recipient_name := null;
+    select display_name into recipient_name from public.users where tenant_id = p_tenant and id = recipient and status = 'active';
+    if recipient is null or recipient is not distinct from p_actor or recipient_name is null then continue; end if;
+    insert into public.notifications(tenant_id, recipient_id, type, title, body, link, actor_id)
+      values (p_tenant, recipient, 'refund_request_cancelled',
+        case when done then '환불이 끝난 뒤 퇴원이 취소되었습니다 — 환불 확인 필요' else '퇴원이 취소되었습니다 — 환불 진행 전 확인' end,
+        coalesce(p_student, '학생') || ' · 퇴원보고서 요청이 취소되었습니다. '
+          || case when done then '이미 환불을 처리한 요청서입니다 — 환불 내용을 다시 확인해 주세요.' else '환불 요청서는 그대로 남아 있으니 환불을 진행하기 전에 확인해 주세요.' end,
+        '/billing/refunds/' || x.document_id::text, p_actor);
+    insert into public.withdrawal_report_events(tenant_id, report_id, actor_id, action, from_status, to_status, comment)
+      values (p_tenant, x.report_id, p_actor, 'refund_notice', x.report_status, 'canceled',
+        recipient_name || ' · ' || case when done then '환불이 끝난 뒤 취소 — 환불 확인 필요' else '환불 진행 전 확인' end);
     n := n + 1;
   end loop;
   return n;
@@ -189,7 +210,7 @@ create or replace function public.request_withdrawal_report_group(p_tenant uuid,
 as $function$
 declare s public.students; actor public.users; snap jsonb; chosen text[]; teachers uuid[]; managers uuid[]; directors uuid[]:='{}';
  gid uuid; rid uuid; teacher uuid; recipient uuid; subjects_for_teacher text[]; d date; kind text; scope_row jsonb; targets uuid[]; teacher_targets uuid[];
- per_report boolean; report_managers uuid[]; list jsonb;
+ per_report boolean; report_managers uuid[]; list jsonb; rm jsonb;
 begin
  select * into actor from public.users where id=p_actor and tenant_id=p_tenant and status='active';
  if actor.id is null or actor.system_role::text not in ('master','admin','manager') then raise exception '관리자가 작성 요청을 할 수 있습니다.'; end if;
@@ -214,18 +235,23 @@ begin
  if coalesce(cardinality(chosen),0)=0 or coalesce(cardinality(teachers),0) not between 1 and 20 then raise exception '대상 과목·작성 강사·승인 관리자를 선택해 주세요.'; end if;
  -- 원장 승인 단계는 없다(원장 2026-11-03) — 옛 화면이 보낸 directorIds는 받지 않는다(directors = 늘 빈 값).
  per_report:=jsonb_typeof(p_payload->'reportManagerIds')='object';
+ -- 작성 강사 id 키는 소문자로 한 번 맞춘다(uuid 글자 대소문자와 무관하게 — 같은 강사가 두 키로 오면 거절).
+ if per_report then
+  select coalesce(jsonb_object_agg(lower(k),val),'{}'::jsonb) into rm from jsonb_each(p_payload->'reportManagerIds') e(k,val);
+  if (select count(*) from jsonb_object_keys(rm))<>(select count(*) from jsonb_object_keys(p_payload->'reportManagerIds')) then raise exception '보고서마다 승인 관리자를 정해 주세요.'; end if;
+ end if;
  if per_report then
   -- 새 화면: 보고서(작성 강사)마다 승인 관리자. 빈 목록 = 관리자 승인 생략 — 그 작성 강사가 관리자급(운영자 계정 아님)일 때만.
   -- 과목 관리자인지(그 보고서 과목을 모두 맡는지)는 앱이 같은 계산으로 가린다(요청 창 · 서버 액션 reportApprovalPlan).
-  if exists(select 1 from jsonb_object_keys(p_payload->'reportManagerIds') k where k !~* '^[0-9a-f-]{36}$' or not k::uuid=any(teachers))
-     or exists(select 1 from unnest(teachers) t where not (p_payload->'reportManagerIds') ? t::text) then raise exception '보고서마다 승인 관리자를 정해 주세요.'; end if;
+  if exists(select 1 from jsonb_object_keys(rm) k where k !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' or not k::uuid=any(teachers))
+     or exists(select 1 from unnest(teachers) t where not rm ? t::text) then raise exception '보고서마다 승인 관리자를 정해 주세요.'; end if;
   foreach teacher in array teachers loop
-   list:=p_payload->'reportManagerIds'->teacher::text;
+   list:=rm->teacher::text;
    if jsonb_typeof(list) is distinct from 'array' or jsonb_array_length(list)>20 then raise exception '보고서마다 승인 관리자를 정해 주세요.'; end if;
-   if list ? teacher::text then raise exception '작성자·관리자를 서로 다르게 지정해 주세요.'; end if;
+   if exists(select 1 from jsonb_array_elements_text(list) v where v::uuid=teacher) then raise exception '작성자·관리자를 서로 다르게 지정해 주세요.'; end if;
    if jsonb_array_length(list)=0 and not exists(select 1 from public.users where id=teacher and tenant_id=p_tenant and status='active' and system_role::text in ('admin','manager','master') and not coalesce(public.is_super_admin(id),false)) then raise exception '승인할 관리자를 선택해 주세요.'; end if;
   end loop;
-  select coalesce(array_agg(distinct v::uuid order by v::uuid),'{}') into managers from jsonb_each(p_payload->'reportManagerIds') e(k,val), jsonb_array_elements_text(e.val) x(v);
+  select coalesce(array_agg(distinct v::uuid order by v::uuid),'{}') into managers from jsonb_each(rm) e(k,val), jsonb_array_elements_text(e.val) x(v);
   if cardinality(managers)>20 then raise exception '승인 관리자는 20명까지 정할 수 있습니다.'; end if;
  else
   -- 옛 화면: 묶음 관리자 전원이 모든 보고서를 승인(1명 이상 · 작성자와 겹치지 않음).
@@ -249,7 +275,7 @@ begin
  foreach teacher in array teachers loop
   select array_agg(distinct e->>'subject'),array_agg((e->>'id')::uuid order by e->>'id') into subjects_for_teacher,teacher_targets from jsonb_array_elements(snap->'courses') e where (cardinality(teachers)=1 or e->>'teacherId'=teacher::text) and (e->>'id')::uuid=any(targets);
   -- 보고서의 승인 관리자 — 새 화면은 그 작성 강사 몫(빈 목록 = 관리자 승인 생략 · manager_id = null), 옛 화면은 묶음 관리자 전원.
-  if per_report then select coalesce(array_agg(distinct v::uuid order by v::uuid),'{}') into report_managers from jsonb_array_elements_text(p_payload->'reportManagerIds'->teacher::text) x(v);
+  if per_report then select coalesce(array_agg(distinct v::uuid order by v::uuid),'{}') into report_managers from jsonb_array_elements_text(rm->teacher::text) x(v);
   else report_managers:=managers; end if;
   insert into public.withdrawal_reports(tenant_id,student_id,requested_by,teacher_id,manager_id,director_id,manager_ids,director_ids,group_id,group_leader,subjects,effective_date,exit_kind,request_note,snapshot,enrollment_ids)
    values(p_tenant,s.id,p_actor,teacher,report_managers[1],null,report_managers,directors,gid,teacher=teachers[1],subjects_for_teacher,d,kind,coalesce(p_payload->>'note',''),snap,teacher_targets) returning id into rid;
@@ -391,7 +417,8 @@ begin
   for child in select * from public.withdrawal_reports where group_id=g.id order by id loop
    update public.withdrawal_reports set status=g.status,applied_at=g.applied_at,last_comment=coalesce(comment_text,last_comment),revision=revision+1,updated_at=now() where id=child.id;
    insert into public.withdrawal_report_events(tenant_id,report_id,actor_id,action,from_status,to_status,comment) values(p_tenant,child.id,p_actor,p_action,child.status,g.status,comment_text);
-   for recipient in select distinct x from unnest(array[g.requested_by,child.teacher_id]||g.manager_ids||g.director_ids) x where x<>coalesce(p_actor,'00000000-0000-0000-0000-000000000000') loop
+   -- 받는 사람 = 요청자 · 그 보고서 작성 강사 · **그 보고서의** 승인 관리자(묶음 합집합이면 다른 과목 관리자에게 무관한 링크가 간다) · 옛 원장.
+   for recipient in select distinct x from unnest(array[g.requested_by,child.teacher_id]||coalesce(child.manager_ids,g.manager_ids)||g.director_ids) x where x<>coalesce(p_actor,'00000000-0000-0000-0000-000000000000') loop
     insert into public.notifications(tenant_id,recipient_id,type,title,body,link,actor_id) values(p_tenant,recipient,'approval_decided',headline,g.snapshot->>'name'||' · '||g.effective_date::text,'/withdrawal-reports/'||child.id::text,p_actor);
    end loop;
   end loop;

@@ -14,7 +14,7 @@ export const REPORT_STATUS = {
 export type ReportStatus = keyof typeof REPORT_STATUS;
 export type ReportAction = "save" | "submit" | "approve" | "reject" | "cancel";
 /** 처리 이력 이름 — `refund`(보고서에서 데스크 환불 요청) · `release`(데스크 환불 완료 뒤 처리)는 s2_0020(원장 2026-11-03). */
-export const REPORT_ACTION_LABEL = { request: "작성 요청", save: "임시 저장", submit: "보고서 제출", approve: "승인", reject: "반려", cancel: "요청 취소", apply: "퇴원·수강종료 처리", direct: "관리자 바로 처리", refund: "데스크 환불 요청", release: "데스크 환불 완료 · 처리", reassign: "승인자 정리" } as const;
+export const REPORT_ACTION_LABEL = { request: "작성 요청", save: "임시 저장", submit: "보고서 제출", approve: "승인", reject: "반려", cancel: "요청 취소", apply: "퇴원·수강종료 처리", direct: "관리자 바로 처리", refund: "데스크 환불 요청", release: "데스크 환불 완료 · 처리", reassign: "승인자 정리", refund_notice: "데스크 환불 확인 알림" } as const;
 const text = z.string().trim().max(5000, "항목별 5,000자 이내로 입력해 주세요.");
 export const bodySchema = z.object({
   reason: z.enum(Object.keys(REASON_LABEL) as [keyof typeof REASON_LABEL, ...Array<keyof typeof REASON_LABEL>]),

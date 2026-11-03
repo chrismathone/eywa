@@ -1253,9 +1253,9 @@ export function auditDetail(
     case "withdrawal_report_update": {
       const ended = Array.isArray(m.endedClasses) ? m.endedClasses.flatMap((v) => str(v) ?? []) : [];
       const skipped = Array.isArray(m.managerSkipped) ? m.managerSkipped.flatMap((v) => str(v) ?? []) : [];
-      const notified = Array.isArray(m.deskRefundsNotified) ? m.deskRefundsNotified.length : 0;
+      const notified = Array.isArray(m.deskRefundsNotified) ? m.deskRefundsNotified.flatMap((v) => str(v) ?? []) : [];
       return join(str(m.operation), str(m.result), str(m.date) ? `마지막 수업일 ${str(m.date)}` : null, ended.length ? `끝난 수업 ${ended.join("·")}` : null,
-        skipped.length ? `관리자 승인 생략 ${skipped.join(", ")}` : null, notified ? `데스크 환불 ${notified}건 '환불 진행 전 확인' 알림` : null);
+        skipped.length ? `관리자 승인 생략 ${skipped.join(", ")}` : null, notified.length ? `데스크 알림 ${notified.join(", ")}` : null);
     }
     // 퇴원보고서 환불 승인(2026-10-29) — 어느 달 청구 · 금액 · 마지막 수업일 · 데스크 단계(2026-11-03 — 환불이 끝나야 처리하는지).
     // 만든 환불 요청서는 refund_request_create에 같은 documentId로 남는다(데스크 단계에 못 이으면 refund_request_delete로 되돌린 기록).
