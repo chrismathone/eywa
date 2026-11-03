@@ -40,5 +40,6 @@ describe("마지막 수업일 — 출결 기준(원장 2026-11-03)", () => {
   it("칸 아래 안내 — 출결 기준 / 출결 기록 없음 → 오늘", () => {
     expect(lastLessonHint("attendance")).toContain("출결 기준");
     expect(lastLessonHint("none")).toBe("출결 기록 없음 → 오늘");
+    expect(lastLessonHint("denied")).toBe("출결을 볼 권한이 없어 오늘로 채웠습니다");
   });
 });

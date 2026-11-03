@@ -18,6 +18,8 @@ import type { UploadTicket } from "@/lib/storage/types";
 import { RESUME_FORM_TYPE } from "@/features/staff/resume/resume";
 import { canViewResume, RESUME_LOCKED_MSG } from "@/features/staff/resume/server/resume-access";
 import { logAction } from "@/features/audit/server/log";
+import { REFUND_FORM_TYPE } from "@/features/billing/refund-request";
+import { releaseWithdrawalRefunds } from "@/features/withdrawal-reports/server/release";
 import { FALLBACK_CATEGORY, normalizeLinkUrl } from "../categories";
 import { getDocumentCategories } from "./category-queries";
 
@@ -347,6 +349,9 @@ export async function deleteDocument(id: string): Promise<{ ok?: boolean; error?
     },
   });
   if (row?.file_path) await removeObject(row.file_path, { bucket: MEDIA_KIND.document.supabaseBucket }).catch(() => {});
+  // 퇴원보고서 데스크 환불 단계(s2_0020) — 지운 환불 요청서는 단계에서 빠진다. 그 요청서만 기다리던 퇴원보고서는 이어서 처리한다
+  // (수납 화면의 요청서 삭제와 같은 길 · 던지지 않는다 — 실패는 오류 보고, 처리일 cron이 다시 본다).
+  if (row?.form_type === REFUND_FORM_TYPE) await releaseWithdrawalRefunds({ tenantId: gate.user.tenantId, documentId: id, actorId: gate.user.id });
   revalidatePath("/documents");
   return { ok: true };
 }

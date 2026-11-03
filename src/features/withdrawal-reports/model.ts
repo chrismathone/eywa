@@ -6,7 +6,7 @@ import { REASON_LABEL } from "@/features/withdrawals/types";
 import { CLEANUP_WITHDRAWAL_MEMO } from "@/features/withdrawals/system-bulk";
 
 export const REPORT_STATUS = {
-  requested: "작성 요청", revision: "반려 · 수정 요청", manager_pending: "관리자 승인 대기",
+  requested: "작성 요청", revision: "반려 · 수정 요청", manager_pending: "관리자 승인 요청",
   director_pending: "원장 승인 대기", scheduled: "처리 예약", completed: "처리 완료",
   blocked: "수강 변경 · 재검토 필요", canceled: "요청 취소",
   approved: "승인 완료 · 다른 보고서 대기",
@@ -14,7 +14,7 @@ export const REPORT_STATUS = {
 export type ReportStatus = keyof typeof REPORT_STATUS;
 export type ReportAction = "save" | "submit" | "approve" | "reject" | "cancel";
 /** 처리 이력 이름 — `refund`(보고서에서 데스크 환불 요청) · `release`(데스크 환불 완료 뒤 처리)는 s2_0020(원장 2026-11-03). */
-export const REPORT_ACTION_LABEL = { request: "작성 요청", save: "임시 저장", submit: "보고서 제출", approve: "승인", reject: "반려", cancel: "요청 취소", apply: "퇴원·수강종료 처리", direct: "관리자 바로 처리", refund: "데스크 환불 요청", release: "데스크 환불 완료 · 처리" } as const;
+export const REPORT_ACTION_LABEL = { request: "작성 요청", save: "임시 저장", submit: "보고서 제출", approve: "승인", reject: "반려", cancel: "요청 취소", apply: "퇴원·수강종료 처리", direct: "관리자 바로 처리", refund: "데스크 환불 요청", release: "데스크 환불 완료 · 처리", reassign: "승인자 정리" } as const;
 const text = z.string().trim().max(5000, "항목별 5,000자 이내로 입력해 주세요.");
 export const bodySchema = z.object({
   reason: z.enum(Object.keys(REASON_LABEL) as [keyof typeof REASON_LABEL, ...Array<keyof typeof REASON_LABEL>]),
@@ -37,15 +37,17 @@ export const requestSchema = z.object({
 export type ReportRequest = z.infer<typeof requestSchema>;
 /**
  * 작성 요청 입력 — 원장 승인 칸은 없다(원장 2026-11-03 · 옛 화면이 보낸 `directorIds`는 버린다 — zod가 모르는 칸을 뺀다, DB도 받지 않는다).
- * 관리자 0명 = 관리자 승인 생략(작성 강사가 모두 그 과목 관리자)일 때만 — 서버 액션이 과목으로 다시 가리고(`managerStepSkippable`) DB가 역할로 막는다.
+ * `reportManagerIds` = 작성 강사 → 그 보고서의 승인 관리자(빈 목록 = 관리자 승인 생략 — 작성 강사가 그 보고서 과목의 관리자일 때만).
+ * 서버 액션이 같은 계산(`reportApprovalPlan`)으로 다시 정해 DB에 넘긴다(화면이 보낸 목록은 후보와 겹치는 것만 쓴다) · DB는 역할로 다시 막는다.
  */
 export const batchRequestSchema = z.object({
   studentId: z.uuid(), teacherIds: z.array(z.uuid()).min(1).max(20), managerIds: z.array(z.uuid()).max(20),
   enrollmentIds: z.array(z.uuid()).min(1, "종료할 반을 선택해 주세요.").max(100).optional(),
   subjects: z.array(z.string().min(1).max(80)).min(1).max(20),
+  reportManagerIds: z.record(z.uuid(), z.array(z.uuid()).max(20)).optional(),
   effectiveDate: z.iso.date(), note: z.string().trim().max(1000),
 }).superRefine((r, ctx) => {
-  if (r.teacherIds.some(id => r.managerIds.includes(id)))
+  if (r.teacherIds.some(id => r.reportManagerIds?.[id]?.includes(id)))
     ctx.addIssue({ code: "custom", message: "작성자·관리자를 서로 다르게 지정해 주세요." });
 });
 /**
@@ -112,18 +114,19 @@ export type StudentOption = { id: string; name: string; school: string | null; g
 /**
  * 요청 이후 학생·수강이 그대로인가 — `subjects`를 주면 그 과목의 수강만 대조한다(과목 수강종료 묶음 · DB `withdrawal_report_scope`와 같은 규칙 s2_0014:
  * 다른 과목 보고서가 먼저 끝나 그 과목 수강이 닫혀도 이 보고서는 바뀐 것이 아니다). 퇴원 묶음은 학생 전체를 대조한다.
- * 🔑 반 이름(className)은 대조하지 않는다 — 반 이름만 바뀐(LE1→LE2) 보고서가 '변경됨'으로 막혔다(원장 2026-11-03 · DB `withdrawal_report_compare_key` s2_0020과 같은 규칙).
+ * 🔑 **표시용 칸은 대조하지 않는다** — 학생 이름·학교·학년 · 수강의 반 이름·담임 이름(반 이름만 바뀐 LE1→LE2 보고서가 '변경됨'으로 막혔다 · 원장 2026-11-03).
+ *    정체 값(수강 id·반 id·과목·담임 id·기간·휴원 · 학생 상태·등록일·퇴원일)만 본다 — DB `withdrawal_report_compare_key`(s2_0020)와 같은 규칙(gotchas #151).
  */
 export function snapshotMatches(a: StudentSnapshot, b: StudentSnapshot, subjects?: readonly string[]) {
-  const key = (s: StudentSnapshot) => JSON.stringify([s.name, s.school, s.grade, s.enrolledAt, s.status, s.withdrawnAt,
-    [...s.courses].filter(c => !subjects || subjects.includes(c.subject)).sort((x, y) => x.id.localeCompare(y.id)).map(c => [c.id, c.classId, c.subject, c.teacherId, c.teacherName, c.startDate, c.endDate, c.onHold])]);
+  const key = (s: StudentSnapshot) => JSON.stringify([s.enrolledAt, s.status, s.withdrawnAt,
+    [...s.courses].filter(c => !subjects || subjects.includes(c.subject)).sort((x, y) => x.id.localeCompare(y.id)).map(c => [c.id, c.classId, c.subject, c.teacherId, c.startDate, c.endDate, c.onHold])]);
   return key(a) === key(b);
 }
 export function canRequestReport(role: SystemRole) { return role === "master" || role === "admin" || role === "manager"; }
 export function managerIds(r: Pick<WithdrawalReport, "manager_id" | "manager_ids">) { return r.manager_ids ?? (r.manager_id ? [r.manager_id] : []); }
 export function directorIds(r: Pick<WithdrawalReport, "director_id" | "director_ids">) { return r.director_ids ?? (r.director_id ? [r.director_id] : []); }
 /**
- * 관리자 승인을 생략한 보고서(원장 2026-11-03 — 작성 강사가 그 과목 관리자) — 승인 관리자 0명. 제출이 곧 관리자 승인이다(DB s2_0020).
+ * 관리자 승인을 생략한 보고서(원장 2026-11-03 — 작성 강사가 그 보고서 과목의 관리자 · 보고서마다 판정) — 승인 관리자 0명. 제출이 곧 관리자 승인이다(DB s2_0020).
  * 바로 처리 보고서는 관리자(처리한 사람)가 있어 해당 없다. ~~2026-10-30 원장을 관리자 칸에 넣던 모양~~은 더 만들지 않는다.
  */
 export function managerStepSkipped(r: Pick<WithdrawalReport, "manager_id" | "manager_ids">) {
@@ -138,14 +141,15 @@ export type RefundStep = { documentId: string; deskId: string | null; deskName: 
 export function refundWaiting(r: Pick<WithdrawalReport, "status">, refunds: readonly RefundStep[]) {
   return !["completed", "canceled", "blocked"].includes(r.status) && refunds.some(s => !s.completedDate);
 }
-const WITH_DESK: Partial<Record<ReportStatus, string>> = { manager_pending: "관리자 승인 요청", approved: "관리자 승인 완료" };
 /**
  * 상태 칩 — 데스크 환불이 남았으면 원래 단계와 '데스크 환불 요청'을 함께(원장 2026-11-03 *"'관리자 승인 요청' '데스크 환불 요청' 같이 나타내줄것"*).
- * 모든 보고서가 승인돼 환불만 남은 묶음도 '관리자 승인 완료' · '데스크 환불 요청'으로 읽힌다.
+ * 관리자 단계는 환불과 상관없이 늘 '관리자 승인 요청'(REPORT_STATUS) · 이 보고서 승인이 끝났으면 '관리자 승인 완료' + 데스크 단계
+ * ('데스크 환불 요청' 대기 · 환불은 끝났는데 아직 처리 전이면 '데스크 환불 완료' — '다른 보고서 대기'로 잘못 읽히지 않게).
  */
 export function reportStatusChips(r: Pick<WithdrawalReport, "status">, refunds: readonly RefundStep[] = []): string[] {
-  if (!refundWaiting(r, refunds)) return [REPORT_STATUS[r.status]];
-  return [WITH_DESK[r.status] ?? REPORT_STATUS[r.status], "데스크 환불 요청"];
+  if (refundWaiting(r, refunds)) return [r.status === "approved" ? "관리자 승인 완료" : REPORT_STATUS[r.status], "데스크 환불 요청"];
+  if (r.status === "approved" && refunds.length) return ["관리자 승인 완료", "데스크 환불 완료"];
+  return [REPORT_STATUS[r.status]];
 }
 export function reportStatusLabel(r: Pick<WithdrawalReport, "status">, refunds: readonly RefundStep[] = []) {
   return reportStatusChips(r, refunds).join(" · ");
@@ -160,13 +164,12 @@ export function isParticipant(r: Pick<WithdrawalReport, "requested_by" | "teache
  */
 export function cancelsAsDirector(role: SystemRole, teacherView: boolean) { return role === "master" && !teacherView; }
 /**
- * 보고서에서 데스크 환불을 요청(환불 승인)할 수 있나 — 원장 2026-11-03: 그 묶음의 관리자 · 요청자 · 관리자 승인을 생략한 보고서의 작성 강사 · 원장급.
- * (2026-10-29엔 원장만.) 취소된 보고서는 안 된다. 처리가 끝난 보고서는 된다(처리를 기다리게 하지 않는다 — 종전처럼).
+ * 보고서에서 환불을 승인(= 데스크 환불 요청서를 만든다)할 수 있나 — **원장급만**(원장 2026-10-29 *"환불승인은 원장급이상만 · 이외의 관리자는 확인만"*).
+ * 관리자·요청자·작성 강사는 청구·요청서·담당·완료 여부를 보기만 한다. 취소된 보고서는 안 된다. 처리가 끝난 보고서는 된다(기다리게 하지 않는다).
  * 화면 토글(`LaterInvoices`)·데스크 담당자 목록(`getReport`)·서버(`approveWithdrawalRefund`)가 이 한 곳을 본다.
  */
-export function canRequestRefund(r: Pick<WithdrawalReport, "status" | "requested_by" | "teacher_id" | "manager_id" | "manager_ids">, userId: string, writable: boolean, directorLevel = false) {
-  if (!writable || r.status === "canceled") return false;
-  return directorLevel || r.requested_by === userId || managerIds(r).includes(userId) || (managerStepSkipped(r) && r.teacher_id === userId);
+export function canRequestRefund(r: Pick<WithdrawalReport, "status">, writable: boolean, directorLevel = false) {
+  return writable && directorLevel && r.status !== "canceled";
 }
 export function reportCapabilities(r: WithdrawalReport, userId: string, writable: boolean, directorLevel = false) {
   const draft = r.status === "requested" || r.status === "revision";
@@ -174,7 +177,7 @@ export function reportCapabilities(r: WithdrawalReport, userId: string, writable
     edit: writable && draft && r.teacher_id === userId,
     approve: writable && ((r.status === "manager_pending" && managerIds(r).includes(userId) && !r.manager_decisions?.[userId]) || (r.status === "director_pending" && directorIds(r).includes(userId) && !r.director_decisions?.[userId])),
     cancel: writable && (r.requested_by === userId || directorLevel) && !["completed", "canceled"].includes(r.status),
-    refund: canRequestRefund(r, userId, writable, directorLevel),
+    refund: canRequestRefund(r, writable, directorLevel),
   };
 }
 /** 퇴원 상세사유 제출 기준 글자 수 — DB 전이 함수 두 개(s2_0015)도 같은 값으로 거른다. 바꿀 땐 함께 바꾼다. */

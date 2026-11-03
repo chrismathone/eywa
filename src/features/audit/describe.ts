@@ -1249,13 +1249,18 @@ export function auditDetail(
       );
     }
     // 처리 결과(2026-10-23) = 이 동작으로 학생 퇴원·수강 종료가 끝났는지 · 처리 예약인지 + 끝난 수업(요청 때 반 이름). 옛 기록은 결과 칸이 없다.
+    // 2026-11-03: 날짜 이름 = 마지막 수업일 · 작성 요청은 관리자 승인 생략 보고서(작성 강사 · 과목) · 취소는 '환불 진행 전 확인'을 받은 데스크 요청서 수.
     case "withdrawal_report_update": {
       const ended = Array.isArray(m.endedClasses) ? m.endedClasses.flatMap((v) => str(v) ?? []) : [];
-      return join(str(m.operation), str(m.result), str(m.date) ? `처리일 ${str(m.date)}` : null, ended.length ? `끝난 수업 ${ended.join("·")}` : null);
+      const skipped = Array.isArray(m.managerSkipped) ? m.managerSkipped.flatMap((v) => str(v) ?? []) : [];
+      const notified = Array.isArray(m.deskRefundsNotified) ? m.deskRefundsNotified.length : 0;
+      return join(str(m.operation), str(m.result), str(m.date) ? `마지막 수업일 ${str(m.date)}` : null, ended.length ? `끝난 수업 ${ended.join("·")}` : null,
+        skipped.length ? `관리자 승인 생략 ${skipped.join(", ")}` : null, notified ? `데스크 환불 ${notified}건 '환불 진행 전 확인' 알림` : null);
     }
-    // 퇴원보고서 환불 승인(2026-10-29) — 어느 달 청구 · 금액 · 퇴원일. 만든 환불 요청서는 refund_request_create에 같은 documentId로 남는다.
+    // 퇴원보고서 환불 승인(2026-10-29) — 어느 달 청구 · 금액 · 마지막 수업일 · 데스크 단계(2026-11-03 — 환불이 끝나야 처리하는지).
+    // 만든 환불 요청서는 refund_request_create에 같은 documentId로 남는다(데스크 단계에 못 이으면 refund_request_delete로 되돌린 기록).
     case "withdrawal_refund_approve":
-      return join(Array.isArray(m.items) ? `${m.items.slice(0, 3).map(String).join(", ")}${m.items.length > 3 ? ` 외 ${m.items.length - 3}건` : ""}` : str(m.invoicePeriod) ? `${str(m.invoicePeriod)} 청구` : null, str(m.totalAmount), str(m.effectiveDate) ? `퇴원 ${str(m.effectiveDate)}` : null, "환불 요청서 작성");
+      return join(Array.isArray(m.items) ? `${m.items.slice(0, 3).map(String).join(", ")}${m.items.length > 3 ? ` 외 ${m.items.length - 3}건` : ""}` : str(m.invoicePeriod) ? `${str(m.invoicePeriod)} 청구` : null, str(m.totalAmount), str(m.effectiveDate) ? `마지막 수업일 ${str(m.effectiveDate)}` : null, str(m.deskStep), "환불 요청서 작성");
     // 잘못 만든 수업 이력 **삭제**(원장·super_admin) — 행이 사라지므로 이 로그가 유일한 흔적이다.
     // metadata.snapshot에 삭제된 행 전체가 들어 있다(뷰어 title 툴팁의 원문 JSON으로 확인).
     case "enrollment_delete": {

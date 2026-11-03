@@ -10,8 +10,9 @@ import { withEmbed } from "@/components/workspace/embed-context";
 import { processWithdrawalDirectly, requestWithdrawalReport } from "@/features/withdrawal-reports/server/actions";
 import { automaticExitKind, type StaffOption, type StudentOption } from "@/features/withdrawal-reports/model";
 import { lastLessonHint } from "@/features/withdrawal-reports/last-lesson";
-import { subjectEndGroups, defaultApproverIds, reportAuthorIds, requestApprovers, toggleCourseGroup } from "@/features/withdrawal-reports/request-options";
+import { approverOptions, subjectEndGroups, defaultApproverIds, reportApprovalPlan, reportAuthorIds, reportManagerIds, toggleCourseGroup } from "@/features/withdrawal-reports/request-options";
 import { DirectFields } from "./direct-fields";
+import { ApprovalPlanNote } from "./approval-plan-note";
 import { useLastLessonDate } from "./use-last-lesson-date";
 
 const control = "w-full rounded-md border bg-background px-3 py-2 text-sm";
@@ -22,7 +23,7 @@ function selectionFor(staff: StaffOption[], s: StudentOption | undefined, next: 
   const selected = s?.courses.filter(c => next.includes(c.id)) ?? [];
   const authors = reportAuthorIds(selected.filter(c => staff.some(u => u.id === c.teacherId)));
   const teacherIds = staff.filter(u => authors.includes(u.id)).map(u => u.id);
-  return { enrollmentIds: next, teacherIds, managerIds: defaultApproverIds(requestApprovers(staff, selected, selected.map(c => c.subject), teacherIds)) };
+  return { enrollmentIds: next, teacherIds, managerIds: defaultApproverIds(reportApprovalPlan(staff, selected, teacherIds)) };
 }
 /**
  * 퇴원보고서 시작 창 — 강사에게 작성 요청 / **강사 작성 없이 바로 처리**(원장 2026-10-23, `directReady` = 0453a 적용 DB에서만).
@@ -60,12 +61,12 @@ export function RequestDialog({ staff, students, labels, scope, initialStudentId
   const courses = student?.courses.filter(c => enrollmentIds.includes(c.id)) ?? [];
   const subjects = [...new Set(courses.map(c => c.subject))];
   const eligible = staff.filter(s => courses.some(c => c.teacherId === s.id));
-  const approvers = requestApprovers(staff, courses, subjects, teacherIds);
-  const managers = approvers.candidates;
-  // 관리자 승인 생략(원장 2026-11-03) — 모든 과목의 작성 강사가 그 과목 관리자면 승인 관리자 없이 요청한다(제출 = 관리자 승인).
-  const skipAll = approvers.skipAll;
-  const selectedManagers = skipAll ? [] : managerIds.filter(id => managers.some(u => u.id === id));
-  const skippedSubjects = approvers.selfManaged.map(s => labels[s] ?? s).join("·");
+  // 보고서(작성 강사)마다 승인 계획 — 작성 강사가 그 보고서 과목의 관리자면 그 보고서만 관리자 승인 생략(원장 2026-11-03). 서버가 같은 계산으로 다시 정한다.
+  const plan = reportApprovalPlan(staff, courses, teacherIds);
+  const managers = approverOptions(plan);
+  const skipAll = plan.length > 0 && plan.every(p => p.skip);
+  const selectedManagers = managerIds.filter(id => managers.some(u => u.id === id));
+  const perReport = reportManagerIds(plan, selectedManagers);
   const noCourses = !!student && student.courses.length === 0;
   const endGroups = subjectEndGroups(courses, labels);
   // 진행 중인 다른 과목 보고서의 반도 남은 반으로 센다 — 그 보고서까지 끝나 남은 반이 없으면 DB가 그때 퇴원으로 마무리한다(s2_0014).
@@ -87,7 +88,7 @@ export function RequestDialog({ staff, students, labels, scope, initialStudentId
     setError("");
     startTransition(async () => {
       try {
-        const res = await requestWithdrawalReport({ studentId, teacherIds, managerIds: selectedManagers, subjects, enrollmentIds, effectiveDate: date, note });
+        const res = await requestWithdrawalReport({ studentId, teacherIds, managerIds: selectedManagers, reportManagerIds: perReport.byTeacher, subjects, enrollmentIds, effectiveDate: date, note });
         if ("error" in res) { setError(res.error); return; }
         toast.success(`${teacherIds.length}명의 강사에게 보고서 작성을 요청했습니다.`);
         go("/withdrawal-reports");
@@ -138,9 +139,9 @@ export function RequestDialog({ staff, students, labels, scope, initialStudentId
               : <SearchableSelect portal options={staffOptions(managers)} value="" multiValues={selectedManagers} ariaLabel="관리자 승인" placeholder={teacherIds.length ? "해당 과목 관리자 선택" : "반을 먼저 선택"} onValueChange={id => { if (!pending && managers.some(u => u.id === id)) setManagers(toggle(selectedManagers, id)); }} />}</div>
           </div>
           <p className="text-xs text-muted-foreground">{teacherIds.length > 1 ? "과목마다 담당 선생님 한 명이 그 과목의 반을 모두 묶어 보고서를 작성합니다. 다른 반 담임에게는 요청하지 않습니다." : "담당 선생님 한 명이 선택한 반을 모두 묶어 보고서 한 건을 작성합니다. 다른 반 담임에게는 요청하지 않습니다."}</p>
-          {approvers.selfManaged.length > 0 && <p role="note" className="border-line rounded-lg border border-dashed px-3 py-2 text-sm">{skipAll ? "관리자 승인 생략 — 작성 강사가 이 과목 관리자입니다. 보고서를 제출하면 바로 승인 완료로 넘어갑니다." : `${skippedSubjects}는 작성 강사가 그 과목 관리자라 따로 승인하지 않습니다. 고른 관리자가 모든 보고서를 승인합니다.`}</p>}
+          <ApprovalPlanNote plan={plan} byTeacher={perReport.byTeacher} staff={staff} labels={labels} />
           <p className="text-xs text-muted-foreground">{skipAll ? "보고서에서 환불을 요청하면 데스크 환불 처리(환불완료일자)가 끝난 뒤 처리합니다." : "지정한 관리자가 모두 승인하면 처리합니다. 보고서에서 환불을 요청하면 데스크 환불 처리까지 끝난 뒤 처리합니다."}</p>
-          {teacherIds.length > 0 && !skipAll && managers.length === 0 && <p className="text-sm text-att-late-ink">선택할 수 있는 해당 과목 관리자가 없습니다. 담당 과목과 승인자 선택을 확인해 주세요.</p>}
+          {plan.some(p => !p.skip && !p.candidates.length) && <p className="text-sm text-att-late-ink">선택할 수 있는 해당 과목 관리자가 없습니다. 담당 과목과 승인자 선택을 확인해 주세요.</p>}
           <label className="block space-y-1 text-sm">강사에게 전달할 내용<textarea className={control} rows={2} maxLength={1000} value={note} onChange={e => setNote(e.target.value)} placeholder="확인할 내용이나 작성 요청 사유" /></label>
           {courses.length > 0 && eligible.length === 0 && <p className="text-sm text-att-late-ink">선택한 반의 작성 강사를 찾지 못했습니다. 반의 담임 배정을 확인해 주세요.</p>}
         </>}
@@ -148,7 +149,7 @@ export function RequestDialog({ staff, students, labels, scope, initialStudentId
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-muted/20 px-5 py-3"><p className="text-xs text-muted-foreground">{summary}</p><div className="flex gap-2"><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>닫기</Button>{direct
         ? <Button disabled={pending || !ready || dateLoading} onClick={submitDirect}>{pending ? "처리 중…" : kind === "withdrawal" ? "바로 퇴원 처리" : "바로 수강종료"}</Button>
-        : <Button disabled={pending || !ready || dateLoading || !teacherIds.length || (!skipAll && !selectedManagers.length)} onClick={submit}>{pending ? "요청 중…" : "강사에게 작성 요청"}</Button>}</div></div>
+        : <Button disabled={pending || !ready || dateLoading || !teacherIds.length || perReport.missing.length > 0} onClick={submit}>{pending ? "요청 중…" : "강사에게 작성 요청"}</Button>}</div></div>
     </DialogContent>
   </Dialog>;
 }

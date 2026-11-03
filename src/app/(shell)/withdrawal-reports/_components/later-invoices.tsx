@@ -23,8 +23,8 @@ function lineStatus(inv: LaterInvoice, l: LaterLine): string {
  * 수납 청구 줄마다 토글 — *"어떤건을 환불할건지 토글토글토글해서 선택선택선택해 그 건을 환불하게"*. 고른 줄이 있을 때만
  * '환불 승인' → 데스크 담당자 고르기 + 확인("환불을 승인하시겠습니까?") → 요청서 한 장. 고른 게 없으면 담당자도 고르지 않는다
  * (*"환불건이 필요없으면… 굳이 데스크 담당자 선택하지 않아도"*). 다른 사람은 청구·요청서·담당·완료 여부만 본다.
- * 원장 2026-11-03: 환불은 **데스크 환불 단계**다 — 요청할 수 있는 사람 = 묶음의 관리자 · 요청자 · 관리자 승인을 생략한 보고서의 작성 강사 · 원장급
- * (`canRequestRefund` → `canApprove`). 처리 전 보고서(`gates`)는 데스크가 환불완료일자를 넣어야 퇴원·수강종료를 처리한다.
+ * 원장 2026-11-03: 환불은 **데스크 환불 단계**다 — 승인은 원장급만(`canRequestRefund` → `canApprove` · 10-29 규칙 그대로).
+ * 처리 전 보고서(`gates`)는 데스크가 환불완료일자를 넣어야 퇴원·수강종료를 처리한다 — 끝난 뒤 알림은 서버가 실제로 이은 결과(`result.gates`)로 정한다.
  */
 export function LaterInvoices({ reportId, rows, canApprove, deskStaff, gates = false }: { reportId: string; rows: LaterInvoice[]; canApprove: boolean; deskStaff: { id: string; name: string }[]; gates?: boolean }) {
   const router = useRouter();
@@ -49,14 +49,14 @@ export function LaterInvoices({ reportId, rows, canApprove, deskStaff, gates = f
         const result = await approveWithdrawalRefund(reportId, chosen.map(x => x.line.key), desk);
         if ("error" in result) { setError(result.error); return; }
         setAsking(false); setPicked(new Set()); setDesk("");
-        toast.success(gates ? "환불을 승인했습니다. 데스크 담당자의 할 일로 보냈고, 환불 처리가 끝나면 퇴원·수강종료를 처리합니다." : "환불을 승인했습니다. 환불 요청서를 만들고 데스크 담당자의 할 일로 보냈습니다.");
+        toast.success(result.gates ? "환불을 승인했습니다. 데스크 담당자의 할 일로 보냈고, 환불 처리가 끝나면 퇴원·수강종료를 처리합니다." : "환불을 승인했습니다. 환불 요청서를 만들고 데스크 담당자의 할 일로 보냈습니다.");
         router.refresh();
       } catch { setError("처리를 완료하지 못했습니다. 새로고침 후 확인해 주세요."); }
     });
   }
   const label = (inv: LaterInvoice, l: LaterLine) => `${inv.period} ${INVOICE_CATEGORY_LABEL[inv.category] ?? "기타"} · ${l.description.trim()}`;
   return <div className="space-y-2" aria-label="환불 확인">
-    <div><p className="text-xs text-muted-foreground">퇴원월 다음 달부터 잡힌 수납 청구입니다{rows.some(r => r.partial) ? "(과목 수강종료라 끝내는 과목 몫과 기타 항목만)" : ""}. {canApprove ? `환불할 건만 토글로 고른 뒤 환불 승인을 누르세요. 고르지 않으면 아무것도 하지 않습니다.${gates ? " 환불을 승인하면 데스크 환불 처리까지 끝나야 퇴원·수강종료를 처리합니다." : ""}` : "환불 승인은 이 보고서의 관리자·요청자(관리자 승인을 생략한 보고서는 작성 강사)·원장이 할 수 있습니다."}</p></div>
+    <div><p className="text-xs text-muted-foreground">퇴원월 다음 달부터 잡힌 수납 청구입니다{rows.some(r => r.partial) ? "(과목 수강종료라 끝내는 과목 몫과 기타 항목만)" : ""}. {canApprove ? `환불할 건만 토글로 고른 뒤 환불 승인을 누르세요. 고르지 않으면 아무것도 하지 않습니다.${gates ? " 환불을 승인하면 데스크 환불 처리까지 끝나야 퇴원·수강종료를 처리합니다." : ""}` : "환불 승인은 원장만 할 수 있습니다."}</p></div>
     <table className="w-full text-xs">
       <thead><tr className="border-b text-left text-xs text-muted-foreground"><th className="py-2 font-normal">청구</th><th className="font-normal">청구액</th><th className="font-normal">납부</th><th className="font-normal">상태</th><th className="font-normal">환불요청</th></tr></thead>
       <tbody>{lines.map(({ inv, line }) => {

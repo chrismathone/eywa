@@ -27,12 +27,13 @@ export function lastAttendedSettled(rows: readonly LastLessonRow[], classIds: re
 }
 
 /** 칸 아래 한 줄 — 값이 어디서 왔는지(원장 2026-11-03 *"출결 기준 / 출결 기록 없음 → 오늘"*). */
-export type LastLessonSource = "today" | "loading" | "attendance" | "none" | "error" | "manual";
+export type LastLessonSource = "today" | "loading" | "attendance" | "none" | "denied" | "error" | "manual";
 export function lastLessonHint(source: LastLessonSource): string {
   switch (source) {
     case "loading": return "출결에서 마지막 수업일을 찾는 중…";
     case "attendance": return "출결 기준 — 고른 반의 마지막 출석일";
     case "none": return "출결 기록 없음 → 오늘";
+    case "denied": return "출결을 볼 권한이 없어 오늘로 채웠습니다";
     case "error": return "출결을 확인하지 못해 오늘로 두었습니다";
     case "manual": return "직접 입력한 날짜";
     default: return "학생과 반을 고르면 출결에서 채웁니다";

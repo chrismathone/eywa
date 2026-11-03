@@ -21,7 +21,7 @@ export function useLastLessonDate(initial: { studentId: string; enrollmentIds: s
     const mine = ++seq.current;
     const settle = (next: { date: string; source: LastLessonSource }) => { if (mine === seq.current && !manual.current) setState(next); };
     loadLastLessonDate({ studentId, enrollmentIds }).then(
-      res => settle("error" in res ? { date: kstToday(), source: "error" } : res.date ? { date: res.date, source: "attendance" } : { date: kstToday(), source: "none" }),
+      res => settle("error" in res ? { date: kstToday(), source: "error" } : res.date ? { date: res.date, source: "attendance" } : { date: kstToday(), source: res.denied ? "denied" : "none" }),
       () => settle({ date: kstToday(), source: "error" }),
     );
   }, []);

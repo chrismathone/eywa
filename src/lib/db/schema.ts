@@ -1960,6 +1960,17 @@ export const withdrawalReportEvents = pgTable("withdrawal_report_events", {
   body: jsonb("body"), comment: text("comment"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, t => [index("withdrawal_report_events_report").on(t.tenantId, t.reportId, t.createdAt)]);
+/** 퇴원보고서 데스크 환불 단계(s2_0020) — 보고서에서 만든 환불 요청서. 요청서(academy_documents)에는 외래키를 걸지 않는다(삭제를 막지 않는다 · 지운 요청서는 대기에서 빠진다). */
+export const withdrawalReportRefunds = pgTable("withdrawal_report_refunds", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  reportId: uuid("report_id").notNull().references(() => withdrawalReports.id, { onDelete: "cascade" }),
+  groupId: uuid("group_id").references(() => withdrawalReportGroups.id, { onDelete: "cascade" }),
+  documentId: uuid("document_id").notNull().unique(),
+  deskId: uuid("desk_id").references(() => users.id, { onDelete: "set null" }),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [index("withdrawal_report_refunds_group").on(t.tenantId, t.groupId), index("withdrawal_report_refunds_report").on(t.tenantId, t.reportId)]);
 
 export const withdrawalReportSources = pgTable("withdrawal_report_sources", {
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }), spreadsheetId: text("spreadsheet_id").notNull(), sheetId: bigint("sheet_id", { mode: "number" }).notNull(),

@@ -7,6 +7,9 @@ import type { RefundPrefillLine } from "@/features/billing/refund-prefill";
 import { INVOICE_CATEGORY_LABEL } from "../prefill";
 import type { WithdrawalReport } from "../model";
 import { REFUND_TAG_PREFIX, claimedKeys, claimedLines, courseOfLine, lineBase, lineIds, norm, splitKey } from "../refund-keys";
+import { billingWriters, type DeskStaffRow } from "../desk-staff";
+import { platformAccountIds } from "@/features/owner/server/platform-settings";
+import { getTenantSettings } from "@/features/owner/server/queries";
 
 /**
  * 퇴원월 **뒤** 청구 — 원장 2026-10-29 *"11월까지 납부했는데, 퇴원보고서상에는 10월납부밖에 없음… 이후에 납부한건 혹은 환불한 건에
@@ -176,10 +179,15 @@ export async function claimedEarlier(tenantId: string, documentId: string, keys:
   });
 }
 
-/** 데스크 담당자로 지정할 수 있는 사람 — 같은 지점 재직 직원(강사 제외 · 수납·상담·운영 역할). */
+/**
+ * 데스크 담당자로 지정할 수 있는 사람 — 같은 지점 재직 직원 중 **수납 쓰기 권한이 있는 사람**(`billingWriters` — 환불 요청서를 처리하는 수납 게이트와 같은 판정 ·
+ * 지점 역할 권한 덮어쓰기 · 개인별 권한 · 꺼진 모듈 반영). 권한표는 지금 사용자의 지점 설정(같은 지점)으로 계산한다.
+ */
 export async function loadDeskStaff(tenantId: string): Promise<{ id: string; name: string }[]> {
-  const { data, error } = await createAdminClient().from("users").select("id,display_name")
-    .eq("tenant_id", tenantId).eq("status", "active").in("system_role", ["accountant", "counselor", "manager", "admin", "master"]).order("display_name");
+  const { data, error } = await createAdminClient().from("users").select("id,display_name,system_role")
+    .eq("tenant_id", tenantId).eq("status", "active").neq("system_role", "student").order("display_name").limit(1000);
   if (error) throw new Error(`데스크 담당자 조회 실패: ${error.message}`);
-  return (data ?? []).map(u => ({ id: String(u.id), name: String(u.display_name ?? "") })).filter(u => u.name);
+  const rows = (data ?? []) as DeskStaffRow[];
+  const [superIds, settings] = await Promise.all([platformAccountIds(rows.map(r => r.id)), getTenantSettings()]);
+  return billingWriters(rows, superIds, settings);
 }

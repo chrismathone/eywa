@@ -1,21 +1,33 @@
--- s2_0020 되돌리기 — 퇴원보고서 원장 승인 없앰·관리자 승인 생략·데스크 환불 단계·반 이름 무시 대조를 2026-11-03 운영 정의로 되돌린다.
--- 🔴 앱을 먼저 되돌린다(새 앱은 연결 함수·release를 부른다 — 함수가 없으면 환불 연결·환불 뒤 처리가 실패한다).
--- 멈추는 경우: 관리자 0명 묶음이 진행 중(옛 함수는 승인자 없는 묶음을 끝내지 못한다) · 데스크 환불 대기 묶음이 진행 중(옛 함수는 환불을 기다리지 않는다).
---   먼저 그 묶음을 마무리하거나 취소한다.
--- 남기는 것: 연결 표 withdrawal_report_refunds(기록 — 다시 적용하면 그대로 쓴다) · 이미 관리자 0명으로 끝난 묶음(옛 CHECK는 NOT VALID로 새 행만 막는다)
+-- s2_0020 되돌리기 — 퇴원보고서 원장 승인 없앰·보고서별 관리자 승인 생략·데스크 환불 단계·표시용 칸 무시 대조를 2026-11-03 운영 정의로 되돌린다.
+-- 🔴 앱을 먼저 되돌린다(새 앱은 연결 함수·release·reportManagerIds를 쓴다 — 함수가 없으면 환불 연결·환불 뒤 처리가 실패한다).
+-- 멈추는 경우(먼저 그 묶음을 마무리하거나 취소한다):
+--   · 진행 중 묶음에 관리자 0명 보고서가 있다(옛 함수는 승인자 없는 보고서를 끝내지 못한다)
+--   · 진행 중 묶음에 보고서마다 다른 승인 관리자가 있다(옛 함수는 묶음 관리자 전원으로 승인한다 — 승인자가 바뀐다)
+--   · 데스크 환불 대기 묶음(진행 중·처리 예약)이 있다(옛 함수는 환불을 기다리지 않는다)
+--   · 모든 보고서가 승인됐는데 처리 전(진행 중)인 묶음이 있다(환불이 끝났는데 release 전 — 옛 함수로는 처리할 길이 없다)
+-- 남기는 것: 연결 표 withdrawal_report_refunds(기록 — 다시 적용하면 그대로 쓴다) · 이미 끝난 관리자 0명 묶음(옛 CHECK는 NOT VALID로 새 행만 막는다)
 --   · manager_id가 빈 보고서가 있으면 NOT NULL을 되돌리지 않는다.
--- 본문 = 2026-11-03 운영 pg_get_functiondef 그대로(s2_0020 머리 지문과 같은 정의).
+-- 본문 = 2026-11-03 운영 pg_get_functiondef 그대로(s2_0020 머리 지문과 같은 정의) · 할 일 동기화는 바꾼 줄 하나를 되돌린다.
 begin;
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';
 
 do $$
 begin
-  if exists(select 1 from public.withdrawal_report_groups where status not in ('completed','canceled') and cardinality(manager_ids) = 0) then
-    raise exception '관리자 0명 묶음이 진행 중이라 되돌릴 수 없습니다(먼저 마무리하거나 취소)';
+  if exists(select 1 from public.withdrawal_report_groups g join public.withdrawal_reports q on q.group_id = g.id
+            where g.status not in ('completed','canceled') and cardinality(coalesce(q.manager_ids, g.manager_ids)) = 0) then
+    raise exception '관리자 승인 생략 보고서가 진행 중이라 되돌릴 수 없습니다(먼저 마무리하거나 취소)';
+  end if;
+  if exists(select 1 from public.withdrawal_report_groups g join public.withdrawal_reports q on q.group_id = g.id
+            where g.status not in ('completed','canceled') and coalesce(q.manager_ids, g.manager_ids) is distinct from g.manager_ids) then
+    raise exception '보고서마다 승인 관리자가 다른 묶음이 진행 중이라 되돌릴 수 없습니다(먼저 마무리하거나 취소)';
   end if;
   if exists(select 1 from public.withdrawal_report_groups g where g.status in ('pending','scheduled') and public.withdrawal_report_refund_pending(g.id)) then
     raise exception '데스크 환불 대기 묶음이 진행 중이라 되돌릴 수 없습니다(먼저 환불을 끝내거나 요청을 취소)';
+  end if;
+  if exists(select 1 from public.withdrawal_report_groups g where g.status = 'pending'
+            and not exists(select 1 from public.withdrawal_reports q where q.group_id = g.id and q.status <> 'approved')) then
+    raise exception '모든 보고서가 승인됐는데 처리 전인 묶음이 있어 되돌릴 수 없습니다(release로 먼저 처리)';
   end if;
 end $$;
 
@@ -341,8 +353,22 @@ begin
 end;
 $function$;
 
+-- 할 일 동기화 — s2_0020이 바꾼 줄 하나를 되돌린다(관리자 차례 = 묶음 목록 먼저).
+do $$
+declare
+  definition text;
+  o constant text := 'coalesce(r.manager_ids, g.manager_ids,';
+  hits int;
+begin
+  select pg_get_functiondef('staff_tasks_private.withdrawal_sync_report(uuid)'::regprocedure) into definition;
+  hits := (length(definition) - length(replace(definition, o, ''))) / length(o);
+  if hits <> 1 then raise exception '되돌릴 할 일 동기화 줄이 하나가 아닙니다(%건)', hits; end if;
+  execute replace(definition, o, 'coalesce(g.manager_ids, r.manager_ids,');
+end $$;
+
 drop function if exists public.release_withdrawal_report_refunds(uuid, uuid, uuid);
-drop function if exists public.attach_withdrawal_report_refund(uuid, uuid, uuid, uuid, uuid);
+drop function if exists public.attach_withdrawal_report_refund(uuid, uuid, uuid, uuid, uuid, boolean);
+drop function if exists public.withdrawal_report_refunds_on_cancel(uuid, uuid, uuid, text);
 drop function if exists public.withdrawal_report_refund_pending(uuid);
 drop function if exists public.withdrawal_report_compare_key(jsonb, text[]);
 

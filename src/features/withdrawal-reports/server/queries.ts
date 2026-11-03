@@ -158,10 +158,10 @@ export async function getReport(id: string) {
   // 퇴원월 뒤 청구(원장 2026-10-29) — 취소된 보고서는 보이지 않는다. 못 읽으면 빈 목록(보고서 화면은 연다).
   const laterInvoices: LaterInvoice[] = data.status === "canceled" || !billingOk ? []
     : await loadLaterInvoices(data as WithdrawalReport).catch((e) => { console.error("[withdrawal-report-later-invoices]", e); return []; });
-  // 데스크 담당자 목록은 환불을 요청할 수 있는 사람에게만(이름 목록을 다른 사람에게 내리지 않는다) — 권한 판정 한 곳 `canRequestRefund`
-  // (원장 2026-11-03 — 묶음의 관리자 · 요청자 · 관리자 승인을 생략한 보고서의 작성 강사 · 원장급) · 자기 자신은 빼고(자기 알림은 가지 않음 — notifyUsers).
+  // 데스크 담당자 목록은 환불을 승인할 수 있는 원장급에게만(이름 목록을 다른 사람에게 내리지 않는다) — 권한 판정 한 곳 `canRequestRefund`
+  // · 후보 = 수납 쓰기 권한이 있는 직원(`loadDeskStaff`) · 자기 자신은 빼고(자기 알림은 가지 않음 — notifyUsers).
   // 데스크 환불 단계(s2_0020)는 함께 읽는다 — 못 읽으면 단계 없이(화면은 연다).
-  const refundAllowed = canRequestRefund(data as WithdrawalReport, viewer.user.id, viewer.writable, cancelsAsDirector(viewer.user.systemRole, !!viewer.teacherId));
+  const refundAllowed = canRequestRefund(data as WithdrawalReport, viewer.writable, cancelsAsDirector(viewer.user.systemRole, !!viewer.teacherId));
   const [deskStaff, refundSteps] = await Promise.all([
     laterInvoices.length && refundAllowed ? loadDeskStaff(viewer.user.tenantId).then(list => list.filter(s => s.id !== viewer.user.id), () => []) : Promise.resolve([]),
     loadRefundSteps(viewer.user.tenantId, [data as WithdrawalReport]).then(map => map.get(data.group_id ?? data.id) ?? [], (e: unknown) => { console.error("[withdrawal-report-refund-steps]", e); return [] as RefundStep[]; }),

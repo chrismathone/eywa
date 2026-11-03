@@ -163,8 +163,9 @@ describe("퇴원은 퇴원보고서로만", () => {
     const later = migrationFiles(ROOT).filter((f) => f.name >= "0453a");
     expect(later.length).toBeGreaterThan(0);
     // 예외 하나 — 처리 함수(`transition_withdrawal_report`) 자신을 다시 정의하는 본문(s2_0020 — 학생을 퇴원시키는 유일한 길이다).
-    // 그 함수 정의만 빼고 본다(다른 함수·문장이 퇴원을 쓰면 그대로 실패한다).
-    const processing = /create\s+or\s+replace\s+function\s+public\.transition_withdrawal_report\([\s\S]*?\$function\$;/gi;
+    // 그 함수 정의만 빼고 본다(다른 함수·문장이 퇴원을 쓰면 그대로 실패한다). 본문 끝 = **여는 따옴표 표식과 같은** 닫는 표식(`as $x$ … $x$;`) —
+    // 닫는 표식을 하나로 못박으면 `$$` 같은 다른 표식의 정의에서 뒤 함수까지 삼킨다(리뷰 2026-11-03). 머리에서 `as $` 전에 `;`가 나오면 정의가 아니다.
+    const processing = /create\s+or\s+replace\s+function\s+public\.transition_withdrawal_report\([^;]*?\bas\s+(\$[a-z_]*\$)[\s\S]*?\1\s*;/gi;
     for (const { name: f, sql } of later) {
       expect(sql.replace(processing, ""), f).not.toMatch(/update\s+public\.students\s+set\s+status\s*=\s*'withdrawn'/i);
     }

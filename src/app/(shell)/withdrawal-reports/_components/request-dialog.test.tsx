@@ -77,8 +77,28 @@ describe("compact request overlay and optional principal", () => {
     expect(screen.getByLabelText("관리자 승인")).toHaveTextContent("생략 — 작성 강사가 과목 관리자");
     expect(screen.queryByText(/원장 승인/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "강사에게 작성 요청" }));
-    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ teacherIds: ["manager"], managerIds: [] })));
+    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ teacherIds: ["manager"], managerIds: [], reportManagerIds: { manager: [] } })));
     expect(mocks.request.mock.calls[0][0]).not.toHaveProperty("directorIds");
+  });
+  it("과목이 섞이면 보고서마다 — 영어(작성 강사 = 영어 관리자)는 생략, 수학(평강사)은 수학 관리자만 승인(원장 2026-11-03)", async () => {
+    mocks.request.mockResolvedValue({ ok: true, id: "new-report" });
+    const mixed = [{ ...multiStudents[0], courses: [multiStudents[0].courses[0], { ...multiStudents[0].courses[1], teacherId: "english-manager", teacherName: "영어 관리자" }] }];
+    render(<RequestDialog {...multiProps} students={mixed} />); await fill();
+    const lines = screen.getByRole("note", { name: "보고서별 승인" });
+    expect(lines).toHaveTextContent("담당 강사 · 수학 보고서 — 수학 관리자, 수학 관리자2 승인");
+    expect(lines).toHaveTextContent("영어 관리자 · 영어 보고서 — 관리자 승인 생략(작성 강사가 과목 관리자)");
+    fireEvent.click(screen.getByRole("button", { name: "강사에게 작성 요청" }));
+    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({
+      teacherIds: ["teacher", "english-manager"], reportManagerIds: { teacher: ["manager", "math-manager-2"], "english-manager": [] } })));
+  });
+  it("보고서 하나라도 승인할 관리자를 안 고르면 요청할 수 없다", async () => {
+    render(<RequestDialog {...multiProps} />); await fill();
+    fireEvent.click(screen.getByRole("button", { name: /^관리자 승인:/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "영어 관리자 영어" }));
+    fireEvent.click(screen.getByRole("button", { name: "영어 범위 관리자 영어" }));
+    await closeOptions();
+    expect(screen.getByRole("note", { name: "보고서별 승인" })).toHaveTextContent("영어 강사 · 영어 보고서 — 승인할 관리자를 골라 주세요");
+    expect(screen.getByRole("button", { name: "강사에게 작성 요청" })).toBeDisabled();
   });
   it("마지막 수업일 — 학생·반을 고르면 출결에서 채우고 출처를 적는다 · 직접 고친 값은 반을 바꿔도 덮지 않는다", async () => {
     mocks.lastLesson.mockResolvedValue({ date: "2026-10-28" });
