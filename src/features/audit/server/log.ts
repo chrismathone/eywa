@@ -206,6 +206,10 @@ export const AUDIT_ACTIONS = {
   classnote_board_enroll: "ClassNote 반 보드 배정",
   classnote_board_release: "ClassNote 반 보드 원아 해제",
   classnote_board_teacher_release: "ClassNote 반 보드 담임 해제",
+  // 전 과목 퇴원 45일 뒤 ClassNote 명부 퇴원처리(퇴소, 원장 2026-11-03) — 연동 PC 워커가 학생 단위로 직접 남긴다(직전 글 목록 백업 위치 포함).
+  classnote_offboard: "ClassNote 명부 퇴원처리(연동 PC)",
+  // 퇴소를 요청했는데 명부로 확인하지 못한 원아 — 결과와 무관하게 남긴다(재원 명부엔 없는데 퇴소 명부에 없음 · 확인 조회 실패 · 그대로 남음).
+  classnote_offboard_unconfirmed: "ClassNote 명부 퇴원처리 요청(확인 실패 · 연동 PC)",
   classnote_board_sync_run: "반 보드 지금 동기화 실행(연동 PC)",
   // 학부모 글·댓글 답글(0317a) — 앱이 요청·수정·삭제를 남기고, 연동 PC 워커가 ClassNote 반영 결과를 직접 남긴다.
   classnote_parent_reply_request: "학부모 글 답글 요청",

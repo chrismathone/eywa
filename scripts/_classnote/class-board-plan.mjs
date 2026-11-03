@@ -55,6 +55,13 @@ export const JOIN_WAIT_REASON = "ClassNote 미가입 — 이 학생으로 확인
 /** 보류 사유 — 반 보드 기록은 있는데 기록된 반 보드에 그 원아가 지금 없다(사람이 뗐다 · 이 회차만 멈춘다 — 다음 회차엔 원아 연결로 다시 판정, 머리 주석 ① b). */
 export const VERIFIED_GONE_REASON = "반 보드에서 확인된 원아가 지금 그 반 보드에 없음 — 확인 필요";
 
+/**
+ * 보류 사유 — 보고서 미발송 반(JJ 자리 반, `classes.report_optout`)은 **오늘 다니는 학생이 없으면** ClassNote 반 보드를 새로 만들지 않는다
+ * (원장 2026-11-03 *"반에 학생이 있다면 배정해야함. 없으면 굳이 만들필요 없음."* — 학생이 1명 이상이면 수학 반처럼 만들고 배정한다).
+ * 같은 이름 보드가 ClassNote에 있으면 학생이 없어도 그 보드를 연결한다.
+ */
+export const OPTOUT_NO_CREATE_REASON = "보고서 미발송 반에 지금 다니는 학생이 없어 ClassNote 반 보드를 만들지 않습니다 — 학생이 생기면 다음 동기화가 만듭니다";
+
 /** 기본이름 — 동명이인 접미사(끝 알파벳)를 뗀 이름. `김근우A`→`김근우`, `박서준C`→`박서준`. */
 export function baseName(effName) {
   return String(effName ?? "").replace(/\s/g, "").replace(/[A-Za-z]+$/, "");
@@ -224,7 +231,8 @@ export function resolveStudentChildren(student, { boards, membersByBoard, admiss
       const pm = phoneMatches(student.phones ?? [], [adm.phone]);
       if (pm === null) reasons.push(`${who} 보호자 전화 대조 불가(한쪽 번호 없음)`);
       else if (pm === false) reasons.push(`${who} 보호자 전화 불일치`);
-      // ④ 역방향 — 이 원아가 다른 학생의 1인 보드에도 있다
+      // ④ 역방향 — 이 원아가 다른 학생의 1인 보드에도 있다. 명부의 소속 보드 칸을 못 읽었으면(null) 대조할 수 없다(리뷰 B3 — 빈 목록으로 두면 조용히 통과).
+      if (adm.boardNames === null) reasons.push(`${who} 운영관리 명부의 소속 보드를 읽지 못함 — 다른 학생 1인 보드 대조 불가`);
       const others = (adm.boardNames ?? [])
         .map(personalBoardOwner)
         .filter((o) => o && o !== normBoard(student.name));
@@ -270,8 +278,10 @@ export function reservedBoardName(name) {
  *   명부(`admissions`)에 없는 원아는 빼고, ⑥은 명부 이름(`name`) + 학부모 프로필 이름 둘 다로 건다(프로필을 모르면 보류).
  * @param {Map<number,{name:string,date_birth:string|null}|null>|null} [p.childProfiles]  이번에 읽은 보드에 없는 연결 원아의 학부모 프로필
  *   (loadPlan이 원아 상세 GET으로 읽는다 · null = 조회 실패 → 그 학생 보류).
+ * @param {Map<string, Set<number>>|null} [p.formerFamilyByClass]  보고서 미발송 반(`reportOptout`)의 같은 이름 보드에 남은 원아 중 **이 반의 지난
+ *   학생으로 증명된 원아**(해제 판정 ①②③ 통과 — class-board-release.mjs `formerFamilyOf`). 이 원아만 남은 보드는 채택한다(그 뒤 자동 해제가 정리).
  */
-export function planClassBoards({ classes, students, boards, membersByBoard, admissions, schoolYear, linkedBoardByClass = new Map(), verifiedChildren = null, verifiedOwnerScope = null, childLinks = null, childProfiles = null }) {
+export function planClassBoards({ classes, students, boards, membersByBoard, admissions, schoolYear, linkedBoardByClass = new Map(), verifiedChildren = null, verifiedOwnerScope = null, childLinks = null, childProfiles = null, formerFamilyByClass = null }) {
   // 1) 학생별 원아 판정(한 번씩)
   const byStudent = new Map();
   // 비교 상대 = 지금 대상 반에 다니는 학생(일부 반만 보는 실행은 호출부가 전체 대상 반 기준으로 넘긴다 — verifiedOwnerScope).
@@ -344,11 +354,25 @@ export function planClassBoards({ classes, students, boards, membersByBoard, adm
       if (!Array.isArray(members)) board = { action: "block", reason: `같은 이름 보드(#${exact[0].id}) 원아 조회 실패 — 채택 보류` };
       else {
         const strangers = members.filter((m) => !planned.has(m.id));
-        board = strangers.length
-          ? { action: "block", reason: `같은 이름 보드(#${exact[0].id})에 이 반 학생이 아닌 원아 ${strangers.length}명이 있습니다 — 채택하지 않습니다(사람 확인)` }
-          : { action: "exists", id: exact[0].id, name: exact[0].name };
+        // 🔑 보고서 미발송 반(JJ)은 ClassNote에 같은 이름 보드가 먼저 있었다 — 그 보드에 **이 반의 지난 학생**(수강이 끝나 그대로 해제 대상인
+        //    원아)만 남아 있으면 남의 집이 아니라 이 반의 옛 가족이라 채택한다(원장 2026-11-03). 그 원아는 채택 뒤 자동 해제가 정리한다
+        //    (④ 양 가드에 걸리면 해제 리스트에 사유와 함께 남는다). 지난 학생으로 증명되지 않는 원아가 하나라도 있으면 종전대로 보류.
+        const former = c.reportOptout ? formerFamilyByClass?.get?.(c.classId) ?? null : null;
+        const foreign = former ? strangers.filter((m) => !former.has(Number(m.id))) : strangers;
+        if (!strangers.length) board = { action: "exists", id: exact[0].id, name: exact[0].name };
+        else if (!foreign.length) board = { action: "exists", id: exact[0].id, name: exact[0].name, adoptedFormer: strangers.length };
+        else
+          board = {
+            action: "block",
+            reason: former
+              ? `같은 이름 보드(#${exact[0].id})에 이 반 학생도 이 반의 지난 학생도 아닌 원아 ${foreign.length}명이 있습니다 — 채택하지 않습니다(사람 확인)`
+              : `같은 이름 보드(#${exact[0].id})에 이 반 학생이 아닌 원아 ${strangers.length}명이 있습니다 — 채택하지 않습니다(사람 확인)`,
+            // 미발송 반 — 낯선 원아가 이 반의 지난 학생인지 호출부(loadPlan `formerFamily`)가 확인할 수 있게 넘긴다.
+            ...(c.reportOptout && !former ? { adoptCandidate: { boardId: Number(exact[0].id), boardName: exact[0].name, strangers: strangers.map((m) => ({ id: Number(m.id), name: m.name ?? "?" })) } } : {}),
+          };
       }
-    } else board = { action: "create" };
+    } else board = c.reportOptout && !c.studentIds.length ? { action: "block", reason: OPTOUT_NO_CREATE_REASON, notice: true } : { action: "create" };
+    // `notice` = 실패가 아니라 안내(학생이 없어 일부러 안 만든다) — 보고서가 '보류'로 적어 실패 수·버튼 숫자에 들지 않는다(리뷰 C1).
 
     // ⑤ 같은 반 기본이름 겹침
     const groups = new Map();
@@ -386,7 +410,7 @@ export function planClassBoards({ classes, students, boards, membersByBoard, adm
     // extraChildren = 같은 목록을 번호와 함께(자동 해제가 번호로 내보낸다 — class-board-release.mjs). extras는 이름만(보고서·해제 리스트).
     const extraChildren = (current ?? []).filter((m) => !planned.has(m.id)).map((m) => ({ id: m.id, name: m.name ?? "?" }));
     const extras = extraChildren.map((m) => m.name);
-    return { classId: c.classId, className: c.className, board, assign, hold, extras, extraChildren };
+    return { classId: c.classId, className: c.className, board, assign, hold, extras, extraChildren, ...(c.reportOptout ? { reportOptout: true } : {}) };
   });
   return plans;
 }

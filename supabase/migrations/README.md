@@ -12,6 +12,10 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-11-03 연동 PC가 출결을 읽기 — ClassNote 명부 퇴원처리 가드 (s2_0018 · ⏳ 운영 적용 대기)
+
+`s2_0018_sync_agent_attendance_read.sql` — 명부 퇴원처리(전 과목 퇴원 45일 뒤 퇴소)가 '퇴원일 뒤 출결이 있으면 내리지 않는다'를 보는데(`scripts/_classnote/classnote-offboard.mjs` loadOffboardFacts), `attendance_records`는 `eywa_sync_agent`의 읽기 권한·정책이 없다(운영 실측 2026-11-03: select 권한 false · 이 역할 정책 0개 → 게이트웨이에서 42501). 자기 지점 줄 읽기만 연다(s2_0006·s2_0008과 같은 모양 · grant + 정책 둘 다 — 정책을 빼면 에러 없이 0행). 매일 쓰는 표라 `lock_timeout 3s`. 🔴 **웹·AywaSync(퇴원처리 워커) 배포 전에** 적용한다 — 없으면 워커가 퇴원처리를 보류로 건너뛰지만(보고서 '보류' 한 줄 · 워커는 지점의 가장 최근 출결이 없거나 14일보다 오래돼도 건너뛴다), 그 질의 실패를 게이트웨이가 `sync_agent_events`에 job_failed(error)로 매일 남겨 연동 화면에 오류가 뜬다. 트랜잭션 안 `set local lock_timeout`. 적용 확인(읽기만): `select has_table_privilege('eywa_sync_agent','public.attendance_records','select') as can_select, (select count(*) from pg_policies where schemaname='public' and tablename='attendance_records' and policyname in ('sync_agent_allow','sync_agent_tenant_boundary')) as policies;` → `true · 2`. 되돌리기 = 파일 머리 주석의 세 줄(drop policy 둘 + revoke).
+
 ## 2026-11-02 퇴원보고서: 상세사유 제출 기준 200자 → 100자 (s2_0015 · ✅ 운영 적용 2026-11-02)
 
 `s2_0015_withdrawal_detail_min_100.sql` — 원장 *"퇴원보고서 상세사유 100자 이상으로"*. 전이 함수 두 개(묶음 · `_v1`)의 글자 수 검사와 거절 문구만 치환한다. 🔴 앱 배포 전에 적용(반대면 그 사이 100~199자 제출이 200자 문구로 거절된다). 되돌리기 = `scripts/_oneoff/revert-s2_0015-withdrawal-detail-min-100.sql`.

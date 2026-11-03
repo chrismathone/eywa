@@ -1507,6 +1507,8 @@ export function auditDetail(
         `변동 ${num(m.changed) ?? 0}건 · 실패 ${num(m.failed) ?? 0}건 · 보류 ${num(m.held) ?? 0}건`,
         num(m.releasedChildren) ? `원아 해제 ${num(m.releasedChildren)}명` : null,
         num(m.releasedTeachers) ? `담임 해제 ${num(m.releasedTeachers)}건` : null,
+        num(m.offboarded) ? `명부 퇴원처리 ${num(m.offboarded)}명` : null,
+        num(m.offboardPlanned) ? `명부 퇴원처리 예정 ${num(m.offboardPlanned)}명(자동 퇴원처리 꺼짐)` : null,
         num(m.release) ? `해제 확인 필요 ${num(m.release)}개 반` : null,
         m.ok === false ? str(m.error) : null,
       );
@@ -1514,6 +1516,22 @@ export function auditDetail(
       return join(str(m.className), m.kind === "request" ? "지금 동기화" : "정기 동기화");
     case "classnote_board_release":
       return join(str(m.className), str(m.reason), m.kind === "request" ? "지금 동기화" : "정기 동기화");
+    case "classnote_offboard":
+      // 백업 위치(backupPath)·원아 번호는 화면에 싣지 않는다(내부 경로) — 무엇을 왜 했는지만.
+      return join(
+        "전 과목 퇴원",
+        num(m.days) === null ? null : `${num(m.days)}일 경과`,
+        num(m.posts) === null ? null : `글 ${num(m.posts)}건 백업`,
+        str(m.childName) ? `원아 '${str(m.childName)}'` : null,
+      );
+    case "classnote_offboard_unconfirmed":
+      // 요청은 보냈는데 명부로 확인하지 못했다 — 사유(한글 문장)를 그대로. 백업 위치·원아 번호는 싣지 않는다.
+      return join(
+        "확인 필요",
+        str(m.childName) ? `원아 '${str(m.childName)}'` : null,
+        num(m.days) === null ? null : `퇴원 ${num(m.days)}일`,
+        str(m.why),
+      );
     case "classnote_board_teacher_release":
       return join(str(m.teacher) ? `${str(m.teacher)} 선생님 연결 해제` : "선생님 연결 해제", "지금 이 반 담당이 아님", m.kind === "request" ? "지금 동기화" : "정기 동기화");
     case "classnote_parent_reply_request":

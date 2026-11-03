@@ -141,7 +141,8 @@ export async function fetchAllDrf(page, path) {
     const j = await page.evaluate(
       async ([p, n]) => {
         const sep = p.includes("?") ? "&" : "?";
-        const r = await fetch(`${p}${sep}page=${n}&page_size=100`, { headers: { accept: "application/json" } });
+        // 판정 입력(원아·보드 목록)이라 캐시를 쓰지 않는다(2026-11-03 리뷰 B9 — 퇴원처리·해제가 직전 상태를 본다).
+        const r = await fetch(`${p}${sep}page=${n}&page_size=100`, { headers: { accept: "application/json" }, cache: "no-store" });
         if (!r.ok) throw new Error(`${p} ${r.status}`);
         return r.json();
       },
@@ -197,7 +198,7 @@ export async function fetchOffboardChildren(page, centerId) {
 /** 원아 상세 — enrollment[](belong_to_class 멤버십, removed_child 플래그 포함). */
 export async function fetchChildDetail(page, childId) {
   return page.evaluate(async (id) => {
-    const r = await fetch(`/api/v1/children/${id}`, { headers: { accept: "application/json" } });
+    const r = await fetch(`/api/v1/children/${id}`, { headers: { accept: "application/json" }, cache: "no-store" });
     if (!r.ok) throw new Error(`children/${id} ${r.status}`);
     return r.json();
   }, childId);

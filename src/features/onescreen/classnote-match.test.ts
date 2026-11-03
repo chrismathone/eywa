@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildCnMatchMap, cnLabelFor, cnLabelState, cnTipCard, CN_UNAVAILABLE, pickCnForClasses } from "./classnote-match";
 
@@ -145,3 +147,13 @@ describe("반 배정이 지금 반과 다를 때(물음표)", () => {
   });
 });
 
+describe("보고서 미발송(JJ) 반 기록 — 2026-11-03부터 동기화가 JJ 반도 연결·기록한다", () => {
+  it("🔴 대상 밖 반의 기록이 섞이면 수학 반 줄이 '배정된 반 보드: JJ…'(물음표)로 잘못 뜬다 — 조회가 대상 반 기록만 넘긴다", () => {
+    const jjBoards = [...boards, { class_id: "jj", board_name: "초등M 개별 JJ2M" }];
+    const mixed = buildCnMatchMap([row({ status: "hold", reason: "보류" }), row({ class_id: "jj" })], jjBoards, ["c1"]);
+    expect(cnLabelFor(mixed, { classId: "c1", subjectKey: "math", studentId: "s1" })).toMatchObject({ elsewhere: ["초등M 개별 JJ2M"] });
+    const src = readFileSync(join(process.cwd(), "src/features/onescreen/server/classnote-match.ts"), "utf8");
+    expect(src).toContain('.eq("report_optout", false)');
+    expect(src).toContain("return buildCnMatchMap(members.filter((m) => eligibleSet.has(m.class_id)), boards, eligibleIds);");
+  });
+});

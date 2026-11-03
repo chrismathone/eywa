@@ -57,6 +57,16 @@ describe("바뀐 반만 고른다 — 과부하 방지(원장 2026-09-30)", () =
     ];
     expect(selectClassesToSync(b).picked.map((p) => p.reasons[0])).toEqual(["배정 대기", "반을 떠난 학생"]);
   });
+  it("보고서 미발송(JJ) 반 — 학생이 없으면 연결이 없어도 '새 반'으로 고르지 않는다(보드를 만들지 않아 같은 보류만 되풀이) · 학생이 있으면 고른다 · 지목하면 고른다 · 연결된 JJ 반은 종전대로", () => {
+    const a = base();
+    a.classes.push({ classId: C3, className: "초등M 개별 JJ2M", studentIds: [], reportOptout: true });
+    expect(selectClassesToSync(a).picked).toEqual([]);
+    expect(selectClassesToSync({ ...a, scope: { full: false, classIds: [C3], studentIds: [] } }).picked.map((p) => p.reasons)).toEqual([["지목한 반"]]);
+    a.classes[2] = { ...a.classes[2], studentIds: [S3] };
+    expect(selectClassesToSync(a).picked.map((p) => p.reasons)).toEqual([["새 반"]]);
+    a.links.set(C3, { boardName: "초등M 개별 JJ2M" });
+    expect(selectClassesToSync(a).picked.map((p) => p.reasons)).toEqual([["새 학생"]]);
+  });
   it("가입 대기 보류는 최근 등록 학생만 다시 본다(오래된 미가입은 새벽 몫)", () => {
     const a = base();
     a.members[0] = { class_id: C1, student_id: S1, status: "hold", reason: "ClassNote 미가입·미배정(1인 보드 원아 0명)" };

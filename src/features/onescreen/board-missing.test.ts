@@ -139,7 +139,9 @@ describe("까닭 가리기(순수)", () => {
   });
   it("🔴 '동기화 대상' 기준은 워커와 같은 조건이다 — 워커 조각이 바뀌면 이 판정도 함께 봐야 한다", () => {
     const load = readFileSync(join(process.cwd(), "scripts/_classnote/math-class-boards-load.mjs"), "utf8");
-    expect(load).toContain("c.is_active and not c.report_optout and c.subject in ('math', 'subject_1') and (c.closed_at is null or c.closed_at >= ${today})");
+    // 2026-11-03부터 워커는 보고서 미발송 반(JJ)도 동기화한다(배정·해제를 에이와와 맞춘다) — 앱은 보고서 발송 반만 본다(isSendCandidateClass가
+    // report_optout을 거른다). 앱이 **더 좁은** 쪽이라 "기다리면 풀린다"는 안내가 거짓이 되지 않는다(미발송 반 보고서는 그 전에 막힌다).
+    expect(load).toContain("c.is_active and c.subject in ('math', 'subject_1') and (c.closed_at is null or c.closed_at >= ${today})");
     expect(load).toContain("(e.end_date is null or e.end_date >= ${today}) and (e.start_date is null or e.start_date <= ${today})");
     expect(load).toContain("s.status = 'enrolled' and not coalesce(s.is_test, false)");
     const server = readFileSync(join(process.cwd(), "src/features/onescreen/server/send-class.ts"), "utf8");
