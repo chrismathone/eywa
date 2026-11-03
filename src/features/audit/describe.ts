@@ -40,9 +40,12 @@ import { loanStatusLabel } from "@/features/inventory/loan-status";
 import { assetCategoryLabel } from "@/features/inventory/category";
 import { auditResultLabel } from "@/features/inventory/audit-result";
 import { OUTCOME_PILL } from "@/features/enrollment/outcome-meta";
+import { EVENT_LABEL, OUTCOME_LABEL, STATUS_LABEL, WORK_OUTCOMES, type WorkOutcome, type WorkStatus } from "@/features/work-requests/model";
 
 /** 대상 유형(target_type) → 한글 — 감사로그 '대상' 열 접두. 미등록 유형은 원문 폴백. */
 export const AUDIT_TYPE_LABEL: Record<string, string> = {
+  work_request: "업무 요청",
+  dashboard_secretary: "업무 비서",
   // 오늘 수학 사용 메뉴(2026-10-19) — 에이와 · 오늘 수학 어느 쪽에서 바꿔도 같은 대상.
   todays_math: "오늘 수학",
   // ── 2026-09-09 전수 보강 — 여기 없으면 감사로그 '대상' 열에 영문이 그대로 뜬다. ──
@@ -2168,6 +2171,35 @@ export function auditDetail(
     case "approval_comment":
     case "approval_comment_delete":
       return null; // metadata = 문서 uuid뿐(대상 열이 문서 제목을 보여준다)
+
+    // ── 업무 요청(s2_0018) · 업무 비서 — 대상 열이 요청 제목. 단계 · 결과 · 새 상태는 업무 요청 화면과 같은 라벨로. ──
+    case "work_request_create": {
+      const assignees = num(m.assignees);
+      const students = num(m.students);
+      return join(assignees ? `담당 ${assignees}명` : null, students ? `학생 ${students}명` : null);
+    }
+    case "work_request_act": {
+      const STEP_EVENT: Record<string, keyof typeof EVENT_LABEL> = { ack: "acked", report: "reported", approve: "approved", return: "returned", cancel: "cancelled" };
+      const step = str(m.step);
+      const outcome = str(m.outcome);
+      const status = str(m.status);
+      return join(
+        step && Object.hasOwn(STEP_EVENT, step) ? EVENT_LABEL[STEP_EVENT[step]!] : null,
+        outcome && (WORK_OUTCOMES as readonly string[]).includes(outcome) ? OUTCOME_LABEL[outcome as WorkOutcome] : null,
+        status && Object.hasOwn(STATUS_LABEL, status) ? `→ ${STATUS_LABEL[status as WorkStatus]}` : null,
+      );
+    }
+    case "dashboard_secretary_run": {
+      // 결과 — 성공은 적지 않는다(정리가 화면에 남는다). AI를 부른 뒤 저장하지 못한 시도만 까닭을 적는다.
+      const OUTCOME: Record<string, string> = { mismatch: "자료와 맞지 않아 저장 안 함", error: "실패" };
+      const candidates = num(m.candidates);
+      const outcome = str(m.outcome);
+      return join(
+        candidates === null ? null : `후보 ${candidates}개`,
+        modelDisplayLabel(str(m.model)),
+        outcome && Object.hasOwn(OUTCOME, outcome) ? OUTCOME[outcome] : null,
+      );
+    }
 
     // ── 보강 빼기 ────────────────────────────────────────────────────────────────────
     case "makeup_remove": {

@@ -154,7 +154,7 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 | `MEETING` | meeting_analysis | Claude(Sonnet 5.5) |
 | `ENROLLMENT` | enrollment_analysis · enrollment_form_extract · enrollment_prep_brief | Claude(Sonnet 5.5) |
 | `CONSULTATIONS` | consultation_analysis · student_care | Claude(분석 Sonnet 5.5 · 케어) |
-| `BRIEFING` | daily_briefing | Claude |
+| `BRIEFING` | daily_briefing · dashboard_secretary(업무 비서 'AI로 정리' · 누를 때 + 예약 01:00 · 13:00 — 화면이 남긴 후보만) | Claude |
 | `ATTENDANCE` | attendance_recap · parent_attendance_intent · parent_attendance_jev_shadow · parent_satisfaction | Claude(요약·결석 판별 Sonnet 5.5 · 만족도 Haiku 5.5) · TypeSafe(비교 전용) |
 | `STUDENT_ONTOLOGY` | student_positive_signal · student_ontology_summary | 긍정 신호 밤 판정 / 명시 버튼의 최근 기록 발췌 요약 · Claude 전용 키 · fast/low · 다른 회사 폴백 없음 |
 | `NOTICE` | notice_translate | Claude(Sonnet 5.5) |
@@ -403,6 +403,9 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - 이름 앞 아바타/이니셜 배지 = 금지 (영구).
 
 ### 운영실(대시보드) → [`docs/decisions/dashboard.md`](docs/decisions/dashboard.md)
+- 업무 요청 내용 = 서식 글(전자결재 `RichEditor` · `.rich-content`) · 미리 채움은 담당자별 · 그 몫만 · 저장 전 · 읽을 때 `sanitizeRichHtml` · 서식 포함 20,000자 · 받는 글은 선생님마다 자기 이름 제목 아래만(`recipient-body.ts` · 서버가 가름 · 미리보기 같은 함수)
+- 업무 비서('확인할 일' 위 · s2_0019) = 같은 후보에서 자동 정리 · AI 정리(매일 01:00 · 13:00 예약 + 버튼 · 페이지 로드는 안 부름) · 단추는 후보가 정한다(AI는 ref로 순서 · 이유만) · 예약은 화면이 남긴 마지막 후보로(숫자 기준 시각을 적는다) · 사람 상세는 그 사람 몫만 · 대화형 비서 재도입 아님
+- '강의실 2D/3D' 제거 · 그 자리 '대시보드 전환' = 같은 스냅샷을 계기판 화면으로(실제 값 · 계정 귀속 `ui_prefs.dashboard.design` · 비율로 나눈 탭 값 없음 · 권한은 운영실과 같다 · 강사별 업무는 이 화면에만, `seePortfolio`)
 - 운영실 카드 '상세' = 그 탭의 통계 화면(카드 몸통·팝업은 그대로) · 운영실에 보이는 지금 구성은 다시 싣지 않는다 · 정확히 셀 수 없는 과거(퇴원 기록 전 · 과목은 수강 종료 기록 전)는 그리지 않는다 · 과목 관리자는 자기 과목만 · 시범 = 원생 통계 `/students/stats`
 - 원생 매일 기록(0381a `student_daily_stats`) = 학년·학교·휴원처럼 지금 값만 남는 것을 오늘부터 하루 한 줄(23:55 cron · 운영실 재원생 카드와 같은 계산 · 서버 전용 표) · 빠진 날은 추정으로 채우지 않는다
 - 상단 '최근 결석' = 어제까지 7일 · 빠진 수업 단위(0221a와 한 벌) · 학생별 누적 많은 순 · 결석마다 그 수업을 가르친 선생님(teacher-axis · 입력자 아님) · ↗ 없음
@@ -467,6 +470,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - 콜&상담 '소개한 사람' = 원생·직원 하나를 골라 잇는다(0362a) · 글의 이름은 후보로만 · QR은 글로만 받는다 · 소개 칸은 기본 조회와 따로 읽는다(#95)
 
 ### 원스크린·수업보고서·ClassNote·AI·알림 → [`docs/decisions/reports-ai.md`](docs/decisions/reports-ai.md)
+- 벨 정리(2026-11-02 · main 11-03) = 기한 초과 업무 요약은 최근 한 장만 받은함 · 배지에(그 한 장을 보관 · 삭제하면 가린 지난 요약도 보관) · 본문 줄이기(링크 없는 알림은 그대로) · 보관 · 삭제는 올렸을 때만 · 읽은 알림 구분선 · 알림 데이터는 그대로
 - 수업보고서 평점(참고용, 0450a) = **기준 v6 원장 점수표(정성·구체성 1~5 · Haiku + 원장 예시 44건 · 손대지 않은 자동작성 ≤3 · 2026-10-26)** · 화면은 지금 기준만 · 평점 정렬(서버가 번호 목록 + 평점으로) · 옛 다섯 항목 평균(v4)·정보 단위 세기(v5)·Sonnet은 기각 · 목록 '평점' 열 + 마우스 오버 근거 카드 · 화면은 AI를 부르지 않는다(정기 처리 cron만) · 수업보고서 쓰기 권한자만 · 표는 정책 0개
 - 수업보고서 목록 '수업일'(실제 수업일 지정) 버튼 제거(2026-10-23 · 도입 후 0건) · 읽는 코드·칸은 남김 · 되살리지 말 것
 - 오늘 수학 월말평가 성적표 = 완성되면 PDF로 그 학생 수업보고서에 첨부(aywa 쪽 구현 0373a · 토글 `todaysMathReportPdf` · 오늘 수학 피드 켜기 대기) · 안 보낸 보고서에만(보낸 보고서에 붙이면 재발송) · 이미 보냈으면 점수 없이 나간 것으로 끝(따로 보내지도 알리지도 않음) · 못 붙이면 선생님에게 알림

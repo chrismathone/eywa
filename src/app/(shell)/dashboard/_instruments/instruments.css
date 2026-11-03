@@ -1,0 +1,440 @@
+/*
+ * 운영실 '대시보드 전환' 화면 전용 스타일 — 모든 선택자가 .aywa-instruments 아래에 있어 앱의 다른 화면에 닿지 않는다.
+ * 폭 조건은 뷰포트가 아니라 이 화면의 폭(@container aywa)을 본다. 창·사이드바 때문에 화면이 좁아져도 칸 수가 맞게 바뀐다.
+ */
+/* ---------- 토큰: 인재원 로고 실측 차콜 #383c40 · 노랑 #fcb810 ---------- */
+.aywa-instruments {
+  --charcoal: #363c41;
+  --charcoal-deep: #2b3034;
+  --ink: #23282c;
+  --ink-2: #485055;
+  --muted: #646d72;
+  --yellow: #fdb811;
+  --yellow-ink: #8a6100;
+  --red: #b44832;
+  --gray: #a3abae;
+  --l1: #c6ccce;
+  --l2: #7a8388;
+  --l3: #363c41;
+  --pale: #e7e9e6;
+  --wash: #f4f4f1;
+  --line: #e1e3df;
+  --grid: #eceeea;
+  --axis: #c3c8c5;
+  --page: #f1f1ed;
+  --surface: #fff;
+  --area: rgba(253, 184, 17, .13);
+  --line-stroke: var(--charcoal);
+  --point-fill: #fff;
+  --h1: #fcefc8;
+  --h2: #fbd76f;
+  --h3: #fdb811;
+  --h4: #c28700;
+  font-family: var(--font-pretendard), 'Malgun Gothic', sans-serif;
+  color: var(--ink);
+  background: var(--page);
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+}
+.aywa-instruments .on-dark {
+  --ink: #fff;
+  --ink-2: #dde1e2;
+  --muted: #aeb6b9;
+  --grid: #475055;
+  --axis: #5b6469;
+  --area: rgba(253, 184, 17, .16);
+  --line-stroke: var(--yellow);
+  --point-fill: var(--charcoal);
+  --pale: #4a5257;
+}
+.aywa-instruments h1, .aywa-instruments h2, .aywa-instruments h3, .aywa-instruments p { margin: 0; }
+.aywa-instruments a { color: inherit; text-decoration: none; }
+.aywa-instruments button, .aywa-instruments input { font: inherit; }
+.aywa-instruments a:focus-visible, .aywa-instruments button:focus-visible, .aywa-instruments input:focus-visible, .aywa-instruments [tabindex]:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
+
+/* ---------- 셸 ---------- */
+
+.aywa-instruments .work { min-width: 0; }
+.aywa-instruments .body { max-width: 1760px; margin: 0 auto; padding: 4px 4px 40px; }
+.aywa-instruments .head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 14px; scroll-margin-top: 16px; }
+.aywa-instruments .eyebrow { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 2px; }
+.aywa-instruments .head h1 { font-size: 26px; letter-spacing: -.045em; font-weight: 800; display: flex; align-items: baseline; gap: 10px; }
+.aywa-instruments .head h1 span { font-size: 14px; font-weight: 600; letter-spacing: 0; color: var(--muted); }
+.aywa-instruments .head-tools { display: flex; align-items: center; gap: 12px; }
+.aywa-instruments .fresh { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
+.aywa-instruments .fresh i { width: 7px; height: 7px; border-radius: 50%; background: #3f8f5f; }
+.aywa-instruments .fresh small { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 2px; }
+
+
+/* ---------- 구역 ---------- */
+.aywa-instruments .block { margin-top: 26px; scroll-margin-top: 16px; }
+.aywa-instruments .block-title { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding-bottom: 8px; margin-bottom: 12px; border-bottom: 2px solid var(--charcoal); }
+.aywa-instruments .block-title h2 { font-size: 18px; font-weight: 800; letter-spacing: -.035em; }
+.aywa-instruments .block-title p { font-size: 13px; color: var(--muted); }
+
+/* ---------- KPI ---------- */
+.aywa-instruments .kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.aywa-instruments .kpi { padding: 14px 18px 14px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; }
+.aywa-instruments .kpi:nth-child(3n) { border-right: 0; }
+.aywa-instruments .kpi:nth-last-child(-n + 3) { border-bottom: 0; }
+.aywa-instruments .kpi-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.aywa-instruments .kpi { cursor: pointer; transition: background .12s; }
+.aywa-instruments .kpi:hover { background: #fdfaf1; }
+.aywa-instruments .kpi-head small { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.aywa-instruments .kpi-body { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-top: 4px; }
+.aywa-instruments .kpi-value { font-size: 30px; font-weight: 850; letter-spacing: -.045em; line-height: 1.15; white-space: nowrap; }
+.aywa-instruments .kpi-value em { font-style: normal; font-size: 14px; font-weight: 700; margin-left: 3px; letter-spacing: 0; }
+.aywa-instruments .kpi-note { font-size: 13px; color: var(--muted); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aywa-instruments .kpi-chart { flex: 0 0 116px; width: 116px; }
+.aywa-instruments .time-chips { list-style: none; margin: 0 0 2px; padding: 0; display: flex; gap: 4px; flex: none; }
+.aywa-instruments .time-chips li { font-size: 13px; font-weight: 700; line-height: 1; padding: 6px 8px; border-radius: 5px; white-space: nowrap; }
+.aywa-instruments .time-chips .is-done { background: var(--charcoal); color: #fff; }
+.aywa-instruments .time-chips .is-next { background: var(--yellow); color: var(--ink); }
+
+/* ---------- 카드 ---------- */
+.aywa-instruments .card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
+.aywa-instruments .span-2 { grid-column: span 2; }
+.aywa-instruments .span-full { grid-column: 1 / -1; }
+.aywa-instruments .card { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.aywa-instruments .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.aywa-instruments .card-title { min-width: 0; }
+.aywa-instruments .card-title h3 { font-size: 15px; font-weight: 750; letter-spacing: -.025em; line-height: 1.35; }
+.aywa-instruments .card-open { all: unset; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-size: 15px; font-weight: 750; letter-spacing: -.025em; }
+.aywa-instruments .kpi-head .card-open { font-size: 14px; }
+.aywa-instruments .card-open:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; border-radius: 3px; }
+.aywa-instruments .card { cursor: pointer; transition: border-color .12s, box-shadow .12s; }
+.aywa-instruments .card:hover { border-color: #cfd2cd; box-shadow: 0 6px 18px rgba(30, 35, 38, .07); }
+.aywa-instruments .card-title p { font-size: 12.5px; color: var(--muted); margin-top: 2px; line-height: 1.45; }
+.aywa-instruments .go { width: 11px; height: 11px; fill: none; stroke: #a3abae; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.aywa-instruments .card:hover .go, .aywa-instruments .kpi:hover .go, .aywa-instruments .card-open:focus-visible .go { stroke: var(--yellow-ink); }
+.aywa-instruments .card-head:has(.card-tools) { flex-wrap: wrap; }
+.aywa-instruments .card-head:has(.card-tools) .card-title { flex: 1 1 300px; }
+.aywa-instruments .card-tools { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+.aywa-instruments .card-value { display: flex; align-items: baseline; gap: 3px; white-space: nowrap; flex: none; }
+.aywa-instruments .card-value span { font-size: 12.5px; color: var(--muted); margin-right: 4px; }
+.aywa-instruments .card-value b { font-size: 21px; font-weight: 850; letter-spacing: -.035em; }
+.aywa-instruments .card-value em { font-style: normal; font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.aywa-instruments .card.is-alert .card-value::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--red); align-self: center; margin-right: 5px; }
+.aywa-instruments .card-body { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 8px; min-width: 0; }
+.aywa-instruments .dot-late { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--red); margin-right: 4px; vertical-align: 1px; }
+
+.aywa-instruments .gauge-card { display: grid; grid-template-columns: 166px minmax(0, 1fr); align-items: center; gap: 16px; }
+.aywa-instruments .gauge-side { min-width: 0; display: grid; gap: 4px; }
+.aywa-instruments .triple-card { display: grid; grid-template-columns: 166px minmax(0, 1fr); align-items: center; gap: 12px 16px; }
+.aywa-instruments .triple-bars { grid-column: 1 / -1; grid-row: 2; min-width: 0; }
+.aywa-instruments .triple-card.no-gauge { grid-template-columns: minmax(0, 1fr); }
+.aywa-instruments .triple-card.no-gauge .triple-bars { grid-row: auto; }
+.aywa-instruments .sheet-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.aywa-instruments .sheet-pair section { min-width: 0; text-align: center; display: grid; gap: 6px; }
+.aywa-instruments .gauge-stats { margin: 0; display: grid; gap: 0; }
+.aywa-instruments .gauge-stats div { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--grid); }
+.aywa-instruments .gauge-stats div:last-child { border-bottom: 0; }
+.aywa-instruments .gauge-stats dt { font-size: 13px; color: var(--muted); }
+.aywa-instruments .gauge-stats dd { margin: 0; font-size: 16px; font-weight: 800; white-space: nowrap; }
+.aywa-instruments .gauge-stats .is-alert dd { color: var(--red); }
+
+.aywa-instruments .notice-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.aywa-instruments .notice-list li { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--grid); }
+.aywa-instruments .notice-list li:first-child { padding-top: 0; }
+.aywa-instruments .notice-list li:last-child { border-bottom: 0; padding-bottom: 0; }
+.aywa-instruments .notice-list em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--yellow-ink); background: #fdf1cf; border-radius: 4px; padding: 1px 6px; flex: none; }
+.aywa-instruments .notice-list b { font-size: 14px; font-weight: 600; min-width: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aywa-instruments .notice-list time { font-size: 12.5px; color: var(--muted); flex: none; }
+
+.aywa-instruments .headline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; font-size: 13px; color: var(--ink-2); }
+.aywa-instruments .headline b { font-size: 20px; font-weight: 850; letter-spacing: -.03em; color: var(--ink); margin-left: 3px; }
+.aywa-instruments .headline b.is-alert { color: var(--red); }
+.aywa-instruments .headline i { font-style: normal; font-size: 12.5px; color: var(--muted); }
+.aywa-instruments .stat-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 14px; }
+.aywa-instruments .stat { font-size: 13px; color: var(--muted); }
+.aywa-instruments .stat b { font-size: 14px; font-weight: 800; color: var(--ink); margin-left: 2px; }
+.aywa-instruments .stat.is-alert b { color: var(--red); }
+.aywa-instruments .foot { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.aywa-instruments .foot b { color: var(--ink-2); }
+
+.aywa-instruments .admission-months { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.aywa-instruments .admission-months section { min-width: 0; display: grid; gap: 4px; }
+.aywa-instruments .admission-months header { display: flex; align-items: baseline; gap: 6px; font-size: 13px; }
+.aywa-instruments .admission-months header span { color: var(--muted); font-size: 12px; }
+.aywa-instruments .admission-months strong { font-size: 26px; font-weight: 850; letter-spacing: -.04em; line-height: 1.1; }
+.aywa-instruments .admission-months p { font-size: 12px; color: var(--muted); }
+.aywa-instruments .admission-months ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 10px; }
+.aywa-instruments .admission-months li { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--muted); }
+.aywa-instruments .admission-months li b { color: var(--ink); font-weight: 700; }
+
+.aywa-instruments .op-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.aywa-instruments .op-grid li { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 9px 10px; background: var(--wash); border-radius: 6px; font-size: 13px; color: var(--ink-2); min-width: 0; }
+.aywa-instruments .op-grid b { font-size: 16px; font-weight: 800; color: var(--ink); white-space: nowrap; }
+.aywa-instruments .op-grid small { font-size: 12px; font-weight: 600; color: var(--muted); margin-left: 1px; }
+
+.aywa-instruments .work-scroll { overflow-x: auto; }
+.aywa-instruments .work-board { display: grid; grid-template-columns: 112px repeat(8, minmax(92px, 1fr)); align-items: center; gap: 7px 14px; min-width: 900px; }
+.aywa-instruments .work-label { font-size: 13px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.aywa-instruments .work-head { padding-bottom: 3px; }
+.aywa-instruments .work-head b { display: block; font-size: 13px; font-weight: 700; }
+.aywa-instruments .work-head small { display: block; font-size: 12px; color: var(--muted); }
+.aywa-instruments .work-fuel { min-width: 0; }
+.aywa-instruments .fuel-cell { fill: var(--pale); }
+.aywa-instruments .fuel:hover { filter: brightness(1.05); }
+.aywa-instruments .is-low { fill: var(--red); }
+
+/* 화면 안 상세 */
+.aywa-instruments .drawer-root[hidden] { display: none; }
+.aywa-instruments .drawer-scrim { position: fixed; inset: 0; z-index: 40; background: rgba(30, 35, 38, .28); opacity: 0; transition: opacity .16s; }
+.aywa-instruments .drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 41; width: min(780px, 100vw); background: var(--surface); box-shadow: -14px 0 34px rgba(24, 28, 31, .2); display: flex; flex-direction: column; transform: translateX(24px); opacity: 0; transition: transform .18s cubic-bezier(.2, .8, .2, 1), opacity .16s; }
+.aywa-instruments .drawer:focus { outline: none; }
+.aywa-instruments .drawer-root.is-open .drawer { transform: none; opacity: 1; }
+.aywa-instruments .drawer-root.is-open .drawer-scrim { opacity: 1; }
+.aywa-instruments .drawer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 18px 22px 14px; background: var(--charcoal); color: #fff; }
+.aywa-instruments .drawer-period { display: block; font-size: 13px; font-weight: 600; color: var(--yellow); margin-bottom: 2px; }
+.aywa-instruments .drawer-head h2 { font-size: 22px; font-weight: 800; letter-spacing: -.04em; }
+.aywa-instruments .drawer-close { flex: none; width: 34px; height: 34px; border: 0; border-radius: 6px; background: #454c51; cursor: pointer; display: grid; place-items: center; }
+.aywa-instruments .drawer-close:hover { background: #565e63; }
+.aywa-instruments .drawer-close svg { width: 16px; height: 16px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; }
+.aywa-instruments .drawer-body { flex: 1; overflow-y: auto; padding: 16px 22px 26px; display: grid; gap: 18px; align-content: start; }
+.aywa-instruments .drawer-stats { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.aywa-instruments .drawer-stats div { background: var(--wash); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+.aywa-instruments .drawer-stats dt { font-size: 12.5px; color: var(--muted); }
+.aywa-instruments .drawer-stats dd { margin: 2px 0 0; font-size: 20px; font-weight: 850; letter-spacing: -.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aywa-instruments .drawer-tools { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+.aywa-instruments .drawer-tools h3, .aywa-instruments .drawer-table h3 { font-size: 15px; font-weight: 750; letter-spacing: -.02em; }
+.aywa-instruments .drawer-table h3 { margin-bottom: 8px; }
+.aywa-instruments .drawer-table h3 small { font-size: 12.5px; font-weight: 600; color: var(--muted); margin-left: 3px; }
+.aywa-instruments .drawer-facets { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.aywa-instruments .drawer-facet { display: flex; align-items: center; gap: 7px; }
+.aywa-instruments .drawer-facet > span { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.aywa-instruments .drawer-toggles { display: flex; gap: 8px; }
+.aywa-instruments .drawer-note { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+.aywa-instruments .seg-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--surface); flex: none; }
+.aywa-instruments .seg-toggle button { border: 0; background: transparent; padding: 4px 9px; font-size: 12.5px; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.aywa-instruments .seg-toggle button + button { border-left: 1px solid var(--line); }
+.aywa-instruments .seg-toggle button[aria-pressed="true"] { background: var(--charcoal); color: #fff; }
+.aywa-instruments .table-wrap { overflow-x: auto; }
+.aywa-instruments .drawer-table table { width: 100%; border-collapse: collapse; }
+.aywa-instruments .drawer-table th, .aywa-instruments .drawer-table td { font-size: 13.5px; padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--grid); white-space: nowrap; font-weight: 500; }
+.aywa-instruments .drawer-table th:first-child { padding-left: 0; font-weight: 600; }
+.aywa-instruments .drawer-table .is-num { text-align: right; }
+.aywa-instruments .tree-toggle { width: 16px; height: 16px; margin-right: 6px; padding: 0; border: 0; background: none; cursor: pointer; vertical-align: -3px; color: var(--muted); }
+.aywa-instruments .tree-toggle::before { content: ''; display: block; width: 0; height: 0; margin: 3px 0 0 5px; border-left: 6px solid currentColor; border-top: 5px solid transparent; border-bottom: 5px solid transparent; transition: transform .12s; }
+.aywa-instruments .tree-toggle[aria-expanded='true']::before { transform: rotate(90deg); }
+.aywa-instruments .drawer-table tr[data-depth='1'] th { padding-left: 20px; font-weight: 500; }
+.aywa-instruments .drawer-table tr[data-depth='2'] th { padding-left: 62px; font-weight: 500; }
+.aywa-instruments .check-wrap { overflow-x: auto; }
+.aywa-instruments .check-card table { width: 100%; border-collapse: collapse; }
+.aywa-instruments .check-card th, .aywa-instruments .check-card td { font-size: 14px; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--grid); white-space: nowrap; font-weight: 500; }
+.aywa-instruments .check-card thead th { color: var(--muted); font-size: 12.5px; padding-top: 0; border-bottom: 1px solid var(--axis); }
+.aywa-instruments .check-card tbody tr:last-child th, .aywa-instruments .check-card tbody tr:last-child td { border-bottom: 0; }
+.aywa-instruments .check-card tbody th { font-weight: 700; }
+.aywa-instruments .check-card tbody tr:hover th, .aywa-instruments .check-card tbody tr:hover td { background: var(--wash); }
+.aywa-instruments .check-card .is-num { text-align: right; }
+.aywa-instruments .check-card .strong { font-weight: 800; font-size: 16px; }
+.aywa-instruments .check-card .area, .aywa-instruments .check-card .basis { color: var(--muted); font-size: 13px; }
+.aywa-instruments .check-card .go-cell { width: 18px; padding-right: 0; text-align: right; }
+.aywa-instruments .check-card a { color: inherit; text-decoration: none; }
+.aywa-instruments .check-open { all: unset; cursor: pointer; }
+.aywa-instruments .drawer-table thead th { color: var(--muted); font-size: 12.5px; border-bottom: 1px solid var(--axis); }
+.aywa-instruments .drawer-table td:last-child, .aywa-instruments .drawer-table th:last-child { padding-right: 0; }
+.aywa-instruments .drawer-table tr.is-focus th, .aywa-instruments .drawer-table tr.is-focus td { background: #fdf4d6; font-weight: 700; }
+
+/* ---------- 차트 공통(SVG) ---------- */
+.aywa-instruments .viz { position: relative; width: 100%; min-width: 0; }
+.aywa-instruments .chart { display: block; overflow: visible; }
+.aywa-instruments .t-axis { font-size: 12px; font-weight: 500; fill: var(--muted); }
+.aywa-instruments .t-label { font-size: 13px; font-weight: 500; fill: var(--ink-2); }
+.aywa-instruments .t-strong { font-size: 13px; font-weight: 700; fill: var(--ink); }
+.aywa-instruments .t-value { font-size: 14px; font-weight: 800; fill: var(--ink); }
+.aywa-instruments .t-stat { font-size: 20px; font-weight: 800; fill: var(--ink); }
+.aywa-instruments .t-inbar { font-size: 12px; font-weight: 700; }
+.aywa-instruments .strong-axis { font-weight: 700; fill: var(--ink-2); }
+.aywa-instruments .today { font-weight: 800; fill: var(--ink); }
+.aywa-instruments .mid { dominant-baseline: central; }
+.aywa-instruments .on-ink { fill: #fff; }
+.aywa-instruments .on-light { fill: var(--ink); }
+.aywa-instruments .grid { stroke: var(--grid); stroke-width: 1; }
+.aywa-instruments .axis { stroke: var(--axis); stroke-width: 1; }
+.aywa-instruments .bracket { fill: none; stroke: var(--axis); stroke-width: 1; }
+.aywa-instruments .connector { stroke: var(--axis); stroke-width: 1; }
+.aywa-instruments .m-yellow { fill: var(--yellow); }
+.aywa-instruments .m-char { fill: var(--charcoal); }
+.aywa-instruments .m-gray { fill: var(--gray); }
+.aywa-instruments .m-pale { fill: var(--pale); }
+.aywa-instruments .m-red { fill: var(--red); }
+.aywa-instruments .m-mid, .aywa-instruments .m-l2 { fill: var(--l2); }
+.aywa-instruments .m-l1 { fill: var(--l1); }
+.aywa-instruments .m-l3 { fill: var(--l3); }
+.aywa-instruments .track { fill: var(--wash); }
+.aywa-instruments .drop { fill: var(--wash); }
+.aywa-instruments .area { fill: var(--area); }
+.aywa-instruments .line { fill: none; stroke: var(--line-stroke); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.aywa-instruments .pt { fill: var(--point-fill); stroke: var(--line-stroke); stroke-width: 2; }
+.aywa-instruments .line.stroke-yellow { stroke: var(--yellow); }
+.aywa-instruments .pt.stroke-yellow { stroke: var(--yellow); }
+.aywa-instruments .line.stroke-gray { stroke: var(--l2); }
+.aywa-instruments .pt.stroke-gray { stroke: var(--l2); }
+.aywa-instruments .line.stroke-light { stroke: var(--gray); }
+.aywa-instruments .pt.stroke-light { stroke: var(--gray); }
+.aywa-instruments .pt.end { fill: var(--yellow); stroke: var(--line-stroke); }
+.aywa-instruments .on-dark .pt.end { stroke: #fff; }
+.aywa-instruments .pt.mini { stroke-width: 1.5; }
+.aywa-instruments .line.step-last { stroke-width: 3; }
+.aywa-instruments .ringed { stroke: var(--surface); stroke-width: 2; }
+.aywa-instruments .weekend { fill: var(--wash); }
+.aywa-instruments .cell.h0 { fill: #f0f1ee; }
+.aywa-instruments .cell.h1 { fill: var(--h1); }
+.aywa-instruments .cell.h2 { fill: var(--h2); }
+.aywa-instruments .cell.h3 { fill: var(--h3); }
+.aywa-instruments .cell.h4 { fill: var(--h4); }
+.aywa-instruments .late { fill: var(--red); stroke: #fff; stroke-width: 1.5; }
+.aywa-instruments .s-run { fill: var(--yellow); }
+.aywa-instruments .s-next { fill: var(--pale); }
+.aywa-instruments .s-done { fill: var(--l2); }
+.aywa-instruments .now { stroke: var(--red); stroke-width: 1.5; }
+.aywa-instruments .now-label { fill: var(--red); font-weight: 700; }
+.aywa-instruments .hit-area, .aywa-instruments .hit-box { fill: transparent; }
+.aywa-instruments .hit, .aywa-instruments .hit-box, .aywa-instruments [data-tip] { cursor: default; }
+.aywa-instruments .cross, .aywa-instruments .cross-dot { opacity: 0; transition: opacity .12s; pointer-events: none; }
+.aywa-instruments .cross { stroke: var(--ink-2); stroke-width: 1; }
+.aywa-instruments .cross-dot { fill: none; stroke: var(--ink); stroke-width: 1.5; }
+.aywa-instruments .hit:hover .cross, .aywa-instruments .hit:hover .cross-dot, .aywa-instruments .hit:focus .cross, .aywa-instruments .hit:focus .cross-dot { opacity: 1; }
+.aywa-instruments .hit:focus { outline: none; }
+.aywa-instruments .bar:hover, .aywa-instruments .seg:hover, .aywa-instruments .cell:hover, .aywa-instruments .float:hover, .aywa-instruments .slot:hover, .aywa-instruments .unit:hover { filter: brightness(1.06) saturate(1.05); }
+
+/* 계기판(viz-gauge.js). 다이얼 이미지는 값을 담지 않는다. */
+.aywa-instruments .gauge-asset .g-base { filter: drop-shadow(0 5px 7px rgba(24, 28, 31, .3)); }
+.aywa-instruments .gauge-asset .g-lit { filter: drop-shadow(0 0 2.5px rgba(253, 184, 17, .55)); }
+.aywa-instruments .gauge-asset .g-tick { stroke: #e9ecea; stroke-linecap: butt; }
+.aywa-instruments .gauge-asset .g-major { stroke-width: 2; stroke: #fff; }
+.aywa-instruments .gauge-asset .g-middle { stroke-width: 1.3; }
+.aywa-instruments .gauge-asset .g-minor { stroke-width: 1; stroke: #aab2b6; }
+.aywa-instruments .gauge-asset .g-num { fill: #e6e9ea; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+.aywa-instruments .gauge-asset .g-needle { filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .6)); }
+.aywa-instruments .gauge-asset .g-face-a { fill: #fbfaf5; }
+.aywa-instruments .gauge-asset .g-face-b { fill: #c9ced0; }
+.aywa-instruments .gauge-asset .g-hub { stroke: #15181a; stroke-width: 1; }
+.aywa-instruments .gauge-asset .g-hub-dot { fill: var(--yellow); }
+.aywa-instruments .gauge-asset .g-read { fill: #fff; font-weight: 700; text-anchor: middle; dominant-baseline: central; letter-spacing: -.03em; }
+.aywa-instruments .gauge-asset .g-read-unit { fill: var(--yellow); font-weight: 700; }
+.aywa-instruments .gauge-asset .g-cap { fill: #aeb7bb; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+.aywa-instruments .gauge-asset .g-glass { pointer-events: none; }
+
+/* 도넛 */
+.aywa-instruments .ring-seg { fill: none; }
+.aywa-instruments .r-char { stroke: var(--charcoal); }
+.aywa-instruments .r-red { stroke: var(--red); }
+.aywa-instruments .r-yellow { stroke: var(--yellow); }
+.aywa-instruments .r-l1 { stroke: var(--l1); }
+.aywa-instruments .r-l2 { stroke: var(--l2); }
+.aywa-instruments .ring-seg:hover { filter: brightness(1.08); }
+
+/* 하나의 말풍선 */
+.aywa-instruments #viz-tip { position: fixed; z-index: 50; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 11px; box-shadow: 0 8px 22px rgba(20, 24, 27, .18); display: grid; gap: 3px; white-space: nowrap; }
+.aywa-instruments #viz-tip[hidden] { display: none; }
+.aywa-instruments #viz-tip > b { font-size: 15px; font-weight: 800; }
+.aywa-instruments #viz-tip > span { font-size: 12.5px; color: var(--muted); }
+.aywa-instruments #viz-tip .tip-title { font-weight: 600; margin-bottom: 2px; }
+.aywa-instruments .tip-row { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; column-gap: 7px; font-size: 13px; color: var(--ink-2); }
+.aywa-instruments .tip-row b { font-size: 14px; font-weight: 800; color: var(--ink); margin-left: 14px; text-align: right; }
+.aywa-instruments .tip-key { width: 10px; height: 10px; border-radius: 2px; }
+.aywa-instruments .tip-key.m-yellow { background: var(--yellow); }
+.aywa-instruments .tip-key.m-char { background: var(--charcoal); }
+.aywa-instruments .tip-key.m-l2 { background: var(--l2); }
+.aywa-instruments .tip-key.m-gray { background: var(--gray); }
+
+/* 진입 움직임: 최종 기하는 처음부터 정확하고, 움직임은 그 위에서 잠깐만 */
+.aywa-instruments .enter .grow-y { animation: aywa-grow-y .75s cubic-bezier(.2, .8, .2, 1) both; transform-box: fill-box; transform-origin: 50% 100%; }
+.aywa-instruments .enter .grow-x { animation: aywa-grow-x .75s cubic-bezier(.2, .8, .2, 1) both; transform-box: fill-box; transform-origin: 0 50%; }
+.aywa-instruments .enter .float.m-red { transform-origin: 50% 0; }
+.aywa-instruments .enter .draw { animation: aywa-draw .9s cubic-bezier(.3, .7, .2, 1) both; stroke-dasharray: 1; }
+.aywa-instruments .enter .pt, .aywa-instruments .enter .area { animation: aywa-fade .5s .35s both; }
+@keyframes aywa-grow-y { from { transform: scaleY(0); } }
+@keyframes aywa-grow-x { from { transform: scaleX(0); } }
+@keyframes aywa-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes aywa-fade { from { opacity: 0; } }
+
+/* ---------- 반응형 ---------- */
+@container aywa (min-width: 1504px) {
+  .aywa-instruments .card-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .aywa-instruments .xl-1 { grid-column: auto; }
+  .aywa-instruments .xl-2 { grid-column: span 2; }
+  .aywa-instruments .triple-card { grid-template-columns: 166px minmax(0, 1fr) 176px; }
+  .aywa-instruments .triple-bars { grid-column: 2; grid-row: 1; }
+  .aywa-instruments .triple-card.no-gauge { grid-template-columns: minmax(0, 1fr) 176px; }
+  .aywa-instruments .triple-card.no-gauge .triple-bars { grid-column: 1; grid-row: 1; }
+  .aywa-instruments .xl-3 { grid-column: span 3; }
+}
+@container aywa (max-width: 1044px) {
+  .aywa-instruments .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container aywa (max-width: 704px) {
+  .aywa-instruments .body { padding: 18px 18px 56px; }
+  .aywa-instruments .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .aywa-instruments .kpi:nth-child(3n) { border-right: 1px solid var(--line); }
+  .aywa-instruments .kpi:nth-child(2n) { border-right: 0; }
+  .aywa-instruments .kpi:nth-last-child(-n + 3) { border-bottom: 1px solid var(--line); }
+  .aywa-instruments .kpi:last-child { border-bottom: 0; grid-column: 1 / -1; }
+}
+@container aywa (max-width: 524px) {
+  .aywa-instruments .span-2, .aywa-instruments .span-full { grid-column: auto; }
+  .aywa-instruments .head { display: block; }
+  .aywa-instruments .head-tools { margin-top: 6px; }
+  .aywa-instruments .body { padding: 16px 14px 84px; }
+  .aywa-instruments .head h1 { font-size: 22px; }
+  .aywa-instruments .kpi-grid, .aywa-instruments .card-grid { grid-template-columns: 1fr; }
+  .aywa-instruments .kpi { border-right: 0 !important; border-bottom: 1px solid var(--line) !important; }
+  .aywa-instruments .kpi:last-child { border-bottom: 0 !important; }
+  .aywa-instruments .block-title { font-size: 17px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aywa-instruments .enter .grow-y, .aywa-instruments .enter .grow-x, .aywa-instruments .enter .draw, .aywa-instruments .enter .pt, .aywa-instruments .enter .area { animation: none; }
+}
+
+
+/* 앱 안에서 보일 때 — 시안의 왼쪽 메뉴·상단 띠는 앱 셸이 맡는다. */
+.aywa-instruments.aywa-board { container: aywa / inline-size; min-height: 100%; background: var(--page); }
+/* 앱 본문 여백·왼쪽 메뉴까지 같은 색으로 — 이 화면이 떠 있을 때만이다. 색은 메뉴 안에서만 바꿔 다른 화면에 닿지 않는다. */
+main:has(.aywa-board) { background: #f1f1ed; }
+body:has(.aywa-board) [data-shell-sidebar] {
+  --sidebar: #f1f1ed;
+  --sidebar-accent: #e7e9e6;
+  --bg-soft: #e7e9e6;
+  --line: #dfe1dc;
+  --primary: #363c41;
+  --primary-foreground: #fdb811;
+}
+body:has(.aywa-board) [data-shell-sidebar] .shadow-primary-glow { box-shadow: none; }
+.aywa-instruments .design-switch { font-size: 13px; font-weight: 800; color: var(--charcoal); background: var(--yellow); border: 1px solid var(--yellow); border-radius: 6px; padding: 6px 12px; white-space: nowrap; cursor: pointer; }
+.aywa-instruments .design-switch:hover { filter: brightness(.96); }
+.aywa-instruments .refresh { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; color: var(--ink-2); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+.aywa-instruments .refresh:disabled { opacity: .5; cursor: default; }
+.aywa-instruments .fresh i.is-warn { background: var(--red); }
+.aywa-instruments .subject-choices { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.aywa-instruments .subject-choices a { font-size: 13px; font-weight: 700; padding: 5px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.aywa-instruments .subject-choices a[aria-current='page'] { background: var(--charcoal); border-color: var(--charcoal); color: #fff; }
+.aywa-instruments .op-grid a { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; width: 100%; }
+.aywa-instruments .foot.is-alert { color: var(--red); }
+
+/* 수치 칸은 놓인 칸 수에 맞춘다 — 8칸은 4 × 2, 남는 칸은 마지막 칸이 채운다. */
+@container aywa (min-width: 705px) {
+  .aywa-instruments .kpi:last-child { grid-column: var(--kpi-last, auto); }
+  .aywa-instruments .kpi-grid[data-cols='4'] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .aywa-instruments .kpi-grid[data-cols='4'] .kpi:nth-child(3n) { border-right: 1px solid var(--line); }
+  .aywa-instruments .kpi-grid[data-cols='4'] .kpi:nth-child(4n) { border-right: 0; }
+  .aywa-instruments .kpi-grid[data-cols='4'] .kpi:nth-last-child(-n + 3) { border-bottom: 1px solid var(--line); }
+  .aywa-instruments .kpi-grid[data-cols='4'] .kpi:nth-last-child(-n + 4) { border-bottom: 0; }
+}
+
+/* 전환 — 어떤 버튼을 눌러도 끊기지 않게. 그래프는 viz-core의 morph가, 글자와 표는 여기서 맡는다. */
+@keyframes aywa-rise { from { opacity: 0; transform: translateY(4px); } }
+.aywa-instruments.aywa-board { animation: aywa-fade .24s ease-out; }
+.aywa-instruments .headline, .aywa-instruments .drawer-swap, .aywa-instruments .work-board { animation: aywa-rise .28s ease-out both; }
+.aywa-instruments .seg-toggle button { transition: background-color .16s, color .16s; }
+.aywa-instruments .drawer-swap-group { display: grid; gap: 18px; }
+@media (prefers-reduced-motion: reduce) {
+  .aywa-instruments.aywa-board, .aywa-instruments .headline, .aywa-instruments .drawer-swap, .aywa-instruments .work-board { animation: none; }
+}
+
+/* 상세 표의 줄 상태 — 지금·오늘은 강조, 끝난 줄은 흐리게, 취소는 줄을 긋는다. */
+.aywa-instruments .drawer-table tr.is-now th, .aywa-instruments .drawer-table tr.is-now td { background: #fdf4d6; }
+.aywa-instruments .drawer-table tr.is-muted th, .aywa-instruments .drawer-table tr.is-muted td { opacity: .42; }
+.aywa-instruments .drawer-table tr.is-struck th, .aywa-instruments .drawer-table tr.is-struck td { opacity: .5; text-decoration: line-through; }
+.aywa-instruments .timeline-scroll { max-height: 240px; overflow-y: auto; }

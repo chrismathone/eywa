@@ -200,6 +200,8 @@ export function Overview({
   demoRoster = null,
   chartKinds: initialKinds = DEFAULT_CHART_KINDS,
   preview = false,
+  onSwitchDesign,
+  onPreloadDesign,
 }: {
   initial: OverviewSnapshot;
   /** 추이 패널 막대/꺾은선 — 계정 귀속(`ui_prefs.dashboard`). */
@@ -208,6 +210,10 @@ export function Overview({
   demoRoster?: DemoRosterControl | null;
   /** 학원 설정 '대시보드 관리'의 미리보기 — 갱신·실시간 구독을 끈다(역할로 다듬은 고정 스냅샷). */
   preview?: boolean;
+  /** 맨 위 '대시보드 전환' — 미리보기·편집기에는 없다. */
+  onSwitchDesign?: () => void;
+  /** 버튼에 손이 갔을 때 — 전환 화면을 미리 받아 둔다. */
+  onPreloadDesign?: () => void;
 }) {
   const hydrated = useSyncExternalStore(
     subscribeHydration,
@@ -1447,11 +1453,11 @@ export function Overview({
           <img className={appearance.headerArtwork} src="/previews/dashboard/study.webp" width="96" height="64" alt="" aria-hidden />
           <div className={s.headerTools}>
             {demoRoster ? <DemoRosterSwitch control={demoRoster} /> : null}
-            {snapshot.allowed.includes("timetable") && snapshot.allowed.includes("classes") && (
-                <Jump href="/dashboard?view=rooms" className={s.classroomPreview}>
-                  강의실 2D/3D
-                </Jump>
-              )}
+            {onSwitchDesign ? (
+              <button type="button" className={s.designSwitch} onClick={onSwitchDesign} onPointerEnter={onPreloadDesign} onFocus={onPreloadDesign}>
+                대시보드 전환
+              </button>
+            ) : null}
             <div
               className={s.freshness}
               title="표시 시각은 에이와 DB 조회 시각입니다. 외부 서비스의 동기화 완료 시각과는 다릅니다."

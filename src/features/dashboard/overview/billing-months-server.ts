@@ -78,7 +78,13 @@ type Db = Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdm
  * 청구서는 달마다 수백 장이라 페이지로(B2), 수강은 학생 id 청크 × 페이지로(B3 · 청크 안 1,000행 절단 방지).
  * `tenantId`는 admin(캐시 안) 경로에서만 — RLS를 우회하므로 지점 필터가 필수다([[#104]]).
  */
-async function classifiedInvoices(client: Db, months: string[], tenantId?: string): Promise<ClassifiedInvoice[]> {
+async function classifiedInvoices(
+  client: Db,
+  months: string[],
+  tenantId?: string,
+  /** 줄의 과목을 무엇으로 볼지 — 없으면 반의 과목 그대로('대시보드 전환' 과목 탭은 영어를 EiE · 인재원 영어로 가른다). */
+  subjectKeyOf?: (subject: string | null, englishTrack: string | null) => string | null,
+): Promise<ClassifiedInvoice[]> {
   if (!months.length) return [];
   type Inv = InvoiceForSubject & { student_id: string | null };
   const invoices = await fetchAllPaged<Inv>((from, to) => {
@@ -88,10 +94,10 @@ async function classifiedInvoices(client: Db, months: string[], tenantId?: strin
   });
   type One<T> = T | T[] | null;
   const studentIds = [...new Set(invoices.map((i) => i.student_id).filter((id): id is string => !!id))];
-  const enrollments = await fetchAllPagedInChunks<{ student_id: string; class_id: string; start_date: string | null; end_date: string | null; class: One<{ class_name: string | null; subject: string | null }> }>(
+  const enrollments = await fetchAllPagedInChunks<{ student_id: string; class_id: string; start_date: string | null; end_date: string | null; class: One<{ class_name: string | null; subject: string | null; english_track: string | null }> }>(
     studentIds,
     (chunk, from, to) => {
-      let q = client.from("enrollments").select("student_id,class_id,start_date,end_date,class:class_id ( class_name, subject )").in("student_id", chunk);
+      let q = client.from("enrollments").select("student_id,class_id,start_date,end_date,class:class_id ( class_name, subject, english_track )").in("student_id", chunk);
       if (tenantId) q = q.eq("tenant_id", tenantId);
       return q.order("id").range(from, to);
     },
@@ -103,7 +109,8 @@ async function classifiedInvoices(client: Db, months: string[], tenantId?: strin
       .filter((e) => enrollmentInMonth({ start: e.start_date, end: e.end_date }, inv.period))
       .map((e) => {
         const klass = Array.isArray(e.class) ? e.class[0] : e.class;
-        return { classId: e.class_id, className: klass?.class_name ?? null, subject: klass?.subject ?? null };
+        const subject = klass?.subject ?? null;
+        return { classId: e.class_id, className: klass?.class_name ?? null, subject: subjectKeyOf ? subjectKeyOf(subject, klass?.english_track ?? null) : subject };
       });
     return classifyInvoice(inv, classes);
   });
@@ -125,6 +132,7 @@ export async function loadBillingMonths(
   tenantId: string,
   months: string[],
   withSubjects: boolean,
+  subjectKeyOf?: (subject: string | null, englishTrack: string | null) => string | null,
 ): Promise<(pred: SlicePredicate | null) => SubjectBillingSummary[]> {
   const db = await createClient();
   const current = months[months.length - 1];
@@ -140,7 +148,9 @@ export async function loadBillingMonths(
         .range(from, to),
     ),
     // 과목 관리자 값(원장 2026-10-14 2단계 — 청구 항목별)은 그 값이 필요할 때만 줄 항목·수강을 읽는다.
-    withSubjects
+    subjectKeyOf
+      ? classifiedInvoices(db, months, undefined, subjectKeyOf)
+      : withSubjects
       ? Promise.all([loadPastClassifiedInvoices(tenantId, months.slice(0, -1)), classifiedInvoices(db, [current])]).then(([a, b]) => [...a, ...b])
       : Promise.resolve([] as ClassifiedInvoice[]),
   ]);

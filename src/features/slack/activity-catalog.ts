@@ -89,6 +89,8 @@ const RULES: readonly [string, string][] = [
   ["exam_", "sheets"],
   ["staff_", "staff"],
   ["approval_", "staff"],
+  // 업무 요청(s2_0018) — 요청 → 보고 → 검토. 아직 미리보기 단계라 슬랙으로는 안 흘린다(FORBID_KEYS · SQL 머리말 약속).
+  ["work_request_", "staff"],
   ["leave_", "staff"],
   ["self_", "staff"],
   ["resume_", "staff"],
@@ -106,6 +108,8 @@ const RULES: readonly [string, string][] = [
   ["document_", "comms"],
   ["notion_", "comms"],
   ["briefing_", "comms"],
+  // 운영실 업무 비서 'AI로 정리'(사람이 누른 유료 AI) — 감사로그 화면에서만(FORBID_KEYS).
+  ["dashboard_secretary_", "comms"],
   ["shuttle_", "ops"],
   ["parent_account_", "ops"], // 학부모 계정 발급·삭제(셔틀 학부모 등하원)
   ["inventory_", "ops"],
@@ -159,6 +163,10 @@ const FORBID_KEYS = new Set([
   "timetable_cell_memo_add",
   "timetable_cell_memo_update",
   "timetable_cell_memo_delete",
+  // 업무 요청 · 업무 비서 — 슬랙과 잇지 않는다(업무 요청 SQL 머리말 · 미리보기 단계).
+  "work_request_create",
+  "work_request_act",
+  "dashboard_secretary_run",
 ]);
 /** 대상 문구 없이 — 돈 계열(금액·계좌가 대상 라벨에 섞일 수 있다) + 연차. */
 const OPAQUE_CATEGORIES = new Set(["billing"]);
