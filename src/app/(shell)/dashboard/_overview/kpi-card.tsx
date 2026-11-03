@@ -22,9 +22,11 @@ export function KpiCard({
   detail,
   detailPrefix,
   labelNote,
+  labelNoteLead,
   icon,
   error,
   popupTitle,
+  popupWide,
   jump,
   helpKey,
   rename,
@@ -35,6 +37,11 @@ export function KpiCard({
   unit: string;
   detail: string;
   labelNote?: string;
+  /**
+   * 꼬리표 앞말(예: '지난달') — 자리가 있을 때만 보인다. 모자라면 앞말이 통째로 빠지고 `labelNote`(예: '(26.10)')가 남는다
+   * (말줄임으로 뒤쪽 달이 잘리지 않게 · 운영실 퇴원 칸).
+   */
+  labelNoteLead?: string;
   /**
    * 접근성 설명과 오류 팝업 앞에 **항상** 붙는 말(기준일 등).
    * 🔴 실패 문구는 `detail`을 통째로 대체한다 — 숫자의 뜻을 정하는 값(어느 날 숫자인가)을 `detail`에 넣으면
@@ -53,6 +60,8 @@ export function KpiCard({
    * 최근 결석의 붉은 색 같은 칸 규칙이 이름을 바꿔도 따라간다.
    */
   rename?: string;
+  /** 넓은 팝업(명단 2단) — `DetailPopup` `wide`. */
+  popupWide?: boolean;
   children: ReactNode;
 }) {
   const cardId = useDashboardCardId();
@@ -64,6 +73,7 @@ export function KpiCard({
     <div className={s.kpi} data-overview="kpi" data-kpi={label} data-help={helpKey} data-dashboard-card={cardId}>
       <DetailPopup
         title={popupTitle}
+        wide={popupWide}
         ariaLabel={`${name} ${value}${missing ? "" : unit}. ${text}. 자세히 보기`}
         trigger={<button type="button" className={s.kpiBody} />}
         label={
@@ -71,7 +81,15 @@ export function KpiCard({
             <span className={s.kpiLabel} data-overview="kpi-label">
               <span className={s.kpiIcon}>{icon}</span>
               <span className={s.kpiName}>{name}</span>
-              {labelNote && <small className={s.kpiPeriod}>{labelNote}</small>}
+              {labelNote && (labelNoteLead ? (
+                // 순서를 거꾸로 두고(row-reverse) 한 줄만 보이게 — 달이 먼저 자리를 잡고, 앞말은 남는 자리에 들어갈 때만 보인다.
+                <small className={`${s.kpiPeriod} ${s.kpiPeriodSplit}`} title={`${labelNoteLead} ${labelNote}`}>
+                  <span>{labelNote}</span>
+                  <span>{labelNoteLead}</span>
+                </small>
+              ) : (
+                <small className={s.kpiPeriod}>{labelNote}</small>
+              ))}
               {error && <span className={s.textDanger} title={body} aria-hidden>!</span>}
             </span>
             <span className={s.kpiValue} data-overview="kpi-value">

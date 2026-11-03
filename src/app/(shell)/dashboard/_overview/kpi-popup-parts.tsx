@@ -76,7 +76,7 @@ export function NameCell({
   ariaLabel?: string;
   children: ReactNode;
 }) {
-  if (!href) return <b className={s.kpiName}>{children}</b>;
+  if (!href) return <b className={s.kpiName} title={title}>{children}</b>;
   return (
     <WindowLink href={href} title={title} ariaLabel={ariaLabel} className={`${s.kpiName} ${s.studentLink}`}>
       {children}

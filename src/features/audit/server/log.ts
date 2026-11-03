@@ -697,6 +697,8 @@ export const AUDIT_ACTIONS = {
   makeup_accept_units: "보강관리 시수 차이 승인",
   makeup_configure: "보강관리 설정 변경",
   makeup_reconcile: "보강관리 대사 실행",
+  before_class_target_add: "비포클래스체크리스트 반 추가",
+  before_class_target_remove: "비포클래스체크리스트 반 빼기",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 
