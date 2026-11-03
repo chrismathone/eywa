@@ -16,6 +16,17 @@ export function clampNotificationLimit(limit: unknown): number {
 /** 벨 목록 뷰 — active=받은함(비보관, 기본) / archived=보관함(0125a). */
 export type NotificationView = "active" | "archived";
 
+/** 하루 한 번 새 행으로 오는 '기한 초과 업무 N건' 요약(staff-tasks/server/digest.ts). */
+export const DIGEST_TYPE = "staff_task_digest";
+
+const COLS = "id, type, title, body, link, read_at, created_at";
+type Row = { id: string; type: string; title: string; body: string | null; link: string | null; read_at: string | null; created_at: string };
+/** 목록과 같은 순서(안 읽음 먼저 · 각각 최근순)에 요약 한 장을 끼우고 상한으로 자른다. */
+function withDigest(rows: Row[], digest: Row, cap: number): Row[] {
+  const rank = (r: Row) => (r.read_at === null ? 0 : 1);
+  return [...rows, digest].sort((a, b) => rank(a) - rank(b) || Date.parse(b.created_at) - Date.parse(a.created_at)).slice(0, cap);
+}
+
 /**
  * 내 알림 목록(최신순) + 안 읽은 수 — RLS(recipient_id=auth.uid())로 본인 것만.
  * unread 배지는 **비보관만** 센다(보관=치웠다는 의사표시인데 배지가 계속 울리면 보관이 무의미).
@@ -33,17 +44,24 @@ export async function getMyNotifications(
   const supabase = await createClient();
   // 내 할 일 수(0377a)는 목록과 상관없다 — 먼저 띄워 두고 함께 기다린다(B4).
   const summaryPromise = myTaskSummary();
+  // 기한 초과 업무 요약은 **가장 최근 한 장만** 받은함 · 배지에 둔다(원장 2026-11-02 *"너무 알림이 정신없음"* — 숫자만 다른 같은 카드가
+  // 매일 한 장씩 쌓여 받은함 위를 덮었다). 받은함 목록 · 수에서는 요약을 빼고, 보관 안 한 가장 최근 요약 한 장을 **함께** 읽어 끼운다(B4 —
+  // 기다리는 차례를 늘리지 않는다). 지난 요약은 지우지도 읽음으로 바꾸지도 않고 받은함에서만 가린다(30일 정리 0447a 그대로) — 보이는 요약을
+  // 보관 · 삭제하면 가린 지난 요약도 함께 보관한다(actions.ts · 안 그러면 하루 전 요약이 다시 올라온다).
+  // 🔴 배지 수 · 최근 요약은 보관함 화면에서도 같게 센다 — 벨은 어느 화면의 응답이든 이 수로 배지를 덮는다. 목록에 끼우는 것만 받은함.
+  const collapse = view === "active";
 
   // 안 읽은 알림이 위로(원장 2026-10-29 *"안읽은 알림이 상단에 오도록"*) — 안 읽음을 상한까지 먼저, 남은 자리를 읽은 알림(최근순)으로.
   //    서버에서 나눠 읽어야 '더 보기'(상한을 늘려 다시 읽음)를 해도 순서가 흔들리지 않는다.
   const cap = clampNotificationLimit(limit);
   const page = (read: boolean, size: number) => {
-    const q = supabase
+    const base = supabase
       .from("notifications")
-      .select("id, type, title, body, link, read_at, created_at")
+      .select(COLS)
       .neq("type", "daily_briefing") // 폐지된 브리핑 알림은 목록 상한을 적용하기 전에 제외한다.
       .order("created_at", { ascending: false })
       .limit(size);
+    const q = collapse ? base.neq("type", DIGEST_TYPE) : base;
     const scoped = view === "archived" ? q.not("archived_at", "is", null) : q.is("archived_at", null);
     return read ? scoped.not("read_at", "is", null) : scoped.is("read_at", null);
   };
@@ -55,17 +73,21 @@ export async function getMyNotifications(
     // 읽은 쪽만 실패하면 안 읽은 알림이라도 보인다(벨이 통째로 비지 않게).
     return readPage.error ? { ...unreadPage, data: first } : { ...readPage, data: [...first, ...(readPage.data ?? [])] };
   });
-
-  // 목록과 안읽음 카운트는 독립 → 병렬(B4). 카운트는 head:true로 행 미수신.
-  const [{ data }, { count }] = await Promise.all([
-    listPromise,
-    supabase
+  const countPromise = (() => {
+    const base = supabase
       .from("notifications")
       .select("*", { count: "exact", head: true })
-      .neq("type", "daily_briefing") // 보이지 않는 알림 때문에 배지가 남지 않도록 같은 기준 사용.
-      .is("read_at", null)
-      .is("archived_at", null),
-  ]);
+      .neq("type", "daily_briefing"); // 보이지 않는 알림 때문에 배지가 남지 않도록 같은 기준 사용.
+    return base.neq("type", DIGEST_TYPE).is("read_at", null).is("archived_at", null);
+  })();
+  const digestPromise = supabase.from("notifications").select(COLS).eq("type", DIGEST_TYPE).is("archived_at", null)
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+
+  // 목록 · 안읽음 카운트 · 최근 요약은 서로 독립 → 병렬(B4). 카운트는 head:true로 행 미수신.
+  const [listed, { count }, digest] = await Promise.all([listPromise, countPromise, digestPromise]);
+  // 요약을 못 읽으면 이번엔 요약 없이 낸다(목록 · 배지는 그대로 — 다음 갱신에 다시 읽는다).
+  const latest = !digest.error ? ((digest.data as Row | null) ?? null) : null;
+  const data = latest && collapse && !listed.error ? withDigest((listed.data ?? []) as Row[], latest, cap) : listed.data;
 
   const items: NotificationItem[] = (data ?? []).map((n) => ({
     id: n.id,
@@ -79,7 +101,7 @@ export async function getMyNotifications(
   // 할 일(0377a) — 이 알림들의 처리 상태 · 내 할 일 수. 실패해도 목록은 그대로 낸다(벨이 비면 안 된다).
   const [badges, summary] = await Promise.all([notificationTaskBadges(items.map((i) => i.id)), summaryPromise]);
   return {
-    unread: count ?? 0,
+    unread: (count ?? 0) + (latest && latest.read_at === null ? 1 : 0),
     items: items.map((i) => {
       const task = badges.get(i.id);
       return presentNotification(task ? { ...i, task } : i);

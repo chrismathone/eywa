@@ -22,6 +22,8 @@ export const TENANT_MODEL_FEATURES: readonly TenantModelFeature[] = [
   { key: "student_care", label: "원생 AI 케어", area: "원생상담", waits: true },
   { key: "meeting_analysis", label: "녹음 분석", area: "회의록" },
   { key: "daily_briefing", label: "일일 브리핑", area: "운영실" },
+  // 원장 · 관리자가 'AI로 정리'를 누르고 화면에서 기다린다(2026-11-02).
+  { key: "dashboard_secretary", label: "업무 비서 정리", area: "운영실", waits: true },
   { key: "attendance_recap", label: "출결 요약", area: "출결" },
   { key: "parent_attendance_intent", label: "학부모 결석 문자 판별", area: "출결" },
   { key: "parent_satisfaction", label: "학부모 글 만족도 판정", area: "강사평가" },

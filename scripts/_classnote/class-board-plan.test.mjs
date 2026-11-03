@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 import {
   JOIN_WAIT_REASON,
+  OPTOUT_NO_CREATE_REASON,
   VERIFIED_GONE_REASON,
   baseName,
   childNameConsistent,
@@ -316,6 +317,53 @@ describe("planClassBoards — 반 단위", () => {
     const [p] = planClassBoards({ ...w, classes: cls(["s1", "s2"]) });
     expect(p.board).toEqual({ action: "exists", id: 50, name: "중등M 중1 BS3E" });
   });
+  describe("보고서 미발송(JJ) 반 — 원장 2026-11-03 에이와와 맞춤(연결·배정) · 학생이 있을 때만 새 보드", () => {
+    const jj = (studentIds) => [{ classId: "c1", className: "초등M 개별 JJ2M", studentIds, reportOptout: true }];
+    it("같은 이름 보드가 없으면 — 지금 다니는 학생이 있으면 만들고(원장 *\"반에 학생이 있다면 배정해야함\"*) 없으면 보류 · 계획에 미발송 표식", () => {
+      const [p] = planClassBoards({ ...world(), classes: jj(["s1"]) });
+      expect(p.board).toEqual({ action: "create" });
+      expect(p.reportOptout).toBe(true);
+      expect(p.assign.map((a) => a.studentId)).toEqual(["s1"]);
+      const [empty] = planClassBoards({ ...world(), classes: jj([]) });
+      expect(empty.board).toEqual({ action: "block", reason: OPTOUT_NO_CREATE_REASON, notice: true }); // notice = 실패가 아니라 안내(리뷰 C1)
+      // 보고서 발송 반은 학생이 없어도 종전대로 만든다
+      const [q] = planClassBoards({ ...world(), classes: cls([]) });
+      expect(q.board).toEqual({ action: "create" });
+      expect(q.reportOptout).toBeUndefined();
+    });
+    it("같은 이름 보드에 낯선 원아가 있으면 — 확인 전엔 보류하고 그 원아를 채택 후보로 넘긴다", () => {
+      const w = world();
+      w.boards.push({ id: 50, name: "초등M 개별 JJ2M" });
+      w.membersByBoard.set(50, [{ id: 101, name: "김근우" }, { id: 999, name: "지난학생" }]);
+      const [p] = planClassBoards({ ...w, classes: jj(["s1"]) });
+      expect(p.board.action).toBe("block");
+      expect(p.board.adoptCandidate).toEqual({ boardId: 50, boardName: "초등M 개별 JJ2M", strangers: [{ id: 999, name: "지난학생" }] });
+    });
+    it("낯선 원아가 전부 '이 반의 지난 학생'으로 증명되면 채택한다 — 그 원아는 명단 밖(자동 해제 대상)으로 남는다", () => {
+      const w = world();
+      w.boards.push({ id: 50, name: "초등M 개별 JJ2M" });
+      w.membersByBoard.set(50, [{ id: 101, name: "김근우" }, { id: 999, name: "지난학생" }]);
+      const [p] = planClassBoards({ ...w, classes: jj(["s1"]), formerFamilyByClass: new Map([["c1", new Set([999])]]) });
+      expect(p.board).toEqual({ action: "exists", id: 50, name: "초등M 개별 JJ2M", adoptedFormer: 1 });
+      expect(p.extraChildren).toEqual([{ id: 999, name: "지난학생" }]);
+      expect(p.assign).toEqual([{ studentId: "s1", name: "김근우A", children: [{ id: 101, name: "김근우", already: true }], source: "personal" }]);
+    });
+    it("🔴 하나라도 증명되지 않으면 종전대로 보류 · 보고서 발송 반은 확인 결과가 있어도 G2 그대로(채택 규칙을 넓히지 않는다)", () => {
+      const w = world();
+      w.boards.push({ id: 50, name: "초등M 개별 JJ2M" });
+      w.membersByBoard.set(50, [{ id: 101, name: "김근우" }, { id: 998, name: "남" }, { id: 999, name: "지난학생" }]);
+      const [p] = planClassBoards({ ...w, classes: jj(["s1"]), formerFamilyByClass: new Map([["c1", new Set([999])]]) });
+      expect(p.board.action).toBe("block");
+      expect(p.board.reason).toContain("이 반 학생도 이 반의 지난 학생도 아닌 원아 1명");
+      expect(p.board.adoptCandidate).toBeUndefined();
+      const w2 = world();
+      w2.boards.push({ id: 50, name: "중등M 중1 BS3E" });
+      w2.membersByBoard.set(50, [{ id: 101, name: "김근우" }, { id: 999, name: "지난학생" }]);
+      const [q] = planClassBoards({ ...w2, classes: cls(["s1"]), formerFamilyByClass: new Map([["c1", new Set([999])]]) });
+      expect(q.board.action).toBe("block");
+      expect(q.board.adoptCandidate).toBeUndefined();
+    });
+  });
   it("🔴 G2 — (수학)·[ALL] 모양 반 이름은 반 보드로 쓰지 않는다(연결 없으면 보류 · 연결 있으면 이름만 안 바꿈)", () => {
     expect(reservedBoardName("(수학)홍길동")).toBeTruthy();
     expect(reservedBoardName(" (영어)홍길동")).toBeTruthy();
@@ -410,6 +458,16 @@ describe("1인 보드가 없거나 빈 학생 — 반 보드에서 확인된 원
     const w = emptied();
     w.admissions.set(101, { phone: "01011111111", boardNames: ["(수학)박준후"] });
     expect(judge(w).reasons.join()).toContain("다른 학생 1인 보드에도 있음");
+  });
+  it("🔴 보드 번호 칸만 빠진 명부(boards·allBoards null · boardNames는 배열)는 확인된 원아를 보류하지 않는다 — 수학 발송이 막히지 않게(2차 리뷰 F1)", () => {
+    const w = emptied();
+    w.admissions.set(101, { ...w.admissions.get(101), boardNames: ["중등M 중1 BS3E"], boards: null, allBoards: null });
+    expect(judge(w)).toMatchObject({ ok: true, source: "verified" });
+  });
+  it("🔴 명부의 소속 보드 칸을 못 읽었으면(null) 역방향 대조를 못 해 보류 — 빈 목록처럼 조용히 통과하지 않는다(리뷰 B3)", () => {
+    const w = emptied();
+    w.admissions.set(101, { phone: "01011111111", boardNames: null });
+    expect(judge(w).reasons.join()).toContain("소속 보드를 읽지 못함");
   });
   it("🔴 반 보드 기록에서 다른 학생에게 확인된 원아면 보류(1인 보드가 비어도 역방향을 잡는다) — 1인 보드 출처에도", () => {
     const w = emptied();
@@ -696,11 +754,12 @@ describe("🔴 배선 — 원아 연결을 모든 진입점에 같은 재료로 
     for (const f of ["math-class-boards-sync.mjs", "provision-math-class-boards.mjs"]) {
       const src = read(f);
       expect(src).toContain("await loadChildLinks(sql, tenant).catch(");
-      expect(src.match(/await loadPlan\([^)]*childLinks \}\)/g)?.length).toBe(2);
+      // 2026-11-03 — 동기화는 JJ 채택 확인 콜백(formerFamily)도 함께 넘긴다(수동 스크립트는 넘기지 않는다 — 종전대로 보류).
+      expect(src.match(/await loadPlan\([^)]*childLinks(, formerFamily)? \}\)/g)?.length).toBe(2);
       expect(src).toContain("reloadChildLinks: () => loadChildLinks(sql, tenant)");
     }
     const load = read("math-class-boards-load.mjs");
-    expect(load).toContain("verifiedOwnerScope, childLinks, childProfiles });");
+    expect(load).toContain("verifiedOwnerScope, childLinks, childProfiles };");
     expect(load).toContain("const childProfiles = await loadLinkProfiles(page, { classes, membersByBoard, admissions, verifiedChildren, childLinks });");
   });
   it("05시 준비 = 경로 판정 한 곳(mathPersonalProvisionOff) · 대상 계산 뒤 · 로그인 앞 · 확인 기록으로 거르지 않는다", () => {

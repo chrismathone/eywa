@@ -1,5 +1,6 @@
 // scripts/_classnote/class-board-release-load.mjs — 반 보드 자동 해제의 **조회부**(aywa DB 읽기만). 판정은 class-board-release.mjs(순수).
 //
+// 영어 반 방·종강 반 보드·1인 보드(원장 2026-11-03)의 조회도 여기 있다 — 묶는 곳은 class-board-release-extra.mjs.
 // 🔴 여기서 읽는 명단은 배정용 명단(loadAywa — 오늘 다니는 재원생)보다 **넓다**: 해제는 "이 반에 수강이 없다"가 근거라
 //    휴원 중·아직 시작 전인 수강도 '이 반 학생'으로 센다(그 학생의 원아를 내보내지 않는다). 조회 실패는 throw —
 //    빈 명단으로 삼키면 판정이 "명단이 비었다"로 보류하긴 하지만, 일부만 읽힌 명단은 해제로 이어진다.
@@ -12,16 +13,18 @@ const kstToday = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/
 /**
  * 반 → 수강 기록. open = **열린 수강**(종료일이 없거나 오늘 이후 — 시작 전·휴원 포함, 학생 상태 무관)이 있는 학생 ·
  * ended = 그 반 수강이 **끝난 기록**(종료일이 어제까지)이 있는 학생. 한 학생이 둘 다에 들 수 있다(나갔다가 다시 들어온 학생 — 판정은 open이 이긴다).
- * @returns {Promise<Map<string, {open:string[], ended:string[]}>>} 조회한 반은 전부 키로 든다(기록이 없으면 빈 배열).
+ * endedOn = 학생 → 그 반 수강이 **마지막으로 끝난 날**(해제 ④ 최근 7일 · ④-b 남길 보드 고르기).
+ * @returns {Promise<Map<string, {open:string[], ended:string[], endedOn:Record<string,string>}>>} 조회한 반은 전부 키로 든다(기록이 없으면 빈 값).
  */
 export async function loadClassEnrollments(sql, tenant, classIds) {
-  const out = new Map(classIds.map((id) => [id, { open: [], ended: [] }]));
+  const out = new Map(classIds.map((id) => [id, { open: [], ended: [], endedOn: {} }]));
   if (!classIds.length) return out;
   const today = kstToday();
   const rows = await sql`
     select e.class_id, e.student_id,
       bool_or(e.end_date is null or e.end_date >= ${today}) as open,
-      bool_or(e.end_date is not null and e.end_date < ${today}) as ended
+      bool_or(e.end_date is not null and e.end_date < ${today}) as ended,
+      max(e.end_date) filter (where e.end_date is not null and e.end_date < ${today})::text as ended_on
     from enrollments e
     where e.tenant_id = ${tenant} and e.class_id = any(${classIds}) and e.student_id is not null
     group by e.class_id, e.student_id`;
@@ -30,8 +33,79 @@ export async function loadClassEnrollments(sql, tenant, classIds) {
     if (!rec) continue;
     if (r.open) rec.open.push(r.student_id);
     if (r.ended) rec.ended.push(r.student_id);
+    if (r.ended_on) rec.endedOn[r.student_id] = String(r.ended_on).slice(0, 10);
   }
   return out;
+}
+
+/**
+ * 학생 → 과목별(수학 = math·subject_1 · 영어 = english) 열린 수강·끝난 기록 — 1인 보드 해제(원장 2026-11-03)의 단위가 '그 학생의 그 과목'이다.
+ * 열린 수강 = 종료일이 없거나 오늘 이후(시작 전·휴원 포함 · 반의 종강·미발송 여부와 무관 — 모르면 다니는 것으로 본다).
+ * endedOn = 그 과목 수강이 마지막으로 끝난 날(해제 ④·④-b).
+ * @returns {Promise<Map<string, {math:{open:boolean, ended:boolean, endedOn:string|null}, english:{open:boolean, ended:boolean, endedOn:string|null}}>>}
+ */
+export async function loadSubjectEnrollments(sql, tenant) {
+  const today = kstToday();
+  const rows = await sql`
+    select e.student_id,
+      bool_or(c.subject in ('math', 'subject_1') and (e.end_date is null or e.end_date >= ${today})) as math_open,
+      bool_or(c.subject in ('math', 'subject_1') and e.end_date is not null and e.end_date < ${today}) as math_ended,
+      bool_or(c.subject = 'english' and (e.end_date is null or e.end_date >= ${today})) as english_open,
+      bool_or(c.subject = 'english' and e.end_date is not null and e.end_date < ${today}) as english_ended,
+      max(e.end_date) filter (where c.subject in ('math', 'subject_1') and e.end_date is not null and e.end_date < ${today})::text as math_ended_on,
+      max(e.end_date) filter (where c.subject = 'english' and e.end_date is not null and e.end_date < ${today})::text as english_ended_on
+    from enrollments e join classes c on c.id = e.class_id and c.tenant_id = e.tenant_id
+    where e.tenant_id = ${tenant} and e.student_id is not null
+    group by e.student_id`;
+  const day = (v) => (v ? String(v).slice(0, 10) : null);
+  return new Map(rows.map((r) => [r.student_id, {
+    math: { open: !!r.math_open, ended: !!r.math_ended, endedOn: day(r.math_ended_on) },
+    english: { open: !!r.english_open, ended: !!r.english_ended, endedOn: day(r.english_ended_on) },
+  }]));
+}
+
+/**
+ * 0302a 연결이 남은 **종강** 수학 반(보고서 미발송 JJ 반 포함) — 종강 반 보드 정리(원장 2026-11-03 · 종강 7일 뒤)의 대상 후보.
+ * 판정(7일·보드가 살아 있나)은 class-board-release-targets.mjs `buildClosedPlans`.
+ */
+export async function loadClosedBoards(sql, tenant) {
+  const today = kstToday();
+  const rows = await sql`select c.id, c.class_name, c.closed_at::text as closed_at, b.board_id, b.board_name
+    from classes c join classnote_class_boards b on b.tenant_id = c.tenant_id and b.class_id = c.id
+    where c.tenant_id = ${tenant} and c.is_active and c.subject in ('math', 'subject_1')
+      and c.closed_at is not null and c.closed_at < ${today}`;
+  return rows.map((r) => ({ classId: r.id, className: r.class_name, closedAt: r.closed_at, boardId: Number(r.board_id), boardName: r.board_name }));
+}
+
+/**
+ * 영어 반 ↔ 반 방 연결(s2_0006 — 사람이 확인한 것만) + 반 상태. 표가 아직 없으면(s2_0006 전 · 웹이 이 조회를 모름) null — 영어 반 방은 건너뛴다.
+ * @returns {Promise<Array<{classId:string, className:string, boardId:number, boardName:string, isActive:boolean, closedAt:string|null}>|null>}
+ */
+export async function loadEnglishRooms(sql, tenant) {
+  try {
+    const rows = await sql`select b.class_id, b.board_id, b.board_name, c.class_name, c.is_active, c.closed_at::text as closed_at
+      from classnote_english_class_boards b join classes c on c.tenant_id = b.tenant_id and c.id = b.class_id
+      where b.tenant_id = ${tenant} and c.subject = 'english'`;
+    return rows.map((r) => ({ classId: r.class_id, className: r.class_name, boardId: Number(r.board_id), boardName: r.board_name, isActive: !!r.is_active, closedAt: r.closed_at ?? null }));
+  } catch (e) {
+    if (e?.code === "42P01" || e?.code === "unknown_operation" || /42P01|does not exist/.test(String(e?.message ?? ""))) return null;
+    throw e;
+  }
+}
+
+/**
+ * 열린 영어 수강(종료일이 없거나 오늘 이후 — 시작 전 포함) — 영어 반 방 해제에서 주인이 **방 연결이 없는 다른 영어 반**에 다니는지
+ * 본다(리뷰 A6). 반이 폐지(비활성)됐어도 열린 수강이 남아 있으면 넣는다(리뷰 R8 — 모르면 보류 쪽).
+ * 🔴 조회 실패는 throw(빈 목록이면 그 가드가 조용히 꺼진다 — 넓힌 대상 조회가 통째로 건너뛰어진다).
+ * @returns {Promise<Array<{studentId:string, classId:string, className:string}>>}
+ */
+export async function loadOpenEnglish(sql, tenant) {
+  const today = kstToday();
+  const rows = await sql`select e.student_id, c.id as class_id, c.class_name
+    from enrollments e join classes c on c.tenant_id = e.tenant_id and c.id = e.class_id
+    where e.tenant_id = ${tenant} and e.student_id is not null and c.subject = 'english'
+      and (e.end_date is null or e.end_date >= ${today})`;
+  return rows.map((r) => ({ studentId: r.student_id, classId: r.class_id, className: r.class_name }));
 }
 
 /** 원아 id → 학생 id(0185a 원아 링크 — 원아 하나에 한 줄). */

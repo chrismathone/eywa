@@ -38,6 +38,11 @@ describe("줄 만들기 — 이유까지 한글 한 줄로", () => {
       { group: "held", className: "나반", text: "박도윤: 학부모 미가입 / 1인 보드 없음", name: "박도윤" },
     ]);
   });
+  it("🔴 학생이 없어 일부러 안 만든 보고서 미발송(JJ) 반은 '실패'가 아니라 '보류' 안내 — 실패 수·버튼 숫자에 안 든다(리뷰 C1)", () => {
+    const lines = planEvents([{ className: "주말 내신 특강", board: { ["action"]: "block", reason: "학생 없음", notice: true }, hold: [] }]);
+    expect(lines).toEqual([{ group: "held", className: "주말 내신 특강", text: "반 보드를 만들지 않았습니다 — 학생 없음" }]);
+    expect(summarizeEvents(lines).failed).toBe(0);
+  });
   it("실행: 반 생성·이름 변경·원아 배정은 변동, 이름 변경 실패·그 반만 보류는 실패", () => {
     const lines = appliedEvents([
       { className: "가반", created: true, renamed: null, enrolled: [{ name: "김민준", childId: 1 }], skipped: null },

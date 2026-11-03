@@ -195,17 +195,17 @@ export async function getEnrollmentStats(
   };
 }
 
-/** Dashboard: previous and current month only, including December across a year boundary. */
-export async function getRecentEnrollmentStats(today: string): Promise<EnrollmentStats> {
+/** Dashboard: previous and current month by default, including December across a year boundary. `count` = 이번 달까지 몇 달. */
+export async function getRecentEnrollmentStats(today: string, count = 2): Promise<EnrollmentStats> {
   const current = today.slice(0, 7);
-  const previous = shiftMonth(current, -1);
+  const first = shiftMonth(current, -(count - 1));
   const db = await createClient();
   const { data, error } = await db.rpc("consultation_monthly_stats", {
-    p_start: monthStartIso(previous),
+    p_start: monthStartIso(first),
     p_end: monthStartIso(shiftMonth(current, 1)),
   });
   if (error) throw error;
-  const months = fillMonths((data ?? []).map(toMonthStat), Number(previous.slice(0, 4)), Number(previous.slice(5)) - 1, 2);
+  const months = fillMonths((data ?? []).map(toMonthStat), Number(first.slice(0, 4)), Number(first.slice(5)) - 1, count);
   const total = months.reduce((sum, row) => sum + row.total, 0);
   const enrolled = months.reduce((sum, row) => sum + row.enrolled, 0);
   return {

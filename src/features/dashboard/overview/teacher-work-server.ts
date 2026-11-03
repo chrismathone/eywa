@@ -21,7 +21,15 @@ import { isModuleEnabled } from "@/lib/modules";
 import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
 
 /** RLS 반 범위에서 현재 담당 반의 업무를 집계한다. 관리자 조회도 테넌트·허용 반으로 제한한다. */
-export async function loadTeacherWork(tenantId: string, today: string, scope: TeacherScope | null, settings: TenantSettings) {
+export async function loadTeacherWork(
+  tenantId: string,
+  today: string,
+  scope: TeacherScope | null,
+  settings: TenantSettings,
+  /** 강사 열을 무엇으로 가를지 — 없으면 반의 과목 그대로. '대시보드 전환' 카드는 영어를 EiE · 인재원 영어로 가른다. */
+  subjectKeyOf?: (subject: string | null, englishTrack: string | null) => string | null,
+) {
+  const columnOf = (c: { subject: string; english_track: string | null }) => subjectKeyOf?.(c.subject, c.english_track) ?? c.subject;
   const db = await createClient();
   // 영상 숙제도 보고서와 같은 최근 7일(원장 2026-10-19 *"최근 7일과 맞도록 하단 표 확인"*) — 종전 30일. 학부모 미확인만 30일(학습·학부모 보고 카드와 같은 판정).
   const range = { reportFrom: addDays(today, -6), videoFrom: addDays(today, -6), to: today };
@@ -32,8 +40,8 @@ export async function loadTeacherWork(tenantId: string, today: string, scope: Te
   const unreadFrom = addDays(today, -(UNREAD_WINDOW_DAYS - 1));
   const reportFetchFrom = unreadFrom < range.videoFrom ? unreadFrom : range.videoFrom;
   // 반 = 출결용(운영실 신호와 같은 범위 — 보고서 미발송 반 · 창 안에 닫힌 반 포함) ⊇ 열·보고서용(보고서 받는 반 · 오늘 열린 반).
-  const classes = await fetchAllPaged<{ id: string; class_name: string; subject: string; teacher_id: string | null; report_optout: boolean | null; closed_at: string | null }>((from, to) =>
-    db.from("classes").select("id,class_name,subject,teacher_id,report_optout,closed_at").eq("tenant_id", tenantId).eq("is_active", true)
+  const classes = await fetchAllPaged<{ id: string; class_name: string; subject: string; english_track: string | null; teacher_id: string | null; report_optout: boolean | null; closed_at: string | null }>((from, to) =>
+    db.from("classes").select("id,class_name,subject,english_track,teacher_id,report_optout,closed_at").eq("tenant_id", tenantId).eq("is_active", true)
       .or(`closed_at.is.null,closed_at.gte.${attendanceFrom}`).order("id").range(from, to));
   const inScope = classes.filter((c) => !isTestClass(c.class_name) && (!scope || scope.classIds.includes(c.id)));
   const visible = inScope.filter((c) => c.report_optout !== true && (!c.closed_at || c.closed_at >= today));
@@ -103,7 +111,7 @@ export async function loadTeacherWork(tenantId: string, today: string, scope: Te
   const workClasses: WorkClass[] = visible.filter((c) => !c.teacher_id || !retired.has(c.teacher_id)).map((c) => {
     const teacherName = c.teacher_id ? names.get(c.teacher_id) ?? "이름 확인 필요" : "담당 미지정";
     const english = subjectGroupOf(c.subject, programs) === "english";
-    return { id: c.id, name: c.class_name, teacherId: c.teacher_id, teacherName, subject: c.subject,
+    return { id: c.id, name: c.class_name, teacherId: c.teacher_id, teacherName, subject: columnOf(c),
       reportSource: settings.report.writingExemptTeachers.includes(teacherName) ? "none" : english && classnoteModuleOn(settings) ? "classnote"
         : !english && isReportTrackedSubject(c.subject, settings.report.classnoteSubjects) ? "lesson" : "none" };
   });
@@ -139,7 +147,7 @@ export async function loadTeacherWork(tenantId: string, today: string, scope: Te
       const meets = schedules.some((s) => s.class_id === c.id && s.day_of_week === dowOf(date) && !!s.valid_from && s.valid_from <= date && (!s.valid_to || s.valid_to >= date));
       if (!meets) return [];
       const judged = judgeClassAttendanceDay({ enrollments: enrollmentsOf.get(c.id) ?? [], recorded: recordedOf.get(`${c.id}|${date}`) ?? new Set(), date, dayKey: dowOf(date) });
-      return judged.expected > 0 ? [{ classId: c.id, teacherId: c.teacher_id, subject: c.subject, unrecorded: judged.unrecorded }] : [];
+      return judged.expected > 0 ? [{ classId: c.id, teacherId: c.teacher_id, subject: columnOf(c), unrecorded: judged.unrecorded }] : [];
     }));
   const counselShown = await counselShownP;
   const counselPick = pickCounselMonth(counselRows, today.slice(0, 7));

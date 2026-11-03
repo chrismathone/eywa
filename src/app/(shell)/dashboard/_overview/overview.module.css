@@ -49,7 +49,7 @@
   gap: 12px;
   align-items: center;
 }
-.classroomPreview {
+.designSwitch {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -62,10 +62,10 @@
   font-weight: 650;
   white-space: nowrap;
 }
-.classroomPreview:hover {
+.designSwitch:hover {
   background: #dfeaf6;
 }
-.classroomPreview:focus-visible {
+.designSwitch:focus-visible {
   outline: 2px solid #3284ad;
   outline-offset: 3px;
 }
