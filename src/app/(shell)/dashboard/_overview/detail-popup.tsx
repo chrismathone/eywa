@@ -24,6 +24,7 @@ export function DetailPopup({
   plain = false,
   trigger,
   ariaLabel,
+  wide = false,
 }: {
   title: string;
   label: ReactNode;
@@ -34,6 +35,8 @@ export function DetailPopup({
   trigger?: ReactElement;
   /** 트리거의 접근성 이름 — 기본은 `${title} 자세히 보기`. */
   ariaLabel?: string;
+  /** 넓은 팝업 — 명단을 2단으로 펼치는 칸(운영실 퇴원 · 원장 2026-11-03 *"스크롤 길게 하지말고 2단으로"*). */
+  wide?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const button = (
@@ -60,7 +63,7 @@ export function DetailPopup({
         </div>
       )}
       <DialogContent
-        className={`flex max-h-[min(80dvh,720px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl ${s.detailPopup}`}
+        className={`flex max-h-[min(80dvh,720px)] flex-col gap-0 overflow-hidden p-0 ${wide ? s.detailPopupWide : "sm:max-w-xl"} ${s.detailPopup}`}
         showCloseButton={false}
       >
         <div className={s.popupHeader}>
@@ -70,7 +73,7 @@ export function DetailPopup({
           </DialogClose>
         </div>
         <div
-          className={s.popupBody}
+          className={wide ? `${s.popupBody} ${s.popupBodyWide}` : s.popupBody}
           onClickCapture={(event) => {
             if (
               event.target instanceof Element &&
