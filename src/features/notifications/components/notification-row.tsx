@@ -75,7 +75,9 @@ export function NotificationRow({
             )}
           </span>
           {item.body && (
-            <span className="text-text-dim mt-1 block text-xs leading-relaxed break-keep [overflow-wrap:anywhere]">
+            // 본문은 세 줄까지(원장 2026-11-02 *"너무 알림이 정신없음"*) — 전체는 눌러서 연 화면에서. 줄바꿈(요약 두 줄)은 살린다.
+            // 눌러도 열 화면이 없는 알림(링크 없음 — 학생을 못 정한 학부모 출결 연락 등)은 자르지 않는다(나머지를 읽을 길이 없다).
+            <span className={`text-text-dim mt-1 text-xs leading-relaxed whitespace-pre-line break-keep [overflow-wrap:anywhere] ${item.link ? "line-clamp-3" : "block"}`}>
               {item.body}
             </span>
           )}
@@ -104,6 +106,9 @@ export function NotificationRow({
               {replyCount > 0 ? `답글 ${replyCount}` : "답글 쓰기"}
             </button>
           ) : null}
+          {/* 보관 · 삭제는 카드에 마우스를 올렸을 때만(키보드 초점 · 터치 화면은 늘 보인다) — 카드마다 아이콘 둘이 늘 서 있으면 목록이 시끄럽다.
+              숨은 동안은 눌리지도 않는다(터치 노트북에서 안 보이는 '삭제'를 탭하는 일 — 삭제는 되돌릴 수 없다). */}
+          <span className="pointer-events-none flex items-center gap-1 opacity-0 transition group-hover/item:pointer-events-auto group-hover/item:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100">
           <button
             type="button"
             onClick={onArchive}
@@ -126,6 +131,7 @@ export function NotificationRow({
           >
             <Trash2 className="size-3.5" />
           </button>
+          </span>
         </div>
       </div>
       {belowSlot ? <div className="pr-3 pb-2 pl-[42px]">{belowSlot}</div> : null}

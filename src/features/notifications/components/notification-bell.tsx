@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
+import { Fragment, useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import {
@@ -425,28 +425,6 @@ export function NotificationBell() {
           </div>
           )}
           <DropdownMenuSeparator className="my-0" />
-          {/* 컴퓨터(OS) 알림 권한 — 중요 알림을 브라우저 밖에서도 확실히 받게. 권한 요청은 사용자 제스처(클릭)에서만
-            가능해 여기 버튼으로 노출한다. granted면 아무것도 안 보임(조용). */}
-          {view === "active" && perm === "default" ? (
-            <button
-              type="button"
-              onClick={() => void enableDesktopNotify()}
-              className="border-line hover:bg-bg-soft flex w-full items-center gap-1.5 border-b px-3 py-2 text-left text-xs transition"
-            >
-              <EyIcon name="bell" size={13} className="text-primary shrink-0" />
-              <span className="text-foreground font-bold">
-                컴퓨터 알림 켜기
-              </span>
-              <span className="text-text-faint truncate">
-                — 창 밖에서도 받기
-              </span>
-            </button>
-          ) : view === "active" && perm === "denied" ? (
-            <p className="text-text-faint border-line border-b px-3 py-2 text-xs leading-snug break-keep">
-              컴퓨터 알림이 차단돼 있습니다 — 주소창의 자물쇠 &gt; 알림에서
-              &lsquo;허용&rsquo;으로 바꿔주세요.
-            </p>
-          ) : null}
           {/* 휴대폰(웹 푸시) 알림 — **셔틀 토글을 켠 계정에만** 뜬다(0188a). 위 컴퓨터 알림과 별개 경로:
             그쪽은 창이 열려 있을 때만이고, 이쪽은 브라우저를 닫아도 잠금화면에 뜬다. */}
           {view === "active" ? <MobilePushRow /> : null}
@@ -459,7 +437,7 @@ export function NotificationBell() {
             </div>
           ) : (
             <div ref={restoreScroll} onScroll={(e) => { listScrollRef.current = e.currentTarget.scrollTop; }} className="scrollbar-thin max-h-[min(480px,60dvh)] overflow-y-auto py-1">
-              {items.map((n) => {
+              {items.map((n, index) => {
                 // 학부모 글·댓글 알림 중 답글을 쓸 수 있는 줄에는 공감 조작(0319a)을 얹는다 — 공감 기능이 없으면 보통 알림 행 그대로.
                 const messageId = replyTargets[n.id];
                 const reaction = messageId ? (replyReactions?.[messageId] ?? null) : null;
@@ -477,7 +455,16 @@ export function NotificationBell() {
                     ),
                   onDelete: () => removeThen(n.id, () => deleteNotification(n.id, view, limit)),
                 };
-                return reaction ? <ParentNotificationRow key={n.id} reaction={reaction} {...row} /> : <NotificationRow key={n.id} {...row} />;
+                // 안 읽은 알림(위) · 읽은 알림(아래) 사이에 구분선 한 줄 — 어디까지가 새 소식인지 보이게.
+                const divider = view === "active" && n.read && index > 0 && !items[index - 1]!.read
+                  ? <p className="text-text-faint border-line/70 border-t px-3 pt-2 pb-1 text-xs">읽은 알림</p>
+                  : null;
+                return (
+                  <Fragment key={n.id}>
+                    {divider}
+                    {reaction ? <ParentNotificationRow reaction={reaction} {...row} /> : <NotificationRow {...row} />}
+                  </Fragment>
+                );
               })}
               {/* 더 보기(F17) — 목록이 꽉 찼으면 더 있을 수 있다. 목록 밖 안 읽은 알림 수를 함께 밝힌다. */}
               {items.length >= limit && limit < NOTIFICATION_LIST_MAX ? (
@@ -497,6 +484,28 @@ export function NotificationBell() {
               ) : null}
             </div>
           )}
+          {/* 컴퓨터(OS) 알림 권한 — 중요 알림을 브라우저 밖에서도 확실히 받게. 권한 요청은 사용자 제스처(클릭)에서만
+            가능해 여기 버튼으로 노출한다. granted면 아무것도 안 보임(조용). 목록 아래에 둔다(원장 2026-11-02 *"너무 알림이 정신없음"* — 맨 위 고정 줄이 알림을 밀어냈다). */}
+          {view === "active" && perm === "default" ? (
+            <button
+              type="button"
+              onClick={() => void enableDesktopNotify()}
+              className="border-line hover:bg-bg-soft flex w-full items-center gap-1.5 border-t px-3 py-2 text-left text-xs transition"
+            >
+              <EyIcon name="bell" size={13} className="text-primary shrink-0" />
+              <span className="text-foreground font-bold">
+                컴퓨터 알림 켜기
+              </span>
+              <span className="text-text-faint truncate">
+                — 창 밖에서도 받기
+              </span>
+            </button>
+          ) : view === "active" && perm === "denied" ? (
+            <p className="text-text-faint border-line border-t px-3 py-2 text-xs leading-snug break-keep">
+              컴퓨터 알림이 차단돼 있습니다 — 주소창의 자물쇠 &gt; 알림에서
+              &lsquo;허용&rsquo;으로 바꿔주세요.
+            </p>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
       {/* 학부모 답글 창 = 벨 목록이 있던 자리에 겹치는 오버레이(드롭다운 밖이라 목록을 닫아도 유지). key = 다른 알림을 열면 새 상태로.

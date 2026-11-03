@@ -48,7 +48,7 @@ export function resetOffboardHaltForTest() {
  */
 export async function loadOffboardFacts(sql, tenant, today = kstToday()) {
   // 퇴원 뒤 활동 가드(B10)를 믿을 수 있나 먼저 본다 — 그 지점의 가장 최근 출결·수업보고서가 읽혀야 한다. 연동 PC 역할에 권한이 없으면(42501)
-  // 또는 정책이 빠져 0행이면 '보류'로 돌리고 나머지는 읽지 않는다(R9 · s2_0018). 그 밖의 오류는 그대로 던진다.
+  // 또는 정책이 빠져 0행이면 '보류'로 돌리고 나머지는 읽지 않는다(R9 · s2_0021). 그 밖의 오류는 그대로 던진다.
   const latest = async (q) => {
     try {
       const [r] = await q;

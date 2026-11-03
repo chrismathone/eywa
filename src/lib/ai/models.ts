@@ -75,8 +75,9 @@ export const FEATURE_KEY_GROUP: Readonly<Record<string, AiKeyGroup>> = {
   // 원생상담 녹음 분석 · 원생 AI 케어
   consultation_analysis: "consultations",
   student_care: "consultations",
-  // 운영실 일일 브리핑
+  // 운영실 일일 브리핑 · 업무 비서('확인할 일' 위 'AI로 정리' — 2026-11-02)
   daily_briefing: "briefing",
+  dashboard_secretary: "briefing",
   // 출결 — 요약 · 학부모 결석 문자 판별 · 학부모 글 만족도(강사평가 — 같은 학부모 글 분류 계열, 애매한 글만)
   attendance_recap: "attendance",
   parent_attendance_intent: "attendance",

@@ -72,12 +72,13 @@ const shadcnConfig = !shadcn
           ],
         },
       },
-      // 자체 CSS로 그리는 화면(랜딩·학원 소개·시간표 편집기) — 테마 밖 클래스가 정상이다.
+      // 자체 CSS로 그리는 화면(랜딩·학원 소개·시간표 편집기·운영실 계기판) — 테마 밖 클래스가 정상이다.
       {
         files: [
           "src/app/(marketing)/**",
           "src/app/(academy)/**",
           "src/features/timetable-lab/editor/**",
+          "src/app/(shell)/dashboard/_instruments/**",
         ],
         rules: { "shadcn/no-unknown-classes": "off" },
       },

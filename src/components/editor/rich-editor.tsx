@@ -32,6 +32,8 @@ export function RichEditor(props: {
   defaultValue?: string;
   placeholder?: string;
   ariaLabel?: string;
+  /** 고칠 때마다 HTML을 알린다 — 폼 밖에서 상태로 들고 있는 화면용(업무 요청). 폼 안이면 필요 없다. */
+  onChange?: (html: string) => void;
 }) {
   return <Impl {...props} />;
 }

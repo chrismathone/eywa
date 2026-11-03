@@ -14,8 +14,26 @@ export function adminVideoLedgerHref(link: string): string {
   return link.startsWith(TEACHER_VIDEO_LEDGER_PATH) && (rest === "" || rest[0] === "?" || rest[0] === "#") ? ADMIN_VIDEO_LEDGER_PATH + rest : link;
 }
 
+/**
+ * 기한 초과 업무 요약 본문(`종류 N · … — 사람 N · … 외 N명`)을 두 줄로 — 종류 셋 · 사람 셋까지(원장 2026-11-02 *"너무 알림이 정신없음"*).
+ * 저장된 글은 그대로 두고 보일 때만 줄인다. 모양이 다르면 그대로.
+ */
+export function compactDigestBody(body: string | null): string | null {
+  if (!body) return body;
+  const top = (part: string | undefined, unit: string) => {
+    if (!part?.trim()) return null;
+    const extra = /\s외 (\d+)명$/.exec(part);
+    const list = (extra ? part.slice(0, extra.index) : part).split(" · ").map((x) => x.trim()).filter(Boolean);
+    const more = Math.max(0, list.length - 3) + (extra ? Number(extra[1]) : 0);
+    return `${list.slice(0, 3).join(" · ")}${more > 0 ? ` 외 ${more}${unit}` : ""}`;
+  };
+  const [kinds, people] = body.split(" — ");
+  return [top(kinds, "종"), top(people, "명")].filter(Boolean).join("\n") || body;
+}
+
 /** 저장된 알림도 현재 화면 명칭·경로를 사용한다. 당시 학생·건수는 그대로 보존한다. */
 export function presentNotification(item: NotificationItem): NotificationItem {
+  if (item.type === "staff_task_digest") return { ...item, body: compactDigestBody(item.body) };
   if (item.type !== "absence_alert") return item;
   return {
     ...item,

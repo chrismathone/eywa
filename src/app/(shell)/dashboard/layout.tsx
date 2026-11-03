@@ -11,7 +11,7 @@ import { requireAccess } from "@/lib/auth/require-access";
  * 떴다(대시보드 권한이 없는 직원이 `/dashboard`를 새로 열 때 — 북마크·새로고침·로그인 `next`·뷰 전환).
  * 레이아웃은 Suspense 바깥이라 여기서의 redirect는 문서 요청에 **HTTP 307**로 나간다(스트림 안 redirect 없음).
  *
- * 하위(`announcements`·`briefing`·`?view=rooms`)는 원래 전부 dashboard 권한을 요구하므로 동작이 바뀌지 않는다.
+ * 하위(`announcements`·`briefing`)는 원래 전부 dashboard 권한을 요구하므로 동작이 바뀌지 않는다.
  * 권한 있는 사람은 그대로 통과 — 조회는 셸 레이아웃과 같은 요청 캐시(getCurrentUser·getUserPermMatrix)를 쓴다.
  * 🔴 페이지 쪽 게이트(`loadOverview`의 requireAccess)는 지우지 말 것 — 서버 액션(`refreshOverview`)도 그 함수를 탄다.
  */
