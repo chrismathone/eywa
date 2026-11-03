@@ -15,10 +15,12 @@ const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
  * 달력 머리의 ‹ › 가 앞뒤 달, 바깥 화살표는 그 달 첫·마지막 수업일에서 앞뒤 달의 마지막·첫 수업일로 넘어간다.
  */
 export function DateCalendar({
-  month, dates, value, today, onChange, onGo, pending = false,
+  month, dates, offDays = {}, value, today, onChange, onGo, pending = false,
 }: {
   month: string;
   dates: string[];
+  /** 쉰 휴일 — 고를 수는 있고(그날 수업했다면 체크) 빨간 글자로 구분한다. */
+  offDays?: Record<string, string>;
   value: string | null;
   today: string;
   onChange: (date: string) => void;
@@ -94,14 +96,16 @@ export function DateCalendar({
               const day = Number(d.slice(8));
               const isClass = dates.includes(d);
               const selected = d === value;
+              const off = offDays[d];
               if (!isClass) return <span key={d} className="text-text-placeholder py-1.5">{day}</span>;
               return (
                 <button
                   key={d}
                   type="button"
                   onClick={() => { onChange(d); setOpen(false); }}
-                  className={`rounded-lg py-1.5 font-bold ${selected ? "bg-primary text-primary-foreground" : "bg-primary-soft text-primary hover:bg-primary/20"} ${d === today && !selected ? "ring-primary ring-1" : ""}`}
+                  className={`rounded-lg py-1.5 font-bold ${selected ? "bg-primary text-primary-foreground" : off ? "bg-bg-soft text-danger hover:bg-bg-soft/70" : "bg-primary-soft text-primary hover:bg-primary/20"} ${d === today && !selected ? "ring-primary ring-1" : ""}`}
                   aria-pressed={selected}
+                  aria-label={off ? `${day}일 휴일(${off})` : undefined}
                 >
                   {day}
                 </button>
@@ -109,7 +113,7 @@ export function DateCalendar({
             })}
           </div>
           <div className="mt-2 flex items-center justify-between gap-2">
-            <p className="text-text-dim text-xs">색 칸 = 이 반 수업일 · 테두리 = 오늘</p>
+            <p className="text-text-dim text-xs">색 칸 = 이 반 수업일 · 빨간 글자 = 휴일 · 테두리 = 오늘</p>
             {month !== thisMonth || (dates.includes(today) && value !== today) ? (
               <button
                 type="button"

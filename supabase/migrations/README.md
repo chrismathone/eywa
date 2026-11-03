@@ -32,6 +32,10 @@
 
 `s2_0013_withdrawal_superadmin_block_and_director_notice.sql` — 원장 *"진짜 원장이 원장에 있어야함"* · *"수학(심화)는 없애 … 전부 수학이야"*. 작성 요청 함수 두 개가 super_admin을 승인자로 받지 않고, 원장 칸이 비고 승인자가 전부 원장이면 제출 알림이 '원장 승인 요청'이 된다. 처리(apply) 재검사는 그대로 — 운영 계정의 '바로 처리'가 멈추지 않게. `invoice_session_terms.subject` subject_1 → math 12행(전부 미확정 · 반은 이미 math · 이전 값은 파일 머리말 참고). 되돌리기 = `scripts/_oneoff/revert-s2_0013-withdrawal-superadmin-block.sql`.
 
+## 2026-11-02 시간표 배치의 강의실 = 등록된 강의실만 (s2_0017 · ✅ 운영 적용 2026-11-02)
+
+`s2_0017_class_schedules_room_canonical.sql` — 원장 *"영어 강의실이 자꾸 301 302 이렇게 되는데, 그런 강의실 없잖아 우린 다 본원이 붙는데"* · *"애초에 저런 강의실 입력할 수 있는곳을 찾아서 다 막아"*. `class_schedules`에 BEFORE INSERT/UPDATE OF(`slot_room_label`, `classroom_id`) 트리거 하나 — 연결이 있으면 라벨 = 그 강의실 이름 · 연결 없이 라벨만이면 등록 강의실(보관 제외)에 이름 그대로 또는 '건물+호수' 하나로 잇는다 · 못 맞추면 지금·앞으로 유효한 줄은 거절(끝난 줄은 통과 · LAB·JJ는 라벨을 비우고 통과 · 대소문자 무시) + `classrooms` AFTER UPDATE OF name 트리거(강의실 이름을 바꾸면 연결된 배치 라벨도). 기존 줄은 바꾸지 않는다(같은 날 명령줄로 침산 영어 555줄 연결 — `D:\tmp\room-link-2026-11-02\backup.json`). 시험 = 임시 표(강의실·배치 사본)에 같은 함수 본문으로 10사례 + 이름 바꾸기 동기화(되돌림) · 적용 전 전 지점 "연결 없음 + 맞는 강의실 없는 라벨 + 지금 유효" 0줄 확인. 되돌리기 = 파일 머리 주석의 drop 두 줄. ⚠️ 번호: AX 작업 가지의 `s2_0017_work_requests`·`s2_0018_dashboard_secretary_notes`(운영 적용됨 · main 미반영)와 겹친다 — 규칙(`docs/sql-season2.md` §D)대로 나중에 합치는 쪽이 번호를 민다.
+
 ## 2026-10-29 숙제 영상 업로드 실패 알림: 반 담임에게만 (s2_0012 · 적용 2026-10-29)
 
 `s2_0012_homework_video_fail_notify_teacher_only.sql` — 원장 *"내 학생 내 반 이런거 있잖아. 나와 관련있는 알림만."* `record_homework_video_upload_event`의 수신자 조건 한 줄 — 할 일 담당과 같은 순서 — 반 담임 → 업로드 경로의 강사 → 둘 다 없을 때만 원장·관리자(종전: 담임 + 원장·관리자 전원). 운영 함수 본문에서 그 줄 1건 확인 뒤 치환. 되돌리기 = `scripts/_oneoff/revert-s2_0012-homework-video-fail-notify-teacher-only.sql`.

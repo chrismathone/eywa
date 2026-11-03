@@ -477,3 +477,29 @@ describe("🔴 같은 시작시각의 다른 교시로 이동(EiE 4교시 ↔ IJ
     expect(rows[0]!.endTime).toBe("17:35");
   });
 });
+
+describe("강의실 라벨 — 강의실을 바꾸면 라벨도 새 강의실로(원장 2026-11-02 PL3a: 설정 605 · 시간표 602)", () => {
+  const rooms = new Map([["r-605", "본원605"], ["r-602", "본원602"]]);
+  const run = (inc: Partial<IncomingSlot>, pr: Partial<PriorSlot> | null) =>
+    preserveScheduleFields({
+      incoming: [incoming(inc)],
+      prior: pr ? [prior(pr)] : [],
+      period: noPeriod,
+      today: TODAY,
+      roomNames: rooms,
+    })[0]!.slotRoomLabel;
+  it("강의실을 바꾸면 옛 라벨을 버리고 새 강의실 이름", () => {
+    expect(run({ classroomId: "r-605" }, { classroomId: "r-602", slotRoomLabel: "본원602" })).toBe("본원605");
+  });
+  it("강의실이 그대로면 라벨(시트 원문 포함)을 승계", () => {
+    expect(run({ classroomId: "r-602" }, { classroomId: "r-602", slotRoomLabel: "602" })).toBe("602");
+    expect(run({ classroomId: null }, { classroomId: null, slotRoomLabel: "605" })).toBe("605");
+  });
+  it("강의실을 비우면 라벨도 비운다(옛 강의실이 시간표에 남지 않게)", () => {
+    expect(run({ classroomId: null }, { classroomId: "r-602", slotRoomLabel: "본원602" })).toBeNull();
+  });
+  it("새 교시는 고른 강의실 이름 · 이름을 모르면 비운다", () => {
+    expect(run({ classroomId: "r-605" }, null)).toBe("본원605");
+    expect(run({ classroomId: "r-999" }, { classroomId: "r-602", slotRoomLabel: "본원602" })).toBeNull();
+  });
+});

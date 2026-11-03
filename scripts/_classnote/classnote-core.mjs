@@ -676,11 +676,11 @@ export async function processQueueOnce(sql, browser, opts) {
     const className = boardClassName(r.subject, studentName); // 학생모드 보드 `(과목)학생명`
     let boardId = null; // Phase 2 내부 API 경로용 — 보드안전 게이트 통과 시 verdict.boardId
     // 수학 발송 경로(보고서 설정, 2026-09-29) — personal = 위 1인 보드 · class = 반 보드(0302a 매칭 원아에게 1:1).
-    // needs_class(반 정보 없는 보강) = 반을 추측하지 않는다 — 원스크린 발송이 정한 'ClassNote로 보낼 반'(0303a,
-    // 메인 수업 또는 강사가 고른 반)이 있으면 그 반 보드로, 없으면(관리자 재발송 등 그 단계를 안 지난 경로) 기존 1인 보드로.
+    // needs_class(반 정보 없는 보강) = 반을 추측하지 않는다 — 보강 반(makeup_class_id)이 곧 발송 반이고, 없으면 막는다.
     // 🔴 실제로 올릴 반 보드(원장 2026-09-30, 순수 판정 = class-route-decide.mjs `pickRouteClass`):
-    //    보고서 반에 살아 있는 연결 → 그 반(특강·연결이 남은 종강 포함) · 없으면 앱이 정한 '보낼 반' · 둘 다 없으면 1인 보드.
-    //    조회 실패는 "대상"으로 둔다 — 아래 대상 확정에서 다시 드러난다(조용히 1인 보드로 새지 않게).
+    //    정규 = 보고서 반 보드(살아 있으면 · 특강·연결이 남은 종강 포함) · 보강 = 보강 반 보드 · 보드가 없거나 반이 없으면 **막는다**
+    //    (반별 경로에서 1인 보드로 돌아가는 길은 없다 — 1인 보드 원아 배정은 2026-11-02에 해제했다).
+    //    조회 실패는 "대상"으로 둔다 — 아래 대상 확정에서 다시 드러난다(조용히 다른 보드로 새지 않게).
     const decided = post ? decideRoute(routeCfg, r) : "personal";
     let route = "personal";
     let routeClassId = r.class_id ?? null;

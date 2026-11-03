@@ -153,7 +153,10 @@ describe("② 퇴원&수업종료 — 1일~오늘, 퇴원관리의 과목 전체
     expect(SERVER).toContain("unknownToAll = true,");
     expect(SERVER).toContain("unknownToAll ? inSliceAny(pred, subjects)");
     expect(SERVER).toContain("getSubjectEndedStudents({ countFrom: win.from })");
-    expect(SERVER).toContain("rows: includeSubjectEnds(");
+    // 줄 조립은 순수 함수(`monthWithdrawalRows` — monthly-exits.test가 잠근다) · 이번 달 퇴원은 6개월 창보다 앞 달로 셌어도 싣는다(원장 2026-11-03 '앞 달로 센').
+    expect(SERVER).toContain("...monthWithdrawalRows(rows, ended, win,");
+    expect(SERVER).toContain("getWithdrawalsInWindow(`${monthKeys(today)[0]}-01`, today, { keepProcessedFrom: `${exitReportMonth(today)}-01` })");
+    expect(src("src/features/dashboard/overview/monthly-exits.ts")).toContain("rows: includeSubjectEnds(");
     expect(SERVER).not.toContain("datedWithdrawals");
     expect(WINDOW).toMatch(/inWithdrawalWindow\(/);
   });

@@ -442,7 +442,7 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     mocks.data = kpiSnapshot();
     render(<Overview initial={mocks.data} />);
     const href = (name: string) => screen.getByRole("link", { name }).getAttribute("href");
-    expect(href("이번 달 퇴원·수업종료 보기")).toBe("/withdrawals?type=all&range=month&month=2026-09");
+    expect(href("퇴원관리에서 9월로 센 퇴원·수업종료 보기")).toBe("/withdrawals?type=all&range=month&month=2026-09");
     // 신규문의 ↗ = 통계 보기의 신규 문의 추이(이번 달 일별 — 오늘 칸 = 카드 숫자 · 원장 2026-10-20).
     expect(href("신규 콜&상담 통계에서 문의 추이 보기")).toBe("/enrollment?view=stats&trend=day&from=dashboard#intake");
     // 오늘첫수업 ↗ = 원생 통계의 첫 수업 추이(이번 달 일별 — 오늘 칸 = 카드 · 원장 2026-10-20). 그날 학생 목록은 그 카드 머리 링크.
@@ -484,7 +484,7 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
   it("↗는 목적지 메뉴를 열 수 있을 때만 선다(카드는 그대로)", () => {
     mocks.data = kpiSnapshot(["dashboard", "students", "enrollment", "calendar"]);
     render(<Overview initial={mocks.data} />);
-    expect(screen.queryByRole("link", { name: "이번 달 퇴원·수업종료 보기" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "퇴원관리에서 9월로 센 퇴원·수업종료 보기" })).toBeNull();
     expect(screen.getByRole("button", { name: /^퇴원&수업종료 2명\./ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^최근 결석 2명\./ })).toBeTruthy();
     cleanup();
@@ -530,13 +530,40 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     render(<Overview initial={mocks.data} />);
     fireEvent.click(screen.getByRole("button", { name: /^퇴원&수업종료 2명\./ }));
     const popup = screen.getByRole("dialog");
-    expect(popup.textContent).toContain("9월 퇴원&수업종료 2명");
+    expect(popup.textContent).toContain("9월로 센 퇴원&수업종료 2명");
     expect(popup.textContent).toContain("퇴원 2명 · 수강종료 0명");
+    // 세는 기준을 숫자 바로 아래에 적는다(원장 2026-11-03 *"오해 소지가 없도록"*) — 앞 달로 센 줄이 없으면 그 묶음은 서지 않는다.
+    // 팝업 아래 = 보여 주는 달(10일 기준) · 날짜는 마지막 수업일 · 달은 수업료 납부(원장 2026-11-03).
+    expect(popup.textContent).toContain("매달 1~10일에는 지난달, 11일부터 다음 달 10일까지는 이번 달 퇴원·수업종료를 보여 줍니다.");
+    expect(popup.textContent).toContain("퇴원·수강종료 날짜는 마지막 수업일이고, 어느 달로 셀지는 수업료 납부로 정합니다 — 퇴원은 수업료를 낸 마지막 달, 수강종료는 그 과목 수업료를 낸 마지막 달(낸 기록이 없으면 마지막 수업일의 달). 예: 마지막 수업일이 9월 1일이어도 8월분까지만 냈으면 8월로 셉니다.");
+    expect(popup.textContent).not.toContain("앞 달로 센");
     expect(
       within(popup).getByRole("link", { name: "EiE 1명 목록 열기" }).getAttribute("href"),
     ).toBe("/withdrawals?type=all&range=month&month=2026-09&program=eie");
     expect(popup.textContent).toContain("기타·미상");
     expect(within(popup).getByRole("link", { name: "퇴원가 원생 상세" }).getAttribute("href")).toBe("/students/w1");
+    cleanup();
+  });
+
+  it("이번 달에 처리했지만 앞 달로 센 학생은 숫자에 넣지 않고 따로 밝힌다(원장 2026-11-03)", () => {
+    mocks.data = kpiSnapshot();
+    const wd = mocks.data.sections.withdrawals!.data!;
+    wd.rows = [];
+    wd.carried = [
+      { id: "c1", eventKey: "c1|math", name: "앞달가", schoolGrade: "침산초4", withdrawnAt: "2026-09-01", program: "math", subject: "math", kind: "subject-ended", countMonth: "2026-08" },
+      { id: "c2", eventKey: "c2|math", name: "앞달나", schoolGrade: "침산중2", withdrawnAt: "2026-09-01", program: "math", subject: "math", kind: "withdrawn", countMonth: "2026-08" },
+    ];
+    render(<Overview initial={mocks.data} />);
+    const card = screen.getByRole("button", { name: /^퇴원&수업종료 0명\./ });
+    expect(card.getAttribute("aria-label")).toContain("마지막 수업일이 9월이지만 앞 달로 센 2명");
+    fireEvent.click(card);
+    const popup = screen.getByRole("dialog");
+    expect(popup.textContent).toContain("9월로 센 퇴원&수업종료 0명");
+    expect(popup.textContent).toContain("9월로 센 퇴원·수업종료 학생이 없습니다.");
+    expect(popup.textContent).toContain("마지막 수업일이 9월이지만 앞 달로 센 2명 — 위 숫자에 들지 않습니다");
+    expect(popup.textContent).toContain("종료 · 8월로 셈");
+    expect(popup.textContent).toContain("퇴원 · 8월로 셈");
+    expect(within(popup).getByRole("link", { name: "앞달가 원생 상세" }).getAttribute("href")).toBe("/students/c1");
     cleanup();
   });
 

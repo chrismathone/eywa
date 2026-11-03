@@ -290,6 +290,11 @@ describe("auditDetail — 액션별 한글 상세", () => {
 
   it("class_end_term / class_handover_*: 날짜·새 담임", () => {
     expect(auditDetail("class_end_term", { classId: SID, closedAt: "2026-07-10" }, ctx())).toBe("종강일 2026-07-10");
+    const two = [{ id: "a" }, { id: "b" }];
+    expect(auditDetail("class_end_term", { classId: SID, closedAt: "2026-09-30", fromName: "LS4b", toName: "LS4b (~26.09.30)", affectedStudents: 3, schedules: two }, ctx()))
+      .toBe("종강일 2026-09-30 · 시간표 배치 2줄 닫음");
+    expect(auditDetail("class_end_term", { classId: SID, closedAt: "2026-09-30", fromName: "LS4b (~26.09.30)", toName: "LS4b (~26.09.30)", affectedStudents: 0, schedules: two }, ctx()))
+      .toBe("종강일 2026-09-30 · 남은 시간표 배치 2줄 정리");
     expect(
       auditDetail("class_handover_schedule", { newTeacherId: UID, effectiveDate: "2026-07-15" }, ctx({ [UID]: "김강사" })),
     ).toBe("새 담임 김강사 · 2026-07-15부터");

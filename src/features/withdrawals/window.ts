@@ -20,6 +20,20 @@ export function withdrawalMonthWindow(month: string, today: string): { from: str
   return { from, to: to < today ? to : today };
 }
 
+/** 운영실 '퇴원&수업종료' 카드가 지난달에서 이번 달로 넘어가는 날 — 이 날까지는 지난달을 보여 준다. */
+export const EXIT_REPORT_SWITCH_DAY = 10;
+
+/**
+ * 운영실 '퇴원&수업종료' 카드가 보여 줄 달(YYYY-MM) — 원장 2026-11-03 *"이번달 10일까지는 '이전달 퇴원'을 보여줄것. 이번달 11일 ~ 다음달
+ * 10일까지 이번달 퇴원을 보여줄것"*. 1~10일은 지난달(1월이면 지난해 12월), 11일부터는 이번 달. 창은 `withdrawalMonthWindow`(지난달이면 말일까지).
+ */
+export function exitReportMonth(today: string): string {
+  const y = Number(today.slice(0, 4));
+  const m = Number(today.slice(5, 7));
+  if (Number(today.slice(8, 10)) > EXIT_REPORT_SWITCH_DAY) return today.slice(0, 7);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
+}
+
 /** 시간표 칸의 퇴원 표시 창과 퇴원관리 '최근 30일' 필터의 길이 — 한 값(원장 2026-09-28 *"같은 배선을 따야"*). 인원 **숫자**는 이 창이 아니라 `withdrawalMonthWindow`(이번 달)다. */
 export const RECENT_EXIT_DAYS = 30;
 

@@ -8,7 +8,7 @@ const row = (class_id: string, student_id: string, extra: Partial<DayCheckRow> =
 describe("pickReportCheck — MS 보고서에 JJ 체크를 붙인다(원장 2026-10-30)", () => {
   const both = new Set(["MS", "JJ"]);
   it("JJ에 그 학생 행이 있으면 그 행", () => {
-    expect(pickReportCheck([row("JJ", "s1", { missed: ["main_solve"] })], both, "s1")).toEqual({ missed: ["main_solve"], absent: false, card: null });
+    expect(pickReportCheck([row("JJ", "s1", { missed: ["main_solve"] })], both, "s1")).toEqual({ missed: ["main_solve"], absent: false, card: null, excused: null, excuseReason: null, excuseNote: null });
   });
   it("JJ 결석 행 → 결석 체크(보고서 줄 없음)", () => {
     expect(pickReportCheck([row("JJ", "s1", { absent: true })], both, "s1")?.absent).toBe(true);

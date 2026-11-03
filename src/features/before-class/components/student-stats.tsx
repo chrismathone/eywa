@@ -81,14 +81,14 @@ export function StudentStats({ classId, students, version }: { classId: string; 
 function StatsBody({ days, unit, since }: { days: DayRecord[]; unit: StatUnit; since: string | null }) {
   const total = totalStat(days);
   const periods = groupStats(days, unit);
-  const attended = total.lessons - total.absentCount;
+  const attended = total.lessons - total.absentCount - total.excusedCount;
   return (
     <>
       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Tile label="평균 완료율" value={percentLabel(total.average)} />
         <Tile label="수업" value={`${total.lessons}회`} />
         <Tile label="보충 필요" value={`${total.supplementCount}회`} />
-        <Tile label="결석" value={`${total.absentCount}회`} />
+        <Tile label="결석" value={`${total.absentCount}회${total.excusedCount ? ` · 제외 ${total.excusedCount}회` : ""}`} />
       </dl>
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="font-bold">받은 카드</span>
@@ -102,7 +102,7 @@ function StatsBody({ days, unit, since }: { days: DayRecord[]; unit: StatUnit; s
         <PeriodTable periods={periods} />
       </section>
       <section>
-        <h3 className="mb-1.5 text-sm font-bold">항목별 미흡 <span className="text-text-dim font-normal">(출석 {attended}회 중)</span></h3>
+        <h3 className="mb-1.5 text-sm font-bold">항목별 미흡 <span className="text-text-dim font-normal">(체크한 수업 {attended}회 중)</span></h3>
         <ul className="space-y-1.5">
           {BEFORE_CLASS_ITEMS.map((i) => {
             const n = total.itemCounts[i.key];

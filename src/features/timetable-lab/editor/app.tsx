@@ -25,8 +25,8 @@ import { DraftLibrary } from './draft-library';
 import { LessonTooltip } from './lesson-tooltip';
 
 /** 연습본 저장소는 밖에서 만든다 — 앱 화면과 시험용 화면이 같은 편집기를 쓴다. */
-export type EditorProps = { store: DraftStore; onDirtyChange?: (dirty: boolean) => void; loginHref?: string; fontScale?: number; applyControls?: (saved: (draft: Draft, name: string) => void) => ReactNode };
-export function App({ store, onDirtyChange, loginHref = '/login', applyControls, fontScale = 1 }: EditorProps) {
+export type EditorProps = { store: DraftStore; onDirtyChange?: (dirty: boolean) => void; loginHref?: string; fontScale?: number; applyControls?: (saved: (draft: Draft, name: string) => void) => ReactNode; pendingApplies?: (load: (name: string, draft: Draft) => void) => ReactNode };
+export function App({ store, onDirtyChange, loginHref = '/login', applyControls, pendingApplies, fontScale = 1 }: EditorProps) {
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot), { draft, undos, redos } = snapshot;
   const [view, setView] = useState<'teacher' | 'integrated'>('teacher');
   const [picked, select] = useState<string[]>([]), [panel, setPanel] = useState<'inspect' | 'stats' | null>(null), [loading, showLoad] = useState(false);
@@ -143,6 +143,7 @@ export function App({ store, onDirtyChange, loginHref = '/login', applyControls,
     {loading && <SourceDialog close={() => showLoad(false)} apply={loaded} loginHref={loginHref} />}
     {library && <DraftLibrary store={store} close={() => showLibrary(false)} currentId={savedId} saved={(name, value, id) => { setSavedDraft(value); setSavedName(name); setSavedId(id); announce(`“${name}”을 저장했습니다.`); }}
         removed={id => { if (id === savedId) { setSavedId(null); setSavedName(''); } }}
+        pending={pendingApplies?.((name, value) => { store.commit('예약 연습본 불러오기', value); setSavedDraft(store.getSnapshot().draft); setSavedName(name); setSavedId(null); select([]); setFocus(null); setPanel(null); showLibrary(false); announce(`“${name}”을 불러왔습니다.`); })}
         loaded={(name, value, id) => { store.commit('저장한 연습본 불러오기', value); setSavedDraft(store.getSnapshot().draft); setSavedName(name); setSavedId(id); select([]); setFocus(null); setPanel(null); showLibrary(false); announce(`“${name}”을 불러왔습니다. 이어서 편집한 뒤 덮어쓰거나 새 연습본으로 저장할 수 있습니다.`); }}
         compare={(a, b) => { setComparison([a, b]); showLibrary(false); }} />}
     {comparison && <ComparisonView left={comparison[0]} right={comparison[1]} close={() => setComparison(null)} />}

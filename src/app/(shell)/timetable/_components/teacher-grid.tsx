@@ -47,8 +47,19 @@ const DAY_OFFSET: Record<DayOfWeek, number> = { mon: 0, tue: 1, wed: 2, thu: 3, 
 const TIME_COL_W = 56;
 /** 강사뷰 열 순서의 저장 묶음 키 — 기본뷰의 요일 묶음(`mon-thu`…)과 한 그릇에 살되 서로 안 섞이게. */
 export const TEACHER_VIEW_ORDER_GROUP = "teacherview";
-const DAY_COL_W = 65; // 반명+방 chip(학생 없음). 강사×요일이 많아 가로 스크롤(2026-07-06 96→65 사용자 지정).
-const LANE_COL_W = 64; // 다중 레인(LAB 서브컬럼) 폭 — 레벨코드 반명(LT2 등) 기준. 시트도 좁은 서브컬럼.
+/**
+ * 요일 칸 폭 — 반명+방 chip(학생 없음). 강사×요일이 많아 가로 스크롤(2026-07-06 96→65 사용자 지정).
+ * 2026-11-03 65→70(원장 *"본원605같은게 두줄처리 안되게 약간만"*): 칸 안 글자 폭 = 칸 − 칸 테두리(안쪽 1 ·
+ * 강사 끝 칸 2) − 래퍼 2 − 칩 테두리 2 − 칩 좌우 여백 12. 65면 47~48px라 본원602·605·606 등이 접혔다.
+ * 70이면 52~53px — 등록 강의실 중 가장 넓은 '본원SKY'(화면 글꼴 설정 그대로 50.3px)까지 한 줄.
+ * 강의실 이름이 더 길어지면 **가장 좁은 칸(강사 끝 칸 52px)** 기준으로 다시 잴 것.
+ */
+const DAY_COL_W = 70;
+/**
+ * 다중 레인(LAB 서브컬럼) 한 칸 폭 — 요일 칸과 같은 값(2026-11-03 64→70). 레인 낱칩은 칸 하나에 칩 하나라
+ * 글자 폭이 요일 칸과 같다(52~53px). 69면 강사 끝 칸의 낱칩이 51px로 '본원SKY'와 약 0.7px 차이뿐이었다.
+ */
+const LANE_COL_W = 70;
 // 행 높이 = 분당 1.4px 고정(스텝 무관 블록 높이 동일 — step 10=14px/행, step 30=42px/행: 60분 수업은 항상 84px).
 const PX_PER_MIN = 1.4;
 const HEAD_TEACHER_H = 30; // 강사 밴드 행 높이(sticky top 오프셋 계산용) — 이름 16px 수용
@@ -287,7 +298,7 @@ export function TeacherGridView({
         breakAnchors.set(bl.index, { span: bl.span });
         for (let r = bl.index; r < bl.index + bl.span; r++) breakCovered.add(r);
       }
-      // 레인 폭 — 1레인=기본 65, 다중(병렬)=레인당 64(시트도 좁은 서브컬럼).
+      // 레인 폭 — 1레인=DAY_COL_W, 다중(병렬)=레인당 LANE_COL_W(지금은 같은 값 · 좁은 서브컬럼은 엑셀 시트만).
       const laneW = laneCount > 1 ? LANE_COL_W : DAY_COL_W;
       return { day, laneCount, laneW, anchors, covered, breakAnchors, breakCovered };
     });

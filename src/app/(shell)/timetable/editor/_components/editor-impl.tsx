@@ -5,7 +5,7 @@ import { App } from "@/features/timetable-lab/editor/app";
 import { emptyDraft } from "@/features/timetable-lab/editor/model";
 import { DraftStore } from "@/features/timetable-lab/editor/store";
 import type { LabAppearance } from "@/features/timetable-lab/types";
-import { ApplyControls } from '@/features/timetable-lab/editor/apply-controls';
+import { ApplyControls, PendingApplies } from '@/features/timetable-lab/editor/apply-controls';
 import { usePrefs } from '@/components/workspace/use-prefs';
 import { UI_FONT_SIZE_ZOOM } from '@/lib/ui-prefs/font-size';
 
@@ -44,7 +44,7 @@ export function EditorImpl({ appearance, onDirtyChange }: { appearance: LabAppea
   const fontSize = usePrefs(state => state.timetableFontSize);
   return (
     <EditorBoundary>
-      <App store={store} fontScale={UI_FONT_SIZE_ZOOM[fontSize]} onDirtyChange={onDirtyChange} applyControls={saved => <ApplyControls store={store} saved={saved} />} />
+      <App store={store} fontScale={UI_FONT_SIZE_ZOOM[fontSize]} onDirtyChange={onDirtyChange} applyControls={saved => <ApplyControls store={store} saved={saved} />} pendingApplies={load => <PendingApplies load={load} />} />
     </EditorBoundary>
   );
 }

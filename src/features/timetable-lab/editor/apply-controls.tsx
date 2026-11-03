@@ -36,9 +36,23 @@ export function ApplyControls({ store, saved }: { store: DraftStore; saved: (dra
     {history && <div className="apply-history"><header><strong>연습본 적용 내역 · KST</strong><button onClick={() => setHistory(false)} aria-label="적용 내역 닫기">×</button></header>
       {error && <p role="alert">{error}</p>}
       {!jobs.length && !error && <p>적용 내역이 없습니다.</p>}
-      {jobs.map(job => <div key={job.id}><span>{kstLabel(job.at)} · {statusLabel[job.status]}</span>{job.error && <p>{job.error}</p>}{!!job.skipped?.length && <details className="lab-conflict"><summary>적용하지 않은 변경 {job.skipped.length}건</summary><ul>{job.skipped.map((item, index) => <li key={index}>{item}</li>)}</ul></details>}<button onClick={async()=>{const result=await readTimetableLabApplyDraft(job.id);if('error'in result)setError(result.error);else{store.commit('예약 연습본 불러오기',result.draft);saved(store.getSnapshot().draft,`예약 연습본 · ${kstLabel(job.at)} KST`);setError('');}}}>연습본 불러오기</button>{job.status === 'pending' && <button onClick={async () => { const result = await cancelTimetableLabApplyJob(job.id); if ('error' in result) setError(result.error); else await load(); }}>예약 취소</button>}</div>)}
+      {jobs.map(job => <div key={job.id}><span>{kstLabel(job.at)} · {statusLabel[job.status]}{job.actorName ? ` · ${job.actorName}` : ''}</span>{job.error && <p>{job.error}</p>}{!!job.skipped?.length && <details className="lab-conflict"><summary>적용하지 않은 변경 {job.skipped.length}건</summary><ul>{job.skipped.map((item, index) => <li key={index}>{item}</li>)}</ul></details>}<button onClick={async()=>{const result=await readTimetableLabApplyDraft(job.id);if('error'in result)setError(result.error);else{store.commit('예약 연습본 불러오기',result.draft);saved(store.getSnapshot().draft,`예약 연습본 · ${kstLabel(job.at)} KST`);setError('');}}}>연습본 불러오기</button>{job.status === 'pending' && job.mine && <button onClick={async () => { const result = await cancelTimetableLabApplyJob(job.id); if ('error' in result) setError(result.error); else await load(); }}>예약 취소</button>}</div>)}
     </div>}
   </>;
+}
+
+/** 보관함 위의 적용 대기 목록 — 예약 내용은 불러와서 확인한다. */
+export function PendingApplies({ load }: { load: (name: string, draft: Draft) => void }) {
+  const [jobs, setJobs] = useState<ApplyJobSummary[]>([]), [error, setError] = useState('');
+  useEffect(() => {
+    let alive = true;
+    void listTimetableLabApplyJobs().then(response => { if (!alive) return; if ('error' in response) setError(response.error); else setJobs(response.jobs.filter(job => job.status === 'pending')); });
+    return () => { alive = false; };
+  }, []);
+  if (!jobs.length && !error) return null;
+  return <><h3>적용 대기 중</h3>{error && <p role="alert" className="load-error">{error}</p>}
+    <ul className="draft-list">{jobs.map(job => <li key={job.id}><div><strong>{kstLabel(job.at)} KST 적용 예정</strong><small>예약자 {job.actorName || '정보 없음'}</small></div>
+      <span className="draft-actions"><button onClick={async () => { const result = await readTimetableLabApplyDraft(job.id); if ('error' in result) setError(result.error); else load(`예약 연습본 · ${kstLabel(job.at)} KST`, result.draft); }}>불러오기</button></span></li>)}</ul></>;
 }
 
 function ApplyDialog({ store, close, done }: { store: DraftStore; close: () => void; done: (job: ApplyJobSummary, draft: Draft) => void }) {

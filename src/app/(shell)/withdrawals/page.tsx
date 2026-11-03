@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Suspense, type ReactNode } from "react";
+import { Fragment, Suspense, type ReactNode } from "react";
 import { isValidYm, kstMonth, kstToday, monthLabel, monthRange, shiftMonth } from "@/lib/date-kst";
 import { withdrawalMonthWindow, withdrawalProgram } from "@/features/withdrawals/window";
 import {
@@ -80,6 +80,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { WithdrawalTrendChart, type WithdrawalMonthPoint } from "./_components/trend-chart";
 import { scopeText, spanText } from "@/features/withdrawals/scope-text";
+import { EXIT_BASIS_TAG, countedEarlierByMonth, countedEarlierTitle, exitBasisRule } from "@/features/withdrawals/exit-basis";
 import { loadWithdrawalTrendPrefs } from "@/features/withdrawals/server/trend-prefs";
 import { WithdrawalListLayout } from "./_components/list-layout";
 import { CustomRange } from "./_components/custom-range";
@@ -430,6 +431,12 @@ export default async function WithdrawalsPage({
   //    툴바에서 다른 달을 골라도 이 카드는 **이번 달**이다(카드 이름이 곧 기간).
   const recentWindow = resolveRange("month", { today, month: withdrawalMonthWindow(kstMonth(), today) });
   const recent = trendRows.filter((r) => inRange(r, recentWindow)).length;
+  // 고른 달(1일~오늘)에 **퇴원·종료**했지만 수업료를 앞 달까지만 내 앞 달로 센 줄 — 센 달마다 묶어 그 달 명단으로 보낸다(원장 2026-11-03
+  // *"오해 소지가 없도록"* — 11월 1일 퇴원 4건이 10월로 세져 '이번 달'이 비어 오류처럼 보였다). 판정은 운영실 팝업과 같은 `countedEarlier`.
+  // 모집단 = 기간 축만 뺀 줄(이 화면 숫자와 같은 단위 — 퇴원은 학생마다, 수강종료는 과목마다). 시스템 정리(날짜 미상)는 기간 판정처럼 뺀다.
+  const carriedGroups =
+    range === "month" ? countedEarlierByMonth(trendRows.filter((r) => !r.systemBulk), monthWindow.from, monthWindow.to) : [];
+  const carriedTotal = carriedGroups.reduce((n, [, c]) => n + c, 0);
 
   // 월별 추이 = 기간 축 제외 · 과목별 분포 = 과목 필터가 없을 때만 과목 축 제외(고르면 명단과 같은 줄을 묶음으로 — 위 술어 주석).
   // ⚠️ **시스템 정리(날짜 미상)는 월별 추이에서 뺀다** — 퇴원일이 실제 시점이 아니라 일괄 처리된 장부 날짜라
@@ -722,7 +729,7 @@ export default async function WithdrawalsPage({
           label="올해 퇴원"
           value={yearWithdrawn}
           unit="명"
-          sub={`${spanText(yearStart, today)} · 학원 전체${yearBulk ? ` · 날짜 미상 ${yearBulk}명 제외` : ""}`}
+          sub={`${spanText(yearStart, today)} · ${EXIT_BASIS_TAG} · 학원 전체${yearBulk ? ` · 날짜 미상 ${yearBulk}명 제외` : ""}`}
           tone="rose"
           icon={<UserMinus size={16} strokeWidth={1.8} />}
         />
@@ -731,7 +738,7 @@ export default async function WithdrawalsPage({
           label="올해 수강종료"
           value={yearEnded}
           unit="건"
-          sub={`${spanText(yearStart, today)} · 학원 전체 · 재원 중 한 과목을 끊음`}
+          sub={`${spanText(yearStart, today)} · ${EXIT_BASIS_TAG} · 학원 전체 · 재원 중 한 과목을 끊음`}
           tone="amber"
           icon={<BookOpen size={16} strokeWidth={1.8} />}
         />
@@ -740,7 +747,7 @@ export default async function WithdrawalsPage({
           label="이번 달"
           value={recent}
           unit="건"
-          sub={`${noun} · ${spanText(`${kstMonth()}-01`, today)} · ${scope}`}
+          sub={`${noun} · ${EXIT_BASIS_TAG} · ${scope}`}
           tone="danger"
           icon={<CalendarClock size={16} strokeWidth={1.8} />}
         />
@@ -754,6 +761,25 @@ export default async function WithdrawalsPage({
         />
         <BigStat label="필터 결과" value={rows.length} unit="건" tone="blue" icon={<Filter size={16} strokeWidth={1.8} />} />
       </StatStrip>
+
+      {/* 세는 달 = 수업료를 낸 마지막 달(원장 2026-10-29) — 처리한 날로 읽으면 '이번 달'이 비어 보여 오류처럼 읽혔다(원장 2026-11-03). */}
+      <p className="text-text-dim px-1 text-sm">
+        {exitBasisRule()} 넓은 화면 명단에는 센 달이 마지막 수업일의 달과 다르면 ‘10월 퇴원’·‘10월 종료’처럼 적습니다.
+        {carriedTotal > 0 ? (
+          <>
+            {" "}
+            <span className="text-foreground font-semibold">{countedEarlierTitle(monthKey, carriedTotal, "건")}</span>{" — "}
+            {carriedGroups.map(([m, n], i) => (
+              <Fragment key={m}>
+                {i ? " · " : ""}
+                <EmbedLink href={hrefWith({ month: m })} scroll={false} className="text-primary font-semibold underline-offset-2 hover:underline">
+                  {Number(m.slice(5, 7))}월 명단 보기({n}건 포함)
+                </EmbedLink>
+              </Fragment>
+            ))}
+          </>
+        ) : null}
+      </p>
 
       {/* 툴바 — 지시서 §10: 축마다 라벨 하나(`유형: 전체` · `기간: 최근 30일` · 사유 · 과목 · 상담), 검색은 눌러야 나온다. */}
       <div className="flex flex-wrap items-center gap-2 px-1">
@@ -871,7 +897,7 @@ export default async function WithdrawalsPage({
               <h2 className="text-foreground text-base font-bold">월별 {noun} 추이</h2>
               <span className="text-text-faint text-xs">
                 {/* 무엇을 센 건지 말해 준다 — 필터가 걸렸는데 "전체"라고 적으면 화면이 거짓말을 한다. */}
-                최근 12개월 · {typeTrend ? `학원 전체 ${sum(typeTrend)}건 · ${scope} ${sum(trend)}건` : `${scope} ${sum(trend)}건`}
+                최근 12개월 · {EXIT_BASIS_TAG} · {typeTrend ? `학원 전체 ${sum(typeTrend)}건 · ${scope} ${sum(trend)}건` : `${scope} ${sum(trend)}건`}
                 {range !== "all" ? " (기간 필터는 이 축이라 제외)" : ""}
                 {systemBulkCount > 0 ? ` (시스템 정리 ${systemBulkCount}명 제외 — 퇴원일 미상)` : ""}
                 {cleanupTrendCount > 0 ? ` (장부 정리 ${cleanupTrendCount}명 제외 — 퇴원일이 장부 날짜)` : ""}

@@ -365,7 +365,8 @@ export async function OneScreenDashboard({
                       {/* 🔴 무엇의 증감인지 적는다(원장 2026-09-10 *"+1, -6 보다. 신규원생 +1, 퇴원생 -6"*) —
                           부호만으로는 무엇이 늘고 줄었는지 읽는 사람이 되짚어야 한다. */}
                       신규 <span className="num text-green font-bold">+{changes.newCount}</span>
-                      {" · 퇴원 "}
+                      {/* 퇴원은 수업료를 낸 마지막 달로 센다(원장 2026-10-29) — 기준을 적지 않으면 월초 '퇴원 -0'이 오류처럼 읽힌다(원장 2026-11-03). */}
+                      {" · 퇴원(수업료 기준) "}
                       <span className="num text-amber font-bold">-{changes.withdrawnCount}</span>
                     </>
                   )

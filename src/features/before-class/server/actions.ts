@@ -16,7 +16,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidYmd } from "@/lib/date-kst";
 import { classDatesInMonth } from "../dates";
 import { attendsClassOn } from "../roster";
-import { BEFORE_CLASS_CARDS, BEFORE_CLASS_ITEMS, isBlankCheck, normalizeMissed } from "../items";
+import { BEFORE_CLASS_CARDS, BEFORE_CLASS_ITEMS, EXCUSE_NOTE_MAX, EXCUSE_REASONS, isBlankCheck, normalizeMissed, type ExcuseReason } from "../items";
+import { isMissingColumn } from "./queries";
 
 const inputSchema = z.object({
   classId: z.uuid(),
@@ -25,6 +26,10 @@ const inputSchema = z.object({
   missed: z.array(z.enum(BEFORE_CLASS_ITEMS.map((i) => i.key) as [string, ...string[]])).max(BEFORE_CLASS_ITEMS.length),
   absent: z.boolean(),
   card: z.enum(BEFORE_CLASS_CARDS.map((c) => c.key) as [string, ...string[]]).nullable(),
+  // 체크 제외(s2_0016, 원장 2026-11-02) — null = 자동(지난 수업 결석). 옛 화면은 안 보낸다.
+  excused: z.boolean().nullable().optional(),
+  excuseReason: z.enum(EXCUSE_REASONS.map((r) => r.key) as [string, ...string[]]).nullable().optional(),
+  excuseNote: z.string().max(EXCUSE_NOTE_MAX).nullable().optional(),
 });
 
 export type SaveBeforeClassInput = z.input<typeof inputSchema>;
@@ -43,6 +48,11 @@ export async function saveBeforeClassCheck(input: SaveBeforeClassInput): Promise
   const { classId, studentId, date, absent } = parsed.data;
   const missed = normalizeMissed(parsed.data.missed);
   const card = parsed.data.card as (typeof BEFORE_CLASS_CARDS)[number]["key"] | null;
+  const excused = parsed.data.excused ?? null;
+  const excuseReason = (parsed.data.excuseReason ?? null) as ExcuseReason | null;
+  // 글은 '기타'일 때만 남긴다(다른 사유로 바꾸면 지운다).
+  const excuseNote = excuseReason === "other" ? parsed.data.excuseNote?.trim() || null : null;
+  const hasExcuse = excused !== null || excuseReason !== null || excuseNote !== null;
   const admin = createAdminClient();
   const [target, enr, sched] = await Promise.all([
     admin.from("before_class_targets").select("class_id").eq("tenant_id", user.tenantId).eq("class_id", classId).maybeSingle(),
@@ -58,12 +68,17 @@ export async function saveBeforeClassCheck(input: SaveBeforeClassInput): Promise
   if (!onRoster) return { ok: false, error: "그날 이 반 명단에 없는 학생입니다" };
 
   const key = { tenant_id: user.tenantId, class_id: classId, student_id: studentId, check_date: date };
-  const { error } = isBlankCheck({ missed, absent, card })
+  const base = { ...key, missed, absent, card, checked_by: user.id, updated_at: new Date().toISOString() };
+  const upsert = (row: Record<string, unknown>) =>
+    admin.from("before_class_checks").upsert(row, { onConflict: "tenant_id,class_id,student_id,check_date" });
+  let { error } = isBlankCheck({ missed, absent, card, excused, excuseReason, excuseNote })
     ? await admin.from("before_class_checks").delete().match(key)
-    : await admin.from("before_class_checks").upsert(
-        { ...key, missed, absent, card, checked_by: user.id, updated_at: new Date().toISOString() },
-        { onConflict: "tenant_id,class_id,student_id,check_date" },
-      );
+    : await upsert({ ...base, excused, excuse_reason: excuseReason, excuse_note: excuseNote });
+  // 제외 칸(s2_0016)이 아직 없는 DB — 제외를 안 쓴 저장은 옛 모양으로 다시, 제외를 쓴 저장은 안내([[#95]]).
+  if (isMissingColumn(error)) {
+    if (hasExcuse) return { ok: false, error: "체크 제외는 아직 준비 중입니다(저장 공간 갱신 필요)" };
+    ({ error } = await upsert(base));
+  }
   if (error) {
     console.error("[before-class] 저장 실패", error);
     return { ok: false, error: "저장하지 못했습니다. 잠시 후 다시 시도해 주세요" };

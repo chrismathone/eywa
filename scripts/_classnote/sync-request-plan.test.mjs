@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  CHILDMAP_REFRESH_GAP_MS,
   MAX_CLASSES_PER_RUN,
+  childMapRefreshDue,
   normalizeScope,
   provisionCandidates,
   selectClassesToSync,
@@ -61,6 +63,14 @@ describe("바뀐 반만 고른다 — 과부하 방지(원장 2026-09-30)", () =
     expect(selectClassesToSync(a).picked).toEqual([]);
     a.recentStudentIds = new Set([S1]);
     expect(selectClassesToSync(a).picked.map((p) => p.reasons)).toEqual([["가입 확인"]]);
+    // 지금 문장(2026-11-02~ 원아 연결까지 없음 — class-board-plan.mjs JOIN_WAIT_REASON)도 같은 가입 대기다 · 옛 '1인 보드 없음'도
+    for (const reason of ["ClassNote 미가입 — 이 학생으로 확인된 원아가 아직 없음", "1인 보드 없음"]) {
+      a.members[0] = { class_id: C1, student_id: S1, status: "hold", reason };
+      expect(selectClassesToSync(a).picked.map((p) => p.reasons)).toEqual([["가입 확인"]]);
+    }
+    // 원아 연결은 있는데 가드에 걸린 보류(형제 계정 등)는 가입 대기가 아니다 — 사람이 푼다
+    a.members[0] = { class_id: C1, student_id: S1, status: "hold", reason: '원아 "박세인" 이름이 학생(박세하)과 다름 — 형제 계정일 수 있어 확인 필요' };
+    expect(selectClassesToSync(a).picked).toEqual([]);
   });
   it("지목한 반·학생은 차이가 없어도 맨 앞 · 지목만이면 차이 반은 안 본다", () => {
     const a = base();
@@ -98,6 +108,10 @@ describe("한글 결과 · 오류", () => {
   });
   it("원문 오류는 한글 한 줄로(원문은 result.raw에만)", () => {
     expect(syncErrorLabel("원아 조회 실패 2건 — 오늘 동기화를 건너뛴다")).toMatch(/원아 조회/);
+    // 원아 연결(0185a)을 못 읽음 · 배정 직전 다시 읽었더니 바뀜 — 'ClassNote 반 구성' 문장으로 뭉개지 않는다
+    expect(syncErrorLabel("원아 연결을 읽지 못했다 — 오늘 동기화를 건너뛴다(x)")).toMatch(/ClassNote 원아의 연결/);
+    expect(syncErrorLabel("김근우A: 원아 연결이 계획과 다르다(그 사이 변경) — 중단")).toMatch(/ClassNote 원아의 연결/);
+    expect(syncErrorLabel("김근우A: 1인 보드 원아가 계획과 다르다(그 사이 변경) — 중단")).toMatch(/반 구성이 예상과 달라/);
     expect(syncErrorLabel("TypeError: x is undefined")).not.toMatch(/TypeError/);
   });
 });
@@ -137,9 +151,32 @@ describe("🔴 워커 배선 — 원자적 집기 · 새벽 표식 보존 · 일
     const sync = read("math-class-boards-sync.mjs");
     expect(sync).toMatch(/writeClassBoardSnapshot\(sql, tenant, fresh\.plans, \{ scoped: true \}\)/);
   });
+  it("원아 연결 갱신(⓪)은 신입 준비(①)·반 보드 동기화(②)보다 앞에서 force·apply로 부른다(원장 2026-11-02 A안)", () => {
+    const src = read("classnote-sync-request.mjs");
+    const refresh = src.indexOf("await syncChildMapOnce(sql, browser, { tenant, apply: true, log, force: true })");
+    expect(refresh).toBeGreaterThan(src.indexOf("childMapRefreshDue({ candidates: provIds.length, lastAt: lastChildMapRefreshAt, now: Date.now() })"));
+    expect(refresh).toBeLessThan(src.indexOf("await provisionDailyOnce(sql, browser,"));
+    expect(refresh).toBeLessThan(src.indexOf("await syncMathClassBoards(sql, page,"));
+    expect(CHILDMAP_REFRESH_GAP_MS).toBeLessThan(5 * 60 * 1000); // 앱 쿨다운(5분)보다 짧게
+    expect(summarizeSync({ classes: 1, enrolled: 1, childLinks: 2 })).toContain("새 학부모 가입 확인 2");
+  });
   it("데몬이 요청 처리기를 부르고 caps.syncRequests를 알린다", () => {
     const w = read("watch-classnote-queue.mjs");
     expect(w).toMatch(/processSyncRequestOnce\(db\(\), b, \{ tenant, post: POST, host: HOSTNAME, log \}\)/);
     expect(w).toMatch(/syncRequests: true/);
+  });
+});
+
+describe("지금 동기화 앞 원아 연결 갱신(원장 2026-11-02 A안 — 낮에 가입한 신입의 당일 배정)", () => {
+  const now = 1_800_000_000_000;
+  it("신입 준비 후보가 없으면 갱신하지 않는다(ClassNote 로그인 0)", () => {
+    expect(childMapRefreshDue({ candidates: 0, lastAt: 0, now })).toBe(false);
+  });
+  it("후보가 있고 처음이면 갱신한다", () => {
+    expect(childMapRefreshDue({ candidates: 2, lastAt: 0, now })).toBe(true);
+  });
+  it("마지막 갱신에서 10분이 안 지났으면 건너뛴다(로그인 반복 금지)", () => {
+    expect(childMapRefreshDue({ candidates: 1, lastAt: now - CHILDMAP_REFRESH_GAP_MS + 1, now })).toBe(false);
+    expect(childMapRefreshDue({ candidates: 1, lastAt: now - CHILDMAP_REFRESH_GAP_MS, now })).toBe(true);
   });
 });

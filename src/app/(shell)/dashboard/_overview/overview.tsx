@@ -55,6 +55,7 @@ import {
 import { DemoRosterSwitch } from "../_components/demo-roster-switch";
 import type { DemoRosterControl } from "@/features/demo-roster/types";
 import s from "./overview.module.css";
+import { EXIT_BASIS_TAG } from "@/features/withdrawals/exit-basis";
 import { SubjectBridge } from "./subject-bridge";
 import appearance from "./appearance.module.css";
 
@@ -556,7 +557,7 @@ export function Overview({
     changes: (
     <Panel
       title={t("changes", "등록 · 퇴원 추이")}
-      note={`최근 6개월 · 당월은 오늘까지${change && startedNote(change) ? ` · ${startedNote(change)}` : ""}`}
+      note={`최근 6개월 · 당월은 오늘까지 · 퇴원은 ${EXIT_BASIS_TAG}${change && startedNote(change) ? ` · ${startedNote(change)}` : ""}`}
       href={studentsStatsHref("flow", { subject: view?.activeSubject, teacherView: snapshot.teacherView })}
       sections={[v.changes]}
       wide
@@ -603,7 +604,7 @@ export function Overview({
     earlyExits: (
     <Panel
       title={t("earlyExits", "등록 후 3개월 내 퇴원")}
-      note="이번 달 퇴원 · 등록일부터 30·60·90일"
+      note={`이번 달 퇴원(${EXIT_BASIS_TAG}) · 등록일부터 30·60·90일`}
       href={earlyExitsHref(v.earlyExits?.data?.month ?? snapshot.today.slice(0, 7))}
       sections={[v.earlyExits]}
     >
@@ -669,7 +670,7 @@ export function Overview({
     !(v.enrolledTrend && v.enrolledTrend.data === null && v.enrolledTrend.at !== null) ? (
       <Panel
         title={t("enrolledTrend", "재원생 추이")}
-        note={`${enrolledTrend?.monthlyFrom ? `${enrolledTrend.monthlyFrom.slice(0, 4)}년 ${Number(enrolledTrend.monthlyFrom.slice(5, 7))}월부터` : "최근 12개월"} · 달마다 말일 기준(이번 달은 오늘) · 휴원 제외`}
+        note={`${enrolledTrend?.monthlyFrom ? `${enrolledTrend.monthlyFrom.slice(0, 4)}년 ${Number(enrolledTrend.monthlyFrom.slice(5, 7))}월부터` : "최근 12개월"} · 달마다 말일 기준(이번 달은 오늘) · 휴원 제외 · 퇴원은 ${EXIT_BASIS_TAG}`}
         href={studentsStatsHref("trend", { subject: view?.activeSubject, teacherView: snapshot.teacherView })}
         sections={[v.enrolledTrend]}
         className={s.fullRow}

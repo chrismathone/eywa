@@ -1,6 +1,9 @@
-import { DONE_CHECK, normalizeCard, normalizeMissed, type BeforeClassCheck } from "./items";
+import { checkFromRow, DONE_CHECK, type BeforeClassCheck } from "./items";
 
-export type DayCheckRow = { class_id: string; student_id: string; missed: unknown; absent: boolean | null; card: unknown };
+export type DayCheckRow = {
+  class_id: string; student_id: string; missed: unknown; absent: boolean | null; card: unknown;
+  excused?: boolean | null; excuse_reason?: unknown; excuse_note?: string | null;
+};
 
 /**
  * 수학 보고서에 붙일 그 학생의 그날 체크 하나를 고른다(원장 2026-10-30 *"MS2A랑 JJ2A 묶고 JJ1A랑 MS1A랑 엮어서"* ·
@@ -15,6 +18,6 @@ export function pickReportCheck(rows: readonly DayCheckRow[], rosterClassIds: Re
   const inRoster = rows.filter((r) => rosterClassIds.has(r.class_id));
   const mine = inRoster.filter((r) => r.student_id === studentId);
   const row = mine.find((r) => !r.absent) ?? mine[0];
-  if (row) return { missed: normalizeMissed(row.missed as string[] | null), absent: !!row.absent, card: normalizeCard(row.card) };
+  if (row) return checkFromRow(row);
   return inRoster.length ? DONE_CHECK : null;
 }

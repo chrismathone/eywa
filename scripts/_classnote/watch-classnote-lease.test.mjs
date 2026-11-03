@@ -10,20 +10,22 @@ const stages = ["processQueueOnce", "processNoticesOnce", "processClassNoticesOn
   "processSyncRequestOnce", "processParentRepliesOnce", "processParentReactionsOnce", "provisionDailyOnce", "syncMathClassBoardsDaily",
   "syncChildMapOnce", "pollParentPostsOnce", "pollParentCommentsOnce", "kickVideoWorker", "kickLinkVideoCompress", "kickVideoReviewExtract", "pollReportReadsOnce", "snapshotBoardRosterOnce"];
 
-async function oneLoop({ local = true, approved = true, legacy = false, missingSchema = false, moduleOn = true, loseAfterFirst = false, managed = false, drainAfterFirst = false } = {}) {
-  const calls = [], writes = [], exits = [], tasks = [];
+async function oneLoop({ local = true, approved = true, legacy = false, missingSchema = false, moduleOn = true, loseAfterFirst = false, managed = false, drainAfterFirst = false, dueToday = false, loops = 1 } = {}) {
+  const calls = [], writes = [], exits = [], tasks = [], childmapOpts = [];
+  let ticks = 0;
   let held = false;
   const sql = Object.assign(async (parts, ...values) => {
     const text = parts.join("?");
     if (/^\s*insert/i.test(text)) writes.push({ text, values });
     return [{ active: legacy }];
   }, { json: (value) => value, end: async () => {} });
-  const work = Object.fromEntries(stages.map((name) => [name, async () => {
+  const work = Object.fromEntries(stages.map((name) => [name, async (...args) => {
     calls.push(name);
+    if (name === "syncChildMapOnce") childmapOpts.push(args[2] ?? {});
     if (name === "processQueueOnce" && loseAfterFirst) held = false;
     return { ran: false, processed: 0, claimed: 0 };
   }]));
-  const common = { ...work, managed, legacyCutover: async () => false, result:()=>{}, activity:async(task)=>{tasks.push(task??"idle");},
+  const common = { ...work, managed, classBoardSyncDueToday: () => (dueToday ? "2026-11-03" : null), legacyCutover: async () => false, result:()=>{}, activity:async(task)=>{tasks.push(task??"idle");},
     state:async(_phase,task)=>{if(task)tasks.push(task);return {drain:drainAfterFirst&&calls.includes("processQueueOnce")};},
     waitForVideoIdle:async()=>{calls.push("video-drained");},waitForAttachmentIdle:async()=>{calls.push("attachments-drained");},
     stopLinkVideoCompress:()=>{calls.push("link-compress-stopped");},waitForLinkCompressIdle:async()=>{calls.push("link-compress-drained");},stopVideoReviewExtract:()=>{calls.push("review-extract-stopped");},waitForReviewExtractIdle:async()=>{calls.push("review-extract-drained");},videoWorkerBusy:()=>false, BATCH: 2, resolveTenant: async () => "tenant-fixture", isClassnoteModuleEnabled: async () => moduleOn,
@@ -45,10 +47,11 @@ async function oneLoop({ local = true, approved = true, legacy = false, missingS
       exit: (code) => exits.push(code) },
     console: { log() {}, error() {} },
     // End after the first loop/denial; no operational timer, browser, DB or file is used.
-    setTimeout: () => { throw new Error("fixture loop complete"); }, clearTimeout() {},
+    // loops > 1 = 폴 대기(`new Promise((r) => setTimeout(r, POLL_MS))`)를 그만큼 바로 넘겨 다음 폴을 돌린다.
+    setTimeout: (fn) => { if (++ticks < loops) { fn(); return 0; } throw new Error("fixture loop complete"); }, clearTimeout() {},
     setInterval: () => ({ unref() {} }),
   }, { timeout: 1000 });
-  return { calls, writes, exits, tasks };
+  return { calls, writes, exits, tasks, childmapOpts };
 }
 
 describe("실제 클래스노트 실행기의 잠금 배선", () => {
@@ -71,6 +74,21 @@ describe("실제 클래스노트 실행기의 잠금 배선", () => {
     // 단계마다 이어서 할 일을 연동 앱에 알린다(업데이트가 기다리는 작업 표시, 1.0.7) — 쉬기 전엔 비운다.
     expect(result.tasks).toEqual(["queue", "notice", "classNotice", "recall", "autoSync", "syncNow", "parentReply", "parentReaction", "provision",
       "classBoardSync", "childmap", "posts", "comments", "video", "reads", "roster", "idle"]);
+  });
+  it("새벽 반 보드 정기 동기화가 돌 차례면 그 바로 앞에서 원아 연결을 한 번 새로 만든다(원장 2026-11-02 A안 — 신입 첫 배정 출처)", async () => {
+    const result = await oneLoop({ dueToday: true, managed: true });
+    const seq = result.calls.filter((name) => stages.includes(name));
+    const i = seq.indexOf("syncMathClassBoardsDaily");
+    expect(seq.slice(i - 2, i + 2)).toEqual(["provisionDailyOnce", "syncChildMapOnce", "syncMathClassBoardsDaily", "syncChildMapOnce"]);
+    expect(result.childmapOpts[0]).toMatchObject({ force: true, apply: true });
+    expect(result.childmapOpts[1]?.force).toBeFalsy(); // 정기 3.5는 20시간 주기 그대로(앞 실행으로 주기가 채워져 실제로는 안 돈다)
+    const p = result.tasks.indexOf("provision");
+    expect(result.tasks.slice(p, p + 4)).toEqual(["provision", "childmap", "classBoardSync", "childmap"]);
+  });
+  it("정기 동기화가 '오늘 함' 표식 전에 실패해 차례가 계속 참이어도 원아 연결 강제 갱신은 하루 한 번뿐(폴마다 ClassNote 로그인 금지)", async () => {
+    const result = await oneLoop({ dueToday: true, loops: 3 });
+    expect(result.calls.filter((name) => name === "syncMathClassBoardsDaily")).toHaveLength(3);
+    expect(result.childmapOpts.filter((o) => o.force === true)).toHaveLength(1);
   });
   it("첫 단계 뒤 잠금이 소실되면 다음 작업을 시작하지 않는다", async () => {
     const result = await oneLoop({ loseAfterFirst: true });

@@ -25,7 +25,6 @@ import { moveLiveSlotTeacher } from "./handover";
 import { detectOverlaps } from "./overlap-detect";
 import {
   ARCHIVE_REASON,
-  CLOSE_TERM_REASON,
   reopenClassEnrollments,
 } from "./enrollment-lifecycle";
 import { deleteCurrentSlots, loadCurrentSlots } from "./schedule-sync";
@@ -47,8 +46,8 @@ import {
 import { normalizeEnglishTrack } from "../english-track";
 import { readFreeClosedNameRequest, type ClassNameConflict } from "../class-name-conflict";
 import { freedLeftNotice, rollbackFreedClassName, writeWithClassNameGuard } from "./class-name-guard";
-import { ClassTermError, endClassWithName } from "./class-term-store";
-import { explainDbError } from "@/lib/supabase/db-error";
+import { ClassTermError, endClassWithName, reopenClassWithSchedules } from "./class-term-store";
+import { explainDbError, logDbError } from "@/lib/supabase/db-error";
 
 export type ClassFormState =
   | {
@@ -409,7 +408,9 @@ export async function updateClass(
 
   // 🔴 겹침은 저장을 막지 않는다(경고만). 자기 자신(id)은 제외.
   // 독립 조회 2건은 병렬(B4) — 겹침 진단과 "delete 전에 기존 스케줄 읽어두기"는 서로 안 쓴다.
-  const [overlaps, priorRes, beforeRes, settingsForPeriods] = await Promise.all([
+  // 교시마다 고른 강의실의 이름 — 강의실을 바꾼 교시의 라벨을 새 강의실로 맞춘다(schedule-preserve `resolveSlotRoomLabel`).
+  const slotRoomIds = [...new Set(input.schedules.map((s) => s.classroomId).filter((v): v is string => !!v))];
+  const [overlaps, priorRes, beforeRes, settingsForPeriods, slotRoomRes] = await Promise.all([
     collectOverlaps(supabase, input, id),
     loadCurrentSlots(supabase, id, today),
     // 감사로그용 **변경 전 스냅샷** — 무엇이 바뀌었는지는 바꾸기 전에만 알 수 있다(독립 조회라 병렬, B4).
@@ -417,7 +418,13 @@ export async function updateClass(
     // 교시표 — "폼이 보낸 종료시각을 믿어도 되나" 판정에 쓴다(schedule-preserve `formEndTimeWins`).
     // 캐시된 조회지만 저장 경로에 직렬 왕복을 얹지 않으려고 여기서 함께 받는다(B4).
     getTenantSettings(),
+    slotRoomIds.length > 0
+      ? supabase.from("classrooms").select("id, name").in("id", slotRoomIds)
+      : Promise.resolve(null),
   ]);
+  // 못 읽었으면 바뀐 교시의 라벨은 비운다(옛 강의실 라벨을 남기지 않는다 — 화면은 강의실 이름으로 떨어진다).
+  if (slotRoomRes?.error) logDbError(slotRoomRes.error, "classes.updateClass.slotRooms");
+  const slotRoomNames = new Map((slotRoomRes?.data ?? []).map((r) => [r.id as string, (r.name as string) || ""]));
   const before = beforeRes.data as
     | { class_name: string; subject: string; teacher_id: string | null; classroom_id: string | null }
     | null;
@@ -530,6 +537,7 @@ export async function updateClass(
       },
       today,
       periodPairs,
+      roomNames: slotRoomNames,
     }).map((s) => ({
       tenant_id: user.tenantId,
       class_id: id,
@@ -802,7 +810,8 @@ export async function endClassTerm(_prev: ClassTermState, formData: FormData): P
   if (!id) return { error: "반 ID가 누락되었습니다" };
 
   try {
-    await endClassWithName(user, { classId: id, date });
+    // 종강일 뒤로 남은 시간표 배치도 그날 닫는다(안 닫으면 시트 가져오기가 없는 반을 "제거"로 띄운다, 2026-11-02).
+    await endClassWithName(user, { classId: id, date, closeSchedules: true });
   } catch (error) {
     return { error: explainDbError(error, { scope: "classes.endClassTerm", op: "write",
       fallback: error instanceof ClassTermError ? error.message : "종강을 저장하지 못했습니다. 종강일·반 이름·수강 정보를 확인하고 다시 시도해 주세요." }).message };
@@ -824,21 +833,14 @@ export async function reopenClassTerm(_prev: ClassTermState, formData: FormData)
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "반 ID가 누락되었습니다" };
 
-  const supabase = await createClient();
-  const { data: klass } = await supabase.from("classes").select("class_name").eq("id", id).single();
-  const { error: updErr } = await supabase.from("classes").update({ closed_at: null }).eq("id", id);
-  if (updErr) return { error: updErr.message };
-
-  // 종강이 종료시킨 수강만 되살린다(그 전에 수동 종료·반이동으로 끝난 수강은 그대로).
-  const sync = await reopenClassEnrollments(supabase, id, CLOSE_TERM_REASON);
-  if (sync.error) return { error: sync.error };
-
-  await logAction({
-    action: "class_reopen_term",
-    targetType: "class",
-    targetLabel: klass?.class_name,
-    metadata: { classId: id, affectedStudents: sync.studentIds.length },
-  });
+  // 종강일 비우기 · 종강이 닫은 시간표 배치 · 종강이 끝낸 수강 · 재개강 기록을 한 거래로(확인 창의 "시간표·일정에
+  // 다시 표시됩니다"). 되살릴 산 배치가 없으면 막는다 — 그 밤 정리가 수강을 다시 닫는다(class-term-store.ts).
+  try {
+    await reopenClassWithSchedules(user, id);
+  } catch (error) {
+    return { error: explainDbError(error, { scope: "classes.reopenClassTerm", op: "write",
+      fallback: error instanceof ClassTermError ? error.message : "재개강을 저장하지 못했습니다. 반 정보를 확인하고 다시 시도해 주세요." }).message };
+  }
   revalidatePath("/classes");
   revalidatePath(`/classes/${id}`);
   revalidatePath("/timetable");

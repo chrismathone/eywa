@@ -1,7 +1,7 @@
 // scripts/_classnote/math-class-boards-load.mjs — 수학 반 보드 계획의 **조회부**(aywa DB + ClassNote GET).
 // 판정은 class-board-plan.mjs(순수). 이 파일은 읽기만 한다 — 쓰기는 provision-math-class-boards.mjs.
 // 🔴 보호자 전화 값은 반환 계획·로그에 싣지 않는다(판정 입력으로만 쓴다).
-import { fetchBoardChildren, fetchBoards } from "./classnote-admin-core.mjs";
+import { fetchBoardChildren, fetchBoards, fetchChildDetail } from "./classnote-admin-core.mjs";
 import { kstSchoolYear } from "./board-safety.mjs";
 import { personalBoardName, planClassBoards } from "./class-board-plan.mjs";
 
@@ -58,7 +58,11 @@ export async function loadAywa(sql, tenant) {
   return { classes, students };
 }
 
-/** 운영관리 명부 — 원아 id → { 보호자 전화, 현재 소속 보드명[] }. 비면 throw(전화 대조 없이는 계획하지 않는다). */
+/**
+ * 운영관리 명부 — 원아 id → { 보호자 전화, 생년, 원아 이름, 현재 소속 보드명[] }. 비면 throw(전화 대조 없이는 계획하지 않는다).
+ * 원아 이름(`name`) = 관리자 화면의 원아 이름 — 원아 연결(0185a)을 만든 바로 그 이름이라, 연결로 가져온 원아의 ⑥(이름 연속성)을
+ * 이 값으로 건다(반 보드에 아직 없는 신입 원아는 다른 이름 출처가 없다 — class-board-plan.mjs `linkMembers`).
+ */
 export async function fetchAdmissions(page, centerId) {
   const adm = await page.evaluate(async (cid) => {
     const r = await fetch(`/api/v1_2/centers/${cid}/admissioninfos?name=&page_size=2000`, { headers: { accept: "application/json" } });
@@ -68,11 +72,12 @@ export async function fetchAdmissions(page, centerId) {
       childId: x.child_id,
       phone: x.basic_info?.carer1_phone ?? null,
       birth: x.basic_info?.child_date_birth ?? null, // 관리자 화면의 생년월일(학부모 프로필 date_birth와 따로 산다)
+      name: x.basic_info?.child_name ?? null,
       boardNames: (x.enrollments ?? []).filter((e) => !e.date_left).map((e) => e.class_name ?? ""),
     }));
   }, centerId);
   if (!adm.length) throw new Error("운영관리 명부가 비었다 — 전화 대조 없이는 계획하지 않는다");
-  return new Map(adm.map((a) => [a.childId, { phone: a.phone, birth: a.birth, boardNames: a.boardNames }]));
+  return new Map(adm.map((a) => [a.childId, { phone: a.phone, birth: a.birth, name: a.name, boardNames: a.boardNames }]));
 }
 
 /** 1인 보드 id — 학생 유효이름으로(공백 무시 정확 일치). 0개·2개 이상이면 null. */
@@ -108,8 +113,64 @@ export async function loadLinkedBoards(sql, tenant, { strict = true } = {}) {
   return new Map(rows.map((r) => [r.class_id, Number(r.board_id)]));
 }
 
-/** 전체 계획을 새로 만든다(매 실행 최신 — 계획을 파일에서 읽어 실행하지 않는다). */
-export async function loadPlan(page, centerId, { classes, students }, { linkedBoardByClass = new Map() } = {}) {
+/**
+ * 반 보드에서 원아 확인을 마친 학생(0302a status ok) — 학생 id → [{id, name, boardIds}](원아 중복 없이 · 기록된 반 보드 번호들).
+ * 1인 보드가 없거나 빈 학생의 원아 판정 출처(원장 2026-11-02 — 1인 보드 원아 배정 해제 · 12월 보드 삭제, class-board-plan.mjs ①).
+ * 🔴 조회 실패 = null(throw 아님) — 호출부가 정한다: 반 보드 동기화는 그날을 건너뛴다(대신 출처 없이 돌면 1인 보드가 빈 학생을
+ *    전부 보류로 적어 **기록 자체를 지운다**), 1인 보드 준비는 수학을 그날 건너뛴다(비운 1인 보드를 다시 채우지 않게).
+ */
+export async function loadVerifiedChildren(sql, tenant) {
+  const rows = await sql`select student_id, child_id, child_name, board_id from classnote_class_board_members
+    where tenant_id = ${tenant} and status = 'ok' and child_id is not null`.catch(() => null);
+  if (!Array.isArray(rows)) return null;
+  const out = new Map();
+  for (const r of rows) {
+    const id = Number(r.child_id);
+    if (!Number.isSafeInteger(id) || id <= 0) continue;
+    const list = out.get(r.student_id) ?? [];
+    let entry = list.find((c) => c.id === id);
+    if (!entry) list.push((entry = { id, name: r.child_name ?? "", boardIds: [] }));
+    const bid = Number(r.board_id);
+    if (Number.isSafeInteger(bid) && bid > 0 && !entry.boardIds.includes(bid)) entry.boardIds.push(bid);
+    out.set(r.student_id, list);
+  }
+  return out;
+}
+
+/**
+ * 원아 연결 출처 원아의 학부모 프로필(이름·생년) — 이번에 읽은 보드에 **없는** 연결 원아만(신입 · 일부 반만 보는 지금 동기화)
+ * 원아 상세(`/api/v1/children/{id}` GET)로 읽는다(원장 2026-11-02 A안 · 적대적 리뷰). 계획이 ⑥을 명부 이름 + 프로필 이름 **둘 다**로
+ * 걸기 위해서다 — 명부 이름은 연결을 만든 바로 그 입력이라 형제끼리 뒤바뀐 명부를 혼자서는 못 잡는다. 못 읽으면 null(그 학생만 보류).
+ * 연결 출처를 쓸 일이 없는 원아(확인 기록이 있는 학생 · 이번 계획 밖 학생 · 명부에 없는 원아)는 읽지 않는다 — 보통 하루 몇 건.
+ * @returns {Promise<Map<number,{name:string,date_birth:string|null}|null>>}
+ */
+async function loadLinkProfiles(page, { classes, membersByBoard, admissions, verifiedChildren, childLinks }) {
+  const out = new Map();
+  if (!childLinks?.size) return out;
+  const planStudents = new Set(classes.flatMap((c) => c.studentIds));
+  const seen = new Set();
+  for (const list of membersByBoard.values()) if (Array.isArray(list)) for (const x of list) seen.add(Number(x.id));
+  for (const [cid, sid] of childLinks) {
+    const id = Number(cid);
+    if (!Number.isSafeInteger(id) || id <= 0 || out.has(id)) continue;
+    if (!planStudents.has(sid) || seen.has(id) || !admissions.get(id)) continue;
+    if ((verifiedChildren?.get?.(sid) ?? []).length) continue;
+    try {
+      const d = await fetchChildDetail(page, id);
+      out.set(id, { name: String(d?.name ?? ""), date_birth: d?.date_birth ?? null });
+    } catch {
+      out.set(id, null);
+    }
+  }
+  return out;
+}
+
+/**
+ * 전체 계획을 새로 만든다(매 실행 최신 — 계획을 파일에서 읽어 실행하지 않는다).
+ * `childLinks`(원아 id → 학생 id, 0185a — class-board-release-load.mjs `loadChildLinks`) = 확인 기록이 아예 없는 학생의 원아 출처
+ * (원장 2026-11-02 A안). 원아 이름·생년은 운영관리 명부에서, 학부모 프로필은 읽은 보드 또는 원아 상세 GET(`loadLinkProfiles`)에서.
+ */
+export async function loadPlan(page, centerId, { classes, students }, { linkedBoardByClass = new Map(), verifiedChildren = null, verifiedOwnerScope = null, childLinks = null } = {}) {
   const boards = await fetchBoards(page, centerId);
   const admissions = await fetchAdmissions(page, centerId);
   const need = new Set();
@@ -126,6 +187,10 @@ export async function loadPlan(page, centerId, { classes, students }, { linkedBo
     const id = linkedBoardByClass.get(c.classId);
     if (id != null && liveIds.has(Number(id))) need.add(Number(id));
   }
+  // 확인 기록의 반 보드(원장 2026-11-02) — 1인 보드가 빈 학생은 "기록된 그 반 보드에 지금도 있는 원아"로 판정하므로 그 보드를 읽는다
+  // (일부 반만 보는 지금 동기화에서 다른 반 보드에 있는 원아를 놓치지 않게). 지워진 보드는 읽지 않는다(조회 실패 = 동기화 중단).
+  for (const sid of new Set(classes.flatMap((c) => c.studentIds)))
+    for (const v of verifiedChildren?.get?.(sid) ?? []) for (const bid of v.boardIds ?? []) if (liveIds.has(Number(bid))) need.add(Number(bid));
   const membersByBoard = new Map();
   let failed = 0;
   for (const id of need) {
@@ -135,6 +200,7 @@ export async function loadPlan(page, centerId, { classes, students }, { linkedBo
       failed++; // undefined로 남겨 "조회 실패" 보류가 되게 한다
     }
   }
-  const plans = planClassBoards({ classes, students, boards, membersByBoard, admissions, schoolYear: kstSchoolYear(), linkedBoardByClass });
+  const childProfiles = await loadLinkProfiles(page, { classes, membersByBoard, admissions, verifiedChildren, childLinks });
+  const plans = planClassBoards({ classes, students, boards, membersByBoard, admissions, schoolYear: kstSchoolYear(), linkedBoardByClass, verifiedChildren, verifiedOwnerScope, childLinks, childProfiles });
   return { plans, boards, membersByBoard, admissions, failed, lookedUp: need.size };
 }

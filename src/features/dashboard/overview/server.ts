@@ -28,7 +28,7 @@ import {
 } from "@/features/students/enrollment/enrolled-composition";
 import { getWithdrawalsInWindow, type WindowWithdrawal } from "@/features/withdrawals/server/window";
 import { getSubjectEndedStudents } from "@/features/withdrawals/server/queries";
-import { includeSubjectEnds } from "./monthly-exits";
+import { monthWithdrawalRows } from "./monthly-exits";
 import { tenureDays } from "@/features/withdrawals/early-exit";
 import { loadTeacherWork } from "./teacher-work-server";
 import { withStaffTasks } from "@/features/staff-tasks/server/teacher-work";
@@ -36,8 +36,8 @@ import { selectSubjectView } from "../layout/subject-view";
 import { AREA_MENUS, RETIRED_AREAS } from "@/features/dashboard/layout/registry";
 import {
   inWithdrawalWindow,
+  exitReportMonth,
   withdrawalMonthWindow,
-  withdrawalProgram,
 } from "@/features/withdrawals/window";
 import { isMergedStudent } from "@/features/students/status/merged";
 import { bookkeepingOnlyIds } from "@/features/withdrawals/server/bookkeeping";
@@ -263,7 +263,9 @@ async function students(
 }
 
 /**
- * KPI '퇴원&수업종료' — 이번 달 1일 ~ min(말일, 오늘)(KST).
+ * KPI '퇴원&수업종료' — 보여 줄 달(`exitReportMonth` — 1~10일은 지난달, 11일부터 이번 달 · 원장 2026-11-03) 1일 ~ min(말일, 오늘)(KST)로
+ * **센**(수업료를 낸 마지막 달 기준) 줄 + 같은 창에 퇴원·종료했지만 앞 달로 센 줄
+ * (`carried`, 원장 2026-11-03 — 숫자엔 들지 않고 팝업이 밝힌다). 조립은 `monthWithdrawalRows`(순수 함수 — 시험이 잠근다).
  * 퇴원관리의 과목 전체 종료 기준을 더하고 종료된 과목마다 한 번 센다. 반이동·특강 종료는 제외한다.
  */
 async function monthWithdrawals(
@@ -271,31 +273,10 @@ async function monthWithdrawals(
   today: string,
   settingsPromise: Promise<Settings>,
 ): Promise<OverviewData["withdrawals"]> {
-  const month = today.slice(0, 7);
+  const month = exitReportMonth(today);
   const win = withdrawalMonthWindow(month, today);
   const [rows, settings, ended] = await Promise.all([rowsPromise, settingsPromise, getSubjectEndedStudents({ countFrom: win.from })]);
-  return {
-    month,
-    rows: includeSubjectEnds(rows
-      .filter((row) =>
-        // 퇴원월 = 수강료를 낸 마지막 달(`exitDate`, 원장 2026-10-29) — 퇴원관리 '이번 달'과 같은 판정.
-        inWithdrawalWindow({ withdrawnAt: row.exitDate, systemBulk: false }, win.from, win.to),
-      )
-      .flatMap((row) => (row.exitClasses.length ? row.exitClasses : [{
-        subject: row.lastClassSubject,
-        englishTrack: row.lastClassEnglishTrack,
-        className: row.lastClassName,
-      }]).map((klass) => ({
-        id: row.id,
-        eventKey: `${row.id}|${klass.subject ?? "unknown"}`,
-        name: row.name,
-        schoolGrade: schoolGradeLabel(row.school, row.grade) || null,
-        withdrawnAt: row.withdrawnAt,
-        className: klass.className ?? undefined,
-        subject: klass.subject,
-        program: withdrawalProgram({ lastClassSubject: klass.subject, lastClassEnglishTrack: klass.englishTrack }, settings.operations.subjects),
-      }))), ended, win, settings.operations.subjects, (school, grade) => schoolGradeLabel(school, grade) || null),
-  };
+  return { month, ...monthWithdrawalRows(rows, ended, win, settings.operations.subjects, (school, grade) => schoolGradeLabel(school, grade) || null) };
 }
 
 /** 지난 달들의 3개월 내 퇴원 명단 — '대시보드 전환' 상세 전용. 달마다 막대의 지난 달 칸(`history`)과 같은 모집단이다. */
@@ -309,7 +290,8 @@ export async function earlyExitNames(rowsPromise: Promise<WindowWithdrawal[]>, t
 }
 
 /**
- * '등록 후 3개월 내 퇴원'(원장 2026-10-15) — KPI '퇴원&수업종료'의 퇴원 행과 **같은 행·같은 창**(이번 달 1일 ~ 오늘)의 퇴원 전부에 등록 후 일수를 붙인다.
+ * '등록 후 3개월 내 퇴원'(원장 2026-10-15) — KPI '퇴원&수업종료'의 퇴원 행과 **같은 행**, 창은 **달력 이번 달**(1일 ~ 오늘 — KPI는 1~10일에 지난달을 보여
+ * 주지만 이 카드는 '이번 달 퇴원'이라 적힌 그대로 달력 기준, 원장 2026-11-03)의 퇴원 전부에 등록 후 일수를 붙인다.
  * 30·60·90일 판정은 카드가 `early-exit.ts`로 한다(퇴원관리 '등록 후' 필터와 같은 함수). 수강종료는 싣지 않는다(퇴원만 판정).
  * 지난 달들(등록·퇴원 추이와 같은 6개월 조회)은 이름 없이 달·일수·과목만 싣는다 — 카드가 달마다 센다.
  */
@@ -721,7 +703,8 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   // 실제 퇴원 행은 KPI·추이·등록 후 3개월 내 퇴원이 공유한다. 과목 종료는 KPI에서만 추가한다.
   const withdrawalRows =
     (allowed.includes("withdrawals") || allowed.includes("students")) && needs("withdrawals", "changes", "earlyExits")
-      ? getWithdrawalsInWindow(`${monthKeys(today)[0]}-01`, today)
+      // KPI가 보여 줄 달에 퇴원했지만 앞 달로 센 학생은 6개월보다 앞 달로 셌어도 싣는다(KPI 팝업 '앞 달로 센' — 원장 2026-11-03). 세 소비처는 `exitDate`로 다시 거른다.
+      ? getWithdrawalsInWindow(`${monthKeys(today)[0]}-01`, today, { keepProcessedFrom: `${exitReportMonth(today)}-01` })
       : Promise.resolve([] as WindowWithdrawal[]);
   // 최근 60일 콜&상담 — 일정 카드(일정↔상담 연결)와 '상담 진행' 카드가 **같은 한 번의 조회**를 쓴다(두 카드가 같은 상담 집합을
   // 보고, 30초 갱신마다 같은 표를 두 번 읽지 않게). 실패 처리는 영역마다 다르다: 일정 카드는 링크만 빼고 살고, 상담 진행은 실패를 알린다.

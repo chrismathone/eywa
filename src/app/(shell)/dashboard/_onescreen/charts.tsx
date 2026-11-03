@@ -1,6 +1,7 @@
 import { Sparkline } from "../_components/sparkline";
 import { PanelEmpty } from "./tiles";
 import type { WeeklyChangeBucket } from "@/features/dashboard/onescreen/weekly-change";
+import { EXIT_BASIS_TAG } from "@/features/withdrawals/exit-basis";
 import type { CompositionBar } from "@/features/dashboard/onescreen/composition";
 
 /**
@@ -74,6 +75,8 @@ export function WeeklyChangeBars({ buckets }: { buckets: WeeklyChangeBucket[] })
         <span className="inline-flex items-center gap-1">
           <span aria-hidden className="bg-amber size-2 rounded-[2px]" /> 퇴원
         </span>
+        {/* 퇴원은 수업료를 낸 마지막 달의 말일 주에 선다(원장 2026-10-29 규칙 · 2026-11-03 기준을 적음). */}
+        <span>· 퇴원은 {EXIT_BASIS_TAG}</span>
       </div>
       <div className="flex min-h-0 flex-1 items-end gap-2 pt-1">
         {buckets.map((b) => (

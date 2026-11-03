@@ -1,7 +1,8 @@
 // scripts/_classnote/provision-math-class-boards.mjs — 수학 **반 보드** 생성·이름 변경·원아 추가 배정(수동 실행판).
 //
-// 원장 2026-09-29: 수학 발송을 aywa 반과 **이름까지 똑같은** 반 보드로 옮긴다. 1인 보드 `(수학)이름`은
-// 해제하지 않고 반 보드에 **추가 배정**한다. 반을 2~3개 다니면 모든 반에 따로. 종강 제외(특강은 포함 — 2026-09-30).
+// 원장 2026-09-29: 수학 발송을 aywa 반과 **이름까지 똑같은** 반 보드로 옮긴다. 반을 2~3개 다니면 모든 반에 따로.
+// 종강 제외(특강은 포함 — 2026-09-30). 1인 보드 `(수학)이름`은 이 스크립트가 손대지 않는다(2026-11-02 원장이 원아 배정을 해제했고
+// 12월에 지운다 — 원아 출처는 1인 보드 → 반 보드 확인 기록 → 원아 연결, class-board-plan.mjs ①).
 // 가드(원아 출처·전화·생년·역방향·같은 반 동명이인·이름 연속성) = class-board-plan.mjs(순수·Vitest).
 // 실행 코드는 매일 동기화(math-class-boards-sync.mjs)와 **같은** math-class-boards-apply.mjs를 쓴다.
 //
@@ -17,7 +18,8 @@ import postgres from "postgres";
 import { fetchCenterId, launchAdminBrowser, loginClassnote } from "./classnote-admin-core.mjs";
 import { resolveTenant } from "./classnote-core.mjs";
 import { closedClassesToKeep, summarizePlan } from "./class-board-plan.mjs";
-import { loadAywa, loadClosedLinked, loadLinkedBoards, loadPlan } from "./math-class-boards-load.mjs";
+import { loadAywa, loadClosedLinked, loadLinkedBoards, loadPlan, loadVerifiedChildren } from "./math-class-boards-load.mjs";
+import { loadChildLinks } from "./class-board-release-load.mjs";
 import { applyClassBoardPlans, ClassBoardStop } from "./math-class-boards-apply.mjs";
 import { writeClassBoardSnapshot } from "./math-class-boards-db.mjs";
 
@@ -40,7 +42,14 @@ try {
   const centerId = await fetchCenterId(page);
   // strict(개명 감사 G9) — 조회 실패를 빈 지도로 삼키면 이름으로 후퇴해 개명한 반을 새로 만든다.
   const linkedBoardByClass = await loadLinkedBoards(sql, tenant, { strict: true });
-  const { plans, boards, membersByBoard, failed, lookedUp } = await loadPlan(page, centerId, aywa, { linkedBoardByClass });
+  // 1인 보드가 없거나 빈 학생의 원아 출처 — 매일 동기화와 같은 판정(원장 2026-11-02, class-board-plan.mjs ①).
+  const verifiedChildren = await loadVerifiedChildren(sql, tenant);
+  if (!verifiedChildren) throw new ClassBoardStop("반 보드 확인 기록을 읽지 못했다 — 중단(그대로 계획하면 1인 보드가 빈 학생이 전부 보류로 기록된다)");
+  // 확인 기록이 아예 없는 학생의 원아 출처 = 원아 연결(0185a) — 매일 동기화와 같은 판정(원장 2026-11-02 A안). 못 읽으면 중단.
+  const childLinks = await loadChildLinks(sql, tenant).catch((e) => {
+    throw new ClassBoardStop(`원아 연결을 읽지 못했다 — 중단(${String(e?.message ?? e).slice(0, 120)})`);
+  });
+  const { plans, boards, membersByBoard, failed, lookedUp } = await loadPlan(page, centerId, aywa, { linkedBoardByClass, verifiedChildren, childLinks });
   console.log(`센터 ${centerId} · 보드 ${boards.length}개 · 원아 조회 보드 ${lookedUp}개(실패 ${failed}) · 연결표 ${linkedBoardByClass.size}개 반`);
 
   const s = summarizePlan(plans);
@@ -63,7 +72,7 @@ try {
   if (!APPLY) {
     console.log("드라이런 — ClassNote 변경 없음. 실행하려면 --apply");
   } else {
-    done = await applyClassBoardPlans({ page, centerId, targets, boards, membersByBoard, students: aywa.students, log: console.log });
+    done = await applyClassBoardPlans({ page, centerId, targets, boards, membersByBoard, students: aywa.students, log: console.log, reloadChildLinks: () => loadChildLinks(sql, tenant) });
     console.log(
       `\n✅ 완료 — 반 ${done.length}개 · 생성 ${done.filter((d) => d.created).length} · 이름 변경 ${done.filter((d) => d.renamed).length} · 원아 배정 ${done.reduce((n, d) => n + d.enrolled.length, 0)}건 · 1인 보드 그대로`,
     );
@@ -73,7 +82,7 @@ try {
     // 방금 만든 보드는 번호로 얹는다(이름이 달라도 연결 — 매일 동기화와 같은 규약, G8).
     const linkedAfter = await loadLinkedBoards(sql, tenant, { strict: true });
     for (const d of done) if (d.created && d.boardId != null) linkedAfter.set(d.classId, Number(d.boardId));
-    const fresh = await loadPlan(page, centerId, aywa, { linkedBoardByClass: linkedAfter });
+    const fresh = await loadPlan(page, centerId, aywa, { linkedBoardByClass: linkedAfter, verifiedChildren, childLinks });
     if (fresh.failed) throw new ClassBoardStop(`원아 조회 실패 ${fresh.failed}건 — DB 기록을 건너뛴다(불완전한 판정으로 초록불을 켜지 않는다)`);
     // 종강 반 연결 — ClassNote 보드가 살아 있으면 지킨다(원장 2026-09-30, 매일 동기화와 같은 판정).
     const keepClassIds = closedClassesToKeep({

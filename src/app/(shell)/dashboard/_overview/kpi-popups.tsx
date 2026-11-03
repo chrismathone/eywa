@@ -7,6 +7,7 @@ import {
   withdrawalsMonthHref,
 } from "@/features/dashboard/overview/kpi-links";
 import { countWithdrawalPrograms } from "@/features/withdrawals/window";
+import { EXIT_REPORT_RULE, countedEarlierTitle, countedMonthLabel, exitBasisRule } from "@/features/withdrawals/exit-basis";
 import { programLabel, visiblePrograms, type ProgramSubject } from "@/features/students/enrollment/program";
 import { dashboardProgramColor, dashboardCombinationColor } from "@/features/dashboard/overview/subject-colors";
 import { CountList, NameCell, PopupEmpty, PopupTotal, Tag, monthDay } from "./kpi-popup-parts";
@@ -70,9 +71,24 @@ export function WithdrawalsPopup({
   if (!data) return <PopupEmpty>퇴원 정보를 불러오지 못했습니다.</PopupEmpty>;
   const counts = countWithdrawalPrograms(data.rows);
   const endedCount = data.rows.filter(row => row.kind === "subject-ended").length;
+  const monthNo = Number(data.month.slice(5));
+  const carried = data.carried ?? [];
+  // 한 줄 — 이름 · 퇴원/수강종료 · 학년·프로그램 · 날짜(마지막 수업일 — 퇴원일·종료일). '앞 달로 센' 줄은 날짜 뒤에 센 달을 붙인다.
+  const row = (r: (typeof data.rows)[number], counted?: string) => (
+    <li key={r.eventKey ?? r.id} className={s.kpiListRow}>
+      <NameCell href={canOpenStudent ? `/students/${r.id}` : null} title={r.name} ariaLabel={`${r.name} 원생 상세`}>
+        {r.name}
+      </NameCell>
+      <Tag tone={r.kind === "subject-ended" ? "info" : "caution"}>{r.kind === "subject-ended" ? "수강종료" : "퇴원"}</Tag>
+      <span className={s.kpiListMeta} title={r.className} style={r.program ? { color: dashboardProgramColor(r.program) } : undefined}>
+        {[r.schoolGrade, r.program ? programLabel(r.program, subjects, eieOn) : null].filter(Boolean).join(" · ")}
+      </span>
+      <time dateTime={r.withdrawnAt}>{monthDay(r.withdrawnAt)}{counted ? ` ${r.kind === "subject-ended" ? "종료" : "퇴원"} · ${counted}` : ""}</time>
+    </li>
+  );
   return (
     <>
-      <PopupTotal label={`${Number(data.month.slice(5))}월 퇴원&수업종료`} value={counts.total} unit="명" />
+      <PopupTotal label={`${monthNo}월로 센 퇴원&수업종료`} value={counts.total} unit="명" />
       <p className={s.popupSummary}>퇴원 {counts.total - endedCount}명 · 수강종료 {endedCount}명</p>
       <CountList
         rows={[
@@ -87,31 +103,19 @@ export function WithdrawalsPopup({
         ]}
       />
       {data.rows.length === 0 ? (
-        <PopupEmpty>이번 달 퇴원·수업종료 학생이 없습니다.</PopupEmpty>
+        <PopupEmpty>{monthNo}월로 센 퇴원·수업종료 학생이 없습니다.</PopupEmpty>
       ) : (
-        <ul className={s.kpiList}>
-          {data.rows.map((row) => (
-            <li key={row.eventKey ?? row.id} className={s.kpiListRow}>
-              <NameCell
-                href={canOpenStudent ? `/students/${row.id}` : null}
-                title={row.name}
-                ariaLabel={`${row.name} 원생 상세`}
-              >
-                {row.name}
-              </NameCell>
-              <Tag tone={row.kind === "subject-ended" ? "info" : "caution"}>
-                {row.kind === "subject-ended" ? "수강종료" : "퇴원"}
-              </Tag>
-              <span className={s.kpiListMeta} title={row.className} style={row.program ? { color: dashboardProgramColor(row.program) } : undefined}>
-                {[row.schoolGrade, row.program ? programLabel(row.program, subjects, eieOn) : null]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </span>
-              <time dateTime={row.withdrawnAt}>{monthDay(row.withdrawnAt)}</time>
-            </li>
-          ))}
-        </ul>
+        <ul className={s.kpiList}>{data.rows.map((r) => row(r))}</ul>
       )}
+      {carried.length > 0 ? (
+        <>
+          <p className={s.popupGroup}>{countedEarlierTitle(data.month, carried.length, "명")} — 위 숫자에 들지 않습니다</p>
+          <ul className={s.kpiList}>{carried.map((r) => row(r, countedMonthLabel(r.countMonth)))}</ul>
+        </>
+      ) : null}
+      {/* 퇴원이 어떤 기준으로 세지는지 — 원장 2026-11-03 *"아래쪽에도 그 내용을 적어놓고, 마지막 수업일 기준이라는 멘트와 수강료 납부 관련 멘트도"*. */}
+      <p className={s.footnote}>{EXIT_REPORT_RULE}</p>
+      <p className={s.footnote}>{exitBasisRule(data.month)}</p>
       <p className={s.footnote}>과목 수업을 모두 종료한 학생 포함 · 반이동·특강 종료·퇴원일 미상 제외 · 여러 과목을 함께 종료하면 과목마다 1명씩 셉니다.</p>
     </>
   );

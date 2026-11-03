@@ -1,4 +1,5 @@
 import s from "./_overview/overview.module.css";
+import { EXIT_BASIS_TAG } from "@/features/withdrawals/exit-basis";
 
 // 운영실(학원 전체 현황) 초기 로드 스트리밍 — 여러 영역 병렬 조회가 도는 동안 Next가 이 loading을
 // Suspense fallback으로 즉시 흘린다(첫 페인트 체감, B7).
@@ -40,10 +41,10 @@ const SECTIONS: { title: string; note: string; panels: PanelShape[]; followups?:
       { title: "출결 현황", note: "오늘 · 학생·반·교시별 출결 칸", body: 205 },
       { title: "9월 수납 현황", note: "이번 달 청구서 · 취소 청구 제외", body: 195 },
       { title: "신규생 단계별 관리", note: "등록 후 90일 · 재원·대기 학생", body: 180 },
-      { title: "등록 · 퇴원 추이", note: "최근 6개월 · 당월은 오늘까지", body: 245, wide: true },
+      { title: "등록 · 퇴원 추이", note: `최근 6개월 · 당월은 오늘까지 · 퇴원은 ${EXIT_BASIS_TAG}`, body: 245, wide: true },
       { title: "6개월 청구 · 수납", note: "최근 6개월 · 청구월 기준 실청구액(청구 − 할인)", body: 245, wide: true },
       // 한 줄 전체 추이 둘(실제 화면의 재원생 추이 · 강좌수 추이 — `s.fullRow`).
-      { title: "재원생 추이", note: "최근 12개월 · 달마다 말일 기준(이번 달은 오늘) · 휴원 제외", body: 245, className: s.fullRow },
+      { title: "재원생 추이", note: `최근 12개월 · 달마다 말일 기준(이번 달은 오늘) · 휴원 제외 · 퇴원은 ${EXIT_BASIS_TAG}`, body: 245, className: s.fullRow },
       { title: "강좌수 추이", note: "최근 12개월 · 달마다 말일 기준(이번 달은 오늘) · 학생마다 같은 과목은 1개", body: 245, className: s.fullRow },
     ],
   },

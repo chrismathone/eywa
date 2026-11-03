@@ -13,6 +13,7 @@
 // - 표가 없으면(0313a 적용 전) 조용히 쉰다([[#95]]).
 import { loginClassnote } from "./classnote-admin-core.mjs";
 import { provisionDailyOnce } from "./classnote-provision-core.mjs";
+import { syncChildMapOnce } from "./classnote-childmap-core.mjs";
 import { loadAywa } from "./math-class-boards-load.mjs";
 import { autoReleaseEnabled, releaseHaltReason, syncMathClassBoards } from "./math-class-boards-sync.mjs";
 import { auditEnrollments, auditReleases, writeSyncRun } from "./class-board-sync-report.mjs";
@@ -24,6 +25,7 @@ import {
   RUNNING_STALE_MIN,
   STALE_PENDING_MSG,
   STALE_RUNNING_MSG,
+  childMapRefreshDue,
   normalizeScope,
   provisionCandidates,
   selectClassesToSync,
@@ -36,6 +38,8 @@ import {
 const MISSING_RECHECK_MS = 10 * 60_000;
 let tableMissingAt = 0;
 let restartSwept = false;
+/** 지금 동기화 앞에서 원아 연결을 마지막으로 새로 만든 시각(ms) — `childMapRefreshDue`가 10분 간격을 본다. */
+let lastChildMapRefreshAt = 0;
 
 const isMissing = (e) => e?.code === "42P01" || /classnote_sync_requests.*does not exist/i.test(String(e?.message ?? ""));
 
@@ -108,7 +112,22 @@ export async function runScopedSync(sql, browser, { tenant, scope: rawScope, log
   for (const p of picked) log(`[sync-now]   ${p.className}: ${p.reasons.join(", ")}`);
 
   const out = { classes: 0, created: 0, renamed: 0, enrolled: 0, teachers: 0, held: 0, boardsCreated: 0, assigned: 0, remaining, provisionRemaining: 0, releasedChildren: 0, releasedTeachers: 0 };
-  // ① 신입 1인 보드 준비 먼저 — 반 보드 배정은 1인 보드의 원아를 출처로 쓴다(class-board-plan.mjs ①).
+  // ⓪ 원아 연결 갱신 — 신입 준비 후보가 있으면 원아 연결(0185a)을 먼저 새로 만든다(원장 2026-11-02 A안 · 판정 = `childMapRefreshDue`).
+  //    수학이 반별이면 신입의 첫 반 보드 배정 출처가 원아 연결이라, 낮에 막 가입한 학부모의 원아가 **이 실행에서** 배정되려면 여기서
+  //    만들어야 한다(아래 ②의 반 보드 동기화가 연결을 새로 읽는다). ClassNote는 명부 GET만 · 4분에 한 번 · 실패해도 기존 연결로 계속.
+  //    결과(만든 연결 수 · 실패)는 동기화 보고서 줄과 결과값(`childLinks` — 감사로그 metadata)에 남긴다.
+  if (childMapRefreshDue({ candidates: provIds.length, lastAt: lastChildMapRefreshAt, now: Date.now() })) {
+    lastChildMapRefreshAt = Date.now();
+    const cm = await syncChildMapOnce(sql, browser, { tenant, apply: true, log, force: true }).catch((e) => {
+      log(`[sync-now] 원아 연결 갱신 오류(기존 연결로 진행): ${String(e?.message ?? e).slice(0, 160)}`);
+      return { ran: false, error: true };
+    });
+    out.childLinks = cm.applied ?? 0;
+    if (cm.error) events.push({ group: "held", className: "", text: "학부모 가입 확인(원아 연결 갱신)에 실패해 기존 연결로 진행했습니다 — 몇 분 뒤 다시 요청하면 다시 확인합니다" });
+    else if (cm.ran && cm.applied) events.push({ group: "changed", className: "", text: `원아 연결 ${cm.applied}건 새로 만듦(학부모 가입 확인)` });
+  }
+  // ① 신입 1인 보드 준비 먼저 — 기존 경로(personal·pilot)의 반 보드 배정은 1인 보드의 원아를 출처로 쓴다(class-board-plan.mjs ①).
+  //    수학이 반별(class)이면 준비가 수학을 건너뛴다(원장 2026-11-02 — 원아 출처 = 반 보드 확인 기록 + 원아 연결) · 영어는 그대로.
   if (provIds.length) {
     const pr = await provisionDailyOnce(sql, browser, { tenant, post: true, log, force: true, studentIds: provIds, maxWrites: MAX_PROVISION_WRITES });
     out.boardsCreated = pr.created ?? 0;
