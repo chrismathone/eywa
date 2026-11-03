@@ -69,7 +69,7 @@ export function carriedSubjectEnds(
 }
 
 /**
- * KPI '퇴원&수업종료' 줄 조립 — `rows` = 창(이번 달 1일~오늘)으로 **센**(수업료를 낸 마지막 달) 퇴원·과목 전체 종료, 퇴원은 끝난 과목마다 한 줄.
+ * KPI '퇴원&수업종료' 줄 조립 — `rows` = 창(보여 줄 달 1일 ~ min(말일, 오늘) · `exitReportMonth`)으로 **센**(수업료를 낸 마지막 달) 퇴원·과목 전체 종료, 퇴원은 끝난 과목마다 한 줄.
  * `carried` = 창 안에 퇴원·종료했지만 앞 달로 센 줄(원장 2026-11-03) — 숫자엔 들지 않는다. 판정은 퇴원관리와 같은 `countedEarlier`.
  * `withdrawn`은 `getWithdrawalsInWindow(…, { keepProcessedFrom: 창 시작 })`로 받아야 6개월보다 앞 달로 센 퇴원(오래 휴원 뒤 퇴원)도 빠지지 않는다.
  */

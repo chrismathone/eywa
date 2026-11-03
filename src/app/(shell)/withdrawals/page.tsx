@@ -764,7 +764,7 @@ export default async function WithdrawalsPage({
 
       {/* 세는 달 = 수업료를 낸 마지막 달(원장 2026-10-29) — 처리한 날로 읽으면 '이번 달'이 비어 보여 오류처럼 읽혔다(원장 2026-11-03). */}
       <p className="text-text-dim px-1 text-sm">
-        {exitBasisRule()} 넓은 화면 명단에는 센 달이 퇴원일·종료일의 달과 다르면 ‘10월 퇴원’·‘10월 종료’처럼 적습니다.
+        {exitBasisRule()} 넓은 화면 명단에는 센 달이 마지막 수업일의 달과 다르면 ‘10월 퇴원’·‘10월 종료’처럼 적습니다.
         {carriedTotal > 0 ? (
           <>
             {" "}

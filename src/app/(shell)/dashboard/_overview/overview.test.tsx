@@ -533,7 +533,9 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     expect(popup.textContent).toContain("9월로 센 퇴원&수업종료 2명");
     expect(popup.textContent).toContain("퇴원 2명 · 수강종료 0명");
     // 세는 기준을 숫자 바로 아래에 적는다(원장 2026-11-03 *"오해 소지가 없도록"*) — 앞 달로 센 줄이 없으면 그 묶음은 서지 않는다.
-    expect(popup.textContent).toContain("퇴원일·종료일이 아니라 수업료를 낸 마지막 달로 셉니다(퇴원은 수업료 전체, 수강종료는 그 과목 수업료 · 낸 기록이 없으면 퇴원일·종료일의 달). 예: 9월 1일 퇴원이어도 8월분까지만 냈으면 8월로 셉니다.");
+    // 팝업 아래 = 보여 주는 달(10일 기준) · 날짜는 마지막 수업일 · 달은 수업료 납부(원장 2026-11-03).
+    expect(popup.textContent).toContain("매달 1~10일에는 지난달, 11일부터 다음 달 10일까지는 이번 달 퇴원·수업종료를 보여 줍니다.");
+    expect(popup.textContent).toContain("퇴원·수강종료 날짜는 마지막 수업일이고, 어느 달로 셀지는 수업료 납부로 정합니다 — 퇴원은 수업료를 낸 마지막 달, 수강종료는 그 과목 수업료를 낸 마지막 달(낸 기록이 없으면 마지막 수업일의 달). 예: 마지막 수업일이 9월 1일이어도 8월분까지만 냈으면 8월로 셉니다.");
     expect(popup.textContent).not.toContain("앞 달로 센");
     expect(
       within(popup).getByRole("link", { name: "EiE 1명 목록 열기" }).getAttribute("href"),
@@ -553,12 +555,12 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     ];
     render(<Overview initial={mocks.data} />);
     const card = screen.getByRole("button", { name: /^퇴원&수업종료 0명\./ });
-    expect(card.getAttribute("aria-label")).toContain("9월에 퇴원·종료했지만 앞 달로 센 2명");
+    expect(card.getAttribute("aria-label")).toContain("마지막 수업일이 9월이지만 앞 달로 센 2명");
     fireEvent.click(card);
     const popup = screen.getByRole("dialog");
     expect(popup.textContent).toContain("9월로 센 퇴원&수업종료 0명");
     expect(popup.textContent).toContain("9월로 센 퇴원·수업종료 학생이 없습니다.");
-    expect(popup.textContent).toContain("9월에 퇴원·종료했지만 앞 달로 센 2명 — 위 숫자에 들지 않습니다");
+    expect(popup.textContent).toContain("마지막 수업일이 9월이지만 앞 달로 센 2명 — 위 숫자에 들지 않습니다");
     expect(popup.textContent).toContain("종료 · 8월로 셈");
     expect(popup.textContent).toContain("퇴원 · 8월로 셈");
     expect(within(popup).getByRole("link", { name: "앞달가 원생 상세" }).getAttribute("href")).toBe("/students/c1");

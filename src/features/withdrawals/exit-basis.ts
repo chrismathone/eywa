@@ -8,6 +8,8 @@
  * 클라이언트 화면도 불러 쓰므로 서버 전용·무거운 모듈을 들이지 않는다.
  */
 
+import { EXIT_REPORT_SWITCH_DAY } from "./window";
+
 /** 짧은 꼬리표 — 카드 머리·추이 설명 칸. */
 export const EXIT_BASIS_TAG = "수업료 낸 달 기준";
 
@@ -22,12 +24,16 @@ const previousMonth = (ym: string) => {
  * 규칙 한 문장 — 팝업·퇴원관리·도움말. `month`(YYYY-MM)를 주면 그 달로 예를 든다(11월 → "11월 1일 퇴원이어도 10월분까지만 냈으면 10월").
  */
 export function exitBasisRule(month?: string): string {
+  // 원장 2026-11-03 *"마지막 수업일 기준이라는 멘트와 수강료 납부 관련 멘트도 적어줄것"* — 날짜는 마지막 수업일, 달은 수업료 납부로.
   const rule =
-    "퇴원·수강종료는 퇴원일·종료일이 아니라 수업료를 낸 마지막 달로 셉니다(퇴원은 수업료 전체, 수강종료는 그 과목 수업료 · 낸 기록이 없으면 퇴원일·종료일의 달).";
+    "퇴원·수강종료 날짜는 마지막 수업일이고, 어느 달로 셀지는 수업료 납부로 정합니다 — 퇴원은 수업료를 낸 마지막 달, 수강종료는 그 과목 수업료를 낸 마지막 달(낸 기록이 없으면 마지막 수업일의 달).";
   if (!month || !/^\d{4}-\d{2}$/.test(month)) return rule;
   const prev = monthNo(previousMonth(month));
-  return `${rule} 예: ${monthNo(month)}월 1일 퇴원이어도 ${prev}월분까지만 냈으면 ${prev}월로 셉니다.`;
+  return `${rule} 예: 마지막 수업일이 ${monthNo(month)}월 1일이어도 ${prev}월분까지만 냈으면 ${prev}월로 셉니다.`;
 }
+
+/** 운영실 카드가 어느 달을 보여 주는지(`exitReportMonth` · 원장 2026-11-03) — 팝업 아래·도움말. */
+export const EXIT_REPORT_RULE = `매달 1~${EXIT_REPORT_SWITCH_DAY}일에는 지난달, ${EXIT_REPORT_SWITCH_DAY + 1}일부터 다음 달 ${EXIT_REPORT_SWITCH_DAY}일까지는 이번 달 퇴원·수업종료를 보여 줍니다.`;
 
 /**
  * 창 [from, to] 안에 **퇴원·종료**했지만(퇴원일·종료일) 수업료를 앞 달까지만 내 **창보다 앞 달로 센** 줄인가 — 숫자에는 들지 않고 '앞 달로 센'으로 따로 밝힌다.
@@ -56,7 +62,7 @@ export function countedEarlierByMonth(
 
 /** '앞 달로 센' 묶음 제목 — 운영실 팝업·퇴원관리가 같은 말(단위는 그 화면 숫자의 단위). `month` = 퇴원·종료한 달(YYYY-MM). */
 export function countedEarlierTitle(month: string, count: number, unit: "명" | "건"): string {
-  return `${monthNo(month)}월에 퇴원·종료했지만 앞 달로 센 ${count}${unit}`;
+  return `마지막 수업일이 ${monthNo(month)}월이지만 앞 달로 센 ${count}${unit}`;
 }
 
 /** 줄 끝 꼬리표 — "10월로 셈". */

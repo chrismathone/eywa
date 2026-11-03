@@ -7,7 +7,7 @@ import {
   withdrawalsMonthHref,
 } from "@/features/dashboard/overview/kpi-links";
 import { countWithdrawalPrograms } from "@/features/withdrawals/window";
-import { countedEarlierTitle, countedMonthLabel, exitBasisRule } from "@/features/withdrawals/exit-basis";
+import { EXIT_REPORT_RULE, countedEarlierTitle, countedMonthLabel, exitBasisRule } from "@/features/withdrawals/exit-basis";
 import { programLabel, visiblePrograms, type ProgramSubject } from "@/features/students/enrollment/program";
 import { dashboardProgramColor, dashboardCombinationColor } from "@/features/dashboard/overview/subject-colors";
 import { CountList, NameCell, PopupEmpty, PopupTotal, Tag, monthDay } from "./kpi-popup-parts";
@@ -73,7 +73,7 @@ export function WithdrawalsPopup({
   const endedCount = data.rows.filter(row => row.kind === "subject-ended").length;
   const monthNo = Number(data.month.slice(5));
   const carried = data.carried ?? [];
-  // 한 줄 — 이름 · 퇴원/수강종료 · 학년·프로그램 · 날짜(퇴원일·종료일). '앞 달로 센' 줄은 날짜 뒤에 센 달을 붙인다.
+  // 한 줄 — 이름 · 퇴원/수강종료 · 학년·프로그램 · 날짜(마지막 수업일 — 퇴원일·종료일). '앞 달로 센' 줄은 날짜 뒤에 센 달을 붙인다.
   const row = (r: (typeof data.rows)[number], counted?: string) => (
     <li key={r.eventKey ?? r.id} className={s.kpiListRow}>
       <NameCell href={canOpenStudent ? `/students/${r.id}` : null} title={r.name} ariaLabel={`${r.name} 원생 상세`}>
@@ -90,8 +90,6 @@ export function WithdrawalsPopup({
     <>
       <PopupTotal label={`${monthNo}월로 센 퇴원&수업종료`} value={counts.total} unit="명" />
       <p className={s.popupSummary}>퇴원 {counts.total - endedCount}명 · 수강종료 {endedCount}명</p>
-      {/* 원장 2026-11-03 — 11월 1일에 처리한 4건이 10월분까지만 내 10월로 세져 '0명'이 오류처럼 보였다. 기준을 숫자 바로 아래에 적는다. */}
-      <p className={s.popupSummary}>{exitBasisRule(data.month)}</p>
       <CountList
         rows={[
           ...visiblePrograms(eieOn).map((program) => ({
@@ -115,6 +113,9 @@ export function WithdrawalsPopup({
           <ul className={s.kpiList}>{carried.map((r) => row(r, countedMonthLabel(r.countMonth)))}</ul>
         </>
       ) : null}
+      {/* 퇴원이 어떤 기준으로 세지는지 — 원장 2026-11-03 *"아래쪽에도 그 내용을 적어놓고, 마지막 수업일 기준이라는 멘트와 수강료 납부 관련 멘트도"*. */}
+      <p className={s.footnote}>{EXIT_REPORT_RULE}</p>
+      <p className={s.footnote}>{exitBasisRule(data.month)}</p>
       <p className={s.footnote}>과목 수업을 모두 종료한 학생 포함 · 반이동·특강 종료·퇴원일 미상 제외 · 여러 과목을 함께 종료하면 과목마다 1명씩 셉니다.</p>
     </>
   );

@@ -6,6 +6,7 @@ import {
   lastEndedByStudent,
   pickLastEnded,
   withdrawalMonthWindow,
+  exitReportMonth,
   withdrawalProgram,
 } from "./window";
 
@@ -28,6 +29,21 @@ const SUBJECTS = [
   { key: "english", label: "영어" },
   { key: "subject_1", label: "수학(심화)" },
 ];
+
+describe("exitReportMonth — 운영실 퇴원 카드는 1~10일 지난달, 11일부터 이번 달(원장 2026-11-03)", () => {
+  it("10일까지 지난달 · 11일부터 이번 달 · 1월 초는 지난해 12월", () => {
+    expect(exitReportMonth("2026-11-01")).toBe("2026-10");
+    expect(exitReportMonth("2026-11-10")).toBe("2026-10");
+    expect(exitReportMonth("2026-11-11")).toBe("2026-11");
+    expect(exitReportMonth("2026-11-30")).toBe("2026-11");
+    expect(exitReportMonth("2026-12-10")).toBe("2026-11");
+    expect(exitReportMonth("2027-01-05")).toBe("2026-12");
+    expect(exitReportMonth("2027-01-11")).toBe("2027-01");
+  });
+  it("지난달을 보여 줄 땐 창이 그 달 말일까지(오늘이 아니라)", () => {
+    expect(withdrawalMonthWindow(exitReportMonth("2026-11-03"), "2026-11-03")).toEqual({ from: "2026-10-01", to: "2026-10-31" });
+  });
+});
 
 describe("pickLastEnded — 마지막으로 끝난 수강", () => {
   it("종료일이 가장 늦은 줄 — 열린 수강은 후보가 아니다", () => {

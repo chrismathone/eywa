@@ -29,7 +29,7 @@ export function summaryOf(id: string, snap: OverviewSnapshot, opts: { amounts?: 
     case "courses":
       return v.courses?.data ? { value: n(v.courses.data.total), unit: "개", detail: "지금 듣는 반" } : null;
     case "withdrawals":
-      return v.withdrawals?.data ? { value: n(v.withdrawals.data.rows.length), unit: "명", detail: `이번 달 퇴원·수업종료 · ${EXIT_BASIS_TAG}` } : null;
+      return v.withdrawals?.data ? { value: n(v.withdrawals.data.rows.length), unit: "명", detail: `${Number(v.withdrawals.data.month.slice(5))}월 퇴원·수업종료 · ${EXIT_BASIS_TAG}` } : null;
     case "intake":
       return v.intake?.data ? { value: n(v.intake.data.length), unit: "건", detail: "오늘 접수" } : null;
     case "calendar":

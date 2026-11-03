@@ -8,6 +8,8 @@ const snap = (sections: Record<string, unknown>) => ({ today: "2026-10-01", subj
 describe("요약형 값 = 카드가 그리는 값", () => {
   it("KPI는 카드 숫자와 같은 배열을 센다", () => {
     expect(summaryOf("kpi:intake", snap({ intake: ok([{ id: "1" }, { id: "2" }]) }))).toMatchObject({ value: "2", unit: "건" });
+    // 퇴원 칸은 서버가 고른 달(1~10일은 지난달 · 원장 2026-11-03)을 적는다 — '이번 달'로 고정하면 KPI 칸 꼬리표와 어긋난다.
+    expect(summaryOf("kpi:withdrawals", snap({ withdrawals: ok({ month: "2026-10", rows: [{ id: "a" }, { id: "b" }] }) }))).toMatchObject({ value: "2", detail: "10월 퇴원·수업종료 · 수업료 낸 달 기준" });
     expect(summaryOf("kpi:absent", snap({ absent: ok({ from: "2026-09-23", to: "2026-09-29", students: [{}] }) }))).toMatchObject({ value: "1", detail: "최근 7일 결석", danger: true });
   });
 
