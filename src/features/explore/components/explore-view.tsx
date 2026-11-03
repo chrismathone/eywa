@@ -74,7 +74,8 @@ export function ExploreView({ model, trail, initialSector }: Props) {
   };
   /**
    * 확대(더블클릭·Enter, 원장 2026-11-03 *"더블 클릭하게 되면 확대되는식 · 번거로운 동작은 배제"*) — 한 번에 간다:
-   * 연결 대상이 하나면 그 대상이 중심으로, 아니면 그 조각의 업무 화면(패널의 첫 링크)을 연다. 여러 대상이면 패널에서 고른다(이미 펼쳐져 있다).
+   * 연결 대상이 **하나**면 그 대상이 중심으로, 아니면(대상이 여럿이거나 없음) 그 조각의 업무 화면(패널의 첫 링크)을 연다
+   * — 수업이 셋인 '수업' 조각을 더블클릭해도 아무 일이 없으면 안 된다(원장 2026-11-03). 여러 대상 중 하나를 고르는 건 패널 목록.
    */
   const zoom = (key: string) => {
     if (leaving) return;
@@ -86,7 +87,7 @@ export function ExploreView({ model, trail, initialSector }: Props) {
       navigate(only, key);
       return;
     }
-    if (!s.targets?.length && s.links?.[0]) openPanelLink(s.links[0].href);
+    if (s.links?.[0]) openPanelLink(s.links[0].href);
   };
   /** 가운데 원 더블클릭 = 지금 중심의 상세 화면(패널 아래 같은 링크를 누른 것과 같다 — 창 규약을 그 링크가 안다). */
   const centerZoom = () => {
@@ -135,7 +136,8 @@ export function ExploreView({ model, trail, initialSector }: Props) {
           </p>
           <ExploreDonut center={model.center} sectors={model.sectors} selected={selected} onSelect={selectSector} onZoom={zoom} onCenterZoom={centerZoom} leaving={leaving} />
           <p className="text-text-dim px-1 text-xs break-keep">
-            클릭 = 오른쪽에 펼치기 · 더블클릭 = 확대(중심 전환·화면 열기) · 가운데 더블클릭 = 상세 열기 · 기준일 <span className="num">{model.asOf}</span>
+            클릭 = 오른쪽에 펼치기 · 더블클릭 = 확대(대상이 하나면 중심 전환, 여럿이면 그 화면 열기) · 가운데 더블클릭 = 상세 열기 · 기준일{" "}
+            <span className="num">{model.asOf}</span>
           </p>
         </section>
         <div
