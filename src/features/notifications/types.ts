@@ -31,7 +31,7 @@ export type NotificationType =
   | "grade_drop" // 같은 과목 성적 15점+ 급락 → master + 담당 강사(Phase 3, cron)
   | "outstanding_alert" // 학생 총 미수 금액 tier 도달 → master + 회계(Phase 3, cron)
   | "refund_request_approved" // 원장이 퇴원보고서에서 퇴원월 뒤 청구의 환불을 승인 → 환불 요청서 생성 → master + 회계(2026-10-29)
-  | "refund_request_cancelled" // 환불 요청서가 걸린 퇴원보고서를 취소 → 그 요청서의 데스크 담당(끝난 환불이면 처리한 사람) — '환불 진행 전 확인' / '환불 확인 필요'(DB s2_0020, 2026-11-03)
+  | "refund_request_cancelled" // 환불 요청서가 걸린 퇴원보고서를 취소 → 그 요청서의 데스크 담당(끝난 환불이면 처리한 사람) — '환불 진행 전 확인' / '환불 확인 필요'(DB s2_0022, 2026-11-03)
   | "unsent_report" // 저장만 하고 발송 안 한 수업 보고서(발송 콘솔과 동일 게이트) → master + 담당 강사(Phase 3, cron)
   | "progress_anomaly" // 진도 기록 이상(점프·겹침, math ingest) → master + 담당 강사(G2 선알림, cron)
   | "attendance_complete" // 반 출석 전원 입력 완료 → 담당 강사(G4, 저장 액션 전이 훅 — 본인이 찍으면 스킵)

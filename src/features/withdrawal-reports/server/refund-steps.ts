@@ -4,10 +4,10 @@ import { fetchInChunks } from "@/lib/supabase/batch";
 import { missingReportSchema, type RefundStep, type StaffOption } from "../model";
 
 /**
- * 보고서 묶음의 데스크 환불 단계(원장 2026-11-03 · s2_0020 `withdrawal_report_refunds`) — 묶음 id(옛 단건은 보고서 id) → 단계 목록.
+ * 보고서 묶음의 데스크 환불 단계(원장 2026-11-03 · s2_0022 `withdrawal_report_refunds`) — 묶음 id(옛 단건은 보고서 id) → 단계 목록.
  * 완료 = 환불 요청서의 환불완료일자. 지워진 요청서는 뺀다(DB `withdrawal_report_refund_pending`과 같은 판정 — 더는 기다릴 환불이 아니다).
  * 담당 이름 = 직원 목록 → 없으면 요청서 결재칸 '담당' → '데스크'. 요청서 본문(계좌 등)은 읽지 않는다(완료일·담당 이름 두 칸만).
- * 표가 없는 DB(s2_0020 전)는 빈 목록 — 화면은 종전 그대로(#95).
+ * 표가 없는 DB(s2_0022 전)는 빈 목록 — 화면은 종전 그대로(#95).
  */
 export async function loadRefundSteps(tenantId: string, keys: { id: string; group_id?: string | null }[], staff: readonly Pick<StaffOption, "id" | "name">[] = []): Promise<Map<string, RefundStep[]>> {
   const out = new Map<string, RefundStep[]>();

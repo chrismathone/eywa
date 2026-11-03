@@ -113,14 +113,14 @@ export async function changeWithdrawalReport(id: string, action: ReportAction, r
   }).single();
   if (error) return { error: describeDbError(error, { fallback: "보고서 처리를 완료하지 못했습니다." }).message };
   const changed = data as WithdrawalReport;
-  // 취소 — DB가 미완료 데스크 환불의 할 일을 취소하고 데스크 담당자에게 '환불 진행 전 확인'을 보냈다(s2_0020 · 요청서는 남긴다). 기록에도 남긴다.
+  // 취소 — DB가 미완료 데스크 환불의 할 일을 취소하고 데스크 담당자에게 '환불 진행 전 확인'을 보냈다(s2_0022 · 요청서는 남긴다). 기록에도 남긴다.
   const extra = action === "cancel" ? await cancelRefundAudit(changed) : {};
   await finish(changed, action, extra);
   return { ok: true, id };
 }
 /**
  * 취소한 묶음의 데스크 환불(원장 2026-11-03) — DB가 같은 거래에서 연결된 요청서마다 데스크에 알렸다(끝나지 않은 요청서 = 할 일 취소 + '환불 진행 전 확인',
- * 끝난 요청서 = 처리한 사람에게 '환불 확인 필요' · 취소한 본인·퇴사자 제외 · s2_0020 `withdrawal_report_refunds_on_cancel`). **실제로 알린 대상**은 DB가 보고서 처리 이력
+ * 끝난 요청서 = 처리한 사람에게 '환불 확인 필요' · 취소한 본인·퇴사자 제외 · s2_0022 `withdrawal_report_refunds_on_cancel`). **실제로 알린 대상**은 DB가 보고서 처리 이력
  * 'refund_notice'로 남긴다 — 취소 줄과 같은 거래 시각인 그 줄들을 읽어 감사로그에 싣는다(앱이 규칙을 따로 흉내 내지 않게). 못 읽으면 그 사실만 적는다.
  */
 async function cancelRefundAudit(r: WithdrawalReport): Promise<Record<string, unknown>> {

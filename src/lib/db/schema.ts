@@ -1933,7 +1933,7 @@ export const withdrawalReports = pgTable("withdrawal_reports", {
   studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "restrict" }),
   requestedBy: uuid("requested_by").notNull().references(() => users.id, { onDelete: "restrict" }),
   teacherId: uuid("teacher_id").notNull().references(() => users.id, { onDelete: "restrict" }),
-  // 관리자 승인을 생략한 묶음(작성 강사가 과목 관리자 · s2_0020)은 null.
+  // 관리자 승인을 생략한 묶음(작성 강사가 과목 관리자 · s2_0022)은 null.
   managerId: uuid("manager_id").references(() => users.id, { onDelete: "restrict" }),
   directorId: uuid("director_id").references(() => users.id, { onDelete: "restrict" }),
   groupId: uuid("group_id").references(() => withdrawalReportGroups.id, { onDelete: "restrict" }), groupLeader: boolean("group_leader").notNull().default(false),
@@ -1960,7 +1960,7 @@ export const withdrawalReportEvents = pgTable("withdrawal_report_events", {
   body: jsonb("body"), comment: text("comment"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, t => [index("withdrawal_report_events_report").on(t.tenantId, t.reportId, t.createdAt)]);
-/** 퇴원보고서 데스크 환불 단계(s2_0020) — 보고서에서 만든 환불 요청서. 요청서(academy_documents)에는 외래키를 걸지 않는다(삭제를 막지 않는다 · 지운 요청서는 대기에서 빠진다). */
+/** 퇴원보고서 데스크 환불 단계(s2_0022) — 보고서에서 만든 환불 요청서. 요청서(academy_documents)에는 외래키를 걸지 않는다(삭제를 막지 않는다 · 지운 요청서는 대기에서 빠진다). */
 export const withdrawalReportRefunds = pgTable("withdrawal_report_refunds", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),

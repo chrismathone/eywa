@@ -1,4 +1,4 @@
--- s2_0020 — 퇴원보고서: 원장 승인 단계 없앰 · 작성 강사가 그 보고서 과목의 관리자면 관리자 승인 생략(보고서마다) · 데스크 환불 단계 ·
+-- s2_0022 — 퇴원보고서: 원장 승인 단계 없앰 · 작성 강사가 그 보고서 과목의 관리자면 관리자 승인 생략(보고서마다) · 데스크 환불 단계 ·
 --           표시용 칸(반·담임·학생 이름 등)만 바뀐 건 '정보 변경' 아님 (2026-11-03)
 --
 -- 왜: 원장 2026-11-03 —
@@ -34,7 +34,7 @@
 --      연결 표·release·reportManagerIds는 새 앱만 쓴다. 처리 함수·요청 함수·제출 트리거·_v1은 운영 정의(2026-11-03 덤프)의 지문(공백 뺀 md5)이 맞을 때만,
 --      할 일 동기화는 바꿀 줄이 정확히 하나일 때만 바꾼다(다르면 멈춘다).
 -- 데이터: 진행 중 '김다예'(작성 강사 정유진 = 영어 관리자 · 승인자 칸에 원장 설현)는 새 앱 배포 뒤 별도 스크립트로 관리자 승인 생략으로 바꾼다.
--- 되돌리기 = scripts/_oneoff/revert-s2_0020-withdrawal-report-desk-refund.sql(앱을 먼저 되돌린 뒤 · 생략·데스크 대기·환불 끝난 처리 전·보고서별 관리자 묶음이
+-- 되돌리기 = scripts/_oneoff/revert-s2_0022-withdrawal-report-desk-refund.sql(앱을 먼저 되돌린 뒤 · 생략·데스크 대기·환불 끝난 처리 전·보고서별 관리자 묶음이
 --      진행 중이면 멈춘다).
 begin;
 set local lock_timeout = '5s';
@@ -53,7 +53,7 @@ begin
   for fn in select jsonb_object_keys(want) loop
     select md5(regexp_replace(pg_get_functiondef(fn::regprocedure), '[[:space:]]+', '', 'g')) into got;
     if got is distinct from want->>fn then
-      raise exception 's2_0020: % 의 운영 정의가 기준(2026-11-03)과 다릅니다(%). 바뀐 내용을 이 파일에 옮긴 뒤 지문을 갱신하세요.', fn, got;
+      raise exception 's2_0022: % 의 운영 정의가 기준(2026-11-03)과 다릅니다(%). 바뀐 내용을 이 파일에 옮긴 뒤 지문을 갱신하세요.', fn, got;
     end if;
   end loop;
 end $$;
@@ -81,7 +81,7 @@ create table if not exists public.withdrawal_report_refunds (
   created_by uuid references public.users(id) on delete set null,
   created_at timestamptz not null default now()
 );
-comment on table public.withdrawal_report_refunds is '퇴원보고서 데스크 환불 단계 — 보고서에서 만든 환불 요청서. 요청서의 환불완료일자가 비어 있으면 묶음 처리를 기다린다(s2_0020).';
+comment on table public.withdrawal_report_refunds is '퇴원보고서 데스크 환불 단계 — 보고서에서 만든 환불 요청서. 요청서의 환불완료일자가 비어 있으면 묶음 처리를 기다린다(s2_0022).';
 create index if not exists withdrawal_report_refunds_group on public.withdrawal_report_refunds(tenant_id, group_id);
 create index if not exists withdrawal_report_refunds_report on public.withdrawal_report_refunds(tenant_id, report_id);
 alter table public.withdrawal_report_refunds enable row level security;
@@ -196,7 +196,7 @@ begin
   perform 1 from public.students where id=new.student_id and tenant_id=new.tenant_id for update;
   perform 1 from public.enrollments where student_id=new.student_id and tenant_id=new.tenant_id for update;
   perform 1 from public.classes c join public.enrollments e on e.class_id=c.id where e.student_id=new.student_id and e.tenant_id=new.tenant_id for share of c;
-  -- 퇴원 묶음은 학생 전체, 과목 수강종료 묶음은 학생 정보 + 묶음 과목의 수강(s2_0014) · 표시용 칸은 대조하지 않는다(s2_0020).
+  -- 퇴원 묶음은 학생 전체, 과목 수강종료 묶음은 학생 정보 + 묶음 과목의 수강(s2_0014) · 표시용 칸은 대조하지 않는다(s2_0022).
   cmp_subjects:=case when new.exit_kind='withdrawal' then null else coalesce((select g.subjects from public.withdrawal_report_groups g where g.id=new.group_id and g.tenant_id=new.tenant_id),new.subjects) end;
   if public.withdrawal_report_compare_key(public.withdrawal_report_snapshot(new.tenant_id,new.student_id),cmp_subjects) is distinct from public.withdrawal_report_compare_key(new.snapshot,cmp_subjects) then raise exception '요청 이후 학생·수강·담당 강사가 변경되었습니다. 관리자에게 요청을 다시 작성해 달라고 알려 주세요.'; end if;
  end if;
@@ -307,7 +307,7 @@ begin
  select * into g from public.withdrawal_report_groups where tenant_id=p_tenant and id=gid for update;
  select * into r from public.withdrawal_reports where tenant_id=p_tenant and id=p_report for update;
  prior:=r.status;
- -- 이 보고서의 승인 관리자(s2_0020 — 보고서마다 · 옛 보고서는 묶음 것). 빈 목록 = 관리자 승인 생략.
+ -- 이 보고서의 승인 관리자(s2_0022 — 보고서마다 · 옛 보고서는 묶음 것). 빈 목록 = 관리자 승인 생략.
  mgrs:=coalesce(r.manager_ids,g.manager_ids);
  if p_action not in ('save','submit','approve','reject','cancel','apply','release') then raise exception '지원하지 않는 처리입니다.'; end if;
  if p_action not in ('apply','release') then
@@ -377,7 +377,7 @@ begin
   perform 1 from public.enrollments where tenant_id=p_tenant and student_id=g.student_id for update;
   perform 1 from public.classes c join public.enrollments e on e.class_id=c.id where e.student_id=g.student_id and e.tenant_id=p_tenant for share of c;
   snap:=public.withdrawal_report_snapshot(p_tenant,g.student_id);
-  -- 퇴원 묶음은 학생 전체, 과목 수강종료 묶음은 학생 정보 + 자기 과목 수강(s2_0014) · 표시용 칸은 대조하지 않는다(s2_0020).
+  -- 퇴원 묶음은 학생 전체, 과목 수강종료 묶음은 학생 정보 + 자기 과목 수강(s2_0014) · 표시용 칸은 대조하지 않는다(s2_0022).
   cmp_subjects:=case when g.exit_kind='withdrawal' then null else g.subjects end;
   valid:=public.withdrawal_report_compare_key(snap,cmp_subjects) is not distinct from public.withdrawal_report_compare_key(g.snapshot,cmp_subjects)
    and not exists(select 1 from public.enrollments e join public.classes c on c.id=e.class_id where e.tenant_id=p_tenant and e.student_id=g.student_id and e.id=any(g.enrollment_ids) and (not c.is_active or c.closed_at is not null))
@@ -442,7 +442,7 @@ declare
 begin
   select pg_get_functiondef('public.transition_withdrawal_report_v1(uuid,uuid,uuid,text,jsonb)'::regprocedure) into definition;
   hits := (length(definition) - length(replace(definition, o, ''))) / length(o);
-  if hits <> 1 then raise exception 's2_0020: _v1 대조 줄이 하나가 아닙니다(%건)', hits; end if;
+  if hits <> 1 then raise exception 's2_0022: _v1 대조 줄이 하나가 아닙니다(%건)', hits; end if;
   execute replace(definition, o, 'if public.withdrawal_report_compare_key(snap,null) is distinct from public.withdrawal_report_compare_key(r.snapshot,null) or');
 end $$;
 
@@ -455,7 +455,7 @@ declare
 begin
   select pg_get_functiondef('staff_tasks_private.withdrawal_sync_report(uuid)'::regprocedure) into definition;
   hits := (length(definition) - length(replace(definition, o, ''))) / length(o);
-  if hits <> 1 then raise exception 's2_0020: 할 일 동기화의 관리자 줄이 하나가 아닙니다(%건)', hits; end if;
+  if hits <> 1 then raise exception 's2_0022: 할 일 동기화의 관리자 줄이 하나가 아닙니다(%건)', hits; end if;
   execute replace(definition, o, 'coalesce(r.manager_ids, g.manager_ids,');
 end $$;
 
