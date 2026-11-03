@@ -46,6 +46,16 @@ describe("퇴원 뒤 청구(원장 2026-10-29)", () => {
     await waitFor(() => expect(mocks.approve).toHaveBeenCalledWith("r", [`${id}#0`], desks[0].id));
     await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
   });
+  it("처리 전 보고서면 데스크 환불까지 끝나야 처리한다고 알린다 · 요청 권한이 없으면 누가 할 수 있는지(원장 2026-11-03)", () => {
+    const { unmount } = render(<LaterInvoices reportId="r" rows={[nov]} canApprove deskStaff={desks} gates />);
+    expect(screen.getByText(/데스크 환불 처리까지 끝나야 퇴원·수강종료를 처리합니다/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("switch", { name: "2026-11 수강료 · 중2 수학 A 환불" }));
+    fireEvent.click(screen.getByRole("button", { name: "환불 승인" }));
+    expect(screen.getByText(/데스크가 환불을 처리\(환불완료일자 입력\)해야 퇴원·수강종료를 처리합니다/)).toBeInTheDocument();
+    unmount();
+    render(<LaterInvoices reportId="r" rows={[nov]} canApprove={false} deskStaff={[]} />);
+    expect(screen.getByText("환불 승인은 이 보고서의 관리자·요청자(관리자 승인을 생략한 보고서는 작성 강사)·원장이 할 수 있습니다.", { exact: false })).toBeInTheDocument();
+  });
   it("이미 요청서가 있는 줄은 담당·완료와 링크 · 낸 돈이 없는 줄은 토글 없음", () => {
     render(<LaterInvoices reportId="r" deskStaff={desks} canApprove rows={[{ ...nov, lines: [
       { ...nov.lines[0], refund: { documentId: "doc", deskName: "데스크A", completed: true } },

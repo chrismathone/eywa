@@ -1933,7 +1933,8 @@ export const withdrawalReports = pgTable("withdrawal_reports", {
   studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "restrict" }),
   requestedBy: uuid("requested_by").notNull().references(() => users.id, { onDelete: "restrict" }),
   teacherId: uuid("teacher_id").notNull().references(() => users.id, { onDelete: "restrict" }),
-  managerId: uuid("manager_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  // 관리자 승인을 생략한 묶음(작성 강사가 과목 관리자 · s2_0020)은 null.
+  managerId: uuid("manager_id").references(() => users.id, { onDelete: "restrict" }),
   directorId: uuid("director_id").references(() => users.id, { onDelete: "restrict" }),
   groupId: uuid("group_id").references(() => withdrawalReportGroups.id, { onDelete: "restrict" }), groupLeader: boolean("group_leader").notNull().default(false),
   managerIds: uuid("manager_ids").array(), directorIds: uuid("director_ids").array(),

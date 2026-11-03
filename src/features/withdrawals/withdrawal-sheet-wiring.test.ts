@@ -18,6 +18,10 @@ describe("수학 퇴원 시트 기입 — 퇴원·수강 종료가 일어나는 
     expect(actions).toContain("await recordMathWithdrawalToSheet(");
     expect(actions).toContain('await finish(report as WithdrawalReport, "direct");');
     expect(read("features", "withdrawal-reports", "server", "scheduled.ts")).toContain("await recordMathWithdrawalToSheet(");
+    // 데스크 환불 완료 뒤 처리(원장 2026-11-03 · s2_0020 release) — 수납 환불완료 저장·요청서 삭제·cron 안전망이 같은 마무리를 지난다.
+    expect(read("features", "withdrawal-reports", "server", "release.ts")).toContain("await recordMathWithdrawalToSheet(");
+    expect(read("features", "billing", "server", "refund-actions.ts")).toContain("await releaseWithdrawalRefunds({ tenantId: gate.user.tenantId, documentId: id, actorId: gate.user.id });");
+    expect(read("features", "withdrawal-reports", "server", "scheduled.ts")).toContain("await releaseWithdrawalRefunds({ tenantId: null, documentId: null, actorId: null });");
   });
   it("예약 퇴원 cron", () => {
     expect(read("app", "api", "cron", "apply-due-withdrawals", "route.ts")).toContain("await recordMathWithdrawalToSheet(");

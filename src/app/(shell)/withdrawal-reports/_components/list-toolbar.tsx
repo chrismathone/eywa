@@ -10,7 +10,7 @@ import type { ListFilters } from "@/features/withdrawal-reports/list-items";
 import { CustomRange } from "../../withdrawals/_components/custom-range";
 
 const SELECT_PROPS = { className: "w-auto", triggerClassName: TOOLBAR_SELECT } as const;
-/** 기간 = 퇴원·종료일. 선택지는 퇴원관리와 같다(창 계산은 `listWindow`). */
+/** 기간 = 마지막 수업일. 선택지는 퇴원관리와 같다(창 계산은 `listWindow`). */
 const RANGE_OPTIONS: FilterSelectOption[] = [
   { value: "month", label: "이번 달" },
   { value: "30d", label: "최근 30일" },

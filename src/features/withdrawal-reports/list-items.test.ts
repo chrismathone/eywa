@@ -69,7 +69,7 @@ describe("퇴원보고서 목록 한 벌 — 웹 보고서 + 기존 스프레드
     expect(keys(filterListItems([web!, old!], { ...all, q: "집안 사정" }, listWindow(all, "2026-10-16")))).toEqual([web!.key]);
   });
 
-  it("퇴원·종료일 늦은 순, 날짜를 못 읽은 원문은 맨 뒤(원문 표기 그대로 보인다)", () => {
+  it("마지막 수업일 늦은 순, 날짜를 못 읽은 원문은 맨 뒤(원문 표기 그대로 보인다)", () => {
     const items = build([report({ id: "r2", effective_date: "2026-10-01" })], [archive(), archive({ id: "a2", exit_date: null, raw_exit_date: "9월 말" })]);
     expect(keys(items)).toEqual(["r:r2", "a:a1", "a:a2"]);
     expect(items[2]!.dateText).toBe("9월 말");
@@ -199,5 +199,39 @@ describe("원장 2026-10-30 — 내 승인 구분 · 요청일 정렬 · 구분/
     expect(keys(filterListItems(items, { ...all, q: "숙제 부담" }, win))).toEqual(["a:a1"]);
     expect(parseListFilters({ kind: "subject_end", mine: "approve" }, true)).toMatchObject({ kind: "subject_end", mine: true });
     expect(parseListFilters({ kind: "x" }, true)).toMatchObject({ kind: "all", mine: false });
+  });
+});
+
+describe("원장 2026-11-03 — 관리자 승인 생략 · 데스크 환불 단계 · 원장 칸 없음", () => {
+  const as = (userId: string, reports: ReportListRow[], refunds?: Map<string, { documentId: string; deskId: string | null; deskName: string; completedDate: string | null }[]>) =>
+    buildListItems({ reports, archives: [], staff, labelOf, userId, refunds });
+  it("관리자 0명 보고서는 '관리자 승인 생략' 한 줄 · 원장 줄·'관리자가 최종 승인' 줄은 없다", () => {
+    const [skip] = as("t1", [report({ manager_id: null, manager_ids: [], status: "requested" })]);
+    expect(skip!.approval).toEqual([{ text: "관리자 승인 생략 · 작성 강사가 과목 관리자", muted: true }]);
+    const [normal] = as("t1", [report()]);
+    expect(normal!.approval).toEqual([{ text: "관리자 ○ 관리자" }]);
+  });
+  it("데스크 환불이 남으면 상태 칩 둘 · 승인 진행에 데스크 줄(○ 대기 / ✓ 완료 · 담당 이름)", () => {
+    const steps = new Map([["g1", [{ documentId: "d1", deskId: "desk", deskName: "데스크A", completedDate: null }]]]);
+    const [w] = as("m1", [report({ group_id: "g1", status: "manager_pending" })], steps);
+    expect(w!.statusChips).toEqual(["관리자 승인 요청", "데스크 환불 요청"]);
+    expect(w!.statusLabel).toBe("관리자 승인 요청 · 데스크 환불 요청");
+    expect(w!.approval.at(-1)).toEqual({ text: "데스크 ○ 데스크A" });
+    expect(w!.mine).toBe("approve");
+    expect(w!.deskTurn).toBeUndefined(); // 관리자 차례가 먼저다
+    const done = new Map([["g1", [{ documentId: "d1", deskId: "desk", deskName: "데스크A", completedDate: "2026-11-03" }]]]);
+    const [d] = as("m1", [report({ group_id: "g1", status: "completed" })], done);
+    expect(d!.statusChips).toEqual(["처리 완료"]);
+    expect(d!.approval.at(-1)).toEqual({ text: "데스크 ✓ 데스크A" });
+  });
+  it("데스크 담당자의 차례 — '내 승인 필요' 필터에 들고 표시는 데스크 차례", () => {
+    const steps = new Map([["g1", [{ documentId: "d1", deskId: "desk", deskName: "데스크A", completedDate: null }]]]);
+    const [w] = as("desk", [report({ group_id: "g1", status: "approved", manager_decisions: { m1: "2026-11-03" } })], steps);
+    expect(w).toMatchObject({ mine: "approve", deskTurn: true, statusLabel: "관리자 승인 완료 · 데스크 환불 요청" });
+    const win = listWindow(all, "2026-11-03");
+    expect(filterListItems([w!], { ...all, mine: true }, win)).toHaveLength(1);
+    expect(filterListItems([w!], { ...all, q: "데스크A" }, win)).toHaveLength(1);
+    // 읽기 전용 보기면 차례를 세우지 않는다
+    expect(buildListItems({ reports: [report({ group_id: "g1", status: "approved" })], archives: [], staff, labelOf, userId: "desk", refunds: steps, writable: false })[0]!.mine).not.toBe("approve");
   });
 });

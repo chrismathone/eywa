@@ -115,6 +115,27 @@ describe("report submission and review", () => {
     fireEvent.click(screen.getByRole("button", { name: "승인 확인" }));
     await waitFor(() => expect(mocks.change).toHaveBeenCalledWith(r.id, "approve", 3, undefined));
   });
+  it("관리자 승인 생략 보고서 — '보고서 제출' · 결재란 관리자 '생략' · 원장 칸 없음(원장 2026-11-03)", async () => {
+    render(<ReportDetail {...props} report={{ ...r, manager_id: null, manager_ids: [], director_id: null, director_ids: [] }} />);
+    expect(screen.getByText(/관리자 승인 생략 — 작성 강사가 이 과목 관리자입니다/)).toBeInTheDocument();
+    const approval = screen.getByRole("table", { name: "결재란" });
+    expect(approval).toHaveTextContent("담임관리자");
+    expect(approval).toHaveTextContent("생략");
+    expect(approval).not.toHaveTextContent("원장");
+    fireEvent.click(screen.getByRole("button", { name: "보고서 제출" }));
+    expect(screen.getByText(/관리자 승인 없이 바로 승인 완료로 넘어갑니다/)).toBeInTheDocument();
+  });
+  it("데스크 환불 대기 — 상태 칩 둘 · 안내 · 결재란 '데스크' 칸(담당 · 환불완료일)", () => {
+    const steps = [{ documentId: "doc", deskId: "desk", deskName: "데스크A", completedDate: null }];
+    render(<ReportDetail {...props} report={{ ...r, status: "approved", director_id: null, director_ids: [] }} userId={manager} refundSteps={steps} />);
+    expect(screen.getByText("관리자 승인 완료")).toBeInTheDocument();
+    expect(screen.getByText("데스크 환불 요청")).toBeInTheDocument();
+    expect(screen.getByText(/데스크 환불 처리\(환불 요청서의 환불완료일자\)가 끝나면/)).toBeInTheDocument();
+    const approval = screen.getByRole("table", { name: "결재란" });
+    expect(approval).toHaveTextContent("데스크");
+    expect(approval).toHaveTextContent("데스크A");
+    expect(approval).toHaveTextContent("환불완료일 :");
+  });
   it("readonly views cannot submit, approve or cancel", () => {
     render(<ReportDetail {...props} writable={false} />);
     expect(screen.queryByRole("button")).not.toBeInTheDocument();

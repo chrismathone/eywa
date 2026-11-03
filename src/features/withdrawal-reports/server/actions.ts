@@ -6,10 +6,11 @@ import { logAction } from "@/features/audit/server/log";
 import { pokeSlack } from "@/features/slack/server/poke";
 import { describeDbError } from "@/lib/supabase/db-error";
 import { recordMathWithdrawalToSheet } from "@/features/withdrawals/server/withdrawal-sheet";
-import { bodySchema, batchRequestSchema, cancelsAsDirector, directSchema, submissionError, missingReportSchema, REPORT_ACTION_LABEL, type ReportAction, type WithdrawalReport } from "../model";
+import { bodySchema, batchRequestSchema, cancelsAsDirector, directSchema, managerStepSkipped, submissionError, missingReportSchema, REPORT_ACTION_LABEL, type ReportAction, type WithdrawalReport } from "../model";
 import { checkReasonInput } from "@/features/withdrawals/reason-detail";
 import { canManageStudentStatusNow } from "@/features/students/server/status-access";
 import { reportViewer, getReport } from "./queries";
+import { managerStepSkippable } from "./request-check";
 import { completedEnrollmentIds } from "./completed-target";
 import { appliedAuditMeta } from "../audit-meta";
 import { loadReportBilling } from "./billing";
@@ -23,8 +24,10 @@ async function finish(r: WithdrawalReport, action: keyof typeof REPORT_ACTION_LA
   // 이 승인으로 퇴원·수강 종료가 끝났으면 끝낸 수강을 함께 남긴다(appliedAuditMeta). 못 읽어도 기록을 먼저 남기고 종전처럼 실패를 알린다.
   let endedIds: string[] | null = null, endedError: unknown = null;
   if (r.status === "completed") { try { endedIds = await completedEnrollmentIds(r); } catch (e) { endedError = e; } }
+  // 관리자 승인을 생략한 보고서의 제출 = 승인(원장 2026-11-03) — 기록에서 그렇게 읽히게.
+  const operation = action === "submit" && managerStepSkipped(r) ? `${REPORT_ACTION_LABEL.submit} · 관리자 승인 생략` : REPORT_ACTION_LABEL[action];
   await logAction({ action: "withdrawal_report_update", targetType: "student", targetLabel: r.snapshot.name,
-    metadata: { reportId: r.id, operation: REPORT_ACTION_LABEL[action], date: r.effective_date, ...appliedAuditMeta(r, endedIds) } });
+    metadata: { reportId: r.id, operation, date: r.effective_date, ...appliedAuditMeta(r, endedIds) } });
   if (action !== "save") pokeSlack(r.tenant_id);
   if (r.status === "completed") {
     if (!endedIds) throw endedError;
@@ -38,6 +41,9 @@ export async function requestWithdrawalReport(input: unknown): Promise<ReportRes
   const parsed = batchRequestSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "입력 내용을 확인해 주세요." };
   if (viewer.scope && parsed.data.subjects.some(s => !viewer.scope!.includes(s))) return { error: "담당 과목의 보고서만 요청할 수 있습니다." };
+  // 승인 관리자 0명 = 관리자 승인 생략(작성 강사가 그 과목 관리자 · 원장 2026-11-03)일 때만 — 요청 창과 같은 계산으로 다시 본다.
+  if (!parsed.data.managerIds.length && !(await managerStepSkippable(viewer.user.tenantId, parsed.data).catch(() => false)))
+    return { error: "승인할 관리자를 선택해 주세요." };
   const db = createAdminClient();
   const { data, error } = await db.rpc("request_withdrawal_report_group", {
     p_tenant: viewer.user.tenantId, p_actor: viewer.user.id, p_payload: parsed.data,

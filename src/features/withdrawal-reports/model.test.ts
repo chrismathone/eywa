@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bodySchema, EMPTY_BODY, requestSchema, batchRequestSchema, automaticExitKind, cancelsAsDirector, reportCapabilities, submissionError, missingReportSchema, canRequestReport, directSchema, isBookkeepingReport, isDirectReport, type WithdrawalReport } from "./model";
+import { bodySchema, EMPTY_BODY, requestSchema, batchRequestSchema, automaticExitKind, cancelsAsDirector, canRequestRefund, reportCapabilities, reportStatusChips, reportStatusLabel, snapshotMatches, submissionError, missingReportSchema, canRequestReport, directSchema, isBookkeepingReport, isDirectReport, type WithdrawalReport } from "./model";
 import { CLEANUP_WITHDRAWAL_MEMO } from "@/features/withdrawals/system-bulk";
 const id = "10000000-0000-4000-8000-000000000001";
 const teacher = "10000000-0000-4000-8000-000000000002";
@@ -13,12 +13,42 @@ describe("withdrawal reports", () => {
     expect(bodySchema.safeParse({ ...EMPTY_BODY, reason: "grades", reasonDetail: "teacher_left" }).success).toBe(false);
     expect(bodySchema.safeParse({ ...EMPTY_BODY, reasonDetail: "invented" }).success).toBe(false);
   });
-  it("allows manager-only final approval and multiple authors without role overlap", () => {
-    const batch = { studentId: id, teacherIds: [teacher], managerIds: [manager], directorIds: [], subjects: ["math"], effectiveDate: "2026-10-14", note: "" };
+  it("작성 요청 입력 — 원장 칸은 버리고, 관리자 0명(관리자 승인 생략)은 서버가 과목으로 다시 본다(원장 2026-11-03)", () => {
+    const batch = { studentId: id, teacherIds: [teacher], managerIds: [manager], subjects: ["math"], effectiveDate: "2026-10-14", note: "" };
     expect(batchRequestSchema.safeParse(batch).success).toBe(true);
-    expect(batchRequestSchema.safeParse({ ...batch, managerIds: [] }).success).toBe(false);
-    expect(batchRequestSchema.safeParse({ ...batch, directorIds: [manager] }).success).toBe(false);
+    expect(batchRequestSchema.safeParse({ ...batch, managerIds: [] }).success).toBe(true);
+    const old = batchRequestSchema.safeParse({ ...batch, directorIds: [director] });
+    expect(old.success && "directorIds" in old.data).toBe(false); // 옛 화면이 보낸 원장은 조용히 버린다(DB도 받지 않는다)
     expect(batchRequestSchema.safeParse({ ...batch, managerIds: [teacher] }).success).toBe(false);
+  });
+  it("반 이름만 바뀐 건 '변경'이 아니다 — 담임·수강이 바뀌면 변경(원장 2026-11-03 · DB withdrawal_report_compare_key)", () => {
+    const course = { id: "e1", classId: "c1", className: "LE1", subject: "english", teacherId: teacher, teacherName: "담임", startDate: "2026-01-01", endDate: null, onHold: false };
+    const snap = { name: "학생", school: null, grade: null, enrolledAt: null, status: "enrolled", withdrawnAt: null, courses: [course] };
+    expect(snapshotMatches(snap, { ...snap, courses: [{ ...course, className: "LE2" }] })).toBe(true);
+    expect(snapshotMatches(snap, { ...snap, courses: [{ ...course, teacherId: manager }] })).toBe(false);
+    expect(snapshotMatches(snap, { ...snap, courses: [] })).toBe(false);
+  });
+  it("데스크 환불 요청 — 묶음 관리자 · 요청자 · 관리자 승인 생략 보고서의 작성 강사 · 원장급(원장 2026-11-03)", () => {
+    const r = { ...report, status: "manager_pending" as const, manager_ids: [manager] };
+    expect(canRequestRefund(r, manager, true)).toBe(true);
+    expect(canRequestRefund({ ...r, requested_by: "req" }, "req", true)).toBe(true);
+    expect(canRequestRefund(r, "someone", true, true)).toBe(true); // 원장급
+    expect(canRequestRefund(r, teacher, true)).toBe(false); // 관리자가 있는 보고서의 작성 강사는 아니다
+    expect(canRequestRefund({ ...r, manager_id: null, manager_ids: [] }, teacher, true)).toBe(true); // 관리자 승인 생략 → 작성 강사
+    expect(canRequestRefund(r, "someone", true)).toBe(false);
+    expect(canRequestRefund(r, manager, false)).toBe(false); // 읽기 전용 보기
+    expect(canRequestRefund({ ...r, status: "canceled" }, manager, true, true)).toBe(false);
+    expect(canRequestRefund({ ...r, status: "completed" }, manager, true)).toBe(true); // 처리 뒤에도(기다리게 하지 않음)
+  });
+  it("상태 칩 — 데스크 환불이 남았으면 원래 단계와 '데스크 환불 요청'을 함께", () => {
+    const waiting = [{ documentId: "d", deskId: "desk", deskName: "데스크A", completedDate: null }];
+    const done = [{ ...waiting[0], completedDate: "2026-11-03" }];
+    expect(reportStatusChips({ status: "manager_pending" }, waiting)).toEqual(["관리자 승인 요청", "데스크 환불 요청"]);
+    expect(reportStatusChips({ status: "approved" }, waiting)).toEqual(["관리자 승인 완료", "데스크 환불 요청"]);
+    expect(reportStatusChips({ status: "scheduled" }, waiting)).toEqual(["처리 예약", "데스크 환불 요청"]);
+    expect(reportStatusChips({ status: "manager_pending" }, done)).toEqual(["관리자 승인 대기"]);
+    expect(reportStatusChips({ status: "completed" }, waiting)).toEqual(["처리 완료"]);
+    expect(reportStatusLabel({ status: "manager_pending" })).toBe("관리자 승인 대기");
   });
   it("infers whole withdrawal only when every enrollment is selected, including same-subject classes", () => {
     const courses = [{ id: "math-a", subject: "math" }, { id: "math-b", subject: "math" }];

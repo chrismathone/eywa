@@ -12,6 +12,10 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-11-03 퇴원보고서: 원장 승인 없앰 · 관리자 승인 생략 · 데스크 환불 단계 · 반 이름 무시 대조 (s2_0020 · ⏳ 미적용)
+
+`s2_0020_withdrawal_report_desk_refund.sql` — 원장 2026-11-03(머리 주석에 원문). ① 대조 열쇠 `withdrawal_report_compare_key`(반 이름·고정 이력 뺌) — 제출 트리거·처리 함수·`_v1` ② 데스크 환불 연결 표 `withdrawal_report_refunds`(정책 0 · service_role select/insert) + `attach_withdrawal_report_refund` · 판정 `withdrawal_report_refund_pending` ③ 작성 요청: 원장 받지 않음 · 관리자 0명은 작성 강사가 모두 관리자급일 때만 · 묶음 `manager_ids_check` 삭제 · 보고서 `manager_id` NOT NULL 해제 ④ 처리 함수: 관리자 0명 제출 = 승인 · 데스크 환불 대기면 묶음 대기 · `apply`는 환불 대기면 그대로 돌려줌 · 새 동작 `release` ⑤ `release_withdrawal_report_refunds`. 함수 4개는 운영 정의(2026-11-03) 지문이 맞을 때만 바꾼다(다르면 멈춤). 🔴 **앱보다 먼저**(#95) — 지금 앱과 함께 돌아도 된다(관리자 1명 이상 요청은 그대로 · 원장 선택은 무시). ⚠️ 번호: AX 가지의 `s2_0017`·`s2_0018`(운영 적용됨 · main 미반영)이 합칠 때 0018·0019가 된다는 전제로 0020 — 그 전엔 번호 가드(빈틈 없음)가 실패한다. 시험 = PGlite에 운영 덤프 정의를 올려 시나리오 30개 + 되돌리기·다시 적용. 적용 뒤 진행 중 김다예 묶음 전환 스크립트(작성 요청 상태일 때만). 되돌리기 = `scripts/_oneoff/revert-s2_0020-withdrawal-report-desk-refund.sql`(앱 먼저 · 관리자 0명/데스크 대기 묶음이 진행 중이면 멈춤 · 연결 표는 남김).
+
 ## 2026-11-02 퇴원보고서: 상세사유 제출 기준 200자 → 100자 (s2_0015 · ✅ 운영 적용 2026-11-02)
 
 `s2_0015_withdrawal_detail_min_100.sql` — 원장 *"퇴원보고서 상세사유 100자 이상으로"*. 전이 함수 두 개(묶음 · `_v1`)의 글자 수 검사와 거절 문구만 치환한다. 🔴 앱 배포 전에 적용(반대면 그 사이 100~199자 제출이 200자 문구로 거절된다). 되돌리기 = `scripts/_oneoff/revert-s2_0015-withdrawal-detail-min-100.sql`.

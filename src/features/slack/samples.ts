@@ -63,7 +63,7 @@ export const SAMPLE_NOTIFICATIONS: Record<string, SampleNotification> = {
     link: "/enrollment",
   },
   grade_drop: { title: "성적 급락", body: "박지우 학생 수학 성적이 18점 하락했습니다(현재 62점).", link: "/retention" },
-  refund_request_approved: { title: "김하늘 환불 요청 — 원장 승인", body: "2026-11 청구 710,000원 · 퇴원 2026-10-28 · 환불 처리를 진행해 주세요.", link: "/billing?tab=refunds" },
+  refund_request_approved: { title: "김하늘 환불 처리 — 퇴원보고서 환불 승인", body: "2026-11 청구 710,000원 · 퇴원 2026-10-28 · 환불 처리를 진행해 주세요.", link: "/billing?tab=refunds" },
   outstanding_alert: { title: "미수금 주의 학생", body: "김하늘 학생의 미수금이 60만원에 이릅니다.", link: "/billing?overdue=1" },
   unsent_report: {
     title: "미발송 수업 보고서",

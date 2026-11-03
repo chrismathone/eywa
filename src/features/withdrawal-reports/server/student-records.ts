@@ -2,10 +2,11 @@ import "server-only";
 import { unstable_rethrow } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { describeDbError, logDbError } from "@/lib/supabase/db-error";
-import { isDirectReport, missingReportSchema, type ReportListRow, type ReportStatus, type StudentSnapshot } from "../model";
+import { isDirectReport, missingReportSchema, reportStatusLabel, type ReportListRow, type ReportStatus, type StudentSnapshot } from "../model";
 import type { ArchiveRow } from "../archive-model";
 import { canReadReport, reportViewer } from "./queries";
 import { canReadArchive } from "./archives";
+import { loadRefundSteps } from "./refund-steps";
 
 /**
  * 퇴원 상세의 '퇴원보고서' 카드 — **한 학생**의 새 보고서와 기존 원본(원장 2026-10-23 *"퇴원보고서 연동"*).
@@ -23,6 +24,8 @@ export type StudentReportItem = {
   /** 요청 묶음 — 담임별로 나뉜 보고서들이 같은 값을 가진다(묶음이 없던 옛 행은 자기 id). */
   groupId: string;
   status: ReportStatus;
+  /** 보이는 상태 — 데스크 환불이 남았으면 '… · 데스크 환불 요청'(원장 2026-11-03 · 목록·상세와 같은 `reportStatusLabel`). */
+  statusLabel: string;
   exitKind: "withdrawal" | "subject_end";
   subjects: string[];
   effectiveDate: string;
@@ -101,16 +104,20 @@ export async function loadStudentReportRecords(studentId: string): Promise<Stude
     ]);
     if (reports.error) return failure(reports.error, "withdrawal-reports.student-reports");
     if (archives.error) return failure(archives.error, "withdrawal-reports.student-archives");
+    const readable = reports.rows.filter((r) => canReadReport(r, viewer));
+    // 데스크 환불 단계(s2_0020)는 아직 처리 전인 보고서에만 의미가 있다 — 그런 보고서가 있을 때만 읽고, 못 읽으면 단계 없이.
+    const open = readable.filter((r) => !["completed", "canceled", "blocked"].includes(r.status));
+    const steps = open.length ? await loadRefundSteps(tenant, open).catch(() => undefined) : undefined;
     return {
       status: "ok",
       // 다 보는 사람만 '없습니다'를 단정한다 — 원장, 그리고 열람 과목 제한이 없는 관리자급(원장 2026-10-30 열람 확대).
       complete: !viewer.teacherId && (viewer.user.systemRole === "master" ? !viewer.scope : viewer.manage && !viewer.readScope),
-      reports: reports.rows
-        .filter((r) => canReadReport(r, viewer))
+      reports: readable
         .map((r) => ({
           id: r.id,
           groupId: r.group_id ?? r.id,
           status: r.status,
+          statusLabel: reportStatusLabel(r, steps?.get(r.group_id ?? r.id) ?? []),
           exitKind: r.exit_kind,
           subjects: r.subjects ?? [],
           effectiveDate: r.effective_date,

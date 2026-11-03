@@ -53,11 +53,11 @@ export function narrowApprovalSubjects(staff: readonly StaffOption[], approverId
   if (!owned.size) return [...staff];
   return staff.map(u => listed.has(u.id) ? u : { ...u, approvalSubjects: (u.approvalSubjects ?? u.subjects).filter(s => !owned.has(s)) });
 }
-/** 기본 선택 — 과목 관리자 전원 + 대신 승인할 원장이 한 명뿐이면 그 원장(여럿이면 요청자가 고른다). */
-export function defaultApproverIds({ candidates, masters }: Pick<ReturnType<typeof requestApprovers>, "candidates" | "masters">) {
-  return [...candidates, ...(masters.length === 1 ? masters : [])].map(u => u.id);
+/** 기본 선택 — 과목 관리자 전원(원장 승인 칸은 없다 — 원장 2026-11-03). */
+export function defaultApproverIds({ candidates }: Pick<ReturnType<typeof requestApprovers>, "candidates">) {
+  return candidates.map(u => u.id);
 }
-/** 작성 강사가 그 과목 관리자인 과목 — 본인 보고서를 본인이 승인할 수 없다. 원장이 담임이면 해당 없다(관리자가 승인). */
+/** 작성 강사가 그 과목 관리자인 과목 — 그 과목은 관리자 승인을 생략한다(원장 2026-11-03). 원장이 담임이면 해당 없다(관리자가 승인). */
 export function selfManagedSubjects(
   staff: readonly StaffOption[],
   courses: readonly Pick<CourseSnapshot, "subject" | "teacherId">[],
@@ -68,40 +68,24 @@ export function selfManagedSubjects(
 }
 
 /**
- * 작성자를 생략한 반도 종료하므로 승인자는 종료 대상 전체 과목에서 고른다.
- * 담임이 관리자인 과목은 관리자 승인을 건너뛰고 원장이 승인한다(원장 2026-10-30). DB가 승인자 1명 이상을 요구해 원장을 승인자 칸에 넣는다.
- */
-export function requestManagers(
-  staff: readonly StaffOption[],
-  courses: readonly Pick<CourseSnapshot, "subject" | "teacherId">[],
-  subjects: readonly string[],
-  teacherIds: readonly string[],
-  directorIds: readonly string[] = [],
-) {
-  const { candidates, masters } = requestApprovers(staff, courses, subjects, teacherIds, directorIds);
-  return [...candidates, ...masters];
-}
-
-/**
- * 승인자 후보를 과목 관리자와 대신 승인할 원장으로 나눈다 — 원장 계정이 여럿이라 원장은 전원을 기본 선택하지 않는다.
+ * 승인 관리자 후보 — 작성자를 생략한 반도 종료하므로 종료 대상 전체 과목에서 고른다(작성 강사 본인은 빼고).
+ * 원장 2026-11-03: 원장 승인 칸은 없다. **작성 강사가 그 과목 관리자면 그 과목은 관리자 승인을 생략**한다(제출 = 관리자 승인).
+ * - 모든 과목이 그렇다(`skipAll`) → 승인 관리자 0명 · 요청을 막지 않는다(DB s2_0020이 관리자 0명 묶음을 받는다).
+ * - 섞여 있다 → 나머지 과목의 관리자가 묶음의 모든 보고서를 승인한다(승인 관리자는 묶음 단위다).
  * 🔴 침산 지점 superadmin(lsy93@gmail.com · st2000423@gmail.com 등)을 여기에 넣으면 안 된다 — `reportStaff`가 역할을 admin으로, 승인 과목을 빈 값으로 넘겨 후보에서 빠진다.
- *    `role`을 실제 system_role로 바꾸거나 다른 직원 목록을 넘기면 이 보호가 사라진다.
+ *    `role`을 실제 system_role로 바꾸거나 다른 직원 목록을 넘기면 이 보호가 사라진다. 관리자 승인 생략도 같은 이유로 운영자 계정에겐 생기지 않는다.
  */
 export function requestApprovers(
   staff: readonly StaffOption[],
   courses: readonly Pick<CourseSnapshot, "subject" | "teacherId">[],
   subjects: readonly string[],
   teacherIds: readonly string[],
-  directorIds: readonly string[] = [],
-): { candidates: StaffOption[]; masters: StaffOption[]; needsDirector: boolean } {
+): { candidates: StaffOption[]; selfManaged: string[]; skipAll: boolean } {
   const hasAuthor = courses.some(c => c.teacherId && teacherIds.includes(c.teacherId));
   const authorSubjects = new Set(hasAuthor ? courses.filter(c => subjects.includes(c.subject)).map(c => c.subject) : []);
   const self = new Set(selfManagedSubjects(staff, courses, teacherIds));
-  const free = (u: StaffOption) => !teacherIds.includes(u.id) && !directorIds.includes(u.id);
   const approves = (u: StaffOption, subject: string) => (u.approvalSubjects ?? u.subjects).includes(subject);
-  const candidates = staff.filter(u => canRequestReport(u.role) && free(u) && [...authorSubjects].some(s => !self.has(s) && approves(u, s)));
-  if (!self.size) return { candidates, masters: [], needsDirector: false };
-  // 다른 과목 관리자가 남으면 그 관리자가 승인한 뒤 원장이 승인한다 — 원장을 '원장 승인' 칸에서 꼭 골라야 한다(관리자 혼자 끝내지 않게).
-  if (candidates.length) return { candidates, masters: [], needsDirector: true };
-  return { candidates, masters: staff.filter(u => u.role === "master" && free(u)), needsDirector: false };
+  const candidates = staff.filter(u => canRequestReport(u.role) && !teacherIds.includes(u.id) && [...authorSubjects].some(s => !self.has(s) && approves(u, s)));
+  const selfManaged = [...authorSubjects].filter(s => self.has(s));
+  return { candidates, selfManaged, skipAll: authorSubjects.size > 0 && selfManaged.length === authorSubjects.size };
 }

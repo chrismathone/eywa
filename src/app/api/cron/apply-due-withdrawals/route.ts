@@ -117,7 +117,7 @@ export async function GET(req: Request) {
     }
   }
   const reports = await applyDueWithdrawalReports();
-  if (applied + failed + reports.applied + reports.blocked > 0) {
+  if (applied + failed + reports.applied + reports.blocked + reports.released > 0) {
     revalidatePath("/withdrawal-reports", "layout");
     revalidatePath("/students", "layout");
     revalidatePath("/withdrawals", "layout");
