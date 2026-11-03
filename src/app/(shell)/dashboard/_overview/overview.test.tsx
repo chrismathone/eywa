@@ -226,7 +226,7 @@ describe("overview display contracts", () => {
   });
 });
 
-const KPI_LABELS = ["재원생", "강좌수", "퇴원&수업종료", "신규문의", "전일 입테", "전일 / 이달 신규", "오늘첫수업", "최근 결석", "보강예정"];
+const KPI_LABELS = ["재원생", "강좌수", "퇴원", "신규문의", "전일 입테", "전일 / 이달 신규", "오늘첫수업", "최근 결석", "보강예정"];
 const ALL_MENUS: OverviewSnapshot["allowed"] = [
   "dashboard",
   "students",
@@ -442,7 +442,7 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     mocks.data = kpiSnapshot();
     render(<Overview initial={mocks.data} />);
     const href = (name: string) => screen.getByRole("link", { name }).getAttribute("href");
-    expect(href("퇴원관리에서 9월로 센 퇴원·수업종료 보기")).toBe("/withdrawals?type=all&range=month&month=2026-09");
+    expect(href("퇴원관리에서 26.09 퇴원(수강종료) 보기")).toBe("/withdrawals?type=all&range=month&month=2026-09");
     // 신규문의 ↗ = 통계 보기의 신규 문의 추이(이번 달 일별 — 오늘 칸 = 카드 숫자 · 원장 2026-10-20).
     expect(href("신규 콜&상담 통계에서 문의 추이 보기")).toBe("/enrollment?view=stats&trend=day&from=dashboard#intake");
     // 오늘첫수업 ↗ = 원생 통계의 첫 수업 추이(이번 달 일별 — 오늘 칸 = 카드 · 원장 2026-10-20). 그날 학생 목록은 그 카드 머리 링크.
@@ -484,8 +484,8 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
   it("↗는 목적지 메뉴를 열 수 있을 때만 선다(카드는 그대로)", () => {
     mocks.data = kpiSnapshot(["dashboard", "students", "enrollment", "calendar"]);
     render(<Overview initial={mocks.data} />);
-    expect(screen.queryByRole("link", { name: "퇴원관리에서 9월로 센 퇴원·수업종료 보기" })).toBeNull();
-    expect(screen.getByRole("button", { name: /^퇴원&수업종료 2명\./ })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "퇴원관리에서 26.09 퇴원(수강종료) 보기" })).toBeNull();
+    expect(screen.getByRole("button", { name: /^퇴원 2명\./ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^최근 결석 2명\./ })).toBeTruthy();
     cleanup();
   });
@@ -528,13 +528,13 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
   it("퇴원&수업종료 팝업 — 프로그램별 합 = 퇴원&수업종료 수(기타·미상 포함), 명단은 원생 상세로", () => {
     mocks.data = kpiSnapshot();
     render(<Overview initial={mocks.data} />);
-    fireEvent.click(screen.getByRole("button", { name: /^퇴원&수업종료 2명\./ }));
+    fireEvent.click(screen.getByRole("button", { name: /^퇴원 2명\./ }));
     const popup = screen.getByRole("dialog");
-    expect(popup.textContent).toContain("9월로 센 퇴원&수업종료 2명");
+    expect(popup.textContent).toContain("26.09 퇴원(수강종료) 2명");
     expect(popup.textContent).toContain("퇴원 2명 · 수강종료 0명");
     // 세는 기준을 숫자 바로 아래에 적는다(원장 2026-11-03 *"오해 소지가 없도록"*) — 앞 달로 센 줄이 없으면 그 묶음은 서지 않는다.
     // 팝업 아래 = 보여 주는 달(10일 기준) · 날짜는 마지막 수업일 · 달은 수업료 납부(원장 2026-11-03).
-    expect(popup.textContent).toContain("매달 1~10일에는 지난달, 11일부터 다음 달 10일까지는 이번 달 퇴원·수업종료를 보여 줍니다.");
+    expect(popup.textContent).toContain("매달 1~10일에는 지난달, 11일부터 다음 달 10일까지는 이번 달 퇴원(수강종료)을 보여 줍니다.");
     expect(popup.textContent).toContain("퇴원·수강종료 날짜는 마지막 수업일이고, 어느 달로 셀지는 수업료 납부로 정합니다 — 퇴원은 수업료를 낸 마지막 달, 수강종료는 그 과목 수업료를 낸 마지막 달(낸 기록이 없으면 마지막 수업일의 달). 예: 마지막 수업일이 9월 1일이어도 8월분까지만 냈으면 8월로 셉니다.");
     expect(popup.textContent).not.toContain("앞 달로 센");
     expect(
@@ -554,16 +554,53 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
       { id: "c2", eventKey: "c2|math", name: "앞달나", schoolGrade: "침산중2", withdrawnAt: "2026-09-01", program: "math", subject: "math", kind: "withdrawn", countMonth: "2026-08" },
     ];
     render(<Overview initial={mocks.data} />);
-    const card = screen.getByRole("button", { name: /^퇴원&수업종료 0명\./ });
+    const card = screen.getByRole("button", { name: /^퇴원 0명\./ });
     expect(card.getAttribute("aria-label")).toContain("마지막 수업일이 9월이지만 앞 달로 센 2명");
     fireEvent.click(card);
     const popup = screen.getByRole("dialog");
-    expect(popup.textContent).toContain("9월로 센 퇴원&수업종료 0명");
-    expect(popup.textContent).toContain("9월로 센 퇴원·수업종료 학생이 없습니다.");
+    expect(popup.textContent).toContain("26.09 퇴원(수강종료) 0명");
+    expect(popup.textContent).toContain("26.09 퇴원(수강종료) 학생이 없습니다.");
     expect(popup.textContent).toContain("마지막 수업일이 9월이지만 앞 달로 센 2명 — 위 숫자에 들지 않습니다");
-    expect(popup.textContent).toContain("종료 · 8월로 셈");
-    expect(popup.textContent).toContain("퇴원 · 8월로 셈");
+    // 열 맞춘 표 — 반·마지막 수업일·센 달 열(원장 2026-11-03 *"반까지 표시하고 열정렬"*).
+    expect(popup.textContent).toContain("센 달");
+    expect(within(popup).getAllByTitle("8월로 셈")).toHaveLength(2);
     expect(within(popup).getByRole("link", { name: "앞달가 원생 상세" }).getAttribute("href")).toBe("/students/c1");
+    cleanup();
+  });
+
+  it("퇴원 꼬리표는 달을 먼저 놓고(좁으면 앞말만 빠짐), 6줄부터 두 명단을 같은 2단 틀에 넣는다(원장 2026-11-03)", () => {
+    mocks.data = kpiSnapshot();
+    const wd = mocks.data.sections.withdrawals!.data!;
+    wd.rows = Array.from({ length: 6 }, (_, i) => ({ id: `r${i}`, name: `퇴원${i}`, schoolGrade: "침산중1", withdrawnAt: "2026-09-03", program: "math" as const, className: `M${i}` }));
+    wd.carried = [
+      { id: "c1", eventKey: "c1|math", name: "앞달가", schoolGrade: "침산초4", withdrawnAt: "2026-09-01", program: "math", subject: "math", kind: "subject-ended", countMonth: "2026-08" },
+    ];
+    render(<Overview initial={mocks.data} />);
+    const card = screen.getByRole("button", { name: /^퇴원 6명\./ });
+    // 꼬리표 = 달 칸이 DOM 앞(거꾸로 놓아 화면엔 '이번달 (26.09)') — 말줄임으로 달이 잘리지 않게.
+    const tag = within(card).getByTitle("이번달 (26.09)");
+    expect([...tag.children].map((el) => el.textContent)).toEqual(["(26.09)", "이번달"]);
+    fireEvent.click(card);
+    const popup = screen.getByRole("dialog");
+    // 6줄 → 두 단(3 + 3) · 앞 달로 센 1줄도 같은 틀의 왼쪽 단(열 위치가 섹션마다 같다).
+    const rowsOf = (ul: Element) => ul.querySelectorAll("li:not([aria-hidden])").length;
+    const exitTables = [...popup.querySelectorAll("ul")].filter((ul) => ul.querySelector("li > time"));
+    expect(exitTables.map(rowsOf)).toEqual([3, 3, 1]);
+    // 앞 두 표 = 한 틀(2단) · 앞 달로 센 표 = 따로 선 틀의 왼쪽 단 하나.
+    expect(exitTables[0]!.parentElement).toBe(exitTables[1]!.parentElement);
+    expect(exitTables[2]!.parentElement).not.toBe(exitTables[0]!.parentElement);
+    expect(exitTables[2]!.parentElement!.children).toHaveLength(1);
+    expect(within(popup).getByTitle("M5").textContent).toBe("M5");
+    cleanup();
+  });
+
+  it("짧은 퇴원 명단은 종전 폭 팝업에 한 표로 놓는다", () => {
+    mocks.data = kpiSnapshot();
+    render(<Overview initial={mocks.data} />);
+    fireEvent.click(screen.getByRole("button", { name: /^퇴원 2명\./ }));
+    const popup = screen.getByRole("dialog");
+    expect(popup.className).toContain("sm:max-w-xl");
+    expect(popup.querySelector("[class*='exitColumns']")).toBeNull();
     cleanup();
   });
 
@@ -571,7 +608,7 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     mocks.data = kpiSnapshot();
     mocks.data.sections.withdrawals!.data!.rows[1]!.kind = "subject-ended";
     render(<Overview initial={mocks.data} />);
-    fireEvent.click(screen.getByRole("button", { name: /^퇴원&수업종료 2명\./ }));
+    fireEvent.click(screen.getByRole("button", { name: /^퇴원 2명\./ }));
     const popup = screen.getByRole("dialog");
     expect(popup.textContent).toContain("퇴원 1명 · 수강종료 1명");
     expect(within(popup).getByText("퇴원")).toBeInTheDocument();
@@ -586,7 +623,7 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
       { id: "w1", eventKey: "w1|math", name: "퇴원가", schoolGrade: "침산중1", withdrawnAt: "2026-09-03", program: "math", kind: "subject-ended" },
     ];
     render(<Overview initial={mocks.data} />);
-    fireEvent.click(screen.getByRole("button", { name: /^퇴원&수업종료 2명\./ }));
+    fireEvent.click(screen.getByRole("button", { name: /^퇴원 2명\./ }));
     const popup = screen.getByRole("dialog");
     expect(popup.textContent).toContain("퇴원 0명 · 수강종료 2명");
     expect(within(popup).getAllByRole("link", { name: "퇴원가 원생 상세" })).toHaveLength(2);

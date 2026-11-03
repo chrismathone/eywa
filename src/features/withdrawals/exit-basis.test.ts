@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EXIT_REPORT_RULE, countedEarlier, countedEarlierByMonth, countedEarlierTitle, countedMonthLabel, exitBasisRule } from "./exit-basis";
+import { EXIT_REPORT_RULE, exitMonthLabel, exitReportTag, exitReportTagParts, exitReportTitle, countedEarlier, countedEarlierByMonth, countedEarlierTitle, countedMonthLabel, exitBasisRule } from "./exit-basis";
 
 // 원장 2026-11-03 *"오해 소지가 없도록 문구들 수정"* — 퇴원·수강종료를 어느 달로 세는지 화면 말 한 벌.
 describe("exit-basis — 세는 달 문구", () => {
@@ -7,7 +7,17 @@ describe("exit-basis — 세는 달 문구", () => {
     expect(exitBasisRule()).toBe("퇴원·수강종료 날짜는 마지막 수업일이고, 어느 달로 셀지는 수업료 납부로 정합니다 — 퇴원은 수업료를 낸 마지막 달, 수강종료는 그 과목 수업료를 낸 마지막 달(낸 기록이 없으면 마지막 수업일의 달).");
     expect(exitBasisRule("2026-11")).toContain("예: 마지막 수업일이 11월 1일이어도 10월분까지만 냈으면 10월로 셉니다.");
     expect(exitBasisRule("2027-01")).toContain("예: 마지막 수업일이 1월 1일이어도 12월분까지만 냈으면 12월로 셉니다.");
-    expect(EXIT_REPORT_RULE).toBe("매달 1~10일에는 지난달, 11일부터 다음 달 10일까지는 이번 달 퇴원·수업종료를 보여 줍니다.");
+    expect(EXIT_REPORT_RULE).toBe("매달 1~10일에는 지난달, 11일부터 다음 달 10일까지는 이번 달 퇴원(수강종료)을 보여 줍니다.");
+    // 운영실 퇴원 칸 — 꼬리표 "지난달 (26.10)" / "이번달 (26.11)" · 제목 "26.10 퇴원(수강종료)"(원장 2026-11-03).
+    expect(exitMonthLabel("2026-10")).toBe("26.10");
+    expect(exitReportTitle("2026-10")).toBe("26.10 퇴원(수강종료)");
+    expect(exitReportTag("2026-10", "2026-11-03")).toBe("지난달 (26.10)");
+    expect(exitReportTag("2026-11", "2026-11-15")).toBe("이번달 (26.11)");
+    expect(exitReportTag("2026-12", "2027-01-05")).toBe("지난달 (26.12)");
+    // 카드 꼬리표는 앞말·달로 나눠 놓는다 — 좁으면 앞말만 빠진다.
+    expect(exitReportTagParts("2026-10", "2026-11-03")).toEqual({ lead: "지난달", label: "(26.10)" });
+    expect(exitReportTagParts("2026-11", "2026-11-15")).toEqual({ lead: "이번달", label: "(26.11)" });
+    expect(exitReportTagParts("2026-12", "2026-11-15")).toEqual({ lead: null, label: "26.12" });
     expect(exitBasisRule("bad")).toBe(exitBasisRule());
   });
 

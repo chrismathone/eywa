@@ -33,7 +33,33 @@ export function exitBasisRule(month?: string): string {
 }
 
 /** 운영실 카드가 어느 달을 보여 주는지(`exitReportMonth` · 원장 2026-11-03) — 팝업 아래·도움말. */
-export const EXIT_REPORT_RULE = `매달 1~${EXIT_REPORT_SWITCH_DAY}일에는 지난달, ${EXIT_REPORT_SWITCH_DAY + 1}일부터 다음 달 ${EXIT_REPORT_SWITCH_DAY}일까지는 이번 달 퇴원·수업종료를 보여 줍니다.`;
+export const EXIT_REPORT_RULE = `매달 1~${EXIT_REPORT_SWITCH_DAY}일에는 지난달, ${EXIT_REPORT_SWITCH_DAY + 1}일부터 다음 달 ${EXIT_REPORT_SWITCH_DAY}일까지는 이번 달 퇴원(수강종료)을 보여 줍니다.`;
+
+/** 달 표기 "26.10"(원장 2026-11-03 *"지난달 (26.10) 이번달 (26.11)"*). */
+export function exitMonthLabel(month: string): string {
+  return `${month.slice(2, 4)}.${month.slice(5, 7)}`;
+}
+
+/** 운영실 퇴원 칸 제목·팝업 합계 — "26.10 퇴원(수강종료)"(원장 2026-11-03 *"그냥 … -> 26.10 퇴원(수강종료)"*). */
+export function exitReportTitle(month: string): string {
+  return `${exitMonthLabel(month)} 퇴원(수강종료)`;
+}
+
+/** 운영실 퇴원 칸 꼬리표 — 보여 주는 달이 오늘의 달이면 "이번달 (26.11)", 지난달이면 "지난달 (26.10)"(다른 칸의 '현재'·'오늘'처럼). */
+export function exitReportTag(month: string, today: string): string {
+  const { lead, label } = exitReportTagParts(month, today);
+  return lead ? `${lead} ${label}` : label;
+}
+
+/**
+ * 같은 꼬리표를 앞말과 달로 나눈 것 — 카드 칸이 좁으면 앞말('지난달')만 빠지고 달('(26.10)')은 남는다.
+ * 통째로 말줄임하면 "지난달 (2…"처럼 정작 달이 잘린다(리뷰 2026-11-03).
+ */
+export function exitReportTagParts(month: string, today: string): { lead: string | null; label: string } {
+  const label = exitMonthLabel(month);
+  if (month === today.slice(0, 7)) return { lead: "이번달", label: `(${label})` };
+  return month < today.slice(0, 7) ? { lead: "지난달", label: `(${label})` } : { lead: null, label };
+}
 
 /**
  * 창 [from, to] 안에 **퇴원·종료**했지만(퇴원일·종료일) 수업료를 앞 달까지만 내 **창보다 앞 달로 센** 줄인가 — 숫자에는 들지 않고 '앞 달로 센'으로 따로 밝힌다.
