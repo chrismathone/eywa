@@ -5,10 +5,17 @@ import { splitEnrolledRecent } from "@/features/dashboard/overview/enrolled-rece
 import { firstClassTrendHref, intakeTrendHref, makeupWeekHref, withdrawalsMonthHref } from "@/features/dashboard/overview/kpi-links";
 import { windowUntilLabel } from "@/features/dashboard/overview/upcoming-window";
 import { countWithdrawalPrograms } from "@/features/withdrawals/window";
+import { EXIT_REPORT_RULE, countedEarlierTitle, countedMonthLabel, exitBasisRule, exitReportTag, exitReportTitle } from "@/features/withdrawals/exit-basis";
 import { absentDaily, makeupWeekly } from "./derive";
 import { dash, levelOfSchoolGrade, type DetailContext, type Details } from "./details-types";
 import { hhmm, monthDay, num, yyMm } from "./labels";
 import { classSubject, compareSlice, oneSeries, onMonths, programName, rosterOf, subjectTab, subjectViews, teacherOfClass } from "./details-shared";
+
+/**
+ * 퇴원 상세 맨 아래 셋째 줄(세는 범위 — 합계가 학생 수보다 클 수 있는 까닭). 기존 운영실 팝업(`kpi-popups.tsx`) 맨 아래 셋째 줄과 같은 문장이다 —
+ * 그 파일이 글자로 들고 있어 여기 한 벌 더 두고, 시험(`instruments.test.ts`)이 두 문장이 같은지 본다. 공용 상수가 생기면 그것을 쓴다.
+ */
+export const WITHDRAWAL_SCOPE_NOTE = "과목 수업을 모두 종료한 학생 포함 · 반이동·특강 종료·퇴원일 미상 제외 · 여러 과목을 함께 종료하면 과목마다 1명씩 셉니다.";
 
 export function kpiDetails(ctx: DetailContext): Details {
   const { snapshot, can } = ctx;
@@ -26,28 +33,40 @@ export function kpiDetails(ctx: DetailContext): Details {
     const subjectMonths = months.filter((m) => ctx.extras.subjects.some((s) => lines?.[s.key]?.withdrawn[m] !== undefined));
     const trendOf = (l: { key: string }) => (lines?.[l.key] ? onMonths(subjectMonths, lines[l.key]!.withdrawn) : null);
     const by = long && lines
-      ? subjectViews(ctx.extras.subjects, subjectMonths, (l) => { const values = trendOf(l); return values ? [oneSeries("퇴원", values, l.key)] : null; }, { title: "월별 퇴원", unit: "명", kind: "bar", note: "과목을 알 수 없는 퇴원은 빠집니다." }, () => [])
+      ? subjectViews(ctx.extras.subjects, subjectMonths, (l) => { const values = trendOf(l); return values ? [oneSeries("퇴원", values, l.key)] : null; }, { title: "월별 퇴원(수강종료 제외)", unit: "명", kind: "bar", note: "과목을 알 수 없는 퇴원은 빠집니다." }, () => [])
       : undefined;
-    const compare = long && lines ? compareSlice(ctx.extras.subjects, subjectMonths, trendOf, { title: "과목별 퇴원", unit: "명", note: "과목을 알 수 없는 퇴원은 빠집니다." }) : undefined;
+    const compare = long && lines ? compareSlice(ctx.extras.subjects, subjectMonths, trendOf, { title: "과목별 퇴원(수강종료 제외)", unit: "명", note: "과목을 알 수 없는 퇴원은 빠집니다." }) : undefined;
+    // 명단 줄 — 앞 달로 센 줄은 날짜 칸에 센 달을 붙인다("10월로 셈"). 구분 = 기존 팝업과 같은 말(퇴원 · 수강종료).
+    const rowOf = (r: (typeof wd.rows)[number], counted?: string) => {
+      const subject = r.program ? programName(r.program, ctx) : subjectTab(r.subject, ctx);
+      const who = rosterOf(ctx, r.id, subject);
+      return {
+        cells: [r.name, dash(r.schoolGrade), subject, r.className || who.cls, r.className ? teacherOfClass(ctx, r.className) : who.teacher, r.kind === "subject-ended" ? "수강종료" : "퇴원", `${monthDay(r.withdrawnAt.slice(0, 10))}${counted ? ` · ${counted}` : ""}`],
+        ...(can("students") ? { href: `/students/${r.id}`, linkTitle: r.name } : {}),
+        subject: [subject], level: levelOfSchoolGrade(r.schoolGrade),
+      };
+    };
+    const cols = ["학생", "학교·학년", "과목", "반", "담임", "구분", "마지막 수업일"];
+    const carried = wd.carried ?? [];
+    // 그 달에 마지막 수업을 했지만 앞 달까지만 내 앞 달로 센 줄의 제목 — 기존 팝업과 같은 말 · 수는 탭으로 거른 줄 수.
+    const carriedTitle = (n: number) => `${countedEarlierTitle(wd.month, n, "명")} — 위 숫자에 들지 않습니다`;
     out["kpi:withdrawals"] = {
-      title: "퇴원&수업종료", period: `이번 달 · ${Number(wd.month.slice(5))}월 1일~오늘`,
+      // 보여 줄 달 = 서버가 정한 달(`exitReportMonth` — 1~10일은 지난달). 제목·꼬리표 = 기존 운영실 팝업·칸과 같은 말(원장 2026-11-03 "26.10 퇴원(수강종료)" · "지난달 (26.10)").
+      title: exitReportTitle(wd.month), period: exitReportTag(wd.month, today),
       stats: [["합계", `${num(counts.total)}명`], ...(["eie", "injaewon", "math"] as const).filter((p) => ctx.eieOn || p !== "eie").map((p): [string, string] => [programName(p, ctx), `${num(counts[p])}명`]), ...(counts.other ? [["기타", `${num(counts.other)}명`] as [string, string]] : [])],
-      ...(long ? { trend: { title: "월별 퇴원", labels: months.map(yyMm), series: [{ name: "퇴원", values: long.map((r) => r.withdrawn), tone: "m-char" }], unit: "명", kind: "bar" as const } } : {}),
+      // 추세 = 달마다 실제 퇴원(수강종료 제외 · 등록·퇴원 추이와 같은 수) — 위 합계(퇴원·수강종료를 과목마다)와 세는 대상이 달라 제목에 밝힌다.
+      ...(long ? { trend: { title: "월별 퇴원(수강종료 제외)", labels: months.map(yyMm), series: [{ name: "퇴원", values: long.map((r) => r.withdrawn), tone: "m-char" }], unit: "명", kind: "bar" as const } } : {}),
       ...(by ? { bySubject: Object.fromEntries(Object.entries(by).map(([label, s]) => [label, { trend: s.trend }])) } : {}),
-      ...(compare ? { compare } : {}),
-      tables: [{
-        title: "명단", unit: "명", cols: ["학생", "학교·학년", "과목", "반", "담임", "구분", "날짜"],
-        rows: wd.rows.map((r) => {
-          const subject = r.program ? programName(r.program, ctx) : subjectTab(r.subject, ctx);
-          const who = rosterOf(ctx, r.id, subject);
-          return {
-            cells: [r.name, dash(r.schoolGrade), subject, r.className || who.cls, r.className ? teacherOfClass(ctx, r.className) : who.teacher, r.kind === "subject-ended" ? "수업종료" : "퇴원", monthDay(r.withdrawnAt.slice(0, 10))],
-            ...(can("students") ? { href: `/students/${r.id}`, linkTitle: r.name } : {}),
-            subject: [subject], level: levelOfSchoolGrade(r.schoolGrade),
-          };
-        }),
-      }],
-      ...(can("withdrawals") ? { link: { href: withdrawalsMonthHref(wd.month), label: "퇴원관리에서 보기" } } : {}),
+      // 비교 탭 = 추세·달마다 표만 — 위 수치(`compareSlice` = 추세 마지막 달 = 이번 달 값)는 1~10일엔 제목의 달과 다르고, 세는 대상(수강종료 제외)도 위 합계와 달라 뺀다(리뷰 2026-11-03).
+      ...(compare ? { compare: { ...compare, stats: [] } } : {}),
+      tables: [
+        { title: "명단", unit: "명", cols, rows: wd.rows.map((r) => rowOf(r)) },
+        // 앞 달로 센 줄 — 위 숫자에도, 과목·학교급 탭과 탭 수치에도 들지 않는다(`aside`).
+        ...(carried.length ? [{ title: carriedTitle(carried.length), titleFor: carriedTitle, aside: true, unit: "명", cols, rows: carried.map((r) => rowOf(r, countedMonthLabel(r.countMonth))) }] : []),
+      ],
+      // 세는 기준 — 기존 팝업 맨 아래 세 줄과 같은 말. 상세 맨 아래에 늘 보인다(명단이 비거나 탭으로 숨어도).
+      notes: [EXIT_REPORT_RULE, exitBasisRule(wd.month), WITHDRAWAL_SCOPE_NOTE],
+      ...(can("withdrawals") ? { link: { href: withdrawalsMonthHref(wd.month), label: `퇴원관리에서 ${exitReportTitle(wd.month)} 보기` } } : {}),
     };
   }
 

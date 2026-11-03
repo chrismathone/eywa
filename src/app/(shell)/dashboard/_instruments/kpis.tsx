@@ -7,14 +7,16 @@ import { levelTestListIn } from "@/features/dashboard/overview/display";
 import { previousDayRange, previousDayText } from "@/features/dashboard/overview/previous-day";
 import { splitEnrolledRecent } from "@/features/dashboard/overview/enrolled-recent";
 import { monthAheadWindow, windowUntilLabel } from "@/features/dashboard/overview/upcoming-window";
-import { countWithdrawalPrograms } from "@/features/withdrawals/window";
+import { countWithdrawalPrograms, exitReportMonth } from "@/features/withdrawals/window";
+import { EXIT_BASIS_TAG, countedEarlierTitle, exitReportTitle } from "@/features/withdrawals/exit-basis";
 import { programLabel, visiblePrograms } from "@/features/students/enrollment/program";
-import { absentDaily, daysInMonth, makeupWeekly, newDates } from "@/features/dashboard/instruments/derive";
+import { absentDaily, daysInMonth, makeupWeekly, newDates, withdrawalHead } from "@/features/dashboard/instruments/derive";
 import { courseLabel, hhmm, monthDay, num, yyMm } from "@/features/dashboard/instruments/labels";
 import { V } from "./engine";
 import { GoIcon, VizSlot, useBoard } from "./parts";
 
-type Kpi = { key: KpiKey; label: string; period?: string; value: string; unit: string; note: string; chart?: (w: number, h: number) => string; chips?: ReactNode };
+/** `periodLead` = 꼬리표 앞말('지난달') — 자리가 있을 때만 보이고, 모자라면 앞말만 빠진다(`period`의 달은 남는다). */
+type Kpi = { key: KpiKey; label: string; period?: string; periodLead?: string; value: string; unit: string; note: string; chart?: (w: number, h: number) => string; chips?: ReactNode };
 
 /** 시각·구분을 그대로 적는 칩. 건수가 적은 칸은 축 위의 점보다 읽기 쉽다. */
 function Chips({ title, items }: { title: string; items: { text: string; done: boolean; tip: string }[] }) {
@@ -45,9 +47,16 @@ function useKpis(): Kpi[] {
       chart: courseTrend.length > 1 ? (w, h) => V.spark(w, h, { labels: courseTrend.map((p) => yyMm(p.key)), values: courseTrend.map((p) => p.count), unit: "개", title: "월말 강좌수" }) : undefined });
   }
   if (v.withdrawals) {
-    const wd = v.withdrawals.data ? countWithdrawalPrograms(v.withdrawals.data.rows) : null;
-    list.push({ key: "withdrawals", label: "퇴원&수업종료", period: "이번 달", value: wd ? num(wd.total) : "—", unit: "명", note: wd ? `${programs(wd)}${wd.other > 0 ? ` · 기타 ${num(wd.other)}` : ""}` : "이번 달 퇴원·수업종료 기준",
-      chart: change ? (w, h) => V.miniColumns(w, h, { labels: change.map((r) => yyMm(r.month)), values: change.map((r) => r.withdrawn), unit: "명", title: "월별 퇴원" }) : undefined });
+    const data = v.withdrawals.data;
+    const wd = data ? countWithdrawalPrograms(data.rows) : null;
+    // 보여 줄 달 = 서버가 정한 달(1~10일은 지난달 · `exitReportMonth`). 이름·꼬리표·설명 = 기존 운영실 칸(`kpi-strip.tsx`)과 같은 말.
+    const month = data?.month ?? exitReportMonth(today);
+    const head = withdrawalHead(month, today, change);
+    const carried = data?.carried?.length ?? 0;
+    // 막대 = 달마다 실제 퇴원(수강종료 제외 · `changes`) · 노란 칸 = 위 숫자의 달. 숫자(퇴원·수강종료를 과목마다)와 세는 대상이 달라 막대 말에 밝힌다.
+    list.push({ key: "withdrawals", label: head.label, period: head.period, periodLead: head.periodLead, value: wd ? num(wd.total) : "—", unit: "명",
+      note: wd ? `${programs(wd)}${wd.other > 0 ? ` · 기타 ${num(wd.other)}` : ""}${carried ? ` · ${countedEarlierTitle(month, carried, "명")}` : ""}` : `${exitReportTitle(month)} · ${EXIT_BASIS_TAG}`,
+      chart: change ? (w, h) => V.miniColumns(w, h, { labels: change.map((r) => `${yyMm(r.month)} 퇴원(수강종료 제외)`), values: change.map((r) => r.withdrawn), unit: "명", emphasis: head.emphasis, title: "월별 퇴원(수강종료 제외)" }) : undefined });
   }
   if (v.intake) {
     const rows = v.intake.data;
@@ -112,7 +121,10 @@ export function KpiGrid({ only }: { only?: readonly KpiKey[] }) {
       <div className="kpi-grid" data-cols={cols} style={style}>
         {order.map((k) => (
           <div className="kpi" data-kpi={k.key} data-detail={`kpi:${k.key}`} key={k.key}>
-            <div className="kpi-head"><button type="button" className="card-open">{custom.get(`kpi:${k.key}`) ?? k.label}<GoIcon /></button>{k.period ? <small>{k.period}</small> : null}</div>
+            <div className="kpi-head"><button type="button" className="card-open">{custom.get(`kpi:${k.key}`) ?? k.label}<GoIcon /></button>{k.period ? (k.periodLead
+              // 앞말 + 달 — 달이 먼저 자리를 잡고 앞말은 같은 줄에 들어갈 때만 보인다(기존 칸 `kpiPeriodSplit`과 같은 방식).
+              ? <small className="kpi-period-split" title={`${k.periodLead} ${k.period}`}><span>{k.period}</span><span>{k.periodLead}</span></small>
+              : <small>{k.period}</small>) : null}</div>
             <div className="kpi-body">
               <div className="kpi-value">{k.value}<em>{k.unit}</em></div>
               {k.chips ?? (k.chart ? <VizSlot h={44} className="kpi-chart" draw={k.chart} /> : null)}

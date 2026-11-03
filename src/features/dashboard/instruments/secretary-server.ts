@@ -72,7 +72,7 @@ export async function captureSecretaryInput(viewer: StaffTaskViewer, input: Secr
 }
 
 type RunArgs = { tenantId: string; userId: string; input: SecretaryInput; runKind: RunKind; basisAt: string; asOf?: AsOf };
-const saveFail = (error: unknown, fallback: string): AskResult => ({ ok: false, error: explainDbError(error, { scope: "dashboard-secretary.save", fallback }).message, status: 500 });
+const saveFail = (error: unknown, fallback: string): Extract<AskResult, { ok: false }> => ({ ok: false, error: explainDbError(error, { scope: "dashboard-secretary.save", fallback }).message, status: 500 });
 
 /**
  * 시도 표식 남기기 — 먼저 남긴 줄이 있으면 물러난다(남긴 표식은 지운다): 같은 종류가 창 안에(버튼 30초 · 예약 3시간) 있거나,

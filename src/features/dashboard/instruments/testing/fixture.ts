@@ -44,7 +44,8 @@ const sections = {
   changes: ok([[8, 9], [6, 8], [5, 9], [11, 10], [6, 14], [0, 0]].map(([enrolled, withdrawn], i) => ({ month: MONTHS[i]!, enrolled: enrolled!, withdrawn: withdrawn! }))),
   enrolledTrend: ok({ monthly: trendPoints([330, 329, 331, 329, 325, 326, 331]), yearly: [{ key: "2025", label: "2025년", date: "2025-12-31", count: 312 }, { key: "2026", label: "2026년", date: TODAY, count: 331 }], recordsFrom: "2025-02", trustFrom: "2026-04", monthlyFrom: "2026-04" }),
   courseTrend: ok({ monthly: trendPoints([449, 450, 452, 457, 451, 448, 412]), yearly: [{ key: "2025", label: "2025년", date: "2025-12-31", count: 436 }, { key: "2026", label: "2026년", date: TODAY, count: 412 }], trustFrom: "2026-04", monthlyFrom: "2026-04" }),
-  withdrawals: ok({ month: "2026-11", rows: [
+  // 11/2 = 1~10일 → 서버는 지난달(10월)을 보낸다(`exitReportMonth`) · 마지막 수업일이 11월이어도 10월분까지만 냈으면 10월로 센다.
+  withdrawals: ok({ month: "2026-10", rows: [
     { id: "w1", name: "학생 가", schoolGrade: "A중2", withdrawnAt: "2026-11-01", program: "math", kind: "withdrawn", className: "중2 수학 A" },
     { id: "w2", name: "학생 나", schoolGrade: "B초5", withdrawnAt: "2026-11-02", program: "eie", kind: "subject-ended", className: "초5 EiE" },
   ] }),

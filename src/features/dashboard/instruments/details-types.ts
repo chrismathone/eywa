@@ -8,8 +8,12 @@ import type { WorkBoard } from "@/features/work-requests/model";
 /** `state` = now 지금·오늘 강조 · muted 끝나서 흐리게 · struck 취소(줄 긋고 흐리게). */
 /** `id`·`parent`·`depth` = 펼치는 줄(담임 → 반 → 학생). */
 export type DetailRow = { cells: string[]; href?: string; linkTitle?: string; subject?: string[]; level?: string; state?: "now" | "muted" | "struck"; id?: string; parent?: string; depth?: number };
-/** `unit` = 줄을 셀 때의 단위(기본 건). 탭을 고르면 위 수치가 이 표의 줄 수로 바뀐다. */
-export type DetailTable = { title: string; cols: string[]; rows: DetailRow[]; unit?: string; note?: string };
+/**
+ * `unit` = 줄을 셀 때의 단위(기본 건). 탭을 고르면 위 수치가 이 표의 줄 수로 바뀐다.
+ * `aside` = 위 수치에 들지 않는 표(그 달에 마지막 수업을 했지만 앞 달로 센 퇴원 등) — 과목·학교급 탭과 탭 수치의 재료가 아니고, 거른 뒤 줄이 없으면 숨는다.
+ * `titleFor` = 제목에 줄 수가 들어가는 표 — 탭으로 거르면 거른 줄 수로 다시 짓는다(제목 옆 수는 따로 적지 않는다).
+ */
+export type DetailTable = { title: string; cols: string[]; rows: DetailRow[]; unit?: string; note?: string; aside?: boolean; titleFor?: (count: number) => string };
 export type DetailSeries = { name: string; values: (number | null)[]; tone: string; stroke?: string };
 export type DetailTrend = { title: string; labels: string[]; series: DetailSeries[]; unit?: string; money?: boolean; kind?: "line" | "bar"; noRange?: boolean; note?: string; lineOnly?: boolean; zero?: boolean };
 export type Detail = {
@@ -24,6 +28,8 @@ export type Detail = {
   compare?: DetailSlice;
   /** 학교급 탭을 고르면 바뀌는 수치. 라벨이 키다. */
   byLevel?: Record<string, [string, string][]>;
+  /** 상세 맨 아래에 늘 보이는 기준 문장 — 표가 비거나 탭으로 숨어도 남는다(퇴원을 어느 달로 세는지 등). */
+  notes?: string[];
   link?: { href: string; label: string };
 };
 export type DetailSlice = { stats?: [string, string][]; trend?: DetailTrend; tables?: DetailTable[]; byLevel?: Record<string, [string, string][]> };

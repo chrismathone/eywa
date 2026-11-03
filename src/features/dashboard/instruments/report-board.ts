@@ -88,7 +88,7 @@ function studentTable(students: readonly HomeworkStudent[], windowDays: number, 
   };
 }
 
-/** 🔴 과목·학교급 탭은 명단으로만 나눈다 — 달별 값은 EiE를 가를 수 없어 탭에서 숨는다(`drawerView`). */
+/** 🔴 과목·학교급 탭은 명단으로만 나눈다 — 달별 값은 EiE를 가를 수 없어 탭에서 숨는다(`drawerView` — 줄이 없는 표는 남는다). */
 export function reportDetail(ctx: DetailContext, homework: (HomeworkRisk & { windowDays: number }) | null, unread: { reports: number; graceHours: number; windowDays: number } | null): Detail {
   const { snapshot } = ctx;
   const report = ctx.extras.report;

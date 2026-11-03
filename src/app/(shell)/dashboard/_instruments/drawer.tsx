@@ -40,10 +40,10 @@ function Trend({ trend, kind, onKind, range, onRange }: { trend: DetailTrend; ki
   );
 }
 
-function Table({ table, rows, focus, onNavigate }: { table: DetailTable; rows: DetailRow[]; focus?: string; onNavigate: () => void }) {
+function Table({ table, rows, title, focus, onNavigate }: { table: DetailTable; rows: DetailRow[]; title: string; focus?: string; onNavigate: () => void }) {
   // 펼치는 표 — 처음엔 담임 · 반까지 보이고 학생은 반을 누르면 열린다.
   const [folded, setFolded] = useState<ReadonlySet<string>>(() => new Set(rows.filter((r) => r.depth === 1).flatMap((r) => (r.id ? [r.id] : []))));
-  if (!rows.length) return <section className="drawer-table"><h3>{table.title}</h3><p className="drawer-note">해당하는 항목이 없습니다.</p></section>;
+  if (!rows.length) return <section className="drawer-table"><h3>{title}</h3><p className="drawer-note">해당하는 항목이 없습니다.</p>{table.note ? <p className="drawer-note">{table.note}</p> : null}</section>;
   // 탭을 눌러도 열이 안 뒤집히게 표 전체로 판정한다.
   const numbers = numberColumns(table.rows);
   const alignOf = (j: number) => (numbers.has(j) ? "is-num" : undefined);
@@ -53,7 +53,7 @@ function Table({ table, rows, focus, onNavigate }: { table: DetailTable; rows: D
   const toggle = (id: string) => setFolded((prev) => { const next = new Set(prev); if (!next.delete(id)) next.add(id); return next; });
   return (
     <section className="drawer-table">
-      <h3>{table.title} <small>{rows.length}</small></h3>
+      <h3>{title}{table.titleFor ? null : <> <small>{rows.length}</small></>}</h3>
       <div className="table-wrap">
         <table>
           <thead><tr>{table.cols.map((c, j) => <th scope="col" key={c} className={alignOf(j)}>{c}</th>)}</tr></thead>
@@ -153,8 +153,9 @@ export function Drawer({ details, openRef }: { details: Details; openRef: Mutabl
             {view.stats.length ? <dl key={`stats:${subject}|${level}`} className="drawer-stats drawer-swap">{view.stats.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl> : null}
             {view.trend ? <Trend trend={view.trend} kind={kind} onKind={setKind} range={range} onRange={setRange} /> : null}
             <div key={`tables:${subject}|${level}`} className="drawer-swap drawer-swap-group">
-              {view.tables.map(({ table, rows }) => <Table key={table.title} table={table} rows={rows} focus={open.focus} onNavigate={close} />)}
+              {view.tables.map(({ table, rows, title }) => <Table key={table.title} table={table} rows={rows} title={title} focus={open.focus} onNavigate={close} />)}
             </div>
+            {detail.notes?.map((n) => <p key={n} className="drawer-note">{n}</p>)}
             {detail.link ? <p className="drawer-note"><WindowLink href={detail.link.href} onNavigate={close}>{detail.link.label}</WindowLink></p> : null}
           </div>
         </aside>

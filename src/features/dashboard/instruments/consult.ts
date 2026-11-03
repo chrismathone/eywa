@@ -126,7 +126,7 @@ function subjectSlices(consult: ConsultExtras, months: readonly string[], skip: 
   };
 }
 
-/** 🔴 과목 탭 — 담임 표·담임 상담률과 달별 상담을 함께 바꾼다. 분류별 표는 과목으로 못 가르면 숨는다(`drawerView`). */
+/** 🔴 과목 탭 — 담임 표·담임 상담률과 달별 상담을 함께 바꾼다. 분류별 표는 과목으로 못 가르면 숨는다(`drawerView` — 줄이 없는 표는 남는다). */
 export function consultDetail(c: StudentConsultationCounts, ctx: DetailContext): Detail {
   const consult = ctx.extras.consult;
   const board = consult ? consultBoard(consult, ctx.snapshot.today) : null;

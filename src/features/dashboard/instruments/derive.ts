@@ -8,6 +8,7 @@ import { STAFF_SUBJECT_LEGEND } from "@/features/dashboard/overview/subject-colo
 import { admissionsListKind } from "@/features/dashboard/overview/display";
 import { studentLevelOf, levelLabel } from "@/features/students/list-filter-values";
 import { earlyCounts } from "@/features/withdrawals/early-exit";
+import { exitReportTagParts } from "@/features/withdrawals/exit-basis";
 import { hhmm, percent } from "./labels";
 
 type Student = OverviewData["students"];
@@ -163,3 +164,12 @@ export function newDates(rows: readonly { date: string | null }[]) {
 }
 
 export const daysInMonth = (today: string) => new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0)).getUTCDate();
+
+/**
+ * 퇴원 칸 머리 — 이름·꼬리표는 기존 운영실 칸(`kpi-strip.tsx`)과 같은 말(앞말 '지난달' + 달 '(26.10)' · 좁으면 앞말만 빠진다).
+ * `emphasis` = 작은 막대(달마다 실제 퇴원)에서 노랗게 칠할 칸 = 위 숫자의 달(1~10일은 지난달). 그 달 막대가 없으면 -1(칠하지 않는다).
+ */
+export function withdrawalHead(month: string, today: string, change: readonly { month: string }[] | null | undefined) {
+  const tag = exitReportTagParts(month, today);
+  return { label: "퇴원", period: tag.label, periodLead: tag.lead ?? undefined, emphasis: change ? change.findIndex((r) => r.month === month) : -1 };
+}

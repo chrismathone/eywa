@@ -3,6 +3,7 @@ import { paymentRateDisplay } from "@/features/billing/calc";
 import { billingStatsHref, studentsStatsHref } from "@/features/dashboard/overview/kpi-links";
 import { processingSummary } from "@/features/dashboard/overview/model";
 import { EARLY_MAX_DAYS, EARLY_SPANS, earlyCounts } from "@/features/withdrawals/early-exit";
+import { EXIT_BASIS_TAG } from "@/features/withdrawals/exit-basis";
 import { attendanceCompare, attendanceTabs } from "./attendance-slices";
 import { careDue, composition, earlyMonthly, noEnrollmentOf } from "./derive";
 import { dash, levelOfSchoolGrade, type Detail, type DetailContext, type DetailTable, type Details } from "./details-types";
@@ -55,7 +56,7 @@ export function operationsDetails(ctx: DetailContext): Details {
 
   if (trend) {
     out.enrolledTrend = {
-      title: "재원생 추이", period: "달마다 말일 기준(이번 달은 오늘) · 휴원 제외",
+      title: "재원생 추이", period: `달마다 말일 기준(이번 달은 오늘) · 휴원 제외 · 퇴원은 ${EXIT_BASIS_TAG}`,
       stats: [["오늘 재원생", `${num(enrolledNow ?? 0)}명`], ...trend.yearly.slice(-3).map((y, i, all): [string, string] => [`${y.label}${i === all.length - 1 ? "(오늘)" : " 말"}`, `${num(y.count)}명`])],
       trend: enrolledTrendView!,
       ...(enrolledViews(() => undefined) ? { bySubject: enrolledViews((_, vals) => [monthTable(months, ["달", "재원생"], (i) => [vals[i] === null || vals[i] === undefined ? "—" : `${num(vals[i]!)}명`])]) } : {}),
@@ -105,7 +106,7 @@ export function operationsDetails(ctx: DetailContext): Details {
     })]) : undefined;
     const compare = extras.changes ? compareSlice(extras.subjects, subjectKeys, (l) => { const row = extras.changes![l.key]; return row ? subjectKeys.map((m) => (row.enrolled[m] ?? 0) - (row.withdrawn[m] ?? 0)) : null; }, { title: "과목별 순증", unit: "명", lineOnly: true, note: "등록 − 퇴원 · 과목을 알 수 없는 등록·퇴원은 빠집니다." }) : undefined;
     out.changes = {
-      title: "등록 · 퇴원 추이", period: "달마다 · 당월은 오늘까지",
+      title: "등록 · 퇴원 추이", period: `달마다 · 당월은 오늘까지 · 퇴원은 ${EXIT_BASIS_TAG}`,
       stats: [["이번 달 등록", `${num(change.at(-1)?.enrolled ?? 0)}명`], ["이번 달 퇴원", `${num(change.at(-1)?.withdrawn ?? 0)}명`], ["6개월 등록", `${num(change.reduce((n, r) => n + r.enrolled, 0))}명`], ["6개월 퇴원", `${num(change.reduce((n, r) => n + r.withdrawn, 0))}명`]],
       trend: { title: "등록·퇴원 추이", labels: keys.map(yyMm), series: [line("등록", rows.map((r) => r.enrolled), "m-yellow", "stroke-yellow"), line("퇴원", rows.map((r) => r.withdrawn), "m-char")], unit: "명", kind: "bar" },
       ...(by ? { bySubject: by } : {}),
@@ -190,7 +191,7 @@ export function operationsDetails(ctx: DetailContext): Details {
     const monthly = earlyMonthly(early);
     const rows = [...early.rows, ...(extras.earlyNames ?? [])].filter((r) => r.days !== null && r.days <= EARLY_MAX_DAYS).sort((a, b) => b.withdrawnAt.localeCompare(a.withdrawnAt));
     out.earlyExits = {
-      title: "등록 후 3개월 내 퇴원", period: "최근 6개월 · 등록일부터 30·60·90일",
+      title: "등록 후 3개월 내 퇴원", period: `최근 6개월 · 등록일부터 30·60·90일 · 퇴원은 ${EXIT_BASIS_TAG}`,
       stats: [["6개월 합계", `${num(monthly.reduce((n, m) => n + m.count, 0))}명`], ...EARLY_SPANS.map((sp): [string, string] => [`이번 달 ${sp.label}`, `${num(counts[sp.key])}명`])],
       trend: { title: "달마다 3개월 내 퇴원", labels: monthly.map((m) => yyMm(m.month)), series: [oneSeries("3개월 내 퇴원", monthly.map((m) => m.count))], unit: "명", kind: "bar" },
       tables: [{ title: "명단", unit: "명", ...(extras.earlyNames ? {} : { note: "이번 달 명단만 보입니다(지난 달 명단은 받지 못했습니다)." }), cols: ["학생", "학교·학년", "반", "담임", "등록일", "퇴원일", "등록 후"], rows: rows.map((r) => { const who = rosterOf(ctx, r.id); return { cells: [r.name, dash(r.schoolGrade), who.cls, who.teacher, r.enrolledAt ? monthDay(r.enrolledAt.slice(0, 10)) : "—", monthDay(r.withdrawnAt.slice(0, 10)), `${num(r.days!)}일`], ...(can("withdrawals") ? { href: `/withdrawals/${r.id}`, linkTitle: `${r.name} 퇴원` } : {}), level: levelOfSchoolGrade(r.schoolGrade), subject: who.subjects }; }) }],

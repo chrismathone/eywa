@@ -16,26 +16,34 @@ export function filterRows(table: DetailTable, subject: string, level: string): 
   return table.rows.filter((r) => (!bySubject || r.subject?.includes(subject)) && (!byLevel || r.level === level));
 }
 
+/** 표 한 장의 그릴 값 — 제목은 거른 줄 수로(`titleFor`). */
+const shownTable = (table: DetailTable, rows: DetailRow[]) => ({ table, rows, title: table.titleFor ? table.titleFor(rows.length) : table.title });
+
 /**
  * 상세 창이 그릴 값. 탭은 표에 실제로 있는 값으로만 세운다(값이 하나뿐이면 탭이 없다).
  * 🔴 탭을 고르면 수치·추세·표가 함께 바뀐다(원장 2026-11-02 *"상단 누르면 하단이 안바뀌고 추이만 바뀜. 같이 바뀌게"*).
  *    그 조건의 값이 없는 추세·표는 전체 값을 남기지 않고 숨긴다 — 표는 1명인데 위 수치가 합계 2명이면 같은 화면이 두 말을 한다. 비율로 나눈 값은 만들지 않는다.
  */
 export function drawerView(detail: Detail, subject: string, level: string) {
-  const rows = detail.tables.flatMap((t) => t.rows);
+  // 탭 재료 = 위 수치에 드는 표의 줄만 — 앞 달로 센 줄(`aside`)만으로 생긴 탭은 '명단 0명'을 보였다(리뷰 2026-11-03).
+  const rows = detail.tables.filter((t) => !t.aside).flatMap((t) => t.rows);
   const subjects = [...uniq([...Object.keys(detail.bySubject ?? {}), ...rows.flatMap((r) => r.subject ?? [])]), ...(detail.compare ? [COMPARE] : [])];
   if (subject === COMPARE && detail.compare) {
     const c = detail.compare;
-    return { stats: c.stats ?? [], trend: c.trend, subjects, levels: [] as string[], tables: (c.tables ?? []).map((table) => ({ table, rows: table.rows })) };
+    return { stats: c.stats ?? [], trend: c.trend, subjects, levels: [] as string[], tables: (c.tables ?? []).map((table) => shownTable(table, table.rows)) };
   }
   const sub = subject === ALL ? undefined : detail.bySubject?.[subject];
   const replaced = !!sub?.tables;
   const tables = (sub?.tables ?? detail.tables).flatMap((table) => {
-    if (subject !== ALL && !replaced && !table.rows.some((r) => r.subject?.length)) return [];
-    if (level !== ALL && !table.rows.some((r) => r.level)) return [];
-    return [{ table, rows: filterRows(table, replaced ? ALL : subject, level) }];
+    // 줄이 하나도 없는 표는 탭을 골라도 남는다 — 거를 것이 없으니 '해당하는 항목이 없습니다'가 그대로 사실이다.
+    if (subject !== ALL && !replaced && table.rows.length && !table.rows.some((r) => r.subject?.length)) return [];
+    if (level !== ALL && table.rows.length && !table.rows.some((r) => r.level)) return [];
+    const kept = filterRows(table, replaced ? ALL : subject, level);
+    return table.aside && !kept.length ? [] : [shownTable(table, kept)];
   });
-  const first = tables.find(({ table }) => table.rows.some((r) => (level !== ALL ? r.level : r.subject?.length)));
+  // 탭 수치 = 위 수치에 드는 표 중 그 축 표시가 있는 첫 표 — 그런 표가 없으면 빈 표를 0으로 센다. `aside` 표는 세지 않는다.
+  const first = tables.find(({ table }) => !table.aside && table.rows.some((r) => (level !== ALL ? r.level : r.subject?.length)))
+    ?? tables.find(({ table }) => !table.aside && !table.rows.length);
   const counted: [string, string][] = first ? [[first.table.title, `${first.rows.length.toLocaleString("ko-KR")}${first.table.unit ?? "건"}`]] : [];
   const levelStats = level === ALL ? undefined : subject === ALL ? detail.byLevel?.[level] : sub?.byLevel?.[level];
   return {

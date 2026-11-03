@@ -1,12 +1,16 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { EXIT_REPORT_RULE, exitBasisRule } from "@/features/withdrawals/exit-basis";
 import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
 import { programSubjectsOf } from "@/features/students/enrollment/program";
 import { buildHomeworkRisk } from "@/features/dashboard/onescreen/homework-risk";
 import { checkRows } from "./check-board";
 import { consultBoard, consultSubjectMonths, pendingOf } from "./consult";
 import { foldWeeks, homeworkStudents, reportBoard } from "./report-board";
-import { absentDaily, admissionMonths, attendance14, careDue, composition, earlyMonthly, consultSteps, gradeColumns, makeupWeekly, newDates, repeatRows, scheduleWeeks, schoolGroups, staffRows, timeline, TIMELINE_ROWS } from "./derive";
+import { absentDaily, admissionMonths, attendance14, careDue, composition, earlyMonthly, consultSteps, gradeColumns, makeupWeekly, newDates, repeatRows, scheduleWeeks, schoolGroups, staffRows, timeline, TIMELINE_ROWS, withdrawalHead } from "./derive";
 import { buildDetails, withExtras } from "./details";
+import { WITHDRAWAL_SCOPE_NOTE } from "./details-kpi";
 import { ALL, COMPARE, drawerView, filterRows, numberColumns, shareStats } from "./details-shared";
 import type { Detail, DetailContext } from "./details-types";
 import { levelOfSchoolGrade } from "./details-types";
@@ -147,6 +151,51 @@ describe("상세", () => {
     const sections = { ...FIXTURE_SNAPSHOT.sections };
     delete sections.withdrawals;
     expect(buildDetails(ctx({ extras: NO_EXTRAS }, { ...FIXTURE_SNAPSHOT, sections }))["kpi:withdrawals"]).toBeUndefined();
+  });
+  it("퇴원 상세 = 서버가 준 달 그대로 · 제목·꼬리표·기준 문장·링크는 기존 운영실 칸·팝업과 같은 말 · 앞 달로 센 줄은 따로(숫자에 안 든다)", () => {
+    const plain = details["kpi:withdrawals"]!;
+    expect([plain.title, plain.period]).toEqual(["26.10 퇴원(수강종료)", "지난달 (26.10)"]);
+    expect(plain.tables).toHaveLength(1);
+    expect(plain.notes).toEqual([EXIT_REPORT_RULE, exitBasisRule("2026-10"), WITHDRAWAL_SCOPE_NOTE]);
+    expect(plain.link?.label).toBe("퇴원관리에서 26.10 퇴원(수강종료) 보기");
+    expect(plain.tables[0]!.rows.map((r) => r.cells[5])).toEqual(["퇴원", "수강종료"]);
+    // 비교 탭 = 추세·달마다 표만(위 수치 없음 — 추세 마지막 달은 이번 달이라 1~10일엔 제목의 달과 다르다).
+    expect(plain.compare?.trend?.title).toBe("과목별 퇴원(수강종료 제외)");
+    expect(drawerView(plain, COMPARE, ALL).stats).toEqual([]);
+    const base = FIXTURE_SNAPSHOT.sections.withdrawals!;
+    const rows = base.data!.rows;
+    const carried = [{ ...rows[0]!, id: "w3", name: "학생 다", withdrawnAt: "2026-10-02", countMonth: "2026-09" }];
+    const sections = { ...FIXTURE_SNAPSHOT.sections, withdrawals: { ...base, data: { month: "2026-10", rows, carried } } };
+    const d = buildDetails(ctx({}, { ...FIXTURE_SNAPSHOT, sections }))["kpi:withdrawals"]!;
+    expect(d.stats[0]).toEqual(["합계", "2명"]);
+    expect(d.tables.map((t) => t.title)).toEqual(["명단", "마지막 수업일이 10월이지만 앞 달로 센 1명 — 위 숫자에 들지 않습니다"]);
+    expect(d.tables[1]!.rows[0]!.cells.at(-1)).toBe("10/2 · 9월로 셈");
+    // 과목·학교급을 골라도 수치는 그 달로 센 줄만 — 앞 달로 센 줄이 섞이지 않는다.
+    expect(drawerView(d, ALL, "중등").stats).toEqual([["명단", "1명"]]);
+  });
+  it("그 달로 센 줄이 없고 앞 달로 센 줄만 있어도 — 탭·탭 수치·기준 문장이 그 줄에 끌려가지 않는다(리뷰 2026-11-03)", () => {
+    const base = FIXTURE_SNAPSHOT.sections.withdrawals!;
+    const [first, second] = base.data!.rows;
+    const carried = [{ ...first!, id: "w3", withdrawnAt: "2026-10-01", countMonth: "2026-09" }, { ...second!, id: "w4", withdrawnAt: "2026-10-02", countMonth: "2026-09" }];
+    const sections = { ...FIXTURE_SNAPSHOT.sections, withdrawals: { ...base, data: { month: "2026-10", rows: [], carried } } };
+    const d = buildDetails(ctx({}, { ...FIXTURE_SNAPSHOT, sections }))["kpi:withdrawals"]!;
+    expect(d.notes?.[0]).toBe(EXIT_REPORT_RULE);
+    const whole = drawerView(d, ALL, ALL);
+    expect(whole.levels).toEqual([]);
+    expect(whole.tables.map((t) => [t.title, t.rows.length])).toEqual([["명단", 0], ["마지막 수업일이 10월이지만 앞 달로 센 2명 — 위 숫자에 들지 않습니다", 2]]);
+    const one = drawerView(d, "수학", ALL);
+    expect(one.stats).toEqual([["명단", "0명"]]);
+    expect(one.tables.map((t) => [t.title, t.rows.length])).toEqual([["명단", 0], ["마지막 수업일이 10월이지만 앞 달로 센 1명 — 위 숫자에 들지 않습니다", 1]]);
+  });
+  it("퇴원 칸 머리 = 기존 칸과 같은 이름·꼬리표(앞말 + 달) · 노란 칸은 위 숫자의 달(1~10일은 지난달 · 막대가 없으면 칠하지 않는다)", () => {
+    const change = ["2026-09", "2026-10", "2026-11"].map((month) => ({ month }));
+    expect(withdrawalHead("2026-10", "2026-11-02", change)).toEqual({ label: "퇴원", period: "(26.10)", periodLead: "지난달", emphasis: 1 });
+    expect(withdrawalHead("2026-11", "2026-11-11", change)).toEqual({ label: "퇴원", period: "(26.11)", periodLead: "이번달", emphasis: 2 });
+    expect(withdrawalHead("2026-08", "2026-11-02", change).emphasis).toBe(-1);
+    expect(withdrawalHead("2026-10", "2026-11-02", null).emphasis).toBe(-1);
+  });
+  it("범위 문장 = 기존 운영실 팝업 맨 아래 셋째 줄과 같은 글자(팝업 파일이 글자로 들고 있다 — 한쪽만 고치면 실패)", () => {
+    expect(readFileSync(join(process.cwd(), "src/app/(shell)/dashboard/_overview/kpi-popups.tsx"), "utf8")).toContain(WITHDRAWAL_SCOPE_NOTE);
   });
   it("과목 값은 달 키로 맞춘다 — 없는 달은 빈칸", () => {
     const by = details.courseTrend!.bySubject!["EiE"]!;

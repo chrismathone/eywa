@@ -44,7 +44,8 @@ describe("업무 비서 후보 — 검증 상한 안으로", () => {
   });
   it("같은 후보 = [후보] · [맡긴 업무]가 같다(이름 목록은 견주지 않는다)", () => {
     const a = secretaryInput(brief, TODAY, "월", 2);
-    expect(inputKey(a)).toBe(inputKey({ ...a, names: [] }));
+    const noNames = { ...a, names: [] };
+    expect(inputKey(a)).toBe(inputKey(noNames));
     expect(inputKey(a)).not.toBe(inputKey({ ...a, candidates: a.candidates.map((c, i) => (i ? c : { ...c, count: c.count + 1 })) }));
     expect(inputKey(a)).not.toBe(inputKey({ ...a, delegated: [...a.delegated, "보고를 기다리는 요청 9건"] }));
   });

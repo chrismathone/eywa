@@ -5,6 +5,7 @@ import { processingSummary, startedNote } from "@/features/dashboard/overview/mo
 import { careDue, careStages, composition, earlyMonthly } from "@/features/dashboard/instruments/derive";
 import { MIX_SERIES, MIX_TONES, monthNo, num, percent, subjectStyle, yyMm } from "@/features/dashboard/instruments/labels";
 import { onMonths } from "@/features/dashboard/instruments/details-shared";
+import { EXIT_BASIS_TAG } from "@/features/withdrawals/exit-basis";
 import { V } from "./engine";
 import { Card, ChartTools, GaugeStats, Headline, PANEL_H, Stat, StatRow, VizSlot, useBoard, type TrendId } from "./parts";
 
@@ -112,7 +113,7 @@ export function ChangesCard() {
     ? lines.map((s, i) => ({ name: s.label, values: keys.map((m) => netOf(s.key, m)), ...subjectStyle(s.key, i) }))
     : [{ name: "등록", values: enrolled, tone: "m-yellow", stroke: "stroke-yellow" }, { name: "퇴원", values: withdrawn, tone: "m-char" }];
   return (
-    <Card id="changes" cls="span-2" title={title("changes", "등록 · 퇴원 추이")} note={`최근 6개월 · 당월은 오늘까지${started ? ` · ${started}` : ""}`} sections={[v.changes]} tools={<ChartTools id="changes" tabs={tabs} lineOnly={compare} />}>
+    <Card id="changes" cls="span-2" title={title("changes", "등록 · 퇴원 추이")} note={`최근 6개월 · 당월은 오늘까지 · 퇴원은 ${EXIT_BASIS_TAG}${started ? ` · ${started}` : ""}`} sections={[v.changes]} tools={<ChartTools id="changes" tabs={tabs} lineOnly={compare} />}>
       {change ? (
         <>
           <Headline key={picks.changes} label={`${monthNo(snapshot.today)}월 순증${key ? ` · ${picks.changes}` : ""}`} value={`${signed(delta)}명`} alert={delta < 0} note={compare ? lines.map((s) => `${s.label} ${signed(netOf(s.key, keys.at(-1) ?? ""))}명`).join(" · ") : undefined} />
@@ -155,7 +156,7 @@ export function EarlyExitsCard() {
   const data = v.earlyExits?.data;
   const monthly = data ? earlyMonthly(data) : [];
   return (
-    <Card id="earlyExits" title={title("earlyExits", "등록 후 3개월 내 퇴원")} note="최근 6개월 · 등록일부터 90일 안에 퇴원" sections={[v.earlyExits]} value={data ? { label: "이번 달", num: num(monthly.at(-1)?.count ?? 0), unit: "명" } : undefined}>
+    <Card id="earlyExits" title={title("earlyExits", "등록 후 3개월 내 퇴원")} note={`최근 6개월 · 등록일부터 90일 안에 퇴원 · 퇴원은 ${EXIT_BASIS_TAG}`} sections={[v.earlyExits]} value={data ? { label: "이번 달", num: num(monthly.at(-1)?.count ?? 0), unit: "명" } : undefined}>
       {data ? <VizSlot h={154} draw={(w, h) => V.trend(w, h, { labels: monthly.map((m) => yyMm(m.month)), series: [{ name: "3개월 내 퇴원", values: monthly.map((m) => m.count), tone: "m-char" }], unit: "명", kind: "bar", valueLabels: "all", title: "달마다 3개월 내 퇴원" })} /> : null}
     </Card>
   );
@@ -186,7 +187,7 @@ function TrendCard({ id, base, unit, name, sectionKey, by }: { id: "enrolledTren
   const history = data && "historyFrom" in data ? data.historyFrom : null;
   const from = history ? `${ym(history)}부터(앞쪽은 지난 기록)` : data?.monthlyFrom ? `${ym(data.monthlyFrom)}부터` : "최근 12개월";
   return (
-    <Card id={id} cls={id === "enrolledTrend" ? "span-full xl-3" : "span-full"} title={title(id, base)} note={`${from} · 달마다 말일 기준(이번 달은 오늘) · ${id === "enrolledTrend" ? "휴원 제외" : "학생마다 같은 과목은 1개"}`} sections={[section]} tools={<ChartTools id={id} tabs={tabs} />}>
+    <Card id={id} cls={id === "enrolledTrend" ? "span-full xl-3" : "span-full"} title={title(id, base)} note={`${from} · 달마다 말일 기준(이번 달은 오늘) · ${id === "enrolledTrend" ? `휴원 제외 · 퇴원은 ${EXIT_BASIS_TAG}` : "학생마다 같은 과목은 1개"}`} sections={[section]} tools={<ChartTools id={id} tabs={tabs} />}>
       {data ? (
         <>
           <Headline key={pick} label={`오늘 ${name}${key ? ` · ${pick}` : ""}`} value={`${num(pickNow)}${unit}`} note={pick === "비교" ? compareNote : key ? `전체 ${num(now)}${unit} 중 ${percent(pickNow, now)}%` : yearly} />
