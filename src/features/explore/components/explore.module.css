@@ -1,0 +1,252 @@
+/* 연결 탐색 도넛 — 모션. 색은 토큰(var(--…))만 쓴다.
+ *
+ * 세 장면(원장 2026-11-03 "모든 움직임은 자연스럽게"):
+ *  ① 올리기 — 마우스를 올린 조각이 바깥으로 떠오른다(이동 + 살짝 확대 + 그림자).
+ *  ② 고르기 — 고른 대상이 가운데로 모이며 원이 된다: 조각들이 도넛 중심으로 접히고(leave), 고른 조각의 글자가 가운데로 날아가고,
+ *     가운데 원이 그 대상 이름으로 바뀐다. 그 사이 새 중심의 데이터를 읽는다.
+ *  ③ 펼치기 — 새 중심이 뜨면 가운데 원이 먼저 서고, 조각이 맨 위부터 시계 방향으로 차례로(stagger) 펼쳐진다(enter).
+ */
+
+/* ③ 펼치기 — 바깥 <g>: 도넛 중심을 축으로 0에서 자란다(animation-delay는 조각마다 인라인 — 12시부터 시계 방향). */
+.sectorOuter {
+  transform-box: view-box;
+  transform-origin: 320px 320px;
+  animation: sector-enter 520ms cubic-bezier(0.2, 0.9, 0.25, 1.08) both;
+}
+
+@keyframes sector-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.12) rotate(-16deg);
+  }
+  55% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ② 고르기 — 고르지 않은 조각은 제자리에서 물러나고(조금 줄며 사라진다), **고른 조각만 가운데로 미끄러져 들어간다**(도넛 중심 축으로 줄어들면
+ *    자연히 중심을 향한다). 그 위로 같은 색의 둥근 원(`.orb`)이 자라나 가운데 원 크기가 되고, 가운데 원이 새 이름을 받는다. */
+.sectorOuterLeave {
+  animation: sector-leave 300ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+
+.sectorOuterLeaveChosen {
+  animation: sector-leave-chosen 520ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes sector-leave {
+  to {
+    opacity: 0;
+    transform: scale(0.86);
+  }
+}
+
+@keyframes sector-leave-chosen {
+  55% {
+    opacity: 1;
+    transform: scale(0.42);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+}
+
+/* 고른 조각 자리에서 자라나 가운데 원이 되는 둥근 면(HTML, 겹판 위). 시작 자리는 조각 라벨 좌표(--ox/--oy). */
+.orb {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: 50%;
+  width: 40%;
+  aspect-ratio: 1;
+  border-radius: 9999px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation: orb-in 560ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes orb-in {
+  0% {
+    left: var(--ox);
+    top: var(--oy);
+    width: 14%;
+    opacity: 0.96;
+  }
+  68% {
+    left: 50%;
+    top: 50%;
+    width: 40%;
+    opacity: 0.96;
+  }
+  100% {
+    left: 50%;
+    top: 50%;
+    width: 40%;
+    opacity: 0;
+  }
+}
+
+/* ① 올리기 — 안쪽 <g>: 제 중심을 축으로 바깥 이동 + 확대. 모양은 그대로다. */
+.sector {
+  cursor: pointer;
+  outline: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 220ms ease;
+}
+
+.sector path {
+  transition:
+    fill 200ms ease,
+    stroke 200ms ease;
+}
+
+.sectorSelected {
+  filter: drop-shadow(0 10px 18px color-mix(in srgb, var(--primary) 32%, transparent));
+}
+
+.sectorHover {
+  filter: drop-shadow(0 8px 14px color-mix(in srgb, var(--ink) 18%, transparent));
+}
+
+/* 글자 겹판 — 바깥(자리) › 가운데(펼침·접힘) › 안쪽(올리기 이동). */
+.labelOuter {
+  transition:
+    left 420ms cubic-bezier(0.4, 0, 0.2, 1),
+    top 420ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.labelEnter {
+  animation: label-enter 420ms cubic-bezier(0.2, 0.9, 0.25, 1.08) both;
+}
+
+@keyframes label-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.labelLeave {
+  animation: label-leave 260ms ease-in forwards;
+}
+
+.labelLeaveChosen {
+  animation: label-leave-chosen 440ms ease-in forwards;
+}
+
+@keyframes label-leave {
+  to {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+@keyframes label-leave-chosen {
+  60% {
+    opacity: 1;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+}
+
+.label {
+  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* 가운데 원 — 새 중심은 살짝 작았다가 서고(enter), 대상을 받을 땐 한 번 부푼다(swap). */
+.centerEnter {
+  animation: center-enter 320ms cubic-bezier(0.2, 0.9, 0.25, 1.1) both;
+}
+
+@keyframes center-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.centerSwap {
+  animation: center-swap 520ms cubic-bezier(0.3, 0.7, 0.3, 1) both;
+}
+
+@keyframes center-swap {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  45% {
+    transform: translate(-50%, -50%) scale(1.08);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.centerContent {
+  animation: fade-in 260ms ease-out both;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 오른쪽 패널 — 조각이 바뀔 때 가볍게 들어온다. */
+.panelEnter {
+  animation: panel-enter 240ms ease-out both;
+}
+
+@keyframes panel-enter {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sectorOuter,
+  .sectorOuterLeave,
+  .sectorOuterLeaveChosen,
+  .orb,
+  .labelEnter,
+  .labelLeave,
+  .labelLeaveChosen,
+  .centerEnter,
+  .centerSwap,
+  .centerContent,
+  .panelEnter {
+    animation: none;
+  }
+  .sector,
+  .sector path,
+  .label,
+  .labelOuter {
+    transition: none;
+  }
+}

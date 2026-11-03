@@ -7,6 +7,7 @@ import { isModuleEnabled } from "@/lib/modules";
 import { WindowLink } from "@/components/workspace/window-link";
 import { notFound } from "next/navigation";
 import { CalendarClock, ClipboardCheck, Info, MapPin, Pencil, User, Users } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
@@ -305,6 +306,11 @@ export default async function ClassDetailPage({
             </Button>
           ) : null}
           {showJjLink ? <JjClassLink classId={klass.id} lang={lang} /> : null}
+          {/* 연결 탐색(2026-11-03) — 이 반을 가운데 놓은 도넛(수강 원생·담임·시간표·강의실·출석부·강사 시트). 창 안에서도 제 창으로 연다. */}
+          <Button variant="outline" render={<WindowLink href={`/explore/class/${klass.id}`} title={`${klass.className} 연결 탐색`} frameTarget="window" />}>
+            <EyIcon name="pieChart" size={16} />
+            <SheetText value={"연결 탐색"} />
+          </Button>
           <Button
             render={
               <WindowLink

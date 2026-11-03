@@ -153,7 +153,7 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 | `MENT` | classnote_ment · english_ment · ment_prompt_preview · ment_style_profile · love_note_draft(사랑의 한마디 초안 버튼) · lesson_report_rating(평점 정기 처리 · 기본 꺼짐) | Claude(Haiku·Sonnet) |
 | `MEETING` | meeting_analysis | Claude(Sonnet 5.5) |
 | `ENROLLMENT` | enrollment_analysis · enrollment_form_extract · enrollment_prep_brief | Claude(Sonnet 5.5) |
-| `CONSULTATIONS` | consultation_analysis · student_care | Claude(분석 Sonnet 5.5 · 케어) |
+| `CONSULTATIONS` | consultation_analysis · student_care · student_flow_consultations · student_flow_timeline(원생 흐름 분석 — 상담 저장 뒤 합산 · 타임라인 밤 배치 · 연결 탐색 카드, 2026-11-03) | Claude(분석 Sonnet 5.5 · 케어 · 흐름 Sonnet 5.5) |
 | `BRIEFING` | daily_briefing | Claude |
 | `ATTENDANCE` | attendance_recap · parent_attendance_intent · parent_attendance_jev_shadow · parent_satisfaction | Claude(요약·결석 판별 Sonnet 5.5 · 만족도 Haiku 5.5) · TypeSafe(비교 전용) |
 | `STUDENT_ONTOLOGY` | student_positive_signal · student_ontology_summary | 긍정 신호 밤 판정 / 명시 버튼의 최근 기록 발췌 요약 · Claude 전용 키 · fast/low · 다른 회사 폴백 없음 |

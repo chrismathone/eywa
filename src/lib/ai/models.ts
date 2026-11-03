@@ -75,6 +75,9 @@ export const FEATURE_KEY_GROUP: Readonly<Record<string, AiKeyGroup>> = {
   // 원생상담 녹음 분석 · 원생 AI 케어
   consultation_analysis: "consultations",
   student_care: "consultations",
+  // 원생 흐름 분석(2026-11-03 · 연결 탐색) — 상담 저장 뒤 합산 · 타임라인은 밤 배치 · '다시 분석' 버튼. 같은 상담 기록을 읽는 일이라 같은 그룹.
+  student_flow_consultations: "consultations",
+  student_flow_timeline: "consultations",
   // 운영실 일일 브리핑
   daily_briefing: "briefing",
   // 출결 — 요약 · 학부모 결석 문자 판별 · 학부모 글 만족도(강사평가 — 같은 학부모 글 분류 계열, 애매한 글만)
