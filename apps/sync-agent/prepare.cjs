@@ -18,7 +18,7 @@ if(!fs.existsSync(keyFile)){fs.mkdirSync(path.dirname(keyFile),{recursive:true})
 const privateKey=crypto.createPrivateKey(fs.readFileSync(keyFile));const publicKey=crypto.createPublicKey(privateKey).export({type:'spki',format:'pem'});const jwk=crypto.createPublicKey(privateKey).export({format:'jwk'});
 const xml=`<RSAKeyValue><Modulus>${Buffer.from(jwk.n,'base64url').toString('base64')}</Modulus><Exponent>${Buffer.from(jwk.e,'base64url').toString('base64')}</Exponent></RSAKeyValue>`;
 fs.writeFileSync(path.join(here,'build-config.json'),JSON.stringify({apiOrigin:'https://www.aywa.co.kr',version:pkg.version,sequence,publicKey},null,2));
-const bootstrap=fs.readFileSync(path.join(here,'native/Bootstrap.cs'),'utf8').replace('__PUBLIC_KEY_XML__',xml).replace('__SEQUENCE__',String(sequence));fs.writeFileSync(path.join(build,'Bootstrap.cs'),bootstrap);
+const bootstrap=fs.readFileSync(path.join(here,'native/Bootstrap.cs'),'utf8').replace('__PUBLIC_KEY_XML__',xml);fs.writeFileSync(path.join(build,'Bootstrap.cs'),bootstrap);
 const csc=path.join(process.env.WINDIR,'Microsoft.NET','Framework64','v4.0.30319','csc.exe');
 execFileSync(csc,['/nologo','/target:exe',`/out:${path.join(build,'WorkerHost.exe')}`,path.join(here,'native','WorkerHost.cs')],{stdio:'inherit'});
 execFileSync(csc,['/nologo','/target:winexe',`/win32icon:${path.join(build,'icon.ico')}`,`/out:${path.join(build,'AywaSync.exe')}`,'/r:System.Web.Extensions.dll','/r:System.Windows.Forms.dll',path.join(build,'Bootstrap.cs')],{stdio:'inherit'});
