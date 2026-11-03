@@ -59,6 +59,20 @@ export type OperationCount = {
   count: number | null;
   unit: string;
 };
+/** KPI '퇴원&수업종료' 한 줄(퇴원 한 명 또는 과목 수강종료 한 건). */
+export type WithdrawalKpiRow = {
+  id: string;
+  /** 같은 학생이 여러 과목을 종료하면 목록에는 과목마다 한 줄. */
+  eventKey?: string;
+  name: string;
+  schoolGrade: string | null;
+  /** 처리한 날(퇴원일·과목 종료일) — 보이는 날짜. 어느 달로 세는지는 수업료 기준(`exit-month.ts`). */
+  withdrawnAt: string;
+  program: Program | null;
+  subject?: string | null;
+  kind?: "withdrawn" | "subject-ended";
+  className?: string;
+};
 export type OverviewData = {
   teacherWork: import("./teacher-work").TeacherWork;
   students: {
@@ -93,21 +107,15 @@ export type OverviewData = {
   courses: import("@/features/students/enrollment/course-count").CourseSummary;
   /** '강좌수 추이' 카드(원장 같은 날 '카드 따로') — 재원생 추이와 같은 원본·날짜·시작 달(`loadEnrolledTrend().courses`) · 강사 스코프면 null. */
   courseTrend: import("./course-history").CourseTrendWithHistory | null;
-  /** 이번 달 퇴원 또는 과목 전체 수업종료. 과목별 종료 건수이며 반이동·특강 종료·시스템 정리 제외. */
+  /**
+   * 이번 달로 **센** 퇴원 또는 과목 전체 수업종료(수업료를 낸 마지막 달 기준 — `exit-month.ts`). 과목별 종료 건수이며 반이동·특강 종료·시스템 정리 제외.
+   * `carried` = 이번 달(1일~오늘)에 **처리**했지만 앞 달까지만 내 앞 달로 센 줄 — 숫자엔 들지 않고 팝업이 따로 밝힌다(원장 2026-11-03 *"오해 소지가
+   * 없도록"*). `countMonth` = 센 달. 옛 저장본엔 없다(선택 칸).
+   */
   withdrawals: {
     month: string;
-    rows: {
-      id: string;
-      /** 같은 학생이 여러 과목을 종료하면 목록에는 과목마다 한 줄. */
-      eventKey?: string;
-      name: string;
-      schoolGrade: string | null;
-      withdrawnAt: string;
-      program: Program | null;
-      subject?: string | null;
-      kind?: "withdrawn" | "subject-ended";
-      className?: string;
-    }[];
+    rows: WithdrawalKpiRow[];
+    carried?: (WithdrawalKpiRow & { countMonth: string })[];
   };
   /**
    * '등록 후 3개월 내 퇴원'(원장 2026-10-15) — 이번 달 1일 ~ 오늘(KST) 퇴원한 학생 **전부**와 등록일부터 며칠 만인지(`days`,

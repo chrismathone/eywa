@@ -110,11 +110,14 @@ export type WindowWithdrawal = {
  * 같은 달을 써야 하는 곳).
  * 퇴원관리 `range=month`는 같은 판정(`inWithdrawalWindow`)을 같은 행(`loadEndedEnrollments`)에 건다.
  * ⚠️ 강사 스코프를 걸지 않는다 — 퇴원관리(강사 none, 테넌트 전역)와 같은 모집단이어야 두 숫자가 같다.
+ * `keepProcessedFrom` = 그날 ~ `to`에 **퇴원일**이 든 학생은 센 날짜(`exitDate`)가 창보다 앞이어도 돌려준다 — 운영실 '이번 달에 퇴원·종료했지만
+ * 앞 달로 센' 목록(원장 2026-11-03 · 오래 휴원 뒤 퇴원은 6개월 창보다 앞 달로 센다). 🔴 받는 쪽이 `exitDate`로 다시 걸러야 한다(운영실 세 소비처는
+ * 그렇게 한다 — 월 칸 밖 날짜는 `monthlyChanges`가 버린다).
  */
 export async function getWithdrawalsInWindow(
   from: string,
   to: string,
-  opts: { basis?: "tuition" | "date" } = {},
+  opts: { basis?: "tuition" | "date"; keepProcessedFrom?: string } = {},
 ): Promise<WindowWithdrawal[]> {
   const byTuition = (opts.basis ?? "tuition") === "tuition";
   const supabase = await createClient();
@@ -180,7 +183,8 @@ export async function getWithdrawalsInWindow(
     const systemBulk = isSystemBulkWithdrawal({ withdrawnAt: s.withdrawn_at, hasEnrollmentHistory: !!row });
     const withdrawnAt = (s.withdrawn_at ?? "").slice(0, 10);
     const exitDate = exitDates.get(s.id) ?? withdrawnAt;
-    if (!inWithdrawalWindow({ withdrawnAt: exitDate, systemBulk }, from, to)) return [];
+    const keep = !!opts.keepProcessedFrom && inWithdrawalWindow({ withdrawnAt, systemBulk }, opts.keepProcessedFrom, to);
+    if (!inWithdrawalWindow({ withdrawnAt: exitDate, systemBulk }, from, to) && !keep) return [];
     return [
       {
         id: s.id,

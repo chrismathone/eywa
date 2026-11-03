@@ -9,6 +9,7 @@ import { previousDayRange } from "@/features/dashboard/overview/previous-day";
 import { splitEnrolledRecent } from "@/features/dashboard/overview/enrolled-recent";
 import { earlyCounts } from "@/features/withdrawals/early-exit";
 import { cardDef } from "./registry";
+import { EXIT_BASIS_TAG } from "@/features/withdrawals/exit-basis";
 
 export type Summary = { value: string; unit?: string; detail?: string; danger?: boolean };
 
@@ -28,7 +29,7 @@ export function summaryOf(id: string, snap: OverviewSnapshot, opts: { amounts?: 
     case "courses":
       return v.courses?.data ? { value: n(v.courses.data.total), unit: "개", detail: "지금 듣는 반" } : null;
     case "withdrawals":
-      return v.withdrawals?.data ? { value: n(v.withdrawals.data.rows.length), unit: "명", detail: "이번 달 퇴원" } : null;
+      return v.withdrawals?.data ? { value: n(v.withdrawals.data.rows.length), unit: "명", detail: `이번 달 퇴원·수업종료 · ${EXIT_BASIS_TAG}` } : null;
     case "intake":
       return v.intake?.data ? { value: n(v.intake.data.length), unit: "건", detail: "오늘 접수" } : null;
     case "calendar":

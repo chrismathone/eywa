@@ -95,7 +95,10 @@ export function narrowBySubject(sections: Sections, groups: readonly string[], g
   // 퇴원 명단 — 종료된 반의 과목(없으면 마지막 수강 반의 프로그램)으로 가른다. 둘 다 모르면 모든 과목 관리자에게(결정 1).
   const wd = live("withdrawals");
   if (wd?.data) {
-    out.withdrawals = { ...wd, data: { ...wd.data, rows: wd.data.rows.filter((r) => r.subject ? same(r.subject) : r.program ? groups.includes(programGroup(r.program) ?? "") : same(null)) } };
+    const mine = (r: { subject?: string | null; program: Program | null }) =>
+      r.subject ? same(r.subject) : r.program ? groups.includes(programGroup(r.program) ?? "") : same(null);
+    // '앞 달로 센' 줄(원장 2026-11-03)도 같은 규칙으로 — 영어 관리자 팝업에 수학 줄이 서지 않게.
+    out.withdrawals = { ...wd, data: { ...wd.data, rows: wd.data.rows.filter(mine), ...(wd.data.carried ? { carried: wd.data.carried.filter(mine) } : {}) } };
   }
   // 등록 후 3개월 내 퇴원 — 퇴원 무렵 끝난 과목 중 하나라도 담당이면(두 과목이면 양쪽에). 과목을 모르면 모든 과목 관리자에게.
   const early = live("earlyExits");

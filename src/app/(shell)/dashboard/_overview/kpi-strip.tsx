@@ -19,6 +19,7 @@ import {
   withdrawalsMonthHref,
 } from "@/features/dashboard/overview/kpi-links";
 import { countWithdrawalPrograms } from "@/features/withdrawals/window";
+import { EXIT_BASIS_TAG, countedEarlierTitle } from "@/features/withdrawals/exit-basis";
 import { programLabel, programSubjectsOf, visiblePrograms, type Program } from "@/features/students/enrollment/program";
 import type { MenuKey } from "@/lib/permissions";
 import { number } from "./charts";
@@ -160,21 +161,25 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
           <CoursesPopup data={course} subjectLabels={snapshot.subjects} />
         </KpiCard>
   );
+  // 퇴원&수업종료는 처리한 날이 아니라 수업료를 낸 마지막 달로 센다(원장 2026-10-29) — '이번 달(1일~오늘)'이라고만 적으면 이번 달에
+  // 처리한 퇴원이 0명으로 보여 오류처럼 읽혔다(원장 2026-11-03 *"오해 소지가 없도록 문구들 수정"*). 꼬리표·팝업 제목·↗에 기준을 같이 적는다.
   if (v.withdrawals) cards.withdrawals = (
         <KpiCard
           helpKey="dash-withdrawn"
           label="퇴원&수업종료"
           rename={opts.titles?.["kpi:withdrawals"]}
-          labelNote={noteOf("withdrawals", "이번 달")}
+          labelNote={noteOf("withdrawals", `이번 달 · ${EXIT_BASIS_TAG}`)}
           value={count(wd?.total)}
           unit="명"
-          detail={wd ? `${programLine(wd)}${wd.other > 0 ? ` · 기타 ${number(wd.other)}` : ""}` : "이번 달 퇴원·수업종료 기준"}
+          detail={wd
+            ? `${programLine(wd)}${wd.other > 0 ? ` · 기타 ${number(wd.other)}` : ""}${withdrawals?.carried?.length ? ` · ${countedEarlierTitle(month, withdrawals.carried.length, "명")}` : ""}`
+            : `이번 달 퇴원·수업종료 · ${EXIT_BASIS_TAG}`}
           icon={<MenuGlyph name="userMinus" size={20} />}
           error={v.withdrawals.error}
-          popupTitle={`이번 달(${Number(month.slice(5))}월 1일~오늘) 퇴원&수업종료`}
+          popupTitle={`${Number(month.slice(5))}월로 센 퇴원&수업종료 · ${EXIT_BASIS_TAG}`}
           jump={
             can("withdrawals")
-              ? { href: withdrawalsMonthHref(month), label: "이번 달 퇴원·수업종료 보기" }
+              ? { href: withdrawalsMonthHref(month), label: `퇴원관리에서 ${Number(month.slice(5))}월로 센 퇴원·수업종료 보기` }
               : null
           }
         >
