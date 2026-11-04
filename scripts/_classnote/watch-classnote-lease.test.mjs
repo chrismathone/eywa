@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 const source = fs.readFileSync(path.resolve("scripts/_classnote/watch-classnote-queue.mjs"), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
 const stages = ["processQueueOnce", "processNoticesOnce", "processClassNoticesOnce", "processRecallsOnce", "autoSyncTick",
-  "processSyncRequestOnce", "processParentRepliesOnce", "processParentReactionsOnce", "provisionDailyOnce", "syncMathClassBoardsDaily",
+  "processSyncRequestOnce", "processParentRepliesOnce", "processParentReactionsOnce", "syncMathClassBoardsDaily",
   "syncChildMapOnce", "pollParentPostsOnce", "pollParentCommentsOnce", "kickVideoWorker", "kickLinkVideoCompress", "kickVideoReviewExtract", "pollReportReadsOnce", "snapshotBoardRosterOnce"];
 
 async function oneLoop({ local = true, approved = true, legacy = false, missingSchema = false, moduleOn = true, loseAfterFirst = false, managed = false, drainAfterFirst = false, dueToday = false, loops = 1 } = {}) {
@@ -61,29 +61,32 @@ describe("실제 클래스노트 실행기의 잠금 배선", () => {
     expect(result.calls).not.toContain("browser");
     expect(result.writes).toEqual([]);
   });
-  it("승인된 실행은 기존 18개 처리 단계를 순서대로 유지한다", async () => {
+  // 1.0.14 — 1인 보드 준비(provisionDailyOnce) 단계를 뺐다(원장 2026-11-04 "앞으로 1인보드에 배정 시키지마 절대") → 17개.
+  it("승인된 실행은 기존 17개 처리 단계를 순서대로 유지한다", async () => {
     const result = await oneLoop();
     expect(result.calls.filter((name) => stages.includes(name))).toEqual(stages);
     const payload = result.writes[0].values.find((value) => value?.executionInstanceId);
     expect(payload).toMatchObject({ executionInstanceId: "fixture-instance", executionLeaseVersion: 1, postMode: true });
   });
-  it("통합 앱도 기존 18개 처리 단계를 같은 순서로 연결한다", async () => {
+  it("통합 앱도 기존 17개 처리 단계를 같은 순서로 연결한다", async () => {
     const result = await oneLoop({ managed: true });
     expect(result.calls.filter((name) => stages.includes(name))).toEqual(stages);
+    expect(result.calls).not.toContain("provisionDailyOnce");
     expect(result.writes).toHaveLength(1);
     // 단계마다 이어서 할 일을 연동 앱에 알린다(업데이트가 기다리는 작업 표시, 1.0.7) — 쉬기 전엔 비운다.
-    expect(result.tasks).toEqual(["queue", "notice", "classNotice", "recall", "autoSync", "syncNow", "parentReply", "parentReaction", "provision",
+    expect(result.tasks).toEqual(["queue", "notice", "classNotice", "recall", "autoSync", "syncNow", "parentReply", "parentReaction",
       "classBoardSync", "childmap", "posts", "comments", "video", "reads", "roster", "idle"]);
   });
   it("새벽 반 보드 정기 동기화가 돌 차례면 그 바로 앞에서 원아 연결을 한 번 새로 만든다(원장 2026-11-02 A안 — 신입 첫 배정 출처)", async () => {
     const result = await oneLoop({ dueToday: true, managed: true });
     const seq = result.calls.filter((name) => stages.includes(name));
     const i = seq.indexOf("syncMathClassBoardsDaily");
-    expect(seq.slice(i - 2, i + 2)).toEqual(["provisionDailyOnce", "syncChildMapOnce", "syncMathClassBoardsDaily", "syncChildMapOnce"]);
+    expect(seq.slice(i - 2, i + 2)).toEqual(["processParentReactionsOnce", "syncChildMapOnce", "syncMathClassBoardsDaily", "syncChildMapOnce"]);
     expect(result.childmapOpts[0]).toMatchObject({ force: true, apply: true });
     expect(result.childmapOpts[1]?.force).toBeFalsy(); // 정기 3.5는 20시간 주기 그대로(앞 실행으로 주기가 채워져 실제로는 안 돈다)
-    const p = result.tasks.indexOf("provision");
-    expect(result.tasks.slice(p, p + 4)).toEqual(["provision", "childmap", "classBoardSync", "childmap"]);
+    const p = result.tasks.indexOf("classBoardSync");
+    expect(result.tasks.slice(p - 2, p + 2)).toEqual(["parentReaction", "childmap", "classBoardSync", "childmap"]);
+    expect(result.tasks).not.toContain("provision");
   });
   it("정기 동기화가 '오늘 함' 표식 전에 실패해 차례가 계속 참이어도 원아 연결 강제 갱신은 하루 한 번뿐(폴마다 ClassNote 로그인 금지)", async () => {
     const result = await oneLoop({ dueToday: true, loops: 3 });

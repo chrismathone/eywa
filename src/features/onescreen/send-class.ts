@@ -17,14 +17,18 @@
 
 export const SEND_CLASS_SUBJECTS: ReadonlySet<string> = new Set(["math", "subject_1"]);
 
-/** 이 강사의 수학 보고서가 반 보드로 가는가(보고서 설정 '수학 발송 경로'). 모르는 값 = 아니다(기존 방식). */
+/**
+ * 이 강사의 수학 보고서가 반 보드로 가는가(보고서 설정 '수학 발송 경로'). 모르는 값·빈 값 = 반별(2026-11-04 — 1인 보드에
+ * 원아를 배정하지 않아 기존 방식은 보낼 곳이 없다 · 워커 class-route-decide.mjs `normalizeRouteConfig`와 같은 기본).
+ * 저장된 personal·pilot은 그대로 따른다(설정 화면이 '반별 발송'으로 바꾸게 안내한다).
+ */
 export function classRouteAppliesTo(
   report: { classnoteMathRoute?: string | null; classnoteMathRoutePilot?: readonly string[] | null },
   teacherName: string | null | undefined,
 ): boolean {
-  if (report.classnoteMathRoute === "class") return true;
+  if (report.classnoteMathRoute === "personal") return false;
   if (report.classnoteMathRoute === "pilot") return (report.classnoteMathRoutePilot ?? []).includes(teacherName ?? "");
-  return false;
+  return true; // class · 모르는 값 · 빈 값
 }
 
 /**

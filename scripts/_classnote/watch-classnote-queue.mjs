@@ -34,7 +34,6 @@ import { BATCH, closeClassnoteAdminSession, isClassnoteModuleEnabled, launchBrow
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
 import { processRecallsOnce } from "./classnote-recall-core.mjs";
 import { processClassNoticesOnce } from "./classnote-class-notice-core.mjs";
-import { provisionDailyOnce } from "./classnote-provision-core.mjs";
 import { classBoardSyncDueToday, syncMathClassBoardsDaily } from "./math-class-boards-sync.mjs";
 import { syncChildMapOnce } from "./classnote-childmap-core.mjs";
 import { pollParentCommentsOnce, pollParentPostsOnce } from "./classnote-feed-core.mjs";
@@ -420,17 +419,8 @@ async function main() {
         return { ran: false };
       });
       if (rxres.ran) noteResult("parentReaction", { ok: rxres.ok ? 1 : 0 });
-      // 3) 일일 프로비저닝(신규생 보드 생성 + 가입자 자동 배정) — KST 05시 이후 하루 1회(가드 내장).
-      await assertExecutionLease("provision");
-      const pres = await provisionDailyOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
-        log(`[provision] 오류(내일 재시도): ${e.message}`);
-        noteResult("provision", { error: e.message });
-        return { ran: false };
-      });
-      if (pres.ran) {
-        log(`[provision] 일일 프로비저닝 완료 — 보드 생성 ${pres.created} · 배정 ${pres.assigned}${pres.held ? ` · 보류 ${pres.held}` : ""}`);
-        noteResult("provision", pres);
-      }
+      // 3) (없앰 · 1.0.14) 1인 보드 준비 — 원장 2026-11-04 *"앞으로 1인보드에 배정 시키지마 절대"*. `(수학)`·`(영어)` 1인 보드를
+      //    만들지도, 원아를 배정하지도 않는다(옛 1인 보드 준비 모듈은 지웠다 · 가드 no-personal-board-writes.test.mjs).
       // 3-0) 원아 연결(0185a)을 반 보드 정기 동기화 **바로 앞에서** 한 번 새로 만든다(원장 2026-11-02 A안). 신입의 첫 반 보드 배정
       //      출처가 (수학) 1인 보드에서 원아 연결로 바뀌었다 — 아래 3.5의 20시간 주기만 믿으면 어제 가입한 학부모의 원아가 오늘 새벽
       //      배정을 놓쳐 첫 보고서가 하루 더 막힌다. 실패해도 동기화는 어제까지의 연결로 그대로 돈다(3.5와 같은 처리 · 3.5는 이 실행으로

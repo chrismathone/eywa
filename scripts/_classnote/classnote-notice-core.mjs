@@ -34,7 +34,7 @@ import {
   uploadToKage,
   norm,
 } from "./classnote-admin-core.mjs";
-import { boardNameAmbiguity, evaluateBoardSafety, kstSchoolYear } from "./board-safety.mjs";
+import { boardNameAmbiguity, emptyBoardNoticeNote, evaluateBoardSafety, kstSchoolYear, noBoardNoticeNote } from "./board-safety.mjs";
 import { createNoticeMediaUploader, fetchNoticeMedia, mediaForNoticeTarget } from "./notice-attachments.mjs";
 import { findNoticeLeaks, isClassRouteTarget, resolveNoticeClassTarget, snapshotChildReports } from "./notice-class-route.mjs";
 import { classRouteHaltReason, haltClassRoute } from "./class-route-halt.mjs";
@@ -216,7 +216,8 @@ export async function processTarget(page, ctx, target, index = 0) {
     return res;
   }
   const board = ctx.boardByNorm.get(norm(target.board));
-  if (!board) return { board: target.board, ok: false, note: "보드 없음(프로비저닝 필요)" };
+  // 1인 보드는 더 만들지 않는다(원장 2026-11-04) — '프로비저닝 필요'라고 하지 않는다(board-safety.mjs `noBoardNoticeNote`).
+  if (!board) return { board: target.board, ok: false, note: noBoardNoticeNote(target.board) };
 
   // ⛔ 보드 안전 게이트 — 발송 워커(classnote-core)와 **같은 순수 판정**(board-safety.mjs)으로 공유 보드 차단.
   // ⚠️ 아래 `enrolled`는 target 이름과 일치하는 원아만 세므로 **이름이 다른 제3의 가족이 같은 보드에 붙어 있으면
@@ -255,7 +256,7 @@ export async function processTarget(page, ctx, target, index = 0) {
     },
   });
   if (enrolled.length === 0)
-    return { board: target.board, ok: false, note: rejected?.reason ?? "학부모 미가입 또는 보드 미배정" };
+    return { board: target.board, ok: false, note: rejected?.reason ?? emptyBoardNoticeNote(target.board) };
   return postToChildren(page, ctx, target, index, { boardId: board.id, enrolled });
 }
 

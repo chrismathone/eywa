@@ -564,8 +564,9 @@ export const reportSchema = z.object({
   // 수학 발송 경로(원장 2026-09-29) — personal = 기존 `(수학)학생명` 1인 보드 · class = aywa 반과 이름이 같은
   // 반 보드(0302a 매칭 기록의 원아에게 1:1) · pilot = `classnoteMathRoutePilot`에 든 강사만 반 보드, 나머지는 1인 보드.
   // 소비처 = ClassNote 워커(classnote-core.mjs `getClassnoteMathRoute`, raw SQL 직독 — allowlist와 같은 패턴).
-  // 🔴 기본 personal(지금 동작 그대로). 반 보드 경로는 이름으로 원아를 고르지 않는다(같은 반 동명이인).
-  classnoteMathRoute: z.enum(["personal", "class", "pilot"]).default("personal"),
+  // 🔴 기본 class(2026-11-04 — 1인 보드에 원아를 배정하지 않아 personal·pilot은 보낼 곳이 없다 · 원장 "앞으로 1인보드에 배정
+  //    시키지마 절대" · 워커 class-route-decide.mjs `normalizeRouteConfig`도 같은 기본). 반 보드 경로는 이름으로 원아를 고르지 않는다.
+  classnoteMathRoute: z.enum(["personal", "class", "pilot"]).default("class"),
   // pilot 대상 강사 — 보고서의 작성 강사 표시 이름(lesson_reports.teacher_name, 작성률 예외 강사와 같은 키).
   classnoteMathRoutePilot: z.array(z.string()).default([]),
   // 학부모 글·댓글에 답글·공감(0317a·0319a, 원장 2026-10-01) — aywa에서 쓰면 연동 PC가 ClassNote 그 글에 올린다.

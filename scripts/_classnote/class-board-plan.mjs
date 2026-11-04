@@ -31,7 +31,7 @@
 //
 // ⚠️ 순수 유지 — playwright·postgres import 금지(Vitest가 끌어오면 안 된다). 테스트 = class-board-plan.test.mjs.
 
-import { expectedBirthYear, normBoard } from "./board-safety.mjs";
+import { expectedBirthYear, isPersonalBoardName, normBoard } from "./board-safety.mjs";
 import { carerPhones, phoneMatches } from "./offboard-safety.mjs";
 import { childIdentityKeys } from "./identity-keys.mjs";
 
@@ -334,7 +334,13 @@ export function planClassBoards({ classes, students, boards, membersByBoard, adm
       // 🔑 반 연결은 **번호가 기준**이다(2026-09-29 동기화) — aywa에서 반 이름을 바꿔도 새 반을 만들지 않고 이름을 바꾼다.
       // 🔴 이름을 못 바꾸는 사정(같은 이름 보드가 이미 있음·예약된 이름)이 있어도 **연결은 지킨다**(개명 감사 G1) —
       //    번호로 계속 보내면 되고, 연결을 지우면 다음 날 이름으로 엉뚱한 보드를 채택하거나 새 보드를 만든다.
-      if (linked.name === c.className) board = { action: "exists", id: linked.id, name: linked.name };
+      // 🔴 연결된 보드 이름이 1인 보드 모양(`(수학)`·`(영어)`)이면 반 보드로 다루지 않는다 — 1인 보드에는 원아를 배정하지 않는다
+      //    (원장 2026-11-04 *"앞으로 1인보드에 배정 시키지마 절대"*). 이름을 되돌리지도, 원아를 넣지도 않고 사람에게 맡긴다.
+      //    🔑 연결은 남긴다(keepLink — 기록 단계가 판정만 지운다 · G1): 지우면 다음 동기화가 같은 이름 보드를 못 찾아 새 반 보드를
+      //    만들고 원아를 넣어 한 가족이 두 보드에 생긴다. ClassNote에서 반 이름을 바로잡으면 다음 동기화가 이어서 한다.
+      if (isPersonalBoardName(linked.name))
+        board = { action: "block", keepLink: true, reason: `연결된 ClassNote 반(#${linked.id}) 이름이 1인 보드 모양("${linked.name}")입니다 — 1인 보드에는 원아를 배정하지 않습니다(ClassNote에서 반 이름을 바로잡아 주세요)` };
+      else if (linked.name === c.className) board = { action: "exists", id: linked.id, name: linked.name };
       else if (reserved)
         board = { action: "exists", id: linked.id, name: linked.name, renameBlocked: `반 이름 "${c.className}"은(는) ${reserved} — 보드 이름을 바꾸지 않습니다` };
       else if (exact.length || near.length)
@@ -448,19 +454,4 @@ export function closedClassesToKeep({ closedIds, planClassIds, linkedBoardByClas
   const inPlan = new Set(planClassIds);
   const live = new Set([...liveBoardIds].map(Number));
   return closedIds.filter((id) => !inPlan.has(id) && linkedBoardByClass.has(id) && live.has(Number(linkedBoardByClass.get(id))));
-}
-
-/**
- * 매일 05시 1인 보드 준비(classnote-provision-core.mjs)가 오늘 **수학을 건너뛸까**(순수) — 원장 2026-11-02 A안.
- * · `"class"`   = 수학 발송 경로가 반별 — `(수학)이름` 1인 보드를 만들지도 원아를 배정하지도 않는다(원아 신분 = ① b·c).
- * · `"unknown"` = 경로를 못 읽었다 — 모르는 채로 1인 보드를 만들거나 채우지 않는다(그날 수학만 건너뛴다).
- * · `null`      = 기존(personal)·일부 선생님만 반별(pilot) — 1인 보드로 보내는 선생님이 있으니 종전대로 준비한다.
- * 영어는 이 판정과 무관하다(영어 `(영어)` 준비는 그대로).
- * @param {string|null|undefined} route  `getClassnoteMathRoute().route`(못 읽었으면 null)
- * @returns {"class"|"unknown"|null}
- */
-export function mathPersonalProvisionOff(route) {
-  if (route === "class") return "class";
-  if (route === "personal" || route === "pilot") return null;
-  return "unknown";
 }

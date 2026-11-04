@@ -80,8 +80,9 @@ export function staleReason(row: Pick<SyncRequestRow, "status" | "requestedAt" |
 
 /**
  * 쿨다운 남은 시간(ms). 시간 초과(`result.timedOut`)로 끝난 요청엔 걸지 않는다 — 이미 오래 기다렸다.
- * 자동 동기화(연동 PC가 스스로 낸 요청, `result.auto`)가 끝난 것에도 걸지 않는다(2026-10-03) — 자동은 달라진 반만 돌고
- * 신입 1인 보드 준비는 하지 않는다. 자동이 돌 때마다 버튼이 5분씩 잠기면 사람이 그 준비를 요청할 틈이 없다.
+ * 자동 동기화(연동 PC가 스스로 낸 요청, `result.auto`)가 끝난 것에도 걸지 않는다(2026-10-03) — 자동은 달라진 반만 돈다.
+ * 자동이 돌 때마다 버튼이 5분씩 잠기면 사람이 필요한 동기화(지목한 반·학생)를 요청할 틈이 없다.
+ * (신입 1인 보드 준비는 2026-11-04부터 어디서도 하지 않는다 — 원장 "앞으로 1인보드에 배정 시키지마 절대".)
  * (지점당 살아 있는 요청 하나 · 자동 쪽 간격은 워커가 따로 지킨다.)
  */
 export function cooldownLeftMs(latest: Pick<SyncRequestRow, "status" | "finishedAt" | "result"> | null, nowMs: number): number {

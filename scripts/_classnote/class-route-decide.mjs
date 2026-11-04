@@ -2,7 +2,8 @@
 //
 // 원장 2026-09-29: 보고서 설정 '수학 발송 경로' = personal(기존 `(수학)이름` 1인 보드) · class(반 보드) ·
 // pilot(고른 강사만 반 보드). 워커가 보고서마다 이 판정으로 경로를 정한다.
-// 🔴 모르면 personal(지금 동작 그대로) — 설정이 비거나 이상한 값이면 새 경로로 가지 않는다.
+// 🔴 모르면 class(2026-11-04 — 1인 보드에 원아를 배정하지 않아 personal은 보낼 곳이 없다 · 원장 "앞으로 1인보드에 배정
+//    시키지마 절대" · 앱 `classRouteAppliesTo`·DEFAULT_SETTINGS와 같은 기본). 저장된 personal·pilot은 그대로 따른다(화면이 바꾸게 안내).
 
 /** 반 보드 경로 대상 과목 — 수학(math·subject_1)만. 영어는 그룹 반 레일이 따로다. */
 export const CLASS_ROUTE_SUBJECTS = new Set(["math", "subject_1"]);
@@ -12,7 +13,8 @@ export const CLASS_ROUTE_SUBJECTS = new Set(["math", "subject_1"]);
  * @param {{ classnoteMathRoute?: unknown, classnoteMathRoutePilot?: unknown } | null | undefined} report
  */
 export function normalizeRouteConfig(report) {
-  const route = ["personal", "class", "pilot"].includes(report?.classnoteMathRoute) ? report.classnoteMathRoute : "personal";
+  // 저장값이 없으면 class(2026-11-04 — 1인 보드에 원아를 배정하지 않아 personal은 보낼 곳이 없다 · 앱 DEFAULT_SETTINGS와 같은 기본).
+  const route = ["personal", "class", "pilot"].includes(report?.classnoteMathRoute) ? report.classnoteMathRoute : "class";
   const pilot = Array.isArray(report?.classnoteMathRoutePilot)
     ? report.classnoteMathRoutePilot.filter((s) => typeof s === "string" && s.trim())
     : [];

@@ -11,6 +11,48 @@ export function normBoard(s) {
   return (s || "").replace(/\s/g, "");
 }
 
+/**
+ * 1인 보드 꼴 이름인가 — `(수학)이름`·`(영어)이름`(공백 무시). 🔴 이런 보드는 **만들지도, 원아를 배정하지도 않는다**
+ * (원장 2026-11-04 *"앞으로 1인보드에 배정 시키지마 절대"* · 1.0.14). 반 보드 적용(math-class-boards-apply.mjs)이 이 판정으로 건너뛴다.
+ */
+export function isPersonalBoardName(name) {
+  return /^\((수학|영어)\)/.test(normBoard(String(name ?? "")));
+}
+
+// 🔴 아래 사유 문구는 실패 알림 벨의 힌트 함수(SQL `classnote_failure_hint` · 앱 미러 `humanizeClassnoteError`)의 말
+//    ('보드 없음'·'프로비저닝'·'미가입'·'학생 없음'·'보드 미배정'·'배정 필요'·'409')에 걸리면 안 된다 — 걸리면 벨이
+//    "알림장 생성 후 다시 발송"·"학부모를 초대한 뒤"처럼 1인 보드를 만들거나 채우라고 안내한다(2026-11-04 금지된 일).
+//    시험 = no-personal-board-writes.test.mjs.
+
+/**
+ * 보드가 없어 **보고서**를 못 보냈을 때의 사유(한글) — 1인 보드는 더 만들지 않는다(원장 2026-11-04).
+ * 할 일이 과목마다 달라 접두로 가른다(읽는 사람 = 선생님·관리자 — 할 수 있는 일만 적는다).
+ */
+export function noBoardReason(className) {
+  const n = normBoard(String(className ?? ""));
+  if (n.startsWith("(영어)"))
+    return `ClassNote에 "${className}" 1인 보드가 없어 보내지 못했습니다 — 1인 보드는 더 만들지 않습니다. 이 학생의 영어 반이 ClassNote 반 방에 연결돼야 보낼 수 있으니 관리자에게 알려 주세요`;
+  if (n.startsWith("(수학)"))
+    return `ClassNote에 "${className}" 1인 보드가 없어 보내지 못했습니다 — 1인 보드는 더 만들지 않습니다. 수학은 반 보드로 보냅니다(학원 설정의 수학 발송 경로가 '반별 발송'인지 관리자에게 확인해 주세요)`;
+  return `ClassNote에 "${className}" 보드가 없어 보내지 못했습니다 — 관리자에게 알려 주세요`;
+}
+
+const ENGLISH_NOTICE_TAIL = "영어 개별 공지는 아직 반 방으로 보내지 못합니다 · 관리자에게 알려 주세요";
+
+/** 보드가 없어 **개별 공지**를 못 보냈을 때의 짧은 사유 — 영어 개별 공지는 아직 반 방 경로가 없다(1인 보드로만 간다). */
+export function noBoardNoticeNote(boardName) {
+  if (normBoard(String(boardName ?? "")).startsWith("(영어)"))
+    return `1인 보드가 없어 보내지 못했습니다 — 1인 보드는 더 만들지 않습니다(${ENGLISH_NOTICE_TAIL})`;
+  return "1인 보드가 없어 보내지 못했습니다 — 1인 보드는 더 만들지 않습니다(관리자에게 알려 주세요)";
+}
+
+/** 1인 보드에 원아가 없어 **개별 공지**를 못 보냈을 때의 짧은 사유 — 그 보드에 원아를 넣어 줄 주체가 더는 없다(2026-11-04). */
+export function emptyBoardNoticeNote(boardName) {
+  if (normBoard(String(boardName ?? "")).startsWith("(영어)"))
+    return `1인 보드에 학생이 없어 보내지 못했습니다 — 1인 보드에는 더 넣지 않습니다(${ENGLISH_NOTICE_TAIL})`;
+  return "1인 보드에 학생이 없어 보내지 못했습니다 — 1인 보드에는 더 넣지 않습니다(관리자에게 알려 주세요)";
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 매핑 검증 — "이 보드의 원아가 정말 이 학생인가"
 //
@@ -149,7 +191,7 @@ export function evaluateBoardSafety({ className, boards, allowlist = [], mapping
     return {
       ok: false,
       code: "no_board",
-      reason: `ClassNote 보드 없음 — "${className}" 보드가 없어 발송할 수 없습니다(프로비저닝/학부모 초대 필요)`,
+      reason: noBoardReason(className),
     };
   if (matched.length > 1)
     return {

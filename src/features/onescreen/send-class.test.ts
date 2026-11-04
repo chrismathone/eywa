@@ -15,12 +15,13 @@ import {
 } from "./send-class";
 
 describe("classRouteAppliesTo — 워커 class-route-decide.mjs와 같은 규칙", () => {
-  it("class = 전원 · pilot = 고른 강사(원문 일치)만 · 그 외 = 아니다", () => {
+  it("class = 전원 · pilot = 고른 강사(원문 일치)만 · personal = 아니다 · 모르는 값·빈 값 = 반별(2026-11-04 · 워커와 같은 기본)", () => {
     expect(classRouteAppliesTo({ classnoteMathRoute: "class" }, "누구")).toBe(true);
     expect(classRouteAppliesTo({ classnoteMathRoute: "pilot", classnoteMathRoutePilot: ["남정화"] }, "남정화")).toBe(true);
     expect(classRouteAppliesTo({ classnoteMathRoute: "pilot", classnoteMathRoutePilot: ["남정화"] }, " 남정화")).toBe(false);
     expect(classRouteAppliesTo({ classnoteMathRoute: "personal" }, "남정화")).toBe(false);
-    expect(classRouteAppliesTo({}, "남정화")).toBe(false);
+    expect(classRouteAppliesTo({}, "남정화")).toBe(true);
+    expect(classRouteAppliesTo({ classnoteMathRoute: "weird" }, "남정화")).toBe(true);
   });
 });
 

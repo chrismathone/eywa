@@ -4,9 +4,10 @@ import { decideRoute, normalizeRouteConfig, pickRouteClass, ROUTE_BLOCKED_MESSAG
 const r = (over = {}) => ({ subject: "math", teacher_name: "남정화", class_id: "c1", ...over });
 
 describe("normalizeRouteConfig", () => {
-  it("모르는 값·빈 설정은 personal(지금 동작 그대로)", () => {
-    expect(normalizeRouteConfig(null).route).toBe("personal");
-    expect(normalizeRouteConfig({ classnoteMathRoute: "weird" }).route).toBe("personal");
+  it("모르는 값·빈 설정은 class(2026-11-04 — 1인 보드에 원아를 배정하지 않아 personal은 보낼 곳이 없다 · 앱 기본과 같다)", () => {
+    expect(normalizeRouteConfig(null).route).toBe("class");
+    expect(normalizeRouteConfig({ classnoteMathRoute: "weird" }).route).toBe("class");
+    expect(normalizeRouteConfig({ classnoteMathRoute: "personal" }).route).toBe("personal"); // 저장값은 그대로(화면이 바꾸게 안내)
     expect([...normalizeRouteConfig({ classnoteMathRoute: "pilot", classnoteMathRoutePilot: ["a", "", 3] }).pilot]).toEqual(["a"]);
   });
 });

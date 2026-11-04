@@ -8,7 +8,6 @@ import {
   baseName,
   childNameConsistent,
   closedClassesToKeep,
-  mathPersonalProvisionOff,
   planClassBoards,
   reservedBoardName,
   resolveStudentChildren,
@@ -760,18 +759,7 @@ describe("확인 기록이 아예 없는 학생 — 원아 연결(0185a)로 판�
   });
 });
 
-describe("mathPersonalProvisionOff — 05시 1인 보드 준비가 수학을 건너뛸까(원장 2026-11-02 A안)", () => {
-  it("반별(class)이면 건너뛴다 · 경로를 못 읽으면 건너뛴다 · 기존·일부 반별이면 종전대로 한다", () => {
-    expect(mathPersonalProvisionOff("class")).toBe("class");
-    expect(mathPersonalProvisionOff(null)).toBe("unknown");
-    expect(mathPersonalProvisionOff(undefined)).toBe("unknown");
-    expect(mathPersonalProvisionOff("이상한값")).toBe("unknown");
-    expect(mathPersonalProvisionOff("personal")).toBeNull();
-    expect(mathPersonalProvisionOff("pilot")).toBeNull();
-  });
-});
-
-describe("🔴 배선 — 원아 연결을 모든 진입점에 같은 재료로 · 05시 준비는 수학을 통째로 건너뛴다", () => {
+describe("🔴 배선 — 원아 연결을 모든 진입점에 같은 재료로", () => {
   const read = (f) => readFileSync(join(process.cwd(), "scripts/_classnote", f), "utf8");
   it("정기·지금·자동(=syncMathClassBoards)과 수동 스크립트가 두 계획에 childLinks를 넘기고, 배정 직전 연결을 다시 읽는다", () => {
     for (const f of ["math-class-boards-sync.mjs", "provision-math-class-boards.mjs"]) {
@@ -785,12 +773,28 @@ describe("🔴 배선 — 원아 연결을 모든 진입점에 같은 재료로 
     expect(load).toContain("verifiedOwnerScope, childLinks, childProfiles };");
     expect(load).toContain("const childProfiles = await loadLinkProfiles(page, { classes, membersByBoard, admissions, verifiedChildren, childLinks });");
   });
-  it("05시 준비 = 경로 판정 한 곳(mathPersonalProvisionOff) · 대상 계산 뒤 · 로그인 앞 · 확인 기록으로 거르지 않는다", () => {
-    const src = read("classnote-provision-core.mjs");
-    expect(src).toContain("const off = mathPersonalProvisionOff(route);");
-    expect(src).not.toContain("loadVerifiedChildren");
-    const drop = src.indexOf("await dropRetiredMathTargets(sql, tenant, plans, log);");
-    expect(drop).toBeGreaterThan(src.indexOf("await expectedFor(sql, tenant, g.keys, g.prefix)"));
-    expect(drop).toBeLessThan(src.indexOf("await loginClassnote(page)"));
+});
+
+describe("🔴 1인 보드 배정 금지(원장 2026-11-04) — 연결된 보드가 1인 보드 모양이면 반 보드로 다루지 않는다", () => {
+  it("연결된 보드 이름이 (수학)·(영어)로 시작하면 막는다(원아를 넣지 않고 보류로 기록)", () => {
+    for (const name of ["(수학)홍길동", "(영어) 홍길동"]) {
+      const w = world();
+      w.boards.push({ id: 80, name });
+      w.membersByBoard.set(80, []);
+      const [p] = planClassBoards({ ...w, classes: cls(["s1"]), linkedBoardByClass: new Map([["c1", 80]]) });
+      expect(p.board.action).toBe("block");
+      expect(p.board.keepLink).toBe(true); // 연결은 남긴다(G1 — 지우면 다음 동기화가 새 반 보드를 만들어 한 가족이 두 보드에)
+      expect(p.board.rename).toBeUndefined(); // 이름을 되돌리지도 않는다(사람이 바로잡는다)
+      expect(p.board.reason).toContain("1인 보드에는 원아를 배정하지 않습니다");
+      expect(p.assign).toEqual([]);
+      expect(p.hold.map((h) => h.studentId ?? h.name).length).toBe(1);
+    }
+  });
+  it("보통 반 보드 연결은 그대로(exists)", () => {
+    const w = world();
+    w.boards.push({ id: 81, name: "중등M 중1 BS3E" });
+    w.membersByBoard.set(81, []);
+    const [p] = planClassBoards({ ...w, classes: cls(["s1"]), linkedBoardByClass: new Map([["c1", 81]]) });
+    expect(p.board.action).toBe("exists");
   });
 });
