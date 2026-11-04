@@ -13,6 +13,9 @@ export type FakeClassRow = {
   closed_at: string | null;
   teacher_id?: string | null;
   classroom_id?: string | null;
+  /** 반 수정 감사로그의 켜고 끄는 칸(class-flag-changes.ts) — 없으면 꺼짐으로 읽힌다. */
+  is_special?: boolean;
+  report_optout?: boolean;
 };
 
 type Result = { data: unknown; error: unknown };

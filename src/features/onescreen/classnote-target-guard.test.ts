@@ -1,6 +1,6 @@
 /**
  * 🔴 ClassNote 반 보드 '대상 반'은 두 곳이 같은 조건이어야 한다 — 연동 PC 워커 `targetClassWhere`(scripts/_classnote/math-class-boards-load.mjs)
- *    ↔ 원스크린 C.N 아이콘의 대상 반 조회(src/features/onescreen/server/classnote-match.ts `getClassnoteMatchMap`).
+ *    ↔ 원스크린 C.N 아이콘의 대상 반 조회(src/features/onescreen/server/classnote-match.ts `loadClassnoteMatch`).
  *
  * 2026-11-03 'JJ 맞춤'(1d0b1b4f0 · 연동 PC 1.0.12 — PC에는 적용 안 됨)은 워커에서만 `not c.report_optout`을 빼서 두 조건이 갈라졌다.
  * 2026-11-04 원장 *"JJ 미발송반은 클래스노트 반배정도 할 필요없음"* — 둘 다 **보고서 발송 반만**(미발송 제외)으로 맞춘다.
