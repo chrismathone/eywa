@@ -24,7 +24,9 @@ import {
   SITE_MAX_CHOICES,
   SITE_MAX_STUDENTS_PER_LAST4,
   SITE_OPENS_PER_HOUR,
+  siteNoChoiceMessage,
   type SiteLookupResult,
+  type SiteNoChoiceWhy,
   type SiteOpenResult,
 } from "../site";
 import { mintSubmitLink } from "./links";
@@ -54,8 +56,7 @@ const LIMITED = "잠시 동안 너무 많이 시도했습니다. 조금 뒤에 �
 const FAILED = "확인하지 못했습니다. 잠시 후 다시 시도해 주세요.";
 const NAME_NEEDED = "이름을 두 글자 이상 입력해 주세요.";
 const NOT_FOUND = "번호와 이름이 맞는 학생을 찾지 못했습니다. 번호와 이름을 다시 확인하거나 선생님께 알려 주세요.";
-/** 번호·이름은 맞지만 올릴 반이 없다 — "찾지 못했다"와 가른다(영상 숙제를 쓰지 않는 반의 학생이 검색이 안 되는 것으로 오해하지 않게, 원장 2026-10-03). */
-const NO_HOMEWORK = "지금 여기서 영상을 올릴 수 있는 반이 없습니다. 숙제 영상은 ClassNote 알림장에 올려 주세요.";
+// 번호·이름은 맞지만 고를 줄이 없다 — "찾지 못했다"와 가른다(원장 2026-10-03). 문구는 까닭을 가려 말한다(`siteNoChoiceMessage`, 원장 2026-11-04).
 /** 숙제 없이 올리기 줄의 지문 자리(숙제일 대신) — 날짜 모양이 아니라 숙제 지문과 겹치지 않는다. */
 const FREE = "free";
 const TOO_MANY = "이 번호로는 여기서 찾을 수 없습니다. 숙제 영상은 ClassNote 알림장에 올려 주세요.";
@@ -128,7 +129,7 @@ type ClassRow = { id: string; class_name: string | null; subject: string | null;
  */
 async function findCandidates(
   db: Db, tenantId: string, last4: string, name: string, day: string, settings: TenantSettings,
-): Promise<{ tooMany: boolean; matched: boolean; list: Candidate[] }> {
+): Promise<{ tooMany: boolean; matched: boolean; list: Candidate[]; why?: SiteNoChoiceWhy }> {
   // DB에서는 그 4자리를 **포함**하는 번호로 넓게 받고(뒤에 "(모)" 같은 글자가 붙은 저장값도 걸리게), 숫자만 남겨 끝자리를 다시 본다.
   const { data: students, error } = await db.from("students")
     .select("id,name,grade,student_phone,parent_phone")
@@ -154,12 +155,15 @@ async function findCandidates(
   const current = new Set(enrollments.filter((e) => started(e) && !ended(e)).map((e) => `${e.student_id}:${e.class_id}`));
   const since = addDays(day, -VIDEO_HOMEWORK_MAX_DUE_DAYS);
   const past = enrollments.filter((e) => started(e) && !e.on_hold && !!e.end_date && e.end_date >= since && ended(e) && !current.has(`${e.student_id}:${e.class_id}`));
-  if (!live.length && !past.length) return { tooMany: false, matched: true, list: [] };
-  const classes = await fetchInChunks<ClassRow>([...new Set([...live, ...past].map((e) => e.class_id))], (chunk) => db.from("classes")
+  // 아직 시작 전인 수강 — 고를 줄로는 세우지 않고, 고를 줄이 없을 때 "언제부터"를 말하는 데만 쓴다(원장 2026-11-04).
+  const upcoming = enrollments.filter((e) => !!e.class_id && !started(e) && !e.on_hold && !ended(e));
+  if (!live.length && !past.length && !upcoming.length) return { tooMany: false, matched: true, list: [] };
+  const classes = await fetchInChunks<ClassRow>([...new Set([...live, ...past, ...upcoming].map((e) => e.class_id))], (chunk) => db.from("classes")
     .select("id,class_name,subject,is_active,teacher_id").eq("tenant_id", tenantId).in("id", chunk));
   const classById = new Map(classes.map((c) => [c.id, c]));
   const policy = settings.report.videoHomeworkPolicy;
   const out = new Map<string, Candidate>();
+  let excludedNow = false;
   // 지금 다니는 반이 먼저 — 같은 반을 다시 다니면(끝난 수강 + 지금 수강) 지금 반으로 선다(숙제 없이 올리기 줄까지).
   // 지금 수강인데 반이 닫혔으면(반 폐지 당일 — 종료일이 오늘이라 아직 수강 중) 끝난 반처럼 받은 숙제만(적대적 리뷰 2026-10-21).
   for (const [rows, isPast] of [[live, false], [past, true]] as const) {
@@ -167,14 +171,25 @@ async function findCandidates(
       const student = byId.get(e.student_id);
       const klass = classById.get(e.class_id);
       if (!student || !klass?.subject || out.has(`${student.id}:${klass.id}`)) continue;
-      if (!isVideoHomeworkEnabled(policy, { classId: klass.id, subjectKey: klass.subject, grade: student.grade })) continue;
+      if (!isVideoHomeworkEnabled(policy, { classId: klass.id, subjectKey: klass.subject, grade: student.grade })) {
+        if (!isPast) excludedNow = true;
+        continue;
+      }
       out.set(`${student.id}:${klass.id}`, { studentId: student.id, classId: klass.id, studentName: student.name?.trim() || "학생",
         className: klass.class_name?.trim() || "수업", ...(isPast || !klass.is_active ? { past: true as const } : {}),
         teacherId: klass.teacher_id ?? null, subject: klass.subject });
     }
   }
   const list = [...out.values()].sort((a, b) => a.studentName.localeCompare(b.studentName, "ko") || a.className.localeCompare(b.className, "ko"));
-  return { tooMany: false, matched: true, list };
+  // 시작 전 반은 영상 숙제 대상이고 열린 반만 "그날부터 올릴 수 있다"고 말한다(대상 밖 반의 시작일을 약속하지 않는다).
+  const nextStart = upcoming.filter((e) => {
+    const student = byId.get(e.student_id);
+    const klass = classById.get(e.class_id);
+    return !!student && !!klass?.subject && klass.is_active !== false
+      && isVideoHomeworkEnabled(policy, { classId: klass.id, subjectKey: klass.subject, grade: student.grade });
+  }).map((e) => e.start_date!).sort()[0] ?? null;
+  // 까닭은 학생 한 명일 때만 — 같은 이름·같은 4자리가 둘이면 한 학생의 시작일을 다른 학생에게 약속하게 된다(리뷰 2026-11-04).
+  return { tooMany: false, matched: true, list, ...(matched.length === 1 ? { why: { excludedNow, nextStart } } : {}) };
 }
 
 /** 숙제 줄 — `due` = 그 숙제의 마감(그날 포함) · `next` = 선생님이 '다음 수업'으로 고른 마감(due.ts). */
@@ -230,7 +245,7 @@ export async function lookupSite(input: { last4: unknown; name: unknown; ip: str
     if (!found.matched) return { ok: false, code: "invalid", error: NOT_FOUND };
     const choices = await pickChoices(db, site.tenantId, found.list, day);
     if (!choices) return { ok: false, code: "unavailable", error: UNAVAILABLE };
-    if (!choices.length) return { ok: false, code: "no_homework", error: NO_HOMEWORK };
+    if (!choices.length) return { ok: false, code: "no_homework", error: siteNoChoiceMessage(found.why) };
     // 선생님 → 반 → 숙제(원장 2026-10-22 *"반이름도 반이름이지만 '선생님' 이름을 좀 잘보이게"* · *"선생님 선택 -> 반 선택 -> 숙제 선택"*).
     // 이름 = '내 정보'의 수업보고서 발송 이름(없으면 원래 이름 — 발송과 같은 규칙) + (과목). 화면엔 번호 대신 묶음 열쇠만 내려간다.
     const teacherNames = await siteTeacherNames(db, site.tenantId, [...new Set(found.list.flatMap((c) => (c.teacherId ? [c.teacherId] : [])))]);
