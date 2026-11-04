@@ -51,6 +51,9 @@ type PendingRow = {
 
 /** 알림 스윕이 읽는 행 — 분류 결과 + 함께 알릴 다른 과목 담당(0331a, 칸이 없는 DB에선 undefined). */
 type NotifyRow = PendingRow & {
+  /** 원문 종류 'post'(글 작성) · 'comment'(댓글) · 원문이 올라온 ClassNote 반 이름 — 벨 본문 앞머리(0184a부터 있는 칸). */
+  source?: string | null;
+  class_name?: string | null;
   category: string;
   starts_on: string | null;
   ends_on: string | null;
@@ -172,7 +175,7 @@ export async function classifyPendingParentMessages(tenantId?: string): Promise<
  *  ③ **벨 폭탄**: 아래 age 가드 — 토글을 나중에 켜면 과거분이 통째로 쏟아지는 것을 막는다.
  */
 async function notifyPending(db: ReturnType<typeof createAdminClient>, tenantId?: string): Promise<number> {
-  const COLUMNS = "id, tenant_id, content, posted_at, created_at, student_id, category, starts_on, ends_on, detail";
+  const COLUMNS = "id, tenant_id, content, posted_at, created_at, student_id, category, starts_on, ends_on, detail, source, class_name";
   const pendingRows = (columns: string) => {
     const query = db
       .from("classnote_parent_messages")
@@ -276,6 +279,9 @@ async function notifyRecipients(
     content: row.content,
     // 원문 날짜("8월 11일")를 푸는 축 — 판정이 못 담은 날이 있으면 벨이 그 사실을 적는다.
     messageDate: messageDateOf(row),
+    // 어느 반 보드의 글인지 댓글인지(원장 2026-11-04) — 작성자 칸은 없어 '학부모'라고 적지 않는다.
+    source: row.source ?? null,
+    className: row.class_name ?? null,
   });
   const link = row.student_id ? `/students/${row.student_id}` : null;
   const { error } = await db.from("notifications").insert(
