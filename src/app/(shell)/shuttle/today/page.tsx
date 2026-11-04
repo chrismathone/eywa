@@ -7,6 +7,7 @@ import {
 } from "@/features/shuttle/server/queries";
 import { getAssignableStudents } from "@/features/shuttle/server/students";
 import { getRiderContacts } from "@/features/shuttle/server/rider-contacts";
+import { getRiderAttendance } from "@/features/shuttle/server/rider-attendance";
 import { canRecordBoarding } from "@/features/shuttle/server/record-gate";
 import { isShuttleAdmin, requireShuttleView } from "@/features/shuttle/server/access";
 import { loadShuttleTodayPrefs } from "@/features/shuttle/today/server/today-prefs";
@@ -55,13 +56,24 @@ export default async function ShuttleTodayPage({
     ]);
 
   // 📞 학생·학부모 전화번호 — 기록 권한이 있을 때만(사용자 2026-10-21). 그날 명단에 설 수 있는 학생 전부(편성 · 오늘만 승하차 · 기록).
-  const contacts = canWrite
-    ? await getRiderContacts([
-        ...board.runs.flatMap((r) => r.stops.flatMap((s) => s.riders.map((x) => x.studentId))),
-        ...exceptionsRes.exceptions.map((e) => e.studentId),
-        ...logs.map((l) => l.studentId),
-      ])
-    : {};
+  // ✓ 하원 줄의 그날 출석(사용자 2026-10-30 — 관리자 뷰) — 출석부를 **읽기만** 한다. 하원으로 설 수 있는 학생만.
+  const showTrack = await isShuttleAdmin();
+  const [contacts, attendance] = await Promise.all([
+    canWrite
+      ? getRiderContacts([
+          ...board.runs.flatMap((r) => r.stops.flatMap((s) => s.riders.map((x) => x.studentId))),
+          ...exceptionsRes.exceptions.map((e) => e.studentId),
+          ...logs.map((l) => l.studentId),
+        ])
+      : Promise.resolve({}),
+    showTrack
+      ? getRiderAttendance(date, [
+          ...board.runs.flatMap((r) => r.stops.flatMap((s) => s.riders.filter((x) => x.ioKind === "out").map((x) => x.studentId))),
+          ...exceptionsRes.exceptions.filter((e) => e.ioKind === "out").map((e) => e.studentId),
+          ...logs.filter((l) => l.ioKind === "out").map((l) => l.studentId),
+        ])
+      : Promise.resolve({}),
+  ]);
 
   return (
     <div className="flex min-h-full w-full flex-col gap-3 p-3 md:px-5 md:py-4">
@@ -72,7 +84,7 @@ export default async function ShuttleTodayPage({
         </div>
       ) : (
         <DayBoardClient
-          showTrack={await isShuttleAdmin()}
+          showTrack={showTrack}
           date={date}
           season={season}
           vehicles={board.vehicles}
@@ -93,6 +105,7 @@ export default async function ShuttleTodayPage({
           // 실시간 반영 채널(테넌트 × 날짜) — 남이 찍은 것이 이 화면에도 바로 들어온다.
           tenantId={user.tenantId}
           contacts={contacts}
+          attendance={attendance}
         />
       )}
     </div>

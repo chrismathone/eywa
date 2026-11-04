@@ -29,6 +29,8 @@ import type { AssignableStudent } from "@/features/shuttle/server/students";
 import { RideExceptionDialog } from "./ride-exception-dialog";
 import { RideJump } from "./ride-jump";
 import { RiderContactsProvider } from "./rider-contacts";
+import { RiderAttendanceProvider } from "./rider-attendance";
+import type { RiderAttendance } from "@/features/shuttle/today/rider-attendance";
 import type { RiderContact } from "@/features/shuttle/server/rider-contacts";
 import { RunPanel } from "./run-panel";
 import { ShuttleDayNav } from "../../_components/shuttle-day-nav";
@@ -74,6 +76,7 @@ export function DayBoardClient({
   tripsReady,
   tenantId,
   contacts = {},
+  attendance = {},
 }: {
   /** 실시간 위치 탭을 붙일까 — 원장·관리자·총괄만(서버 `isShuttleAdmin`이 정한다). */
   showTrack?: boolean;
@@ -104,6 +107,8 @@ export function DayBoardClient({
   tenantId: string;
   /** 학생·학부모 전화번호(studentId → 번호) — 기록 권한이 있을 때만 페이지가 싣는다. 없으면 빈칸. */
   contacts?: Record<string, RiderContact>;
+  /** 하원 줄의 그날 출석(studentId → 출석 줄) — 셔틀 관리자일 때만 페이지가 싣는다. */
+  attendance?: Record<string, RiderAttendance[]>;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -235,6 +240,7 @@ export function DayBoardClient({
 
   return (
     <RiderContactsProvider value={contacts}>
+    <RiderAttendanceProvider value={attendance}>
     <div className="flex min-h-0 flex-col gap-3">
       {/* 📐 **면 전환 + 날짜 + 시즌을 한 줄로**(2026-09-03, 원장 *"한 페이지에 정보가 너무 많다"*). 날짜 이동은 앱
           전역 PeriodNav + 시즌 드롭다운(공용 ShuttleDayNav — 옛 outline 아이콘 버튼 둘 + 알약 칩 둘, 디자인 v5 17단계).
@@ -402,6 +408,7 @@ export function DayBoardClient({
        </div>
       </div>
     </div>
+    </RiderAttendanceProvider>
     </RiderContactsProvider>
   );
 }

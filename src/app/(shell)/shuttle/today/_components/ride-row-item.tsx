@@ -23,6 +23,7 @@ import {
 import { isInactiveDay, type RideRow } from "@/features/shuttle/roster";
 import { clearBoarding, clearRideException, recordBoarding } from "@/features/shuttle/server/actions";
 import { setRowChecked, useRowChecked } from "@/features/shuttle/today/check-store";
+import { RiderAttendanceLine } from "./rider-attendance";
 import { RiderContactLine } from "./rider-contacts";
 import { StaffRideControls } from "./staff-ride-controls";
 
@@ -358,6 +359,9 @@ export function RideRowItem({
             />
           </span>
         ) : null}
+        {/* ✓ 하원 줄 = 그날 출석(사용자 2026-10-30 — 관리자 뷰만 데이터가 온다). 출석부를 읽기만 한다.
+            이름 줄(이름 · 학교 · [등하원 수정]) **아래** 한 줄로 — 버튼 자리를 밀지 않게 맨 끝에 둔다. */}
+        {row.ioKind === "out" && !skipped && <RiderAttendanceLine studentId={row.studentId} />}
       </div>
 
       {/* 🔴 오늘 안 타는 줄엔 탑승/미탑승을 **띄우지 않는다** — '미탑승'(예정이었는데 안 탔다)과
