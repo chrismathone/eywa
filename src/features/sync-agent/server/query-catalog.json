@@ -134,6 +134,26 @@
       "tenant"
     ]
   },
+  "03c35a113081d606fa5a44e2c62d7339c09b84c9cfb55f15cf616810eaeec972": {
+    "parts": [
+      "select student_id, max(period) as last_period, max((paid_at at time zone 'Asia/Seoul')::date)::text as last_paid\n    from invoices where tenant_id = ",
+      " and student_id is not null and status::text <> 'void' group by student_id"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/classnote-offboard.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant"
+    ]
+  },
   "042b2baa6c6f62bfb179091f2dd8a0ef6f254a271a2969a45a36298ea92a00fd": {
     "parts": [
       "\n      select makeedu_id from enrollment_consultations\n      where tenant_id = ",
@@ -1661,6 +1681,26 @@
       "tenantId"
     ]
   },
+  "2bc33b15483beead5dffb96ce499d940c3c957fa25de98efdfb4cb2d23b99bb0": {
+    "parts": [
+      "select child_id, student_id from classnote_class_board_members where tenant_id = ",
+      " and status = 'ok' and child_id is not null"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/classnote-offboard.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant"
+    ]
+  },
   "2be14c095fd66ac65d9ee014630469834146e269ea72d60fe9901cb88f5b29ec": {
     "parts": [
       "\n      select last_seen_post_id, counts from classnote_feed_state\n      where tenant_id = ",
@@ -2047,6 +2087,31 @@
     "expressions": [
       "sql(dupIds)",
       "tenantId"
+    ]
+  },
+  "351e581074e31b32407dc37897cf1b48cda25f033b3aaa44b7435699c6f67a77": {
+    "parts": [
+      "select b.board_id, b.board_name from classnote_class_boards b\n    join classes c on c.tenant_id = b.tenant_id and c.id = b.class_id\n    where b.tenant_id = ",
+      " and b.class_id = ",
+      " and not c.report_optout"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/classnote-class-route.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant",
+      "classId"
     ]
   },
   "384469cec3177de586ea39b7d324ee878800b89ff6cc0e86e1ad91e8afb9cea1": {
@@ -2863,6 +2928,56 @@
       "allTokens"
     ]
   },
+  "4e616a7d9788b48616809c0a64d460345e5c2b714a631930f9af355d048d7c7b": {
+    "parts": [
+      "\n    select e.student_id,\n      bool_or(c.subject in ('math', 'subject_1') and (e.end_date is null or e.end_date >= ",
+      ")) as math_open,\n      bool_or(c.subject in ('math', 'subject_1') and e.end_date is not null and e.end_date < ",
+      ") as math_ended,\n      bool_or(c.subject = 'english' and (e.end_date is null or e.end_date >= ",
+      ")) as english_open,\n      bool_or(c.subject = 'english' and e.end_date is not null and e.end_date < ",
+      ") as english_ended,\n      max(e.end_date) filter (where c.subject in ('math', 'subject_1') and e.end_date is not null and e.end_date < ",
+      ")::text as math_ended_on,\n      max(e.end_date) filter (where c.subject = 'english' and e.end_date is not null and e.end_date < ",
+      ")::text as english_ended_on\n    from enrollments e join classes c on c.id = e.class_id and c.tenant_id = e.tenant_id\n    where e.tenant_id = ",
+      " and e.student_id is not null\n    group by e.student_id"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/class-board-release-load.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "today",
+      "today",
+      "today",
+      "today",
+      "today",
+      "today",
+      "tenant"
+    ]
+  },
   "4f43c7b162a423a550467d2163af8ed97d1900c17c9b65e27ea2deea8474c027": {
     "parts": [
       "\n      select id, makeedu_id, name, school, grade, status, student_phone, parent_phone from students where tenant_id = ",
@@ -2996,6 +3111,37 @@
     ],
     "expressions": [
       "id"
+    ]
+  },
+  "510bf8376fd30b5ceeb8c1ec13838dd1272332d71682e92d9c2a85965106458d": {
+    "parts": [
+      "\n    select c.id, c.class_name, c.report_optout,\n      coalesce(array_agg(distinct e.student_id) filter (where e.student_id is not null), '{}') as student_ids\n    from classes c\n    left join enrollments e on e.class_id = c.id and ",
+      "\n    where ",
+      "\n    group by c.id, c.class_name, c.report_optout\n    order by c.class_name"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/math-class-boards-load.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "fragment",
+        "ids": [
+          "2af1b852b3c47342f9fd7d9776020f0f2a5c019b5c4e7c4fb198137eae252b43"
+        ]
+      },
+      {
+        "kind": "fragment",
+        "ids": [
+          "c50ecd1f4138e606793813298abb1353f3c00ad4188f95bbd4906462d5948347"
+        ]
+      }
+    ],
+    "expressions": [
+      "currentEnrollmentOn(sql, tenant, today)",
+      "targetClassWhere(sql, tenant, today)"
     ]
   },
   "5116f9ce78adf4ea40242a846ea0eaedf424681e20f283bfef9146b99d1b1dd2": {
@@ -4568,6 +4714,31 @@
       "p.classId"
     ]
   },
+  "8370b09eae830bc40ad4010fa9dc8f1425421f84e7cd8a8cdb01862e1e03f94e": {
+    "parts": [
+      "select e.student_id, c.id as class_id, c.class_name\n    from enrollments e join classes c on c.tenant_id = e.tenant_id and c.id = e.class_id\n    where e.tenant_id = ",
+      " and e.student_id is not null and c.subject = 'english'\n      and (e.end_date is null or e.end_date >= ",
+      ")"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/class-board-release-load.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant",
+      "today"
+    ]
+  },
   "844e60d49c52a30c9dc021c80eb865724eb6e1d60b2e29bd18ed30fa0a4ddc0d": {
     "parts": [
       "select drive_file_id from student_homework_videos where tenant_id=",
@@ -5770,6 +5941,31 @@
       "r.id"
     ]
   },
+  "9cb40bf1ddcd5654c95440b7af518f994f14f473942c3765275621e61f69788f": {
+    "parts": [
+      "select max(r.report_date)::text as last_date from lesson_reports r where r.tenant_id = ",
+      " and r.report_date <= ",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/classnote-offboard.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant",
+      "today"
+    ]
+  },
   "9d38f9cb76731f846ff3bea2cd216b4284f5e1b2059eeb66207b8a97711961fa": {
     "parts": [
       "select public.sync_agent_staff_attendance_ready(",
@@ -6319,7 +6515,8 @@
       "classnote"
     ],
     "sources": [
-      "scripts/_classnote/class-board-sync-report.mjs"
+      "scripts/_classnote/class-board-sync-report.mjs",
+      "scripts/_classnote/classnote-offboard.mjs"
     ],
     "parameters": [
       {
@@ -6441,6 +6638,31 @@
       "reason",
       "tries",
       "r.id"
+    ]
+  },
+  "aa802c93ccf25650500fefc6e2dd6dcbcbe7bc3d524f9ca627faca19f854e18c": {
+    "parts": [
+      "select max(a.session_date)::text as last_date from attendance_records a where a.tenant_id = ",
+      " and a.session_date <= ",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/classnote-offboard.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant",
+      "today"
     ]
   },
   "ab3b30348876a217154197f65112849d1f5aacdfb440f0179feaf859bbcaafc5": {
@@ -6784,6 +7006,72 @@
       "tenant"
     ]
   },
+  "b2c8613873cfb15c516b84b0bf09c01444e57c38441bff2de08560c83b96994a": {
+    "parts": [
+      "select b.class_id from classnote_class_boards b join classes c on c.tenant_id = b.tenant_id and c.id = b.class_id\n        where b.tenant_id = ",
+      " and b.board_id = ",
+      " and not c.report_optout"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/video-teacher-route.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenantId",
+      "boardId"
+    ]
+  },
+  "b30985431ee29f70b75ad074633fd041f68465da369448523740b00c2f9833bb": {
+    "parts": [
+      "\n    with cls as (\n      select c.id, c.class_name, c.teacher_id, c.report_optout from classes c where ",
+      "\n    ), stu as (\n      select e.class_id, array_agg(distinct e.student_id) as ids\n      from enrollments e join cls on cls.id = e.class_id\n      where e.student_id is not null and ",
+      "\n      group by e.class_id\n    )\n    select\n      (select coalesce(jsonb_agg(jsonb_build_object(\n          'id', cls.id, 'name', cls.class_name, 'teacher', cls.teacher_id, 'optout', cls.report_optout,\n          'students', coalesce(to_jsonb(stu.ids), '[]'::jsonb))), '[]'::jsonb)\n        from cls left join stu on stu.class_id = cls.id) as classes,\n      (select coalesce(jsonb_agg(jsonb_build_object('class_id', b.class_id, 'board_name', b.board_name)), '[]'::jsonb)\n        from classnote_class_boards b where b.tenant_id = ",
+      ") as links,\n      (select coalesce(jsonb_agg(jsonb_build_object('class_id', m.class_id, 'student_id', m.student_id, 'status', m.status)), '[]'::jsonb)\n        from classnote_class_board_members m join cls on cls.id = m.class_id where m.tenant_id = ",
+      ") as members"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/auto-sync-load.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "fragment",
+        "ids": [
+          "c50ecd1f4138e606793813298abb1353f3c00ad4188f95bbd4906462d5948347"
+        ]
+      },
+      {
+        "kind": "fragment",
+        "ids": [
+          "2af1b852b3c47342f9fd7d9776020f0f2a5c019b5c4e7c4fb198137eae252b43"
+        ]
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "targetClassWhere(sql, tenant, today)",
+      "currentEnrollmentOn(sql, tenant, today)",
+      "tenant",
+      "tenant"
+    ]
+  },
   "b4084a90733acdce6ffffc1f22cdbc78e0450f3b25e67f66345a870c560ced40": {
     "parts": [
       "update classnote_parent_replies set\n      status = case processing_action when 'edit' then 'edit_requested' when 'delete' then 'delete_requested' else 'queued' end,\n      error = case when processing_action = 'post' then ",
@@ -6821,6 +7109,26 @@
       "tenant",
       "only",
       "REPLY_STALE_MIN * 60"
+    ]
+  },
+  "b445063cff659ac0d774b6339122beca8dac98ddcfe93dc3d604c889b673f6b4": {
+    "parts": [
+      "select b.class_id, b.board_id, b.board_name, c.class_name, c.is_active, c.closed_at::text as closed_at\n      from classnote_english_class_boards b join classes c on c.tenant_id = b.tenant_id and c.id = b.class_id\n      where b.tenant_id = ",
+      " and c.subject = 'english'"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/class-board-release-load.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant"
     ]
   },
   "b47f822248ad22bf3c5a4bc5eff399a1248a05a811cb675b97e04d6d70e1bfa7": {
@@ -6939,6 +7247,26 @@
       "tenantId"
     ]
   },
+  "b663691ef9612ce164e3fe38ea56373bf8102687266686ffa989d2f1420a7cee": {
+    "parts": [
+      "select id, name, classnote_name, status::text as status, withdrawn_at::text as withdrawn_at, coalesce(is_test, false) as is_test, notes,\n      parent_phone, student_phone, home_phone, other_phone\n    from students where tenant_id = ",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/classnote-offboard.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant"
+    ]
+  },
   "b683d398a5b57db43b292d751b0137c28740aaa272cdf36c6330220f5cdc255c": {
     "parts": [
       "select 1 as ok from classes c\n    join classnote_class_boards b on b.tenant_id = c.tenant_id and b.class_id = c.id\n    where c.tenant_id = ",
@@ -7042,6 +7370,31 @@
       "tenant",
       "p.board.id",
       "p.classId"
+    ]
+  },
+  "b8d85198a366b7f35cc0c4f0bd46ca6740d23d348b03f0a24d825898c50848aa": {
+    "parts": [
+      "select c.id, c.class_name, c.closed_at::text as closed_at, b.board_id, b.board_name\n    from classes c join classnote_class_boards b on b.tenant_id = c.tenant_id and b.class_id = c.id\n    where c.tenant_id = ",
+      " and c.is_active and c.subject in ('math', 'subject_1')\n      and c.closed_at is not null and c.closed_at < ",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/class-board-release-load.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant",
+      "today"
     ]
   },
   "b98dc7116f2847a94c84c013dd7c535eb623da5c9d6aa147c870d3bc5bcd3d5a": {
@@ -7488,6 +7841,31 @@
       "today"
     ]
   },
+  "c50ecd1f4138e606793813298abb1353f3c00ad4188f95bbd4906462d5948347": {
+    "parts": [
+      "c.tenant_id = ",
+      " and c.is_active and c.subject in ('math', 'subject_1') and (c.closed_at is null or c.closed_at >= ",
+      ")"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/math-class-boards-load.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant",
+      "today"
+    ]
+  },
   "c5c578af674eedf522be276cee65ee0a578569f278ecadea22cf82d38397b954": {
     "parts": [
       "update makeedu_push_requests set status = 'pending', started_at = null\n                     where id in ",
@@ -7667,6 +8045,31 @@
       }
     ],
     "expressions": [
+      "tenant"
+    ]
+  },
+  "c946425253fef2205404fb552b179554120bccd2b217f4561258d9fd78bc5473": {
+    "parts": [
+      "select r.student_id, max(r.report_date)::text as last_date from lesson_reports r\n    where r.tenant_id = ",
+      " and r.student_id in (select s.id from students s where s.tenant_id = ",
+      " and s.status = 'withdrawn')\n    group by r.student_id"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/classnote-offboard.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant",
       "tenant"
     ]
   },
@@ -8008,6 +8411,31 @@
       "tenant"
     ]
   },
+  "d0bc7123ee3394042978e9f897c566ebd3ccc286f09e8fe24e98c4a540a2836d": {
+    "parts": [
+      "select a.student_id, max(a.session_date)::text as last_date from attendance_records a\n    where a.tenant_id = ",
+      " and a.student_id in (select s.id from students s where s.tenant_id = ",
+      " and s.status = 'withdrawn')\n    group by a.student_id"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/classnote-offboard.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant",
+      "tenant"
+    ]
+  },
   "d0be5cee1795428b0ac095ffe7bcb0951a8b06897cfc873dfff8595d0557467d": {
     "parts": [
       "\n    select b.board_id, b.board_name, b.class_id from classnote_class_boards b\n    join classes c on c.id = b.class_id and c.tenant_id = b.tenant_id\n    where b.tenant_id = ",
@@ -8238,6 +8666,46 @@
       "userIds"
     ]
   },
+  "d77f0289386705a56d303ff1756184c597524679529de1da736ec0d9ab5b5e4d": {
+    "parts": [
+      "\n    select e.class_id, e.student_id,\n      bool_or(e.end_date is null or e.end_date >= ",
+      ") as open,\n      bool_or(e.end_date is not null and e.end_date < ",
+      ") as ended,\n      max(e.end_date) filter (where e.end_date is not null and e.end_date < ",
+      ")::text as ended_on\n    from enrollments e\n    where e.tenant_id = ",
+      " and e.class_id = any(",
+      ") and e.student_id is not null\n    group by e.class_id, e.student_id"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/class-board-release-load.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "today",
+      "today",
+      "today",
+      "tenant",
+      "classIds"
+    ]
+  },
   "d79214622592b29a4a560022451e190a9c8f4d3c5bef2eaef77be969f8ffdaca": {
     "parts": [
       "select display_name, report_display_name from users\n      where tenant_id = ",
@@ -8296,6 +8764,26 @@
     ],
     "expressions": [
       "noticeId"
+    ]
+  },
+  "d921c3c36f8b59246a45ae94987a756ab9d8b874feb3cd82d5553cf4dda72feb": {
+    "parts": [
+      "\n    select id, name, classnote_name, grade, parent_phone, student_phone, home_phone, other_phone, status::text as status, coalesce(is_test, false) as is_test\n    from students where tenant_id = ",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/math-class-boards-load.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant"
     ]
   },
   "d9ddf3eb373ec1ee12f67808c3bd4a8480d7adcb35a70a64903ab8307fb275d7": {
@@ -8923,6 +9411,31 @@
       "tenantId"
     ]
   },
+  "e9b6080f95af56a44c49d7f7af96f61bbc6ea1764c2fd56039f147299e3dd2ef": {
+    "parts": [
+      "select c.id from classes c\n    join classnote_class_boards b on b.tenant_id = c.tenant_id and b.class_id = c.id\n    where c.tenant_id = ",
+      " and c.is_active and c.subject in ('math', 'subject_1')\n      and c.closed_at is not null and c.closed_at < ",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/math-class-boards-load.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant",
+      "today"
+    ]
+  },
   "ea6b075ebf968eccec33f137daf4908ad853f5f3bbeeb18fd667f220c4055929": {
     "parts": [
       "update student_homework_videos set route = ",
@@ -9121,6 +9634,31 @@
     "expressions": [
       "tenant",
       "startedAt"
+    ]
+  },
+  "ee280d8818d6c162bc1511a990fac8d0a3ad11bd3dd476fe4066257d17b69def": {
+    "parts": [
+      "select student_id, bool_or(end_date is null or end_date >= ",
+      ") as open, max(end_date)::text as last_end\n    from enrollments where tenant_id = ",
+      " and student_id is not null group by student_id"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/classnote-offboard.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "today",
+      "tenant"
     ]
   },
   "efe4443a25e88b06fae9c5fc5cd03d960b843ab2370253eb2ef5a385be050f20": {

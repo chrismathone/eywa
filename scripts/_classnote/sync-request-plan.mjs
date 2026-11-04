@@ -54,8 +54,11 @@ export function classDiffReasons(c, link, mem, recentStudentIds) {
   const reasons = [];
   const inClass = new Set(c.studentIds);
   const recorded = new Set(mem.map((m) => m.student_id));
-  if (!link) reasons.push([2, "새 반"]);
-  else if (link.boardName !== c.className) reasons.push([3, "반 이름 변경"]);
+  // 보고서 미발송(JJ) 반은 지금 다니는 학생이 없으면 보드를 만들지 않는다(class-board-plan.mjs `OPTOUT_NO_CREATE_REASON`) — 그런 반을
+  // '새 반'으로 고르면 요청마다 같은 보류만 되풀이한다(같은 이름 보드 채택은 새벽 정기 동기화가 본다 · 지목하면 그 반은 함께 된다).
+  if (!link) {
+    if (!c.reportOptout || c.studentIds.length) reasons.push([2, "새 반"]);
+  } else if (link.boardName !== c.className) reasons.push([3, "반 이름 변경"]);
   if (link && c.studentIds.some((s) => !recorded.has(s))) reasons.push([4, "새 학생"]);
   if (mem.some((m) => m.status === "hold" && String(m.reason ?? "").startsWith(WAIT_ASSIGN))) reasons.push([5, "배정 대기"]);
   if (mem.some((m) => !inClass.has(m.student_id))) reasons.push([6, "반을 떠난 학생"]);
@@ -71,7 +74,7 @@ export function classDiffReasons(c, link, mem, recentStudentIds) {
 /**
  * 동기화할 반 고르기.
  * @param {object} a
- * @param {Array<{classId:string, className:string, studentIds:string[]}>} a.classes  대상 수학 반(loadAywa — 종강·미발송 제외)
+ * @param {Array<{classId:string, className:string, studentIds:string[]}>} a.classes  대상 수학 반(loadAywa — 종강 제외 · 보고서 미발송 JJ 반 포함)
  * @param {Map<string,{boardName:string}>} a.links  0302a 반 ↔ 보드
  * @param {Array<{class_id:string, student_id:string, status:string, reason:string|null}>} a.members  0302a 반 보드 학생 기록
  * @param {Set<string>} a.recentStudentIds  최근 등록 학생

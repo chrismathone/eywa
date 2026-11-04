@@ -205,7 +205,9 @@ describe("배선 — 워커가 적고 · 앱이 읽고 · 버튼이 그린다", 
   });
   it("워커: 동기화가 연결 기록 뒤에 해제 대상을 적는다 · 값은 sql.json으로 · 실패는 삼킨다", () => {
     const sync = read("scripts", "_classnote", "math-class-boards-sync.mjs");
-    expect(sync.indexOf("await writeReleaseNames(sql, tenant, fresh.plans, log, releaseListReasons(")).toBeGreaterThan(sync.lastIndexOf("await writeClassBoardSnapshot("));
+    // `listed` = 이번에 본 반 보드(fresh.plans) + 종강 반 보드(0302a 행이 남은 반 — 2026-11-03 넓힌 자동 해제)
+    expect(sync).toContain("const listed = [...fresh.plans, ...(extra?.closedPlans ?? [])];");
+    expect(sync.indexOf("await writeReleaseNames(sql, tenant, listed, log, releaseListReasons(")).toBeGreaterThan(sync.lastIndexOf("await writeClassBoardSnapshot("));
     // 🔴 자동 해제는 배정 기록(0302a) **뒤**에 돈다 — 해제 쪽이 멈춰도 방금 배정한 원아의 기록은 남는다
     expect(sync.indexOf("await releaseChildren(")).toBeGreaterThan(sync.lastIndexOf("await writeClassBoardSnapshot("));
     const db = read("scripts", "_classnote", "math-class-boards-db.mjs");

@@ -29,6 +29,8 @@ type Props = {
   defaultValue?: string;
   placeholder?: string;
   ariaLabel?: string;
+  /** 고칠 때마다 HTML을 알린다(폼 밖 상태로 들고 있는 화면용 — 업무 요청). */
+  onChange?: (html: string) => void;
 };
 
 /** 툴바 버튼 하나 — 아이콘이 없는 서식은 글자(B·I·U)로 낸다(아이콘을 억지로 끼워 맞추지 않는다). */
@@ -98,7 +100,7 @@ function TableTools({ editor }: { editor: Editor }) {
   );
 }
 
-export function RichEditorImpl({ name, defaultValue = "", placeholder, ariaLabel }: Props) {
+export function RichEditorImpl({ name, defaultValue = "", placeholder, ariaLabel, onChange }: Props) {
   const [html, setHtml] = useState(defaultValue);
 
   const editor = useEditor({
@@ -124,7 +126,11 @@ export function RichEditorImpl({ name, defaultValue = "", placeholder, ariaLabel
         "aria-multiline": "true",
       },
     },
-    onUpdate: ({ editor: e }) => setHtml(e.getHTML()),
+    onUpdate: ({ editor: e }) => {
+      const next = e.getHTML();
+      setHtml(next);
+      onChange?.(next);
+    },
   });
 
   // 언마운트 정리 — 에디터 인스턴스가 남으면 ProseMirror 뷰가 DOM을 붙든다.

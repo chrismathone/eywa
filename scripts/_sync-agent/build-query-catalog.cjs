@@ -14,6 +14,9 @@ const catalog = fs.existsSync(catalogPath)?JSON.parse(fs.readFileSync(catalogPat
 const sources = new Map();
 const externals = new Set();
 const normalize = p => p.replaceAll('\\', '/');
+// Windows checkouts (core.autocrlf) give CRLF sources. Template parts are already LF-normalized by the scanner, but
+// getText() returns raw source — normalize so the catalog does not change with the checkout's line endings.
+const lf = s => s.replace(/\r\n?/g, '\n');
 const idOf = parts => crypto.createHash('sha256').update(JSON.stringify(parts)).digest('hex');
 const parsedFiles=new Map();
 function bindings(file) {
@@ -86,7 +89,7 @@ function visitFile(file, module) {
             if(old?.kind===next.kind){if(next.ids)next.ids=[...new Set([...old.ids??[],...next.ids])];if(next.columns)next.columns=[...new Set([...old.columns??[],...next.columns])];}
             return next;
           }),
-          expressions: ts.isNoSubstitutionTemplateLiteral(t) ? [] : t.templateSpans.map(s=>s.expression.getText(source)) };
+          expressions: ts.isNoSubstitutionTemplateLiteral(t) ? [] : t.templateSpans.map(s=>lf(s.expression.getText(source))) };
       }
     }
     ts.forEachChild(node,walk);

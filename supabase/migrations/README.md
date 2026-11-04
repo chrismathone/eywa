@@ -12,6 +12,22 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-11-03 연동 PC가 출결을 읽기 — ClassNote 명부 퇴원처리 가드 (s2_0021 · ✅ 운영 적용 2026-11-03 — 권한 true · 정책 2 · 연동 PC 역할로 자기 지점만 읽힘)
+
+`s2_0021_sync_agent_attendance_read.sql` — 명부 퇴원처리(전 과목 퇴원 45일 뒤 퇴소)가 '퇴원일 뒤 출결이 있으면 내리지 않는다'를 보는데(`scripts/_classnote/classnote-offboard.mjs` loadOffboardFacts), `attendance_records`는 `eywa_sync_agent`의 읽기 권한·정책이 없다(운영 실측 2026-11-03: select 권한 false · 이 역할 정책 0개 → 게이트웨이에서 42501). 자기 지점 줄 읽기만 연다(s2_0006·s2_0008과 같은 모양 · grant + 정책 둘 다 — 정책을 빼면 에러 없이 0행). 매일 쓰는 표라 `lock_timeout 3s`. 🔴 **웹·AywaSync(퇴원처리 워커) 배포 전에** 적용한다 — 없으면 워커가 퇴원처리를 보류로 건너뛰지만(보고서 '보류' 한 줄 · 워커는 지점의 가장 최근 출결이 없거나 14일보다 오래돼도 건너뛴다), 그 질의 실패를 게이트웨이가 `sync_agent_events`에 job_failed(error)로 매일 남겨 연동 화면에 오류가 뜬다. 트랜잭션 안 `set local lock_timeout`. 적용 확인(읽기만): `select has_table_privilege('eywa_sync_agent','public.attendance_records','select') as can_select, (select count(*) from pg_policies where schemaname='public' and tablename='attendance_records' and policyname in ('sync_agent_allow','sync_agent_tenant_boundary')) as policies;` → `true · 2`. 되돌리기 = 파일 머리 주석의 세 줄(drop policy 둘 + revoke).
+
+## 2026-11-03 업무 요청 근거 학생: 담당 미정 줄의 유일 조건 풀기 (s2_0020 · ⏳ 미적용 — 원장 승인 뒤 적용 · 앱은 이 SQL 없이도 돈다)
+
+`s2_0020_work_request_links_nulls_distinct.sql` — 커밋 전 적대적 리뷰(2026-11-03)가 찾은 것. `work_request_links_uniq`가 `nulls not distinct`라 한 학생을 맡은 두 담당자를 둘 다 지우면 두 번째 직원 삭제가 23505로 실패한다(`assignee_id`가 `on delete set null`). 제약을 일반 유일 조건으로 다시 만든다(담당 미정 줄끼리는 겹쳐도 된다 · 담당자가 있는 줄의 중복은 그대로 막는다). 이 기능 전용 표 하나만 바꾼다.
+
+## 2026-11-02 업무 비서: AI 정리 기록 · 마지막 후보 (s2_0019 · ✅ 운영 적용 2026-11-02 — 옛 이름 `s2_0018`로 적용됨 · main 병합 때 번호만 밀었다 · 파일 안 표기와 표 설명도 그때 그대로 · 다시 돌리지 않는다)
+
+`s2_0019_dashboard_secretary_notes.sql` — 원장 *"ai가 비서가되어줘서 알려주면 좋을듯"* · *"새벽 1시에 한번, 오후 1시에 한번 … 언제 돌렸는지 시간도 남겨"*. **새 표 둘만**(`dashboard_secretary_notes` = AI 정리 · 실행 종류 `run_kind` button/schedule · 숫자 기준 `basis_at` / `dashboard_secretary_inputs` = 사람마다 마지막 후보 한 줄). 기존 표 · 함수 · 트리거 · 알림은 건드리지 않는다. RLS 켜고 정책 0 · 로그인 사용자 · 공개 키 권한 없음(서버 키만). 같은 날 두 번에 나눠 적용(정리 표 → 실행 종류 · 기준 시각 칸과 후보 표를 더함 · 더할 때 정리 0건) — 지금 파일이 최종 모양이다. 적용 후 확인: 두 표 RLS · 정책 0 · 공개 키 `401 42501` · 서버 키 `200` · 되돌리는 거래 안에서 넣기 · 덮어쓰기 · 크기 제한(23514) · 모르는 실행 종류(23514) · 남은 행 0. 표가 없으면 앱은 'AI로 정리' 버튼 없이 자동 정리만 보인다(#95).
+
+## 2026-11-02 업무 요청: 요청 → 담당자 보고 → 관리자 검토 → 마감 (s2_0018 · ✅ 운영 적용 2026-11-02 — 옛 이름 `s2_0017`로 적용됨(내용 한도 20,000은 11-03 따로 적용) · main 병합 때 번호만 밀었다 · 파일 안 표기와 표 설명도 그때 그대로 · 다시 돌리지 않는다)
+
+`s2_0018_work_requests.sql` — 원장 *"그렇게 추천방식으로 해보자"* · *"기존 2.0은 아무 이상 없도록 별도로 적용"*(3.0 AX를 2.0에 녹이는 2단계). **새 표 넷(`work_requests` · `work_request_assignees` · `work_request_links` · `work_request_events`)과 새 함수 둘(`work_request_create` · `work_request_act`)만** 더한다 — 기존 표·함수·트리거·알림·슬랙·할 일은 건드리지 않는다. RLS 켬 · 정책 0개 · 로그인 사용자·비로그인 권한 회수 · 서버 키만. 같은 날 고침(원장 *"담당에 담당 학생이 배정되는것처럼"*): 학생 연결에 맡은 담당자 칸(`assignee_id` · 같은 학생을 두 담당자가 맡을 수 있다 · 담당 미정 = null) · 만들기 함수가 `p_links jsonb`([{student, assignee}])를 받는다 — 빈 표라 운영 DB에서 연결 표를 다시 만들고 함수를 바꿔 이 파일과 같게 맞췄다(바꾸기 전 업무 요청 0건). 적용 후 확인: 네 표 모두 RLS·정책 0 · authenticated/anon 읽기 없음 · 함수 실행은 service_role만 · 되돌리는 거래 안에서 흐름 한 바퀴(막히는 동작 8가지 포함) 뒤 남은 행 0. 앱은 표가 없으면 업무 흐름 구역을 그리지 않는다(#95). 같은 날 저녁 고침(원장 *"담임에게 전달할 내용이 너무 두서없이 … 노션처럼 약간의 서식"*): 내용을 서식 글(전자결재와 같은 편집기 HTML)로 담으며 `work_requests.body` 한도를 4,000 → 20,000자로 올렸다(`work_requests_body_check` 다시 만듦 · 그때 요청 0건) — 이 파일이 최종 모양이다.
+
 ## 2026-11-02 퇴원보고서: 상세사유 제출 기준 200자 → 100자 (s2_0015 · ✅ 운영 적용 2026-11-02)
 
 `s2_0015_withdrawal_detail_min_100.sql` — 원장 *"퇴원보고서 상세사유 100자 이상으로"*. 전이 함수 두 개(묶음 · `_v1`)의 글자 수 검사와 거절 문구만 치환한다. 🔴 앱 배포 전에 적용(반대면 그 사이 100~199자 제출이 200자 문구로 거절된다). 되돌리기 = `scripts/_oneoff/revert-s2_0015-withdrawal-detail-min-100.sql`.
@@ -22,7 +38,7 @@
 
 ## 2026-11-02 시간표 배치의 강의실 = 등록된 강의실만 (s2_0017 · ✅ 운영 적용 2026-11-02)
 
-`s2_0017_class_schedules_room_canonical.sql` — 원장 *"영어 강의실이 자꾸 301 302 이렇게 되는데, 그런 강의실 없잖아 우린 다 본원이 붙는데"* · *"애초에 저런 강의실 입력할 수 있는곳을 찾아서 다 막아"*. `class_schedules`에 BEFORE INSERT/UPDATE OF(`slot_room_label`, `classroom_id`) 트리거 하나 — 연결이 있으면 라벨 = 그 강의실 이름 · 연결 없이 라벨만이면 등록 강의실(보관 제외)에 이름 그대로 또는 '건물+호수' 하나로 잇는다 · 못 맞추면 지금·앞으로 유효한 줄은 거절(끝난 줄은 통과 · LAB·JJ는 라벨을 비우고 통과 · 대소문자 무시) + `classrooms` AFTER UPDATE OF name 트리거(강의실 이름을 바꾸면 연결된 배치 라벨도). 기존 줄은 바꾸지 않는다(같은 날 명령줄로 침산 영어 555줄 연결 — `D:\tmp\room-link-2026-11-02\backup.json`). 시험 = 임시 표(강의실·배치 사본)에 같은 함수 본문으로 10사례 + 이름 바꾸기 동기화(되돌림) · 적용 전 전 지점 "연결 없음 + 맞는 강의실 없는 라벨 + 지금 유효" 0줄 확인. 되돌리기 = 파일 머리 주석의 drop 두 줄. ⚠️ 번호: AX 작업 가지의 `s2_0017_work_requests`·`s2_0018_dashboard_secretary_notes`(운영 적용됨 · main 미반영)와 겹친다 — 규칙(`docs/sql-season2.md` §D)대로 나중에 합치는 쪽이 번호를 민다.
+`s2_0017_class_schedules_room_canonical.sql` — 원장 *"영어 강의실이 자꾸 301 302 이렇게 되는데, 그런 강의실 없잖아 우린 다 본원이 붙는데"* · *"애초에 저런 강의실 입력할 수 있는곳을 찾아서 다 막아"*. `class_schedules`에 BEFORE INSERT/UPDATE OF(`slot_room_label`, `classroom_id`) 트리거 하나 — 연결이 있으면 라벨 = 그 강의실 이름 · 연결 없이 라벨만이면 등록 강의실(보관 제외)에 이름 그대로 또는 '건물+호수' 하나로 잇는다 · 못 맞추면 지금·앞으로 유효한 줄은 거절(끝난 줄은 통과 · LAB·JJ는 라벨을 비우고 통과 · 대소문자 무시) + `classrooms` AFTER UPDATE OF name 트리거(강의실 이름을 바꾸면 연결된 배치 라벨도). 기존 줄은 바꾸지 않는다(같은 날 명령줄로 침산 영어 555줄 연결 — `D:\tmp\room-link-2026-11-02\backup.json`). 시험 = 임시 표(강의실·배치 사본)에 같은 함수 본문으로 10사례 + 이름 바꾸기 동기화(되돌림) · 적용 전 전 지점 "연결 없음 + 맞는 강의실 없는 라벨 + 지금 유효" 0줄 확인. 되돌리기 = 파일 머리 주석의 drop 두 줄. ⚠️ 번호: AX 작업 가지의 `s2_0017_work_requests`·`s2_0018_dashboard_secretary_notes`(운영 적용됨 · main 미반영)와 겹친다 — 규칙(`docs/sql-season2.md` §D)대로 나중에 합치는 쪽이 번호를 민다. → ✅ 11-03 AX 가지를 main에 합치며 `s2_0018_work_requests`·`s2_0019_dashboard_secretary_notes`로 밀었다(이 파일 위쪽 '업무 요청'·'업무 비서' 항목).
 
 ## 2026-10-29 숙제 영상 업로드 실패 알림: 반 담임에게만 (s2_0012 · 적용 2026-10-29)
 

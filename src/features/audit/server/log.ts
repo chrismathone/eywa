@@ -206,6 +206,10 @@ export const AUDIT_ACTIONS = {
   classnote_board_enroll: "ClassNote 반 보드 배정",
   classnote_board_release: "ClassNote 반 보드 원아 해제",
   classnote_board_teacher_release: "ClassNote 반 보드 담임 해제",
+  // 전 과목 퇴원 45일 뒤 ClassNote 명부 퇴원처리(퇴소, 원장 2026-11-03) — 연동 PC 워커가 학생 단위로 직접 남긴다(직전 글 목록 백업 위치 포함).
+  classnote_offboard: "ClassNote 명부 퇴원처리(연동 PC)",
+  // 퇴소를 요청했는데 명부로 확인하지 못한 원아 — 결과와 무관하게 남긴다(재원 명부엔 없는데 퇴소 명부에 없음 · 확인 조회 실패 · 그대로 남음).
+  classnote_offboard_unconfirmed: "ClassNote 명부 퇴원처리 요청(확인 실패 · 연동 PC)",
   classnote_board_sync_run: "반 보드 지금 동기화 실행(연동 PC)",
   // 학부모 글·댓글 답글(0317a) — 앱이 요청·수정·삭제를 남기고, 연동 PC 워커가 ClassNote 반영 결과를 직접 남긴다.
   classnote_parent_reply_request: "학부모 글 답글 요청",
@@ -229,6 +233,8 @@ export const AUDIT_ACTIONS = {
   approval_withdraw: "전자결재 회수",
   approval_comment: "전자결재 댓글",
   approval_comment_delete: "전자결재 댓글 삭제",
+  work_request_create: "업무 요청",
+  work_request_act: "업무 요청 처리",
   // 연차 조정(0252a) — 결재 문서가 아니라 **자격(부여 일수)** 을 바꾸는 행위라 별도 키다.
   // 남의 연차를 늘리고 줄이는 일이라 누가·언제·왜가 반드시 남아야 한다.
   leave_adjust: "연차 조정",
@@ -603,6 +609,8 @@ export const AUDIT_ACTIONS = {
   announcement_delete: "직원 공지 삭제",
   announcement_pin: "직원 공지 고정 전환",
   briefing_regenerate: "일일 브리핑 다시 생성",
+  // 운영실 계기판 '업무 비서' — 사람이 'AI로 정리'를 눌러 유료 AI를 태운 경로(예약 정리는 사람이 한 일이 아니라 남기지 않는다).
+  dashboard_secretary_run: "업무 비서 AI 정리",
 
   // 인재원 학습 프로그램 짝(students.ijw_student_id, 0259a) — 학생 행을 바꾸므로 기록한다.
   student_ijw_link: "인재원 학습 계정 연결",
@@ -693,6 +701,8 @@ export const AUDIT_ACTIONS = {
   makeup_accept_units: "보강관리 시수 차이 승인",
   makeup_configure: "보강관리 설정 변경",
   makeup_reconcile: "보강관리 대사 실행",
+  before_class_target_add: "비포클래스체크리스트 반 추가",
+  before_class_target_remove: "비포클래스체크리스트 반 빼기",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 

@@ -49,7 +49,10 @@ export async function getClassnoteMatchMap(): Promise<CnMatchMap> {
     // 종강 반 = 연결이 남아 있으면(ClassNote 보드가 살아 있으면 매일 동기화가 지킨다) 그대로 대상 — 워커 isClassRouteEligible과 같은 규칙.
     const linked = new Set(boards.map((b) => b.class_id));
     const eligibleIds = eligible.filter((c) => !c.closed_at || c.closed_at >= today || linked.has(c.id)).map((c) => c.id);
-    return buildCnMatchMap(members, boards, eligibleIds);
+    // 기록은 대상 반 것만 — 2026-11-03부터 동기화가 보고서 미발송 반(JJ)도 연결·기록한다. 그 기록이 섞이면 수학 반 줄이
+    // 보류일 때 "배정된 반 보드: JJ…"(물음표)로 잘못 뜬다(그 학생의 보고서는 JJ 반 보드로 가지 않는다).
+    const eligibleSet = new Set(eligibleIds);
+    return buildCnMatchMap(members.filter((m) => eligibleSet.has(m.class_id)), boards, eligibleIds);
   } catch {
     return CN_UNAVAILABLE;
   }

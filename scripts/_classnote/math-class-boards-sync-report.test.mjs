@@ -7,6 +7,9 @@ const m = vi.hoisted(() => ({
   // 자동 해제 — 판정·실행은 가짜로 갈아 끼우고 동기화 본체의 흐름(순서·보고서·멈춤)만 본다.
   childPlan: { releases: [], held: [] }, teacherPlan: { releases: [], held: [] }, childReleaseThrows: null, childReleaseHalts: false,
   childPlanThrows: null, teacherPlanInput: null, order: [],
+  // 넓힌 대상(원장 2026-11-03) — 조회 묶음은 가짜로 갈아 끼운다(판정에 넘어가는지 · 지금 동기화에선 안 부르는지만 본다).
+  extra: null, extraThrows: null, extraCalls: 0, childPlanInput: null,
+  englishRooms: null, // 영어 반 방 표(지금 동기화가 직접 읽는다 — F2)
 }));
 const plans = () => [
   { classId: "c1", className: "가반", board: { ["action"]: "exists", id: 1 }, assign: [{ studentId: "s1", name: "김민준", children: [{ id: 11, already: false }] }], hold: [{ studentId: "s9", name: "박도윤", reasons: ["학부모 미가입"] }], extras: ["이서연"], extraChildren: [{ id: 77, name: "이서연" }] },
@@ -22,7 +25,8 @@ vi.mock("./math-class-boards-load.mjs", () => ({
   loadPlan: async () => ({ plans: plans(), boards: [], membersByBoard: new Map(), admissions: new Map(), failed: 0 }),
 }));
 vi.mock("./class-board-release.mjs", () => ({
-  planChildReleases: () => {
+  planChildReleases: (input) => {
+    m.childPlanInput = input;
     if (m.childPlanThrows) throw new Error(m.childPlanThrows);
     return m.childPlan;
   },
@@ -42,6 +46,14 @@ vi.mock("./class-board-release-load.mjs", () => ({
   loadClassEnrollments: async () => new Map(),
   loadChildLinks: async () => new Map(),
   loadClassTeachers: async () => new Map(),
+  loadEnglishRooms: async () => m.englishRooms,
+}));
+vi.mock("./class-board-release-extra.mjs", () => ({
+  loadExtraReleaseTargets: async () => {
+    m.extraCalls++;
+    if (m.extraThrows) throw new Error(m.extraThrows);
+    return m.extra ?? { plans: [], closedPlans: [], enrollmentsByClass: new Map(), membersByBoard: new Map(), notes: [] };
+  },
 }));
 vi.mock("./class-board-release-apply.mjs", () => ({
   releaseChildren: async ({ releases, done }) => {
@@ -101,6 +113,12 @@ beforeEach(() => {
   m.childPlanThrows = null;
   m.teacherPlanInput = null;
   m.order = [];
+  m.extra = null;
+  m.extraThrows = null;
+  m.extraCalls = 0;
+  m.childPlanInput = null;
+  m.englishRooms = null;
+  delete process.env.CLASSNOTE_BOARD_AUTO_RELEASE_EXTRA;
   resetReleaseHaltForTest();
   delete process.env.CLASSNOTE_BOARD_AUTO_RELEASE;
 });
@@ -257,5 +275,66 @@ describe("자동 해제(원장 2026-10-02) — 수강이 끝난 원아·지금 �
     m.order = [];
     await syncMathClassBoards(sql, {}, { tenant: "t1", apply: true, log: () => {} });
     expect(m.order).toContain("원아 해제");
+  });
+});
+describe("넓힌 대상(원장 2026-11-03) — 영어 반 방·종강 반 보드·1인 보드는 매일 정기 동기화(전체)에서만, 같은 판정으로", () => {
+  const closedPlanOf = () => ({ kind: "closed", teachers: true, classId: "z1", className: "종강 반 보드 · 다반", board: { action: "exists", id: 9, name: "다반" }, extraChildren: [{ id: 91, name: "박도윤" }], extras: ["박도윤"], assign: [], hold: [] });
+  const englishPlan = { kind: "english", teachers: false, classId: "e1", className: "영어 반 방 · 영A", board: { action: "exists", id: 8, name: "영A" }, extraChildren: [{ id: 81, name: "정도윤" }], extras: ["정도윤"], assign: [], hold: [] };
+  // 부를 때마다 새 계획 — 동기화가 해제한 원아를 계획에서 빼므로(dropReleasedExtras) 테스트끼리 같은 객체를 나눠 쓰면 안 된다.
+  const extra = () => { const closedPlan = closedPlanOf(); return { plans: [{ ...englishPlan }, closedPlan], closedPlans: [closedPlan], enrollmentsByClass: new Map([["e1", { open: [], ended: [] }]]), membersByBoard: new Map(), notes: [{ group: "held", className: "", text: "안내 줄" }] }; };
+  it("전체 실행 — 반 보드 계획 뒤에 넓힌 계획을 붙여 한 번에 판정하고, 종강 반 보드는 원아가 다 나간 경우에만 선생님 해제 판정에 오른다", async () => {
+    m.extra = extra();
+    m.childPlan = { releases: [{ classId: "z1", className: "종강 반 보드 · 다반", boardId: 9, boardKind: "closed", childId: 91, childName: "박도윤", studentId: "s5", studentName: "박도윤", reason: "x" }], held: [] };
+    const events = [];
+    await syncMathClassBoards(sql, {}, { tenant: "t1", apply: true, log: () => {}, events });
+    expect(m.extraCalls).toBe(1);
+    expect(m.childPlanInput.map((p) => p.classId)).toEqual(["c1", "c2", "e1", "z1"]);
+    expect(m.teacherPlanInput.boards.find((b) => b.closed)).toMatchObject({ boardId: 9, closed: true, remainingChildren: 0 });
+    expect(texts(events, "held")).toContain("|안내 줄");
+    // 해제 리스트 — 종강 반 보드(0302a 행이 있다)도 함께 적는다 · 영어 반 방은 0302a 행이 없어 넘기지 않는다
+    expect(m.release.mock.calls[0][2].map((p) => p.classId)).toEqual(["c1", "c2", "z1"]);
+    expect(m.release.mock.calls[0][2][2].extras).toEqual([]);
+  });
+  it("종강 반 보드에 원아가 남으면(해제 못 함) 선생님 해제 판정에 '남은 원아'로 오른다", async () => {
+    m.extra = extra();
+    await syncMathClassBoards(sql, {}, { tenant: "t1", apply: true, log: () => {} });
+    expect(m.teacherPlanInput.boards.find((b) => b.closed)).toMatchObject({ boardId: 9, remainingChildren: 1 });
+  });
+  it("지금 동기화(반 몇 개) · 스위치 off면 넓힌 대상을 읽지 않는다 — 반 보드 해제는 그대로", async () => {
+    m.extra = extra();
+    await syncMathClassBoards(sql, {}, { tenant: "t1", apply: true, log: () => {}, onlyClassIds: new Set(["c1"]) });
+    expect(m.extraCalls).toBe(0);
+    expect(m.childPlanInput.map((p) => p.classId)).toEqual(["c1", "c2"]);
+    process.env.CLASSNOTE_BOARD_AUTO_RELEASE_EXTRA = "off";
+    m.order = [];
+    await syncMathClassBoards(sql, {}, { tenant: "t1", apply: true, log: () => {} });
+    expect(m.extraCalls).toBe(0);
+    expect(m.order).toContain("원아 해제");
+  });
+  it("🔴 넓힌 대상을 못 읽으면 그것만 건너뛰고(보고서 '실패'에 한글 사유) 반 보드 해제는 한다", async () => {
+    m.extraThrows = "connection reset";
+    const events = [];
+    await syncMathClassBoards(sql, {}, { tenant: "t1", apply: true, log: () => {}, events });
+    expect(m.order).toEqual(["담임 연결", "기록", "원아 해제", "담임 해제"]);
+    expect(texts(events, "failed")).toEqual(["|영어 반 방·종강 반 보드·1인 보드의 자동 해제 대상을 읽지 못해 이번에는 건너뛰었습니다(반 보드 해제는 그대로 했습니다) — 다음 동기화에서 다시 봅니다"]);
+    expect(texts(events, "failed").join("")).not.toContain("connection reset");
+  });
+  it("🔴 영어 반 방과 같은 번호인 수학 반 보드는 원아를 내보내지 않는다(F2) — 지금 동기화는 표를 직접 읽고 · 전체 실행은 넓힌 대상의 번호로", async () => {
+    m.englishRooms = [{ classId: "e1", boardId: 1 }];
+    const events = [];
+    await syncMathClassBoards(sql, {}, { tenant: "t1", apply: true, log: () => {}, events, onlyClassIds: new Set(["c1"]) });
+    expect(m.childPlanInput.find((p) => p.classId === "c1").extraChildren).toEqual([]);
+    expect(texts(events, "held")).toContain("가반|원아 해제 보류: 이서연 — 이 보드가 수학 반 보드와 영어 반 방 양쪽에 이어져 있어 자동 해제하지 않습니다");
+    m.extra = { ...extra(), englishBoardIds: new Set([1]) };
+    await syncMathClassBoards(sql, {}, { tenant: "t1", apply: true, log: () => {} });
+    expect(m.childPlanInput.find((p) => p.classId === "c1").extraChildren).toEqual([]);
+  });
+  it("계획만 볼 때도 같은 대상을 함께 돌려준다(쓰기 0)", async () => {
+    m.extra = extra();
+    const r = await syncMathClassBoards(sql, {}, { tenant: "t1", apply: false, log: () => {} });
+    expect(m.extraCalls).toBe(1);
+    expect(m.childPlanInput.map((p) => p.classId)).toEqual(["c1", "c2", "e1", "z1"]);
+    expect(r.releasePlan.notes).toEqual([{ group: "held", className: "", text: "안내 줄" }]);
+    expect(m.order).toEqual([]);
   });
 });

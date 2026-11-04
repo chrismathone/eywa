@@ -18,7 +18,9 @@ const line = (group, className, text, extra = {}) => ({ group, className: classN
 export function planEvents(plans) {
   const out = [];
   for (const p of plans ?? []) {
-    if (p.board?.action === "block") out.push(line("failed", p.className, `반 보드를 정하지 못했습니다 — ${p.board.reason ?? "사유 없음"}`));
+    // 학생이 없는 보고서 미발송(JJ) 반은 일부러 안 만든 것 — 실패가 아니라 '보류' 안내(실패 수·버튼 숫자·감사로그 '실패 N건'에 안 든다, 리뷰 C1).
+    if (p.board?.action === "block" && p.board.notice) out.push(line("held", p.className, `반 보드를 만들지 않았습니다 — ${p.board.reason ?? "사유 없음"}`));
+    else if (p.board?.action === "block") out.push(line("failed", p.className, `반 보드를 정하지 못했습니다 — ${p.board.reason ?? "사유 없음"}`));
     if (p.board?.renameBlocked) out.push(line("failed", p.className, `반 이름 변경 보류 — ${p.board.renameBlocked}`));
     for (const h of p.hold ?? []) out.push(line("held", p.className, `${h.name ?? "?"}: ${(h.reasons ?? []).join(" / ") || "사유 없음"}`, { name: h.name ?? null }));
   }
@@ -149,7 +151,8 @@ export async function auditEnrollments(sql, tenant, done, { kind }) {
  */
 export async function auditReleases(sql, tenant, released, { kind }) {
   for (const r of released?.children ?? []) {
-    const metadata = { studentId: r.studentId ?? null, className: r.className, boardId: r.boardId ?? null, childId: r.childId ?? null, reason: r.reason ?? null, kind };
+    // boardKind = 어느 종류 보드에서 뺐나(반 보드·영어 반 방·종강 반 보드·1인 보드 — 원장 2026-11-03 범위 확장). 옛 줄은 반 보드다.
+    const metadata = { studentId: r.studentId ?? null, className: r.className, boardId: r.boardId ?? null, childId: r.childId ?? null, reason: r.reason ?? null, boardKind: r.boardKind ?? "class", kind };
     await sql`insert into audit_logs (tenant_id, actor_id, actor_name, action, target_type, target_label, metadata)
       values (${tenant}, null, ${RELEASE_AUDIT.actor_name}, ${RELEASE_AUDIT.action}, ${"student"}, ${r.studentName ?? r.childName ?? "학생"}, ${sql.json(metadata)})`.catch(() => {});
   }

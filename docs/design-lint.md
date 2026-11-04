@@ -110,13 +110,11 @@
   prop 이름이 `className`인 앞의 것은 이름을 바꾸는 편이 낫고(`classLabel` 등), 아니면 줄 단위 예외.
 - 테스트 더미 클래스: `src/components/embed-link.test.tsx:50`(`chip`).
 
-### ⑥ 보류 59건 — 결정 전에는 손대지 않는다
+### ⑥ 보류 53건 — 결정 전에는 손대지 않는다
 
 - **인쇄 서식 30건 / 8파일**(`src/app/(print)/**`의 `gray`·`slate`·`amber` 등). 종이는 화면 팔레트와 별개라
   이 규칙에서 뺄지 아직 정하지 않았다.
 - **랜딩 목업 SVG 23건**(`src/app/(marketing)/_scroll/dashboard-mock.tsx`). 자체 팔레트로 그린 그림이다.
-- **강의실 도면 SVG 6건**(`src/app/(shell)/dashboard/_classrooms/classroom-map.tsx`). 도면 전용 색으로 그린
-  그림이라 맞는 토큰이 없다.
 
 ## 한계
 

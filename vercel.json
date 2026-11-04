@@ -96,6 +96,10 @@
     {
       "path": "/api/cron/report-ratings",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/dashboard-secretary",
+      "schedule": "0 4,16 * * *"
     }
   ]
 }
