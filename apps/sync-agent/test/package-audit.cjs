@@ -22,7 +22,7 @@ for(const d of files){const rel=path.relative(bundle,path.join(d.parentPath,d.na
 }
 assert.ok(!fs.existsSync(path.join(runtime,'node_modules/postgres')));
 for(const name of ['AywaSync.exe','AywaSyncRuntime.exe','resources/WorkerHost.exe','resources/ffmpeg/ffmpeg.exe','resources/ffmpeg/ffprobe.exe'])assert.ok(fs.statSync(path.join(bundle,name)).size>0);
-// 실행기 판·설치본 순번 표식(1.0.12) — 본체가 설치 폴더 실행기를 바꾸는 근거라 빠지면 옛 실행기가 계속 남는다.
+// 실행기 판·설치본 순번 표식(1.0.13) — 본체가 설치 폴더 실행기를 바꾸는 근거라 빠지면 옛 실행기가 계속 남는다.
 const launcherVersion=Number(/const int LauncherVersion = (\d+);/.exec(fs.readFileSync(path.join(app,'native/Bootstrap.cs'),'utf8'))[1]);
 assert.deepEqual(JSON.parse(fs.readFileSync(path.join(bundle,'aywa-launcher.json'),'utf8')),{launcher:launcherVersion});
 assert.deepEqual(JSON.parse(fs.readFileSync(path.join(bundle,'aywa-install.json'),'utf8')),{sequence:require('../build-config.json').sequence});

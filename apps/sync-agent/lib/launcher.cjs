@@ -1,5 +1,5 @@
 'use strict';
-// 실행기(AywaSync.exe) 바꾸기·넘겨받기(1.0.12).
+// 실행기(AywaSync.exe) 바꾸기·넘겨받기(1.0.13).
 // 앱 안 업데이트는 본체만 versions/<순번>에 받는다 — 설치 폴더의 실행기는 설치 파일을 다시 돌리기 전엔 그대로였다.
 // 그래서 1.0.7에서 고친 '업데이트 세 번째에 새 버전이 안 뜸'이 현장 PC(10/15 설치본)에는 들어가지 못했다(11/3 1.0.11 적용 뒤 앱이 안 켜짐).
 // 이제 본체가 자기 버전 폴더의 실행기로 설치 폴더 실행기를 바꾸고, 옛 실행기가 띄운 본체는 업데이트 때 새 실행기로 넘긴다.
@@ -13,7 +13,7 @@ function sha256(file){return crypto.createHash('sha256').update(fs.readFileSync(
 function sameDir(a,b){return path.resolve(a).toLowerCase()===path.resolve(b).toLowerCase();}
 function writeJson(file,value){const temp=`${file}.${process.pid}.tmp`;fs.writeFileSync(temp,JSON.stringify(value));fs.renameSync(temp,file);}
 const validSequence=v=>Number.isSafeInteger(v)&&v>0;
-// 설치 폴더 본체의 순번 — 설치 파일이 넣은 aywa-install.json(1.0.12~), 없으면 설치 폴더 본체의 build-config.json(app.asar 안 — Electron fs로 읽힌다).
+// 설치 폴더 본체의 순번 — 설치 파일이 넣은 aywa-install.json(1.0.13~), 없으면 설치 폴더 본체의 build-config.json(app.asar 안 — Electron fs로 읽힌다).
 // 0 = 모름. 실행기는 이 값으로 '버전 폴더가 없는 순번'을 설치 폴더 본체로 착각하지 않는다.
 function installedSequenceOf(installDir,read=fs.readFileSync){
   try{const v=JSON.parse(read(path.join(installDir,INSTALL_FILE),'utf8')).sequence;if(validSequence(v))return v;}catch{}

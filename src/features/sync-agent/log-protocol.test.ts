@@ -5,7 +5,7 @@ it("accepts only fixed worker log codes and rejects raw text or unknown detail f
  expect(EventInput.safeParse(event).success).toBe(true);
  expect(EventInput.safeParse({...event,detail:{logCode:"학생이름 private"}}).success).toBe(false);
  expect(EventInput.safeParse({...event,detail:{logCode:"makeedu_students",stdout:"private"}}).success).toBe(false);
- // 실행기 교체·넘겨받기(AywaSync 1.0.12) — 웹이 먼저 받아야 연동 PC 로그가 안 버려진다.
+ // 실행기 교체·넘겨받기(AywaSync 1.0.13) — 웹이 먼저 받아야 연동 PC 로그가 안 버려진다.
  for(const logCode of ["launcher_updated","launcher_update_failed","launcher_handover"])expect(EventInput.safeParse({...event,module:"update",detail:{logCode}}).success).toBe(true);
 });
 it("accepts fixed update failure reasons without exposing arbitrary messages",()=>{

@@ -12,12 +12,13 @@ using System.Windows.Forms;
 
 class Bootstrap {
   const string PublicKey = "__PUBLIC_KEY_XML__";
-  // 실행기 판(1.0.12 = 2). 포장 폴더의 aywa-launcher.json에도 같은 값을 적는다 — 본체가 이 값을 보고 설치 폴더의 옛 실행기를 바꾸고,
+  // 실행기 판(1.0.13 = 2). 포장 폴더의 aywa-launcher.json에도 같은 값을 적는다 — 본체가 이 값을 보고 설치 폴더의 옛 실행기를 바꾸고,
   // 옛 실행기에서 업데이트를 넘겨받는다. 이 파일의 동작을 바꾸면 이 값과 after-pack.cjs의 값을 함께 올린다.
   const int LauncherVersion = 2;
   const string MutexName = "Local\\AYWA.Sync.Bootstrap", ShowName = "Local\\AYWA.Sync.Show";
-  // --show(창만 띄우기)를 아는 첫 본체 순번(1.0.12 = 14). 그 전 본체는 --show를 모르고 주인이 되어 버리므로 보내지 않는다.
-  const int ShowSinceSequence = 14;
+  // --show(창만 띄우기)를 아는 첫 본체 순번(1.0.13 = 15). 그 전 본체는 --show를 모르고 주인이 되어 버리므로 보내지 않는다.
+  // (처음엔 1.0.13/14로 준비했으나 14번은 다른 변경(반 보드 해제 확대)이 가져갔다 — 14번 본체는 --show를 모른다.)
+  const int ShowSinceSequence = 15;
   static JavaScriptSerializer json=new JavaScriptSerializer {MaxJsonLength=8*1024*1024};
   static string root=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"AYWA","Sync");
   // 설치 폴더 = 이 실행기가 있는 곳. 설치 폴더에 쓸 수 없어 본체가 지점 폴더에 복사해 둔 실행기만 --install-dir로 받는다.
@@ -54,7 +55,7 @@ class Bootstrap {
     if(!seen.Contains("AywaSyncRuntime.exe")||!seen.Contains("resources/app.asar"))throw new Exception("missing");
     return Path.Combine(dir,"AywaSyncRuntime.exe");
   }
-  // 창만 띄워 달라는 실행 — 본체는 --show로 켜지면 주인이 되지 않고 끝난다(1.0.12). 주인 본체가 있으면 그 창이 뜬다.
+  // 창만 띄워 달라는 실행 — 본체는 --show로 켜지면 주인이 되지 않고 끝난다(1.0.13). 주인 본체가 있으면 그 창이 뜬다.
   // 본체·실행기가 남기는 표식 파일은 지점 폴더 바로 아래의 정해진 이름만(건강 파일과 같은 규칙).
   static string MarkerPath(string value,string prefix){try{string full=Path.GetFullPath(value);return string.Equals(Path.GetDirectoryName(full),Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar),StringComparison.OrdinalIgnoreCase)&&Path.GetFileName(full).StartsWith(prefix,StringComparison.Ordinal)?full:null;}catch{return null;}}
   static string Option(string[] args,string name){foreach(string a in args)if(a.StartsWith(name,StringComparison.Ordinal))return a.Substring(name.Length);return null;}

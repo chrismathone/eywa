@@ -7,7 +7,7 @@ const pass=async()=>true,fail=async()=>false;
 async function until(check,ms,label){const end=Date.now()+ms;while(Date.now()<end){if(check())return;await new Promise(r=>setTimeout(r,100));}assert.fail(`timeout: ${label}`);}
 // 옛 설치 폴더: 실행기 판·설치본 순번 표식 없음 · 본체 순번은 resources/app.asar/build-config.json(Electron에선 asar 안 파일, 여기선 같은 경로의 폴더).
 function legacyInstall(root,sequence=7){const dir=path.join(root,'install');fs.mkdirSync(path.join(dir,'resources','app.asar'),{recursive:true});fs.writeFileSync(path.join(dir,'resources','app.asar','build-config.json'),JSON.stringify({sequence}));return dir;}
-test('the runtime replaces a running old launcher only after its signed hash and self-test pass, and never downgrades it(1.0.12)',{timeout:60000},async()=>{
+test('the runtime replaces a running old launcher only after its signed hash and self-test pass, and never downgrades it(1.0.13)',{timeout:60000},async()=>{
   const root=tmp('launcher-refresh'),installDir=legacyInstall(root),ownDir=path.join(root,'versions','14');fs.mkdirSync(ownDir,{recursive:true});
   // 설치 폴더 = 지금 돌고 있는 옛 실행기(판 표시 없음). 버전 폴더 = 새 실행기(판 2).
   const source=path.join(root,'Old.cs');fs.writeFileSync(source,`using System.IO;using System.Threading;class Old{static void Main(){File.WriteAllText(${JSON.stringify(path.join(root,'started'))},"1");for(int i=0;i<300&&!File.Exists(${JSON.stringify(path.join(root,'stop'))});i++)Thread.Sleep(100);}}`);
@@ -39,7 +39,7 @@ test('the runtime replaces a running old launcher only after its signed hash and
   await until(()=>cleanupOldLaunchers(installDir)===1,5000,'old launcher removed after exit');
   assert.deepEqual(fs.readdirSync(installDir).sort(),['AywaSync.exe','aywa-install.json','aywa-launcher.json','resources']);
 });
-test('handover uses the install folder launcher when it is new, otherwise a self-tested copy beside the profile(1.0.12)',async()=>{
+test('handover uses the install folder launcher when it is new, otherwise a self-tested copy beside the profile(1.0.13)',async()=>{
   const root=tmp('launcher-handover'),installDir=legacyInstall(root),dataRoot=path.join(root,'profile'),ownDir=path.join(dataRoot,'versions','14');fs.mkdirSync(ownDir,{recursive:true});
   fs.writeFileSync(path.join(installDir,'AywaSync.exe'),'old');fs.writeFileSync(path.join(ownDir,'AywaSync.exe'),'new');fs.writeFileSync(path.join(ownDir,'aywa-launcher.json'),JSON.stringify({launcher:2}));
   // 설치 폴더가 옛 판(바꾸지 못함) → 지점 폴더 launcher\ 복사본 + 설치 폴더·설치본 순번을 알려 준다. 버전 폴더의 실행기는 쓰지 않는다.
@@ -58,7 +58,7 @@ test('handover uses the install folder launcher when it is new, otherwise a self
   assert.equal(signedLauncherSha(ownDir,()=>({files:[{path:'AywaSync.exe',sha256:'a'.repeat(64)}]})),'a'.repeat(64));
   assert.throws(()=>signedLauncherSha(ownDir,()=>({files:[{path:'AywaSyncRuntime.exe',sha256:'b'.repeat(64)}]})),/launcher_not_listed/);
 });
-test('main.cjs wiring: --show never becomes primary, apply waits for the launcher, old launchers hand over only after the new one is waiting(1.0.12)',()=>{
+test('main.cjs wiring: --show never becomes primary, apply waits for the launcher, old launchers hand over only after the new one is waiting(1.0.13)',()=>{
   const main=fs.readFileSync(path.join(__dirname,'../main.cjs'),'utf8');
   assert.match(main,/if\(!app\.requestSingleInstanceLock\(\)\)\{if\(process\.env\.AYWA_HEALTH_FILE&&!process\.argv\.includes\('--show'\)\)app\.exit\(43\);else app\.quit\(\);\}else if\(process\.argv\.includes\('--show'\)\)\{app\.releaseSingleInstanceLock\(\);app\.quit\(\);\}/);
   assert.match(main,/const applyUpdate=!closing&&launcherReady\(\)&&updatePlan\.shouldApply/);

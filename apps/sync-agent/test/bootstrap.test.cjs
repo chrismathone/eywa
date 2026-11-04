@@ -4,7 +4,7 @@ const sha=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest
 test('native bootstrap verifies the signed file list, rolls back bad starts and keeps a healthy trial',{timeout:180000},()=>{
   const pair=crypto.generateKeyPairSync('rsa',{modulusLength:2048}),jwk=pair.publicKey.export({format:'jwk'});
   const xml=`<RSAKeyValue><Modulus>${Buffer.from(jwk.n,'base64url').toString('base64')}</Modulus><Exponent>${Buffer.from(jwk.e,'base64url').toString('base64')}</Exponent></RSAKeyValue>`;
-  // legacy = 옛 설치 폴더에 새 실행기만 들어온 경우(aywa-install.json 없음 — 설치본 순번 모름, 1.0.12).
+  // legacy = 옛 설치 폴더에 새 실행기만 들어온 경우(aywa-install.json 없음 — 설치본 순번 모름, 1.0.13).
   for(const legacy of [false,true])for(const scenario of ['healthy','bad-start','corrupt-file','wrong-signature','malformed-journal']){
     const root=fs.mkdtempSync(path.resolve(__dirname,'../../../work/bootstrap-test-')),profile=path.join(root,'profile'),version=path.join(profile,'versions','2');fs.mkdirSync(path.join(version,'resources'),{recursive:true});
     const source=fs.readFileSync(path.resolve(__dirname,'../native/Bootstrap.cs'),'utf8').replace('__PUBLIC_KEY_XML__',xml).replace(/static string root=Path.Combine\([^\n]+;/,`static string root=${JSON.stringify(profile)};`).replace(/MessageBox.Show\([^;]+;/,'File.WriteAllText(Path.Combine(root,"unexpected-error"),"error");')
@@ -48,11 +48,11 @@ test('native bootstrap keeps relaunching after repeated update exits (42) — �
   assert.equal(fs.existsSync(path.join(profile,'unexpected-error')),false);
   assert.equal(fs.readFileSync(path.join(profile,'runs'),'utf8').trim().split(/\r?\n/).length,7);
 });
-// 실행기를 컴파일한다(지점 폴더 = 시험 폴더 · 잠금·신호 이름도 시험 전용 — 같은 PC에서 진짜 앱이 돌아도 섞이지 않게). 1.0.12 시험용.
+// 실행기를 컴파일한다(지점 폴더 = 시험 폴더 · 잠금·신호 이름도 시험 전용 — 같은 PC에서 진짜 앱이 돌아도 섞이지 않게). 1.0.13 시험용.
 function compileLauncher(sourceFile,root,profile,out){
   const source=fs.readFileSync(sourceFile,'utf8').replace('__PUBLIC_KEY_XML__','<RSAKeyValue><Modulus>AQAB</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>').replace('__SEQUENCE__','1')
     .replace(/static string root=Path.Combine\([^\n]+;/,`static string root=${JSON.stringify(profile)};`).replace(/MessageBox.Show\([^;]+;/,'File.WriteAllText(Path.Combine(root,"unexpected-error"),"error");')
-    .replace(/AYWA\.Sync\.(Bootstrap|Show)/g,m=>`${m}.Test.${path.basename(root)}`).replace('const int ShowSinceSequence = 14;','const int ShowSinceSequence = 1;');
+    .replace(/AYWA\.Sync\.(Bootstrap|Show)/g,m=>`${m}.Test.${path.basename(root)}`).replace('const int ShowSinceSequence = 15;','const int ShowSinceSequence = 1;');
   const file=path.join(root,path.basename(out,'.exe')+'.cs');fs.writeFileSync(file,source);
   execFileSync(csc,['/nologo','/target:winexe',`/out:${out}`,'/r:System.Web.Extensions.dll','/r:System.Windows.Forms.dll',file],{windowsHide:true,stdio:'pipe'});
 }
@@ -69,7 +69,7 @@ function launcherFixture(prefix,runtimeBody,{field=false}={}){
 }
 const lines=file=>fs.existsSync(file)?fs.readFileSync(file,'utf8').split(/\r?\n/).filter(Boolean):[];
 async function until(check,ms,label){const end=Date.now()+ms;while(Date.now()<end){if(check())return;await new Promise(r=>setTimeout(r,150));}assert.fail(`timeout: ${label}`);}
-test('the field launcher (2026-10-15) hands over to a new launcher that waits for its lock — 옛 실행기의 42 세기를 타지 않는다(1.0.12)',{timeout:90000},async()=>{
+test('the field launcher (2026-10-15) hands over to a new launcher that waits for its lock — 옛 실행기의 42 세기를 타지 않는다(1.0.13)',{timeout:90000},async()=>{
   // 1번째 본체(옛 실행기가 띄움): 건강 확인 → 새 실행기를 --handover로 띄우고 '기다리는 중' 표식을 본 뒤 0으로 끝(main.cjs exitForUpdate와 같은 순서).
   // 옛 실행기는 건강 확인 뒤 0이면 잠금을 놓지 않고 끝난다(abandoned) → 새 실행기가 이어 받아 2번째 본체를 띄운다.
   const f=launcherFixture('bootstrap-handover','File.AppendAllText(runs,"run launcher="+Environment.GetEnvironmentVariable("AYWA_LAUNCHER")+" args="+string.Join(" ",args)+Environment.NewLine);'
@@ -81,7 +81,7 @@ test('the field launcher (2026-10-15) hands over to a new launcher that waits fo
   assert.equal(fs.existsSync(path.join(f.profile,'unexpected-error')),false);
   assert.deepEqual(lines(f.runs),['run launcher= args=--hidden','ready=True','run launcher=2 args=--hidden']);
 });
-test('a second launch asks the owner to show the window and never starts a second runtime itself(1.0.12)',{timeout:60000},async()=>{
+test('a second launch asks the owner to show the window and never starts a second runtime itself(1.0.13)',{timeout:60000},async()=>{
   // 주인 본체: 건강 확인 뒤 stop 파일이 생길 때까지 돈다. --show 본체: 기록만 남기고 끝(실제 본체는 주인에게 창을 띄우라고 넘기고 끝난다).
   const f=launcherFixture('bootstrap-show','if(args.Contains("--show")){File.AppendAllText(runs,"show"+Environment.NewLine);return 0;}File.AppendAllText(runs,"primary"+Environment.NewLine);'
     +'File.WriteAllText(Environment.GetEnvironmentVariable("AYWA_HEALTH_FILE"),"ready");for(int i=0;i<200&&!File.Exists(Path.Combine(profile,"stop"));i++)Thread.Sleep(100);return 0;');
@@ -93,7 +93,7 @@ test('a second launch asks the owner to show the window and never starts a secon
   assert.equal(fs.existsSync(path.join(f.profile,'unexpected-error')),false);
   assert.deepEqual(lines(f.runs),['primary','show']);
 });
-test('the launcher self-test writes only its version inside the profile and starts nothing(1.0.12)',{timeout:60000},()=>{
+test('the launcher self-test writes only its version inside the profile and starts nothing(1.0.13)',{timeout:60000},()=>{
   const f=launcherFixture('bootstrap-selftest','File.AppendAllText(runs,"run"+Environment.NewLine);return 0;');
   execFileSync(f.launcher,[`--selftest=${path.join(f.profile,'selftest-1')}`],{windowsHide:true,timeout:15000});
   assert.equal(fs.readFileSync(path.join(f.profile,'selftest-1'),'utf8'),'launcher:2');
@@ -106,7 +106,7 @@ test('the launcher self-test writes only its version inside the profile and star
   assert.equal(fs.readFileSync(path.join(f.profile,'selftest-4'),'utf8'),'launcher:2');
   assert.deepEqual(lines(f.runs),[]);
 });
-test('a runtime that cannot take the single-instance lock (43) is retried, not rolled back(1.0.12)',{timeout:60000},()=>{
+test('a runtime that cannot take the single-instance lock (43) is retried, not rolled back(1.0.13)',{timeout:60000},()=>{
   // 1번째: 잠금을 못 잡음(43, 건강 확인 전) · 2번째: 정상. 시험 실행 중이어도 되돌리거나 격리하지 않는다.
   const f=launcherFixture('bootstrap-43','File.AppendAllText(runs,"x"+Environment.NewLine);if(File.ReadAllLines(runs).Length==1)return 43;File.WriteAllText(Environment.GetEnvironmentVariable("AYWA_HEALTH_FILE"),"ready");return 0;');
   execFileSync(f.launcher,[],{windowsHide:true,timeout:30000});

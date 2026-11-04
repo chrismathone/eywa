@@ -13,7 +13,7 @@ const dataRoot=path.resolve(process.env.LOCALAPPDATA||path.join(app.getPath('hom
 fs.mkdirSync(path.join(dataRoot,'electron'),{recursive:true});
 app.setPath('userData',path.join(dataRoot,'electron'));
 // 창만 띄워 달라는 실행(--show — 실행기가 두 번째 실행을 넘길 때)은 주인이 되지 않는다. 주인 본체가 아직 안 떴을 때 이 실행이 잠금을 쥐면
-// 실행기가 띄운 본체가 밀려나 새 버전 시작이 실패로 잡힌다. 실행기가 띄운 본체가 잠금을 못 잡으면 43 — 1.0.12 실행기는 실패로 세지 않고 다시 띄운다.
+// 실행기가 띄운 본체가 밀려나 새 버전 시작이 실패로 잡힌다. 실행기가 띄운 본체가 잠금을 못 잡으면 43 — 1.0.13 실행기는 실패로 세지 않고 다시 띄운다.
 if(!app.requestSingleInstanceLock()){if(process.env.AYWA_HEALTH_FILE&&!process.argv.includes('--show'))app.exit(43);else app.quit();}else if(process.argv.includes('--show')){app.releaseSingleInstanceLock();app.quit();}else{void app.whenReady().then(start).catch(()=>{dialog.showErrorBox('AYWA 연동','앱을 시작하지 못했습니다. 설치 파일을 다시 실행해 주세요.');app.exit(1);});}
 let window,tray,store,events,connection=null,local={...DEFAULT_LOCAL_SETTINGS},lease,api,supervisor,updater,updatePlan,configuration=null;
 let message='',unlockedUntil=0,looping=false,quitting=false,closing=false,applying=false,suspended=false,nextConnect=0,revoked=false;
@@ -131,7 +131,7 @@ function launcherSelftest(exe,version){
   const file=path.join(dataRoot,`selftest-${randomUUID()}`);
   return new Promise(resolve=>execFile(exe,[`--selftest=${file}`],{timeout:20000,windowsHide:true},()=>{let ok=false;try{ok=fs.readFileSync(file,'utf8')===`launcher:${version}`;}catch{}dropMarker(file);resolve(ok);}));
 }
-// 설치 폴더 실행기를 이 버전 것으로 — 앱 안 업데이트는 본체만 받아서, 1.0.7에서 고친 실행기가 설치 폴더엔 들어가지 못했다(1.0.12).
+// 설치 폴더 실행기를 이 버전 것으로 — 앱 안 업데이트는 본체만 받아서, 1.0.7에서 고친 실행기가 설치 폴더엔 들어가지 못했다(1.0.13).
 // 비켜 둔 옛 실행기는 새 실행기가 본체를 한 번 띄워 증명한 뒤(AYWA_LAUNCHER ≥ 설치 폴더 판)에만 지운다 — 그 전엔 손으로 되돌릴 마지막 실행기다.
 async function refreshLauncher(){
   const installDir=process.env.AYWA_INSTALL_DIR;if(!app.isPackaged||!installDir)return;
@@ -145,7 +145,7 @@ async function refreshLauncher(){
 function sameDir(a,b){return path.resolve(a).toLowerCase()===path.resolve(b).toLowerCase();}
 // 표식 파일 지우기는 실패해도 넘어간다(백신이 잠깐 잡고 있어도) — 여기서 던지면 'switch' 상태로 앱이 멈춘다.
 function dropMarker(file){try{fs.rmSync(file,{force:true});}catch{}}
-// 새 버전 띄우기. 실행기 없이 직접 켰으면 Electron이 다시 켜고, 1.0.12 실행기(AYWA_LAUNCHER≥2)는 42를 받아 새 버전을 띄운다.
+// 새 버전 띄우기. 실행기 없이 직접 켰으면 Electron이 다시 켜고, 1.0.13 실행기(AYWA_LAUNCHER≥2)는 42를 받아 새 버전을 띄운다.
 // 옛 실행기(1.0.7 전 판)는 42를 세어 세 번째에 아무것도 띄우지 않으므로 — 새 실행기를 먼저 띄워(앞 실행기의 잠금이 풀리길 기다린다)
 // '기다리는 중' 표식을 받은 뒤에만 0으로 끝낸다. 옛 실행기는 건강 확인을 마친 본체가 0으로 끝나면 그냥 끝난다. 넘기지 못하면 예전처럼 42.
 async function exitForUpdate(){
