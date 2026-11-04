@@ -56,6 +56,7 @@ export function classDiffReasons(c, link, mem, recentStudentIds) {
   const recorded = new Set(mem.map((m) => m.student_id));
   // 보고서 미발송(JJ) 반은 지금 다니는 학생이 없으면 보드를 만들지 않는다(class-board-plan.mjs `OPTOUT_NO_CREATE_REASON`) — 그런 반을
   // '새 반'으로 고르면 요청마다 같은 보류만 되풀이한다(같은 이름 보드 채택은 새벽 정기 동기화가 본다 · 지목하면 그 반은 함께 된다).
+  // 11-04 'JJ 맞춤' 되돌림 뒤에는 미발송 반이 대상 밖이라 이 분기는 쓰이지 않는다(다시 넣는 날을 위해 남김).
   if (!link) {
     if (!c.reportOptout || c.studentIds.length) reasons.push([2, "새 반"]);
   } else if (link.boardName !== c.className) reasons.push([3, "반 이름 변경"]);
@@ -74,7 +75,7 @@ export function classDiffReasons(c, link, mem, recentStudentIds) {
 /**
  * 동기화할 반 고르기.
  * @param {object} a
- * @param {Array<{classId:string, className:string, studentIds:string[]}>} a.classes  대상 수학 반(loadAywa — 종강 제외 · 보고서 미발송 JJ 반 포함)
+ * @param {Array<{classId:string, className:string, studentIds:string[]}>} a.classes  대상 수학 반(loadAywa — 종강 제외 · 보고서 미발송 JJ 반 제외 — 11-04 되돌림)
  * @param {Map<string,{boardName:string}>} a.links  0302a 반 ↔ 보드
  * @param {Array<{class_id:string, student_id:string, status:string, reason:string|null}>} a.members  0302a 반 보드 학생 기록
  * @param {Set<string>} a.recentStudentIds  최근 등록 학생

@@ -8,19 +8,18 @@ import { personalBoardName, planClassBoards } from "./class-board-plan.mjs";
 const norm = (s) => String(s ?? "").replace(/\s/g, "");
 
 /**
- * **대상 반** 조건(SQL 조각) — 활성 수학(math·subject_1) · 종강 제외. 반 별칭은 `c`.
+ * **대상 반** 조건(SQL 조각) — 활성 수학(math·subject_1) · 보고서 발송 반 · 종강 제외. 반 별칭은 `c`.
  * 동기화(loadAywa)와 자동 동기화의 대조(auto-sync-load.mjs)가 **같은 조각**을 쓴다 — 두 곳에 따로 적으면 한쪽만 바뀐 날
  * 대조는 "달라졌다"는데 동기화는 그 반을 대상 밖으로 보고 아무것도 안 한다(되풀이 요청).
  * 🔴 종강 제외(원장 2026-09-29 — 종강 반 6개를 만들었다가 지웠다). aywa는 종강을 is_active가 아니라 closed_at(종강일)에 적는다.
  *    판정 = overlap.ts isLiveSlot과 같은 축(closed_at < 오늘이면 종강).
- * 🔑 보고서 미발송 반(`report_optout` — JJ 자리 반)도 넣는다(원장 2026-11-03 *JJ 반 보드 = 에이와와 맞춤* — 연결·학생 배정·해제·담임 연결을
- *    에이와 수강대로). **보고서 발송은 지금처럼 하지 않는다** — 발송 판정(앱 `liveBoardClassIds`·`isSendCandidateClass`, 워커
- *    `isClassRouteEligible`·`resolveClassTargets`)이 미발송 반을 따로 거른다. 미발송 반은 **오늘 다니는 학생이 1명 이상일 때만**
- *    ClassNote 보드를 새로 만들고(원장 2026-11-03 *"반에 학생이 있다면 배정해야함. 없으면 굳이 만들필요 없음"*), 학생이 없으면
- *    같은 이름 보드만 연결한다(class-board-plan.mjs `reportOptout`).
+ * 🔴 보고서 미발송 반(`report_optout` — JJ 자리 반)은 **대상이 아니다**(원장 2026-11-04 *"JJ 미발송반은 클래스노트 반배정도 할 필요없음"* —
+ *    11-03 'JJ 맞춤'(연결·배정·해제를 에이와 수강대로)을 되돌렸다). 연결·학생 배정·해제·담임 연결을 하지 않고, 남은 옛 연결은 정기 동기화가
+ *    걷는다(math-class-boards-db.mjs). class-board-plan.mjs의 `reportOptout` 분기는 이 조각을 지난 반에선 쓰이지 않는다.
+ *    🔴 원스크린 C.N 아이콘의 대상 반(src/features/onescreen/server/classnote-match.ts)도 같은 조건이다 — 가드 classnote-target-guard.test.ts.
  */
 export const targetClassWhere = (sql, tenant, today) =>
-  sql`c.tenant_id = ${tenant} and c.is_active and c.subject in ('math', 'subject_1') and (c.closed_at is null or c.closed_at >= ${today})`;
+  sql`c.tenant_id = ${tenant} and c.is_active and not c.report_optout and c.subject in ('math', 'subject_1') and (c.closed_at is null or c.closed_at >= ${today})`;
 
 /**
  * **오늘 그 반에 다니는 재원생** 수강 조건(SQL 조각) — 수강 별칭은 `e`. 테스트 학생·재원이 아닌 학생은 뺀다.
@@ -32,7 +31,7 @@ export const currentEnrollmentOn = (sql, tenant, today) =>
       and exists (select 1 from students s where s.id = e.student_id and s.status = 'enrolled' and not coalesce(s.is_test, false))`;
 
 /**
- * aywa 대상 반·학생. 대상 반 = 활성 수학(math·subject_1) · 종강 제외(특강·보고서 미발송 JJ 반 포함 — 원장 2026-09-30 · 2026-11-03).
+ * aywa 대상 반·학생. 대상 반 = 활성 수학(math·subject_1) · 보고서 발송 반 · 종강 제외(특강 포함 — 원장 2026-09-30 · 미발송 JJ 반 제외 — 2026-11-04).
  * 학생은 지점 전체(자동 해제가 퇴원생의 원아도 본다) — `status`(휴원 가드)·`isTest`(1인 보드 해제 제외)를 함께 싣는다.
  */
 export async function loadAywa(sql, tenant) {
@@ -125,7 +124,7 @@ export async function loadClosedLinked(sql, tenant) {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
   const rows = await sql`select c.id from classes c
     join classnote_class_boards b on b.tenant_id = c.tenant_id and b.class_id = c.id
-    where c.tenant_id = ${tenant} and c.is_active and c.subject in ('math', 'subject_1')
+    where c.tenant_id = ${tenant} and c.is_active and not c.report_optout and c.subject in ('math', 'subject_1')
       and c.closed_at is not null and c.closed_at < ${today}`;
   // 🔴 조회 실패는 throw — 빈 목록으로 삼키면 동기화가 종강 반 연결을 **전부 지운다**(되돌릴 수 없다).
   return rows.map((r) => r.id);

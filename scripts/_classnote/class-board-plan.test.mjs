@@ -317,7 +317,7 @@ describe("planClassBoards — 반 단위", () => {
     const [p] = planClassBoards({ ...w, classes: cls(["s1", "s2"]) });
     expect(p.board).toEqual({ action: "exists", id: 50, name: "중등M 중1 BS3E" });
   });
-  describe("보고서 미발송(JJ) 반 — 원장 2026-11-03 에이와와 맞춤(연결·배정) · 학생이 있을 때만 새 보드", () => {
+  describe("보고서 미발송(JJ) 반 계획 분기 — 11-03 'JJ 맞춤' 때 넣고 11-04 되돌림 뒤 운영 경로에선 안 쓰임 · 학생이 있을 때만 새 보드", () => {
     const jj = (studentIds) => [{ classId: "c1", className: "초등M 개별 JJ2M", studentIds, reportOptout: true }];
     it("같은 이름 보드가 없으면 — 지금 다니는 학생이 있으면 만들고(원장 *\"반에 학생이 있다면 배정해야함\"*) 없으면 보류 · 계획에 미발송 표식", () => {
       const [p] = planClassBoards({ ...world(), classes: jj(["s1"]) });

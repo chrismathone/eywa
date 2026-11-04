@@ -101,7 +101,7 @@ describe("넓힌 대상 조회(원장 2026-11-03)", () => {
     expect(out.get("s1")).toEqual({ math: { open: true, ended: false, endedOn: null }, english: { open: false, ended: true, endedOn: "2026-10-01" } });
     expect(seen[0]).toContain("c.subject in ('math', 'subject_1') and (e.end_date is null or e.end_date >= ?)) as math_open");
   });
-  it("종강 연결 반 — 미발송(JJ) 반도 포함(report_optout을 거르지 않는다)", async () => {
+  it("종강 연결 반 — 이 조회는 report_optout을 거르지 않는다(11-04 되돌림 뒤 미발송 반 연결은 정기 동기화가 먼저 걷어 여기 오지 않는다)", async () => {
     const { sql, seen } = fakeSql({ classes: [{ id: "c1", class_name: "가반", closed_at: "2026-10-19", board_id: "7", board_name: "가반" }] });
     expect(await loadClosedBoards(sql, "t1")).toEqual([{ classId: "c1", className: "가반", closedAt: "2026-10-19", boardId: 7, boardName: "가반" }]);
     expect(seen[0]).not.toContain("report_optout");

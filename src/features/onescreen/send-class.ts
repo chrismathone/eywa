@@ -113,8 +113,8 @@ export const BOARD_MISSING_ERROR =
  *  · `unknown`       = 그 밖 — 옛 안내 그대로(동기화 대상이 아닌 반·학생, 연결은 있는데 반 전체 기록이 빈 반 = 보드가 지워졌거나
  *                      특정 불가, 기록이 전부 ok인데 막힘, 그 반에 다닌 적 없음)
  * 🔴 "기다리면 풀린다"고 말하려면 **동기화가 실제로 그 학생을 넣을 수 있어야** 한다 — `syncTarget`은 워커의 대상 기준
- *    (`targetClassWhere`·`currentEnrollmentOn`: 활성·수학·종강 전 반 + 재원·테스트 아님 학생)과 같거나 **더 좁아야** 하고(2026-11-03부터 워커는
- *    보고서 미발송 반도 동기화한다 — 여기는 보고서 발송 반만 본다),
+ *    (`targetClassWhere`·`currentEnrollmentOn`: 활성·보고서 발송·수학·종강 전 반 + 재원·테스트 아님 학생)과 같아야 하고(2026-11-04 원장
+ *    지시로 워커도 다시 보고서 발송 반만 동기화한다 — 11-03 'JJ 맞춤' 되돌림),
  *    `liveNow`는 그 날짜 기준(시작일 ≤ 오늘 ≤ 종료일)과 같아야 한다. 어긋나면 "배정을 요청했습니다"가 거짓말이 된다.
  */
 export type BoardMissingKind = "enrolling" | "class_pending" | "hold_join" | "hold_other" | "left" | "unknown";

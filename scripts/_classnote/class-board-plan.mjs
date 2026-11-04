@@ -59,6 +59,8 @@ export const VERIFIED_GONE_REASON = "반 보드에서 확인된 원아가 지금
  * 보류 사유 — 보고서 미발송 반(JJ 자리 반, `classes.report_optout`)은 **오늘 다니는 학생이 없으면** ClassNote 반 보드를 새로 만들지 않는다
  * (원장 2026-11-03 *"반에 학생이 있다면 배정해야함. 없으면 굳이 만들필요 없음."* — 학생이 1명 이상이면 수학 반처럼 만들고 배정한다).
  * 같은 이름 보드가 ClassNote에 있으면 학생이 없어도 그 보드를 연결한다.
+ * 🔑 2026-11-04 되돌림(원장 *"JJ 미발송반은 클래스노트 반배정도 할 필요없음"*) 뒤 운영 경로(`targetClassWhere`)는 미발송 반을 넘기지 않아
+ *    이 분기는 쓰이지 않는다 — 다시 넣는 날을 위해 남긴다.
  */
 export const OPTOUT_NO_CREATE_REASON = "보고서 미발송 반에 지금 다니는 학생이 없어 ClassNote 반 보드를 만들지 않습니다 — 학생이 생기면 다음 동기화가 만듭니다";
 
@@ -357,6 +359,7 @@ export function planClassBoards({ classes, students, boards, membersByBoard, adm
         // 🔑 보고서 미발송 반(JJ)은 ClassNote에 같은 이름 보드가 먼저 있었다 — 그 보드에 **이 반의 지난 학생**(수강이 끝나 그대로 해제 대상인
         //    원아)만 남아 있으면 남의 집이 아니라 이 반의 옛 가족이라 채택한다(원장 2026-11-03). 그 원아는 채택 뒤 자동 해제가 정리한다
         //    (④ 양 가드에 걸리면 해제 리스트에 사유와 함께 남는다). 지난 학생으로 증명되지 않는 원아가 하나라도 있으면 종전대로 보류.
+        //    11-04 되돌림 뒤 운영 경로에선 `reportOptout`이 생기지 않아 이 채택은 쓰이지 않는다.
         const former = c.reportOptout ? formerFamilyByClass?.get?.(c.classId) ?? null : null;
         const foreign = former ? strangers.filter((m) => !former.has(Number(m.id))) : strangers;
         if (!strangers.length) board = { action: "exists", id: exact[0].id, name: exact[0].name };

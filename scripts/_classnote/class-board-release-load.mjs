@@ -65,7 +65,7 @@ export async function loadSubjectEnrollments(sql, tenant) {
 }
 
 /**
- * 0302a 연결이 남은 **종강** 수학 반(보고서 미발송 JJ 반 포함) — 종강 반 보드 정리(원장 2026-11-03 · 종강 7일 뒤)의 대상 후보.
+ * 0302a 연결이 남은 **종강** 수학 반(보고서 미발송 JJ 반은 11-04 되돌림 뒤 연결이 걷혀 사실상 빠진다) — 종강 반 보드 정리(원장 2026-11-03 · 종강 7일 뒤)의 대상 후보.
  * 판정(7일·보드가 살아 있나)은 class-board-release-targets.mjs `buildClosedPlans`.
  */
 export async function loadClosedBoards(sql, tenant) {
