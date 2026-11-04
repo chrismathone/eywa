@@ -1,5 +1,5 @@
 // 현장 PC(2026-10-15 재설치 · 1.0.5)에 깔린 옛 실행기 원본 = git fb0ef21a8:apps/sync-agent/native/Bootstrap.cs (1.0.7 4461dcc15 전 마지막 판).
-// 1.0.12 넘겨받기 시험의 "앞 실행기"로만 쓴다 — 고치지 말 것(현장 코드 그대로여야 시험이 뜻을 가진다).
+// 1.0.13 넘겨받기 시험의 "앞 실행기"로만 쓴다 — 고치지 말 것(현장 코드 그대로여야 시험이 뜻을 가진다).
 using System;
 using System.IO;
 using System.Linq;
