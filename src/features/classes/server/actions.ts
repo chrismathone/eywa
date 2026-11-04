@@ -48,6 +48,7 @@ import { readFreeClosedNameRequest, type ClassNameConflict } from "../class-name
 import { freedLeftNotice, rollbackFreedClassName, writeWithClassNameGuard } from "./class-name-guard";
 import { ClassTermError, endClassWithName, reopenClassWithSchedules } from "./class-term-store";
 import { explainDbError, logDbError } from "@/lib/supabase/db-error";
+import { classFlagChanges } from "../class-flag-changes";
 
 export type ClassFormState =
   | {
@@ -352,6 +353,8 @@ export async function createClass(
       subject: input.subject,
       teacherId: input.teacherId,
       isSpecial: input.isSpecial,
+      // '수업보고서 미발송'(0174a)으로 만든 반인지 — 없으면 처음부터 미발송이었는지 되짚을 근거가 없다(2026-11-04 사고).
+      reportOptout: input.reportOptout,
       schedules: input.schedules.length,
       ...(input.validFrom || input.validTo ? { validFrom: input.validFrom ?? null, validTo: input.validTo ?? null } : {}),
     },
@@ -414,7 +417,12 @@ export async function updateClass(
     collectOverlaps(supabase, input, id),
     loadCurrentSlots(supabase, id, today),
     // 감사로그용 **변경 전 스냅샷** — 무엇이 바뀌었는지는 바꾸기 전에만 알 수 있다(독립 조회라 병렬, B4).
-    supabase.from("classes").select("class_name, subject, teacher_id, classroom_id").eq("id", id).maybeSingle(),
+    // 특강·수업보고서 미발송도 함께 읽는다 — 켜고 끈 기록이 없어 누가 미발송으로 바꿨는지 몰랐다(2026-11-04 사고).
+    supabase
+      .from("classes")
+      .select("class_name, subject, teacher_id, classroom_id, is_special, report_optout")
+      .eq("id", id)
+      .maybeSingle(),
     // 교시표 — "폼이 보낸 종료시각을 믿어도 되나" 판정에 쓴다(schedule-preserve `formEndTimeWins`).
     // 캐시된 조회지만 저장 경로에 직렬 왕복을 얹지 않으려고 여기서 함께 받는다(B4).
     getTenantSettings(),
@@ -426,7 +434,14 @@ export async function updateClass(
   if (slotRoomRes?.error) logDbError(slotRoomRes.error, "classes.updateClass.slotRooms");
   const slotRoomNames = new Map((slotRoomRes?.data ?? []).map((r) => [r.id as string, (r.name as string) || ""]));
   const before = beforeRes.data as
-    | { class_name: string; subject: string; teacher_id: string | null; classroom_id: string | null }
+    | {
+        class_name: string;
+        subject: string;
+        teacher_id: string | null;
+        classroom_id: string | null;
+        is_special: boolean | null;
+        report_optout: boolean | null;
+      }
     | null;
   // ⚠️ 승계 자료를 못 읽었으면 **아무것도 쓰기 전에** 멈춘다 — 빈 배열로 진행하면 delete 뒤 재insert가
   // 라벨·기간을 전부 null로 덮어쓰는데 그땐 복구가 불가능하다(규칙 B3: error를 `?? []`로 삼키지 않는다).
@@ -484,10 +499,27 @@ export async function updateClass(
   });
   if (!guarded.ok) return "conflict" in guarded ? nameConflictState(guarded.conflict) : { error: guarded.error };
 
+  // 🔴 반 행(미발송·특강 포함)은 여기서 이미 저장됐다 — 아래 교시 저장이 실패해 돌아가도 그 켜고 끄기는 남긴다.
+  //    안 남기면 다시 저장할 때 이전값이 이미 바뀐 값이라 누가 켰는지 끝내 기록되지 않는다(적대적 리뷰 2026-11-04 ·
+  //    11-04 사고 = 미발송을 누가 켰는지 몰랐다). 성공 경로는 아래 class_update 하나에 함께 남긴다.
+  const logFlagsBeforeFailedReturn = async () => {
+    const flags = classFlagChanges(before, input);
+    if (flags.length === 0) return;
+    await logAction({
+      action: "class_update",
+      targetType: "class",
+      targetLabel: input.className,
+      metadata: { classId: id, changed: flags.map((c) => c.field), changes: flags, note: "교시 저장 실패 — 반 정보만 저장됨" },
+    });
+  };
+
   // 스케줄 동기화 = **현재 유효한 행만** delete 후 재삽입. 만료 행(valid_to 지난 = 지난 배치 이력)은
   // 건드리지 않는다 — 옛 코드의 무조건 전삭제는 반 메모 한 줄 수정에도 3~6월 배치 기록을 영구 삭제했다.
   const del = await deleteCurrentSlots(supabase, id, today);
-  if (del.error) return { error: del.error };
+  if (del.error) {
+    await logFlagsBeforeFailedReturn();
+    return { error: del.error };
+  }
 
   // 🔴 담당·강의실이 바뀌거나 슬롯이 사라지면 **옛 배치를 마감 행으로 남긴다**(원장 2026-08-04
   //    "주차변경시에 실제로 일어났던 모든것이 반영되도록"). 지금까지는 같은 행을 덮어써서 지난 주를
@@ -588,6 +620,7 @@ export async function updateClass(
       if (restore.error && labSupported && isMissingColumnError(restore.error)) {
         restore = await supabase.from("class_schedules").insert(restoreRows(false));
       }
+      await logFlagsBeforeFailedReturn();
       return {
         error: restore.error
           ? "스케줄 저장에 실패했고 되돌리기도 실패했습니다. 이 반의 교시를 확인해주세요."
@@ -660,6 +693,8 @@ export async function updateClass(
       to: input.subject ? subjects.labelOf(input.subject) : null,
     });
   }
+  // 특강·수업보고서 미발송 켜고 끄기(2026-11-04) — "수업보고서 미발송 꺼짐 → 켜짐". 폼이 그 칸을 보냈을 때만 비교한다.
+  changes.push(...classFlagChanges(before, input));
 
   if (changes.length > 0) {
     await logAction({

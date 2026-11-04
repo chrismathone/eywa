@@ -1,5 +1,11 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-04 — 반 설정 '수업보고서 미발송' 안전장치: 보내던 반을 켜면 경고 + 확인 체크 · 켜고 끈 기록을 감사로그에
+- 사고(11-04): 10-30에 JJ 반을 한꺼번에 미발송으로 바꿨는데 14반은 매주 보고서를 보내던 반이었다 — 원스크린 보고서 칸이 잠기고 다음 날 ClassNote 정기 동기화가 그 반들의 보드 연결을 지워 선생님들이 보고서를 못 보냈다. 반 수정 감사로그는 담임·강의실·반 이름·과목·배치만 비교해서 누가 켰는지 남지 않았다.
+- 경고: 반 수정 화면에서 꺼져 있던 반을 켜면 최근 30일 ClassNote 발송 건수(편집 화면 서버 컴포넌트의 기존 `Promise.all`에서 count · 행을 받지 않음)와 결과(보고서 칸 잠김 · ClassNote를 쓰는 지점의 수학 반이면 반 보드 연결도 다음 정기 동기화 때 풀림 — 미발송 수학 반은 반 보드 대상 밖 · 11-04 되돌림 · 영어 반 방 연결은 그대로라 영어 반엔 잠금만)를 알리고, 확인 체크(이름 없는 `required` 칸)를 해야 저장된다. 못 세면 그래도 경고 · 0건·이미 미발송·끄는 쪽·새 반은 경고 없음 · 서버는 막지 않는다. 이름 충돌의 '그 반 이름을 바꾸고 저장'도 같은 검사(`reportValidity`)를 거친다. 보고서 칸 설명의 '반 공지는 그대로'는 뺐다(수학 미발송 반은 반 보드로 가는 공지도 멈춘다). 교시 저장이 실패해 돌아가도 이미 저장된 미발송·특강 변경은 감사로그에 남긴다(note '교시 저장 실패 — 반 정보만 저장됨').
+- 감사로그: `class_update` `changes`에 '수업보고서 미발송'·'특강' 꺼짐 ↔ 켜짐(폼이 보낸 칸만 · 변경 전 조회에 두 칸 추가) · `class_create` metadata에 `reportOptout`. 감사 화면은 '수업보고서 미발송 꺼짐 → 켜짐'으로 읽는다.
+- 파일: [`report-optout-warning.ts`](../src/features/classes/report-optout-warning.ts)(판정·문구) · [`class-flag-changes.ts`](../src/features/classes/class-flag-changes.ts)(감사 항목) · `classes/server/report-optout-sent.ts`(건수) · `classes/_components/class-report-optout-confirm.tsx`(확인 상자) + 테스트.
+
 ## 2026-11-03 — ClassNote 전 과목 퇴원 45일 뒤 명부 퇴원처리(퇴소 · 스위치 기본 꺼짐 = 관찰 모드 · 직전 글·댓글 백업 · 하루 10명 · 명부 재조회로 확인 · 요청한 원아는 결과와 무관하게 감사로그) + 자동 해제 리뷰 보강(우리 센터 배정만 셈 · ④ 분모 · 휴원 대조 · 영어 방 다른 반 · 안 내보낸 원아가 사라지면 멈춤) — 상세 [classnote-integration.md §10.5-b · §11 'Phase 2 구현'](classnote-integration.md)
 
 ## 2026-11-03 — ClassNote 자동 해제 범위 확장(영어 반 방·종강 7일 뒤 반 보드·1인 보드) · JJ 자리 반도 연결·배정·해제(학생이 있을 때만 새 보드 · 보고서 없음) · ④ 대량 보류는 최근 7일 안에 끝난 수강만 · 휴원은 어디서도 해제 안 함 · 🔴 마지막 배정은 안 뗀다(떼면 자동 퇴소 — 11-02 실측 2건 · 퇴소 API 실측은 §11) — 상세 [classnote-integration.md §10.5-b](classnote-integration.md) · [decisions/reports-ai.md](decisions/reports-ai.md) '자동 해제'

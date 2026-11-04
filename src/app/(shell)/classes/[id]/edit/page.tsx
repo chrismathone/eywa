@@ -8,7 +8,9 @@ import {
   getClassTeacherOptions,
 } from "@/features/classes/server/queries";
 import { getClassroomOptions } from "@/features/enrollments/server/queries";
+import { countRecentSentReports } from "@/features/classes/server/report-optout-sent";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { classnoteModuleOn } from "@/features/owner/classnote-gate";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import { isCurrentSlot } from "@/features/classes/schedule-preserve";
@@ -26,13 +28,17 @@ export default async function EditClassPage({
 }) {
   await requireAccess("classes");
   const { id } = await params;
+  const today = kstToday();
 
-  const [klass, teachers, classrooms, settings] = await Promise.all([
+  const [klass, teachers, classrooms, settings, recentSentReports] = await Promise.all([
     getClassDetail(id),
     getClassTeacherOptions(),
     // 보관된 강의실이라도 **이 반에 배정돼 있으면** 선택지에 남긴다(안 그러면 저장 시 배정이 조용히 지워진다).
     getClassroomOptions({ keepForClassId: id }),
     getTenantSettings(),
+    // '수업보고서 미발송'을 켤 때 경고할 최근 30일 발송 건수(2026-11-04 사고) — 행을 받지 않는 count라 가볍다(B2).
+    // 반 정보와 독립이라 함께 받는다(B4). 못 세면 null(화면은 그래도 경고) — 이 조회 때문에 화면이 안 열리지 않는다.
+    countRecentSentReports(id, today),
   ]);
 
   if (!klass) notFound();
@@ -52,7 +58,6 @@ export default async function EditClassPage({
   // 폼이 편집하는 대상 = **현재 유효한 슬롯만**. 운영 종료일이 지난 행은 지난 배치의 이력이라
   // (영어 시트 구조 가져오기가 옛 배치를 마감하고 새 배치를 넣는다) 화면에 섞으면 ① 같은 칸에 옛/현
   // 두 행이 겹쳐 보이고 ② 저장 시 옛 강사·강의실 라벨이 현재 행에 되살아난다. 서버도 같은 범위만 쓴다.
-  const today = kstToday();
   const liveSlots = klass.scheduleSlots.filter((s) => isCurrentSlot(s.validTo, today));
   const historyCount = klass.scheduleSlots.length - liveSlots.length;
   // 운영 기간 프리필 — 기간은 스케줄 **슬롯마다** 있고 폼은 반 단위 한 쌍이라, 전 슬롯이 같을 때만
@@ -82,6 +87,7 @@ export default async function EditClassPage({
           bgColor: klass.bgColor,
           isSpecial: klass.isSpecial,
           reportOptout: klass.reportOptout,
+          recentSentReports,
           ...(klass.englishTrack ? { englishTrack: klass.englishTrack } : {}),
           validFrom: period.validFrom,
           validTo: period.validTo,
@@ -103,6 +109,7 @@ export default async function EditClassPage({
         subjectOptions={subjectOptions}
         periodsConfig={periodsConfig}
         showEnglishTrack={isModuleEnabled(settings.modules.disabled, "eie")}
+        classnoteOn={classnoteModuleOn(settings)}
       />
     </div>
   );

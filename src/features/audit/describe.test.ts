@@ -353,6 +353,23 @@ describe("auditDetail — 액션별 한글 상세", () => {
     ).toBe("변경: 수업 배치 · 강의실 없음 → 205호");
   });
 
+  it("class_update: 수업보고서 미발송·특강 켜고 끄기는 '꺼짐 → 켜짐'으로 읽는다(2026-11-04 사고)", () => {
+    // 10-30 JJ 반 일괄 미발송 — 반 수정 기록에 이 칸이 없어 누가 켰는지 몰랐다(class-flag-changes.ts).
+    expect(
+      auditDetail(
+        "class_update",
+        {
+          changed: ["특강", "수업보고서 미발송"],
+          changes: [
+            { field: "특강", from: "켜짐", to: "꺼짐" },
+            { field: "수업보고서 미발송", from: "꺼짐", to: "켜짐" },
+          ],
+        },
+        ctx(),
+      ),
+    ).toBe("변경: 특강 켜짐 → 꺼짐 · 수업보고서 미발송 꺼짐 → 켜짐");
+  });
+
   it("🔴 class_update 옛 행(항목 이름만)은 그대로 — 없는 화살표를 지어내지 않는다", () => {
     // 2026-08-05 이전에 쌓인 행에는 이전값이 아예 없다. "강의실 없음 → 없음"으로 보이면 거짓말이 된다.
     expect(auditDetail("class_update", { changed: ["강의실"] }, ctx())).toBe("변경: 강의실");

@@ -58,6 +58,11 @@ export type ClassFormDefaults = {
   /** 특강 토글값(0133a 컬럼 그대로). 이름 폴백은 서버 판정용이라 폼 체크상태에 섞지 않는다. */
   isSpecial?: boolean;
   reportOptout?: boolean;
+  /**
+   * 최근 30일 동안 이 반이 ClassNote로 보낸 수업보고서 건수 — '수업보고서 미발송'을 켤 때 경고·확인용(2026-11-04 사고).
+   * 편집 화면만 넘긴다 · undefined = 새 반(경고 없음) · null = 못 셌다(그래도 경고) — report-optout-warning.ts.
+   */
+  recentSentReports?: number | null;
   /** 영어 프로그램 구분(0176a) — 영어 반이 아니면 undefined. */
   englishTrack?: EnglishTrack | null;
   /** 운영 기간 프리필 — 스케줄 슬롯들의 공통값. 슬롯마다 다르면 그 칸은 **비워** 주고 periodMixed로 알린다. */
@@ -109,6 +114,7 @@ export function ClassForm({
   scope,
   today,
   showEnglishTrack = true,
+  classnoteOn = false,
 }: {
   mode: "create" | "edit";
   defaults?: ClassFormDefaults;
@@ -127,6 +133,8 @@ export function ClassForm({
    * 안 그리면 폼에 `englishTrack`이 없어 서버가 새 반은 미분류(null)로 두고, 수정은 기존 값을 건드리지 않는다.
    */
   showEnglishTrack?: boolean;
+  /** 이 지점이 ClassNote 모듈을 쓰나(`classnoteModuleOn`) — 꺼진 지점엔 보고서 칸의 ClassNote 문장을 안 보인다(기본 false). */
+  classnoteOn?: boolean;
 }) {
   // 🔴 과목 선택지는 학원설정 단일 소스 — 서버 부모가 안 주면 셸의 `OperationsProvider`에서 읽는다
   //    (옛 `DEFAULT_SUBJECT_OPTIONS` 하드코딩 폐기, 감사 D9 · CLAUDE.md "운영 enum 하드코딩 금지").
@@ -291,6 +299,8 @@ export function ClassForm({
   const freeClosedName = () => {
     const form = formRef.current;
     if (!form || !nameConflict?.freeTo) return;
+    // 직접 보내는 길이라 브라우저 제출 검사를 안 거친다 — 미발송 확인 체크(class-report-optout-confirm.tsx) 등을 여기서 같이 본다.
+    if (!form.reportValidity()) return;
     const fd = new FormData(form);
     fd.set(FREE_CLOSED_NAME_FIELDS.flag, "1");
     fd.set(FREE_CLOSED_NAME_FIELDS.name, nameConflict.name);
@@ -438,7 +448,14 @@ export function ClassForm({
         <ClassEnglishTrackField value={englishTrack} onChange={setEnglishTrack} />
       ) : null}
 
-      <ClassReportFields reportOptout={reportOptout} onReportOptoutChange={setReportOptout} />
+      <ClassReportFields
+        reportOptout={reportOptout}
+        onReportOptoutChange={setReportOptout}
+        initialReportOptout={defaults?.reportOptout ?? false}
+        recentSentReports={defaults?.recentSentReports}
+        subject={subject}
+        classnoteOn={classnoteOn}
+      />
 
       <section className="space-y-3 border-t pt-4">
         <header>
