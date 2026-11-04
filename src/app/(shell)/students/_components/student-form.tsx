@@ -24,7 +24,8 @@ import { DraftBanner } from "@/components/forms/draft-banner";
 import { WithdrawalReasonSlot } from "./withdrawal-reason-slot";
 import { SIBLING_FIELD_NAMES, SiblingsField } from "./siblings-field";
 import { Guardian2Field } from "./guardian2-field";
-import { Field, GUARDIAN_RELATIONS, inputClass } from "./student-form-field";
+import { Field, inputClass } from "./student-form-field";
+import { GUARDIAN_RELATIONS } from "@/features/students/guardian";
 import type { SiblingOption } from "@/features/students/siblings";
 
 type Mode = "create" | "edit";
@@ -349,7 +350,7 @@ export function StudentForm({
           {/* 보호자2(원장 2026-11-04) — 값이 있으면 열린 채로, 없으면 '+ 보호자 추가'. 관계 목록은 보호자1과 같다. */}
           <Guardian2Field
             initial={{ name: v.parent2Name, phone: v.parent2Phone, relation: v.parent2Relation }}
-            phoneError={errors.parent2Phone}
+            errors={{ name: errors.parent2Name, phone: errors.parent2Phone, relation: errors.parent2Relation }}
           />
           {mode === "edit" && initialValue?.id && siblings ? (
             // key = 열 때 칩·자동 추천 — 손대지 않은 창이 새로고침돼 새 짝이 오면 칸을 다시 그린다(칩과 '열 때 칩'이 어긋나면

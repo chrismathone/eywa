@@ -47,6 +47,7 @@ import { canViewStudentDetail } from "./read-scope";
 import { canManageStudentStatusNow } from "./status-access";
 import { saveStudentSiblings } from "./siblings";
 import { statusCreationNeedsPermission, STUDENT_STATUS_DENIED } from "../status-access";
+import { GUARDIAN2_NAME_MAX, isGuardianRelation } from "../guardian";
 
 export type StudentFormState =
   | {
@@ -128,6 +129,13 @@ function validate(input: ReturnType<typeof readForm>): Record<string, string> | 
   }
   if (input.parent2Phone && !/^[\d\s\-+()]{8,}$/.test(input.parent2Phone)) {
     errors.parent2Phone = "연락처 형식을 확인해주세요";
+  }
+  // 보호자2만 — 관계는 화면 목록(보호자1과 같은 한 벌) 밖의 값을 받지 않고, 이름은 길이 상한(보호자1의 종전 동작은 그대로).
+  if (input.parent2Name && input.parent2Name.length > GUARDIAN2_NAME_MAX) {
+    errors.parent2Name = `보호자2 이름은 ${GUARDIAN2_NAME_MAX}자까지 적을 수 있습니다`;
+  }
+  if (input.parent2Relation && !isGuardianRelation(input.parent2Relation)) {
+    errors.parent2Relation = "보호자2 관계는 목록에서 골라 주세요";
   }
   if (input.status === "withdrawn" && !input.withdrawnAt) {
     errors.withdrawnAt = "퇴원일을 입력해주세요";

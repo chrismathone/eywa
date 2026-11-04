@@ -27,6 +27,19 @@ describe("원생 형제 판정", () => {
     expect(siblingBasis(withMom("a", "김유하", null, "053-333-0503", "장은혜"), withMom("b", "박서준", "010-5555-6666", null, "장은혜"))).toBe("name");
   });
 
+  it("🔴 보호자2는 '다르다'(확인 후보)의 근거가 아니다 — 보호자1 기준 판정은 종전과 같다", () => {
+    const withMom = (id: string, name: string, parent_phone: string | null, parent2_phone: string | null, parent_name: string | null = null) =>
+      ({ id, name, parent_name, parent_phone, parent2_phone });
+    // A = 보호자1 일반전화 + 보호자2 엄마 휴대폰 · B = 아빠 휴대폰 · 학부모 이름 같음 → 종전처럼 이름 근거 형제(보호자2 없을 때와 같다)
+    const a = withMom("a", "김유하", "053-333-0503", "010-7300-2311", "장은혜");
+    const b = withMom("b", "박서준", "010-5555-6666", null, "장은혜");
+    expect(siblingBasis(a, b)).toBe("name");
+    expect(siblingBasis(b, a)).toBe("name");
+    expect(siblingBasis({ ...a, parent2_phone: null }, b)).toBe(siblingBasis(a, b));
+    // 양쪽 다 보호자2만 있고 서로 다른 번호여도 보호자1이 없으면 이름 근거
+    expect(siblingBasis(withMom("a", "김유하", null, "010-1111-2222", "장은혜"), withMom("b", "박서준", null, "010-3333-4444", "장은혜"))).toBe("name");
+  });
+
   it("형제가 아니다 — 아무것도 안 같음 · 학부모 이름 한 글자 · 일반전화만 같음 · 자기 자신", () => {
     expect(siblingBasis(kid("a", "김유하", "장은혜", "010-7300-2311"), kid("b", "박서준", "이민정", "010-1111-2222"))).toBeNull();
     expect(siblingBasis(kid("a", "김유하", "장", null), kid("b", "박서준", "장", null))).toBeNull();

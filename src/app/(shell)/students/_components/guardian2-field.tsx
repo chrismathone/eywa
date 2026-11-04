@@ -2,12 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Field, GUARDIAN_RELATIONS, inputClass } from "./student-form-field";
+import { GUARDIAN2_NAME_MAX, GUARDIAN_RELATIONS } from "@/features/students/guardian";
+import { Field, inputClass } from "./student-form-field";
 
 /** 보호자2 칸 이름(s2_0024) — 서버 `readForm`이 같은 이름을 읽는다. */
 export const GUARDIAN2_FIELD_NAMES = ["parent2Name", "parent2Phone", "parent2Relation"] as const;
 
 export type Guardian2Value = { name: string | null; phone: string | null; relation: string | null };
+/** 서버 검증 오류(`readForm` 칸 이름 parent2Name·parent2Phone·parent2Relation) — 칸 아래에 보인다. */
+export type Guardian2Errors = { name?: string; phone?: string; relation?: string };
 
 /**
  * 원생 폼 '보호자 연락처'의 둘째 보호자 줄(원장 2026-11-04 — 보호자를 한 명 더). 값이 있으면 처음부터 열려 있고, 없으면
@@ -16,15 +19,16 @@ export type Guardian2Value = { name: string | null; phone: string | null; relati
  * 🔑 칸은 닫혀 있어도 폼 안에 그대로 둔다(숨김만) — 닫힌 줄은 빈 값으로 실려 저장과 화면이 늘 같고, 초안 되살리기도 값을 넣을
  *    자리가 있다. 숨은 칸에 값이 들어오면(초안 되살리기) 줄을 연다 — 보이지 않는 값이 저장되지 않게.
  */
-export function Guardian2Field({ initial, phoneError }: { initial: Guardian2Value; phoneError?: string }) {
+export function Guardian2Field({ initial, errors = {} }: { initial: Guardian2Value; errors?: Guardian2Errors }) {
   const filled = !!(initial.name || initial.phone || initial.relation);
   const [open, setOpen] = useState(filled);
-  // 연락처 오류는 줄이 닫혀 있어도 보이게 연다 — 단 '삭제'를 누른 뒤엔 닫는다(다음 제출의 폼 리셋에서 풀린다).
+  // 칸 오류는 줄이 닫혀 있어도 보이게 연다 — 단 '삭제'를 누른 뒤엔 닫는다(다음 제출의 폼 리셋에서 풀린다).
   const [dismissed, setDismissed] = useState(false);
   const rowRef = useRef<HTMLDivElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const focusOnOpen = useRef(false);
-  const shown = open || (!!phoneError && !dismissed);
+  const hasError = !!(errors.name || errors.phone || errors.relation);
+  const shown = open || (hasError && !dismissed);
 
   // 폼 리셋(React 19는 제출 뒤 폼을 연 때 값으로 되돌린다)이면 칸 값이 연 때 값으로 돌아가니 열림도 연 때로 맞춘다 —
   // '삭제'로 닫은 줄이 숨은 채 옛 값을 다시 싣지 않게.
@@ -68,17 +72,18 @@ export function Guardian2Field({ initial, phoneError }: { initial: Guardian2Valu
     >
       <div hidden={!shown} className="space-y-2">
         <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Field label="보호자2 이름" htmlFor="parent2Name">
+          <Field label="보호자2 이름" htmlFor="parent2Name" error={errors.name}>
             <input
               ref={nameRef}
               id="parent2Name"
               name="parent2Name"
+              maxLength={GUARDIAN2_NAME_MAX}
               defaultValue={initial.name ?? ""}
               className={inputClass}
               placeholder="예: 김어머니"
             />
           </Field>
-          <Field label="보호자2 연락처" htmlFor="parent2Phone" error={phoneError}>
+          <Field label="보호자2 연락처" htmlFor="parent2Phone" error={errors.phone}>
             <input
               id="parent2Phone"
               name="parent2Phone"
@@ -89,7 +94,7 @@ export function Guardian2Field({ initial, phoneError }: { initial: Guardian2Valu
               placeholder="010-1234-5678"
             />
           </Field>
-          <Field label="보호자2 관계" htmlFor="parent2Relation">
+          <Field label="보호자2 관계" htmlFor="parent2Relation" error={errors.relation}>
             <select id="parent2Relation" name="parent2Relation" defaultValue={initial.relation ?? ""} className={inputClass}>
               <option value="">선택</option>
               {GUARDIAN_RELATIONS.map((r) => (

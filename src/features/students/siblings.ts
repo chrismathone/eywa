@@ -6,7 +6,9 @@
  * 자동 판정(저장하지 않고 볼 때마다):
  *  · 학부모 휴대폰이 같다 → 형제(숫자만 · +82→0 · 휴대폰만 — `phoneKeyOf`, 콜&상담 같은 학생 판정과 같은 열쇠).
  *    보호자2 휴대폰(s2_0024)도 같은 근거다 — 두 원생의 보호자1·보호자2 번호 중 하나라도 겹치면 형제(한 집의 엄마·아빠 번호가 갈려 적힌다).
- *  · 학부모 이름이 같고 연락처가 부딪히지 않는다(한쪽이라도 보호자 휴대폰이 하나도 없다) → 형제
+ *    🔴 보호자2는 '같다'의 근거만 더한다 — '다르다'(확인 후보)는 종전처럼 **보호자1 휴대폰끼리**만 본다. 보호자2를 적었다는 이유로
+ *    이름 근거 형제가 확인 후보로 내려가지 않게(보호자1 기준 판정은 종전과 같다).
+ *  · 학부모 이름이 같고 연락처가 부딪히지 않는다(한쪽이라도 보호자1 휴대폰이 없다) → 형제
  *  · 🔴 학부모 이름만 같고 휴대폰이 서로 다르면 형제로 치지 않는다 — 수정 화면에 '확인 후보'로만 띄운다.
  *    2026-10-19 침산 실측: 이름만 같은 17쌍이 전부 휴대폰이 6~8자리 달랐고 아이 성도 대부분 달랐다(다른 집 학부모의 같은 이름).
  *  · 학생 이름이 같으면(접미사 A·B 무시) 형제가 아니다 — 같은 아이의 중복 기록이다(실측 8쌍).
@@ -46,11 +48,11 @@ export function siblingBasis(me: SiblingPerson, other: SiblingPerson): SiblingBa
   if (me.id === other.id) return null;
   const mine = childKey(me.name);
   if (mine && mine === childKey(other.name)) return null;
-  const pa = guardianPhoneKeys(me);
   const pb = guardianPhoneKeys(other);
-  if ([...pa].some((k) => pb.has(k))) return "phone";
+  if ([...guardianPhoneKeys(me)].some((k) => pb.has(k))) return "phone";
   const na = personName(me.parent_name);
-  if (na.length >= 2 && na === personName(other.parent_name)) return pa.size > 0 && pb.size > 0 ? "conflict" : "name";
+  // '다르다'는 보호자1 휴대폰끼리만(위 주석) — 둘 다 있고 서로 다를 때만 확인 후보.
+  if (na.length >= 2 && na === personName(other.parent_name)) return phoneKeyOf(me.parent_phone) && phoneKeyOf(other.parent_phone) ? "conflict" : "name";
   return null;
 }
 

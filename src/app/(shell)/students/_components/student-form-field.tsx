@@ -1,10 +1,8 @@
 /** 원생 등록·수정 폼의 칸 틀 — 폼 본문(`student-form.tsx`)과 보호자2 줄(`guardian2-field.tsx`)이 같은 모양을 쓴다. */
+// 보호자 관계 목록·보호자2 이름 상한은 저장 검증과 한 벌이라 기능 모듈에 둔다(`@/features/students/guardian`).
 
 export const inputClass =
   "border-input bg-background w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring";
-
-/** 보호자 관계 선택지 — 보호자1·보호자2가 같은 목록(원장 2026-11-04). 값이 곧 저장값이다. */
-export const GUARDIAN_RELATIONS = ["부", "모", "조부", "조모", "기타"] as const;
 
 export function Field({
   label,

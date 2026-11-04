@@ -1,17 +1,17 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { GUARDIAN2_FIELD_NAMES, Guardian2Field, type Guardian2Value } from "./guardian2-field";
-import { GUARDIAN_RELATIONS } from "./student-form-field";
+import { GUARDIAN2_FIELD_NAMES, Guardian2Field, type Guardian2Errors, type Guardian2Value } from "./guardian2-field";
+import { GUARDIAN2_NAME_MAX, GUARDIAN_RELATIONS } from "@/features/students/guardian";
 
 afterEach(cleanup);
 
 const EMPTY: Guardian2Value = { name: null, phone: null, relation: null };
 
-function renderInForm(initial: Guardian2Value, phoneError?: string) {
+function renderInForm(initial: Guardian2Value, errors?: Guardian2Errors) {
   const onInput = vi.fn();
   const utils = render(
     <form data-testid="form" onInput={onInput}>
-      <Guardian2Field initial={initial} phoneError={phoneError} />
+      <Guardian2Field initial={initial} errors={errors} />
     </form>,
   );
   const form = utils.getByTestId("form") as HTMLFormElement;
@@ -70,10 +70,19 @@ describe("원생 폼 보호자2 줄(s2_0024)", () => {
     expect(phone).toBeVisible();
   });
 
-  it("연락처 오류는 닫힌 줄도 열어 보여 준다 · '삭제'를 누르면 닫힌다", () => {
-    renderInForm(EMPTY, "연락처 형식을 확인해주세요");
+  it("칸 오류(연락처·이름·관계)는 닫힌 줄도 열어 보여 준다 · '삭제'를 누르면 닫힌다", () => {
+    renderInForm(EMPTY, { phone: "연락처 형식을 확인해주세요" });
     expect(screen.getByText("연락처 형식을 확인해주세요")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "보호자2 삭제" }));
     expect(screen.getByLabelText("보호자2 연락처")).not.toBeVisible();
+    cleanup();
+    renderInForm(EMPTY, { name: "이름 오류", relation: "관계 오류" });
+    expect(screen.getByText("이름 오류")).toBeVisible();
+    expect(screen.getByText("관계 오류")).toBeVisible();
+  });
+
+  it("이름 칸은 서버 상한과 같은 길이로 막힌다", () => {
+    renderInForm(EMPTY);
+    expect(screen.getByLabelText("보호자2 이름")).toHaveAttribute("maxLength", String(GUARDIAN2_NAME_MAX));
   });
 });

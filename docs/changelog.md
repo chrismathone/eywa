@@ -1,6 +1,6 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
-## 2026-11-04 — 원생 보호자2(이름·연락처·관계) + 같은 사람 대조에 보호자2 번호 (s2_0024 · 번호 임시 · ⏳ SQL 미적용 · 워커는 따로 커밋) — 결정 [students.md](decisions/students.md)
+## 2026-11-04 — 원생 보호자2(이름·연락처·관계) + 같은 사람 대조에 보호자2 번호 (s2_0024 · 번호 임시 · ✅ SQL 운영 적용 2026-11-04 15:05 CLI(원장 승인) · 워커는 따로 커밋) — 결정 [students.md](decisions/students.md)
 - 원장 *"메이크에듀가 아니라 에이와"* · *"여기서해서 올려 그냥"* — 원생 수정 화면 '보호자 연락처'에 보호자를 한 명 더. 계기: 전유솔은 ClassNote 보호자1이 엄마 번호, 에이와엔 아빠 번호만 있어 반 보드 자동 배정이 '보호자 전화 불일치'로 막혔다.
 - DB: `students.parent2_name` · `parent2_phone` · `parent2_relation`(nullable text · `set local lock_timeout = '3s'`) · 되돌리기 `scripts/_oneoff/revert-s2_0024-student-guardian2.sql`. 🔴 웹보다 먼저 적용([[#95]] — 원생 상세·수정·목록 검색·형제·중복 후보·`getStudentById`를 쓰는 화면이 이 칸을 읽는다).
 - 화면: 보호자1 줄 아래 '+ 보호자 추가' → 보호자2 줄(`guardian2-field.tsx`) · 값이 있으면 열린 채 · '삭제'로 비움 · 관계 목록은 보호자1과 한 벌(`student-form-field.tsx`로 칸 틀·입력 스타일·관계 목록을 뺐다). 원생 상세 프로필에 적어 둔 칸만.
