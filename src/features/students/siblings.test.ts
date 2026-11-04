@@ -14,7 +14,7 @@ describe("원생 형제 판정", () => {
     expect(siblingBasis(kid("a", "김유하", "장은혜", "010-7300-2311"), kid("b", "박서준", "장은혜", "010-1111-2222"))).toBe("conflict");
   });
 
-  it("보호자2 휴대폰(s2_0024)도 같은 근거 — 한쪽 보호자1 = 다른 쪽 보호자2면 형제 · 이름만 같고 보호자 번호가 하나도 안 겹치면 확인 후보", () => {
+  it("보호자2 휴대폰(s2_0022)도 같은 근거 — 한쪽 보호자1 = 다른 쪽 보호자2면 형제 · 이름만 같고 보호자 번호가 하나도 안 겹치면 확인 후보", () => {
     const withMom = (id: string, name: string, parent_phone: string | null, parent2_phone: string | null, parent_name: string | null = null) =>
       ({ id, name, parent_name, parent_phone, parent2_phone });
     // 동생은 아버지 번호만, 형은 보호자1 아버지 · 보호자2 어머니 — 어머니 번호로만 적힌 셋째와도 형제

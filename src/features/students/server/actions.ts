@@ -110,7 +110,7 @@ function readForm(formData: FormData, schoolAliases: readonly SchoolSaveAlias[])
     parentName: get("parentName") || null,
     parentPhone: normalizePhone(get("parentPhone") || null),
     parentRelation: get("parentRelation") || null,
-    // 보호자2(s2_0024) — 정규화·검증은 보호자1 연락처와 같다.
+    // 보호자2(s2_0022) — 정규화·검증은 보호자1 연락처와 같다.
     parent2Name: get("parent2Name") || null,
     parent2Phone: normalizePhone(get("parent2Phone") || null),
     parent2Relation: get("parent2Relation") || null,
@@ -462,7 +462,7 @@ export async function updateStudent(
       parent_name: input.parentName,
       parent_phone: input.parentPhone,
       parent_relation: input.parentRelation,
-      // 보호자2 칸(s2_0024)은 그 칸이 있던 화면에서만 건드린다 — 칸 없이 들어온 저장(배포 사이 열려 있던 옛 화면)이 보호자2를 지우지 않게.
+      // 보호자2 칸(s2_0022)은 그 칸이 있던 화면에서만 건드린다 — 칸 없이 들어온 저장(배포 사이 열려 있던 옛 화면)이 보호자2를 지우지 않게.
       ...(formData.has("parent2Phone")
         ? { parent2_name: input.parent2Name, parent2_phone: input.parent2Phone, parent2_relation: input.parent2Relation }
         : {}),

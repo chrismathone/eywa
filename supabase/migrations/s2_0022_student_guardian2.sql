@@ -1,4 +1,6 @@
--- s2_0024 — 원생 보호자2(이름·연락처·관계) 칸 (2026-11-04) — ⚠️ 번호는 임시: main에 합칠 때 다음 빈 번호로 민다(docs/sql-season2.md §D)
+-- s2_0022 — 원생 보호자2(이름·연락처·관계) 칸 (2026-11-04) — ✅ 운영 적용 2026-11-04 15:05 · CLI(원장 승인)
+-- 번호: 적용 때는 임시 번호 s2_0024였고, main에 합치며 다음 빈 번호 s2_0022로 옮겼다(docs/sql-season2.md §D). 본문은 적용한 글자 그대로다 —
+--   아래 칸 설명(comment on column)의 "(s2_0024)"도 운영 DB 칸 설명과 같게 두려고 일부러 고치지 않았다.
 --
 -- 왜: 원장 *"메이크에듀가 아니라 에이와"* · *"여기서해서 올려 그냥"* — 원생 수정 화면 '보호자 연락처'에 보호자를 한 명 더 적게.
 --     계기: 전유솔은 ClassNote 보호자1이 어머니 번호인데 에이와에는 아버지 번호만 있어 반 보드 자동 배정이 '보호자 전화 불일치'로 막혔다.
@@ -17,7 +19,7 @@
 --    where table_schema = 'public' and table_name = 'students'
 --      and column_name in ('parent2_name', 'parent2_phone', 'parent2_relation');   -- 기대: 3
 --
--- 되돌리기: scripts/_oneoff/revert-s2_0024-student-guardian2.sql (웹·AywaSync를 먼저 되돌린 뒤)
+-- 되돌리기: scripts/_oneoff/revert-s2_0022-student-guardian2.sql (웹·AywaSync를 먼저 되돌린 뒤)
 
 begin;
 set local lock_timeout = '3s';

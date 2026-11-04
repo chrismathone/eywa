@@ -62,7 +62,7 @@ describe("duplicateReasons — 무엇이 같아서 후보인가", () => {
     expect(duplicateReasons(a, b)).toEqual(["parent_phone"]);
   });
 
-  it("(b) 보호자2 연락처(s2_0024)가 상대의 보호자1·보호자2 번호와 겹쳐도 연락처 근거 — 한 집의 두 보호자", () => {
+  it("(b) 보호자2 연락처(s2_0022)가 상대의 보호자1·보호자2 번호와 겹쳐도 연락처 근거 — 한 집의 두 보호자", () => {
     const mom = student({ id: "b", name: "김수아", grade: "초6", school: "산격중", parentPhone: "010-9999-0000", parent2Phone: "010-1234-5678" });
     expect(duplicateReasons(a, mom)).toEqual(["parent_phone"]);
     expect(duplicateReasons(mom, a)).toEqual(["parent_phone"]);
@@ -206,7 +206,7 @@ describe("groupDuplicateCandidates — 묶기·정렬", () => {
     expect(groups[0]!.reasons).toEqual(["natural_key", "parent_phone"]);
   });
 
-  it("보호자2 번호(s2_0024)로도 묶는다 — 한쪽은 아버지 번호만, 다른 쪽은 보호자2에 같은 번호", () => {
+  it("보호자2 번호(s2_0022)로도 묶는다 — 한쪽은 아버지 번호만, 다른 쪽은 보호자2에 같은 번호", () => {
     const rows = [
       student({ id: "a", name: "한별", grade: "초5", school: "칠성초", parentPhone: "010-2222-3333" }),
       student({ id: "b", name: "한별", grade: "초5", school: "산격초", parentPhone: "010-4444-5555", parent2Phone: "01022223333" }),

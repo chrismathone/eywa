@@ -27,7 +27,7 @@ export type SameNameInput = {
   grade: string | null;
   school: string | null;
   parentPhone: string | null;
-  /** 보호자2 연락처(s2_0024) — 통합 섹션의 연락처 신호가 보는 값이라 함께 넘긴다(안 넘기면 그 쌍이 두 섹션에 동시에 뜬다). */
+  /** 보호자2 연락처(s2_0022) — 통합 섹션의 연락처 신호가 보는 값이라 함께 넘긴다(안 넘기면 그 쌍이 두 섹션에 동시에 뜬다). */
   parent2Phone?: string | null;
   /**
    * 동기화 자동 접미사 표식(0078a). 통합 섹션의 세 번째 신호(`auto_suffix`)가 이 값을 보므로 **그쪽이

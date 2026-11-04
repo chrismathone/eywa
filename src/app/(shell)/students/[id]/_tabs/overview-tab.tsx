@@ -122,7 +122,7 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
             <Field label="학부모 이름" value={student.parentName} />
             {student.parentRelation ? <Field label="보호자 관계" value={student.parentRelation} /> : null}
             <Field label="학부모 연락처" value={student.parentPhone} mono />
-            {/* 보호자2(s2_0024) — 적어 둔 칸만 보인다(보호자1 줄은 빈칸도 '—'로 그대로). */}
+            {/* 보호자2(s2_0022) — 적어 둔 칸만 보인다(보호자1 줄은 빈칸도 '—'로 그대로). */}
             {student.parent2Name ? <Field label="보호자2 이름" value={student.parent2Name} /> : null}
             {student.parent2Relation ? <Field label="보호자2 관계" value={student.parent2Relation} /> : null}
             {student.parent2Phone ? <Field label="보호자2 연락처" value={student.parent2Phone} mono /> : null}

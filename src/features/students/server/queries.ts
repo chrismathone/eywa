@@ -158,7 +158,7 @@ const STUDENT_PAGE_COLUMNS =
   "id, name, english_name, school, grade, status, enrolled_at, parent_phone";
 
 // 검색 필드 → 컬럼 매핑. all은 데스크 응대 빈도 높은 이름·학교·전화·보호자명 묶음.
-// 보호자2(s2_0024)도 같은 자리에서 찾는다 — 어머니 번호로 물어도 아버지 번호만 적힌 칸에 막히지 않게(원장 2026-11-04).
+// 보호자2(s2_0022)도 같은 자리에서 찾는다 — 어머니 번호로 물어도 아버지 번호만 적힌 칸에 막히지 않게(원장 2026-11-04).
 const SEARCH_FIELD_COLS: Record<SearchField, string[]> = {
   all: ["name", "english_name", "school", "student_phone", "parent_phone", "parent2_phone", "parent_name", "parent2_name"],
   name: ["name", "english_name"],
@@ -714,7 +714,7 @@ export type StudentDetail = {
   parentName: string | null;
   parentPhone: string | null;
   parentRelation: string | null;
-  /** 보호자2(s2_0024) — 원생 수정 화면 '보호자 연락처'의 둘째 줄. */
+  /** 보호자2(s2_0022) — 원생 수정 화면 '보호자 연락처'의 둘째 줄. */
   parent2Name: string | null;
   parent2Phone: string | null;
   parent2Relation: string | null;

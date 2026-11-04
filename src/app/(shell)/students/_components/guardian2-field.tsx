@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { GUARDIAN2_NAME_MAX, GUARDIAN_RELATIONS } from "@/features/students/guardian";
 import { Field, inputClass } from "./student-form-field";
 
-/** 보호자2 칸 이름(s2_0024) — 서버 `readForm`이 같은 이름을 읽는다. */
+/** 보호자2 칸 이름(s2_0022) — 서버 `readForm`이 같은 이름을 읽는다. */
 export const GUARDIAN2_FIELD_NAMES = ["parent2Name", "parent2Phone", "parent2Relation"] as const;
 
 export type Guardian2Value = { name: string | null; phone: string | null; relation: string | null };

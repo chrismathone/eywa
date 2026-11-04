@@ -1,4 +1,4 @@
--- s2_0024 되돌리기 — 원생 보호자2 칸 셋을 지운다.
+-- s2_0022 되돌리기 — 원생 보호자2 칸 셋을 지운다.
 -- 🔴 적어 둔 보호자2 값이 함께 사라진다. 필요하면 먼저 받아 둘 것(읽기만):
 --   select id, name, parent2_name, parent2_phone, parent2_relation from public.students
 --    where coalesce(parent2_name, parent2_phone, parent2_relation) is not null;

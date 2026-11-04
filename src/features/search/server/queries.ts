@@ -96,7 +96,7 @@ async function searchStudents(term: string): Promise<Axis> {
     // 원생 본인 전화도 — 원생목록 기본 검색(SEARCH_FIELD_COLS.all)과 같은 칸을 본다.
     `student_phone.ilike.%${term}%`,
     `parent_phone.ilike.%${term}%`,
-    `parent2_phone.ilike.%${term}%`, // 보호자2(s2_0024) — 원생목록 검색과 같은 칸
+    `parent2_phone.ilike.%${term}%`, // 보호자2(s2_0022) — 원생목록 검색과 같은 칸
     `parent_name.ilike.%${term}%`,
     `parent2_name.ilike.%${term}%`,
   ].join(",");

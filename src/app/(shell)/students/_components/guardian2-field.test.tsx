@@ -19,7 +19,7 @@ function renderInForm(initial: Guardian2Value, errors?: Guardian2Errors) {
   return { ...utils, form, onInput, values };
 }
 
-describe("원생 폼 보호자2 줄(s2_0024)", () => {
+describe("원생 폼 보호자2 줄(s2_0022)", () => {
   it("값이 없으면 닫혀 있고 '+ 보호자 추가'로 연다 — 닫힌 줄도 빈 값으로 실린다", () => {
     const { values } = renderInForm(EMPTY);
     expect(screen.getByLabelText("보호자2 이름")).not.toBeVisible();

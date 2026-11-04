@@ -385,7 +385,7 @@ export const students = pgTable(
     studentPhone: text("student_phone"),
     parentPhone: text("parent_phone"),
     parentName: text("parent_name"),
-    // 보호자2(s2_0024) — 원생 수정 화면 '보호자 연락처'의 둘째 줄. 같은 사람 대조(형제·중복 후보·ClassNote 원아)에 보호자1 연락처와 함께 쓴다.
+    // 보호자2(s2_0022) — 원생 수정 화면 '보호자 연락처'의 둘째 줄. 같은 사람 대조(형제·중복 후보·ClassNote 원아)에 보호자1 연락처와 함께 쓴다.
     parent2Name: text("parent2_name"),
     parent2Phone: text("parent2_phone"),
     parent2Relation: text("parent2_relation"),

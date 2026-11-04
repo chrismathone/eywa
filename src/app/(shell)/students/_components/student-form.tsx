@@ -53,7 +53,7 @@ export type StudentFormValue = {
   parentName: string | null;
   parentPhone: string | null;
   parentRelation: string | null;
-  /** 보호자2(s2_0024) — 셋 중 하나라도 있으면 보호자2 줄이 열린 채로 뜬다. */
+  /** 보호자2(s2_0022) — 셋 중 하나라도 있으면 보호자2 줄이 열린 채로 뜬다. */
   parent2Name: string | null;
   parent2Phone: string | null;
   parent2Relation: string | null;

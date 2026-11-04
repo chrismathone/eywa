@@ -75,7 +75,7 @@ export async function findDuplicateStudents(): Promise<DuplicateReview> {
     grade: r.grade,
     school: r.school,
     parentPhone: r.parent_phone,
-    parent2Phone: r.parent2_phone, // 보호자2(s2_0024) — 같은 판정(duplicateReasons)이 보호자 번호 둘을 다 본다
+    parent2Phone: r.parent2_phone, // 보호자2(s2_0022) — 같은 판정(duplicateReasons)이 보호자 번호 둘을 다 본다
     dupSuspect: r.dup_suspect === true,
     status: r.status,
     enrolledAt: r.enrolled_at,

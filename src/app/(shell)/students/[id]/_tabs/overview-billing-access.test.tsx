@@ -94,7 +94,7 @@ describe("학생 개요 기록 정보", () => {
     expect(screen.getByText("(12345) 상세 주소만 입력됨")).toBeInTheDocument();
   });
 
-  it("보호자2(s2_0024)는 적어 둔 칸만 프로필에 보인다 — 없으면 줄 자체가 없다", async () => {
+  it("보호자2(s2_0022)는 적어 둔 칸만 프로필에 보인다 — 없으면 줄 자체가 없다", async () => {
     render(await OverviewTab({
       student: { ...student, parentName: "김아버지", parentPhone: "010-1111-2222", parent2Name: "김어머니", parent2Relation: "모", parent2Phone: "010-3333-4444" },
       canSeeBilling: false,

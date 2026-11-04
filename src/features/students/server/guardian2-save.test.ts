@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// 원생 보호자2 저장(s2_0024) — 수정 저장의 칸 가드 · 정규화 · 검증(보호자2만 · 보호자1은 종전 그대로). DB는 가짜.
+// 원생 보호자2 저장(s2_0022) — 수정 저장의 칸 가드 · 정규화 · 검증(보호자2만 · 보호자1은 종전 그대로). DB는 가짜.
 const m = vi.hoisted(() => ({ client: vi.fn(), update: vi.fn(), insert: vi.fn(),
   row: { status: "enrolled", withdrawn_at: null, withdrawal_metadata: null, name: "Synthetic", notes: null } }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => ({ id: "actor", tenantId: "tenant", systemRole: "admin" }) }));
@@ -41,7 +41,7 @@ beforeEach(() => {
   m.client.mockResolvedValue({ from: vi.fn(() => q) });
 });
 
-describe("원생 보호자2 저장(s2_0024)", () => {
+describe("원생 보호자2 저장(s2_0022)", () => {
   it("🔴 보호자2 칸이 없는 저장(옛 화면)은 보호자2를 건드리지 않는다", async () => {
     expect((await updateStudent(undefined, form()))?.ok).toBe(true);
     const patch = m.update.mock.calls[0]![0];

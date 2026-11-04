@@ -38,7 +38,7 @@ export async function findAutoSiblings(
   me: SiblingPerson,
 ): Promise<{ row: SiblingRow; basis: SiblingBasis }[]> {
   const ors: string[] = [];
-  // 보호자 휴대폰(보호자1·보호자2 — s2_0024)마다 상대의 두 칸을 다 본다(끝 8자리 · 표기 무관). 판정은 아래 `siblingBasis`.
+  // 보호자 휴대폰(보호자1·보호자2 — s2_0022)마다 상대의 두 칸을 다 본다(끝 8자리 · 표기 무관). 판정은 아래 `siblingBasis`.
   for (const phone of guardianPhoneKeys(me)) {
     const like = quoted(`%${phone.slice(-8, -4)}%${phone.slice(-4)}%`);
     ors.push(`parent_phone.ilike.${like}`, `parent2_phone.ilike.${like}`);
