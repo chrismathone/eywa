@@ -121,6 +121,7 @@ describe("🔴 제외 — 모르면 내리지 않는다", () => {
     expect(codes(planOffboard(world({ admissions: new Map([[1, adm("이지나", { phone: null, phones: [] })]]) })))).toEqual(["no_phone"]);
     // 빈 값만 든 phones도 '없음' — 길이만 보고 대조로 넘기면 phoneMatches가 null(대조 불가)이라 조용히 통과했다(carerPhones · 2026-11-04 리뷰)
     expect(codes(planOffboard(world({ admissions: new Map([[1, adm("이지나", { phone: null, phones: [null, ""] })]]) })))).toEqual(["no_phone"]);
+    expect(codes(planOffboard(world({ admissions: new Map([[1, adm("이지나", { phone: null, phones: [" ", "-"] })]]) })))).toEqual(["no_phone"]);
   });
   it("🔴 보호자 전화는 명부의 carer 전화 전부로 본다 — 둘째 보호자 전화가 퇴원하지 않은 형제와 같아도 제외(B7)", () => {
     const sts = new Map([st("s1", "이지나", { phones: ["010-1000-0000", "010-2000-0000"] }), st("now", "이후성", { status: "enrolled", withdrawnAt: null, phones: ["010-2000-0000"] })]);

@@ -249,7 +249,7 @@ function judgeChild(p, ch, w, env, { students, admissions, childLinks }, byName)
  * @param {string} [ctx.today]  'YYYY-MM-DD'(KST) — ④의 '최근 7일' 기준(기본 = 오늘)
  * @param {Map<string,{id:string,name:string,phones?:string[],status?:string}>} ctx.students  전 학생(유효이름·전화·상태)
  * @param {Map<number, Array<{id:number}>>} ctx.membersByBoard
- * @param {Map<number,{phone:string|null, boardNames:string[]}>} ctx.admissions  운영관리 명부(원아 → 보호자 전화·소속 보드 이름)
+ * @param {Map<number,{phone:string|null, phones?:Array<string|null>, boardNames:string[]}>} ctx.admissions  운영관리 명부(원아 → 보호자 전화(phone = carer1 · phones = carer1~N)·소속 보드 이름)
  * @param {Map<number,string>} ctx.childLinks  원아 id → 학생 id(0185a)
  * @param {number} [ctx.runLimit]
  * @returns {{ releases: Array<{classId:string, className:string, boardId:number, boardKind:string, childId:number, childName:string, studentId:string|null, studentName:string, reason:string}>,
