@@ -271,7 +271,7 @@ export function reservedBoardName(name) {
  * @param {Map<string,{id:string,name:string,grade:string|null,phones:string[]}>} p.students  name = 유효이름
  * @param {Array<{id:number,name:string}>} p.boards  ClassNote 전 보드
  * @param {Map<number,Array<{id:number,name?:string,date_birth?:string|null}>>} p.membersByBoard  조회한 보드의 원아
- * @param {Map<number,{phone:string|null, boardNames:string[]}>} p.admissions  운영관리 명부(원아 id → 보호자 전화·소속 보드)
+ * @param {Map<number,{phone:string|null, phones?:Array<string|null>, boardNames:string[]}>} p.admissions  운영관리 명부(원아 id → 보호자 전화(phone = carer1 · phones = carer1~N)·소속 보드)
  * @param {number} p.schoolYear
  * @param {Map<string,Array<{id:number,name:string,boardIds:number[]}>>|null} [p.verifiedChildren]  반 보드에서 확인된 원아(0302a ok) — 1인 보드가 없거나 빈 학생만 쓴다
  * @param {Set<string>|null} [p.verifiedOwnerScope]  ④(기록) 비교 상대 학생 — 전체 대상 반의 학생(없으면 이번 계획 반의 학생)

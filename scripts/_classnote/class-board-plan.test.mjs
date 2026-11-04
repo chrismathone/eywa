@@ -98,6 +98,16 @@ describe("resolveStudentChildren — 가드 ①~④·⑥", () => {
     expect(resolveStudentChildren(w.students.get("s1"), w).reasons.join()).toContain("보호자 전화 불일치");
   });
 
+  it("② 보호자2 번호로 통과해도 ⑥ 이름이 다른 형제 원아는 그대로 보류", () => {
+    const w = world();
+    Object.assign(w.admissions.get(101), { phone: "010-9999-9999", phones: ["010-9999-9999", "+82 10-1111-1111"] });
+    w.membersByBoard.get(11)[0].name = "김근호";
+    const v = resolveStudentChildren(w.students.get("s1"), w);
+    expect(v.ok).toBe(false);
+    expect(v.reasons.join()).not.toContain("보호자 전화");
+    expect(v.reasons.join()).toContain("형제 계정");
+  });
+
   it("② 한쪽 번호가 없거나 명부에 없으면 = 보류(모르면 안 한다)", () => {
     const w = world();
     w.students.get("s1").phones = [null, ""];

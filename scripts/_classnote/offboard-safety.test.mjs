@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dayDiff, evaluateBoardRelease, evaluateOffboardCandidate, isProtectedName, isSystemBulkWithdrawal, normalizePhone, ownedBoardNames, phoneMatches } from "./offboard-safety.mjs";
+import { carerPhones, dayDiff, evaluateBoardRelease, evaluateOffboardCandidate, isProtectedName, isSystemBulkWithdrawal, normalizePhone, ownedBoardNames, phoneMatches } from "./offboard-safety.mjs";
 
 // 픽스처는 실사례 기반이지만 **개인정보를 제거**했다(이름은 실제 사고 케이스만 유지, username은 u1 형식).
 // 2026 학년도 기준: 중2 = 2012년생, 고2 = 2009년생, 초6 = 2014년생(expectedBirthYear).
@@ -475,6 +475,16 @@ describe("전화 대조 — 최상위 신원 증거(원장 제안)", () => {
     expect(phoneMatches(["010-1111-2222"], ["010-3333-4444"])).toBe(false);
     expect(phoneMatches([], ["01011112222"])).toBeNull();
     expect(phoneMatches(["010-1111-2222"], [])).toBeNull();
+  });
+
+  it("carerPhones: 명부의 carer1~N 전부 — 빈 값은 빼고, phones에 쓸 값이 없으면 phone(carer1) 하나로(2026-11-04)", () => {
+    expect(carerPhones({ phone: "010-1111-2222", phones: ["010-1111-2222", null, "", "010-3333-4444"] })).toEqual(["010-1111-2222", "010-3333-4444"]);
+    expect(carerPhones({ phone: "010-1111-2222", phones: [null, ""] })).toEqual(["010-1111-2222"]);
+    expect(carerPhones({ phone: "010-1111-2222", phones: [] })).toEqual(["010-1111-2222"]);
+    expect(carerPhones({ phone: "010-1111-2222" })).toEqual(["010-1111-2222"]);
+    expect(carerPhones({ phone: null, phones: [null, ""] })).toEqual([]);
+    expect(carerPhones(null)).toEqual([]);
+    expect(carerPhones(undefined)).toEqual([]);
   });
 
   it("⭐ 전화 불일치면 exclude — 이름·생년이 다 맞아도 다른 집이다", () => {
