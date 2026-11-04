@@ -4,8 +4,9 @@
  * 쓰는 곳: 학생 상세 '프로필'의 형제 줄 · 학생 수정 화면의 형제 칸(자동 추천을 미리 채움) · 저장(0376a `student_siblings`).
  *
  * 자동 판정(저장하지 않고 볼 때마다):
- *  · 학부모 휴대폰이 같다 → 형제(숫자만 · +82→0 · 휴대폰만 — `phoneKeyOf`, 콜&상담 같은 학생 판정과 같은 열쇠)
- *  · 학부모 이름이 같고 연락처가 부딪히지 않는다(한쪽이라도 휴대폰이 없다) → 형제
+ *  · 학부모 휴대폰이 같다 → 형제(숫자만 · +82→0 · 휴대폰만 — `phoneKeyOf`, 콜&상담 같은 학생 판정과 같은 열쇠).
+ *    보호자2 휴대폰(s2_0024)도 같은 근거다 — 두 원생의 보호자1·보호자2 번호 중 하나라도 겹치면 형제(한 집의 엄마·아빠 번호가 갈려 적힌다).
+ *  · 학부모 이름이 같고 연락처가 부딪히지 않는다(한쪽이라도 보호자 휴대폰이 하나도 없다) → 형제
  *  · 🔴 학부모 이름만 같고 휴대폰이 서로 다르면 형제로 치지 않는다 — 수정 화면에 '확인 후보'로만 띄운다.
  *    2026-10-19 침산 실측: 이름만 같은 17쌍이 전부 휴대폰이 6~8자리 달랐고 아이 성도 대부분 달랐다(다른 집 학부모의 같은 이름).
  *  · 학생 이름이 같으면(접미사 A·B 무시) 형제가 아니다 — 같은 아이의 중복 기록이다(실측 8쌍).
@@ -21,7 +22,14 @@ export type SiblingPerson = {
   name: string | null;
   parent_name?: string | null;
   parent_phone?: string | null;
+  /** 보호자2 연락처(s2_0024) — 없으면 보호자1 번호만 본다(종전과 같다). */
+  parent2_phone?: string | null;
 };
+
+/** 한 원생의 보호자 휴대폰 열쇠(보호자1·보호자2) — 일반전화·빈 값은 빠진다. */
+export function guardianPhoneKeys(p: Pick<SiblingPerson, "parent_phone" | "parent2_phone">): Set<string> {
+  return new Set([phoneKeyOf(p.parent_phone), phoneKeyOf(p.parent2_phone)].filter((k): k is string => !!k));
+}
 
 /** 수정 화면 형제 칸의 한 줄(고르기 목록 · 미리 넣은 형제 · 확인 후보). `auto` = 자동 판정으로 미리 넣은 원생. */
 export type SiblingOption = { value: string; label: string; hint: string; auto?: boolean };
@@ -38,11 +46,11 @@ export function siblingBasis(me: SiblingPerson, other: SiblingPerson): SiblingBa
   if (me.id === other.id) return null;
   const mine = childKey(me.name);
   if (mine && mine === childKey(other.name)) return null;
-  const pa = phoneKeyOf(me.parent_phone);
-  const pb = phoneKeyOf(other.parent_phone);
-  if (pa && pa === pb) return "phone";
+  const pa = guardianPhoneKeys(me);
+  const pb = guardianPhoneKeys(other);
+  if ([...pa].some((k) => pb.has(k))) return "phone";
   const na = personName(me.parent_name);
-  if (na.length >= 2 && na === personName(other.parent_name)) return pa && pb ? "conflict" : "name";
+  if (na.length >= 2 && na === personName(other.parent_name)) return pa.size > 0 && pb.size > 0 ? "conflict" : "name";
   return null;
 }
 

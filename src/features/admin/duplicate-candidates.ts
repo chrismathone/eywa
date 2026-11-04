@@ -14,7 +14,7 @@
  * 신호는 셋이고, 셋 다 **사람이 눌러야 병합된다**(자동 병합 없음 — 병합은 수강·출결·수납을 옮기고
  * 한쪽을 퇴원시키는 비가역 동작이다).
  *   (a) `natural_key`   이름·학년·학교가 같음(학생 자연키와 같은 차원)
- *   (b) `parent_phone`  이름·학년이 같고 학부모 연락처(숫자만)가 같음
+ *   (b) `parent_phone`  이름·학년이 같고 학부모 연락처(숫자만)가 같음 — 보호자1·보호자2(s2_0024) 번호 중 하나라도 겹치면
  *   (c) `auto_suffix`   **접미사만 다르고** 그 이름 무리에 `dup_suspect`가 아직 살아 있음  ← 신규
  *
  * 🔴 **(c)를 `dup_suspect`에 매단 이유** = 배너의 약속과 정확히 같은 집합이기 때문이고, 동시에
@@ -49,6 +49,8 @@ export type DuplicateInput = {
   grade: string | null;
   school: string | null;
   parentPhone: string | null;
+  /** 보호자2 연락처(s2_0024) — 보호자1 연락처와 같은 근거로 본다(한 집의 두 보호자가 각자 번호를 적는다). */
+  parent2Phone?: string | null;
   /** 동기화가 이름 충돌로 **자동 접미사**를 붙인 학생(0078a). '정상 확인'을 누르면 false가 된다. */
   dupSuspect?: boolean;
 };
@@ -99,6 +101,9 @@ function exactNameKey(name: string): string {
 }
 
 const phoneDigits = (v: string | null | undefined): string => (v ?? "").replace(/\D/g, "");
+/** 한 학생의 보호자 연락처(숫자만) — 보호자1·보호자2. 빈 값은 뺀다. */
+const guardianPhones = (r: Pick<DuplicateInput, "parentPhone" | "parent2Phone">): Set<string> =>
+  new Set([phoneDigits(r.parentPhone), phoneDigits(r.parent2Phone)].filter(Boolean));
 const gradeKey = (v: string | null | undefined): string => v ?? "";
 const schoolKey = (v: string | null | undefined): string => v ?? "";
 
@@ -111,8 +116,8 @@ const schoolKey = (v: string | null | undefined): string => v ?? "";
 export function duplicateReasons(a: DuplicateInput, b: DuplicateInput): DuplicateReason[] {
   const sameGrade = gradeKey(a.grade) === gradeKey(b.grade);
   const sameSchool = schoolKey(a.school) === schoolKey(b.school);
-  const phoneA = phoneDigits(a.parentPhone);
-  const samePhone = phoneA !== "" && phoneA === phoneDigits(b.parentPhone);
+  const phonesB = guardianPhones(b);
+  const samePhone = [...guardianPhones(a)].some((p) => phonesB.has(p));
 
   const reasons: DuplicateReason[] = [];
   const sameExactName = exactNameKey(a.name) === exactNameKey(b.name);
@@ -179,8 +184,7 @@ export function groupDuplicateCandidates<T extends DuplicateInput>(
   for (const r of rows) {
     const base = `${exactNameKey(r.name)}::${gradeKey(r.grade)}`;
     addToBucket(`nat::${base}::${schoolKey(r.school)}`, r.id);
-    const phone = phoneDigits(r.parentPhone);
-    if (phone) addToBucket(`ph::${base}::${phone}`, r.id);
+    for (const phone of guardianPhones(r)) addToBucket(`ph::${base}::${phone}`, r.id);
   }
   for (const ids of buckets.values()) {
     for (let i = 1; i < ids.length; i++) union(ids[0]!, ids[i]!);

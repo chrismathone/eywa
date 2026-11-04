@@ -158,15 +158,16 @@ const STUDENT_PAGE_COLUMNS =
   "id, name, english_name, school, grade, status, enrolled_at, parent_phone";
 
 // 검색 필드 → 컬럼 매핑. all은 데스크 응대 빈도 높은 이름·학교·전화·보호자명 묶음.
+// 보호자2(s2_0024)도 같은 자리에서 찾는다 — 어머니 번호로 물어도 아버지 번호만 적힌 칸에 막히지 않게(원장 2026-11-04).
 const SEARCH_FIELD_COLS: Record<SearchField, string[]> = {
-  all: ["name", "english_name", "school", "student_phone", "parent_phone", "parent_name"],
+  all: ["name", "english_name", "school", "student_phone", "parent_phone", "parent2_phone", "parent_name", "parent2_name"],
   name: ["name", "english_name"],
   school: ["school"],
-  phone: ["student_phone", "parent_phone"],
+  phone: ["student_phone", "parent_phone", "parent2_phone"],
   address: ["address"],
   email: ["email"],
   memo: ["notes"],
-  parent: ["parent_name"],
+  parent: ["parent_name", "parent2_name"],
 };
 
 /**
@@ -713,6 +714,10 @@ export type StudentDetail = {
   parentName: string | null;
   parentPhone: string | null;
   parentRelation: string | null;
+  /** 보호자2(s2_0024) — 원생 수정 화면 '보호자 연락처'의 둘째 줄. */
+  parent2Name: string | null;
+  parent2Phone: string | null;
+  parent2Relation: string | null;
   enrolledAt: string | null;
   withdrawnAt: string | null;
   notes: string | null;
@@ -803,7 +808,7 @@ export async function getStudentById(id: string): Promise<StudentDetail | null> 
        gender, birth_date, nickname, graduation_year,
        address, zip_code, address_detail, email, student_phone, home_phone, other_phone,
        enrolled_at, withdrawn_at, created_at, notes, dup_suspect,
-       parent_name, parent_phone, parent_relation,
+       parent_name, parent_phone, parent_relation, parent2_name, parent2_phone, parent2_relation,
        ai_care_summary, ai_care_focus, ai_care_model_version, ai_care_generated_at`,
     )
     .eq("id", id)
@@ -838,6 +843,9 @@ export async function getStudentById(id: string): Promise<StudentDetail | null> 
     parentName: data.parent_name,
     parentPhone: data.parent_phone,
     parentRelation: data.parent_relation,
+    parent2Name: data.parent2_name,
+    parent2Phone: data.parent2_phone,
+    parent2Relation: data.parent2_relation,
     createdAt: data.created_at,
     dupSuspect: data.dup_suspect === true,
     aiCareSummary: data.ai_care_summary,

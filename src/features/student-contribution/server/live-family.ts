@@ -6,7 +6,7 @@ import { readSection, type LiveContext } from "./live-context";
 export function readLiveFamily(c: LiveContext) {
   const href = `/students/${c.studentId}?tab=overview`;
   return readSection("family", "보호자·형제", href, async () => {
-    const { data, error } = await c.db.from("students").select("id, name, parent_name, parent_phone, parent_relation")
+    const { data, error } = await c.db.from("students").select("id, name, parent_name, parent_phone, parent2_phone, parent_relation")
       .eq("tenant_id", c.tenant).eq("id", c.studentId).maybeSingle();
     if (error) throw error;
     if (!data) throw new Error("Student source unavailable");

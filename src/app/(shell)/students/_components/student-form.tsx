@@ -23,6 +23,8 @@ import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
 import { WithdrawalReasonSlot } from "./withdrawal-reason-slot";
 import { SIBLING_FIELD_NAMES, SiblingsField } from "./siblings-field";
+import { Guardian2Field } from "./guardian2-field";
+import { Field, GUARDIAN_RELATIONS, inputClass } from "./student-form-field";
 import type { SiblingOption } from "@/features/students/siblings";
 
 type Mode = "create" | "edit";
@@ -50,6 +52,10 @@ export type StudentFormValue = {
   parentName: string | null;
   parentPhone: string | null;
   parentRelation: string | null;
+  /** 보호자2(s2_0024) — 셋 중 하나라도 있으면 보호자2 줄이 열린 채로 뜬다. */
+  parent2Name: string | null;
+  parent2Phone: string | null;
+  parent2Relation: string | null;
   status: string;
   enrolledAt: string | null;
   withdrawnAt: string | null;
@@ -182,6 +188,9 @@ export function StudentForm({
     parentName: null,
     parentPhone: null,
     parentRelation: null,
+    parent2Name: null,
+    parent2Phone: null,
+    parent2Relation: null,
     status: "prospect",
     enrolledAt: null,
     withdrawnAt: null,
@@ -330,13 +339,18 @@ export function StudentForm({
               className={inputClass}
             >
               <option value="">선택</option>
-              <option value="부">부</option>
-              <option value="모">모</option>
-              <option value="조부">조부</option>
-              <option value="조모">조모</option>
-              <option value="기타">기타</option>
+              {GUARDIAN_RELATIONS.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
             </select>
           </Field>
+          {/* 보호자2(원장 2026-11-04) — 값이 있으면 열린 채로, 없으면 '+ 보호자 추가'. 관계 목록은 보호자1과 같다. */}
+          <Guardian2Field
+            initial={{ name: v.parent2Name, phone: v.parent2Phone, relation: v.parent2Relation }}
+            phoneError={errors.parent2Phone}
+          />
           {mode === "edit" && initialValue?.id && siblings ? (
             // key = 열 때 칩·자동 추천 — 손대지 않은 창이 새로고침돼 새 짝이 오면 칸을 다시 그린다(칩과 '열 때 칩'이 어긋나면
             // 저장이 다른 화면에서 바꾼 짝을 덮는다). 미저장 창은 새로고침되지 않아 고친 칩은 날아가지 않는다.
@@ -568,45 +582,5 @@ export function StudentForm({
         <SubmitButton mode={mode} />
       </FormActionBar>
     </form>
-  );
-}
-
-const inputClass =
-  "border-input bg-background w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring";
-
-function Field({
-  label,
-  htmlFor,
-  error,
-  hint,
-  inlineHint,
-  children,
-}: {
-  label: string;
-  htmlFor: string;
-  error?: string;
-  hint?: string;
-  inlineHint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <label
-          htmlFor={htmlFor}
-          className="text-foreground block text-sm font-medium"
-        >
-          {label}
-        </label>
-        {inlineHint ? (
-          <p id={`${htmlFor}-inline-hint`} className="text-foreground/60 text-xs leading-relaxed">
-            {inlineHint}
-          </p>
-        ) : null}
-      </div>
-      {children}
-      {hint ? <p className="text-text-faint text-xs">{hint}</p> : null}
-      {error ? <p className="text-chart-4 text-xs">{error}</p> : null}
-    </div>
   );
 }

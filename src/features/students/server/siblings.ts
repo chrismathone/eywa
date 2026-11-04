@@ -4,9 +4,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canViewStudentDetail } from "./read-scope";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { phoneKeyOf, personName } from "@/features/enrollment/same-person";
+import { personName } from "@/features/enrollment/same-person";
 import { isMergedStudent } from "../status/merged";
-import { planSiblingSave, resolveSiblingIds, siblingBasis, siblingPair, type SiblingBasis, type SiblingPerson } from "../siblings";
+import { guardianPhoneKeys, planSiblingSave, resolveSiblingIds, siblingBasis, siblingPair, type SiblingBasis, type SiblingPerson } from "../siblings";
 
 /**
  * 원생 형제 — 조회·저장(판정은 `../siblings.ts` 한 벌). 학생 상세 '프로필' 형제 줄 · 학생 수정 화면 형제 칸 · 저장이 지난다.
@@ -23,7 +23,7 @@ export type SiblingRow = SiblingPerson & {
   is_test?: boolean | null;
 };
 
-const COLS = "id, name, school, grade, status, notes, is_test, parent_name, parent_phone";
+const COLS = "id, name, school, grade, status, notes, is_test, parent_name, parent_phone, parent2_phone";
 /** 한 원생의 형제 후보 상한 — 학부모 휴대폰·이름으로 좁힌 뒤라 넘을 일이 없다. */
 const CANDIDATE_CAP = 100;
 
@@ -38,8 +38,11 @@ export async function findAutoSiblings(
   me: SiblingPerson,
 ): Promise<{ row: SiblingRow; basis: SiblingBasis }[]> {
   const ors: string[] = [];
-  const phone = phoneKeyOf(me.parent_phone);
-  if (phone) ors.push(`parent_phone.ilike.${quoted(`%${phone.slice(-8, -4)}%${phone.slice(-4)}%`)}`);
+  // 보호자 휴대폰(보호자1·보호자2 — s2_0024)마다 상대의 두 칸을 다 본다(끝 8자리 · 표기 무관). 판정은 아래 `siblingBasis`.
+  for (const phone of guardianPhoneKeys(me)) {
+    const like = quoted(`%${phone.slice(-8, -4)}%${phone.slice(-4)}%`);
+    ors.push(`parent_phone.ilike.${like}`, `parent2_phone.ilike.${like}`);
+  }
   const parent = plain(personName(me.parent_name));
   if (parent.length >= 2) ors.push(`parent_name.ilike.${quoted([...parent].join("%"))}`);
   if (ors.length === 0) return [];
@@ -108,13 +111,16 @@ export async function loadStudentSiblings(db: Db, tenantId: string, me: SiblingP
 }
 
 /** 상세·수정 화면이 부르는 입구 — 지금 로그인(지점 보기면 보는 지점)의 원생 하나. 로그인이 없으면 빈 값. */
-export async function getStudentSiblings(student: { id: string; name: string; parentName: string | null; parentPhone: string | null }) {
+export async function getStudentSiblings(student: {
+  id: string; name: string; parentName: string | null; parentPhone: string | null; parent2Phone?: string | null;
+}) {
   const none = { ready: false, siblings: [] as SiblingView[], review: [] as SiblingView[], autoIds: [] as string[] };
   const user = await getCurrentUser();
   if (!user) return none;
   try {
     const found = await loadStudentSiblings(await createClient(), user.tenantId, {
       id: student.id, name: student.name, parent_name: student.parentName, parent_phone: student.parentPhone,
+      parent2_phone: student.parent2Phone ?? null,
     });
     // 🔴 원생 표 RLS는 지점 단위라 강사(담당 학생만 열람)에게도 담당 밖 형제가 읽힌다 — 상세를 열 수 있는 형제만 남긴다
     //    ("존재 여부 자체도 담당 밖 정보다" · 학생 상세와 같은 판정 `canViewStudentDetail`). 열람 범위 제한이 없으면 전부 통과.

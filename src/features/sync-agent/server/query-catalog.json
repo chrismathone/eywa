@@ -2978,6 +2978,26 @@
       "tenant"
     ]
   },
+  "4e9a63620879ca7a06f0b29f640150a59c5ac723eccfeaf89fb186b408f76cc5": {
+    "parts": [
+      "\n    select id, name, classnote_name, grade, parent_phone, parent2_phone, student_phone, home_phone, other_phone, status::text as status, coalesce(is_test, false) as is_test\n    from students where tenant_id = ",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/math-class-boards-load.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant"
+    ]
+  },
   "4f43c7b162a423a550467d2163af8ed97d1900c17c9b65e27ea2deea8474c027": {
     "parts": [
       "\n      select id, makeedu_id, name, school, grade, status, student_phone, parent_phone from students where tenant_id = ",
@@ -3624,6 +3644,26 @@
     ],
     "expressions": [
       "sql(ids)"
+    ]
+  },
+  "6748332da9c83efac22f926162c55f668feaa37c417849d60b437b682b2f6199": {
+    "parts": [
+      "select id, name, classnote_name, status::text as status, withdrawn_at::text as withdrawn_at, coalesce(is_test, false) as is_test, notes,\n      parent_phone, parent2_phone, student_phone, home_phone, other_phone\n    from students where tenant_id = ",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/classnote-offboard.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant"
     ]
   },
   "681f852b2b6699fe0d108f8f57d2fca108960c20a12c46e1b0548fa0efce47da": {
@@ -5380,6 +5420,26 @@
       "f.privacyAgree",
       "tenantId",
       "it.seq"
+    ]
+  },
+  "8d7d56b84f4a0fb688010e699b44ac7321b26f50be5be410a870bae7a1e44e20": {
+    "parts": [
+      "select id, name, classnote_name, grade, parent_phone, parent2_phone, student_phone, home_phone, other_phone\n        from students where tenant_id = ",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/classnote-childmap-core.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant"
     ]
   },
   "8eab9568dc23db9ffb744c55a5c0d0330a3f50bcc91b7cd0bf76e109a12fecd5": {
@@ -8639,6 +8699,31 @@
     "expressions": [
       "tenant",
       "STUCK_MIN"
+    ]
+  },
+  "d723df27fe5708975bf1139d65a6f74c13cac9674e0957cbcc192dd281f9193f": {
+    "parts": [
+      "select name, classnote_name, grade, parent_phone, parent2_phone, student_phone, home_phone, other_phone\n      from students where id=",
+      " and tenant_id=",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/classnote-core.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "r.student_id",
+      "tenant"
     ]
   },
   "d7602343ddbbcb9513a1ccba8795ab1061ceeadae67582b3256fb4b22b19f0e6": {

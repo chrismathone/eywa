@@ -57,11 +57,12 @@ export async function findDuplicateStudents(): Promise<DuplicateReview> {
     status: string;
     enrolled_at: string | null;
     parent_phone: string | null;
+    parent2_phone: string | null;
     dup_suspect: boolean | null;
   }>((from, to) =>
     supabase
       .from("students")
-      .select("id, name, grade, school, status, enrolled_at, parent_phone, dup_suspect")
+      .select("id, name, grade, school, status, enrolled_at, parent_phone, parent2_phone, dup_suspect")
       .neq("status", "withdrawn")
       .order("id")
       .range(from, to),
@@ -74,6 +75,7 @@ export async function findDuplicateStudents(): Promise<DuplicateReview> {
     grade: r.grade,
     school: r.school,
     parentPhone: r.parent_phone,
+    parent2Phone: r.parent2_phone, // 보호자2(s2_0024) — 같은 판정(duplicateReasons)이 보호자 번호 둘을 다 본다
     dupSuspect: r.dup_suspect === true,
     status: r.status,
     enrolledAt: r.enrolled_at,
@@ -130,11 +132,12 @@ export async function findSameNameStudents(): Promise<SameNameStudentGroup[]> {
       school: string | null;
       status: string;
       parent_phone: string | null;
+      parent2_phone: string | null;
       dup_suspect: boolean | null;
     }>((from, to) =>
       supabase
         .from("students")
-        .select("id, name, grade, school, status, parent_phone, dup_suspect")
+        .select("id, name, grade, school, status, parent_phone, parent2_phone, dup_suspect")
         .neq("status", "withdrawn")
         .order("id")
         .range(from, to),
@@ -149,6 +152,8 @@ export async function findSameNameStudents(): Promise<SameNameStudentGroup[]> {
       grade: r.grade,
       school: r.school,
       parentPhone: r.parent_phone,
+      // 보호자2 번호도 — 통합 섹션이 그 번호로 잡은 쌍을 여기서도 빼야 두 섹션에 같은 쌍이 동시에 뜨지 않는다.
+      parent2Phone: r.parent2_phone,
       // 통합 섹션이 접미사 신호로 이미 잡는 쌍인지 판단하려면 이 표식이 필요하다(두 섹션 중복 노출 방지).
       dupSuspect: r.dup_suspect === true,
       status: r.status,
