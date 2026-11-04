@@ -92,14 +92,26 @@ describe("퇴원보고서 목록 한 벌 — 웹 보고서 + 기존 스프레드
     expect(by("archive")).toEqual(["a:a1"]);
   });
 
-  it("미연결 — 학생에 안 붙은 기존 기록만", () => {
-    const items = build([report()], [archive(), archive({ id: "a2", mapped_student_id: "s2", mapping_kind: "auto" })]);
-    const f = parseListFilters({ link: "unmapped" }, true);
-    expect(keys(filterListItems(items, f, listWindow(f, "2026-10-14")))).toEqual(["a:a1"]);
+  it("요청 취소는 기본으로 숨긴다 — 끄면 보이고 · 상태를 '요청 취소'로 고르면 그대로 보인다(원장 2026-11-02)", () => {
+    const items = build([report(), report({ id: "r3", status: "canceled" })], [archive()]);
+    const shown = (sp: Record<string, string>) => {
+      const f = parseListFilters(sp, true);
+      return keys(filterListItems(items, f, listWindow(f, "2026-10-14"))).sort();
+    };
+    expect(parseListFilters({}, true).hideCanceled).toBe(true);
+    expect(shown({})).toEqual(["a:a1", "r:r1"]);
+    expect(shown({ canceled: "show" })).toEqual(["a:a1", "r:r1", "r:r3"]);
+    expect(shown({ status: "canceled" })).toEqual(["r:r3"]);
   });
 
-  it("기존 기록을 못 보는 사람은 주소에 값이 남아 있어도 미연결·스프레드시트 기록 필터가 없다", () => {
-    expect(parseListFilters({ link: "unmapped", status: "archive" }, false)).toMatchObject({ unmapped: false, status: "all" });
+  it("미연결 필터는 없앴다 — 옛 주소가 남아 있어도 전부 보인다", () => {
+    const items = build([report()], [archive(), archive({ id: "a2", mapped_student_id: "s2", mapping_kind: "auto" })]);
+    const f = parseListFilters({ link: "unmapped" }, true);
+    expect(filterListItems(items, f, listWindow(f, "2026-10-14"))).toHaveLength(3);
+  });
+
+  it("기존 기록을 못 보는 사람은 주소에 값이 남아 있어도 스프레드시트 기록 필터가 없다", () => {
+    expect(parseListFilters({ status: "archive" }, false)).toMatchObject({ status: "all" });
   });
 
   it("기간 — 퇴원관리와 같은 창 계산 · 이번 달은 말일까지(처리 예약 포함) · 날짜 모르는 원문은 기간을 고르면 빠진다", () => {
@@ -133,12 +145,21 @@ describe("퇴원보고서 목록 한 벌 — 웹 보고서 + 기존 스프레드
   it("작성 강사 선택지 = 목록에 나온 이름만, 이름 모름·퇴직자 묶음은 빼고 한국어 정렬", () => {
     const items = build([report(), report({ id: "r2", teacher_id: "gone" })], [archive({ teacher_name: "" }), archive({ id: "a2", teacher_name: "Jane" })]);
     // 한국어 정렬은 한글이 로마자보다 앞이다([[#84]]) — 원문 영어 이름은 뒤로.
-    expect(teacherOptions(items).map((o) => o.value)).toEqual(["이성우", "Jane"]);
+    expect(teacherOptions(items, staff).map((o) => o.value)).toEqual(["이성우", "Jane"]);
+  });
+
+  it("작성 강사 선택지 — 퇴사자는 재직자 뒤 별도 묶음이다", () => {
+    const items = build([report()], [archive({ teacher_name: "가나다" }), archive({ id: "a2", teacher_name: "Jane" })]);
+    expect(teacherOptions(items, staff)).toEqual([
+      { value: "이성우", label: "이성우" },
+      { value: "가나다", label: "가나다", group: "퇴사자" },
+      { value: "Jane", label: "Jane", group: "퇴사자" },
+    ]);
   });
 
   it("목록 주소 — 창(embed)을 지키고 쪽은 처음으로", () => {
-    expect(listHref({ embed: "1", page: "3", status: "pending" }, { link: "unmapped", status: null })).toBe(
-      "/withdrawal-reports?embed=1&link=unmapped",
+    expect(listHref({ embed: "1", page: "3", status: "pending" }, { kind: "withdrawal", status: null })).toBe(
+      "/withdrawal-reports?embed=1&kind=withdrawal",
     );
     expect(listHref({}, {})).toBe("/withdrawal-reports");
   });

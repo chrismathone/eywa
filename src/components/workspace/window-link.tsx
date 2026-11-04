@@ -5,6 +5,7 @@ import type { MouseEvent, ReactNode } from "react";
 import { findNavItem, navPresentation, SUBTABS_BY_MENU } from "@/lib/navigation";
 import { MENU_LABEL, type MenuKey } from "@/lib/permissions";
 import { useWindowStore } from "./window-store";
+import { openLinkWindow } from "./open-menu-window";
 import { useMenuHub } from "./menu-hub-store";
 import { useIsDesktop } from "./use-is-desktop";
 import { useInFrame } from "./use-in-frame";
@@ -180,10 +181,9 @@ export function WindowLink({
     // 마우스 클릭(detail>0)이면 커서 위치에서 팝업, 키보드 활성(detail=0, clientX/Y 0)이면 cascade.
     const anchor = e.detail > 0 ? { x: e.clientX, y: e.clientY } : undefined;
     const params = { id: resolved.id, title: title ?? resolved.navLabel ?? "보기", href };
-    const store = useWindowStore.getState();
-    // 최상위 프레임: shift+클릭 = 같은 화면을 새 창으로 한 벌 더(듀얼), 일반 클릭 = 기존 창 포커스/열기.
-    if (e.shiftKey) store.openNewInstance("route", params, anchor);
-    else store.open("route", params, anchor);
+    // 최상위 프레임: shift+클릭 = 같은 화면을 새 창으로 한 벌 더(듀얼), 일반 클릭 = 그 주소로 연다(창이 다른 곳에 가 있어도).
+    if (e.shiftKey) useWindowStore.getState().openNewInstance("route", params, anchor);
+    else openLinkWindow(params, anchor);
     return true;
   }
   const dblMode = openOn === "doubleClick";

@@ -127,7 +127,7 @@ describe("침산 불변 — 저장 행이 있는 학원은 오늘과 같다", ()
     expect(DEFAULT_SETTINGS.preset).toBe("chinsan");
     expect(DEFAULT_SETTINGS.billing.sessionPrices.length).toBeGreaterThan(0);
     expect(DEFAULT_SETTINGS.notifications.serviceTerms.length).toBeGreaterThan(0);
-    expect(DEFAULT_SETTINGS.operations.subjects.some((s) => s.key === "subject_1")).toBe(true);
+    expect(DEFAULT_SETTINGS.operations.subjects.some((s) => s.key === "subject_1")).toBe(false);
     expect(DEFAULT_SETTINGS.modules.disabled).toEqual([]);
     expect(DEFAULT_SETTINGS.operations.periodStyle).toBe("chinsan");
   });
@@ -159,7 +159,7 @@ describe("일반판 — 새로 연 학원", () => {
 
   it("민감 기능 담당자와 개인 메뉴 권한은 비어 있고, 옛 설정 폼 저장이 명단을 지우지 않는다", () => {
     expect(g.permissions.userOverrides).toEqual([]);
-    expect(g.permissions.specialAccess).toEqual({ payslipViewerIds: [], payslipManagerIds: [], leaveAdjusterIds: [], classSplitterIds: [], enrollmentDateEditorIds: [], staffTaskMonitorIds: [], vendorViewerIds: [], jjReportManagerIds: [], staffSubjectScopes: [] });
+    expect(g.permissions.specialAccess).toEqual({ payslipViewerIds: [], payslipManagerIds: [], leaveAdjusterIds: [], classSplitterIds: [], enrollmentDateEditorIds: [], staffTaskMonitorIds: [], vendorViewerIds: [], jjReportManagerIds: [], beforeClassReportIds: [], withdrawalApproverIds: [], staffSubjectScopes: [] });
     const stored = {
       userOverrides: [{ userId: "11111111-1111-4111-8111-111111111111", menu: "staff", access: "full" }],
       specialAccess: { payslipViewerIds: ["11111111-1111-4111-8111-111111111111"], leaveAdjusterIds: [], classSplitterIds: [], staffSubjectScopes: [] },

@@ -3,7 +3,7 @@
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { isTenantViewWriteBlocked } from "@/lib/auth/tenant-view";
-import { getMyNotifications, type NotificationView } from "./queries";
+import { DIGEST_TYPE, getMyNotifications, type NotificationView } from "./queries";
 import type { NotificationItem } from "../types";
 
 // ⚠️ 이 파일의 액션엔 **일부러 감사로그(logAction)를 달지 않는다**(2026-09-09 전수 점검).
@@ -51,8 +51,22 @@ export async function archiveNotification(
   const user = await getCurrentUser();
   if (!user) return { unread: 0, items: [] };
   const supabase = await createClient();
+  await archiveHiddenDigests(supabase, user.id, id);
   await supabase.from("notifications").update({ archived_at: new Date().toISOString() }).eq("id", id);
   return getMyNotifications(view, limit);
+}
+
+type Db = Awaited<ReturnType<typeof createClient>>;
+/**
+ * 받은함의 기한 초과 업무 요약은 가장 최근 한 장만 보인다(queries.ts) — 그 한 장을 보관 · 삭제하면 가려 둔 지난 요약도 함께 보관한다.
+ * 안 그러면 다음 갱신에 하루 전 요약이 안 읽음으로 다시 올라온다(배지도 그대로). 보관함에서 지우는 요약은 받은함과 상관없다.
+ */
+async function archiveHiddenDigests(supabase: Db, userId: string, id: string): Promise<void> {
+  const { data } = await supabase.from("notifications").select("type, archived_at, created_at").eq("id", id).maybeSingle();
+  if (data?.type !== DIGEST_TYPE || data.archived_at !== null) return;
+  // 그보다 **앞선** 요약만 — 화면이 갱신되기 전(최대 60초)에 새로 온 오늘 요약은 한 번도 안 보인 채 보관되지 않게.
+  await supabase.from("notifications").update({ archived_at: new Date().toISOString() })
+    .eq("recipient_id", userId).eq("type", DIGEST_TYPE).is("archived_at", null).lt("created_at", data.created_at);
 }
 
 /** 보관 해제 — 보관함에서 받은함으로 복원. */
@@ -77,6 +91,7 @@ export async function deleteNotification(
   const user = await getCurrentUser();
   if (!user) return { unread: 0, items: [] };
   const supabase = await createClient();
+  await archiveHiddenDigests(supabase, user.id, id);
   await supabase.from("notifications").delete().eq("id", id);
   return getMyNotifications(view, limit);
 }

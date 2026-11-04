@@ -1,4 +1,5 @@
 import { normalizeEffectiveDate } from '@/features/timetable/import/effective-date';
+import { shortDate } from '@/features/timetable/scheduled-import';
 
 export function kstClock(now = new Date()) {
   const local = new Date(now.getTime() + 9 * 60 * 60 * 1000).toISOString();
@@ -13,6 +14,12 @@ export function normalizeApplyTime(date: string, hour: number, now = new Date())
   const at = new Date(`${effective.date}T${String(hour).padStart(2, '0')}:00:00+09:00`);
   if (at.getTime() < now.getTime()) return { error: '이미 지난 적용 시각입니다. 다음 정시 이후로 선택해 주세요.' };
   return { at: at.toISOString(), date: effective.date, hour };
+}
+
+/** 툴바 배지 문구 — "11/2 16시 연습본 적용 예정". 시각은 KST로 읽는다. */
+export function labApplyLabel(at: string, today: string) {
+  const { date, hour } = kstClock(new Date(at));
+  return `${shortDate(date, today)} ${hour}시 연습본 적용 예정`;
 }
 
 export function nextApplyHour(now = new Date()) {

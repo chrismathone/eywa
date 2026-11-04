@@ -90,6 +90,12 @@ describe("퇴원은 퇴원보고서로만", () => {
     expect(gate).toContain("viaReportMessage(rows, input.enrollmentIds, input.date, withdrawnAt)");
     // 과목 마지막 반 판정은 특강 여부가 재료다(끝난 특강은 퇴원관리 '수강종료'가 아니다) — 조회가 칸을 읽는다.
     expect(gate).toContain('select("id, class_name, subject, is_special")');
+    // 반·학생 상세의 수강 종료 창은 열리는 순간 같은 서버 판정으로 막는다(원장 2026-11-02 — 사유를 다 고른 뒤 거절하지 않는다).
+    const dialog = read("src/features/enrollments/components/end-enrollment-action.tsx");
+    expect(dialog).toContain("fetchEndScope(enrollmentId, today)");
+    expect(dialog).toContain("endScopeViaReport(result)");
+    // 연습본 적용의 수강 종료도 같은 안내로 막는다.
+    expect(read("src/features/timetable-lab/apply-plan.ts")).toContain("SUBJECT_END_VIA_REPORT");
     // 원생 화면의 상태 전환 창도 같은 함수로 과목별 '퇴원보고서로'를 미리 계산한다(원장 2026-10-26).
     expect(read("src/app/(shell)/students/[id]/page.tsx")).toContain("viaReportMessage(endRows,");
   });

@@ -93,7 +93,7 @@ async function loadSubjectLabels(sql, tenantId) {
   }
   return Object.keys(labels).length
     ? labels
-    : { math: "수학", subject_1: "수학(심화)", english: "영어", science: "과학", korean: "국어" };
+    : { math: "수학", english: "영어", science: "과학", korean: "국어" };
 }
 
 /** 원천 과목 글자 → 설정 과목 키. 키(`math`)·라벨(`수학`)·공백 차이만 허용, 그 밖은 null(추측 금지). */

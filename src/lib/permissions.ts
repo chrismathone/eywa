@@ -108,7 +108,7 @@ export const MENU_LABEL: Record<MenuKey, string> = {
   ecs: "영어 강사 시트",
   mcs: "수학 강사 시트",
   lesson_reports: "수업보고서",
-  before_class_checklist: "비포클래스체크리스트(초안)",
+  before_class_checklist: "비포클래스체크리스트",
   report_settings: "보고서 설정",
   ai_ment: "AI 멘트",
   profile_settings: "프로필·브랜드 설정",

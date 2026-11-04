@@ -156,7 +156,10 @@ export async function loadVideoTeacher(sql, tenantId, video) {
           where tenant_id = ${tenantId} and board_id = ${boardId} and child_id = ${video.childId} and status = 'ok'
         union select student_id from classnote_student_links
           where tenant_id = ${tenantId} and board_id = ${boardId} and child_id = ${video.childId}`,
-      sql`select class_id from classnote_class_boards where tenant_id = ${tenantId} and board_id = ${boardId}`,
+      // 보고서 미발송 반(JJ) 보드는 '게시 반'으로 잇지 않는다 — 동기화는 미발송 JJ 반을 연결하지 않지만(11-04 되돌림) 옛 연결이 남을 수 있고, 영상 담임은 JJ 반을 뺀다
+      // (원장 2026-10-01 · isJjClass). 연결로 잇으면 JJ 보드 영상이 JJ 반 담임 폴더로 가 그 규칙을 건너뛴다 — 종전처럼 확인 필요로 둔다.
+      sql`select b.class_id from classnote_class_boards b join classes c on c.tenant_id = b.tenant_id and c.id = b.class_id
+        where b.tenant_id = ${tenantId} and b.board_id = ${boardId} and not c.report_optout`,
     ]);
     const studentIds = unique(links.map((r) => r.student_id));
     const boardClassIds = boards.map((r) => r.class_id);

@@ -32,6 +32,17 @@ export function endScopeViaReport(result: EndScopeResult | null): boolean {
   return result.viaReport ?? result.scope === "student";
 }
 
+/** 서버 판정을 묻는다 — 실패·거절은 null(문구는 게이트가 아니다 · 저장 때 서버가 다시 막는다). */
+export async function fetchEndScope(enrollmentId: string, date: string): Promise<EndScopeResult | null> {
+  const q = new URLSearchParams({ enrollmentId, date });
+  try {
+    const response = await fetch(`/api/timetable/end-scope?${q.toString()}`, { cache: "no-store" });
+    return response.ok ? ((await response.json()) as { result: EndScopeResult | null }).result : null;
+  } catch {
+    return null;
+  }
+}
+
 /** 판정을 못 받았을 때(조회 실패·권한 없음) — 사실만 말한다. */
 export const END_SCOPE_UNKNOWN_TEXT = "이 반 수강만 종료합니다. 다른 반 수강은 그대로 유지됩니다.";
 

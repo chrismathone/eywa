@@ -35,7 +35,7 @@ import { processNoticesOnce } from "./classnote-notice-core.mjs";
 import { processRecallsOnce } from "./classnote-recall-core.mjs";
 import { processClassNoticesOnce } from "./classnote-class-notice-core.mjs";
 import { provisionDailyOnce } from "./classnote-provision-core.mjs";
-import { syncMathClassBoardsDaily } from "./math-class-boards-sync.mjs";
+import { classBoardSyncDueToday, syncMathClassBoardsDaily } from "./math-class-boards-sync.mjs";
 import { syncChildMapOnce } from "./classnote-childmap-core.mjs";
 import { pollParentCommentsOnce, pollParentPostsOnce } from "./classnote-feed-core.mjs";
 import { kickVideoWorker } from "./video-worker.mjs";
@@ -59,6 +59,8 @@ const LOG_KEEP_DAYS = Number(process.env.CLASSNOTE_LOG_KEEP_DAYS) || DEFAULT_KEE
 const LOG_MAX_BYTES = (Number(process.env.CLASSNOTE_LOG_MAX_MB) || 0) * 1024 * 1024 || DEFAULT_MAX_BYTES;
 let lastRotateCheck = 0;
 let pendingRotateNote = null; // 회전 사실은 **새 파일 첫 줄**에 남긴다(어디로 갔는지 추적 가능하게)
+/** 반 보드 정기 동기화 직전 원아 연결 갱신(3-0)을 한 날짜(KST) — 하루 한 번만(정기 동기화가 실패해 차례가 계속 참이어도). */
+let preSyncChildMapDay = "";
 
 /** 필요하면 watch.log를 날짜/크기 기준으로 넘긴다. 실패해도 로깅은 계속(fail-open). */
 function maybeRotateLog(nowMs) {
@@ -428,6 +430,22 @@ async function main() {
       if (pres.ran) {
         log(`[provision] 일일 프로비저닝 완료 — 보드 생성 ${pres.created} · 배정 ${pres.assigned}${pres.held ? ` · 보류 ${pres.held}` : ""}`);
         noteResult("provision", pres);
+      }
+      // 3-0) 원아 연결(0185a)을 반 보드 정기 동기화 **바로 앞에서** 한 번 새로 만든다(원장 2026-11-02 A안). 신입의 첫 반 보드 배정
+      //      출처가 (수학) 1인 보드에서 원아 연결로 바뀌었다 — 아래 3.5의 20시간 주기만 믿으면 어제 가입한 학부모의 원아가 오늘 새벽
+      //      배정을 놓쳐 첫 보고서가 하루 더 막힌다. 실패해도 동기화는 어제까지의 연결로 그대로 돈다(3.5와 같은 처리 · 3.5는 이 실행으로
+      //      주기가 채워져 오늘 다시 돌지 않는다). 🔴 하루 한 번만(자기 표식) — 정기 동기화가 '오늘 함' 표식 전에 실패하면 차례가 계속
+      //      참이라, 표식이 없으면 폴마다 ClassNote에 로그인한다.
+      const childMapDueDay = classBoardSyncDueToday({ post: POST });
+      if (childMapDueDay && childMapDueDay !== preSyncChildMapDay) {
+        preSyncChildMapDay = childMapDueDay;
+        await assertExecutionLease("childmap");
+        const pre = await syncChildMapOnce(db(), b, { tenant, apply: true, log, force: true }).catch((e) => {
+          log(`[원아매핑] 반 보드 동기화 전 갱신 오류(어제까지의 연결로 진행): ${e.message}`);
+          noteResult("childmap", { error: e.message });
+          return { ran: false };
+        });
+        if (pre.ran) noteResult("childmap", { ...pre, samples: undefined });
       }
       // 3-a) 수학 반 보드 매일 동기화(새 반·이름 변경·신입 배정·담임·0302a 기록) — KST 05시 이후 하루 1회, 반 보드를 쓰는 지점만.
       await assertExecutionLease("classBoardSync");

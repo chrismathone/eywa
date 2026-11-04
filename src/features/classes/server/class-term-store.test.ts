@@ -3,7 +3,15 @@ import type postgres from "postgres";
 import { applyClassTerms, prepareClassTerms, rollbackClassTerms } from "./class-term-store";
 
 function database(
-  options: { today?: string; staleClass?: boolean; staleEnrollment?: boolean; inactive?: boolean } = {},
+  options: {
+    today?: string;
+    staleClass?: boolean;
+    staleEnrollment?: boolean;
+    staleSchedule?: boolean;
+    inactive?: boolean;
+    schedules?: { id: string; valid_to: string | null }[];
+    lastAttendance?: string | null;
+  } = {},
 ) {
   const calls: { query: string; args: unknown[] }[] = [];
   const classes = [
@@ -54,6 +62,10 @@ function database(
       if (query.includes("from classes")) return structuredClone(classes);
       if (query.includes("from enrollments"))
         return enrollments.filter((e) => !(args[2] as string[]).includes(e.id));
+      if (query.includes("from attendance_records")) return [{ last: options.lastAttendance ?? null }];
+      if (query.includes("from class_schedules")) return structuredClone(options.schedules ?? []);
+      if (query.includes("update class_schedules"))
+        return options.staleSchedule ? [] : (args[0] as unknown[]).map(() => ({ id: "s" }));
       if (query.includes("update classes")) return options.staleClass ? [] : [{ id: "c" }];
       if (query.includes("update enrollments"))
         return options.staleEnrollment ? [] : (args[0] as unknown[]).map(() => ({ id: "e" }));
@@ -153,3 +165,67 @@ it.each(["staleClass", "staleEnrollment"] as const)(
     expect(db.calls.some((c) => c.query.includes("insert into audit_logs"))).toBe(false);
   },
 );
+
+const LIVE = [
+  { id: "open", valid_to: null },
+  { id: "later", valid_to: "2026-12-31" },
+];
+it("종강(배치 닫기)은 종강일 뒤로 남은 배치를 종강일로 닫고 그 목록을 종강 기록에 남긴다", async () => {
+  const db = database({ schedules: LIVE });
+  const terms = await prepareClassTerms(db.tx, actor.tenantId, [
+    { classId: "c", date: "2026-09-30", closeSchedules: true },
+  ]);
+  expect(terms[0]!.schedules).toEqual([
+    { id: "open", before: null, after: "2026-09-30" },
+    { id: "later", before: "2026-12-31", after: "2026-09-30" },
+  ]);
+  const read = db.calls.find((c) => c.query.includes("from class_schedules"))!;
+  expect(read.args.slice(0, 3)).toEqual([actor.tenantId, "c", "2026-09-30"]);
+  expect(read.query).toContain("for update");
+  await applyClassTerms(db.tx, actor, terms);
+  expect(db.calls.find((c) => c.query.includes("update class_schedules"))!.args[0]).toEqual(terms[0]!.schedules);
+  const log = db.calls.find((c) => c.query.includes("insert into audit_logs"))!;
+  expect(log.args[3]).toBe("class_end_term");
+  expect(log.args[5]).toMatchObject({ classId: "c", closedAt: "2026-09-30", schedules: terms[0]!.schedules });
+});
+it("배치 닫기를 켜지 않은 종강(영어 시트 반영)과 폐지는 배치를 건드리지 않는다", async () => {
+  for (const request of [
+    { classId: "c", date: "2026-09-30" },
+    { classId: "c", date: "2026-10-01", archive: true, closeSchedules: true },
+  ]) {
+    const db = database({ schedules: LIVE });
+    const terms = await prepareClassTerms(db.tx, actor.tenantId, [request]);
+    expect(terms[0]!.schedules).toBeUndefined();
+    await applyClassTerms(db.tx, actor, terms);
+    expect(db.calls.some((c) => c.query.includes("class_schedules"))).toBe(false);
+    expect(db.calls.find((c) => c.query.includes("insert into audit_logs"))!.args[5]).not.toHaveProperty("schedules");
+  }
+});
+it("되돌리기는 닫은 배치를 원래 끝나는 날로, 그새 바뀐 배치가 있으면 종강을 중단한다", async () => {
+  const db = database({ schedules: LIVE });
+  const terms = await prepareClassTerms(db.tx, actor.tenantId, [
+    { classId: "c", date: "2026-09-30", closeSchedules: true },
+  ]);
+  await rollbackClassTerms(db.tx, actor, terms);
+  expect(db.calls.find((c) => c.query.includes("update class_schedules"))!.args[0]).toEqual([
+    { id: "open", before: "2026-09-30", after: null },
+    { id: "later", before: "2026-09-30", after: "2026-12-31" },
+  ]);
+  const stale = database({ schedules: LIVE, staleSchedule: true });
+  const again = await prepareClassTerms(stale.tx, actor.tenantId, [
+    { classId: "c", date: "2026-09-30", closeSchedules: true },
+  ]);
+  await expect(applyClassTerms(stale.tx, actor, again)).rejects.toThrow("종강 처리를 중단");
+  expect(stale.calls.some((c) => c.query.includes("insert into audit_logs"))).toBe(false);
+});
+it("종강일 뒤 출결이 있으면 배치는 그 마지막 출결일까지 남긴다(강사 귀속 보존) — 종강일은 그대로", async () => {
+  const db = database({ schedules: LIVE, lastAttendance: "2026-10-02" });
+  const terms = await prepareClassTerms(db.tx, actor.tenantId, [
+    { classId: "c", date: "2026-09-30", closeSchedules: true },
+  ]);
+  expect(terms[0]!.after.closed_at).toBe("2026-09-30");
+  expect(terms[0]!.schedules!.map((s) => s.after)).toEqual(["2026-10-02", "2026-10-02"]);
+  const att = db.calls.find((c) => c.query.includes("from attendance_records"))!;
+  expect(att.args).toEqual([actor.tenantId, "c", "2026-09-30"]);
+  expect(db.calls.find((c) => c.query.includes("from class_schedules"))!.args[2]).toBe("2026-10-02");
+});

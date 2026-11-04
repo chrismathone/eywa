@@ -1,12 +1,12 @@
 "use client";
 
-import { useRef, useState, useTransition, type ReactNode } from "react";
+import { useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import { Toolbar, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { shortDateLabel } from "../dates";
-import { isBlankCheck, needsSupplement, type BeforeClassCheck } from "../items";
+import { DONE_CHECK, isBlankCheck, isExcused, needsSupplement, type BeforeClassCheck } from "../items";
 import { saveBeforeClassCheck } from "../server/actions";
 import { checkKey, type ReportDayLevels, type RosterStudent } from "../types";
 import { DateCalendar } from "./date-calendar";
@@ -21,13 +21,17 @@ import { MonthTable } from "./month-table";
  * 누르면 늦게 도착한 옛 값이 새 값을 덮을 수 있어서다. 저장이 실패하면 그 칸을 서버가 마지막으로 확인한 값으로 되돌린다.
  */
 export function ChecklistBoard({
-  classId, month, dates, students, initialChecks, initialDate, today, trackingStart, canEdit, report, classPicker,
+  classId, month, dates, students, initialChecks, autoExcused, offDays, initialDate, today, trackingStart, canEdit, report, classPicker,
 }: {
   classId: string;
   month: string;
   dates: string[];
   students: RosterStudent[];
   initialChecks: Record<string, BeforeClassCheck>;
+  /** '지난 수업 결석' 자동 제외 칸 열쇠(서버 판정 · 저장 안 함). */
+  autoExcused: string[];
+  /** 쉰 휴일(날짜 → 이름) — 통계에서 빠진다. 칸은 그대로(그날 수업했다면 체크하면 수업한 날이 된다). */
+  offDays: Record<string, string>;
   initialDate: string | null;
   today: string;
   /** 이 반 첫 체크 날(서버) — 이 화면에서 처음 체크하면 아래에서 앞당긴다. */
@@ -65,7 +69,10 @@ export function ChecklistBoard({
       return copy;
     });
     const run = async () => {
-      const res = await saveBeforeClassCheck({ classId, studentId, date, missed: next.missed, absent: next.absent, card: next.card });
+      const res = await saveBeforeClassCheck({
+        classId, studentId, date, missed: next.missed, absent: next.absent, card: next.card,
+        excused: next.excused ?? null, excuseReason: next.excuseReason ?? null, excuseNote: next.excuseNote ?? null,
+      });
       if (res.ok) {
         saved.current.set(key, isBlankCheck(next) ? undefined : next);
         setVersion((v) => v + 1);
@@ -91,10 +98,17 @@ export function ChecklistBoard({
   // 서버 값이 이 달 안이면 이 달 체크는 전부 화면에 있으니 화면 값만 믿는다(첫 체크를 지운 뒤에도 옛 시작일이 남지 않게).
   const serverStart = trackingStart && trackingStart.slice(0, 7) < month ? trackingStart : null;
   const start = [serverStart, ...Object.keys(checks).map((k) => k.split("|")[1] ?? "")].filter((d): d is string => !!d).sort()[0] ?? null;
+  // 화면에 보이는 칸 = 저장된 칸 + 자동 제외 표식(저장 안 함). 추적 시작·보고서 시안은 저장된 칸(checks)만 본다.
+  const viewChecks = useMemo(() => {
+    const out = { ...checks };
+    for (const k of autoExcused) out[k] = { ...(checks[k] ?? DONE_CHECK), autoExcused: true };
+    return out;
+  }, [checks, autoExcused]);
   const dayStudents = date ? students.filter((s) => s.activeDates.includes(date)) : [];
-  const dayChecks = Object.fromEntries(dayStudents.map((s) => [s.id, date ? checks[checkKey(s.id, date)] : undefined]));
+  const dayChecks = Object.fromEntries(dayStudents.map((s) => [s.id, date ? viewChecks[checkKey(s.id, date)] : undefined]));
   const supplement = dayStudents.filter((s) => { const c = dayChecks[s.id]; return c ? needsSupplement(c) : false; }).length;
   const absent = dayStudents.filter((s) => dayChecks[s.id]?.absent).length;
+  const excused = dayStudents.filter((s) => { const c = dayChecks[s.id]; return c ? isExcused(c) : false; }).length;
 
   return (
     <div className="space-y-3">
@@ -108,7 +122,7 @@ export function ChecklistBoard({
           <ToolbarSegmentItem active={view === "report"} onClick={() => setView("report")}>보고서 시안</ToolbarSegmentItem>
         </ToolbarSegment>
         {view !== "stats" ? (
-          <DateCalendar month={month} dates={dates} value={date} today={today} onChange={setDate} onGo={goMonth} pending={going} />
+          <DateCalendar month={month} dates={dates} offDays={offDays} value={date} today={today} onChange={setDate} onGo={goMonth} pending={going} />
         ) : null}
       </Toolbar>
 
@@ -122,6 +136,7 @@ export function ChecklistBoard({
             date={date}
             students={dayStudents}
             checks={checks}
+            autoExcused={autoExcused}
             reportLevels={report.levels}
             className={report.className}
             teacherName={report.teacherName}
@@ -130,14 +145,17 @@ export function ChecklistBoard({
           />
         ) : null
       ) : view === "month" ? (
-        <MonthTable dates={dates} students={students} checks={checks} today={today} trackingStart={start} onPickDate={(d) => { setDate(d); setView("check"); }} />
+        <MonthTable dates={dates} offDays={offDays} students={students} checks={viewChecks} today={today} trackingStart={start} onPickDate={(d) => { setDate(d); setView("check"); }} />
       ) : (
         <>
           <p className="text-text-dim px-1 text-sm">
-            {date ? shortDateLabel(date) : ""} · 학생 {dayStudents.length}명 · 보충 필요 {supplement}명 · 결석 {absent}명
+            {date ? shortDateLabel(date) : ""}
+            {date && offDays[date] ? <span className="text-danger font-semibold"> · 휴일({offDays[date]}) — 수업했다면 그대로 체크하세요(통계에서 빠진 날)</span> : null}
+            {" "}· 학생 {dayStudents.length}명 · 보충 필요 {supplement}명 · 결석 {absent}명{excused ? ` · 체크 제외 ${excused}명` : ""}
             {canEdit ? " · 체크한 칸 = 미흡(누르면 바로 저장)" : " · 보기 전용"}
           </p>
-          <CheckTable students={dayStudents} checks={dayChecks} canEdit={canEdit} onChange={change} />
+          {/* 날짜마다 새로 — 사유 글 상자가 다른 날 글을 들고 가지 않게. */}
+          <CheckTable key={date ?? ""} students={dayStudents} checks={dayChecks} canEdit={canEdit} onChange={change} />
         </>
       )}
     </div>

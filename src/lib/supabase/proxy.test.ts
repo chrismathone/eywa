@@ -19,13 +19,13 @@ it("keeps the emergency exit reachable without checking a broken or absent sessi
 });
 
 describe("login return destination", () => {
-  it("retains the classroom preview instead of returning to the default dashboard", async () => {
-    const response = await updateSession(new NextRequest("http://localhost:3032/dashboard?view=rooms"));
+  it("retains the query instead of returning to the default dashboard", async () => {
+    const response = await updateSession(new NextRequest("http://localhost:3032/dashboard?subject=math"));
     const location = new URL(response.headers.get("location")!);
     expect(response.status).toBe(307);
     expect(location.pathname).toBe("/login");
-    expect(location.searchParams.get("next")).toBe("/dashboard?view=rooms");
-    expect(location.searchParams.has("view")).toBe(false);
+    expect(location.searchParams.get("next")).toBe("/dashboard?subject=math");
+    expect(location.searchParams.has("subject")).toBe(false);
   });
 
   it("preserves multiple encoded filters without turning them into login parameters", async () => {

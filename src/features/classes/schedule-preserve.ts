@@ -91,6 +91,23 @@ export type PreservedSlot = Omit<IncomingSlot, "explicitTime" | "labSeparate"> &
   labSeparate: boolean;
 };
 
+/**
+ * 강의실 라벨 — **강의실을 바꿨거나 새 교시에 강의실을 골랐으면 그 강의실 이름**, 강의실을 비웠으면 null, 그 외엔 승계.
+ * 🔴 같은 사실(강의실)을 FK(`classroom_id`)와 라벨 두 벌로 든다([[#115]]). 예전엔 라벨을 늘 옛 행에서 승계해, 반 수정에서
+ *    강의실을 602→605로 바꾸면 FK만 605가 되고 라벨은 602로 남았다 — 설정 화면(FK)은 605, 시간표(라벨 우선)는 602,
+ *    시트 가져오기(라벨 비교)도 602로 읽었다(원장 2026-11-02 PL3a *"왜 설정값과 시간표가 다를까? 수요일 605호인데"*).
+ *    이름을 모르면(조회 실패) null — 옛 강의실 라벨을 남기는 것보다 FK 이름으로 떨어지는 편이 맞다.
+ */
+function resolveSlotRoomLabel(
+  s: IncomingSlot,
+  prior: PriorSlot | undefined,
+  roomNames: ReadonlyMap<string, string> | undefined,
+): string | null {
+  const next = s.classroomId ?? null;
+  if (prior && next === (prior.classroomId ?? null)) return prior.slotRoomLabel ?? null;
+  return next ? (roomNames?.get(next) ?? null) : null;
+}
+
 /** 재삽입 라벨 규칙 — 자리를 골랐으면 그 자리, 자리였다가 풀었으면 null, 그 외엔 승계. */
 function resolveSlotTeacherLabel(s: IncomingSlot, prior: PriorSlot | undefined): string | null {
   return s.seatLabel
@@ -305,6 +322,8 @@ export function preserveScheduleFields(input: {
   today: string;
   /** 교시표의 (시작,종료) 짝 — `planSlotArchives`에 넘긴 것과 **같은 값**이어야 한다. */
   periodPairs?: PeriodPairs;
+  /** 강의실 id → 이름 — 강의실을 바꾼 교시의 라벨을 새 강의실로 맞춘다(`resolveSlotRoomLabel`). */
+  roomNames?: ReadonlyMap<string, string>;
 }): PreservedSlot[] {
   // 같은 키가 여러 행일 수 있어(중복 슬롯) 큐로 두고 하나씩 소비 = 1:1 승계.
   // 1차 = 정확 키(요일|시작|종료). 2차 = (요일|시작) — 폼이 보내는 종료시각은 교시표에서 파생되므로
@@ -363,7 +382,7 @@ export function preserveScheduleFields(input: {
       //    존재하는 이유가 그 사고 방지다. 그래서 ① 자리를 골랐으면 그 자리로 ② 자리였는데 사람/담임으로
       //    바꿨으면 지우고(안 지우면 화면엔 사람인데 라벨은 LAB인 유령이 남는다) ③ 그 외엔 승계.
       slotTeacherLabel: resolveSlotTeacherLabel(s, prior),
-      slotRoomLabel: prior?.slotRoomLabel ?? null,
+      slotRoomLabel: resolveSlotRoomLabel(s, prior, input.roomNames),
       periodLabel: prior?.periodLabel ?? null,
       mergeGroup: prior?.mergeGroup ?? null,
       labSeparate: resolveLabSeparate(s, prior),

@@ -1,3 +1,5 @@
+import type { AreaScores } from "./area-scores";
+
 /**
  * 성적 입력표의 **공용 계약** — 서버 조회·화면 격자·엑셀이 같은 모양을 본다.
  *
@@ -78,6 +80,8 @@ export type GradeSheetRow = {
    *    실측 2026-09-22(수학 2학기 204명): 지금 수학 반이 없는 8명 중 **6명만 퇴원**이고 2명은 재원이었다.
    */
   withdrawn: boolean;
+  /** 저장된 영역 점수(영어 Monthly Test, s2_0023) — 칸이 없거나 안 적었으면 null. */
+  areas?: AreaScores | null;
 };
 
 export type GradeSheet = {
@@ -104,6 +108,8 @@ export type GradeSheet = {
    * 그동안 월말평가는 **학기에 한 칸**이라 다음 달을 적으면 지난달을 덮어쓴다(그래서 배너로 알린다).
    */
   monthReady: boolean;
+  /** s2_0023(영역 점수)이 적용됐는가 — 영역으로 적는 시험(영어 Monthly Test)에서만 본다. 없으면 false. */
+  areasReady?: boolean;
   /** 강사 담당 반 조회가 일부 실패했다(`gradeTeacherClassScope`) — 화면이 배너로 알린다. */
   scopePartial?: boolean;
 };
@@ -151,6 +157,8 @@ export type GradeEntry = {
   noExam?: boolean;
   /** '시험없음' 사유 — 끄면 함께 지운다. */
   noExamReason?: string | null;
+  /** 영역 점수(영어 Monthly Test) — 안 보내면 안 건드린다 · null이면 비운다. 서버가 합으로 점수를 정한다. */
+  areas?: AreaScores | null;
 };
 
 export const GRADE_MAX_SCORE_DEFAULT = 100;

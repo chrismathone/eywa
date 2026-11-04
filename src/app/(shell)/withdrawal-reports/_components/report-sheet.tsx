@@ -33,7 +33,7 @@ export function ReportSheet({ fields: f, subject, signatures, archive = false, c
           <tr><th scope="row">퇴원일</th><td colSpan={3}>{f.exitDate}</td><th scope="row" colSpan={2}>수강기간</th><td colSpan={6}>{f.period}</td></tr>
           <tr><th scope="row">담임명</th><td colSpan={3}>{f.teacher}</td><th scope="row" colSpan={2}>{archive ? "출결·현황" : "최근 3개월 출결 현황"}</th><td colSpan={6}>{f.attendance}</td></tr>
           {fullRow("퇴원사유", f.reason)}
-          {fullRow(<>퇴원 상세 사유<span className={styles.requirement}>(10pt, 200자 이상)</span></>, f.detail, true)}
+          {fullRow("퇴원 상세 사유", f.detail, true)}
           <tr><th scope="rowgroup" rowSpan={2} colSpan={2}>상담결과{consultationNote && <div>{consultationNote}</div>}</th><th scope="row" colSpan={2}>학생 상담</th><td colSpan={8}><div className={styles.consultation}>{f.studentConsultation}</div></td></tr>
           <tr><th scope="row" colSpan={2}>학부모상담</th><td colSpan={8}><div className={styles.consultation}>{f.parentConsultation}</div></td></tr>
           {consultationLinks && fullRow("연결 상담", consultationLinks)}

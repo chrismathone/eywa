@@ -1,5 +1,16 @@
-import { useWindowStore, windowId } from "./window-store";
+import { useWindowStore, windowId, type WindowParams } from "./window-store";
 import { navigateWindow } from "./route-window";
+
+const pathOf = (url: string) => url.split(/[?#]/)[0]!;
+/** 창이 안에서 **다른 메뉴의 화면**으로 넘어갔나(원생목록 창 안의 퇴원보고서). 같은 메뉴의 상세는 '보던 자리'라 아니다. */
+function leftMenu(stack: readonly string[] | undefined, href: string): boolean {
+  const top = stack?.[stack.length - 1];
+  return !!top && pathOf(top) !== pathOf(href) && !pathOf(top).startsWith(`${pathOf(href)}/`);
+}
+function returnToEntry(winId: string): void {
+  const target = useWindowStore.getState().homeNav(winId);
+  if (target) navigateWindow(winId, target);
+}
 
 /**
  * **메뉴에서 화면을 여는 단일 경로** — 사이드바 줄(`RailItem`)과 메뉴 판(`HubGrid`)이 같은 규칙을 쓴다.
@@ -37,6 +48,9 @@ import { navigateWindow } from "./route-window";
  *    판정은 여기가 아니라 **스토어 `open()`**에 있다 — 창 링크·알림·인쇄로 되살려도 같아야 해서다(리뷰 2026-09-11).
  *    그래서 여기선 `open()`만 부른다(되살리기·창 개수 한도·첫 화면 표식이 전부 거기서 정해진다).
  *
+ * 🔴 **다른 메뉴의 화면으로 넘어간 창은 최상단이 아니어도 첫 화면으로 되돌린다** (원장 2026-11-02: 원생 창 안에서 퇴원보고서를
+ *    한 번 연 뒤로 원생목록을 눌러도 계속 퇴원보고서가 떴다). 지켜 줄 '보던 자리'는 그 메뉴 안의 화면뿐이다.
+ *
  * 🔴 데스크톱 + 창(window) 표현일 때만 부를 것 — 모바일 `router.push`와 배경(desktop) 표현은 호출부가
  *    먼저 가른다(그쪽은 창이 없어 되돌릴 대상 자체가 없다).
  */
@@ -45,10 +59,27 @@ export function openMenuWindow(params: { id: string; title: string; href: string
   const winId = windowId("route", params.id);
   const win = store.windows[winId];
   const onTop = !store.spotlight || store.spotlightRaised.includes(winId);
-  if (win && !win.minimized && store.focusedId === winId && onTop && win.params.href === params.href) {
-    const target = store.homeNav(winId);
-    if (target) navigateWindow(winId, target);
+  const sameEntry = win?.params.href === params.href;
+  if (win && !win.minimized && store.focusedId === winId && onTop && sameEntry) {
+    returnToEntry(winId);
     return;
   }
-  store.open("route", params);
+  const left = sameEntry && leftMenu(store.nav[winId], params.href);
+  if (store.open("route", params) && left) returnToEntry(winId);
+}
+
+/**
+ * **링크로 화면을 여는 단일 경로** — 운영실 카드·알림·창 안의 '창으로 열기' 링크. 메뉴와 달리 **목적지가 정해진 이동**이라 보던 자리를 지키지 않는다.
+ *
+ * 🔴 계기(원장 2026-11-02): 운영실 '재원생 구성'의 미수강을 눌러 원생목록 창을 열고, 학생 → 퇴원보고서로 들어간 뒤로 미수강을 다시 누르면
+ *    계속 퇴원보고서가 떴다. `open()`은 **입구 주소**만 비교하는데 창 안 이동은 입구 주소를 바꾸지 않아, 같은 링크는 포커스만 받았다.
+ * ⚠️ 이미 그 주소면 `homeNav`가 null을 돌려 다시 불러오지 않는다. 녹음 중 잠금·미저장 보호도 `homeNav`가 맡는다.
+ */
+export function openLinkWindow(params: WindowParams, anchor?: { x: number; y: number }): boolean {
+  const store = useWindowStore.getState();
+  const winId = windowId("route", params.id);
+  const sameEntry = store.windows[winId]?.params.href === params.href;
+  const opened = store.open("route", params, anchor);
+  if (opened && sameEntry) returnToEntry(winId);
+  return opened;
 }

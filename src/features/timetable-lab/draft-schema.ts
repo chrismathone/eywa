@@ -64,7 +64,8 @@ export type SavedDraftSnapshot = z.infer<typeof draftSnapshotSchema>;
 export type SaveDraftInput = z.infer<typeof saveDraftSchema>;
 export type DraftSummary = { id: string; name: string; subject: 'english'; createdAt: string;
   createdBy: string; createdByName: string | null;
-  lessonCount: number; classCount: number; studentCount: number; referenceDate: string | null };
+  lessonCount: number; classCount: number; studentCount: number; referenceDate: string | null;
+  /** 지금 계정이 덮어쓰거나 지울 수 있는가 — 서버가 다시 본다. */ manageable?: boolean };
 
 /** Reject pathological nested formatting before recursive schema validation. */
 export function boundedJson(value: unknown): boolean {

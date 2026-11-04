@@ -49,7 +49,8 @@ export async function classBoardLiveForStudent(tenantId: string, classId: string
  *    살아 있는 요청(또는 그 뒤를 잇는 범위)에 이 반이 실려 있을 때만. 합류가 범위를 못 실은 채 성공을 돌려주는 길이 있다.
  *  · `request=false` = 미리 보기(보내려던 게 아니다) — 까닭만 가리고 요청하지 않는다. 문장도 미리 보기용이다.
  *  · 🔴 "기다리면 풀린다"는 동기화가 실제로 그 학생을 넣을 수 있을 때만 — 워커의 대상 기준(`targetClassWhere`·
- *    `currentEnrollmentOn`: 활성·보고서 발송·수학·종강 전 반 · 재원이고 테스트가 아닌 학생 · 시작일 ≤ 오늘 ≤ 종료일)을 그대로 본다.
+ *    `currentEnrollmentOn`: 활성·보고서 발송·수학·종강 전 반 · 재원이고 테스트가 아닌 학생 · 시작일 ≤ 오늘 ≤ 종료일)을 그대로 본다
+ *    (2026-11-04 원장 지시로 워커도 다시 보고서 발송 반만 동기화한다 — 11-03 'JJ 맞춤' 되돌림).
  * 조회 실패·예외 = 까닭 모름(옛 안내 그대로). 던지지 않는다 — 발송은 이미 막혔고 여기는 안내일 뿐이다.
  * ⚠️ admin 클라이언트 + tenant 필터 — 돌려주는 것은 결과 코드와 안내 문장뿐이다.
  */
@@ -83,7 +84,7 @@ export async function explainBoardMissing(
     const members = (mem.data ?? []) as { status: string | null; reason: string | null }[];
     const c = cls.data as { is_active: boolean | null; report_optout: boolean | null; subject: string | null; closed_at: string | null } | null;
     const st = stu.data as { status: string | null; is_test: boolean | null } | null;
-    // 워커 `targetClassWhere`(종강일 당일까지 대상) · `currentEnrollmentOn`(재원 · 테스트 아님)과 같은 기준.
+    // 워커 `targetClassWhere`(종강일 당일까지 대상) · `currentEnrollmentOn`(재원 · 테스트 아님)과 같은 기준 — 반은 보고서 발송 반만(워커와 같다 · 11-04 'JJ 맞춤' 되돌림).
     const classTarget = !!c && isSendCandidateClass({ subject: c.subject, is_active: c.is_active, report_optout: c.report_optout, closed_at: c.closed_at }, today);
     const studentTarget = !!st && st.status === "enrolled" && !st.is_test;
     holdReason = members.find((m) => m.status !== "ok")?.reason ?? null;

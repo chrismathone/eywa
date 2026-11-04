@@ -36,8 +36,9 @@ export function CardCounts({ counts }: { counts: Record<BeforeClassCard, number>
 }
 
 /** 판정 — 결석(빨강) · 보충 필요(미흡 3개 이상, 주황) · 그 밖은 양호(파랑). 시트 조건부 서식과 같은 색 뜻. */
-export function VerdictBadge({ absent, supplement }: { absent: boolean; supplement: boolean }) {
+export function VerdictBadge({ absent, supplement, excused = false }: { absent: boolean; supplement: boolean; excused?: boolean }) {
   if (absent) return <span className={`${BADGE} bg-danger-soft text-danger`}>결석</span>;
+  if (excused) return <span className={`${BADGE} bg-bg-soft text-text-dim`}>체크 제외</span>;
   if (supplement) return <span className={`${BADGE} bg-amber-soft text-amber`}>보충 필요</span>;
   return <span className={`${BADGE} bg-blue-soft text-blue`}>양호</span>;
 }

@@ -19,7 +19,7 @@ describe("describeEndSelection", () => {
     expect(plan.mode).toBe("subject");
     expect(plan.buttonLabel).toBe("퇴원보고서로 진행");
     expect(plan.notice).toContain("영어");
-    expect(plan.notice).toContain("과목 수강종료입니다");
+    expect(plan.notice).toContain("이 과목의 마지막 수업");
     expect(plan.notice).toContain("퇴원보고서");
     // 여러 과목 중 하나라도 수강종료면 보고서로(나머지 과목만 따로 끝내려면 그 과목만 고른다).
     expect(describeEndSelection(3, ["수학", "영어"], ["수학"]).mode).toBe("subject");

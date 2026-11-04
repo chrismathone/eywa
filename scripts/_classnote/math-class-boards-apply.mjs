@@ -1,7 +1,9 @@
 // scripts/_classnote/math-class-boards-apply.mjs — 반 보드 계획 **실행**(ClassNote 쓰기) — 수동 스크립트와 매일 동기화가 같은 코드.
 //
 // 한 반씩: ① 반 만들기(DOM '반 추가하기') 또는 ② 반 이름 바꾸기(PATCH — aywa에서 반 이름이 바뀐 경우) →
-// ③ 원아 추가 배정(직전에 1인 보드를 다시 읽어 계획과 같은지 확인) → ④ 반 원아가 계획과 정확히 같은지 확인.
+// ③ 원아 추가 배정(직전 재확인 — 원아를 1인 보드에서 가져온 학생은 1인 보드를, 원아 연결(0185a)에서 가져온 학생은 원아 연결표를
+//    다시 읽어 계획한 원아가 아직 이 학생 것인지 본다 · 반 보드 확인 기록에서 가져온 학생은 이미 그 반 보드에 있는 원아라 다시 읽을 출처가 없다) →
+// ④ 반 원아가 계획과 정확히 같은지 확인.
 // 끝에 건드린 1인 보드가 **하나도 안 바뀌었는지** 확인한다. 이상하면 `ClassBoardStop`을 던진다(다음 반으로 넘어가지 않는다).
 // 🔑 해제(원아·선생님)는 여기서 하지 않는다 — 배정·기록이 끝난 뒤 class-board-release-apply.mjs가 따로 한다(원장 2026-10-02 자동 해제).
 import { CLASSNOTE_BASE, createBoard, dismissHonorificDialog, enrollChild, fetchBoardChildren, fetchBoards } from "./classnote-admin-core.mjs";
@@ -30,15 +32,33 @@ async function renameBoard(page, centerId, boardId, name) {
 }
 
 /**
- * @param {{ page, centerId, targets, boards, membersByBoard, students, log?, out? }} p
+ * 계획한 원아 중 지금 다시 읽은 원아 연결에서 **이 학생에게 붙어 있지 않은** 원아 id들 — 하나라도 있으면 그 사이 연결이 바뀌었다(멈춘다).
+ * 🔑 같은지(집합 일치)가 아니라 "계획한 원아가 아직 이 학생 것인가"만 본다 — 계획은 명부에 없는 옛 연결 원아를 빼고(class-board-plan.mjs
+ *    `linkMembers`) 그 사이 새 연결이 하나 생길 수도 있어, 집합 일치로 보면 그때마다 동기화 전체가 멈춘다(적대적 리뷰 2026-11-02).
+ *    새로 생긴 연결은 이번에 넣지 않고 다음 동기화가 가드와 함께 본다.
+ */
+const unlinkedPlanned = (childLinks, studentId, planned) => {
+  const owner = new Map([...(childLinks ?? [])].map(([cid, sid]) => [Number(cid), sid]));
+  return planned.filter((id) => owner.get(Number(id)) !== studentId);
+};
+
+/**
+ * @param {{ page, centerId, targets, boards, membersByBoard, students, log?, out?, reloadChildLinks? }} p
  *   targets = 실행할 반 계획(보류 반 제외) · students = aywa 학생 지도(유효이름)
  *   out = 반별 결과를 담을 배열(호출자가 넘기면 **도중에 멈춰도** 그때까지 한 일이 호출자에게 남는다 — 동기화 보고서 0329a)
+ *   reloadChildLinks = 원아 연결표(0185a)를 **지금** 다시 읽는 함수(`() => loadChildLinks(sql, tenant)`) — 원아 연결에서 가져온 학생이
+ *     있으면 필수(없으면 멈춘다). 연결은 사람이 손으로 고친다(형제에게 잘못 붙은 연결) — 계획과 배정 사이에 고쳤으면 옛 연결로 넣지 않는다.
  * @returns {Promise<Array<{className, boardId, created:boolean, renamed:string|null, enrolled:Array<{name,childId}>, held:number}>>}
  */
-export async function applyClassBoardPlans({ page, centerId, targets, boards, membersByBoard, students, log = console.log, out = [] }) {
+export async function applyClassBoardPlans({ page, centerId, targets, boards, membersByBoard, students, log = console.log, out = [], reloadChildLinks = null }) {
+  // 1인 보드 재확인은 **원아를 1인 보드에서 가져온 학생만** 한다. 반 보드 확인 기록·원아 연결에서 가져온 학생(source "verified"·"link" —
+  // 1인 보드가 없거나 비었다, 원장 2026-11-02)은 1인 보드가 출처가 아니라서, 다시 읽으면 늘 "계획과 다르다"로 동기화 전체가 멈춘다.
+  const fromPersonal = (a) => (a.source ?? "personal") === "personal";
+  const fromLink = (a) => a.source === "link";
   const personalBefore = new Map();
   for (const p of targets)
     for (const a of p.assign) {
+      if (!fromPersonal(a)) continue;
       const pid = personalBoardId(boards, students.get(a.studentId).name);
       if (pid != null && !personalBefore.has(pid)) personalBefore.set(pid, ids(membersByBoard.get(pid)));
     }
@@ -98,11 +118,20 @@ export async function applyClassBoardPlans({ page, centerId, targets, boards, me
     entry.boardId = boardId;
 
     const want = new Set();
+    // 원아 연결 재확인 — 이 반에 연결 출처 학생이 있으면 배정 직전에 한 번 다시 읽는다(반마다 · DB 조회 1건).
+    let linksNow = null;
     for (const a of p.assign) {
-      const pid = personalBoardId(boards, students.get(a.studentId).name);
-      const live = ids(await fetchBoardChildren(page, centerId, pid));
-      const planned = new Set(a.children.map((c) => c.id));
-      if (!sameSet(live, planned)) throw new ClassBoardStop(`${a.name}: 1인 보드 원아가 계획과 다르다(그 사이 변경) — 중단`);
+      if (fromPersonal(a)) {
+        const pid = personalBoardId(boards, students.get(a.studentId).name);
+        const live = ids(await fetchBoardChildren(page, centerId, pid));
+        const planned = new Set(a.children.map((c) => c.id));
+        if (!sameSet(live, planned)) throw new ClassBoardStop(`${a.name}: 1인 보드 원아가 계획과 다르다(그 사이 변경) — 중단`);
+      } else if (fromLink(a)) {
+        if (typeof reloadChildLinks !== "function") throw new ClassBoardStop(`${a.name}: 원아 연결에서 가져온 학생인데 원아 연결을 다시 읽을 수 없다 — 중단`);
+        linksNow ??= await reloadChildLinks();
+        if (unlinkedPlanned(linksNow, a.studentId, a.children.map((c) => c.id)).length)
+          throw new ClassBoardStop(`${a.name}: 원아 연결이 계획과 다르다(그 사이 변경) — 중단`);
+      }
       for (const c of a.children) {
         want.add(c.id);
         if (c.already) continue;

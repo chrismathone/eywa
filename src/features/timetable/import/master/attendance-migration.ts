@@ -12,7 +12,12 @@ import { planWholeAbsences } from "./attendance-absence";
 type Plan = Pick<
   MasterPlan,
   "report" | "roster" | "mappings" | "effectiveDate"
->;
+> & {
+  /** 어느 수업이 어디로 갔는지 아는 호출자(연습본 적용)만 넘긴다. 시트 반영은 추정 규칙을 그대로 쓴다. */
+  pinnedTimes?: ReadonlyMap<string, string>;
+};
+export const pinnedTimeKey = (classId: string, day: string | null, start: string | null) =>
+  JSON.stringify([classId, day, start]);
 const cellKey = (a: MasterAttendance) =>
   JSON.stringify([a.studentId, a.classId, a.date, a.startTime]);
 export function planAttendanceMigration(
@@ -56,7 +61,11 @@ export function planAttendanceMigration(
     const toClassId = moves[0]?.toClassId ?? a.classId;
     const oldSlots = slotsOn(before, a.classId, a.date);
     const newSlots = slotsOn(after, toClassId, a.date);
-    const target = attendanceTarget(oldSlots, newSlots, a.startTime);
+    const pinned = moves.length ? undefined : plan.pinnedTimes?.get(pinnedTimeKey(a.classId, axisDowOf(a.date), a.startTime));
+    const pinnedSlots = newSlots.filter((s) => s.startTime === pinned);
+    const target: ReturnType<typeof attendanceTarget> = pinned && pinnedSlots.length === 1
+      ? { time: pinned, seatLabel: specialSlotLabel(pinnedSlots[0]!.label ?? "") }
+      : attendanceTarget(oldSlots, newSlots, a.startTime);
     let reason =
       moves.length > 1
         ? "한 학생의 출결을 옮길 새 반이 여러 개입니다."
@@ -116,6 +125,8 @@ export function planAttendanceMigration(
       ctx.attendance.some(
         (v) =>
           !rows.some((r) => r.id === v.id) &&
+          // 함께 다른 교시로 비켜나는 칸은 충돌이 아니다(한 교시씩 밀리는 시간표).
+          !plan.pinnedTimes?.has(pinnedTimeKey(v.classId, axisDowOf(v.date), v.startTime)) &&
           v.studentId === a.studentId &&
           v.classId === toClassId &&
           v.date === a.date &&

@@ -385,6 +385,10 @@ export const students = pgTable(
     studentPhone: text("student_phone"),
     parentPhone: text("parent_phone"),
     parentName: text("parent_name"),
+    // 보호자2(s2_0022) — 원생 수정 화면 '보호자 연락처'의 둘째 줄. 같은 사람 대조(형제·중복 후보·ClassNote 원아)에 보호자1 연락처와 함께 쓴다.
+    parent2Name: text("parent2_name"),
+    parent2Phone: text("parent2_phone"),
+    parent2Relation: text("parent2_relation"),
     // 키오스크 셀프 체크인용 출석번호(학생 휴대폰 뒷4자리 우선, 충돌 시 5자리).
     // 부분 유니크 (tenant_id, attendance_code) WHERE status<>'withdrawn' 는 손수 alpha SQL에서.
     attendanceCode: text("attendance_code"),
@@ -1926,7 +1930,7 @@ export const withdrawalReportGroups = pgTable("withdrawal_report_groups", {
   teacherIds: uuid("teacher_ids").array().notNull(), managerIds: uuid("manager_ids").array().notNull(), directorIds: uuid("director_ids").array().notNull().default(sql`'{}'::uuid[]`),
   subjects: text("subjects").array().notNull(), effectiveDate: date("effective_date").notNull(), exitKind: text("exit_kind").notNull(), snapshot: jsonb("snapshot").notNull(),
   status: text("status").notNull().default("pending"), createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(), appliedAt: timestamp("applied_at", { withTimezone: true }),
-}, t => [uniqueIndex("withdrawal_report_groups_pending").on(t.tenantId, t.studentId).where(sql`status not in ('completed','canceled')`)]);
+}, t => [index("withdrawal_report_groups_open").on(t.tenantId, t.studentId).where(sql`status not in ('completed','canceled')`)]);
 export const withdrawalReports = pgTable("withdrawal_reports", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),

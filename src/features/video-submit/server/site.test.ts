@@ -191,7 +191,9 @@ describe("뒷 4자리 + 이름 조회 — 선생님이 낸 영상 숙제 중 아
     db.tables.enrollments = db.tables.enrollments!.filter((e) => !(e.student_id === S2 && e.class_id === C));
     const english = await look("김민수");
     expect(english).toMatchObject({ ok: false, code: "no_homework" });
-    expect(!english.ok && english.error).toContain("영상을 올릴 수 있는 반이 없습니다");
+    // 반은 있다 — '반이 없다'가 아니라 '이 반은 여기서 안 받는다'(원장 2026-11-04 · 학생이 '반 배정이 안 됐다'로 읽었다)
+    expect(!english.ok && english.error).toContain("지금 다니는 반은 여기서 영상 숙제를 받지 않습니다");
+    expect(!english.ok && english.error).not.toContain("반이 없습니다");
     // ② 숙제가 나간 적이 없다 — 숙제 줄은 없고 반 줄(숙제 없이 올리기)만 선다(원장 2026-10-13 *"숙제가 없어도 업로드 할 수 있게"*)
     db.tables.lesson_reports = [];
     const none = await look("류태경");
@@ -204,7 +206,32 @@ describe("뒷 4자리 + 이름 조회 — 선생님이 낸 영상 숙제 중 아
     Object.assign(db.tables.enrollments![0]!, { end_date: null, on_hold: true });
     expect(await look("류태경")).toMatchObject({ ok: false, code: "no_homework" });
     Object.assign(db.tables.enrollments![0]!, { on_hold: false, start_date: "2026-10-05" });
-    expect(await look("류태경")).toMatchObject({ ok: false, code: "no_homework" });
+    const early = await look("류태경");
+    expect(early).toMatchObject({ ok: false, code: "no_homework" });
+    expect(!early.ok && early.error).toContain("다니는 반 수업이 10/5 (월)에 시작합니다");
+  });
+  it("🔴 지금 반이 영상 숙제 대상 밖(반째 꺼짐) + 새 반은 시작 전 — 두 까닭을 다 말하고 '반이 없다'고 하지 않는다(원장 2026-11-04 김민정 건)", async () => {
+    m.settings = { ...withEnglishOff(), report: { videoHomeworkPolicy: { ...withEnglishOff().report.videoHomeworkPolicy, disabledClassIds: [C] } } };
+    db.tables.enrollments!.push({ tenant_id: T, student_id: S, class_id: C3, start_date: "2026-10-06", end_date: null, on_hold: false, is_transferred: false });
+    const r = await look("류태경");
+    expect(r).toMatchObject({ ok: false, code: "no_homework" });
+    expect(!r.ok && r.error).toContain("지금 다니는 반은 여기서 영상 숙제를 받지 않습니다");
+    expect(!r.ok && r.error).toContain("10/6 (화)에 시작하는 반은 그날부터");
+    expect(!r.ok && r.error).not.toContain("반이 없습니다");
+    // 시작 전 반도 대상 밖이면 그날을 약속하지 않는다
+    m.settings = { ...withEnglishOff(), report: { videoHomeworkPolicy: { ...withEnglishOff().report.videoHomeworkPolicy, disabledClassIds: [C, C3] } } };
+    const off = await look("류태경");
+    expect(!off.ok && off.error).toBe("지금 다니는 반은 여기서 영상 숙제를 받지 않습니다. 숙제 영상은 ClassNote 알림장에 올려 주세요.");
+    // 같은 이름·같은 4자리 학생이 둘이면 한 학생의 까닭을 다른 학생에게 말하지 않는다(종전 문구 — 리뷰 2026-11-04)
+    m.settings = { ...withEnglishOff(), report: { videoHomeworkPolicy: { ...withEnglishOff().report.videoHomeworkPolicy, disabledClassIds: [C] } } };
+    db.tables.students!.push({ id: "s-twin", tenant_id: T, name: "류태경B", grade: "초3", status: "enrolled", student_phone: null, parent_phone: "010-2222-5678" });
+    const twins = await look("류태경");
+    expect(!twins.ok && twins.error).toBe("지금 여기서 영상을 올릴 수 있는 반이 없습니다. 숙제 영상은 ClassNote 알림장에 올려 주세요.");
+    db.tables.students = db.tables.students!.filter((st) => st.id !== "s-twin");
+    // 원장이 반을 켜면 숙제가 없어도 그 반 줄(숙제 없이 올리기)이 선다
+    m.settings = withEnglishOff();
+    const on = await look("류태경");
+    expect(on.ok).toBe(true);
   });
   it("🔴 영상을 낸 숙제도 마감까지 남고 낸 수를 센다(여러 단원 — 원장 2026-10-21) · 수동 완료는 낸 영상으로 세지 않는다", async () => {
     // 선생님이 10/1 숙제를 완료로 찍었다 — 영상은 0개

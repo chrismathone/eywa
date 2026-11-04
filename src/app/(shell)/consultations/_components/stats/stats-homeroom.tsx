@@ -14,12 +14,15 @@ import {
   type HomeroomFilter,
   type HomeroomSort,
   type HomeroomSortKey,
+  type HomeroomView,
 } from "@/features/consultations/homeroom-sort";
 import { bucketLabel } from "@/features/consultations/stats-model";
 import { saveConsultationStatsPrefs } from "@/features/consultations/server/stats-prefs-actions";
 import { HomeroomStudentGrid } from "./stats-homeroom-students";
 import { HomeroomFilters } from "./stats-homeroom-filters";
 import { HomeroomTeacherRow, SortHead } from "./stats-homeroom-row";
+import { HomeroomGaugeGrid } from "./stats-homeroom-gauge";
+import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 const mLabel = (ym: string) => bucketLabel(`${ym}-01`, "month");
@@ -37,6 +40,7 @@ export function StatsHomeroom({
   teacherScoped,
   initialSort,
   initialFilter,
+  initialView,
   linkedWho,
   linkedSubject,
 }: {
@@ -44,6 +48,7 @@ export function StatsHomeroom({
   teacherScoped: boolean;
   initialSort: HomeroomSort;
   initialFilter: HomeroomFilter;
+  initialView: HomeroomView;
   /** 지금 통계 조건(주소의 상담사·과목) — 이 표의 고르기와 맞물린다. */
   linkedWho: string;
   linkedSubject: string;
@@ -61,6 +66,7 @@ export function StatsHomeroom({
     if (window.location.hash === "#homeroom") document.getElementById("homeroom")?.scrollIntoView({ block: "start" });
   }, []);
   const [sort, setSort] = useState(initialSort);
+  const [view, setView] = useState(initialView);
   const [filter, setFilter] = useState(() => alignHomeroomFilter(initialFilter, linkedWho, linkedSubject));
   // 주소가 바뀌면(위 드롭다운 · 이 표가 보낸 이동) 고르기를 맞춘다 — 렌더 중 비교(effect 안 setState 금지 규칙, [[#25]]).
   const linkKey = `${linkedWho}|${linkedSubject}`;
@@ -83,8 +89,10 @@ export function StatsHomeroom({
   }
   const { months, retired } = data;
   const last = months.length - 1;
-  // 달이 하나뿐이면 평균 = 그 달 — 같은 숫자를 두 번 세우지 않는다.
-  const showAvg = months.length > 1;
+  const onView = (next: HomeroomView) => {
+    setView(next);
+    void saveConsultationStatsPrefs({ hrView: next }).catch(() => undefined);
+  };
   const onSort = (key: HomeroomSortKey) => {
     const next = nextSort(sort, key);
     setSort(next);
@@ -112,7 +120,17 @@ export function StatsHomeroom({
     // id — 목록 요약 띠의 [담임별] 팝업이 여기로 바로 내려온다(`/consultations/stats#homeroom`).
     <div id="homeroom" className={`${card} scroll-mt-4`}>
       <div className="space-y-0.5">
-        <p className="text-foreground text-sm font-bold">담임별 상담 현황</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-foreground text-sm font-bold">담임별 상담 현황</p>
+          <ToolbarSegment label="보기">
+            <ToolbarSegmentItem active={view === "table"} onClick={() => onView("table")}>
+              표
+            </ToolbarSegmentItem>
+            <ToolbarSegmentItem active={view === "gauge"} onClick={() => onView("gauge")}>
+              게이지
+            </ToolbarSegmentItem>
+          </ToolbarSegment>
+        </div>
         <p className="text-muted-foreground text-xs break-keep">
           지금 담임 반 재원생 · {months.length > 1 ? `${mLabel(months[0]!)}~${mLabel(months[last]!)}` : `${mLabel(months[0]!)}부터`} · 담임 본인이 쓴 상담 기준 · 부담임·특강·JJ 반 제외 · 기간·카테고리 필터와 무관 · 과목·담임(한 명)을 고르면 위 상담 통계도 그 조건으로
           {retired.teachers > 0 ? ` · 퇴사한 담임 ${retired.teachers}명의 반 ${retired.classes}개(학생 ${fmt(retired.students)}명) 제외` : ""}
@@ -137,6 +155,8 @@ export function StatsHomeroom({
         <p className="text-muted-foreground py-3 text-center text-sm">
           {data.teachers.length > 0 ? "고른 조건에 맞는 담임이 없습니다" : teacherScoped ? "담임을 맡은 반이 없습니다" : "담임 반이 없습니다"}
         </p>
+      ) : view === "gauge" ? (
+        <HomeroomGaugeGrid teachers={sorted} months={months} prevMonth={data.prevMonth} />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-max border-collapse text-sm">
@@ -148,7 +168,6 @@ export function StatsHomeroom({
                 {head("students", `${mLabel(months[last]!)} 학생`)}
                 {head("left", `${mLabel(data.prevMonth)} 퇴원`)}
                 {months.map((m, i) => head(`m${last - i}`, m === months[last] ? `${mLabel(m)}(진행 중)` : mLabel(m)))}
-                {showAvg ? head("avg", "평균") : null}
                 {head("unmet", "이번 달 미상담")}
                 <th className="px-2 py-1.5 text-center font-medium whitespace-nowrap" title="이번 달 담임은 안 했지만 다른 선생님·데스크가 상담한 학생 수">
                   담임 아닌 직원 상담
@@ -159,10 +178,10 @@ export function StatsHomeroom({
             <tbody>
               {sorted.map((t) => (
                 <Fragment key={t.id}>
-                  <HomeroomTeacherRow t={t} showAvg={showAvg} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} />
+                  <HomeroomTeacherRow t={t} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} />
                   {open === t.id ? (
                     <tr>
-                      <td colSpan={months.length + (showAvg ? 9 : 8)} className="bg-bg-soft/40 p-2">
+                      <td colSpan={months.length + 8} className="bg-bg-soft/40 p-2">
                         <HomeroomStudentGrid t={t} months={months} unmetOnly={filter.unmetStudentsOnly} />
                       </td>
                     </tr>

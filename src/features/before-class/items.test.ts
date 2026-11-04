@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { classDatesInMonth, defaultCheckDate, pickCheckDate, shortDateLabel } from "./dates";
-import { completionRate, DONE_CHECK, isBlankCheck, needsSupplement, normalizeCard, normalizeMissed, reportCheckLevels, reportCheckRows, summarizeStudent } from "./items";
+import { completionRate, DONE_CHECK, isBlankCheck, needsSupplement, normalizeCard, normalizeMissed, reportCheckLevels, reportCheckRows, summarizeStudent, autoCard, effectiveCard } from "./items";
 
 describe("비포클래스 판정", () => {
   it("완료율 = 체크 안 된 항목 ÷ 10 · 결석이면 null", () => {
@@ -80,14 +80,30 @@ describe("pickCheckDate — 주소의 날짜", () => {
 });
 
 describe("reportCheckRows — 수업보고서 '수업 평가' 표에 붙는 줄(원장 2026-10-30)", () => {
-  it("체크 없음 = 줄 없음 · 결석 = 한 줄 · 모두 해 옴 = 다섯 줄 상", () => {
+  it("체크 없음 = 줄 없음 · 결석 = 줄 없음 · 모두 해 옴 = 다섯 줄 상", () => {
     expect(reportCheckRows(null)).toEqual([]);
-    expect(reportCheckRows({ missed: [], absent: true, card: null })).toEqual([{ label: "수업 준비", level: null, none: "결석" }]);
+    expect(reportCheckRows({ missed: [], absent: true, card: null })).toEqual([]);
     expect(reportCheckRows(DONE_CHECK).map((r) => `${r.label}:${r.level}`)).toEqual(["예습영상:상", "개념정리:상", "풀이노트정리:상", "문제풀이:상", "오답정리:상"]);
   });
   it("미흡 항목은 눈금으로 — 한 항목 줄 미흡 = 하 · 묶은 줄 하나 미흡 = 중", () => {
     const rows = reportCheckRows({ missed: ["preview_video", "main_solve"], absent: false, card: null });
     expect(rows.find((r) => r.label === "예습영상")?.level).toBe("하");
     expect(rows.find((r) => r.label === "문제풀이")?.level).toBe("중");
+  });
+});
+
+describe("완료율 자동 카드(원장 2026-11-02)", () => {
+  const ITEM_KEYS = ["preview_video","concept_note","solution_note","print_homework","main_solve","main_review","sub_solve","sub_review","materials","deadline"];
+  const miss = (n: number) => ({ missed: ITEM_KEYS.slice(0, n), absent: false, card: null });
+  it("25%씩 — 75% 이상 골드 · 50% 이상 블루 · 25% 이상 옐로우 · 그 아래 레드", () => {
+    expect([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => autoCard(miss(n)))).toEqual([
+      "gold", "gold", "gold", "blue", "blue", "blue", "yellow", "yellow", "red", "red", "red",
+    ]);
+  });
+  it("결석이면 자동 카드 없음 · 고른 카드가 이긴다", () => {
+    expect(autoCard({ missed: [], absent: true, card: null })).toBeNull();
+    expect(effectiveCard({ missed: [], absent: true, card: null })).toBeNull();
+    expect(effectiveCard({ ...miss(9), card: "gold" })).toBe("gold");
+    expect(effectiveCard(miss(9))).toBe("red");
   });
 });

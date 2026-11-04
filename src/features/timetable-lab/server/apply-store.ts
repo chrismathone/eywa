@@ -2,18 +2,21 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import type postgres from 'postgres';
 import { openMasterDb } from '@/features/timetable/server/master-sheet-store';
-import { lockAttendanceMigration, loadAttendanceLinks } from '@/features/timetable/server/master-sheet-attendance';
+import { applyAttendanceMoves, attendanceBackups, lockAttendanceMigration, loadAttendanceLinks, loadMasterAttendance, type AttendanceBackup } from '@/features/timetable/server/master-sheet-attendance';
+import type { AttendanceMove } from '@/features/timetable/import/master/attendance-types';
 import { mergeViewPrefs, parseViewPrefs, serializeViewPrefs, type TimetableViewPrefs } from '@/features/timetable/lib/view-prefs';
 import { mergeMovedTeacherOrder } from '../teacher-order-merge';
 import { teacherColumns } from '../editor/teachers';
 import { appearanceOf } from '../editor/appearance';
 import { timeLabel, type Draft } from '../editor/model';
 import { buildApplyPlan, type ApplyPlan } from '../apply-plan';
+import { planLabAttendance, slotChangedClasses } from '../apply-attendance';
+import { rebaseDraft } from '../apply-rebase';
 import { fingerprint, contextFingerprint, readApplyContext, type ApplyContext } from './apply-context';
 import { shiftDays } from '@/features/timetable/lib/week';
 import { parseEditorViewPref, type TimetableEditorView } from '@/features/timetable/lib/editor-view-prefs';
 
-export type ApplyJob = { id: string; tenant_id: string; actor_id: string; actor_role: string; policy_hash: string; baseline_hash: string; request_hash: string; effective_date: string; apply_at: string; payload: Draft; status: string };
+export type ApplyJob = { id: string; tenant_id: string; actor_id: string; actor_role: string; policy_hash: string; baseline_hash: string; request_hash: string; effective_date: string; apply_at: string; payload: Draft; status: string; summary: { teacherNames?: number; students?: number } | null };
 export const policyHash = (settings: Record<string, unknown>, role: string) => fingerprint({ role, permissions: settings.permissions, modules: settings.modules });
 const equal = (a: unknown, b: unknown) => fingerprint(a ?? null) === fingerprint(b ?? null);
 
@@ -54,7 +57,8 @@ export function appliedViewPatch(draft: Draft, raw: unknown, slotIds: Map<string
   return patch;
 }
 
-export async function validateOperatingLinks(tx: postgres.TransactionSql, tenant: string, date: string, plan: ApplyPlan) {
+/** 막아야 할 연결을 거르고, 새 교시로 옮길 출결을 돌려준다. */
+export async function validateOperatingLinks(tx: postgres.TransactionSql, tenant: string, date: string, plan: ApplyPlan, context: ApplyContext): Promise<{ moves: AttendanceMove[]; backups: AttendanceBackup[] }> {
   const scheduleClasses = new Set([...plan.schedules.map(row => row.item.classId), ...plan.removedSchedules.map(row => row.classId), ...plan.closedClasses.map(row => row.id)]);
   const rosterPairs = new Set(plan.enrollments.filter(row => row.before).map(row => `${row.classId}:${row.studentId}`));
   const structuralClasses = [...new Set([...scheduleClasses, ...plan.classes.filter(row => row.before && row.teacherId !== row.before.teacherId).map(row => row.id)])];
@@ -62,22 +66,26 @@ export async function validateOperatingLinks(tx: postgres.TransactionSql, tenant
     const pendingTeacher = await tx`select id from classes where tenant_id=${tenant} and id=any(${structuralClasses}::uuid[]) and pending_teacher_id is not null limit 1`;
     if (pendingTeacher.length) throw new Error('변경할 반에 인수인계 예약이 있습니다. 반 정보를 먼저 확인해 주세요.');
   }
-  if (!scheduleClasses.size && !rosterPairs.size && !plan.classes.length) return;
+  if (!scheduleClasses.size && !rosterPairs.size && !plan.classes.length) return { moves: [], backups: [] };
   const pending = await tx`select id from timetable_snapshots s where tenant_id=${tenant} and reference_date>=${date}::date and reference_date>(now() at time zone 'Asia/Seoul')::date and payload->>'kind'='english_structure' and not exists(select 1 from timetable_import_logs l where l.tenant_id=${tenant} and l.snapshot_id=s.id and l.restored_at is not null) limit 1`;
   if (pending.length) throw new Error('적용일 이후 시간표 가져오기 예약이 있습니다. 기존 예약을 먼저 확인해 주세요.');
-  const attendance = await tx<{ classId: string; studentId: string }[]>`select class_id as "classId",student_id as "studentId" from attendance_records where tenant_id=${tenant} and session_date>=${date}::date`;
-  const links = await loadAttendanceLinks(tx, tenant, date);
-  if ([...attendance, ...links].some(row => scheduleClasses.has(row.classId) || rosterPairs.has(`${row.classId}:${row.studentId}`))) throw new Error('적용일 이후 출결·보고서·보강 예약이 연결되어 있습니다. 기록을 확인하거나 적용일을 뒤로 바꿔 주세요.');
+  const attendance = await loadMasterAttendance(tx, tenant, date), links = await loadAttendanceLinks(tx, tenant, date);
+  const migration = planLabAttendance(plan, context, date, attendance, links);
+  if (migration.errors.length) throw new Error(`${migration.errors[0]}${migration.errors.length > 1 ? ` 외 ${migration.errors.length - 1}건` : ''} 기록을 확인하거나 적용일을 뒤로 바꿔 주세요.`);
+  // 강사·강의실만 바뀐 반은 막지 않는다. 보고서에는 교시가 없고, 보강·자리 기록은 교시가 달라지는 반에서만 어긋난다.
+  const slotChanged = slotChangedClasses(plan), rosterMoved = (row: { classId: string; studentId: string | null }) => rosterPairs.has(`${row.classId}:${row.studentId}`);
+  if (links.some(row => rosterMoved(row) || (row.kind !== 'report' && slotChanged.has(row.classId)))) throw new Error('적용일 이후 보고서·보강 예약이 연결되어 있습니다. 기록을 확인하거나 적용일을 뒤로 바꿔 주세요.');
   const nativeLinks = await tx<{ classId: string | null; studentId: string | null }[]>`
     select original_class_id as "classId",student_id as "studentId" from makeup_cases where tenant_id=${tenant} and original_date>=${date}::date and lifecycle<>'closed'
     union all select class_id,null::uuid from makeup_sessions where tenant_id=${tenant} and session_date>=${date}::date and state in ('confirmed','finished')
     union all select anchor_class_id,student_id from makeup_participants where tenant_id=${tenant} and session_date>=${date}::date and status<>'cancelled'
     union all select class_id,student_id from seat_period_pins where tenant_id=${tenant}
     union all select class_id,student_id from seat_period_moves where tenant_id=${tenant} and session_date>=${date}::date`;
-  if (nativeLinks.some(row => !!row.classId && (scheduleClasses.has(row.classId) || rosterPairs.has(`${row.classId}:${row.studentId}`)))) throw new Error('변경할 반이나 학생에 보강 일정·교시 고정·자리 이동이 연결되어 있습니다. 해당 내역을 먼저 확인해 주세요.');
+  if (nativeLinks.some(row => !!row.classId && (slotChanged.has(row.classId) || rosterPairs.has(`${row.classId}:${row.studentId}`)))) throw new Error('변경할 반이나 학생에 보강 일정·교시 고정·자리 이동이 연결되어 있습니다. 해당 내역을 먼저 확인해 주세요.');
+  return { moves: migration.moves, backups: attendanceBackups(migration.moves, attendance) };
 }
 
-async function commitPlan(tx: postgres.TransactionSql, job: ApplyJob, context: ApplyContext, plan: ApplyPlan) {
+async function commitPlan(tx: postgres.TransactionSql, job: ApplyJob, context: ApplyContext, plan: ApplyPlan, skipped: string[], attendance: AttendanceBackup[]) {
   const tenant = job.tenant_id, date = job.effective_date, dayBefore = shiftDays(date, -1), draft = job.payload;
   const actor = context.people.find(person => person.id === job.actor_id)!;
   const slotIds = new Map<string, string>(), studentIds = new Map<string, string>();
@@ -121,13 +129,16 @@ async function commitPlan(tx: postgres.TransactionSql, job: ApplyJob, context: A
     const source = row.before ?? plan.enrollments.find(other => other.studentId === row.studentId && other.before && other.remove)?.before;
     await tx`insert into enrollments(tenant_id,student_id,class_id,start_date,end_date,on_hold,is_transferred_in,attendance_days,salary_tier) values(${tenant},${studentIds.get(row.studentId) ?? row.studentId},${row.classId},${date}::date,${row.before?.end ?? null}::date,${source?.hold ?? false},${!!source},${row.days}::text[],${source?.salaryTier ?? null})`;
   }
+  const attendanceMoved = await applyAttendanceMoves(tx, tenant, attendance);
   const [user] = await tx<{ prefs: Record<string, unknown> | null }[]>`select ui_prefs as prefs from users where tenant_id=${tenant} and id=${job.actor_id} for update`;
   if (!user) throw new Error('계정 정보를 다시 확인해 주세요.');
   const raw = user.prefs ?? {}, patch = appliedViewPatch(draft, raw, slotIds), prefs = serializeViewPrefs(mergeViewPrefs(parseViewPrefs(raw), patch));
   await tx`update users set ui_prefs=${tx.json({ ...raw, timetable: prefs } as never)}::jsonb where tenant_id=${tenant} and id=${job.actor_id}`;
-  const result = { ...plan.summary, effectiveDate: date, appliedAt: new Date().toISOString() };
+  const result = { ...plan.summary, attendanceMoved, skipped, effectiveDate: date, appliedAt: new Date().toISOString() };
   await tx`insert into audit_logs(tenant_id,actor_id,actor_name,action,target_type,target_label,metadata) values(${tenant},${job.actor_id},${actor.name},'timetable_structure_apply','timetable','시간표 연습본 적용',${tx.json({ jobId: job.id, ...result } as never)}::jsonb)`;
-  await tx`update timetable_lab_apply_jobs set status='applied',finished_at=now(),result=${tx.json(result)}::jsonb,error=null where tenant_id=${tenant} and id=${job.id} and status='pending'`;
+  // 실제로 넣은 새 수업만 남긴다 — 이번에 제외된 수업은 충돌이 풀리면 다시 넣을 수 있어야 한다(`appliedNewIds`).
+  const newLessonIds = [...plan.schedules, ...plan.blocks].flatMap(row => row.before ? [] : [row.item.id]);
+  await tx`update timetable_lab_apply_jobs set status='applied',finished_at=now(),result=${tx.json({ ...result, newLessonIds, attendanceMoves: attendance } as never)}::jsonb,error=null where tenant_id=${tenant} and id=${job.id} and status='pending'`;
   return result;
 }
 
@@ -148,11 +159,14 @@ export async function runApplyJob(id: string) {
       await tx`select set_config('request.jwt.claims',${JSON.stringify({ sub: job.actor_id, role: 'authenticated' })},true)`;
       const context = await readApplyContext(tx, job.tenant_id), actor = context.people.find(person => person.id === job.actor_id);
       if (!actor || actor.status !== 'active' || actor.role !== job.actor_role || policyHash(context.settings, actor.role) !== job.policy_hash) throw new Error('예약 이후 계정 또는 권한이 변경되었습니다. 다시 확인해 주세요.');
-      if (contextFingerprint(context) !== job.baseline_hash) throw new Error('예약 이후 원본 시간표가 변경되었습니다. 다시 불러와 적용해 주세요.');
       if (job.payload.source?.tenantId !== job.tenant_id) throw new Error('현재 학원의 시간표만 적용할 수 있습니다.');
-      const plan = buildApplyPlan(job.payload, context, job.effective_date);
-      await validateOperatingLinks(tx, job.tenant_id, job.effective_date, plan);
-      return await commitPlan(tx, job, context, plan);
+      // 예약 뒤에 운영이 바뀌어도 막지 않는다 — 실행 시점의 최신 자료로 다시 맞춘다.
+      const latest = rebaseDraft(job.payload, context, job.effective_date, contextFingerprint(context) !== job.payload.source?.baselineHash);
+      const plan = buildApplyPlan(latest.draft, latest.context, job.effective_date);
+      // 강사·학생 이름 변경은 예약할 때 권한을 봤다 — 그때보다 늘면 권한을 지나지 않은 쓰기다.
+      if (plan.people.length > (job.summary?.teacherNames ?? 0) || plan.students.length > (job.summary?.students ?? 0)) throw new Error('예약 이후 강사·학생 이름 변경 내용이 달라졌습니다. 다시 검사해 주세요.');
+      const { backups } = await validateOperatingLinks(tx, job.tenant_id, job.effective_date, plan, latest.context);
+      return await commitPlan(tx, { ...job, payload: latest.draft }, context, plan, latest.skipped, backups);
     });
   } catch (error) {
     const message = error instanceof Error && !('code' in error) ? error.message : '자료가 변경되었거나 저장에 실패했습니다. 다시 불러와 확인해 주세요.';

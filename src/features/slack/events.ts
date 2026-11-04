@@ -19,7 +19,8 @@ export const FORWARD_EVENT_OPTIONS: readonly ForwardEventOption[] = [
   { type: "attendance_desk_confirm_request", label: "데스크 확인 요청", group: "출결" },
   { type: "attendance_unmarked_to_present", label: "미출결 → 출석 전환", group: "출결" },
   { type: "attendance_absence_intake", label: "결석 사전 접수", group: "출결" },
-  { type: "student_attendance_notice", label: "학부모 결석·지각 연락", group: "출결" },
+  // 학생이 가족 계정으로 직접 쓴 글도 들어온다(작성자 칸 없음 · 원장 2026-11-04) — '학부모'라고 적지 않는다.
+  { type: "student_attendance_notice", label: "ClassNote 결석·지각 연락", group: "출결" },
   { type: "absence_alert", label: "반복 결석", group: "학생 관리" },
   { type: "followup_due", label: "상담 후속조치 기한", group: "학생 관리" },
   { type: "enrollment_followup", label: "콜&상담 후속 조치(다음 상담)", group: "학생 관리" },

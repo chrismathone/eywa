@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { useWindowStore, windowId } from "./window-store";
-import { openMenuWindow } from "./open-menu-window";
+import { openLinkWindow, openMenuWindow } from "./open-menu-window";
 import { iframeRegistry } from "./route-window";
 
 // 녹음 중인 창을 옮기지 않았다는 안내(sonner) — 실제 토스트 대신 호출만 본다.
@@ -102,6 +102,80 @@ describe("openMenuWindow — 메뉴 재클릭은 그 창을 첫 화면으로", (
     expect(useWindowStore.getState().windows[MEET]?.minimized).toBe(false);
     // 화면에 안 보이는 창을 리셋해 봐야 사용자는 못 본다 — 자리는 아직 그대로.
     expect(useWindowStore.getState().nav[MEET]).toHaveLength(2);
+  });
+});
+
+/**
+ * 계기(원장 2026-11-02): 운영실 미수강 → 학생 → 퇴원보고서로 들어간 뒤 미수강을 다시 누르면 계속 퇴원보고서가 떴다.
+ */
+describe("창이 안에서 다른 화면으로 옮겨 간 뒤", () => {
+  beforeEach(reset);
+
+  const STU = windowId("route", "students");
+  const LINK = { id: "students", title: "원생목록", href: "/students?status=enrolled&subject=none" };
+  const MENU = { id: "students", title: "원생목록", href: "/students" };
+
+  function drifted(params: { id: string; title: string; href: string }) {
+    const store = useWindowStore.getState();
+    openLinkWindow(params);
+    store.observeIframe(STU, { title: "원생목록", url: `${params.href}${params.href.includes("?") ? "&" : "?"}embed=1` });
+    store.observeIframe(STU, { title: "학생", url: "/students/abc?embed=1" });
+    store.observeIframe(STU, { title: "퇴원보고서", url: "/withdrawal-reports?request=abc&embed=1" });
+    store.showDesktop();
+  }
+
+  it("같은 링크를 다시 누르면 머물던 화면이 아니라 그 링크의 주소로 간다", () => {
+    drifted(LINK);
+    const replace = fakeFrame(STU);
+    openLinkWindow(LINK);
+    const st = useWindowStore.getState();
+    expect(st.focusedId).toBe(STU);
+    expect(st.windows[STU]?.minimized).toBe(false);
+    expect(st.nav[STU]).toEqual([LINK.href]);
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(replace.mock.calls[0]![0]).toContain("subject=none");
+  });
+  it("이미 그 주소면 다시 불러오지 않는다", () => {
+    openLinkWindow(LINK);
+    useWindowStore.getState().observeIframe(STU, { title: "원생목록", url: `${LINK.href}&embed=1` });
+    const replace = fakeFrame(STU);
+    openLinkWindow(LINK);
+    expect(replace).not.toHaveBeenCalled();
+  });
+  it("🔴 녹음 중인 창은 링크로도 옮기지 않는다", () => {
+    drifted(LINK);
+    const replace = fakeFrame(STU);
+    useWindowStore.getState().setWindowBusy(STU, true);
+    openLinkWindow(LINK);
+    expect(replace).not.toHaveBeenCalled();
+    expect(toastWarning).toHaveBeenCalled();
+  });
+  it("미저장 창은 떠나기 확인이 지키도록 기록을 미리 지우지 않는다", () => {
+    drifted(LINK);
+    const replace = fakeFrame(STU);
+    useWindowStore.getState().setWindowDirty(STU, true);
+    openLinkWindow(LINK);
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(useWindowStore.getState().nav[STU]).toHaveLength(3);
+    expect(useWindowStore.getState().pendingNav[STU]).toBeDefined();
+  });
+  it("메뉴를 눌러도 다른 메뉴의 화면에 머물지 않고 그 메뉴의 첫 화면으로 간다", () => {
+    drifted(MENU);
+    const replace = fakeFrame(STU);
+    openMenuWindow(MENU);
+    expect(useWindowStore.getState().nav[STU]).toEqual(["/students"]);
+    expect(replace).toHaveBeenCalledTimes(1);
+  });
+  it("같은 메뉴 안의 상세는 메뉴로 돌아와도 보던 자리를 지킨다", () => {
+    openMenuWindow(MENU);
+    const store = useWindowStore.getState();
+    store.observeIframe(STU, { title: "원생목록", url: "/students?embed=1" });
+    store.observeIframe(STU, { title: "학생", url: "/students/abc?embed=1" });
+    store.showDesktop();
+    const replace = fakeFrame(STU);
+    openMenuWindow(MENU);
+    expect(useWindowStore.getState().nav[STU]).toHaveLength(2);
+    expect(replace).not.toHaveBeenCalled();
   });
 });
 

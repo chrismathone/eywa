@@ -545,7 +545,7 @@ describe("지점 보기 — Supabase를 거치지 않는 일(바깥으로 나가
     const direct = SRC_FILES.filter((f) => /from "(@\/lib\/db(\/[a-z-]+)?|postgres|pg|drizzle-orm\/postgres-js)"/.test(readFileSync(f, "utf8"))).map(rel).sort();
     expect(direct).toEqual([
       "src/features/classes/server/class-period-names.ts", // ② cron(끝난 반 이름 정리)
-      "src/features/classes/server/class-term-store.ts", // ① endClassWithName
+      "src/features/classes/server/class-term-store.ts", // ① endClassWithName · reopenClassWithSchedules
       "src/features/demo-history/math-refresh.ts", // ② cron(데모 지점 새로 고침)
       "src/features/demo-roster/apply.ts", // ① replaceDemoRoster
       "src/features/demo-roster/dashboard-apply.ts", // ↑ 그 트랜잭션 안에서만
@@ -560,6 +560,7 @@ describe("지점 보기 — Supabase를 거치지 않는 일(바깥으로 나가
     ]);
     const STORES: [string, string][] = [
       ["src/features/classes/server/class-term-store.ts", "endClassWithName"],
+      ["src/features/classes/server/class-term-store.ts", "reopenClassWithSchedules"],
       ["src/features/students/server/english-name-store.ts", "saveEnglishName"],
       ["src/features/timetable/server/master-sheet-store.ts", "applyMasterTransaction"],
       ["src/features/timetable/server/master-sheet-store.ts", "cancelMasterDate"],

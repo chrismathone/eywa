@@ -41,10 +41,12 @@ export async function finishEndedClassNames() {
               .map((v) => v.class_name),
           );
           if (c.closed_at) {
+            // 종강일 뒤로 남은 배치도 닫는다 — 2026-11-02 전에 종강한 반에 남은 줄을 거두고, 종강일을 다른 길로
+            // 넣은 반도 다음 밤에 맞춘다(시트 가져오기가 없는 반을 "제거"로 띄우던 원인).
             const terms = await prepareClassTerms(tx, tenant, [
-              { classId: c.id, date: c.end_date },
+              { classId: c.id, date: c.end_date, closeSchedules: true },
             ]);
-            if (name === c.class_name && !terms[0]!.enrollments.length) continue;
+            if (name === c.class_name && !terms[0]!.enrollments.length && !terms[0]!.schedules?.length) continue;
             await applyClassTerms(tx, actor, terms);
           } else {
             if (name === c.class_name) continue;

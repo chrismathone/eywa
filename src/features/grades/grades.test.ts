@@ -71,9 +71,9 @@ describe("학기 축", () => {
 });
 
 describe("시험 칸", () => {
-  it("수학은 중간·기말 + 월말평가(내신 한 칸은 2026-10-14 폐지), 영어는 듣기평가가 앞에 붙는다", () => {
+  it("수학은 중간·기말 + 월말평가(내신 한 칸은 2026-10-14 폐지), 영어는 듣기평가가 앞에 붙고 Monthly Test(2026-11-04)가 뒤에", () => {
     expect(examSlotsFor("math")).toEqual(["midterm", "final", "monthly"]);
-    expect(examSlotsFor("english")).toEqual(["listening", "midterm", "final"]);
+    expect(examSlotsFor("english")).toEqual(["listening", "midterm", "final", "monthly"]);
     // 등록만 된 다른 과목도 화면이 서야 한다 — 기본 두 칸.
     expect(examSlotsFor("science")).toEqual(["midterm", "final"]);
   });
@@ -96,6 +96,7 @@ describe("시험 칸", () => {
       EXAM_SLOT_LABEL.listening,
       EXAM_SLOT_LABEL.midterm,
       EXAM_SLOT_LABEL.final,
+      "Monthly Test",
     ]);
   });
 });
@@ -322,8 +323,8 @@ describe("확인 뷰의 열(원장 2026-09-23)", () => {
 
   it("🔴 값이 없는 칸은 열을 안 세운다 — 안 친 달까지 빈 열로 깔리면 표만 길어진다", () => {
     expect(buildOverviewColumns("math", []).length).toBe(0);
-    // 그 과목에 없는 시험(영어의 월말평가)은 남아 있어도 안 세운다.
-    expect(buildOverviewColumns("english", [{ slot: "monthly", month: 9 }])).toEqual([]);
+    // 그 과목에 없는 시험(등록만 된 과목의 월말평가)은 남아 있어도 안 세운다.
+    expect(buildOverviewColumns("science", [{ slot: "monthly", month: 9 }])).toEqual([]);
   });
 
   it("평균은 **비율**로 센다 — 만점이 칸마다 다를 수 있다", () => {

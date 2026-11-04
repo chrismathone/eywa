@@ -49,7 +49,7 @@
   gap: 12px;
   align-items: center;
 }
-.classroomPreview {
+.designSwitch {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -62,10 +62,10 @@
   font-weight: 650;
   white-space: nowrap;
 }
-.classroomPreview:hover {
+.designSwitch:hover {
   background: #dfeaf6;
 }
-.classroomPreview:focus-visible {
+.designSwitch:focus-visible {
   outline: 2px solid #3284ad;
   outline-offset: 3px;
 }
@@ -427,6 +427,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 앞말 + 달 꼬리표(운영실 퇴원 "지난달 (26.10)") — 달이 첫 자리(오른쪽에서부터 거꾸로 놓임), 앞말은 같은 줄에 들어갈 때만.
+   자리가 모자라면 앞말이 둘째 줄로 넘어가 가려진다(한 줄 높이 + 넘침 숨김) — 말줄임처럼 달이 잘리지 않는다. */
+.kpiPeriodSplit {
+  display: inline-flex;
+  flex-direction: row-reverse;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  column-gap: 0.3em;
+  height: 1lh;
+}
 .subjectTrack {
   height: 12px;
 }
@@ -556,6 +566,14 @@
   overflow: auto;
   overscroll-behavior: contain;
   padding: 16px 20px 20px;
+}
+/* 넓은 팝업(운영실 퇴원 명단 2단) — 최대 72rem, 이전 화면 유지에선 사이드바 자리(--keepalive-rail)를 빼고 그 안 가운데에 둔다
+   (그 방식은 대화상자를 사이드바 오른쪽 가운데로 옮긴다 · globals.css). 폭을 창 기준으로만 잡으면 양옆이 사이드바 밑·화면 밖으로 잘린다. */
+.detailPopupWide {
+  max-width: min(72rem, calc(100vw - 2rem - var(--keepalive-rail, 0px)));
+}
+.popupBodyWide {
+  container: exit-popup / inline-size;
 }
 .popupBody > p + p {
   margin-top: 12px;
@@ -1229,6 +1247,80 @@ a.kpiCountRow:hover > span {
   margin: 12px 0 0;
   padding: 0;
   border-top: 1px solid #e4eaf0;
+}
+/* 운영실 퇴원 명단 — 열 맞춘 표(원장 2026-11-03 *"반까지 표시하고 열정렬해서 깔끔하게"*) · 길면 2단(*"스크롤 길게 하지말고 2단으로 … 공간활용"*).
+   열 = 이름 · 구분 · 학교·학년 · 과목 · 반 · 마지막 수업일 (+ '앞 달로 센' 표는 센 달).
+   2단 기준 = **팝업 본문 폭**(창 폭 아님 — 사이드바를 뺀 자리에 뜨기도 한다). 한 단 = (본문 − 24) / 2 이고 고정 열 합이 398px
+   ('앞 달로 센' 표 440px)이라 본문 1040px부터 반 열이 110px(68px) 남는다. 그보다 좁으면 1단 — 둘째 표는 머리줄·위 여백 없이 이어 붙인다. */
+.exitColumns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0 24px;
+}
+.exitColumns > .exitTable + .exitTable {
+  margin-top: 0;
+  border-top: 0;
+}
+.exitColumns > .exitTable + .exitTable > .exitHead {
+  display: none;
+}
+@container exit-popup (min-width: 1040px) {
+  .exitColumns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .exitColumns > .exitTable + .exitTable {
+    margin-top: 12px;
+    border-top: 1px solid #e4eaf0;
+  }
+  .exitColumns > .exitTable + .exitTable > .exitHead {
+    display: grid;
+  }
+}
+.exitTable {
+  --exit-cols: 4.5rem 4.25rem 4.5rem 4.75rem minmax(0, 1fr) 5rem;
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  border-top: 1px solid #e4eaf0;
+  min-width: 0;
+}
+.exitTableCounted {
+  --exit-cols: 4.5rem 4.25rem 4.5rem 4.75rem minmax(0, 1fr) 5rem 2.25rem;
+}
+.exitHead,
+.exitRow {
+  display: grid;
+  grid-template-columns: var(--exit-cols);
+  align-items: center;
+  gap: 6px;
+  padding: 7px 0;
+  border-bottom: 1px solid #edf0f5;
+  font-size: var(--text-xs);
+}
+.exitHead {
+  padding: 5px 0;
+  color: var(--text-dim);
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.exitHead > span:nth-child(n + 6),
+.exitRow > time,
+.exitCounted {
+  justify-self: end;
+  text-align: right;
+}
+.exitRow > :first-child,
+.exitCell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.exitRow > time,
+.exitCounted {
+  font-weight: 700;
+  white-space: nowrap;
 }
 .kpiListRow {
   display: flex;

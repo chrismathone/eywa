@@ -67,6 +67,8 @@ const COLUMN_LABEL: Record<string, string> = {
   registration_status: "등록상태", payment_amount: "결제금액", payment_date: "결제일", registrar: "등록자",
   counselor: "상담자", non_registration_reason: "미등록사유", follow_up_date: "후속일", follow_up_content: "후속내용",
   gender: "성별", birth_date: "생년월일", parent_relation: "보호자관계", address: "주소", address_detail: "상세주소",
+  // 원생 보호자2(s2_0022) — 원생 수정 화면의 칸 이름 그대로
+  parent2_name: "보호자2 이름", parent2_phone: "보호자2 연락처", parent2_relation: "보호자2 관계",
   student_type: "학생유형", received_date: "접수일", consultation_date: "상담일", shuttle_bus_request: "셔틀요청",
   consulted_at: "상담일시", english_name: "영문이름", blood_type: "혈액형", zip_code: "우편번호",
   privacy_agreement: "개인정보동의", installment_agreement: "분납동의", processing_status: "처리상태",

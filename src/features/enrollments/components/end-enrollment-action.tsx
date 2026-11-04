@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut, Loader2, X } from "@/components/icons/aywa-icon-compat";
 import { kstToday } from "@/lib/date-kst";
@@ -8,6 +8,7 @@ import { endChoices, type EndChoice } from "../end-choices";
 import { endSingleEnrollment } from "@/features/students/server/actions";
 import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 import { ReasonFields } from "@/features/withdrawals/reason-fields";
+import { endScopeText, endScopeViaReport, fetchEndScope } from "@/features/timetable/lib/end-scope-text";
 
 /**
  * 수강 종료 — 이 수강 **한 건**을 끝낸다(퇴원 아님·반 폐지 아님).
@@ -22,6 +23,9 @@ import { ReasonFields } from "@/features/withdrawals/reason-fields";
  * 🔑 **사유를 고른다**(원장 2026-10-15 *"기타는 모든 곳을 일치하게"*) — 상태 전환 창과 같은 칸(`ReasonFields`: 대분류 · 세부 ·
  *    '기타'면 메모 필수). 예전엔 사유 없이 '기타'로 끝나 퇴원관리에 메모 없는 '기타'가 쌓였다. 날짜 버튼이 곧 저장이라
  *    누르면 먼저 칸 검사(`reportValidity`)를 지난다 — 서버도 같은 규칙으로 다시 본다(`readReasonForm`).
+ * 🔴 **마지막 수업이면 창이 열리는 순간 막는다**(원장 2026-11-02) — 학생의 마지막 반 · 영어·수학 등 그 과목의 마지막 반은 사유를 다 고른 뒤
+ *    맨 아래 작은 글씨로 거절하지 않고, 입력 칸 대신 '반이동이면 반 이동 메뉴로, 퇴원(수강종료)이면 퇴원보고서'만 보여 준다.
+ *    판정은 시간표 확인 문구와 같은 서버 판정이고, 조회가 실패해도 저장 때 `endSingleEnrollment`가 다시 막는다.
  * ⚠️ 아직 시작 안 한 수강(배정 예정)엔 붙이지 말 것 — 종료일이 시작일로 클램프돼 두 갈래가 **같은
  *    결과**가 된다(그건 '종료'가 아니라 배정 취소라 학생 상세의 삭제가 맡는다).
  */
@@ -99,6 +103,17 @@ function EndDialog({
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const choices = endChoices(today, startDate);
+  const [gate, setGate] = useState<{ checking: boolean; blocked: string | null }>({ checking: true, blocked: null });
+
+  useEffect(() => {
+    let alive = true;
+    void fetchEndScope(enrollmentId, today).then((result) => {
+      if (alive) setGate({ checking: false, blocked: endScopeViaReport(result) ? endScopeText(result) : null });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [enrollmentId, today]);
 
   const submit = (choice: EndChoice) => {
     const form = formRef.current;
@@ -129,6 +144,25 @@ function EndDialog({
   };
 
   const working = busy || pending;
+  if (gate.blocked) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+        <div role="alertdialog" aria-label="수강 종료 불가" className="bg-background border-border w-full max-w-md rounded-2xl border p-6 shadow-lg">
+          <p className="eyebrow">수강 종료</p>
+          <h2 className="text-foreground mt-1 truncate text-lg font-bold">
+            {studentName ? `${studentName} · ` : ""}
+            {className}
+          </h2>
+          <p className="text-danger mt-3 text-sm font-medium">{gate.blocked}</p>
+          <div className="mt-4 flex justify-end">
+            <button type="button" onClick={onClose} className="text-text-dim hover:text-foreground px-3 py-1.5 text-sm">
+              닫기
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
       <div className="bg-background border-border max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border p-6 shadow-lg">
@@ -176,7 +210,7 @@ function EndDialog({
             <button
               key={c.key}
               type="button"
-              disabled={working || !!c.disabledReason}
+              disabled={working || gate.checking || !!c.disabledReason}
               onClick={() => submit(c)}
               title={c.disabledReason}
               className="border-line enabled:hover:border-primary/50 enabled:hover:bg-bg-soft focus-visible:ring-primary/50 block w-full rounded-xl border px-4 py-3 text-left transition focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"

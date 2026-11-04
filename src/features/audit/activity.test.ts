@@ -26,6 +26,16 @@ describe("activityDetail — 사람이 읽는 요약", () => {
     expect(changes).toEqual(["퇴원사유 기타→수업·강사", "세부 사유 비움→강사 퇴사"]);
   });
 
+  it("원생 보호자2 칸(s2_0022)은 화면 이름표 그대로 — 영문 칸 이름이 새지 않는다", () => {
+    const { changes } = activityDetail("students", "UPDATE", "한별", {
+      parent2_name: { old: null, new: "김어머니" },
+      parent2_phone: { old: null, new: "010-1234-5678" },
+      parent2_relation: { old: "모", new: null },
+    });
+    expect(changes).toEqual(["보호자2 이름 비움→김어머니", "보호자2 연락처 비움→010-1234-5678", "보호자2 관계 모→비움"]);
+    expect(changes.join(" ")).not.toMatch(/parent2/);
+  });
+
   it("미등록 값은 원문 폴백", () => {
     const { changes } = activityDetail("students", "UPDATE", "홍길동", {
       memo: { old: "abc", new: "def" },

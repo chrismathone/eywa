@@ -1,4 +1,5 @@
 import { absentClassKeysOf, judgeTodayLessonReports } from "../today-actions";
+import { isTestClass } from "./test-class";
 import { enrollmentAttendsOnDay, isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { boardKey, classKey, dowOf, sessionDates, type ClassPostDay } from "@/features/report-admin/english-writing";
 import { buildHasStudentsOn } from "@/features/report-admin/english-class-presence";
@@ -10,7 +11,7 @@ export type WorkEnrollment = { class_id: string; student_id: string; start_date:
 export type WorkAttendance = EffectiveAttendanceRecord & { status: string };
 export type WorkObligation = { classId: string; studentId: string; date: string; written: boolean; status: string | null;
   /** 쓴 보고서에 영상 과제가 나갔나(영상 숙제 출제율 — 원장 2026-10-19). */ videoHomework?: boolean };
-export const isTestClass = (name: string) => /(?:^|[\s([_-])(?:테스트(?:반)?|test(?:\s*class)?|sandbox)(?=$|[\s)\]_-])/iu.test(name);
+export { isTestClass };
 
 export type UnclassifiedWorkReport = Omit<WorkReport, "classId"> & { subject: string | null; teacherName: string | null };
 

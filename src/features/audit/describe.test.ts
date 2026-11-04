@@ -17,6 +17,22 @@ const ctx = (names: Record<string, string> = {}) => ({
   subjectLabel: (key: string) => ({ math: "수학", english: "영어" })[key] ?? key,
 });
 
+describe("auditDetail — ClassNote 명부 퇴원처리(2026-11-03)", () => {
+  it("정기 동기화 요약 — 실제로 내린 수와 관찰 모드(자동 퇴원처리 꺼짐)의 예정 수를 가른다", () => {
+    expect(auditDetail("classnote_board_sync_daily", { changed: 3, failed: 0, held: 12, offboarded: 0, offboardPlanned: 10 }, ctx())).toContain("명부 퇴원처리 예정 10명(자동 퇴원처리 꺼짐)");
+    const live = auditDetail("classnote_board_sync_daily", { changed: 3, failed: 0, held: 2, offboarded: 4 }, ctx());
+    expect(live).toContain("명부 퇴원처리 4명");
+    expect(live).not.toContain("예정");
+  });
+  it("확인 실패 — 사유 문장을 그대로 · 원아 번호·백업 위치는 안 보인다", () => {
+    const line = auditDetail("classnote_offboard_unconfirmed", { childId: 5611926, childName: "박예서", days: 60, why: "퇴원처리 요청 뒤에도 재원 명부에 그대로 있습니다(ClassNote가 처리하지 않음)", backupPath: "t/x.json" }, ctx());
+    expect(line).toContain("확인 필요");
+    expect(line).toContain("재원 명부에 그대로");
+    expect(line).not.toContain("5611926");
+    expect(line).not.toContain("x.json");
+  });
+});
+
 describe("auditDetail — 원스크린 일괄 입력(2026-10-15)", () => {
   const C1 = "c1111111-2222-3333-4444-555555555555";
   const C2 = "c2222222-2222-3333-4444-555555555555";
@@ -290,6 +306,11 @@ describe("auditDetail — 액션별 한글 상세", () => {
 
   it("class_end_term / class_handover_*: 날짜·새 담임", () => {
     expect(auditDetail("class_end_term", { classId: SID, closedAt: "2026-07-10" }, ctx())).toBe("종강일 2026-07-10");
+    const two = [{ id: "a" }, { id: "b" }];
+    expect(auditDetail("class_end_term", { classId: SID, closedAt: "2026-09-30", fromName: "LS4b", toName: "LS4b (~26.09.30)", affectedStudents: 3, schedules: two }, ctx()))
+      .toBe("종강일 2026-09-30 · 시간표 배치 2줄 닫음");
+    expect(auditDetail("class_end_term", { classId: SID, closedAt: "2026-09-30", fromName: "LS4b (~26.09.30)", toName: "LS4b (~26.09.30)", affectedStudents: 0, schedules: two }, ctx()))
+      .toBe("종강일 2026-09-30 · 남은 시간표 배치 2줄 정리");
     expect(
       auditDetail("class_handover_schedule", { newTeacherId: UID, effectiveDate: "2026-07-15" }, ctx({ [UID]: "김강사" })),
     ).toBe("새 담임 김강사 · 2026-07-15부터");
@@ -607,6 +628,8 @@ describe("auditDetail — 시간표 연습본 저장(개인 사본)", () => {
     const meta = { draftId: SID, lessonCount: 12, classCount: 5, studentCount: 31, referenceDate: "2026-09-28" };
     expect(auditDetail("timetable_lab_draft_save", meta, ctx())).toBe("개인 연습본 · 반 5개 · 수업 12개 · 학생 31명");
     expect(auditDetail("timetable_lab_draft_save", {}, ctx())).toBe("개인 연습본");
+    expect(auditDetail("timetable_lab_draft_overwrite", meta, ctx())).toBe("개인 연습본 · 반 5개 · 수업 12개 · 학생 31명");
+    expect(auditDetail("timetable_lab_draft_delete", meta, ctx())).toBe("개인 연습본 · 반 5개 · 수업 12개 · 학생 31명");
     expect(AUDIT_TYPE_LABEL.timetable_lab_draft).toBe("시간표 연습본");
   });
 });
@@ -1031,6 +1054,8 @@ describe("🔴 감사 상세에 영문이 새지 않는다(실표본 전수)", (
     { action: "staff_link_from_resume", meta: { resumeId: DOC, userId: UID, filled: ["bankName", "phone"] }, banned: ["bankName", "filled"] },
     { action: "staff_roster_import", meta: { createdIds: [UID], sheetTab: "2026 직원명부" }, banned: ["sheetTab", "createdIds"] },
     { action: "staff_roster_import_revert", meta: { revertedLog: "C:/eywa/scripts/logs/import-2026.json" }, banned: ["revertedLog", "json"] },
+    { action: "classnote_offboard", meta: { studentId: UID, childId: 5611926, childName: "박예서", baseDate: "2026-09-04", days: 60, posts: 3, backupPath: "t/offboard/2026-11-03/5611926.json" }, banned: ["backupPath", "json", "5611926", "studentId"] },
+    { action: "classnote_offboard_unconfirmed", meta: { studentId: UID, childId: 5611926, childName: "박예서", days: 60, outcome: "unconfirmed", why: "재원 명부에서는 빠졌는데 퇴소 명부에서 찾지 못했습니다(확인 필요)", backupPath: "t/offboard/2026-11-03/5611926.json" }, banned: ["backupPath", "json", "5611926", "studentId", "unconfirmed"] },
     { action: "teacher_view_impersonate", meta: { targetUserId: UID }, banned: ["targetUserId"] },
     { action: "resume_view_unlock", meta: { resumeId: DOC }, banned: ["resumeId"] },
     { action: "shuttle_rider_remove", meta: { riderId: DOC }, banned: ["riderId"] },

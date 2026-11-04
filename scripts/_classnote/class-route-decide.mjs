@@ -24,9 +24,9 @@ export function normalizeRouteConfig(report) {
  * - 수학이 아니면 personal(영어 등은 이 설정과 무관).
  * - class = 전원 반 보드 · pilot = 작성 강사(teacher_name 원문 일치)가 목록에 있을 때만 반 보드.
  * - 🔴 반 보드로 가야 하는데 **반 정보가 없으면**(보강 등) `needs_class` — 반을 **추측하지 않는다**.
- *   원장 결정(2026-09-29 "보낼 곳이 없으면 '선택'") = A안 — 원스크린 발송이 'ClassNote로 보낼 반'(0303a
- *   `classnote_class_id`: 메인 수업 또는 강사가 고른 반)을 적고, 워커는 그 반 보드로 보낸다. 그 칸이 빈 행
- *   (관리자 재발송처럼 그 단계를 안 지난 경로)은 **기존 1인 보드**로 보낸다(학부모에게는 지금처럼 간다 — 길을 잃지 않는다).
+ *   실제로 올릴 반은 아래 `pickRouteClass`가 정한다(원장 2026-09-30 — 보강 반이 곧 발송 반 · 보강 반이 없으면 `no_anchor`로
+ *   **막는다**). 반별 경로에서 1인 보드로 돌아가는 길은 없다(2026-09-29의 "'보낼 반'이 빈 행은 1인 보드로"는 09-30에 바뀌었다 —
+ *   1인 보드 원아 배정도 2026-11-02에 해제했다).
  * @returns {"personal" | "class" | "needs_class"}
  */
 export function decideRoute(cfg, report) {

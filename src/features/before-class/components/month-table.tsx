@@ -2,10 +2,11 @@
 
 import { shortDateLabel } from "../dates";
 import {
-  BEFORE_CLASS_ITEMS, completionRate, needsSupplement, percentLabel, summarizeStudent, type BeforeClassCheck,
+  BEFORE_CLASS_ITEMS, completionRate, effectiveCard, excuseText, isExcused, needsSupplement, percentLabel, summarizeStudent, type BeforeClassCheck,
 } from "../items";
 import { checkKey, type RosterStudent } from "../types";
 import { DONE_CHECK, isRecordedDay } from "../stats";
+import { encodeTip } from "@/components/hover-tip/tip";
 import { CardBadge } from "./badges";
 
 /**
@@ -15,9 +16,11 @@ import { CardBadge } from "./badges";
  * 그 밖의 날은 '—' · 그날 명단에 없던 학생은 빈 칸.
  */
 export function MonthTable({
-  dates, students, checks, today, trackingStart, onPickDate,
+  dates, offDays, students, checks, today, trackingStart, onPickDate,
 }: {
   dates: string[];
+  /** 쉰 휴일 — 칸은 '휴일', 평균·횟수에서 뺀다(그날 체크가 생기면 서버가 수업한 날로 돌린다). */
+  offDays: Record<string, string>;
   today: string;
   trackingStart: string | null;
   students: RosterStudent[];
@@ -36,6 +39,7 @@ export function MonthTable({
                 <button type="button" className="hover:text-primary underline-offset-2 hover:underline" onClick={() => onPickDate(d)}>
                   {shortDateLabel(d)}
                 </button>
+                {offDays[d] ? <div className="text-danger text-xs font-normal">휴일</div> : null}
               </th>
             ))}
             <th className="px-2 py-2 text-center text-xs font-semibold">평균</th>
@@ -46,7 +50,7 @@ export function MonthTable({
         </thead>
         <tbody>
           {students.map((s) => {
-            const own = s.activeDates.filter((d) => isRecordedDay(d, today, trackingStart)).map((d) => checks[checkKey(s.id, d)] ?? DONE_CHECK);
+            const own = s.activeDates.filter((d) => !offDays[d] && isRecordedDay(d, today, trackingStart)).map((d) => checks[checkKey(s.id, d)] ?? DONE_CHECK);
             const sum = summarizeStudent(own);
             const top = BEFORE_CLASS_ITEMS
               .map((i) => ({ label: i.short, count: sum.itemCounts.get(i.key) ?? 0 }))
@@ -59,7 +63,9 @@ export function MonthTable({
                   <span className="font-medium">{s.name}</span>
                   <span className="text-text-dim ml-1.5 text-xs">{s.schoolGrade}</span>
                 </td>
-                {dates.map((d) => <MonthCell key={d} active={s.activeDates.includes(d)} check={checks[checkKey(s.id, d)] ?? (isRecordedDay(d, today, trackingStart) ? DONE_CHECK : undefined)} />)}
+                {dates.map((d) => offDays[d] && s.activeDates.includes(d)
+                  ? <td key={d} className="bg-bg-soft text-text-dim px-1 py-1.5 text-center text-xs" data-tip={encodeTip(offDays[d])}>휴일</td>
+                  : <MonthCell key={d} active={s.activeDates.includes(d)} check={checks[checkKey(s.id, d)] ?? (isRecordedDay(d, today, trackingStart) ? DONE_CHECK : undefined)} />)}
                 <td className="px-2 py-1.5 text-center font-semibold tabular-nums">{percentLabel(sum.average)}</td>
                 <td className="px-2 py-1.5 text-center tabular-nums">{sum.supplementCount || "—"}</td>
                 <td className="px-2 py-1.5 text-center tabular-nums">{sum.absentCount || "—"}</td>
@@ -78,11 +84,15 @@ export function MonthTable({
 function MonthCell({ active, check }: { active: boolean; check: BeforeClassCheck | undefined }) {
   if (!active) return <td className="bg-bg-soft px-1 py-1.5" />;
   if (!check) return <td className="text-text-dim px-1 py-1.5 text-center">—</td>;
+  if (isExcused(check)) {
+    // 체크 제외 — 완료율·카드 없이 '제외'(사유는 마우스 오버 카드).
+    return <td className="bg-bg-soft text-text-dim px-1 py-1.5 text-center text-xs" data-tip={encodeTip({ title: "체크 제외", lines: [excuseText(check) || "사유 없음"] })}>제외</td>;
+  }
   const tone = check.absent ? "bg-danger-soft text-danger" : needsSupplement(check) ? "bg-amber-soft text-amber" : "bg-blue-soft text-blue";
   return (
     <td className={`px-1 py-1 text-center ${tone}`}>
       <div className="font-semibold tabular-nums">{check.absent ? "결석" : percentLabel(completionRate(check))}</div>
-      {check.card ? <div className="mt-0.5"><CardBadge card={check.card} /></div> : null}
+      {effectiveCard(check) ? <div className="mt-0.5"><CardBadge card={effectiveCard(check)} /></div> : null}
     </td>
   );
 }

@@ -1,6 +1,6 @@
 "use server";
 
-import { jjBooksOnly } from "../jj-books";
+import { isSrsDraftText, jjBooksOnly } from "../jj-books";
 import { LAST_TEMPLATE_BY_CLASS_PREF, LAST_TEMPLATE_PREF, isTemplateIdShape, readTemplatePrefs, rememberTemplate } from "../last-template";
 import { normalizeNoneMarker } from "../none-marker";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
@@ -485,7 +485,11 @@ export async function saveLessonReport(
         subject: input.subject || null,
         class_id: input.classId || null,
         // JJ 수업보고서 글은 세 권 중 고른 것만(jj-books.ts) — 화면도 거르지만 서버가 한 번 더 거른다(#77).
-        textbook: (input.subject === "english" && input.jjSheet ? jjBooksOnly(input.textbook) : input.textbook) || null,
+        // 글이 SRS 양식이면 표시가 없어도 거른다(복사한 사용자 템플릿 · 옛 화면, 원장 2026-10-30).
+        textbook:
+          (input.subject === "english" && (input.jjSheet || isSrsDraftText(input.notes))
+            ? jjBooksOnly(input.textbook)
+            : input.textbook) || null,
         makeup: input.makeup ?? false,
         // 자유입력 자리표시자(`-`·`X` 등)를 "없음" 하나로 표준화(none-marker.ts 규약, 원장 2026-07-23) —
         // 그대로 두면 학부모 카드에 "오늘 과제: -"가 나가고 AI 멘트가 그걸 사실로 받는다.
@@ -1687,11 +1691,11 @@ export async function generateReportComment(
         .catch(() => null)
     : Promise.resolve(null);
   // 비포클래스체크리스트(원장 2026-10-30) — 그 반·그날 체크가 있으면 수업 평가 표에 줄을 붙인다(report-rows.ts). 반을 모르면 줄 없음.
-  //   🔴 시험 중 = 운영자 계정의 '다른 강사 뷰' 또는 테스트 학생에게만(beforeClassReportEnabled).
+  //   🔴 개인별 기능 권한 '비포클래스 보고서 표'에 지정한 선생님(강사뷰 기준 user) 또는 테스트 학생에게만(beforeClassReportEnabled).
   //   아래 갈래마다 다른 재료와 함께 기다린다(B4) — 받은 값은 `beforeClassRows`에 두고 표를 짤 때 쓴다.
   const beforeClassRowsP: Promise<ReportCheckRow[]> =
     pilotStudentId && trendCtx?.classId
-      ? beforeClassReportEnabled(user.tenantId, pilotStudentId).then((on) =>
+      ? beforeClassReportEnabled(user.tenantId, pilotStudentId, user.id).then((on) =>
           on && trendCtx.classId ? loadBeforeClassReportRows(user.tenantId, trendCtx.classId, pilotStudentId, resolveReportDate(trendCtx.date)) : [])
       : Promise.resolve([]);
   let beforeClassRows: ReportCheckRow[] = [];

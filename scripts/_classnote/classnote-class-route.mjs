@@ -46,8 +46,11 @@ export async function isClassRouteEligible(sql, tenant, classId, studentId) {
  *                 | {ok:false, error:string}>}
  */
 export async function resolveClassTargets(sql, page, { tenant, centerId, classId, studentId }) {
-  const [board] = await sql`select board_id, board_name from classnote_class_boards
-    where tenant_id = ${tenant} and class_id = ${classId}`;
+  // 🔴 보고서 미발송 반(JJ 자리 반)은 반 보드 연결이 있어도 보내지 않는다 — 동기화는 미발송 반을 연결하지 않지만(11-04 'JJ 맞춤'
+  //    되돌림) 옛 연결이 남아 있을 수 있다. 발송 판정(isClassRouteEligible·앱)이 먼저 거르지만, 그 조회가 실패해 '대상'으로 넘어온 경우의 마지막 방어.
+  const [board] = await sql`select b.board_id, b.board_name from classnote_class_boards b
+    join classes c on c.tenant_id = b.tenant_id and c.id = b.class_id
+    where b.tenant_id = ${tenant} and b.class_id = ${classId} and not c.report_optout`;
   if (!board) return { ok: false, error: "반별 발송: 이 반의 ClassNote 반 연결이 없습니다(C.N 빨강) — 반 매칭 후 다시 발송하세요" };
   const rows = await sql`select child_id, child_name, status, reason from classnote_class_board_members
     where tenant_id = ${tenant} and class_id = ${classId} and student_id = ${studentId}`;

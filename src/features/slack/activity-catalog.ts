@@ -89,6 +89,8 @@ const RULES: readonly [string, string][] = [
   ["exam_", "sheets"],
   ["staff_", "staff"],
   ["approval_", "staff"],
+  // 업무 요청(s2_0018) — 요청 → 보고 → 검토. 아직 미리보기 단계라 슬랙으로는 안 흘린다(FORBID_KEYS · SQL 머리말 약속).
+  ["work_request_", "staff"],
   ["leave_", "staff"],
   ["self_", "staff"],
   ["resume_", "staff"],
@@ -106,6 +108,8 @@ const RULES: readonly [string, string][] = [
   ["document_", "comms"],
   ["notion_", "comms"],
   ["briefing_", "comms"],
+  // 운영실 업무 비서 'AI로 정리'(사람이 누른 유료 AI) — 감사로그 화면에서만(FORBID_KEYS).
+  ["dashboard_secretary_", "comms"],
   ["shuttle_", "ops"],
   ["parent_account_", "ops"], // 학부모 계정 발급·삭제(셔틀 학부모 등하원)
   ["inventory_", "ops"],
@@ -151,12 +155,18 @@ const FORBID_KEYS = new Set([
   "data_export_download",
   // 연습본은 작성자 본인만 읽는 개인 사본이다 — 이름을 채널로 흘리지 않는다(운영 시간표 변경으로 읽힐 수도 있다).
   "timetable_lab_draft_save",
+  "timetable_lab_draft_overwrite",
+  "timetable_lab_draft_delete",
   // 메모 시트는 자동 저장이라(고칠 때마다) 채널로 내보내면 줄이 쏟아진다 — 고를 수 없게 둔다.
   "timetable_memo_sheet_save",
   // 칸 메모도 자동 저장이다(입력하는 대로) — 같은 이유로 고를 수 없게 둔다.
   "timetable_cell_memo_add",
   "timetable_cell_memo_update",
   "timetable_cell_memo_delete",
+  // 업무 요청 · 업무 비서 — 슬랙과 잇지 않는다(업무 요청 SQL 머리말 · 미리보기 단계).
+  "work_request_create",
+  "work_request_act",
+  "dashboard_secretary_run",
 ]);
 /** 대상 문구 없이 — 돈 계열(금액·계좌가 대상 라벨에 섞일 수 있다) + 연차. */
 const OPAQUE_CATEGORIES = new Set(["billing"]);

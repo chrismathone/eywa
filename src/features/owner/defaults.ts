@@ -142,16 +142,6 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     // 영어는 과목 전용 평일 교시(내장 11교시)·강사별시간표 기본(가로줄 6시각·격자 10분)을 프리필(2026-07-06).
     subjects: [
       { key: "math", label: "수학", color: "blue", weekdayGrouping: "mon-thu", testMax: 5 },
-      // 수학(심화)는 학원 고유 과목이라 표준키 대신 subject_N 계열로 통일(2026-06-19, highmath→subject_1 마이그레이션).
-      // hiddenFromIntake: 재원생 대상 반이라 QR 공개접수 '상담 희망 과목'에선 뺀다(2026-07-15 원장 지시).
-      {
-        key: "subject_1",
-        label: "수학(심화)",
-        color: "blue",
-        weekdayGrouping: "mon-thu",
-        testMax: 5,
-        hiddenFromIntake: true,
-      },
       {
         key: "english",
         label: "영어",
@@ -258,7 +248,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
   },
   // 권한 override는 sparse(빈 배열) — 진짜 기본값은 permissions.ts의 MENU_ACCESS. 매트릭스 복제 금지.
   // userOverrides = 개인 예외(특정 사용자에게만 메뉴 셀 덮어쓰기, 2026-08-01) — 역시 sparse.
-  permissions: { overrides: [], userOverrides: [], specialAccess: { payslipViewerIds: [], payslipManagerIds: [], leaveAdjusterIds: [], classSplitterIds: [], enrollmentDateEditorIds: [], studentStatusManagerIds: [], staffTaskMonitorIds: [], vendorViewerIds: [], jjReportManagerIds: [], staffSubjectScopes: [] } },
+  permissions: { overrides: [], userOverrides: [], specialAccess: { payslipViewerIds: [], payslipManagerIds: [], leaveAdjusterIds: [], classSplitterIds: [], enrollmentDateEditorIds: [], studentStatusManagerIds: [], staffTaskMonitorIds: [], vendorViewerIds: [], jjReportManagerIds: [], beforeClassReportIds: [], withdrawalApproverIds: [], staffSubjectScopes: [] } },
   // 사이드바 표시도 sparse(빈 배열) — **비면 지금과 글자 그대로 같다**(전부 표시·코드 순서).
   // 기본 목록을 여기 복제하지 말 것: 복제하면 메뉴를 새로 만들 때마다 두 곳을 고쳐야 하고,
   // 한쪽을 잊으면 새 메뉴가 조용히 안 보인다(이 기능이 애초에 풀려던 문제 그 자체).

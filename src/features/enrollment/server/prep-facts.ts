@@ -146,15 +146,28 @@ export async function collectPrepFacts(
     // 형제자매 후보 — 학부모 연락처가 같은 재원생. 연락처가 없으면 조회 자체를 안 한다(전건 스캔 금지).
     // ⚠️ QR 접수는 하이픈 없는 숫자("01000009100")로 들어오고 학생 DB는 하이픈 표기가 96%라
     //    원문 eq로는 형제를 못 찾는다(실측 QR 29건 중 8건 누락) → 포맷 변형을 함께 조회한다.
+    // 보호자2 연락처(s2_0022)도 본다 — 상담에 적힌 번호가 그 원생의 보호자2(예: 어머니) 번호일 수 있다. 칸마다 `.in()`으로
+    // 따로 묻고 합친다(번호 원문이 섞여 있어 `.or()` 글자로 엮지 않는다 — `.in()`이 값을 감싼다). 실패한 쪽은 빈 결과(종전과 같다).
     phoneCandidates.length > 0
-      ? supabase
-          .from("students")
-          .select("id, name, school, grade")
-          .eq("tenant_id", tenantId)
-          .eq("status", "enrolled")
-          .eq("is_test", false)
-          .in("parent_phone", phoneCandidates)
-          .limit(8)
+      ? Promise.all(
+          (["parent_phone", "parent2_phone"] as const).map((col) =>
+            supabase
+              .from("students")
+              .select("id, name, school, grade")
+              .eq("tenant_id", tenantId)
+              .eq("status", "enrolled")
+              .eq("is_test", false)
+              .in(col, phoneCandidates)
+              .limit(8),
+          ),
+        ).then((results) => {
+          const seen = new Set<string>();
+          const data = results
+            .flatMap((r) => r.data ?? [])
+            .filter((s) => !seen.has(s.id) && !!seen.add(s.id))
+            .slice(0, 8);
+          return { data };
+        })
       : Promise.resolve({ data: [] }),
     // 앞서 들어온 같은 학생의 다른 접수(반복 QR 제출 · 재방문) — 상담에서 같은 질문을 반복하지 않게.
     // 판정 = 카드 'N건' 배지·상세 '다른 상담'과 같은 한 벌(`same-person.ts` — 원생 연결 · 이름+학교+학년 · 이름+연락처).

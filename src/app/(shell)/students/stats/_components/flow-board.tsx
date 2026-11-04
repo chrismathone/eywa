@@ -10,6 +10,7 @@ import { startedNote } from "@/features/dashboard/overview/model";
 import { StatCard } from "./stat-card";
 import { TrendChart } from "./trend-chart";
 import { FlowTable } from "./flow-table";
+import { EXIT_BASIS_TAG } from "@/features/withdrawals/exit-basis";
 
 const number = (n: number) => n.toLocaleString("ko-KR");
 const axisMonth = (m: string) => `${m.slice(2, 4)}.${m.slice(5, 7)}`;
@@ -74,7 +75,7 @@ export function FlowBoard({
     <StatCard
       id="flow"
       title="등록 · 퇴원 추이"
-      note={`${first ? `${first.slice(0, 4)}년 ${Number(first.slice(5, 7))}월부터` : "기록 없음"} · 당월은 오늘까지${started ? ` · ${started}` : ""} · 퇴원은 실제 퇴원만${hasHistory && historyWithdrawnKnown ? "(지난 기록 구간은 청구가 끊긴 학생)" : ""}${scopeLabel ? ` · ${scopeLabel} 반을 다닌 학생만(과목을 알 수 있는 기록만 — 반 배정 전 신입은 반에 들어간 뒤 셉니다)` : ""}`}
+      note={`${first ? `${first.slice(0, 4)}년 ${Number(first.slice(5, 7))}월부터` : "기록 없음"} · 당월은 오늘까지${started ? ` · ${started}` : ""} · 퇴원은 실제 퇴원만${hasHistory && historyWithdrawnKnown ? "(지난 기록 구간은 청구가 끊긴 학생)" : ""} · 퇴원 달은 ${EXIT_BASIS_TAG}${hasHistory && historyWithdrawnKnown ? "(지난 기록 구간은 청구가 끊긴 달)" : ""}${scopeLabel ? ` · ${scopeLabel} 반을 다닌 학생만(과목을 알 수 있는 기록만 — 반 배정 전 신입은 반에 들어간 뒤 셉니다)` : ""}`}
       tools={
         <>
           {ranges.length > 1 ? (

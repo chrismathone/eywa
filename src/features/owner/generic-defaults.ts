@@ -53,7 +53,7 @@ export const GENERIC_SETTINGS: TenantSettings = {
   },
   consultations: { templates: DEFAULT_SETTINGS.consultations.templates.map((t) => ({ ...t })) },
   report: { ...DEFAULT_SETTINGS.report },
-  permissions: { overrides: [], userOverrides: [], specialAccess: { payslipViewerIds: [], payslipManagerIds: [], leaveAdjusterIds: [], classSplitterIds: [], enrollmentDateEditorIds: [], studentStatusManagerIds: [], staffTaskMonitorIds: [], vendorViewerIds: [], jjReportManagerIds: [], staffSubjectScopes: [] } },
+  permissions: { overrides: [], userOverrides: [], specialAccess: { payslipViewerIds: [], payslipManagerIds: [], leaveAdjusterIds: [], classSplitterIds: [], enrollmentDateEditorIds: [], studentStatusManagerIds: [], staffTaskMonitorIds: [], vendorViewerIds: [], jjReportManagerIds: [], beforeClassReportIds: [], withdrawalApproverIds: [], staffSubjectScopes: [] } },
   navigation: { menus: [], teacherMenus: [], groups: [], teacherGroups: [] },
   modules: { disabled: [...GENERIC_DISABLED_MODULES] },
   dashboard: { version: 1, layouts: [], assignments: [] },

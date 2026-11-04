@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { Popover } from "@base-ui/react/popover";
 import { useMobileScrollRow } from "./mobile-scroll-row";
@@ -17,6 +17,8 @@ export type ComboOption = {
    * 금액이 이름 길이를 따라 들쭉날쭉했다). 값이 없는 소비처는 예전 모양 그대로다.
    */
   meta?: string;
+  /** 묶음 제목 — 값이 바뀌는 줄 위에 구분선과 제목이 선다(예: 맨 아래 '퇴사자'). 검색으로 걸러도 남은 줄 위에 그대로 선다. */
+  group?: string;
 };
 
 /**
@@ -275,7 +277,7 @@ export function SearchableSelect({
             {shown.length === 0 ? (
               <li className="text-text-faint px-3 py-2 text-xs">{text(waiting ? "검색어를 입력하세요" : "결과 없음")}</li>
             ) : (
-              shown.map((o) => {
+              shown.map((o, index) => {
                 const isCurrent = multi && picked.length > 0 ? multiValues.includes(o.value) : o.value === current;
                 // 강조는 **선택된 줄에만** — hover는 그대로 둔다(마우스가 지나간 줄이 선택된 줄처럼 보이면
                 // 강조가 무의미해진다). amber-soft/amber는 전역 토큰이라 라이트 팔레트와 어긋나지 않는다.
@@ -284,7 +286,11 @@ export function SearchableSelect({
                     ? "bg-amber-soft text-amber font-bold"
                     : "hover:bg-bg-soft";
                 return (
-                  <li key={o.value}>
+                  <Fragment key={o.value}>
+                  {o.group && o.group !== shown[index - 1]?.group ? (
+                    <li className="border-line text-text-faint mt-1 border-t px-3 pt-2 pb-1 text-xs">{text(o.group)}</li>
+                  ) : null}
+                  <li>
                     <button
                       type="button"
                       aria-pressed={multi ? isCurrent : undefined}
@@ -331,6 +337,7 @@ export function SearchableSelect({
                       ) : null}
                     </button>
                   </li>
+                  </Fragment>
                 );
               })
             )}

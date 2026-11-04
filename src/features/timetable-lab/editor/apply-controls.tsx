@@ -8,7 +8,8 @@ const statusLabel = { pending: '적용 예약', applied: '적용 완료', failed
 const kstLabel = (at: string) => new Date(at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: 'numeric', hour12: false });
 export function ApplyControls({ store, saved }: { store: DraftStore; saved: (draft: Draft, name: string) => void }) {
   const { draft } = useSyncExternalStore(store.subscribe, store.getSnapshot);
-  const [open, setOpen] = useState(false), [history, setHistory] = useState(false), [jobs, setJobs] = useState<ApplyJobSummary[]>([]), [error, setError] = useState('');
+  // 시간표 배지에서 들어오면 적용 내역부터 보여 준다.
+  const [open, setOpen] = useState(false), [history, setHistory] = useState(() => new URLSearchParams(window.location.search).has('history')), [jobs, setJobs] = useState<ApplyJobSummary[]>([]), [error, setError] = useState('');
   const seen = useRef(new Set<string>());
   const load = useCallback(async () => {
     const response = await listTimetableLabApplyJobs();
@@ -35,9 +36,23 @@ export function ApplyControls({ store, saved }: { store: DraftStore; saved: (dra
     {history && <div className="apply-history"><header><strong>연습본 적용 내역 · KST</strong><button onClick={() => setHistory(false)} aria-label="적용 내역 닫기">×</button></header>
       {error && <p role="alert">{error}</p>}
       {!jobs.length && !error && <p>적용 내역이 없습니다.</p>}
-      {jobs.map(job => <div key={job.id}><span>{kstLabel(job.at)} · {statusLabel[job.status]}</span>{job.error && <p>{job.error}</p>}<button onClick={async()=>{const result=await readTimetableLabApplyDraft(job.id);if('error'in result)setError(result.error);else{store.commit('예약 연습본 불러오기',result.draft);saved(store.getSnapshot().draft,`예약 연습본 · ${kstLabel(job.at)} KST`);setError('');}}}>연습본 불러오기</button>{job.status === 'pending' && <button onClick={async () => { const result = await cancelTimetableLabApplyJob(job.id); if ('error' in result) setError(result.error); else await load(); }}>예약 취소</button>}</div>)}
+      {jobs.map(job => <div key={job.id}><span>{kstLabel(job.at)} · {statusLabel[job.status]}{job.actorName ? ` · ${job.actorName}` : ''}</span>{job.error && <p>{job.error}</p>}{!!job.skipped?.length && <details className="lab-conflict"><summary>적용하지 않은 변경 {job.skipped.length}건</summary><ul>{job.skipped.map((item, index) => <li key={index}>{item}</li>)}</ul></details>}<button onClick={async()=>{const result=await readTimetableLabApplyDraft(job.id);if('error'in result)setError(result.error);else{store.commit('예약 연습본 불러오기',result.draft);saved(store.getSnapshot().draft,`예약 연습본 · ${kstLabel(job.at)} KST`);setError('');}}}>연습본 불러오기</button>{job.status === 'pending' && job.mine && <button onClick={async () => { const result = await cancelTimetableLabApplyJob(job.id); if ('error' in result) setError(result.error); else await load(); }}>예약 취소</button>}</div>)}
     </div>}
   </>;
+}
+
+/** 보관함 위의 적용 대기 목록 — 예약 내용은 불러와서 확인한다. */
+export function PendingApplies({ load }: { load: (name: string, draft: Draft) => void }) {
+  const [jobs, setJobs] = useState<ApplyJobSummary[]>([]), [error, setError] = useState('');
+  useEffect(() => {
+    let alive = true;
+    void listTimetableLabApplyJobs().then(response => { if (!alive) return; if ('error' in response) setError(response.error); else setJobs(response.jobs.filter(job => job.status === 'pending')); });
+    return () => { alive = false; };
+  }, []);
+  if (!jobs.length && !error) return null;
+  return <><h3>적용 대기 중</h3>{error && <p role="alert" className="load-error">{error}</p>}
+    <ul className="draft-list">{jobs.map(job => <li key={job.id}><div><strong>{kstLabel(job.at)} KST 적용 예정</strong><small>예약자 {job.actorName || '정보 없음'}</small></div>
+      <span className="draft-actions"><button onClick={async () => { const result = await readTimetableLabApplyDraft(job.id); if ('error' in result) setError(result.error); else load(`예약 연습본 · ${kstLabel(job.at)} KST`, result.draft); }}>불러오기</button></span></li>)}</ul></>;
 }
 
 function ApplyDialog({ store, close, done }: { store: DraftStore; close: () => void; done: (job: ApplyJobSummary, draft: Draft) => void }) {
@@ -45,6 +60,7 @@ function ApplyDialog({ store, close, done }: { store: DraftStore; close: () => v
   const initial = nextApplyHour(), [date, setDate] = useState(initial.date), [hour, setHour] = useState(initial.hour), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [reviewed, setReviewed] = useState<{ review: ApplyReview; revision: number; snapshot: Draft } | null>(null), [acknowledged, setAcknowledged] = useState(false);
   const review = reviewed?.revision === revision && reviewed.review.date === date && reviewed.review.hour === hour ? reviewed.review : null;
+  const needsAck = !!review && review.warnings.length + review.skipped.length > 0;
   useEffect(() => { dialog.current?.showModal(); }, []);
   async function inspect() {
     setBusy(true); setError(''); setAcknowledged(false);
@@ -70,11 +86,13 @@ function ApplyDialog({ store, close, done }: { store: DraftStore; close: () => v
     <div className="apply-time-fields"><label>적용일<input type="date" value={date} disabled={busy} onChange={event => setDate(event.target.value)} /></label><label>적용 시각 · KST<select value={hour} disabled={busy} onChange={event => setHour(Number(event.target.value))}>{Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{String(hour).padStart(2, '0')}시 정시</option>)}</select></label></div>
     {error && <p role="alert" className="load-error">{error}</p>}
     {review && <><p className="apply-summary">수업 {review.summary.schedules} · 일정 {review.summary.blocks} · 반 {review.summary.classes} · 수강 {review.summary.enrollments} · 학생 {review.summary.students} · 강사 이름 {review.summary.teacherNames}</p>
+      {review.notices.length > 0 && <ul className="apply-notices">{review.notices.map((notice, index) => <li key={index}>{notice}</li>)}</ul>}
       <ul className="apply-changes">{review.changes.map((change, index) => <li key={index}>{change}</li>)}</ul>
+      {review.skipped.length > 0 && <div className="lab-conflict apply-skipped"><strong>적용하지 않는 변경 {review.skipped.length}건</strong><ul>{review.skipped.map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
       {review.warnings.length > 0 && <details className="lab-conflict"><summary>겹침 경고 {review.warnings.length}건</summary><ul>{review.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></details>}
-      {review.warnings.length > 0 && <label className="apply-ack"><input type="checkbox" checked={acknowledged} disabled={busy} onChange={event => setAcknowledged(event.target.checked)} />겹침 경고를 확인했습니다.</label>}
+      {needsAck && <label className="apply-ack"><input type="checkbox" checked={acknowledged} disabled={busy} onChange={event => setAcknowledged(event.target.checked)} />경고를 확인했습니다.</label>}
       <p>반 배치·순서·접기 설정은 현재 계정에 저장됩니다. 수업 배치와 학생 이동은 운영 자료에 적용됩니다.</p>
     </>}
-    <footer><button disabled={busy} onClick={close}>취소</button><button disabled={busy} onClick={inspect}>{busy ? '확인 중…' : review ? '다시 검사' : '변경 내용 검사'}</button><button className="primary" disabled={busy || !review || (!!review.warnings.length && !acknowledged)} onClick={apply}>연습본 적용 예약</button></footer>
+    <footer><button disabled={busy} onClick={close}>취소</button><button disabled={busy} onClick={inspect}>{busy ? '확인 중…' : review ? '다시 검사' : '변경 내용 검사'}</button><button className="primary" disabled={busy || !review || (needsAck && !acknowledged)} onClick={apply}>연습본 적용 예약</button></footer>
   </dialog>;
 }

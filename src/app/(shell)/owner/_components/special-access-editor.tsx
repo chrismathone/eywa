@@ -86,6 +86,24 @@ export function SpecialAccessEditor({ value, hiddenUserIds, staffOptions, nameOf
           nameOf={nameOf}
           onChange={(update) => onChange((prev) => ({ ...prev, jjReportManagerIds: update(prev.jjReportManagerIds ?? []) }))}
         />
+        <SpecialAccessList
+          label="비포클래스 보고서 표"
+          hint="이 사람이 쓰는 수학 수업보고서의 '수업 평가' 표에 비포클래스체크리스트 줄이 붙습니다. 체크리스트 반이고 그날 체크가 있을 때만 붙습니다."
+          ids={value.beforeClassReportIds ?? []}
+          hiddenUserIds={hiddenUserIds}
+          staffOptions={pickable}
+          nameOf={nameOf}
+          onChange={(update) => onChange((prev) => ({ ...prev, beforeClassReportIds: update(prev.beforeClassReportIds ?? []) }))}
+        />
+        <SpecialAccessList
+          label="퇴원보고서 승인자"
+          hint="퇴원보고서의 관리자 승인을 맡는 사람입니다. 여기 지정한 사람이 담당하는 과목은 이 사람들만 승인 후보로 나옵니다. 지정한 사람이 없는 과목은 그 과목 관리자 전원이 후보입니다. 담당 과목은 직원의 과목(직원관리 과목 범위가 있으면 그 범위)을 따릅니다."
+          ids={value.withdrawalApproverIds ?? []}
+          hiddenUserIds={hiddenUserIds}
+          staffOptions={pickable}
+          nameOf={nameOf}
+          onChange={(update) => onChange((prev) => ({ ...prev, withdrawalApproverIds: update(prev.withdrawalApproverIds ?? []) }))}
+        />
       </div>
     </SettingsCard>
   );

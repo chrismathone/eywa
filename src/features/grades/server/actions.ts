@@ -5,7 +5,8 @@ import { logAction } from "@/features/audit/server/log";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { kstToday } from "@/lib/date-kst";
-import { EXAM_SLOT_LABEL, GRADE_MONTH_NOT_READY } from "../exam-slots";
+import { examSlotLabel, GRADE_MONTH_NOT_READY } from "../exam-slots";
+import { areaError, parseAreas, sameAreas, slotHasAreas, sumAreas, type AreaScores } from "../area-scores";
 import { resolveGradeSelection, selectionSlotIsValid } from "../selection";
 import { axisLabelFor } from "../subject-axis";
 import { termLabel } from "../term";
@@ -13,7 +14,7 @@ import { GRADE_MARK_KEYS, type GradeEntry, type GradeMarkKey, type GradeSheetRow
 import { gradeWriteError } from "./access";
 import { getGradeSheet } from "./queries";
 import { hasUntouchedMark } from "../keep";
-import { gradeMarksReady, gradeNoExamReady, gradesSchemaReady, writeGradeCells } from "./write";
+import { GRADE_AREAS_NOT_READY, gradeMarksReady, gradeNoExamReady, gradesSchemaReady, writeGradeCells } from "./write";
 import { loadTodaysMathMonthly } from "./todays-math-monthly";
 import { countTodaysMathSame } from "../todays-math-monthly";
 
@@ -46,12 +47,14 @@ function parseEntries(raw: FormDataEntryValue | null): GradeEntry[] | null {
       const noExam = noExamRaw === undefined ? undefined : !!noExamRaw;
       const noExamReason =
         typeof reasonRaw === "string" ? reasonRaw.trim().slice(0, 200) || null : null;
+      // 영역 점수(영어 Monthly Test) — 키가 있을 때만(`null` = 영역을 모두 비움). 없으면 안 건드린다.
+      const areas = "areas" in item ? parseAreas((item as { areas?: unknown }).areas) : undefined;
       if (score === null || score === undefined) {
-        out.push({ studentId, score: null, marks, noExam, noExamReason });
+        out.push({ studentId, score: null, marks, noExam, noExamReason, areas });
         continue;
       }
       if (typeof score !== "number" || !Number.isFinite(score)) return null;
-      out.push({ studentId, score, marks, noExam, noExamReason });
+      out.push({ studentId, score, marks, noExam, noExamReason, areas });
     }
     return out;
   } catch {
@@ -115,7 +118,10 @@ export async function saveGradeScores(
     otherMarks?: boolean;
     noExam?: boolean;
     noExamReason?: string | null;
+    areas?: AreaScores | null;
   }[] = [];
+  // 영역으로 적는 시험(영어 Monthly Test)이면 점수 = 영역의 합 — 화면이 보낸 총합은 믿지 않는다.
+  const withAreas = slotHasAreas(sel.subject, sel.slot);
   const seen = new Set<string>();
   for (const e of entries) {
     if (seen.has(e.studentId)) continue; // 같은 학생이 두 줄이어도 값은 하나
@@ -125,6 +131,12 @@ export async function saveGradeScores(
     // 🔴 제도상 안 치는 시험(초등·중1의 중간·기말)은 **아무것도 쓰지 않는다** — 화면에도 칸이 없고,
     //    주소·POST로 밀어 넣어도 그 학생에게 없는 시험의 행이 생기면 안 된다([[#77]]).
     if (!row.applies) continue;
+    const areas = withAreas && e.areas !== undefined ? e.areas : undefined;
+    if (areas !== undefined) {
+      const bad = areaError(areas, sel.maxScore);
+      if (bad) return { error: bad };
+      e.score = sumAreas(areas);
+    }
     if (e.score != null) {
       if (e.score < 0) return { error: "점수는 0점 이상이어야 합니다" };
       if (e.score > sel.maxScore) return { error: `점수는 만점(${sel.maxScore})을 넘을 수 없습니다` };
@@ -154,7 +166,10 @@ export async function saveGradeScores(
       (score === null || (row.maxScore === sel.maxScore && row.takenOn === sel.date));
     const wantReason = wantNoExam ? ((e.noExamReason ?? null) || null) : null;
     const noExamSame = !noExamReady || (wantNoExam === row.noExam && wantReason === row.noExamReason);
-    if (scoreSame && !marksChanged && noExamSame) continue;
+    // '시험없음'이면 영역도 비운다(점수와 같은 규칙).
+    const wantAreas = areas === undefined ? undefined : wantNoExam ? null : areas;
+    const areasSame = wantAreas === undefined || sameAreas(wantAreas, row.areas);
+    if (scoreSame && !marksChanged && noExamSame && areasSame) continue;
     changed.push({
       studentId: e.studentId,
       classId: row.classId,
@@ -163,6 +178,7 @@ export async function saveGradeScores(
       // 이 저장이 안 건드리는데 DB엔 켜져 있는 표식 — 있으면 행을 지우지 않는다(삭제 판정 전용).
       otherMarks: hasUntouchedMark(row.marks, marks),
       ...(noExamReady ? { noExam: wantNoExam, noExamReason: wantReason } : {}),
+      ...(wantAreas === undefined ? {} : { areas: wantAreas }),
     });
   }
 
@@ -190,7 +206,7 @@ export async function saveGradeScores(
     // 🔴 단 **사람이 고칠 수 있는 사유**는 그대로 전한다 — "저장하지 못했습니다"로 뭉개면 SQL을
     //    적용하기 전엔 성공할 수 없는 저장을 사람이 계속 다시 누른다(적대적 리뷰 2026-09-23).
     console.error("[grades] saveGradeScores", err);
-    if (err instanceof Error && err.message === GRADE_MONTH_NOT_READY) return { error: err.message };
+    if (err instanceof Error && (err.message === GRADE_MONTH_NOT_READY || err.message === GRADE_AREAS_NOT_READY)) return { error: err.message };
     return { error: "성적을 저장하지 못했습니다" };
   }
 
@@ -203,7 +219,7 @@ export async function saveGradeScores(
   await logAction({
     action: "exam_scores",
     targetType: "grades",
-    targetLabel: `${termLabel(sel.year, sel.term)} · ${axisLabelFor(sel, subjects.labelOf)} · ${EXAM_SLOT_LABEL[sel.slot]}`,
+    targetLabel: `${termLabel(sel.year, sel.term)} · ${axisLabelFor(sel, subjects.labelOf)} · ${examSlotLabel(sel.subject, sel.slot)}`,
     metadata: {
       subject: sel.subject,
       year: sel.year,

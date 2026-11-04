@@ -18,13 +18,14 @@ import {
   studentsStatsHref,
   withdrawalsMonthHref,
 } from "@/features/dashboard/overview/kpi-links";
-import { countWithdrawalPrograms } from "@/features/withdrawals/window";
+import { countWithdrawalPrograms, exitReportMonth } from "@/features/withdrawals/window";
+import { EXIT_BASIS_TAG, countedEarlierTitle, exitReportTagParts, exitReportTitle } from "@/features/withdrawals/exit-basis";
 import { programLabel, programSubjectsOf, visiblePrograms, type Program } from "@/features/students/enrollment/program";
 import type { MenuKey } from "@/lib/permissions";
 import { number } from "./charts";
 import { KpiCard } from "./kpi-card";
 import { identifyCard } from "./card-id";
-import { FirstClassPopup, StudentsPopup, WithdrawalsPopup } from "./kpi-popups";
+import { FirstClassPopup, StudentsPopup, WithdrawalsPopup, withdrawalsPopupWide } from "./kpi-popups";
 import { CoursesPopup } from "./kpi-courses-popup";
 import { EnrolledTodayPopup, IntakePopup, LevelTestPopup, MakeupPopup } from "./kpi-popups-day";
 import { RecentAbsentPopup } from "./recent-absent-popup";
@@ -97,7 +98,9 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
   const course = v.courses?.data?.basis === "student-subject" ? v.courses.data : null;
   const withdrawals = v.withdrawals?.data;
   const wd = withdrawals ? countWithdrawalPrograms(withdrawals.rows) : null;
-  const month = withdrawals?.month ?? today.slice(0, 7);
+  // 보여 줄 달 = 서버가 정한 달(1~10일은 지난달 · `exitReportMonth`). 값이 없을 때만 같은 함수로.
+  const month = withdrawals?.month ?? exitReportMonth(today);
+  const withdrawalTag = exitReportTagParts(month, today);
   const intake = v.intake?.data;
   // 전일 입테 = **전일** 레벨테스트(원장 2026-10-22 '금일 입테' → 전일 · 월요일엔 토·일 주말 전체 — 전일 / 이달 신규와 같은 기간).
   // 숫자 = 살아 있는 입테만, 팝업 = 취소된 것도 취소선으로(원장 2026-09-30) — 한 번 계산해 카드·팝업이 같이 쓴다.
@@ -160,21 +163,28 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
           <CoursesPopup data={course} subjectLabels={snapshot.subjects} />
         </KpiCard>
   );
+  // 퇴원(수강종료 포함)은 처리한 날이 아니라 수업료를 낸 마지막 달로 센다(원장 2026-10-29). 꼬리표 = 보여 주는 달("지난달 (26.10)"),
+  // 팝업 제목·↗ = "26.10 퇴원(수강종료)"(원장 2026-11-03 — 앞서 붙였던 '수업료 낸 달 기준'은 원장이 이 제목으로 바꿨다).
+  // 세는 기준 문장은 팝업 맨 아래(규칙·수업료·집계 범위 세 줄)와 값이 없을 때의 보조 줄에 남는다.
   if (v.withdrawals) cards.withdrawals = (
         <KpiCard
           helpKey="dash-withdrawn"
-          label="퇴원&수업종료"
+          label="퇴원"
           rename={opts.titles?.["kpi:withdrawals"]}
-          labelNote={noteOf("withdrawals", "이번 달")}
+          labelNote={noteOf("withdrawals", withdrawalTag.label)}
+          labelNoteLead={withdrawalTag.lead ?? undefined}
           value={count(wd?.total)}
           unit="명"
-          detail={wd ? `${programLine(wd)}${wd.other > 0 ? ` · 기타 ${number(wd.other)}` : ""}` : "이번 달 퇴원·수업종료 기준"}
+          detail={wd
+            ? `${programLine(wd)}${wd.other > 0 ? ` · 기타 ${number(wd.other)}` : ""}${withdrawals?.carried?.length ? ` · ${countedEarlierTitle(month, withdrawals.carried.length, "명")}` : ""}`
+            : `${exitReportTitle(month)} · ${EXIT_BASIS_TAG}`}
           icon={<MenuGlyph name="userMinus" size={20} />}
           error={v.withdrawals.error}
-          popupTitle={`이번 달(${Number(month.slice(5))}월 1일~오늘) 퇴원&수업종료`}
+          popupTitle={exitReportTitle(month)}
+          popupWide={withdrawalsPopupWide(withdrawals)}
           jump={
             can("withdrawals")
-              ? { href: withdrawalsMonthHref(month), label: "이번 달 퇴원·수업종료 보기" }
+              ? { href: withdrawalsMonthHref(month), label: `퇴원관리에서 ${exitReportTitle(month)} 보기` }
               : null
           }
         >

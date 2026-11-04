@@ -7,13 +7,16 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ToolbarButton } from "@/components/toolbar";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
-import { examSlotOptions, examSlotsFor } from "@/features/grades/exam-slots";
+import { examSlotLabel, examSlotOptions, examSlotsFor } from "@/features/grades/exam-slots";
+import { AREA_KEYS, slotHasAreas } from "@/features/grades/area-scores";
 import { saveGradeScores } from "@/features/grades/server/actions";
 import { createUnifiedGrade } from "@/features/grades/unified/server/create-action";
 import { loadSchoolRoster, type SchoolRoster } from "@/features/grades/unified/server/entry-actions";
 import { KIND_LABEL, schoolGradeLabel } from "@/features/grades/unified/model";
 import { prefillFromTodaysMath } from "@/features/grades/todays-math-monthly";
 import { EntryGrid, type EntryGridRow, type EntryResult } from "./entry-grid";
+import { AreaEntryGrid, draftFromSaved, draftHasValue, type AreaDraft, type AreaGridRow } from "./area-entry-grid";
+import { saveAreaRoster, schoolRowsOf } from "./area-entry-save";
 import { SchoolGradeFields } from "./school-grade-fields";
 
 type Option = { value: string; label: string };
@@ -50,6 +53,7 @@ export function GradeEntryDialog({ canWrite, today, subjects, students, classes,
   const [slot, setSlot] = useState("");
   const [extraIds, setExtraIds] = useState<string[]>([]);
   const [scores, setScores] = useState<Record<string, string>>({});
+  const [areaDraft, setAreaDraft] = useState<Record<string, AreaDraft>>({});
   const [results, setResults] = useState<Record<string, EntryResult>>({});
   const [roster, setRoster] = useState<SchoolRoster | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
@@ -60,16 +64,17 @@ export function GradeEntryDialog({ canWrite, today, subjects, students, classes,
   const schoolSlots = examSlotOptions(baseSubject).filter((o) => o.value !== "monthly");
   const kinds: Option[] = [
     ...(["daily", "check", "admission", "other"] as const).map((k) => ({ value: k, label: KIND_LABEL[k] })),
-    { value: "school", label: "내신" }, ...(hasMonthly ? [{ value: "monthly", label: KIND_LABEL.monthly }] : []),
+    { value: "school", label: "내신" }, ...(hasMonthly ? [{ value: "monthly", label: examSlotLabel(baseSubject, "monthly") }] : []),
   ];
   const school = kind === "school" || kind === "monthly";
+  const areaMode = kind === "monthly" && slotHasAreas(baseSubject, "monthly");
   const byId = useMemo(() => new Map(students.map((s) => [s.id, s])), [students]);
   const subjectClasses = classes.filter((c) => c.subject === baseSubject);
   const subjectStudents = useMemo(() => [...new Set(subjectClasses.flatMap((c) => c.studentIds))].map((id) => byId.get(id)).filter((s): s is Student => !!s),
     [subjectClasses, byId]);
 
   // 조건이 바뀌면 이미 친 점수·결과·명단을 비운다 — 다른 시험의 점수가 새 명단에 남아 잘못 저장되지 않게.
-  const resetWork = () => { setScores({}); setResults({}); setRoster(null); setNotice(null); };
+  const resetWork = () => { setScores({}); setAreaDraft({}); setResults({}); setRoster(null); setNotice(null); };
   const change = <T,>(set: (v: T) => void) => (v: T) => { set(v); resetWork(); };
 
   const quickRows: EntryGridRow[] = useMemo(() => {
@@ -78,22 +83,21 @@ export function GradeEntryDialog({ canWrite, today, subjects, students, classes,
     return ids.map((id) => byId.get(id)).filter((s): s is Student => !!s).sort((a, b) => a.name.localeCompare(b.name, "ko"))
       .map((s) => ({ studentId: s.id, name: s.name, school: s.school, grade: s.grade, className: classNamesOf[`${s.id}|${baseSubject}`] ?? (cls?.studentIds.includes(s.id) ? cls.name : "추가한 학생") }));
   }, [classes, classId, extraIds, byId, classNamesOf, baseSubject]);
-  const schoolRows: EntryGridRow[] = (roster?.rows ?? []).map((r) => ({ studentId: r.studentId, name: r.name, school: r.school, grade: r.grade,
-    className: classNamesOf[`${r.studentId}|${baseSubject}`] ?? r.className, existing: r.score, lockedReason: r.withdrawn ? "퇴원" : !r.applies ? "해당 없는 시험" : null,
-    todaysMath: roster?.todaysMath?.[r.studentId]?.maxScore === roster?.selection.maxScore ? roster?.todaysMath?.[r.studentId]?.score ?? null : null }));
+  const schoolRows = schoolRowsOf(roster, classNamesOf, baseSubject);
   const rows = school ? schoolRows : quickRows;
   const maxNum = school ? roster?.selection.maxScore ?? Number(max) : Number(max);
-  const filled = rows.filter((r) => !r.lockedReason && (scores[r.studentId] ?? "") !== "");
+  const filled = rows.filter((r) => !r.lockedReason && (areaMode ? draftHasValue(areaDraft[r.studentId]) : (scores[r.studentId] ?? "") !== ""));
   // 미입력만 보기 — 기준은 **저장된 값**(내신·월말) / 저장 결과(수업 시험)다. 치는 중인 칸으로 거르면 Enter를 누르는 순간 줄이 사라진다.
   const shownRows = onlyMissing ? rows.filter((r) => !r.lockedReason && (school ? r.existing == null : !results[r.studentId]?.ok)) : rows;
 
   const loadRoster = () => start(async () => {
     resetWork();
-    const res = await loadSchoolRoster({ year, term, subject, date, max,
+    const res = await loadSchoolRoster({ year, term, subject, date, max: areaMode ? String(Number(max) * AREA_KEYS.length) : max,
       ...(kind === "school" ? { classId: "", school: schoolName, grade: gradeName } : { classId }),
       slot: kind === "monthly" ? "monthly" : slot || schoolSlots[0]?.value });
     if ("error" in res) { setNotice({ ok: false, text: res.error }); return; }
     setRoster(res.roster);
+    if (areaMode) { setAreaDraft(Object.fromEntries(res.roster.rows.map((r) => [r.studentId, draftFromSaved(r.score, r.areas)]))); return; }
     // 오늘 수학 월말평가가 있으면 빈 칸에 바로 채운다(단추 없음 · 저장은 사람이) — 만점이 다르면 채우지 않고 알린다.
     const pre = prefillFromTodaysMath(res.roster.ready ? res.roster.todaysMath : null, res.roster.rows,
       Object.fromEntries(res.roster.rows.filter((r) => r.score != null).map((r) => [r.studentId, String(r.score)])), res.roster.selection.maxScore);
@@ -105,6 +109,7 @@ export function GradeEntryDialog({ canWrite, today, subjects, students, classes,
 
   const save = () => start(async () => {
     setNotice(null);
+    if (areaMode && roster) { const res = await saveAreaRoster(roster, schoolRows, areaDraft); if (res.roster) { setRoster(res.roster); setResults(res.results); } setNotice(res.notice); return; }
     if (school && roster) {
       const touched = roster.rows.filter((r) => r.applies && !r.withdrawn && (scores[r.studentId] ?? "") !== (r.score == null ? "" : String(r.score)));
       if (!touched.length) { setNotice({ ok: true, text: "바뀐 점수가 없습니다" }); return; }
@@ -167,7 +172,7 @@ export function GradeEntryDialog({ canWrite, today, subjects, students, classes,
             className="w-60" triggerClassName={FIELD} onValueChange={(id) => change(setClassId)(id)}
             options={[...(school ? [{ value: "", label: "전체" }] : []), ...subjectClasses.map((c) => ({ value: c.id, label: c.name, hint: `${c.studentIds.length}명` }))]} /></div>}
           <label className={LABEL}><SheetText value={"시험일"} /><input type="date" value={date} onChange={(e) => change(setDate)(e.target.value)} className={FIELD} /></label>
-          <label className={LABEL}><SheetText value={"만점"} /><input type="number" min="1" max="1000" value={max} onChange={(e) => change(setMax)(e.target.value)} className={`${FIELD} w-20`} /></label>
+          <label className={LABEL}><SheetText value={areaMode ? "영역 만점" : "만점"} /><input type="number" min="1" max="1000" value={max} onChange={(e) => change(setMax)(e.target.value)} className={`${FIELD} w-20`} /></label>
         </div>
         {/* 2행 — 고른 시험에만 필요한 것 */}
         <div className="bg-bg-soft flex flex-wrap items-end gap-2 rounded-xl p-3">
@@ -175,13 +180,16 @@ export function GradeEntryDialog({ canWrite, today, subjects, students, classes,
             <label className={LABEL}><SheetText value={"내신 종류"} /><select value={slot || schoolSlots[0]?.value} onChange={(e) => change(setSlot)(e.target.value)} className={FIELD}>
               {schoolSlots.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>{loadButton}</>
             : kind === "monthly" ? <>{termFields}
-              <p className="text-sm font-semibold">{Number(date.slice(5, 7))}<SheetText value={"월 월말평가 "} /><span className="text-text-dim font-normal"><SheetText value={"(월은 시험일에서)"} /></span></p>{loadButton}</>
+              <p className="text-sm font-semibold">{Number(date.slice(5, 7))}<SheetText value={"월 "} />{examSlotLabel(baseSubject, "monthly")}{" "}<span className="text-text-dim font-normal"><SheetText value={"(월은 시험일에서)"} /></span></p>{loadButton}</>
             : <div className={LABEL}><SheetText value={"학생 추가"} /><SearchableSelect value="" placeholder="이름 검색" searchPlaceholder="학생 이름" requireQuery cap={30} ariaLabel="학생 추가" className="w-48" triggerClassName={FIELD}
               onValueChange={(id) => id && setExtraIds((prev) => prev.includes(id) ? prev : [...prev, id])}
               options={students.map((s) => ({ value: s.id, label: s.name, hint: schoolGradeLabel(s.school, s.grade) }))} /></div>}
         </div>
         {school && roster?.notice ? <p className="text-danger text-sm">{roster.notice}</p> : null}
         {school && !roster ? <p className="text-text-dim py-8 text-center text-sm"><SheetText value={"조건을 고르고 [명단 불러오기]를 누르면 그 학기 명단이 섭니다. 이미 있는 점수는 채워져 나옵니다."} /></p>
+          : areaMode ? <AreaEntryGrid rows={shownRows as AreaGridRow[]} draft={areaDraft} areaMax={maxNum / AREA_KEYS.length} results={results} disabled={pending}
+            emptyText={onlyMissing && rows.length ? "미입력 학생이 없습니다." : "조건에 맞는 학생이 없습니다."}
+            onArea={(id, k, v) => { setAreaDraft((prev) => ({ ...prev, [id]: { ...prev[id], [k]: v } })); setResults((prev) => { const { [id]: _drop, ...rest } = prev; void _drop; return rest; }); }} />
           : <EntryGrid rows={shownRows} scores={scores} max={maxNum} results={results} disabled={pending}
             emptyText={onlyMissing && rows.length ? "미입력 학생이 없습니다." : school ? "조건에 맞는 학생이 없습니다." : undefined}
             onScore={(id, v) => { setScores((prev) => ({ ...prev, [id]: v })); setResults((prev) => { const { [id]: _drop, ...rest } = prev; void _drop; return rest; }); }}

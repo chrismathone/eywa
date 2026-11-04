@@ -113,14 +113,22 @@ export const BOARD_MISSING_ERROR =
  *  · `unknown`       = 그 밖 — 옛 안내 그대로(동기화 대상이 아닌 반·학생, 연결은 있는데 반 전체 기록이 빈 반 = 보드가 지워졌거나
  *                      특정 불가, 기록이 전부 ok인데 막힘, 그 반에 다닌 적 없음)
  * 🔴 "기다리면 풀린다"고 말하려면 **동기화가 실제로 그 학생을 넣을 수 있어야** 한다 — `syncTarget`은 워커의 대상 기준
- *    (`targetClassWhere`·`currentEnrollmentOn`: 활성·보고서 발송·수학·종강 전 반 + 재원·테스트 아님 학생)과 같아야 하고,
+ *    (`targetClassWhere`·`currentEnrollmentOn`: 활성·보고서 발송·수학·종강 전 반 + 재원·테스트 아님 학생)과 같아야 하고(2026-11-04 원장
+ *    지시로 워커도 다시 보고서 발송 반만 동기화한다 — 11-03 'JJ 맞춤' 되돌림),
  *    `liveNow`는 그 날짜 기준(시작일 ≤ 오늘 ≤ 종료일)과 같아야 한다. 어긋나면 "배정을 요청했습니다"가 거짓말이 된다.
  */
 export type BoardMissingKind = "enrolling" | "class_pending" | "hold_join" | "hold_other" | "left" | "unknown";
 
 /** 배정 보류 사유(연동 PC가 적은 문장) — "다음 동기화 때 배정"은 보류가 아니라 배정 중이다. */
 const ASSIGN_PENDING_REASON = /^반 보드 배정 전/;
-/** 학부모 가입이 끝나면 풀리는 보류 사유(class-board-plan.mjs `resolveStudentChildren`의 두 문장). */
+/**
+ * 학부모 가입이 끝나면 풀리는 보류 사유(연동 PC class-board-plan.mjs `resolveStudentChildren`이 적는 문장의 머리).
+ *  · 지금 문장(2026-11-02~) = `JOIN_WAIT_REASON` 'ClassNote 미가입 — 이 학생으로 확인된 원아가 아직 없음'(1인 보드·반 보드 확인 기록·
+ *    원아 연결 어디에도 원아가 없다 — 가입하면 원아 연결이 생기고 다음 동기화가 배정한다)
+ *  · 옛 문장 둘 = '1인 보드 없음' · 'ClassNote 미가입·미배정(1인 보드 원아 0명)' — 연동 PC가 바뀌기 전·기록이 다시 쓰이기 전 줄
+ * 🔴 둘 다 알아본다(앱과 연동 PC 중 무엇이 먼저 배포돼도 '가입 대기'가 '관리자 확인'으로 떨어지지 않게). 원아 연결이 있는데
+ *    가드(전화·생년·이름)에 걸린 보류는 이 머리로 시작하지 않는다 = 관리자 확인. 잠금 = board-missing.test.ts.
+ */
 const JOIN_HOLD_REASON = /^(1인 보드 없음|ClassNote 미가입)/;
 /** 워커가 사유 여러 개를 잇는 글자(math-class-boards-db.mjs `h.reasons.join(" / ")`) — 사유가 둘 이상이면 가입만으로 풀리지 않는다. */
 const REASON_JOINER = " / ";

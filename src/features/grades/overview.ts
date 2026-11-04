@@ -11,7 +11,7 @@
  *    입력할 반을 고르는 축일 뿐이라 여기선 나누지 않는다.
  */
 
-import { EXAM_SLOT_LABEL, examSlotsFor, slotUsesMonth, type ExamSlotKey } from "./exam-slots";
+import { examSlotLabel, examSlotsFor, slotUsesMonth, type ExamSlotKey } from "./exam-slots";
 
 /** 확인 뷰의 열 하나 — 시험 칸(+월). `key`는 셀 맵의 키이자 React key다. */
 export type OverviewColumn = {
@@ -20,6 +20,8 @@ export type OverviewColumn = {
   /** 달마다 치는 시험만 1~12, 나머지는 0. */
   month: number;
   label: string;
+  /** 그 과목에서 부르는 시험 이름(영어 월말 = Monthly Test) — 달 열 머리 위 작은 글자. */
+  exam: string;
 };
 
 /** 한 칸의 값 — 점수가 없을 수도 있다('시험없음'으로 눌러 둔 칸). */
@@ -78,7 +80,8 @@ export function buildOverviewColumns(
       key: overviewColumnKey(slot, month),
       slot,
       month,
-      label: slotUsesMonth(slot) && month > 0 ? `${month}월` : EXAM_SLOT_LABEL[slot],
+      label: slotUsesMonth(slot) && month > 0 ? `${month}월` : examSlotLabel(subjectKey, slot),
+      exam: examSlotLabel(subjectKey, slot),
     }));
 }
 

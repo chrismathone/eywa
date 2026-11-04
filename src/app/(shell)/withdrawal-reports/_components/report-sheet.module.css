@@ -22,7 +22,6 @@
 .sheet .body > tbody > tr:nth-child(-n+3) > th, .sheet .body > tbody > tr:nth-child(-n+3) > td { font-weight: 700; }
 .writing { min-height: 32px; }
 .consultation { min-height: 32px; }
-.requirement { display: block; color: #c00; font-size: 11px; }
 .sheet input, .sheet textarea, .sheet select { display: block; width: 100%; min-width: 0; border: 0; border-radius: 0; padding: 4px; color: black; background: transparent; font: inherit; }
 .sheet textarea { resize: none; overflow: hidden; line-height: 1.6; }
 .sheet textarea:focus, .sheet input:focus, .sheet select:focus { outline: 2px solid var(--primary); outline-offset: -2px; }

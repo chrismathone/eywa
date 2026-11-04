@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getTimetableLabApplyRevision } from '@/features/timetable-lab/server/apply-actions';
 
-/** 운영 자료 적용 후 열린 시간표도 갱신한다. 입력이 있는 화면은 건드리지 않는다. */
+/** 연습본 적용·예약·취소 뒤 열린 시간표도 갱신한다. 입력이 있는 화면은 건드리지 않는다. */
 export function TimetableApplyRefresh({ tenantId }: { tenantId: string }) {
   const router = useRouter();
   useEffect(() => {

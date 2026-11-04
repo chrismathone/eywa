@@ -31,16 +31,17 @@ const STATUS_OPTIONS: FilterSelectOption[] = [
 
 /**
  * 퇴원보고서 툴바 — 퇴원관리처럼 축마다 드롭다운 하나(`상태: 전체` · `기간: 최근 30일` · 과목 · 작성 강사) + 검색 토글.
- * 기존 스프레드시트 기록을 보는 사람(작성 요청 권한)에겐 '스프레드시트 기록' 상태와 **학생 미연결** 칩이 더 선다
- * (원장 2026-10-14 *"미연결 리스트만 따로 보면"*).
+ * 기존 스프레드시트 기록을 보는 사람(작성 요청 권한)에겐 '스프레드시트 기록' 상태가 더 선다.
+ * 학생 미연결 칩은 없앴다(원장 2026-10-30 *"어차피 지난 기록이라 따로 필터링 안되도 상관없어"*).
  */
 export function ListToolbar({
   filters,
   custom,
   subjects,
   teachers,
-  unmapped,
+  archiveStatus,
   mine,
+  hideCanceled,
   resultText,
   resetHref,
   request,
@@ -49,10 +50,12 @@ export function ListToolbar({
   custom?: { from: string; to: string };
   subjects: FilterSelectOption[];
   teachers: FilterSelectOption[];
-  /** 기존 기록을 보는 사람만 — 미연결 칩의 주소(누르면 켜고 끈다)와 건수(상태 밖 다른 필터를 건 수). */
-  unmapped: { href: string; count: number } | null;
+  /** 기존 기록을 보는 사람만 — 상태 선택지에 '스프레드시트 기록'을 더한다. */
+  archiveStatus: boolean;
   /** 지금 내 승인 차례인 보고서 칩(누르면 켜고 끈다) — 0건이고 꺼져 있으면 없다. */
   mine: { href: string; count: number } | null;
+  /** 요청 취소 숨기기 칩(기본 켜짐) — 상태를 따로 고르면 뜻이 없어 없다. `count` = 지금 조건의 요청 취소 건수. */
+  hideCanceled: { active: boolean; href: string; count: number } | null;
   resultText: string;
   resetHref: string | null;
   request: ReactNode;
@@ -62,11 +65,9 @@ export function ListToolbar({
       <FilterSelect
         paramName="status"
         value={filters.status === "all" ? "" : filters.status}
-        options={unmapped ? [...STATUS_OPTIONS, { value: "archive", label: "스프레드시트 기록" }] : STATUS_OPTIONS}
+        options={archiveStatus ? [...STATUS_OPTIONS, { value: "archive", label: "스프레드시트 기록" }] : STATUS_OPTIONS}
         axisLabel="상태"
         ariaLabel="상태 필터"
-        // 미연결은 기존 기록에만 있다 — 상태를 고르면 칩을 끈다(켜진 채면 진행 중·완료와 겹쳐 늘 0건).
-        clearParams={["link"]}
         {...SELECT_PROPS}
       />
       {/* 기간을 바꾸면 `from=`·`to=`는 지운다 — 옛 날짜가 붙어 남지 않게. */}
@@ -113,9 +114,9 @@ export function ListToolbar({
           내 승인 필요 <span className="num">{mine.count}</span>건
         </ToolbarChip>
       ) : null}
-      {unmapped ? (
-        <ToolbarChip active={filters.unmapped} href={unmapped.href}>
-          학생 미연결 <span className="num">{unmapped.count}</span>건
+      {hideCanceled ? (
+        <ToolbarChip active={hideCanceled.active} href={hideCanceled.href}>
+          요청 취소 숨기기 <span className="num">{hideCanceled.count}</span>건
         </ToolbarChip>
       ) : null}
       <SearchToggle placeholder="학생·학교·반·내용" defaultValue={filters.q} />

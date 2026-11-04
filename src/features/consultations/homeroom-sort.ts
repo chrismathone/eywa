@@ -5,7 +5,7 @@
  */
 import type { HomeroomTeacher } from "./homeroom-model";
 
-export type HomeroomSortKey = "name" | "subject" | "students" | "prev" | "left" | "avg" | "unmet" | `m${number}`;
+export type HomeroomSortKey = "name" | "subject" | "students" | "prev" | "left" | "unmet" | `m${number}`;
 export type SortDir = "asc" | "desc";
 export type HomeroomSort = { key: HomeroomSortKey; dir: SortDir };
 
@@ -16,14 +16,14 @@ export const DEFAULT_HOMEROOM_SORT: HomeroomSort = { key: "name", dir: "asc" };
 const MAX_MONTH_OFFSET = 11;
 
 export function parseHomeroomSortKey(raw: unknown): HomeroomSortKey | null {
-  if (raw === "name" || raw === "subject" || raw === "students" || raw === "prev" || raw === "left" || raw === "avg" || raw === "unmet") return raw;
+  if (raw === "name" || raw === "subject" || raw === "students" || raw === "prev" || raw === "left" || raw === "unmet") return raw;
   if (typeof raw === "string" && /^m\d{1,2}$/.test(raw) && Number(raw.slice(1)) <= MAX_MONTH_OFFSET) return raw as HomeroomSortKey;
   return null;
 }
 
 /** 열을 처음 눌렀을 때 방향 — 글자는 가나다순, 상담률은 **낮은 순**(챙길 담임이 위), 학생·퇴원·미상담은 많은 순. */
 export function defaultDirOf(key: HomeroomSortKey): SortDir {
-  return key === "name" || key === "subject" || key === "avg" || key.startsWith("m") ? "asc" : "desc";
+  return key === "name" || key === "subject" || key.startsWith("m") ? "asc" : "desc";
 }
 
 /** 같은 열이면 방향만 뒤집고, 다른 열이면 그 열의 기본 방향으로. */
@@ -31,12 +31,10 @@ export function nextSort(cur: HomeroomSort, key: HomeroomSortKey): HomeroomSort 
   return cur.key === key ? { key, dir: cur.dir === "asc" ? "desc" : "asc" } : { key, dir: defaultDirOf(key) };
 }
 
-/** 기간 평균 상담률 — 달별 '담임이 상담한 학생 / 대상'을 더해 나눈다(대상 0인 달은 자연히 빠진다). */
-export function averageRate(t: HomeroomTeacher): number | null {
-  const self = t.months.reduce((a, m) => a + m.self, 0);
-  const target = t.months.reduce((a, m) => a + m.target, 0);
-  return pct(self, target);
-}
+// '평균' 열은 뺐다(원장 2026-11-02 *"무슨 평균인지 모르겠음"*) — 저장돼 있던 `avg` 정렬은 파서가 버려 이름순으로 돌아간다.
+/** 보기 — 게이지(담임 카드 + 계기판, 기본 · 원장 2026-11-02) / 표(달별 줄). 계정에 남는다(`ui_prefs.consultations.hr_view`, 기본값은 저장 안 함). */
+export type HomeroomView = "table" | "gauge";
+export const parseHomeroomView = (raw: unknown): HomeroomView => (raw === "table" ? "table" : "gauge");
 
 export function sortHomeroomTeachers(
   teachers: readonly HomeroomTeacher[],
@@ -52,7 +50,6 @@ export function sortHomeroomTeachers(
     if (sort.key === "prev") return t.prev.students;
     if (sort.key === "left") return t.prev.withdrawn.length;
     if (sort.key === "unmet") return t.months[last(t)]?.none ?? 0;
-    if (sort.key === "avg") return averageRate(t);
     const m = t.months[last(t) - Number(sort.key.slice(1))];
     return m ? pct(m.self, m.target) : null;
   };

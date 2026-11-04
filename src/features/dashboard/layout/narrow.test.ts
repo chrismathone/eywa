@@ -40,7 +40,8 @@ const sections = {
       ] },
     ],
   }),
-  withdrawals: ok({ month: "2026-10", rows: [{ id: "w1", program: "math" }, { id: "w2", program: "eie" }, { id: "w3", program: null }] }),
+  withdrawals: ok({ month: "2026-10", rows: [{ id: "w1", program: "math" }, { id: "w2", program: "eie" }, { id: "w3", program: null }],
+    carried: [{ id: "c1", program: "math", subject: "math", countMonth: "2026-09" }, { id: "c2", program: "eie", subject: "english", countMonth: "2026-09" }] }),
   englishSheet: ok({ period: "", classes: 1, filled: 1, total: 2 }),
   mathSheet: ok({ period: "", classes: 1, filled: 1, total: 2 }),
 } as unknown as Sections;
@@ -84,6 +85,8 @@ describe("과목 관리자 — 담당 과목으로 좁히기(서버)", () => {
 
   it("퇴원 명단은 마지막 수강 프로그램으로 가르고(둘 다 모르면 모두에게), 강사 시트는 담당 과목 것만", () => {
     expect(math.withdrawals?.data?.rows.map((r) => r.id)).toEqual(["w1", "w3"]);
+    // '앞 달로 센' 줄(원장 2026-11-03)도 같은 규칙 — 수학 관리자 팝업에 영어 줄이 서지 않는다.
+    expect(math.withdrawals?.data?.carried?.map((r) => r.id)).toEqual(["c1"]);
     expect(math.mathSheet).toBeDefined();
     expect(math.englishSheet).toBeUndefined();
     const korean = narrowBySubject(sections, ["korean"], groupOf, false);

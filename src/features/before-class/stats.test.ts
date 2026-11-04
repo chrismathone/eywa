@@ -28,13 +28,15 @@ describe("학생 통계", () => {
     expect(totalStat([day("2026-10-26", ["deadline"]), day("2026-10-29")]).average).toBeCloseTo(0.95);
   });
 
-  it("카드 = 종류별 개수(결석 날 카드도 센다 · 안 고른 날은 안 센다)", () => {
+  it("카드 = 종류별 개수(결석 날 고른 카드도 센다 · 안 고른 날은 완료율 자동 카드)", () => {
     const t = totalStat([
       { date: "2026-10-26", check: { missed: [], absent: false, card: "blue" as const } },
       { date: "2026-10-29", check: { missed: [], absent: true, card: "blue" as const } },
       { date: "2026-11-02", check: { missed: [], absent: false, card: "none" as const } },
       day("2026-11-05"),
+      day("2026-11-06", [], true),
     ]);
-    expect(t.cardCounts).toEqual({ blue: 2, gold: 0, red: 0, yellow: 0, none: 1 });
+    // 11-05 = 100% → 자동 골드 · 11-06 결석·안 고름 → 카드 없음.
+    expect(t.cardCounts).toEqual({ blue: 2, gold: 1, red: 0, yellow: 0, none: 1 });
   });
 });

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SystemRole } from "@/lib/permissions";
+import type { SubjectHistoryRow } from "./course-period";
 import { reasonDetailOf } from "@/features/withdrawals/reason-detail";
 import { REASON_LABEL } from "@/features/withdrawals/types";
 import { CLEANUP_WITHDRAWAL_MEMO } from "@/features/withdrawals/system-bulk";
@@ -67,7 +68,7 @@ export function isDirectReport(r: Pick<WithdrawalReport, "teacher_id" | "manager
 /**
  * 관리 도구 장부 정리(수강 없는 재원생 일괄 퇴원)가 남긴 바로 처리 보고서인가 — 바로 처리 · 사유 '기타' · 메모 = 장부 정리 메모.
  * 퇴원보고서 목록에서는 조용히 뺀다(원장 2026-10-15 *"장부 정리는 그냥 미출력되게"* — 퇴원관리와 같은 결 · 학생 기록·퇴원 상세엔 남는다).
- * 정상 보고서의 상세사유는 200자 이상이라 이 짧은 메모와 겹치지 않는다.
+ * 정상 보고서의 상세사유는 제출 기준(`MIN_DETAIL_LENGTH`) 이상이라 이 짧은 메모와 겹치지 않는다.
  */
 export function isBookkeepingReport(r: Pick<ReportListRow, "teacher_id" | "manager_id" | "requested_by" | "body_reason" | "body_detail">) {
   return isDirectReport(r) && r.body_reason === "other" && (r.body_detail ?? "").trim() === CLEANUP_WITHDRAWAL_MEMO;
@@ -75,8 +76,12 @@ export function isBookkeepingReport(r: Pick<ReportListRow, "teacher_id" | "manag
 export function automaticExitKind(courses: { id: string }[], enrollmentIds: readonly string[]) {
   return courses.length > 0 && courses.every(c => enrollmentIds.includes(c.id)) ? "withdrawal" as const : "subject_end" as const;
 }
-export type CourseSnapshot = { id: string; classId: string; className: string; subject: string; teacherId: string | null; teacherName: string | null; startDate: string; endDate: string | null; onHold: boolean };
-export type StudentSnapshot = { name: string; school: string | null; grade: string | null; enrolledAt: string | null; status: string; withdrawnAt: string | null; courses: CourseSnapshot[] };
+export type CourseSnapshot = { id: string; classId: string; className: string; subject: string; teacherId: string | null; teacherName: string | null; startDate: string; endDate: string | null; onHold: boolean;
+  /** 요청 창에서만 쓴다(저장된 보고서 스냅샷에는 없다) — '수업보고서 미발송' 반(0174a) · EiE 반(사업자가 달라 같은 영어로 묶지 않는다). */
+  reportOptout?: boolean; eie?: boolean };
+export type StudentSnapshot = { name: string; school: string | null; grade: string | null; enrolledAt: string | null; status: string; withdrawnAt: string | null; courses: CourseSnapshot[];
+  /** 완료·취소된 보고서의 수강기간 칸 이력 — 처음 열 때 고정(원장 2026-10-30 '완료 시점 값으로 고정'). 없으면 지금 수강 기록으로 센다. */
+  subjectHistory?: SubjectHistoryRow[] };
 export type WithdrawalReport = {
   id: string; tenant_id: string; student_id: string; requested_by: string; teacher_id: string; manager_id: string; director_id: string | null;
   enrollment_ids?: string[] | null;
@@ -95,15 +100,32 @@ export type ReportListRow = Omit<WithdrawalReport, "body"> & {
   body_student?: string | null; body_parent?: string | null; body_opinion?: string | null; body_attendance?: string | null; body_tuition?: string | null; body_arrears_note?: string | null;
 };
 export type StaffOption = { id: string; name: string; role: SystemRole; subjects: string[]; approvalSubjects?: string[] };
-export type StudentOption = { id: string; name: string; school: string | null; grade: string | null; courses: CourseSnapshot[] };
-export function snapshotMatches(a: StudentSnapshot, b: StudentSnapshot) {
+export type StudentOption = { id: string; name: string; school: string | null; grade: string | null; courses: CourseSnapshot[];
+  /** 진행 중인 다른 퇴원보고서가 맡은 과목의 반(s2_0014 — 과목이 다르면 따로 요청한다) · 여기서는 고를 수 없고 처리 구분(퇴원/수강종료)만 센다. */
+  busyCourses?: CourseSnapshot[] };
+/**
+ * 요청 이후 학생·수강이 그대로인가 — `subjects`를 주면 그 과목의 수강만 대조한다(과목 수강종료 묶음 · DB `withdrawal_report_scope`와 같은 규칙 s2_0014:
+ * 다른 과목 보고서가 먼저 끝나 그 과목 수강이 닫혀도 이 보고서는 바뀐 것이 아니다). 퇴원 묶음은 학생 전체를 대조한다.
+ */
+export function snapshotMatches(a: StudentSnapshot, b: StudentSnapshot, subjects?: readonly string[]) {
   const key = (s: StudentSnapshot) => JSON.stringify([s.name, s.school, s.grade, s.enrolledAt, s.status, s.withdrawnAt,
-    [...s.courses].sort((x, y) => x.id.localeCompare(y.id)).map(c => [c.id, c.classId, c.className, c.subject, c.teacherId, c.teacherName, c.startDate, c.endDate, c.onHold])]);
+    [...s.courses].filter(c => !subjects || subjects.includes(c.subject)).sort((x, y) => x.id.localeCompare(y.id)).map(c => [c.id, c.classId, c.className, c.subject, c.teacherId, c.teacherName, c.startDate, c.endDate, c.onHold])]);
   return key(a) === key(b);
 }
 export function canRequestReport(role: SystemRole) { return role === "master" || role === "admin" || role === "manager"; }
 export function managerIds(r: Pick<WithdrawalReport, "manager_id" | "manager_ids">) { return r.manager_ids ?? [r.manager_id]; }
 export function directorIds(r: Pick<WithdrawalReport, "director_id" | "director_ids">) { return r.director_ids ?? (r.director_id ? [r.director_id] : []); }
+/**
+ * 담임이 관리자라 관리자 칸을 건너뛴 보고서(원장 2026-10-30) — 승인자 칸에 원장만 있고 원장 칸은 비어 있다.
+ * DB가 승인자 1명 이상을 요구하므로 요청 창이 원장을 승인자 칸에 넣고, 화면은 이 모양을 '관리자 생략 · 원장 승인'으로 읽는다.
+ */
+export function skipsManagerStep(r: Pick<WithdrawalReport, "manager_id" | "manager_ids" | "director_id" | "director_ids">, staff: readonly Pick<StaffOption, "id" | "role">[]) {
+  const ids = managerIds(r);
+  return ids.length > 0 && directorIds(r).length === 0 && ids.every(id => staff.find(u => u.id === id)?.role === "master");
+}
+export function reportStatusLabel(r: Parameters<typeof skipsManagerStep>[0] & Pick<WithdrawalReport, "status">, staff: readonly Pick<StaffOption, "id" | "role">[]) {
+  return r.status === "manager_pending" && skipsManagerStep(r, staff) ? REPORT_STATUS.director_pending : REPORT_STATUS[r.status];
+}
 export function isParticipant(r: Pick<WithdrawalReport, "requested_by" | "teacher_id" | "manager_id" | "director_id" | "manager_ids" | "director_ids">, userId: string) {
   return [r.requested_by, r.teacher_id, ...managerIds(r), ...directorIds(r)].includes(userId);
 }
@@ -121,8 +143,10 @@ export function reportCapabilities(r: WithdrawalReport, userId: string, writable
     cancel: writable && (r.requested_by === userId || directorLevel) && !["completed", "canceled"].includes(r.status),
   };
 }
+/** 퇴원 상세사유 제출 기준 글자 수 — DB 전이 함수 두 개(s2_0015)도 같은 값으로 거른다. 바꿀 땐 함께 바꾼다. */
+export const MIN_DETAIL_LENGTH = 100;
 export function submissionError(body: ReportBody): string | null {
-  if (Array.from(body.detail.trim()).length < 200) return "퇴원 상세사유를 200자 이상 작성해 주세요.";
+  if (Array.from(body.detail.trim()).length < MIN_DETAIL_LENGTH) return `퇴원 상세사유를 ${MIN_DETAIL_LENGTH}자 이상 작성해 주세요.`;
   if (!body.studentConsultation.trim() || !body.parentConsultation.trim() || !body.teacherOpinion.trim())
     return "학생·학부모 상담 결과와 담임 의견을 작성해 주세요. 상담하지 못했다면 그 사유를 적어 주세요.";
   return null;

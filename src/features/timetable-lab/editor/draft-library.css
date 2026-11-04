@@ -9,6 +9,10 @@
 .draft-list li > div { min-width: 0; overflow-wrap: anywhere; }
 .draft-list li strong { overflow-wrap: anywhere; }
 .draft-list li button { flex-shrink: 0; }
+.draft-actions { display: flex; flex-shrink: 0; gap: 6px; }
+.draft-confirm { margin: 10px 0; padding: 10px; color: #924521; background: #fff2e8; border: 1px solid #ecc9a8; border-radius: 5px; }
+.draft-confirm p { margin: 0 0 8px; }
+.draft-confirm div { display: flex; gap: 8px; }
 .draft-compare-picker { border-top: 1px solid #dbe3ec; padding-top: 10px; }
 .draft-compare-picker > div { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
 .draft-compare-picker label { display: grid; gap: 8px; flex: 1; min-width: 200px; }

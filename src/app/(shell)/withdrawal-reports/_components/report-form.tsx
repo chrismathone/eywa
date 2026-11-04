@@ -6,14 +6,15 @@ import type { ReportConsultation } from "@/features/withdrawal-reports/consultat
 import { GrowingTextarea } from "./growing-textarea";
 import { ConsultationLinks } from "./consultation-links";
 import { REASON_LABEL } from "@/features/withdrawals/types";
-import { directorIds, isDirectReport, managerIds, type ReportBody, type ReportEvent, type WithdrawalReport } from "@/features/withdrawal-reports/model";
+import { directorIds, isDirectReport, managerIds, MIN_DETAIL_LENGTH, type ReportBody, type ReportEvent, type WithdrawalReport } from "@/features/withdrawal-reports/model";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { ReportSheet } from "./report-sheet";
 import { TuitionDetail } from "./tuition-detail";
 import { reportCourses } from "@/features/withdrawal-reports/target-courses";
 
 const date = (value: string) => new Date(value).toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
-export function ReportForm({ report: r, body, events, labels, nameOf, editable, pending, onChange, consultations = [], subjectHistory = [], refundCheck }: {
+export function ReportForm({ report: r, body, events, labels, nameOf, editable, pending, onChange, consultations = [], subjectHistory = [], refundCheck, managerSkipped = false }: {
+  managerSkipped?: boolean;
   consultations?: ReportConsultation[];
   refundCheck?: ReactNode;
   subjectHistory?: SubjectHistoryRow[];
@@ -22,8 +23,8 @@ export function ReportForm({ report: r, body, events, labels, nameOf, editable, 
   onChange: <K extends keyof ReportBody>(key: K, value: ReportBody[K]) => void;
 }) {
   const courses = reportCourses(r);
-  const textField = (key: "detail" | "attendance" | "studentConsultation" | "parentConsultation" | "teacherOpinion" | "arrearsNote", label: string) => editable
-    ? <GrowingTextarea aria-label={label} maxLength={key === "arrearsNote" ? 1000 : 5000} value={body[key]} disabled={pending} onChange={e => onChange(key, e.target.value)} />
+  const textField = (key: "detail" | "attendance" | "studentConsultation" | "parentConsultation" | "teacherOpinion" | "arrearsNote", label: string, placeholder?: string) => editable
+    ? <GrowingTextarea aria-label={label} placeholder={placeholder} maxLength={key === "arrearsNote" ? 1000 : 5000} value={body[key]} disabled={pending} onChange={e => onChange(key, e.target.value)} />
     : body[key];
   const writtenAt = events.findLast(e => e.action === "save" || e.action === "submit")?.created_at;
   const approvers = (kind: "manager" | "director") => {
@@ -48,7 +49,7 @@ export function ReportForm({ report: r, body, events, labels, nameOf, editable, 
       ? [{ role: "바로 처리", name: nameOf(r.requested_by), date: `처리 요청일 : ${date(r.created_at)}` }]
       : [
           { role: "담임", name: nameOf(r.teacher_id), date: `작성일 : ${writtenAt ? date(writtenAt) : ""}` },
-          approvers("manager"), approvers("director"),
+          ...(managerSkipped ? [{ role: "관리자", name: "생략", date: "" }, { ...approvers("manager"), role: "원장" }] : [approvers("manager"), approvers("director")]),
         ]}
     fields={{
       name: r.snapshot.name,
@@ -59,7 +60,7 @@ export function ReportForm({ report: r, body, events, labels, nameOf, editable, 
       teacher: direct ? homeroom : nameOf(r.teacher_id),
       attendance: textField("attendance", "최근 3개월 출결 현황"),
       reason: editable ? <div className="flex flex-wrap gap-2"><select aria-label="퇴원사유" style={{ flex: "1 1 180px" }} value={body.reason} disabled={pending} onChange={e => { onChange("reason", e.target.value as ReportBody["reason"]); onChange("reasonDetail", ""); }}>{Object.entries(REASON_LABEL).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>{REASON_DETAILS[body.reason].length > 0 && <select aria-label="세부 퇴원사유" style={{ flex: "1 1 240px" }} value={body.reasonDetail ?? ""} disabled={pending} onChange={e => onChange("reasonDetail", e.target.value)}><option value="">세부 사유 선택</option>{REASON_DETAILS[body.reason].map(d => <option key={d.key} value={d.key}>{d.label}</option>)}</select>}</div> : [REASON_LABEL[body.reason], reasonDetailOf(body.reasonDetail)?.label].filter(Boolean).join(" · "),
-      detail: <>{textField("detail", "퇴원 상세사유")}{editable && <small>{Array.from(body.detail.trim()).length}자 · 제출 시 200자 이상</small>}</>,
+      detail: <>{textField("detail", "퇴원 상세사유", `${MIN_DETAIL_LENGTH}자 이상 작성해 주세요`)}{editable && <small>{Array.from(body.detail.trim()).length} / {MIN_DETAIL_LENGTH}자</small>}</>,
       studentConsultation: textField("studentConsultation", "학생상담"),
       parentConsultation: textField("parentConsultation", "학부모상담"),
       teacherOpinion: textField("teacherOpinion", "담임 의견"),
