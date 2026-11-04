@@ -53,10 +53,13 @@ export function cnLabelState(label: CnLabel): CnLabelState {
 export type CnMatchMap = {
   available: boolean;
   byKey: Record<string, CnMatch>;
-  /** 학생별 **배정이 확인된** 반 보드(반마다 하나) — 이 반이 아닌 다른 반 보드에 있는지를 읽는 재료. 사유는 싣지 않는다. */
+  /** 학생별 **배정이 확인된** 반 보드(반마다 하나 · 그날 다니는 반은 뺀다 — `buildCnMatchMap`의 `current`) — 이 반이 아닌 다른 반 보드에 있는지를 읽는 재료. 사유는 싣지 않는다. */
   okBoards?: Record<string, CnOkBoard[]>;
-  /** 반 보드 대상 반(수학·활성·보고서 발송 · 종강 전 또는 연결이 남은 종강 · 특강 포함 2026-09-30) — 이 밖의 반 행엔 라벨을 달지 않는다. */
+  /** 반 보드 대상 반(수학·활성·보고서 발송 · 종강 전 또는 연결이 남은 종강 · 특강 포함 2026-09-30) — 이 밖의 반 행엔 라벨을 달지 않는다.
+   *  보고서 미발송(JJ) 반은 대상이 아니다(원장 2026-11-04 *"JJ 미발송반은 클래스노트 반배정도 할 필요없음"*). */
   eligibleClassIds: string[];
+  /** 매칭 표 버전(`cnMatchVersion`) — 새로고침 없이 갱신할 때 '바뀌었나'만 가른다(원장 2026-11-04). 표를 못 읽었으면 없다. */
+  version?: string;
 };
 
 export const CN_UNAVAILABLE: CnMatchMap = { available: false, byKey: {}, eligibleClassIds: [] };
@@ -69,12 +72,19 @@ export const cnKey = (classId: string, studentId: string) => `${classId}|${stude
 /**
  * 표 행 → 원스크린 지도. 한 (반, 학생)에 원아가 둘(학부모·학생 두 계정)이면 **전부 ok여야 ok**,
  * 하나라도 보류면 보류(한쪽만 받는 상태를 초록으로 보이면 안 된다).
+ *
+ * `current` = 로스터 날짜에 다니는 (반, 학생). 주면 물음표의 근거(`okBoards`)에서 **그날도 다니는 반**의 보드를 뺀다(원장 2026-11-04
+ * *"근본으로 해결해"*). 물음표는 '이 반 대신 **그날은 안 다니는 반**의 보드에 배정이 남았다'(반 이동 직후)는 뜻이다 — 두 반을
+ * 함께 다니는 학생(예: 이연아 = JJ1G + BS1D)의 다른 반 배정은 이 반 배정이 틀렸다는 증거가 아니다(그 줄에 "배정된 반 보드: BS1D"가 떴다).
+ * 안 주면 종전대로 전부.
  */
 export function buildCnMatchMap(
   members: readonly CnMemberRow[],
   boards: readonly { class_id: string; board_name: string }[],
   eligibleClassIds: readonly string[],
+  current?: readonly { class_id: string; student_id: string }[],
 ): CnMatchMap {
+  const attending = current ? new Set(current.map((e) => cnKey(e.class_id, e.student_id))) : null;
   const boardBy = new Map(boards.map((b) => [b.class_id, b.board_name]));
   const byKey: Record<string, CnMatch> = {};
   for (const m of members) {
@@ -85,14 +95,44 @@ export function buildCnMatchMap(
     if (m.reason && !cur.reasons.includes(m.reason)) cur.reasons.push(m.reason);
     byKey[k] = cur;
   }
-  // 학생별 배정이 확인된 반 보드 — (반, 학생) 줄이 전부 ok인 것만(위 규칙 그대로).
+  // 학생별 배정이 확인된 반 보드 — (반, 학생) 줄이 전부 ok인 것만(위 규칙 그대로) · 지금도 다니는 반은 빼고(위 `current`).
   const okBoards: Record<string, CnOkBoard[]> = {};
   for (const [k, v] of Object.entries(byKey)) {
     if (v.status !== "ok") continue;
+    if (attending?.has(k)) continue;
     const [classId, studentId] = k.split("|") as [string, string];
     (okBoards[studentId] ??= []).push({ classId, boardName: v.boardName ?? "" });
   }
   return { available: true, byKey, okBoards, eligibleClassIds: [...eligibleClassIds] };
+}
+
+/**
+ * 매칭 표 버전 — 두 표의 (행 수, 가장 큰 번호 · 가장 늦은 연결 시각)으로 만든 짧은 문자열(순수).
+ * 서버의 두 경로(전체 조회 `loadClassnoteMatch` · 가벼운 확인 `getClassnoteMatchVersion`)가 **같은 값**을 내야 한다 —
+ * 그래서 시각은 밀리초 숫자로 맞춘다(문자열 모양에 기대지 않는다).
+ * 동기화는 반을 볼 때마다 그 반의 배정 행을 지우고 다시 넣고(새 번호) 연결 행의 시각을 고친다(scripts/_classnote/math-class-boards-db.mjs) —
+ * 지우기만 한 것(대상에서 빠진 반)은 행 수가 잡는다. 🔴 값의 뜻은 '같은가/다른가'뿐이다(크기를 비교하지 말 것).
+ */
+export function cnMatchVersion(v: { memberCount: number; maxMemberId: number | null; boardCount: number; maxSyncedAt: number | null }): string {
+  return `${v.memberCount}.${v.maxMemberId ?? 0}.${v.boardCount}.${v.maxSyncedAt ?? 0}`;
+}
+
+/** 전체로 읽은 두 표에서 같은 버전을 만든다(가벼운 확인은 행 수 + 맨 위 한 줄로 같은 값을 만든다). */
+export function cnMatchVersionOf(
+  members: readonly { id: number | string | null }[],
+  boards: readonly { synced_at: string | null }[],
+): string {
+  let maxMemberId: number | null = null;
+  for (const m of members) {
+    const id = Number(m.id);
+    if (Number.isFinite(id) && (maxMemberId === null || id > maxMemberId)) maxMemberId = id;
+  }
+  let maxSyncedAt: number | null = null;
+  for (const b of boards) {
+    const at = b.synced_at ? Date.parse(b.synced_at) : NaN;
+    if (Number.isFinite(at) && (maxSyncedAt === null || at > maxSyncedAt)) maxSyncedAt = at;
+  }
+  return cnMatchVersion({ memberCount: members.length, maxMemberId, boardCount: boards.length, maxSyncedAt });
 }
 
 /**
@@ -110,16 +150,41 @@ export function pickCnForClasses(map: CnMatchMap, classIds: Iterable<string>, st
     const boards = map.okBoards && Object.hasOwn(map.okBoards, id) ? map.okBoards[id] : undefined;
     if (boards?.length) okBoards[id] = boards;
   }
-  return { available: true, byKey, okBoards, eligibleClassIds: map.eligibleClassIds.filter((id) => keep.has(id)) };
+  return {
+    available: true,
+    byKey,
+    okBoards,
+    eligibleClassIds: map.eligibleClassIds.filter((id) => keep.has(id)),
+    ...(map.version !== undefined ? { version: map.version } : {}),
+  };
 }
 
-/** 이 행에 라벨을 다는가 + 무슨 색인가. null = 라벨 없음(수학 아님·보강 행·표 못 읽음). */
+/** 로스터 날짜에 다니는 (반, 학생) — 서버 전용 판정 재료(클라이언트로 내려가지 않는다). */
+export type CnAttending = { class_id: string; student_id: string };
+/** 서버 조회 한 벌 — 지점 전체 매칭 지도 + 그날 다니는 (반, 학생). */
+export type CnMatchLoad = { map: CnMatchMap; attending: readonly CnAttending[] };
+
+/**
+ * 강사 로스터 화면 몫 — 페이지 첫 렌더와 새로고침 없는 갱신(`/api/onescreen/classnote-match`)이 **같은 함수**로 좁힌다
+ * (같은 날짜·같은 반이면 같은 결과 — 원장 2026-10-14 *"같은 데이터는 같은 원본으로"*).
+ * 학생 = 이 반들을 그날 다니는 학생(휴원 포함). 라벨이 붙는 줄(그 반 정규 줄)의 학생은 전부 여기 든다 — 로스터도 같은 날짜·같은
+ * 수강 판정으로 줄을 세우고, 보강 줄은 반이 없어 라벨이 없다.
+ */
+export function pickCnForRoster(loaded: CnMatchLoad, classIds: Iterable<string>): CnMatchMap {
+  const keep = new Set(classIds);
+  const students = loaded.attending.filter((e) => keep.has(e.class_id)).map((e) => e.student_id);
+  return pickCnForClasses(loaded.map, keep, students);
+}
+
+/** 이 행에 라벨을 다는가 + 무슨 색인가. null = 라벨 없음(수학 아님·보강 행·미발송 줄·표 못 읽음). */
 export function cnLabelFor(
   map: CnMatchMap | undefined,
-  row: { classId?: string | null; subjectKey?: string | null; studentId: string },
+  row: { classId?: string | null; subjectKey?: string | null; studentId: string; reportOptout?: boolean | null },
 ): CnLabel | null {
   if (!map?.available) return null;
   if (!row.classId || !row.subjectKey || !CN_SUBJECT_KEYS.has(row.subjectKey)) return null;
+  // 보고서 미발송 줄(미발송 반 · 수업 나누기로 온 줄) — 그 줄의 보고서는 ClassNote로 가지 않는다(원장 2026-11-04). 카드·표 같은 판정.
+  if (row.reportOptout === true) return null;
   if (!map.eligibleClassIds.includes(row.classId)) return null; // 연결이 걷힌 종강·미발송 반 — 반 보드 대상이 아니다
   const match = map.byKey[cnKey(row.classId, row.studentId)] ?? null;
   const ok = match?.status === "ok";

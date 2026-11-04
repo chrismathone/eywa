@@ -26,8 +26,12 @@ export const REPORT_OPTOUT_LABEL = "수업보고서 미발송";
  * 🔴 2026-08-19 원장 지시: *"보고서는 안보내지만 이제부터라도 출결은 찍을것"*. 그 전까지 미발송 반은
  *    원스크린 로스터에서 **통째로 빠져** 담임이 출결을 찍을 길이 아예 없었다. 이제 반은 보이되 보고서
  *    쪽만 잠근다 — 잠근 이유를 안 적으면 "왜 안 써지지"가 된다(발송 완료·결석 잠금과 같은 규약).
+ * 🔴 2026-11-04 원장: *"원인을 선생님이 알 수 없으니까 곤란해하심"* — 이유(반 설정이 미발송)와 **어떻게 하면 되는지**
+ *    (반 설정을 바꿀 사람에게 요청)까지 한 문장에 적는다. 원스크린은 이 문장을 보고서 칸 자리에 그대로 보여 준다.
+ *    ⚠️ 일반 화면 문구라 플랫폼 내부 역할 이름은 쓰지 않는다(AGENTS.md).
  */
-export const REPORT_OPTOUT_NOTICE = "이 반은 수업보고서를 보내지 않습니다 — 출결만 기록합니다";
+export const REPORT_OPTOUT_NOTICE =
+  "이 반은 '수업보고서 미발송' 반으로 지정돼 있어 보고서를 쓰지 않습니다(출결만 기록) — 보고서를 써야 하는 반이면 원장·관리자에게 반 설정 변경을 요청하세요";
 
 /** 좁은 칸(버튼 아래 라벨·칩)용 짧은 형태. 뜻은 위 문장과 같다. */
 export const REPORT_OPTOUT_SHORT = "미발송 반 — 출결만";
@@ -38,7 +42,7 @@ export const REPORT_OPTOUT_SHORT = "미발송 반 — 출결만";
  * 그 화면만 한글이 뜬다(같은 이유로 요일·출결 표도 한 파일에 나란히 둔다).
  */
 export const REPORT_OPTOUT_NOTICE_EN =
-  "This class does not send lesson reports — only attendance is recorded";
+  "This class is set to 'No lesson report', so no report is written here (attendance only) — if this class needs reports, ask the director or an admin to change the class setting";
 export const REPORT_OPTOUT_SHORT_EN = "No report — attendance only";
 
 /** 화면 언어에 맞는 문장. 인자를 안 주면 한국어(기존 호출부 무변경). */

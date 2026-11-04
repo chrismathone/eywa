@@ -4324,7 +4324,8 @@ export const SHEET_DICT = {
     ko: "{subject} — 저장했지만 이 과목은 발송 대상이 아니라 전송하지 않았습니다(원장 설정의 발송 과목 확인)",
     en: "{subject} — saved, but this subject is not one that gets sent, so nothing went out (check the subjects in the director's settings)",
   },
-  "os.c.optoutSubject": { ko: "{subject} — {notice}(기록 저장은 유지)", en: "{subject} — {notice} (the record is still saved)" },
+  // {notice} = 미발송 반 안내 한 문장(report-optout.ts — 끝이 '요청하세요'라 '저장했습니다'를 앞에 둔다, 2026-11-04).
+  "os.c.optoutSubject": { ko: "{subject} — 기록은 저장했습니다. {notice}", en: "{subject} — the record is saved. {notice}" },
   "os.c.absentSubject": {
     ko: "{subject} — 수업일 출결이 결석으로 기록돼 있어 발송하지 않았습니다(기록 저장은 유지)",
     en: "{subject} — the attendance for that day is 'absent', so nothing was sent (the record is still saved)",
@@ -4361,7 +4362,7 @@ export const SHEET_DICT = {
     ko: "{name} {subject} — 저장했지만 발송 대상 과목이 아니라 전송하지 않았습니다",
     en: "{name} {subject} — saved, but this subject is not one that gets sent, so nothing went out",
   },
-  "os.c.optoutRow": { ko: "{name} {subject} — {notice}(기록 저장은 유지)", en: "{name} {subject} — {notice} (the record is still saved)" },
+  "os.c.optoutRow": { ko: "{name} {subject} — 기록은 저장했습니다. {notice}", en: "{name} {subject} — the record is saved. {notice}" },
   "os.c.absentRow": {
     ko: "{name} — 수업일 출결이 결석으로 기록돼 있어 발송하지 않았습니다(기록 저장은 유지)",
     en: "{name} — the attendance for that day is 'absent', so nothing was sent (the record is still saved)",

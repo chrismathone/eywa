@@ -1,7 +1,17 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildCnMatchMap, cnLabelFor, cnLabelState, cnTipCard, CN_UNAVAILABLE, pickCnForClasses } from "./classnote-match";
+import {
+  buildCnMatchMap,
+  cnLabelFor,
+  cnLabelState,
+  cnMatchVersion,
+  cnMatchVersionOf,
+  cnTipCard,
+  CN_UNAVAILABLE,
+  pickCnForClasses,
+  pickCnForRoster,
+} from "./classnote-match";
 
 const boards = [{ class_id: "c1", board_name: "중등M 중1 MS2R" }];
 const row = (over: Partial<Parameters<typeof buildCnMatchMap>[0][number]> = {}) => ({
@@ -147,13 +157,109 @@ describe("반 배정이 지금 반과 다를 때(물음표)", () => {
   });
 });
 
-describe("보고서 미발송(JJ) 반 기록 — 2026-11-03부터 동기화가 JJ 반도 연결·기록한다", () => {
-  it("🔴 대상 밖 반의 기록이 섞이면 수학 반 줄이 '배정된 반 보드: JJ…'(물음표)로 잘못 뜬다 — 조회가 대상 반 기록만 넘긴다", () => {
-    const jjBoards = [...boards, { class_id: "jj", board_name: "초등M 개별 JJ2M" }];
-    const mixed = buildCnMatchMap([row({ status: "hold", reason: "보류" }), row({ class_id: "jj" })], jjBoards, ["c1"]);
-    expect(cnLabelFor(mixed, { classId: "c1", subjectKey: "math", studentId: "s1" })).toMatchObject({ elsewhere: ["초등M 개별 JJ2M"] });
-    const src = readFileSync(join(process.cwd(), "src/features/onescreen/server/classnote-match.ts"), "utf8");
-    expect(src).toContain('.eq("report_optout", false)');
-    expect(src).toContain("return buildCnMatchMap(members.filter((m) => eligibleSet.has(m.class_id)), boards, eligibleIds);");
+describe("보고서 미발송 줄 · 함께 다니는 반 — 물음표는 그날 안 다니는 반의 배정만(원장 2026-11-04)", () => {
+  // 이연아 = JJ1G(보고서 쓰는 JJ 반)와 BS1D(일반 반)를 함께 다닌다 — BS1D 보드에만 배정이 확인됐고 JJ1G는 아직이다.
+  const twoBoards = [
+    { class_id: "bs1d", board_name: "초등M 개별 BS1D" },
+    { class_id: "jj1g", board_name: "초등M 개별 JJ1G" },
+  ];
+  const yeonah = (over: Partial<Parameters<typeof buildCnMatchMap>[0][number]> = {}) =>
+    row({ class_id: "bs1d", student_id: "lee", child_name: "이연아", ...over });
+  const bothNow = [
+    { class_id: "bs1d", student_id: "lee" },
+    { class_id: "jj1g", student_id: "lee" },
+  ];
+
+  it("🔴 보고서 미발송 줄엔 라벨이 없다 — 대상 반에 없을 때(서버가 뺀다)도, 줄이 미발송으로 표시됐을 때(수업 나누기로 온 줄)도", () => {
+    const map = buildCnMatchMap([], twoBoards, ["bs1d"], []);
+    // 미발송 반 — 대상 반 목록 밖이라 라벨 없음(카드·표 둘 다 같은 함수).
+    expect(cnLabelFor(map, { classId: "optout-jj", subjectKey: "math", studentId: "lee" })).toBeNull();
+    // 대상 반이어도 줄이 미발송이면 없음 — 그 줄의 보고서는 ClassNote로 가지 않는다.
+    expect(cnLabelFor(map, { classId: "bs1d", subjectKey: "math", studentId: "lee", reportOptout: true })).toBeNull();
+    expect(cnLabelFor(map, { classId: "bs1d", subjectKey: "math", studentId: "lee", reportOptout: false })).toEqual({ ok: false, match: null });
+  });
+
+  it("🔴 두 반을 함께 다니면 다른 반 배정은 물음표의 근거가 아니다 — JJ1G 줄에 '배정된 반 보드: BS1D'가 뜨지 않는다", () => {
+    const map = buildCnMatchMap([yeonah()], twoBoards, ["bs1d", "jj1g"], bothNow);
+    const jj = cnLabelFor(map, { classId: "jj1g", subjectKey: "math", studentId: "lee" })!;
+    expect(jj.elsewhere).toBeUndefined();
+    expect(cnLabelState(jj)).toBe("none");
+    expect(cnTipCard(jj, "초등M 개별 JJ1G").rows).not.toContainEqual(["배정된 반 보드", "초등M 개별 BS1D"]);
+    // BS1D 줄은 그 반 보드 기준으로 체크.
+    expect(cnLabelState(cnLabelFor(map, { classId: "bs1d", subjectKey: "math", studentId: "lee" })!)).toBe("ok");
+    // 그날 다니는 반을 안 넘기면(옛 호출) 종전대로 물음표 — 이 구분이 고친 자리다.
+    expect(cnLabelState(cnLabelFor(buildCnMatchMap([yeonah()], twoBoards, ["bs1d", "jj1g"]), { classId: "jj1g", subjectKey: "math", studentId: "lee" })!)).toBe("mismatch");
+  });
+
+  it("🔴 반을 옮긴 학생(옛 반은 그날 안 다닌다) — 옛 반 보드 배정은 그대로 물음표의 근거", () => {
+    const moved = [...boards, { class_id: "c2", board_name: "B반" }];
+    const map = buildCnMatchMap([row()], moved, ["c1", "c2"], [{ class_id: "c2", student_id: "s1" }]);
+    const label = cnLabelFor(map, { classId: "c2", subjectKey: "math", studentId: "s1" })!;
+    expect(label.elsewhere).toEqual(["중등M 중1 MS2R"]);
+    expect(cnLabelState(label)).toBe("mismatch");
+  });
+});
+
+describe("매칭 표 버전(새로고침 없는 갱신, 원장 2026-11-04)", () => {
+  const members = [{ id: 5 }, { id: 12 }, { id: 9 }];
+  const linkRows = [{ synced_at: "2026-11-04T05:00:12.345678+00:00" }, { synced_at: "2026-11-04T05:00:12.3+00:00" }];
+
+  it("🔴 전체로 읽은 값과 가벼운 확인(행 수 + 맨 위 한 줄)이 같은 문자열을 낸다 — 시각은 밀리초로 맞춘다", () => {
+    const full = cnMatchVersionOf(members, linkRows);
+    const light = cnMatchVersion({ memberCount: 3, maxMemberId: 12, boardCount: 2, maxSyncedAt: Date.parse("2026-11-04T05:00:12.345678+00:00") });
+    expect(full).toBe(light);
+  });
+
+  it("동기화가 반을 다시 쓰면(새 번호) · 지우기만 하면(행 수) · 연결 시각이 바뀌면 버전이 바뀐다", () => {
+    const base = cnMatchVersionOf(members, linkRows);
+    expect(cnMatchVersionOf([...members, { id: 13 }], linkRows)).not.toBe(base);
+    expect(cnMatchVersionOf(members.slice(1), linkRows)).not.toBe(base);
+    expect(cnMatchVersionOf(members, [...linkRows, { synced_at: "2026-11-04T06:00:00+00:00" }])).not.toBe(base);
+    expect(cnMatchVersionOf(members, linkRows)).toBe(base);
+  });
+
+  it("빈 표·읽을 수 없는 시각도 터지지 않는다", () => {
+    expect(cnMatchVersionOf([], [])).toBe(cnMatchVersion({ memberCount: 0, maxMemberId: null, boardCount: 0, maxSyncedAt: null }));
+    expect(cnMatchVersionOf([{ id: null }], [{ synced_at: null }, { synced_at: "모름" }])).toBe("1.0.2.0");
+  });
+});
+
+describe("pickCnForRoster — 페이지 첫 렌더와 갱신 라우트가 같은 함수로 좁힌다", () => {
+  const twoBoards = [
+    { class_id: "c1", board_name: "A반" },
+    { class_id: "c2", board_name: "B반" },
+  ];
+  const map = { ...buildCnMatchMap([row(), row({ class_id: "c2", student_id: "s9", status: "hold", reason: "남의 반 사유" })], twoBoards, ["c1", "c2"]), version: "v1" };
+  const attending = [
+    { class_id: "c3", student_id: "s1" },
+    { class_id: "c2", student_id: "s9" },
+  ];
+
+  it("🔴 학생 = 이 반들을 그날 다니는 학생만 — 다른 반 학생의 배정·사유는 안 내려간다", () => {
+    const picked = pickCnForRoster({ map, attending }, ["c3"]);
+    expect(picked.byKey).toEqual({});
+    expect(picked.okBoards).toEqual({ s1: [{ classId: "c1", boardName: "A반" }] });
+    expect(JSON.stringify(picked)).not.toMatch(/남의 반 사유|s9/);
+    expect(picked.version).toBe("v1");
+  });
+
+  it("표를 못 읽은 지도는 그대로(라벨 없음) — 버전도 그대로 싣는다", () => {
+    expect(pickCnForRoster({ map: { ...CN_UNAVAILABLE, version: "v0" }, attending }, ["c1"])).toEqual({ ...CN_UNAVAILABLE, version: "v0" });
+    expect(pickCnForClasses(CN_UNAVAILABLE, ["c1"]).version).toBeUndefined();
+  });
+
+  it("🔴 배선 — 서버는 미발송 반을 대상에서 빼고 그날 다니는 반을 물음표 판정에 넘긴다 · 페이지와 갱신 라우트가 같은 조회·같은 좁히기", () => {
+    // 주석은 지우고 본다(주석에 같은 글자가 있어도 통과하지 않게).
+    const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8").replace(/\/\/[^\n]*/g, "");
+    const server = read("src/features/onescreen/server/classnote-match.ts");
+    expect(server).toContain('.eq("report_optout", false)');
+    expect(server).toContain("resolveReportDate(rosterDate, today)");
+    expect(server).toMatch(/buildCnMatchMap\([^;]*eligibleIds, attending\)/);
+    const page = read("src/app/(shell)/onescreen/page.tsx");
+    expect(page).toContain("loadClassnoteMatch(date)");
+    expect(page).toContain("pickCnForRoster(");
+    const route = read("src/app/api/onescreen/classnote-match/route.ts");
+    expect(route).toContain("loadClassnoteMatch(q.date)");
+    expect(route).toContain("pickCnForRoster(loaded, q.classIds)");
   });
 });

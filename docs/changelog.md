@@ -1,5 +1,7 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-04 — 원스크린 C.N 아이콘(미발송 반 대상 아님 · 물음표 = 그날 안 다니는 반의 배정(로스터 날짜) · '?' 글자 하나 · 새로고침 없이 갱신 `GET /api/onescreen/classnote-match`) · 미발송 반 줄 보고서 칸 안내(까닭 + 할 일 · 카드·표 같은 부품) · 보고서 목록 '미발송' 칸 마우스 오버 이유 카드(`GET /api/lesson-reports/unsent-reasons`) — 상세 [decisions/reports-ai.md](decisions/reports-ai.md) '원스크린 ClassNote 반 매칭 아이콘' · "보고서 목록 '미발송' 칸"
+
 ## 2026-11-03 — ClassNote 전 과목 퇴원 45일 뒤 명부 퇴원처리(퇴소 · 스위치 기본 꺼짐 = 관찰 모드 · 직전 글·댓글 백업 · 하루 10명 · 명부 재조회로 확인 · 요청한 원아는 결과와 무관하게 감사로그) + 자동 해제 리뷰 보강(우리 센터 배정만 셈 · ④ 분모 · 휴원 대조 · 영어 방 다른 반 · 안 내보낸 원아가 사라지면 멈춤) — 상세 [classnote-integration.md §10.5-b · §11 'Phase 2 구현'](classnote-integration.md)
 
 ## 2026-11-03 — ClassNote 자동 해제 범위 확장(영어 반 방·종강 7일 뒤 반 보드·1인 보드) · JJ 자리 반도 연결·배정·해제(학생이 있을 때만 새 보드 · 보고서 없음) · ④ 대량 보류는 최근 7일 안에 끝난 수강만 · 휴원은 어디서도 해제 안 함 · 🔴 마지막 배정은 안 뗀다(떼면 자동 퇴소 — 11-02 실측 2건 · 퇴소 API 실측은 §11) — 상세 [classnote-integration.md §10.5-b](classnote-integration.md) · [decisions/reports-ai.md](decisions/reports-ai.md) '자동 해제'

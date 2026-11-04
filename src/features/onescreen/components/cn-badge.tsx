@@ -1,7 +1,7 @@
 "use client";
 
 import { tipProps } from "@/components/hover-tip/tip";
-import { EyIcon } from "@/components/icons/aywa-icons";
+import { TONE_TEXT } from "@/lib/design/semantic-color";
 import { useSheetT } from "@/features/teacher-view/lang-context";
 import { cnLabelState, cnTipCard, type CnLabel } from "../classnote-match";
 
@@ -13,11 +13,12 @@ import { cnLabelState, cnTipCard, type CnLabel } from "../classnote-match";
  * 마우스를 올리면 반·반 보드·원아·사유 카드(`data-tip` — 문서마다 한 장인 HoverTipLayer가 그린다).
  * 카드 모드(student-list)와 표 모드(grid-row)가 **같은 부품**을 쓴다. 판정은 `cnLabelFor`(classnote-match.ts) — 여기선 그리기만.
  *
- * 그림은 셋이다(원장 2026-10-06 *"활성화는 체크, 반배정 오류는 ? 오버레이. 그래야 좀 알아보기 편할듯"*):
- *  · 체크(원래 색) = 이 반 보드에 배정이 확인됐다.
- *  · **물음표 덮개** = ClassNote 연결은 돼 있는데 반 배정이 지금 반과 다르다(다른 반 보드에 있거나, 원아는 찾았는데 이 반 배정이 보류).
- *    그림의 체크를 가리는 자리에 얹는다 — 체크와 물음표가 함께 보이면 뜻이 섞인다.
- *  · 회색 = 연결 자체가 확인되지 않았다(종전 그대로).
+ * 그림은 셋이다(원장 2026-10-06 *"활성화는 체크, 반배정 오류는 ? …"*):
+ *  · 체크(원래 색 노트 그림) = 이 반 보드에 배정이 확인됐다.
+ *  · **물음표 하나** = ClassNote 연결은 돼 있는데 반 배정이 지금 반과 다르다(그날 안 다니는 반 보드에 있거나, 원아는 찾았는데
+ *    이 반 배정이 보류). 원장 2026-11-04 *"? 아이콘이 배경없애고 그냥 ? 만 선명하게 새로 만들것"* — 노트 그림 위 작은 주황 원은
+ *    18px에서 안 읽혔다. 그림도 원 배경도 없이 주의 색(caution) 굵은 글자 하나다(글자 글리프 — 인라인 SVG 금지 가드).
+ *  · 회색 노트 그림 = 연결 자체가 확인되지 않았다(종전 그대로).
  */
 export function CnBadge({
   label,
@@ -47,27 +48,24 @@ export function CnBadge({
       role="img"
       aria-label={`${L.title} · ${stateText}`}
       data-cn-state={state}
-      className="relative inline-flex shrink-0 items-center"
+      className="inline-flex size-4.5 shrink-0 items-center justify-center"
     >
-      {/* eslint-disable-next-line @next/next/no-img-element -- 18px 정적 스티커(메뉴 탭 그림과 같은 방식) */}
-      <img
-        src="/badges/cnNote.png"
-        alt=""
-        width={18}
-        height={18}
-        draggable={false}
-        className={`size-4.5 ${state === "none" ? "opacity-45 grayscale" : ""}`}
-      />
       {state === "mismatch" ? (
-        // 그림의 체크 자리(위쪽 가운데)를 덮는 물음표 — 주의 색 원 위에 도움말 글리프(아이콘 한 벌에서 가져온다 — 인라인 SVG 금지 가드).
-        <span
-          aria-hidden
-          data-cn-overlay=""
-          className="bg-amber text-primary-foreground pointer-events-none absolute top-[46%] left-1/2 inline-flex size-2.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full"
-        >
-          <EyIcon name="help" size={10} strokeWidth={2.6} />
+        // 뜻은 바깥 이름표가 읽어 준다 — 글자는 꾸밈(aria-hidden). 18px 상자에 맞춘 굵은 물음표.
+        <span aria-hidden data-cn-glyph="" className={`${TONE_TEXT.caution} text-base leading-none font-black`}>
+          ?
         </span>
-      ) : null}
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element -- 18px 정적 스티커(메뉴 탭 그림과 같은 방식)
+        <img
+          src="/badges/cnNote.png"
+          alt=""
+          width={18}
+          height={18}
+          draggable={false}
+          className={`size-4.5 ${state === "none" ? "opacity-45 grayscale" : ""}`}
+        />
+      )}
     </span>
   );
 }
