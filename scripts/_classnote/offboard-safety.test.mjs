@@ -485,6 +485,9 @@ describe("전화 대조 — 최상위 신원 증거(원장 제안)", () => {
     expect(carerPhones({ phone: null, phones: [null, ""] })).toEqual([]);
     expect(carerPhones(null)).toEqual([]);
     expect(carerPhones(undefined)).toEqual([]);
+    // 숫자가 안 남는 값(공백·'-'·'없음'·너무 짧은 번호)은 전화로 치지 않는다
+    expect(carerPhones({ phone: "010-1111-2222", phones: [" ", "-", "없음", "1234"] })).toEqual(["010-1111-2222"]);
+    expect(carerPhones({ phone: "없음", phones: [" "] })).toEqual([]);
   });
 
   it("⭐ 전화 불일치면 exclude — 이름·생년이 다 맞아도 다른 집이다", () => {
