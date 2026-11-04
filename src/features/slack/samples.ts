@@ -80,7 +80,7 @@ export const SAMPLE_NOTIFICATIONS: Record<string, SampleNotification> = {
   approval_comment: { title: "결재 문서 댓글", body: "10월 교재 구입 품의 — 박지현: 수량 한 번만 확인 부탁드려요", link: "/approvals" },
   student_attendance_notice: {
     title: "김하늘 결석 9/30",
-    body: "학부모: \"내일 가족 행사가 있어 하루 쉽니다\" — 출결 확인이 필요합니다.",
+    body: "가족 행사 · 중등M 중2 A 보드에 글 작성: “내일 가족 행사가 있어 하루 쉽니다”",
     link: "/attendance/live?tab=desk",
   },
   classnote_parent_post: { title: "학부모 새 글 — 이서준", body: "이번 주 숙제 범위를 다시 알려주실 수 있을까요?", link: "/onescreen" },

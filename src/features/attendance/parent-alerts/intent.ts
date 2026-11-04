@@ -187,9 +187,28 @@ export function uncoveredDatesIn(
 }
 
 /**
+ * 원문이 **어느 반 보드에 · 글인지 댓글인지** — 벨 본문의 원문 앞머리(원장 2026-11-04).
+ *
+ * 🔴 '학부모'라고 적지 않는다: 원문 표(`classnote_parent_messages`)에는 작성자 칸이 없다. ClassNote 가족 계정으로
+ *    **학생이 직접** 쓴 글·댓글도 같은 길로 들어오는데(11-04 '김동리 학생' 댓글이 '학부모'로 떴다) 누가 썼는지는 모른다.
+ *    반 이름(`class_name`) = 연동 PC가 그 글이 올라온 ClassNote 반(보드) 이름을 적은 값 · 글/댓글 = `source`('post'·'comment').
+ * 🔑 반 이름 뒤에 **'보드에'**를 붙여 장소임을 밝힌다 — 1인 보드 이름은 `(수학)김동리`라 `(수학)김동리 댓글`이면
+ *    "김동리가 쓴 댓글"로 읽힌다(그 보드엔 학부모도 쓴다 · 리뷰 2026-11-04). 둘 다 모르면 '원문'.
+ */
+export function parentMessageOrigin(source: string | null | undefined, className: string | null | undefined): string {
+  const cls = String(className ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const kind = source === "comment" ? "댓글" : source === "post" ? "글 작성" : null;
+  if (!cls) return kind ?? "원문";
+  return kind ? `${cls} 보드에 ${kind}` : `${cls} 보드 원문`;
+}
+
+/**
  * 벨 알림 문구 — **원문을 반드시 싣는다.**
  * 강사·차량팀이 클래스노트를 열지 않고도 판단할 수 있어야 한다는 게 인바운드 알림의 원칙이고,
  * 여기선 한 겹 더해서 "분류가 틀렸을 때 사람이 알아챌 수 있어야 한다"는 이유도 있다.
+ * 원문 앞에는 어느 반 보드의 글인지 댓글인지를 붙인다(`parentMessageOrigin` — 작성자는 모르므로 적지 않는다).
  *
  * ⚠️ 판정이 못 담은 날짜가 원문에 있으면 제목·본문에 그 사실을 적는다(`uncoveredDatesIn` 주석 참조) —
  *    제목만 훑는 차량팀이 "오늘"을 놓치지 않게. 단정하지 않고 "원문 확인"으로만 말한다.
@@ -199,12 +218,18 @@ export function buildAttendanceAlert({
   intent,
   content,
   messageDate,
+  source,
+  className,
 }: {
   studentName: string;
   intent: ParentIntent;
   content: string;
   /** 연락일(KST). 원문 날짜를 푸는 축 — 없으면 다른 날짜 안내를 생략한다(지어내지 않는다). */
   messageDate?: string;
+  /** 원문 종류 — 'post'(글 작성) · 'comment'(댓글). 모르면 생략. */
+  source?: string | null;
+  /** 원문이 올라온 ClassNote 반 이름(연동 PC가 적은 값). 모르면 생략. */
+  className?: string | null;
 }): { title: string; body: string } {
   const when = describeWhen(intent);
   const assumed = intent.dateAssumed ? "(연락일 기준)" : "";
@@ -217,7 +242,7 @@ export function buildAttendanceAlert({
   const head = intent.detail ? `${intent.detail} · ` : "";
   const also = others.length ? `원문에 ${others.join("·")} 날짜도 있음 · ` : "";
   const quoted = text.length > 180 ? `${text.slice(0, 180)}…` : text;
-  return { title, body: `${head}${also}학부모: “${quoted}”` };
+  return { title, body: `${head}${also}${parentMessageOrigin(source, className)}: “${quoted}”` };
 }
 
 /**
