@@ -5,7 +5,7 @@ import { attachmentFilename } from "@/lib/http/content-disposition";
 import { ENGLISH_TRACK_LABEL } from "@/features/classes/english-track";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { EXAM_SLOT_LABEL } from "@/features/grades/exam-slots";
+import { examSlotLabel } from "@/features/grades/exam-slots";
 import { termLabel } from "@/features/grades/term";
 import { buildGradesWorkbook } from "@/features/grades/server/excel-build";
 import { getGradeSheet } from "@/features/grades/server/queries";
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
   // 축을 정해야 명단을 뽑을 수 있어 순서가 있다(B4의 병렬 대상이 아니다).
   const sheet = await getGradeSheet(selection);
   const subjectLabel = subjects.labelOf(selection.subject);
-  const wb = await buildGradesWorkbook(sheet, { subjectLabel, slotLabel: EXAM_SLOT_LABEL[slot] });
+  const wb = await buildGradesWorkbook(sheet, { subjectLabel, slotLabel: examSlotLabel(selection.subject, slot) });
   const buf = await wb.xlsx.writeBuffer();
 
   const className = sheet.classes.find((c) => c.id === selection.classId)?.className;
@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
     termLabel(year, term).replace(/\s+/g, ""),
     `${subjectLabel}${trackPart}`,
     className ? safe(className) : null,
-    EXAM_SLOT_LABEL[slot],
+    examSlotLabel(selection.subject, slot),
     selection.date,
   ]
     .filter(Boolean)

@@ -10,10 +10,13 @@ import { kstToday } from "@/lib/date-kst";
 import type { ExamSlotKey } from "@/features/grades/exam-slots";
 import { loadTodaysMathMonthly } from "@/features/grades/server/todays-math-monthly";
 import type { TodaysMathMonthly } from "@/features/grades/todays-math-monthly";
+import { slotHasAreas, type AreaScores } from "@/features/grades/area-scores";
 
 export type SchoolRosterRow = {
   studentId: string; name: string; school: string | null; grade: string | null; className: string;
   score: number | null; applies: boolean; withdrawn: boolean; noExam: boolean; noExamReason: string | null;
+  /** 저장된 영역 점수(영어 Monthly Test) — 영역으로 안 적는 시험이면 null. */
+  areas: AreaScores | null;
 };
 export type SchoolRoster = {
   /** 서버가 해석한 축 — 저장은 **이 값 그대로** 보낸다(화면 입력과 어긋나면 다른 칸에 쓴다). */
@@ -51,11 +54,12 @@ export async function loadSchoolRoster(raw: {
     if (raw.grade && (r.grade ?? "") !== raw.grade) continue;
     seen.add(r.studentId);
     rows.push({ studentId: r.studentId, name: r.name, school: r.school, grade: r.grade, className: r.className, score: r.score,
-      applies: r.applies, withdrawn: r.withdrawn, noExam: r.noExam, noExamReason: r.noExamReason });
+      applies: r.applies, withdrawn: r.withdrawn, noExam: r.noExam, noExamReason: r.noExamReason, areas: r.areas ?? null });
   }
   const todaysMath = await loadTodaysMathMonthly(sel, rows.map((r) => r.studentId));
   const notice = !sheet.schemaReady ? "성적 표 준비(0283a)가 적용되어야 저장할 수 있습니다."
-    : sel.slot === "monthly" && !sheet.monthReady ? "월 축 준비(0288a)가 적용되어야 월말평가를 저장할 수 있습니다." : null;
+    : sel.slot === "monthly" && !sheet.monthReady ? "월 축 준비(0288a)가 적용되어야 월말평가를 저장할 수 있습니다."
+    : slotHasAreas(sel.subject, sel.slot) && !sheet.areasReady ? "영역 점수 준비(s2_0023)가 적용되어야 Monthly Test를 저장할 수 있습니다." : null;
   return { roster: {
     selection: { year: sel.year, term: sel.term, subject: axisValueOf(sel), classId: sel.classId ?? "", slot: sel.slot, date: sel.date, maxScore: sel.maxScore },
     classes: sheet.classes.map((c) => ({ id: c.id, name: c.className, count: c.studentCount })),

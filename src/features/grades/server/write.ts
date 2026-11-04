@@ -2,7 +2,8 @@ import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { EXAM_SLOT_LABEL, GRADE_MONTH_NOT_READY, gradeMonthOf, slotUsesMonth, type ExamSlotKey } from "../exam-slots";
+import { examSlotLabel, GRADE_MONTH_NOT_READY, gradeMonthOf, slotUsesMonth, type ExamSlotKey } from "../exam-slots";
+import type { AreaScores } from "../area-scores";
 import type { Term } from "../term";
 import { gradeCellKeeps } from "../keep";
 import { GRADE_MARK_KEYS, type GradeMarkKey } from "../types";
@@ -56,7 +57,15 @@ export type GradeWriteRow = {
    */
   noExam?: boolean;
   noExamReason?: string | null;
+  /**
+   * 영역 점수(영어 Monthly Test, s2_0023) — `undefined`면 안 건드린다 · null이면 지운다.
+   * 🔴 점수(`score`)는 호출부가 이 값의 합으로 이미 맞춰 보낸다(합을 여기서 다시 셈하지 않는다).
+   */
+  areas?: AreaScores | null;
 };
+
+/** 영역 점수 칸(s2_0023)이 아직 없을 때 영역 저장의 사유 — 사람이 고칠 수 있는 사유라 그대로 화면에 낸다. */
+export const GRADE_AREAS_NOT_READY = "영역 점수 준비(s2_0023)가 아직 적용되지 않아 Monthly Test는 저장할 수 없습니다";
 
 const MARK_COL: Record<GradeMarkKey, { at: string; by: string }> = {
   ask1: { at: "ask1_at", by: "ask1_by" },
@@ -83,6 +92,10 @@ export async function writeGradeCells(
   if (!monthReady && slotUsesMonth(axis.slot)) {
     throw new Error(GRADE_MONTH_NOT_READY);
   }
+  // 영역 점수 칸(s2_0023)이 없는데 영역을 보내면 전건 400이다 — 영역 저장만 막는다([[#95]]).
+  if (rows.some((r) => r.areas !== undefined) && !(await gradeAreasReady())) {
+    throw new Error(GRADE_AREAS_NOT_READY);
+  }
   const CONFLICT_WITH_MONTH = "tenant_id,student_id,subject,school_year,term,exam_slot,exam_month";
   const CONFLICT_LEGACY = "tenant_id,student_id,subject,school_year,term,exam_slot";
   const conflict = monthReady ? CONFLICT_WITH_MONTH : CONFLICT_LEGACY;
@@ -105,7 +118,7 @@ export async function writeGradeCells(
     term: axis.term,
     exam_slot: axis.slot,
     // 라벨도 함께 저장한다 — 0283a 전 화면(학생 타임라인·성적 급락 알림)이 시험 이름을 계속 읽는다.
-    exam_name: EXAM_SLOT_LABEL[axis.slot],
+    exam_name: examSlotLabel(axis.subject, axis.slot),
     score: r.score,
     max_score: axis.maxScore,
     taken_on: axis.date,
@@ -131,6 +144,7 @@ export async function writeGradeCells(
       r.notes === undefined ? "" : "n",
       GRADE_MARK_KEYS.filter((k) => r.marks?.[k] !== undefined).join(","),
       r.noExam === undefined ? "" : "x",
+      r.areas === undefined ? "" : "a",
     ].join("|");
   const byShape = new Map<string, Record<string, unknown>[]>();
   for (const r of toSave) {
@@ -141,6 +155,7 @@ export async function writeGradeCells(
       ...(r.noExam === undefined
         ? {}
         : { no_exam: r.noExam, no_exam_reason: r.noExam ? (r.noExamReason ?? null) : null }),
+      ...(r.areas === undefined ? {} : { area_scores: r.areas }),
     };
     const key = shapeOf(r);
     byShape.set(key, [...(byShape.get(key) ?? []), payload]);
@@ -220,6 +235,9 @@ export const gradeMarksReady = cache(async () => columnExists("ask1_at"));
  * 🔴 false면 월말평가는 학기에 한 칸이라 다음 달이 지난달을 덮는다 → 화면이 배너로 그 사실을 말한다.
  */
 export const gradeMonthReady = cache(async () => columnExists("exam_month"));
+
+/** s2_0023(영역 점수)이 적용됐는가 — 위 넷과 **따로** 본다(같은 이유). */
+export const gradeAreasReady = cache(async () => columnExists("area_scores"));
 
 /** 0285a('시험없음'·사유)가 적용됐는가 — 위 둘과 **따로** 본다(같은 이유). */
 export const gradeNoExamReady = cache(async () => columnExists("no_exam"));

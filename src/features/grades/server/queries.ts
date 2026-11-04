@@ -10,7 +10,8 @@ import { ENGLISH_SUBJECT_KEY } from "../subject-axis";
 import { rosterAnchorFor, termWindow } from "../term";
 import { examAppliesTo } from "../applies";
 import { EMPTY_GRADE_MARKS, type GradeClassOption, type GradeMarks, type GradeSelection, type GradeSheet, type GradeSheetRow } from "../types";
-import { gradeMarksReady, gradeMonthReady, gradeNoExamReady, gradesSchemaReady } from "./write";
+import { gradeAreasReady, gradeMarksReady, gradeMonthReady, gradeNoExamReady, gradesSchemaReady } from "./write";
+import { parseAreas, slotHasAreas } from "../area-scores";
 import { kstToday } from "@/lib/date-kst";
 
 /**
@@ -127,11 +128,14 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
   );
 
   const studentIds = [...new Set(inTerm.map((e) => e.student_id))];
-  const [schemaReady, marksReady, noExamReady, monthReady] = await Promise.all([
+  // 영역 점수(s2_0023)는 영역으로 적는 시험(영어 Monthly Test)에서만 읽는다 — 다른 시험 화면은 이 확인조차 안 한다.
+  const wantAreas = slotHasAreas(sel.subject, sel.slot);
+  const [schemaReady, marksReady, noExamReady, monthReady, areasReady] = await Promise.all([
     gradesSchemaReady(),
     gradeMarksReady(),
     gradeNoExamReady(),
     gradeMonthReady(),
+    wantAreas ? gradeAreasReady() : Promise.resolve(false),
   ]);
   // 표식 컬럼(0284a)이 아직 없으면 그 열만 빼고 읽는다 — 넣으면 PostgREST 400으로 화면이 죽는다([[#95]]).
   // 아직 없는 컬럼을 select에 넣으면 PostgREST 400으로 화면이 죽는다([[#95]]) — 준비된 것만 읽는다.
@@ -139,6 +143,7 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
     "id, student_id, exam_slot, score, max_score, taken_on",
     marksReady ? ", ask1_at, ask2_at, received_at" : "",
     noExamReady ? ", no_exam, no_exam_reason" : "",
+    areasReady ? ", area_scores" : "",
   ].join("");
   type ScoreCell = {
     id: string;
@@ -152,6 +157,7 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
     received_at?: string | null;
     no_exam?: boolean | null;
     no_exam_reason?: string | null;
+    area_scores?: unknown;
   };
 
   const [students, scores] = await Promise.all([
@@ -209,6 +215,7 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
         } satisfies GradeMarks,
         noExam: s.no_exam === true,
         noExamReason: s.no_exam_reason ?? null,
+        areas: parseAreas(s.area_scores),
       },
     ]),
   );
@@ -238,6 +245,7 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
       marks: cell?.marks ?? EMPTY_GRADE_MARKS,
       noExam: cell?.noExam ?? false,
       noExamReason: cell?.noExamReason ?? null,
+      areas: cell?.areas ?? null,
       // 여기까지 온 줄은 전부 치는 시험이다(위에서 걸렀다) — 그래도 필드는 남긴다: 엑셀 파서가
       // 이 값으로 "안 치는 시험에 점수가 적혀 왔다"를 판정한다.
       applies: true,
@@ -305,5 +313,5 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
       (myClassIds.has(a.id) ? 0 : 1) - (myClassIds.has(b.id) ? 0 : 1) ||
       a.className.localeCompare(b.className, "ko"),
   );
-  return { selection: sel, classes, rows: uniqueRows, schemaReady, marksReady, noExamReady, monthReady, scopePartial };
+  return { selection: sel, classes, rows: uniqueRows, schemaReady, marksReady, noExamReady, monthReady, areasReady, scopePartial };
 }
