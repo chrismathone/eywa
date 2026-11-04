@@ -107,7 +107,7 @@ export function ContractFiles({
   return (
     <div className="mt-4">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="micro">계약서 파일</p>
+        <p className="micro">계약서/사직서 파일</p>
         {canWrite ? (
           <>
             <input
