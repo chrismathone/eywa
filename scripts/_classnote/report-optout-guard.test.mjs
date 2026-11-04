@@ -1,4 +1,4 @@
-// 🔴 보고서 미발송 반(JJ 자리 반 · classes.report_optout) 차단 SQL 가드 — 2026-11-03부터 동기화가 JJ 반 보드도 연결하므로,
+// 🔴 보고서 미발송 반(JJ 자리 반 · classes.report_optout) 차단 SQL 가드 — 동기화는 미발송 반을 연결하지 않지만(11-04 'JJ 맞춤' 되돌림) 옛 연결이 남을 수 있으므로,
 // 워커의 반 보드 발송 대상 조회 세 곳이 `not c.report_optout`으로 막아야 JJ 반에 수업보고서·영상 게시 반이 새지 않는다(리뷰 C2·R13·F13).
 // 함수 범위(isClassRouteEligible · resolveClassTargets · loadVideoTeacher)로 자르고, JS 주석(// · /* */)과 SQL 템플릿 안의 `--` 주석을 걷은 뒤
 // **SQL 템플릿(sql`…`) 안에서만** 센다 — 파일 전체 글자를 세면 SQL에서 지우고 주석에 같은 글자를 써도 통과한다.

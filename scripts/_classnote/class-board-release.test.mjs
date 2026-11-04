@@ -93,6 +93,14 @@ describe("🔴 원아 해제 — 보류하는 경우(지금 다니는 학생을 
     expect(heldText(r)[0]).toContain("'김민준'와 보호자 전화가 같습니다");
     expect(heldText(r)[0]).not.toContain("1111");
   });
+  it("보호자 전화는 carer1~N 전부(carerPhones) — phones에 쓸 값이 없으면 phone(carer1)으로 형제를 대조해 보류", () => {
+    const r = one({ id: 2, name: "이서연" }, { admissions: new Map([[2, { ...adm("010-1111-2222"), phones: [null, ""] }]]), childLinks: new Map([[2, "s-out"]]) });
+    expect(r.releases).toEqual([]);
+    expect(heldText(r)[0]).toContain("'김민준'와 보호자 전화가 같습니다");
+    const r2 = one({ id: 2, name: "이서연" }, { admissions: new Map([[2, { ...adm("010-9999-9999"), phones: ["010-9999-9999", "010-1111-2222"] }]]), childLinks: new Map([[2, "s-out"]]) });
+    expect(r2.releases).toEqual([]);
+    expect(heldText(r2)[0]).toContain("'김민준'와 보호자 전화가 같습니다");
+  });
   it("ClassNote 운영관리 명부에 없는 원아는 보류 — 1인 보드·전화를 대조하지 못한 채 원아 링크만 믿고 내보내지 않는다", () => {
     const r = one({ id: 2, name: "이서연" }, { admissions: new Map(), childLinks: new Map([[2, "s-out"]]) });
     expect(r.releases).toEqual([]);

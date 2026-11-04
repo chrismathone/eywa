@@ -1,7 +1,6 @@
 
 import { SheetText } from "@/features/teacher-view/interface-label";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
-import { EXAM_SLOT_LABEL } from "@/features/grades/exam-slots";
 import type { OverviewColumn, OverviewRow } from "@/features/grades/overview";
 
 /**
@@ -36,7 +35,7 @@ export function OverviewTable({ columns, rows }: { columns: OverviewColumn[]; ro
                     같은데(디자인 규약), 수학은 `내신`과 `월말평가`가 나란히 서서 `10월`만으론 구분이 안 된다. */}
                 {c.month > 0 ? (
                   <span className="block leading-tight">
-                    <span className="text-text-faint block font-normal">{EXAM_SLOT_LABEL[c.slot]}</span>
+                    <span className="text-text-faint block font-normal">{c.exam}</span>
                     {c.label}
                   </span>
                 ) : (

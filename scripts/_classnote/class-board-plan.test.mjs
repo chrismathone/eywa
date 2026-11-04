@@ -85,6 +85,29 @@ describe("resolveStudentChildren — 가드 ①~④·⑥", () => {
     expect(v.reasons.join()).not.toMatch(/\d{4}/);
   });
 
+  it("② 보호자2·3 번호가 맞아도 통과 — 보호자1(엄마)·aywa(아빠)로 갈린 집(원장 2026-11-04 · 전유솔)", () => {
+    const w = world();
+    // 보호자1 = 다른 번호(엄마) · 보호자2 = aywa 번호(아빠) → 같은 집
+    Object.assign(w.admissions.get(101), { phone: "010-9999-9999", phones: ["010-9999-9999", "+82 10-1111-1111"] });
+    expect((resolveStudentChildren(w.students.get("s1"), w).reasons ?? []).join()).not.toContain("보호자 전화");
+    // 보호자 전부가 다르면 그대로 보류
+    Object.assign(w.admissions.get(101), { phones: ["010-9999-9999", "010-8888-8888"] });
+    expect(resolveStudentChildren(w.students.get("s1"), w).reasons.join()).toContain("보호자 전화 불일치");
+    // phones가 빈 배열이면 옛 모양(phone 하나)으로 — 보호자1이 다르면 불일치
+    Object.assign(w.admissions.get(101), { phones: [] });
+    expect(resolveStudentChildren(w.students.get("s1"), w).reasons.join()).toContain("보호자 전화 불일치");
+  });
+
+  it("② 보호자2 번호로 통과해도 ⑥ 이름이 다른 형제 원아는 그대로 보류", () => {
+    const w = world();
+    Object.assign(w.admissions.get(101), { phone: "010-9999-9999", phones: ["010-9999-9999", "+82 10-1111-1111"] });
+    w.membersByBoard.get(11)[0].name = "김근호";
+    const v = resolveStudentChildren(w.students.get("s1"), w);
+    expect(v.ok).toBe(false);
+    expect(v.reasons.join()).not.toContain("보호자 전화");
+    expect(v.reasons.join()).toContain("형제 계정");
+  });
+
   it("② 한쪽 번호가 없거나 명부에 없으면 = 보류(모르면 안 한다)", () => {
     const w = world();
     w.students.get("s1").phones = [null, ""];
@@ -317,7 +340,7 @@ describe("planClassBoards — 반 단위", () => {
     const [p] = planClassBoards({ ...w, classes: cls(["s1", "s2"]) });
     expect(p.board).toEqual({ action: "exists", id: 50, name: "중등M 중1 BS3E" });
   });
-  describe("보고서 미발송(JJ) 반 — 원장 2026-11-03 에이와와 맞춤(연결·배정) · 학생이 있을 때만 새 보드", () => {
+  describe("보고서 미발송(JJ) 반 계획 분기 — 11-03 'JJ 맞춤' 때 넣고 11-04 되돌림 뒤 운영 경로에선 안 쓰임 · 학생이 있을 때만 새 보드", () => {
     const jj = (studentIds) => [{ classId: "c1", className: "초등M 개별 JJ2M", studentIds, reportOptout: true }];
     it("같은 이름 보드가 없으면 — 지금 다니는 학생이 있으면 만들고(원장 *\"반에 학생이 있다면 배정해야함\"*) 없으면 보류 · 계획에 미발송 표식", () => {
       const [p] = planClassBoards({ ...world(), classes: jj(["s1"]) });

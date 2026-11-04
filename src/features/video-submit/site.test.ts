@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isLast4, isSiteName, phoneEndsWith, SITE_HOMEWORK_DAYS, siteHomeworkLastDay, siteLinkExpiresAt, siteNameKey, siteNameMatches, uploadLastDay } from "./site";
+import { isLast4, isSiteName, phoneEndsWith, SITE_HOMEWORK_DAYS, SITE_NO_CLASS, siteHomeworkLastDay, siteLinkExpiresAt, siteNameKey, siteNameMatches, siteNoChoiceMessage, uploadLastDay } from "./site";
 
 const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), "utf8");
 
@@ -168,5 +168,27 @@ describe("배선 가드", () => {
     expect(code).toContain("{siteUrl ? (");
     // 끊긴 링크의 안내도 그 링크의 지점으로 묻는다
     expect(read("src", "app", "(share)", "v", "[token]", "page.tsx")).toContain("siteAvailability(db, link.tenant_id)");
+  });
+});
+
+describe("고를 줄이 없을 때의 안내 — 까닭을 가린다(원장 2026-11-04)", () => {
+  it("🔴 다니는 반이 영상 숙제 대상 밖이면 '반이 없다'고 하지 않는다(학생이 '반 배정이 안 됐다'로 읽었다)", () => {
+    const off = siteNoChoiceMessage({ excludedNow: true, nextStart: null });
+    expect(off).toContain("지금 다니는 반은 여기서 영상 숙제를 받지 않습니다");
+    expect(off).not.toContain("반이 없습니다");
+    expect(off).toContain("ClassNote 알림장");
+  });
+  it("시작 전 반은 그날을 알려 준다 · 대상 밖 반과 함께면 둘 다 말한다", () => {
+    expect(siteNoChoiceMessage({ excludedNow: false, nextStart: "2026-11-06" })).toBe(
+      "다니는 반 수업이 11/6 (금)에 시작합니다. 그날부터 여기서 올릴 수 있습니다. 그 전에는 숙제 영상을 ClassNote 알림장에 올려 주세요.");
+    const both = siteNoChoiceMessage({ excludedNow: true, nextStart: "2026-11-06" });
+    expect(both).toContain("지금 다니는 반은 여기서 영상 숙제를 받지 않습니다");
+    expect(both).toContain("11/6 (금)에 시작하는 반은 그날부터");
+    expect(both).not.toContain("반이 없습니다");
+  });
+  it("까닭이 없으면(수강 끝 · 휴원 · 숙제 없는 지난 반뿐) 종전 문구", () => {
+    expect(siteNoChoiceMessage({ excludedNow: false, nextStart: null })).toBe(SITE_NO_CLASS);
+    expect(siteNoChoiceMessage(undefined)).toBe(SITE_NO_CLASS);
+    expect(SITE_NO_CLASS).toContain("영상을 올릴 수 있는 반이 없습니다");
   });
 });

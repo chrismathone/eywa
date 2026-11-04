@@ -62,6 +62,17 @@ describe("duplicateReasons — 무엇이 같아서 후보인가", () => {
     expect(duplicateReasons(a, b)).toEqual(["parent_phone"]);
   });
 
+  it("(b) 보호자2 연락처(s2_0022)가 상대의 보호자1·보호자2 번호와 겹쳐도 연락처 근거 — 한 집의 두 보호자", () => {
+    const mom = student({ id: "b", name: "김수아", grade: "초6", school: "산격중", parentPhone: "010-9999-0000", parent2Phone: "010-1234-5678" });
+    expect(duplicateReasons(a, mom)).toEqual(["parent_phone"]);
+    expect(duplicateReasons(mom, a)).toEqual(["parent_phone"]);
+    const both2 = student({ id: "c", name: "김수아", grade: "초6", school: "칠성초", parentPhone: null, parent2Phone: "010 9999 0000" });
+    expect(duplicateReasons(mom, both2)).toEqual(["parent_phone"]);
+    // 번호가 하나도 안 겹치면 근거가 아니다(빈 보호자2는 겹침으로 치지 않는다)
+    const other = student({ id: "d", name: "김수아", grade: "초6", school: "산격중", parentPhone: "010-5555-6666", parent2Phone: "" });
+    expect(duplicateReasons(a, other)).toEqual([]);
+  });
+
   it("이름이 같아도 학년이 다르면 근거가 없다", () => {
     const b = student({
       id: "b",
@@ -193,6 +204,16 @@ describe("groupDuplicateCandidates — 묶기·정렬", () => {
     expect(groups).toHaveLength(1);
     expect(groups[0]!.students.map((s) => s.id).sort()).toEqual(["a", "b", "c"]);
     expect(groups[0]!.reasons).toEqual(["natural_key", "parent_phone"]);
+  });
+
+  it("보호자2 번호(s2_0022)로도 묶는다 — 한쪽은 아버지 번호만, 다른 쪽은 보호자2에 같은 번호", () => {
+    const rows = [
+      student({ id: "a", name: "한별", grade: "초5", school: "칠성초", parentPhone: "010-2222-3333" }),
+      student({ id: "b", name: "한별", grade: "초5", school: "산격초", parentPhone: "010-4444-5555", parent2Phone: "01022223333" }),
+    ];
+    const groups = groupDuplicateCandidates(rows);
+    expect(groups.map((g) => g.students.map((s) => s.id))).toEqual([["a", "b"]]);
+    expect(groups[0]!.reasons).toEqual(["parent_phone"]);
   });
 
   it("정렬은 이름→id로 고정 — 조회 순서가 흔들려도 페이지가 안 들썩인다", () => {

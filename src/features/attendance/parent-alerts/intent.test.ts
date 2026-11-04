@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   attendanceCategoryLabel,
@@ -6,6 +8,7 @@ import {
   describeWhen,
   isAttendanceIntent,
   normalizeIntent,
+  parentMessageOrigin,
   uncoveredDatesIn,
 } from "./intent";
 
@@ -179,7 +182,44 @@ describe("판정이 못 담은 원문 날짜(uncoveredDatesIn)", () => {
     expect(title).toContain("이수빈 결석 8/12");
     expect(title).toContain("8/7·8/11 확인");
     expect(body).toContain("원문에 8/7·8/11 날짜도 있음");
-    expect(body).toContain("학부모: “"); // 원문은 그대로
+    expect(body).toContain("원문: “"); // 원문은 그대로(글/댓글·반을 모르면 '원문')
+  });
+
+  // 원장 2026-11-04: 학생이 직접 단 댓글이 '학부모'로 떴다 — 작성자 칸이 없으니 '학부모'라고 적지 않고,
+  // 어느 반 보드의 글인지 댓글인지를 적는다.
+  it("원문 앞머리 = ‹반› 보드에 글 작성/댓글 · '학부모'라고 적지 않는다", () => {
+    const intent = normalizeIntent({ category: "absence", startsOn: FRI, endsOn: FRI, detail: "팔이 아파서" }, { messageDate: FRI });
+    const comment = buildAttendanceAlert({
+      studentName: "김동리",
+      intent,
+      content: "선생님 저 팔이 넘 아파서 쉴게요",
+      messageDate: FRI,
+      source: "comment",
+      className: "Green 초등 브릿지C (월수목)",
+    });
+    expect(comment.body).toBe("팔이 아파서 · Green 초등 브릿지C (월수목) 보드에 댓글: “선생님 저 팔이 넘 아파서 쉴게요”");
+    expect(comment.body).not.toContain("학부모");
+    const post = buildAttendanceAlert({ studentName: "김동리", intent, content: "오늘 결석합니다", source: "post", className: "중등M 중2 A" });
+    expect(post.body).toContain("중등M 중2 A 보드에 글 작성: “오늘 결석합니다”");
+    // 1인 보드 이름 = `(수학)학생이름` — '보드에'가 없으면 "김동리가 쓴 댓글"로 읽힌다(그 보드엔 학부모도 쓴다).
+    const personal = buildAttendanceAlert({ studentName: "김동리", intent, content: "오늘 쉬어요", source: "comment", className: "(수학)김동리" });
+    expect(personal.body).toContain("(수학)김동리 보드에 댓글: “오늘 쉬어요”");
+  });
+
+  it("parentMessageOrigin — 반이 없으면 종류만 · 종류를 모르면 '원문' · 공백은 하나로", () => {
+    expect(parentMessageOrigin("comment", null)).toBe("댓글");
+    expect(parentMessageOrigin("post", "  중등M   중2 A ")).toBe("중등M 중2 A 보드에 글 작성");
+    expect(parentMessageOrigin(undefined, "중등M 중2 A")).toBe("중등M 중2 A 보드 원문");
+    expect(parentMessageOrigin("something", "")).toBe("원문");
+  });
+
+  // 배선 가드(리뷰 2026-11-04) — 알림 스윕이 두 칸을 안 읽거나 안 넘기면 모든 벨이 조용히 '원문: “…”'으로 바뀐다.
+  it("알림 스윕(server/classify.ts)이 source·class_name을 읽어 벨 문구로 넘긴다", () => {
+    const src = readFileSync(join(process.cwd(), "src/features/attendance/parent-alerts/server/classify.ts"), "utf8");
+    const columns = src.match(/const COLUMNS = "([^"]*)"/)?.[1] ?? "";
+    expect(columns.split(",").map((c) => c.trim())).toEqual(expect.arrayContaining(["source", "class_name"]));
+    expect(src).toContain("source: row.source ?? null");
+    expect(src).toContain("className: row.class_name ?? null");
   });
 
   it("담을 게 없으면 제목이 지금까지와 같다(잡음 안 늘린다)", () => {

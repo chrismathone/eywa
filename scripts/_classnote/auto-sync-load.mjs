@@ -43,7 +43,8 @@ export async function loadAutoSyncInputs(sql, tenant) {
       (select coalesce(jsonb_agg(jsonb_build_object('class_id', m.class_id, 'student_id', m.student_id, 'status', m.status)), '[]'::jsonb)
         from classnote_class_board_members m join cls on cls.id = m.class_id where m.tenant_id = ${tenant}) as members`;
   return {
-    // reportOptout = 보고서 미발송(JJ) 반 — 오늘 다니는 학생이 1명 이상일 때만 새 보드를 만든다. 학생이 없으면 '새 반'으로 고르지 않는다(sync-request-plan.mjs classDiffReasons).
+    // reportOptout = 보고서 미발송(JJ) 반 — 11-04 되돌림으로 targetClassWhere가 미발송 반을 빼서 지금은 늘 없다(다시 넣는 날을 위해 남김).
+    //   넣으면: 오늘 다니는 학생이 1명 이상일 때만 새 보드를 만든다. 학생이 없으면 '새 반'으로 고르지 않는다(sync-request-plan.mjs classDiffReasons).
     classes: arr(row?.classes).map((c) => ({ classId: c.id, className: c.name, studentIds: arr(c.students), teacherId: c.teacher ?? null, ...(c.optout === true ? { reportOptout: true } : {}) })),
     links: new Map(arr(row?.links).map((l) => [l.class_id, { boardName: l.board_name }])),
     members: arr(row?.members),

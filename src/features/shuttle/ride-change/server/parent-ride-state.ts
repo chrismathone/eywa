@@ -136,4 +136,6 @@ export function refreshRideViews() {
   revalidatePath("/shuttle/today");
   revalidatePath("/shuttle/live");
   revalidatePath("/shuttle/parent-rides");
+  // 탑승 학생 시간표도 그 주 그날만 변경을 보여 준다(사용자 2026-11-04).
+  revalidatePath("/shuttle/classes");
 }

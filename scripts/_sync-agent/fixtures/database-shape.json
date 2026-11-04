@@ -3554,6 +3554,24 @@
       "table_type": "BASE TABLE"
     },
     {
+      "table_name": "students",
+      "column_name": "parent2_name",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "parent2_phone",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
+      "table_name": "students",
+      "column_name": "parent2_relation",
+      "data_type": "text",
+      "table_type": "BASE TABLE"
+    },
+    {
       "table_name": "tenant_settings",
       "column_name": "tenant_id",
       "data_type": "uuid",

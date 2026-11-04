@@ -20,7 +20,8 @@
 //         ⚠️ 연결로 처음 넣은 원아는 그 회차에 0302a ok로 적혀 다음부터는 b(확인 기록 — 보드의 프로필 이름 하나)로 판정된다.
 //      셋 다 없으면 '가입 대기'(`JOIN_WAIT_REASON`). 아래 ②~⑥은 어느 출처의 원아에도 똑같이 건다. ④는 기록에서 다른 학생에게
 //      확인된 원아인지도 본다.
-//   ② 보호자 전화 일치 필수 — ClassNote 운영관리 carer1_phone ∈ aywa 전화 4칸. 모르면 보류.
+//   ② 보호자 전화 일치 필수 — ClassNote 운영관리 보호자 전화(carer1~N 중 하나) ∈ aywa 전화 4칸. 모르면 보류.
+//      (2026-11-04까지는 carer1만 봤다 — 보호자1 엄마·aywa 아빠로 갈린 집이 '불일치'로 막혔다. `carerPhones`)
 //   ③ 생년 일치 필수 — 학년에서 역산 ±1년. 모르면 보류.
 //   ④ 역방향 유일성 — 그 원아가 **다른 학생의** 1인 보드에 있거나 계획상 두 학생에게 잡히면 둘 다 보류.
 //   ⑤ 같은 반에 기본이름(끝 알파벳 뗀 이름)이 겹치는 학생 = 둘 다 보류(원장 확인 전 자동 배정 금지).
@@ -31,7 +32,7 @@
 // ⚠️ 순수 유지 — playwright·postgres import 금지(Vitest가 끌어오면 안 된다). 테스트 = class-board-plan.test.mjs.
 
 import { expectedBirthYear, normBoard } from "./board-safety.mjs";
-import { phoneMatches } from "./offboard-safety.mjs";
+import { carerPhones, phoneMatches } from "./offboard-safety.mjs";
 import { childIdentityKeys } from "./identity-keys.mjs";
 
 /** 생년 대조 허용 오차 — board-safety.mjs BIRTH_YEAR_TOLERANCE와 같은 값(그쪽은 export하지 않는다). */
@@ -59,6 +60,8 @@ export const VERIFIED_GONE_REASON = "반 보드에서 확인된 원아가 지금
  * 보류 사유 — 보고서 미발송 반(JJ 자리 반, `classes.report_optout`)은 **오늘 다니는 학생이 없으면** ClassNote 반 보드를 새로 만들지 않는다
  * (원장 2026-11-03 *"반에 학생이 있다면 배정해야함. 없으면 굳이 만들필요 없음."* — 학생이 1명 이상이면 수학 반처럼 만들고 배정한다).
  * 같은 이름 보드가 ClassNote에 있으면 학생이 없어도 그 보드를 연결한다.
+ * 🔑 2026-11-04 되돌림(원장 *"JJ 미발송반은 클래스노트 반배정도 할 필요없음"*) 뒤 운영 경로(`targetClassWhere`)는 미발송 반을 넘기지 않아
+ *    이 분기는 쓰이지 않는다 — 다시 넣는 날을 위해 남긴다.
  */
 export const OPTOUT_NO_CREATE_REASON = "보고서 미발송 반에 지금 다니는 학생이 없어 ClassNote 반 보드를 만들지 않습니다 — 학생이 생기면 다음 동기화가 만듭니다";
 
@@ -228,7 +231,7 @@ export function resolveStudentChildren(student, { boards, membersByBoard, admiss
     const adm = admissions.get(m.id);
     if (!adm) reasons.push(`${who} 운영관리 명부에 없음 — 보호자 전화 대조 불가`);
     else {
-      const pm = phoneMatches(student.phones ?? [], [adm.phone]);
+      const pm = phoneMatches(student.phones ?? [], carerPhones(adm)); // 보호자1~N 전부(원장 2026-11-04 — 엄마·아빠 번호가 갈려 적힌 집)
       if (pm === null) reasons.push(`${who} 보호자 전화 대조 불가(한쪽 번호 없음)`);
       else if (pm === false) reasons.push(`${who} 보호자 전화 불일치`);
       // ④ 역방향 — 이 원아가 다른 학생의 1인 보드에도 있다. 명부의 소속 보드 칸을 못 읽었으면(null) 대조할 수 없다(리뷰 B3 — 빈 목록으로 두면 조용히 통과).
@@ -270,7 +273,7 @@ export function reservedBoardName(name) {
  * @param {Map<string,{id:string,name:string,grade:string|null,phones:string[]}>} p.students  name = 유효이름
  * @param {Array<{id:number,name:string}>} p.boards  ClassNote 전 보드
  * @param {Map<number,Array<{id:number,name?:string,date_birth?:string|null}>>} p.membersByBoard  조회한 보드의 원아
- * @param {Map<number,{phone:string|null, boardNames:string[]}>} p.admissions  운영관리 명부(원아 id → 보호자 전화·소속 보드)
+ * @param {Map<number,{phone:string|null, phones?:Array<string|null>, boardNames:string[]}>} p.admissions  운영관리 명부(원아 id → 보호자 전화(phone = carer1 · phones = carer1~N)·소속 보드)
  * @param {number} p.schoolYear
  * @param {Map<string,Array<{id:number,name:string,boardIds:number[]}>>|null} [p.verifiedChildren]  반 보드에서 확인된 원아(0302a ok) — 1인 보드가 없거나 빈 학생만 쓴다
  * @param {Set<string>|null} [p.verifiedOwnerScope]  ④(기록) 비교 상대 학생 — 전체 대상 반의 학생(없으면 이번 계획 반의 학생)
@@ -357,6 +360,7 @@ export function planClassBoards({ classes, students, boards, membersByBoard, adm
         // 🔑 보고서 미발송 반(JJ)은 ClassNote에 같은 이름 보드가 먼저 있었다 — 그 보드에 **이 반의 지난 학생**(수강이 끝나 그대로 해제 대상인
         //    원아)만 남아 있으면 남의 집이 아니라 이 반의 옛 가족이라 채택한다(원장 2026-11-03). 그 원아는 채택 뒤 자동 해제가 정리한다
         //    (④ 양 가드에 걸리면 해제 리스트에 사유와 함께 남는다). 지난 학생으로 증명되지 않는 원아가 하나라도 있으면 종전대로 보류.
+        //    11-04 되돌림 뒤 운영 경로에선 `reportOptout`이 생기지 않아 이 채택은 쓰이지 않는다.
         const former = c.reportOptout ? formerFamilyByClass?.get?.(c.classId) ?? null : null;
         const foreign = former ? strangers.filter((m) => !former.has(Number(m.id))) : strangers;
         if (!strangers.length) board = { action: "exists", id: exact[0].id, name: exact[0].name };

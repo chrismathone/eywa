@@ -77,6 +77,8 @@ function refresh() {
   revalidatePath("/shuttle/live");
   // 주간 시간표도 편성 보드를 그대로 읽는다.
   revalidatePath("/shuttle/week");
+  // 탑승 학생 시간표도 편성 보드를 읽고 수정 카드로 고친다(사용자 2026-11-04).
+  revalidatePath("/shuttle/classes");
 }
 
 /** PostgREST 에러를 한글로 — raw 원문을 화면에 그대로 내보내지 않는다(CLAUDE.md 반복 지적). */
