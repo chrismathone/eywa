@@ -85,6 +85,19 @@ describe("resolveStudentChildren — 가드 ①~④·⑥", () => {
     expect(v.reasons.join()).not.toMatch(/\d{4}/);
   });
 
+  it("② 보호자2·3 번호가 맞아도 통과 — 보호자1(엄마)·aywa(아빠)로 갈린 집(원장 2026-11-04 · 전유솔)", () => {
+    const w = world();
+    // 보호자1 = 다른 번호(엄마) · 보호자2 = aywa 번호(아빠) → 같은 집
+    Object.assign(w.admissions.get(101), { phone: "010-9999-9999", phones: ["010-9999-9999", "+82 10-1111-1111"] });
+    expect((resolveStudentChildren(w.students.get("s1"), w).reasons ?? []).join()).not.toContain("보호자 전화");
+    // 보호자 전부가 다르면 그대로 보류
+    Object.assign(w.admissions.get(101), { phones: ["010-9999-9999", "010-8888-8888"] });
+    expect(resolveStudentChildren(w.students.get("s1"), w).reasons.join()).toContain("보호자 전화 불일치");
+    // phones가 빈 배열이면 옛 모양(phone 하나)으로 — 보호자1이 다르면 불일치
+    Object.assign(w.admissions.get(101), { phones: [] });
+    expect(resolveStudentChildren(w.students.get("s1"), w).reasons.join()).toContain("보호자 전화 불일치");
+  });
+
   it("② 한쪽 번호가 없거나 명부에 없으면 = 보류(모르면 안 한다)", () => {
     const w = world();
     w.students.get("s1").phones = [null, ""];
