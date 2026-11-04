@@ -16,7 +16,7 @@
 
 `s2_0021_sync_agent_attendance_read.sql` — 명부 퇴원처리(전 과목 퇴원 45일 뒤 퇴소)가 '퇴원일 뒤 출결이 있으면 내리지 않는다'를 보는데(`scripts/_classnote/classnote-offboard.mjs` loadOffboardFacts), `attendance_records`는 `eywa_sync_agent`의 읽기 권한·정책이 없다(운영 실측 2026-11-03: select 권한 false · 이 역할 정책 0개 → 게이트웨이에서 42501). 자기 지점 줄 읽기만 연다(s2_0006·s2_0008과 같은 모양 · grant + 정책 둘 다 — 정책을 빼면 에러 없이 0행). 매일 쓰는 표라 `lock_timeout 3s`. 🔴 **웹·AywaSync(퇴원처리 워커) 배포 전에** 적용한다 — 없으면 워커가 퇴원처리를 보류로 건너뛰지만(보고서 '보류' 한 줄 · 워커는 지점의 가장 최근 출결이 없거나 14일보다 오래돼도 건너뛴다), 그 질의 실패를 게이트웨이가 `sync_agent_events`에 job_failed(error)로 매일 남겨 연동 화면에 오류가 뜬다. 트랜잭션 안 `set local lock_timeout`. 적용 확인(읽기만): `select has_table_privilege('eywa_sync_agent','public.attendance_records','select') as can_select, (select count(*) from pg_policies where schemaname='public' and tablename='attendance_records' and policyname in ('sync_agent_allow','sync_agent_tenant_boundary')) as policies;` → `true · 2`. 되돌리기 = 파일 머리 주석의 세 줄(drop policy 둘 + revoke).
 
-## 2026-11-03 업무 요청 근거 학생: 담당 미정 줄의 유일 조건 풀기 (s2_0020 · ⏳ 미적용 — 원장 승인 뒤 적용 · 앱은 이 SQL 없이도 돈다)
+## 2026-11-03 업무 요청 근거 학생: 담당 미정 줄의 유일 조건 풀기 (s2_0020 · ✅ 운영 적용 2026-11-04 — 제약 = `UNIQUE (request_id, target_type, target_id, assignee_id)` · 그때 연결 0줄 · 앱은 이 SQL 없이도 돈다)
 
 `s2_0020_work_request_links_nulls_distinct.sql` — 커밋 전 적대적 리뷰(2026-11-03)가 찾은 것. `work_request_links_uniq`가 `nulls not distinct`라 한 학생을 맡은 두 담당자를 둘 다 지우면 두 번째 직원 삭제가 23505로 실패한다(`assignee_id`가 `on delete set null`). 제약을 일반 유일 조건으로 다시 만든다(담당 미정 줄끼리는 겹쳐도 된다 · 담당자가 있는 줄의 중복은 그대로 막는다). 이 기능 전용 표 하나만 바꾼다.
 
