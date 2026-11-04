@@ -1,5 +1,9 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-04 — 시간표 강사뷰: 퇴사자의 근무 블록(수업준비·쉬는 시간·회의)을 그리지 않는다
+
+- 원장 제보: 10-31 퇴사한 정은지(Charlie) 열이 수업 0개인데 강사뷰에 남음. 원인 = `teacher_schedule_blocks`는 사람 id가 아니라 시트 라벨로 저장돼 퇴사해도 기간(valid_to)이 안 닫힌다(Charlie 10줄). `getTeacherScheduleBlocks`가 퇴사(`status='inactive'`) 직원의 한글 이름·닉네임과 같은 라벨(원문·해석 둘 다)을 거른다 — 재직자와 같은 표기는 빼지 않는다(`resignedTeacherLabels`). 조회 실패는 거르지 않고 종전대로. 반 이동 판정(move-actions)도 같은 함수라 퇴사자 회의가 칸을 막지 않는다. DB는 안 바꿨다(퇴사자를 되돌리면 블록도 다시 보인다). 지난 주를 봐도 퇴사자 블록은 안 보인다(수업은 그대로).
+
 ## 2026-11-04 — 성적 입력: 영어 Monthly Test(듣기·읽기·말하기·쓰기 + 총합 자동)
 - 원장 *"monthly test 결과 담을 수 있는 … 듣기 읽기 말하기 쓰기 총합 이렇게 들어가게 총합은 자동 SUM"*. 영어에 월말 칸(`monthly`·월 축 — 수학 월말평가와 같은 칸)을 열고 화면 이름은 `Monthly Test`(`examSlotLabel`). 성적 입력 창에서 고르면 명단이 영역 네 칸 + 총합(자동)으로 서고, Enter는 오른쪽 칸 → 다음 학생. 만점 칸 = 영역 만점(총합 만점 = ×4).
 - 저장 = 기존 `saveGradeScores` → `writeGradeCells` 한 경로. 점수(score) = 영역의 합(서버가 다시 셈), 영역 값은 `student_grades.area_scores`(s2_0023, 원장 수동 적용 · 적용 전엔 Monthly Test 저장만 사유와 함께 잠김). 엑셀·원장 행 수정은 총합만 고치므로 합이 맞을 때만 영역을 채워 보여 준다(`areasMatch`). 규칙 = `src/features/grades/area-scores.ts`.

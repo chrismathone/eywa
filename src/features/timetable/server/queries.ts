@@ -36,6 +36,7 @@ import {
   buildTeacherNicknameMap,
   resolveTeacherLabel,
   resolveSlotTeacherLabel,
+  resignedTeacherLabels,
   type TeacherLabelMap,
   type TeacherNicknameMap,
 } from "../lib/teacher-label";
@@ -1202,6 +1203,20 @@ export function dayOfWeekIndex(key: string): number {
   return DOW_INDEX[key] ?? 7;
 }
 
+/** 퇴사자 표기 — 실패하면 빈 집합(걸러 내지 않고 종전대로 그린다 · 시간표 핫패스 fail-soft). */
+async function loadResignedLabels(supabase: Awaited<ReturnType<typeof createClient>>): Promise<Set<string>> {
+  const { data, error } = await supabase.from("users").select("display_name, english_name, status");
+  if (error) {
+    console.error("[timetable] 퇴사자 조회 실패 — 근무 블록을 거르지 않고 표시", error);
+    return new Set();
+  }
+  return resignedTeacherLabels((data ?? []).map((u) => ({
+    displayName: (u.display_name as string | null) ?? null,
+    englishName: (u.english_name as string | null) ?? null,
+    status: (u.status as string | null) ?? null,
+  })));
+}
+
 /**
  * 강사 시간표의 **비수업 블록**(감독·준비·회의·연차·쉬는 시간, 0138a) — 강사뷰 렌더 전용.
  *
@@ -1236,7 +1251,7 @@ export async function getTeacherScheduleBlocks(
     // 이름을 못 찾으면 **아무것도 보여주지 않는다**(전체 노출로 폴백하면 격리가 뚫린다).
     if (labels.length === 0) return [];
   }
-  const rows = await fetchAllPaged<{
+  const [rows, resigned] = await Promise.all([fetchAllPaged<{
     id: string;
     teacher_label: string;
     day_of_week: string;
@@ -1253,11 +1268,16 @@ export async function getTeacherScheduleBlocks(
       .or(`valid_to.is.null,valid_to.gte.${referenceDate}`);
     if (labels.length > 0) q = q.in("teacher_label", labels);
     return q.order("id").range(from, to);
-  });
+  }), loadResignedLabels(supabase)]);
   // ⚠️ 조회 필터(labels)는 DB 원본 라벨로 두고, **내보내는 라벨만** 해석한다 — 안 그러면 블록이
   //    'Hannah' 열, 수업이 '이현이' 열로 갈라져 강사뷰에 같은 사람의 컬럼이 두 개 생긴다.
   const labelMap = await getTeacherLabelMap();
-  return rows.map((r) => ({
+  // 퇴사자의 블록은 그리지 않는다 — 블록은 시트 라벨로 저장돼 퇴사해도 기간이 안 닫히고, 그대로 두면
+  // 수업이 하나도 없는 퇴사자 열이 강사뷰에 남는다(원장 2026-11-04). 원문·해석 라벨 둘 다 본다.
+  const live = resigned.size === 0
+    ? rows
+    : rows.filter((r) => !resigned.has(r.teacher_label.trim()) && !resigned.has(resolveTeacherLabel(r.teacher_label, labelMap) ?? ""));
+  return live.map((r) => ({
     id: `block:${r.id}`,
     classId: "",
     // 블록 라벨은 자유 문자열이지만 감독(supervise) 블록은 **감독 대상 강사 이름**이 들어온다

@@ -6,6 +6,7 @@ import {
   isSpecialSlotLabel,
   resolveTeacherLabel,
   resolveTeacherLabels,
+  resignedTeacherLabels,
   resolveSlotTeacherLabel,
 } from "./teacher-label";
 
@@ -214,5 +215,23 @@ describe("직책 라벨(부원장) → 닉네임", () => {
   it("🔴 닉네임이 users에 없으면 원본 유지 — 사람이 못 알아보는 라벨로 바꾸지 않는다", () => {
     const noYoojin = buildTeacherLabelMap(USERS);
     expect(resolveTeacherLabel("부원장", noYoojin)).toBe("부원장");
+  });
+});
+
+describe("resignedTeacherLabels", () => {
+  it("퇴사자의 한글 이름·닉네임을 모은다", () => {
+    const s = resignedTeacherLabels([
+      { displayName: "정은지", englishName: "Charlie", status: "inactive" },
+      { displayName: "추민아", englishName: "Jane", status: "active" },
+    ]);
+    expect([...s].sort()).toEqual(["Charlie", "정은지"]);
+  });
+  it("재직자와 같은 표기는 빼지 않는다", () => {
+    const s = resignedTeacherLabels([
+      { displayName: "김하나", englishName: "Anna", status: "inactive" },
+      { displayName: "육소희", englishName: "Anna", status: "active" },
+      { displayName: "김하나", englishName: null, status: "pending" },
+    ]);
+    expect(s.size).toBe(0);
   });
 });

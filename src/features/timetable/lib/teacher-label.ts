@@ -269,3 +269,22 @@ export function buildTeacherLabelMap(
   }
   return map;
 }
+
+/**
+ * 퇴사한 직원의 표기(한글 이름·영어 닉네임) — 강사뷰 근무 블록(수업준비·쉬는 시간·회의)을 거르는 데 쓴다.
+ * 블록은 사람 id가 아니라 시트 라벨로 저장돼 퇴사해도 기간이 안 닫힌다 → 그대로 두면 수업이 하나도 없는
+ * 퇴사자 열이 강사뷰에 남는다(원장 2026-11-04, 정은지(Charlie) 10-31 퇴사).
+ * ⚠️ 재직 중인(퇴사 아닌) 사람과 같은 표기는 빼지 않는다 — 동명·같은 닉네임이면 그 사람 블록까지 사라진다.
+ */
+export function resignedTeacherLabels(
+  rows: readonly { displayName: string | null; englishName: string | null; status: string | null }[],
+): Set<string> {
+  const resigned = new Set<string>();
+  const working = new Set<string>();
+  for (const r of rows) {
+    const target = r.status === "inactive" ? resigned : working;
+    for (const l of [r.displayName, r.englishName]) if (l?.trim()) target.add(l.trim());
+  }
+  for (const l of working) resigned.delete(l);
+  return resigned;
+}
