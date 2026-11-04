@@ -116,6 +116,22 @@ export function normalizePhone(v) {
   return t.length >= 9 ? t.slice(-11) : "";
 }
 
+/**
+ * 운영관리 명부 한 원아의 **보호자 전화 전부**(carer1~N · `math-class-boards-load` fetchAdmissions의 `phones`).
+ * `phones`가 없는 옛 모양(테스트·수동 도구의 `{ phone }`)이면 그 하나만. 둘 다 없으면 빈 목록(= `phoneMatches`가 null — 대조 불가).
+ * 왜 전부인가(원장 2026-11-04): 클래스노트 보호자1 = 엄마, aywa 보호자 = 아빠처럼 **같은 집의 다른 보호자**가 갈려 적히면
+ * carer1만 보던 반 보드 ②·동명이인 대조가 '불일치'로 막았다(전유솔 — 보호자2에 아빠 번호를 넣어도 안 풀림).
+ * 퇴원처리·반 보드 해제도 이 함수로 본다(class-board-release · classnote-offboard-plan — 한 곳만 고쳐 갈리지 않게).
+ * 한계(2026-11-04 리뷰): carer2 이후에 다른 집 번호·여러 집 대표번호를 잘못 넣으면 그 번호로도 통과한다 — 이름(⑥)·생년(③)이 남은 가드다.
+ * @param {{ phone?: string|null, phones?: Array<string|null|undefined> } | null | undefined} adm
+ * @returns {string[]}
+ */
+export function carerPhones(adm) {
+  if (!adm) return [];
+  if (Array.isArray(adm.phones) && adm.phones.some(Boolean)) return adm.phones.filter(Boolean);
+  return adm.phone ? [adm.phone] : [];
+}
+
 /** 두 전화 목록에 공통 번호가 있나(aywa parent_phone·student_phone ↔ ClassNote carer 연락처). */
 export function phoneMatches(a, b) {
   const A = new Set((a ?? []).map(normalizePhone).filter(Boolean));

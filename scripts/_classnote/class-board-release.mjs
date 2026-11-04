@@ -55,7 +55,7 @@
 
 import { childNameConsistent, reservedBoardName } from "./class-board-plan.mjs";
 import { normBoard } from "./board-safety.mjs";
-import { phoneMatches } from "./offboard-safety.mjs";
+import { carerPhones, phoneMatches } from "./offboard-safety.mjs";
 
 /** 한 반에서 최근에 끝난 원아가 이만큼을 넘고 보드 원아의 절반도 넘으면 그 원아들을 보류(④). */
 export const RELEASE_CLASS_SOFT_LIMIT = 4;
@@ -208,7 +208,7 @@ function judgeChild(p, ch, w, env, { students, admissions, childLinks }, byName)
   }
   const boardOwner = ownerNames.find((n) => env.keeperNames.has(n));
   if (boardOwner) return { why: `${w.keeper} '${boardOwner}'의 1인 보드에 있는 원아입니다` };
-  const phones = adm.phones?.length ? adm.phones : adm.phone ? [adm.phone] : [];
+  const phones = carerPhones(adm);
   const phoneTwin = phones.length ? env.keepers.find((k) => phoneMatches(k.phones ?? [], phones) === true) : null;
   if (phoneTwin) return { why: onHold(phoneTwin) ? heldWhy(phoneTwin, "보호자 전화가 같음") : `${w.keeper} '${phoneTwin.name}'와 보호자 전화가 같습니다(형제일 수 있어 확인 필요)` };
   // ② 누구의 원아인지 알아야 내보낸다.
