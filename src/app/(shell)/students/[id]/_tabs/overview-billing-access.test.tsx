@@ -94,6 +94,22 @@ describe("학생 개요 기록 정보", () => {
     expect(screen.getByText("(12345) 상세 주소만 입력됨")).toBeInTheDocument();
   });
 
+  it("보호자2(s2_0022)는 적어 둔 칸만 프로필에 보인다 — 없으면 줄 자체가 없다", async () => {
+    render(await OverviewTab({
+      student: { ...student, parentName: "김아버지", parentPhone: "010-1111-2222", parent2Name: "김어머니", parent2Relation: "모", parent2Phone: "010-3333-4444" },
+      canSeeBilling: false,
+    }));
+    expect(screen.getByText("보호자2 이름")).toBeInTheDocument();
+    expect(screen.getByText("김어머니")).toBeInTheDocument();
+    expect(screen.getByText("보호자2 관계")).toBeInTheDocument();
+    expect(screen.getByText("010-3333-4444")).toBeInTheDocument();
+    cleanup();
+    render(await OverviewTab({ student: { ...student, parentName: "김아버지", parent2Phone: "010-3333-4444" }, canSeeBilling: false }));
+    expect(screen.queryByText("보호자2 이름")).toBeNull();
+    expect(screen.queryByText("보호자2 관계")).toBeNull();
+    expect(screen.getByText("보호자2 연락처")).toBeInTheDocument();
+  });
+
   it("상담자와 상담일, 성적의 시험일·반·만점 없는 점수·시험없음을 빠짐없이 표시한다", async () => {
     consultationQuery.mockResolvedValue([{
       id: "consultation", consultedAt: "2026-10-20", category: "general", subject: "math", audience: "parent",
