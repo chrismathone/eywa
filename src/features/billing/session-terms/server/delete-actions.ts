@@ -34,7 +34,7 @@ export type SessionTermDeletePreview = {
 };
 
 async function deletionContext(id: string, period: string) {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" } as const;
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF } as const;
   if (typeof id !== "string" || isVirtualTermId(id) || !UUID.test(id)) return { error: "삭제할 회차 행이 없습니다" } as const;

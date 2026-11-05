@@ -4,9 +4,10 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { textbookRequestStudentIds } from "./textbook-scope";
-import { effectiveTeacherId } from "@/lib/auth/view-mode";
+import { effectiveTeacherId, viewAsTeacher } from "@/lib/auth/view-mode";
 import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { explainDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 import {
@@ -19,7 +20,21 @@ import { ownsTextbookRequest } from "../textbook-ownership";
 import { handOverTextbookNoticeLink } from "./textbook-notice-handover";
 
 // 교재신청(textbook_orders) CRUD — invoices actions 골격 본뜸. 상태 전환 시 해당 타임스탬프를
-// 진입 시각으로 채운다(ijw timestamp-on-toggle). tenant_id는 RLS 강제(INSERT엔 명시).
+// 진입 시각으로 채운다(ijw timestamp-on-toggle). tenant_id는 RLS 강제 + **모든 조회·변경에 명시**(아래 textbookDb).
+
+type TextbookDb = Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdminClient>;
+
+/**
+ * 교재 요청 저장 클라이언트 — 평소엔 세션(RLS 그대로), '다른 강사 뷰'일 때만 관리 클라이언트(원장 2026-11-05 강사뷰 전수).
+ * 🔴 DB의 `auth.uid()`는 강사뷰에서도 실제 계정 A다. 그래서 RLS(0168a insert: `created_by = auth.uid()` · 0174a 수정·삭제:
+ *    강사면 `teacher_name = A 표시명 or created_by = A`)가 대상 강사 X 명의의 저장과 X 요청의 수정·삭제를 거절한다
+ *    (insert는 에러, 수정·삭제는 0행으로 조용히).
+ * 부르는 쪽은 앱 게이트를 먼저 지난다 — `canWriteTenant`(읽기 강사뷰는 여기서 막힌다) + 강사 범위·소유(`loadEditableRequest`, X 기준).
+ * 관리 클라이언트는 RLS를 우회하므로 이 파일의 모든 조회·변경은 `tenant_id`를 명시한다.
+ */
+async function textbookDb(): Promise<TextbookDb> {
+  return (await viewAsTeacher()) ? createAdminClient() : await createClient();
+}
 export type TextbookState =
   | {
       error?: string;
@@ -92,11 +107,12 @@ function parse(formData: FormData) {
 }
 
 async function resolveStudentName(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: TextbookDb,
+  tenantId: string,
   studentId: string | null,
 ): Promise<string | null> {
   if (!studentId) return null;
-  const { data } = await supabase.from("students").select("name").eq("id", studentId).single();
+  const { data } = await supabase.from("students").select("name").eq("tenant_id", tenantId).eq("id", studentId).single();
   return data?.name ?? null;
 }
 
@@ -107,8 +123,8 @@ export async function createTextbookOrder(_prev: TextbookState, formData: FormDa
   const f = parse(formData);
   if (!f.bookName) return { fieldErrors: { bookName: "교재명을 입력해주세요" } };
 
-  const supabase = await createClient();
-  const studentName = await resolveStudentName(supabase, f.studentId);
+  const supabase = await textbookDb();
+  const studentName = await resolveStudentName(supabase, user.tenantId, f.studentId);
   // 생성 id를 돌려받는다 — 다이얼로그의 '클래스노트 발송'이 **방금 저장한 그 건**을 대상으로 열려면 필요.
   const { data, error } = await supabase
     .from("textbook_orders")
@@ -171,9 +187,9 @@ export async function requestTextbook(_prev: TextbookState, formData: FormData):
     }
   }
 
-  const supabase = await createClient();
+  const supabase = await textbookDb();
   // 학생 이름 일괄 조회(N 단건 대신 1쿼리) — student_name 스냅샷 컬럼 채움.
-  const { data: studentRows } = await supabase.from("students").select("id, name").in("id", studentIds);
+  const { data: studentRows } = await supabase.from("students").select("id, name").eq("tenant_id", user.tenantId).in("id", studentIds);
   const nameById = new Map((studentRows ?? []).map((s) => [s.id as string, (s.name as string | null) ?? null]));
 
   const nowIso = new Date().toISOString();
@@ -237,7 +253,8 @@ export async function requestTextbook(_prev: TextbookState, formData: FormData):
  * (사무실은 기존 /billing 교재 면의 updateTextbookOrder/deleteTextbookOrder로 잠금 없이 처리.)
  */
 async function loadEditableRequest(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: TextbookDb,
+  tenantId: string,
   id: string,
 ): Promise<{ error: string } | { ok: true; before: TextbookAuditSnapshot }> {
   // 감사 기록용 스냅샷을 **같은 조회에서** 함께 받는다(바꾸기 전 값이 있어야 "누가 뭘 고쳤나"를 적는다).
@@ -245,6 +262,7 @@ async function loadEditableRequest(
     .from("textbook_orders")
     // ⚠️ `AUDIT_COLS`가 이미 student_id를 담는다 — 여기서 또 적으면 같은 칸을 두 번 요청하게 된다.
     .select(`created_by, registered_at, ordered_at, paid_at, ${AUDIT_COLS}`)
+    .eq("tenant_id", tenantId)
     .eq("id", id)
     .single();
   if (!row) return { error: "교재 요청을 찾을 수 없습니다" };
@@ -278,8 +296,8 @@ export async function updateTextbookRequest(_prev: TextbookState, formData: Form
   const f = parse(formData);
   if (!f.bookName) return { fieldErrors: { bookName: "교재명을 입력해주세요" } };
 
-  const supabase = await createClient();
-  const gate = await loadEditableRequest(supabase, id);
+  const supabase = await textbookDb();
+  const gate = await loadEditableRequest(supabase, user.tenantId, id);
   if ("error" in gate) return { error: gate.error };
 
   const { error } = await supabase
@@ -291,7 +309,7 @@ export async function updateTextbookRequest(_prev: TextbookState, formData: Form
       price: f.price, // 미처리(untouched) 요청만 이 경로에 오므로 강사가 금액 정정 가능(폼이 항상 전송)
       updated_at: new Date().toISOString(),
     })
-    .eq("id", id);
+    .eq("tenant_id", user.tenantId).eq("id", id);
   if (error) return { error: explainDbError(error, { scope: "billing.textbookRequest.update", fallback: "교재 요청을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
   const changes = diffTextbookOrder(gate.before, {
     bookName: f.bookName,
@@ -320,8 +338,8 @@ export async function deleteTextbookRequest(_prev: TextbookState, formData: Form
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "교재 요청 ID가 누락되었습니다" };
 
-  const supabase = await createClient();
-  const gate = await loadEditableRequest(supabase, id);
+  const supabase = await textbookDb();
+  const gate = await loadEditableRequest(supabase, user.tenantId, id);
   if ("error" in gate) return { error: gate.error };
 
   // 🔴 `.select("id")`가 핵심 — PostgREST는 **RLS에 막힌 행을 에러 없이 건너뛴다**(0행 삭제).
@@ -331,7 +349,7 @@ export async function deleteTextbookRequest(_prev: TextbookState, formData: Form
   const { data: gone, error } = await supabase
     .from("textbook_orders")
     .delete()
-    .eq("id", id)
+    .eq("tenant_id", user.tenantId).eq("id", id)
     .select("id, student_id, book_name, request_date, classnote_notice_id");
   if (error) return { error: explainDbError(error, { scope: "billing.textbookRequest.delete", fallback: "교재 요청을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", op: "delete" }).message };
   if (!gone?.length) return { error: DELETE_BLOCKED_MSG };
@@ -365,13 +383,13 @@ export async function updateTextbookOrder(_prev: TextbookState, formData: FormDa
   const f = parse(formData);
   if (!f.bookName) return { fieldErrors: { bookName: "교재명을 입력해주세요" } };
 
-  const supabase = await createClient();
-  const studentName = await resolveStudentName(supabase, f.studentId);
+  const supabase = await textbookDb();
+  const studentName = await resolveStudentName(supabase, user.tenantId, f.studentId);
   // 바꾸기 전 값 — 감사 기록의 '이전' 칸(원장 2026-09-09 "금액 수정같은거 전부 감사로그에").
   const { data: beforeRow } = await supabase
     .from("textbook_orders")
     .select(AUDIT_COLS)
-    .eq("id", id)
+    .eq("tenant_id", user.tenantId).eq("id", id)
     .single();
   const before = snapshotOf(beforeRow as AuditRow | null);
   const { error } = await supabase
@@ -387,7 +405,7 @@ export async function updateTextbookOrder(_prev: TextbookState, formData: FormDa
       notes: f.notes,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", id);
+    .eq("tenant_id", user.tenantId).eq("id", id);
   if (error) return { error: explainDbError(error, { scope: "billing.textbookOrder.update", fallback: "교재 주문을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
 
   const changes = diffTextbookOrder(before, {
@@ -425,12 +443,12 @@ export async function toggleTextbookCheck(_prev: TextbookState, formData: FormDa
   const col = CHECK_COLS[field];
   if (!col) return { error: "잘못된 체크 항목입니다" };
 
-  const supabase = await createClient();
+  const supabase = await textbookDb();
   // 다른 체크 상태가 있어야 status를 재도출 → 현재 행 조회(RLS 격리).
   const { data: row } = await supabase
     .from("textbook_orders")
     .select(`registered_at, ordered_at, paid_at, ${AUDIT_COLS}`)
-    .eq("id", id)
+    .eq("tenant_id", user.tenantId).eq("id", id)
     .single();
   if (!row) return { error: "교재신청을 찾을 수 없습니다" };
 
@@ -454,7 +472,7 @@ export async function toggleTextbookCheck(_prev: TextbookState, formData: FormDa
   // 영구 제외해 해제↔재체크 핑퐁을 막는다(환불·오체크 정정 존중). 주문 해제는 자동화 무관이라 마커 안 찍음.
   if (!checked && (col === "registered_at" || col === "paid_at")) patch.check_dismissed_at = now;
 
-  const { error } = await supabase.from("textbook_orders").update(patch).eq("id", id);
+  const { error } = await supabase.from("textbook_orders").update(patch).eq("tenant_id", user.tenantId).eq("id", id);
   if (error) return { error: explainDbError(error, { scope: "billing.textbookOrder.check", fallback: "체크를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
 
   const checkTarget = textbookAuditTarget(snapshotOf(row as AuditRow));
@@ -483,18 +501,18 @@ export async function deleteTextbookOrder(_prev: TextbookState, formData: FormDa
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "교재신청 ID가 누락되었습니다" };
 
-  const supabase = await createClient();
+  const supabase = await textbookDb();
   // 지우기 전 스냅샷 — 지운 뒤엔 무엇을 지웠는지 되짚을 방법이 없다.
   const { data: beforeRow } = await supabase
     .from("textbook_orders")
     .select(AUDIT_COLS)
-    .eq("id", id)
+    .eq("tenant_id", user.tenantId).eq("id", id)
     .single();
   // 위와 같은 이유로 지운 행 수를 확인한다(0행 = 권한에 막힘, 에러는 안 난다).
   const { data: gone, error } = await supabase
     .from("textbook_orders")
     .delete()
-    .eq("id", id)
+    .eq("tenant_id", user.tenantId).eq("id", id)
     .select("id, student_id, book_name, request_date, classnote_notice_id");
   if (error) return { error: explainDbError(error, { scope: "billing.textbookOrder.delete", fallback: "교재 주문을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", op: "delete" }).message };
   if (!gone?.length) return { error: DELETE_BLOCKED_MSG };

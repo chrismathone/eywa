@@ -5,6 +5,8 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { logAction } from "@/features/audit/server/log";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { viewAsTeacher } from "@/lib/auth/view-as";
 import {
   normalizeRefund,
   parseRefundForm,
@@ -32,13 +34,25 @@ export type RefundActionState =
   | { ok?: boolean; error?: string; id?: string; nonce?: number; redirectTo?: string }
   | undefined;
 
+// 🔑 행위자 = '다른 강사 뷰'의 대상 직원(`getCurrentUser({ teacherView: true })`) — 작성자(uploaded_by)·환불완료 처리자(completedBy)가
+//    대상 명의다(원장 2026-11-05 강사뷰 전수). '읽기' 강사뷰는 canWriteTenant가 막는다. 감사로그 행위자는 로그인 계정(logAction).
 async function requireBillingWrite() {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" as const };
   if (!(await canWriteTenant(user.systemRole, "billing"))) {
     return { error: "수납관리 권한이 없습니다" as const };
   }
   return { user };
+}
+
+/**
+ * 요청서 행을 읽고 쓰는 클라이언트 — 평소엔 세션(RLS). '다른 강사 뷰'면 관리 클라이언트: DB의 restricted 백스톱(0072a·0148a)이
+ * **로그인 계정의 역할**(`auth_system_role()`)로 사무실 여부를 보므로, 대상 직원(회계 등)이 쓸 수 있는 요청서가 로그인 계정 역할에 따라
+ * 조용히 0행이 된다. 앱 게이트(대상의 수납 쓰기)를 지난 뒤에만 부르고, 모든 조회·변경에 tenant_id를 명시한다.
+ */
+async function refundDb(tenantId: string) {
+  if (await viewAsTeacher()) return { db: createAdminClient(), tenantId };
+  return { db: await createClient(), tenantId };
 }
 
 /**
@@ -68,7 +82,7 @@ export async function saveRefundRequest(
   const parsed = parseRefundForm(formData);
   if (!parsed.student.name) return { error: "학생 이름을 입력하세요" };
 
-  const supabase = await createClient();
+  const { db: supabase, tenantId } = await refundDb(gate.user.tenantId);
   const id = String(formData.get("id") ?? "").trim();
 
   if (id) {
@@ -76,6 +90,7 @@ export async function saveRefundRequest(
     const { data: existing } = await supabase
       .from("academy_documents")
       .select("form_data")
+      .eq("tenant_id", tenantId)
       .eq("id", id)
       .eq("form_type", REFUND_FORM_TYPE)
       .maybeSingle();
@@ -84,6 +99,7 @@ export async function saveRefundRequest(
     const { error } = await supabase
       .from("academy_documents")
       .update({ title: refundTitle(data), form_data: data, updated_at: new Date().toISOString() })
+      .eq("tenant_id", tenantId)
       .eq("id", id)
       .eq("form_type", REFUND_FORM_TYPE);
     if (error) return { error: `저장 실패: ${error.message}` };
@@ -96,7 +112,7 @@ export async function saveRefundRequest(
   const { data: row, error } = await supabase
     .from("academy_documents")
     .insert({
-      tenant_id: gate.user.tenantId,
+      tenant_id: tenantId,
       title: refundTitle(data),
       category: "billing",
       kind: "form",
@@ -183,17 +199,19 @@ export async function deleteRefundRequest(id: string): Promise<{ ok?: boolean; e
   const gate = await requireBillingWrite();
   if ("error" in gate) return { error: gate.error };
 
-  const supabase = await createClient();
+  const { db: supabase, tenantId } = await refundDb(gate.user.tenantId);
   // 지운 뒤엔 되짚을 행이 없다 — 학생·금액을 **삭제 전에** 읽어 둔다(expense_delete와 같은 규약).
   const { data: before } = await supabase
     .from("academy_documents")
     .select("title, form_data")
+    .eq("tenant_id", tenantId)
     .eq("id", id)
     .eq("form_type", REFUND_FORM_TYPE)
     .maybeSingle();
   const { data: gone, error } = await supabase
     .from("academy_documents")
     .delete()
+    .eq("tenant_id", tenantId)
     .eq("id", id)
     .eq("form_type", REFUND_FORM_TYPE)
     .select("id");

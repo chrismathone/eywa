@@ -78,7 +78,8 @@ export async function sendClassWideNotice(input: {
   attachments?: NoticeAttachment[];
   test?: boolean;
 }): Promise<{ ok: boolean; queued?: number; skipped?: string[]; dryRun?: boolean; error?: string }> {
-  const user = await getCurrentUser();
+  // '다른 강사 뷰'면 대상 강사 X의 명의로 보낸다(created_by·'내가 보낸 반 공지') — 감사로그 행위자는 logAction이 실제 계정으로 남긴다.
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const roError = await readonlyTeacherViewError();
   if (roError) return { ok: false, error: roError };
@@ -217,7 +218,8 @@ export async function loadMyClassWideNotice(): Promise<{
   rows?: ClassNoticeRow[];
   error?: string;
 }> {
-  const user = await getCurrentUser();
+  // 이력('내가 보낸 반 공지')의 '나'는 발송 명의(sendClassWideNotice)와 같은 사람 — 강사뷰면 대상 강사 X.
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const teacherId = await effectiveTeacherId();
   if (!teacherId && !(await canWriteTenant(user.systemRole, "lesson_reports"))) return { ok: false, error: "공지 발송 권한이 없습니다" };

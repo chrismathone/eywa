@@ -56,8 +56,10 @@ function finishTermMutation(log: Parameters<typeof logAction>[0]) {
  * ⚠️ N1: confirmed_* 필드는 절대 건드리지 않는다(계획만 갱신). 확정 안 된 stale 행만 삭제.
  * (B2 페이징 / B3 청크 / B4 병렬. 산출은 순수 planTermsForMonth — Vitest.)
  */
+// 🔑 이 폴더의 행위자 = `getCurrentUser({ teacherView: true })` — '다른 강사 뷰'면 대상 직원 X(원장 2026-11-05 강사뷰 전수).
+//    확정·이월·분할 기록의 명의(confirmed_by·carryover_by·created_by)가 X다. 감사로그 행위자는 logAction이 실제 계정으로 남긴다.
 export async function refreshPlannedTerms(period: string): Promise<SessionTermActionState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
@@ -261,7 +263,7 @@ export async function confirmClassTerms(
   skippedUnplanned?: number;
   terms?: SessionTermPatch[];
 }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
@@ -436,7 +438,7 @@ export async function confirmSessionTerm(
   _prev: SessionTermActionState,
   formData: FormData,
 ): Promise<SessionTermActionState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
@@ -524,7 +526,7 @@ export async function unconfirmSessionTerm(
   _prev: SessionTermActionState,
   formData: FormData,
 ): Promise<SessionTermActionState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
@@ -586,7 +588,7 @@ export async function setSessionTermCarryover(
   _prev: SessionTermActionState,
   formData: FormData,
 ): Promise<SessionTermActionState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };

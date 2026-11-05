@@ -7,6 +7,8 @@ const m = vi.hoisted(() => ({
   // 반 공지 재료 조회(loadMyClassWideNotice)용 — 조회 헬퍼가 부른 순서대로 돌려준다.
   chunkIds: [] as string[][], chunks: [] as unknown[][], paged: [] as unknown[][], chunkFail: false, mine: [] as unknown[],
   workers: [] as unknown[],
+  // 세션 클라이언트 조회의 .eq 인자(내가 보낸 반 공지의 '나' 확인용).
+  eqs: [] as unknown[][],
 }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: m.user }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: m.canWrite, canAccessTenant: async () => true }));
@@ -21,7 +23,7 @@ vi.mock("@/lib/supabase/server", () => ({
     from: (table: string) => {
       // 발송 PC 하트비트(이미지 롤아웃 가드) — select가 곧 결과다.
       if (table === "classnote_workers") return { select: async () => ({ data: m.workers, error: null }) };
-      const q = { select: () => q, eq: () => q, order: () => q, limit: async () => ({ data: m.mine, error: null }) };
+      const q = { select: () => q, eq: (...a: unknown[]) => { m.eqs.push(a); return q; }, order: () => q, limit: async () => ({ data: m.mine, error: null }) };
       return q;
     },
   }),
@@ -72,6 +74,7 @@ beforeEach(() => {
   m.paged = [];
   m.chunkFail = false;
   m.mine = [];
+  m.eqs = [];
   m.workers = [{ last_seen: new Date().toISOString(), last_results: { postMode: true, caps: { classNoticeImages: true } } }];
 });
 
@@ -107,6 +110,14 @@ describe("반 단체 공지 인가", () => {
     expect(m.teaching).not.toHaveBeenCalled();
     expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ source: "class_wide" }) }));
   });
+  it("🔴 강사뷰면 발송 명의(created_by)가 대상 강사 X — 실제 계정 A가 아니다", async () => {
+    m.user.mockImplementation(async (o?: { teacherView?: boolean }) =>
+      o?.teacherView ? { id: "x1", tenantId: "t1", systemRole: "teacher" } : { id: "a1", tenantId: "t1", systemRole: "master" });
+    m.teacherId.mockResolvedValue("x1");
+    expect(await sendClassWideNotice(input(["c1"]))).toMatchObject({ ok: true });
+    expect(m.inserted[0]).toMatchObject({ created_by: "x1" });
+    expect(m.user).toHaveBeenCalledWith({ teacherView: true });
+  });
   it("발송 스위치가 꺼져 있으면 큐에 올리지 않는다(dry-run)", async () => {
     m.sendOn = false;
     expect(await sendClassWideNotice(input(["c1"]))).toMatchObject({ ok: true, queued: 0, dryRun: true });
@@ -124,6 +135,15 @@ describe("원스크린 반 공지 재료 — 보낼 수 있는 반", () => {
     expect(r.rows).toEqual([{ id: "n1", title: "휴원", classNames: ["가반"], imageCount: 0, isTest: false, status: "success", failures: ["가반: 보드 원아 불일치"], error: null, createdAt: "2026-10-02T01:00:00Z" }]);
     // 반 보드 연결은 **담당 반 id로** 좁혀 읽는다(남의 반 연결을 읽지 않는다)
     expect(m.chunkIds[0]).toEqual(["c1", "c2"]);
+  });
+  it("🔴 강사뷰면 '내가 보낸 반 공지'의 나 = 대상 강사 X(발송 명의와 같은 사람)", async () => {
+    m.user.mockImplementation(async (o?: { teacherView?: boolean }) =>
+      o?.teacherView ? { id: "x1", tenantId: "t1", systemRole: "teacher" } : { id: "a1", tenantId: "t1", systemRole: "master" });
+    m.teacherId.mockResolvedValue("x1");
+    m.chunks = [[{ class_id: "c1" }], [{ id: "c1", class_name: "가반" }]];
+    m.paged = [[]];
+    await loadMyClassWideNotice();
+    expect(m.eqs).toContainEqual(["created_by", "x1"]);
   });
   it("담당 반이 없거나 · 반 보드가 연결된 반이 없으면 빈 목록(화면이 토글을 감춘다)", async () => {
     m.teaching.mockResolvedValue({ own: [], delegated: [], all: [] });

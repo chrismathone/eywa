@@ -59,6 +59,27 @@ const GUARDED_ACTION_FILES: { file: string[]; what: string }[] = [
     file: ["src", "features", "work-requests", "server", "actions.ts"],
     what: "업무 요청 만들기·처리(강사뷰 대상 명의)",
   },
+  // 강사뷰 = 그 사람(2026-11-05 전수) — 대상 명의로 쓰거나 외부로 보내는 액션은 읽기 강사뷰를 먼저 막는다.
+  {
+    file: ["src", "features", "help", "board", "server", "actions.ts"],
+    what: "도움말 게시판 글·답변(강사뷰 대상 명의 · 관리 클라이언트 쓰기)",
+  },
+  {
+    file: ["src", "features", "classnote-reply", "server", "reply-actions.ts"],
+    what: "ClassNote 학부모 답장(외부 발신 · 대상 명의)",
+  },
+  {
+    file: ["src", "features", "classnote-reply", "server", "reaction-actions.ts"],
+    what: "ClassNote 공감(외부 발신 · 대상 명의)",
+  },
+  {
+    file: ["src", "features", "billing", "server", "textbook-notice-actions.ts"],
+    what: "교재 안내 멘트 저장(관리 클라이언트 쓰기)",
+  },
+  {
+    file: ["src", "features", "report-templates", "server", "actions.ts"],
+    what: "영어 보고서 템플릿 저장·삭제(대상 명의 · 관리 클라이언트)",
+  },
 ];
 
 describe("'다른 강사 뷰'(열람 전용) 배선 가드", () => {

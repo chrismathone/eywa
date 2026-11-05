@@ -60,6 +60,16 @@ describe("도움말 게시판 배선", () => {
     expect(detail).toMatch(/const mine = post\.authorId === user\.id && canWrite;/);
   });
 
+  it("🔴 '다른 강사 뷰'는 대상 X로 판정한다 — 작성자 명의 · '자기 글' · 답변 역할 · 읽기 강사뷰 거절", () => {
+    const actions = read("src/features/help/board/server/actions.ts");
+    expect(actions).toContain("getCurrentUser({ teacherView: true })");
+    expect(actions).toContain("readonlyTeacherViewError");
+    // 실제 로그인 계정(인자 없는 getCurrentUser)으로 명의·판정을 하는 길이 되살아나지 않게.
+    expect(actions).not.toContain("getCurrentUser()");
+    const detail = read("src/app/(shell)/help/posts/[id]/page.tsx");
+    expect(detail).toContain("getCurrentUser({ teacherView: true })");
+  });
+
   it("표 부재를 구분한다", () => {
     expect(isMissingHelpBoard({ code: "PGRST205" })).toBe(true);
     expect(isMissingHelpBoard({ code: "42P01" })).toBe(true);

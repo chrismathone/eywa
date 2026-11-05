@@ -43,6 +43,9 @@ export async function getParentReactionState(messageId: string): Promise<Reactio
 export async function requestParentReaction(input: { messageId: string; type: string }): Promise<ReactionActionResult> {
   const g = await replyGate();
   if (!g.ok) return g;
+  // 외부(학부모 글)에 대상 직원 명의로 눌리는 공감 — '다른 강사 뷰'(열람 전용)·지점 보기는 먼저 막는다(decideReplyPermission도 다시 본다).
+  const ro = await readonlyTeacherViewError();
+  if (ro) return { ok: false, error: ro };
   if (!isReactionType(input?.type)) return { ok: false, error: "공감 종류를 다시 골라 주세요" };
   const admin = createAdminClient();
   const tenantId = g.user.tenantId;

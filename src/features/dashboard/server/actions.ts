@@ -16,6 +16,10 @@ import { DAILY_BRIEFING_DISABLED_MESSAGE, DAILY_BRIEFING_ENABLED } from "../brie
 
 export type AnnouncementActionState = { error?: string; ok?: boolean } | undefined;
 
+// 🔑 행위자 = '다른 강사 뷰'의 대상 직원(`getCurrentUser({ teacherView: true })`) — 직원 관리 역할 판정(canManageStaff)과 공지 작성자(author_id)가
+//    대상 기준이다. 로그인 계정 역할로 열면 대상 직원이 못 하는 공지 작성·브리핑 재생성이 그 화면에서 열린다(원장 2026-11-05 강사뷰 전수).
+//    '읽기' 강사뷰는 canWriteTenant가 막는다. 감사로그 행위자는 로그인 계정 그대로(logAction).
+
 function revalidateDashboard() {
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/announcements");
@@ -38,7 +42,7 @@ export async function createAnnouncement(
   _prev: AnnouncementActionState,
   formData: FormData,
 ): Promise<AnnouncementActionState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "dashboard"))) {
     return { error: "공지 작성 권한이 없습니다" };
@@ -76,7 +80,7 @@ export async function updateAnnouncement(
   _prev: AnnouncementActionState,
   formData: FormData,
 ): Promise<AnnouncementActionState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "dashboard"))) {
     return { error: "공지 수정 권한이 없습니다" };
@@ -115,7 +119,7 @@ export async function deleteAnnouncement(
   _prev: AnnouncementActionState,
   formData: FormData,
 ): Promise<AnnouncementActionState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "dashboard"))) {
     return { error: "공지 삭제 권한이 없습니다" };
@@ -159,7 +163,7 @@ export async function deleteAnnouncement(
  */
 export async function regenerateDailyBriefing(): Promise<{ error?: string; ok?: boolean }> {
   if (!DAILY_BRIEFING_ENABLED) return { error: DAILY_BRIEFING_DISABLED_MESSAGE };
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "dashboard"))) {
     return { error: "브리핑을 다시 생성할 권한이 없습니다" };
@@ -236,7 +240,7 @@ export async function toggleAnnouncementPin(
   _prev: AnnouncementActionState,
   formData: FormData,
 ): Promise<AnnouncementActionState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "dashboard"))) {
     return { error: "권한이 없습니다" };

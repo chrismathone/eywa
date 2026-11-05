@@ -33,7 +33,7 @@ export async function saveTeacherSplits(
   _prev: SaveSplitsState,
   formData: FormData,
 ): Promise<SaveSplitsState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };

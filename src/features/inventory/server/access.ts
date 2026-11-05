@@ -9,11 +9,14 @@ import { explainDbError } from "@/lib/supabase/db-error";
  * 🔴 `canWriteTenant("inventory")`다. `canAccess`/`canAccessTenant`는 **readonly를 통과시킨다** —
  *    회계(accountant)는 열람만인데 그걸 쓰면 자산을 고치게 된다. '다른 강사 뷰'(열람 전용) 캡도 이 함수 안에 있다.
  * 열람 게이트는 페이지의 `requireAccess("inventory")`(메뉴 권한) 하나다 — 셔틀처럼 별도 토글 우회가 없다.
+ * 🔑 사람 = '다른 강사 뷰'의 대상 직원(`getCurrentUser({ teacherView: true })`) — 실사 확인자(auditor_user_id·auditor_name)·점검자·
+ *    등록자(created_by) 같은 기록 명의가 대상 직원이다(원장 2026-11-05 강사뷰 전수). 재고 쓰기는 전부 관리 클라이언트 + tenant_id라 RLS와 무관하다.
+ *    감사로그 행위자는 로그인 계정 그대로(logAction). 보기 설정(prefs.ts — ui_prefs)은 이 게이트를 타지 않고 로그인 계정 것이다.
  */
 export type InventoryWriteCtx = { tenantId: string; userId: string; displayName: string };
 
 export async function requireInventoryWrite(): Promise<InventoryWriteCtx | { error: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "inventory"))) {
     return { error: "재고관리를 수정할 권한이 없습니다" };

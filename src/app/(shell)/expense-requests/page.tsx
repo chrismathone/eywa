@@ -25,5 +25,6 @@ export default async function ExpenseRequestsPage() {
   const [rows, actor] = await Promise.all([getMyExpenseRequests(teacherId), getCurrentUser({ teacherView: true })]);
   const canWrite = actor ? (await expenseWriteScope(actor.systemRole)) !== null : false;
 
-  return <ExpenseRequestsClient rows={rows} requesterName={user.displayName} canWrite={canWrite} />;
+  // 작성자 표시 = 서버가 저장할 author 기본값과 같은 사람(createExpense의 행위자) — 강사뷰면 대상 강사 X.
+  return <ExpenseRequestsClient rows={rows} requesterName={actor?.displayName ?? user.displayName} canWrite={canWrite} />;
 }

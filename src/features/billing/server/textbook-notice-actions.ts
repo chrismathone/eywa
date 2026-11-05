@@ -16,6 +16,7 @@
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { logAction } from "@/features/audit/server/log";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
@@ -74,6 +75,9 @@ const MENT_MAX = 2000;
 export async function saveMyTextbookMent(text: string): Promise<{ ok: boolean }> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false };
+  // 🔴 관리 클라이언트 쓰기라 canWriteTenant 캡을 지나지 않는다 — 열람 전용 강사뷰(·지점 보기)는 여기서 막는다.
+  //    안 막으면 원장이 강사 X 화면을 '읽기'로 보다가 칸을 고치는 순간 X의 멘트가 바뀐다(원장 2026-11-05 강사뷰 전수).
+  if (await readonlyTeacherViewError()) return { ok: false };
   const value = (text ?? "").trim().slice(0, MENT_MAX) || null;
   const admin = createAdminClient();
   const { error } = await admin

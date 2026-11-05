@@ -146,7 +146,8 @@ export async function linkClassnoteChild(input: {
     child_id: childId,
     child_name_at_link: child.child_name as string,
     birth_year_at_link: child.birth_year as number | null,
-    linked_by: user.id,
+    // 연결 기록의 명의는 강사뷰면 대상 X(아래 audit_logs 행위자는 실제 계정 그대로).
+    linked_by: (await getCurrentUser({ teacherView: true }))?.id ?? user.id,
   });
   if (error) return { ok: false, error: humanizeDbError(error.message, "저장") };
 
