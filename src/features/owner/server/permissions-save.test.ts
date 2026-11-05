@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MENU_ACCESS, resolveMatrix } from "@/lib/permissions";
+import { applyUserOverrides, isScopedForbiddenRole, MENU_ACCESS, resolveMatrix, SCOPED_FORBIDDEN_MESSAGE } from "@/lib/permissions";
+import { sparseRoleOverrides } from "../permission-edit";
 import { resolveSettings } from "../resolve";
 import { applySettingRoles, settingRoleSelection } from "../setting-roles";
 import type { PermissionsSettings } from "../settings-types";
@@ -677,6 +678,57 @@ describe("student status actual settings saves", () => {
     m.staff = [{ id: OPERATOR, system_role: "admin", status: "active" }]; m.platformIds = new Set([OPERATOR]);
     expect((await w.save({ ...w.draft, specialAccess: { ...w.draft.specialAccess, studentStatusManagerIds: [OPERATOR] } }))?.error).toBeTruthy();
     expect((await w.save({ ...w.draft, specialAccess: { ...w.draft.specialAccess, studentStatusManagerIds: null } }))?.error).toBeTruthy();
+    expect(m.writes).toBe(0);
+  });
+});
+
+describe("강사보다 낮은 직급(열람·아르바이트)의 '담당' — 원장 2026-11-05 금지 · 저장된 값이 이 면을 막지 않는다(리뷰 2026-11-05)", () => {
+  const PART = { id: STAFF_A, system_role: "parttime", status: "active" };
+  /** 화면이 보내는 것과 같은 모양 — 표(resolveMatrix: 저장된 금지 '담당'은 '읽기' — 그 칸 기본값이 '없음'이면 '없음' — 로 내림) → 기본값과 다른 칸만 + 개인·담당자 그대로. */
+  const asForm = (p: PermissionsSettings) => ({ overrides: sparseRoleOverrides(resolveMatrix(p.overrides)), userOverrides: p.userOverrides, specialAccess: p.specialAccess });
+
+  it.each(["chinsan", "generic"] as const)("🔴 %s: 저장돼 있던 역할 칸 '담당'(손으로 넣은 값)이 있어도 화면 그대로 저장된다 — '읽기'(기본값이 '없음'이면 '없음')로 정리된다", async (preset) => {
+    // 아르바이트 출석부 기본값 '없음' · 열람 출석부 기본값 '읽기' · 열람 원생 칸은 '전체'로 열어 둔 뒤 옛 '담당'이 덮었던 경우.
+    seed(preset, { overrides: [{ menu: "attendance", role: "parttime", access: "scoped" }, { menu: "attendance", role: "viewer", access: "scoped" }, { menu: "students", role: "viewer", access: "full" }, { menu: "students", role: "viewer", access: "scoped" }], userOverrides: [] });
+    const w = openWindow();
+    const res = await w.save(asForm(w.draft));
+    expect(res?.ok, JSON.stringify(res)).toBe(true);
+    expect(stored().overrides.some((o) => isScopedForbiddenRole(o.role) && o.access === "scoped")).toBe(false);
+    const after = resolveMatrix(stored().overrides);
+    expect(after.attendance.parttime).toBe("none"); // '읽기'로 올리면 그 칸이 처음 열린다
+    expect(after.attendance.viewer).toBe("readonly");
+    expect(after.students.viewer).toBe("readonly"); // 버리면 앞 줄의 '전체'가 된다
+  });
+
+  it.each(["chinsan", "generic"] as const)("🔴 %s: 요청에 실린 역할 칸 '담당'은 같은 안내 문구로 거절(화면을 거치지 않은 요청)", async (preset) => {
+    seed(preset, { overrides: [], userOverrides: [] });
+    const w = openWindow();
+    const res = await w.save({ ...asForm(w.draft), overrides: [{ menu: "attendance", role: "viewer", access: "scoped" }] });
+    expect(res?.error).toBe(SCOPED_FORBIDDEN_MESSAGE);
+    expect(m.writes).toBe(0);
+    // 강사의 '담당'은 된다.
+    expect((await w.save({ ...asForm(w.draft), overrides: [{ menu: "attendance", role: "teacher", access: "scoped" }] }))?.ok).toBe(true);
+  });
+
+  it.each(["chinsan", "generic"] as const)("🔴 %s: 역할이 바뀌어 남은 옛 '담당' 개인 줄은 그대로 두고 저장된다(일반판도 — 그 줄 하나로 면 전체가 막히던 것)", async (preset) => {
+    seed(preset, { overrides: [], userOverrides: [{ userId: STAFF_A, menu: "attendance", access: "scoped" }] });
+    m.staff = [PART];
+    const w = openWindow();
+    const res = await w.save(asForm(w.draft));
+    expect(res?.ok, JSON.stringify(res)).toBe(true);
+    expect(stored().userOverrides).toEqual([{ userId: STAFF_A, menu: "attendance", access: "scoped" }]);
+    // 적용: 역할 칸이 '전체'면 '읽기'(버리면 역할 값으로 넓어진다) · 역할 칸이 기본값 '없음'이면 '없음'('읽기'로 올리면 처음 열린다).
+    const matrix = resolveMatrix([{ menu: "attendance", role: "parttime", access: "full" }]);
+    expect(applyUserOverrides(matrix, STAFF_A, "parttime", stored().userOverrides).attendance.parttime).toBe("readonly");
+    expect(applyUserOverrides(resolveMatrix(stored().overrides), STAFF_A, "parttime", stored().userOverrides).attendance.parttime).toBe("none");
+  });
+
+  it.each(["chinsan", "generic"] as const)("🔴 %s: 새로 주거나 다른 수준에서 '담당'으로 바꾸는 개인 줄은 같은 안내 문구로 거절", async (preset) => {
+    seed(preset, { overrides: [], userOverrides: [{ userId: STAFF_A, menu: "students", access: "readonly" }] });
+    m.staff = [PART];
+    const w = openWindow();
+    expect((await w.save({ ...asForm(w.draft), userOverrides: [...w.draft.userOverrides, { userId: STAFF_A, menu: "attendance", access: "scoped" }] }))?.error).toBe(SCOPED_FORBIDDEN_MESSAGE);
+    expect((await w.save({ ...asForm(w.draft), userOverrides: [{ userId: STAFF_A, menu: "students", access: "scoped" }] }))?.error).toBe(SCOPED_FORBIDDEN_MESSAGE);
     expect(m.writes).toBe(0);
   });
 });

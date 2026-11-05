@@ -1,9 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { permissionAccessOptions } from "@/features/owner/permission-edit";
 import type { PermissionRowGroup } from "@/features/owner/permission-rows";
-import { isPermissionLocked, isRoleOnlyMenu, MENU_LABEL, type Access, type MenuKey, type SystemRole, type UserPermissionOverride } from "@/lib/permissions";
+import {
+  isPermissionLocked,
+  isRoleOnlyMenu,
+  isScopedForbiddenRole,
+  MENU_LABEL,
+  SCOPED_FORBIDDEN_MESSAGE,
+  storedScopedAccess,
+  type Access,
+  type AccessMatrix,
+  type MenuKey,
+  type SystemRole,
+  type UserPermissionOverride,
+} from "@/lib/permissions";
 import { SettingsCard } from "./settings-card";
 import { ACCESS_LABEL, ROLE_LABEL } from "./permission-ui";
 
@@ -19,9 +31,11 @@ const MAX_ROWS = 80;
  * 🔴 화면에 안 보이는 줄(`hiddenUserIds`)은 손대지 않고 그대로 둔다 — 지우거나 바꾸는 요청은 저장이 거절한다.
  * ⚠️ 메뉴 고르기의 차례·묶음은 위 표와 같다(`groups` — 왼쪽 탭과 그 내부 메뉴 순).
  */
-export function UserOverrideEditor({ overrides, hiddenUserIds, staffOptions, nameOf, groups, onChange }: {
+export function UserOverrideEditor({ overrides, roleMatrix, hiddenUserIds, staffOptions, nameOf, groups, onChange }: {
   /** 저장되는 줄 전부(안 보이는 줄 포함). */
   overrides: readonly UserPermissionOverride[];
+  /** 위 역할 표(편집 중인 값) — 옛 '담당' 줄이 실제로 어떤 값으로 적용되는지 적는 데 쓴다(그 사람 역할 칸이 '없음'이면 '없음'). */
+  roleMatrix: AccessMatrix;
   hiddenUserIds: readonly string[];
   staffOptions: readonly StaffOption[];
   nameOf: (userId: string) => string;
@@ -31,6 +45,7 @@ export function UserOverrideEditor({ overrides, hiddenUserIds, staffOptions, nam
   const [pickedUser, setPickedUser] = useState("");
   const [wantedMenu, setWantedMenu] = useState<MenuKey>("staff");
   const [pickedAccess, setPickedAccess] = useState<Access>("full");
+  const idPrefix = useId();
   const hidden = new Set(hiddenUserIds);
   const visible = overrides.filter((row) => !hidden.has(row.userId));
   const staff = staffOptions.filter((s) => !hidden.has(s.id));
@@ -45,6 +60,8 @@ export function UserOverrideEditor({ overrides, hiddenUserIds, staffOptions, nam
   const pickedMenu: MenuKey = selectable.includes(wantedMenu) ? wantedMenu : (selectable[0] ?? wantedMenu);
   const full = overrides.length >= MAX_ROWS && !overrides.some((r) => r.userId === pickedUser && r.menu === pickedMenu);
   const blocked = !pickedUser || !pickedRole || full || isPermissionLocked(pickedMenu, pickedRole, pickedAccess);
+  // 강사보다 낮은 직급(열람·아르바이트)에게 '담당'을 고르면 단추만 꺼 두지 않고 까닭을 바로 아래에 알린다(원장 2026-11-05 "알림메시지도 배선").
+  const scopedForbidden = !!pickedRole && pickedAccess === "scoped" && isScopedForbiddenRole(pickedRole);
 
   function add() {
     if (blocked) return;
@@ -81,6 +98,11 @@ export function UserOverrideEditor({ overrides, hiddenUserIds, staffOptions, nam
           {full ? <span className="text-text-dim text-xs">개인별 권한은 {MAX_ROWS}건까지 둘 수 있습니다.</span> : null}
         </div>
       ) : null}
+      {staff.length > 0 && scopedForbidden ? (
+        <p role="alert" className="text-danger mt-2 text-xs leading-relaxed">
+          {ROLE_LABEL[pickedRole!]}: {SCOPED_FORBIDDEN_MESSAGE}
+        </p>
+      ) : null}
       {/* 직원 평가는 개인에게 주면 수준과 관계없이 평가자 실명이 보이고(강사 제외 — class-review `getReviewPrivileges`),
           쓰기 수준(전체·담당)이면 문항 편집 · 최종 총평도 열린다(그 둘은 쓰기 게이트를 먼저 지난다). 역할 표의 같은 수준과
           다르게 동작하므로 고르는 자리에서 알린다. */}
@@ -106,6 +128,12 @@ export function UserOverrideEditor({ overrides, hiddenUserIds, staffOptions, nam
           {visible.map((row) => {
             const name = nameOf(row.userId);
             const role = roleOf(row.userId);
+            // 역할이 바뀌어 강사보다 낮은 직급이 된 사람의 옛 '담당' 줄 — '읽기'(그 사람 역할 칸이 '없음'이면 '없음')로 내려 적용된다
+            // (storedScopedAccess — 적용하는 쪽과 같은 함수로 적는다). 말없이 두지 않는다.
+            // 까닭은 보이는 글로 적고 고르기 칸과 묶는다(title만 두면 터치·키보드·화면낭독기에서 안 보인다 — 리뷰 2026-11-05).
+            const demoted = !!role && row.access === "scoped" && row.menu !== "teacher_view" && isScopedForbiddenRole(role);
+            const applied = demoted ? storedScopedAccess(row.menu, role!, row.access, roleMatrix[row.menu][role!]) : row.access;
+            const noteId = `${idPrefix}-${row.userId}-${row.menu}`;
             return (
               <tr key={`${row.userId}-${row.menu}`} className="border-border border-b last:border-b-0">
                 <th scope="row" className="text-foreground break-words px-2 py-2 font-medium">{name}</th>
@@ -114,6 +142,7 @@ export function UserOverrideEditor({ overrides, hiddenUserIds, staffOptions, nam
                 <td className="px-2 py-2">
                 <select
                   aria-label={`${name} ${MENU_LABEL[row.menu]} 권한`}
+                  aria-describedby={demoted ? noteId : undefined}
                   value={row.access}
                   onChange={(e) => onChange((rows) => rows.map((r) => (r === row ? { ...r, access: e.target.value as Access } : r)))}
                   className="border-border bg-card min-h-8 w-full rounded border px-2 py-1 text-xs"
@@ -123,6 +152,11 @@ export function UserOverrideEditor({ overrides, hiddenUserIds, staffOptions, nam
                     <option key={access} value={access}>{ACCESS_LABEL[access]}</option>
                   ))}
                 </select>
+                {demoted ? (
+                  <span id={noteId} className="text-danger mt-1 block text-xs leading-relaxed">
+                    {applied === "none" ? "‘없음’으로 적용됩니다(역할 표의 이 칸이 ‘없음’)" : "‘읽기’로 적용됩니다"} — {ROLE_LABEL[role!]}에는 ‘담당’을 줄 수 없습니다(맡은 반이 없어 ‘전체’처럼 열림). 다른 수준을 고르세요.
+                  </span>
+                ) : null}
                 </td>
                 <td className="px-2 py-2">
                 <button

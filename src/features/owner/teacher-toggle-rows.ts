@@ -10,7 +10,7 @@ import { isTeacherMenuEntranceOpen } from "@/lib/navigation";
 import { MENU_ACCESS, MENU_LABEL, TEACHER_MENU_KEYS, type Access, type MenuKey } from "@/lib/permissions";
 import { teacherNavigationSource } from "@/lib/teacher-navigation";
 import { isMenuHiddenByLayout } from "./menu-layout";
-import type { PermissionNavigation } from "./permission-rows";
+import { isRenamedDest, renamedCovers, type PermissionNavigation } from "./permission-rows";
 
 /** 이 칸들이 켜고 끄는 권한 — 강사 '내 메뉴'와 **같은 입구 정책**으로 거른다(메뉴에서 뺀 탭은 없다). */
 export const TEACHER_TOGGLE_KEYS: readonly MenuKey[] = TEACHER_MENU_KEYS.filter(isTeacherMenuEntranceOpen);
@@ -18,7 +18,11 @@ export const TEACHER_TOGGLE_KEYS: readonly MenuKey[] = TEACHER_MENU_KEYS.filter(
 export type TeacherToggleRow = {
   menu: MenuKey;
   label: string;
-  /** 강사 '내 메뉴'에 실제로 서는 이름(강사뷰 구성의 이름 그대로) — 권한 이름과 다르거나 둘 이상일 때만 채운다. */
+  /**
+   * 강사뷰 구성에서 **이름을 바꾼** 입구의 바뀐 이름 — 그 밖엔 비운다. 칸은 권한 이름(탭 이름) 한 줄이 기본이다
+   * (원장 2026-11-05 *"항상 탭 이름을 기본으로 가져가도록해"* — 권한 표 `permission-rows.ts`와 같은 규칙 · 같은 판정 `isRenamedDest`).
+   * 전에는 '내 메뉴'에 서는 이름을 다 적었다(출석부 옆 '출결 모드 · 출석부', 원생목록 옆 '내 학생').
+   */
   covers: string[];
   /** 강사뷰 구성에서 이 권한의 입구를 전부 감췄다 — 켜 두어도 '내 메뉴'에는 안 선다(주소로는 열린다). */
   hiddenInMenu: boolean;
@@ -30,22 +34,24 @@ export type TeacherToggleRow = {
  */
 export function teacherToggleRows(navigation?: PermissionNavigation): TeacherToggleRow[] {
   const teacherMenus = navigation?.teacherMenus;
-  const found = new Map<MenuKey, { label: string; hidden: boolean }[]>();
+  const found = new Map<MenuKey, { label: string; renamed: boolean; hidden: boolean }[]>();
   for (const g of configuredHubGroups(teacherNavigationSource(), teacherMenus, navigation?.teacherGroups, true)) {
     for (const d of g.items) {
       if (!TEACHER_TOGGLE_KEYS.includes(d.menuKey)) continue;
-      found.set(d.menuKey, [...(found.get(d.menuKey) ?? []), { label: d.label, hidden: g.hidden === true || isMenuHiddenByLayout(d.href, teacherMenus) }]);
+      found.set(d.menuKey, [
+        ...(found.get(d.menuKey) ?? []),
+        { label: d.label, renamed: isRenamedDest(d), hidden: g.hidden === true || isMenuHiddenByLayout(d.href, teacherMenus) },
+      ]);
     }
   }
   // 입구 표에 줄이 없는 권한(있어서는 안 된다 — 가드가 잠근다)도 빠뜨리지 않고 끝에 세운다.
   const order = [...found.keys(), ...TEACHER_TOGGLE_KEYS.filter((menu) => !found.has(menu))];
   const rows = order.map((menu): TeacherToggleRow => {
     const dests = found.get(menu) ?? [];
-    const names = dests.map((d) => d.label);
     return {
       menu,
       label: MENU_LABEL[menu],
-      covers: names.length === 1 && names[0] === MENU_LABEL[menu] ? [] : names,
+      covers: renamedCovers(dests, MENU_LABEL[menu]),
       // 홈은 감춰도 그 선생님에게 맨 위로 남는다(applyTeacherMenuLayout) — 감춤 표식을 달지 않는다.
       hiddenInMenu: menu !== "teacher_onescreen" && dests.length > 0 && dests.every((d) => d.hidden),
     };
