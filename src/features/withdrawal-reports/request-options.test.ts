@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { subjectEndGroups, defaultApproverIds, narrowApprovalSubjects, reportAuthorIds, requestApprovers, requestManagers, selfManagedSubjects, toggleCourseGroup } from "./request-options";
-import { reportStatusLabel, skipsManagerStep, type CourseSnapshot, type StaffOption } from "./model";
+import { approverOptions, subjectEndGroups, defaultApproverIds, narrowApprovalSubjects, reportApprovalPlan, reportAuthorIds, reportManagerIds, toggleCourseGroup } from "./request-options";
+import { managerStepSkipped, type CourseSnapshot, type StaffOption } from "./model";
 import { withUnassignedCourses } from "./target-courses";
 
 const course = (id: string, subject: string, teacherId: string | null, extra: Partial<CourseSnapshot> = {}): CourseSnapshot => ({
@@ -55,50 +55,54 @@ describe("subjectEndGroups — 함께 종료되는 수업 안내", () => {
   });
 });
 
-describe("requestManagers — 담임이 관리자면 원장이 승인", () => {
+describe("reportApprovalPlan — 원장 승인 칸 없음 · 관리자 승인 생략은 보고서마다(원장 2026-11-03)", () => {
   const person = (id: string, role: StaffOption["role"], subjects: string[]): StaffOption => ({ id, name: id, role, subjects });
-  const staff = [person("boss", "master", []), person("mgrA", "manager", ["math"]), person("mgrB", "manager", ["math"]), person("mgrE", "manager", ["english"]), person("t", "teacher", ["math"])];
+  const staff = [person("boss", "master", []), person("mgrA", "manager", ["math"]), person("mgrB", "manager", ["math"]), person("mgrE", "manager", ["english"]), person("t", "teacher", ["math"]), person("te", "teacher", ["english"])];
   const ids = (list: StaffOption[]) => list.map(u => u.id);
 
-  it("담임이 평강사면 그 과목 관리자가 승인한다", () => {
-    expect(ids(requestManagers(staff, [course("m", "math", "t")], ["math"], ["t"]))).toEqual(["mgrA", "mgrB"]);
+  it("담임이 평강사면 그 과목 관리자가 승인한다 · 원장은 후보가 아니다", () => {
+    const [p] = reportApprovalPlan(staff, [course("m", "math", "t")], ["t"]);
+    expect(p).toMatchObject({ teacherId: "t", subjects: ["math"], skip: false });
+    expect(ids(p!.candidates)).toEqual(["mgrA", "mgrB"]);
+    expect(defaultApproverIds([p!])).toEqual(["mgrA", "mgrB"]);
   });
-  it("담임이 그 과목 관리자면 다른 관리자 없이 원장만 승인한다", () => {
-    const courses = [course("m", "math", "mgrA")];
-    expect(selfManagedSubjects(staff, courses, ["mgrA"])).toEqual(["math"]);
-    expect(ids(requestManagers(staff, courses, ["math"], ["mgrA"]))).toEqual(["boss"]);
+  it("담임이 그 과목 관리자면 그 보고서는 관리자 승인 생략(원장으로 대신하지 않는다)", () => {
+    const plan = reportApprovalPlan(staff, [course("m", "math", "mgrA")], ["mgrA"]);
+    expect(plan).toEqual([{ teacherId: "mgrA", subjects: ["math"], skip: true, candidates: [] }]);
+    expect(reportManagerIds(plan, ["mgrB"])).toEqual({ byTeacher: { mgrA: [] }, missing: [] });
   });
-  it("다른 과목 관리자가 남으면 그 관리자 뒤에 원장을 꼭 고르게 한다", () => {
-    const courses = [course("m", "math", "mgrA"), course("e", "english", "t")];
-    const approvers = requestApprovers(staff, courses, ["math", "english"], ["mgrA", "t"]);
-    expect(ids(approvers.candidates)).toEqual(["mgrE"]);
-    expect(approvers.masters).toEqual([]);
-    expect(approvers.needsDirector).toBe(true);
+  it("과목이 섞이면 보고서마다 — 영어(관리자 작성)는 생략, 수학(평강사)은 수학 관리자만", () => {
+    const plan = reportApprovalPlan(staff, [course("m", "math", "t"), course("e", "english", "mgrE")], ["t", "mgrE"]);
+    expect(plan.map(p => [p.teacherId, p.skip, ids(p.candidates)])).toEqual([["t", false, ["mgrA", "mgrB"]], ["mgrE", true, []]]);
+    expect(reportManagerIds(plan, ["mgrA", "mgrB"])).toEqual({ byTeacher: { t: ["mgrA", "mgrB"], mgrE: [] }, missing: [] });
   });
-  it("원장이 담임이면 관리자가 승인한다", () => {
-    expect(ids(requestManagers(staff, [course("m", "math", "boss")], ["math"], ["boss"]))).toEqual(["mgrA", "mgrB"]);
+  it("같은 과목에 작성자가 둘(EiE·일반 영어) — 관리자 작성자만 생략, 평강사 보고서는 영어 관리자(관리자인 작성자 포함)가 승인", () => {
+    const plan = reportApprovalPlan(staff, [course("eie", "english", "mgrE", { eie: true }), course("le", "english", "te")], ["mgrE", "te"]);
+    expect(plan.map(p => [p.teacherId, p.skip, ids(p.candidates)])).toEqual([["mgrE", true, []], ["te", false, ["mgrE"]]]);
+    expect(reportManagerIds(plan, [])).toEqual({ byTeacher: { mgrE: [], te: [] }, missing: ["te"] });
   });
-  it("담임이 평강사인데 그 과목 관리자가 없으면 원장으로 대신하지 않는다(요청을 막는다)", () => {
-    expect(requestManagers(staff, [course("s", "science", "t")], ["science"], ["t"])).toEqual([]);
+  it("작성 강사가 보고서 과목 일부만 맡으면 생략이 아니다 — 맡지 않은 과목의 관리자가 승인", () => {
+    const multi = [...staff, person("both", "manager", ["english"])];
+    const [p] = reportApprovalPlan(multi, [course("m", "math", "both"), course("e", "english", "both")], ["both"]);
+    expect(p).toMatchObject({ subjects: ["math", "english"], skip: false });
+    expect(ids(p!.candidates)).toEqual(["mgrA", "mgrB"]);
   });
-  it("작성 강사가 없으면 승인자도 없다", () => {
-    expect(requestManagers(staff, [course("m", "math", "t")], ["math"], [])).toEqual([]);
+  it("원장이 담임이면 관리자가 승인한다(생략 아님) · 관리자가 없는 과목은 후보 0(요청을 막는다)", () => {
+    expect(reportApprovalPlan(staff, [course("m", "math", "boss")], ["boss"])[0]).toMatchObject({ skip: false });
+    expect(ids(reportApprovalPlan(staff, [course("m", "math", "boss")], ["boss"])[0]!.candidates)).toEqual(["mgrA", "mgrB"]);
+    const [p] = reportApprovalPlan(staff, [course("s", "science", "t")], ["t"]);
+    expect(p).toMatchObject({ skip: false, candidates: [] });
+    expect(reportManagerIds([p!], ["mgrA"]).missing).toEqual(["t"]);
   });
-  it("대신 승인할 원장이 여럿이면 기본 선택하지 않는다", () => {
-    const many = [...staff, person("boss2", "master", [])];
-    const approvers = requestApprovers(many, [course("m", "math", "mgrA")], ["math"], ["mgrA"]);
-    expect(ids(approvers.masters)).toEqual(["boss", "boss2"]);
-    expect(defaultApproverIds(approvers)).toEqual([]);
+  it("작성 강사가 없으면 계획도 없다 · 후보는 보고서들의 합집합", () => {
+    expect(reportApprovalPlan(staff, [course("m", "math", "t")], [])).toEqual([]);
+    const plan = reportApprovalPlan(staff, [course("m", "math", "t"), course("e", "english", "te")], ["t", "te"]);
+    expect(ids(approverOptions(plan))).toEqual(["mgrA", "mgrB", "mgrE"]);
   });
-  it("원장이 한 명이면 기본 선택한다", () => {
-    expect(defaultApproverIds(requestApprovers(staff, [course("m", "math", "mgrA")], ["math"], ["mgrA"]))).toEqual(["boss"]);
-  });
-  it("승인자 칸에 원장만 있으면 관리자 생략 · 원장 승인 대기로 읽는다", () => {
-    const report = { manager_id: "boss", manager_ids: ["boss"], director_id: null, director_ids: [], status: "manager_pending" as const };
-    expect(skipsManagerStep(report, staff)).toBe(true);
-    expect(reportStatusLabel(report, staff)).toBe("원장 승인 대기");
-    expect(skipsManagerStep({ ...report, manager_id: "mgrA", manager_ids: ["mgrA"] }, staff)).toBe(false);
-    expect(skipsManagerStep({ ...report, director_id: "boss2", director_ids: ["boss2"] }, staff)).toBe(false);
+  it("관리자 승인 생략 = 승인 관리자 0명(보고서 모양)", () => {
+    expect(managerStepSkipped({ manager_id: null, manager_ids: [] })).toBe(true);
+    expect(managerStepSkipped({ manager_id: "mgrA", manager_ids: ["mgrA"] })).toBe(false);
+    expect(managerStepSkipped({ manager_id: "mgrA", manager_ids: null })).toBe(false);
   });
 });
 
@@ -125,14 +129,14 @@ describe("narrowApprovalSubjects — 학원 설정 '퇴원보고서 승인자'(�
   const math = [{ subject: "math", teacherId: "t" }];
   it("지정한 사람이 맡은 과목은 그 사람만 후보 · 지정이 없는 과목(영어)은 그대로", () => {
     const narrowed = narrowApprovalSubjects(people, ["vice"]);
-    expect(requestApprovers(narrowed, math, ["math"], ["t"]).candidates.map(u => u.id)).toEqual(["vice"]);
-    expect(requestApprovers(narrowed, [{ subject: "english", teacherId: "t" }], ["english"], ["t"]).candidates.map(u => u.id)).toEqual(["head", "eng"]);
+    expect(reportApprovalPlan(narrowed, math, ["t"])[0]!.candidates.map(u => u.id)).toEqual(["vice"]);
+    expect(reportApprovalPlan(narrowed, [{ subject: "english", teacherId: "t" }], ["t"])[0]!.candidates.map(u => u.id)).toEqual(["head", "eng"]);
   });
   it("지정이 없으면 종전 그대로(과목 관리자 전원)", () => {
-    expect(requestApprovers(narrowApprovalSubjects(people, []), math, ["math"], ["t"]).candidates.map(u => u.id)).toEqual(["vice", "other-branch", "head"]);
+    expect(reportApprovalPlan(narrowApprovalSubjects(people, []), math, ["t"])[0]!.candidates.map(u => u.id)).toEqual(["vice", "other-branch", "head"]);
   });
   it("관리자 역할이 아닌 사람을 지정해도 과목을 빼앗지 않는다", () => {
     const withTeacher = [...people, { id: "tt", name: "강사", role: "teacher", subjects: ["math"] } as StaffOption];
-    expect(requestApprovers(narrowApprovalSubjects(withTeacher, ["tt"]), math, ["math"], ["t"]).candidates.map(u => u.id)).toEqual(["vice", "other-branch", "head"]);
+    expect(reportApprovalPlan(narrowApprovalSubjects(withTeacher, ["tt"]), math, ["t"])[0]!.candidates.map(u => u.id)).toEqual(["vice", "other-branch", "head"]);
   });
 });
