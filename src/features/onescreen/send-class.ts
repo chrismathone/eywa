@@ -12,43 +12,31 @@
  * 순서: 후보(그 학생이 다니는 반 보드 대상 수학 반)가 하나면 그 반 → 보낸 보고서가 가장 많은 반 →
  * 동률이면 출결이 가장 많은 반 → 그래도 동률이면 **정하지 않는다**(강사가 고른다).
  * ⚠️ 경로 판정은 워커 [`class-route-decide.mjs`](../../../scripts/_classnote/class-route-decide.mjs)와 **같은 규칙**이어야 한다
- *    (.mjs라 import로 공유하지 못해 옮겨 적었다 — send-class.test.ts가 같은 표를 고정한다).
+ *    (send-class.test.ts가 같은 표를 고정한다).
  */
 
 export const SEND_CLASS_SUBJECTS: ReadonlySet<string> = new Set(["math", "subject_1"]);
 
 /**
- * 이 강사의 수학 보고서가 반 보드로 가는가(보고서 설정 '수학 발송 경로'). 모르는 값·빈 값 = 반별(2026-11-04 — 1인 보드에
- * 원아를 배정하지 않아 기존 방식은 보낼 곳이 없다 · 워커 class-route-decide.mjs `normalizeRouteConfig`와 같은 기본).
- * 저장된 personal·pilot은 그대로 따른다(설정 화면이 '반별 발송'으로 바꾸게 안내한다).
- */
-export function classRouteAppliesTo(
-  report: { classnoteMathRoute?: string | null; classnoteMathRoutePilot?: readonly string[] | null },
-  teacherName: string | null | undefined,
-): boolean {
-  if (report.classnoteMathRoute === "personal") return false;
-  if (report.classnoteMathRoute === "pilot") return (report.classnoteMathRoutePilot ?? []).includes(teacherName ?? "");
-  return true; // class · 모르는 값 · 빈 값
-}
-
-/**
- * 반별 발송이 **이 학원에서** 켜져 있는가 — ClassNote 기능(모듈)이 켜진 학원 + 보고서 설정 '수학 발송 경로'.
+ * 반별 발송이 **이 학원에서** 켜져 있는가 — ClassNote 기능(모듈)이 켜진 학원이면 수학은 **늘 반별**이다.
  * 원장 2026-09-30: ClassNote 관련 기능은 ClassNote를 쓰는 학원에만. 모듈이 꺼져 있으면 반 고르기·'보낼 반 없음' 차단이
  * **전부 없다**(예전 그대로). 발송 경로의 모든 판정은 이 함수를 지난다(원스크린·관리자 직접 작성·관리자 일괄 발송).
+ * 🔴 2026-11-05 원장 *"이제 안쓰는 기능들 정리하고 반 보드 동기화만 남기면 될듯"* — 옛 보고서 설정 '수학 발송 경로'
+ *    (기존 방식 = 1인 보드 · 일부 선생님만 반별)를 걷었다. 워커 [`class-route-decide.mjs`](../../../scripts/_classnote/class-route-decide.mjs)
+ *    `decideRoute`도 수학이면 늘 반별이다(같은 규칙 — send-class.test.ts가 함께 고정한다).
+ * ⚠️ 둘째 인자(강사 이름)는 옛 '일부 선생님만' 판정의 자리라 **쓰지 않는다**. 진행 중인 다른 작업(영어 개별 공지 반 방 경로)이
+ *    같은 호출 모양을 쓰고 있어 인자만 남겨 두었다 — 그 작업이 main에 들어간 뒤 호출부와 함께 걷는다.
  */
 export function classRouteActive(
-  settings: {
-    modules?: { disabled?: readonly string[] | null } | null;
-    report: { classnoteMathRoute?: string | null; classnoteMathRoutePilot?: readonly string[] | null };
-  },
-  teacherName: string | null | undefined,
+  settings: { modules?: { disabled?: readonly string[] | null } | null },
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 옛 '일부 선생님만' 자리(위 ⚠️) — 호출부 정리 때 함께 걷는다
+  _teacherName?: string | null,
 ): boolean {
-  if ((settings.modules?.disabled ?? []).includes("classnote")) return false;
-  return classRouteAppliesTo(settings.report, teacherName);
+  return !(settings.modules?.disabled ?? []).includes("classnote");
 }
 
 /**
- * 이 보고서에 '보낼 반'이 필요한가 — 수학 · 반별 경로 대상 강사이면서
+ * 이 보고서에 '보낼 반'이 필요한가 — 수학 · 반별 경로(ClassNote 모듈 켜짐)이면서
  *  · 반이 없거나(보강) — 원장 2026-09-29 A안
  *  · 반은 있지만 이 학생이 받을 **살아 있는 반 보드가 없을 때**(`classLive === false`) — ClassNote에서 반이 사라진 종강 반 등.
  *    원장 2026-09-30 *"종강은 클래스노트에 반이 살아있는 한은 계속 보내고, 이후에 반이 사라지면 반 선택이 뜨도록"*.
@@ -88,12 +76,12 @@ export function sendClassRow(r: { id: unknown; student_id: unknown; class_id: un
   return { id: r.id as string, studentId: r.student_id as string, classId: (r.class_id as string | null) ?? null };
 }
 
-/** 반별 발송 대상 수학 행인가(ClassNote 모듈 + '수학 발송 경로' + 작성 강사) — 보낼 반 게이트를 태울 행. */
+/** 반별 발송 대상 수학 행인가(ClassNote 모듈 켜짐 + 수학) — 보낼 반 게이트를 태울 행. */
 export function isSendClassRouteRow(
   settings: Parameters<typeof classRouteActive>[0],
   r: { subject?: unknown; teacher_name?: unknown },
 ): boolean {
-  return SEND_CLASS_SUBJECTS.has((r.subject as string | null) ?? "") && classRouteActive(settings, (r.teacher_name as string | null) ?? null);
+  return SEND_CLASS_SUBJECTS.has((r.subject as string | null) ?? "") && classRouteActive(settings);
 }
 
 /** 보낼 반이 없어 발송을 막을 때의 안내(원장 2026-09-30 *"담당 반이 없으면 보고서 발송 불가능하게"*) — 서버·화면 한 벌. */

@@ -242,8 +242,6 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     classnoteSharedBoardAllowlist: [], // 공유 보드 발송 예외(빈=예외 없음 = 2가족+ 보드는 전부 보류). 확인된 '같은 학생 다계정' 보드명만.
     classnoteSendWindowStart: "", // 발송 허용 시간창 시작(KST HH:MM). 빈 값=무제한(기존 동작) — 둘 다 채워야 활성.
     classnoteSendWindowEnd: "", // 발송 허용 시간창 종료(KST HH:MM). 빈 값=무제한.
-    classnoteMathRoute: "class", // 수학 발송 경로 — 기본 = 반별 발송(2026-11-04 — 1인 보드에 원아를 배정하지 않는다 · 워커 normalizeRouteConfig와 같은 기본).
-    classnoteMathRoutePilot: [], // pilot일 때 반 보드로 보내는 강사(표시 이름). 빈 값 = 아무도 반 보드로 안 감.
     classnoteParentReplyMode: "off", // 학부모 글 답글·공감 — 기본 끔(없는 기능). 시험 = 학원이 테스트 보드만, 전체 = 확정 연결이 맞는 글.
   },
   // 권한 override는 sparse(빈 배열) — 진짜 기본값은 permissions.ts의 MENU_ACCESS. 매트릭스 복제 금지.

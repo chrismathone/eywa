@@ -6,13 +6,6 @@
 // 게시 직전 ClassNote를 **다시 읽어** 그 원아가 아직 그 반에 배정돼 있는지 확인하고(TOCTOU), 게시 뒤에는
 // 같은 반 다른 원아의 알림장을 훑어 이 보고서 링크가 새지 않았는지 본다(마지막 차단).
 import { fetchBoardChildren, fetchChildDetail, findChildReportId } from "./classnote-admin-core.mjs";
-import { normalizeRouteConfig } from "./class-route-decide.mjs";
-
-/** 설정 직독(allowlist와 같은 패턴 — 앱 캐시 무관, 커밋값 즉시). */
-export async function getClassnoteMathRoute(sql, tenant) {
-  const [row] = await sql`select data->'report' as report from tenant_settings where tenant_id = ${tenant}`;
-  return normalizeRouteConfig(row?.report ?? null);
-}
 
 /**
  * 이 학생을 이 반 보드로 게시할 수 있는가 — **반 보드 연결(0302a) + 그 학생의 원아 매칭이 ok**인 수학 반(원장 2026-09-30).

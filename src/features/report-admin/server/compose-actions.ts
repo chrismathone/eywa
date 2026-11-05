@@ -493,11 +493,11 @@ export async function saveAndQueueAdminReport(
     if (!conflictRows?.length) return await unqueuedStatus(supabase, saved.id, saved.shareToken);
     return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "name_conflict" };
   }
-  // 반별 발송(ClassNote 모듈 + '수학 발송 경로') — 🔴 원장 2026-09-30: 보고서 반 = 출석부 반 = 발송 반(원스크린과 같은 규칙).
+  // 반별 발송(ClassNote 모듈 켜짐 · 수학은 늘 반별) — 🔴 원장 2026-09-30: 보고서 반 = 출석부 반 = 발송 반(원스크린과 같은 규칙).
   //  · 반이 붙은 보고서 = 그 반 보드로만. 이 학생이 받을 반 보드가 없으면 막는다(다른 반으로 보내지 않는다 — 반 보드 동기화 필요).
   //  · 반 없는 보강 = 보강 반(저장이 확인해 적은 앵커)의 반 보드로만. 보드가 없으면 반을 고르게 하고, 고른 반은 다시 저장을 지나
   //    새 보강 반이 된다(출석부 칸도 함께). 반 없는 정규 행(모호해 반을 못 정한 행)은 보낼 곳이 없다 — 막는다.
-  const shownTeacher = input.teacherName?.trim() || user.displayName; // 워커가 경로를 보는 teacher_name과 같은 값(upsertAdminReport)
+  const shownTeacher = input.teacherName?.trim() || user.displayName; // 보고서에 적히는 teacher_name과 같은 값(upsertAdminReport) — 경로 판정엔 더 쓰지 않는다(2026-11-05)
   const routeApplies = classRouteActive(settings, shownTeacher);
   let sendClassId: string | null = null;
   let sendClassVia: string | null = null;

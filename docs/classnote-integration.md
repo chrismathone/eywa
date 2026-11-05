@@ -70,7 +70,7 @@ SQL 적용이나 발송 PC 교체는 필요 없다. [검수 기록과 화면 증
 - **몇 번 나갔나** = `sent` 줄 + `sent_at`이 찍힌 `failed` 줄(게시 뒤 교차 확인 이상으로 실패 처리한 것). ⚠️ '일부 계정에만 게시'·'게시 응답 없음' 실패는
   나갔을 수도 있다(`sent_at` 없음 — `error` 문구로 가른다). 실패 줄은 행에 남은 옛 발송 시각을 물려받지 않는다.
 - **사본(snapshot)**: 학부모 카드 칸(교재·진도·오늘 과제·일일/확인테스트·exam_info·지난 과제 수행률·수업 태도·멘트·학습 추세·첨부 목록·공유 토큰·
-  영상 숙제 칸·담임 표기) + 학생 이름·학교·학년 + 반 이름 + 카드 표시 설정(`show*`·제목·수학 발송 경로). `sent`·`failed`는 **그 회차에 연동 PC가 집은 순간**의 사본
+  영상 숙제 칸·담임 표기) + 학생 이름·학교·학년 + 반 이름 + 카드 표시 설정(`show*`·제목 · 옛 '수학 발송 경로' 두 키는 2026-11-05에 걷었다 — 저장된 값은 그 지점의 **다음 보고서 설정 저장 때** 빠지고, 그 전까지는 사본에 그대로 담긴다). `sent`·`failed`는 **그 회차에 연동 PC가 집은 순간**의 사본
   (캡처 수 초~수 분 전 — 게시하는 동안 고친 내용은 섞이지 않는다. 한 번에 2건을 집어 둘째 건은 첫째 건 게시 뒤 캡처하므로 그 사이 고친 내용은 캡처엔 있고
   사본엔 없을 수 있다 · 집은 줄이 없으면 그 순간의 행), `cleared`·`deleted`는 지우기 직전. `snapshot_at` = 사본을 뜬 시각.
 - **누가**: `actor_id` = 그 변화를 일으킨 로그인 사용자(연동 PC·관리 키 경로는 비어 있다) · `db_role` = 그 쓰기의 DB 역할(`eywa_sync_agent` = 연동 PC ·
@@ -413,7 +413,7 @@ aywa 쪽 특례는 같은 날 전부 걷어냈다.)
 
 ### 수학 반별 발송의 '보낼 반' 규칙 (2026-09-30 원장)
 
-ClassNote 모듈이 켜져 있고 보고서 설정 '수학 발송 경로'가 반별(또는 시범 강사)일 때만 적용된다. 판정 = `classRouteActive`.
+ClassNote 모듈이 켜져 있으면 적용된다(수학은 늘 반별 — 옛 보고서 설정 '수학 발송 경로'는 2026-11-05에 걷었다). 판정 = `classRouteActive`.
 모듈이 꺼진 학원은 아래가 전부 없다(예전 그대로).
 
 - **보고서 반에 살아 있는 반 보드가 있으면 그 반으로 보낸다.** 살아 있다 = 0302a 연결이 있고 그 학생의 원아가 ok로 매칭돼 있다(`classBoardLiveForStudent`).
@@ -720,7 +720,7 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 | 생성·배정 | [`provision-math-class-boards.mjs`](../scripts/_classnote/provision-math-class-boards.mjs) | 드라이런 기본 · `--apply --only --limit` · 반마다 원아 정확히 대조 · 끝에 1인 보드 무변경 확인 · `--sync-db` = 0302a 기록 |
 | 담임 연결 | [`provision-math-class-teachers.mjs`](../scripts/_classnote/provision-math-class-teachers.mjs) | 확인된 대응표만(`TEACHER_MAP` — 김은정=셀린·이수진=수진T) · 선생님별 연결 수 +N 검증 |
 | 대상 반 | [`math-class-boards-load.mjs`](../scripts/_classnote/math-class-boards-load.mjs) | 활성 수학 · **보고서 발송 반만**(미발송 JJ 자리 반 제외 — 2026-11-04 되돌림 · 11-03에 잠깐 넣었던 'JJ 맞춤'을 거뒀다 · §10.5-b) · **특강 포함**(2026-09-30) · **종강(closed_at) 제외**(종강 반 6개를 만들었다 지운 사고 — 이미 연결된 종강 반은 보드가 살아 있는 동안 연결 유지) |
-| 발송 경로 | [`class-route-decide.mjs`](../scripts/_classnote/class-route-decide.mjs)(순수) + [`classnote-class-route.mjs`](../scripts/_classnote/classnote-class-route.mjs) | 보고서 설정 `classnoteMathRoute` personal/class/pilot · 반별 = 저장 원아 → ClassNote 재확인 → 게시 → 같은 반 다른 원아 교차 확인(새면 **비상 정지**) |
+| 발송 경로 | [`class-route-decide.mjs`](../scripts/_classnote/class-route-decide.mjs)(순수) + [`classnote-class-route.mjs`](../scripts/_classnote/classnote-class-route.mjs) | 수학 = 늘 반별(옛 보고서 설정 `classnoteMathRoute` personal/class/pilot은 2026-11-05에 걷었다 — 워커도 읽지 않는다) · 저장 원아 → ClassNote 재확인 → 게시 → 같은 반 다른 원아 교차 확인(새면 **비상 정지**) |
 | 매일 동기화 | [`math-class-boards-sync.mjs`](../scripts/_classnote/math-class-boards-sync.mjs) + [`math-class-boards-apply.mjs`](../scripts/_classnote/math-class-boards-apply.mjs) | 워커 KST 05시 이후 하루 1회(연결표가 빈 지점은 안 돈다) · 연결표 **번호 기준**(이름 바뀌면 PATCH) · 새 반·신입 배정·담임·0302a 갱신 · 이상하면 멈추고 기록 안 함 · 회차마다 **동기화 보고서**(0329a — 변동·실패·보류 + 이유, 해제 대상)를 남긴다 → 앱 '동기화 보고서 다운로드' |
 | C.N 라벨 | [`classnote-match.ts`](../src/features/onescreen/classnote-match.ts) · [`cn-badge.tsx`](../src/features/onescreen/components/cn-badge.tsx) | 원스크린 카드·표 모드. 초록 = 확인된 배정 |
 
@@ -855,7 +855,7 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 - **신입 1인 보드 준비**: 대상 계산(aywa DB)이 ClassNote 로그인보다 **먼저** — 범위 안에 발송 과목 학생이 없으면 로그인하지 않는다.
 - **받지 않는 경우**: 모듈 꺼짐(버튼 없음) · 0313a 전(버튼 없음, 워커는 10분마다 표를 다시 확인) · 반 보드를 한 번도 안 쓴 지점(버튼 없음) · 실게시(`--post`) 새 워커가 살아 있지 않음(버튼은 보이되 잠기고 사유). dry-run 워커는 집지 않는다.
 - **권한**: 보고서 쓰기(원장·관리자·매니저) + **강사**(원스크린 '보낼 반' 고르기에서 필요가 생긴다 — 요청은 새벽과 같은 가드·상한·쿨다운이라 안전). '다른 강사 뷰'(열람 전용)는 막는다.
-- **자리 4곳**: 보고서 설정 '수학 발송 경로'(반별·시범일 때) · 발송 관리 'ClassNote 발송 큐' 관리 버튼 줄 · 반 단체 공지(새 반은 연결 뒤에야 목록에 뜬다) · 원스크린 '보낼 반' 고르기 창. 원스크린의 '보낼 반이 없어 발송할 수 없습니다' 알림(토스트)·원스크린 C.N 아이콘(툴팁)·관리자 직접 작성 '보낼 반' 칸에는 **아직 없다**(같은 날 보강 경로 작업이 그 파일들을 고치는 중이라 병합 뒤에 붙인다). 다만 2026-10-03부터 **정규 보고서가 반 보드 배정 전이라 막히면 버튼 없이도 그 자리에서 요청이 나간다**(같은 요청 함수 · `source: "send_blocked"` — 까닭이 '배정 중'·'새 반'·'가입 대기 보류'일 때만 — 그 밖의 보류·반을 떠난 학생은 요청하지 않는다. 상세 [`decisions/reports-ai.md`](decisions/reports-ai.md)).
+- **자리 4곳**: 보고서 설정 '수학 반 보드'(옛 '수학 발송 경로' 자리) · 발송 관리 'ClassNote 발송 큐' 관리 버튼 줄 · 반 단체 공지(새 반은 연결 뒤에야 목록에 뜬다) · 원스크린 '보낼 반' 고르기 창. 원스크린의 '보낼 반이 없어 발송할 수 없습니다' 알림(토스트)·원스크린 C.N 아이콘(툴팁)·관리자 직접 작성 '보낼 반' 칸에는 **아직 없다**(같은 날 보강 경로 작업이 그 파일들을 고치는 중이라 병합 뒤에 붙인다). 다만 2026-10-03부터 **정규 보고서가 반 보드 배정 전이라 막히면 버튼 없이도 그 자리에서 요청이 나간다**(같은 요청 함수 · `source: "send_blocked"` — 까닭이 '배정 중'·'새 반'·'가입 대기 보류'일 때만 — 그 밖의 보류·반을 떠난 학생은 요청하지 않는다. 상세 [`decisions/reports-ai.md`](decisions/reports-ai.md)).
 - **감사로그**: `classnote_board_sync_request`(누른 사람 — 합류 포함) · `classnote_board_sync_run`(연동 PC 직접 insert, 실행자 `system:classnote-sync-now` — 반·배정·보류·남은 반 수, 실패 사유).
 - ⚠️ **워커 zip 교체 필요** — 옛 워커엔 `caps.syncRequests`가 없어 앱이 요청을 받지 않는다(버튼이 '연동 PC가 꺼져 있거나 옛 버전' 사유로 잠김).
 
