@@ -51,7 +51,7 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
-import { createLinkDocument, createTextDocument, deleteDocument, registerUploadedDocument, signDocumentUrl, toggleDocumentPin } from "./actions";
+import { createLinkDocument, createTextDocument, deleteDocument, registerUploadedDocument, signDocumentUrl, toggleDocumentPin, updateDocument } from "./actions";
 
 const form = (o: Record<string, string>) => {
   const f = new FormData();
@@ -107,6 +107,18 @@ describe("자료실 — 제한 문서는 대상 역할로 거른다", () => {
     await deleteDocument("refund");
     expect(m.calls).toHaveLength(2);
     for (const c of m.calls) expect(c.filters).toContainEqual(RESTRICTED);
+  });
+
+  it("🔴 수정도 같은 벽 — 현재 행 조회와 수정 문장 모두 restricted=false로 좁힌다(못 보는 제한 문서를 id로 고치지 못한다)", async () => {
+    expect(await updateDocument(undefined, form({ id: "refund", title: "바꾼 제목", category: "etc" }))).toMatchObject({ ok: true });
+    const touched = m.calls.filter((c) => c.op === "select" || c.op === "update");
+    expect(touched.map((c) => c.op)).toEqual(["select", "update"]);
+    for (const c of touched) expect(c.filters).toContainEqual(RESTRICTED);
+    // 못 보는 제한 문서면 좁힌 조회에 걸리지 않아 수정 문장까지 가지 않는다.
+    m.calls = [];
+    m.row = null;
+    expect(await updateDocument(undefined, form({ id: "refund", title: "바꾼 제목", category: "etc" }))).toEqual({ error: "문서를 찾을 수 없습니다" });
+    expect(m.calls.some((c) => c.op === "update")).toBe(false);
   });
 
   it("강사뷰가 아닌 원장은 종전대로(제한 문서 필터 없음 — DB가 실제 역할로 판정)", async () => {

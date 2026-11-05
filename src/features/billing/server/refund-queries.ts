@@ -1,6 +1,7 @@
 import "server-only";
 import { receiptHistoryLines } from "../invoice-line-items";
 import { createClient } from "@/lib/supabase/server";
+import { hideRestrictedDocuments } from "@/features/documents/server/restricted";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { getStudentEnrollments } from "@/features/students/server/queries";
@@ -31,12 +32,15 @@ function authorNameOf(u: unknown): string | null {
 
 /** 환불 요청서 전건(최신순) — 건수가 작아 소량, 페이지네이션은 호출부 메모리 슬라이스(이력서 패턴). */
 export async function getRefundRequests(): Promise<RefundListRow[]> {
-  const supabase = await createClient();
-  const { data } = await supabase
+  // 🔴 요청서는 restricted(계좌·환불금액) — DB는 로그인 계정 역할로만 거른다. '다른 강사 뷰'면 대상 X의 역할로 한 번 더(자료실과 같은 판정,
+  //    documents/server/restricted.ts). 평소 사용자에게는 DB와 같은 결과다(같은 역할 목록).
+  const [supabase, hideRestricted] = await Promise.all([createClient(), hideRestrictedDocuments()]);
+  let qb = supabase
     .from("academy_documents")
     .select("id, form_data, created_at, updated_at, uploader:uploaded_by(display_name)")
-    .eq("form_type", REFUND_FORM_TYPE)
-    .order("created_at", { ascending: false });
+    .eq("form_type", REFUND_FORM_TYPE);
+  if (hideRestricted) qb = qb.eq("restricted", false);
+  const { data } = await qb.order("created_at", { ascending: false });
   return (data ?? []).map((r) => {
     const d = normalizeRefund(r.form_data);
     return {
@@ -166,13 +170,15 @@ export type RefundDetail = {
 };
 
 export async function getRefundRequestById(id: string): Promise<RefundDetail | null> {
-  const supabase = await createClient();
-  const { data } = await supabase
+  // 목록과 같은 벽 — 대상 X가 못 보는 요청서는 id로 직접 열어도 없다(getRefundRequests 주석).
+  const [supabase, hideRestricted] = await Promise.all([createClient(), hideRestrictedDocuments()]);
+  let qb = supabase
     .from("academy_documents")
     .select("id, form_data, created_at, updated_at, uploader:uploaded_by(display_name)")
     .eq("id", id)
-    .eq("form_type", REFUND_FORM_TYPE)
-    .maybeSingle();
+    .eq("form_type", REFUND_FORM_TYPE);
+  if (hideRestricted) qb = qb.eq("restricted", false);
+  const { data } = await qb.maybeSingle();
   if (!data) return null;
   return {
     id: data.id,

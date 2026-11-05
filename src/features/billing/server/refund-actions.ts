@@ -4,9 +4,8 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { logAction } from "@/features/audit/server/log";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { viewAsTeacher } from "@/lib/auth/view-as";
+import { canSeeRestrictedDocuments } from "@/features/documents/server/restricted";
+import { teacherViewReadDb, writeSessionFirst } from "./teacher-view-db";
 import {
   normalizeRefund,
   parseRefundForm,
@@ -36,23 +35,26 @@ export type RefundActionState =
 
 // 🔑 행위자 = '다른 강사 뷰'의 대상 직원(`getCurrentUser({ teacherView: true })`) — 작성자(uploaded_by)·환불완료 처리자(completedBy)가
 //    대상 명의다(원장 2026-11-05 강사뷰 전수). '읽기' 강사뷰는 canWriteTenant가 막는다. 감사로그 행위자는 로그인 계정(logAction).
+// 🔴 요청서는 전부 restricted(계좌·환불금액) — DB 백스톱(0170a academy_documents_restricted_guard)은 restricted 행을 **사무 역할**
+//    (master·admin·manager·accountant)에게만 연다. 수납 쓰기 권한(개인 예외 등)만 있는 다른 역할은 DB가 거절·0행으로 막는다 → 앱도
+//    같은 역할 목록(canSeeRestrictedDocuments, 대상 X의 역할)으로 먼저 막는다. 평소 사용자에게는 DB와 같은 결과다.
 async function requireBillingWrite() {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" as const };
-  if (!(await canWriteTenant(user.systemRole, "billing"))) {
+  if (!(await canWriteTenant(user.systemRole, "billing")) || !canSeeRestrictedDocuments(user.systemRole)) {
     return { error: "수납관리 권한이 없습니다" as const };
   }
   return { user };
 }
 
 /**
- * 요청서 행을 읽고 쓰는 클라이언트 — 평소엔 세션(RLS). '다른 강사 뷰'면 관리 클라이언트: DB의 restricted 백스톱(0072a·0148a)이
+ * 요청서 행을 **읽는** 클라이언트 — 평소엔 세션(RLS), '다른 강사 뷰'면 관리 클라이언트(teacher-view-db.ts): DB의 restricted 백스톱이
  * **로그인 계정의 역할**(`auth_system_role()`)로 사무실 여부를 보므로, 대상 직원(회계 등)이 쓸 수 있는 요청서가 로그인 계정 역할에 따라
- * 조용히 0행이 된다. 앱 게이트(대상의 수납 쓰기)를 지난 뒤에만 부르고, 모든 조회·변경에 tenant_id를 명시한다.
+ * 조용히 0행이 된다. **쓰기**는 `writeSessionFirst` — A의 세션으로 먼저(활동 기록·환불 데스크 할 일 닫기 s2_0011의 행위자 = auth.uid()),
+ * 막힐 때만 관리 클라이언트. 앱 게이트(대상의 수납 쓰기 + 사무 역할)를 지난 뒤에만 부르고, 모든 조회·변경에 tenant_id를 명시한다.
  */
 async function refundDb(tenantId: string) {
-  if (await viewAsTeacher()) return { db: createAdminClient(), tenantId };
-  return { db: await createClient(), tenantId };
+  return { db: (await teacherViewReadDb()).db, tenantId };
 }
 
 /**
@@ -96,12 +98,13 @@ export async function saveRefundRequest(
       .maybeSingle();
     const prev = existing ? normalizeRefund(existing.form_data) : null;
     const data = stampCompletion(parsed, prev, gate.user);
-    const { error } = await supabase
+    const { error } = await writeSessionFirst("mutate", (db) => db
       .from("academy_documents")
       .update({ title: refundTitle(data), form_data: data, updated_at: new Date().toISOString() })
       .eq("tenant_id", tenantId)
       .eq("id", id)
-      .eq("form_type", REFUND_FORM_TYPE);
+      .eq("form_type", REFUND_FORM_TYPE)
+      .select("id"));
     if (error) return { error: `저장 실패: ${error.message}` };
     await logAction({ action: "refund_request_update", ...refundAuditFields(id, data, prev) });
     revalidateRefund(id);
@@ -109,7 +112,7 @@ export async function saveRefundRequest(
   }
 
   const data = stampCompletion(parsed, null, gate.user); // 생성 시 완료일자를 함께 넣으면 작성자가 완료자로 기록.
-  const { data: row, error } = await supabase
+  const { data: row, error } = await writeSessionFirst("insert", (db) => db
     .from("academy_documents")
     .insert({
       tenant_id: tenantId,
@@ -123,7 +126,7 @@ export async function saveRefundRequest(
       uploaded_by: gate.user.id,
     })
     .select("id")
-    .single();
+    .single());
   if (error || !row) return { error: `저장 실패: ${error?.message ?? "unknown"}` };
   await logAction({ action: "refund_request_create", ...refundAuditFields(row.id, data, null) });
   revalidateRefund(row.id);
@@ -208,13 +211,13 @@ export async function deleteRefundRequest(id: string): Promise<{ ok?: boolean; e
     .eq("id", id)
     .eq("form_type", REFUND_FORM_TYPE)
     .maybeSingle();
-  const { data: gone, error } = await supabase
+  const { data: gone, error } = await writeSessionFirst("mutate", (db) => db
     .from("academy_documents")
     .delete()
     .eq("tenant_id", tenantId)
     .eq("id", id)
     .eq("form_type", REFUND_FORM_TYPE)
-    .select("id");
+    .select("id"));
   if (error) return { error: `삭제 실패: ${error.message}` };
 
   // RLS에 막히면 PostgREST가 에러 없이 0행을 지운다 — 안 지워진 삭제를 감사로그가 사실로 적지 않게 한다.

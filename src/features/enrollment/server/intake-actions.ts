@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { createClient } from "@/lib/supabase/server";
 import { explainDbError } from "@/lib/supabase/db-error";
 import { after } from "next/server";
@@ -29,8 +30,13 @@ import { cleanReferrerName } from "@/features/enrollment/referrer";
 
 // ───────────────────────── 토큰 관리 (직원, 인증) ─────────────────────────
 
+// 🔑 행위자 = '다른 강사 뷰'의 대상 직원(`getCurrentUser({ teacherView: true })`) — 접수 링크의 만든 사람(created_by)이 대상 명의다
+//    (원장 2026-11-05 강사뷰 전수 · 적대 리뷰). 감사로그 행위자는 로그인 계정(logAction). intake_tokens RLS는 지점 격리뿐이라 세션으로 쓴다.
+//    토큰 관리는 전부 쓰기다 — 열람 전용 강사뷰(·지점 보기)는 맨 앞에서 거절한다(accessLevelTenant도 읽기로 누르지만 명시한다).
 async function requireIntakeAdmin() {
-  const user = await getCurrentUser();
+  const readonly = await readonlyTeacherViewError();
+  if (readonly) return { user: null, error: readonly };
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { user: null, error: "로그인이 필요합니다" };
   const lvl = await accessLevelTenant(user.systemRole, "enrollment");
   if (lvl !== "full" && lvl !== "scoped") return { user: null, error: "신규 콜&상담 권한이 없습니다" };
