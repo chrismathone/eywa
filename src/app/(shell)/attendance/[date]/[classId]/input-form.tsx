@@ -311,8 +311,11 @@ export function AttendanceInputForm({
   return (
     <form onSubmit={(e) => submitAction(e, formAction)} className="space-y-4">
       {/* 잠금은 fieldset 하나로 — 컨트롤을 하나씩 disabled 처리하면 새 입력이 생길 때마다 빠뜨린다.
-          ⚠️ 진짜 게이트는 서버 액션(saveAttendance)이다(#77). 여기선 헛수고를 없앨 뿐. */}
-      <fieldset disabled={locked} className={locked ? "opacity-60" : undefined}>
+          ⚠️ 진짜 게이트는 서버 액션(saveAttendance)이다(#77). 여기선 헛수고를 없앨 뿐.
+          🔴 간격(`space-y-4`)은 **fieldset이** 준다 — 일괄 바·명단·저장 줄이 전부 이 안이라 form의 `space-y-4`는 안 먹고
+             블록이 0px로 붙었다(2026-07-22 fieldset 도입 때의 퇴행). `min-w-0` = fieldset 기본 최소 폭(min-content)이
+             좁은 창에서 명단을 가로로 밀어내지 않게. hidden input은 display:none이라 간격에 끼지 않는다. */}
+      <fieldset disabled={locked} className={`min-w-0 space-y-4 ${locked ? "opacity-60" : ""}`}>
       <input type="hidden" name="classId" value={classId} />
       <input type="hidden" name="date" value={date} />
 

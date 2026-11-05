@@ -74,6 +74,15 @@ export function Toolbar({
 }
 
 /**
+ * 툴바 컨트롤 자리 **스켈레톤** — `loading.tsx`의 툴바 줄은 실물 `<Toolbar>`에 이것을 늘어놓는다(줄 여백·간격·레일이 실물과 같다).
+ * 높이는 실 컨트롤과 같은 변수(`CONTROL_H` = `--control-h`) · 라운드는 칩·드롭다운과 같은 `rounded-lg`. 폭만 `className`(w-*)으로.
+ * 🔴 2026-11-05 스켈레톤 2차 검수: 툴바를 `<Toolbar>` 없이 손으로 그린 스켈레톤들이 `py-1`을 빠뜨려 8px 낮았다.
+ */
+export function ToolbarSkeletonItem({ className = "w-36" }: { className?: string }) {
+  return <div aria-hidden className={`bg-bg-soft ${CONTROL_H} shrink-0 animate-pulse rounded-lg ${className}`} />;
+}
+
+/**
  * 긴 툴바를 모바일에서만 여러 레일로 쪼개는 줄 래퍼(`.toolbar-rail-row`).
  * 데스크톱·창은 `display:contents`라 이 래퍼가 없는 것과 같다 — DOM 순서를 그대로 둘 것.
  */

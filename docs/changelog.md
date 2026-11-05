@@ -1,5 +1,15 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-05 — 스켈레톤 2차 전수 검수: 공용 짝 스켈레톤 · 하위 화면 잠금 · 69개를 실화면 모양으로
+
+- 원장 *"전체 스켈레톤 페이지 최신으로 검수."* → *"스켈레톤은 추천대로 진행해"*. 검수 = 52개 중 47개가 실화면과 어긋남(계획 `D:\tmp\skeleton-audit-2026-11-04\PLAN.md`). 원인 둘: ① 공용 부품(면 탭·요약 띠·숫자 카드·툴바)을 **손으로 베낀** 스켈레톤이 부품 변경(09-11 면 탭 밑줄·요약 띠 전환 등)을 못 따라감 ② **하위 화면이 부모 스켈레톤을 받음**(보강 상세·회의록 새로 만들기 등에 목록 스켈레톤).
+- 공용 부품(실물과 같은 치수 상수를 공유): `FaceTabsSkeleton`(`labels`·`dividers` — 칸 폭까지 실물) · `StatStripSkeleton`(`sub` 칸별) · `BigStatSkeleton` · `ToolbarSkeletonItem`(실물 `<Toolbar>` 안) · `PageHeaderSkeleton` `stats` 자리(실물과 같은 세로 간격) · `PeriodNavSkeleton`·`SheetClassPickerSkeleton`·`SheetFaceSwitchSkeleton` · `SkeletonLine`·`SkeletonText`(글자 토큰이 Tailwind 기본보다 한 단계 큼 — `text-sm` 한 줄 24px, `h-5`로 적은 막대가 줄마다 4~8px 짧았다). 실물 쪽은 상수만 꺼냄(`face-tabs-classes.ts`·`period-nav-metrics.ts`·`chrome.ts` — 값 그대로).
+- 가드: 새 `skeleton-pairs.test.ts`(① 화면이 FaceTabs·StatStrip·BigStat을 그리면 덮는 스켈레톤이 짝을 **JSX로** 그린다 — 예외 1 `attendance/live` 지난 기록 면 ② 부모 스켈레톤을 받는 하위 화면은 목록으로 잠금 — 지금 0, 리다이렉트만 하는 화면 제외) · `skeleton-canon` 공용 부품 허용(JSX 사용 + 화면 전용 스켈레톤 부품까지) · `control-scale` 상수 모듈까지 함께 읽기. 문서 `design-conventions.md`·`design-lint.md`(편집기 스켈레톤 eslint 예외 = 설정·표).
+- 운영실: `loading.tsx` = 머리 + KPI만 → 배치(역할·저장 배치·디자인)를 안 뒤 Suspense로 본문 뼈대(원장 기본 격자·자유 격자·계기판). `loadOverview`에 `onView` 알림 — 쿼리·권한·캐시·대기 순서 그대로(새 시험 `server-on-view.test.ts`가 순서·동시 시작·실패 전파를 고정, 줄을 지우면 실패함을 확인).
+- 새 하위 스켈레톤 17개: 출결 반 입력 · 지출 결의서 · 환불 상세/새로 · 운영실 공지 · 영상 숙제 · 보강 상세/새로/후보/모의/대사 · 회의록 상세/새로 · 고객센터 공지/요청 상세/요청 새로 · 영어 시트.
+- 실물 고침(리뷰에서 발견): 출결 반 입력 fieldset이 form 간격을 삼켜 블록이 붙어 있던 것(07-22 퇴행 → `space-y-4`) · 성적관리 툴바 고르기 상자 42px → 컨트롤 높이(`TOOLBAR_SELECT`, 입력·보기와 같게) · JJ 링크 `/exams?` → `/exams/input?`(옛 주소는 통합 화면으로 가던 버그).
+- 검증: tsc 새 오류 0 · eslint 0 · 관련 시험 통과 · 영역별 적대적 리뷰 7회 + 수리분 재리뷰 4회. 남은 것: 스켈레톤이 없는 화면(범위 밖) · 데이터에 따라 서는 블록(기한 경과 배너·조치 목록 등)과 폰의 긴 라벨 줄바꿈은 근사 · 기존 실패 2(`control-scale` levels-lead `text-[11px]` · `no-left-accent-bar` 계기판 CSS — 이번 변경 밖).
+
 ## 2026-11-05 — 원스크린: SRS 보고서는 진도 없이 저장·발송
 
 - 원장 *"srs보고서의 경우 진도 영역이 필요없자나 필수로 넣지말아줘"*. 영어 행 + 지금 글이 SRS(JJ) 글이면(`isProgressOptionalReport`, jj-books.ts — 사랑의 한마디 선택과 같은 판정) 진도 게이트를 건너뛴다 · `isReportEligible`/`isRowActionable`에 `progressOptional` · 표·카드·일괄 저장/발송/자동작성·첨부 저장 전부 같은 값. 서버는 원래 진도를 요구하지 않는다.

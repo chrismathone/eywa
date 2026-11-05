@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import { faceTabOverflow, faceTabScrollTo } from "@/components/face-tab-scroll";
+import { FACE_TAB_ITEM, FACE_TABS_NAV, FACE_TABS_NAV_LEVEL } from "@/components/face-tabs-classes";
 import { useSheetText } from "@/features/teacher-view/lang-context";
 
 /**
@@ -84,9 +85,8 @@ export function FaceTabs({
         ref={scrollerRef}
         aria-label={text(ariaLabel)}
         // URL을 여는 링크 탐색이다. 버튼 탭의 ARIA 역할 대신 현재 페이지를 알린다.
-        className={`scrollbar-hide border-line flex min-h-(--control-h) items-stretch gap-1 overflow-x-auto ${
-          level === "primary" ? "border-b pb-1" : "w-fit max-w-full rounded-lg border bg-bg-soft/40 px-0.5"
-        }`}
+        // 치수는 스켈레톤(face-tabs-skeleton.tsx)과 같은 상수 — 여기서 고치면 로딩 화면도 따라온다.
+        className={`${FACE_TABS_NAV} ${FACE_TABS_NAV_LEVEL[level]}`}
       >
         {faces.map((f, i) => {
           const on = f.key === active;
@@ -105,7 +105,7 @@ export function FaceTabs({
                 href={embed ? withEmbed(f.href) : f.href}
                 replace
                 aria-current={on ? "page" : undefined}
-                className={`inline-flex h-(--control-h) shrink-0 items-center rounded-md px-2 text-(length:--control-label) leading-none whitespace-nowrap transition focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary ${
+                className={`${FACE_TAB_ITEM} text-(length:--control-label) leading-none whitespace-nowrap transition focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary ${
                   on
                     ? level === "primary" ? "bg-primary text-primary-foreground font-medium" : "bg-primary-soft text-primary font-bold"
                     : "text-text-dim hover:text-foreground hover:bg-bg-soft font-medium"

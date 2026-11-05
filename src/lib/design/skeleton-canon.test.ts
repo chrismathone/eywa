@@ -1,8 +1,23 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const APP = join(process.cwd(), "src", "app");
+
+/**
+ * 스켈레톤 원문 + 그것이 직접 import한 **로컬 스켈레톤 부품**(경로에 `skeleton`이 든 파일) 원문 — 화면 전용 스켈레톤 부품
+ * (`VideoLedgerSkeleton` 등)이 툴바를 대신 그리는 loading.tsx도 같은 기준으로 본다(skeleton-pairs 가드와 같은 범위).
+ */
+function withSkeletonParts(file: string): string {
+  const src = readFileSync(file, "utf8");
+  const parts = [src];
+  for (const m of src.matchAll(/from\s+"(\.{1,2}\/[^"]*skeleton[^"]*|@\/[^"]*skeleton[^"]*)"/gi)) {
+    const spec = m[1];
+    const base = spec.startsWith("@/") ? join(process.cwd(), "src", spec.slice(2)) : resolve(dirname(file), spec);
+    for (const f of [`${base}.tsx`, join(base, "index.tsx")]) if (existsSync(f)) parts.push(readFileSync(f, "utf8"));
+  }
+  return parts.join("\n");
+}
 
 function loadingFiles(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
@@ -30,11 +45,17 @@ describe("스켈레톤 캐논 — loading.tsx는 실표면과 같은 치수를 �
     expect(files.length).toBeGreaterThan(15);
   });
 
-  it("툴바·상단 바·면 탭을 그리는 스켈레톤은 컨트롤 높이를 **변수**로 가리킨다", () => {
+  it("툴바·상단 바·면 탭을 그리는 스켈레톤은 컨트롤 높이를 **변수**로 가리킨다(또는 그 변수를 쓰는 공용 스켈레톤 부품)", () => {
+    // 공용 부품(2026-11-05) = `ToolbarSkeletonItem`(toolbar.tsx) · `FaceTabsSkeleton`(face-tabs-skeleton.tsx) · `PeriodNavSkeleton`
+    // (period-nav-skeleton.tsx) · `SheetClassPickerSkeleton`·`SheetFaceSwitchSkeleton`(class-sheets sheet-chrome-skeleton.tsx) — 모두
+    // 실물과 같은 상수로 `--control-h`를 쓴다.
+    // JSX로 **실제로 그린** 것만 센다 — 주석·import 줄에 이름만 있어도 통과하던 구멍(2026-11-05 재리뷰).
+    const SHARED = /<(ToolbarSkeletonItem|FaceTabsSkeleton|PeriodNavSkeleton|SheetClassPickerSkeleton|SheetFaceSwitchSkeleton)[\s/>]/;
     for (const f of files) {
       const src = readFileSync(f, "utf8");
       if (!/툴바|상단 바|면 탭/.test(src)) continue;
-      expect(src, rel(f)).toContain("--control-h");
+      const all = withSkeletonParts(f);
+      expect(all.includes("--control-h") || SHARED.test(all), rel(f)).toBe(true);
     }
   });
 
