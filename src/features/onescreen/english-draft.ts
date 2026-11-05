@@ -28,6 +28,7 @@ import { englishTemplateValues, englishTestText } from "@/features/report-templa
 import { mentionsStudentName } from "@/features/report-templates/name-mention";
 import { englishFactsKey, textHash, type EnglishFacts } from "@/features/report-templates/provenance";
 import { englishSheetValues } from "./english-sheet";
+import { monthlyEvalMarker, type MonthlyEval } from "@/features/report-templates/monthly-eval";
 import { progressWithMode } from "./progress-mode";
 
 /** 한 행의 사실 — 이미 사람이 읽는 표기(buildReportFields 결과·행 평가값)를 그대로 받는다. */
@@ -50,6 +51,8 @@ export type EnglishRowFacts = {
   progressMode?: string | null;
   /** 그날 출결 문장(attendance-sentence.ts, 2026-10-26) — 항목 보고서의 '출결' 칸. 출결 기록이 없으면 "". */
   attendance?: string;
+  /** 그 반의 Monthly Test 점수(2026-11-05, EiE 월간 보고서 — 로스터가 읽어 행에 싣는다). 없으면 `{월간평가}` 줄이 빠진다. */
+  monthly?: MonthlyEval | null;
 };
 
 /**
@@ -107,6 +110,7 @@ export function composeEnglishDraft(
     slots: facts.slots,
     // 항목 보고서 칸(2026-10-26) — 수학 새 보고서와 같은 문장(english-sheet.ts). 이 칸을 안 쓰는 템플릿엔 영향 없다.
     sheet: englishSheetValues(facts),
+    monthly: facts.monthly ?? null,
   });
   // 줄바꿈은 LF 하나로 — AI 문장에 CR이 섞이면 첨부 줄을 넣고 뺄 때 글이 한 글자 달라져 지문이 영영 안 맞는다(적대 리뷰 2026-09-11).
   return fillReportTemplate(template.body, values, { decorationTokens: TEMPLATE_DECORATION_TOKENS }).text.replace(
@@ -150,7 +154,8 @@ export function aiFactsHashOf(facts: EnglishRowFacts, nextTest: string): string 
 const LEGACY_FACT_TOKENS = ["학생", "작성자", "진도", "테스트", "숙제", "다음테스트"] as const;
 // 항목 칸(2026-10-26)도 사실이다 — 점수·태도·출결이 바뀌면 그 문장이 바뀐다. 역시 **뒤에** 붙인다(앞 칸들의 뜻 불변).
 // 단어백분위·학습배지(2026-10-26)도 맨 뒤 — 이 칸을 안 쓰는 템플릿의 지문은 그대로다(쓰는 칸만 센다).
-const FACT_TOKENS = [...LEGACY_FACT_TOKENS, "시험결과지", "학습분석지", ...SHEET_TOKEN_KEYS, "단어백분위", "학습배지"] as const;
+// 월간평가(2026-11-05)도 맨 뒤 — 성적을 고치면 그 줄이 바뀌니 사실이다(이 칸을 안 쓰는 템플릿의 지문은 그대로).
+const FACT_TOKENS = [...LEGACY_FACT_TOKENS, "시험결과지", "학습분석지", ...SHEET_TOKEN_KEYS, "단어백분위", "학습배지", "월간평가"] as const;
 export type FactToken = (typeof FACT_TOKENS)[number];
 
 function factValue(token: FactToken, facts: EnglishRowFacts, nextTest: string): string {
@@ -173,6 +178,8 @@ function factValue(token: FactToken, facts: EnglishRowFacts, nextTest: string): 
     case "단어백분위":
     case "학습배지":
       return facts.slots?.[token] ? imageSlotMarker(token) : "";
+    case "월간평가":
+      return facts.monthly ? monthlyEvalMarker(facts.monthly) : "";
     default:
       return englishSheetValues(facts)[token];
   }

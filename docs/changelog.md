@@ -1,5 +1,7 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-05 — EiE 일일 보고서(수학 보고서 표) · EiE 월간 보고서(시트 모양 · Monthly Test 점수 동결 줄 + Teacher's Comment) — 영어 기본 템플릿 둘 · 원스크린 로스터가 영어 반 Monthly Test 점수를 싣는다(실패·s2_0023 미적용이면 빈 결과) — 상세 [decisions/reports-ai.md](decisions/reports-ai.md) 'EiE 보고서 두 종류'
+
 ## 2026-11-04 — ClassNote 1인 보드 배정 금지 · 1인 보드 준비 없앰(AywaSync 1.0.14) · 남은 수학 1인 보드 원아 해제
 
 - 원장 *"앞으로 1인보드에 배정 시키지마 절대"* · *"남은것들도 같이 수정하고 필요하면 1.0.14"*.

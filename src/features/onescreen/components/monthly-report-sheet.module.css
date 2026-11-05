@@ -1,0 +1,195 @@
+/*
+ * EiE 월간 보고서 — 시트(Monthly Evaluation Report)의 색·글꼴을 그대로 옮긴 종이 서식(2026-11-05).
+ * 색은 시트 값 그대로라 디자인 토큰이 아니라 이 파일에만 둔다(종이 서식 예외 — 학원 앱 화면 색과 섞지 않는다).
+ */
+.sheet,
+.block {
+  --eie-red: #b3121b;
+  --eie-blue: #4285f4;
+  --eie-bar-red: #ea4335;
+  background: #fff;
+  color: #121212;
+  font-family: "Times New Roman", Times, serif;
+}
+
+.sheet {
+  border-left: 14px solid var(--eie-red);
+  border-right: 14px solid var(--eie-red);
+  padding: 18px 16px 22px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo {
+  width: 84px;
+  height: 84px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.headMain {
+  min-width: 0;
+  flex: 1;
+}
+
+.title {
+  margin: 0;
+  padding-bottom: 4px;
+  border-bottom: 4px solid var(--eie-red);
+  text-align: center;
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.info {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  border: 1px solid #121212;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.info td {
+  padding: 3px 4px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.info td:nth-child(3) {
+  border-left: 1px solid #121212;
+}
+
+.info tr + tr td {
+  border-top: 1px solid #121212;
+}
+
+.chart {
+  margin: 16px 0 0;
+  border: 1px solid #bdbdbd;
+  padding: 10px 12px 8px;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.chartTitle {
+  margin: 0;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.legend {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin: 4px 0 8px;
+  font-size: 0.75rem;
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  display: inline-block;
+}
+
+.avg {
+  background: var(--eie-blue);
+}
+
+.mine {
+  background: var(--eie-bar-red);
+}
+
+.plot {
+  display: grid;
+  grid-template-columns: 4.6rem 1fr;
+  row-gap: 10px;
+  font-size: 0.75rem;
+}
+
+.rowLabel {
+  align-self: center;
+  text-align: right;
+  padding-right: 6px;
+}
+
+.bars {
+  position: relative;
+  border-left: 1px solid #616161;
+  background-image: linear-gradient(to right, #e0e0e0 1px, transparent 1px);
+  background-size: 25% 100%;
+  padding: 3px 0;
+}
+
+.bar {
+  height: 11px;
+  min-width: 1px;
+}
+
+.bar + .bar {
+  margin-top: 2px;
+}
+
+.axis {
+  display: flex;
+  justify-content: space-between;
+  margin-left: 4.6rem;
+  padding-top: 2px;
+  font-size: 0.7rem;
+}
+
+.scores {
+  width: 100%;
+  margin-top: 14px;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.scores th,
+.scores td {
+  padding: 4px 2px;
+}
+
+.scores thead th {
+  background: #efefef;
+}
+
+.scores tbody th {
+  background: #efefef;
+  white-space: nowrap;
+}
+
+.commentTitle {
+  margin: 14px 0 4px;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.comment {
+  margin: 0;
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: keep-all;
+}
+
+.footer {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 0.75rem;
+  color: #616161;
+}

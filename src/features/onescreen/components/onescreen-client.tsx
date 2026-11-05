@@ -2806,6 +2806,8 @@ export function OneScreenClient({
       // 출결(원장 2026-10-26) — 출석부 칸 그대로(수학 보고서와 같은 문장, attendance-sentence.ts).
       // 보강 줄이면 결석 날짜·시간·사유를 붙인다(2026-10-26 — 수학과 같은 재료, report-comment.ts rowMakeupFacts).
       attendance: attendanceSentence(su.attendanceRaw, su.attendanceNote, rowMakeupFacts(student, su)),
+      // EiE 월간 보고서 점수(2026-11-05) — 로스터가 실어 둔 그 반 Monthly Test(english-monthly.ts).
+      monthly: su.monthlyEval ?? null,
       slots: slotFactsFor(
         jjKnownSlots(jjCache[jjDayKey(student.id, activeDate)]),
         rep?.autoDraft ?? rep?.draft ?? "",

@@ -10,6 +10,7 @@
  *    그래서 **키는 바꾸지 않는다** — 라벨만 바꾼다.
  */
 import { IMAGE_SLOT_KEYS, imageSlotMarker, type ImageSlotKey } from "./image-slots";
+import { monthlyEvalMarker } from "./monthly-eval";
 
 export type TemplateTokenKey =
   | "학생"
@@ -21,7 +22,9 @@ export type TemplateTokenKey =
   | "다음테스트"
   | "코멘트"
   | SheetTokenKey
-  | ImageSlotKey;
+  | ImageSlotKey
+  // EiE 월간 보고서 점수 자리(2026-11-05) — 값은 점수를 담은 한 줄(monthly-eval.ts). 그 달 Monthly Test 점수가 없으면 빈 값.
+  | "월간평가";
 
 /**
  * **항목 칸**(원장 2026-10-26 *"수학보고서 디자인을 영어보고서에도 적용"*) — 수학 새 보고서와 **같은 문장**을 영어 칸 값으로 만든 것.
@@ -96,6 +99,12 @@ export const ENGLISH_TEMPLATE_TOKENS: readonly TemplateToken[] = [
     key: "학습배지",
     label: "학습 배지(그림)",
     source: "인재원 학습 레벨 배지(통과한 학년 과정) — 아직 배지가 없으면 줄이 빠진다. 빼려면 이 줄을 지운다",
+    image: true,
+  },
+  {
+    key: "월간평가",
+    label: "Monthly Test 점수(그래프·표)",
+    source: "성적관리 영어 Monthly Test의 쓰기·말하기·읽기·듣기 점수와 반 평균 — 그 달 점수가 없으면 줄이 빠진다",
     image: true,
   },
 ] as const;
@@ -273,6 +282,69 @@ export const BUILTIN_JJ_SHEET_TEMPLATE: ReportTemplate = {
   ].join("\n"),
 };
 
+export const BUILTIN_EIE_DAILY_TEMPLATE_ID = "builtin:eie-daily";
+
+/**
+ * **EiE 일일 보고서**(원장 2026-11-05 *"eie는 … 월간 보고서와 일일보고서 두가지 종류로 … 일일보고서는 수학 일일보고서 디자인으로
+ * 하나 만들어줘"*). 수학 보고서와 같은 표(PilotReportSheet)로 그린다 — 항목 제목은 수학 `PILOT_SECTION_TITLES`와 글자까지 같다.
+ * 항목 보고서(기본)에서 인재원 결과지를 뺀 모양이다(EiE 반은 인재원 단어 시험을 보지 않는다).
+ */
+export const BUILTIN_EIE_DAILY_TEMPLATE: ReportTemplate = {
+  id: BUILTIN_EIE_DAILY_TEMPLATE_ID,
+  name: "EiE 일일 보고서",
+  builtIn: true,
+  body: [
+    "■ 수업 평가",
+    "{수업평가}",
+    "",
+    "■ 진도",
+    "{진도}",
+    "",
+    "■ 출결",
+    "{출결}",
+    "",
+    "■ 일일 테스트",
+    "{일일테스트}",
+    "",
+    "■ 확인 테스트",
+    "{확인테스트}",
+    "",
+    "■ 수업 태도",
+    "{수업태도}",
+    "",
+    "■ 숙제 완성도",
+    "{숙제완성도}",
+    "",
+    "■ 오늘의 수업",
+    "{인사말}",
+    "{코멘트}",
+    "",
+    "■ 오늘의 숙제",
+    "{오늘의숙제}",
+    "",
+    "■ 다음 테스트",
+    "{다음테스트}",
+    "",
+    "■ 사랑의 한마디",
+    "{한마디}",
+  ].join("\n"),
+};
+
+export const BUILTIN_EIE_MONTHLY_TEMPLATE_ID = "builtin:eie-monthly";
+
+/**
+ * **EiE 월간 보고서**(원장 2026-11-05 *"월간 보고서 디자인은 해당 시트로 동일하게"*) — 시트(Monthly Evaluation Report) 모양.
+ * 첫 줄 = Monthly Test 점수 자리(카드가 그래프·표로 그린다), 그 아래 글 = Teacher's Comment(원스크린 특이사항 칸 원문).
+ * 🔑 학부모 카드는 이 점수 줄이 든 영어 글을 시트 모양으로 그린다(parent-report-card.tsx). 그 달 점수가 없으면 줄이 빠져 예전 카드다.
+ * 🔑 코멘트가 비면 점수 줄만 남아 '빈 멘트'로 발송이 막힌다(image-slots.ts `hasTextBesidesMarkers`) — Teacher's Comment 없이 나가지 않는다.
+ */
+export const BUILTIN_EIE_MONTHLY_TEMPLATE: ReportTemplate = {
+  id: BUILTIN_EIE_MONTHLY_TEMPLATE_ID,
+  name: "EiE 월간 보고서",
+  builtIn: true,
+  body: ["{월간평가}", "", "{한마디}"].join("\n"),
+};
+
 /**
  * 영어 행의 **기본 템플릿**(템플릿을 고르지 않은 행) — 2026-10-26부터 항목 보고서다. 옛 'ECS 자동'은 목록에 남아 고를 수 있다
  * (글자 하나 안 바꿨다 — 그 템플릿으로 쓴 글·지문이 흔들리지 않게).
@@ -285,12 +357,23 @@ export const BUILTIN_ENGLISH_TEMPLATES: readonly ReportTemplate[] = [
   BUILTIN_ENGLISH_TEMPLATE,
   BUILTIN_ENGLISH_JJ_TEMPLATE,
   BUILTIN_JJ_SHEET_TEMPLATE,
+  // EiE 두 종류(2026-11-05) — 뒤에 붙인다(앞 템플릿들의 자리·기본은 그대로).
+  BUILTIN_EIE_DAILY_TEMPLATE,
+  BUILTIN_EIE_MONTHLY_TEMPLATE,
 ];
 
 /** 기본 템플릿 이름의 화면 문구 키(teacher-view/i18n.ts) — 기본 템플릿 이름은 화면 언어를 따른다. */
 export function builtinTemplateLabelKey(
   id: string,
-): "os.tpl.builtinName" | "os.tpl.builtinJjName" | "os.tpl.builtinSheetName" | "os.tpl.builtinJjSheetName" {
+):
+  | "os.tpl.builtinName"
+  | "os.tpl.builtinJjName"
+  | "os.tpl.builtinSheetName"
+  | "os.tpl.builtinJjSheetName"
+  | "os.tpl.builtinEieDailyName"
+  | "os.tpl.builtinEieMonthlyName" {
+  if (id === BUILTIN_EIE_DAILY_TEMPLATE_ID) return "os.tpl.builtinEieDailyName";
+  if (id === BUILTIN_EIE_MONTHLY_TEMPLATE_ID) return "os.tpl.builtinEieMonthlyName";
   if (id === BUILTIN_ENGLISH_SHEET_TEMPLATE_ID) return "os.tpl.builtinSheetName";
   if (id === BUILTIN_JJ_SHEET_TEMPLATE_ID) return "os.tpl.builtinJjSheetName";
   return id === BUILTIN_ENGLISH_JJ_TEMPLATE_ID ? "os.tpl.builtinJjName" : "os.tpl.builtinName";
@@ -328,6 +411,16 @@ export const TEMPLATE_PREVIEW_SAMPLE: Readonly<Record<TemplateTokenKey, string>>
   학습분석지: imageSlotMarker("학습분석지"),
   단어백분위: imageSlotMarker("단어백분위"),
   학습배지: imageSlotMarker("학습배지"),
+  월간평가: monthlyEvalMarker({
+    month: "2026-10",
+    areaMax: 100,
+    areas: {
+      writing: { score: 70, average: 95 },
+      speaking: { score: 90, average: 97 },
+      reading: { score: 80, average: 96 },
+      listening: { score: 90, average: 96 },
+    },
+  }),
 };
 
 /** 템플릿 본문 상한 — ClassNote 공지 본문 4,000자 fail-closed 선례(notice-actions)와 같은 값. */
