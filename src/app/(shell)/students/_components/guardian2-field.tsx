@@ -105,6 +105,12 @@ export function Guardian2Field({ initial, errors = {} }: { initial: Guardian2Val
             </select>
           </Field>
         </div>
+        {/* 안내(원장 2026-11-05 — 지금 해당 0명이지만 혹시 모를 경우): 형제 판정·중복 후보는 보호자2 번호도 본다(siblings.ts
+            `guardianPhoneKeys`), 보호자2를 원아 대조에 쓰는 연동 PC 판도 준비 중이다. */}
+        <p className="text-text-dim text-xs leading-relaxed">
+          보호자2에는 이 아이 집의 보호자 번호를 적어 주세요. 다른 집 아이와 함께 쓰는 번호(예: 사촌을 함께 돌보는 할머니 번호)를 적으면
+          그 아이와 형제로 묶이고, ClassNote 원아 연결도 헷갈릴 수 있습니다.
+        </p>
         <div className="flex justify-end">
           <Button type="button" variant="ghost" size="sm" onClick={remove} aria-label="보호자2 삭제">
             삭제
