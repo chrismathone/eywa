@@ -153,7 +153,7 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 | `MENT` | classnote_ment · english_ment · ment_prompt_preview · ment_style_profile · love_note_draft(사랑의 한마디 초안 버튼) · lesson_report_rating(평점 정기 처리 · 기본 꺼짐) | Claude(Haiku·Sonnet) |
 | `MEETING` | meeting_analysis | Claude(Sonnet 5.5) |
 | `ENROLLMENT` | enrollment_analysis · enrollment_form_extract · enrollment_prep_brief | Claude(Sonnet 5.5) |
-| `CONSULTATIONS` | consultation_analysis · student_care | Claude(분석 Sonnet 5.5 · 케어) |
+| `CONSULTATIONS` | consultation_analysis · student_care · student_flow_consultations · student_flow_timeline(원생 흐름 분석 — 상담 저장 뒤 합산 · 타임라인 밤 배치 · 연결 탐색 카드, 2026-11-03) | Claude(분석 Sonnet 5.5 · 케어 · 흐름 Sonnet 5.5) |
 | `BRIEFING` | daily_briefing · dashboard_secretary(업무 비서 'AI로 정리' · 누를 때 + 예약 01:00 · 13:00 — 화면이 남긴 후보만) | Claude |
 | `ATTENDANCE` | attendance_recap · parent_attendance_intent · parent_attendance_jev_shadow · parent_satisfaction | Claude(요약·결석 판별 Sonnet 5.5 · 만족도 Haiku 5.5) · TypeSafe(비교 전용) |
 | `STUDENT_ONTOLOGY` | student_positive_signal · student_ontology_summary | 긍정 신호 밤 판정 / 명시 버튼의 최근 기록 발췌 요약 · Claude 전용 키 · fast/low · 다른 회사 폴백 없음 |
@@ -786,6 +786,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **#150** `(수학)이름` 1인 보드는 발송 경로에서 빠졌어도 반 보드 원아의 **신분 증명 출처**였다 — 원아를 빼면 반 보드 발송이 막히고 05시 준비가 다시 채운다(고침 = 0302a 확인 원아 → 확인 기록이 없으면 원아 연결 0185a로 판정 · 반별이면 05시 준비가 수학 안 함). 🔑 안 쓰는 것을 지우기 전에 읽는 곳을 grep으로 전부 · ⚠️ 원아 연결은 형제에게 붙을 수 있다(이름 둘 다 대조) · 원아를 영구히 떼려면 원아 연결도 고친다
 - **#151** 고친 코드가 현장에 안 닿는 자리 — AywaSync **실행기(`AywaSync.exe`)는 앱 안 업데이트로 안 바뀐다**(본체만 `versions/<순번>`) → 1.0.7 수정이 10/15 설치본 PC에 없어 업데이트 세 번째마다 앱이 안 켜졌다(1.0.8·1.0.11). 1.0.13부터 본체가 설치 폴더 실행기를 더 높은 판으로 바꾸고 옛 실행기에서 넘겨받는다 · 🔴 실행기 동작을 바꾸면 `LauncherVersion`을 올릴 것 · ⚠️ 넘겨받을 실행기를 버전 폴더에서 띄우지 말 것(다음 업데이트 정리가 막힌다)
 - **#152** '요청 이후 바뀌었나' 스냅숏 대조에 **표시용 칸(반 이름)**을 넣으면 이름만 바꿔도 승인이 막힌다(퇴원보고서 LE1→LE2 · 고침 = 대조 열쇠 `withdrawal_report_compare_key` · 앱 `snapshotMatches` 같은 규칙) · ⚠️ 스크립트: `select (f()).*`는 f를 열 수만큼 부른다 · postgres.js 템플릿 안 `'\s+'`는 백슬래시가 사라진다(`[[:space:]]+`)
+- **#153** Next 16은 **경로 매개변수를 디코딩하지 않는다**(`subject:math` → `params = "subject%3Amath"` → 모양 검사에서 404) — 만드는 쪽 `encodeURIComponent` + 받는 쪽 `decodeURIComponent`를 짝으로 · `loading.tsx`는 세그먼트 값마다 새 Suspense 경계라 종류 바뀜 전환마다 뼈대가 뜬다 → 부드러운 전환은 윗 `layout.tsx`의 Suspense 하나 · 창 주소를 최상위 문서로 열면 셸이 `/dashboard`로 바꾼다(자동 확인은 `?embed=1`)
 - **#82** postgres.js에서 `${JSON.stringify(v)}::jsonb` = **이중 인코딩**(`"#153e75"` 9자 저장 → 검증 실패 → 설정 침묵 무시). 스칼라는 `to_jsonb(${v}::text)`·객체는 `sql.json(obj)`, 검증은 **길이까지** (⚠️ 눈으로 따옴표 구분 안 됨)
 
 ## 🎨 디자인 규칙 인덱스 (상세는 `docs/design-conventions.md`)

@@ -1,6 +1,7 @@
 import { WindowLink } from "@/components/workspace/window-link";
 import { notFound } from "next/navigation";
 import { CalendarDays, Pencil, Wallet } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -125,6 +126,11 @@ export default async function StaffDetailPage({
                 근무 설정
               </Button>
             ) : null}
+            {/* 연결 탐색(2026-11-03) — 이 직원을 가운데 놓은 도넛(담당 수업·시간표·담당 원생·강사 시트·수업보고서·직원 정보). 창 안에서도 제 창으로 연다. */}
+            <Button variant="outline" render={<WindowLink href={`/explore/teacher/${staff.id}`} title={`${staff.displayName} 연결 탐색`} frameTarget="window" />}>
+              <EyIcon name="pieChart" size={16} />
+              연결 탐색
+            </Button>
             {isTeacherLike ? (
               <>
                 {isPayrollEnabled(settings) ? (
