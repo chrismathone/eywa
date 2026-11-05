@@ -505,9 +505,13 @@ export function RideRowItem({
         </div>
         </div>
       ) : (
-        <span className="text-text-dim shrink-0 text-xs">
-          {row.status ? BOARDING_STATUS_LABEL[row.status] : "미기록"}
-        </span>
+        // 읽기 줄 — 기록 칸 대신 상태 글자. 번호를 볼 자격이 있으면(읽기 강사뷰의 셔틀 담당 화면) 그 위에 번호 한 줄(없으면 안 그린다).
+        <div className="flex shrink-0 flex-col items-end gap-0.5">
+          <RiderContactLine studentId={row.studentId} onlyLoaded />
+          <span className="text-text-dim text-xs">
+            {row.status ? BOARDING_STATUS_LABEL[row.status] : "미기록"}
+          </span>
+        </div>
       )}
 
       {view.status === "missed" && canWrite && !skipped && (

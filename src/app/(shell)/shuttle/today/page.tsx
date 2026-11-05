@@ -8,7 +8,7 @@ import {
 import { getAssignableStudents } from "@/features/shuttle/server/students";
 import { getRiderContacts } from "@/features/shuttle/server/rider-contacts";
 import { getRiderAttendance } from "@/features/shuttle/server/rider-attendance";
-import { canRecordBoarding } from "@/features/shuttle/server/record-gate";
+import { canRecordBoarding, canSeeBoardingContacts } from "@/features/shuttle/server/record-gate";
 import { isShuttleAdmin, requireShuttleView } from "@/features/shuttle/server/access";
 import { loadShuttleTodayPrefs } from "@/features/shuttle/today/server/today-prefs";
 import { isSeason, type Season } from "@/features/shuttle/types";
@@ -55,11 +55,12 @@ export default async function ShuttleTodayPage({
       getTripsOn(date), // 운행 단위(0243a) — 표가 없으면 ready:false로 상태를 아예 안 그린다
     ]);
 
-  // 📞 학생·학부모 전화번호 — 기록 권한이 있을 때만(사용자 2026-10-21). 그날 명단에 설 수 있는 학생 전부(편성 · 오늘만 승하차 · 기록).
+  // 📞 학생·학부모 전화번호 — 기록 자격이 있는 사람만(사용자 2026-10-21). 그날 명단에 설 수 있는 학생 전부(편성 · 오늘만 승하차 · 기록).
+  //    읽기 강사뷰는 쓰기(canWrite)가 막혀도 대상 강사가 보는 번호는 보인다(canSeeBoardingContacts — 평소엔 canWrite와 같은 값, 왕복 0).
   // ✓ 하원 줄의 그날 출석(사용자 2026-10-30 — 관리자 뷰) — 출석부를 **읽기만** 한다. 하원으로 설 수 있는 학생만.
   const showTrack = await isShuttleAdmin();
   const [contacts, attendance] = await Promise.all([
-    canWrite
+    canWrite || (await canSeeBoardingContacts())
       ? getRiderContacts([
           ...board.runs.flatMap((r) => r.stops.flatMap((s) => s.riders.map((x) => x.studentId))),
           ...exceptionsRes.exceptions.map((e) => e.studentId),

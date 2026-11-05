@@ -69,12 +69,17 @@ describe("출결 — 자리 출석부 화면은 쓰기 게이트와 같은 신�
 describe("출석부 — 원장 전용 금액·급여명세서 버튼은 화면 주인 기준", () => {
   const page = code(read("app", "(shell)", "attendance", "page.tsx"));
 
-  it("정산액·명세서 판정이 실제 계정 역할로 돌아가지 않는다", () => {
+  it("정산액 판정이 실제 계정 역할로 돌아가지 않는다", () => {
     expect(page).toContain(`const viewer = (await ${TARGET}) ?? user;`);
     expect(page.split('viewer.systemRole === "master"').length - 1).toBe(2);
     expect(page).not.toContain('user.systemRole === "master"');
-    expect(page).toContain("await canViewPayslipNow(viewer)");
-    expect(page).not.toContain("canViewPayslipNow(user)");
+  });
+
+  it("명세서 버튼은 화면 주인과 실제 계정 **둘 다** 볼 수 있을 때만 — 명세서 페이지는 실제 계정으로 판정한다(적대 리뷰 2026-11-05)", () => {
+    expect(page).toContain("(await canViewPayslipNow(viewer)) && (await canViewPayslipNow(user))");
+    // 명세서 페이지·조회는 실제 계정 그대로(주민번호·계좌가 실린 문서 — 대상 기준으로 넓히지 않는다).
+    expect(code(read("app", "(print)", "payroll", "[teacherId]", "payslip", "page.tsx"))).not.toContain(TARGET);
+    expect(code(read("features", "payroll", "server", "payslip-queries.ts"))).not.toContain(TARGET);
   });
 });
 
@@ -102,6 +107,32 @@ describe("셔틀 — 기록 명의는 자격(canRecordBoarding)과 같은 사람
     expect(fnBody(code(read("features", "shuttle", "ride-change", "server", "staff-ride-gate.ts")), "staffDayGate")).toContain(TARGET);
     expect(fnBody(code(read("features", "shuttle", "ride-change", "server", "history-ack-actions.ts")), "ackShuttleHistory")).toContain(TARGET);
     expect(fnBody(code(read("features", "shuttle", "map", "server", "vehicle-position-actions.ts")), "reportVehiclePosition")).toContain(TARGET);
+  });
+});
+
+describe("셔틀 학부모 계정·연락처 화면 — 입구와 같은 판정(적대 리뷰 2026-11-05)", () => {
+  it("학부모 관리 현황의 '실시간 위치' 탭은 고정 true가 아니라 isShuttleAdmin", () => {
+    const page = code(read("app", "(shell)", "shuttle", "parents", "page.tsx"));
+    expect(page).toContain("isShuttleAdmin()");
+    expect(page).toContain('shuttleFaces("term", { track: showTrack })');
+    expect(page).not.toContain("track: true");
+  });
+
+  it("학부모 계정 자격은 화면 주인, 발급·삭제는 읽기 강사뷰를 맨 앞에서 막는다", () => {
+    expect(fnBody(code(read("features", "shuttle", "parent-accounts", "server", "parent-access.ts")), "parentAccountsActor")).toContain(TARGET);
+    const actions = code(read("features", "shuttle", "parent-accounts", "server", "parent-actions.ts"));
+    for (const fn of ["createParentAccount", "deleteParentAccount"]) {
+      const body = fnBody(actions, fn);
+      expect(body.indexOf("readonlyTeacherViewError()"), fn).toBeGreaterThan(-1);
+      expect(body.indexOf("readonlyTeacherViewError()"), fn).toBeLessThan(body.indexOf("parentAccountsActor()"));
+    }
+  });
+
+  it("오늘 등하원 화면은 쓰기가 막혀도 볼 자격(canSeeBoardingContacts)이 있으면 연락처를 싣는다", () => {
+    const page = code(read("app", "(shell)", "shuttle", "today", "page.tsx"));
+    expect(page).toContain("canWrite || (await canSeeBoardingContacts())");
+    const row = code(read("app", "(shell)", "shuttle", "today", "_components", "ride-row-item.tsx"));
+    expect(row).toContain("<RiderContactLine studentId={row.studentId} onlyLoaded />");
   });
 });
 
