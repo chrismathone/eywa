@@ -17,9 +17,12 @@ import { CONNECTED_APPS, connectedAppVisibleTo, type ConnectedApp } from "../app
  * 과목 조회는 켜진 앱이 있을 때만 한다(대부분 지점은 스위치 조회 1번으로 끝). 못 읽으면 **감춘다** — 다른 앱에 로그인시키는
  * 입구라, 영어 선생님에게 새는 쪽보다 잠깐 안 보이는 쪽이 낫다(스위치 조회와 같은 fail-closed).
  * 요청 캐시 — 레이아웃이 한 번 부르면 같은 요청의 다른 소비처는 쿼리 0.
+ * 🔑 '다른 강사 뷰'면 **대상 직원 X의 담당 과목**으로 거른다(원장 2026-11-05 강사뷰 전수 — X 화면에 X에게 없는 링크가 서지 않게).
+ *    링크를 눌러 바깥 앱에 들어가는 신원(출발 라우트의 SSO)은 인증이라 실제 계정 그대로다 — 여기는 '보이는가'만 정한다.
+ *    총괄 우회(isCurrentUserSuperAdmin)는 강사뷰 중에는 열리지 않는다(super-admin.ts).
  */
 export const getMyConnectedApps = cache(async (): Promise<ConnectedApp[]> => {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return [];
   // 운영 콘솔의 '지점 보기'(읽기 전용)에서는 연결 앱을 세우지 않는다 — 이 입구는 **다른 앱에 로그인시키는** 길이라
   // 그 지점의 이름으로 바깥 앱에 들어가거나 계정이 이어지면 '읽기'가 아니다. 출발 라우트도 이 함수로 걸러진다.

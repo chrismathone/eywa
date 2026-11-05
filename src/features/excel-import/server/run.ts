@@ -18,8 +18,13 @@ import { annotateErrors, findSheet, loadWorkbook, sheetGrid } from "./workbook";
  */
 export type RunOutput = { kind: "json"; body: ImportResult; status?: number } | { kind: "file"; buf: Buffer; name: string };
 
+/**
+ * 게이트 — 사람 = '다른 강사 뷰'의 대상 직원(`getCurrentUser({ teacherView: true })`, 원장 2026-11-05 강사뷰 전수). 가져온 행의 기록 명의
+ * (created_by·작성자·출결 recorded_by)와 역할 판정(직원 가져오기의 줄 수 있는 역할·담당 범위)이 대상 기준이다. '읽기' 강사뷰는
+ * canManageTenant(읽기로 캡)가 막는다. 감사로그 행위자는 로그인 계정 그대로(logAction).
+ */
 export async function gateImport(def: ImporterDef): Promise<ImportCtx | { error: string; status: number }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다", status: 401 };
   if (!(await canManageTenant(user.systemRole, def.menu))) {
     return { error: `${def.title} 엑셀 올리기는 이 메뉴의 전체 권한(관리자 이상)이 있어야 합니다`, status: 403 };

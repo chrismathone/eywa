@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { WindowLink } from "@/components/workspace/window-link";
 import { requireAccess } from "@/lib/auth/require-access";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAnswerHelpBoard, canAskHelpBoard } from "@/features/help/board/access";
 import { HELP_BOARD_NOT_READY } from "@/features/help/board/missing";
 import { getHelpPost } from "@/features/help/board/server/queries";
@@ -13,7 +14,9 @@ import { HelpPostForm } from "../../_components/post-form";
 export const metadata = { title: "도움말 질문 — 에이와" };
 
 export default async function HelpPostPage({ params }: { params: Promise<{ id: string }> }) {
-  const [{ id }, user] = await Promise.all([params, requireAccess("help")]);
+  const [{ id }, viewer] = await Promise.all([params, requireAccess("help")]);
+  // '다른 강사 뷰'면 대상 X의 자리 — '자기 글' · 답변 역할을 서버 액션(boardActor)과 같은 행위자로 본다.
+  const user = (await getCurrentUser({ teacherView: true })) ?? viewer;
   const loaded = await getHelpPost(id);
   if (!loaded.ready) {
     return (

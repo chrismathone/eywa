@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ before: {} as Record<string, unknown>, written: null as Record<string, unknown> | null, assignedCount: 0, allowed: true, conflict: false, log: vi.fn(), filters: [] as unknown[][] }));
+const m = vi.hoisted(() => ({ before: {} as Record<string, unknown>, written: null as Record<string, unknown> | null, assignedCount: 0, allowed: true, conflict: false, log: vi.fn(), filters: [] as unknown[][], viewAs: null as Record<string, unknown> | null }));
 vi.mock("./assigned-classes", () => ({ countAssignedClasses: async () => m.assignedCount }));
-vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => ({ id: "u1", tenantId: "t1", displayName: "직원", systemRole: "master" }) }));
+// '다른 강사 뷰'(m.viewAs)면 teacherView 요청에만 대상 직원을 돌려준다 — 인자 없는 호출(감사로그 등)은 로그인 계정 그대로.
+vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async (o?: { teacherView: boolean }) => (o?.teacherView && m.viewAs) || { id: "u1", tenantId: "t1", displayName: "직원", systemRole: "master" } }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: async () => m.allowed }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: () => {
  let writing = false;
@@ -24,7 +25,7 @@ import { patchConsultationCells, setEnrollmentOutcome, updateEnrollmentConsultat
 const form = () => { const fd = new FormData(); fd.set("id", "c1"); fd.set("prospectName", "학생"); return fd; };
 beforeEach(() => {
  m.before = { ...buildConsultationRow({ prospectName: "학생" }, []), from_public_intake: true, outcome: "pending", updated_at: "2026-10-21", learning_history: null };
- m.written = null; m.assignedCount = 0; m.allowed = true; m.conflict = false; m.log.mockReset(); m.filters = [];
+ m.written = null; m.assignedCount = 0; m.allowed = true; m.conflict = false; m.log.mockReset(); m.filters = []; m.viewAs = null;
 });
 describe("QR 상담자 저장 배선", () => {
  it("옛 등록 상태·결제 값은 저장하지도 비우지도 않는다 — 낡은 폼이 값을 보내도 보존", async () => {
@@ -55,6 +56,15 @@ describe("QR 상담자 저장 배선", () => {
   // 빈 상담자 계정도 같은 직원으로(2026-10-26 — 계정이 비면 후속 조치 할 일·알림이 원장 전원에게 갔다 · 10-21 '계정은 안 바꾼다'를 고침)
   expect(m.written?.consultant_id).toBe("u1");
   expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ consultationId: "c1", counselorAutofill: "직원" }) }));
+ });
+ it("'다른 강사 뷰'면 빈 상담자를 대상 직원(이름·계정)으로 채운다 — 로그인 계정 명의가 아니다", async () => {
+  m.viewAs = { id: "x1", tenantId: "t1", displayName: "상담실장", systemRole: "counselor" };
+  const fd = form(); fd.set("careerGoal", "의사");
+  expect(await updateEnrollmentConsultation(undefined, fd)).toEqual({ ok: true });
+  expect(m.written).toMatchObject({ counselor: "상담실장", consultant_id: "x1" });
+  m.written = null;
+  await patchConsultationCells("c1", { parentRequest: "상담 내용" });
+  expect(m.written).toMatchObject({ counselor: "상담실장", consultant_id: "x1" });
  });
  it("상담자 계정이 이미 있으면 자동 채움이 계정을 바꾸지 않는다", async () => {
   m.before = { ...m.before, consultant_id: "someone" };

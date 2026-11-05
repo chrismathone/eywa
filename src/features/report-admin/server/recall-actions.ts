@@ -74,7 +74,9 @@ export async function requestReportRecallByShareToken(shareToken: string): Promi
  * 발송 시 `saveAndQueueClassnote`가 `recalled` 행을 새 토큰으로 되돌려 평범한 발송으로 처리한다.
  */
 export async function requestReportRecall(ids: string[]): Promise<RecallResult> {
-  const user = await getCurrentUser();
+  // '다른 강사 뷰'면 담당·작성 소유 판정과 회수 명의(revoked_by)가 대상 강사 X다 — 실제 계정 A로 보면 X의 학생·X가 쓴 보강이
+  // '담당이 아님'으로 막힌다. 감사로그 행위자는 logAction이 실제 계정으로 남긴다.
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!classnoteModuleOn(await getTenantSettings())) return { ok: false, error: "사용할 수 없는 기능입니다" };
   // '다른 강사 뷰'(열람 전용) 차단 — 위 requestReportRecallByShareToken과 같은 이유(겸직 본인 축 우회).

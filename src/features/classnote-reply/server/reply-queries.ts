@@ -1,5 +1,5 @@
 import "server-only";
-import type { CurrentUser } from "@/lib/auth/current-user";
+import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { readonlyTeacherViewError } from "@/lib/auth/view-mode";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -20,6 +20,9 @@ export const PARENT_THREAD_DAYS = 14;
 export const PARENT_THREAD_LIMIT = 100;
 
 export async function listParentThreads(a: { mode: ReplyMode; user: CurrentUser; page?: string }): Promise<ParentThreadsView> {
+  // 버튼(답글·공감)·'내 공감' 판정은 답글 액션의 첫 문(`replyGate`)과 **같은 사람**으로 — '다른 강사 뷰'면 대상 직원이다.
+  // 페이지가 넘긴 로그인 계정으로 판정하면 원장 자격으로 버튼이 서고, 누르면 서버(대상 직원 기준)가 거절한다(#77).
+  const user = (await getCurrentUser({ teacherView: true })) ?? a.user;
   const supabase = await createClient();
   const since = new Date(Date.now() - PARENT_THREAD_DAYS * 86_400_000).toISOString();
   const { count, error: countError } = await supabase.from("classnote_parent_messages")
@@ -49,15 +52,15 @@ export async function listParentThreads(a: { mode: ReplyMode; user: CurrentUser;
       supabase.from("students").select("id, name, classnote_name").in("id", chunk),
     ).catch(() => []),
     // 공감 — 표가 없거나(0319a 전) 공감을 아는 연동 PC가 없으면 null(버튼을 그리지 않는다).
-    reactionReady(admin, a.user.tenantId)
-      .then((ready) => (ready ? loadReactions(admin, a.user.tenantId, ids) : null))
+    reactionReady(admin, user.tenantId)
+      .then((ready) => (ready ? loadReactions(admin, user.tenantId, ids) : null))
       .catch((): Map<string, ReactionRow> | null => null),
-    isReplyManager(a.user.systemRole) ? Promise.resolve(true) : isCurrentUserSuperAdmin().catch(() => false),
+    isReplyManager(user.systemRole) ? Promise.resolve(true) : isCurrentUserSuperAdmin().catch(() => false),
     readonlyTeacherViewError().then((r) => !!r, () => true),
     // 전체 모드 — aywa가 아는 보드(0302a 반 보드·1인 보드)의 글에만 버튼을 세운다(영어 그룹반 등은 어차피 받지 않는다).
-    a.mode === "on" ? uniqueClassBoardNames(admin, a.user.tenantId, messages.map((m) => m.boardName)).catch(() => new Set<string>()) : Promise.resolve(new Set<string>()),
+    a.mode === "on" ? uniqueClassBoardNames(admin, user.tenantId, messages.map((m) => m.boardName)).catch(() => new Set<string>()) : Promise.resolve(new Set<string>()),
     // 첨부 개수(영상·사진) — 개수만이라 열람 게이트는 필요 없다(원문 줄은 이미 같은 직원에게 보인다). 못 세면 0.
-    countThreadMedia(admin, a.user.tenantId, messages),
+    countThreadMedia(admin, user.tenantId, messages),
   ]);
   const nameOf = new Map(students.map((s) => [s.id, (s.classnote_name || s.name || "").trim() || null]));
   const byMessage = new Map<string, typeof replies.rows>();
@@ -75,7 +78,7 @@ export async function listParentThreads(a: { mode: ReplyMode; user: CurrentUser;
       replyCount: list.filter((r) => r.status !== "deleted").length, latest: v ? { label: v.label, tone: v.tone } : null,
       replyable,
       media: media.get(m.id) ?? { videos: 0, photos: 0 },
-      reaction: replyable && reactions ? toReactionView(m.id, reactions.get(m.id) ?? null, a.user, manager, readonly) : null,
+      reaction: replyable && reactions ? toReactionView(m.id, reactions.get(m.id) ?? null, user, manager, readonly) : null,
     };
   });
   return { rows, page, totalPages, total: count ?? rows.length, days: PARENT_THREAD_DAYS, replyReady: replies.ok, testOnly: a.mode === "test" };

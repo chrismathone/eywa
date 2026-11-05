@@ -333,7 +333,8 @@ async function upsertAdminReport(
 export async function saveAdminReport(
   input: AdminSaveReportInput,
 ): Promise<{ ok: boolean; id?: string; shareToken?: string; error?: string }> {
-  const user = await getCurrentUser();
+  // 강사뷰면 대상 X — 담임 표기 기본값(teacher_name, 학부모에게 나간다)·보강 귀속(saver·candidatesFor)이 X다.
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "lesson_reports"))) return { ok: false, error: "보고서 관리 권한이 없습니다" };
   if (!input.studentId) return { ok: false, error: "학생을 선택하세요" };
@@ -373,7 +374,8 @@ export async function saveAndQueueAdminReport(
   /** status="needs_class"일 때 — 보강 추가한 반인데 반 보드가 없어 다른 반으로 가야 한다(경고). */
   makeupClassName?: string | null;
 }> {
-  const user = await getCurrentUser();
+  // 강사뷰면 대상 X — 담임 표기 기본값(teacher_name, 학부모에게 나간다)·보강 귀속(saver·candidatesFor)이 X다.
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "lesson_reports"))) return { ok: false, error: "보고서 관리 권한이 없습니다" };
   if (!input.studentId) return { ok: false, error: "학생을 선택하세요" };
@@ -641,7 +643,8 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   dryRun?: boolean;
   error?: string;
 }> {
-  const user = await getCurrentUser();
+  // 강사뷰면 대상 X — 담임 표기 기본값(teacher_name, 학부모에게 나간다)·보강 귀속(saver·candidatesFor)이 X다.
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "lesson_reports"))) return { ok: false, error: "보고서 관리 권한이 없습니다" };
   const body = (input.notes ?? "").trim();

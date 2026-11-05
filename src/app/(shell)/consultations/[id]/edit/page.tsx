@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import {
@@ -22,7 +23,7 @@ export default async function EditConsultationPage({
 }) {
   const viewer = await requireAccess("consultations");
   const { id } = await params;
-  const [canWrite, item, students, counselors, settings, newcomerTargets] = await Promise.all([
+  const [canWrite, item, students, counselors, settings, newcomerTargets, actor] = await Promise.all([
     // 저장·삭제 게이트(update/deleteStudentConsultation)와 같은 판정 — 읽기 권한이면 칸만 잠그고 단추는 그리지 않는다.
     canWriteTenant(viewer.systemRole, "consultations"),
     getStudentConsultationById(id),
@@ -31,6 +32,8 @@ export default async function EditConsultationPage({
     getTenantSettings(),
     // 신규생 관리 칸(0295a) — 못 읽어도 상담 수정은 된다(칸만 안 뜬다).
     getNewcomerLinkTargets(id).catch(() => []),
+    // 상담사 칸의 '나' = 저장 액션과 같은 행위자 — 강사뷰면 대상 직원 X(원장 2026-11-05 강사뷰 전수).
+    getCurrentUser({ teacherView: true }),
   ]);
   if (!item) notFound();
 
@@ -59,7 +62,7 @@ export default async function EditConsultationPage({
         students={students}
         counselors={counselors}
         subjectLabels={subjectLabelRecord(settings.operations.subjects)}
-        currentUserId={viewer.id}
+        currentUserId={(actor ?? viewer).id}
         // 🔴 고를 수 있는 학생(담당 범위로 좁힌 목록)의 것만 내려보낸다 — 강사에게 전사 신입 명단이 새지 않게.
         newcomerTargets={newcomerTargets.filter((t) => students.some((s) => s.id === t.studentId))}
         classSupported={item.classSupported}

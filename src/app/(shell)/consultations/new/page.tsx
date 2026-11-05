@@ -1,5 +1,6 @@
 import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getStudentOptionsForConsultation } from "@/features/consultations/server/queries";
 import { getTeacherOptions } from "@/features/students/server/queries";
@@ -23,7 +24,7 @@ export default async function NewConsultationPage({
   // 학생(recording-resume.ts). 같은 주소에서 쿼리만 바뀌면 Next가 폼을 그대로 두므로 둘로 key를 걸어 새로 그린다.
   const { studentId, form, recordStudent } = await searchParams;
   const instanceKey = `${formInstanceKey(form)}:${typeof recordStudent === "string" ? recordStudent : ""}`;
-  const [canWrite, students, counselors, settings, newcomerTargets, classSupported] = await Promise.all([
+  const [canWrite, students, counselors, settings, newcomerTargets, classSupported, actor] = await Promise.all([
     // 저장 게이트(createStudentConsultation)와 같은 판정 — 읽기 권한이면 칸은 잠그고 저장·녹음은 그리지 않는다.
     canWriteTenant(viewer.systemRole, "consultations"),
     getStudentOptionsForConsultation(),
@@ -33,7 +34,11 @@ export default async function NewConsultationPage({
     getNewcomerLinkTargets().catch(() => []),
     // 반 칸(0318a) — SQL 적용 전이면 칸을 안 그린다([[#95]]).
     hasClassSupport().catch(() => false),
+    // '상담사' 기본값·자동 과목의 '나' = 저장 액션(createStudentConsultation)과 같은 행위자 — 강사뷰면 대상 직원 X
+    // (원장 2026-11-05 강사뷰 전수: X 화면에서 상담사 칸이 A로 채워져 A 명의 상담이 남았다).
+    getCurrentUser({ teacherView: true }),
   ]);
+  const me = actor ?? viewer;
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
@@ -60,9 +65,9 @@ export default async function NewConsultationPage({
           students={students}
           counselors={counselors}
           subjectLabels={subjectLabelRecord(settings.operations.subjects)}
-          currentUserId={viewer.id}
+          currentUserId={me.id}
           templates={settings.consultations.templates}
-          currentUserName={viewer.displayName}
+          currentUserName={me.displayName}
           // 🔴 고를 수 있는 학생(담당 범위로 좁힌 목록)의 것만 내려보낸다 — 강사에게 전사 신입 명단이 새지 않게.
           newcomerTargets={newcomerTargets.filter((t) => students.some((s) => s.id === t.studentId))}
           classSupported={classSupported}

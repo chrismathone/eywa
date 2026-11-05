@@ -69,7 +69,7 @@ async function loadContext(termId: string): Promise<{ data?: Context; error?: st
 }
 
 export async function getMoneyCarryoverOptions(termId: string): Promise<{ data?: MoneyCarryOptions; error?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
   const ctx = await loadContext(termId);
@@ -83,7 +83,7 @@ export async function getMoneyCarryoverOptions(termId: string): Promise<{ data?:
 
 /** `amount: 0` = 이월 취소. `expectedAllocation` = 창을 열 때 본 배분액(그 사이 배분이 바뀌면 거절). */
 export async function saveMoneyCarryover(input: { termId: string; amount: number; classId: string | null; note: string | null; expectedAllocation: number | null }): Promise<{ ok?: true; error?: string; warning?: string; notice?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
   const ctx = await loadContext(input?.termId);

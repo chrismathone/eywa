@@ -35,7 +35,9 @@ type SyncTrigger = "auto" | "manual";
 type Gate = { ok: true; tenantId: string; userId: string; canExport: boolean } | { ok: false; error: string; hidden: boolean };
 
 async function gate(): Promise<Gate> {
-  const user = await getCurrentUser();
+  // 강사뷰면 대상 X — '쓰기 권한 없는 강사' 판정(역할)과 요청 명의(requested_by)가 X 기준이다. A의 역할로 보면
+  // 원장이 강사 X 화면에서 발송이 배정 보류로 막혔을 때 서버가 대신 내는 자동 동기화 요청까지 거절된다.
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다", hidden: true };
   const settings = await getTenantSettings();
   if (!classnoteModuleOn(settings)) return { ok: false, error: "사용할 수 없는 기능입니다", hidden: true };

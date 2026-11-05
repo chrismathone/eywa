@@ -12,7 +12,7 @@ import { humanizeDbError } from "@/lib/supabase/db-error";
 
 /** 월 정액의 시수만 수정한다. 설정의 새 월 단가를 다시 적용하지 않는다. */
 export async function updateMonthlyTermSessions(id: string, sessions: number, expectedConfirmedAt: string | null): Promise<{ error?: string; terms?: SessionTermPatch[] }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
   if (!id || !expectedConfirmedAt || !validSessionQuantity(sessions)) return { error: "확정 시수는 0~99 사이, 소수 한 자리까지 입력하세요" };

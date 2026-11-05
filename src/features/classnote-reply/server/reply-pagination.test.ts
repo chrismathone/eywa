@@ -2,6 +2,8 @@ import { beforeEach, expect, it, vi } from "vitest";
 import type { CurrentUser } from "@/lib/auth/current-user";
 const m = vi.hoisted(() => ({ ranges: [] as number[][], orders: [] as string[], total: 136 }));
 vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => true }));
+// 강사뷰가 아니면 대상 사람이 없다 → 페이지가 넘긴 사람 그대로(reply-queries-teacher-view.test.ts가 강사뷰를 본다).
+vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => null }));
 vi.mock("@/lib/auth/view-mode", () => ({ readonlyTeacherViewError: async () => null }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 vi.mock("./reaction-data", () => ({ reactionReady: async () => false, loadReactions: vi.fn(), toReactionView: vi.fn() }));

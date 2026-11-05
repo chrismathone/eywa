@@ -244,6 +244,19 @@ describe("요청", () => {
     });
   });
 
+  // 원장 2026-11-05 강사뷰 전수 — 원장(A)이 강사 X 화면에서 발송이 막혔을 때 서버가 대신 내는 요청도 X로 판정·기록한다.
+  it("🔴 강사뷰(대상 X = 강사)면 역할·요청 명의가 X — 자동 요청은 받고, requested_by는 X", async () => {
+    m.user.mockImplementation(async (o?: { teacherView?: boolean }) =>
+      o?.teacherView ? { id: "x1", tenantId: "t1", systemRole: "teacher" } : { id: "a1", tenantId: "t1", systemRole: "master" });
+    m.canWrite.mockResolvedValue(false); // 권한표의 A 역할 줄은 X 값(none)으로 덮여 있다
+    const direct = await requestClassnoteBoardSync({ classIds: [CLASS_ID], source: "onescreen_send_class" });
+    expect(direct).toMatchObject({ ok: false, error: expect.stringContaining("직접 동기화를 요청할 수 없습니다") });
+    const auto = await runAsAutoSyncRequest(() => requestClassnoteBoardSync({ classIds: [CLASS_ID], studentIds: [STUDENT_ID], source: "send_blocked" }));
+    expect(auto.ok).toBe(true);
+    expect(inserts()[0]!.args[0]).toMatchObject({ tenant_id: "t1", requested_by: "x1" });
+    expect(m.user).toHaveBeenCalledWith({ teacherView: true });
+  });
+
   it("보고서 쓰기 권한이 있는 계정은 종전처럼 버튼으로 요청한다(역할이 강사여도) — 수동으로 기록된다", async () => {
     m.user.mockResolvedValue({ id: "u4", tenantId: "t1", systemRole: "teacher" });
     m.canWrite.mockResolvedValue(true);
