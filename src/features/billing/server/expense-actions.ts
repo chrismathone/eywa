@@ -1,10 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { logAction } from "@/features/audit/server/log";
-import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
-import { viewAsTeacher } from "@/lib/auth/view-as";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { teacherViewReadDb, writeSessionFirst } from "./teacher-view-db";
 import {
@@ -18,6 +17,7 @@ import {
 import type { UploadTicket } from "@/lib/storage/types";
 import { normalizeApprovalChecks } from "./expense-queries";
 import { expenseWriteScope } from "./expense-scope";
+import { expenseVisibleToActor } from "./expense-visibility";
 import { DEFAULT_CURRENCY, isValidCurrency, roundMoney } from "../currencies";
 
 const RECEIPTS_BUCKET = "expense-receipts";
@@ -98,20 +98,6 @@ const today = () => kstToday();
  */
 async function expenseDb() {
   return teacherViewReadDb();
-}
-
-/**
- * 관리 클라이언트로 읽은 결의서가 행위자(X)에게 보이는 행인가 — RLS `expenses_role_gate_select`(0158a)를 X 기준으로:
- *   지출 열람(`billing` ≠ none) **or** (지출결의서 **제출 권한** `expense_requests` ∈ full·scoped **and** 본인 작성분).
- * ⚠️ 열람 전용 강사뷰는 권한표가 X의 full·scoped를 읽기로 눌러 둔다 — 그 캡은 '쓰기'를 막으려는 것이라, 여기서는 X의 원래 수준
- *    대신 '메뉴 접근'으로 본다(X가 원래 제출 권한이었는지 구분할 수 없어 읽기 강사뷰에서만 한 단계 넓다 — 목록도 X의 것을 보여 준다).
- * 세션 클라이언트일 때는 RLS가 이미 걸렀으므로 부르지 않는다(viaAdmin일 때만).
- */
-async function visibleToActor(row: { created_by?: string | null }, user: CurrentUser): Promise<boolean> {
-  if (await canAccessTenant(user.systemRole, "billing")) return true;
-  if (row.created_by !== user.id) return false;
-  if ((await expenseWriteScope(user.systemRole)) !== null) return true;
-  return (await viewAsTeacher())?.access === "readonly" && (await canAccessTenant(user.systemRole, "expense_requests"));
 }
 
 // 지출결의서 쓰기 스코프(full=사무실 전건 / own=강사 본인 것) — 화면과 같은 한 함수(./expense-scope.ts).
@@ -692,7 +678,7 @@ export async function signExpenseReceipts(
     .maybeSingle();
   if (!row) return { error: "지출을 찾을 수 없습니다" };
   // 강사뷰(관리 클라이언트)면 RLS 대신 같은 규칙을 앱에서 — X가 못 보는 결의서의 증빙은 서명하지 않는다.
-  if (viaAdmin && !(await visibleToActor(row, user))) return { error: "지출을 찾을 수 없습니다" };
+  if (viaAdmin && !(await expenseVisibleToActor(row, user))) return { error: "지출을 찾을 수 없습니다" };
 
   // 레거시 http(s) 증빙(ijw Firebase 다운로드 URL)은 이미 공개 토큰 URL이라 그대로 통과(서명 불필요),
   // 테넌트 스토리지 경로만 서명(임의 객체 서명 차단). 깨진 경로는 조용히 제외.
@@ -728,7 +714,7 @@ export async function signExpenseReceipt(
     .maybeSingle();
   if (!row) return { error: "지출을 찾을 수 없습니다" };
   // 강사뷰(관리 클라이언트)면 RLS 대신 같은 규칙을 앱에서 — X가 못 보는 결의서의 증빙은 서명하지 않는다.
-  if (viaAdmin && !(await visibleToActor(row, user))) return { error: "지출을 찾을 수 없습니다" };
+  if (viaAdmin && !(await expenseVisibleToActor(row, user))) return { error: "지출을 찾을 수 없습니다" };
   if (!parseReceipts(row.receipt_urls).some((r) => r.path === path)) {
     return { error: "등록되지 않은 파일입니다" };
   }

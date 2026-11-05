@@ -61,7 +61,7 @@ vi.mock("@/lib/storage/media-storage", () => ({
 }));
 
 import { createExpense, signExpenseReceipts, updateExpense } from "./expense-actions";
-import { getMyExpenseRequests } from "./expense-queries";
+import { getExpenseById, getMyExpenseRequests } from "./expense-queries";
 
 const A = { id: "a1", tenantId: "t1", systemRole: "master", displayName: "원장" };
 const X = { id: "x1", tenantId: "t1", systemRole: "teacher", displayName: "김선생" };
@@ -178,6 +178,37 @@ describe("'X의 결의서' 목록", () => {
 
   it("강사뷰가 아니거나 대상이 아닌 id면 세션 클라이언트", async () => {
     await getMyExpenseRequests("someone-else");
+    expect(m.calls.every((c) => c.client === "session")).toBe(true);
+  });
+
+  // 적대 재리뷰 2026-11-05 — 목록·상세·증빙 서명이 한 판정(expense-visibility.ts). 서명만 막히면 "목록엔 있는데 증빙은 없음".
+  it("🔴 X에게 지출 열람도 제출 권한도 없으면 X 작성분이어도 목록이 비고, 조회조차 나가지 않는다", async () => {
+    m.canWrite.mockResolvedValue(false);
+    m.list = [m.row];
+    expect(await getMyExpenseRequests("x1")).toEqual([]);
+    expect(m.calls).toEqual([]);
+  });
+});
+
+describe("지출결의서 상세 — 강사뷰면 목록과 같은 길", () => {
+  it("🔴 강사뷰면 관리 클라이언트 + 지점 명시 — A의 RLS가 숨겨도 X의 결의서가 열린다", async () => {
+    expect((await getExpenseById(EXPENSE_ID))?.createdBy).toBe("x1");
+    expect(m.calls.every((c) => c.client === "admin")).toBe(true);
+    expect(tenantEqs("admin")).toBe(1);
+  });
+
+  it("🔴 X가 못 보는 결의서는 상세도 없다 — 서명과 같은 판정", async () => {
+    m.row = { ...m.row!, created_by: "a1" };
+    expect(await getExpenseById(EXPENSE_ID)).toBeNull();
+    m.row = { ...m.row!, created_by: "x1" };
+    m.canWrite.mockResolvedValue(false);
+    expect(await getExpenseById(EXPENSE_ID)).toBeNull();
+  });
+
+  it("강사뷰가 아니면 세션 그대로(RLS가 거른다)", async () => {
+    m.viewAs.mockResolvedValue(null);
+    m.row = { ...m.row!, created_by: "a1" };
+    expect((await getExpenseById(EXPENSE_ID))?.createdBy).toBe("a1");
     expect(m.calls.every((c) => c.client === "session")).toBe(true);
   });
 });

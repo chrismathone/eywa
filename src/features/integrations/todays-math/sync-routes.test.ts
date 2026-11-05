@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const { rpc, currentUser } = vi.hoisted(() => ({ rpc: vi.fn(), currentUser: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc }) }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: currentUser }));
+// 인가 경로의 강사뷰 거절은 sync-authorize-fallback.test.ts가 잠근다 — 여기는 강사뷰가 아닌 경로만.
+vi.mock("@/lib/auth/view-as", () => ({ viewAsTeacher: async () => null }));
 import { POST as controlPost } from "@/app/api/integrations/todays-math/v2/control/route";
 import { POST as snapshotPost } from "@/app/api/integrations/todays-math/v2/snapshots/route";
 import { POST as tokenPost } from "@/app/api/integrations/todays-math/v2/token/route";
