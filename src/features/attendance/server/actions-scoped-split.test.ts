@@ -162,7 +162,12 @@ vi.mock("@/features/attendance/live/server/write-policy", () => ({
 }));
 vi.mock("./auto-units", () => ({ resolveAutoUnits: vi.fn(async () => new Map()) }));
 // 보강 보고서 반(앵커) 칸 지우기 게이트·대신 보강 귀속 probe(원장 2026-09-30) — 이 파일은 강사 보기 몫 판정만 본다(게이트는 따로 잠근다).
-vi.mock("./makeup-anchor-cells", () => ({ makeupAnchorDeleteBlock: vi.fn(async () => null) }));
+vi.mock("./makeup-anchor-cells", () => ({
+  makeupAnchorDeleteBlock: vi.fn(async () => null),
+  // 출석부 지우기는 발송분을 허용하는 확인 함수를 쓴다(원장 2026-11-05).
+  makeupAnchorDeleteCheck: vi.fn(async () => ({ block: null, keptSent: 0, keptCells: new Set<string>() })),
+  anchorCellKey: (c: { studentId: string; classId: string; date: string }) => `${c.studentId}|${c.classId}|${c.date}`,
+}));
 vi.mock("./taught-by-db", () => ({ taughtByColumnReady: vi.fn(async () => false) }));
 /** 인계일 인덱스(감사로그 12개월) — 저장 경로는 **절대 부르면 안 된다**(반응속도 1순위). 불리면 afterEach가 잡는다. */
 vi.mock("@/features/classes/server/teacher-as-of-queries", () => ({

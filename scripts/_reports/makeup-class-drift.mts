@@ -15,6 +15,7 @@
  *  B. 미발송 — **보고서를 출석부 반에 맞춘다**: 앵커 밖 보강 칸이 정확히 하나이고 그 반이 보이지 않는 보강 반이 아니면
  *     `makeup_class_id = classnote_class_id = 그 반`. 칸이 여럿·보강 반뿐이면 사람 몫(목록만).
  *  C. 앵커는 있는데 칸이 아무 데도 없음(관리자 작성분 등, C8) — 앵커 반에 보강 칸 **생성**(시수 기본 1, 귀속은 비움).
+ *     🔴 발송 '성공' 보고서는 빼고 목록만 — 2026-11-05부터 출석부에서 그 칸을 일부러 지울 수 있다(급여 시수 · 보고서는 그대로).
  *  D. 반 미정(반별 발송 대상인데 앵커 없음) — 건수·예시만(사람이 원스크린에서 고른다).
  * 출력 = 분류별 건수 + 예시 5건(학생 이름·날짜·과목·반 이름만 — 🔴 연락처·본문 없음).
  *
@@ -158,6 +159,9 @@ const sent = (r: Report) => !!r.classnote_sent_at || r.classnote_status === "suc
 const bad = rows.filter((x) => x.violations.length > 0);
 const undecided = bad.filter((x) => x.violations.includes("no_anchor"));
 const noCellsAnywhere = bad.filter((x) => x.r.makeup_class_id && x.cells.length === 0);
+// 2026-11-05: 발송 '성공' 보고서의 칸은 출석부에서 일부러 지울 수 있다(원장 — 급여 시수 · 보고서는 그대로) → 칸을 다시 만들지 않는다(목록만).
+const noCellsKept = noCellsAnywhere.filter((x) => x.r.classnote_status === "success");
+const noCellsToCreate = noCellsAnywhere.filter((x) => x.r.classnote_status !== "success");
 const sentMismatch = bad.filter((x) => sent(x.r) && !x.violations.includes("no_anchor") && !noCellsAnywhere.includes(x));
 const unsentMismatch = bad.filter((x) => !sent(x.r) && !x.violations.includes("no_anchor") && !noCellsAnywhere.includes(x));
 const noAnchorAll = rows.filter((x) => !x.r.makeup_class_id);
@@ -176,7 +180,8 @@ const show = (title: string, xs: Row[]) => {
 };
 show("A. 발송 완료 — 출석부를 발송 반으로 옮기는 안", sentMismatch);
 show("B. 미발송 — 보고서를 출석부 반에 맞추는 안", unsentMismatch);
-show("C. 앵커는 있는데 칸이 아무 데도 없음 — 앵커 반에 칸 생성 안(관리자 작성분 포함)", noCellsAnywhere);
+show("C. 앵커는 있는데 칸이 아무 데도 없음 — 앵커 반에 칸 생성 안(관리자 작성분 포함)", noCellsToCreate);
+show("C′. 발송 성공인데 칸 없음 — 출석부에서 일부러 지운 칸일 수 있어 그대로 둔다(목록만 · 2026-11-05)", noCellsKept);
 show("D. 반 미정(반별 발송 대상) — 사람이 원스크린에서 고른다", undecided);
 console.log(`  └ A 중 반 보드로 게시(보낼 반 있음) ${sentMismatch.filter((x) => x.r.classnote_class_id).length}건 · 1인 보드 게시(보강 반 기준) ${sentMismatch.filter((x) => !x.r.classnote_class_id).length}건`);
 console.log(`  └ D 중 미발송 ${undecided.filter((x) => !sent(x.r)).length}건(다음 저장·발송 때 반을 고르게 된다) · 발송 완료 ${undecided.filter((x) => sent(x.r)).length}건(과거분 — 고칠 수 없는 이력)`);
@@ -227,7 +232,7 @@ for (const x of unsentMismatch) {
   if (error) throw new Error(error.message);
   log.reports.push({ id: x.r.id, old_makeup: x.r.makeup_class_id, old_send: x.r.classnote_class_id });
 }
-for (const x of noCellsAnywhere) {
+for (const x of noCellsToCreate) {
   const { data, error } = await sb
     .from("attendance_records")
     .insert({ tenant_id: x.r.tenant_id, class_id: x.r.makeup_class_id, student_id: x.r.student_id, session_date: x.r.report_date, status: "makeup", recorded_by: x.r.created_by })
