@@ -62,7 +62,7 @@ import {
 } from "./plan-write";
 import { mergeTodayOrder, normalizeTodayOrder } from "../today-order";
 import { readEcsLandingOrder, readEcsTodayOrder } from "../view-prefs";
-import { readonlyTeacherViewError } from "@/lib/auth/view-mode";
+import { readonlyTeacherViewError, viewAsTeacher } from "@/lib/auth/view-mode";
 
 type ActionError = { ok: false; error: string };
 
@@ -910,6 +910,14 @@ async function patchMyEcsPrefs(patch: Record<string, unknown>): Promise<{ ok: bo
 }
 
 /**
+ * '다른 강사 뷰'(전체 포함)의 반 순서 저장 거절 문구 — 화면은 그 뷰에서 손잡이를 아예 안 만든다(ecs/page.tsx
+ * `canReorder = viewAs === null`). 서버도 같은 판정으로 막는다(2026-11-05 강사뷰 신원 점검):
+ * 순서는 화면 주인(그 강사)의 반 목록에 묶인 값이라 읽기는 그 강사 것인데(today.ts·queries.ts `orderOwner`),
+ * 저장(`patchMyUiPrefs`)은 실제 계정에 간다 — 열어 두면 그 강사의 순서를 바탕으로 만든 목록이 **보는 사람의 순서를 덮었다**.
+ */
+const OTHER_TEACHER_ORDER_ERROR = "다른 선생님 화면의 반 순서는 그 선생님 계정에서만 바꿀 수 있습니다";
+
+/**
  * 오늘 면 **반 순서**를 본인 계정에 저장 — `users.ui_prefs.ecs.todayOrder`(원장 2026-09-05 드래그&드롭).
  *
  * 인자는 **오늘 화면에 보이는 반의 새 순서**다. 저장 전에 오늘 안 보인 옛 저장분을 뒤에 붙여
@@ -922,8 +930,9 @@ export async function setMyEcsTodayOrder(visibleOrder: string[]): Promise<{ ok: 
   //    부를 수 있다. 그 뷰는 열람 전용이라 여기서도 거절한다(원장 2026-09-05).
   const readonlyErr = await readonlyTeacherViewError();
   if (readonlyErr) return { ok: false, error: readonlyErr };
+  if (await viewAsTeacher()) return { ok: false, error: OTHER_TEACHER_ORDER_ERROR };
   const next = normalizeTodayOrder(visibleOrder);
-  const user = await getCurrentUser({ teacherView: true });
+  const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const admin = createAdminClient();
   const { data } = await admin.from("users").select("ui_prefs").eq("id", user.id).maybeSingle();
@@ -942,8 +951,9 @@ export async function setMyEcsLandingOrder(visibleOrder: string[]): Promise<{ ok
   //    부를 수 있다. 그 뷰는 열람 전용이라 여기서도 거절한다(원장 2026-09-05).
   const readonlyErr = await readonlyTeacherViewError();
   if (readonlyErr) return { ok: false, error: readonlyErr };
+  if (await viewAsTeacher()) return { ok: false, error: OTHER_TEACHER_ORDER_ERROR };
   const next = normalizeTodayOrder(visibleOrder);
-  const user = await getCurrentUser({ teacherView: true });
+  const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const admin = createAdminClient();
   const { data } = await admin.from("users").select("ui_prefs").eq("id", user.id).maybeSingle();

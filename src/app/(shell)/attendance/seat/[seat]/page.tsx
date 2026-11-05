@@ -14,6 +14,7 @@ import {
 import { PeriodNav } from "@/components/period-nav";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { dutyAllowsSeat } from "@/features/attendance/seat/duty";
@@ -94,8 +95,11 @@ export default async function SeatAttendancePage({
   // 토글 담당은 메뉴 권한 없이 그 자리만 연다. 없으면 기존 seat_attendance 게이트.
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  // 담당 판정은 쓰기 게이트(`gateSeatWrite`)와 **같은 두 함수**다 — 아래 쓰기 여부에도 그대로 쓴다.
-  const onDuty = dutyAllowsSeat(await getActiveSeatDuties(user.id, user.tenantId), seat);
+  // 담당 판정은 쓰기 게이트(`gateSeatWrite`)와 **같은 두 함수·같은 신원**이다 — 아래 쓰기 여부에도 그대로 쓴다.
+  // 🔑 담당 토글은 **화면 주인**(강사뷰면 검증된 대상 강사)의 것을 본다 — 게이트가 그 사람 명의로 쓰기 때문이다.
+  //    `user`(실제 계정)는 실시간 문서·presence 축(planMeta)에만 남는다 — 편집 중 표시는 실제 편집자다(view-as.ts).
+  const owner = (await getCurrentUser({ teacherView: true })) ?? user;
+  const onDuty = dutyAllowsSeat(await getActiveSeatDuties(owner.id, owner.tenantId), seat);
   if (!onDuty) await requireAccess("seat_attendance");
 
   const today = kstToday();
@@ -135,7 +139,9 @@ export default async function SeatAttendancePage({
    *    예전엔 ③만 봐서 **오늘이면 읽기 권한에게도** 출결 단추·일괄 단추·드래그·단어수 가져오기가 다 열리고, 누르면 그제서야
    *    "자리 출석부 입력 권한이 없습니다"가 떴다(화면은 attendance 키, 서버는 seat_attendance 키 — 키가 어긋나 있었다).
    */
-  const canSeatWrite = onDuty || (await canWriteTenant(user.systemRole, "seat_attendance"));
+  // 토글 갈래는 canWriteTenant를 안 지나므로 읽기 강사뷰를 게이트와 같은 함수(readonlyTeacherViewError)로 끈다.
+  const dutyWrite = onDuty && !(await readonlyTeacherViewError());
+  const canSeatWrite = dutyWrite || (await canWriteTenant(user.systemRole, "seat_attendance"));
   // 지난 날짜 쓰기는 사무실만 — 자리 전용 권한(아르바이트)은 오늘만. 서버 액션이 같은 판정을 다시 한다(#77).
   const canEditPast = await canWriteTenant(user.systemRole, "attendance");
   const readOnly = !canSeatWrite || (date !== today && !canEditPast);

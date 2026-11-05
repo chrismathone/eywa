@@ -21,7 +21,8 @@ type AckState = { ok: true } | { error: string };
  * ⚠️ 0323a 전이면 한글 안내로 돌려준다([[#95]] — 화면은 표가 없어도 산다: 아무것도 숨기지 않는다).
  */
 export async function ackShuttleHistory(kind: string, historyId: string): Promise<AckState> {
-  const user = await getCurrentUser();
+  // 확인한 사람(acked_by·acked_by_name)은 화면 주인 — 강사뷰면 검증된 대상(자격 canRecordBoarding과 같은 사람).
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canRecordBoarding())) return { error: "변경 내역을 확인할 권한이 없습니다" };
   if ((kind !== "ride" && kind !== "regular") || !historyId) return { error: "확인할 내역을 찾지 못했습니다" };

@@ -23,7 +23,8 @@ const MAX_AHEAD_DAYS = 62;
  * 🔴 날짜·학생은 서버가 다시 본다([[#77]]): 우리 학원 학생 · 오늘~62일 뒤 평일 · 쉬는 날 아님. 지난 날짜는 그날의 기록이라 안 바꾼다.
  */
 export async function staffDayGate(input: { studentId: string; onDate: string; ioKind: string }): Promise<Ctx | { error: string }> {
-  const user = await getCurrentUser();
+  // 바꾼 사람(actorName·created_by)은 화면 주인 — 강사뷰면 검증된 대상(자격 canRecordBoarding과 같은 사람).
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canRecordBoarding())) return { error: "셔틀 등하원을 바꿀 권한이 없습니다" };
   if (!isDirection(input.ioKind)) return { error: "등원/하원을 확인해 주세요" };

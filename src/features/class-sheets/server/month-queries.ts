@@ -23,7 +23,6 @@ import { normalizeMonth, activeDowsOf, rangeDates, rangeWeeks, type MonthWeek } 
 // 세션 기간(0189a) — 해석은 `resolvePeriodWindow` 한 곳(폴백 분기를 여기 두지 않는다).
 import { getPeriodDefsForYears } from "@/features/periods/server/queries";
 import { resolvePeriodWindow, type PeriodDef } from "@/features/periods/resolve";
-import { getCurrentUser } from "@/lib/auth/current-user";
 import { mondayOf, shiftDays } from "@/features/timetable/lib/week";
 import {
   monthFillStats,
@@ -50,6 +49,7 @@ import type { PlanLineDTO } from "./actions";
 import { getClassPlannedLines, type PlannedLine } from "@/features/textbooks/server/month-plan";
 import type { LessonIndex } from "@/features/textbooks/plan-compare";
 import { requireEcsClassAccess } from "./access";
+import { loadViewerUiPrefs } from "./viewer-prefs";
 import type { DowKey } from "../lib/week";
 
 /**
@@ -161,15 +161,8 @@ export type MonthResult = { ok: true; data: ClassSheetMonthData } | { ok: false;
  * ⚠️ admin은 RLS 우회라 `tenant_id`를 함께 건다([[#104]]).
  */
 async function loadMyUiPrefs(): Promise<unknown> {
-  const user = await getCurrentUser({ teacherView: true });
-  if (!user) return null;
-  const { data } = await createAdminClient()
-    .from("users")
-    .select("ui_prefs")
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId)
-    .maybeSingle();
-  return data?.ui_prefs ?? null;
+  // 보는 사람(실제 계정)의 값 — 쓰기(setMyEcsMonthView·MonthPeriod·MonthDisplay)가 실제 계정에 저장한다(viewer-prefs.ts).
+  return (await loadViewerUiPrefs()).data?.ui_prefs ?? null;
 }
 
 export async function getClassSheetMonth(

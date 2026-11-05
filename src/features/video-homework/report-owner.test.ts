@@ -61,12 +61,27 @@ describe("② 원스크린 저장 관문이 이 판정을 쓴다", () => {
 
   it("동시 첫 저장 — 저장된 값을 되받아, DB가 남의 값을 지켰으면 그 값을 화면에 알린다", () => {
     expect(body).toMatch(/\.select\(videoHwReady\s*\? \(videoDueReady \? "id, share_token, teacher_name, created_by, video_homework, video_homework_due" : "id, share_token, teacher_name, created_by, video_homework"\)\s*: "id, share_token, teacher_name, created_by"\)\s*\.single\(\)/);
-    expect(body).toMatch(/data\.created_by !== user\.id && \(data\.video_homework \?\? null\) !== input\.videoHomework/);
+    // 강사뷰에서 다시 적기에 실패한 줄(ownerRewriteFailed)도 같은 길로 화면을 저장값으로 되돌린다(아래 "다른 강사 뷰" 항목).
+    expect(body).toMatch(/\(data\.created_by !== user\.id \|\| ownerRewriteFailed\) && \(data\.video_homework \?\? null\) !== input\.videoHomework/);
     expect(body).toMatch(/const keptVideoHwFinal = keptVideoHw \?\? raceKept;/);
   });
 
   it("판정 재료(지금 값)를 미리 읽는다 — 칸이 확인됐을 때만(#95)", () => {
     expect(body).toMatch(/videoHwReady \? ", video_homework" : ""/);
+  });
+
+  it("🔴 '다른 강사 뷰'(전체) — DB 트리거가 실제 계정으로 판정해 되돌린 대상 강사 줄의 값만, 강사뷰일 때 관리 키로 다시 적는다(2026-11-05)", () => {
+    // 판정 자체는 onescreen/teacher-view-video-owner.test.ts. 여기는 저장 뒤 · 경합 판정 앞에서 부르는지, 행을 좁히는지만 본다.
+    const call = body.indexOf("videoOwnerRewrite({");
+    expect(call).toBeGreaterThan(body.indexOf(".upsert("));
+    expect(call).toBeLessThan(body.indexOf("const raceKept"));
+    expect(body).toMatch(/viewingOtherTeacher: \(await viewAsTeacher\(\)\) !== null/);
+    expect(body).toMatch(/wantedVideoHomework: videoHwReady && !keptVideoHw \? input\.videoHomework : undefined/);
+    const fix = body.slice(call, body.indexOf("const raceKept"));
+    expect(fix).toContain('.eq("tenant_id", user.tenantId)');
+    expect(fix).toContain('.eq("id", data.id)');
+    expect(fix).toContain('.eq("created_by", user.id)');
+    expect(fix).toContain("ownerRewriteFailed = true");
   });
 
   it("발송(saveAndQueueClassnote)도 둔 값을 화면에 넘긴다", () => {

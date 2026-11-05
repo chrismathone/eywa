@@ -198,8 +198,9 @@ export async function ProgressContainerPanel({ studentId }: { studentId: string 
   const data = await getStudentProgressAnalytics(studentId);
   const open = data.anomalies.filter((a) => a.resolvedAt === null);
   const resolved = data.anomalies.filter((a) => a.resolvedAt !== null);
-  // 버튼 노출 판정 = 서버 액션과 **같은 순수 게이트**(#77). 강사(scoped)는 담당 학생일 때만.
-  const user = await getCurrentUser();
+  // 버튼 노출 판정 = 서버 액션과 **같은 순수 게이트·같은 사람**(#77). 강사(scoped)는 담당 학생일 때만.
+  // 강사뷰면 검증된 대상 강사의 담당으로 본다 — 실제 계정 id로 보면 대상 강사 학생인데 버튼이 안 섰다.
+  const user = await getCurrentUser({ teacherView: true });
   const level = user ? await accessLevelTenant(user.systemRole, "students") : "none";
   const supabase = await createClient();
   const owns =

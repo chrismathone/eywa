@@ -2,10 +2,10 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({ user: null as unknown, video: null as unknown, error: null as unknown, allowed: true,
   student: null as unknown, states: {} as Record<string, unknown>, credential: null as unknown,
-  reads: [] as unknown[][], token: vi.fn(), fetch: vi.fn(), pinned: vi.fn(), thread: vi.fn(), detail: vi.fn(), level: "full", scope: ["class-a"], linked: { route: { classId: "class-a" } } as unknown }));
-vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => m.user }));
+  reads: [] as unknown[][], userArgs: [] as unknown[], scopeArgs: [] as unknown[], token: vi.fn(), fetch: vi.fn(), pinned: vi.fn(), thread: vi.fn(), detail: vi.fn(), level: "full", scope: ["class-a"], linked: { route: { classId: "class-a" } } as unknown }));
+vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async (options?: unknown) => { m.userArgs.push(options); return m.user; } }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ canAccessTenant: async () => m.allowed, accessLevelTenant: async () => m.level }));
-vi.mock("./read-scope", () => ({ teacherViewableClassIds: async () => m.scope }));
+vi.mock("./read-scope", () => ({ teacherViewableClassIds: async (id: unknown) => { m.scopeArgs.push(id); return m.scope; } }));
 vi.mock("@/features/video-homework/server/video-source", () => ({ homeworkVideoSource: async () => "homework_video_ledger_videos" }));
 vi.mock("./queries", () => ({ getStudentById: m.detail }));
 vi.mock("@/features/classnote-reply/server/video-poll", () => ({ getThreadVideoStates: m.thread }));
@@ -26,7 +26,7 @@ const FILE = "owned_video_file123";
 const request = (range?: string, query = "") => new Request(`https://aywa.test/api/homework-videos/${ID}/stream${query}`, { headers: range ? { range } : {} });
 const upstream = () => new Response("abcd", { status: 206, headers: { "content-type": "video/mp4", "content-length": "4", "content-range": "bytes 0-3/12" } });
 beforeEach(() => {
-  vi.clearAllMocks(); m.reads = []; m.error = null; m.allowed = true; m.level = "full"; m.scope = ["class-a"]; m.linked = { route: { classId: "class-a" } };
+  vi.clearAllMocks(); m.reads = []; m.userArgs = []; m.scopeArgs = []; m.error = null; m.allowed = true; m.level = "full"; m.scope = ["class-a"]; m.linked = { route: { classId: "class-a" } };
   m.user = { tenantId: "tenant-a", systemRole: "teacher" }; m.student = { id: "student-a" }; m.states = {};
   m.video = { student_id: "student-a", status: "uploaded", drive_file_id: FILE, route: { rootId: ROOT, connectionId: null } };
   m.token.mockResolvedValue("secret-token"); m.credential = { status: "ready", accessToken: m.token };
@@ -61,6 +61,14 @@ it("a scoped teacher cannot read this student's other subject video; manual ledg
   m.linked = { route: { classId: "class-a" } }; expect((await streamHomeworkVideo(request(), ID)).status).toBe(206);
   expect(m.reads).toContainEqual(["from", "homework_video_ledger_videos"]);
   m.linked = null; expect((await streamHomeworkVideo(request(), ID)).status).toBe(403);
+});
+it("teacher view: the viewer is the validated target teacher, and that teacher's classes decide (2026-11-05)", async () => {
+  // 관리자가 '다른 강사 뷰'로 강사 X를 열면 getCurrentUser({ teacherView: true })가 X를 준다 — 담당 반도 X의 것으로 묻는다.
+  m.user = { id: "teacher-x", tenantId: "tenant-a", systemRole: "teacher" };
+  expect((await streamHomeworkVideo(request(), ID)).status).toBe(206);
+  expect(m.userArgs).toEqual([{ teacherView: true }]);
+  expect(m.scopeArgs).toEqual(["teacher-x"]);
+  m.scope = ["class-of-the-real-admin"]; expect((await streamHomeworkVideo(request(), ID)).status).toBe(403);
 });
 it("full student-list access does not grant a teacher access to another class's video bytes", async () => {
   m.level = "full"; m.linked = { route: { classId: "another-class" } };

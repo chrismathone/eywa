@@ -58,11 +58,15 @@ export async function canViewLinkedHomeworkVideo(
   return true;
 }
 
-/** 로그인·학생 아님·학생 메뉴 접근·이 지점의 업로드된 영상까지 — 재생과 AI 참고 메모의 공통 앞단. */
+/**
+ * 로그인·학생 아님·학생 메뉴 접근·이 지점의 업로드된 영상까지 — 재생과 AI 참고 메모의 공통 앞단.
+ * 🔑 판정하는 사람은 **화면 주인** — 강사뷰(다른 강사 뷰)면 검증된 대상 강사다. 학생 상세 열람(`canViewStudentDetail`)과
+ *    같은 신원이어야 한다: 실제 계정(관리자) id로 담당 반을 물으면 대상 강사의 학생 영상이 403이었다(2026-11-05 점검).
+ */
 export async function loadViewableVideo(videoId: string): Promise<
   { ok: true; user: ViewerUser; db: ReturnType<typeof createAdminClient>; video: VideoRow } | { ok: false; status: number }
 > {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user || user.systemRole === "student") return { ok: false, status: 401 };
   if (!UUID.test(videoId)) return { ok: false, status: 404 };
   if (!(await canAccessTenant(user.systemRole, "students"))) return { ok: false, status: 403 };

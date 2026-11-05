@@ -212,7 +212,9 @@ export async function recordAbsenceIntake(input: {
   /** 화면에서 체크를 푼 칸(cellKey) — **빼는 데만** 쓴다. 목록은 서버가 다시 계산한다. */
   exclude?: string[];
 }): Promise<IntakeSaveResult> {
-  const user = await getCurrentUser();
+  // 알림의 접수자(actorId·actorName)는 화면 주인 — 강사뷰면 검증된 대상. 아래 출결(recorded_by)·조치 기록(created_by)과
+  // 같은 사람이어야 한다(2026-11-05 강사뷰 신원 점검). 읽기 강사뷰는 canManageTenant(수준 캡)가 막는다.
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canManageTenant(user.systemRole, "attendance"))) return { error: "결석 접수 권한이 없습니다" };
 

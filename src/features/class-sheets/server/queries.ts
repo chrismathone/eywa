@@ -73,6 +73,7 @@ import { isMeaningfulPlanLine } from "../lib/plan-codec";
 import { goalAreasFor } from "../lib/goal-areas";
 import { normalizeSlotTime, weekDatesOf, YMD_RE, type DowKey } from "../lib/week";
 import { ecsDelegatedClassIds, ecsVisibleClassFilter, requireEcsClassAccess } from "./access";
+import { loadViewerUiPrefs } from "./viewer-prefs";
 
 /**
  * ECS 주간 시트 로더 — 게이트(requireEcsClassAccess) 통과 후 admin client(service_role)로만 읽는다
@@ -318,7 +319,8 @@ export async function getClassSheetWeek(
       //    (시간표는 같은 함수가 던진다 — 감사 E5. 영어 강사 전원이 매일 여는 화면이라 여기선 삼킨다).
       .catch(() => undefined),
     // 내 글씨 크기(계정 귀속) — 서버 확정값이라 첫 렌더부터 정확하다(localStorage 초기값 = 하이드레이션 크래시 #75).
-    admin.from("users").select("ui_prefs").eq("id", access.user.id).eq("tenant_id", tenantId).maybeSingle(),
+    // 내 글씨 크기는 **보는 사람(실제 계정)** 것 — 쓰기(setMyEcsFontSize → patchMyUiPrefs)와 같은 행(viewer-prefs.ts).
+    loadViewerUiPrefs(),
     // 교시 체크(Shouting, 0230a). ⚠️ **에러를 일부러 삼킨다**(아래 에러 게이트 목록에도 안 넣는다) —
     // 마이그레이션보다 앱이 먼저 배포되면 표가 없어 400이 나는데, 그때 시트 전체가 안 열리면 안 된다([[#95]]).
     // 표가 생긴 뒤엔 정상 조회된다. 체크가 잠깐 안 보이는 것과 반 시트가 통째로 죽는 것은 급이 다르다.
@@ -889,7 +891,8 @@ export async function getSheetLanding(
       .eq("is_active", true)
       .or(`closed_at.is.null,closed_at.gte.${weekMonday}`)
       .order("class_name"),
-    admin.from("users").select("ui_prefs").eq("id", user.id).eq("tenant_id", user.tenantId).maybeSingle(),
+    // 표시 취향은 보는 사람(실제 계정) 것 — 쓰기(patchMyUiPrefs)와 같은 행(viewer-prefs.ts). 반 순서만 아래에서 화면 주인 것을 읽는다.
+    loadViewerUiPrefs(),
   ]);
   if (classError) return { ok: false, error: `반 목록을 불러오지 못했습니다: ${classError.message}` };
   /**
