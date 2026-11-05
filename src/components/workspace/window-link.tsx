@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { MouseEvent, ReactNode } from "react";
 import { findNavItem, navPresentation, SUBTABS_BY_MENU } from "@/lib/navigation";
 import { MENU_LABEL, type MenuKey } from "@/lib/permissions";
+import { EXPLORE_WINDOW_LABEL } from "@/features/explore/model";
 import { useWindowStore } from "./window-store";
 import { openLinkWindow } from "./open-menu-window";
 import { useMenuHub } from "./menu-hub-store";
@@ -76,6 +77,10 @@ export function windowIdForHref(href: string): { id: string; navLabel?: string }
   // 도움말 하위(`/help/posts/…` · `/help/icons` · 옛 `/help/<slug>` 북마크)는 **도움말 창 하나**.
   if (path === "/help" || path.startsWith("/help/")) {
     return { id: "help", navLabel: MENU_LABEL.help };
+  }
+  // 연결 탐색(`/explore/<종류>/<id>`)도 **창 하나** — 중심을 바꿔 가며 보는 화면이라 중심마다 창이 생기면 안 된다(2026-11-03).
+  if (path === "/explore" || path.startsWith("/explore/")) {
+    return { id: "explore", navLabel: EXPLORE_WINDOW_LABEL };
   }
   const item = findNavItem(path);
   if (item && item.href === path) {

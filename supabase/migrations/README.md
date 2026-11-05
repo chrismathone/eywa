@@ -12,6 +12,10 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-11-03 원생 흐름 분석 저장 표 (s2_0027 · ✅ 운영 적용 2026-11-03 · 적용 때 가지 번호 s2_0018 → 합치며 s2_0027(main의 s2_0018 = 업무 요청 · 2026-11-05 밤 병합) · 본문 글자는 적용한 그대로)
+
+`s2_0027_student_flow_insights.sql` — 원장 2026-11-03 *"새 상담 올릴때마다 상담 분석 돌릴것 … 이전 상담 분석에 합산"* · *"타임라인도 비슷하게"*. 표 `student_flow_insights`(학생 × 종류 consultations·timeline마다 마지막 분석 한 벌) — 연결 탐색(`/explore`) 왼쪽 '흐름' 카드가 읽는다. 읽기·쓰기 정책 없음(서버 service_role만 · admin 클라이언트 + tenant_id 필터). 🔴 다시 실행하지 말 것(운영에 이미 있다).
+
 ## 2026-11-05 원생 메뉴 권한 저장 가드 좁힘 (s2_0026 · ✅ 운영 적용 2026-11-05 18:01 · 원장 승인 *"그래 근본 해결하고 그렇게해"* · 적용 때 임시 번호 s2_0025 → 합치며 s2_0026(퇴원보고서가 s2_0025로 먼저 운영 적용) · 본문 글자는 적용한 그대로)
 
 `s2_0026_student_status_guard_narrow.sql` — 원장 *"원생목록 '읽기'에 굳이 그럴 필요가있어?"*(아르바이트 칸에 원생목록 '읽기'를 주려는데 "원생 상태 변경 담당자를 지정해 주세요"로 막혔다). `student_status_private.guard_settings()`의 옛 방식(담당자 미지정) 갈래만 바꾼다: 원생 메뉴 줄이 **조금만 바뀌어도** 막던 것을 **원생 상태 변경 권한이 넓어지는 변경**만 막도록 — 자격(사무실 역할 ∧ 원생 '전체' ∨ 관리자 도구 '전체', `student_status_private.allowed`)의 앞뒤 **실효값**(마지막 줄 우선 — `student_status_private.menu`와 같은 순서)을 비교한다. 같은 줄을 그대로 두면 막지 않는다(겹친 줄이 저장된 학원도 안전 — 재리뷰). 앱 `studentStatusRefreshRequired`와 같은 판정(가드 `student-status-permissions.test.ts`가 역할·메뉴 목록·기본값을 맞춘다). 적용 전 세션 임시 함수(pg_temp)로 32개 사례(운영 실제 설정 그대로 · + 아르바이트 원생 '읽기' 포함)를 앱 판정과 대조해 모두 맞음. 함수 하나 교체라 표 잠금 없음 · 앱보다 먼저든 나중이든 안전. 적용 = 파일의 문장 2개(begin/commit 뺌)를 글자 그대로 감싼 do 블록 한 문장(같은 DB 연결 · 211ms) · 적용 전 운영 정의 = 분석한 0428a 원본과 글자 일치 · tenant_settings 활성 질의 0 · 적용 후: 마커 `LEGACY-STATUS-WIDEN` true · 운영 본문 = 파일 본문(공백 무시 일치) · 트리거 `zz_student_status_settings` 켜짐·연결 그대로 · 소유자 postgres · 실행 권한(authenticated·service_role) · security invoker · `search_path=public` 그대로. 되돌리기 = 시즌1 `s1_season1.sql` 0428a 구역의 `guard_settings` 정의 재실행.
