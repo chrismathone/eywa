@@ -73,7 +73,7 @@ import { needsMakeupCheck } from "../reserved-makeup";
 import { MakeupSwitchButton } from "./makeup-switch-button";
 import { isMathBookRow, useMathBookListId } from "./math-book-list";
 import { JjBookPicker } from "./jj-book-picker";
-import { isJjSheetDraft, isJjSheetReport } from "../jj-books";
+import { isJjSheetDraft, isJjSheetReport, isProgressOptionalReport } from "../jj-books";
 import { LoveNoteDraftButton } from "./love-note-draft-button";
 
 const TD_BASE = "px-2 py-1.5 align-top";
@@ -343,6 +343,7 @@ export function GridBodyRow({
   const oneLineRow = pilot || subject.subjectKey === "english";
   // JJ 수업보고서 글 — 사랑의 한마디는 선택(비우면 그 항목이 빠진다, 원장 2026-10-27).
   const jjOptionalNote = subject.subjectKey === "english" && isJjSheetDraft(rep);
+  const progressOptional = isProgressOptionalReport(subject, rep); // SRS 글은 진도 항목이 없다(원장 2026-11-05)
   const sendGate = evaluateSendGate({
     lang,
     needsAutoWrite:
@@ -366,7 +367,7 @@ export function GridBodyRow({
     alreadySent,
     reportOptout: isReportOptoutRow(subject), // 미발송 반(0174a) — 카드뷰와 같은 단일 소스
     isAbsent: subject.attendanceRaw === "absent",
-    hasProgress: isReportEligible(subject),
+    hasProgress: isReportEligible(subject, progressOptional),
     hasDraft,
     // 출결 쓰기 권한 없음 = 게이트 해당 없음(P0-3) — 알약도 없는데 "출결을 기록하라"는 거짓 안내 방지.
     attendanceUnchecked: !gen.attReadOnly && isAttendanceUnchecked(subject),
@@ -387,7 +388,7 @@ export function GridBodyRow({
     checkTest: rowEval.tests.check.score != null ? "y" : "",
   });
   // 발송 완료건은 자동작성도 막는다 — 멘트를 새로 만들어 봐야 저장이 서버에서 거부된다(입력 유실).
-  const canAutoWrite = isRowActionable(subject, "autowrite", liveStatus);
+  const canAutoWrite = isRowActionable(subject, "autowrite", liveStatus, { progressOptional });
   const isAbsent = subject.attendanceRaw === "absent";
   /**
    * 이 행의 **보고서 입력 전체**를 잠그나 — 발송 완료 또는 결석(`isRowInputEditable` 단일 소스).

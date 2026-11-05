@@ -1,5 +1,9 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-05 — 원스크린: SRS 보고서는 진도 없이 저장·발송
+
+- 원장 *"srs보고서의 경우 진도 영역이 필요없자나 필수로 넣지말아줘"*. 영어 행 + 지금 글이 SRS(JJ) 글이면(`isProgressOptionalReport`, jj-books.ts — 사랑의 한마디 선택과 같은 판정) 진도 게이트를 건너뛴다 · `isReportEligible`/`isRowActionable`에 `progressOptional` · 표·카드·일괄 저장/발송/자동작성·첨부 저장 전부 같은 값. 서버는 원래 진도를 요구하지 않는다.
+
 ## 2026-11-05 — EiE 일일 보고서(수학 보고서 표) · EiE 월간 보고서(시트 모양 · Monthly Test 점수 동결 줄 + Teacher's Comment) — 영어 기본 템플릿 둘 · 원스크린 로스터가 영어 반 Monthly Test 점수를 싣는다(실패·s2_0023 미적용이면 빈 결과) — 상세 [decisions/reports-ai.md](decisions/reports-ai.md) 'EiE 보고서 두 종류'
 
 ## 2026-11-05 — 보고서 설정: 옛 '수학 발송 경로' 걷음 — '수학 반 보드'(설명 + 지금 반 보드 동기화)만
