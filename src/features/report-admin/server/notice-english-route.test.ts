@@ -83,7 +83,7 @@ describe("routeNoticeCandidates — 영어", () => {
       classes: [klass("E1", { teacher_id: "t1" })],
       classnote_english_class_boards: [room("E1", "Jennifer E1 (월수)")],
     });
-    const r = await routeNoticeCandidates({ supabase, tenantId: T, settings, senderName: null, candidates: [cand("s1", "english", strict("t1", ["E1"]))] });
+    const r = await routeNoticeCandidates({ supabase, tenantId: T, settings, candidates: [cand("s1", "english", strict("t1", ["E1"]))] });
     expect(r).toEqual({
       classTargets: [{ studentId: "s1", studentName: "학생s1", board: "Jennifer E1 (월수) · 학생s1", classId: "E1", className: "반 E1", subject: "english" }],
       rest: [],
@@ -92,7 +92,7 @@ describe("routeNoticeCandidates — 영어", () => {
   });
   it("반 방이 없는 영어 반이면 지금처럼 1인 보드(rest — 동명이인 가드를 탄다)", async () => {
     Object.assign(db.state.tables, { enrollments: [enr("s1", "E1")], classes: [klass("E1", { teacher_id: "t1" })] });
-    const r = await routeNoticeCandidates({ supabase, tenantId: T, settings, senderName: null, candidates: [cand("s1", "english", strict("t1"))] });
+    const r = await routeNoticeCandidates({ supabase, tenantId: T, settings, candidates: [cand("s1", "english", strict("t1"))] });
     expect(r).toEqual({ classTargets: [], rest: [{ studentId: "s1", name: "학생s1", classnoteName: null, subject: "english" }], skipped: [] });
   });
   it("🔴 연동 PC가 영어 반 방을 모르면(옛 워커 · 하나라도) 반을 싣지 않는다 — 전부 지금처럼 1인 보드", async () => {
@@ -101,7 +101,7 @@ describe("routeNoticeCandidates — 영어", () => {
     });
     for (const workers of [[worker({ noticeClassRoute: true })], [worker({ noticeEnglishRoom: true }), worker({})], []]) {
       db.state.tables.classnote_workers = workers;
-      const r = await routeNoticeCandidates({ supabase, tenantId: T, settings, senderName: null, candidates: [cand("s1", "english", strict("t1"))] });
+      const r = await routeNoticeCandidates({ supabase, tenantId: T, settings, candidates: [cand("s1", "english", strict("t1"))] });
       expect(r.classTargets).toEqual([]);
       expect(r.rest).toHaveLength(1);
     }
@@ -109,9 +109,9 @@ describe("routeNoticeCandidates — 영어", () => {
   it("ClassNote 모듈이 꺼져 있거나 학원 설정에서 영어를 발송 과목에서 뺐으면 경로 판정을 하지 않는다", async () => {
     Object.assign(db.state.tables, { enrollments: [enr("s1", "E1")], classes: [klass("E1", { teacher_id: "t1" })], classnote_english_class_boards: [room("E1", "E1 방")] });
     const off = { ...settings, modules: { disabled: ["classnote"] } };
-    expect((await routeNoticeCandidates({ supabase, tenantId: T, settings: off, senderName: null, candidates: [cand("s1", "english", strict("t1"))] })).classTargets).toEqual([]);
+    expect((await routeNoticeCandidates({ supabase, tenantId: T, settings: off, candidates: [cand("s1", "english", strict("t1"))] })).classTargets).toEqual([]);
     const noEnglish = { ...settings, report: { ...settings.report, classnoteSubjects: ["math"] } };
-    const r = await routeNoticeCandidates({ supabase, tenantId: T, settings: noEnglish, senderName: null, candidates: [cand("s1", "english", strict("t1"))] });
+    const r = await routeNoticeCandidates({ supabase, tenantId: T, settings: noEnglish, candidates: [cand("s1", "english", strict("t1"))] });
     expect(r.classTargets).toEqual([]);
     expect(r.rest).toHaveLength(1); // 기존 경로가 '발송 과목 아님'으로 제외한다
     expect(db.state.reads).not.toContain("enrollments");
@@ -125,7 +125,7 @@ describe("routeNoticeCandidates — 영어", () => {
       class_delegations: [delegation("E3", "원어민", "2026-11-04", "2026-11-04")],
     });
     const r = await routeNoticeCandidates({
-      supabase, tenantId: T, settings, senderName: null,
+      supabase, tenantId: T, settings,
       candidates: ["s1", "s2", "s3"].map((s) => cand(s, "english", strict("원어민"))),
     });
     expect(r.classTargets.map((t) => t.classId)).toEqual(["E2", "E3"]);
@@ -143,7 +143,7 @@ describe("routeNoticeCandidates — 영어", () => {
       ],
     });
     const r = await routeNoticeCandidates({
-      supabase, tenantId: T, settings, senderName: null,
+      supabase, tenantId: T, settings,
       candidates: ["s1", "s2", "s3", "s4"].map((s) => cand(s, "english", strict("원어민"))),
     });
     expect(r.classTargets).toEqual([]);
@@ -219,7 +219,7 @@ describe("routeNoticeCandidates — 영어", () => {
     db.state.errors.classnote_english_class_boards = { code: "57014", message: "canceling statement due to statement timeout" };
     await expect(resolveEnglishNoticeClasses(T, [{ studentId: "s1" }])).rejects.toThrow();
     await expect(
-      routeNoticeCandidates({ supabase, tenantId: T, settings, senderName: null, candidates: [cand("s1", "english", strict("t1"))] }),
+      routeNoticeCandidates({ supabase, tenantId: T, settings, candidates: [cand("s1", "english", strict("t1"))] }),
     ).rejects.toThrow();
   });
   it("사무실 발송 = 고른 반 · 고른 반에 반 방이 없으면 그 반의 일이라 1인 보드(다른 반 방으로 옮기지 않는다)", async () => {
@@ -229,8 +229,8 @@ describe("routeNoticeCandidates — 영어", () => {
       classnote_english_class_boards: [room("나", "나 방")],
     });
     const office = (hints: string[]) => cand("s1", "english", { hints, teacherIds: null });
-    expect((await routeNoticeCandidates({ supabase, tenantId: T, settings, senderName: null, candidates: [office(["가"])] })).rest).toHaveLength(1);
-    expect((await routeNoticeCandidates({ supabase, tenantId: T, settings, senderName: null, candidates: [office(["나"])] })).classTargets).toMatchObject([{ classId: "나" }]);
+    expect((await routeNoticeCandidates({ supabase, tenantId: T, settings, candidates: [office(["가"])] })).rest).toHaveLength(1);
+    expect((await routeNoticeCandidates({ supabase, tenantId: T, settings, candidates: [office(["나"])] })).classTargets).toMatchObject([{ classId: "나" }]);
   });
   it("같은 반 방 · 같은 표시 이름의 두 학생은 둘 다 뺀다(결과를 서로 구분할 수 없다) · 같은 학생이 두 번 뽑혀도 한 번", async () => {
     Object.assign(db.state.tables, {
@@ -239,11 +239,11 @@ describe("routeNoticeCandidates — 영어", () => {
       classnote_english_class_boards: [room("E1", "E1 방")],
     });
     const twins = [{ ...cand("s1", "english", strict("t1")), name: "김민준" }, { ...cand("s2", "english", strict("t1")), name: "김민준" }];
-    const r = await routeNoticeCandidates({ supabase, tenantId: T, settings, senderName: null, candidates: twins });
+    const r = await routeNoticeCandidates({ supabase, tenantId: T, settings, candidates: twins });
     expect(r.classTargets).toEqual([]);
     expect(r.skipped).toEqual([{ name: "김민준", reason: "name_collision" }, { name: "김민준", reason: "name_collision" }]);
     expect(r.rest).toEqual([]);
-    const once = await routeNoticeCandidates({ supabase, tenantId: T, settings, senderName: null, candidates: [cand("s1", "english", strict("t1")), cand("s1", "english", strict("t1"))] });
+    const once = await routeNoticeCandidates({ supabase, tenantId: T, settings, candidates: [cand("s1", "english", strict("t1")), cand("s1", "english", strict("t1"))] });
     expect(once.classTargets).toHaveLength(1);
   });
 });
@@ -258,7 +258,7 @@ describe("routeNoticeCandidates — 수학·영어가 섞인 발송", () => {
       classnote_english_class_boards: [room("E1", "E1 방")],
     });
     const r = await routeNoticeCandidates({
-      supabase, tenantId: T, settings, senderName: null,
+      supabase, tenantId: T, settings,
       candidates: [cand("수", "math", strict("t1")), cand("영", "english", strict("t1")), cand("영2", "english", strict("t1"))],
     });
     expect(r.classTargets).toEqual([
@@ -270,7 +270,7 @@ describe("routeNoticeCandidates — 수학·영어가 섞인 발송", () => {
   });
   it("🔴 수학 경로는 그대로 — 영어 반 방을 아는 워커여도 수학 반 보드가 없는 수학 학생은 제외(1인 보드로 되돌리지 않는다)", async () => {
     Object.assign(db.state.tables, { enrollments: [enr("수", "M1")], classes: [klass("M1", { subject: "math", teacher_id: "t1" })] });
-    const r = await routeNoticeCandidates({ supabase, tenantId: T, settings, senderName: null, candidates: [cand("수", "math", strict("t1"))] });
+    const r = await routeNoticeCandidates({ supabase, tenantId: T, settings, candidates: [cand("수", "math", strict("t1"))] });
     expect(r).toEqual({ classTargets: [], rest: [], skipped: [{ name: "학생수", reason: "no_class_board" }] });
   });
 });

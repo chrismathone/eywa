@@ -13,6 +13,7 @@
 - 앱: `classRouteActive` = ClassNote 모듈 켜짐 하나(강사 이름 인자는 쓰지 않음 — 진행 중인 영어 개별 공지 반 방 작업이 같은 호출 모양을 써서 인자만 남김, 그 작업 병합 뒤 호출부와 함께 걷는다) · `classRouteAppliesTo` 삭제 · 설정 스키마·기본값에서 두 칸 삭제(저장된 값은 다음 보고서 설정 저장 때 빠진다).
 - 워커: `decideRoute(report)` = 수학이면 반별(설정을 읽지 않는다) · `normalizeRouteConfig`·`getClassnoteMathRoute` 삭제. 다음 AywaSync 판에 실린다 — **동작 변화 없음**(운영 저장값 = 침산 `class` 하나, 다른 지점은 빈 값 = 반별).
 - SQL 변경 없음(발송 기록 스냅샷 `lesson_report_send_private.snapshot`은 키가 있을 때만 담는다 — 읽는 곳 없음).
+- 후속(영어 반 방 병합 뒤, 가지 fix/math-route-followup): 위에서 남겨 둔 강사 이름 인자를 걷었다 — `classRouteActive(settings)` 한 인자 · 호출부 10곳(앱 9 + `scripts/_reports/makeup-class-drift.mts`) · 공지 경로 `routeNoticeCandidates`의 `senderName` 삭제. 동작 변화 없음(지운 인자 식에 부수효과 없음 — 적대적 리뷰 확인).
 
 ## 2026-11-04 — 영어 개별 공지·교재요청서 = 영어 반 방 1:1(AywaSync 1.0.15 · 가지 feat/english-notice-room)
 

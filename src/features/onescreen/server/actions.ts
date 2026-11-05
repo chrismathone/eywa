@@ -420,7 +420,7 @@ export async function saveLessonReport(
           }
         : null,
       anchorRequired: async () =>
-        SEND_CLASS_SUBJECTS.has(input.subject ?? "") && classRouteActive(await getTenantSettings(), user.displayName),
+        SEND_CLASS_SUBJECTS.has(input.subject ?? "") && classRouteActive(await getTenantSettings()),
     });
     if (!prepared.ok)
       return {
@@ -1142,7 +1142,7 @@ export async function saveAndQueueClassnote(
    *  · 반 정보가 없는 정규 행(옛 과목 단위 행)은 반별로 보낼 곳이 없다 — 막는다.
    * 🔴 확인 실패는 **발송하지 않는다**(fail-closed) — 모르는 채로 보내면 워커가 막거나 엉뚱한 곳을 시도한다.
    */
-  const routeApplies = classRouteActive(settings, user.displayName); // ClassNote 모듈이 꺼진 학원은 언제나 false(예전 그대로)
+  const routeApplies = classRouteActive(settings); // ClassNote 모듈이 꺼진 학원은 언제나 false(예전 그대로)
   let sendClassPick: { classId: string; via: string } | null = null; // 감사로그 — 어느 반으로
   if (routeApplies && SEND_CLASS_SUBJECTS.has(input.subject ?? "")) {
     const unqueue = async () => {
