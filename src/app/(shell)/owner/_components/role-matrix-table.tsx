@@ -75,7 +75,7 @@ export function RoleMatrixTable({ groups, matrix, savedMatrix, onCycle }: {
           {item.hiddenInMenu || (tab && group.hiddenInMenu) ? <span className="text-text-dim shrink-0">관리자뷰에서 감춤</span> : null}
         </span>
         {item.covers.length > 0 ? (
-          // 이 권한이 함께 여는 내부 메뉴 — 줄이면 무엇이 열리는지 안 보이므로 자르지 않고 접어 적는다.
+          // 메뉴 구성에서 이름을 바꾼 화면의 바뀐 이름(그 밖엔 비어 있다 — 줄은 탭 이름 한 줄 · 원장 2026-11-05). 자르지 않고 접어 적는다.
           <span className="text-text-dim block leading-snug">{item.covers.join(" · ")}</span>
         ) : null}
       </td>

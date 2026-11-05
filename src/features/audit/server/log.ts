@@ -100,6 +100,10 @@ export const AUDIT_ACTIONS = {
   // 수업보고서 보드 명단 핀(board-roster-actions.ts) — audit_logs에 **직접 insert**라 가드가 못 봤다(아직 행 0건).
   classnote_child_link: "ClassNote 자녀 보드 연결",
   classnote_child_unlink: "ClassNote 자녀 보드 연결 해제",
+  // 원장 확인 연결(0185a linked_by='confirmed' · 2026-11-05) — 입소 서류(명부 이름·보호자 전화)만 대조에서 빼는 사람 확인.
+  // 손 도구 scripts/_classnote/confirm-child-links.mjs가 직접 insert(넣기 · 되돌리기).
+  classnote_child_link_confirm: "ClassNote 원아 연결 원장 확인",
+  classnote_child_link_unconfirm: "ClassNote 원아 연결 원장 확인 해제",
   staff_role_change: "역할 변경",
   staff_delete: "직원 삭제",
   // 재직 상태 변경(퇴사·복구·대기) — 2026-09-23 전수 점검 S1 전엔 기록이 한 줄도 안 남았다.

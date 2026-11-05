@@ -39,7 +39,9 @@ import { canViewUnitsMaster } from "@/features/attendance/server/units-master";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { attendanceUnitSuffix } from "@/features/attendance/unit-suffix";
 import { ATTENDANCE_EDIT_WINDOW_DAYS } from "@/features/attendance/edit-window";
-import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canAccessTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { getActiveSeatDuties } from "@/features/attendance/seat/server/duty";
+import { dutyAllowsSeat } from "@/features/attendance/seat/duty";
 import { AbsenceIntakeButton } from "./_components/absence-intake-button";
 import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
@@ -269,6 +271,9 @@ export default async function AttendancePage({
   const month = monthParam ?? currentMonthKey();
   // 강사(또는 강사뷰 겸직)인지 — 기본 진입 화면을 가른다. 캐시된 헬퍼라 쿼리가 늘지 않는다.
   const myTeacherId = await effectiveTeacherId();
+  // 자리(랩실·JJ실)를 열 수 있는가 — 아래 반 목록 조회와 독립이라 먼저 출발시킨다(B4). 쓰는 곳은 자리 선택지.
+  const seatAccessPromise = Promise.all([canAccessTenant(user.systemRole, "seat_attendance"), getActiveSeatDuties(user.id, user.tenantId)]);
+  seatAccessPromise.catch(() => {}); // 기다리기 전에 실패해도 처리되지 않은 거절로 새지 않게 — 실패는 아래 await에서 그대로 던진다.
   // 보기 모드 판정(resolveViewMode)은 **검증된 반**(effectiveClassId)이 나온 뒤에 한다 — 아래 참조.
 
   // 반 목록(경량) — classId 없이 부르면 무거운 출석 데이터는 안 불러온다(렉 방지). 과목→강사→반 계층·선택지 도출용.
@@ -336,8 +341,12 @@ export default async function AttendancePage({
    * ⚠️ 과목 필터가 영어가 아닐 땐 자리를 숨긴다 — 자리는 영어관 운영이라 수학 화면에 뜨면 노이즈다.
    */
   const showSeats = seatOn && (!effectiveSubject || effectiveSubject === "english");
+  // 자리는 **열 수 있는 사람에게만** 보인다 — 자리 화면의 게이트(그 자리 담당 토글 또는 `seat_attendance` 권한)와 같은 판정.
+  // 전엔 출석부 권한만 있으면 자리가 보여서, 자리 권한이 없는 사람이 눌렀다가 첫 화면으로 튕겼다(원장 2026-11-05 권한 점검).
+  const [seatMenuOpen, seatDuties] = await seatAccessPromise;
+  const openSeatKeys = showSeats ? SEAT_KEYS.filter((k) => seatMenuOpen || dutyAllowsSeat(seatDuties, k)) : [];
   const seatOptions = showSeats
-    ? SEAT_KEYS.map((k) => ({
+    ? openSeatKeys.map((k) => ({
         value: seatFilterValue(k),
         label: `${SEAT_NAME[k]} ${SEAT_ROOM[k]}`,
         hint: sheetT(lang, "att.seat.hint"),
@@ -1270,7 +1279,7 @@ export default async function AttendancePage({
           // 자리 묶음 = 드롭다운과 같은 순서·같은 조건(과목이 영어일 때만). 목록이 두 곳에서 달라 보이면 안 된다.
           seats={
             showSeats
-              ? SEAT_KEYS.map((k) => ({
+              ? openSeatKeys.map((k) => ({
                   key: k,
                   name: SEAT_NAME[k],
                   room: SEAT_ROOM[k],

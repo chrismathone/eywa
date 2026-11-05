@@ -15,6 +15,7 @@ import {
   type MenuLayout,
 } from "@/features/owner/menu-layout";
 import { canManageParentAccountsRole, SHUTTLE_PARENTS_PATH } from "@/features/shuttle/parent-accounts/parent-access";
+import { SEAT_NAME, USABLE_SEAT_KEYS } from "@/features/attendance/seat/seat";
 
 /**
  * 버튼형 메뉴 — **왼쪽에서 업무군을 고르면 본문에 그 업무의 메뉴 버튼이 뜬다**(원장 2026-09-07 확정:
@@ -60,6 +61,11 @@ export type HubDest = {
   section?: string;
   /** 검색은 개명 전 이름으로도 찾을 수 있다. */
   originalLabel?: string;
+  /**
+   * **대신 입구 전용** 내부 탭 — 부모 메뉴 권한이 없는 사람에게만 부모 자리에 선다(`standInsOf`). 부모를 볼 수 있는 사람의 메뉴 지도·검색에는
+   * 세우지 않는다(`innerTabsOf`). 자리 출석부처럼 화면 위 탭바가 아니라 드롭다운으로 닿는 면이라 부모 화면 안에서 이미 고를 수 있다.
+   */
+  standInOnly?: boolean;
 };
 
 export type HubGroup = {
@@ -232,12 +238,29 @@ export const HUB_GROUPS: HubGroup[] = [
  * (원장 2026-10-14 *"내부 탭에 있는 메뉴는 따로 탭 및 메뉴 구성에 넣지 말것"* — 2026-09-02 재고관리 *"내부탭은 왼쪽 탭에서
  * 안보여도 돼 … 그냥 '재고관리' 1개"*와 같은 결). 그 화면 위 탭바(FaceTabs)로 오간다.
  * 🔴 여기 적는 것은 **부모 화면 위 탭바에 실제로 있는 면**뿐이다 — 탭바가 없는 화면(오늘 출결 `/attendance/live` · 출결 모드)은
- *    메뉴에서 빼면 갈 길이 없어 위 업무군에 그대로 둔다.
- * 이 목록을 읽는 곳 = 검색 팰릿(Shift+F, `innerTabsOf` — 탭바의 버튼도 이름으로 찾혀야 한다 · 부모 메뉴가 보일 때만) · 글의 메뉴 링크(멘션) ·
- * 권한 표의 '이 권한으로 열리는 메뉴' · 부모 권한 없이 탭 권한만 받은 사람의 대신 입구(`hubGroupsFor`).
+ *    메뉴에서 빼면 갈 길이 없어 위 업무군에 그대로 둔다. 예외 = `standInOnly`(자리 출석부 — 부모 화면의 드롭다운으로 닿는 면, 대신 입구로만 쓴다).
+ * 이 목록을 읽는 곳 = 검색 팰릿·메뉴 지도(Shift+F, `innerTabsOf` — 탭바의 버튼도 이름으로 찾혀야 한다 · 부모 메뉴가 보일 때만 · `standInOnly` 제외) ·
+ * 글의 메뉴 링크(멘션) · 권한 표(같은 권한의 탭은 그 줄의 감춤 판정에 센다) · 부모 권한 없이 탭 권한만 받은 사람의 대신 입구(`hubGroupsFor`).
  * ⚠️ 메뉴 구성의 저장값은 이 주소들을 모른다(읽을 때 지워진다 — `normalizeNavigationSettings`). 이름·숨김은 그 화면의 탭이 정한다.
  */
 export const INNER_TABS: { parent: string; items: HubDest[] }[] = [
+  {
+    // 자리 출석부(랩실·JJ실) — 출석부 화면 안 **강사 드롭다운의 한 갈래**라 메뉴에 따로 세우지 않는다(원장 2026-08-14 "따로 빼지말고").
+    // 여기 적는 까닭은 **대신 입구**다: 출석부(`attendance`) 권한은 없고 `seat_attendance`만 받은 사람(아르바이트 등)은
+    // 출석부 화면에 못 들어가 그 드롭다운까지 닿지 못했다 — 출석부를 열어 주면 다른 선생님 출석부가 다 보이고,
+    // 닫으면 자리 출석부로 갈 길이 없었다(원장 2026-11-05). 이제 그런 사람에겐 출석부 자리에 이 둘이 대신 선다(`standInsOf`).
+    // 출석부 권한이 있는 사람에겐 메뉴가 바뀌지 않는다 — 대신 입구는 부모를 못 볼 때만 서고, `standInOnly`라 메뉴 지도·검색(`innerTabsOf`)에도 안 선다.
+    parent: "/attendance",
+    items: keep(
+      USABLE_SEAT_KEYS.map((k) =>
+        face("attendance", `/attendance/seat/${k}`, `${SEAT_NAME[k]} 출석부`, undefined, {
+          menuKey: "seat_attendance",
+          icon: MENU_ICON.seat_attendance,
+          standInOnly: true,
+        }),
+      ),
+    ),
+  },
   {
     parent: "/lesson-reports",
     items: keep([
@@ -418,7 +441,8 @@ export function hubGroupsFor(groups: HubGroup[], gate: Gate): HubGroup[] {
  */
 function standInsOf(parent: HubDest, gate: Gate): HubDest[] {
   if (canAccess(gate.systemRole, parent.menuKey, gate.permMatrix) || isMenuHiddenByLayout(parent.href, gate.menuLayout)) return [];
-  return innerTabsOf(parent.href, gate).filter((t) => t.menuKey !== parent.menuKey);
+  // 대신 입구 전용 탭(`standInOnly`)도 여기선 선다 — 그래서 `innerTabsOf`(전용 탭을 뺀다)가 아니라 목록을 직접 거른다.
+  return (INNER_TABS.find((t) => t.parent === parent.href)?.items ?? []).filter((t) => t.menuKey !== parent.menuKey && allowed(t, gate));
 }
 
 /** 모든 표면이 공유하는 배치 해석. 외부 입력으로 목적지/권한을 만들지 않는다. */
@@ -468,7 +492,7 @@ export function configuredHubGroups(groups: readonly HubGroup[], menus?: MenuLay
  * `parentHref`는 **이 사람에게 보이는** 메뉴의 주소여야 한다(부모가 안 보이면 면도 안 선다 — 호출부가 `hubGroupsFor`의 결과로 부른다).
  */
 export function innerTabsOf(parentHref: string, gate: Gate): HubDest[] {
-  return (INNER_TABS.find((t) => t.parent === parentHref)?.items ?? []).filter((d) => allowed(d, gate));
+  return (INNER_TABS.find((t) => t.parent === parentHref)?.items ?? []).filter((d) => !d.standInOnly && allowed(d, gate));
 }
 
 /**

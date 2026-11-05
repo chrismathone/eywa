@@ -9,6 +9,19 @@ import { NOTICE_SKIP_LABEL } from "@/features/report-admin/notice-targets";
 import { SEND_CLASS_SUBJECTS } from "@/features/onescreen/send-class";
 
 type MathRoute = NonNullable<PreparedTextbookNotice["mathRoute"]>;
+type Standing = NonNullable<PreparedTextbookNotice["standing"]>;
+
+/**
+ * 이 학생을 이 과목 알림장으로 **보낼 수 없는 사유**(없으면 null) — 수업 시작 전·휴원(대기) 중(원장 2026-11-05)이 먼저,
+ * 그다음 수학 반 보드 경로의 사유. 발송 인원 세기와 목록 표시가 같은 판정을 쓴다(화면에 "N명 발송"이 실제로 나가는 수와 같게).
+ */
+export function sendBlockOf(route: MathRoute | undefined, standing: Standing | undefined, studentId: string, subject: string | undefined) {
+  if (!subject) return null;
+  const s = standing?.[studentId]?.[subject];
+  if (s) return s;
+  const r = mathRouteOf(route, studentId, subject);
+  return r && "blocked" in r ? r.blocked : null;
+}
 
 /**
  * 이 학생의 수학 알림장이 가는 곳 — 반 보드 경로가 켜져 있을 때만 값이 있다(없으면 지금까지처럼 1인 보드).
@@ -87,6 +100,7 @@ export function SendTargetList({
   onPick,
   labelOf,
   mathRoute,
+  standing,
 }: {
   targets: SendTarget[];
   orphans: TextbookNoticeOrder[];
@@ -97,16 +111,15 @@ export function SendTargetList({
   labelOf: (key: string) => string;
   /** 수학 알림장이 가는 반 보드(서버 판정) — 없으면 지금까지처럼 1인 보드. */
   mathRoute?: MathRoute;
+  /** 수업 시작 전·휴원(대기) 중이라 그 과목 알림장으로 못 보내는 학생(서버 판정 · 원장 2026-11-05). */
+  standing?: Standing;
 }) {
   // 알림장 라벨 — 수학 반 보드 경로면 어느 반으로 가는지까지 적는다("수학 알림장 · 중등M 중2 BS3O").
   const boardLabel = (studentId: string, subject: string) => {
     const r = mathRouteOf(mathRoute, studentId, subject);
     return `${labelOf(subject)} 알림장${r && "className" in r ? ` · ${r.className}` : ""}`;
   };
-  const blockedOf = (studentId: string, subject: string | undefined) => {
-    const r = mathRouteOf(mathRoute, studentId, subject);
-    return r && "blocked" in r ? r.blocked : null;
-  };
+  const blockedOf = (studentId: string, subject: string | undefined) => sendBlockOf(mathRoute, standing, studentId, subject);
   return (
     <ul className="divide-line border-line divide-y rounded-2xl border">
       {targets.map((t) => (

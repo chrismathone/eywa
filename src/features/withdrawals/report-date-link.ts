@@ -111,7 +111,7 @@ export function dayDiff(a: string | null, b: string | null): number | null {
 export type ReportDateNote = { date: string; rows: { label: string; date: string }[] };
 
 /**
- * 퇴원 상세 머리의 '퇴원보고서 종료일' — **같은 사건 후보**만 본다.
+ * 퇴원 상세 머리의 '퇴원보고서 마지막 수업일' — **같은 사건 후보**만 본다.
  * 그중 하나라도 퇴원일과 같으면 보일 게 없다(null). 다르면 가장 늦은 보고서 날짜를 보이고, 후보 전부를 근거로 싣는다.
  */
 export function reportDateNote(

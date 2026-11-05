@@ -22,7 +22,8 @@ export function ReportList({ items }: { items: ListItem[] }) {
       <table className="w-full text-left text-sm">
         <thead className="bg-muted/50">
           <tr>
-            {["과목", "학생", "학교학년", "구분", "요청일", "퇴원·종료일", "퇴원 사유", "작성 강사", "승인 진행", "상태"].map((label) => (
+            {/* 원장 2026-11-03 — '요청일' → '퇴원요청일', '퇴원·종료일' → '마지막 수업일'(같은 값의 다른 화면 이름도 함께). */}
+            {["과목", "학생", "학교학년", "구분", "퇴원요청일", "마지막 수업일", "퇴원 사유", "작성 강사", "승인 진행", "상태"].map((label) => (
               <th key={label} className="px-4 py-3 font-medium whitespace-nowrap">
                 {label}
               </th>
@@ -62,11 +63,16 @@ export function ReportList({ items }: { items: ListItem[] }) {
                 ))}
               </td>
               <td className="px-4 py-4">
-                {/* 상태 칸 — 내 승인 차례는 진하게, 승인자가 아닌 열람은 점선 테두리로(원장 2026-10-30 "상태란을 다르게 표시"). */}
+                {/* 상태 칸 — 내 승인 차례는 진하게, 승인자가 아닌 열람은 점선 테두리로(원장 2026-10-30 "상태란을 다르게 표시").
+                    데스크 환불이 남았으면 칩 두 개(원장 2026-11-03 "'관리자 승인 요청' '데스크 환불 요청' 같이"). */}
                 {r.mine === "approve" ? (
-                  <span className="bg-primary text-primary-foreground inline-block rounded-full px-2.5 py-1 text-xs font-bold">내 승인 필요</span>
+                  <span className="bg-primary text-primary-foreground inline-block rounded-full px-2.5 py-1 text-xs font-bold">{r.deskTurn ? "내 환불 처리 필요" : "내 승인 필요"}</span>
                 ) : (
-                  <span className={`inline-block rounded-full px-2.5 py-1 text-xs ${r.mine === "view" ? "border-line text-muted-foreground border border-dashed" : TONE[r.tone]}`}>{r.statusLabel}</span>
+                  <span className="inline-flex flex-wrap gap-1">
+                    {r.statusChips.map((chip) => (
+                      <span key={chip} className={`inline-block rounded-full px-2.5 py-1 text-xs ${r.mine === "view" ? "border-line text-muted-foreground border border-dashed" : TONE[r.tone]}`}>{chip}</span>
+                    ))}
+                  </span>
                 )}
                 {r.mine === "approve" && <div className="text-muted-foreground mt-1 text-xs">{r.statusLabel}</div>}
                 {r.mine === "view" && <div className="text-muted-foreground mt-1 text-xs">열람 · 승인 대상 아님</div>}

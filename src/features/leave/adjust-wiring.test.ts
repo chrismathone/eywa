@@ -288,8 +288,23 @@ describe("내 정보 연차 카드(원장 2026-09-18)", () => {
     const page = read("src/app/(shell)/me/page.tsx");
     expect(page.replace(/\s+/g, " ")).toContain("getMyLeaveBalance(user.id).catch(() => null)");
     expect(page.replace(/\s+/g, " ")).toContain(".catch(() => null)");
-    // 학생 계정엔 연차 개념이 없다 — 아예 부르지 않는다.
-    expect(page).toContain('user.systemRole === "student"');
+    // 학생·아르바이트엔 연차 개념이 없다 — 아예 부르지 않는다(판정은 eligibility.ts 한 곳 · 원장 2026-11-05).
+    expect(page).toContain("!isLeaveEligibleRole(user.systemRole) ? Promise.resolve(null)");
+  });
+
+  it("아르바이트는 연차 대상이 아니다 — 내 정보 카드·관리 표·조정이 같은 판정(원장 2026-11-05)", async () => {
+    const { isLeaveEligibleRole, NON_LEAVE_ROLES } = await import("./eligibility");
+    expect(isLeaveEligibleRole("parttime")).toBe(false);
+    expect(isLeaveEligibleRole("student")).toBe(false);
+    for (const r of ["master", "admin", "manager", "teacher", "counselor", "accountant", "viewer"]) expect(isLeaveEligibleRole(r)).toBe(true);
+    expect([...NON_LEAVE_ROLES]).toEqual(["student", "parttime"]);
+    const admin = read("src/features/leave/server/admin.ts");
+    // 아르바이트는 SQL이 아니라 JS로 거른다(열거형 값이 없는 DB에서도 표가 산다).
+    expect(admin).toContain('.neq("system_role", "student")');
+    expect(admin).toContain(".filter((u) => isLeaveEligibleRole(u.system_role))");
+    expect(admin).not.toContain("NON_LEAVE_ROLES");
+    const actions = read("src/features/leave/server/actions.ts");
+    expect(actions).toContain('if (!isLeaveEligibleRole(data.system_role as string | null)) return { error: "아르바이트는 연차 대상이 아닙니다" };');
   });
 
   it("조정을 바꾸면 본인 화면도 함께 새로 그린다", () => {

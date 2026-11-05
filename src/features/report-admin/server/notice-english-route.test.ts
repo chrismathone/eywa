@@ -95,6 +95,27 @@ describe("routeNoticeCandidates — 영어", () => {
     const r = await routeNoticeCandidates({ supabase, tenantId: T, settings, candidates: [cand("s1", "english", strict("t1"))] });
     expect(r).toEqual({ classTargets: [], rest: [{ studentId: "s1", name: "학생s1", classnoteName: null, subject: "english" }], skipped: [] });
   });
+  // 원장 2026-11-05 *"수업 시작전이거나 휴원 중인 학생은 클래스노트 배정을 하지말것"* — 전에는 반을 못 정해 1인 보드(rest)로 갔다.
+  it("🔴 수업 시작 전·휴원 영어 학생은 반 방으로도 1인 보드(rest)로도 보내지 않고 사유와 함께 뺀다 · 연동 PC 판과 무관", async () => {
+    Object.assign(db.state.tables, {
+      enrollments: [enr("s1", "E1", { start_date: "2026-11-10" }), enr("s2", "E1", { on_hold: true }), enr("s3", "E1"), enr("s4", "E1")],
+      students: [{ id: "s3", tenant_id: T, status: "on_hold" }, { id: "s4", tenant_id: T, status: "enrolled" }],
+      classes: [klass("E1", { teacher_id: "t1" })],
+      classnote_english_class_boards: [room("E1", "E1 방")],
+    });
+    const cands = ["s1", "s2", "s3", "s4"].map((s) => cand(s, "english", strict("t1")));
+    for (const workers of [[worker({ noticeClassRoute: true, noticeEnglishRoom: true })], [worker({ noticeClassRoute: true })]]) {
+      db.state.tables.classnote_workers = workers;
+      const r = await routeNoticeCandidates({ supabase, tenantId: T, settings, candidates: cands });
+      expect(r.skipped).toEqual([
+        { name: "학생s1", reason: "not_started" },
+        { name: "학생s2", reason: "on_hold" },
+        { name: "학생s3", reason: "on_hold" },
+      ]);
+      // 지금 다니는 학생(s4)만 반 방(새 연동 PC) 또는 1인 보드(옛 연동 PC)로 간다
+      expect([...r.classTargets.map((t) => t.studentId), ...r.rest.map((c) => c.studentId)]).toEqual(["s4"]);
+    }
+  });
   it("🔴 연동 PC가 영어 반 방을 모르면(옛 워커 · 하나라도) 반을 싣지 않는다 — 전부 지금처럼 1인 보드", async () => {
     Object.assign(db.state.tables, {
       enrollments: [enr("s1", "E1")], classes: [klass("E1", { teacher_id: "t1" })], classnote_english_class_boards: [room("E1", "E1 방")],

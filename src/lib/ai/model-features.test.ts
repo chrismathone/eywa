@@ -43,10 +43,11 @@ describe("고를 수 있는 모델", () => {
 
 describe("featurePin — 지점 선택 > 코드 기본 > 없음", () => {
   it("코드 기본(전사 분석 셋 = Sonnet 5.5 · 2026-10-26 원장 '전사 분석은 전부 sonnet 5.5' + 2026-10-20 영상 설명 판정·확인)", () => {
-    expect(Object.keys(FEATURE_MODELS).sort()).toEqual(["enrollment_analysis", "enrollment_form_extract", "meeting_analysis", "video_review_judge", "video_review_verify"]);
+    // 원생 흐름 분석 둘(연결 탐색 2026-11-03 — 상담 기록 분석이라 전사 분석과 같은 Sonnet 5.5)을 병합하며 더했다(2026-11-05).
+    expect(Object.keys(FEATURE_MODELS).sort()).toEqual(["enrollment_analysis", "enrollment_form_extract", "meeting_analysis", "student_flow_consultations", "student_flow_timeline", "video_review_judge", "video_review_verify"]);
     expect(featurePin("video_review_judge")).toEqual({ provider: "anthropic", model: "claude-haiku-5-5" });
     expect(featurePin("video_review_verify")).toEqual({ provider: "anthropic", model: "claude-sonnet-5-5" });
-    for (const f of ["meeting_analysis", "enrollment_analysis", "enrollment_form_extract"]) {
+    for (const f of ["meeting_analysis", "enrollment_analysis", "enrollment_form_extract", "student_flow_consultations", "student_flow_timeline"]) {
       expect(featurePin(f), f).toEqual({ provider: "anthropic", model: "claude-sonnet-5-5" });
     }
   });

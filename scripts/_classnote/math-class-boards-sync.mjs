@@ -18,7 +18,7 @@ import fs from "node:fs";
 import { fetchCenterId, loginClassnote } from "./classnote-admin-core.mjs";
 import { stateFile } from "./classnote-paths.mjs";
 import { haltMarker } from "./halt-marker.mjs";
-import { loadAywa, loadClosedLinked, loadLinkedBoards, loadPlan, loadVerifiedChildren } from "./math-class-boards-load.mjs";
+import { loadAywa, loadClosedLinked, loadConfirmedChildPairs, loadLinkedBoards, loadPlan, loadVerifiedChildren } from "./math-class-boards-load.mjs";
 import { closedClassesToKeep } from "./class-board-plan.mjs";
 import { applyClassBoardPlans } from "./math-class-boards-apply.mjs";
 import { writeClassBoardSnapshot, writeReleaseNames } from "./math-class-boards-db.mjs";
@@ -202,12 +202,16 @@ export async function syncMathClassBoards(sql, page, { tenant, apply = false, lo
   const childLinks = await loadChildLinks(sql, tenant).catch((e) => {
     throw new Error(`원아 연결을 읽지 못했다 — 오늘 동기화를 건너뛴다(${String(e?.message ?? e).slice(0, 120)})`);
   });
+  // 원장 확인 연결(0185a linked_by='confirmed' · 2026-11-05) — 못 읽으면 같은 규칙으로 오늘을 건너뛴다(확인 없이 돌면 확인한 학생이 보류로 적혀 확인 기록이 지워진다).
+  const confirmedPairs = await loadConfirmedChildPairs(sql, tenant).catch((e) => {
+    throw new Error(`원장 확인 연결을 읽지 못했다 — 오늘 동기화를 건너뛴다(${String(e?.message ?? e).slice(0, 120)})`);
+  });
   // ④(기록) 비교 상대 = **전체** 대상 반의 학생 — 일부 반만 보는 실행에서도 다른 반 학생에게 확인된 원아를 잡는다.
   const verifiedOwnerScope = new Set(all.classes.flatMap((c) => c.studentIds));
   // 보고서 미발송 반(JJ)의 같은 이름 보드 채택 — 낯선 원아가 그 반의 **지난 학생**(해제 판정 ①②③ 통과)인지 본다(원장 2026-11-03). 11-04 되돌림 뒤에는 미발송 반이 대상 밖이라 쓰이지 않는다(다시 넣는 날을 위해 남김).
   const formerFamily = async (cands, { admissions, membersByBoard: members }) =>
     formerFamilyOf(cands, { enrollmentsByClass: await loadClassEnrollments(sql, tenant, cands.map((c) => c.classId)), students: aywa.students, admissions, childLinks, membersByBoard: members });
-  const first = await loadPlan(page, centerId, aywa, { linkedBoardByClass, verifiedChildren, verifiedOwnerScope, childLinks, formerFamily });
+  const first = await loadPlan(page, centerId, aywa, { linkedBoardByClass, verifiedChildren, verifiedOwnerScope, childLinks, confirmedPairs, formerFamily });
   const { plans, boards, membersByBoard, failed } = first;
   if (failed) throw new Error(`원아 조회 실패 ${failed}건 — 오늘 동기화를 건너뛴다`);
   // 자동 해제 — 스위치가 켜져 있고 멈춤 표식이 없을 때만.
@@ -290,7 +294,7 @@ export async function syncMathClassBoards(sql, page, { tenant, apply = false, lo
     // 방금 만든 보드는 아직 연결표에 없다 — 번호로 얹어 준다(ClassNote가 이름을 다르게 적었어도 다음 날 또 만들지 않게, G8).
     const linkedAfter = await loadLinkedBoards(sql, tenant, { strict: true });
     for (const d of done) if (d.created && d.boardId != null) linkedAfter.set(d.classId, Number(d.boardId));
-    const fresh = await loadPlan(page, centerId, aywa, { linkedBoardByClass: linkedAfter, verifiedChildren, verifiedOwnerScope, childLinks, formerFamily });
+    const fresh = await loadPlan(page, centerId, aywa, { linkedBoardByClass: linkedAfter, verifiedChildren, verifiedOwnerScope, childLinks, confirmedPairs, formerFamily });
     if (fresh.failed) throw new Error(`원아 재조회 실패 ${fresh.failed}건 — 기록 갱신을 건너뛴다`);
     reported = fresh.plans;
 

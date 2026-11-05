@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF } from "@/components/toolbar-controls";
 import { PeriodNav } from "@/components/period-nav";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstMonth } from "@/lib/date-kst";
 import { buildHolidayMap } from "@/features/attendance/calendar";
@@ -79,10 +80,11 @@ export default async function SeatMonthlyPage({
   if (!dutyAllowsSeat(await getActiveSeatDuties(user.id, user.tenantId), seat)) await requireAccess("seat_attendance");
 
   const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(monthParam ?? "") ? monthParam! : kstMonth();
-  const [view, prefs, settings] = await Promise.all([
+  const [view, prefs, settings, canOpenAttendance] = await Promise.all([
     getSeatMonthly(seat, month),
     loadSeatMonthlyPrefs(),
     getTenantSettings(),
+    canAccessTenant(user.systemRole, "attendance"),
   ]);
   const holidays = buildHolidayMap(settings.operations.holidays);
   const href = (m: string) => `/attendance/seat/${seat}/month?month=${m}`;
@@ -101,9 +103,12 @@ export default async function SeatMonthlyPage({
               <Link href={`/attendance/seat/${seat}`} className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF}`}>
                 하루
               </Link>
-              <Link href="/attendance" className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF}`}>
-                출석부로
-              </Link>
+              {/* 출석부를 못 여는 사람(자리 출석부만 받은 아르바이트 등)에겐 그리지 않는다 — 누르면 첫 화면으로 튕긴다(2026-11-05 리뷰). */}
+              {canOpenAttendance ? (
+                <Link href="/attendance" className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF}`}>
+                  출석부로
+                </Link>
+              ) : null}
               <MonthlyPrintButton seat={seat} month={month} title={`${SEAT_NAME[seat]} ${formatMonth(month)}`} />
               {/* 월 이동 — 월별 출석부·시간표와 같은 PeriodNav(원장 2026-09-01). 라벨 클릭 = 이번 달. */}
               <PeriodNav

@@ -1689,9 +1689,15 @@ export type StudentAttendanceFull = {
   reporter: string | null;
 };
 
-/** 학생 전 출결 기록(월 네비·달력/리스트 뷰·과목/반 필터를 클라에서 처리하도록 전건 반환). */
-export async function getStudentAttendanceFull(studentId: string): Promise<StudentAttendanceFull[]> {
+/**
+ * 학생 출결 기록 전건(정정 줄은 최신 하나만) — 출결 탭이 읽는다(월 네비·달력/리스트 뷰·과목/반 필터는 클라에서).
+ * `since`(YYYY-MM-DD)를 주면 **그 날짜부터**만 읽는다(연결 탐색의 출결 조각 = 최근 30일 — 전 기간 출결·보고서를 다 읽으면
+ * 그 학생 한 명에 두 표 페이징 왕복이 쌓여 전환이 느렸다, 2026-11-03). 정정 줄 판정은 같은 날짜·반·교시 안에서만 하므로
+ * 날짜로 잘라도 결과가 어긋나지 않는다. 보고서 작성자 맵도 같은 창.
+ */
+export async function getStudentAttendanceFull(studentId: string, opts: { since?: string } = {}): Promise<StudentAttendanceFull[]> {
   const supabase = await createClient();
+  const since = opts.since ?? null;
   // 🔴 둘은 서로를 안 쓴다 — 순서대로 await하면 왕복이 합산된다(B4).
   const [data, reports] = await Promise.all([
     fetchAllPaged<{
@@ -1705,17 +1711,18 @@ export async function getStudentAttendanceFull(studentId: string): Promise<Stude
     seat_label: string | null;
     recorded_at: string;
     class: { class_name?: string; subject?: string } | { class_name?: string; subject?: string }[] | null;
-  }>((from, to) =>
-    supabase
-      .from("attendance_records")
-      .select(
-        `id, student_id, session_date, status, note, class_id, slot_start, seat_label, recorded_at, class:class_id ( class_name, subject )`,
-      )
-      .eq("student_id", studentId)
-      .order("session_date", { ascending: false })
-      .order("id", { ascending: true })
-      .range(from, to),
-    ),
+  }>((from, to) => {
+      const q = supabase
+        .from("attendance_records")
+        .select(
+          `id, student_id, session_date, status, note, class_id, slot_start, seat_label, recorded_at, class:class_id ( class_name, subject )`,
+        )
+        .eq("student_id", studentId);
+      return (since ? q.gte("session_date", since) : q)
+        .order("session_date", { ascending: false })
+        .order("id", { ascending: true })
+        .range(from, to);
+    }),
     /**
      * 그 학생의 수업보고서 작성자를 (날짜, 반)으로 붙인다 — 위 `reporter` 주석의 규약.
      * ⚠️ 전건이 1000행을 넘을 수 있어(이관분 포함) `fetchAllPaged`(B2). 임베드가 없어 FK 힌트 불요(#94).
@@ -1726,16 +1733,17 @@ export async function getStudentAttendanceFull(studentId: string): Promise<Stude
       report_date: string;
       class_id: string | null;
       teacher_name: string | null;
-    }>((from, to) =>
-      supabase
+    }>((from, to) => {
+      const q = supabase
         .from("lesson_reports")
         .select("report_date, class_id, teacher_name")
         .eq("student_id", studentId)
-        .not("class_id", "is", null)
+        .not("class_id", "is", null);
+      return (since ? q.gte("report_date", since) : q)
         .order("report_date", { ascending: true })
         .order("id", { ascending: true })
-        .range(from, to),
-    ).catch(() => []),
+        .range(from, to);
+    }).catch(() => []),
   ]);
   const reporterMap = new Map<string, string>();
   for (const rp of reports) {

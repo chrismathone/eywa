@@ -1491,11 +1491,19 @@ describe("auditDetail — 숙제 영상 올리기 사이트에서 연 링크(202
 });
 
 describe("auditDetail — 퇴원보고서 처리 결과(2026-10-23)", () => {
-  it("마지막 승인으로 끝났으면 결과 · 처리일 · 끝난 수업 — 옛 기록(결과 칸 없음)은 종전 그대로", () => {
+  it("마지막 승인으로 끝났으면 결과 · 마지막 수업일 · 끝난 수업 — 옛 기록(결과 칸 없음)은 종전 그대로", () => {
     expect(auditDetail("withdrawal_report_update", { operation: "승인", result: "학생 퇴원", date: "2026-10-23", endedClasses: ["M1A", "E2B"] }, ctx()))
-      .toBe("승인 · 학생 퇴원 · 처리일 2026-10-23 · 끝난 수업 M1A·E2B");
-    expect(auditDetail("withdrawal_report_update", { operation: "승인", result: "처리 예약", date: "2026-11-01" }, ctx())).toBe("승인 · 처리 예약 · 처리일 2026-11-01");
-    expect(auditDetail("withdrawal_report_update", { operation: "보고서 제출", date: "2026-10-23" }, ctx())).toBe("보고서 제출 · 처리일 2026-10-23");
+      .toBe("승인 · 학생 퇴원 · 마지막 수업일 2026-10-23 · 끝난 수업 M1A·E2B");
+    expect(auditDetail("withdrawal_report_update", { operation: "승인", result: "처리 예약", date: "2026-11-01" }, ctx())).toBe("승인 · 처리 예약 · 마지막 수업일 2026-11-01");
+    expect(auditDetail("withdrawal_report_update", { operation: "보고서 제출", date: "2026-10-23" }, ctx())).toBe("보고서 제출 · 마지막 수업일 2026-10-23");
+  });
+  it("작성 요청의 관리자 승인 생략 보고서 · 취소 때 데스크에 알린 환불 요청서 · 환불 승인의 데스크 단계(2026-11-03)", () => {
+    expect(auditDetail("withdrawal_report_update", { operation: "작성 요청", date: "2026-11-03", managerSkipped: ["정유진 · 영어"] }, ctx()))
+      .toBe("작성 요청 · 마지막 수업일 2026-11-03 · 관리자 승인 생략 정유진 · 영어");
+    expect(auditDetail("withdrawal_report_update", { operation: "요청 취소", date: "2026-11-03", deskRefundsNotified: ["데스크A · 환불 진행 전 확인", "데스크B · 환불이 끝난 뒤 취소 — 환불 확인 필요"] }, ctx()))
+      .toBe("요청 취소 · 마지막 수업일 2026-11-03 · 데스크 알림 데스크A · 환불 진행 전 확인, 데스크B · 환불이 끝난 뒤 취소 — 환불 확인 필요");
+    expect(auditDetail("withdrawal_refund_approve", { items: ["2026-11 영어 315,000원"], totalAmount: "315,000원", effectiveDate: "2026-10-28", deskStep: "데스크 환불 완료 뒤 처리" }, ctx()))
+      .toBe("2026-11 영어 315,000원 · 315,000원 · 마지막 수업일 2026-10-28 · 데스크 환불 완료 뒤 처리 · 환불 요청서 작성");
   });
 });
 

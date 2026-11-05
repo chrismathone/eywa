@@ -4,6 +4,7 @@ import { SheetText } from "@/features/teacher-view/interface-label";
 import { WindowLink } from "@/components/workspace/window-link";
 import { notFound } from "next/navigation";
 import { Pencil } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant, canAccessTenant, canManageTenant, canWriteTenant, readonlyViewErasedScope } from "@/lib/auth/perm-matrix";
@@ -298,6 +299,11 @@ export default async function StudentDetailPage({
             ) : null}
             {/* 🔴 'AI 케어 분석' 버튼은 **없앴다**(원장 2026-09-18 "삭제") — 되살리지 말 것.
                 지난 분석 결과는 개요 탭 'AI 케어 인사이트'에 그대로 보인다(결과가 있을 때만 서는 패널). */}
+            {/* 연결 탐색(2026-11-03) — 이 학생을 가운데 놓은 도넛(수업·출결·성적·진도·상담·특이사항·수납·타임라인). 창 안에서도 제 창으로 연다. */}
+            <Button variant="outline" render={<WindowLink href={`/explore/student/${student.id}`} title={`${student.name} 연결 탐색`} frameTarget="window" />}>
+              <EyIcon name="pieChart" size={16} />
+              <SheetText value={"연결 탐색"} />
+            </Button>
             {canSeeWithdrawals ? (
               <WindowLink href={`/withdrawals/${student.id}`} title={student.name}>
                 <span className="text-primary text-sm font-semibold hover:underline"><SheetText value={"퇴원 기록 보기"} /></span>

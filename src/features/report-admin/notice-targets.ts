@@ -41,9 +41,13 @@ export type NoticeTarget = {
 };
 /**
  * 제외 사유. `no_class_board` = 반 보드 경로인데 이 학생이 받을 반 보드가 없다(연결 없음·원아 매칭 보류) ·
- * `not_my_class` = 반 보드는 있지만 보내는 선생님이 맡은 반이 아니다(삼자 일치 실패). 화면 문구 = NOTICE_SKIP_LABEL.
+ * `not_my_class` = 반 보드는 있지만 보내는 선생님이 맡은 반이 아니다(삼자 일치 실패) ·
+ * `not_started`·`on_hold` = 그 과목 수업 시작 전 · 휴원(대기) 중 — ClassNote로 보내지 않는다(원장 2026-11-05, notice-standing.ts). 화면 문구 = NOTICE_SKIP_LABEL.
  */
-export type NoticeSkip = { name: string; reason: "subject_off" | "name_collision" | "no_name" | "no_class_board" | "not_my_class" };
+export type NoticeSkip = {
+  name: string;
+  reason: "subject_off" | "name_collision" | "no_name" | "no_class_board" | "not_my_class" | "not_started" | "on_hold";
+};
 
 /** 제외 사유 한글 문구 — 화면은 이 표만 쓴다(raw 코드 노출 금지). */
 export const NOTICE_SKIP_LABEL: Record<NoticeSkip["reason"], string> = {
@@ -52,6 +56,8 @@ export const NOTICE_SKIP_LABEL: Record<NoticeSkip["reason"], string> = {
   no_name: "이름 없음",
   no_class_board: "ClassNote 반 보드에 연결된 원아가 없음 — '지금 반 보드 동기화' 뒤 다시",
   not_my_class: "보내는 선생님의 담당 반이 아님",
+  not_started: "수업 시작 전 — 첫 수업 날부터 ClassNote로 보낼 수 있습니다",
+  on_hold: "휴원(대기) 중 — 휴원 중에는 ClassNote로 보내지 않습니다",
 };
 
 /**

@@ -4,6 +4,7 @@
 import { fetchBoardChildren, fetchBoards, fetchChildDetail } from "./classnote-admin-core.mjs";
 import { kstSchoolYear } from "./board-safety.mjs";
 import { personalBoardName, planClassBoards } from "./class-board-plan.mjs";
+import { CONFIRMED_LINK, confirmedPairKey } from "./child-identity.mjs";
 
 const norm = (s) => String(s ?? "").replace(/\s/g, "");
 
@@ -25,9 +26,15 @@ export const targetClassWhere = (sql, tenant, today) =>
  * **오늘 그 반에 다니는 재원생** 수강 조건(SQL 조각) — 수강 별칭은 `e`. 테스트 학생·재원이 아닌 학생은 뺀다.
  * 🔴 지점 필터(`e.tenant_id`)를 함께 건다 — 수강 인덱스는 (tenant_id, class_id)·(tenant_id, student_id)라 반 id만으로 조인하면
  *    앞 칸이 빠져 전 지점 수강을 훑는다(자동 동기화가 1분마다 이 조각을 쓴다).
+ * 🔴 수업 시작 전·휴원 중인 수강은 ClassNote 배정 대상이 아니다(원장 2026-11-05 *"수업 시작전이거나 휴원 중인 학생은 클래스노트 배정을
+ *    하지말것. 수업배정이 되는 순간 동기화 작동하게"*). 시작 전 = `start_date > 오늘`(종전부터) · 휴원 = 학생 상태 휴원(종전부터) **또는
+ *    그 수강만 휴원·대기**(`e.on_hold` — 과목별 휴원·시간표 '대기', 2026-11-05 추가). 자동 동기화도 이 조각을 써서, 시작일이 되거나
+ *    휴원이 풀리면 '새 학생'으로 잡혀 그 반만 동기화한다(밤사이 시작은 새벽 5시 정기 동기화). 이미 배정된 휴원생의 원아는 떼지 않는다
+ *    (자동 해제는 '열린 수강' — 휴원·시작 전 포함 — 을 따로 본다 · 원장 2026-11-03).
  */
 export const currentEnrollmentOn = (sql, tenant, today) =>
   sql`e.tenant_id = ${tenant} and (e.end_date is null or e.end_date >= ${today}) and (e.start_date is null or e.start_date <= ${today})
+      and not coalesce(e.on_hold, false)
       and exists (select 1 from students s where s.id = e.student_id and s.status = 'enrolled' and not coalesce(s.is_test, false))`;
 
 /**
@@ -46,10 +53,22 @@ export async function loadAywa(sql, tenant) {
     where ${targetClassWhere(sql, tenant, today)}
     group by c.id, c.class_name, c.report_optout
     order by c.class_name`;
+  const students = await loadBoardStudents(sql, tenant);
+  const classes = classRows.map((c) => ({ classId: c.id, className: c.class_name, studentIds: c.student_ids, ...(c.report_optout ? { reportOptout: true } : {}) }));
+  return { classes, students };
+}
+
+/**
+ * 지점 학생 전체(퇴원 포함) — 학생 id → { 유효이름 · 학년 · 전화 4칸 · 상태 · 테스트 여부 }. 원아 신분 가드(②③⑦)의 재료.
+ * 수학 반 보드 동기화(`loadAywa`)와 영어 반 방 발송 가드(english-guard-load.mjs)가 같은 조회를 쓴다.
+ * 🔴 SQL 본문을 한 글자도 바꾸지 말 것 — 연동 앱 질의 목록은 본문으로 조회를 알아본다(바뀌면 웹 배포가 먼저 나가야 한다).
+ * 🔴 전화 값은 대조에만 쓴다 — 로그로 찍지 말 것.
+ */
+export async function loadBoardStudents(sql, tenant) {
   const studentRows = await sql`
     select id, name, classnote_name, grade, parent_phone, student_phone, home_phone, other_phone, status::text as status, coalesce(is_test, false) as is_test
     from students where tenant_id = ${tenant}`;
-  const students = new Map(
+  return new Map(
     studentRows.map((s) => [
       s.id,
       {
@@ -63,8 +82,6 @@ export async function loadAywa(sql, tenant) {
       },
     ]),
   );
-  const classes = classRows.map((c) => ({ classId: c.id, className: c.class_name, studentIds: c.student_ids, ...(c.report_optout ? { reportOptout: true } : {}) }));
-  return { classes, students };
 }
 
 /**
@@ -142,6 +159,17 @@ export async function loadLinkedBoards(sql, tenant, { strict = true } = {}) {
 }
 
 /**
+ * 원장 확인 연결(0185a `linked_by = 'confirmed'` · 원장 2026-11-05) — `학생 id:원아 id` 열쇠 모음(child-identity.mjs `confirmedPairKey`).
+ * 사람이 확인한 연결은 운영관리 명부(학부모가 입소 때 낸 기본정보)의 이름·보호자 전화만 대조에서 뺀다 — 수학 반 보드 계획과 영어 반 방 발송이
+ * 같은 조회를 쓴다. 🔴 조회 실패는 throw(빈 모음으로 삼키지 않는다 — 수학 동기화는 원아 연결과 같은 규칙으로 그날을 건너뛰고, 영어 발송은 재시도로 둔다).
+ * @returns {Promise<Set<string>>}
+ */
+export async function loadConfirmedChildPairs(sql, tenant) {
+  const rows = await sql`select child_id, student_id from classnote_child_links where tenant_id = ${tenant} and linked_by = ${CONFIRMED_LINK}`;
+  return new Set(rows.map((r) => confirmedPairKey(r.student_id, r.child_id)));
+}
+
+/**
  * 반 보드에서 원아 확인을 마친 학생(0302a status ok) — 학생 id → [{id, name, boardIds}](원아 중복 없이 · 기록된 반 보드 번호들).
  * 1인 보드가 없거나 빈 학생의 원아 판정 출처(원장 2026-11-02 — 1인 보드 원아 배정 해제 · 12월 보드 삭제, class-board-plan.mjs ①).
  * 🔴 조회 실패 = null(throw 아님) — 호출부가 정한다: 반 보드 동기화는 그날을 건너뛴다(대신 출처 없이 돌면 1인 보드가 빈 학생을
@@ -199,8 +227,9 @@ async function loadLinkProfiles(page, { classes, membersByBoard, admissions, ver
  * (원장 2026-11-02 A안). 원아 이름·생년은 운영관리 명부에서, 학부모 프로필은 읽은 보드 또는 원아 상세 GET(`loadLinkProfiles`)에서.
  * `formerFamily` = 보고서 미발송 반(JJ)의 같은 이름 보드 채택이 낯선 원아 때문에 막혔을 때, 그 원아가 **이 반의 지난 학생**인지 확인하는
  * 콜백(`(cands, {admissions, membersByBoard}) => Promise<Map<반, Set<원아>>>` — 동기화가 해제 판정 한 벌로 넘긴다). 없으면 종전대로 보류.
+ * `confirmedPairs` = 원장 확인 연결(`loadConfirmedChildPairs`) — 없으면 확인 없음(명부 이름·보호자 전화까지 다 대조).
  */
-export async function loadPlan(page, centerId, { classes, students }, { linkedBoardByClass = new Map(), verifiedChildren = null, verifiedOwnerScope = null, childLinks = null, formerFamily = null } = {}) {
+export async function loadPlan(page, centerId, { classes, students }, { linkedBoardByClass = new Map(), verifiedChildren = null, verifiedOwnerScope = null, childLinks = null, confirmedPairs = null, formerFamily = null } = {}) {
   const boards = await fetchBoards(page, centerId);
   const admissions = await fetchAdmissions(page, centerId);
   const need = new Set();
@@ -231,7 +260,7 @@ export async function loadPlan(page, centerId, { classes, students }, { linkedBo
     }
   }
   const childProfiles = await loadLinkProfiles(page, { classes, membersByBoard, admissions, verifiedChildren, childLinks });
-  const input = { classes, students, boards, membersByBoard, admissions, schoolYear: kstSchoolYear(), linkedBoardByClass, verifiedChildren, verifiedOwnerScope, childLinks, childProfiles };
+  const input = { classes, students, boards, membersByBoard, admissions, schoolYear: kstSchoolYear(), linkedBoardByClass, verifiedChildren, verifiedOwnerScope, childLinks, childProfiles, confirmedPairs };
   let plans = planClassBoards(input);
   // 미발송 반(JJ)의 같은 이름 보드 — 낯선 원아가 이 반의 지난 학생인지 확인하고 다시 계획한다(원장 2026-11-03 · class-board-plan.mjs `adoptCandidate`).
   const cands = formerFamily ? plans.filter((p) => p.board.adoptCandidate).map((p) => ({ classId: p.classId, className: p.className, ...p.board.adoptCandidate })) : [];

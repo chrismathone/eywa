@@ -246,6 +246,8 @@ describe("대조 조회 — 가볍게, 동기화 본체와 같은 대상", () =>
     expect(body).toContain("left join enrollments e on e.class_id = c.id and ${currentEnrollmentOn(sql, tenant, today)}");
     expect(body).toContain("where ${targetClassWhere(sql, tenant, today)}");
     expect(body).toContain("sql`e.tenant_id = ${tenant} and (e.end_date is null or e.end_date >= ${today})");
+    // 2026-11-05 원장 *"휴원 중인 학생은 클래스노트 배정을 하지말것"* — 그 수강의 휴원·대기도 대상 학생에서 뺀다(리뷰 2026-11-05 시험 공백).
+    expect(load + body).toContain("and not coalesce(e.on_hold, false)");
     // 조건 본문은 조각 한 곳에만 있다
     expect((body + load).match(/c\.subject in \('math', 'subject_1'\) and \(c\.closed_at is null/g)).toHaveLength(1);
     expect((body + load).match(/s\.status = 'enrolled' and not coalesce\(s\.is_test, false\)/g)).toHaveLength(1);

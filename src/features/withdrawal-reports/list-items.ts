@@ -3,7 +3,7 @@ import { monthRange } from "@/lib/date-kst";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import type { ArchiveRow } from "./archive-model";
 import { archiveReason, webReportReason, type ListReason } from "./list-reason";
-import { directorIds, isDirectReport, isParticipant, managerIds, reportStatusLabel, skipsManagerStep, type ReportListRow, type StaffOption } from "./model";
+import { directorIds, isDirectReport, isParticipant, managerIds, managerStepSkipped, refundWaiting, reportStatusChips, type RefundStep, type ReportListRow, type StaffOption } from "./model";
 
 /**
  * 퇴원보고서 목록 한 벌 — 웹에서 작성·승인하는 보고서와 기존 스프레드시트 보고서(원문 보관)를 **한 목록**에 세운다.
@@ -29,7 +29,7 @@ export type ListItem = {
   kind: "withdrawal" | "subject_end" | null;
   /** 기존 기록의 반 이름(이름 아래 작게) — 웹 보고서는 빈칸. */
   classText: string;
-  /** 기간 필터·정렬 축 = 퇴원·종료일(원문에서 날짜를 못 읽은 기록은 null). */
+  /** 기간 필터·정렬 축 = 마지막 수업일(원문에서 날짜를 못 읽은 기록은 null). */
   date: string | null;
   dateText: string;
   /** 요청일(원장 2026-10-29 *"퇴원보고서 요청일 열 추가"*) — 웹 보고서가 만들어진 날(KST). 기존 기록은 알 수 없어 '—'. */
@@ -42,6 +42,8 @@ export type ListItem = {
   subjects: string[];
   status: ListStatus;
   statusLabel: string;
+  /** 상태 칩 — 데스크 환불이 남았으면 원래 단계와 '데스크 환불 요청'을 함께(원장 2026-11-03 · `reportStatusChips`). 글은 `statusLabel`과 같다. */
+  statusChips: string[];
   tone: "done" | "alert" | "muted";
   approval: { text: string; muted?: boolean }[];
   /** 기존 기록만 — 학생 연결 상태. 웹 보고서는 늘 학생에서 출발하므로 null. */
@@ -52,6 +54,8 @@ export type ListItem = {
    * `approve` = 지금 내 승인 차례 · `view` = 승인자·요청자·작성자가 아닌 열람 · `none` = 그 밖(관여했지만 지금 할 일 없음).
    */
   mine: "approve" | "view" | "none";
+  /** 내 차례가 데스크 환불 처리다(원장 2026-11-03) — 상태 칸 글을 '내 환불 처리 필요'로. 승인 차례와 같은 '내 승인 필요' 필터에 든다. */
+  deskTurn?: boolean;
   search: string;
 };
 
@@ -70,6 +74,8 @@ export function buildListItems(input: {
   userId: string;
   /** 쓰기 권한(읽기 전용 보기면 '내 승인 필요'를 세우지 않는다 — 상세에 승인 버튼이 없다). 기본 true. */
   writable?: boolean;
+  /** 데스크 환불 단계(원장 2026-11-03) — 묶음 id(옛 단건은 보고서 id) → 단계(`loadRefundSteps`). 없으면 단계 없음. */
+  refunds?: ReadonlyMap<string, readonly RefundStep[]>;
 }): ListItem[] {
   const { staff, labelOf, userId } = input;
   const writable = input.writable ?? true;
@@ -85,6 +91,11 @@ export function buildListItems(input: {
     const reason = webReportReason(r.status, r.body_reason, r.body_detail, r.body_reason_detail);
     // 관리자 바로 처리(강사 작성 없이, 원장 2026-10-23) — 작성자 칸은 처리한 관리자, 승인 칸 대신 '관리자 바로 처리'.
     const direct = isDirectReport(r);
+    const steps = input.refunds?.get(r.group_id ?? r.id) ?? [];
+    const chips = reportStatusChips(r, steps);
+    // 데스크 줄(원장 2026-11-03 '데스크 환불 요청' 단계) — ○ 대기 · ✓ 환불완료일자 입력됨, 담당 이름.
+    const desk = steps.length ? [{ text: `데스크 ${steps.map((s) => `${s.completedDate ? "✓" : "○"} ${s.deskName}`).join(" · ")}` }] : [];
+    const deskTurn = writable && myDeskTurn(r, steps, userId);
     return {
       key: `r:${r.id}`,
       href: `${LIST_PATH}/${r.id}`,
@@ -103,23 +114,27 @@ export function buildListItems(input: {
       reason,
       subjects: r.subjects,
       status: r.status === "completed" ? "completed" : r.status === "canceled" ? "canceled" : "pending",
-      statusLabel: reportStatusLabel(r, staff),
+      statusLabel: chips.join(" · "),
+      statusChips: chips,
       tone: r.status === "completed" ? "done" : r.status === "revision" || r.status === "blocked" ? "alert" : "muted",
-      approval: direct
-        ? [{ text: `관리자 바로 처리 · ${staffName(r.requested_by)}` }, { text: "강사 작성 없음", muted: true }]
-        : skipsManagerStep(r, staff)
-          ? [{ text: `원장 ${reviewers(r, "manager")}` }, { text: "관리자 승인 생략", muted: true }]
-          : [
-            { text: `관리자 ${reviewers(r, "manager")}` },
-            directorIds(r).length ? { text: `원장 ${reviewers(r, "director")}` } : { text: "관리자가 최종 승인", muted: true },
-          ],
+      approval: [
+        ...(direct
+          ? [{ text: `관리자 바로 처리 · ${staffName(r.requested_by)}` }, { text: "강사 작성 없음", muted: true }]
+          // 관리자 승인 생략(원장 2026-11-03 — 작성 강사가 과목 관리자) · 원장 칸은 옛 보고서에만.
+          : managerStepSkipped(r)
+            ? [{ text: "관리자 승인 생략 · 작성 강사가 과목 관리자", muted: true }]
+            : [{ text: `관리자 ${reviewers(r, "manager")}` }, ...(directorIds(r).length ? [{ text: `원장 ${reviewers(r, "director")}` }] : [])]),
+        ...desk,
+      ],
       link: null,
       myTurn: ["requested", "revision"].includes(r.status) && r.teacher_id === userId,
-      // 열람 표시는 진행 중에만(끝난 보고서엔 승인할 일이 없다 — 리뷰).
-      mine: writable && myApprovalTurn(r, userId) ? "approve" : !isParticipant(r, userId) && !["completed", "canceled"].includes(r.status) ? "view" : "none",
+      // 열람 표시는 진행 중에만(끝난 보고서엔 승인할 일이 없다 — 리뷰). 데스크 환불 차례도 내 차례다.
+      mine: writable && (myApprovalTurn(r, userId) || deskTurn) ? "approve" : !isParticipant(r, userId) && !["completed", "canceled"].includes(r.status) ? "view" : "none",
+      ...(deskTurn && !myApprovalTurn(r, userId) ? { deskTurn: true } : {}),
       // 검색 = 보이는 칸 + 보고서 본문 글 전부(원장 2026-10-30 *"검색은 내용등 모든것을 검색가능하게"*) — 상담 내용·담임 의견·요청 메모·반려 사유·승인자까지.
       search: [r.snapshot.name, r.snapshot.school, r.snapshot.grade, schoolGradeLabel(r.snapshot.school, r.snapshot.grade), ...r.snapshot.courses.map((c) => c.className), teacher, reason.text, reason.note ?? "", direct ? "관리자 바로 처리" : "",
-        r.exit_kind === "withdrawal" ? "퇴원" : "수강종료", ...r.subjects.map(labelOf), reportStatusLabel(r, staff), staffName(r.requested_by), ...managerIds(r).map(staffName), ...directorIds(r).map(staffName),
+        managerStepSkipped(r) && !direct ? "관리자 승인 생략" : "", ...steps.map((s) => s.deskName),
+        r.exit_kind === "withdrawal" ? "퇴원" : "수강종료", ...r.subjects.map(labelOf), chips.join(" "), staffName(r.requested_by), ...managerIds(r).map(staffName), ...directorIds(r).map(staffName),
         r.request_note, r.last_comment ?? "", r.body_detail ?? "", r.body_student ?? "", r.body_parent ?? "", r.body_opinion ?? "", r.body_attendance ?? "", r.body_tuition ?? "", r.body_arrears_note ?? ""].join(" "),
     };
   });
@@ -145,6 +160,7 @@ export function buildListItems(input: {
       subjects: a.subject ? [a.subject] : [],
       status: "archive",
       statusLabel: "스프레드시트 기록",
+      statusChips: ["스프레드시트 기록"],
       tone: "muted",
       approval: [{ text: `원본 · ${a.sheet_title}`, muted: true }],
       link: a.mapped_student_id ? (a.mapping_kind === "manual" ? "manual" : "auto") : "unmapped",
@@ -155,9 +171,9 @@ export function buildListItems(input: {
     };
   });
   // 🔑 진행 중(처리할 일)이 먼저 — 기본 보기가 '전체'라 지난 날짜로 요청된 진행 중 보고서가 기존 기록 사이로 묻히지 않게.
-  // 그다음 퇴원·종료일 늦은 순(날짜 없는 원문은 맨 뒤) → 이름 → 키 — 웹 보고서와 기존 기록이 섞여도 순서가 결정적이다.
+  // 그다음 마지막 수업일 늦은 순(날짜 없는 원문은 맨 뒤) → 이름 → 키 — 웹 보고서와 기존 기록이 섞여도 순서가 결정적이다.
   // 원장 2026-10-30 *"처리되지 않은 것이 상단으로. 처리완료는 그 아래 … 요청일 기준으로 최신 요청이 상단"* — 묶음 안에선 요청일 늦은 순,
-  // 요청일이 없는 기존 기록은 그 뒤에 퇴원·종료일 늦은 순.
+  // 요청일이 없는 기존 기록은 그 뒤에 마지막 수업일 늦은 순.
   const rank = (i: ListItem) => (i.status === "pending" ? 0 : i.requestedAt === null && i.date === null ? 2 : 1);
   return [...web, ...archived].sort(
     (a, b) =>
@@ -253,9 +269,16 @@ export function listHref(sp: Record<string, string | undefined>, patch: Record<s
   return s ? `${LIST_PATH}?${s}` : LIST_PATH;
 }
 
-/** 지금 이 사람의 승인 차례인가 — 관리자 단계면 관리자 명단에 있고 아직 결정 전, 원장 단계면 원장 명단에 있고 결정 전(DB 처리 함수와 같은 판정). */
+/** 지금 이 사람의 승인 차례인가 — 관리자 단계면 관리자 명단에 있고 아직 결정 전, 원장 단계(옛 보고서)면 원장 명단에 있고 결정 전(DB 처리 함수와 같은 판정). */
 export function myApprovalTurn(r: Pick<ReportListRow, "status" | "manager_id" | "manager_ids" | "director_id" | "director_ids" | "manager_decisions" | "director_decisions">, userId: string): boolean {
   if (r.status === "manager_pending") return managerIds(r).includes(userId) && !r.manager_decisions?.[userId];
   if (r.status === "director_pending") return directorIds(r).includes(userId) && !r.director_decisions?.[userId];
   return false;
+}
+/**
+ * 지금 이 사람의 데스크 환불 차례인가(원장 2026-11-03) — 처리를 기다리는 보고서에 내가 담당인 환불 요청서가 아직 완료 전.
+ * 처리는 수납의 환불 요청서에서 한다(환불완료일자) — 내 할 일 '환불 처리'(s2_0011)와 같은 일이다.
+ */
+export function myDeskTurn(r: Pick<ReportListRow, "status">, steps: readonly RefundStep[], userId: string): boolean {
+  return refundWaiting(r, steps) && steps.some((s) => !s.completedDate && s.deskId === userId);
 }

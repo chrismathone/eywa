@@ -15,7 +15,7 @@ import { PeriodNav } from "@/components/period-nav";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { readonlyTeacherViewError } from "@/lib/auth/view-as";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { dutyAllowsSeat } from "@/features/attendance/seat/duty";
 import { getActiveSeatDuties } from "@/features/attendance/seat/server/duty";
@@ -144,6 +144,8 @@ export default async function SeatAttendancePage({
   const canSeatWrite = dutyWrite || (await canWriteTenant(user.systemRole, "seat_attendance"));
   // 지난 날짜 쓰기는 사무실만 — 자리 전용 권한(아르바이트)은 오늘만. 서버 액션이 같은 판정을 다시 한다(#77).
   const canEditPast = await canWriteTenant(user.systemRole, "attendance");
+  // '출석부로'는 출석부를 열 수 있을 때만 — 자리 출석부만 받은 사람(아르바이트 등)이 누르면 첫 화면으로 튕긴다(2026-11-05 리뷰).
+  const canOpenAttendance = await canAccessTenant(user.systemRole, "attendance");
   const readOnly = !canSeatWrite || (date !== today && !canEditPast);
   // 이유가 둘이면 권한이 먼저다 — 권한이 없는 사람에게 "지난 날짜라서"라고 하면 오늘로 와서 다시 헛수고한다.
   const readOnlyReason: SeatReadOnlyReason = canSeatWrite ? "past" : "permission";
@@ -266,10 +268,12 @@ export default async function SeatAttendancePage({
           // flex-wrap — 폰(390px)에선 [출석부로][월간][랩실|JJ실][‹ 날짜 ›][과거 조회]가 한 줄 599px이라 본문이 가로로 밀렸다
           // (2026-09-13 모바일 전수검사). 감기면 두 줄, 데스크톱은 폭이 남아 종전대로 한 줄.
           <div className="flex flex-wrap items-center gap-1.5">
-            {/* 자리는 강사 축의 한 갈래라 되돌아갈 길을 헤더에 둔다(사이드바 항목이 없다). */}
-            <Link href="/attendance" className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF} mr-1`}>
-              출석부로
-            </Link>
+            {/* 자리는 강사 축의 한 갈래라 되돌아갈 길을 헤더에 둔다(사이드바 항목이 없다). 출석부를 못 여는 사람에겐 그리지 않는다. */}
+            {canOpenAttendance ? (
+              <Link href="/attendance" className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF} mr-1`}>
+                출석부로
+              </Link>
+            ) : null}
             <Link
               href={`/attendance/seat/${seat}/month?month=${date.slice(0, 7)}`}
               className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF} mr-1`}

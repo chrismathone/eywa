@@ -41,6 +41,8 @@ const SKIP_KEY: Record<NoticeSkip["reason"], SheetDictKey> = {
   no_name: "os.n.skip.no_name",
   no_class_board: "os.n.skip.no_class_board",
   not_my_class: "os.n.skip.not_my_class",
+  not_started: "os.n.skip.not_started",
+  on_hold: "os.n.skip.on_hold",
 };
 import type { NoticeAttachment } from "../notice-attachments";
 import type { OneScreenStudent } from "../types";

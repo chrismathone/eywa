@@ -46,6 +46,8 @@ import { classnoteSendOn } from "@/features/owner/classnote-gate";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { SEND_CLASS_SUBJECTS, classRouteActive } from "@/features/onescreen/send-class";
 import { noticeClassRouteWorkerReady, resolveNoticeClasses } from "@/features/report-admin/server/notice-class-route";
+import { resolveNoticeStandings } from "@/features/report-admin/server/notice-standing-query";
+import { isClassnoteSubjectEnabled } from "@/features/onescreen/classnote-guard";
 import type { NoticeOwner } from "../textbook-notice-subject";
 
 /**
@@ -122,27 +124,48 @@ export async function prepareTextbookNotice(orderIds: string[]): Promise<Prepare
   const acc = accountForTarget(settings.billing, "textbook");
   // 수학 알림장이 어느 반 보드로 가는지 미리 정해 보여 준다(발송 액션과 같은 함수 — 화면에 보인 반으로 나간다).
   // 경로가 꺼져 있거나 연동 PC가 아직 못 하면 비운다(= 지금까지처럼 1인 보드). 판정 실패는 화면을 세우지 않는다 — 발송 때 다시 판정한다.
-  let mathRoute: PreparedTextbookNotice["mathRoute"];
-  try {
-    const supabase = await createClient();
-    const senderTeacherId = await effectiveTeacherId();
-    if (classRouteActive(settings) && (await noticeClassRouteWorkerReady(supabase))) {
+  const mathRouteP = (async (): Promise<PreparedTextbookNotice["mathRoute"]> => {
+    try {
+      const supabase = await createClient();
+      const senderTeacherId = await effectiveTeacherId();
+      if (!classRouteActive(settings) || !(await noticeClassRouteWorkerReady(supabase))) return undefined;
       const teachers = teachersByStudent(loaded.rows, owners, senderTeacherId);
       const mathStudents = [...new Set(studentIds)].filter((id) => (boards.subjects[id] ?? []).some((k) => SEND_CLASS_SUBJECTS.has(k)));
       const picks = await resolveNoticeClasses(
         user.tenantId,
         mathStudents.map((id) => ({ studentId: id, teacherIds: teachers[id] ?? [], teacherStrict: !!senderTeacherId })),
       );
-      mathRoute = {};
-      for (const [id, p] of picks) mathRoute[id] = p.ok ? { className: p.className } : { reason: p.reason };
+      const out: NonNullable<PreparedTextbookNotice["mathRoute"]> = {};
+      for (const [id, p] of picks) out[id] = p.ok ? { className: p.className } : { reason: p.reason };
+      return out;
+    } catch (e) {
+      console.error("[textbook] 반 보드 미리 보기 판정 실패 — 발송 때 다시 판정합니다", e instanceof Error ? e.message : e);
+      return undefined;
     }
-  } catch (e) {
-    console.error("[textbook] 반 보드 미리 보기 판정 실패 — 발송 때 다시 판정합니다", e instanceof Error ? e.message : e);
-    mathRoute = undefined;
-  }
+  })();
+  // 수업 시작 전·휴원(대기) 중인 학생 — 그 과목 알림장으로는 보내지 않는다(원장 2026-11-05 · 발송 액션 routeNoticeCandidates와 같은 함수).
+  // 교재요청서는 첫 수업 전에 보내는 일이 많아 보내기 전에 알린다. 위 미리 보기와 서로 독립(B4). 판정 실패는 화면을 세우지 않는다.
+  const standingP = (async (): Promise<PreparedTextbookNotice["standing"]> => {
+    if (!classRouteActive(settings)) return undefined;
+    const pairs = [...new Set(studentIds)].flatMap((id) =>
+      (boards.subjects[id] ?? []).filter((k) => isClassnoteSubjectEnabled(k, settings.report.classnoteSubjects)).map((subject) => ({ studentId: id, subject })),
+    );
+    if (!pairs.length) return {};
+    try {
+      const judged = await resolveNoticeStandings(user.tenantId, pairs);
+      const out: NonNullable<PreparedTextbookNotice["standing"]> = {};
+      for (const [id, bySubject] of judged) out[id] = Object.fromEntries(bySubject);
+      return out;
+    } catch (e) {
+      console.error("[textbook] 수업 시작 전·휴원 미리 보기 판정 실패 — 발송 때 다시 판정합니다", e instanceof Error ? e.message : e);
+      return undefined;
+    }
+  })();
+  const [mathRoute, standing] = await Promise.all([mathRouteP, standingP]);
   return {
     ok: true,
     mathRoute,
+    standing,
     orders: loaded.rows.map((r) => {
       const subjects = (r.student_id ? boards.subjects[r.student_id] : undefined) ?? [];
       return {

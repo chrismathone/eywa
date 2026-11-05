@@ -28,6 +28,7 @@ export const FORWARD_EVENT_OPTIONS: readonly ForwardEventOption[] = [
   { type: "grade_drop", label: "성적 급락", group: "학생 관리" },
   { type: "outstanding_alert", label: "미납 누적", group: "학생 관리" },
   { type: "refund_request_approved", label: "환불 승인(퇴원보고서)", group: "학생 관리" },
+  { type: "refund_request_cancelled", label: "퇴원 취소 · 환불 확인(퇴원보고서)", group: "학생 관리" },
   { type: "unsent_report", label: "미발송 수업 보고서", group: "학생 관리" },
   { type: "progress_anomaly", label: "진도 기록 이상", group: "학생 관리" },
   { type: "withdrawal_bypass", label: "퇴원보고서 없이 퇴원", group: "학생 관리" },

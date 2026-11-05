@@ -38,6 +38,8 @@ import {
 import type { NoticeCandidate, NoticeSkip, NoticeTarget } from "../notice-targets";
 import { attendingClassesOf, studentLegQuery, teacherLegQueries, teachersByClass } from "./notice-route-legs";
 import { ENGLISH_NOTICE_SUBJECT, resolveEnglishNoticeClasses } from "./notice-english-route";
+import { resolveNoticeStandings } from "./notice-standing-query";
+import { standingSubjectsOf, type NoticeStanding } from "../notice-standing";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -216,7 +218,7 @@ export async function routeNoticeCandidates(args: {
   settings: Parameters<typeof classRouteActive>[0] & { report: { classnoteSubjects: readonly string[] } };
   candidates: readonly RoutedCandidate[];
 }): Promise<{ classTargets: NoticeTarget[]; rest: NoticeCandidate[]; skipped: NoticeSkip[] }> {
-  const { supabase, tenantId, settings, candidates } = args;
+  const { supabase, tenantId, settings } = args;
   const sendable = (c: RoutedCandidate) => isClassnoteSubjectEnabled(c.subject, settings.report.classnoteSubjects);
   const isMath = (c: RoutedCandidate) => SEND_CLASS_SUBJECTS.has(c.subject ?? "") && sendable(c);
   const isEnglish = (c: RoutedCandidate) => c.subject === ENGLISH_NOTICE_SUBJECT && sendable(c);
@@ -224,12 +226,36 @@ export async function routeNoticeCandidates(args: {
     list.map((c) => ({ studentId: c.studentId, name: c.name, classnoteName: c.classnoteName, subject: c.subject }));
   // ClassNote 모듈이 꺼져 있거나(두 과목 모두 이 조건 하나) 켜져 있는 연동 PC가 아직 처리 못 하면 그 과목은 전부 기존 경로.
   // 하트비트는 한 번만 읽는다(두 과목이 같은 발송 PC 목록을 본다).
-  const wantMath = candidates.some(isMath) && classRouteActive(settings);
-  const wantEnglish = candidates.some(isEnglish) && !(settings.modules?.disabled ?? []).includes("classnote");
-  const pool = wantMath || wantEnglish ? await postingWorkerPool(supabase) : [];
+  const moduleOn = classRouteActive(settings);
+  // 🔴 수업 시작 전·휴원(대기) 중 = ClassNote로 보내지 않는다(원장 2026-11-05 *"수업 시작전이거나 휴원 중인 학생은 클래스노트 배정을
+  //    하지말것"* · notice-standing.ts) — 경로(반 보드·반 방·1인 보드)를 고르기 **전에** 사유와 함께 뺀다. 발송 PC 판과 무관하다(앱이
+  //    정한다 — 워커도 게시 직전에 다시 막는다). 모듈이 꺼져 있으면 ClassNote로 가는 길이 없어 보지 않는다. 하트비트와 서로 독립(B4).
+  const toJudge = moduleOn ? args.candidates.filter((c) => !!c.subject && sendable(c)) : [];
+  const needPool = moduleOn && args.candidates.some((c) => isMath(c) || isEnglish(c));
+  const [standings, pool] = await Promise.all([
+    toJudge.length
+      ? resolveNoticeStandings(tenantId, toJudge.map((c) => ({ studentId: c.studentId, subject: c.subject! })))
+      : Promise.resolve(new Map<string, Map<string, NoticeStanding>>()),
+    needPool ? postingWorkerPool(supabase) : Promise.resolve([]),
+  ]);
+  const standingSkips: NoticeSkip[] = [];
+  const skippedPair = new Set<string>();
+  const candidates = args.candidates.filter((c) => {
+    const standing = c.subject ? standings.get(c.studentId)?.get(c.subject) : undefined;
+    if (!standing) return true;
+    // 한 학생 · 한 알림장 묶음에 한 줄(수학·수학(심화) 후보가 함께 와도 같은 사유를 두 번 세지 않는다 — 리뷰 2026-11-05).
+    const key = `${c.studentId}\u0001${[...standingSubjectsOf(c.subject ?? "")].sort().join(",")}`;
+    if (!skippedPair.has(key)) {
+      skippedPair.add(key);
+      standingSkips.push({ name: (c.classnoteName || c.name || "").trim() || "(이름 없음)", reason: standing });
+    }
+    return false;
+  });
+  const wantMath = candidates.some(isMath) && moduleOn;
+  const wantEnglish = candidates.some(isEnglish) && moduleOn;
   const mathOn = wantMath && poolSupports(pool, workerSupportsNoticeClassRoute);
   const englishOn = wantEnglish && poolSupports(pool, workerSupportsNoticeEnglishRoom);
-  if (!mathOn && !englishOn) return { classTargets: [], rest: plain(candidates), skipped: [] };
+  if (!mathOn && !englishOn) return { classTargets: [], rest: plain(candidates), skipped: standingSkips };
 
   const merged = mergeByStudent(mathOn ? candidates.filter(isMath) : []);
   const englishMerged = mergeByStudent(englishOn ? candidates.filter(isEnglish) : []);
@@ -239,7 +265,7 @@ export async function routeNoticeCandidates(args: {
     englishMerged.size ? resolveEnglishNoticeClasses(tenantId, requestsOf(englishMerged)) : Promise.resolve(new Map<string, EnglishNoticePick>()),
   ]);
   const classTargets: NoticeTarget[] = [];
-  const skipped: NoticeSkip[] = [];
+  const skipped: NoticeSkip[] = [...standingSkips];
   for (const c of merged.values()) {
     const eff = (c.classnoteName || c.name || "").trim();
     if (!eff) {

@@ -72,7 +72,8 @@ export function isCanonicalRouteKey(key: string): boolean {
  * 🔴 셸(`src/app/(shell)`)에 첫 칸이 새로 생기면 메뉴 표나 여기에 넣을 것 — 안 넣으면 그 화면 이용이 **조용히 버려진다**
  *    (가드 `labels-query.test.ts`가 잡는다).
  */
-export const NON_MENU_SHELL_SEGMENTS: ReadonlySet<string> = new Set(["me", "menu"]);
+// explore = 연결 탐색(원생·수업·강사 중심 도넛) — 메뉴 밖 화면, 원생·수업·직원 상세의 '연결 탐색' 버튼과 검색으로 연다(2026-11-03).
+export const NON_MENU_SHELL_SEGMENTS: ReadonlySet<string> = new Set(["me", "menu", "explore"]);
 
 /** 화면 식별자가 속한 메뉴 — 메뉴 표에 없는 주소(내 정보·메뉴 판 등)는 `other`. */
 export type UsageMenuKey = MenuKey | "other";

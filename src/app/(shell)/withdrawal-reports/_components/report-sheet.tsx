@@ -30,7 +30,8 @@ export function ReportSheet({ fields: f, subject, signatures, archive = false, c
         <colgroup>{Array.from({ length: 12 }, (_, i) => <col key={i} style={{ width: `${100 / 12}%` }} />)}</colgroup>
         <tbody>
           <tr><th scope="row">성명</th><td>{f.name}</td><th scope="row">학년</th><td>{f.grade}</td><th scope="row">반명</th><td colSpan={7}>{f.className}</td></tr>
-          <tr><th scope="row">퇴원일</th><td colSpan={3}>{f.exitDate}</td><th scope="row" colSpan={2}>수강기간</th><td colSpan={6}>{f.period}</td></tr>
+          {/* 웹 보고서의 날짜 = 마지막 수업일(원장 2026-11-03 — 목록·요청 창과 같은 이름) · 기존 원본 양식은 원문 머리글 '퇴원일' 그대로. */}
+          <tr><th scope="row">{archive ? "퇴원일" : "마지막 수업일"}</th><td colSpan={3}>{f.exitDate}</td><th scope="row" colSpan={2}>수강기간</th><td colSpan={6}>{f.period}</td></tr>
           <tr><th scope="row">담임명</th><td colSpan={3}>{f.teacher}</td><th scope="row" colSpan={2}>{archive ? "출결·현황" : "최근 3개월 출결 현황"}</th><td colSpan={6}>{f.attendance}</td></tr>
           {fullRow("퇴원사유", f.reason)}
           {fullRow("퇴원 상세 사유", f.detail, true)}

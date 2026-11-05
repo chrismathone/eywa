@@ -31,6 +31,12 @@ export const isEnglishRoomTarget = (target) => isClassRouteTarget(target) && ENG
 const BAD_TARGET_NOTE = "발송 대상 정보가 올바르지 않습니다(반·학생 번호) — 다시 발송해 주세요";
 const NOT_ATTENDING_NOTE = "이 학생은 지금 그 반에 다니지 않습니다 — 반을 확인한 뒤 다시 발송해 주세요";
 /**
+ * 수업 시작 전·휴원 중인 학생은 ClassNote로 보내지 않는다(원장 2026-11-05 *"수업 시작전이거나 휴원 중인 학생은 클래스노트 배정을 하지말것"*).
+ * 앱이 큐에 올리기 전에 거르지만(notice-standing.ts), 큐에 오른 뒤 휴원으로 바뀐 경우를 여기서 다시 막는다.
+ */
+export const NOT_STARTED_NOTE = "이 학생은 아직 그 반 수업을 시작하지 않았습니다 — 수업 시작 전에는 ClassNote로 보내지 않습니다(첫 수업 날부터 보낼 수 있습니다)";
+export const ON_HOLD_NOTE = "이 학생은 지금 휴원 중입니다 — 휴원 중에는 ClassNote로 보내지 않습니다(복귀하면 다시 보낼 수 있습니다)";
+/**
  * 앱이 반 방으로 정한 뒤 그 연결이 풀렸다 — 시험이 벨 힌트 말을 담지 않는지 본다.
  * "다시 보내면 된다"고 약속하지 않는다 — 교재요청서는 같은 공지가 일부라도 나갔으면 그 요청서를 다시 보낼 수 없다(중복 발송 차단).
  */
@@ -44,12 +50,32 @@ function targetIds(target) {
   return UUID.test(classId) && UUID.test(studentId) ? { classId, studentId } : null;
 }
 
-/** ① 오늘 그 반에 다니는가(큐에 오른 뒤 반이 바뀌었을 수 있다) — 반이동 당일 옛 반은 아니다. 수학·영어 같은 확인. */
+/**
+ * ① 오늘 그 반에 다니는가(큐에 오른 뒤 반이 바뀌었을 수 있다) — 반이동 당일 옛 반은 아니다. 수학·영어 같은 확인.
+ * 휴원(그 수강의 휴원·대기 또는 학생 상태 휴원)과 수업 시작 전은 다니는 것이 아니다(2026-11-05) — 사유를 갈라 돌려준다(`attendanceNote`).
+ * @returns {Promise<string|null>} 보내지 않을 사유(다니면 null)
+ */
 async function attendsToday(sql, tenant, classId, studentId) {
-  const rows = await sql`select start_date::text as start_date, end_date::text as end_date, is_transferred
-    from enrollments where tenant_id = ${tenant} and class_id = ${classId} and student_id = ${studentId}`;
-  const today = kstToday();
-  return rows.some((e) => isCurrentEnrollment({ startDate: e.start_date, endDate: e.end_date, isTransferred: e.is_transferred === true }, today));
+  const rows = await sql`select e.start_date::text as start_date, e.end_date::text as end_date, e.is_transferred, e.on_hold, s.status::text as status
+    from enrollments e join students s on s.id = e.student_id
+    where e.tenant_id = ${tenant} and e.class_id = ${classId} and e.student_id = ${studentId}`;
+  return attendanceNote(rows, kstToday());
+}
+
+/**
+ * 순수 판정(시험용으로 뺐다) — 수강 줄(`start_date`·`end_date`·`is_transferred`·`on_hold`·학생 `status`) → 보내지 않을 사유 또는 null.
+ * 오늘 다니는 줄이 있고 휴원이 아니면 null · 학생 휴원이거나 오늘 줄이 모두 휴원이면 휴원 · 끝나지 않은 줄이 아직 시작 전이면 시작 전 ·
+ * 그 밖은 '다니지 않음'.
+ */
+export function attendanceNote(rows, today) {
+  const list = rows ?? [];
+  const current = list.filter((e) => isCurrentEnrollment({ startDate: e.start_date, endDate: e.end_date, isTransferred: e.is_transferred === true }, today));
+  if (current.length) {
+    if (list.some((e) => e.status === "on_hold") || current.every((e) => e.on_hold === true)) return ON_HOLD_NOTE;
+    return null;
+  }
+  const upcoming = list.some((e) => e.start_date && e.start_date > today && (!e.end_date || e.end_date >= e.start_date));
+  return upcoming ? NOT_STARTED_NOTE : NOT_ATTENDING_NOTE;
 }
 
 /**
@@ -63,7 +89,8 @@ export async function resolveNoticeClassTarget(sql, page, { tenant, centerId, ta
   const { classId, studentId } = ids;
 
   // ① 오늘 그 반에 다니는가.
-  if (!(await attendsToday(sql, tenant, classId, studentId))) return { ok: false, note: NOT_ATTENDING_NOTE };
+  const notAttending = await attendsToday(sql, tenant, classId, studentId);
+  if (notAttending) return { ok: false, note: notAttending };
 
   // ② 반 보드 대상 + 연결 + 원아 매칭 ok.
   if (!(await isClassRouteEligible(sql, tenant, classId, studentId)))
@@ -88,7 +115,8 @@ export async function resolveNoticeEnglishTarget(sql, page, { tenant, centerId, 
   const { classId, studentId } = ids;
 
   // ① 오늘 그 반에 다니는가.
-  if (!(await attendsToday(sql, tenant, classId, studentId))) return { ok: false, note: NOT_ATTENDING_NOTE };
+  const notAttending = await attendsToday(sql, tenant, classId, studentId);
+  if (notAttending) return { ok: false, note: notAttending };
 
   // ② 그 영어 반의 반 방 연결이 지금도 있는가(사람이 이은 연결 — 큐에 오른 뒤 풀렸을 수 있다 · 영어 반이 아니면 없음).
   //    없으면 막는다 — 1인 보드로 몰래 돌리지 않는다(화면이 '반 방으로 보냄'을 거짓말하게 된다).
