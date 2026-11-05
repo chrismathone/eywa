@@ -42,7 +42,7 @@ import type { DisplayOptions } from "../display-options";
 import { PreviousContent } from "./previous-content";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { isJjSheetDraft, isJjSheetReport } from "../jj-books";
+import { isJjSheetDraft, isJjSheetReport, isProgressOptionalReport } from "../jj-books";
 import {
   EMPTY_TEMPLATE_PREFS,
   implicitTemplateFor,
@@ -3422,7 +3422,10 @@ export function OneScreenClient({
           r.subject,
           action,
           effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus),
-          { attendanceReadOnly: !canEditAttendance }, // 출결 쓰기 권한 없음 = 미체크 게이트 해당 없음(P0-3)
+          {
+            attendanceReadOnly: !canEditAttendance, // 출결 쓰기 권한 없음 = 미체크 게이트 해당 없음(P0-3)
+            progressOptional: isProgressOptionalReport(r.subject, reportsRef.current[r.student.id]?.[r.subject.name]), // SRS 글은 진도 불필요
+          },
         ),
       );
     if (!keys || keys.length === 0) return all;
@@ -4320,7 +4323,7 @@ export function OneScreenClient({
     }
     // 진도 미입력 게이트(방어층) — 버튼 disabled 우회·프로그램 호출 대비. 표뷰와 동일 기준(#15 확정).
     const su = selected.subjects.find((s) => s.name === subjectName);
-    if (su && !isRowActionable(su, "save")) {
+    if (su && !isRowActionable(su, "save", undefined, { progressOptional: isProgressOptionalReport(su, reports[selected.id]?.[subjectName]) })) {
       toast.message(t("os.c.needProgress"));
       return;
     }
@@ -4616,7 +4619,7 @@ export function OneScreenClient({
         (!keySet || keySet.has(r.key)) &&
         r.subject.attendanceRaw !== "absent" &&
         !isAlreadySent(effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus)) &&
-        !isReportEligible(r.subject),
+        !isReportEligible(r.subject, isProgressOptionalReport(r.subject, reportsRef.current[r.student.id]?.[r.subject.name])),
     );
     const noProgressNames = [...new Set(noProgressRows.map((r) => r.student.name))];
     const progressLine = noProgressRows.length
@@ -4637,7 +4640,9 @@ export function OneScreenClient({
       (r) =>
         canEditAttendance && // 출결 쓰기 권한 없음 = 게이트 해당 없음(P0-3) — 제외 안내도 하지 않는다
         (!keySet || keySet.has(r.key)) &&
-        isRowActionable(r.subject, "autowrite", effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus)) &&
+        isRowActionable(r.subject, "autowrite", effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus), {
+          progressOptional: isProgressOptionalReport(r.subject, reportsRef.current[r.student.id]?.[r.subject.name]),
+        }) &&
         isAttendanceUnchecked(r.subject),
     );
     const uncheckedNames = [...new Set(uncheckedRows.map((r) => r.student.name))];
@@ -4917,7 +4922,7 @@ export function OneScreenClient({
     }
     // 미저장 첨부는 buildSaveInput으로 보고서 행을 먼저 만든다 — 진도 없으면 빈 보고서가 생기므로 게이트(#15).
     const su0 = student.subjects.find((s) => s.name === subjectName);
-    if (su0 && !reports[student.id]?.[subjectName]?.sent && !isRowActionable(su0, "save")) {
+    if (su0 && !reports[student.id]?.[subjectName]?.sent && !isRowActionable(su0, "save", undefined, { progressOptional: isProgressOptionalReport(su0, reports[student.id]?.[subjectName]) })) {
       if (!opts?.silent) toast.message(t("os.c.attachNeedProgress"));
       return 0;
     }
