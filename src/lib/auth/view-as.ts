@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { accessLevel, type SystemRole } from "@/lib/permissions";
 import { getActorPermMatrix } from "@/lib/auth/perm-matrix";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
-import { isProtectedSuperAdminTarget, isSignedInSuperAdmin } from "@/lib/auth/super-admin";
+import { isSignedInSuperAdmin, superAdminTargetProtection } from "@/lib/auth/super-admin";
 import { canViewAsRole } from "@/lib/auth/role-hierarchy";
 import { createClient } from "@/lib/supabase/server";
 import { READONLY_TEACHER_VIEW_ERROR } from "@/lib/auth/view-as-message";
@@ -65,54 +65,87 @@ export type ViewAsTeacher = CurrentUser & { access: "full" | "readonly" };
  * ⚠️ 자격(canUseOtherTeacherView)·쿠키 판독은 호출부 몫 — 여기는 대상 검증만.
  */
 export async function loadViewAsTarget(targetId: string): Promise<CurrentUser | null> {
+  return (await checkViewAsTarget(targetId)).target;
+}
+
+/** 대상 검증 결과 — `unverified` = 조회가 실패해 **확인하지 못함**(무효 대상과 다르다 — 아래 resolveViewAs). */
+type ViewAsCheck = { target: CurrentUser | null; unverified: boolean };
+const NO_TARGET: ViewAsCheck = { target: null, unverified: false };
+const UNVERIFIED: ViewAsCheck = { target: null, unverified: true };
+
+async function checkViewAsTarget(targetId: string): Promise<ViewAsCheck> {
   const user = await getCurrentUser();
-  if (!user) return null;
+  if (!user) return NO_TARGET;
   const supabase = await createClient();
   // 세션 클라이언트(RLS)라 타 테넌트 행은 애초에 안 보이지만 tenant_id 이중 확인.
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("users")
     .select("id, tenant_id, email, display_name, job_title, system_role, status")
     .eq("id", targetId)
     .maybeSingle();
-  if (!data || data.tenant_id !== user.tenantId || data.system_role === "student") return null;
-  if (data.status !== "active") return null;
+  if (error) return UNVERIFIED;
+  if (!data || data.tenant_id !== user.tenantId || data.system_role === "student") return NO_TARGET;
+  if (data.status !== "active") return NO_TARGET;
   // 🔴 위계 — 자기보다 높은 역할은 대상이 될 수 없다(2026-11-05 적대 리뷰 치명: 강사뷰 권한을 개인 예외로 받은 상담사가
   //    반을 맡은 원장을 골라 원장의 권한표 · 받은함 · 할 일 현황 · 업무 판정을 빌렸다). 같은 역할은 된다.
   //    운영 계정(실제 로그인)은 위계 예외 · 대상이 운영 계정이면 실제 계정도 운영 계정일 때만(조회 실패 = 막음).
   //    진입과 매 요청 재검증이 이 함수 하나를 쓰므로, 역할이 바뀌면 다음 요청부터 강사뷰가 풀린다.
-  if (!(await isSignedInSuperAdmin()) && !canViewAsRole(user.systemRole, data.system_role as SystemRole)) return null;
-  if (await isProtectedSuperAdminTarget(user.id, data.id)) return null;
-  return { id: data.id, tenantId: data.tenant_id, email: data.email ?? "", displayName: ((data.display_name as string | null) ?? "").trim(), jobTitle: data.job_title ?? null, systemRole: data.system_role as SystemRole };
+  if (!(await isSignedInSuperAdmin()) && !canViewAsRole(user.systemRole, data.system_role as SystemRole)) return NO_TARGET;
+  const protection = await superAdminTargetProtection(user.id, data.id);
+  if (protection === "unknown") return UNVERIFIED;
+  if (protection === "protected") return NO_TARGET;
+  return {
+    target: { id: data.id, tenantId: data.tenant_id, email: data.email ?? "", displayName: ((data.display_name as string | null) ?? "").trim(), jobTitle: data.job_title ?? null, systemRole: data.system_role as SystemRole },
+    unverified: false,
+  };
 }
 
 /**
  * 지금 요청이 '다른 강사 뷰'인가 — 맞으면 **검증된 대상 강사**를, 아니면 null.
  *
- * 매 요청 재검증(캐시 1회): ① 직원 + 강사뷰 쿠키 ② 자격([canUseOtherTeacherView])
- * ③ 대상이 같은 테넌트의 실존 직원(학생 아님·본인 아님). 하나라도 어긋나면 null = 기존 겸직/관리자 뷰로
+ * 매 요청 재검증(캐시 1회): ① 관리자 계열 직원 + 강사뷰 쿠키 ② 자격([canUseOtherTeacherView])
+ * ③ 대상이 같은 테넌트의 실존 직원(학생 아님·본인 아님·위계). 하나라도 어긋나면 null = 기존 겸직/관리자 뷰로
  * 조용히 폴백(쿠키를 지울 수는 없지만 — RSC는 쿠키 쓰기 불가 — 아무 효과도 없다).
  *
- * 명시적으로 권한을 받은 강사도 전환할 수 있다. 쿠키만으로는 접근을 얻지 못한다.
+ * 🔴 진입(switchToOtherTeacherView)·피커와 **같은 조건** — 관리자 계열 역할만(isFullShellRole). 강사 역할에 '강사뷰 접근'을
+ *    개인별로 줘도 진입·피커는 막는데 매 요청 재검증만 통과시키면, 쿠키를 직접 만든 강사가 다른 강사를 본다(2026-11-05 적대 재리뷰).
+ * 쿠키만으로는 접근을 얻지 못한다.
  */
-export const viewAsTeacher = cache(async (): Promise<ViewAsTeacher | null> => {
+export const viewAsTeacher = cache(async (): Promise<ViewAsTeacher | null> => (await resolveViewAs()).target);
+
+/**
+ * 매 요청 판정의 실체 — 대상과 함께 **확인하지 못했는가**(`unverified`)를 돌려준다.
+ * 강사뷰 쿠키가 살아 있는데 대상 조회(users · 운영 계정 보호)가 실패하면 viewAsTeacher는 null이 되어 그 요청은 실제 계정 본인으로
+ * 처리된다 — 읽기 강사뷰라면 그 요청만 쓰기가 열리고, 전체 강사뷰라면 대상 X의 일이 A 명의로 저장된다. 그래서 확인하지 못한 요청은
+ * **읽기 전용**으로 닫는다(isReadonlyTeacherView = true → 쓰기 캡 · 명시 가드가 모두 거절, 2026-11-05 적대 재리뷰).
+ */
+const resolveViewAs = cache(async (): Promise<{ target: ViewAsTeacher | null; unverified: boolean }> => {
+  const none = { target: null, unverified: false };
   const user = await getCurrentUser();
-  if (!user || user.systemRole === "student") return null;
+  if (!user || !isFullShellRole(user.systemRole)) return none;
   // 지점 보기 중에는 이 브라우저에 남아 있던 강사뷰 쿠키(본인 지점에서 쓰던 것)를 읽지 않는다 — 위 otherTeacherViewAccess 주석.
-  if (user.tenantView) return null;
+  if (user.tenantView) return none;
   const jar = await cookies();
-  if (jar.get(VIEW_MODE_COOKIE)?.value !== "teacher") return null;
+  if (jar.get(VIEW_MODE_COOKIE)?.value !== "teacher") return none;
   const targetId = jar.get(VIEW_AS_COOKIE)?.value;
-  if (!targetId || !UUID_RE.test(targetId) || targetId === user.id) return null;
+  if (!targetId || !UUID_RE.test(targetId) || targetId === user.id) return none;
   const access = await otherTeacherViewAccess();
-  if (access === "none") return null;
-  const target = await loadViewAsTarget(targetId);
-  return target ? { ...target, access } : null;
+  if (access === "none") return none;
+  const { target, unverified } = await checkViewAsTarget(targetId);
+  return { target: target ? { ...target, access } : null, unverified };
 });
 
-/** 지금 요청이 '다른 강사 뷰'(열람 전용)인가 — 쓰기 캡·presence 차단·배지 노출의 공용 판정. */
+/**
+ * 지금 요청이 '다른 강사 뷰'(열람 전용)인가 — 쓰기 캡·presence 차단·배지 노출의 공용 판정.
+ * 강사뷰 쿠키가 있는데 대상을 **확인하지 못한** 요청도 true(위 resolveViewAs — 확인 못 한 요청은 쓰지 않는다).
+ */
 export async function isReadonlyTeacherView(): Promise<boolean> {
-  return (await viewAsTeacher())?.access === "readonly";
+  const { target, unverified } = await resolveViewAs();
+  return unverified || target?.access === "readonly";
 }
+
+/** 강사뷰 대상을 확인하지 못해 저장을 거절할 때의 문구(조회 순간 장애 — 새로고침하면 대개 풀린다). */
+export const TEACHER_VIEW_UNVERIFIED_ERROR = "강사뷰 대상을 확인하지 못해 저장하지 않았습니다 — 잠시 뒤 새로고침해 주세요";
 
 // 거절 문구는 클라 토스트와 공유하는 순수 모듈(view-as-message.ts)이 단일 소스 — 기존 소비처를 위해 재수출.
 export { READONLY_TEACHER_VIEW_ERROR } from "@/lib/auth/view-as-message";
@@ -129,5 +162,6 @@ export async function readonlyTeacherViewError(): Promise<string | null> {
   // 외부로 나가는 일을 품고 있어, 데이터 접근 층의 쓰기 차단보다 **앞에서** 멈춰야 한다.
   const tenantView = await tenantViewWriteError();
   if (tenantView) return tenantView;
+  if ((await resolveViewAs()).unverified) return TEACHER_VIEW_UNVERIFIED_ERROR;
   return (await isReadonlyTeacherView()) ? READONLY_TEACHER_VIEW_ERROR : null;
 }

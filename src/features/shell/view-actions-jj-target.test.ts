@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   call: 0,
   role: "master",
   superAdmin: false,
+  superAdminIds: [] as string[],
 }));
 
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined, set: vi.fn(), delete: vi.fn() }) }));
@@ -30,7 +31,10 @@ vi.mock("@/lib/auth/view-as", () => ({
   VIEW_AS_COOKIE: "eywa-view-as",
 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({}) }));
-vi.mock("@/lib/auth/super-admin", () => ({ isSignedInSuperAdmin: async () => h.superAdmin }));
+vi.mock("@/lib/auth/super-admin", () => ({
+  isSignedInSuperAdmin: async () => h.superAdmin,
+  getSuperAdminIds: async () => new Set(h.superAdminIds),
+}));
 // 호출 순서 = 직원 → 반(view-actions의 Promise.all 순서).
 vi.mock("@/lib/supabase/batch", () => ({
   fetchAllPaged: async () => (h.call++ === 0 ? h.staff : h.classes),
@@ -52,6 +56,7 @@ beforeEach(() => {
   h.settingsFail = false;
   h.role = "master";
   h.superAdmin = false;
+  h.superAdminIds = [];
   h.staff = [
     { id: "u-t", display_name: "박소선", system_role: "teacher" },
     { id: "u-jj", display_name: "김동후", system_role: "viewer" },
@@ -104,6 +109,12 @@ describe("'다른 강사 뷰' 대상 — 자기보다 높은 역할은 빠진다
   it("운영 계정(실제 로그인)은 역할과 상관없이 모두", async () => {
     h.role = "admin";
     h.superAdmin = true;
+    h.superAdminIds = ["u-owner"];
     expect(await list()).toEqual(["관리자", "박소선", "원장"]);
+  });
+  // 2026-11-05 적대 재리뷰 — 진입이 막는 대상(운영 계정)을 목록에 띄우지 않는다(고르면 아무 일도 없던 자리).
+  it("🔴 실제 계정이 운영 계정이 아니면 운영 계정 대상은 원장에게도 서지 않는다", async () => {
+    h.superAdminIds = ["u-owner"];
+    expect(await list()).toEqual(["관리자", "박소선"]);
   });
 });

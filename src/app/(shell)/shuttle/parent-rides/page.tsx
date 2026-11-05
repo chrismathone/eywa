@@ -12,6 +12,7 @@ import {
 import { getRegularChanges, getRideChangesOn } from "@/features/shuttle/ride-change/server/change-history-queries";
 import { getParentAccounts, getParentLinkedStudentIds, getParentStudentOptions } from "@/features/shuttle/parent-accounts/server/parents";
 import { parentAccountsActor } from "@/features/shuttle/parent-accounts/server/parent-access";
+import { readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { ParentAccountsButton } from "./_components/parent-accounts-button";
 import { ParentRidesBoard } from "./_components/parent-rides-board";
 import { buildRideLegs, type RideLeg } from "@/features/shuttle/parent/parent-rides";
@@ -92,6 +93,8 @@ export default async function ShuttleParentRidesPage({
   const date = sp.d && isValidYmd(sp.d) ? sp.d : today;
   const view: "day" | "month" = sp.v === "month" ? "month" : "day";
   const month = sp.m && /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.m) ? sp.m : date.slice(0, 7);
+  // 학부모 계정 모달 — 읽기 강사뷰 · 지점 보기면 발급 폼 · 삭제를 그리지 않는다(발급·삭제 액션의 첫 가드와 같은 판정).
+  const accountsReadOnly = (await readonlyTeacherViewError()) !== null;
 
   // 📅 월별 — 학원 전체 한 달(아이 한 줄 × 평일). 날짜를 누르면 그날 상세 모달(거기서 [관리자 수정하기]). 일별 재료(노선·기록·변경 내역)는 안 읽는다.
   if (view === "month") {
@@ -129,7 +132,7 @@ export default async function ShuttleParentRidesPage({
           </p>
           <span className="flex shrink-0 flex-wrap items-center gap-2">
             <ViewToggle view="month" season={season} date={date} month={month} />
-            {monthManager ? <ParentAccountsButton accounts={monthAccounts} students={monthStudents} /> : null}
+            {monthManager ? <ParentAccountsButton accounts={monthAccounts} students={monthStudents} readOnly={accountsReadOnly} /> : null}
           </span>
         </div>
         <StaffMonthView
@@ -240,7 +243,7 @@ export default async function ShuttleParentRidesPage({
         {/* [일별][월별]은 [학부모 관리 현황] 옆(사용자 2026-10-16 "학부모 관리 현황 옆에 배치"). */}
         <span className="flex shrink-0 flex-wrap items-center gap-2">
           <ViewToggle view="day" season={season} date={date} month={month} />
-          {manager ? <ParentAccountsButton accounts={parentAccounts} students={parentStudents} /> : null}
+          {manager ? <ParentAccountsButton accounts={parentAccounts} students={parentStudents} readOnly={accountsReadOnly} /> : null}
         </span>
       </div>
       {students.length === 0 ? (

@@ -14,6 +14,7 @@ const m = vi.hoisted(() => ({
   targetRow: null as null | Record<string, unknown>,
   signedInSuper: false,
   protectedTarget: false,
+  protectionUnknown: false,
 }));
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: (k: string) => (k in m.cookies ? { value: m.cookies[k] } : undefined) }),
@@ -29,7 +30,7 @@ vi.mock("@/lib/auth/current-user", () => ({
 vi.mock("@/lib/auth/super-admin", () => ({
   isCurrentUserSuperAdmin: async () => false,
   isSignedInSuperAdmin: async () => m.signedInSuper,
-  isProtectedSuperAdminTarget: async () => m.protectedTarget,
+  superAdminTargetProtection: async () => (m.protectionUnknown ? "unknown" : m.protectedTarget ? "protected" : "allowed"),
 }));
 vi.mock("@/lib/auth/tenant-view", () => ({
   isTenantViewWriteBlocked: async () => false, isTenantViewRequest: async () => false, tenantViewWriteError: async () => null,
@@ -49,7 +50,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ kind: "admin" }) }));
 
-import { viewAsTeacher, loadViewAsTarget } from "@/lib/auth/view-as";
+import { viewAsTeacher, loadViewAsTarget, isReadonlyTeacherView, readonlyTeacherViewError, TEACHER_VIEW_UNVERIFIED_ERROR } from "@/lib/auth/view-as";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getStaffTaskViewer } from "@/features/staff-tasks/server/gate";
 import { notificationInbox } from "@/features/notifications/server/inbox";
@@ -65,6 +66,7 @@ beforeEach(() => {
   m.targetRow = rowOf("master");
   m.signedInSuper = false;
   m.protectedTarget = false;
+  m.protectionUnknown = false;
 });
 
 describe("canViewAsRole — 같거나 낮은 역할만", () => {
@@ -112,5 +114,30 @@ describe("허용되는 대상", () => {
     m.userOverrides = [];
     m.protectedTarget = true;
     expect(await loadViewAsTarget(X_ID)).toBeNull();
+  });
+});
+
+describe("매 요청 재검증 = 진입과 같은 조건(2026-11-05 적대 재리뷰)", () => {
+  it("🔴 강사 역할은 '강사뷰 접근'을 개인별로 받아도 쿠키만으로 다른 강사를 보지 못한다(진입·피커와 같은 isFullShellRole)", async () => {
+    m.actor = actorOf("teacher");
+    m.userOverrides = [{ userId: m.actor.id, menu: "teacher_view", access: "full" }];
+    m.targetRow = rowOf("teacher");
+    expect(await viewAsTeacher()).toBeNull();
+  });
+
+  it("🔴 대상 확인(운영 계정 보호 조회)이 실패한 요청은 실제 계정으로 쓰지 않는다 — 읽기 전용으로 닫는다", async () => {
+    m.targetRow = rowOf("teacher");
+    m.protectionUnknown = true;
+    expect(await viewAsTeacher()).toBeNull();
+    expect(await isReadonlyTeacherView()).toBe(true);
+    expect(await readonlyTeacherViewError()).toBe(TEACHER_VIEW_UNVERIFIED_ERROR);
+    expect(await canWriteTenant("counselor", "students")).toBe(false);
+  });
+
+  it("대상이 무효(보호된 운영 계정)면 확인 실패가 아니다 — 종전처럼 실제 계정 화면으로 돌아간다", async () => {
+    m.targetRow = rowOf("teacher");
+    m.protectedTarget = true;
+    expect(await viewAsTeacher()).toBeNull();
+    expect(await isReadonlyTeacherView()).toBe(false);
   });
 });

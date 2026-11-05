@@ -6,7 +6,7 @@ import { notFound } from "next/navigation";
 import { Pencil } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
-import { accessLevelTenant, canAccessTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canAccessTenant, canManageTenant, canWriteTenant, readonlyViewErasedScope } from "@/lib/auth/perm-matrix";
 import { getEnrollmentDateAccess } from "@/features/enrollments/server/date-access";
 import { canSeeStudentEnrollment } from "@/features/students/server/enrollment-gate";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
@@ -129,7 +129,9 @@ export default async function StudentDetailPage({
   if (!student) {
     // 강사(scoped)는 담당 학생만 상세 열람(적대 리뷰 F9) — 차단이면 404 대신 이유를 말한다.
     // (없는 학생과 비담당 학생을 구분해 주진 않는다 — 존재 여부 자체도 담당 밖 정보다.)
-    if ((await accessLevelTenant(user.systemRole, "students")) === "scoped") {
+    // 읽기 강사뷰가 X의 담당 범위를 지운 경우도 같은 안내(게이트 canViewStudentDetail과 같은 판정).
+    const studentsLevel = await accessLevelTenant(user.systemRole, "students");
+    if (studentsLevel === "scoped" || (studentsLevel === "readonly" && (await readonlyViewErasedScope("students")))) {
       return (
         <div className="space-y-6">
           <BackLink href="/students" label="원생목록으로" />

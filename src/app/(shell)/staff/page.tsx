@@ -20,6 +20,7 @@ import { SearchToggle } from "@/components/search-toggle";
 import { Toolbar } from "@/components/toolbar";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { requireAccess } from "@/lib/auth/require-access";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
 import { jobTitleRank } from "@/features/approvals/job-rank";
 import { canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -122,6 +123,9 @@ export default async function StaffPage({
   }>;
 }) {
   const user = await requireAccess("staff");
+  // '다른 강사 뷰'면 그 직원 — 연차·급여 버튼은 그 화면(연차 관리 · 월별 급여)의 판정과 같은 사람으로 세운다
+  // (2026-11-05 적대 재리뷰: 버튼은 실제 계정 A, 화면·저장은 대상 X로 갈렸다). 강사뷰가 아니면 user와 같다.
+  const viewer = (await getCurrentUser({ teacherView: true })) ?? user;
   const sp = await searchParams;
   // 보기 설정은 계정 귀속(users.ui_prefs.staff, 원장 2026-08-04) — URL(명시값) → 저장값 → 기본값. 조회 실패(null)면 기본값으로
   // 그리되 이번 렌더는 저장하지 않는다(다른 축을 기본값으로 덮지 않게). 서로 독립인 조회는 한 번에(B4) — 저장값은 메모리 필터에만
@@ -269,7 +273,7 @@ export default async function StaffPage({
         title="직원관리"
         actions={
           <>
-            {isPayrollEnabled(settings) && user.systemRole === "master" ? (
+            {isPayrollEnabled(settings) && viewer.systemRole === "master" ? (
               <Button variant="outline" render={<WindowLink href="/staff/payroll" title="월별 급여" />}>
                 <Wallet className="size-4" />
                 월별 급여
@@ -279,7 +283,7 @@ export default async function StaffPage({
                 *"직원관리에 버튼 연동해주지 전자결재에 있는게 연차를 관리하는게 이상하자나"*).
                 휴가 신청·결재는 여전히 전자결재다. 원장과 학원 설정 '역할·권한'에서 연차 조정으로 지정한 사람에게만 보이고
                 실제 차단은 그 페이지·서버 액션이 같은 함수로 한다([[#77]]). */}
-            {canAdjustLeave(user, isSuperAdmin, { adjusterIds: settings.permissions.specialAccess.leaveAdjusterIds }) ? (
+            {canAdjustLeave(viewer, isSuperAdmin, { adjusterIds: settings.permissions.specialAccess.leaveAdjusterIds }) ? (
               <Button variant="outline" render={<WindowLink href="/staff/annual-leave" title="연차 관리" />}>
                 {/* 아이콘은 옛 '휴가 관리'(CalendarClock)와 **다른 것**으로 — 그 플래그를 되살리면
                     두 버튼이 나란히 서는데 같은 그림이면 무엇이 무엇인지 못 가린다. */}

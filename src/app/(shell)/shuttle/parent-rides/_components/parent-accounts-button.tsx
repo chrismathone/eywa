@@ -18,9 +18,12 @@ import type { ParentAccount, ParentStudentOption } from "@/features/shuttle/pare
 export function ParentAccountsButton({
   accounts,
   students,
+  readOnly = false,
 }: {
   accounts: ParentAccount[];
   students: ParentStudentOption[];
+  /** 읽기 강사뷰 · 지점 보기 — 목록만 보이고 발급 폼 · 삭제는 그리지 않는다(서버 액션도 같은 판정으로 거절). */
+  readOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -37,8 +40,8 @@ export function ParentAccountsButton({
           </div>
           <DialogDescription>학부모 계정과 연결된 원생을 확인하고 새 계정을 발급합니다.</DialogDescription>
           <div className="mt-2 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start">
-            <ParentAccountList accounts={accounts} />
-            <ParentAccountForm students={students} framed={false} />
+            <ParentAccountList accounts={accounts} readOnly={readOnly} />
+            {readOnly ? null : <ParentAccountForm students={students} framed={false} />}
           </div>
         </DialogContent>
       </Dialog>

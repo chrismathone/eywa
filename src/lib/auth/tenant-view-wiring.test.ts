@@ -357,9 +357,11 @@ describe("지점 보기 — 화면과 권한", () => {
     const access = /export const otherTeacherViewAccess[\s\S]*?\n}\);/.exec(viewAs)?.[0] ?? "";
     expect(access).toContain('if (user.tenantView) return "none";');
     expect(access.indexOf('if (user.tenantView) return "none";')).toBeLessThan(access.indexOf("isSignedInSuperAdmin()"));
-    const target = /export const viewAsTeacher[\s\S]*?\n}\);/.exec(viewAs)?.[0] ?? "";
-    expect(target).toContain("if (user.tenantView) return null;");
-    expect(target.indexOf("if (user.tenantView) return null;")).toBeLessThan(target.indexOf("await cookies()"));
+    // 매 요청 판정의 실체는 resolveViewAs(viewAsTeacher는 그 대상만 돌려준다 — 대상 확인 실패를 따로 들고 있어서, 2026-11-05).
+    expect(viewAs).toContain("export const viewAsTeacher = cache(async (): Promise<ViewAsTeacher | null> => (await resolveViewAs()).target);");
+    const target = /const resolveViewAs[\s\S]*?\n}\);/.exec(viewAs)?.[0] ?? "";
+    expect(target).toContain("if (user.tenantView) return none;");
+    expect(target.indexOf("if (user.tenantView) return none;")).toBeLessThan(target.indexOf("await cookies()"));
     const mode = read("src/lib/auth/view-mode.ts");
     const scope = /export const effectiveTeacherId[\s\S]*?\n}\);/.exec(mode)?.[0] ?? "";
     expect(scope).toContain("if (user.tenantView) return null;");

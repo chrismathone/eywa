@@ -9,7 +9,7 @@ import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { PrintWindowButton } from "@/components/workspace/print-window";
 import { requireAccess } from "@/lib/auth/require-access";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canWriteTenant, readonlyViewErasedScope } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { formatCreatedAt } from "@/lib/utils";
 import {
@@ -149,8 +149,8 @@ export default async function EnrollmentDetailPage({
   const canOpenClass =
     classLevel === "none"
       ? false
-      : classLevel !== "scoped" ||
-        // scoped는 반마다 다르다 — 한 반이라도 못 열면 전부 텍스트로(부분 링크는 더 헷갈린다).
+      : (classLevel !== "scoped" && !(classLevel === "readonly" && (await readonlyViewErasedScope("classes")))) ||
+        // scoped는 반마다 다르다(읽기 강사뷰가 X의 담당 범위를 지운 경우도 — 반 상세 게이트와 같은 판정) — 한 반이라도 못 열면 전부 텍스트로(부분 링크는 더 헷갈린다).
         (assigned?.ok
           ? (await Promise.all(assigned.rows.map((c) => canViewClassDetail(c.classId)))).every(Boolean)
           : false);

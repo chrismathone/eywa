@@ -91,16 +91,25 @@ export const getSuperAdminIds = cache(async (): Promise<Set<string>> => {
  * 비밀번호·이메일·이름·삭제 등 대상 계정을 바꾸는 서버 액션은 이 값이 true면 거절한다.
  */
 export async function isProtectedSuperAdminTarget(actorId: string, targetId: string): Promise<boolean> {
-  if (actorId === targetId) return false;
+  return (await superAdminTargetProtection(actorId, targetId)) !== "allowed";
+}
+
+/**
+ * 위 보호 판정의 세 갈래 — `unknown` = 조회 실패. '막음'과 '확인 못 함'을 나눠야 하는 소비처용이다.
+ * 강사뷰 대상 검증(view-as.ts)은 막으면 실제 계정으로 돌아가므로, 확인 못 한 요청을 **읽기 전용**으로 닫으려면 둘을 구분해야 한다
+ * (2026-11-05 적대 재리뷰 — 조회가 순간 실패하면 읽기 강사뷰의 그 요청만 쓰기가 열렸다).
+ */
+export async function superAdminTargetProtection(actorId: string, targetId: string): Promise<"protected" | "allowed" | "unknown"> {
+  if (actorId === targetId) return "allowed";
   // getSuperAdminIds(표시용)는 조회 실패를 빈 명단으로 삼킨다 — 보호선이 그걸 쓰면 실패하는 순간 조용히 꺼진다.
-  // 여기서는 두 사람만 직접 묻고, 조회가 실패하면 **막는 쪽**(true)으로 둔다.
+  // 여기서는 두 사람만 직접 묻고, 조회가 실패하면 `unknown`(isProtectedSuperAdminTarget는 **막는 쪽**)으로 둔다.
   const { data, error } = await createAdminClient()
     .from("super_admins")
     .select("id")
     .in("id", [actorId, targetId]);
-  if (error) return true;
+  if (error) return "unknown";
   const ids = new Set((data ?? []).map((r) => r.id as string));
-  return ids.has(targetId) && !ids.has(actorId);
+  return ids.has(targetId) && !ids.has(actorId) ? "protected" : "allowed";
 }
 
 export const SUPER_ADMIN_TARGET_DENIED_MSG = "이 계정을 변경할 권한이 없습니다";

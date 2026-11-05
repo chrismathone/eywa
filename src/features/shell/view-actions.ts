@@ -7,7 +7,7 @@ import { roleHome } from "@/lib/permissions";
 import { getActorPermMatrix } from "@/lib/auth/perm-matrix";
 import { canUseTeacherView, getShellView, isFullShellRole, VIEW_MODE_COOKIE } from "@/lib/auth/view-mode";
 import { canUseOtherTeacherView, loadViewAsTarget, VIEW_AS_COOKIE } from "@/lib/auth/view-as";
-import { isSignedInSuperAdmin } from "@/lib/auth/super-admin";
+import { getSuperAdminIds, isSignedInSuperAdmin } from "@/lib/auth/super-admin";
 import { canViewAsRole } from "@/lib/auth/role-hierarchy";
 import type { SystemRole } from "@/lib/permissions";
 import { teacherHomeForSubjects } from "@/lib/auth/teacher-home";
@@ -168,10 +168,14 @@ export async function listTeacherViewTargets(): Promise<TeacherViewTarget[]> {
   ]);
   const teachingIds = new Set(classRows.map((r) => r.teacher_id).filter(Boolean) as string[]);
   // 자기보다 높은 역할은 후보에서 뺀다 — 진입 검증(loadViewAsTarget)과 같은 위계 규칙(운영 계정은 예외 · 2026-11-05).
+  // 운영 계정(super_admin) 대상도 같은 규칙 — 실제 계정이 운영 계정이 아니면 후보에 세우지 않는다(진입이 막는 대상을 목록에 띄우지 않게,
+  // 2026-11-05 적대 재리뷰). 명단 조회가 실패하면 빈 명단(표시용) — 고르더라도 진입 검증이 다시 막는다.
   const anyRole = await isSignedInSuperAdmin();
+  const superAdminIds = anyRole ? new Set<string>() : await getSuperAdminIds();
   return staff
     .filter((s) => s.id !== user.id && s.system_role !== "student")
     .filter((s) => anyRole || canViewAsRole(user.systemRole, s.system_role as SystemRole))
+    .filter((s) => !superAdminIds.has(s.id))
     .filter((s) => s.system_role === "teacher" || teachingIds.has(s.id) || jjIds.has(s.id))
     .map((s) => ({ id: s.id, name: s.display_name ?? "(이름 없음)" }))
     .sort((a, b) => a.name.localeCompare(b.name, "ko")); // Postgres 정렬은 로마자→한글(#84) — 한글 우선 정렬

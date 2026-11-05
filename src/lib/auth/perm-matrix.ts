@@ -198,6 +198,39 @@ const resolveActorPermMatrix = cache(async (): Promise<AccessMatrix> => {
   }
 });
 
+/**
+ * '다른 강사 뷰' 대상(X)의 **캡 이전** 매트릭스 — 역할 기본 + 학원 설정 + X의 개인 권한(읽기 강사뷰의 readonly 캡은 아직 없다).
+ * 강사뷰가 아니면 null. getUserPermMatrix와 readonlyViewErasedScope가 같은 값을 읽는다(요청 캐시 1회).
+ */
+const viewAsTargetMatrix = cache(async (): Promise<AccessMatrix | null> => {
+  const target = await viewAsTeacher();
+  if (!target) return null;
+  const settings = await getTenantSettings();
+  return capSettingFeatures(capMakeupMode(capDisabledModules(
+    applyUserOverrides(resolveMatrix(settings.permissions.overrides), target.id, target.systemRole, settings.permissions.userOverrides),
+    settings.modules.disabled), normalizeMakeupSettings(settings.makeups).mode), target.tenantId, target.systemRole);
+});
+
+/** 강사뷰 대상 X의 이 메뉴 값(캡 이전). 원스크린은 역할 메뉴가 아니라 검증된 강사뷰의 홈이라 teacher 행을 쓴다(아래 getUserPermMatrix 주석). */
+function targetMenuValue(targetMatrix: AccessMatrix, menu: MenuKey, targetRole: SystemRole): Access {
+  return TEACHER_VIEW_CLOSED_MENUS.includes(menu) ? "none" : targetMatrix[menu][menu === "teacher_onescreen" ? "teacher" : targetRole];
+}
+
+/**
+ * 읽기 강사뷰의 캡이 이 메뉴의 **담당 범위(scoped)를 지웠는가** — 읽기 강사뷰는 X의 full·scoped를 모두 readonly로 누르므로,
+ * `accessLevelTenant`가 돌려준 readonly만으로는 "원래 scoped(강사 = 자기 반·자기 학생만)"였는지 알 수 없다. 그러면
+ * `level === "scoped"`로 읽기를 좁히던 자리(반 상세 · 학생 상세)가 **학원 전체**로 열린다(2026-11-05 강사뷰 적대 리뷰 · 재리뷰).
+ * X의 캡 이전 값(개인 권한 포함)이 scoped이면 true — 그 자리는 담당 판정을 X의 id로 다시 건다.
+ * 강사뷰가 아니거나 전체 강사뷰면 언제나 false(종전 판정 그대로).
+ * 🔴 새로 `accessLevelTenant(...) === "scoped"`로 **읽기**를 좁히는 코드를 쓰면 이 판정도 함께 볼 것.
+ */
+export async function readonlyViewErasedScope(menu: MenuKey): Promise<boolean> {
+  const target = await viewAsTeacher();
+  if (target?.access !== "readonly") return false;
+  const targetMatrix = await viewAsTargetMatrix();
+  return targetMatrix !== null && targetMenuValue(targetMatrix, menu, target.systemRole) === "scoped";
+}
+
 /** A selected teacher view has that teacher's role and personal permissions, never the viewer's broader powers. */
 export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
   const actor = await getActorPermMatrix();
@@ -205,15 +238,13 @@ export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
   if (!target) return capLaboratory(actor, (await getCurrentUser())?.tenantId ?? "");
   const user = await getCurrentUser();
   if (!user) return actor;
-  const settings = await getTenantSettings();
-  const targetMatrix = await capSettingFeatures(capMakeupMode(capDisabledModules(
-    applyUserOverrides(resolveMatrix(settings.permissions.overrides), target.id, target.systemRole, settings.permissions.userOverrides),
-    settings.modules.disabled), normalizeMakeupSettings(settings.makeups).mode), target.tenantId, target.systemRole);
+  const targetMatrix = await viewAsTargetMatrix();
+  if (!targetMatrix) return actor;
   return capLaboratory(Object.fromEntries(MENU_KEYS.map((menu) => {
     // 원스크린은 역할 메뉴가 아니라 검증된 강사뷰의 홈이다. 겸직 직원은 실제 역할(admin 등)의
     // 값이 none이므로 이를 teacher 행에 복사하면 /onescreen → /onescreen 리다이렉트가 반복된다.
     // 본인 겸직 강사뷰와 동일하게 이 메뉴만 teacher 행을 쓰고, 나머지는 대상의 개인 권한을 유지한다.
-    const value = TEACHER_VIEW_CLOSED_MENUS.includes(menu) ? "none" : targetMatrix[menu][menu === "teacher_onescreen" ? "teacher" : target.systemRole];
+    const value = targetMenuValue(targetMatrix, menu, target.systemRole);
     const level = target.access === "readonly" && (value === "full" || value === "scoped") ? "readonly" : value;
     return [menu, { ...actor[menu], [user.systemRole]: level, [target.systemRole]: level, teacher: level }];
   })) as AccessMatrix, user.tenantId).then((m) =>

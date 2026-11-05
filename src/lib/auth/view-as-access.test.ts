@@ -4,7 +4,7 @@ const ACTOR = "10000000-0000-4000-8000-000000000001";
 const TARGET = "20000000-0000-4000-8000-000000000001";
 const m = vi.hoisted(() => ({ access: "none" as Access, role: "admin" as SystemRole, cookie: "20000000-0000-4000-8000-000000000001", tenant: "branch", status: "active", targetRole: "teacher", reads: 0, tenantView: false }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => ({ id: "10000000-0000-4000-8000-000000000001", tenantId: "branch", systemRole: m.role, ...(m.tenantView ? { tenantView: { tenantId: "branch", tenantName: "Branch" } } : {}) }) }));
-vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => false, isSignedInSuperAdmin: async () => false, isProtectedSuperAdminTarget: async () => false }));
+vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => false, isSignedInSuperAdmin: async () => false, superAdminTargetProtection: async () => "allowed" }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ getActorPermMatrix: async () => resolveMatrix([{ menu: "teacher_view", role: m.role, access: m.access }]) }));
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: (key: string) => ({ value: key === "eywa-view" ? "teacher" : m.cookie }) }) }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: () => {
@@ -38,7 +38,9 @@ it("rejects another branch, an inactive target, a student and malformed/self coo
   m.targetRole = "teacher"; m.cookie = "forged"; expect(await viewAsTeacher()).toBeNull();
   m.cookie = ACTOR; expect(await viewAsTeacher()).toBeNull();
 });
-it("allows an explicitly granted teacher and denies the unsupported scoped level", async () => {
-  m.role = "teacher"; m.access = "full"; expect(await viewAsTeacher()).toMatchObject({ id: TARGET });
-  m.access = "scoped"; expect(await viewAsTeacher()).toBeNull();
+// 2026-11-05 적대 재리뷰 — 진입(switchToOtherTeacherView)·피커는 2026-10-22부터 관리자 계열만 받는다. 매 요청 재검증도 같은 조건이어야
+// 쿠키를 직접 만든 강사가 개인별 '강사뷰 접근'만으로 다른 강사를 보지 못한다(같은 역할 강사 = 위계 통과).
+it("a teacher role never switches by cookie even with a grant (same as entry and picker), and the scoped level is unsupported", async () => {
+  m.role = "teacher"; m.access = "full"; expect(await viewAsTeacher()).toBeNull(); expect(m.reads).toBe(0);
+  m.role = "admin"; m.access = "scoped"; expect(await viewAsTeacher()).toBeNull();
 });
