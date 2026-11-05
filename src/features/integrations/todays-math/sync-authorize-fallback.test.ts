@@ -1,8 +1,10 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-const { rpc, currentUser } = vi.hoisted(() => ({ rpc: vi.fn(), currentUser: vi.fn() }));
+const { rpc, currentUser, connectedApps } = vi.hoisted(() => ({ rpc: vi.fn(), currentUser: vi.fn(), connectedApps: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc }) }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: currentUser }));
+// 연결 앱 권한 판정(2026-11-05) — 기본은 '오늘 수학 링크가 서는 사람'. 꺼진 경우는 아래 따로 본다.
+vi.mock("@/features/connected-apps/server/visible", () => ({ getMyConnectedApps: connectedApps }));
 import { GET } from "@/app/api/connected-apps/todays-math/authorize/route";
 import { activeControl, config, eligibleEntry, id, user } from "./sync-browser.test-support";
 
@@ -20,6 +22,7 @@ beforeEach(() => {
   vi.stubEnv("EYWA_SYNC_AUTO_JSON", undefined);
   currentUser.mockResolvedValue(user);
   rpc.mockResolvedValue({ data: activeControl, error: null });
+  connectedApps.mockResolvedValue([{ feature: "todays_math" }]);
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -60,6 +63,31 @@ describe("source authorization login fallback", () => {
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: "account_not_eligible" });
     expect(response.headers.get("location")).toBeNull(); expect(rpc).not.toHaveBeenCalled();
+  });
+
+  // 연결 앱 권한(학원 설정 → 역할·권한 '연결 앱 권한', 2026-11-05): 오늘 수학 자격이 있어도 권한이 꺼진 사람은 코드를 받지 못하고
+  // 자격이 없을 때와 같은 로그인 안내로 간다(원문 403 화면 아님). 판정은 자격 확인 뒤라 꺼짐·검증 실패의 403/503은 그대로다.
+  it("redirects an eligible account whose connected-app permission is off to the configured login without issuing a code", async () => {
+    connectedApps.mockResolvedValue([]);
+    rpc.mockResolvedValue({ data: { ...activeControl, users: [eligibleEntry] }, error: null });
+    const response = await GET(request());
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(`${config.targetBaseUrl}/login?eywa=not-linked`);
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("tm_sync_control", { p_binding_id: config.bindingId, p_user_id: user.id });
+    expect(connectedApps).toHaveBeenCalledTimes(1);
+    noStore(response);
+  });
+
+  it("checks the connected-app permission only after the source control has passed", async () => {
+    connectedApps.mockResolvedValue([]);
+    rpc.mockResolvedValue({ data: { ...activeControl, enabled: false, users: [eligibleEntry] }, error: null });
+    const off = await GET(request());
+    expect(off.status).toBe(403);
+    expect(await off.json()).toEqual({ error: "account_not_eligible" });
+    rpc.mockResolvedValue({ data: { ...activeControl, users: [] }, error: null });
+    const ineligible = await GET(request());
+    expect(ineligible.headers.get("location")).toBe(`${config.targetBaseUrl}/login?eywa=not-linked`);
+    expect(connectedApps).not.toHaveBeenCalled();
   });
 
   it("keeps failed atomic code issuance denied", async () => {

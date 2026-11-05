@@ -12,6 +12,7 @@ import {
   MENU_KEYS,
   MENU_LABEL,
   SYSTEM_ROLES,
+  isConnectedAppMenu,
   isPermissionLocked,
   resolveMatrix,
   type Access,
@@ -21,6 +22,7 @@ import {
   type UserPermissionOverride,
 } from "@/lib/permissions";
 import { ACCESS_LABEL, ROLE_LABEL } from "./permission-ui";
+import { ConnectedAppPermissionsCard, type ConnectedAppPermissionRow } from "./connected-app-permissions-card";
 import { RoleMatrixTable } from "./role-matrix-table";
 import { SectionForm } from "./section-form";
 import { SettingsCard } from "./settings-card";
@@ -56,6 +58,7 @@ export function PermissionsSection({
   hiddenUserIds = [],
   generic = false,
   hiddenSettingKeys = [],
+  connectedApps = [],
   baselineToken,
   baselineVersion,
 }: {
@@ -69,6 +72,8 @@ export function PermissionsSection({
   hiddenUserIds?: string[];
   generic?: boolean;
   hiddenSettingKeys?: readonly SettingsRoleKey[];
+  /** 이 지점에서 켠 연결 앱 — 역할별 표 아래 '연결 앱 권한' 표의 줄(없으면 카드도 없다). */
+  connectedApps?: readonly ConnectedAppPermissionRow[];
   /**
    * 이 화면이 연 시점의 역할·권한을 가리키는 기준 token — 저장 요청에 실려, 그사이 다른 곳(다른 창 · '역할 설정' 대화상자 ·
    * 운영자 스크립트)이 바꿨으면 저장이 거절된다. 없으면 저장할 수 없다(서버가 받지 않는다).
@@ -111,7 +116,8 @@ export function PermissionsSection({
   const savedMatrix = useMemo(() => (JSON.parse(confirmed) as PermissionsDraft).matrix, [confirmed]);
   // 표에 선 차례대로 적고(왼쪽 탭 → 내부 메뉴), **표에 없는 줄의 변경도 뒤에 붙인다** — 감춘 메뉴의 강사 칸은 위 '내 메뉴' 표시로 바뀐다.
   const shownMenus = groups.flatMap((g) => g.rows.map((r) => r.menu));
-  const changes = [...shownMenus, ...MENU_KEYS.filter((menu) => !shownMenus.includes(menu))].flatMap((menu) => SYSTEM_ROLES.flatMap((role) =>
+  // 연결 앱 칸은 아래 '연결 앱 권한' 카드가 제 제목 줄에 센다 — 역할별 카드의 수에 섞지 않는다(리뷰 2026-11-05). 저장은 그대로 한 번에 실린다.
+  const changes = [...shownMenus, ...MENU_KEYS.filter((menu) => !shownMenus.includes(menu) && !isConnectedAppMenu(menu))].flatMap((menu) => SYSTEM_ROLES.flatMap((role) =>
     matrix[menu][role] === savedMatrix[menu][role] ? [] : [{ menu, role, before: savedMatrix[menu][role], after: matrix[menu][role] }],
   ));
   const staffName = (id: string) => staffOptions.find((s) => s.id === id)?.name || userOverrideNames[id] || `${id.slice(0, 8)}…`;
@@ -161,14 +167,20 @@ export function PermissionsSection({
         <TeacherMenuToggles matrix={matrix} navigation={navigation} onToggle={setTeacherShown} />
         <SettingsCard
           title="역할별 메뉴 권한"
-          description={<>
-            셀을 클릭하면 <b>전체 → 담당 → 읽기 → 없음</b> 순으로 바뀝니다. 기본값과 다른 셀만 저장됩니다
-            (기본값과 다른 셀 {overrides.length}개). 강사뷰 접근은 <b>전체 → 읽기 → 없음</b>만 사용합니다. 줄은 <b>탭 및 메뉴 구성에서 쓰는 메뉴</b>가 <b>왼쪽 탭과 그 안의 메뉴 차례</b>대로 서 있습니다(구성에서 감춘 메뉴는 표에 없고 — 강사 ‘내 메뉴’에 보이면 ‘관리자뷰에서 감춤’으로 남습니다 — 구성을 바꾸면
-            함께 바뀝니다). 선생님 원스크린·내 학습은 강사·학생 전용 화면이라 표에 없고, 학생 역할과 원장의 설정·대시보드 접근은
-            잠글 수 없습니다. 강사 대시보드는 담당 범위 집계가 없어 비활성화됩니다.
-          </>}
+          // 접고 펼친다(원장 2026-11-05 *"역할별하고 연동앱 권한도 접기 펼치기"*) — 처음엔 지금처럼 펼친 채, 접어도 안의 값은 그대로 저장에 실린다.
+          collapsible
+          defaultOpen
+          // 접어 둬도 저장하지 않은 칸이 있는지 보이게(안쪽 '저장 전 변경' 목록과 같은 수 · 문구는 겹치지 않게).
+          summary={changes.length ? `저장하지 않은 칸 ${changes.length}개` : undefined}
         >
           <div className="space-y-3">
+          {/* 설명은 접는 제목 줄이 아니라 본문에 둔다 — 제목 줄 안의 글자를 누르면 카드가 접히고, 화면 낭독기가 설명 전체를 단추 이름으로 읽는다. */}
+          <p className="text-text-dim text-xs">
+            셀을 클릭하면 <b>전체 → 담당 → 읽기 → 없음</b> 순으로 바뀝니다. 기본값과 다른 셀만 저장됩니다
+            (기본값과 다른 셀 {overrides.filter((o) => !isConnectedAppMenu(o.menu)).length}개). 강사뷰 접근은 <b>전체 → 읽기 → 없음</b>만 사용합니다. 줄은 <b>탭 및 메뉴 구성에서 쓰는 메뉴</b>가 <b>왼쪽 탭과 그 안의 메뉴 차례</b>대로 서 있습니다(구성에서 감춘 메뉴는 표에 없고 — 강사 ‘내 메뉴’에 보이면 ‘관리자뷰에서 감춤’으로 남습니다 — 구성을 바꾸면
+            함께 바뀝니다). 선생님 원스크린·내 학습은 강사·학생 전용 화면이라 표에 없고, 학생 역할과 원장의 설정·대시보드 접근은
+            잠글 수 없습니다. 강사 대시보드는 담당 범위 집계가 없어 비활성화됩니다.
+          </p>
           {ambiguous.length ? (
             <p role="status" className="border-amber/30 bg-amber-soft rounded-md border px-3 py-2 text-xs leading-relaxed">
               <b>같은 칸이 서로 다른 값으로 여러 번 저장되어 있습니다</b> —{" "}
@@ -189,6 +201,7 @@ export function PermissionsSection({
           <RoleMatrixTable groups={menuGroups} matrix={matrix} savedMatrix={savedMatrix} onCycle={cycle} />
           </div>
         </SettingsCard>
+        <ConnectedAppPermissionsCard apps={connectedApps} matrix={matrix} savedMatrix={savedMatrix} onCycle={cycle} />
         <SettingsCard
           title="설정별 역할 권한"
           description="각 메뉴에 있던 ‘역할 설정’을 여기에서 관리합니다. 기존 권한은 그대로 유지되며, 메뉴·개인 권한과 함께 저장됩니다."

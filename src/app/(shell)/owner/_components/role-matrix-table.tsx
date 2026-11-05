@@ -44,12 +44,14 @@ function isTabRow(group: PermissionRowGroup): boolean {
   return own.length === 1 && own[0]!.label === group.label;
 }
 
-export function RoleMatrixTable({ groups, matrix, savedMatrix, onCycle }: {
+export function RoleMatrixTable({ groups, matrix, savedMatrix, onCycle, rowHeader = "메뉴" }: {
   groups: readonly PermissionRowGroup[];
   matrix: AccessMatrix;
   /** 마지막으로 저장된 표 — 저장 전에 바꾼 칸을 표시한다. */
   savedMatrix: AccessMatrix;
   onCycle: (menu: MenuKey, role: SystemRole) => void;
+  /** 머리 줄 첫 칸 이름 — 연결 앱 권한 표는 '앱'(줄이 메뉴가 아니다). */
+  rowHeader?: string;
 }) {
   const headRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -114,7 +116,7 @@ export function RoleMatrixTable({ groups, matrix, savedMatrix, onCycle }: {
           <Columns />
           <thead>
             <tr>
-              <th className={`bg-bg-soft sticky left-0 z-10 px-3 py-2 text-left font-bold whitespace-nowrap ${EDGE}`}>메뉴</th>
+              <th className={`bg-bg-soft sticky left-0 z-10 px-3 py-2 text-left font-bold whitespace-nowrap ${EDGE}`}>{rowHeader}</th>
               {SYSTEM_ROLES.map((role) => (
                 <th key={role} className="px-2 py-2 text-center font-bold whitespace-nowrap">{ROLE_LABEL[role]}</th>
               ))}

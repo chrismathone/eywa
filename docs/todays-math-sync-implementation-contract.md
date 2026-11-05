@@ -39,7 +39,7 @@
 
 Control: `{schemaVersion:2,bindingId,tenantId,targetBranchId,sourceEpoch,securityRevision,tenantRevocationGeneration,enabled,mode,validatedAt,nextEffectiveAt:string|null,healthy:boolean,users:ControlUser[]}`. 특정 userId면 한 명 또는 삭제된 신원을 나타내는 0명. users 전체는 초기 동기화에 사용.
 
-ControlUser: `{id,email,name,status,role,subjects:string[],eligible:boolean,blockReasons:string[],accountRevocationGeneration,classListRevision,classes:{id,permissionRevision,capabilities:string[],validUntil:string|null}[]}`. 계정 자격은 active 수학/겸임 교사이며 ASSIGNABLE_TEACHER_ROLES 재사용. 교사 판정과 메뉴 판정을 섞지 않는다. 플랫폼 보호 계정은 자동 연결 제외. 삭제된 사용자는 생략하되 영속 tombstone과 계정 generation은 유지.
+ControlUser: `{id,email,name,status,role,subjects:string[],eligible:boolean,blockReasons:string[],accountRevocationGeneration,classListRevision,classes:{id,permissionRevision,capabilities:string[],validUntil:string|null}[]}`. 계정 자격은 active 수학/겸임 교사이며 ASSIGNABLE_TEACHER_ROLES 재사용. 교사 판정과 메뉴 판정을 섞지 않는다(예외 2026-11-05: source authorize의 **코드 발급만** aywa '연결 앱 권한'(`app_todays_math`)도 본다 — 자격 확인 뒤, 꺼진 사람은 코드 없이 `/login?eywa=not-linked`. ControlUser 자격·명단 동기화는 이 권한과 무관). 플랫폼 보호 계정은 자동 연결 제외. 삭제된 사용자는 생략하되 영속 tombstone과 계정 generation은 유지.
 
 capabilities의 허용 값은 `class:read`, `student:read`, `test:read`, `test:write`, `progress:read`, `progress:write`, `student:account`. delegate는 네 가지 `:read`만 발급한다. 지점 ID는 대상 서비스의 문자열 ID, membership ID는 UUID 또는 안정된 문자열 ID를 허용한다.
 

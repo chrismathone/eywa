@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { isConnectedAppMenu } from "@/lib/permissions";
 import { MENU_GLYPH_NAMES } from "./menu-glyph";
 
 const ROOT = join(__dirname, "..", "..", "..");
@@ -48,7 +49,10 @@ const PENDING_GLYPH = new Set<string>(["bookText", "calendarClock", "checkbox", 
       icons.indexOf("export const MENU_ICON"),
       icons.indexOf("} as const satisfies Record<MenuKey"),
     );
-    const used = new Set<string>([...menuBlock.matchAll(/:\s*"(\w+)"/g)].map((m) => m[1]!));
+    // 연결 앱 권한 키(app_* · 2026-11-05)는 메뉴 보드의 탭이 아니다 — 연결 앱 줄이 선화(EyIcon)로 그리므로 스티커를 요구하지 않는다.
+    const used = new Set<string>(
+      [...menuBlock.matchAll(/(\w+):\s*"(\w+)"/g)].filter((m) => !isConnectedAppMenu(m[1]!)).map((m) => m[2]!),
+    );
     const hub = readFileSync(join(SRC, "lib", "menu-hub.ts"), "utf8");
     for (const m of hub.matchAll(/icon:\s*"(\w+)"/g)) used.add(m[1]!);
 

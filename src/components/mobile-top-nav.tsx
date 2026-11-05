@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { UserMenu } from "@/components/user-menu";
-import { EyIcon } from "@/components/icons/aywa-icons";
+import { EyIcon, MENU_ICON } from "@/components/icons/aywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
 import { findNavItem } from "@/lib/navigation";
@@ -151,7 +151,7 @@ export function MobileTopNav({
               onClick={() => setOpen(false)}
               className="text-text-dim hover:text-foreground hover:bg-bg-soft flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-bold transition"
             >
-              <EyIcon name="calculator" size={14} strokeWidth={1.8} />
+              <EyIcon name={MENU_ICON[a.permission]} size={14} strokeWidth={1.8} />
               <span className="truncate">{a.label}</span>
               <EyIcon name="externalLink" size={12} strokeWidth={1.8} className="shrink-0 opacity-70" />
             </a>

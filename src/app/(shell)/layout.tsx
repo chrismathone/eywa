@@ -243,7 +243,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 겸직(관리자 계열 + 담당 반)이 '강사뷰' 쿠키를 켜면 view="teacher"라 아래 미니셸을 탄다(권한은 실 role 유지).
   const view = await getShellView();
 
-  // 연결 앱(오늘 수학 등) — 지점 스위치 ∧ 담당 과목(영어 선생님에겐 안 보인다) 판정은 `getMyConnectedApps` 한 곳.
+  // 연결 앱(오늘 수학 등) — 지점 스위치 ∧ 본인 권한 표('연결 앱 권한' · 2026-11-05) ∧ 담당 과목(영어뿐이면 안 보인다) 판정은 `getMyConnectedApps` 한 곳.
   // 풀셸은 사이드바·폰 메뉴, 강사 미니셸은 '내 메뉴' 끝에 선다. 아래 다른 조회들과 독립이라 **먼저 출발**시킨다(B4).
   // 학생 미니셸엔 자리가 없고, '다른 강사 뷰'(열람 전용)에선 세우지 않는다 — 출발 라우트는 **보는 사람 자신**으로
   // 로그인시키므로 남의 화면에 그 사람 것처럼 둘 수 없다.

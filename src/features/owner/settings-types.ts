@@ -2,7 +2,7 @@
 // 저장은 tenant_settings.data jsonb. 빈 키는 DEFAULT_SETTINGS로 폴백(resolve.ts).
 // 섹션별 부분 저장(saveOwnerSection)이라 SECTION_SCHEMAS로 섹션 단위 검증.
 import { z } from "zod";
-import { MENU_KEYS, MENU_LABEL, SYSTEM_ROLES, type MenuKey, type SystemRole } from "@/lib/permissions";
+import { isConnectedAppMenu, MENU_KEYS, MENU_LABEL, SYSTEM_ROLES, type MenuKey, type SystemRole } from "@/lib/permissions";
 // 감출 수 없는 목적지 판정 — 스키마(저장 거부)와 적용(isMenuHiddenByLayout)이 **같은 함수**를 본다.
 import { isLayoutHideLocked, isFixedDestination, FIXED_GROUP_IDS, MAX_NAV_GROUPS } from "./menu-layout";
 import { hasMenuGlyph } from "@/components/icons/menu-glyph";
@@ -645,6 +645,10 @@ export const permissionsSchema = z
     // 가드레일을 스키마에서 강제(저장 자체 거부) — resolveMatrix 적용 단계와 이중 방어.
     if ([...v.overrides, ...v.userOverrides].some((r) => r.menu === "teacher_view" && r.access === "scoped")) {
       ctx.addIssue({ code: "custom", message: "강사뷰 접근은 전체·읽기·없음 중에서 선택해 주세요" });
+    }
+    // 연결 앱은 링크를 보이거나 안 보이거나뿐이다(permissions.ts isPermissionLocked와 같은 규칙).
+    if ([...v.overrides, ...v.userOverrides].some((r) => isConnectedAppMenu(r.menu) && r.access !== "full" && r.access !== "none")) {
+      ctx.addIssue({ code: "custom", message: "연결 앱 권한은 전체·없음 중에서 선택해 주세요" });
     }
     for (const r of v.overrides) {
       if (r.menu === "teacher_onescreen" || r.menu === "my_learning") {

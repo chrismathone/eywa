@@ -1,8 +1,10 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-const { rpc, currentUser } = vi.hoisted(() => ({ rpc: vi.fn(), currentUser: vi.fn() }));
+const { rpc, currentUser, visibleApps } = vi.hoisted(() => ({ rpc: vi.fn(), currentUser: vi.fn(), visibleApps: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc }) }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: currentUser }));
+// 연결 앱 권한 판정(authorize만 쓴다 · 2026-11-05) — 기본은 '오늘 수학 링크가 서는 사람'.
+vi.mock("@/features/connected-apps/server/visible", () => ({ getMyConnectedApps: visibleApps }));
 import { POST as controlPost } from "@/app/api/integrations/todays-math/v2/control/route";
 import { POST as snapshotPost } from "@/app/api/integrations/todays-math/v2/snapshots/route";
 import { POST as tokenPost } from "@/app/api/integrations/todays-math/v2/token/route";
@@ -20,7 +22,10 @@ function request(endpoint: string, value: unknown, purpose: SecretPurpose = "con
   const body = JSON.stringify(value);
   return new Request(config.sourceBaseUrl + path, { method: "POST", body, headers: signedHeaders(config, purpose, "POST", path, body, now) });
 }
-beforeEach(() => { vi.resetAllMocks(); vi.useFakeTimers(); vi.setSystemTime(now); vi.stubEnv("EYWA_SYNC_BINDINGS_JSON", JSON.stringify([config])); });
+beforeEach(() => {
+  vi.resetAllMocks(); vi.useFakeTimers(); vi.setSystemTime(now); vi.stubEnv("EYWA_SYNC_BINDINGS_JSON", JSON.stringify([config]));
+  visibleApps.mockResolvedValue([{ feature: "todays_math" }]);
+});
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 describe("authenticated configuration diagnostics", () => {
   const wakeSecret = "wake".repeat(10);
@@ -229,6 +234,13 @@ describe("source browser authorization", () => {
     eligible(); rpc.mockResolvedValue({ data: control, error: null });
     expect((await authorizeGet(authorizeRequest())).status).toBe(403);
     expect(rpc).toHaveBeenCalledTimes(1);
+  });
+  it("issues no code when the connected-app permission is off — back to the target login like an ineligible account", async () => {
+    eligible(); visibleApps.mockResolvedValue([]);
+    const response = await authorizeGet(authorizeRequest());
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(`${config.targetBaseUrl}/login?eywa=not-linked`);
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual(["tm_sync_control"]);
   });
 });
 describe("durable dispatch receipts", () => {

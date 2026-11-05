@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { getMyConnectedApps } from "@/features/connected-apps/server/visible";
 import { sha256, uuidSchema } from "@/features/integrations/todays-math/sync-contract";
 import { NO_STORE, SyncHttpError, parseSyncBody, sourceControl, syncBindings, syncErrorResponse, syncRpc } from "@/features/integrations/todays-math/sync-server";
 
@@ -25,9 +26,13 @@ export async function GET(request: Request) {
     if (user.tenantId !== config.tenantId || user.systemRole === "student") throw new SyncHttpError(403, "account_not_eligible");
     const control = await sourceControl(config, user.id);
     if (!control.healthy || !control.enabled || control.mode !== "active") throw new SyncHttpError(403, "account_not_eligible");
-    if (!control.users.some((entry) => entry.id === user.id && entry.eligible)) {
-      return NextResponse.redirect(new URL("/login?eywa=not-linked", config.targetBaseUrl), { headers: NO_STORE });
-    }
+    const notLinked = () => NextResponse.redirect(new URL("/login?eywa=not-linked", config.targetBaseUrl), { headers: NO_STORE });
+    if (!control.users.some((entry) => entry.id === user.id && entry.eligible)) return notLinked();
+    // 연결 앱 권한(학원 설정 → 역할·권한 '연결 앱 권한', 2026-11-05) — 사이드바·출발 라우트와 **같은 판정**([[#77]]).
+    // 오늘 수학 쪽 시작 주소로 바로 들어와도 권한이 꺼진 사람에게는 로그인 코드를 내주지 않는다(지점 보기는 그 앞 자격 확인에서 먼저 빠진다).
+    // 자리 = 오늘 수학 자격 확인 **뒤** · 코드 발급 바로 앞: 꺼짐·검증 실패의 403/503은 그대로 두고, 권한이 꺼진 사람은 자격이 없을 때와
+    // 같은 곳(오늘 수학 로그인 안내 화면)으로 돌려보낸다 — 원문 403 JSON 화면을 보이지 않는다(리뷰 2026-11-05).
+    if (!(await getMyConnectedApps()).some((app) => app.feature === "todays_math")) return notLinked();
     const code = randomBytes(32).toString("base64url");
     const issued = await syncRpc("tm_sync_issue_code", {
       p_binding_id: config.bindingId, p_user_id: user.id, p_code_hash: sha256(code),

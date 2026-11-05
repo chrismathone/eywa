@@ -1,7 +1,7 @@
 "use client";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { EyIcon } from "@/components/icons/aywa-icons";
+import { EyIcon, MENU_ICON } from "@/components/icons/aywa-icons";
 import type { ConnectedApp } from "@/features/connected-apps/apps";
 
 const EASE = "ease-[cubic-bezier(0.22,0.61,0.36,1)]";
@@ -37,8 +37,9 @@ export function ConnectedAppRail({
           motion ? `transition-[left,right,opacity] duration-200 ${EASE}` : ""
         }`}
       />
+      {/* 아이콘 원본 = 앱 권한 키의 MENU_ICON 한 곳(2026-11-05) — 새 연결 앱마다 제 그림을 갖는다(폰·강사 메뉴도 같다). */}
       <EyIcon
-        name="calculator"
+        name={MENU_ICON[app.permission]}
         size={18}
         strokeWidth={1.8}
         className="text-text-dim group-hover:text-foreground relative z-10 shrink-0"

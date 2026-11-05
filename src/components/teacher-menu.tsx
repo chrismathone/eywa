@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { EyIcon } from "@/components/icons/aywa-icons";
+import { EyIcon, MENU_ICON } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -106,7 +106,7 @@ export function TeacherMenu({
                 key={a.feature}
                 render={<a href={a.launchPath} target="_blank" rel="noopener noreferrer" className="cursor-pointer" />}
               >
-                <EyIcon name="calculator" size={16} strokeWidth={1.8} /> {a.label}
+                <EyIcon name={MENU_ICON[a.permission]} size={16} strokeWidth={1.8} /> {a.label}
                 <EyIcon name="externalLink" size={13} strokeWidth={1.8} className="ml-auto size-3.5 opacity-70" />
               </DropdownMenuItem>
             ))}

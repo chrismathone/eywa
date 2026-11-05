@@ -34,3 +34,15 @@ describe("설정별 역할 변경", () => {
     expect(settingRoleSelection("owner", rows).operations_settings).toContain("manager");
   });
 });
+
+describe("연결 앱 권한 저장 — 전체·없음만(원장 2026-11-05 · isPermissionLocked와 이중 방어)", () => {
+  it("전체·없음은 받고 담당·읽기는 거절한다 — 역할 칸도 개인 칸도", () => {
+    const uid = "00000000-0000-4000-8000-000000000001";
+    expect(permissionsSchema.safeParse({ overrides: [{ menu: "app_todays_math", role: "teacher", access: "none" }] }).success).toBe(true);
+    expect(permissionsSchema.safeParse({ overrides: [{ menu: "app_todays_math", role: "parttime", access: "full" }] }).success).toBe(true);
+    for (const access of ["scoped", "readonly"] as const) {
+      expect(permissionsSchema.safeParse({ overrides: [{ menu: "app_todays_math", role: "teacher", access }] }).success, access).toBe(false);
+      expect(permissionsSchema.safeParse({ overrides: [], userOverrides: [{ userId: uid, menu: "app_todays_math", access }] }).success, access).toBe(false);
+    }
+  });
+});

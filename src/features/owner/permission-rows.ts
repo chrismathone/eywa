@@ -18,7 +18,7 @@
  */
 import { configuredHubGroups, HUB_GROUPS, hubDestinationForPath, INNER_TABS, SUPPORT_GROUPS, type HubDest } from "@/lib/menu-hub";
 import { navItemByKey } from "@/lib/navigation";
-import { isRoleOnlyMenu, MENU_KEYS, MENU_LABEL, type MenuKey } from "@/lib/permissions";
+import { isConnectedAppMenu, isRoleOnlyMenu, MENU_KEYS, MENU_LABEL, type MenuKey } from "@/lib/permissions";
 import { SETTINGS_ROLE_HREF, SETTINGS_ROLE_KEYS, type SettingsRoleKey } from "@/lib/settings-role-catalog";
 import { teacherNavigationSource } from "@/lib/teacher-navigation";
 import { isMenuHiddenByLayout, type MenuGroupLayout, type MenuLayout } from "./menu-layout";
@@ -55,6 +55,8 @@ export type PermissionRowGroup = {
 /** 강사 '내 메뉴'에만 입구가 있는 권한 · 어느 메뉴에도 입구가 없는 권한의 묶음 이름. */
 export const TEACHER_ONLY_GROUP = { id: "teacher-menu", label: "강사 ‘내 메뉴’ 전용" } as const;
 export const NO_MENU_GROUP = { id: "no-menu", label: "메뉴에 없는 화면" } as const;
+/** 연결 앱(바깥 앱 링크) 권한 — 역할별 메뉴 표가 아니라 그 아래 '연결 앱 권한' 표에 선다(원장 2026-11-05 *"역할별 밑에 넣어줘"* · connected-app-permissions-card). */
+export const CONNECTED_APP_GROUP = { id: "connected-apps", label: "연결 앱" } as const;
 
 /**
  * 메뉴 버튼이 없는 권한이 속한 화면 — **다른 화면 안의 버튼·드롭다운으로만 닿는 것**만 손으로 적는다. 설정 권한은 그 설정의
@@ -176,8 +178,11 @@ export function permissionRowGroups(navigation?: PermissionNavigation, options?:
   for (const menu of teacherOnly.keys()) taken.add(menu);
 
   // ④ 어느 메뉴에도 입구가 없는 화면(메뉴에서 뺀 화면 · 다른 역할 전용 화면).
-  const rest = MENU_KEYS.filter((menu) => !taken.has(menu));
+  const rest = MENU_KEYS.filter((menu) => !taken.has(menu) && !isConnectedAppMenu(menu));
   if (rest.length > 0) out.push({ ...NO_MENU_GROUP, hiddenInMenu: false, rows: rest.map((menu) => newRow(menu)) });
+  // ⑤ 연결 앱 — 메뉴(화면)가 아니라 바깥 앱 링크라 따로 묶는다. 화면에서는 '연결 앱 권한' 표에만 선다(아래 editable에서 뺀다).
+  const apps = MENU_KEYS.filter((menu) => !taken.has(menu) && isConnectedAppMenu(menu));
+  if (apps.length > 0) out.push({ ...CONNECTED_APP_GROUP, hiddenInMenu: false, rows: apps.map((menu) => newRow(menu)) });
   return out;
 }
 
@@ -202,7 +207,7 @@ export function editablePermissionRowGroups(navigation?: PermissionNavigation, o
   );
   const shown = (row: PermissionRow) => !isRoleOnlyMenu(row.menu) && (!row.hiddenInMenu || usedByTeacher.has(row.menu));
   return permissionRowGroups(navigation, options)
-    .filter((group) => group.id !== NO_MENU_GROUP.id)
+    .filter((group) => group.id !== NO_MENU_GROUP.id && group.id !== CONNECTED_APP_GROUP.id)
     .map((group) => {
       let parentShown = false;
       // 다른 화면 안에서 쓰는 권한(inner)은 바로 위 화면의 줄을 따라간다.

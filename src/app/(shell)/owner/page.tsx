@@ -46,6 +46,9 @@ import { EvaluationFace } from "./_components/evaluation/evaluation-face";
 import { getContributionGate } from "@/features/student-contribution/server/access";
 import { ContributionSettingsFace } from "@/features/student-contribution/components/settings-face";
 import { getPortfolioGate } from "@/features/teacher-portfolio/server/queries";
+import { getTenantConnectedApps } from "@/features/connected-apps/server/visible";
+import { connectedAppNote } from "@/features/connected-apps/apps";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { writeLockedNote } from "@/lib/write-lock";
 
 export const dynamic = "force-dynamic";
@@ -211,11 +214,18 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   const hiddenSettingKeys: SettingsRoleKey[] = [];
   if (showsPermissions && !(await isFeatureLicensed(viewer.tenantId, "ai_analysis"))) hiddenSettingKeys.push("ai_ment");
   if (settings.modules.disabled.includes("payroll")) hiddenSettingKeys.push("attendance_salary_settings", "payroll_settings");
-  const [userOverrideNames, permissionStaff, hiddenPermissionIds] = await Promise.all([
+  const [userOverrideNames, permissionStaff, hiddenPermissionIds, connectedApps] = await Promise.all([
     permissionPeople.length > 0 ? getUserDisplayNames(permissionPeople) : {},
     // 개인별 메뉴 권한을 주고 거두는 구획의 직원 선택지 — 어느 학원에서나 선다(원장 2026-10-06).
     permissionsSource ? getPermissionStaffOptions() : [],
     permissionsSource ? platformAccountIds(permissionPeople).then((ids) => [...ids]) : [],
+    // 역할별 표 아래 '연결 앱 권한'(원장 2026-11-05) — 이 지점에서 켠 앱만(꺼진 앱은 표에도 없다).
+    permissionsSource
+      ? getTenantConnectedApps(viewer.tenantId).then((apps) => {
+          const { labelOf } = buildSubjectMaps(settings.operations.subjects);
+          return apps.map((a) => ({ permission: a.permission, label: a.label, note: connectedAppNote(a, labelOf) }));
+        })
+      : [],
   ]);
   // 탭 및 메뉴 구성 — 편집기가 세우지 않을 메뉴(지점에서 닫힌 메뉴 · 강사 권한) 판정. 그 면을 열 때만 조회한다.
   const navigationGates = tab === "navigation" ? await navigationEditorGates(settings) : null;
@@ -318,6 +328,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
               hiddenUserIds={hiddenPermissionIds}
               generic={isGenericTenant(settings)}
               hiddenSettingKeys={hiddenSettingKeys}
+              connectedApps={connectedApps}
               baselineToken={permissionsToken(permissionsSource)}
               baselineVersion={editable?.versions.permissions}
             />

@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { inclusiveDateWindowStart, kstToday } from "@/lib/date-kst";
 import { requireSuperAdmin } from "@/lib/auth/super-admin";
-import { MENU_KEYS } from "@/lib/permissions";
+import { isConnectedAppMenu, MENU_KEYS } from "@/lib/permissions";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { subjectLabelRecord } from "@/features/owner/subjects";
 import type { SubjectSetting } from "@/features/owner/settings-types";
@@ -58,5 +58,6 @@ export async function loadUsage(q: UsageQuery): Promise<UsageLoad> {
     const missing = rpc.error.code === "PGRST202" || rpc.error.code === "42883" || rpc.error.code === "42P01";
     return { ok: false, reason: missing ? "not_ready" : "error", detail: rpc.error.message, tenants, subjects };
   }
-  return { ok: true, from, to, summary: shapeUsage(parseUsageRows(rpc.data), MENU_KEYS, q.sort), tenants, subjects };
+  // 연결 앱 권한 키(app_* · 2026-11-05)는 화면 방문이 남지 않는 바깥 앱 링크라 '안 쓰는 메뉴'로 세지 않는다.
+  return { ok: true, from, to, summary: shapeUsage(parseUsageRows(rpc.data), MENU_KEYS.filter((key) => !isConnectedAppMenu(key)), q.sort), tenants, subjects };
 }

@@ -1,4 +1,5 @@
 import type { OptInFeature } from "@/lib/license/rule";
+import type { MenuKey } from "@/lib/permissions";
 
 /**
  * **연결 앱** — aywa 밖의 우리 앱을 왼쪽 사이드바 '연결 앱' 구역에서 바로 여는 링크 목록.
@@ -16,6 +17,11 @@ import type { OptInFeature } from "@/lib/license/rule";
  */
 export type ConnectedApp = {
   feature: OptInFeature;
+  /**
+   * 역할·권한 키(`CONNECTED_APP_MENU_KEYS`) — 학원 설정 → 역할·권한 '연결 앱 권한' 표가 역할마다 켜고 끈다(원장 2026-11-05).
+   * 🔴 새 앱을 더하면 permissions.ts에 키를 함께 더하고 기본값은 전 역할 없음(원장 *"새 연동앱은 전부 꺼짐"*).
+   */
+  permission: MenuKey;
   label: string;
   /** 그 앱의 첫 주소 — 자동 로그인을 못 할 때(secret 없음) 떨어지는 곳. */
   href: string;
@@ -38,6 +44,7 @@ export type ConnectedApp = {
 export const CONNECTED_APPS: readonly ConnectedApp[] = [
   {
     feature: "todays_math",
+    permission: "app_todays_math",
     label: "오늘 수학",
     href: "https://todays-math.vercel.app",
     launchPath: "/api/connected-apps/todays-math/launch",
@@ -59,4 +66,15 @@ export function connectedAppVisibleTo(app: ConnectedApp, subjects: readonly stri
   const hidden = app.hiddenForOnlySubjects;
   if (!hidden?.length || subjects.length === 0) return true;
   return !subjects.every((s) => hidden.includes(s));
+}
+
+/**
+ * 학원 설정 '연결 앱 권한' 표 아래 안내 — 그 표와 **따로** 앱을 가리는 규칙(과목 축)을 사람 말로. 규칙이 없으면 undefined.
+ * 과목 이름은 학원 설정에서 받는다(`labelOf` — 운영 enum 하드코딩 금지). 켠 앱에서만 만든다(꺼진 앱 이름이 표에 새지 않게).
+ * 판정은 역할과 상관없이 직원관리의 담당 과목만 보므로 '선생님'이 아니라 '직원'이라고 적는다(리뷰 2026-11-05).
+ */
+export function connectedAppNote(app: ConnectedApp, labelOf: (subjectKey: string) => string): string | undefined {
+  const only = app.hiddenForOnlySubjects;
+  if (!only?.length) return undefined;
+  return `담당 과목이 ${only.map(labelOf).join("·")}뿐인 직원에게는 이 표와 상관없이 보이지 않습니다`;
 }

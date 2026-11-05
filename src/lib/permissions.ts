@@ -84,7 +84,21 @@ export const MENU_KEYS = [
   "teacher_onescreen",
   "my_learning",
   "kiosk_settings",
+  // 연결 앱(왼쪽 '연결 앱'의 바깥 앱 링크) — 앱마다 한 키. 아래 CONNECTED_APP_MENU_KEYS에도 함께 적는다.
+  "app_todays_math",
 ] as const;
+
+/**
+ * **연결 앱 권한** 키 — 바깥 앱 링크(오늘 수학 등)를 그 역할에게 세우나(원장 2026-11-05 *"연결앱 권한 따로 빼나줘"*).
+ * 칸은 **전체(보임) · 없음**만 쓴다(`isPermissionLocked`가 담당·읽기를 막는다) · 역할별 표가 아니라 '연결 앱 권한' 표에 선다(permission-rows).
+ * 🔴 새 연결 앱의 기본값 = **전 역할 없음**(원장 2026-11-05 *"새 연동앱은 전부 꺼짐으로 기본값"* — 가드 permissions.test.ts).
+ *    오늘 수학만 강사 이상(원장·관리자·매니저(실장)·강사 — 권한 표의 강사 왼쪽 칸 · 오늘 수학 쪽 로그인 자격과 같은 네 역할)에게 열린 채 시작한다.
+ * 판정 = [`getMyConnectedApps`](@/features/connected-apps/server/visible.ts) 한 곳(사이드바 · 폰 메뉴 · 강사 내 메뉴 · 출발 라우트 · 오늘 수학 v2 로그인 authorize).
+ */
+export const CONNECTED_APP_MENU_KEYS = ["app_todays_math"] as const;
+export function isConnectedAppMenu(menu: string): boolean {
+  return (CONNECTED_APP_MENU_KEYS as readonly string[]).includes(menu);
+}
 
 /**
  * 메뉴 한글 라벨 — **단일 소스**. 권한 편집기(화면)와 감사로그(설정 변경 상세)가 같은 말을 써야
@@ -146,6 +160,7 @@ export const MENU_LABEL: Record<MenuKey, string> = {
   teacher_onescreen: "선생님 원스크린",
   my_learning: "내 학습",
   kiosk_settings: "키오스크 설정",
+  app_todays_math: "오늘 수학(연결 앱)",
 };
 export type MenuKey = (typeof MENU_KEYS)[number];
 
@@ -319,6 +334,10 @@ export const MENU_ACCESS: AccessMatrix = {
   // 비포클래스체크리스트(초안, 원장 2026-10-28) — 수업 전 준비 체크(시트 이식). 새 키 규칙대로 원장만 전체.
   // 체크하는 사람(전체)·보는 사람(읽기)은 학원 설정 → 역할·권한 → 개인별 메뉴 권한으로 연다. 표는 서버 전용(정책 0개).
   before_class_checklist: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  // 연결 앱 '오늘 수학'(원장 2026-11-05 *"지금 하나 있는 '오늘 수학'은 강사 이상에게 열림"*) — 강사 이상 = 원장·관리자·매니저(실장)·강사(권한 표의 강사 왼쪽 칸 ·
+  // 오늘 수학 쪽 로그인 자격 tm_sync_control과 같은 네 역할 — 상담·회계는 링크를 눌러도 로그인되지 않는다). 상담·회계·열람·아르바이트·학생은 없음.
+  // 영어만 맡은 선생님은 이 값과 따로 과목 축으로 빠진다(connected-apps/apps.ts). 새 연결 앱은 전부 없음으로 시작한다.
+  app_todays_math: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
 };
 
 // 🔴 **새 권한 키의 기본값 = 원장 '전체' · 나머지 '없음'**(원장 2026-10-06: *"새 권한을 넣으면 '원장' 전체가 디폴트로 하고 나머진 없음을
@@ -456,6 +475,8 @@ export function isRoleOnlyMenu(menu: MenuKey): boolean {
 }
 export function isPermissionLocked(menu: MenuKey, role: SystemRole, access: Access): boolean {
   if (menu === "teacher_view" && access === "scoped") return true;
+  // 연결 앱은 링크를 세우나 마나뿐이다 — 담당·읽기는 뜻이 없다(전체 = 보임 · 없음 = 안 보임).
+  if (isConnectedAppMenu(menu) && (access === "scoped" || access === "readonly")) return true;
   if (ROLE_LOCKED_MENUS.has(menu)) return true;
   // 대시보드 집계는 테넌트 전체 데이터다. 강사 scoped 쿼리가 마련되기 전까지는
   // 강사에게 메뉴를 열면 담당 범위를 넘어 학생·출결 데이터가 노출되므로 override를 막는다.

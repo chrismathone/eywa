@@ -10,11 +10,11 @@
 import { describe, expect, it } from "vitest";
 import { configuredHubGroups, HUB_GROUPS, SUPPORT_GROUPS } from "@/lib/menu-hub";
 import { teacherMenuKeysFor } from "@/lib/navigation";
-import { MENU_KEYS, MENU_LABEL, resolveMatrix, TEACHER_MENU_KEYS, type MenuKey } from "@/lib/permissions";
+import { CONNECTED_APP_MENU_KEYS, MENU_KEYS, MENU_LABEL, resolveMatrix, TEACHER_MENU_KEYS, type MenuKey } from "@/lib/permissions";
 import { SETTINGS_ROLE_HREF } from "@/lib/settings-role-catalog";
 import { teacherNavigationSource } from "@/lib/teacher-navigation";
 import { TEACHER_MENU_LINKS } from "@/lib/teacher-menu-links";
-import { editablePermissionRowGroups, NO_MENU_GROUP, permissionRowGroups, TEACHER_ONLY_GROUP, type PermissionNavigation } from "./permission-rows";
+import { CONNECTED_APP_GROUP, editablePermissionRowGroups, NO_MENU_GROUP, permissionRowGroups, TEACHER_ONLY_GROUP, type PermissionNavigation } from "./permission-rows";
 import { TEACHER_TOGGLE_KEYS, teacherToggleOnAccess, teacherToggleRows } from "./teacher-toggle-rows";
 
 const keysOf = (nav?: PermissionNavigation, generic = false) => permissionRowGroups(nav, { generic }).flatMap((g) => g.rows.map((r) => r.menu));
@@ -49,12 +49,12 @@ describe("화면에 세우는 줄 — 탭 및 메뉴 구성에서 쓰고 있는 
   ] as const) {
     it(name, () => {
       const shown = editablePermissionRowGroups(nav, { generic }).flatMap((g) => g.rows.map((r) => r.menu));
-      // 빠지는 것은 '메뉴에 없는 화면' 묶음 · 역할 전용 화면 둘 · 구성에서 감춘 메뉴뿐이고, 차례는 그대로다.
-      const dropped = new Set<MenuKey>([...menusOf(NO_MENU_GROUP.id, nav), "teacher_onescreen", "my_learning", ...hiddenMenus]);
+      // 빠지는 것은 '메뉴에 없는 화면' 묶음 · 역할 전용 화면 둘 · 구성에서 감춘 메뉴 · 연결 앱(따로 '연결 앱 권한' 표)뿐이고, 차례는 그대로다.
+      const dropped = new Set<MenuKey>([...menusOf(NO_MENU_GROUP.id, nav), ...menusOf(CONNECTED_APP_GROUP.id, nav), "teacher_onescreen", "my_learning", ...hiddenMenus]);
       expect(shown).toEqual(keysOf(nav, generic).filter((menu) => !dropped.has(menu)));
-      expect([...dropped].filter((menu) => !(hiddenMenus as readonly string[]).includes(menu)).sort()).toEqual(["admin", "calendar", "my_learning", "teacher_onescreen"]);
+      expect([...dropped].filter((menu) => !(hiddenMenus as readonly string[]).includes(menu)).sort()).toEqual(["admin", "app_todays_math", "calendar", "my_learning", "teacher_onescreen"]);
       expect(shown).toHaveLength(MENU_KEYS.length - dropped.size);
-      expect(editablePermissionRowGroups(nav, { generic }).some((g) => g.id === NO_MENU_GROUP.id)).toBe(false);
+      expect(editablePermissionRowGroups(nav, { generic }).some((g) => g.id === NO_MENU_GROUP.id || g.id === CONNECTED_APP_GROUP.id)).toBe(false);
       // 줄이 다 빠진 묶음은 세우지 않는다(이름만 남은 빈 띠).
       expect(editablePermissionRowGroups(nav, { generic }).every((g) => g.rows.length > 0)).toBe(true);
     });
@@ -125,7 +125,7 @@ describe("차례 = 왼쪽 탭 → 그 탭의 내부 메뉴", () => {
     const tabs = configuredHubGroups([...HUB_GROUPS, ...SUPPORT_GROUPS], undefined, undefined, true);
     const groups = permissionRowGroups();
     expect(groups.slice(0, tabs.length).map((g) => [g.id, g.label])).toEqual(tabs.map((g) => [g.id, g.label]));
-    expect(groups.slice(tabs.length).map((g) => g.id)).toEqual([TEACHER_ONLY_GROUP.id, NO_MENU_GROUP.id]);
+    expect(groups.slice(tabs.length).map((g) => g.id)).toEqual([TEACHER_ONLY_GROUP.id, NO_MENU_GROUP.id, CONNECTED_APP_GROUP.id]);
   });
 
   it("탭 안의 줄 차례 = 내부 메뉴 차례(같은 권한의 면은 한 줄로 접힌다)", () => {
@@ -189,6 +189,13 @@ describe("메뉴 버튼이 없는 권한은 그 권한을 쓰는 화면 아래�
     expect(menusOf(TEACHER_ONLY_GROUP.id)).toEqual(["textbook_requests", "expense_requests"]);
     // 캘린더 = 메뉴에서 뺀 화면 · 관리자 도구 = 설정으로 옮겨진 옛 화면 · 내 학습 = 학생 전용.
     expect(menusOf(NO_MENU_GROUP.id)).toEqual(["calendar", "admin", "my_learning"]);
+  });
+
+  it("연결 앱 권한은 따로 묶이고(전체 목록) 역할별 메뉴 표에는 서지 않는다 — 그 아래 '연결 앱 권한' 표에 선다(원장 2026-11-05)", () => {
+    expect(menusOf(CONNECTED_APP_GROUP.id)).toEqual([...CONNECTED_APP_MENU_KEYS]);
+    const editable = editablePermissionRowGroups().flatMap((g) => g.rows.map((r) => r.menu));
+    for (const key of CONNECTED_APP_MENU_KEYS) expect(editable, key).not.toContain(key);
+    expect(editablePermissionRowGroups().map((g) => g.id)).not.toContain(CONNECTED_APP_GROUP.id);
   });
 });
 

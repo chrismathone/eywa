@@ -1328,4 +1328,6 @@ export const MENU_ICON = {
   teacher_onescreen: "screen",
   my_learning: "graduationCap",
   kiosk_settings: "tablet",
+  // 연결 앱 권한(메뉴 화면이 아니다) — 사이드바 '연결 앱'의 오늘 수학 줄과 같은 그림(connected-app-rail.tsx).
+  app_todays_math: "calculator",
 } as const satisfies Record<MenuKey, AywaIconName>;

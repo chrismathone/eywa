@@ -3,6 +3,9 @@ import {
   applyUserOverrides,
   canWrite,
   canAccess,
+  CONNECTED_APP_MENU_KEYS,
+  isConnectedAppMenu,
+  isPermissionLocked,
   MENU_ACCESS,
   MENU_KEYS,
   menuKeyForPath,
@@ -242,12 +245,33 @@ describe("새 권한의 기본값 = 원장 '전체' · 나머지 '없음'(원장
       why: "퇴원보고서 결정 문서 2026-10-13 — 관리자 요청 → 담임 작성 → 관리자 승인 흐름이 기본값으로 돈다",
       access: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
     },
+    // 2026-11-05 추가: docs/decisions/tenant.md 연결 앱 — 원장 "지금 하나 있는 '오늘 수학'은 강사 이상에게 열림"
+    // (권한을 만들기 전엔 모든 직원에게 보였다 — 강사 이상 = 표의 강사 왼쪽 칸 · 오늘 수학 쪽 로그인 자격과 같은 네 역할만 남겼다).
+    app_todays_math: {
+      why: "연결 앱 결정(tenant.md 2026-11-05) — 오늘 수학은 강사 이상(원장·관리자·매니저·강사)에게 열린 채 시작한다",
+      access: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+    },
   };
+  // 새 연결 앱은 원장도 '없음'으로 시작한다(원장 2026-11-05 *"새 연동앱은 전부 꺼짐으로 기본값"*) — 켜는 것은 '연결 앱 권한' 표에서.
+  const allNone = Object.fromEntries(SYSTEM_ROLES.map((role) => [role, "none"]));
 
   it("🔴 목록 밖의 권한은 원장만 '전체'로 시작한다 — 새 권한을 다른 역할에게 코드 기본값으로 열어 두지 않는다", () => {
     for (const menu of MENU_KEYS) {
       if (BEFORE_RULE.includes(menu)) continue;
-      expect(MENU_ACCESS[menu], menu).toEqual(DECIDED_AFTER_RULE[menu]?.access ?? expected);
+      expect(MENU_ACCESS[menu], menu).toEqual(DECIDED_AFTER_RULE[menu]?.access ?? (isConnectedAppMenu(menu) ? allNone : expected));
+    }
+  });
+
+  it("🔴 연결 앱 권한은 전체·없음만 — 담당·읽기는 잠그고, 연결 앱 키는 permissions.ts 목록과 MENU_KEYS가 같은 것을 가리킨다", () => {
+    for (const menu of CONNECTED_APP_MENU_KEYS) {
+      expect(MENU_KEYS as readonly string[], menu).toContain(menu);
+      for (const role of SYSTEM_ROLES) {
+        expect(isPermissionLocked(menu, role, "scoped"), `${menu}·${role}`).toBe(true);
+        expect(isPermissionLocked(menu, role, "readonly"), `${menu}·${role}`).toBe(true);
+      }
+      // 강사 칸은 전체 ↔ 없음으로 돈다(학생 칸은 역할 전체가 잠겨 있다).
+      expect(isPermissionLocked(menu, "teacher", "none")).toBe(false);
+      expect(isPermissionLocked(menu, "teacher", "full")).toBe(false);
     }
   });
 

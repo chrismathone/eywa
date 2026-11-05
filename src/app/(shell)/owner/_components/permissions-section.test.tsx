@@ -17,7 +17,8 @@ import { SETTINGS_ROLE_KEYS } from "@/lib/settings-role-catalog";
 import { editablePermissionRowGroups } from "@/features/owner/permission-rows";
 import { teacherToggleRows } from "@/features/owner/teacher-toggle-rows";
 import { teacherMenuKeysFor } from "@/lib/navigation";
-import { MENU_LABEL, resolveMatrix, SYSTEM_ROLES, TEACHER_MENU_KEYS, type MenuKey } from "@/lib/permissions";
+import { CONNECTED_APP_MENU_KEYS, MENU_LABEL, resolveMatrix, SYSTEM_ROLES, TEACHER_MENU_KEYS, type MenuKey } from "@/lib/permissions";
+import { ROLE_LABEL } from "./permission-ui";
 import { PermissionsSection } from "./permissions-section";
 
 vi.mock("./section-form", () => ({
@@ -461,9 +462,9 @@ describe("역할별 메뉴 권한 표 — 줄은 왼쪽 탭과 그 내부 메뉴
   it("탭 및 메뉴 구성에 있는 화면의 권한이 한 줄씩 있고, 줄마다 역할 수만큼 칸이 있다", () => {
     render(<PermissionsSection initial={EMPTY} />);
     const rows = [...menuTable().querySelectorAll("tbody tr")].filter((tr) => tr.querySelector("button"));
-    // 전체 권한에서 메뉴에 없는 화면(캘린더 · 관리자 도구)과 역할 전용 화면 둘을 뺀 수.
+    // 전체 권한에서 메뉴에 없는 화면(캘린더 · 관리자 도구)과 역할 전용 화면 둘, 연결 앱(아래 '연결 앱 권한' 표)을 뺀 수.
     expect(rows).toHaveLength(editablePermissionRowGroups().flatMap((g) => g.rows).filter((row) => !(SETTINGS_ROLE_KEYS as readonly string[]).includes(row.menu)).length);
-    expect(rows).toHaveLength(Object.keys(MENU_LABEL).length - 4 - SETTINGS_ROLE_KEYS.length);
+    expect(rows).toHaveLength(Object.keys(MENU_LABEL).length - 4 - CONNECTED_APP_MENU_KEYS.length - SETTINGS_ROLE_KEYS.length);
     for (const tr of rows) expect(tr.querySelectorAll("button")).toHaveLength(SYSTEM_ROLES.length);
   });
 
@@ -526,5 +527,67 @@ describe("설정별 역할 권한 통합", () => {
     const card = screen.getByRole("heading", { name: "설정별 역할 권한" }).closest("section")!;
     expect(within(card).queryByText(MENU_LABEL.ai_ment)).not.toBeInTheDocument();
     expect(JSON.parse(screen.getByTestId("payload").textContent ?? "{}").overrides).toContainEqual({ menu: "ai_ment", role: "admin", access: "readonly" });
+  });
+});
+
+describe("연결 앱 권한 — 역할별 메뉴 권한 아래 · 이 지점에서 켠 앱만(원장 2026-11-05)", () => {
+  const apps = [{ permission: "app_todays_math" as const, label: "오늘 수학" }];
+  const appCard = () => screen.getByRole("heading", { name: "연결 앱 권한" }).closest("section") as HTMLElement;
+  const cell = (role: (typeof SYSTEM_ROLES)[number], access: string) =>
+    within(appCard()).getByRole("button", { name: `오늘 수학 · ${ROLE_LABEL[role]}: ${access}` });
+  const savedOverrides = () => JSON.parse(screen.getByTestId("payload").textContent ?? "{}").overrides;
+
+  it("켠 앱이 없으면 카드도 없다(꺼진 기능은 있었는지조차 모르게)", () => {
+    render(<PermissionsSection initial={EMPTY} />);
+    expect(screen.queryByRole("heading", { name: "연결 앱 권한" })).not.toBeInTheDocument();
+  });
+
+  it("역할별 메뉴 권한 바로 아래에 서고, 역할별 표에는 연결 앱 줄이 없다", () => {
+    render(<PermissionsSection initial={EMPTY} connectedApps={apps} />);
+    const headings = screen.getAllByRole("heading").map((h) => h.textContent);
+    expect(headings.indexOf("연결 앱 권한")).toBe(headings.indexOf("역할별 메뉴 권한") + 1);
+    // 줄 이름이 '오늘 수학(연결 앱)'이어도 잡히게 글자 일부로 찾는다.
+    expect(within(menuTable()).queryByText(/오늘 수학/)).not.toBeInTheDocument();
+    expect(within(appCard()).getByRole("table")).toBeInTheDocument();
+  });
+
+  it("처음 값 = 강사 이상(원장·관리자·매니저·강사) 전체 · 상담·회계·열람·아르바이트 없음(원장 2026-11-05)", () => {
+    render(<PermissionsSection initial={EMPTY} connectedApps={apps} />);
+    for (const role of ["master", "admin", "manager", "teacher"] as const) expect(cell(role, "전체")).toBeInTheDocument();
+    for (const role of ["counselor", "accountant", "viewer", "parttime"] as const) expect(cell(role, "없음")).toBeInTheDocument();
+  });
+
+  it("🔴 칸은 전체 ↔ 없음만 돈다 — 담당·읽기를 건너뛰고, 역할별 표와 같은 저장에 실린다", () => {
+    render(<PermissionsSection initial={EMPTY} connectedApps={apps} />);
+    fireEvent.click(cell("teacher", "전체"));
+    expect(cell("teacher", "없음")).toBeInTheDocument();
+    expect(savedOverrides()).toContainEqual({ menu: "app_todays_math", role: "teacher", access: "none" });
+    fireEvent.click(cell("teacher", "없음"));
+    expect(cell("teacher", "전체")).toBeInTheDocument();
+    fireEvent.click(cell("parttime", "없음"));
+    expect(cell("parttime", "전체")).toBeInTheDocument();
+    expect(savedOverrides()).toContainEqual({ menu: "app_todays_math", role: "parttime", access: "full" });
+    expect(savedOverrides()).not.toContainEqual(expect.objectContaining({ menu: "app_todays_math", role: "teacher" }));
+  });
+
+  it("연결 앱 칸의 바뀐 수는 이 카드 제목 줄에 센다 — 역할별 카드의 '저장하지 않은 칸'·'저장 전 변경'·기본값 셀 수에 섞지 않는다(리뷰 2026-11-05)", () => {
+    render(<PermissionsSection initial={EMPTY} connectedApps={apps} />);
+    fireEvent.click(cell("teacher", "전체"));
+    expect(within(appCard()).getByText(/저장하지 않은 칸 1개/)).toBeInTheDocument();
+    const roleCard = screen.getByRole("heading", { name: "역할별 메뉴 권한" }).closest("details") as HTMLElement;
+    expect(within(roleCard).queryByText(/저장하지 않은 칸/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/저장 전 변경/)).not.toBeInTheDocument();
+    expect(within(roleCard).getByText(/기본값과 다른 셀 0개/)).toBeInTheDocument();
+    // 저장에는 그대로 실린다(두 카드가 한 저장).
+    expect(savedOverrides()).toContainEqual({ menu: "app_todays_math", role: "teacher", access: "none" });
+  });
+
+  it("두 카드 모두 접고 펼칠 수 있다 — 처음엔 지금처럼 펼친 채(원장 *\"역할별하고 연동앱 권한도 접기 펼치기\"*)", () => {
+    render(<PermissionsSection initial={EMPTY} connectedApps={apps} />);
+    for (const name of ["역할별 메뉴 권한", "연결 앱 권한"]) {
+      const details = screen.getByRole("heading", { name }).closest("details");
+      expect(details, name).not.toBeNull();
+      expect(details!.open, name).toBe(true);
+    }
   });
 });
