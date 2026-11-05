@@ -6,7 +6,7 @@ const h = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => h.actor }));
 vi.mock("@/lib/auth/require-access", () => ({ requireAccess: async () => h.actor }));
-vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => false }));
+vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => false, isSignedInSuperAdmin: async () => false }));
 vi.mock("@/lib/auth/view-as", () => ({ isReadonlyTeacherView: async () => h.readonly, viewAsTeacher: async () => null }));
 vi.mock("@/lib/license/server", () => ({ isFeatureLicensed: async () => true, isFeatureOptedIn: async () => false }));
 // 실험실 덮개(perm-matrix capLaboratory)는 급여 설정 메뉴와 무관한 평소 상태로 — 급여 설정이 아닌 실험실 메뉴 하나만 배정, 지점은 실험실 꺼짐.

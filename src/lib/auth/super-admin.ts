@@ -43,6 +43,22 @@ export const getCurrentSuperAdmin = cache(async (): Promise<CurrentSuperAdmin | 
  * (셸은 어차피 users 행이 없으면 진입 불가). /super-admin 게이트는 기존 getCurrentSuperAdmin 유지.
  */
 export const isCurrentUserSuperAdmin = cache(async (): Promise<boolean> => {
+  if (!(await isSignedInSuperAdmin())) return false;
+  // '다른 강사 뷰' 중에는 **그 강사와 같은 화면**이어야 한다(원장 2026-11-05 *"강사뷰 전환시에 실제 그 사람으로 완벽하게 전환"*) —
+  // 운영 계정만 통과하는 문(담당 반 우회 · 지정 명단 우회 · 답변 권한 등)을 열지 않는다. 열면 강사에게 없는 버튼이 섞이고,
+  // 반대로 담당 판정 구멍이 우회에 가려 '되는 것처럼' 보인다(점검 2026-11-05). 지점 보기와 같은 원칙.
+  // view-as가 이 파일을 쓰므로 순환을 피해 늦게 불러온다(current-user.ts와 같은 방식).
+  const { viewAsTeacher } = await import("./view-as");
+  return !(await viewAsTeacher());
+});
+
+/**
+ * **실제 로그인 계정**이 super_admin인가 — 강사뷰여도 실제 계정으로 답한다.
+ * 🔴 강사뷰 자격(`view-as.ts` otherTeacherViewAccess) · 실제 계정의 권한표(`perm-matrix.ts`) · 지점 보기 감시 탑재(셸 레이아웃)
+ *    전용이다. 업무 판정(담당 · 명단 · 우회)은 위 `isCurrentUserSuperAdmin`을 쓸 것 — 이걸 쓰면 강사뷰에 운영 계정의 문이 열린다.
+ *    (perm-matrix · view-as가 위 함수를 쓰면 viewAsTeacher → 권한표 → 슈퍼관리자 → viewAsTeacher로 순환한다.)
+ */
+export const isSignedInSuperAdmin = cache(async (): Promise<boolean> => {
   const user = await getCurrentUser();
   if (!user) return false;
   // 운영 콘솔의 '지점 보기'(읽기 전용) 중에는 **그 지점 원장과 같은 화면**이어야 한다 — 운영 계정만 통과하는 문

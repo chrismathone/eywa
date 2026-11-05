@@ -54,6 +54,11 @@ const GUARDED_ACTION_FILES: { file: string[]; what: string }[] = [
     file: ["src", "features", "math-sheets", "server", "goal-audit-actions.ts"],
     what: "수학 시트 목표 칸 편집 감사로그(열람 중엔 기록도 없다)",
   },
+  {
+    // 할 일 게이트가 '다른 강사 뷰'면 대상 강사를 돌려준다(2026-11-05) — 업무 요청은 그 강사 명의로 쓰므로 읽기 강사뷰를 막는다.
+    file: ["src", "features", "work-requests", "server", "actions.ts"],
+    what: "업무 요청 만들기·처리(강사뷰 대상 명의)",
+  },
 ];
 
 describe("'다른 강사 뷰'(열람 전용) 배선 가드", () => {
@@ -123,5 +128,57 @@ describe("'다른 강사 뷰'(열람 전용) 배선 가드", () => {
     const src = read("src", "features", "audit", "server", "log.ts");
     expect(src).toContain("teacher_view_impersonate:");
     expect(src).toContain("staff_teacher_view_access:");
+  });
+});
+
+/**
+ * '다른 강사 뷰' = **그 사람**(원장 2026-11-05 *"강사뷰 전환시에 실제 그 사람으로 완벽하게 전환되는지 … 모든 면에서 빠짐없이"*).
+ * 메뉴 권한만 대상으로 바뀌고 '내 알림 · 내 할 일 · 담당 · 운영 계정 우회'가 보는 사람으로 남던 구멍(점검 2026-11-05 45곳)이
+ * 되돌아가지 않게 잠근다. 계기: 김태건 선생님 앞 '퇴원보고서 작성 요청'이 강사뷰 벨 · 내 할 일에 안 떴다.
+ */
+describe("'다른 강사 뷰' = 그 사람(신원 축)", () => {
+  it("운영 계정 우회는 강사뷰 중 꺼지고, 강사뷰 자격 · 실제 계정 권한표만 실제 계정 판정을 쓴다(순환 방지)", () => {
+    const sa = read("src", "lib", "auth", "super-admin.ts");
+    const current = /export const isCurrentUserSuperAdmin[\s\S]*?\n}\);/.exec(sa)?.[0] ?? "";
+    expect(current).toContain("await isSignedInSuperAdmin()");
+    expect(current).toContain("viewAsTeacher()");
+    for (const f of [["src", "lib", "auth", "perm-matrix.ts"], ["src", "lib", "auth", "view-as.ts"]]) {
+      const src = read(...f);
+      expect(src).not.toContain("isCurrentUserSuperAdmin");
+      expect(src).toContain("isSignedInSuperAdmin()");
+    }
+  });
+  it("벨 받은함 — 강사뷰면 그 강사의 알림(관리 연결 + 받는 사람 · 지점 명시), 목록 · 쓰기 · 할 일 칩이 한 문을 지난다", () => {
+    const inbox = read("src", "features", "notifications", "server", "inbox.ts");
+    expect(inbox).toContain("await viewAsTeacher()");
+    expect(inbox).toContain('writable: target.access === "full"');
+    for (const f of [["src", "features", "notifications", "server", "queries.ts"], ["src", "features", "notifications", "server", "actions.ts"], ["src", "features", "staff-tasks", "server", "bell.ts"]]) {
+      const src = read(...f);
+      expect(src).toContain("notificationInbox()");
+      expect(src).not.toContain('from "@/lib/supabase/server"');
+    }
+    // 쓰기는 모두 받는 사람 · 지점을 명시한다(관리 연결은 RLS가 없다).
+    const actions = read("src", "features", "notifications", "server", "actions.ts");
+    expect(actions.split('.eq("recipient_id", inbox.recipientId)').length - 1).toBeGreaterThanOrEqual(6);
+  });
+  it("내 할 일 — 할 일 게이트가 강사뷰 대상을 쓴다", () => {
+    expect(read("src", "features", "staff-tasks", "server", "gate.ts")).toContain("getCurrentUser({ teacherView: true })");
+  });
+  it("착지 경로 — 자리 · 셔틀 담당을 강사뷰 대상으로 본다", () => {
+    const home = read("src", "lib", "auth", "teacher-home.ts");
+    const landing = /export async function landingPath[\s\S]*?\n}/.exec(home)?.[0] ?? "";
+    expect(landing).toContain("getCurrentUser({ teacherView: true })");
+  });
+  it("공지 팝업 — 대상 역할은 강사뷰 대상, '다시 보지 않기'는 보는 사람 본인(셸과 라우트가 같은 판정)", () => {
+    expect(read("src", "app", "(shell)", "layout.tsx")).toContain("getActivePopups(viewAs?.systemRole ?? user.systemRole, user.tenantId, user.id)");
+    expect(read("src", "app", "api", "notice-popups", "route.ts")).toContain("getActivePopupsOrThrow(viewAs?.systemRole ?? user.systemRole, user.tenantId, user.id)");
+  });
+  it("전자결재 — 강사뷰에서 메뉴를 닫고, 메뉴를 보지 않는 결재 · 회수 문도 막는다(결재는 본인 서명)", () => {
+    const perm = read("src", "lib", "auth", "perm-matrix.ts");
+    expect(perm).toMatch(/export const TEACHER_VIEW_CLOSED_MENUS: readonly MenuKey\[\] = \["approvals"\];/);
+    expect(perm).toContain("TEACHER_VIEW_CLOSED_MENUS.includes(menu)");
+    const approvals = read("src", "features", "approvals", "server", "actions.ts");
+    const signedIn = /async function requireSignedIn[\s\S]*?\n}/.exec(approvals)?.[0] ?? "";
+    expect(signedIn).toContain("if (await viewAsTeacher()) return { error: TEACHER_VIEW_APPROVAL_ERROR };");
   });
 });

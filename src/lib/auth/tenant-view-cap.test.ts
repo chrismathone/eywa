@@ -17,7 +17,7 @@ const m = vi.hoisted(() => ({
 }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => ({ id: "actor", tenantId: "branch", systemRole: "master", ...(m.live ? { tenantView: { tenantId: "branch", tenantName: "지점" } } : {}) }) }));
-vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => false }));
+vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => false, isSignedInSuperAdmin: async () => false }));
 vi.mock("@/lib/auth/view-as", () => ({ viewAsTeacher: async () => null, isReadonlyTeacherView: async () => false }));
 vi.mock("@/lib/auth/tenant-view", () => ({ isTenantViewRequest: async () => m.live, isTenantViewWriteBlocked: async () => m.blocked }));
 vi.mock("@/lib/license/server", () => ({ isFeatureLicensed: async () => true, isFeatureOptedIn: async () => true }));

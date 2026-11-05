@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { canAccess, MENU_ACCESS, SYSTEM_ROLES, type SystemRole, type PermissionOverride, type UserPermissionOverride } from "../permissions";
 const m = vi.hoisted(() => ({ access: null as null | "full" | "readonly", targetRole: "teacher" as SystemRole, overrides: [] as PermissionOverride[], individual: [] as UserPermissionOverride[] }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => ({ id: "actor", tenantId: "branch", systemRole: "master" }) }));
-vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => false }));
+vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => false, isSignedInSuperAdmin: async () => false }));
 vi.mock("@/lib/auth/view-as", () => ({
   viewAsTeacher: async () => m.access ? { id: "target", tenantId: "branch", systemRole: m.targetRole, access: m.access } : null,
   isReadonlyTeacherView: async () => m.access === "readonly",
@@ -67,3 +67,16 @@ it("keeps an administrator target's personal denials while preserving the teache
   expect(matrix.mcs.master).toBe("readonly");
   expect(matrix.teacher_onescreen.teacher).toBe("full");
 });
+it("전자결재는 강사뷰에서 닫힌다 — 대상 강사에게 열려 있어도(결재는 본인 서명 · 원장 2026-11-05 점검)", async () => {
+  m.individual = [{ userId: "target", menu: "approvals", access: "full" }, { userId: "actor", menu: "approvals", access: "full" }];
+  // 강사뷰가 아니면 본인 권한 그대로
+  expect(await canAccessApprovals()).toBe(true);
+  for (const access of ["full", "readonly"] as const) {
+    m.access = access;
+    expect(await canAccessApprovals()).toBe(false);
+    expect(await canWriteTenant("master", "approvals")).toBe(false);
+  }
+});
+async function canAccessApprovals() {
+  return canAccess("master", "approvals", await getUserPermMatrix());
+}

@@ -6,7 +6,7 @@ const s = vi.hoisted(() => ({ role: "admin" as SystemRole, super: false, readonl
   laboratory: true, makeupsOn: false,
   overrides: [] as PermissionOverride[], userOverrides: [] as UserPermissionOverride[], disabled: [] as string[] }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => ({ id: "u1", tenantId: "t1", systemRole: s.role }) }));
-vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => s.super }));
+vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => s.super, isSignedInSuperAdmin: async () => s.super }));
 vi.mock("@/lib/auth/view-as", () => ({ isReadonlyTeacherView: async () => s.readonly, viewAsTeacher: async () => null }));
 vi.mock("@/lib/license/server", () => ({ isFeatureLicensed: async () => s.licensed, isFeatureOptedIn: async () => s.laboratory }));
 vi.mock("@/lib/laboratory/server", () => ({ getLaboratoryMenus: async () => ["makeups"] }));

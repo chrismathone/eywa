@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { accessLevel, type SystemRole } from "@/lib/permissions";
 import { getActorPermMatrix } from "@/lib/auth/perm-matrix";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
-import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { isSignedInSuperAdmin } from "@/lib/auth/super-admin";
 import { createClient } from "@/lib/supabase/server";
 import { READONLY_TEACHER_VIEW_ERROR } from "@/lib/auth/view-as-message";
 import { tenantViewWriteError } from "@/lib/auth/tenant-view";
@@ -47,7 +47,7 @@ export const otherTeacherViewAccess = cache(async (): Promise<"full" | "readonly
   // 🔴 운영 콘솔의 '지점 보기'(읽기 전용)는 **원장 화면 하나**다 — 그 안에서 강사뷰로 갈아타지 않는다. 갈아타면 권한이 대상 강사의
   //    것으로 덮여 보기에서 닫아 둔 메뉴(perm-matrix.ts `TENANT_VIEW_CLOSED_MENUS`)가 다시 열리고, 강사뷰 쿠키가 보기 뒤에도 남는다.
   if (user.tenantView) return "none";
-  if (await isCurrentUserSuperAdmin()) return "full";
+  if (await isSignedInSuperAdmin()) return "full";
   const level = accessLevel(user.systemRole, "teacher_view", await getActorPermMatrix());
   return level === "full" || level === "readonly" ? level : "none";
 });

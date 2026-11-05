@@ -81,7 +81,9 @@ export async function teacherHomeForSubjects(subjects: string[]): Promise<string
  */
 export async function landingPath(role: SystemRole, matrix?: AccessMatrix): Promise<string> {
   // 자리 출석부 담당 토글 — 강사 홈보다 앞선다(원장: 로그인하면 그 출석부로).
-  const user = await getCurrentUser();
+  // '다른 강사 뷰'면 **그 강사의** 담당으로 착지한다(원장 2026-11-05 *"실제 그 사람으로 완벽하게 전환"*) — 실제 계정의 담당이면
+  // 강사뷰에서 권한 거부 폴백이 보는 사람의 출석부로 빠지고, 대상 강사의 담당 착지는 사라졌다(점검 2026-11-05).
+  const user = await getCurrentUser({ teacherView: true });
   if (user) {
     const seatHome = landingPathFromDuties(await getActiveSeatDuties(user.id, user.tenantId));
     if (seatHome) return seatHome;
