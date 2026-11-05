@@ -96,6 +96,19 @@ export function workerSupportsNoticeClassRoute(raw: unknown): boolean {
 }
 
 /**
+ * 이 워커가 **영어 개별 공지·교재요청서의 반 방 경로**(그 영어 반에 이어진 ClassNote 반 방의 그 학생 원아에게 1:1)를 아는 버전인가 —
+ * 하트비트 `last_results.caps.noticeEnglishRoom`(2026-11-04 · AywaSync 1.0.15). 옛 워커는 `classId`가 실린 대상을 전부 수학 반 보드로
+ * 보고 '반 보드 연결이 확인되지 않습니다'로 실패시킨다(오발송은 아니다) — 그래서 앱은 이 값이 참일 때만 영어 대상에 반을 싣는다.
+ * 키가 없으면 미지원(fail-safe = 지금까지처럼 `(영어)이름` 1인 보드 경로).
+ */
+export function workerSupportsNoticeEnglishRoom(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  const caps = (raw as Record<string, unknown>).caps;
+  if (!caps || typeof caps !== "object" || Array.isArray(caps)) return false;
+  return (caps as Record<string, unknown>).noticeEnglishRoom === true;
+}
+
+/**
  * 이 워커가 **반 공지의 이미지 첨부**를 지원하는 버전인가 — 하트비트 `last_results.caps.classNoticeImages`(2026-10-03).
  * 구버전은 큐 행의 이미지를 모르고 **글만 올린 뒤 '발송 완료'로 적는다** — 그래서 앱은 이 값이 참일 때만 이미지를 받아 준다.
  * 키가 없으면 미지원(fail-safe).

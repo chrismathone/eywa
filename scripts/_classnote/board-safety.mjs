@@ -37,9 +37,13 @@ export function noBoardReason(className) {
   return `ClassNote에 "${className}" 보드가 없어 보내지 못했습니다 — 관리자에게 알려 주세요`;
 }
 
-const ENGLISH_NOTICE_TAIL = "영어 개별 공지는 아직 반 방으로 보내지 못합니다 · 관리자에게 알려 주세요";
+// 영어 개별 공지·교재요청서는 2026-11-04(1.0.15)부터 보내는 선생님이 맡은(사무실 발송은 고른) 영어 반에 반 방이 이어져 있으면
+// 반 방으로 간다(notice-class-route.mjs). 1인 보드로 오는 영어 공지 = 그 반이 **반 방에 연결 안 된** 것이거나, 보내는 선생님이 그 학생의
+// 영어 반을 맡지 않은 것이다 — 연결만 요청하라고 하면 이미 연결된 반에서 틀린 안내가 된다(리뷰 2026-11-04).
+const ENGLISH_NOTICE_TAIL =
+  "영어 개별 공지는 보내는 선생님이 맡은(사무실 발송은 고른) 영어 반이 ClassNote 반 방에 연결돼 있을 때 반 방으로 갑니다 · 관리자에게 알려 주세요";
 
-/** 보드가 없어 **개별 공지**를 못 보냈을 때의 짧은 사유 — 영어 개별 공지는 아직 반 방 경로가 없다(1인 보드로만 간다). */
+/** 보드가 없어 **개별 공지**를 못 보냈을 때의 짧은 사유 — 영어는 반 방이 연결 안 된 반의 공지만 1인 보드로 온다. */
 export function noBoardNoticeNote(boardName) {
   if (normBoard(String(boardName ?? "")).startsWith("(영어)"))
     return `1인 보드가 없어 보내지 못했습니다 — 1인 보드는 더 만들지 않습니다(${ENGLISH_NOTICE_TAIL})`;
