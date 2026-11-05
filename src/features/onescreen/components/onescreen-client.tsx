@@ -3101,6 +3101,8 @@ export function OneScreenClient({
     }));
     // 월간 보고서인데 Monthly Test 점수가 없으면 코멘트만 들어간다 — 반응 없음처럼 보이지 않게 까닭을 알린다(2026-11-05).
     if (!quiet && monthlyScoresMissing(found ?? DEFAULT_ENGLISH_TEMPLATE, nowFacts)) toast.message(t("os.tpl.monthlyNoScores"));
+    // AI를 안 부르는 템플릿(월간 보고서 등)은 눈 깜짝할 새 끝나 '눌렸나?'를 모른다 — 채웠다고 알린다(원장 2026-11-05 *"로딩이나 뭐 그런게없음 그래서 자꾸 누르게됌"*).
+    else if (!quiet && found && !templateNeedsAi(found)) toast.success(t("os.tpl.filledNoAi"));
     if (found) return "ok";
     if (!quiet) toast.message(t("os.tpl.templateMissing"));
     return "template_fallback";
