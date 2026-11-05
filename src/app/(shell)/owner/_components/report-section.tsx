@@ -8,7 +8,7 @@ import { SectionForm, SettingsCard } from "./section-form";
 import { StringListEditor } from "./list-editors";
 import { TextField, ToggleField } from "./fields";
 import { BrandingField } from "./profile-section";
-import { ClassnoteRouteField } from "./classnote-route-field";
+import { ClassnoteMathBoardField } from "./classnote-math-board-field";
 import { ClassnoteReplyModeField } from "./classnote-reply-mode-field";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import type { VideoHomeworkClassOption } from "@/features/video-homework/server/queries";
@@ -264,13 +264,8 @@ export function ReportSection({
               ) : null}
             </div>
 
-            {/* 수학 발송 경로(원장 2026-09-29) — 소비처 = 발송 워커(getClassnoteMathRoute). */}
-            <ClassnoteRouteField
-              route={r.classnoteMathRoute}
-              pilot={r.classnoteMathRoutePilot}
-              mathTeachers={[...new Set([...(teachers.math ?? []), ...(teachers.subject_1 ?? [])])].filter(inStaff)}
-              onChange={set}
-            />
+            {/* 수학 반 보드(원장 2026-11-05 — 옛 '수학 발송 경로' 세 갈래를 걷고 반별 발송 + 지금 반 보드 동기화만). */}
+            <ClassnoteMathBoardField />
 
             {/* 학부모 글 답글·공감(원장 2026-10-01) — 소비처 = 앱 classnoteReplyMode + 워커 loadReplyMode. 기본 끔. */}
             <ClassnoteReplyModeField mode={r.classnoteParentReplyMode} onChange={set} />

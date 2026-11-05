@@ -16,7 +16,7 @@ const COMPOSE = read("src/features/report-admin/server/compose-actions.ts");
 const BATCH = read("src/features/report-admin/server/actions.ts");
 
 describe("반별 발송 '보낼 반' — 세 발송 경로", () => {
-  it("모두 classRouteActive(ClassNote 모듈 + 경로 설정)로 판정한다 — 모듈이 꺼진 학원은 예전 그대로", () => {
+  it("모두 classRouteActive(ClassNote 모듈 켜짐 — 수학은 늘 반별)로 판정한다 — 모듈이 꺼진 학원은 예전 그대로", () => {
     for (const src of [ONESCREEN, COMPOSE]) {
       expect(src).toContain("classRouteActive(settings");
       expect(src).toContain("SEND_CLASS_SUBJECTS.has(");

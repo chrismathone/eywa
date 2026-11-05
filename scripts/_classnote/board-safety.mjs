@@ -33,7 +33,7 @@ export function noBoardReason(className) {
   if (n.startsWith("(영어)"))
     return `ClassNote에 "${className}" 1인 보드가 없어 보내지 못했습니다 — 1인 보드는 더 만들지 않습니다. 이 학생의 영어 반이 ClassNote 반 방에 연결돼야 보낼 수 있으니 관리자에게 알려 주세요`;
   if (n.startsWith("(수학)"))
-    return `ClassNote에 "${className}" 1인 보드가 없어 보내지 못했습니다 — 1인 보드는 더 만들지 않습니다. 수학은 반 보드로 보냅니다(학원 설정의 수학 발송 경로가 '반별 발송'인지 관리자에게 확인해 주세요)`;
+    return `ClassNote에 "${className}" 1인 보드가 없어 보내지 못했습니다 — 1인 보드는 더 만들지 않습니다. 수학은 반 보드로 보내니 관리자에게 알려 주세요`;
   return `ClassNote에 "${className}" 보드가 없어 보내지 못했습니다 — 관리자에게 알려 주세요`;
 }
 
