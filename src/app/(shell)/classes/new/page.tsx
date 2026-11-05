@@ -1,6 +1,7 @@
 import { BackLink } from "@/components/back-link";
 import { isModuleEnabled } from "@/lib/modules";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canManageTenant } from "@/lib/auth/perm-matrix";
 import { getClassTeacherOptions } from "@/features/classes/server/queries";
 import { getClassroomOptions } from "@/features/enrollments/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -13,12 +14,16 @@ import { ClassForm } from "../_components/class-form";
 export const metadata = { title: "새 반 — 에이와" };
 
 export default async function NewClassPage() {
-  await requireAccess("classes");
+  const user = await requireAccess("classes");
 
-  const [teachers, classrooms, settings] = await Promise.all([
+  // 🔴 새 반 저장(`createClass` → `requireClassManage`)은 **full만** 받는다 — 화면도 같은 함수로 판정한다.
+  //    `canWriteTenant`를 쓰면 scoped(강사)가 통과해 "칸은 열렸는데 저장만 거절"이 된다(#77).
+  //    주소로 바로 들어온 읽기 권한이면 막지 않고 칸을 전부 끈 채 보여 준다(원장 2026-11-05 — lib/write-lock.ts).
+  const [teachers, classrooms, settings, canCreate] = await Promise.all([
     getClassTeacherOptions(),
     getClassroomOptions(),
     getTenantSettings(),
+    canManageTenant(user.systemRole, "classes"),
   ]);
   const subjectOptions = buildSubjectMaps(settings.operations.subjects).options;
   const periodsConfig = settingsToPeriodsConfig(settings.operations);
@@ -44,6 +49,7 @@ export default async function NewClassPage() {
         periodsConfig={periodsConfig}
         showEnglishTrack={isModuleEnabled(settings.modules.disabled, "eie")}
         classnoteOn={classnoteModuleOn(settings)}
+        readOnly={!canCreate}
       />
     </div>
   );

@@ -18,8 +18,12 @@ const COLUMNS: { key: CampaignStatus; label: string; color: PillColor }[] = [
   { key: "declined", label: "이탈", color: "rose" },
 ];
 
-/** 재등록 캠페인 보드 — KPI + 후보 스트립 + 4열 퍼널 칸반. 상태 전환은 서버 액션(transition). */
-export function CampaignBoard({ board }: { board: Board }) {
+/**
+ * 재등록 캠페인 보드 — KPI + 후보 스트립 + 4열 퍼널 칸반. 상태 전환은 서버 액션(transition).
+ * `canWrite` = 서버 게이트(`campaignAdd`·`campaignSetStatus`·`campaignRemove`)와 같은 `canWriteTenant(…,"retention")`를 page가 계산 —
+ * 읽기 권한이면 추가·상태 전환·제거 단추를 그리지 않고 보드만 보인다(원장 2026-11-05, src/lib/write-lock.ts).
+ */
+export function CampaignBoard({ board, canWrite }: { board: Board; canWrite: boolean }) {
   const [pending, start] = useTransition();
   const [expandedCols, setExpandedCols] = useState<Set<string>>(new Set());
   const [showAllCandidates, setShowAllCandidates] = useState(false);
@@ -59,7 +63,7 @@ export function CampaignBoard({ board }: { board: Board }) {
         <div className="bg-card border-line shadow-card rounded-2xl border p-3">
           <div className="mb-2.5 flex items-center gap-2">
             <span className="micro">재등록 위험 후보</span>
-            <span className="text-text-faint text-xs">{candidates.length}명 — 캠페인에 추가하세요</span>
+            <span className="text-text-faint text-xs">{candidates.length}명{canWrite ? " — 캠페인에 추가하세요" : ""}</span>
           </div>
           <div className="flex flex-wrap gap-2">
             {(showAllCandidates ? candidates : candidates.slice(0, CANDIDATE_CAP)).map((c) => (
@@ -75,14 +79,16 @@ export function CampaignBoard({ board }: { board: Board }) {
                 </div>
                 <Pill color={c.renewalTone === "risk" ? "danger" : "amber"}>재등록 {c.renewalLabel}</Pill>
                 <span className="text-text-dim num text-xs">{c.feeLabel}</span>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => run(() => campaignAdd(c.studentId), `${c.name} — 캠페인 추가`)}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-2.5 py-1 text-xs font-medium transition disabled:opacity-50"
-                >
-                  추가
-                </button>
+                {canWrite ? (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => run(() => campaignAdd(c.studentId), `${c.name} — 캠페인 추가`)}
+                    className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-2.5 py-1 text-xs font-medium transition disabled:opacity-50"
+                  >
+                    추가
+                  </button>
+                ) : null}
               </div>
             ))}
             {!showAllCandidates && candidates.length > CANDIDATE_CAP ? (
@@ -131,6 +137,7 @@ export function CampaignBoard({ board }: { board: Board }) {
                         </div>
                         <span className="text-text-dim num shrink-0 text-xs">{card.feeLabel}</span>
                       </div>
+                      {canWrite ? (
                       <div className="mt-2 flex flex-wrap gap-1">
                         {card.status === "pending" ? (
                           <Btn
@@ -167,6 +174,7 @@ export function CampaignBoard({ board }: { board: Board }) {
                           onClick={() => run(() => campaignRemove(card.targetId), `${card.name} — 캠페인에서 제거`)}
                         />
                       </div>
+                      ) : null}
                     </div>
                   ))}
                   {rest > 0 ? (

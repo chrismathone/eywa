@@ -15,6 +15,7 @@ import {
 } from "@/features/report-admin/class-notice";
 import { NoticeAttachmentPicker } from "@/features/onescreen/components/notice-attachment-picker";
 import type { NoticeAttachment } from "@/features/onescreen/notice-attachments";
+import { writeLockedNote, writeLockedPlaceholder } from "@/lib/write-lock";
 
 const fmt = (iso: string) =>
   new Intl.DateTimeFormat("ko-KR", {
@@ -31,6 +32,9 @@ const fmt = (iso: string) =>
  * 고를 수 있는 반 = ClassNote 반 보드 연결(0302a)이 있는 반뿐. 보내기 전 워커가 **보드 원아 = 그 반 재원생**을 대조해,
  * 반을 옮긴 학생이 보드에 남아 있으면 그 반은 보내지 않는다(반 공지는 보드에 남은 원아 전원에게 간다).
  * 테스트 발송 = `[수학] 테스트반`(학원* 원아만).
+ * `canSend` = 수업보고서 쓰기(page.tsx의 `canSendReports`) — 읽기 권한이면 반 선택·제목·본문은 비활성 + 권한 안내,
+ * 발송 단추는 그리지 않는다(원장 2026-11-05). ⚠️ 서버 `sendClassWideNotice`는 강사 신분(effectiveTeacherId)이면 이 판정 없이도
+ * 받는다 — 화면이 그보다 좁은 것은 이번 변경 전부터다(전에도 canSend가 없으면 보내기가 비활성이었다).
  */
 export function ClassNoticePanel({
   classes,
@@ -123,8 +127,9 @@ export function ClassNoticePanel({
                   key={c.id}
                   type="button"
                   aria-pressed={on}
+                  disabled={!canSend}
                   onClick={() => toggle(c.id)}
-                  className={`rounded-full border px-3 py-1 text-sm transition ${
+                  className={`rounded-full border px-3 py-1 text-sm transition disabled:cursor-not-allowed disabled:opacity-60 ${
                     on ? "border-primary bg-primary/10 text-primary font-bold" : "border-line text-text-dim hover:bg-bg-soft"
                   }`}
                 >
@@ -140,16 +145,18 @@ export function ClassNoticePanel({
             value={title}
             maxLength={CLASS_NOTICE_TITLE_MAX}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="제목"
-            className="border-line focus:border-primary rounded-md border bg-white px-3 py-2 text-sm outline-none"
+            disabled={!canSend}
+            placeholder={canSend ? "제목" : writeLockedPlaceholder("lesson_reports")}
+            className="border-line focus:border-primary rounded-md border bg-white px-3 py-2 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-60"
           />
           <textarea
             value={body}
             maxLength={CLASS_NOTICE_BODY_MAX}
             onChange={(e) => setBody(e.target.value)}
             rows={6}
-            placeholder="공지 내용"
-            className="border-line focus:border-primary rounded-md border bg-white px-3 py-2 text-sm outline-none"
+            disabled={!canSend}
+            placeholder={canSend ? "공지 내용" : writeLockedPlaceholder("lesson_reports")}
+            className="border-line focus:border-primary rounded-md border bg-white px-3 py-2 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-60"
           />
         </div>
         {canSend ? (
@@ -164,14 +171,19 @@ export function ClassNoticePanel({
             />
           </div>
         ) : null}
-        <div className="mt-3 flex justify-end gap-2">
-          <Button type="button" variant="outline" disabled={!ready} onClick={() => send(true)}>
-            테스트 발송(테스트반)
-          </Button>
-          <Button type="button" disabled={!ready || checked.size === 0} onClick={() => send(false)}>
-            {checked.size ? `${checked.size}개 반에 보내기${atts.length ? ` · 이미지 ${atts.length}` : ""}` : "반을 고르세요"}
-          </Button>
-        </div>
+        {/* 발송 단추는 쓰기 권한자만 — 읽기 권한엔 비활성 단추 대신 안내 한 줄. */}
+        {canSend ? (
+          <div className="mt-3 flex justify-end gap-2">
+            <Button type="button" variant="outline" disabled={!ready} onClick={() => send(true)}>
+              테스트 발송(테스트반)
+            </Button>
+            <Button type="button" disabled={!ready || checked.size === 0} onClick={() => send(false)}>
+              {checked.size ? `${checked.size}개 반에 보내기${atts.length ? ` · 이미지 ${atts.length}` : ""}` : "반을 고르세요"}
+            </Button>
+          </div>
+        ) : (
+          <p className="text-text-faint mt-3 text-xs">{writeLockedNote("lesson_reports")}</p>
+        )}
       </section>
 
       <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">

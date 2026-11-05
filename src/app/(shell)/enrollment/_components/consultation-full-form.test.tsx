@@ -61,6 +61,7 @@ vi.mock("@/lib/recording-resume", async (original) => ({
 }));
 vi.mock("@/components/workspace/use-in-frame", () => ({ useInFrame: () => m.inFrame }));
 
+import { useEditPresence } from "@/features/presence/edit-presence";
 import { ConsultationFullForm } from "./consultation-full-form";
 
 let assign: ReturnType<typeof vi.spyOn>;
@@ -346,5 +347,40 @@ describe("콜앤상담 녹음 저장과 대상 구분", () => {
     expect(m.recorderScope.mock.calls.at(-1)?.[0].recordKey).not.toBe(aScope.recordKey);
     expect(screen.queryAllByText("A.webm")).toHaveLength(0);
     expect(m.clearRecovery).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 읽기 권한(원장 2026-11-05 *"읽기 권한인데 쓸 수 있는것처럼 오해 불러오지 않도록"* · write-lock.ts) — 칸은 비활성 + 권한 안내,
+ * 저장·녹음 단추는 없고, 임시 저장·'수정 중' 표시도 켜지 않는다. 판정은 페이지가 `canWriteTenant(…,"enrollment")`로 내려 준다.
+ */
+describe("읽기 권한 — 칸 잠금 · 쓰기 단추 없음", () => {
+  it("수정 화면: 값은 보이되 칸이 잠기고, 저장·녹음 단추와 '수정 중' 표시·임시 저장이 없다", async () => {
+    const { container } = render(<ConsultationFullForm mode="edit" readOnly recordingOwner={{ tenantId: "t1", userId: "u1" }} initial={{ id: "c1", prospectName: "홍길동" }} />);
+    expect(screen.getByRole("note")).toHaveTextContent("신규 콜&상담 작성 권한이 필요합니다");
+    const name = container.querySelector<HTMLInputElement>('[name="prospectName"]')!;
+    expect(name).toBeDisabled();
+    expect(name).toHaveValue("홍길동");
+    expect(container.querySelector('[name="parentRequest"]')).toHaveAttribute("placeholder", "신규 콜&상담 작성 권한이 필요합니다");
+    expect(container.querySelector('[name="subject"]')).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "등록 완료" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /저장/ })).toBeNull();
+    expect(screen.queryByText("테스트 녹음 선택")).toBeNull();
+    expect(vi.mocked(useEditPresence).mock.lastCall).toEqual([undefined, false]);
+    expect(m.loadDraft).not.toHaveBeenCalled();
+    // 단추가 없어도 다른 제출 길(Enter 등)로 액션이 불리지 않는다.
+    await act(async () => {
+      fireEvent.submit(container.querySelector("form")!);
+      await Promise.resolve();
+    });
+    expect(m.updateEnrollmentConsultation).not.toHaveBeenCalled();
+  });
+
+  it("쓰기 권한(기본값)이면 종전 그대로 — 칸이 열려 있고 저장 단추가 있다", () => {
+    const { container } = render(<ConsultationFullForm mode="create" recordingOwner={{ tenantId: "t1", userId: "u1" }} />);
+    expect(screen.queryByRole("note")).toBeNull();
+    expect(container.querySelector('[name="prospectName"]')).toBeEnabled();
+    expect(container.querySelector('[name="parentRequest"]')).toHaveAttribute("placeholder", "학부모 요구사항 / 관찰");
+    expect(screen.getByRole("button", { name: /저장하고 상세로/ })).toBeInTheDocument();
   });
 });

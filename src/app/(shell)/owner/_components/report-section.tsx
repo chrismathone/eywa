@@ -229,7 +229,7 @@ export function ReportSection({
                   value={r.classnoteSendWindowEnd}
                   onChange={(e) => set({ classnoteSendWindowEnd: e.target.value })}
                 />
-                {r.classnoteSendWindowStart || r.classnoteSendWindowEnd ? (
+                {(r.classnoteSendWindowStart || r.classnoteSendWindowEnd) && canEdit ? (
                   <button
                     type="button"
                     className="text-text-dim hover:text-foreground text-xs underline underline-offset-2"
@@ -449,7 +449,7 @@ export function ReportSection({
               )}
               {orphanExempt.length > 0 ? (
                 <div className="mt-3">
-                  <p className="text-text-dim text-xs">현재 담당 반 없음(설정만 남음) — 클릭해 해제</p>
+                  <p className="text-text-dim text-xs">{canEdit ? "현재 담당 반 없음(설정만 남음) — 클릭해 해제" : "현재 담당 반 없음(설정만 남음)"}</p>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {orphanExempt.map((name) => (
                       <button

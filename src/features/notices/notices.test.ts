@@ -20,6 +20,7 @@ describe("audienceMatchesRole", () => {
     counselor: ["all", "staff", "office", "counselors"],
     accountant: ["all", "staff", "office", "accounting"],
     viewer: ["all", "staff", "office"],
+    parttime: ["all", "staff"],
     student: ["all"],
   };
 

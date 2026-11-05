@@ -105,3 +105,23 @@ describe("Notion 액션 — 모두 학원 판정을 지난다", () => {
     expect(client).not.toMatch(/export function notionTasksDatabaseId/);
   });
 });
+
+describe("이메일 자동연결 — 읽기 권한이면 저장하지 않는다(원장 2026-11-05)", () => {
+  const actions = readFileSync(path.join(__dirname, "server", "notion-actions.ts"), "utf8");
+  const server = readFileSync(path.join(__dirname, "server", "notion.ts"), "utf8");
+
+  it("🔴 prepareStaffNotionMappingRow는 쓰기 판정을 저장(setStaffNotionUserIdRow)보다 먼저 본다", () => {
+    const at = server.indexOf("export async function prepareStaffNotionMappingRow(");
+    expect(at).toBeGreaterThan(-1);
+    const body = server.slice(at, server.indexOf("export async function", at + 1));
+    const guard = body.indexOf('if (!canWrite) return { state: "none" };');
+    expect(guard).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(body.indexOf("setStaffNotionUserIdRow("));
+  });
+
+  it("prepareNotionMapping은 그 판정에 직원관리 쓰기 권한(canWriteTenant staff)을 넘긴다", () => {
+    const at = actions.indexOf("export async function prepareNotionMapping(");
+    const body = actions.slice(at, actions.indexOf("export async function", at + 1));
+    expect(body).toMatch(/prepareStaffNotionMappingRow\(\s*staffId,\s*actor\.tenantId,\s*await canWriteTenant\(actor\.systemRole, "staff"\)/);
+  });
+});

@@ -50,10 +50,16 @@ const CAP = 15;
 
 export async function ConsultationsTab({
   studentId,
+  canWrite,
   canSeeEnrollment = false,
   canOpenEnrollmentDetail = false,
 }: {
   studentId: string;
+  /**
+   * 상담 기록 쓰기 = `canWriteTenant(role, "consultations")` — 작성·수정·삭제·후속 조치 서버 게이트와 같은 판정(page.tsx가 계산).
+   * 읽기 권한이면 '+ 새 상담 기록'·수정·삭제를 그리지 않고 후속 조치는 상태 글자만(원장 2026-11-05 — lib/write-lock.ts).
+   */
+  canWrite: boolean;
   /** 입학 상담 카드 노출 여부 — enrollment 권한 또는 담당 강사(본인 학생). */
   canSeeEnrollment?: boolean;
   /** 입학 상담 '상세 보기'(/enrollment/[id]) 링크 노출 — enrollment 권한 있을 때만(강사는 숨김). */
@@ -80,8 +86,10 @@ export async function ConsultationsTab({
             <span className="text-muted-foreground num ml-2 text-xs font-normal">{consults.length}<SheetText value={"건"} /></span>
           ) : null}
         </h2>
-        <NewConsultationLink studentId={studentId} className="text-chart-1 hover:underline text-xs">
-          <SheetText value={"+ 새 상담 기록"} /></NewConsultationLink>
+        {canWrite ? (
+          <NewConsultationLink studentId={studentId} className="text-chart-1 hover:underline text-xs">
+            <SheetText value={"+ 새 상담 기록"} /></NewConsultationLink>
+        ) : null}
       </header>
 
       {/* 입학 상담(등록상담) — 아주 중요한 상담이라 상단 고정. 별도 테이블(enrollment_consultations).
@@ -116,7 +124,7 @@ export async function ConsultationsTab({
         <>
           <ul className="space-y-3">
             {visible.map((c) => (
-              <ConsultItem key={c.id} c={c} studentId={studentId} />
+              <ConsultItem key={c.id} c={c} studentId={studentId} canWrite={canWrite} />
             ))}
           </ul>
           {rest.length > 0 ? (
@@ -126,7 +134,7 @@ export async function ConsultationsTab({
                 {rest.length}<SheetText value={"건 더 보기"} /></summary>
               <ul className="mt-3 space-y-3">
                 {rest.map((c) => (
-                  <ConsultItem key={c.id} c={c} studentId={studentId} />
+                  <ConsultItem key={c.id} c={c} studentId={studentId} canWrite={canWrite} />
                 ))}
               </ul>
             </details>
@@ -137,7 +145,7 @@ export async function ConsultationsTab({
   );
 }
 
-function ConsultItem({ c, studentId }: { c: Consult; studentId: string }) {
+function ConsultItem({ c, studentId, canWrite }: { c: Consult; studentId: string; canWrite: boolean }) {
   return (
     <li className="bg-card border-border space-y-2 rounded-2xl border px-4 py-3">
       <header className="flex flex-wrap items-baseline gap-3">
@@ -157,21 +165,23 @@ function ConsultItem({ c, studentId }: { c: Consult; studentId: string }) {
         {c.counselorName ? (
           <span className="text-muted-foreground text-xs">· <SheetTeacherName value={c.counselorName} /></span>
         ) : null}
-        <div className="ml-auto flex items-center gap-3">
-          <Link
-            href={`/consultations/${c.id}/edit`}
-            className="text-chart-1 text-xs hover:underline"
-          >
-            <SheetText value={"수정"} /></Link>
-          <ConsultationDeleteButton id={c.id} studentId={studentId} label="" />
-        </div>
+        {canWrite ? (
+          <div className="ml-auto flex items-center gap-3">
+            <Link
+              href={`/consultations/${c.id}/edit`}
+              className="text-chart-1 text-xs hover:underline"
+            >
+              <SheetText value={"수정"} /></Link>
+            <ConsultationDeleteButton id={c.id} studentId={studentId} label="" />
+          </div>
+        ) : null}
       </header>
       <p className="text-foreground text-sm leading-relaxed">{c.summary}</p>
       {c.followUpAction ? (
         <div className="bg-bg-soft/40 rounded-sm px-3 py-2 text-xs">
           <div className="flex items-center justify-between gap-2">
             <p className="text-muted-foreground"><SheetText value={"후속 조치"} /></p>
-            <FollowUpToggle id={c.id} done={!!c.followUpDone} />
+            <FollowUpToggle id={c.id} done={!!c.followUpDone} readOnly={!canWrite} />
           </div>
           <p className="text-foreground mt-0.5">{c.followUpAction}</p>
           {c.followUpDate ? (

@@ -13,6 +13,9 @@ export const SYSTEM_ROLES = [
   "counselor",
   "accountant",
   "viewer",
+  // 아르바이트(원장 2026-11-05 *"열람보다 낮은 등급"*) — 기본은 도움말·고객센터만. 필요한 메뉴는 원장이 역할·권한 표나
+  // 개인별 메뉴 권한으로 연다(랩실·JJ실 출석은 직원관리의 '자리 담당' 토글). 열람(viewer)보다 넓게 두지 말 것.
+  "parttime",
   "student",
 ] as const;
 export type SystemRole = (typeof SYSTEM_ROLES)[number];
@@ -181,78 +184,78 @@ export type AccessMatrix = Record<MenuKey, Record<SystemRole, Access>>;
 export const MENU_ACCESS: AccessMatrix = {
   // 강사=none — 대시보드는 테넌트 전체 재무(미수·수납률·미수상위 등)를 보여주고 강사 스코핑이 없어 누수라,
   // 강사는 접근 불가(강제 URL 진입 시 requireAccess가 roleHome=/onescreen으로 폴백). 강사 홈은 원스크린.
-  dashboard: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "scoped", accountant: "scoped", viewer: "readonly", student: "none" },
-  timetable: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "readonly", accountant: "readonly", viewer: "readonly", student: "none" },
-  attendance: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "readonly", viewer: "readonly", student: "none" },
-  makeups: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  dashboard: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "scoped", accountant: "scoped", viewer: "readonly", parttime: "none", student: "none" },
+  timetable: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "readonly", accountant: "readonly", viewer: "readonly", parttime: "none", student: "none" },
+  attendance: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "readonly", viewer: "readonly", parttime: "none", student: "none" },
+  makeups: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // 자리(랩실·JJ실) 출석부 — 여러 반이 동시에 들어오는 **방**을 축으로 출석만 찍는 면(0208a).
   // 🔴 attendance와 **별개 키**인 이유: 자리 당번은 아르바이트(현재 viewer)라 출석 쓰기를 통째로 주면
   //    학원 전체 출석부가 함께 열린다(#77). "이 기능만 다른 권한"은 menuKey 승격이 정석
   //    (textbook_requests·integrations 선례) → 개인은 permissions.userOverrides로 이 키만 연다.
   // ⚠️ 기본값은 사무실만. 자리 당번 계정은 역할 승격이 아니라 **개인 예외**로 열 것
   //    (역할을 올리면 급여·직원명부·알림 수신자가 따라 붙는다 — LAB 가짜 강사 사고와 같은 종류).
-  seat_attendance: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
-  classes: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "readonly", student: "none" },
-  students: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "readonly", viewer: "readonly", student: "none" },
+  seat_attendance: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  classes: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "readonly", parttime: "none", student: "none" },
+  students: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "readonly", viewer: "readonly", parttime: "none", student: "none" },
   // 영어 시트의 이름 한 칸만 수정. 원생목록 전체 권한과 별도로 부여한다.
-  student_english_name: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
-  student_contribution: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
-  teacher_view: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  student_english_name: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  student_contribution: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  teacher_view: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // 성적관리 — 시험 등록 + 반 일괄 성적입력. 강사는 담당 반 채점(scoped), 회계는 무관, 학생 미표시.
-  exams: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "none", viewer: "readonly", student: "none" },
-  enrollment: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "none", viewer: "none", student: "none" },
-  consultations: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "none", viewer: "readonly", student: "none" },
+  exams: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "none", viewer: "readonly", parttime: "none", student: "none" },
+  enrollment: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  consultations: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "none", viewer: "readonly", parttime: "none", student: "none" },
   // 강사=none — 전체 퇴원 학생(테넌트 전역, 강사 스코핑 없음)이라 누수. 강사 메뉴엔 없음(담당 교육 페이지만).
-  withdrawals: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "full", viewer: "readonly", student: "none" },
-  withdrawal_reports: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  withdrawals: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "full", viewer: "readonly", parttime: "none", student: "none" },
+  withdrawal_reports: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // 이탈 방어(리텐션) — 위험도 기반 재등록 방어. 강사는 담당 학생만(scoped), 회계는 매출 위험 열람.
-  retention: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "readonly", viewer: "readonly", student: "none" },
+  retention: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "readonly", viewer: "readonly", parttime: "none", student: "none" },
   // 신규생 관리 — 신입 등록 후 90일 체크리스트(사전 콜·첫 수업 안내·OJT·만족도 콜). **데스크 업무**라
   // 사무실 역할만 연다. 🔴 강사=none인 이유는 퇴원관리와 같다: 이 목록은 **테넌트 전역 신입 명단**이라
   // 강사 스코핑이 없어, readonly로 열면 담당하지 않는 학생까지 통째로 보인다(#77 계열 누수).
-  newcomers: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "none", viewer: "readonly", student: "none" },
+  newcomers: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "none", viewer: "readonly", parttime: "none", student: "none" },
   // English Class Sheet(ECS) — 영어 반별 주간 수업계획서/출석부(구글시트 이식). 강사=scoped(담당 반만,
   // 게이트는 requireEcsClassAccess 공용 함수 — effectiveTeacherScope 상시 적용). viewer=readonly(열람만).
   // 출석 체크 쓰기는 이 키가 아니라 attendance 게이트(비파괴 markPresentIfAbsent)가 별도 판정.
-  ecs: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "readonly", student: "none" },
+  ecs: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "readonly", parttime: "none", student: "none" },
   // Math Class Sheet(MCS) — 수학 반별 **월간 진도표**(학생 × 수업일). ECS와 축이 다르다: 영어는 반 전체가
   // 같은 진도를 나가지만 수학은 학생마다 제 교재·제 진도라(실측 2026-08: 같은 반 같은 날 묶음의 79%에서
   // 교재가 갈린다) 행이 학생이다. 권한 모양은 ecs와 같게 둔다 — 같은 성격의 화면이고, 다르게 두면
   // "영어 담임은 되는데 수학 담임은 안 되는" 이유를 아무도 설명할 수 없다.
   // ⚠️ SQL auth_menu_access DEFAULTS엔 넣지 않는다(0170a는 SQL 정책이 참조하는 4개만 담는다 —
   //    math_month_goals는 service_role 전용이라 SQL이 이 키를 묻지 않는다. ecs도 같은 이유로 없다).
-  mcs: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "readonly", student: "none" },
+  mcs: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "readonly", parttime: "none", student: "none" },
   // 수업보고서(발송 관리) — 학원 전체 보고서 발송 큐·작성률·목록 총괄(오버사이트). 구 학원설정 ?tab=report_mgmt에서
   // 좌측 독립 메뉴로 승격(옛 Edutrix 외부링크 대체). 사무실(master/admin/manager)이 관리(재발송 등 쓰기 포함),
   // 뷰어는 열람만. 강사=none(작성은 /onescreen 원스크린 담당, 여기는 전체 오버사이트라 스코핑 없음).
-  lesson_reports: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "readonly", student: "none" },
-  report_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
-  ai_ment: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
-  profile_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
-  operations_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
-  billing_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
-  notification_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
-  consultation_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
-  navigation_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
-  integration_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
-  popup_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
-  attendance_salary_settings: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
-  payroll_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  lesson_reports: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "readonly", parttime: "none", student: "none" },
+  report_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  ai_ment: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  profile_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  operations_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  billing_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  notification_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  consultation_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  navigation_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  integration_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  popup_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  attendance_salary_settings: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  payroll_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // 강사=none — 전체 직원 목록·상세(급여·계정 등 민감)라 누수. 강사 메뉴엔 없음.
-  staff: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "full", viewer: "none", student: "none" },
-  billing: { master: "full", admin: "full", manager: "readonly", teacher: "none", counselor: "none", accountant: "full", viewer: "none", student: "none" },
+  staff: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "full", viewer: "none", parttime: "none", student: "none" },
+  billing: { master: "full", admin: "full", manager: "readonly", teacher: "none", counselor: "none", accountant: "full", viewer: "none", parttime: "none", student: "none" },
   // 교재 요청 — 강사가 본인 담당 학생 교재를 요청(스코프)하는 전용 면. 사무실(master/admin/accountant)은 /billing 교재 면에서 처리하되 여기서도 열람 가능.
-  textbook_requests: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "none", accountant: "full", viewer: "none", student: "none" },
+  textbook_requests: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "none", accountant: "full", viewer: "none", parttime: "none", student: "none" },
   // 지출결의서(강사 제출) — 강사가 본인 지출을 작성·제출하고 결재 진행상태를 조회하는 전용 면(강사=본인 것만).
   // 사무실(master/admin/accountant)은 /billing 지출 면에서 결재·처리하므로 여기 접근 시 그쪽으로 이동(=full은 라우팅만,
   // 생성 게이트엔 영향 없음 — 이들은 이미 billing 쓰기로 생성). manager는 billing=readonly라 여기서도 none(생성 권한
   // 확장 방지 — 이 기능은 '강사 제출'에 한정). ⚠️ 결재 승인(원장/대표 토글)은 이 키가 아니라 billing 쓰기만 통과 →
   // 강사가 자기 결의서를 셀프 승인 못 함(expense-actions 게이트).
-  expense_requests: { master: "full", admin: "full", manager: "none", teacher: "full", counselor: "none", accountant: "full", viewer: "none", student: "none" },
+  expense_requests: { master: "full", admin: "full", manager: "none", teacher: "full", counselor: "none", accountant: "full", viewer: "none", parttime: "none", student: "none" },
   // 강사=none — 원장 회의 포함 전체 회의록(민감)이라 누수. 강사 메뉴엔 없음(화자 연결은 데이터일 뿐 열람권 아님).
-  meetings: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "full", viewer: "readonly", student: "none" },
+  meetings: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "full", viewer: "readonly", parttime: "none", student: "none" },
   // 데이터베이스(서식 저장소) — 사무실(master/admin/manager)이 업로드·작성, 나머지는 조회만. 학생은 미노출.
-  documents: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "readonly", accountant: "readonly", viewer: "readonly", student: "none" },
+  documents: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "readonly", accountant: "readonly", viewer: "readonly", parttime: "none", student: "none" },
   // 수업 평가 체크리스트(참관 30문항, 원장 지시 2026-08-04) — **테스트 단계라 기본 전원 차단**.
   // 개방은 코드가 아니라 tenant_settings 데이터로만 한다(배포 없이 명단 조정):
   //   · 원장직급(master) = 역할 override — ⚠️ **여기 기본값이 none이라 원장도 이 행이 없으면 못 들어간다**
@@ -261,19 +264,19 @@ export const MENU_ACCESS: AccessMatrix = {
   // 개인에게 여는 자리 = 학원 설정 → 역할·권한 → '개인별 메뉴 권한'(2026-10-06부터 원장이 화면에서 주고 거둔다).
   // 예전 명단 스크립트(scripts/staff-access/grant-class-review.mjs)는 다시 돌리지 말 것 — 거둔 명단이 되살아난다.
   // ⚠️ 개인 예외는 CRUD뿐 아니라 **실명 열람·문항 세트 편집**까지 연다(getReviewPrivileges) — 명단은 최소로.
-  class_review: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  class_review: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // 캘린더(학원 공용 일정, 원장 2026-08-18 "일단 캘린더 탭으로 일정부터 관리") — 일정 등록·수정은
   // 사무실(full), 강사·상담·회계·뷰어는 열람(readonly). 학원 일정은 전 직원이 봐야 의미가 있다.
-  calendar: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "readonly", accountant: "readonly", viewer: "readonly", student: "none" },
+  calendar: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "readonly", accountant: "readonly", viewer: "readonly", parttime: "none", student: "none" },
   // 셔틀(노랑버스, 원장 2026-08-19 makeedu에서 이관) — 편성·등하원 기록은 사무실(full).
   // 강사·상담·회계·뷰어는 **열람만**: 담임이 "우리 반 누가 셔틀 타나"를 봐야 결석 판단이 되는데,
   // 편성을 만지면 그 학생의 등하원 동선이 조용히 바뀐다(학생 레코드 잠금과 같은 결, CLAUDE.md).
-  shuttle: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "readonly", accountant: "readonly", viewer: "readonly", student: "none" },
+  shuttle: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "readonly", accountant: "readonly", viewer: "readonly", parttime: "none", student: "none" },
   // 재고관리(전자기기 자산관리대장, 원장 2026-09-02 — 0242a). 자산대장은 **경영지원팀 도구**다(원본 시트의
   // 분배관리 = 경영지원팀). 회계는 자산 현황을 볼 일이 있어 열람만. 강사·상담·뷰어에게 열면 사이드바 줄만
   // 늘고 쓸 일이 없다. 쓰기 게이트는 canWriteTenant("inventory")(회계 readonly는 자산을 못 고친다).
   // ⚠️ 기본값이 full인 셀이 있으므로 super_admin은 mergeMostPermissive로 자동 통과한다(별도 처리 불요).
-  inventory: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "readonly", viewer: "none", student: "none" },
+  inventory: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "readonly", viewer: "none", parttime: "none", student: "none" },
   // 교재목록(수업 교재 마스터, 0266a). 원장 2026-09-16: *"사무실만 편집 · 강사는 고르기만"*.
   // 🔴 강사가 **readonly**인 건 의도다 — 시트에서 교재를 고르려면 목록을 볼 수 있어야 하지만, 마스터를
   //    고치게 하면 372종으로 갈렸던 이름이 다시 갈린다(이 기능의 존재 이유가 그 통일이다).
@@ -281,41 +284,41 @@ export const MENU_ACCESS: AccessMatrix = {
   //    `requireEcsClassAccess(classId,{write:true})`가 연다(0266a 헤더). 여기 readonly인 담임 강사도
   //    자기 반에는 교재를 태울 수 있다.
   // ⚠️ 기본값이 full인 셀이 있으므로 super_admin은 mergeMostPermissive로 자동 통과한다.
-  textbooks: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  textbooks: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // 전자결재(기안·결재함, 원장 지시 2026-08-14 — 첫 양식 = 휴가신청서) — **기본 전원 차단**.
   // 여는 길은 둘뿐이다: 역할·권한 표에서 그 역할의 칸을 열거나, '개인별 메뉴 권한'에서 그 사람에게 준다
   // (원장 2026-10-06 — 전에 있던 코드 명단은 없앴다, [`access.ts`](../features/approvals/access.ts)).
   // ⚠️ 전 직원에게 열 땐 **이 행의 기본값을 올려라**(결재는 결국 모든 직원의 기능이다. student는 계속 none).
-  approvals: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  approvals: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // makeedu 연동 조작 — '지금 동기화'(정방향 릴레이 트리거)·'makeedu로 보내기'(역동기화 큐잉) 실행 권한.
   // 사이드바 메뉴가 아니라 **액션 권한 키**(hidden) — 버튼 노출(목록 ↻ 배지 옆·등록상담 전송 카드)과 서버 액션
   // 게이트(canWriteTenant)가 함께 읽는다. 역할·권한 면에 행이 떠 원장이 조정 가능(예: 상담사에게 열기).
   // ⚠️ 구글 시트 반영·가져오기는 이 키가 아니라 sheet_sync(아래). 연동 ON/OFF 토글만 owner 콘솔 소속(master).
-  integrations: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  integrations: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // 구글 시트 연동 조작 — 시간표 '시트 반영'(DB→시트 전체 push)·'시트에서 가져오기'(시트→DB) 실행 권한.
   // integrations와 같은 **액션 권한 키**(hidden, 사이드바 메뉴 아님) — 버튼 노출(timetable/page)과 서버 액션
   // 게이트(canManageSheetSync)가 함께 읽는다. 역할·권한 면에 행이 떠 원장이 조정 가능.
   // ⚠️ 이 경로는 **테넌트 전체 시간표**(전 강사·전 학생 명단)를 외부 공유 시트와 주고받으므로 담당(scoped)
   // 개념이 없다 — 게이트가 "full"만 통과시킨다(전체/없음만 의미 있음). 강사에게 열면 전 학생 명단이 나간다.
-  sheet_sync: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
-  help: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "full", accountant: "full", viewer: "full", student: "none" },
+  sheet_sync: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  help: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "full", accountant: "full", viewer: "full", parttime: "full", student: "none" },
   // 고객센터(0294a) — 지점 → aywa 운영자 창구(공지사항·개선요청). makeedu처럼 지점 직원 누구나 요청을 쓴다.
   // 원장이 좁히려면 역할·권한 면에서 끈다. 🔴 표 RLS는 이 키를 안 본다(tenant 격리만, #92) — 새 키라도 락아웃 없음.
-  support: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "full", accountant: "full", viewer: "full", student: "none" },
+  support: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "full", accountant: "full", viewer: "full", parttime: "full", student: "none" },
   // master 전용 — 중복 병합 / 데이터 정리 / Google Sheets 통합 등 위험도 높은 도구
-  admin: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  admin: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // owner(=원장/테넌트 소유자) 전용 — 학원 설정 콘솔(과목·교시·직급·청구 기본값·약관 등 테넌트 전체 적용)
-  owner: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  owner: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // 강사 전용 — 수업 마감 원스크린(진도·테스트·보고서). 원장(master) 사이드바엔 미표시.
   // (오버사이트가 필요하면 master를 "full"로만 바꾸면 됨.)
-  teacher_onescreen: { master: "none", admin: "none", manager: "none", teacher: "full", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  teacher_onescreen: { master: "none", admin: "none", manager: "none", teacher: "full", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // 학생 전용 — 내 학습 현황(누적 대시보드) + 데일리 리포트. 직원(원장·강사 등)에겐 미표시.
-  my_learning: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "full" },
+  my_learning: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "full" },
   // master 전용 — 출석 키오스크 설정(출석번호 발급·기기 등록·발송 시뮬 피드). 사이드바 미표시(직접 URL).
-  kiosk_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  kiosk_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // 비포클래스체크리스트(초안, 원장 2026-10-28) — 수업 전 준비 체크(시트 이식). 새 키 규칙대로 원장만 전체.
   // 체크하는 사람(전체)·보는 사람(읽기)은 학원 설정 → 역할·권한 → 개인별 메뉴 권한으로 연다. 표는 서버 전용(정책 0개).
-  before_class_checklist: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  before_class_checklist: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
 };
 
 // 🔴 **새 권한 키의 기본값 = 원장 '전체' · 나머지 '없음'**(원장 2026-10-06: *"새 권한을 넣으면 '원장' 전체가 디폴트로 하고 나머진 없음을

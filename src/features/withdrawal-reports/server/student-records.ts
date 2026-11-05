@@ -105,7 +105,7 @@ export async function loadStudentReportRecords(studentId: string): Promise<Stude
     if (reports.error) return failure(reports.error, "withdrawal-reports.student-reports");
     if (archives.error) return failure(archives.error, "withdrawal-reports.student-archives");
     const readable = reports.rows.filter((r) => canReadReport(r, viewer));
-    // 데스크 환불 단계(s2_0024)는 아직 처리 전인 보고서에만 의미가 있다 — 그런 보고서가 있을 때만 읽고, 못 읽으면 단계 없이.
+    // 데스크 환불 단계(s2_0025)는 아직 처리 전인 보고서에만 의미가 있다 — 그런 보고서가 있을 때만 읽고, 못 읽으면 단계 없이.
     const open = readable.filter((r) => !["completed", "canceled", "blocked"].includes(r.status));
     const steps = open.length ? await loadRefundSteps(tenant, open).catch(() => undefined) : undefined;
     return {

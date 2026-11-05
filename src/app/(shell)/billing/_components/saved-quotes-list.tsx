@@ -41,10 +41,16 @@ export function SavedQuotesList({
   rows,
   students,
   defaultPeriod,
+  canConvert,
+  canDelete,
 }: {
   rows: QuoteListItem[];
   students: StudentOption[];
   defaultPeriod: string;
+  /** '청구서로 전환' — 서버 createInvoice와 같은 canWriteTenant(billing). 읽기 권한이면 그리지 않는다. */
+  canConvert: boolean;
+  /** 견적 삭제 — 서버 deleteTuitionQuote와 같은 full(canManageTenant billing). 읽기 권한이면 그리지 않는다. */
+  canDelete: boolean;
 }) {
   const embed = useEmbed();
   const [, delAction] = useActionState<SaveQuoteState, FormData>(deleteTuitionQuote, undefined);
@@ -74,20 +80,24 @@ export function SavedQuotesList({
           <span className="text-foreground num shrink-0 text-sm font-bold">
             {KRW.format(r.totalAmount)}원
           </span>
-          <CreateInvoiceTrigger
-            students={students}
-            defaultPeriod={defaultPeriod}
-            variant="outline"
-            label="청구서로 전환"
-            prefill={{
-              amountTotal: r.totalAmount,
-              notes: `견적 전환 · ${r.studentName} · 수강 ${r.courseCount}개, 교재/기타 ${r.extraCount}개`,
-            }}
-          />
-          <form action={delAction} className="shrink-0">
-            <input type="hidden" name="id" value={r.id} />
-            <DeleteBtn />
-          </form>
+          {canConvert ? (
+            <CreateInvoiceTrigger
+              students={students}
+              defaultPeriod={defaultPeriod}
+              variant="outline"
+              label="청구서로 전환"
+              prefill={{
+                amountTotal: r.totalAmount,
+                notes: `견적 전환 · ${r.studentName} · 수강 ${r.courseCount}개, 교재/기타 ${r.extraCount}개`,
+              }}
+            />
+          ) : null}
+          {canDelete ? (
+            <form action={delAction} className="shrink-0">
+              <input type="hidden" name="id" value={r.id} />
+              <DeleteBtn />
+            </form>
+          ) : null}
         </li>
       ))}
     </ul>

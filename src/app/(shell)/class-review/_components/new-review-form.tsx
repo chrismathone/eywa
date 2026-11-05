@@ -7,6 +7,7 @@ import { Loader2 } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { createClassReview, type ReviewActionState } from "@/features/class-review/server/actions";
+import { writeLockedNote, writeLockedPlaceholder } from "@/lib/write-lock";
 import {
   DEFAULT_OBSERVER_LIMIT,
   OBSERVER_LIMIT_OPTIONS,
@@ -30,17 +31,23 @@ function SubmitButton() {
  * 그 값이 문서에 동결되므로, 나중에 기본값을 바꿔도 이미 만든 평가의 정원은 안 흔들린다.
  * 반명·회차·수업시간·학생수는 입력받지 않고, **날짜도 안 받는다**(2026-08-05 — 생성 당일 자동).
  * 호칭은 "평가자"(원장 지시 2026-08-05 — "참관자 아니고 평가자") — 데이터 키(observer*)는 불변.
+ * `canWrite=false`(읽기 권한) — 칸·선택 단추는 전부 잠그고 안내를 띄우며 '평가 만들기'는 그리지 않는다(원장 2026-11-05).
  */
 export function NewReviewForm({
   staff,
   subjects,
   templates,
+  canWrite,
 }: {
   staff: { value: string; label: string }[];
   subjects: { value: string; label: string }[];
   /** 문항 세트 선택지(만든 순) — 비어 있으면 내장 기본 문항 사용(선택 UI 숨김). */
   templates: { value: string; label: string }[];
+  /** 서버(page)가 canWriteTenant("class_review")로 정한 값 — 저장 액션과 같은 판정. */
+  canWrite: boolean;
 }) {
+  const locked = !canWrite;
+  const lockedPlaceholder = writeLockedPlaceholder("class_review");
   const [mode, setMode] = useState<"assigned" | "open">("assigned");
   const [count, setCount] = useState<number>(DEFAULT_OBSERVER_LIMIT);
   const [state, formAction] = useActionState<ReviewActionState, FormData>(createClassReview, undefined);
@@ -55,14 +62,18 @@ export function NewReviewForm({
     <form action={formAction} className="bg-card max-w-2xl space-y-4 rounded-2xl p-5 shadow-card">
       <input type="hidden" name="observerMode" value={mode} />
       <input type="hidden" name="observerCount" value={count} />
+      {/* 문항 세트·인원·방식은 값이 이미 골라져 있어 placeholder로는 알릴 수 없다 — 양식 위에 한 줄. */}
+      {locked ? <p className="text-text-dim text-sm" role="status">{writeLockedNote("class_review")}</p> : null}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label className="micro mb-1 block">평가 대상 강사 *</label>
-          <SearchableSelect name="teacherId" options={staff} placeholder="강사 선택" ariaLabel="평가 대상 강사" />
+          <SearchableSelect name="teacherId" options={staff} placeholder={locked ? lockedPlaceholder : "강사 선택"}
+            ariaLabel="평가 대상 강사" disabled={locked} />
         </div>
         <div>
           <label className="micro mb-1 block">과목 (선택)</label>
-          <SearchableSelect name="subject" options={subjects} placeholder="과목 선택" ariaLabel="과목" />
+          <SearchableSelect name="subject" options={subjects} placeholder={locked ? lockedPlaceholder : "과목 선택"}
+            ariaLabel="과목" disabled={locked} />
         </div>
         {templates.length > 0 ? (
           <div className="sm:col-span-2">
@@ -71,8 +82,9 @@ export function NewReviewForm({
               name="templateId"
               options={templates}
               defaultValue={templates[0].value}
-              placeholder="문항 세트 선택"
+              placeholder={locked ? lockedPlaceholder : "문항 세트 선택"}
               ariaLabel="문항 세트"
+              disabled={locked}
             />
           </div>
         ) : null}
@@ -91,8 +103,9 @@ export function NewReviewForm({
                   key={n}
                   type="button"
                   onClick={() => setCount(n)}
+                  disabled={locked}
                   aria-pressed={count === n}
-                  className={`num border-line px-2.5 py-1 text-xs transition not-first:border-l ${
+                  className={`num border-line px-2.5 py-1 text-xs transition not-first:border-l disabled:cursor-not-allowed disabled:opacity-60 ${
                     count === n
                       ? "bg-primary text-primary-foreground font-bold"
                       : "text-text-dim hover:text-foreground"
@@ -115,8 +128,9 @@ export function NewReviewForm({
               key={o.v}
               type="button"
               onClick={() => setMode(o.v)}
+              disabled={locked}
               aria-pressed={mode === o.v}
-              className={`flex-1 rounded-xl border px-4 py-3 text-left transition ${
+              className={`flex-1 rounded-xl border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
                 mode === o.v ? "border-primary bg-primary/5" : "border-line hover:border-primary/40"
               }`}
             >
@@ -143,8 +157,9 @@ export function NewReviewForm({
                     key={i}
                     name={`observer${i + 1}`}
                     options={staff}
-                    placeholder={label}
+                    placeholder={locked ? lockedPlaceholder : label}
                     ariaLabel={label}
+                    disabled={locked}
                   />
                 );
               })}
@@ -158,9 +173,12 @@ export function NewReviewForm({
         )}
       </div>
 
-      <div className="flex justify-end">
-        <SubmitButton />
-      </div>
+      {/* 읽기 권한이면 저장 단추를 그리지 않는다 — 비활성으로 두면 "누르면 될 것 같은" 오해가 남는다. */}
+      {canWrite ? (
+        <div className="flex justify-end">
+          <SubmitButton />
+        </div>
+      ) : null}
     </form>
   );
 }

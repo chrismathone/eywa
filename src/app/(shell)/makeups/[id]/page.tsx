@@ -2,6 +2,7 @@ import { EmbedLink as Link } from "@/components/embed-link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { PageHeader } from "@/components/page-header";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
@@ -18,7 +19,10 @@ export default async function MakeupCasePage({ params, searchParams }: {
   const actor = await requireAccess("makeups");
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) notFound();
-  const [result, settings, query, shellView] = await Promise.all([getMakeupCaseDetail(id), getTenantSettings(), searchParams, getShellView()]);
+  // 쓰기 여부 = 저장 액션(executeMakeupCommand)과 같은 판정. DB가 돌려주는 permissions만으로는 원장 덮어쓰기·
+  // '다른 강사 뷰'(열람 전용)를 놓쳐 양식이 보였다가 저장 때 거절됐다(원장 2026-11-05 읽기 권한 정리).
+  const [result, settings, query, shellView, canWrite] = await Promise.all([getMakeupCaseDetail(id), getTenantSettings(), searchParams, getShellView(),
+    canWriteTenant(actor.systemRole, "makeups")]);
   const back = makeupListBack(query.back);
   if (!result.data) return <div className="space-y-4 p-4"><p role="alert">{result.error}</p>
     <Link href={`/makeups/${id}?${new URLSearchParams(typeof query.back === "string" ? { back: query.back } : {})}`} className="text-primary underline">다시 조회</Link><Link href={back} className="text-primary ml-4 underline">목록</Link></div>;
@@ -27,6 +31,6 @@ export default async function MakeupCasePage({ params, searchParams }: {
     <PageHeader title={`${detail.case.student_name} · 보강`} description={subjects.labelOf(detail.case.subject_key)}
       actions={<Link href={back} className="text-primary inline-block min-h-6 underline">목록</Link>} />
     {query.existing === "1" ? <p role="status" className="border-line rounded-md border p-3">이미 접수된 건입니다. 현재 처리 상태를 확인해 주세요.</p> : null}
-    <CaseDetailView initial={detail} periods={periods} actorId={actor.id} reserveOn={settings.makeups.mode === "on"} recordView={shellView === "teacher" ? "teacher" : "attendance"} />
+    <CaseDetailView initial={detail} periods={periods} actorId={actor.id} reserveOn={settings.makeups.mode === "on"} canWrite={canWrite} recordView={shellView === "teacher" ? "teacher" : "attendance"} />
   </div>;
 }

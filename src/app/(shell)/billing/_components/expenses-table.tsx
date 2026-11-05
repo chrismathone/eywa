@@ -20,6 +20,7 @@ import type {
   ExpenseRow,
 } from "@/features/billing/server/expense-queries";
 import { formatMoney } from "@/features/billing/currencies";
+import { writeLockedPlaceholder } from "@/lib/write-lock";
 
 const CAT_COLOR: Record<string, PillColor> = {
   인건비: "purple",
@@ -43,11 +44,42 @@ const TOGGLE_ROLES: { role: Exclude<ApprovalRole, "author">; label: string }[] =
  */
 type EmptyReason = { title: string; hint?: string; clearHref?: string };
 
-export function ExpensesTable({ rows, empty, toolbar }: { rows: ExpenseRow[]; empty?: EmptyReason; toolbar?: ReactNode }) {
+export function ExpensesTable({
+  rows,
+  empty,
+  toolbar,
+  canWrite,
+  canCreate = canWrite,
+  ownEditorId = null,
+}: {
+  rows: ExpenseRow[];
+  empty?: EmptyReason;
+  toolbar?: ReactNode;
+  /**
+   * 지출 등록·결재 체크·복제·수정·삭제·증빙 편집을 세울지 — 서버(ExpensesPanel)가 canWriteTenant(billing)로 정한 값.
+   * 읽기 권한이면 쓰기 단추는 그리지 않고 결재 체크는 비활성(원장 2026-11-05).
+   */
+  canWrite: boolean;
+  /**
+   * '지출 등록'을 세울지 — 서버 createExpense와 같은 `expenseWriteScope` ≠ null(billing 쓰기 또는 지출결의 쓰기).
+   * 기본 = canWrite. 개인별 권한으로 지출결의만 연 사무실 계정은 /expense-requests가 이 면으로 보내므로 여기서 등록한다.
+   */
+  canCreate?: boolean;
+  /**
+   * 지출결의 쓰기만 있는(scope "own") 사람의 id — 본인이 작성한 결의서만 복제, 결재 시작 전이면 수정·삭제·증빙 편집.
+   * 서버 guardOwnExpense·duplicateExpense의 본인 판정과 같다. canWrite(billing 쓰기)면 쓰지 않는다.
+   */
+  ownEditorId?: string | null;
+}) {
   const [dialog, setDialog] = useState<{ expense: ExpenseRow | null } | null>(null);
   const [receiptsFor, setReceiptsFor] = useState<ExpenseRow | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<ExpenseRow | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // 행 단위 쓰기 판정 — 서버 expense-actions의 scope(full|own) + guardOwnExpense(본인 작성 · 원장/대표 결재 전)와 같다.
+  const ownRow = (r: ExpenseRow) => !canWrite && ownEditorId !== null && r.createdBy === ownEditorId;
+  const ownLocked = (r: ExpenseRow) => Boolean(r.approvalChecks.director?.checked || r.approvalChecks.ceo?.checked);
+  const canEditRow = (r: ExpenseRow) => canWrite || (ownRow(r) && !ownLocked(r));
+  const canDuplicateRow = (r: ExpenseRow) => canWrite || ownRow(r);
   const [, startTransition] = useTransition();
 
   function run(id: string, fd: FormData, action: (p: undefined, f: FormData) => Promise<unknown>) {
@@ -82,17 +114,19 @@ export function ExpensesTable({ rows, empty, toolbar }: { rows: ExpenseRow[]; em
     <>
       <div className="flex flex-wrap items-center justify-between gap-2">
         {toolbar}
-        <Button size="sm" onClick={() => setDialog({ expense: null })}>
-          <Plus className="size-4" />
-          지출 등록
-        </Button>
+        {canCreate ? (
+          <Button size="sm" onClick={() => setDialog({ expense: null })}>
+            <Plus className="size-4" />
+            지출 등록
+          </Button>
+        ) : null}
       </div>
 
       {rows.length === 0 ? (
         <div className="border-line text-text-faint flex flex-col items-center gap-3 rounded-2xl border border-dashed px-4 py-10 text-center text-sm">
           <div className="space-y-1">
             <p className={empty ? "text-text-dim font-medium" : ""}>
-              {empty?.title ?? "이 달 지출 내역이 없습니다. 위 “지출 등록”으로 추가하세요."}
+              {empty?.title ?? (canCreate ? "이 달 지출 내역이 없습니다. 위 “지출 등록”으로 추가하세요." : "이 달 지출 내역이 없습니다.")}
             </p>
             {empty?.hint ? <p className="max-w-md text-xs">{empty.hint}</p> : null}
           </div>
@@ -171,48 +205,58 @@ export function ExpensesTable({ rows, empty, toolbar }: { rows: ExpenseRow[]; em
                         <td key={role} className="px-2 py-2 text-center">
                           <button
                             type="button"
-                            onClick={() => toggleStage(r, role, !checked)}
-                            disabled={isBusy}
+                            onClick={canWrite ? () => toggleStage(r, role, !checked) : undefined}
+                            disabled={isBusy || !canWrite}
                             aria-pressed={checked}
-                            title={`${label} 결재 — 클릭하면 ${checked ? "해제" : "승인"}`}
-                            className="focus-visible:ring-primary/50 inline-flex items-center justify-center rounded-sm focus:outline-none focus-visible:ring-1"
+                            title={
+                              canWrite
+                                ? `${label} 결재 — 클릭하면 ${checked ? "해제" : "승인"}`
+                                : `${label} 결재 ${checked ? "완료" : "전"} · ${writeLockedPlaceholder("billing")}`
+                            }
+                            className="focus-visible:ring-primary/50 inline-flex items-center justify-center rounded-sm focus:outline-none focus-visible:ring-1 disabled:cursor-not-allowed"
                           >
-                            <StageMark checked={checked} interactive />
+                            <StageMark checked={checked} interactive={canWrite} />
                           </button>
                         </td>
                       );
                     })}
                     <td className="px-2 py-2">
-                      <div className="flex items-center justify-end gap-0.5">
-                        <button
-                          type="button"
-                          onClick={() => handleDuplicate(r)}
-                          disabled={isBusy}
-                          className="text-text-faint hover:text-blue p-1"
-                          aria-label="복제"
-                          title="이 결의서를 새 결의서로 복제 (날짜·작성자 자동 갱신)"
-                        >
-                          <Copy className="size-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDialog({ expense: r })}
-                          disabled={isBusy}
-                          className="text-text-faint hover:text-foreground p-1"
-                          aria-label="수정"
-                        >
-                          <Pencil className="size-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmDelete(r)}
-                          disabled={isBusy}
-                          className="text-text-faint hover:text-danger p-1"
-                          aria-label="삭제"
-                        >
-                          {isBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
-                        </button>
-                      </div>
+                      {canDuplicateRow(r) ? (
+                        <div className="flex items-center justify-end gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => handleDuplicate(r)}
+                            disabled={isBusy}
+                            className="text-text-faint hover:text-blue p-1"
+                            aria-label="복제"
+                            title="이 결의서를 새 결의서로 복제 (날짜·작성자 자동 갱신)"
+                          >
+                            <Copy className="size-3.5" />
+                          </button>
+                          {canEditRow(r) ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setDialog({ expense: r })}
+                                disabled={isBusy}
+                                className="text-text-faint hover:text-foreground p-1"
+                                aria-label="수정"
+                              >
+                                <Pencil className="size-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDelete(r)}
+                                disabled={isBusy}
+                                className="text-text-faint hover:text-danger p-1"
+                                aria-label="삭제"
+                              >
+                                {isBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                              </button>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </td>
                   </tr>
                 );
@@ -222,12 +266,13 @@ export function ExpensesTable({ rows, empty, toolbar }: { rows: ExpenseRow[]; em
         </DragScrollArea>
       )}
 
-      {dialog ? (
+      {canCreate && dialog ? (
         <ExpenseDialog expense={dialog.expense} onClose={() => setDialog(null)} />
       ) : null}
 
+      {/* 증빙 보기는 읽기 권한도 연다 — 유형 선택·업로드·삭제만 canEdit로 잠근다. */}
       {receiptsFor ? (
-        <ExpenseReceiptsModal expense={receiptsFor} onClose={() => setReceiptsFor(null)} />
+        <ExpenseReceiptsModal expense={receiptsFor} canEdit={canEditRow(receiptsFor)} onClose={() => setReceiptsFor(null)} />
       ) : null}
 
       <ConfirmDialog

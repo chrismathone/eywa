@@ -43,12 +43,15 @@ export function MeetingReportAccordion({
   editedBy,
   editedAt,
   modelVersion,
+  canWrite,
 }: {
   report: MeetingReportSection;
   meetingId: string;
   editedBy?: string | null;
   editedAt?: string | null;
   modelVersion?: string | null;
+  /** 섹션 수정 권한 — 페이지가 updateMeetingReportSection과 같은 canWriteTenant("meetings")로 계산. 거짓이면 '수정' 칩·초안 배너가 없다. */
+  canWrite: boolean;
 }) {
   // 분석을 생성한 AI 모델의 짧은 라벨(원시 id 아님). 모델을 번갈아 쓰므로 직원이 확인 가능하게 노출.
   const modelLabel = modelDisplayLabel(modelVersion);
@@ -77,6 +80,8 @@ export function MeetingReportAccordion({
   const localDraft = useStateDraft({
     scope: `meeting-report:${meetingId}`,
     snapshot: draftSnapshot,
+    enabled: canWrite, // 읽기 권한이면 되살릴 편집이 없다
+
     hasContent: (s) => s.editing !== null && s.draft.trim() !== s.base.trim(),
   });
 
@@ -147,11 +152,13 @@ export function MeetingReportAccordion({
 
   return (
     <div className="space-y-2">
-      <DraftBanner
-        savedAt={localDraft.draftSavedAt}
-        onRestore={restoreSectionDraft}
-        onDiscard={localDraft.discard}
-      />
+      {canWrite ? (
+        <DraftBanner
+          savedAt={localDraft.draftSavedAt}
+          onRestore={restoreSectionDraft}
+          onDiscard={localDraft.discard}
+        />
+      ) : null}
       {/* 복구 폐기 안내 — 편집 UI가 닫혀 있을 때도 보이게 배너 자리 아래에 표시. */}
       {error && !editing ? <p className="text-danger text-xs">{error}</p> : null}
       <div className="flex items-center justify-between gap-2">
@@ -205,7 +212,7 @@ export function MeetingReportAccordion({
             </button>
             {isOpen ? (
               <div className="border-line border-t px-4 py-3">
-                {isEditing ? (
+                {isEditing && canWrite ? (
                   <div className="space-y-2">
                     <textarea
                       value={draft}
@@ -240,24 +247,27 @@ export function MeetingReportAccordion({
                   </div>
                 ) : (
                   <div className="group relative">
-                    <button
-                      type="button"
-                      onClick={() => startEdit(section.key)}
-                      title="이 섹션 수정"
-                      className="border-line text-text-faint hover:text-primary hover:bg-bg-soft absolute top-0 right-0 inline-flex items-center gap-1 rounded-md border bg-card/80 px-1.5 py-0.5 text-xs opacity-0 transition group-hover:opacity-100"
-                    >
-                      <Pencil className="size-3" /> 수정
-                    </button>
+                    {/* 읽기 권한이면 '수정' 칩이 없다(원장 2026-11-05) — 칩 자리 여백(pr-16)도 함께 걷는다. */}
+                    {canWrite ? (
+                      <button
+                        type="button"
+                        onClick={() => startEdit(section.key)}
+                        title="이 섹션 수정"
+                        className="border-line text-text-faint hover:text-primary hover:bg-bg-soft absolute top-0 right-0 inline-flex items-center gap-1 rounded-md border bg-card/80 px-1.5 py-0.5 text-xs opacity-0 transition group-hover:opacity-100"
+                      >
+                        <Pencil className="size-3" /> 수정
+                      </button>
+                    ) : null}
                     {/* pr-16(64px) = 위 '수정' 칩 실측 폭(border 2 + px-1.5 12 + size-3 12 + gap-1 4 + text-xs 14px×2자 28 = 58px) 이상 — 2026-09-08 v5 글자 기준 실측. 두 곳 같은 값(빈 상태도 겹친다) */}
                     {body ? (
                       <RichText
                         text={body}
                         bulletize={section.list}
-                        className="text-foreground space-y-1.5 pr-16 text-sm leading-relaxed"
+                        className={`text-foreground space-y-1.5 text-sm leading-relaxed ${canWrite ? "pr-16" : ""}`}
                       />
                     ) : (
-                      <p className="text-text-faint pr-16 text-sm italic">
-                        (내용 없음 — 수정으로 채울 수 있습니다)
+                      <p className={`text-text-faint text-sm italic ${canWrite ? "pr-16" : ""}`}>
+                        {canWrite ? "(내용 없음 — 수정으로 채울 수 있습니다)" : "(내용 없음)"}
                       </p>
                     )}
                   </div>

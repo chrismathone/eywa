@@ -6,14 +6,14 @@ import { SectionForm, SettingsCard } from "./section-form";
 import { TextAreaField, TextField } from "./fields";
 import { useModuleOn } from "@/features/owner/operations-context";
 
-export function NotificationsSection({ initial }: { initial: NotificationsSettings }) {
+export function NotificationsSection({ initial, readOnly = false }: { initial: NotificationsSettings; readOnly?: boolean }) {
   const [n, setN] = useState<NotificationsSettings>(initial);
   const set = (patch: Partial<NotificationsSettings>) => setN((prev) => ({ ...prev, ...patch }));
   // 알림톡 발신키는 키오스크(등하원 알림) 기능의 폴백이다 — 키오스크가 꺼진 학원엔 카드가 없다(2026-09-30). 값은 state에 남는다.
   const kioskOn = useModuleOn("kiosk");
 
   return (
-    <SectionForm section="notifications" payload={n}>
+    <SectionForm section="notifications" payload={n} readOnly={readOnly}>
       <div className="grid items-start gap-4 xl:grid-cols-2">
       {/* 폴백 소스: 전용 설정(키오스크 설정)이 비어 있으면 아래 값이 쓰인다(provider.ts).
           ⚠️ kakaoChannelId(@채널)는 발송 경로(pfId+템플릿)에서 안 쓰여 대응 DB 컬럼이 없으므로 입력 숨김(상태·저장은 보존).

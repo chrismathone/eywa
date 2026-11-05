@@ -283,6 +283,9 @@ export default async function ClassDetailPage({
                 // 단체 배정 목록의 학교·학년 표기·검색(원장 2026-09-18 — 특강은 학교·학년 단위로 모은다).
                 school: s.school,
               }))}
+              // 배정 창은 students full로도 열린다 — 그 안의 '반이동'은 서버(moveEnrollmentsBatch)가 classes full만
+              // 받으므로 같은 판정으로 따로 내린다(수업목록 '읽기'면 토글을 그리지 않는다, lib/write-lock.ts).
+              allowTransfer={classLevel === "full"}
             />
           ) : null}
           {canEditClass ? (

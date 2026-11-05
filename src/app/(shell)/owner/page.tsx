@@ -46,6 +46,7 @@ import { EvaluationFace } from "./_components/evaluation/evaluation-face";
 import { getContributionGate } from "@/features/student-contribution/server/access";
 import { ContributionSettingsFace } from "@/features/student-contribution/components/settings-face";
 import { getPortfolioGate } from "@/features/teacher-portfolio/server/queries";
+import { writeLockedNote } from "@/lib/write-lock";
 
 export const dynamic = "force-dynamic";
 
@@ -70,6 +71,14 @@ function facesFor(canReadAudit: boolean, showModules: boolean, showMakeups: bool
  * 고치는 것이 없거나(감사로그), 다른 권한으로 버튼을 세우는 면이다(데이터 정리 · 데이터 가져오기).
  */
 const SELF_GATED_TABS: ReadonlySet<OwnerTab | "modules"> = new Set(["data", "import", "audit", "evaluation", "contribution"]);
+
+/**
+ * 읽기 권한 안내를 **면이 직접** 적는 면 — 섹션 폼(SectionForm readOnly)이나 팝업 공지 목록이 `writeLockedNote`를 제자리에 적는다.
+ * 페이지 위의 안내 한 줄은 그 밖의 면(연동 · 역할·권한)에만 세운다 — 두 번 적지 않는다.
+ */
+const FACE_WRITES_OWN_NOTE: ReadonlySet<OwnerTab | "modules"> = new Set([
+  "profile", "operations", "subjects", "makeups", "billing", "notifications", "consultations", "navigation", "modules", "dashboard", "popups",
+]);
 
 /** 요청한 면 + 학원 설정 → 실제로 보일 면. '기능' 면은 일반판 학원에서만 열리고, 침산에선 기본 면(프로필)으로 떨어진다. */
 function effectiveTab(sp: Sp, settings: { preset: "chinsan" | "generic" }): OwnerTab | "modules" {
@@ -241,11 +250,13 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         <OwnerTabBar faces={facesFor(canReadAudit, isGenericTenant(settings), showMakeups, showEvaluation, showContribution).filter((face) => allowedTabs.get(face.key))} active={tab} />
       </PageMaximizeToolbar>
 
-      {/* 운영 체계·과목 운영 면은 섹션 폼이 같은 안내를 직접 적는다(읽기 전용 폼) — 두 번 적지 않는다. */}
+      {/* 섹션 폼 면(FACE_WRITES_OWN_NOTE)은 폼이 같은 안내를 직접 적는다(읽기 전용 폼) — 두 번 적지 않는다. */}
       {/* 자체 판정을 하는 면(SELF_GATED_TABS)은 설정 '읽기 전용' 안내도, 아래 fieldset 잠금도 받지 않는다. */}
-      {!canEditSettings && !showsOperations && !SELF_GATED_TABS.has(tab) ? <p className="text-text-faint text-xs">읽기 전용입니다.</p> : null}
+      {/* 🔴 읽기 권한이면 각 면이 저장·추가·삭제 단추를 **그리지 않는다**(원장 2026-11-05) — 판정은 위 canEditSettings 하나다
+          (저장 액션 saveOwnerSection과 같은 함수·같은 키). fieldset은 남은 입력칸을 잠그는 바닥이다. */}
+      {!canEditSettings && !FACE_WRITES_OWN_NOTE.has(tab) && !SELF_GATED_TABS.has(tab) ? <p className="text-text-faint text-xs">{writeLockedNote(menu)}</p> : null}
       <fieldset disabled={!canEditSettings} className="min-w-0 space-y-4 border-0 p-0">
-      {tab === "profile" ? <ProfileSection initial={settings.profile} /> : null}
+      {tab === "profile" ? <ProfileSection initial={settings.profile} readOnly={!canEditSettings} /> : null}
       {settingsUnreadable ? (
         <div className="bg-card border-line rounded-2xl border p-6">
           <p className="text-foreground text-sm font-bold">설정을 불러오지 못했습니다</p>
@@ -267,7 +278,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           하나 더 서 있던 것을 옮겼다(원장 2026-10-06). 원장 위만 바꾼다(저장 액션 `configureMakeupSettings`와 같은 선). */}
       {tab === "makeups" ? (
         canReadAudit ? (
-          <MakeupsSection initial={settings.makeups} />
+          <MakeupsSection initial={settings.makeups} readOnly={!canEditSettings} />
         ) : (
           <div className="bg-card border-line rounded-2xl border p-6">
             <p className="text-foreground text-sm font-bold">보강 운영은 원장만 바꿀 수 있습니다</p>
@@ -290,10 +301,10 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         />
       ) : null}
       {tab === "billing" ? (
-        <BillingSection initial={settings.billing} showEie={isModuleEnabled(settings.modules.disabled, "eie")} />
+        <BillingSection initial={settings.billing} showEie={isModuleEnabled(settings.modules.disabled, "eie")} readOnly={!canEditSettings} />
       ) : null}
-      {tab === "notifications" ? <NotificationsSection initial={settings.notifications} /> : null}
-      {tab === "consultations" ? <ConsultationsSection initial={settings.consultations} /> : null}
+      {tab === "notifications" ? <NotificationsSection initial={settings.notifications} readOnly={!canEditSettings} /> : null}
+      {tab === "consultations" ? <ConsultationsSection initial={settings.consultations} readOnly={!canEditSettings} /> : null}
       {tab === "permissions" ? (
         isMaster ? (
           // 못 읽었으면(permissionsSource 없음) 위의 '불러오지 못했습니다' 안내만 선다.
@@ -331,13 +342,14 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           // 개인별 메뉴 권한으로 강사 계정에게 연 메뉴는 강사뷰 편집기에 남긴다 · 지점에서 아무도 못 여는 메뉴는 편집기에 세우지 않는다(원장 2026-10-14 "없는 메뉴").
           teacherPersonal={navigationGates?.teacherPersonal}
           closedMenus={navigationGates?.closed}
+          readOnly={!canEditSettings}
         />
       ) : null}
       {/* '기능' 면 = 원장·총괄만 편집(saveOwnerSection·0281a 트리거와 같은 선) — 위임 계정엔 저장이 실패할 폼 대신 안내.
           판정은 감사로그 면과 같은 식(원장 또는 총괄)이라 canReadAudit을 그대로 쓴다. */}
       {tab === "modules" ? (
         canReadAudit ? (
-          <ModulesSection initial={settings.modules} />
+          <ModulesSection initial={settings.modules} readOnly={!canEditSettings} />
         ) : (
           <div className="bg-card border-line rounded-2xl border p-6">
             <p className="text-foreground text-sm font-bold">기능 켜기·끄기는 원장만 바꿀 수 있습니다</p>
@@ -351,7 +363,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           (원장 시점 전체 스냅샷)을 **읽지도 않는다** — 면을 감추는 게 아니라 조회 자체를 안 한다. */}
       {tab === "dashboard" ? (
         canReadAudit ? (
-          <DashboardFace settings={settings} />
+          <DashboardFace settings={settings} readOnly={!canEditSettings} />
         ) : (
           <div className="bg-card border-line rounded-2xl border p-6">
             <p className="text-foreground text-sm font-bold">대시보드 관리는 원장만 바꿀 수 있습니다</p>
@@ -361,7 +373,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           </div>
         )
       ) : null}
-      {tab === "popups" ? <PopupsFace /> : null}
+      {tab === "popups" ? <PopupsFace canWrite={canEditSettings} /> : null}
       {/* 연동 = 켜진 연동만 내부 탭(슬랙 · makeedu · 구글 시트) — 원장 2026-09-28 "세로 스크롤이 너무 길어짐". */}
       {tab === "sheets" ? (
         <IntegrationsFace
@@ -374,6 +386,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           }}
           page={page}
           isEmbed={isEmbed}
+          canEdit={canEditSettings}
         />
       ) : null}
       </fieldset>

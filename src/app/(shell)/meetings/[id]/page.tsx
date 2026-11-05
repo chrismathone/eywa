@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { AlertCircle, CheckSquare, Loader2, Mic, Scissors, Sparkles, Users } from "@/components/icons/aywa-icon-compat";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { toneColor } from "@/lib/design/semantic-color";
@@ -60,13 +61,15 @@ export default async function MeetingDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAccess("meetings");
+  const user = await requireAccess("meetings");
   const { id } = await params;
-  const meeting = await getMeetingById(id);
+  // 쓰기 판정 = 이 화면의 모든 변경 액션(제목·메모·AI 정리·재전사·삭제·섹션 수정·화자 지정)과 같은 함수.
+  // 읽기 권한이면 그 단추·편집기를 그리지 않는다(원장 2026-11-05 — src/lib/write-lock.ts). 인쇄·텍스트 저장은 읽기라 남긴다.
+  const [meeting, canWrite] = await Promise.all([getMeetingById(id), canWriteTenant(user.systemRole, "meetings")]);
   if (!meeting) notFound();
 
-  // 화자 지정용 직원 옵션 — 전사가 있을 때만 의미 있지만 쿼리가 가벼워 무조건 로드.
-  const staffOptions = meeting.transcription ? await getStaffOptions() : [];
+  // 화자 지정용 직원 옵션 — 전사가 있고 지정할 수 있을 때만(읽기 권한엔 편집기가 없다).
+  const staffOptions = meeting.transcription && canWrite ? await getStaffOptions() : [];
 
   const badge = STATUS_BADGE[meeting.processingStatus];
   const hasAudio = !!meeting.audioPath;
@@ -78,7 +81,7 @@ export default async function MeetingDetailPage({
   const hasTranscription = !!meeting.transcription;
   const hasNotepad = !!meeting.content?.trim();
   // 전사·메모 중 하나라도 있으면 "AI로 정리"(regenerate) 가능. 결과가 이미 있으면 "다시 생성" 라벨.
-  const canOrganize = (hasTranscription || hasNotepad) && !isProcessing;
+  const canOrganize = canWrite && (hasTranscription || hasNotepad) && !isProcessing;
   const organizeLabel = hasAiReport ? "AI 분석 다시 생성" : "AI로 정리";
 
   // B: 회의 종료 후 못 끈 뒷부분 잡음 꼬리가 분석에서 제외됐는지 — 저장된 화자 라벨로 재계산(분석 입력과 동일 함수).
@@ -103,7 +106,7 @@ export default async function MeetingDetailPage({
               </Pill>
             ) : null}
           </div>
-          <MeetingTitleEditor meetingId={meeting.id} title={meeting.title} />
+          <MeetingTitleEditor meetingId={meeting.id} title={meeting.title} canWrite={canWrite} />
           <div className="text-muted-foreground flex flex-wrap items-center gap-3 text-sm">
             <span className="num">{formatTime(meeting.heldAt)}</span>
             {meeting.attendees.length > 0 ? (
@@ -149,7 +152,8 @@ export default async function MeetingDetailPage({
                   }
                 : null
             }
-            canRetry={hasAudio && hasAiReport && !isProcessing}
+            canRetry={canWrite && hasAudio && hasAiReport && !isProcessing}
+            canDelete={canWrite}
           />
         </div>
       </header>
@@ -164,7 +168,7 @@ export default async function MeetingDetailPage({
           <p className="text-muted-foreground mt-2 text-sm">
             {meeting.processingError ?? "알 수 없는 오류"}
           </p>
-          {hasAudio ? <MeetingRetryButton meetingId={meeting.id} /> : null}
+          {hasAudio && canWrite ? <MeetingRetryButton meetingId={meeting.id} /> : null}
         </section>
       ) : null}
 
@@ -193,7 +197,7 @@ export default async function MeetingDetailPage({
       {/* 메모장 — 회의 중/후 직접 작성한 메모(편집 가능). 저장 후 'AI로 정리'로 전사와 함께 분석.
           처리 중(전사/분석)엔 숨겨 화면 잡음을 줄인다(완료·대기·실패 상태에서 편집). */}
       {!isProcessing ? (
-        <MeetingNotepad meetingId={meeting.id} content={meeting.content ?? ""} />
+        <MeetingNotepad meetingId={meeting.id} content={meeting.content ?? ""} canWrite={canWrite} />
       ) : null}
 
       {/* 8-section AI report */}
@@ -226,6 +230,7 @@ export default async function MeetingDetailPage({
             editedBy={meeting.aiReportEditedBy}
             editedAt={meeting.aiReportEditedAt}
             modelVersion={meeting.aiModelVersion}
+            canWrite={canWrite}
           />
         </section>
       ) : null}
@@ -301,8 +306,8 @@ export default async function MeetingDetailPage({
               </span>
             </p>
           ) : null}
-          {/* 화자 지정 — 화자 라벨이 있을 때만(diarization 된 회의). 직원 연결로 교정. */}
-          {meeting.speakerLabels && meeting.speakerLabels.length > 0 ? (
+          {/* 화자 지정 — 화자 라벨이 있고(diarization 된 회의) 쓰기 권한이 있을 때만(updateMeetingSpeakers와 같은 판정). 직원 연결로 교정. */}
+          {canWrite && meeting.speakerLabels && meeting.speakerLabels.length > 0 ? (
             <SpeakerEditor
               meetingId={meeting.id}
               utterances={meeting.speakerLabels}

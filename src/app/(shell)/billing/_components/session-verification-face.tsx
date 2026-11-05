@@ -49,6 +49,7 @@ export async function SessionVerificationFace({
   query,
   status,
   params = {},
+  canWrite,
 }: {
   period?: string;
   subject?: string;
@@ -56,6 +57,8 @@ export async function SessionVerificationFace({
   query?: string;
   status?: string;
   params?: Record<string, string | undefined>;
+  /** '청구 분배 기록 저장'을 세울지 — 부모(SessionTermsFace)가 saveTeacherSplits와 같은 canWriteTenant(billing)로 정한 값. */
+  canWrite: boolean;
 }) {
   const p = period && /^\d{4}-\d{2}$/.test(period) ? period : currentPeriod();
   const [view, settings, savedSplits] = await Promise.all([
@@ -259,7 +262,7 @@ export async function SessionVerificationFace({
               key=period: 월 이동 시 useActionState(저장 완료/에러 메시지)를 리셋(적대 리뷰 픽스). */}
           {savedSplits !== null || liveSplits.rowCount > 0 ? (
             <section className="border-line overflow-hidden rounded-2xl border">
-              <SplitsSnapshotPanel key={p} period={p} live={liveSplits} saved={savedSplits} />
+              <SplitsSnapshotPanel key={p} period={p} live={liveSplits} saved={savedSplits} canWrite={canWrite} />
             </section>
           ) : null}
 

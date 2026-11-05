@@ -6,12 +6,12 @@ import { useSubjectMaps } from "@/features/owner/operations-context";
 import { SectionForm, SettingsCard } from "./section-form";
 import { Input } from "@/components/ui/input";
 
-export function MakeupsSection({ initial }: { initial: MakeupSettings }) {
+export function MakeupsSection({ initial, readOnly = false }: { initial: MakeupSettings; readOnly?: boolean }) {
   const [mode, setMode] = useState(initial.mode);
   const subjects = useSubjectMaps();
   const payload: MakeupSettings = { ...initial, mode, allowAdditional: false };
   return (
-    <SectionForm section="makeups" payload={payload}>
+    <SectionForm section="makeups" payload={payload} readOnly={readOnly}>
       <SettingsCard title="보강관리 운영" description="접수·일정·실시 검토를 별도 장부에서 관리합니다." span2>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="space-y-2">

@@ -17,6 +17,9 @@ import { NO_LESSON_LABEL } from "@/features/billing/session-terms/month-roster";
 import { confirmableTermRow, filterSessionTermRows, shareClassIdsOf, type TermOnlyKey } from "@/features/billing/session-terms/term-filter";
 import { SessionVerificationFace } from "./session-verification-face";
 import { SessionPanels } from "./session-panels";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { writeLockedNote } from "@/lib/write-lock";
 
 const PAGE_SIZE = 25; // 반(그룹) 단위 페이지
 
@@ -58,9 +61,12 @@ export async function SessionTermsFace({
   params?: Record<string, string | undefined>;
 }) {
   const p = period && /^\d{4}-\d{2}$/.test(period) ? period : currentPeriod();
+  // 회차 확정·해제·삭제·계획 갱신·배분·이월·메모·청구 분배 기록 — 서버 액션이 전부 canWriteTenant(billing)를 본다.
+  // 화면도 같은 함수로 정해 읽기 권한이면 쓰기 단추를 그리지 않는다(원장 2026-11-05 — 저장해야 거절되던 자리).
+  const canWrite = await getCurrentUser().then((u) => (u ? canWriteTenant(u.systemRole, "billing") : false));
   if (panel === "verify") return <div className="space-y-4">
     <SessionPanels period={p} params={params} active="verify" />
-    <SessionVerificationFace period={p} subject={subject} page={page} query={q} status={status} params={params} />
+    <SessionVerificationFace period={p} subject={subject} page={page} query={q} status={status} params={params} canWrite={canWrite} />
   </div>;
   // JJ실 줄 재료는 표 조회와 독립이라 나란히 읽는다(B4) — 권한이 없거나 못 읽으면 null(줄만 안 선다).
   const [view, settings, seatShare] = await Promise.all([getSessionTermsView(p, undefined, { lastMonth: true }), getTenantSettings(), loadSeatShareSummary(p)]);
@@ -173,13 +179,17 @@ export async function SessionTermsFace({
           {noLessonCount > 0 ? ` · ${NO_LESSON_LABEL.label} ${noLessonCount}` : null}
           {duplicateCount > 0 ? ` · 청구서 중복 ${duplicateCount}` : null}
         </span>
-        <div className="ml-auto flex items-center gap-1">
-          <RefreshPlanButton period={p} />
-        </div>
-        <Link href="/owner?tab=billing" className="text-primary text-sm underline-offset-2 hover:underline">
+        {canWrite ? (
+          <div className="ml-auto flex items-center gap-1">
+            <RefreshPlanButton period={p} />
+          </div>
+        ) : null}
+        <Link href="/owner?tab=billing" className={`text-primary text-sm underline-offset-2 hover:underline ${canWrite ? "" : "ml-auto"}`}>
           단가 설정
         </Link>
       </div>
+      {/* 읽기 권한 — 미확정 줄의 시수·단가 칸은 값(예정·지난 달 기준)이 차 있어 placeholder로 알릴 수 없다 → 표 위 한 줄. */}
+      {!canWrite ? <p className="text-text-dim px-1 text-xs">{writeLockedNote("billing")}</p> : null}
 
       {/* 규칙 설명(N1/N2)은 지워선 안 되는 사실이라 접힌 2차로(§4). */}
       <FaceNote>
@@ -211,25 +221,31 @@ export async function SessionTermsFace({
         <div className="border-border text-text-dim rounded-2xl border border-dashed p-10 text-center text-sm">
           {/* 이 달 회차 자체가 없으면 필터 문구보다 '계획 갱신' 안내가 먼저 — "미확정 항목이 없습니다"는 전부 확정된 것처럼 읽힌다(리뷰 2026-09-17). */}
           {allRows.length === 0 ? (
-            <>
-              이 달의 회차 데이터가 없습니다. 위의 <b>계획 갱신</b>을 누르면 청구서 기준으로 반별 계획 회차가
-              생성됩니다.
-            </>
+            canWrite ? (
+              <>
+                이 달의 회차 데이터가 없습니다. 위의 <b>계획 갱신</b>을 누르면 청구서 기준으로 반별 계획 회차가
+                생성됩니다.
+              </>
+            ) : (
+              <>이 달의 회차 데이터가 없습니다.</>
+            )
           ) : onlyKeys.length > 0 ? (
             <>보기 필터({onlyKeys.map((key) => ONLY_LABEL[key]).join(" · ")})에 맞는 항목이 없습니다.</>
           ) : query ? (
             <>“{query}” 검색 결과가 없습니다. 검색어를 조정해 보세요.</>
-          ) : (
+          ) : canWrite ? (
             <>
               이 달의 회차 데이터가 없습니다. 위의 <b>계획 갱신</b>을 누르면 청구서 기준으로 반별 계획 회차가
               생성됩니다.
             </>
+          ) : (
+            <>이 달의 회차 데이터가 없습니다.</>
           )}
         </div>
       ) : (
         <>
           {/* 검색·과목·미배분·미확정 필터로 한 반의 일부만 보일 때도 반 일괄 확정은 보이는 학생에게만(안 보이는 확정값을 덮지 않게 — 리뷰 2026-09-17). */}
-          <SessionTermGroups key={p} groups={groups} catalog={view.catalog} period={p} seatShare={seatShare} visibleOnly={pendingOnly || openOnly || query !== "" || activeSubject !== null} />
+          <SessionTermGroups key={p} groups={groups} catalog={view.catalog} period={p} seatShare={seatShare} visibleOnly={pendingOnly || openOnly || query !== "" || activeSubject !== null} canWrite={canWrite} />
           <Pagination page={curPage} totalPages={totalPages} total={allGroups.length} hrefForPage={pageHref} />
         </>
       )}

@@ -45,6 +45,10 @@ import {
   validateLeaveRange,
   type LeaveKind,
 } from "@/features/leave/request-days";
+import { writeLockedNote, writeLockedPlaceholder } from "@/lib/write-lock";
+
+/** 읽기 권한 칸의 안내(placeholder) — 판정은 페이지가 기안 액션과 같은 canWriteTenant("approvals")로 내린다. */
+const LOCKED_PH = writeLockedPlaceholder("approvals");
 
 /**
  * 결재 문서 작성 — **하이웍스 작성 화면 그대로 한 장의 연속 문서**(원장 2026-08-14:
@@ -65,6 +69,10 @@ import {
  *
  * ⚠️ 잔여·결재선 검증의 근거는 서버(line.ts·각 submit 액션)다 — 화면은 미리보기·조기경고([[#77]]).
  * ⚠️ 임시저장·인쇄미리보기·보존연한·보안등급은 흉내 내지 않는다(대응 데이터가 없다 — 죽은 컨트롤 금지).
+ *
+ * `canWrite`(필수) = 기안 액션(requireApprovalWriter)과 같은 canWriteTenant("approvals") — 거짓이면(읽기 권한으로
+ * 주소에 바로 들어온 경우) 칸은 전부 비활성 + 권한 안내이고, '결재 올리기'·결재선 저장/삭제는 그리지 않는다
+ * (원장 2026-11-05 — src/lib/write-lock.ts).
  */
 
 /** Select.Root items — SelectValue가 값 대신 이 라벨을 그린다(base-ui). */
@@ -72,7 +80,7 @@ const FORM_ITEMS = Object.fromEntries(APPROVAL_FORMS.map((f) => [f, APPROVAL_FOR
 const KIND_ITEMS = Object.fromEntries(LEAVE_KINDS.map((k) => [k, LEAVE_KIND_LABEL[k]]));
 
 const inputClass =
-  "border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary rounded-lg border px-3 py-1.5 text-sm outline-none transition";
+  "border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary rounded-lg border px-3 py-1.5 text-sm outline-none transition disabled:cursor-not-allowed disabled:opacity-60";
 
 /** 섹션 한 줄 — 좌측 라벨 칸 + 우측 내용(하이웍스 작성 화면의 행 문법). */
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -93,12 +101,15 @@ export function DraftComposer({
   periodEnd,
   remaining,
   today,
+  canWrite,
 }: {
   drafterName: string;
   drafterJobTitle: string | null;
   candidates: ApprovalPerson[];
   templates: ApprovalLineTemplate[];
   initialApproverIds: string[];
+  /** 기안 권한 — 거짓이면 읽기 전용 양식(칸 비활성 + 안내, 제출·저장 단추 없음). */
+  canWrite: boolean;
   /** 연차 구간 끝 — 입사일 미등록이면 null. **휴가신청서만** 막고 다른 양식은 기안할 수 있어야 한다. */
   periodEnd: string | null;
   /** 잔여 연차. null = 사용 조회 실패로 셀 수 없음(E10) — 화면 사전 경고만 끄고, 판정은 서버가 한다. */
@@ -192,9 +203,14 @@ export function DraftComposer({
               : null
           : null;
   const blocked = !!detailProblem || approvers.length === 0;
+  const locked = !canWrite;
 
   return (
-    <form action={action}>
+    // 읽기 권한이면 제출 단추가 없고 칸도 잠겨 있지만, 제출 경로를 하나라도 남기지 않는다(서버도 막는다).
+    <form action={action} onSubmit={locked ? (e) => e.preventDefault() : undefined}>
+      {locked ? (
+        <p className="text-text-dim bg-bg-soft mb-3 rounded-lg px-3 py-2 text-sm">{writeLockedNote("approvals")}</p>
+      ) : null}
       <input type="hidden" name="approverIds" value={JSON.stringify(approvers)} />
       <input type="hidden" name="refIds" value={JSON.stringify(refs)} />
       {form === "leave" ? <input type="hidden" name="kind" value={kind} /> : null}
@@ -216,6 +232,7 @@ export function DraftComposer({
                         안 잘린다(인플레이스 absolute 팝오버 금지 규칙은 그대로 유효). */}
                     <Select
                       value={form}
+                      disabled={locked}
                       onValueChange={(v) => {
                         if (!v) return;
                         setForm(v as ApprovalForm);
@@ -270,11 +287,13 @@ export function DraftComposer({
             setApprovers={setApprovers}
             refs={refs}
             setRefs={setRefs}
+            locked={locked}
           />
           <TemplateControls
             templates={templates}
             approvers={approvers}
             refs={refs}
+            locked={locked}
             onApply={(t) => {
               setApprovers(t.approverIds.filter((x) => byId.has(x)));
               setRefs(t.refIds.filter((x) => byId.has(x)));
@@ -289,8 +308,12 @@ export function DraftComposer({
               <div className="border-line bg-bg-soft/50 text-text-dim rounded-lg border border-dashed px-4 py-6 text-center text-xs">
                 입사일이 등록되지 않아 연차를 계산할 수 없습니다 — 사무실(직원관리)에 입사일 등록을
                 요청하세요.
-                <br />
-                품의서·지출결의서·수입결의서는 지금도 기안할 수 있습니다.
+                {locked ? null : (
+                  <>
+                    <br />
+                    품의서·지출결의서·수입결의서는 지금도 기안할 수 있습니다.
+                  </>
+                )}
               </div>
             ) : (
               <>
@@ -300,6 +323,7 @@ export function DraftComposer({
                     {/* 드롭다운(원장 2026-08-19: 반반차 추가로 셋) — Portal 렌더라 잘림 없음. */}
                     <Select
                       value={kind}
+                      disabled={locked}
                       onValueChange={(v) => {
                         if (v) setKind(v as LeaveKind);
                       }}
@@ -327,6 +351,7 @@ export function DraftComposer({
                         setStart(e.target.value);
                         if (e.target.value > end) setEnd(e.target.value);
                       }}
+                      disabled={locked}
                       className={inputClass}
                       required
                     />
@@ -342,6 +367,7 @@ export function DraftComposer({
                         value={end}
                         min={start}
                         onChange={(e) => setEnd(e.target.value)}
+                        disabled={locked}
                         className={inputClass}
                         required
                       />
@@ -358,8 +384,9 @@ export function DraftComposer({
                   {/* 표·서식이 필요해 리치 에디터(원장 요구). 무거운 라이브러리라 지연로드된다(B5). */}
                   <RichEditor
                     name="reason"
-                    placeholder="사유를 적어 주세요 — 표·목록·서식을 쓸 수 있습니다"
+                    placeholder={locked ? LOCKED_PH : "사유를 적어 주세요 — 표·목록·서식을 쓸 수 있습니다"}
                     ariaLabel="사유"
+                    disabled={locked}
                   />
                 </div>
               </>
@@ -373,12 +400,15 @@ export function DraftComposer({
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   maxLength={80}
+                  disabled={locked}
                   placeholder={
-                    form === "expense"
-                      ? "예: 8월 교재 구입비 지출"
-                      : form === "income"
-                        ? "예: 여름 특강 교재 판매 수입"
-                        : "예: 겨울 특강 교재 구매 품의"
+                    locked
+                      ? LOCKED_PH
+                      : form === "expense"
+                        ? "예: 8월 교재 구입비 지출"
+                        : form === "income"
+                          ? "예: 여름 특강 교재 판매 수입"
+                          : "예: 겨울 특강 교재 구매 품의"
                   }
                   className={`${inputClass} w-full max-w-[520px]`}
                   required
@@ -395,7 +425,8 @@ export function DraftComposer({
                           key={c}
                           type="button"
                           onClick={() => setCategory(c)}
-                          className={`rounded-full border px-2.5 py-0.5 text-xs transition ${
+                          disabled={locked}
+                          className={`rounded-full border px-2.5 py-0.5 text-xs transition disabled:cursor-not-allowed disabled:opacity-60 ${
                             category === c
                               ? "border-primary bg-primary text-primary-foreground font-medium"
                               : "border-line bg-card text-text-dim hover:border-primary/50 hover:text-foreground"
@@ -416,7 +447,10 @@ export function DraftComposer({
                         onChange={(e) =>
                           setAmountDigits(e.target.value.replace(/[^0-9]/g, "").slice(0, 10))
                         }
+                        // 좁은 칸(140px)이라 안내 문구가 잘린다 — 읽기 권한 안내는 양식 위 한 줄이 맡고 여기는 툴팁만.
                         placeholder="0"
+                        title={locked ? LOCKED_PH : undefined}
+                        disabled={locked}
                         className={`${inputClass} w-[140px] text-right`}
                         aria-label="금액(원)"
                         required
@@ -431,6 +465,7 @@ export function DraftComposer({
                       name={form === "expense" ? "spendDate" : "incomeDate"}
                       value={moneyDate}
                       onChange={(e) => setMoneyDate(e.target.value)}
+                      disabled={locked}
                       className={inputClass}
                       required
                     />
@@ -445,13 +480,16 @@ export function DraftComposer({
                 <RichEditor
                   name="body"
                   placeholder={
-                    form === "expense"
-                      ? "지출 내역을 적어 주세요 — 품목·수량 표를 넣을 수 있습니다"
-                      : form === "income"
-                        ? "수입 내역을 적어 주세요 — 항목·수량 표를 넣을 수 있습니다"
-                        : "내용을 적어 주세요 — 표·목록·서식을 쓸 수 있습니다"
+                    locked
+                      ? LOCKED_PH
+                      : form === "expense"
+                        ? "지출 내역을 적어 주세요 — 품목·수량 표를 넣을 수 있습니다"
+                        : form === "income"
+                          ? "수입 내역을 적어 주세요 — 항목·수량 표를 넣을 수 있습니다"
+                          : "내용을 적어 주세요 — 표·목록·서식을 쓸 수 있습니다"
                   }
                   ariaLabel="본문"
+                  disabled={locked}
                 />
               </div>
             </>
@@ -459,7 +497,9 @@ export function DraftComposer({
         </Row>
       </article>
 
-      {/* 하단 — 요약 + 상신(문서 판 바깥, 하이웍스의 하단 액션 바 대응) */}
+      {/* 하단 — 요약 + 상신(문서 판 바깥, 하이웍스의 하단 액션 바 대응). 읽기 권한이면 바째 없다 —
+          "제목을 입력하세요"·"결재자를 지정하세요" 같은 재촉과 '결재 올리기'가 할 수 없는 일을 권한다(안내는 양식 위 한 줄). */}
+      {locked ? null : (
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3 px-1">
         <p className="text-sm">
           {form === "leave" && leaveReady && !detailProblem ? (
@@ -486,6 +526,7 @@ export function DraftComposer({
         </p>
         <SubmitButton blocked={blocked} />
       </div>
+      )}
     </form>
   );
 }
@@ -534,6 +575,7 @@ function LineTable({
   setApprovers,
   refs,
   setRefs,
+  locked,
 }: {
   drafterName: string;
   drafterJobTitle: string | null;
@@ -543,6 +585,8 @@ function LineTable({
   setApprovers: React.Dispatch<React.SetStateAction<string[]>>;
   refs: string[];
   setRefs: React.Dispatch<React.SetStateAction<string[]>>;
+  /** 읽기 권한 — [+]·[지정] 단추를 잠그고 빈 칸 안내를 권한 안내로 바꾼다. */
+  locked: boolean;
 }) {
   const roles = stepRoleLabels(approvers.length);
   const [picker, setPicker] = useState<null | "approver" | "ref">(null);
@@ -595,7 +639,7 @@ function LineTable({
             </th>
             {approvers.length === 0 ? (
               <td rowSpan={3} className="border-line text-text-faint min-w-[180px] border px-4 text-xs">
-                [+]를 눌러 결재자를 지정하세요
+                {locked ? LOCKED_PH : "[+]를 눌러 결재자를 지정하세요"}
               </td>
             ) : (
               approvers.map((id) => (
@@ -612,9 +656,10 @@ function LineTable({
               <button
                 type="button"
                 onClick={() => setPicker("approver")}
-                className="border-line text-text-dim hover:border-primary/60 hover:text-primary mx-auto flex size-9 items-center justify-center rounded-lg border border-dashed transition"
+                disabled={locked}
+                className="border-line text-text-dim hover:border-primary/60 hover:text-primary mx-auto flex size-9 items-center justify-center rounded-lg border border-dashed transition disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="결재선 지정·순서 변경"
-                title="결재선 지정·순서 변경"
+                title={locked ? LOCKED_PH : "결재선 지정·순서 변경"}
               >
                 <EyIcon name={approvers.length > 0 ? "edit" : "plus"} size={15} />
               </button>
@@ -659,13 +704,14 @@ function LineTable({
                 <button
                   type="button"
                   onClick={() => setPicker("ref")}
-                  className="border-line text-text-dim hover:border-blue/60 hover:text-blue flex size-6 items-center justify-center rounded-lg border border-dashed transition"
+                  disabled={locked}
+                  className="border-line text-text-dim hover:border-blue/60 hover:text-blue flex size-6 items-center justify-center rounded-lg border border-dashed transition disabled:cursor-not-allowed disabled:opacity-40"
                   aria-label="참조자 지정"
-                  title="참조자 지정"
+                  title={locked ? LOCKED_PH : "참조자 지정"}
                 >
                   <EyIcon name={refs.length > 0 ? "edit" : "plus"} size={12} />
                 </button>
-                {refs.length === 0 ? (
+                {refs.length === 0 && !locked ? (
                   <span className="text-text-faint text-xs">결재 없이 열람만 — 없어도 됩니다</span>
                 ) : null}
               </span>
@@ -674,7 +720,7 @@ function LineTable({
         </tbody>
       </table>
 
-      {picker ? (
+      {picker && !locked ? (
         <StaffPickerDialog
           mode={picker}
           candidates={candidates}
@@ -890,17 +936,23 @@ function StaffPickerDialog({
   );
 }
 
-/** 자주 쓰는 결재선 — 저장(이름) · 불러오기 · 삭제. 팝오버 없이 **칩 나열**. */
+/**
+ * 자주 쓰는 결재선 — 저장(이름) · 불러오기 · 삭제. 팝오버 없이 **칩 나열**.
+ * 읽기 권한(`locked`)이면 저장 칸·저장·× 삭제는 그리지 않고(saveLineTemplate·deleteLineTemplate가 같은 판정으로 거절),
+ * 불러오기 칩은 잠긴 결재선 칸을 채우는 입력이라 비활성으로만 남긴다.
+ */
 function TemplateControls({
   templates,
   approvers,
   refs,
   onApply,
+  locked,
 }: {
   templates: ApprovalLineTemplate[];
   approvers: string[];
   refs: string[];
   onApply: (t: ApprovalLineTemplate) => void;
+  locked: boolean;
 }) {
   const [name, setName] = useState("");
   const [pending, startTransition] = useTransition();
@@ -947,27 +999,31 @@ function TemplateControls({
             <button
               type="button"
               onClick={() => onApply(t)}
-              className="text-foreground hover:text-primary"
+              disabled={locked}
+              className="text-foreground hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
               title={`결재 ${t.approverIds.length}단계${t.refIds.length ? ` · 참조 ${t.refIds.length}명` : ""}`}
             >
               {t.name}
             </button>
-            <button
-              type="button"
-              onClick={() => remove(t.id, t.name)}
-              disabled={busyDelete === t.id}
-              className="text-text-faint hover:text-danger"
-              aria-label={`저장된 결재선 ${t.name} 삭제`}
-            >
-              {busyDelete === t.id ? (
-                <Loader2 className="size-3 animate-spin" />
-              ) : (
-                <EyIcon name="close" size={11} />
-              )}
-            </button>
+            {locked ? null : (
+              <button
+                type="button"
+                onClick={() => remove(t.id, t.name)}
+                disabled={busyDelete === t.id}
+                className="text-text-faint hover:text-danger"
+                aria-label={`저장된 결재선 ${t.name} 삭제`}
+              >
+                {busyDelete === t.id ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : (
+                  <EyIcon name="close" size={11} />
+                )}
+              </button>
+            )}
           </span>
         ))
       )}
+      {locked ? null : (
       <span className="ml-auto inline-flex items-center gap-1.5">
         <input
           value={name}
@@ -987,6 +1043,7 @@ function TemplateControls({
           저장
         </Button>
       </span>
+      )}
     </div>
   );
 }

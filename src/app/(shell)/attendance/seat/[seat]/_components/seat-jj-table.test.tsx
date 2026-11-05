@@ -5,6 +5,7 @@ import type { SeatClassRoster } from "@/features/attendance/seat/server/queries"
 import type { SeatClassPlan } from "@/features/attendance/seat/server/jj-plan";
 import { ECS_PLAN_API } from "@/features/class-sheets/components/plan-api";
 import { SeatJjTable, type SeatPlanContext } from "./seat-jj-table";
+import { writeLockedPlaceholder } from "@/lib/write-lock";
 
 // 계획 블록이 서버 액션을 import한다 — 렌더 테스트라 호출은 안 하지만 모듈은 실려야 한다.
 vi.mock("@/features/class-sheets/server/actions", () => ({
@@ -214,5 +215,36 @@ describe("JJ실 출석부 진도(수업계획)", () => {
     expect((container.firstElementChild as HTMLElement).style.gridTemplateColumns).toBe(
       `repeat(2, minmax(min(100%, ${JJ_SEAT_COL_MIN_PX}px), 1fr))`,
     );
+  });
+});
+
+/** 자리 출석부 읽기 권한(원장 2026-11-05) — 쓰기 단추는 그리지 않고, 입력칸은 잠그고 권한을 말한다(write-lock.ts). */
+describe("JJ실 출석부 — 읽기 권한", () => {
+  const base = {
+    statusOf: () => null,
+    noteOf: () => null,
+    onSaveNote: vi.fn(),
+    showReason: true,
+    onSave: vi.fn(),
+    onSaveField: vi.fn(),
+    onFillClass: vi.fn(),
+    hints,
+    pending: false,
+  };
+
+  it("🔴 출결 세 단추 대신 상태 글자 · 입력칸은 잠기고 권한 안내 · '이 반 출석'은 없다", () => {
+    render(<SeatJjTable rosters={[roster]} {...base} readOnly writeLocked />);
+    expect(screen.queryByRole("button", { name: "이다윤A 출석" })).toBeNull();
+    expect(screen.getByLabelText("이다윤A 미체크")).toBeTruthy();
+    const words = screen.getByLabelText("이다윤A 누적 암기 단어수");
+    expect(words).toHaveProperty("disabled", true);
+    expect(words).toHaveAttribute("placeholder", writeLockedPlaceholder("seat_attendance"));
+    expect(screen.queryByText("이 반 출석")).toBeNull();
+  });
+
+  it("지난 날짜 잠금(권한은 있음)은 종전대로 잠긴 세 단추 — 사유가 권한이 아니다", () => {
+    render(<SeatJjTable rosters={[roster]} {...base} readOnly />);
+    expect(screen.getByRole("button", { name: "이다윤A 출석" })).toHaveProperty("disabled", true);
+    expect(screen.getByLabelText("이다윤A 누적 암기 단어수")).not.toHaveAttribute("placeholder");
   });
 });

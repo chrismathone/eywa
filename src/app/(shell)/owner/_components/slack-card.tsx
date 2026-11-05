@@ -8,9 +8,22 @@ import { ScheduleSection } from "./slack/schedule-section";
  * 슬랙 연동 카드(학원 설정 '연동' 면) — 슈퍼관리자가 '슬랙 알림 연결'을 켠 지점에만 선다.
  * aywa에서 일어나는 일(알림·활동 기록)을 규칙대로 슬랙 채널·1:1로 보낸다(2026-09-28, codex·grok 합의 설계).
  */
-export async function SlackCard() {
+export async function SlackCard({ canEdit = true }: { canEdit?: boolean }) {
   const state = await getSlackCardState();
   if (state.kind === "off") return null;
+  // 🔴 연동 설정이 '읽기'면(설정 액션 = slackGate(write) — canEdit과 같은 판정, page.tsx) 연결·발송 시간·규칙·사람 연결 편집부를
+  //    **그리지 않고** 지금 상태만 글로 보인다(원장 2026-11-05 — 잠긴 단추·칸을 늘어놓지 않는다).
+  if (state.kind !== "readonly" && state.kind !== "missing_table" && state.kind !== "error" && !canEdit) {
+    return (
+      <section className="border-border bg-card space-y-3 rounded-2xl border p-5" aria-label="슬랙 연동">
+        <h3 className="text-foreground text-sm font-bold">슬랙 연동</h3>
+        <p className="text-text-dim text-sm">
+          {state.connected ? `${state.teamName || "슬랙 워크스페이스"}에 연결되어 있습니다 · 발송 규칙 ${state.rules.length}개` : "아직 슬랙에 연결하지 않았습니다."}
+        </p>
+        {/* 권한 안내는 연동 면 위 한 줄(owner/page.tsx)이 이미 적는다 — 같은 문장을 또 적지 않는다(2026-11-05 리뷰). */}
+      </section>
+    );
+  }
 
   return (
     <section className="border-border bg-card space-y-5 rounded-2xl border p-5" aria-label="슬랙 연동">

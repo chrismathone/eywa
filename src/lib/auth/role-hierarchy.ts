@@ -10,7 +10,10 @@ export const ROLE_HIERARCHY: Record<SystemRole, number> = {
   counselor: 4,
   teacher: 5,
   viewer: 6,
-  student: 7,
+  // 아르바이트 = 열람보다 아래(2026-11-05). DB 트리거 guard_user_privilege_columns는 parttime을 따로 적지 않아
+  // 모르는 역할 = 99(가장 아래)로 본다 — 숫자는 다르지만 '열람보다 아래'라는 방향은 같다(이메일·재직 상태 변경 위계에만 쓰임).
+  parttime: 7,
+  student: 8,
 };
 
 // master 표시 라벨 = "원장"(테넌트 소유자) — 사용자 결정 2026-07-07(2026-07-02 "owner" 통일을 정정).
@@ -23,6 +26,7 @@ export const ROLE_LABEL: Record<SystemRole, string> = {
   counselor: "상담사",
   teacher: "강사",
   viewer: "참관",
+  parttime: "아르바이트",
   student: "학생",
 };
 

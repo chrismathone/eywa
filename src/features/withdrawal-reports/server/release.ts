@@ -15,7 +15,7 @@ const NONE: ReleaseResult = { released: 0, blocked: 0, failed: 0 };
 const SYSTEM_ACTOR = "시스템(데스크 환불 완료 확인)";
 
 /**
- * **데스크 환불이 끝난 퇴원보고서 묶음을 처리**한다(원장 2026-11-03 · DB `release_withdrawal_report_refunds` s2_0024) —
+ * **데스크 환불이 끝난 퇴원보고서 묶음을 처리**한다(원장 2026-11-03 · DB `release_withdrawal_report_refunds` s2_0025) —
  * 관리자 승인은 끝났고 보고서에서 요청한 환불만 남아 기다리던 묶음(또는 처리일이 된 예약)을 지금 처리한다(미래 날짜면 예약 · 정보가 바뀌었으면 재검토).
  * 부르는 곳: 수납 환불 요청서에 환불완료일자를 처음 넣었을 때 · 요청서를 지웠을 때(그 요청서 · 저장한 사람) · 처리일 cron(전체 · 시스템 — 안전망).
  * 묶음마다 감사로그(`withdrawal_report_update` · 작업 '데스크 환불 완료 · 처리' · 처리 결과)를 남기고, 처리 완료면 수학 퇴원 시트까지(승인 화면·cron과 같은 마무리).

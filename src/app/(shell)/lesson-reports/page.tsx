@@ -157,7 +157,7 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
       {inClassnote ? <FaceTabs faces={classnoteFaces} active={tab} ariaLabel="클래스노트 기능" level="secondary" /> : null}
 
       {tab === "queue" ? (
-        queue ? <ClassnoteQueueCard view={queue} /> :
+        queue ? <ClassnoteQueueCard view={queue} canSend={canSendReports} /> :
           <p className="text-text-faint text-sm">발송 현황을 불러올 수 없습니다.</p>
       ) : null}
 

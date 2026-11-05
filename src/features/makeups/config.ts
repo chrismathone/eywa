@@ -27,6 +27,6 @@ export function capMakeupMode(matrix: AccessMatrix, mode: MakeupSettings["mode"]
   if (mode !== "off") return matrix;
   return { ...matrix, makeups: {
     master: "none", admin: "none", manager: "none", teacher: "none",
-    counselor: "none", accountant: "none", viewer: "none", student: "none",
+    counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none",
   } };
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { writeLockedPlaceholder } from "@/lib/write-lock";
 import { FIELD } from "./form-bits";
 
 export type LessonValue = { progress: string; homework: string };
@@ -33,10 +34,18 @@ export function LessonsEditor({
   if (lessonNos.length === 0) {
     return (
       <p className="text-text-dim border-line-faint rounded-lg border px-3 py-6 text-center text-xs">
-        위 <b>차수</b>에 숫자를 넣으면 그만큼 진도·과제 칸이 바로 열립니다.
+        {/* 읽기 권한에게 '숫자를 넣으라'고 권하지 않는다(write-lock.ts — 빈 목록 문구도 읽기용으로). */}
+        {canWrite ? (
+          <>
+            위 <b>차수</b>에 숫자를 넣으면 그만큼 진도·과제 칸이 바로 열립니다.
+          </>
+        ) : (
+          "적어 둔 차수가 없습니다."
+        )}
       </p>
     );
   }
+  const lockedHint = canWrite ? undefined : writeLockedPlaceholder("textbooks");
 
   return (
     <div className="flex flex-col gap-2">
@@ -75,6 +84,7 @@ export function LessonsEditor({
                       value={v.progress}
                       onChange={(e) => onChange(no, "progress", e.target.value)}
                       disabled={!canWrite}
+                      placeholder={lockedHint}
                       maxLength={500}
                       aria-label={`${no}차수 진도`}
                       className={FIELD}
@@ -85,6 +95,7 @@ export function LessonsEditor({
                       value={v.homework}
                       onChange={(e) => onChange(no, "homework", e.target.value)}
                       disabled={!canWrite}
+                      placeholder={lockedHint}
                       maxLength={500}
                       aria-label={`${no}차수 과제`}
                       className={FIELD}

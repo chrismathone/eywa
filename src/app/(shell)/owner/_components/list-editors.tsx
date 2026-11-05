@@ -25,11 +25,15 @@ import { SUBJECT_SOLID, KNOWN_SUBJECT_KEYS, counselByClassTeacher } from "@/feat
 import { SUBJECT_COLOR_LABEL } from "@/features/owner/subject-color-label";
 import { WEEKDAY_GROUPING_OPTIONS } from "@/features/timetable/lib/weekday-groups";
 import { STATE_RESERVED_COLORS } from "@/lib/design/semantic-color";
+import { useLockedPlaceholder, useWriteLock } from "./write-lock-context";
 
 const cellCls =
   "border-line text-foreground min-w-0 rounded-md border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-primary";
 
+// 🔴 읽기 권한(쓰기 잠금)이면 추가·삭제·순서 이동 단추를 **그리지 않는다** — 비활성으로 남기면 쓸 수 있는 것처럼 읽힌다
+//    (원장 2026-11-05, `write-lock-context.tsx`). 입력칸은 폼의 fieldset이 잠그고 빈 칸 placeholder만 권한 안내로 바꾼다.
 function AddButton({ onClick, label }: { onClick: () => void; label: string }) {
+  if (useWriteLock().locked) return null;
   return (
     <button
       type="button"
@@ -42,6 +46,7 @@ function AddButton({ onClick, label }: { onClick: () => void; label: string }) {
 }
 
 function RemoveButton({ onClick }: { onClick: () => void }) {
+  if (useWriteLock().locked) return null;
   return (
     <button
       type="button"
@@ -68,6 +73,7 @@ export function StringListEditor({
   type?: "text" | "date";
 }) {
   const set = (i: number, v: string) => onChange(value.map((x, j) => (j === i ? v : x)));
+  const ph = useLockedPlaceholder();
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
@@ -77,7 +83,7 @@ export function StringListEditor({
               type={type}
               className={`${cellCls} ${type === "date" ? "w-[140px]" : "w-[110px]"}`}
               value={v}
-              placeholder={placeholder}
+              placeholder={ph(placeholder)}
               onChange={(e) => set(i, e.target.value)}
             />
             <RemoveButton onClick={() => onChange(value.filter((_, j) => j !== i))} />
@@ -136,6 +142,7 @@ export function SubjectListEditor({
     const l = value[i].label.trim().toLowerCase();
     return !!l && value.some((o, j) => j !== i && o.label.trim().toLowerCase() === l);
   };
+  const ph = useLockedPlaceholder();
 
   return (
     <div className="space-y-2">
@@ -160,7 +167,7 @@ export function SubjectListEditor({
               <input
                 className={`${cellCls} w-[110px] ${dup ? "border-danger focus:border-danger" : ""}`}
                 value={s.label}
-                placeholder="과목명 (예: 수학)"
+                placeholder={ph("과목명 (예: 수학)")}
                 onChange={(e) => set(i, { label: e.target.value })}
                 onBlur={() => finalizeKey(i)}
                 aria-invalid={dup}
@@ -301,6 +308,8 @@ function PeriodRow({
   onRemove: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const { locked } = useWriteLock();
+  const ph = useLockedPlaceholder();
   return (
     <div
       ref={setNodeRef}
@@ -313,17 +322,19 @@ function PeriodRow({
         isDragging ? "bg-bg-soft relative z-10 rounded-md opacity-90 shadow-sm" : ""
       }`}
     >
-      <button
-        type="button"
-        aria-label={`${row.label || "교시"} 순서 이동`}
-        title="끌어서 순서 변경"
-        // touch-none이 없으면 터치에서 스크롤이 드래그를 삼킨다(dnd-kit 요구).
-        className="text-text-faint hover:text-foreground shrink-0 cursor-grab touch-none rounded p-1 active:cursor-grabbing"
-        {...attributes}
-        {...listeners}
-      >
-        <GripVertical className="size-4" />
-      </button>
+      {locked ? null : (
+        <button
+          type="button"
+          aria-label={`${row.label || "교시"} 순서 이동`}
+          title="끌어서 순서 변경"
+          // touch-none이 없으면 터치에서 스크롤이 드래그를 삼킨다(dnd-kit 요구).
+          className="text-text-faint hover:text-foreground shrink-0 cursor-grab touch-none rounded p-1 active:cursor-grabbing"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="size-4" />
+        </button>
+      )}
       <input
         // 2026-09-08 v5 글자 기준 실측: text-sm 16px에서 placeholder '이름 없음(시간만)'이 ≈115px라
         // 110px 칸(안쪽 88px)에서 '이름 없음(시'로 끊겼다(input이라 말줄임도 없다) → 140px(필요 137px).
@@ -331,7 +342,7 @@ function PeriodRow({
         value={row.label}
         // 비워도 저장된다(2026-08-13) — 그 교시는 화면에서 이름 없이 시간대만 나온다. placeholder에
         // "1교시"를 두면 비운 칸이 "1교시로 저장될 것"처럼 보여 그 규칙이 안 보인다.
-        placeholder="이름 없음(시간만)"
+        placeholder={ph("이름 없음(시간만)")}
         title="비워 두면 시간표·시트에 이름 없이 시간대만 표시됩니다"
         onChange={(e) => onPatch({ label: e.target.value })}
       />
@@ -388,6 +399,7 @@ export function PeriodListEditor({
     if (from < 0 || to < 0) return;
     onChange(arrayMove(value, from, to));
   };
+  const { locked } = useWriteLock();
   return (
     <div className={`${periodStyles.list} space-y-2`}>
       <DndContext id={uid} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -410,7 +422,7 @@ export function PeriodListEditor({
           onClick={() => onChange([...value, { label: `${value.length + 1}교시`, startTime: "", endTime: "" }])}
           label="교시 추가"
         />
-        {value.length > 1 ? (
+        {value.length > 1 && !locked ? (
           <span className="text-text-faint text-xs">왼쪽 손잡이를 끌어 순서를 바꿉니다.</span>
         ) : null}
       </div>
@@ -427,6 +439,7 @@ export function HolidayListEditor({
 }) {
   const set = (i: number, patch: Partial<HolidaySetting>) =>
     onChange(value.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  const ph = useLockedPlaceholder();
   return (
     <div className="space-y-2">
       {value.map((h, i) => (
@@ -440,7 +453,7 @@ export function HolidayListEditor({
           <input
             className={`${cellCls} flex-1`}
             value={h.name}
-            placeholder="공휴일명 (예: 개교기념일, 설날)"
+            placeholder={ph("공휴일명 (예: 개교기념일, 설날)")}
             onChange={(e) => set(i, { name: e.target.value })}
           />
           <RemoveButton onClick={() => onChange(value.filter((_, j) => j !== i))} />
@@ -461,6 +474,7 @@ export function ShuttleEditor({
 }) {
   const setRoute = (i: number, patch: Partial<ShuttleSetting["routes"][number]>) =>
     onChange({ ...value, routes: value.routes.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
+  const ph = useLockedPlaceholder();
   return (
     <div className="space-y-3">
       <label className="text-foreground flex items-center gap-2 text-sm">
@@ -477,7 +491,7 @@ export function ShuttleEditor({
         <input
           className={`${cellCls} ml-2 w-[160px]`}
           value={value.fee}
-          placeholder="월 20,000원"
+          placeholder={ph("월 20,000원")}
           onChange={(e) => onChange({ ...value, fee: e.target.value })}
         />
       </label>
@@ -489,7 +503,7 @@ export function ShuttleEditor({
               <input
                 className={`${cellCls} flex-1`}
                 value={r.label}
-                placeholder="노선 이름 (예: 1호차 주요 노선)"
+                placeholder={ph("노선 이름 (예: 1호차 주요 노선)")}
                 onChange={(e) => setRoute(i, { label: e.target.value })}
               />
               <RemoveButton onClick={() => onChange({ ...value, routes: value.routes.filter((_, j) => j !== i) })} />
@@ -548,6 +562,7 @@ export function ConsultationTemplateEditor({
   const setDefault = (i: number | null) =>
     onChange(value.map((x, j) => ({ ...x, isDefault: i !== null && j === i })));
   const noDefault = !value.some((t) => t.isDefault);
+  const ph = useLockedPlaceholder();
 
   return (
     <div className="space-y-3">
@@ -578,7 +593,7 @@ export function ConsultationTemplateEditor({
             <input
               className={`${cellCls} min-w-[180px] flex-1`}
               value={t.name}
-              placeholder="양식 이름 (예: 신입생 관리 #1 – 첫수업 전 전화)"
+              placeholder={ph("양식 이름 (예: 신입생 관리 #1 – 첫수업 전 전화)")}
               onChange={(e) => set(i, { name: e.target.value })}
             />
             <select
@@ -617,7 +632,7 @@ export function ConsultationTemplateEditor({
             className={`${cellCls} w-full resize-y break-keep`}
             rows={4}
             value={t.body}
-            placeholder="요약 뼈대 — 상담 등록 시 요약란에 채워집니다. {{날짜}} {{담당}} 태그 사용 가능"
+            placeholder={ph("요약 뼈대 — 상담 등록 시 요약란에 채워집니다. {{날짜}} {{담당}} 태그 사용 가능")}
             onChange={(e) => set(i, { body: e.target.value })}
           />
         </div>
@@ -651,6 +666,7 @@ export function TermListEditor({
 }) {
   const set = (i: number, patch: Partial<TermSetting>) =>
     onChange(value.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  const ph = useLockedPlaceholder();
   return (
     <div className="space-y-2">
       {value.map((t, i) => (
@@ -658,7 +674,7 @@ export function TermListEditor({
           <input
             className={`${cellCls} w-[140px]`}
             value={t.name}
-            placeholder="1학기"
+            placeholder={ph("1학기")}
             onChange={(e) => set(i, { name: e.target.value })}
           />
           <input

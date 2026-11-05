@@ -34,6 +34,7 @@ import { OverlapNotice } from "./overlap-notice";
 import { ClassNameConflictNotice } from "./class-name-conflict-notice";
 import { FREE_CLOSED_NAME_FIELDS } from "@/features/classes/class-name-conflict";
 import { useSubjectMaps } from "@/features/owner/operations-context";
+import { writeLockedNote, writeLockedPlaceholder } from "@/lib/write-lock";
 
 type Schedule = {
   dayOfWeek: string;
@@ -115,6 +116,7 @@ export function ClassForm({
   today,
   showEnglishTrack = true,
   classnoteOn = false,
+  readOnly = false,
 }: {
   mode: "create" | "edit";
   defaults?: ClassFormDefaults;
@@ -135,6 +137,12 @@ export function ClassForm({
   showEnglishTrack?: boolean;
   /** 이 지점이 ClassNote 모듈을 쓰나(`classnoteModuleOn`) — 꺼진 지점엔 보고서 칸의 ClassNote 문장을 안 보인다(기본 false). */
   classnoteOn?: boolean;
+  /**
+   * 쓰기 권한이 없다 — 주소로 바로 들어온 읽기 권한 사용자(원장 2026-11-05 — lib/write-lock.ts).
+   * 판정은 page.tsx(서버)가 저장 액션 게이트와 **같은 함수**로 계산해 내린다(새 반 = `canManageTenant(role, "classes")`).
+   * 켜지면 모든 입력칸(시간표 격자 포함)을 `<fieldset disabled>`로 한 번에 끄고, 저장 단추·초안 복원·행 추가/삭제는 그리지 않는다.
+   */
+  readOnly?: boolean;
 }) {
   // 🔴 과목 선택지는 학원설정 단일 소스 — 서버 부모가 안 주면 셸의 `OperationsProvider`에서 읽는다
   //    (옛 `DEFAULT_SUBJECT_OPTIONS` 하드코딩 폐기, 감사 D9 · CLAUDE.md "운영 enum 하드코딩 금지").
@@ -248,6 +256,8 @@ export function ClassForm({
     // periodProvided·periodKeepValidTo는 값이 항상 "1"인 마커라 "사용자가 뭔가 입력했다"는 신호가
     // 아니다(빈 폼 오탐 방지).
     ignoreForBanner: ["periodProvided", "periodKeepValidTo"],
+    // 읽기 권한이면 초안을 쓰지도 복원하지도 않는다 — 끈 칸에 예전 초안이 채워지면 쓸 수 있는 것처럼 보인다.
+    enabled: !readOnly,
   });
   const clearDraft = draft.clear;
 
@@ -316,10 +326,30 @@ export function ClassForm({
   // ⚠️ `action={formAction}` 금지(#83) — 겹침 경고로 이동을 붙잡으면 폼이 화면에 남는데, React 19는
   // 액션 제출마다 form.reset()을 걸어 컨트롤드 state와 DOM이 갈라진다(저장 직후 재저장 = 직전 저장 되돌림).
   return (
-    <form onSubmit={(e) => submitAction(e, formAction)} ref={formRef} className="space-y-5">
-      <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
+    <form
+      onSubmit={(e) => {
+        // 저장 단추가 없어도 Enter 제출 같은 우회로를 닫는다 — 진짜 거절은 서버 게이트(requireClassManage·requireClassWrite).
+        if (readOnly) {
+          e.preventDefault();
+          return;
+        }
+        submitAction(e, formAction);
+      }}
+      ref={formRef}
+      className="space-y-5"
+    >
+      {readOnly ? (
+        <p className="text-text-dim border-border bg-muted/40 rounded-md border px-3 py-2 text-sm">
+          {writeLockedNote("classes")}
+        </p>
+      ) : (
+        <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
+      )}
       {defaults?.id ? <input type="hidden" name="id" value={defaults.id} /> : null}
 
+      {/* 🔴 읽기 권한이면 아래 입력칸 전부(시간표 격자 버튼·드롭다운 포함)를 fieldset 하나로 끈다 — 칸마다 따로 끄면
+          새 칸을 더할 때 빠뜨린다. `min-w-0`·테두리 0 = fieldset 기본 모양이 레이아웃을 바꾸지 않게. */}
+      <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-5 border-0 p-0">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {/* 이름 충돌이면 문구·버튼을 ClassNameConflictNotice가 함께 그린다(같은 문구가 두 번 뜨지 않게 Field 오류는 비운다). */}
         <Field label="반 이름" {...(nameConflict || !fieldErrs.className ? {} : { error: fieldErrs.className })}>
@@ -327,7 +357,7 @@ export function ClassForm({
             name="className"
             required
             defaultValue={defaults?.className ?? ""}
-            placeholder="예: 중3 수학 심화반"
+            placeholder={readOnly ? writeLockedPlaceholder("classes") : "예: 중3 수학 심화반"}
             className="border-border bg-card text-foreground w-full rounded-md border px-3 py-2 text-sm"
           />
           {nameConflict ? (
@@ -422,7 +452,7 @@ export function ClassForm({
             name="notes"
             rows={2}
             defaultValue={defaults?.notes ?? ""}
-            placeholder="반 운영에 대한 메모 (선택)"
+            placeholder={readOnly ? writeLockedPlaceholder("classes") : "반 운영에 대한 메모 (선택)"}
             className="border-border bg-card text-foreground w-full rounded-md border px-3 py-2 text-sm"
           />
         </Field>
@@ -500,8 +530,10 @@ export function ClassForm({
           key={`custom-${gridKey}`}
           initial={split.custom}
           onCountChange={setCustomCount}
+          readOnly={readOnly}
         />
       </section>
+      </fieldset>
 
       {/* 겹침 상세 — 저장 성공 뒤에만 뜬다(차단 아님). '확인'을 눌러야 상세로 이동한다. */}
       {showOverlaps ? (
@@ -514,9 +546,12 @@ export function ClassForm({
       ) : null}
       {state?.error ? <p className="text-chart-4 text-sm">{state.error}</p> : null}
 
-      <FormActionBar>
-        <Submit mode={mode} pending={pending} locked={mode === "create" && showOverlaps} />
-      </FormActionBar>
+      {/* 읽기 권한이면 저장 단추를 **그리지 않는다**(비활성으로 남기지 않는다 — write-lock.ts 규칙 1). */}
+      {readOnly ? null : (
+        <FormActionBar>
+          <Submit mode={mode} pending={pending} locked={mode === "create" && showOverlaps} />
+        </FormActionBar>
+      )}
     </form>
   );
 }

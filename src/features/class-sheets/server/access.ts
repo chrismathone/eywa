@@ -44,6 +44,11 @@ export type EcsClassAccess = {
   englishTrack: EnglishTrack | null;
   /** 계획/마크/메모 편집 가능(full|scoped). 출석은 별도 attendance 게이트(actions에서 판정). */
   canWrite: boolean;
+  /**
+   * 쓰기 권한(full|scoped)은 있는데 **담당 반이 아니라서** 보기만 하는가(readOnly로 연 남의 반).
+   * 화면 안내를 "작성 권한이 필요합니다"(권한 부족)와 갈라 쓰려고 둔다(2026-11-05 리뷰 · write-lock.ts).
+   */
+  scopeLocked?: boolean;
   skillAreas: SkillAreaSetting[];
 };
 
@@ -106,6 +111,7 @@ export async function requireEcsClassAccess(
       teacherId: cls.teacher_id ?? null,
       englishTrack: readEnglishTrack(cls),
       canWrite,
+      scopeLocked: (level === "full" || level === "scoped") && !scopedClass,
       skillAreas,
     },
   };

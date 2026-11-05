@@ -90,7 +90,7 @@ async function flush() {
 async function renderForm() {
   let utils!: ReturnType<typeof render>;
   await act(async () => {
-    utils = render(<NewMeetingForm recordingOwner={{ tenantId: "t1", userId: "u1" }} />);
+    utils = render(<NewMeetingForm recordingOwner={{ tenantId: "t1", userId: "u1" }} canWrite />);
     await flush();
   });
   fireEvent.change(screen.getByLabelText(/회의 제목/), { target: { value: "주간 회의" } });
@@ -257,5 +257,29 @@ describe("새 회의록 저장 뒤 이동(#102)", () => {
     expect(screen.getByText(FAILED)).toHaveAttribute("title", "Failed to fetch");
     expect(screen.queryByText("Failed to fetch")).toBeNull();
     expect(screen.getByRole("button", { name: /메모로 회의록 만들기/ })).toBeEnabled();
+  });
+});
+
+/**
+ * 읽기 권한으로 주소(/meetings/new)에 바로 들어온 경우 — 원장 2026-11-05 제보("다 쓰고 저장하니 그제서야 권한 없음").
+ * 칸은 보이되 전부 잠그고 안내를 달며, 업로드·녹음·저장 단추는 아예 그리지 않는다(src/lib/write-lock.ts).
+ */
+describe("읽기 권한(canWrite=false)", () => {
+  it("단추 없음 · 칸 비활성 · placeholder와 한 줄 안내", async () => {
+    await act(async () => {
+      render(<NewMeetingForm recordingOwner={{ tenantId: "t1", userId: "u1" }} canWrite={false} />);
+      await flush();
+    });
+    for (const name of [/파일 업로드/, /바로 녹음/, /메모로 회의록 만들기/, /업로드 및 분석 시작/]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+    for (const label of [/회의 제목/, "참석자", "메모장"]) {
+      const field = screen.getByLabelText(label);
+      expect(field).toBeDisabled();
+      expect(field).toHaveAttribute("placeholder", "회의록 작성 권한이 필요합니다");
+    }
+    expect(screen.getByLabelText("회의 일시")).toBeDisabled(); // 값이 차 있는 칸 — 안내는 위 한 줄이 맡는다
+    expect(screen.getByText("읽기 권한입니다. 고치려면 회의록 작성 권한이 필요합니다.")).toBeInTheDocument();
+    expect(m.listRecovery).not.toHaveBeenCalled(); // 녹음 복구 배너도 없다(되살릴 곳이 잠겨 있다)
   });
 });

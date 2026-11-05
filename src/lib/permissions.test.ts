@@ -240,7 +240,7 @@ describe("새 권한의 기본값 = 원장 '전체' · 나머지 '없음'(원장
     // 매니저 '전체'는 같은 커밋(6a76be7a3)의 요청 자격 canRequestReport(원장·관리자·매니저)와 짝이다. 실험실 메뉴라 실험실을 켠 지점만 열린다.
     withdrawal_reports: {
       why: "퇴원보고서 결정 문서 2026-10-13 — 관리자 요청 → 담임 작성 → 관리자 승인 흐름이 기본값으로 돈다",
-      access: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+      access: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
     },
   };
 

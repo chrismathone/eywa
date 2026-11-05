@@ -13,7 +13,7 @@ export const REPORT_STATUS = {
 } as const;
 export type ReportStatus = keyof typeof REPORT_STATUS;
 export type ReportAction = "save" | "submit" | "approve" | "reject" | "cancel";
-/** 처리 이력 이름 — `refund`(보고서에서 데스크 환불 요청) · `release`(데스크 환불 완료 뒤 처리)는 s2_0024(원장 2026-11-03). */
+/** 처리 이력 이름 — `refund`(보고서에서 데스크 환불 요청) · `release`(데스크 환불 완료 뒤 처리)는 s2_0025(원장 2026-11-03). */
 export const REPORT_ACTION_LABEL = { request: "작성 요청", save: "임시 저장", submit: "보고서 제출", approve: "승인", reject: "반려", cancel: "요청 취소", apply: "퇴원·수강종료 처리", direct: "관리자 바로 처리", refund: "데스크 환불 요청", release: "데스크 환불 완료 · 처리", reassign: "승인자 정리", refund_notice: "데스크 환불 확인 알림" } as const;
 const text = z.string().trim().max(5000, "항목별 5,000자 이내로 입력해 주세요.");
 export const bodySchema = z.object({
@@ -90,7 +90,7 @@ export type StudentSnapshot = { name: string; school: string | null; grade: stri
   /** 완료·취소된 보고서의 수강기간 칸 이력 — 처음 열 때 고정(원장 2026-10-30 '완료 시점 값으로 고정'). 없으면 지금 수강 기록으로 센다. */
   subjectHistory?: SubjectHistoryRow[] };
 export type WithdrawalReport = {
-  /** manager_id — 관리자 승인을 생략한 묶음(s2_0024)은 null · manager_ids = []. */
+  /** manager_id — 관리자 승인을 생략한 묶음(s2_0025)은 null · manager_ids = []. */
   id: string; tenant_id: string; student_id: string; requested_by: string; teacher_id: string; manager_id: string | null; director_id: string | null;
   enrollment_ids?: string[] | null;
   group_id?: string | null; group_leader?: boolean; manager_ids?: string[] | null; director_ids?: string[] | null;
@@ -115,7 +115,7 @@ export type StudentOption = { id: string; name: string; school: string | null; g
  * 요청 이후 학생·수강이 그대로인가 — `subjects`를 주면 그 과목의 수강만 대조한다(과목 수강종료 묶음 · DB `withdrawal_report_scope`와 같은 규칙 s2_0014:
  * 다른 과목 보고서가 먼저 끝나 그 과목 수강이 닫혀도 이 보고서는 바뀐 것이 아니다). 퇴원 묶음은 학생 전체를 대조한다.
  * 🔑 **표시용 칸은 대조하지 않는다** — 학생 이름·학교·학년 · 수강의 반 이름·담임 이름(반 이름만 바뀐 LE1→LE2 보고서가 '변경됨'으로 막혔다 · 원장 2026-11-03).
- *    정체 값(수강 id·반 id·과목·담임 id·기간·휴원 · 학생 상태·등록일·퇴원일)만 본다 — DB `withdrawal_report_compare_key`(s2_0024)와 같은 규칙(gotchas #152).
+ *    정체 값(수강 id·반 id·과목·담임 id·기간·휴원 · 학생 상태·등록일·퇴원일)만 본다 — DB `withdrawal_report_compare_key`(s2_0025)와 같은 규칙(gotchas #152).
  */
 export function snapshotMatches(a: StudentSnapshot, b: StudentSnapshot, subjects?: readonly string[]) {
   const key = (s: StudentSnapshot) => JSON.stringify([s.enrolledAt, s.status, s.withdrawnAt,
@@ -126,7 +126,7 @@ export function canRequestReport(role: SystemRole) { return role === "master" ||
 export function managerIds(r: Pick<WithdrawalReport, "manager_id" | "manager_ids">) { return r.manager_ids ?? (r.manager_id ? [r.manager_id] : []); }
 export function directorIds(r: Pick<WithdrawalReport, "director_id" | "director_ids">) { return r.director_ids ?? (r.director_id ? [r.director_id] : []); }
 /**
- * 관리자 승인을 생략한 보고서(원장 2026-11-03 — 작성 강사가 그 보고서 과목의 관리자 · 보고서마다 판정) — 승인 관리자 0명. 제출이 곧 관리자 승인이다(DB s2_0024).
+ * 관리자 승인을 생략한 보고서(원장 2026-11-03 — 작성 강사가 그 보고서 과목의 관리자 · 보고서마다 판정) — 승인 관리자 0명. 제출이 곧 관리자 승인이다(DB s2_0025).
  * 바로 처리 보고서는 관리자(처리한 사람)가 있어 해당 없다. ~~2026-10-30 원장을 관리자 칸에 넣던 모양~~은 더 만들지 않는다.
  */
 export function managerStepSkipped(r: Pick<WithdrawalReport, "manager_id" | "manager_ids">) {

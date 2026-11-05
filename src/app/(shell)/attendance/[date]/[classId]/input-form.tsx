@@ -26,9 +26,10 @@ import type {
   AttendanceInputRow,
   AttendanceStatus,
 } from "@/features/attendance/server/queries";
-import { slotBreakdown } from "@/features/attendance/cell-display";
+import { slotBreakdown, statusTextOf } from "@/features/attendance/cell-display";
 import { formatSessionUnits } from "@/features/attendance/session-units";
 import { submitAction } from "@/components/forms/submit-action";
+import { writeLockedNote, writeLockedPlaceholder } from "@/lib/write-lock";
 import {
   MakeupConfirmDialog,
   type MakeupConfirmChoice,
@@ -112,6 +113,7 @@ export function AttendanceInputForm({
   date,
   rows,
   locked,
+  readOnly = false,
   autoUnits,
 }: {
   classId: string;
@@ -119,6 +121,12 @@ export function AttendanceInputForm({
   rows: AttendanceInputRow[];
   /** 수정 기간(7일)이 지나 강사가 못 고치는 날 — 입력·저장을 전부 잠근다. */
   locked?: boolean;
+  /**
+   * 출석부 **읽기 권한**(page.tsx가 saveAttendance 게이트와 같은 `canWriteTenant`로 계산) — `locked`처럼 입력을 잠그고,
+   * 출결 단추 대신 상태 글자를 · 일괄 단추·'보강 추가'·'저장'은 **그리지 않는다**(원장 2026-11-05, write-lock.ts 규칙).
+   * 메모·숙제가 있는 학생은 펼친 채 보인다 — 펼치기 단추도 잠긴 양식 안이라 눌리지 않는다.
+   */
+  readOnly?: boolean;
   /**
    * 이 반·날짜 **수학 자동 시수**(수업 길이, auto-units.ts · 원장 2026-09-11) — 기록 없는 학생을 시수 칸
    * 비운 채 저장하면 서버가 넣는 값이라 그 칸의 기본값(placeholder)으로 보여 준다. null = 빈 칸은 1.
@@ -315,7 +323,7 @@ export function AttendanceInputForm({
           🔴 간격(`space-y-4`)은 **fieldset이** 준다 — 일괄 바·명단·저장 줄이 전부 이 안이라 form의 `space-y-4`는 안 먹고
              블록이 0px로 붙었다(2026-07-22 fieldset 도입 때의 퇴행). `min-w-0` = fieldset 기본 최소 폭(min-content)이
              좁은 창에서 명단을 가로로 밀어내지 않게. hidden input은 display:none이라 간격에 끼지 않는다. */}
-      <fieldset disabled={locked} className={`min-w-0 space-y-4 ${locked ? "opacity-60" : ""}`}>
+      <fieldset disabled={locked || readOnly} className={`min-w-0 space-y-4 ${locked || readOnly ? "opacity-60" : ""}`}>
       <input type="hidden" name="classId" value={classId} />
       <input type="hidden" name="date" value={date} />
 
@@ -330,6 +338,7 @@ export function AttendanceInputForm({
             </span>
           ) : null}
         </div>
+        {readOnly ? null : (
         <div className="flex items-center gap-1.5">
           <button
             type="button"
@@ -349,20 +358,27 @@ export function AttendanceInputForm({
           <span className="text-text-dim/40 text-xs">·</span>
           <AttendanceMakeupAdder classId={classId} date={date} disabled={locked} onAdd={openMakeupConfirm} />
         </div>
+        )}
       </div>
 
       {allRows.length === 0 ? (
         <div className="border-line bg-bg-soft/20 rounded-2xl border border-dashed p-8 text-center">
           <p className="text-text-dim text-sm">이 날짜에 등원하는 학생이 없습니다.</p>
-          <p className="text-text-faint mt-1 text-xs break-keep">
-            보강으로 온 학생이 있으면 위 &lsquo;+ 보강 학생 추가&rsquo;로 출결을 남길 수 있습니다.
-          </p>
+          {readOnly ? null : (
+            <p className="text-text-faint mt-1 text-xs break-keep">
+              보강으로 온 학생이 있으면 위 &lsquo;+ 보강 학생 추가&rsquo;로 출결을 남길 수 있습니다.
+            </p>
+          )}
         </div>
       ) : (
         <ul className="bg-card border-line divide-border divide-y rounded-2xl border">
           {allRows.map((r) => {
             const cell = pending[r.studentId];
             const hasExtra = !!(cell.note || cell.homeworkRequired);
+            // 읽기 권한 — 펼치기 단추가 잠긴 양식 안이라 눌리지 않으므로, 적힌 것이 있으면 펼친 채 보인다.
+            const showDetail = readOnly ? hasExtra : cell.expanded;
+            const statusDef = readOnly ? STATUS_DEFS.find((s) => s.value === cell.status) : undefined;
+            const StatusIcon = statusDef?.icon;
             return (
               <li key={r.studentId} className="px-5 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -496,6 +512,18 @@ export function AttendanceInputForm({
                     value={cell.homeworkDone ? "true" : "false"}
                   />
 
+                  {readOnly ? (
+                    // 🔴 출결 단추는 상태 표시도 겸해서, 읽기 권한엔 단추 대신 **상태 글자**만 그린다(write-lock.ts 규칙 1).
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium ${
+                        statusDef ? statusDef.activeClass : "border-line text-text-dim"
+                      }`}
+                    >
+                      {StatusIcon ? <StatusIcon className="size-3" /> : null}
+                      {/* 단추 목록에 없는 상태(사유 결석 등)도 이름은 같은 표에서 — 기록이 있는데 '미입력'이라 하지 않는다. */}
+                      {statusDef ? statusDef.label : cell.status ? statusTextOf(cell.status) : "미입력"}
+                    </span>
+                  ) : (
                   <div className="inline-flex flex-wrap items-center justify-end gap-1">
                     {STATUS_DEFS.map((s) => {
                       const Icon = s.icon;
@@ -532,9 +560,10 @@ export function AttendanceInputForm({
                       )}
                     </button>
                   </div>
+                  )}
                 </div>
 
-                {cell.expanded ? (
+                {showDetail ? (
                   <div className="bg-bg-soft/30 border-line mt-2 space-y-2 rounded-md border p-2.5">
                     <div className="flex items-start gap-2">
                       <Pencil className="text-text-dim mt-1.5 size-3" />
@@ -542,7 +571,7 @@ export function AttendanceInputForm({
                         type="text"
                         value={cell.note}
                         onChange={(e) => patchOne(r.studentId, { note: e.target.value })}
-                        placeholder="메모 (오늘의 특이사항 등)"
+                        placeholder={readOnly ? writeLockedPlaceholder("attendance") : "메모 (오늘의 특이사항 등)"}
                         className="border-line bg-card text-foreground flex-1 rounded-md border px-2 py-1.5 text-xs"
                       />
                     </div>
@@ -560,9 +589,17 @@ export function AttendanceInputForm({
                         onChange={(e) => patchOne(r.studentId, { units: e.target.value })}
                         // 🔴 기록이 **없는** 학생은 빈 칸으로 저장하면 서버가 수학 자동 시수(수업 길이)를 넣는다
                         //    (auto-units.ts, 2026-09-11) — 빈 칸이 뜻하는 값을 그대로 보여 준다. 기록이 있으면 빈 칸 = 1.
-                        placeholder={r.recordIds.length === 0 && autoUnits ? formatSessionUnits(autoUnits) : "1"}
+                        placeholder={
+                          readOnly
+                            ? writeLockedPlaceholder("attendance")
+                            : r.recordIds.length === 0 && autoUnits
+                              ? formatSessionUnits(autoUnits)
+                              : "1"
+                        }
                         title={
-                          r.slotCount > 1
+                          readOnly
+                            ? writeLockedNote("attendance")
+                            : r.slotCount > 1
                             ? `${r.slotCount}개 교시의 합입니다 — 교시별 시수는 영어 수업 시트에서 고치세요`
                             : r.recordIds.length === 0 && autoUnits
                               ? `빈 칸으로 저장하면 이 수업 길이로 ${formatSessionUnits(autoUnits)}회분이 들어갑니다(출석·지각·조퇴·보강). 다른 값이면 직접 적으세요`
@@ -621,12 +658,16 @@ export function AttendanceInputForm({
         </p>
       ) : null}
 
-      <div className="flex items-center justify-end gap-2 border-t pt-5">
-        <span className="text-text-dim text-xs">
-          {dirty ? "변경됨" : "변경 사항 없음"}
-        </span>
-        <SubmitButton />
-      </div>
+      {/* 읽기 권한엔 저장 줄을 통째로 그리지 않는다 — 잠긴 단추를 남기지 않는다(write-lock.ts 규칙 1).
+          이유 한 줄은 페이지 위(page.tsx의 `locked` = writeLockedNote)에 이미 있어 여기서 또 적지 않는다(두 번 뜨지 않게). */}
+      {readOnly ? null : (
+        <div className="flex items-center justify-end gap-2 border-t pt-5">
+          <span className="text-text-dim text-xs">
+            {dirty ? "변경됨" : "변경 사항 없음"}
+          </span>
+          <SubmitButton />
+        </div>
+      )}
     </fieldset>
       {/* 보강 확인창 — key로 학생이 바뀔 때 상태를 새로 짓는다(effect 초기화 금지, #25). */}
       {makeupPick ? (

@@ -195,7 +195,8 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
         ) : null}
       </div>
 
-      {doc.recoverable ? (
+      {/* 읽기 권한이면 그리지 않는다(sheet-client.tsx와 같은 규칙 — 저장 큐가 canEdit=false라 복구해도 저장되지 않는다). */}
+      {doc.recoverable && canEdit ? (
         <div className="border-line bg-bg-soft mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-dashed px-2 py-1 text-xs">
           <span className="text-foreground">
             저장되지 못한 입력 {doc.recoverable.mutations.length}건이 이 기기에 남아 있습니다.

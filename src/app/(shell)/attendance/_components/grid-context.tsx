@@ -20,6 +20,7 @@ import { countCells, type Counted } from "@/features/attendance/grid/totals";
 import { columnTotals, type ColumnTotals } from "@/features/attendance/grid/column-totals";
 import { NOT_MINE_MESSAGE, type AttendanceMark, type NotMineReason } from "@/features/attendance/cell-display";
 import { lockedMessage } from "@/features/attendance/lock-message";
+import { writeLockedNote } from "@/lib/write-lock";
 import {
   ghostOptimisticValue,
   optimisticGridValue,
@@ -38,6 +39,11 @@ type Ctx = {
   toggleCollapsed: (classId: string) => void;
   /** 전부 접기/펼치기 — 표 머리의 이름 칸 토글. */
   setAllCollapsed: (collapse: boolean) => void;
+  /**
+   * 출석부 **읽기 권한**인가(서버 게이트 `canWriteTenant("attendance")`가 거짓) — 칸 전부가 잠기고 사유는
+   * `writeLockedNote("attendance")`. 칸·팝오버가 이 값으로 쓰기 단추를 그리지 않는다(원장 2026-11-05).
+   */
+  readOnly: boolean;
   isLocked: (date: string) => boolean;
   /**
    * 잠긴 칸의 사유 문장 — **칸마다 서버가 만들어 내려보내지 않고 여기서 만든다.**
@@ -172,10 +178,17 @@ export function GridProvider({
   slotCounts,
   notMine,
   lockBefore,
+  readOnly = false,
   initialCollapsed,
   autoUnits,
   children,
 }: {
+  /**
+   * 🔴 출석부 **읽기 권한**(page.tsx가 서버 게이트와 같은 `canWriteTenant(role, "attendance")`로 계산) — 날짜와 무관하게
+   *    모든 칸을 잠근다. 예전엔 잠금이 강사(scoped)의 7일 창뿐이라 읽기 권한(회계·뷰어)도 칸을 치고 붙여넣을 수 있었고,
+   *    저장 순간에야 "출석 관리 권한이 없습니다"가 떴다(원장 2026-11-05 · 회의록과 같은 증상).
+   */
+  readOnly?: boolean;
   /**
    * 반 → 날짜 → **수학 자동 시수**(수업 길이, auto-units.ts · 원장 2026-09-11). 빈 칸에 숫자 없이 찍으면
    * 서버가 이 값을 넣으므로 낙관값도 같은 숫자로 칠한다 — 안 그러면 새로고침 뒤 숫자가 바뀌고, 낙관 덮개는
@@ -292,15 +305,20 @@ export function GridProvider({
     [rows, applyCollapsed],
   );
 
-  const isLocked = useCallback((date: string) => !!lockBefore && date < lockBefore, [lockBefore]);
+  const isLocked = useCallback(
+    (date: string) => readOnly || (!!lockBefore && date < lockBefore),
+    [readOnly, lockBefore],
+  );
   /**
    * 잠긴 칸이면 **사유 문장**, 아니면 null — 안내는 칸 툴팁(`matrix-row`)과 같은 한 문장을 쓴다.
    * ⚠️ 잠김 판정과 문장 만들기를 **한 곳에서** 한다. 따로 두면 `lockBefore`가 null인 자리에 `!`를 쓰게 되고,
    *    그건 "잠겼다 = lockBefore가 있다"는 사실을 타입이 아니라 사람 기억에 맡기는 것이다.
    */
+  // 읽기 권한이 7일 잠금보다 먼저다 — 읽기 권한에게 "7일이 지나 못 고친다"고 하면 틀린 이유다.
   const lockNoteOf = useCallback(
-    (date: string) => (lockBefore && isLocked(date) ? lockedMessage(date, lockBefore) : null),
-    [isLocked, lockBefore],
+    (date: string) =>
+      readOnly ? writeLockedNote("attendance") : lockBefore && date < lockBefore ? lockedMessage(date, lockBefore) : null,
+    [readOnly, lockBefore],
   );
   /** 이 칸이 입력을 받지 않는 빗금 칸인가 — 잠금과 사유가 달라 메시지도 따로 낸다. */
   const isNotMine = useCallback((key: string) => !!notMine?.[key], [notMine]);
@@ -481,6 +499,11 @@ export function GridProvider({
     (keys: Set<string>, val: TypedValue | null, options: { preserveUnits?: boolean; recordUndo?: boolean } = {}) => {
       const preserveUnits = options.preserveUnits === true;
       setError(null); // 위 writeOne과 같은 이유 — 지난 실패가 이번 안내를 삼키지 않게.
+      // 읽기 권한은 칸 수를 세어 "N칸은 수정 기간(7일)이 지나…"로 말하지 않는다 — 기간이 아니라 권한이 이유다.
+      if (readOnly) {
+        setError(writeLockedNote("attendance"));
+        return;
+      }
       const all = [...keys].map(parseCellKey).filter((p): p is NonNullable<typeof p> => !!p);
       const unlocked = all.filter((p) => !isLocked(p.date));
       // 🔴 남의 교시만 있는 칸은 범위 채우기·붙여넣기·**Delete에서도** 뺀다 — 안 빼면 화면에 값이
@@ -591,7 +614,7 @@ export function GridProvider({
         if (notices.length > 0) showNotice(notices.join(" · "));
       });
     },
-    [store, isLocked, isNotMine, isGhost, writeOne, scheduleRefresh, toValue, showNotice, tf, scope],
+    [store, readOnly, isLocked, isNotMine, isGhost, writeOne, scheduleRefresh, toValue, showNotice, tf, scope],
   );
 
   /** 버퍼 확정 — 범위가 잡혀 있으면 전체에. 확정할 수 없는 입력이면 아무 일도 없다. */
@@ -638,6 +661,11 @@ export function GridProvider({
   const startFill = useCallback(() => {
     const a = store.active;
     if (!a) return;
+    // 읽기 권한엔 손잡이가 안 서지만(잠긴 칸) 문도 닫아 둔다 — 끌고 난 뒤에야 거절되면 헛수고다.
+    if (readOnly) {
+      setError(writeLockedNote("attendance"));
+      return;
+    }
     // 빗금 칸의 흐린 값은 채우기 원본이 아니다 — 씨앗이 비어 끌면 '지우기'가 된다(칸도 손잡이를 안 띄운다).
     if (store.valueOf(cellKey(a.row, a.col))?.g) {
       setError(tf("att.grid.ghostCopyBlock", {}));
@@ -646,7 +674,7 @@ export function GridProvider({
     fillSeedRef.current = copyValueOf(store.valueOf(cellKey(a.row, a.col)));
     store.setFocus(null);
     setFilling(true);
-  }, [store, tf]);
+  }, [store, readOnly, tf]);
 
   // 드래그 채우기 — 커서 아래 칸을 data-cell-key로 읽어 범위를 넓히고, 놓을 때 시작값을 채운다.
   useEffect(() => {
@@ -773,7 +801,8 @@ export function GridProvider({
         //    통째로 못 친다 — 한 행을 왼쪽부터 끄는 흔한 조작에서 앵커가 빗금이기 쉽다(영어 빗금 887칸).
         //    범위는 `writeMany`가 잠금·빗금을 걸러내고 "N칸은 … 건너뛰었습니다"로 알린다.
         // ⚠️ 잠금을 **먼저** 본다 — 칸 툴팁(matrix-row)의 우선순위와 같은 순서라야 호버와 안내가 같은 말을 한다.
-        const blockNote = sel.size <= 1 ? blockNoteOf(key, active.col) : null;
+        // 🔴 읽기 권한은 **범위여도** 버퍼를 열지 않는다 — 범위의 거르기(writeMany)는 확정 단계라 숫자가 보였다가 사라진다.
+        const blockNote = readOnly ? lockNoteOf(active.col) : sel.size <= 1 ? blockNoteOf(key, active.col) : null;
         if (blockNote) {
           setError(blockNote);
           return;
@@ -836,7 +865,7 @@ export function GridProvider({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [store, commit, writeMany, writeOne, pushCell, isNotMine, isLocked, blockNoteOf, showNotice, tf]);
+  }, [store, readOnly, commit, writeMany, writeOne, pushCell, isNotMine, isLocked, lockNoteOf, blockNoteOf, showNotice, tf]);
 
   const ctx = useMemo<Ctx>(
     () => ({
@@ -844,6 +873,7 @@ export function GridProvider({
       collapsed,
       toggleCollapsed,
       setAllCollapsed,
+      readOnly,
       isLocked,
       lockNoteOf,
       setLocal: (key: string, v: GridValue) => store.setLocal([[key, v]]),
@@ -863,7 +893,7 @@ export function GridProvider({
       toValue,
       transferGhost: (key: string, status: string) => writeOne(key, { status, units: "" }),
     }),
-    [store, collapsed, toggleCollapsed, setAllCollapsed, isLocked, lockNoteOf, commit, startFill, startSelection, autoUnitsOf, toValue, writeOne, writeMany],
+    [store, collapsed, toggleCollapsed, setAllCollapsed, readOnly, isLocked, lockNoteOf, commit, startFill, startSelection, autoUnitsOf, toValue, writeOne, writeMany],
   );
 
   return (

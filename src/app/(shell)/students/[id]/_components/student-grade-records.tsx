@@ -17,12 +17,14 @@ type Href = (patch: Record<string, string>) => string;
  * 열 머리 = 필터·정렬(통합 성적관리 원장과 같은 부품·같은 판정 `applyLedgerView`). 결과가 0건이어도 머리는 남긴다
  * (치우면 걸린 필터를 못 되돌린다). 지우기는 **성적 입력 행만** — 보고서 점수는 보고서에서, 레벨테스트는 그 구역에서.
  */
-export function StudentGradeRecords({ rows, studentId, notesById, subjectLabel, view, href, filters, goals }: {
+export function StudentGradeRecords({ rows, studentId, notesById, subjectLabel, view, href, filters, goals, canWrite }: {
   rows: readonly UnifiedRow[]; studentId: string; notesById: Record<string, string | null>; subjectLabel: Record<string, string>;
   view: LedgerView; href: Href;
   filters: { subject: string; kind: string; subjects: FilterSelectOption[]; kinds: FilterSelectOption[] };
   /** 줄 key → 시험 목표 대비(`goalViewsForRows` — /exams와 같은 함수). */
   goals: Record<string, GoalView>;
+  /** 성적 삭제 단추 — 서버 `deleteStudentGrade`(students full|scoped)와 같은 판정. 읽기 권한이면 그리지 않는다. */
+  canWrite: boolean;
 }) {
   const th = "micro px-4 py-2 font-bold whitespace-nowrap";
   // 🔴 overflow-x-auto로 싸지 말 것 — 열 머리 필터 팝업이 표 밖으로 못 나와 잘린다(원생목록 규약).
@@ -57,7 +59,7 @@ export function StudentGradeRecords({ rows, studentId, notesById, subjectLabel, 
             <td className="px-4 py-2 text-xs"><DeltaBadge row={row} /></td>
             <td className="text-muted-foreground px-4 py-2 text-xs">{(row.source === "grade" ? notesById[row.sourceId] : null) ?? "—"}</td>
             <td className="px-4 py-2 text-right whitespace-nowrap">
-              {row.source === "grade" ? <DeleteGradeButton gradeId={row.sourceId} studentId={studentId} label={info ?? KIND_LABEL[row.kind]} />
+              {row.source === "grade" ? (canWrite ? <DeleteGradeButton gradeId={row.sourceId} studentId={studentId} label={info ?? KIND_LABEL[row.kind]} /> : null)
                 : row.source === "report" ? <Link href={href({ tab: "progress", subject: "", kind: "", sort: "", dir: "", fScore: "", fDelta: "", page: "" })} className="text-primary text-xs hover:underline" title="수업보고서 점수는 보고서에서 고칩니다">수업보고서</Link>
                 : <span className="text-muted-foreground text-xs" title="아래 레벨테스트 구역에서 고칩니다">레벨테스트</span>}
             </td>

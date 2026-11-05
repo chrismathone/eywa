@@ -9,6 +9,7 @@ import {
   checkMakeeduSyncLock,
 } from "@/features/integrations/server/actions";
 import type { MakeeduAutoSyncStatus, MakeeduSyncLock } from "@/features/integrations/server/makeedu-sync";
+import { writeLockedNote } from "@/lib/write-lock";
 
 /**
  * makeedu 자동 동기화 ON/OFF 카드 (연동 면). 토글은 user_integrations(provider=makeedu).sync_enabled를 바꾸고,
@@ -20,9 +21,18 @@ import type { MakeeduAutoSyncStatus, MakeeduSyncLock } from "@/features/integrat
 export function MakeeduSyncCard({
   status,
   initialLock,
+  canToggle = true,
+  canTrigger = true,
 }: {
   status: MakeeduAutoSyncStatus;
   initialLock: MakeeduSyncLock;
+  /** 자동 동기화 켜기·끄기 = 연동 설정 쓰기(`setMakeeduSyncEnabled`와 같은 판정). 없으면 스위치를 잠근다. */
+  canToggle?: boolean;
+  /**
+   * '지금 동기화' = makeedu 연동(integrations) 쓰기 — `triggerMakeeduSyncNow`와 같은 판정(sheets-face.tsx가 계산).
+   * 🔴 없으면 단추를 **그리지 않는다**(원장 2026-11-05 — 누르면 거절되는 단추를 두지 않는다).
+   */
+  canTrigger?: boolean;
 }) {
   const [enabled, setEnabled] = useState(status.enabled);
   const [pending, start] = useTransition();
@@ -111,7 +121,7 @@ export function MakeeduSyncCard({
           aria-checked={enabled}
           aria-label="makeedu 자동 동기화"
           onClick={toggle}
-          disabled={pending}
+          disabled={pending || !canToggle}
           className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition disabled:opacity-50 ${
             enabled ? "bg-primary" : "bg-line-strong"
           }`}
@@ -128,6 +138,7 @@ export function MakeeduSyncCard({
 
       {error ? <p className="text-chart-4 text-sm">{error}</p> : null}
 
+      {canTrigger ? (
       <div>
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="outline" onClick={runNow} disabled={busy}>
@@ -148,6 +159,10 @@ export function MakeeduSyncCard({
           <p className="text-text-faint mt-1.5 text-xs">동기화 진행 중…</p>
         ) : null}
       </div>
+      ) : canToggle ? (
+        // 면 전체가 잠겼으면(연동 설정 읽기) 면 위의 안내 한 줄로 충분하다 — 여기는 makeedu 연동 권한만 없을 때.
+        <p className="text-text-faint text-xs">{writeLockedNote("integrations")}</p>
+      ) : null}
 
       <p className="text-muted-foreground border-t pt-3 text-xs">
         반영 시각은 각 화면(학생·수업·상담·수납)의 ‘↻ 동기화’ 배지에 표시됩니다.

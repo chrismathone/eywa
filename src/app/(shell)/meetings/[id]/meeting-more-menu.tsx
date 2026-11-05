@@ -28,6 +28,7 @@ export function MeetingMoreMenu({
   canPrint,
   txt,
   canRetry,
+  canDelete,
 }: {
   meetingId: string;
   printHref: string;
@@ -35,13 +36,17 @@ export function MeetingMoreMenu({
   canPrint: boolean;
   /** 내려받을 내용(리포트·메모·전사 중 하나라도)이 있을 때만. null이면 항목이 없다. */
   txt: MeetingTxtSource | null;
-  /** 원본 오디오가 있고 처리 중이 아닐 때만. */
+  /** 원본 오디오가 있고 처리 중이 아니고 **쓰기 권한**이 있을 때만(페이지가 함께 판정). */
   canRetry: boolean;
+  /** 쓰기 권한(deleteMeeting과 같은 canWriteTenant("meetings")) — 거짓이면 '삭제' 항목이 없다. */
+  canDelete: boolean;
 }) {
   const [mode, setMode] = useState<null | "delete" | "retry">(null);
   const openPrint = usePrintWindow();
 
-  if (mode === "delete") return <MeetingDeleteConfirm meetingId={meetingId} onCancel={() => setMode(null)} />;
+  if (mode === "delete" && canDelete) return <MeetingDeleteConfirm meetingId={meetingId} onCancel={() => setMode(null)} />;
+  // 읽기 권한에 인쇄·텍스트 저장도 없으면(내용 없는 회의록) 열 메뉴가 비므로 '더보기' 자체를 그리지 않는다.
+  if (!canPrint && !txt && !canRetry && !canDelete) return null;
   // 🔴 `canRetry`를 함께 본다 — 확인 버튼을 누르면 액션이 상태를 `transcribing`으로 쓰고 서버가 canRetry=false를 내려보내지만
   //    클라 state `mode`는 남아, 확인 줄이 그대로 서 있으면 "됐나?" 하고 한 번 더 눌러 AssemblyAI에 **이중 제출**된다
   //    (첫 작업의 웹훅은 transcript id가 덮여 버려진다 — 리뷰 확정 결함). 부모도 `key={processingStatus}`로 state를 리셋한다.
@@ -85,10 +90,14 @@ export function MeetingMoreMenu({
         ) : null}
         {txt ? <DropdownMenuItem onClick={() => downloadMeetingTxt(txt)}>텍스트 저장</DropdownMenuItem> : null}
         {canRetry ? <DropdownMenuItem onClick={() => setMode("retry")}>전사부터 다시</DropdownMenuItem> : null}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onClick={() => setMode("delete")}>
-          삭제
-        </DropdownMenuItem>
+        {canDelete ? (
+          <>
+            {canPrint || txt || canRetry ? <DropdownMenuSeparator /> : null}
+            <DropdownMenuItem variant="destructive" onClick={() => setMode("delete")}>
+              삭제
+            </DropdownMenuItem>
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

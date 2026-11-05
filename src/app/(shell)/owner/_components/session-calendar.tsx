@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useWriteLock } from "./write-lock-context";
 import {
   dragRange as toRange,
   labelMonthOf,
@@ -54,6 +55,7 @@ function MiniCalendar({
 }) {
   const cells = useMemo(() => monthGrid(year, month), [year, month]);
   const mine = painted.find((p) => p.labelMonth === month);
+  const { locked } = useWriteLock();
 
   // 이 날짜가 **어느 달 세션**에 속하는지 — 자기 달만 보지 않는다(순수 모듈 단일 소스).
   // 🔴 구 출석부는 자기 달 구간만 칠해서, 2월 세션이 3/5까지 가도 3월 달력엔 안 보였다. 그래서
@@ -98,7 +100,7 @@ function MiniCalendar({
         <span className={`rounded px-1.5 py-0.5 text-xs font-bold text-white ${MONTH_BG[month]}`}>
           {month}월
         </span>
-        {mine ? (
+        {mine && !locked ? (
           <button
             type="button"
             onClick={() => onClear(month)}

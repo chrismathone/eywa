@@ -53,6 +53,14 @@ describe("통합 성적 원장", () => {
     expect(fd.get("id")).toBe("one");
   });
 
+  it("🔴 읽기 권한이면 [수정]·[삭제]를 **그리지 않는다**(비활성 단추로 남기지 않음 — 원장 2026-11-05)", () => {
+    render(<UnifiedLedger rows={[record]} canWrite={false} head={<thead><tr><th>머리</th></tr></thead>} />);
+    expect(screen.queryByRole("button", { name: "수정" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "삭제" })).toBeNull();
+    // 관리 칸이 통째로 빠져 줄은 11칸(과목~상담)이다 — 빈 칸이 남아 열이 밀리지 않게.
+    expect(screen.getByText("김서아").closest("tr")?.querySelectorAll("td")).toHaveLength(11);
+  });
+
   it("[삭제]는 한 번 더 확인한 뒤 점수를 비운다(행은 남는다)", async () => {
     render(table([record]));
     fireEvent.click(screen.getByRole("button", { name: "삭제" }));

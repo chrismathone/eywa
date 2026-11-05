@@ -157,9 +157,9 @@ describe("새 메뉴 배선 — 권한 표·라벨·경로 매핑이 함께 있�
     expect(missing).toEqual([]);
   });
 
-  it("권한 표의 모든 셀이 8개 역할을 다 채운다(빈 칸 = 조용한 차단)", () => {
+  it("권한 표의 모든 셀이 9개 역할을 다 채운다(빈 칸 = 조용한 차단)", () => {
     for (const key of MENU_KEYS) {
-      expect(Object.keys(MENU_ACCESS[key]).length, `${key} 역할 수`).toBe(8);
+      expect(Object.keys(MENU_ACCESS[key]).length, `${key} 역할 수`).toBe(9);
     }
   });
 

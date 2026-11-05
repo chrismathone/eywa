@@ -308,7 +308,8 @@ export function RefundSheet({
             칸을 클릭해 바로 입력하세요 — <span className="text-danger">*</span>는 필수, 저장해야 반영됩니다.
           </>
         ) : (
-          "종이 서식 그대로 — 인쇄하거나 수정할 수 있습니다."
+          // 읽기 권한에겐 '수정'이 없다 — 할 수 없는 일을 안내하지 않는다(원장 2026-11-05).
+          canWrite ? "종이 서식 그대로 — 인쇄하거나 수정할 수 있습니다." : "종이 서식 그대로 — 인쇄할 수 있습니다."
         )}
       </p>
       <div className="flex flex-wrap items-center gap-2">

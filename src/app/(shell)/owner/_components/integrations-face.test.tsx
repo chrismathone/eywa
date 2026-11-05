@@ -1,10 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const m = vi.hoisted(() => ({ slack: vi.fn(), mathOn: vi.fn() }));
-vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => ({ tenantId: "t1" }) }));
+const m = vi.hoisted(() => ({ slack: vi.fn(), mathOn: vi.fn(), canWrite: vi.fn() }));
+vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => ({ tenantId: "t1", systemRole: "admin" }) }));
+vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: m.canWrite }));
 vi.mock("@/lib/license/server", () => ({ isFeatureOptedIn: m.mathOn }));
-vi.mock("./todays-math-card", () => ({ TodaysMathCard: () => <p>오늘 수학 카드</p> }));
+vi.mock("./todays-math-card", () => ({
+  TodaysMathCard: (p: { readOnly?: boolean; lockMenu?: string }) => <p data-readonly={String(!!p.readOnly)} data-lock={p.lockMenu}>오늘 수학 카드</p>,
+}));
 vi.mock("./todays-math-menus-card", () => ({ TodaysMathMenusCard: () => <p>오늘 수학 사용 메뉴</p> }));
 vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => false }));
 vi.mock("@/features/slack/server/gate", () => ({ slackGate: m.slack }));
@@ -20,13 +23,15 @@ vi.mock("@/components/face-tabs", () => ({
 import type { TenantSettings } from "@/features/owner/settings-types";
 import { IntegrationsFace } from "./integrations-face";
 
-const face = (disabled: string[], sub?: string, modulesOn = { makeedu: true, sheets: false }) => IntegrationsFace({
-  sub, settings: { modules: { disabled }, operations: { subjects: [] } } as unknown as TenantSettings, modulesOn, page: 1, isEmbed: false,
+const face = (disabled: string[], sub?: string, modulesOn = { makeedu: true, sheets: false }, canEdit = true) => IntegrationsFace({
+  sub, settings: { modules: { disabled }, operations: { subjects: [] } } as unknown as TenantSettings, modulesOn, page: 1, isEmbed: false, canEdit,
 });
 
 beforeEach(() => {
   m.slack.mockResolvedValue({ error: "꺼짐" });
   m.mathOn.mockResolvedValue(false);
+  m.canWrite.mockReset();
+  m.canWrite.mockResolvedValue(true);
 });
 
 describe("연동 면의 내부 탭 — 숙제영상 드라이브는 ClassNote 기능이 있는 지점에만", () => {
@@ -65,6 +70,22 @@ describe("연동 면의 내부 탭 — 오늘 수학(개발 중 기능 스위치
     render(await face([], "todaysMath"));
     expect(screen.getByRole("link", { name: "오늘 수학" })).toHaveAttribute("href", "/owner?tab=sheets&sub=todaysMath");
     expect(screen.getByText("오늘 수학 카드")).toBeInTheDocument();
+  });
+  it("🔴 토글 3개는 보고서 섹션에 저장되므로 보고서 설정 쓰기(report_settings)로 잠근다 — 연동 설정 쓰기만으론 열리지 않는다", async () => {
+    m.mathOn.mockResolvedValue(true);
+    m.canWrite.mockImplementation(async (_role: string, menu: string) => menu !== "report_settings");
+    render(await face([], "todaysMath"));
+    expect(m.canWrite).toHaveBeenCalledWith("admin", "report_settings");
+    const card = screen.getByText("오늘 수학 카드");
+    expect(card).toHaveAttribute("data-readonly", "true");
+    expect(card).toHaveAttribute("data-lock", "report_settings");
+  });
+  it("연동 면 자체가 읽기(canEdit=false)면 보고서 설정 쓰기가 있어도 잠그고, 안내 키는 연동 설정이다", async () => {
+    m.mathOn.mockResolvedValue(true);
+    render(await face([], "todaysMath", undefined, false));
+    const card = screen.getByText("오늘 수학 카드");
+    expect(card).toHaveAttribute("data-readonly", "true");
+    expect(card).toHaveAttribute("data-lock", "integration_settings");
   });
   it("🔴 라이선스가 꺼진 학원엔 탭도 카드도 없다 — 주소로 골라도 다른 탭으로", async () => {
     render(await face([], "todaysMath"));

@@ -116,7 +116,7 @@ export async function changeWithdrawalReport(id: string, action: ReportAction, r
   }).single();
   if (error) return { error: describeDbError(error, { fallback: "보고서 처리를 완료하지 못했습니다." }).message };
   const changed = data as WithdrawalReport;
-  // 취소 — DB가 미완료 데스크 환불의 할 일을 취소하고 데스크 담당자에게 '환불 진행 전 확인'을 보냈다(s2_0024 · 요청서는 남긴다). 기록에도 남긴다.
+  // 취소 — DB가 미완료 데스크 환불의 할 일을 취소하고 데스크 담당자에게 '환불 진행 전 확인'을 보냈다(s2_0025 · 요청서는 남긴다). 기록에도 남긴다.
   const extra = action === "cancel" ? await cancelRefundAudit(changed) : {};
   await finish(changed, action, { ...extra, ...await teacherViewMeta(viewer.user) });
   return { ok: true, id };
@@ -165,7 +165,7 @@ const AUTOSAVE_OPERATION = "자동 저장";
  * 검사와 DB 처리는 'save'와 같다(`transition_withdrawal_report` 'save' — 작성 강사 본인 · 작성 단계만 · revision 대조). 다른 점 셋:
  * - 화면을 다시 그리지 않는다(`refresh` 안 함) — 고칠 때마다 다섯 경로를 다시 그리면 무겁고 쓰던 칸이 흔들린다. 바뀐 revision만 돌려준다.
  * - 감사로그는 그 보고서를 같은 사람이 10분 안에 이어 자동 저장하면 새 줄을 남기지 않는다(시간표 메모 시트와 같은 규칙).
- *   DB 처리 이력도 같은 규칙으로 줄을 아낀다(s2_0024 — 마지막 이력이 같은 사람의 10분 안 '임시 저장'이면 새 줄을 넣지 않는다).
+ *   DB 처리 이력도 같은 규칙으로 줄을 아낀다(s2_0025 — 마지막 이력이 같은 사람의 10분 안 '임시 저장'이면 새 줄을 넣지 않는다).
  * - revision이 다르면(다른 화면이 먼저 고침) `conflict` — 자동 저장기가 멈추고 새로고침을 안내한다(내 글로 덮지 않는다).
  *   단 서버 글이 지금 글이거나 결과를 모르던 내 글(`unconfirmed`)이면 응답만 끊긴 내 저장이다 — 받아들이거나 그 위에 이어 쓴다.
  */
@@ -223,7 +223,7 @@ export async function autosaveWithdrawalReport(id: string, revision: number, inp
 }
 /**
  * 취소한 묶음의 데스크 환불(원장 2026-11-03) — DB가 같은 거래에서 연결된 요청서마다 데스크에 알렸다(끝나지 않은 요청서 = 할 일 취소 + '환불 진행 전 확인',
- * 끝난 요청서 = 처리한 사람에게 '환불 확인 필요' · 취소한 본인·퇴사자 제외 · s2_0024 `withdrawal_report_refunds_on_cancel`). **실제로 알린 대상**은 DB가 보고서 처리 이력
+ * 끝난 요청서 = 처리한 사람에게 '환불 확인 필요' · 취소한 본인·퇴사자 제외 · s2_0025 `withdrawal_report_refunds_on_cancel`). **실제로 알린 대상**은 DB가 보고서 처리 이력
  * 'refund_notice'로 남긴다 — 취소 줄과 같은 거래 시각인 그 줄들을 읽어 감사로그에 싣는다(앱이 규칙을 따로 흉내 내지 않게). 못 읽으면 그 사실만 적는다.
  */
 async function cancelRefundAudit(r: WithdrawalReport): Promise<Record<string, unknown>> {

@@ -7,6 +7,7 @@ import { CheckCircle2, ChevronRight, ClipboardCheck, Pencil } from "@/components
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import {
   getAttendanceForDate,
   getDailyProcessingStatus,
@@ -56,8 +57,11 @@ export default async function AttendanceByDatePage({
   params: Promise<{ date: string }>;
   searchParams: Promise<{ saved?: string; unlinked?: string; linkError?: string; status?: string }>;
 }) {
-  await requireAccess("attendance");
+  const user = await requireAccess("attendance");
   const { date } = await params;
+  // 읽기 권한엔 반별 양식 링크를 '입력'(연필)이 아니라 '보기'로 — 양식은 열리지만 잠겨 있다(원장 2026-11-05).
+  // 판정은 그 양식의 저장 게이트(saveAttendance)와 같은 함수.
+  const canWrite = await canWriteTenant(user.systemRole, "attendance");
   const { saved, unlinked, linkError, status } = await searchParams;
   // 결석 학생 보기(`?status=absent`) — 그날 결석 판정 단일 소스(getScopedAbsentStudents)로 그 명단만 그린다(옛 운영실 '전일 결석' ↗ 목적지 · 2026-10-20 카드는 '최근 결석'으로 바뀌었다).
   // 🔴 강사(실 강사·겸직 강사뷰·'다른 강사 뷰')는 그날 **그 강사가 가르치는 반**(teacher-axis: 담임 ∪ 교시 담당)만 — 출석부 반 목록과 같은 규칙.
@@ -200,8 +204,8 @@ export default async function AttendanceByDatePage({
                   href={`/attendance/${date}/${p.classId}`}
                   className="text-text-dim hover:text-foreground inline-flex shrink-0 items-center gap-1 text-xs"
                 >
-                  <Pencil className="size-3" />
-                  입력
+                  {canWrite ? <Pencil className="size-3" /> : null}
+                  {canWrite ? "입력" : "보기"}
                 </Link>
               </li>
             ))}
@@ -267,8 +271,8 @@ export default async function AttendanceByDatePage({
                         href={`/attendance/${date}/${classId}`}
                         className="text-text-dim hover:text-foreground inline-flex items-center gap-1.5 text-xs"
                       >
-                        <Pencil className="size-3" />
-                        출석 입력
+                        {canWrite ? <Pencil className="size-3" /> : null}
+                        {canWrite ? "출석 입력" : "출석 보기"}
                       </Link>
                     </div>
                     <ul className="divide-border divide-y">

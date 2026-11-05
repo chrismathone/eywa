@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { WEEKDAYS, WEEKDAY_LABEL, type PunctualityOptions, type StaffHours } from "@/features/teacher-portfolio/evaluation/options";
 import { NumField } from "./scoring-editor";
+import { useWriteLock } from "../write-lock-context";
 
 /**
  * 강사 근태의 '세는 법'(원장 2026-10-15 *"추천으로 진행. 직원마다 일부 출근시간 퇴근시간 다른 직원이 있음"*).
@@ -20,6 +21,7 @@ const clamp = (n: number | null, lo: number, hi: number, fallback: number) => Ma
 
 export function PunctualityOptionsEditor({ value, onChange, label }: { value: PunctualityOptions; onChange: (next: PunctualityOptions) => void; label: string }) {
   const staff = useContext(EvaluationStaffContext);
+  const { locked } = useWriteLock();
   const setHours = (hours: StaffHours[]) => onChange({ ...value, hours });
   const patch = (i: number, next: Partial<StaffHours>) => setHours(value.hours.map((h, j) => (j === i ? { ...h, ...next } : h)));
   const weight = (key: "late" | "absent" | "early", title: string) => (
@@ -65,13 +67,15 @@ export function PunctualityOptionsEditor({ value, onChange, label }: { value: Pu
             <label className="flex items-center gap-1">퇴근
               <Input type="time" className="w-36" aria-label={`${label} — 개인 시각 ${i + 1} 퇴근`} value={h.end ?? ""}
                 onChange={(e) => patch(i, { end: /^\d{2}:\d{2}$/.test(e.target.value) ? e.target.value : null })} /></label>
-            <Button type="button" size="sm" variant="ghost" onClick={() => setHours(value.hours.filter((_, j) => j !== i))}>삭제</Button>
+            {locked ? null : <Button type="button" size="sm" variant="ghost" onClick={() => setHours(value.hours.filter((_, j) => j !== i))}>삭제</Button>}
           </div>
         ))}
-        <Button type="button" size="sm" variant="outline" disabled={!staff.length || value.hours.length >= 200}
-          onClick={() => setHours([...value.hours, { userId: staff[0]!.id, days: ["mon", "tue", "wed", "thu", "fri"], start: "13:00", end: "21:00" }])}>
-          개인 출퇴근 시각 추가
-        </Button>
+        {locked ? null : (
+          <Button type="button" size="sm" variant="outline" disabled={!staff.length || value.hours.length >= 200}
+            onClick={() => setHours([...value.hours, { userId: staff[0]!.id, days: ["mon", "tue", "wed", "thu", "fri"], start: "13:00", end: "21:00" }])}>
+            개인 출퇴근 시각 추가
+          </Button>
+        )}
       </div>
       <p className="text-xs">저장한 뒤 다시 매긴 점수에 반영됩니다(미리보기엔 보이지 않습니다). 퇴근을 비우면 조퇴를 세지 않습니다.</p>
     </fieldset>

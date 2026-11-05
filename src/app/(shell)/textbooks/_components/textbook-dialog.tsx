@@ -23,6 +23,7 @@ import { DialogShell, Field, FIELD, FormError, SELECT } from "./form-bits";
 import { CoverField } from "./cover-field";
 import { LessonsEditor, type LessonValue } from "./lessons-editor";
 import { GradeTermField } from "./grade-term-field";
+import { writeLockedNote, writeLockedPlaceholder } from "@/lib/write-lock";
 
 const MAX_SESSIONS = 200;
 
@@ -246,6 +247,8 @@ export function TextbookDialog({
     >
       <div className="flex flex-col gap-4">
         <FormError error={error} />
+        {/* 읽기 권한은 이미 있는 교재만 연다 — 칸이 차 있어 placeholder가 안 보이니 한 줄로 알린다(write-lock.ts). */}
+        {!canWrite ? <p className="text-text-dim bg-bg-soft rounded-lg px-3 py-2 text-xs">{writeLockedNote("textbooks")}</p> : null}
 
         {loading ? (
           <p className="text-text-dim py-6 text-center text-xs">불러오는 중…</p>
@@ -274,7 +277,7 @@ export function TextbookDialog({
                     onChange={(e) => setTitle(e.target.value)}
                     maxLength={120}
                     disabled={!canWrite}
-                    placeholder="예: 내신콘서트"
+                    placeholder={canWrite ? "예: 내신콘서트" : writeLockedPlaceholder("textbooks")}
                     className={FIELD}
                   />
                 </Field>
@@ -304,6 +307,7 @@ export function TextbookDialog({
                     onChange={(e) => setPageTime(e.target.value)}
                     maxLength={40}
                     disabled={!canWrite}
+                    placeholder={canWrite ? undefined : writeLockedPlaceholder("textbooks")}
                     className={FIELD}
                   />
                 </Field>

@@ -13,6 +13,7 @@ import { DeleteReviewButton } from "../_components/delete-review-button";
 import { ObserverManager } from "../_components/observer-manager";
 import { FinalReviewPanel } from "../_components/final-review-panel";
 import { kstDateOf } from "@/lib/date-kst";
+import { writeLockedNote } from "@/lib/write-lock";
 import { getStaffOptions } from "@/features/meetings/server/queries";
 import {
   getClassReview,
@@ -90,6 +91,9 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
 
   // 내 채점 자격(공용 헬퍼) — 있으면 헤더에 평가하기/수정하기 버튼(채점은 별도 페이지, 원장 지시 2026-08-04).
   const mine = myScoreSlot(doc, rv.id);
+  // 채점 단추는 자격(mine)과 쓰기 권한(저장 액션 submitClassReviewScores의 게이트와 같은 canWrite)을 함께 본다 —
+  // 읽기 권한이면 채점 자리가 있어도 단추를 그리지 않는다(원장 2026-11-05).
+  const canScore = !!mine && canWrite;
 
   // 채점이 실제로 들어온 열 수 — 상단 '제출' 스탯과 삭제 확인 문구가 같은 수를 쓴다("몇 명 것이 사라지나").
   const submittedCount = cols.filter((c) => c.totals.answered > 0).length;
@@ -120,9 +124,9 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
           description={headerBits.join(" · ")}
           embedLabel={`직원 평가 — ${doc.header.teacherName}`}
           actions={
-            mine || canDelete ? (
+            canScore || canDelete ? (
               <span className="flex flex-wrap items-center gap-2">
-                {mine ? (
+                {mine && canScore ? (
                   <Button render={<Link href={`/class-review/${doc.id}/score`} />}>
                     {mine.submitted ? "내 평가 수정하기" : "평가하기"}
                   </Button>
@@ -350,7 +354,10 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
       />
 
       {/* 채점은 별도 페이지(/score) — 상세는 보기 전용(원장 지시 2026-08-04). */}
-      {mine ? (
+      {mine && !canScore ? (
+        // 채점 자리는 있지만 읽기 권한 — 단추 대신 왜 못 쓰는지 한 줄(원장 2026-11-05).
+        <p className="text-text-dim text-xs">{writeLockedNote("class_review")}</p>
+      ) : mine ? (
         <div className="bg-bg-soft/40 flex flex-wrap items-center justify-between gap-3 rounded-2xl p-4">
           <p className="text-text-dim text-sm">
             {mine.submitted

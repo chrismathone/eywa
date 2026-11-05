@@ -1,5 +1,6 @@
 "use client";
 
+import { writeLockedNote } from "@/lib/write-lock";
 import type { SaveState } from "./use-memo-autosave";
 
 const TIME = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -12,7 +13,8 @@ function at(iso: string | null): string {
 
 /** 저장 상태 한 줄 — 자동 저장이라 '저장' 단추 대신 지금 어디까지 들어갔는지를 말한다. */
 export function SaveStatus({ state, canEdit, onRetry }: { state: SaveState; canEdit: boolean; onRetry: () => void }) {
-  if (!canEdit) return <span className="text-sm">보기 전용</span>;
+  // 읽기 권한 — 수식 입력줄은 글자가 차 있으면 placeholder 안내가 안 보이므로 여기서 한 줄로 알린다(write-lock.ts).
+  if (!canEdit) return <span className="text-sm">{writeLockedNote("timetable")}</span>;
   if (state.kind === "pending" || state.kind === "saving") return <span className="text-sm">저장 중…</span>;
   if (state.kind === "error") {
     return (

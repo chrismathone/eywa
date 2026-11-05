@@ -5,7 +5,8 @@ import { getAgentDashboard,issueAgentCode,issueAgentManagementCode,revokeAgentDe
 
 type Dashboard=NonNullable<Awaited<ReturnType<typeof getAgentDashboard>>["data"]>;
 const when=(value:string|null)=>value?new Date(value).toLocaleString("ko-KR",{timeZone:"Asia/Seoul"}):"아직 없음";
-export function AgentCard({classnoteOn,makeeduOn,legacyPC}:{classnoteOn:boolean;makeeduOn:boolean;legacyPC?:ReactNode}) {
+// `canEdit` = 연동 설정 쓰기(연동 PC 액션의 requireManager와 같은 키) — 없으면 코드 발급·연결 해제 단추를 그리지 않고 스위치를 잠근다(원장 2026-11-05).
+export function AgentCard({classnoteOn,makeeduOn,legacyPC,canEdit=true}:{classnoteOn:boolean;makeeduOn:boolean;legacyPC?:ReactNode;canEdit?:boolean}) {
   const [data,setData]=useState<Dashboard|null>(null),[error,setError]=useState(""),[notice,setNotice]=useState("");
   const [code,setCode]=useState<{code:string;expiresAt:string}|null>(null);
   const [managementCode,setManagementCode]=useState<{code:string;expiresAt:string}|null>(null);
@@ -39,7 +40,7 @@ export function AgentCard({classnoteOn,makeeduOn,legacyPC}:{classnoteOn:boolean;
   const events=(data?.events??[]).filter(e=>(filter==="all"||e.module===filter)&&(level==="all"||e.level===level));
   const box="border-border bg-card rounded-2xl border p-5 space-y-3";
   const button="border-border rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-50";
-  const toggle=(key:"enabled"|"classnoteEnabled"|"makeeduEnabled"|"updatesEnabled",label:string)=><label className="flex items-center justify-between gap-4 py-2"><span>{label}</span><input aria-label={label} type="checkbox" checked={settings?.[key]??false} disabled={pending||!settings} onChange={e=>change(key,e.target.checked)} /></label>;
+  const toggle=(key:"enabled"|"classnoteEnabled"|"makeeduEnabled"|"updatesEnabled",label:string)=><label className="flex items-center justify-between gap-4 py-2"><span>{label}</span><input aria-label={label} type="checkbox" checked={settings?.[key]??false} disabled={!canEdit||pending||!settings} onChange={e=>change(key,e.target.checked)} /></label>;
   return <div className="space-y-5" aria-label="연동 PC 관리">
     {error?<p role="alert" className="text-danger rounded-lg border p-3 text-sm">{error}</p>:null}
     {notice?<p role="status" className="text-primary text-sm">{notice}</p>:null}
@@ -52,7 +53,7 @@ export function AgentCard({classnoteOn,makeeduOn,legacyPC}:{classnoteOn:boolean;
       <h2 className="font-bold">지점 연결 코드</h2>
       <p className="text-text-dim text-sm">앱을 처음 실행할 때 아래 코드를 입력하세요. 15분 동안 한 번 사용할 수 있으며, 재발급하면 이전 코드는 만료됩니다.</p>
       {code && Date.parse(code.expiresAt)>now?<div className="flex flex-wrap items-center gap-3"><output className="font-mono text-2xl tracking-widest" aria-label="12자리 연결 코드">{code.code.match(/.{1,4}/g)?.join(" ")}</output><button className={button} onClick={()=>{void navigator.clipboard.writeText(code.code).then(()=>setNotice("코드를 복사했습니다."),()=>setError("코드를 직접 입력해 주세요."));}}>복사</button><span className="text-text-dim text-xs">{when(code.expiresAt)}까지</span></div>:null}
-      <button className={button} disabled={pending||!data||!!device} onClick={()=>act(async()=>{const result=await issueAgentCode();if(result.data){setCode(result.data);setNow(Date.now());}return result;})}>연결 코드 발급</button>
+      {canEdit?<button className={button} disabled={pending||!data||!!device} onClick={()=>act(async()=>{const result=await issueAgentCode();if(result.data){setCode(result.data);setNow(Date.now());}return result;})}>연결 코드 발급</button>:null}
       {device?<p className="text-text-dim text-xs">다른 PC로 교체하려면 현재 PC의 연결을 먼저 해제하세요.</p>:null}
     </section>
     <section className={box}>
@@ -60,9 +61,9 @@ export function AgentCard({classnoteOn,makeeduOn,legacyPC}:{classnoteOn:boolean;
       {device?<>
         <p className="font-semibold">{device.name} <span className="text-text-dim text-sm">· {online?"온라인":"연결 확인 필요"}</span></p>
         <p className="text-text-dim text-sm">버전 {device.version??"확인 중"} · 마지막 확인 {when(device.last_seen_at)}</p>
-        <button className={button} disabled={pending||!!device.revoke_requested_at} onClick={()=>act(async()=>{const result=await issueAgentManagementCode();if(result.data)setManagementCode(result.data);return result;})}>PC 설정 관리 코드 발급</button>
+        {canEdit?<button className={button} disabled={pending||!!device.revoke_requested_at} onClick={()=>act(async()=>{const result=await issueAgentManagementCode();if(result.data)setManagementCode(result.data);return result;})}>PC 설정 관리 코드 발급</button>:null}
         {managementCode && Date.parse(managementCode.expiresAt)>now?<p className="text-sm">앱의 설정 잠금을 여는 코드: <output className="font-mono tracking-widest">{managementCode.code.match(/.{1,4}/g)?.join(" ")}</output> · 10분 동안 한 번 사용</p>:null}
-        {device.revoke_requested_at?<p role="status" className="text-sm">기존 PC의 실행 종료를 확인하고 있습니다. 완료 후 새 코드를 발급할 수 있습니다.</p>:<button className={button} disabled={pending} onClick={()=>{if(window.confirm("이 PC의 연동을 중지하고 연결을 해제할까요? 작업 중이면 완료 여부를 확인해 주세요."))act(()=>revokeAgentDevice(device.id),"연결 해제를 요청했습니다.");}}>PC 연결 해제</button>}
+        {device.revoke_requested_at?<p role="status" className="text-sm">기존 PC의 실행 종료를 확인하고 있습니다. 완료 후 새 코드를 발급할 수 있습니다.</p>:!canEdit?null:<button className={button} disabled={pending} onClick={()=>{if(window.confirm("이 PC의 연동을 중지하고 연결을 해제할까요? 작업 중이면 완료 여부를 확인해 주세요."))act(()=>revokeAgentDevice(device.id),"연결 해제를 요청했습니다.");}}>PC 연결 해제</button>}
         {!settings?.cutoverReady?<p className="text-text-dim text-sm">앱에서 기존 워커 확인과 계정 설정을 마치면 연동을 시작할 수 있습니다.</p>:null}
       </>:<p className="text-text-dim text-sm">{data?"아직 연결된 PC가 없습니다.":error?"PC 상태를 불러오지 못했습니다.":"PC 상태를 확인 중입니다."}</p>}
       {toggle("enabled","이 PC에서 연동 실행")}

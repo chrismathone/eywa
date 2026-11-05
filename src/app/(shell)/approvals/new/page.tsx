@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "@/components/icons/aywa-icon-compat";
 import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import {
   getApproverCandidates,
@@ -23,11 +24,14 @@ export const metadata = { title: "기안하기 — 에이와" };
  */
 export default async function NewApprovalPage() {
   const user = await requireAccess("approvals");
-  // 세 조회는 서로 독립 — 함께 받는다(B4 직렬 워터폴 금지).
-  const [balance, candidates, templates] = await Promise.all([
+  // 네 조회는 서로 독립 — 함께 받는다(B4 직렬 워터폴 금지).
+  // canWrite = 기안 액션(requireApprovalWriter)과 같은 canWriteTenant("approvals") — 주소로 바로 들어온 읽기 권한이면
+  // 양식은 보이되 잠긴다(칸 비활성 + 안내, '결재 올리기'·결재선 저장 없음 — 원장 2026-11-05).
+  const [balance, candidates, templates, canWrite] = await Promise.all([
     getMyLeaveBalance(user.id),
     getApproverCandidates(),
     getMyLineTemplates(),
+    canWriteTenant(user.systemRole, "approvals"),
   ]);
 
   return (
@@ -52,6 +56,7 @@ export default async function NewApprovalPage() {
         periodEnd={balance.period?.end ?? null}
         remaining={balance.usageUnknown ? null : balance.remaining}
         today={kstToday()}
+        canWrite={canWrite}
       />
     </div>
   );

@@ -12,7 +12,7 @@ import { releaseWithdrawalRefunds } from "./release";
 
 /**
  * 처리일이 된 예약 보고서 처리(매일 00:05 cron) + **데스크 환불이 끝난 묶음 처리**(원장 2026-11-03 · 안전망 — 수납 저장이 놓친 것).
- * 데스크 환불이 남은 예약은 DB가 그대로 돌려준다(오류 없음 · s2_0024) → '미룸'으로 세고 기록하지 않는다(날마다 같은 기록이 쌓이지 않게).
+ * 데스크 환불이 남은 예약은 DB가 그대로 돌려준다(오류 없음 · s2_0025) → '미룸'으로 세고 기록하지 않는다(날마다 같은 기록이 쌓이지 않게).
  */
 export async function applyDueWithdrawalReports() {
   const db = createAdminClient();

@@ -89,7 +89,9 @@ function LedgerRow({ row, canWrite, goal, todaysMath }: { row: UnifiedRow; canWr
           </span>
           : initialConsult ? <span className="num">{initialConsult.slice(5).replace("-", "/")}</span> : <span className="text-text-dim">—</span>}
       </td>
-      <td className="px-2 py-2 text-center">
+      {/* 🔴 읽기 권한이면 [수정]·[삭제] 칸을 **통째로 그리지 않는다**(원장 2026-11-05 — 비활성 단추로 남기지 않는다, write-lock.ts).
+          머리줄 '관리' 열·colgroup도 같은 `canWrite`로 함께 뺀다(LedgerHead · 아래 UnifiedLedger). */}
+      {canWrite ? <td className="px-2 py-2 text-center">
         <div className="flex items-center justify-center gap-1">
           {editing ? <>
             <button type="button" className={`${BTN} bg-primary text-primary-foreground border-primary`} disabled={pending || (consulted && !row.consultationDate && !consultDate)}
@@ -99,14 +101,14 @@ function LedgerRow({ row, canWrite, goal, todaysMath }: { row: UnifiedRow; canWr
             <button type="button" className={`${BTN} border-danger text-danger`} disabled={pending} onClick={() => send({ score: "", label: "점수를 지웠습니다" })}><SheetText value={pending ? "지우는 중" : "지우기"} /></button>
             <button type="button" className={BTN} disabled={pending} onClick={() => setConfirmDelete(false)}><SheetText value={"취소"} /></button>
           </> : <>
-            <button type="button" className={BTN} disabled={!canWrite} onClick={() => reset(true)}><SheetText value={"수정"} /></button>
-            <button type="button" className={`${BTN} text-danger`} disabled={!canWrite || (row.score == null && !row.rawScore)}
+            <button type="button" className={BTN} onClick={() => reset(true)}><SheetText value={"수정"} /></button>
+            <button type="button" className={`${BTN} text-danger`} disabled={row.score == null && !row.rawScore}
               title="이 기록의 점수를 지웁니다" onClick={() => { setConfirmDelete(true); setMessage(null); }}><SheetText value={"삭제"} /></button>
           </>}
         </div>
         {confirmDelete ? <span className="text-danger mt-1 block text-xs"><SheetText value={"점수를 지울까요?"} /></span> : null}
         {message ? <span role={message.ok ? "status" : "alert"} className={`mt-1 block text-xs ${message.ok ? "text-green" : "text-danger"}`}>{message.text}</span> : null}
-      </td>
+      </td> : null}
     </tr>
   );
 }
@@ -126,7 +128,7 @@ export function UnifiedLedger({ rows, canWrite, head, goals = {}, todaysMathKeys
         <colgroup>
           <col className="w-[5.5rem]" /><col className="w-[7.75rem]" /><col className="w-[6rem]" /><col className="w-[7rem]" /><col />
           <col className="w-[8rem]" /><col className="w-[7rem]" /><col className="w-[10.5rem]" /><col className="w-[12.5rem]" /><col className="w-[6.5rem]" />
-          <col className="w-[7.5rem]" /><col className="w-[8.5rem]" />
+          <col className="w-[7.5rem]" />{canWrite ? <col className="w-[8.5rem]" /> : null}
         </colgroup>
         {head}
         <tbody>{rows.map((row) => <LedgerRow key={row.key} row={row} canWrite={canWrite} goal={goals[row.key]} todaysMath={marked.has(row.key)} />)}</tbody>

@@ -7,8 +7,12 @@ import { logRetentionAction, type LogActionState } from "../server/actions";
 
 const TONES: MessageTone[] = ["soft", "firm", "result", "reassure"];
 
-/** 학부모 메시지 초안 — 말투 토글 + 클립보드 복사 + 조치 기록(student_consultations). 실발송 없음. */
-export function MessageComposer({ studentId, input }: { studentId: string; input: MessageInput }) {
+/**
+ * 학부모 메시지 초안 — 말투 토글 + 클립보드 복사 + 조치 기록(student_consultations). 실발송 없음.
+ * `canWrite` = 서버 게이트(`logRetentionAction`)와 같은 `canWriteTenant(…,"retention")`를 page가 계산 — 읽기 권한이면
+ * '발송 조치 기록'을 그리지 않는다(초안 보기·복사는 저장이 아니라 그대로 둔다, 원장 2026-11-05).
+ */
+export function MessageComposer({ studentId, input, canWrite }: { studentId: string; input: MessageInput; canWrite: boolean }) {
   const [tone, setTone] = useState<MessageTone>("soft");
   const [state, formAction, pending] = useActionState<LogActionState, FormData>(
     logRetentionAction,
@@ -62,17 +66,19 @@ export function MessageComposer({ studentId, input }: { studentId: string; input
         >
           메시지 복사
         </button>
-        <form action={formAction} className="flex items-center gap-2">
-          <input type="hidden" name="studentId" value={studentId} />
-          <input type="hidden" name="summary" value={`학부모 ${TONE_LABELS[tone]} 메시지 발송`} />
-          <button
-            type="submit"
-            disabled={pending}
-            className="border-line hover:bg-bg-soft rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50"
-          >
-            {pending ? "기록 중…" : "발송 조치 기록"}
-          </button>
-        </form>
+        {canWrite ? (
+          <form action={formAction} className="flex items-center gap-2">
+            <input type="hidden" name="studentId" value={studentId} />
+            <input type="hidden" name="summary" value={`학부모 ${TONE_LABELS[tone]} 메시지 발송`} />
+            <button
+              type="submit"
+              disabled={pending}
+              className="border-line hover:bg-bg-soft rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50"
+            >
+              {pending ? "기록 중…" : "발송 조치 기록"}
+            </button>
+          </form>
+        ) : null}
       </div>
     </div>
   );

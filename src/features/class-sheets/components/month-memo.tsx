@@ -23,6 +23,7 @@ import { saveMonthMemo } from "../server/month-memo-actions";
 import type { MonthMemoStatus } from "../server/month-queries";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import type { SheetEditAudit } from "./use-sheet-edit-audit";
+import { writeLockedPlaceholder } from "@/lib/write-lock";
 
 const SAVE_DELAY_MS = 600;
 const MAX_BODY = 2000;
@@ -129,7 +130,8 @@ export function MonthMemo({
           defaultValue={initialBody}
           disabled={!ready}
           maxLength={MAX_BODY}
-          placeholder={canEdit ? t("month.memo.placeholder") : ""}
+          // 읽기 권한이면 빈 자리 표시 글 대신 **권한 안내**(원장 2026-11-05 — 비어 있는 잠긴 칸은 이유를 말하지 않았다).
+          placeholder={canEdit ? t("month.memo.placeholder") : writeLockedPlaceholder("ecs")}
           aria-label={tf("month.memo.aria", { month: monthLabel })}
           onChange={(e) => onChange(e.target.value)}
           onBlur={(e) => {

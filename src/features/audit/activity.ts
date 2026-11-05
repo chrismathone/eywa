@@ -129,7 +129,7 @@ const VALUE_LABEL: Record<string, string> = {
   uploaded: "업로드됨", transcribing: "전사중", analyzing: "분석중",
   // 역할
   master: "원장", admin: "관리자", manager: "매니저", teacher: "강사", counselor: "상담사",
-  accountant: "회계", viewer: "열람", student: "학생",
+  accountant: "회계", viewer: "열람", parttime: "아르바이트", student: "학생",
   // 요일
   mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
   // 공지 대상

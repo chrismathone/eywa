@@ -501,7 +501,7 @@ describe("역할별 메뉴 권한 표 — 줄은 왼쪽 탭과 그 내부 메뉴
     expect(head.className).toContain("top-0");
     // 본문 표와 같은 표 상자 안에 있다(붙는 범위 = 표가 화면에 걸쳐 있는 동안).
     expect(head.parentElement!.contains(menuTable())).toBe(true);
-    expect([...head.querySelectorAll("th")].map((th) => th.textContent)).toEqual(["메뉴", "원장", "관리자", "실장", "강사", "상담", "회계", "열람", "학생"]);
+    expect([...head.querySelectorAll("th")].map((th) => th.textContent)).toEqual(["메뉴", "원장", "관리자", "실장", "강사", "상담", "회계", "열람", "아르바이트", "학생"]);
     const cols = [...container.querySelectorAll("colgroup")].map((g) => g.querySelectorAll("col").length);
     expect(cols).toEqual(Array(4).fill(SYSTEM_ROLES.length + 1));
   });

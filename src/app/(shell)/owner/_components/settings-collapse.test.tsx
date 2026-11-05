@@ -87,7 +87,7 @@ describe("보강 운영 면", () => {
     expect(operationsBlock).toContain("<OperationsSection");
     expect(operationsBlock).not.toContain("MakeupsSection");
     expect(page.match(/<MakeupsSection\b/g)).toHaveLength(1);
-    expect(page).toMatch(/\{tab === "makeups" \? \(\s*canReadAudit \? \(\s*<MakeupsSection initial=\{settings\.makeups\} \/>/);
+    expect(page).toMatch(/\{tab === "makeups" \? \(\s*canReadAudit \? \(\s*<MakeupsSection initial=\{settings\.makeups\} readOnly=\{!canEditSettings\} \/>/);
   });
 
   it("🔴 다른 화면의 '보강관리 운영 모드 설정' 링크도 새 면으로 간다 — 옛 위치(운영 체계)에는 그 폼이 없다", () => {

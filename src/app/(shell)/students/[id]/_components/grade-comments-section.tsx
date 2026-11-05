@@ -162,12 +162,18 @@ function DeleteCommentBtn({ id, studentId }: { id: string; studentId: string }) 
   );
 }
 
+/**
+ * canWrite = 서버 `requireGradeWrite`(students full|scoped)와 같은 판정 — page.tsx의 `canWriteTenant(role, "students")`.
+ * 읽기 권한이면 '추가'·수정·삭제를 그리지 않는다(원장 2026-11-05 — lib/write-lock.ts).
+ */
 export function GradeCommentsSection({
   studentId,
   comments,
+  canWrite,
 }: {
   studentId: string;
   comments: GradeCommentRow[];
+  canWrite: boolean;
 }) {
   const subjects = useSubjectMaps();
   const [open, setOpen] = useState(false);
@@ -186,10 +192,12 @@ export function GradeCommentsSection({
     <section className="space-y-3">
       <header className="flex items-center justify-between">
         <h3 className="text-foreground text-sm font-bold">학습 코멘트</h3>
-        <Button size="sm" variant="outline" onClick={openNew}>
-          <Plus className="size-3.5" />
-          추가
-        </Button>
+        {canWrite ? (
+          <Button size="sm" variant="outline" onClick={openNew}>
+            <Plus className="size-3.5" />
+            추가
+          </Button>
+        ) : null}
       </header>
 
       {comments.length === 0 ? (
@@ -219,17 +227,19 @@ export function GradeCommentsSection({
                       </span>
                     ) : null}
                   </div>
-                  <div className="flex items-center gap-0.5">
-                    <button
-                      type="button"
-                      onClick={() => openEdit(c)}
-                      className="text-muted-foreground hover:text-foreground p-1"
-                      aria-label="수정"
-                    >
-                      <Pencil className="size-3.5" />
-                    </button>
-                    <DeleteCommentBtn id={c.id} studentId={studentId} />
-                  </div>
+                  {canWrite ? (
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(c)}
+                        className="text-muted-foreground hover:text-foreground p-1"
+                        aria-label="수정"
+                      >
+                        <Pencil className="size-3.5" />
+                      </button>
+                      <DeleteCommentBtn id={c.id} studentId={studentId} />
+                    </div>
+                  ) : null}
                 </div>
                 <p className="text-foreground mt-1.5 text-sm whitespace-pre-wrap">{c.content}</p>
                 {c.authorName ? (
@@ -241,7 +251,7 @@ export function GradeCommentsSection({
         </ul>
       )}
 
-      {open ? (
+      {open && canWrite ? (
         <CommentDialog studentId={studentId} editing={editing} onClose={() => setOpen(false)} />
       ) : null}
     </section>

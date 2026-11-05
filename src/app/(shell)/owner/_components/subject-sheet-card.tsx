@@ -7,6 +7,7 @@ import {
   setSubjectSheetTarget,
 } from "@/features/integrations/server/actions";
 import type { IntegrationStatus } from "@/features/integrations/server/queries";
+import { writeLockedPlaceholder } from "@/lib/write-lock";
 
 /**
  * 과목별 구글 시트 내보내기 카드 — 토글(ON/OFF) + 대상 시트 ID 등록 + 상태(동기화/오류) + 열기.
@@ -16,10 +17,13 @@ export function SubjectSheetCard({
   subject,
   label,
   status,
+  canEdit = true,
 }: {
   subject: string;
   label: string;
   status: IntegrationStatus;
+  /** 연동 설정 쓰기(토글·시트 ID 저장 액션과 같은 판정) — 없으면 스위치·칸을 잠그고 저장 단추를 그리지 않는다. */
+  canEdit?: boolean;
 }) {
   const [enabled, setEnabled] = useState(status.enabled);
   const [sheetId, setSheetId] = useState(status.spreadsheetId ?? "");
@@ -67,7 +71,7 @@ export function SubjectSheetCard({
           aria-checked={enabled}
           aria-label={`${label} 시트 내보내기 연동`}
           onClick={toggle}
-          disabled={toggling}
+          disabled={toggling || !canEdit}
           className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition disabled:opacity-50 ${
             enabled ? "bg-primary" : "bg-line-strong"
           }`}
@@ -88,19 +92,22 @@ export function SubjectSheetCard({
           <input
             value={sheetId}
             onChange={(e) => setSheetId(e.target.value)}
-            placeholder="시트 URL의 /d/ 뒤 문자열"
+            placeholder={canEdit ? "시트 URL의 /d/ 뒤 문자열" : writeLockedPlaceholder("integration_settings")}
+            disabled={!canEdit}
             spellCheck={false}
             className="border-line bg-bg-soft focus:border-primary min-w-0 flex-1 rounded-md border px-2.5 py-1.5 font-mono text-xs outline-none"
           />
-          <button
-            type="button"
-            onClick={save}
-            disabled={saving || !dirty}
-            className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1 rounded-lg border px-3 py-1.5 text-xs transition disabled:opacity-50"
-          >
-            {saving ? <Loader2 className="size-3 animate-spin" /> : null}
-            저장
-          </button>
+          {canEdit ? (
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving || !dirty}
+              className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1 rounded-lg border px-3 py-1.5 text-xs transition disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="size-3 animate-spin" /> : null}
+              저장
+            </button>
+          ) : null}
         </div>
       </div>
 

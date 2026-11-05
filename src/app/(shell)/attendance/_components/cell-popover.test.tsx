@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CellPopover } from "./cell-popover";
-import { GridProvider } from "./grid-context";
+import { GridProvider, useCellState } from "./grid-context";
+import { writeLockedNote, writeLockedPlaceholder } from "@/lib/write-lock";
 
 const { setCell } = vi.hoisted(() => ({
   setCell: vi.fn<
@@ -163,6 +164,55 @@ describe("칸 상세 팝오버", () => {
         { status: "present", units: null, note: "" },
         { ifStill: token, revert: true },
       ]);
+    });
+  });
+
+  /** 출석부 읽기 권한(원장 2026-11-05) — 쓰기 단추는 그리지 않고, 입력칸은 잠그고 권한을 말한다(write-lock.ts). */
+  describe("읽기 권한", () => {
+    const NOTE = writeLockedNote("attendance");
+
+    it("🔴 상태·지우기·보강 예약·저장 단추가 없다 — 상태는 글자로, 시수·메모는 잠긴 칸에 값만", () => {
+      open({ readOnly: true, locked: NOTE, status: "absent", units: null, note: "병결", onReserve: vi.fn() });
+      expect(screen.getByText(NOTE)).toBeInTheDocument();
+      expect(screen.getByText("결석")).toBeInTheDocument();
+      for (const name of [/지각/, /^지우기$/, /보강 예약/, /메모 저장/, /^저장$/]) {
+        expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+      }
+      expect(screen.getByLabelText("시수")).toBeDisabled();
+      expect(screen.getByLabelText("시수")).toHaveValue("1");
+      const memo = screen.getByLabelText("메모(사유)");
+      expect(memo).toBeDisabled();
+      expect(memo).toHaveValue("병결");
+      expect(memo).toHaveAttribute("placeholder", writeLockedPlaceholder("attendance"));
+    });
+
+    it("🔴 7일 잠금의 '메모는 언제든'도 열지 않는다 — 메모 저장도 같은 쓰기 게이트다", () => {
+      open({ readOnly: true, locked: NOTE, status: "present", note: "" });
+      expect(screen.queryByText(/언제든/)).not.toBeInTheDocument();
+      expect(screen.getByLabelText("메모(사유)")).toBeDisabled();
+    });
+
+    function Probe({ date }: { date: string }) {
+      const { ctx } = useCellState("probe");
+      return <p data-testid="probe">{ctx ? `${ctx.readOnly}|${ctx.isLocked(date)}|${ctx.lockNoteOf(date)}` : "none"}</p>;
+    }
+
+    it("🔴 격자 — 읽기 권한이면 날짜와 무관하게 전부 잠기고, 사유는 7일이 아니라 권한이다", () => {
+      render(
+        <GridProvider rows={[]} cols={[]} initial={{}} lockBefore={null} readOnly>
+          <Probe date="2099-01-01" />
+        </GridProvider>,
+      );
+      expect(screen.getByTestId("probe")).toHaveTextContent(`true|true|${NOTE}`);
+    });
+
+    it("격자 — 쓰기 권한이면 종전대로(잠금 없음)", () => {
+      render(
+        <GridProvider rows={[]} cols={[]} initial={{}} lockBefore={null}>
+          <Probe date="2099-01-01" />
+        </GridProvider>,
+      );
+      expect(screen.getByTestId("probe")).toHaveTextContent("false|false|null");
     });
   });
 });

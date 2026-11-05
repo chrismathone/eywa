@@ -78,8 +78,11 @@ function RequestRow({
   onSend,
   ownerName,
   viewerUserId,
+  canWrite,
 }: {
   row: TextbookOrderRow;
+  /** 교재 요청 쓰기 권한(서버 게이트와 같은 판정). false면 수정·삭제를 그리지 않는다. */
+  canWrite: boolean;
   onDownload: (r: TextbookOrderRow) => void;
   /** 학부모 알림장 발송 다이얼로그 열기(없으면 버튼 미노출). */
   onSend?: (r: TextbookOrderRow) => void;
@@ -101,7 +104,8 @@ function RequestRow({
   // 🔴 이름이 안 맞아 버튼이 통째로 사라지던 자리(원장 2026-08-03 "삭제 버튼이 없다 … 이름 때문인가?").
   //    합집합: **내가 만든 것** OR 내 이름으로 된 것(0174a). 대리 작성 의미는 그대로 둔다.
   const mine = !ownerName || ownsTextbookRequest(row.teacherName, ownerName, row.createdBy, viewerUserId);
-  const canManage = mine && isUntouched(row);
+  // 🔴 쓰기 권한이 먼저다 — 사무실은 ownerName이 없어 mine이 늘 참이라, 이것 없이는 읽기 권한에게도 수정·삭제가 떴다.
+  const canManage = canWrite && mine && isUntouched(row);
   const done = isDone(row);
 
   const openEdit = () => {
@@ -229,7 +233,7 @@ function RequestRow({
             </button>
           </span>
         )
-      ) : mine ? (
+      ) : canWrite && mine ? (
         /* 사무실이 이미 손댄 건(등록·주문·납부 중 하나라도) — 지우면 처리 이력이 사라지므로 강사가 못 지운다.
            🔴 버튼만 없애고 아무 말도 안 하면 "왜 안 되지"로 끝난다(원장 2026-08-03 "삭제가 안 되는 것 같은데").
            할 수 없는 이유와 다음 행동을 같이 적는다. */
@@ -251,9 +255,15 @@ export function RequestHistory({
   capNote,
   ownerName,
   viewerUserId,
+  canWrite,
 }: {
   rows: TextbookOrderRow[];
   onDownload: (r: TextbookOrderRow) => void;
+  /**
+   * 교재 요청 쓰기 권한 — 서버 게이트(`canWriteTenant("textbook_requests")`)와 같은 판정을 page.tsx가 계산해 내린다.
+   * false(읽기 권한)면 수정·삭제·발송을 **그리지 않는다**(원장 2026-11-05 — 소유 판정만으로는 사무실 readonly에게 전부 열렸다).
+   */
+  canWrite: boolean;
   /** 학부모 알림장 발송 진입점(행마다). 없으면 발송 버튼 미노출. */
   onSend?: (r: TextbookOrderRow) => void;
   /** rows가 절단본일 때(사무실=최근 100건) 카운트가 전체 통계로 읽히지 않게 붙이는 안내. */
@@ -353,9 +363,10 @@ export function RequestHistory({
               key={r.id}
               row={r}
               onDownload={onDownload}
-              onSend={onSend}
+              onSend={canWrite ? onSend : undefined}
               ownerName={ownerName}
               viewerUserId={viewerUserId}
+              canWrite={canWrite}
             />
           ))}
         </ul>

@@ -208,6 +208,9 @@ export default async function TimetablePage({
   //    '편집'이 그대로 떴다. 시간표 편집은 드래그로 **학생을 반 사이로 옮기는 것**(moveEnrollmentsBatch)이라
   //    남의 반 명단까지 바뀐다 → 관리자(classes=full)만. `canWriteTenant`는 scoped 강사도 통과하므로
   //    쓰면 안 된다(perm-matrix `canManageTenant` 주석). 서버 액션도 같은 게이트로 잠갔다(#77).
+  // ⚠️ 시간표 메뉴 키(timetable)를 여기에 AND하지 않는다(2026-11-05 적대적 리뷰) — 이 값이 여는 쓰기(블록·학생 끌기
+  //    moveClassSlots·moveEnrollmentsBatch, 수업 나누기, 가져오기)의 서버 게이트는 전부 classes 키다. 화면만 timetable로
+  //    닫으면 서버는 받아 주는데 단추가 없는 어긋남이 생긴다(write-lock.ts — 판정은 서버 게이트와 같은 함수·같은 키).
   const canEdit = rel !== "past" && (await canManageTenant(user.systemRole, "classes"));
   // 명단 이동(통합뷰에서 대기/퇴원으로 끌어 놓기) = **학생 기록 변경**이라 문이 다르다 — 서버 액션의
   // 게이트(canManageStudentRecords = students full)와 같은 모양이어야 한다(#77: 끌 수는 있는데 저장에서
@@ -355,6 +358,10 @@ export default async function TimetablePage({
   // (업로드 시트가 테넌트 전체 수강이라 담당 개념이 없다 — 시트 경로와 동일 규약).
   const canManageImport = await canManageTimetableImport(user.systemRole);
   const canMasterImport = subject === "english" && canManageImport && await canManageSheetSync(user.systemRole);
+  // 영어 '시트에서 가져오기'(구조 + 반이동) = 서버 applyStructureImport·applySheetImport와 같은 판정(시트 연동 ∧ classes 쓰기).
+  // 종전엔 과목만 봐서 반 관리가 '읽기'인 계정에도 메뉴가 떴다가 적용에서야 거절됐다(원장 2026-11-05, write-lock.ts).
+  const canApplyStructureImport =
+    (await canManageSheetSync(user.systemRole)) && (await canWriteTenant(user.systemRole, "classes"));
   // 미래 날짜로 적용해 둔 가져오기(예약) — 툴바 배지의 재료. 예약이 없으면 0행이라 비용이 사실상 없고,
   // 권한자에게만 도는 쿼리다(배지의 × 가 권한자 전용이라 남에게 보여줄 이유가 없다).
   const scheduled = (canSync && canManageImport) || canMasterImport ? await getScheduledImports() : [];
@@ -1079,6 +1086,7 @@ export default async function TimetablePage({
           kind={kind}
           canSync={canSync}
           canManageImport={canManageImport}
+          canApplyStructureImport={canApplyStructureImport}
           canMasterImport={canMasterImport}
           sheetUrl={sheetUrl}
           compact1h={compactList}
@@ -1128,7 +1136,7 @@ export default async function TimetablePage({
   );
 
   return (
-    <TimetableEditProvider effectiveDate={effectiveDate} today={today} canEdit={canEdit} canSplit={canSplit} weekMonday={week}>
+    <TimetableEditProvider effectiveDate={effectiveDate} today={today} canEdit={canEdit} canSplit={canSplit} canEndEnrollment={canEditRoster} weekMonday={week}>
       <TimetableApplyRefresh tenantId={user.tenantId} />
       {/* 학생 검색 — 툴바 입력칸과 세 뷰(기본·통합·강사)가 같은 값을 보게 감싼다. 편집 공급자 **안쪽**이라
           검색이 편집 모드를 읽고 스스로 물러난다(search-context.tsx 주석). */}

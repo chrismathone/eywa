@@ -14,7 +14,7 @@ import { EmbedLink as Link } from "@/components/embed-link";
  *    못 연다) 대시보드 카드·브리핑 신호도 빠진다. 켠 뒤 누가 쓰는지는 '역할·권한' 면이 정한다.
  * ⚠️ 데이터는 지우지 않는다 — 껐다 켜면 그대로 돌아온다.
  */
-export function ModulesSection({ initial }: { initial: ModulesSettings }) {
+export function ModulesSection({ initial, readOnly = false }: { initial: ModulesSettings; readOnly?: boolean }) {
   const [disabled, setDisabled] = useState<Set<ModuleId>>(() => new Set(initial.disabled));
   const toggle = (id: ModuleId) =>
     setDisabled((prev) => {
@@ -28,7 +28,7 @@ export function ModulesSection({ initial }: { initial: ModulesSettings }) {
   const onCount = MODULE_IDS.length - payload.disabled.length;
 
   return (
-    <SectionForm section="modules" payload={payload}>
+    <SectionForm section="modules" payload={payload} readOnly={readOnly}>
       <SettingsCard
         title="기능 켜기·끄기"
         description={`${MODULE_IDS.length}개 중 ${onCount}개 켜짐 · 끄면 그 메뉴와 대시보드 카드가 이 학원에서 사라집니다(데이터는 지우지 않습니다). 켠 기능을 누가 쓰는지는 '역할·권한'에서 정합니다.`}

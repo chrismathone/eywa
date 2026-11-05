@@ -9,6 +9,7 @@ import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
 // 분류는 단일 소스 — 화면 파일에 목록·라벨·색을 다시 적지 말 것.
 import { MEMO_CATEGORIES } from "@/features/students/detail/memo-category";
+import { writeLockedPlaceholder } from "@/lib/write-lock";
 
 function Submit() {
   const { pending } = useFormStatus();
@@ -20,7 +21,11 @@ function Submit() {
   );
 }
 
-export function MemoForm({ studentId }: { studentId: string }) {
+/**
+ * canWrite = 서버 `createStudentMemo`와 같은 판정(`canWriteTenant(role, "students")`) — page.tsx가 계산해 내린다.
+ * 읽기 권한이면 칸은 비활성 + 안내 placeholder, '특이사항 추가'는 그리지 않는다(원장 2026-11-05 — lib/write-lock.ts).
+ */
+export function MemoForm({ studentId, canWrite }: { studentId: string; canWrite: boolean }) {
   const [state, formAction] = useActionState<CreateMemoState, FormData>(
     createStudentMemo,
     undefined,
@@ -28,9 +33,11 @@ export function MemoForm({ studentId }: { studentId: string }) {
   const formRef = useRef<HTMLFormElement>(null);
 
   // 로컬 초안 자동저장 — 작성 중 메모를 새로고침/창닫기에서 지킨다. 저장 성공 시 초안 삭제(reset과 함께).
+  // 읽기 권한이면 끈다 — 쓸 수 없는 칸에 '작성하던 내용이 있습니다'를 띄우지 않게.
   const draft = useFormDraft({
     scope: `student-memo:${studentId}`,
     formRef,
+    enabled: canWrite,
     exclude: ["studentId"],
     ignoreForBanner: ["category"],
   });
@@ -57,7 +64,8 @@ export function MemoForm({ studentId }: { studentId: string }) {
         <select
           name="category"
           defaultValue="general"
-          className="border-border bg-card text-foreground rounded-lg border px-2 py-1 text-xs"
+          disabled={!canWrite}
+          className="border-border bg-card text-foreground rounded-lg border px-2 py-1 text-xs disabled:opacity-60"
         >
           {MEMO_CATEGORIES.map((c) => (
             <option key={c.value} value={c.value}>
@@ -68,8 +76,8 @@ export function MemoForm({ studentId }: { studentId: string }) {
         <span className="text-muted-foreground text-xs">분류</span>
         {/* 검색 허용(원장 2026-09-08) — 켜 두면 학생 검색이 이 메모 내용으로도 그 학생을 찾는다.
             🔴 기본은 켜짐이다: 메모를 적는 대부분의 이유가 "나중에 찾기"라서(민감한 메모만 끈다). */}
-        <label className="text-muted-foreground ml-auto flex cursor-pointer items-center gap-1.5 text-xs">
-          <input type="checkbox" name="searchable" defaultChecked className="size-3.5 accent-[var(--primary)]" />
+        <label className={`text-muted-foreground ml-auto flex items-center gap-1.5 text-xs ${canWrite ? "cursor-pointer" : "opacity-60"}`}>
+          <input type="checkbox" name="searchable" defaultChecked disabled={!canWrite} className="size-3.5 accent-[var(--primary)]" />
           검색 허용
         </label>
       </div>
@@ -77,13 +85,16 @@ export function MemoForm({ studentId }: { studentId: string }) {
         name="content"
         required
         rows={3}
-        placeholder="특이사항을 입력하세요..."
-        className="border-border bg-card text-foreground w-full rounded-lg border px-2 py-2 text-sm"
+        disabled={!canWrite}
+        placeholder={canWrite ? "특이사항을 입력하세요..." : writeLockedPlaceholder("students")}
+        className="border-border bg-card text-foreground w-full rounded-lg border px-2 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
       />
       {state?.error ? <p className="text-chart-4 text-xs">{state.error}</p> : null}
-      <div className="flex justify-end">
-        <Submit />
-      </div>
+      {canWrite ? (
+        <div className="flex justify-end">
+          <Submit />
+        </div>
+      ) : null}
     </form>
   );
 }

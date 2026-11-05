@@ -8,6 +8,7 @@ import { SHEET_BOX_FRAME, SHEET_INPUT } from "../ui-box";
 import { actualBooksOf, offGoalBooksOf, type MonthGoalMap, type PlanLineLike } from "../lib/goal-match";
 import type { GoalField, GoalRole } from "./use-month-goals";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { writeLockedPlaceholder } from "@/lib/write-lock";
 
 /**
  * 월간 목표 스트립 — 시트 원본의 '담임/부담임 월간계획'(6영역 × 교재·목표 진도)을 가로로 편 것.
@@ -45,6 +46,7 @@ export function MonthGoalStrip({
   const t = useSheetT();
   const tf = useSheetTf();
   const [folded, setFolded] = useState(false);
+  const lockedTitle = canEdit ? undefined : writeLockedPlaceholder("ecs");
   const map = goals[role];
   const roleChip = (key: GoalRole, label: string) => (
     <button
@@ -106,19 +108,23 @@ export function MonthGoalStrip({
                   >
                     {area.label}
                   </span>
+                  {/* 읽기 권한이면 **비활성**(readOnly는 활성 칸처럼 보였다) — '교재명'·'목표'처럼 쓰기를 권하는
+                      자리 표시 글도 걷고 안내는 툴팁으로. 칸이 12개라 문구를 칸마다 박지 않는다(화면 한 줄 = month-client). */}
                   <input
                     className={SHEET_INPUT}
                     defaultValue={cell.textbook ?? ""}
-                    readOnly={!canEdit}
-                    placeholder={t("month.goal.book")}
+                    disabled={!canEdit}
+                    placeholder={canEdit ? t("month.goal.book") : undefined}
+                    title={lockedTitle}
                     aria-label={tf("month.goal.bookAria", { area: area.label })}
                     onChange={(e) => onField(role, area.key, "textbook", e.target.value)}
                   />
                   <input
                     className={SHEET_INPUT}
                     defaultValue={cell.targetProgress ?? ""}
-                    readOnly={!canEdit}
-                    placeholder={t("month.goal.target")}
+                    disabled={!canEdit}
+                    title={lockedTitle}
+                    placeholder={canEdit ? t("month.goal.target") : undefined}
                     aria-label={tf("month.goal.targetAria", { area: area.label })}
                     onChange={(e) => onField(role, area.key, "targetProgress", e.target.value)}
                   />

@@ -192,8 +192,11 @@ export function AttendanceCell({
   const tf = useSheetTf();
   // 잠금 사유 문장은 여기서 편다 — 판정은 grid-context·`notMineCell` 한 곳, 문장은 사전.
   // 자리뿐인 칸은 사유가 다르다 — "반별 보기에서 고치세요"는 자리 기록엔 거짓 안내다(원장 2026-09-12).
-  const locked =
-    lockedReason === "past"
+  // 🔴 읽기 권한(격자 `readOnly`)이 먼저다 — 날짜·칸 성격과 무관하게 전부 잠기고, 사유도 권한이다(원장 2026-11-05).
+  const readOnly = ctx?.readOnly ?? false;
+  const locked = readOnly
+    ? (ctx?.lockNoteOf(sessionDate) ?? null)
+    : lockedReason === "past"
       ? (ctx?.lockNoteOf(sessionDate) ?? null)
       : lockedReason === "seatOnly"
         ? t("att.lock.seatOnly")
@@ -303,7 +306,8 @@ export function AttendanceCell({
   const openPopoverAt = (el: HTMLElement | null) => {
     if (!el) return;
     const selected = ctx?.store.selected;
-    setRangeKeys(selected && selected.size > 1 && selected.has(key) ? new Set(selected) : null);
+    // 범위 팝오버는 상태를 고르는 단추뿐이라 읽기 권한엔 열지 않는다 — 이 칸의 읽기 팝오버가 대신 선다.
+    setRangeKeys(!readOnly && selected && selected.size > 1 && selected.has(key) ? new Set(selected) : null);
     const r = el.getBoundingClientRect();
     const vh = typeof window !== "undefined" ? window.innerHeight : 9999;
     // 아래 공간이 팝오버 높이(~300px)보다 좁으면 위로 뒤집는다 — 마지막 행에서 저장 버튼이 화면 밖으로 안 나가게.
@@ -493,14 +497,20 @@ export function AttendanceCell({
           units={units}
           note={noteVal || ghostNote}
           locked={locked ?? null}
+          readOnly={readOnly}
           otherCount={otherSlots?.length ?? 0}
           anchor={popover}
           // 값이 찍힌 칸(결석 등)에서도 예약 정보·취소가 보여야 한다(서버는 `reserved`만 내려준다 — 이행되면 사라진다).
           reservation={reservation}
-          onReserve={() => {
-            setPopover(null);
-            setReserveOpen(true);
-          }}
+          // 읽기 권한엔 '보강 예약' 항목을 세우지 않는다(서버 `reserveMakeup`도 같은 출석부 쓰기 게이트).
+          onReserve={
+            readOnly
+              ? undefined
+              : () => {
+                  setPopover(null);
+                  setReserveOpen(true);
+                }
+          }
           onClose={() => setPopover(null)}
           onSaved={(next, opts) => {
             const token = (opts?.ifStill ?? null) as CellPaint | null;
@@ -552,7 +562,7 @@ export function AttendanceCell({
           }}
         />
       ) : null}
-      {reserveOpen ? (
+      {reserveOpen && !readOnly ? (
         /* 포털이라 DOM은 body지만 React 이벤트는 이 칸으로 버블한다 — 칸 선택·팝오버 열기에 안 닿게 창이 스스로 막는다. */
         <MakeupReserveDialog
           studentId={studentId}

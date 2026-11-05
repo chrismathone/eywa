@@ -41,8 +41,14 @@ export const CUSTOM_SLOTS_ANCHOR_ID = "class-custom-time-slots";
 export function CustomTimeSlots({
   initial,
   onCountChange,
+  readOnly = false,
 }: {
   initial: CustomSlot[];
+  /**
+   * 쓰기 권한 없음 — '시각 추가'·행 삭제 단추를 **그리지 않는다**(lib/write-lock.ts 규칙 1).
+   * 입력칸 자체는 부모 폼의 `<fieldset disabled>`가 끈다(class-form.tsx).
+   */
+  readOnly?: boolean;
   /**
    * 행 수가 바뀔 때만 부모에 알린다 — 클릭그리드 쪽 "교시표 밖 시각 N개" 배지가 이 수를 쓴다.
    * ⚠️ **상태를 부모로 올리지 않는다**(행 값은 여기 그대로) — 개수만 흘려보낸다. 부르는 자리는 **핸들러**뿐이다
@@ -92,18 +98,20 @@ export function CustomTimeSlots({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-foreground text-xs font-medium">시각 직접 입력 (교시표에 없는 시간)</p>
-        <button
-          type="button"
-          onClick={add}
-          disabled={rows.length >= MAX_ROWS}
-          {...(rows.length >= MAX_ROWS
-            ? { title: `직접 입력은 ${MAX_ROWS}개까지 추가할 수 있습니다` }
-            : {})}
-          className="text-primary inline-flex items-center gap-0.5 text-xs hover:underline disabled:opacity-50 disabled:hover:no-underline"
-        >
-          <EyIcon name="plus" size={12} />
-          시각 추가
-        </button>
+        {readOnly ? null : (
+          <button
+            type="button"
+            onClick={add}
+            disabled={rows.length >= MAX_ROWS}
+            {...(rows.length >= MAX_ROWS
+              ? { title: `직접 입력은 ${MAX_ROWS}개까지 추가할 수 있습니다` }
+              : {})}
+            className="text-primary inline-flex items-center gap-0.5 text-xs hover:underline disabled:opacity-50 disabled:hover:no-underline"
+          >
+            <EyIcon name="plus" size={12} />
+            시각 추가
+          </button>
+        )}
       </div>
       <p className="text-muted-foreground text-xs break-keep">
         방학 오전 특강처럼 교시표에 없는 시간대는 여기에 직접 입력합니다. 기존에 교시표 밖 시각으로
@@ -158,14 +166,16 @@ export function CustomTimeSlots({
                 aria-label={`${i + 1}번째 직접 입력 수업 종료 시각`}
                 className={inputClass}
               />
-              <button
-                type="button"
-                onClick={() => remove(i)}
-                aria-label={`${i + 1}번째 직접 입력 수업 삭제`}
-                className="text-text-dim hover:text-chart-4 inline-flex items-center rounded-lg p-1 transition"
-              >
-                <EyIcon name="trash" size={14} />
-              </button>
+              {readOnly ? null : (
+                <button
+                  type="button"
+                  onClick={() => remove(i)}
+                  aria-label={`${i + 1}번째 직접 입력 수업 삭제`}
+                  className="text-text-dim hover:text-chart-4 inline-flex items-center rounded-lg p-1 transition"
+                >
+                  <EyIcon name="trash" size={14} />
+                </button>
+              )}
             </li>
           ))}
         </ul>
