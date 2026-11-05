@@ -199,6 +199,14 @@ export function templateCarriesNote(template: ReportTemplate): boolean {
   return factTokensOf(template).includes("한마디");
 }
 
+/**
+ * 월간 점수 칸(`{월간평가}`)을 쓰는 템플릿인데 이 행에 Monthly Test 점수가 없는가 — 그러면 점수 줄 없이 코멘트만 들어가
+ * 자동작성이 "아무 반응 없음"처럼 보인다(원장 2026-11-05 제보). 화면이 까닭을 알린다.
+ */
+export function monthlyScoresMissing(template: ReportTemplate, facts: EnglishRowFacts): boolean {
+  return factTokensOf(template).includes("월간평가") && !facts.monthly;
+}
+
 /** 이 템플릿이 쓰는 그림 칸(고정 순서) — 있으면 자동작성·다시 채우기가 인재원 자료를 **먼저** 받는다. */
 export function templateImageSlots(template: ReportTemplate): ImageSlotKey[] {
   const used = new Set<string>(templateTokens(template.body));

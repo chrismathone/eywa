@@ -3527,6 +3527,10 @@ export const SHEET_DICT = {
     ko: "템플릿 목록을 불러오는 중입니다 — 잠시 후 다시 눌러 주세요",
     en: "Still loading your templates — try again in a moment",
   },
+  "os.tpl.monthlyNoScores": {
+    ko: "이 반의 최근 Monthly Test 점수가 없어 그래프·점수 표 없이 코멘트만 넣었습니다 — 성적관리에서 Monthly Test 점수를 넣고 새로고침한 뒤 다시 눌러 주세요",
+    en: "No recent Monthly Test scores for this class, so only the comment was filled — enter the Monthly Test scores in Grades, refresh, and try again",
+  },
   "os.tpl.templateMissing": {
     ko: "고른 템플릿을 찾지 못해 기본 템플릿으로 채웠습니다",
     en: "The chosen template wasn't found, so the built-in one was used",

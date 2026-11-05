@@ -157,6 +157,7 @@ import {
   templateFactsKey,
   templateCarriesNote,
   templateImageSlots,
+  monthlyScoresMissing,
   templateNeedsAi,
   type EnglishGenStatus,
   type EnglishRowFacts,
@@ -3098,6 +3099,8 @@ export function OneScreenClient({
       // 🔴 새 글이다 — 앞선 '그대로' 확인은 옛 글에 대한 것이라 버린다(안 버리면 새 글이 확인 없이 나갔다, 적대 재리뷰).
       outputAck: undefined,
     }));
+    // 월간 보고서인데 Monthly Test 점수가 없으면 코멘트만 들어간다 — 반응 없음처럼 보이지 않게 까닭을 알린다(2026-11-05).
+    if (!quiet && monthlyScoresMissing(found ?? DEFAULT_ENGLISH_TEMPLATE, nowFacts)) toast.message(t("os.tpl.monthlyNoScores"));
     if (found) return "ok";
     if (!quiet) toast.message(t("os.tpl.templateMissing"));
     return "template_fallback";
@@ -3162,6 +3165,7 @@ export function OneScreenClient({
     if (edited && !window.confirm(t("os.tpl.overwriteConfirm"))) return;
     if (!found) toast.message(t("os.tpl.templateMissing"));
     const facts = englishFactsOf(student, su, rep, jj.cacheRef.current);
+    if (monthlyScoresMissing(template, facts)) toast.message(t("os.tpl.monthlyNoScores"));
     const composed = composeEnglishDraft(template, facts, {
       nextTest: rep?.nextTest,
       aiIntro: ai.aiIntro,
