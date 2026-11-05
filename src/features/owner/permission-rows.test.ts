@@ -134,25 +134,27 @@ describe("차례 = 왼쪽 탭 → 그 탭의 내부 메뉴", () => {
     expect(menusOf("class").filter((menu) => fromMenu.includes(menu))).toEqual(fromMenu);
   });
 
-  it("권한 하나가 여는 면이 여럿이면 그 이름을 함께 적는다 — 수납의 화면 위 탭까지 · 출석부의 세 화면", () => {
-    // 수납 · 교재 · 지출은 메뉴 버튼, 환불·계산기·회차 확정은 화면 위 탭(원장 2026-10-14·15) — 탭도 이 권한이 여는 화면이라 이름을 적는다(메뉴 판 버튼 다음 — 화면 탭 차례).
-    expect(group("billing")!.rows.find((r) => r.menu === "billing")!.covers).toEqual(["수납", "교재", "지출", "환불 요청서", "수강료 계산기", "회차 확정"]);
-    expect(group("operation")!.rows.find((r) => r.menu === "shuttle")!.covers).toEqual(["셔틀", "학부모 관리 현황", "주간 시간표", "오늘 등하원", "학부모 등하원", "운행 현황", "실시간 위치"]);
-    // 따로 권한이 있는 탭(보고서 설정 · AI 멘트)은 수업보고서 줄에 적지 않는다 — 제 줄이 따로 선다.
-    expect(group("class")!.rows.find((r) => r.menu === "lesson_reports")!.covers).toEqual([]);
-    expect(group("class")!.rows.find((r) => r.menu === "attendance")!.covers).toEqual(["출석부", "오늘 출결", "출결 모드"]);
-    // 면이 하나뿐이고 이름도 그대로면 적지 않는다(같은 말을 두 번 쓰지 않는다).
-    expect(group("student")!.rows.find((r) => r.menu === "students")!.covers).toEqual([]);
+  it("줄은 탭 이름 한 줄 — 같은 권한이 여는 면을 나열하지 않는다(원장 2026-11-05 *\"문구 특별한 일 없으면 나누지마\"*)", () => {
+    // 수납(교재·지출·환불·계산기·회차 확정) · 셔틀(면 9개) · 출석부(오늘 출결·출결 모드) · 재고관리 — 모두 이름 한 줄.
+    for (const [g, menu, label] of [["billing", "billing", "수납관리"], ["operation", "shuttle", "셔틀"], ["class", "attendance", "출석부"]] as const) {
+      const r = group(g)!.rows.find((x) => x.menu === menu)!;
+      expect(r.label).toBe(label);
+      expect(r.covers).toEqual([]);
+    }
+    for (const g of permissionRowGroups()) for (const r of g.rows) expect(r.covers).toEqual([]);
+    // 따로 권한이 있는 화면만 제 줄(└)로 선다 — 출석부 아래 랩실·JJ실 출석부.
+    const rows = group("class")!.rows;
+    const at = rows.findIndex((r) => r.menu === "attendance");
+    expect(rows[at + 1]).toMatchObject({ menu: "seat_attendance", inner: true });
   });
 
   it("'학원 설정' 줄은 설정 묶음의 맨 위에 선다(그 메뉴 자신의 주소 자리) — 첫 면이 다른 권한(프로필·브랜드 설정)을 써도", () => {
     expect(menusOf("owner").slice(0, 2)).toEqual(["owner", "profile_settings"]);
   });
 
-  it("🔴 원장만 들어가는 면은 '이 권한으로 열리는 메뉴'로 적지 않는다 — 다른 역할에게 그 줄을 열어도 그 면은 안 열린다", () => {
+  it("'학원 설정' 줄도 이름 한 줄 — 역할·권한·데이터 정리·데이터 가져오기를 나열하지 않는다(원장 2026-11-05 *\"학원설정으로 통합\"*)", () => {
     const owner = (generic: boolean) => permissionRowGroups(undefined, { generic }).find((g) => g.id === "owner")!.rows.find((r) => r.menu === "owner")!;
-    expect(owner(false).covers).toEqual(["역할·권한", "데이터 정리", "데이터 가져오기"]);
-    for (const name of ["보강 운영", "대시보드 관리", "감사로그", "기능"]) expect(owner(true).covers).not.toContain(name);
+    for (const generic of [false, true]) expect(owner(generic)).toMatchObject({ label: "학원 설정", covers: [] });
   });
 });
 

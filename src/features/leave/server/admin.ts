@@ -18,6 +18,7 @@ import {
   type PeriodWindow,
 } from "../balance";
 import { isMissingUsedRangeColumn } from "../missing-used-range";
+import { isLeaveEligibleRole } from "../eligibility";
 // 표 미적용 판정(PGRST205·42P01…)은 전자결재 쪽과 **같은 헬퍼**를 쓴다 — 실패 모양을 두 번 정의하면
 // 한쪽만 새 오류 코드를 배운다. ⚠️ 다만 **문구는 여기서 쓴다**(아래 `describeOverviewError`):
 // 그쪽 문구는 "결재 문서를 볼 권한이 없습니다"라 직원관리 화면에서는 남의 시스템 얘기가 된다.
@@ -120,18 +121,22 @@ function describeOverviewError(e: unknown): LeaveLoadError {
   return { summary: "연차 현황을 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요", raw };
 }
 
-/** 활성 직원(학생 제외) — 결재선 후보와 같은 모집단이라 "여기 있는데 저기 없는" 사람이 안 생긴다. */
+/**
+ * 활성 직원(학생·아르바이트 제외) — 연차 대상만. 결재선 후보(학생만 제외)보다 아르바이트만큼 좁다
+ * (원장 2026-11-05 *"아르바이트생에게 연차 기능 필요없음"* — 판정은 `isLeaveEligibleRole` 한 곳).
+ * ⚠️ 아르바이트는 **JS에서** 거른다 — SQL 필터에 'parttime'을 넣으면 그 열거형 값이 없는 DB(s2_0024 전)에서 22P02로 표 전체가 죽는다(2026-11-05 리뷰).
+ */
 async function activeStaff(tenantId: string): Promise<StaffRaw[]> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("users")
-    .select("id, display_name, job_title, hire_date, subjects")
+    .select("id, display_name, job_title, hire_date, subjects, system_role")
     .eq("tenant_id", tenantId)
     .neq("status", "inactive")
     .neq("system_role", "student")
     .limit(500); // 학원 직원 수(수십)의 한참 위 — 절단 방지용 명시 상한(B2)
   if (error) throw new Error(error.message);
-  return (data ?? []) as StaffRaw[];
+  return ((data ?? []) as (StaffRaw & { system_role: string | null })[]).filter((u) => isLeaveEligibleRole(u.system_role));
 }
 
 /**

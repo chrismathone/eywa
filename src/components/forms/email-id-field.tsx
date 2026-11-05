@@ -61,7 +61,10 @@ export function EmailIdField({
             onChange={(e) => setDomain(e.target.value.trim().toLowerCase())}
             placeholder="gmail.com"
             aria-label="이메일 도메인"
-            className={`num w-36 shrink-0 ${inputClassName ?? ""}`}
+            // 폭은 flex-basis로 잡는다 — 부르는 쪽 inputClassName에 `w-full`이 섞여 오면(내 정보·직원 계정 대화상자)
+            // `w-36`이 지고 도메인 칸이 열 너비를 다 먹은 채 줄지 않아(shrink-0) 아이디 칸이 0으로 눌리고 옆 열을 덮었다
+            // (원장 제보 2026-11-05). basis는 width보다 우선이고, 좁은 화면에선 아이디 칸과 함께 줄어든다.
+            className={`num min-w-0 basis-36 ${inputClassName ?? ""}`}
           />
         ) : (
           <span className="border-line bg-bg-soft/60 text-text-dim num flex shrink-0 items-center rounded-lg border px-2.5 text-sm">

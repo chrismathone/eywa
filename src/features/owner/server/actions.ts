@@ -188,7 +188,10 @@ export async function saveOwnerSection(
     return { error: "새로고침한 뒤 급여명세서 권한을 다시 설정해 주세요." };
   }
   if (section === "permissions" && studentStatusRefreshRequired(parsedJson, (existing?.data as Record<string, unknown> | null)?.permissions)) {
-    return { error: "원생 메뉴 권한을 바꾸기 전에 새로고침한 뒤 원생 상태 변경 담당자를 지정해 주세요." };
+    // 자리를 문장에 넣는다 — "담당자를 지정해 주세요"만으로는 어디서 하는지 몰라 같은 오류가 거듭 났다(원장 2026-11-05).
+    // 전환과 메뉴 변경은 **한 번에 저장해도 된다**(요청에 studentStatusManagerIds 키가 실리면 이 검사를 지난다 · DB 트리거도 같다).
+    // 막는 것은 **상태 변경 권한이 넓어지는 변경**뿐이다(사무실 역할의 원생 '전체' · 개인 '전체' — 판정은 studentStatusRefreshRequired).
+    return { error: "이 변경은 원생 상태 변경(퇴원·휴원) 권한을 넓힙니다. 아래 '개인별 기능 권한 › 원생 상태 변경'에서 '담당자 지정으로 전환'을 누르고 담당자를 정한 뒤 함께 저장해 주세요. 이미 전환했다면 새로고침 후 다시 저장해 주세요." };
   }
   // 개인별 메뉴 권한의 대상 확인 — 어느 학원에서나 한다(침산도 역할 표 아래에서 개인별 권한을 준다, 원장 2026-10-06).
   //  · 개인별 메뉴 권한 — 새 학원(일반판): 종전대로 요청의 모든 줄을 본다. 침산: **새로 주거나 바꾸는 줄만** 본다 —
