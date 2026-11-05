@@ -6,6 +6,8 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { MARKER_TRIGGER, MARKER_WIDTH } from "@/components/ui/marker-trigger";
 import {
   SHEET_FACES,
+  SHEET_PILL_GLYPH_ICON,
+  SHEET_PILL_GLYPH_LABEL,
   SHEET_SEG_BOX,
   sheetFaceLabel,
   sheetFaceTitle,
@@ -55,10 +57,10 @@ function PillGlyph({
 }) {
   return (
     <>
-      <span className="flex h-[18px] items-center md:hidden" title={hint}>
+      <span className={SHEET_PILL_GLYPH_ICON} title={hint}>
         <EyIcon name={icon} size={14} />
       </span>
-      <span className="hidden md:inline">{children}</span>
+      <span className={SHEET_PILL_GLYPH_LABEL}>{children}</span>
     </>
   );
 }

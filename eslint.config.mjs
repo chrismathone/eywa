@@ -78,6 +78,8 @@ const shadcnConfig = !shadcn
           "src/app/(marketing)/**",
           "src/app/(academy)/**",
           "src/features/timetable-lab/editor/**",
+          // 편집기가 뜨기 전 자리 표시 — 편집기 CSS를 그대로 불러 같은 클래스로 그린다(2026-11-05 스켈레톤 검수).
+          "src/app/(shell)/timetable/editor/_components/editor-skeleton.tsx",
           "src/app/(shell)/dashboard/_instruments/**",
         ],
         rules: { "shadcn/no-unknown-classes": "off" },

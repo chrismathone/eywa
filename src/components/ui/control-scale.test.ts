@@ -149,12 +149,21 @@ describe("컨트롤 프리셋 — 높이는 라벨에서 도출, 공용 컨트�
       // 클래스 문자열 안의 h-8만 본다 — 주석은 "h-8을 대체했다"고 적으려고 그 단어를 쓴다.
       expect(src, r).not.toMatch(/["`][^"`\n]*\bh-8\b[^"`\n]*["`]/);
     }
-    // 직접 클래스를 적는 부품은 같은 변수를 가리켜야 한다.
-    for (const r of ["components/toolbar-controls.ts", "components/face-tabs.tsx", "components/period-nav.tsx"]) {
-      const src = readFileSync(join(SRC, r), "utf8");
+    // 직접 클래스를 적는 부품은 같은 변수를 가리켜야 한다. 부품이 치수 상수를 순수 모듈로 꺼냈으면(스켈레톤과 함께 쓰려고 —
+    // 2026-11-05) 그 모듈까지 한 덩어리로 본다.
+    const parts: Record<string, string[]> = {
+      "components/toolbar-controls.ts": ["components/toolbar-controls.ts"],
+      "components/face-tabs.tsx": ["components/face-tabs.tsx", "components/face-tabs-classes.ts"],
+      "components/period-nav.tsx": ["components/period-nav.tsx", "components/period-nav-metrics.ts"],
+    };
+    for (const [r, files] of Object.entries(parts)) {
+      const src = files.map((f) => readFileSync(join(SRC, f), "utf8")).join("\n");
       expect(src, r).toContain(CONTROL_H);
       expect(src, r).toContain("text-(length:--control-label)");
     }
+    // 꺼낸 상수를 실물 부품이 실제로 쓴다(모듈만 맞고 부품은 손 클래스로 돌아가면 안 된다).
+    expect(readFileSync(join(SRC, "components/period-nav.tsx"), "utf8")).toContain("period-nav-metrics");
+    expect(readFileSync(join(SRC, "components/face-tabs.tsx"), "utf8")).toContain("face-tabs-classes");
     expect(CONTROL_LABEL).toContain("leading-none");
   });
 });
