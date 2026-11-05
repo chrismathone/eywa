@@ -10,8 +10,8 @@ import { SettingsCard } from "./settings-card";
  * '강사 내 메뉴 표시' — 강사 화면 '내 메뉴'에 세울 탭을 켜고 끈다. 아래 '역할별 메뉴 권한' 표의 **강사 칸과 같은 값**이다
  * (따로 저장하는 칸이 아니다). 끄면 그 탭이 '내 메뉴'에서 빠지고 강사는 그 화면에 들어갈 수 없다.
  *
- * 칸의 차례와 이름은 강사 '내 메뉴'가 실제로 서는 그대로다([teacherToggleRows](@/features/owner/teacher-toggle-rows) — 강사뷰 구성).
- * 칸 하나가 '내 메뉴'의 여러 줄을 함께 여닫으면(출석부 = 출결 모드 + 출석부) 그 줄 이름을 아래에 적는다.
+ * 칸의 차례는 강사 '내 메뉴'가 실제로 서는 그대로다([teacherToggleRows](@/features/owner/teacher-toggle-rows) — 강사뷰 구성).
+ * 칸 이름은 권한 이름(탭 이름) 한 줄 — 강사뷰 구성에서 **이름을 바꾼** 입구만 바꾼 이름을 아래에 적는다(원장 2026-11-05 "항상 탭 이름을 기본으로").
  * 접어 둘 수 있다(원장 2026-10-06) — 접혀 있어도 값은 그대로 살아 저장에 실린다.
  */
 export function TeacherMenuToggles({ matrix, navigation, onToggle }: {
