@@ -8,6 +8,7 @@ import { kstDateOf } from "@/lib/date-kst";
 import { isIntakeExpired } from "@/features/enrollment/intake-expiry";
 import { Copy, Loader2, Power, QrCode, Trash2, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
+import { writeLockedNote } from "@/lib/write-lock";
 import {
   createIntakeToken,
   setIntakeTokenActive,
@@ -35,7 +36,7 @@ function CreateBtn() {
   );
 }
 
-function Dialog({ tokens, onClose }: { tokens: IntakeTokenView[]; onClose: () => void }) {
+function Dialog({ tokens, canWrite, onClose }: { tokens: IntakeTokenView[]; canWrite: boolean; onClose: () => void }) {
   const router = useRouter();
   const [state, formAction] = useActionState<IntakeTokenState, FormData>(createIntakeToken, undefined);
   const [, startMutate] = useTransition();
@@ -81,6 +82,9 @@ function Dialog({ tokens, onClose }: { tokens: IntakeTokenView[]; onClose: () =>
           </button>
         </header>
 
+        {/* 🔴 읽기 권한이면 링크 생성 양식째 그리지 않는다 — QR 보기·링크 복사만 남는다(원장 2026-11-05 · write-lock.ts).
+            서버(requireIntakeAdmin)도 같은 판정(enrollment full|scoped)으로 다시 막는다. */}
+        {canWrite ? (
         <form action={formAction} className="border-border mb-4 flex flex-wrap items-end gap-2 border-b pb-4">
           <label className="flex-1 space-y-1">
             <span className="text-foreground block text-xs font-medium">링크 이름</span>
@@ -100,6 +104,9 @@ function Dialog({ tokens, onClose }: { tokens: IntakeTokenView[]; onClose: () =>
           </label>
           <CreateBtn />
         </form>
+        ) : (
+          <p className="text-text-dim border-border mb-4 border-b pb-4 text-xs">{writeLockedNote("enrollment")}</p>
+        )}
         {state?.error ? <p className="text-danger mb-3 text-xs">{state.error}</p> : null}
 
         {tokens.length === 0 ? (
@@ -141,6 +148,9 @@ function Dialog({ tokens, onClose }: { tokens: IntakeTokenView[]; onClose: () =>
                       <Copy className="size-3" />
                       {copied === t.id ? "복사됨" : "링크 복사"}
                     </button>
+                    {/* 활성 토글·만료일 변경·삭제 = 쓰기 — 읽기 권한이면 그리지 않는다(링크 복사만). */}
+                    {canWrite ? (
+                    <>
                     <form action={mutate}>
                       <input type="hidden" name="id" value={t.id} />
                       <input type="hidden" name="action" value="toggle" />
@@ -183,6 +193,8 @@ function Dialog({ tokens, onClose }: { tokens: IntakeTokenView[]; onClose: () =>
                         삭제
                       </button>
                     </form>
+                    </>
+                    ) : null}
                   </div>
                 </div>
               </li>
@@ -195,7 +207,7 @@ function Dialog({ tokens, onClose }: { tokens: IntakeTokenView[]; onClose: () =>
 }
 
 /** 등록상담 헤더의 "공개 접수 QR" 트리거. */
-export function IntakeQrButton({ tokens }: { tokens: IntakeTokenView[] }) {
+export function IntakeQrButton({ tokens, canWrite = true }: { tokens: IntakeTokenView[]; canWrite?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -206,7 +218,7 @@ export function IntakeQrButton({ tokens }: { tokens: IntakeTokenView[] }) {
         <QrCode className="size-4" />
         공개 접수 QR
       </Button>
-      {open ? <Dialog tokens={tokens} onClose={() => setOpen(false)} /> : null}
+      {open ? <Dialog tokens={tokens} canWrite={canWrite} onClose={() => setOpen(false)} /> : null}
     </>
   );
 }

@@ -455,10 +455,24 @@ v3(회색 캔버스 `#f5f5f7` + 화이트 카드)에서 캔버스를 화이트�
 실표면이 바뀔 때 같이 안 바뀐다 — 실제로 v5(컨트롤 32→26px)와 09-01(ECS·MCS 상단 바 카드 제거)을 스켈레톤 **아홉이 못 따라왔다**
 (수납은 14단계에서 걷힌 '최근 6개월 칩 줄'을, ECS·MCS는 카드 껍데기 띠를, 면 탭은 알약 7개를 계속 그리고 있었다).
 - **컨트롤 줄**(툴바·상단 바·면 탭)의 높이는 **`h-(--control-h)`** — `h-8`·`h-[38px]`로 적지 말 것.
-- **면 탭**은 알약 여러 개가 아니라 **테두리 상자 하나**(`FaceTabs` = `h-(--control-h) rounded-lg border`).
+- **면 탭**은 알약 여러 개가 아니다 — 1차(`FaceTabs` 기본) = **폭 전체 밑줄**(`min-h-(--control-h) border-b pb-1`, 2026-09-11~) ·
+  2차(`level="secondary"`) = 내용 폭 테두리 상자. 치수는 [`face-tabs-classes.ts`](../src/components/face-tabs-classes.ts) 한 곳이다.
+- 🔴 **공용 부품의 스켈레톤을 쓴다**(2026-11-05 2차 검수 — 52개 중 47개가 다시 어긋났다: 손으로 베낀 사본이라 부품이 바뀌어도 안 따라왔다):
+  면 탭 = `FaceTabsSkeleton` · 툴바 줄 = 실물 `<Toolbar>` + `ToolbarSkeletonItem` · 숫자 카드 = `BigStatSkeleton` ·
+  요약 띠 = `StatStripSkeleton` · 머리글 = `PageHeaderSkeleton`(`actions`·`stats` 자리). 부품의 치수 상수를 실물과 함께 쓰므로 실물을 고치면 따라온다.
+  면 탭은 `labels`(실물 탭 이름)를 주면 칸 폭까지 같다 · 요약 띠 `sub`는 칸마다(배열) 줄 수 있다.
+- 🔴 **글자 줄 높이를 `h-4`·`h-5`로 적지 않는다** — 이 저장소의 글자 토큰은 Tailwind 기본보다 한 단계 크다(`text-sm` 한 줄 = 24px ·
+  `text-xs` ≈ 20px · `text-base` 27px · `text-xl` 30px). 한 줄 자리 = `SkeletonLine`(글자 클래스를 주면 그 줄 높이) · 여러 줄 문장·긴 라벨 =
+  `SkeletonText`(실물 문구를 투명 글자로 — 같은 폭에서 같은 줄 수) — `src/components/skeleton-text.tsx`(2026-11-05 리뷰: 줄마다 4~8px 짧아 아래가 누적해 밀렸다).
+- 🔴 **하위 화면은 부모 스켈레톤을 받는다**(Next: 자기 `loading.tsx`가 없으면 가장 가까운 조상 것) — 상세·새로 만들기처럼 모양이 다른
+  하위 화면을 새로 만들면 그 폴더에 자기 `loading.tsx`를 둘지 정한다.
 - 실화면에 있는 줄(면 탭·툴바)을 **빠뜨리지 말 것** — 빠지면 그 줄 높이만큼 본문이 통째로 내려앉는다.
 - 가드 [`src/lib/design/skeleton-canon.test.ts`](../src/lib/design/skeleton-canon.test.ts): 툴바를 그리는 스켈레톤은
-  `--control-h`를 가리켜야 하고, 툴바 자리에 고정 px 높이를 적으면 실패한다.
+  `--control-h`를 가리키거나 그 변수를 쓰는 공용 스켈레톤 부품(`ToolbarSkeletonItem`·`FaceTabsSkeleton`·`PeriodNavSkeleton`·
+  `SheetClassPickerSkeleton`·`SheetFaceSwitchSkeleton`)을 **JSX로 그려야** 하고, 툴바 자리에 고정 px 높이를 적으면 실패한다.
+- 가드 [`src/lib/design/skeleton-pairs.test.ts`](../src/lib/design/skeleton-pairs.test.ts): ① 화면이 `FaceTabs`·`StatStrip`·`BigStat`을
+  그리면 덮는 스켈레톤이 짝 스켈레톤을 그린다(흔한 첫 화면에 안 서는 경우만 사유와 함께 `EXEMPT`) ② 부모 스켈레톤을 받는 하위 화면은
+  `ALLOWED` 목록으로 잠근다(리다이렉트만 하는 화면은 제외) — 새 하위 화면을 만들면 자기 `loading.tsx`를 두거나 사유와 함께 올린다.
 - **임의 px 금지**: `rounded-[Npx]`는 토큰으로(2~4→xs, 5~6→sm, 8→md, 9~10→lg, 12~14→xl, 16~18→2xl).
   예외 = 로고 마크·모핑 하이라이트 등 정밀 튜닝(주석으로 사유 명시).
 - **불변 영역**: `src/components/ui/*`(base-nova 프리셋), 표·그리드 내부 밀도 요소(시간표 셀 미니 라벨 등),

@@ -20,6 +20,7 @@ import { getCatalogOptions } from "@/features/billing/server/catalog-queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { accountForTarget } from "@/features/owner/settings-types";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { TextbooksTable } from "./textbooks-table";
@@ -85,6 +86,9 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
     ? await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId)
     : null;
   const account = accountForTarget(settings.billing, "textbook");
+  // 교재신청 등록·체크·수정·삭제를 세울지 — 서버 액션(createTextbookOrder·toggleTextbookCheck 등)과 같은 canWriteTenant(billing).
+  // 읽기 권한이면 단추를 그리지 않고 체크는 비활성(원장 2026-11-05).
+  const canWrite = user ? await canWriteTenant(user.systemRole, "billing") : false;
   const todayKst = kstToday(); // 신청일 경과 라벨 계산 기준(서버 KST) — 클라에 주입.
 
   const pageHref = (n: number) => {
@@ -185,6 +189,7 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
         logoUrl={logoUrl}
         account={account}
         todayKst={todayKst}
+        canWrite={canWrite}
         emptyTitle={
           q || status !== "all"
             ? "조건에 맞는 교재신청이 없습니다. 위에서 검색·상태 필터를 바꿀 수 있습니다."

@@ -7,6 +7,15 @@ import { ChevronLeft, ChevronRight } from "@/components/icons/aywa-icon-compat";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import { cn } from "@/lib/utils";
 import s from "./period-nav.module.css";
+import {
+  PERIOD_NAV_ARROW_BOX,
+  PERIOD_NAV_ARROW_ICON,
+  PERIOD_NAV_BOX,
+  PERIOD_NAV_LABEL_BASE,
+  PERIOD_NAV_LABEL_BOX,
+  PERIOD_NAV_ROW,
+  periodNavLabelWidth,
+} from "./period-nav-metrics";
 
 /**
  * 기간 이동 네비 **단일 소스** — `‹ 2026년 8월 ›` 한 덩어리.
@@ -50,7 +59,7 @@ export function PeriodNav({
   prevAriaLabel,
   nextAriaLabel,
   currentTitle,
-  labelWidth: labelWidthBase = 112,
+  labelWidth: labelWidthBase = PERIOD_NAV_LABEL_BASE,
   pending: externalPending = false,
   onNavigate,
   prevDisabled = false,
@@ -142,24 +151,25 @@ export function PeriodNav({
   //    같은 값이라 한 줄에 나란히 서도 밑선이 맞는다. 세로 패딩으로 높이를 만들지 말 것(글자 크기가 바뀌면 흔들린다).
   //    (09-01 "h-8 고정"은 이 규칙으로 대체.)
   const arrow =
-    "text-text-dim hover:text-primary hover:bg-bg-soft inline-flex h-full cursor-pointer items-center justify-center px-2 transition disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-text-dim";
+    `${PERIOD_NAV_ARROW_BOX} text-text-dim hover:text-primary hover:bg-bg-soft cursor-pointer transition disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-text-dim`;
 
   // 칠해진 화살표 — hover 톤까지 덮어써야 마우스를 얹었을 때 색이 도로 풀리지 않는다.
   const lit =
     "bg-primary text-primary-foreground hover:bg-primary-deep hover:text-primary-foreground";
 
   // 🔴 폭은 **고정**(원장 2026-09-01 "이동해도 크기 변동 안 되고 고정되게" — min이면 글자 수가 바뀔 때 화살표가 움찔한다).
-  //    호출부의 labelWidth는 옛 13px 라벨에 맞춘 값이라 v5 라벨(18px)에 맞춰 1.4배로 도출한다(고정폭은 그대로).
-  const desktopLabelWidth = Math.ceil(labelWidthBase * 1.4);
+  //    호출부의 labelWidth는 옛 13px 라벨에 맞춘 값이라 v5 라벨(18px)에 맞춰 1.4배로 도출한다(고정폭은 그대로) —
+  //    도출은 period-nav-metrics.ts 한 곳(스켈레톤 PeriodNavSkeleton과 같은 함수).
+  const desktopLabelWidth = periodNavLabelWidth(labelWidthBase);
   const labelWidth = mobileLabel ? "var(--period-label-width)" : desktopLabelWidth;
 
   return (
     <div
-      className={`flex shrink-0 items-center gap-1.5 ${mobileLabel ? s.responsive : ""}`}
+      className={`${PERIOD_NAV_ROW} ${mobileLabel ? s.responsive : ""}`}
       style={mobileLabel ? { "--period-label-desktop": `${desktopLabelWidth}px` } as CSSProperties : undefined}
     >
       <div
-        className={`border-line-strong inline-flex h-(--control-h) items-center overflow-hidden rounded-lg border ${
+        className={`${PERIOD_NAV_BOX} ${
           pending || handing || externalPending ? "opacity-70" : ""
         }`}
       >
@@ -170,11 +180,11 @@ export function PeriodNav({
           disabled={prevDisabled}
           onClick={() => go(prevHref)}
         >
-          <ChevronLeft className="size-[1em] text-(length:--control-label)" />
+          <ChevronLeft className={PERIOD_NAV_ARROW_ICON} />
         </button>
         {labelControl ? (
           <div
-            className="border-line-faint h-full shrink-0 border-x"
+            className={PERIOD_NAV_LABEL_BOX}
             style={{ width: labelWidth }}
           >
             {labelControl}
@@ -184,7 +194,7 @@ export function PeriodNav({
             type="button"
             // 이미 이번 기간이면 눌러도 갈 곳이 없다 — 비활성으로 그 사실을 모양에 담는다.
             disabled={isCurrent}
-            className={`border-line-faint num h-full shrink-0 border-x px-2 text-center text-(length:--control-label) leading-none font-bold whitespace-nowrap transition ${
+            className={`${PERIOD_NAV_LABEL_BOX} num px-2 text-center text-(length:--control-label) leading-none font-bold whitespace-nowrap transition ${
               isCurrent
                 ? "text-foreground cursor-default"
                 : "text-foreground hover:bg-bg-soft cursor-pointer"
@@ -206,7 +216,7 @@ export function PeriodNav({
           disabled={nextDisabled}
           onClick={() => go(nextHref)}
         >
-          <ChevronRight className="size-[1em] text-(length:--control-label)" />
+          <ChevronRight className={PERIOD_NAV_ARROW_ICON} />
         </button>
       </div>
       {badge ? (

@@ -7,7 +7,7 @@ import { StatStrip } from "@/components/atoms/stat-strip";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { requireAccess } from "@/lib/auth/require-access";
-import { canManageTenant } from "@/lib/auth/perm-matrix";
+import { canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { isModuleEnabled } from "@/lib/modules";
 import { ExcelMenu } from "@/components/excel-import/excel-menu";
@@ -95,13 +95,15 @@ export default async function ConsultationsPage({
     subject: subject || undefined,
     subjectLabel: subject ? subjects.labelOf(subject) : null,
   };
-  const [{ rows: items, total, classSupported }, counts, counselorOptions, canImportExcel, teacherId] = await Promise.all([
+  const [{ rows: items, total, classSupported }, counts, counselorOptions, canImportExcel, teacherId, canWrite] = await Promise.all([
     getStudentConsultationsPage(filters, page, size),
     getStudentConsultationCounts(),
     getConsultationCounselorOptions(),
     // 엑셀로 넣기 = 학원 전체 일괄 작업 → full만(올리기 주소도 같은 판정 — [[#77]]).
     canManageTenant(user.systemRole, "consultations"),
     effectiveTeacherId(),
+    // '상담 추가' = 저장 게이트(createStudentConsultation)와 같은 판정 — 읽기 권한이면 단추를 그리지 않는다(원장 2026-11-05).
+    canWriteTenant(user.systemRole, "consultations"),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / size));
   const { thisMonth, lastWeek, pendingFollowUps, overdueFollowUps } = counts;
@@ -165,7 +167,7 @@ export default async function ConsultationsPage({
             className={`${CONTROL_H} ${CONTROL_LABEL} text-primary inline-flex items-center px-1 font-medium whitespace-nowrap hover:underline`}
           >
             <SheetText value={"통계 보기"} /></EmbedLink>
-          <NewConsultationTrigger />
+          {canWrite ? <NewConsultationTrigger /> : null}
         </div>
       </div>
 
@@ -190,7 +192,7 @@ export default async function ConsultationsPage({
               src="/photos/consultations-hero.webp"
               alt=""
               caption="기록된 상담이 없습니다"
-              sub="상담 추가로 첫 기록을 남겨 보세요"
+              sub={canWrite ? "상담 추가로 첫 기록을 남겨 보세요" : undefined}
               aspect="3/2"
               sizes="(max-width: 768px) 100vw, 576px"
             />

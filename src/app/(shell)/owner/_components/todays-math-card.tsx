@@ -4,18 +4,27 @@ import { useState } from "react";
 import type { ReportSettings } from "@/features/owner/settings-types";
 import { SectionForm, SettingsCard } from "./section-form";
 import { ToggleField } from "./fields";
+import type { MenuKey } from "@/lib/permissions";
 
 /**
  * 학원 설정 → 연동 → 오늘 수학(2026-10-17). 지점에 오늘 수학이 켜져 있을 때만 이 탭이 선다(integrations-face.tsx).
  * 개발 중 기능은 여기서 켠 학원만 동작한다(원장 *"원장 설정에서 오늘의 수학 탭에서 토글 온 되어있어야 연동되게"* ·
  * *"같은 탭에 토글로 진행해"*). 값은 보고서 섹션(`report.todaysMath*`)에 산다 — 저장은 다른 설정과 같은 길(saveOwnerSection)로 섹션째.
  */
-export function TodaysMathCard({ report }: { report: ReportSettings }) {
+export function TodaysMathCard({ report, readOnly = false, lockMenu, lockNote = true }: {
+  report: ReportSettings;
+  /** 보고서 설정 쓰기(저장 액션 = saveOwnerSection(report) → report_settings)가 없거나 연동 면이 잠겼으면 true — 저장 바를 그리지 않는다. */
+  readOnly?: boolean;
+  /** 읽기 전용 안내에 적을 권한 키(막은 쪽) — integrations-face.tsx가 정한다. */
+  lockMenu?: MenuKey;
+  /** 폼 위 권한 안내를 적을지 — 연동 면 전체가 잠겼으면(면 위가 이미 적음) false(SectionForm.lockNote). */
+  lockNote?: boolean;
+}) {
   const [fill, setFill] = useState(report.todaysMathTestFill);
   const [monthly, setMonthly] = useState(report.todaysMathMonthlyFill);
   const [pdf, setPdf] = useState(report.todaysMathReportPdf);
   return (
-    <SectionForm section="report" payload={{ ...report, todaysMathTestFill: fill, todaysMathMonthlyFill: monthly, todaysMathReportPdf: pdf }}>
+    <SectionForm section="report" payload={{ ...report, todaysMathTestFill: fill, todaysMathMonthlyFill: monthly, todaysMathReportPdf: pdf }} readOnly={readOnly} lockMenu={lockMenu} lockNote={lockNote}>
       <div className="grid items-start gap-4 xl:grid-cols-2">
         <SettingsCard
           title="원스크린 시험 칸 채우기"

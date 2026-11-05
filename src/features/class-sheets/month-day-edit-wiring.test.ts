@@ -233,11 +233,16 @@ describe("ECS 상단 바 · 주간/월간 통일", () => {
  */
 describe("ECS 상단 바 · 좁은 폭에서 접기", () => {
   const chrome = code(read("features/class-sheets/components/sheet-chrome.tsx"));
+  // 알약 글자 자리 클래스는 2026-11-05부터 chrome.ts 상수(`SHEET_PILL_GLYPH_*`) — 스켈레톤(sheet-chrome-skeleton.tsx)과 같은 값을 쓰려고
+  // 옮겼다(원문 확인처를 옮긴 것이지 없앤 게 아니다). 실물이 그 상수를 쓰는지 + 상수 값을 함께 본다.
+  const chromeConsts = code(read("features/class-sheets/chrome.ts"));
 
   it("글자는 접히고 아이콘이 대신 선다(둘 다 사라지는 폭이 없다)", () => {
     // 아이콘 자리 = 좁은 폭 전용, 글자 자리 = md부터. 한 쌍이라 어느 폭에서도 정확히 하나가 보인다.
-    expect(chrome).toContain('className="flex h-[18px] items-center md:hidden"');
-    expect(chrome).toContain('className="hidden md:inline"');
+    expect(chrome).toContain("className={SHEET_PILL_GLYPH_ICON}");
+    expect(chrome).toContain("className={SHEET_PILL_GLYPH_LABEL}");
+    expect(chromeConsts).toContain('SHEET_PILL_GLYPH_ICON = "flex h-[18px] items-center md:hidden"');
+    expect(chromeConsts).toContain('SHEET_PILL_GLYPH_LABEL = "hidden md:inline"');
     expect(chrome).toContain('<PillGlyph icon="list"');
     expect(chrome).toContain('<PillGlyph icon="info"');
   });
@@ -267,7 +272,7 @@ describe("ECS 상단 바 · 좁은 폭에서 접기", () => {
 
   it("⚠️ 아이콘 자리 높이가 글자 줄상자와 같다 — 접힌 알약만 낮아지지 않게", () => {
     // 12px 글자 × preflight line-height 1.5 = 18px. 이 값을 지우면 옆 요일 알약과 밑줄이 어긋난다.
-    expect(chrome).toContain("h-[18px]");
+    expect(chromeConsts).toContain("h-[18px]");
   });
 
   it("🔴 접기는 공용 조각 한 곳에서만 — 화면마다 라벨을 다시 그리지 않는다", () => {

@@ -25,6 +25,7 @@ import { CatalogPicker, CourseEditor, ExtraEditor, DiscountEditor } from "./quot
 import { QuoteDocument } from "./quote-document";
 import { submitAction } from "@/components/forms/submit-action";
 import { useBillingSettingsRefresh } from "@/features/billing/use-billing-settings-refresh";
+import { writeLockedNote } from "@/lib/write-lock";
 
 const won = (n: number) => `${new Intl.NumberFormat("ko-KR").format(Math.round(n))}원`;
 const inputCls =
@@ -77,6 +78,7 @@ export function TuitionCalculator({
   textbooks = [],
   initial,
   showHouseRules = true,
+  canSave,
 }: {
   academyName: string;
   logoSrc?: string | null; // 학원 로고(서버에서 resolveBrandingSrc로 푼 signed URL) — 안내문 헤더
@@ -88,6 +90,11 @@ export function TuitionCalculator({
   initial?: QuoteDetail;
   /** 안내문 하단 '학원 수칙'(첫 학원 규칙) — 새 학원은 끈다. 법정 환불 규정은 늘 실린다. */
   showHouseRules?: boolean;
+  /**
+   * '견적 저장'을 세울지 — 서버(CalculatorTab)가 `saveTuitionQuote`와 같은 판정(canManageTenant billing = full)으로 정한 값.
+   * 읽기 권한이면 저장 단추만 그리지 않는다 — 입력칸은 그 자리 계산용이라 그대로 두고 계산·인쇄는 쓴다(원장 2026-11-05).
+   */
+  canSave: boolean;
 }) {
   useBillingSettingsRefresh();
   /**
@@ -421,10 +428,14 @@ export function TuitionCalculator({
         {/* 저장 */}
         <section className="bg-card border-line shadow-card space-y-3 rounded-2xl border p-4">
           <div className="flex items-baseline justify-between">
-            <h2 className="text-foreground text-base font-bold">견적 저장</h2>
+            <h2 className="text-foreground text-base font-bold">{canSave ? "견적 저장" : "합계"}</h2>
             <span className="text-primary num text-lg font-bold">{won(totals.total)}</span>
           </div>
-          <p className="text-text-faint text-xs">신입생 상담 견적으로 저장됩니다(재원생 청구서와 별개). 저장 후 ‘저장된 청구서’ 탭에서 다시 열 수 있습니다.</p>
+          <p className="text-text-faint text-xs">
+            {canSave
+              ? "신입생 상담 견적으로 저장됩니다(재원생 청구서와 별개). 저장 후 ‘저장된 청구서’ 탭에서 다시 열 수 있습니다."
+              : `계산·인쇄는 그대로 쓸 수 있습니다. ${writeLockedNote("billing")}`}
+          </p>
           <form onSubmit={(e) => submitAction(e, formAction)} className="flex items-center justify-end gap-2">
             <input type="hidden" name="studentName" value={student.name} />
             <input type="hidden" name="school" value={student.school} />
@@ -448,7 +459,7 @@ export function TuitionCalculator({
                 <Check className="size-3.5" />
                 견적이 저장되었습니다.
               </p>
-            ) : !student.name.trim() || courses.length === 0 ? (
+            ) : canSave && (!student.name.trim() || courses.length === 0) ? (
               <p className="text-text-faint mr-auto text-xs">
                 <span className="text-danger">*</span> 학생 이름과 수강 과목을 입력하면 저장됩니다
               </p>
@@ -457,7 +468,7 @@ export function TuitionCalculator({
               <Printer className="size-4" />
               인쇄
             </Button>
-            <SaveBtn disabled={!student.name.trim() || courses.length === 0} />
+            {canSave ? <SaveBtn disabled={!student.name.trim() || courses.length === 0} /> : null}
           </form>
         </section>
       </div>

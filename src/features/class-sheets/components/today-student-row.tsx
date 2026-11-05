@@ -84,7 +84,9 @@ export function StudentRow({
           onSet={onSet}
           onClear={onClear}
           onRemoveMakeup={
-            student.isMakeup
+            // 🔴 서버(removeMakeupAttendee)는 ecs 쓰기 **그리고** 출석 쓰기를 본다 — ecs가 읽기면 단추를 그리지 않는다
+            //    (출석 권한만 보고 그렸더니 눌러야 "편집 권한이 없습니다"가 떴다 — 원장 2026-11-05 읽기 권한 규칙).
+            student.isMakeup && canEdit
               ? () => {
                   void removeMakeupAttendee({
                     classId: card.classId,

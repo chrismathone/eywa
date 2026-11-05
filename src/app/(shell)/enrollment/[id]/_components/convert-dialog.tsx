@@ -56,6 +56,7 @@ export function ConvertToStudentDialog({
   alreadyConverted,
   linkedStudentId,
   canRequestTextbook,
+  canWrite = true,
 }: {
   consultationId: string;
   defaults: {
@@ -75,6 +76,11 @@ export function ConvertToStudentDialog({
    * ⚠️ 판정은 서버(페이지)에서 온다. 진짜 게이트는 교재 화면 자신의 `requireAccess`다([[#77]]).
    */
   canRequestTextbook: boolean;
+  /**
+   * 신규 콜&상담 쓰기 권한(`canWriteTenant(…,"enrollment")` — 서버 `convertConsultationToStudent`와 같은 게이트).
+   * false면 '수업 배정' 단추를 그리지 않는다(원장 2026-11-05 · write-lock.ts). 이미 배정된 건의 '학생 정보 보기'는 읽기라 남는다.
+   */
+  canWrite?: boolean;
 }) {
   const router = useRouter();
   const isDesktop = useWindowMode();
@@ -171,6 +177,8 @@ export function ConvertToStudentDialog({
       </Button>
     );
   }
+  // 훅은 위에서 다 부른 뒤에 끊는다(규칙 순서 유지) — 읽기 권한이면 배정 단추·양식째 없다.
+  if (!canWrite) return null;
 
   return (
     <>

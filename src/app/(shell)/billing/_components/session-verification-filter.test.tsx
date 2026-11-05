@@ -17,7 +17,7 @@ vi.mock("@/components/search-toggle", () => ({SearchToggle:()=>null}));
 import { SessionVerificationFace } from "./session-verification-face";
 afterEach(cleanup);
 it.each([{query:"없는이름"},{status:"over"}])("검색/판정 0건은 월 데이터와 분배 스냅샷을 숨기지 않는다: %j", async (filter) => {
-  render(await SessionVerificationFace({period:"2026-10",...filter,params:{q:"없는이름",status:"over",embed:"1",lang:"en",page:"3",subject:"math"}}));
+  render(await SessionVerificationFace({period:"2026-10",canWrite:true,...filter,params:{q:"없는이름",status:"over",embed:"1",lang:"en",page:"3",subject:"math"}}));
   expect(screen.queryByText(/이 달의 회차 데이터가 없습니다/)).toBeNull();
   expect(screen.getByText(/조건에 맞는 학생이 없습니다/)).toBeInTheDocument();
   expect(screen.getByText("강사별 청구 금액 (참고)")).toBeInTheDocument();

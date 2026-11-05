@@ -11,6 +11,8 @@ import {
   getTuitionCategoryOptions,
 } from "@/features/billing/server/tuition-catalog-queries";
 import { PMODE_UNSET, PRICING_MODES } from "@/features/billing/tuition-catalog";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { canManageTenant } from "@/lib/auth/perm-matrix";
 import { TuitionPricesTable } from "./tuition-prices-table";
 
 // 🔴 '미지정'이 필터에 없으면 **아직 안 고른 항목을 화면에서 골라낼 방법이 아예 없다**(전체·회당·월·할인
@@ -38,10 +40,12 @@ export async function TuitionPricesPanel({ sp }: { sp: Sp }) {
   const active = sp.cactive ?? "all";
   const page = Math.max(1, Number(sp.cpage) || 1);
 
-  const [{ rows, total }, stats, categories] = await Promise.all([
+  const [{ rows, total }, stats, categories, canManage] = await Promise.all([
     getTuitionCatalogPage({ q, category, pmode, active }, page, PAGE_SIZE),
     getTuitionCatalogStats(),
     getTuitionCategoryOptions(),
+    // 항목 추가·수정·삭제·단가 종류·사용 토글 — 서버 tuition-catalog-actions가 **full만** 받는다 → 같은 뜻의 canManageTenant.
+    getCurrentUser().then((u) => (u ? canManageTenant(u.systemRole, "billing") : false)),
   ]);
   // 분류 = 학원설정 과목 ∪ 이미 쓰인 분류 ∪ 기타·할인(감사 D7). 필터와 편집 창이 같은 목록을 쓴다.
   const CATEGORY_OPTIONS = categories.map((c) => ({ value: c, label: c }));
@@ -79,8 +83,8 @@ export async function TuitionPricesPanel({ sp }: { sp: Sp }) {
             단가 종류를 안 고른 항목이 <span className="num">{stats.unset}</span>개 있습니다
           </span>
           <span className="text-amber/80">
-            — 계산기가 이 항목을 <b>월 고정</b>으로 넣습니다. 회당 수업이면 금액이 한 회차분으로 줄어드니
-            눌러서 골라 주세요.
+            — 계산기가 이 항목을 <b>월 고정</b>으로 넣습니다. 회당 수업이면 금액이 한 회차분으로
+            {canManage ? " 줄어드니 눌러서 골라 주세요." : " 줄어듭니다. 고르려면 수납관리 전체 권한이 필요합니다."}
           </span>
         </Link>
       ) : null}
@@ -90,6 +94,7 @@ export async function TuitionPricesPanel({ sp }: { sp: Sp }) {
       <TuitionPricesTable
         rows={rows}
         categories={categories}
+        canManage={canManage}
         summary={
           <div className="flex flex-wrap items-center gap-2">
             <FilterSelect

@@ -31,7 +31,8 @@ export async function staffOf(tenantId: string, superAdmins: Set<string>, subjec
   });
   return {
     all: new Map(rows.map((u) => [u.id, person(u)])),
-    active: rows.filter((u) => u.status === "active" && u.system_role !== "student" && u.system_role !== "viewer").map(person),
+    // 업무 요청 대상 = 열람·아르바이트(2026-11-05)·학생을 뺀 재직 직원.
+    active: rows.filter((u) => u.status === "active" && u.system_role !== "student" && u.system_role !== "viewer" && u.system_role !== "parttime").map(person),
   };
 }
 

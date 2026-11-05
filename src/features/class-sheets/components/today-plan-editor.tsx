@@ -41,6 +41,7 @@ import {
 } from "./use-sheet-saves";
 import type { TodaySlot } from "../server/today";
 import type { CarryPatch } from "../lib/carry-marks";
+import { writeLockedPlaceholder } from "@/lib/write-lock";
 
 // 입력칸 테두리 = line-strong(18%) — 헤어라인 9%는 흰 카드 위에서 칸 경계가 안 보인다(주간 시트와 동일).
 const cellCls =
@@ -108,7 +109,10 @@ function CasInput({
       value={value}
       disabled={!canEdit}
       aria-label={ariaLabel}
-      placeholder={placeholder}
+      // 읽기 권한이면 '교재'·'진도'처럼 쓰기를 권하는 자리 표시 글을 걷고 툴팁으로 안내한다 — 줄마다 칸이
+      // 네 개라 문구를 칸마다 박지 않는다(화면 한 줄 = ecs/page.tsx 오늘 면). 원장 2026-11-05 읽기 권한 규칙.
+      placeholder={canEdit ? placeholder : undefined}
+      title={canEdit ? undefined : writeLockedPlaceholder("ecs")}
       list={listId ?? undefined}
       onChange={(e) => store.edit(lineId, field, e.target.value)}
       onBlur={onCommit ? (e) => onCommit(e.target.value) : undefined}

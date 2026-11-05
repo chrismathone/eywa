@@ -34,7 +34,7 @@ describe("퇴원 뒤 청구(원장 2026-10-29)", () => {
     expect(screen.queryByRole("combobox")).toBeNull();
   });
   it("원장: 줄 토글로 고름 → 환불 승인 → 담당자 골라야 확정 → 고른 줄만 보냄", async () => {
-    mocks.approve.mockResolvedValue({ ok: true, documentId: "d" });
+    mocks.approve.mockResolvedValue({ ok: true, documentId: "d", gates: false });
     render(<LaterInvoices reportId="r" rows={[nov]} canApprove deskStaff={desks} />);
     fireEvent.click(screen.getByRole("switch", { name: "2026-11 수강료 · 중등E_중2 심화 Jane 환불" }));
     expect(screen.getByText("선택 1건 · 환불 315,000원")).toBeInTheDocument();
@@ -45,6 +45,16 @@ describe("퇴원 뒤 청구(원장 2026-10-29)", () => {
     fireEvent.click(screen.getByRole("button", { name: "환불 승인" }));
     await waitFor(() => expect(mocks.approve).toHaveBeenCalledWith("r", [`${id}#0`], desks[0].id));
     await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
+  });
+  it("처리 전 보고서면 데스크 환불까지 끝나야 처리한다고 알린다 · 원장급이 아니면 보기만(원장 2026-10-29 규칙)", () => {
+    const { unmount } = render(<LaterInvoices reportId="r" rows={[nov]} canApprove deskStaff={desks} gates />);
+    expect(screen.getByText(/데스크 환불 처리까지 끝나야 퇴원·수강종료를 처리합니다/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("switch", { name: "2026-11 수강료 · 중2 수학 A 환불" }));
+    fireEvent.click(screen.getByRole("button", { name: "환불 승인" }));
+    expect(screen.getByText(/데스크가 환불을 처리\(환불완료일자 입력\)해야 퇴원·수강종료를 처리합니다/)).toBeInTheDocument();
+    unmount();
+    render(<LaterInvoices reportId="r" rows={[nov]} canApprove={false} deskStaff={[]} />);
+    expect(screen.getByText("환불 승인은 원장만 할 수 있습니다.", { exact: false })).toBeInTheDocument();
   });
   it("이미 요청서가 있는 줄은 담당·완료와 링크 · 낸 돈이 없는 줄은 토글 없음", () => {
     render(<LaterInvoices reportId="r" deskStaff={desks} canApprove rows={[{ ...nov, lines: [

@@ -15,6 +15,7 @@ import { getShuttleBoard } from "@/features/shuttle/server/queries";
 import { buildRunCards } from "@/features/shuttle/run-cards";
 import { studentAssignments } from "@/features/shuttle/student-assignments";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canRecordBoarding } from "@/features/shuttle/server/record-gate";
 import { loadRecentScheduleChanges, SCHEDULE_CHANGE_DAYS } from "@/features/shuttle/server/schedule-changes";
 import { loadRideConflictAcks } from "@/features/shuttle/server/conflict-acks";
 import { loadWeekRideChanges } from "@/features/shuttle/server/week-ride-changes";
@@ -41,7 +42,7 @@ export default async function ShuttleRiderClassesPage({ searchParams }: { search
   const week = weekDates(today);
 
   // 서로 독립 — 함께 받는다(B4).
-  const [slots, riderIds, holidays, board, acks, weekChanges, canWrite] = await Promise.all([
+  const [slots, riderIds, holidays, board, acks, weekChanges, canWrite, canEditDay] = await Promise.all([
     // 명단 기준일 = 시간표와 같은 규칙 — 이번 주면 오늘, 주말에 열어 다음 주를 보면 그 주 월요일.
     getWeeklyScheduleWithStudents({ referenceDate: week.some((w) => w.ymd === today) ? today : week[0]!.ymd, futureNames: true }),
     loadShuttleRiderIds(user.tenantId, season),
@@ -54,6 +55,8 @@ export default async function ShuttleRiderClassesPage({ searchParams }: { search
     loadWeekRideChanges(user.tenantId, week.slice(0, 5).map((w) => ({ day: w.day, ymd: w.ymd }))),
     // 수정 카드 [고정으로 변경] = 노선 편성과 같은 편성 쓰기 권한(서버 액션이 다시 본다).
     canWriteTenant(user.systemRole, "shuttle"),
+    // 수정 카드 [당일만 수정] = 그날 하루 변경 게이트(staffDayGate·loadStaffRideEditor)와 같은 함수 — 편성 권한과 축이 다르다.
+    canRecordBoarding(),
   ]);
   /** 배차 카드 — 회차 × 요일, 그날 타는 아이(수업 카드와 따로 칸에 선다). */
   const runCards = buildRunCards(board.runs, board.vehicles, weekChanges ?? []);
@@ -117,6 +120,7 @@ export default async function ShuttleRiderClassesPage({ searchParams }: { search
           changesFailed={weekChanges === null}
           assignments={assignments}
           canWrite={canWrite}
+          canEditDay={canEditDay}
         />
       )}
     </div>

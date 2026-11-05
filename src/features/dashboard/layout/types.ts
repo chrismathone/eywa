@@ -12,8 +12,8 @@ export const MAX_GRID_Y = 4096;
 export const GRID_ROW_PX = 64;
 export const MAX_ITEMS = 80;
 
-/** 역할 묶음 — 설계 메모(2026-10-01)의 판정 + 그 밖에 운영실을 여는 계정(상담·회계·열람). */
-export const BUNDLES = ["super", "owner", "subject", "desk", "manager", "teacher", "counselor", "accountant", "viewer", "student"] as const;
+/** 역할 묶음 — 설계 메모(2026-10-01)의 판정 + 그 밖에 운영실을 여는 계정(상담·회계·열람·아르바이트). */
+export const BUNDLES = ["super", "owner", "subject", "desk", "manager", "teacher", "counselor", "accountant", "viewer", "parttime", "student"] as const;
 export type Bundle = (typeof BUNDLES)[number];
 
 export const BUNDLE_LABELS: Record<Bundle, string> = {
@@ -22,7 +22,7 @@ export const BUNDLE_LABELS: Record<Bundle, string> = {
   subject: "관리자 · 과목 운영형",
   manager: "실장",
   desk: "관리자 · 경영지원형",
-  teacher: "강사", counselor: "상담", accountant: "회계", viewer: "열람", student: "학생",
+  teacher: "강사", counselor: "상담", accountant: "회계", viewer: "열람", parttime: "아르바이트", student: "학생",
 };
 
 /** 편집기에 적는 한 줄 — 어떤 사람들인가(판정 기준 = `bundle.ts`). */
@@ -36,6 +36,7 @@ export const BUNDLE_RULES: Record<Bundle, string> = {
   counselor: "등록상담·신규생·상담 일정 중심",
   accountant: "수납·행정 중심 · 금액은 카드 설정과 메뉴 권한을 따릅니다",
   viewer: "재원·수업·공지 중심 · 읽기 권한을 따릅니다",
+  parttime: "공지 중심 · 대시보드는 기본으로 닫혀 있고 원장이 메뉴 권한을 열면 보입니다",
   student: "내 학습 화면을 사용합니다 · 현재 대시보드 접근은 잠겨 있습니다",
 };
 

@@ -17,6 +17,8 @@ import { MetricSettingCard } from "./metric-setting-card";
 import { PresetBar, type PresetOption } from "./preset-bar";
 import { EvaluationStaffContext } from "./punctuality-options";
 import { PreviewCard, type PreviewData } from "./preview-card";
+import { WriteLockProvider } from "../write-lock-context";
+import { writeLockedNote } from "@/lib/write-lock";
 
 /** 기본 제공 구성 — 원장 구성(기본값)과 그 전 직원 포트폴리오(같은 점수). 지울 수 없다. */
 const BUILTIN_PRESETS: PresetOption[] = [
@@ -87,7 +89,9 @@ export function EvaluationEditor({ initial, tableMissing, readOnly = false, prev
       {tableMissing ? (
         <p role="status" className="bg-amber-soft rounded-lg px-3.5 py-2.5 text-sm">강사평가 설정 표가 아직 준비되지 않았습니다. 지금은 기본 설정으로 계산하고, 저장은 준비가 끝난 뒤에 됩니다.</p>
       ) : null}
-      {readOnly ? <p role="status" className="bg-bg-soft rounded-lg px-3.5 py-2.5 text-sm">읽기 전용으로 보고 있습니다. 기준을 바꿀 수 없습니다.</p> : null}
+      {/* 🔴 읽기 권한(readOnly — 저장 문 evaluationWriteGate와 같은 판정, evaluation-face.tsx)이면 구성 저장·불러오기, 지표 추가·삭제·
+          순서 이동, 구간·시각 추가·삭제, 하단 저장 바를 **그리지 않는다**(원장 2026-11-05). 칸은 fieldset이 잠근다. */}
+      {readOnly ? <p role="status" className="bg-bg-soft rounded-lg px-3.5 py-2.5 text-sm">{writeLockedNote("class_review")}</p> : null}
       <SettingsCard title="강사평가 기준" span2 description="직원 평가 → 직원 포트폴리오의 월간 점수를 어떻게 매길지 정합니다. 지표를 켜고 끄고, 만점과 점수 규칙을 학원에 맞게 고칩니다.">
         <p className="text-sm"><b className="num">켠 지표 {on.length}개 · 만점 합계 {maxTotal}점</b></p>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
@@ -96,8 +100,11 @@ export function EvaluationEditor({ initial, tableMissing, readOnly = false, prev
           <li>저장하면 진행 중인 달의 점수를 다시 매깁니다. 마감한 달은 그때의 설정 그대로입니다.</li>
         </ul>
       </SettingsCard>
-      <PresetBar presets={[...BUILTIN_PRESETS, ...presets]} draft={config} dirty={JSON.stringify(config) !== JSON.stringify(saved)}
-        readOnly={readOnly} tableMissing={presetsMissing} onLoad={setConfig} />
+      {readOnly ? null : (
+        <PresetBar presets={[...BUILTIN_PRESETS, ...presets]} draft={config} dirty={JSON.stringify(config) !== JSON.stringify(saved)}
+          readOnly={readOnly} tableMissing={presetsMissing} onLoad={setConfig} />
+      )}
+      <WriteLockProvider locked={readOnly} menu="class_review">
       <fieldset disabled={readOnly} className="m-0 grid min-w-0 gap-4 border-0 p-0 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
         <EvaluationStaffContext.Provider value={staff}>
         <div className="min-w-0 space-y-3">
@@ -113,16 +120,19 @@ export function EvaluationEditor({ initial, tableMissing, readOnly = false, prev
                 onChange={(next) => update(id, next)} onMove={(dir) => move(id, dir)} onRemove={manual ? () => remove(id) : undefined} />
             );
           })}
-          <Button type="button" variant="outline" onClick={addManual} disabled={config.manual.length >= 20}>직접 입력 지표 추가</Button>
+          {readOnly ? null : <Button type="button" variant="outline" onClick={addManual} disabled={config.manual.length >= 20}>직접 입력 지표 추가</Button>}
         </div>
         </EvaluationStaffContext.Provider>
         <PreviewCard saved={saved} draft={config} preview={preview} />
       </fieldset>
-      <FormActionBar>
-        <Button type="button" variant="ghost" onClick={() => setConfig(DEFAULT_EVALUATION_CONFIG)} disabled={readOnly}>기본값으로</Button>
-        <Button type="button" variant="ghost" onClick={() => setConfig(saved)} disabled={readOnly}>되돌리기</Button>
-        <Button type="submit" disabled={pending || tableMissing || readOnly} aria-busy={pending}>{pending ? "저장 중…" : "저장"}</Button>
-      </FormActionBar>
+      </WriteLockProvider>
+      {readOnly ? null : (
+        <FormActionBar>
+          <Button type="button" variant="ghost" onClick={() => setConfig(DEFAULT_EVALUATION_CONFIG)}>기본값으로</Button>
+          <Button type="button" variant="ghost" onClick={() => setConfig(saved)}>되돌리기</Button>
+          <Button type="submit" disabled={pending || tableMissing} aria-busy={pending}>{pending ? "저장 중…" : "저장"}</Button>
+        </FormActionBar>
+      )}
     </form>
   );
 }

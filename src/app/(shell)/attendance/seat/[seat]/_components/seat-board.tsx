@@ -15,6 +15,7 @@ import { useSeatPlacementMoves } from "./seat-board-moves";
 import { SeatJjNote, SeatJjTable, type SeatPlanFold } from "./seat-jj-table";
 import type { SeatClassPlan } from "@/features/attendance/seat/server/jj-plan";
 import { SeatLabGrid } from "./seat-lab-grid";
+import { writeLockedNote } from "@/lib/write-lock";
 import {
   applySeatPlacements,
   mergeSeatPlacements,
@@ -28,6 +29,21 @@ import {
 } from "@/features/attendance/seat/period-choice";
 
 type PeriodChip = { start: string; ends: string[]; classIds: string[] };
+
+/**
+ * 보기만 되는 **이유** — 안내 문장과 칸 모양이 이유마다 다르다(원장 2026-11-05).
+ *  · `"permission"` 자리 출석부 읽기 권한(서버 `gateSeatWrite`가 거절할 사람) — 세 단추 대신 상태 글자 + 권한 안내.
+ *  · `"past"` 지난 날짜(쓰기 권한은 있는데 지난 날짜 쓰기는 사무실만) — 종전대로 잠긴 단추 + "지난 날짜는 보기만".
+ * 🔴 사유를 섞어 말하지 말 것 — 권한이 없는 사람에게 "지난 날짜라서"라고 하면 오늘로 와서 다시 헛수고한다.
+ */
+export type SeatReadOnlyReason = "permission" | "past";
+
+/** 보드 위 안내 한 줄 — 사유별 문장의 단일 소스(교시 하나·'전체' 보기·공개 화면이 같은 말을 한다). */
+export function seatReadOnlyNote(reason: SeatReadOnlyReason): string {
+  return reason === "permission"
+    ? writeLockedNote("seat_attendance")
+    : "지난 날짜는 보기만 가능합니다 — 수정이 필요하면 관리자에게 요청하세요.";
+}
 
 /**
  * 진도(수업계획)를 함께 그릴 때만 내려오는 재료 — **없으면 진도 구획이 아예 안 생긴다**.
@@ -63,6 +79,7 @@ export function SeatBoard({
   activeStart,
   rosters,
   readOnly,
+  readOnlyReason = "past",
   hrefFor,
   publicPin,
   prevAbsentByCell,
@@ -89,6 +106,11 @@ export function SeatBoard({
   activeStart: string;
   rosters: SeatClassRoster[];
   readOnly: boolean;
+  /**
+   * `readOnly`일 때 그 이유(`SeatReadOnlyReason`) — page.tsx가 서버 게이트(`gateSeatWrite`)와 같은 판정으로 정한다.
+   * 생략하면 종전 의미(지난 날짜)다.
+   */
+  readOnlyReason?: SeatReadOnlyReason;
   hrefFor: string;
   /**
    * 앞 교시가 결석인 칸 → 그 교시 시각(`classId|studentId` → "HH:MM", `prevPeriodAbsences`).
@@ -186,6 +208,8 @@ export function SeatBoard({
     applyCarried,
     onBlur: auditBlur,
   } = useSeatBoardSaves(seat, date, activeStart);
+  /** 읽기 권한 때문에 보기만인가 — 칸이 세 단추 대신 상태 글자를, 입력칸이 권한 안내 placeholder를 쓴다. */
+  const writeLocked = readOnly && readOnlyReason === "permission";
   const showJj = seatHasJjFields(seat);
   /**
    * 접힘 — 교시 판마다 제 것이고 그 안에서 **반마다 따로**다(원장 2026-09-18 *"각각의 수업이 펼치기 접기가
@@ -474,7 +498,7 @@ export function SeatBoard({
       {showJj && showChips ? <SeatJjNote /> : null}
       {readOnly ? (
         <p className="text-text-dim bg-bg-soft/60 border-line rounded-xl border px-3 py-2 text-xs">
-          지난 날짜는 보기만 가능합니다 — 수정이 필요하면 관리자에게 요청하세요.
+          {seatReadOnlyNote(readOnlyReason)}
         </p>
       ) : null}
       {error ? (
@@ -511,6 +535,7 @@ export function SeatBoard({
             onSaveField={saveField}
             onFillClass={(classId) => fill("present", classId)}
             readOnly={readOnly}
+            writeLocked={writeLocked}
             pending={pending}
           />
         ) : (
@@ -524,6 +549,7 @@ export function SeatBoard({
             hints={hints}
             onFillClass={(classId) => fill("present", classId)}
             readOnly={readOnly}
+            writeLocked={writeLocked}
             pending={pending || movePending}
             canMove={canMove}
             onResetClass={(classId) =>

@@ -10,6 +10,7 @@ import type { ClassSheetMonthData, MonthPlanLine } from "../server/month-queries
 import type { GoalField, GoalRole } from "./use-month-goals";
 import { sheetDowLabelByIndex, type SheetLang } from "@/features/teacher-view/i18n";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { writeLockedPlaceholder } from "@/lib/write-lock";
 
 // 요일 글자는 사전 한 벌(`sheetDowLabelByIndex`) — 화면마다 표를 새로 만들면 글자가 갈린다.
 const dowOf = (date: string, lang: SheetLang) =>
@@ -57,6 +58,7 @@ export function MonthRail({
   const t = useSheetT();
   const tf = useSheetTf();
   const lang = useSheetLang();
+  const lockedTitle = canEdit ? undefined : writeLockedPlaceholder("ecs");
   // 열 = 계획 줄이 하나라도 있는 날(수업은 있는데 아무것도 안 쓴 날까지 세우면 표가 빈 열로 길어진다).
   // ⚠️ **지금 보여 줄 줄**로 센다 — 자리 교시에만 계획이 있는 날은 자리를 접었을 때 셀이 전부 비므로,
   //    `data.lines` 전체로 세면 아무것도 없는 열이 하나 선다.
@@ -161,19 +163,22 @@ export function MonthRail({
                       {area.label}
                     </span>
                     <div className="grid grid-cols-[minmax(0,1fr)_62px] gap-1">
+                      {/* 읽기 권한이면 비활성 + 쓰기를 권하는 자리 표시 글을 걷고 툴팁 안내(month-goal-strip.tsx와 같은 규칙). */}
                       <input
                         className={SHEET_INPUT}
                         defaultValue={goal.textbook ?? ""}
-                        readOnly={!canEdit}
-                        placeholder={t("month.goal.book")}
+                        disabled={!canEdit}
+                        placeholder={canEdit ? t("month.goal.book") : undefined}
+                        title={lockedTitle}
                         aria-label={tf("month.goal.bookAria", { area: area.label })}
                         onChange={(e) => onField("homeroom", area.key, "textbook", e.target.value)}
                       />
                       <input
                         className={SHEET_INPUT}
                         defaultValue={goal.targetProgress ?? ""}
-                        readOnly={!canEdit}
-                        placeholder={t("month.goal.target")}
+                        disabled={!canEdit}
+                        title={lockedTitle}
+                        placeholder={canEdit ? t("month.goal.target") : undefined}
                         aria-label={tf("month.goal.targetAria", { area: area.label })}
                         onChange={(e) => onField("homeroom", area.key, "targetProgress", e.target.value)}
                       />

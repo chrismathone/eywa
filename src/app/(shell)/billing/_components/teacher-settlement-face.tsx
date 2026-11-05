@@ -12,6 +12,7 @@ import { TeacherCompEditor } from "./teacher-comp-editor";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { BillingMonthNav } from "./billing-month-nav";
 import { FaceNote } from "./face-note";
+import { writeLockedNote } from "@/lib/write-lock";
 
 const fmtWon = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 const fmtUnits = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
@@ -60,6 +61,8 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
           </div>
         ) : null}
       </div>
+      {/* 읽기 권한 — 정책·과정·배분율 칸은 값이 차 있어 placeholder로 알릴 수 없다 → 비활성 fieldset 위 한 줄(원장 2026-11-05). */}
+      {!canEdit ? <p className="text-text-dim px-1 text-xs">{writeLockedNote("payroll_settings")}</p> : null}
 
       <FaceNote>
         <b>급여명세서의 수업료와 같은 계산</b>입니다(출석부 하단 정산액과 같은 조립). 담임인 활성 반의 그 달 출결 시수 ×
@@ -113,6 +116,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
                       commissionRate={r.commissionRate}
                       groupRates={r.groupRates}
                       monthlyBase={r.monthlyBase}
+                      canEdit={canEdit}
                     />
                   </td>
                   <td className="px-3 py-2">
@@ -173,7 +177,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
             </thead>
             <tbody>
               {classRows.map((c) => (
-                <ClassSalaryRowForm key={c.classId} row={c} />
+                <ClassSalaryRowForm key={c.classId} row={c} canEdit={canEdit} />
               ))}
             </tbody>
           </table>

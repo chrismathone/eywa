@@ -18,6 +18,7 @@ import {
 import type { CatalogRow } from "@/features/billing/server/catalog-queries";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 import { useSubjectMaps } from "@/features/owner/operations-context";
+import { writeLockedPlaceholder } from "@/lib/write-lock";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const inputCls =
@@ -164,13 +165,19 @@ function CatalogDialog({ item, onClose }: { item?: CatalogRow; onClose: () => vo
   );
 }
 
-function ToggleActive({ id, isActive }: { id: string; isActive: boolean }) {
+function ToggleActive({ id, isActive, disabled }: { id: string; isActive: boolean; disabled: boolean }) {
   const [, action] = useActionState<CatalogActionState, FormData>(toggleCatalogActive, undefined);
   return (
     <form action={action}>
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="next" value={String(!isActive)} />
-      <button type="submit" title={isActive ? "사용 중지" : "사용 재개"}>
+      {/* 읽기 권한이면 바로 저장되는 토글이라 비활성 + 안내(원장 2026-11-05). */}
+      <button
+        type="submit"
+        disabled={disabled}
+        className="disabled:cursor-not-allowed"
+        title={disabled ? writeLockedPlaceholder("billing") : isActive ? "사용 중지" : "사용 재개"}
+      >
         <Pill color={isActive ? "primary" : "neutral"} soft={!isActive}>
           {isActive ? "사용" : "중지"}
         </Pill>
@@ -182,8 +189,14 @@ function ToggleActive({ id, isActive }: { id: string; isActive: boolean }) {
 export function CatalogTable({
   rows,
   toolbar,
+  canManage,
 }: {
   rows: CatalogRow[];
+  /**
+   * 교재 추가·수정·삭제·사용 토글을 세울지 — 서버 패널이 액션과 **같은 판정**(canManageTenant billing = full)으로 정한 값.
+   * 읽기 권한이면 추가·수정 단추는 그리지 않고 사용 토글은 비활성(원장 2026-11-05).
+   */
+  canManage: boolean;
   /**
    * '교재 추가' 버튼과 **한 행**을 나눠 쓸 결과 줄·필터 — 서버 패널이 넘긴다(원장 2026-09-22 *"넓은 화면까지 2행일 필요가
    * 없어보임"* — 종전엔 결과·필터 줄 아래에 버튼 하나만 선 둘째 줄이 있었다). 수강료 단가표의 `summary`와 같은 모양.
@@ -197,10 +210,12 @@ export function CatalogTable({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="min-w-0">{toolbar}</div>
-        <Button size="sm" onClick={() => setOpen("new")}>
-          <Plus className="size-4" />
-          교재 추가
-        </Button>
+        {canManage ? (
+          <Button size="sm" onClick={() => setOpen("new")}>
+            <Plus className="size-4" />
+            교재 추가
+          </Button>
+        ) : null}
       </div>
 
       {rows.length === 0 ? (
@@ -208,7 +223,7 @@ export function CatalogTable({
           image="documents"
           icon={() => <BookText size={32} strokeWidth={1.8} />}
           title="등록된 교재가 없습니다"
-          description="표준 교재·단가를 등록해두면 교재 신청 시 자동으로 채워집니다."
+          description={canManage ? "표준 교재·단가를 등록해두면 교재 신청 시 자동으로 채워집니다." : undefined}
         />
       ) : (
         <DragScrollArea className="bg-card shadow-card rounded-2xl">
@@ -221,7 +236,7 @@ export function CatalogTable({
                 <th className="px-4 py-3 text-left">출판사</th>
                 <th className="px-4 py-3 text-right">단가</th>
                 <th className="px-4 py-3 text-left">상태</th>
-                <th className="px-4 py-3 text-right">관리</th>
+                {canManage ? <th className="px-4 py-3 text-right">관리</th> : null}
               </tr>
             </thead>
             <tbody className="divide-line divide-y">
@@ -241,18 +256,20 @@ export function CatalogTable({
                     {KRW.format(r.price)}
                   </td>
                   <td className="px-4 py-2.5">
-                    <ToggleActive id={r.id} isActive={r.isActive} />
+                    <ToggleActive id={r.id} isActive={r.isActive} disabled={!canManage} />
                   </td>
-                  <td className="px-4 py-2.5 text-right">
-                    <button
-                      type="button"
-                      onClick={() => setOpen(r)}
-                      className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition"
-                    >
-                      <Pencil className="size-3.5" />
-                      수정
-                    </button>
-                  </td>
+                  {canManage ? (
+                    <td className="px-4 py-2.5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setOpen(r)}
+                        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition"
+                      >
+                        <Pencil className="size-3.5" />
+                        수정
+                      </button>
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
@@ -260,8 +277,8 @@ export function CatalogTable({
         </DragScrollArea>
       )}
 
-      {open === "new" ? <CatalogDialog onClose={() => setOpen(null)} /> : null}
-      {open && open !== "new" ? <CatalogDialog item={open} onClose={() => setOpen(null)} /> : null}
+      {canManage && open === "new" ? <CatalogDialog onClose={() => setOpen(null)} /> : null}
+      {canManage && open && open !== "new" ? <CatalogDialog item={open} onClose={() => setOpen(null)} /> : null}
     </div>
   );
 }

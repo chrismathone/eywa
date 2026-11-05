@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { MessageSquare, Mic, Pencil, Pin, Sparkles } from "@/components/icons/aywa-icon-compat";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { WindowLink } from "@/components/workspace/window-link";
 import { Button } from "@/components/ui/button";
@@ -30,11 +31,13 @@ export default async function ConsultationDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAccess("consultations");
+  const user = await requireAccess("consultations");
   const { id } = await params;
-  const [item, settings] = await Promise.all([
+  const [item, settings, canWrite] = await Promise.all([
     getStudentConsultationById(id),
     getTenantSettings(),
+    // 수정·삭제·후속 완료·AI 분석 게이트와 같은 판정 — 읽기 권한이면 쓰기 단추를 그리지 않는다(원장 2026-11-05).
+    canWriteTenant(user.systemRole, "consultations"),
   ]);
   if (!item) notFound();
 
@@ -89,22 +92,24 @@ export default async function ConsultationDetailPage({
             {item.syncAddedAt ? <MakeeduOriginTag /> : null}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            render={
-              <WindowLink href={`/consultations/${item.id}/edit`} title="상담 수정" />
-            }
-          >
-            <Pencil className="size-4" />
-            {/* 상세 화면 헤더의 편집 버튼은 여는 대상을 적는다(반 수정·학생 수정·이력서 수정과 같은 규칙). */}
-            상담 수정
-          </Button>
-          <ConsultationDeleteButton
-            id={item.id}
-            studentId={item.studentId}
-            redirectTo="/consultations"
-          />
-        </div>
+        {canWrite ? (
+          <div className="flex items-center gap-2">
+            <Button
+              render={
+                <WindowLink href={`/consultations/${item.id}/edit`} title="상담 수정" />
+              }
+            >
+              <Pencil className="size-4" />
+              {/* 상세 화면 헤더의 편집 버튼은 여는 대상을 적는다(반 수정·학생 수정·이력서 수정과 같은 규칙). */}
+              상담 수정
+            </Button>
+            <ConsultationDeleteButton
+              id={item.id}
+              studentId={item.studentId}
+              redirectTo="/consultations"
+            />
+          </div>
+        ) : null}
       </header>
 
       {/* 메타 — 상담일·상담사 */}
@@ -140,7 +145,7 @@ export default async function ConsultationDetailPage({
           <h2 className="text-primary mb-3 flex items-center gap-2 text-sm font-bold">
             <Pin className="size-4" />
             후속 조치
-            <FollowUpToggle id={item.id} done={item.followUpDone} />
+            <FollowUpToggle id={item.id} done={item.followUpDone} readOnly={!canWrite} />
           </h2>
           {item.followUpAction ? (
             <p className="text-foreground text-sm leading-relaxed whitespace-pre-wrap">
@@ -163,6 +168,7 @@ export default async function ConsultationDetailPage({
         aiReport={item.aiReport}
         aiGeneratedAt={item.aiGeneratedAt}
         aiModelVersion={item.aiModelVersion}
+        canAnalyze={canWrite}
       />
     </div>
   );

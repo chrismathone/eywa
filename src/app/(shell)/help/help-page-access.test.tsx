@@ -1,11 +1,13 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HELP_BOARD_NOT_READY } from "@/features/help/board/missing";
+import { writeLockedNote } from "@/lib/write-lock";
 
 const ctx = vi.hoisted(() => ({
   role: "admin" as string,
   view: "admin" as "admin" | "teacher",
   allow: (() => true) as (role: string, menu: string) => boolean,
+  write: (() => true) as (role: string, menu: string) => boolean,
 }));
 const board = vi.hoisted(() => ({
   getHelpPostsPage: vi.fn(async () => ({ ready: true, rows: [], total: 0 })),
@@ -16,6 +18,7 @@ vi.mock("@/lib/auth/require-access", () => ({
 }));
 vi.mock("@/lib/auth/perm-matrix", () => ({
   canAccessTenant: async (role: string, menu: string) => ctx.allow(role, menu),
+  canWriteTenant: async (role: string, menu: string) => ctx.write(role, menu),
 }));
 vi.mock("@/lib/auth/view-mode", () => ({ getShellView: async () => ctx.view }));
 vi.mock("@/lib/license/server", () => ({ isFeatureLicensed: async () => true }));
@@ -38,6 +41,7 @@ describe("도움말 — 열 수 있는 화면만 링크한다", () => {
     ctx.role = "admin";
     ctx.view = "admin";
     ctx.allow = () => true;
+    ctx.write = () => true;
     board.getHelpPostsPage.mockResolvedValue({ ready: true, rows: [], total: 0 });
   });
   afterEach(cleanup);
@@ -56,6 +60,18 @@ describe("도움말 — 열 수 있는 화면만 링크한다", () => {
     expect(screen.getAllByText(/화면 설명서 \d+개/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/자주 묻는 질문 \d+개/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/F1/).length).toBeGreaterThan(0);
+  });
+
+  it("🔴 도움말이 '읽기'면 '질문하기'를 그리지 않고 안내만 — 작성 액션과 같은 판정(canWriteTenant help, 2026-11-05)", async () => {
+    ctx.write = (_role, menu) => menu !== "help";
+    await renderPage();
+    expect(screen.queryByRole("button", { name: "질문하기" })).toBeNull();
+    expect(screen.getByText(writeLockedNote("help"))).toBeTruthy();
+  });
+
+  it("도움말 쓰기 권한이면 '질문하기'가 선다", async () => {
+    await renderPage();
+    expect(screen.getByRole("button", { name: "질문하기" })).toBeTruthy();
   });
 
   it("표가 없어도 Q&A 는 남고 게시판은 안내만", async () => {

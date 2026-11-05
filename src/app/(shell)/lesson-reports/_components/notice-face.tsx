@@ -17,6 +17,7 @@ import { humanizeClassnoteError } from "@/features/report-admin/classnote-error"
 import { noticeFailures } from "@/features/report-admin/notice-failures";
 import type { NoticeAttachment } from "@/features/onescreen/notice-attachments";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { writeLockedPlaceholder } from "@/lib/write-lock";
 import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import type { ClassNoticeRow } from "@/features/report-admin/class-notice";
 import { NoticePreviewDialog, type NoticeReview } from "./notice-preview-dialog";
@@ -336,8 +337,9 @@ function EachNoticeFace({
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 disabled={!canSend}
-                placeholder="공지 내용 (예: 다음 주 월요일은 학원 휴원입니다.)"
-                className="border-line bg-card focus:border-primary min-h-[180px] w-full flex-1 resize-y rounded-lg border p-3 text-sm outline-none"
+                // 읽기 권한이면 예시 대신 권한 안내(원장 2026-11-05 — 비활성 칸이 왜 막혔는지 말한다).
+                placeholder={canSend ? "공지 내용 (예: 다음 주 월요일은 학원 휴원입니다.)" : writeLockedPlaceholder("lesson_reports")}
+                className="border-line bg-card focus:border-primary min-h-[180px] w-full flex-1 resize-y rounded-lg border p-3 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-60"
               />
             </div>
 

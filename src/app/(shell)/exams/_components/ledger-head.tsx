@@ -26,11 +26,13 @@ export function SortButton({ sort, view, href, label }: { sort: LedgerSort; view
  * (원장 2026-10-14 *"오름차순/내림차순 필요없는 제목 행에 대해서는 엑셀처럼 필터적용가능하게"*).
  * 필터 선택지는 열 필터를 걸기 전 행에서 만든다(ledgerOptions) — 걸면 사라지는 선택지는 되돌릴 수 없다.
  */
-export function LedgerHead({ view, href, options, subject, subjects }: {
+export function LedgerHead({ view, href, options, subject, subjects, canWrite = true }: {
   view: LedgerView; href: Href;
   options: { schools: FilterSelectOption[]; classes: FilterSelectOption[]; teachers: FilterSelectOption[]; kinds: FilterSelectOption[]; infos: FilterSelectOption[] };
   /** 과목 필터 — 툴바의 `과목:`과 **같은 주소 값**(`subject`)을 쓴다. 두 자리가 따로 놀지 않게. */
   subject: string; subjects: FilterSelectOption[];
+  /** 읽기 권한이면 '관리' 열을 뺀다 — 원장 줄의 [수정]·[삭제] 칸과 **같은 값**(UnifiedLedger `canWrite`)을 넘길 것. */
+  canWrite?: boolean;
 }) {
   const th = "px-2 py-2 font-bold whitespace-nowrap";
   const both = (filter: React.ReactNode, sort: LedgerSort) => <span className="inline-flex items-center gap-0.5">{filter}<SortButton sort={sort} view={view} href={href} /></span>;
@@ -50,6 +52,6 @@ export function LedgerHead({ view, href, options, subject, subjects }: {
       options={[{ value: "up", label: "상승" }, { value: "down", label: "하락" }, { value: "same", label: "변화 없음" }]} />, "delta")}</th>
     <th className={`${th} text-center`}><HeaderFilter paramName="fConsult" axisLabel="상담" value={view.consult}
       options={[{ value: "done", label: "상담함" }, { value: "none", label: "상담 안 함" }]} /></th>
-    <th className={`${th} text-center`}><SheetText value={"관리"} /></th>
+    {canWrite ? <th className={`${th} text-center`}><SheetText value={"관리"} /></th> : null}
   </tr></thead>;
 }

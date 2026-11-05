@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { C, S, T } from "./test-fixture.test-util";
 
 const m = vi.hoisted(() => ({
-  access: vi.fn(), student: vi.fn(), enrollments: vi.fn(), available: vi.fn(), revoke: vi.fn(), audit: vi.fn(),
+  access: vi.fn(), write: vi.fn(), student: vi.fn(), enrollments: vi.fn(), available: vi.fn(), revoke: vi.fn(), audit: vi.fn(),
 }));
 vi.mock("@/lib/auth/require-access", () => ({ requireAccess: m.access }));
+vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: m.write }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 vi.mock("@/features/audit/server/log", () => ({ logAction: m.audit }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({ modules: { disabled: [] } }) }));
@@ -17,7 +18,8 @@ import { revokeVideoSubmitLinks } from "./actions";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  m.access.mockResolvedValue({ id: "user-1", tenantId: T });
+  m.access.mockResolvedValue({ id: "user-1", tenantId: T, systemRole: "admin" });
+  m.write.mockResolvedValue(true);
   m.student.mockResolvedValue({ id: S, name: "류태경" });
   m.enrollments.mockResolvedValue([{ classId: C, className: "LT4", endDate: null, isTransferred: false }]);
   m.available.mockResolvedValue({ ok: true });
@@ -42,5 +44,12 @@ describe("학생 상세 — 이미 나간 제출 링크 끊기", () => {
     expect(await revokeVideoSubmitLinks(S, C)).toMatchObject({ ok: false });
     expect(await revokeVideoSubmitLinks("x", C)).toMatchObject({ ok: false });
     expect(m.revoke).not.toHaveBeenCalled();
+  });
+  it("🔴 원생목록 읽기 권한(쓰기 아님)이면 끊지 않는다 — requireAccess는 읽기도 통과시킨다(감사 2026-11-05)", async () => {
+    m.write.mockResolvedValueOnce(false);
+    expect(await revokeVideoSubmitLinks(S, C)).toMatchObject({ ok: false, error: expect.stringContaining("권한") });
+    expect(m.write).toHaveBeenCalledWith("admin", "students");
+    expect(m.revoke).not.toHaveBeenCalled();
+    expect(m.audit).not.toHaveBeenCalled();
   });
 });

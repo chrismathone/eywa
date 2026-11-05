@@ -39,8 +39,10 @@ export function GradeEntryDialog({ canWrite, today, subjects, students, classes,
   /** 옛 입력 주소(`/exams/input?…` → `entry=1`)로 들어오면 내신으로 열린 채 시작한다. */
   initialOpen: boolean;
 }) {
-  const [open, setOpen] = useState(initialOpen);
-  const [kind, setKind] = useState<EntryKind>(initialOpen ? "school" : "daily");
+  // 🔴 `?entry=1`로 바로 열어도 읽기 권한이면 열지 않는다 — 예전엔 창이 칸째 열려 명단을 고르고 점수를 다 친 뒤에야
+  //    "성적을 입력할 권한이 없습니다"가 떴다(원장 2026-11-05, write-lock.ts). 아래에서 단추·창도 통째로 그리지 않는다.
+  const [open, setOpen] = useState(initialOpen && canWrite);
+  const [kind, setKind] = useState<EntryKind>(initialOpen && canWrite ? "school" : "daily");
   const [subject, setSubject] = useState(subjects[0]?.value ?? "");
   const [classId, setClassId] = useState("");
   const [schoolName, setSchoolName] = useState("");
@@ -151,8 +153,11 @@ export function GradeEntryDialog({ canWrite, today, subjects, students, classes,
     <label className={LABEL}><SheetText value={"학기"} /><select value={term} onChange={(e) => change(setTerm)(e.target.value)} className={FIELD}><option value="1"><SheetText value={"1학기"} /></option><option value="2"><SheetText value={"2학기"} /></option></select></label>
   </>;
 
+  // 읽기 권한이면 '성적 입력' 단추를 **그리지 않는다**(비활성으로 남기지 않는다) — 판정은 서버 게이트와 같은 `gradeWriteError`(unified-dashboard).
+  // ⚠️ 훅은 모두 위에서 이미 불렀다 — 이 반환을 훅 위로 올리지 말 것.
+  if (!canWrite) return null;
   return <>
-    <ToolbarButton variant="primary" disabled={!canWrite} onClick={() => setOpen(true)} title={canWrite ? undefined : "성적을 입력할 권한이 없습니다"}><SheetText value={"성적 입력"} /></ToolbarButton>
+    <ToolbarButton variant="primary" onClick={() => setOpen(true)}><SheetText value={"성적 입력"} /></ToolbarButton>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-4xl">
         <DialogHeader><DialogTitle><SheetText value={"성적 입력"} /></DialogTitle>

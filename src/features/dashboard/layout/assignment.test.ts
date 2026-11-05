@@ -15,9 +15,9 @@ const user = { id, systemRole: "admin" as const, isSuperAdmin: false, subjects: 
 const assignment: DashboardAssignment = { userId: id, scope: "subjects", subjects: ["english"], adminLayout: "desk" };
 
 describe("역할·담당 범위·배치는 독립", () => {
-  it("8개 시스템 역할 + 총괄 자격을 모두 선택한다", () => {
+  it("9개 시스템 역할 + 총괄 자격을 모두 선택한다", () => {
     expect(DASHBOARD_ROLES).toEqual(["super", ...SYSTEM_ROLES]);
-    expect(new Set(SYSTEM_ROLES.map((r) => ROLE_BUNDLE[r])).size).toBe(8);
+    expect(new Set(SYSTEM_ROLES.map((r) => ROLE_BUNDLE[r])).size).toBe(9);
   });
   it("담당 과목이 있어도 경영지원형을 고를 수 있고, 전 과목도 과목 운영형을 고를 수 있다", () => {
     expect(dashboardAssignmentOf(user, assignment)).toMatchObject({ bundle: "desk", subjects: ["english"], subjectScoped: true });

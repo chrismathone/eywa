@@ -34,6 +34,8 @@ export function RichEditor(props: {
   ariaLabel?: string;
   /** 고칠 때마다 HTML을 알린다 — 폼 밖에서 상태로 들고 있는 화면용(업무 요청). 폼 안이면 필요 없다. */
   onChange?: (html: string) => void;
+  /** 쓰기 권한이 없을 때 편집을 막는다(툴바 숨김). 안내는 placeholder로 — `writeLockedPlaceholder`(src/lib/write-lock.ts). */
+  disabled?: boolean;
 }) {
   return <Impl {...props} />;
 }

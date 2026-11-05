@@ -39,7 +39,8 @@ function PinButton({ memo, studentId }: { memo: StudentMemoRow; studentId: strin
   );
 }
 
-export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId: string }) {
+/** canWrite = 서버 고정·수정·삭제 게이트와 같은 판정(`canWriteTenant(role, "students")`). 읽기 권한이면 세 단추를 그리지 않는다. */
+export function MemoItem({ memo, studentId, canWrite }: { memo: StudentMemoRow; studentId: string; canWrite: boolean }) {
   const [editing, setEditing] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
   // 수정 폼 로컬 초안 — 신규작성(memo-form)엔 있는데 수정엔 없어 긴 메모를 고치다 리로드되면 유실됐다.
@@ -92,23 +93,25 @@ export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId:
             })}
           </span>
         </div>
-        <div className="flex shrink-0 items-center gap-2.5">
-          <PinButton memo={memo} studentId={studentId} />
-          {!editing ? (
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              aria-label="수정"
-              className="text-muted-foreground hover:text-foreground inline-flex items-center transition"
-            >
-              <Pencil className="size-3.5" />
-            </button>
-          ) : null}
-          <DeleteMemoButton memoId={memo.id} studentId={studentId} />
-        </div>
+        {canWrite ? (
+          <div className="flex shrink-0 items-center gap-2.5">
+            <PinButton memo={memo} studentId={studentId} />
+            {!editing ? (
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                aria-label="수정"
+                className="text-muted-foreground hover:text-foreground inline-flex items-center transition"
+              >
+                <Pencil className="size-3.5" />
+              </button>
+            ) : null}
+            <DeleteMemoButton memoId={memo.id} studentId={studentId} />
+          </div>
+        ) : null}
       </header>
 
-      {editing ? (
+      {editing && canWrite ? (
         // submitAction: React 19 액션 폼 자동 리셋(#83) 회피 — 저장 실패 시 입력이 옛 값으로 돌아가지 않게.
         <form ref={formRef} onSubmit={(e) => submitAction(e, action)} className="space-y-2 pt-1">
           <DraftBanner

@@ -28,7 +28,7 @@ async function assignedMembers(settings: TenantSettings, tenantId: string): Prom
  * 학원 설정 '대시보드 관리' 면(서버) — 🔴 호출부(`owner/page.tsx`)가 **원장·총괄만** 이 면을 그린다(그 밖은 안내 문구).
  * 실데이터 미리보기 원본(원장 시점 전체 스냅샷)은 **기다리지 않고 흘려 보낸다**(B7 — 운영실 조회는 수 초가 걸린다). 실패하면 null.
  */
-export async function DashboardFace({ settings }: { settings: TenantSettings }) {
+export async function DashboardFace({ settings, readOnly = false }: { settings: TenantSettings; readOnly?: boolean }) {
   const user = await getCurrentUser();
   const preview = loadOverview({ full: true }).catch((error) => {
     reportError(error, { scope: "owner.dashboard-face.preview" });
@@ -42,6 +42,7 @@ export async function DashboardFace({ settings }: { settings: TenantSettings }) 
       subjects={subjectChoices(Object.fromEntries(settings.operations.subjects.map((s) => [s.key, s.label])))}
       members={members}
       preview={preview}
+      readOnly={readOnly}
     />
   );
 }

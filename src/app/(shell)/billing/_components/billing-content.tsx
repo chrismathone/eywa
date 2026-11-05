@@ -200,9 +200,9 @@ export async function BillingContent({ sp, canImport = false }: { sp: Sp; canImp
         // 동일하게(창이 기본 경로라 빠지면 검색 피드백이 사라짐, 적대 리뷰).
         embedLabel={`${formatPeriod(period)} · ${periodSummary}`}
         actions={
-          <>
-            <CreateInvoiceTrigger students={students} defaultPeriod={period} />
-          </>
+          // 읽기 권한이면 '청구서 만들기'를 세우지 않는다(원장 2026-11-05 — 양식을 다 쓴 뒤에야 거절되던 자리).
+          // 판정은 서버 `createInvoice`와 같은 canWriteTenant(billing).
+          canWriteBilling ? <CreateInvoiceTrigger students={students} defaultPeriod={period} /> : undefined
         }
       />
 

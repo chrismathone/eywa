@@ -36,6 +36,7 @@ import { useMonthGoals, type GoalRole } from "./use-month-goals";
 import { useMonthPlan } from "./use-month-plan";
 import { useSheetEditAudit } from "./use-sheet-edit-audit";
 import { mpCellKey } from "../lib/month-plan";
+import { writeLockedNote } from "@/lib/write-lock";
 
 /**
  * ECS 월간 뷰 껍데기 — **달력 ↔ 진도표 ↔ 계획(MP) 전환**과 표시 토글, 목표·계획 편집 상태를 소유한다.
@@ -450,6 +451,9 @@ export function MonthClient({
           {t("month.mp.loadFailed")}
         </p>
       ) : null}
+      {/* 읽기 권한 안내 — 칸은 이미 잠겨 있지만(목표·계획·메모) 값이 차 있으면 왜 못 고치는지 모른다.
+          칸마다 문구를 달지 않고 **화면에 한 줄만**(원장 2026-11-05 읽기 권한 규칙, src/lib/write-lock.ts). */}
+      {!data.canEdit ? <p className="text-text-dim px-1 text-sm">{writeLockedNote("ecs")}</p> : null}
 
       {view === "mp" ? (
         <MonthPlanView

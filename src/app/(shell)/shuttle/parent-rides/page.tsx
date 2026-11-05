@@ -144,7 +144,7 @@ export default async function ShuttleParentRidesPage({
     );
   }
 
-  const [board, { logs }, { exceptions }, tripsRes, changes, regularChanges, linked, manager, parentAccounts, parentStudents] = await Promise.all([
+  const [board, { logs }, { exceptions }, tripsRes, changes, regularChanges, linked, manager, parentAccounts, parentStudents, canAck] = await Promise.all([
     getShuttleBoard(season),
     getBoardingsOn(date),
     getRideExceptionsOn(date),
@@ -157,6 +157,8 @@ export default async function ShuttleParentRidesPage({
     parentAccountsActor(),
     getParentAccounts(),
     getParentStudentOptions(),
+    // 변경 내역 [확인] = ackShuttleHistory의 게이트와 같은 함수(월별 화면의 canEdit과 같은 판정).
+    canRecordBoarding(),
   ]);
 
   const legsByStudent = buildRideLegs({
@@ -192,6 +194,7 @@ export default async function ShuttleParentRidesPage({
         staff
         changes={(changes.get(s.id) ?? []).filter((c) => dirs.has(c.direction))}
         regularChanges={(regularChanges.get(s.id) ?? []).filter((c) => dirs.has(c.direction))}
+        canAck={canAck}
         // 학부모 화면과 같이 노선 전체(어디서 몇 시에 타는지)를 편다 — 학부모가 보는 것을 그대로 확인.
         showRoute
         aside={

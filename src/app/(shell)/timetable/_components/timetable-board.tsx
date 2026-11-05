@@ -123,9 +123,17 @@ export function TimetableEditProvider({
   today,
   canEdit = true,
   canSplit = false,
+  canEndEnrollment = false,
   weekMonday,
 }: {
   children: ReactNode;
+  /**
+   * 학생 위 Delete → '수강 종료' 창을 세울 수 있나 — 서버 `endSingleEnrollment`와 **같은 함수**
+   * (`canManageStudentStatusNow` = 원생 '전체' + 학생 상태 담당, page.tsx `canEditRoster`).
+   * 🔴 시간표 편집(`canEdit` = 반 관리)만 보던 시절엔 원생이 '읽기'인 계정에도 창이 떠서 사유를 다 쓴 뒤에야
+   *    저장이 거절됐다(원장 2026-11-05, write-lock.ts). 없으면(기본) 단축키 자체가 꺼진다.
+   */
+  canEndEnrollment?: boolean;
   /** 수업 나누기 권한(0351a — 원장 역할 또는 학원 설정에서 지정한 사람 + 수업 관리 권한) — 켜지면 드롭 팝업에 '수업 나누기' 쪽이 선다. 게이트는 서버 액션이 다시 본다(#77). */
   canSplit?: boolean;
   /** 보고 있는 주의 월요일 — 나누기 선택지를 그 주 배치로 만든다. */
@@ -195,8 +203,10 @@ export function TimetableEditProvider({
   // 학생 위에 마우스 올린 채 Delete → 오늘 수강 종료 **확인 팝업**. 입력창 타이핑 중엔 무시.
   // ⚠️ 옛 '편집 모드'가 이 단축키의 문이었는데 모드가 사라졌다 — 이제 편집 권한(canDrag)이 곧 문이고,
   //    실제 종료는 팝업에서 한 번 더 확인해야 일어난다(키 하나로 조용히 지워지지 않는다).
+  // 🔴 문은 **둘 다**다 — 편집 가능한 주(canDrag)이면서 학생 기록을 바꿀 수 있어야(canEndEnrollment) 한다.
+  const canEndByKey = canDrag && canEndEnrollment;
   useEffect(() => {
-    if (!canDrag) return;
+    if (!canEndByKey) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Delete") return;
       const el = e.target as HTMLElement | null;
@@ -210,7 +220,7 @@ export function TimetableEditProvider({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canDrag]);
+  }, [canEndByKey]);
 
   /** `reason` = 확인 창의 사유 칸(대분류 · 세부 · 메모) — 서버가 같은 규칙으로 다시 본다(`readReasonForm`). */
   async function confirmEndEnrollment(reason: FormData) {
@@ -628,7 +638,8 @@ export function TimetableEditProvider({
       }}
     >
       {children}
-      {endTarget ? (
+      {/* 창이 열린 채 문이 닫히면(과거 주로 이동 등) 창도 함께 내린다 — 열 때와 같은 문(canEndByKey). */}
+      {endTarget && canEndByKey ? (
         <EndEnrollmentConfirm
           target={endTarget}
           today={today}

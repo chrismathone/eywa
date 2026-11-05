@@ -20,8 +20,9 @@ export type EnglishJjStatus =
   | { kind: "error"; detail: string }
   | { kind: "ok"; exams: number; answers: number };
 
-/** 짝 잇기 자리 — 성적관리 › 영어 › JJ실 맨 아래(exams/page.tsx의 `#jj-link`, 관리자 전용 구역). */
-export const JJ_LINK_HREF = "/exams?subject=english&type=jj#jj-link";
+/** 짝 잇기 자리 — 성적관리 › 영어 › JJ실 맨 아래(exams/input/page.tsx의 `#jj-link`, 관리자 전용 구역).
+ *  옛 `/exams?…type=jj`는 리다이렉트를 한 번 더 거쳐 스켈레톤이 두 번 떴다(2026-11-05) — 입력 화면으로 바로 간다. */
+export const JJ_LINK_HREF = "/exams/input?subject=english&type=jj#jj-link";
 
 export function JjStatusLine({
   jj,

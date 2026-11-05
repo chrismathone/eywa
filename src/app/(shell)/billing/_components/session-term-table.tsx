@@ -30,6 +30,7 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { formatTermDays } from "@/features/billing/session-terms/term-days";
 import { isUntouchedScaledSessions } from "@/features/billing/session-terms/last-month-suggestion";
 import { WindowLink } from "@/components/workspace/window-link";
+import { writeLockedPlaceholder } from "@/lib/write-lock";
 
 import type { SeatShareSummary } from "@/features/attendance/server/seat-share-summary";
 import { SeatShareRow } from "./seat-share-row";
@@ -367,7 +368,11 @@ type Draft = TermDraft;
  * 그대로 보인다). 상태는 부모(`SessionTermGroups`)가 들고 새 groups가 오면 푼다 — 개별 확정·반 일괄·선택 일괄이 같은 자리를 쓴다.
  */
 /** `selectable` = 이 반에 선택 일괄 확정 버튼이 서 있는가 — '전체 확정 해제' 상태엔 버튼이 없어 체크를 잠근다(남은 줄은 행의 '확정'으로). */
-function TermRow({ r, period, listId, draft, onDraft, selected, onSelect, awaiting, onAwait, selectable }: { r: Row; period: string; listId: string; draft: Draft; onDraft: (draft: Draft) => void; selected: boolean; onSelect: (checked: boolean) => void; awaiting: boolean; onAwait: () => void; selectable: boolean }) {
+/**
+ * `canWrite` = 수납관리 쓰기 권한(서버 액션과 같은 canWriteTenant billing) — 읽기 권한이면 선택 체크·확정/해제/삭제·배분·이월·
+ * 메모 편집·월정액 시수 편집을 그리지 않고, 미확정 줄의 시수·단가 칸은 비활성으로 값만 보여 준다(원장 2026-11-05).
+ */
+function TermRow({ r, period, listId, draft, onDraft, selected, onSelect, awaiting, onAwait, selectable, canWrite }: { r: Row; period: string; listId: string; draft: Draft; onDraft: (draft: Draft) => void; selected: boolean; onSelect: (checked: boolean) => void; awaiting: boolean; onAwait: () => void; selectable: boolean; canWrite: boolean }) {
   const { apply } = useSessionTermsState();
   const router = useRouter();
   const [state, confirmAction, confirming] = useActionState<SessionTermActionState, FormData>(async (prev, data) => {
@@ -422,16 +427,19 @@ function TermRow({ r, period, listId, draft, onDraft, selected, onSelect, awaiti
     <tr aria-busy={pending} className="group border-border hover:bg-accent/30 border-t transition-colors [&>td]:whitespace-nowrap">
       {/* 선택(원장 2026-09-17) — 미확정 행만 고를 수 있다('선택 일괄 확정'의 대상). 확정된 행은 해제 후 선택. 청구서 없는 줄은 잠긴다. */}
       <td className="px-2 py-2 text-center">
-        <input
-          type="checkbox"
-          checked={selected && !confirmed && !locked && selectable}
-          disabled={confirmed || pending || !r.classId || locked || !selectable}
-          onChange={(e) => onSelect(e.target.checked)}
-          aria-label={`${r.studentName} 선택`}
-          title={confirmed ? "이미 확정됨 — 해제한 뒤 고를 수 있습니다" : undefined}
-          {...(locked && stateMeta ? stateTip(r.termState as Exclude<TermRowState, "term">) : {})}
-          className="accent-primary size-4 cursor-pointer align-middle disabled:cursor-default"
-        />
+        {/* 선택은 '선택 일괄 확정'의 대상 고르기라 읽기 권한이면 세우지 않는다. */}
+        {canWrite ? (
+          <input
+            type="checkbox"
+            checked={selected && !confirmed && !locked && selectable}
+            disabled={confirmed || pending || !r.classId || locked || !selectable}
+            onChange={(e) => onSelect(e.target.checked)}
+            aria-label={`${r.studentName} 선택`}
+            title={confirmed ? "이미 확정됨 — 해제한 뒤 고를 수 있습니다" : undefined}
+            {...(locked && stateMeta ? stateTip(r.termState as Exclude<TermRowState, "term">) : {})}
+            className="accent-primary size-4 cursor-pointer align-middle disabled:cursor-default"
+          />
+        ) : null}
       </td>
       <td className="text-foreground px-3 py-2 font-medium">
         {/* 누르면 원생 상세를 **새 창**으로(원장 2026-09-17) — 회차 확정 창은 그대로 둔다. */}
@@ -451,7 +459,7 @@ function TermRow({ r, period, listId, draft, onDraft, selected, onSelect, awaiti
           ) : null}
         </div>
         {/* 미확정 행의 확정 폼(빈 폼) — 회차/단가 입력·확정 버튼이 form 속성으로 여기에 묶인다. 청구월은 가상 id(회차 행 없음)를 서버가 풀 때 쓴다. */}
-        {!confirmed && !locked ? (
+        {canWrite && !confirmed && !locked ? (
           <form
             id={fid}
             action={confirmAction}
@@ -497,7 +505,11 @@ function TermRow({ r, period, listId, draft, onDraft, selected, onSelect, awaiti
               <span className="sr-only"> · 일수 기준 · 재확정 필요</span>
             </span>
           ) : monthly ? (
-            <MonthlySessionEditor id={r.id} sessions={r.confirmedSessions!} confirmedAt={r.confirmedAt} studentName={r.studentName} />
+            canWrite ? (
+              <MonthlySessionEditor id={r.id} sessions={r.confirmedSessions!} confirmedAt={r.confirmedAt} studentName={r.studentName} />
+            ) : (
+              <span className="text-foreground font-bold">{r.confirmedSessions}</span>
+            )
           ) : planDiffers(r) ? (
             <span className="text-amber cursor-help font-bold underline decoration-dotted underline-offset-4" {...planDiffTip(r)}>
               {r.confirmedSessions}
@@ -508,7 +520,7 @@ function TermRow({ r, period, listId, draft, onDraft, selected, onSelect, awaiti
           )
         ) : (
           <input
-            form={fid}
+            form={canWrite ? fid : undefined}
             name="sessions"
             type="number"
             step="any"
@@ -516,7 +528,10 @@ function TermRow({ r, period, listId, draft, onDraft, selected, onSelect, awaiti
             max={99}
             value={draft.sessions}
             onChange={(e) => onDraft({ ...draft, sessions: e.target.value })}
-            disabled={pending}
+            // 읽기 권한 — 값(예정·지난 달 기준)은 보이되 잠근다. 칸이 좁아 안내는 title로, 표 위에 writeLockedNote 한 줄.
+            disabled={pending || !canWrite}
+            title={canWrite ? undefined : writeLockedPlaceholder("billing")}
+            placeholder={canWrite ? undefined : writeLockedPlaceholder("billing")}
             aria-label={`${r.studentName} 확정 회차`}
             className={`${NUM_INPUT} w-14 text-center ${suggestedSessions ? "bg-amber-soft" : "bg-background"}`}
             {...(suggestedSessions ? lastMonthTip(r) : {})}
@@ -538,15 +553,16 @@ function TermRow({ r, period, listId, draft, onDraft, selected, onSelect, awaiti
         ) : (
           <>
             <input
-              form={fid}
+              form={canWrite ? fid : undefined}
               name="unitPrice"
               type="text"
               inputMode="numeric"
               list={listId}
-              placeholder="단가"
+              placeholder={canWrite ? "단가" : writeLockedPlaceholder("billing")}
               value={draft.price}
               onChange={(e) => onDraft({ ...draft, price: e.target.value })}
-              disabled={pending}
+              disabled={pending || !canWrite}
+              title={canWrite ? undefined : writeLockedPlaceholder("billing")}
               aria-label={`${r.studentName} 회당 단가`}
               className={`${NUM_INPUT} w-24 text-right ${suggestedPrice ? "bg-blue-soft" : "bg-background"}`}
               {...(suggestedPrice ? lastMonthTip(r) : {})}
@@ -576,22 +592,30 @@ function TermRow({ r, period, listId, draft, onDraft, selected, onSelect, awaiti
             {r.allocatedAmount != null ? <b>{won(netAllocatedAmount(r) ?? r.allocatedAmount)}</b> : <span>{r.classAmount !== null ? won(r.classAmount) : "—"}</span>}
             <ReceiptTag r={r} />
             <MoneyCarryTags r={r} />
-            {r.invoiceId !== null ? <ReceiptAllocationButton invoiceId={r.invoiceId} studentName={r.studentName} /> : null}
-            <MoneyCarryButton r={r} />
+            {/* 배분·이월은 조회부터 쓰기 게이트(canWriteTenant billing)라 읽기 권한이면 세우지 않는다. */}
+            {canWrite && r.invoiceId !== null ? <ReceiptAllocationButton invoiceId={r.invoiceId} studentName={r.studentName} /> : null}
+            {canWrite ? <MoneyCarryButton r={r} /> : null}
           </div>
         )}
       </td>
       {/* 메모(특이사항) — 누르면 그 자리에서 고친다. 회차 행이 없는 줄은 적을 자리(행)가 아직 없다. */}
       <td className="px-3 py-2">
         {r.termState === "term" ? (
-          <TermNoteCell id={r.id} note={r.note} studentName={r.studentName} />
+          canWrite ? (
+            <TermNoteCell id={r.id} note={r.note} studentName={r.studentName} />
+          ) : r.note ? (
+            // 읽기 권한 — 글만(한 줄 말줄임 + 전문은 마우스 오버 카드). 눌러서 고치는 문은 세우지 않는다.
+            <span className="block w-full truncate text-left text-sm" {...tipProps({ title: "메모", lines: [r.note] })}>
+              {r.note}
+            </span>
+          ) : null
         ) : (
           <span className="text-text-dim cursor-help text-xs" {...NO_ROW_NOTE_TIP}>—</span>
         )}
       </td>
       {/* 기타 — 확정·해제·삭제. 삭제는 저장된 회차 행에만 제공한다. */}
       <td className={`${STICKY_END_ROW} px-3 py-2 text-center`}>
-        {locked ? (
+        {locked || !canWrite ? (
           <span className="text-text-dim">—</span>
         ) : confirmed ? (
           <form action={unconfirmAction} className="inline">
@@ -610,7 +634,7 @@ function TermRow({ r, period, listId, draft, onDraft, selected, onSelect, awaiti
             {confirming || awaiting ? "확정 중…" : monthly ? "월 금액 확정" : "확정"}
           </button>
         )}
-        {r.termState === "term" ? <TermDeleteButton id={r.id} period={period} studentName={r.studentName} className={r.className} disabled={pending} onDeleted={() => { onSelect(false); onAwait(); }} /> : null}
+        {canWrite && r.termState === "term" ? <TermDeleteButton id={r.id} period={period} studentName={r.studentName} className={r.className} disabled={pending} onDeleted={() => { onSelect(false); onAwait(); }} /> : null}
         {err ? <p className="text-danger mt-1 text-xs whitespace-normal">{err}</p> : null}
       </td>
     </tr>
@@ -687,10 +711,16 @@ export function SessionTermGroups({
   period,
   visibleOnly = false,
   seatShare = null,
+  canWrite,
 }: {
   groups: ClassGroup[];
   catalog: Catalog;
   period: string;
+  /**
+   * 수납관리 쓰기 권한 — 서버(SessionTermsFace)가 회차 액션과 **같은 함수**(canWriteTenant billing)로 정한 값.
+   * 읽기 권한이면 반 일괄 입력·확정·전체 해제·선택 체크, 행의 확정·해제·삭제·배분·이월·메모 편집을 그리지 않는다(원장 2026-11-05).
+   */
+  canWrite: boolean;
   /** 필터(보기 필터의 미확정·미배분 · 검색)로 좁혀 보는 중 — 반 일괄 확정을 보이는 학생에게만. */
   visibleOnly?: boolean;
   /**
@@ -815,7 +845,7 @@ export function SessionTermGroups({
                 <tr className="bg-accent/40 border-border border-t-2">
                   <td className="px-2 py-2 text-center">
                     {/* 이 반의 미확정 학생 전체 선택 — 반이 없는 묶음엔 선택 확정이 없다 */}
-                    {hasClass ? <input
+                    {canWrite && hasClass ? <input
                       type="checkbox"
                       checked={allSelected}
                       ref={(el) => {
@@ -852,7 +882,8 @@ export function SessionTermGroups({
                       </div>
                       {/* 불투명(반 머리 줄과 같은 색) — 좁은 창에서 왼쪽 반 정보 위로 겹칠 때 글자가 섞이지 않게.
                           확정할 수 있는 줄이 하나도 없는 반(청구서 없음·취소뿐)엔 일괄 입력·확정 자체가 없다. */}
-                      {confirmable.length > 0 ? (
+                      {/* 읽기 권한이면 일괄 입력·확정·해제 묶음 자체를 세우지 않는다(입력칸도 그 단추에 넣을 값이라 함께). */}
+                      {canWrite && confirmable.length > 0 ? (
                       <div className="bg-card bg-[linear-gradient(color-mix(in_oklab,var(--color-accent)_40%,transparent),color-mix(in_oklab,var(--color-accent)_40%,transparent))] sticky right-3 z-[1] rounded-md pl-2">
                         {/* 반 일괄 대상이 전부 확정 → 입력칸·일괄 버튼 대신 '전체 확정 해제' 하나(원장 2026-09-17). 판정은 화면에 반영된
                             확정 상태(patches)라 한 명만 해제해도 곧바로 입력칸이 돌아온다. 반이 없는 묶음은 서버가 반을 못 가려 종전대로.
@@ -916,6 +947,7 @@ export function SessionTermGroups({
                     awaiting={awaiting.has(r.id)}
                     onAwait={() => addAwaiting([r.id])}
                     selectable={!(batchDone && hasClass)}
+                    canWrite={canWrite}
                   />
                 ))}
                 {/* 자리 몫 줄 — 이 반의 그 달 자리(JJ실·랩실) 몫을 숫자로 선생님 몫에 돌린다(반마다 한 줄 · 학생별 값은 창 안에서 · 날짜는 고르지 않는다). */}

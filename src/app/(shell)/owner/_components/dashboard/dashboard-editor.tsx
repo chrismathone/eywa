@@ -36,6 +36,13 @@ export type DashboardEditorProps = {
   members: DashboardMembers;
   /** 원장 시점 원본 스냅샷 — 서버가 흘려 보낸다(첫 화면을 막지 않게, B7). 실패하면 null. */
   preview: Promise<OverviewSnapshot | null>;
+  /**
+   * 읽기 권한(학원 설정 쓰기 없음 — 저장 액션과 같은 판정, page.tsx) — 편집 도구 줄('편집'·기본값 등)과 저장 바를 그리지 않고
+   * 편집 얼굴(끌기·크기·서랍·갤러리)로 들어가지 않는다(원장 2026-11-05). ⚠️ 역할 전환 줄(RoleBar)·과목 전환도 일반 단추라
+   * 페이지 fieldset(owner/page.tsx `disabled={!canEditSettings}`) 안에서 비활성이다 — 읽기 사용자는 지금 고른 역할의 배치만 본다
+   * (이번 변경 전부터 같다). 보기 전환까지 열려면 그 조작을 fieldset 밖으로 옮길 것(2026-11-05 리뷰).
+   */
+  readOnly?: boolean;
 };
 
 /** 갤러리·편집 얼굴용 — 모든 카드를 기본 크기로 놓은 배치. */
@@ -48,9 +55,11 @@ const LIST_BELOW = 720;
  * 학원 설정 '대시보드 관리' — 역할마다 운영실에 무엇을 어디에 얼마나 크게 놓을지(원장 2026-10-01 *"카드 및 위치, 카드 크기 등등 다양하게"*).
  * 처음엔 그 역할의 **실데이터 미리보기**, '편집'을 누르면 위젯 편집(끌기·크기·서랍·갤러리), '완료'로 돌아온다. 저장은 아래 저장 바(다섯 역할 한 번에).
  */
-export function DashboardEditor({ initial, roleMenus, subjects, members, preview }: DashboardEditorProps) {
+export function DashboardEditor({ initial, roleMenus, subjects, members, preview, readOnly = false }: DashboardEditorProps) {
   const ed = useDashboardEditor(initial, subjects.map((s) => s.key));
-  const { role, editing, selected, commit, select, restore, undo, redo } = ed;
+  const { role, selected, commit, select, restore, undo, redo } = ed;
+  // 읽기 권한이면 편집 얼굴로 들어가지 않는다 — 도구 줄을 그리지 않으므로 켤 길도 없지만, 상태가 남아도 막는다.
+  const editing = ed.editing && !readOnly;
   const items = useMemo(() => editing ? positionItems(ed.items) : ed.items, [ed.items, editing]);
   const [full, setFull] = useState<OverviewSnapshot | null | "failed">(null);
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -151,6 +160,7 @@ export function DashboardEditor({ initial, roleMenus, subjects, members, preview
       extraFields={{ dashboardPart: "layouts", dashboardTouched: JSON.stringify(ed.touched) }}
       onSubmit={() => { submittedRef.current = ed.payload; }}
       onSaved={() => { if (submittedRef.current) ed.markSaved(submittedRef.current); }}
+      readOnly={readOnly}
     >
       <div ref={rootRef} className={e.editor} style={{ "--spring-linear": SPRING } as CSSProperties}>
         <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,380px)]">
@@ -162,7 +172,7 @@ export function DashboardEditor({ initial, roleMenus, subjects, members, preview
           <span>{members.failed ? "직원 조회 실패" : `지금 ${applicableMembers.people.filter((p) => p.bundle === role && p.canOpen).length}명`}</span>
           <span>{ed.status[role].isDefault ? "기본 배치 사용 중" : "직접 구성한 배치"}</span>
         </p>
-        <EditorActions
+        {readOnly ? null : <EditorActions
           role={role}
           editing={editing}
           canUndo={ed.canUndo}
@@ -192,7 +202,7 @@ export function DashboardEditor({ initial, roleMenus, subjects, members, preview
             toast(`${BUNDLE_LABELS[role]} 배치를 기본값으로 되돌렸습니다`);
           }}
           onSubject={setSubject}
-        />
+        />}
         </div>
         <AssignedStaff members={applicableMembers} bundle={role} />
         </div>
@@ -226,15 +236,15 @@ export function DashboardEditor({ initial, roleMenus, subjects, members, preview
             ) : null}
           </div>
         ) : full === null ? (
-          <p className={e.note}>실데이터 미리보기를 불러오는 중입니다… 그동안 ‘편집’을 눌러 배치를 바꿀 수 있습니다.</p>
+          <p className={e.note}>{readOnly ? "실데이터 미리보기를 불러오는 중입니다…" : "실데이터 미리보기를 불러오는 중입니다… 그동안 ‘편집’을 눌러 배치를 바꿀 수 있습니다."}</p>
         ) : full === "failed" ? (
           <p className={e.note} data-tone="danger">
-            미리보기 데이터를 불러오지 못했습니다. 배치 편집·저장은 그대로 할 수 있습니다(새로고침하면 다시 불러옵니다).
+            {readOnly ? "미리보기 데이터를 불러오지 못했습니다(새로고침하면 다시 불러옵니다)." : "미리보기 데이터를 불러오지 못했습니다. 배치 편집·저장은 그대로 할 수 있습니다(새로고침하면 다시 불러옵니다)."}
           </p>
         ) : (
           <RolePreview full={full} role={role} items={items} menus={menus} subject={previewSubject} />
         )}
-        <WidgetGallery open={galleryOpen} onOpenChange={setGalleryOpen} items={items} role={role} menus={menus} snapshot={snapshot} onAdd={add} />
+        <WidgetGallery open={galleryOpen && !readOnly} onOpenChange={setGalleryOpen} items={items} role={role} menus={menus} snapshot={snapshot} onAdd={add} />
       </div>
     </SectionForm>
   );

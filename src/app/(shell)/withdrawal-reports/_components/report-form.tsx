@@ -6,15 +6,18 @@ import type { ReportConsultation } from "@/features/withdrawal-reports/consultat
 import { GrowingTextarea } from "./growing-textarea";
 import { ConsultationLinks } from "./consultation-links";
 import { REASON_LABEL } from "@/features/withdrawals/types";
-import { directorIds, isDirectReport, managerIds, MIN_DETAIL_LENGTH, type ReportBody, type ReportEvent, type WithdrawalReport } from "@/features/withdrawal-reports/model";
+import { directorIds, isDirectReport, managerIds, MIN_DETAIL_LENGTH, refundWaiting, type RefundStep, type ReportBody, type ReportEvent, type WithdrawalReport } from "@/features/withdrawal-reports/model";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { ReportSheet } from "./report-sheet";
 import { TuitionDetail } from "./tuition-detail";
 import { reportCourses } from "@/features/withdrawal-reports/target-courses";
 
 const date = (value: string) => new Date(value).toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
-export function ReportForm({ report: r, body, events, labels, nameOf, editable, pending, onChange, consultations = [], subjectHistory = [], refundCheck, managerSkipped = false }: {
+export function ReportForm({ report: r, body, events, labels, nameOf, editable, pending, onChange, consultations = [], subjectHistory = [], refundCheck, managerSkipped = false, refundSteps = [] }: {
+  /** 관리자 승인 생략(원장 2026-11-03 — 작성 강사가 과목 관리자) — 결재란 관리자 칸 '생략'. */
   managerSkipped?: boolean;
+  /** 데스크 환불 단계(원장 2026-11-03) — 있으면 결재란에 '데스크' 칸(담당 · 환불완료일). */
+  refundSteps?: RefundStep[];
   consultations?: ReportConsultation[];
   refundCheck?: ReactNode;
   subjectHistory?: SubjectHistoryRow[];
@@ -41,15 +44,20 @@ export function ReportForm({ report: r, body, events, labels, nameOf, editable, 
   // 관리자 바로 처리(원장 2026-10-23) — 강사가 쓰지 않았다. 결재란은 처리한 관리자 한 칸, 담임명은 그 반의 담임(요청 당시)으로.
   const direct = isDirectReport(r);
   const homeroom = [...new Set(courses.map(c => c.teacherName).filter(Boolean))].join(", ") || "—";
+  // 결재란(원장 2026-11-03): 원장 칸은 원장을 지정했던 옛 보고서에만 · 데스크 환불을 요청했으면 '데스크' 칸(담당 · 환불완료일).
+  const desk = refundSteps.length ? [{ role: "데스크", name: refundSteps.map(s => s.deskName).join("\n"), date: refundSteps.map(s => `환불완료일 : ${s.completedDate ?? ""}`).join("\n") }] : [];
+  const deskWaiting = refundWaiting(r, refundSteps);
   return <ReportSheet
     refundCheck={refundCheck}
     subject={r.subjects.map(s => labels[s] ?? "기타 과목").join(" · ")}
     consultationLinks={<ConsultationLinks records={consultations} selected={body.consultationIds ?? []} editable={editable} pending={pending} onChange={ids => onChange("consultationIds", ids)} />}
     signatures={direct
-      ? [{ role: "바로 처리", name: nameOf(r.requested_by), date: `처리 요청일 : ${date(r.created_at)}` }]
+      ? [{ role: "바로 처리", name: nameOf(r.requested_by), date: `처리 요청일 : ${date(r.created_at)}` }, ...desk]
       : [
           { role: "담임", name: nameOf(r.teacher_id), date: `작성일 : ${writtenAt ? date(writtenAt) : ""}` },
-          ...(managerSkipped ? [{ role: "관리자", name: "생략", date: "" }, { ...approvers("manager"), role: "원장" }] : [approvers("manager"), approvers("director")]),
+          managerSkipped ? { role: "관리자", name: "생략", date: "작성 강사가 과목 관리자" } : approvers("manager"),
+          ...(directorIds(r).length ? [approvers("director")] : []),
+          ...desk,
         ]}
     fields={{
       name: r.snapshot.name,
@@ -66,7 +74,7 @@ export function ReportForm({ report: r, body, events, labels, nameOf, editable, 
       teacherOpinion: textField("teacherOpinion", "담임 의견"),
       tuition: <TuitionDetail text={body.tuition || "수납 기록 확인 필요"} />,
       arrears: <><span>{ { unknown: "청구 기록 확인 필요", no: "미납 없음", yes: "미납 있음" }[body.arrears]}</span>{body.arrearsNote && <div className="whitespace-pre-line">{body.arrearsNote}</div>}</>,
-      processing: r.applied_at ? `${nameOf(applied?.actor_id ?? null)} · ${date(r.applied_at)} 처리 완료${direct ? " (관리자 바로 처리)" : ""}` : `${direct ? "관리자 바로 처리" : "요청"}: ${nameOf(r.requested_by)} · ${r.status === "canceled" ? "요청 취소" : direct ? `${r.effective_date} 처리 예약` : "승인 완료 후 자동 처리"}`,
+      processing: r.applied_at ? `${nameOf(applied?.actor_id ?? null)} · ${date(r.applied_at)} 처리 완료${direct ? " (관리자 바로 처리)" : ""}` : `${direct ? "관리자 바로 처리" : "요청"}: ${nameOf(r.requested_by)} · ${r.status === "canceled" ? "요청 취소" : direct ? `${r.effective_date} 처리 예약${deskWaiting ? " · 데스크 환불 완료 후" : ""}` : deskWaiting ? "승인·데스크 환불 완료 후 자동 처리" : "승인 완료 후 자동 처리"}`,
     }}
   />;
 }

@@ -20,6 +20,7 @@ import { scopeFieldsFor, useAttendanceScope } from "./scope-context";
 import { NOT_MINE_MESSAGE, STATUS_TONE, statusTextOf } from "@/features/attendance/cell-display";
 // 화면 언어 — 상태 이름은 `statusTextOf`(한글 맵 옆) 단일 소스, 나머지 문구는 사전.
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { writeLockedNote, writeLockedPlaceholder } from "@/lib/write-lock";
 
 /**
  * 🔴 이름을 여기 적지 않는다 — 표·범례와 **같은 표**를 읽어야 같은 낱말이 된다.
@@ -57,6 +58,7 @@ export function CellPopover({
   units,
   note,
   locked,
+  readOnly = false,
   otherCount = 0,
   anchor,
   reservation = null,
@@ -81,6 +83,11 @@ export function CellPopover({
   note: string;
   /** 수정 기간(7일)이 지나 상태·시수를 못 고치는 칸 — 이유를 담은 문장. null = 제한 없음. */
   locked?: string | null;
+  /**
+   * 출석부 **읽기 권한**(격자 `readOnly`) — 상태·지우기·보강 예약·예약 취소 단추를 그리지 않고, 시수·메모는 잠근 칸으로
+   * 값만 보인다(원장 2026-11-05). 7일 잠금의 '메모는 언제든'도 열지 않는다 — 메모 저장도 같은 쓰기 게이트다.
+   */
+  readOnly?: boolean;
   /**
    * 이 표가 세지 않는 교시 수(강사 전체 보기의 빗금 칸) — **"기록이 없다"와 "내 기록이 없다"를 가른다.**
    * 0보다 크면 그 날 기록은 **있다**(남의 교시 것). 이걸 안 보면 아래 안내가 사실과 반대로 나간다.
@@ -155,7 +162,8 @@ export function CellPopover({
     });
   };
   // 잠겼는데 기록도 없으면 손댈 게 없다 — 사유만 알리고 입력은 안 연다.
-  const noteOnly = !!locked;
+  // 읽기 권한은 메모만 여는 갈래(7일 잠금)도 타지 않는다 — 아래 읽기 전용 블록이 대신 선다.
+  const noteOnly = !!locked && !readOnly;
   const nothingToEdit = noteOnly && !status;
   // 🔴 **값이 없다 ≠ 기록이 없다.** 빗금 칸엔 남의 교시 기록이 있고, 거기에 "기록이 없는 날"이라고
   //    쓰면 화면이 스스로를 부정한다(잠금 사유는 "다른 교시 것"이라고 말하는데 그 아래에서 없다고 한다).
@@ -272,7 +280,7 @@ export function CellPopover({
             </p>
             {reservation.note ? <p className="text-xs leading-tight break-keep">{reservation.note}</p> : null}
             <p className="text-xs leading-tight break-keep opacity-80">{t("att.pop.reservedTip")}</p>
-            {noteOnly ? null : (
+            {noteOnly || readOnly ? null : (
               <button
                 type="button"
                 onClick={cancelReservation}
@@ -282,6 +290,31 @@ export function CellPopover({
                 {cancelling ? t("att.pop.cancelling") : t("att.pop.cancelReserve")}
               </button>
             )}
+          </div>
+        ) : null}
+        {readOnly ? (
+          // 🔴 읽기 권한 — 쓰기 단추는 그리지 않고(상태 단추 대신 상태 글자), 시수·메모는 잠근 칸에 값만 싣는다.
+          //    값이 차 있으면 placeholder가 안 보이므로 위 사유 문장이 늘 함께 선다(write-lock.ts 규칙).
+          <div className="flex flex-col gap-1 p-0.5">
+            <p className="text-amber text-xs leading-tight break-keep">{locked ?? writeLockedNote("attendance")}</p>
+            {status ? <p className="text-foreground text-xs leading-tight font-bold">{statusTextOf(status, lang)}</p> : null}
+            <input
+              type="text"
+              disabled
+              // 평소 팝오버와 같은 규약 — 값이 있는 칸의 빈 시수는 1이다(unitsDraft 초기값).
+              value={status !== null ? formatSessionUnits(units ?? 1) : ""}
+              placeholder={writeLockedPlaceholder("attendance")}
+              aria-label={t("att.pop.unitsAria")}
+              className="border-line bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-md border px-2 py-1 text-xs opacity-70"
+            />
+            <input
+              type="text"
+              disabled
+              value={note}
+              placeholder={writeLockedPlaceholder("attendance")}
+              aria-label={t("att.pop.notePh")}
+              className="border-line bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-md border px-2 py-1 text-xs opacity-70"
+            />
           </div>
         ) : null}
         {noteOnly ? (
@@ -360,7 +393,7 @@ export function CellPopover({
             )}
           </div>
         ) : null}
-        {noteOnly ? null : (
+        {noteOnly || readOnly ? null : (
           <>
             {STATUS_OPTIONS.map((o) => (
               <button

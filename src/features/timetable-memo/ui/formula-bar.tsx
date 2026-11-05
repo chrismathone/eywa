@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { writeLockedPlaceholder } from "@/lib/write-lock";
 import { SHEET_LIMITS, cellKey, cellName } from "../doc";
 import { setTexts } from "../ops";
 import type { SheetModel } from "./use-sheet-model";
@@ -43,7 +44,10 @@ export function FormulaBar({ model, canEdit, onDone }: { model: SheetModel; canE
         ref={ref}
         key={`${r},${c}`}
         defaultValue={text}
-        readOnly={!canEdit}
+        // 🔴 읽기 권한이면 **비활성** + 안내(원장 2026-11-05, write-lock.ts). 복사는 이 칸이 아니라 판(Ctrl+C·우클릭 '복사')이
+        //    맡으므로 readOnly로 남겨 둘 이유가 없다. 글자가 차 있어 안내가 가리면 머리줄의 SaveStatus가 같은 말을 한다.
+        disabled={!canEdit}
+        placeholder={canEdit ? undefined : writeLockedPlaceholder("timetable")}
         maxLength={SHEET_LIMITS.text}
         aria-label="칸 글자"
         className="min-w-0 flex-1 bg-transparent px-2 py-1 outline-none"

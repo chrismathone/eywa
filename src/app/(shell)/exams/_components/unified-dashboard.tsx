@@ -9,6 +9,7 @@ import { getUnifiedGrades } from "@/features/grades/unified/server/queries";
 import { loadTodaysMathMarks } from "@/features/grades/unified/server/todays-math-marks";
 import { aggregateBy, KIND_LABEL, withPreviousScores, type UnifiedRow } from "@/features/grades/unified/model";
 import { kstToday } from "@/lib/date-kst";
+import { writeLockedNote } from "@/lib/write-lock";
 import { goalViewsForRows } from "@/features/grades/server/goals";
 import { getStudentGradeGoals } from "@/features/students/server/queries";
 import { defaultRangeFrom } from "@/features/grades/unified/default-range";
@@ -147,8 +148,9 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
     {tab === "records" ? <div className="space-y-3">
       <RecordsPager page={page} pageSize={PAGE_SIZE} total={ledgerRows.length} href={ledgerHref} note={showMissing ? "미입력 포함" : undefined} />
       <UnifiedLedger rows={pageRows} canWrite={!writeError} goals={goalViews} todaysMathKeys={todaysMathKeys}
-        head={<LedgerHead view={ledgerView} href={ledgerHref} options={ledgerOptions(rows)} subject={subject} subjects={subjectOptions} />} />
-      {writeError ? <p className="text-danger text-sm">{writeError}</p> : null}
+        head={<LedgerHead view={ledgerView} href={ledgerHref} options={ledgerOptions(rows)} subject={subject} subjects={subjectOptions} canWrite={!writeError} />} />
+      {/* 읽기 권한 안내는 오류 모양(빨강)이 아니라 다른 읽기 화면과 같은 흐린 한 줄(write-lock.ts · 격자 score-grid와 같게). */}
+      {writeError ? <p className="text-text-dim text-xs">{writeLockedNote("exams")}</p> : null}
       <RecordsPager page={page} pageSize={PAGE_SIZE} total={ledgerRows.length} href={ledgerHref} note="수업보고서 테스트일은 보고서 날짜와 연결됩니다" />
     </div> : null}
 

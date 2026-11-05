@@ -72,7 +72,7 @@ export function userStatusMeta(status: string): { label: string; tone: SemanticT
  * 학생(student)은 직원 위계 밖이라 뺀다(서버 `changeUserRole`도 거절한다).
  */
 export const ASSIGNABLE_ROLES: { value: SystemRole; label: string }[] = (
-  ["master", "admin", "manager", "teacher", "counselor", "accountant", "viewer"] as const
+  ["master", "admin", "manager", "teacher", "counselor", "accountant", "viewer", "parttime"] as const
 ).map((value) => ({ value, label: ROLE_LABEL[value] }));
 
 // ── 라이선스 기능 ──────────────────────────────────────────────────────

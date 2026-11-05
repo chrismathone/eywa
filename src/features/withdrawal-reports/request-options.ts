@@ -45,7 +45,7 @@ export function reportAuthorIds(courses: readonly Pick<CourseSnapshot, "subject"
 /**
  * 학원 설정 '퇴원보고서 승인자'(`specialAccess.withdrawalApproverIds`)로 승인 과목을 좁힌다 — 지정한 사람이 승인 담당인 과목은
  * 다른 사람의 승인 과목에서 뺀다(원장 2026-10-30 *"수학의 경우 허은진 부원장 한명만"*). 지정한 사람이 없는 과목은 그대로.
- * 승인 후보 판정(`requestApprovers`)은 이 결과의 approvalSubjects만 보므로 창·기본 선택이 함께 따른다.
+ * 승인 계획(`reportApprovalPlan` — 후보·관리자 승인 생략)은 이 결과의 approvalSubjects만 보므로 창·기본 선택이 함께 따른다.
  */
 export function narrowApprovalSubjects(staff: readonly StaffOption[], approverIds: readonly string[]): StaffOption[] {
   const listed = new Set(approverIds);
@@ -53,55 +53,54 @@ export function narrowApprovalSubjects(staff: readonly StaffOption[], approverId
   if (!owned.size) return [...staff];
   return staff.map(u => listed.has(u.id) ? u : { ...u, approvalSubjects: (u.approvalSubjects ?? u.subjects).filter(s => !owned.has(s)) });
 }
-/** 기본 선택 — 과목 관리자 전원 + 대신 승인할 원장이 한 명뿐이면 그 원장(여럿이면 요청자가 고른다). */
-export function defaultApproverIds({ candidates, masters }: Pick<ReturnType<typeof requestApprovers>, "candidates" | "masters">) {
-  return [...candidates, ...(masters.length === 1 ? masters : [])].map(u => u.id);
-}
-/** 작성 강사가 그 과목 관리자인 과목 — 본인 보고서를 본인이 승인할 수 없다. 원장이 담임이면 해당 없다(관리자가 승인). */
-export function selfManagedSubjects(
-  staff: readonly StaffOption[],
-  courses: readonly Pick<CourseSnapshot, "subject" | "teacherId">[],
-  teacherIds: readonly string[],
-) {
-  return [...new Set(courses.filter(c => c.teacherId && teacherIds.includes(c.teacherId) && staff.some(u => u.id === c.teacherId
-    && canRequestReport(u.role) && u.role !== "master" && (u.approvalSubjects ?? u.subjects).includes(c.subject))).map(c => c.subject))];
-}
-
 /**
- * 작성자를 생략한 반도 종료하므로 승인자는 종료 대상 전체 과목에서 고른다.
- * 담임이 관리자인 과목은 관리자 승인을 건너뛰고 원장이 승인한다(원장 2026-10-30). DB가 승인자 1명 이상을 요구해 원장을 승인자 칸에 넣는다.
+ * 보고서 하나(작성 강사)의 승인 계획 — 원장 2026-11-03 *"작성 강사가 그 과목 관리자 본인이면 관리자 승인 생략"*, **보고서마다** 판정한다.
+ * - 보고서 과목 = DB가 보고서에 싣는 과목과 같은 규칙: 작성 강사가 한 명이면 고른 반 전부, 여럿이면 그 강사가 담임인 반(`request_withdrawal_report_group`).
+ * - 생략(`skip`) = 작성 강사가 관리자·매니저(원장·운영자 계정 아님)이고 그 보고서 과목을 **모두** 승인 과목으로 가진다.
+ * - 후보(`candidates`) = 작성 강사 본인을 뺀 관리자급 중 그 보고서의 **작성 강사가 맡지 않은 과목**을 승인하는 사람
+ *   (같은 묶음의 다른 작성 강사도 후보가 될 수 있다 — EiE·일반 영어처럼 같은 과목에 작성자가 둘이면 관리자인 작성자가 평강사 보고서를 승인한다).
+ * - 승인 과목 = `approvalSubjects`(직원 과목 범위 덮어쓰기 → 학원 설정 '퇴원보고서 승인자' 좁히기까지 반영된 값 — `reportStaff`) · 없으면 담당 과목.
+ * 🔴 침산 지점 superadmin(lsy93@gmail.com · st2000423@gmail.com 등)을 여기에 넣으면 안 된다 — `reportStaff`가 역할을 admin으로, 승인 과목을 빈 값으로 넘겨
+ *    후보에서도 생략에서도 빠진다. `role`을 실제 system_role로 바꾸거나 다른 직원 목록을 넘기면 이 보호가 사라진다.
  */
-export function requestManagers(
+export type ReportApproval = { teacherId: string; subjects: string[]; skip: boolean; candidates: StaffOption[] };
+const approves = (u: Pick<StaffOption, "approvalSubjects" | "subjects">, subject: string) => (u.approvalSubjects ?? u.subjects).includes(subject);
+export function reportApprovalPlan(
   staff: readonly StaffOption[],
   courses: readonly Pick<CourseSnapshot, "subject" | "teacherId">[],
-  subjects: readonly string[],
   teacherIds: readonly string[],
-  directorIds: readonly string[] = [],
-) {
-  const { candidates, masters } = requestApprovers(staff, courses, subjects, teacherIds, directorIds);
-  return [...candidates, ...masters];
+): ReportApproval[] {
+  return teacherIds.map(teacherId => {
+    const own = teacherIds.length === 1 ? courses : courses.filter(c => c.teacherId === teacherId);
+    const subjects = [...new Set(own.map(c => c.subject))];
+    const writer = staff.find(u => u.id === teacherId);
+    const managed = writer && canRequestReport(writer.role) && writer.role !== "master" ? subjects.filter(s => approves(writer, s)) : [];
+    const skip = subjects.length > 0 && managed.length === subjects.length;
+    const rest = subjects.filter(s => !managed.includes(s));
+    const candidates = skip ? [] : staff.filter(u => canRequestReport(u.role) && u.id !== teacherId && rest.some(s => approves(u, s)));
+    return { teacherId, subjects, skip, candidates };
+  });
 }
-
+/** 창에 보일 승인 관리자 후보 — 생략이 아닌 보고서들의 후보 합집합(한 사람이 여러 보고서를 맡을 수 있다). */
+export function approverOptions(plan: readonly ReportApproval[]): StaffOption[] {
+  const seen = new Map<string, StaffOption>();
+  for (const p of plan) for (const u of p.candidates) if (!seen.has(u.id)) seen.set(u.id, u);
+  return [...seen.values()];
+}
+/** 기본 선택 — 후보 전원(원장 승인 칸은 없다 — 원장 2026-11-03). */
+export function defaultApproverIds(plan: readonly ReportApproval[]) {
+  return approverOptions(plan).map(u => u.id);
+}
 /**
- * 승인자 후보를 과목 관리자와 대신 승인할 원장으로 나눈다 — 원장 계정이 여럿이라 원장은 전원을 기본 선택하지 않는다.
- * 🔴 침산 지점 superadmin(lsy93@gmail.com · st2000423@gmail.com 등)을 여기에 넣으면 안 된다 — `reportStaff`가 역할을 admin으로, 승인 과목을 빈 값으로 넘겨 후보에서 빠진다.
- *    `role`을 실제 system_role로 바꾸거나 다른 직원 목록을 넘기면 이 보호가 사라진다.
+ * 고른 관리자 → 보고서마다 승인 관리자(DB `reportManagerIds`) — 생략 보고서는 빈 목록, 그 밖은 그 보고서 후보 중 고른 사람.
+ * `missing` = 고른 사람이 하나도 안 걸린(승인자가 없는) 보고서의 작성 강사 — 요청을 막는다.
  */
-export function requestApprovers(
-  staff: readonly StaffOption[],
-  courses: readonly Pick<CourseSnapshot, "subject" | "teacherId">[],
-  subjects: readonly string[],
-  teacherIds: readonly string[],
-  directorIds: readonly string[] = [],
-): { candidates: StaffOption[]; masters: StaffOption[]; needsDirector: boolean } {
-  const hasAuthor = courses.some(c => c.teacherId && teacherIds.includes(c.teacherId));
-  const authorSubjects = new Set(hasAuthor ? courses.filter(c => subjects.includes(c.subject)).map(c => c.subject) : []);
-  const self = new Set(selfManagedSubjects(staff, courses, teacherIds));
-  const free = (u: StaffOption) => !teacherIds.includes(u.id) && !directorIds.includes(u.id);
-  const approves = (u: StaffOption, subject: string) => (u.approvalSubjects ?? u.subjects).includes(subject);
-  const candidates = staff.filter(u => canRequestReport(u.role) && free(u) && [...authorSubjects].some(s => !self.has(s) && approves(u, s)));
-  if (!self.size) return { candidates, masters: [], needsDirector: false };
-  // 다른 과목 관리자가 남으면 그 관리자가 승인한 뒤 원장이 승인한다 — 원장을 '원장 승인' 칸에서 꼭 골라야 한다(관리자 혼자 끝내지 않게).
-  if (candidates.length) return { candidates, masters: [], needsDirector: true };
-  return { candidates, masters: staff.filter(u => u.role === "master" && free(u)), needsDirector: false };
+export function reportManagerIds(plan: readonly ReportApproval[], selected: readonly string[]): { byTeacher: Record<string, string[]>; missing: string[] } {
+  const byTeacher: Record<string, string[]> = {};
+  const missing: string[] = [];
+  for (const p of plan) {
+    byTeacher[p.teacherId] = p.skip ? [] : p.candidates.filter(u => selected.includes(u.id)).map(u => u.id);
+    if (!p.skip && !byTeacher[p.teacherId].length) missing.push(p.teacherId);
+  }
+  return { byTeacher, missing };
 }

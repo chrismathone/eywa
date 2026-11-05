@@ -13,6 +13,7 @@ import { TodaysMathCard } from "./todays-math-card";
 import { TodaysMathMenusCard } from "./todays-math-menus-card";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { isFeatureOptedIn } from "@/lib/license/server";
 
 /**
@@ -33,12 +34,18 @@ export async function IntegrationsFace({
   modulesOn,
   page,
   isEmbed,
+  canEdit,
 }: {
   sub: string | undefined;
   settings: TenantSettings;
   modulesOn: { makeedu: boolean; sheets: boolean };
   page: number;
   isEmbed: boolean;
+  /**
+   * 연동 설정 쓰기(`canWriteTenant(integration_settings)` — page.tsx의 fieldset 잠금과 같은 값). 없으면 이 면 전체가 잠기므로
+   * 하위 카드는 쓰기 단추를 **그리지 않는다**(원장 2026-11-05 — 비활성 단추를 남기지 않는다).
+   */
+  canEdit: boolean;
 }) {
   // 슬랙 탭 = 설정 게이트와 같은 판정(지점 스위치 ∧ 원장·총괄) — 위임 관리자에게 빈 슬랙 탭이 첫 탭으로 뜨지 않게.
   // 오늘 수학 탭 = 지점 라이선스(todays_math)가 켜진 학원만(2026-10-17 — 개발 중 기능의 켜기 스위치가 여기 산다).
@@ -69,11 +76,14 @@ export async function IntegrationsFace({
   const wanted = sub ?? (page > 1 ? "makeedu" : "");
   const active: IntegrationSub = (available as string[]).includes(wanted) ? (wanted as IntegrationSub) : available[0]!;
   const faces: Face[] = available.map((key) => ({ key, label: LABEL[key], href: `/owner?tab=sheets&sub=${key}` }));
+  // 오늘 수학 토글 3개는 **보고서 섹션**에 저장된다(saveOwnerSection(report) → report_settings) — 화면도 그 키로 판정한다.
+  // 이 면이 연동 설정으로 잠겼으면(canEdit=false) 어차피 못 고치니 함께 잠근다. 안내 문구의 키는 막은 쪽.
+  const canWriteReport = active === "todaysMath" && user ? await canWriteTenant(user.systemRole, "report_settings") : false;
 
   return (
     <div className="space-y-4">
       {available.length > 1 ? <FaceTabs faces={faces} active={active} level="secondary" ariaLabel="연동 종류 전환" /> : null}
-      {active === "slack" ? <SlackCard /> : null}
+      {active === "slack" ? <SlackCard canEdit={canEdit} /> : null}
       {active === "makeedu" || active === "sheets" ? (
         <SheetsFace
           subjects={settings.operations.subjects}
@@ -81,12 +91,22 @@ export async function IntegrationsFace({
           isEmbed={isEmbed}
           makeeduOn={active === "makeedu"}
           sheetsOn={active === "sheets"}
+          canEdit={canEdit}
         />
       ) : null}
       {active === "video" ? <VideoDriveCard /> : null}
-      {active === "todaysMath" ? <TodaysMathCard report={settings.report} /> : null}
-      {active === "todaysMath" && isMaster ? <TodaysMathMenusCard /> : null}
-      {active === "agent" ? <AgentCard classnoteOn={classnoteModuleOn(settings)} makeeduOn={modulesOn.makeedu}
+      {active === "todaysMath" ? (
+        <TodaysMathCard
+          report={settings.report}
+          readOnly={!canEdit || !canWriteReport}
+          lockMenu={canWriteReport ? "integration_settings" : "report_settings"}
+          // 면 전체가 잠겼으면(canEdit=false) 면 위 한 줄이 안내한다 — 일부(보고서 설정)만 막힌 때만 카드가 적는다.
+          lockNote={canEdit}
+        />
+      ) : null}
+      {/* 사용 메뉴 저장도 연동 설정 쓰기를 함께 본다(branch-menus-actions.ts의 저장 문과 같은 판정). */}
+      {active === "todaysMath" && isMaster ? <TodaysMathMenusCard canEdit={canEdit} /> : null}
+      {active === "agent" ? <AgentCard classnoteOn={classnoteModuleOn(settings)} makeeduOn={modulesOn.makeedu} canEdit={canEdit}
         legacyPC={modulesOn.makeedu?<LegacyMakeeduPC />:null} /> : null}
     </div>
   );

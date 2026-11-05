@@ -116,7 +116,7 @@ describe("ClassnoteQueueCard 자동 갱신", () => {
 
   it("발송 대기가 남아 있으면 10초마다 다시 조회해 '발송 완료'로 바뀐다", async () => {
     refreshMock.mockResolvedValue(drainedView());
-    render(<ClassnoteQueueCard view={waitingView()} />);
+    render(<ClassnoteQueueCard canSend view={waitingView()} />);
 
     expect(screen.getByText("학원이")).toBeInTheDocument();
     expect(screen.getByText(/자동 갱신 중/)).toBeInTheDocument();
@@ -136,7 +136,7 @@ describe("ClassnoteQueueCard 자동 갱신", () => {
     refreshMock
       .mockResolvedValueOnce(waitingView())
       .mockResolvedValueOnce(drainedView({ summary: { ...emptySummary, success: 10, failed: 1, total: 11 } }));
-    render(<ClassnoteQueueCard view={waitingView()} />);
+    render(<ClassnoteQueueCard canSend view={waitingView()} />);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(20_000);
@@ -151,7 +151,7 @@ describe("ClassnoteQueueCard 자동 갱신", () => {
     refreshMock
       .mockResolvedValueOnce(waitingView({ summary: { ...standing, queued: 1 } }))
       .mockResolvedValueOnce(drainedView({ summary: standing }));
-    render(<ClassnoteQueueCard view={waitingView({ summary: { ...standing, queued: 1 } })} />);
+    render(<ClassnoteQueueCard canSend view={waitingView({ summary: { ...standing, queued: 1 } })} />);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(20_000);
@@ -163,7 +163,7 @@ describe("ClassnoteQueueCard 자동 갱신", () => {
 
   it("다 끝난 뒤에는 더 조회하지 않는다", async () => {
     refreshMock.mockResolvedValue(drainedView());
-    render(<ClassnoteQueueCard view={waitingView()} />);
+    render(<ClassnoteQueueCard canSend view={waitingView()} />);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60_000);
@@ -174,7 +174,7 @@ describe("ClassnoteQueueCard 자동 갱신", () => {
 
   it("발송 PC가 꺼져 있으면 1분 간격으로 늦춰서 '켜졌는지'만 지켜본다", async () => {
     refreshMock.mockResolvedValue(waitingView({ workers: [worker(false)] }));
-    render(<ClassnoteQueueCard view={waitingView({ workers: [worker(false)] })} />);
+    render(<ClassnoteQueueCard canSend view={waitingView({ workers: [worker(false)] })} />);
 
     expect(screen.getByText(/발송 PC 꺼짐 — 켜지면 자동으로 이어서 갱신합니다/)).toBeInTheDocument();
     await act(async () => {
@@ -190,7 +190,7 @@ describe("ClassnoteQueueCard 자동 갱신", () => {
 
   it("발송 PC가 다시 켜지면 사람이 새로고침하지 않아도 빠른 주기로 이어받는다", async () => {
     refreshMock.mockResolvedValue(waitingView()); // 워커 온라인으로 돌아온 응답
-    render(<ClassnoteQueueCard view={waitingView({ workers: [worker(false)] })} />);
+    render(<ClassnoteQueueCard canSend view={waitingView({ workers: [worker(false)] })} />);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60_000); // 느린 감시 1회 → 워커 온라인 확인
@@ -206,7 +206,7 @@ describe("ClassnoteQueueCard 자동 갱신", () => {
 
   it("화면이 가려진 동안은 건너뛰고, 돌아오면 즉시 한 번 조회한다", async () => {
     refreshMock.mockResolvedValue(waitingView()); // 계속 대기 중
-    render(<ClassnoteQueueCard view={waitingView()} />);
+    render(<ClassnoteQueueCard canSend view={waitingView()} />);
 
     act(() => setVisibility("hidden"));
     await act(async () => {
@@ -223,7 +223,7 @@ describe("ClassnoteQueueCard 자동 갱신", () => {
 
   it("서버가 새 값을 내려주면(탭 이동·재발송) 낡은 폴링 스냅샷을 버린다", async () => {
     refreshMock.mockResolvedValue(drainedView());
-    const { rerender } = render(<ClassnoteQueueCard view={waitingView()} />);
+    const { rerender } = render(<ClassnoteQueueCard canSend view={waitingView()} />);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10_000);
@@ -233,14 +233,14 @@ describe("ClassnoteQueueCard 자동 갱신", () => {
     // 그 뒤 다른 선생님이 새로 발송 → 서버 렌더가 새 진행 중을 내려준다.
     const fresh = waitingView();
     fresh.pending[0]!.studentName = "김새로";
-    rerender(<ClassnoteQueueCard view={fresh} />);
+    rerender(<ClassnoteQueueCard canSend view={fresh} />);
 
     expect(screen.getByText("김새로")).toBeInTheDocument(); // 낡은 스냅샷이 가리면 안 됨
   });
 
   it("10분째 아무 변화가 없으면 멈추고 '다시 확인'을 준다", async () => {
     refreshMock.mockResolvedValue(waitingView()); // 워커는 온라인인데 큐가 전혀 안 줄어드는 상황
-    render(<ClassnoteQueueCard view={waitingView()} />);
+    render(<ClassnoteQueueCard canSend view={waitingView()} />);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(11 * 60_000);
@@ -264,7 +264,7 @@ describe("ClassnoteQueueCard 자동 갱신", () => {
       v.summary.success = sent;
       return v;
     });
-    render(<ClassnoteQueueCard view={waitingView()} />);
+    render(<ClassnoteQueueCard canSend view={waitingView()} />);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(15 * 60_000);
@@ -280,7 +280,7 @@ describe("ClassnoteQueueCard 자동 갱신", () => {
     refreshMock.mockImplementation(() => new Promise((resolve) => (releasePoll = resolve)));
     resetStuckMock.mockResolvedValue({ ok: true, reset: 1 });
     const stuckView = waitingView({ summary: { ...emptySummary, queued: 1, stuck: 1, processing: 1, total: 12 } });
-    render(<ClassnoteQueueCard view={stuckView} />);
+    render(<ClassnoteQueueCard canSend view={stuckView} />);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10_000); // 폴 출발(응답 대기 중)
@@ -308,7 +308,7 @@ describe("ClassnoteQueueCard 자동 갱신", () => {
     refreshMock.mockResolvedValue(
       drainedView({ summary: { ...emptySummary, success: 10, failed: 1, total: 11 } }),
     );
-    render(<ClassnoteQueueCard view={waitingView()} />);
+    render(<ClassnoteQueueCard canSend view={waitingView()} />);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10_000);
@@ -320,7 +320,7 @@ describe("ClassnoteQueueCard 자동 갱신", () => {
 
   it("가려 둔 시간은 '무변화' 시간으로 세지 않는다 — 돌아오면 멈추지 말고 확인한다", async () => {
     refreshMock.mockResolvedValue(waitingView()); // 변화 없음
-    render(<ClassnoteQueueCard view={waitingView()} />);
+    render(<ClassnoteQueueCard canSend view={waitingView()} />);
 
     act(() => setVisibility("hidden"));
     await act(async () => {
@@ -345,7 +345,7 @@ describe("ClassnoteQueueCard 자동 갱신", () => {
       summary: { ...emptySummary, queued: 1, failed: 1, total: 12 },
     });
     refreshMock.mockResolvedValue(waitingView()); // 다음 조회에선 그 행이 사라짐(해결됨)
-    render(<ClassnoteQueueCard view={withItems} />);
+    render(<ClassnoteQueueCard canSend view={withItems} />);
 
     fireEvent.click(screen.getByRole("checkbox", { name: "실패학생 선택" }));
     expect(screen.getByRole("button", { name: /선택 재발송 \(1\)/ })).toBeInTheDocument();
@@ -359,7 +359,7 @@ describe("ClassnoteQueueCard 자동 갱신", () => {
 
   it("조회가 계속 실패하면 '갱신 중'이라고 말하지 않는다", async () => {
     refreshMock.mockRejectedValue(new Error("network"));
-    render(<ClassnoteQueueCard view={waitingView()} />);
+    render(<ClassnoteQueueCard canSend view={waitingView()} />);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(30_000);
@@ -392,23 +392,23 @@ describe("재발송 기한 표시", () => {
     });
 
   it("마지막 날은 '오늘까지', 기한 지난 건은 '기한 만료'로 표시한다", () => {
-    render(<ClassnoteQueueCard view={view()} />);
+    render(<ClassnoteQueueCard canSend view={view()} />);
     expect(screen.getByText("오늘까지")).toBeInTheDocument();
     expect(screen.getByText("기한 만료")).toBeInTheDocument();
   });
 
   it("만료건은 '주의 항목 전체 재발송' 대상에서 빠진다 — 눌러도 서버가 거부해 헛돌기 때문", () => {
-    render(<ClassnoteQueueCard view={view()} />);
+    render(<ClassnoteQueueCard canSend view={view()} />);
     expect(screen.getByRole("button", { name: /주의 항목 전체 재발송 \(1\)/ })).toBeInTheDocument();
   });
 
   it("만료건도 개별 선택은 열어 둔다 — 화면이 길을 막지 않는다(최종 판단은 서버)", () => {
-    render(<ClassnoteQueueCard view={view()} />);
+    render(<ClassnoteQueueCard canSend view={view()} />);
     expect(screen.getByLabelText("r-old 선택")).not.toBeDisabled();
   });
 
   it("기한을 넘겨 못 나간 건수를 경고로 알린다", () => {
-    render(<ClassnoteQueueCard view={view()} />);
+    render(<ClassnoteQueueCard canSend view={view()} />);
     expect(screen.getByText(/재발송 기한\(7일\)을 넘겨/)).toBeInTheDocument();
   });
 
@@ -416,6 +416,7 @@ describe("재발송 기한 표시", () => {
   it("주의 목록이 상한에 걸려 잘리면 잘린 수를 밝힌다", () => {
     render(
       <ClassnoteQueueCard
+        canSend
         view={drainedView({
           summary: { ...emptySummary, failed: 5, total: 15 },
           items: [failedItem("r-1", "2026-07-20")],
@@ -428,6 +429,7 @@ describe("재발송 기한 표시", () => {
   it("잘리지 않았으면 안내를 띄우지 않는다", () => {
     render(
       <ClassnoteQueueCard
+        canSend
         view={drainedView({ summary: { ...emptySummary, failed: 1, total: 11 }, items: [failedItem("r-1", "2026-07-20")] })}
       />,
     );
@@ -435,19 +437,27 @@ describe("재발송 기한 표시", () => {
   });
 
   it("잃은 건이 없으면 경고를 띄우지 않는다", () => {
-    render(<ClassnoteQueueCard view={drainedView()} />);
+    render(<ClassnoteQueueCard canSend view={drainedView()} />);
     expect(screen.queryByText(/재발송 기한\(7일\)을 넘겨/)).toBeNull();
+  });
+
+  // 원장 2026-11-05 — 읽기 권한에 재발송 단추가 떠서 눌러야 "권한이 없습니다"가 떴다. 단추·선택 칸을 아예 그리지 않는다.
+  it("읽기 권한(canSend=false)이면 재발송·선택 칸을 그리지 않고 주의 목록은 그대로 보인다", () => {
+    render(<ClassnoteQueueCard canSend={false} view={view()} />);
+    expect(screen.queryByRole("button", { name: /재발송/ })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.getByText("r-old")).toBeInTheDocument();
   });
 });
 
 describe("구워커 경고", () => {
   it("nativePublish=false면 업데이트 필요 경고를 띄운다 — 옛 서버 소등 시 발송 전멸을 미리 알린다", () => {
-    render(<ClassnoteQueueCard view={drainedView({ workers: [worker(true, false)] })} />);
+    render(<ClassnoteQueueCard canSend view={drainedView({ workers: [worker(true, false)] })} />);
     expect(screen.getByText(/구버전 워커/)).toBeInTheDocument();
   });
 
   it("최신 워커면 경고가 없다", () => {
-    render(<ClassnoteQueueCard view={drainedView()} />);
+    render(<ClassnoteQueueCard canSend view={drainedView()} />);
     expect(screen.queryByText(/구버전 워커/)).toBeNull();
   });
 });

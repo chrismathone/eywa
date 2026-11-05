@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { logAction } from "@/features/audit/server/log";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import { releaseWithdrawalRefunds } from "@/features/withdrawal-reports/server/release";
 import {
   normalizeRefund,
   parseRefundForm,
@@ -81,13 +82,19 @@ export async function saveRefundRequest(
       .maybeSingle();
     const prev = existing ? normalizeRefund(existing.form_data) : null;
     const data = stampCompletion(parsed, prev, gate.user);
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from("academy_documents")
       .update({ title: refundTitle(data), form_data: data, updated_at: new Date().toISOString() })
       .eq("id", id)
-      .eq("form_type", REFUND_FORM_TYPE);
+      .eq("form_type", REFUND_FORM_TYPE)
+      .select("id"); // select 없으면 RLS에 막혀 0행을 고쳐도 성공으로 보고된다(삭제와 같은 규약).
     if (error) return { error: `저장 실패: ${error.message}` };
+    if (!updated?.length) return { error: "저장되지 않았습니다 — 이 요청서를 고칠 권한이 없거나 이미 지워졌습니다." };
     await logAction({ action: "refund_request_update", ...refundAuditFields(id, data, prev) });
+    // 퇴원보고서 데스크 환불 단계(원장 2026-11-03) — 환불완료일자를 처음 넣으면 이 요청서를 기다리던 퇴원보고서를 이어서 처리한다
+    // (승인이 끝났고 다른 환불이 남지 않았을 때만 · 던지지 않는다 — 실패는 오류 보고, 처리일 cron이 다시 본다).
+    if (data.result.completedDate.trim() && !(prev?.result.completedDate ?? "").trim())
+      await releaseWithdrawalRefunds({ tenantId: gate.user.tenantId, documentId: id, actorId: gate.user.id });
     revalidateRefund(id);
     return { ok: true, id, nonce: Date.now(), redirectTo: `/billing/refunds/${id}` };
   }
@@ -213,6 +220,8 @@ export async function deleteRefundRequest(id: string): Promise<{ ok?: boolean; e
         completedDate: d?.result.completedDate || null,
       },
     });
+    // 지운 요청서는 퇴원보고서 데스크 환불 단계에서 빠진다(원장 2026-11-03) — 그 요청서만 기다리던 보고서는 이어서 처리한다.
+    await releaseWithdrawalRefunds({ tenantId: gate.user.tenantId, documentId: id, actorId: gate.user.id });
   }
   revalidateRefund(id);
   return { ok: true };

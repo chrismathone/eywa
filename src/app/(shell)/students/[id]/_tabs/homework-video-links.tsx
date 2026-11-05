@@ -53,8 +53,10 @@ async function loadRows(studentId: string): Promise<{ rows: LinkRow[]; siteUrl: 
  *    업로드 혹은 /v 링크로만 업로드"*). 이미 나간 링크는 만든 날 + 7일에 저절로 끝나고, 그 전에 여기서 끊을 수 있다.
  * 🔴 쓸 수 없는 학원(ClassNote 기능 꺼짐·Drive 값·SQL 없음)에선 **아무것도 그리지 않는다**(흔적 없이). 조회가 실패해도
  *    탭 전체를 죽이지 않고 이 구역만 빠진다.
+ * canRevoke = 서버 `revokeVideoSubmitLinks` 게이트와 같은 판정(`canWriteTenant(role, "students")`) — page.tsx가 계산해 내린다.
+ *    읽기 권한이면 남은 링크(개수·기한)는 보이되 '링크 끊기'는 그리지 않는다(원장 2026-11-05 — lib/write-lock.ts).
  */
-export async function HomeworkVideoLinks({ studentId }: { studentId: string }) {
+export async function HomeworkVideoLinks({ studentId, canRevoke }: { studentId: string; canRevoke: boolean }) {
   const loaded = await loadRows(studentId);
   if (!loaded || (!loaded.rows.length && !loaded.siteUrl)) return null;
   const { rows, siteUrl } = loaded;
@@ -68,7 +70,9 @@ export async function HomeworkVideoLinks({ studentId }: { studentId: string }) {
         ) : null}
         {rows.length ? (
           <p className="text-text-dim mt-1 text-sm break-keep">
-            <SheetText value={"아래는 아직 쓸 수 있는 제출 링크입니다(학생이 사이트에서 연 링크 · 예전에 보낸 링크). 적힌 날까지 쓸 수 있고, 그 전에 끊을 수 있습니다. 학생마다 링크를 새로 만들지는 않습니다."} /></p>
+            <SheetText value={canRevoke
+              ? "아래는 아직 쓸 수 있는 제출 링크입니다(학생이 사이트에서 연 링크 · 예전에 보낸 링크). 적힌 날까지 쓸 수 있고, 그 전에 끊을 수 있습니다. 학생마다 링크를 새로 만들지는 않습니다."
+              : "아래는 아직 쓸 수 있는 제출 링크입니다(학생이 사이트에서 연 링크 · 예전에 보낸 링크). 적힌 날까지 쓸 수 있습니다. 학생마다 링크를 새로 만들지는 않습니다."} /></p>
         ) : null}
       </div>
       {rows.length ? (
@@ -76,7 +80,7 @@ export async function HomeworkVideoLinks({ studentId }: { studentId: string }) {
           {rows.map((row) => (
             <li key={row.classId} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
               <span className="min-w-0 flex-1 text-sm font-bold"><SheetClassName value={row.className} /></span>
-              <HomeworkVideoLinkButtons studentId={studentId} classId={row.classId} classLabel={row.className} count={row.count} until={row.until} />
+              <HomeworkVideoLinkButtons studentId={studentId} classId={row.classId} classLabel={row.className} count={row.count} until={row.until} canRevoke={canRevoke} />
             </li>
           ))}
         </ul>

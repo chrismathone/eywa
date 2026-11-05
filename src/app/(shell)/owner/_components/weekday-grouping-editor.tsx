@@ -2,6 +2,7 @@
 
 // 학원이 요일 병합을 직접 만든다. 만든 묶음은 과목의 '시간표 요일 병합' 드롭다운에 붙는다.
 import { useState } from "react";
+import { useWriteLock } from "./write-lock-context";
 import type { CustomWeekdayGrouping, SubjectSetting, WeekdayGrouping } from "@/features/owner/settings-types";
 import {
   WEEKDAY_GROUPING_LABEL,
@@ -39,6 +40,8 @@ export function WeekdayGroupingEditor({
   const [picked, setPicked] = useState<GroupingDay[]>([]);
   const [draft, setDraft] = useState<GroupingDay[][]>([]);
   const [note, setNote] = useState("");
+  // 읽기 권한(쓰기 잠금)이면 묶음 만들기·빼기·다시 넣기를 그리지 않는다(write-lock-context.tsx).
+  const { locked } = useWriteLock();
 
   const used = new Set(draft.flat());
   const preview = completeWeekdayPartition(draft);
@@ -128,13 +131,13 @@ export function WeekdayGroupingEditor({
 
   return (
     <div className="space-y-3">
-      <p className="text-sm">
+      {locked ? null : <p className="text-sm">
         요일을 고른 뒤 묶으면 한 칸이 됩니다. 고르지 않은 평일은 혼자 남습니다. 토·일을 묶으면 주말 판에서 한 칸이 됩니다.
         목록에 넣은 묶음은 아래 과목의 시간표 요일 병합에서 고릅니다.
-      </p>
+      </p>}
       <details className="border-line rounded-md border px-3 py-2">
         <summary className="cursor-pointer text-sm font-bold">드롭다운 목록 관리 · {choices.length}개</summary>
-        <p className="text-text-dim mt-2 text-xs">과목에서 사용 중인 묶음은 다른 묶음으로 바꾼 뒤 뺄 수 있습니다.</p>
+        {locked ? null : <p className="text-text-dim mt-2 text-xs">과목에서 사용 중인 묶음은 다른 묶음으로 바꾼 뒤 뺄 수 있습니다.</p>}
         <ul className="mt-2 space-y-2">
           {choices.map((choice) => {
             const using = subjects
@@ -144,8 +147,8 @@ export function WeekdayGroupingEditor({
               <li key={choice.value} className="flex flex-wrap items-center gap-2">
                 <span className="text-sm">{choice.label}</span>
                 {using.length > 0 ? <span className="text-text-dim text-xs">사용 중: {using.join(", ")}</span> : null}
-                {choices.length === 1 ? <span className="text-text-dim text-xs">마지막 선택지</span> : null}
-                <button
+                {choices.length === 1 && !locked ? <span className="text-text-dim text-xs">마지막 선택지</span> : null}
+                {locked ? null : <button
                   type="button"
                   className={`border-line bg-card disabled:cursor-not-allowed disabled:opacity-40 ${CHIP}`}
                   disabled={using.length > 0 || choices.length === 1}
@@ -153,7 +156,7 @@ export function WeekdayGroupingEditor({
                   onClick={() => remove(choice.value)}
                 >
                   목록에서 빼기
-                </button>
+                </button>}
               </li>
             );
           })}
@@ -165,15 +168,19 @@ export function WeekdayGroupingEditor({
               {hiddenBuiltins.map((id) => (
                 <li key={id} className="flex flex-wrap items-center gap-2">
                   <span className="text-sm">{WEEKDAY_GROUPING_LABEL[id]}</span>
-                  <button type="button" className={`border-line bg-card ${CHIP}`} onClick={() => restore(id)}>
-                    다시 넣기
-                  </button>
+                  {locked ? null : (
+                    <button type="button" className={`border-line bg-card ${CHIP}`} onClick={() => restore(id)}>
+                      다시 넣기
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
           </div>
         ) : null}
       </details>
+      {/* 🔴 아래는 묶음을 **만드는** 작업대라 읽기 권한이면 통째로 그리지 않는다(원장 2026-11-05). */}
+      {locked ? null : <>
       <div className="flex flex-wrap gap-2">
         {GROUPING_DAYS.map((day) => {
           const grouped = used.has(day);
@@ -237,6 +244,7 @@ export function WeekdayGroupingEditor({
         </button>
       </div>
       {note ? <p className="text-sm">{note}</p> : null}
+      </>}
     </div>
   );
 }

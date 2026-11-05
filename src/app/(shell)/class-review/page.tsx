@@ -3,6 +3,7 @@ import { FaceTabs } from "@/components/face-tabs";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import {
@@ -87,12 +88,14 @@ export default async function ClassReviewPage({ searchParams }: { searchParams: 
     );
   }
   // 자기 평가 전용 판정·평가지 소유 id는 서버 단일 소스에서('다른 강사 뷰'면 그 강사의 눈, #77).
-  const [{ rows }, settings, priv, myFilter, rv] = await Promise.all([
+  // 쓰기 판정 = 서버 액션(requireWrite)과 같은 canWriteTenant("class_review") — 읽기 권한이면 '새 평가'·'문항 편집'을 그리지 않는다.
+  const [{ rows }, settings, priv, myFilter, rv, canWrite] = await Promise.all([
     listClassReviews(),
     getTenantSettings(),
     getReviewPrivileges(),
     getMyClassReviewFilter(viewer),
     getReviewViewer(),
+    canWriteTenant(viewer.systemRole, "class_review"),
   ]);
   const selfOnly = rv.selfOnly;
   const subjects = buildSubjectMaps(settings.operations.subjects);
@@ -111,7 +114,8 @@ export default async function ClassReviewPage({ searchParams }: { searchParams: 
               // ⚠️ 인원을 글자로 박지 말 것 — 정원은 평가마다 다르다(생성 시 선택, 문서에 동결).
               modeLabel:
                 r.header.observerMode === "open" ? `선착순 ${observerLimitOf(r)}명` : "평가자 지정",
-              myTurn: !!mine && !mine.submitted,
+              // 읽기 권한이면 '내 평가 대기'로 재촉하지 않는다 — 채점 단추가 없다(write-lock.ts · 2026-11-05 리뷰).
+              myTurn: canWrite && !!mine && !mine.submitted,
               incomplete: r.submittedCount < r.observerSlots,
               submitted: `${r.submittedCount}/${r.observerSlots}`,
               percent: r.averages ? r.averages.percent.toFixed(1) : null,
@@ -136,13 +140,14 @@ export default async function ClassReviewPage({ searchParams }: { searchParams: 
                 종합 보기
               </Button>
             ) : null}
-            {priv.editTemplate ? (
+            {/* 문항 편집 자격(editTemplate)은 쓰기 권한을 보지 않는다 — 서버 저장은 둘 다 요구하므로 화면도 둘 다 본다. */}
+            {priv.editTemplate && canWrite ? (
               <Button variant="outline" render={<Link href="/class-review/template" />}>
                 문항 편집
               </Button>
             ) : null}
-            {/* 평가 건 개설은 사무실 몫 — 강사에겐 서버 액션이 거절하므로 버튼 자체를 안 그린다(#77). */}
-            {selfOnly ? null : (
+            {/* 평가 건 개설은 사무실 몫 — 강사·읽기 권한에겐 서버 액션이 거절하므로 버튼 자체를 안 그린다(#77). */}
+            {selfOnly || !canWrite ? null : (
               <Button render={<Link href="/class-review/new" />}>
                 + 새 평가
               </Button>
@@ -157,7 +162,9 @@ export default async function ClassReviewPage({ searchParams }: { searchParams: 
           <p className="text-text-dim text-sm">
             {selfOnly
               ? "아직 내 직원 평가 건이 없습니다 — 사무실에서 평가 건을 만들면 여기에 표시됩니다."
-              : "아직 평가 건이 없습니다 — ‘새 평가’로 시작하세요."}
+              : canWrite
+                ? "아직 평가 건이 없습니다 — ‘새 평가’로 시작하세요."
+                : "아직 평가 건이 없습니다 — 평가 건이 만들어지면 여기에 표시됩니다."}
           </p>
         </div>
       ) : (

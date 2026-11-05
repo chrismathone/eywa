@@ -18,6 +18,7 @@ import {
 } from "@/features/onescreen/server/prompt-actions";
 import type { MentStyleView } from "@/features/onescreen/server/ment-style-actions";
 import { MentStyleCard } from "./ment-style-card";
+import { writeLockedNote, writeLockedPlaceholder } from "@/lib/write-lock";
 
 export function AiMentSection({ initial, styles, canEdit = true }: { initial: PromptRow[]; styles?: MentStyleView; canEdit?: boolean }) {
   const [reports, setReports] = useState<TestReportOption[]>([]);
@@ -37,7 +38,9 @@ export function AiMentSection({ initial, styles, canEdit = true }: { initial: Pr
         으로 되돌릴 수 있어요.
       </div>
       {/* 강사 말투(0262a) — 프롬프트보다 위: 원장이 "왜 선생님마다 결이 다른가"를 여기서 먼저 본다. */}
-      {!canEdit ? <p className="text-text-faint text-xs">읽기 전용입니다.</p> : null}
+      {/* 🔴 읽기 권한(canEdit=false — 저장·테스트 액션과 같은 `canWriteTenant(ai_ment)`, lesson-reports/page.tsx)이면
+          저장·불러오기·복원·테스트·지금 갱신 단추를 **그리지 않는다**(원장 2026-11-05). 글상자는 잠근다. */}
+      {!canEdit ? <p className="text-text-faint text-xs">{writeLockedNote("ai_ment")}</p> : null}
       {styles ? <MentStyleCard initial={styles} canEdit={canEdit} /> : null}
       {initial.map((p) => (
         <PromptEditor key={p.type} row={p} reports={reports} canEdit={canEdit} />
@@ -141,11 +144,12 @@ function PromptEditor({ row, reports, canEdit }: { row: PromptRow; reports: Test
       </div>
 
       <textarea
-        readOnly={!canEdit}
+        disabled={!canEdit}
+        placeholder={canEdit ? undefined : writeLockedPlaceholder("ai_ment")}
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={12}
-        className={`border-line focus:border-primary scrollbar-thin w-full resize-y rounded-md border bg-background px-3 py-2 font-mono text-xs leading-relaxed outline-none ${
+        className={`border-line focus:border-primary scrollbar-thin w-full resize-y rounded-md border bg-background px-3 py-2 font-mono text-xs leading-relaxed outline-none disabled:opacity-70 ${
           missingPlaceholder ? "border-danger" : ""
         }`}
       />
@@ -164,6 +168,7 @@ function PromptEditor({ row, reports, canEdit }: { row: PromptRow; reports: Test
         {missingPlaceholder ? " (현재 빠져 있어 저장할 수 없습니다)" : ""}
       </p>
 
+      {canEdit ? (
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={onSave} disabled={!canEdit || saving || missingPlaceholder}>
           {saving ? "저장 중…" : "저장"}
@@ -177,8 +182,10 @@ function PromptEditor({ row, reports, canEdit }: { row: PromptRow; reports: Test
           </Button>
         ) : null}
       </div>
+      ) : null}
 
-      {/* 실데이터 미리보기 — 저장 없이 편집 중 프롬프트로 생성해 결과만 확인. */}
+      {/* 실데이터 미리보기 — 저장 없이 편집 중 프롬프트로 생성해 결과만 확인. 테스트 액션도 쓰기 권한이라 읽기 권한엔 세우지 않는다. */}
+      {canEdit ? (
       <div className="border-line mt-3 rounded-md border p-3">
         <p className="text-text-faint mb-1.5 text-xs font-bold">실데이터로 테스트</p>
         <p className="text-text-faint mb-1.5 text-xs break-keep">
@@ -207,6 +214,7 @@ function PromptEditor({ row, reports, canEdit }: { row: PromptRow; reports: Test
           </p>
         ) : null}
       </div>
+      ) : null}
 
       {history ? (
         <div className="border-line mt-3 rounded-md border p-3">
@@ -224,14 +232,15 @@ function PromptEditor({ row, reports, canEdit }: { row: PromptRow; reports: Test
                     </p>
                     <p className="text-text-faint mt-0.5 truncate text-xs">{v.text.slice(0, 80)}…</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setText(v.text)}
-                    disabled={!canEdit}
-                    className="border-line text-text-dim hover:bg-bg-soft shrink-0 rounded-sm border px-2 py-1 text-xs font-bold"
-                  >
-                    이 버전 불러오기
-                  </button>
+                  {canEdit ? (
+                    <button
+                      type="button"
+                      onClick={() => setText(v.text)}
+                      className="border-line text-text-dim hover:bg-bg-soft shrink-0 rounded-sm border px-2 py-1 text-xs font-bold"
+                    >
+                      이 버전 불러오기
+                    </button>
+                  ) : null}
                 </li>
               ))}
             </ul>

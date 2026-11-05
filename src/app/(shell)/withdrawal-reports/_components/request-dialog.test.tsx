@@ -3,8 +3,9 @@ import "@testing-library/jest-dom/vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { RequestDialog } from "./request-dialog";
 import type { StaffOption, StudentOption } from "@/features/withdrawal-reports/model";
-const mocks = vi.hoisted(() => ({ request: vi.fn(), direct: vi.fn(), inFrame: true }));
+const mocks = vi.hoisted(() => ({ request: vi.fn(), direct: vi.fn(), lastLesson: vi.fn(), inFrame: true }));
 vi.mock("@/features/withdrawal-reports/server/actions", () => ({ requestWithdrawalReport: mocks.request, processWithdrawalDirectly: mocks.direct }));
+vi.mock("@/features/withdrawal-reports/server/last-lesson-actions", () => ({ loadLastLessonDate: mocks.lastLesson }));
 vi.mock("@/components/workspace/use-in-frame", () => ({ useInFrame: () => mocks.inFrame }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn() } }));
 const staff: StaffOption[] = [{ id: "teacher", name: "담당 강사", role: "teacher", subjects: ["math"] }, { id: "manager", name: "관리자", role: "admin", subjects: ["math"] }, { id: "director", name: "원장", role: "master", subjects: [] }];
@@ -35,7 +36,7 @@ const multiStaff: StaffOption[] = [
 const multiStudents: StudentOption[] = [{ ...students[0], courses: [students[0].courses[0], { ...students[0].courses[0], id: "english-course", classId: "english-class", className: "영어반", subject: "english", teacherId: "english-teacher", teacherName: "영어 강사" }] }];
 const multiProps = { ...props, staff: multiStaff, students: multiStudents, labels: { math: "수학", english: "영어" } };
 describe("compact request overlay and optional principal", () => {
-  beforeEach(() => { cleanup(); mocks.request.mockReset(); mocks.inFrame = true; assign = vi.spyOn(window.location, "assign").mockImplementation(() => {}); });
+  beforeEach(() => { cleanup(); mocks.request.mockReset(); mocks.lastLesson.mockReset(); mocks.lastLesson.mockResolvedValue({ date: null }); mocks.inFrame = true; assign = vi.spyOn(window.location, "assign").mockImplementation(() => {}); });
   afterEach(() => { cleanup(); assign.mockRestore(); });
   it("requests without a principal, uses actual homeroom teachers and preserves embedded navigation", async () => {
     mocks.request.mockResolvedValue({ ok: true, id: "new-report" });
@@ -43,7 +44,7 @@ describe("compact request overlay and optional principal", () => {
     expect(screen.queryByLabelText("처리 구분")).not.toBeInTheDocument();
     expect(screen.getByText(/퇴원 · 1개 반 · 보고서 1건/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "강사에게 작성 요청" }));
-    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ studentId: "student", teacherIds: ["teacher"], managerIds: ["manager"], directorIds: [], subjects: ["math"] })));
+    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ studentId: "student", teacherIds: ["teacher"], managerIds: ["manager"], subjects: ["math"] })));
     await waitFor(() => expect(assign).toHaveBeenCalledWith("/withdrawal-reports?embed=1"));
   });
   it("keeps normal navigation outside a window", async () => {
@@ -63,16 +64,61 @@ describe("compact request overlay and optional principal", () => {
     expect(screen.getByText("종료할 반을 선택해 주세요.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "강사에게 작성 요청" })).toBeDisabled();
     fireEvent.click(screen.getByRole("checkbox", { name: "수학반 · 수학 · 담당 강사" }));
+    // 반을 바꾸면 마지막 수업일을 출결에서 다시 찾는 동안 요청 버튼이 잠긴다(오늘 날짜로 먼저 나가지 않게).
+    await waitFor(() => expect(screen.getByRole("button", { name: "강사에게 작성 요청" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "강사에게 작성 요청" }));
     await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ enrollmentIds: expect.arrayContaining(["course", "second-course"]), subjects: ["math"], teacherIds: ["teacher"] })));
   });
-  it("skips the manager step when the homeroom teacher is the subject manager", async () => {
+  it("작성 강사가 그 과목 관리자면 관리자 승인을 생략한다 — 승인 관리자 0명 · 원장 칸 없음(원장 2026-11-03)", async () => {
     mocks.request.mockResolvedValue({ ok: true, id: "new-report" });
     const own = [{ ...students[0], courses: [{ ...students[0].courses[0], teacherId: "manager", teacherName: "관리자" }] }];
     render(<RequestDialog {...props} students={own} />); await fill();
-    expect(screen.getByText(/관리자 칸을 건너뛰고 원장 승인으로 바로 넘어갑니다\./)).toBeInTheDocument();
+    expect(screen.getByText(/관리자 승인 생략 — 작성 강사가 이 과목 관리자입니다\./)).toBeInTheDocument();
+    expect(screen.getByLabelText("관리자 승인")).toHaveTextContent("생략 — 작성 강사가 과목 관리자");
+    expect(screen.queryByText(/원장 승인/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "강사에게 작성 요청" }));
-    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ teacherIds: ["manager"], managerIds: ["director"], directorIds: [] })));
+    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ teacherIds: ["manager"], managerIds: [], reportManagerIds: { manager: [] } })));
+    expect(mocks.request.mock.calls[0][0]).not.toHaveProperty("directorIds");
+  });
+  it("과목이 섞이면 보고서마다 — 영어(작성 강사 = 영어 관리자)는 생략, 수학(평강사)은 수학 관리자만 승인(원장 2026-11-03)", async () => {
+    mocks.request.mockResolvedValue({ ok: true, id: "new-report" });
+    const mixed = [{ ...multiStudents[0], courses: [multiStudents[0].courses[0], { ...multiStudents[0].courses[1], teacherId: "english-manager", teacherName: "영어 관리자" }] }];
+    render(<RequestDialog {...multiProps} students={mixed} />); await fill();
+    const lines = screen.getByRole("note", { name: "보고서별 승인" });
+    expect(lines).toHaveTextContent("담당 강사 · 수학 보고서 — 수학 관리자, 수학 관리자2 승인");
+    expect(lines).toHaveTextContent("영어 관리자 · 영어 보고서 — 관리자 승인 생략(작성 강사가 과목 관리자)");
+    fireEvent.click(screen.getByRole("button", { name: "강사에게 작성 요청" }));
+    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({
+      teacherIds: ["teacher", "english-manager"], reportManagerIds: { teacher: ["manager", "math-manager-2"], "english-manager": [] } })));
+  });
+  it("보고서 하나라도 승인할 관리자를 안 고르면 요청할 수 없다", async () => {
+    render(<RequestDialog {...multiProps} />); await fill();
+    fireEvent.click(screen.getByRole("button", { name: /^관리자 승인:/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "영어 관리자 영어" }));
+    fireEvent.click(screen.getByRole("button", { name: "영어 범위 관리자 영어" }));
+    await closeOptions();
+    expect(screen.getByRole("note", { name: "보고서별 승인" })).toHaveTextContent("영어 강사 · 영어 보고서 — 승인할 관리자를 골라 주세요");
+    expect(screen.getByRole("button", { name: "강사에게 작성 요청" })).toBeDisabled();
+  });
+  it("마지막 수업일 — 학생·반을 고르면 출결에서 채우고 출처를 적는다 · 직접 고친 값은 반을 바꿔도 덮지 않는다", async () => {
+    mocks.lastLesson.mockResolvedValue({ date: "2026-10-28" });
+    const extra = { ...students[0].courses[0], id: "english-course", classId: "english-class", className: "영어반", subject: "english" };
+    render(<RequestDialog {...props} staff={[...staff, { id: "em", name: "영어 관리자", role: "admin", subjects: ["english"] }]} students={[{ ...students[0], courses: [...students[0].courses, extra] }]} labels={{ math: "수학", english: "영어" }} />);
+    await fill();
+    await waitFor(() => expect(screen.getByLabelText("마지막 수업일")).toHaveValue("2026-10-28"));
+    expect(mocks.lastLesson).toHaveBeenCalledWith({ studentId: "student", enrollmentIds: ["course", "english-course"] });
+    expect(screen.getByText("출결 기준 — 고른 반의 마지막 출석일")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("마지막 수업일"), { target: { value: "2026-10-30" } });
+    expect(screen.getByText("직접 입력한 날짜")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "영어반 · 영어 · 담당 강사" }));
+    expect(mocks.lastLesson).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("마지막 수업일")).toHaveValue("2026-10-30");
+    fireEvent.click(screen.getByRole("button", { name: "강사에게 작성 요청" }));
+    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ effectiveDate: "2026-10-30", enrollmentIds: ["course"] })));
+  });
+  it("출결 기록이 없으면 오늘 · 그렇게 적는다", async () => {
+    render(<RequestDialog {...props} />); await fill();
+    expect(await screen.findByText("출결 기록 없음 → 오늘")).toBeInTheDocument();
   });
   it("keeps entered data when the server refuses a duplicate", async () => {
     mocks.request.mockResolvedValue({ error: "진행 중인 보고서가 있습니다." });
@@ -129,7 +175,7 @@ describe("compact request overlay and optional principal", () => {
 /** 관리자 바로 처리(강사 작성 없이) — 원장 2026-10-23. 원생 화면의 '퇴원보고서'가 `?request=`로 그 학생을 고른 채 연다. */
 describe("direct processing without teacher writing", () => {
   const noCourse: StudentOption = { id: "alone", name: "수강없음", school: "학교", grade: "중2", courses: [] };
-  beforeEach(() => { cleanup(); mocks.direct.mockReset(); mocks.request.mockReset(); mocks.inFrame = false; assign = vi.spyOn(window.location, "assign").mockImplementation(() => {}); });
+  beforeEach(() => { cleanup(); mocks.direct.mockReset(); mocks.request.mockReset(); mocks.lastLesson.mockReset(); mocks.lastLesson.mockResolvedValue({ date: null }); mocks.inFrame = false; assign = vi.spyOn(window.location, "assign").mockImplementation(() => {}); });
   afterEach(() => { cleanup(); assign.mockRestore(); });
   it("hides the option until the database is ready", async () => {
     render(<RequestDialog {...props} />);

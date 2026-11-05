@@ -29,6 +29,8 @@ import { DraftBanner } from "@/components/forms/draft-banner";
 /**
  * 등록상담 AI 분석 — ijw ReportViewer식 아코디언(접기) + 섹션별 인라인 수정 + 다시 분석 + 텍스트 저장.
  * 섹션 순서·구성은 ijw 원본과 동일(상담자 대응 = teacherResponse 키 유지). 수형도는 트리로 렌더.
+ * 🔴 읽기 권한(`canWrite=false`)이면 '다시 분석'·섹션 '수정'과 섹션 초안 복구를 그리지 않는다 — 펼쳐 읽기·텍스트 저장만 남는다
+ *    (원장 2026-11-05 · write-lock.ts). 판정은 페이지가 서버 게이트와 같은 `canWriteTenant(…,"enrollment")`로 내려 준다.
  */
 
 type TextKey = Exclude<keyof ConsultationAudioReport, "extracted" | "conversationFlow">;
@@ -62,6 +64,7 @@ export function ConsultationReportEditor({
   studentName,
   consultationDate,
   transcript,
+  canWrite = true,
 }: {
   report: ConsultationAudioReport;
   analysisId: string;
@@ -73,6 +76,7 @@ export function ConsultationReportEditor({
   studentName?: string | null;
   consultationDate?: string | null;
   transcript?: string | null;
+  canWrite?: boolean;
 }) {
   const aiOn = useLicenseOn("ai_analysis"); // 꺼진 지점엔 '다시 분석'이 없다(2026-09-30 "꺼지면 흔적 없이")
   const [report, setReport] = useState(initialReport);
@@ -224,7 +228,7 @@ export function ConsultationReportEditor({
   return (
     <section className="space-y-2">
       <DraftBanner
-        savedAt={localDraft.draftSavedAt}
+        savedAt={canWrite ? localDraft.draftSavedAt : null}
         onRestore={restoreSectionDraft}
         onDiscard={localDraft.discard}
       />
@@ -241,7 +245,7 @@ export function ConsultationReportEditor({
           ) : null}
         </span>
         <div className="flex items-center gap-1.5">
-          {aiOn ? (
+          {aiOn && canWrite ? (
           <button
             type="button"
             onClick={reanalyze}
@@ -294,7 +298,7 @@ export function ConsultationReportEditor({
         const normalized = list ? normalizeAiListText(body) : body;
         const asList = !!list && normalized.includes("\n");
         const isOpen = expanded.has(key);
-        const isEditing = editing === key;
+        const isEditing = canWrite && editing === key;
         return (
           <div key={key} className="border-line bg-card overflow-hidden rounded-2xl border">
             <button
@@ -307,7 +311,7 @@ export function ConsultationReportEditor({
                 {label}
               </h3>
               <div className="flex items-center gap-1">
-                {isOpen && !isEditing ? (
+                {isOpen && !isEditing && canWrite ? (
                   <span
                     role="button"
                     tabIndex={0}

@@ -14,8 +14,11 @@ const EMPTY_ACCOUNT: AccountSetting = { label: "", bank: "", holder: "", number:
 export function BillingSection({
   initial,
   showEie = true,
+  readOnly = false,
 }: {
   initial: BillingSettings;
+  /** 읽기 권한 — 추가·삭제 단추를 그리지 않고 입력을 잠근다(저장 액션과 같은 판정, page.tsx). */
+  readOnly?: boolean;
   /** EiE 월 수강료 카드 — EiE 모듈이 꺼진 학원(새 학원 기본)은 안 보인다. 값은 state에 남아 그대로 저장된다. */
   showEie?: boolean;
 }) {
@@ -46,7 +49,7 @@ export function BillingSection({
     );
 
   return (
-    <SectionForm section="billing" payload={b}>
+    <SectionForm section="billing" payload={b} readOnly={readOnly}>
       <SettingsCard
         title="공통 회당 단가"
         description="수학·영어가 함께 쓰는 회차 확정 드롭다운입니다. 같은 금액은 한 번만 등록하며, 저장하면 반 일괄·학생별 단가 선택에 반영됩니다. 이미 확정한 금액은 유지됩니다."
@@ -71,25 +74,29 @@ export function BillingSection({
                   onChange={(label) => set({ sessionPrices: b.sessionPrices.map((r, j) => j === i ? { ...r, label } : r) })}
                 />
               </div>
-              <button
-                type="button"
-                aria-label={`단가 ${i + 1} 삭제`}
-                onClick={() => set({ sessionPrices: b.sessionPrices.filter((_, j) => j !== i) })}
-                className="text-text-dim hover:text-danger col-start-2 row-start-1 flex h-10 items-center gap-1 text-xs sm:col-start-auto sm:row-start-auto"
-              >
-                <Trash2 className="size-3.5" />삭제
-              </button>
+              {readOnly ? null : (
+                <button
+                  type="button"
+                  aria-label={`단가 ${i + 1} 삭제`}
+                  onClick={() => set({ sessionPrices: b.sessionPrices.filter((_, j) => j !== i) })}
+                  className="text-text-dim hover:text-danger col-start-2 row-start-1 flex h-10 items-center gap-1 text-xs sm:col-start-auto sm:row-start-auto"
+                >
+                  <Trash2 className="size-3.5" />삭제
+                </button>
+              )}
             </div>
           ))}
           {b.sessionPrices.length === 0 ? <p className="text-text-dim text-sm">등록된 단가가 없습니다. 회차 화면에서 직접 입력할 수도 있습니다.</p> : null}
-          <button
-            type="button"
-            disabled={b.sessionPrices.length >= 100}
-            onClick={() => set({ sessionPrices: [...b.sessionPrices, { price: 0, label: "" }] })}
-            className="border-line text-text-dim hover:bg-bg-soft flex w-full items-center justify-center gap-1 rounded-md border border-dashed py-2 text-xs disabled:opacity-50"
-          >
-            <Plus className="size-3.5" />단가 추가
-          </button>
+          {readOnly ? null : (
+            <button
+              type="button"
+              disabled={b.sessionPrices.length >= 100}
+              onClick={() => set({ sessionPrices: [...b.sessionPrices, { price: 0, label: "" }] })}
+              className="border-line text-text-dim hover:bg-bg-soft flex w-full items-center justify-center gap-1 rounded-md border border-dashed py-2 text-xs disabled:opacity-50"
+            >
+              <Plus className="size-3.5" />단가 추가
+            </button>
+          )}
         </div>
       </SettingsCard>
 
@@ -130,21 +137,23 @@ export function BillingSection({
         <div className="space-y-3">
           {b.accounts.length === 0 ? (
             <p className="text-text-dim border-line rounded-md border border-dashed px-3 py-6 text-center text-xs">
-              등록된 입금 계좌가 없습니다. 아래 &apos;계좌 추가&apos;로 등록하세요.
+              {readOnly ? "등록된 입금 계좌가 없습니다." : <>등록된 입금 계좌가 없습니다. 아래 &apos;계좌 추가&apos;로 등록하세요.</>}
             </p>
           ) : (
             b.accounts.map((a, i) => (
               <div key={i} className="border-line bg-bg-soft/40 space-y-3 rounded-md border p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-foreground text-xs font-bold">계좌 {i + 1}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeAccount(i)}
-                    className="text-text-dim hover:text-danger inline-flex items-center gap-1 text-xs transition"
-                  >
-                    <Trash2 className="size-3.5" />
-                    삭제
-                  </button>
+                  {readOnly ? null : (
+                    <button
+                      type="button"
+                      onClick={() => removeAccount(i)}
+                      className="text-text-dim hover:text-danger inline-flex items-center gap-1 text-xs transition"
+                    >
+                      <Trash2 className="size-3.5" />
+                      삭제
+                    </button>
+                  )}
                 </div>
                 <TextField
                   label="별칭"
@@ -197,14 +206,16 @@ export function BillingSection({
               </div>
             ))
           )}
-          <button
-            type="button"
-            onClick={addAccount}
-            className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground flex w-full items-center justify-center gap-1 rounded-md border border-dashed py-2 text-xs transition"
-          >
-            <Plus className="size-3.5" />
-            계좌 추가
-          </button>
+          {readOnly ? null : (
+            <button
+              type="button"
+              onClick={addAccount}
+              className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground flex w-full items-center justify-center gap-1 rounded-md border border-dashed py-2 text-xs transition"
+            >
+              <Plus className="size-3.5" />
+              계좌 추가
+            </button>
+          )}
         </div>
       </SettingsCard>
     </SectionForm>

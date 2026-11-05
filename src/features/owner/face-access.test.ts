@@ -168,7 +168,7 @@ describe("배선 — 설정 화면", () => {
     for (const tag of ["<DataFace ", "<DuplicatesFace ", "<ImportHubFace ", "<AuditFace ", "<EvaluationFace ", "<ContributionSettingsFace "]) {
       expect(code.indexOf(tag), tag).toBeGreaterThan(fieldsetEnd);
     }
-    // 설정 '읽기 전용' 안내도 이 면들에는 서지 않는다.
-    expect(code).toContain("!canEditSettings && !showsOperations && !SELF_GATED_TABS.has(tab)");
+    // 설정 '읽기 권한' 안내도 이 면들에는 서지 않는다(섹션 폼 면은 폼이 직접 적는다 — FACE_WRITES_OWN_NOTE, 2026-11-05).
+    expect(code).toContain("!canEditSettings && !FACE_WRITES_OWN_NOTE.has(tab) && !SELF_GATED_TABS.has(tab)");
   });
 });

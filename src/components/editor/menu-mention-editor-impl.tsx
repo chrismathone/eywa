@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { EditorContent, useEditor, Node, ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps, type Editor, type JSONContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Placeholder } from "@tiptap/extensions";
@@ -50,7 +50,7 @@ function suggestionAt(editor: Editor): Suggestion | null {
   return match ? { from: selection.from - match[1].length - 1, to: selection.from, query: match[1] } : null;
 }
 
-export function MenuMentionEditorImpl({ name, defaultValue = "", onChange, ariaLabel = "내용", placeholder = "내용을 입력하세요. @를 입력하면 메뉴를 선택할 수 있습니다.", maxLength = 8000, minHeight = 160, defaultNames = false }: MenuMentionEditorProps) {
+export function MenuMentionEditorImpl({ name, defaultValue = "", onChange, ariaLabel = "내용", placeholder = "내용을 입력하세요. @를 입력하면 메뉴를 선택할 수 있습니다.", maxLength = 8000, minHeight = 160, defaultNames = false, disabled = false }: MenuMentionEditorProps) {
   const present = useMenuPresentation();
   const labelOf = (href: string) => (!defaultNames && present(href)?.label) || menuMentionDestination(href)?.label || "메뉴";
   const [value, setValue] = useState(defaultValue);
@@ -62,9 +62,10 @@ export function MenuMentionEditorImpl({ name, defaultValue = "", onChange, ariaL
   const updateSuggestion = (editor: Editor) => { setSuggestion(suggestionAt(editor)); setActive(0); };
   const editor = useEditor({
     immediatelyRender: false,
+    editable: !disabled,
     extensions: [
       StarterKit.configure({ blockquote: false, bold: false, bulletList: false, code: false, codeBlock: false, heading: false, horizontalRule: false, italic: false, link: false, listItem: false, listKeymap: false, orderedList: false, strike: false, underline: false, trailingNode: false }),
-      Placeholder.configure({ placeholder }),
+      Placeholder.configure({ placeholder, showOnlyWhenEditable: false }), // 비활성(권한 잠금)일 때도 안내가 보이게(write-lock.ts)
       Node.create({
         name: "menuMention", group: "inline", inline: true, atom: true, selectable: true,
         addOptions: () => ({ defaultNames }),
@@ -100,6 +101,9 @@ export function MenuMentionEditorImpl({ name, defaultValue = "", onChange, ariaL
     onUpdate: ({ editor }) => { const next = serialize(editor.state.doc); setValue(next); onChange?.(next); setLimitReached(next.length > maxLength); updateSuggestion(editor); },
     onSelectionUpdate: ({ editor }) => updateSuggestion(editor),
   });
+  // 잠금이 바뀌면(권한 판정이 나중에 내려오는 화면 등) 편집 가능 여부만 갈아 끼운다 — 편집기를 다시 만들지 않는다.
+  // emitUpdate=false — 마운트 때 update가 나가 onChange가 저절로 불리지 않게(기존 화면 동작 그대로).
+  useEffect(() => { editor?.setEditable(!disabled, false); }, [editor, disabled]);
   const query = suggestion?.query.trim().toLocaleLowerCase() ?? "";
   const candidates = MENU_MENTION_CATALOG.filter((d) => `${d.label} ${labelOf(d.href)}`.toLocaleLowerCase().includes(query));
   const choose = (href: string) => {
@@ -110,7 +114,7 @@ export function MenuMentionEditorImpl({ name, defaultValue = "", onChange, ariaL
     setSuggestion(null);
   };
   return <div className="mt-1 space-y-2">
-    <div className="border-line bg-card rounded-lg border focus-within:border-primary" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setSuggestion(null); }}
+    <div aria-disabled={disabled || undefined} className={`border-line bg-card rounded-lg border focus-within:border-primary ${disabled ? "bg-bg-soft opacity-70" : ""}`} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setSuggestion(null); }}
       onKeyDownCapture={(e) => {
         if (!suggestion || e.nativeEvent.isComposing || e.keyCode === 229) return;
         if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setSuggestion(null); }
@@ -122,7 +126,7 @@ export function MenuMentionEditorImpl({ name, defaultValue = "", onChange, ariaL
         if (e.key === "Enter" && candidates[active]) { e.preventDefault(); e.stopPropagation(); choose(candidates[active].href); }
       }}>
       <EditorContent editor={editor} />
-      {suggestion ? <div className="border-line border-t p-2">
+      {suggestion && !disabled ? <div className="border-line border-t p-2">
         <p className="text-text-dim px-2 py-1 text-xs">메뉴 선택 · ↑↓ 이동 · Enter 선택 · Esc 닫기</p>
         <div id={listId} role="listbox" aria-label="참조할 메뉴" className="max-h-56 overflow-y-auto">
           {candidates.length ? candidates.map((d, index) => <button type="button" key={d.href} id={`${listId}-${index}`} role="option" aria-selected={active === index}
@@ -134,7 +138,8 @@ export function MenuMentionEditorImpl({ name, defaultValue = "", onChange, ariaL
       </div> : null}
     </div>
     {name ? <input type="hidden" name={name} value={value} /> : null}
-    <p id={helpId} className="text-text-dim text-xs">메뉴를 설명할 때는 <strong className="text-primary">@를 입력해 선택해 주세요.</strong> 각 지점에서는 설정한 이름으로, 운영자에게는 기본 메뉴 이름으로 표시됩니다.</p>
+    {/* 비활성이면 숨기되 지우지는 않는다 — 편집기의 aria-describedby가 이 id를 가리킨다. */}
+    <p id={helpId} hidden={disabled} className="text-text-dim text-xs">메뉴를 설명할 때는 <strong className="text-primary">@를 입력해 선택해 주세요.</strong> 각 지점에서는 설정한 이름으로, 운영자에게는 기본 메뉴 이름으로 표시됩니다.</p>
     {limitReached ? <p className="text-danger text-xs" role="alert">내용은 메뉴 참조를 포함해 {maxLength.toLocaleString()}자까지 입력할 수 있습니다.</p> : null}
   </div>;
 }

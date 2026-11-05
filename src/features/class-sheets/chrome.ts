@@ -41,6 +41,13 @@ export const sheetPill = (on: boolean) =>
   }`;
 
 /**
+ * 알약 글자 자리(sheet-chrome.tsx `PillGlyph` — '목록'·'반 정보 보기') — 좁은 폭(<md)은 14px 아이콘만, 넓으면 글자만.
+ * 실물과 스켈레톤(sheet-chrome-skeleton.tsx)이 같은 문자열을 쓴다. 아이콘 자리 `h-[18px]`의 까닭은 PillGlyph 주석.
+ */
+export const SHEET_PILL_GLYPH_ICON = "flex h-[18px] items-center md:hidden";
+export const SHEET_PILL_GLYPH_LABEL = "hidden md:inline";
+
+/**
  * 이 화면의 **세그먼트 묶음**(JJ 표시/숨김 토글 — 글씨 크기는 18단계부터 `글씨: 값` 드롭다운) — 앱 전역 [`TOOLBAR_SEG_BOX`]에 잉크 테두리만 얹는다.
  * ⚠️ `border-line`(규약 기본)과 `border-line-strong`이 겹치면 승자를 CSS 순서가 정한다([[#116]]) →
  *    규약 상수에서 색만 빼고 다시 적는 대신, 여기서 **뒤에 오는 클래스로 덮지 않고** 색을 분리해 둔다.

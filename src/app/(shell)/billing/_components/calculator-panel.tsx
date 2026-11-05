@@ -16,6 +16,7 @@ import { isGenericTenant } from "@/features/owner/preset";
 import { isModuleEnabled } from "@/lib/modules";
 import { accountForTarget } from "@/features/owner/settings-types";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canManageTenant } from "@/lib/auth/perm-matrix";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { TuitionCalculator } from "./tuition-calculator";
 import { TuitionPricesPanel } from "./tuition-prices-panel";
@@ -81,6 +82,8 @@ async function CalculatorTab({ qid }: { qid?: string }) {
   ]);
   // 학원 로고 이미지 → 수강료 안내문 헤더. 미업로드면 null → 안내문이 학원명 머리글자 배지로 폴백.
   const logoSrc = user ? await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId) : null;
+  // '견적 저장' — 서버 saveTuitionQuote가 **full만** 받는다(accessLevelTenant==="full") → 같은 뜻의 canManageTenant.
+  const canSave = user ? await canManageTenant(user.systemRole, "billing") : false;
   return (
     <TuitionCalculator
       academyName={settings.profile.name || NEUTRAL_ACADEMY_NAME}
@@ -97,6 +100,7 @@ async function CalculatorTab({ qid }: { qid?: string }) {
       textbooks={textbooks}
       initial={initial ?? undefined}
       showHouseRules={!isGenericTenant(settings)}
+      canSave={canSave}
     />
   );
 }

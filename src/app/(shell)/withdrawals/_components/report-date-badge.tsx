@@ -4,7 +4,7 @@ import { reportDateNote, type LinkEnrollment } from "@/features/withdrawals/repo
 import type { StudentReportRecords } from "@/features/withdrawal-reports/server/student-records";
 
 /**
- * 퇴원일 옆 '퇴원보고서 종료일' — 같은 퇴원 사건으로 보이는 보고서의 날짜가 퇴원일과 다를 때만(원장 2026-10-23).
+ * 퇴원일 옆 '퇴원보고서 마지막 수업일'(2026-11-03 '종료일'에서 이름만 바꿈 — 퇴원보고서 화면과 같은 이름) — 같은 퇴원 사건으로 보이는 보고서의 날짜가 퇴원일과 다를 때만(원장 2026-10-23).
  * 정보로 보인다(어긋남·오류라고 말하지 않는다). 퇴원일은 바꾸지 않는다 — 어느 날짜가 맞는지는 사람이 본다.
  * 판정은 [`report-date-link.ts`](../../../../features/withdrawals/report-date-link.ts) 한 곳(어긋남 목록 스크립트와 같다).
  */
@@ -47,10 +47,10 @@ export function ReportDateBadge({
       {...tipProps({
         title: "퇴원보고서 날짜",
         rows: note.rows.map((r) => [r.label, r.date] as const),
-        lines: ["보고서에 적힌 종료일입니다. 퇴원일은 그대로이며, 어느 날짜가 맞는지는 확인이 필요합니다."],
+        lines: ["보고서에 적힌 마지막 수업일입니다. 퇴원일은 그대로이며, 어느 날짜가 맞는지는 확인이 필요합니다."],
       })}
     >
-      <Pill color="neutral">{`퇴원보고서 종료일 ${note.date}`}</Pill>
+      <Pill color="neutral">{`퇴원보고서 마지막 수업일 ${note.date}`}</Pill>
     </span>
   );
 }

@@ -12,9 +12,12 @@ import {
 export function ClassAssignAction({
   klass,
   studentOptions,
+  allowTransfer,
 }: {
   klass: AssignDialogClass;
   studentOptions: AssignDialogStudent[];
+  /** '반이동' 토글 — 서버 `moveEnrollmentsBatch`와 같은 판정(classes full)을 반 상세 page.tsx가 내린다. */
+  allowTransfer: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -30,6 +33,7 @@ export function ClassAssignAction({
         mode="add-student-to-class"
         fixedClass={klass}
         studentOptions={studentOptions}
+        allowTransfer={allowTransfer}
       />
     </>
   );

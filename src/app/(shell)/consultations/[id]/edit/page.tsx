@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import {
   getStudentConsultationById,
@@ -21,7 +22,9 @@ export default async function EditConsultationPage({
 }) {
   const viewer = await requireAccess("consultations");
   const { id } = await params;
-  const [item, students, counselors, settings, newcomerTargets] = await Promise.all([
+  const [canWrite, item, students, counselors, settings, newcomerTargets] = await Promise.all([
+    // 저장·삭제 게이트(update/deleteStudentConsultation)와 같은 판정 — 읽기 권한이면 칸만 잠그고 단추는 그리지 않는다.
+    canWriteTenant(viewer.systemRole, "consultations"),
     getStudentConsultationById(id),
     getStudentOptionsForConsultation(),
     getTeacherOptions(),
@@ -41,15 +44,18 @@ export default async function EditConsultationPage({
           <p className="eyebrow">상담 수정</p>
           <h1 className="font-bold tracking-tight text-foreground text-2xl">{item.studentName}</h1>
         </div>
-        <ConsultationDeleteButton
-          id={item.id}
-          studentId={item.studentId}
-          redirectTo="/consultations"
-        />
+        {canWrite ? (
+          <ConsultationDeleteButton
+            id={item.id}
+            studentId={item.studentId}
+            redirectTo="/consultations"
+          />
+        ) : null}
       </header>
 
       <ConsultationForm
         mode="edit"
+        readOnly={!canWrite}
         students={students}
         counselors={counselors}
         subjectLabels={subjectLabelRecord(settings.operations.subjects)}

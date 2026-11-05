@@ -13,6 +13,7 @@ import { ExpenseReceiptsModal } from "@/app/(shell)/billing/_components/expense-
 import { deleteExpense } from "@/features/billing/server/expense-actions";
 import type { ExpenseRow } from "@/features/billing/server/expense-queries";
 import { formatMoney } from "@/features/billing/currencies";
+import { writeLockedPlaceholder } from "@/lib/write-lock";
 
 const CAT_COLOR: Record<string, PillColor> = {
   인건비: "purple",
@@ -40,9 +41,12 @@ function statusLabel(r: ExpenseRow): { label: string; color: PillColor } {
 export function ExpenseRequestsClient({
   rows,
   requesterName,
+  canWrite,
 }: {
   rows: ExpenseRow[];
   requesterName: string;
+  /** 서버 게이트(expenseWriteScope)와 같은 판정 — false면 작성·수정·삭제·증빙 변경 단추를 그리지 않는다. */
+  canWrite: boolean;
 }) {
   const [dialog, setDialog] = useState<{ expense: ExpenseRow | null } | null>(null);
   const [receiptsFor, setReceiptsFor] = useState<ExpenseRow | null>(null);
@@ -72,14 +76,18 @@ export function ExpenseRequestsClient({
             </p>
           </div>
         </div>
-        <Button onClick={() => setDialog({ expense: null })}>
-          <Plus className="size-4" />새 지출결의서
-        </Button>
+        {canWrite ? (
+          <Button onClick={() => setDialog({ expense: null })}>
+            <Plus className="size-4" />새 지출결의서
+          </Button>
+        ) : null}
       </header>
 
       {rows.length === 0 ? (
         <div className="border-line text-text-faint rounded-2xl border border-dashed px-4 py-12 text-center text-sm">
-          제출한 지출결의서가 없습니다. 위 “새 지출결의서”로 작성하세요.
+          {canWrite
+            ? "제출한 지출결의서가 없습니다. 위 “새 지출결의서”로 작성하세요."
+            : `제출한 지출결의서가 없습니다. 작성하려면 ${writeLockedPlaceholder("expense_requests")}`}
         </div>
       ) : (
         <DragScrollArea className="bg-card border-line shadow-card rounded-2xl border">
@@ -140,7 +148,7 @@ export function ExpenseRequestsClient({
                     </td>
                     <td className="px-2 py-2">
                       <div className="flex items-center justify-end gap-0.5">
-                        {locked ? (
+                        {!canWrite ? null : locked ? (
                           <span className="text-text-faint px-1 text-xs" title="사무실 결재가 시작되어 수정할 수 없습니다">
                             잠김
                           </span>
@@ -178,10 +186,16 @@ export function ExpenseRequestsClient({
         </DragScrollArea>
       )}
 
-      {dialog ? <ExpenseDialog expense={dialog.expense} onClose={() => setDialog(null)} /> : null}
+      {canWrite && dialog ? <ExpenseDialog expense={dialog.expense} onClose={() => setDialog(null)} /> : null}
 
       {receiptsFor ? (
-        <ExpenseReceiptsModal expense={receiptsFor} onClose={() => setReceiptsFor(null)} />
+        // 증빙 열람은 누구나, 바꾸기는 쓰기 권한이 있을 때만(결재 착수 후 잠금은 서버 guardOwnExpense가 따로 막는다).
+        <ExpenseReceiptsModal
+          expense={receiptsFor}
+          onClose={() => setReceiptsFor(null)}
+          canEdit={canWrite}
+          lockedMenu="expense_requests"
+        />
       ) : null}
 
       <ConfirmDialog

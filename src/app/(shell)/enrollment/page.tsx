@@ -146,7 +146,7 @@ export default async function EnrollmentPage({
     received: receivedDay,
   };
 
-  // 칸반 드래그(상태 변경) 가능 여부 — 권한 판정은 캐시된 매트릭스 재사용이라 추가 쿼리 0.
+  // 칸반 드래그(상태 변경)·'신규 등록'·QR 링크 관리 노출 여부 — 권한 판정은 캐시된 매트릭스 재사용이라 추가 쿼리 0.
   // ⚠️ 이건 **화면을 줄이는 용도**일 뿐이고 진짜 게이트는 setEnrollmentOutcome 안에 있다([[#77]]).
   // 수강료 계산기 바로가기(감사 N14, 원장 2026-09-23) — 계산기는 수납관리의 한 면이라 **그 화면을 열 수 있는
   // 사람에게만** 링크를 세운다(권한은 바꾸지 않는다 — 못 여는 사람에게 링크를 주면 눌러도 거절된다).
@@ -365,7 +365,8 @@ export default async function EnrollmentPage({
                 </Button>
               }
             >
-              <IntakeQrSection />
+              {/* 읽기 권한이면 QR 보기·링크 복사만 — 생성·활성 토글·만료일 변경·삭제는 그리지 않는다(write-lock.ts). */}
+              <IntakeQrSection canWrite={canWriteEnrollment} />
             </Suspense>
             {/* makeedu 보내기 — 후보 조회는 Suspense로 첫 페인트에서 뗀다(B7). 누르면 연동 면과 같은 전송 카드가
                 다이얼로그로 뜬다. 연동 면(/owner 연동 탭)의 카드는 그대로(실패 건 재전송). */}
@@ -383,7 +384,8 @@ export default async function EnrollmentPage({
                 수강료 계산기
               </Button>
             ) : null}
-            <NewEnrollmentTrigger />
+            {/* 읽기 권한이면 작성 단추를 그리지 않는다 — 양식을 다 쓴 뒤에야 거절되는 일을 없앤다(원장 2026-11-05 · write-lock.ts). */}
+            {canWriteEnrollment ? <NewEnrollmentTrigger /> : null}
           </>
         }
         // 🔴 통계뷰에선 이 줄을 아예 안 그린다. 통계뷰는 목록을 안 불러오므로 여기 숫자가 전부 0이
@@ -500,7 +502,8 @@ export default async function EnrollmentPage({
             src="/photos/enrollment-hero.webp"
             alt=""
             caption="진행 중인 상담이 없습니다"
-            sub="QR 공개 접수 또는 신규 등록으로 첫 상담을 시작해 보세요"
+            // 읽기 권한엔 '신규 등록'·QR 만들기가 없으니 작성을 권하지 않는다(write-lock.ts · 원생상담 목록과 같은 처리).
+            sub={canWriteEnrollment ? "QR 공개 접수 또는 신규 등록으로 첫 상담을 시작해 보세요" : undefined}
             aspect="3/2"
             sizes="(max-width: 768px) 100vw, 576px"
           />

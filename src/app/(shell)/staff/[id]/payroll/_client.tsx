@@ -19,6 +19,7 @@ import type {
   PayrollCalcResult,
   PayrollRecord,
 } from "@/features/payroll/server/queries";
+import { writeLockedNote, writeLockedPlaceholder } from "@/lib/write-lock";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 
@@ -53,11 +54,17 @@ export function PayrollClient({
   period,
   autoCalc,
   history,
+  canWrite,
 }: {
   userId: string;
   period: string;
   autoCalc: PayrollCalcResult;
   history: PayrollRecord[];
+  /**
+   * 정산 저장·자동 계산·지급 완료 표시를 할 수 있는가 — page.tsx가 서버 액션(upsertPayroll 등)과 **같은 식**으로 계산한 값
+   * (super_admin 또는 canManageStaff && canWriteTenant(staff)). false면 쓰기 단추는 그리지 않고 입력칸은 잠근다(원장 2026-11-05).
+   */
+  canWrite: boolean;
 }) {
   const existing = history.find((r) => r.period === period) ?? null;
 
@@ -123,18 +130,22 @@ export function PayrollClient({
           <StatBox label="시간 정산" value={`${KRW.format(autoCalc.hourlyAmount)}원`} />
           <StatBox label="근무 시간" value={`${autoCalc.hoursWorked}h`} highlight="text-chart-2" />
         </div>
-        <form action={autoAction} className="mt-4">
-          <input type="hidden" name="userId" value={userId} />
-          <input type="hidden" name="period" value={period} />
-          <AutoBtn />
-        </form>
+        {canWrite ? (
+          <form action={autoAction} className="mt-4">
+            <input type="hidden" name="userId" value={userId} />
+            <input type="hidden" name="period" value={period} />
+            <AutoBtn />
+          </form>
+        ) : null}
       </section>
 
       {/* 수동 정산 폼 */}
       <section className="bg-card border-border rounded-2xl border p-5">
         <header className="mb-3">
           <p className="eyebrow">수동 정산</p>
-          <h3 className="text-foreground mt-1 text-sm font-bold">상세 항목 입력</h3>
+          <h3 className="text-foreground mt-1 text-sm font-bold">{canWrite ? "상세 항목 입력" : "상세 항목"}</h3>
+          {/* 숫자칸은 값이 차 있어 placeholder로 알릴 수 없다 — 양식 머리에 한 줄로 알린다. */}
+          {canWrite ? null : <p className="text-text-dim mt-1 text-xs">{writeLockedNote("staff")}</p>}
         </header>
         <form onSubmit={(e) => submitAction(e, formAction)} className="space-y-3">
           <input type="hidden" name="userId" value={userId} />
@@ -144,12 +155,14 @@ export function PayrollClient({
             <NumField
               label="기본급"
               name="baseAmount"
+              disabled={!canWrite}
               value={baseAmount}
               onChange={setBaseAmount}
             />
             <NumField
               label="근무 시간"
               name="hoursWorked"
+              disabled={!canWrite}
               value={hoursWorked}
               onChange={setHoursWorked}
               step="0.5"
@@ -157,15 +170,17 @@ export function PayrollClient({
             <NumField
               label="시간 정산"
               name="hourlyAmount"
+              disabled={!canWrite}
               value={hourlyAmount}
               onChange={setHourlyAmount}
             />
-            <NumField label="보너스" name="bonus" value={bonus} onChange={setBonus} />
+            <NumField label="보너스" name="bonus" value={bonus} onChange={setBonus} disabled={!canWrite} />
             <NumField
               label="공제"
               name="deduction"
               value={deduction}
               onChange={setDeduction}
+              disabled={!canWrite}
             />
             <div className="space-y-1">
               <label className="text-muted-foreground block text-xs font-medium">합계</label>
@@ -179,16 +194,20 @@ export function PayrollClient({
               name="notes"
               rows={2}
               defaultValue={existing?.notes ?? ""}
-              className="border-border bg-card text-foreground w-full rounded-md border px-2 py-1.5 text-sm"
+              disabled={!canWrite}
+              placeholder={canWrite ? undefined : writeLockedPlaceholder("staff")}
+              className="border-border bg-card text-foreground w-full rounded-md border px-2 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             />
           </div>
 
           {state?.error ? <p className="text-chart-4 text-sm">{state.error}</p> : null}
 
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <SaveBtn />
-            {existing && !existing.paidAt ? <MarkPaidButton recordId={existing.id} userId={userId} /> : null}
-          </div>
+          {canWrite ? (
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <SaveBtn />
+              {existing && !existing.paidAt ? <MarkPaidButton recordId={existing.id} userId={userId} /> : null}
+            </div>
+          ) : null}
         </form>
       </section>
 
@@ -259,12 +278,14 @@ function NumField({
   value,
   onChange,
   step,
+  disabled = false,
 }: {
   label: string;
   name: string;
   value: number;
   onChange: (v: number) => void;
   step?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="space-y-1">
@@ -275,7 +296,8 @@ function NumField({
         step={step ?? "1000"}
         value={value}
         onChange={(e) => onChange(Number(e.target.value) || 0)}
-        className="border-border bg-card text-foreground num w-full rounded-md border px-2 py-1.5 text-sm"
+        disabled={disabled}
+        className="border-border bg-card text-foreground num w-full rounded-md border px-2 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
       />
     </div>
   );

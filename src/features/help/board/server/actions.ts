@@ -165,6 +165,8 @@ export async function createHelpAnswer(postId: string, bodyRaw: string): Promise
 export async function closeHelpPost(postId: string): Promise<Result> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  // 🔴 닫기도 쓰기다 — 작성자라도 도움말이 '읽기'면 닫지 못한다(전에는 메뉴 권한을 보지 않았다, 2026-11-05 권한 감사).
+  if (!(await canAskHelpBoard(user.systemRole))) return { error: "이 글을 닫을 권한이 없습니다" };
   const admin = createAdminClient();
   const { data: post, error: loadErr } = await admin
     .from("help_posts")

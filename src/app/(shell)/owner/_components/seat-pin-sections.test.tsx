@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { writeLockedNote } from "@/lib/write-lock";
 
 /**
  * 자리 PIN — 편집자 마스킹·자동완성 방지, 읽기 전용 열람자에겐 값 미전송(2026-10-03 운영점검 합의 A15).
@@ -75,7 +76,8 @@ describe("운영 체계 면 — 읽기 전용 열람자", () => {
     const { container } = renderReadOnly();
     expect(screen.queryByTestId("action-bar")).toBeNull();
     expect(container.querySelector('button[type="submit"]')).toBeNull();
-    expect(screen.getByText("읽기 전용입니다.")).toBeInTheDocument();
+    // 읽기 권한 안내 = 공통 문구(원장 2026-11-05, src/lib/write-lock.ts) — 막은 권한 키(운영 설정)를 적는다.
+    expect(screen.getByText(writeLockedNote("operations_settings"))).toBeInTheDocument();
   });
 });
 

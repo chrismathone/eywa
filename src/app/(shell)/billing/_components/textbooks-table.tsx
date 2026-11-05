@@ -11,6 +11,7 @@ import type { StudentOption, TextbookOrderRow } from "@/features/billing/server/
 import type { CatalogOption } from "@/features/billing/server/catalog-queries";
 import type { AccountSetting } from "@/features/owner/settings-types";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { writeLockedPlaceholder } from "@/lib/write-lock";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const won = (n: number) => `${KRW.format(n)}원`;
@@ -44,9 +45,15 @@ export function TextbooksTable({
   todayKst,
   toolbar,
   emptyTitle,
+  canWrite,
 }: {
   toolbar?: ReactNode;
   emptyTitle?: string;
+  /**
+   * 등록·체크·수정·삭제를 세울지 — 서버(TextbooksPanel)가 액션과 **같은 함수**(canWriteTenant billing)로 정한 값.
+   * 읽기 권한이면 쓰기 단추는 그리지 않고 진행 체크는 비활성으로 보여 준다(원장 2026-11-05).
+   */
+  canWrite: boolean;
   rows: TextbookOrderRow[];
   students: StudentOption[];
   catalog: CatalogOption[];
@@ -98,15 +105,17 @@ export function TextbooksTable({
     <>
       <div className="flex flex-wrap items-center justify-between gap-2">
         {toolbar}
-        <Button size="sm" className="shrink-0" onClick={() => setDialog({ order: null })}>
-          <Plus className="size-4" />
-          교재 신청 등록
-        </Button>
+        {canWrite ? (
+          <Button size="sm" className="shrink-0" onClick={() => setDialog({ order: null })}>
+            <Plus className="size-4" />
+            교재 신청 등록
+          </Button>
+        ) : null}
       </div>
 
       {rows.length === 0 ? (
         <div className="border-line text-text-faint rounded-2xl border border-dashed px-4 py-10 text-center text-sm">
-          {emptyTitle ?? "교재신청 내역이 없습니다. 위 ‘교재 신청 등록’으로 추가하세요."}
+          {emptyTitle ?? (canWrite ? "교재신청 내역이 없습니다. 위 ‘교재 신청 등록’으로 추가하세요." : "교재신청 내역이 없습니다.")}
         </div>
       ) : (
       <DragScrollArea className="bg-card shadow-card rounded-2xl">
@@ -166,13 +175,21 @@ export function TextbooksTable({
                           <button
                             key={c.field}
                             type="button"
-                            disabled={isBusy}
-                            onClick={() => toggleCheck(r, c.field, !checked)}
-                            title={checked ? `${c.label} 완료 · ${fmtFull(date)}` : `${c.label} (미완료) — 클릭하여 체크`}
-                            className={`inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-xs font-medium transition ${
+                            disabled={isBusy || !canWrite}
+                            onClick={canWrite ? () => toggleCheck(r, c.field, !checked) : undefined}
+                            title={
+                              checked
+                                ? `${c.label} 완료 · ${fmtFull(date)}`
+                                : canWrite
+                                  ? `${c.label} (미완료) — 클릭하여 체크`
+                                  : `${c.label} (미완료) · ${writeLockedPlaceholder("billing")}`
+                            }
+                            className={`inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-xs font-medium transition disabled:cursor-not-allowed ${
                               checked
                                 ? c.active
-                                : "border-line text-text-faint hover:text-foreground hover:bg-bg-soft"
+                                : canWrite
+                                  ? "border-line text-text-faint hover:text-foreground hover:bg-bg-soft"
+                                  : "border-line text-text-faint"
                             }`}
                           >
                             {checked ? <Check className="size-3" strokeWidth={2.5} /> : null}
@@ -211,24 +228,28 @@ export function TextbooksTable({
                       >
                         <FileText className="size-3.5" />
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setDialog({ order: r })}
-                        disabled={isBusy}
-                        className="text-text-faint hover:text-foreground p-1"
-                        aria-label="수정"
-                      >
-                        <Pencil className="size-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(r)}
-                        disabled={isBusy}
-                        className="text-text-faint hover:text-danger p-1"
-                        aria-label="삭제"
-                      >
-                        {isBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
-                      </button>
+                      {canWrite ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setDialog({ order: r })}
+                            disabled={isBusy}
+                            className="text-text-faint hover:text-foreground p-1"
+                            aria-label="수정"
+                          >
+                            <Pencil className="size-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(r)}
+                            disabled={isBusy}
+                            className="text-text-faint hover:text-danger p-1"
+                            aria-label="삭제"
+                          >
+                            {isBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                          </button>
+                        </>
+                      ) : null}
                     </div>
                     {/* 삭제 실패 사유 — 권한(RLS)에 막히면 예전엔 아무 표시 없이 행이 남아 "고장난 버튼"으로 읽혔다. */}
                     {delError?.id === r.id ? (
@@ -243,7 +264,7 @@ export function TextbooksTable({
       </DragScrollArea>
       )}
 
-      {dialog ? (
+      {canWrite && dialog ? (
         <TextbookDialog
           order={dialog.order}
           students={students}

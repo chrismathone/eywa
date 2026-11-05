@@ -126,6 +126,7 @@ export default async function WithdrawalDetailPage({
             initialReason={md?.reason ?? null}
             initialDetail={md?.detail ?? null}
             initialMemo={md?.memo ?? null}
+            readOnly={!canWrite}
           />
         </Card>
 
@@ -141,8 +142,10 @@ export default async function WithdrawalDetailPage({
               }
             }
           />
+          {/* 읽기 권한이면 체크가 잠겨 있다 — '즉시 저장'이라고 쓰지 않는다(원장 2026-11-05). 권한 안내는 위 사유 카드가
+              이미 한 줄 적으므로 여기선 기록의 용도만 남긴다(같은 문장이 두 번 뜨지 않게 · 2026-11-05 리뷰). */}
           <p className="text-muted-foreground mt-3 text-xs">
-            체크하면 즉시 저장됩니다. 재등록 가능성 평가용 기록.
+            {canWrite ? "체크하면 즉시 저장됩니다. 재등록 가능성 평가용 기록." : "재등록 가능성 평가용 기록."}
           </p>
         </Card>
 

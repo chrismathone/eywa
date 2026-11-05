@@ -22,6 +22,7 @@ import { SavedStayNotice } from "@/components/forms/saved-stay-notice";
 import { withEmbed } from "@/components/workspace/embed-context";
 import { useInFrame } from "@/components/workspace/use-in-frame";
 import { startMeetingFromAudio, createTextMeeting } from "@/features/meetings/server/actions";
+import { writeLockedNote, writeLockedPlaceholder } from "@/lib/write-lock";
 import { issueAudioUploadTicket } from "@/features/media/server/upload-actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import {
@@ -40,11 +41,16 @@ const LEAVE_FALLBACK_MS = 5000;
 /**
  * `instance` = 작성 화면 한 벌(recording-resume.ts) — `formId`가 있으면 임시 저장 칸을 따로 쓴다. 이 화면에 걸린 녹음이 있으면
  * (녹음 아이콘의 '작성 화면 열기'·뒤로 가기로 돌아옴) 그 뒤의 임시 저장을 안내 없이 되살린다. 페이지가 `formId`로 key를 건다.
+ *
+ * `canWrite` = 서버 액션과 같은 `canWriteTenant("meetings")`를 페이지(서버)가 계산한 값 — **필수**다(빠뜨리면 다시
+ * "다 쓰고 나서야 거절"이 된다). 거짓이면(읽기 권한, 주소로 바로 들어온 경우) 칸은 전부 비활성 + 권한 안내이고
+ * 업로드·녹음·저장 단추와 초안·녹음 복구 배너는 그리지 않는다(원장 2026-11-05 — src/lib/write-lock.ts).
  */
-export function NewMeetingForm({ onSuccess, recordingOwner, instance }: {
+export function NewMeetingForm({ onSuccess, recordingOwner, instance, canWrite }: {
   onSuccess?: () => void;
   recordingOwner: RecordingOwner;
   instance?: { formId?: string };
+  canWrite: boolean;
 }) {
   // 녹음·전사 라이선스가 꺼진 지점엔 '음성' 칸이 없다 — 메모장만으로 회의록을 만든다(2026-09-30 "꺼지면 흔적 없이").
   const recordingOn = useLicenseOn("meeting_recording");
@@ -98,6 +104,8 @@ export function NewMeetingForm({ onSuccess, recordingOwner, instance }: {
   const localDraft = useStateDraft({
     scope: formDraftScope("meeting:new", instance?.formId),
     snapshot: draftSnapshot,
+    // 읽기 권한이면 초안을 읽지도 되살리지도 않는다 — 잠긴 칸에 남의(예전 권한 때) 초안이 채워지면 쓸 수 있는 것처럼 보인다.
+    enabled: canWrite,
     // heldAt은 항상 기본값(지금)이 채워지므로 빈 폼 판정에서 제외.
     hasContent: (s) => s.title.trim() !== "" || s.attendees.trim() !== "" || s.notepad.trim() !== "",
     // 이 화면에 걸린 녹음으로 돌아왔으면 그 녹음 뒤의 제목·일시까지 바로 — 녹음 대상(제목+날짜)이 다시 맞아 녹음이 붙는다.
@@ -190,6 +198,7 @@ export function NewMeetingForm({ onSuccess, recordingOwner, instance }: {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!canWrite) return; // 저장 단추가 없지만 제출 경로를 하나라도 남기지 않는다(서버도 막는다)
     if (isRecording) return setError("녹음을 끝낸 뒤 저장해 주세요.");
     setError(null);
     setErrorDetail(null);
@@ -307,19 +316,25 @@ export function NewMeetingForm({ onSuccess, recordingOwner, instance }: {
   }
 
   const busy = phase !== "idle";
+  // 읽기 권한 — 칸은 보이되 잠그고, 안내는 placeholder(빈 칸) + 양식 위 한 줄(일시처럼 값이 차 있는 칸 몫).
+  const locked = !canWrite;
+  const lockedPh = locked ? writeLockedPlaceholder("meetings") : undefined;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      {/* 텍스트 초안 복구 배너(제목·참석자·메모) — 녹음 복구 배너와 별개 */}
-      <DraftBanner
-        savedAt={title.trim() ? null : localDraft.draftSavedAt}
-        onRestore={restoreTextDraft}
-        onDiscard={localDraft.discard}
-      />
-      {recordingOn ? <RecordingRecoveryNotice key={recordingScope?.recordKey ?? "empty"} kind="meeting" scope={recordingScope}
+      {locked ? <p className="text-text-dim bg-bg-soft rounded-md px-3 py-2 text-sm">{writeLockedNote("meetings")}</p> : null}
+      {/* 텍스트 초안 복구 배너(제목·참석자·메모) — 녹음 복구 배너와 별개. 읽기 권한이면 되살릴 칸이 잠겨 있어 그리지 않는다. */}
+      {locked ? null : (
+        <DraftBanner
+          savedAt={title.trim() ? null : localDraft.draftSavedAt}
+          onRestore={restoreTextDraft}
+          onDiscard={localDraft.discard}
+        />
+      )}
+      {recordingOn && !locked ? <RecordingRecoveryNotice key={recordingScope?.recordKey ?? "empty"} kind="meeting" scope={recordingScope}
         selectedId={recoveryId ?? recorded.activeRecoveryId} disabled={busy || isRecording}
         onRestore={(recovered, meta) => { setFile(recovered); setRecoveryId(meta.id); setFileOrigin("restored"); }} /> : null}
-      {recordingOn && recorded.elsewhere ? <p className="text-text-dim text-xs">이 회의는 다른 창이나 탭에서 녹음하고 있습니다.</p> : null}
+      {recordingOn && !locked && recorded.elsewhere ? <p className="text-text-dim text-xs">이 회의는 다른 창이나 탭에서 녹음하고 있습니다.</p> : null}
 
       {/* Title */}
       <div className="space-y-1.5">
@@ -330,9 +345,9 @@ export function NewMeetingForm({ onSuccess, recordingOwner, instance }: {
           id="title"
           value={title}
           onChange={(e) => { setTitle(e.target.value); setFile(null); setRecoveryId(null); }}
-          disabled={busy || isRecording}
+          disabled={locked || busy || isRecording}
           required
-          placeholder="예: 주간 강사 회의 (5월 4주차)"
+          placeholder={lockedPh ?? "예: 주간 강사 회의 (5월 4주차)"}
           className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
@@ -346,8 +361,8 @@ export function NewMeetingForm({ onSuccess, recordingOwner, instance }: {
           id="attendees"
           value={attendees}
           onChange={(e) => setAttendees(e.target.value)}
-          disabled={busy}
-          placeholder="박지훈, 이연우, 김민지"
+          disabled={locked || busy}
+          placeholder={lockedPh ?? "박지훈, 이연우, 김민지"}
           className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
         />
         <p className="text-muted-foreground text-xs">쉼표로 구분</p>
@@ -366,13 +381,13 @@ export function NewMeetingForm({ onSuccess, recordingOwner, instance }: {
             if (e.target.value.slice(0, 10) !== heldAt.slice(0, 10)) { setFile(null); setRecoveryId(null); }
             setHeldAt(e.target.value);
           }}
-          disabled={busy || isRecording}
+          disabled={locked || busy || isRecording}
           className="border-input bg-background w-72 rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
 
-      {/* Audio source */}
-      {recordingOn ? (
+      {/* Audio source — 읽기 권한이면 업로드·녹음 단추째 없다(비활성으로 남기지 않는다, write-lock.ts 규칙 1). */}
+      {recordingOn && !locked ? (
       <div className="space-y-2">
         <label className="text-foreground block text-sm font-medium">음성</label>
 
@@ -439,9 +454,9 @@ export function NewMeetingForm({ onSuccess, recordingOwner, instance }: {
           id="notepad"
           value={notepad}
           onChange={(e) => setNotepad(e.target.value)}
-          disabled={busy}
+          disabled={locked || busy}
           rows={4}
-          placeholder="회의 중 메모를 적어두세요. 녹음 전사와 함께 AI가 정리합니다. (녹음 없이 메모만으로도 생성 가능)"
+          placeholder={lockedPh ?? "회의 중 메모를 적어두세요. 녹음 전사와 함께 AI가 정리합니다. (녹음 없이 메모만으로도 생성 가능)"}
           className="border-input bg-background focus:ring-ring min-h-[6rem] w-full resize-y rounded-md border px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-1"
         />
       </div>
@@ -488,6 +503,7 @@ export function NewMeetingForm({ onSuccess, recordingOwner, instance }: {
         </p>
       ) : null}
 
+      {locked ? null : (
       <div className="flex items-center justify-end gap-2 border-t pt-5">
         <Button type="submit" disabled={busy || isRecording || (!file && !notepad.trim())}>
           {busy && !restored ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
@@ -506,6 +522,7 @@ export function NewMeetingForm({ onSuccess, recordingOwner, instance }: {
                   : "메모로 회의록 만들기"}
         </Button>
       </div>
+      )}
     </form>
   );
 }

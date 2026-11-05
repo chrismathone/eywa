@@ -122,6 +122,22 @@ describe("수강 배정 창의 '반이동' 토글", () => {
     expect(screen.queryByText("반이동 날짜")).not.toBeInTheDocument();
   });
 
+  it("🔴 반 이동 권한(classes full)이 없으면 토글을 그리지 않는다 — 배정은 그대로 된다(원장 2026-11-05)", () => {
+    render(
+      <EnrollmentAssignDialog
+        open
+        onClose={() => {}}
+        mode="add-class-to-student"
+        student={STUDENT}
+        classes={CLASSES}
+        allowTransfer={false}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "반이동" })).not.toBeInTheDocument();
+    expect(screen.getByText("시작일")).toBeInTheDocument();
+    expect(listMovable).not.toHaveBeenCalled();
+  });
+
   it("🔴 켜면 시작일·종료일 대신 '이동 날짜' 한 칸이다 — 두 날짜가 함께 있으면 무엇이 진짜인지 갈린다", async () => {
     const user = userEvent.setup();
     open();

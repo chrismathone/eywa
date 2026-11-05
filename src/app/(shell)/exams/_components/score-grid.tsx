@@ -15,6 +15,7 @@ import { nextGradeSort, type GradeSort, type GradeSortKey } from "@/features/gra
 import { saveGradeScores, type GradeSaveState } from "@/features/grades/server/actions";
 import { axisValueOf } from "@/features/grades/subject-axis";
 import { monthlyFromTodaysMath, planMonthlyFill, type TodaysMathMonthly } from "@/features/grades/todays-math-monthly";
+import { writeLockedNote, writeLockedPlaceholder } from "@/lib/write-lock";
 import {
   GRADE_MARK_LABEL,
   gradeMarkKeysFor,
@@ -65,6 +66,9 @@ export function ScoreGrid({
   // 추론해 수동 메모를 못 지킨다(lint `preserve-manual-memoization`).
   const { maxScore: selMax, date: selDate, slot: selSlot } = sel;
   const locked = !canWrite || !!lockReason;
+  // 🔑 **권한 때문에** 잠긴 칸만 placeholder로 권한을 말한다(원장 2026-11-05, write-lock.ts) — 마이그레이션 미적용으로
+  //    잠긴 칸(`lockReason`만 있음)은 권한 문제가 아니라 원래 placeholder 그대로 둔다.
+  const lockedPlaceholder = canWrite ? null : writeLockedPlaceholder("exams");
   // 🔴 표식 열은 **시험마다 다르다**(월말평가 = 1차상담 하나, 원장 2026-09-23). 모듈 상수를 돌려주는
   //    순수 함수라 메모가 필요 없다. 감춘 열의 DB 값은 건드리지 않는다(저장은 바뀐 것만 쓴다).
   const markKeys = gradeMarkKeysFor(selSlot);
@@ -288,9 +292,10 @@ export function ScoreGrid({
       <input type="hidden" name="max" value={sel.maxScore} />
       <input type="hidden" name="entries" value={entriesJson} />
 
-      {lockReason ? (
+      {/* 읽기 권한이면 점수가 차 있는 칸은 placeholder가 안 보인다 — 격자 위에 안내 한 줄(writeLockedNote). */}
+      {!canWrite || lockReason ? (
         <p className="border-amber/40 bg-amber-soft text-foreground rounded-lg border px-3 py-2 text-sm">
-          {lockReason}
+          {canWrite ? lockReason : writeLockedNote("exams")}
         </p>
       ) : null}
       {!lockReason && !marksReady ? (
@@ -346,7 +351,8 @@ export function ScoreGrid({
         </span>
       </div>
 
-      {monthlyPlan && (Object.keys(monthlyPlan.fill).length > 0 || monthlyPlan.maxMismatch > 0) ? (
+      {/* '채우기'는 쓰기 단추라 읽기 권한이면 줄째 그리지 않는다("채울 수 있습니다"라는 말부터 오해다). */}
+      {canWrite && monthlyPlan && (Object.keys(monthlyPlan.fill).length > 0 || monthlyPlan.maxMismatch > 0) ? (
         <div className="border-line bg-bg-soft flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-1.5 text-sm">
           <span className="text-text-dim">
             <SheetText value={"오늘 수학 월말평가 — 빈 칸 "} />
@@ -476,7 +482,7 @@ export function ScoreGrid({
                                 onChange={(e) =>
                                   setReasons((prev) => ({ ...prev, [id]: e.target.value }))
                                 }
-                                placeholder="사유 (선택)"
+                                placeholder={lockedPlaceholder ?? "사유 (선택)"}
                                 className="border-line bg-background text-foreground focus:ring-primary/40 min-w-0 flex-1 rounded-md border px-2 py-1 text-sm focus:ring-1 focus:outline-none disabled:opacity-60"
                               />
                             ) : (
@@ -505,7 +511,8 @@ export function ScoreGrid({
                                 }}
                                 onPaste={(e) => handlePaste(e, myIndex)}
                                 aria-invalid={outOfRange || undefined}
-                                placeholder="—"
+                                placeholder={lockedPlaceholder ?? "—"}
+                                title={lockedPlaceholder ?? undefined}
                                 className={`bg-background text-foreground num focus:ring-primary/40 min-w-0 flex-1 rounded-md border px-2 py-1 text-center text-sm focus:ring-1 focus:outline-none disabled:opacity-60 ${
                                   outOfRange
                                     ? "border-danger text-danger"

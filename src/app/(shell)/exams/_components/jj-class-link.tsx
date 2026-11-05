@@ -14,7 +14,7 @@ export function JjClassLink({ classId, lang }: { classId: string; lang: "ko" | "
     <Button
       variant="outline"
       render={
-        <WindowLink href={`/exams?subject=english&type=jj&jjClass=${encodeURIComponent(classId)}`} title={label} />
+        <WindowLink href={`/exams/input?subject=english&type=jj&jjClass=${encodeURIComponent(classId)}`} title={label} />
       }
     >
       {label}

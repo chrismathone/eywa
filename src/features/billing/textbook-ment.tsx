@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useModuleOn } from "@/features/owner/operations-context";
 import { TEXTAREA_AUTOSIZE } from "@/lib/ui/textarea";
+import { writeLockedNote, writeLockedPlaceholder } from "@/lib/write-lock";
 import { loadMyTextbookMent, saveMyTextbookMent } from "./server/textbook-notice-actions";
 import { DEFAULT_TEXTBOOK_MENT } from "./textbook-notice";
 
@@ -73,10 +74,16 @@ export function TextbookMentField({
   value,
   onChange,
   rows = 3,
+  disabled = false,
 }: {
   value: string;
   onChange: (v: string) => void;
   rows?: number;
+  /**
+   * 읽기 권한(교재 요청 쓰기 없음) — 칸을 잠그고 권한 안내를 띄운다(원장 2026-11-05, write-lock.ts).
+   * 잠그면 onChange가 안 불려 자동 저장(saveMyTextbookMent)도 일어나지 않는다.
+   */
+  disabled?: boolean;
 }) {
   // 이 문구는 ClassNote 발송에만 쓰인다 — ClassNote 기능이 꺼진 학원엔 칸 자체가 없다(2026-09-30 "꺼지면 흔적 없이").
   const classnoteOn = useModuleOn("classnote");
@@ -89,12 +96,20 @@ export function TextbookMentField({
         onChange={(e) => onChange(e.target.value)}
         rows={rows}
         aria-label="학부모에게 보낼 메시지"
-        className={`border-line bg-background text-foreground placeholder:text-text-faint focus:ring-primary/40 min-h-[76px] w-full rounded-lg border px-3 py-2 text-sm focus:ring-1 focus:outline-none ${TEXTAREA_AUTOSIZE}`}
-        placeholder={DEFAULT_TEXTBOOK_MENT}
+        disabled={disabled}
+        className={`border-line bg-background text-foreground placeholder:text-text-faint focus:ring-primary/40 min-h-[76px] w-full rounded-lg border px-3 py-2 text-sm focus:ring-1 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 ${TEXTAREA_AUTOSIZE}`}
+        placeholder={disabled ? writeLockedPlaceholder("textbook_requests") : DEFAULT_TEXTBOOK_MENT}
       />
+      {/* 저장된 문구가 차 있으면 placeholder가 안 보인다 — 잠긴 칸은 안내 한 줄로 대신한다. */}
       <p className="text-text-faint text-xs">
-        학부모에게 보내는 안내 문구입니다 (메모는 사무실 내부용이라 나가지 않습니다) ·{" "}
-        {"{학생}·{교재명}·{금액}"}은 학생마다 자동으로 채워집니다 · 입력을 멈추면 자동 저장됩니다.
+        {disabled ? (
+          writeLockedNote("textbook_requests")
+        ) : (
+          <>
+            학부모에게 보내는 안내 문구입니다 (메모는 사무실 내부용이라 나가지 않습니다) ·{" "}
+            {"{학생}·{교재명}·{금액}"}은 학생마다 자동으로 채워집니다 · 입력을 멈추면 자동 저장됩니다.
+          </>
+        )}
       </p>
     </div>
   );

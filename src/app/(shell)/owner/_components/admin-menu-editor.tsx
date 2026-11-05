@@ -8,6 +8,7 @@ import { FIXED_GROUP_IDS, MAX_NAV_GROUPS, isFixedDestination, isMenuHiddenByLayo
 import { placeNavigationGroup, placeNavigationMenu } from "@/features/owner/navigation-placement";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { MenuIconPicker } from "./menu-icon-picker";
+import { useWriteLock } from "./write-lock-context";
 import { LibraryMenu, MenuDropEnd, NavigationDragRow, navigationKeyboardCoordinates, type NavigationDrag, type NavigationDrop, type NavigationHover } from "./navigation-drag";
 
 const ADMIN_SOURCE = [...HUB_GROUPS, ...SUPPORT_GROUPS];
@@ -28,6 +29,10 @@ export function AdminMenuEditor({ menus, groups, onMenus, onGroups, source = ADM
   const [dragging, setDragging] = useState<NavigationDrag | null>(null);
   const [hover, setHover] = useState<NavigationHover | null>(null);
   const [notice, setNotice] = useState("");
+  // 🔴 읽기 권한(쓰기 잠금)이면 탭 추가·삭제·순서 이동·메뉴 담기를 그리지 않는다(write-lock-context.tsx).
+  //    ⚠️ 탭 고르기·관리자뷰/강사뷰 전환도 일반 단추라 SectionForm·페이지 fieldset 안에서 비활성이다 — 읽기 사용자는 처음 보이는
+  //    탭 구성만 본다(이번 변경 전부터 같다 · 2026-11-05 리뷰).
+  const { locked } = useWriteLock();
   const dragSnapshot = useRef<NavigationDrag | null>(null);
   const pointer = useRef<{ x: number; y: number } | null>(null);
   const dragId = useId();
@@ -127,7 +132,7 @@ export function AdminMenuEditor({ menus, groups, onMenus, onGroups, source = ADM
         <span className="text-text-faint text-xs">항상 기본 위치와 이름으로 표시됩니다.</span></>}
       </div>
       <div className="flex min-h-6 flex-wrap items-center justify-between gap-2 text-xs">
-        <p className="text-text-dim">메뉴를 집어 왼쪽 탭에 담으세요. 손잡이를 끌면 탭과 메뉴의 순서도 바뀝니다.</p>
+        {locked ? <span /> : <p className="text-text-dim">메뉴를 집어 왼쪽 탭에 담으세요. 손잡이를 끌면 탭과 메뉴의 순서도 바뀝니다.</p>}
         <span role="status" className="text-primary font-semibold">{hoverFolder ? `${resolved.find((g) => g.id === hoverFolder)?.label}에 놓기` : notice}</span>
       </div>
       <div className="border-line grid overflow-visible rounded-xl border lg:grid-cols-[240px_minmax(0,1fr)]">
@@ -135,13 +140,13 @@ export function AdminMenuEditor({ menus, groups, onMenus, onGroups, source = ADM
           <div className="lg:sticky lg:top-3">
             <div className="mb-3 flex items-center justify-between gap-2 px-1">
               <h3 className="text-sm font-bold">왼쪽 탭</h3>
-              <button type="button" className="text-primary text-xs font-bold disabled:opacity-35" disabled={groupSlots >= MAX_NAV_GROUPS} onClick={() => {
+              {locked ? null : <button type="button" className="text-primary text-xs font-bold disabled:opacity-35" disabled={groupSlots >= MAX_NAV_GROUPS} onClick={() => {
                 const id = `custom-${crypto.randomUUID()}`;
                 onGroups([...groups.filter((r) => !editable.some((g) => g.id === r.id)),
                   ...editable.map((g, order) => ({ ...groups.find((r) => r.id === g.id), id: g.id, order })),
                   { id, label: "새 탭", icon: "folder", order: editable.length }]);
                 setSelected(id); setAdding(true); setDeleting(false);
-              }}>+ 탭 추가</button>
+              }}>+ 탭 추가</button>}
             </div>
             <ul className="space-y-2 p-1 lg:max-h-[70dvh] lg:overflow-y-auto" aria-label="탭 순서 및 메뉴 담기">{editable.map((g, index) => <NavigationDragRow key={g.id} id={`group:${g.id}`}
               drag={{ kind: "group", groupId: g.id, label: g.label, icon: g.icon }} drop={{ kind: "group", groupId: g.id, label: g.label }}
@@ -152,7 +157,7 @@ export function AdminMenuEditor({ menus, groups, onMenus, onGroups, source = ADM
                 <span className="min-w-0 flex-1 break-words">{g.label}{hoverFolder === g.id ? <span className="text-primary block text-xs">여기에 담기</span> : null}</span>
                 <span className="text-text-faint text-xs">{g.items.filter((d) => !isMenuHiddenByLayout(d.href, menus)).length}</span>
               </button>
-              <div className="flex shrink-0"><button type="button" aria-label={`${g.label} 탭 위로`} disabled={index === 0} onClick={() => reorderGroups(index, -1)} className="p-1 disabled:opacity-25">↑</button><button type="button" aria-label={`${g.label} 탭 아래로`} disabled={index === editable.length - 1} onClick={() => reorderGroups(index, 1)} className="p-1 disabled:opacity-25">↓</button></div>
+              {locked ? null : <div className="flex shrink-0"><button type="button" aria-label={`${g.label} 탭 위로`} disabled={index === 0} onClick={() => reorderGroups(index, -1)} className="p-1 disabled:opacity-25">↑</button><button type="button" aria-label={`${g.label} 탭 아래로`} disabled={index === editable.length - 1} onClick={() => reorderGroups(index, 1)} className="p-1 disabled:opacity-25">↓</button></div>}
             </NavigationDragRow>)}</ul>
           </div>
         </aside>
@@ -161,11 +166,11 @@ export function AdminMenuEditor({ menus, groups, onMenus, onGroups, source = ADM
             <div className="mb-5 flex flex-wrap items-end gap-3">
               <MenuIconPicker value={current.icon} label={current.label} onChange={(icon) => patchGroup(current.id, { icon })} />
               <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs font-semibold">큰 탭 이름<input className={field} aria-label="큰 탭 이름" maxLength={24} value={groups.find((g) => g.id === current.id)?.label ?? current.label} onChange={(e) => patchGroup(current.id, { label: e.target.value })} /></label>
-              <button type="button" className={`${button} text-danger`} onClick={() => setDeleting(!deleting)}>탭 삭제</button>
+              {locked ? null : <button type="button" className={`${button} text-danger`} onClick={() => setDeleting(!deleting)}>탭 삭제</button>}
             </div>
-            {deleting ? <div className="border-danger/30 bg-danger-soft mb-4 rounded-lg border p-3 text-sm"><p>이 탭과 안의 메뉴를 숨깁니다. 메뉴는 보관함에서 다른 탭에 다시 담을 수 있습니다.</p><div className="mt-2 flex gap-2"><button type="button" className={button} onClick={() => { patchGroup(current.id, { hidden: true }); setDeleting(false); }}>삭제하기</button><button type="button" className={button} onClick={() => setDeleting(false)}>취소</button></div></div> : null}
-            <div className="mb-3 flex items-center justify-between gap-2"><h4 className="text-sm font-bold">내부 메뉴 <span className="text-text-faint">{current.items.length}</span></h4><button type="button" aria-expanded={adding} className={`${button} text-primary`} onClick={() => setAdding(!adding)}>{adding ? "보관함 접기" : "+ 메뉴 추가"}</button></div>
-            <div className={`grid items-start gap-4 ${adding ? "xl:grid-cols-[minmax(0,1fr)_250px]" : ""}`}>
+            {deleting && !locked ? <div className="border-danger/30 bg-danger-soft mb-4 rounded-lg border p-3 text-sm"><p>이 탭과 안의 메뉴를 숨깁니다. 메뉴는 보관함에서 다른 탭에 다시 담을 수 있습니다.</p><div className="mt-2 flex gap-2"><button type="button" className={button} onClick={() => { patchGroup(current.id, { hidden: true }); setDeleting(false); }}>삭제하기</button><button type="button" className={button} onClick={() => setDeleting(false)}>취소</button></div></div> : null}
+            <div className="mb-3 flex items-center justify-between gap-2"><h4 className="text-sm font-bold">내부 메뉴 <span className="text-text-faint">{current.items.length}</span></h4>{locked ? null : <button type="button" aria-expanded={adding} className={`${button} text-primary`} onClick={() => setAdding(!adding)}>{adding ? "보관함 접기" : "+ 메뉴 추가"}</button>}</div>
+            <div className={`grid items-start gap-4 ${adding && !locked ? "xl:grid-cols-[minmax(0,1fr)_250px]" : ""}`}>
               <div className="min-w-0">
                 <ul className="space-y-3" aria-label={`${current.label} 내부 메뉴`}>{current.items.map((d, index) => {
                   const row = menus.find((r) => r.href === d.href);
@@ -178,16 +183,16 @@ export function AdminMenuEditor({ menus, groups, onMenus, onGroups, source = ADM
                         <input type="checkbox" aria-label={`${d.originalLabel} 표시`} checked={!hidden} onChange={() => patchMenu(d.href, { hidden: !hidden })} className="accent-primary size-4 shrink-0" />
                         <MenuIconPicker value={d.icon} label={d.originalLabel ?? d.label} onChange={(icon) => patchMenu(d.href, { icon })} />
                         <input aria-label={`${d.originalLabel} 메뉴 이름`} maxLength={40} className={`${field} w-full flex-1`} value={row?.label ?? d.label} onChange={(e) => patchMenu(d.href, { label: e.target.value })} />
-                        <button type="button" className="p-1 disabled:opacity-25" aria-label={`${d.originalLabel} 위로`} disabled={index === 0} onClick={() => reorderMenus(index, -1)}>↑</button><button type="button" className="p-1 disabled:opacity-25" aria-label={`${d.originalLabel} 아래로`} disabled={index === current.items.length - 1} onClick={() => reorderMenus(index, 1)}>↓</button>
+                        {locked ? null : <><button type="button" className="p-1 disabled:opacity-25" aria-label={`${d.originalLabel} 위로`} disabled={index === 0} onClick={() => reorderMenus(index, -1)}>↑</button><button type="button" className="p-1 disabled:opacity-25" aria-label={`${d.originalLabel} 아래로`} disabled={index === current.items.length - 1} onClick={() => reorderMenus(index, 1)}>↓</button></>}
                       </div>
                       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs"><span className="text-text-faint">기본 이름: {d.originalLabel}{d.teacherOnly ? " · 담당 반이 있는 계정" : ""}{hidden ? " · 숨김" : ""}</span><select aria-label={`${d.originalLabel} 소속 탭`} className="border-line bg-card max-w-full rounded-md border px-2 py-1" value={current.id} onChange={(e) => moveMenu(d, e.target.value)}>{editable.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}</select></div>
                       {menuHint?.(d) ? <p className="text-text-dim mt-2 text-xs leading-relaxed">{menuHint(d)}</p> : null}
                     </div>
                   </NavigationDragRow>;
                 })}</ul>
-                <MenuDropEnd groupId={current.id} label={current.label} empty={current.items.length === 0} active={dragging?.kind === "menu"} />
+                {locked ? null : <MenuDropEnd groupId={current.id} label={current.label} empty={current.items.length === 0} active={dragging?.kind === "menu"} />}
               </div>
-              {adding ? <aside className="border-line bg-bg-soft/50 order-first min-w-0 rounded-xl border p-3 xl:sticky xl:top-3 xl:order-last" aria-label="메뉴 보관함">
+              {adding && !locked ? <aside className="border-line bg-bg-soft/50 order-first min-w-0 rounded-xl border p-3 xl:sticky xl:top-3 xl:order-last" aria-label="메뉴 보관함">
                 <h4 className="text-sm font-bold">메뉴 보관함</h4>
                 <p className="text-text-dim mt-1 mb-3 text-xs">메뉴를 끌어 탭이나 원하는 순서에 놓으세요. 클릭하면 현재 탭에 담깁니다.</p>
                 <input aria-label="추가할 메뉴 검색" placeholder="이름으로 메뉴 찾기" value={query} onChange={(e) => setQuery(e.target.value)} className={`${field} mb-2 w-full`} />
@@ -201,7 +206,7 @@ export function AdminMenuEditor({ menus, groups, onMenus, onGroups, source = ADM
                 })}{library.length === 0 ? <p className="text-text-faint py-6 text-center text-sm">찾는 메뉴가 없습니다.</p> : null}</div>
               </aside> : null}
             </div>
-          </> : <p className="text-text-dim py-10 text-center text-sm">‘탭 추가’로 메뉴를 구성해 주세요.</p>}
+          </> : <p className="text-text-dim py-10 text-center text-sm">{locked ? "구성한 탭이 없습니다." : "‘탭 추가’로 메뉴를 구성해 주세요."}</p>}
         </section>
       </div>
     </div>

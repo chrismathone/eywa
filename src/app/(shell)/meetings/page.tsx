@@ -14,6 +14,7 @@ import { FilterSelect } from "@/components/filter-select";
 import { SearchToggle } from "@/components/search-toggle";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import {
   getMeetingsPage,
   type MeetingProcessingStatus,
@@ -169,7 +170,7 @@ export default async function MeetingsPage({
 }: {
   searchParams: Promise<{ range?: RangeKey; status?: StatusKey; q?: string; page?: string }>;
 }) {
-  await requireAccess("meetings");
+  const user = await requireAccess("meetings");
   const sp = await searchParams;
   const range: RangeKey = (sp.range as RangeKey) ?? "all";
   const status: StatusKey = (sp.status as StatusKey) ?? "all";
@@ -177,7 +178,12 @@ export default async function MeetingsPage({
   const page = Math.max(1, Number(sp.page) || 1);
 
   // 목록은 서버가 걸러 한 페이지만 준다(T6·N8) — 전사 원문 전체를 받지 않고, 검색은 제목·참석자·AI 요약·전사까지.
-  const result = await getMeetingsPage({ range, status, q, page, pageSize: PAGE_SIZE });
+  // 쓰기 판정은 회의록 서버 액션과 같은 함수(canWriteTenant "meetings") — 읽기 권한이면 '새 회의록'을 그리지 않는다
+  // (원장 2026-11-05: 읽기인데 단추가 떠서 양식을 다 쓴 뒤에야 거절됐다). 매트릭스는 요청 캐시라 왕복이 없다.
+  const [result, canWrite] = await Promise.all([
+    getMeetingsPage({ range, status, q, page, pageSize: PAGE_SIZE }),
+    canWriteTenant(user.systemRole, "meetings"),
+  ]);
   const rows = result.ok ? result.rows : [];
   const total = result.ok ? result.total : 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -240,7 +246,7 @@ export default async function MeetingsPage({
             triggerClassName={TOOLBAR_SELECT}
           />
           <SearchToggle placeholder="제목·참석자·내용" defaultValue={q} />
-          <NewMeetingTrigger />
+          {canWrite ? <NewMeetingTrigger /> : null}
         </div>
       </div>
 
@@ -255,7 +261,7 @@ export default async function MeetingsPage({
             src="/photos/meetings-hero.webp"
             alt=""
             caption="기록된 회의가 없습니다"
-            sub="녹음을 올리면 전사와 AI 분석이 자동으로 정리됩니다"
+            sub={canWrite ? "녹음을 올리면 전사와 AI 분석이 자동으로 정리됩니다" : "회의록이 올라오면 여기에 표시됩니다"}
             aspect="3/2"
             sizes="(max-width: 768px) 100vw, 576px"
           />

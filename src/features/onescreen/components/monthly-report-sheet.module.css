@@ -9,7 +9,8 @@
   --eie-bar-red: #ea4335;
   background: #fff;
   color: #121212;
-  font-family: "Times New Roman", Times, serif;
+  /* 글꼴 = 앱 평소 글꼴(원장 2026-11-05 *"텍스트 우리 평소쓰는걸로"*) — 시트의 Times·Arial을 따르지 않는다. */
+  font-family: inherit;
 }
 
 .sheet {
@@ -73,7 +74,6 @@
   margin: 16px 0 0;
   border: 1px solid #bdbdbd;
   padding: 10px 12px 8px;
-  font-family: Arial, Helvetica, sans-serif;
 }
 
 .chartTitle {

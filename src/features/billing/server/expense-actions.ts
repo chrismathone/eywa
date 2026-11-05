@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { logAction } from "@/features/audit/server/log";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
-import type { SystemRole } from "@/lib/permissions";
 import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -17,6 +16,7 @@ import {
 } from "@/lib/storage/media-storage";
 import type { UploadTicket } from "@/lib/storage/types";
 import { normalizeApprovalChecks } from "./expense-queries";
+import { expenseWriteScope } from "./expense-scope";
 import { DEFAULT_CURRENCY, isValidCurrency, roundMoney } from "../currencies";
 
 const RECEIPTS_BUCKET = "expense-receipts";
@@ -88,14 +88,8 @@ const APPROVAL_ROLE_LABEL: Record<string, string> = {
 };
 const today = () => kstToday();
 
-// 지출결의서 쓰기 스코프 — 사무실(billing 쓰기)="full"(전건 관리·결재), 강사(expense_requests 쓰기)="own"(본인 것만).
+// 지출결의서 쓰기 스코프(full=사무실 전건 / own=강사 본인 것) — 화면과 같은 한 함수(./expense-scope.ts).
 // ⚠️ 결재 승인 토글(toggleExpenseApproval)은 이 스코프가 아니라 billing 쓰기만 통과 → 강사가 자기 결의서를 셀프 승인 못 함.
-type WriteScope = "full" | "own";
-async function expenseWriteScope(role: SystemRole): Promise<WriteScope | null> {
-  if (await canWriteTenant(role, "billing")) return "full";
-  if (await canWriteTenant(role, "expense_requests")) return "own";
-  return null;
-}
 
 // own 스코프(강사)가 기존 결의서를 수정/삭제/증빙변경할 수 있는지 — 본인 작성분(created_by=본인) + 사무실 결재 착수 전.
 // 사무실이 원장/대표 결재를 시작(체크)하면 강사 편집을 잠근다(제출 후 변조 방지). 반환: 에러 메시지(불가) 또는 null(가능).

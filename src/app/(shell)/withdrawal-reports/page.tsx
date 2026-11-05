@@ -9,6 +9,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { directProcessingReady, listReports, reportViewer, reportStaff, requestStudents, reportSubjectLabels } from "@/features/withdrawal-reports/server/queries";
 import { canManageStudentStatusNow } from "@/features/students/server/status-access";
 import { listArchives } from "@/features/withdrawal-reports/server/archives";
+import { loadRefundSteps } from "@/features/withdrawal-reports/server/refund-steps";
 import {
   LIST_PAGE_SIZE,
   buildListItems,
@@ -64,7 +65,7 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
       title="퇴원보고서"
       description={
         shell !== "teacher"
-          ? "관리자가 작성을 요청하고, 강사별로 보고서를 제출합니다. 원장을 선택하지 않으면 관리자가 최종 승인합니다."
+          ? "관리자가 작성을 요청하고, 강사별로 보고서를 제출합니다. 관리자 승인(보고서에서 환불을 요청했다면 데스크 환불 처리까지)이 끝나면 처리합니다."
           : "작성을 요청받은 퇴원보고서를 작성해 제출합니다."
       }
     />
@@ -80,7 +81,12 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
 
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
   const canSeeArchive = !!viewer.teacherId || viewer.manage;
-  const items = buildListItems({ reports: list.rows, archives: archives ?? [], staff, labelOf: subjectMaps.labelOf, userId: viewer.user.id, writable: viewer.writable });
+  // 데스크 환불 단계(원장 2026-11-03) — 못 읽으면 단계 없이(목록은 연다).
+  const refunds = await loadRefundSteps(viewer.user.tenantId, list.rows, staff).catch((error: unknown) => {
+    console.error("[withdrawal-reports] 데스크 환불 단계 조회 실패", error);
+    return undefined;
+  });
+  const items = buildListItems({ reports: list.rows, archives: archives ?? [], staff, labelOf: subjectMaps.labelOf, userId: viewer.user.id, writable: viewer.writable, refunds });
   const filters = parseListFilters(sp, canSeeArchive);
   const rangeWindow = listWindow(filters, kstToday());
   const found = filterListItems(items, filters, rangeWindow);

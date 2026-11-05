@@ -164,11 +164,15 @@ export async function ClassesTab({
         moveStudent={{ id: student.id, name: student.name, grade: student.grade }}
         action={
           // 반 배정도 학생 기록 변경 — 강사(열람 전용)에겐 숨긴다. 서버 createEnrollment 게이트(full)와 한 쌍(#77).
+          // allowTransfer = 창 안 '반이동' 토글 — 서버 moveEnrollmentsBatch·listMovableEnrollments와 같은 게이트
+          // `canManageTenant("classes")`(= page.tsx의 canEditSchedule). 원생은 전체인데 수업목록이 읽기인 사람에게
+          // 토글이 보였다가 저장에서 거절되던 것을 막는다(원장 2026-11-05 — 쓰기 단추는 그리지 않는다).
           canAssign ? (
             <StudentAssignAction
               student={{ id: student.id, name: student.name, grade: student.grade }}
               classes={candidateClasses}
               blockedReason={assignBlockedReason}
+              allowTransfer={canEditSchedule}
             />
           ) : undefined
         }

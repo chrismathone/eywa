@@ -10,6 +10,8 @@ import { MasterSheetForm } from "./sheet-form";
 export default async function EnglishSheetPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  // 판정 = 시간표 툴바의 진입 링크(`canMasterImport`)·서버 반영 액션(master-sheet-actions)과 같은 두 문.
+  // ⚠️ 시간표 메뉴 키(timetable)는 보지 않는다 — 서버 반영 게이트가 보지 않는 키로 화면만 닫으면 어긋난다(2026-11-05 리뷰).
   const [sheet, classes] = await Promise.all([
     canManageSheetSync(user.systemRole),
     canManageTimetableImport(user.systemRole),

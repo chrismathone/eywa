@@ -58,9 +58,12 @@ export function MentStyleCard({ initial, canEdit = true }: { initial: MentStyleV
             직접 쓰거나 고친 멘트(최근 {MENT_STYLE_WINDOW_DAYS}일 · {MENT_STYLE_MIN_SAMPLES}건 이상)로 선생님마다 말투를 접어 자동작성에 붙입니다 · 매주 일요일 저녁 자동 갱신
           </span>
         </h2>
-        <Button size="sm" variant="outline" onClick={onRebuild} disabled={!canEdit || busy || view.tableMissing}>
-          {busy ? "갱신 중…" : "지금 갱신"}
-        </Button>
+        {/* 읽기 권한이면 [지금 갱신]을 그리지 않는다(갱신 액션 = canWriteTenant(ai_ment)). 일요일 자동 갱신은 그대로. */}
+        {canEdit ? (
+          <Button size="sm" variant="outline" onClick={onRebuild} disabled={busy || view.tableMissing}>
+            {busy ? "갱신 중…" : "지금 갱신"}
+          </Button>
+        ) : null}
       </div>
 
       {view.tableMissing ? (
@@ -72,7 +75,7 @@ export function MentStyleCard({ initial, canEdit = true }: { initial: MentStyleV
           강사 말투 목록을 불러오지 못했습니다.
         </p>
       ) : view.rows.length === 0 ? (
-        <p className="text-text-faint text-xs">아직 만들어진 말투가 없습니다 — [지금 갱신]을 누르거나 일요일 자동 갱신을 기다리세요.</p>
+        <p className="text-text-faint text-xs">{canEdit ? "아직 만들어진 말투가 없습니다 — [지금 갱신]을 누르거나 일요일 자동 갱신을 기다리세요." : "아직 만들어진 말투가 없습니다 — 일요일 자동 갱신을 기다리세요."}</p>
       ) : (
         <ul className="divide-line divide-y">
           {view.rows.map((r) => (

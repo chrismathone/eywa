@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getMyExpenseRequests } from "@/features/billing/server/expense-queries";
+import { expenseWriteScope } from "@/features/billing/server/expense-scope";
 import { ExpenseRequestsClient } from "./_client";
 
 /**
@@ -18,7 +20,10 @@ export default async function ExpenseRequestsPage() {
   // 이 화면의 주인(created_by)이 작성한 결의서 전건. 🔴 '다른 강사 뷰'(열람 전용)에선 보는 사람이 아니라
   // **대상 강사**의 결의서여야 한다(감사 E6 — 그 뷰의 존재 이유가 "그 사람이 보는 화면 그대로").
   // effectiveTeacherId = 본인 강사·겸직 강사뷰면 본인 id, 다른 강사 뷰면 대상 강사 id.
-  const rows = await getMyExpenseRequests(teacherId);
+  // 쓰기 여부 = 서버 액션과 **같은 판정**(expenseWriteScope · 같은 행위자 getCurrentUser({teacherView})).
+  // 읽기 권한이면 작성·수정·삭제·증빙 변경 단추를 그리지 않는다(원장 2026-11-05 — 다 쓰고 저장해야 거부가 떴다).
+  const [rows, actor] = await Promise.all([getMyExpenseRequests(teacherId), getCurrentUser({ teacherView: true })]);
+  const canWrite = actor ? (await expenseWriteScope(actor.systemRole)) !== null : false;
 
-  return <ExpenseRequestsClient rows={rows} requesterName={user.displayName} />;
+  return <ExpenseRequestsClient rows={rows} requesterName={user.displayName} canWrite={canWrite} />;
 }

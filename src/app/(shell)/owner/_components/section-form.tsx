@@ -9,10 +9,21 @@ import { FormActionBar } from "@/components/forms/form-action-bar";
 import { useNavigationSettings } from "@/features/owner/navigation-context";
 import { publishRecordSaved } from "@/lib/realtime/record-channel";
 import { serializeForm } from "@/lib/realtime/form-snapshot";
+import { OWNER_SECTION_MENU } from "@/lib/settings-role-catalog";
+import type { MenuKey } from "@/lib/permissions";
+import { writeLockedNote } from "@/lib/write-lock";
+import { WriteLockProvider } from "./write-lock-context";
+
+/** 섹션의 쓰기 권한 키 — 저장 액션(`saveOwnerSection`)과 같은 표다(설정별 권한이 없는 섹션은 학원 설정). */
+function sectionMenu(section: SectionKey): MenuKey {
+  return section in OWNER_SECTION_MENU ? OWNER_SECTION_MENU[section as keyof typeof OWNER_SECTION_MENU] : "owner";
+}
 
 /**
  * 섹션 폼 공통 래퍼 — 편집 상태(payload)를 hidden JSON으로 직렬화해 saveOwnerSection 호출.
  * 섹션 컴포넌트는 로컬 state만 관리하고 그 객체를 payload로 넘긴다. 저장 결과(저장됨/오류) 표시.
+ * 🔴 `readOnly`(읽기 권한) = 저장 바를 **그리지 않고** 입력을 잠그며, 안에 든 목록 편집기·설정 칸은 쓰기 잠금 문맥을 받아
+ *    추가·삭제 단추를 숨기고 빈 칸 placeholder를 권한 안내로 바꾼다(원장 2026-11-05, `write-lock-context.tsx`).
  */
 export function SectionForm({
   section,
@@ -27,6 +38,8 @@ export function SectionForm({
   footer,
   header,
   readOnly = false,
+  lockMenu,
+  lockNote = true,
   children,
 }: {
   section: SectionKey;
@@ -49,6 +62,13 @@ export function SectionForm({
   /** 읽기 전용에서도 분류 탭은 이동할 수 있도록 폼 밖에 둔다. */
   header?: ReactNode;
   readOnly?: boolean;
+  /** 읽기 전용 안내에 적을 권한 키 — 기본은 섹션의 저장 권한 키. */
+  lockMenu?: MenuKey;
+  /**
+   * readOnly일 때 폼 위 안내 한 줄을 적을지(기본 true). 바깥(면 위)이 같은 안내를 이미 적는 자리에서만 false —
+   * 예: 연동 면 전체가 잠긴 때의 오늘 수학 카드(두 번 뜨지 않게, 2026-11-05 리뷰).
+   */
+  lockNote?: boolean;
   children: ReactNode;
 }) {
   const formId = useId();
@@ -138,10 +158,12 @@ export function SectionForm({
     }
   }, [rebaselineNonce, markSaved, rebaseline]);
 
+  const menu = lockMenu ?? sectionMenu(section);
   return (
+    <WriteLockProvider locked={readOnly} menu={menu}>
     <div className="space-y-4">
       {header}
-      {readOnly ? <p className="text-text-faint text-xs">읽기 전용입니다.</p> : null}
+      {readOnly && lockNote ? <p className="text-text-faint text-xs">{writeLockedNote(menu)}</p> : null}
       {/* onSubmit 경유(액션 폼 아님) — 위 submit() 주석 참조. Enter 저장은 그대로 살고, 자동 리셋만 안 생긴다.
           hidden 두 칸은 이제 제출에 안 쓰이지만 **useUnsavedGuard의 dirty 감지 캐리어**라 유지한다
           (버튼→state로만 바뀌는 편집은 폼 안에 대응 input이 없어 hidden 없이는 '미저장'을 못 본다). */}
@@ -176,6 +198,7 @@ export function SectionForm({
         </button>
       </FormActionBar> : null}
     </div>
+    </WriteLockProvider>
   );
 }
 

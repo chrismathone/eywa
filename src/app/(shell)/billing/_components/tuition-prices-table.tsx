@@ -21,6 +21,7 @@ import {
   PRICING_MODE_EFFECT,
   type TuitionCatalogRow,
 } from "@/features/billing/tuition-catalog";
+import { writeLockedPlaceholder } from "@/lib/write-lock";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const inputCls =
@@ -195,7 +196,7 @@ function TuitionDialog({
  * 🔴 미지정은 흐린 글씨가 아니라 **경고색**으로 둔다 — 이 화면에서 "아직 안 정한 것"이 가장 중요한
  *    정보다(계산기가 그 항목을 월 고정으로 넣고, 회당 수업이면 한 달치가 한 회차 금액으로 줄어든다).
  */
-function PricingModeCell({ id, mode }: { id: string; mode: string | null }) {
+function PricingModeCell({ id, mode, disabled }: { id: string; mode: string | null; disabled: boolean }) {
   const [, action] = useActionState<TuitionCatalogActionState, FormData>(setTuitionPricingMode, undefined);
   return (
     <div className="flex flex-wrap items-center gap-1">
@@ -206,14 +207,24 @@ function PricingModeCell({ id, mode }: { id: string; mode: string | null }) {
             <input type="hidden" name="id" value={id} />
             {/* 켜진 것을 다시 누르면 빈 값 → 미지정으로 되돌린다(잘못 고른 값을 되돌릴 문). */}
             <input type="hidden" name="pricing_mode" value={on ? "" : m.value} />
+            {/* 읽기 권한이면 바로 저장되는 칩이라 비활성 + 안내(원장 2026-11-05). */}
             <button
               type="submit"
               aria-pressed={on}
-              title={on ? `${m.label} — 다시 누르면 미지정으로` : PRICING_MODE_EFFECT[m.value]}
-              className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${
+              disabled={disabled}
+              title={
+                disabled
+                  ? `${m.label} · ${writeLockedPlaceholder("billing")}`
+                  : on
+                    ? `${m.label} — 다시 누르면 미지정으로`
+                    : PRICING_MODE_EFFECT[m.value]
+              }
+              className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition disabled:cursor-not-allowed ${
                 on
                   ? "border-primary bg-primary text-primary-foreground"
-                  : "border-line text-text-dim hover:bg-bg-soft hover:text-foreground"
+                  : disabled
+                    ? "border-line text-text-dim"
+                    : "border-line text-text-dim hover:bg-bg-soft hover:text-foreground"
               }`}
             >
               {m.label}
@@ -230,13 +241,18 @@ function PricingModeCell({ id, mode }: { id: string; mode: string | null }) {
   );
 }
 
-function ToggleActive({ id, isActive }: { id: string; isActive: boolean }) {
+function ToggleActive({ id, isActive, disabled }: { id: string; isActive: boolean; disabled: boolean }) {
   const [, action] = useActionState<TuitionCatalogActionState, FormData>(toggleTuitionActive, undefined);
   return (
     <form action={action}>
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="next" value={String(!isActive)} />
-      <button type="submit" title={isActive ? "사용 중지" : "사용 재개"}>
+      <button
+        type="submit"
+        disabled={disabled}
+        className="disabled:cursor-not-allowed"
+        title={disabled ? writeLockedPlaceholder("billing") : isActive ? "사용 중지" : "사용 재개"}
+      >
         <Pill color={isActive ? "primary" : "neutral"} soft={!isActive}>
           {isActive ? "사용" : "중지"}
         </Pill>
@@ -249,9 +265,15 @@ export function TuitionPricesTable({
   rows,
   categories,
   summary,
+  canManage,
 }: {
   rows: TuitionCatalogRow[];
   categories: string[];
+  /**
+   * 항목 추가·수정·삭제·단가 종류·사용 토글을 세울지 — 서버 패널이 tuition-catalog-actions와 **같은 판정**
+   * (canManageTenant billing = full)으로 정한 값. 읽기 권한이면 추가·수정은 그리지 않고 칩·토글은 비활성(원장 2026-11-05).
+   */
+  canManage: boolean;
   /** 좌측에 놓을 요약(건수·페이지)과 필터·검색 — 서버 패널이 넘긴다. 이 줄과 '항목 추가'가 **한 행**을 나눠 쓴다
    *  (원장 2026-08-07: *"단가 104개·1/3 페이지 랑 항목 추가 버튼이 2개 행으로 공간차지하고 있는데 한개 행으로"* →
    *  2026-09-22 필터 줄도 같은 행으로 *"넓은화면까지 2행일 필요가 없어보임"*). */
@@ -266,10 +288,12 @@ export function TuitionPricesTable({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">{summary}</div>
-        <Button size="sm" onClick={() => setOpen("new")}>
-          <Plus className="size-4" />
-          항목 추가
-        </Button>
+        {canManage ? (
+          <Button size="sm" onClick={() => setOpen("new")}>
+            <Plus className="size-4" />
+            항목 추가
+          </Button>
+        ) : null}
       </div>
 
       {rows.length === 0 ? (
@@ -277,7 +301,7 @@ export function TuitionPricesTable({
           image="billing"
           icon={() => <Coins size={32} strokeWidth={1.8} />}
           title="등록된 단가가 없습니다"
-          description="과목 단가·할인 프리셋을 등록하면 계산기에서 골라 자동으로 채워집니다."
+          description={canManage ? "과목 단가·할인 프리셋을 등록하면 계산기에서 골라 자동으로 채워집니다." : undefined}
         />
       ) : (
         <DragScrollArea className="bg-card shadow-card rounded-2xl">
@@ -289,7 +313,7 @@ export function TuitionPricesTable({
                 <th className="px-4 py-3 text-left">항목명</th>
                 <th className="px-4 py-3 text-right">단가 · 할인액</th>
                 <th className="px-4 py-3 text-left">상태</th>
-                <th className="px-4 py-3 text-right">관리</th>
+                {canManage ? <th className="px-4 py-3 text-right">관리</th> : null}
               </tr>
             </thead>
             <tbody className="divide-line divide-y">
@@ -301,7 +325,7 @@ export function TuitionPricesTable({
                     </Pill>
                   </td>
                   <td className="px-4 py-2.5">
-                    <PricingModeCell id={r.id} mode={r.pricingMode} />
+                    <PricingModeCell id={r.id} mode={r.pricingMode} disabled={!canManage} />
                   </td>
                   <td className="px-4 py-2.5">
                     <span className="text-foreground text-sm font-bold">{r.name}</span>
@@ -312,18 +336,20 @@ export function TuitionPricesTable({
                     {KRW.format(r.price)}
                   </td>
                   <td className="px-4 py-2.5">
-                    <ToggleActive id={r.id} isActive={r.isActive} />
+                    <ToggleActive id={r.id} isActive={r.isActive} disabled={!canManage} />
                   </td>
-                  <td className="px-4 py-2.5 text-right">
-                    <button
-                      type="button"
-                      onClick={() => setOpen(r)}
-                      className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition"
-                    >
-                      <Pencil className="size-3.5" />
-                      수정
-                    </button>
-                  </td>
+                  {canManage ? (
+                    <td className="px-4 py-2.5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setOpen(r)}
+                        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition"
+                      >
+                        <Pencil className="size-3.5" />
+                        수정
+                      </button>
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
@@ -333,12 +359,13 @@ export function TuitionPricesTable({
             {stopped.length ? (
               <tbody className="divide-line divide-y">
                 <tr className="bg-bg-soft">
-                  <td colSpan={6} className="px-4 py-2">
+                  <td colSpan={canManage ? 6 : 5} className="px-4 py-2">
                     <span className="text-text-dim text-xs font-bold">
                       중지됨 <span className="num">{stopped.length}</span>개
                     </span>
                     <span className="text-text-faint ml-1.5 text-xs">
-                      — 계산기·수납 어디에도 나오지 않습니다. &lsquo;중지&rsquo;를 누르면 다시 사용합니다.
+                      — 계산기·수납 어디에도 나오지 않습니다.
+                      {canManage ? <> &lsquo;중지&rsquo;를 누르면 다시 사용합니다.</> : null}
                     </span>
                   </td>
                 </tr>
@@ -350,7 +377,7 @@ export function TuitionPricesTable({
                       </Pill>
                     </td>
                     <td className="px-4 py-2.5">
-                      <PricingModeCell id={r.id} mode={r.pricingMode} />
+                      <PricingModeCell id={r.id} mode={r.pricingMode} disabled={!canManage} />
                     </td>
                     <td className="px-4 py-2.5">
                       <span className="text-foreground text-sm font-bold">{r.name}</span>
@@ -361,18 +388,20 @@ export function TuitionPricesTable({
                       {KRW.format(r.price)}
                     </td>
                     <td className="px-4 py-2.5">
-                      <ToggleActive id={r.id} isActive={r.isActive} />
+                      <ToggleActive id={r.id} isActive={r.isActive} disabled={!canManage} />
                     </td>
-                    <td className="px-4 py-2.5 text-right">
-                      <button
-                        type="button"
-                        onClick={() => setOpen(r)}
-                        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition"
-                      >
-                        <Pencil className="size-3.5" />
-                        수정
-                      </button>
-                    </td>
+                    {canManage ? (
+                      <td className="px-4 py-2.5 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setOpen(r)}
+                          className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition"
+                        >
+                          <Pencil className="size-3.5" />
+                          수정
+                        </button>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
@@ -381,8 +410,8 @@ export function TuitionPricesTable({
         </DragScrollArea>
       )}
 
-      {open === "new" ? <TuitionDialog categories={categories} onClose={() => setOpen(null)} /> : null}
-      {open && open !== "new" ? <TuitionDialog item={open} categories={categories} onClose={() => setOpen(null)} /> : null}
+      {canManage && open === "new" ? <TuitionDialog categories={categories} onClose={() => setOpen(null)} /> : null}
+      {canManage && open && open !== "new" ? <TuitionDialog item={open} categories={categories} onClose={() => setOpen(null)} /> : null}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useLockedPlaceholder } from "./write-lock-context";
 
 const inputCls =
   "border-line text-foreground block w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus:border-primary";
@@ -36,12 +37,14 @@ export function TextField({
   onChange: (v: string) => void;
   placeholder?: string;
 }) {
+  // 읽기 권한(쓰기 잠금)이면 빈 칸의 placeholder가 권한 안내가 된다(write-lock-context.tsx).
+  const ph = useLockedPlaceholder();
   return (
     <Field label={label} hint={hint}>
       <input
         className={inputCls}
         value={value}
-        placeholder={placeholder}
+        placeholder={ph(placeholder)}
         onChange={(e) => onChange(e.target.value)}
       />
     </Field>
@@ -70,6 +73,7 @@ export function ColorField({
   note?: string;
 }) {
   const valid = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.test(value.trim());
+  const ph = useLockedPlaceholder();
   return (
     <Field label={label} hint={hint}>
       <div className="flex items-center gap-2">
@@ -83,7 +87,7 @@ export function ColorField({
         <input
           className={inputCls}
           value={value}
-          placeholder={placeholder}
+          placeholder={ph(placeholder)}
           onChange={(e) => onChange(e.target.value)}
         />
       </div>
@@ -107,13 +111,14 @@ export function TextAreaField({
   placeholder?: string;
   rows?: number;
 }) {
+  const ph = useLockedPlaceholder();
   return (
     <Field label={label} hint={hint}>
       <textarea
         className={inputCls}
         rows={rows}
         value={value}
-        placeholder={placeholder}
+        placeholder={ph(placeholder)}
         onChange={(e) => onChange(e.target.value)}
       />
     </Field>

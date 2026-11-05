@@ -31,6 +31,7 @@ export function RiderDayEdit({
   season,
   assignments,
   canWrite,
+  canEditDay,
   className,
   children,
 }: {
@@ -47,8 +48,13 @@ export function RiderDayEdit({
   season: Season;
   /** 이 학생의 평소 배정(그 시즌 전부). */
   assignments: readonly StudentAssignment[];
-  /** 편성(고정) 쓰기 권한 — 없으면 고정 변경 버튼을 잠근다. */
+  /** 편성(고정) 쓰기 권한(canWriteTenant shuttle) — 없으면 [고정으로 변경]을 그리지 않는다. */
   canWrite: boolean;
+  /**
+   * 그날 하루 등하원 변경 권한 — page.tsx가 서버 게이트(`staffDayGate`·`loadStaffRideEditor`)와 **같은 함수**
+   * `canRecordBoarding()`으로 계산한 값. 없으면 [당일만 수정]을 그리지 않는다(원장 2026-11-05 — 예전엔 눌러야 거절됐다).
+   */
+  canEditDay: boolean;
   className?: string;
   children: ReactNode;
 }) {
@@ -76,6 +82,9 @@ export function RiderDayEdit({
 
   const choice = "border-line hover:bg-muted flex flex-col items-start gap-0.5 rounded-xl border p-3 text-left disabled:cursor-not-allowed disabled:opacity-50";
 
+  // 둘 다 못 하면 수정 카드를 열 이유가 없다 — 칩은 보기만 한다(누를 수 있는 것처럼 보이지 않게).
+  if (!canEditDay && !canWrite) return <span className={className}>{children}</span>;
+
   return (
     <>
       <button
@@ -100,30 +109,32 @@ export function RiderDayEdit({
             {md} · {place}
           </DialogDescription>
 
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            <button type="button" disabled={!dayEditable || loading} onClick={openDay} className={choice}>
-              <span className="text-base font-bold">{loading ? "여는 중…" : "당일만 수정"}</span>
-              <span className="text-text-dim text-sm break-keep">
-                {dayEditable ? `${md} 하루만 바뀌어요 · 평소 배정은 그대로` : "지난 날짜는 바꿀 수 없어요"}
-              </span>
-            </button>
-            <button
-              type="button"
-              disabled={!canWrite}
-              aria-pressed={mode === "fixed"}
-              onClick={() => setMode("fixed")}
-              className={cn(choice, mode === "fixed" && "border-primary bg-primary-soft")}
-            >
-              <span className="text-base font-bold">고정으로 변경</span>
-              <span className="text-text-dim text-sm break-keep">
-                {canWrite ? "매주 적용 · 노선 편성의 배정이 바뀌어요" : "셔틀 편성을 고칠 권한이 없어요"}
-              </span>
-            </button>
+          {/* 권한이 있는 선택지만 세운다(쓰기 단추는 비활성으로 남기지 않는다 — 원장 2026-11-05). */}
+          <div className={cn("mt-2 grid gap-2", canEditDay && canWrite && "sm:grid-cols-2")}>
+            {canEditDay ? (
+              <button type="button" disabled={!dayEditable || loading} onClick={openDay} className={choice}>
+                <span className="text-base font-bold">{loading ? "여는 중…" : "당일만 수정"}</span>
+                <span className="text-text-dim text-sm break-keep">
+                  {dayEditable ? `${md} 하루만 바뀌어요 · 평소 배정은 그대로` : "지난 날짜는 바꿀 수 없어요"}
+                </span>
+              </button>
+            ) : null}
+            {canWrite ? (
+              <button
+                type="button"
+                aria-pressed={mode === "fixed"}
+                onClick={() => setMode("fixed")}
+                className={cn(choice, mode === "fixed" && "border-primary bg-primary-soft")}
+              >
+                <span className="text-base font-bold">고정으로 변경</span>
+                <span className="text-text-dim text-sm break-keep">매주 적용 · 노선 편성의 배정이 바뀌어요</span>
+              </button>
+            ) : null}
           </div>
 
           {error ? <p className="text-danger mt-2 text-sm font-bold break-keep">{error}</p> : null}
 
-          {mode === "fixed" ? (
+          {mode === "fixed" && canWrite ? (
             mine.length > 0 ? (
               <div className="mt-2">
                 <p className="text-text-dim text-sm">평소 {word} 배정 — 정류장·요일을 바꾸면 바로 저장돼요.</p>

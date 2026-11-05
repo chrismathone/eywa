@@ -38,6 +38,7 @@ export function TeacherCompEditor({
   commissionRate,
   monthlyBase,
   groupRates,
+  canEdit,
 }: {
   userId: string;
   salaryType: SalaryType | null;
@@ -45,6 +46,11 @@ export function TeacherCompEditor({
   monthlyBase: number;
   /** 과정별 배분율(초·중·고·수능·특강). 비면 기본 비율만 쓴다. */
   groupRates?: GroupRates | null;
+  /**
+   * 급여 정책 쓰기(`canManageSalary` — 서버 saveTeacherComp와 같은 판정). false면 요약 글만 보이고
+   * 편집 폼을 여는 단추를 그리지 않는다(원장 2026-11-05 읽기 권한 규칙, write-lock.ts).
+   */
+  canEdit: boolean;
 }) {
   const [state, formAction] = useActionState<SaveCompState, FormData>(saveTeacherComp, undefined);
   const [open, setOpen] = useState(false);
@@ -62,6 +68,16 @@ export function TeacherCompEditor({
     monthlyBase,
     groupRates,
   });
+
+  if (!canEdit) {
+    // 읽기 권한 — 지금 방식 요약만(비활성 단추로 남겨 두지 않는다).
+    return (
+      <span className="text-text-dim inline-flex items-center gap-1 px-2 py-1 text-xs">
+        {summary}
+        {groupSpan ? <span className="text-text-faint">{groupSpan}</span> : null}
+      </span>
+    );
+  }
 
   if (!open) {
     return (

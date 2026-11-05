@@ -28,6 +28,7 @@ import type { TeacherOption } from "@/features/students/server/queries";
 import type { ConsultationTemplate } from "@/features/owner/settings-types";
 import { fillTemplate, formatConsultDate, type TemplateVars } from "@/features/consultations/template-vars";
 import type { NewcomerLinkTarget } from "@/features/newcomers/consult-link";
+import { writeLockedNote, writeLockedPlaceholder } from "@/lib/write-lock";
 import { NewcomerLinkField } from "./newcomer-link-field";
 import { ConsultationClassField } from "./class-field";
 
@@ -99,6 +100,7 @@ export function ConsultationForm({
   currentUserName,
   newcomerTargets,
   classSupported = false,
+  readOnly = false,
 }: {
   mode: Mode;
   initialValue?: ConsultationFormValue;
@@ -114,6 +116,12 @@ export function ConsultationForm({
   newcomerTargets?: NewcomerLinkTarget[];
   /** 0318a(반 칸)가 DB에 있나 — 없으면 '반' 칸을 그리지 않는다([[#95]]). */
   classSupported?: boolean;
+  /**
+   * 원생상담 **읽기 권한**(서버 게이트와 같은 `canWriteTenant(…,"consultations")`를 page가 계산) — 칸은 전부 비활성 +
+   * 권한 안내 placeholder, 저장 단추는 그리지 않는다. 초안 자동저장·동시편집 표시도 켜지 않는다(원장 2026-11-05 — 양식을 다 쓴 뒤에야
+   * "권한이 없습니다"가 뜨지 않게, src/lib/write-lock.ts).
+   */
+  readOnly?: boolean;
 }) {
   const action = mode === "create" ? createStudentConsultation : updateStudentConsultation;
   const [state, formAction] = useActionState<ConsultationFormState, FormData>(action, undefined);
@@ -265,6 +273,8 @@ export function ConsultationForm({
     scope: mode === "create" ? formDraftScope("student-consultation:new", formId) : `student-consultation:${initialValue?.id ?? "edit"}`,
     restoreSince: mode === "create" ? () => recordingSince(formId) : undefined,
     formRef,
+    // 읽기 권한이면 쓸 수 없는 칸의 초안을 남기거나 되살리지 않는다.
+    enabled: !readOnly,
     // 신규생 관리 칸은 학생마다 선택지가 달라 초안으로 되살리면 엉뚱한 칸이 잡힌다.
     // 반(classId·classPick)도 학생·일시에 따라 선택지가 달라 초안으로 되살리지 않는다(자동 판정이 다시 잡는다).
     exclude: ["studentId", "newcomerLink", "newcomerLinkRow", "classId", "classPick"],
@@ -273,9 +283,12 @@ export function ConsultationForm({
   const clearDraft = draft.clear;
 
   // 동시편집 가드(same-browser 저장경고) + cross-user "수정중" presence(edit 모드).
+  // 🔴 읽기 권한은 열기만 해도 남에게 "수정중"으로 뜨지 않게 scope를 넘기지 않는다. 남이 고치는 중이라는 띠는 그대로 본다.
   const editScope = mode === "edit" && initialValue?.id ? `student-consultation:${initialValue.id}` : undefined;
-  const { notifySaved } = useConcurrentEditGuard({ scope: editScope, formRef });
-  const { markSaved } = useUnsavedGuard({ formRef });
+  const { notifySaved } = useConcurrentEditGuard({ scope: readOnly ? undefined : editScope, formRef });
+  const { markSaved } = useUnsavedGuard({ formRef, enabled: !readOnly });
+  /** 비활성 칸의 안내 — 읽기 권한일 때만(평소 placeholder는 그대로). */
+  const locked = (normal?: string) => (readOnly ? writeLockedPlaceholder("consultations") : normal);
 
   // 저장 성공 확정(nonce) 후에만 초안 삭제 → 이동(B-2). 제출 시점 무조건 clear는 서버 검증 실패 시
   // (학생 미선택·요약 5자 미만 등) 입력이 먼저 사라져 창을 닫으면 복구 불가라 성공 기반으로 전환.
@@ -297,7 +310,11 @@ export function ConsultationForm({
       {mode === "edit" && initialValue?.id ? (
         <input type="hidden" name="id" value={initialValue.id} />
       ) : null}
+      {/* 값이 차 있는 칸(상담사·일시·대상 등)은 placeholder가 안 보여 한 줄로 알린다. */}
+      {readOnly ? <p className="text-muted-foreground text-sm">{writeLockedNote("consultations")}</p> : null}
 
+      {/* 읽기 권한이면 fieldset째 비활성 — 반·신규생 칸처럼 안쪽 부품의 선택·단추까지 한 번에 잠긴다. */}
+      <fieldset disabled={readOnly} className="m-0 min-w-0 border-0 p-0">
       {/* 2단 배치 — 좌: 짧은 메타 필드(컴팩트) / 우: 상담 양식 + 큰 요약(주인공, 창 높이를 채움).
           좁은 창(md 미만)에선 자동으로 세로 1열로 접힘. minmax(0,…)로 그리드 자식 overflow 방지(좁은 창 줄바꿈 깨짐 예방). */}
       <div className="grid gap-5 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] md:items-stretch">
@@ -308,7 +325,8 @@ export function ConsultationForm({
               name="studentId"
               defaultValue={v.studentId}
               onValueChange={setLinkStudentId}
-              placeholder="학생 선택..."
+              disabled={readOnly}
+              placeholder={locked("학생 선택...")}
               searchPlaceholder="학생 이름 검색..."
               options={students.map((s) => ({
                 value: s.id,
@@ -382,7 +400,7 @@ export function ConsultationForm({
               name="subject"
               ref={subjectRef}
               defaultValue={v.subject ?? initialAutoSubject}
-              placeholder="예: 수학"
+              placeholder={locked("예: 수학")}
               className={inputClass}
             />
           </Field>
@@ -416,7 +434,7 @@ export function ConsultationForm({
                 id="followUpAction"
                 name="followUpAction"
                 defaultValue={v.followUpAction ?? ""}
-                placeholder="예: 다음주 화요일 학부모 통화"
+                placeholder={locked("예: 다음주 화요일 학부모 통화")}
                 className={inputClass}
               />
             </Field>
@@ -472,13 +490,14 @@ export function ConsultationForm({
               ref={summaryRef}
               defaultValue={initSummary}
               required
-              placeholder="상담 내용 요약"
+              placeholder={locked("상담 내용 요약")}
               className={`${inputClass} min-h-[18rem] flex-1 resize-y break-keep`}
             />
             {errors.summary ? <p className="text-chart-4 text-xs">{errors.summary}</p> : null}
           </div>
         </div>
       </div>
+      </fieldset>
 
       {state?.error ? (
         <p className="text-chart-4 bg-chart-4/10 border-chart-4/20 inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm">
@@ -487,9 +506,11 @@ export function ConsultationForm({
         </p>
       ) : null}
 
-      <FormActionBar>
-        <SubmitButton mode={mode} />
-      </FormActionBar>
+      {readOnly ? null : (
+        <FormActionBar>
+          <SubmitButton mode={mode} />
+        </FormActionBar>
+      )}
     </form>
   );
 }
