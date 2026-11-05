@@ -24,14 +24,9 @@ export const SEND_CLASS_SUBJECTS: ReadonlySet<string> = new Set(["math", "subjec
  * 🔴 2026-11-05 원장 *"이제 안쓰는 기능들 정리하고 반 보드 동기화만 남기면 될듯"* — 옛 보고서 설정 '수학 발송 경로'
  *    (기존 방식 = 1인 보드 · 일부 선생님만 반별)를 걷었다. 워커 [`class-route-decide.mjs`](../../../scripts/_classnote/class-route-decide.mjs)
  *    `decideRoute`도 수학이면 늘 반별이다(같은 규칙 — send-class.test.ts가 함께 고정한다).
- * ⚠️ 둘째 인자(강사 이름)는 옛 '일부 선생님만' 판정의 자리라 **쓰지 않는다**. 진행 중인 다른 작업(영어 개별 공지 반 방 경로)이
- *    같은 호출 모양을 쓰고 있어 인자만 남겨 두었다 — 그 작업이 main에 들어간 뒤 호출부와 함께 걷는다.
+ * 인자는 설정 하나뿐이다 — 옛 '일부 선생님만' 판정 자리였던 둘째 인자(강사 이름)와 공지 경로의 `senderName`은 호출부와 함께 걷었다(2026-11-05).
  */
-export function classRouteActive(
-  settings: { modules?: { disabled?: readonly string[] | null } | null },
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 옛 '일부 선생님만' 자리(위 ⚠️) — 호출부 정리 때 함께 걷는다
-  _teacherName?: string | null,
-): boolean {
+export function classRouteActive(settings: { modules?: { disabled?: readonly string[] | null } | null }): boolean {
   return !(settings.modules?.disabled ?? []).includes("classnote");
 }
 

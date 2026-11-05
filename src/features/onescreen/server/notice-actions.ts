@@ -191,7 +191,6 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
         supabase,
         tenantId: user.tenantId,
         settings,
-        senderName: teacherId ? user.displayName : null,
         candidates,
       });
     } catch (e) {

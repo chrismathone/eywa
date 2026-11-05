@@ -57,7 +57,6 @@ type Report = {
   classnote_status: string | null;
   classnote_sent_at: string | null;
   created_by: string | null;
-  teacher_name: string | null;
   source: string | null;
 };
 type Att = { id: string; class_id: string; student_id: string; session_date: string; status: string; slot_start: string | null; recorded_at: string };
@@ -77,7 +76,7 @@ const chunks = <T,>(xs: T[], n = 100) => Array.from({ length: Math.ceil(xs.lengt
 const reports = await pageAll<Report>((f, t) =>
   sb
     .from("lesson_reports")
-    .select("id, tenant_id, student_id, report_date, subject, makeup_class_id, classnote_class_id, classnote_status, classnote_sent_at, created_by, teacher_name, source")
+    .select("id, tenant_id, student_id, report_date, subject, makeup_class_id, classnote_class_id, classnote_status, classnote_sent_at, created_by, source")
     .eq("makeup", true)
     .is("class_id", null)
     .gte("report_date", since)
@@ -146,7 +145,7 @@ for (const r of reports) {
     (a) => a.class_id === r.makeup_class_id || isOwnerPool(a.class_id) || (a.status === "makeup" && classes.get(a.class_id)?.subject === subject),
   );
   const settings = settingsByTenant.get(r.tenant_id)!;
-  const requireAnchor = SEND_CLASS_SUBJECTS.has(subject) && classRouteActive(settings, r.teacher_name);
+  const requireAnchor = SEND_CLASS_SUBJECTS.has(subject) && classRouteActive(settings);
   const violations = makeupInvariantViolations({
     report: { makeup: true, classId: null, makeupClassId: r.makeup_class_id, classnoteClassId: r.classnote_class_id },
     cells: cells.map((a) => ({ classId: a.class_id, status: a.status })),

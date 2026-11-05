@@ -17,11 +17,13 @@ describe("classRouteActive — 수학은 늘 반별, ClassNote 모듈이 꺼진 
   it("모듈 켜짐 = 켜짐", () => expect(classRouteActive({ modules: { disabled: [] } })).toBe(true));
   it("🔴 모듈 꺼짐 = 꺼짐", () => expect(classRouteActive({ modules: { disabled: ["classnote"] } })).toBe(false));
   it("모듈 정보가 없으면 켜진 것으로(침산 — 꺼진 모듈 없음)", () => expect(classRouteActive({})).toBe(true));
-  it("🔴 옛 '수학 발송 경로' 저장값(기존 방식·일부 선생님만)과 강사 이름은 판정에 쓰지 않는다(2026-11-05 걷음)", () => {
+  it("🔴 옛 '수학 발송 경로' 저장값(기존 방식·일부 선생님만)은 판정에 쓰지 않는다(2026-11-05 걷음 — 강사 이름 인자도 없앰)", () => {
     const old = { modules: { disabled: [] }, report: { classnoteMathRoute: "personal", classnoteMathRoutePilot: ["남정화"] } };
-    expect(classRouteActive(old, "이성우")).toBe(true);
+    expect(classRouteActive(old)).toBe(true);
     const pilotOld = { ...old, report: { classnoteMathRoute: "pilot", classnoteMathRoutePilot: [] as string[] } };
-    expect(classRouteActive(pilotOld, null)).toBe(true);
+    expect(classRouteActive(pilotOld)).toBe(true);
+    // 인자는 설정 하나뿐 — 옛 '일부 선생님만' 자리(강사 이름)를 다시 받지 않는다.
+    expect(classRouteActive.length).toBe(1);
   });
 });
 

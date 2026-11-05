@@ -1,5 +1,9 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-05 — 원스크린: SRS 보고서는 진도 없이 저장·발송
+
+- 원장 *"srs보고서의 경우 진도 영역이 필요없자나 필수로 넣지말아줘"*. 영어 행 + 지금 글이 SRS(JJ) 글이면(`isProgressOptionalReport`, jj-books.ts — 사랑의 한마디 선택과 같은 판정) 진도 게이트를 건너뛴다 · `isReportEligible`/`isRowActionable`에 `progressOptional` · 표·카드·일괄 저장/발송/자동작성·첨부 저장 전부 같은 값. 서버는 원래 진도를 요구하지 않는다.
+
 ## 2026-11-05 — EiE 일일 보고서(수학 보고서 표) · EiE 월간 보고서(시트 모양 · Monthly Test 점수 동결 줄 + Teacher's Comment) — 영어 기본 템플릿 둘 · 원스크린 로스터가 영어 반 Monthly Test 점수를 싣는다(실패·s2_0023 미적용이면 빈 결과) — 상세 [decisions/reports-ai.md](decisions/reports-ai.md) 'EiE 보고서 두 종류'
 
 ## 2026-11-05 — 보고서 설정: 옛 '수학 발송 경로' 걷음 — '수학 반 보드'(설명 + 지금 반 보드 동기화)만
@@ -9,6 +13,7 @@
 - 앱: `classRouteActive` = ClassNote 모듈 켜짐 하나(강사 이름 인자는 쓰지 않음 — 진행 중인 영어 개별 공지 반 방 작업이 같은 호출 모양을 써서 인자만 남김, 그 작업 병합 뒤 호출부와 함께 걷는다) · `classRouteAppliesTo` 삭제 · 설정 스키마·기본값에서 두 칸 삭제(저장된 값은 다음 보고서 설정 저장 때 빠진다).
 - 워커: `decideRoute(report)` = 수학이면 반별(설정을 읽지 않는다) · `normalizeRouteConfig`·`getClassnoteMathRoute` 삭제. AywaSync 1.0.15(순번 17)에 실렸다 — **동작 변화 없음**(운영 저장값 = 침산 `class` 하나, 다른 지점은 빈 값 = 반별).
 - SQL 변경 없음(발송 기록 스냅샷 `lesson_report_send_private.snapshot`은 키가 있을 때만 담는다 — 읽는 곳 없음).
+- 후속(영어 반 방 병합 뒤, 가지 fix/math-route-followup): 위에서 남겨 둔 강사 이름 인자를 걷었다 — `classRouteActive(settings)` 한 인자 · 호출부 10곳(앱 9 + `scripts/_reports/makeup-class-drift.mts`) · 공지 경로 `routeNoticeCandidates`의 `senderName` 삭제. 동작 변화 없음(지운 인자 식에 부수효과 없음 — 적대적 리뷰 확인).
 
 ## 2026-11-05 — 영어 개별 공지·교재요청서 = 영어 반 방 1:1(AywaSync 1.0.15 · main 072d6f3b2)
 

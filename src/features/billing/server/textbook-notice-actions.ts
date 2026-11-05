@@ -122,7 +122,7 @@ export async function prepareTextbookNotice(orderIds: string[]): Promise<Prepare
   try {
     const supabase = await createClient();
     const senderTeacherId = await effectiveTeacherId();
-    if (classRouteActive(settings, senderTeacherId ? user.displayName : null) && (await noticeClassRouteWorkerReady(supabase))) {
+    if (classRouteActive(settings) && (await noticeClassRouteWorkerReady(supabase))) {
       const teachers = teachersByStudent(loaded.rows, owners, senderTeacherId);
       const mathStudents = [...new Set(studentIds)].filter((id) => (boards.subjects[id] ?? []).some((k) => SEND_CLASS_SUBJECTS.has(k)));
       const picks = await resolveNoticeClasses(

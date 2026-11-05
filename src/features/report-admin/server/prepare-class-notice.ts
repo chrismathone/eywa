@@ -86,7 +86,7 @@ async function prepare(input: ClassNoticeInput) {
     // 없으면 지금처럼 1인 보드(2026-11-04). 조회 실패는 발송을 막는다.
     let routed: Awaited<ReturnType<typeof routeNoticeCandidates>>;
     try {
-      routed = await routeNoticeCandidates({ supabase, tenantId: user.tenantId, settings, senderName: null, candidates });
+      routed = await routeNoticeCandidates({ supabase, tenantId: user.tenantId, settings, candidates });
     } catch (e) {
       console.error("[notice] 반 보드 경로 판정 실패", e instanceof Error ? e.message : e);
       return { ok: false as const, error: "보낼 반을 확인하지 못해 발송하지 않았습니다 — 잠시 뒤 다시 시도해 주세요" };

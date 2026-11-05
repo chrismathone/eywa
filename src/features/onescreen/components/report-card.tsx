@@ -37,7 +37,7 @@ import {
 import { FieldSelect } from "./field-select";
 import { isMathBookRow, useMathBookListId } from "./math-book-list";
 import { JjBookPicker } from "./jj-book-picker";
-import { isJjSheetDraft, isJjSheetReport } from "../jj-books";
+import { isJjSheetDraft, isJjSheetReport, isProgressOptionalReport } from "../jj-books";
 import { LoveNoteDraftButton } from "./love-note-draft-button";
 import { HomeworkRateInput } from "./homework-rate-input";
 import { VideoHomeworkCheck } from "@/features/video-homework/components/video-homework-provider";
@@ -338,6 +338,7 @@ export function ReportCard({
   const oneLineRow = pilot || subject.subjectKey === "english";
   // JJ 수업보고서 글 — 사랑의 한마디는 선택(비우면 그 항목이 빠진다, 원장 2026-10-27).
   const jjOptionalNote = subject.subjectKey === "english" && isJjSheetDraft(rep);
+  const progressOptional = isProgressOptionalReport(subject, rep); // SRS 글은 진도 항목이 없다(원장 2026-11-05)
   const sendGate = evaluateSendGate({
     lang, // 🔴 판정이 아니라 **글자**만 갈린다(canSend·reasons 불변, send-gate.ts)
     needsAutoWrite:
@@ -362,7 +363,7 @@ export function ReportCard({
     alreadySent,
     reportOptout: optoutRow, // 미발송 반(0174a) — 표뷰와 같은 단일 소스
     isAbsent,
-    hasProgress: isReportEligible(subject),
+    hasProgress: isReportEligible(subject, progressOptional),
     // 멘트 = 학부모에게 나갈 글 — 영어 글의 그림·사진 자리 줄뿐이면 서버가 막으니 여기서도 '멘트 없음'(표뷰와 같은 판정).
     hasDraft: hasTextBesidesMarkers(rep.draft),
     // 출결 쓰기 권한 없음 = 게이트 해당 없음(P0-3) — 표뷰(grid-row)와 동일 예외.
@@ -793,11 +794,11 @@ export function ReportCard({
             <Button
               variant="ghost"
               size="sm"
-              disabled={generating || !isRowActionable(subject, "autowrite") || alreadySent}
+              disabled={generating || !isRowActionable(subject, "autowrite", undefined, { progressOptional }) || alreadySent}
               title={
                 alreadySent
                   ? t("os.row.genSentLocked")
-                  : isRowActionable(subject, "autowrite")
+                  : isRowActionable(subject, "autowrite", undefined, { progressOptional })
                   ? undefined
                   : optoutRow
                     ? lockNotice
@@ -1009,11 +1010,11 @@ export function ReportCard({
           <Button
             variant="outline"
             size="sm"
-            disabled={readonlyView || !isRowActionable(subject, "save") || alreadySent}
+            disabled={readonlyView || !isRowActionable(subject, "save", undefined, { progressOptional }) || alreadySent}
             title={
               alreadySent
                 ? t("os.card.saveSentTitle")
-                : isRowActionable(subject, "save")
+                : isRowActionable(subject, "save", undefined, { progressOptional })
                   ? t("os.card.saveTitle")
                   : optoutRow
                     ? lockNotice // 진도 칸이 잠겨 있어 "진도를 먼저 입력하세요"는 거짓 안내다
@@ -1026,9 +1027,9 @@ export function ReportCard({
           <Button
             variant="ghost"
             size="sm"
-            disabled={readonlyView || !isRowActionable(subject, "save")}
+            disabled={readonlyView || !isRowActionable(subject, "save", undefined, { progressOptional })}
             title={
-              isRowActionable(subject, "save")
+              isRowActionable(subject, "save", undefined, { progressOptional })
                 ? t("os.card.pdfTitle")
                 : optoutRow
                   ? lockNotice

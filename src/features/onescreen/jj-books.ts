@@ -38,6 +38,17 @@ export function isJjSheetDraft(rep: { templateId?: string; draft?: string } | un
   return rep?.templateId === BUILTIN_JJ_SHEET_TEMPLATE_ID || isSrsDraftText(rep?.draft);
 }
 
+/**
+ * 진도 없이 저장·발송할 수 있는 글인가 — SRS 보고서(JJ 글)는 진도 항목이 없다(원장 2026-11-05 *"srs보고서의 경우 진도 영역이 필요없자나 필수로 넣지말아줘"*).
+ * 판정은 사랑의 한마디 선택(`isJjSheetDraft`)과 같다 — 영어 행 + 지금 글이 JJ 글.
+ */
+export function isProgressOptionalReport(
+  subject: { subjectKey?: string | null },
+  rep: { templateId?: string; draft?: string } | undefined | null,
+): boolean {
+  return subject.subjectKey === "english" && isJjSheetDraft(rep);
+}
+
 /** 교재 칸 값 → 고른 JJ 교재 / 목록 밖 조각. 구분은 ` · `·`,`·`/` 어느 것이든. */
 export function parseJjBooks(value: string | null | undefined): { picked: JjBook[]; other: string[] } {
   const parts = (value ?? "")
