@@ -17,6 +17,7 @@ import { completedEnrollmentIds } from "./completed-target";
 import { appliedAuditMeta } from "../audit-meta";
 import { loadReportBilling } from "./billing";
 import { withoutBillingFields } from "../prefill";
+import { REPORT_UNCONFIRMED_LIMIT } from "../autosave";
 
 export type ReportResult = { ok: true; id: string } | { error: string };
 function refresh() {
@@ -96,7 +97,11 @@ export async function changeWithdrawalReport(id: string, action: ReportAction, r
   if (!record) return { error: "보고서에 접근할 수 없습니다." };
   if (action === "cancel" && record.report.requested_by !== viewer.user.id && !cancelsAsDirector(viewer.user.systemRole, !!viewer.teacherId))
     return { error: "작성 요청을 보낸 사람이나 원장만 취소할 수 있습니다." };
-  const payload: { revision: number; body?: unknown; comment?: string } = { revision };
+  // 취소는 본문과 상관없다 — 화면이 본 상태 그대로면 서버가 방금 읽은 revision으로 처리한다(2026-11-05 재리뷰: 강사가 쓰는 동안
+  // 자동 저장이 revision을 계속 올려 요청자 · 원장의 취소가 '보고서가 변경되었습니다'로 거절됐다). 상태가 바뀌었으면(그사이 제출 · 승인)
+  // 화면의 revision 그대로 보내 DB가 거절한다 — 새로 보고 다시 판단하게.
+  const seenStatus = action === "cancel" && input && typeof input === "object" ? (input as { seenStatus?: unknown }).seenStatus : undefined;
+  const payload: { revision: number; body?: unknown; comment?: string } = { revision: seenStatus === record.report.status ? record.report.revision : revision };
   if (action === "save" || action === "submit") {
     const body = await reportBodyFor(record, input, action === "submit");
     if ("error" in body) return body;
@@ -117,16 +122,22 @@ export async function changeWithdrawalReport(id: string, action: ReportAction, r
   return { ok: true, id };
 }
 
+/** 작성 칸만 검사 형식으로(수납 칸 빼고) — 저장 본문 · 충돌 판정이 같은 값을 본다. */
+function writtenBody(input: unknown): { written: ReportBody } | { error: string } {
+  const parsed = bodySchema.safeParse(withoutBillingFields(input));
+  return parsed.success ? { written: parsed.data } : { error: parsed.error.issues[0]?.message ?? "보고서 내용을 확인해 주세요." };
+}
 /** 작성·제출 본문 — 화면 값 검사(제출이면 제출 기준까지) · 연결할 수 있는 상담만 · 수납 칸은 서버가 지금 장부로 채운다. */
 type BodyRecord = { report: WithdrawalReport; consultations: readonly { id: string }[] };
 /** 저장·제출 본문 — 작성 칸 검사 + 연결 상담 확인 + 수납은 지금 장부. `retry` = 다시 하면 될 수 있는 실패(장부 조회). */
 async function reportBodyFor(record: BodyRecord, input: unknown, submit: boolean): Promise<{ body: unknown; written: ReportBody } | { error: string; retry?: boolean }> {
-  const parsed = bodySchema.safeParse(withoutBillingFields(input));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "보고서 내용을 확인해 주세요." };
-  if (submit) { const error = submissionError(parsed.data); if (error) return { error }; }
+  const parsed = writtenBody(input);
+  if ("error" in parsed) return parsed;
+  const written = parsed.written;
+  if (submit) { const error = submissionError(written); if (error) return { error }; }
   const existing = record.report.body.consultationIds ?? [];
-  if (parsed.data.consultationIds?.some(id => !existing.includes(id) && !record.consultations.some(c => c.id === id))) return { error: "연결할 수 없는 상담기록이 포함되어 있습니다." };
-  try { return { body: { ...parsed.data, ...await loadReportBilling(record.report) }, written: parsed.data }; }
+  if (written.consultationIds?.some(id => !existing.includes(id) && !record.consultations.some(c => c.id === id))) return { error: "연결할 수 없는 상담기록이 포함되어 있습니다." };
+  try { return { body: { ...written, ...await loadReportBilling(record.report) }, written }; }
   catch { return { error: "수납 정보를 확인하지 못했습니다. 잠시 후 다시 저장해 주세요.", retry: true }; }
 }
 
@@ -156,26 +167,39 @@ const AUTOSAVE_OPERATION = "자동 저장";
  * - 감사로그는 그 보고서를 같은 사람이 10분 안에 이어 자동 저장하면 새 줄을 남기지 않는다(시간표 메모 시트와 같은 규칙).
  *   DB 처리 이력도 같은 규칙으로 줄을 아낀다(s2_0024 — 마지막 이력이 같은 사람의 10분 안 '임시 저장'이면 새 줄을 넣지 않는다).
  * - revision이 다르면(다른 화면이 먼저 고침) `conflict` — 자동 저장기가 멈추고 새로고침을 안내한다(내 글로 덮지 않는다).
+ *   단 서버 글이 지금 글이거나 결과를 모르던 내 글(`unconfirmed`)이면 응답만 끊긴 내 저장이다 — 받아들이거나 그 위에 이어 쓴다.
  */
-export async function autosaveWithdrawalReport(id: string, revision: number, input: unknown): Promise<AutosaveResult> {
+export async function autosaveWithdrawalReport(id: string, revision: number, input: unknown, unconfirmed: unknown = []): Promise<AutosaveResult> {
   const viewer = await reportViewer();
   if (!viewer?.writable) return { ok: false, conflict: false, error: "이 화면에서는 보고서를 수정할 수 없습니다." };
   if (!/^[0-9a-f-]{36}$/i.test(id) || !Number.isSafeInteger(revision)) return { ok: false, conflict: false, error: "요청 내용을 확인해 주세요." };
   const ids = input && typeof input === "object" && Array.isArray((input as { consultationIds?: unknown }).consultationIds)
     ? ((input as { consultationIds: unknown[] }).consultationIds).filter((c): c is string => typeof c === "string") : [];
-  const record = await getReportForSave(id, ids);
+  let record: Awaited<ReturnType<typeof getReportForSave>>;
+  // 조회 오류는 다시 보낼 실패 — 없음 · 볼 수 없음만 다시 해도 같은 거절이다(2026-11-05 재리뷰).
+  try { record = await getReportForSave(id, ids); }
+  catch { return { ok: false, conflict: false, error: "서버에서 오류가 났습니다.", retry: true }; }
   if (!record) return { ok: false, conflict: false, error: "보고서에 접근할 수 없습니다." };
+  const current = writtenBody(input);
+  if ("error" in current) return { ok: false, conflict: false, error: current.error };
+  let base = revision;
+  if (record.report.revision !== revision) {
+    // revision이 다르면 상담 검사 · 장부 조회 **전에** 판정한다(2026-11-05 재리뷰: 충돌이 검사 오류 · 장부 재시도에 가려졌다).
+    // 앞선 내 저장이 들어갔는데 응답만 끊긴 경우(모바일 등)만 받아들인다 — 그 밖은 충돌(덮지 않는다).
+    // - 서버 글 = 지금 보내는 글: 쓸 것 없이 그 revision을 받아들인다.
+    // - 서버 글 = 결과를 모르던 내 글(`unconfirmed` — 저장 중 이어 쓴 경우): 서버 revision 위에 지금 글을 쓴다.
+    const stored = record.report;
+    const mine = stored.revision > revision && stored.teacher_id === viewer.user.id && ["requested", "revision"].includes(stored.status);
+    if (mine && sameWrittenBody(stored.body, current.written)) return { ok: true, revision: stored.revision, savedAt: stored.updated_at };
+    const earlier = Array.isArray(unconfirmed) ? unconfirmed.slice(-REPORT_UNCONFIRMED_LIMIT) : [];
+    const landed = mine && earlier.some((b) => { const w = writtenBody(b); return "written" in w && sameWrittenBody(stored.body, w.written); });
+    if (!landed) return { ok: false, conflict: true, error: "다른 화면에서 이 보고서가 바뀌었습니다." };
+    base = stored.revision;
+  }
   const body = await reportBodyFor(record, input, false);
   if ("error" in body) return { ok: false, conflict: false, error: body.error, retry: body.retry };
-  if (record.report.revision !== revision) {
-    // 앞선 저장이 들어갔는데 응답만 끊긴 경우(모바일 등) — 서버의 작성 칸이 지금 보내는 글과 같으면 그 revision을 받아들인다
-    // (2026-11-05 리뷰: 다시 보낸 저장이 자기 저장과 충돌해 '다른 화면에서 바뀌었습니다'로 멈췄다). 다르면 충돌 — 덮지 않는다.
-    const mine = record.report.revision > revision && record.report.teacher_id === viewer.user.id && ["requested", "revision"].includes(record.report.status);
-    if (mine && sameWrittenBody(record.report.body, body.written)) return { ok: true, revision: record.report.revision, savedAt: record.report.updated_at };
-    return { ok: false, conflict: true, error: "다른 화면에서 이 보고서가 바뀌었습니다." };
-  }
   const { data, error } = await createAdminClient().rpc("transition_withdrawal_report", {
-    p_tenant: viewer.user.tenantId, p_actor: viewer.user.id, p_report: id, p_action: "save", p_payload: { revision, body: body.body },
+    p_tenant: viewer.user.tenantId, p_actor: viewer.user.id, p_report: id, p_action: "save", p_payload: { revision: base, body: body.body },
   }).single();
   if (error) {
     const message = describeDbError(error, { fallback: "서버에서 오류가 났습니다." }).message;

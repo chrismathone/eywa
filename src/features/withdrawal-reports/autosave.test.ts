@@ -7,9 +7,9 @@ function harness(initialRevision = 1, maxRetries?: number) {
   const delays: number[] = [];
   let seq = 0;
   const statuses: ReportSaverStatus[] = [];
-  const calls: { revision: number; body: string; resolve: (r: ReportSaveResult) => void; reject: (e: unknown) => void }[] = [];
+  const calls: { revision: number; body: string; unconfirmed: readonly string[]; resolve: (r: ReportSaveResult) => void; reject: (e: unknown) => void }[] = [];
   const saver = createReportSaver<string>(initialRevision, {
-    save: (revision, body) => new Promise((resolve, reject) => { calls.push({ revision, body, resolve, reject }); }),
+    save: (revision, body, unconfirmed) => new Promise((resolve, reject) => { calls.push({ revision, body, unconfirmed, resolve, reject }); }),
     onStatus: (s) => statuses.push(s),
     now: () => 1000,
     maxRetries,
@@ -141,6 +141,42 @@ describe("퇴원보고서 자동 저장기", () => {
     h.calls[0].resolve({ ok: true, revision: 2 }); await h.tick();
     expect(h.saver.syncServer(2)).toBe("ignored"); // 메아리
     expect(h.last()).toEqual({ kind: "saved", at: 1000 });
+  });
+
+  // 2026-11-05 재리뷰 A — 응답만 끊긴 저장(모바일): 결과를 모르는 글을 기억해 다음 저장에 함께 보낸다(서버가 '내 저장이 들어갔나' 판정).
+  it("결과를 모르는 저장 뒤 이어 쓴 글은 그 글을 함께 보낸다 — 성공하면 잊는다", async () => {
+    const h = harness(3);
+    h.saver.change("A"); h.fire(); await h.tick();
+    h.calls[0].reject(new Error("offline")); await h.tick();
+    h.saver.change("AB"); h.fire(); await h.tick();
+    expect(h.calls.map((c) => [c.revision, c.body, c.unconfirmed])).toEqual([[3, "A", []], [3, "AB", ["A"]]]);
+    h.calls[1].resolve({ ok: true, revision: 5 }); await h.tick();
+    h.saver.change("ABC"); h.fire(); await h.tick();
+    expect(h.calls.map((c) => [c.revision, c.unconfirmed]).at(-1)).toEqual([5, []]);
+  });
+
+  it("결과를 모르는 저장이 있으면 새로고침 revision은 판정하지 않는다(ignored) — 재시도가 판정한다", async () => {
+    const h = harness(3);
+    h.saver.change("A"); h.fire(); await h.tick();
+    h.calls[0].reject(new Error("offline")); await h.tick();
+    expect(h.saver.syncServer(4)).toBe("ignored"); // 내 저장이 들어간 revision일 수 있다
+    expect(h.last()).toEqual({ kind: "error", message: REPORT_AUTOSAVE_NETWORK_ERROR, retrying: true });
+    h.fire(); await h.tick();
+    expect(h.calls.map((c) => [c.revision, c.body, c.unconfirmed])).toEqual([[3, "A", []], [3, "A", ["A"]]]);
+  });
+
+  it("검사 거절(다시 해도 안 될 실패)은 안 들어간 게 확실해 기억하지 않는다 · 결과 모르는 글은 최근 3개만", async () => {
+    const h = harness(1, 10);
+    h.saver.change("가"); h.fire(); await h.tick();
+    h.calls[0].resolve({ ok: false, conflict: false, error: "퇴원사유와 미납 여부를 확인해 주세요." }); await h.tick();
+    h.saver.change("가나"); h.fire(); await h.tick();
+    expect(h.calls[1].unconfirmed).toEqual([]);
+    for (const text of ["1", "2", "3", "4"]) {
+      h.calls.at(-1)!.resolve({ ok: false, conflict: false, error: "서버에서 오류가 났습니다.", retry: true }); await h.tick();
+      h.saver.change(text); h.fire(); await h.tick();
+    }
+    expect(h.calls.map((c) => c.body)).toEqual(["가", "가나", "1", "2", "3", "4"]);
+    expect(h.calls.at(-1)?.unconfirmed).toEqual(["1", "2", "3"]);
   });
 
   it("stop 뒤에는 아무것도 보내지 않고 깨끗하다", async () => {

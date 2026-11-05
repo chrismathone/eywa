@@ -51,9 +51,10 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
   // 저장 단추는 없다: 칸을 고치면 잠시 뒤 저장하고, 제출·취소 직전에 남은 글을 마저 보낸 뒤 그 revision으로 처리한다.
   const [saveStatus, setSaveStatus] = useState<ReportSaverStatus>({ kind: "idle" });
   const saverRef = useRef<ReportSaver<ReportBody> | null>(null);
-  if (capabilities.edit && !saverRef.current) {
-    saverRef.current = createReportSaver<ReportBody>(r.revision, {
-      save: (revision, next) => autosaveWithdrawalReport(r.id, revision, next),
+  // 처음 그릴 때 한 번만 만든다(React 규칙의 ref 초기화 모양) — 상세는 상태가 바뀔 때만 다시 마운트되므로(page.tsx key) 작성 가능 여부도 그때 정해진다.
+  if (saverRef.current == null) {
+    if (capabilities.edit) saverRef.current = createReportSaver<ReportBody>(r.revision, {
+      save: (revision, next, unconfirmed) => autosaveWithdrawalReport(r.id, revision, next, unconfirmed),
       onStatus: setSaveStatus,
     });
   }
@@ -103,7 +104,9 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
           if (settled.conflict) { setError("다른 화면에서 이 보고서가 바뀌어 처리를 멈췄습니다. 쓴 내용을 복사해 두고 새로고침해 주세요."); return; }
           revision = settled.revision;
         }
-        const result = await changeWithdrawalReport(r.id, action, revision, action === "save" || action === "submit" ? body : action === "reject" ? comment : undefined);
+        // 취소는 본 상태를 함께 보낸다 — 같으면 서버가 지금 revision으로 처리한다(작성 중 자동 저장에 막히지 않게 · actions.ts).
+        const input = action === "save" || action === "submit" ? body : action === "reject" ? comment : action === "cancel" ? { seenStatus: r.status } : undefined;
+        const result = await changeWithdrawalReport(r.id, action, revision, input);
         if ("error" in result) { setError(result.error); return; }
         if (action === "submit" || action === "cancel") saver?.stop();
         setDecision(null); setComment(""); toast.success(`${REPORT_ACTION_LABEL[action]}했습니다.`); router.refresh();

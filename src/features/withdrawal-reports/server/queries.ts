@@ -176,7 +176,9 @@ export async function getReportForSave(id: string, consultationIds: readonly str
   const viewer = await reportViewer();
   if (!viewer) return null;
   const { data, error } = await createAdminClient().from("withdrawal_reports").select(REPORT_COLUMNS).eq("tenant_id", viewer.user.tenantId).eq("id", id).maybeSingle();
-  if (error || !data || !canReadReport(data as WithdrawalReport, viewer)) return null;
+  // 조회 오류는 던진다(자동 저장이 '다시 보낼 실패'로 받는다 — 2026-11-05 재리뷰). null = 없거나 볼 수 없음(다시 해도 같다).
+  if (error) throw new Error(error.message);
+  if (!data || !canReadReport(data as WithdrawalReport, viewer)) return null;
   const report = data as WithdrawalReport;
   const existing = report.body.consultationIds ?? [];
   const consultations = consultationIds.some(c => !existing.includes(c)) ? await reportConsultations(report, viewer) : [];

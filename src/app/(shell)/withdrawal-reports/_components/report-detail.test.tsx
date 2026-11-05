@@ -26,7 +26,7 @@ describe("report submission and review", () => {
     fireEvent.click(screen.getByRole("checkbox"));
     // 실시간 저장(원장 2026-11-05) — 저장 단추 없이 입력이 멎으면 한 번 저장한다.
     expect(screen.queryByRole("button", { name: "임시 저장" })).not.toBeInTheDocument();
-    await waitFor(() => expect(mocks.autosave).toHaveBeenCalledWith(r.id, r.revision, expect.objectContaining({ reasonDetail: "school_grades", consultationIds: [consultation.id] })), AUTOSAVE_WAIT);
+    await waitFor(() => expect(mocks.autosave).toHaveBeenCalledWith(r.id, r.revision, expect.objectContaining({ reasonDetail: "school_grades", consultationIds: [consultation.id] }), []), AUTOSAVE_WAIT);
     expect(mocks.autosave).toHaveBeenCalledTimes(1);
     expect(mocks.change).not.toHaveBeenCalled();
     await screen.findByText(/자동 저장됨/);
@@ -39,7 +39,7 @@ describe("report submission and review", () => {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     expect(mocks.autosave).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText("퇴원 상세사유"), { target: { value: "상담 결과 ".repeat(40) } });
-    await waitFor(() => expect(mocks.autosave).toHaveBeenCalledWith(r.id, 3, expect.objectContaining({ detail: "상담 결과 ".repeat(40) })), AUTOSAVE_WAIT);
+    await waitFor(() => expect(mocks.autosave).toHaveBeenCalledWith(r.id, 3, expect.objectContaining({ detail: "상담 결과 ".repeat(40) }), []), AUTOSAVE_WAIT);
     await screen.findByText(/자동 저장됨/);
     fireEvent.click(screen.getByRole("button", { name: "관리자에게 제출" }));
     fireEvent.click(screen.getByRole("button", { name: "보고서 제출 확인" }));
@@ -69,7 +69,7 @@ describe("report submission and review", () => {
     expect(screen.queryByLabelText("미납 여부")).not.toBeInTheDocument();
     // 자동으로 채운 칸은 사람이 한 칸이라도 고치면 함께 저장된다.
     fireEvent.change(screen.getByLabelText("담임 의견"), { target: { value: "확인" } });
-    await waitFor(() => expect(mocks.autosave).toHaveBeenCalledWith(r.id, r.revision, expect.objectContaining({ tuition: "청구 300,000원", attendance: "최근 출석 5회", arrears: "no", arrearsNote: "수납 확인", teacherOpinion: "확인" })), AUTOSAVE_WAIT);
+    await waitFor(() => expect(mocks.autosave).toHaveBeenCalledWith(r.id, r.revision, expect.objectContaining({ tuition: "청구 300,000원", attendance: "최근 출석 5회", arrears: "no", arrearsNote: "수납 확인", teacherOpinion: "확인" }), []), AUTOSAVE_WAIT);
   });
   it("a grouped report shows only its own homeroom classes even when another teacher teaches the same subject", () => {
     const course = { id: "course", classId: "class", className: "내 담당반", subject: "math", teacherId: teacher, teacherName: "담임", startDate: "2026-01-01", endDate: null, onHold: false };
@@ -137,6 +137,14 @@ describe("report submission and review", () => {
     fireEvent.click(screen.getByRole("button", { name: "반려 확인" }));
     await waitFor(() => expect(mocks.change).toHaveBeenCalledWith(r.id, "reject", 3, "학부모 상담 내용을 보충해 주세요."));
   });
+  // 2026-11-05 재리뷰 D — 강사가 쓰는 동안 자동 저장이 revision을 올려도 요청자의 취소가 막히지 않게 본 상태를 함께 보낸다(서버가 판정).
+  it("요청자의 '요청 취소'는 본 상태를 함께 보낸다", async () => {
+    render(<ReportDetail {...props} userId={manager} />);
+    fireEvent.click(screen.getByRole("button", { name: "요청 취소" }));
+    fireEvent.click(screen.getByRole("button", { name: "요청 취소 확인" }));
+    await waitFor(() => expect(mocks.change).toHaveBeenCalledWith(r.id, "cancel", 3, { seenStatus: "requested" }));
+    expect(mocks.autosave).not.toHaveBeenCalled();
+  });
   it("shows final withdrawal consequences before director approval", async () => {
     render(<ReportDetail {...props} report={{ ...r, status: "director_pending", manager_approved_at: r.created_at }} userId={director} />);
     fireEvent.click(screen.getByRole("button", { name: "승인" }));
@@ -191,7 +199,7 @@ describe("같은 상태로 다시 그려질 때 — 본문은 서버와 함께 �
     expect(screen.getByLabelText("퇴원 상세사유")).toHaveValue("휴대폰에서 고친 최신 글");
     fireEvent.change(screen.getByLabelText("담임 의견"), { target: { value: "한 글자" } });
     await waitFor(() => expect(mocks.autosave).toHaveBeenCalled(), AUTOSAVE_WAIT);
-    expect(mocks.autosave).toHaveBeenCalledWith(r.id, 9, expect.objectContaining({ detail: "휴대폰에서 고친 최신 글", teacherOpinion: "한 글자" }));
+    expect(mocks.autosave).toHaveBeenCalledWith(r.id, 9, expect.objectContaining({ detail: "휴대폰에서 고친 최신 글", teacherOpinion: "한 글자" }), []);
   });
 
   it("작성 강사 · 안 간 글이 있는데 다른 기기가 앞서면 충돌로 멈춘다 — 내 글로 덮지 않고, 쓴 글은 화면에 남는다", async () => {
