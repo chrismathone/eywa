@@ -104,6 +104,10 @@ const GUARDED_ACTION_FILES: { file: string[]; what: string }[] = [
     file: ["src", "features", "enrollment", "server", "intake-actions.ts"],
     what: "신규 콜 접수 링크 만들기(created_by = 대상)",
   },
+  {
+    file: ["src", "features", "shuttle", "parent-accounts", "server", "parent-actions.ts"],
+    what: "셔틀 학부모 로그인 계정 발급·삭제(canWriteTenant를 지나지 않는 외부 효과)",
+  },
 ];
 
 describe("'다른 강사 뷰'(열람 전용) 배선 가드", () => {

@@ -833,8 +833,13 @@ export default async function AttendancePage({
 
   // 급여명세서 버튼 노출 — 게이트가 async(super_admin 조회)라 JSX 밖에서 한 번 계산한다.
   // ⚠️ 강사 전체 보기일 때만 물어본다 — 그 외에는 버튼 자체가 없어 왕복이 아깝다.
+  // 🔑 **두 사람 다** 볼 수 있을 때만 선다: 화면 주인(viewer — 강사 X의 화면엔 X가 못 보는 버튼이 서지 않게)과
+  //    실제 계정(user — 버튼이 여는 명세서 페이지·조회는 실제 계정으로 판정한다. 명세서는 주민번호·계좌가 실린 문서라
+  //    대상 기준으로 넓히지 않는다, 2026-11-05 강사뷰 신원 적대 리뷰). 한쪽만 보면 "보이는데 누르면 홈으로"가 된다.
   const canOpenPayslip =
-    mode === "teacher" && !!effectiveTeacher ? await canViewPayslipNow(viewer) : false;
+    mode === "teacher" && !!effectiveTeacher
+      ? (await canViewPayslipNow(viewer)) && (await canViewPayslipNow(user))
+      : false;
 
   // 결석 통보 접수(2026-08-19) — 남의 반 칸까지 한 번에 만드는 조작이라 **사무실(full)만**.
   // ⚠️ 화면 조건은 게이트가 아니다(#77) — 서버 액션이 같은 판정을 다시 한다.

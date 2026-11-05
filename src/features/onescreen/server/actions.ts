@@ -2044,6 +2044,10 @@ export async function setMyNoticeMode(
 /**
  * 원스크린 '글씨 크기'(작음/보통/큼)를 **본인 계정**에 저장 — users.ui_prefs.onescreen.fontSize.
  *
+ * 🔑 '본인' = **실제 로그인 계정**(보는 사람). 글씨 크기는 개인 표시 설정이라 '다른 강사 뷰'에서도 대상 강사의 행이 아니라 내 행에
+ *    저장·읽기한다(로스터 `viewerUiPrefs`, 2026-11-05 강사뷰 신원 적대 리뷰 — ECS 글씨 크기와 같은 결정). 대상 행에 쓰면 관리자가
+ *    강사 X의 화면에서 키운 글씨가 X의 원스크린 크기를 바꿨다.
+ *
  * ⚠️ ui_prefs는 화면별 네임스페이스라 **onescreen 키만 갈아끼우고 형제 키(timetable 등)는 보존**한다
  *    (saveTimetableViewPrefs와 같은 규약 — 한 화면 저장이 다른 화면 설정을 지우면 안 된다).
  * ⚠️ 기본값('작음')이면 키를 지운다 — 빈 값이 쌓이지 않게.
@@ -2052,9 +2056,9 @@ export async function setMyNoticeMode(
 export async function setMyOnescreenFontSize(
   size: OnescreenFontSize,
 ): Promise<{ ok: boolean; error?: string }> {
-  const user = await getCurrentUser({ teacherView: true });
+  const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  // '다른 강사 뷰'(열람 전용) 차단 — setMyNoticeMode와 같은 이유(화면=대상 값·저장=본인 행 불일치 방지).
+  // 읽기 강사뷰·지점 보기에서는 화면 설정도 저장하지 않는다 — 같은 화면의 표시 옵션·영상 마감 기본값 저장과 같은 규약.
   const roError = await readonlyTeacherViewError();
   if (roError) return { ok: false, error: roError };
   if (!(ONESCREEN_FONT_SIZES as readonly string[]).includes(size))

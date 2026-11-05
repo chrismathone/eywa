@@ -6,9 +6,14 @@ import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { canManageParentAccountsRole } from "../parent-access";
 
-/** 지금 사용자가 학부모 계정을 다룰 수 있으면 그 사용자, 아니면 null. 판정 = `canManageParentAccountsRole`. */
+/**
+ * 지금 사용자가 학부모 계정을 다룰 수 있으면 그 사용자, 아니면 null. 판정 = `canManageParentAccountsRole`.
+ * 🔑 역할은 **화면 주인** — 강사뷰(다른 강사 뷰)면 검증된 대상의 역할이다. 셔틀 화면(requireShuttleView)·관리자 면(isShuttleAdmin)과
+ *    같은 신원이어야 한다: 실제 계정(원장) 역할로 보면 강사 X의 화면에 [학부모 계정] 버튼과 로그인 이메일·연락처가 섰다
+ *    (2026-11-05 강사뷰 신원 적대 리뷰). 쓰기(발급·삭제)는 이와 별개로 읽기 강사뷰를 맨 앞에서 막는다(parent-actions.ts).
+ */
 export async function parentAccountsActor(): Promise<CurrentUser | null> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return null;
   const isSuperAdmin = await isCurrentUserSuperAdmin();
   return canManageParentAccountsRole(user.systemRole, isSuperAdmin) ? user : null;

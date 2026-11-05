@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { reportError } from "@/lib/observability/report-error";
 import { normalizePhone } from "@/features/students/lib/student-import";
-import { canRecordBoarding } from "./record-gate";
+import { canSeeBoardingContacts } from "./record-gate";
 
 /** 한 학생의 연락처 — 줄 위에 "학생 · 학부모" 번호를 띄운다. 없으면 null·빈 배열(화면은 빈칸). */
 export type RiderContact = {
@@ -19,7 +19,8 @@ export type RiderContact = {
  * 오늘 등하원 줄의 학생·학부모 전화번호(사용자 2026-10-21 *"탑승 미탑승 위에 학생 학부모 전화번호 … 학부모 계정연결을 해야
  * 부모님 전화번호가 보일거아냐 그렇게 셋팅만 · 없으면 빈칸"*).
  *
- * 🔒 **등하원 기록 권한이 있는 사람만**(`canRecordBoarding` = 사무실 ∪ 셔틀 담당 ∪ super_admin) — 그 밖엔 빈 결과다.
+ * 🔒 **등하원 기록 자격이 있는 사람만**(`canSeeBoardingContacts` = 사무실 ∪ 셔틀 담당 ∪ super_admin — 화면 주인 기준) — 그 밖엔 빈 결과다.
+ *    읽기 강사뷰는 쓰기 자격(`canRecordBoarding`)이 늘 막히지만 **보는 것**은 대상 강사와 같아야 해서 읽기 판정을 따로 둔다(record-gate.ts).
  *    페이지가 이미 같은 판정으로 부르지만, 다른 호출부가 생겨도 여기서 다시 막는다([[#77]]).
  * 🔑 학부모 번호는 **학부모 계정 연결**에서만 온다 — 원생 기록의 `parent_phone`(makeedu 이관 값)은 쓰지 않는다(사용자 지시).
  *    그래서 계정을 연결하기 전엔 빈칸이다.
@@ -33,7 +34,7 @@ export async function getRiderContacts(studentIds: readonly string[]): Promise<R
   const ids = [...new Set(studentIds)].filter(Boolean);
   if (ids.length === 0) return {};
   const user = await getCurrentUser();
-  if (!user || !(await canRecordBoarding())) return {};
+  if (!user || !(await canSeeBoardingContacts())) return {};
   const admin = createAdminClient();
   const tenantId = user.tenantId;
   try {

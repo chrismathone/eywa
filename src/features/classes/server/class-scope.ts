@@ -1,6 +1,8 @@
 import "server-only";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
-import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, getPermMatrix } from "@/lib/auth/perm-matrix";
+import { isReadonlyTeacherView } from "@/lib/auth/view-as";
+import { accessLevel, type SystemRole } from "@/lib/permissions";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
@@ -85,6 +87,19 @@ export async function canWriteLoadedClass(classTeacherId: string | null): Promis
   return level === "scoped" && (await isCurrentUserSuperAdmin());
 }
 
+/**
+ * 읽기 강사뷰의 캡이 **담당 범위를 지웠는가** — `getUserPermMatrix`는 읽기 강사뷰에서 대상의 full·scoped를 모두 readonly로
+ * 누르므로, 넘겨받은 수준만으로는 "원래 scoped(강사 = 자기 반만)"였는지 알 수 없다. 대상 **역할**의 캡 이전 수준(지점 매트릭스
+ * `getPermMatrix` — 역할 기본 + 학원 설정)으로 다시 본다. 강사뷰가 아니거나 전체 강사뷰면 언제나 false(종전 판정 그대로).
+ * ⚠️ 대상 **개인 예외**(사람별 권한)는 보지 않는다 — 개인 예외로 반 전체를 받은 강사는 읽기 강사뷰에서 자기 반만 보이고(좁아짐),
+ *    역할은 전체인데 개인 예외로 담당만 받은 사람은 무제한 열람이다(종전과 같은 넓이). 정확히 하려면 캡 이전 대상 수준을 돌려주는
+ *    공통 API(src/lib/auth)가 필요하다. 대상 역할이 원래 full·readonly면(원장·실장·회계) 캡이 지운 범위가 없어 종전대로 무제한 열람이다.
+ */
+async function readonlyViewErasedScope(role: SystemRole, level: string): Promise<boolean> {
+  if (level !== "readonly" || !(await isReadonlyTeacherView())) return false;
+  return accessLevel(role, "classes", await getPermMatrix()) === "scoped";
+}
+
 /** 임시 위임 열람 유예 — ECS와 같은 ±7일(주 단위로 일하는 사람이 앞뒤 하루를 못 여는 일 방지). */
 const VIEW_DELEGATION_GRACE_DAYS = 7;
 
@@ -94,7 +109,10 @@ const VIEW_DELEGATION_GRACE_DAYS = 7;
  *
  * 판정 대상은 `classes` 접근 수준이 **scoped인 사람만**(=강사 화면). 겸직 관리자의 본인 강사뷰는 실 역할이
  * full이라 무제한, 회계·뷰어도 종전대로다. '다른 강사 뷰'(전체)로 강사 X를 열면 수준이 X 것(scoped)이 되므로
- * 세 갈래도 **X의 id로** 묻는다 — 실제 계정 id로 물으면 X의 반이 404였다. 읽기 강사뷰는 readonly로 캡되어 무제한 열람.
+ * 세 갈래도 **X의 id로** 묻는다 — 실제 계정 id로 물으면 X의 반이 404였다.
+ * 🔴 읽기 강사뷰는 수준이 readonly로 **캡**된다 — 캡이 X의 '담당 범위'까지 지워 학원 전체 반이 열렸다(강사 A가 개인 권한으로
+ *    읽기 강사뷰를 받으면 X를 여는 것만으로 남의 반 상세를 다 봤다, 2026-11-05 강사뷰 신원 적대 리뷰). 캡이 범위를 지운 경우만
+ *    (`readonlyViewErasedScope`) 같은 세 갈래를 X의 id로 다시 적용한다.
  *
  * ⚠️ 조회 실패는 **열어 둔다**(fail-open, [[#60]]·`canViewStudentDetail`과 같은 결) — 순간 장애로
  *    강사의 정당한 화면이 404가 되는 쪽이 더 나쁘다. 쓰기는 위에서 fail-closed라 사고로 안 번진다.
@@ -102,7 +120,8 @@ const VIEW_DELEGATION_GRACE_DAYS = 7;
 export async function canViewClassDetail(classId: string): Promise<boolean> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return false;
-  if ((await accessLevelTenant(user.systemRole, "classes")) !== "scoped") return true;
+  const level = await accessLevelTenant(user.systemRole, "classes");
+  if (level !== "scoped" && !(await readonlyViewErasedScope(user.systemRole, level))) return true;
   if (await isCurrentUserSuperAdmin()) return true;
   if (!classId) return false;
 

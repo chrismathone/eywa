@@ -1,9 +1,10 @@
 import "server-only";
 import { cache } from "react";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canWriteTenant, getPermMatrix } from "@/lib/auth/perm-matrix";
+import { canWrite } from "@/lib/permissions";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
-import { readonlyTeacherViewError } from "@/lib/auth/view-as";
+import { isReadonlyTeacherView, readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { hasShuttleRecordDuty } from "./duty";
 
 /**
@@ -40,4 +41,23 @@ export const canRecordBoarding = cache(async (): Promise<boolean> => {
   if (await canWriteTenant(user.systemRole, "shuttle")) return true;
   if (await hasShuttleRecordDuty(user.id, user.tenantId)) return true;
   return isCurrentUserSuperAdmin();
+});
+
+/**
+ * 기록에 딸린 **읽기**(탑승 학생·학부모 연락처) 자격 — 기록 자격(`canRecordBoarding`)과 같은 사람들이되, 읽기 강사뷰 차단만 뺀다.
+ *
+ * 🔴 왜 나눴나: 연락처는 "찍는 사람이 전화하려고" 보는 정보라 기록 자격으로 열었는데, 읽기 강사뷰는 기록 자격이 늘 false라
+ *    대상 X(셔틀 담당)의 화면을 읽기로 열면 X가 보는 연락처가 빈칸이었다 — X의 화면과 달라진다(2026-11-05 강사뷰 신원 적대 리뷰).
+ *    쓰기(기록·변경)는 여전히 `canRecordBoarding`이 막는다.
+ * 🔑 읽기 강사뷰에서는 쓰기 캡이 '사무실(편성 쓰기)' 판정을 지우므로, 대상 **역할**의 캡 이전 수준(지점 매트릭스)과 대상의 셔틀 담당
+ *    토글로 다시 본다. 그 밖(평소 · 전체 강사뷰 · 지점 보기)은 기록 자격과 똑같다.
+ * ⚠️ 대상 **개인 예외**(사람별 권한)는 이 갈래에서 보지 않는다 — 개인으로 넓어진 강사는 빈칸(좁아짐), 역할은 사무실인데 개인으로
+ *    셔틀을 막은 사람은 번호가 보인다(넓어짐 — 읽기 전용 보기의 번호 열람뿐). 정확히 하려면 캡 이전 대상 수준을 돌려주는 공통 API가 필요하다.
+ */
+export const canSeeBoardingContacts = cache(async (): Promise<boolean> => {
+  if (!(await isReadonlyTeacherView())) return canRecordBoarding();
+  const user = await getCurrentUser({ teacherView: true });
+  if (!user) return false;
+  if (canWrite(user.systemRole, "shuttle", await getPermMatrix())) return true;
+  return hasShuttleRecordDuty(user.id, user.tenantId);
 });
