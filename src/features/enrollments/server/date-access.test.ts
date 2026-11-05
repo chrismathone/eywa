@@ -36,6 +36,17 @@ describe("수강 날짜 수정 공용 서버 게이트", () => {
     m.user.mockResolvedValueOnce({ id: "student", systemRole: "student" }); expect(await canEditEnrollmentDatesNow()).toBe(false);
     expect(m.settings).not.toHaveBeenCalled();
   });
+  it("강사뷰 — 명단·원장 판정·담당 반은 검증된 대상 강사로 본다(2026-11-05)", async () => {
+    // '다른 강사 뷰'로 X를 열면 getCurrentUser({ teacherView: true })가 X — 실제 계정(원장)은 옵션 없이 부를 때만 나온다.
+    m.user.mockImplementation(async (o?: { teacherView?: boolean }) => (o?.teacherView ? { id: "teacher-x", systemRole: "teacher" } : { id: "master", systemRole: "master" }));
+    m.menu.mockResolvedValue("scoped");
+    // 실제 계정이 원장이어도 대상 X가 지정되지 않았으면 닫힌다.
+    expect(await canEditEnrollmentDatesNow()).toBe(false);
+    expect(m.user).toHaveBeenCalledWith({ teacherView: true });
+    m.settings.mockResolvedValue({ permissions: { specialAccess: { enrollmentDateEditorIds: ["teacher-x"] } } });
+    expect(await getEnrollmentDateAccess()).toEqual({ allowed: true, classIds: ["own-class"] });
+    expect(m.scope).toHaveBeenCalledWith("teacher-x");
+  });
   it("담당 메뉴만 있는 직원은 기능 지정으로 범위가 넓어지지 않는다", async () => {
     m.menu.mockResolvedValue("scoped"); m.privileged.mockResolvedValue(true);
     expect(await getEnrollmentDateAccess()).toEqual({ allowed: true, classIds: ["own-class"] });

@@ -80,6 +80,22 @@ const GUARDED_ACTION_FILES: { file: string[]; what: string }[] = [
     file: ["src", "features", "report-templates", "server", "actions.ts"],
     what: "영어 보고서 템플릿 저장·삭제(대상 명의 · 관리 클라이언트)",
   },
+  {
+    file: ["src", "features", "attendance", "seat", "server", "gate.ts"],
+    what: "자리 출석부 담당 토글 갈래(canWriteTenant를 지나지 않는다 · 대상 명의)",
+  },
+  {
+    file: ["src", "features", "shuttle", "server", "record-gate.ts"],
+    what: "셔틀 탑승 기록 담당 토글 갈래(대상 명의)",
+  },
+  {
+    file: ["src", "features", "video-review", "server", "actions.ts"],
+    what: "숙제 영상 AI 메모 다시 분석(requested_by = 대상)",
+  },
+  {
+    file: ["src", "features", "class-sheets", "server", "actions.ts"],
+    what: "ECS 반 순서 저장(다른 강사 뷰면 거절 — 보는 사람 계정에 대상 순서를 덮지 않게)",
+  },
 ];
 
 describe("'다른 강사 뷰'(열람 전용) 배선 가드", () => {

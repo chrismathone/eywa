@@ -9,7 +9,8 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
-import { effectiveTeacherId, readonlyTeacherViewError } from "@/lib/auth/view-mode";
+import { effectiveTeacherId, readonlyTeacherViewError, viewAsTeacher } from "@/lib/auth/view-mode";
+import { videoOwnerRewrite } from "../teacher-view-video-owner";
 import { addDays, kstToday, resolveReportDate } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
 import { type ReportCommentInput } from "../report-comment";
@@ -548,6 +549,36 @@ export async function saveLessonReport(
     return { ok: false, error: error?.message ?? "보고서 저장에 실패했습니다" };
   }
 
+  // 🔴 '다른 강사 뷰'(전체) — 대상 강사(user = X)가 쓴 줄의 영상 과제·마감을 고치면 DB 트리거(0425a)가 auth.uid() = 실제 계정으로
+  //    'A ≠ 작성자'라 보고 **조용히 원래 값으로** 둔다(DB는 강사뷰를 모른다, teacher-view-video-owner.ts). 앱 게이트(videoHomeworkKept ·
+  //    decideVideoHomeworkDue)가 이미 작성자 = X로 통과시킨 칸만, 강사뷰일 때만 관리 클라이언트(auth.uid() 없음 → 트리거 비대상)로 다시 적는다.
+  //    tenant_id · 행 id · 작성자를 모두 건다([[#104]]). 못 적으면 아래 경합 판정이 저장값으로 화면을 되돌리게 둔다(조용히 넘기지 않는다).
+  let ownerRewriteFailed = false;
+  const ownerRewrite = videoOwnerRewrite({
+    viewingOtherTeacher: (await viewAsTeacher()) !== null,
+    ownerId: user.id,
+    saved: data,
+    wantedVideoHomework: videoHwReady && !keptVideoHw ? input.videoHomework : undefined,
+    wantedDue: videoDueWrite,
+  });
+  if (ownerRewrite) {
+    const { data: fixed, error: fixError } = await createAdminClient()
+      .from("lesson_reports")
+      .update(ownerRewrite)
+      .eq("tenant_id", user.tenantId)
+      .eq("id", data.id)
+      .eq("created_by", user.id)
+      .select("id")
+      .maybeSingle();
+    if (fixError || !fixed) {
+      if (fixError) logDbError(fixError, "onescreen.saveLessonReport.teacherViewVideoOwner");
+      else console.warn(JSON.stringify({ level: "warn", scope: "onescreen.saveLessonReport.teacherViewVideoOwner", message: "작성자 줄을 찾지 못해 영상 과제를 다시 적지 못했다", reportId: data.id }));
+      ownerRewriteFailed = true;
+    } else {
+      Object.assign(data, ownerRewrite);
+    }
+  }
+
   // 선생님이 자동작성 글을 **고쳐** 저장했으면 그 자동작성 원문을 따로 남긴다(0370a) — 말투 프로파일이 '늘 고치는 것'을 배운다.
   // 🔴 응답 뒤에(`after`) — 원스크린 저장은 전원이 매일 쓰는 길이라 늦추지 않는다. 표가 없으면 도우미가 조용히 건너뛴다(#95).
   // 영어는 템플릿 모드라 코퍼스 밖(MENT_STYLE_EXCLUDED_SUBJECTS). 화면도 'auto_edited'라고 말한 저장만 — sticky 강등(어제 AI 글을 오늘
@@ -671,14 +702,14 @@ export async function saveLessonReport(
   // 저장된 값이 보낸 값과 다르다 → 화면이 그 값으로 되돌리게 알린다. (트리거 적용 전엔 내 값이 들어가 같다 — 그 경합은 트리거만 막는다.)
   const raceKept =
     !keptVideoHw && videoHwReady && typeof input.videoHomework === "boolean" &&
-    !!data.created_by && data.created_by !== user.id && (data.video_homework ?? null) !== input.videoHomework
+    !!data.created_by && (data.created_by !== user.id || ownerRewriteFailed) && (data.video_homework ?? null) !== input.videoHomework
       ? { kept: data.video_homework ?? null }
       : null;
   const keptVideoHwFinal = keptVideoHw ?? raceKept;
   // 마감도 같은 경합 — 적으려던 마감과 저장된 마감이 다르면 DB 트리거가 작성 선생님의 마감을 지킨 것이다. 그 값을 화면에 돌려준다(`kept` —
   // 화면이 저장값으로 맞추고 줄을 잠그며, 이 저장은 발송하지 않는다 — 내 화면이 말하던 마감으로 나가지 않게, 적대 재리뷰 2026-10-15).
   const raceDue: SavedVideoHomeworkDue | null =
-    videoDueWrite && "video_homework_due" in data && !!data.created_by && data.created_by !== user.id
+    videoDueWrite && "video_homework_due" in data && !!data.created_by && (data.created_by !== user.id || ownerRewriteFailed)
     && (data.video_homework_due ?? null) !== videoDueWrite.video_homework_due
       ? isCustomDue(reportDate, data.video_homework_due)
         ? { mode: "next", date: data.video_homework_due, kept: true }

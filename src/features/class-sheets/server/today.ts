@@ -41,6 +41,7 @@ import { DEFAULT_ECS_FONT_SIZE, readEcsFontSize, type EcsFontSize } from "../fon
 // (0140a)이고, 반↔보드 매칭은 작성률 화면과 **같은 키**(classKey/boardKey)를 쓴다 — 따로 만들면 갈린다.
 import { boardKey, classKey } from "@/features/report-admin/english-writing";
 import { ecsDelegatedClassIds, ecsVisibleClassFilter } from "./access";
+import { loadViewerUiPrefs } from "./viewer-prefs";
 import { appendMakeupStudents, makeupStudentIds } from "../lib/makeup-roster";
 // 보강 예약(0264a) — 그날 이 반에 예약된 학생을 보강 행으로 미리 세운다(fail-soft).
 import { getReservationsOn } from "@/features/attendance/server/makeup-reservation-queries";
@@ -260,7 +261,8 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
       .eq("is_active", true)
       .or(`closed_at.is.null,closed_at.gte.${date}`)
       .order("class_name"),
-    admin.from("users").select("ui_prefs").eq("id", user.id).eq("tenant_id", user.tenantId).maybeSingle(),
+    // 표시 취향은 보는 사람(실제 계정) 것 — 쓰기(patchMyUiPrefs)와 같은 행(viewer-prefs.ts). 반 순서만 아래에서 화면 주인 것을 읽는다.
+    loadViewerUiPrefs(),
     // 예약된 개명 — 위 둘과 독립이라 같은 묶음(B4). 요청 캐시라 다른 뷰가 또 물어도 왕복 0.
     getClassNameAsOfIndex(),
   ]);

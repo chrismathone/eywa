@@ -1,4 +1,5 @@
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { dutyAllowsSeat } from "../duty";
@@ -26,8 +27,13 @@ export async function gateSeatWrite(seat: SeatKey, date: string): Promise<SeatGa
     return { error: "이 자리 출석부는 아직 열리지 않았습니다" };
   }
 
-  const user = await getCurrentUser();
-  if (user) {
+  // 🔑 담당 토글·명의(recorded_by)는 **화면 주인** — 강사뷰(다른 강사 뷰)면 검증된 대상 강사다. 실제 계정으로 보면
+  //    관리자가 자리 담당 강사 X의 화면에서 찍을 때 X의 토글이 안 보여 "입력 권한이 없습니다"가 됐다(2026-11-05 점검).
+  // 🔴 직원 토글 갈래는 canWriteTenant를 지나지 않는다 — 읽기 강사뷰가 대상의 토글로 쓰지 못하게 여기서 먼저 막는다.
+  //    (PIN 갈래는 로그인과 무관한 문이라 그대로 둔다 — 명의도 null이다.)
+  const user = await getCurrentUser({ teacherView: true });
+  const readonlyError = user ? await readonlyTeacherViewError() : null;
+  if (user && !readonlyError) {
     const duties = await getActiveSeatDuties(user.id, user.tenantId);
     const assigned = dutyAllowsSeat(duties, seat);
     const menuWrite = await canWriteTenant(user.systemRole, "seat_attendance");
@@ -50,6 +56,7 @@ export async function gateSeatWrite(seat: SeatKey, date: string): Promise<SeatGa
   // 로그인한 사람에게는 "비밀번호를 다시" 대신 권한 문구를 보여준다(그 사람이 풀 문제가 아니다).
   // 날짜 문구(not-today)는 로그인 여부와 무관하게 그대로 — 그게 실제 사유다.
   if ("error" in pin) {
+    if (readonlyError && pin.reason === "no-pin") return { error: readonlyError };
     return { error: user && pin.reason === "no-pin" ? "자리 출석부 입력 권한이 없습니다" : pin.error };
   }
   return { ok: true, userId: null, tenantId: pin.tenantId, via: "pin" };

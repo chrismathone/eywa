@@ -3,6 +3,7 @@ import { cache } from "react";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { hasShuttleRecordDuty } from "./duty";
 
 /**
@@ -26,10 +27,15 @@ import { hasShuttleRecordDuty } from "./duty";
  * ⚠️ 기록은 학생 레코드를 건드리지 않는다(셔틀 로그일 뿐) — 그래서 이 완화가 퇴원·출결 잠금과
  *    충돌하지 않는다. 출결 결석은 여전히 출결 게이트가 따로 판정한다("신호만" 원칙).
  * ⚠️ 토글 조회는 admin 클라이언트라 RLS를 우회한다 — tenant_id 필터는 duty.ts가 건다([[#104]]).
+ *
+ * 🔑 판정은 **화면 주인** — 강사뷰(다른 강사 뷰)면 검증된 대상의 역할·셔틀 담당 토글로 본다(기록 명의도 대상,
+ *    actions.ts `recordGate`). 🔴 토글 갈래는 canWriteTenant를 지나지 않아 읽기 강사뷰가 대상의 토글로 기록할 수
+ *    있었다 — 맨 앞에서 `readonlyTeacherViewError`로 막는다(2026-11-05 강사뷰 신원 점검).
  */
 export const canRecordBoarding = cache(async (): Promise<boolean> => {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return false;
+  if (await readonlyTeacherViewError()) return false;
   // 사무실(편성 권한 보유)은 당연히 기록할 수 있다 — 대부분의 호출이 여기서 끝난다(왕복 0).
   if (await canWriteTenant(user.systemRole, "shuttle")) return true;
   if (await hasShuttleRecordDuty(user.id, user.tenantId)) return true;

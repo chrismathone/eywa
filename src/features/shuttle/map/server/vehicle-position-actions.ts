@@ -18,7 +18,8 @@ import { loadRunningPositions } from "./vehicle-position-core";
  * 🔑 회차마다 최신 한 줄 upsert. 값 검증은 순수 모듈(`checkReport`) — 이상한 좌표·큰 오차는 버린다.
  */
 export async function reportVehiclePosition(input: PositionReport): Promise<{ ok: true } | { error: string }> {
-  const user = await getCurrentUser();
+  // 보낸 사람(sent_by)은 화면 주인 — 강사뷰면 검증된 대상(자격 canRecordBoarding과 같은 사람).
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canRecordBoarding())) return { error: "위치를 보낼 권한이 없습니다" };
   const checked = checkReport(input);

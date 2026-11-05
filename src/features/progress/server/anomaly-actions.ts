@@ -20,7 +20,9 @@ type Result = { ok: boolean; error?: string };
  *    (재-ingest가 새 이벤트를 만든다). 여기서 끄는 건 **신호**뿐이다.
  */
 export async function setProgressAnomalyResolved(eventId: string, resolved: boolean): Promise<Result> {
-  const user = await getCurrentUser();
+  // 담당 학생 판정·확인자(resolved_by)는 화면 주인 — 강사뷰면 검증된 대상 강사(2026-11-05 강사뷰 신원 점검).
+  // 읽기 강사뷰는 수준이 readonly로 캡되어 아래 게이트(canResolveProgressAnomaly)가 거절한다. 감사로그는 실제 계정.
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
 
   const supabase = await createClient();

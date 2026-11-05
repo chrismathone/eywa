@@ -29,7 +29,8 @@ export async function changeClassLevel(
   classId: string,
   change: LevelChange,
 ): Promise<ChangeClassLevelState> {
-  const user = await getCurrentUser();
+  // '담당 반인가'는 화면 주인으로 — 강사뷰면 검증된 대상 강사(반 수정 게이트 class-scope.ts와 같은 신원).
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "반 관리 권한이 없습니다" };
   if (!classId) return { error: "반 ID가 누락되었습니다" };

@@ -20,6 +20,12 @@ import { logDbError } from "@/lib/supabase/db-error";
  * 🔴 읽기를 담임으로 좁히면 안 된다: 영어 시트 머리의 '반 정보' 링크는 **부담임·위임 강사도** 누른다
  *    (그 반 시트를 쓰는 사람들이다). 좁히면 "시트는 열리는데 반 정보는 404"가 된다.
  * 🔴 쓰기를 세 갈래로 넓히면 안 된다: 부담임 한 칸을 맡았다고 반 이름·과목·담임·시간표를 고칠 수는 없다.
+ *
+ * 🔑 '내 반인가'는 **화면의 주인**으로 판정한다 — `getCurrentUser({ teacherView: true })`(강사뷰면 검증된 대상 강사,
+ *    아니면 실제 계정). 메뉴 권한은 이미 대상 것으로 바뀌는데(perm-matrix `getUserPermMatrix`) 담임 비교만 실제 계정
+ *    id로 하면 X의 반이 '남의 반'이 되어 상세는 404, 수정·인수인계·위임은 거절됐다(2026-11-05 강사뷰 신원 점검).
+ *    게이트가 돌려주는 `user`도 대상이라 호출부의 기록 명의(위임 created_by·알림 actor)가 함께 대상으로 남는다.
+ *    감사로그(logAction)는 따로 실제 계정을 읽는다.
  */
 
 /** 쓰기 게이트 결과 — 기존 호출부 모양(`{ user, error }`) 그대로라 분해 대입이 안 바뀐다. */
@@ -34,7 +40,7 @@ export type ClassWriteGate =
  *    규약([[#60]] fail-open)은 **읽기·메뉴 노출** 이야기고, 쓰기에서 "모르니까 통과"는 곧 사고다.
  */
 export async function requireClassWrite(classId: string): Promise<ClassWriteGate> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { user: null, error: "로그인이 필요합니다" };
   const level = await accessLevelTenant(user.systemRole, "classes");
   if (level !== "full" && level !== "scoped") return { user: null, error: "반 관리 권한이 없습니다" };
@@ -72,7 +78,7 @@ export async function requireClassWrite(classId: string): Promise<ClassWriteGate
  * 서버 액션(`requireClassWrite`)과 **같은 답**을 내야 한다: 갈라지면 "버튼은 보이는데 누르면 거절".
  */
 export async function canWriteLoadedClass(classTeacherId: string | null): Promise<boolean> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return false;
   const level = await accessLevelTenant(user.systemRole, "classes");
   if (canWriteClassRecord({ level, classTeacherId, userId: user.id })) return true;
@@ -86,14 +92,15 @@ const VIEW_DELEGATION_GRACE_DAYS = 7;
  * 이 반 **상세를 열람**할 수 있는가 — [`getClassDetail`](./queries.ts)이 유일 소비 지점(초크포인트)이라
  * 반 상세 페이지와 반 수정 페이지가 **함께** 잠긴다(표면마다 다시 쓰지 않는다).
  *
- * 판정 대상은 `classes` 접근 수준이 **scoped인 사람만**(=실 강사). 겸직 관리자의 강사뷰는 실 역할이
- * full이라 무제한이고('다른 강사 뷰'는 readonly로 캡되어 역시 무제한 열람), 회계·뷰어도 종전대로다.
+ * 판정 대상은 `classes` 접근 수준이 **scoped인 사람만**(=강사 화면). 겸직 관리자의 본인 강사뷰는 실 역할이
+ * full이라 무제한, 회계·뷰어도 종전대로다. '다른 강사 뷰'(전체)로 강사 X를 열면 수준이 X 것(scoped)이 되므로
+ * 세 갈래도 **X의 id로** 묻는다 — 실제 계정 id로 물으면 X의 반이 404였다. 읽기 강사뷰는 readonly로 캡되어 무제한 열람.
  *
  * ⚠️ 조회 실패는 **열어 둔다**(fail-open, [[#60]]·`canViewStudentDetail`과 같은 결) — 순간 장애로
  *    강사의 정당한 화면이 404가 되는 쪽이 더 나쁘다. 쓰기는 위에서 fail-closed라 사고로 안 번진다.
  */
 export async function canViewClassDetail(classId: string): Promise<boolean> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return false;
   if ((await accessLevelTenant(user.systemRole, "classes")) !== "scoped") return true;
   if (await isCurrentUserSuperAdmin()) return true;

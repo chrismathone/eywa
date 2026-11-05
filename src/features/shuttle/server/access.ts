@@ -17,9 +17,11 @@ import { canManageParentAccountsRole } from "../parent-accounts/parent-access";
  *    `canRecordBoarding`(현장)이 각각 판정한다. 이 함수는 "화면을 열 수 있나"까지다.
  * ⚠️ 순서가 성능이다 — 매트릭스는 요청당 캐시(레이아웃이 이미 부름)라 통과하면 왕복 0이고,
  *    토글 조회(admin 1왕복)는 **메뉴 권한이 없을 때만** 든다.
+ * 🔑 담당 토글·역할은 **화면 주인**(강사뷰면 검증된 대상) — 메뉴 권한이 이미 대상 것이라 토글만 실제 계정으로 보면
+ *    셔틀 담당 X의 화면이 열리지 않았다(2026-11-05 점검). 돌려주는 사람도 대상이다.
  */
 export async function requireShuttleView(): Promise<CurrentUser> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) redirect("/login");
   const matrix = await getUserPermMatrix();
   if (canAccess(user.systemRole, "shuttle", matrix)) return user;
@@ -30,9 +32,10 @@ export async function requireShuttleView(): Promise<CurrentUser> {
 /**
  * 셔틀 **관리자** 면(실시간 위치)을 볼 수 있나 — 원장(master)·관리자(admin)·총괄(super_admin)(사용자 2026-10-08 "관리자 계정들만").
  * 🔑 판정은 학부모 관리 현황과 같은 `canManageParentAccountsRole` — 메뉴판 `adminOnly`도 같은 함수를 지난다(입구·화면이 갈리지 않게).
+ * 🔑 역할은 **화면 주인**의 것 — 강사뷰로 강사 X를 열었으면 X의 역할(강사)이라 관리자 면이 닫힌다(실제 계정 역할로 열리던 구멍).
  */
 export async function isShuttleAdmin(): Promise<boolean> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return false;
   return canManageParentAccountsRole(user.systemRole, await isCurrentUserSuperAdmin());
 }
