@@ -80,7 +80,9 @@ export default async function JjDeckPage({
     track: group.classRef?.track ?? null,
     stats: s,
   }));
-  const backHref = `/exams?subject=english&type=jj_exam${filter ? `&jjClass=${encodeURIComponent(filter)}` : ""}`;
+  // 🔴 `/exams?…type=jj_exam`은 옛 주소 판정(exams/page.tsx — `type==="jj"`·`view==="jj_exam"`만)에 안 걸려 통합 화면으로 갔다(2026-11-05) —
+  //    JJ실(시험) 목록이 있는 입력 화면으로 바로 간다(입력 화면은 `view`가 없으면 `type`을 읽는다).
+  const backHref = `/exams/input?subject=english&type=jj_exam${filter ? `&jjClass=${encodeURIComponent(filter)}` : ""}`;
   return (
     <div className="space-y-5">
       <BackLink href={backHref} label="JJ실(시험) 목록으로" />
