@@ -27,6 +27,7 @@ import { isMissingUsedRangeColumn } from "../missing-used-range";
 import { adjustmentDaysFor, reservedLeaveDays } from "./admin";
 import { isMissingRelation } from "@/features/approvals/server/queries";
 import type { LeaveActionState } from "../action-state";
+import { isLeaveEligibleRole } from "../eligibility";
 
 /**
  * 연차 조정 쓰기 — 이월·특별휴가 부여와 정산 차감(원장 2026-09-08).
@@ -85,6 +86,8 @@ async function loadTarget(tenantId: string, userId: string) {
   if (!data) return { error: "대상 직원을 찾을 수 없습니다" };
   if (data.status === "inactive") return { error: "퇴사한 직원의 연차는 조정할 수 없습니다" };
   if (data.system_role === "student") return { error: "학생 계정은 연차 대상이 아닙니다" };
+  // 아르바이트도 연차 대상이 아니다(원장 2026-11-05) — 관리 표에서 빠지지만 주소·옛 화면으로 들어온 요청도 막는다.
+  if (!isLeaveEligibleRole(data.system_role as string | null)) return { error: "아르바이트는 연차 대상이 아닙니다" };
 
   const today = kstToday();
   const period = applyLeaveGrantOverride(userId, resolveLeavePeriod((data.hire_date as string | null) ?? null, today), isChinsanTenant(await getTenantSettings()));

@@ -21,6 +21,8 @@ import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
 import { sheetT, sheetTf } from "@/features/teacher-view/i18n";
 import { getMyLeaveBalance } from "@/features/approvals/server/queries";
 import { getMyLeaveHistory } from "@/features/leave/server/my-history";
+import { isLeaveEligibleRole } from "@/features/leave/eligibility";
+import { hasAssignedClass } from "@/features/staff/server/assigned-class";
 import { AccountCard } from "./_components/account-card";
 import { LeaveCard } from "./_components/leave-card";
 import { ReportNameCard } from "./_components/report-name-card";
@@ -46,7 +48,7 @@ export default async function MyPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const [resume, me, reportName, resolvedSendName, balance, slack, settings] = await Promise.all([
+  const [resume, me, reportName, resolvedSendName, balance, slack, settings, hasClass] = await Promise.all([
     getResumeByStaffUser(user.id),
     getStaffById(user.id),
     // 수업보고서 발송용 이름(0217a) — fail-soft: 컬럼 미적용이면 null(빈 칸)이고 페이지는 그대로 산다.
@@ -54,13 +56,16 @@ export default async function MyPage() {
     // 실제 발송이 쓰는 해석기로 "지금 매핑이 걸리는가"까지 확인 — 저장 후 생긴 동명 직원 때문에
     // 조용히 실명 발송으로 돌아간 상태를 카드가 밝힌다([[#89]] 폴백 기능의 침묵 실패 가시화).
     resolveReportAuthorSettings(user.tenantId, user.displayName),
-    // 연차 잔여(원장 2026-09-18) — 다른 조회와 독립이라 함께 받는다(B4). 학생 계정엔 없는 개념이라
-    // 아예 안 부르고, 실패해도 null로 떨어뜨린다(이력서를 채우는 화면이 연차 한 조각에 죽으면 안 된다).
-    user.systemRole === "student" ? Promise.resolve(null) : getMyLeaveBalance(user.id).catch(() => null),
+    // 연차 잔여(원장 2026-09-18) — 다른 조회와 독립이라 함께 받는다(B4). 학생·아르바이트엔 없는 개념이라
+    // (원장 2026-11-05 *"아르바이트생에게 연차 기능 필요없음"*) 아예 안 부르고 카드도 서지 않는다.
+    // 실패해도 null로 떨어뜨린다(이력서를 채우는 화면이 연차 한 조각에 죽으면 안 된다).
+    !isLeaveEligibleRole(user.systemRole) ? Promise.resolve(null) : getMyLeaveBalance(user.id).catch(() => null),
     // 내 슬랙 연결 — 지점이 슬랙을 켜고 연결했을 때만 카드가 선다. 실패해도 카드만 빠진다.
     getMySlackState().catch(() => null),
     // ClassNote 기능 켜짐 여부(보고서 이름 카드 설명) — 테넌트 캐시. 실패하면 종전 문구(켜짐)로.
     getTenantSettings().catch(() => null),
+    // 맡은 반(담임 ∪ 교시 담당)이 있는가 — **아르바이트만** 묻는다(수업보고서 이름 카드). 다른 역할은 묻지 않고 카드를 그대로 둔다.
+    user.systemRole === "parttime" ? hasAssignedClass(user.id, user.tenantId) : Promise.resolve(true),
   ]);
   // 내역은 구간이 있어야 물어볼 수 있다(입사일 미등록이면 구간 자체가 없다) — 잔여에 의존하는 조회라
   // 위 Promise.all에 못 넣는다. 여기서도 실패는 null(카드가 "못 불러왔다"를 그대로 적는다).
@@ -71,6 +76,9 @@ export default async function MyPage() {
       }).catch(() => null)
     : null;
   const placeholder = isImportArtifactEmail(user.email);
+  // 수업보고서 이름 — 반이 없는 아르바이트에겐 쓸 데가 없다(원장 2026-11-05 *"수업이 없는 일반 아르바이트 (소속 반이 없음) 필요없음"*).
+  // 단 이미 저장한 값이 있으면 카드를 둔다 — 숨기면 그 값을 지울 길이 없어진다.
+  const showReportName = hasClass || !!reportName.name || reportName.includeClassName;
 
   // 이력서가 아직 없으면 계정에 있는 정보로 초안을 채워 바로 쓰게 한다(빈 종이보다 시작이 쉽다).
   const data = resume?.data ?? emptyResume();
@@ -122,13 +130,15 @@ export default async function MyPage() {
             날짜순으로 선다. 숫자는 결재함·연차 관리 표와 **같은 산식**(balance.ts)이다. */}
         {balance ? <LeaveCard lang={lang} balance={balance} history={leaveHistory} /> : null}
         {/* 수업보고서 발송용 이름(0217a) — 발송·공유·인쇄에 실명 대신 표시할 이름을 본인이 정한다. */}
-        <ReportNameCard
-          realName={user.displayName}
-          initialName={reportName.name}
-          initialIncludeClassName={reportName.includeClassName}
-          mappingBlocked={!!(reportName.name || reportName.includeClassName) && (resolvedSendName.name !== reportName.name || resolvedSendName.includeClassName !== reportName.includeClassName)}
-          classnoteOn={settings ? classnoteModuleOn(settings) : true}
-        />
+        {showReportName ? (
+          <ReportNameCard
+            realName={user.displayName}
+            initialName={reportName.name}
+            initialIncludeClassName={reportName.includeClassName}
+            mappingBlocked={!!(reportName.name || reportName.includeClassName) && (resolvedSendName.name !== reportName.name || resolvedSendName.includeClassName !== reportName.includeClassName)}
+            classnoteOn={settings ? classnoteModuleOn(settings) : true}
+          />
+        ) : null}
         {slack ? <SlackLinkCard linked={slack.linked} email={slack.email} /> : null}
       </div>
 

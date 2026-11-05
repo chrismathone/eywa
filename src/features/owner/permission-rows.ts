@@ -7,8 +7,8 @@
  *
  * 🔴 차례·묶음·이름은 여기서 새로 적지 않는다 — 사이드바·메뉴 판·'탭 및 메뉴 구성' 편집기가 쓰는 **같은 해석**
  *    ([`configuredHubGroups`](@/lib/menu-hub))을 그대로 부른다. 원장이 탭을 옮기거나 이름을 바꾸면 이 표도 따라 바뀐다.
- * 🔴 줄의 단위는 **권한 키**다(목적지가 아니다) — 출석부의 세 화면은 권한이 하나라 줄도 하나다(수납·셔틀의 면은 2026-10-14부터 메뉴가 아닌 화면 안 탭이다). 그 줄이 함께 여는 내부 메뉴는
- *    `covers`에 이름으로 적는다(무엇이 열리는지 표에서 보이게).
+ * 🔴 줄의 단위는 **권한 키**다(목적지가 아니다) — 출석부의 세 화면은 권한이 하나라 줄도 하나다(수납·셔틀의 면은 2026-10-14부터 메뉴가 아닌 화면 안 탭이다).
+ *    줄은 탭 이름 한 줄이고 함께 여는 화면을 나열하지 않는다(원장 2026-11-05) — `covers`는 메뉴 구성에서 이름을 바꾼 화면만 적는다(아래 `finish`).
  * 🔴 이 목록은 메뉴 구성에서 감춘 줄도 **지우지 않고** `hiddenInMenu` 표식을 단다 — 감추는 것은 입구뿐이고 권한은 그대로다
  *    (주소를 치면 열린다, [[#77]]). 화면에 세울지는 아래 `editablePermissionRowGroups`가 정한다(감춘 줄은 세우지 않는다).
  * 🔴 화면(표 · 개인별 메뉴 권한의 메뉴 고르기)은 `editablePermissionRowGroups`를 쓴다 — **탭 및 메뉴 구성에서 쓰고 있는 화면의 권한만** 세운다
@@ -35,7 +35,7 @@ export type PermissionRow = {
   menu: MenuKey;
   /** 권한 이름 — 화면과 감사 기록이 같은 말을 쓴다(`MENU_LABEL`). */
   label: string;
-  /** 이 권한 하나로 함께 열리는 내부 메뉴(메뉴 구성의 이름 그대로). 둘 이상이거나 이름을 바꿨을 때만 채운다. */
+  /** 메뉴 구성에서 **이름을 바꾼** 화면의 바뀐 이름 — 그 밖엔 비운다(줄은 탭 이름 한 줄 · 원장 2026-11-05). */
   covers: string[];
   /** 메뉴 구성에서 이 권한의 입구를 전부 감췄다(권한은 그대로다). */
   hiddenInMenu: boolean;
@@ -75,7 +75,11 @@ type Placed = { row: PermissionRow; dests: PlacedDest[] };
 
 function finish(placed: Placed): PermissionRow {
   const listed = placed.dests.filter((d) => d.listed);
-  const covers = listed.length > 1 ? listed.map((d) => d.label) : listed[0]?.renamed ? [listed[0].label] : [];
+  // 줄은 **탭 이름 한 줄**이 기본이다 — 이 권한이 함께 여는 화면(출석부의 오늘 출결·출결 모드 · 셔틀의 면 · 수납의 탭 · 학원 설정의 면 …)을
+  // 나열하지 않는다(원장 2026-11-05 *"문구 특별한 일 없으면 나누지마. 하위로 따로 빼는것만 빼도록"* · *"항상 탭 이름을 기본으로 가져가도록해"*).
+  // 따로 권한이 있는 화면만 제 줄(└ 랩실·JJ실 출석부 등)로 선다. 예외('특별한 일') = 메뉴 구성에서 **이름을 바꾼** 화면 — 표의 이름(권한 이름)과
+  // 메뉴에 보이는 이름이 달라 무엇인지 못 알아보므로 바꾼 이름만 적는다.
+  const covers = listed.filter((d) => d.renamed).map((d) => d.label);
   return { ...placed.row, covers, hiddenInMenu: placed.dests.length > 0 && placed.dests.every((d) => d.hidden) };
 }
 
@@ -120,8 +124,8 @@ export function permissionRowGroups(navigation?: PermissionNavigation, options?:
       // 원장만 들어가는 면은 "이 권한으로 열리는 메뉴"로 적지 않는다 — 다른 역할에게 이 줄을 열어도 그 면은 안 열린다.
       const hidden = g.hidden === true || isMenuHiddenByLayout(d.href, menus);
       at.dests.push({ label: d.label, renamed: renamed(d), hidden, listed: !d.masterOnly });
-      // 같은 권한으로 열리는 그 화면 위 탭(수납의 환불 요청서·회차 확정 · 셔틀의 오늘 등하원 …)도 '이 권한으로 열리는 메뉴'에 적는다 — 메뉴에선 뺐지만
-      // (원장 2026-10-14) 이 줄이 여는 화면이다. 감춤은 부모를 따른다(탭은 부모 화면 안에 있다). 따로 권한이 있는 탭은 제 줄이 적는다.
+      // 같은 권한으로 열리는 그 화면 위 탭(수납의 환불 요청서·회차 확정 · 셔틀의 오늘 등하원 …)도 이 줄의 목적지로 센다 — 이름은 적지 않지만(원장 2026-11-05)
+      // '메뉴 구성에서 다 감췄나' 판정에 든다. 감춤은 부모를 따른다(탭은 부모 화면 안에 있다). 따로 권한이 있는 탭은 제 줄이 선다.
       for (const tab of INNER_TABS.find((x) => x.parent === d.href)?.items ?? []) {
         if (tab.menuKey === d.menuKey && visible(tab)) tabsAfter.push({ menu: d.menuKey, dest: { label: tab.label, renamed: false, hidden, listed: !tab.masterOnly } });
       }
