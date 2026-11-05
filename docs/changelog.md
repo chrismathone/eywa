@@ -1,5 +1,12 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-05 — '수강 종료' 창: 막힘 문구가 한 줄로 창 밖까지 나가던 것
+
+- 원장 캡처: 원생 상세 '수업' 탭 → '수강 종료'에서 "이 학생이 다니는 마지막 수업이라 수강 종료할 수 없습니다. …" 빨간 문구가 줄바꿈 없이 창 오른쪽 밖 회색 배경까지 나갔다(반 이름도 오른쪽 정렬).
+- 원인: 창이 포털 없이 표 칸 안에 그려져 표의 `[&_td]:whitespace-nowrap`과 칸의 `text-right`를 그대로 물려받았다(`ConfirmDialog` 2026-09-07과 같은 함정).
+- 수리: [`end-enrollment-action.tsx`](../src/features/enrollments/components/end-enrollment-action.tsx) 창을 `document.body`로 포털(같은 칸의 '반 이동' 창과 같은 방식) + 창 겉틀 `whitespace-normal`(이중 방어) + 빨간 문구 `break-keep`. 막힘 창(학생의 마지막 수업 · 과목의 마지막 수업)과 입력 창(안내 · 서버 거절 문구) 모두. 반 상세도 같은 한 벌이라 함께 고쳐진다. 시간표의 '수강 종료' 팝업(Delete 키 · 통합뷰 퇴원 칸)은 표 칸 밖 고정 폭 창이라 같은 원인이 아니어서 그대로.
+- 시험: [`end-enrollment-action.test.tsx`](../src/features/enrollments/components/end-enrollment-action.test.tsx)(새) — 학생 상세 표 칸 그대로 감싸 열어도 문구가 표 밖에 있고 nowrap 계열 클래스를 물려받지 않는지(고치기 전 코드에선 3건 모두 실패).
+
 ## 2026-11-05 — ClassNote: 수업 시작 전·휴원 = 배정·발송 안 함 · 원아 신분 가드 한 벌(형제 뒤바뀜 · 영어 반 방도) — AywaSync 1.0.16
 
 - 원장 *"수업 시작전이거나 휴원 중인 학생은 클래스노트 배정을 하지말것. 수업배정이 되는 순간 동기화 작동하게"* · *"형제 원아 연결이 뒤바뀐건 크리티컬함. 아주 섬세한 가드로 매칭해야함"*. 결정 본문 = [decisions/reports-ai.md](decisions/reports-ai.md) 11-05.
