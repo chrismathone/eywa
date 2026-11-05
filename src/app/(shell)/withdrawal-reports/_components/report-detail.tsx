@@ -11,7 +11,8 @@ import { LaterInvoices } from "./later-invoices";
 import type { LaterInvoice } from "@/features/withdrawal-reports/server/refund";
 import type { SubjectHistoryRow } from "@/features/withdrawal-reports/course-period";
 import { fillEmptyReportFields } from "@/features/withdrawal-reports/prefill";
-import { changeWithdrawalReport } from "@/features/withdrawal-reports/server/actions";
+import { autosaveWithdrawalReport, changeWithdrawalReport } from "@/features/withdrawal-reports/server/actions";
+import { createReportSaver, type ReportSaver, type ReportSaverStatus } from "@/features/withdrawal-reports/autosave";
 import { EMPTY_BODY, REPORT_ACTION_LABEL, directorIds, isDirectReport, managerStepSkipped, refundWaiting, reportCapabilities, reportStatusChips, type RefundStep, type WithdrawalReport, type ReportEvent, type StaffOption, type ReportAction, type ReportBody } from "@/features/withdrawal-reports/model";
 
 const control = "w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm disabled:bg-muted/20 disabled:text-foreground";
@@ -44,13 +45,43 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
   const skipped = managerStepSkipped(r) && !isDirectReport(r);
   const deskWaiting = refundWaiting(r, refundSteps);
   const nameOf = (id: string | null) => id ? staff.find(s => s.id === id)?.name ?? r.snapshot.courses.find(c => c.teacherId === id)?.teacherName ?? "이전 담당자" : "자동 처리";
-  const update = <K extends keyof ReportBody>(key: K, value: ReportBody[K]) => setBody(b => ({ ...b, [key]: value }));
+  // 실시간 저장(원장 2026-11-05 "퇴원보고서도 실시간으로 입력되고 저장되게") — 작성할 수 있을 때만 저장기를 둔다(autosave.ts).
+  // 저장 단추는 없다: 칸을 고치면 잠시 뒤 저장하고, 제출·취소 직전에 남은 글을 마저 보낸 뒤 그 revision으로 처리한다.
+  const [saveStatus, setSaveStatus] = useState<ReportSaverStatus>({ kind: "idle" });
+  const saverStatusRef = useRef(saveStatus);
+  saverStatusRef.current = saveStatus;
+  const saverRef = useRef<ReportSaver<ReportBody> | null>(null);
+  if (capabilities.edit && !saverRef.current) {
+    saverRef.current = createReportSaver<ReportBody>(r.revision, {
+      save: (revision, next) => autosaveWithdrawalReport(r.id, revision, next),
+      onStatus: setSaveStatus,
+    });
+  }
+  const touched = useRef(false);
+  useEffect(() => { if (touched.current) saverRef.current?.change(body); }, [body]);
+  useEffect(() => { saverRef.current?.adoptRevision(r.revision); }, [r.revision]);
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => { if (saverRef.current?.isDirty()) e.preventDefault(); };
+    window.addEventListener("beforeunload", warn);
+    // 화면을 떠날 때(앱 안 이동) 남은 글을 마저 보낸다 — 기다리지는 않는다.
+    return () => { window.removeEventListener("beforeunload", warn); if (saverRef.current?.isDirty()) void saverRef.current.settle(); };
+  }, []);
+  const update = <K extends keyof ReportBody>(key: K, value: ReportBody[K]) => { touched.current = true; setBody(b => ({ ...b, [key]: value })); };
   function change(action: ReportAction) {
     setError("");
     startTransition(async () => {
       try {
-        const result = await changeWithdrawalReport(r.id, action, r.revision, action === "save" || action === "submit" ? body : action === "reject" ? comment : undefined);
+        let revision = r.revision;
+        const saver = saverRef.current;
+        if (saver) {
+          // 자동 저장이 revision을 올려 두었다 — 남은 글을 보내고 그 값으로 처리한다. 다른 화면이 먼저 고쳤으면 처리하지 않는다.
+          const settled = await saver.settle();
+          if (!settled.ok && saverStatusRef.current.kind === "conflict") { setError("다른 화면에서 이 보고서가 바뀌어 처리를 멈췄습니다. 쓴 내용을 복사해 두고 새로고침해 주세요."); return; }
+          revision = settled.revision;
+        }
+        const result = await changeWithdrawalReport(r.id, action, revision, action === "save" || action === "submit" ? body : action === "reject" ? comment : undefined);
         if ("error" in result) { setError(result.error); return; }
+        if (action === "submit" || action === "cancel") saver?.stop();
         setDecision(null); setComment(""); toast.success(`${REPORT_ACTION_LABEL[action]}했습니다.`); router.refresh();
       } catch { setError("처리를 완료하지 못했습니다. 새로고침 후 상태를 확인해 주세요."); }
     });
@@ -71,7 +102,7 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
       refundCheck={r.status === "canceled" ? undefined : <LaterInvoices reportId={r.id} rows={laterInvoices} canApprove={capabilities.refund} deskStaff={deskStaff} gates={!["completed", "blocked"].includes(r.status)} />} />
     {error && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
     <div className="flex flex-wrap gap-2">
-      {capabilities.edit && <><Button disabled={pending} variant="outline" onClick={() => change("save")}>임시 저장</Button><Button disabled={pending || assignmentChanged} onClick={() => setDecision("submit")}>{skipped ? "보고서 제출" : "관리자에게 제출"}</Button></>}
+      {capabilities.edit && <><Button disabled={pending || assignmentChanged || saveStatus.kind === "conflict"} onClick={() => setDecision("submit")}>{skipped ? "보고서 제출" : "관리자에게 제출"}</Button><AutosaveNote status={saveStatus} /></>}
       {capabilities.approve && <><Button disabled={pending || assignmentChanged} onClick={() => setDecision("approve")}>승인</Button><Button disabled={pending} variant="outline" onClick={() => setDecision("reject")}>반려</Button></>}
     </div>
     {decision && <section ref={decisionRef} className="space-y-3 rounded-xl border bg-muted/20 p-5" aria-label="처리 확인">
@@ -81,4 +112,17 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
     </section>}
     <section className="rounded-xl border p-5"><h2 className="mb-4 text-sm font-semibold">처리 이력</h2><ol className="space-y-3">{events.map(e => <li key={e.id} className="text-sm"><div>{REPORT_ACTION_LABEL[e.action]} · {nameOf(e.actor_id)} <span className="ml-2 text-xs text-muted-foreground">{dateTime(e.created_at)}</span></div>{e.comment && <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{e.comment}</p>}</li>)}</ol></section>
   </>;
+}
+
+/** 자동 저장 상태 한 줄(원장 2026-11-05 실시간 저장) — 저장 단추 자리에 선다. 화면 읽기 프로그램에도 바뀔 때마다 읽힌다. */
+function AutosaveNote({ status }: { status: ReportSaverStatus }) {
+  const time = (at: number) => new Date(at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const text = status.kind === "idle" ? "입력하면 자동으로 저장됩니다."
+    : status.kind === "pending" ? "입력 중 — 잠시 뒤 저장합니다."
+    : status.kind === "saving" ? "저장 중…"
+    : status.kind === "saved" ? `자동 저장됨 · ${time(status.at)}`
+    : status.kind === "error" ? `저장하지 못했습니다 — ${status.message} 잠시 뒤 다시 저장합니다.`
+    : "다른 화면에서 이 보고서가 바뀌어 자동 저장을 멈췄습니다. 쓴 내용을 복사해 두고 새로고침해 주세요.";
+  const alert = status.kind === "error" || status.kind === "conflict";
+  return <p role="status" aria-live="polite" className={`self-center text-sm ${alert ? "text-destructive" : "text-muted-foreground"}`}>{text}</p>;
 }

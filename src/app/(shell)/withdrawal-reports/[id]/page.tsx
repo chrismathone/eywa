@@ -21,6 +21,6 @@ export default async function WithdrawalReportPage({ params }: { params: Promise
     {!viewer.teacherId && !isParticipant(record.report, viewer.user.id) ? (
       <p className="border-line text-muted-foreground rounded-lg border border-dashed px-3 py-2 text-sm">열람 — 이 보고서의 승인자로 지정되지 않았습니다. 승인은 지정된 사람만 할 수 있습니다.</p>
     ) : null}
-    <ReportDetail key={`${record.report.id}:${record.report.revision}`} {...record} staff={staff} labels={labels} userId={viewer.user.id} writable={viewer.writable} directorLevel={cancelsAsDirector(viewer.user.systemRole, !!viewer.teacherId)} withdrawalHref={withdrawalHref} />
+    <ReportDetail key={`${record.report.id}:${record.report.status}`} {...record} staff={staff} labels={labels} userId={viewer.user.id} writable={viewer.writable} directorLevel={cancelsAsDirector(viewer.user.systemRole, !!viewer.teacherId)} withdrawalHref={withdrawalHref} />
   </div>;
 }

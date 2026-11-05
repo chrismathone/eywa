@@ -3,9 +3,11 @@ import "@testing-library/jest-dom/vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { ReportDetail } from "./report-detail";
 import { EMPTY_BODY, type WithdrawalReport } from "@/features/withdrawal-reports/model";
-const mocks = vi.hoisted(() => ({ change: vi.fn(), refresh: vi.fn() }));
+const mocks = vi.hoisted(() => ({ change: vi.fn(), autosave: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: mocks.refresh }) }));
-vi.mock("@/features/withdrawal-reports/server/actions", () => ({ changeWithdrawalReport: mocks.change }));
+vi.mock("@/features/withdrawal-reports/server/actions", () => ({ changeWithdrawalReport: mocks.change, autosaveWithdrawalReport: mocks.autosave }));
+// 자동 저장기의 기다림(1.2초)보다 넉넉히.
+const AUTOSAVE_WAIT = { timeout: 4000 };
 vi.mock("sonner", () => ({ toast: { success: vi.fn() } }));
 const teacher = "10000000-0000-4000-8000-000000000002";
 const manager = "10000000-0000-4000-8000-000000000003";
@@ -22,10 +24,34 @@ describe("report submission and review", () => {
     fireEvent.change(screen.getByLabelText("세부 퇴원사유"), { target: { value: "school_grades" } });
     fireEvent.click(screen.getByText("등록된 상담 연결"));
     fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.click(screen.getByRole("button", { name: "임시 저장" }));
-    await waitFor(() => expect(mocks.change).toHaveBeenCalledWith(r.id, "save", r.revision, expect.objectContaining({ reasonDetail: "school_grades", consultationIds: [consultation.id] })));
+    // 실시간 저장(원장 2026-11-05) — 저장 단추 없이 입력이 멎으면 한 번 저장한다.
+    expect(screen.queryByRole("button", { name: "임시 저장" })).not.toBeInTheDocument();
+    await waitFor(() => expect(mocks.autosave).toHaveBeenCalledWith(r.id, r.revision, expect.objectContaining({ reasonDetail: "school_grades", consultationIds: [consultation.id] })), AUTOSAVE_WAIT);
+    expect(mocks.autosave).toHaveBeenCalledTimes(1);
+    expect(mocks.change).not.toHaveBeenCalled();
+    await screen.findByText(/자동 저장됨/);
     fireEvent.change(screen.getByLabelText("퇴원사유"), { target: { value: "dissatisfaction" } });
     expect(screen.getByLabelText("세부 퇴원사유")).toHaveValue("");
+  });
+  it("자동 저장 뒤 제출은 자동 저장이 올린 revision으로 간다 · 연 직후에는 저장하지 않는다", async () => {
+    render(<ReportDetail {...props} />);
+    expect(screen.getByRole("status")).toHaveTextContent("입력하면 자동으로 저장됩니다.");
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(mocks.autosave).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("퇴원 상세사유"), { target: { value: "상담 결과 ".repeat(40) } });
+    await waitFor(() => expect(mocks.autosave).toHaveBeenCalledWith(r.id, 3, expect.objectContaining({ detail: "상담 결과 ".repeat(40) })), AUTOSAVE_WAIT);
+    await screen.findByText(/자동 저장됨/);
+    fireEvent.click(screen.getByRole("button", { name: "관리자에게 제출" }));
+    fireEvent.click(screen.getByRole("button", { name: "보고서 제출 확인" }));
+    await waitFor(() => expect(mocks.change).toHaveBeenCalledWith(r.id, "submit", 4, expect.objectContaining({ detail: "상담 결과 ".repeat(40) })));
+  });
+  it("다른 화면이 먼저 고쳤으면 자동 저장을 멈추고 제출을 막는다", async () => {
+    mocks.autosave.mockResolvedValue({ ok: false, conflict: true, error: "다른 화면에서 이 보고서가 바뀌었습니다." });
+    render(<ReportDetail {...props} />);
+    fireEvent.change(screen.getByLabelText("담임 의견"), { target: { value: "의견" } });
+    await screen.findByText(/자동 저장을 멈췄습니다/, undefined, AUTOSAVE_WAIT);
+    expect(screen.getByRole("button", { name: "관리자에게 제출" })).toBeDisabled();
+    expect(screen.getByLabelText("담임 의견")).toHaveValue("의견");
   });
   it("only the requester sees cancellation, including when the author has an administrator role", () => {
     const { rerender } = render(<ReportDetail {...props} />);
@@ -41,8 +67,9 @@ describe("report submission and review", () => {
     expect(screen.getByText("청구 300,000원")).toBeInTheDocument();
     expect(screen.getByText("미납 없음")).toBeInTheDocument();
     expect(screen.queryByLabelText("미납 여부")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "임시 저장" }));
-    await waitFor(() => expect(mocks.change).toHaveBeenCalledWith(r.id, "save", r.revision, expect.objectContaining({ tuition: "청구 300,000원", attendance: "최근 출석 5회", arrears: "no", arrearsNote: "수납 확인" })));
+    // 자동으로 채운 칸은 사람이 한 칸이라도 고치면 함께 저장된다.
+    fireEvent.change(screen.getByLabelText("담임 의견"), { target: { value: "확인" } });
+    await waitFor(() => expect(mocks.autosave).toHaveBeenCalledWith(r.id, r.revision, expect.objectContaining({ tuition: "청구 300,000원", attendance: "최근 출석 5회", arrears: "no", arrearsNote: "수납 확인", teacherOpinion: "확인" })), AUTOSAVE_WAIT);
   });
   it("a grouped report shows only its own homeroom classes even when another teacher teaches the same subject", () => {
     const course = { id: "course", classId: "class", className: "내 담당반", subject: "math", teacherId: teacher, teacherName: "담임", startDate: "2026-01-01", endDate: null, onHold: false };
@@ -54,7 +81,8 @@ describe("report submission and review", () => {
     render(<ReportDetail {...props} assignmentChanged />);
     expect(screen.getByRole("alert")).toHaveTextContent("담당 강사가 변경");
     expect(screen.getByRole("button", { name: "관리자에게 제출" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "임시 저장" })).toBeEnabled();
+    expect(screen.getByLabelText("담임 의견")).toBeEnabled();
+    expect(screen.getByRole("status")).toHaveTextContent("입력하면 자동으로 저장됩니다.");
   });
   it("shows only the selected enrollment even when its teacher has another class in the same subject", () => {
     const course = { id: "course", classId: "class", className: "종료할 반", subject: "math", teacherId: teacher, teacherName: "담임", startDate: "2026-10-01", endDate: null, onHold: false };
@@ -69,7 +97,7 @@ describe("report submission and review", () => {
     expect(screen.getAllByText(/담임 수업/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/부담임 수업/).length).toBeGreaterThan(0);
   });
-  beforeEach(() => { cleanup(); vi.clearAllMocks(); mocks.change.mockResolvedValue({ ok: true, id: r.id }); });
+  beforeEach(() => { cleanup(); vi.clearAllMocks(); mocks.change.mockResolvedValue({ ok: true, id: r.id }); mocks.autosave.mockResolvedValue({ ok: true, revision: r.revision + 1, savedAt: "2026-10-13T01:05:00Z" }); });
   it("submits the entered report only after explicit confirmation", async () => {
     render(<ReportDetail {...props} />);
     fireEvent.change(screen.getByLabelText("퇴원 상세사유"), { target: { value: "상담 결과 ".repeat(40) } });
@@ -79,7 +107,9 @@ describe("report submission and review", () => {
     fireEvent.click(screen.getByRole("button", { name: "관리자에게 제출" }));
     expect(mocks.change).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "보고서 제출 확인" }));
-    await waitFor(() => expect(mocks.change).toHaveBeenCalledWith(r.id, "submit", r.revision, expect.objectContaining({ studentConsultation: "학생 상담 완료", detail: "상담 결과 ".repeat(40) })));
+    // 제출 직전에 남은 글을 자동 저장으로 마저 보내고(revision 3 → 4) 그 revision으로 제출한다.
+    await waitFor(() => expect(mocks.change).toHaveBeenCalledWith(r.id, "submit", r.revision + 1, expect.objectContaining({ studentConsultation: "학생 상담 완료", detail: "상담 결과 ".repeat(40) })));
+    expect(mocks.autosave).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
   });
   it("shows the detail length rule as a placeholder, not as a label note", () => {

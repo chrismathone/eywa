@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { logAction } from "@/features/audit/server/log";
 import { pokeSlack } from "@/features/slack/server/poke";
 import { describeDbError } from "@/lib/supabase/db-error";
@@ -96,13 +98,9 @@ export async function changeWithdrawalReport(id: string, action: ReportAction, r
     return { error: "작성 요청을 보낸 사람이나 원장만 취소할 수 있습니다." };
   const payload: { revision: number; body?: unknown; comment?: string } = { revision };
   if (action === "save" || action === "submit") {
-    const parsed = bodySchema.safeParse(withoutBillingFields(input));
-    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "보고서 내용을 확인해 주세요." };
-    if (action === "submit") { const error = submissionError(parsed.data); if (error) return { error }; }
-    const existing = record.report.body.consultationIds ?? [];
-    if (parsed.data.consultationIds?.some(id => !existing.includes(id) && !record.consultations.some(c => c.id === id))) return { error: "연결할 수 없는 상담기록이 포함되어 있습니다." };
-    try { payload.body = { ...parsed.data, ...await loadReportBilling(record.report) }; }
-    catch { return { error: "수납 정보를 확인하지 못했습니다. 잠시 후 다시 저장해 주세요." }; }
+    const body = await reportBodyFor(record, input, action === "submit");
+    if ("error" in body) return body;
+    payload.body = body.body;
   }
   if (action === "reject") {
     if (typeof input !== "string" || !input.trim() || input.trim().length > 1000) return { error: "반려 사유를 1~1,000자로 작성해 주세요." };
@@ -115,8 +113,72 @@ export async function changeWithdrawalReport(id: string, action: ReportAction, r
   const changed = data as WithdrawalReport;
   // 취소 — DB가 미완료 데스크 환불의 할 일을 취소하고 데스크 담당자에게 '환불 진행 전 확인'을 보냈다(s2_0024 · 요청서는 남긴다). 기록에도 남긴다.
   const extra = action === "cancel" ? await cancelRefundAudit(changed) : {};
-  await finish(changed, action, extra);
+  await finish(changed, action, { ...extra, ...await teacherViewMeta(viewer.user) });
   return { ok: true, id };
+}
+
+/** 작성·제출 본문 — 화면 값 검사(제출이면 제출 기준까지) · 연결할 수 있는 상담만 · 수납 칸은 서버가 지금 장부로 채운다. */
+async function reportBodyFor(record: NonNullable<Awaited<ReturnType<typeof getReport>>>, input: unknown, submit: boolean): Promise<{ body: unknown } | { error: string }> {
+  const parsed = bodySchema.safeParse(withoutBillingFields(input));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "보고서 내용을 확인해 주세요." };
+  if (submit) { const error = submissionError(parsed.data); if (error) return { error }; }
+  const existing = record.report.body.consultationIds ?? [];
+  if (parsed.data.consultationIds?.some(id => !existing.includes(id) && !record.consultations.some(c => c.id === id))) return { error: "연결할 수 없는 상담기록이 포함되어 있습니다." };
+  try { return { body: { ...parsed.data, ...await loadReportBilling(record.report) } }; }
+  catch { return { error: "수납 정보를 확인하지 못했습니다. 잠시 후 다시 저장해 주세요." }; }
+}
+
+/**
+ * 강사뷰 전환으로 대신 쓴 처리인가(원장 2026-11-05 — 부재 강사의 보고서를 관리자가 강사뷰로 들어가 대신 작성) — 처리 이력·DB 행위자는
+ * 그 강사(작성 강사 본인만 쓸 수 있다), 감사로그 행위자는 실제 로그인 계정이다. 둘이 다르면 누구 화면에서 했는지 기록에 남긴다.
+ */
+async function teacherViewMeta(actingAs: { id: string; displayName: string }): Promise<Record<string, unknown>> {
+  const real = await getCurrentUser();
+  return real && real.id !== actingAs.id ? { teacherViewAs: actingAs.displayName } : {};
+}
+
+export type AutosaveResult = { ok: true; revision: number; savedAt: string } | { ok: false; conflict: boolean; error: string };
+const AUTOSAVE_AUDIT_WINDOW_MS = 10 * 60 * 1000;
+const AUTOSAVE_OPERATION = "자동 저장";
+
+/**
+ * **자동 저장**(원장 2026-11-05 *"퇴원보고서도 실시간으로 입력되고 저장되게"*) — 작성 칸을 고치면 화면의 자동 저장기(`autosave.ts`)가 잠시 뒤 부른다.
+ * 검사와 DB 처리는 'save'와 같다(`transition_withdrawal_report` 'save' — 작성 강사 본인 · 작성 단계만 · revision 대조). 다른 점 셋:
+ * - 화면을 다시 그리지 않는다(`refresh` 안 함) — 고칠 때마다 다섯 경로를 다시 그리면 무겁고 쓰던 칸이 흔들린다. 바뀐 revision만 돌려준다.
+ * - 감사로그는 그 보고서를 같은 사람이 10분 안에 이어 자동 저장하면 새 줄을 남기지 않는다(시간표 메모 시트와 같은 규칙).
+ *   DB 처리 이력도 같은 규칙으로 줄을 아낀다(s2_0024 — 마지막 이력이 같은 사람의 10분 안 '임시 저장'이면 새 줄을 넣지 않는다).
+ * - revision이 다르면(다른 화면이 먼저 고침) `conflict` — 자동 저장기가 멈추고 새로고침을 안내한다(내 글로 덮지 않는다).
+ */
+export async function autosaveWithdrawalReport(id: string, revision: number, input: unknown): Promise<AutosaveResult> {
+  const viewer = await reportViewer();
+  if (!viewer?.writable) return { ok: false, conflict: false, error: "이 화면에서는 보고서를 수정할 수 없습니다." };
+  if (!/^[0-9a-f-]{36}$/i.test(id) || !Number.isSafeInteger(revision)) return { ok: false, conflict: false, error: "요청 내용을 확인해 주세요." };
+  const record = await getReport(id);
+  if (!record) return { ok: false, conflict: false, error: "보고서에 접근할 수 없습니다." };
+  if (record.report.revision !== revision) return { ok: false, conflict: true, error: "다른 화면에서 이 보고서가 바뀌었습니다." };
+  const body = await reportBodyFor(record, input, false);
+  if ("error" in body) return { ok: false, conflict: false, error: body.error };
+  const { data, error } = await createAdminClient().rpc("transition_withdrawal_report", {
+    p_tenant: viewer.user.tenantId, p_actor: viewer.user.id, p_report: id, p_action: "save", p_payload: { revision, body: body.body },
+  }).single();
+  if (error) {
+    const message = describeDbError(error, { fallback: "보고서를 저장하지 못했습니다." }).message;
+    return { ok: false, conflict: /보고서가 변경되었습니다/.test(error.message ?? ""), error: message };
+  }
+  const saved = data as WithdrawalReport;
+  const realUser = await getCurrentUser();
+  const meta = await teacherViewMeta(viewer.user);
+  after(async () => {
+    if (!realUser) return;
+    const since = new Date(Date.now() - AUTOSAVE_AUDIT_WINDOW_MS).toISOString();
+    const { data: recent } = await createAdminClient().from("audit_logs").select("id")
+      .eq("tenant_id", saved.tenant_id).eq("actor_id", realUser.id).eq("action", "withdrawal_report_update")
+      .eq("metadata->>reportId", saved.id).eq("metadata->>operation", AUTOSAVE_OPERATION).gte("created_at", since).limit(1);
+    if (recent?.length) return;
+    await logAction({ action: "withdrawal_report_update", targetType: "student", targetLabel: saved.snapshot.name,
+      metadata: { reportId: saved.id, operation: AUTOSAVE_OPERATION, date: saved.effective_date, revision: saved.revision, ...meta } });
+  });
+  return { ok: true, revision: saved.revision, savedAt: saved.updated_at };
 }
 /**
  * 취소한 묶음의 데스크 환불(원장 2026-11-03) — DB가 같은 거래에서 연결된 요청서마다 데스크에 알렸다(끝나지 않은 요청서 = 할 일 취소 + '환불 진행 전 확인',
