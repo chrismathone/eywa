@@ -17,9 +17,7 @@ export const PENDING_STALE_MIN = 30;
 export const RUNNING_STALE_MIN = 20;
 /** 한 번에 동기화하는 반 상한 — 반 하나 ≈ ClassNote 조회 (학생 수 × 3 + 몇) 건. 남은 반은 다음 누름·새벽이 한다. */
 export const MAX_CLASSES_PER_RUN = 15;
-/** 1인 보드 생성 + 원아 배정 상한(신입 준비). */
-export const MAX_PROVISION_WRITES = 20;
-/** '최근 등록'으로 보는 기간(일) — 이 안의 학생만 1인 보드 준비·가입 대기 재확인 대상. */
+/** '최근 등록'으로 보는 기간(일) — 이 안의 학생만 가입 대기 재확인(원아 연결 갱신) 대상. */
 export const RECENT_DAYS = 14;
 
 const WAIT_ASSIGN = "반 보드 배정 전";
@@ -56,6 +54,7 @@ export function classDiffReasons(c, link, mem, recentStudentIds) {
   const recorded = new Set(mem.map((m) => m.student_id));
   // 보고서 미발송(JJ) 반은 지금 다니는 학생이 없으면 보드를 만들지 않는다(class-board-plan.mjs `OPTOUT_NO_CREATE_REASON`) — 그런 반을
   // '새 반'으로 고르면 요청마다 같은 보류만 되풀이한다(같은 이름 보드 채택은 새벽 정기 동기화가 본다 · 지목하면 그 반은 함께 된다).
+  // 11-04 'JJ 맞춤' 되돌림 뒤에는 미발송 반이 대상 밖이라 이 분기는 쓰이지 않는다(다시 넣는 날을 위해 남김).
   if (!link) {
     if (!c.reportOptout || c.studentIds.length) reasons.push([2, "새 반"]);
   } else if (link.boardName !== c.className) reasons.push([3, "반 이름 변경"]);
@@ -74,7 +73,7 @@ export function classDiffReasons(c, link, mem, recentStudentIds) {
 /**
  * 동기화할 반 고르기.
  * @param {object} a
- * @param {Array<{classId:string, className:string, studentIds:string[]}>} a.classes  대상 수학 반(loadAywa — 종강 제외 · 보고서 미발송 JJ 반 포함)
+ * @param {Array<{classId:string, className:string, studentIds:string[]}>} a.classes  대상 수학 반(loadAywa — 종강 제외 · 보고서 미발송 JJ 반 제외 — 11-04 되돌림)
  * @param {Map<string,{boardName:string}>} a.links  0302a 반 ↔ 보드
  * @param {Array<{class_id:string, student_id:string, status:string, reason:string|null}>} a.members  0302a 반 보드 학생 기록
  * @param {Set<string>} a.recentStudentIds  최근 등록 학생
@@ -103,10 +102,11 @@ export function selectClassesToSync({ classes, links, members, recentStudentIds,
 }
 
 /**
- * 1인 보드 준비(프로비저닝) 대상 학생 — 지목한 학생 + (전체일 때) 최근 등록인데 원아 연결(0185a)이 아직 없는 학생.
- * 원아 연결이 있으면 이미 가입·배정된 학생이라 볼 필요가 없다.
+ * 가입 확인(원아 연결 갱신) 후보 학생 — 지목한 학생 + (전체일 때) 최근 등록인데 원아 연결(0185a)이 아직 없는 학생.
+ * 원아 연결이 있으면 이미 가입·연결된 학생이라 볼 필요가 없다. 🔴 1인 보드 준비 대상이 아니다 — 1인 보드는 만들지도 배정하지도
+ * 않는다(원장 2026-11-04 *"앞으로 1인보드에 배정 시키지마 절대"* · 1.0.14).
  */
-export function provisionCandidates({ recentStudentIds, childLinkedStudentIds, scope }) {
+export function childLinkCandidates({ recentStudentIds, childLinkedStudentIds, scope }) {
   const out = new Set(scope.studentIds);
   if (scope.full) for (const s of recentStudentIds) if (!childLinkedStudentIds.has(s)) out.add(s);
   return [...out];
@@ -121,10 +121,10 @@ export const CHILDMAP_REFRESH_GAP_MS = 4 * 60 * 1000;
 
 /**
  * 지금 동기화가 반 보드 동기화 **앞에서** 원아 연결(0185a)을 새로 만들까(순수) — 원장 2026-11-02 A안.
- * 수학이 반별이면 신입의 첫 반 보드 배정 출처가 원아 연결이다. 1.0.10까지는 아래 신입 1인 보드 준비가 이름으로 원아를 넣어
- * **같은 실행에서** 반 보드까지 풀었다 — 이제 그 준비가 수학을 건너뛰므로, 낮에 막 가입한 학부모의 원아는 연결을 여기서 만들지
- * 않으면 다음 날 새벽까지 막힌다(앱 '가입 대기' 안내 "몇 분 뒤 다시 보내 보세요"가 거짓이 된다 — 적대적 리뷰 2026-11-02).
- * 조건 = 신입 준비 후보(지목 학생 + 최근 등록인데 연결 없는 학생)가 있고, 마지막 갱신에서 `CHILDMAP_REFRESH_GAP_MS`(4분)가 지났다.
+ * 수학이 반별이면 신입의 첫 반 보드 배정 출처가 원아 연결이다. 1.0.10까지는 신입 1인 보드 준비가 이름으로 원아를 넣어
+ * **같은 실행에서** 반 보드까지 풀었다 — 그 준비는 1.0.11에서 수학을, 1.0.14에서 통째로 뺐으므로, 낮에 막 가입한 학부모의 원아는
+ * 연결을 여기서 만들지 않으면 다음 날 새벽까지 막힌다(앱 '가입 대기' 안내 "몇 분 뒤 다시 보내 보세요"가 거짓이 된다 — 적대적 리뷰 2026-11-02).
+ * 조건 = 가입 확인 후보(지목 학생 + 최근 등록인데 연결 없는 학생)가 있고, 마지막 갱신에서 `CHILDMAP_REFRESH_GAP_MS`(4분)가 지났다.
  */
 export function childMapRefreshDue({ candidates, lastAt, now }) {
   if (!(candidates > 0)) return false;
@@ -139,7 +139,7 @@ export const RESTARTED_MSG = "연동 PC가 동기화 도중 다시 시작돼 중
 /**
  * 결과 한 줄(한글) — 화면 툴팁·감사로그. 숫자는 result의 같은 키로도 남긴다(앱 syncResultBrief).
  * @param {{ noChange?:boolean, classes?:number, created?:number, renamed?:number, enrolled?:number, teachers?:number,
- *   boardsCreated?:number, assigned?:number, held?:number, remaining?:number, provisionRemaining?:number, dryRun?:boolean }} r
+ *   releasedChildren?:number, releasedTeachers?:number, childLinks?:number, held?:number, remaining?:number, dryRun?:boolean }} r
  */
 export function summarizeSync(r) {
   if (r.noChange) return "바뀐 반이 없어 ClassNote는 건드리지 않았습니다";
@@ -151,12 +151,9 @@ export function summarizeSync(r) {
   if (r.teachers) bits.push(`담임 연결 ${r.teachers}`);
   if (r.releasedChildren) bits.push(`원아 해제 ${r.releasedChildren}`);
   if (r.releasedTeachers) bits.push(`담임 해제 ${r.releasedTeachers}`);
-  if (r.boardsCreated) bits.push(`1인 보드 생성 ${r.boardsCreated}`);
-  if (r.assigned) bits.push(`1인 보드 배정 ${r.assigned}`);
   if (r.childLinks) bits.push(`새 학부모 가입 확인 ${r.childLinks}`); // 지금 동기화 앞 원아 연결 갱신(classnote-sync-request.mjs ⓪)
   if (r.held) bits.push(`보류 ${r.held}(사유는 원스크린 노트 아이콘)`);
   if (r.remaining) bits.push(`남은 반 ${r.remaining}(다시 누르거나 새벽 5시에)`);
-  if (r.provisionRemaining) bits.push(`남은 신입 준비 ${r.provisionRemaining}`);
   return bits.join(" · ");
 }
 

@@ -13,8 +13,11 @@ import { getWeeklyScheduleWithStudents } from "@/features/timetable/server/queri
 import { getReservationsInRange } from "@/features/attendance/server/makeup-reservation-queries";
 import { getShuttleBoard } from "@/features/shuttle/server/queries";
 import { buildRunCards } from "@/features/shuttle/run-cards";
+import { studentAssignments } from "@/features/shuttle/student-assignments";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { loadRecentScheduleChanges, SCHEDULE_CHANGE_DAYS } from "@/features/shuttle/server/schedule-changes";
 import { loadRideConflictAcks } from "@/features/shuttle/server/conflict-acks";
+import { loadWeekRideChanges } from "@/features/shuttle/server/week-ride-changes";
 import { buildMakeupCards } from "./_components/makeup-cards";
 import { RiderWeekSheet, type SheetClass } from "./_components/rider-week-sheet";
 
@@ -38,7 +41,7 @@ export default async function ShuttleRiderClassesPage({ searchParams }: { search
   const week = weekDates(today);
 
   // 서로 독립 — 함께 받는다(B4).
-  const [slots, riderIds, holidays, board, acks] = await Promise.all([
+  const [slots, riderIds, holidays, board, acks, weekChanges, canWrite] = await Promise.all([
     // 명단 기준일 = 시간표와 같은 규칙 — 이번 주면 오늘, 주말에 열어 다음 주를 보면 그 주 월요일.
     getWeeklyScheduleWithStudents({ referenceDate: week.some((w) => w.ymd === today) ? today : week[0]!.ymd, futureNames: true }),
     loadShuttleRiderIds(user.tenantId, season),
@@ -47,9 +50,15 @@ export default async function ShuttleRiderClassesPage({ searchParams }: { search
     getShuttleBoard(season),
     // "수정된 내용" 확인 기록(계정 귀속) — 확인한 겹침은 다시 안 띄운다.
     loadRideConflictAcks(),
+    // 그 주 그날만 변경(사용자 2026-11-04) — 오늘 등하원 [등하원 수정]·학부모 수정과 같은 표. 실패면 null(평소 배정만 + 안내).
+    loadWeekRideChanges(user.tenantId, week.slice(0, 5).map((w) => ({ day: w.day, ymd: w.ymd }))),
+    // 수정 카드 [고정으로 변경] = 노선 편성과 같은 편성 쓰기 권한(서버 액션이 다시 본다).
+    canWriteTenant(user.systemRole, "shuttle"),
   ]);
   /** 배차 카드 — 회차 × 요일, 그날 타는 아이(수업 카드와 따로 칸에 선다). */
-  const runCards = buildRunCards(board.runs, board.vehicles);
+  const runCards = buildRunCards(board.runs, board.vehicles, weekChanges ?? []);
+  /** 학생별 평소 배정 — 수정 카드가 노선 편성 편집기로 연다(보드가 실은 회차에서 접는다, 추가 조회 0). */
+  const assignments = Object.fromEntries(studentAssignments(board.runs, board.vehicles));
 
   // 보강 예약(0264a) — 시간표 '보강' 탭·운영실 카드와 같은 조회. 반 집합은 이번 주 시간표의 반 전부, 학생은 탑승 학생만.
   const allClassIds = [...new Set(slots.filter((s) => !s.blockKind).map((s) => s.classId))];
@@ -104,6 +113,10 @@ export default async function ShuttleRiderClassesPage({ searchParams }: { search
           acks={acks}
           week={week.map((w) => ({ ...w, rest: restDayName(holidays, w.ymd) }))}
           today={today}
+          season={season}
+          changesFailed={weekChanges === null}
+          assignments={assignments}
+          canWrite={canWrite}
         />
       )}
     </div>

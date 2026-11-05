@@ -9,6 +9,7 @@ import { isImageAttachment } from "../attachment-utils";
 import { isVocabkingDeck } from "@/features/vocabking/deck";
 import { buildVocabkingReport } from "@/features/vocabking/model";
 import { VocabkingReportView } from "@/features/vocabking/components/vocabking-report";
+import { MonthlyEvalBlock } from "./monthly-report-sheet";
 
 /**
  * 학부모 카드의 **템플릿 모드 본문**(영어) — ParentReportCard에서 떼어 냈다(2026-09-11, 첨부 자리를 더하며).
@@ -52,6 +53,12 @@ export function TemplateBody({
   const drawn = new Set<string>();
   const blocks = segments.flatMap((seg, i): ReactNode[] => {
     if (seg.kind === "text") return [<TemplateText key={`t${i}`} text={seg.text.trim()} />];
+    // EiE 월간 점수 자리(2026-11-05) — 글에 동결된 점수로 그래프 + 표를 그린다(월간 카드가 아닌 글에 들어가도 같은 그림).
+    if (seg.kind === "monthly") {
+      if (drawn.has("monthly")) return [];
+      drawn.add("monthly");
+      return [<MonthlyEvalBlock key={`m${i}`} evaluation={seg.eval} />];
+    }
     const once = seg.kind === "slot" ? `slot:${seg.key}` : `att:${seg.name}`;
     if (drawn.has(once)) return [];
     drawn.add(once);

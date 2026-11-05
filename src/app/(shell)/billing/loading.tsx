@@ -1,68 +1,71 @@
 import { PageHeaderSkeleton } from "@/components/page-header";
+import { FaceTabsSkeleton } from "@/components/face-tabs-skeleton";
+import { StatStripSkeleton } from "@/components/atoms/stat-strip";
+import { ToolbarSkeletonItem } from "@/components/toolbar";
+import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 
-// 수납관리 초기 로드 스트리밍(B7) — BillingContent가 그 달 청구서 전건(2026-07 기준 385행·419KB)과
-// 월 목록·학생 옵션·동기화 상태를 await하는 동안 Next가 이 loading을 Suspense fallback으로 즉시
-// 스트리밍한다. 예전엔 이 라우트에 loading이 없어 **창=iframe으로 열면 응답이 올 때까지 흰 화면**이었다
-// ("수납관리 창이 너무 느리다"의 체감 대부분이 이 구간).
-//
-// ⚠️ 실제 렌더와 블록 순서·높이를 맞춘다(면탭 + 오른쪽 끝 동기화 배지 한 줄 → 헤더 → 툴바 → KPI 5 → 진행률 → 표).
-//    어긋나면 데이터 도착 순간 레이아웃이 튀어 스켈레톤이 없느니만 못하다(시간표 loading의 교훈).
-//    간격도 실제와 같이 중첩한다 — 바깥 space-y-4(page.tsx) 안에 BillingContent의 space-y-5.
+// 투명 글자 막대 — 글자 크기·줄 높이를 실물과 같게 잡는다(손 치수 대신).
+const TEXT_BAR = "bg-bg-soft text-transparent animate-pulse rounded";
+// 면 탭 이름 — page.tsx의 FACES 6 + 원장 전용 '강사 정산'(회차 정산 모듈이 켜진 지점의 원장 = 흔한 첫 화면). 실물 이름이라 칸 폭이 같다.
+const FACE_LABELS = ["수납", "교재", "지출", "수강료 계산기", "회차 확정", "환불 요청서", "강사 정산"] as const;
+
+// 수납관리 초기 로드 스트리밍(B7) — BillingContent가 그 달 청구서 전건·월 목록·학생 옵션·동기화 상태를 await하는 동안
+// Next가 이 loading을 즉시 흘려보낸다(예전엔 loading이 없어 창으로 열면 응답까지 흰 화면이었다).
+// ⚠️ 실물과 블록 순서·간격을 맞춘다 — 바깥 `space-y-4`(page.tsx) 안에 BillingContent의 `space-y-3`.
+//    (면 탭 줄 → 머리 → 월 이동 줄 → 요약 띠 → 진행률 한 줄 → 표). 어긋나면 데이터 도착 순간 화면이 튄다.
+// 면(`?tab=`)마다 본문이 다르지만 loading은 주소를 못 읽는다 — 기본 면(수납)에 맞춘다(원장 결정: 공통 골격 타협).
 export default function BillingLoading() {
   return (
-    <div className="space-y-4">
-      {/* 면 탭 줄 — 실제 `FaceTabs`는 **테두리 상자 하나**(`h-(--control-h) rounded-lg border`) 안에 항목이 든 모양이다.
-          옛 스켈레톤은 알약 7개를 따로 그려(32px) 로딩→본문에서 모양과 높이가 함께 바뀌었다.
-          동기화 배지는 2026-10-15부터 **같은 줄 오른쪽 끝**이다(page.tsx) — 배지 줄을 따로 그리면 데이터 도착 때 본문이 40px 튄다. */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="bg-bg-soft h-(--control-h) w-[30rem] max-w-full animate-pulse rounded-lg" />
-        <div className="bg-bg-soft ml-auto h-5 w-36 animate-pulse rounded-pill" />
+    <div className="space-y-4 print:space-y-0">
+      {/* 면 탭 줄 — 실물과 같은 래퍼·같은 부품 치수. 동기화 배지는 같은 줄 오른쪽 끝(2026-10-15)이라 따로 줄을 그리지 않는다. */}
+      <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
+        <div className="min-w-0 max-w-full self-start">
+          <FaceTabsSkeleton labels={FACE_LABELS} />
+        </div>
+        <div className="ml-auto flex justify-end">
+          <span aria-hidden className={`${TEXT_BAR} inline-flex whitespace-nowrap text-xs`}>동기화 0시간 전 확인</span>
+        </div>
       </div>
-      <div className="space-y-5">
-        {/* PageHeader — 한 줄(데스크톱) · 컴팩트(창·모바일)에서도 **통째로 숨기면 안 된다**. 수납 헤더는 embedLabel과
-            actions(머리 상시 버튼 둘)를 넘기므로 compact에서도 한 줄이 실제로 렌더된다(page-header.tsx).
-            숨기면 데이터 도착 때 본문이 통째로 밀린다(적대 리뷰). 시간표는 PageHeader 자체를
-            compact-chrome:hidden 래퍼로 감싸 진짜 사라지므로 거기 스켈레톤만 보고 베끼면 틀린다.
-            오른쪽 = 머리 상시 버튼 둘('엑셀 내보내기' 텍스트 + '청구서 만들기' Primary) — 2026-10-01부터 헤더가 한 줄이라
-            넓은 화면에서도 제목과 같은 줄에 선다. ⚠️ 옛 스켈레톤은 여기에 월 네비 32px 정사각 둘을 그렸는데,
-            월 이동은 14단계에서 **툴바의 BillingMonthNav**로 내려갔다. */}
+      <div className="space-y-3">
+        {/* 머리 — 실 헤더에 embedLabel·actions가 있어 창(컴팩트)에서도 한 줄이 남는다 → hideCompact 금지.
+            동작 = '검색' + '청구서 만들기'. 검색 토글은 툴바에 놓여도 포털로 머리 동작 줄 맨 앞에 선다(HeaderSearchSlot, 10-19). */}
         <PageHeaderSkeleton
           actions={
             <>
-              <div className="bg-bg-soft h-(--control-h) w-24 animate-pulse rounded-lg" />
-              <div className="bg-bg-soft h-(--control-h-lg) w-28 animate-pulse rounded-lg" />
+              <ToolbarSkeletonItem className="w-14" />
+              <ToolbarSkeletonItem className="w-36" />
             </>
           }
         />
-        {/* 툴바 — 실제는 `BillingMonthNav`(PeriodNav 한 상자 + `월:` 드롭다운) + 오른쪽 끝 검색 토글이다.
-            ⚠️ 옛 스켈레톤은 **최근 6개월 알약 칩 줄**을 그렸는데 그 줄은 14단계에서 걷혔다(§10 칩 줄 금지) —
-            스켈레톤만 남으면 데이터 도착 때 줄이 통째로 바뀌어 스켈레톤이 없느니만 못하다.
-            카드 껍데기 없음 · 높이는 컨트롤과 같은 변수(`--control-h`, v5 control-scale). */}
+        {/* 월 이동 툴바 — 실물(손으로 짠 줄 `gap-2.5 px-1 py-1`)과 같은 래퍼. PeriodNav 한 상자 + 오른쪽 ExcelMenu.
+            엑셀은 09-29부터 이 줄이다(머리 아님). 검색은 위 머리로 옮겨 가므로 여기 자리를 두지 않는다.
+            엑셀 = 원장(billing full) 실물 '엑셀 내보내기/가져오기 ▾' 버튼 — 공용 Button 기본 크기·여백에 실물 문구를 투명 글자로(폭이 실물과 같다). */}
         <div className="flex flex-wrap items-center gap-2.5 px-1 py-1">
-          <div className="bg-bg-soft h-(--control-h) w-44 shrink-0 animate-pulse rounded-lg" />
-          <div className="bg-bg-soft h-(--control-h) w-32 shrink-0 animate-pulse rounded-lg" />
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            <div className="bg-bg-soft h-(--control-h) w-16 animate-pulse rounded-lg" />
+          <ToolbarSkeletonItem className="w-60" />
+          <div className="ml-auto flex items-center gap-2">
+            <span
+              aria-hidden
+              className={`${CONTROL_H} ${CONTROL_LABEL} bg-bg-soft inline-flex shrink-0 animate-pulse items-center gap-1.5 rounded-lg border border-transparent px-2.5 font-medium whitespace-nowrap text-transparent`}
+            >
+              엑셀 내보내기/가져오기
+              {/* 쉐브론 — Button의 CONTROL_ICON 규칙(크기 클래스 없는 svg = 1em)이라 글자와 같은 18px. */}
+              <span className="size-[1em] shrink-0" />
+            </span>
           </div>
         </div>
-        {/* KPI 5종 */}
-        {/* ⚠️ 실제와 같은 분기점(md 3 · xl 5) — 옛 스켈레톤은 2xl이라 1280~1535px에서 3열을 그리다가
-            데이터가 오면 5열로 접혀 카드 줄이 통째로 튀었다. */}
-        <section className="grid grid-cols-2 gap-3.5 md:grid-cols-3 xl:grid-cols-5">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <div key={i} className="bg-card shadow-card h-[104px] animate-pulse rounded-2xl" />
-          ))}
-        </section>
-        {/* 수납 진행률 */}
-        <section className="bg-card shadow-card rounded-2xl p-5">
-          <div className="mb-3 flex items-baseline justify-between">
-            <div className="bg-bg-soft h-4 w-20 animate-pulse rounded" />
-            <div className="bg-bg-soft h-3 w-48 animate-pulse rounded" />
+        {/* KPI 5칸 = 요약 띠(09-11 띠 전환) — 떨어진 카드로 그리면 좁은 폭에서 줄 수가 달라진다.
+            보조 줄은 실물 칸 순서대로 총 청구액·수납 완료·미수금 셋뿐(할인 합계·수납률은 없음). */}
+        <StatStripSkeleton count={5} sub={[true, false, true, true, false]} />
+        {/* 수납 진행률 — 카드 없이 띠 아래 한 줄(09-04). */}
+        <div aria-hidden className="px-1">
+          <div className="mb-1.5 flex items-baseline justify-between gap-3">
+            <span className={`${TEXT_BAR} text-sm font-bold`}>수납 진행률</span>
+            <span className={`${TEXT_BAR} num text-sm`}>수납 00% · 부분납부 잔액 0.0% · 미납 0.0%</span>
           </div>
-          <div className="bg-bg-soft h-2.5 rounded-pill" />
-        </section>
-        {/* 표 */}
-        <div className="bg-card border-border h-[520px] animate-pulse rounded-2xl border" />
+          <div className="bg-bg-soft h-2.5 animate-pulse rounded-pill" />
+        </div>
+        {/* 표 — 실물 카드(`bg-card shadow-card rounded-2xl`, 헤어라인 링 하나 · border 없음). */}
+        <div aria-hidden className="bg-card shadow-card h-[32.5rem] animate-pulse rounded-2xl" />
       </div>
     </div>
   );

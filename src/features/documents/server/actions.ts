@@ -349,7 +349,7 @@ export async function deleteDocument(id: string): Promise<{ ok?: boolean; error?
     },
   });
   if (row?.file_path) await removeObject(row.file_path, { bucket: MEDIA_KIND.document.supabaseBucket }).catch(() => {});
-  // 퇴원보고서 데스크 환불 단계(s2_0022) — 지운 환불 요청서는 단계에서 빠진다. 그 요청서만 기다리던 퇴원보고서는 이어서 처리한다
+  // 퇴원보고서 데스크 환불 단계(s2_0024) — 지운 환불 요청서는 단계에서 빠진다. 그 요청서만 기다리던 퇴원보고서는 이어서 처리한다
   // (수납 화면의 요청서 삭제와 같은 길 · 던지지 않는다 — 실패는 오류 보고, 처리일 cron이 다시 본다).
   if (row?.form_type === REFUND_FORM_TYPE) await releaseWithdrawalRefunds({ tenantId: gate.user.tenantId, documentId: id, actorId: gate.user.id });
   revalidatePath("/documents");

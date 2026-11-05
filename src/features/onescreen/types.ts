@@ -3,6 +3,7 @@
  * 프로토타입(data/원스크린_전달/data.js)의 학생 shape를 그대로 타입화.
  * 데모 충실 이식: 입력은 클라이언트 state로만 돌고 DB에 영속화하지 않는다.
  */
+import type { MonthlyEval } from "@/features/report-templates/monthly-eval";
 
 /** 과목 톤 — aywa 디자인 토큰(globals.css)에 매핑된 색 키 */
 export type SubjectTone = "primary" | "blue" | "rose" | "purple" | "gold" | "neutral";
@@ -35,6 +36,11 @@ export type Subject = {
    */
   subjectLabel?: string;
   prev: string; // 이전 진도 — "Unit 7 · p.82"
+  /**
+   * 영어 반의 Monthly Test 점수(2026-11-05, EiE 월간 보고서) — 로스터가 이 반·이 학생의 가장 최근(이번 달·지난달) 점수를 싣는다.
+   * 없으면(점수 없음·영역 칸 미적용·조회 실패) undefined — 월간 템플릿의 점수 줄이 빠질 뿐 다른 동작은 그대로다.
+   */
+  monthlyEval?: MonthlyEval;
   today: string; // 오늘 진도 — "Unit 8 · p.90"
   /**
    * 오늘 수업의 **성격**(복습·문제풀이) — 진도 차시와 **함께** 기록되는 별개 축(progress-mode.ts).

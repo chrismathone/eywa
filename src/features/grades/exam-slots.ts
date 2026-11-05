@@ -33,7 +33,8 @@ const DEFAULT_SLOTS: readonly ExamSlotKey[] = ["midterm", "final"];
  *    0363a가 수학 내신 저장을 막는다. `school` 키·라벨은 옛 행을 읽기 위해서만 남긴다(새로 쓰지 않는다).
  */
 const SLOTS_BY_SUBJECT: Record<string, readonly ExamSlotKey[]> = {
-  english: ["listening", "midterm", "final"],
+  // 영어 월말 시험(Monthly Test — 원장 2026-11-04)은 수학 월말평가와 같은 칸(`monthly`·월 축)이고, 화면 이름과 영역 점수만 다르다.
+  english: ["listening", "midterm", "final", "monthly"],
   math: ["midterm", "final", "monthly"],
 };
 
@@ -85,13 +86,19 @@ export function normalizeExamSlot(subjectKey: string, raw: unknown): ExamSlotKey
   return isExamSlot(v) && slots.includes(v) ? v : slots[0]!;
 }
 
+/** 그 과목에서 부르는 시험 이름 — 영어 월말 시험만 `Monthly Test`(원장 2026-11-04 · 시트 제목 그대로), 나머지는 공통 라벨. */
+export function examSlotLabel(subjectKey: string, slot: ExamSlotKey): string {
+  return subjectKey === "english" && slot === "monthly" ? "Monthly Test" : EXAM_SLOT_LABEL[slot];
+}
+
 export function examSlotOptions(subjectKey: string): { value: ExamSlotKey; label: string }[] {
-  return examSlotsFor(subjectKey).map((key) => ({ value: key, label: EXAM_SLOT_LABEL[key] }));
+  return examSlotsFor(subjectKey).map((key) => ({ value: key, label: examSlotLabel(subjectKey, key) }));
 }
 
 /** 라벨 → 칸 키(엑셀이 이름으로 적혀 오는 자리). 모르는 이름은 null. */
 export function examSlotFromLabel(label: unknown): ExamSlotKey | null {
   const t = String(label ?? "").replace(/\s+/g, "");
+  if (t.toLowerCase() === "monthlytest") return "monthly";
   const hit = (Object.keys(EXAM_SLOT_LABEL) as ExamSlotKey[]).find(
     (k) => EXAM_SLOT_LABEL[k].replace(/\s+/g, "") === t,
   );

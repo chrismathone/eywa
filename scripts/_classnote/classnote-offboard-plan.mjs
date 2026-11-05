@@ -33,7 +33,7 @@
 import { baseName, childNameConsistent } from "./class-board-plan.mjs";
 import { personalOwnerName } from "./class-board-release.mjs";
 import { normBoard } from "./board-safety.mjs";
-import { dayDiff, isProtectedName, phoneMatches } from "./offboard-safety.mjs";
+import { carerPhones, dayDiff, isProtectedName, phoneMatches } from "./offboard-safety.mjs";
 
 /** 전 과목 퇴원 뒤 이만큼 지나야 명부에서 내린다(원장 2026-11-03). */
 export const OFFBOARD_GRACE_DAYS = 45;
@@ -244,7 +244,7 @@ export function planOffboard({ admissions, students, enrollment, childLinks, ver
     // ⑥ 다른 집 · 다른 아이 — 보호자 전화가 확실히 다르거나, 원아 이름이 그 학생 이름과 **같지 않으면**(공백·끝 알파벳 제외) 내리지 않는다.
     //    원아 이름 = 명부 이름(학원이 적는 basic_info) — 학부모가 원아 목록 이름을 '채민 공주💋'처럼 바꾼 경우가 있어서다. 명부 이름이 없을 때만 원아 목록 이름.
     //    보호자 전화 = 명부의 carer 전화 전부(B7) — 하나도 없으면 형제 대조를 못 해 내리지 않는다.
-    const phones = adm?.phones?.length ? adm.phones : adm?.phone ? [adm.phone] : [];
+    const phones = carerPhones(adm);
     if (!phones.length) hit("no_phone", "보호자 전화가 없어 형제 대조를 할 수 없습니다");
     else if (phoneMatches(s.phones ?? [], phones) === false) hit("phone_mismatch", "ClassNote 보호자 전화가 그 학생의 전화와 다릅니다 — 다른 집일 수 있습니다");
     const ownName = rosterName || listName;

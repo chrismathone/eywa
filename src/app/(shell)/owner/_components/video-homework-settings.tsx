@@ -28,7 +28,7 @@ export function VideoHomeworkSettings({ policy, classes, onChange }: {
   const visible = showAll ? filtered : filtered.slice(0, 16);
 
   return <SettingsCard title="영상 제출 검사"
-    description="강사가 지난 영상 숙제를 검사할 대상입니다. 과목·학교급·반 중 하나라도 꺼지면 강사 체크와 관리자 당일 명단에서 제외됩니다. 기존 검사 이력은 유지됩니다."
+    description="영상 숙제를 쓰는 대상입니다. 과목·학교급·반 중 하나라도 꺼지면 원스크린 '영상 과제' 출제, 학생 영상 올리기 사이트, 학부모 보고서의 영상 안내 줄, 강사 체크·관리자 당일 명단·운영실 집계 등에서 빠집니다. 기존 검사 이력은 유지됩니다."
     span2>
     <div className="space-y-4">
       <ToggleField label="영상 제출 검사 사용" value={policy.enabled}

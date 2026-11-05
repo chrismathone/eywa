@@ -3,7 +3,8 @@ import { originalClassName } from "@/features/classes/closed-name";
 import type { ReportSettings } from "@/features/owner/settings-types";
 import type { JjReportSnapshot } from "@/features/ijw/snapshot";
 import { parentStudentName } from "@/features/report-templates/student-name";
-import { splitImageSlots } from "@/features/report-templates/image-slots";
+import { splitImageSlots, stripImageSlots } from "@/features/report-templates/image-slots";
+import { monthlyEvalOfText } from "@/features/report-templates/monthly-eval";
 import { hasTrend, type TrendPoint } from "../report-trend";
 import { isImageAttachment, pickInlineAttachments } from "../attachment-utils";
 import { isSkipStatusProgress } from "../progress-status";
@@ -14,6 +15,7 @@ import { isPilotReportSections, parsePilotNotes, splitPilotNote } from "../pilot
 import { PilotNoteBox, PilotNotesBody } from "./pilot-notes-body";
 import { ReportTrendGraph } from "./report-trend-graph";
 import { PilotReportSheet } from "./pilot-report-sheet";
+import { MonthlyReportSheet } from "./monthly-report-sheet";
 import { EMPTY_NOTES, FileLink, TemplateBody, type CardAttachment } from "./report-template-body";
 
 // 학부모 수업 보고서 카드 — 공유 서버 컴포넌트(순수 프레젠테이션, 데이터는 props로만).
@@ -172,6 +174,26 @@ export function ParentReportCard({
     templateMode && rpt.showAttachments ? pickInlineAttachments(report.notes, attachments) : new Map();
   const inlinePaths = new Set([...inline.values()].map((a) => a.path));
   const restAttachments = inlinePaths.size ? attachments.filter((a) => !inlinePaths.has(a.path)) : attachments;
+
+  // EiE 월간 보고서(원장 2026-11-05 *"월간 보고서 디자인은 해당 시트로 동일하게"*) — 영어 글에 월간 점수 줄이 있고 항목 글(■)이
+  // 아니면 시트 모양으로 그린다. 점수 줄을 뺀 나머지 글이 Teacher's Comment다(템플릿 = BUILTIN_EIE_MONTHLY_TEMPLATE).
+  const monthly = templateMode && !pilotOwns ? monthlyEvalOfText(report.notes) : null;
+  if (monthly) {
+    return (
+      // ⚠️ report-capture = ClassNote 워커 스크린샷 대상(아래 카드들과 같은 클래스·폭).
+      <div className="report-capture flex w-full max-w-lg flex-col">
+        <MonthlyReportSheet
+          evaluation={monthly}
+          date={report.reportDate}
+          studentName={parentStudent?.name || "-"}
+          className={report.className ? originalClassName(report.className) : null}
+          teacherName={report.teacherName}
+          comment={stripImageSlots(report.notes)}
+          footer={rpt.showFooter ? rpt.footerNote || academyName : null}
+        />
+      </div>
+    );
+  }
 
   // 수학 보고서 시범 = 데일리 학습알림 표(원장 2026-10-23 참고 시안). 시범 글이 확실할 때만(pilotOwns) — 나머지 학생은 아래 카드 그대로.
   // 학생 정보·제목 머리는 표 머리가 대신한다. 학습 추이·추세·첨부는 같은 재료를 띠로 넘기고, 사랑의 한마디는 맨 아래 그대로.

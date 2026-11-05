@@ -56,7 +56,6 @@
     "scripts/_classnote/classnote-parent-reaction-core.mjs",
     "scripts/_classnote/classnote-parent-reply-core.mjs",
     "scripts/_classnote/classnote-paths.mjs",
-    "scripts/_classnote/classnote-provision-core.mjs",
     "scripts/_classnote/classnote-read-core.mjs",
     "scripts/_classnote/classnote-recall-core.mjs",
     "scripts/_classnote/classnote-roster-core.mjs",

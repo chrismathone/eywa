@@ -37,7 +37,7 @@ import {
 import { FieldSelect } from "./field-select";
 import { isMathBookRow, useMathBookListId } from "./math-book-list";
 import { JjBookPicker } from "./jj-book-picker";
-import { isJjSheetDraft, isJjSheetReport } from "../jj-books";
+import { isJjSheetDraft, isJjSheetReport, isProgressOptionalReport } from "../jj-books";
 import { LoveNoteDraftButton } from "./love-note-draft-button";
 import { HomeworkRateInput } from "./homework-rate-input";
 import { VideoHomeworkCheck } from "@/features/video-homework/components/video-homework-provider";
@@ -57,6 +57,7 @@ import { hasPilotOneLine, isMathReportPilot, pilotCanEdit, pilotNeedsAutoWrite }
 import { needsAttitudeNote, needsHomeworkMissReason, pilotRowSig, testSkipComplete } from "../math-report-pilot-sections";
 import type { SheetLang } from "@/features/teacher-view/i18n";
 import { ReservedMakeupTag } from "./reserved-makeup-tag";
+import { ReportLockNotice } from "./report-lock-notice";
 import { needsMakeupCheck } from "../reserved-makeup";
 import { MakeupSwitchButton } from "./makeup-switch-button";
 
@@ -324,6 +325,8 @@ export function ReportCard({
   const optoutRow = isReportOptoutRow(subject); // '수업보고서 미발송' 반 — 보고서 쪽만 잠긴다(0174a)
   // 잠긴 이유 문구 — 나눔 행이면 "보고서는 원래 반에서", 아니면 미발송 반 문구(split-rows.ts 단일 소스).
   const lockNotice = rowLockNotice(subject, reportOptoutNotice(lang));
+  // 잠긴 칸 안의 짧은 글(긴 문장은 카드 머리 아래 안내가 한 번 적는다) — "'자동작성'을 먼저 눌러…" 같은 거짓 안내 대신(원장 2026-11-04).
+  const lockShort = subject.splitIn ? lockNotice : reportOptoutShort(lang);
   // 이 행의 입력을 잠그나 — 발송 완료 **또는 결석**(표 모드와 같은 단일 소스, grid.ts).
   // 2026-08-07 확대: 예전엔 왼쪽 기록 열이 `alreadySent`만 봐서, 결석을 눌러도 진도·태도가 그대로 열려 있었다.
   // 열람 전용(다른 강사 뷰)이면 무조건 잠금 — 3개 fieldset(입력 열·멘트 열·첨부)이 이 값 하나를 본다.
@@ -335,6 +338,7 @@ export function ReportCard({
   const oneLineRow = pilot || subject.subjectKey === "english";
   // JJ 수업보고서 글 — 사랑의 한마디는 선택(비우면 그 항목이 빠진다, 원장 2026-10-27).
   const jjOptionalNote = subject.subjectKey === "english" && isJjSheetDraft(rep);
+  const progressOptional = isProgressOptionalReport(subject, rep); // SRS 글은 진도 항목이 없다(원장 2026-11-05)
   const sendGate = evaluateSendGate({
     lang, // 🔴 판정이 아니라 **글자**만 갈린다(canSend·reasons 불변, send-gate.ts)
     needsAutoWrite:
@@ -359,7 +363,7 @@ export function ReportCard({
     alreadySent,
     reportOptout: optoutRow, // 미발송 반(0174a) — 표뷰와 같은 단일 소스
     isAbsent,
-    hasProgress: isReportEligible(subject),
+    hasProgress: isReportEligible(subject, progressOptional),
     // 멘트 = 학부모에게 나갈 글 — 영어 글의 그림·사진 자리 줄뿐이면 서버가 막으니 여기서도 '멘트 없음'(표뷰와 같은 판정).
     hasDraft: hasTextBesidesMarkers(rep.draft),
     // 출결 쓰기 권한 없음 = 게이트 해당 없음(P0-3) — 표뷰(grid-row)와 동일 예외.
@@ -404,7 +408,7 @@ export function ReportCard({
         rows={3}
         value={cardEval.note}
         onChange={(e) => onNote(e.target.value)}
-        placeholder={jjOptionalNote ? t("os.card.notePhJj") : oneLineRow ? t("os.card.notePhPilot") : t("os.card.notePh")}
+        placeholder={optoutRow ? lockShort : jjOptionalNote ? t("os.card.notePhJj") : oneLineRow ? t("os.card.notePhPilot") : t("os.card.notePh")}
         className={`${TEXTAREA_AUTOSIZE} border-line focus:border-primary min-h-20 rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none`}
       />
     </div>
@@ -592,6 +596,9 @@ export function ReportCard({
           {t("os.card.absentLockB")}
         </p>
       ) : null}
+      {/* '수업보고서 미발송' 반 — 아래 보고서 칸이 **왜 잠겼고 어떻게 하면 되는지**(원장 2026-11-04 *"원인을 선생님이 알 수 없으니까
+          곤란해하심"*). 머리의 짧은 알약(마우스를 올려야 이유가 보였다)만으로는 몰랐다. 결석 안내와 같은 자리. */}
+      {optoutRow ? <ReportLockNotice text={lockNotice} className="mx-3 mt-2" /> : null}
 
       <div className="grid flex-1 grid-cols-1 items-start gap-2.5 px-3 py-2.5 @[560px]:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] @[560px]:gap-x-3">
         {/* 1열 — 오늘 진도 · 테스트(옛 가운데 열). 원장 2026-08-05: *"이걸 하나의 섹션으로 합쳐버리면
@@ -787,11 +794,11 @@ export function ReportCard({
             <Button
               variant="ghost"
               size="sm"
-              disabled={generating || !isRowActionable(subject, "autowrite") || alreadySent}
+              disabled={generating || !isRowActionable(subject, "autowrite", undefined, { progressOptional }) || alreadySent}
               title={
                 alreadySent
                   ? t("os.row.genSentLocked")
-                  : isRowActionable(subject, "autowrite")
+                  : isRowActionable(subject, "autowrite", undefined, { progressOptional })
                   ? undefined
                   : optoutRow
                     ? lockNotice
@@ -815,7 +822,7 @@ export function ReportCard({
                 <textarea
                   value={paras.p1}
                   onChange={(e) => onSubjectDraft(subjectName, joinComment(e.target.value, paras.p2))}
-                  placeholder={tf("os.card.para1Ph", { subject: subjectName })}
+                  placeholder={optoutRow ? lockShort : tf("os.card.para1Ph", { subject: subjectName })}
                   className="border-line focus:border-primary scrollbar-thin min-h-[84px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
                 />
               </label>
@@ -824,7 +831,7 @@ export function ReportCard({
                 <textarea
                   value={paras.p2}
                   onChange={(e) => onSubjectDraft(subjectName, joinComment(paras.p1, e.target.value))}
-                  placeholder={t("os.card.para2Ph")}
+                  placeholder={optoutRow ? lockShort : t("os.card.para2Ph")}
                   className="border-line focus:border-primary scrollbar-thin min-h-[84px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
                 />
               </label>
@@ -843,7 +850,9 @@ export function ReportCard({
               // 시범 대상 = 자동작성 전엔 보기만, 자동작성 뒤엔 고칠 수 있다(원장 2026-10-23 *"자동작성하고나면 수정은 할수있게"*).
               readOnly={pilotLocked}
               placeholder={
-                pilot
+                optoutRow
+                  ? lockShort // 잠긴 줄에 "'자동작성'을 먼저 눌러 만듭니다"를 띄우면 거짓 안내다(원장 2026-11-04)
+                  : pilot
                   ? t("os.card.mentPhPilot")
                   : isEnglishRow
                     ? t("os.card.mentPhTemplate")
@@ -890,7 +899,7 @@ export function ReportCard({
               value={rep.trendDraft ?? ""}
               onChange={(e) => onSubjectTrend(subjectName, e.target.value)}
               readOnly={pilotLocked}
-              placeholder={t("os.card.trendPh")}
+              placeholder={optoutRow ? lockShort : t("os.card.trendPh")}
               title={trendOptOut?.hidden(subjectName) ? t("os.row.trendOptOutOn") : undefined}
               className={`border-line focus:border-primary scrollbar-thin min-h-[64px] resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none ${
                 trendOptOut?.hidden(subjectName) ? "text-text-dim line-through decoration-1" : ""
@@ -1001,11 +1010,11 @@ export function ReportCard({
           <Button
             variant="outline"
             size="sm"
-            disabled={readonlyView || !isRowActionable(subject, "save") || alreadySent}
+            disabled={readonlyView || !isRowActionable(subject, "save", undefined, { progressOptional }) || alreadySent}
             title={
               alreadySent
                 ? t("os.card.saveSentTitle")
-                : isRowActionable(subject, "save")
+                : isRowActionable(subject, "save", undefined, { progressOptional })
                   ? t("os.card.saveTitle")
                   : optoutRow
                     ? lockNotice // 진도 칸이 잠겨 있어 "진도를 먼저 입력하세요"는 거짓 안내다
@@ -1018,9 +1027,9 @@ export function ReportCard({
           <Button
             variant="ghost"
             size="sm"
-            disabled={readonlyView || !isRowActionable(subject, "save")}
+            disabled={readonlyView || !isRowActionable(subject, "save", undefined, { progressOptional })}
             title={
-              isRowActionable(subject, "save")
+              isRowActionable(subject, "save", undefined, { progressOptional })
                 ? t("os.card.pdfTitle")
                 : optoutRow
                   ? lockNotice

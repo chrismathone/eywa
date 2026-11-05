@@ -4,6 +4,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { getClassTeacherOptions } from "@/features/classes/server/queries";
 import { getClassroomOptions } from "@/features/enrollments/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { classnoteModuleOn } from "@/features/owner/classnote-gate";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import { kstToday } from "@/lib/date-kst";
@@ -42,6 +43,7 @@ export default async function NewClassPage() {
         subjectOptions={subjectOptions}
         periodsConfig={periodsConfig}
         showEnglishTrack={isModuleEnabled(settings.modules.disabled, "eie")}
+        classnoteOn={classnoteModuleOn(settings)}
       />
     </div>
   );

@@ -18,8 +18,9 @@ export async function writeClassBoardSnapshot(sql, tenant, plans, { keepClassIds
   const out = { classes: 0, ok: 0, hold: 0, cleared: 0 };
   for (const p of plans) {
     await sql.begin(async (tx) => {
-      if (p.board.deletedBoardId != null) {
+      if (p.board.deletedBoardId != null || p.board.keepLink === true) {
         // ClassNote에서 지운 보드 — 배정 기록만 지우고 연결 행은 남긴다(지우면 다음 날 같은 이름으로 다시 만들어진다).
+        // keepLink = 연결된 보드 이름이 1인 보드 모양이라 막은 반(class-board-plan.mjs · 2026-11-04) — 같은 까닭으로 연결은 남긴다.
         const d1 = await tx`delete from classnote_class_board_members where tenant_id = ${tenant} and class_id = ${p.classId}`;
         out.cleared += d1.count;
         return;

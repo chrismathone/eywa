@@ -32,7 +32,7 @@ import { joinLevelsLead, splitLevelsLead } from "../pilot-notes";
 import { LevelsLead } from "./levels-lead";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { rowLockNotice } from "../split-rows";
-import { reportOptoutNotice } from "@/features/classes/report-optout";
+import { reportOptoutNotice, reportOptoutShort } from "@/features/classes/report-optout";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
 import { attendanceMarkBadgeClass, attendanceMarkLabel, MARK_PRESENT } from "../attendance-mark";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
@@ -43,6 +43,7 @@ import { resolveRowFields } from "../row-fields";
 import type { OneScreenStudent, Subject } from "../types";
 import { cnLabelFor, type CnMatchMap } from "../classnote-match";
 import { CnBadge } from "./cn-badge";
+import { ReportLockNotice } from "./report-lock-notice";
 import { classnoteBadge, readAtLabel, type SubjectReport } from "./report-card";
 import { GridAttachButton, useRowFileDrop } from "./grid-attach";
 import { useClassnoteOn } from "./classnote-on-context";
@@ -72,7 +73,7 @@ import { needsMakeupCheck } from "../reserved-makeup";
 import { MakeupSwitchButton } from "./makeup-switch-button";
 import { isMathBookRow, useMathBookListId } from "./math-book-list";
 import { JjBookPicker } from "./jj-book-picker";
-import { isJjSheetDraft, isJjSheetReport } from "../jj-books";
+import { isJjSheetDraft, isJjSheetReport, isProgressOptionalReport } from "../jj-books";
 import { LoveNoteDraftButton } from "./love-note-draft-button";
 
 const TD_BASE = "px-2 py-1.5 align-top";
@@ -342,6 +343,7 @@ export function GridBodyRow({
   const oneLineRow = pilot || subject.subjectKey === "english";
   // JJ 수업보고서 글 — 사랑의 한마디는 선택(비우면 그 항목이 빠진다, 원장 2026-10-27).
   const jjOptionalNote = subject.subjectKey === "english" && isJjSheetDraft(rep);
+  const progressOptional = isProgressOptionalReport(subject, rep); // SRS 글은 진도 항목이 없다(원장 2026-11-05)
   const sendGate = evaluateSendGate({
     lang,
     needsAutoWrite:
@@ -365,7 +367,7 @@ export function GridBodyRow({
     alreadySent,
     reportOptout: isReportOptoutRow(subject), // 미발송 반(0174a) — 카드뷰와 같은 단일 소스
     isAbsent: subject.attendanceRaw === "absent",
-    hasProgress: isReportEligible(subject),
+    hasProgress: isReportEligible(subject, progressOptional),
     hasDraft,
     // 출결 쓰기 권한 없음 = 게이트 해당 없음(P0-3) — 알약도 없는데 "출결을 기록하라"는 거짓 안내 방지.
     attendanceUnchecked: !gen.attReadOnly && isAttendanceUnchecked(subject),
@@ -386,7 +388,7 @@ export function GridBodyRow({
     checkTest: rowEval.tests.check.score != null ? "y" : "",
   });
   // 발송 완료건은 자동작성도 막는다 — 멘트를 새로 만들어 봐야 저장이 서버에서 거부된다(입력 유실).
-  const canAutoWrite = isRowActionable(subject, "autowrite", liveStatus);
+  const canAutoWrite = isRowActionable(subject, "autowrite", liveStatus, { progressOptional });
   const isAbsent = subject.attendanceRaw === "absent";
   /**
    * 이 행의 **보고서 입력 전체**를 잠그나 — 발송 완료 또는 결석(`isRowInputEditable` 단일 소스).
@@ -405,8 +407,10 @@ export function GridBodyRow({
     "contents [&_input:disabled]:opacity-50 [&_textarea:disabled]:opacity-50 [&_button:disabled]:opacity-50 [&:disabled_*]:cursor-not-allowed";
   const optoutRow = isReportOptoutRow(subject);
   const lockNotice = rowLockNotice(subject, reportOptoutNotice(lang));
+  // 잠긴 칸 안은 짧게 — 까닭·할 일 긴 문장은 이 칸 맨 위 안내가 한 번 적는다(원장 2026-11-04 · 세 칸에 같은 긴 문장을 늘어놓지 않는다).
+  const lockShort = subject.splitIn ? lockNotice : reportOptoutShort(lang);
   const mentPlaceholder = optoutRow
-    ? lockNotice
+    ? lockShort
     : isAbsent
       ? t("os.row.absentMent")
       : alreadySent
@@ -414,7 +418,7 @@ export function GridBodyRow({
         : null;
   /** 특이사항 자리 — 막기만 하지 말고 **갈 곳**을 알려준다(결석 사유는 출결 알약 안에 적는 칸이 있다). */
   const rowPlaceholder = optoutRow
-    ? lockNotice
+    ? lockShort
     : isAbsent
       ? t("os.row.absentNote")
       : alreadySent
@@ -471,9 +475,9 @@ export function GridBodyRow({
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
           <span className={`size-1.5 shrink-0 rounded-full ${toneSolidClass(tone)}`} aria-hidden />
           <span className="text-foreground shrink-0 font-bold whitespace-nowrap">{student.name}</span>
-          {/* ClassNote 반 보드 매칭(원장 2026-09-29) — 카드 모드와 같은 부품·같은 판정. 수학 반 행만. */}
+          {/* ClassNote 반 보드 매칭(원장 2026-09-29) — 카드 모드와 같은 부품·같은 판정. 수학 반 행만 · 미발송 줄은 없음(2026-11-04). */}
           <CnBadge
-            label={cnLabelFor(config.classnoteMatch, { classId: subject.classId, subjectKey: subject.subjectKey, studentId: student.id })}
+            label={cnLabelFor(config.classnoteMatch, { classId: subject.classId, subjectKey: subject.subjectKey, studentId: student.id, reportOptout: subject.reportOptout })}
             className={subject.className ?? student.className}
           />
           {/* 보강 배지 = **빼는 문**(원장 2026-08-18 *"다 삭제"*). 추가만 있고 빼는 길이 없어 잘못 추가한
@@ -933,6 +937,8 @@ export function GridBodyRow({
       <td className={td}>
         {/* 특이사항(입력) + 학부모 문구(멘트) + 학습 추세 — 자동작성이 특이사항을 문장으로 풀어 씀. 우측 남는 폭 활용. */}
         <div className="flex flex-col gap-1">
+          {/* '수업보고서 미발송' 반 — 이 보고서 칸이 왜 잠겼고 어떻게 하면 되는지(원장 2026-11-04, 카드와 같은 부품·같은 문장). */}
+          {optoutRow ? <ReportLockNotice text={lockNotice} /> : null}
           {/* 특이사항도 이 행의 기록이라 함께 잠근다 — 카드 모드는 처음부터 잠겨 있었고(왼쪽 fieldset)
               표만 열려 있어 같은 값이 한쪽에선 써지고 한쪽에선 안 써졌다. */}
           {/* 🔴 읽기도 **행 값**(rowEval) — 쓰기(onNote)가 행별로 바뀐 2026-08-13에 여기만 학생 값으로 남아,

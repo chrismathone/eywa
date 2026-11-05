@@ -27,6 +27,10 @@ const SURFACES: { path: string; why: string }[] = [
     why: "로스터 **행에 플래그를 실어** 보고서 칸만 잠근다(2026-08-19 — 목록에서 빼지는 않는다)",
   },
   { path: "src/features/onescreen/grid.ts", why: "원스크린 행 입력 잠금·발송/자동작성 게이트(isReportOptoutRow)" },
+  {
+    path: "src/features/onescreen/server/classnote-match.ts",
+    why: "C.N 아이콘 대상 반 — 미발송 반은 ClassNote 반 보드 대상이 아니다(원장 2026-11-04 · 그 줄엔 아이콘 없음)",
+  },
   { path: "src/features/onescreen/server/actions.ts", why: "강사 발송 서버 재검증(#77) — 저장은 하고 큐잉만 막는다" },
   { path: "src/features/report-admin/server/queries.ts", why: "작성률 분모 + 영어 작성률(요구 ②)" },
   { path: "src/features/dashboard/server/action-signals.ts", why: "대시보드/브리핑 '오늘 미작성' — 작성률과 별도 경로" },

@@ -13,7 +13,7 @@ export type ApprovalDecision =
  * - 승인 = `reportApprovalPlan`(같은 직원 목록 `reportStaff`의 승인 과목 · 지금 학생 수강):
  * - 생략 보고서 = 빈 목록(창이 무엇을 보냈든) · 그 밖 = 창이 보낸 그 보고서 목록(없으면 옛 화면의 `managerIds`) 중 **그 보고서 후보**만.
  * - 생략이 아닌데 남는 사람이 없으면 거절(그 보고서를 승인할 사람이 없다).
- * DB(s2_0022)는 역할로 다시 막는다(빈 목록 = 작성 강사가 관리자급일 때만 · 자기 자신 금지). 감사로그용 한 줄(생략 · 승인자)도 함께 만든다.
+ * DB(s2_0024)는 역할로 다시 막는다(빈 목록 = 작성 강사가 관리자급일 때만 · 자기 자신 금지). 감사로그용 한 줄(생략 · 승인자)도 함께 만든다.
  */
 export async function decideReportApprovals(tenantId: string, input: {
   studentId: string; teacherIds: string[]; subjects: string[]; enrollmentIds?: string[]; managerIds: string[]; reportManagerIds?: Record<string, string[]>;

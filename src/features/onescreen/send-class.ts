@@ -12,39 +12,26 @@
  * 순서: 후보(그 학생이 다니는 반 보드 대상 수학 반)가 하나면 그 반 → 보낸 보고서가 가장 많은 반 →
  * 동률이면 출결이 가장 많은 반 → 그래도 동률이면 **정하지 않는다**(강사가 고른다).
  * ⚠️ 경로 판정은 워커 [`class-route-decide.mjs`](../../../scripts/_classnote/class-route-decide.mjs)와 **같은 규칙**이어야 한다
- *    (.mjs라 import로 공유하지 못해 옮겨 적었다 — send-class.test.ts가 같은 표를 고정한다).
+ *    (send-class.test.ts가 같은 표를 고정한다).
  */
 
 export const SEND_CLASS_SUBJECTS: ReadonlySet<string> = new Set(["math", "subject_1"]);
 
-/** 이 강사의 수학 보고서가 반 보드로 가는가(보고서 설정 '수학 발송 경로'). 모르는 값 = 아니다(기존 방식). */
-export function classRouteAppliesTo(
-  report: { classnoteMathRoute?: string | null; classnoteMathRoutePilot?: readonly string[] | null },
-  teacherName: string | null | undefined,
-): boolean {
-  if (report.classnoteMathRoute === "class") return true;
-  if (report.classnoteMathRoute === "pilot") return (report.classnoteMathRoutePilot ?? []).includes(teacherName ?? "");
-  return false;
-}
-
 /**
- * 반별 발송이 **이 학원에서** 켜져 있는가 — ClassNote 기능(모듈)이 켜진 학원 + 보고서 설정 '수학 발송 경로'.
+ * 반별 발송이 **이 학원에서** 켜져 있는가 — ClassNote 기능(모듈)이 켜진 학원이면 수학은 **늘 반별**이다.
  * 원장 2026-09-30: ClassNote 관련 기능은 ClassNote를 쓰는 학원에만. 모듈이 꺼져 있으면 반 고르기·'보낼 반 없음' 차단이
  * **전부 없다**(예전 그대로). 발송 경로의 모든 판정은 이 함수를 지난다(원스크린·관리자 직접 작성·관리자 일괄 발송).
+ * 🔴 2026-11-05 원장 *"이제 안쓰는 기능들 정리하고 반 보드 동기화만 남기면 될듯"* — 옛 보고서 설정 '수학 발송 경로'
+ *    (기존 방식 = 1인 보드 · 일부 선생님만 반별)를 걷었다. 워커 [`class-route-decide.mjs`](../../../scripts/_classnote/class-route-decide.mjs)
+ *    `decideRoute`도 수학이면 늘 반별이다(같은 규칙 — send-class.test.ts가 함께 고정한다).
+ * 인자는 설정 하나뿐이다 — 옛 '일부 선생님만' 판정 자리였던 둘째 인자(강사 이름)와 공지 경로의 `senderName`은 호출부와 함께 걷었다(2026-11-05).
  */
-export function classRouteActive(
-  settings: {
-    modules?: { disabled?: readonly string[] | null } | null;
-    report: { classnoteMathRoute?: string | null; classnoteMathRoutePilot?: readonly string[] | null };
-  },
-  teacherName: string | null | undefined,
-): boolean {
-  if ((settings.modules?.disabled ?? []).includes("classnote")) return false;
-  return classRouteAppliesTo(settings.report, teacherName);
+export function classRouteActive(settings: { modules?: { disabled?: readonly string[] | null } | null }): boolean {
+  return !(settings.modules?.disabled ?? []).includes("classnote");
 }
 
 /**
- * 이 보고서에 '보낼 반'이 필요한가 — 수학 · 반별 경로 대상 강사이면서
+ * 이 보고서에 '보낼 반'이 필요한가 — 수학 · 반별 경로(ClassNote 모듈 켜짐)이면서
  *  · 반이 없거나(보강) — 원장 2026-09-29 A안
  *  · 반은 있지만 이 학생이 받을 **살아 있는 반 보드가 없을 때**(`classLive === false`) — ClassNote에서 반이 사라진 종강 반 등.
  *    원장 2026-09-30 *"종강은 클래스노트에 반이 살아있는 한은 계속 보내고, 이후에 반이 사라지면 반 선택이 뜨도록"*.
@@ -84,12 +71,12 @@ export function sendClassRow(r: { id: unknown; student_id: unknown; class_id: un
   return { id: r.id as string, studentId: r.student_id as string, classId: (r.class_id as string | null) ?? null };
 }
 
-/** 반별 발송 대상 수학 행인가(ClassNote 모듈 + '수학 발송 경로' + 작성 강사) — 보낼 반 게이트를 태울 행. */
+/** 반별 발송 대상 수학 행인가(ClassNote 모듈 켜짐 + 수학) — 보낼 반 게이트를 태울 행. */
 export function isSendClassRouteRow(
   settings: Parameters<typeof classRouteActive>[0],
   r: { subject?: unknown; teacher_name?: unknown },
 ): boolean {
-  return SEND_CLASS_SUBJECTS.has((r.subject as string | null) ?? "") && classRouteActive(settings, (r.teacher_name as string | null) ?? null);
+  return SEND_CLASS_SUBJECTS.has((r.subject as string | null) ?? "") && classRouteActive(settings);
 }
 
 /** 보낼 반이 없어 발송을 막을 때의 안내(원장 2026-09-30 *"담당 반이 없으면 보고서 발송 불가능하게"*) — 서버·화면 한 벌. */
@@ -113,8 +100,8 @@ export const BOARD_MISSING_ERROR =
  *  · `unknown`       = 그 밖 — 옛 안내 그대로(동기화 대상이 아닌 반·학생, 연결은 있는데 반 전체 기록이 빈 반 = 보드가 지워졌거나
  *                      특정 불가, 기록이 전부 ok인데 막힘, 그 반에 다닌 적 없음)
  * 🔴 "기다리면 풀린다"고 말하려면 **동기화가 실제로 그 학생을 넣을 수 있어야** 한다 — `syncTarget`은 워커의 대상 기준
- *    (`targetClassWhere`·`currentEnrollmentOn`: 활성·수학·종강 전 반 + 재원·테스트 아님 학생)과 같거나 **더 좁아야** 하고(2026-11-03부터 워커는
- *    보고서 미발송 반도 동기화한다 — 여기는 보고서 발송 반만 본다),
+ *    (`targetClassWhere`·`currentEnrollmentOn`: 활성·보고서 발송·수학·종강 전 반 + 재원·테스트 아님 학생)과 같아야 하고(2026-11-04 원장
+ *    지시로 워커도 다시 보고서 발송 반만 동기화한다 — 11-03 'JJ 맞춤' 되돌림),
  *    `liveNow`는 그 날짜 기준(시작일 ≤ 오늘 ≤ 종료일)과 같아야 한다. 어긋나면 "배정을 요청했습니다"가 거짓말이 된다.
  */
 export type BoardMissingKind = "enrolling" | "class_pending" | "hold_join" | "hold_other" | "left" | "unknown";

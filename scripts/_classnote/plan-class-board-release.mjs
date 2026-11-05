@@ -2,7 +2,7 @@
 //
 // 자동 해제(원장 2026-10-02)가 다음 동기화에서 **누구를 내보내고 누구를 보류할지**를 미리 출력한다 — 워커를 바꿨거나 반 구성이
 // 크게 바뀐 날, 실제 동기화 전에 명단을 사람이 확인하는 용도다. 판정·조회는 매일 동기화와 같은 코드(`syncMathClassBoards` apply=false).
-// 2026-11-03 — 넓힌 대상(영어 반 방·종강 반 보드·1인 보드)과 보고서 미발송(JJ) 반의 연결·배정 계획도 함께 출력한다.
+// 2026-11-03 — 넓힌 대상(영어 반 방·종강 반 보드·1인 보드)과 보고서 미발송(JJ) 반의 연결·배정 계획도 함께 출력한다(11-04 되돌림 뒤에는 미발송 반이 대상 밖이라 그 목록은 비어 있다).
 //
 // 실행: CLASSNOTE_TENANT_ID=… node --env-file=.env.local scripts/_classnote/plan-class-board-release.mjs [--json 파일]
 import fs from "node:fs";
@@ -23,7 +23,7 @@ try {
   const page = await (await browser.newContext()).newPage();
   await loginClassnote(page);
   const r = await syncMathClassBoards(sql, page, { tenant, apply: false });
-  // 보고서 미발송(JJ) 반 — 연결·배정 계획(오늘 다니는 학생이 있을 때만 새 보드를 만든다).
+  // 보고서 미발송(JJ) 반 — 연결·배정 계획(11-04 되돌림 뒤에는 대상 밖이라 비어 있다 · 다시 넣는 날을 위해 남김).
   const jj = (r.plans ?? []).filter((p) => p.reportOptout);
   console.log(`\n보고서 미발송(JJ) 반 ${jj.length}개`);
   for (const p of jj) {

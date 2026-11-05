@@ -116,6 +116,26 @@ export function normalizePhone(v) {
   return t.length >= 9 ? t.slice(-11) : "";
 }
 
+/**
+ * 운영관리 명부 한 원아의 **보호자 전화 전부**(carer1~N · `math-class-boards-load` fetchAdmissions의 `phones`).
+ * `phones`가 없는 옛 모양(테스트·수동 도구의 `{ phone }`)이면 그 하나만. 둘 다 없으면 빈 목록(= `phoneMatches`가 null — 대조 불가).
+ * '전화'로 치는 값 = `normalizePhone`이 숫자를 남기는 값만 — 공백·'-'·'없음'만 든 칸을 '전화 있음'으로 세면
+ * 퇴원처리의 '보호자 전화 없음' 가드를 비켜 대조 불가(null)로 조용히 통과한다(2026-11-04 재리뷰).
+ * 왜 전부인가(원장 2026-11-04): 클래스노트 보호자1 = 엄마, aywa 보호자 = 아빠처럼 **같은 집의 다른 보호자**가 갈려 적히면
+ * carer1만 보던 반 보드 ②·동명이인 대조가 '불일치'로 막았다(전유솔 — 보호자2에 아빠 번호를 넣어도 안 풀림).
+ * 퇴원처리·반 보드 해제도 이 함수로 본다(class-board-release · classnote-offboard-plan — 한 곳만 고쳐 갈리지 않게).
+ * 한계(2026-11-04 리뷰): carer2 이후에 다른 집 번호·여러 집 대표번호를 잘못 넣으면 그 번호로도 맞는다 — 반 보드 배정(class-board-plan)에선
+ * 이름(⑥)·생년(③) 가드가 남는다(퇴원처리·해제는 '맞음'이 보류·제외 쪽으로만 쓰여 더 막는 방향이다).
+ * @param {{ phone?: string|null, phones?: Array<string|null|undefined> } | null | undefined} adm
+ * @returns {string[]}
+ */
+export function carerPhones(adm) {
+  if (!adm) return [];
+  const usable = (v) => normalizePhone(v) !== "";
+  if (Array.isArray(adm.phones) && adm.phones.some(usable)) return adm.phones.filter(usable);
+  return usable(adm.phone) ? [adm.phone] : [];
+}
+
 /** 두 전화 목록에 공통 번호가 있나(aywa parent_phone·student_phone ↔ ClassNote carer 연락처). */
 export function phoneMatches(a, b) {
   const A = new Set((a ?? []).map(normalizePhone).filter(Boolean));
@@ -649,7 +669,7 @@ export function evaluateBoardRelease({
     // 명부 퇴원처리(Operation B) 대상 힌트. 세 조건을 **모두** 만족해야 한다:
     //  ① 전과목 퇴원(일부 과목만 그만둔 학생은 false — 다른 수업 배정이 살아 있어야 한다)
     //  ② aywa 퇴원 후 유예 경과 — ⚠️ **보드 삭제와 자격이 다르다.** 게시물 없는 빈 보드를 지우는 건 20일차라도
-    //     무해하다(재등록하면 프로비저닝이 다시 만든다). 그러나 **명부에서 내리는 건 비가역**이고(복구 =
+    //     무해하다(재등록해도 1인 보드는 다시 만들지 않는다 — 2026-11-04 · 반 보드·반 방으로 보낸다). 그러나 **명부에서 내리는 건 비가역**이고(복구 =
     //     학부모 재초대+재가입) 실측 재등록 31건이 **전부 30일 내**였다. 그래서 퇴원처리에만 유예를 요구한다.
     //     이걸 빼면 "2026-07-10 대량 퇴원(20일차)"이 그대로 퇴원처리 대상으로 뜬다(실제로 그렇게 나왔다).
     //  ③ 이 보드 판정이 release(위 가드 전부 통과)

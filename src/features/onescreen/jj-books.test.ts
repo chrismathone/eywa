@@ -1,8 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { BUILTIN_ENGLISH_SHEET_TEMPLATE_ID, BUILTIN_JJ_SHEET_TEMPLATE_ID } from "@/features/report-templates/defaults";
-import { isJjSheetDraft, isJjSheetReport, parseJjBooks, toggleJjBook } from "./jj-books";
+import { isJjSheetDraft, isJjSheetReport, isProgressOptionalReport, parseJjBooks, toggleJjBook } from "./jj-books";
 
 describe("JJ 교재(원장 2026-10-27)", () => {
+  it("SRS 글은 진도 없이 저장·발송 대상 — 영어 행 + SRS 글만(원장 2026-11-05)", () => {
+    const srs = "■ 수업 평가\n수업 태도 중\n\n■ SRS 학습 결과\n[학습분석지]";
+    const sheet = "■ 수업 평가\n수업 태도 중\n\n■ 오늘의 진도\nReading 10-3";
+    expect(isProgressOptionalReport({ subjectKey: "english" }, { draft: srs })).toBe(true);
+    expect(isProgressOptionalReport({ subjectKey: "english" }, { templateId: BUILTIN_JJ_SHEET_TEMPLATE_ID })).toBe(true);
+    expect(isProgressOptionalReport({ subjectKey: "english" }, { draft: sheet })).toBe(false);
+    expect(isProgressOptionalReport({ subjectKey: "math" }, { draft: srs })).toBe(false);
+    expect(isProgressOptionalReport({ subjectKey: "english" }, undefined)).toBe(false);
+  });
+
   it("JJ 수업보고서 템플릿 행만 — 고르는 중인 템플릿이 이긴다", () => {
     expect(isJjSheetReport({ templateId: BUILTIN_JJ_SHEET_TEMPLATE_ID })).toBe(true);
     expect(isJjSheetReport({ templateId: BUILTIN_JJ_SHEET_TEMPLATE_ID, pendingTemplateId: BUILTIN_ENGLISH_SHEET_TEMPLATE_ID })).toBe(false);

@@ -31,14 +31,8 @@ const MIX_META: Record<MixKey, { label: string; color: string }> = {
   otherOnly: { label: "그 밖의 과목만", color: DASHBOARD_SUBJECT_COLORS.other },
 };
 
-/** 카드가 오기 전 자리 — **같은 id**라 운영실 '상세'(`#first` 등)가 먼저 그 자리로 스크롤된다(내용이 오면 그 자리에 선다). */
-export function SectionSkeleton({ id, title, height = "h-96" }: { id: string; title: string; height?: string }) {
-  return (
-    <section id={id} aria-label={title} aria-busy="true" className={`border-line bg-bg-soft/40 scroll-mt-4 animate-pulse rounded-2xl border ${height}`}>
-      <span className="sr-only">{title} 불러오는 중</span>
-    </section>
-  );
-}
+// 카드가 오기 전 자리는 순수 파일로 뺐다 — loading.tsx(원생·수납 통계)가 이 파일의 보드 import를 끌어오지 않게. page.tsx는 여기서 받는다.
+export { SectionSkeleton } from "./section-skeleton";
 
 async function trendContext({ stats, parts, scopeLabel }: Ctx) {
   const [trend, trustFrom] = await Promise.all([parts.trend, stats.trustFrom]);

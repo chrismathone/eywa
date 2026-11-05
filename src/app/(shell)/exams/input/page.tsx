@@ -13,7 +13,7 @@ import { ijwConfigFor } from "@/features/ijw/server/client";
 import { getJjViewer } from "@/features/ijw/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { EXAM_SLOT_LABEL, examSlotOptions, slotUsesMonth } from "@/features/grades/exam-slots";
+import { examSlotLabel, examSlotOptions, slotUsesMonth } from "@/features/grades/exam-slots";
 import { resolveGradeSelection } from "@/features/grades/selection";
 import { gradeWriteError } from "@/features/grades/server/access";
 import { getGradeSheet } from "@/features/grades/server/queries";
@@ -246,8 +246,8 @@ export default async function ExamsPage({
       <PageHeader
         eyebrow="학생 관리"
         title="성적관리"
-        description={`${termLabel(sel.year, sel.term)} · ${axisLabelFor(sel, subjects.labelOf)} · ${EXAM_SLOT_LABEL[sel.slot]}`}
-        embedLabel={`${termLabel(sel.year, sel.term)} · ${EXAM_SLOT_LABEL[sel.slot]}`}
+        description={`${termLabel(sel.year, sel.term)} · ${axisLabelFor(sel, subjects.labelOf)} · ${examSlotLabel(sel.subject, sel.slot)}`}
+        embedLabel={`${termLabel(sel.year, sel.term)} · ${examSlotLabel(sel.subject, sel.slot)}`}
       />
 
       <Toolbar>
@@ -344,7 +344,7 @@ export default async function ExamsPage({
           sort={sortPref}
           saveSort={saveGradeSortPref}
           canWrite={canWrite}
-          slotLabel={EXAM_SLOT_LABEL[sel.slot]}
+          slotLabel={examSlotLabel(sel.subject, sel.slot)}
           lockReason={lockReason}
           todaysMath={todaysMath}
         />

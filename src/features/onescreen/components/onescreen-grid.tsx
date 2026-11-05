@@ -5,6 +5,7 @@ import { orderReportRows, reportRowGroup } from "../report-row-order";
 import { CLASS_GROUP_MAKEUP, CLASS_GROUP_OTHER } from "../class-tags";
 import { Fragment, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { isProgressOptionalReport } from "../jj-books";
 import { buildGridRows, buildRowRenderMeta, effectiveClassnoteStatus, isRowActionable, isRowInputEditable, rowClassName, rowInClass } from "../grid";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { BulkPresentButton, type BulkPresentProps } from "./bulk-present-button";
@@ -91,8 +92,10 @@ export function OneScreenGrid({
     groupStudents.get(key)!.add(row.student.id);
   }
   // 작업별 대상(2-3): 발송·자동작성=진도+결석 제외, 저장=진도만(결석 포함 — 기록 보존).
+  // SRS 글은 진도 없이도 대상(원장 2026-11-05) — 행·카드와 같은 판정(isProgressOptionalReport).
+  const progressOptional = (r: (typeof rows)[number]) => isProgressOptionalReport(r.subject, reports[r.student.id]?.[r.subject.name]);
   const sendableRows = rows.filter((r) =>
-    isRowActionable(r.subject, "send", undefined, { attendanceReadOnly: attReadOnly }),
+    isRowActionable(r.subject, "send", undefined, { attendanceReadOnly: attReadOnly, progressOptional: progressOptional(r) }),
   );
   // 🔴 실제로 **발송되는** 행 = 위 조건 + **멘트 있음**. 빈 멘트는 절대 가드가 거절하므로(2026-07-28 사고)
   //    `sendableRows`를 그대로 "발송가능"이라 쓰면 상단 숫자와 행 라벨("멘트 입력 필요")이 서로 다른 말을 한다.
@@ -100,7 +103,7 @@ export function OneScreenGrid({
   // 영어 글의 그림·사진 자리 줄뿐인 행은 멘트가 없다(행 발송 게이트·서버와 같은 판정 — hasTextBesidesMarkers).
   const hasDraft = (r: (typeof rows)[number]) => hasTextBesidesMarkers(reports[r.student.id]?.[r.subject.name]?.draft);
   const sendReadyRows = sendableRows.filter(hasDraft);
-  const saveableRows = rows.filter((r) => isRowActionable(r.subject, "save"));
+  const saveableRows = rows.filter((r) => isRowActionable(r.subject, "save", undefined, { progressOptional: progressOptional(r) }));
   // 행 선택(체크) — 일괄 작업 대상. **표시된 모든 행**을 선택 가능(진도 유무 무관).
   // 실제 처리는 client의 selectRows가 발송가능(진도 입력) 행만 걸러내므로, 진도 없는 행은 안전히 건너뜀.
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -129,7 +132,7 @@ export function OneScreenGrid({
   // "채웠는데 자동작성이 덮어쓰나?" 하는 불안이 없다(원장 지시 07-21).
   // ⚠️ sendableRows를 쓰면 안 된다(2026-08-17부터 send≠autowrite) — 출결 미체크 행은 발송만 막히고
   //    자동작성은 되므로, send 기준으로 세면 카운트가 실제 대상보다 적은 거짓 숫자가 된다(#89류).
-  const autoRows = rows.filter((r) => isRowActionable(r.subject, "autowrite"));
+  const autoRows = rows.filter((r) => isRowActionable(r.subject, "autowrite", undefined, { progressOptional: progressOptional(r) }));
   const noDraft = (r: (typeof rows)[number]) => !hasDraft(r);
   const autoWritable = autoRows.filter(noDraft).length;
   const selectedAutoWritable = autoRows.filter((r) => checked.has(r.key) && noDraft(r)).length;

@@ -632,7 +632,15 @@ async function operations(
  * 운영실 스냅샷을 만드는 옵션. `full` = **학원 설정 '대시보드 관리' 미리보기 원본 전용** — 역할 배치를 안 걸고 원장 시점의 모든 영역을 읽는다.
  * 🔴 호출부(`owner/page.tsx`)가 원장·총괄 게이트를 지난 뒤에만 넘긴다. 서버 액션 `refreshOverview`는 인자를 받지 않아 이 옵션을 못 넘긴다.
  */
-export type LoadOverviewOptions = { full?: boolean; subject?: string };
+export type LoadOverviewOptions = {
+  full?: boolean;
+  subject?: string;
+  /**
+   * 배치(`view`)가 정해지는 즉시 한 번 불린다 — 운영실 첫 화면이 무거운 조회를 기다리지 않고 그 배치의 스켈레톤을 먼저 그린다
+   * (`overview-server.tsx`의 Suspense 경계). 알림만 할 뿐 조회·권한·캐시는 그대로다. 받은 `view`를 고치지 말 것(스냅샷에 그대로 실린다).
+   */
+  onView?: (view: ResolvedView) => void;
+};
 
 /** Authoritative, permission-gated snapshot. No cross-user server cache, no fallback zeros. */
 export async function loadOverview(options: LoadOverviewOptions = {}): Promise<OverviewSnapshot> {
@@ -674,6 +682,7 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
     view.activeSubject = subjectView.active?.key;
     view.subjectChoices = subjectView.choices;
   }
+  options.onView?.(view);
   const programSubjects = programSubjectsOf(subjectLabels);
   const groupOf = (key: string | null | undefined) => subjectGroupOf(key, programSubjects);
   // 과목 값 판정의 과목 목록 = **학원 설정의 과목만**(재리뷰 2026-10-14) — `subjectLabelRecord`의 옛 표시용 라벨(예술·사회·기타)을

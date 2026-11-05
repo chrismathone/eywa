@@ -34,7 +34,6 @@ import { BATCH, closeClassnoteAdminSession, isClassnoteModuleEnabled, launchBrow
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
 import { processRecallsOnce } from "./classnote-recall-core.mjs";
 import { processClassNoticesOnce } from "./classnote-class-notice-core.mjs";
-import { provisionDailyOnce } from "./classnote-provision-core.mjs";
 import { classBoardSyncDueToday, syncMathClassBoardsDaily } from "./math-class-boards-sync.mjs";
 import { syncChildMapOnce } from "./classnote-childmap-core.mjs";
 import { pollParentCommentsOnce, pollParentPostsOnce } from "./classnote-feed-core.mjs";
@@ -108,8 +107,11 @@ const recentIssues = [];
 // 안 올린 탓에, 옛 프로세스가 그대로 돌고 있는데도(started_at 7일 전) 하트비트만 보고는 알 수 없었다.
 // kageFailReasons=스샷 업로드 실패를 네 갈래(빈 캡처·첨부 칸 없음·kage 거부·무응답)로 갈라 담는 버전인가
 // (2026-09-04). 이 키가 없으면 옛 워커라 실패 사유가 여전히 `스샷 kage 업로드 실패` 한 줄로만 남는다.
-// mathClassRoute=수학 반 보드 경로(보고서 설정 '수학 발송 경로', 2026-09-29)를 아는 버전인가. 이 키가 없는 옛 워커는
-// 설정을 반별로 바꿔도 **전부 1인 보드로** 보낸다 — 설정을 바꾸기 전에 이 키로 이관 여부를 확인할 것.
+// mathClassRoute=수학 반 보드 경로(2026-09-29)를 아는 버전인가. 이 키가 없는 옛 워커는 수학도 **전부 1인 보드로** 보내고,
+// 원아를 뺀 1인 보드에선 "ClassNote 보드에 연결된 원아가 없습니다"(board-safety.mjs)로 실패한다.
+// 옛 보고서 설정 '수학 발송 경로'는 2026-11-05에 없앴다 — 지금은 수학이면 늘 반별.
+// ⚠️ 이 키는 필요조건일 뿐이다 — 05시 1인 보드 준비(배정)는 1.0.14에서 뺐는데 1.0.13 이하도 이 키를 갖는다.
+//    1인 보드 배정 금지(2026-11-04)가 지켜지는지는 키가 아니라 **판 번호(1.0.14 이상)**로 확인한다.
 // syncRequests=지금 반 보드 동기화 요청(0313a)을 집는 버전인가(2026-09-30). 앱은 이 키가 있는 실게시 PC가 살아 있을 때만 요청을 받는다
 // (옛 워커만 있으면 아무도 안 집는 '대기 중'이 생긴다).
 // parentReply=학부모 글 답글(0317a) · parentReaction=학부모 글 공감(0319a)을 집는 버전인가. 앱은 그 키가 있을 때만 요청을 받는다.
@@ -120,7 +122,10 @@ const recentIssues = [];
 // homeworkVideoReportLink=보고서 글에 댓글로 올린 영상을 그 보고서의 숙제에 묶는 버전인가(2026-10-06, video-report-link.mjs).
 // 앱은 이 키로 아무것도 막지 않는다 — 이 키가 없는 옛 워커가 올린 영상은 예전처럼 '가장 오래된 미확인 숙제부터' 센다(적용 확인용).
 // homeworkVideoLinkCompress=`/v`로 학생이 올린 영상을 발송 PC가 사후 압축하는 버전인가(2026-10-16, video-link-compress.mjs). 적용 확인용.
-const WORKER_CAPS = { autoBoardSync: POST && autoSyncMode() === "on", classNoticeImages: true, noticeClassRoute: true, noticeAttachments: true, nativePublish: true, reportAuthorClassPrefix: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true, classBoardSync: true, syncRequests: true, homeworkVideoArchive: true, homeworkVideoTenantFolders: true, homeworkVideoTenantAccounts: true, homeworkVideoReportLink: true, homeworkVideoLinkCompress: true, parentReply: true, parentReplySettings: true, parentReaction: true, attachmentMessageRepair: true };
+// noticeEnglishRoom=영어 개별 공지·교재요청서를 그 영어 반의 **반 방**으로 1:1 보내는 버전인가(2026-11-04 · 1.0.15, notice-class-route.mjs
+// `resolveNoticeEnglishTarget`). 앱은 이 키가 있을 때만 영어 대상에 반(`classId` + `subject: "english"`)을 싣는다 — 옛 워커는 그 대상을
+// 수학 반 보드로 보고 실패시킨다(오발송은 아니다).
+const WORKER_CAPS = { autoBoardSync: POST && autoSyncMode() === "on", classNoticeImages: true, noticeClassRoute: true, noticeEnglishRoom: true, noticeAttachments: true, nativePublish: true, reportAuthorClassPrefix: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true, classBoardSync: true, syncRequests: true, homeworkVideoArchive: true, homeworkVideoTenantFolders: true, homeworkVideoTenantAccounts: true, homeworkVideoReportLink: true, homeworkVideoLinkCompress: true, parentReply: true, parentReplySettings: true, parentReaction: true, attachmentMessageRepair: true };
 
 // 로그 타임스탬프 = KST(UTC+9) 고정 오프셋 — 연동 PC의 시스템 로케일/타임존과 무관하게 "YYYY-MM-DD HH:MM:SS".
 // watch.log이 UTC(…Z)로 찍혀 실제 시각과 9시간 어긋나 보이던 문제(2026-07-22 원장 제보). DB/하트비트는 ISO 유지(기계용).
@@ -420,17 +425,8 @@ async function main() {
         return { ran: false };
       });
       if (rxres.ran) noteResult("parentReaction", { ok: rxres.ok ? 1 : 0 });
-      // 3) 일일 프로비저닝(신규생 보드 생성 + 가입자 자동 배정) — KST 05시 이후 하루 1회(가드 내장).
-      await assertExecutionLease("provision");
-      const pres = await provisionDailyOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
-        log(`[provision] 오류(내일 재시도): ${e.message}`);
-        noteResult("provision", { error: e.message });
-        return { ran: false };
-      });
-      if (pres.ran) {
-        log(`[provision] 일일 프로비저닝 완료 — 보드 생성 ${pres.created} · 배정 ${pres.assigned}${pres.held ? ` · 보류 ${pres.held}` : ""}`);
-        noteResult("provision", pres);
-      }
+      // 3) (없앰 · 1.0.14) 1인 보드 준비 — 원장 2026-11-04 *"앞으로 1인보드에 배정 시키지마 절대"*. `(수학)`·`(영어)` 1인 보드를
+      //    만들지도, 원아를 배정하지도 않는다(옛 1인 보드 준비 모듈은 지웠다 · 가드 no-personal-board-writes.test.mjs).
       // 3-0) 원아 연결(0185a)을 반 보드 정기 동기화 **바로 앞에서** 한 번 새로 만든다(원장 2026-11-02 A안). 신입의 첫 반 보드 배정
       //      출처가 (수학) 1인 보드에서 원아 연결로 바뀌었다 — 아래 3.5의 20시간 주기만 믿으면 어제 가입한 학부모의 원아가 오늘 새벽
       //      배정을 놓쳐 첫 보고서가 하루 더 막힌다. 실패해도 동기화는 어제까지의 연결로 그대로 돈다(3.5와 같은 처리 · 3.5는 이 실행으로

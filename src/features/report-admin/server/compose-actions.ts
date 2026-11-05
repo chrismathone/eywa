@@ -186,7 +186,7 @@ async function upsertAdminReport(
           }
         : null,
       anchorRequired: async () =>
-        SEND_CLASS_SUBJECTS.has(input.subject) && classRouteActive(await getTenantSettings(), shownTeacher),
+        SEND_CLASS_SUBJECTS.has(input.subject) && classRouteActive(await getTenantSettings()),
     });
     if (!prepared.ok)
       return { ok: false, ...(prior ? { id: prior.id } : {}), error: prepared.error, ...(prepared.needsAnchor ? { needsAnchor: true } : {}) };
@@ -493,12 +493,11 @@ export async function saveAndQueueAdminReport(
     if (!conflictRows?.length) return await unqueuedStatus(supabase, saved.id, saved.shareToken);
     return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "name_conflict" };
   }
-  // 반별 발송(ClassNote 모듈 + '수학 발송 경로') — 🔴 원장 2026-09-30: 보고서 반 = 출석부 반 = 발송 반(원스크린과 같은 규칙).
+  // 반별 발송(ClassNote 모듈 켜짐 · 수학은 늘 반별) — 🔴 원장 2026-09-30: 보고서 반 = 출석부 반 = 발송 반(원스크린과 같은 규칙).
   //  · 반이 붙은 보고서 = 그 반 보드로만. 이 학생이 받을 반 보드가 없으면 막는다(다른 반으로 보내지 않는다 — 반 보드 동기화 필요).
   //  · 반 없는 보강 = 보강 반(저장이 확인해 적은 앵커)의 반 보드로만. 보드가 없으면 반을 고르게 하고, 고른 반은 다시 저장을 지나
   //    새 보강 반이 된다(출석부 칸도 함께). 반 없는 정규 행(모호해 반을 못 정한 행)은 보낼 곳이 없다 — 막는다.
-  const shownTeacher = input.teacherName?.trim() || user.displayName; // 워커가 경로를 보는 teacher_name과 같은 값(upsertAdminReport)
-  const routeApplies = classRouteActive(settings, shownTeacher);
+  const routeApplies = classRouteActive(settings);
   let sendClassId: string | null = null;
   let sendClassVia: string | null = null;
   if (routeApplies && SEND_CLASS_SUBJECTS.has(input.subject)) {
@@ -1079,7 +1078,7 @@ export async function getAdminComposeContext(studentId: string): Promise<{
 
 /**
  * 관리자 직접 작성의 **보낼 반 고르기** 재료(원장 2026-09-30 *"학생 고르고 난 후에 반 고르기 나오는 식으로"*).
- * - `applies=false` = 반별 발송 대상이 아니다(ClassNote 모듈 꺼짐·경로 '기존'·수학 아님) — 화면에 아무것도 안 띄운다.
+ * - `applies=false` = 반별 발송 대상이 아니다(ClassNote 모듈 꺼짐·수학 아님) — 화면에 아무것도 안 띄운다.
  * - `needed=false` = 보고서 반에 살아 있는 반 보드가 있다 — 그 반으로 간다(`reportClassName`만 보여 준다).
  * - `needed=true` = 고를 반 목록(`candidates`)과 기본값(`defaultId` = 메인 수업). 비어 있으면 발송 불가(`NO_SEND_CLASS_ERROR`).
  * 서버 발송(saveAndQueueAdminReport)이 **같은 함수로 다시** 확인한다 — 이건 화면 안내일 뿐이다([[#77]]).
@@ -1111,7 +1110,7 @@ export async function getAdminSendClassOptions(args: {
   if (!(await canAccessTenant(user.systemRole, "lesson_reports"))) return { ok: false, error: "보고서 관리 권한이 없습니다" };
   if (!args.studentId || !args.subject) return { ok: true, applies: false };
   const settings = await getTenantSettings();
-  const routeApplies = classRouteActive(settings, args.teacherName?.trim() || user.displayName);
+  const routeApplies = classRouteActive(settings);
   if (!routeApplies || !SEND_CLASS_SUBJECTS.has(args.subject)) return { ok: true, applies: false };
   const supabase = await createClient();
   const reportDate = resolveReportDate(args.reportDate);

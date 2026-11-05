@@ -7,13 +7,15 @@ import { saveDashboardDesign } from "@/features/dashboard/overview/chart-prefs-a
 import type { DashboardDesign } from "@/features/dashboard/overview/chart-prefs";
 import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
 import type { DemoRosterControl } from "@/features/demo-roster/types";
+import { InstrumentsSkeleton } from "../_instruments/instruments-skeleton";
 import { Overview } from "./overview";
 
 /** 계기판 화면은 고른 사람만 받는다(그림 엔진을 운영실 첫 묶음에 넣지 않는다 — B5). 버튼에 손이 가면 미리 받아 전환 때 빈 화면이 안 보이게 한다. */
 const loadBoard = () => import("../_instruments/instrument-board");
 const InstrumentBoard = dynamic(() => loadBoard().then((m) => m.InstrumentBoard), {
   ssr: false,
-  loading: () => <div className="min-h-screen" aria-busy />,
+  // 받는 동안 = 운영실 Suspense fallback과 같은 계기판 뼈대(ssr:false라 서버 HTML이 곧 이것) — 뼈대 → 빈 화면 → 계기판으로 깜빡이지 않게.
+  loading: () => <InstrumentsSkeleton />,
 });
 
 /**

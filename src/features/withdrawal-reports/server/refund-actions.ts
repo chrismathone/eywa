@@ -24,7 +24,7 @@ const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
  *   관리자·요청자·작성 강사는 확인만(원장 2026-10-29 · 2026-11-03 다시 확인). 화면 토글과 같은 판정.
  * - 대상: 이 보고서의 퇴원 뒤 청구 줄(과목 수강종료면 끝내는 반 줄만) · 낸 돈이 있고 · 환불된 청구가 아니고 · 아직 요청서가 없는 줄. 하나라도 아니면 전부 거절.
  * - 요청서 한 장 = 고른 줄 전부. 결재칸 담당 = 데스크 담당자 · 원장 = 승인한 원장급. 총 환불금액 = 고른 줄로 낸 금액 합.
- * - **데스크 환불 단계**(원장 2026-11-03 · s2_0022 `attach_withdrawal_report_refund`): 요청서를 보고서에 잇는다 — 처리 전 묶음이면 환불완료일자가
+ * - **데스크 환불 단계**(원장 2026-11-03 · s2_0024 `attach_withdrawal_report_refund`): 요청서를 보고서에 잇는다 — 처리 전 묶음이면 환불완료일자가
  *   들어갈 때까지 퇴원·수강종료를 기다린다(수납의 환불완료 저장이 `releaseWithdrawalRefunds`로 이어 처리). 처리가 끝난 보고서는 기다리게 하지 않는다.
  *   🔴 **원자적으로**: 잇기가 실패하면(그 사이 묶음이 처리·재검토·취소됨 · DB 준비 전 등) 방금 만든 요청서를 지우고(감사로그) 오류를 돌려준다 —
  *   요청서만 남고 기다림이 걸리지 않는 일이 없게. 할 일·알림은 잇기가 끝난 뒤에만 만든다. 화면이 본 상태(처리 전인가)를 DB에 넘겨 같이 대조한다.
@@ -105,7 +105,7 @@ export async function approveWithdrawalRefund(reportId: string, keys: string[], 
     return { error: "같은 건을 방금 다른 창에서 승인했습니다. 새로고침 후 확인해 주세요." };
   }
 
-  // 데스크 환불 단계 — 요청서를 보고서에 잇는다(처리 전 묶음이면 환불 완료까지 처리를 기다린다 · s2_0022). 실패하면 요청서를 지우고 그만둔다.
+  // 데스크 환불 단계 — 요청서를 보고서에 잇는다(처리 전 묶음이면 환불 완료까지 처리를 기다린다 · s2_0024). 실패하면 요청서를 지우고 그만둔다.
   let link = await attachRefundStep(report.tenant_id, viewer.user.id, report.id, documentId, desk.id, expectGate);
   if (!link.ok) {
     // DB에선 이어졌는데 응답만 잃었을 수 있다 — 지우기 전에 실제로 이어졌는지 한 번 더 본다(이어졌으면 지우지 않고 그대로 간다).
@@ -161,7 +161,7 @@ async function linkedStep(tenantId: string, documentId: string): Promise<{ linke
   return { linked: true, gates: !groupError && ["pending", "scheduled"].includes(String(group?.status ?? "")) };
 }
 
-/** 데스크 환불 단계 잇기(s2_0022) — 처리 전 묶음이면 `gates`. 화면이 본 상태와 다르거나 옛 DB(함수 없음)·실패면 `ok: false`(호출부가 요청서를 지운다). */
+/** 데스크 환불 단계 잇기(s2_0024) — 처리 전 묶음이면 `gates`. 화면이 본 상태와 다르거나 옛 DB(함수 없음)·실패면 `ok: false`(호출부가 요청서를 지운다). */
 async function attachRefundStep(tenantId: string, actorId: string, reportId: string, documentId: string, deskId: string, expectGate: boolean): Promise<{ ok: boolean; gates: boolean; error?: string }> {
   const { data, error } = await createAdminClient().rpc("attach_withdrawal_report_refund", { p_tenant: tenantId, p_actor: actorId, p_report: reportId, p_document: documentId, p_desk: deskId, p_expect_gate: expectGate })
     .then(r => r, (e: unknown) => ({ data: null, error: { message: e instanceof Error ? e.message : String(e), code: "" } }));

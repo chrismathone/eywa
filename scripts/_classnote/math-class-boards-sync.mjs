@@ -8,7 +8,7 @@
 //   보류한 원아는 지금처럼 '해제 필요'로 반 보드 행에 남는다(0329a 해제 리스트 — 사람이 확인).
 // 원장 2026-11-03 *"수강종료(즉, 남은 과목이 1개라도 있거나 일부 반을 종료하는경우)는 즉시즉시"* — 매일 정기 동기화(전체)는 원아 해제를
 //   **영어 반 방(s2_0006) · 종강 7일이 지난 수학 반 보드(+선생님) · 1인 보드 `(수학)이름`·`(영어)이름`**까지 넓혀 한다(같은 판정·같은 상한 —
-//   class-board-release-extra.mjs). '지금 동기화'(반 몇 개)는 종전대로 그 반 보드만. 보고서 미발송 JJ 반도 대상 반이다(오늘 다니는 학생이 1명 이상일 때만 새 보드를 만든다).
+//   class-board-release-extra.mjs). '지금 동기화'(반 몇 개)는 종전대로 그 반 보드만. 보고서 미발송 JJ 반은 대상 반이 아니다(원장 2026-11-04 — 11-03 'JJ 맞춤' 되돌림).
 // 🔴 보드 삭제는 하지 않는다(원장 *"반 삭제는 됐고"*). 영어 반 방의 선생님 연결·그룹 보드([ALL] 전체방)는 건드리지 않는다.
 // 🔑 끄는 법 = 연동 PC 환경변수 `CLASSNOTE_BOARD_AUTO_RELEASE=off`(해제만 멈추고 나머지 동기화는 그대로). ⚠️ 2026-11-03 기준 연동 앱 화면은
 //    ID/PW만 저장해 PC에서 이 값을 넣을 길이 없다 — 지금은 상태 폴더의 멈춤 표식 파일(class-board-release-halt.txt)을 만들어 멈춘다(지우면 재개).
@@ -204,7 +204,7 @@ export async function syncMathClassBoards(sql, page, { tenant, apply = false, lo
   });
   // ④(기록) 비교 상대 = **전체** 대상 반의 학생 — 일부 반만 보는 실행에서도 다른 반 학생에게 확인된 원아를 잡는다.
   const verifiedOwnerScope = new Set(all.classes.flatMap((c) => c.studentIds));
-  // 보고서 미발송 반(JJ)의 같은 이름 보드 채택 — 낯선 원아가 그 반의 **지난 학생**(해제 판정 ①②③ 통과)인지 본다(원장 2026-11-03).
+  // 보고서 미발송 반(JJ)의 같은 이름 보드 채택 — 낯선 원아가 그 반의 **지난 학생**(해제 판정 ①②③ 통과)인지 본다(원장 2026-11-03). 11-04 되돌림 뒤에는 미발송 반이 대상 밖이라 쓰이지 않는다(다시 넣는 날을 위해 남김).
   const formerFamily = async (cands, { admissions, membersByBoard: members }) =>
     formerFamilyOf(cands, { enrollmentsByClass: await loadClassEnrollments(sql, tenant, cands.map((c) => c.classId)), students: aywa.students, admissions, childLinks, membersByBoard: members });
   const first = await loadPlan(page, centerId, aywa, { linkedBoardByClass, verifiedChildren, verifiedOwnerScope, childLinks, formerFamily });

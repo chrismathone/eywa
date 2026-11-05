@@ -29,6 +29,8 @@ import { ReportViewSettings } from "./report-view-settings";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { RatingCell } from "./rating-cell";
 import { REPORT_RATING_VISIBLE } from "@/features/report-admin/report-rating";
+import { tipProps, type TipCard } from "@/components/hover-tip/tip";
+import { useUnsentReasonCards } from "./use-unsent-reasons";
 
 // 시:분(KST). timestamptz → Asia/Seoul HH:mm. 값 없으면 빈 문자열.
 function hhmmKst(iso: string | null): string {
@@ -54,7 +56,18 @@ function readAtLabel(iso: string): string {
   });
 }
 
-function StatusCell({ status, source, readAt }: { status: string | null; source: string | null; readAt: string | null }) {
+function StatusCell({
+  status,
+  source,
+  readAt,
+  unsentTip,
+}: {
+  status: string | null;
+  source: string | null;
+  readAt: string | null;
+  /** '미발송' 칸 카드 — 아직 안 나간 이유(원장 2026-11-04, unsent-reason.ts). 도착 전·실패면 없다. */
+  unsentTip?: TipCard;
+}) {
   const badge = classnoteBadge(status ?? undefined);
   // 학부모 읽음(0122a) — **양성 배지만**: 없음 = "미읽음"이 아니라 "동기화 안 됨"일 수 있어 표시하지 않는다
   // (매칭 키 없는 행의 거짓 미확인 방지 — report-filters.ts readAt 주석 참조).
@@ -78,7 +91,15 @@ function StatusCell({ status, source, readAt }: { status: string | null; source:
         {read}
       </>
     );
-  return <span className="text-amber text-xs">미발송</span>;
+  // 마우스를 올리면 아직 안 나간 이유 카드(`data-tip` — 같은 값에 title을 함께 달지 않는다). 카드가 있을 때만 점선 밑줄로 알린다.
+  return (
+    <span
+      className={`text-amber text-xs ${unsentTip ? "cursor-help underline decoration-dotted underline-offset-2" : ""}`}
+      {...tipProps(unsentTip)}
+    >
+      미발송
+    </span>
+  );
 }
 
 /** 멘트 작성 방식(0214a) 셀 — 직접(강조)/자동+수정/자동. 도입 전 행(null)은 "—"(라벨을 지어내지 않는다). */
@@ -185,6 +206,8 @@ export function ReportList({
   };
 
   const { rows, total, page, pageSize } = result;
+  // '미발송' 칸 카드 — 이 페이지 미발송 줄만 목록이 그려진 뒤 따로 읽는다(첫 페인트를 막지 않는다). 발송 상태 열이 있을 때만.
+  const unsentCards = useUnsentReasonCards(rows, classnoteOn);
   const maxPage = Math.max(0, Math.ceil(total / pageSize) - 1);
   const sendable = rows.filter(isAdminSendable);
   const allChecked = sendable.length > 0 && sendable.every((r) => checked.has(r.id));
@@ -424,7 +447,7 @@ export function ReportList({
                   ) : null}
                   {classnoteOn ? (
                     <td className="px-3 py-2">
-                      <StatusCell status={r.classnoteStatus} source={r.source} readAt={r.readAt} />
+                      <StatusCell status={r.classnoteStatus} source={r.source} readAt={r.readAt} unsentTip={unsentCards[r.id]} />
                     </td>
                   ) : null}
                   <td className="px-3 py-2 text-right">

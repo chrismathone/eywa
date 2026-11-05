@@ -4,9 +4,9 @@ import { describe, expect, it } from "vitest";
 import {
   CHILDMAP_REFRESH_GAP_MS,
   MAX_CLASSES_PER_RUN,
+  childLinkCandidates,
   childMapRefreshDue,
   normalizeScope,
-  provisionCandidates,
   selectClassesToSync,
   summarizeSync,
   syncErrorLabel,
@@ -100,11 +100,11 @@ describe("바뀐 반만 고른다 — 과부하 방지(원장 2026-09-30)", () =
   });
 });
 
-describe("신입 1인 보드 준비 대상", () => {
+describe("가입 확인(원아 연결 갱신) 후보", () => {
   it("최근 등록 + 원아 연결 없음 · 지목 학생은 항상", () => {
-    const r = provisionCandidates({ recentStudentIds: new Set([S1, S2]), childLinkedStudentIds: new Set([S2]), scope: FULL });
+    const r = childLinkCandidates({ recentStudentIds: new Set([S1, S2]), childLinkedStudentIds: new Set([S2]), scope: FULL });
     expect(r).toEqual([S1]);
-    const s = provisionCandidates({ recentStudentIds: new Set([S1]), childLinkedStudentIds: new Set(), scope: normalizeScope({ studentIds: [S3] }) });
+    const s = childLinkCandidates({ recentStudentIds: new Set([S1]), childLinkedStudentIds: new Set(), scope: normalizeScope({ studentIds: [S3] }) });
     expect(s).toEqual([S3]); // 지목만이면 최근 등록 전체를 보지 않는다
   });
 });
@@ -141,31 +141,19 @@ describe("🔴 워커 배선 — 원자적 집기 · 새벽 표식 보존 · 일
     expect(src).toMatch(/on conflict do nothing returning id/);
     expect(src).not.toMatch(/on conflict \(tenant_id\)/);
   });
-  it("수동 실행은 새벽 프로비저닝의 '오늘 함' 표식을 남기지 않는다", () => {
-    const src = read("classnote-provision-core.mjs");
-    expect(src).not.toMatch(/^\s*markRun\(today\);/m);
-    expect(src.match(/if \(!force\) markRun\(today\);/g)?.length).toBe(2);
-  });
-  it("범위 지정 신입 준비는 대상이 없으면 ClassNote에 로그인하지 않는다(대상 계산이 로그인보다 먼저)", () => {
-    const src = read("classnote-provision-core.mjs");
-    const plan = src.indexOf("await expectedFor(sql, tenant, g.keys, g.prefix)");
-    const early = src.indexOf("if (studentIds && !plans.some((p) => p.targets.length))");
-    const login = src.indexOf("await loginClassnote(page)");
-    expect(plan).toBeGreaterThan(0);
-    expect(early).toBeGreaterThan(plan);
-    expect(login).toBeGreaterThan(early);
-  });
   it("일부 반만 본 실행은 계획 밖 반의 연결을 지우지 않는다", () => {
     const db = read("math-class-boards-db.mjs");
     expect(db).toMatch(/if \(scoped\) return out;\s*(\r?\n)\s*const live = /);
     const sync = read("math-class-boards-sync.mjs");
     expect(sync).toMatch(/writeClassBoardSnapshot\(sql, tenant, fresh\.plans, \{ scoped: true \}\)/);
   });
-  it("원아 연결 갱신(⓪)은 신입 준비(①)·반 보드 동기화(②)보다 앞에서 force·apply로 부른다(원장 2026-11-02 A안)", () => {
+  it("원아 연결 갱신(⓪)은 반 보드 동기화(②)보다 앞에서 force·apply로 부른다(원장 2026-11-02 A안) · 1인 보드 준비(①)는 없다(1.0.14)", () => {
     const src = read("classnote-sync-request.mjs");
     const refresh = src.indexOf("await syncChildMapOnce(sql, browser, { tenant, apply: true, log, force: true })");
-    expect(refresh).toBeGreaterThan(src.indexOf("childMapRefreshDue({ candidates: provIds.length, lastAt: lastChildMapRefreshAt, now: Date.now() })"));
-    expect(refresh).toBeLessThan(src.indexOf("await provisionDailyOnce(sql, browser,"));
+    const due = src.indexOf("childMapRefreshDue({ candidates: candidateIds.length, lastAt: lastChildMapRefreshAt, now: Date.now() })");
+    expect(due).toBeGreaterThan(0);
+    expect(refresh).toBeGreaterThan(due);
+    expect(src).not.toMatch(/provisionDailyOnce|classnote-provision-core/);
     expect(refresh).toBeLessThan(src.indexOf("await syncMathClassBoards(sql, page,"));
     expect(CHILDMAP_REFRESH_GAP_MS).toBeLessThan(5 * 60 * 1000); // 앱 쿨다운(5분)보다 짧게
     expect(summarizeSync({ classes: 1, enrolled: 1, childLinks: 2 })).toContain("새 학부모 가입 확인 2");

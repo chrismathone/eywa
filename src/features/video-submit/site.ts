@@ -12,7 +12,7 @@
  * 🔴 뒷 4자리는 약한 확인이다(1만 가지). 이 파일의 숫자(횟수 제한·링크 수명)가 그 약함을 받치는 값이다 — 늘릴 때는 그 뜻을 함께 볼 것.
  */
 import { shareExpiryDate } from "@/features/onescreen/share-expiry";
-import { kstDateOf } from "@/lib/date-kst";
+import { formatShortKoreanDate, kstDateOf } from "@/lib/date-kst";
 
 /** 뒷 4자리 — 숫자 넷. 모양이 다르면 DB를 묻지도 않는다. */
 export const LAST4_RE = /^\d{4}$/;
@@ -121,6 +121,27 @@ export function uploadLastDay(expiresAtIso: string, homeworkDate: string | null,
 export const VIDEO_UPLOAD_OTHER_WAYS = "숙제 영상은 ClassNote 알림장에 올리거나, 숙제 영상 올리기 사이트에서 휴대폰 번호 뒷 4자리와 이름을 넣고 올려 주세요.";
 
 /**
+ * 번호·이름은 맞는데 고를 줄이 없는 까닭(원장 2026-11-04 *"메시지가 오해를 불러일으킬 수 있을거같은데"*).
+ * 실제로 있었던 일: 지금 다니는 반이 학원 설정('영상 제출 검사')에서 꺼져 있었고 다른 반은 아직 시작 전이었다.
+ * 그런데 학생은 "올릴 수 있는 반이 없습니다"를 보고 "반 배정이 안 됐다"로 읽었다.
+ *  · `excludedNow` = 지금 다니는 반 가운데 영상 숙제 대상이 아닌 반이 있다(반은 있다 — '반이 없다'고 말하지 않는다).
+ *  · `nextStart` = 아직 시작 전인 영상 숙제 대상 반 가운데 가장 이른 시작일.
+ * 반 이름·선생님은 싣지 않는다. 공개 화면이라, 고를 줄이 없을 때 반 정보를 새로 내보내지 않는다.
+ */
+export type SiteNoChoiceWhy = { excludedNow: boolean; nextStart: string | null };
+/** 정말로 올릴 반이 없다(수강이 끝났거나 · 휴원 · 숙제가 남지 않은 지난 반뿐). */
+export const SITE_NO_CLASS = "지금 여기서 영상을 올릴 수 있는 반이 없습니다. 숙제 영상은 ClassNote 알림장에 올려 주세요.";
+export function siteNoChoiceMessage(why: SiteNoChoiceWhy | null | undefined): string {
+  const start = why?.nextStart ? formatShortKoreanDate(why.nextStart) : null;
+  if (why?.excludedNow && start) {
+    return `지금 다니는 반은 여기서 영상 숙제를 받지 않습니다. ${start}에 시작하는 반은 그날부터 여기서 올릴 수 있습니다. 그 전에는 숙제 영상을 ClassNote 알림장에 올려 주세요.`;
+  }
+  if (why?.excludedNow) return "지금 다니는 반은 여기서 영상 숙제를 받지 않습니다. 숙제 영상은 ClassNote 알림장에 올려 주세요.";
+  if (start) return `다니는 반 수업이 ${start}에 시작합니다. 그날부터 여기서 올릴 수 있습니다. 그 전에는 숙제 영상을 ClassNote 알림장에 올려 주세요.`;
+  return SITE_NO_CLASS;
+}
+
+/**
  * 살아 있을 수 있는 사이트 링크를 찾을 때 거슬러 볼 날수(만든 날 기준) — 링크 수명의 최댓값(마감의 최대 거리 14일 + 1일) + 하루 여유.
  * 14 = video-homework/due.ts `VIDEO_HOMEWORK_MAX_DUE_DAYS`(그 모듈이 이 파일을 읽어 여기서는 숫자로 적는다 — site.test.ts가 같은 값인지 잠근다).
  */
@@ -166,7 +187,7 @@ export const SITE_BRANCH_STORAGE_KEY = "eywa-video-site-branch";
 
 export type SiteLookupResult =
   | { ok: true; choices: SiteChoice[] }
-  /** `no_homework` = 번호·이름은 맞지만 영상을 올릴 반이 없다(영상 숙제를 쓰지 않는 반만 다닌다 · 수강 중인 반이 없다). */
+  /** `no_homework` = 번호·이름은 맞지만 고를 줄이 없다 — 문구가 까닭을 가린다(`siteNoChoiceMessage`: 대상 밖 반 · 시작 전 · 반 없음). */
   | { ok: false; code: "invalid" | "no_homework" | "limit" | "unavailable" | "error"; error: string }
   | SiteBranchNeeded;
 export type SiteOpenResult =

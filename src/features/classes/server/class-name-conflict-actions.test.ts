@@ -11,6 +11,8 @@ const h = vi.hoisted(() => ({
   db: null as unknown,
   canManage: true,
   user: { id: "u1", tenantId: "tenant-a", systemRole: "master", displayName: "원장" },
+  /** 교시 지우기 실패를 흉내 낸다(반 행은 이미 저장된 뒤의 실패). */
+  deleteSlotsError: null as string | null,
 }));
 
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => h.user }));
@@ -33,7 +35,7 @@ vi.mock("./class-scope", () => ({ requireClassWrite: async () => ({ user: h.user
 vi.mock("./overlap-detect", () => ({ detectOverlaps: async () => [] }));
 vi.mock("./schedule-sync", () => ({
   loadCurrentSlots: async () => ({ rows: [], labSeparateSupported: false }),
-  deleteCurrentSlots: async () => ({}),
+  deleteCurrentSlots: async () => (h.deleteSlotsError ? { error: h.deleteSlotsError } : {}),
 }));
 vi.mock("./queries", () => ({ getClassroomAssignmentData: vi.fn() }));
 vi.mock("./handover", () => ({ moveLiveSlotTeacher: vi.fn() }));
@@ -71,6 +73,7 @@ let db: ReturnType<typeof fakeClassesDb>;
 beforeEach(() => {
   vi.mocked(logAction).mockClear();
   h.canManage = true;
+  h.deleteSlotsError = null;
   db = fakeClassesDb([
     row({ id: "pl4", class_name: "PL4" }),
     row({ id: "old-pl5", class_name: "PL5", is_active: false, closed_at: "2026-07-02" }),
@@ -118,6 +121,89 @@ describe("반 수정 — 종강·폐지 반이 쥔 이름으로 개명", () => {
     const res = await updateClass(undefined, editForm(pressFreeButton()));
     expect(res?.nameConflict).toMatchObject({ status: "closed", freeTo: null });
     expect(byId(db, "old-pl5").class_name).toBe("PL5");
+  });
+});
+
+/**
+ * 특강·수업보고서 미발송 켜고 끄기의 감사로그(2026-11-04 사고 — 10-30 JJ 반 일괄 미발송이 기록에 안 남았다).
+ * 폼은 hidden("0") + 체크박스("1") 쌍을 보낸다 — 켜면 ["0","1"], 끄면 ["0"], 칸을 모르는 폼은 키가 없다.
+ */
+describe("반 수정·생성 — 특강·수업보고서 미발송 감사로그", () => {
+  const plain = (extra: Record<string, string[]> = {}) => {
+    const fd = form({ id: "pl4", className: "PL4", subject: "english", teacherId: "", classroomId: "" });
+    for (const [k, vs] of Object.entries(extra)) for (const v of vs) fd.append(k, v);
+    return fd;
+  };
+  const updateLog = () =>
+    vi.mocked(logAction).mock.calls.map((c) => c[0]).find((a) => a.action === "class_update");
+
+  it("미발송을 켜면 저장 + '수업보고서 미발송 꺼짐 → 켜짐' 기록", async () => {
+    byId(db, "pl4").report_optout = false;
+    const res = await updateClass(undefined, plain({ reportOptout: ["0", "1"] }));
+    expect(res?.ok).toBe(true);
+    expect(byId(db, "pl4").report_optout).toBe(true);
+    expect(updateLog()?.metadata).toMatchObject({
+      classId: "pl4",
+      changed: ["수업보고서 미발송"],
+      changes: [{ field: "수업보고서 미발송", from: "꺼짐", to: "켜짐" }],
+    });
+  });
+
+  // 리뷰 2026-11-04: 반 행은 저장됐는데 교시 저장이 실패해 돌아가면, 다시 저장할 때 이전값이 이미 '켜짐'이라 끝내 기록이 안 남았다.
+  it("🔴 교시 저장이 실패해도 이미 저장된 미발송 켜기는 기록한다(note로 실패를 밝힌다)", async () => {
+    byId(db, "pl4").report_optout = false;
+    h.deleteSlotsError = "스케줄 저장에 실패했습니다.";
+    const res = await updateClass(undefined, plain({ reportOptout: ["0", "1"] }));
+    expect(res?.error).toBe("스케줄 저장에 실패했습니다.");
+    expect(byId(db, "pl4").report_optout).toBe(true);
+    expect(updateLog()?.metadata).toMatchObject({
+      classId: "pl4",
+      changes: [{ field: "수업보고서 미발송", from: "꺼짐", to: "켜짐" }],
+      note: "교시 저장 실패 — 반 정보만 저장됨",
+    });
+  });
+
+  it("교시 저장이 실패해도 켜고 끄는 칸을 안 바꿨으면 기록하지 않는다", async () => {
+    byId(db, "pl4").report_optout = true;
+    h.deleteSlotsError = "스케줄 저장에 실패했습니다.";
+    await updateClass(undefined, plain({ reportOptout: ["0", "1"] }));
+    expect(updateLog()).toBeUndefined();
+  });
+
+  it("특강을 끄고 미발송을 끄면 둘 다 '켜짐 → 꺼짐'", async () => {
+    byId(db, "pl4").is_special = true;
+    byId(db, "pl4").report_optout = true;
+    await updateClass(undefined, plain({ isSpecial: ["0"], reportOptout: ["0"] }));
+    expect(updateLog()?.metadata).toMatchObject({
+      changes: [
+        { field: "특강", from: "켜짐", to: "꺼짐" },
+        { field: "수업보고서 미발송", from: "켜짐", to: "꺼짐" },
+      ],
+    });
+  });
+
+  it("🔴 칸을 안 보낸 폼·같은 값 저장은 기록하지 않는다(다른 변경도 없으면 로그 자체가 없다)", async () => {
+    byId(db, "pl4").report_optout = true;
+    await updateClass(undefined, plain());
+    await updateClass(undefined, plain({ reportOptout: ["0", "1"] }));
+    expect(byId(db, "pl4").report_optout).toBe(true);
+    expect(updateLog()).toBeUndefined();
+  });
+
+  it("반 만들기 기록에 미발송 값을 남긴다", async () => {
+    const res = await createClass(
+      undefined,
+      (() => {
+        const fd = form({ className: "JJ9", subject: "math", teacherId: "", classroomId: "" });
+        fd.append("reportOptout", "0");
+        fd.append("reportOptout", "1");
+        return fd;
+      })(),
+    );
+    expect(res?.ok).toBe(true);
+    expect(logAction).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "class_create", metadata: expect.objectContaining({ reportOptout: true, isSpecial: false }) }),
+    );
   });
 });
 

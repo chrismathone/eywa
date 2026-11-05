@@ -410,9 +410,14 @@ describe("⑥ 최근 결석 — 어제까지 7일 · 카드·팝업이 같은 �
     expect(POPUP).not.toMatch(/(오늘|어제)\s*(결석|한 교시도)/);
   });
 
-  it("로드 스켈레톤은 실제 보조 줄과 같은 모양이다(기간 + 결석 횟수 + 연락 필요)", () => {
-    const LOADING = src("src/app/(shell)/dashboard/loading.tsx");
-    expect(LOADING).toMatch(/\["최근 결석",[^\]]*"[^"]*· 결석 0회 · 연락 필요 0명"/);
+  it("로드 스켈레톤도 실제 카드처럼 라벨·값뿐이다 — 보조 줄은 09-12에 실물에서 지웠다(기간 꼬리표 '7일'만 남는다)", () => {
+    // 옛 스켈레톤이 지운 보조 줄(기간 + 결석 횟수 + 연락 필요)을 계속 그려 로드 끝에 KPI 띠 높이가 튀었다(검수 2026-11-05).
+    const CARD = src("src/app/(shell)/dashboard/_overview/kpi-card.tsx");
+    const SKELETON = src("src/app/(shell)/dashboard/_overview/overview-skeleton.tsx");
+    expect(CARD).not.toContain("kpiDetail");
+    expect(SKELETON).not.toContain("kpiDetail");
+    expect(SKELETON).not.toContain("연락 필요");
+    expect(SKELETON).toContain('absent: { note: "7일"');
   });
 
   it("카드 라벨 = '최근 결석' — 색을 칠하는 CSS 선택자도 같은 글자다", () => {
@@ -480,7 +485,8 @@ describe("카드 구조 — ↗는 버튼 안에 들어가지 않는다", () => 
   });
 });
 
-const LOADING = src("src/app/(shell)/dashboard/loading.tsx");
+// 운영실 로딩 뼈대 — `loading.tsx`(머리 + KPI 띠)와 본문 뼈대(`overview-skeleton.tsx`, 배치를 안 뒤 Suspense fallback)를 함께 본다.
+const LOADING = src("src/app/(shell)/dashboard/loading.tsx") + src("src/app/(shell)/dashboard/_overview/overview-skeleton.tsx");
 const OVERVIEW = src("src/app/(shell)/dashboard/_overview/overview.tsx");
 
 /**
@@ -563,7 +569,8 @@ describe("⑧ 레벨테스트 및 첫수업 일정 — 오늘부터 한 달, 서
     for (const [name, text] of [["overview", OVERVIEW], ["loading", LOADING]] as const) {
       expect(text, name).not.toMatch(/오늘부터 7일|다가오는 7일/);
     }
-    expect(LOADING).toContain('note: "오늘부터 한 달 · 10/15 (목)까지"');
+    // 날짜는 일반 글자(폭 잡이) — 특정 날짜를 박으면 그날이 지나도 스켈레톤에 남는다.
+    expect(LOADING).toContain('note: "오늘부터 한 달 · 00/00 (0)까지"');
   });
 });
 

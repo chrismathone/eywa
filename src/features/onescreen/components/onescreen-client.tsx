@@ -42,7 +42,7 @@ import type { DisplayOptions } from "../display-options";
 import { PreviousContent } from "./previous-content";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { isJjSheetDraft, isJjSheetReport } from "../jj-books";
+import { isJjSheetDraft, isJjSheetReport, isProgressOptionalReport } from "../jj-books";
 import {
   EMPTY_TEMPLATE_PREFS,
   implicitTemplateFor,
@@ -157,6 +157,7 @@ import {
   templateFactsKey,
   templateCarriesNote,
   templateImageSlots,
+  monthlyScoresMissing,
   templateNeedsAi,
   type EnglishGenStatus,
   type EnglishRowFacts,
@@ -263,6 +264,8 @@ import {
 import { applyStudentOrder } from "../student-order";
 import { saveStudentOrder } from "../server/order-actions";
 import { useClassnoteStatusSync } from "./use-classnote-status-sync";
+import { useLiveClassnoteMatch } from "./use-live-classnote-match";
+import { cnSyncRequested } from "../classnote-match-live";
 import { mergeClassnoteStatuses, pendingSendStudentIds, type ClassnoteStatusRow } from "../classnote-status";
 import { linkMakeupToAbsence, setAttendanceBulk, setAttendanceCell } from "@/features/attendance/server/actions";
 import { subscribeAttendanceApplied } from "@/features/attendance/live/attendance-applied-bus";
@@ -1102,6 +1105,13 @@ export function OneScreenClient({
   // 대기·처리중인 학생이 있는 동안만 감시(없으면 조회 0회, 다 끝나면 저절로 멈춘다).
   const pendingSends = useMemo(() => pendingSendStudentIds(reports), [reports]);
   useClassnoteStatusSync(date, classnoteOn ? pendingSends : NO_PENDING, applyClassnoteStatuses);
+  // C.N 아이콘(반 보드 매칭) — 새로고침 없이 갱신(원장 2026-11-04 · use-live-classnote-match.ts). 반 = 이 날짜 로스터의 반(페이지가 좁힌 것과 같다).
+  const cnClassIds = useMemo(() => initial.flatMap((s) => s.subjects.flatMap((su) => (su.classId ? [su.classId] : []))), [initial]);
+  const { map: liveClassnoteMatch, boost: boostClassnoteMatch } = useLiveClassnoteMatch(classnoteMatch, {
+    enabled: classnoteOn,
+    date: activeDate,
+    classIds: cnClassIds,
+  });
 
   function patchReport(
     studentId: string,
@@ -2797,6 +2807,8 @@ export function OneScreenClient({
       // 출결(원장 2026-10-26) — 출석부 칸 그대로(수학 보고서와 같은 문장, attendance-sentence.ts).
       // 보강 줄이면 결석 날짜·시간·사유를 붙인다(2026-10-26 — 수학과 같은 재료, report-comment.ts rowMakeupFacts).
       attendance: attendanceSentence(su.attendanceRaw, su.attendanceNote, rowMakeupFacts(student, su)),
+      // EiE 월간 보고서 점수(2026-11-05) — 로스터가 실어 둔 그 반 Monthly Test(english-monthly.ts).
+      monthly: su.monthlyEval ?? null,
       slots: slotFactsFor(
         jjKnownSlots(jjCache[jjDayKey(student.id, activeDate)]),
         rep?.autoDraft ?? rep?.draft ?? "",
@@ -3087,6 +3099,10 @@ export function OneScreenClient({
       // 🔴 새 글이다 — 앞선 '그대로' 확인은 옛 글에 대한 것이라 버린다(안 버리면 새 글이 확인 없이 나갔다, 적대 재리뷰).
       outputAck: undefined,
     }));
+    // 월간 보고서인데 Monthly Test 점수가 없으면 코멘트만 들어간다 — 반응 없음처럼 보이지 않게 까닭을 알린다(2026-11-05).
+    if (!quiet && monthlyScoresMissing(found ?? DEFAULT_ENGLISH_TEMPLATE, nowFacts)) toast.message(t("os.tpl.monthlyNoScores"));
+    // AI를 안 부르는 템플릿(월간 보고서 등)은 눈 깜짝할 새 끝나 '눌렸나?'를 모른다 — 채웠다고 알린다(원장 2026-11-05 *"로딩이나 뭐 그런게없음 그래서 자꾸 누르게됌"*).
+    else if (!quiet && found && !templateNeedsAi(found)) toast.success(t("os.tpl.filledNoAi"));
     if (found) return "ok";
     if (!quiet) toast.message(t("os.tpl.templateMissing"));
     return "template_fallback";
@@ -3151,6 +3167,7 @@ export function OneScreenClient({
     if (edited && !window.confirm(t("os.tpl.overwriteConfirm"))) return;
     if (!found) toast.message(t("os.tpl.templateMissing"));
     const facts = englishFactsOf(student, su, rep, jj.cacheRef.current);
+    if (monthlyScoresMissing(template, facts)) toast.message(t("os.tpl.monthlyNoScores"));
     const composed = composeEnglishDraft(template, facts, {
       nextTest: rep?.nextTest,
       aiIntro: ai.aiIntro,
@@ -3407,7 +3424,10 @@ export function OneScreenClient({
           r.subject,
           action,
           effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus),
-          { attendanceReadOnly: !canEditAttendance }, // 출결 쓰기 권한 없음 = 미체크 게이트 해당 없음(P0-3)
+          {
+            attendanceReadOnly: !canEditAttendance, // 출결 쓰기 권한 없음 = 미체크 게이트 해당 없음(P0-3)
+            progressOptional: isProgressOptionalReport(r.subject, reportsRef.current[r.student.id]?.[r.subject.name]), // SRS 글은 진도 불필요
+          },
         ),
       );
     if (!keys || keys.length === 0) return all;
@@ -4274,6 +4294,8 @@ export function OneScreenClient({
                         : null;
     // 배정 보류 안내는 사유(연동 PC가 적은 문장)를 끼운다 — 나머지 문장엔 자리가 없어 그대로다.
     if (!res.ok && sendClassKey) res = { ...res, error: tf(sendClassKey, { reason: res.boardHoldReason ?? "" }) };
+    // 서버가 그 반 동기화를 요청했다 — 몇 분 동안 C.N 아이콘을 짧은 주기로 다시 본다(배정되면 새로고침 없이 체크로 바뀐다).
+    if (cnSyncRequested(res.status)) boostClassnoteMatch();
     if (res.ok) {
       // ⚠️ 응답 status에는 DB 상태가 아닌 **결과 코드**도 섞여 있다(dry_run·subject_off·absent·already_sent).
       //    그중 `already_sent`를 그대로 배지 state에 넣으면 "success가 아니게" 되어 발송 가드가 스스로 풀린다
@@ -4303,7 +4325,7 @@ export function OneScreenClient({
     }
     // 진도 미입력 게이트(방어층) — 버튼 disabled 우회·프로그램 호출 대비. 표뷰와 동일 기준(#15 확정).
     const su = selected.subjects.find((s) => s.name === subjectName);
-    if (su && !isRowActionable(su, "save")) {
+    if (su && !isRowActionable(su, "save", undefined, { progressOptional: isProgressOptionalReport(su, reports[selected.id]?.[subjectName]) })) {
       toast.message(t("os.c.needProgress"));
       return;
     }
@@ -4599,7 +4621,7 @@ export function OneScreenClient({
         (!keySet || keySet.has(r.key)) &&
         r.subject.attendanceRaw !== "absent" &&
         !isAlreadySent(effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus)) &&
-        !isReportEligible(r.subject),
+        !isReportEligible(r.subject, isProgressOptionalReport(r.subject, reportsRef.current[r.student.id]?.[r.subject.name])),
     );
     const noProgressNames = [...new Set(noProgressRows.map((r) => r.student.name))];
     const progressLine = noProgressRows.length
@@ -4620,7 +4642,9 @@ export function OneScreenClient({
       (r) =>
         canEditAttendance && // 출결 쓰기 권한 없음 = 게이트 해당 없음(P0-3) — 제외 안내도 하지 않는다
         (!keySet || keySet.has(r.key)) &&
-        isRowActionable(r.subject, "autowrite", effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus)) &&
+        isRowActionable(r.subject, "autowrite", effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus), {
+          progressOptional: isProgressOptionalReport(r.subject, reportsRef.current[r.student.id]?.[r.subject.name]),
+        }) &&
         isAttendanceUnchecked(r.subject),
     );
     const uncheckedNames = [...new Set(uncheckedRows.map((r) => r.student.name))];
@@ -4900,7 +4924,7 @@ export function OneScreenClient({
     }
     // 미저장 첨부는 buildSaveInput으로 보고서 행을 먼저 만든다 — 진도 없으면 빈 보고서가 생기므로 게이트(#15).
     const su0 = student.subjects.find((s) => s.name === subjectName);
-    if (su0 && !reports[student.id]?.[subjectName]?.sent && !isRowActionable(su0, "save")) {
+    if (su0 && !reports[student.id]?.[subjectName]?.sent && !isRowActionable(su0, "save", undefined, { progressOptional: isProgressOptionalReport(su0, reports[student.id]?.[subjectName]) })) {
       if (!opts?.silent) toast.message(t("os.c.attachNeedProgress"));
       return 0;
     }
@@ -5139,7 +5163,7 @@ export function OneScreenClient({
             // 멘트 모드는 카드 모드와 **같은 실효값**을 쓴다(강사 오버라이드 > 학원 기본) — 표 모드만
             // 단일 칸으로 남으면 토글을 B로 둔 강사가 "표에선 적용이 안 된다"고 느낀다(원장 제보 2026-07-21).
             noticeMode: noticeMode ?? academyNoticeMode,
-            classnoteMatch,
+            classnoteMatch: liveClassnoteMatch,
             holidayName,
           }}
           fields={{
@@ -5724,7 +5748,7 @@ selected ? (
               reportCell: reportCell(rowReports, rows.length),
               sendMark: buildSendMark({ subjects: rows, reports: reports[student.id], delivery: classnoteSendEnabled,
                 label: sendMarkLabel, date: activeDate, now: lessonNow, lessons: todayClasses, showingAll }),
-              cn: cnRow ? cnLabelFor(classnoteMatch, { classId: cnRow.classId, subjectKey: cnRow.subjectKey, studentId: student.id }) : null,
+              cn: cnRow ? cnLabelFor(liveClassnoteMatch, { classId: cnRow.classId, subjectKey: cnRow.subjectKey, studentId: student.id, reportOptout: cnRow.reportOptout }) : null,
             };
           }}
           reportCellById={reportCellById}

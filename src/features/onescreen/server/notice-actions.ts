@@ -183,14 +183,14 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
       });
     }
     // 🔴 수학은 **반 보드 경로**(원장 2026-10-02) — 삼자 일치로 반을 정해 그 반 보드의 그 학생 원아에게 1:1로. 맞는 반이 없으면 제외한다
-    //    (1인 보드로 되돌리지 않는다). 경로가 꺼져 있거나 연동 PC가 아직 못 하면 전원 기존 경로(rest). 조회 실패는 발송을 막는다.
+    //    (1인 보드로 되돌리지 않는다). 영어는 그렇게 정한 반에 **반 방**이 이어져 있으면 반 방(2026-11-04), 없으면 지금처럼 1인 보드(rest).
+    //    경로가 꺼져 있거나 연동 PC가 아직 못 하면 전원 기존 경로(rest). 조회 실패는 발송을 막는다.
     let routed: Awaited<ReturnType<typeof routeNoticeCandidates>>;
     try {
       routed = await routeNoticeCandidates({
         supabase,
         tenantId: user.tenantId,
         settings,
-        senderName: teacherId ? user.displayName : null,
         candidates,
       });
     } catch (e) {
@@ -211,7 +211,8 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
       });
     }
     // 반 보드 경로 대상은 이름 가드를 타지 않는다 — 원아를 이름으로 찾지 않고 0302a에 가드를 통과해 적힌 원아 번호로 올린다
-    // (같은 반 동명이인은 그 표가 애초에 보류로 둔다 → 위에서 '반 보드 없음'으로 제외됐다).
+    // (같은 반 동명이인은 그 표가 애초에 보류로 둔다 → 위에서 '반 보드 없음'으로 제외됐다). 영어 반 방 대상도 이름으로 찾지 않는다
+    // (워커가 원아 연결 ∩ 지금 그 방 원아로 고른다 — 영어 보고서와 같은 함수).
     targets = [...routed.classTargets, ...survivors];
   }
   if (!targets.length) return { ok: false, error: "발송 가능한 학생이 없습니다", skipped };
@@ -308,8 +309,9 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
       source: "onescreen",
       commonAttachments: commonAttachments.length,
       targetAttachments: targets.reduce((n, t) => n + (t.attachments?.length ?? 0), 0),
-      // 반 보드로 간 대상 수(나머지는 1인 보드) — 어느 경로로 나갔는지 기록에 남긴다.
+      // 반 보드·반 방으로 간 대상 수(나머지는 1인 보드) — 어느 경로로 나갔는지 기록에 남긴다. 그중 영어 반 방은 따로 센다.
       classRouteTargets: targets.filter((t) => t.classId).length,
+      englishRoomTargets: targets.filter((t) => t.classId && t.subject === "english").length,
     },
   });
 

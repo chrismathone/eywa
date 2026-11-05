@@ -8,7 +8,7 @@
 // 🔑 해제(원아·선생님)는 여기서 하지 않는다 — 배정·기록이 끝난 뒤 class-board-release-apply.mjs가 따로 한다(원장 2026-10-02 자동 해제).
 import { CLASSNOTE_BASE, createBoard, dismissHonorificDialog, enrollChild, fetchBoardChildren, fetchBoards } from "./classnote-admin-core.mjs";
 import { personalBoardId } from "./math-class-boards-load.mjs";
-import { normBoard } from "./board-safety.mjs";
+import { isPersonalBoardName, normBoard } from "./board-safety.mjs";
 import { reservedBoardName } from "./class-board-plan.mjs";
 
 export class ClassBoardStop extends Error {}
@@ -67,6 +67,15 @@ export async function applyClassBoardPlans({ page, centerId, targets, boards, me
     const entry = { classId: p.classId, className: p.className, boardId: p.board.id ?? null, created: false, renamed: null, enrolled: [], held: p.hold.length, skipped: null };
     out.push(entry);
     let boardId = p.board.id ?? null;
+
+    // 🔴 1인 보드 꼴 이름(`(수학)`·`(영어)` — 계획한 반 이름이나 지금 연결된 보드 이름)이면 만들지도, 이름을 바꾸지도, 원아를 넣지도
+    //    않는다(원장 2026-11-04 *"앞으로 1인보드에 배정 시키지마 절대"* · 1.0.14). 그 반만 건너뛴다.
+    const linkedName = boardId != null ? boards.find((b) => Number(b.id) === Number(boardId))?.name : null;
+    if (isPersonalBoardName(p.className) || isPersonalBoardName(linkedName)) {
+      entry.skipped = "1인 보드 꼴 이름이라 반 보드로 다루지 않습니다(1인 보드에는 원아를 배정하지 않습니다)";
+      log(`  ⛔ ${p.className}: ${entry.skipped}`);
+      continue;
+    }
 
     // 🔑 이름 검증 실패는 **그 반만** 보류한다(개명 감사 G8) — 전에는 한 반의 생성·개명 검증 실패가 ClassBoardStop으로
     //    동기화 전체(다른 반 신입 배정·0302a 기록)를 매일 멈췄다. 원아 대조 실패는 여전히 전체를 멈춘다(오배정 위험).

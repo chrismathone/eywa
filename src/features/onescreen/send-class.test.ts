@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 // 워커 .mjs — 앱·워커가 같은 순서로 반을 고르는지 한 표로 고정한다.
-import { pickRouteClass } from "../../../scripts/_classnote/class-route-decide.mjs";
+import { decideRoute, pickRouteClass } from "../../../scripts/_classnote/class-route-decide.mjs";
 import {
   classRouteActive,
-  classRouteAppliesTo,
   decideSendClass,
   isSendCandidateClass,
   sendClassGateRow,
@@ -14,22 +13,31 @@ import {
   sendClassRow,
 } from "./send-class";
 
-describe("classRouteAppliesTo — 워커 class-route-decide.mjs와 같은 규칙", () => {
-  it("class = 전원 · pilot = 고른 강사(원문 일치)만 · 그 외 = 아니다", () => {
-    expect(classRouteAppliesTo({ classnoteMathRoute: "class" }, "누구")).toBe(true);
-    expect(classRouteAppliesTo({ classnoteMathRoute: "pilot", classnoteMathRoutePilot: ["남정화"] }, "남정화")).toBe(true);
-    expect(classRouteAppliesTo({ classnoteMathRoute: "pilot", classnoteMathRoutePilot: ["남정화"] }, " 남정화")).toBe(false);
-    expect(classRouteAppliesTo({ classnoteMathRoute: "personal" }, "남정화")).toBe(false);
-    expect(classRouteAppliesTo({}, "남정화")).toBe(false);
+describe("classRouteActive — 수학은 늘 반별, ClassNote 모듈이 꺼진 학원만 판정 자체가 없다(원장 2026-09-30 · 2026-11-05)", () => {
+  it("모듈 켜짐 = 켜짐", () => expect(classRouteActive({ modules: { disabled: [] } })).toBe(true));
+  it("🔴 모듈 꺼짐 = 꺼짐", () => expect(classRouteActive({ modules: { disabled: ["classnote"] } })).toBe(false));
+  it("모듈 정보가 없으면 켜진 것으로(침산 — 꺼진 모듈 없음)", () => expect(classRouteActive({})).toBe(true));
+  it("🔴 옛 '수학 발송 경로' 저장값(기존 방식·일부 선생님만)은 판정에 쓰지 않는다(2026-11-05 걷음 — 강사 이름 인자도 없앰)", () => {
+    const old = { modules: { disabled: [] }, report: { classnoteMathRoute: "personal", classnoteMathRoutePilot: ["남정화"] } };
+    expect(classRouteActive(old)).toBe(true);
+    const pilotOld = { ...old, report: { classnoteMathRoute: "pilot", classnoteMathRoutePilot: [] as string[] } };
+    expect(classRouteActive(pilotOld)).toBe(true);
+    // 인자는 설정 하나뿐 — 옛 '일부 선생님만' 자리(강사 이름)를 다시 받지 않는다.
+    expect(classRouteActive.length).toBe(1);
   });
 });
 
-describe("classRouteActive — ClassNote 모듈이 꺼진 학원은 반별 발송 판정 자체가 없다(원장 2026-09-30)", () => {
-  const report = { classnoteMathRoute: "class" };
-  it("모듈 켜짐 + 반별 = 켜짐", () => expect(classRouteActive({ modules: { disabled: [] }, report }, "누구")).toBe(true));
-  it("🔴 모듈 꺼짐이면 설정이 반별이어도 꺼짐", () =>
-    expect(classRouteActive({ modules: { disabled: ["classnote"] }, report }, "누구")).toBe(false));
-  it("모듈 정보가 없으면 켜진 것으로(침산 — 꺼진 모듈 없음)", () => expect(classRouteActive({ report }, "누구")).toBe(true));
+describe("앱·워커 같은 규칙 — 수학이면 늘 반별(워커 class-route-decide.mjs `decideRoute`)", () => {
+  it("수학(math·subject_1) = 반 있으면 class · 반 없으면(보강) needs_class · 그 밖 과목 = personal(이 판정과 무관)", () => {
+    const anyTeacher = { subject: "math", class_id: "c1", teacher_name: "아무나" }; // 작성 강사는 보지 않는다
+    expect(decideRoute(anyTeacher)).toBe("class");
+    expect(decideRoute({ subject: "subject_1", class_id: "c1" })).toBe("class");
+    expect(decideRoute({ subject: "math", class_id: null })).toBe("needs_class");
+    expect(decideRoute({ subject: "english", class_id: "c1" })).toBe("personal");
+    // 앱 쪽 같은 표: 모듈이 켜진 학원의 수학 행은 반별 게이트를 탄다.
+    expect(isSendClassRouteRow({ modules: { disabled: [] } }, { subject: "math" })).toBe(true);
+    expect(isSendClassRouteRow({ modules: { disabled: [] } }, { subject: "english" })).toBe(false);
+  });
 });
 
 describe("needsSendClass", () => {
@@ -88,8 +96,8 @@ describe("관리자 일괄 경로 입력 변환", () => {
   it("sendClassRow", () => {
     expect(sendClassRow({ id: "r", student_id: "s", class_id: null })).toEqual({ id: "r", studentId: "s", classId: null });
   });
-  it("isSendClassRouteRow — 수학 + 반별 경로 + 모듈 켜짐", () => {
-    const settings = { modules: { disabled: [] }, report: { classnoteMathRoute: "class" } };
+  it("isSendClassRouteRow — 수학 + 모듈 켜짐", () => {
+    const settings = { modules: { disabled: [] } };
     expect(isSendClassRouteRow(settings, { subject: "math", teacher_name: "누구" })).toBe(true);
     expect(isSendClassRouteRow(settings, { subject: "english", teacher_name: "누구" })).toBe(false);
     expect(isSendClassRouteRow({ ...settings, modules: { disabled: ["classnote"] } }, { subject: "math" })).toBe(false);

@@ -3527,6 +3527,11 @@ export const SHEET_DICT = {
     ko: "템플릿 목록을 불러오는 중입니다 — 잠시 후 다시 눌러 주세요",
     en: "Still loading your templates — try again in a moment",
   },
+  "os.tpl.filledNoAi": { ko: "템플릿으로 글을 채웠습니다", en: "Filled the report from the template" },
+  "os.tpl.monthlyNoScores": {
+    ko: "이 반의 최근 Monthly Test 점수가 없어 그래프·점수 표 없이 코멘트만 넣었습니다 — 성적관리에서 Monthly Test 점수를 넣고 새로고침한 뒤 다시 눌러 주세요",
+    en: "No recent Monthly Test scores for this class, so only the comment was filled — enter the Monthly Test scores in Grades, refresh, and try again",
+  },
   "os.tpl.templateMissing": {
     ko: "고른 템플릿을 찾지 못해 기본 템플릿으로 채웠습니다",
     en: "The chosen template wasn't found, so the built-in one was used",
@@ -3638,6 +3643,8 @@ export const SHEET_DICT = {
   // 영어 기본 = 수학과 같은 항목 보고서(원장 2026-10-26) — report-templates/defaults.ts BUILTIN_ENGLISH_SHEET_TEMPLATE.
   "os.tpl.builtinSheetName": { ko: "수학과 같은 항목 보고서 (기본)", en: "Section report like math (default)" },
   "os.tpl.builtinJjSheetName": { ko: "SRS 보고서", en: "SRS report" },
+  "os.tpl.builtinEieDailyName": { ko: "EiE 일일 보고서", en: "EiE daily report" },
+  "os.tpl.builtinEieMonthlyName": { ko: "EiE 월간 보고서", en: "EiE monthly report" },
   "os.tpl.jjLoading": { ko: "인재원 자료를 불러오는 중…", en: "Loading Injaewon data…" },
   "os.tpl.jjUnlinked": {
     ko: "인재원 미연결 — 결과지·학습분석지 칸은 비워 둡니다",
@@ -4324,7 +4331,8 @@ export const SHEET_DICT = {
     ko: "{subject} — 저장했지만 이 과목은 발송 대상이 아니라 전송하지 않았습니다(원장 설정의 발송 과목 확인)",
     en: "{subject} — saved, but this subject is not one that gets sent, so nothing went out (check the subjects in the director's settings)",
   },
-  "os.c.optoutSubject": { ko: "{subject} — {notice}(기록 저장은 유지)", en: "{subject} — {notice} (the record is still saved)" },
+  // {notice} = 미발송 반 안내 한 문장(report-optout.ts — 끝이 '요청하세요'라 '저장했습니다'를 앞에 둔다, 2026-11-04).
+  "os.c.optoutSubject": { ko: "{subject} — 기록은 저장했습니다. {notice}", en: "{subject} — the record is saved. {notice}" },
   "os.c.absentSubject": {
     ko: "{subject} — 수업일 출결이 결석으로 기록돼 있어 발송하지 않았습니다(기록 저장은 유지)",
     en: "{subject} — the attendance for that day is 'absent', so nothing was sent (the record is still saved)",
@@ -4361,7 +4369,7 @@ export const SHEET_DICT = {
     ko: "{name} {subject} — 저장했지만 발송 대상 과목이 아니라 전송하지 않았습니다",
     en: "{name} {subject} — saved, but this subject is not one that gets sent, so nothing went out",
   },
-  "os.c.optoutRow": { ko: "{name} {subject} — {notice}(기록 저장은 유지)", en: "{name} {subject} — {notice} (the record is still saved)" },
+  "os.c.optoutRow": { ko: "{name} {subject} — 기록은 저장했습니다. {notice}", en: "{name} {subject} — the record is saved. {notice}" },
   "os.c.absentRow": {
     ko: "{name} — 수업일 출결이 결석으로 기록돼 있어 발송하지 않았습니다(기록 저장은 유지)",
     en: "{name} — the attendance for that day is 'absent', so nothing was sent (the record is still saved)",

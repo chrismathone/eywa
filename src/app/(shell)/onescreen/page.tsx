@@ -7,8 +7,8 @@ import { roleHome } from "@/lib/permissions";
 import { getTeacherRoster } from "@/features/onescreen/server/roster";
 import { resolveReportAuthorSettings } from "@/features/onescreen/server/report-author-name";
 import { getJjAccess } from "@/features/ijw/server/queries";
-import { getClassnoteMatchMap } from "@/features/onescreen/server/classnote-match";
-import { pickCnForClasses } from "@/features/onescreen/classnote-match";
+import { loadClassnoteMatch } from "@/features/onescreen/server/classnote-match";
+import { pickCnForRoster } from "@/features/onescreen/classnote-match";
 import { parseView } from "@/features/onescreen/view";
 import { OneScreenClient } from "@/features/onescreen/components/onescreen-client";
 import { TodayAttendanceStrip } from "@/features/attendance/live/components/today-strip";
@@ -74,7 +74,8 @@ export default async function OneScreenPage({
     // 실패해도 링크만 빠진다(관리자에게 요청하라는 문구로 떨어진다) — 전원 핫패스라 이 조회가 화면을 막으면 안 된다.
     getJjAccess().catch(() => null),
     // ClassNote 반 보드 매칭(0302a, 'C.N' 알약) — 로스터와 독립(B4). 함수 안에서 실패를 삼켜 라벨만 뺀다(#95 핫패스).
-    getClassnoteMatchMap(),
+    // '그날 다니는 반'(물음표 판정)은 로스터와 같은 날짜로 본다(지난 날짜 로스터 — 함수 안에서 같은 resolveReportDate).
+    loadClassnoteMatch(date),
     // 수학 교재명 칸 제안(원장 2026-10-27, math-book-list.ts) — 교재목록 마스터를 ECS와 같은 캐시 경로로. fail-soft(실패=제안 없음, #95 핫패스).
     loadEcsTextbookOptions("math"),
   ]);
@@ -240,11 +241,11 @@ export default async function OneScreenPage({
       initialClassName={initialClassName}
       initialStudentId={initialStudentId}
       canLinkIjw={!!jjAccess?.canLink}
-      // 이 강사 로스터의 반만 — 다른 반 학생의 보류 사유를 내려보내지 않는다. 다른 반 보드 배정(이름만)은 이 로스터의 학생 것만.
-      classnoteMatch={pickCnForClasses(
+      // 이 강사 로스터의 반만 — 다른 반 학생의 보류 사유를 내려보내지 않는다. 다른 반 보드 배정(이름만)은 이 반들을 그날 다니는 학생 것만.
+      // 🔴 새로고침 없는 갱신(/api/onescreen/classnote-match)도 **같은 함수**로 좁힌다 — 같은 날짜·같은 반이면 같은 결과.
+      classnoteMatch={pickCnForRoster(
         classnoteMatch,
         roster.students.flatMap((s) => s.subjects.map((su) => su.classId).filter((id): id is string => !!id)),
-        roster.students.map((s) => s.id),
       )}
       />
       </TextbookOptionsProvider>

@@ -17,10 +17,10 @@
 | CN05 | 학생별 공지 수정·회수 | `classnote-notice-core.mjs` | `edit_requested`와 `revoke_requested` 모두 처리. 기존 글 ID와 대상 대조, 남의 글 변경 금지. 발송 OFF에서도 정정/회수 가능한 기존 의미 유지. |
 | CN06 | 반 단체 공지 | `classnote-class-notice-core.mjs`, `class-notice-guard.mjs` | 반마다 공지 1건, 현재 반 구성 검증, 반 하나만 지정, 이미지 전부 준비, 게시 후 실물 확인, 반별 부분 성공. |
 | CN07 | 보고서 회수 | `classnote-recall-core.mjs`, `share-bases.mjs` | 과거/현재 공유 주소와 토큰으로 정확한 글만 회수. 오래된 글 회수 가능. 발송 OFF와 독립, 확인 불가를 삭제 완료로 처리하지 않음. |
-| CN08 | 신규생 보드 생성·배정 | `classnote-provision-core.mjs` | 05시 KST 이후 하루 1회. 재원·수강·발송 대상 조건, 동명이인 보류. 발송 OFF 중 준비 가능한 기존 의미 유지. |
+| CN08 | 신규생 보드 생성·배정 — 🔴 **없앰(2026-11-04 · 1.0.14 · 1인 보드 배정 금지)** | ~~`classnote-provision-core.mjs`~~(지움) | 05시 KST 이후 하루 1회. 재원·수강·발송 대상 조건, 동명이인 보류. 발송 OFF 중 준비 가능한 기존 의미 유지. |
 | CN09 | 반 보드 일일 동기화 | `math-class-boards-sync.mjs` 및 load/plan/apply 모듈 | 새 반·개명·학생/강사 배정과 안전한 해제. 기존 연결 없는 지점에 임의 도입하지 않음. 1인 보드 해제/보드 삭제로 확대하지 않음. |
 | CN10 | 변경 감지 자동 동기화 | `classnote-auto-sync.mjs`, `auto-sync-load.mjs`, `auto-sync-plan.mjs` | 1분 대조, 변경분만 기존 요청 큐 사용. `on/observe/off` 의미와 자동 해제 별도 스위치 유지. |
-| CN11 | 지금 반 보드 동기화 | `classnote-sync-request.mjs`, `sync-request-plan.mjs` | 버튼 요청 선점·변경분 처리·반 15개/신입 준비 20건 상한·남은 항목 결과. 수동 처리가 일일 완료 표식을 덮지 않음. |
+| CN11 | 지금 반 보드 동기화 | `classnote-sync-request.mjs`, `sync-request-plan.mjs` | 버튼 요청 선점·변경분 처리·반 15개 상한(신입 1인 보드 준비 20건 상한은 2026-11-04 없앰)·남은 항목 결과. 수동 처리가 일일 완료 표식을 덮지 않음. |
 | CN12 | 원아 ID와 학생 연결 | `classnote-childmap-core.mjs`, `child-map.mjs` | 영어 그룹반·여러 원아 계정→한 학생 지원, 유일성 검증. 보호자 전화는 대조에만 사용. 현재 간격은 20시간 가드이며 05시 일일 작업과 다름. |
 | CN13 | 학부모 새 글 수집 | `classnote-feed-core.mjs`, `parent-post-filter.mjs` | 1분 주기·워터마크·초기 기준선·오래된 연락 알림 제한, 현직 담당자 알림과 중복 방지. |
 | CN14 | 학부모 댓글 수집 | `classnote-feed-core.mjs`, `parent-comment-events.mjs`, `parent-comment-filter.mjs` | 10분 주기, 댓글 수 비교와 ClassNote 알림 신호 경로 모두 유지. 감시창 밖 댓글·동일 시각 댓글·일부 조회 실패를 누락하지 않음. |

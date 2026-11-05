@@ -9,25 +9,24 @@
 // - 🔴 새벽 정기 동기화의 '오늘 함' 표식을 건드리지 않는다 — 일부 반만 본 수동 실행이 새벽 전체 실행을 건너뛰게 하면 안 된다.
 //   같은 폴 루프(단일 스레드)라 둘이 동시에 돌 수는 없다(한 폴 안에서 차례로).
 // - 달라진 게 없으면 ClassNote에 로그인조차 하지 않는다(aywa DB만 본다 — sync-request-plan.mjs).
-// - 상한: 반 15개·신입 준비 20건 — 남은 건 결과에 적고 새벽(또는 다시 누름)이 한다.
+// - 상한: 반 15개 — 남은 건 결과에 적고 새벽(또는 다시 누름)이 한다.
+// - 🔴 1인 보드는 만들지도, 원아를 배정하지도 않는다(원장 2026-11-04 *"앞으로 1인보드에 배정 시키지마 절대"* · 1.0.14에서 신입 1인 보드 준비를 뺐다).
 // - 표가 없으면(0313a 적용 전) 조용히 쉰다([[#95]]).
 import { loginClassnote } from "./classnote-admin-core.mjs";
-import { provisionDailyOnce } from "./classnote-provision-core.mjs";
 import { syncChildMapOnce } from "./classnote-childmap-core.mjs";
 import { loadAywa } from "./math-class-boards-load.mjs";
 import { autoReleaseEnabled, releaseHaltReason, syncMathClassBoards } from "./math-class-boards-sync.mjs";
 import { auditEnrollments, auditReleases, writeSyncRun } from "./class-board-sync-report.mjs";
 import {
-  MAX_PROVISION_WRITES,
   PENDING_STALE_MIN,
   RECENT_DAYS,
   RESTARTED_MSG,
   RUNNING_STALE_MIN,
   STALE_PENDING_MSG,
   STALE_RUNNING_MSG,
+  childLinkCandidates,
   childMapRefreshDue,
   normalizeScope,
-  provisionCandidates,
   selectClassesToSync,
   summarizeSync,
   syncErrorLabel,
@@ -73,8 +72,8 @@ async function claim(sql, tenant, host) {
 }
 
 /**
- * 바뀐 반만 동기화 — ClassNote 쓰기는 새벽 동기화와 같은 코드·같은 가드(class-board-plan.mjs · math-class-boards-apply.mjs ·
- * classnote-provision-core.mjs)를 탄다. 여기서 새로 하는 일은 **대상 고르기**뿐이다.
+ * 바뀐 반만 동기화 — ClassNote 쓰기는 새벽 동기화와 같은 코드·같은 가드(class-board-plan.mjs · math-class-boards-apply.mjs)를
+ * 탄다. 여기서 새로 하는 일은 **대상 고르기**뿐이다.
  * `events`·`applied` = 동기화 보고서(0329a)용 빈 배열 — 이 회차의 변동·실패·보류 줄과 반별 실행 결과가 담긴다(멈춰도 남는다).
  */
 export async function runScopedSync(sql, browser, { tenant, scope: rawScope, log = console.log, events = [], applied = [], released = { children: [], teachers: [] } }) {
@@ -98,25 +97,25 @@ export async function runScopedSync(sql, browser, { tenant, scope: rawScope, log
     : { picked: [], remaining: 0 };
   // 지목한 학생은 지점 학생만(다른 지점 id가 섞여 와도 무시 — 대상 반 목록이 이미 이 지점 것뿐).
   const tenantStudents = new Set(aywa.students.keys());
-  const provIds = provisionCandidates({
+  const candidateIds = childLinkCandidates({
     recentStudentIds: recent,
     childLinkedStudentIds: new Set(childLinks.map((r) => r.student_id)),
     scope: { ...scope, studentIds: scope.studentIds.filter((s) => tenantStudents.has(s)) },
   });
 
-  if (!picked.length && !provIds.length) {
+  if (!picked.length && !candidateIds.length) {
     log("[sync-now] 바뀐 반 없음 — ClassNote는 건드리지 않음");
     return { noChange: true, classes: 0, enrolled: 0, summary: summarizeSync({ noChange: true }) };
   }
-  log(`[sync-now] 대상 반 ${picked.length}개${remaining ? `(남은 ${remaining}개는 다음에)` : ""} · 신입 준비 후보 ${provIds.length}명`);
+  log(`[sync-now] 대상 반 ${picked.length}개${remaining ? `(남은 ${remaining}개는 다음에)` : ""} · 가입 확인 후보 ${candidateIds.length}명`);
   for (const p of picked) log(`[sync-now]   ${p.className}: ${p.reasons.join(", ")}`);
 
-  const out = { classes: 0, created: 0, renamed: 0, enrolled: 0, teachers: 0, held: 0, boardsCreated: 0, assigned: 0, remaining, provisionRemaining: 0, releasedChildren: 0, releasedTeachers: 0 };
-  // ⓪ 원아 연결 갱신 — 신입 준비 후보가 있으면 원아 연결(0185a)을 먼저 새로 만든다(원장 2026-11-02 A안 · 판정 = `childMapRefreshDue`).
+  const out = { classes: 0, created: 0, renamed: 0, enrolled: 0, teachers: 0, held: 0, remaining, releasedChildren: 0, releasedTeachers: 0 };
+  // ⓪ 원아 연결 갱신 — 가입 확인 후보가 있으면 원아 연결(0185a)을 먼저 새로 만든다(원장 2026-11-02 A안 · 판정 = `childMapRefreshDue`).
   //    수학이 반별이면 신입의 첫 반 보드 배정 출처가 원아 연결이라, 낮에 막 가입한 학부모의 원아가 **이 실행에서** 배정되려면 여기서
   //    만들어야 한다(아래 ②의 반 보드 동기화가 연결을 새로 읽는다). ClassNote는 명부 GET만 · 4분에 한 번 · 실패해도 기존 연결로 계속.
   //    결과(만든 연결 수 · 실패)는 동기화 보고서 줄과 결과값(`childLinks` — 감사로그 metadata)에 남긴다.
-  if (childMapRefreshDue({ candidates: provIds.length, lastAt: lastChildMapRefreshAt, now: Date.now() })) {
+  if (childMapRefreshDue({ candidates: candidateIds.length, lastAt: lastChildMapRefreshAt, now: Date.now() })) {
     lastChildMapRefreshAt = Date.now();
     const cm = await syncChildMapOnce(sql, browser, { tenant, apply: true, log, force: true }).catch((e) => {
       log(`[sync-now] 원아 연결 갱신 오류(기존 연결로 진행): ${String(e?.message ?? e).slice(0, 160)}`);
@@ -126,20 +125,10 @@ export async function runScopedSync(sql, browser, { tenant, scope: rawScope, log
     if (cm.error) events.push({ group: "held", className: "", text: "학부모 가입 확인(원아 연결 갱신)에 실패해 기존 연결로 진행했습니다 — 몇 분 뒤 다시 요청하면 다시 확인합니다" });
     else if (cm.ran && cm.applied) events.push({ group: "changed", className: "", text: `원아 연결 ${cm.applied}건 새로 만듦(학부모 가입 확인)` });
   }
-  // ① 신입 1인 보드 준비 먼저 — 기존 경로(personal·pilot)의 반 보드 배정은 1인 보드의 원아를 출처로 쓴다(class-board-plan.mjs ①).
-  //    수학이 반별(class)이면 준비가 수학을 건너뛴다(원장 2026-11-02 — 원아 출처 = 반 보드 확인 기록 + 원아 연결) · 영어는 그대로.
-  if (provIds.length) {
-    const pr = await provisionDailyOnce(sql, browser, { tenant, post: true, log, force: true, studentIds: provIds, maxWrites: MAX_PROVISION_WRITES });
-    out.boardsCreated = pr.created ?? 0;
-    out.assigned = pr.assigned ?? 0;
-    out.provisionRemaining = pr.remaining ?? 0;
-    // 보고서 줄 — 신입 1인 보드 준비(학생별 내역은 준비 코드가 로그에 남긴다. 여기엔 건수만).
-    if (out.boardsCreated) events.push({ group: "changed", className: "", text: `신입 1인 보드 ${out.boardsCreated}개 생성` });
-    if (out.assigned) events.push({ group: "changed", className: "", text: `신입 1인 보드 원아 배정 ${out.assigned}건` });
-    if (out.provisionRemaining) events.push({ group: "held", className: "", text: `신입 준비 ${out.provisionRemaining}건은 한 번에 할 수 있는 수를 넘어 다음 동기화로 미뤘습니다` });
-  }
+  // ① (없앰 · 1.0.14) 신입 1인 보드 준비 — 원장 2026-11-04 *"앞으로 1인보드에 배정 시키지마 절대"*. 신입의 첫 반 보드 배정 출처는
+  //    위 ⓪의 원아 연결이다(영어 반 방도 원아 연결로 보낸다 — english-class-route.mjs).
   if (remaining) events.push({ group: "held", className: "", text: `바뀐 반 ${remaining}개는 한 번에 볼 수 있는 수를 넘어 다음 동기화로 미뤘습니다` });
-  // ② 고른 반만 반 보드 동기화. 실패하면 ①에서 이미 한 일을 오류에 실어 보낸다(부분 실패 기록).
+  // ② 고른 반만 반 보드 동기화. 실패하면 ⓪에서 이미 한 일을 오류에 실어 보낸다(부분 실패 기록).
   if (picked.length) {
     const page = await browser.newPage();
     try {
@@ -197,8 +186,6 @@ async function audit(sql, tenant, requestId, result, error, auto = false) {
     held: result?.held ?? 0,
     releasedChildren: result?.releasedChildren ?? 0,
     releasedTeachers: result?.releasedTeachers ?? 0,
-    boardsCreated: result?.boardsCreated ?? 0,
-    assigned: result?.assigned ?? 0,
     remaining: result?.remaining ?? 0,
     ...(error ? { error } : {}),
   };

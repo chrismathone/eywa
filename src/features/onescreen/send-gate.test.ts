@@ -25,7 +25,11 @@ describe("evaluateSendGate", () => {
     expect(g.canSend).toBe(false);
     expect(g.reasons).toEqual(["report_optout"]);
     expect(g.label).toBe("미발송 반 — 출결만");
-    expect(g.hint).toContain("출결만 기록합니다");
+    // 까닭(반 설정)과 할 일(반 설정 변경 요청)까지 한 문장(원장 2026-11-04 *"원인을 선생님이 알 수 없으니까 곤란해하심"*).
+    expect(g.hint).toContain("'수업보고서 미발송' 반으로 지정");
+    expect(g.hint).toContain("출결만 기록");
+    expect(g.hint).toContain("반 설정 변경을 요청하세요");
+    expect(g.hint).not.toMatch(/슈퍼|super_admin|총괄/);
   });
 
   it("🔴 이미 발송된 건이 있으면 그 사실이 먼저다 — 미발송 반이어도 '발송됨'을 가리지 않는다", () => {

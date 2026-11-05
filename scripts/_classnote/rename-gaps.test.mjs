@@ -73,6 +73,12 @@ describe("G5 — 동명이인 1인 보드 보호자 전화 대조", () => {
     expect(homonymPhoneGate({ studentPhones: [null, ""], children: [{ id: 2 }], admissions: adm }).ok).toBe(true);
     expect(homonymPhoneGate({ studentPhones: ["010-1111-1111"], children: [{ id: 2 }], admissions: null }).ok).toBe(true);
   });
+  it("보호자2·3 번호가 맞으면 같은 집 — 통과(원장 2026-11-04 · 보호자1 엄마·aywa 아빠)", () => {
+    const split = new Map([[5, { phone: "010-9999-0000", phones: ["010-9999-0000", "010-1111-1111"] }]]);
+    expect(homonymPhoneGate({ studentPhones: ["01011111111"], children: [{ id: 5, name: "전유솔" }], admissions: split }).ok).toBe(true);
+    const none = new Map([[5, { phone: "010-9999-0000", phones: ["010-9999-0000", "010-8888-0000"] }]]);
+    expect(homonymPhoneGate({ studentPhones: ["01011111111"], children: [{ id: 5, name: "전유솔" }], admissions: none }).ok).toBe(false);
+  });
   it("한 아이 2계정(보호자·학생 본인)은 두 번호가 aywa 4칸 안이면 통과(안은지·박세욱 예외)", () => {
     const two = new Map([[10, { phone: "010-1000-0000" }], [11, { phone: "010-2000-0000" }]]);
     expect(homonymPhoneGate({ studentPhones: ["010-1000-0000", "010-2000-0000"], children: [{ id: 10 }, { id: 11 }], admissions: two }).ok).toBe(true);
