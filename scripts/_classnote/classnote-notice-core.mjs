@@ -18,7 +18,9 @@
  *
  * **반 보드 경로(수학, 원장 2026-10-02)**: 타깃에 `classId`가 있으면 1인 보드 `(수학)이름`이 아니라 **그 반 보드의 그 학생 원아**에게
  * 1:1로 올린다(수업보고서 반 보드 경로와 같은 대상 확정 — notice-class-route.mjs). 원아는 이름으로 찾지 않는다(0302a 원아 번호).
- * `classId`가 없는 타깃(영어·옛 큐 행)은 지금까지와 똑같이 1인 보드로 간다. 게시·중복 확인·409 재시도·회수·수정은 두 경로가 같은 코드다.
+ * **영어 반 방 경로(원장 2026-11-04 · 1.0.15)**: `classId` + `subject: "english"`이면 그 영어 반에 이어진 ClassNote 반 방(s2_0006)의
+ * 그 학생 원아에게 1:1로(원아 연결 0185a ∩ 지금 그 방 — 영어 보고서와 같은 함수). 대상 확정만 다르고 게시 이후는 수학 반 보드와 같은 코드다.
+ * `classId`가 없는 타깃(반 방이 없는 영어 반·옛 큐 행)은 지금까지와 똑같이 1인 보드로 간다. 게시·중복 확인·409 재시도·회수·수정은 세 경로가 같은 코드다.
  */
 import { isClassnoteSendEnabled, getClassnoteBoardAllowlist, DEFAULT_BASE, DEFAULT_AUTHOR_NAME } from "./classnote-core.mjs";
 import {
@@ -36,7 +38,14 @@ import {
 } from "./classnote-admin-core.mjs";
 import { boardNameAmbiguity, emptyBoardNoticeNote, evaluateBoardSafety, kstSchoolYear, noBoardNoticeNote } from "./board-safety.mjs";
 import { createNoticeMediaUploader, fetchNoticeMedia, mediaForNoticeTarget } from "./notice-attachments.mjs";
-import { findNoticeLeaks, isClassRouteTarget, resolveNoticeClassTarget, snapshotChildReports } from "./notice-class-route.mjs";
+import {
+  findNoticeLeaks,
+  isClassRouteTarget,
+  isEnglishRoomTarget,
+  resolveNoticeClassTarget,
+  resolveNoticeEnglishTarget,
+  snapshotChildReports,
+} from "./notice-class-route.mjs";
 import { classRouteHaltReason, haltClassRoute } from "./class-route-halt.mjs";
 
 // 내부 첨부 라우트 게이트(보고서 첨부·/r 스샷과 동일 시크릿). 없으면 라우트가 401 → 한글 사유로 보고된다.
@@ -181,22 +190,32 @@ async function openAddForm(page) {
 
 /**
  * 타깃 1건 처리 — 보드·원아·enrollment 해석 후 게시 + 리포트 id 캡처. 실패 사유는 한글 note.
- * 🔴 `classId`가 실린 타깃은 **반 보드 경로만** 탄다 — 대상 확정에 실패해도 아래 1인 보드 경로로 떨어지지 않는다
+ * 🔴 `classId`가 실린 타깃은 **반 보드(영어는 반 방) 경로만** 탄다 — 대상 확정에 실패해도 아래 1인 보드 경로로 떨어지지 않는다
  *    (조용히 옛 보드로 가면 화면의 "반 보드로 보냄"이 거짓이 된다).
  */
 export async function processTarget(page, ctx, target, index = 0) {
   if (isClassRouteTarget(target)) {
     // 비상 정지 — 반 보드에서 글이 다른 원아에게 보인 적이 있으면(보고서·공지 어느 쪽이든) 원인을 볼 때까지 올리지 않는다.
+    // 영어 반 방도 같은 표식을 따른다(보고서의 영어 반 방 경로와 같다 — 한쪽에서 새면 둘 다 멈춘다).
     if (classRouteHaltReason())
-      return { board: target.board, ok: false, note: "반 보드 발송이 비상 정지 중입니다 — 교차 확인 이상으로 멈췄습니다(연동 PC를 다시 켜기 전에 원인 확인 필요)" };
-    const resolved = await resolveNoticeClassTarget(ctx.sql, page, { tenant: ctx.tenant, centerId: ctx.centerId, target });
+      return {
+        board: target.board,
+        ok: false,
+        // 영어 반 방 대상엔 영어 용어로(수학 문구는 그대로) — 정지 표식은 하나라 둘 다 멈춘다.
+        note: `${isEnglishRoomTarget(target) ? "반 방" : "반 보드"} 발송이 비상 정지 중입니다 — 교차 확인 이상으로 멈췄습니다(연동 PC를 다시 켜기 전에 원인 확인 필요)`,
+      };
+    // 영어 반 방(원장 2026-11-04 · `subject: "english"` 표식)은 대상 확정만 다르다 — 게시·중복 확인·409 재시도·교차 확인은 아래 같은 코드.
+    const resolved = isEnglishRoomTarget(target)
+      ? await resolveNoticeEnglishTarget(ctx.sql, page, { tenant: ctx.tenant, centerId: ctx.centerId, target })
+      : await resolveNoticeClassTarget(ctx.sql, page, { tenant: ctx.tenant, centerId: ctx.centerId, target });
     if (!resolved.ok) return { board: target.board, ok: false, note: resolved.note };
     // 교차 확인 준비 — 이 공지가 그 반 보드에 **처음** 올리기 전에, 그 반의 다른 원아들이 지금 갖고 있는 글을 적어 둔다(기준선).
     // 이 대상의 원아는 올리기 **전에** '대상'으로 적는다 — 게시 확인에 실패해도 제 글이 '다른 원아에게 샌 글'로 세이지 않게.
     let post = ctx.classPosts?.get(resolved.boardId) ?? null;
     if (ctx.classPosts && !post) {
       const baseline = await snapshotChildReports(page, ctx.centerId, resolved.others).catch(() => new Map());
-      post = { baseline, targeted: new Set(), contents: new Set(), posted: 0, checked: 0 };
+      // room = 영어 반 방(교차 확인 사유 문구의 용어만 가른다 — 판정은 같다).
+      post = { baseline, targeted: new Set(), contents: new Set(), posted: 0, checked: 0, room: isEnglishRoomTarget(target) };
       ctx.classPosts.set(resolved.boardId, post);
     }
     if (post) {
@@ -404,7 +423,10 @@ async function checkBoardLeak(page, { centerId, boardId, post, log }) {
   const { leakedTo, unknown } = await findNoticeLeaks(page, { centerId, boardId, others, contents: [...post.contents], baseline: post.baseline });
   if (leakedTo.length) {
     haltClassRoute("공지 교차 확인 이상");
-    log?.(`[notice] 🔴 교차 확인 이상 — 반 보드 #${boardId} 다른 원아 ${leakedTo.join(",")} · 반 보드 발송 비상 정지`);
+    log?.(`[notice] 🔴 교차 확인 이상 — ${post.room ? "반 방" : "반 보드"} #${boardId} 다른 원아 ${leakedTo.join(",")} · 반 보드·반 방 발송 비상 정지`);
+    // 수학 반 보드 문구는 그대로 · 영어 반 방은 영어 용어(정지 표식이 하나라 두 경로가 함께 멈춘다는 것도 적는다).
+    if (post.room)
+      return `🔴 반 방 교차 확인 이상 — 이 공지가 대상이 아닌 원아(${leakedTo.length}명)의 알림장에서 보입니다. 반 방·반 보드 발송을 멈췄습니다(ClassNote에서 확인한 뒤 게시취소해 주세요)`;
     return `🔴 반 보드 교차 확인 이상 — 이 공지가 대상이 아닌 원아(${leakedTo.length}명)의 알림장에서 보입니다. 반 보드 발송을 멈췄습니다(ClassNote에서 확인한 뒤 게시취소해 주세요)`;
   }
   if (unknown) log?.(`[notice] ⚠️ 반 보드 #${boardId} 교차 확인을 다 하지 못했습니다(조회 실패) — 게시는 성공으로 둔다`);

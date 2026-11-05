@@ -150,6 +150,7 @@ export async function sendClassNotice(input: ClassNoticeInput): Promise<{ ok: bo
       source: "class",
       commonAttachments: commonAttachments.length,
       classRouteTargets: targets.filter((t) => t.classId).length,
+      englishRoomTargets: targets.filter((t) => t.classId && t.subject === "english").length,
     },
   });
 

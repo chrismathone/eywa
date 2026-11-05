@@ -1,6 +1,13 @@
 // 원생 개별 공지·교재요청서를 어느 반 보드로 보낼지 — 삼자 일치(보내는 선생님 – 반 – 학생) 판정.
 import { describe, expect, it } from "vitest";
-import { classTargetKey, isJjClassName, pickNoticeClass, type NoticeClassCandidate } from "./notice-class-pick";
+import {
+  classTargetKey,
+  isJjClassName,
+  pickEnglishNoticeClass,
+  pickNoticeClass,
+  type EnglishNoticeClass,
+  type NoticeClassCandidate,
+} from "./notice-class-pick";
 
 const cls = (over: Partial<NoticeClassCandidate> & { classId: string }): NoticeClassCandidate => ({
   className: over.classId,
@@ -93,5 +100,77 @@ describe("공통", () => {
   it("대상 키 — 한 반 보드에 여러 학생이 가므로 반 보드 이름 + 학생 이름으로 서로 구분된다", () => {
     expect(classTargetKey(" 중등M 중2 BS3O ", " 김수련 ")).toBe("중등M 중2 BS3O · 김수련");
     expect(classTargetKey("가반", "김민준")).not.toBe(classTargetKey("가반", "이서연"));
+  });
+});
+
+describe("영어 개별 공지 — 반을 삼자 일치로 정하고, 그 반에 반 방이 있으면 반 방 · 없으면 지금처럼 1인 보드(원장 2026-11-04)", () => {
+  const en = (over: Partial<EnglishNoticeClass> & { classId: string }): EnglishNoticeClass => ({
+    className: over.classId,
+    room: null,
+    taught: false,
+    homeroom: false,
+    ...over,
+  });
+  it("내가 맡은 반에 반 방이 있으면 그 반 방(표시 키는 반 방 이름)", () => {
+    const r = pickEnglishNoticeClass({ classes: [en({ classId: "LE2", room: "Jennifer LE2 (월수)", taught: true })], teacher: "strict" });
+    expect(r).toEqual({ route: "room", classId: "LE2", className: "LE2", boardName: "Jennifer LE2 (월수)", via: "teacher" });
+  });
+  it("🔴 내가 맡은 반에 반 방이 없으면 1인 보드 — 남의 반 방(같은 학생이 다니는 다른 선생님 반)으로 옮기지 않는다", () => {
+    const classes = [en({ classId: "내반", taught: true }), en({ classId: "남의반", room: "남의 반 방" })];
+    expect(pickEnglishNoticeClass({ classes, teacher: "strict" })).toEqual({ route: "personal" });
+    // 화면이 남의 반을 골라 보냈어도 마찬가지(힌트는 내 반 안에서만)
+    expect(pickEnglishNoticeClass({ classes, teacher: "strict", hints: ["남의반"] })).toEqual({ route: "personal" });
+  });
+  it("🔴 강사 본인 발송인데 이 학생의 영어 반을 하나도 맡지 않았으면 반 방으로 보내지 않는다(지금처럼 1인 보드)", () => {
+    expect(pickEnglishNoticeClass({ classes: [en({ classId: "A", room: "A 방" })], teacher: "strict" })).toEqual({ route: "personal" });
+  });
+  it("영어 반이 없으면(휴원·끝난 수강 등) 1인 보드", () => {
+    for (const teacher of ["strict", "prefer", "none"] as const) expect(pickEnglishNoticeClass({ classes: [], teacher })).toEqual({ route: "personal" });
+  });
+  it("내 반이 둘이면 화면이 고른 반 → 반 방 있는 반 → 담임 반 → 이름순", () => {
+    const classes = [en({ classId: "가반", taught: true, homeroom: true }), en({ classId: "나반", room: "나 방", taught: true })];
+    // 화면이 고른 반이 반 방 없는 반이면 그 반의 일 — 1인 보드(다른 반 방으로 옮기지 않는다)
+    expect(pickEnglishNoticeClass({ classes, teacher: "strict", hints: ["가반"] })).toEqual({ route: "personal" });
+    expect(pickEnglishNoticeClass({ classes, teacher: "strict", hints: ["나반"] })).toMatchObject({ route: "room", classId: "나반" });
+    // 고른 반이 없으면 반 방이 있는 반이 담임 반보다 먼저(1인 보드가 없는 신입도 받는다)
+    expect(pickEnglishNoticeClass({ classes, teacher: "strict" })).toMatchObject({ route: "room", classId: "나반", via: "teacher" });
+    const both = [en({ classId: "나반", room: "나 방", taught: true }), en({ classId: "가반", room: "가 방", taught: true, homeroom: false }), en({ classId: "다반", room: "다 방", taught: true, homeroom: true })];
+    expect(pickEnglishNoticeClass({ classes: both, teacher: "strict" })).toMatchObject({ classId: "다반" });
+    expect(pickEnglishNoticeClass({ classes: both.map((c) => ({ ...c, homeroom: false })), teacher: "strict" })).toMatchObject({ classId: "가반" });
+  });
+  it("🔴 고른 반이 여럿이면 고른 순서와 무관하게 반 방 있는 반(리뷰 2026-11-04 — 수강 행 순서에 따라 갈리던 것)", () => {
+    const classes = [en({ classId: "가반", taught: true }), en({ classId: "나반", room: "나 방", taught: true })];
+    for (const hints of [["가반", "나반"], ["나반", "가반"]])
+      for (const teacher of ["strict", "prefer", "none"] as const)
+        expect(pickEnglishNoticeClass({ classes, teacher, hints })).toMatchObject({ route: "room", classId: "나반" });
+  });
+  it("고른 반이 둘 다 반 방 있는 내 반이면 고르지 않았을 때와 같은 순서 — 담임 반 먼저(재리뷰 2026-11-04)", () => {
+    const classes = [en({ classId: "가반", room: "가 방", taught: true }), en({ classId: "나반", room: "나 방", taught: true, homeroom: true })];
+    expect(pickEnglishNoticeClass({ classes, teacher: "strict" })).toMatchObject({ classId: "나반" });
+    for (const hints of [["가반", "나반"], ["나반", "가반"]]) expect(pickEnglishNoticeClass({ classes, teacher: "strict", hints })).toMatchObject({ classId: "나반" });
+  });
+  it("사무실 발송(선생님 없음) = 고른 반 → 없으면 반 방 있는 반 → 이름순", () => {
+    const classes = [en({ classId: "가반" }), en({ classId: "나반", room: "나 방" })];
+    expect(pickEnglishNoticeClass({ classes, teacher: "none", hints: ["가반"] })).toEqual({ route: "personal" });
+    expect(pickEnglishNoticeClass({ classes, teacher: "none", hints: ["나반"] })).toMatchObject({ route: "room", classId: "나반", via: "selected" });
+    expect(pickEnglishNoticeClass({ classes, teacher: "none" })).toMatchObject({ route: "room", classId: "나반", via: "first" });
+    expect(pickEnglishNoticeClass({ classes: [en({ classId: "가반", room: "가 방" })], teacher: "none" })).toMatchObject({ route: "room", via: "only" });
+  });
+  it("사무실이 요청서 주인 대신(prefer) — 주인이 맡은 반 → 없으면 사무실 규칙", () => {
+    const classes = [en({ classId: "가반", room: "가 방" }), en({ classId: "나반", room: "나 방", taught: true })];
+    expect(pickEnglishNoticeClass({ classes, teacher: "prefer" })).toMatchObject({ route: "room", classId: "나반", via: "teacher" });
+    expect(pickEnglishNoticeClass({ classes: classes.map((c) => ({ ...c, taught: false })), teacher: "prefer" })).toMatchObject({ classId: "가반", via: "first" });
+  });
+  it("🔴 prefer는 우선순위일 뿐 — 주인 반에 반 방이 없으면 학생의 다른 반 반 방으로(리뷰 2026-11-05 · 수학 prefer와 같은 뜻)", () => {
+    // 주인(사무실이 대신 보내는 요청서의 선생님)은 반 방 없는 가반만 맡고, 학생은 반 방 있는 나반(다른 선생님)에도 다닌다.
+    const classes = [en({ classId: "가반", taught: true, homeroom: true }), en({ classId: "나반", room: "나 방" })];
+    expect(pickEnglishNoticeClass({ classes, teacher: "prefer" })).toMatchObject({ route: "room", classId: "나반", via: "first" });
+    // strict(강사 본인)는 그대로 문 — 남의 반 방으로 옮기지 않는다.
+    expect(pickEnglishNoticeClass({ classes, teacher: "strict" })).toEqual({ route: "personal" });
+    // 주인 반 중 반 방 있는 반이 있으면 그 반이 먼저다(다른 반 방보다).
+    const both = [en({ classId: "가반", room: "가 방", taught: true }), en({ classId: "나반", room: "나 방" })];
+    expect(pickEnglishNoticeClass({ classes: both, teacher: "prefer" })).toMatchObject({ route: "room", classId: "가반", via: "teacher" });
+    // 반 방이 어디에도 없으면 지금처럼 1인 보드.
+    expect(pickEnglishNoticeClass({ classes: [en({ classId: "가반", taught: true })], teacher: "prefer" })).toEqual({ route: "personal" });
   });
 });

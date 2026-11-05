@@ -90,7 +90,7 @@ describe("지금 반 보드 동기화 버튼", () => {
 
 describe("🔴 배치 — 필요한 곳 네 자리", () => {
   it.each([
-    ["src/app/(shell)/owner/_components/classnote-route-field.tsx", "owner_report_route"],
+    ["src/app/(shell)/owner/_components/classnote-math-board-field.tsx", "owner_report_route"],
     ["src/app/(shell)/lesson-reports/_components/classnote-queue-card.tsx", "lesson_reports_queue"],
     ["src/app/(shell)/lesson-reports/_components/class-notice-panel.tsx", "class_notice"],
     ["src/features/onescreen/components/send-class-dialog.tsx", "onescreen_send_class"],

@@ -13,13 +13,13 @@ import "server-only";
  *    원아 매칭 ok · 지금 그 반에 배정돼 있는가). 여기서 고른 반은 "보낼 곳"의 제안이고 워커의 확인이 마지막 문이다.
  * ⚠️ admin 클라이언트 + tenant 필터(RLS 우회) — 강사 RLS로는 다른 강사 반의 연결·멤버 행이 안 보여 판정이 사람마다 달라진다.
  *    돌려주는 것은 그 학생의 반 이름·반 보드 이름뿐이다.
+ * 영어(2026-11-04 · AywaSync 1.0.15)는 같은 입구(`routeNoticeCandidates`)에서 갈린다 — 반 방이 이어진 영어 반이면 반 방
+ * ([`notice-english-route.ts`](./notice-english-route.ts)), 아니면 지금처럼 1인 보드. 두 과목의 삼자 일치 재료는 한 벌(notice-route-legs.ts).
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { createClient } from "@/lib/supabase/server";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
-import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
-import { isDelegationActiveOn } from "@/features/classes/delegation-window";
 import {
   SEND_CLASS_SUBJECTS,
   classRouteActive,
@@ -27,9 +27,17 @@ import {
   liveBoardClassIdsOf,
 } from "@/features/onescreen/send-class";
 import { isClassnoteSubjectEnabled } from "@/features/onescreen/classnote-guard";
-import { workerSupportsNoticeClassRoute } from "../worker-results";
-import { classTargetKey, pickNoticeClass, type NoticeClassCandidate, type NoticeClassPick } from "../notice-class-pick";
+import { workerSupportsNoticeClassRoute, workerSupportsNoticeEnglishRoom } from "../worker-results";
+import {
+  classTargetKey,
+  pickNoticeClass,
+  type EnglishNoticePick,
+  type NoticeClassCandidate,
+  type NoticeClassPick,
+} from "../notice-class-pick";
 import type { NoticeCandidate, NoticeSkip, NoticeTarget } from "../notice-targets";
+import { attendingClassesOf, studentLegQuery, teacherLegQueries, teachersByClass } from "./notice-route-legs";
+import { ENGLISH_NOTICE_SUBJECT, resolveEnglishNoticeClasses } from "./notice-english-route";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -37,26 +45,39 @@ type ServerClient = Awaited<ReturnType<typeof createClient>>;
 const WORKER_LIVE_MS = 10 * 60 * 1000;
 
 /**
- * 지금 켜져 있는 연동 PC가 **공지의 반 보드 경로**를 처리할 수 있는가(롤아웃 가드).
- * 앱은 바로 배포되고 워커는 zip으로 늦게 바뀐다 — 그 사이 `classId`가 실린 대상을 옛 워커가 집으면 반 보드 이름을 1인 보드처럼
- * 찾다가 "공유 보드"로 막힌다(발송 실패). 그래서 **켜져 있는 워커가 있고 전부 지원할 때만** 반 보드 경로를 쓴다.
- * 그 전에는 지금까지처럼 1인 보드로 보낸다(옛 워커·새 워커 둘 다 처리한다). 조회 실패 = 아니다(옛 경로).
- * 🔴 **켜져 있는 워커가 없을 때는 가장 최근에 돌던 워커**로 판정한다 — 그러지 않으면 연동 PC가 꺼진 시각(밤·주말)에 보낸 수학 공지만
- *    조용히 1인 보드로 가서, 같은 강사·같은 학생의 글이 시각에 따라 다른 보드로 갈린다(삼자 일치도 안 탄다).
+ * 공지 경로를 판정할 **발송 PC들의 하트비트**(`last_results`) — 실제로 게시하는 워커(postMode)만. 지금 켜져 있는 워커가 있으면 그 전부,
+ * 없으면 **가장 최근에 돌던 워커 하나**. 조회 실패·발송 PC 없음 = 빈 목록(= 지원 안 함 · 옛 경로).
+ * 🔴 켜진 워커가 없을 때 가장 최근 워커로 보는 까닭 — 그러지 않으면 연동 PC가 꺼진 시각(밤·주말)에 보낸 공지만 조용히 1인 보드로 가서,
+ *    같은 강사·같은 학생의 글이 시각에 따라 다른 보드로 갈린다(삼자 일치도 안 탄다).
  */
-export async function noticeClassRouteWorkerReady(supabase: ServerClient): Promise<boolean> {
+async function postingWorkerPool(supabase: ServerClient): Promise<unknown[]> {
   const { data, error } = await supabase.from("classnote_workers").select("last_seen, last_results");
-  if (error) return false;
+  if (error) return [];
   // 실제로 게시하는 워커(postMode)만 본다 — 시험·dry-run PC는 큐를 집지 않으므로, 그 PC가 새 판이어도 발송 PC가 옛 판이면 아니다.
   const posting = (raw: unknown) => !!raw && typeof raw === "object" && !Array.isArray(raw) && (raw as Record<string, unknown>).postMode === true;
   const seen = (data ?? [])
     .map((w) => ({ at: Date.parse(String(w.last_seen ?? "")), raw: w.last_results }))
     .filter((w) => Number.isFinite(w.at) && posting(w.raw));
-  if (!seen.length) return false;
+  if (!seen.length) return [];
   const live = seen.filter((w) => Date.now() - w.at < WORKER_LIVE_MS);
-  if (live.length) return live.every((w) => workerSupportsNoticeClassRoute(w.raw));
-  return workerSupportsNoticeClassRoute(seen.reduce((a, b) => (b.at > a.at ? b : a)).raw);
+  return live.length ? live.map((w) => w.raw) : [seen.reduce((a, b) => (b.at > a.at ? b : a)).raw];
 }
+
+/** 판정할 워커가 있고 **전부** 그 기능을 알 때만 참. */
+const poolSupports = (pool: readonly unknown[], supports: (raw: unknown) => boolean) => pool.length > 0 && pool.every(supports);
+
+/**
+ * 지금 켜져 있는 연동 PC가 **공지의 반 보드 경로**를 처리할 수 있는가(롤아웃 가드).
+ * 앱은 바로 배포되고 워커는 zip으로 늦게 바뀐다 — 그 사이 `classId`가 실린 대상을 옛 워커가 집으면 반 보드 이름을 1인 보드처럼
+ * 찾다가 "공유 보드"로 막힌다(발송 실패). 그래서 **켜져 있는 워커가 있고 전부 지원할 때만** 반 보드 경로를 쓴다.
+ * 그 전에는 지금까지처럼 1인 보드로 보낸다(옛 워커·새 워커 둘 다 처리한다). 조회 실패 = 아니다(옛 경로).
+ * 켜져 있는 워커가 없을 때는 가장 최근에 돌던 워커로 판정한다(`postingWorkerPool`).
+ */
+export async function noticeClassRouteWorkerReady(supabase: ServerClient): Promise<boolean> {
+  return poolSupports(await postingWorkerPool(supabase), workerSupportsNoticeClassRoute);
+}
+// 영어 반 방 경로의 롤아웃 가드(`caps.noticeEnglishRoom`, AywaSync 1.0.15)는 `routeNoticeCandidates`가 같은 풀로 본다 — 옛 워커는
+// `classId`가 실린 영어 대상을 수학 반 보드로 보고 실패시키므로, 수학과 같은 방식(켜진 워커 전부 · 없으면 가장 최근)으로 본다.
 
 export type NoticeClassRequest = {
   studentId: string;
@@ -83,26 +104,8 @@ export async function resolveNoticeClasses(
   const admin = createAdminClient();
 
   // ① 학생 다리 — 오늘 다니는 반. 종료 규약은 단일 소스(반이동 당일 옛 반은 이미 아니다, [[#125]]). 휴원은 다니는 반이 아니다.
-  const enr = await fetchAllPagedInChunks<{
-    id: string; class_id: string; student_id: string; start_date: string | null; end_date: string | null;
-    is_transferred: boolean | null; on_hold: boolean | null;
-  }>(studentIds, (chunk, from, to) =>
-    admin
-      .from("enrollments")
-      .select("id, class_id, student_id, start_date, end_date, is_transferred, on_hold")
-      .eq("tenant_id", tenantId)
-      .in("student_id", chunk)
-      .order("id")
-      .range(from, to),
-  );
-  const classesOf = new Map<string, Set<string>>();
-  for (const e of enr) {
-    if (e.on_hold) continue;
-    if (e.start_date && e.start_date > date) continue;
-    if (isEnrollmentEndedOn(e.end_date, date, !!e.is_transferred)) continue;
-    if (!classesOf.has(e.student_id)) classesOf.set(e.student_id, new Set());
-    classesOf.get(e.student_id)!.add(e.class_id);
-  }
+  //    판정은 영어 반 방 경로와 한 벌(notice-route-legs.ts).
+  const classesOf = attendingClassesOf(await studentLegQuery(admin, tenantId, studentIds), date);
   const classIds = [...new Set([...classesOf.values()].flatMap((s) => [...s]))];
   if (!classIds.length) {
     for (const r of requests) out.set(r.studentId, { ok: false, reason: "no_class_board" });
@@ -110,7 +113,7 @@ export async function resolveNoticeClasses(
   }
 
   const teacherIds = [...new Set(requests.flatMap((r) => [...(r.teacherIds ?? [])]))];
-  // 서로 독립인 조회 — 한 번에(B4). 반·연결은 반 id 청크, 멤버는 학생 id 청크 × 페이징(B2·B3).
+  // 서로 독립인 조회 — 한 번에(B4). 반·연결은 반 id 청크, 멤버는 학생 id 청크 × 페이징(B2·B3). 선생님 다리 재료는 공용 모듈(영어 반 방과 한 벌).
   const [classes, boards, members, slots, delegations] = await Promise.all([
     fetchInChunks<{
       id: string; class_name: string; subject: string | null; is_active: boolean | null; report_optout: boolean | null;
@@ -134,34 +137,8 @@ export async function resolveNoticeClasses(
         .order("id")
         .range(from, to),
     ),
-    // 선생님 다리 재료 — 오늘 유효한 교시 담당(교시 표는 이력을 함께 담는다, [[#88]]).
-    teacherIds.length
-      ? fetchAllPagedInChunks<{ id: string; class_id: string; teacher_id: string | null }>(classIds, (chunk, from, to) =>
-          admin
-            .from("class_schedules")
-            .select("id, class_id, teacher_id")
-            .eq("tenant_id", tenantId)
-            .in("class_id", chunk)
-            .in("teacher_id", teacherIds)
-            .lte("valid_from", date)
-            .or(`valid_to.is.null,valid_to.gte.${date}`)
-            .order("id")
-            .range(from, to),
-        )
-      : Promise.resolve([]),
-    teacherIds.length
-      ? fetchInChunks<{ class_id: string; delegate_user_id: string | null; from_date: string; to_date: string; revoked_at: string | null }>(
-          classIds,
-          (chunk) =>
-            admin
-              .from("class_delegations")
-              .select("class_id, delegate_user_id, from_date, to_date, revoked_at")
-              .eq("tenant_id", tenantId)
-              .in("class_id", chunk)
-              .in("delegate_user_id", teacherIds)
-              .is("revoked_at", null),
-        )
-      : Promise.resolve([]),
+    // 선생님 다리 재료 — 오늘 유효한 교시 담당 · 위임(요청한 선생님들만).
+    ...teacherLegQueries(admin, tenantId, classIds, teacherIds, date),
   ]);
 
   // 반 보드 대상 반(수학 · 활성 · 보고서 발송 · 종강 전) — 수업보고서의 '보낼 반 후보'와 같은 기준.
@@ -177,17 +154,7 @@ export async function resolveNoticeClasses(
     membersOf.get(m.student_id)!.push({ classId: m.class_id, status: m.status });
   }
   // 반 → 그 반 담당(담임 ∪ 오늘 교시 담당 ∪ 오늘 위임). 요청한 선생님들만 담는다.
-  const wanted = new Set(teacherIds);
-  const teachersOf = new Map<string, Set<string>>();
-  const add = (classId: string, teacherId: string | null) => {
-    if (!teacherId || !wanted.has(teacherId)) return;
-    if (!teachersOf.has(classId)) teachersOf.set(classId, new Set());
-    teachersOf.get(classId)!.add(teacherId);
-  };
-  for (const c of classById.values()) add(c.id, c.teacher_id);
-  for (const s of slots) add(s.class_id, s.teacher_id);
-  for (const d of delegations)
-    if (isDelegationActiveOn({ fromDate: d.from_date, toDate: d.to_date, revokedAt: d.revoked_at }, date)) add(d.class_id, d.delegate_user_id);
+  const teachersOf = teachersByClass({ classes: classById.values(), slots, delegations, teacherIds, date });
 
   for (const r of requests) {
     const mine = [...(classesOf.get(r.studentId) ?? [])].filter((id) => classById.has(id));
@@ -219,43 +186,60 @@ export async function resolveNoticeClasses(
   return out;
 }
 
-/** 후보 한 명 + 삼자 일치 재료. `subject`가 수학이고 반 보드 경로가 켜져 있을 때만 반 보드로 간다. */
+/** 후보 한 명 + 삼자 일치 재료. 수학은 반 보드 경로가 켜져 있을 때 반 보드로, 영어는 그 반에 반 방이 이어져 있으면 반 방으로 간다. */
 export type RoutedCandidate = NoticeCandidate & { hints?: readonly string[]; teacherIds?: readonly string[] | null; teacherStrict?: boolean };
+type MergedCandidate = RoutedCandidate & { hints: string[]; teacherIds: string[] };
 
-/**
- * 후보를 **반 보드 경로(수학)**와 **기존 1인 보드 경로(그 밖)**로 가른다 — 세 발송 표면이 같이 쓰는 한 벌.
- * @returns classTargets = 반 보드로 갈 대상(완성) · rest = 기존 경로로 넘길 후보(resolveNoticeTargets + 동명이인 가드) · skipped = 제외 사유
- */
-export async function routeNoticeCandidates(args: {
-  supabase: ServerClient;
-  tenantId: string;
-  settings: Parameters<typeof classRouteActive>[0] & { report: { classnoteSubjects: readonly string[] } };
-  /** 보내는 사람 표시 이름(시범 강사 판정용 — 수학 발송 경로가 '시범'일 때만 쓰인다). */
-  senderName: string | null;
-  candidates: readonly RoutedCandidate[];
-}): Promise<{ classTargets: NoticeTarget[]; rest: NoticeCandidate[]; skipped: NoticeSkip[] }> {
-  const { supabase, tenantId, settings, senderName, candidates } = args;
-  const isMath = (c: RoutedCandidate) =>
-    SEND_CLASS_SUBJECTS.has(c.subject ?? "") && isClassnoteSubjectEnabled(c.subject, settings.report.classnoteSubjects);
-  const math = candidates.filter(isMath);
-  const plain = (list: readonly RoutedCandidate[]): NoticeCandidate[] =>
-    list.map((c) => ({ studentId: c.studentId, name: c.name, classnoteName: c.classnoteName, subject: c.subject }));
-  // 경로가 꺼져 있거나(설정·모듈) 켜져 있는 연동 PC가 아직 처리 못 하면 전부 기존 경로.
-  if (!math.length || !classRouteActive(settings, senderName) || !(await noticeClassRouteWorkerReady(supabase)))
-    return { classTargets: [], rest: plain(candidates), skipped: [] };
-
-  // 같은 학생이 여러 번 뽑혀도 한 번만(반 힌트는 뽑힌 순서대로 모은다) — 한 학생에게 같은 글이 두 번 가지 않게.
-  const merged = new Map<string, RoutedCandidate & { hints: string[]; teacherIds: string[] }>();
-  for (const c of math) {
+/** 같은 학생이 여러 번 뽑혀도 한 번만(반 힌트·선생님은 뽑힌 순서대로 모은다) — 한 학생에게 같은 글이 두 번 가지 않게. */
+function mergeByStudent(list: readonly RoutedCandidate[]): Map<string, MergedCandidate> {
+  const merged = new Map<string, MergedCandidate>();
+  for (const c of list) {
     const cur = merged.get(c.studentId) ?? { ...c, hints: [], teacherIds: [] };
     for (const h of c.hints ?? []) if (h && !cur.hints.includes(h)) cur.hints.push(h);
     for (const t of c.teacherIds ?? []) if (t && !cur.teacherIds.includes(t)) cur.teacherIds.push(t);
     merged.set(c.studentId, cur);
   }
-  const picks = await resolveNoticeClasses(
-    tenantId,
-    [...merged.values()].map((c) => ({ studentId: c.studentId, hints: c.hints, teacherIds: c.teacherIds, teacherStrict: c.teacherStrict === true })),
-  );
+  return merged;
+}
+const requestsOf = (merged: Map<string, MergedCandidate>): NoticeClassRequest[] =>
+  [...merged.values()].map((c) => ({ studentId: c.studentId, hints: c.hints, teacherIds: c.teacherIds, teacherStrict: c.teacherStrict === true }));
+
+/**
+ * 후보를 **반 보드 경로(수학)** · **영어 반 방 경로** · **기존 1인 보드 경로(그 밖)**로 가른다 — 세 발송 표면이 같이 쓰는 한 벌.
+ * 영어(원장 2026-11-04 — 1인 보드 배정 금지 뒤): 삼자 일치로 정한 영어 반에 ClassNote 반 방(s2_0006)이 이어져 있으면 그 반 방의
+ * 그 학생 원아에게 1:1(대상에 `classId` + `subject: "english"`), 없거나 반을 못 정하면 지금처럼 `(영어)이름` 1인 보드(rest).
+ * @returns classTargets = 반 보드·반 방으로 갈 대상(완성) · rest = 기존 경로로 넘길 후보(resolveNoticeTargets + 동명이인 가드) · skipped = 제외 사유
+ */
+export async function routeNoticeCandidates(args: {
+  supabase: ServerClient;
+  tenantId: string;
+  settings: Parameters<typeof classRouteActive>[0] & { report: { classnoteSubjects: readonly string[] } };
+  /** 보내는 사람 표시 이름 — 지금은 쓰지 않는다(옛 '수학 발송 경로 = 일부 선생님만' 판정 자리 · classRouteActive 둘째 인자를 걷을 때 함께 걷는다). */
+  senderName: string | null;
+  candidates: readonly RoutedCandidate[];
+}): Promise<{ classTargets: NoticeTarget[]; rest: NoticeCandidate[]; skipped: NoticeSkip[] }> {
+  const { supabase, tenantId, settings, senderName, candidates } = args;
+  const sendable = (c: RoutedCandidate) => isClassnoteSubjectEnabled(c.subject, settings.report.classnoteSubjects);
+  const isMath = (c: RoutedCandidate) => SEND_CLASS_SUBJECTS.has(c.subject ?? "") && sendable(c);
+  const isEnglish = (c: RoutedCandidate) => c.subject === ENGLISH_NOTICE_SUBJECT && sendable(c);
+  const plain = (list: readonly RoutedCandidate[]): NoticeCandidate[] =>
+    list.map((c) => ({ studentId: c.studentId, name: c.name, classnoteName: c.classnoteName, subject: c.subject }));
+  // ClassNote 모듈이 꺼져 있거나(두 과목 모두 이 조건 하나) 켜져 있는 연동 PC가 아직 처리 못 하면 그 과목은 전부 기존 경로.
+  // 하트비트는 한 번만 읽는다(두 과목이 같은 발송 PC 목록을 본다).
+  const wantMath = candidates.some(isMath) && classRouteActive(settings, senderName);
+  const wantEnglish = candidates.some(isEnglish) && !(settings.modules?.disabled ?? []).includes("classnote");
+  const pool = wantMath || wantEnglish ? await postingWorkerPool(supabase) : [];
+  const mathOn = wantMath && poolSupports(pool, workerSupportsNoticeClassRoute);
+  const englishOn = wantEnglish && poolSupports(pool, workerSupportsNoticeEnglishRoom);
+  if (!mathOn && !englishOn) return { classTargets: [], rest: plain(candidates), skipped: [] };
+
+  const merged = mergeByStudent(mathOn ? candidates.filter(isMath) : []);
+  const englishMerged = mergeByStudent(englishOn ? candidates.filter(isEnglish) : []);
+  // 서로 독립인 판정 — 한 번에(B4). 조회 실패는 throw(호출부가 그 발송을 막는다).
+  const [picks, englishPicks] = await Promise.all([
+    merged.size ? resolveNoticeClasses(tenantId, requestsOf(merged)) : Promise.resolve(new Map<string, NoticeClassPick>()),
+    englishMerged.size ? resolveEnglishNoticeClasses(tenantId, requestsOf(englishMerged)) : Promise.resolve(new Map<string, EnglishNoticePick>()),
+  ]);
   const classTargets: NoticeTarget[] = [];
   const skipped: NoticeSkip[] = [];
   for (const c of merged.values()) {
@@ -277,6 +261,29 @@ export async function routeNoticeCandidates(args: {
       className: pick.className,
     });
   }
+  // 영어 — 반 방으로 정해진 학생만 반 방 대상. 반 방이 없는 반·반을 못 정한 학생은 지금처럼 1인 보드(rest — 동명이인 가드를 탄다).
+  // 🔴 `subject: "english"`가 워커의 분기 표식이다 — 없으면 워커가 수학 반 보드로 확인한다(영어 반은 거기서 통과하지 못한다).
+  const englishPersonal = new Set<string>();
+  for (const c of englishMerged.values()) {
+    const pick = englishPicks.get(c.studentId);
+    if (pick?.route !== "room") {
+      englishPersonal.add(c.studentId);
+      continue;
+    }
+    const eff = (c.classnoteName || c.name || "").trim();
+    if (!eff) {
+      skipped.push({ name: c.name || "(이름 없음)", reason: "no_name" });
+      continue;
+    }
+    classTargets.push({
+      studentId: c.studentId,
+      studentName: eff,
+      board: classTargetKey(pick.boardName, eff),
+      classId: pick.classId,
+      className: pick.className,
+      subject: ENGLISH_NOTICE_SUBJECT,
+    });
+  }
   // 표시 키(`board`)가 겹치는 대상은 결과를 서로 구분할 수 없다(같은 반 보드 · 같은 표시 이름) — 둘 다 뺀다(0302a가 같은 반
   // 동명이인을 보류로 두므로 여기까지 오지 않는 것이 정상이다. 왔다면 어느 학생의 결과인지 화면이 거짓말하게 된다).
   const seenKey = new Map<string, number>();
@@ -287,5 +294,6 @@ export async function routeNoticeCandidates(args: {
     return false;
   });
   unique.sort((a, b) => a.board.localeCompare(b.board, "ko"));
-  return { classTargets: unique, rest: plain(candidates.filter((c) => !isMath(c))), skipped };
+  const routed = (c: RoutedCandidate) => (mathOn && isMath(c)) || (englishOn && isEnglish(c) && !englishPersonal.has(c.studentId));
+  return { classTargets: unique, rest: plain(candidates.filter((c) => !routed(c))), skipped };
 }

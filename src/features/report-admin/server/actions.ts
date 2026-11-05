@@ -292,7 +292,7 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
   const uncheckedIds = await makeupUncheckedIds(user.tenantId, sendable);
   const makeupUnchecked = uncheckedIds.size;
   if (makeupUnchecked) sendable = sendable.filter((r) => !uncheckedIds.has(r.id as string));
-  // 반별 발송(ClassNote 모듈 + '수학 발송 경로') — 보낼 반 보드가 없는 행은 **큐에 올리지 않는다**(원스크린과 같은 규칙).
+  // 반별 발송(ClassNote 모듈 켜짐 · 수학은 늘 반별) — 보낼 반 보드가 없는 행은 **큐에 올리지 않는다**(원스크린과 같은 규칙).
   // 일괄에선 행마다 반을 고를 수 없으니 이미 정해진 '보낼 반'(0303a)이 있을 때만 보낸다. 판정 실패 = fail-closed(그 행 제외).
   const routeRow = (r: (typeof sendable)[number]) => isSendClassRouteRow(settings, r);
   // 판정 = blockedForNoSendClass(재발송·멈춤 복구와 같은 함수). 조회 실패는 throw → 대상 행 전부 제외(fail-closed).

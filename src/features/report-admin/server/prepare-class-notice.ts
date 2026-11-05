@@ -40,7 +40,8 @@ async function prepare(input: ClassNoticeInput) {
   const supabase = await createClient();
 
   // body?: 개별 내용을 담을 수 있음. 테스트 타깃은 studentId null이라 유니온.
-  let targets: { studentId: string | null; studentName: string; board: string; body?: string; classId?: string; className?: string }[] = [];
+  // subject = 영어 반 방 대상 표식(notice-targets.ts `NoticeTarget.subject`) — 큐에 그대로 실린다.
+  let targets: { studentId: string | null; studentName: string; board: string; body?: string; classId?: string; className?: string; subject?: "english" }[] = [];
   let skipped: NoticeSkip[] = [];
   if (input.test) {
     // 테스트 학생은 탈원 처리라 반 해석 경로로 못 뽑힘 — 고정 타깃(보드·학부모 연결 실존 확인됨). 개별 내용 없음.
@@ -81,7 +82,8 @@ async function prepare(input: ClassNoticeInput) {
         teacherIds: null,
       });
     }
-    // 수학은 반 보드 경로(맞는 반 보드가 없으면 제외 — 1인 보드로 되돌리지 않는다). 조회 실패는 발송을 막는다.
+    // 수학은 반 보드 경로(맞는 반 보드가 없으면 제외 — 1인 보드로 되돌리지 않는다). 영어는 고른 반에 반 방이 이어져 있으면 반 방,
+    // 없으면 지금처럼 1인 보드(2026-11-04). 조회 실패는 발송을 막는다.
     let routed: Awaited<ReturnType<typeof routeNoticeCandidates>>;
     try {
       routed = await routeNoticeCandidates({ supabase, tenantId: user.tenantId, settings, senderName: null, candidates });
@@ -105,6 +107,7 @@ async function prepare(input: ClassNoticeInput) {
       });
     }
     // 반 보드 경로 대상은 이름 가드를 타지 않는다(원아 번호로 올린다 — 같은 반 동명이인은 0302a가 보류로 둔다).
+    // 영어 반 방 대상도 같다(워커가 원아 연결 ∩ 지금 그 방 원아로 고른다).
     targets = [...routed.classTargets, ...survivors];
   }
 
