@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { viewAsTeacher } from "@/lib/auth/view-as";
 import { CONNECTED_APPS } from "@/features/connected-apps/apps";
 import { getMyConnectedApps } from "@/features/connected-apps/server/visible";
 import { signSsoToken, usableSsoSecret } from "@/features/connected-apps/sso";
@@ -16,6 +17,8 @@ import { sourceBindingForTenant, sourceControl, syncErrorResponse } from "@/feat
  * - 학생 계정 → 표 없이 오늘 수학 첫 화면(학생은 오늘 수학 원장 계정과 연결할 일이 없다 — 연결 시도 자체를 안 연다).
  * - 이 사람에게 링크가 안 서면 → 그 사람의 홈(`/home`). 판정은 메뉴와 같은 `getMyConnectedApps` — 지점이 꺼져 있거나
  *   영어 전담 선생님이면 주소를 쳐도 표를 받지 못한다.
+ * - '다른 강사 뷰' 중이면 → `/home`. 표의 신원은 실제 로그인 계정인데 화면은 남의 것이다 — 남의 화면에서 바깥 앱에 들어가지 않는다
+ *   (적대 리뷰 2026-11-05). 메뉴도 강사뷰 중엔 링크를 세우지 않는다(visible.ts).
  * - v1 `EYWA_SSO_SECRET`이 없거나 짧으면 → 표 없이 오늘 수학 첫 화면. v2 설정/제어 오류는 거절한다.
  * 코드와 v1 표는 캐시·리퍼러에 남기지 않는다(no-store · no-referrer). 수명은 60초.
  */
@@ -27,6 +30,7 @@ export async function GET(req: Request) {
   const app = CONNECTED_APPS.find((a) => a.feature === "todays_math")!;
   const user = await getCurrentUser();
   if (!user) return NextResponse.redirect(new URL("/login", req.url), { headers: HEADERS });
+  if (await viewAsTeacher()) return NextResponse.redirect(new URL("/home", req.url), { headers: HEADERS });
   if (!(await getMyConnectedApps()).some((a) => a.feature === app.feature)) {
     return NextResponse.redirect(new URL("/home", req.url), { headers: HEADERS });
   }

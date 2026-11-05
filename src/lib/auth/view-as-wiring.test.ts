@@ -100,6 +100,10 @@ const GUARDED_ACTION_FILES: { file: string[]; what: string }[] = [
     file: ["src", "features", "leave", "server", "actions.ts"],
     what: "연차 조정 추가·삭제(실제 계정이 원장이라 '읽기' 강사뷰에서도 저장됐다 · 2026-11-05)",
   },
+  {
+    file: ["src", "features", "enrollment", "server", "intake-actions.ts"],
+    what: "신규 콜 접수 링크 만들기(created_by = 대상)",
+  },
 ];
 
 describe("'다른 강사 뷰'(열람 전용) 배선 가드", () => {

@@ -6,8 +6,7 @@ import { logAction } from "@/features/audit/server/log";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { viewAsTeacher } from "@/lib/auth/view-as";
 import { kstToday } from "@/lib/date-kst";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { teacherViewReadDb, writeSessionFirst } from "./teacher-view-db";
 import {
   createUploadTicket,
   MEDIA_KIND,
@@ -91,23 +90,28 @@ const APPROVAL_ROLE_LABEL: Record<string, string> = {
 const today = () => kstToday();
 
 /**
- * 지출결의서 DB 클라이언트 — 평소엔 세션(RLS 그대로), '다른 강사 뷰'일 때만 관리 클라이언트(원장 2026-11-05 강사뷰 전수).
- * 🔴 DB의 `auth.uid()`는 강사뷰에서도 실제 계정 A다. RLS(expenses_role_gate_*: A의 지출 권한 or `created_by = auth.uid()`)는
- *    A에게 지출 권한이 없으면 대상 X 명의(created_by = X)의 작성과 X 결의서의 수정·증빙 변경을 거절한다.
+ * 지출결의서 **읽기** 클라이언트 — 평소엔 세션(RLS 그대로), '다른 강사 뷰'일 때만 관리 클라이언트(teacher-view-db.ts).
+ * **쓰기**는 `writeSessionFirst` — 실제 계정 A의 세션으로 먼저 쓰고, RLS(expenses_role_gate_*: A의 지출 권한 or
+ * `created_by = auth.uid()`)에 막힐 때만 관리 클라이언트로 내려간다. 세션으로 쓰면 DB 활동 기록(log_activity)에 행위자 A가 남는다.
  * 부르는 쪽은 앱 게이트를 먼저 지난다 — `expenseWriteScope`/`canWriteTenant`(읽기 강사뷰는 여기서 막힌다) + own이면
- * `guardOwnExpense`(X 본인 작성분). 관리 클라이언트는 RLS를 우회하므로 이 파일의 모든 조회·변경은 `tenant_id`를 명시한다.
+ * `guardOwnExpense`(X 본인 작성분). 이 파일의 모든 조회·변경은 `tenant_id`를 명시한다.
  */
-type ExpenseDb = Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdminClient>;
-async function expenseDb(): Promise<{ db: ExpenseDb; viaAdmin: boolean }> {
-  return (await viewAsTeacher()) ? { db: createAdminClient(), viaAdmin: true } : { db: await createClient(), viaAdmin: false };
+async function expenseDb() {
+  return teacherViewReadDb();
 }
 
 /**
- * 관리 클라이언트로 읽은 결의서가 행위자(X)에게 보이는 행인가 — RLS `expenses_role_gate_select`(지출 열람 권한 or 본인 작성분)를
- * 앱에서 같은 모양으로. 세션 클라이언트일 때는 RLS가 이미 걸렀으므로 부르지 않는다(viaAdmin일 때만).
+ * 관리 클라이언트로 읽은 결의서가 행위자(X)에게 보이는 행인가 — RLS `expenses_role_gate_select`(0158a)를 X 기준으로:
+ *   지출 열람(`billing` ≠ none) **or** (지출결의서 **제출 권한** `expense_requests` ∈ full·scoped **and** 본인 작성분).
+ * ⚠️ 열람 전용 강사뷰는 권한표가 X의 full·scoped를 읽기로 눌러 둔다 — 그 캡은 '쓰기'를 막으려는 것이라, 여기서는 X의 원래 수준
+ *    대신 '메뉴 접근'으로 본다(X가 원래 제출 권한이었는지 구분할 수 없어 읽기 강사뷰에서만 한 단계 넓다 — 목록도 X의 것을 보여 준다).
+ * 세션 클라이언트일 때는 RLS가 이미 걸렀으므로 부르지 않는다(viaAdmin일 때만).
  */
 async function visibleToActor(row: { created_by?: string | null }, user: CurrentUser): Promise<boolean> {
-  return (await canAccessTenant(user.systemRole, "billing")) || row.created_by === user.id;
+  if (await canAccessTenant(user.systemRole, "billing")) return true;
+  if (row.created_by !== user.id) return false;
+  if ((await expenseWriteScope(user.systemRole)) !== null) return true;
+  return (await viewAsTeacher())?.access === "readonly" && (await canAccessTenant(user.systemRole, "expense_requests"));
 }
 
 // 지출결의서 쓰기 스코프(full=사무실 전건 / own=강사 본인 것) — 화면과 같은 한 함수(./expense-scope.ts).
@@ -186,10 +190,9 @@ export async function createExpense(_prev: ExpenseState, formData: FormData): Pr
   const invalid = validate(f);
   if (invalid) return invalid;
 
-  const { db: supabase } = await expenseDb();
   // ⚠️ `.maybeSingle()` — 강사(own)도 자기 행은 select 정책을 통과하지만(0158a: delete/select 조건 동일),
   //    혹시 표현이 안 돌아와도 **저장 성공을 에러로 뒤집지 않게** single()은 쓰지 않는다.
-  const { data: created, error } = await supabase
+  const { data: created, error } = await writeSessionFirst("insert", (db) => db
     .from("expenses")
     .insert({
       tenant_id: user.tenantId,
@@ -213,7 +216,7 @@ export async function createExpense(_prev: ExpenseState, formData: FormData): Pr
       approval_checks: { author: { checked: true, date: today() } },
     })
     .select("id")
-    .maybeSingle();
+    .maybeSingle());
   if (error) return { error: error.message };
 
   await logAction({
@@ -259,7 +262,7 @@ export async function updateExpense(_prev: ExpenseState, formData: FormData): Pr
     .select("title, amount, currency, category, expense_date")
     .eq("tenant_id", user.tenantId).eq("id", id)
     .maybeSingle();
-  const { error } = await supabase
+  const { error } = await writeSessionFirst("mutate", (db) => db
     .from("expenses")
     .update({
       title: f.title,
@@ -279,7 +282,7 @@ export async function updateExpense(_prev: ExpenseState, formData: FormData): Pr
       line_items: f.lineItems,
       updated_at: new Date().toISOString(),
     })
-    .eq("tenant_id", user.tenantId).eq("id", id);
+    .eq("tenant_id", user.tenantId).eq("id", id).select("id"));
   if (error) return { error: error.message };
 
   await logAction({
@@ -334,7 +337,7 @@ export async function deleteExpense(_prev: ExpenseState, formData: FormData): Pr
 
   // `.select("id")` = 실제로 지워진 행 확인. RLS에 막히면 PostgREST가 **에러 없이 0행**을 지운다 —
   // 그때 로그를 남기면 감사로그가 일어나지 않은 삭제를 사실로 적는다(안 지워졌으면 기록도 안 남긴다).
-  const { data: gone, error } = await supabase.from("expenses").delete().eq("tenant_id", user.tenantId).eq("id", id).select("id");
+  const { data: gone, error } = await writeSessionFirst("mutate", (db) => db.from("expenses").delete().eq("tenant_id", user.tenantId).eq("id", id).select("id"));
   if (error) return { error: error.message };
 
   if (gone?.length) {
@@ -389,10 +392,10 @@ export async function toggleExpenseApproval(
   base[role as keyof typeof base] = checked ? { checked: true, date: today() } : { checked: false };
   const approvalStatus = base.director?.checked && base.ceo?.checked ? "approved" : "pending";
 
-  const { error } = await supabase
+  const { error } = await writeSessionFirst("mutate", (db) => db
     .from("expenses")
     .update({ approval_checks: base, approval_status: approvalStatus, updated_at: new Date().toISOString() })
-    .eq("tenant_id", user.tenantId).eq("id", id);
+    .eq("tenant_id", user.tenantId).eq("id", id).select("id"));
   if (error) return { error: error.message };
 
   // 🔴 **방향을 반드시 남긴다** — "누가 결재를 눌렀나"만큼 "누가 해제했나"가 중요하다(해제는 이미 승인된
@@ -439,7 +442,7 @@ export async function duplicateExpense(_prev: ExpenseState, formData: FormData):
     return { error: "본인이 작성한 지출결의서만 복제할 수 있습니다" };
   }
 
-  const { data: created, error } = await supabase
+  const { data: created, error } = await writeSessionFirst("insert", (db) => db
     .from("expenses")
     .insert({
       tenant_id: user.tenantId,
@@ -462,7 +465,7 @@ export async function duplicateExpense(_prev: ExpenseState, formData: FormData):
       approval_checks: { author: { checked: true, date: today() } },
     })
     .select("id")
-    .maybeSingle();
+    .maybeSingle());
   if (error) return { error: error.message };
 
   // 복제는 **같은 금액의 지출이 하나 더 생기는** 일이라 create와 갈라 둔다 — 중복 지출을 되짚을 때
@@ -504,11 +507,10 @@ export async function setExpenseReceiptType(
   const type = String(formData.get("receiptType") ?? "").trim();
   if (type && !RECEIPT_TYPES.has(type)) return { error: "잘못된 증빙 유형입니다" };
 
-  const { db: supabase } = await expenseDb();
-  const { error } = await supabase
+  const { error } = await writeSessionFirst("mutate", (db) => db
     .from("expenses")
     .update({ receipt_type: type || null, updated_at: new Date().toISOString() })
-    .eq("tenant_id", user.tenantId).eq("id", id);
+    .eq("tenant_id", user.tenantId).eq("id", id).select("id"));
   if (error) return { error: error.message };
 
   await logAction({
@@ -598,10 +600,10 @@ export async function addExpenseReceipt(
   if (!list.some((r) => r.path === path)) {
     list.push({ path, name: name || path.split("/").pop() || path });
   }
-  const { error } = await supabase
+  const { error } = await writeSessionFirst("mutate", (db) => db
     .from("expenses")
     .update({ receipt_urls: list, updated_at: new Date().toISOString() })
-    .eq("tenant_id", user.tenantId).eq("id", id);
+    .eq("tenant_id", user.tenantId).eq("id", id).select("id"));
   if (error) {
     await removeObject(path, { bucket: RECEIPTS_BUCKET }).catch(() => {});
     return { error: error.message };
@@ -644,10 +646,10 @@ export async function removeExpenseReceipt(
   const current = parseReceipts(row.receipt_urls);
   const removed = current.find((r) => r.path === path); // 감사로그에 남길 파일 이름(지운 뒤엔 못 읽는다)
   const list = current.filter((r) => r.path !== path);
-  const { error } = await supabase
+  const { error } = await writeSessionFirst("mutate", (db) => db
     .from("expenses")
     .update({ receipt_urls: list, updated_at: new Date().toISOString() })
-    .eq("tenant_id", user.tenantId).eq("id", id);
+    .eq("tenant_id", user.tenantId).eq("id", id).select("id"));
   if (error) return { error: error.message };
 
   if (!isLegacy) await removeObject(path, { bucket: RECEIPTS_BUCKET }).catch(() => {});
