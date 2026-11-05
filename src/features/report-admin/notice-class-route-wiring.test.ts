@@ -88,7 +88,49 @@ describe("워커 — 반 보드 경로는 1인 보드로 되돌아가지 않는�
   });
   it("워커가 이 기능을 지원한다고 알린다(앱은 이 값이 있을 때만 반 보드 경로로 큐에 싣는다)", () => {
     expect(read("scripts", "_classnote", "watch-classnote-queue.mjs")).toMatch(/WORKER_CAPS = \{[^}]*noticeClassRoute: true/);
-    expect(read("src", "features", "report-admin", "server", "notice-class-route.ts")).toContain("live.every((w) => workerSupportsNoticeClassRoute(w.raw))");
+    const app = read("src", "features", "report-admin", "server", "notice-class-route.ts");
+    // 판정할 발송 PC가 있고 **전부** 알아야 한다(켜진 워커 전부 · 없으면 가장 최근 워커)
+    expect(app).toContain("const poolSupports = (pool: readonly unknown[], supports: (raw: unknown) => boolean) => pool.length > 0 && pool.every(supports);");
+    expect(app).toContain("return poolSupports(await postingWorkerPool(supabase), workerSupportsNoticeClassRoute);");
+    expect(app).toContain("const mathOn = wantMath && poolSupports(pool, workerSupportsNoticeClassRoute);");
+  });
+});
+
+describe("영어 개별 공지 — 반 방 경로(원장 2026-11-04 · 1인 보드 배정 금지 뒤)", () => {
+  const app = read("src", "features", "report-admin", "server", "notice-class-route.ts");
+  const core = read("scripts", "_classnote", "classnote-notice-core.mjs");
+  const route = read("scripts", "_classnote", "notice-class-route.mjs");
+  it("🔴 연동 PC가 `noticeEnglishRoom`을 알릴 때만 영어 대상에 반을 싣는다(옛 워커는 영어 반을 수학 반 보드로 보고 실패시킨다)", () => {
+    expect(read("scripts", "_classnote", "watch-classnote-queue.mjs")).toMatch(/WORKER_CAPS = \{[^}]*noticeEnglishRoom: true/);
+    expect(app).toContain("const englishOn = wantEnglish && poolSupports(pool, workerSupportsNoticeEnglishRoom);");
+    // 영어 대상의 반은 워커의 분기 표식(subject)과 함께 싣는다 · 반 방이 없거나 반을 못 정하면 지금처럼 1인 보드(rest)
+    expect(app).toContain("subject: ENGLISH_NOTICE_SUBJECT,");
+    expect(app).toContain('if (pick?.route !== "room") {');
+    expect(app).toContain("englishPersonal.add(c.studentId);");
+  });
+  it("두 과목의 삼자 일치 재료는 한 벌이다(학생 다리 · 선생님 다리)", () => {
+    const english = read("src", "features", "report-admin", "server", "notice-english-route.ts");
+    for (const code of [app, english]) {
+      expect(code).toContain("attendingClassesOf(await studentLegQuery(admin, tenantId, studentIds), date)");
+      expect(code).toContain("...teacherLegQueries(admin, tenantId, classIds, teacherIds, date),");
+      expect(code).toContain("teachersByClass({ classes:");
+    }
+  });
+  it("워커 — 영어 반 방 대상은 반 보드 분기 안에서 대상 확정만 달리하고, 같은 게시·교차 확인 코드를 탄다(1인 보드로 떨어지지 않는다)", () => {
+    const head = core.slice(core.indexOf("export async function processTarget"));
+    const branch = head.slice(head.indexOf("if (isClassRouteTarget(target)) {"), head.indexOf("ctx.boardByNorm.get(norm(target.board))"));
+    expect(branch.indexOf("if (classRouteHaltReason())")).toBeLessThan(branch.indexOf("resolveNoticeEnglishTarget("));
+    expect(branch).toContain("const resolved = isEnglishRoomTarget(target)");
+    expect(branch.indexOf("resolveNoticeEnglishTarget(")).toBeLessThan(branch.indexOf("await postToChildren("));
+  });
+  it("워커 — 영어 반 방의 원아는 영어 보고서와 같은 함수로 고른다(원아 연결 ∩ 지금 그 방 · 이름으로 찾지 않는다)", () => {
+    expect(route).toContain(
+      'import { ENGLISH_ROUTE_SUBJECTS, englishBlockedMessage, loadEnglishClassBoard, resolveEnglishClassTargets } from "./english-class-route.mjs";',
+    );
+    const fn = route.slice(route.indexOf("export async function resolveNoticeEnglishTarget"));
+    expect(fn).toContain("await loadEnglishClassBoard(sql, tenant, classId)");
+    expect(fn).toContain("await resolveEnglishClassTargets(sql, page, { tenant, centerId, board, studentId })");
+    expect(fn).not.toMatch(/resolveBoardChildEnrollments|fetchChildren|childKeys|boardByNorm/);
   });
 });
 

@@ -7,6 +7,7 @@
 import { SHEET_TOKEN_KEYS, type SheetTokenKey, type TemplateTokenKey } from "./defaults";
 import { imageSlotMarker, type ImageSlotKey } from "./image-slots";
 import { parentStudentName } from "./student-name";
+import { monthlyEvalMarker, type MonthlyEval } from "./monthly-eval";
 
 export type EnglishTemplateSource = {
   studentName: string;
@@ -30,6 +31,8 @@ export type EnglishTemplateSource = {
    * 이 모듈은 문장을 만들지 않는다(수학과 영어가 같은 문장을 쓰게 한 곳에서). 없으면 빈 값 = 그 줄·문단이 빠진다.
    */
   sheet?: Partial<Record<SheetTokenKey, string>>;
+  /** 그 반의 이번(또는 지난) 달 Monthly Test 점수(2026-11-05, EiE 월간 보고서) — 없으면 `{월간평가}` 줄이 빠진다. */
+  monthly?: MonthlyEval | null;
 };
 
 /**
@@ -61,6 +64,7 @@ export function englishTemplateValues(src: EnglishTemplateSource): Record<Templa
     학습분석지: src.slots?.학습분석지 ? imageSlotMarker("학습분석지") : "",
     단어백분위: src.slots?.단어백분위 ? imageSlotMarker("단어백분위") : "",
     학습배지: src.slots?.학습배지 ? imageSlotMarker("학습배지") : "",
+    월간평가: src.monthly ? monthlyEvalMarker(src.monthly) : "",
     ...(Object.fromEntries(SHEET_TOKEN_KEYS.map((k) => [k, (src.sheet?.[k] ?? "").trim()])) as Record<SheetTokenKey, string>),
   };
 }

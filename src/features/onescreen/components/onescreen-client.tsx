@@ -42,7 +42,7 @@ import type { DisplayOptions } from "../display-options";
 import { PreviousContent } from "./previous-content";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { isJjSheetDraft, isJjSheetReport } from "../jj-books";
+import { isJjSheetDraft, isJjSheetReport, isProgressOptionalReport } from "../jj-books";
 import {
   EMPTY_TEMPLATE_PREFS,
   implicitTemplateFor,
@@ -157,6 +157,7 @@ import {
   templateFactsKey,
   templateCarriesNote,
   templateImageSlots,
+  monthlyScoresMissing,
   templateNeedsAi,
   type EnglishGenStatus,
   type EnglishRowFacts,
@@ -2806,6 +2807,8 @@ export function OneScreenClient({
       // 출결(원장 2026-10-26) — 출석부 칸 그대로(수학 보고서와 같은 문장, attendance-sentence.ts).
       // 보강 줄이면 결석 날짜·시간·사유를 붙인다(2026-10-26 — 수학과 같은 재료, report-comment.ts rowMakeupFacts).
       attendance: attendanceSentence(su.attendanceRaw, su.attendanceNote, rowMakeupFacts(student, su)),
+      // EiE 월간 보고서 점수(2026-11-05) — 로스터가 실어 둔 그 반 Monthly Test(english-monthly.ts).
+      monthly: su.monthlyEval ?? null,
       slots: slotFactsFor(
         jjKnownSlots(jjCache[jjDayKey(student.id, activeDate)]),
         rep?.autoDraft ?? rep?.draft ?? "",
@@ -3096,6 +3099,10 @@ export function OneScreenClient({
       // 🔴 새 글이다 — 앞선 '그대로' 확인은 옛 글에 대한 것이라 버린다(안 버리면 새 글이 확인 없이 나갔다, 적대 재리뷰).
       outputAck: undefined,
     }));
+    // 월간 보고서인데 Monthly Test 점수가 없으면 코멘트만 들어간다 — 반응 없음처럼 보이지 않게 까닭을 알린다(2026-11-05).
+    if (!quiet && monthlyScoresMissing(found ?? DEFAULT_ENGLISH_TEMPLATE, nowFacts)) toast.message(t("os.tpl.monthlyNoScores"));
+    // AI를 안 부르는 템플릿(월간 보고서 등)은 눈 깜짝할 새 끝나 '눌렸나?'를 모른다 — 채웠다고 알린다(원장 2026-11-05 *"로딩이나 뭐 그런게없음 그래서 자꾸 누르게됌"*).
+    else if (!quiet && found && !templateNeedsAi(found)) toast.success(t("os.tpl.filledNoAi"));
     if (found) return "ok";
     if (!quiet) toast.message(t("os.tpl.templateMissing"));
     return "template_fallback";
@@ -3160,6 +3167,7 @@ export function OneScreenClient({
     if (edited && !window.confirm(t("os.tpl.overwriteConfirm"))) return;
     if (!found) toast.message(t("os.tpl.templateMissing"));
     const facts = englishFactsOf(student, su, rep, jj.cacheRef.current);
+    if (monthlyScoresMissing(template, facts)) toast.message(t("os.tpl.monthlyNoScores"));
     const composed = composeEnglishDraft(template, facts, {
       nextTest: rep?.nextTest,
       aiIntro: ai.aiIntro,
@@ -3416,7 +3424,10 @@ export function OneScreenClient({
           r.subject,
           action,
           effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus),
-          { attendanceReadOnly: !canEditAttendance }, // 출결 쓰기 권한 없음 = 미체크 게이트 해당 없음(P0-3)
+          {
+            attendanceReadOnly: !canEditAttendance, // 출결 쓰기 권한 없음 = 미체크 게이트 해당 없음(P0-3)
+            progressOptional: isProgressOptionalReport(r.subject, reportsRef.current[r.student.id]?.[r.subject.name]), // SRS 글은 진도 불필요
+          },
         ),
       );
     if (!keys || keys.length === 0) return all;
@@ -4314,7 +4325,7 @@ export function OneScreenClient({
     }
     // 진도 미입력 게이트(방어층) — 버튼 disabled 우회·프로그램 호출 대비. 표뷰와 동일 기준(#15 확정).
     const su = selected.subjects.find((s) => s.name === subjectName);
-    if (su && !isRowActionable(su, "save")) {
+    if (su && !isRowActionable(su, "save", undefined, { progressOptional: isProgressOptionalReport(su, reports[selected.id]?.[subjectName]) })) {
       toast.message(t("os.c.needProgress"));
       return;
     }
@@ -4610,7 +4621,7 @@ export function OneScreenClient({
         (!keySet || keySet.has(r.key)) &&
         r.subject.attendanceRaw !== "absent" &&
         !isAlreadySent(effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus)) &&
-        !isReportEligible(r.subject),
+        !isReportEligible(r.subject, isProgressOptionalReport(r.subject, reportsRef.current[r.student.id]?.[r.subject.name])),
     );
     const noProgressNames = [...new Set(noProgressRows.map((r) => r.student.name))];
     const progressLine = noProgressRows.length
@@ -4631,7 +4642,9 @@ export function OneScreenClient({
       (r) =>
         canEditAttendance && // 출결 쓰기 권한 없음 = 게이트 해당 없음(P0-3) — 제외 안내도 하지 않는다
         (!keySet || keySet.has(r.key)) &&
-        isRowActionable(r.subject, "autowrite", effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus)) &&
+        isRowActionable(r.subject, "autowrite", effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus), {
+          progressOptional: isProgressOptionalReport(r.subject, reportsRef.current[r.student.id]?.[r.subject.name]),
+        }) &&
         isAttendanceUnchecked(r.subject),
     );
     const uncheckedNames = [...new Set(uncheckedRows.map((r) => r.student.name))];
@@ -4911,7 +4924,7 @@ export function OneScreenClient({
     }
     // 미저장 첨부는 buildSaveInput으로 보고서 행을 먼저 만든다 — 진도 없으면 빈 보고서가 생기므로 게이트(#15).
     const su0 = student.subjects.find((s) => s.name === subjectName);
-    if (su0 && !reports[student.id]?.[subjectName]?.sent && !isRowActionable(su0, "save")) {
+    if (su0 && !reports[student.id]?.[subjectName]?.sent && !isRowActionable(su0, "save", undefined, { progressOptional: isProgressOptionalReport(su0, reports[student.id]?.[subjectName]) })) {
       if (!opts?.silent) toast.message(t("os.c.attachNeedProgress"));
       return 0;
     }

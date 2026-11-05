@@ -127,20 +127,20 @@ describe("연동 PC가 꺼져 있는 시각", () => {
 });
 
 describe("후보를 반 보드 경로(수학)와 기존 경로로 가른다", () => {
-  const settings = { modules: { disabled: [] }, report: { classnoteMathRoute: "class", classnoteSubjects: ["math", "english"] } };
+  const settings = { modules: { disabled: [] }, report: { classnoteSubjects: ["math", "english"] } };
   const cand = (studentId: string, subject: string | null, over: Record<string, unknown> = {}) => ({ studentId, name: studentId, classnoteName: null, subject, ...over });
   const one = () => seed({ enrollments: [enr("수학생", "A")], classes: [klass("A")], boards: [board("A", "A반")], members: [member("수학생", "A")] });
 
   it("수학은 반 보드 대상(classId · 표시 키), 영어는 기존 경로로 넘긴다", async () => {
     one();
-    const r = await routeNoticeCandidates({ supabase, tenantId: "tn", settings, senderName: null, candidates: [cand("수학생", "math", { hints: ["A"] }), cand("영어생", "english")] });
+    const r = await routeNoticeCandidates({ supabase, tenantId: "tn", settings, candidates: [cand("수학생", "math", { hints: ["A"] }), cand("영어생", "english")] });
     expect(r.classTargets).toEqual([{ studentId: "수학생", studentName: "수학생", board: "A반 · 수학생", classId: "A", className: "A" }]);
     expect(r.rest).toEqual([{ studentId: "영어생", name: "영어생", classnoteName: null, subject: "english" }]);
     expect(r.skipped).toEqual([]);
   });
   it("🔴 받을 반 보드가 없는 수학 학생은 제외한다 — 기존 1인 보드 경로(rest)로 넘기지 않는다", async () => {
     seed({ enrollments: [], classes: [], boards: [], members: [] });
-    const r = await routeNoticeCandidates({ supabase, tenantId: "tn", settings, senderName: null, candidates: [cand("수학생", "math")] });
+    const r = await routeNoticeCandidates({ supabase, tenantId: "tn", settings, candidates: [cand("수학생", "math")] });
     expect(r.classTargets).toEqual([]);
     expect(r.rest).toEqual([]);
     expect(r.skipped).toEqual([{ name: "수학생", reason: "no_class_board" }]);
@@ -151,7 +151,7 @@ describe("후보를 반 보드 경로(수학)와 기존 경로로 가른다", ()
       members: [member("s1", "A"), member("s2", "A")],
     });
     const twins = [{ ...cand("s1", "math"), name: "김민준" }, { ...cand("s2", "math"), name: "김민준" }];
-    const r = await routeNoticeCandidates({ supabase, tenantId: "tn", settings, senderName: null, candidates: twins });
+    const r = await routeNoticeCandidates({ supabase, tenantId: "tn", settings, candidates: twins });
     expect(r.classTargets).toEqual([]);
     expect(r.skipped).toEqual([{ name: "김민준", reason: "name_collision" }, { name: "김민준", reason: "name_collision" }]);
   });
@@ -169,22 +169,20 @@ describe("후보를 반 보드 경로(수학)와 기존 경로로 가른다", ()
   });
   it("같은 학생이 여러 반에서 뽑혀도 한 번만 보낸다", async () => {
     one();
-    const r = await routeNoticeCandidates({ supabase, tenantId: "tn", settings, senderName: null, candidates: [cand("수학생", "math", { hints: ["A"] }), cand("수학생", "math", { hints: ["B"] })] });
+    const r = await routeNoticeCandidates({ supabase, tenantId: "tn", settings, candidates: [cand("수학생", "math", { hints: ["A"] }), cand("수학생", "math", { hints: ["B"] })] });
     expect(r.classTargets).toHaveLength(1);
   });
-  it("경로가 꺼져 있거나(설정·ClassNote 모듈) 연동 PC가 아직 못 하면 전원 기존 경로 — 지금까지와 똑같이", async () => {
+  it("ClassNote 모듈이 꺼져 있거나 연동 PC가 아직 못 하면 전원 기존 경로 — 지금까지와 똑같이", async () => {
     const all = [cand("수학생", "math"), cand("영어생", "english")];
     const plain = all.map(({ studentId, name, classnoteName, subject }) => ({ studentId, name, classnoteName, subject }));
-    const off = { ...settings, report: { ...settings.report, classnoteMathRoute: "personal" } };
-    expect(await routeNoticeCandidates({ supabase, tenantId: "tn", settings: off, senderName: null, candidates: all })).toEqual({ classTargets: [], rest: plain, skipped: [] });
     const moduleOff = { ...settings, modules: { disabled: ["classnote"] } };
-    expect((await routeNoticeCandidates({ supabase, tenantId: "tn", settings: moduleOff, senderName: null, candidates: all })).rest).toEqual(plain);
+    expect(await routeNoticeCandidates({ supabase, tenantId: "tn", settings: moduleOff, candidates: all })).toEqual({ classTargets: [], rest: plain, skipped: [] });
     m.workers = [liveWorker({})];
-    expect((await routeNoticeCandidates({ supabase, tenantId: "tn", settings, senderName: null, candidates: all })).rest).toEqual(plain);
+    expect((await routeNoticeCandidates({ supabase, tenantId: "tn", settings, candidates: all })).rest).toEqual(plain);
   });
   it("학원설정에서 수학을 발송 과목에서 뺐으면 반 보드 경로도 타지 않는다(기존 경로가 '발송 과목 아님'으로 제외한다)", async () => {
     const noMath = { ...settings, report: { ...settings.report, classnoteSubjects: ["english"] } };
-    const r = await routeNoticeCandidates({ supabase, tenantId: "tn", settings: noMath, senderName: null, candidates: [cand("수학생", "math")] });
+    const r = await routeNoticeCandidates({ supabase, tenantId: "tn", settings: noMath, candidates: [cand("수학생", "math")] });
     expect(r.classTargets).toEqual([]);
     expect(r.rest).toHaveLength(1);
   });

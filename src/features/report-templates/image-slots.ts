@@ -16,6 +16,8 @@
  * ⚠️ 줄 **전체**가 자리 표식일 때만 자리다 — 문장 속 `[시험결과지]`는 그냥 글자(사람이 쓴 문장을 그림으로 오인하지 않게).
  */
 
+import { monthlyEvalOfLine, type MonthlyEval } from "./monthly-eval";
+
 export type ImageSlotKey = "시험결과지" | "학습분석지" | "단어백분위" | "학습배지";
 
 /** 그림 자리 키 — 템플릿 칸 이름과 **같은 글자**다(defaults.ts의 토큰 목록이 이 키를 쓴다). */
@@ -51,13 +53,17 @@ export function attachmentNameOfLine(line: string): string | null {
 export type BodySegment =
   | { kind: "text"; text: string }
   | { kind: "slot"; key: ImageSlotKey }
-  | { kind: "attachment"; name: string };
+  | { kind: "attachment"; name: string }
+  // EiE 월간 보고서 점수 자리(2026-11-05, monthly-eval.ts) — 점수를 줄 안에 동결해 둔다.
+  | { kind: "monthly"; eval: MonthlyEval };
 
 type MarkerSegment = Exclude<BodySegment, { kind: "text" }>;
 
 function markerOfLine(line: string): MarkerSegment | null {
   const key = imageSlotOfLine(line);
   if (key) return { kind: "slot", key };
+  const monthly = monthlyEvalOfLine(line);
+  if (monthly) return { kind: "monthly", eval: monthly };
   const name = attachmentNameOfLine(line);
   return name ? { kind: "attachment", name } : null;
 }

@@ -67,7 +67,7 @@ export async function registerMakeupEntries(input: {
       return { ok: false, error: "담당 과목과 보강 수업을 확인해 주세요" };
     }
     // 🔴 반별 발송 대상(수학 · ClassNote 반 경로)은 반 없이 추가할 수 없다('반 미정' 보강을 만들지 않는다 — 원장 2026-09-30).
-    if (!anchor && SEND_CLASS_SUBJECTS.has(entry.subject) && classRouteActive(settings, user.displayName)) {
+    if (!anchor && SEND_CLASS_SUBJECTS.has(entry.subject) && classRouteActive(settings)) {
       return { ok: false, error: MAKEUP_ANCHOR_REQUIRED_ERROR };
     }
     if (entry.units != null && (!Number.isFinite(entry.units) || entry.units <= 0 || entry.units > 24)) {

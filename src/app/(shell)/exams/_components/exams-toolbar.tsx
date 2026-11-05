@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FilterSelect, type FilterSelectOption } from "@/components/filter-select";
 import { SearchToggle } from "@/components/search-toggle";
 import { Toolbar, ToolbarButton, ToolbarDivider } from "@/components/toolbar";
+import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { useInFrame } from "@/components/workspace/use-in-frame";
 import { withEmbed } from "@/components/workspace/embed-context";
@@ -40,10 +41,11 @@ export function ExamsToolbar({ from, to, subject, kind, missing, q, subjectOptio
     <input type="date" aria-label="시작일" className={dateInput} value={from} max={to} onChange={(e) => setDate("from", e.target.value)} />
     <span aria-hidden>~</span>
     <input type="date" aria-label="종료일" className={dateInput} value={to} min={from} onChange={(e) => setDate("to", e.target.value)} />
-    <FilterSelect paramName="subject" axisLabel="과목" value={subject} allValue="all" options={subjectOptions} />
+    {/* 드롭다운 셋은 SearchableSelect라 기본 상자(42px)가 다르다 — 툴바 한 줄에서 **같은 치수**로(input·view 툴바와 같은 처리). */}
+    <FilterSelect paramName="subject" axisLabel="과목" value={subject} allValue="all" options={subjectOptions} triggerClassName={TOOLBAR_SELECT} />
     {/* 열 머리 '시험'(fKind)·'시험정보'(fInfo)는 이 값 안에서 다시 좁힌다 — 여기를 바꾸면 둘을 푼다(어긋나 0건이 되지 않게, 리뷰 2026-10-14). */}
-    <FilterSelect paramName="kind" axisLabel="시험" value={kind} allValue="all" options={kindOptions} clearParams={["fKind", "fInfo"]} />
-    <FilterSelect paramName="missing" axisLabel="미입력" allLabel="숨김" value={missing ? "1" : ""} options={[{ value: "1", label: "표시" }]} />
+    <FilterSelect paramName="kind" axisLabel="시험" value={kind} allValue="all" options={kindOptions} clearParams={["fKind", "fInfo"]} triggerClassName={TOOLBAR_SELECT} />
+    <FilterSelect paramName="missing" axisLabel="미입력" allLabel="숨김" value={missing ? "1" : ""} options={[{ value: "1", label: "표시" }]} triggerClassName={TOOLBAR_SELECT} />
     <SearchToggle placeholder="학생 이름" defaultValue={q} />
     <span className="ml-auto" />
     <ToolbarButton onClick={() => window.location.assign(inFrame ? withEmbed(exportHref) : exportHref)}><SheetText value={"엑셀 내보내기"} /></ToolbarButton>

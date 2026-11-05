@@ -91,6 +91,9 @@ describe("기본 템플릿 + 인재원 결과지(2026-09-11)", () => {
       BUILTIN_ENGLISH_TEMPLATE.id,
       BUILTIN_ENGLISH_JJ_TEMPLATE.id,
       "builtin:english-jj-sheet",
+      // 2026-11-05 — EiE 일일·월간 보고서가 맨 뒤.
+      "builtin:eie-daily",
+      "builtin:eie-monthly",
     ]);
     expect(BUILTIN_ENGLISH_TEMPLATES.every((t) => t.builtIn && t.id.startsWith("builtin:"))).toBe(true);
   });

@@ -9,14 +9,48 @@
 //   ③ 그 원아가 **지금** ClassNote 그 반에 배정돼 있다(`resolveClassTargets` — 실시간 재조회 + 배정 번호)
 // 원아는 이름으로 찾지 않는다 — 0302a에 가드를 통과해 적힌 원아 번호만 쓴다(수업보고서 반 보드 경로와 같은 함수).
 // 🔴 하나라도 어긋나면 **보내지 않는다** — 1인 보드로 되돌리지 않는다(조용히 옛 경로로 가면 어느 보드로 갔는지 아무도 모른다).
+//
+// **영어 반 방 경로(원장 2026-11-04 · AywaSync 1.0.15)**: 1인 보드 배정 금지 뒤 영어 신입이 개별 공지·교재요청서를 받을 곳이 없어서,
+// 앱이 삼자 일치로 정한 영어 반에 반 방(s2_0006)이 이어져 있으면 대상에 `classId` + `subject: "english"`를 싣는다. 워커는
+//   ① 오늘 그 반에 다닌다(수학과 같은 확인) ② 그 영어 반의 반 방 연결이 지금도 있다(`loadEnglishClassBoard` — 영어 반만)
+//   ③ 원아 = 원아 연결(0185a) ∩ 지금 그 방 원아(`resolveEnglishClassTargets` — 영어 보고서와 같은 함수 · 이름으로 찾지 않는다 · 방에 없으면 막는다)
+// 를 확인한 뒤 수학 반 보드와 **같은 게시·중복 확인·교차 확인 코드**로 올린다. 어긋나면 그 대상만 실패 — 1인 보드로 되돌리지 않는다.
 import { isClassRouteEligible, resolveClassTargets } from "./classnote-class-route.mjs";
+import { ENGLISH_ROUTE_SUBJECTS, englishBlockedMessage, loadEnglishClassBoard, resolveEnglishClassTargets } from "./english-class-route.mjs";
 import { isCurrentEnrollment } from "./notify-axis.mjs";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const kstToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
 
-/** 이 타깃이 반 보드 경로인가 — 앱이 `classId`를 실었을 때만. */
+/** 이 타깃이 반 보드 경로인가 — 앱이 `classId`를 실었을 때만(영어 반 방 대상도 여기 든다 — 대상 확정만 다르다). */
 export const isClassRouteTarget = (target) => typeof target?.classId === "string" && target.classId.length > 0;
+
+/** 이 타깃이 **영어 반 방** 경로인가 — `classId`에 더해 앱이 `subject: "english"`를 실었을 때만(표식이 없으면 수학 반 보드로 본다). */
+export const isEnglishRoomTarget = (target) => isClassRouteTarget(target) && ENGLISH_ROUTE_SUBJECTS.has(target?.subject ?? "");
+
+const BAD_TARGET_NOTE = "발송 대상 정보가 올바르지 않습니다(반·학생 번호) — 다시 발송해 주세요";
+const NOT_ATTENDING_NOTE = "이 학생은 지금 그 반에 다니지 않습니다 — 반을 확인한 뒤 다시 발송해 주세요";
+/**
+ * 앱이 반 방으로 정한 뒤 그 연결이 풀렸다 — 시험이 벨 힌트 말을 담지 않는지 본다.
+ * "다시 보내면 된다"고 약속하지 않는다 — 교재요청서는 같은 공지가 일부라도 나갔으면 그 요청서를 다시 보낼 수 없다(중복 발송 차단).
+ */
+export const ENGLISH_ROOM_GONE_NOTE =
+  "이 영어 반의 ClassNote 반 방 연결이 발송 직전에 없어져 보내지 않았습니다(다른 보드로 보내지 않습니다) — 관리자에게 알려 주세요";
+
+/** 큐 대상의 반·학생 번호(모양이 틀리면 null — 조회하지 않고 거절한다). */
+function targetIds(target) {
+  const classId = String(target?.classId ?? "");
+  const studentId = String(target?.studentId ?? "");
+  return UUID.test(classId) && UUID.test(studentId) ? { classId, studentId } : null;
+}
+
+/** ① 오늘 그 반에 다니는가(큐에 오른 뒤 반이 바뀌었을 수 있다) — 반이동 당일 옛 반은 아니다. 수학·영어 같은 확인. */
+async function attendsToday(sql, tenant, classId, studentId) {
+  const rows = await sql`select start_date::text as start_date, end_date::text as end_date, is_transferred
+    from enrollments where tenant_id = ${tenant} and class_id = ${classId} and student_id = ${studentId}`;
+  const today = kstToday();
+  return rows.some((e) => isCurrentEnrollment({ startDate: e.start_date, endDate: e.end_date, isTransferred: e.is_transferred === true }, today));
+}
 
 /**
  * 반 보드 경로 타깃의 게시 대상 확정.
@@ -24,16 +58,12 @@ export const isClassRouteTarget = (target) => typeof target?.classId === "string
  *                 | {ok:false, note:string}>}  note = 화면에 그대로 나가는 한글 사유 · others = 그 반 보드의 **다른** 원아(교차 확인용)
  */
 export async function resolveNoticeClassTarget(sql, page, { tenant, centerId, target }) {
-  const classId = String(target?.classId ?? "");
-  const studentId = String(target?.studentId ?? "");
-  if (!UUID.test(classId) || !UUID.test(studentId)) return { ok: false, note: "발송 대상 정보가 올바르지 않습니다(반·학생 번호) — 다시 발송해 주세요" };
+  const ids = targetIds(target);
+  if (!ids) return { ok: false, note: BAD_TARGET_NOTE };
+  const { classId, studentId } = ids;
 
-  // ① 오늘 그 반에 다니는가(큐에 오른 뒤 반이 바뀌었을 수 있다).
-  const rows = await sql`select start_date::text as start_date, end_date::text as end_date, is_transferred
-    from enrollments where tenant_id = ${tenant} and class_id = ${classId} and student_id = ${studentId}`;
-  const today = kstToday();
-  const attending = rows.some((e) => isCurrentEnrollment({ startDate: e.start_date, endDate: e.end_date, isTransferred: e.is_transferred === true }, today));
-  if (!attending) return { ok: false, note: "이 학생은 지금 그 반에 다니지 않습니다 — 반을 확인한 뒤 다시 발송해 주세요" };
+  // ① 오늘 그 반에 다니는가.
+  if (!(await attendsToday(sql, tenant, classId, studentId))) return { ok: false, note: NOT_ATTENDING_NOTE };
 
   // ② 반 보드 대상 + 연결 + 원아 매칭 ok.
   if (!(await isClassRouteEligible(sql, tenant, classId, studentId)))
@@ -43,6 +73,32 @@ export async function resolveNoticeClassTarget(sql, page, { tenant, centerId, ta
   const resolved = await resolveClassTargets(sql, page, { tenant, centerId, classId, studentId });
   if (!resolved.ok) return { ok: false, note: resolved.error };
   if (!resolved.targets.length) return { ok: false, note: "이 학생의 ClassNote 원아를 찾지 못했습니다 — 반 매칭 후 다시 발송해 주세요" };
+  return { ok: true, boardId: resolved.boardId, boardName: resolved.boardName, enrolled: resolved.targets, others: resolved.others ?? [] };
+}
+
+/**
+ * 영어 반 방 경로 타깃의 게시 대상 확정 — `resolveNoticeClassTarget`과 같은 모양을 돌려준다(게시·중복 확인·교차 확인 코드를 그대로 탄다).
+ * 🔴 실패 사유는 벨 힌트(SQL `classnote_failure_hint` · 앱 `humanizeClassnoteError`)의 말을 담지 않는다 — 담으면 벨이 1인 보드를
+ *    만들거나 채우라고 안내한다(board-safety.mjs 상단 · 시험 no-personal-board-writes.test.mjs).
+ * 조회 실패(DB·ClassNote)는 throw — 호출부(공지 큐)가 그 대상만 실패로 적는다.
+ */
+export async function resolveNoticeEnglishTarget(sql, page, { tenant, centerId, target }) {
+  const ids = targetIds(target);
+  if (!ids) return { ok: false, note: BAD_TARGET_NOTE };
+  const { classId, studentId } = ids;
+
+  // ① 오늘 그 반에 다니는가.
+  if (!(await attendsToday(sql, tenant, classId, studentId))) return { ok: false, note: NOT_ATTENDING_NOTE };
+
+  // ② 그 영어 반의 반 방 연결이 지금도 있는가(사람이 이은 연결 — 큐에 오른 뒤 풀렸을 수 있다 · 영어 반이 아니면 없음).
+  //    없으면 막는다 — 1인 보드로 몰래 돌리지 않는다(화면이 '반 방으로 보냄'을 거짓말하게 된다).
+  const board = await loadEnglishClassBoard(sql, tenant, classId);
+  if (!board) return { ok: false, note: ENGLISH_ROOM_GONE_NOTE };
+
+  // ③ 원아 = 원아 연결 ∩ 지금 그 방 원아(영어 보고서와 같은 함수 — 이름으로 찾지 않는다 · 방에 없으면 막는다).
+  const resolved = await resolveEnglishClassTargets(sql, page, { tenant, centerId, board, studentId });
+  if (!resolved.ok) return { ok: false, note: resolved.error };
+  if (!resolved.targets.length) return { ok: false, note: englishBlockedMessage("not_in_board", board.boardName) };
   return { ok: true, boardId: resolved.boardId, boardName: resolved.boardName, enrolled: resolved.targets, others: resolved.others ?? [] };
 }
 

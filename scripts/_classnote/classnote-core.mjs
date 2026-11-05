@@ -21,7 +21,7 @@ import { hasMentText } from "./ment-text.mjs";
 import { CURRENT_SHARE_BASE, shareUrlVariants } from "./share-bases.mjs";
 import { fetchVideoSubmitLine, reportPostContent } from "./report-video-line.mjs";
 import { decideRoute, pickRouteClass, ROUTE_BLOCKED_MESSAGE } from "./class-route-decide.mjs";
-import { crossCheckOthers, getClassnoteMathRoute, isClassRouteEligible, resolveClassTargets } from "./classnote-class-route.mjs";
+import { crossCheckOthers, isClassRouteEligible, resolveClassTargets } from "./classnote-class-route.mjs";
 import { classRouteHaltReason, haltClassRoute } from "./class-route-halt.mjs";
 import { englishAnchorClass, isMissingTable, loadEnglishClassBoard, resolveEnglishClassTargets } from "./english-class-route.mjs";
 
@@ -599,7 +599,6 @@ export async function processQueueOnce(sql, browser, opts) {
   let admissionsCache;
   let showAttachments = false; // Phase 2: 파일 리포트를 내부 API로 보낼지 라우팅 게이트
   let childrenCache = null; // Phase 2: 파일 리포트 첫 만남에 fetchChildren 1회 캐시
-  let routeCfg = { route: "personal", pilot: new Set() }; // 수학 발송 경로(보고서 설정) — 준비 단계에서 읽는다
   if (post) {
     try {
       const admin = await getAdminSession(browser); // 세션 유지 — 폴마다 로그인하지 않는다(아래 주석)
@@ -618,7 +617,6 @@ export async function processQueueOnce(sql, browser, opts) {
       allowlist = a;
       allNames = nameRows.map((x) => (x.classnote_name || x.name || "").trim()).filter(Boolean);
       showAttachments = await isShowAttachmentsEnabled(sql, tenant);
-      routeCfg = await getClassnoteMathRoute(sql, tenant);
       preflightFails = 0;
       preflightBackoffUntil = 0;
     } catch (e) {
@@ -675,13 +673,13 @@ export async function processQueueOnce(sql, browser, opts) {
     }
     const className = boardClassName(r.subject, studentName); // 학생모드 보드 `(과목)학생명`
     let boardId = null; // Phase 2 내부 API 경로용 — 보드안전 게이트 통과 시 verdict.boardId
-    // 수학 발송 경로(보고서 설정, 2026-09-29) — personal = 위 1인 보드 · class = 반 보드(0302a 매칭 원아에게 1:1).
+    // 수학 = 늘 반 보드(0302a 매칭 원아에게 1:1 · 옛 보고서 설정 '수학 발송 경로'는 2026-11-05에 걷었다) · 그 밖 과목 = 위 1인 보드.
     // needs_class(반 정보 없는 보강) = 반을 추측하지 않는다 — 보강 반(makeup_class_id)이 곧 발송 반이고, 없으면 막는다.
     // 🔴 실제로 올릴 반 보드(원장 2026-09-30, 순수 판정 = class-route-decide.mjs `pickRouteClass`):
     //    정규 = 보고서 반 보드(살아 있으면 · 특강·연결이 남은 종강 포함) · 보강 = 보강 반 보드 · 보드가 없거나 반이 없으면 **막는다**
     //    (반별 경로에서 1인 보드로 돌아가는 길은 없다 — 1인 보드 원아 배정은 2026-11-02에 해제했다).
     //    조회 실패는 "대상"으로 둔다 — 아래 대상 확정에서 다시 드러난다(조용히 다른 보드로 새지 않게).
-    const decided = post ? decideRoute(routeCfg, r) : "personal";
+    const decided = post ? decideRoute(r) : "personal";
     let route = "personal";
     let routeClassId = r.class_id ?? null;
     let makeupWriteBack = null; // 보강 반으로 게시했고 적힌 '보낼 반'이 없으면 게시 뒤 그 반을 적는다

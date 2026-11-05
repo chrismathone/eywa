@@ -420,7 +420,7 @@ export async function saveLessonReport(
           }
         : null,
       anchorRequired: async () =>
-        SEND_CLASS_SUBJECTS.has(input.subject ?? "") && classRouteActive(await getTenantSettings(), user.displayName),
+        SEND_CLASS_SUBJECTS.has(input.subject ?? "") && classRouteActive(await getTenantSettings()),
     });
     if (!prepared.ok)
       return {
@@ -1134,7 +1134,7 @@ export async function saveAndQueueClassnote(
   }
 
   /**
-   * 반별 발송(ClassNote 모듈 + 보고서 설정 '수학 발송 경로') — 🔴 원장 2026-09-30: **보고서 반 = 출석부 반 = 발송 반**.
+   * 반별 발송(ClassNote 모듈 켜짐 · 수학은 늘 반별 — 옛 '수학 발송 경로' 설정은 2026-11-05에 없앰) — 🔴 원장 2026-09-30: **보고서 반 = 출석부 반 = 발송 반**.
    *  · 정규 보고서 = 보고서 반의 반 보드로만. 이 학생이 받을 반 보드가 없으면 **막고 안내**한다 — 다른 반으로 보내지 않는다
    *    (원장 결정 4 · 반 보드 동기화가 필요하다). 예전엔 다른 반을 고르게 했다(C5).
    *  · 보강 보고서 = **보강 반**(저장이 확인해 적은 `makeup_class_id`)의 반 보드로만. 보드가 없으면 반을 고르게 하고, 고른 반은
@@ -1142,7 +1142,7 @@ export async function saveAndQueueClassnote(
    *  · 반 정보가 없는 정규 행(옛 과목 단위 행)은 반별로 보낼 곳이 없다 — 막는다.
    * 🔴 확인 실패는 **발송하지 않는다**(fail-closed) — 모르는 채로 보내면 워커가 막거나 엉뚱한 곳을 시도한다.
    */
-  const routeApplies = classRouteActive(settings, user.displayName); // ClassNote 모듈이 꺼진 학원은 언제나 false(예전 그대로)
+  const routeApplies = classRouteActive(settings); // ClassNote 모듈이 꺼진 학원은 언제나 false(예전 그대로)
   let sendClassPick: { classId: string; via: string } | null = null; // 감사로그 — 어느 반으로
   if (routeApplies && SEND_CLASS_SUBJECTS.has(input.subject ?? "")) {
     const unqueue = async () => {

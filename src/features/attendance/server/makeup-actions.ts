@@ -68,7 +68,7 @@ export async function fetchMakeupHostClasses(
     ]);
     const wanted = subjects?.length ? new Set(subjects) : null;
     const noneBlocked =
-      classRouteActive(settings, user.displayName) && [...(wanted ?? SEND_CLASS_SUBJECTS)].some((k) => SEND_CLASS_SUBJECTS.has(k));
+      classRouteActive(settings) && [...(wanted ?? SEND_CLASS_SUBJECTS)].some((k) => SEND_CLASS_SUBJECTS.has(k));
     // 종강 반은 빼고(원장 2026-09-30 *"종강이 아닌 담당 반"*) · 과목이 같은 반만 · 담당 반이거나 학생이 다니는 반(`acceptMakeupAnchor`와 같은 조건).
     return {
       options: orderHostClasses(

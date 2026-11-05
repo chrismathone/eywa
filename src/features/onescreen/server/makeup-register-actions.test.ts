@@ -6,7 +6,7 @@ const h = vi.hoisted(() => ({
   readonly: null as string | null,
   student: { id: "s1" } as { id: string } | null,
   store: vi.fn(),
-  route: "personal" as string,
+  classnoteOff: true, // ClassNote 모듈 꺼짐 = 반별 발송 판정 없음(옛 '수학 발송 경로' 기존 방식 자리 — 2026-11-05 걷음)
   sync: vi.fn(),
 }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => h.user }));
@@ -32,12 +32,12 @@ vi.mock("./makeup-anchor-sync", () => ({
   ],
 }));
 vi.mock("@/features/owner/server/queries", () => ({
-  getTenantSettings: async () => ({ modules: { disabled: [] }, report: { classnoteMathRoute: h.route } }),
+  getTenantSettings: async () => ({ modules: { disabled: h.classnoteOff ? ["classnote"] : [] }, report: {} }),
 }));
 const { registerMakeupEntries } = await import("./makeup-register-actions");
 
 beforeEach(() => {
-  h.user = { id: "u1", tenantId: "t1", displayName: "강사" }; h.readonly = null; h.student = { id: "s1" }; h.route = "personal";
+  h.user = { id: "u1", tenantId: "t1", displayName: "강사" }; h.readonly = null; h.student = { id: "s1" }; h.classnoteOff = true;
   h.store.mockReset().mockResolvedValue({ ok: true, updatedAt: "2026-09-12T06:00:00Z" });
   h.sync.mockReset().mockResolvedValue({ ok: true, moved: 0, created: true });
 });
@@ -72,8 +72,8 @@ describe("보강 추가 저장 게이트", () => {
     const merge = h.store.mock.calls[0][2] as (p: SessionProgress) => SessionProgress;
     expect(makeupSessionEntries(merge({}))[0].makeupClassId).toBe("B");
   });
-  it("🔴 반별 발송 대상(수학 · 반 경로)은 '반 없이' 추가할 수 없다 — 반 미정 보강을 만들지 않는다", async () => {
-    h.route = "class";
+  it("🔴 반별 발송 대상(수학 · ClassNote 켜짐)은 '반 없이' 추가할 수 없다 — 반 미정 보강을 만들지 않는다", async () => {
+    h.classnoteOff = false;
     const res = await registerMakeupEntries(input);
     expect(res.ok).toBe(false);
     expect(h.store).not.toHaveBeenCalled();

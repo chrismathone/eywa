@@ -44,6 +44,20 @@ const ICON_TONE: Record<BigStatTone, string> = {
 const RAISED =
   "cursor-pointer text-left shadow-[0_0_0_1px_var(--line),0_4px_0_0_var(--line-strong)] transition-[transform,box-shadow] duration-100 hover:-translate-y-px active:translate-y-[3px] active:shadow-[0_0_0_1px_var(--line),0_1px_0_0_var(--line-strong)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 
+/**
+ * 카드 치수 — 실물과 스켈레톤(`BigStatSkeleton`)이 **같은 문자열**을 쓴다(2026-11-05 스켈레톤 2차 검수: ECS 목표·계획 차이·사용량
+ * 스켈레톤이 `h-20` 채운 면으로 그려 실물(약 115~123px)보다 짧았다). 🔴 **색은 넣지 않는다** — 스켈레톤의 투명 글자와 같은 칸에서
+ * 색 유틸이 겹치면 승자를 CSS 순서가 정한다([[#116]]).
+ */
+const STAT_SHELL = "bg-card block w-full rounded-2xl p-4 compact-chrome:p-3 xl:p-5";
+const STAT_LABEL_ROW = "flex items-center justify-between gap-2";
+const STAT_LABEL_TEXT = "text-sm font-medium compact-chrome:text-xs";
+const STAT_ICON_BOX = "flex size-8 shrink-0 items-center justify-center rounded-xl compact-chrome:size-6 compact-chrome:rounded-lg";
+const statValueRow = (size: "md" | "lg") => `${size === "lg" ? "mt-3" : "mt-2.5"} flex items-baseline gap-1 compact-chrome:mt-1`;
+const statValueText = (size: "md" | "lg") =>
+  `num font-bold leading-none tracking-tight compact-chrome:text-2xl ${size === "lg" ? "text-4xl" : "text-3xl"}`;
+const STAT_SUB = "mt-1.5 block min-h-[17px] text-xs compact-chrome:mt-0.5 compact-chrome:min-h-0";
+
 export function BigStat({
   label,
   value,
@@ -88,13 +102,13 @@ export function BigStat({
       data-stat=""
       data-stat-action={onClick ? "" : undefined}
       {...(onClick ? { type: "button" as const, onClick, "aria-label": ariaLabel } : {})}
-      className={`bg-card block w-full rounded-2xl p-4 compact-chrome:p-3 xl:p-5 ${onClick ? RAISED : "shadow-card"}`}
+      className={`${STAT_SHELL} ${onClick ? RAISED : "shadow-card"}`}
     >
-      <Box data-stat-label="" className="flex items-center justify-between gap-2">
-        <span className="text-text-dim text-sm font-medium compact-chrome:text-xs"><SheetText value={label} /></span>
+      <Box data-stat-label="" className={STAT_LABEL_ROW}>
+        <span className={`text-text-dim ${STAT_LABEL_TEXT}`}><SheetText value={label} /></span>
         {icon ? (
           <span
-            className={`${ICON_TONE[tone]} flex size-8 shrink-0 items-center justify-center rounded-xl compact-chrome:size-6 compact-chrome:rounded-lg`}
+            className={`${ICON_TONE[tone]} ${STAT_ICON_BOX}`}
             aria-hidden="true"
             data-stat-icon=""
           >
@@ -102,21 +116,39 @@ export function BigStat({
           </span>
         ) : null}
       </Box>
-      <Box data-stat-value="" className={`${size === "lg" ? "mt-3" : "mt-2.5"} flex items-baseline gap-1 compact-chrome:mt-1`}>
-        <span
-          className={`num font-bold leading-none tracking-tight compact-chrome:text-2xl ${
-            size === "lg" ? "text-4xl" : "text-3xl"
-          } ${valueClass ?? "text-foreground"}`}
-        >
+      <Box data-stat-value="" className={statValueRow(size)}>
+        <span className={`${statValueText(size)} ${valueClass ?? "text-foreground"}`}>
           {value}
         </span>
         {unit ? <span className="text-text-dim text-sm font-medium compact-chrome:text-xs"><SheetText value={unit} /></span> : null}
       </Box>
       {/* 보조라인 자리는 값이 없을 때 **비워두되 높이를 잡아** 카드 4장의 밑선을 맞춘다 — 컴팩트에선 그
           예약 높이를 없애고(min-h-0) 실제 내용이 있을 때만 차지하게 한다. */}
-      <Box data-stat-sub="" className="text-text-faint mt-1.5 block min-h-[17px] text-xs compact-chrome:mt-0.5 compact-chrome:min-h-0">
+      <Box data-stat-sub="" className={`text-text-faint ${STAT_SUB}`}>
         {sub ?? null}
       </Box>
     </Shell>
+  );
+}
+
+/**
+ * BigStat 자리 스켈레톤 — `loading.tsx`에서 숫자 카드를 `h-20` 같은 손 치수로 그리지 말고 이것을 쓴다(위 치수 상수를 그대로 쓴다).
+ * 글자는 투명 글자로 줄 높이를 실물과 같게 잡는다. `StatStrip` 안에 두면 띠 규칙(`[data-stat]` 여백·선)도 실물처럼 입는다.
+ * - `icon` — 실물에 아이콘 칩이 있으면 켠다(칩 32px이 라벨 줄 높이를 정한다).
+ * - `sub` — 실물에 보조 줄 글이 있으면 켠다(없으면 빈 칸 — 띠 안에선 `:empty`로 접힌다).
+ */
+export function BigStatSkeleton({ size = "md", icon = false, sub = false }: { size?: "md" | "lg"; icon?: boolean; sub?: boolean }) {
+  const bar = "bg-bg-soft text-transparent animate-pulse rounded";
+  return (
+    <div data-stat="" aria-hidden className={`${STAT_SHELL} shadow-card`}>
+      <div data-stat-label="" className={STAT_LABEL_ROW}>
+        <span className={`${STAT_LABEL_TEXT} ${bar}`}>지표 이름</span>
+        {icon ? <span data-stat-icon="" className={`${STAT_ICON_BOX} bg-bg-soft animate-pulse`} /> : null}
+      </div>
+      <div data-stat-value="" className={statValueRow(size)}>
+        <span className={`${statValueText(size)} ${bar}`}>000</span>
+      </div>
+      <div data-stat-sub="" className={STAT_SUB}>{sub ? <span className={bar}>보조 줄 자리</span> : null}</div>
+    </div>
   );
 }

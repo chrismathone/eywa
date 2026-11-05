@@ -5,9 +5,14 @@
 //   그곳도 1인 보드 꼴 이름이면 건너뛴다(isPersonalBoardName).
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { emptyBoardNoticeNote, isPersonalBoardName, noBoardNoticeNote, noBoardReason } from "./board-safety.mjs";
 import { humanizeClassnoteError } from "../../src/features/report-admin/classnote-error.ts";
+
+// 영어 반 방 공지의 실패 문구(2026-11-04 · 1.0.15)도 같은 말 검사를 받는다 — 그 모듈이 끌어오는 브라우저 모듈은 문구 검사에 필요 없다.
+vi.mock("./classnote-admin-core.mjs", () => ({}));
+const { englishBlockedMessage } = await import("./english-class-route.mjs");
+const { ENGLISH_ROOM_GONE_NOTE } = await import("./notice-class-route.mjs");
 
 const ROOT = process.cwd();
 const DIR = join(ROOT, "scripts/_classnote");
@@ -87,6 +92,9 @@ describe("🔴 실패 사유 문구가 벨 힌트에 걸려 '1인 보드를 만�
     noBoardReason("(영어)홍길동"), noBoardReason("(수학)홍길동"), noBoardReason("중등M 중1 BS3E"),
     noBoardNoticeNote("(영어)홍길동"), noBoardNoticeNote("(수학)홍길동"),
     emptyBoardNoticeNote("(영어)홍길동"), emptyBoardNoticeNote("(수학)홍길동"),
+    // 영어 반 방(보고서·공지 공용 사유) · 공지가 반 방으로 정해진 뒤 연결이 풀린 경우
+    englishBlockedMessage("no_link", "Jennifer 초6 MED a (화수금)"), englishBlockedMessage("not_in_board", "Jennifer 초6 MED a (화수금)"),
+    ENGLISH_ROOM_GONE_NOTE,
   ];
   it("힌트 말을 읽어 왔다(보드 없음·프로비저닝·미가입 등)", () => {
     expect(words).toEqual(expect.arrayContaining(["보드 없음", "프로비저닝", "미가입", "학생 없음", "보드 미배정", "배정 필요"]));

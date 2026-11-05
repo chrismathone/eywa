@@ -27,6 +27,8 @@ export type NoticeCandidate = {
 // attachments = 그 학생에게만 붙는 이미지/파일(0130a, 예: 학생별 교재요청서 PNG). 공통 첨부는 큐 행(classnote_notices.attachments).
 // classId·className = **반 보드 경로**(수학, 2026-10-02) — 있으면 워커가 1인 보드가 아니라 그 반 보드의 그 학생 원아에게 1:1로 올린다
 //   (server/notice-class-route.ts가 삼자 일치로 정한다). 이때 `board`는 보드를 찾는 값이 아니라 결과↔대상을 맞추는 표시 키다(classTargetKey).
+// subject = `"english"`이면 **영어 반 방 경로**(2026-11-04 · AywaSync 1.0.15) — 그 영어 반에 이어진 ClassNote 반 방(s2_0006)의 그 학생 원아에게.
+//   수학 반 보드 대상에는 싣지 않는다(옛 큐 행과 같은 모양 — 워커는 표식이 없으면 수학 반 보드로 본다).
 export type NoticeTarget = {
   studentId: string;
   studentName: string;
@@ -35,6 +37,7 @@ export type NoticeTarget = {
   attachments?: NoticeAttachment[];
   classId?: string;
   className?: string;
+  subject?: "english";
 };
 /**
  * 제외 사유. `no_class_board` = 반 보드 경로인데 이 학생이 받을 반 보드가 없다(연결 없음·원아 매칭 보류) ·

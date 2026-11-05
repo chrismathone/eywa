@@ -110,12 +110,22 @@ export function PageHeader({
  *    (`PageMaximizeFallbackBar`)이 잠깐 섰다 사라지며 본문이 튀고, 로딩이 길어지면 돌아올 길이 없다.
  * - `hideCompact` — 실 화면이 헤더를 `compact-chrome:hidden` 래퍼로 감싸 창·모바일에서 아예 없앨 때(시간표·강사 시트 주간·월간).
  * - `actions` — 실 헤더 오른쪽 동작 자리(높이를 그 컨트롤과 같은 변수로 — 스켈레톤 캐논).
+ * - `stats` — 실 헤더가 `stats=`로 요약 카드·띠를 끼우면 같은 자리(구분선 위)에 그 스켈레톤(`StatStripSkeleton`·`BigStatSkeleton`).
  */
-export function PageHeaderSkeleton({ hideCompact = false, actions }: { hideCompact?: boolean; actions?: ReactNode }) {
+export function PageHeaderSkeleton({
+  hideCompact = false,
+  actions,
+  stats,
+}: {
+  hideCompact?: boolean;
+  actions?: ReactNode;
+  stats?: ReactNode;
+}) {
   return (
     <header
       data-page-header=""
-      className={`border-line-faint shrink-0 border-b pb-3 compact-chrome:pb-2 ${hideCompact ? "compact-chrome:hidden" : ""}`}
+      // 실 헤더와 같은 세로 쌓기·간격 — `stats` 칸이 제목 줄과 실물만큼 떨어진다(빠지면 요약 띠가 붙어 도착 때 본문이 16px 밀렸다, 2026-11-05 리뷰).
+      className={`border-line-faint flex shrink-0 flex-col gap-4 border-b pb-3 compact-chrome:gap-3 compact-chrome:pb-2 ${hideCompact ? "compact-chrome:hidden" : ""}`}
     >
       <div data-page-header-row="" className="flex items-center justify-between gap-3 px-1">
         {/* 줄 높이 = 실 제목 줄(text-xl 한 줄 = 1lh). 컴팩트(창·모바일)에선 제목이 접히고 16px 라벨 한 줄(h-6)만 남는다. */}
@@ -131,6 +141,7 @@ export function PageHeaderSkeleton({ hideCompact = false, actions }: { hideCompa
           <PageMaximizeButton />
         </div>
       </div>
+      {stats ?? null}
     </header>
   );
 }

@@ -15,7 +15,7 @@ import {
 const { settings } = vi.hoisted(() => ({
   settings: {
     modules: { disabled: [] as string[] },
-    report: { classnoteSendEnabled: true, classnoteSubjects: ["math"], classnoteMathRoute: "class", classnoteMathRoutePilot: [] as string[] },
+    report: { classnoteSendEnabled: true, classnoteSubjects: ["math"] },
     operations: { subjects: [{ key: "math", label: "수학", color: "blue" }] },
   },
 }));

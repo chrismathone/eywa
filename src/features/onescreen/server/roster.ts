@@ -46,6 +46,7 @@ import { getRosterReservationsOn } from "@/features/attendance/server/makeup-res
 import { applyReservedMakeup, planReservedMakeup } from "../reserved-makeup";
 import { holidayNameOrNull } from "@/features/attendance/server/holiday";
 import { getSplitsOnDate } from "@/features/class-splits/server/queries";
+import { loadEnglishMonthlyEvals } from "./english-monthly";
 import { planSplitRows } from "../split-rows";
 import { autoUnitsOn, isAutoUnitsSubject, toAutoUnitsSchedule } from "@/features/attendance/auto-units";
 import { getLessonProfile } from "@/features/owner/server/lesson-profile";
@@ -634,6 +635,13 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     : allClasses.filter((c) => todayIds.has(c.id) || jjIds.has(c.id));
   const classById = new Map(activeClasses.map((c) => [c.id, c]));
   const activeIds = activeClasses.map((c) => c.id);
+  // EiE 월간 보고서 점수(2026-11-05) — 영어 반만, 본 로스터 조회와 **나란히**(B4) 돌리고 아래에서 행에 싣는다.
+  // 실패·영역 칸 미적용이면 빈 결과(원스크린은 그대로 뜬다 — english-monthly.ts).
+  const monthlyEvalsP = loadEnglishMonthlyEvals(
+    user.tenantId,
+    activeClasses.filter((c) => c.subject === "english").map((c) => c.id),
+    targetDate,
+  );
 
   // 3) 대상 날짜 시점 수강생 — start≤date AND (end null OR end≥date). null 양단 허용(레거시 안전).
   // ⚠️ end_date IS NULL 고정이면 과거 날짜 마감 시 그새 종료된 학생이 누락되고, 출결 write 게이트(날짜기준)와
@@ -1825,6 +1833,15 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     last_read_at: string | null;
   };
   const readBySid = new Map((readStats as ReadStatRow[]).map((r) => [r.student_id, r]));
+  const monthlyEvals = await monthlyEvalsP;
+  if (monthlyEvals.size) {
+    for (const s of byStudent.values()) {
+      for (const su of s.subjects) {
+        const ev = su.classId ? monthlyEvals.get(`${su.classId}|${s.id}`) : undefined;
+        if (ev) su.monthlyEval = ev;
+      }
+    }
+  }
   const anomalyCountBySid = new Map<string, number>();
   for (const e of anomalyEvents) anomalyCountBySid.set(e.student_id, (anomalyCountBySid.get(e.student_id) ?? 0) + 1);
   for (const s of byStudent.values()) {
