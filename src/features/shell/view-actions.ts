@@ -7,6 +7,9 @@ import { roleHome } from "@/lib/permissions";
 import { getActorPermMatrix } from "@/lib/auth/perm-matrix";
 import { canUseTeacherView, getShellView, isFullShellRole, VIEW_MODE_COOKIE } from "@/lib/auth/view-mode";
 import { canUseOtherTeacherView, loadViewAsTarget, VIEW_AS_COOKIE } from "@/lib/auth/view-as";
+import { isSignedInSuperAdmin } from "@/lib/auth/super-admin";
+import { canViewAsRole } from "@/lib/auth/role-hierarchy";
+import type { SystemRole } from "@/lib/permissions";
 import { teacherHomeForSubjects } from "@/lib/auth/teacher-home";
 import { ENGLISH_TEACHER_HOME, teacherHomeFromAssistantClasses } from "@/lib/auth/teacher-home-rule";
 import { createClient } from "@/lib/supabase/server";
@@ -164,8 +167,11 @@ export async function listTeacherViewTargets(): Promise<TeacherViewTarget[]> {
       .catch(() => new Set<string>()),
   ]);
   const teachingIds = new Set(classRows.map((r) => r.teacher_id).filter(Boolean) as string[]);
+  // 자기보다 높은 역할은 후보에서 뺀다 — 진입 검증(loadViewAsTarget)과 같은 위계 규칙(운영 계정은 예외 · 2026-11-05).
+  const anyRole = await isSignedInSuperAdmin();
   return staff
     .filter((s) => s.id !== user.id && s.system_role !== "student")
+    .filter((s) => anyRole || canViewAsRole(user.systemRole, s.system_role as SystemRole))
     .filter((s) => s.system_role === "teacher" || teachingIds.has(s.id) || jjIds.has(s.id))
     .map((s) => ({ id: s.id, name: s.display_name ?? "(이름 없음)" }))
     .sort((a, b) => a.name.localeCompare(b.name, "ko")); // Postgres 정렬은 로마자→한글(#84) — 한글 우선 정렬

@@ -15,6 +15,8 @@ export type NotificationInbox = {
   db: NotificationDb;
   /** 읽음 · 보관 · 삭제를 해도 되는가('읽기' 강사뷰는 보기만). */
   writable: boolean;
+  /** '다른 강사 뷰'로 그 강사의 받은함을 보는 중인가 — 벨이 OS 알림 · 중앙 팝업을 띄우지 않는다(보는 사람 컴퓨터에 남의 알림이 몰려 뜨지 않게). */
+  viewAs: boolean;
 };
 
 /**
@@ -33,6 +35,6 @@ export const notificationInbox = cache(async (): Promise<NotificationInbox | nul
   if (!user) return null;
   if (user.tenantView || (await isTenantViewWriteBlocked())) return null;
   const target = await viewAsTeacher();
-  if (target) return { tenantId: target.tenantId, recipientId: target.id, db: createAdminClient(), writable: target.access === "full" };
-  return { tenantId: user.tenantId, recipientId: user.id, db: await createClient(), writable: true };
+  if (target) return { tenantId: target.tenantId, recipientId: target.id, db: createAdminClient(), writable: target.access === "full", viewAs: true };
+  return { tenantId: user.tenantId, recipientId: user.id, db: await createClient(), writable: true, viewAs: false };
 });

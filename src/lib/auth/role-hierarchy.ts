@@ -54,6 +54,17 @@ export function assignableRoles(actor: SystemRole): SystemRole[] {
   );
 }
 
+/**
+ * '다른 강사 뷰' 대상으로 고를 수 있는 역할인가 — **자기와 같거나 낮은 역할만**(2026-11-05 강사뷰 적대 리뷰 치명).
+ * 강사뷰는 대상의 권한표·받은함·할 일·업무 판정을 그대로 쓰므로, 높은 역할을 고르면 그 사람의 힘을 빌린다
+ * (예: 강사뷰 권한을 개인 예외로 받은 상담사가 반을 맡은 원장을 골랐다). 같은 역할은 된다 — 자리를 비운 같은 급 직원을 대신한다.
+ * 운영 계정(실제 로그인) 예외와 운영 계정 대상 보호는 호출부(view-as.ts loadViewAsTarget)가 맡는다.
+ */
+export function canViewAsRole(actor: SystemRole, target: SystemRole): boolean {
+  if (target === "student") return false;
+  return ROLE_HIERARCHY[target] >= ROLE_HIERARCHY[actor];
+}
+
 export function canManageStaff(actor: SystemRole): boolean {
   return actor === "master" || actor === "admin" || actor === "manager";
 }

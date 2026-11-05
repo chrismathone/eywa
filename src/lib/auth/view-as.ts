@@ -4,7 +4,8 @@ import { cookies } from "next/headers";
 import { accessLevel, type SystemRole } from "@/lib/permissions";
 import { getActorPermMatrix } from "@/lib/auth/perm-matrix";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
-import { isSignedInSuperAdmin } from "@/lib/auth/super-admin";
+import { isProtectedSuperAdminTarget, isSignedInSuperAdmin } from "@/lib/auth/super-admin";
+import { canViewAsRole } from "@/lib/auth/role-hierarchy";
 import { createClient } from "@/lib/supabase/server";
 import { READONLY_TEACHER_VIEW_ERROR } from "@/lib/auth/view-as-message";
 import { tenantViewWriteError } from "@/lib/auth/tenant-view";
@@ -75,6 +76,12 @@ export async function loadViewAsTarget(targetId: string): Promise<CurrentUser | 
     .maybeSingle();
   if (!data || data.tenant_id !== user.tenantId || data.system_role === "student") return null;
   if (data.status !== "active") return null;
+  // 🔴 위계 — 자기보다 높은 역할은 대상이 될 수 없다(2026-11-05 적대 리뷰 치명: 강사뷰 권한을 개인 예외로 받은 상담사가
+  //    반을 맡은 원장을 골라 원장의 권한표 · 받은함 · 할 일 현황 · 업무 판정을 빌렸다). 같은 역할은 된다.
+  //    운영 계정(실제 로그인)은 위계 예외 · 대상이 운영 계정이면 실제 계정도 운영 계정일 때만(조회 실패 = 막음).
+  //    진입과 매 요청 재검증이 이 함수 하나를 쓰므로, 역할이 바뀌면 다음 요청부터 강사뷰가 풀린다.
+  if (!(await isSignedInSuperAdmin()) && !canViewAsRole(user.systemRole, data.system_role as SystemRole)) return null;
+  if (await isProtectedSuperAdminTarget(user.id, data.id)) return null;
   return { id: data.id, tenantId: data.tenant_id, email: data.email ?? "", displayName: ((data.display_name as string | null) ?? "").trim(), jobTitle: data.job_title ?? null, systemRole: data.system_role as SystemRole };
 }
 

@@ -29,10 +29,16 @@ function withDigest(rows: Row[], digest: Row, cap: number): Row[] {
  * 내 알림 목록(최신순) + 안 읽은 수 — 받은함(`notificationInbox`)의 받는 사람 것만(평소 = 본인 · RLS도 함께, '다른 강사 뷰' = 그 강사).
  * unread 배지는 **비보관만** 센다(보관=치웠다는 의사표시인데 배지가 계속 울리면 보관이 무의미).
  */
+/**
+ * 벨이 받는 목록. `viewAs` = '다른 강사 뷰'로 그 강사의 받은함을 보는 중(벨은 OS 알림 · 중앙 팝업을 띄우지 않는다),
+ * `readOnly` = 읽음 · 보관 · 삭제를 할 수 없다('읽기' 강사뷰 — 벨이 그 단추를 감춘다). 평소에는 둘 다 없다(2026-11-05 강사뷰 적대 리뷰).
+ */
+export type NotificationList = { unread: number; items: NotificationItem[]; tasks?: StaffTaskSummary; viewAs?: true; readOnly?: true };
+
 export async function getMyNotifications(
   view: NotificationView = "active",
   limit: number = NOTIFICATION_LIST_LIMIT,
-): Promise<{ unread: number; items: NotificationItem[]; tasks?: StaffTaskSummary }> {
+): Promise<NotificationList> {
   // 운영 콘솔의 '지점 보기'(읽기 전용) 중에는 벨을 비운다 — 알림은 지점이 아니라 **받는 사람**으로 걸러지는 표라
   // 그대로 읽으면 운영자 본인이 자기 지점에서 받은 알림이 보는 지점 화면에 뜬다(inbox.ts가 null).
   // 보기 쿠키가 남아 있는데 보기가 아닌 요청(끝났다 · 확인하지 못했다)도 같다 — 그 브라우저에는 보기 띠를 단 탭이 남아 있을 수 있다.
@@ -107,5 +113,7 @@ export async function getMyNotifications(
       return presentNotification(task ? { ...i, task } : i);
     }),
     ...(summary ? { tasks: summary } : {}),
+    ...(inbox.viewAs ? { viewAs: true as const } : {}),
+    ...(!inbox.writable ? { readOnly: true as const } : {}),
   };
 }

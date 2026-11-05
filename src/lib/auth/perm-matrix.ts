@@ -218,7 +218,9 @@ export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
     return [menu, { ...actor[menu], [user.systemRole]: level, [target.systemRole]: level, teacher: level }];
   })) as AccessMatrix, user.tenantId).then((m) =>
     // 다른 강사 뷰는 대상 값으로 내 역할 줄을 다시 쓰므로 개인 메뉴 차단을 한 번 더 누른다(user-menu-blocks.ts).
-    capContributionMenu(applyUserMenuBlocks(m, user.id, [user.systemRole, target.systemRole, "teacher"]), user.tenantId),
+    // 보는 사람(A)의 차단과 **대상(X)의 차단 둘 다** — X에게 막힌 메뉴가 X의 강사뷰에서 열리지 않게(2026-11-05 강사뷰 적대 리뷰),
+    // A에게 막힌 메뉴를 강사뷰로 우회하지 못하게.
+    capContributionMenu(applyUserMenuBlocks(applyUserMenuBlocks(m, user.id, [user.systemRole, target.systemRole, "teacher"]), target.id, [user.systemRole, target.systemRole, "teacher"]), user.tenantId),
   );
 });
 

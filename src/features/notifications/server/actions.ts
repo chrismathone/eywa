@@ -1,8 +1,7 @@
 "use server";
 
-import { DIGEST_TYPE, getMyNotifications, type NotificationView } from "./queries";
+import { DIGEST_TYPE, getMyNotifications, type NotificationList, type NotificationView } from "./queries";
 import { notificationInbox, type NotificationInbox } from "./inbox";
-import type { NotificationItem } from "../types";
 
 // ⚠️ 이 파일의 액션엔 **일부러 감사로그(logAction)를 달지 않는다**(2026-09-09 전수 점검).
 // 넷 다 **받은함**(`notificationInbox` — 평소 본인 · RLS `recipient_id = auth.uid()`도 함께)만 바꾼다(0074a: select·update·delete
@@ -26,7 +25,7 @@ export async function markNotificationsRead(
   ids?: string[],
   view: NotificationView = "active",
   limit?: number,
-): Promise<{ unread: number; items: NotificationItem[] }> {
+): Promise<NotificationList> {
   const inbox = await writableInbox();
   if (!inbox) return getMyNotifications(view, limit);
   let q = inbox.db
@@ -48,7 +47,7 @@ export async function archiveNotification(
   id: string,
   view: NotificationView = "active",
   limit?: number,
-): Promise<{ unread: number; items: NotificationItem[] }> {
+): Promise<NotificationList> {
   const inbox = await writableInbox();
   if (!inbox) return getMyNotifications(view, limit);
   await archiveHiddenDigests(inbox, id);
@@ -81,7 +80,7 @@ export async function unarchiveNotification(
   id: string,
   view: NotificationView = "archived",
   limit?: number,
-): Promise<{ unread: number; items: NotificationItem[] }> {
+): Promise<NotificationList> {
   const inbox = await writableInbox();
   if (!inbox) return getMyNotifications(view, limit);
   await inbox.db.from("notifications").update({ archived_at: null })
@@ -94,7 +93,7 @@ export async function deleteNotification(
   id: string,
   view: NotificationView = "active",
   limit?: number,
-): Promise<{ unread: number; items: NotificationItem[] }> {
+): Promise<NotificationList> {
   const inbox = await writableInbox();
   if (!inbox) return getMyNotifications(view, limit);
   await archiveHiddenDigests(inbox, id);
@@ -113,7 +112,7 @@ export async function deleteAllNotifications(
   view: NotificationView = "active",
   limit?: number,
   upTo?: string,
-): Promise<{ unread: number; items: NotificationItem[] }> {
+): Promise<NotificationList> {
   const inbox = await writableInbox();
   if (!inbox) return getMyNotifications(view, limit);
   let q = inbox.db.from("notifications").delete().eq("tenant_id", inbox.tenantId).eq("recipient_id", inbox.recipientId);

@@ -10,11 +10,13 @@ const h = vi.hoisted(() => ({
   jjIds: [] as string[],
   settingsFail: false,
   call: 0,
+  role: "master",
+  superAdmin: false,
 }));
 
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined, set: vi.fn(), delete: vi.fn() }) }));
 vi.mock("@/lib/auth/current-user", () => ({
-  getCurrentUser: async () => ({ id: "u-me", systemRole: "master", tenantId: "t1" }),
+  getCurrentUser: async () => ({ id: "u-me", systemRole: h.role, tenantId: "t1" }),
 }));
 vi.mock("@/lib/auth/view-mode", () => ({
   canUseTeacherView: async () => true,
@@ -28,6 +30,7 @@ vi.mock("@/lib/auth/view-as", () => ({
   VIEW_AS_COOKIE: "eywa-view-as",
 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({}) }));
+vi.mock("@/lib/auth/super-admin", () => ({ isSignedInSuperAdmin: async () => h.superAdmin }));
 // 호출 순서 = 직원 → 반(view-actions의 Promise.all 순서).
 vi.mock("@/lib/supabase/batch", () => ({
   fetchAllPaged: async () => (h.call++ === 0 ? h.staff : h.classes),
@@ -47,6 +50,8 @@ vi.mock("@/lib/auth/teacher-scope", () => ({ getTeacherScope: async () => ({ cla
 beforeEach(() => {
   h.call = 0;
   h.settingsFail = false;
+  h.role = "master";
+  h.superAdmin = false;
   h.staff = [
     { id: "u-t", display_name: "박소선", system_role: "teacher" },
     { id: "u-jj", display_name: "김동후", system_role: "viewer" },
@@ -75,5 +80,30 @@ describe("'다른 강사 뷰' 대상 — JJ 보고서 담당", () => {
   it("설정을 못 읽어도 목록은 산다(JJ 갈래만 빈다)", async () => {
     h.settingsFail = true;
     expect(await list()).toEqual(["박소선"]);
+  });
+});
+
+// 위계(2026-11-05 강사뷰 적대 리뷰 치명) — 자기보다 높은 역할은 후보에 서지 않는다(진입 검증 loadViewAsTarget과 같은 규칙).
+describe("'다른 강사 뷰' 대상 — 자기보다 높은 역할은 빠진다", () => {
+  beforeEach(() => {
+    h.staff = [
+      { id: "u-t", display_name: "박소선", system_role: "teacher" },
+      { id: "u-owner", display_name: "원장", system_role: "master" },
+      { id: "u-adm", display_name: "관리자", system_role: "admin" },
+    ];
+    h.classes = [{ teacher_id: "u-owner" }, { teacher_id: "u-adm" }]; // 둘 다 반을 맡았다(겸직)
+    h.jjIds = [];
+  });
+  it("관리자는 강사 · 같은 관리자만 — 반을 맡은 원장은 빠진다", async () => {
+    h.role = "admin";
+    expect(await list()).toEqual(["관리자", "박소선"]);
+  });
+  it("원장은 모두", async () => {
+    expect(await list()).toEqual(["관리자", "박소선", "원장"]);
+  });
+  it("운영 계정(실제 로그인)은 역할과 상관없이 모두", async () => {
+    h.role = "admin";
+    h.superAdmin = true;
+    expect(await list()).toEqual(["관리자", "박소선", "원장"]);
   });
 });

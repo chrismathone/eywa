@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { canSeeStaffMember, STAFF_SCOPE_DENIED_MSG } from "@/features/staff/department/server/subject-scope";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -54,8 +55,12 @@ const REASON_REQUIRED_MSG =
   "사유 없이 저장하려면 마이그레이션 0277a가 필요합니다 — 그전까지는 사유를 적어 주세요";
 
 async function requireAdjuster() {
-  const user = await getCurrentUser();
+  // '다른 강사 뷰'면 그 직원으로 판정하고(원장 역할 · 조정 지정 · 볼 수 있는 직원), '읽기'면 저장하지 않는다
+  // (2026-11-05 강사뷰 적대 리뷰 — 실제 계정이 원장이라 '읽기' 강사뷰에서도 조정이 저장됐다). 감사로그는 실제 계정(logAction).
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" as const };
+  const readonly = await readonlyTeacherViewError();
+  if (readonly) return { error: readonly };
   const [settings, isSuperAdmin, canOpenStaff] = await Promise.all([
     getTenantSettings(),
     isCurrentUserSuperAdmin(),

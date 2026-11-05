@@ -96,6 +96,10 @@ const GUARDED_ACTION_FILES: { file: string[]; what: string }[] = [
     file: ["src", "features", "class-sheets", "server", "actions.ts"],
     what: "ECS 반 순서 저장(다른 강사 뷰면 거절 — 보는 사람 계정에 대상 순서를 덮지 않게)",
   },
+  {
+    file: ["src", "features", "leave", "server", "actions.ts"],
+    what: "연차 조정 추가·삭제(실제 계정이 원장이라 '읽기' 강사뷰에서도 저장됐다 · 2026-11-05)",
+  },
 ];
 
 describe("'다른 강사 뷰'(열람 전용) 배선 가드", () => {
@@ -107,6 +111,19 @@ describe("'다른 강사 뷰'(열람 전용) 배선 가드", () => {
   for (const { file, what } of GUARDED_ACTION_FILES) {
     it(`${file.at(-1)}(${what})에 readonlyTeacherViewError 가드가 있다`, () => {
       expect(read(...file)).toContain("readonlyTeacherViewError");
+    });
+  }
+
+  // 강사뷰 화면에 입구가 없는 학원 쪽 쓰기 — 강사뷰(전체 · 읽기) 중이면 아예 거절한다(2026-11-05 강사뷰 적대 리뷰).
+  //   업무 비서: 할 일 게이트가 대상 X를 돌려주므로 직접 호출 · 다른 탭 자동 전송이 X 명의 후보를 덮고 X 명의로 AI를 불렀다.
+  //   오늘 수학 메뉴: 실제 계정(원장)으로 바깥 앱에 저장됐다.
+  for (const file of [
+    ["src", "app", "api", "dashboard", "secretary", "input", "route.ts"],
+    ["src", "app", "api", "dashboard", "secretary", "route.ts"],
+    ["src", "features", "integrations", "todays-math", "server", "branch-menus-actions.ts"],
+  ]) {
+    it(`${file.slice(-2).join("/")} — 강사뷰 중이면 거절한다`, () => {
+      expect(read(...file)).toMatch(/if \(await viewAsTeacher\(\)\) return/);
     });
   }
 

@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NotificationBell } from "./notification-bell";
+import { IMPORTANT_NOTIFICATION_TYPES } from "@/features/notifications/important";
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -156,4 +157,34 @@ it("전체 삭제는 확인을 한 번 거친 뒤 지금 뷰만 지운다", asyn
   fireEvent.click(screen.getByRole("button", { name: "삭제" }));
   expect(mocks.clear).toHaveBeenCalledWith("active", 20, "2026-09-11T00:00:00Z");
   expect(await screen.findByText("새 알림이 없습니다")).toBeTruthy();
+});
+
+// '다른 강사 뷰'(2026-11-05 강사뷰 적대 리뷰) — 그 강사의 받은함을 보는 중이면 OS 알림 · 중앙 팝업을 띄우지 않고,
+// '읽기'면 읽음 · 보관 · 삭제 단추를 감추고 열어도 읽음으로 바꾸지 않는다(서버도 막는다).
+it("강사뷰(읽기) — 쓰기 단추가 없고, 열어도 읽음 처리를 보내지 않으며, 중요 알림도 팝업으로 띄우지 않는다", async () => {
+  const { showDesktopNotification } = await import("@/features/notifications/desktop-notify");
+  const important = { id: "imp", type: IMPORTANT_NOTIFICATION_TYPES[0]!, title: "대상 강사의 중요 알림", body: "본문", link: null, read: false, createdAt: "2026-11-05T00:00:00Z" };
+  mocks.fetch.mockResolvedValue({ unread: 1, items: [important], viewAs: true, readOnly: true });
+  render(<NotificationBell />);
+  fireEvent.click(await screen.findByRole("button", { name: "알림 1개" }));
+  await screen.findByRole("button", { name: /대상 강사의 중요 알림/ });
+  expect(screen.queryByRole("button", { name: "모두 읽음" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "전체 삭제" })).toBeNull();
+  expect(screen.queryByRole("button", { name: /보관$/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: /삭제$/ })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /대상 강사의 중요 알림/ }));
+  expect(mocks.mark).not.toHaveBeenCalled();
+  expect(showDesktopNotification).not.toHaveBeenCalled();
+});
+
+it("평소에는 중요 알림을 팝업으로 띄우고 쓰기 단추가 있다(위 시험의 대조군)", async () => {
+  const { showDesktopNotification } = await import("@/features/notifications/desktop-notify");
+  const important = { id: "imp2", type: IMPORTANT_NOTIFICATION_TYPES[0]!, title: "내 중요 알림", body: "본문", link: null, read: false, createdAt: "2026-11-05T00:00:00Z" };
+  localStorage.removeItem("eywa-notify-alerted");
+  mocks.fetch.mockResolvedValue({ unread: 1, items: [important] });
+  render(<NotificationBell />);
+  await waitFor(() => expect(showDesktopNotification).toHaveBeenCalled());
+  fireEvent.click(await screen.findByRole("button", { name: "알림 1개" }));
+  expect(await screen.findByRole("button", { name: "모두 읽음" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "전체 삭제" })).toBeTruthy();
 });

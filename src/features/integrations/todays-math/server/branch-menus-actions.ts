@@ -5,6 +5,7 @@ import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { isFeatureOptedIn } from "@/lib/license/server";
 import { tenantViewOutboundError } from "@/lib/auth/tenant-view-outbound";
+import { viewAsTeacher } from "@/lib/auth/view-as";
 import { logAction } from "@/features/audit/server/log";
 import { sourceBindingForTenant, targetRequest } from "../sync-server";
 import { menuDiff, todaysMathMenusSchema, todaysMathMenusWriteReplySchema, type TodaysMathMenus } from "../branch-menus";
@@ -24,6 +25,8 @@ const UNAVAILABLE = "오늘 수학에 연결하지 못했습니다. 잠시 뒤 �
 async function gate() {
   const user = await getCurrentUser();
   if (!user) return { error: "원장만 바꿀 수 있습니다." } as const;
+  // 학원 설정 화면 것이라 강사뷰에는 입구가 없다 — 강사뷰 중 직접 부르면 실제 계정(원장)으로 바깥 앱에 저장됐다(2026-11-05 강사뷰 적대 리뷰).
+  if (await viewAsTeacher()) return { error: "강사뷰에서는 바꿀 수 없습니다. 강사뷰를 끝내고 다시 시도해 주세요." } as const;
   // 원장 역할 + 총괄(새 제한 게이트 자동 통과 — 결정 로그 2026-08-13).
   if (user.systemRole !== "master" && !(await isCurrentUserSuperAdmin())) return { error: "원장만 바꿀 수 있습니다." } as const;
   if (!(await isFeatureOptedIn(user.tenantId, "todays_math"))) return { error: "오늘 수학 연결이 꺼져 있습니다." } as const;
