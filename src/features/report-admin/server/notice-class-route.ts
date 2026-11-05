@@ -214,7 +214,7 @@ export async function routeNoticeCandidates(args: {
   supabase: ServerClient;
   tenantId: string;
   settings: Parameters<typeof classRouteActive>[0] & { report: { classnoteSubjects: readonly string[] } };
-  /** 보내는 사람 표시 이름(시범 강사 판정용 — 수학 발송 경로가 '시범'일 때만 쓰인다). */
+  /** 보내는 사람 표시 이름 — 지금은 쓰지 않는다(옛 '수학 발송 경로 = 일부 선생님만' 판정 자리 · classRouteActive 둘째 인자를 걷을 때 함께 걷는다). */
   senderName: string | null;
   candidates: readonly RoutedCandidate[];
 }): Promise<{ classTargets: NoticeTarget[]; rest: NoticeCandidate[]; skipped: NoticeSkip[] }> {
@@ -224,7 +224,7 @@ export async function routeNoticeCandidates(args: {
   const isEnglish = (c: RoutedCandidate) => c.subject === ENGLISH_NOTICE_SUBJECT && sendable(c);
   const plain = (list: readonly RoutedCandidate[]): NoticeCandidate[] =>
     list.map((c) => ({ studentId: c.studentId, name: c.name, classnoteName: c.classnoteName, subject: c.subject }));
-  // 경로가 꺼져 있거나(수학 = 설정·모듈 · 영어 = 모듈) 켜져 있는 연동 PC가 아직 처리 못 하면 그 과목은 전부 기존 경로.
+  // ClassNote 모듈이 꺼져 있거나(두 과목 모두 이 조건 하나) 켜져 있는 연동 PC가 아직 처리 못 하면 그 과목은 전부 기존 경로.
   // 하트비트는 한 번만 읽는다(두 과목이 같은 발송 PC 목록을 본다).
   const wantMath = candidates.some(isMath) && classRouteActive(settings, senderName);
   const wantEnglish = candidates.some(isEnglish) && !(settings.modules?.disabled ?? []).includes("classnote");
