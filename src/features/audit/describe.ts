@@ -1517,6 +1517,10 @@ export function auditDetail(
       );
     case "classnote_board_enroll":
       return join(str(m.className), m.kind === "request" ? "지금 동기화" : "정기 동기화");
+    case "classnote_child_link_confirm":
+    case "classnote_child_link_unconfirm":
+      // 왜 확인했는지(되돌렸는지)만 — 학생은 대상 칸에 있다 · 원아 번호·연결 근거 코드·전화는 싣지 않는다.
+      return join(str(m.why));
     case "classnote_board_release":
       return join(str(m.className), str(m.reason), m.kind === "request" ? "지금 동기화" : "정기 동기화");
     case "classnote_offboard":

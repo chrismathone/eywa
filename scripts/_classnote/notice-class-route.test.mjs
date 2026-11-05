@@ -32,7 +32,7 @@ vi.mock("./board-safety.mjs", () => ({
 }));
 vi.mock("./notice-attachments.mjs", () => ({ createNoticeMediaUploader: () => ({}), fetchNoticeMedia: async () => ({ ok: true }), mediaForNoticeTarget: () => null }));
 
-const { findNoticeLeaks, isClassRouteTarget, resolveNoticeClassTarget, snapshotChildReports } = await import("./notice-class-route.mjs");
+const { NOT_STARTED_NOTE, ON_HOLD_NOTE, attendanceNote, findNoticeLeaks, isClassRouteTarget, resolveNoticeClassTarget, snapshotChildReports } = await import("./notice-class-route.mjs");
 const { crossCheckNoticeBoards, processTarget } = await import("./classnote-notice-core.mjs");
 const { classRouteHaltReason, haltClassRoute, resetClassRouteHaltForTest } = await import("./class-route-halt.mjs");
 
@@ -215,5 +215,29 @@ describe("공지 워커 — 교차 확인과 비상 정지", () => {
     expect(r).toMatchObject({ ok: false });
     expect(r.note).toContain("비상 정지");
     expect(m.posts).toEqual([]);
+  });
+});
+
+// 원장 2026-11-05 *"수업 시작전이거나 휴원 중인 학생은 클래스노트 배정을 하지말것"* — 워커가 게시 직전에 다시 가른다(수학·영어 공용).
+describe("attendanceNote — 오늘 그 반에 다니는가(휴원·시작 전 구분)", () => {
+  const T = "2026-11-05";
+  const row = (over = {}) => ({ start_date: "2026-03-01", end_date: null, is_transferred: false, on_hold: false, status: "enrolled", ...over });
+  it("다니면 null", () => {
+    expect(attendanceNote([row()], T)).toBeNull();
+    // 한 줄은 휴원이어도 휴원 아닌 오늘 줄이 있으면 다닌다(같은 반 분리등원 줄)
+    expect(attendanceNote([row({ on_hold: true }), row()], T)).toBeNull();
+  });
+  it("그 수강이 휴원·대기이거나 학생이 휴원이면 휴원", () => {
+    expect(attendanceNote([row({ on_hold: true })], T)).toBe(ON_HOLD_NOTE);
+    expect(attendanceNote([row({ status: "on_hold" })], T)).toBe(ON_HOLD_NOTE);
+  });
+  it("끝나지 않은 줄이 아직 시작 전이면 시작 전", () => {
+    expect(attendanceNote([row({ start_date: "2026-11-10" })], T)).toBe(NOT_STARTED_NOTE);
+  });
+  it("끝났거나 줄이 없으면 다니지 않음(종전 사유)", () => {
+    expect(attendanceNote([row({ end_date: "2026-11-01" })], T)).toContain("지금 그 반에 다니지 않습니다");
+    expect(attendanceNote([], T)).toContain("지금 그 반에 다니지 않습니다");
+    // 시작일보다 종료일이 앞선(지운) 예약 줄은 시작 전이 아니다
+    expect(attendanceNote([row({ start_date: "2026-11-10", end_date: "2026-11-09" })], T)).toContain("지금 그 반에 다니지 않습니다");
   });
 });

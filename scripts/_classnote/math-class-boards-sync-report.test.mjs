@@ -22,6 +22,7 @@ vi.mock("./math-class-boards-load.mjs", () => ({
   loadLinkedBoards: async () => new Map(),
   loadClosedLinked: async () => [],
   loadVerifiedChildren: async () => new Map(),
+  loadConfirmedChildPairs: async () => new Set(),
   loadPlan: async () => ({ plans: plans(), boards: [], membersByBoard: new Map(), admissions: new Map(), failed: 0 }),
 }));
 vi.mock("./class-board-release.mjs", () => ({

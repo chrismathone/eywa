@@ -19,7 +19,7 @@ import type { PreparedTextbookNotice, TextbookNoticeSkip } from "@/features/bill
 import { DEFAULT_TEXTBOOK_MENT } from "@/features/billing/textbook-notice";
 import { initialNoticePicks } from "@/features/billing/textbook-notice-subject";
 import { useMentDraft } from "@/features/billing/textbook-ment";
-import { groupTargets, mathRouteOf, SendSkipList, SendTargetList } from "./_send-targets";
+import { groupTargets, sendBlockOf, SendSkipList, SendTargetList } from "./_send-targets";
 import { MentField, NoticeBanners } from "./_send-fields";
 import { CoverPicker, FormCaptureStatus } from "./_send-images";
 import { NoticePreview } from "./_send-preview";
@@ -93,11 +93,8 @@ export function TextbookSendDialog({
   const capture = useFormCapture(jobs);
 
   const { targets, orphans } = groupTargets(prep?.orders ?? []);
-  // 수학 반 보드 경로에서 받을 반 보드가 없는 학생은 대상에서 뺀다 — "N명 발송"이 실제로 나가는 수와 같게.
-  const routeBlocked = (studentId: string) => {
-    const r = mathRouteOf(prep?.mathRoute, studentId, pick[studentId]);
-    return !!r && "blocked" in r;
-  };
+  // 수학 반 보드 경로에서 받을 반 보드가 없는 학생 · 수업 시작 전·휴원(대기) 중인 학생은 대상에서 뺀다 — "N명 발송"이 실제로 나가는 수와 같게.
+  const routeBlocked = (studentId: string) => !!sendBlockOf(prep?.mathRoute, prep?.standing, studentId, pick[studentId]);
   const sendable = targets.filter((t) => t.subjects.length > 0 && pick[t.studentId] && !routeBlocked(t.studentId));
   const unpicked = targets.filter((t) => t.subjects.length > 1 && !pick[t.studentId]).length;
   const head = sendable[0] ?? null;
@@ -181,6 +178,7 @@ export function TextbookSendDialog({
                 onPick={(id, v) => setPick((p) => ({ ...p, [id]: v }))}
                 labelOf={subjectMaps.labelOf}
                 mathRoute={prep.mathRoute}
+                standing={prep.standing}
               />
               {unpicked > 0 ? (
                 <p className="text-danger text-xs">

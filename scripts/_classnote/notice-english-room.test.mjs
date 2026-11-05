@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({
   enrollments: [], boards: [], links: [], roomChildren: [], detail: {}, sqlTexts: [], sqlCalls: [], roomReads: [],
-  posts: [], listed: [], byChild: null, reads: [], mathCalls: 0, postStatus: 201,
+  posts: [], listed: [], byChild: null, reads: [], mathCalls: 0, postStatus: 201, guard: null,
 }));
 // 수학 반 보드 확정은 이 시험의 대상이 아니다 — 불리면 센다(영어 대상이 수학으로 새지 않는지).
 vi.mock("./classnote-class-route.mjs", () => ({
@@ -37,16 +37,29 @@ vi.mock("./classnote-admin-core.mjs", () => ({
   uploadToKage: async () => null,
   norm: (s) => String(s ?? "").replace(/\s/g, ""),
 }));
-vi.mock("./board-safety.mjs", () => ({
+// 생년 계산·이름 정규화는 진짜를 쓴다(원아 신분 가드 — child-identity.mjs).
+vi.mock("./board-safety.mjs", async (importOriginal) => ({
+  ...(await importOriginal()),
   boardNameAmbiguity: () => ({ ambiguous: false, siblings: [] }),
   evaluateBoardSafety: () => {
     throw new Error("1인 보드 안전 판정을 타면 안 된다");
   },
   kstSchoolYear: () => 2026,
 }));
+// 원아 신분 가드 재료(2026-11-05) — 학생·명부·확인 기록은 시험이 정한다(m.guard). 같은 집 찾기는 진짜 함수.
+vi.mock("./english-guard-load.mjs", async () => {
+  const { familyFinder } = await import("./child-identity.mjs");
+  return {
+    ENGLISH_GUARD_FRESH_MIN_MS: 60_000,
+    loadEnglishGuardInputs: async () => {
+      const students = new Map(m.guard.students.map((s) => [s.id, s]));
+      return { students, admissions: m.guard.admissions, verifiedOwners: new Map(), familyFor: familyFinder(students.values()), schoolYear: 2026, loadedAt: Date.now() };
+    },
+  };
+});
 vi.mock("./notice-attachments.mjs", () => ({ createNoticeMediaUploader: () => ({}), fetchNoticeMedia: async () => ({ ok: true }), mediaForNoticeTarget: () => null }));
 
-const { ENGLISH_ROOM_GONE_NOTE, isClassRouteTarget, isEnglishRoomTarget, resolveNoticeEnglishTarget } = await import("./notice-class-route.mjs");
+const { ENGLISH_ROOM_GONE_NOTE, NOT_STARTED_NOTE, ON_HOLD_NOTE, isClassRouteTarget, isEnglishRoomTarget, resolveNoticeEnglishTarget } = await import("./notice-class-route.mjs");
 const { processTarget } = await import("./classnote-notice-core.mjs");
 const { englishBlockedMessage } = await import("./english-class-route.mjs");
 const { classRouteHaltReason, haltClassRoute, resetClassRouteHaltForTest } = await import("./class-route-halt.mjs");
@@ -81,6 +94,11 @@ const ctx = () => ({ sql, tenant: "tn", centerId: 1, body: "공통 본문", auth
 
 beforeEach(() => {
   m.enrollments = [{ start_date: "2026-03-01", end_date: null, is_transferred: false }];
+  // 이준혁(초6 · 2014생) — 원아 5239556의 명부 이름·생년·보호자 전화가 맞는 학생(가드 통과).
+  m.guard = {
+    students: [{ id: STUDENT, name: "이준혁", grade: "초6", phones: ["010-1234-5678"] }],
+    admissions: new Map([[5239556, { name: "이준혁", birth: "2014-03-01", phones: ["010-1234-5678"], phone: "010-1234-5678", boardNames: [] }]]),
+  };
   m.boards = [{ board_id: String(ROOM), board_name: "Jennifer 초6 MED a (화수금)" }];
   // 이준혁: 5239556은 영어 반 방 원아, 5233052는 수학 반 보드에만 있는 원아(다계정)
   m.links = [{ child_id: "5239556" }, { child_id: "5233052" }];
@@ -141,6 +159,25 @@ describe("대상 확정 — 게시 직전에 다시 본다", () => {
     expect(await resolveNoticeEnglishTarget(sql, page, args())).toEqual({ ok: false, note: englishBlockedMessage("not_in_board", "Jennifer 초6 MED a (화수금)") });
     m.links = [];
     expect(await resolveNoticeEnglishTarget(sql, page, args())).toEqual({ ok: false, note: englishBlockedMessage("no_link", "Jennifer 초6 MED a (화수금)") });
+  });
+  // 원장 2026-11-05 *"수업 시작전이거나 휴원 중인 학생은 클래스노트 배정을 하지말것"* — 큐에 오른 뒤 바뀐 것도 게시 직전에 다시 막는다.
+  it("🔴 휴원 중(그 수강 휴원 또는 학생 휴원)이면 보내지 않는다 · 수업 시작 전이면 보내지 않는다(ClassNote를 읽지도 않는다)", async () => {
+    m.enrollments = [{ start_date: "2026-03-01", end_date: null, is_transferred: false, on_hold: true, status: "enrolled" }];
+    expect(await resolveNoticeEnglishTarget(sql, page, args())).toEqual({ ok: false, note: ON_HOLD_NOTE });
+    m.enrollments = [{ start_date: "2026-03-01", end_date: null, is_transferred: false, on_hold: false, status: "on_hold" }];
+    expect(await resolveNoticeEnglishTarget(sql, page, args())).toEqual({ ok: false, note: ON_HOLD_NOTE });
+    m.enrollments = [{ start_date: "2099-01-01", end_date: null, is_transferred: false, on_hold: false, status: "enrolled" }];
+    expect(await resolveNoticeEnglishTarget(sql, page, args())).toEqual({ ok: false, note: NOT_STARTED_NOTE });
+    expect(m.roomReads).toEqual([]);
+  });
+  // 원장 2026-11-05 *"형제 원아 연결이 뒤바뀐건 크리티컬함. 아주 섬세한 가드로 매칭해야함"*.
+  it("🔴 원아 명부 이름이 같은 집 형제 것이면(형제 뒤바뀜) 보내지 않는다 — 원아 연결이 이 학생을 가리켜도", async () => {
+    m.guard.students.push({ id: "sib", name: "이준서", grade: "초4", phones: ["010-1234-5678"] });
+    m.guard.admissions.set(5239556, { name: "이준서", birth: "2014-03-01", phones: ["010-1234-5678"], phone: "010-1234-5678", boardNames: [] });
+    const r = await resolveNoticeEnglishTarget(sql, page, args());
+    expect(r.ok).toBe(false);
+    expect(r.note).toContain("발송 보류");
+    expect(r.note).toContain("같은 집 다른 아이(이준서)");
   });
   it("반·학생 번호가 올바르지 않은 큐 행은 조회 없이 거절", async () => {
     expect((await resolveNoticeEnglishTarget(sql, page, { ...args(), target: target({ classId: "x" }) })).ok).toBe(false);

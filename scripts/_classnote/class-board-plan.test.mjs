@@ -639,7 +639,7 @@ describe("확인 기록이 아예 없는 학생 — 원아 연결(0185a)로 판�
       w.childLinks = new Map([[303, "j"]]);
       const v = judge(w, "j");
       expect(v.ok).toBe(false);
-      expect(v.reasons.join()).toContain('원아 "윤현소" 이름이 학생(윤정인)과 다름');
+      expect(v.reasons.join()).toContain('원아 "윤현소"(명부·프로필) 이름이 학생(윤정인)과 다름');
     });
     it("🔴 실측 모양 — 연결·프로필 이름은 맞는데 운영관리 명부 이름이 형제 이름이면 보류(반대 방향도)", () => {
       const w = siblings();
@@ -647,10 +647,11 @@ describe("확인 기록이 아예 없는 학생 — 원아 연결(0185a)로 판�
       w.admissions.get(302).name = "박세하"; // 명부 이름이 형제(2026-11-02 박세인 원아 실측)
       w.boards.push({ id: 40, name: "초등M 초6" });
       w.membersByBoard.set(40, [{ id: 302, name: "박세인", date_birth: "2014-04-01" }]); // 프로필 이름은 본인
-      expect(judge(w, "i").reasons.join()).toContain('원아 "박세하" 이름이 학생(박세인)과 다름');
+      // 사유엔 걸린 이름과 출처(명부 · 프로필)를 적는다(재리뷰 2026-11-05)
+      expect(judge(w, "i").reasons.join()).toContain('원아 "박세하"(명부) 이름이 학생(박세인)과 다름');
       w.admissions.get(302).name = "박세인";
       w.membersByBoard.set(40, [{ id: 302, name: "박세하", date_birth: "2014-04-01" }]); // 이번엔 프로필이 형제
-      expect(judge(w, "i").reasons.join()).toContain('원아 "박세하" 이름이 학생(박세인)과 다름');
+      expect(judge(w, "i").reasons.join()).toContain('원아 "박세하"(프로필) 이름이 학생(박세인)과 다름');
       w.membersByBoard.set(40, [{ id: 302, name: "세인", date_birth: "2014-04-01" }]); // 둘 다 이어지면 통과
       expect(judge(w, "i")).toMatchObject({ ok: true, source: "link" });
     });
@@ -661,7 +662,7 @@ describe("확인 기록이 아예 없는 학생 — 원아 연결(0185a)로 판�
       w.childLinks = new Map([[302, "h"]]);
       const v = judge(w, "h");
       expect(v.ok).toBe(false);
-      expect(v.reasons.join()).toContain('원아 "박세인" 이름이 학생(박세하)과 다름');
+      expect(v.reasons.join()).toContain('원아 "박세인"(프로필) 이름이 학생(박세하)과 다름');
       const [p] = planClassBoards({ ...w, classes: [{ classId: "c1", className: "중등M 중1 BS3E", studentIds: ["h"] }] });
       expect(p.assign).toEqual([]); // ClassNote에 넣지 않는다(배정 알림·반 공지 노출 없음)
     });
@@ -765,12 +766,14 @@ describe("🔴 배선 — 원아 연결을 모든 진입점에 같은 재료로"
     for (const f of ["math-class-boards-sync.mjs", "provision-math-class-boards.mjs"]) {
       const src = read(f);
       expect(src).toContain("await loadChildLinks(sql, tenant).catch(");
+      // 2026-11-05 원장 확인 연결도 같은 규칙(못 읽으면 그날 건너뜀·중단)으로 읽어 두 계획에 넘긴다.
+      expect(src).toContain("await loadConfirmedChildPairs(sql, tenant).catch(");
       // 2026-11-03 — 동기화는 JJ 채택 확인 콜백(formerFamily)도 함께 넘긴다(수동 스크립트는 넘기지 않는다 — 종전대로 보류).
-      expect(src.match(/await loadPlan\([^)]*childLinks(, formerFamily)? \}\)/g)?.length).toBe(2);
+      expect(src.match(/await loadPlan\([^)]*childLinks, confirmedPairs(, formerFamily)? \}\)/g)?.length).toBe(2);
       expect(src).toContain("reloadChildLinks: () => loadChildLinks(sql, tenant)");
     }
     const load = read("math-class-boards-load.mjs");
-    expect(load).toContain("verifiedOwnerScope, childLinks, childProfiles };");
+    expect(load).toContain("verifiedOwnerScope, childLinks, childProfiles, confirmedPairs };");
     expect(load).toContain("const childProfiles = await loadLinkProfiles(page, { classes, membersByBoard, admissions, verifiedChildren, childLinks });");
   });
 });
@@ -796,5 +799,37 @@ describe("🔴 1인 보드 배정 금지(원장 2026-11-04) — 연결된 보드
     w.membersByBoard.set(81, []);
     const [p] = planClassBoards({ ...w, classes: cls(["s1"]), linkedBoardByClass: new Map([["c1", 81]]) });
     expect(p.board.action).toBe("exists");
+  });
+});
+
+describe("🔴 ⑦·⑦-b 배선 — planClassBoards가 같은 집·지점 전체 이름 확인을 원아 판정에 넘긴다(적대적 리뷰 2026-11-05)", () => {
+  // 형제 김하(초4) · 김하늘(초3). 김하의 1인 보드에 원아 '김하늘'(명부도 '김하늘') — 이름이 포함 관계라 ⑥은 통과한다.
+  const sibWorld = (haneulPhone) => ({
+    students: new Map([
+      ["ha", { id: "ha", name: "김하", grade: "초4", phones: [P1] }],
+      ["hn", { id: "hn", name: "김하늘", grade: "초3", phones: [haneulPhone] }],
+    ]),
+    boards: [{ id: 21, name: "(수학)김하" }],
+    membersByBoard: new Map([[21, [{ id: 201, name: "김하늘", date_birth: "2016-04-01" }]]]),
+    admissions: new Map([[201, { name: "김하늘", birth: "2016-04-01", phones: [P1], phone: P1, boardNames: ["(수학)김하"] }]]),
+    schoolYear: SY,
+  });
+  it("형제 번호가 같으면 ⑦(같은 집)으로 보류", () => {
+    const [p] = planClassBoards({ ...sibWorld(P1), classes: [{ classId: "c1", className: "초등M 초4 BS1A", studentIds: ["ha"] }] });
+    expect(p.assign).toEqual([]);
+    expect(p.hold[0].reasons.join()).toContain("같은 집 다른 아이(김하늘)");
+  });
+  it("형제가 다른 번호로 적혀 같은 집에 안 잡혀도 ⑦-b(지점 전체 같은 이름)로 보류", () => {
+    const [p] = planClassBoards({ ...sibWorld(P2), classes: [{ classId: "c1", className: "초등M 초4 BS1A", studentIds: ["ha"] }] });
+    expect(p.assign).toEqual([]);
+    expect(p.hold[0].reasons.join()).toContain("다른 학생(김하늘)과 똑같음");
+  });
+  it("🔴 원아 이름이 형제 이름을 담고 있어도(김하 ← '김하늘이') ⑦-b로 보류(재리뷰 2026-11-05)", () => {
+    const w = sibWorld(P2);
+    w.membersByBoard = new Map([[21, [{ id: 201, name: "김하늘이", date_birth: "2016-04-01" }]]]);
+    w.admissions.get(201).name = "김하늘이";
+    const [p] = planClassBoards({ ...w, classes: [{ classId: "c1", className: "초등M 초4 BS1A", studentIds: ["ha"] }] });
+    expect(p.assign).toEqual([]);
+    expect(p.hold[0].reasons.join()).toContain('원아 "김하늘이"(명부·프로필) 이름에 다른 학생(김하늘) 이름이 들어 있음');
   });
 });

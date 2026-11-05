@@ -255,6 +255,9 @@ function EachNoticeFace({
     // 수학 반 보드 경로 — 받을 반 보드가 없는 학생은 빠진다(1인 보드로 되돌리지 않는다). 누가 빠졌는지 그대로 알린다.
     const noBoard = (res.skipped ?? []).filter((s) => s.reason === "no_class_board" || s.reason === "not_my_class");
     if (noBoard.length) parts.push(`반 보드 없음 제외 ${noBoard.length}명(${noBoard.map((s) => s.name).join(", ")})`);
+    // 수업 시작 전·휴원(대기) 중 — ClassNote로 보내지 않는다(원장 2026-11-05). 누가 빠졌는지 그대로 알린다.
+    const notAttending = (res.skipped ?? []).filter((s) => s.reason === "not_started" || s.reason === "on_hold");
+    if (notAttending.length) parts.push(`수업 시작 전·휴원 제외 ${notAttending.length}명(${notAttending.map((s) => s.name).join(", ")})`);
     toast.success(parts.join(" · "));
     if (!test) {
       setBody("");

@@ -21,6 +21,7 @@
  *    "아직 모른다"로 남기는 게 언제나 낫다(퇴원 동명이인 사고의 교훈, parent-post-filter.mjs 주석 참조).
  */
 import { expectedBirthYear } from "./board-safety.mjs";
+import { childNameConsistent, familyFinder, namesakeClash, namesakeFinder, siblingNameClash } from "./child-identity.mjs";
 import { childIdentityKeys, matchesIdentity, studentIdentityKeys } from "./identity-keys.mjs";
 
 /**
@@ -36,19 +37,25 @@ export function phoneKey(raw) {
   return d.length >= 10 ? d : "";
 }
 
+/** ClassNote 유효이름 — classnote_name 오버라이드 || name(발송 워커와 같은 규약). */
+const effName = (s) => String(s?.classnote_name || s?.name || "").trim();
+
 /**
  * 원아 1명 → aywa 학생 확정.
  *
  * @param {{ childId: number, name?: string|null, birth?: string|null, phones?: Array<string|null|undefined> }} child
  * @param {Array<{ id: string, name?: string|null, classnote_name?: string|null, grade?: string|null, phones?: Array<string|null|undefined> }>} students
  *   전 학생(퇴원 포함) — ⚠️ 재원만 넘기면 퇴원 동명이인의 원아가 재원 학생에게 잘못 붙는다.
- * @param {{ schoolYear: number }} opts
+ * @param {{ schoolYear: number, familyFor?: ((student:object, adm:{phones:Array<string|null|undefined>}) => Array<object>)|null }} opts
+ *   familyFor = 같은 집 후보(child-identity.mjs `familyFinder` — 전건 계획이 한 번 만들어 넘긴다 · 없으면 여기서 만든다)
+ *   · namesakesFor = 지점 전체 같은 이름(`namesakeFinder` — 형제가 서로 다른 번호로 적혀 같은 집에 안 잡히는 경우 · 없으면 여기서 만든다).
  * @returns {{ studentId: string, by: "phone"|"phone+name"|"phone+name+birth"|"name"|"name+birth" }
  *          | { studentId: null, why: string }}
  */
-export function resolveChildStudent(child, students, { schoolYear }) {
+export function resolveChildStudent(child, students, { schoolYear, familyFor = null, namesakesFor = null }) {
   const list = students ?? [];
-  const ck = childIdentityKeys(child?.name ?? "");
+  const childName = child?.name ?? "";
+  const ck = childIdentityKeys(childName);
   const nameOk = (s) => matchesIdentity(ck, studentIdentityKeys(s?.name ?? "", s?.classnote_name ?? null));
   const birthYear = Number(String(child?.birth ?? "").slice(0, 4));
   const birthOk = (s) => {
@@ -62,18 +69,42 @@ export function resolveChildStudent(child, students, { schoolYear }) {
     : [];
 
   const only = (arr, by) => (arr.length === 1 ? { studentId: arr[0].id, by } : null);
+  // ⑦ 같은 집 형제 확인(child-identity.mjs — 수학 반 보드·영어 반 방 발송과 같은 판정). 같은 집 = 원아 보호자 전화 ∪ 그 학생의 전화.
+  const findFamily = familyFor ?? familyFinder(list.map((s) => ({ id: s.id, name: effName(s), phones: s.phones })));
+  const findNamesakes = namesakesFor ?? namesakeFinder(list.map((s) => ({ id: s.id, name: effName(s) })));
+  // ⑦ + ⑦-b — 같은 집 다른 아이와 이어지거나, 지점 전체에서 원아 이름과 똑같은(또는 이 학생보다 긴 그 이름을 담은) 다른 학생이 있으면
+  // 붙이지 않는다(적대적 리뷰·재리뷰 2026-11-05 반례 김하·김하늘 · '김하늘이'). 돌려주는 값 = 미확정 사유의 가운데 말(없으면 null).
+  const clashWhy = (s) => {
+    const self = { id: s.id, name: effName(s) };
+    if (siblingNameClash(self, [childName], findFamily({ id: s.id, phones: s.phones }, { phones: child?.phones ?? [] })).length) return "같은 집 다른 아이와도 이어짐";
+    if (namesakeClash(self, [childName], findNamesakes([childName])).length) return "다른 학생 이름과 똑같거나 그 이름을 담고 있음";
+    return null;
+  };
 
   if (byPhone.length) {
     // 전화가 맞으면 그 집이 맞다 — 남은 문제는 "그 집의 누구냐"(형제)뿐이라 이름·생년으로 좁힌다.
+    // 🔴 2026-11-05(원장 *"형제 원아 연결이 뒤바뀐건 크리티컬함. 아주 섬세한 가드로 매칭해야함"*): 전화 후보가 **한 명이어도** 원아 이름이
+    //    그 학생과 이어져야 붙인다. 전엔 이름을 안 봤다 — 형제가 aywa에 다른 번호로 적혀 있으면 형제의 원아가 이 학생에게 붙었다
+    //    (실측 2026-11-05: 명부 '한도현' 원아가 같은 번호의 유일한 학생 '한민호'에 붙어 있었다). 이름이 정확히 같지 않은 계정
+    //    (`서연`↔`박서연` · `Jay(이재희)`)은 포함 관계로 인정하되, 같은 집 다른 아이와도 이어지면 붙이지 않는다.
     const named = byPhone.filter(nameOk);
-    return (
-      only(byPhone, "phone") ??
-      only(named, "phone+name") ??
-      only(named.filter(birthOk), "phone+name+birth") ?? {
-        studentId: null,
-        why: `전화후보 ${byPhone.length}명 중 이름일치 ${named.length}명 — 사람이 확인 필요`,
-      }
-    );
+    if (byPhone.length === 1) {
+      const s = byPhone[0];
+      if (!childNameConsistent(effName(s), childName))
+        return { studentId: null, why: "전화후보 1명인데 원아 이름이 그 학생과 이어지지 않음 — 형제 계정일 수 있어 사람이 확인 필요" };
+      const clash = clashWhy(s);
+      if (clash) return { studentId: null, why: `전화후보 1명이지만 원아 이름이 ${clash} — 사람이 확인 필요` };
+      // 근거 표기는 종전대로 'phone'(= 전화 후보 1명) — 11-05부터는 이름 연속성·형제 확인도 지난 연결이다(0185a linked_by 칸 설명).
+      return { studentId: s.id, by: "phone" };
+    }
+    const pick = only(named, "phone+name") ?? only(named.filter(birthOk), "phone+name+birth");
+    if (pick) {
+      const s = byPhone.find((x) => x.id === pick.studentId);
+      const clash = s ? clashWhy(s) : null;
+      if (clash) return { studentId: null, why: `원아 이름이 ${clash} — 사람이 확인 필요` };
+      return pick;
+    }
+    return { studentId: null, why: `전화후보 ${byPhone.length}명 중 이름일치 ${named.length}명 — 사람이 확인 필요` };
   }
 
   // 전화가 없거나 어느 학생과도 안 맞는 경우 — 이름만으로는 위험하므로 **유일할 때만** 인정한다.
@@ -104,13 +135,16 @@ export function resolveChildStudent(child, students, { schoolYear }) {
  */
 export function planChildMap(children, students, { schoolYear, linkedChildIds = [] }) {
   const already = new Set([...linkedChildIds].map(Number));
+  // 같은 집 색인은 전건에 한 번(원아마다 학생 전체를 다시 훑지 않게).
+  const familyFor = familyFinder((students ?? []).map((s) => ({ id: s.id, name: effName(s), phones: s.phones })));
+  const namesakesFor = namesakeFinder((students ?? []).map((s) => ({ id: s.id, name: effName(s) })));
   const plan = [];
   const skipped = [];
   for (const c of children ?? []) {
     const childId = Number(c?.childId);
     if (!Number.isFinite(childId)) continue;
     if (already.has(childId)) continue; // 이미 붙어 있다 = 할 일 없음
-    const r = resolveChildStudent(c, students, { schoolYear });
+    const r = resolveChildStudent(c, students, { schoolYear, familyFor, namesakesFor });
     if (!r.studentId) {
       skipped.push({ childId, why: r.why });
       continue;

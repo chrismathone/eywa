@@ -1,10 +1,17 @@
 // 수학 개별 공지의 반 보드 경로 — 조회 결과를 삼자 일치 판정에 맞게 엮는가(조회는 가짜로 갈아 끼운다).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const m = vi.hoisted(() => ({ paged: [] as unknown[][], chunks: [] as unknown[][], workers: [] as unknown[], workerError: false }));
+const m = vi.hoisted(() => ({ paged: [] as unknown[][], chunks: [] as unknown[][], workers: [] as unknown[], workerError: false, standings: new Map<string, Map<string, string>>(), judged: [] as unknown[] }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 vi.mock("@/lib/date-kst", () => ({ kstToday: () => "2026-10-02" }));
+// 수업 시작 전·휴원 판정(2026-11-05)은 notice-standing.test.ts가 잠근다 — 여기선 결과만 정한다(이 파일의 조회 흉내는 부른 순서대로 꺼내 쓴다).
+vi.mock("./notice-standing-query", () => ({
+  resolveNoticeStandings: async (_tenant: string, pairs: unknown[]) => {
+    m.judged.push(...pairs);
+    return m.standings;
+  },
+}));
 // 조회 헬퍼는 부른 순서대로 준비해 둔 결과를 돌려준다(콜백은 부르지 않는다 — 쿼리 모양은 타입체크가 본다).
 vi.mock("@/lib/supabase/batch", () => ({
   fetchAllPagedInChunks: async () => m.paged.shift() ?? [],
@@ -38,6 +45,8 @@ beforeEach(() => {
   m.chunks = [];
   m.workers = [liveWorker({ noticeClassRoute: true })];
   m.workerError = false;
+  m.standings = new Map();
+  m.judged = [];
 });
 
 describe("삼자 일치 — 보내는 선생님 · 반 · 학생", () => {
@@ -144,6 +153,26 @@ describe("후보를 반 보드 경로(수학)와 기존 경로로 가른다", ()
     expect(r.classTargets).toEqual([]);
     expect(r.rest).toEqual([]);
     expect(r.skipped).toEqual([{ name: "수학생", reason: "no_class_board" }]);
+  });
+  // 원장 2026-11-05 *"수업 시작전이거나 휴원 중인 학생은 클래스노트 배정을 하지말것"*.
+  it("🔴 수업 시작 전·휴원 학생은 어느 경로로도 보내지 않고 사유와 함께 뺀다(1인 보드 경로 rest로도 안 간다 · 한 번만)", async () => {
+    one();
+    m.standings = new Map([["시작전", new Map([["math", "not_started"]])], ["휴원생", new Map([["english", "on_hold"]])]]);
+    const r = await routeNoticeCandidates({
+      supabase, tenantId: "tn", settings,
+      candidates: [cand("수학생", "math", { hints: ["A"] }), cand("시작전", "math"), cand("시작전", "math"), cand("휴원생", "english", { classnoteName: "휴원생B" }), cand("영어생", "english")],
+    });
+    expect(r.classTargets.map((t) => t.studentId)).toEqual(["수학생"]);
+    expect(r.rest.map((c) => c.studentId)).toEqual(["영어생"]);
+    expect(r.skipped).toEqual([{ name: "시작전", reason: "not_started" }, { name: "휴원생B", reason: "on_hold" }]);
+    // 판정은 ClassNote로 보낼 과목만(학원설정에서 보내는 과목) — 과목 없는 후보는 묻지 않는다
+    expect(m.judged).toHaveLength(5);
+  });
+  it("모듈이 꺼져 있으면 시작 전·휴원도 판정하지 않는다(ClassNote로 가는 길이 없다)", async () => {
+    m.standings = new Map([["시작전", new Map([["math", "not_started"]])]]);
+    const r = await routeNoticeCandidates({ supabase, tenantId: "tn", settings: { ...settings, modules: { disabled: ["classnote"] } }, candidates: [cand("시작전", "math")] });
+    expect(r.skipped).toEqual([]);
+    expect(m.judged).toEqual([]);
   });
   it("표시 키가 겹치는 두 학생(같은 반 보드 · 같은 표시 이름)은 둘 다 뺀다 — 결과를 서로 구분할 수 없다", async () => {
     seed({

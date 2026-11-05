@@ -270,6 +270,36 @@
       "studentIds[0]"
     ]
   },
+  "0897f0cd9118e17d8f736dd53511614cb1ab363c4153f7d2fb37f4eb853c2958": {
+    "parts": [
+      "select e.start_date::text as start_date, e.end_date::text as end_date, e.is_transferred, e.on_hold, s.status::text as status\n    from enrollments e join students s on s.id = e.student_id\n    where e.tenant_id = ",
+      " and e.class_id = ",
+      " and e.student_id = ",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/notice-class-route.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant",
+      "classId",
+      "studentId"
+    ]
+  },
   "08bfc2f2cb14a87a06a2f862ed66b32a23d63e7ea7dae49c37f759f030939499": {
     "parts": [
       "select distinct student_id from classnote_child_links where tenant_id = ",
@@ -712,6 +742,31 @@
     "expressions": [
       "r.id",
       "tenant"
+    ]
+  },
+  "14d4b2ac5fa62975ffd11293ec426d093942e9b012c8d373045177aa9f882730": {
+    "parts": [
+      "select child_id, student_id from classnote_child_links where tenant_id = ",
+      " and linked_by = ",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/math-class-boards-load.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant",
+      "CONFIRMED_LINK"
     ]
   },
   "15a66c65ba460822742f7b02623f1634458e331c512d41678b09096790dd7dde": {
@@ -3149,7 +3204,8 @@
       {
         "kind": "fragment",
         "ids": [
-          "2af1b852b3c47342f9fd7d9776020f0f2a5c019b5c4e7c4fb198137eae252b43"
+          "2af1b852b3c47342f9fd7d9776020f0f2a5c019b5c4e7c4fb198137eae252b43",
+          "8bc2f332855de127266855faf4b2fb20159aa98528a8b204781557da24cae91c"
         ]
       },
       {
@@ -5298,6 +5354,36 @@
       "tenantId"
     ]
   },
+  "8bc2f332855de127266855faf4b2fb20159aa98528a8b204781557da24cae91c": {
+    "parts": [
+      "e.tenant_id = ",
+      " and (e.end_date is null or e.end_date >= ",
+      ") and (e.start_date is null or e.start_date <= ",
+      ")\n      and not coalesce(e.on_hold, false)\n      and exists (select 1 from students s where s.id = e.student_id and s.status = 'enrolled' and not coalesce(s.is_test, false))"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/math-class-boards-load.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant",
+      "today",
+      "today"
+    ]
+  },
   "8bf1ba572acf39a284231b48df34638be01ed2c4befe6dbf3cf567a93b367a4f": {
     "parts": [
       "\n        update makeedu_push_requests set status = 'running', started_at = now()\n        where status = 'pending' and tenant_id = ",
@@ -7117,7 +7203,8 @@
       {
         "kind": "fragment",
         "ids": [
-          "2af1b852b3c47342f9fd7d9776020f0f2a5c019b5c4e7c4fb198137eae252b43"
+          "2af1b852b3c47342f9fd7d9776020f0f2a5c019b5c4e7c4fb198137eae252b43",
+          "8bc2f332855de127266855faf4b2fb20159aa98528a8b204781557da24cae91c"
         ]
       },
       {

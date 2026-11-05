@@ -4635,6 +4635,14 @@ export const SHEET_DICT = {
     en: "Not linked to a ClassNote class yet — ask an admin to press 'Sync class boards now', then send again",
   },
   "os.n.skip.not_my_class": { ko: "내 담당 반 학생이 아님", en: "Not a student in one of your classes" },
+  "os.n.skip.not_started": {
+    ko: "수업 시작 전 — 첫 수업 날부터 ClassNote로 보낼 수 있습니다",
+    en: "Classes have not started yet — ClassNote messages can go from the first class day",
+  },
+  "os.n.skip.on_hold": {
+    ko: "휴원(대기) 중 — 휴원 중에는 ClassNote로 보내지 않습니다",
+    en: "On a break — nothing is sent through ClassNote during a break",
+  },
   "os.n.editFail": { ko: "수정에 실패했습니다", en: "The edit failed" },
   "os.n.editedPosted": {
     ko: "게시 공지 수정을 요청했습니다 — 연동 PC가 게시글에 반영합니다",

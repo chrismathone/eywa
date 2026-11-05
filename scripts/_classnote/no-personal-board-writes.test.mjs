@@ -11,8 +11,8 @@ import { humanizeClassnoteError } from "../../src/features/report-admin/classnot
 
 // 영어 반 방 공지의 실패 문구(2026-11-04 · 1.0.15)도 같은 말 검사를 받는다 — 그 모듈이 끌어오는 브라우저 모듈은 문구 검사에 필요 없다.
 vi.mock("./classnote-admin-core.mjs", () => ({}));
-const { englishBlockedMessage } = await import("./english-class-route.mjs");
-const { ENGLISH_ROOM_GONE_NOTE } = await import("./notice-class-route.mjs");
+const { englishBlockedMessage, englishGuardMessage } = await import("./english-class-route.mjs");
+const { ENGLISH_ROOM_GONE_NOTE, NOT_STARTED_NOTE, ON_HOLD_NOTE } = await import("./notice-class-route.mjs");
 
 const ROOT = process.cwd();
 const DIR = join(ROOT, "scripts/_classnote");
@@ -95,6 +95,21 @@ describe("🔴 실패 사유 문구가 벨 힌트에 걸려 '1인 보드를 만�
     // 영어 반 방(보고서·공지 공용 사유) · 공지가 반 방으로 정해진 뒤 연결이 풀린 경우
     englishBlockedMessage("no_link", "Jennifer 초6 MED a (화수금)"), englishBlockedMessage("not_in_board", "Jennifer 초6 MED a (화수금)"),
     ENGLISH_ROOM_GONE_NOTE,
+    // 원아 신분 가드 보류(형제 뒤바뀜 등 — 수학 반 보드 보류 사유와 같은 말) · 수업 시작 전 · 휴원(2026-11-05)
+    englishGuardMessage("LE3", [
+      '원아 "박세하"(명부) 이름이 학생(박세인)과 다름 — 형제 계정일 수 있어 확인 필요',
+      '원아 "박세하"(명부) 이름이 같은 집 다른 아이(박세하)와도 이어짐 — 형제 계정이 뒤바뀌었을 수 있어 확인 필요',
+      '원아 "김하늘"(명부·프로필) 이름이 다른 학생(김하늘)과 똑같음 — 그 학생의 원아 계정일 수 있어 확인 필요',
+      '원아 "김하늘이"(프로필) 이름에 다른 학생(김하늘) 이름이 들어 있음 — 그 학생의 원아 계정일 수 있어 확인 필요',
+      '원아 "김태진" 보호자 전화 불일치',
+      '원아 "아이" 운영관리 명부에 없음 — 보호자 전화 대조 불가',
+      '원아 "아이" 학부모 프로필(이름)을 확인하지 못함 — 다음 동기화에서 다시 확인',
+      '원아 "아이" 반 보드 기록에서 다른 학생에게 확인된 원아입니다',
+      "이 학생과 연결된 원아 3명이 같은 반 방에 있음 — 사람 확인 필요",
+      "학생 정보를 읽지 못해 원아를 대조할 수 없음",
+    ]),
+    NOT_STARTED_NOTE,
+    ON_HOLD_NOTE,
   ];
   it("힌트 말을 읽어 왔다(보드 없음·프로비저닝·미가입 등)", () => {
     expect(words).toEqual(expect.arrayContaining(["보드 없음", "프로비저닝", "미가입", "학생 없음", "보드 미배정", "배정 필요"]));
