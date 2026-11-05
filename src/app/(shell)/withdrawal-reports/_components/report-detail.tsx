@@ -13,6 +13,7 @@ import type { SubjectHistoryRow } from "@/features/withdrawal-reports/course-per
 import { fillEmptyReportFields } from "@/features/withdrawal-reports/prefill";
 import { autosaveWithdrawalReport, changeWithdrawalReport } from "@/features/withdrawal-reports/server/actions";
 import { createReportSaver, type ReportSaver, type ReportSaverStatus } from "@/features/withdrawal-reports/autosave";
+import { windowDirtyMessage } from "@/components/workspace/window-bridge";
 import { EMPTY_BODY, REPORT_ACTION_LABEL, directorIds, isDirectReport, managerStepSkipped, refundWaiting, reportCapabilities, reportStatusChips, type RefundStep, type WithdrawalReport, type ReportEvent, type StaffOption, type ReportAction, type ReportBody } from "@/features/withdrawal-reports/model";
 
 const control = "w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm disabled:bg-muted/20 disabled:text-foreground";
@@ -32,7 +33,8 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
   subjectHistory?: SubjectHistoryRow[];
 }) {
   const router = useRouter();
-  const [body, setBody] = useState<ReportBody>(() => fillEmptyReportFields({ ...EMPTY_BODY, ...r.body }, prefill));
+  const serverBody = () => fillEmptyReportFields({ ...EMPTY_BODY, ...r.body }, prefill);
+  const [body, setBody] = useState<ReportBody>(serverBody);
   const [error, setError] = useState("");
   const [decision, setDecision] = useState<ReportAction | null>(null);
   // 확인 칸은 양식 아래에 있다 — 위쪽 '요청 취소'(원장 2026-10-30)를 눌러도 보이게 그 자리로 옮겨 준다.
@@ -48,8 +50,6 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
   // 실시간 저장(원장 2026-11-05 "퇴원보고서도 실시간으로 입력되고 저장되게") — 작성할 수 있을 때만 저장기를 둔다(autosave.ts).
   // 저장 단추는 없다: 칸을 고치면 잠시 뒤 저장하고, 제출·취소 직전에 남은 글을 마저 보낸 뒤 그 revision으로 처리한다.
   const [saveStatus, setSaveStatus] = useState<ReportSaverStatus>({ kind: "idle" });
-  const saverStatusRef = useRef(saveStatus);
-  saverStatusRef.current = saveStatus;
   const saverRef = useRef<ReportSaver<ReportBody> | null>(null);
   if (capabilities.edit && !saverRef.current) {
     saverRef.current = createReportSaver<ReportBody>(r.revision, {
@@ -59,13 +59,36 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
   }
   const touched = useRef(false);
   useEffect(() => { if (touched.current) saverRef.current?.change(body); }, [body]);
-  useEffect(() => { saverRef.current?.adoptRevision(r.revision); }, [r.revision]);
+  // 🔴 화면이 서버에서 새 revision을 받으면(새로고침 — 숨었던 창이 다시 보일 때 등) **본문도 같이** 맞춘다(2026-11-05 리뷰 치명·중요).
+  //    상세는 상태가 바뀔 때만 다시 마운트되므로(page.tsx key) 같은 상태로 다시 그려지면 이 화면의 본문은 처음 연 값으로 남는다.
+  //    - 작성 화면: 내 저장의 메아리면 그대로, 다른 화면이 앞섰고 안 간 글이 없으면 서버 본문으로, 있으면 충돌로 멈춘다(autosave.ts syncServer).
+  //    - 보기 화면(승인자 · 요청자 · 열람자): 늘 서버 본문 — 보지 않은 본문을 승인하지 않게 열려 있던 처리 확인도 닫는다.
+  const seenRevision = useRef(r.revision);
+  useEffect(() => {
+    if (r.revision === seenRevision.current) return;
+    seenRevision.current = r.revision;
+    const saver = saverRef.current;
+    if (!saver) { setBody(serverBody()); setDecision(null); return; }
+    if (saver.syncServer(r.revision) === "adopted") { touched.current = false; setBody(serverBody()); }
+    // serverBody는 r.body · prefill을 읽는다 — revision이 바뀔 때만 다시 맞춘다(입력 중에 덮지 않게).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [r.revision]);
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => { if (saverRef.current?.isDirty()) e.preventDefault(); };
     window.addEventListener("beforeunload", warn);
     // 화면을 떠날 때(앱 안 이동) 남은 글을 마저 보낸다 — 기다리지는 않는다.
     return () => { window.removeEventListener("beforeunload", warn); if (saverRef.current?.isDirty()) void saverRef.current.settle(); };
   }, []);
+  // 작업창(iframe) X · Esc 닫기 확인과 숨은 창 새로고침 보류 — 창은 beforeunload를 받지 않으므로 앱의 창 미저장 신호로 알린다
+  // (useUnsavedGuard와 같은 다리 · 창이 아니면 보내지 않는다).
+  // 안 간 글이 있는 상태 = 입력 대기 · 보내는 중 · 실패 · 충돌(멈춰도 글은 남는다 — autosave.ts). 저장됨 · 처음은 깨끗하다.
+  const dirty = saveStatus.kind !== "idle" && saveStatus.kind !== "saved";
+  useEffect(() => {
+    if (typeof window === "undefined" || window.parent === window) return;
+    const post = (d: boolean) => { try { window.parent.postMessage(windowDirtyMessage(d), window.location.origin); } catch { /* 무시 */ } };
+    post(dirty);
+    return () => { if (dirty) post(false); };
+  }, [dirty]);
   const update = <K extends keyof ReportBody>(key: K, value: ReportBody[K]) => { touched.current = true; setBody(b => ({ ...b, [key]: value })); };
   function change(action: ReportAction) {
     setError("");
@@ -75,8 +98,9 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
         const saver = saverRef.current;
         if (saver) {
           // 자동 저장이 revision을 올려 두었다 — 남은 글을 보내고 그 값으로 처리한다. 다른 화면이 먼저 고쳤으면 처리하지 않는다.
+          // 충돌만 멈춘다 — 그 밖의 실패는 처리 요청이 본문을 함께 보내 서버가 다시 검사한다(autosave.ts settle).
           const settled = await saver.settle();
-          if (!settled.ok && saverStatusRef.current.kind === "conflict") { setError("다른 화면에서 이 보고서가 바뀌어 처리를 멈췄습니다. 쓴 내용을 복사해 두고 새로고침해 주세요."); return; }
+          if (settled.conflict) { setError("다른 화면에서 이 보고서가 바뀌어 처리를 멈췄습니다. 쓴 내용을 복사해 두고 새로고침해 주세요."); return; }
           revision = settled.revision;
         }
         const result = await changeWithdrawalReport(r.id, action, revision, action === "save" || action === "submit" ? body : action === "reject" ? comment : undefined);
@@ -121,7 +145,7 @@ function AutosaveNote({ status }: { status: ReportSaverStatus }) {
     : status.kind === "pending" ? "입력 중 — 잠시 뒤 저장합니다."
     : status.kind === "saving" ? "저장 중…"
     : status.kind === "saved" ? `자동 저장됨 · ${time(status.at)}`
-    : status.kind === "error" ? `저장하지 못했습니다 — ${status.message} 잠시 뒤 다시 저장합니다.`
+    : status.kind === "error" ? `저장하지 못했습니다 — ${status.message} ${status.retrying ? "잠시 뒤 다시 저장합니다." : "다시 입력하면 저장을 다시 시도합니다. 쓴 내용은 복사해 두세요."}`
     : "다른 화면에서 이 보고서가 바뀌어 자동 저장을 멈췄습니다. 쓴 내용을 복사해 두고 새로고침해 주세요.";
   const alert = status.kind === "error" || status.kind === "conflict";
   return <p role="status" aria-live="polite" className={`self-center text-sm ${alert ? "text-destructive" : "text-muted-foreground"}`}>{text}</p>;

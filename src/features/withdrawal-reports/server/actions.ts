@@ -8,10 +8,10 @@ import { logAction } from "@/features/audit/server/log";
 import { pokeSlack } from "@/features/slack/server/poke";
 import { describeDbError } from "@/lib/supabase/db-error";
 import { recordMathWithdrawalToSheet } from "@/features/withdrawals/server/withdrawal-sheet";
-import { bodySchema, batchRequestSchema, cancelsAsDirector, directSchema, managerStepSkipped, submissionError, missingReportSchema, REPORT_ACTION_LABEL, type ReportAction, type WithdrawalReport } from "../model";
+import { bodySchema, batchRequestSchema, cancelsAsDirector, directSchema, managerStepSkipped, submissionError, missingReportSchema, REPORT_ACTION_LABEL, type ReportAction, type ReportBody, type WithdrawalReport } from "../model";
 import { checkReasonInput } from "@/features/withdrawals/reason-detail";
 import { canManageStudentStatusNow } from "@/features/students/server/status-access";
-import { reportViewer, getReport } from "./queries";
+import { reportViewer, getReport, getReportForSave } from "./queries";
 import { decideReportApprovals } from "./request-check";
 import { completedEnrollmentIds } from "./completed-target";
 import { appliedAuditMeta } from "../audit-meta";
@@ -118,14 +118,22 @@ export async function changeWithdrawalReport(id: string, action: ReportAction, r
 }
 
 /** 작성·제출 본문 — 화면 값 검사(제출이면 제출 기준까지) · 연결할 수 있는 상담만 · 수납 칸은 서버가 지금 장부로 채운다. */
-async function reportBodyFor(record: NonNullable<Awaited<ReturnType<typeof getReport>>>, input: unknown, submit: boolean): Promise<{ body: unknown } | { error: string }> {
+type BodyRecord = { report: WithdrawalReport; consultations: readonly { id: string }[] };
+/** 저장·제출 본문 — 작성 칸 검사 + 연결 상담 확인 + 수납은 지금 장부. `retry` = 다시 하면 될 수 있는 실패(장부 조회). */
+async function reportBodyFor(record: BodyRecord, input: unknown, submit: boolean): Promise<{ body: unknown; written: ReportBody } | { error: string; retry?: boolean }> {
   const parsed = bodySchema.safeParse(withoutBillingFields(input));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "보고서 내용을 확인해 주세요." };
   if (submit) { const error = submissionError(parsed.data); if (error) return { error }; }
   const existing = record.report.body.consultationIds ?? [];
   if (parsed.data.consultationIds?.some(id => !existing.includes(id) && !record.consultations.some(c => c.id === id))) return { error: "연결할 수 없는 상담기록이 포함되어 있습니다." };
-  try { return { body: { ...parsed.data, ...await loadReportBilling(record.report) } }; }
-  catch { return { error: "수납 정보를 확인하지 못했습니다. 잠시 후 다시 저장해 주세요." }; }
+  try { return { body: { ...parsed.data, ...await loadReportBilling(record.report) }, written: parsed.data }; }
+  catch { return { error: "수납 정보를 확인하지 못했습니다. 잠시 후 다시 저장해 주세요.", retry: true }; }
+}
+
+/** 작성 칸(수납 칸 빼고)이 같은가 — 검사 형식을 거친 값끼리 비교한다(칸 순서가 같다). */
+function sameWrittenBody(stored: unknown, written: ReportBody): boolean {
+  const parsed = bodySchema.safeParse(withoutBillingFields(stored));
+  return parsed.success && JSON.stringify(parsed.data) === JSON.stringify(written);
 }
 
 /**
@@ -137,7 +145,7 @@ async function teacherViewMeta(actingAs: { id: string; displayName: string }): P
   return real && real.id !== actingAs.id ? { teacherViewAs: actingAs.displayName } : {};
 }
 
-export type AutosaveResult = { ok: true; revision: number; savedAt: string } | { ok: false; conflict: boolean; error: string };
+export type AutosaveResult = { ok: true; revision: number; savedAt: string } | { ok: false; conflict: boolean; error: string; retry?: boolean };
 const AUTOSAVE_AUDIT_WINDOW_MS = 10 * 60 * 1000;
 const AUTOSAVE_OPERATION = "자동 저장";
 
@@ -153,17 +161,26 @@ export async function autosaveWithdrawalReport(id: string, revision: number, inp
   const viewer = await reportViewer();
   if (!viewer?.writable) return { ok: false, conflict: false, error: "이 화면에서는 보고서를 수정할 수 없습니다." };
   if (!/^[0-9a-f-]{36}$/i.test(id) || !Number.isSafeInteger(revision)) return { ok: false, conflict: false, error: "요청 내용을 확인해 주세요." };
-  const record = await getReport(id);
+  const ids = input && typeof input === "object" && Array.isArray((input as { consultationIds?: unknown }).consultationIds)
+    ? ((input as { consultationIds: unknown[] }).consultationIds).filter((c): c is string => typeof c === "string") : [];
+  const record = await getReportForSave(id, ids);
   if (!record) return { ok: false, conflict: false, error: "보고서에 접근할 수 없습니다." };
-  if (record.report.revision !== revision) return { ok: false, conflict: true, error: "다른 화면에서 이 보고서가 바뀌었습니다." };
   const body = await reportBodyFor(record, input, false);
-  if ("error" in body) return { ok: false, conflict: false, error: body.error };
+  if ("error" in body) return { ok: false, conflict: false, error: body.error, retry: body.retry };
+  if (record.report.revision !== revision) {
+    // 앞선 저장이 들어갔는데 응답만 끊긴 경우(모바일 등) — 서버의 작성 칸이 지금 보내는 글과 같으면 그 revision을 받아들인다
+    // (2026-11-05 리뷰: 다시 보낸 저장이 자기 저장과 충돌해 '다른 화면에서 바뀌었습니다'로 멈췄다). 다르면 충돌 — 덮지 않는다.
+    const mine = record.report.revision > revision && record.report.teacher_id === viewer.user.id && ["requested", "revision"].includes(record.report.status);
+    if (mine && sameWrittenBody(record.report.body, body.written)) return { ok: true, revision: record.report.revision, savedAt: record.report.updated_at };
+    return { ok: false, conflict: true, error: "다른 화면에서 이 보고서가 바뀌었습니다." };
+  }
   const { data, error } = await createAdminClient().rpc("transition_withdrawal_report", {
     p_tenant: viewer.user.tenantId, p_actor: viewer.user.id, p_report: id, p_action: "save", p_payload: { revision, body: body.body },
   }).single();
   if (error) {
-    const message = describeDbError(error, { fallback: "보고서를 저장하지 못했습니다." }).message;
-    return { ok: false, conflict: /보고서가 변경되었습니다/.test(error.message ?? ""), error: message };
+    const message = describeDbError(error, { fallback: "서버에서 오류가 났습니다." }).message;
+    // DB가 던진 검사(P0001 — 권한 · 작성 단계 · 칸)는 다시 해도 같다. 그 밖(연결 · 시간 초과 등)은 다시 보낸다.
+    return { ok: false, conflict: /보고서가 변경되었습니다/.test(error.message ?? ""), error: message, retry: error.code !== "P0001" };
   }
   const saved = data as WithdrawalReport;
   const realUser = await getCurrentUser();

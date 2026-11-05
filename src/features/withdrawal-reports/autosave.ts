@@ -5,8 +5,11 @@
  *
  * 🔴 겹쳐 보내지 않는다 — 저장은 한 줄로 선다(`chain`). 저장 중에 또 고치면 끝난 뒤 **앞 요청이 돌려준 revision으로** 한 번 더 보낸다
  *    (DB `transition_withdrawal_report`는 revision이 다르면 '보고서가 변경되었습니다'로 거절한다).
- * 🔴 다른 화면이 먼저 고쳤으면(revision 불일치 = `conflict`) **멈춘다** — 내 글로 덮지 않는다. 화면이 새로고침을 안내한다.
- * 🔴 실패(네트워크·검사)는 쓰던 글을 버리지 않는다 — 다음 입력이나 `settle`·재시도 타이머가 다시 보낸다.
+ * 🔴 다른 화면이 먼저 고쳤으면 **멈춘다**(`conflict`) — 내 글로 덮지 않는다. 멈춰도 안 간 글은 남겨 두어(`isDirty`) 창 닫기 경고가 산다.
+ *    서버 응답 말고 **화면 새로고침**으로 더 높은 revision을 알게 된 때도 같다(`syncServer` — 2026-11-05 리뷰: revision만 받아들이면
+ *    화면에 남은 옛 글이 다음 입력에 '맞는 revision'으로 나가 다른 기기의 글을 덮었다).
+ * 🔴 실패는 쓰던 글을 버리지 않는다. 다시 하면 될 실패(네트워크)만 간격을 늘려 몇 번 다시 보내고, 다시 해도 안 될 실패(권한·검사)는
+ *    멈추고 알린다(같은 리뷰: 5초마다 끝없이 재시도했다). 다음 입력이나 `settle`이 다시 시도한다.
  */
 
 export type ReportSaverStatus =
@@ -14,87 +17,99 @@ export type ReportSaverStatus =
   | { kind: "pending" }
   | { kind: "saving" }
   | { kind: "saved"; at: number }
-  | { kind: "error"; message: string }
+  | { kind: "error"; message: string; retrying: boolean }
   | { kind: "conflict" };
 
-export type ReportSaveResult = { ok: true; revision: number } | { ok: false; conflict: boolean; error: string };
+/** `retry` = 다시 보내면 될 수 있는 실패(네트워크 · 일시적인 DB 오류). 없으면 다시 보내지 않는다. */
+export type ReportSaveResult = { ok: true; revision: number } | { ok: false; conflict: boolean; error: string; retry?: boolean };
 
 export type ReportSaverDeps<B> = {
   save(revision: number, body: B): Promise<ReportSaveResult>;
   onStatus(s: ReportSaverStatus): void;
   debounceMs?: number;
+  /** 첫 재시도 간격 — 그 뒤로 두 배씩. */
   retryMs?: number;
+  /** 다시 보내는 최대 횟수(넘으면 멈추고 알린다 — 다음 입력·settle이 다시 시도). */
+  maxRetries?: number;
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (h: unknown) => void;
 };
 
+export type ReportSettleResult = { ok: boolean; conflict: boolean; revision: number; error: string | null };
+
 export type ReportSaver<B> = {
-  /** 칸을 고쳤다 — 마지막 입력 뒤 `debounceMs`에 보낸다. 멈춘 뒤(`conflict`·`stop`)에는 무시한다. */
+  /** 칸을 고쳤다 — 마지막 입력 뒤 `debounceMs`에 보낸다. 충돌로 멈춘 뒤에는 보내지 않고 글만 남긴다(창 닫기 경고용). */
   change(body: B): void;
   /**
    * 제출·취소처럼 revision을 쓰는 처리 **직전**에 부른다 — 기다리던 타이머를 끊고, 남은 글을 보내고, 줄이 빌 때까지 기다린 뒤
-   * 지금 revision을 돌려준다. `ok: false`면(충돌·실패) 처리하지 말고 상태 문구를 보여 준다.
+   * 지금 revision을 돌려준다. **`conflict`면 처리하지 않는다**(다른 화면의 글을 덮는다). 그 밖의 실패는 처리 요청이 본문을 함께 보내
+   * 서버가 다시 검사하므로 진행해도 된다(`ok` · `error`는 안내용).
    */
-  settle(): Promise<{ ok: boolean; revision: number }>;
-  /** 화면 밖에서 더 높은 revision을 받았을 때(새로고침) — 보낼 글이 없을 때만 받아들인다. */
-  adoptRevision(revision: number): void;
+  settle(): Promise<ReportSettleResult>;
+  /**
+   * 화면이 서버에서 revision을 새로 받았다(새로고침) — 내 저장보다 앞서 있으면:
+   * - 안 간 글이 없으면 받아들인다(`adopted` — 화면은 본문을 서버 것으로 다시 맞춘다),
+   * - 있으면 충돌로 멈춘다(`conflict` — 내 글로 다른 화면의 글을 덮지 않는다).
+   * 보내는 중이거나(그 응답이 판정한다) 내 저장의 메아리면 `ignored`.
+   */
+  syncServer(revision: number): "ignored" | "adopted" | "conflict";
   /** 제출이 끝났다 — 이후 입력은 보내지 않는다. */
   stop(): void;
   revision(): number;
-  /** 아직 서버에 안 간 글이 있거나 보내는 중인가(창을 닫기 전 경고용). */
+  /** 아직 서버에 안 간 글이 있거나 보내는 중인가(창을 닫기 전 경고용) — 충돌로 멈췄어도 안 간 글이 있으면 참. */
   isDirty(): boolean;
 };
 
-export const REPORT_AUTOSAVE_NETWORK_ERROR = "저장하지 못했습니다. 인터넷 연결을 확인해 주세요.";
+export const REPORT_AUTOSAVE_NETWORK_ERROR = "인터넷 연결을 확인해 주세요.";
 
 export function createReportSaver<B>(initialRevision: number, deps: ReportSaverDeps<B>): ReportSaver<B> {
   const setTimer = deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
   const clearTimer = deps.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
   const debounceMs = deps.debounceMs ?? 1200;
   const retryMs = deps.retryMs ?? 5000;
+  const maxRetries = deps.maxRetries ?? 5;
   const now = deps.now ?? (() => Date.now());
   let revision = initialRevision;
   let waiting: { body: B } | null = null; // 아직 안 보낸 글(가장 최근 것 하나)
   let timer: unknown = null;
   let chain: Promise<void> = Promise.resolve();
   let busy = 0;
-  let stopped = false;
+  let stopped = false; // 제출 끝 — 더 보내지 않고 남은 글도 버린다
+  let halted = false; // 충돌 — 더 보내지 않지만 안 간 글은 남긴다
   let lastError: string | null = null;
+  let retries = 0;
 
   const emit = (s: ReportSaverStatus) => deps.onStatus(s);
   const disarm = () => { if (timer !== null) { clearTimer(timer); timer = null; } };
   const arm = (ms: number) => { disarm(); timer = setTimer(() => { timer = null; void kick(); }, ms); };
+  const halt = () => { halted = true; disarm(); emit({ kind: "conflict" }); };
 
   async function step() {
-    if (stopped || !waiting) return;
+    if (stopped || halted || !waiting) return;
     const { body } = waiting;
     waiting = null;
     busy++;
     emit({ kind: "saving" });
     let res: ReportSaveResult;
     try { res = await deps.save(revision, body); }
-    catch { res = { ok: false, conflict: false, error: REPORT_AUTOSAVE_NETWORK_ERROR }; }
+    catch { res = { ok: false, conflict: false, error: REPORT_AUTOSAVE_NETWORK_ERROR, retry: true }; }
     busy--;
     if (stopped) return;
     if (res.ok) {
       revision = res.revision;
       lastError = null;
+      retries = 0;
       emit(waiting ? { kind: "pending" } : { kind: "saved", at: now() });
       return;
     }
-    if (res.conflict) {
-      stopped = true;
-      waiting = null;
-      disarm();
-      emit({ kind: "conflict" });
-      return;
-    }
-    // 실패 — 그사이 새 글이 없으면 보내려던 글을 되돌려 두고 잠시 뒤 다시.
+    // 실패 · 충돌 모두 보내려던 글을 되돌려 둔다(그사이 새 글이 있으면 그것이 더 새것).
     if (!waiting) waiting = { body };
+    if (res.conflict) { halt(); return; }
     lastError = res.error;
-    emit({ kind: "error", message: res.error });
-    if (timer === null) arm(retryMs);
+    const retrying = !!res.retry && retries < maxRetries;
+    emit({ kind: "error", message: res.error, retrying });
+    if (retrying && timer === null) arm(retryMs * 2 ** retries++);
   }
 
   function kick(): Promise<void> {
@@ -106,19 +121,24 @@ export function createReportSaver<B>(initialRevision: number, deps: ReportSaverD
     change(body) {
       if (stopped) return;
       waiting = { body };
+      if (halted) return;
+      retries = 0;
       emit({ kind: "pending" });
       arm(debounceMs);
     },
     async settle() {
       disarm();
-      if (stopped) { await chain; return { ok: false, revision }; }
+      if (stopped || halted) { await chain; return { ok: false, conflict: halted, revision, error: null }; }
       lastError = null;
+      retries = 0;
       await kick();
-      return { ok: !stopped && !waiting && lastError === null, revision };
+      return { ok: !halted && !waiting && lastError === null, conflict: halted, revision, error: lastError };
     },
-    adoptRevision(next) {
-      if (stopped || waiting || busy > 0) return;
-      if (next > revision) revision = next;
+    syncServer(next) {
+      if (stopped || halted || busy > 0 || next <= revision) return "ignored";
+      if (waiting) { halt(); return "conflict"; }
+      revision = next;
+      return "adopted";
     },
     stop() {
       stopped = true;

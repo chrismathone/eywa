@@ -168,6 +168,20 @@ export async function getReport(id: string) {
   ]);
   return { report: data as WithdrawalReport, events: [...(events ?? [])].reverse() as ReportEvent[], assignmentChanged, consultations, laterInvoices, deskStaff, refundSteps, subjectHistory, ...prefill };
 }
+/**
+ * 자동 저장용 가벼운 조회(원장 2026-11-05 실시간 저장 · 리뷰: 입력이 멈출 때마다 상세 전체 — 이력 300줄 · 스냅숏 · 수강 이력 · 장부 · 뒤 청구 ·
+ * 환불 단계 — 를 다시 읽었다). 보고서 한 줄과, 새로 잇는 상담이 있을 때만 연결 가능한 상담 목록. 열람 규칙은 `getReport`와 같다.
+ */
+export async function getReportForSave(id: string, consultationIds: readonly string[]) {
+  const viewer = await reportViewer();
+  if (!viewer) return null;
+  const { data, error } = await createAdminClient().from("withdrawal_reports").select(REPORT_COLUMNS).eq("tenant_id", viewer.user.tenantId).eq("id", id).maybeSingle();
+  if (error || !data || !canReadReport(data as WithdrawalReport, viewer)) return null;
+  const report = data as WithdrawalReport;
+  const existing = report.body.consultationIds ?? [];
+  const consultations = consultationIds.some(c => !existing.includes(c)) ? await reportConsultations(report, viewer) : [];
+  return { report, consultations };
+}
 /** 완료·취소된 보고서의 수강기간 이력을 보고서에 고정 — 아직 고정되지 않았을 때만(동시에 열어도 한 번). 실패해도 화면은 지금 이력으로 연다. */
 async function freezeSubjectHistory(report: WithdrawalReport, rows: SubjectHistoryRow[]) {
   const { error } = await createAdminClient().from("withdrawal_reports")

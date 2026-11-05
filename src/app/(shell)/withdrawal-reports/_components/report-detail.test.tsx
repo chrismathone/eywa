@@ -172,3 +172,64 @@ describe("report submission and review", () => {
     expect(screen.queryByRole("textbox", { name: "퇴원 상세사유" })).not.toBeInTheDocument();
   });
 });
+
+// 2026-11-05 실시간 저장 리뷰(치명 · 중요) — 상세는 상태가 바뀔 때만 다시 마운트된다(page.tsx key). 같은 상태로 다시 그려질 때(숨었던 창이
+// 다시 보이며 새로고침 등) 본문이 처음 연 값으로 남으면 다른 기기의 글을 덮거나, 보지 않은 본문을 승인했다.
+describe("같은 상태로 다시 그려질 때 — 본문은 서버와 함께 간다", () => {
+  const key = `${r.id}:requested`;
+  beforeEach(() => {
+    cleanup(); vi.clearAllMocks();
+    mocks.change.mockResolvedValue({ ok: true, id: r.id });
+    mocks.autosave.mockImplementation(async (_id: string, rev: number) => ({ ok: true, revision: rev + 1, savedAt: "2026-10-13T01:05:00Z" }));
+  });
+  const pcBody = { ...r, body: { ...EMPTY_BODY, detail: "PC에서 쓴 옛 글" } } as WithdrawalReport;
+  const phoneBody = { ...pcBody, revision: 9, body: { ...EMPTY_BODY, detail: "휴대폰에서 고친 최신 글" } } as WithdrawalReport;
+
+  it("작성 강사 · 안 간 글이 없으면 다른 기기의 최신 본문으로 다시 맞추고, 이어 쓰면 그 위에 저장한다", async () => {
+    const { rerender } = render(<ReportDetail key={key} {...props} report={pcBody} />);
+    rerender(<ReportDetail key={key} {...props} report={phoneBody} />);
+    expect(screen.getByLabelText("퇴원 상세사유")).toHaveValue("휴대폰에서 고친 최신 글");
+    fireEvent.change(screen.getByLabelText("담임 의견"), { target: { value: "한 글자" } });
+    await waitFor(() => expect(mocks.autosave).toHaveBeenCalled(), AUTOSAVE_WAIT);
+    expect(mocks.autosave).toHaveBeenCalledWith(r.id, 9, expect.objectContaining({ detail: "휴대폰에서 고친 최신 글", teacherOpinion: "한 글자" }));
+  });
+
+  it("작성 강사 · 안 간 글이 있는데 다른 기기가 앞서면 충돌로 멈춘다 — 내 글로 덮지 않고, 쓴 글은 화면에 남는다", async () => {
+    const { rerender } = render(<ReportDetail key={key} {...props} report={pcBody} />);
+    fireEvent.change(screen.getByLabelText("담임 의견"), { target: { value: "PC에서 막 쓴 의견" } });
+    rerender(<ReportDetail key={key} {...props} report={phoneBody} />);
+    expect(screen.getByRole("status")).toHaveTextContent("자동 저장을 멈췄습니다");
+    expect(screen.getByLabelText("담임 의견")).toHaveValue("PC에서 막 쓴 의견");
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(mocks.autosave).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "관리자에게 제출" })).toBeDisabled();
+  });
+
+  it("승인 관리자 · 반려 뒤 고쳐 다시 낸 본문이 보이고, 열려 있던 승인 확인은 닫힌다(보지 않은 본문을 승인하지 않게)", async () => {
+    const m2 = "10000000-0000-4000-8000-000000000005";
+    const first = { ...r, status: "manager_pending", manager_ids: [manager, m2], director_ids: [], manager_decisions: {}, director_decisions: {}, body: { ...EMPTY_BODY, detail: "1차 제출 글" }, revision: 5 } as unknown as WithdrawalReport;
+    const second = { ...first, revision: 8, body: { ...EMPTY_BODY, detail: "반려 뒤 고쳐 다시 낸 글" } } as unknown as WithdrawalReport;
+    const pendingKey = `${r.id}:manager_pending`;
+    const { rerender } = render(<ReportDetail key={pendingKey} {...props} report={first} userId={m2} />);
+    fireEvent.click(screen.getByRole("button", { name: "승인" }));
+    expect(screen.getByRole("button", { name: "승인 확인" })).toBeInTheDocument();
+    rerender(<ReportDetail key={pendingKey} {...props} report={second} userId={m2} />);
+    expect(screen.getByText("반려 뒤 고쳐 다시 낸 글")).toBeInTheDocument();
+    expect(screen.queryByText("1차 제출 글")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "승인 확인" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "승인" }));
+    fireEvent.click(screen.getByRole("button", { name: "승인 확인" }));
+    await waitFor(() => expect(mocks.change).toHaveBeenCalledWith(r.id, "approve", 8, undefined));
+  });
+
+  it("제출 직전 마저 저장하다 충돌하면 제출하지 않는다(렌더를 기다리지 않고 settle 값으로 판정)", async () => {
+    mocks.autosave.mockResolvedValue({ ok: false, conflict: true, error: "다른 화면에서 이 보고서가 바뀌었습니다." });
+    render(<ReportDetail key={key} {...props} report={pcBody} />);
+    fireEvent.change(screen.getByLabelText("담임 의견"), { target: { value: "의견" } });
+    fireEvent.click(screen.getByRole("button", { name: "관리자에게 제출" }));
+    fireEvent.click(screen.getByRole("button", { name: "보고서 제출 확인" }));
+    await screen.findByText(/처리를 멈췄습니다/);
+    expect(mocks.autosave).toHaveBeenCalledTimes(1);
+    expect(mocks.change).not.toHaveBeenCalled();
+  });
+});
