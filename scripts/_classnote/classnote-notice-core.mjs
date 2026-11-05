@@ -198,7 +198,12 @@ export async function processTarget(page, ctx, target, index = 0) {
     // 비상 정지 — 반 보드에서 글이 다른 원아에게 보인 적이 있으면(보고서·공지 어느 쪽이든) 원인을 볼 때까지 올리지 않는다.
     // 영어 반 방도 같은 표식을 따른다(보고서의 영어 반 방 경로와 같다 — 한쪽에서 새면 둘 다 멈춘다).
     if (classRouteHaltReason())
-      return { board: target.board, ok: false, note: "반 보드 발송이 비상 정지 중입니다 — 교차 확인 이상으로 멈췄습니다(연동 PC를 다시 켜기 전에 원인 확인 필요)" };
+      return {
+        board: target.board,
+        ok: false,
+        // 영어 반 방 대상엔 영어 용어로(수학 문구는 그대로) — 정지 표식은 하나라 둘 다 멈춘다.
+        note: `${isEnglishRoomTarget(target) ? "반 방" : "반 보드"} 발송이 비상 정지 중입니다 — 교차 확인 이상으로 멈췄습니다(연동 PC를 다시 켜기 전에 원인 확인 필요)`,
+      };
     // 영어 반 방(원장 2026-11-04 · `subject: "english"` 표식)은 대상 확정만 다르다 — 게시·중복 확인·409 재시도·교차 확인은 아래 같은 코드.
     const resolved = isEnglishRoomTarget(target)
       ? await resolveNoticeEnglishTarget(ctx.sql, page, { tenant: ctx.tenant, centerId: ctx.centerId, target })
@@ -209,7 +214,8 @@ export async function processTarget(page, ctx, target, index = 0) {
     let post = ctx.classPosts?.get(resolved.boardId) ?? null;
     if (ctx.classPosts && !post) {
       const baseline = await snapshotChildReports(page, ctx.centerId, resolved.others).catch(() => new Map());
-      post = { baseline, targeted: new Set(), contents: new Set(), posted: 0, checked: 0 };
+      // room = 영어 반 방(교차 확인 사유 문구의 용어만 가른다 — 판정은 같다).
+      post = { baseline, targeted: new Set(), contents: new Set(), posted: 0, checked: 0, room: isEnglishRoomTarget(target) };
       ctx.classPosts.set(resolved.boardId, post);
     }
     if (post) {
@@ -417,7 +423,10 @@ async function checkBoardLeak(page, { centerId, boardId, post, log }) {
   const { leakedTo, unknown } = await findNoticeLeaks(page, { centerId, boardId, others, contents: [...post.contents], baseline: post.baseline });
   if (leakedTo.length) {
     haltClassRoute("공지 교차 확인 이상");
-    log?.(`[notice] 🔴 교차 확인 이상 — 반 보드 #${boardId} 다른 원아 ${leakedTo.join(",")} · 반 보드 발송 비상 정지`);
+    log?.(`[notice] 🔴 교차 확인 이상 — ${post.room ? "반 방" : "반 보드"} #${boardId} 다른 원아 ${leakedTo.join(",")} · 반 보드·반 방 발송 비상 정지`);
+    // 수학 반 보드 문구는 그대로 · 영어 반 방은 영어 용어(정지 표식이 하나라 두 경로가 함께 멈춘다는 것도 적는다).
+    if (post.room)
+      return `🔴 반 방 교차 확인 이상 — 이 공지가 대상이 아닌 원아(${leakedTo.length}명)의 알림장에서 보입니다. 반 방·반 보드 발송을 멈췄습니다(ClassNote에서 확인한 뒤 게시취소해 주세요)`;
     return `🔴 반 보드 교차 확인 이상 — 이 공지가 대상이 아닌 원아(${leakedTo.length}명)의 알림장에서 보입니다. 반 보드 발송을 멈췄습니다(ClassNote에서 확인한 뒤 게시취소해 주세요)`;
   }
   if (unknown) log?.(`[notice] ⚠️ 반 보드 #${boardId} 교차 확인을 다 하지 못했습니다(조회 실패) — 게시는 성공으로 둔다`);

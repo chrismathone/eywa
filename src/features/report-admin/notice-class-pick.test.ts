@@ -161,4 +161,16 @@ describe("영어 개별 공지 — 반을 삼자 일치로 정하고, 그 반에
     expect(pickEnglishNoticeClass({ classes, teacher: "prefer" })).toMatchObject({ route: "room", classId: "나반", via: "teacher" });
     expect(pickEnglishNoticeClass({ classes: classes.map((c) => ({ ...c, taught: false })), teacher: "prefer" })).toMatchObject({ classId: "가반", via: "first" });
   });
+  it("🔴 prefer는 우선순위일 뿐 — 주인 반에 반 방이 없으면 학생의 다른 반 반 방으로(리뷰 2026-11-05 · 수학 prefer와 같은 뜻)", () => {
+    // 주인(사무실이 대신 보내는 요청서의 선생님)은 반 방 없는 가반만 맡고, 학생은 반 방 있는 나반(다른 선생님)에도 다닌다.
+    const classes = [en({ classId: "가반", taught: true, homeroom: true }), en({ classId: "나반", room: "나 방" })];
+    expect(pickEnglishNoticeClass({ classes, teacher: "prefer" })).toMatchObject({ route: "room", classId: "나반", via: "first" });
+    // strict(강사 본인)는 그대로 문 — 남의 반 방으로 옮기지 않는다.
+    expect(pickEnglishNoticeClass({ classes, teacher: "strict" })).toEqual({ route: "personal" });
+    // 주인 반 중 반 방 있는 반이 있으면 그 반이 먼저다(다른 반 방보다).
+    const both = [en({ classId: "가반", room: "가 방", taught: true }), en({ classId: "나반", room: "나 방" })];
+    expect(pickEnglishNoticeClass({ classes: both, teacher: "prefer" })).toMatchObject({ route: "room", classId: "가반", via: "teacher" });
+    // 반 방이 어디에도 없으면 지금처럼 1인 보드.
+    expect(pickEnglishNoticeClass({ classes: [en({ classId: "가반", taught: true })], teacher: "prefer" })).toEqual({ route: "personal" });
+  });
 });

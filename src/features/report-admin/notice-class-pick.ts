@@ -98,6 +98,7 @@ export function pickNoticeClass(input: {
  * 있으면 반 방, 없으면 지금처럼 이미 있는 `(영어)이름` 1인 보드(`personal`)로 간다. 반을 고르는 규칙은 수학과 같은 삼자 일치다:
  *  · 선생님 다리(strict = 강사 본인 · prefer = 사무실이 요청서 주인 대신) — 맡은 반이 있으면 그 반(화면이 고른 반 → 반 방 있는 반 →
  *    JJ 아닌 반 → 담임 반 → 이름순). 🔴 strict인데 맡은 반이 없으면 반 방으로 보내지 않는다(남의 반 방 금지) — 지금처럼 1인 보드.
+ *    prefer는 주인 반 중 **반 방 있는 반**이 있을 때만 그 반 — 없으면 아래 사무실 규칙(수학 prefer와 같은 뜻 · 주인 반이 배달을 막지 않는다).
  *  · 선생님 없는 발송(사무실 '반 공지' 탭) = 화면이 고른 반 → 없으면 반 방 있는 반 → 이름순 첫 반.
  * 화면이 고른 반이 여럿이면(한 학생이 고른 반 둘에 다 다닌다) **고른 반들 안에서** 같은 순서(반 방 있는 반 먼저)로 고른다 —
  * 고른 순서(수강 행 순서·로스터)에 따라 반 방과 1인 보드가 갈리지 않게(리뷰 2026-11-04).
@@ -143,7 +144,12 @@ export function pickEnglishNoticeClass(input: {
   if (!all.length) return { route: "personal" };
   if (input.teacher !== "none") {
     const mine = all.filter((c) => c.taught);
-    if (mine.length) return chosen(hinted(mine) ?? best(mine), "teacher");
+    // strict(강사 본인) = 문 — 맡은 반 안에서만 고른다(그 반에 반 방이 없으면 1인 보드).
+    // prefer(사무실이 요청서 주인 대신) = **우선순위일 뿐** — 주인 반 중 반 방 있는 반만 먼저 보고, 없으면 배달을 막지 않고 아래 사무실
+    // 규칙으로 간다(수학 prefer가 반 보드 있는 반 안에서만 주인 반을 고르는 것과 같은 뜻 · 리뷰 2026-11-05: 주인 반에 반 방이 없어
+    // 학생의 다른 반 반 방을 두고 1인 보드로 가던 것 — 1인 보드가 없는 신입은 실패했다).
+    const pool = input.teacher === "prefer" ? mine.filter((c) => c.room) : mine;
+    if (pool.length) return chosen(hinted(pool) ?? best(pool), "teacher");
     if (input.teacher === "strict") return { route: "personal" };
   }
   const sel = hinted(all);

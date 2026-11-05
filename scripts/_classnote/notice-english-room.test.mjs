@@ -193,15 +193,17 @@ describe("공지 워커 — 영어 반 방 대상", () => {
     };
     const c = ctx();
     await processTarget(leaky, c, target());
-    expect(c.leakAlert).toContain("반 보드 교차 확인 이상");
+    // 영어 반 방엔 영어 용어(수학 반 보드 문구는 그대로 — notice-class-route.test.mjs) · 두 경로가 함께 멈춘다는 것도 적는다(리뷰 2026-11-05).
+    expect(c.leakAlert).toContain("반 방 교차 확인 이상");
+    expect(c.leakAlert).toContain("반 방·반 보드 발송을 멈췄습니다");
     expect(classRouteHaltReason()).toBe("공지 교차 확인 이상");
     const next = await processTarget(leaky, c, target({ studentId: "33333333-3333-4333-8333-333333333333" }));
-    expect(next.note).toContain("비상 정지");
+    expect(next.note).toContain("반 방 발송이 비상 정지 중");
   });
   it("🔴 비상 정지 중에는 영어 반 방으로도 올리지 않는다(대상 확정도 하지 않는다)", async () => {
     haltClassRoute("수업보고서 교차 확인 이상");
     const r = await processTarget(page, ctx(), target());
-    expect(r.note).toContain("비상 정지");
+    expect(r.note).toContain("반 방 발송이 비상 정지 중");
     expect(m.sqlTexts).toEqual([]);
     expect(m.posts).toEqual([]);
   });

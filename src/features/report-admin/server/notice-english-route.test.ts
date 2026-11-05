@@ -149,7 +149,7 @@ describe("routeNoticeCandidates — 영어", () => {
     expect(r.classTargets).toEqual([]);
     expect(r.rest).toHaveLength(4);
   });
-  it("🔴 보고서 미발송 반은 반 방으로 보내지 않는다 — 그 반으로 정해지면 1인 보드(고른 반·맡은 반이면 다른 반 반 방으로 옮기지 않는다)", async () => {
+  it("🔴 보고서 미발송 반은 반 방으로 보내지 않는다 — 그 반으로 정해지면 1인 보드(고른 반·강사 본인이 맡은 반이면 다른 반 반 방으로 옮기지 않는다)", async () => {
     Object.assign(db.state.tables, {
       enrollments: [enr("s1", "미발송"), enr("s2", "미발송"), enr("s2", "정규")],
       classes: [klass("미발송", { report_optout: true, teacher_id: "미발송담임" }), klass("정규", { teacher_id: "정규담임" })],
@@ -163,8 +163,10 @@ describe("routeNoticeCandidates — 영어", () => {
     expect((await resolveEnglishNoticeClasses(T, [{ studentId: "s2", hints: ["미발송"] }])).get("s2")).toEqual({ route: "personal" });
     const homeroom = await resolveEnglishNoticeClasses(T, [{ studentId: "s2", teacherIds: ["미발송담임"], teacherStrict: true }]);
     expect(homeroom.get("s2")).toEqual({ route: "personal" });
+    // 사무실이 요청서 주인(미발송 반 담임) 대신 보내면(prefer) 주인 반은 우선순위일 뿐 — 주인 반에서 반 방을 못 쓰면 학생의 다른 반 반 방으로
+    // (수학 prefer가 반 보드 있는 반 안에서만 주인 반을 고르는 것과 같은 뜻 · 리뷰 2026-11-05). 강사 본인(strict)은 위처럼 그 반의 일.
     const owner = await resolveEnglishNoticeClasses(T, [{ studentId: "s2", teacherIds: ["미발송담임"], teacherStrict: false }]);
-    expect(owner.get("s2")).toEqual({ route: "personal" });
+    expect(owner.get("s2")).toMatchObject({ route: "room", classId: "정규", via: "first" });
   });
   it("🔴 [[#54]] 위임은 오늘 걸친 행만 읽는다 — 지난 위임이 1,000건 쌓여도 오늘 위임이 잘리지 않는다", async () => {
     const past = Array.from({ length: 1000 }, (_, i) => delegation("E1", "원어민", "2026-01-01", "2026-01-02", { id: `p${i}` }));
