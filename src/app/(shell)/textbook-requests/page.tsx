@@ -1,4 +1,6 @@
 import { requireAccess } from "@/lib/auth/require-access";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { textbookRequestStudentIds } from "@/features/billing/server/textbook-scope";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -41,7 +43,15 @@ export default async function TextbookRequestsPage({
   const teacherId = await effectiveTeacherId();
   const isTeacher = teacherId !== null;
   // 카탈로그 = 폼 '교재 검색'(단가표 146권, 선택 시 교재명·상세·금액 자동입력 — ijw 패리티). 독립 조회라 병렬(B4).
-  const [settings, catalog] = await Promise.all([getTenantSettings(), getCatalogOptions()]);
+  // 쓰기 여부 = 서버 액션(requestTextbook·수정·삭제·발송)과 **같은 판정** — 같은 행위자(teacherView)로
+  // canWriteTenant("textbook_requests"). 읽기 권한이면 양식은 잠그고 저장·발송·수정·삭제 단추는 그리지 않는다
+  // (원장 2026-11-05 — 양식을 다 쓰고 저장해야 "권한이 없습니다"가 떴다, write-lock.ts).
+  const [settings, catalog, actor] = await Promise.all([
+    getTenantSettings(),
+    getCatalogOptions(),
+    getCurrentUser({ teacherView: true }),
+  ]);
+  const canWrite = actor ? await canWriteTenant(actor.systemRole, "textbook_requests") : false;
 
   let rows;
   let students;
@@ -85,6 +95,7 @@ export default async function TextbookRequestsPage({
       viewerUserId={user.id}
       initialStudentIds={initialStudentIds}
       classnoteOn={classnoteModuleOn(settings)}
+      canWrite={canWrite}
     />
   );
 }

@@ -6,6 +6,7 @@ import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import type { ReactNode } from "react";
 import type { PlacementEdge } from "@/features/owner/navigation-placement";
+import { useWriteLock } from "./write-lock-context";
 
 export type NavigationDrag =
   | { kind: "group"; groupId: string; label: string; icon: AywaIconName }
@@ -48,6 +49,8 @@ function DragHandle({ label, attributes, listeners, activatorRef }: {
   label: string; attributes: DraggableAttributes; listeners: DraggableSyntheticListeners;
   activatorRef: (node: HTMLElement | null) => void;
 }) {
+  // 읽기 권한(쓰기 잠금)이면 끌기 손잡이를 그리지 않는다 — 옮겨 놓아도 저장할 수 없다(write-lock-context.tsx).
+  if (useWriteLock().locked) return null;
   return <button type="button" ref={activatorRef} {...attributes} {...listeners} aria-label={`${label} 끌기`}
     title="끌어서 이동 · 스페이스로 집기, 방향키로 이동, Esc로 취소"
     className="text-text-faint hover:text-primary hover:bg-primary-soft flex size-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:cursor-grabbing">

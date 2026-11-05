@@ -73,6 +73,7 @@ export function defaultItems(bundle: Bundle): Item[] {
       return ["kpi:students", "panel:subjects", "panel:nowClasses", "panel:notices"].map((id) => newItem(id));
     case "teacher":
       return ["panel:nowClasses", "panel:reports", "panel:notices"].map((id) => newItem(id));
+    case "parttime":
     case "student":
       return [newItem("panel:notices")];
   }

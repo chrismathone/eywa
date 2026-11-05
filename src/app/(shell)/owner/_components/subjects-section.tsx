@@ -39,6 +39,7 @@ import { PeriodListEditor, SubjectListEditor } from "./list-editors";
 import { WeekdayGroupingEditor } from "./weekday-grouping-editor";
 import { weekdayGroupingChoices } from "@/features/timetable/lib/weekday-groups";
 import { SubjectSessionEditor } from "./subject-session-editor";
+import { useLockedPlaceholder, useWriteLock } from "./write-lock-context";
 import type { PeriodDef } from "@/features/periods/resolve";
 
 const cellCls =
@@ -229,19 +230,21 @@ export function SubjectsSection({
                           value={s.skillAreas}
                           onChange={(v) => patchSubject(i, { skillAreas: v })}
                         />
-                        <button
-                          type="button"
-                          className={ghostBtnCls}
-                          onClick={() =>
-                            patchSubject(i, {
-                              skillAreas: s.key === "english" ? undefined : [],
-                            })
-                          }
-                        >
-                          {s.key === "english"
-                            ? "기본 6영역(Vocab~Speaking)으로 되돌리기"
-                            : "영역 전체 해제 (수업계획 대상 제외)"}
-                        </button>
+                        {readOnly ? null : (
+                          <button
+                            type="button"
+                            className={ghostBtnCls}
+                            onClick={() =>
+                              patchSubject(i, {
+                                skillAreas: s.key === "english" ? undefined : [],
+                              })
+                            }
+                          >
+                            {s.key === "english"
+                              ? "기본 6영역(Vocab~Speaking)으로 되돌리기"
+                              : "영역 전체 해제 (수업계획 대상 제외)"}
+                          </button>
+                        )}
                         <p className="text-text-faint text-xs">
                           영역을 삭제해도 이미 저장된 수업계획 행은 사라지지 않고 &lsquo;미등록 영역&rsquo;으로
                           표시됩니다.
@@ -254,21 +257,23 @@ export function SubjectsSection({
                             ? "기본 6영역(Vocab · Listening · Reading · Grammar · Writing · Speaking)을 사용 중입니다."
                             : "이 과목은 수업계획(ECS) 대상이 아닙니다."}
                         </p>
-                        <button
-                          type="button"
-                          className={ghostBtnCls}
-                          onClick={() =>
-                            patchSubject(i, {
-                              skillAreas:
-                                s.key === "english"
-                                  ? DEFAULT_ENGLISH_SKILL_AREAS.map((a) => ({ ...a }))
-                                  : [{ key: "area_1", label: "" }],
-                            })
-                          }
-                        >
-                          <Plus className="size-3.5" />{" "}
-                          {s.key === "english" ? "영역 직접 편집 (기본 복사로 시작)" : "영역 만들기"}
-                        </button>
+                        {readOnly ? null : (
+                          <button
+                            type="button"
+                            className={ghostBtnCls}
+                            onClick={() =>
+                              patchSubject(i, {
+                                skillAreas:
+                                  s.key === "english"
+                                    ? DEFAULT_ENGLISH_SKILL_AREAS.map((a) => ({ ...a }))
+                                    : [{ key: "area_1", label: "" }],
+                              })
+                            }
+                          >
+                            <Plus className="size-3.5" />{" "}
+                            {s.key === "english" ? "영역 직접 편집 (기본 복사로 시작)" : "영역 만들기"}
+                          </button>
+                        )}
                       </>
                     )}
                   </div>
@@ -293,35 +298,39 @@ export function SubjectsSection({
                           value={s.weekdayPeriods}
                           onChange={(v) => patchSubject(i, { weekdayPeriods: v })}
                         />
-                        <button
-                          type="button"
-                          className={ghostBtnCls}
-                          onClick={() =>
-                            patchSubject(i, {
-                              weekdayPeriods:
-                                s.key === "english" ? [...ENGLISH_WEEKDAY_PERIOD_LIST] : undefined,
-                            })
-                          }
-                        >
-                          {s.key === "english"
-                            ? "내장 기본(영어 11교시)으로 되돌리기"
-                            : "전역 평일 교시 사용 (전용 해제)"}
-                        </button>
+                        {readOnly ? null : (
+                          <button
+                            type="button"
+                            className={ghostBtnCls}
+                            onClick={() =>
+                              patchSubject(i, {
+                                weekdayPeriods:
+                                  s.key === "english" ? [...ENGLISH_WEEKDAY_PERIOD_LIST] : undefined,
+                              })
+                            }
+                          >
+                            {s.key === "english"
+                              ? "내장 기본(영어 11교시)으로 되돌리기"
+                              : "전역 평일 교시 사용 (전용 해제)"}
+                          </button>
+                        )}
                       </>
                     ) : (
                       <>
                         <p className="text-text-dim text-xs">
                           전역 평일 교시(운영 체계 탭)를 사용 중입니다.
                         </p>
-                        <button
-                          type="button"
-                          className={ghostBtnCls}
-                          onClick={() =>
-                            patchSubject(i, { weekdayPeriods: o.weekdayPeriods.map((p) => ({ ...p })) })
-                          }
-                        >
-                          <Plus className="size-3.5" /> 과목 전용 교시 만들기 (전역 복사로 시작)
-                        </button>
+                        {readOnly ? null : (
+                          <button
+                            type="button"
+                            className={ghostBtnCls}
+                            onClick={() =>
+                              patchSubject(i, { weekdayPeriods: o.weekdayPeriods.map((p) => ({ ...p })) })
+                            }
+                          >
+                            <Plus className="size-3.5" /> 과목 전용 교시 만들기 (전역 복사로 시작)
+                          </button>
+                        )}
                       </>
                     )}
                   </div>
@@ -678,6 +687,9 @@ function SkillAreaListEditor({
 }) {
   const labels = value.map((a) => a.label.trim()).filter(Boolean);
   const dupLabels = new Set(labels.filter((l, i) => labels.indexOf(l) !== i));
+  // 읽기 권한(쓰기 잠금)이면 영역 추가·삭제를 그리지 않고 빈 칸엔 권한 안내(write-lock-context.tsx).
+  const { locked } = useWriteLock();
+  const ph = useLockedPlaceholder();
   const confirmKey = (i: number) => {
     const a = value[i];
     if (a.key) return; // 확정된 ID는 불변
@@ -702,7 +714,7 @@ function SkillAreaListEditor({
             <input
               className={`${cellCls} w-[160px] ${dup ? "border-danger" : ""}`}
               value={a.label}
-              placeholder="영역 이름 (예: Vocab)"
+              placeholder={ph("영역 이름 (예: Vocab)")}
               onChange={(e) =>
                 onChange(value.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))
               }
@@ -739,24 +751,28 @@ function SkillAreaListEditor({
             </span>
             <span className={badgeCls}>{a.key || "ID 자동"}</span>
             {dup ? <span className="text-danger text-xs">이름 중복</span> : null}
-            <button
-              type="button"
-              aria-label="영역 삭제"
-              className="text-text-faint hover:text-danger shrink-0 rounded p-1"
-              onClick={() => onChange(value.filter((_, j) => j !== i))}
-            >
-              <X className="size-4" />
-            </button>
+            {locked ? null : (
+              <button
+                type="button"
+                aria-label="영역 삭제"
+                className="text-text-faint hover:text-danger shrink-0 rounded p-1"
+                onClick={() => onChange(value.filter((_, j) => j !== i))}
+              >
+                <X className="size-4" />
+              </button>
+            )}
           </div>
         );
       })}
-      <button
-        type="button"
-        className={ghostBtnCls}
-        onClick={() => onChange([...value, { key: "", label: "" }])}
-      >
-        <Plus className="size-3.5" /> 영역 추가
-      </button>
+      {locked ? null : (
+        <button
+          type="button"
+          className={ghostBtnCls}
+          onClick={() => onChange([...value, { key: "", label: "" }])}
+        >
+          <Plus className="size-3.5" /> 영역 추가
+        </button>
+      )}
     </div>
   );
 }
@@ -769,6 +785,7 @@ function TimeListEditor({
   value: string[];
   onChange: (v: string[]) => void;
 }) {
+  const { locked } = useWriteLock();
   return (
     <div className="flex flex-wrap items-center gap-2">
       {value.map((t, i) => (
@@ -779,19 +796,23 @@ function TimeListEditor({
             value={t}
             onChange={(e) => onChange(value.map((x, j) => (j === i ? e.target.value : x)))}
           />
-          <button
-            type="button"
-            aria-label="가로줄 삭제"
-            className="text-text-faint hover:text-danger shrink-0 rounded p-1"
-            onClick={() => onChange(value.filter((_, j) => j !== i))}
-          >
-            <X className="size-4" />
-          </button>
+          {locked ? null : (
+            <button
+              type="button"
+              aria-label="가로줄 삭제"
+              className="text-text-faint hover:text-danger shrink-0 rounded p-1"
+              onClick={() => onChange(value.filter((_, j) => j !== i))}
+            >
+              <X className="size-4" />
+            </button>
+          )}
         </span>
       ))}
-      <button type="button" className={ghostBtnCls} onClick={() => onChange([...value, ""])}>
-        <Plus className="size-3.5" /> 가로줄 추가
-      </button>
+      {locked ? null : (
+        <button type="button" className={ghostBtnCls} onClick={() => onChange([...value, ""])}>
+          <Plus className="size-3.5" /> 가로줄 추가
+        </button>
+      )}
     </div>
   );
 }
@@ -852,6 +873,7 @@ function BreakListEditor({
 }) {
   const patch = (i: number, p: Partial<BreakRangeSetting>) =>
     onChange(value.map((b, j) => (j === i ? { ...b, ...p } : b)));
+  const { locked } = useWriteLock();
   return (
     <div className="space-y-1.5">
       {value.map((b, i) => (
@@ -871,23 +893,27 @@ function BreakListEditor({
             value={b.end}
             onChange={(e) => patch(i, { end: e.target.value })}
           />
-          <button
-            type="button"
-            aria-label="쉬는 시간 삭제"
-            className="text-text-faint hover:text-danger shrink-0 rounded p-1"
-            onClick={() => onChange(value.filter((_, j) => j !== i))}
-          >
-            <X className="size-4" />
-          </button>
+          {locked ? null : (
+            <button
+              type="button"
+              aria-label="쉬는 시간 삭제"
+              className="text-text-faint hover:text-danger shrink-0 rounded p-1"
+              onClick={() => onChange(value.filter((_, j) => j !== i))}
+            >
+              <X className="size-4" />
+            </button>
+          )}
         </div>
       ))}
-      <button
-        type="button"
-        className={ghostBtnCls}
-        onClick={() => onChange([...value, { start: "", end: "" }])}
-      >
-        <Plus className="size-3.5" /> 쉬는 시간 추가
-      </button>
+      {locked ? null : (
+        <button
+          type="button"
+          className={ghostBtnCls}
+          onClick={() => onChange([...value, { start: "", end: "" }])}
+        >
+          <Plus className="size-3.5" /> 쉬는 시간 추가
+        </button>
+      )}
     </div>
   );
 }

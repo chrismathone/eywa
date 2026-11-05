@@ -45,11 +45,25 @@ function slotPicksLabel(picks: readonly string[]): string {
  * 🔴 **여기서 실제 칸에 쓰지도 않는다**(원장 결정 D1, 2026-09-23) — 옛 [미리보기]→[기입] 문을 걷고
  *    읽기 전용 **월간계획 미리보기**로 바꿨다. 실제로 옮기는 길은 시트의 [월간계획 가져오기] 하나뿐이다.
  * 🔑 [배정 삭제]는 둔다(감사 F4) — 잘못 건 배정의 '계획'이 월간 달력에 계속 뜨는데 지울 곳이 없었다.
- *    삭제는 배정(=계획)만 지우고 이미 시트에 적은 실제 진도는 건드리지 않는다. 게이트는 서버(그 반 ECS 쓰기).
+ *    삭제는 배정(=계획)만 지우고 이미 시트에 적은 실제 진도는 건드리지 않는다. 게이트는 서버(그 반 ECS 쓰기)이고,
+ *    단추는 같은 게이트를 통과한 반(`deletableClassIds`)에만 그린다.
  * 🔑 반·교재 검색은 **화면 안에서** 거른다(감사 N7) — 목록은 한 번에 다 받으므로(fetch-once) 주소를 바꿔
  *    다시 조회할 이유가 없다.
  */
-export function PlansFace({ rows, skillAreas }: { rows: ClassTextbookPlanRow[]; skillAreas: SkillAreaSetting[] }) {
+export function PlansFace({
+  rows,
+  skillAreas,
+  deletableClassIds,
+}: {
+  rows: ClassTextbookPlanRow[];
+  skillAreas: SkillAreaSetting[];
+  /**
+   * [배정 삭제]를 그릴 반 — page.tsx가 서버와 **같은 게이트**(그 반 ECS 쓰기, plan-delete-access.ts)로 고른다.
+   * 여기 없는 반엔 단추를 그리지 않는다(원장 2026-11-05 읽기 권한 규칙 — write-lock.ts).
+   */
+  deletableClassIds: readonly string[];
+}) {
+  const deletable = useMemo(() => new Set(deletableClassIds), [deletableClassIds]);
   const [previewing, setPreviewing] = useState<ClassTextbookPlanRow | null>(null);
   const [deleting, setDeleting] = useState<ClassTextbookPlanRow | null>(null);
   const [classFilter, setClassFilter] = useState("");
@@ -163,9 +177,11 @@ export function PlansFace({ rows, skillAreas }: { rows: ClassTextbookPlanRow[]; 
                         <Button type="button" size="sm" variant="outline" onClick={() => setPreviewing(p)}>
                           미리보기
                         </Button>
-                        <Button type="button" size="sm" variant="ghost" onClick={() => setDeleting(p)}>
-                          배정 삭제
-                        </Button>
+                        {deletable.has(p.classId) ? (
+                          <Button type="button" size="sm" variant="ghost" onClick={() => setDeleting(p)}>
+                            배정 삭제
+                          </Button>
+                        ) : null}
                       </span>
                     </td>
                   </tr>

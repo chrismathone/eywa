@@ -37,7 +37,17 @@ function SaveBtn() {
  * 반 1개의 급여 설정 행(원장 전용) — 과정(수동) + 배분율(수동).
  * 자동 판정된 과정은 회색으로 보여주고, 비워두면 그대로 자동 판정을 쓴다.
  */
-export function ClassSalaryRowForm({ row }: { row: ClassSalaryRow }) {
+export function ClassSalaryRowForm({
+  row,
+  canEdit,
+}: {
+  row: ClassSalaryRow;
+  /**
+   * 급여 정책 쓰기(`canManageSalary` — 서버 saveClassSalary와 같은 판정). false면 '저장'을 그리지 않는다
+   * (칸은 부모의 비활성 fieldset이 잠근다 — 원장 2026-11-05 읽기 권한 규칙, write-lock.ts).
+   */
+  canEdit: boolean;
+}) {
   const [state, formAction] = useActionState<SaveClassSalaryState, FormData>(saveClassSalary, undefined);
   // ⚠️ select를 controlled state로 두면 저장 후 화면이 거짓말을 한다: React 19는 `<form action>` 제출마다
   // 폼을 자동 리셋하는데, state는 그대로라 "저장했는데 선택이 풀린" 꼴이 된다(#83·폼 자동리셋 계열).
@@ -102,7 +112,7 @@ export function ClassSalaryRowForm({ row }: { row: ClassSalaryRow }) {
               {d.label}
             </label>
           ))}
-          <SaveBtn />
+          {canEdit ? <SaveBtn /> : null}
           {state?.error ? <span className="text-danger text-xs">{state.error}</span> : null}
           {state?.ok ? <span className="text-text-faint text-xs">저장됨</span> : null}
         </form>

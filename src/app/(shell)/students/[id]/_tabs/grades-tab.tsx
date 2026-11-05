@@ -31,8 +31,12 @@ const PAGE_SIZE = 20;
 /** 성적 목록 열 머리 필터·정렬·쪽 — 주소에 싣는 키(탭을 옮기면 탭 링크가 `?tab=`만 실어 저절로 풀린다). */
 export const GRADES_QUERY_KEYS = ["subject", "kind", "sort", "dir", "fScore", "fDelta", "page"] as const;
 
-export async function GradesTab({ studentId, query, back, embed }: {
-  studentId: string; query: Partial<Record<(typeof GRADES_QUERY_KEYS)[number], string>>; back: string | null; embed: boolean;
+/**
+ * canWrite = `canWriteTenant(role, "students")` — 성적·목표·코멘트·레벨테스트 서버 액션 게이트와 같은 판정(page.tsx가 계산).
+ * 읽기 권한이면 입력 폼은 비활성 + 안내, 추가·수정·삭제 단추는 그리지 않는다(원장 2026-11-05 — lib/write-lock.ts).
+ */
+export async function GradesTab({ studentId, query, back, embed, canWrite }: {
+  studentId: string; query: Partial<Record<(typeof GRADES_QUERY_KEYS)[number], string>>; back: string | null; embed: boolean; canWrite: boolean;
 }) {
   const [rows, grades, levelTests, settings, goals, comments] = await Promise.all([
     getStudentUnifiedRows(studentId),
@@ -95,21 +99,21 @@ export async function GradesTab({ studentId, query, back, embed }: {
       {/* JJ실 학습(인재원)은 2026-09-21에 **'SRS 성적' 탭**으로 옮겼다(원장 지시: 일반 성적과 분리).
           이 탭에 다시 끌어오지 말 것 — 두 탭이 같은 구역을 그리면 기간 칩이 서로를 튕겨 낸다. */}
       <div className="border-border border-t pt-4">
-        <GoalsSection studentId={studentId} goals={goals} />
+        <GoalsSection studentId={studentId} goals={goals} canWrite={canWrite} />
       </div>
 
-      <GradeForm studentId={studentId} subjectOptions={subjectMaps.options} />
+      <GradeForm studentId={studentId} subjectOptions={subjectMaps.options} canWrite={canWrite} />
 
       <StudentGradeRecords rows={pageRows} studentId={studentId} notesById={notesById} subjectLabel={subjectLabels}
-        view={view} href={href} filters={filterOptions} goals={goalViews} />
+        view={view} href={href} filters={filterOptions} goals={goalViews} canWrite={canWrite} />
       {totalPages > 1 ? <Pagination page={page} totalPages={totalPages} total={listed.length} hrefForPage={(p) => href({ page: String(p) })} /> : null}
 
       {/* 성적 코멘트 · 레벨테스트 — 둘 다 짧은 목록이라 세로로만 쌓으면 넓은 창에서 오른쪽이 통째로 빈다.
           폭이 되면 나란히(auto-fit), 좁으면 접힘. 구분선은 두 줄이 겹치지 않게 그리드 바깥에 한 번만.
           (목표 섹션은 입력폼·성적표 위라 인접하지 않아 그대로 둔다 — 순서를 바꾸면 입력 흐름이 깨진다.) */}
       <div className="border-border grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-x-6 gap-y-4 border-t pt-4">
-        <GradeCommentsSection studentId={studentId} comments={comments} />
-        <LevelTests studentId={studentId} tests={levelTests} />
+        <GradeCommentsSection studentId={studentId} comments={comments} canWrite={canWrite} />
+        <LevelTests studentId={studentId} tests={levelTests} canWrite={canWrite} />
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { leavePeriodLabel } from "@/features/leave/accrual";
 import { formatLeaveDays } from "@/features/leave/request-days";
 import { formatSignedDays } from "@/features/leave/balance";
@@ -32,6 +33,8 @@ const BOX_TABS = [
     key: "all",
     label: "전체",
     empty: "관련 문서가 없습니다 — 위 ‘기안하기’로 시작하세요.",
+    // 읽기 권한엔 '기안하기'가 없다 — 없는 단추를 가리키지 않는다(원장 2026-11-05).
+    emptyReadonly: "관련 문서가 없습니다.",
   },
   {
     key: "waiting",
@@ -47,6 +50,7 @@ const BOX_TABS = [
     key: "progress",
     label: "진행",
     empty: "진행 중인 문서가 없습니다 — 위 ‘기안하기’로 시작하세요.",
+    emptyReadonly: "진행 중인 문서가 없습니다.",
   },
   {
     key: "done",
@@ -83,10 +87,13 @@ export default async function ApprovalsPage({
 
   // 대결은 원장만 한다(decideDocument) — '학원 전체 진행' 함도 원장에게만(같은 판정).
   const isMaster = user.systemRole === "master";
-  // 두 조회는 서로 독립 — 함께 받는다(B4 직렬 워터폴 금지).
-  const [boxes, balance] = await Promise.all([
+  // 세 조회는 서로 독립 — 함께 받는다(B4 직렬 워터폴 금지).
+  // canWrite = 기안 액션(requireApprovalWriter)과 같은 canWriteTenant("approvals") — 읽기 권한이면 '기안하기'를 그리지 않는다.
+  // ⚠️ 결재·회수·댓글은 이 값과 무관하다(결재선 기준 설계, actions.ts requireSignedIn) — 상세 화면 몫.
+  const [boxes, balance, canWrite] = await Promise.all([
     getApprovalBoxes(user.id, { academyWide: isMaster }),
     getMyLeaveBalance(user.id),
+    canWriteTenant(user.systemRole, "approvals"),
   ]);
 
   const tabs = BOX_TABS.filter((t) => t.key !== "academy" || boxes.academyPending !== null);
@@ -138,10 +145,12 @@ export default async function ApprovalsPage({
         description={boxSummary}
         embedLabel={boxSummary ? `전자결재 · ${boxSummary}` : undefined}
         actions={
-          <Button render={<Link href="/approvals/new" />}>
-            <EyIcon name="plus" size={16} />
-            기안하기
-          </Button>
+          canWrite ? (
+            <Button render={<Link href="/approvals/new" />}>
+              <EyIcon name="plus" size={16} />
+              기안하기
+            </Button>
+          ) : undefined
         }
       />
 
@@ -210,7 +219,7 @@ export default async function ApprovalsPage({
 
           <FaceTabs faces={faces} active={face} ariaLabel="결재함 전환" />
 
-          <DocList docs={docsByTab[face]} emptyText={activeTab.empty} deferredConfirmIds={deferredConfirmIds} />
+          <DocList docs={docsByTab[face]} emptyText={!canWrite && "emptyReadonly" in activeTab ? activeTab.emptyReadonly : activeTab.empty} deferredConfirmIds={deferredConfirmIds} />
         </>
       )}
     </div>

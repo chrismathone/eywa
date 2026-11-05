@@ -150,7 +150,11 @@ function DeleteBtn({ id, studentId }: { id: string; studentId: string }) {
   );
 }
 
-export function LevelTests({ studentId, tests }: { studentId: string; tests: LevelTestRow[] }) {
+/**
+ * canWrite = 서버 `createStudentLevelTest`·`deleteStudentLevelTest`와 같은 판정(`canWriteTenant(role, "students")`) — page.tsx가 내린다.
+ * 읽기 권한이면 '추가'·삭제를 그리지 않는다(원장 2026-11-05 — lib/write-lock.ts).
+ */
+export function LevelTests({ studentId, tests, canWrite }: { studentId: string; tests: LevelTestRow[]; canWrite: boolean }) {
   const subjects = useSubjectMaps();
   const [open, setOpen] = useState(false);
   // 폼 닫힘은 제출 후 라우터 revalidate로 목록 갱신되며, 사용자가 닫기/취소로 닫는다.
@@ -159,10 +163,12 @@ export function LevelTests({ studentId, tests }: { studentId: string; tests: Lev
     <section className="space-y-3">
       <header className="flex items-center justify-between">
         <h3 className="text-foreground text-sm font-bold">레벨테스트</h3>
-        <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-          <Plus className="size-3.5" />
-          추가
-        </Button>
+        {canWrite ? (
+          <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+            <Plus className="size-3.5" />
+            추가
+          </Button>
+        ) : null}
       </header>
 
       {tests.length === 0 ? (
@@ -187,7 +193,7 @@ export function LevelTests({ studentId, tests }: { studentId: string; tests: Lev
                     {t.level ? <span className="text-primary text-xs font-bold">{t.level}</span> : null}
                     <span className="text-muted-foreground num text-xs">{t.testedOn}</span>
                   </div>
-                  <DeleteBtn id={t.id} studentId={studentId} />
+                  {canWrite ? <DeleteBtn id={t.id} studentId={studentId} /> : null}
                 </div>
                 {subs.length > 0 ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
@@ -205,7 +211,7 @@ export function LevelTests({ studentId, tests }: { studentId: string; tests: Lev
         </ul>
       )}
 
-      {open ? <Dialog studentId={studentId} onClose={() => setOpen(false)} /> : null}
+      {open && canWrite ? <Dialog studentId={studentId} onClose={() => setOpen(false)} /> : null}
     </section>
   );
 }

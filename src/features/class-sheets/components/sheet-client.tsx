@@ -66,6 +66,10 @@ import { SheetGrid } from "./sheet-grid";
 import { CopyPrevWeek } from "./copy-prev-week";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { TodayClassSheet } from "./today-class-sheet";
+import { writeLockedNote } from "@/lib/write-lock";
+
+/** 쓰기 권한은 있지만 담당 반이 아니라서 보기만 할 때의 안내(권한 안내 writeLockedNote와 구분). */
+const ECS_SCOPE_LOCK_NOTE = "담당 반이 아니라 보기만 할 수 있습니다.";
 
 /**
  * 시트 핸들러 = **계획 줄 기계**([PlanHandlers](./use-plan-handlers.ts)) + 출결·마크.
@@ -938,7 +942,15 @@ export function SheetClient({
         />
       ) : null}
 
-      {doc.recoverable ? (
+      {/* 읽기 권한 안내 — 계획·명단·좌측 패널 칸은 이미 잠겨 있지만 값이 차 있으면 왜 못 고치는지 모른다.
+          칸마다 문구를 달지 않고 **시트에 한 줄만**(원장 2026-11-05 읽기 권한 규칙, src/lib/write-lock.ts).
+          ⚠️ 주간 시트(full)에서만 — 오늘 면은 반마다 이 컴포넌트를 쌓으므로 페이지(ecs/page.tsx)가 한 번 띄운다. */}
+      {/* 잠긴 이유를 가른다(2026-11-05 리뷰) — 쓰기 권한은 있는데 담당 반이 아니라 보기만 하는 경우(자리 화면의 남의 반 링크 등)에
+          "작성 권한이 필요합니다"를 띄우면 이미 권한이 있는 사람에게 틀린 말이 된다. */}
+      {variant === "full" && !canEdit ? <p className="text-text-dim px-1 text-sm">{data.scopeLocked ? ECS_SCOPE_LOCK_NOTE : writeLockedNote("ecs")}</p> : null}
+      {/* 읽기 권한이면 그리지 않는다 — 저장 큐가 canEdit=false라 '복구해서 저장'을 눌러도 아무것도 저장되지 않는데
+          "복구됨"이 떴다. 기기에 남은 기록은 지우지 않고 둔다(쓰기 권한이 돌아오면 그때 다시 뜬다). */}
+      {doc.recoverable && canEdit ? (
         <div className="border-line bg-bg-soft flex flex-wrap items-center gap-2 rounded-2xl border border-dashed px-4 py-2.5 text-sm">
           <span className="text-foreground">
             이전에 저장되지 못한 입력 {doc.recoverable.mutations.length}건이 이
@@ -1051,6 +1063,7 @@ export function SheetClient({
                 // 🔴 왼쪽 표 행만 트랙별 목록(EiE = 달력 칸) — 교시 계획 줄은 `data.skillAreas` 그대로다.
                 skillAreas={data.goalAreas}
                 canEdit={canEdit}
+                lockedHint={data.scopeLocked ? ECS_SCOPE_LOCK_NOTE : undefined}
                 monthStart={data.monthStart}
                 weekMonday={weekMonday}
                 memo={memos["panel"] ?? ""}

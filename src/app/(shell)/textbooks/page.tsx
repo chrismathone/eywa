@@ -9,6 +9,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getMathAssignmentList } from "@/features/textbooks/server/math-assignment-queries";
 import { MathPlansFace } from "./_components/math-plans-face";
 import { getClassTextbookPlans, getTextbooks } from "@/features/textbooks/server/queries";
+import { planDeletableClassIds } from "@/features/textbooks/server/plan-delete-access";
 import type { TextbookTableStatus } from "@/features/textbooks/types";
 import { BooksFace } from "./_components/books-face";
 import { NotReadyBanner } from "./_components/not-ready-banner";
@@ -77,6 +78,12 @@ export default async function TextbooksPage({ searchParams }: { searchParams: Pr
   // 🔴 잠금은 **면마다 제 조회 상태**로 판단한다 — 교재 목록 조회가 한 번 실패했다고 다른 면까지 잠그면
   //    고칠 수 있는 일을 못 하게 막는 셈이다(그 반대도 마찬가지).
   const editable = canWrite && list.status === "ok";
+  // 영어 반 배정 면의 [배정 삭제] — 서버(deleteClassTextbookPlan)와 같은 반 단위 ECS 쓰기 게이트로 반을 고른다.
+  // 그 밖의 반엔 단추를 그리지 않는다(원장 2026-11-05 — 열람자 전원에게 떠서 눌러야 거절됐다).
+  const deletableClassIds =
+    tab === "plans" && !mathPlans && plans.status === "ok" && plans.rows.length > 0
+      ? await planDeletableClassIds(plans.rows.map((p) => p.classId))
+      : [];
 
   // ECS 계획 줄의 '구분'과 **같은 목록**을 쓴다(학원설정 단일 소스) — 여기서 따로 적으면 시트와 갈린다.
   // 수학엔 영역 축이 없다(설정에 skillAreas가 없으면 빈 목록 → 화면이 '구분'을 감춘다).
@@ -116,7 +123,7 @@ export default async function TextbooksPage({ searchParams }: { searchParams: Pr
       {tab === "plans" && mathPlans ? (
         <MathPlansFace status={mathPlans.status} rows={mathPlans.rows} />
       ) : tab === "plans" ? (
-        <PlansFace rows={plans.rows} skillAreas={skillAreas} />
+        <PlansFace rows={plans.rows} skillAreas={skillAreas} deletableClassIds={deletableClassIds} />
       ) : (
         <BooksFace
           rows={list.rows}

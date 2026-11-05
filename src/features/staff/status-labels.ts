@@ -48,6 +48,7 @@ const ROLE_PILL: Record<string, PillColor> = {
   counselor: "rose",
   accountant: "purple",
   viewer: "neutral",
+  parttime: "neutral",
   student: "neutral",
 };
 

@@ -108,6 +108,8 @@ export type ClassSheetWeekData = {
   weekRelation: "past" | "current" | "future";
   today: string;
   canWrite: boolean;
+  /** 쓰기 권한은 있는데 담당 반이 아니라 보기만 하는가(`EcsClassAccess.scopeLocked`) — 잠금 안내 문구를 가른다. */
+  scopeLocked?: boolean;
   /** 날짜별 출석 present 체크 가능 여부(attendance 계약 — 권한 + 강사 7일 창). */
   canMarkAttendanceByDate: Record<string, boolean>;
   /**
@@ -714,6 +716,7 @@ export async function getClassSheetWeek(
       weekRelation: weekRelation(weekMonday, today),
       today,
       canWrite: access.canWrite,
+      scopeLocked: access.scopeLocked === true,
       canMarkAttendanceByDate,
       canNoteAttendance,
       skillAreas: access.skillAreas,

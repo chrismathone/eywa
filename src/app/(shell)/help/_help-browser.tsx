@@ -9,6 +9,7 @@ import type { HelpGroup, HelpManual } from "@/features/help/types";
 import { HelpText } from "./_components/help-text";
 import { OpenScreenArrow } from "./_components/open-screen";
 import { HelpPostForm } from "./_components/post-form";
+import { writeLockedNote } from "@/lib/write-lock";
 
 type FaqItem = { q: string; a: string };
 
@@ -124,7 +125,8 @@ export function HelpBoard({
           <p className="micro">게시판</p>
           <h2 className="text-foreground mt-0.5 text-lg font-bold">질문 게시판</h2>
         </div>
-        {canAsk && board.ready ? <HelpPostForm /> : null}
+        {/* '질문하기'는 도움말 쓰기 권한(canAskHelpBoard — 작성 액션과 같은 함수)일 때만. 읽기 권한이면 단추 대신 안내 한 줄. */}
+        {canAsk && board.ready ? <HelpPostForm /> : board.ready ? <p className="text-text-faint text-xs">{writeLockedNote("help")}</p> : null}
       </header>
       {!board.ready ? (
         <div className="bg-card shadow-card rounded-2xl p-5">

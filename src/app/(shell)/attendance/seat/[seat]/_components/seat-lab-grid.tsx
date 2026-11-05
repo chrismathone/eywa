@@ -91,6 +91,7 @@ export function SeatLabGrid({
   hints,
   onFillClass,
   readOnly,
+  writeLocked = false,
   pending,
   canMove,
   onResetClass,
@@ -100,6 +101,8 @@ export function SeatLabGrid({
   onClearPeriodChoices,
   canDrag = false,
 }: {
+  /** 자리 출석부 **읽기 권한**(보드의 `readOnlyReason === "permission"`) — 출결 세 단추 대신 상태 글자(`SeatMarkTriad statusOnly`). */
+  writeLocked?: boolean;
   rosters: PlacedSeatRoster[];
   statusOf: (classId: string, student: SeatClassRoster["students"][number]) => SeatStatus | null;
   noteOf: (classId: string, student: SeatClassRoster["students"][number]) => string | null;
@@ -145,6 +148,7 @@ export function SeatLabGrid({
           hints={hints}
           onFillClass={onFillClass}
           readOnly={readOnly}
+          writeLocked={writeLocked}
           pending={pending}
           canMove={canMove}
           onResetClass={onResetClass}
@@ -170,6 +174,7 @@ function SeatClassSection({
   hints,
   onFillClass,
   readOnly,
+  writeLocked,
   pending,
   canMove,
   onResetClass,
@@ -179,6 +184,7 @@ function SeatClassSection({
   onClearPeriodChoices,
   canDrag,
 }: {
+  writeLocked: boolean;
   roster: PlacedSeatRoster;
   statusOf: (classId: string, student: SeatClassRoster["students"][number]) => SeatStatus | null;
   noteOf: (classId: string, student: SeatClassRoster["students"][number]) => string | null;
@@ -285,6 +291,7 @@ function SeatClassSection({
             showReason={showReason}
             hints={hints}
             readOnly={readOnly}
+            writeLocked={writeLocked}
             pending={pending}
             canMove={canDrag}
           />
@@ -304,6 +311,8 @@ type SeatCardProps = {
   showReason: boolean;
   hints: SeatPeriodHintData;
   readOnly: boolean;
+  /** 읽기 권한 — 세 단추 대신 상태 글자(`SeatLabGrid` 주석). */
+  writeLocked: boolean;
   pending: boolean;
 };
 
@@ -373,6 +382,7 @@ const SeatCardBody = memo(function SeatCardBody({
   showReason,
   hints,
   readOnly,
+  writeLocked,
   pending,
   handle,
 }: SeatCardProps & { handle: SeatCardHandle }) {
@@ -504,8 +514,15 @@ const SeatCardBody = memo(function SeatCardBody({
       ) : null}
       {/* 🔴 지난 날짜(readOnly)에도 **숨기지 않고 잠근다** — 감추면 상태가 배경색으로만 남아
           "무슨 색이 무슨 뜻인지" 되짚어야 한다(색만으로 뜻을 나르지 않는다). 원장 지시의
-          "버튼 수·폭이 상태에 따라 변하지 않는다"와도 같은 결이다. */}
-      <SeatMarkTriad cur={cur} studentName={s.name} disabled={readOnly || pending} onMark={mark} />
+          "버튼 수·폭이 상태에 따라 변하지 않는다"와도 같은 결이다.
+          🔴 읽기 권한(`writeLocked`)은 잠긴 단추 대신 **상태 글자**만 — 같은 전폭이라 색만으로 뜻을 나르지 않는다(원장 2026-11-05). */}
+      <SeatMarkTriad
+        cur={cur}
+        studentName={s.name}
+        disabled={readOnly || pending}
+        statusOnly={writeLocked}
+        onMark={mark}
+      />
     </li>
   );
 });

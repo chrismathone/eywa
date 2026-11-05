@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Band, Scoring } from "@/features/teacher-portfolio/evaluation/config";
 import { bandIssues, describeScoring, zeroMaxIssue } from "@/features/teacher-portfolio/evaluation/scoring";
+import { useWriteLock } from "../write-lock-context";
 
 const DECIMAL = /^-?\d+(\.\d+)?$/;
 
@@ -55,6 +56,7 @@ export function ScoringEditor({ scoring, max, unit, onChange, label }: {
 }) {
   const setBand = (i: number, patch: Partial<Band>) =>
     scoring.mode === "bands" && onChange({ ...scoring, bands: scoring.bands.map((b, j) => (j === i ? { ...b, ...patch } : b)) });
+  const { locked } = useWriteLock();
   return (
     <div className="space-y-3">
       <div role="radiogroup" aria-label={`${label} 점수 규칙`} className="flex flex-wrap gap-1.5"
@@ -91,12 +93,16 @@ export function ScoringEditor({ scoring, max, unit, onChange, label }: {
               <span aria-hidden>→</span>
               <NumField label={`${label} ${i + 1}번째 구간 점수`} value={b.points} onChange={(n) => setBand(i, { points: n ?? 0 })} />
               <span>점</span>
-              <Button type="button" size="sm" variant="ghost" disabled={scoring.bands.length === 1}
-                onClick={() => onChange({ ...scoring, bands: scoring.bands.filter((_, j) => j !== i) })}>구간 삭제</Button>
+              {locked ? null : (
+                <Button type="button" size="sm" variant="ghost" disabled={scoring.bands.length === 1}
+                  onClick={() => onChange({ ...scoring, bands: scoring.bands.filter((_, j) => j !== i) })}>구간 삭제</Button>
+              )}
             </div>
           ))}
-          <Button type="button" size="sm" variant="outline" disabled={scoring.bands.length >= 20}
-            onClick={() => onChange({ ...scoring, bands: [...scoring.bands, { from: null, to: null, points: 0 }] })}>구간 추가</Button>
+          {locked ? null : (
+            <Button type="button" size="sm" variant="outline" disabled={scoring.bands.length >= 20}
+              onClick={() => onChange({ ...scoring, bands: [...scoring.bands, { from: null, to: null, points: 0 }] })}>구간 추가</Button>
+          )}
           {/* 빈틈·만점 초과는 막지 않고 알린다 — 원장이 일부러 둔 것일 수도 있다. */}
           {bandIssues(scoring.bands, max, unit).map((t) => <p key={t} role="status" className="bg-amber-soft rounded-lg px-3 py-2 text-xs">{t}</p>)}
         </div>

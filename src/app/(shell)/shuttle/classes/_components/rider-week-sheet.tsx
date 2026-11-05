@@ -92,6 +92,7 @@ export function RiderWeekSheet({
   changesFailed = false,
   assignments = {},
   canWrite = false,
+  canEditDay = false,
 }: {
   classes: SheetClass[];
   runCards: RunCard[];
@@ -101,8 +102,10 @@ export function RiderWeekSheet({
   changesFailed?: boolean;
   /** 학생별 평소 배정(그 시즌) — 수정 카드의 [고정으로 변경]이 노선 편성 편집기로 연다. */
   assignments?: Record<string, StudentAssignment[]>;
-  /** 셔틀 편성 쓰기 권한 — 없으면 [고정으로 변경]을 잠근다. */
+  /** 셔틀 편성 쓰기 권한 — 없으면 [고정으로 변경]을 그리지 않는다. */
   canWrite?: boolean;
+  /** 그날 하루 등하원 변경 권한(`canRecordBoarding`, 서버 게이트와 같은 함수) — 없으면 [당일만 수정]을 그리지 않는다. */
+  canEditDay?: boolean;
   /** 이 계정이 이미 확인한 겹침 열쇠(`conflictKey`) — 이 겹침은 다시 안 띄운다. */
   acks: string[];
   week: { day: DayCode; ymd: string; rest: string | null }[];
@@ -687,6 +690,7 @@ export function RiderWeekSheet({
                                   season={season}
                                   assignmentsOf={(id) => assignments[id] ?? []}
                                   canWrite={canWrite}
+                                  canEditDay={canEditDay}
                                 />
                               ) : (
                                 <ClassCard
@@ -771,6 +775,7 @@ function RunBox({
   season,
   assignmentsOf,
   canWrite,
+  canEditDay,
 }: {
   r: RunCard;
   makeupOf: (studentId: string) => { start: string; end: string } | null;
@@ -783,6 +788,7 @@ function RunBox({
   season: Season;
   assignmentsOf: (studentId: string) => StudentAssignment[];
   canWrite: boolean;
+  canEditDay: boolean;
 }) {
   const inbound = r.direction === "in";
   const riding = ridingRiders(r).length;
@@ -882,6 +888,7 @@ function RunBox({
                 season={season}
                 assignments={assignmentsOf(s.id)}
                 canWrite={canWrite}
+                canEditDay={canEditDay}
                 className={chip}
               >
                 {body}

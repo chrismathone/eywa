@@ -53,8 +53,11 @@ export function SearchableSelect({
   requireQuery = false,
   multiValues,
   multiSummary,
+  disabled = false,
 }: {
   options: ComboOption[];
+  /** 쓰기 권한이 없을 때 — 목록을 열지 않는다. 안내는 placeholder로(`writeLockedPlaceholder`, src/lib/write-lock.ts). */
+  disabled?: boolean;
   value?: string;
   defaultValue?: string;
   onValueChange?: (v: string) => void;
@@ -218,15 +221,16 @@ export function SearchableSelect({
   const a11yName = ariaLabel ? (a11yValue ? `${text(ariaLabel)}: ${a11yValue}` : text(ariaLabel)) : undefined;
 
   return (
-    <SelectFrame portalled={portalled} open={open} onOpenChange={setOpen}>
+    <SelectFrame portalled={portalled} open={open && !disabled} onOpenChange={disabled ? () => {} : setOpen}>
     <div ref={ref} className={`relative ${className ?? ""}`}>
       {name ? <input type="hidden" name={name} value={current} /> : null}
       <Trigger
         type="button"
         aria-label={a11yName}
         title={multiFull ?? undefined}
-        onClick={portalled ? undefined : () => setOpen(!open)}
-        className={`flex w-full cursor-pointer items-center justify-between ${compact ? "gap-1" : "gap-2"} ${triggerBox}`}
+        disabled={disabled}
+        onClick={portalled || disabled ? undefined : () => setOpen(!open)}
+        className={`flex w-full cursor-pointer items-center justify-between disabled:cursor-not-allowed disabled:opacity-60 ${compact ? "gap-1" : "gap-2"} ${triggerBox}`}
       >
         {/* 굵기는 박스 스타일과 안 겹쳐서 triggerClassName을 넘긴 호출부에서도 안전하게 붙는다. */}
         <span
@@ -248,7 +252,8 @@ export function SearchableSelect({
           <EyIcon name="chevronDown" size={16} className="size-4 shrink-0 opacity-50" />
         )}
       </Trigger>
-      {open ? (
+      {/* 비포털 목록도 disabled면 그리지 않는다 — defaultOpen과 함께 와도 고를 수 없게. */}
+      {open && !disabled ? (
         <SelectPopup portalled={portalled}>
           <div className="border-border flex items-center gap-2 border-b px-2.5 py-1.5">
             <EyIcon name="search" size={14} className="size-3.5 shrink-0 opacity-50" />

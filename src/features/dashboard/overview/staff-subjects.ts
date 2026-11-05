@@ -23,6 +23,7 @@ export const STAFF_ROLE_LABELS: Readonly<Record<string, string>> = {
   counselor: "상담",
   accountant: "회계",
   viewer: "열람",
+  parttime: "아르바이트",
 };
 
 export function staffSubjectGroup(

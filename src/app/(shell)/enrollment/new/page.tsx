@@ -1,6 +1,7 @@
 import { BackLink } from "@/components/back-link";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { referrerColumnsReady } from "@/features/enrollment/server/referrer-queries";
 import { formInstanceKey } from "@/lib/recording-resume";
@@ -18,7 +19,11 @@ export default async function NewEnrollmentPage({
   // 바뀌면 Next가 폼을 그대로 두므로 key로 갈라 새로 그린다.
   const { form } = await searchParams;
   // 소개한 사람 칸(0362a)이 DB에 있을 때만 그린다(#95) — 행을 받지 않는 확인 한 번.
-  const referrerReady = await referrerColumnsReady((await createClient()) as unknown as SupabaseClient);
+  // 읽기 권한이면 칸을 잠그고 저장·녹음 단추를 그리지 않는다 — 저장 액션 게이트와 같은 함수·같은 키(원장 2026-11-05 · write-lock.ts).
+  const [referrerReady, canWrite] = await Promise.all([
+    referrerColumnsReady((await createClient()) as unknown as SupabaseClient),
+    canWriteTenant(viewer.systemRole, "enrollment"),
+  ]);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -34,7 +39,7 @@ export default async function NewEnrollmentPage({
       </header>
 
       <NewConsultationForm key={formInstanceKey(form)} recordingOwner={{ tenantId: viewer.tenantId, userId: viewer.id }} referrerReady={referrerReady}
-        counselor={viewer.displayName} instance={{ formId: typeof form === "string" ? form : undefined }} />
+        counselor={viewer.displayName} instance={{ formId: typeof form === "string" ? form : undefined }} readOnly={!canWrite} />
     </div>
   );
 }

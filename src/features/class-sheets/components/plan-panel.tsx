@@ -12,6 +12,7 @@ import { skillAreaColorOf } from "@/features/owner/skill-areas";
 import { SUBJECT_SOFT } from "@/features/owner/subjects";
 import type { SheetGoalDTO } from "../server/queries";
 import { SHEET_BOX_FRAME, SHEET_INPUT, SHEET_TEXTAREA } from "../ui-box";
+import { writeLockedPlaceholder } from "@/lib/write-lock";
 
 const SECTIONS: { role: "homeroom" | "assistant"; scope: "month" | "week"; title: SheetDictKey }[] = [
   { role: "homeroom", scope: "month", title: "plan.panel.homeroom.month" },
@@ -24,6 +25,7 @@ export function PlanPanel({
   goals,
   skillAreas,
   canEdit,
+  lockedHint,
   monthStart,
   weekMonday,
   memo,
@@ -34,6 +36,8 @@ export function PlanPanel({
   /** 왼쪽 표의 행 — 교시 계획 줄의 영역 목록이 아니다(EiE는 둘이 다르다). */
   skillAreas: SkillAreaSetting[];
   canEdit: boolean;
+  /** 잠긴 이유가 권한 부족이 아닐 때(담당 반 아님 등) 쓸 안내. 없으면 권한 안내(writeLockedPlaceholder). */
+  lockedHint?: string;
   monthStart: string;
   weekMonday: string;
   memo: string;
@@ -47,6 +51,7 @@ export function PlanPanel({
   onMemo: (body: string) => void;
 }) {
   const t = useSheetT();
+  const lockedTitle = canEdit ? undefined : (lockedHint ?? writeLockedPlaceholder("ecs"));
   const goalOf = (scope: string, role: string, area: string) =>
     goals.find(
       (g) =>
@@ -100,17 +105,21 @@ export function PlanPanel({
                     >
                       {area.label}
                     </span>
+                    {/* 읽기 권한이면 **비활성**(readOnly는 활성 칸처럼 보였다) + 툴팁 안내 — 칸이 24개라 문구를
+                        칸마다 박지 않는다(시트 머리 한 줄 = sheet-client.tsx). */}
                     <input
                       className={SHEET_INPUT}
                       defaultValue={g?.textbook ?? ""}
-                      readOnly={!canEdit}
+                      disabled={!canEdit}
+                      title={lockedTitle}
                       aria-label={`${t(sec.title)} ${area.label} ${t("month.goal.book")}`}
                       onChange={(e) => onGoalField(sec.scope, sec.role, area.key, "textbook", e.target.value)}
                     />
                     <input
                       className={SHEET_INPUT}
                       defaultValue={g?.targetProgress ?? ""}
-                      readOnly={!canEdit}
+                      disabled={!canEdit}
+                      title={lockedTitle}
                       aria-label={`${t(sec.title)} ${area.label} ${t("plan.panel.progress")}`}
                       onChange={(e) =>
                         onGoalField(sec.scope, sec.role, area.key, "targetProgress", e.target.value)
@@ -126,10 +135,12 @@ export function PlanPanel({
 
       <div className="border-line-strong mt-1.5 border-t pt-1.5">
         <span className="text-foreground text-xs font-bold">{t("plan.panel.memo")}</span>
+        {/* 메모는 한 칸이라 자리 표시 글로 권한을 안내한다(비어 있을 때). SHEET_TEXTAREA엔 비활성 모양이 없어 여기서 더한다. */}
         <textarea
-          className={`${SHEET_TEXTAREA} mt-1 min-h-[56px]`}
+          className={`${SHEET_TEXTAREA} mt-1 min-h-[56px] disabled:opacity-60`}
           defaultValue={memo}
-          readOnly={!canEdit}
+          disabled={!canEdit}
+          placeholder={lockedTitle}
           aria-label={t("plan.panel.memo")}
           onChange={(e) => onMemo(e.target.value)}
         />

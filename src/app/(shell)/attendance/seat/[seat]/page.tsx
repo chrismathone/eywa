@@ -39,7 +39,7 @@ import { getSeatNextDestinationsBySlot } from "@/features/attendance/seat/server
 import { seatStaysFor } from "@/features/attendance/seat/next-destination";
 import { SEAT_ALL_PERIODS } from "./_components/seat-period-chips";
 import { mondayOf } from "@/features/timetable/lib/week";
-import { SeatBoard } from "./_components/seat-board";
+import { SeatBoard, type SeatReadOnlyReason } from "./_components/seat-board";
 import { SeatAllDay } from "./_components/seat-all-day";
 import { SeatJjAllDay } from "./_components/seat-jj-all-day";
 import { MemorizedPullButton } from "./_components/memorized-pull-button";
@@ -94,7 +94,9 @@ export default async function SeatAttendancePage({
   // 토글 담당은 메뉴 권한 없이 그 자리만 연다. 없으면 기존 seat_attendance 게이트.
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!dutyAllowsSeat(await getActiveSeatDuties(user.id, user.tenantId), seat)) await requireAccess("seat_attendance");
+  // 담당 판정은 쓰기 게이트(`gateSeatWrite`)와 **같은 두 함수**다 — 아래 쓰기 여부에도 그대로 쓴다.
+  const onDuty = dutyAllowsSeat(await getActiveSeatDuties(user.id, user.tenantId), seat);
+  if (!onDuty) await requireAccess("seat_attendance");
 
   const today = kstToday();
   const date = /^\d{4}-\d{2}-\d{2}$/.test(dateParam ?? "") ? dateParam! : today;
@@ -127,9 +129,18 @@ export default async function SeatAttendancePage({
   /** 이번에 그릴 교시들 — '전체'면 그날 전부, 아니면 고른 하나. */
   const shown = viewAll ? day.periods : period ? [period] : [];
 
+  /**
+   * 🔴 쓰기 여부 = 서버 `gateSeatWrite`와 **같은 판정**(원장 2026-11-05) — ① 그 자리 토글 담당이거나 ② 자리 출석부 쓰기 권한
+   *    (`canWriteTenant("seat_attendance")`), 그리고 ③ 지난 날짜면 출석부 쓰기 권한(`attendance`)까지.
+   *    예전엔 ③만 봐서 **오늘이면 읽기 권한에게도** 출결 단추·일괄 단추·드래그·단어수 가져오기가 다 열리고, 누르면 그제서야
+   *    "자리 출석부 입력 권한이 없습니다"가 떴다(화면은 attendance 키, 서버는 seat_attendance 키 — 키가 어긋나 있었다).
+   */
+  const canSeatWrite = onDuty || (await canWriteTenant(user.systemRole, "seat_attendance"));
   // 지난 날짜 쓰기는 사무실만 — 자리 전용 권한(아르바이트)은 오늘만. 서버 액션이 같은 판정을 다시 한다(#77).
   const canEditPast = await canWriteTenant(user.systemRole, "attendance");
-  const readOnly = date !== today && !canEditPast;
+  const readOnly = !canSeatWrite || (date !== today && !canEditPast);
+  // 이유가 둘이면 권한이 먼저다 — 권한이 없는 사람에게 "지난 날짜라서"라고 하면 오늘로 와서 다시 헛수고한다.
+  const readOnlyReason: SeatReadOnlyReason = canSeatWrite ? "past" : "permission";
   // 인재원 연동이 걸린 학원에서만 '단어수 가져오기'를 내놓는다 — 눌러도 안 되는 버튼을 두지 않는다.
   const ijwReady = !!ijwConfigFor(user.tenantId);
 
@@ -336,6 +347,7 @@ export default async function SeatAttendancePage({
           }}
           canMove={canChoosePeriod}
           readOnly={readOnly}
+          readOnlyReason={readOnlyReason}
           hrefFor={hrefFor}
           canMovePlacement={canMovePlacement}
           placementNotice={placementNotice}
@@ -357,6 +369,7 @@ export default async function SeatAttendancePage({
           seat={seat}
           date={date}
           readOnly={readOnly}
+          readOnlyReason={readOnlyReason}
           hrefFor={hrefFor}
           planMeta={{ tenantId: user.tenantId, userId: user.id, weekMonday: mondayOf(date) }}
           periods={day.periods.map((p) => ({
@@ -385,6 +398,7 @@ export default async function SeatAttendancePage({
           activeStart={period.start}
           rosters={rosters}
           readOnly={readOnly}
+          readOnlyReason={readOnlyReason}
           hrefFor={hrefFor}
           prevAbsentByCell={prevAbsentFor(period.start, ambiguousClassIds(period))}
           // 🔵 '다음 행선지'·'마지막 수업'은 이 화면과 **공개 PIN 랩실**(`/seat/lab`, 원장 2026-09-10 *"seat/lab에서도

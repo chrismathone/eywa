@@ -8,6 +8,7 @@ import { ReferralOptionsEditor } from "./referral-options";
 import { PunctualityOptionsEditor } from "./punctuality-options";
 import { GradesOptionsEditor, SatisfactionOptionsEditor } from "./source-options";
 import { NumField, ScoringEditor } from "./scoring-editor";
+import { useLockedPlaceholder, useWriteLock } from "../write-lock-context";
 
 /** 지표 한 장 — 켜기 · 이름 · 만점 · 차례 · 원래 수치 · 점수 규칙 · 자료가 없을 때. 직접 만든 지표는 단위·설명과 삭제가 더 있다. */
 export function MetricSettingCard({ setting, measure, pending, unit, manual, position, onChange, onMove, onRemove }: {
@@ -25,6 +26,8 @@ export function MetricSettingCard({ setting, measure, pending, unit, manual, pos
 }) {
   const set = (patch: Partial<ManualMetricSetting>) => onChange({ ...setting, ...patch } as MetricSetting | ManualMetricSetting);
   const label = setting.label || "지표";
+  const { locked } = useWriteLock();
+  const ph = useLockedPlaceholder();
   return (
     <section data-metric-setting aria-label={label}
       className={`bg-card shadow-card space-y-4 rounded-2xl p-5 ${setting.enabled ? "" : "opacity-70"}`}>
@@ -37,11 +40,14 @@ export function MetricSettingCard({ setting, measure, pending, unit, manual, pos
         <span className="flex items-center gap-1.5 text-sm">
           만점 <NumField label={`${label} 만점`} value={setting.max} onChange={(n) => set({ max: Math.max(0, n ?? 0) })} /> 점
         </span>
-        <span className="ml-auto flex items-center gap-1">
-          <Button type="button" size="sm" variant="ghost" disabled={position.first} onClick={() => onMove(-1)} aria-label={`${label} 위로`}>위로</Button>
-          <Button type="button" size="sm" variant="ghost" disabled={position.last} onClick={() => onMove(1)} aria-label={`${label} 아래로`}>아래로</Button>
-          {onRemove ? <Button type="button" size="sm" variant="ghost" onClick={onRemove}>지표 삭제</Button> : null}
-        </span>
+        {/* 읽기 권한(쓰기 잠금)이면 순서 이동·삭제를 그리지 않는다(evaluation-editor.tsx가 잠금을 세운다). */}
+        {locked ? null : (
+          <span className="ml-auto flex items-center gap-1">
+            <Button type="button" size="sm" variant="ghost" disabled={position.first} onClick={() => onMove(-1)} aria-label={`${label} 위로`}>위로</Button>
+            <Button type="button" size="sm" variant="ghost" disabled={position.last} onClick={() => onMove(1)} aria-label={`${label} 아래로`}>아래로</Button>
+            {onRemove ? <Button type="button" size="sm" variant="ghost" onClick={onRemove}>지표 삭제</Button> : null}
+          </span>
+        )}
       </div>
       {manual ? (
         <div className="grid gap-2 sm:grid-cols-[8rem_minmax(0,1fr)]">
@@ -51,7 +57,7 @@ export function MetricSettingCard({ setting, measure, pending, unit, manual, pos
           </label>
           <label className="space-y-1 text-sm">
             <span className="block font-medium">무엇을 적나</span>
-            <Input value={(setting as ManualMetricSetting).description} maxLength={200} placeholder="예: 디스쿨·네이버 영수증 리뷰의 실명 칭찬 건수"
+            <Input value={(setting as ManualMetricSetting).description} maxLength={200} placeholder={ph("예: 디스쿨·네이버 영수증 리뷰의 실명 칭찬 건수")}
               onChange={(e) => set({ description: e.target.value })} />
           </label>
           <p className="text-xs sm:col-span-2">원장이 달마다 강사별 숫자를 넣습니다(직원 포트폴리오 → 직접 입력 지표).</p>

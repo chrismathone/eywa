@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import { SeatBoard } from "./seat-board";
+import { writeLockedNote } from "@/lib/write-lock";
 
 const { setSeatJjField } = vi.hoisted(() => ({
   setSeatJjField: vi.fn().mockResolvedValue({ ok: true }),
@@ -289,5 +290,31 @@ describe("JJ실 '전체' 보기 — 수업계획은 **반마다** 접은 채(원
   it("안내 한 줄은 교시마다 반복하지 않는다 — 칩 줄을 바깥이 그리는 보기에선 보드가 안 적는다", () => {
     render(<SeatBoard {...base} showChips={false} foldPlans plans={plans} />);
     expect(screen.queryByText(/영어 시트 JJ 칸과 같은 기록/)).toBeNull();
+  });
+});
+
+/** 보기만인 이유(원장 2026-11-05) — 권한 때문인지 날짜 때문인지 안내 문장이 갈린다(`seatReadOnlyNote`). */
+describe("자리 출석부 — 보기만인 이유", () => {
+  const base = {
+    seat: "lab" as const,
+    date: "2026-08-14",
+    periods,
+    activeStart: "16:20",
+    rosters,
+    readOnly: true,
+    hrefFor: "/attendance/seat/lab?date=2026-08-14&start=",
+  };
+
+  it("🔴 읽기 권한이면 권한을 말하고 출결 단추를 그리지 않는다(상태 글자만)", () => {
+    render(<SeatBoard {...base} readOnlyReason="permission" />);
+    expect(screen.getByText(writeLockedNote("seat_attendance"))).toBeTruthy();
+    expect(screen.queryByText(/지난 날짜는 보기만/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "이다윤A 출석" })).toBeNull();
+  });
+
+  it("이유를 안 주면 종전 의미(지난 날짜) — 잠긴 세 단추와 날짜 안내", () => {
+    render(<SeatBoard {...base} />);
+    expect(screen.getByText(/지난 날짜는 보기만/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "이다윤A 출석" })).toHaveProperty("disabled", true);
   });
 });

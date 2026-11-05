@@ -92,7 +92,9 @@ export default async function EnrollmentDetailPage({
     getClassesList({ active: "active" }),
     getTenantSettings(),
     getSiblingConsultations(id), // 같은 학생의 다른 등록상담(반복 접수) — 없으면 빈 배열
-    canWriteTenant(user.systemRole, "enrollment"), // 읽기 전용 역할엔 브리프 생성 버튼을 안 준다
+    // 읽기 권한이면 쓰기 단추(수정·상태 변경·수업 배정·삭제·AI 요약·다시 분석·섹션 수정·브리프·병합)를 그리지 않는다 —
+    // 서버 액션 게이트와 **같은 함수·같은 키**(원장 2026-11-05 · write-lock.ts).
+    canWriteTenant(user.systemRole, "enrollment"),
     // 수학 반 배정 직후 '교재 신청서' 경로를 그릴지(원장 2026-09-09) — 못 여는 사람에게 그리면
     // 눌러도 권한 화면으로 튕기는 죽은 버튼이 된다. 진짜 게이트는 교재 화면의 requireAccess다([[#77]]).
     canWriteTenant(user.systemRole, "textbook_requests"),
@@ -218,11 +220,15 @@ export default async function EnrollmentDetailPage({
         <div className="flex flex-wrap items-center gap-2">
           {/* ⚠️ "수정" 단독 금지 — 아래 AI 분석 리포트에도 섹션마다 '수정'(그 섹션 문장)이 있다.
               여기는 **상담 내용 폼 전체**를 연다. */}
-          <Button variant="outline" render={<Link href={`/enrollment/${id}/edit`} />}>
-            <Pencil className="size-4" />
-            상담 수정
-          </Button>
-          <ConsultationManageButtons values={{ id: consult.id, outcome: consult.outcome, assignedClassCount: consult.assignedClassCount }} />
+          {canWrite ? (
+            <>
+              <Button variant="outline" render={<Link href={`/enrollment/${id}/edit`} />}>
+                <Pencil className="size-4" />
+                상담 수정
+              </Button>
+              <ConsultationManageButtons values={{ id: consult.id, outcome: consult.outcome, assignedClassCount: consult.assignedClassCount }} />
+            </>
+          ) : null}
           {consult.aiAnalysis ? (
             <PrintWindowButton
               id={`print/enrollment/${id}`}
@@ -252,8 +258,9 @@ export default async function EnrollmentDetailPage({
             alreadyConverted={!!consult.studentId}
             linkedStudentId={consult.studentId}
             canRequestTextbook={canRequestTextbook}
+            canWrite={canWrite}
           />
-          <ConsultationDeleteButton id={consult.id} />
+          {canWrite ? <ConsultationDeleteButton id={consult.id} /> : null}
         </div>
       </header>
 
@@ -447,6 +454,7 @@ export default async function EnrollmentDetailPage({
                 canAddSummary={!!consult.audioReport?.summary?.trim()}
                 aiSuggestion={showParentRequestSuggestion ? aiSuggestedParentRequest : null}
                 editHref={`/enrollment/${consult.id}/edit`}
+                canWrite={canWrite}
               />
               {/* makeedu 동기화 예비상담(makeedu_id=counselSeq) → 원본 상세 링크(클릭 시 makeedu 로그인 필요). */}
               {consult.makeeduId ? (
@@ -562,6 +570,7 @@ export default async function EnrollmentDetailPage({
             studentName={consult.prospectName}
             consultationDate={consult.consultedAt?.slice(0, 10)}
             transcript={consult.transcription}
+            canWrite={canWrite}
           />
         ) : consult.aiAnalysis ? (
           <AiAnalysisPanel

@@ -15,6 +15,7 @@ import {
   type ChecklistArea,
 } from "@/features/class-review/checklist";
 import { submitClassReviewScores, type ReviewActionState } from "@/features/class-review/server/actions";
+import { writeLockedNote, writeLockedPlaceholder } from "@/lib/write-lock";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -31,6 +32,7 @@ function SubmitButton() {
  * 30문항을 스크롤하는 동안에도 보이도록 **진행 헤더는 상단 sticky, 저장은 하단 고정 바**
  * (창 데이터입력 폼 하우스 규약 + 원장 2026-08-05 "사용자 친화"). 미입력 문항은 점프 버튼으로 찾아간다.
  * 값은 컨트롤드 + hidden input으로 서버 액션에 전달(q0..q29).
+ * `canWrite=false`(읽기 권한) — 점수 단추·코멘트를 잠그고 '채점 저장'을 그리지 않는다(원장 2026-11-05).
  */
 export function ScorePanel({
   docId,
@@ -38,6 +40,7 @@ export function ScorePanel({
   initialScores,
   initialComment,
   backHref,
+  canWrite,
 }: {
   docId: string;
   areas: ChecklistArea[];
@@ -45,7 +48,10 @@ export function ScorePanel({
   initialComment: string;
   /** 저장 성공 시 돌아갈 곳(채점 전용 페이지 → 상세). 미지정이면 제자리. */
   backHref?: string;
+  /** 서버(page)가 canWriteTenant("class_review")로 정한 값 — 저장 액션과 같은 판정. */
+  canWrite: boolean;
 }) {
+  const locked = !canWrite;
   const router = useRouter();
   const totalItems = itemCountOf(areas);
   const [scores, setScores] = useState<number[]>(() =>
@@ -100,6 +106,8 @@ export function ScorePanel({
       <p className="text-text-faint mt-3 mb-3 text-xs">
         4점 척도 — 1점(미흡) / 2점(기준 이하) / 3점(기준 충족) / 4점(우수) · 같은 점수를 다시 누르면 해제
       </p>
+      {/* 점수 단추는 placeholder가 없어 잠긴 이유를 따로 한 줄로 알린다. */}
+      {locked ? <p className="text-text-dim mb-3 text-sm" role="status">{writeLockedNote("class_review")}</p> : null}
 
       <div className="space-y-4">
         {areas.map((area, ai) => {
@@ -132,6 +140,7 @@ export function ScorePanel({
                             type="button"
                             role="radio"
                             aria-checked={scores[qi] === n}
+                            disabled={locked}
                             onClick={() =>
                               setScores((prev) => {
                                 const next = [...prev];
@@ -139,7 +148,7 @@ export function ScorePanel({
                                 return next;
                               })
                             }
-                            className={`num size-8 rounded-lg border text-sm transition ${
+                            className={`num size-8 rounded-lg border text-sm transition disabled:cursor-not-allowed disabled:opacity-60 ${
                               scores[qi] === n
                                 ? "border-primary bg-primary font-bold text-white"
                                 : "border-line text-text-dim hover:border-primary/40 hover:text-primary font-medium"
@@ -166,8 +175,13 @@ export function ScorePanel({
         name="comment"
         defaultValue={initialComment}
         rows={3}
-        placeholder="선택 — 이 수업에 대한 의견을 남기세요 (최종 총평은 상세 화면에서 따로 씁니다)"
-        className="border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary w-full rounded-lg border px-3 py-2 text-sm outline-none transition"
+        disabled={locked}
+        placeholder={
+          locked
+            ? writeLockedPlaceholder("class_review")
+            : "선택 — 이 수업에 대한 의견을 남기세요 (최종 총평은 상세 화면에서 따로 씁니다)"
+        }
+        className="border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary w-full rounded-lg border px-3 py-2 text-sm outline-none transition disabled:cursor-not-allowed disabled:opacity-70"
       />
 
       {/* 저장 바 — 하단 고정(창 데이터입력 폼 규약). 미입력이 있으면 개수 + 점프를 함께 보여준다.
@@ -184,7 +198,8 @@ export function ScorePanel({
         ) : (
           <span className="text-text-dim text-xs">모든 문항을 입력했습니다.</span>
         )}
-        <SubmitButton />
+        {/* 읽기 권한이면 저장 단추를 그리지 않는다(비활성으로 남기지 않는다). */}
+        {canWrite ? <SubmitButton /> : null}
       </div>
     </form>
   );

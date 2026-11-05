@@ -40,6 +40,7 @@ import { sheetDateLabelEn, sheetT, sheetTf, sheetWeekLabel, type SheetLang } fro
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
 import { TextbookOptionsProvider, type TextbookOptionItem } from "@/features/textbooks/textbook-options-context";
 import { loadEcsTextbookOptions } from "@/features/textbooks/server/ecs-options";
+import { writeLockedNote } from "@/lib/write-lock";
 
 /** 오늘 면 시트 모드의 반 1개분 — 시트 조회가 실패해도 나머지 반은 그려야 하므로 결과를 통째로 나른다. */
 type TodaySheet = {
@@ -392,6 +393,13 @@ function EcsTodayFace({
           {sheetT(lang, "today.holiday.tail")} <b>{sheetT(lang, "today.holiday.asUsual")}</b>
           {sheetT(lang, "today.holiday.tail2")}
         </p>
+      ) : null}
+
+      {/* 읽기 권한 안내(원장 2026-11-05) — 계획·학생 기록 칸은 이미 잠겨 있지만 값이 차 있으면 왜 못 고치는지
+          모른다. 시트 모드는 반마다 SheetClient가 쌓이므로 **이 화면에 한 줄만** 띄운다(칸·반마다 반복 금지).
+          판정 = 카드·시트와 같은 `res.canWrite`(accessLevelTenant("ecs") full|scoped). */}
+      {!res.canWrite && res.cards.length > 0 ? (
+        <p className="text-text-dim px-1 text-sm">{writeLockedNote("ecs")}</p>
       ) : null}
 
       {/* 오늘 시트는 **본인 담당 교시만** 그린다(2026-08-19) — 그래서 "그 교시가 왜 없지"가 생긴다.

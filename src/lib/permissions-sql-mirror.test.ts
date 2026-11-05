@@ -10,12 +10,13 @@ import { MENU_ACCESS, SYSTEM_ROLES, type MenuKey } from "./permissions";
  * 이 테스트가 마이그레이션 파일을 파싱해 두 소스가 같은지 잠근다.
  * 실패하면 **permissions.ts가 아니라 마이그레이션 SQL을 고쳐라**(SQL이 미러다).
  *
- * ⚠️ auth_menu_access의 **살아있는 정의는 0170a**(개인 예외 userOverrides 추가)로 이동했다 — DEFAULTS
+ * ⚠️ auth_menu_access의 **살아있는 정의는 s2_0024**(0170a 그대로 + DEFAULTS에 아르바이트 "parttime" 칸, 2026-11-05)이다.
+ * 그 전엔 0170a(개인 예외 userOverrides 추가)로 이동했었다 — DEFAULTS
  * 미러 검사도 0169a를 본다. 0158a의 리터럴은 역사 기록(재적용 시 0169a를 다시 돌려야 함). 앞으로
  * 이 함수를 또 재정의하면 MIGRATION 경로를 그 파일로 옮기고 이 주석을 갱신할 것.
  */
 // 시즌1 합본(s1_season1.sql)의 구역을 원래 이름으로 읽는다.
-const MIGRATION = "0170a_user_permission_overrides.sql";
+const MIGRATION = "s2_0024_parttime_role.sql";
 // 0158a 고유 검사(정책 생성 여부)는 계속 원파일을 본다.
 const MIGRATION_0158A = "0158a_rls_role_gates_for_invoices_expenses.sql";
 
@@ -42,7 +43,7 @@ describe("0158a RLS 기본 권한 = permissions.ts MENU_ACCESS 미러", () => {
     expect(mirrored.sort()).toEqual(["billing", "expense_requests", "staff", "textbook_requests"]);
   });
 
-  it.each(mirrored)("%s — 8개 역할의 기본 접근수준이 코드와 일치", (menu) => {
+  it.each(mirrored)("%s — 모든 역할의 기본 접근수준이 코드와 일치", (menu) => {
     for (const role of SYSTEM_ROLES) {
       expect(
         sqlDefaults[menu]?.[role],

@@ -14,7 +14,11 @@ import { SettingsCard } from "./settings-card";
  */
 const FAILED = "오늘 수학에 연결하지 못했습니다. 잠시 뒤 다시 시도해 주세요.";
 
-export function TodaysMathMenusCard() {
+/**
+ * `canEdit` = 연동 설정 쓰기 — 저장 액션(`saveTodaysMathMenus`)과 같은 판정(integrations-face.tsx가 내린다). 없으면 켜기·끄기·
+ * 저장 단추를 그리지 않고 체크칸을 잠근다(원장 2026-11-05). 지금 값은 그대로 보인다.
+ */
+export function TodaysMathMenusCard({ canEdit = true }: { canEdit?: boolean }) {
   const [saved, setSaved] = useState<TodaysMathMenus | null>(null);
   const [draft, setDraft] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(true);
@@ -92,10 +96,12 @@ export function TodaysMathMenusCard() {
                     <span className="text-xs text-text-dim tabular-nums">
                       {open.filter((i) => draft.has(i.menu)).length} / 열림 {open.length}
                     </span>
-                    <span className="ml-auto flex gap-1">
-                      <Button type="button" variant="ghost" size="xs" disabled={busy || conflict} onClick={() => setMany(open.map((i) => i.menu), true)}>모두 켜기</Button>
-                      <Button type="button" variant="ghost" size="xs" disabled={busy || conflict} onClick={() => setMany(open.map((i) => i.menu), false)}>모두 끄기</Button>
-                    </span>
+                    {canEdit ? (
+                      <span className="ml-auto flex gap-1">
+                        <Button type="button" variant="ghost" size="xs" disabled={busy || conflict} onClick={() => setMany(open.map((i) => i.menu), true)}>모두 켜기</Button>
+                        <Button type="button" variant="ghost" size="xs" disabled={busy || conflict} onClick={() => setMany(open.map((i) => i.menu), false)}>모두 끄기</Button>
+                      </span>
+                    ) : null}
                   </div>
                   <table className="w-full table-fixed border-collapse text-sm">
                     <colgroup><col className="w-10" /><col /><col className="w-24" /></colgroup>
@@ -107,7 +113,7 @@ export function TodaysMathMenusCard() {
                           <tr key={item.menu} className={`border-b border-line last:border-b-0 ${on ? "bg-primary-soft" : ""}`}>
                             <td className="px-3 py-1 text-center">
                               <input id={id} type="checkbox" className="size-4 accent-[var(--primary)]" checked={on}
-                                disabled={!item.open || busy || conflict} onChange={(e) => setMany([item.menu], e.target.checked)} />
+                                disabled={!canEdit || !item.open || busy || conflict} onChange={(e) => setMany([item.menu], e.target.checked)} />
                             </td>
                             <td className="py-1">
                               <label htmlFor={id} className={item.open ? undefined : "text-text-faint"}>{item.label}</label>
@@ -131,13 +137,18 @@ export function TodaysMathMenusCard() {
             </p>
           ) : null}
           {notice ? <p className="rounded-lg bg-green-soft px-3 py-2 text-sm text-green" role="status">{notice}</p> : null}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="mr-auto text-xs text-text-dim" aria-live="polite">
-              사용 메뉴 {onCount}개 · {dirty ? "저장하지 않은 변경이 있습니다." : "저장하지 않은 변경 없음"}
-            </span>
-            <Button type="button" variant="outline" disabled={busy || !dirty} onClick={() => { apply(saved); setNotice(null); }}>변경 취소</Button>
-            <Button type="button" disabled={busy || !dirty || conflict} onClick={save}>사용 메뉴 저장</Button>
-          </div>
+          {canEdit ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-auto text-xs text-text-dim" aria-live="polite">
+                사용 메뉴 {onCount}개 · {dirty ? "저장하지 않은 변경이 있습니다." : "저장하지 않은 변경 없음"}
+              </span>
+              <Button type="button" variant="outline" disabled={busy || !dirty} onClick={() => { apply(saved); setNotice(null); }}>변경 취소</Button>
+              <Button type="button" disabled={busy || !dirty || conflict} onClick={save}>사용 메뉴 저장</Button>
+            </div>
+          ) : (
+            // canEdit=false면 연동 면 전체가 잠긴 것 — 권한 안내는 면 위 한 줄(owner/page.tsx)이 적는다(두 번 뜨지 않게).
+            <p className="text-xs text-text-dim">사용 메뉴 {onCount}개</p>
+          )}
         </div>
       )}
     </SettingsCard>

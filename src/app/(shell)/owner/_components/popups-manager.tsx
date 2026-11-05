@@ -25,6 +25,7 @@ import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import type { AdminPopup } from "@/features/notices/server/queries";
 import { MenuMentionEditor } from "@/components/editor/menu-mention-editor";
 import { kstDateTimeLocal, kstShortStamp } from "@/lib/date-kst";
+import { writeLockedNote } from "@/lib/write-lock";
 
 const INPUT = "border-border bg-card text-foreground min-w-0 w-full rounded-md border px-2.5 py-1.5 text-sm";
 const LABEL = "text-text-dim text-xs font-medium";
@@ -234,7 +235,10 @@ function PopupImageField({ value, onChange }: { value: string; onChange: (v: str
   );
 }
 
-export function PopupsManager({ items }: { items: AdminPopup[] }) {
+/** 읽기 권한에서 영문 상태를 단추 대신 글로 — 상태 문구는 단추와 같다. */
+const EN_STATUS_LABEL: Record<AdminPopup["enStatus"], string> = { none: "영문 없음", stale: "옛 원문", ready: "영문 있음", skipped: "건너뜀" };
+
+export function PopupsManager({ items, canWrite = true }: { items: AdminPopup[]; canWrite?: boolean }) {
   const [editing, setEditing] = useState<AdminPopup | null>(null);
   const [imageUrl, setImageUrl] = useState("");
   const [formKey, setFormKey] = useState(0);
@@ -261,8 +265,9 @@ export function PopupsManager({ items }: { items: AdminPopup[] }) {
   const e = editing;
 
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start [&>section]:min-w-0">
-      {/* 작성/수정 폼 */}
+    <div className={`grid min-w-0 grid-cols-1 gap-6 lg:items-start [&>section]:min-w-0 ${canWrite ? "lg:grid-cols-2" : ""}`}>
+      {/* 🔴 작성/수정 폼 — 읽기 권한이면 **그리지 않는다**(비활성 양식을 남기면 '새 팝업 공지'를 쓸 수 있는 것처럼 읽힌다). */}
+      {canWrite ? (
       <section className="bg-card border-line shadow-card rounded-2xl border p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-foreground text-sm font-bold">{e ? "팝업 수정" : "새 팝업 공지"}</h2>
@@ -351,10 +356,12 @@ export function PopupsManager({ items }: { items: AdminPopup[] }) {
           </div>
         </form>
       </section>
+      ) : null}
 
       {/* 목록 */}
       <section className="bg-card border-line shadow-card rounded-2xl border p-5">
         <p className="micro mb-3">등록된 팝업 ({items.length})</p>
+        {canWrite ? null : <p className="text-text-faint mb-3 text-xs">{writeLockedNote("popup_settings")}</p>}
         {items.length === 0 ? (
           <p className="text-text-faint py-6 text-center text-sm">아직 팝업 공지가 없습니다</p>
         ) : (
@@ -376,14 +383,22 @@ export function PopupsManager({ items }: { items: AdminPopup[] }) {
                     </p>
                   </div>
                 </div>
-                <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2.5 pt-0.5">
-                  <EnglishForm id={p.id} status={p.enStatus} skipReason={p.enSkipReason} />
-                  <ToggleForm id={p.id} isActive={p.isActive} />
-                  <button type="button" onClick={() => startEdit(p)} aria-label="수정" className="text-text-dim hover:text-foreground inline-flex items-center transition">
-                    <Pencil className="size-3.5" />
-                  </button>
-                  <DeleteForm id={p.id} />
-                </div>
+                {canWrite ? (
+                  <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2.5 pt-0.5">
+                    <EnglishForm id={p.id} status={p.enStatus} skipReason={p.enSkipReason} />
+                    <ToggleForm id={p.id} isActive={p.isActive} />
+                    <button type="button" onClick={() => startEdit(p)} aria-label="수정" className="text-text-dim hover:text-foreground inline-flex items-center transition">
+                      <Pencil className="size-3.5" />
+                    </button>
+                    <DeleteForm id={p.id} />
+                  </div>
+                ) : (
+                  // 읽기 권한 — 노출 여부·영문 상태는 글로만(누르는 칩이 아니다).
+                  <div className="text-text-faint flex max-w-full shrink-0 flex-wrap items-center gap-2.5 pt-0.5 text-xs">
+                    <span>{EN_STATUS_LABEL[p.enStatus]}</span>
+                    <span className={p.isActive ? "text-primary font-bold" : undefined}>{p.isActive ? "노출 중" : "꺼짐"}</span>
+                  </div>
+                )}
               </li>
             ))}
           </ul>

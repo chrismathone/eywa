@@ -205,13 +205,20 @@ export default async function StudentDetailPage({
   // 퇴원은 퇴원보고서로만(원장 2026-10-23) — 재원·휴원(퇴원 예약 없음) 학생에게 '퇴원보고서' 입구를 세운다. 조회 실패는 입구만 접는다
   // (실제 거절은 서버 액션이 한다 — 입구는 길 안내다).
   const reportable = (student.status === "enrolled" || student.status === "on_hold") && !student.withdrawnAt;
-  const [scheduled, canManageScheduled, upcomingMakeups, canSeeWithdrawals, reportInfo] = await Promise.all([
+  // canWriteStudent·canWriteConsultation = 탭 안의 기록 쓰기(원장 2026-11-05 — 읽기 권한이면 쓰기 단추를 그리지 않고
+  // 입력칸은 비활성, lib/write-lock.ts). 🔴 서버 게이트와 **같은 함수·같은 키**다: 메모·성적·목표·코멘트·레벨테스트·
+  // 숙제 영상 링크 끊기 = `canWriteTenant("students")`(students/server/actions.ts · video-submit/server/actions.ts),
+  // 상담 작성·수정·삭제·후속 조치 = `canWriteTenant("consultations")`. 위 canManageStudent(full)와 다르다 —
+  // 강사(scoped)도 담당 학생 메모·성적은 쓴다(담당 범위는 서버가 따로 본다).
+  const [scheduled, canManageScheduled, upcomingMakeups, canSeeWithdrawals, reportInfo, canWriteStudent, canWriteConsultation] = await Promise.all([
     getScheduledForStudent(student.id),
     canManageTenant(user.systemRole, "classes"),
     getStudentUpcomingReservations(student.id, kstToday()),
     // 퇴원생이면 퇴원 기록(사유·사후 상담)으로 바로 가는 링크(감사 N6) — 퇴원관리를 못 여는 사람에겐 안 선다.
     student.status === "withdrawn" ? canAccessTenant(user.systemRole, "withdrawals") : Promise.resolve(false),
     reportable ? studentReportEntry(student.id).catch(() => null) : Promise.resolve(null),
+    canWriteTenant(user.systemRole, "students"),
+    tab === "consultations" ? canWriteTenant(user.systemRole, "consultations") : Promise.resolve(false),
   ]);
   // 진행 중인 보고서를 열 수 없는 사람에게는 '진행 중' 글을 원생 상태를 다루는 사람에게만 보인다(참여자가 아닌 강사에게 새지 않게).
   const reportEntry: ReportEntry | null = reportInfo?.pending
@@ -341,7 +348,7 @@ export default async function StudentDetailPage({
             canDeleteEnrollment={canDeleteEnrollment}
           />
         ) : tab === "grades" ? (
-          <GradesTab studentId={student.id} back={isInternalPath(backParam) ? backParam : null} embed={sp.embed === "1"}
+          <GradesTab studentId={student.id} back={isInternalPath(backParam) ? backParam : null} embed={sp.embed === "1"} canWrite={canWriteStudent}
             query={{ subject: sp.subject, kind: sp.kind, sort: sp.sort, dir: sp.dir, fScore: sp.fScore, fDelta: sp.fDelta, page: pageParam }} />
         ) : tab === "srs" ? (
           <SrsTab studentId={student.id} jjFrom={jjFrom} jjTo={jjTo} />
@@ -359,7 +366,7 @@ export default async function StudentDetailPage({
         ) : tab === "homework-videos" ? (
           // 위 = 올리기 사이트 안내 + 남은 제출 링크 끊기(쓸 수 없는 학원에선 안 그린다) · 아래 = 보관된 영상 목록.
           <div className="space-y-6">
-            <HomeworkVideoLinks studentId={student.id} />
+            <HomeworkVideoLinks studentId={student.id} canRevoke={canWriteStudent} />
             <HomeworkVideosTab studentId={student.id} videoId={typeof sp.video === "string" ? sp.video : null} />
           </div>
         ) : tab === "attendance" ? (
@@ -367,11 +374,12 @@ export default async function StudentDetailPage({
         ) : tab === "consultations" ? (
           <ConsultationsTab
             studentId={student.id}
+            canWrite={canWriteConsultation}
             canSeeEnrollment={canSeeEnrollment}
             canOpenEnrollmentDetail={canOpenEnrollmentDetail}
           />
         ) : tab === "memos" ? (
-          <MemosTab studentId={student.id} />
+          <MemosTab studentId={student.id} canWrite={canWriteStudent} />
         ) : tab === "billing" ? (
           <BillingTab studentId={student.id} />
         ) : tab === "contribution" && showContribution ? (

@@ -39,7 +39,7 @@ export const POSITION_LABEL: Record<PopupPosition, string> = {
 
 /**
  * 공지 청중(audience)이 이 역할에게 보여야 하는가. 순수 함수(서버·클라 공용).
- * 'staff'=학생 외 전 직원, 'office'=강사·학생 제외 운영진(풀셸 사용자 — 강사 미니셸 무관 공지용),
+ * 'staff'=학생 외 전 직원, 'office'=강사·학생·아르바이트 제외 운영진(풀셸 사용자 — 강사 미니셸 무관 공지용),
  * 나머지는 해당 시스템 역할에 직접 매핑.
  */
 export function audienceMatchesRole(audience: string, role: SystemRole): boolean {
@@ -49,7 +49,8 @@ export function audienceMatchesRole(audience: string, role: SystemRole): boolean
     case "staff":
       return role !== "student";
     case "office":
-      return role !== "student" && role !== "teacher";
+      // 아르바이트(2026-11-05)는 운영진 공지 대상이 아니다 — 열람보다 낮은 등급.
+      return role !== "student" && role !== "teacher" && role !== "parttime";
     case "teachers":
       return role === "teacher";
     case "counselors":

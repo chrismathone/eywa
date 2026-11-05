@@ -38,7 +38,7 @@ import { canViewUnitsMaster } from "@/features/attendance/server/units-master";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { attendanceUnitSuffix } from "@/features/attendance/unit-suffix";
 import { ATTENDANCE_EDIT_WINDOW_DAYS } from "@/features/attendance/edit-window";
-import { accessLevelTenant, canManageTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { AbsenceIntakeButton } from "./_components/absence-intake-button";
 import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
@@ -932,6 +932,9 @@ export default async function AttendancePage({
   // ⚠️ 역할을 코드로 나열하지 않고 권한 매트릭스를 읽는다(#58) — 원장이 역할 권한을 조정하면 함께 따라간다.
   // ⚠️ 이건 화면 편의일 뿐 진짜 게이트는 서버 액션이다(#77).
   const scopedAttendance = (await accessLevelTenant(user.systemRole, "attendance")) === "scoped";
+  // 🔴 읽기 권한(회계·뷰어 등)은 칸 전부를 잠근다 — 판정은 칸 저장 액션(setAttendanceCell·setAttendanceRange)의 게이트와
+  //    **같은 함수**다. 7일 창(lockBefore)은 강사만이라, 이게 없으면 읽기 권한이 칸을 치고 저장 순간에야 거절됐다(원장 2026-11-05).
+  const attendanceReadOnly = !(await canWriteTenant(user.systemRole, "attendance"));
   const lockBefore = scopedAttendance
     ? new Date(Date.parse(`${kstToday()}T00:00:00Z`) - (ATTENDANCE_EDIT_WINDOW_DAYS - 1) * 86_400_000)
         .toISOString()
@@ -1063,6 +1066,7 @@ export default async function AttendancePage({
       notMine={gridSource.notMine}
       slotCounts={gridSource.slotCounts}
       lockBefore={lockBefore}
+      readOnly={attendanceReadOnly}
       initialCollapsed={viewPrefs.collapsed}
       autoUnits={gridSource.autoUnits}
     >

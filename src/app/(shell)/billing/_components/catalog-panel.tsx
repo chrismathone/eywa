@@ -5,6 +5,8 @@ import { Pagination } from "@/components/pagination";
 import { SearchToggle } from "@/components/search-toggle";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { getCatalogPage, getCatalogStats } from "@/features/billing/server/catalog-queries";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { canManageTenant } from "@/lib/auth/perm-matrix";
 import { CatalogTable } from "./catalog-table";
 
 // 학년은 교재의 coarse 버킷(초/중/고)이라 학원설정 학년 enum이 아니다(catalog-table과 같은 예외, CLAUDE.md).
@@ -30,9 +32,12 @@ export async function CatalogPanel({ sp, base }: { sp: Sp; base: Record<string, 
   const active = sp.active ?? "all";
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const [{ rows, total }, stats] = await Promise.all([
+  const [{ rows, total }, stats, canManage] = await Promise.all([
     getCatalogPage({ q, gradeLevel: grade, active }, page, PAGE_SIZE),
     getCatalogStats(),
+    // 교재 추가·수정·삭제·사용 토글 — 서버 catalog-actions가 **full만** 받으므로(accessLevelTenant==="full")
+    // 화면도 같은 뜻의 canManageTenant로 정한다(canWriteTenant면 scoped가 단추를 보고 저장에서 막힌다).
+    getCurrentUser().then((u) => (u ? canManageTenant(u.systemRole, "billing") : false)),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -57,6 +62,7 @@ export async function CatalogPanel({ sp, base }: { sp: Sp; base: Record<string, 
       {/* ↳ 그 줄이 '교재 추가' 버튼과 한 행을 나눠 쓴다(원장 2026-09-22 — 종전엔 버튼 하나만 선 둘째 줄이 있었다). */}
       <CatalogTable
         rows={rows}
+        canManage={canManage}
         toolbar={
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <p className="text-text-dim text-sm whitespace-nowrap">

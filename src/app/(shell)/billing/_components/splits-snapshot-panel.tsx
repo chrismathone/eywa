@@ -35,10 +35,13 @@ export function SplitsSnapshotPanel({
   period,
   live,
   saved,
+  canWrite,
 }: {
   period: string;
   live: LiveSplits;
   saved: SplitsSnapshotStatus | null;
+  /** 저장 단추를 세울지 — saveTeacherSplits와 같은 canWriteTenant(billing). 읽기 권한이면 기록 상태만 보여 준다(원장 2026-11-05). */
+  canWrite: boolean;
 }) {
   const [state, formAction] = useActionState<SaveSplitsState, FormData>(saveTeacherSplits, undefined);
 
@@ -58,7 +61,7 @@ export function SplitsSnapshotPanel({
             <span className="num">{fmtKst(saved.savedAt)}</span> 저장
             {drift ? (
               <span className="ml-1.5 rounded-full border border-amber/30 bg-amber-soft px-2 py-0.5 text-amber">
-                현재 집계와 다릅니다 — 다시 저장하세요
+                {canWrite ? "현재 집계와 다릅니다 — 다시 저장하세요" : "현재 집계와 다릅니다"}
               </span>
             ) : (
               <span className="ml-1.5 rounded-full border border-green/30 bg-green-soft px-2 py-0.5 text-green">
@@ -68,8 +71,12 @@ export function SplitsSnapshotPanel({
           </span>
         ) : (
           <span className="text-text-dim">
-            저장된 청구 분배 기록이 없습니다. 확정 행(현재 <b className="num">{live.rowCount}</b>행)의 강사 분배를
-            기록으로 남기려면 저장하세요.
+            저장된 청구 분배 기록이 없습니다.
+            {canWrite ? (
+              <>
+                {" "}확정 행(현재 <b className="num">{live.rowCount}</b>행)의 강사 분배를 기록으로 남기려면 저장하세요.
+              </>
+            ) : null}
           </span>
         )}
         {state && "saved" in state && state.saved !== undefined ? (
@@ -81,14 +88,16 @@ export function SplitsSnapshotPanel({
       </div>
       <p className="text-text-dim text-xs">청구 기준 참고 기록입니다. 실제 급여는 출석부 기준으로 계산합니다.</p>
 
-      <form action={formAction} className="flex items-center gap-2">
-        <input type="hidden" name="period" value={period} />
-        <span className="text-text-faint text-xs">그 달 전체 저장 · 청구서는 변경되지 않음</span>
-        <SaveButton
-          disabled={!canSave}
-          label={live.rowCount === 0 && saved !== null ? "분배 기록 비우기(확정 0)" : "청구 분배 기록 저장"}
-        />
-      </form>
+      {canWrite ? (
+        <form action={formAction} className="flex items-center gap-2">
+          <input type="hidden" name="period" value={period} />
+          <span className="text-text-faint text-xs">그 달 전체 저장 · 청구서는 변경되지 않음</span>
+          <SaveButton
+            disabled={!canSave}
+            label={live.rowCount === 0 && saved !== null ? "분배 기록 비우기(확정 0)" : "청구 분배 기록 저장"}
+          />
+        </form>
+      ) : null}
     </div>
   );
 }

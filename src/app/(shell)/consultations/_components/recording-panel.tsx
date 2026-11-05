@@ -60,6 +60,7 @@ function RecordingPanelInner({
   aiReport,
   aiGeneratedAt,
   aiModelVersion,
+  canAnalyze = true,
 }: {
   id: string;
   processingStatus: ConsultationProcessingStatus;
@@ -69,6 +70,11 @@ function RecordingPanelInner({
   aiReport: StudentConsultationAiReport | null;
   aiGeneratedAt: string | null;
   aiModelVersion?: string | null;
+  /**
+   * 'AI 분석' 단추를 그리나 — 원생상담 읽기 권한이면 false(서버 `runStudentConsultationAnalysis`와 같은 쓰기 판정을 page가 계산).
+   * 전사·분석 결과는 그대로 읽는다. 기본값은 종전 동작(단추 있음).
+   */
+  canAnalyze?: boolean;
 }) {
   const modelLabel = modelDisplayLabel(aiModelVersion);
   const router = useRouter();
@@ -104,7 +110,7 @@ function RecordingPanelInner({
               {STATUS_LABEL[processingStatus]}
             </span>
           ) : null}
-          {!inFlight ? (
+          {!inFlight && canAnalyze ? (
             <form action={formAction}>
               <input type="hidden" name="id" value={id} />
               {/* 🔴 전사가 없으면 누를 수 없다 — 서버도 같은 조건으로 거절한다([[#77]] 화면만 잠그지 않기). */}

@@ -10,8 +10,9 @@ import {
 } from "@/features/attendance/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
+import { writeLockedNote } from "@/lib/write-lock";
 import { attendanceLockMessage, isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
 import { getAutoUnitsForClassDay } from "@/features/attendance/server/auto-units";
 import { AttendanceInputForm } from "./input-form";
@@ -25,11 +26,15 @@ export default async function AttendanceInputPage({
 }) {
   const user = await requireAccess("attendance");
   const { date, classId } = await params;
+  // 🔴 읽기 권한(회계·뷰어 등) — 주소로 바로 들어와도 양식을 잠그고 저장·보강 추가를 그리지 않는다(원장 2026-11-05).
+  //    판정은 saveAttendance 게이트와 **같은 함수**(canWriteTenant). 예전엔 강사 7일 잠금만 있어 다 쓰고 저장해야 거절됐다.
+  const readOnly = !(await canWriteTenant(user.systemRole, "attendance"));
   // 강사(scoped)는 KST 오늘 기준 7일 지난 출결을 못 고친다(원장 2026-07-21). 관리자 이상은 제한 없음.
   // ⚠️ 진짜 게이트는 saveAttendance 서버 액션 — 여기선 폼을 미리 잠가 헛수고를 없앨 뿐이다(#77).
-  const locked =
-    (await accessLevelTenant(user.systemRole, "attendance")) === "scoped" &&
-    !isWithinAttendanceEditWindow(date, kstToday())
+  const locked = readOnly
+    ? writeLockedNote("attendance")
+    : (await accessLevelTenant(user.systemRole, "attendance")) === "scoped" &&
+        !isWithinAttendanceEditWindow(date, kstToday())
       ? attendanceLockMessage(date, kstToday())
       : null;
   // 수학 자동 시수(수업 길이, 원장 2026-09-11) — 빈 시수 칸으로 **새로** 저장하면 서버가 넣는 값이라
@@ -63,7 +68,7 @@ export default async function AttendanceInputPage({
           {locked}
         </p>
       ) : null}
-      <AttendanceInputForm classId={classId} date={date} rows={rows} locked={!!locked} autoUnits={autoUnits} />
+      <AttendanceInputForm classId={classId} date={date} rows={rows} locked={!!locked} readOnly={readOnly} autoUnits={autoUnits} />
     </div>
   );
 }

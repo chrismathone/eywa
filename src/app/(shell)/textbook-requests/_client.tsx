@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { kstToday } from "@/lib/date-kst";
 import { TEXTAREA_AUTOSIZE } from "@/lib/ui/textarea";
+import { writeLockedNote, writeLockedPlaceholder } from "@/lib/write-lock";
 import type { AccountSetting } from "@/features/owner/settings-types";
 import { requestTextbook, type TextbookState } from "@/features/billing/server/textbook-actions";
 import { TextbookMentField, useMentDraft } from "@/features/billing/textbook-ment";
@@ -48,7 +49,14 @@ export function TextbookRequestClient({
   viewerUserId,
   initialStudentIds,
   classnoteOn = true,
+  canWrite,
 }: {
+  /**
+   * 교재 요청 쓰기 권한 — 서버 게이트(`canWriteTenant("textbook_requests")`, 같은 행위자)와 같은 판정을 page.tsx가 내린다.
+   * false(읽기 권한)면 양식 칸은 잠그고 권한 안내를 띄우며, 저장·발송·수정·삭제 단추는 그리지 않는다
+   * (원장 2026-11-05 — 양식을 다 쓴 뒤에야 "교재 요청 권한이 없습니다"가 떴다, write-lock.ts).
+   */
+  canWrite: boolean;
   rows: TextbookOrderRow[];
   students: StudentOption[];
   catalog: CatalogOption[];
@@ -70,13 +78,16 @@ export function TextbookRequestClient({
   // 전 필드 controlled — 우측 실시간 미리보기의 데이터 소스이자, '교재 검색'(단가표) 자동입력 대상.
   // 🔴 **내 목록에 있는 학생만** 초기값으로 받는다 — 스코프 밖 id를 그대로 담으면 칩에 이름 대신
   //    raw UUID가 뜨고(UI에 raw 코드 금지) 저장은 서버에서 거절돼 이유 없는 실패가 된다.
+  // 읽기 권한이면 링크로 온 학생도 담지 않는다 — 잠긴 양식에 칩만 차 있으면 쓸 수 있는 것처럼 보인다.
   const [studentIds, setStudentIds] = useState<string[]>(() =>
-    (initialStudentIds ?? []).filter((id) => students.some((s) => s.id === id)),
+    canWrite ? (initialStudentIds ?? []).filter((id) => students.some((s) => s.id === id)) : [],
   );
   // 링크로 왔는데 그 학생이 내 목록에 없으면(담당 스코프 밖·퇴원) **말해 준다** — 그냥 비우면
   // "링크를 눌렀는데 아무것도 안 채워졌다"가 되어 원인을 아무도 모른다.
-  const prefillDropped = (initialStudentIds ?? []).some((id) => !students.some((s) => s.id === id));
-  const [teacherName, setTeacherName] = useState(requesterName);
+  const prefillDropped = canWrite && (initialStudentIds ?? []).some((id) => !students.some((s) => s.id === id));
+  // 읽기 권한이면 담임 칸을 비워 둔다 — 값이 차 있으면 권한 안내(placeholder)가 안 보인다.
+  const [teacherName, setTeacherName] = useState(canWrite ? requesterName : "");
+  const lockedHint = canWrite ? undefined : writeLockedPlaceholder("textbook_requests");
   const [requestDate, setRequestDate] = useState(kstToday());
   const [bookName, setBookName] = useState("");
   const [bookDetail, setBookDetail] = useState("");
@@ -244,6 +255,11 @@ export function TextbookRequestClient({
 
   // '이미지 저장 및 기록' — 방금 기록한 요청과 같으면 기록하지 않고 요청서 이미지만 다시 받는다.
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    // 읽기 권한 — 저장 단추가 없지만 Enter 제출 등 어떤 경로로도 기록을 시도하지 않는다(서버도 거절한다).
+    if (!canWrite) {
+      e.preventDefault();
+      return;
+    }
     const same = sameSavedRequest(saved, fp);
     if (!same) {
       setSubmitFp(fp);
@@ -294,6 +310,10 @@ export function TextbookRequestClient({
         >
           {/* 좌: 작성 폼 (ijw 기본 정보 → 교재 내용 섹션 구조) */}
           <section className="border-line bg-card space-y-5 rounded-2xl border p-4">
+            {/* 요청 일자·교재 검색처럼 placeholder로 알릴 수 없는 칸이 있어 양식 머리에 한 줄로도 알린다. */}
+            {!canWrite ? (
+              <p className="text-text-dim bg-bg-soft rounded-lg px-3 py-2 text-xs">{writeLockedNote("textbook_requests")}</p>
+            ) : null}
             <div className="space-y-3">
               <SectionLabel icon={<User className="size-3.5" />}>기본 정보</SectionLabel>
               <div className="space-y-1.5">
@@ -310,9 +330,10 @@ export function TextbookRequestClient({
                     setStudentIds((prev) => (prev.includes(id) ? prev : [...prev, id]))
                   }
                   options={availableOptions}
-                  placeholder="학생을 검색해 추가 (여러 명 가능)"
+                  placeholder={lockedHint ?? "학생을 검색해 추가 (여러 명 가능)"}
                   searchPlaceholder="학생 이름 검색..."
                   ariaLabel="교재 요청 학생 추가"
+                  disabled={!canWrite}
                 />
                 {selectedStudents.length > 0 ? (
                   <div className="flex flex-wrap gap-1.5 pt-0.5">
@@ -354,7 +375,8 @@ export function TextbookRequestClient({
                   name="teacherName"
                   value={teacherName}
                   onChange={(e) => setTeacherName(e.target.value)}
-                  placeholder="선생님 성함"
+                  placeholder={lockedHint ?? "선생님 성함"}
+                  disabled={!canWrite}
                 />
                 {/* 🔴 이 칸이 곧 **소유자**다(ownsTextbookRequest) — 다른 이름으로 저장하면 수정·삭제·발송을
                     그 선생님만 할 수 있다. 안 알리면 '기록했습니다, 발송창에서 보낼 수 있어요' 토스트 직후
@@ -373,6 +395,7 @@ export function TextbookRequestClient({
                   type="date"
                   value={requestDate}
                   onChange={(e) => setRequestDate(e.target.value)}
+                  disabled={!canWrite}
                 />
               </label>
             </div>
@@ -392,10 +415,11 @@ export function TextbookRequestClient({
                   <SearchableSelect
                     value=""
                     options={catalogOptions}
-                    placeholder="교재명을 입력해 검색..."
+                    placeholder={lockedHint ?? "교재명을 입력해 검색..."}
                     searchPlaceholder="교재명 검색..."
                     ariaLabel="교재 단가표 검색"
                     onValueChange={pickCatalog}
+                    disabled={!canWrite}
                   />
                   <span className="text-text-faint text-xs">
                     선택하면 교재명·상세·금액이 자동으로 채워집니다 (직접 수정 가능)
@@ -410,7 +434,8 @@ export function TextbookRequestClient({
                   name="bookName"
                   value={bookName}
                   onChange={(e) => setBookName(e.target.value)}
-                  placeholder="교재명을 입력하세요"
+                  placeholder={lockedHint ?? "교재명을 입력하세요"}
+                  disabled={!canWrite}
                 />
                 {state?.fieldErrors?.bookName ? (
                   <span className="text-danger text-xs">{state.fieldErrors.bookName}</span>
@@ -422,7 +447,8 @@ export function TextbookRequestClient({
                   name="bookDetail"
                   value={bookDetail}
                   onChange={(e) => setBookDetail(e.target.value)}
-                  placeholder="상세 내용을 입력하세요 (선택)"
+                  placeholder={lockedHint ?? "상세 내용을 입력하세요 (선택)"}
+                  disabled={!canWrite}
                 />
               </label>
               <label className="block space-y-1">
@@ -434,7 +460,8 @@ export function TextbookRequestClient({
                   step={500}
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
-                  placeholder="교재 검색 시 자동 입력"
+                  placeholder={lockedHint ?? "교재 검색 시 자동 입력"}
+                  disabled={!canWrite}
                   className="num text-right"
                 />
               </label>
@@ -446,24 +473,28 @@ export function TextbookRequestClient({
                   rows={3}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="예: 급해요 — 이번 주 수업에 필요"
-                  className={`border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 min-h-[68px] w-full rounded-lg border bg-transparent px-2.5 py-1.5 text-sm transition-colors outline-none focus-visible:ring-3 ${TEXTAREA_AUTOSIZE}`}
+                  placeholder={lockedHint ?? "예: 급해요 — 이번 주 수업에 필요"}
+                  disabled={!canWrite}
+                  className={`border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 min-h-[68px] w-full rounded-lg border bg-transparent px-2.5 py-1.5 text-sm transition-colors outline-none focus-visible:ring-3 disabled:cursor-not-allowed disabled:opacity-60 ${TEXTAREA_AUTOSIZE}`}
                 />
               </label>
               {/* 메모 바로 아래 = 학부모에게 실제로 나가는 문구(발송 시 그대로 쓰인다). */}
-              {classnoteOn ? <TextbookMentField value={ment} onChange={editMent} /> : null}
+              {classnoteOn ? <TextbookMentField value={ment} onChange={editMent} disabled={!canWrite} /> : null}
             </div>
 
-            <TextbookFormFooter
-              result={showMsg ? state : undefined}
-              notice={notice}
-              canSubmit={canSubmit}
-              pending={pending}
-              sending={sending}
-              onReset={reset}
-              onSaveAndSend={classnoteOn ? saveAndSend : undefined}
-              onSendCreated={classnoteOn ? setSendIds : undefined}
-            />
+            {/* 읽기 권한이면 '작성 지우기'·'클래스노트 발송'·'이미지 저장 및 기록'을 그리지 않는다(write-lock.ts 규칙 1). */}
+            {canWrite ? (
+              <TextbookFormFooter
+                result={showMsg ? state : undefined}
+                notice={notice}
+                canSubmit={canSubmit}
+                pending={pending}
+                sending={sending}
+                onReset={reset}
+                onSaveAndSend={classnoteOn ? saveAndSend : undefined}
+                onSendCreated={classnoteOn ? setSendIds : undefined}
+              />
+            ) : null}
           </section>
 
           {/* 우: 실시간 미리보기 (ijw 우측 패널 — 타이핑 즉시 종이 서식에 반영) */}
@@ -493,10 +524,12 @@ export function TextbookRequestClient({
                 account={account}
               />
             </div>
-            <p className="text-text-faint text-xs">
-              * 입력한 내용은 자동으로 미리보기에 반영됩니다. &lsquo;이미지 저장 및 기록&rsquo;을 누르면 이 요청서가
-              PNG로 저장되고 아래 내역에 기록됩니다.
-            </p>
+            {canWrite ? (
+              <p className="text-text-faint text-xs">
+                * 입력한 내용은 자동으로 미리보기에 반영됩니다. &lsquo;이미지 저장 및 기록&rsquo;을 누르면 이 요청서가
+                PNG로 저장되고 아래 내역에 기록됩니다.
+              </p>
+            ) : null}
           </section>
         </form>
       )}
@@ -506,7 +539,8 @@ export function TextbookRequestClient({
       <RequestHistory
         rows={rows}
         onDownload={download}
-        onSend={classnoteOn ? (r) => setSendIds([r.id]) : undefined}
+        canWrite={canWrite}
+        onSend={classnoteOn && canWrite ? (r) => setSendIds([r.id]) : undefined}
         capNote={isTeacher ? undefined : "최근 100건 기준 — 전체는 수납관리 › 교재"}
         // 강사일 때만 소유 판정 — 사무실(master/accountant)은 서버에서도 이 게이트를 안 탄다.
         ownerName={isTeacher ? requesterName : undefined}

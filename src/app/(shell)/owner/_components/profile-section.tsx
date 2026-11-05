@@ -7,13 +7,14 @@ import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { isBrandColorApplied, DEFAULT_BRAND_COLOR } from "@/lib/color-utils";
 import { SectionForm, SettingsCard } from "./section-form";
 import { TextField, ColorField } from "./fields";
+import { useLockedPlaceholder, useWriteLock } from "./write-lock-context";
 
-export function ProfileSection({ initial }: { initial: ProfileSettings }) {
+export function ProfileSection({ initial, readOnly = false }: { initial: ProfileSettings; readOnly?: boolean }) {
   const [p, setP] = useState<ProfileSettings>(initial);
   const set = (patch: Partial<ProfileSettings>) => setP((prev) => ({ ...prev, ...patch }));
 
   return (
-    <SectionForm section="profile" payload={p}>
+    <SectionForm section="profile" payload={p} readOnly={readOnly}>
       <div className="grid items-start gap-4 xl:grid-cols-2">
       <SettingsCard title="학원 정보" description="청구서·알림·인쇄물에 쓰이는 학원 기본 정보입니다.">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -127,6 +128,9 @@ export function BrandingField({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [localPreview, setLocalPreview] = useState<string | null>(null);
+  // 읽기 권한이면 올리기·제거를 그리지 않는다(쓰기 잠금 — 폼이 세운다).
+  const { locked } = useWriteLock();
+  const ph = useLockedPlaceholder();
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -172,11 +176,13 @@ export function BrandingField({
             <span className="text-text-faint text-xs">없음</span>
           )}
         </div>
-        <label className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition">
-          <input type="file" accept="image/*" hidden onChange={onFile} disabled={busy} />
-          {busy ? "업로드 중…" : "이미지 업로드"}
-        </label>
-        {value ? (
+        {locked ? null : (
+          <label className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition">
+            <input type="file" accept="image/*" hidden onChange={onFile} disabled={busy} />
+            {busy ? "업로드 중…" : "이미지 업로드"}
+          </label>
+        )}
+        {value && !locked ? (
           <button
             type="button"
             onClick={() => {
@@ -195,7 +201,7 @@ export function BrandingField({
         <input
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="https://…/logo.png"
+          placeholder={ph("https://…/logo.png")}
           className="border-line bg-card mt-1 w-full rounded-md border px-2 py-1 text-xs"
         />
       </details>

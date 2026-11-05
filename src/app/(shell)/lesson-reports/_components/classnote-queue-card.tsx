@@ -180,7 +180,11 @@ function ReasonCell({ summary, raw }: { summary: string; raw: string }) {
   );
 }
 
-export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView }) {
+/**
+ * `canSend` = 서버 재발송 게이트와 같은 판정(`canWriteTenant(role, "lesson_reports")`, page.tsx가 계산).
+ * 읽기 권한이면 재발송·멈춤 재시도 단추와 행 선택 칸을 **그리지 않는다** — 눌러야 "권한이 없습니다"가 뜨던 자리(원장 2026-11-05).
+ */
+export function ClassnoteQueueCard({ view: served, canSend }: { view: ClassnoteQueueView; canSend: boolean }) {
   const router = useRouter();
   const subjects = useSubjectMaps(); // 과목 표시는 한글 라벨(raw 키 노출 금지)
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -464,24 +468,28 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
         {summary.stuck > 0 ? <Stat label="멈춤" value={summary.stuck} tone="bg-danger/10 text-danger" /> : null}
       </div></details>
 
-      {/* 관리 버튼 */}
+      {/* 관리 버튼 — 재발송·멈춤 재시도는 쓰기 권한자만(읽기 권한엔 그리지 않는다). 동기화 단추는 서버가 스스로 숨긴다. */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button size="sm" disabled={busy || checked.size === 0} onClick={() => doRetry([...checked])}>
-          선택 재발송 {checked.size > 0 ? `(${checked.size})` : ""}
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={busy || retriable.length === 0}
-          onClick={() => doRetry(retriable.map((i) => i.id))}
-          title="아직 기한이 남은 실패·멈춤 전체를 재발송 대기로(기한 지난 건은 보낼 수 없어 제외)"
-        >
-          주의 항목 전체 재발송 ({retriable.length})
-        </Button>
-        {summary.stuck > 0 ? (
-          <Button size="sm" variant="ghost" disabled={busy} onClick={doResetStuck}>
-            멈춤 재시도 ({summary.stuck})
-          </Button>
+        {canSend ? (
+          <>
+            <Button size="sm" disabled={busy || checked.size === 0} onClick={() => doRetry([...checked])}>
+              선택 재발송 {checked.size > 0 ? `(${checked.size})` : ""}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy || retriable.length === 0}
+              onClick={() => doRetry(retriable.map((i) => i.id))}
+              title="아직 기한이 남은 실패·멈춤 전체를 재발송 대기로(기한 지난 건은 보낼 수 없어 제외)"
+            >
+              주의 항목 전체 재발송 ({retriable.length})
+            </Button>
+            {summary.stuck > 0 ? (
+              <Button size="sm" variant="ghost" disabled={busy} onClick={doResetStuck}>
+                멈춤 재시도 ({summary.stuck})
+              </Button>
+            ) : null}
+          </>
         ) : null}
         {/* 지금 반 보드 동기화(0313a) — '보낼 반 없음'으로 막힌 행은 대개 새벽 동기화 전의 새 반·신입이다. */}
         <ClassnoteSyncNowButton source="lesson_reports_queue" className="ml-auto" />
@@ -515,7 +523,8 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
           <table className="w-full min-w-[560px] text-left text-xs">
             <thead>
               <tr className="border-line text-text-faint border-b">
-                <th className="w-8 px-2 py-2"></th>
+                {/* 선택 칸은 재발송 대상 고르기라 쓰기 권한자만 — 읽기 권한엔 열 자체가 없다. */}
+                {canSend ? <th className="w-8 px-2 py-2"></th> : null}
                 <th className="px-3 py-2 font-bold">학생 · 과목</th>
                 <th className="px-3 py-2 font-bold">날짜</th>
                 <th className="px-3 py-2 font-bold">상태</th>
@@ -528,7 +537,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
                 const dl = deadlineBadge(it.reportDate, todayKst);
                 return (
                   <tr key={it.id} className="border-line border-b last:border-b-0">
-                    <td className="px-2 py-2.5">
+                    {canSend ? <td className="px-2 py-2.5">
                       {/* 사람이 푸는 상태(blocked_shared·name_conflict)는 **둘 다 선택 가능** — 원장이 원인을
                           고친 뒤(예외 등재·보드 정리·구분 이름 지정·가드 수정) 보류분을 내보낼 길이 없으면
                           영영 못 나가는 막다른 길이 된다. 워커 프리플라이트가 매 시도 재평가하므로 미해결이면
@@ -544,7 +553,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
                         title={it.status === "processing" ? "처리 중에 멈춘 건은 '멈춤 재시도'로 되돌린 뒤 재발송합니다" : undefined}
                         aria-label={`${it.studentName} 선택`}
                       />
-                    </td>
+                    </td> : null}
                     <td className="px-3 py-2.5">
                       <span className="text-foreground font-bold">{it.studentName}</span>
                       {it.subject ? (

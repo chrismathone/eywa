@@ -31,6 +31,8 @@ type Props = {
   ariaLabel?: string;
   /** 고칠 때마다 HTML을 알린다(폼 밖 상태로 들고 있는 화면용 — 업무 요청). */
   onChange?: (html: string) => void;
+  /** 쓰기 권한이 없을 때 — 편집을 막고 툴바를 숨긴다. 안내는 placeholder로(원장 2026-11-05). */
+  disabled?: boolean;
 };
 
 /** 툴바 버튼 하나 — 아이콘이 없는 서식은 글자(B·I·U)로 낸다(아이콘을 억지로 끼워 맞추지 않는다). */
@@ -100,12 +102,13 @@ function TableTools({ editor }: { editor: Editor }) {
   );
 }
 
-export function RichEditorImpl({ name, defaultValue = "", placeholder, ariaLabel, onChange }: Props) {
+export function RichEditorImpl({ name, defaultValue = "", placeholder, ariaLabel, onChange, disabled = false }: Props) {
   const [html, setHtml] = useState(defaultValue);
 
   const editor = useEditor({
     // ssr:false로만 마운트되지만, 하이드레이션 경고를 확실히 없애려고 명시한다.
     immediatelyRender: false,
+    editable: !disabled,
     extensions: [
       // StarterKit v3에 굵게·기울임·밑줄·취소선·목록·제목·인용·코드·링크·실행취소가 모두 들어 있다.
       StarterKit.configure({
@@ -114,7 +117,9 @@ export function RichEditorImpl({ name, defaultValue = "", placeholder, ariaLabel
       }),
       TableKit.configure({ table: { resizable: false } }), // 열 너비는 저장하지 않는다(sanitize가 style을 뗀다)
       TextAlign.configure({ types: ["heading", "paragraph"] }),
-      Placeholder.configure({ placeholder: placeholder ?? "내용을 입력하세요" }),
+      // showOnlyWhenEditable: false — 기본값(true)이면 비활성(권한 잠금)일 때 placeholder 장식을 아예 안 만들어
+      // "○○ 작성 권한이 필요합니다" 안내가 보이지 않는다(write-lock.ts · 2026-11-05 리뷰). 편집 가능한 화면은 그대로다.
+      Placeholder.configure({ placeholder: placeholder ?? "내용을 입력하세요", showOnlyWhenEditable: false }),
     ],
     content: defaultValue,
     editorProps: {
@@ -135,6 +140,11 @@ export function RichEditorImpl({ name, defaultValue = "", placeholder, ariaLabel
 
   // 언마운트 정리 — 에디터 인스턴스가 남으면 ProseMirror 뷰가 DOM을 붙든다.
   useEffect(() => () => editor?.destroy(), [editor]);
+  // 권한이 바뀌어 다시 그려질 때도 편집 가능 여부를 맞춘다(useEditor 옵션은 처음 한 번만 읽힌다).
+  useEffect(() => {
+    // emitUpdate=false — 기본값(true)이면 마운트 때마다 update가 나가 onChange가 저절로 한 번 불린다(비활성이 아닌 기존 화면 포함).
+    editor?.setEditable(!disabled, false);
+  }, [editor, disabled]);
 
   if (!editor) return <EditorSkeleton />;
 
@@ -150,10 +160,14 @@ export function RichEditorImpl({ name, defaultValue = "", placeholder, ariaLabel
   };
 
   return (
-    <div className="border-line bg-card focus-within:border-primary rounded-lg border transition">
+    <div
+      className={`border-line rounded-lg border transition ${disabled ? "bg-bg-soft/40 cursor-not-allowed" : "bg-card focus-within:border-primary"}`}
+      aria-disabled={disabled || undefined}
+    >
       <input type="hidden" name={name} value={html} />
 
       {/* 툴바 — 좁은 창에서는 가로 레일로 흐른다(줄바꿈으로 키가 커지지 않게). */}
+      {disabled ? null : (
       <div className="border-line flex flex-wrap items-center gap-0.5 border-b px-2 py-1.5">
         <ToolButton
           label="굵게"
@@ -242,6 +256,7 @@ export function RichEditorImpl({ name, defaultValue = "", placeholder, ariaLabel
           </span>
         </button>
       </div>
+      )}
 
       <EditorContent editor={editor} />
     </div>

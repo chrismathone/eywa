@@ -53,7 +53,7 @@ function AddForm() {
   );
 }
 
-function RoomRow({ room }: { room: ClassroomRow }) {
+function RoomRow({ room, readOnly }: { room: ClassroomRow; readOnly: boolean }) {
   const [editing, setEditing] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [upState, upAction] = useActionState<ClassroomActionState, FormData>(async (p, fd) => {
@@ -126,6 +126,7 @@ function RoomRow({ room }: { room: ClassroomRow }) {
           </span>
         ) : null}
       </div>
+      {readOnly ? null : (
       <div className="flex shrink-0 items-center gap-2.5">
         <button
           type="button"
@@ -176,13 +177,18 @@ function RoomRow({ room }: { room: ClassroomRow }) {
           </button>
         )}
       </div>
+      )}
       {delState?.error ? <span className="text-danger w-full text-xs">{delState.error}</span> : null}
       {arcState?.error ? <span className="text-danger w-full text-xs">{arcState.error}</span> : null}
     </li>
   );
 }
 
-export function ClassroomManager({ rooms, canImport = false }: { rooms: ClassroomRow[]; canImport?: boolean }) {
+/**
+ * `readOnly` = 운영 설정 읽기 권한 — 추가 양식·행의 수정·숨기기·삭제를 **그리지 않는다**(원장 2026-11-05 — 비활성으로 남기면
+ * 쓸 수 있는 것처럼 읽힌다). 판정은 강의실 액션과 같은 `canWriteTenant(operations_settings)`(page.tsx → 운영 섹션).
+ */
+export function ClassroomManager({ rooms, canImport = false, readOnly = false }: { rooms: ClassroomRow[]; canImport?: boolean; readOnly?: boolean }) {
   const live = rooms.filter((r) => r.archivedAt == null);
   const archived = rooms.filter((r) => r.archivedAt != null);
   return (
@@ -193,16 +199,18 @@ export function ClassroomManager({ rooms, canImport = false }: { rooms: Classroo
       collapsible
       summary={`${live.length}개`}
     >
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <AddForm />
-        {/* 엑셀 가져오기(강의실) — 이 카드엔 검색이 없어 추가 줄 오른쪽 끝(원장 2026-09-29 통일 — 이름은 ExcelMenu 한 곳). */}
-        {canImport ? <ExcelMenu importKind="classrooms" /> : null}
-      </div>
+      {readOnly ? null : (
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <AddForm />
+          {/* 엑셀 가져오기(강의실) — 이 카드엔 검색이 없어 추가 줄 오른쪽 끝(원장 2026-09-29 통일 — 이름은 ExcelMenu 한 곳). */}
+          {canImport ? <ExcelMenu importKind="classrooms" /> : null}
+        </div>
+      )}
       <ul className="divide-line mt-4 divide-y border-t pt-2">
         {live.length === 0 ? (
           <li className="text-text-faint py-3 text-center text-sm">아직 등록된 강의실이 없습니다</li>
         ) : (
-          live.map((r) => <RoomRow key={r.id} room={r} />)
+          live.map((r) => <RoomRow key={r.id} room={r} readOnly={readOnly} />)
         )}
       </ul>
       {/* 숨긴 강의실 — 접어 둔다. 배정이 남아 있으면 시간표엔 계속 보이므로 여기서 복원할 수 있어야 한다. */}
@@ -213,7 +221,7 @@ export function ClassroomManager({ rooms, canImport = false }: { rooms: Classroo
           </summary>
           <ul className="divide-line mt-1 divide-y">
             {archived.map((r) => (
-              <RoomRow key={r.id} room={r} />
+              <RoomRow key={r.id} room={r} readOnly={readOnly} />
             ))}
           </ul>
         </details>

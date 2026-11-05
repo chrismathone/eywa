@@ -121,15 +121,22 @@ async function usedNotionIds(): Promise<Map<string, string>> {
  * 미매핑 직원의 매핑 준비 — 이메일 자동연결 시도(성공 시 저장) 또는 수동 후보 반환.
  * ⚠️ 첫 페인트가 아니라 **클라 액션에서 지연 호출**되는 무거운 경로(담당자 스캔 수 초).
  * 수동 후보에서 **이미 다른 직원에 연결된 Notion 계정은 제외**(중복 연결 방지, DB 부분유니크와 정합).
+ *
+ * `canWrite` = 호출부가 판정한 직원관리 **쓰기** 권한(canWriteTenant(staff)) — 자동연결 **저장**과 수동 후보 노출 둘 다 이것이다.
+ * 🔴 읽기 권한이면 이메일이 맞아도 저장하지 않는다(원장 2026-11-05 — 예전엔 월간일정 탭을 여는 것만으로
+ *    `users.notion_user_id`가 admin 클라로 써졌다). 'matched'로 답하면 화면이 재조회해도 여전히 미매핑이라
+ *    준비 표시에 머물므로, 저장하지 못한 경우는 'none'(자동 불가 + 후보 비노출)으로 답한다.
  */
 export async function prepareStaffNotionMappingRow(
   staffId: string,
   actorTenantId: string,
-  includeOptions: boolean,
+  canWrite: boolean,
 ): Promise<MappingPrep> {
   if (!notionConfigFor(actorTenantId)) return { state: "none" };
   const { notionUserId, email } = await staffMappingRow(staffId);
   if (notionUserId) return { state: "matched" };
+  // 읽기 권한 — 저장도, 후보 노출도 하지 않는다(위 주석). 쓸 수 없으니 담당자 스캔(수 초)도 돌리지 않는다.
+  if (!canWrite) return { state: "none" };
 
   const people = await cachedNotionAssignees(actorTenantId);
   const target = normEmail(email);
@@ -139,7 +146,6 @@ export async function prepareStaffNotionMappingRow(
     if (!saved.ok) console.warn(`[notion] 이메일 자동매칭 저장 실패(${staffId}): ${saved.error}`);
     return { state: "matched" };
   }
-  if (!includeOptions) return { state: "none" };
 
   const used = await usedNotionIds();
   const available: NotionUserOption[] = [];

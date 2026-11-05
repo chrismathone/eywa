@@ -23,6 +23,7 @@ import type { SeatClassRoster } from "@/features/attendance/seat/server/queries"
 import type { SeatStatus } from "@/features/attendance/seat/server/actions";
 import { seatCellKey } from "@/features/attendance/seat/prev-period";
 import { SeatMarkTriad, SeatMemoMark, SeatNotePopover } from "./seat-mark-extras";
+import { writeLockedPlaceholder } from "@/lib/write-lock";
 import { SeatPeriodHints, type SeatPeriodHintData } from "./seat-period-hints";
 
 const INPUT =
@@ -88,6 +89,11 @@ type JjTableProps = {
   onSaveField: (classId: string, studentId: string, field: JjMarkField, value: string, before: string | null) => void;
   onFillClass: (classId: string) => void;
   readOnly: boolean;
+  /**
+   * 자리 출석부 **읽기 권한**(보드의 `readOnlyReason === "permission"`, 원장 2026-11-05) — 출결 세 단추 대신 상태 글자,
+   * 잠긴 입력칸 placeholder에 권한 안내(`writeLockedPlaceholder("seat_attendance")`). 지난 날짜 잠금과 사유가 달라 따로 받는다.
+   */
+  writeLocked?: boolean;
   pending: boolean;
 };
 
@@ -138,6 +144,7 @@ export function SeatJjTable(props: JjTableProps) {
           onSaveField={props.onSaveField}
           onFillClass={props.onFillClass}
           readOnly={props.readOnly}
+          writeLocked={props.writeLocked}
           pending={props.pending}
         />
       ))}
@@ -159,9 +166,12 @@ function SeatJjClass({
   onSaveField,
   onFillClass,
   readOnly,
+  writeLocked = false,
   pending,
 }: Omit<JjTableProps, "rosters"> & { roster: SeatClassRoster }) {
   const cols = jjSeatTextCols();
+  // 잠긴 칸의 안내 — 권한 때문이면 권한을 말한다(지난 날짜 잠금은 보드 위 한 줄이 이미 말한다).
+  const lockedPlaceholder = writeLocked ? writeLockedPlaceholder("seat_attendance") : undefined;
   const left = r.students.filter((s) => statusOf(r.classId, s) === null).length;
   const slotPlan = plan?.plans[r.classId];
   const canEditEcs = !!slotPlan?.canEdit;
@@ -350,6 +360,7 @@ function SeatJjClass({
                   noteTitle={noteTitle}
                   showReason={showReason}
                   readOnly={readOnly}
+                  writeLocked={writeLocked}
                   pending={pending}
                   hints={hints}
                   onSave={onSave}
@@ -373,6 +384,7 @@ function SeatJjClass({
                         className={INPUT}
                         value={s[field] ?? ""}
                         disabled={readOnly}
+                        placeholder={lockedPlaceholder}
                         maxLength={JJ_MARK_MAXLEN[field]}
                         aria-label={`${s.name} ${c.label}`}
                         title={c.title}
@@ -386,6 +398,7 @@ function SeatJjClass({
                     className={INPUT}
                     value={s.progressNote ?? ""}
                     disabled={readOnly}
+                    placeholder={lockedPlaceholder}
                     maxLength={JJ_MARK_MAXLEN.progressNote}
                     aria-label={`${s.name} ${ROSTER_FIXED_LABEL.progressNote}`}
                     title="이 교시의 특이사항 — 영어 시트 JJ 칸과 같은 기록입니다"
@@ -419,6 +432,7 @@ function JjAttendanceCell({
   noteTitle,
   showReason,
   readOnly,
+  writeLocked,
   pending,
   hints,
   onSave,
@@ -431,6 +445,8 @@ function JjAttendanceCell({
   noteTitle: string | null;
   showReason: boolean;
   readOnly: boolean;
+  /** 읽기 권한 — 세 단추 대신 상태 글자(`JjTableProps.writeLocked`). */
+  writeLocked: boolean;
   pending: boolean;
   hints: SeatPeriodHintData;
   onSave: (classId: string, studentId: string, next: SeatStatus | null, prev: SeatStatus | null) => void;
@@ -462,6 +478,7 @@ function JjAttendanceCell({
             cur={cur}
             studentName={s.name}
             disabled={readOnly || pending}
+            statusOnly={writeLocked}
             onMark={(next) => {
               // 고른 것을 다시 누르면 미체크로([[#103]]). 결석·지각을 새로 고르면 사유 창이 이어서.
               const same = cur === next;

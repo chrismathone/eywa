@@ -30,6 +30,7 @@ export function ParentRideCard({
   regularChanges = [],
   skipButtons = false,
   nowMinutes,
+  canAck = false,
 }: {
   name: string;
   schoolGrade: string;
@@ -71,6 +72,11 @@ export function ParentRideCard({
   nowMinutes?: number;
   /** 카드 머리 오른쪽(관리자 뷰의 '학부모 계정 연결' 표시 등). */
   aside?: React.ReactNode;
+  /**
+   * 직원 뷰 변경 내역 줄의 [확인](학원 공용 확인 기록에 쓴다)을 세울까 — 호출부(page.tsx)가 서버 게이트(`ackShuttleHistory`)와
+   * **같은 함수** `canRecordBoarding()`으로 계산해 넘긴다. 없으면 [확인]을 그리지 않고 내역만 보인다(원장 2026-11-05).
+   */
+  canAck?: boolean;
 }) {
   return (
     <article className="bg-card rounded-2xl p-4 shadow-[var(--shadow-card)]">
@@ -186,8 +192,8 @@ export function ParentRideCard({
           })}
         </ol>
       )}
-      {staff && changes.length > 0 ? <StaffChangeList changes={changes} /> : null}
-      {staff && regularChanges.length > 0 ? <StaffRegularChangeList changes={regularChanges} /> : null}
+      {staff && changes.length > 0 ? <StaffChangeList changes={changes} canAck={canAck} /> : null}
+      {staff && regularChanges.length > 0 ? <StaffRegularChangeList changes={regularChanges} canAck={canAck} /> : null}
     </article>
   );
 }
@@ -196,7 +202,7 @@ export function ParentRideCard({
  * 변경 내역(직원 전용) — 누가 · 언제 · 어디서 어디로. 학부모·직원이 바꾼 것, 취소한 것 모두(0321a 장부).
  * 🔑 전/후는 저장 당시 글자 스냅샷이다(노선이 나중에 바뀌어도 그때의 자리가 남는다). null = 평소대로.
  */
-function StaffChangeList({ changes }: { changes: readonly RideChange[] }) {
+function StaffChangeList({ changes, canAck }: { changes: readonly RideChange[]; canAck: boolean }) {
   return (
     <section className="border-line mt-3 border-t pt-2">
       <p className="text-text-dim text-xs font-bold">변경 내역 {changes.length}건 · 직원에게만 보입니다</p>
@@ -209,8 +215,8 @@ function StaffChangeList({ changes }: { changes: readonly RideChange[] }) {
                 <span className="bg-bg-soft rounded-full px-1.5 py-0.5 text-xs font-bold">{DIRECTION_LABEL[c.direction]}</span>{" "}
                 <span className="num text-text-dim">{c.at}</span> <span className="font-bold">{c.actorName}</span>
               </span>
-              {/* 확인하면 이 줄은 화면에서 내려간다(장부는 그대로, 0323a · 사용자 2026-09-30). */}
-              <AckHistoryButton kind="ride" historyId={c.id} />
+              {/* 확인하면 이 줄은 화면에서 내려간다(장부는 그대로, 0323a · 사용자 2026-09-30). 기록 권한이 없으면 단추 없음. */}
+              {canAck ? <AckHistoryButton kind="ride" historyId={c.id} /> : null}
             </div>
             <span className="text-text-dim block pl-1">
               {c.beforeLabel ?? "평소"} → {c.op === "cancel" ? "평소대로" : c.afterLabel ?? "평소"}
@@ -227,7 +233,7 @@ function StaffChangeList({ changes }: { changes: readonly RideChange[] }) {
 }
 
 /** 고정(매주) 시간 변경 내역(직원 전용, 0322a 장부) — 최근 60일. 요일·전/후·사유·누가. */
-function StaffRegularChangeList({ changes }: { changes: readonly RegularChange[] }) {
+function StaffRegularChangeList({ changes, canAck }: { changes: readonly RegularChange[]; canAck: boolean }) {
   return (
     <section className="border-line mt-3 border-t pt-2">
       <p className="text-text-dim text-xs font-bold">고정 시간 변경 {changes.length}건 · 최근 60일 · 직원에게만 보입니다</p>
@@ -241,7 +247,7 @@ function StaffRegularChangeList({ changes }: { changes: readonly RegularChange[]
                 </span>{" "}
                 <span className="num text-text-dim">{c.at}</span> <span className="font-bold">{c.actorName}</span>
               </span>
-              <AckHistoryButton kind="regular" historyId={c.id} />
+              {canAck ? <AckHistoryButton kind="regular" historyId={c.id} /> : null}
             </div>
             <span className="text-text-dim block pl-1">
               {c.beforeLabel ?? "없음"} → {c.afterLabel ?? "없음"}

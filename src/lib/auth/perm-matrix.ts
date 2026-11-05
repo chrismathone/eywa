@@ -40,7 +40,7 @@ async function capLaboratory(matrix: AccessMatrix, tenantId: string): Promise<Ac
 
 async function capSettingFeatures(matrix: AccessMatrix, tenantId: string, role: SystemRole): Promise<AccessMatrix> {
   if (matrix.ai_ment[role] === "none" || await isFeatureLicensed(tenantId, "ai_analysis")) return matrix;
-  return { ...matrix, ai_ment: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" } };
+  return { ...matrix, ai_ment: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" } };
 }
 
 /**

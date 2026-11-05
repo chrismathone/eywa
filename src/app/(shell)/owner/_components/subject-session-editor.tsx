@@ -10,6 +10,7 @@ import { suggestEndDate, verifyPeriodShape } from "@/features/periods/verify";
 import { overlappingMonths } from "@/features/periods/calendar-grid";
 import type { PeriodDef } from "@/features/periods/resolve";
 import { SessionCalendar, type PaintedMonth } from "./session-calendar";
+import { useWriteLock } from "./write-lock-context";
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 /**
@@ -43,6 +44,7 @@ export function SubjectSessionEditor({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const { locked } = useWriteLock();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
@@ -169,7 +171,7 @@ export function SubjectSessionEditor({
       <div className="border-line rounded-lg border p-2.5">
         <div className="mb-1.5 flex items-center justify-between">
           <span className="text-text-dim text-xs font-bold">설정된 세션 ({sorted.length}개월)</span>
-          {sorted.length > 0 ? (
+          {sorted.length > 0 && !locked ? (
             <button type="button" onClick={() => setPainted([])} className="text-text-faint hover:text-danger text-xs">
               전체 지우기
             </button>
@@ -203,6 +205,8 @@ export function SubjectSessionEditor({
         )}
       </div>
 
+      {/* 🔴 읽기 권한이면 채우기·붙여넣기·세션 저장을 그리지 않는다(원장 2026-11-05 — 저장은 운영 설정 쓰기와 같은 판정). */}
+      {locked ? null : (
       <div className="flex flex-wrap items-center gap-1.5">
         <button type="button" onClick={fillForward} className="border-line bg-card rounded-lg border px-2.5 py-1 text-xs font-bold">
           빈 달 이어서 채우기
@@ -234,8 +238,9 @@ export function SubjectSessionEditor({
           </button>
         </div>
       </div>
+      )}
 
-      {pasteOpen ? (
+      {pasteOpen && !locked ? (
         <div className="border-line bg-card space-y-2 rounded-lg border p-2.5">
           <p className="text-text-dim text-xs">
             한 줄에 한 달씩 — <b>3월 3/6~4/2</b>. 전해에 시작하는 1월 세션은 <b>1월 {year - 1}-12-28~1/24</b>처럼 연도까지.

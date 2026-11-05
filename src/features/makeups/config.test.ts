@@ -9,7 +9,7 @@ describe("new makeup feature gates", () => {
       const settings = resolveSettings({ preset }, { name: "합성 학원" });
       expect(settings.makeups).toEqual({ mode: "off", allowAdditional: false, pilotSubjects: ["math"] });
       const base = resolveMatrix([]), capped = capMakeupMode(base, settings.makeups.mode);
-      expect(Object.values(capped.makeups)).toEqual(Array(8).fill("none"));
+      expect(Object.values(capped.makeups)).toEqual(Array(9).fill("none"));
       expect(capped.attendance).toEqual(base.attendance);
       expect(capped.owner).toEqual(base.owner);
     }

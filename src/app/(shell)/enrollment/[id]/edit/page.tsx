@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getEnrollmentConsultationById } from "@/features/enrollment/server/queries";
@@ -17,7 +18,12 @@ export default async function EditEnrollmentPage({
   const viewer = await requireAccess("enrollment");
   const { id } = await params;
   const db = (await createClient()) as unknown as SupabaseClient;
-  const [c, ref] = await Promise.all([getEnrollmentConsultationById(id), loadConsultationReferrer(db, id)]);
+  // 읽기 권한이면 칸을 잠그고 저장·녹음 단추를 그리지 않는다 — 저장 액션 게이트와 같은 함수·같은 키(원장 2026-11-05 · write-lock.ts).
+  const [c, ref, canWrite] = await Promise.all([
+    getEnrollmentConsultationById(id),
+    loadConsultationReferrer(db, id),
+    canWriteTenant(viewer.systemRole, "enrollment"),
+  ]);
   if (!c) notFound();
   const f = c.fields;
   // 아직 잇지 않은 소개 — 글에 이름이 그대로 나온 원생·직원을 후보로(소개 흔적이 있을 때만 목록을 읽는다).
@@ -38,6 +44,7 @@ export default async function EditEnrollmentPage({
         key={c.id}
         recordingOwner={{ tenantId: viewer.tenantId, userId: viewer.id }}
         mode="edit"
+        readOnly={!canWrite}
         confirmConsultedOnSave={c.fromPublicIntake && ["pending", "scheduled"].includes(c.outcome)}
         aiSuggestedParentRequest={c.aiFormSuggestions?.parentRequest ?? null}
         existingRecordings={c.recordings.map((r) => ({ createdAt: r.createdAt, status: r.status }))}

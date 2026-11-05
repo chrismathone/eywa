@@ -28,7 +28,7 @@ it("실제 폼 저장 → 상세 재조회 → 열린 이력 2페이지 갱신, 
     .mockResolvedValueOnce(page("저장 후 최신 이력", 2));
   const initial = detail();
   calls.reload.mockResolvedValue({ data: { ...initial, case: { ...initial.case, ...caseRow({ reservable_minutes: 120, revision: 2 }) } } });
-  render(<CaseDetailView initial={initial} periods={periods} actorId={uuid(4)} reserveOn recordView="teacher" />);
+  render(<CaseDetailView initial={initial} periods={periods} actorId={uuid(4)} reserveOn canWrite recordView="teacher" />);
   const history = screen.getByText("변경 이력").closest("details")!;
   act(() => { history.open = true; fireEvent(history, new Event("toggle")); });
   await screen.findByText("이력 첫 페이지");

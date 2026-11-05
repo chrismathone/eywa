@@ -23,8 +23,11 @@ function SaveBtn() {
   );
 }
 
-/** 회의록 제목 인라인 편집 — 연필 토글 → input → 저장(updateMeetingTitle). 성공 시 닫힘+revalidate. */
-export function MeetingTitleEditor({ meetingId, title }: { meetingId: string; title: string }) {
+/**
+ * 회의록 제목 인라인 편집 — 연필 토글 → input → 저장(updateMeetingTitle). 성공 시 닫힘+revalidate.
+ * `canWrite`(페이지가 updateMeetingTitle과 같은 canWriteTenant("meetings")로 계산)가 거짓이면 연필 없이 제목만.
+ */
+export function MeetingTitleEditor({ meetingId, title, canWrite }: { meetingId: string; title: string; canWrite: boolean }) {
   const [editing, setEditing] = useState(false);
   const [state, action] = useActionState<UpdateMeetingTitleState, FormData>(
     updateMeetingTitle,
@@ -42,11 +45,11 @@ export function MeetingTitleEditor({ meetingId, title }: { meetingId: string; ti
     }
   }, [state]);
 
-  if (!editing) {
+  if (!editing || !canWrite) {
     return (
       <h1 className="font-bold tracking-tight text-foreground group flex items-center gap-2 text-3xl">
         {title}
-        <button
+        {canWrite ? <button
           type="button"
           onClick={() => {
             handled.current = false;
@@ -56,7 +59,7 @@ export function MeetingTitleEditor({ meetingId, title }: { meetingId: string; ti
           aria-label="제목 수정"
         >
           <Pencil className="size-4" />
-        </button>
+        </button> : null}
       </h1>
     );
   }

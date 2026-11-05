@@ -2,7 +2,7 @@ import type { SeatClassPlan } from "@/features/attendance/seat/server/jj-plan";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import type { SeatPlacement } from "@/features/attendance/seat/placement";
 import type { SeatKey } from "@/features/attendance/seat/seat";
-import { SeatBoard } from "./seat-board";
+import { SeatBoard, type SeatReadOnlyReason } from "./seat-board";
 import { SeatJjNote } from "./seat-jj-table";
 import { SEAT_ALL_PERIODS, SeatPeriodChips } from "./seat-period-chips";
 
@@ -39,6 +39,7 @@ export function SeatJjAllDay({
   date,
   periods,
   readOnly,
+  readOnlyReason,
   hrefFor,
   planMeta,
 }: {
@@ -46,6 +47,8 @@ export function SeatJjAllDay({
   date: string;
   periods: SeatJjAllDayPeriod[];
   readOnly: boolean;
+  /** 보기만인 이유 — 교시 하나 보기와 같은 값(`SeatReadOnlyReason`). 생략 = 지난 날짜. */
+  readOnlyReason?: SeatReadOnlyReason;
   hrefFor: string;
   /** 저널·presence 문서 키 — 교시 하나 보기와 같은 값(영어 시트와 같은 주차여야 서로를 본다). */
   planMeta: { tenantId: string; userId: string; weekMonday: string };
@@ -65,6 +68,7 @@ export function SeatJjAllDay({
               activeStart={p.start}
               rosters={p.rosters}
               readOnly={readOnly}
+              readOnlyReason={readOnlyReason}
               hrefFor={hrefFor}
               prevAbsentByCell={p.prevAbsentByCell}
               nextStartByStudent={p.nextStartByStudent}

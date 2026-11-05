@@ -159,7 +159,11 @@ function DeleteGoalBtn({ id, studentId }: { id: string; studentId: string }) {
   );
 }
 
-export function GoalsSection({ studentId, goals }: { studentId: string; goals: GradeGoalRow[] }) {
+/**
+ * canWrite = 서버 `requireGradeWrite`(students full|scoped)와 같은 판정 — page.tsx의 `canWriteTenant(role, "students")`.
+ * 읽기 권한이면 '추가'·삭제를 그리지 않는다(원장 2026-11-05 — lib/write-lock.ts).
+ */
+export function GoalsSection({ studentId, goals, canWrite }: { studentId: string; goals: GradeGoalRow[]; canWrite: boolean }) {
   const subjects = useSubjectMaps();
   const [open, setOpen] = useState(false);
   const rate = goalAchievementRate(goals);
@@ -177,10 +181,12 @@ export function GoalsSection({ studentId, goals }: { studentId: string; goals: G
             </span>
           ) : null}
         </div>
-        <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-          <Plus className="size-3.5" />
-          추가
-        </Button>
+        {canWrite ? (
+          <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+            <Plus className="size-3.5" />
+            추가
+          </Button>
+        ) : null}
       </header>
 
       {goals.length === 0 ? (
@@ -204,7 +210,7 @@ export function GoalsSection({ studentId, goals }: { studentId: string; goals: G
                       </span>
                     ) : null}
                   </div>
-                  <DeleteGoalBtn id={g.id} studentId={studentId} />
+                  {canWrite ? <DeleteGoalBtn id={g.id} studentId={studentId} /> : null}
                 </div>
                 {g.reason ? (
                   <p className="text-muted-foreground mt-1.5 text-xs">{g.reason}</p>
@@ -214,7 +220,7 @@ export function GoalsSection({ studentId, goals }: { studentId: string; goals: G
         </ul>
       )}
 
-      {open ? <GoalDialog studentId={studentId} onClose={() => setOpen(false)} /> : null}
+      {open && canWrite ? <GoalDialog studentId={studentId} onClose={() => setOpen(false)} /> : null}
     </section>
   );
 }

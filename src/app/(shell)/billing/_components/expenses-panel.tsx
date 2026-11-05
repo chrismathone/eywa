@@ -13,6 +13,8 @@ import { EXPENSE_FILTER_CATEGORIES, filterExpensesForView, normalizeExpenseCateg
 import { SearchToggle } from "@/components/search-toggle";
 import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import { kstMonth, monthLabel } from "@/lib/date-kst";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { expenseWriteScope } from "@/features/billing/server/expense-scope";
 import { BillingMonthNav } from "./billing-month-nav";
 import { ExpensesTable } from "./expenses-table";
 
@@ -38,7 +40,18 @@ export async function ExpensesPanel({ sp, canImport = false }: { sp: Sp; canImpo
   //    전체 220행 · 한 달 최대 55행 = 2026-07, 상한의 5.5%). 검색을 DB `ilike`로 내리지 않고 이 달 행 위에서
   //    거르는 이유도 그것 — 같은 배열로 KPI·분류별 바를 내는데, 검색만 따로 조회하면 화면 안에서
   //    **모집단이 둘**이 된다(수납 면이 2026-07-30 적대 리뷰로 정리한 바로 그 함정).
-  const [allRows, months] = await Promise.all([getExpensesForMonth(period), getExpenseMonths()]);
+  const [allRows, months, write] = await Promise.all([
+    getExpensesForMonth(period),
+    getExpenseMonths(),
+    // 쓰기 판정 = 서버 expense-actions와 **같은 함수·같은 행위자**(expenseWriteScope · getCurrentUser({teacherView})).
+    //  · "full"(billing 쓰기) = 등록·결재 체크·전 행 복제/수정/삭제·증빙 편집
+    //  · "own"(지출결의 쓰기만 — 개인별 권한으로 연 사무실 계정; /expense-requests가 강사 아니면 이 면으로 보낸다)
+    //    = 등록 + 본인 작성 행만(결재 시작 전이면 수정·삭제·증빙) — 결재 체크는 billing 쓰기만(셀프 승인 금지)
+    getCurrentUser({ teacherView: true }).then(async (u) => ({ scope: u ? await expenseWriteScope(u.systemRole) : null, actorId: u?.id ?? null })),
+  ]);
+  const canWrite = write.scope === "full";
+  const canCreate = write.scope !== null;
+  const ownEditorId = write.scope === "own" ? write.actorId : null;
   // 🔴 집계는 **언제나 이 달 전체(allRows)** 기준 — 검색·분류 필터가 닿지 않는다(돈 산식 불변).
   const summary = summarizeExpenses(allRows, period);
   const rows = filterExpensesForView(allRows, cat, q);
@@ -101,7 +114,7 @@ export async function ExpensesPanel({ sp, canImport = false }: { sp: Sp; canImpo
       </div>
 
       {summary.count === 0 ? (
-        <ExpensesTable rows={rows} />
+        <ExpensesTable rows={rows} canWrite={canWrite} canCreate={canCreate} ownEditorId={ownEditorId} />
       ) : (
         <>
           {/* KPI — 공용 BigStat(옛 로컬 Kpi 카드는 링 위에 border를 겹쳐 선이 이중이었다, v5 ④). */}
@@ -177,6 +190,9 @@ export async function ExpensesPanel({ sp, canImport = false }: { sp: Sp; canImpo
             {q ? <span className="ml-1">· &ldquo;{q}&rdquo; 검색</span> : null}
           </p>}
             rows={rows}
+            canWrite={canWrite}
+            canCreate={canCreate}
+            ownEditorId={ownEditorId}
             // 이 달엔 지출이 있는데 걸러서 0건이면 "이 달 지출 내역이 없습니다"는 **거짓말**이다.
             // ⚠️ 검색이 **분류를 안 본다**(옆에 전용 드롭다운이 있으니까) → `인건비`를 쳐서 0건이 나오면
             //    고장으로 읽힌다. 그래서 어디를 찾는지·분류는 어디서 고르는지 한 줄로 알린다.

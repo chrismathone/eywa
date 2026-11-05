@@ -27,6 +27,7 @@ export const systemRoleEnum = pgEnum("system_role", [
   "counselor",
   "accountant",
   "viewer",
+  "parttime", // 아르바이트 — 열람보다 낮은 직원 역할(2026-11-05, s2 마이그레이션이 'student' 앞에 넣는다)
   "student", // 학생 본인 화면(내 학습 현황) 로그인용 — 직원 위계 밖
 ]);
 

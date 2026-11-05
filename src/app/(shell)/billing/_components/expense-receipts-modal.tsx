@@ -6,6 +6,8 @@ import { ExternalLink, FileText, Loader2, Trash2, Upload, X } from "@/components
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
+import { writeLockedNote, writeLockedPlaceholder } from "@/lib/write-lock";
+import type { MenuKey } from "@/lib/permissions";
 import {
   addExpenseReceipt,
   issueReceiptUploadTicket,
@@ -34,9 +36,18 @@ const inputCls =
 export function ExpenseReceiptsModal({
   expense,
   onClose,
+  canEdit,
+  lockedMenu = "billing",
 }: {
   expense: ExpenseRow;
   onClose: () => void;
+  /**
+   * 증빙을 바꿀 수 있는가 — 부르는 화면이 서버 게이트(`expenseWriteScope`)와 같은 판정으로 계산해 넘긴다.
+   * false면 열람만: 유형 선택은 비활성, 업로드·삭제·붙여넣기는 없다(원장 2026-11-05 읽기 권한 규칙 — write-lock.ts).
+   */
+  canEdit: boolean;
+  /** 읽기 안내 문구의 메뉴 이름 — 사무실 지출 면 = billing(기본), 강사 지출결의서 = expense_requests. */
+  lockedMenu?: MenuKey;
 }) {
   const router = useRouter();
   const [receipts, setReceipts] = useState<ExpenseReceipt[]>(expense.receiptUrls);
@@ -141,6 +152,8 @@ export function ExpenseReceiptsModal({
 
   // Ctrl+V — 클립보드의 이미지/PDF를 붙여넣어 바로 첨부(영수증 스크린샷 캡처 후 붙여넣기 등). 모달 열린 동안만.
   useEffect(() => {
+    // 읽기 권한이면 붙여넣기 업로드도 열지 않는다 — 단추를 숨겨도 Ctrl+V가 남으면 같은 거부가 뜬다.
+    if (!canEdit) return;
     function onPaste(e: ClipboardEvent) {
       const items = e.clipboardData?.items;
       if (!items) return;
@@ -161,7 +174,7 @@ export function ExpenseReceiptsModal({
     }
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [handleUpload]);
+  }, [handleUpload, canEdit]);
 
   // 라이트박스 Esc 닫기
   useEffect(() => {
@@ -214,8 +227,14 @@ export function ExpenseReceiptsModal({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <span className="text-foreground block text-sm font-medium">증빙 유형</span>
-            <select value={type} onChange={(e) => changeType(e.target.value)} className={inputCls}>
-              <option value="">선택 안 함</option>
+            <select
+              value={type}
+              onChange={(e) => changeType(e.target.value)}
+              disabled={!canEdit}
+              className={`${inputCls} disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              {/* select엔 placeholder가 없어 빈 값 줄이 그 자리를 한다 — 읽기 권한이면 권한 안내로. */}
+              <option value="">{canEdit ? "선택 안 함" : writeLockedPlaceholder(lockedMenu)}</option>
               {RECEIPT_TYPES.map((t) => (
                 <option key={t} value={t}>{t}</option>
               ))}
@@ -286,14 +305,16 @@ export function ExpenseReceiptsModal({
                         >
                           <ExternalLink className="size-3" />
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmRemove(r)}
-                          className="text-text-faint hover:text-danger shrink-0 p-0.5"
-                          aria-label="삭제"
-                        >
-                          <Trash2 className="size-3" />
-                        </button>
+                        {canEdit ? (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmRemove(r)}
+                            className="text-text-faint hover:text-danger shrink-0 p-0.5"
+                            aria-label="삭제"
+                          >
+                            <Trash2 className="size-3" />
+                          </button>
+                        ) : null}
                       </div>
                     </li>
                   );
@@ -302,24 +323,29 @@ export function ExpenseReceiptsModal({
             )}
           </div>
 
-          <label className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft flex cursor-pointer flex-col items-center gap-1.5 rounded-md border border-dashed px-3 py-5 transition">
-            {uploading ? <Loader2 className="size-5 animate-spin" /> : <Upload className="size-5" />}
-            <span className="text-foreground text-sm font-medium">
-              {uploading ? "업로드 중…" : "파일 추가 또는 Ctrl+V 붙여넣기"}
-            </span>
-            <span className="text-text-faint text-xs">이미지 · PDF · 최대 10MB</span>
-            <input
-              type="file"
-              accept={ACCEPT}
-              disabled={uploading}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void handleUpload(f);
-                e.target.value = "";
-              }}
-              className="hidden"
-            />
-          </label>
+          {!canEdit ? (
+            // 업로드 칸 대신 안내 한 줄 — 유형 칸에 값이 차 있으면 위 select의 안내가 안 보인다.
+            <p className="text-text-faint text-xs">{writeLockedNote(lockedMenu)}</p>
+          ) : (
+            <label className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft flex cursor-pointer flex-col items-center gap-1.5 rounded-md border border-dashed px-3 py-5 transition">
+              {uploading ? <Loader2 className="size-5 animate-spin" /> : <Upload className="size-5" />}
+              <span className="text-foreground text-sm font-medium">
+                {uploading ? "업로드 중…" : "파일 추가 또는 Ctrl+V 붙여넣기"}
+              </span>
+              <span className="text-text-faint text-xs">이미지 · PDF · 최대 10MB</span>
+              <input
+                type="file"
+                accept={ACCEPT}
+                disabled={uploading}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleUpload(f);
+                  e.target.value = "";
+                }}
+                className="hidden"
+              />
+            </label>
+          )}
 
           {error ? (
             <p className="text-danger bg-danger-soft border-danger/20 rounded-md border px-3 py-2 text-sm">{error}</p>

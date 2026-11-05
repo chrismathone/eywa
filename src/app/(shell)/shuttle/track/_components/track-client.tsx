@@ -65,6 +65,7 @@ export function TrackClient({
   trips,
   tripsReady,
   today,
+  canEditStops,
 }: {
   tenantId: string;
   date: string;
@@ -81,6 +82,11 @@ export function TrackClient({
   tripsReady: boolean;
   /** KST 오늘(서버가 내려준다) — 지난 날짜면 실시간 채널을 안 연다. */
   today: string;
+  /**
+   * 정류장 위치를 고칠 수 있나 — page.tsx가 저장 액션(`saveStopLocation`의 `gate()`)과 **같은 함수**
+   * `canWriteTenant(shuttle)`로 계산한 값. 없으면 [위치 수정]을 그리지 않는다(원장 2026-11-05 — 예전엔 핀을 끌어 놓아야 거절됐다).
+   */
+  canEditStops: boolean;
 }) {
   // 남이 찍으면 이 화면이 스스로 갱신된다. 🔴 publish는 안 한다 — 여기선 아무것도 바꾸지 않는다.
   const { lastSignalAt } = useShuttleLive({
@@ -364,19 +370,22 @@ export function TrackClient({
       {/* 지도 위 한 줄 — 위치 수정 모드 · 고른 정류장 구간 되돌리기(사용자 2026-10-21). */}
       {KAKAO_MAP_KEY ? (
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <button
-            type="button"
-            onClick={() => {
-              setEditStops((v) => !v);
-              setEditMsg(null);
-              setFocusStopId(null);
-              setPlacingId(null);
-            }}
-            aria-pressed={editStops}
-            className={`${SHUTTLE_CHIP} ${editStops ? SHUTTLE_CHIP_ON : SHUTTLE_CHIP_OFF}`}
-          >
-            {editStops ? "위치 수정 끝내기" : "위치 수정"}
-          </button>
+          {/* 편성 쓰기 권한이 없으면 수정 모드 입구 자체가 없다 — 그러면 핀 끌기·위치 찍기도 열리지 않는다. */}
+          {canEditStops ? (
+            <button
+              type="button"
+              onClick={() => {
+                setEditStops((v) => !v);
+                setEditMsg(null);
+                setFocusStopId(null);
+                setPlacingId(null);
+              }}
+              aria-pressed={editStops}
+              className={`${SHUTTLE_CHIP} ${editStops ? SHUTTLE_CHIP_ON : SHUTTLE_CHIP_OFF}`}
+            >
+              {editStops ? "위치 수정 끝내기" : "위치 수정"}
+            </button>
+          ) : null}
           {editStops ? (
             <span className="text-text-dim break-keep">
               {vehicle

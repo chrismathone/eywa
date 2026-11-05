@@ -2,6 +2,7 @@
 
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { isFeatureOptedIn } from "@/lib/license/server";
 import { tenantViewOutboundError } from "@/lib/auth/tenant-view-outbound";
 import { logAction } from "@/features/audit/server/log";
@@ -46,6 +47,9 @@ export async function loadTodaysMathMenus(): Promise<MenusLoad> {
 export async function saveTodaysMathMenus(input: { menus: string[]; expectedRevision: number; before: TodaysMathMenus }): Promise<MenusSave> {
   const g = await gate();
   if ("error" in g) return { ok: false, message: g.error ?? UNAVAILABLE };
+  // 🔴 저장은 원장 역할에 더해 **연동 설정 쓰기**까지 — 원장이 자기 연동 설정 칸을 '읽기'로 둔 경우에도 역할만으로 통과했다
+  //    (2026-11-05 권한 감사). 화면도 같은 판정으로 저장 단추를 감춘다(integrations-face.tsx). 읽기(load)는 종전대로 역할만 본다.
+  if (!(await canWriteTenant(g.user.systemRole, "integration_settings"))) return { ok: false, message: "연동 설정 작성 권한이 필요합니다." };
   const blocked = await tenantViewOutboundError();
   if (blocked) return { ok: false, message: blocked };
   const before = todaysMathMenusSchema.safeParse(input.before);

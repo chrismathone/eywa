@@ -1,5 +1,6 @@
 import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getStudentOptionsForConsultation } from "@/features/consultations/server/queries";
 import { getTeacherOptions } from "@/features/students/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -22,7 +23,9 @@ export default async function NewConsultationPage({
   // 학생(recording-resume.ts). 같은 주소에서 쿼리만 바뀌면 Next가 폼을 그대로 두므로 둘로 key를 걸어 새로 그린다.
   const { studentId, form, recordStudent } = await searchParams;
   const instanceKey = `${formInstanceKey(form)}:${typeof recordStudent === "string" ? recordStudent : ""}`;
-  const [students, counselors, settings, newcomerTargets, classSupported] = await Promise.all([
+  const [canWrite, students, counselors, settings, newcomerTargets, classSupported] = await Promise.all([
+    // 저장 게이트(createStudentConsultation)와 같은 판정 — 읽기 권한이면 칸은 잠그고 저장·녹음은 그리지 않는다.
+    canWriteTenant(viewer.systemRole, "consultations"),
     getStudentOptionsForConsultation(),
     getTeacherOptions(),
     getTenantSettings(),
@@ -45,11 +48,15 @@ export default async function NewConsultationPage({
       </header>
 
       <div key={instanceKey} className="space-y-4">
-        <AudioConsultationForm students={students} recordingOwner={{ tenantId: viewer.tenantId, userId: viewer.id }}
-          initialStudentId={typeof recordStudent === "string" ? recordStudent : undefined} />
+        {/* 녹음·파일로 만드는 상담은 통째로 쓰기 동작(녹음 시작·업로드·저장)이라 읽기 권한이면 그리지 않는다. */}
+        {canWrite ? (
+          <AudioConsultationForm students={students} recordingOwner={{ tenantId: viewer.tenantId, userId: viewer.id }}
+            initialStudentId={typeof recordStudent === "string" ? recordStudent : undefined} />
+        ) : null}
 
         <ConsultationForm
           mode="create"
+          readOnly={!canWrite}
           students={students}
           counselors={counselors}
           subjectLabels={subjectLabelRecord(settings.operations.subjects)}

@@ -42,11 +42,40 @@ const group = (subjectLabel: string, monthlyPrice: number | null = null): ClassG
   }],
 });
 
-function SessionTermGroups(props: React.ComponentProps<typeof Table>) {
-  return <SessionTermsState rows={props.groups.flatMap((g) => g.students)}><div data-testid="confirmed-count"><SessionTermsConfirmedCount /></div><Table {...props} /></SessionTermsState>;
+// 기본은 쓰기 권한(종전 테스트 그대로) — 읽기 권한 화면은 아래 '읽기 권한' 묶음이 `canWrite={false}`로 따로 본다.
+function SessionTermGroups({ canWrite = true, ...props }: Omit<React.ComponentProps<typeof Table>, "canWrite"> & { canWrite?: boolean }) {
+  return <SessionTermsState rows={props.groups.flatMap((g) => g.students)}><div data-testid="confirmed-count"><SessionTermsConfirmedCount /></div><Table {...props} canWrite={canWrite} /></SessionTermsState>;
 }
 
 beforeEach(() => vi.clearAllMocks());
+
+describe("읽기 권한(원장 2026-11-05 — 저장해야 거절되던 자리)", () => {
+  it("미확정 반 — 일괄 입력·확정·선택·행 확정·삭제·메모 편집을 그리지 않고, 시수·단가 칸은 값만 보이게 잠근다", () => {
+    render(<SessionTermGroups groups={[group("수학")]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" canWrite={false} />);
+    expect(screen.queryByRole("button", { name: /일괄/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "확정" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /회차 삭제/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /메모/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("수학반 반 회차")).not.toBeInTheDocument();
+    const sessions = screen.getByLabelText("수학학생 확정 회차");
+    expect(sessions).toBeDisabled();
+    expect(sessions).toHaveValue(9);
+    expect(screen.getByLabelText("수학학생 회당 단가")).toBeDisabled();
+    expect(screen.getByLabelText("수학학생 회당 단가")).toHaveAttribute("placeholder", "수납관리 작성 권한이 필요합니다");
+  });
+
+  it("확정된 줄 — 해제·배분·이월·월정액 시수 편집 없이 값만 보인다", () => {
+    const g = group("EiE", 270000);
+    g.students[0] = { ...g.students[0]!, confirmedSessions: 8, unitPrice: 270000, amount: 270000, pricingMode: "monthly", confirmedAt: "2026-09-01T00:00:00Z", note: "휴원 1회" };
+    render(<SessionTermGroups groups={[g]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" canWrite={false} />);
+    expect(screen.queryByRole("button", { name: /해제/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /배분/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /이월/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /월 정액 시수 수정/ })).not.toBeInTheDocument();
+    expect(screen.getByText("휴원 1회")).toBeInTheDocument();
+  });
+});
 
 describe("회차 삭제", () => {
   const preview = { updatedAt: "2026-09-22T01:02:03Z", confirmedSessions: 0, amount: 0, note: "종료반", blockedReason: null };

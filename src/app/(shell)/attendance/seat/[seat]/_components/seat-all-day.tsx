@@ -25,7 +25,7 @@ import { clearSeatPeriodChoices, moveSeatStudentPeriod } from "@/features/attend
 import type { SeatKey } from "@/features/attendance/seat/seat";
 import type { SeatClassRoster, SeatStudent } from "@/features/attendance/seat/server/queries";
 import type { SeatStudentClass } from "@/features/attendance/seat/student-classes";
-import { SeatBoard } from "./seat-board";
+import { SeatBoard, type SeatReadOnlyReason } from "./seat-board";
 import { useSeatChoiceOverlay } from "./seat-board-moves";
 import { beginSeatDrag, endSeatDrag } from "./seat-drag";
 import type { CardDrag, SeatDropTarget } from "./seat-lab-grid";
@@ -118,6 +118,7 @@ export function SeatAllDay({
   shownStart = null,
   showAll,
   readOnly,
+  readOnlyReason,
   hrefFor,
   canMovePlacement,
   placementNotice,
@@ -138,6 +139,8 @@ export function SeatAllDay({
   /** 칩 줄에 '전체'를 세울 것인가(랩실만). */
   showAll: boolean;
   readOnly: boolean;
+  /** 보기만인 이유 — 보드가 안내 문장·칸 모양을 가른다(`SeatReadOnlyReason`). 생략 = 지난 날짜. */
+  readOnlyReason?: SeatReadOnlyReason;
   hrefFor: string;
   /** 이미 옮겨 둔 자리(배치, 0254a)를 [초기화]할 수 있나 — 교시 이동과 **가용성이 따로**다. */
   canMovePlacement: boolean;
@@ -346,6 +349,7 @@ export function SeatAllDay({
       activeStart={p.start}
       rosters={appliedByPeriod[p.start] ?? p.rosters}
       readOnly={readOnly}
+      readOnlyReason={readOnlyReason}
       hrefFor={hrefFor}
       prevAbsentByCell={p.prevAbsentByCell}
       nextStartByStudent={p.nextStartByStudent}

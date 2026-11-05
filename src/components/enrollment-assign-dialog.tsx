@@ -103,6 +103,7 @@ export function EnrollmentAssignDialog({
   studentOptions,
   fixedClass,
   conflicts,
+  allowTransfer = true,
 }: {
   open: boolean;
   onClose: (assigned: boolean) => void;
@@ -112,6 +113,13 @@ export function EnrollmentAssignDialog({
   studentOptions?: AssignDialogStudent[];
   fixedClass?: AssignDialogClass;
   conflicts?: { day: string; time: string; existingClass: string }[];
+  /**
+   * '반이동' 토글을 그릴지 — 서버 `moveEnrollmentsBatch`·`listMovableEnrollments`·`transfer-source-actions`와
+   * 같은 판정(`canManageTenant(role, "classes")`)을 page.tsx가 계산해 내린다(원장 2026-11-05 — lib/write-lock.ts).
+   * 배정 창은 students full로도 열리므로(createEnrollment = classes full ∥ students full) 수업목록이 '읽기'인
+   * 사람에게 토글이 떠서 누르면 거절됐다. 기본값 true = 이 값을 아직 안 내리는 호출처의 종전 동작.
+   */
+  allowTransfer?: boolean;
 }) {
   const router = useRouter();
   const subjects = useSubjectMaps();
@@ -752,20 +760,23 @@ export function EnrollmentAssignDialog({
               '옛 반 종료 + 새 반 시작' 한 쌍을 만든다. 끄면 종전 그대로다. */}
           <footer className="flex flex-wrap items-center justify-between gap-2 pt-2">
             <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={toggleTransfer}
-                disabled={sourceLocked}
-                aria-pressed={transferMode}
-                title="기존에 다니던 반을 이 반으로 옮깁니다. 이동 날짜 전날까지 이전 반, 그날부터 이 반입니다."
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                  transferMode
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border text-muted-foreground hover:bg-muted"
-                }`}
-              >
-                반이동
-              </button>
+              {/* 반 이동 권한(classes full)이 없으면 토글을 **그리지 않는다** — 비활성으로 남기지 않는다(write-lock.ts 규칙 1). */}
+              {allowTransfer ? (
+                <button
+                  type="button"
+                  onClick={toggleTransfer}
+                  disabled={sourceLocked}
+                  aria-pressed={transferMode}
+                  title="기존에 다니던 반을 이 반으로 옮깁니다. 이동 날짜 전날까지 이전 반, 그날부터 이 반입니다."
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                    transferMode
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  반이동
+                </button>
+              ) : null}
               {!isStudentMode ? (
                 <button
                   type="button"

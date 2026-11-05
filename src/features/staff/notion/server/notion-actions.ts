@@ -69,7 +69,9 @@ export async function getStaffMonthlyTasks(
 
 /**
  * 미매핑 직원의 매핑 준비(지연 호출) — 이메일 자동연결 시도(+저장) 또는 수동 후보 목록.
- * 담당자 스캔(수 초)이 여기서 돌므로 첫 페인트를 안 막는다. 후보 목록은 직원관리 쓰기 권한만.
+ * 담당자 스캔(수 초)이 여기서 돌므로 첫 페인트를 안 막는다.
+ * 🔴 열람은 읽기 권한으로 들어오지만 **자동연결 저장과 후보 목록은 직원관리 쓰기 권한만**(canWriteTenant(staff)) —
+ *    읽기 권한이면 저장 없이 'none'을 돌려준다(원장 2026-11-05, prepareStaffNotionMappingRow 주석).
  */
 export async function prepareNotionMapping(
   staffId: string,
@@ -100,7 +102,7 @@ export async function prepareNotionMapping(
     const prep = await prepareStaffNotionMappingRow(
       staffId,
       actor.tenantId,
-      await canWriteTenant(actor.systemRole, "staff"),
+      await canWriteTenant(actor.systemRole, "staff"), // 저장·후보 노출 게이트(읽기 권한이면 저장하지 않는다)
     );
     if (prep.state === "matched") {
       revalidatePath(`/staff/${staffId}`);

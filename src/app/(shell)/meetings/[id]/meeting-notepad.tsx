@@ -7,6 +7,7 @@ import { updateMeetingNotepad, type UpdateNotepadState } from "@/features/meetin
 import { useEditPresence } from "@/features/presence/edit-presence";
 import { useStateDraft } from "@/components/forms/use-state-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
+import { writeLockedNote, writeLockedPlaceholder } from "@/lib/write-lock";
 
 function SaveBtn({ dirty }: { dirty: boolean }) {
   const { pending } = useFormStatus();
@@ -28,13 +29,18 @@ function SaveBtn({ dirty }: { dirty: boolean }) {
  *
  * dirty(수정됨)는 **파생값** — 현재 입력값 vs 마지막 저장값(액션 반환 content, 없으면 초기 prop).
  * ref를 render에서 읽거나 effect에서 setState하지 않는다(react-hooks/refs·set-state-in-effect 회피).
+ *
+ * `canWrite`(페이지가 updateMeetingNotepad와 같은 canWriteTenant("meetings")로 계산)가 거짓이면 글상자는 비활성 +
+ * 권한 안내(빈 칸은 placeholder, 차 있으면 위 한 줄)이고, '메모 저장'·초안 복구 배너는 그리지 않는다.
  */
 export function MeetingNotepad({
   meetingId,
   content,
+  canWrite,
 }: {
   meetingId: string;
   content: string;
+  canWrite: boolean;
 }) {
   const [value, setValue] = useState(content);
   const [state, action] = useActionState<UpdateNotepadState, FormData>(
@@ -55,6 +61,8 @@ export function MeetingNotepad({
   const localDraft = useStateDraft({
     scope: `meeting-notepad:${meetingId}`,
     snapshot: value,
+    enabled: canWrite, // 읽기 권한이면 잠긴 칸에 되살릴 초안을 찾지 않는다
+
     hasContent: (s) => s.trim() !== "" && s !== savedValue,
   });
   const clearLocalDraft = localDraft.clear;
@@ -73,28 +81,39 @@ export function MeetingNotepad({
       </header>
       {/* 안내 문장("회의 중 메모를 적어두면 … 상단 'AI로 정리'를 누르세요")은 뺐다(디자인 v5 13단계 — 지시서 §4 설명 문장 금지).
           제목 '메모장'과 머리의 Primary 'AI로 정리'가 이미 그 사실을 말한다. */}
-      <DraftBanner
-        savedAt={localDraft.draftSavedAt}
-        onRestore={() => {
-          const d = localDraft.restore();
-          if (d !== null) setValue(d);
-        }}
-        onDiscard={localDraft.discard}
-      />
+      {canWrite ? (
+        <DraftBanner
+          savedAt={localDraft.draftSavedAt}
+          onRestore={() => {
+            const d = localDraft.restore();
+            if (d !== null) setValue(d);
+          }}
+          onDiscard={localDraft.discard}
+        />
+      ) : value.trim() ? (
+        <p className="text-text-dim text-xs">{writeLockedNote("meetings")}</p>
+      ) : null}
       <form action={action} className="space-y-2">
         <input type="hidden" name="id" value={meetingId} />
         <textarea
           name="content"
           value={value}
           onChange={(e) => setValue(e.target.value)}
+          disabled={!canWrite}
           rows={6}
-          placeholder="예: 6/5까지 교재 재고 확인 — 박부장 / 신규 상담 유입 논의 / 다음 회의 5월 4주차"
-          className="border-input bg-background text-foreground focus:ring-ring min-h-[9rem] w-full resize-y rounded-md border px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-1"
+          placeholder={
+            canWrite
+              ? "예: 6/5까지 교재 재고 확인 — 박부장 / 신규 상담 유입 논의 / 다음 회의 5월 4주차"
+              : writeLockedPlaceholder("meetings")
+          }
+          className="border-input bg-background text-foreground focus:ring-ring min-h-[9rem] w-full resize-y rounded-md border px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-1 disabled:cursor-not-allowed disabled:opacity-60"
         />
-        <div className="flex items-center justify-end gap-2">
-          {state?.error ? <span className="text-chart-4 text-xs">{state.error}</span> : null}
-          <SaveBtn dirty={dirty} />
-        </div>
+        {canWrite ? (
+          <div className="flex items-center justify-end gap-2">
+            {state?.error ? <span className="text-chart-4 text-xs">{state.error}</span> : null}
+            <SaveBtn dirty={dirty} />
+          </div>
+        ) : null}
       </form>
     </section>
   );

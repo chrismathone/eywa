@@ -67,6 +67,7 @@ export function TimetableToolbarActions({
   kind = DEFAULT_TIMETABLE_KIND,
   canSync = false,
   canManageImport = false,
+  canApplyStructureImport = false,
   canMasterImport = false,
   sheetUrl = null,
   compact1h = [],
@@ -86,6 +87,11 @@ export function TimetableToolbarActions({
    * 페이지가 계산해 내려준다. 화면에서만 숨기는 건 게이트가 아니므로 서버 액션도 같은 함수로 막는다(#77).
    */
   canManageImport?: boolean;
+  /**
+   * 영어 '시트에서 가져오기'(구조 + 반이동) 적용 권한 — 서버 applyStructureImport·applySheetImport와 같은 판정
+   * (시트 연동 ∧ classes 쓰기, 담당분 포함)을 페이지가 계산해 내려준다.
+   */
+  canApplyStructureImport?: boolean;
   canMasterImport?: boolean;
   /** 연결된 구글 시트 URL(설정돼 있을 때만). 있으면 '시트 열기' 노출. */
   sheetUrl?: string | null;
@@ -116,7 +122,10 @@ export function TimetableToolbarActions({
   const canImport = supportsTimetableImport(subjectKey) && canManageImport;
   // 구조 가져오기(강사별 그리드 → class_schedules 재구축)는 english 전용. 시트→앱 되읽기라 canSync와 AND.
   // 영어는 구조+반이동을 하나의 '시트에서 가져오기'(EnglishImportDialog)로 통합 → canStructureImport로 분기.
-  const canStructureImport = supportsStructureImport(subjectKey);
+  // 🔴 권한(`canApplyStructureImport` = 서버 적용 게이트와 같은 값)도 AND — 과목만 보던 시절엔 시트 권한만 있고 반 관리가
+  //    '읽기'인 계정에도 이 메뉴가 떠서, 미리보기까지 다 본 뒤 적용에서야 "시간표 관리 권한이 없습니다"가 떴다
+  //    (원장 2026-11-05, write-lock.ts — 읽기 권한이면 쓰기 단추를 그리지 않는다).
+  const canStructureImport = supportsStructureImport(subjectKey) && canApplyStructureImport;
   // 정규 화면에서만 내보내기 허용 — 익스포터가 화면 구분을 못 받으므로 "화면과 파일이 다른" 상태를 만들지 않는다.
   const exportsAllowed = kind === "regular";
   /**

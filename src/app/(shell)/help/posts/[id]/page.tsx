@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { WindowLink } from "@/components/workspace/window-link";
 import { requireAccess } from "@/lib/auth/require-access";
-import { canAnswerHelpBoard } from "@/features/help/board/access";
+import { canAnswerHelpBoard, canAskHelpBoard } from "@/features/help/board/access";
 import { HELP_BOARD_NOT_READY } from "@/features/help/board/missing";
 import { getHelpPost } from "@/features/help/board/server/queries";
 import { HELP_POST_STATUS_LABEL } from "@/features/help/board/types";
@@ -30,9 +30,11 @@ export default async function HelpPostPage({ params }: { params: Promise<{ id: s
   }
   if (!loaded.post) notFound();
   const post = loaded.post;
-  const mine = post.authorId === user.id;
-  const canAnswer = await canAnswerHelpBoard(user.systemRole);
-  const canClose = post.status !== "closed" && (mine || canAnswer);
+  // 🔴 수정 · 삭제 · 닫기 · 답변은 서버 액션과 **같은 함수**로 판정한다 — 도움말이 '읽기'면 자기 글이어도 단추를 그리지 않는다
+  //    (원장 2026-11-05 — 전에는 `mine`만 보고 단추를 세워, 누르면 그제서야 거절됐다).
+  const [canWrite, canAnswer] = await Promise.all([canAskHelpBoard(user.systemRole), canAnswerHelpBoard(user.systemRole)]);
+  const mine = post.authorId === user.id && canWrite;
+  const canClose = post.status !== "closed" && canWrite && (mine || canAnswer);
 
   return (
     <div className="space-y-5">

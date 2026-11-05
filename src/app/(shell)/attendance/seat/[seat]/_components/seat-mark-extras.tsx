@@ -36,14 +36,34 @@ export function SeatMarkTriad({
   cur,
   studentName,
   disabled,
+  statusOnly = false,
   onMark,
 }: {
   cur: SeatStatus | null;
   studentName: string;
   disabled: boolean;
+  /**
+   * 🔴 자리 출석부 **읽기 권한**(원장 2026-11-05) — 세 단추는 상태 표시를 겸하므로, 잠긴 단추를 남기지 않고
+   *    **상태 글자 한 칸**만 그린다(write-lock.ts 규칙 1). 칸 폭은 세 단추와 같은 전폭이라 줄이 출렁이지 않는다.
+   *    지난 날짜 잠금(`disabled`)은 종전대로 잠긴 세 단추다 — 그건 권한이 아니라 날짜 규칙이다.
+   */
+  statusOnly?: boolean;
   /** 고른 값. **이미 그 값이면 호출부가 미체크로 되돌린다**(같은 값이 그대로 넘어온다). */
   onMark: (next: SeatStatus) => void;
 }) {
+  if (statusOnly) {
+    const label = cur ? SEAT_LABEL[cur] : "미체크";
+    return (
+      <div
+        aria-label={`${studentName} ${label}`}
+        className={`w-full rounded-md border px-0.5 py-1 text-center text-xs font-bold ${
+          cur ? `${SEAT_MARK_ON[cur]} border-transparent` : "border-line bg-card text-text-dim"
+        }`}
+      >
+        {label}
+      </div>
+    );
+  }
   return (
     <div className="grid w-full grid-cols-3 gap-0.5">
       {SEAT_MARK_ORDER.map((k) => {

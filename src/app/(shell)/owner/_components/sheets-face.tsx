@@ -16,6 +16,9 @@ import { MakeeduPushCard } from "@/features/integrations/components/makeedu-push
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { EmbedLink } from "@/components/embed-link";
 import { humanizeMakeeduSyncError } from "@/features/integrations/sync-error";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canPushToMakeedu } from "@/features/integrations/server/makeedu-push-access";
 
 /**
  * 연동 면 (owner ?tab=sheets) — 구글 시트 내보내기 단일 홈.
@@ -34,6 +37,7 @@ export async function SheetsFace({
   isEmbed = false,
   makeeduOn = true,
   sheetsOn = true,
+  canEdit = true,
 }: {
   /** 과목 라벨 소스(operations.subjects) — 시트 세팅 카드 제목용(하드코딩 금지). */
   subjects: Parameters<typeof buildSubjectMaps>[0];
@@ -43,6 +47,8 @@ export async function SheetsFace({
   makeeduOn?: boolean;
   /** 구글 시트 시간표 연동 모듈 — 꺼지면 시트 내보내기 절을 세우지 않는다. 침산은 둘 다 켜져 있다. */
   sheetsOn?: boolean;
+  /** 연동 설정 쓰기(page.tsx의 fieldset 잠금과 같은 값) — 없으면 토글·시트 ID 저장 단추를 그리지 않는다. */
+  canEdit?: boolean;
 }) {
   // 독립 조회 → 병렬(B4). 시트 상태는 지원 과목(math·english)마다 별도 provider 행.
   // 꺼진 연동은 조회도 하지 않는다 — 그 학원엔 없는 연동이다.
@@ -56,11 +62,18 @@ export async function SheetsFace({
       </div>
     );
   }
+  // 🔴 '지금 동기화'·'makeedu로 보내기'는 연동 설정이 아니라 **makeedu 연동(integrations) 권한**이다 — 서버 액션과 같은 함수
+  //    (`triggerMakeeduSyncNow` = canWriteTenant(integrations) · `enqueueConsultationPush` = canPushToMakeedu)로 판정한다.
+  //    이 면이 연동 설정으로 잠겼으면(canEdit=false) fieldset이 단추를 잠그므로 비활성으로 남기지 않게 함께 감춘다.
+  const viewer = makeeduOn ? await getCurrentUser() : null;
+  const [canTriggerSync, canPush] = viewer && canEdit
+    ? await Promise.all([canWriteTenant(viewer.systemRole, "integrations"), canPushToMakeedu(viewer.systemRole)])
+    : [false, false];
   const [sheetStatuses, makeeduStatus, runsPage, pushCandidates, syncLock, invoiceSync] = await Promise.all([
     sheetsOn ? Promise.all(SHEET_EXPORT_SUBJECTS.map((s) => getGoogleSheetsStatus(s))) : Promise.resolve([]),
     makeeduOn ? getMakeeduAutoSyncStatus() : Promise.resolve(null),
     makeeduOn ? getMakeeduSyncRuns(page, RUNS_PAGE_SIZE) : Promise.resolve({ runs: [], total: 0 }),
-    makeeduOn ? getUnpushedIntakeConsultations() : Promise.resolve([]),
+    makeeduOn && canPush ? getUnpushedIntakeConsultations() : Promise.resolve([]),
     makeeduOn ? getMakeeduSyncLock() : Promise.resolve({ busyUntil: null, running: false }),
     makeeduOn ? getMakeeduSyncState("invoices") : Promise.resolve(null),
   ]);
@@ -89,7 +102,7 @@ export async function SheetsFace({
       {/* makeedu 자동 동기화 — 외부 연동 면 상단: 토글/버튼 카드 + 담당 PC 상태(0073a) + 최근 실행 이력(0070a) */}
       {makeeduOn && makeeduStatus ? (
         <>
-          <MakeeduSyncCard status={makeeduStatus} initialLock={syncLock} />
+          <MakeeduSyncCard status={makeeduStatus} initialLock={syncLock} canToggle={canEdit} canTrigger={canTriggerSync} />
           <EmbedLink href="/owner?tab=sheets&sub=agent" className="text-primary text-sm font-semibold underline underline-offset-2">연동 PC 관리</EmbedLink>
           <MakeeduSyncRunsList
             runs={runsPage.runs}
@@ -98,8 +111,9 @@ export async function SheetsFace({
             total={runsPage.total}
             hrefForPage={runsHref}
           />
-          {/* 역동기화 — QR 접수 상담을 makeedu로 보내기(항상 표시, 후보 0건이면 빈 상태로 발견성 유지) */}
-          <MakeeduPushCard candidates={pushCandidates} />
+          {/* 역동기화 — QR 접수 상담을 makeedu로 보내기(보낼 권한이 있으면 항상 표시, 후보 0건이면 빈 상태로 발견성 유지).
+              보낼 권한이 없으면 카드를 세우지 않는다(등록상담 화면의 'makeedu 보내기'와 같은 함수). */}
+          {canPush ? <MakeeduPushCard candidates={pushCandidates} /> : null}
         </>
       ) : null}
 
@@ -155,7 +169,7 @@ export async function SheetsFace({
         {/* 우 — 과목별 시트 카드(토글 + 대상 ID + 상태) */}
         <div className="space-y-4">
           {SHEET_EXPORT_SUBJECTS.map((s, i) => (
-            <SubjectSheetCard key={s} subject={s} label={subjectMaps.labelOf(s)} status={sheetStatuses[i]} />
+            <SubjectSheetCard key={s} subject={s} label={subjectMaps.labelOf(s)} status={sheetStatuses[i]} canEdit={canEdit} />
           ))}
         </div>
       </div>
