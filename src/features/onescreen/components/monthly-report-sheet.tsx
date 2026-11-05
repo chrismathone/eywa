@@ -66,11 +66,17 @@ export function MonthlyReportSheet({
 }
 
 const pct = (v: number | null, max: number) => (v == null ? 0 : Math.max(0, Math.min(100, (v / max) * 100)));
+/** 그래프 눈금 — 딱 떨어지는 칸(만점 100 → 25씩 · 25 → 5씩). 나눠지지 않으면 4칸(소수 한 자리). */
+export function axisTicks(max: number): number[] {
+  const n = [4, 5, 2].find((k) => Number.isInteger(max / k)) ?? 4;
+  return Array.from({ length: n + 1 }, (_, i) => Math.round(((max * i) / n) * 10) / 10);
+}
 const fmt = (v: number | null) => (v == null ? "-" : String(v));
 
 /** 그래프 + 점수 표 — 월간 카드와, 다른 템플릿 글 속 `[월간평가 …]` 자리(TemplateBody)가 같이 쓴다. */
 export function MonthlyEvalBlock({ evaluation: ev }: { evaluation: MonthlyEval }) {
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(ev.areaMax * f * 10) / 10);
+  const ticks = axisTicks(ev.areaMax);
+  const grid = { backgroundSize: `${100 / (ticks.length - 1)}% 100%` };
   return (
     <div className={styles.block}>
       <figure className={styles.chart} aria-label="Monthly Test Result">
@@ -87,7 +93,7 @@ export function MonthlyEvalBlock({ evaluation: ev }: { evaluation: MonthlyEval }
           {MONTHLY_AREA_ORDER.map((k) => (
             <div key={k} style={{ display: "contents" }}>
               <span className={styles.rowLabel}>{MONTHLY_AREA_LABEL[k]}</span>
-              <div className={styles.bars}>
+              <div className={styles.bars} style={grid}>
                 <div className={`${styles.bar} ${styles.avg}`} style={{ width: `${pct(ev.areas[k].average, ev.areaMax)}%` }} />
                 <div className={`${styles.bar} ${styles.mine}`} style={{ width: `${pct(ev.areas[k].score, ev.areaMax)}%` }} />
               </div>

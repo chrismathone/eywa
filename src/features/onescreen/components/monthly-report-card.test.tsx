@@ -104,3 +104,12 @@ describe("EiE 템플릿 두 종류", () => {
     expect(fill("", "잘했어요")).toBe("잘했어요");
   });
 });
+
+describe("그래프 눈금", () => {
+  it("딱 떨어지는 칸 — 만점 100은 25씩, 25는 5씩", async () => {
+    const { axisTicks } = await import("./monthly-report-sheet");
+    expect(axisTicks(100)).toEqual([0, 25, 50, 75, 100]);
+    expect(axisTicks(25)).toEqual([0, 5, 10, 15, 20, 25]);
+    expect(axisTicks(7)).toEqual([0, 1.8, 3.5, 5.3, 7]);
+  });
+});
