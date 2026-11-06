@@ -831,6 +831,14 @@ export function auditDetail(
       return join("운영 스크립트 실행 · 원장 승인", `행사 ${num(m.events) ?? 0}개`, `학생 ${num(m.students) ?? 0}명`, `학생별 참석 ${num(m.studentEvents) ?? 0}건`, "배점은 별도 활성화");
     case "student_parent_events_revoke":
       return join("운영 스크립트 실행 · 원장 승인", "연결 취소 · 원본 보존", str(m.reason), "점수는 다음 집계에서 정정");
+    case "student_care_save": {
+      // 상담 약속·인계(s2_0028) — 종류·버전·사유. 증거 종류도 한글로(모르는 값은 싣지 않는다 — 영문 키를 흘리지 않는다).
+      const kind = ({ create: "약속 등록", revise: "내용 변경(새 버전)", acknowledge: "담당자 인수 확인", evidence: "이행 기록 추가",
+        complete: "완료 확인", cancel: "취소" } as Record<string, string>)[str(m.kind) ?? ""] ?? null;
+      const evidence = ({ consultation: "상담", lesson_report: "수업보고서", english_sheet: "영어 강사 시트", math_sheet: "수학 강사 시트" } as Record<string, string>)[str(m.evidenceKind) ?? ""] ?? null;
+      const revision = num(m.revision);
+      return join(kind, revision === null ? null : `v${revision}`, evidence ? `${evidence} 기록` : null, str(m.reason));
+    }
     case "student_contribution_summary_generate": {
       const outcome = ({ saved: "저장 완료", failed: "생성 실패", quota: "일일 한도 도달", busy: "중복 요청 중단",
         unavailable: "요약 조건 미충족", input_limit: "입력량 제한", source_changed: "원본 변경으로 저장 중단" } as Record<string, string>)[str(m.outcome) ?? ""] ?? "결과 확인 필요";

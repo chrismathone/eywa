@@ -172,6 +172,7 @@ export const AYWA_ICON_CATALOG = [
   { name: "alarm", label: "알람", family: "interface", meaning: "지정 시간 알림" },
   { name: "copyPlus", label: "복사본 추가", family: "interface", meaning: "복제해 새 항목 만들기" },
   { name: "listChecks", label: "완료 목록", family: "interface", meaning: "여러 작업의 점검 상태" },
+  { name: "hand", label: "손", family: "interface", meaning: "약속과 맡은 할 일" },
   { name: "gauge", label: "점수 계기판", family: "interface", meaning: "평가 점수와 그 기준" },
   { name: "pinOff", label: "고정 해제", family: "interface", meaning: "고정된 위치와 항목 풀기" },
   { name: "doorOpen", label: "열린 문", family: "interface", meaning: "공간 출입과 열린 상태" },
@@ -889,6 +890,15 @@ const EXTENDED_ICON_GLYPHS = {
     <>
       <path d="M3 17a9 9 0 0 1 18 0" />
       <path d="M12 17l5-6M3 17h18" />
+    </>
+  ),
+  // 약속·할 일(연결 탐색 조각 · 원장 2026-11-05 시안의 손바닥).
+  hand: (
+    <>
+      <path d="M18 11V6a2 2 0 0 0-4 0v5" />
+      <path d="M14 10V4a2 2 0 0 0-4 0v6" />
+      <path d="M10 10.5V6a2 2 0 0 0-4 0v8" />
+      <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
     </>
   ),
   listChecks: (

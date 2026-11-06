@@ -9,7 +9,7 @@ import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { PrintWindowButton } from "@/components/workspace/print-window";
 import { requireAccess } from "@/lib/auth/require-access";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { formatCreatedAt } from "@/lib/utils";
 import {
@@ -87,7 +87,7 @@ export default async function EnrollmentDetailPage({
 }) {
   const user = await requireAccess("enrollment");
   const { id } = await params;
-  const [consult, allClasses, settings, siblings, canWrite, canRequestTextbook, referrer] = await Promise.all([
+  const [consult, allClasses, settings, siblings, canWrite, canRequestTextbook, referrer, canReadCare] = await Promise.all([
     getEnrollmentConsultationById(id),
     getClassesList({ active: "active" }),
     getTenantSettings(),
@@ -100,6 +100,8 @@ export default async function EnrollmentDetailPage({
     canWriteTenant(user.systemRole, "textbook_requests"),
     // 소개한 사람(0362a) — 기본 조회와 따로·실패해도 되게(#95).
     createClient().then((db) => loadConsultationReferrer(db as unknown as SupabaseClient, id)),
+    // 상담 약속·인계(2026-11-05 AX 이식) 입구 — 약속 전체를 보는 신규생 관리 권한.
+    canAccessTenant(user.systemRole, "newcomers"),
   ]);
   if (!consult) {
     // 🔴 병합으로 사라진 상담이면 **404 대신 남은 쪽으로 보낸다**(원장 2026-09-01 제보) — 병합
@@ -218,6 +220,7 @@ export default async function EnrollmentDetailPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {canReadCare ? <Button variant="outline" render={<WindowLink href={consult.studentId ? `/students/${consult.studentId}/care` : `/enrollment/${id}/care`} title="상담 약속·인계" />}>상담 약속·인계</Button> : null}
           {/* ⚠️ "수정" 단독 금지 — 아래 AI 분석 리포트에도 섹션마다 '수정'(그 섹션 문장)이 있다.
               여기는 **상담 내용 폼 전체**를 연다. */}
           {canWrite ? (

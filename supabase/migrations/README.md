@@ -12,6 +12,10 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-11-05 상담 약속·인계 — 약속 표 · 이력 표 · 저장 함수 · 등록 전 약속 · 강사 시트 증거 (s2_0028 · s2_0029 · ⏳ 운영 미적용)
+
+`s2_0028_student_care_commitments.sql` → `s2_0029_intake_care_and_sheet_evidence.sql`(이 순서) — 원장 2026-11-05 *"전부 가져온다"*(AX 인계본의 '상담 약속·인계'를 main에 이식 · 인계본 번호 s2_0014·s2_0015). ① 새 표 둘(`student_care_commitments` = 약속 한 건의 현재 문서 · `student_care_events` = 저장마다 한 줄 이력)과 저장 함수 `save_student_care`(version 비교 · 이력을 같은 트랜잭션에 · 증거 원본 존재·학생 일치를 `for share`로 재확인). ② 등록 전 약속(`intake_id` · `student_id` nullable)과 신규 콜&상담이 학생으로 연결될 때 약속을 잇는 트리거 `student_care_on_intake_link`(`enrollment_consultations`에 건다 · `lock_timeout 3s`) · 강사 시트 증거를 받는 `save_student_care_v2`(옛 함수는 v2를 부르는 껍데기로). RLS 켬 · 정책 0개 · anon/authenticated 권한 회수 · 서버 키(service_role)만 — 권한은 앱(`src/features/student-care/server/access.ts`)이 가른다. 앱은 표가 없으면 약속 화면·연결 탐색 '약속·할 일'에 '준비 안 됨' 안내만 내고(#95), s2_0029 없이 s2_0028만 있으면 옛 칸으로 다시 읽는다. 기존 표의 데이터는 바꾸지 않는다(트리거는 앞으로의 연결에만). 되돌리기 = 각 파일 머리 주석.
+
 ## 2026-11-03 원생 흐름 분석 저장 표 (s2_0027 · ✅ 운영 적용 2026-11-03 · 적용 때 가지 번호 s2_0018 → 합치며 s2_0027(main의 s2_0018 = 업무 요청 · 2026-11-05 밤 병합) · 본문 글자는 적용한 그대로)
 
 `s2_0027_student_flow_insights.sql` — 원장 2026-11-03 *"새 상담 올릴때마다 상담 분석 돌릴것 … 이전 상담 분석에 합산"* · *"타임라인도 비슷하게"*. 표 `student_flow_insights`(학생 × 종류 consultations·timeline마다 마지막 분석 한 벌) — 연결 탐색(`/explore`) 왼쪽 '흐름' 카드가 읽는다. 읽기·쓰기 정책 없음(서버 service_role만 · admin 클라이언트 + tenant_id 필터). 🔴 다시 실행하지 말 것(운영에 이미 있다).

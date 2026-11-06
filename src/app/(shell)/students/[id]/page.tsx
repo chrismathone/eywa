@@ -211,7 +211,7 @@ export default async function StudentDetailPage({
   // 숙제 영상 링크 끊기 = `canWriteTenant("students")`(students/server/actions.ts · video-submit/server/actions.ts),
   // 상담 작성·수정·삭제·후속 조치 = `canWriteTenant("consultations")`. 위 canManageStudent(full)와 다르다 —
   // 강사(scoped)도 담당 학생 메모·성적은 쓴다(담당 범위는 서버가 따로 본다).
-  const [scheduled, canManageScheduled, upcomingMakeups, canSeeWithdrawals, reportInfo, canWriteStudent, canWriteConsultation] = await Promise.all([
+  const [scheduled, canManageScheduled, upcomingMakeups, canSeeWithdrawals, reportInfo, canWriteStudent, canWriteConsultation, canSeeCare] = await Promise.all([
     getScheduledForStudent(student.id),
     canManageTenant(user.systemRole, "classes"),
     getStudentUpcomingReservations(student.id, kstToday()),
@@ -220,6 +220,8 @@ export default async function StudentDetailPage({
     reportable ? studentReportEntry(student.id).catch(() => null) : Promise.resolve(null),
     canWriteTenant(user.systemRole, "students"),
     tab === "consultations" ? canWriteTenant(user.systemRole, "consultations") : Promise.resolve(false),
+    // 상담 약속·인계(2026-11-05 AX 이식) 입구 — 약속 전체를 보는 신규생 관리 권한. 담당으로 배정된 강사는 연결 탐색·미완료 약속에서 연다.
+    canAccessTenant(user.systemRole, "newcomers"),
   ]);
   // 진행 중인 보고서를 열 수 없는 사람에게는 '진행 중' 글을 원생 상태를 다루는 사람에게만 보인다(참여자가 아닌 강사에게 새지 않게).
   const reportEntry: ReportEntry | null = reportInfo?.pending
@@ -302,6 +304,11 @@ export default async function StudentDetailPage({
               <EyIcon name="pieChart" size={16} />
               <SheetText value={"연결 탐색"} />
             </Button>
+            {canSeeCare ? (
+              <Button variant="outline" render={<WindowLink href={`/students/${student.id}/care`} title={`${student.name} 상담 약속·인계`} />}>
+                <SheetText value={"약속·인계"} />
+              </Button>
+            ) : null}
             {canSeeWithdrawals ? (
               <WindowLink href={`/withdrawals/${student.id}`} title={student.name}>
                 <span className="text-primary text-sm font-semibold hover:underline"><SheetText value={"퇴원 기록 보기"} /></span>

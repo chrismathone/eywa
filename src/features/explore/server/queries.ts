@@ -7,6 +7,7 @@ import { KIND_LABEL, groupCenterName, sectorLabelOf, type ExploreKind, type Trai
 import { loadStudentCenter } from "./student";
 import { loadClassCenter } from "./class";
 import { loadTeacherCenter } from "./teacher";
+import { loadRoomCenter } from "./room";
 import { settle, type ExploreLoad } from "./shared";
 
 export type { ExploreLoad } from "./shared";
@@ -18,6 +19,7 @@ export type { ExploreLoad } from "./shared";
 export async function loadExploreCenter(kind: ExploreKind, id: string): Promise<ExploreLoad> {
   if (kind === "student") return loadStudentCenter(id);
   if (kind === "class") return loadClassCenter(id);
+  if (kind === "room") return loadRoomCenter(id);
   return loadTeacherCenter(id);
 }
 
@@ -29,15 +31,17 @@ export async function resolveTrailLabels(trail: readonly TrailItem[]): Promise<T
   if (trail.length === 0) return [];
   const supabase = await createClient();
   const ids = (kind: ExploreKind) => trail.filter((t) => t.kind === kind).map((t) => t.id);
-  const [students, classes, teachers] = await Promise.all([
+  const [students, classes, teachers, rooms] = await Promise.all([
     settle("explore.trail.students", fetchInChunks<{ id: string; name: string }>(ids("student"), (chunk) => supabase.from("students").select("id, name").in("id", chunk))),
     settle("explore.trail.classes", fetchInChunks<{ id: string; class_name: string }>(ids("class"), (chunk) => supabase.from("classes").select("id, class_name").in("id", chunk))),
     settle("explore.trail.teachers", fetchInChunks<{ id: string; display_name: string }>(ids("teacher"), (chunk) => supabase.from("users").select("id, display_name").in("id", chunk))),
+    settle("explore.trail.rooms", fetchInChunks<{ id: string; name: string }>(ids("room"), (chunk) => supabase.from("classrooms").select("id, name").in("id", chunk))),
   ]);
   const names = new Map<string, string>();
   for (const s of students.ok ? students.value : []) names.set(`student:${s.id}`, s.name);
   for (const c of classes.ok ? classes.value : []) names.set(`class:${c.id}`, c.class_name);
   for (const t of teachers.ok ? teachers.value : []) names.set(`teacher:${t.id}`, t.display_name);
+  for (const r of rooms.ok ? rooms.value : []) names.set(`room:${r.id}`, r.name);
   // 영역 중심(`kind:id:sector`)의 이름 = "김민서G · 수업" — 과목 조각은 학원 설정 과목 라벨로(가운데 원과 같은 말).
   const subjects = trail.some((t) => t.sector) ? buildSubjectMaps((await getTenantSettings()).operations.subjects) : null;
   return trail.map((t) => {

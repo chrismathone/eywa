@@ -4,6 +4,10 @@ import { isExploreKind, parseTrail } from "@/features/explore/model";
 import { loadExploreCenter, resolveTrailLabels } from "@/features/explore/server/queries";
 import { ExploreView } from "@/features/explore/components/explore-view";
 import { ExploreNotice } from "@/features/explore/components/explore-landing";
+import { loadExploreContribution } from "@/features/explore/server/contribution";
+import { loadExploreFacts } from "@/features/explore/server/facts";
+import { parseExplorePrefs } from "@/features/explore/view-prefs";
+import { readMyUiPrefs } from "@/lib/ui-prefs/read";
 
 export const metadata = { title: "연결 탐색 — 에이와" };
 
@@ -17,15 +21,29 @@ export default async function ExploreCenterPage({
   searchParams,
 }: {
   params: Promise<{ kind: string; id: string }>;
-  searchParams: Promise<{ t?: string; sector?: string }>;
+  searchParams: Promise<{ t?: string; sector?: string; month?: string }>;
 }) {
   const { kind, id } = await params;
   if (!isExploreKind(kind)) notFound();
   await requireAccess(kind === "student" ? "students" : "classes");
   const sp = await searchParams;
   const trailItems = parseTrail(sp.t).filter((t) => !(t.kind === kind && t.id === id));
-  const [load, trail] = await Promise.all([loadExploreCenter(kind, id), resolveTrailLabels(trailItems)]);
+  const [load, trail, uiPrefs] = await Promise.all([loadExploreCenter(kind, id), resolveTrailLabels(trailItems), readMyUiPrefs()]);
   if (load.state === "notfound") notFound();
   if (load.state === "forbidden") return <ExploreNotice title="열람할 수 없는 대상입니다" message={load.reason} />;
-  return <ExploreView key={`${kind}:${id}`} model={load.model} trail={trail} initialSector={typeof sp.sector === "string" ? sp.sector : null} />;
+  // 기여도 점수는 무거운 조회 — 기다리지 않고 약속으로 넘긴다(왼쪽 카드만 늦게 채워진다 · B7).
+  const contribution = load.model.aside?.contribution ? loadExploreContribution(id, typeof sp.month === "string" ? sp.month : null) : null;
+  // 네트워크 '온톨로지 사실'(형제) — 같은 결로 약속만 넘긴다(첫 화면을 막지 않는다).
+  const facts = kind === "student" ? loadExploreFacts(id) : null;
+  return (
+    <ExploreView
+      key={`${kind}:${id}`}
+      model={load.model}
+      trail={trail}
+      initialSector={typeof sp.sector === "string" ? sp.sector : null}
+      prefs={parseExplorePrefs(uiPrefs.explore)}
+      contribution={contribution}
+      facts={facts}
+    />
+  );
 }

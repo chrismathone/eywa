@@ -430,6 +430,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 
 ### 원생·콜&상담·신규생·학교 표기 → [`docs/decisions/students.md`](docs/decisions/students.md)
 
+- 연결 탐색 = 원장 시안(:3978) 구조(세 열 · 도넛/네트워크 계정 귀속 · 분석·판단은 오른쪽 아래 · 강의실 중심은 수업 전체 열람만 · 출처 표시·통합 메모는 시안 전용, 2026-11-05)
 - 학생 온톨로지·기여도 → [`student-ontology.md`](docs/decisions/student-ontology.md) · 설명회 신청·형제 인정과 최초 연결(2026-10-26, 기본 비활성) → [`student-parent-events.md`](docs/decisions/student-parent-events.md)
 - 퇴원 상세 = 퇴원보고서(새 보고서·원본)·콜&상담 카드(카드마다 목적지 메뉴 권한 · 학생 id로 좁혀 읽기 · 실패는 카드만) · 작성 입구 없음 · 퇴원일 옆 '퇴원보고서 종료일'은 같은 사건 후보만(정보 · 퇴원일 안 고침 · `report-date-link.ts`) · 보고서 상세 → '퇴원 상세' 링크(2026-10-23)
 - 퇴원월 = 수강료를 낸 마지막 달(2026-10-29 · 수업 순액 > 0 · 운영실·퇴원관리·퇴원생 시트 · 시간표 X·수강종료는 날짜 그대로 · `exit-month.ts` 한 벌)

@@ -12,20 +12,21 @@ import type { PillColor } from "@/components/atoms/pill";
  * ⚠️ `"use client"`도 `server-only`도 붙이지 말 것 — 창 해석(`window-link.tsx`)과 서버 페이지가 둘 다 읽는다([[#61]]·[[#81]]).
  */
 
-export const EXPLORE_KINDS = ["student", "class", "teacher"] as const;
+export const EXPLORE_KINDS = ["student", "class", "teacher", "room"] as const;
 export type ExploreKind = (typeof EXPLORE_KINDS)[number];
 
 export function isExploreKind(v: string | undefined | null): v is ExploreKind {
   return !!v && (EXPLORE_KINDS as readonly string[]).includes(v);
 }
 
-export const KIND_LABEL: Record<ExploreKind, string> = { student: "원생", class: "수업", teacher: "강사" };
-export const KIND_ICON: Record<ExploreKind, AywaIconName> = { student: "user", class: "graduationCap", teacher: "user" };
+export const KIND_LABEL: Record<ExploreKind, string> = { student: "원생", class: "수업", teacher: "강사", room: "강의실" };
+export const KIND_ICON: Record<ExploreKind, AywaIconName> = { student: "user", class: "graduationCap", teacher: "user", room: "doorOpen" };
 /** 화면 제목 — 시안의 "수업 연결 탐색" · "강사 연결 탐색". */
 export const KIND_TITLE: Record<ExploreKind, string> = {
   student: "원생 연결 탐색",
   class: "수업 연결 탐색",
   teacher: "강사 연결 탐색",
+  room: "강의실 연결 탐색",
 };
 
 /** 창(iframe) 제목 · 메뉴 밖 화면이라 창 id는 경로 하나("explore")다 — [`windowIdForHref`](../../components/workspace/window-link.tsx). */
@@ -101,11 +102,35 @@ export type ExploreLink = { href: string; label: string };
 /** 같은 과목 안의 반 하나 — 조각을 다시 n분할한 작은 조각(원장 2026-11-03 *"같은 과목이면 그 안에서 다시 n분할"*). `rows` = 패널에 펼칠 그 반 요약. */
 export type ExplorePart = { key: string; label: string; summary: string; target: ExploreTarget; rows?: ExploreRow[] };
 
+/** 신규생 90일 점검 한 줄 — 상태는 신규생 관리 화면의 판정(`statusOf`) 그대로. */
+export type ExploreCareCheck = {
+  key: string;
+  label: string;
+  status: "done" | "overdue" | "due" | "upcoming" | "pending" | "waived";
+  /** '08.03' · '11.06 · 3일 내' · '11.02 · 지남' · '첫 수업일 미정'. */
+  when: string;
+};
+export type ExploreCareChecks = {
+  /** notNewcomer = 등록 90일이 지났거나 신규생 명단에 없음 · unavailable = 체크 표 미적용 · denied = 신규생 관리 권한 없음 · off = 신규생 관리 기능이 꺼진 지점(있었는지조차 모르게 — 칸·줄을 그리지 않는다). */
+  state: "ready" | "notNewcomer" | "unavailable" | "denied" | "error" | "off";
+  enrolledOn: string | null;
+  items: ExploreCareCheck[];
+};
+/** 약속·할 일 조각의 패널 재료 — 입학 요구 · 약속·인계(student-care) · 신규생 90일 점검. */
+export type ExploreCarePanel = {
+  studentId: string;
+  checks: ExploreCareChecks;
+  /** 약속·인계(student-care) — 이 원생의 약속 · 입학 요구. 직렬화 가능한 보기 모양(타입만 가져온다). */
+  commitments: import("../student-care/server/explore").CareExploreView;
+};
+
 export type ExploreSector = {
   key: string;
   label: string;
   icon: AywaIconName;
   tone: ExploreTone;
+  /** 약속·할 일 조각만 — 패널이 블록 셋(입학 요구 · 약속·인계 · 90일 점검)으로 그린다. */
+  care?: ExploreCarePanel;
   /** 조각 안의 한 줄 요약(길면 화면이 말줄임). */
   summary: string;
   state: SectorState;
@@ -137,16 +162,75 @@ export type ExploreCenter = {
   group?: string;
 };
 
-/** 넓은 화면 왼쪽 열(원장 2026-11-03 *"공간이 많이 남으니까"*) — 고정 사실 몇 줄 + (원생) AI 흐름 분석 카드. */
+/** 왼쪽 열 '기본 정보' 한 줄 — 값은 한 줄(전화번호는 가린 값). */
+export type ExploreFact = { label: string; value: string };
+
+/**
+ * 왼쪽 열(원장 2026-11-05 시안 :3978 *"구조가 완전히 다르잖아. 완전히 일치하게"*) — 머리('원생 정보' · '수업 정보' · '강사 정보') +
+ * 기본 정보 카드 + (원생) 기여도·기록 카드 + (원생) 자료 연결 상태 카드. 분석·판단은 오른쪽 아래 칸(`ExploreAnalysis`)으로 옮겼다.
+ */
 export type ExploreAside = {
-  facts: { label: string; value: string }[];
-  /** 원생 중심만 — 상담·타임라인 흐름 분석(저장된 결과만 · 페이지 로드로 AI를 부르지 않는다). */
-  flow?: {
-    state: "ready" | "denied" | "error";
-    items: import("./flow-insight").FlowInsightView[];
-    /** '다시 분석' 버튼(원생상담 쓰기 권한). */
-    canRefresh: boolean;
+  heading: string;
+  basics: {
+    title: string;
+    /** 카드 머리 오른쪽 작은 글 — 원생 '기준일 YYYY-MM-DD' · 수업·강사는 이름. */
+    spacer: string | null;
+    facts: ExploreFact[];
+    /** 카드 끝 '원생 상세 열기 ›' — 상세 열기 링크는 여기 한 곳(패널 바닥엔 영역 링크만). */
+    link: ExploreLink | null;
   };
+  /** 원생만 — 기록 건수(수업보고서 · 상담 · 특이사항 메모). 기여도 점수는 무거운 조회라 따로 늦게 채운다(`ExploreContribution`). */
+  records?: { label: string; value: number; unit: string }[];
+  /** 원생만 — 기여도 기능이 켜진 지점·권한이면 true(꺼졌으면 '있었는지조차 모르게' 카드 이름도 '기록'). */
+  contribution?: boolean;
+  /** 원생만 — 이 화면이 읽는 원천마다 연결 상태. */
+  coverage?: ExploreCoverageItem[];
+};
+
+/** 자료 연결 상태 — 연결됨(이 화면이 읽었다) · 일부 확인 · 열람 제한(권한 밖) · 연결 전(기능 꺼짐·연결 없음) · 조회 실패. */
+export type CoverageState = "connected" | "partial" | "restricted" | "pending" | "failed";
+export const COVERAGE_LABEL: Record<CoverageState, string> = {
+  connected: "연결됨",
+  partial: "일부 확인",
+  restricted: "열람 제한",
+  pending: "연결 전",
+  failed: "조회 실패",
+};
+export type ExploreCoverageItem = { key: string; label: string; state: CoverageState };
+
+/** 기여도 카드 값 — 원생 상세 '기여도' 탭과 같은 계산(그 달 원수치 + 보정 → `scoreRaws`). */
+export type ExploreContribution =
+  | { state: "ready"; month: string; months: string[]; total: number; operations: number; participation: number; href: string }
+  | { state: "empty" | "error"; month: string | null; months: string[]; href: string };
+
+/**
+ * 분석·판단(오른쪽 아래 칸) — 블록 하나 = 상담 · 타임라인(원생 AI 흐름 분석, 저장된 결과만) 또는 규칙 판정(수업·강사 — 기록 기반 계산).
+ * 고른 조각과 이어진 블록이 먼저 오고 나머지는 옅어진다(`related` = 이어진 조각 key · 과목 조각은 `subject:*`).
+ */
+export type ExploreAnalysisBlock = {
+  id: string;
+  kind: "ai" | "rule";
+  title: string;
+  /** AI 흐름 분석이면 그 종류 — '다시 분석' 버튼이 이 값으로 부른다. */
+  flowKind?: import("./flow-insight").FlowKind;
+  badge: { label: string; color: PillColor } | null;
+  headline: string | null;
+  change: string | null;
+  watch: string[];
+  next: string[];
+  /** 맨 아래 작은 줄 — '상담 7건 반영 · 11.03 01:20 · Claude Sonnet 5.5' · '규칙 · 기록 기반 계산'. */
+  basis: string | null;
+  /** 분석이 아직 없을 때의 안내(있으면 headline 대신). */
+  empty: string | null;
+  related: string[];
+};
+export type ExploreAnalysis = {
+  state: "ready" | "denied" | "error";
+  blocks: ExploreAnalysisBlock[];
+  /** AI 블록의 '다시 분석'(원생상담 쓰기 권한). */
+  canRefresh: boolean;
+  /** 권한 없음·실패일 때의 문장. */
+  note?: string | null;
 };
 
 export type ExploreModel = {
@@ -156,6 +240,8 @@ export type ExploreModel = {
   /** 판정 기준일(KST). */
   asOf: string;
   aside?: ExploreAside;
+  /** 오른쪽 아래 칸 '분석·판단'. */
+  analysis?: ExploreAnalysis;
   /** 아무 조각도 안 골랐을 때 패널에 펼칠 것 — 영역 중심은 그 영역 전체(목록·링크), 없으면 `defaultSector` 조각. */
   panelDefault?: ExploreSector;
 };
@@ -165,7 +251,7 @@ export type ExploreModel = {
 export type SectorDef = { key: string; label: string; icon: AywaIconName; tone: ExploreTone };
 
 /**
- * 조각은 **맨 위 조각부터 시계 방향**이다(시안과 같은 차례). 원생 8 · 수업 6 · 강사 6.
+ * 조각은 **맨 위 조각부터 시계 방향**이다(시안과 같은 차례). 원생 9 · 수업 6 · 강사 6 · 강의실 4.
  * 🔴 조각을 더하거나 이름을 바꾸면 `server/queries.ts`의 `build*Sectors`가 **같은 key**를 채워야 한다(가드 `model.test.ts`).
  */
 export const SECTOR_DEFS: Record<ExploreKind, readonly SectorDef[]> = {
@@ -178,6 +264,8 @@ export const SECTOR_DEFS: Record<ExploreKind, readonly SectorDef[]> = {
     { key: "memos", label: "특이사항", icon: "alertCircle", tone: "rose" },
     { key: "billing", label: "수납", icon: "wallet", tone: "green" },
     { key: "timeline", label: "타임라인", icon: "clock", tone: "gold" },
+    // 약속·할 일 = 입학 요구 · 약속·인계(student-care) · 신규생 90일 점검(신규생 관리 체크리스트) — 원장 2026-11-05 시안.
+    { key: "care", label: "약속·할 일", icon: "hand", tone: "amber" },
   ],
   class: [
     { key: "students", label: "수강 원생", icon: "users", tone: "blue" },
@@ -195,10 +283,17 @@ export const SECTOR_DEFS: Record<ExploreKind, readonly SectorDef[]> = {
     { key: "reports", label: "수업보고서", icon: "report", tone: "rose" },
     { key: "staff", label: "직원 정보", icon: "userSettings", tone: "green" },
   ],
+  // 강의실 = 시안(:3978 roomCenter)의 네 조각 — 이 방에서 도는 수업 · 그 수업의 강사 · 주간 시간표 · 강의실 정보(이름·정원).
+  room: [
+    { key: "classes", label: "수업", icon: "graduationCap", tone: "blue" },
+    { key: "teachers", label: "강사", icon: "user", tone: "green" },
+    { key: "timetable", label: "시간표", icon: "calendar", tone: "primary" },
+    { key: "info", label: "강의실 정보", icon: "settings", tone: "purple" },
+  ],
 };
 
 /** 처음 열 때 패널에 펼치는 조각 — 시안: 원생은 수업 · 수업은 수강 원생 · 강사는 담당 수업. */
-export const DEFAULT_SECTOR: Record<ExploreKind, string> = { student: "classes", class: "students", teacher: "classes" };
+export const DEFAULT_SECTOR: Record<ExploreKind, string> = { student: "classes", class: "students", teacher: "classes", room: "classes" };
 
 export function sectorDef(kind: ExploreKind, key: string): SectorDef {
   const def = SECTOR_DEFS[kind].find((d) => d.key === key);
@@ -508,8 +603,28 @@ export function buildGroupModel(parent: ExploreModel, sectorKey: string): Explor
     defaultSector: shown[0].key,
     asOf: parent.asOf,
     aside: parent.aside,
+    analysis: parent.analysis,
     panelDefault: sector,
   };
+}
+
+/**
+ * 분석·판단 카드가 고른 요소를 따라가는 판정(원장 2026-11-05 *"분석 판단도 선택한 요소에 따라 바뀌게"*) — 고른 조각(또는 기록의 조각)과
+ * 이어진 블록이 먼저, 나머지는 옅게. 영역 중심(2단계 도넛)에선 그 영역 자체가 고른 것이다. 아무것도 안 골랐으면 null(원래 순서 · 안내 없음).
+ * `related`의 `subject:*`는 모든 과목 조각과 이어진다는 뜻.
+ */
+export function analysisFocus(
+  blocks: readonly ExploreAnalysisBlock[],
+  model: Pick<ExploreModel, "center" | "sectors">,
+  sel: string | null,
+  record: { sectorKey: string; title: string } | null = null,
+): { label: string; match: (b: ExploreAnalysisBlock) => boolean; count: number } | null {
+  const key = record ? record.sectorKey : model.center.group ?? (sel ? splitSelKey(sel).sectorKey : null);
+  if (!key) return null;
+  const sector = model.sectors.find((s) => s.key === key);
+  const label = record ? (record.title.length > 18 ? `${record.title.slice(0, 18)}…` : record.title) : model.center.group ? model.center.name.split(" · ").pop() ?? key : sector?.label ?? key;
+  const match = (b: ExploreAnalysisBlock) => b.related.includes(key) || (key.startsWith("subject:") && b.related.includes("subject:*"));
+  return { label, match, count: blocks.filter(match).length };
 }
 
 export function exploreLandingHref(embed = false): string {

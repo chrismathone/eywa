@@ -4,6 +4,8 @@ import { buildGroupModel, isExploreKind, isSectorKeyShape, parseTrail, sameCente
 import { loadExploreCenter, resolveTrailLabels } from "@/features/explore/server/queries";
 import { ExploreView } from "@/features/explore/components/explore-view";
 import { ExploreNotice } from "@/features/explore/components/explore-landing";
+import { parseExplorePrefs } from "@/features/explore/view-prefs";
+import { readMyUiPrefs } from "@/lib/ui-prefs/read";
 
 export const metadata = { title: "연결 탐색 — 에이와" };
 
@@ -26,12 +28,22 @@ export default async function ExploreGroupPage({
   const sp = await searchParams;
   const self = { kind, id, sector };
   const trailItems = parseTrail(sp.t).filter((t) => !sameCenter(t, self));
-  const [load, trail] = await Promise.all([loadExploreCenter(kind, id), resolveTrailLabels(trailItems)]);
+  const [load, trail, uiPrefs] = await Promise.all([loadExploreCenter(kind, id), resolveTrailLabels(trailItems), readMyUiPrefs()]);
   if (load.state === "notfound") notFound();
   if (load.state === "forbidden") return <ExploreNotice title="열람할 수 없는 대상입니다" message={load.reason} />;
   const group = buildGroupModel(load.model, sector);
   if (!group) notFound();
-  return <ExploreView key={`${kind}:${id}:${sector}`} model={group} trail={trail} initialSector={typeof sp.sector === "string" ? sp.sector : null} />;
+  return (
+    <ExploreView
+      key={`${kind}:${id}:${sector}`}
+      model={group}
+      trail={trail}
+      initialSector={typeof sp.sector === "string" ? sp.sector : null}
+      prefs={parseExplorePrefs(uiPrefs.explore)}
+      contribution={null}
+      facts={null}
+    />
+  );
 }
 
 function decodeSegment(raw: string): string | null {

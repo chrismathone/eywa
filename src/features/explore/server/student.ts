@@ -27,9 +27,13 @@ import {
   type StudentClassRow,
   type StudentEnrollment,
 } from "@/features/students/server/queries";
-import { DEFAULT_SECTOR, SECTOR_DEFS, monthDayKo, oneLine, subjectSectorKey, type ExploreAside, type ExploreRow, type ExploreSector, type ExploreTarget, type ExploreTone } from "../model";
+import { DEFAULT_SECTOR, SECTOR_DEFS, monthDayKo, oneLine, subjectSectorKey, type ExploreRow, type ExploreSector, type ExploreTarget, type ExploreTone } from "../model";
 import { FLOW_KINDS } from "../flow-insight";
 import { readFlowInsights, toFlowView } from "./flow-insights";
+import { buildStudentAnalysis, buildStudentAside, coverageOfSector, loadCoverageExtras } from "./student-aside";
+import { careSummary, loadCareChecks } from "./student-care-sector";
+import { contributionEnabled } from "./contribution";
+import { getStudentCareForExplore } from "@/features/student-care/server/explore";
 import { NOT_FOUND, deniedSector, errorSector, forbidden, makeSector, settle, won, type ExploreLoad, type Settled } from "./shared";
 
 /**
@@ -50,7 +54,7 @@ export async function loadStudentCenter(id: string): Promise<ExploreLoad> {
   const flowAllowed = consultLevel === "full" || consultLevel === "readonly";
   // 🔴 학생 조회·조각 조회·흐름 분석을 **한 묶음**으로(B4) — 학생 → 조각 묶음 → 흐름의 직렬 3단이 전환마다 왕복 둘을 더하고 있었다
   //    (2026-11-03 실측). 학생을 못 읽으면(없음 · 담당 밖) 나머지 결과는 버린다 — 조각 조회도 같은 RLS·게이트를 지나므로 새는 것이 없다.
-  const [student, enrollments, attendance, grades, reports, consultations, memos, invoices, timeline, settings, classDetails, attendanceFull, flowRows] = await Promise.all([
+  const [student, enrollments, attendance, grades, reports, consultations, memos, invoices, timeline, settings, classDetails, attendanceFull, flowRows, careChecks, hasContribution, coverageExtras, care] = await Promise.all([
     getStudentById(id),
     settle("explore.student.enrollments", getStudentEnrollments(id)),
     settle("explore.student.attendance", getStudentAttendanceStats(id, 30)),
@@ -67,6 +71,14 @@ export async function loadStudentCenter(id: string): Promise<ExploreLoad> {
     // 이 목록이 요약함에 선다.
     settle("explore.student.attendanceFull", getStudentAttendanceFull(id, { since })),
     flowAllowed ? settle("explore.student.flow", readFlowInsights(user.tenantId, id)) : Promise.resolve(null),
+    // 약속·할 일의 90일 점검 — 신규생 관리와 같은 조회·판정. 권한 없음·표 미적용·실패를 가른다(안에서).
+    loadCareChecks(id, today),
+    // 기여도는 원생 상세 '기여도' 탭과 같은 열쇠 — 꺼졌으면 카드에 기여도 줄 자체가 없다(점수는 page가 따로 늦게 채운다).
+    contributionEnabled().catch(() => false),
+    // 자료 연결 상태 중 이 화면이 내용을 안 싣는 원천(클래스노트 · 셔틀 · 오늘 수학)의 연결 여부.
+    settle("explore.student.coverage", loadCoverageExtras(user.tenantId, id)),
+    // 약속·인계(student-care) — 약속 관리 화면과 같은 문(강사 = 배정된 약속만). 표가 없으면 unavailable(SQL 미적용).
+    getStudentCareForExplore(id).catch(() => ({ state: "error" as const, commitments: [], canManage: false, canContribute: false, careHref: `/students/${id}/care`, intake: null })),
   ]);
   if (!student) {
     if ((await accessLevelTenant(user.systemRole, "students")) === "scoped") {
@@ -76,7 +88,7 @@ export async function loadStudentCenter(id: string): Promise<ExploreLoad> {
   }
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const base = `/students/${id}`;
-  const [dClasses, dAttendance, dGrades, dProgress, dConsult, dMemos, dBilling, dTimeline] = SECTOR_DEFS.student;
+  const [dClasses, dAttendance, dGrades, dProgress, dConsult, dMemos, dBilling, dTimeline, dCare] = SECTOR_DEFS.student;
 
   const sectors: ExploreSector[] = [
     ...subjectSectors(dClasses, enrollments, today, subjects, base, classDetails.ok ? classDetails.value : []),
@@ -227,28 +239,62 @@ export async function loadStudentCenter(id: string): Promise<ExploreLoad> {
         note: events.length > 8 ? `전체 ${events.length}건 중 최근 8건` : null,
       });
     })(),
+    // 약속·할 일(원장 2026-11-05 시안) — 입학 요구 · 약속·인계 · 신규생 90일 점검. 패널은 `care` 재료로 블록 셋을 그린다.
+    makeSector(dCare, {
+      summary: careSummary(careChecks, care.state === "ready" ? care.commitments.filter((c) => c.state === "open").length : null),
+      // 조각 상태 = 둘 중 하나라도 읽었으면 ready(나머지는 패널 안에서 까닭별 문장). 둘 다 실패·권한 밖일 때만 그 상태.
+      state: careChecks.state === "ready" || care.state === "ready" ? "ready" : careChecks.state === "error" && care.state === "error" ? "error" : careChecks.state === "denied" && care.state === "denied" ? "denied" : "empty",
+      care: { studentId: id, checks: careChecks, commitments: care },
+      links: careChecks.state === "denied" || careChecks.state === "off" ? [] : [{ href: "/newcomers", label: "신규생 관리 열기" }],
+    }),
   ];
 
   const status = studentStatusMeta(student.status);
-  // 왼쪽 열 — 고정 사실 + AI 흐름 분석(저장된 결과만 · 권한 판정은 위).
-  const flow: NonNullable<ExploreAside["flow"]> = !flowAllowed
-    ? { state: "denied", items: [], canRefresh: false }
-    : !flowRows || !flowRows.ok
-      ? { state: "error", items: [], canRefresh: false }
-      : { state: "ready", items: FLOW_KINDS.map((k) => toFlowView(k, flowRows.value[k])), canRefresh: consultLevel === "full" };
-  const currentClasses = enrollments.ok
-    ? enrollments.value.filter((e) => ["active", "leaving"].includes(enrollmentPhaseOn({ startDate: e.startDate, endDate: e.endDate, isTransferred: e.isTransferred }, today)))
-    : [];
-  const aside: ExploreAside = {
-    facts: [
-      { label: "학교·학년", value: schoolGradeLabel(student.school, student.grade) || "—" },
-      { label: "등록일", value: student.enrolledAt ?? "—" },
-      { label: "담당 강사", value: [...new Set(currentClasses.map((e) => e.teacherName).filter((n): n is string => !!n))].join(" · ") || "—" },
-      { label: "수강 과목", value: [...new Set(currentClasses.map((e) => subjects.labelOf(e.subject)))].join(" · ") || "—" },
-      ...(student.parentName ? [{ label: "학부모", value: student.parentName }] : []),
-    ],
-    flow,
-  };
+  // 오른쪽 아래 '분석·판단' — AI 흐름 분석(저장된 결과만 · 권한 판정은 위).
+  const analysis = buildStudentAnalysis({
+    allowed: flowAllowed,
+    canRefresh: consultLevel === "full",
+    rows: !flowRows ? null : flowRows.ok ? { ok: true, value: Object.fromEntries(FLOW_KINDS.map((k) => [k, toFlowView(k, flowRows.value[k])])) } : { ok: false },
+  });
+  // 자료 연결 상태(원장 2026-11-05 시안) — 이 화면이 읽은 원천은 그 조각 상태로, 내용을 안 싣는 원천은 연결 여부로(꺼진 기능·해당 없는 원천은 줄째 뺀다).
+  const byKey = (k: string) => sectors.find((s) => s.key === k);
+  const classSector = sectors.find((s) => s.key.startsWith("subject:") || s.key === "classes");
+  const coverage = [
+    { key: "classes", label: "수업·출결", state: classSector?.state === "error" || byKey("attendance")?.state === "error" ? ("failed" as const) : ("connected" as const) },
+    { key: "grades", label: "성적", state: coverageOfSector(byKey("grades")) },
+    { key: "progress", label: "수업보고서·진도", state: coverageOfSector(byKey("progress")) },
+    { key: "consultations", label: "상담", state: coverageOfSector(byKey("consultations")) },
+    { key: "memos", label: "특이사항", state: coverageOfSector(byKey("memos")) },
+    { key: "billing", label: "수납", state: coverageOfSector(byKey("billing")) },
+    { key: "timeline", label: "타임라인", state: coverageOfSector(byKey("timeline")) },
+    {
+      key: "care",
+      label: "약속·인계",
+      state: care.state === "ready" ? ("connected" as const) : care.state === "denied" ? ("restricted" as const) : care.state === "unavailable" ? ("pending" as const) : ("failed" as const),
+    },
+    ...(careChecks.state === "off" ? [] : [{
+      key: "checks",
+      label: "90일 점검",
+      state: careChecks.state === "denied" ? ("restricted" as const) : careChecks.state === "error" ? ("failed" as const) : careChecks.state === "unavailable" ? ("pending" as const) : ("connected" as const),
+    }]),
+    ...(coverageExtras.ok ? coverageExtras.value : [{ key: "extras", label: "클래스노트·셔틀", state: "failed" as const }]),
+  ];
+  const aside = buildStudentAside({
+    student,
+    today,
+    base,
+    reportsTotal: reports.ok ? { ok: true, value: reports.value.total } : { ok: false },
+    consultCount: consultations.ok ? { ok: true, value: consultations.value.length } : { ok: false },
+    memoCount: memos.ok ? { ok: true, value: memos.value.length } : { ok: false },
+    contribution: hasContribution,
+    coverage,
+  });
+  // 아무 조각도 안 골랐을 때의 패널 = '수업'(과목마다 묶음 · 지금 수강만 — 원장 2026-11-05 시안 *"우측 상단은 수업이라 하고 그 안에 수강중인 반명"*).
+  const subjectSecs = sectors.filter((s) => s.key.startsWith("subject:"));
+  const panelDefault: ExploreSector | undefined =
+    subjectSecs.length > 0
+      ? { key: "classes", label: dClasses.label, icon: dClasses.icon, tone: dClasses.tone, summary: "", state: "ready", groups: subjectSecs.map((s) => ({ label: s.label, targets: s.targets ?? [] })), links: [{ href: `${base}?tab=classes`, label: "수업 탭 열기" }] }
+      : undefined;
   return {
     state: "ready",
     model: {
@@ -267,6 +313,8 @@ export async function loadStudentCenter(id: string): Promise<ExploreLoad> {
       defaultSector: sectors[0]?.key ?? DEFAULT_SECTOR.student,
       asOf: today,
       aside,
+      analysis,
+      panelDefault,
     },
   };
 }
@@ -316,11 +364,19 @@ function subjectSectors(
   const current = enrollments.value.filter((e) => ["active", "leaving"].includes(phaseOf(e)));
   const upcoming = enrollments.value.filter((e) => phaseOf(e) === "upcoming");
   const past = enrollments.value.filter((e) => phaseOf(e) === "ended").slice(0, 8);
-  const toTarget = (e: StudentEnrollment, meta: string): ExploreTarget => ({
+  /** 반의 요일·교시 한 줄 — 수업 탭과 같은 재료. */
+  const scheduleOf = (e: StudentEnrollment) => {
+    const d = details.find((x) => x.enrollmentId === e.id);
+    return d && d.schedule.length > 0 ? d.schedule.map((g) => `${g.days.join("·")} ${g.label}`).join(" / ") : null;
+  };
+  // 지금 수강 = "담임 박지훈 · 월·수·금 16:20~17:20"(원장 2026-11-05 시안 — 과목은 묶음 머리에만) · 예정·지난 = 과목 · 강사.
+  const toTarget = (e: StudentEnrollment, meta: string | null, current = false): ExploreTarget => ({
     kind: "class",
     id: e.classId,
     label: e.className,
-    detail: [subjects.labelOf(e.subject), e.teacherName].filter(Boolean).join(" · ") || null,
+    detail: current
+      ? [e.teacherName ? `담임 ${e.teacherName}` : null, scheduleOf(e)].filter(Boolean).join(" · ") || null
+      : [subjects.labelOf(e.subject), e.teacherName].filter(Boolean).join(" · ") || null,
     meta,
     badge: e.onHold ? { label: "휴원", color: "amber" } : null,
   });
@@ -353,7 +409,7 @@ function subjectSectors(
   return [...bySubject.entries()]
     .sort((a, b) => (order.get(a[0]) ?? 99) - (order.get(b[0]) ?? 99))
     .map(([subject, classes]) => {
-      const targets = classes.map((e) => toTarget(e, e.onHold ? "휴원 중" : "수강 중"));
+      const targets = classes.map((e) => toTarget(e, null, true));
       return {
         key: subjectSectorKey(subject),
         label: subjects.labelOf(subject),
@@ -366,7 +422,8 @@ function subjectSectors(
         parts: classes.map((e, i) => ({ key: e.classId, label: e.className, summary: e.onHold ? "휴원 중" : "", target: targets[i], rows: rowsOf(e) })),
         groups: groupsFor(subject),
         links,
-        note: `${subjects.labelOf(subject)} 수강 중 ${classes.length}개`,
+        // "수강 중 N개" 안내줄은 뺐다(원장 2026-11-05 — 개수는 머리 알약 "총 N개" 한 곳).
+        note: null,
       } satisfies ExploreSector;
     });
 }
