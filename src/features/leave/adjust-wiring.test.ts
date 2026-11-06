@@ -67,7 +67,9 @@ describe("연차 조정 자격", () => {
     // 대신 직원관리 목록이 같은 함수로 버튼을 낸다.
     const staffPage = read("src/app/(shell)/staff/page.tsx");
     expect(staffPage).toContain('from "@/features/leave/access"');
-    expect(staffPage).toContain("canAdjustLeave(user, isSuperAdmin,");
+    // '다른 강사 뷰'면 버튼도 그 직원으로(연차 관리 화면 · 저장 액션과 같은 사람 — 2026-11-05 적대 재리뷰).
+    expect(staffPage).toContain("const viewer = (await getCurrentUser({ teacherView: true })) ?? user;");
+    expect(staffPage).toContain("canAdjustLeave(viewer, isSuperAdmin,");
     expect(staffPage).toContain('href="/staff/annual-leave"');
   });
 });
@@ -91,6 +93,9 @@ describe("게이트 배선", () => {
     expect(flat).toContain("if (!canOpenStaff || !canAdjustLeave(user, isSuperAdmin,");
     // 🔴 직원관리 과목 범위 — 표(조회)와 추가·삭제(쓰기) 세 곳이 같은 판정을 지난다.
     expect(page).toContain("getViewerStaffScope(user)");
+    // 화면의 user = 강사뷰 대상(저장 액션 requireAdjuster와 같은 사람) · 읽기 강사뷰는 조정 단추를 그리지 않는다.
+    expect(page).toContain("const user = (await getCurrentUser({ teacherView: true })) ?? signedIn;");
+    expect(page).toContain("readOnly={readOnly}");
     expect(flat).toContain("if (!(await canSeeStaffMember(user, userId))) return { error: STAFF_SCOPE_DENIED_MSG };");
     expect(flat).toContain("if (!(await canSeeStaffMember(user, targetId))) return { error: STAFF_SCOPE_DENIED_MSG };");
     // 쓰기 두 갈래(추가·삭제)가 각각 게이트를 지난다 — 한쪽만 막으면 POST로 우회된다.

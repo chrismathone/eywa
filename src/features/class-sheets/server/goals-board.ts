@@ -29,6 +29,7 @@ import {
 import { readEcsGoalsRole, readEcsGoalsView } from "../view-prefs";
 import { freshRawUiPrefs } from "@/lib/filter-reset/server";
 import { ecsVisibleClassFilter } from "./access";
+import { loadViewerUiPrefs } from "./viewer-prefs";
 import type { MonthSlot } from "../lib/month-assemble";
 
 /**
@@ -104,7 +105,8 @@ export async function getGoalsBoard(dateParam?: string | null): Promise<GoalsBoa
       .eq("is_active", true)
       .or(`closed_at.is.null,closed_at.gte.${weekMonday}`)
       .order("class_name"),
-    admin.from("users").select("ui_prefs").eq("id", user.id).eq("tenant_id", user.tenantId).maybeSingle(),
+    // 역할·보기 토글은 보는 사람(실제 계정) 것 — 쓰기(goals-board-actions → patchMyUiPrefs)와 같은 행(viewer-prefs.ts).
+    loadViewerUiPrefs(),
     ecsVisibleClassFilter(weekMonday),
   ]);
   if (classesRes.error) return { ok: false, error: `반 목록을 불러오지 못했습니다: ${classesRes.error.message}` };

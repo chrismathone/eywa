@@ -330,7 +330,7 @@ describe("지점 보기 — 화면과 권한", () => {
   });
 
   it("보기 중에는 운영 계정만 통과하는 문을 열지 않는다(그 지점 원장과 같은 화면)", () => {
-    const sa = /export const isCurrentUserSuperAdmin[\s\S]*?\n}\);/.exec(read("src/lib/auth/super-admin.ts"))?.[0] ?? "";
+    const sa = /export const isSignedInSuperAdmin[\s\S]*?\n}\);/.exec(read("src/lib/auth/super-admin.ts"))?.[0] ?? "";
     expect(sa).toContain("if (user.tenantView) return false;");
   });
 
@@ -348,7 +348,7 @@ describe("지점 보기 — 화면과 권한", () => {
     // 감시는 보는 중이거나 보기를 열 수 있는 사람의 화면에만 놓인다.
     expect(layout).toContain("const tenantViewSync = user.tenantView || canOpenTenantView");
     // 🔴 그 판정은 설정 조회와 **나란히** 묻는다 — 따로 먼저 기다리면 모든 사용자의 창 첫 페인트 앞에 조회 하나가 줄을 선다(B4).
-    expect(layout).toMatch(/const \[settings, showMakeupSettings, showEvaluationSettings, canOpenTenantView, laboratoryMenus\] = await Promise\.all\(\[\s+getTenantSettings\(\),\s+isLaboratoryMenuAvailable\(user\.tenantId, "makeups"\),[\s\S]*?isLaboratoryMenuAvailable\(user\.tenantId, "class_review"\),\s+user\.tenantView \? false : isCurrentUserSuperAdmin\(\),\s+getLaboratoryMenus\(\),\s+\]\);/);
+    expect(layout).toMatch(/const \[settings, showMakeupSettings, showEvaluationSettings, canOpenTenantView, laboratoryMenus\] = await Promise\.all\(\[\s+getTenantSettings\(\),\s+isLaboratoryMenuAvailable\(user\.tenantId, "makeups"\),[\s\S]*?isLaboratoryMenuAvailable\(user\.tenantId, "class_review"\),\s+user\.tenantView \? false : isSignedInSuperAdmin\(\),\s+getLaboratoryMenus\(\),\s+\]\);/);
     expect(layout).not.toContain("(await isCurrentUserSuperAdmin())\n    ? <TenantViewSync");
   });
 
@@ -356,10 +356,12 @@ describe("지점 보기 — 화면과 권한", () => {
     const viewAs = read("src/lib/auth/view-as.ts");
     const access = /export const otherTeacherViewAccess[\s\S]*?\n}\);/.exec(viewAs)?.[0] ?? "";
     expect(access).toContain('if (user.tenantView) return "none";');
-    expect(access.indexOf('if (user.tenantView) return "none";')).toBeLessThan(access.indexOf("isCurrentUserSuperAdmin()"));
-    const target = /export const viewAsTeacher[\s\S]*?\n}\);/.exec(viewAs)?.[0] ?? "";
-    expect(target).toContain("if (user.tenantView) return null;");
-    expect(target.indexOf("if (user.tenantView) return null;")).toBeLessThan(target.indexOf("await cookies()"));
+    expect(access.indexOf('if (user.tenantView) return "none";')).toBeLessThan(access.indexOf("isSignedInSuperAdmin()"));
+    // 매 요청 판정의 실체는 resolveViewAs(viewAsTeacher는 그 대상만 돌려준다 — 대상 확인 실패를 따로 들고 있어서, 2026-11-05).
+    expect(viewAs).toContain("export const viewAsTeacher = cache(async (): Promise<ViewAsTeacher | null> => (await resolveViewAs()).target);");
+    const target = /const resolveViewAs[\s\S]*?\n}\);/.exec(viewAs)?.[0] ?? "";
+    expect(target).toContain("if (user.tenantView) return none;");
+    expect(target.indexOf("if (user.tenantView) return none;")).toBeLessThan(target.indexOf("await cookies()"));
     const mode = read("src/lib/auth/view-mode.ts");
     const scope = /export const effectiveTeacherId[\s\S]*?\n}\);/.exec(mode)?.[0] ?? "";
     expect(scope).toContain("if (user.tenantView) return null;");
@@ -489,7 +491,9 @@ describe("지점 보기 — Supabase를 거치지 않는 일(바깥으로 나가
     // 연결 앱 — 다른 앱에 로그인시키는 입구.
     expect(read("src/features/connected-apps/server/visible.ts")).toContain("if (user.tenantView) return [];");
     // 벨 — 받는 사람으로 걸러지는 표라 본인 지점 알림이 섞인다. 끝난 보기의 탭(띠가 남아 있을 수 있다)에도 비운다.
-    expect(body("src/features/notifications/server/queries.ts", "getMyNotifications")).toContain("if (user.tenantView || (await isTenantViewWriteBlocked())) return { unread: 0, items: [] };");
+    // 받은함 단일 소스(inbox.ts)가 보기를 거르고, 목록 · 쓰기 액션은 그 받은함이 없으면 비운다(강사뷰 받은함 — 2026-11-05).
+    expect(read("src/features/notifications/server/inbox.ts")).toContain("if (user.tenantView || (await isTenantViewWriteBlocked())) return null;");
+    expect(body("src/features/notifications/server/queries.ts", "getMyNotifications")).toContain("const inbox = await notificationInbox();\n  if (!inbox) return { unread: 0, items: [] };");
     expect(read("src/app/api/usage/route.ts")).toContain("if (user.tenantView || (await isTenantViewWriteBlocked())) return empty(204);");
   });
 

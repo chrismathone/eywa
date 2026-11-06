@@ -23,7 +23,7 @@ vi.mock("@/features/owner/server/queries", () => ({
 vi.mock("@/lib/auth/current-user", () => ({
   getCurrentUser: async () => ({ id: "u-1", tenantId: "t-1", systemRole: g.role }),
 }));
-vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => g.superAdmin }));
+vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => g.superAdmin, isSignedInSuperAdmin: async () => g.superAdmin }));
 // 실물과 같은 관계로 바꿔 끼운다 — 열람 전용 판정은 '보는 대상 강사'에서 나온다(`isReadonlyTeacherView` = 대상의 access가 readonly).
 // 🔑 매트릭스(`getUserPermMatrix`)가 대상 강사를 직접 묻기 때문에(2026-10-07 — 강사 뷰는 그 강사의 권한을 따른다) 둘 다 있어야 한다.
 vi.mock("@/lib/auth/view-as", () => ({

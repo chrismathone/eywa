@@ -1163,7 +1163,8 @@ async function requireDelegationWrite(
   supabase: Awaited<ReturnType<typeof createClient>>,
   classId: string,
 ): Promise<DelegationGate> {
-  const user = await getCurrentUser();
+  // 담당 판정·기록 명의(created_by·revoked_by·알림 actor)는 화면 주인 — 강사뷰면 검증된 대상 강사(class-scope.ts 머리 주석).
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const lvl = await accessLevelTenant(user.systemRole, "classes");
   if (lvl !== "full" && lvl !== "scoped") return { ok: false, error: "반 관리 권한이 없습니다" };

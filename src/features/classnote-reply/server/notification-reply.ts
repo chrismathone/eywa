@@ -1,11 +1,10 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { commentNotificationAmbiguous, isParentMessageNotification, pickMessageForNotification, postIdFromClassnoteLink } from "../notification-match";
 import type { ReplyContext } from "../reply-types";
 import { loadMessagesByPosts } from "./reply-data";
-import { replyGate } from "./reply-gate";
+import { replyGate, replyNotificationScope } from "./reply-gate";
 import { getParentReplyContext } from "./reply-actions";
 import { archivedNotificationContext } from "./archived-notification";
 
@@ -14,9 +13,10 @@ export async function getNotificationReplyContext(notificationId: string): Promi
   const g = await replyGate();
   if (!g.ok) return g;
   try {
-    const db = await createClient();
-    const { data: n, error } = await db.from("notifications").select("type, link, body, created_at")
-      .eq("tenant_id", g.user.tenantId).eq("recipient_id", g.user.id).eq("id", notificationId).maybeSingle();
+    // 내 알림만 — 평소엔 세션(RLS), '다른 강사 뷰'면 대상 직원의 알림까지(지점·받는 사람 명시, replyNotificationScope).
+    const scope = await replyNotificationScope(g.user);
+    const { data: n, error } = await scope.db.from("notifications").select("type, link, body, created_at")
+      .eq("tenant_id", g.user.tenantId).in("recipient_id", scope.recipients).eq("id", notificationId).maybeSingle();
     if (error || !n || !isParentMessageNotification(n.type)) return { ok: false, error: "알림을 찾지 못했습니다" };
     const postId = postIdFromClassnoteLink(n.link);
     if (!postId) return { ok: false, error: "학부모 글 원문을 찾지 못했습니다" };

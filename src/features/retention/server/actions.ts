@@ -8,6 +8,10 @@ import { logAction } from "@/features/audit/server/log";
 
 export type LogActionState = { ok?: boolean; error?: string } | undefined;
 
+// 🔑 행위자 = `getCurrentUser({ teacherView: true })` — '다른 강사 뷰'면 대상 직원 X(원장 2026-11-05 강사뷰 전수).
+//    조치 기록·캠페인의 담당(counselor_id)이 X여야 X의 상담 목록·퇴원보고서 상담 연결 후보(counselor_id 축)에 뜬다.
+//    감사로그 행위자는 logAction이 실제 계정으로 남긴다. 두 표의 RLS는 지점 격리뿐이라 세션 클라이언트로 X 명의 저장이 된다.
+
 /**
  * 이탈 방어 조치 기록 → aywa 학생상담(student_consultations)에 적재.
  * 부원장의 "조치 타임라인"을 별도 테이블 없이 aywa 상담 기록과 한 몸으로 만든다.
@@ -17,7 +21,7 @@ export async function logRetentionAction(
   _prev: LogActionState,
   formData: FormData,
 ): Promise<LogActionState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "retention"))) return { error: "이탈 방어 권한이 없습니다" };
 
@@ -69,7 +73,7 @@ const CAMPAIGN_STATUSES = ["pending", "contacted", "enrolled", "declined"];
 
 /** 후보 학생을 캠페인에 추가(status=pending). 학생당 1트랙(unique 제약). */
 export async function campaignAdd(studentId: string): Promise<CampaignResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "retention"))) return { ok: false, error: "이탈 방어 권한이 없습니다" };
   if (!studentId) return { ok: false, error: "학생 ID가 누락되었습니다" };
@@ -94,7 +98,7 @@ export async function campaignAdd(studentId: string): Promise<CampaignResult> {
 
 /** 캠페인 대상 상태 전환(대상→연락함→재등록|이탈). contacted/decided 타임스탬프 기록. */
 export async function campaignSetStatus(targetId: string, status: string): Promise<CampaignResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "retention"))) return { ok: false, error: "이탈 방어 권한이 없습니다" };
   if (!targetId || !CAMPAIGN_STATUSES.includes(status)) return { ok: false, error: "잘못된 요청입니다" };
@@ -122,7 +126,7 @@ export async function campaignSetStatus(targetId: string, status: string): Promi
 
 /** 캠페인에서 대상 제거. */
 export async function campaignRemove(targetId: string): Promise<CampaignResult> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "retention"))) return { ok: false, error: "이탈 방어 권한이 없습니다" };
   if (!targetId) return { ok: false, error: "대상 ID가 누락되었습니다" };

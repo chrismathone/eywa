@@ -1,7 +1,5 @@
 import "server-only";
-import { createClient } from "@/lib/supabase/server";
-import { getCurrentUser } from "@/lib/auth/current-user";
-import { isTenantViewWriteBlocked } from "@/lib/auth/tenant-view";
+import { notificationInbox } from "./inbox";
 import { NOTIFICATION_LIST_LIMIT, NOTIFICATION_LIST_MAX, type NotificationItem } from "../types";
 import { presentNotification } from "../presentation";
 import { myTaskSummary, notificationTaskBadges } from "@/features/staff-tasks/server/bell";
@@ -28,20 +26,26 @@ function withDigest(rows: Row[], digest: Row, cap: number): Row[] {
 }
 
 /**
- * 내 알림 목록(최신순) + 안 읽은 수 — RLS(recipient_id=auth.uid())로 본인 것만.
+ * 내 알림 목록(최신순) + 안 읽은 수 — 받은함(`notificationInbox`)의 받는 사람 것만(평소 = 본인 · RLS도 함께, '다른 강사 뷰' = 그 강사).
  * unread 배지는 **비보관만** 센다(보관=치웠다는 의사표시인데 배지가 계속 울리면 보관이 무의미).
  */
+/**
+ * 벨이 받는 목록. `viewAs` = '다른 강사 뷰'로 그 강사의 받은함을 보는 중(벨은 OS 알림 · 중앙 팝업을 띄우지 않는다),
+ * `readOnly` = 읽음 · 보관 · 삭제를 할 수 없다('읽기' 강사뷰 — 벨이 그 단추를 감춘다). 평소에는 둘 다 없다(2026-11-05 강사뷰 적대 리뷰).
+ */
+export type NotificationList = { unread: number; items: NotificationItem[]; tasks?: StaffTaskSummary; viewAs?: true; readOnly?: true };
+
 export async function getMyNotifications(
   view: NotificationView = "active",
   limit: number = NOTIFICATION_LIST_LIMIT,
-): Promise<{ unread: number; items: NotificationItem[]; tasks?: StaffTaskSummary }> {
-  const user = await getCurrentUser();
-  if (!user) return { unread: 0, items: [] };
+): Promise<NotificationList> {
   // 운영 콘솔의 '지점 보기'(읽기 전용) 중에는 벨을 비운다 — 알림은 지점이 아니라 **받는 사람**으로 걸러지는 표라
-  // (`recipient_id = auth.uid()`), 그대로 읽으면 운영자 본인이 자기 지점에서 받은 알림이 보는 지점 화면에 뜬다.
+  // 그대로 읽으면 운영자 본인이 자기 지점에서 받은 알림이 보는 지점 화면에 뜬다(inbox.ts가 null).
   // 보기 쿠키가 남아 있는데 보기가 아닌 요청(끝났다 · 확인하지 못했다)도 같다 — 그 브라우저에는 보기 띠를 단 탭이 남아 있을 수 있다.
-  if (user.tenantView || (await isTenantViewWriteBlocked())) return { unread: 0, items: [] };
-  const supabase = await createClient();
+  const inbox = await notificationInbox();
+  if (!inbox) return { unread: 0, items: [] };
+  // 받는 사람 · 지점을 **늘 명시**한다 — '다른 강사 뷰'는 관리 연결(RLS 없음)로 대상 강사 알림을 읽는다(inbox.ts).
+  const mine = () => inbox.db.from("notifications");
   // 내 할 일 수(0377a)는 목록과 상관없다 — 먼저 띄워 두고 함께 기다린다(B4).
   const summaryPromise = myTaskSummary();
   // 기한 초과 업무 요약은 **가장 최근 한 장만** 받은함 · 배지에 둔다(원장 2026-11-02 *"너무 알림이 정신없음"* — 숫자만 다른 같은 카드가
@@ -55,9 +59,10 @@ export async function getMyNotifications(
   //    서버에서 나눠 읽어야 '더 보기'(상한을 늘려 다시 읽음)를 해도 순서가 흔들리지 않는다.
   const cap = clampNotificationLimit(limit);
   const page = (read: boolean, size: number) => {
-    const base = supabase
-      .from("notifications")
+    const base = mine()
       .select(COLS)
+      .eq("tenant_id", inbox.tenantId)
+      .eq("recipient_id", inbox.recipientId)
       .neq("type", "daily_briefing") // 폐지된 브리핑 알림은 목록 상한을 적용하기 전에 제외한다.
       .order("created_at", { ascending: false })
       .limit(size);
@@ -74,13 +79,14 @@ export async function getMyNotifications(
     return readPage.error ? { ...unreadPage, data: first } : { ...readPage, data: [...first, ...(readPage.data ?? [])] };
   });
   const countPromise = (() => {
-    const base = supabase
-      .from("notifications")
+    const base = mine()
       .select("*", { count: "exact", head: true })
+      .eq("tenant_id", inbox.tenantId)
+      .eq("recipient_id", inbox.recipientId)
       .neq("type", "daily_briefing"); // 보이지 않는 알림 때문에 배지가 남지 않도록 같은 기준 사용.
     return base.neq("type", DIGEST_TYPE).is("read_at", null).is("archived_at", null);
   })();
-  const digestPromise = supabase.from("notifications").select(COLS).eq("type", DIGEST_TYPE).is("archived_at", null)
+  const digestPromise = mine().select(COLS).eq("tenant_id", inbox.tenantId).eq("recipient_id", inbox.recipientId).eq("type", DIGEST_TYPE).is("archived_at", null)
     .order("created_at", { ascending: false }).limit(1).maybeSingle();
 
   // 목록 · 안읽음 카운트 · 최근 요약은 서로 독립 → 병렬(B4). 카운트는 head:true로 행 미수신.
@@ -107,5 +113,7 @@ export async function getMyNotifications(
       return presentNotification(task ? { ...i, task } : i);
     }),
     ...(summary ? { tasks: summary } : {}),
+    ...(inbox.viewAs ? { viewAs: true as const } : {}),
+    ...(!inbox.writable ? { readOnly: true as const } : {}),
   };
 }

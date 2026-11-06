@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { viewAsTeacher } from "@/lib/auth/view-as";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { humanizeDbError } from "@/lib/supabase/db-error";
 import { kstToday } from "@/lib/date-kst";
@@ -132,8 +133,13 @@ async function requireApprovalWriter() {
 async function requireSignedIn() {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" as const };
+  // '다른 강사 뷰' 중에는 결재 · 회수를 하지 않는다 — 결재는 본인 서명이다(메뉴도 닫혀 있다 — perm-matrix.ts TEACHER_VIEW_CLOSED_MENUS).
+  // 이 문은 메뉴를 보지 않으므로 여기서 따로 막는다(벨 링크 · 직접 호출).
+  if (await viewAsTeacher()) return { error: TEACHER_VIEW_APPROVAL_ERROR };
   return { user };
 }
+
+const TEACHER_VIEW_APPROVAL_ERROR = "강사뷰에서는 전자결재를 처리할 수 없습니다. 강사뷰를 끝내고 본인 화면에서 처리해 주세요." as const;
 
 /** 결재선·참조 후보 = **활성 직원 전원**(학생 제외) — 서버 검증용 id 집합(폼 조작 방어). */
 async function activeStaffIds(tenantId: string): Promise<string[]> {

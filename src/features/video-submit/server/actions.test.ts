@@ -3,8 +3,10 @@ import { C, S, T } from "./test-fixture.test-util";
 
 const m = vi.hoisted(() => ({
   access: vi.fn(), write: vi.fn(), student: vi.fn(), enrollments: vi.fn(), available: vi.fn(), revoke: vi.fn(), audit: vi.fn(),
+  actor: vi.fn(),
 }));
 vi.mock("@/lib/auth/require-access", () => ({ requireAccess: m.access }));
+vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: m.actor }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: m.write }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 vi.mock("@/features/audit/server/log", () => ({ logAction: m.audit }));
@@ -19,6 +21,8 @@ import { revokeVideoSubmitLinks } from "./actions";
 beforeEach(() => {
   vi.clearAllMocks();
   m.access.mockResolvedValue({ id: "user-1", tenantId: T, systemRole: "admin" });
+  // 강사뷰가 아니면 대상 = 실제 계정
+  m.actor.mockImplementation(async () => ({ id: "user-1", tenantId: T, systemRole: "admin" }));
   m.write.mockResolvedValue(true);
   m.student.mockResolvedValue({ id: S, name: "류태경" });
   m.enrollments.mockResolvedValue([{ classId: C, className: "LT4", endDate: null, isTransferred: false }]);
@@ -44,6 +48,12 @@ describe("학생 상세 — 이미 나간 제출 링크 끊기", () => {
     expect(await revokeVideoSubmitLinks(S, C)).toMatchObject({ ok: false });
     expect(await revokeVideoSubmitLinks("x", C)).toMatchObject({ ok: false });
     expect(m.revoke).not.toHaveBeenCalled();
+  });
+  it("🔴 강사뷰면 끊은 사람(revoked_by)은 대상 X — 감사로그는 실제 계정이 logAction으로 남긴다", async () => {
+    m.actor.mockImplementation(async (o?: { teacherView?: boolean }) =>
+      o?.teacherView ? { id: "teacher-x", tenantId: T, systemRole: "teacher" } : { id: "user-1", tenantId: T, systemRole: "admin" });
+    expect(await revokeVideoSubmitLinks(S, C)).toEqual({ ok: true, revoked: 2 });
+    expect(m.revoke).toHaveBeenCalledWith(expect.anything(), { tenantId: T, studentId: S, classId: C, userId: "teacher-x" });
   });
   it("🔴 원생목록 읽기 권한(쓰기 아님)이면 끊지 않는다 — requireAccess는 읽기도 통과시킨다(감사 2026-11-05)", async () => {
     m.write.mockResolvedValueOnce(false);

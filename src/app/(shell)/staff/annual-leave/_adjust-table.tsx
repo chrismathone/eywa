@@ -48,9 +48,14 @@ type Props = {
    * 🔴 조정 기능 전체를 잠그지 않는다 — 칸 하나가 없다고 되는 일까지 막으면 안 된다([[#95]]).
    */
   usedRangeReady: boolean;
+  /**
+   * 읽기 강사뷰(원장이 조정 담당 직원의 화면을 '읽기'로 연 경우) — 표는 보이고 '조정' 단추는 그리지 않는다(쓰기 단추는 그리지 않는다 —
+   * write-lock.ts 규칙). 저장 액션도 같은 판정으로 거절한다(readonlyTeacherViewError).
+   */
+  readOnly?: boolean;
 };
 
-export function AdjustTable({ rows, tableReady, usedRangeReady }: Props) {
+export function AdjustTable({ rows, tableReady, usedRangeReady, readOnly = false }: Props) {
   const [query, setQuery] = useState("");
   const [openFor, setOpenFor] = useState<string | null>(null);
 
@@ -142,7 +147,7 @@ export function AdjustTable({ rows, tableReady, usedRangeReady }: Props) {
                   </td>
                 )}
                 <td className="px-2.5 py-2 text-center">
-                  <button
+                  {readOnly ? null : <button
                     type="button"
                     disabled={!r.period || !tableReady}
                     onClick={() => setOpenFor(r.userId)}
@@ -156,7 +161,7 @@ export function AdjustTable({ rows, tableReady, usedRangeReady }: Props) {
                     }
                   >
                     조정
-                  </button>
+                  </button>}
                 </td>
               </tr>
             ))}

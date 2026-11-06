@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { BackLink } from "@/components/back-link";
 import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { isReadonlyTeacherView } from "@/lib/auth/view-as";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { canAdjustLeave } from "@/features/leave/access";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -25,8 +27,11 @@ export const metadata = { title: "연차 관리 — 에이와" };
  *    서버 액션도 범위 밖 직원의 조정을 거절한다.
  */
 export default async function AnnualLeavePage() {
-  const user = await requireAccess("staff");
-  const [settings, isSuperAdmin] = await Promise.all([getTenantSettings(), isCurrentUserSuperAdmin()]);
+  const signedIn = await requireAccess("staff");
+  // 🔴 '다른 강사 뷰'면 그 직원으로 판정한다(조정 지정 · 볼 수 있는 직원 범위) — 저장 액션(requireAdjuster)과 같은 사람.
+  //    requireAccess는 실제 계정을 돌려줘, 화면은 원장(A)으로 열리고 저장은 대상(X)으로 거절되거나 그 반대가 됐다(2026-11-05 적대 재리뷰).
+  const user = (await getCurrentUser({ teacherView: true })) ?? signedIn;
+  const [settings, isSuperAdmin, readOnly] = await Promise.all([getTenantSettings(), isCurrentUserSuperAdmin(), isReadonlyTeacherView()]);
   if (!canAdjustLeave(user, isSuperAdmin, { adjusterIds: settings.permissions.specialAccess.leaveAdjusterIds })) redirect("/staff");
 
   const scope = await getViewerStaffScope(user);
@@ -94,6 +99,7 @@ export default async function AnnualLeavePage() {
         rows={overview.rows}
         tableReady={overview.tableReady}
         usedRangeReady={overview.usedRangeReady}
+        readOnly={readOnly}
       />
     </div>
   );

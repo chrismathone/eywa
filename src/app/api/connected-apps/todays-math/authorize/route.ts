@@ -3,6 +3,7 @@ import { z } from "zod";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getMyConnectedApps } from "@/features/connected-apps/server/visible";
+import { viewAsTeacher } from "@/lib/auth/view-as";
 import { sha256, uuidSchema } from "@/features/integrations/todays-math/sync-contract";
 import { NO_STORE, SyncHttpError, parseSyncBody, sourceControl, syncBindings, syncErrorResponse, syncRpc } from "@/features/integrations/todays-math/sync-server";
 
@@ -23,6 +24,9 @@ export async function GET(request: Request) {
       login.searchParams.set("next", url.pathname + url.search);
       return NextResponse.redirect(login, { headers: NO_STORE });
     }
+    // '다른 강사 뷰' 중이면 코드를 내지 않는다 — 출발 라우트(launch)와 같은 거절. 대상 쪽 v2 시작 주소를 직접 열면
+    // 출발 라우트를 건너뛰고 여기로 곧장 온다(적대 재리뷰 2026-11-05). 표의 신원은 실제 계정인데 화면은 남의 것이다.
+    if (await viewAsTeacher()) return NextResponse.redirect(new URL("/home", request.url), { headers: NO_STORE });
     if (user.tenantId !== config.tenantId || user.systemRole === "student") throw new SyncHttpError(403, "account_not_eligible");
     const control = await sourceControl(config, user.id);
     if (!control.healthy || !control.enabled || control.mode !== "active") throw new SyncHttpError(403, "account_not_eligible");

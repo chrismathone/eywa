@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { logAction } from "@/features/audit/server/log";
 import { SHUTTLE_PARENTS_PATH } from "../parent-access";
 import { SHUTTLE_PARENT_RIDES_PATH } from "../../faces";
@@ -18,6 +19,9 @@ export async function createParentAccount(
   _previous: ParentActionState,
   formData: FormData,
 ): Promise<ParentActionState> {
+  // 🔴 읽기 강사뷰(·지점 보기)는 맨 앞에서 거절한다 — 이 액션은 canWriteTenant를 지나지 않고, 로그인 계정을 만드는 외부 효과가 있다.
+  const readonly = await readonlyTeacherViewError();
+  if (readonly) return { error: readonly };
   // 원장·관리자만 — 화면 입구와 같은 판정(canManageParentAccountsRole)을 서버가 다시 본다(#77).
   const actor = await parentAccountsActor();
   if (!actor) return { error: "학부모 계정은 원장·관리자만 발급할 수 있습니다" };
@@ -111,6 +115,9 @@ function refreshParentScreens() {
  *    가리키는 일이 생겨도 직원 로그인이 지워지는 사고는 없게 — 그 경우 학부모 정보만 지우고 알린다.
  */
 export async function deleteParentAccount(parentAccountId: string): Promise<{ ok?: true; error?: string; notice?: string }> {
+  // 🔴 읽기 강사뷰(·지점 보기)는 맨 앞에서 거절한다 — 로그인 계정을 지우는 되돌릴 수 없는 일이다(발급과 같은 문).
+  const readonly = await readonlyTeacherViewError();
+  if (readonly) return { error: readonly };
   const actor = await parentAccountsActor();
   if (!actor) return { error: "학부모 계정은 원장·관리자만 삭제할 수 있습니다" };
   if (!parentAccountId) return { error: "삭제할 계정을 찾지 못했습니다" };

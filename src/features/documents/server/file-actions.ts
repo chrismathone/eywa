@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
 import { renamedFileName } from "../file-name";
 import { logDbError } from "@/lib/supabase/db-error";
+import { hideRestrictedDocuments } from "./restricted";
 
 /** 저장 객체는 그대로 두고 폴더 연결만 변경한다. 다른 화면의 이동·수정을 덮어쓰지 않는다. */
 export async function moveDocumentFile(id: string, targetCategory: string, expectedCategory: string) {
@@ -17,10 +18,13 @@ export async function moveDocumentFile(id: string, targetCategory: string, expec
       typeof expectedCategory !== "string" || !expectedCategory)
     return { error: "이동할 파일과 폴더를 선택해 주세요." };
 
-  const db = await createClient();
-  const { data: row, error } = await db.from("academy_documents")
+  const [db, hideRestricted] = await Promise.all([createClient(), hideRestrictedDocuments()]);
+  // 제한 문서는 행위자(강사뷰면 대상 X) 역할로 — 목록에서 못 보는 행을 id로 옮기지 못하게(restricted.ts).
+  let rowQuery = db.from("academy_documents")
     .select("title, category, updated_at").eq("id", id).eq("tenant_id", user.tenantId)
-    .eq("kind", "file").is("staff_user_id", null).maybeSingle();
+    .eq("kind", "file").is("staff_user_id", null);
+  if (hideRestricted) rowQuery = rowQuery.eq("restricted", false);
+  const { data: row, error } = await rowQuery.maybeSingle();
   if (error || !row) {
     logDbError(error, "documents.moveDocumentFile");
     return { error: "파일을 찾을 수 없거나 이동할 수 없습니다." };
@@ -55,9 +59,11 @@ export async function renameDocumentFile(id: string, baseName: string, expected:
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "documents"))) return { error: "파일 이름을 변경할 권한이 없습니다" };
-  const db = await createClient();
-  const { data: row, error } = await db.from("academy_documents")
-    .select("title, file_name, file_path, updated_at").eq("id", id).eq("tenant_id", user.tenantId).eq("kind", "file").is("staff_user_id", null).maybeSingle();
+  const [db, hideRestricted] = await Promise.all([createClient(), hideRestrictedDocuments()]);
+  let rowQuery = db.from("academy_documents")
+    .select("title, file_name, file_path, updated_at").eq("id", id).eq("tenant_id", user.tenantId).eq("kind", "file").is("staff_user_id", null);
+  if (hideRestricted) rowQuery = rowQuery.eq("restricted", false);
+  const { data: row, error } = await rowQuery.maybeSingle();
   if (error || !row) {
     logDbError(error, "documents.renameDocumentFile");
     return { error: "파일을 찾을 수 없거나 변경할 수 없습니다." };

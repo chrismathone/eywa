@@ -17,7 +17,7 @@ import { NotificationBell } from "@/features/notifications/components/notificati
 import { NotifyPermissionBanner } from "@/features/notifications/components/notify-permission-banner";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { isCurrentUserSuperAdmin, isSignedInSuperAdmin } from "@/lib/auth/super-admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { getActivePopups } from "@/features/notices/server/queries";
@@ -89,12 +89,14 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // getTenantSettings는 React cache라 아래 분기들이 같은 라운드트립을 공유(임베드 포함).
   // 운영 계정 판정(아래 감시용)도 **여기서 나란히** 묻는다 — 따로 먼저 기다리면 모든 사용자의 창(embed) 첫 페인트 앞에 조회 하나가
   // 줄을 선다(B4). 이 판정은 권한 매트릭스가 어차피 부르는 요청 캐시라 조회 수는 늘지 않는다.
+  // 운영 계정 판정은 **실제 계정**으로 묻는다(`isSignedInSuperAdmin`) — '다른 강사 뷰' 탭에서도 감시는 그대로 싣는다
+  // (강사뷰에서 꺼지는 것은 업무 판정의 운영 계정 우회뿐이다 — super-admin.ts).
   const [settings, showMakeupSettings, showEvaluationSettings, canOpenTenantView, laboratoryMenus] = await Promise.all([
     getTenantSettings(),
     isLaboratoryMenuAvailable(user.tenantId, "makeups"),
     // 강사평가 설정 면은 직원 평가(실험실 메뉴)가 열린 지점에서만 — 꺼진 지점에선 입구도 없다(설정 화면은 따로 막는다).
     isLaboratoryMenuAvailable(user.tenantId, "class_review"),
-    user.tenantView ? false : isCurrentUserSuperAdmin(),
+    user.tenantView ? false : isSignedInSuperAdmin(),
     getLaboratoryMenus(),
   ]);
   // 운영 콘솔의 '지점 보기'(읽기 전용) — 탭마다 "그려진 화면"과 "브라우저의 실제 상태"가 어긋났는지 지켜보는 감시
@@ -220,7 +222,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
   // 공지 팝업(셸 진입 시 창처럼 노출) — 임베드(iframe 창)엔 위에서 이미 return했으므로 최상위 프레임에서만
   // 1회 fetch(테넌트별 unstable_cache·역할 audience 필터). 대부분 0건이라 비용 거의 없음.
-  const popups = await getActivePopups(user.systemRole, user.tenantId, user.id);
+  // 팝업 대상(역할)은 '다른 강사 뷰'면 그 강사의 역할 — 그 강사가 보는 공지가 뜬다(원장 2026-11-05 *"실제 그 사람으로 완벽하게 전환"*).
+  // '다시 보지 않기'는 보는 사람 본인 계정 것 — 대신 닫아 준 공지가 그 강사 본인 화면에서 사라지면 안 된다(api/notice-popups와 같은 판정).
+  const popups = await getActivePopups(viewAs?.systemRole ?? user.systemRole, user.tenantId, user.id);
 
   const brand = settings.profile.logoText || "에이와";
   const academyLine =

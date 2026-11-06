@@ -1,5 +1,8 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { viewAsTeacher } from "@/lib/auth/view-as";
+import { expenseVisibleToActor } from "./expense-visibility";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { DEFAULT_CURRENCY, roundMoney } from "../currencies";
 
@@ -204,10 +207,17 @@ export async function getExpensesForMonth(period: string): Promise<ExpenseRow[]>
 // 강사 '지출결의서' 면 — 본인이 작성(created_by=본인)한 결의서 전건(최신순). 강사 스코프의 단일 소스.
 // tenant RLS로 테넌트 격리 + created_by eq로 본인 것만(사무실 결의서·타 강사 제출분은 안 보임). 최근 200건.
 export async function getMyExpenseRequests(userId: string): Promise<ExpenseRow[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("expenses")
-    .select(EXPENSE_COLS)
+  // 🔴 '다른 강사 뷰'면 userId = 대상 강사 X인데 DB의 auth.uid()는 실제 계정 A다 — A에게 지출 열람 권한이 없으면
+  //    RLS(본인 작성분만)가 X의 결의서를 0건으로 돌려준다(원장 2026-11-05 강사뷰 전수). 이 조회는 이미 created_by = X로
+  //    좁혀져 있으므로 강사뷰(대상 = 이 userId)일 때만 관리 클라이언트 + 지점 명시로 읽는다.
+  const viewAs = await viewAsTeacher();
+  const asTarget = viewAs !== null && viewAs.id === userId;
+  // 관리 클라이언트는 RLS를 건너뛰므로 X가 이 결의서들(전부 X 작성분)을 볼 수 있는지 같은 판정으로 다시 본다 — 상세·증빙 서명과 한 함수.
+  if (asTarget && !(await expenseVisibleToActor({ created_by: userId }, viewAs))) return [];
+  const supabase = asTarget ? createAdminClient() : await createClient();
+  let q = supabase.from("expenses").select(EXPENSE_COLS);
+  if (asTarget) q = q.eq("tenant_id", viewAs.tenantId);
+  const { data, error } = await q
     .eq("created_by", userId)
     .order("created_at", { ascending: false })
     .order("id")
@@ -218,14 +228,17 @@ export async function getMyExpenseRequests(userId: string): Promise<ExpenseRow[]
 }
 
 // 단건 — 지출결의서 상세(창). RLS가 tenant 격리하므로 id만으로 조회. 없으면 null(→ notFound).
+// 🔴 '다른 강사 뷰'면 목록과 같은 길 — 관리 클라이언트 + 지점 명시 + X 기준 열람 판정(expense-visibility.ts). A의 RLS로 읽으면
+//    A에게 지출 열람 권한이 없을 때 X의 목록에 뜬 결의서가 상세에서 404가 됐다(적대 재리뷰 2026-11-05).
 export async function getExpenseById(id: string): Promise<ExpenseRow | null> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("expenses")
-    .select(EXPENSE_COLS)
-    .eq("id", id)
-    .maybeSingle();
-  return data ? mapExpenseRow(data) : null;
+  const viewAs = await viewAsTeacher();
+  const supabase = viewAs ? createAdminClient() : await createClient();
+  let q = supabase.from("expenses").select(EXPENSE_COLS).eq("id", id);
+  if (viewAs) q = q.eq("tenant_id", viewAs.tenantId);
+  const { data } = await q.maybeSingle();
+  if (!data) return null;
+  if (viewAs && !(await expenseVisibleToActor(data, viewAs))) return null;
+  return mapExpenseRow(data);
 }
 
 export function summarizeExpenses(rows: ExpenseRow[], period: string): ExpenseSummary {

@@ -5,6 +5,8 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc }) }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: currentUser }));
 // 연결 앱 권한 판정(authorize만 쓴다 · 2026-11-05) — 기본은 '오늘 수학 링크가 서는 사람'.
 vi.mock("@/features/connected-apps/server/visible", () => ({ getMyConnectedApps: visibleApps }));
+// 인가 경로의 강사뷰 거절은 sync-authorize-fallback.test.ts가 잠근다 — 여기는 강사뷰가 아닌 경로만.
+vi.mock("@/lib/auth/view-as", () => ({ viewAsTeacher: async () => null }));
 import { POST as controlPost } from "@/app/api/integrations/todays-math/v2/control/route";
 import { POST as snapshotPost } from "@/app/api/integrations/todays-math/v2/snapshots/route";
 import { POST as tokenPost } from "@/app/api/integrations/todays-math/v2/token/route";

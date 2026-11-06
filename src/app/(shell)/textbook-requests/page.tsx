@@ -90,9 +90,11 @@ export default async function TextbookRequestsPage({
       academyName={settings.profile.name || NEUTRAL_ACADEMY_NAME}
       logoUrl={logoUrl}
       account={accountForTarget(settings.billing, "textbook")}
-      requesterName={user.displayName}
+      // '나'(요청 강사 이름 기본값 · 내 요청 판정)는 서버 액션과 같은 행위자 — '다른 강사 뷰'면 대상 강사 X
+      // (실제 계정 A로 두면 X 화면의 새 요청이 A 이름으로 나가고 X의 요청이 '남의 것'으로 잠긴다, 원장 2026-11-05).
+      requesterName={actor?.displayName ?? user.displayName}
       // 소유 판정 합집합(0174a) — 이름을 다르게 적어도 본인이 만든 요청은 본인 것.
-      viewerUserId={user.id}
+      viewerUserId={actor?.id ?? user.id}
       initialStudentIds={initialStudentIds}
       classnoteOn={classnoteModuleOn(settings)}
       canWrite={canWrite}

@@ -1,10 +1,9 @@
 import "server-only";
 import { stripTextbookPages } from "../textbook-carry";
-import { DEFAULT_DISPLAY_OPTIONS, readDisplayOptions, type DisplayOptions } from "../display-options";
+import { DEFAULT_DISPLAY_OPTIONS, type DisplayOptions } from "../display-options";
 import { lessonEndsByClass } from "../send-mark";
-import { readTrendOptOut } from "../trend-optout";
-import { readTemplatePrefs, type TemplatePrefs } from "../last-template";
-import { readVideoDueDefault } from "@/features/video-homework/due-pref";
+import { splitOnescreenPrefs } from "../pref-owner";
+import type { TemplatePrefs } from "../last-template";
 import type { VideoHomeworkDueMode } from "@/features/video-homework/due";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -54,7 +53,6 @@ import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/r
 import { carryProgress } from "../progress-status";
 import {
   DEFAULT_ONESCREEN_FONT_SIZE,
-  readOnescreenFontSize,
   type OnescreenFontSize,
 } from "../font-size";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
@@ -353,6 +351,19 @@ async function fetchMyMakeupReports(
 /** 맡은 보강 배정을 읽지 못했을 때 화면에 그대로 싣는 안내(원문·코드 없이). */
 const MAKEUP_UNREAD_NOTICE = "보강 배정을 확인하지 못했습니다. 새로고침해 다시 확인해 주세요.";
 
+/**
+ * **보는 사람**(실제 로그인 계정)의 `users.ui_prefs` — '다른 강사 뷰'에서 표시 취향(글씨 크기 · 표시 옵션 · 영상 마감 내 기본값)만 따로 읽는다.
+ * 🔴 그 값들의 저장은 실제 계정에 간다(글씨 크기 `setMyOnescreenFontSize` · 표시 옵션 · 영상 마감 기본값 `patchMyUiPrefs`). 읽기가 대상 강사의
+ *    행이면 저장한 값이 화면에 돌아오지 않는다(2026-11-05 강사뷰 신원 적대 리뷰 — ECS `viewer-prefs.ts`와 같은 결정).
+ * ⚠️ 반·보고서에 묶인 값(반별 마지막 템플릿 · 학습 추세 미발송 · 멘트 모드)은 여기서 읽지 않는다 — 화면 주인(대상 강사) 것이다.
+ */
+async function viewerUiPrefs(supabase: Awaited<ReturnType<typeof createClient>>): Promise<unknown> {
+  const me = await getCurrentUser();
+  if (!me) return null;
+  const { data } = await supabase.from("users").select("ui_prefs").eq("id", me.id).maybeSingle();
+  return (data as { ui_prefs?: unknown } | null)?.ui_prefs ?? null;
+}
+
 function emptyRoster(today: string, date: string, teacherName: string, config: RosterConfig = {}): TeacherRoster {
   return {
     today,
@@ -420,9 +431,10 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   //    + 학생 표시 순서(0116a, 강사×반 개인 설정) + 출결 쓰기 권한 — 서로 독립이라 병렬(B4).
   //    ⚠️ `classes.teacher_id`를 여기서 직접 비교하지 말 것 — 판정은 getTeachingClasses 단일 소스다
   //    (저장·발송·출결 게이트가 같은 함수를 쓴다. 갈라지면 "화면엔 뜨는데 저장하면 거절"이 난다).
-  const [teachingClasses, { data: meRow }, { data: orderRows }, canEditAttendance, logoSrc, holidayName] =
+  const [teachingClasses, { data: meRow }, { data: orderRows }, canEditAttendance, logoSrc, holidayName, viewerPrefs] =
     await Promise.all([
       getTeachingClasses(supabase, teacherId, targetDate),
+      // 멘트 모드 · 반별 템플릿 · 학습 추세 미발송은 화면 주인(대상 강사)의 반·보고서에 묶인 값 — 대상 행에서 읽는다.
       supabase.from("users").select("report_notice_mode, ui_prefs").eq("id", teacherId).single(),
       supabase.from("onescreen_student_order").select("class_id, student_ids").eq("teacher_id", teacherId),
       canWriteTenant(user.systemRole, "attendance"),
@@ -433,16 +445,19 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         : Promise.resolve(null),
       // 휴원일 이름 — 위에서 읽은 학원설정을 그대로 읽는다(요청 단위 캐시라 왕복 0). 실패는 null(fail-soft).
       holidayNameOrNull(targetDate),
+      // 표시 취향은 보는 사람(실제 계정) 것 — '다른 강사 뷰'일 때만 따로 읽는다(아니면 위 행이 곧 내 행이라 왕복 0).
+      viewAs ? viewerUiPrefs(supabase) : Promise.resolve(undefined),
     ]);
   const orderByClass = new Map(
     (orderRows ?? []).map((r) => [r.class_id as string, (r.student_ids ?? []) as string[]]),
   );
   const noticeMode = ((meRow?.report_notice_mode as "A" | "B" | null | undefined) ?? null);
-  const fontSize = readOnescreenFontSize(meRow?.ui_prefs);
-  const displayOptions = readDisplayOptions(meRow?.ui_prefs);
-  const trendOptOut = readTrendOptOut(meRow?.ui_prefs);
-  const templatePrefs = readTemplatePrefs(meRow?.ui_prefs);
-  const videoDueDefault = readVideoDueDefault(meRow?.ui_prefs);
+  // 🔑 표시 취향 = 보는 사람 행(viewerUiPrefs) · 반/보고서에 묶인 값 = 화면 주인 행(meRow) — 나눔은 pref-owner.ts 한 벌.
+  const { fontSize, displayOptions, trendOptOut, templatePrefs, videoDueDefault } = splitOnescreenPrefs({
+    viewingOtherTeacher: !!viewAs,
+    ownerPrefs: meRow?.ui_prefs,
+    viewerPrefs,
+  });
 
   // 학원설정·강사설정에서 온 값 — 빈 로스터를 포함해 **모든 반환 경로가 이걸 그대로 쓴다**(emptyRoster 주석 참조).
   const config: RosterSettings = {

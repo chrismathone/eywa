@@ -1,10 +1,12 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-const { rpc, currentUser, visibleApps, signSsoToken } = vi.hoisted(() => ({
-  rpc: vi.fn(), currentUser: vi.fn(), visibleApps: vi.fn(), signSsoToken: vi.fn(),
+const { rpc, currentUser, visibleApps, signSsoToken, viewAs } = vi.hoisted(() => ({
+  rpc: vi.fn(), currentUser: vi.fn(), visibleApps: vi.fn(), signSsoToken: vi.fn(), viewAs: vi.fn(),
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc }) }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: currentUser }));
+// 강사뷰 중 거절(/home)은 visible-actor.test.ts가 잠근다 — 여기는 강사뷰가 아닌 실제 로그인 경로만 본다.
+vi.mock("@/lib/auth/view-as", () => ({ viewAsTeacher: viewAs }));
 vi.mock("@/features/connected-apps/server/visible", () => ({ getMyConnectedApps: visibleApps }));
 vi.mock("@/features/connected-apps/sso", async (original) => ({
   ...await original<typeof import("@/features/connected-apps/sso")>(), signSsoToken,
@@ -26,7 +28,7 @@ function location(response: Response) {
 beforeEach(() => {
   vi.resetAllMocks(); vi.stubEnv("EYWA_SYNC_BINDINGS_JSON", JSON.stringify([config]));
   vi.stubEnv("EYWA_SYNC_AUTO_JSON", undefined); vi.stubEnv("EYWA_SSO_SECRET", "legacy".repeat(8));
-  currentUser.mockResolvedValue(user); visibleApps.mockResolvedValue([app]);
+  currentUser.mockResolvedValue(user); visibleApps.mockResolvedValue([app]); viewAs.mockResolvedValue(null);
   rpc.mockResolvedValue({ data: activeControl, error: null });
 });
 afterEach(() => vi.unstubAllEnvs());

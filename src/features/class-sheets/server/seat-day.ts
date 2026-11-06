@@ -18,6 +18,7 @@ import { dowKeyOf, YMD_RE } from "../lib/week";
 import { readEcsFontSize } from "../font-size";
 import { isSeatLabel, type SeatSlotRef } from "../lib/seat-day";
 import { ecsVisibleClassFilter } from "./access";
+import { loadViewerUiPrefs } from "./viewer-prefs";
 import { assembleSeatPeriods, type SeatAttRow, type SeatEnr, type SeatMarkRow } from "./seat-day-assemble";
 import type { SeatDayData, SeatDayResult } from "./seat-day-types";
 
@@ -43,7 +44,8 @@ export async function getEcsSeatDay(
   const [{ classIds: visibleIds }, settings, prefsRes, sched, nameIndex] = await Promise.all([
     ecsVisibleClassFilter(),
     getTenantSettings(),
-    supabase.from("users").select("ui_prefs").eq("id", user.id).maybeSingle(),
+    // 글씨 크기는 보는 사람(실제 계정) 것 — 쓰기(setMyEcsFontSize → patchMyUiPrefs)와 같은 행(viewer-prefs.ts).
+    loadViewerUiPrefs(),
     fetchAllPaged<{
       class_id: string;
       start_time: string;

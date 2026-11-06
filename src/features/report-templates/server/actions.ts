@@ -5,8 +5,8 @@
  *
  * 🔑 목록도 서버 액션이다 — 원스크린 첫 화면(강사 전원이 매일 여는 자리)이 이 표를 읽지 않게
  *    템플릿 칸을 **열 때** 가져온다([[#95]]: 전원이 매일 쓰는 경로에 새 표를 끼우지 않는다).
- * 🔴 게이트: 로그인한 직원 + '다른 강사 뷰'(열람 전용)가 아닐 것. 내 것만 고치므로 메뉴 권한은 보지 않는다
- *    (강사·겸직 관리자·사무실 모두 자기 템플릿은 가진다).
+ * 🔴 게이트: 로그인한 직원 + (저장·삭제는) '다른 강사 뷰'(열람 전용)가 아닐 것. 내 것만 고치므로 메뉴 권한은 보지 않는다
+ *    (강사·겸직 관리자·사무실 모두 자기 템플릿은 가진다). '내'는 강사뷰면 대상 강사다(actor 주석).
  * 🔴 admin 클라이언트라 RLS를 우회한다 → 모든 조회·변경에 tenant_id·owner_id를 명시한다
  *    (template-guard.test.ts가 호출 모양을 잠근다).
  * ⚠️ 이 파일은 async 함수만 export한다([[#119]]).
@@ -32,11 +32,17 @@ function isMissingTable(error: { code?: string; message?: string } | null): bool
   return /42P01|PGRST205|Could not find the table/i.test(`${error.code ?? ""} ${error.message ?? ""}`);
 }
 
-async function actor(): Promise<{ tenantId: string; userId: string } | Fail> {
-  const user = await getCurrentUser();
+/**
+ * 템플릿의 주인 — '다른 강사 뷰'면 **대상 강사 X**(원장 2026-11-05 강사뷰 전수: X 화면에 A의 템플릿이 뜨고 A 소유로 저장되던 것).
+ * 읽기(목록)는 열람 전용 강사뷰에서도 X의 템플릿을 보여 준다 — 저장·삭제만 막는다(write).
+ */
+async function actor(write: boolean): Promise<{ tenantId: string; userId: string } | Fail> {
+  const user = await getCurrentUser({ teacherView: true });
   if (!user || user.systemRole === "student") return { ok: false, error: "로그인이 필요합니다." };
-  const readonly = await readonlyTeacherViewError();
-  if (readonly) return { ok: false, error: readonly };
+  if (write) {
+    const readonly = await readonlyTeacherViewError();
+    if (readonly) return { ok: false, error: readonly };
+  }
   return { tenantId: user.tenantId, userId: user.id };
 }
 
@@ -46,7 +52,7 @@ function toTemplate(row: { id: string; name: string; body: string }): ReportTemp
 
 /** 내 템플릿 목록 — 맨 앞은 항상 기본 템플릿(둘: 기본 · 인재원 결과지). 표가 없거나 조회가 실패해도 기본 템플릿은 준다. */
 export async function listMyReportTemplates(): Promise<{ templates: ReportTemplate[]; notice: string | null }> {
-  const who = await actor();
+  const who = await actor(false);
   if ("ok" in who) return { templates: [...BUILTIN_ENGLISH_TEMPLATES], notice: who.error };
   const admin = createAdminClient();
   const { data, error } = await admin
@@ -70,7 +76,7 @@ export async function saveMyReportTemplate(input: {
   name: string;
   body: string;
 }): Promise<{ ok: true; template: ReportTemplate } | Fail> {
-  const who = await actor();
+  const who = await actor(true);
   if ("ok" in who) return who;
   if (input.id && !UUID_RE.test(input.id)) {
     return { ok: false, error: "기본 템플릿은 고칠 수 없습니다. '복사해서 새로 만들기'로 내 템플릿을 만들어 주세요." };
@@ -111,7 +117,7 @@ export async function saveMyReportTemplate(input: {
 
 /** 삭제 — 내 템플릿만. 기본 템플릿은 지울 수 없다. */
 export async function deleteMyReportTemplate(id: string): Promise<{ ok: true } | Fail> {
-  const who = await actor();
+  const who = await actor(true);
   if ("ok" in who) return who;
   if (!UUID_RE.test(id ?? "")) return { ok: false, error: "기본 템플릿은 지울 수 없습니다." };
   const admin = createAdminClient();

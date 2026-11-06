@@ -38,8 +38,9 @@ export function NotificationRow({
   item: NotificationItem;
   archived: boolean;
   onOpen: () => void;
-  onArchive: () => void;
-  onDelete: () => void;
+  /** 보관 · 삭제 — 없으면 단추를 세우지 않는다('읽기' 강사뷰는 보기만 · 2026-11-05). */
+  onArchive?: () => void;
+  onDelete?: () => void;
   /** 학부모 글·댓글에 답글(0317a) — 쓸 수 있는 알림에만 온다(없으면 버튼 없음). */
   onReply?: () => void;
   /** 이미 달린 우리 답글 수 — 있으면 '답글 N'으로 쓰레드에 다시 들어간다. */
@@ -108,7 +109,9 @@ export function NotificationRow({
           ) : null}
           {/* 보관 · 삭제는 카드에 마우스를 올렸을 때만(키보드 초점 · 터치 화면은 늘 보인다) — 카드마다 아이콘 둘이 늘 서 있으면 목록이 시끄럽다.
               숨은 동안은 눌리지도 않는다(터치 노트북에서 안 보이는 '삭제'를 탭하는 일 — 삭제는 되돌릴 수 없다). */}
+          {onArchive || onDelete ? (
           <span className="pointer-events-none flex items-center gap-1 opacity-0 transition group-hover/item:pointer-events-auto group-hover/item:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100">
+          {onArchive ? (
           <button
             type="button"
             onClick={onArchive}
@@ -122,6 +125,8 @@ export function NotificationRow({
               <Archive className="size-3.5" />
             )}
           </button>
+          ) : null}
+          {onDelete ? (
           <button
             type="button"
             onClick={onDelete}
@@ -131,7 +136,9 @@ export function NotificationRow({
           >
             <Trash2 className="size-3.5" />
           </button>
+          ) : null}
           </span>
+          ) : null}
         </div>
       </div>
       {belowSlot ? <div className="pr-3 pb-2 pl-[42px]">{belowSlot}</div> : null}

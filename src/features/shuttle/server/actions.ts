@@ -47,9 +47,12 @@ const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
 type Ctx = { tenantId: string; userId: string; userName: string };
 
-/** 공용 게이트 — 통과하면 tenant/user, 아니면 한글 사유. */
+/**
+ * 공용 게이트 — 통과하면 tenant/user, 아니면 한글 사유.
+ * 🔑 명의(created_by·recorded_by·started_by·ended_by)는 **화면 주인** — 강사뷰면 검증된 대상(감사로그만 실제 계정).
+ */
 async function gate(): Promise<Ctx | { error: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "shuttle"))) {
     return { error: "셔틀 편성을 수정할 권한이 없습니다" };
@@ -62,7 +65,8 @@ async function gate(): Promise<Ctx | { error: string }> {
  * 사무실 권한을 요구하면 정작 쓸 사람이 못 쓴다(record-gate.ts 머리 주석).
  */
 async function recordGate(): Promise<Ctx | { error: string }> {
-  const user = await getCurrentUser();
+  // 자격(canRecordBoarding)과 같은 사람으로 명의를 남긴다 — 강사뷰면 검증된 대상(위 gate 주석).
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canRecordBoarding())) {
     return { error: "셔틀 등하원을 기록할 권한이 없습니다" };

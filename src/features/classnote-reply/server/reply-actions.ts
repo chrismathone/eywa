@@ -1,7 +1,6 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 import { readonlyTeacherViewError } from "@/lib/auth/view-mode";
 import { logAction } from "@/features/audit/server/log";
 import { REPLY_BODY_MAX, REPLY_COOLDOWN_SEC, replyBoardKnown, replyTargetAllowed, validateReplyBody } from "../reply-policy";
@@ -13,7 +12,7 @@ import type { ReactionView, ReplyActionResult, ReplyContext, ReplyTargets } from
 import { decideReplyPermission, type PermissionMemo } from "./reply-permission";
 import { buildMinimalThread, buildThread } from "./thread-data";
 import { changeReply } from "./reply-change";
-import { replyGate } from "./reply-gate";
+import { replyGate, replyNotificationScope } from "./reply-gate";
 import { classnoteLinkForHomeroom } from "./classnote-link";
 import { loadReaction, loadReactions, reactionReady, toReactionView } from "./reaction-data";
 
@@ -36,8 +35,10 @@ export async function getReplyTargetsForNotifications(notificationIds: string[])
   // 발송 스위치가 꺼져 있으면 버튼을 세우지 않는다(눌러도 "보낼 수 없습니다"뿐인 버튼 — 벨은 전원이 매일 여는 자리다).
   if (!g.ok || !g.sendOn || !Array.isArray(notificationIds) || !notificationIds.length) return none;
   const ids = notificationIds.filter((x) => typeof x === "string").slice(0, 100);
-  const supabase = await createClient(); // RLS = 내 알림만
-  const { data: notes } = await supabase.from("notifications").select("id, type, link, body, created_at").in("id", ids).in("type", [...PARENT_MESSAGE_NOTIFICATION_TYPES]);
+  // 내 알림만 — 평소엔 세션(RLS), '다른 강사 뷰'면 대상 직원의 알림까지(지점·받는 사람 명시, replyNotificationScope).
+  const scope = await replyNotificationScope(g.user);
+  const { data: notes } = await scope.db.from("notifications").select("id, type, link, body, created_at")
+    .eq("tenant_id", g.user.tenantId).in("recipient_id", scope.recipients).in("id", ids).in("type", [...PARENT_MESSAGE_NOTIFICATION_TYPES]);
   const postIds = (notes ?? []).map((n) => postIdFromClassnoteLink(n.link as string | null)).filter((x): x is number => x !== null);
   if (!postIds.length) return none;
   const admin = createAdminClient();
@@ -157,6 +158,9 @@ const SAME_BODY = "같은 글에 같은 내용의 답글이 이미 있습니다"
 export async function requestParentReply(input: { messageId: string; body: string; clientKey: string }): Promise<ReplyActionResult> {
   const g = await replyGate();
   if (!g.ok) return g;
+  // 외부(학부모)로 나가는 글 — '다른 강사 뷰'(열람 전용)·지점 보기는 무엇보다 먼저 막는다(decideReplyPermission도 다시 본다).
+  const ro = await readonlyTeacherViewError();
+  if (ro) return { ok: false, error: ro };
   if (!CLIENT_KEY.test(String(input?.clientKey ?? ""))) return { ok: false, error: "잘못된 요청입니다 — 창을 닫고 다시 여세요" };
   const v = validateReplyBody(input?.body);
   if (!v.ok) return { ok: false, error: v.error };

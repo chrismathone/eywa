@@ -61,7 +61,8 @@ const hasValue = (values: MonthValues) => Object.values(values).some((v) => v > 
  * 🔴 강사 범위·과목 관리자 화면은 과목 탭을 만들지 않는다(원생 통계처럼 학원 전체 값이 섞인다).
  */
 export async function loadInstrumentExtras({ checksOnly = false }: { checksOnly?: boolean } = {}): Promise<ExtrasReply | null> {
-  const user = await getCurrentUser();
+  // '다른 강사 뷰'면 대상 직원의 운영실이다 — 배치(묶음·담당 과목)·메뉴 판정이 대상 기준(권한 매트릭스가 대상 값을 쓰는 것과 같은 축).
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return null;
   const matrix = await getUserPermMatrix();
   if (!canAccess(user.systemRole, "dashboard", matrix)) return null;

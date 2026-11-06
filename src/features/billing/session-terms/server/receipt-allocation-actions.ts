@@ -44,8 +44,11 @@ export type ReceiptAllocationView = {
  */
 export type ReceiptAllocationInput = { termId: string; lineIndex: number | null; amount: number; baseAmount: number | null; confirmedAt: string | null; ackUnlinked?: boolean };
 
+// 🔑 행위자 = `getCurrentUser({ teacherView: true })` — '다른 강사 뷰'면 대상 직원 X(원장 2026-11-05 강사뷰 전수).
+//    자유 배분의 '관리자 이상' 판정(canUseFreeAllocation)은 **역할**을 보므로 실제 계정 A의 역할로 보면 X(예: 회계)의 화면에서
+//    A(원장)의 권한이 열린다. 확정 기록(confirmed_by — 이월 시수 동기화)도 X 명의. 감사로그 행위자는 logAction이 실제 계정으로 남긴다.
 export async function getReceiptAllocation(invoiceId: string): Promise<{ data?: ReceiptAllocationView; error?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
   const db = await createClient();
@@ -80,7 +83,7 @@ async function freeAllocationLock(db: Awaited<ReturnType<typeof createClient>>, 
 }
 
 export async function mergeReceiptItems(invoiceId: string, source: unknown, indices: number[], label: string, removeId?: string): Promise<{ data?: ReceiptAllocationView; error?: string; committed?: boolean }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
   const lockDb = await createClient();
@@ -100,7 +103,7 @@ export async function mergeReceiptItems(invoiceId: string, source: unknown, indi
 }
 
 export async function saveReceiptAllocation(invoiceId: string, source: unknown, input: ReceiptAllocationInput[]): Promise<{ ok?: boolean; error?: string; notice?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
   if (!Array.isArray(input) || input.length > 500 || input.some((row) => !Number.isSafeInteger(row.amount) || row.amount < 0 || (row.lineIndex === null ? row.amount !== 0 : !Number.isInteger(row.lineIndex) || row.lineIndex < 0))) return { error: "배분금액과 연결 항목을 확인해 주세요" };
@@ -167,7 +170,7 @@ export type FreeAllocationInput = FreeAllocationRow & { confirmedAt: string | nu
  * 🔴 관리자 이상(+ super_admin)만 · 화면과 같은 판정(`validateFreeAllocation`)을 서버가 다시 본다(#77) · DB 함수도 다시 본다.
  */
 export async function saveFreeReceiptAllocation(invoiceId: string, source: unknown, input: FreeAllocationInput[]): Promise<{ ok?: boolean; error?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
   if (!canUseFreeAllocation(user.systemRole) && !(await isCurrentUserSuperAdmin())) return { error: "자유 배분은 관리자 이상만 할 수 있습니다" };

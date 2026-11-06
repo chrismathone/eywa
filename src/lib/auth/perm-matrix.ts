@@ -18,7 +18,7 @@ import {
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { isTenantViewRequest, isTenantViewWriteBlocked } from "@/lib/auth/tenant-view";
-import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { isSignedInSuperAdmin } from "@/lib/auth/super-admin";
 import { approvalMenuOverridesFor } from "@/features/approvals/access";
 import { capDisabledModules } from "@/lib/modules";
 // ⚠️ view-mode.ts가 아니라 view-as.ts에서 — view-mode는 teacher-scope·delegation을 물고 있어 순환 위험.
@@ -67,7 +67,7 @@ export const getPermMatrix = cache(async (): Promise<AccessMatrix> => {
     // 🔴 꺼진 모듈(기능 묶음)은 **맨 끝에서** 전원 none — super_admin 병합으로도 안 열린다(그 학원엔 없는 기능이다).
     //    침산은 꺼진 모듈이 없어 capDisabledModules가 받은 매트릭스를 그대로 돌려준다(오늘과 같다).
     const disabled = settings.modules.disabled;
-    if (overrides.length > 0 && (await isCurrentUserSuperAdmin())) {
+    if (overrides.length > 0 && (await isSignedInSuperAdmin())) {
       // 잠금은 무시(기본값이 살아남고), 부여는 보존(원장이 연 셀은 그대로) — mergeMostPermissive 주석 참조.
       return capLaboratory(capMakeupMode(capDisabledModules(mergeMostPermissive(resolveMatrix([]), resolveMatrix(overrides)), disabled), makeupMode), (await getCurrentUser())?.tenantId ?? "");
     }
@@ -118,6 +118,14 @@ export async function tenantClosedMenus(): Promise<MenuKey[]> {
 export const TENANT_VIEW_CLOSED_MENUS: readonly MenuKey[] = ["makeups", "approvals", "payroll_settings"];
 
 /**
+ * '다른 강사 뷰'에서 **아예 닫는** 메뉴 — 대상 강사에게 열려 있어도 닫는다(원장 2026-11-05 강사뷰 전수 점검).
+ * 전자결재는 결재 · 기안이 **본인 서명**이고, 결재함 · 연차 · 결재선 판정을 DB 정책(`auth.uid()`)과 화면이 로그인한 사람으로
+ * 정한다 — 열면 보는 사람의 결재함이 대상 강사 이름 아래 뜨고, 대상 강사 차례의 결재는 처리할 수 없다(틀린 화면).
+ * 남의 이름으로 결재하는 길은 만들지 않는다 — 결재는 본인이 로그인해서 한다.
+ */
+export const TEACHER_VIEW_CLOSED_MENUS: readonly MenuKey[] = ["approvals"];
+
+/**
  * 운영 콘솔의 '지점 보기'(읽기 전용)면 그 자리(원장 줄)의 전체·담당 권한을 **읽기**로 누른다 — 없음은 그대로(읽기를 넓히지 않는다).
  * 사이드바·requireAccess·쓰기 게이트가 전부 이 매트릭스를 읽으므로 화면이 통째로 열람 전용이 된다.
  * 실제 쓰기 차단은 여기에 기대지 않는다(데이터 접근 층 tenant-view-guard.ts + DB 0356a).
@@ -163,7 +171,7 @@ const resolveActorPermMatrix = cache(async (): Promise<AccessMatrix> => {
     // 기본값이 전 역할 '없음'인 메뉴(전자결재)는 운영 계정이 따로 통과한다(원장 지시 2026-08-13). 그 밖의 개인별 권한은
     // 전부 저장값이다 — 학원 설정 '개인별 메뉴 권한'(원장 2026-10-06: 역할 권한이 기본 · 개인에게는 편집기에서. 코드 명단 폐지).
     // 요청 캐시된 PK 조회 1회이고, override가 있는 테넌트는 getPermMatrix에서 이미 부른 그 캐시다.
-    const isSuperAdmin = await isCurrentUserSuperAdmin();
+    const isSuperAdmin = await isSignedInSuperAdmin();
     const codeOverrides = approvalMenuOverridesFor(user.id, isSuperAdmin);
     const userOverrides = [...codeOverrides, ...settings.permissions.userOverrides];
     if (userOverrides.length === 0 && !isSuperAdmin) return capSettingFeatures(base, user.tenantId, user.systemRole);
@@ -190,6 +198,39 @@ const resolveActorPermMatrix = cache(async (): Promise<AccessMatrix> => {
   }
 });
 
+/**
+ * '다른 강사 뷰' 대상(X)의 **캡 이전** 매트릭스 — 역할 기본 + 학원 설정 + X의 개인 권한(읽기 강사뷰의 readonly 캡은 아직 없다).
+ * 강사뷰가 아니면 null. getUserPermMatrix와 readonlyViewErasedScope가 같은 값을 읽는다(요청 캐시 1회).
+ */
+const viewAsTargetMatrix = cache(async (): Promise<AccessMatrix | null> => {
+  const target = await viewAsTeacher();
+  if (!target) return null;
+  const settings = await getTenantSettings();
+  return capSettingFeatures(capMakeupMode(capDisabledModules(
+    applyUserOverrides(resolveMatrix(settings.permissions.overrides), target.id, target.systemRole, settings.permissions.userOverrides),
+    settings.modules.disabled), normalizeMakeupSettings(settings.makeups).mode), target.tenantId, target.systemRole);
+});
+
+/** 강사뷰 대상 X의 이 메뉴 값(캡 이전). 원스크린은 역할 메뉴가 아니라 검증된 강사뷰의 홈이라 teacher 행을 쓴다(아래 getUserPermMatrix 주석). */
+function targetMenuValue(targetMatrix: AccessMatrix, menu: MenuKey, targetRole: SystemRole): Access {
+  return TEACHER_VIEW_CLOSED_MENUS.includes(menu) ? "none" : targetMatrix[menu][menu === "teacher_onescreen" ? "teacher" : targetRole];
+}
+
+/**
+ * 읽기 강사뷰의 캡이 이 메뉴의 **담당 범위(scoped)를 지웠는가** — 읽기 강사뷰는 X의 full·scoped를 모두 readonly로 누르므로,
+ * `accessLevelTenant`가 돌려준 readonly만으로는 "원래 scoped(강사 = 자기 반·자기 학생만)"였는지 알 수 없다. 그러면
+ * `level === "scoped"`로 읽기를 좁히던 자리(반 상세 · 학생 상세)가 **학원 전체**로 열린다(2026-11-05 강사뷰 적대 리뷰 · 재리뷰).
+ * X의 캡 이전 값(개인 권한 포함)이 scoped이면 true — 그 자리는 담당 판정을 X의 id로 다시 건다.
+ * 강사뷰가 아니거나 전체 강사뷰면 언제나 false(종전 판정 그대로).
+ * 🔴 새로 `accessLevelTenant(...) === "scoped"`로 **읽기**를 좁히는 코드를 쓰면 이 판정도 함께 볼 것.
+ */
+export async function readonlyViewErasedScope(menu: MenuKey): Promise<boolean> {
+  const target = await viewAsTeacher();
+  if (target?.access !== "readonly") return false;
+  const targetMatrix = await viewAsTargetMatrix();
+  return targetMatrix !== null && targetMenuValue(targetMatrix, menu, target.systemRole) === "scoped";
+}
+
 /** A selected teacher view has that teacher's role and personal permissions, never the viewer's broader powers. */
 export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
   const actor = await getActorPermMatrix();
@@ -197,20 +238,20 @@ export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
   if (!target) return capLaboratory(actor, (await getCurrentUser())?.tenantId ?? "");
   const user = await getCurrentUser();
   if (!user) return actor;
-  const settings = await getTenantSettings();
-  const targetMatrix = await capSettingFeatures(capMakeupMode(capDisabledModules(
-    applyUserOverrides(resolveMatrix(settings.permissions.overrides), target.id, target.systemRole, settings.permissions.userOverrides),
-    settings.modules.disabled), normalizeMakeupSettings(settings.makeups).mode), target.tenantId, target.systemRole);
+  const targetMatrix = await viewAsTargetMatrix();
+  if (!targetMatrix) return actor;
   return capLaboratory(Object.fromEntries(MENU_KEYS.map((menu) => {
     // 원스크린은 역할 메뉴가 아니라 검증된 강사뷰의 홈이다. 겸직 직원은 실제 역할(admin 등)의
     // 값이 none이므로 이를 teacher 행에 복사하면 /onescreen → /onescreen 리다이렉트가 반복된다.
     // 본인 겸직 강사뷰와 동일하게 이 메뉴만 teacher 행을 쓰고, 나머지는 대상의 개인 권한을 유지한다.
-    const value = targetMatrix[menu][menu === "teacher_onescreen" ? "teacher" : target.systemRole];
+    const value = targetMenuValue(targetMatrix, menu, target.systemRole);
     const level = target.access === "readonly" && (value === "full" || value === "scoped") ? "readonly" : value;
     return [menu, { ...actor[menu], [user.systemRole]: level, [target.systemRole]: level, teacher: level }];
   })) as AccessMatrix, user.tenantId).then((m) =>
     // 다른 강사 뷰는 대상 값으로 내 역할 줄을 다시 쓰므로 개인 메뉴 차단을 한 번 더 누른다(user-menu-blocks.ts).
-    capContributionMenu(applyUserMenuBlocks(m, user.id, [user.systemRole, target.systemRole, "teacher"]), user.tenantId),
+    // 보는 사람(A)의 차단과 **대상(X)의 차단 둘 다** — X에게 막힌 메뉴가 X의 강사뷰에서 열리지 않게(2026-11-05 강사뷰 적대 리뷰),
+    // A에게 막힌 메뉴를 강사뷰로 우회하지 못하게.
+    capContributionMenu(applyUserMenuBlocks(applyUserMenuBlocks(m, user.id, [user.systemRole, target.systemRole, "teacher"]), target.id, [user.systemRole, target.systemRole, "teacher"]), user.tenantId),
   );
 });
 

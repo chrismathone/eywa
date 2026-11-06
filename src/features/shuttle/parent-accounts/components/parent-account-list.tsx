@@ -6,8 +6,9 @@ import { ParentAccountDelete } from "./parent-account-delete";
  * 학부모 계정 목록 — '학부모 관리 현황' 화면과 '학부모 등하원'의 모달이 **같은 목록**을 그린다.
  * 🔴 원장·관리자 전용 데이터(로그인 이메일·연락처)다 — 부르는 쪽이 `parentAccountsActor()`로 걸러서 넘긴다.
  * 카드마다 [삭제](확인 칸을 거쳐 로그인·연결 삭제, `ParentAccountDelete`).
+ * `readOnly`(읽기 강사뷰 · 지점 보기)면 [삭제]를 그리지 않는다 — 서버 액션도 같은 판정(readonlyTeacherViewError)으로 거절한다.
  */
-export function ParentAccountList({ accounts }: { accounts: readonly ParentAccount[] }) {
+export function ParentAccountList({ accounts, readOnly = false }: { accounts: readonly ParentAccount[]; readOnly?: boolean }) {
   if (accounts.length === 0) {
     return (
       <div className="border-line text-text-dim rounded-xl border border-dashed p-8 text-center text-sm">
@@ -45,9 +46,11 @@ export function ParentAccountList({ accounts }: { accounts: readonly ParentAccou
             ))}
           </div>
           {/* 삭제 — 확인 칸이 카드 폭을 다 쓰도록 카드 맨 아래에 둔다. */}
-          <div className="mt-2 flex justify-end">
-            <ParentAccountDelete accountId={account.id} name={account.displayName} studentCount={account.students.length} />
-          </div>
+          {readOnly ? null : (
+            <div className="mt-2 flex justify-end">
+              <ParentAccountDelete accountId={account.id} name={account.displayName} studentCount={account.students.length} />
+            </div>
+          )}
         </article>
       ))}
     </div>

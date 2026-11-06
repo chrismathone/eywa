@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { logAction } from "@/features/audit/server/log";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
-import { createClient } from "@/lib/supabase/server";
+import { teacherViewReadDb, writeSessionFirst } from "./teacher-view-db";
 import {
   createUploadTicket,
   MEDIA_KIND,
@@ -17,6 +17,7 @@ import {
 import type { UploadTicket } from "@/lib/storage/types";
 import { normalizeApprovalChecks } from "./expense-queries";
 import { expenseWriteScope } from "./expense-scope";
+import { expenseVisibleToActor } from "./expense-visibility";
 import { DEFAULT_CURRENCY, isValidCurrency, roundMoney } from "../currencies";
 
 const RECEIPTS_BUCKET = "expense-receipts";
@@ -88,16 +89,28 @@ const APPROVAL_ROLE_LABEL: Record<string, string> = {
 };
 const today = () => kstToday();
 
+/**
+ * 지출결의서 **읽기** 클라이언트 — 평소엔 세션(RLS 그대로), '다른 강사 뷰'일 때만 관리 클라이언트(teacher-view-db.ts).
+ * **쓰기**는 `writeSessionFirst` — 실제 계정 A의 세션으로 먼저 쓰고, RLS(expenses_role_gate_*: A의 지출 권한 or
+ * `created_by = auth.uid()`)에 막힐 때만 관리 클라이언트로 내려간다. 세션으로 쓰면 DB 활동 기록(log_activity)에 행위자 A가 남는다.
+ * 부르는 쪽은 앱 게이트를 먼저 지난다 — `expenseWriteScope`/`canWriteTenant`(읽기 강사뷰는 여기서 막힌다) + own이면
+ * `guardOwnExpense`(X 본인 작성분). 이 파일의 모든 조회·변경은 `tenant_id`를 명시한다.
+ */
+async function expenseDb() {
+  return teacherViewReadDb();
+}
+
 // 지출결의서 쓰기 스코프(full=사무실 전건 / own=강사 본인 것) — 화면과 같은 한 함수(./expense-scope.ts).
 // ⚠️ 결재 승인 토글(toggleExpenseApproval)은 이 스코프가 아니라 billing 쓰기만 통과 → 강사가 자기 결의서를 셀프 승인 못 함.
 
 // own 스코프(강사)가 기존 결의서를 수정/삭제/증빙변경할 수 있는지 — 본인 작성분(created_by=본인) + 사무실 결재 착수 전.
 // 사무실이 원장/대표 결재를 시작(체크)하면 강사 편집을 잠근다(제출 후 변조 방지). 반환: 에러 메시지(불가) 또는 null(가능).
-async function guardOwnExpense(id: string, userId: string): Promise<string | null> {
-  const supabase = await createClient();
+async function guardOwnExpense(id: string, userId: string, tenantId: string): Promise<string | null> {
+  const { db: supabase } = await expenseDb();
   const { data: row } = await supabase
     .from("expenses")
     .select("created_by, approval_checks")
+    .eq("tenant_id", tenantId)
     .eq("id", id)
     .maybeSingle();
   if (!row) return "지출을 찾을 수 없습니다";
@@ -163,10 +176,9 @@ export async function createExpense(_prev: ExpenseState, formData: FormData): Pr
   const invalid = validate(f);
   if (invalid) return invalid;
 
-  const supabase = await createClient();
   // ⚠️ `.maybeSingle()` — 강사(own)도 자기 행은 select 정책을 통과하지만(0158a: delete/select 조건 동일),
   //    혹시 표현이 안 돌아와도 **저장 성공을 에러로 뒤집지 않게** single()은 쓰지 않는다.
-  const { data: created, error } = await supabase
+  const { data: created, error } = await writeSessionFirst("insert", (db) => db
     .from("expenses")
     .insert({
       tenant_id: user.tenantId,
@@ -190,7 +202,7 @@ export async function createExpense(_prev: ExpenseState, formData: FormData): Pr
       approval_checks: { author: { checked: true, date: today() } },
     })
     .select("id")
-    .maybeSingle();
+    .maybeSingle());
   if (error) return { error: error.message };
 
   await logAction({
@@ -222,21 +234,21 @@ export async function updateExpense(_prev: ExpenseState, formData: FormData): Pr
   if (!id) return { error: "지출 ID가 누락되었습니다" };
   // 강사(own)는 본인 작성분 + 사무실 결재 착수 전만 수정 가능. 사무실(full)은 전건.
   if (scope === "own") {
-    const denied = await guardOwnExpense(id, user.id);
+    const denied = await guardOwnExpense(id, user.id, user.tenantId);
     if (denied) return { error: denied };
   }
   const f = parse(formData);
   const invalid = validate(f);
   if (invalid) return invalid;
 
-  const supabase = await createClient();
+  const { db: supabase } = await expenseDb();
   // 감사로그용 이전값 — 금액이 언제 얼마에서 얼마로 바뀌었는지가 "왜 다른가"의 답이다(교재 신청 감사와 같은 결).
   const { data: before } = await supabase
     .from("expenses")
     .select("title, amount, currency, category, expense_date")
-    .eq("id", id)
+    .eq("tenant_id", user.tenantId).eq("id", id)
     .maybeSingle();
-  const { error } = await supabase
+  const { error } = await writeSessionFirst("mutate", (db) => db
     .from("expenses")
     .update({
       title: f.title,
@@ -256,7 +268,7 @@ export async function updateExpense(_prev: ExpenseState, formData: FormData): Pr
       line_items: f.lineItems,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", id);
+    .eq("tenant_id", user.tenantId).eq("id", id).select("id"));
   if (error) return { error: error.message };
 
   await logAction({
@@ -290,17 +302,17 @@ export async function deleteExpense(_prev: ExpenseState, formData: FormData): Pr
   if (!id) return { error: "지출 ID가 누락되었습니다" };
   // 강사(own)는 본인 작성분 + 사무실 결재 착수 전만 삭제 가능. 사무실(full)은 전건.
   if (scope === "own") {
-    const denied = await guardOwnExpense(id, user.id);
+    const denied = await guardOwnExpense(id, user.id, user.tenantId);
     if (denied) return { error: denied };
   }
 
-  const supabase = await createClient();
+  const { db: supabase } = await expenseDb();
   // 첨부 증빙 파일도 함께 정리(고아 객체 방지) — RLS로 같은 테넌트 행만 읽힌다.
   // 🔴 제목·금액도 **여기서** 읽는다 — 지운 뒤엔 행에서 되짚을 수 없다(textbook_order_delete와 같은 규약).
   const { data: row } = await supabase
     .from("expenses")
     .select("receipt_urls, title, amount, currency, category, expense_date")
-    .eq("id", id)
+    .eq("tenant_id", user.tenantId).eq("id", id)
     .maybeSingle();
   const paths = parseReceipts(row?.receipt_urls)
     .map((r) => r.path)
@@ -311,7 +323,7 @@ export async function deleteExpense(_prev: ExpenseState, formData: FormData): Pr
 
   // `.select("id")` = 실제로 지워진 행 확인. RLS에 막히면 PostgREST가 **에러 없이 0행**을 지운다 —
   // 그때 로그를 남기면 감사로그가 일어나지 않은 삭제를 사실로 적는다(안 지워졌으면 기록도 안 남긴다).
-  const { data: gone, error } = await supabase.from("expenses").delete().eq("id", id).select("id");
+  const { data: gone, error } = await writeSessionFirst("mutate", (db) => db.from("expenses").delete().eq("tenant_id", user.tenantId).eq("id", id).select("id"));
   if (error) return { error: error.message };
 
   if (gone?.length) {
@@ -351,11 +363,11 @@ export async function toggleExpenseApproval(
   if (!VALID_ROLES.has(role)) return { error: "잘못된 결재 역할입니다" };
   const checked = String(formData.get("checked") ?? "") === "true";
 
-  const supabase = await createClient();
+  const { db: supabase } = await expenseDb();
   const { data: row, error: readErr } = await supabase
     .from("expenses")
     .select("approval_checks, title") // title = 감사로그 '대상' 라벨(같은 왕복에서 함께 읽는다)
-    .eq("id", id)
+    .eq("tenant_id", user.tenantId).eq("id", id)
     .maybeSingle();
   if (readErr) return { error: readErr.message };
   if (!row) return { error: "지출을 찾을 수 없습니다" };
@@ -366,10 +378,10 @@ export async function toggleExpenseApproval(
   base[role as keyof typeof base] = checked ? { checked: true, date: today() } : { checked: false };
   const approvalStatus = base.director?.checked && base.ceo?.checked ? "approved" : "pending";
 
-  const { error } = await supabase
+  const { error } = await writeSessionFirst("mutate", (db) => db
     .from("expenses")
     .update({ approval_checks: base, approval_status: approvalStatus, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("tenant_id", user.tenantId).eq("id", id).select("id"));
   if (error) return { error: error.message };
 
   // 🔴 **방향을 반드시 남긴다** — "누가 결재를 눌렀나"만큼 "누가 해제했나"가 중요하다(해제는 이미 승인된
@@ -401,13 +413,13 @@ export async function duplicateExpense(_prev: ExpenseState, formData: FormData):
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "지출 ID가 누락되었습니다" };
 
-  const supabase = await createClient();
+  const { db: supabase } = await expenseDb();
   const { data: src, error: readErr } = await supabase
     .from("expenses")
     .select(
       "title, category, amount, currency, vendor, department, payment_method, bank_name, account_number, memo, line_items, created_by",
     )
-    .eq("id", id)
+    .eq("tenant_id", user.tenantId).eq("id", id)
     .maybeSingle();
   if (readErr) return { error: readErr.message };
   if (!src) return { error: "원본 지출을 찾을 수 없습니다" };
@@ -416,7 +428,7 @@ export async function duplicateExpense(_prev: ExpenseState, formData: FormData):
     return { error: "본인이 작성한 지출결의서만 복제할 수 있습니다" };
   }
 
-  const { data: created, error } = await supabase
+  const { data: created, error } = await writeSessionFirst("insert", (db) => db
     .from("expenses")
     .insert({
       tenant_id: user.tenantId,
@@ -439,7 +451,7 @@ export async function duplicateExpense(_prev: ExpenseState, formData: FormData):
       approval_checks: { author: { checked: true, date: today() } },
     })
     .select("id")
-    .maybeSingle();
+    .maybeSingle());
   if (error) return { error: error.message };
 
   // 복제는 **같은 금액의 지출이 하나 더 생기는** 일이라 create와 갈라 둔다 — 중복 지출을 되짚을 때
@@ -475,17 +487,16 @@ export async function setExpenseReceiptType(
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "지출 ID가 누락되었습니다" };
   if (scope === "own") {
-    const denied = await guardOwnExpense(id, user.id);
+    const denied = await guardOwnExpense(id, user.id, user.tenantId);
     if (denied) return { error: denied };
   }
   const type = String(formData.get("receiptType") ?? "").trim();
   if (type && !RECEIPT_TYPES.has(type)) return { error: "잘못된 증빙 유형입니다" };
 
-  const supabase = await createClient();
-  const { error } = await supabase
+  const { error } = await writeSessionFirst("mutate", (db) => db
     .from("expenses")
     .update({ receipt_type: type || null, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("tenant_id", user.tenantId).eq("id", id).select("id"));
   if (error) return { error: error.message };
 
   await logAction({
@@ -513,12 +524,12 @@ export async function issueReceiptUploadTicket(
   if (!UUID_RE.test(expenseId)) return { error: "잘못된 지출 ID입니다" };
   // 강사(own)는 본인 작성분 + 결재 착수 전만 증빙 첨부 가능.
   if (scope === "own") {
-    const denied = await guardOwnExpense(expenseId, user.id);
+    const denied = await guardOwnExpense(expenseId, user.id, user.tenantId);
     if (denied) return { error: denied };
   }
   // 소유 확인 — RLS 스코프로 내 테넌트의 expense인지.
-  const supabase = await createClient();
-  const { data: exp } = await supabase.from("expenses").select("id").eq("id", expenseId).maybeSingle();
+  const { db: supabase } = await expenseDb();
+  const { data: exp } = await supabase.from("expenses").select("id").eq("tenant_id", user.tenantId).eq("id", expenseId).maybeSingle();
   if (!exp) return { error: "지출을 찾을 수 없습니다" };
 
   const contentType = String(formData.get("contentType") ?? "");
@@ -550,7 +561,7 @@ export async function addExpenseReceipt(
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "지출 ID가 누락되었습니다" };
   if (scope === "own") {
-    const denied = await guardOwnExpense(id, user.id);
+    const denied = await guardOwnExpense(id, user.id, user.tenantId);
     if (denied) return { error: denied };
   }
   const path = String(formData.get("path") ?? "").trim();
@@ -565,8 +576,8 @@ export async function addExpenseReceipt(
     return { error: e instanceof Error ? e.message : "첨부 검증 실패" };
   }
 
-  const supabase = await createClient();
-  const { data: row } = await supabase.from("expenses").select("receipt_urls").eq("id", id).maybeSingle();
+  const { db: supabase } = await expenseDb();
+  const { data: row } = await supabase.from("expenses").select("receipt_urls").eq("tenant_id", user.tenantId).eq("id", id).maybeSingle();
   if (!row) {
     await removeObject(path, { bucket: RECEIPTS_BUCKET }).catch(() => {});
     return { error: "지출을 찾을 수 없습니다" };
@@ -575,10 +586,10 @@ export async function addExpenseReceipt(
   if (!list.some((r) => r.path === path)) {
     list.push({ path, name: name || path.split("/").pop() || path });
   }
-  const { error } = await supabase
+  const { error } = await writeSessionFirst("mutate", (db) => db
     .from("expenses")
     .update({ receipt_urls: list, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("tenant_id", user.tenantId).eq("id", id).select("id"));
   if (error) {
     await removeObject(path, { bucket: RECEIPTS_BUCKET }).catch(() => {});
     return { error: error.message };
@@ -607,7 +618,7 @@ export async function removeExpenseReceipt(
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "지출 ID가 누락되었습니다" };
   if (scope === "own") {
-    const denied = await guardOwnExpense(id, user.id);
+    const denied = await guardOwnExpense(id, user.id, user.tenantId);
     if (denied) return { error: denied };
   }
   const path = String(formData.get("path") ?? "").trim();
@@ -615,16 +626,16 @@ export async function removeExpenseReceipt(
   const isLegacy = /^https?:\/\//i.test(path);
   if (!isLegacy && !isTenantReceiptPath(path, user.tenantId, id)) return { error: "파일 경로가 잘못되었습니다" };
 
-  const supabase = await createClient();
-  const { data: row } = await supabase.from("expenses").select("receipt_urls").eq("id", id).maybeSingle();
+  const { db: supabase } = await expenseDb();
+  const { data: row } = await supabase.from("expenses").select("receipt_urls").eq("tenant_id", user.tenantId).eq("id", id).maybeSingle();
   if (!row) return { error: "지출을 찾을 수 없습니다" };
   const current = parseReceipts(row.receipt_urls);
   const removed = current.find((r) => r.path === path); // 감사로그에 남길 파일 이름(지운 뒤엔 못 읽는다)
   const list = current.filter((r) => r.path !== path);
-  const { error } = await supabase
+  const { error } = await writeSessionFirst("mutate", (db) => db
     .from("expenses")
     .update({ receipt_urls: list, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("tenant_id", user.tenantId).eq("id", id).select("id"));
   if (error) return { error: error.message };
 
   if (!isLegacy) await removeObject(path, { bucket: RECEIPTS_BUCKET }).catch(() => {});
@@ -659,13 +670,15 @@ export async function signExpenseReceipts(
   const expenseId = String(formData.get("id") ?? "").trim();
   if (!expenseId) return { error: "지출 ID가 누락되었습니다" };
 
-  const supabase = await createClient();
+  const { db: supabase, viaAdmin } = await expenseDb();
   const { data: row } = await supabase
     .from("expenses")
-    .select("receipt_urls")
-    .eq("id", expenseId)
+    .select("receipt_urls, created_by")
+    .eq("tenant_id", user.tenantId).eq("id", expenseId)
     .maybeSingle();
   if (!row) return { error: "지출을 찾을 수 없습니다" };
+  // 강사뷰(관리 클라이언트)면 RLS 대신 같은 규칙을 앱에서 — X가 못 보는 결의서의 증빙은 서명하지 않는다.
+  if (viaAdmin && !(await expenseVisibleToActor(row, user))) return { error: "지출을 찾을 수 없습니다" };
 
   // 레거시 http(s) 증빙(ijw Firebase 다운로드 URL)은 이미 공개 토큰 URL이라 그대로 통과(서명 불필요),
   // 테넌트 스토리지 경로만 서명(임의 객체 서명 차단). 깨진 경로는 조용히 제외.
@@ -693,13 +706,15 @@ export async function signExpenseReceipt(
   // 방어심층: admin(서비스롤)이 RLS를 우회해 서명하므로, 경로 형식만 믿지 말고 그 expense에 **실제 등록된**
   // 첨부인지 RLS 스코프 조회로 확인(임의/열거 경로 서명 차단). 경로의 2번째 세그먼트 = expense id.
   const expenseId = path.split("/")[1];
-  const supabase = await createClient();
+  const { db: supabase, viaAdmin } = await expenseDb();
   const { data: row } = await supabase
     .from("expenses")
-    .select("receipt_urls")
-    .eq("id", expenseId)
+    .select("receipt_urls, created_by")
+    .eq("tenant_id", user.tenantId).eq("id", expenseId)
     .maybeSingle();
   if (!row) return { error: "지출을 찾을 수 없습니다" };
+  // 강사뷰(관리 클라이언트)면 RLS 대신 같은 규칙을 앱에서 — X가 못 보는 결의서의 증빙은 서명하지 않는다.
+  if (viaAdmin && !(await expenseVisibleToActor(row, user))) return { error: "지출을 찾을 수 없습니다" };
   if (!parseReceipts(row.receipt_urls).some((r) => r.path === path)) {
     return { error: "등록되지 않은 파일입니다" };
   }

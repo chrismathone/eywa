@@ -18,6 +18,8 @@ vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => h.user }
 vi.mock("@/lib/license/server", () => ({ isFeatureOptedIn: async () => h.optedIn }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ getActorPermMatrix: async () => h.matrix }));
 vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => h.superAdmin }));
+// 강사뷰 중 거절은 visible-actor.test.ts가 본다 — 여기는 강사뷰가 아닌 판정(지점 스위치 · 본인 권한 표 · 과목)만.
+vi.mock("@/lib/auth/view-as", () => ({ viewAsTeacher: async () => null }));
 vi.mock("@/lib/auth/user-menu-blocks", () => ({ USER_MENU_BLOCKS: { "blocked-user": ["app_todays_math"] } }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({

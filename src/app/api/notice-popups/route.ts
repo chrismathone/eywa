@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { viewAsTeacher } from "@/lib/auth/view-as";
 import { getActivePopupsOrThrow } from "@/features/notices/server/queries";
 import { reportError } from "@/lib/observability/report-error";
 
@@ -24,7 +25,10 @@ export async function GET() {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: "unauthenticated" }, { status: 401, headers: NO_STORE });
-    const popups = await getActivePopupsOrThrow(user.systemRole, user.tenantId, user.id);
+    // 대상 역할 = '다른 강사 뷰'면 그 강사 역할, '다시 보지 않기' = 보는 사람 본인(셸 레이아웃과 같은 판정 — 대신 닫아 준 공지가
+    // 그 강사 화면에서 사라지면 안 된다).
+    const viewAs = await viewAsTeacher();
+    const popups = await getActivePopupsOrThrow(viewAs?.systemRole ?? user.systemRole, user.tenantId, user.id);
     return NextResponse.json({ popups }, { headers: NO_STORE });
   } catch (error) {
     reportError(error, { scope: "api.notice-popups.list" });

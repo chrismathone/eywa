@@ -20,7 +20,7 @@ import { logDbError } from "@/lib/supabase/db-error";
  * (행에는 마지막 값만 남는다).
  */
 export async function updateSessionTermNote(id: string, raw: string): Promise<{ error?: string; note?: string | null }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };

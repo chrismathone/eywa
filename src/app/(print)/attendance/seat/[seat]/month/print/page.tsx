@@ -35,7 +35,8 @@ export default async function SeatMonthlyPrintPage({
   if (!seat) notFound();
   if (!parseUsableSeatKey(seatParam)) notFound();
 
-  const user = await getCurrentUser();
+  // 담당 토글은 화면 주인(강사뷰면 검증된 대상 강사) — 하루 화면·쓰기 게이트(gateSeatWrite)와 같은 신원.
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) redirect("/login");
   if (!dutyAllowsSeat(await getActiveSeatDuties(user.id, user.tenantId), seat)) await requireAccess("seat_attendance");
 

@@ -3,6 +3,7 @@ import { readSecretaryInput } from "@/features/dashboard/instruments/secretary-s
 import { askSecretary, loadSecretaryNote } from "@/features/dashboard/instruments/secretary-server";
 import { getStaffTaskViewer } from "@/features/staff-tasks/server/gate";
 import { isTenantViewWriteBlocked } from "@/lib/auth/tenant-view";
+import { viewAsTeacher } from "@/lib/auth/view-as";
 import { reportError } from "@/lib/observability/report-error";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,8 @@ export async function GET() {
 export async function POST(request: Request) {
   const input = await readSecretaryInput(request);
   if (!input) return NextResponse.json({ error: "정리할 자료를 읽지 못했습니다. 화면을 새로고침해 주세요" }, { status: 400 });
+  // 강사뷰(전체 · 읽기)에서는 정리하지 않는다 — 대상 X 명의로 AI를 부르고 X의 하루 상한을 쓴다(2026-11-05 강사뷰 적대 리뷰 중요).
+  if (await viewAsTeacher()) return NextResponse.json({ error: "강사뷰에서는 업무 비서를 쓸 수 없습니다. 강사뷰를 끝내고 본인 화면에서 써 주세요" }, { status: 403 });
   const viewer = await getStaffTaskViewer();
   if (!viewer) return NextResponse.json({ error: "이 계정으로는 업무 비서를 쓸 수 없습니다" }, { status: 403 });
   if (await isTenantViewWriteBlocked()) return NextResponse.json({ error: "읽기 전용으로 보는 중에는 정리할 수 없습니다" }, { status: 403 });

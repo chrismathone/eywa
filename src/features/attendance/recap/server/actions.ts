@@ -32,7 +32,8 @@ export async function generateRecapSummary(
   if (!ymd.test(from) || !ymd.test(to) || from > to) return { error: "날짜 형식이 올바르지 않습니다" };
   if (to > kstToday()) return { error: "미래 날짜는 요약할 수 없습니다" };
 
-  const user = await getCurrentUser();
+  // 요청자(requested_by)는 화면 주인 — 강사뷰면 검증된 대상(읽기 강사뷰는 아래 수준 캡이 막는다).
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   // 요약 탭과 **같은 게이트**(사무실 full) — 화면에서만 감추면 게이트가 아니다(#77).
   if ((await accessLevelTenant(user.systemRole, "attendance")) !== "full") {

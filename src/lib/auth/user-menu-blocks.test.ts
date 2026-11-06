@@ -27,8 +27,9 @@ describe("개인 메뉴 차단(원장 2026-10-20)", () => {
   it("명단은 원장이 지시한 한 줄뿐이다(넓히려면 원장에게 다시 묻는다)", () => {
     expect(USER_MENU_BLOCKS).toEqual({ [YUN]: ["staff"] });
   });
-  it("배선: 행위자·다른 강사 뷰 매트릭스 둘 다 맨 끝에서 누른다", () => {
+  it("배선: 행위자·다른 강사 뷰 매트릭스 둘 다 맨 끝에서 누른다(강사뷰는 보는 사람 · 대상 둘 다 — 2026-11-05)", () => {
     const src = readFileSync(join(process.cwd(), "src/lib/auth/perm-matrix.ts"), "utf8");
-    expect(src.match(/applyUserMenuBlocks\(/g)?.length).toBe(2);
+    expect(src.match(/applyUserMenuBlocks\(/g)?.length).toBe(3);
+    expect(src).toMatch(/applyUserMenuBlocks\(applyUserMenuBlocks\(m, user\.id, [^)]*\), target\.id,/);
   });
 });

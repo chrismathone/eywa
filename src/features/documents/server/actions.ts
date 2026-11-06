@@ -22,15 +22,18 @@ import { REFUND_FORM_TYPE } from "@/features/billing/refund-request";
 import { releaseWithdrawalRefunds } from "@/features/withdrawal-reports/server/release";
 import { FALLBACK_CATEGORY, normalizeLinkUrl } from "../categories";
 import { getDocumentCategories } from "./category-queries";
+import { hideRestrictedDocuments } from "./restricted";
 
 // 데이터베이스(서식 저장소) 변경 액션 — 쓰기는 canWriteTenant("documents")(master/admin/manager),
 // 다운로드(읽기)는 canAccessTenant(readonly 강사·상담·회계도 빈 양식을 받아야 하므로).
+// '다른 강사 뷰'면 행위자는 대상 X — 등록자 명의(uploaded_by)는 X, 감사로그(logAction)는 실제 로그인 계정이 남는다.
+// 제한 문서(restricted)는 행위자 역할로 한 번 더 거른다 — DB는 실제 로그인 계정 역할로만 거른다(restricted.ts).
 
 export type DocTicketState = { ticket?: UploadTicket; error?: string } | undefined;
 export type DocActionState = { ok?: boolean; error?: string; id?: string; nonce?: number } | undefined;
 
 async function requireDocumentWrite() {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" as const };
   if (!(await canWriteTenant(user.systemRole, "documents"))) {
     return { error: "서식 관리 권한이 없습니다" as const };
@@ -246,14 +249,15 @@ export async function updateDocument(
   const cat = await parseCategory(formData.get("category"));
   if ("error" in cat) return { error: cat.error };
 
-  const supabase = await createClient();
-  const { data: current, error: currentError } = await supabase
+  const [supabase, hideRestricted] = await Promise.all([createClient(), hideRestrictedDocuments()]);
+  let currentQuery = supabase
     .from("academy_documents")
     .select("kind, file_name, file_path")
     .eq("id", id)
     .eq("tenant_id", gate.user.tenantId)
-    .is("staff_user_id", null)
-    .maybeSingle();
+    .is("staff_user_id", null);
+  if (hideRestricted) currentQuery = currentQuery.eq("restricted", false);
+  const { data: current, error: currentError } = await currentQuery.maybeSingle();
   if (currentError || !current) {
     logDbError(currentError, "documents.updateDocument");
     return { error: "문서를 찾을 수 없습니다" };
@@ -279,14 +283,15 @@ export async function updateDocument(
   }
 
   // 직원 연결 문서(이력서·계약서)는 이 표면에서 조작 불가(#77) — 관리도 /staff 쪽 전용 액션으로만.
-  const { data: updated, error } = await supabase
+  let updateQuery = supabase
     .from("academy_documents")
     .update(patch)
     .eq("id", id)
-    .is("staff_user_id", null)
-    // ⚠️ select 없이 로그를 남기면 0행 갱신(없는 id·이력서 id)도 "고쳤다"고 적힌다 — 감사로그가
-    //    실제로 없었던 변경을 주장하면 역검수가 오히려 틀린 곳을 가리킨다. 바뀐 행이 있을 때만 남긴다.
-    .select("id");
+    .is("staff_user_id", null);
+  if (hideRestricted) updateQuery = updateQuery.eq("restricted", false);
+  // ⚠️ select 없이 로그를 남기면 0행 갱신(없는 id·이력서 id)도 "고쳤다"고 적힌다 — 감사로그가
+  //    실제로 없었던 변경을 주장하면 역검수가 오히려 틀린 곳을 가리킨다. 바뀐 행이 있을 때만 남긴다.
+  const { data: updated, error } = await updateQuery.select("id");
   if (error) return { error: `수정 실패: ${error.message}` };
   if (updated?.length) {
     await logAction({
@@ -311,13 +316,14 @@ export async function deleteDocument(id: string): Promise<{ ok?: boolean; error?
   const gate = await requireDocumentWrite();
   if ("error" in gate) return { error: gate.error };
 
-  const supabase = await createClient();
-  const { data: row } = await supabase
+  const [supabase, hideRestricted] = await Promise.all([createClient(), hideRestrictedDocuments()]);
+  let rowQuery = supabase
     .from("academy_documents")
     .select("title, kind, category, file_path, form_type, uploaded_by")
     .eq("id", id)
-    .is("staff_user_id", null) // 직원 연결 문서는 여기서 안 지운다(#77) — 이력서는 deleteStaffResume 전용
-    .maybeSingle();
+    .is("staff_user_id", null); // 직원 연결 문서는 여기서 안 지운다(#77) — 이력서는 deleteStaffResume 전용
+  if (hideRestricted) rowQuery = rowQuery.eq("restricted", false);
+  const { data: row } = await rowQuery.maybeSingle();
 
   // ⚠️ 이력서는 같은 행이 여기(탐색기)에도 뜨지만 **열람은 원장·관리자로 잠겨 있다**(재인증 제거 2026-07-28) —
   // 열람 못 하는 이력서를 이 경로로 삭제할 수 있으면 잠금이 무의미해진다(2026-07-15 적대검수 실적발). 같은 게이트를 건다.
@@ -326,12 +332,14 @@ export async function deleteDocument(id: string): Promise<{ ok?: boolean; error?
     if (!ok) return { error: RESUME_LOCKED_MSG };
   }
 
-  const { data: deleted, error } = await supabase
+  let deleteQuery = supabase
     .from("academy_documents")
     .delete()
     .eq("id", id)
-    .is("staff_user_id", null)
-    .select("id"); // select 없으면 0행 삭제도 성공으로 보고된다.
+    .is("staff_user_id", null);
+  // 못 보는 제한 문서는 못 지운다 — 위 조회와 같은 벽(안 그러면 목록에 없는 행을 id로 지울 수 있다).
+  if (hideRestricted) deleteQuery = deleteQuery.eq("restricted", false);
+  const { data: deleted, error } = await deleteQuery.select("id"); // select 없으면 0행 삭제도 성공으로 보고된다.
   if (error) return { error: humanizeDbError(error.message, "삭제") };
   if (!deleted?.length) return { error: "문서를 찾을 수 없습니다 — 이미 삭제되었을 수 있습니다" };
   // 🔴 지운 뒤엔 이름을 되찾을 곳이 없다 — 삭제 직전 제목을 그대로 스냅샷으로 남긴다(id만 남으면
@@ -364,17 +372,20 @@ export async function signDocumentUrl(
   id: string,
   mode: "view" | "download" = "view",
 ): Promise<{ url?: string; fileName?: string; error?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canAccessTenant(user.systemRole, "documents"))) return { error: "접근 권한이 없습니다" };
 
-  const supabase = await createClient();
-  const { data: row } = await supabase
+  const [supabase, hideRestricted] = await Promise.all([createClient(), hideRestrictedDocuments()]);
+  let rowQuery = supabase
     .from("academy_documents")
     .select("title, file_path, file_name")
     .eq("id", id)
-    .is("staff_user_id", null) // 직원 연결 문서는 전용 서명 경로(signStaffContractFileUrl)만(#77)
-    .maybeSingle();
+    .is("staff_user_id", null); // 직원 연결 문서는 전용 서명 경로(signStaffContractFileUrl)만(#77)
+  // 🔴 제한 문서는 행위자 역할로 — 강사뷰에서 원장 토큰으로 서명하면 강사 X에게 계좌·금액 문서가 내려받아졌다.
+  //    다운로드 라우트(/api/documents/[id]/file)도 이 함수를 지나므로 같은 벽이다.
+  if (hideRestricted) rowQuery = rowQuery.eq("restricted", false);
+  const { data: row } = await rowQuery.maybeSingle();
   if (!row?.file_path) return { error: "파일이 없는 문서입니다" };
   try {
     const fileName = documentFileName(row.file_name, row.title, row.file_path);
@@ -397,13 +408,14 @@ export async function toggleDocumentPin(
   const gate = await requireDocumentWrite();
   if ("error" in gate) return { error: gate.error };
 
-  const supabase = await createClient();
-  const { data: updated, error } = await supabase
+  const [supabase, hideRestricted] = await Promise.all([createClient(), hideRestrictedDocuments()]);
+  let pinQuery = supabase
     .from("academy_documents")
     .update({ pinned, updated_at: new Date().toISOString() })
     .eq("id", id)
-    .is("staff_user_id", null)
-    .select("id, title"); // 제목은 로그 라벨용 — 같은 왕복에서 받아 온다(추가 조회 0).
+    .is("staff_user_id", null);
+  if (hideRestricted) pinQuery = pinQuery.eq("restricted", false);
+  const { data: updated, error } = await pinQuery.select("id, title"); // 제목은 로그 라벨용 — 같은 왕복에서 받아 온다(추가 조회 0).
   if (error) return { error: `고정 변경 실패: ${error.message}` };
   if (updated?.length) {
     await logAction({

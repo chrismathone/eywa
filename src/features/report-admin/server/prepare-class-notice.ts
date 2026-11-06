@@ -28,7 +28,8 @@ export async function prepareClassNotice(input: ClassNoticeInput) {
 }
 
 async function prepare(input: ClassNoticeInput) {
-  const user = await getCurrentUser();
+  // '다른 강사 뷰'면 대상 X의 명의로 보낸다(큐의 created_by) — 미리보기와 발송이 같은 사람이라 지문(userId)도 맞는다.
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false as const, error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "lesson_reports"))) return { ok: false as const, error: "공지 발송 권한이 없습니다" };
   const body = (input.body ?? "").trim();

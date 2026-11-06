@@ -1,6 +1,7 @@
 import "server-only";
 import { isModuleEnabled } from "@/lib/modules";
 import { requireAccess } from "@/lib/auth/require-access";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getTeacherScope, type TeacherScope } from "@/lib/auth/teacher-scope";
@@ -645,7 +646,9 @@ export type LoadOverviewOptions = {
 /** Authoritative, permission-gated snapshot. No cross-user server cache, no fallback zeros. */
 export async function loadOverview(options: LoadOverviewOptions = {}): Promise<OverviewSnapshot> {
   const requestedAt = Date.now();
-  const user = await requireAccess("dashboard");
+  const signedIn = await requireAccess("dashboard");
+  // '다른 강사 뷰'면 대상 직원의 운영실이다 — 배치(묶음·담당 과목)·공지 대상(역할)·결재함이 대상 기준(메뉴 권한이 대상 값인 것과 같은 축).
+  const user = (await getCurrentUser({ teacherView: true })) ?? signedIn;
   // 역할 판정(총괄 여부·관리자의 담당 과목)은 권한 매트릭스와 독립 — 먼저 띄워 둔다(B4, 30초 갱신마다 왕복이 붙지 않게).
   const viewerPromise = options.full ? Promise.resolve({ bundle: "owner" as const, subjects: [] as string[], subjectScoped: false }) : loadViewerBundle(user);
   void viewerPromise.catch(() => undefined);

@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, readonlyViewErasedScope } from "@/lib/auth/perm-matrix";
 import { getDelegatedClassIdsInRange } from "@/features/classes/server/delegation";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
@@ -91,7 +91,10 @@ export const teacherClassScopeStrict = cache(async (userId: string, strictDelega
 export async function canViewStudentDetail(studentId: string): Promise<boolean> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return false;
-  if ((await accessLevelTenant(user.systemRole, "students")) !== "scoped") return true;
+  const level = await accessLevelTenant(user.systemRole, "students");
+  // 🔴 읽기 강사뷰는 X의 scoped를 readonly로 캡한다 — 그 캡이 담당 범위까지 지우면 X와 무관한 학생 상세가 열렸다(반 상세는
+  //    막히는데 그 반 학생은 열림, 2026-11-05 강사뷰 적대 재리뷰). 반 상세(class-scope.ts)와 같은 판정으로 X의 담당을 다시 건다.
+  if (level !== "scoped" && !(level === "readonly" && (await readonlyViewErasedScope("students")))) return true;
 
   const classIds = await teacherViewableClassIds(user.id);
   if (classIds.length === 0) return false;

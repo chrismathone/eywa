@@ -1,6 +1,7 @@
 "use server";
 
 import { requireAccess } from "@/lib/auth/require-access";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { kstToday } from "@/lib/date-kst";
@@ -25,6 +26,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 async function gate(studentId: string, classId: string) {
   const user = await requireAccess("students");
+  // 끊은 사람(revoked_by)은 '다른 강사 뷰'면 대상 직원 X — 업무 기록의 명의(원장 2026-11-05 강사뷰 전수).
+  // 감사로그 행위자는 logAction이 실제 계정으로 남긴다. 열람 전용 강사뷰는 아래 canWriteTenant가 막는다.
+  const actor = (await getCurrentUser({ teacherView: true })) ?? user;
   const deny = (error: string) => ({ ok: false as const, error });
   if (!(await canWriteTenant(user.systemRole, "students"))) return deny("링크를 끊을 권한이 없습니다(원생목록 작성 권한 필요).");
   if (!UUID_RE.test(studentId) || !UUID_RE.test(classId)) return deny("학생 또는 반을 찾을 수 없습니다.");
@@ -36,14 +40,14 @@ async function gate(studentId: string, classId: string) {
   if (!enrollment) return deny("지금 다니는 반이 아닙니다.");
   const availability = await videoSubmitAvailability(user.tenantId, await getTenantSettings());
   if (!availability.ok) return deny("지금은 제출 링크를 쓸 수 없습니다.");
-  return { ok: true as const, user, student, enrollment, today };
+  return { ok: true as const, user, actor, student, enrollment, today };
 }
 
 export async function revokeVideoSubmitLinks(studentId: string, classId: string): Promise<Result<{ revoked: number }>> {
   const g = await gate(studentId, classId);
   if (!g.ok) return { ok: false, error: g.error };
   try {
-    const revoked = await revokeSubmitLinks(createAdminClient(), { tenantId: g.user.tenantId, studentId, classId, userId: g.user.id });
+    const revoked = await revokeSubmitLinks(createAdminClient(), { tenantId: g.user.tenantId, studentId, classId, userId: g.actor.id });
     await logAction({
       action: "lesson_report_video_link_revoke", targetType: "student", targetLabel: `${g.student.name} · ${g.enrollment.className}`,
       metadata: { studentId, classId, revoked },

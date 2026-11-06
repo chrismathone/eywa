@@ -44,6 +44,11 @@ import { referrerChanged, referrerColumns, referrerColumnsOf, type ReferrerColum
 import { readReferrerBefore, referrerLabelOf } from "@/features/enrollment/server/referrer-queries";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+// 🔑 행위자 = '다른 강사 뷰'의 대상 직원(`getCurrentUser({ teacherView: true })`, 강사뷰가 아니면 본인) — 상담자 계정(consultant_id)·
+//    녹음한 사람(recorded_by)·빈 상담자 자동 채움·AI 리포트 수정자·배정 알림의 유발자가 대상 명의다(출결 recorded_by와 같은 규약,
+//    원장 2026-11-05 강사뷰 전수). 등록상담 표들은 지점 격리 RLS뿐이라 세션 클라이언트로 대상 명의를 쓸 수 있다. '읽기' 강사뷰는
+//    canWriteTenant가 막는다. 감사로그 행위자만 로그인 계정이다(logAction이 스스로 읽는다).
+
 /** DB 오류 → 화면용 한글 이유 + 로그(scope로 Vercel 로그 검색, [[#138]]). 모르는 오류면 fallback 그대로 — 영문 원문은 안 내보낸다. */
 function dbWhy(error: unknown, scope: string, fallback: string, op?: "write" | "delete"): string {
   return explainDbError(error, { scope, fallback, op }).message;
@@ -77,7 +82,7 @@ export async function createEnrollmentConsultation(
     return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요" };
   }
 
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
 
@@ -365,7 +370,7 @@ export async function updateEnrollmentConsultation(
   _prev: UpdateConsultationState,
   formData: FormData,
 ): Promise<UpdateConsultationState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
 
@@ -549,7 +554,7 @@ export async function setEnrollmentOutcome(
   _prev: SetOutcomeState,
   formData: FormData,
 ): Promise<SetOutcomeState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
 
@@ -636,7 +641,7 @@ export type PatchCellsState = { ok: true } | { error: string };
  *    거절). 상태(outcome)는 여기가 아니라 `setEnrollmentOutcome`(칸반 드롭·상세와 같은 경로)이다.
  */
 export async function patchConsultationCells(id: string, patch: ConsultationCellPatch): Promise<PatchCellsState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
   if (!id?.trim()) return { error: "상담 ID가 누락되었습니다" };
@@ -750,7 +755,7 @@ export async function deleteEnrollmentConsultation(
   _prev: DeleteConsultationState,
   formData: FormData,
 ): Promise<DeleteConsultationState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
 
@@ -871,7 +876,7 @@ export async function convertConsultationToStudent(
   _prev: ConvertToStudentState,
   formData: FormData,
 ): Promise<ConvertToStudentState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
 
@@ -1160,7 +1165,7 @@ export async function updateConsultationReportSection(
   _prev: UpdateConsultationReportState,
   formData: FormData,
 ): Promise<UpdateConsultationReportState> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
 
@@ -1224,7 +1229,7 @@ export async function updateConsultationReportSection(
 export async function regenerateConsultationAnalysis(
   consultationId: string,
 ): Promise<{ ok?: boolean; error?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
   if (!consultationId) return { error: "상담 ID가 누락되었습니다" };
@@ -1366,7 +1371,7 @@ export async function regenerateConsultationAnalysis(
 export async function appendAiSummaryToConsultationContent(
   consultationId: string,
 ): Promise<{ ok?: boolean; error?: string }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "신규 콜&상담 권한이 없습니다" };
   if (!consultationId) return { error: "상담 ID가 누락되었습니다" };

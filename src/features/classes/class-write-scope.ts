@@ -37,7 +37,11 @@ export function canWriteClassRecord(input: {
   level: Access;
   /** 이 반의 담임(`classes.teacher_id`). 모르면 null — 그땐 scoped는 통과 못 한다. */
   classTeacherId: string | null;
-  /** 현재 사용자 id(실 계정 — 강사뷰 대상 강사 id가 아니다). */
+  /**
+   * 화면 주인의 id — `getCurrentUser({ teacherView: true })`(강사뷰면 검증된 대상 강사, 아니면 실제 계정).
+   * ⚠️ 실제 계정 id를 넘기면 안 된다: 수준(level)은 이미 대상 강사의 것이라, id만 실제 계정이면 대상의
+   *    담임 반이 '남의 반'으로 판정된다(열람 전용 시절의 규칙이 남아 있었다 — 2026-11-05 강사뷰 신원 점검).
+   */
   userId: string;
 }): boolean {
   if (input.level === "full") return true;

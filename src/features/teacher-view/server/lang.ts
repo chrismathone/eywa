@@ -22,10 +22,16 @@ import { parseSheetLang } from "../i18n";
  *
  * ⚠️ **조회가 실패해도 화면은 그대로 열린다** — 개인 표시 취향이라 막을 이유가 없다.
  * ⚠️ RLS 우회(admin)라 **`tenant_id`까지 좁힌다**.
+ *
+ * 🔑 '다른 강사 뷰'(원장 A가 강사 X 화면, 원장 2026-11-05 강사뷰 전수)에서는 **두 사람의 값을 나눠 읽는다**:
+ *    ① 본인이 고른 값(`ui_prefs`) = **보는 사람 A** — 개인 표시 설정이라 실제 계정이다. 화면의 언어 스위치
+ *       (`setMyTeacherLang` → `patchMyUiPrefs`)도 A의 ui_prefs에 쓰므로, 여기서 X의 값을 읽으면 스위치가 듣지 않는다.
+ *    ② 관리자 지정(`teacher_view_lang`)·③ 이름 도출 = **대상 X** — "X의 화면은 기본으로 이 언어"라는 X에 대한 사실이다.
+ *    그래서 원어민 강사의 화면을 열면 기본은 X가 보는 그 언어이고, A가 스위치로 고르면 A의 선택이 이긴다.
  */
 export const getTeacherViewLang = cache(async (): Promise<SheetLang> => {
-  const [user, view] = await Promise.all([getCurrentUser(), getShellView()]);
-  if (!user || view !== "teacher") return DEFAULT_SHEET_LANG;
+  const [viewer, target, view] = await Promise.all([getCurrentUser(), getCurrentUser({ teacherView: true }), getShellView()]);
+  if (!viewer || !target || view !== "teacher") return DEFAULT_SHEET_LANG;
   const admin = createAdminClient();
   // 🔴 두 값을 **따로** 읽는다 — `teacher_view_lang`은 0248a라 미적용일 수 있고, 한 select에 함께
   //    실으면 컬럼 부재가 PostgREST 400이 되어 `ui_prefs`까지 못 읽는다([[#95]] — 강사 셸은 전원이
@@ -36,8 +42,8 @@ export const getTeacherViewLang = cache(async (): Promise<SheetLang> => {
       const { data } = await admin
         .from("users")
         .select("ui_prefs")
-        .eq("id", user.id)
-        .eq("tenant_id", user.tenantId)
+        .eq("id", viewer.id)
+        .eq("tenant_id", viewer.tenantId)
         .maybeSingle();
       return readTeacherLangPref(data?.ui_prefs);
     } catch {
@@ -50,8 +56,8 @@ export const getTeacherViewLang = cache(async (): Promise<SheetLang> => {
       const { data, error } = await admin
         .from("users")
         .select("teacher_view_lang")
-        .eq("id", user.id)
-        .eq("tenant_id", user.tenantId)
+        .eq("id", target.id)
+        .eq("tenant_id", target.tenantId)
         .maybeSingle();
       return error ? null : parseSheetLang(data?.teacher_view_lang);
     } catch {
@@ -59,5 +65,5 @@ export const getTeacherViewLang = cache(async (): Promise<SheetLang> => {
     }
   };
   const [prefs, override] = await Promise.all([readPref(), readOverride()]);
-  return resolveSheetLang(prefs, override, user.displayName);
+  return resolveSheetLang(prefs, override, target.displayName);
 });

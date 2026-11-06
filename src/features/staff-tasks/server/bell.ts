@@ -1,5 +1,5 @@
 import "server-only";
-import { createClient } from "@/lib/supabase/server";
+import { notificationInbox } from "@/features/notifications/server/inbox";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { reportError } from "@/lib/observability/report-error";
@@ -31,11 +31,15 @@ export async function notificationTaskBadges(notificationIds: readonly string[])
     const viewer = await getStaffTaskViewer();
     if (!viewer) return badges;
     const tenantId = viewer.user.tenantId;
-    // 알림 → 할 일: 단건은 내 알림 표(RLS = 받는 사람 본인)의 task_id, 묶음은 연결표(관리 키 — 넘긴 id가 이미 내 알림 목록이다).
+    // 알림 → 할 일: 단건은 받은함 알림(받는 사람 · 지점 명시 — 평소 본인 · '다른 강사 뷰'는 그 강사, inbox.ts)의 task_id,
+    // 묶음은 연결표(관리 키 — 넘긴 id가 이미 받은함 목록이다).
+    const inbox = await notificationInbox();
+    if (!inbox) return badges;
     const [single, grouped] = await Promise.all([
       (async () => {
-        const { data, error } = await (await createClient())
-          .from("notifications").select("id, task_id").in("id", [...notificationIds]).not("task_id", "is", null);
+        const { data, error } = await inbox.db
+          .from("notifications").select("id, task_id").eq("tenant_id", inbox.tenantId).eq("recipient_id", inbox.recipientId)
+          .in("id", [...notificationIds]).not("task_id", "is", null);
         if (error) throw new Error(`알림 할 일 연결: ${error.message}`);
         return (data ?? []) as { id: string; task_id: string }[];
       })(),

@@ -20,7 +20,7 @@ import {
 } from "@/features/notifications/server/actions";
 // 목록 조회(마운트·이동·포커스·60초 폴링)는 서버 액션이 아니라 GET 라우트 — 라우터 작업 큐 경합으로 Next 기본 오류
 // 화면이 떴다(gotchas #137). 위 액션들은 **누를 때만** 부르므로 그대로 둔다.
-import { fetchMyNotificationsList } from "@/features/notifications/fetch-my-notifications";
+import { fetchMyNotificationsList, type NotificationListResponse } from "@/features/notifications/fetch-my-notifications";
 import type { NotificationView } from "@/features/notifications/server/queries";
 import {
   NOTIFICATION_LIST_LIMIT,
@@ -100,6 +100,8 @@ export function NotificationBell() {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  // '읽기' 강사뷰 — 그 강사의 받은함을 보기만 한다(서버도 쓰기를 막는다). 읽음 · 보관 · 삭제 단추를 감추고 열어도 읽음으로 바꾸지 않는다.
+  const [readOnly, setReadOnly] = useState(false);
   // 학부모 글·댓글 답글 창(0317a) — 답글을 쓸 수 있는 알림(알림 id → 메시지 id)은 벨이 열릴 때만 묻는다.
   // 공감 대상이 모호한 옛 댓글은 창을 열 때 서버에서 다시 판정한다.
   const [replyOpen, setReplyOpen] = useState<string | null>(null); // 알림 id — 본문·답글 버튼 모두 같은 창
@@ -166,7 +168,7 @@ export function NotificationBell() {
 
   // seq를 발급하고, 응답 도착 시 그 seq가 아직 최신일 때만 반영하는 공용 러너.
   const run = useCallback(
-    (fn: () => Promise<{ unread: number; items: NotificationItem[]; tasks?: StaffTaskSummary }>) => {
+    (fn: () => Promise<NotificationListResponse>) => {
       const seq = ++reqRef.current;
       startTransition(async () => {
         try {
@@ -175,9 +177,12 @@ export function NotificationBell() {
             setItems(res.items);
             setUnread(res.unread);
             if (res.tasks) setTasks(res.tasks);
+            setReadOnly(res.readOnly === true);
             // 읽음처리 응답에도 태우지만 read=true라 대상에서 걸러짐. 보관함 뷰의 목록으로는
             // 팝업을 쏘지 않는다(치워둔 알림이 다시 울리면 보관이 무의미).
-            if (viewRef.current === "active") maybeAlert(res.items);
+            // '다른 강사 뷰'면 띄우지 않는다 — 그 강사의 안 읽은 중요 알림이 보는 사람 컴퓨터에 OS 알림 · 팝업으로 몰려 뜬다
+            // (이미 알린 기록이 계정 구분 없는 localStorage라서 · 2026-11-05 강사뷰 적대 리뷰). 벨 목록 · 배지는 그대로 보인다.
+            if (viewRef.current === "active" && !res.viewAs) maybeAlert(res.items);
           }
         } catch {
           /* best-effort — 벨 갱신 실패는 조용히 무시 */
@@ -250,7 +255,7 @@ export function NotificationBell() {
 
   function openItem(n: NotificationItem) {
     setMenuOpen(false);
-    if (!n.read) {
+    if (!n.read && !readOnly) {
       // 낙관적 갱신 후 서버 반영(응답으로 최종 동기화). run이 seq를 올려 in-flight 폴링이 되돌리지 못한다.
       setItems((prev) =>
         prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)),
@@ -389,7 +394,7 @@ export function NotificationBell() {
               {view === "archived" ? "보관함" : "알림"}
             </DropdownMenuLabel>
             <span className="flex items-center gap-2.5">
-              {view === "active" && visibleUnreadIds.length > 0 ? (
+              {view === "active" && visibleUnreadIds.length > 0 && !readOnly ? (
                 <button
                   type="button"
                   onClick={markAllRead}
@@ -399,7 +404,7 @@ export function NotificationBell() {
                   {hiddenUnread > 0 ? "보이는 알림 읽음" : "모두 읽음"}
                 </button>
               ) : null}
-              {items.length > 0 ? (
+              {items.length > 0 && !readOnly ? (
                 <button
                   type="button"
                   onClick={() => setConfirmClear(true)}
@@ -447,13 +452,13 @@ export function NotificationBell() {
                   onOpen: () => openItem(n),
                   replyCount: messageId ? (replyCounts[messageId] ?? 0) : 0,
                   onReply: messageId ? () => openItem(n) : undefined,
-                  onArchive: () =>
+                  onArchive: readOnly ? undefined : () =>
                     removeThen(n.id, () =>
                       view === "active"
                         ? archiveNotification(n.id, "active", limit)
                         : unarchiveNotification(n.id, "archived", limit),
                     ),
-                  onDelete: () => removeThen(n.id, () => deleteNotification(n.id, view, limit)),
+                  onDelete: readOnly ? undefined : () => removeThen(n.id, () => deleteNotification(n.id, view, limit)),
                 };
                 // 안 읽은 알림(위) · 읽은 알림(아래) 사이에 구분선 한 줄 — 어디까지가 새 소식인지 보이게.
                 const divider = view === "active" && n.read && index > 0 && !items[index - 1]!.read

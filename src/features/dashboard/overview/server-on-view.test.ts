@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => {
   const gate: { release: (rows: unknown[]) => void } = { release: () => undefined };
   return {
     gate,
+    bundle: vi.fn(async (_viewer: unknown) => ({ bundle: "accountant", subjects: [], subjectScoped: false })),
     notices: vi.fn(
       () =>
         new Promise<unknown[]>((resolve) => {
@@ -32,7 +33,12 @@ vi.mock("@/lib/auth/view-mode", () => ({ effectiveTeacherId: vi.fn(async () => n
 vi.mock("@/lib/auth/teacher-scope", () => ({ getTeacherScope: vi.fn(async () => null) }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: vi.fn(async () => mocks.settings) }));
 vi.mock("@/features/dashboard/layout/viewer-server", () => ({
-  loadViewerBundle: vi.fn(async () => ({ bundle: "accountant", subjects: [], subjectScoped: false })),
+  loadViewerBundle: mocks.bundle,
+}));
+// '다른 강사 뷰' — 로그인 계정(원장 u1)이 회계 직원 x의 화면을 연다. 운영실의 사람(배치·공지 대상)은 x다.
+vi.mock("@/lib/auth/current-user", () => ({
+  getCurrentUser: vi.fn(async (o?: { teacherView: boolean }) =>
+    o?.teacherView ? { id: "x", tenantId: "t1", systemRole: "accountant" } : { id: "u1", tenantId: "t1", systemRole: "master" }),
 }));
 vi.mock("@/features/dashboard/server/queries", () => ({
   getRecentAnnouncements: mocks.notices,
@@ -66,5 +72,8 @@ describe("loadOverview onView — 배치를 무거운 조회보다 먼저 알린
     ]).finally(() => clearTimeout(timer));
     expect(snap.view).toBe(onView.mock.calls[0]![0]);
     expect(onView).toHaveBeenCalledTimes(1);
+    // 강사뷰 대상 기준 — 배치 판정과 공지 대상(역할)이 로그인 계정(원장)이 아니라 대상 직원(회계)이다.
+    expect(mocks.bundle).toHaveBeenCalledWith(expect.objectContaining({ id: "x", systemRole: "accountant" }));
+    expect(mocks.notices).toHaveBeenCalledWith("accountant", 4);
   });
 });

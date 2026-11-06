@@ -1,10 +1,11 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-const { rpc, currentUser, connectedApps } = vi.hoisted(() => ({ rpc: vi.fn(), currentUser: vi.fn(), connectedApps: vi.fn() }));
+const { rpc, currentUser, connectedApps, viewAs } = vi.hoisted(() => ({ rpc: vi.fn(), currentUser: vi.fn(), connectedApps: vi.fn(), viewAs: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc }) }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: currentUser }));
 // 연결 앱 권한 판정(2026-11-05) — 기본은 '오늘 수학 링크가 서는 사람'. 꺼진 경우는 아래 따로 본다.
 vi.mock("@/features/connected-apps/server/visible", () => ({ getMyConnectedApps: connectedApps }));
+vi.mock("@/lib/auth/view-as", () => ({ viewAsTeacher: viewAs }));
 import { GET } from "@/app/api/connected-apps/todays-math/authorize/route";
 import { activeControl, config, eligibleEntry, id, user } from "./sync-browser.test-support";
 
@@ -20,7 +21,7 @@ function noStore(response: Response) {
 beforeEach(() => {
   vi.resetAllMocks(); vi.stubEnv("EYWA_SYNC_BINDINGS_JSON", JSON.stringify([config]));
   vi.stubEnv("EYWA_SYNC_AUTO_JSON", undefined);
-  currentUser.mockResolvedValue(user);
+  currentUser.mockResolvedValue(user); viewAs.mockResolvedValue(null);
   rpc.mockResolvedValue({ data: activeControl, error: null });
   connectedApps.mockResolvedValue([{ feature: "todays_math" }]);
 });
@@ -88,6 +89,16 @@ describe("source authorization login fallback", () => {
     const ineligible = await GET(request());
     expect(ineligible.headers.get("location")).toBe(`${config.targetBaseUrl}/login?eywa=not-linked`);
     expect(connectedApps).not.toHaveBeenCalled();
+  });
+
+  // 강사뷰(원장 A → 직원 X) 중 대상 쪽 v2 시작 주소를 직접 열어도 출발 라우트와 같이 /home — A 명의 코드를 내지 않는다.
+  it("sends a teacher-view session home without a control lookup or code", async () => {
+    viewAs.mockResolvedValue({ ...user, id: id(8), access: "full" });
+    rpc.mockResolvedValue({ data: { ...activeControl, users: [eligibleEntry] }, error: null });
+    const response = await GET(request());
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(`${config.sourceBaseUrl}/home`);
+    expect(rpc).not.toHaveBeenCalled(); noStore(response);
   });
 
   it("keeps failed atomic code issuance denied", async () => {

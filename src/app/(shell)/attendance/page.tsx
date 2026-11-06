@@ -18,6 +18,7 @@ import { FilterSelect } from "@/components/filter-select";
 import { kstMonth, kstToday, monthRange } from "@/lib/date-kst";
 import { classTaughtBy, teacherSheetClasses } from "@/features/attendance/teacher-sheet-classes";
 import { requireAccess } from "@/lib/auth/require-access";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isModuleEnabled } from "@/lib/modules";
 import { buildSubjectMaps } from "@/features/owner/subjects";
@@ -246,6 +247,12 @@ export default async function AttendancePage({
   }>;
 }) {
   const user = await requireAccess("attendance");
+  /**
+   * 화면 주인 — 강사뷰(다른 강사 뷰)면 검증된 대상 강사, 아니면 `user`(실제 계정)와 같다.
+   * 🔴 원장 전용 금액(정산액)·급여명세서 버튼은 **이 사람의 역할·명단**으로 판정한다 — 실제 계정(원장)으로 보면
+   *    강사 X의 출석부에 X가 볼 수 없는 정산액·명세서 버튼이 섰다(2026-11-05 강사뷰 신원 점검).
+   */
+  const viewer = (await getCurrentUser({ teacherView: true })) ?? user;
   const {
     class: classParam,
     month: monthParam,
@@ -478,7 +485,7 @@ export default async function AttendancePage({
       : [];
   // 표에서 뺀 반의 명단 — 티어 정산액(원장 전용)이 종전과 같은 학생 집합을 보게 하는 재료일 뿐이다(그리지 않는다). 대부분 0개.
   const laterMatrices =
-    mode === "teacher" && user.systemRole === "master" && payrollOn
+    mode === "teacher" && viewer.systemRole === "master" && payrollOn
       ? await Promise.all(
           laterClasses.map((c) =>
             getMonthlyAttendanceMatrix(month, c.id, "month", effectiveTeacher, sinceByClass.get(c.id) ?? null),
@@ -512,7 +519,7 @@ export default async function AttendancePage({
     ? taughtClasses.filter((c) => c.teacherId === effectiveTeacher && matrixByClass.has(c.id))
     : [];
   const money =
-    mode === "teacher" && user.systemRole === "master" && effectiveTeacher && payrollOn
+    mode === "teacher" && viewer.systemRole === "master" && effectiveTeacher && payrollOn
       ? await getTeacherMoney(
           month,
           effectiveTeacher,
@@ -835,8 +842,13 @@ export default async function AttendancePage({
 
   // 급여명세서 버튼 노출 — 게이트가 async(super_admin 조회)라 JSX 밖에서 한 번 계산한다.
   // ⚠️ 강사 전체 보기일 때만 물어본다 — 그 외에는 버튼 자체가 없어 왕복이 아깝다.
+  // 🔑 **두 사람 다** 볼 수 있을 때만 선다: 화면 주인(viewer — 강사 X의 화면엔 X가 못 보는 버튼이 서지 않게)과
+  //    실제 계정(user — 버튼이 여는 명세서 페이지·조회는 실제 계정으로 판정한다. 명세서는 주민번호·계좌가 실린 문서라
+  //    대상 기준으로 넓히지 않는다, 2026-11-05 강사뷰 신원 적대 리뷰). 한쪽만 보면 "보이는데 누르면 홈으로"가 된다.
   const canOpenPayslip =
-    mode === "teacher" && !!effectiveTeacher ? await canViewPayslipNow(user) : false;
+    mode === "teacher" && !!effectiveTeacher
+      ? (await canViewPayslipNow(viewer)) && (await canViewPayslipNow(user))
+      : false;
 
   // 결석 통보 접수(2026-08-19) — 남의 반 칸까지 한 번에 만드는 조작이라 **사무실(full)만**.
   // ⚠️ 화면 조건은 게이트가 아니다(#77) — 서버 액션이 같은 판정을 다시 한다.

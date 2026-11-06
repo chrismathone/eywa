@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { getActorPermMatrix } from "@/lib/auth/perm-matrix";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { USER_MENU_BLOCKS } from "@/lib/auth/user-menu-blocks";
+import { viewAsTeacher } from "@/lib/auth/view-as";
 import { isFeatureOptedIn } from "@/lib/license/server";
 import { CONNECTED_APPS, connectedAppVisibleTo, type ConnectedApp } from "../apps";
 
@@ -32,6 +33,10 @@ export const getTenantConnectedApps = cache(async (tenantId: string): Promise<Co
  * 과목 조회는 권한으로 남은 앱이 있을 때만 한다(대부분 지점은 스위치 조회 1번으로 끝). 못 읽으면 **감춘다** — 다른 앱에 로그인시키는
  * 입구라, 영어 선생님에게 새는 쪽보다 잠깐 안 보이는 쪽이 낫다(스위치 조회와 같은 fail-closed).
  * 요청 캐시 — 레이아웃이 한 번 부르면 같은 요청의 다른 소비처는 쿼리 0.
+ * 🔑 판정 신원은 **실제 로그인 계정**이다 — 이 입구는 바깥 앱에 **그 사람으로 로그인시키는**(SSO) 인증이라, 강사뷰 대상의 과목을 빌려
+ *    판정하면 영어 전담 A가 수학 강사 X의 화면에서 A 신원의 오늘 수학 표를 받는다(적대 리뷰 2026-11-05).
+ * 🔴 '다른 강사 뷰' 중에는 **세우지 않는다** — 출발 라우트가 강사뷰를 거절하므로(남의 화면에서 내 계정으로 바깥 앱에 들어가지 않는다),
+ *    링크를 세우면 "보이는데 안 들어가지는" 입구가 된다(#77). 지점 보기와 같은 자리에서 끊는다.
  */
 export const getMyConnectedApps = cache(async (): Promise<ConnectedApp[]> => {
   const user = await getCurrentUser();
@@ -39,6 +44,7 @@ export const getMyConnectedApps = cache(async (): Promise<ConnectedApp[]> => {
   // 운영 콘솔의 '지점 보기'(읽기 전용)에서는 연결 앱을 세우지 않는다 — 이 입구는 **다른 앱에 로그인시키는** 길이라
   // 그 지점의 이름으로 바깥 앱에 들어가거나 계정이 이어지면 '읽기'가 아니다. 출발 라우트도 이 함수로 걸러진다.
   if (user.tenantView) return [];
+  if (await viewAsTeacher()) return [];
   const enabled = await getTenantConnectedApps(user.tenantId);
   if (enabled.length === 0) return [];
   const matrix = await getActorPermMatrix();

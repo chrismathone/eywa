@@ -61,7 +61,9 @@ export async function recordFollowup(input: {
    */
   allowFuture?: boolean;
 }): Promise<FollowupResult> {
-  const user = await getCurrentUser();
+  // 담당 판정·처리자(handled_by)·작성자(created_by)는 화면 주인 — 강사뷰면 검증된 대상 강사(출결 recorded_by와 같은 축).
+  // 읽기 강사뷰는 아래 canWriteTenant가 막는다. 감사로그(logAction)는 따로 실제 계정을 남긴다.
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출결 확인 권한이 없습니다" };
 
@@ -175,7 +177,8 @@ export async function requestAttendanceInput(input: {
   sessionDate: string;
   slotStart?: string | null;
 }): Promise<RequestResult> {
-  const user = await getCurrentUser();
+  // 보낸 사람(알림 actor·수신자 제외)은 화면 주인 — 강사뷰면 검증된 대상(읽기 강사뷰는 아래 수준 캡이 막는다).
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   // 전 학원 강사에게 보내는 요청이라 담당(scoped)이 아니라 **관리 권한**(full)만 통과시킨다.
   if ((await accessLevelTenant(user.systemRole, "attendance")) !== "full") {
@@ -309,7 +312,10 @@ export async function requestDeskConfirm(input: {
   /** 저장 축 교시(slot-axis saveSlot) — 수학은 null("그날 전체"). */
   slotStart?: string | null;
 }): Promise<RequestResult> {
-  const user = await getCurrentUser();
+  // 🔑 '내 수업인가'·요청자(알림 actor)·수신자 제외는 **화면 주인** — 강사뷰(다른 강사 뷰)면 검증된 대상 강사다.
+  //    실제 계정으로 판정하면 관리자가 강사 X 화면에서 누른 버튼이 "담당 반이 아닙니다"로 거절됐다(2026-11-05 점검).
+  //    읽기 강사뷰는 아래 수준(accessLevelTenant가 readonly로 캡)에서 거절된다. 감사로그는 실제 계정.
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) return { error: "로그인이 필요합니다" };
   const level = await accessLevelTenant(user.systemRole, "attendance");
   // 🔴 readonly(회계·뷰어)는 거절 — none만 거르면 그 사이 등급이 통과해 "강사가 요청했다"는 벨을
