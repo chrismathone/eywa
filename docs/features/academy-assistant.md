@@ -74,6 +74,11 @@ SQL = `supabase/migrations/s2_0031_academy_assistant.sql`(번호는 병합 때 �
 
 SQL → **원장 승인** → 운영 적용(SQL 편집기 또는 직결) → `alter role aywa_assistant password …`(저장소 밖) → Vercel env `ASSISTANT_DATABASE_URL`(+ 원하면 `ANTHROPIC_API_KEY_ASSISTANT`) → 앱 배포 → 원장 계정으로 질문 한 번(지점 격리 · 진행 단계 · 보고서 확인).
 
+- ✅ SQL 운영 적용 2026-11-06 17:37(원장 승인 · 확인 결과는 [README](../../supabase/migrations/README.md) 해당 절).
+- ⏳ 비밀번호 — Supabase SQL 편집기에서 `alter role aywa_assistant with password '<긴 무작위 값>';`(값은 저장소·대화에 남기지 않는다).
+- ⏳ env — Vercel(Production) `ASSISTANT_DATABASE_URL = postgresql://aywa_assistant.<project ref>:<그 비밀번호>@<지금 DATABASE_URL과 같은 풀러 호스트>:6543/postgres`(거래 방식 풀러 · 사용자 이름에 `.<project ref>`를 붙인다). 넣은 뒤 재배포해야 읽힌다.
+- ⏳ 앱 배포(main 병합) → 원장 계정으로 질문 한 번.
+
 ## 7. 다음(2단계)
 
 답을 운영실 카드로 고정 · 엑셀/PDF 내보내기 · 아침 자동 브리핑 · 서버 거절 대체(`fallbacks` — SDK 0.98에 타입이 없어 지금은 거절 시 한국어 안내).
