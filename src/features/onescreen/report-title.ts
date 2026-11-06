@@ -20,6 +20,12 @@ export const DEFAULT_REPORT_TITLE = "수업 보고서";
  * (report-templates/defaults.ts `BUILTIN_JJ_SHEET_TEMPLATE`의 항목 제목과 글자까지 같아야 한다).
  */
 export const SRS_REPORT_TITLE = "어휘 관리 보고서";
+
+/**
+ * EiE 보고서(일일·월간) 제목 = **EiE 보고서**(원장 2026-11-06 *"EIE 일일 월간 보고서면 영어 보고서 아니고 EIE 보고서로 변경"*).
+ * 판정 = 글에 EiE 일일 양식의 '단어 테스트' 항목이 있는가(pilot-notes `isEieDailySections`). 월간 보고서는 시트 모양이라 한글 제목이 없다.
+ */
+export const EIE_REPORT_TITLE = "EiE 보고서";
 const SRS_SECTION_TITLES = new Set(["단어 학습 현황", "SRS 학습 결과"]);
 export function isSrsReportSections(sections: readonly { title: string }[] | null | undefined): boolean {
   return !!sections?.some((s) => SRS_SECTION_TITLES.has(s.title.trim()));
