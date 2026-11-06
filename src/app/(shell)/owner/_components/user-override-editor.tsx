@@ -1,9 +1,10 @@
 "use client";
 
 import { useId, useState } from "react";
-import { permissionAccessOptions } from "@/features/owner/permission-edit";
+import { PERMISSION_ACCESS_CYCLE, permissionAccessOptions } from "@/features/owner/permission-edit";
 import type { PermissionRowGroup } from "@/features/owner/permission-rows";
 import {
+  isConnectedAppMenu,
   isPermissionLocked,
   isRoleOnlyMenu,
   isScopedForbiddenRole,
@@ -131,7 +132,10 @@ export function UserOverrideEditor({ overrides, roleMatrix, hiddenUserIds, staff
             // 역할이 바뀌어 강사보다 낮은 직급이 된 사람의 옛 '담당' 줄 — '읽기'(그 사람 역할 칸이 '없음'이면 '없음')로 내려 적용된다
             // (storedScopedAccess — 적용하는 쪽과 같은 함수로 적는다). 말없이 두지 않는다.
             // 까닭은 보이는 글로 적고 고르기 칸과 묶는다(title만 두면 터치·키보드·화면낭독기에서 안 보인다 — 리뷰 2026-11-05).
-            const demoted = !!role && row.access === "scoped" && row.menu !== "teacher_view" && isScopedForbiddenRole(role);
+            // 연결 앱 칸은 전체·없음만 쓴다 — 손으로 넣은 '읽기'·'담당' 줄은 적용 단계가 건너뛴다(역할 표 값 그대로 · applyUserOverrides).
+            // 그 값 그대로 보이고 까닭을 적는다('담당 → 읽기로 적용' 안내는 붙이지 않는다 — 연결 앱은 '읽기'도 잠겨 있다 · 재리뷰 2026-11-06).
+            const inertApp = isConnectedAppMenu(row.menu) && row.access !== "full" && row.access !== "none";
+            const demoted = !inertApp && !!role && row.access === "scoped" && row.menu !== "teacher_view" && isScopedForbiddenRole(role);
             const applied = demoted ? storedScopedAccess(row.menu, role!, row.access, roleMatrix[row.menu][role!]) : row.access;
             const noteId = `${idPrefix}-${row.userId}-${row.menu}`;
             return (
@@ -142,19 +146,24 @@ export function UserOverrideEditor({ overrides, roleMatrix, hiddenUserIds, staff
                 <td className="px-2 py-2">
                 <select
                   aria-label={`${name} ${MENU_LABEL[row.menu]} 권한`}
-                  aria-describedby={demoted ? noteId : undefined}
+                  aria-describedby={demoted || inertApp ? noteId : undefined}
                   value={row.access}
                   onChange={(e) => onChange((rows) => rows.map((r) => (r === row ? { ...r, access: e.target.value as Access } : r)))}
                   className="border-border bg-card min-h-8 w-full rounded border px-2 py-1 text-xs"
                 >
-                  {/* 그 사람의 역할에서 잠긴 수준은 고를 수 없다(지금 값은 남긴다 — 사라지면 다른 값으로 보인다). */}
-                  {permissionAccessOptions(row.menu).filter((access) => access === row.access || !role || !isPermissionLocked(row.menu, role, access)).map((access) => (
+                  {/* 그 사람의 역할에서 잠긴 수준은 고를 수 없다(지금 값은 남긴다 — 사라지면 다른 값으로 보인다 · 그 메뉴의 선택지에 없는 값이어도). */}
+                  {PERMISSION_ACCESS_CYCLE.filter((access) => access === row.access || permissionAccessOptions(row.menu).includes(access)).filter((access) => access === row.access || !role || !isPermissionLocked(row.menu, role, access)).map((access) => (
                     <option key={access} value={access}>{ACCESS_LABEL[access]}</option>
                   ))}
                 </select>
                 {demoted ? (
                   <span id={noteId} className="text-danger mt-1 block text-xs leading-relaxed">
                     {applied === "none" ? "‘없음’으로 적용됩니다(역할 표의 이 칸이 ‘없음’)" : "‘읽기’로 적용됩니다"} — {ROLE_LABEL[role!]}에는 ‘담당’을 줄 수 없습니다(맡은 반이 없어 ‘전체’처럼 열림). 다른 수준을 고르세요.
+                  </span>
+                ) : null}
+                {inertApp ? (
+                  <span id={noteId} className="text-danger mt-1 block text-xs leading-relaxed">
+                    적용되지 않습니다(역할 표의 이 칸 값이 그대로 적용) — 연결 앱은 ‘전체’·‘없음’만 씁니다. 다른 수준을 고르세요.
                   </span>
                 ) : null}
                 </td>

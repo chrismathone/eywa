@@ -2,6 +2,7 @@ import {
   MENU_ACCESS,
   MENU_KEYS,
   SYSTEM_ROLES,
+  isConnectedAppMenu,
   isPermissionLocked,
   isScopedForbiddenRole,
   type Access,
@@ -12,8 +13,9 @@ import {
 } from "@/lib/permissions";
 
 export const PERMISSION_ACCESS_CYCLE: readonly Access[] = ["full", "scoped", "readonly", "none"];
+/** 칸에서 고를 수 있는 값 — 강사뷰는 전체·읽기·없음, 연결 앱은 전체·없음(링크를 세우나 마나 — `isPermissionLocked`와 같은 규칙). */
 export const permissionAccessOptions = (menu: MenuKey): readonly Access[] =>
-  menu === "teacher_view" ? ["full", "readonly", "none"] : PERMISSION_ACCESS_CYCLE;
+  isConnectedAppMenu(menu) ? ["full", "none"] : menu === "teacher_view" ? ["full", "readonly", "none"] : PERMISSION_ACCESS_CYCLE;
 /**
  * 칸을 한 번 누를 때 **'담당'을 건너뛰는가** — 강사보다 낮은 직급(열람·아르바이트)의 칸에서 '전체' 다음이 '담당'이면 '읽기'로 건너뛴다.
  * 화면은 이걸로 건너뛴 까닭을 알린다(원장 2026-11-05 *"무조건적으로 안되게하지말고 알림메시지도 배선"* — `SCOPED_FORBIDDEN_MESSAGE`).

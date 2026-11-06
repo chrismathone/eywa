@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applySettingRoles, settingRoleSelection } from "./setting-roles";
-import { resolveMatrix, type PermissionOverride } from "@/lib/permissions";
+import { MENU_ACCESS, resolveMatrix, type PermissionOverride } from "@/lib/permissions";
 import { permissionsSchema } from "./settings-types";
 import { SETTINGS_ROLE_GROUPS, type SettingsRoleGroup } from "@/lib/settings-role-catalog";
 
@@ -35,14 +35,18 @@ describe("설정별 역할 변경", () => {
   });
 });
 
-describe("연결 앱 권한 저장 — 전체·없음만(원장 2026-11-05 · isPermissionLocked와 이중 방어)", () => {
-  it("전체·없음은 받고 담당·읽기는 거절한다 — 역할 칸도 개인 칸도", () => {
+describe("연결 앱 권한 — 전체·없음만(원장 2026-11-05) · 거절은 저장 액션이 요청 값만 보고 한다(permissions-save.test)", () => {
+  it("🔴 스키마는 담당·읽기도 읽는다 — 저장된 값을 다시 읽는 데도 쓰여서(운영 설정 보호 검사) 막으면 그 학원은 역할·권한을 저장하지 못한다", () => {
     const uid = "00000000-0000-4000-8000-000000000001";
-    expect(permissionsSchema.safeParse({ overrides: [{ menu: "app_todays_math", role: "teacher", access: "none" }] }).success).toBe(true);
-    expect(permissionsSchema.safeParse({ overrides: [{ menu: "app_todays_math", role: "parttime", access: "full" }] }).success).toBe(true);
+    for (const access of ["full", "none", "scoped", "readonly"] as const) {
+      expect(permissionsSchema.safeParse({ overrides: [{ menu: "app_todays_math", role: "teacher", access }] }).success, access).toBe(true);
+      expect(permissionsSchema.safeParse({ overrides: [], userOverrides: [{ userId: uid, menu: "app_todays_math", access }] }).success, access).toBe(true);
+    }
+  });
+  it("저장돼 있던 담당·읽기는 적용하지 않는다 — 그 칸은 코드 기본값 그대로(isPermissionLocked)", () => {
     for (const access of ["scoped", "readonly"] as const) {
-      expect(permissionsSchema.safeParse({ overrides: [{ menu: "app_todays_math", role: "teacher", access }] }).success, access).toBe(false);
-      expect(permissionsSchema.safeParse({ overrides: [], userOverrides: [{ userId: uid, menu: "app_todays_math", access }] }).success, access).toBe(false);
+      expect(resolveMatrix([{ menu: "app_todays_math", role: "teacher", access }]).app_todays_math.teacher, access).toBe(MENU_ACCESS.app_todays_math.teacher);
+      expect(resolveMatrix([{ menu: "app_todays_math", role: "viewer", access }]).app_todays_math.viewer, access).toBe(MENU_ACCESS.app_todays_math.viewer);
     }
   });
 });

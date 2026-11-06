@@ -99,6 +99,8 @@ export const CONNECTED_APP_MENU_KEYS = ["app_todays_math"] as const;
 export function isConnectedAppMenu(menu: string): boolean {
   return (CONNECTED_APP_MENU_KEYS as readonly string[]).includes(menu);
 }
+/** 연결 앱 칸에 '담당'·'읽기'를 실은 저장 요청의 거절 문구(역할 칸 · 개인 줄 — saveOwnerSection). 화면은 이 값을 만들지 않는다(칸 순환이 건너뛴다). */
+export const CONNECTED_APP_ACCESS_MESSAGE = "연결 앱 권한은 전체·없음 중에서 선택해 주세요";
 
 /**
  * 메뉴 한글 라벨 — **단일 소스**. 권한 편집기(화면)와 감사로그(설정 변경 상세)가 같은 말을 써야

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyUserOverrides, isScopedForbiddenRole, MENU_ACCESS, resolveMatrix, SCOPED_FORBIDDEN_MESSAGE } from "@/lib/permissions";
+import { applyUserOverrides, CONNECTED_APP_ACCESS_MESSAGE, isScopedForbiddenRole, MENU_ACCESS, resolveMatrix, SCOPED_FORBIDDEN_MESSAGE } from "@/lib/permissions";
 import { sparseRoleOverrides } from "../permission-edit";
 import { resolveSettings } from "../resolve";
 import { applySettingRoles, settingRoleSelection } from "../setting-roles";
@@ -730,5 +730,45 @@ describe("강사보다 낮은 직급(열람·아르바이트)의 '담당' — �
     expect((await w.save({ ...asForm(w.draft), userOverrides: [...w.draft.userOverrides, { userId: STAFF_A, menu: "attendance", access: "scoped" }] }))?.error).toBe(SCOPED_FORBIDDEN_MESSAGE);
     expect((await w.save({ ...asForm(w.draft), userOverrides: [{ userId: STAFF_A, menu: "students", access: "scoped" }] }))?.error).toBe(SCOPED_FORBIDDEN_MESSAGE);
     expect(m.writes).toBe(0);
+  });
+});
+
+describe("연결 앱 권한 — 전체·없음만(원장 2026-11-05) · 저장된 값이 이 면을 막지 않는다", () => {
+  const asForm = (p: PermissionsSettings) => ({ overrides: sparseRoleOverrides(resolveMatrix(p.overrides)), userOverrides: p.userOverrides, specialAccess: p.specialAccess });
+
+  it.each(["chinsan", "generic"] as const)("🔴 %s: 요청에 실린 연결 앱 '담당'·'읽기'는 거절(역할 칸 · 새 개인 줄 — 화면을 거치지 않은 요청)", async (preset) => {
+    seed(preset, { overrides: [], userOverrides: [] });
+    const w = openWindow();
+    for (const access of ["scoped", "readonly"] as const) {
+      expect((await w.save({ ...asForm(w.draft), overrides: [{ menu: "app_todays_math", role: "teacher", access }] }))?.error, access).toBe(CONNECTED_APP_ACCESS_MESSAGE);
+      expect((await w.save({ ...asForm(w.draft), userOverrides: [{ userId: STAFF_A, menu: "app_todays_math", access }] }))?.error, access).toBe(CONNECTED_APP_ACCESS_MESSAGE);
+    }
+    expect(m.writes).toBe(0);
+    // 전체·없음은 된다(역할 칸 · 개인 줄).
+    const res = await w.save({ ...asForm(w.draft), overrides: [{ menu: "app_todays_math", role: "teacher", access: "none" }], userOverrides: [{ userId: STAFF_A, menu: "app_todays_math", access: "full" }] });
+    expect(res?.ok, JSON.stringify(res)).toBe(true);
+  });
+
+  it.each(["chinsan", "generic"] as const)("🔴 %s: 열람·아르바이트의 연결 앱 '담당'도 연결 앱 문구로 거절('읽기'를 고르라는 '담당' 금지 문구가 아니다 — 재리뷰 2026-11-06)", async (preset) => {
+    seed(preset, { overrides: [], userOverrides: [] });
+    m.staff = [{ id: STAFF_A, system_role: "parttime", status: "active" }];
+    const w = openWindow();
+    expect((await w.save({ ...asForm(w.draft), overrides: [{ menu: "app_todays_math", role: "viewer", access: "scoped" }] }))?.error).toBe(CONNECTED_APP_ACCESS_MESSAGE);
+    expect((await w.save({ ...asForm(w.draft), userOverrides: [{ userId: STAFF_A, menu: "app_todays_math", access: "scoped" }] }))?.error).toBe(CONNECTED_APP_ACCESS_MESSAGE);
+    expect(m.writes).toBe(0);
+  });
+
+  it.each(["chinsan", "generic"] as const)("🔴 %s: 저장돼 있던 연결 앱 '담당'·'읽기'(손으로 넣은 값)가 있어도 화면 그대로 저장된다 — 그 칸은 적용하지 않는다", async (preset) => {
+    seed(preset, {
+      overrides: [{ menu: "app_todays_math", role: "manager", access: "readonly" }, { menu: "app_todays_math", role: "viewer", access: "scoped" }],
+      userOverrides: [{ userId: STAFF_A, menu: "app_todays_math", access: "readonly" }],
+    });
+    const w = openWindow();
+    const res = await w.save(asForm(w.draft));
+    expect(res?.ok, JSON.stringify(res)).toBe(true);
+    // 역할 칸은 화면이 적용되는 표(그 칸 = 기본값)로 다시 써 정리된다 · 개인 줄은 손대지 않고 그대로 남는다(적용 단계가 건너뛴다).
+    expect(stored().overrides.some((o) => o.menu === "app_todays_math")).toBe(false);
+    expect(stored().userOverrides).toEqual([{ userId: STAFF_A, menu: "app_todays_math", access: "readonly" }]);
+    expect(applyUserOverrides(resolveMatrix(stored().overrides), STAFF_A, "admin", stored().userOverrides).app_todays_math.admin).toBe(MENU_ACCESS.app_todays_math.admin);
   });
 });

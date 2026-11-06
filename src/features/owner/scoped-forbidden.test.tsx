@@ -16,6 +16,7 @@ import {
   isScopedForbiddenRole,
   MENU_ACCESS,
   MENU_KEYS,
+  MENU_LABEL,
   resolveMatrix,
   SCOPED_FORBIDDEN_MESSAGE,
   SCOPED_FORBIDDEN_ROLES,
@@ -26,7 +27,7 @@ import {
 import { PermissionsSection } from "@/app/(shell)/owner/_components/permissions-section";
 import { ROLE_LABEL } from "@/app/(shell)/owner/_components/permission-ui";
 import { UserOverrideEditor } from "@/app/(shell)/owner/_components/user-override-editor";
-import { cycleSkipsScoped, nextPermissionAccess } from "./permission-edit";
+import { cycleSkipsScoped, nextPermissionAccess, permissionAccessOptions } from "./permission-edit";
 import { editablePermissionRowGroups } from "./permission-rows";
 import { permissionsSchema } from "./settings-types";
 
@@ -112,6 +113,10 @@ describe("권한 표 — 칸을 누르면 '담당'을 건너뛰고 까닭을 알
     expect(cycleSkipsScoped("attendance", "teacher", "full")).toBe(false);
     // 강사뷰 접근은 원래 '담당'이 없는 줄이라 건너뜀 안내 대상이 아니다.
     expect(cycleSkipsScoped("teacher_view", "viewer", "full")).toBe(false);
+    // 연결 앱도 전체·없음만 쓰는 줄이라(담당·읽기 없음) 건너뜀 안내 대상이 아니다 — 전체 다음은 바로 없음.
+    expect(permissionAccessOptions("app_todays_math")).toEqual(["full", "none"]);
+    expect(cycleSkipsScoped("app_todays_math", "parttime", "full")).toBe(false);
+    expect(nextPermissionAccess("app_todays_math", "parttime", "full")).toBe("none");
   });
 
   it("🔴 아르바이트 출석부 칸: 없음 → 전체 → (담당 건너뜀) 읽기 + 안내 · 다른 칸을 누르면 안내가 사라진다", () => {
@@ -203,6 +208,24 @@ describe("개인별 메뉴 권한 — 열람·아르바이트에게 '담당'을 
     expect(within(table).getAllByText(/‘읽기’로 적용됩니다/)).toHaveLength(1);
     // 적용하는 쪽과 같은 값이다.
     expect(applyUserOverrides(roleMatrix, "p1", "parttime", [{ userId: "p1", menu: "attendance", access: "scoped" }]).attendance.parttime).toBe("readonly");
+  });
+
+  it("🔴 저장돼 있던 연결 앱 '읽기'·'담당' 줄(손으로 넣은 값)은 그 값 그대로 보이고 '적용되지 않습니다'를 적는다 — '읽기로 적용' 안내는 붙지 않는다(재리뷰 2026-11-06)", () => {
+    const roleMatrix = resolveMatrix([]);
+    const overrides = [{ userId: "t1", menu: "app_todays_math", access: "readonly" }, { userId: "p1", menu: "app_todays_math", access: "scoped" }] as const;
+    render(<UserOverrideEditor overrides={overrides} roleMatrix={roleMatrix} hiddenUserIds={[]} staffOptions={staff} nameOf={(id) => id} groups={groups} onChange={() => {}} />);
+    const table = screen.getByRole("table", { name: "개인별 메뉴 권한" });
+    const t1 = within(table).getByLabelText(`t1 ${MENU_LABEL.app_todays_math} 권한`) as HTMLSelectElement;
+    expect(t1.value).toBe("readonly"); // '전체'로 보이지 않는다
+    expect([...t1.options].map((o) => o.value)).toEqual(["full", "readonly", "none"]);
+    const notes = within(table).getAllByText(/적용되지 않습니다/);
+    expect(notes).toHaveLength(2);
+    expect(t1).toHaveAttribute("aria-describedby", notes[0].id);
+    expect(within(table).getByLabelText(`p1 ${MENU_LABEL.app_todays_math} 권한`)).toHaveAttribute("aria-describedby", notes[1].id);
+    expect(within(table).queryByText(/‘읽기’로 적용됩니다/)).toBeNull();
+    // 적용하는 쪽도 그 줄을 건너뛴다 — 역할 칸 값 그대로.
+    expect(applyUserOverrides(roleMatrix, "t1", "teacher", overrides).app_todays_math.teacher).toBe(roleMatrix.app_todays_math.teacher);
+    expect(applyUserOverrides(roleMatrix, "p1", "parttime", overrides).app_todays_math.parttime).toBe(roleMatrix.app_todays_math.parttime);
   });
 
   it("🔴 그 사람 역할 칸이 '없음'이면 옛 '담당' 줄은 '없음'으로 적용된다고 적는다('읽기'로 열지 않는다 — 재리뷰 2026-11-05)", () => {
