@@ -8,6 +8,7 @@
  * ⚠️ 영어엔 이해도 점수·일일 테스트 '없음' 사유·숙제 미제출 사유 칸이 없다 — 표는 태도·숙제 두 줄, 사유 문장은 없다.
  */
 import type { SheetTokenKey } from "@/features/report-templates/defaults";
+import { RETEST_MARK } from "./math-report-pilot";
 import {
   NO_DAILY_TEST_TEXT,
   NO_HOMEWORK_TEXT,
@@ -28,6 +29,9 @@ export type EnglishSheetFacts = {
   note: string;
   /** 출결 문장(attendance-sentence.ts) — 지각·조퇴·공결일 때만. */
   attendance?: string;
+  /** EiE 일일 보고서(2026-11-06) — 단어 테스트 재시험 · 강사가 적은 단어 테스트 피드백. */
+  wordRetest?: boolean;
+  wordFeedback?: string;
 };
 
 export function englishSheetValues(f: EnglishSheetFacts): Record<SheetTokenKey, string> {
@@ -41,5 +45,8 @@ export function englishSheetValues(f: EnglishSheetFacts): Record<SheetTokenKey, 
     숙제완성도: homeworkSentence(f.homework) || NO_HOMEWORK_TEXT,
     오늘의숙제: f.homeworkToday.trim() || NO_HOMEWORK_TODAY_TEXT,
     한마디: f.note.trim(),
+    // 단어 테스트(EiE 일일 보고서, 원장 2026-11-06) — 일일 테스트와 같은 문장 + 재시험이면 맨 윗줄에 표시(카드가 제목 옆 '재시험'으로 그린다).
+    단어테스트: [f.wordRetest ? RETEST_MARK : "", scoreText(f.dailyTest) || NO_DAILY_TEST_TEXT].filter(Boolean).join("\n"),
+    단어피드백: (f.wordFeedback ?? "").trim(),
   };
 }

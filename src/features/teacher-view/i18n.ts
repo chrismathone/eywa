@@ -3499,6 +3499,11 @@ export const SHEET_DICT = {
   "os.tpl.manage": { ko: "템플릿 관리", en: "Manage templates" },
   "os.tpl.nextTest": { ko: "다음 시간 테스트", en: "Next class test" },
   "os.tpl.nextTestPh": { ko: "예: 단어 시험 71~80번", en: "e.g. vocabulary test, words 71-80" },
+  // EiE 일일 보고서(원장 2026-11-06) — 단어 테스트 재시험 · 피드백 · 다음 범위.
+  "os.tpl.wordRetest": { ko: "단어 테스트 재시험", en: "Vocabulary test retake" },
+  "os.tpl.wordFeedback": { ko: "단어 테스트 피드백", en: "Vocabulary test feedback" },
+  "os.tpl.wordFeedbackPh": { ko: "예: 헷갈린 단어 2개는 다음 시간 전까지 다시 외워 오기", en: "e.g. review the 2 missed words before next class" },
+  "os.tpl.nextWordTest": { ko: "다음 단어 테스트 범위", en: "Next vocabulary test range" },
   "os.tpl.refill": { ko: "템플릿으로 다시 채우기", en: "Refill from the template" },
   "os.tpl.refillTitle": {
     ko: "지금 진도·숙제·테스트 칸과 마지막 AI 코멘트로 글을 다시 만듭니다",

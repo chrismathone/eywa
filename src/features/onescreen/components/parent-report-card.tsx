@@ -5,6 +5,7 @@ import type { JjReportSnapshot } from "@/features/ijw/snapshot";
 import { parentStudentName } from "@/features/report-templates/student-name";
 import { splitImageSlots, stripImageSlots } from "@/features/report-templates/image-slots";
 import { monthlyEvalOfText } from "@/features/report-templates/monthly-eval";
+import { monthlyActivityOfText } from "@/features/report-templates/monthly-activity";
 import { hasTrend, type TrendPoint } from "../report-trend";
 import { isImageAttachment, pickInlineAttachments } from "../attachment-utils";
 import { isSkipStatusProgress } from "../progress-status";
@@ -178,12 +179,15 @@ export function ParentReportCard({
   // EiE 월간 보고서(원장 2026-11-05 *"월간 보고서 디자인은 해당 시트로 동일하게"*) — 영어 글에 월간 점수 줄이 있고 항목 글(■)이
   // 아니면 시트 모양으로 그린다. 점수 줄을 뺀 나머지 글이 Teacher's Comment다(템플릿 = BUILTIN_EIE_MONTHLY_TEMPLATE).
   const monthly = templateMode && !pilotOwns ? monthlyEvalOfText(report.notes) : null;
-  if (monthly) {
+  // 한 달 학습 기록(2026-11-06) — 점수가 없는 달도 기록만으로 같은 시트 모양을 쓴다.
+  const activity = templateMode && !pilotOwns ? monthlyActivityOfText(report.notes) : null;
+  if (monthly || activity) {
     return (
       // ⚠️ report-capture = ClassNote 워커 스크린샷 대상(아래 카드들과 같은 클래스·폭).
       <div className="report-capture flex w-full max-w-lg flex-col">
         <MonthlyReportSheet
           evaluation={monthly}
+          activity={activity}
           date={report.reportDate}
           studentName={parentStudent?.name || "-"}
           className={report.className ? originalClassName(report.className) : null}

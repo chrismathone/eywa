@@ -158,6 +158,7 @@ import {
   templateCarriesNote,
   templateImageSlots,
   monthlyScoresMissing,
+  usesWordTokens,
   templateNeedsAi,
   type EnglishGenStatus,
   type EnglishRowFacts,
@@ -363,6 +364,8 @@ function initReports(students: OneScreenStudent[], templatePrefs: TemplatePrefs 
           return implicit ? { templateId: implicit, templateImplicit: true } : { templateId: su.templateId };
         })(),
         nextTest: su.nextTest,
+        wordFeedback: su.wordFeedback, // EiE 일일 보고서(2026-11-06) — 세션 복원값
+        wordRetest: su.wordRetest,
         aiIntro: su.aiIntro,
         aiComment: su.aiComment,
         templateHash: su.templateHash, // 템플릿 글 지문 — 없으면(옛 세션·가져온 글) 저장 직전 재조립 대상이 아니다
@@ -857,6 +860,9 @@ export function OneScreenClient({
                     templateId:
                       r?.[su.name]?.templateImplicit && !(r?.[su.name]?.draft ?? "").trim() ? "" : (r?.[su.name]?.templateId ?? ""),
                     nextTest: r?.[su.name]?.nextTest ?? "",
+                    // EiE 일일 보고서(2026-11-06) — 단어 테스트 피드백 · 재시험. 지운 값도 남게 늘 싣는다(nextTest와 같은 규약).
+                    wordFeedback: r?.[su.name]?.wordFeedback ?? "",
+                    wordRetest: r?.[su.name]?.wordRetest === true,
                     aiIntro: r?.[su.name]?.aiIntro ?? "",
                     aiComment: r?.[su.name]?.aiComment ?? "",
                     // 지문 둘(english-draft.ts) — 새로고침 뒤에도 "템플릿 글 그대로인가"·"AI가 옛 값 기준인가"를 판정한다.
@@ -2809,6 +2815,11 @@ export function OneScreenClient({
       attendance: attendanceSentence(su.attendanceRaw, su.attendanceNote, rowMakeupFacts(student, su)),
       // EiE 월간 보고서 점수(2026-11-05) — 로스터가 실어 둔 그 반 Monthly Test(english-monthly.ts).
       monthly: su.monthlyEval ?? null,
+      // 그 달 숙제·태도·단어 테스트(2026-11-06, EiE 월간 보고서) — 로스터가 EiE 반에만 싣는다.
+      monthlyActivity: su.monthlyActivity ?? null,
+      // EiE 일일 보고서(2026-11-06) — 행 보고서 값(재시험 체크 · 단어 테스트 피드백).
+      wordRetest: rep?.wordRetest === true,
+      wordFeedback: rep?.wordFeedback ?? "",
       slots: slotFactsFor(
         jjKnownSlots(jjCache[jjDayKey(student.id, activeDate)]),
         rep?.autoDraft ?? rep?.draft ?? "",
@@ -3217,6 +3228,15 @@ export function OneScreenClient({
   function setNextTestFor(studentId: string, subjectName: string, text: string) {
     wt(studentId, subjectName, "nextTest");
     patchReport(studentId, subjectName, (r) => ({ ...r, nextTest: text }));
+  }
+  /** EiE 일일 보고서(원장 2026-11-06) — 단어 테스트 피드백 · 재시험. 글은 '다시 채우기'·저장 직전 재조립이 맞춘다(다른 칸과 같다). */
+  function setWordFeedbackFor(studentId: string, subjectName: string, text: string) {
+    wt(studentId, subjectName, "nextTest");
+    patchReport(studentId, subjectName, (r) => ({ ...r, wordFeedback: text.slice(0, 1000) }));
+  }
+  function setWordRetestFor(studentId: string, subjectName: string, on: boolean) {
+    wt(studentId, subjectName, "dailyTest");
+    patchReport(studentId, subjectName, (r) => ({ ...r, wordRetest: on }));
   }
   /**
    * 글 복사 — 영어 반 보드 자동 발송이 열리기 전까지 강사가 ClassNote에 붙여 넣는 **유일한** 길.
@@ -5479,6 +5499,12 @@ selected ? (
                         // 지금 글을 실제로 만든 템플릿 — 대기 중이면 칩이 그 이름을 함께 적는다(드롭다운과 글이 다를 때).
                         appliedTemplateId: previewReport?.templateId ?? DEFAULT_ENGLISH_TEMPLATE.id,
                         nextTest: previewReport?.nextTest ?? "",
+                        wordFeedback: previewReport?.wordFeedback ?? "",
+                        wordRetest: previewReport?.wordRetest === true,
+                        // 단어 테스트 칸을 쓰는 템플릿(EiE 일일 보고서)일 때만 피드백·재시험 칸을 연다.
+                        wordFields: usesWordTokens(
+                          findTemplate(previewReport?.pendingTemplateId ?? previewReport?.templateId) ?? DEFAULT_ENGLISH_TEMPLATE,
+                        ),
                         // 경고 셋은 저장값이 아니라 **지금 글·칸** 기준(english-draft.ts) — 새로고침·일괄 작성 뒤에도 맞다.
                         ...englishRowFlags(selected, previewSubject, previewReport),
                         jj: englishJjStatusOf(selected.id),
@@ -5493,6 +5519,8 @@ selected ? (
                       handlers={{
                         onTemplate: (id) => setEnglishTemplateFor(selected, previewSubject.name, id),
                         onNextTest: (v) => setNextTestFor(selected.id, previewSubject.name, v),
+                        onWordFeedback: (v) => setWordFeedbackFor(selected.id, previewSubject.name, v),
+                        onWordRetest: (on) => setWordRetestFor(selected.id, previewSubject.name, on),
                         onRefill: () => void refillEnglishFor(selected, previewSubject.name),
                         onCopy: () => void copyEnglishText(selected, previewSubject.name),
                         onManage: () => setTemplateManagerOpen(true),

@@ -29,6 +29,7 @@ import { mentionsStudentName } from "@/features/report-templates/name-mention";
 import { englishFactsKey, textHash, type EnglishFacts } from "@/features/report-templates/provenance";
 import { englishSheetValues } from "./english-sheet";
 import { monthlyEvalMarker, type MonthlyEval } from "@/features/report-templates/monthly-eval";
+import { monthlyActivityMarker, type MonthlyActivity } from "@/features/report-templates/monthly-activity";
 import { progressWithMode } from "./progress-mode";
 
 /** 한 행의 사실 — 이미 사람이 읽는 표기(buildReportFields 결과·행 평가값)를 그대로 받는다. */
@@ -53,6 +54,11 @@ export type EnglishRowFacts = {
   attendance?: string;
   /** 그 반의 Monthly Test 점수(2026-11-05, EiE 월간 보고서 — 로스터가 읽어 행에 싣는다). 없으면 `{월간평가}` 줄이 빠진다. */
   monthly?: MonthlyEval | null;
+  /** 그 반·그 달 일일 보고서의 숙제·태도·단어 테스트(2026-11-06, EiE 월간 보고서). 없으면 `{월간학습}` 줄이 빠진다. */
+  monthlyActivity?: MonthlyActivity | null;
+  /** EiE 일일 보고서(2026-11-06) — 단어 테스트 재시험 · 피드백(행 보고서 값). */
+  wordRetest?: boolean;
+  wordFeedback?: string;
 };
 
 /**
@@ -111,6 +117,7 @@ export function composeEnglishDraft(
     // 항목 보고서 칸(2026-10-26) — 수학 새 보고서와 같은 문장(english-sheet.ts). 이 칸을 안 쓰는 템플릿엔 영향 없다.
     sheet: englishSheetValues(facts),
     monthly: facts.monthly ?? null,
+    monthlyActivity: facts.monthlyActivity ?? null,
   });
   // 줄바꿈은 LF 하나로 — AI 문장에 CR이 섞이면 첨부 줄을 넣고 뺄 때 글이 한 글자 달라져 지문이 영영 안 맞는다(적대 리뷰 2026-09-11).
   return fillReportTemplate(template.body, values, { decorationTokens: TEMPLATE_DECORATION_TOKENS }).text.replace(
@@ -155,7 +162,7 @@ const LEGACY_FACT_TOKENS = ["학생", "작성자", "진도", "테스트", "숙�
 // 항목 칸(2026-10-26)도 사실이다 — 점수·태도·출결이 바뀌면 그 문장이 바뀐다. 역시 **뒤에** 붙인다(앞 칸들의 뜻 불변).
 // 단어백분위·학습배지(2026-10-26)도 맨 뒤 — 이 칸을 안 쓰는 템플릿의 지문은 그대로다(쓰는 칸만 센다).
 // 월간평가(2026-11-05)도 맨 뒤 — 성적을 고치면 그 줄이 바뀌니 사실이다(이 칸을 안 쓰는 템플릿의 지문은 그대로).
-const FACT_TOKENS = [...LEGACY_FACT_TOKENS, "시험결과지", "학습분석지", ...SHEET_TOKEN_KEYS, "단어백분위", "학습배지", "월간평가"] as const;
+const FACT_TOKENS = [...LEGACY_FACT_TOKENS, "시험결과지", "학습분석지", ...SHEET_TOKEN_KEYS, "단어백분위", "학습배지", "월간평가", "월간학습"] as const;
 export type FactToken = (typeof FACT_TOKENS)[number];
 
 function factValue(token: FactToken, facts: EnglishRowFacts, nextTest: string): string {
@@ -180,6 +187,8 @@ function factValue(token: FactToken, facts: EnglishRowFacts, nextTest: string): 
       return facts.slots?.[token] ? imageSlotMarker(token) : "";
     case "월간평가":
       return facts.monthly ? monthlyEvalMarker(facts.monthly) : "";
+    case "월간학습":
+      return facts.monthlyActivity ? monthlyActivityMarker(facts.monthlyActivity) : "";
     default:
       return englishSheetValues(facts)[token];
   }
@@ -204,7 +213,15 @@ export function templateCarriesNote(template: ReportTemplate): boolean {
  * 자동작성이 "아무 반응 없음"처럼 보인다(원장 2026-11-05 제보). 화면이 까닭을 알린다.
  */
 export function monthlyScoresMissing(template: ReportTemplate, facts: EnglishRowFacts): boolean {
-  return factTokensOf(template).includes("월간평가") && !facts.monthly;
+  const used = factTokensOf(template);
+  // 점수도 한 달 기록도 없을 때만 — 기록만 있어도 월간 카드는 선다(2026-11-06).
+  return used.includes("월간평가") && !facts.monthly && !(used.includes("월간학습") && facts.monthlyActivity?.lessons.length);
+}
+
+/** 이 템플릿이 단어 테스트 칸(`{단어테스트}`·`{단어피드백}`)을 쓰는가 — EiE 일일 보고서. 원스크린이 재시험·피드백 칸을 연다. */
+export function usesWordTokens(template: ReportTemplate): boolean {
+  const used = factTokensOf(template);
+  return used.includes("단어테스트") || used.includes("단어피드백");
 }
 
 /** 이 템플릿이 쓰는 그림 칸(고정 순서) — 있으면 자동작성·다시 채우기가 인재원 자료를 **먼저** 받는다. */

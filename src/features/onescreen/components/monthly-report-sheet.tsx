@@ -1,5 +1,7 @@
 import { MONTHLY_AREA_LABEL, MONTHLY_AREA_ORDER, type MonthlyEval } from "@/features/report-templates/monthly-eval";
+import type { MonthlyActivity } from "@/features/report-templates/monthly-activity";
 import styles from "./monthly-report-sheet.module.css";
+import { MonthlyActivityBlock } from "./monthly-activity-block";
 
 /**
  * EiE **월간 보고서** 학부모 카드 — 시트(Yoojin T_EiE Monthly Evaluation Report)를 그대로 옮긴 모양(원장 2026-11-05).
@@ -13,6 +15,7 @@ export const EIE_LOGO_SRC = "/eie-logo.png";
 
 export function MonthlyReportSheet({
   evaluation,
+  activity,
   date,
   studentName,
   className,
@@ -20,7 +23,10 @@ export function MonthlyReportSheet({
   comment,
   footer,
 }: {
-  evaluation: MonthlyEval;
+  /** Monthly Test 점수 — 그 달 시험이 없으면 null(그래프·점수 표만 빠진다). */
+  evaluation: MonthlyEval | null;
+  /** 그 달 숙제·태도·단어 테스트(2026-11-06) — 기록이 없으면 null. */
+  activity?: MonthlyActivity | null;
   date: string | null;
   studentName: string;
   className: string | null;
@@ -53,7 +59,8 @@ export function MonthlyReportSheet({
           </table>
         </div>
       </header>
-      <MonthlyEvalBlock evaluation={evaluation} />
+      {evaluation ? <MonthlyEvalBlock evaluation={evaluation} /> : null}
+      {activity ? <MonthlyActivityBlock activity={activity} /> : null}
       {comment ? (
         <section>
           <h2 className={styles.commentTitle}>Teacher&rsquo;s Comment:</h2>

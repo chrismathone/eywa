@@ -45,7 +45,7 @@ import { getRosterReservationsOn } from "@/features/attendance/server/makeup-res
 import { applyReservedMakeup, planReservedMakeup } from "../reserved-makeup";
 import { holidayNameOrNull } from "@/features/attendance/server/holiday";
 import { getSplitsOnDate } from "@/features/class-splits/server/queries";
-import { loadEnglishMonthlyEvals } from "./english-monthly";
+import { loadEnglishMonthlyActivities, loadEnglishMonthlyEvals } from "./english-monthly";
 import { planSplitRows } from "../split-rows";
 import { autoUnitsOn, isAutoUnitsSubject, toAutoUnitsSchedule } from "@/features/attendance/auto-units";
 import { getLessonProfile } from "@/features/owner/server/lesson-profile";
@@ -204,6 +204,8 @@ type OnescreenSessionRow = {
       /** 영어 템플릿 모드(2026-09-10) — 영어 행만 실린다(saveOnescreenSession 입력과 같은 키). */
       templateId?: string;
       nextTest?: string;
+      wordFeedback?: string;
+      wordRetest?: boolean;
       aiIntro?: string;
       aiComment?: string;
       templateHash?: string;
@@ -652,10 +654,14 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   const activeIds = activeClasses.map((c) => c.id);
   // EiE 월간 보고서 점수(2026-11-05) — 영어 반만, 본 로스터 조회와 **나란히**(B4) 돌리고 아래에서 행에 싣는다.
   // 실패·영역 칸 미적용이면 빈 결과(원스크린은 그대로 뜬다 — english-monthly.ts).
-  const monthlyEvalsP = loadEnglishMonthlyEvals(
+  const englishClassIds = activeClasses.filter((c) => c.subject === "english").map((c) => c.id);
+  const monthlyEvalsP = loadEnglishMonthlyEvals(user.tenantId, englishClassIds, targetDate);
+  // 그 달 숙제·태도·단어 테스트(원장 2026-11-06, EiE 반만) — 같은 달을 쓰려고 점수의 달을 받아 고른다. 실패면 빈 결과.
+  const monthlyActivitiesP = loadEnglishMonthlyActivities(
     user.tenantId,
-    activeClasses.filter((c) => c.subject === "english").map((c) => c.id),
+    englishClassIds,
     targetDate,
+    monthlyEvalsP.then((evals) => (key: string) => evals.get(key)?.month),
   );
 
   // 3) 대상 날짜 시점 수강생 — start≤date AND (end null OR end≥date). null 양단 허용(레거시 안전).
@@ -1765,6 +1771,9 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         // 영어 템플릿 모드(2026-09-10) — 영어 행만 실려 있다(수학 세션엔 키 자체가 없어 아래는 전부 건너뛴다).
         if (entry?.templateId) su.templateId = entry.templateId;
         if (entry?.nextTest != null) su.nextTest = entry.nextTest;
+        // EiE 일일 보고서(2026-11-06) — 단어 테스트 피드백 · 재시험. 모양을 믿지 않는다(jsonb 검증 없음).
+        if (typeof entry?.wordFeedback === "string") su.wordFeedback = entry.wordFeedback.slice(0, 1000);
+        if (entry?.wordRetest === true) su.wordRetest = true;
         if (entry?.aiIntro != null) su.aiIntro = entry.aiIntro;
         if (entry?.aiComment != null) su.aiComment = entry.aiComment;
         if (entry?.templateHash) su.templateHash = entry.templateHash;
@@ -1848,12 +1857,14 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     last_read_at: string | null;
   };
   const readBySid = new Map((readStats as ReadStatRow[]).map((r) => [r.student_id, r]));
-  const monthlyEvals = await monthlyEvalsP;
-  if (monthlyEvals.size) {
+  const [monthlyEvals, monthlyActivities] = await Promise.all([monthlyEvalsP, monthlyActivitiesP]);
+  if (monthlyEvals.size || monthlyActivities.size) {
     for (const s of byStudent.values()) {
       for (const su of s.subjects) {
         const ev = su.classId ? monthlyEvals.get(`${su.classId}|${s.id}`) : undefined;
         if (ev) su.monthlyEval = ev;
+        const act = su.classId ? monthlyActivities.get(`${su.classId}|${s.id}`) : undefined;
+        if (act) su.monthlyActivity = act;
       }
     }
   }

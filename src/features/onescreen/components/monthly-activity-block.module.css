@@ -1,0 +1,221 @@
+/*
+ * EiE 월간 보고서 — 한 달 학습 기록(2026-11-06). 색은 시트(monthly-report-sheet.module.css)와 같은 값 —
+ * 종이 서식 예외라 디자인 토큰이 아니라 이 파일에만 둔다. 숙제 = 시트 파랑 · 단어 테스트 = 시트 빨강(Average/Student 막대와 같은 두 색).
+ */
+.block {
+  --eie-red: #b3121b;
+  --eie-blue: #4285f4;
+  --eie-bar-red: #ea4335;
+  margin-top: 16px;
+  background: #fff;
+  color: #121212;
+  font-family: inherit;
+}
+
+.title {
+  margin: 0 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 3px solid var(--eie-red);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 1px solid #bdbdbd;
+  padding: 6px 2px;
+  text-align: center;
+}
+
+.tileLabel {
+  font-size: 0.75rem;
+  color: #616161;
+  word-break: keep-all;
+}
+
+.tileValue {
+  font-size: 1.25rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.tileNote {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--eie-red);
+}
+
+.chart {
+  margin: 12px 0 0;
+  border: 1px solid #bdbdbd;
+  padding: 10px 10px 6px;
+}
+
+.chartTitle {
+  margin: 0;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.legend {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin: 4px 0 8px;
+  font-size: 0.75rem;
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  display: inline-block;
+}
+
+.hw {
+  background: var(--eie-blue);
+}
+
+.word {
+  background: var(--eie-bar-red);
+}
+
+.columns {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  border-bottom: 1px solid #616161;
+  background-image: linear-gradient(to top, #e0e0e0 1px, transparent 1px);
+  background-size: 100% 25%;
+}
+
+.col {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pair {
+  display: flex;
+  width: 100%;
+  height: 96px;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+}
+
+.vbar {
+  width: 38%;
+  max-width: 12px;
+  min-height: 1px;
+  border-radius: 3px 3px 0 0;
+}
+
+.day {
+  margin-top: 2px;
+  font-size: 0.65rem;
+  white-space: nowrap;
+}
+
+.retest,
+.retestGap {
+  height: 14px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  line-height: 14px;
+  color: var(--eie-red);
+}
+
+.attitude {
+  margin-top: 12px;
+  border: 1px solid #bdbdbd;
+  padding: 8px 10px;
+}
+
+.subTitle {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.attRow {
+  display: grid;
+  grid-template-columns: 6.6rem 1fr 2.6rem;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 0.8rem;
+}
+
+.attLabel {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.attLabel small {
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: #616161;
+}
+
+.attTrack {
+  height: 10px;
+  background: #efefef;
+}
+
+.attBar {
+  display: block;
+  height: 100%;
+  background: var(--eie-blue);
+}
+
+.attCount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.table {
+  width: 100%;
+  margin-top: 12px;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  border: 1px solid #d6d6d6;
+  padding: 3px 2px;
+}
+
+.table thead th {
+  background: #efefef;
+  font-weight: 700;
+}
+
+.retestTag {
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--eie-red);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 800;
+}
