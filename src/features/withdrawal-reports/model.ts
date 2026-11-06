@@ -5,8 +5,9 @@ import { reasonDetailOf } from "@/features/withdrawals/reason-detail";
 import { REASON_LABEL } from "@/features/withdrawals/types";
 import { CLEANUP_WITHDRAWAL_MEMO } from "@/features/withdrawals/system-bulk";
 
+/** 상태 이름 — 관리자 단계는 '관리자 요청'(원장 2026-11-06 *"2줄 처리 안되게 관리자 요청으로"* · DB 알림 제목 '퇴원보고서 관리자 승인 요청'은 그대로). */
 export const REPORT_STATUS = {
-  requested: "작성 요청", revision: "반려 · 수정 요청", manager_pending: "관리자 승인 요청",
+  requested: "작성 요청", revision: "반려 · 수정 요청", manager_pending: "관리자 요청",
   director_pending: "원장 승인 대기", scheduled: "처리 예약", completed: "처리 완료",
   blocked: "수강 변경 · 재검토 필요", canceled: "요청 취소",
   approved: "승인 완료 · 다른 보고서 대기",
@@ -157,7 +158,7 @@ export function refundWaiting(r: Pick<WithdrawalReport, "status">, refunds: read
 }
 /**
  * 상태 칩 — 데스크 환불이 남았으면 원래 단계와 '데스크 환불 요청'을 함께(원장 2026-11-03 *"'관리자 승인 요청' '데스크 환불 요청' 같이 나타내줄것"*).
- * 관리자 단계는 환불과 상관없이 늘 '관리자 승인 요청'(REPORT_STATUS) · 이 보고서 승인이 끝났으면 '관리자 승인 완료' + 데스크 단계
+ * 관리자 단계는 환불과 상관없이 늘 '관리자 요청'(REPORT_STATUS · 2026-11-06 이름) · 이 보고서 승인이 끝났으면 '관리자 승인 완료' + 데스크 단계
  * ('데스크 환불 요청' 대기 · 환불은 끝났는데 아직 처리 전이면 '데스크 환불 완료' — '다른 보고서 대기'로 잘못 읽히지 않게).
  */
 export function reportStatusChips(r: Pick<WithdrawalReport, "status">, refunds: readonly RefundStep[] = []): string[] {
@@ -177,6 +178,10 @@ export function isParticipant(r: Pick<WithdrawalReport, "requested_by" | "teache
  * 강사뷰로 보는 중엔 원장 몫으로 치지 않는다.
  */
 export function cancelsAsDirector(role: SystemRole, teacherView: boolean) { return role === "master" && !teacherView; }
+/** 이 사람이 요청을 취소할 수 있나 — 요청자 또는 원장급(`cancelsAsDirector`) · 처리 끝·취소 전. 상세 단추·목록 '내 재요청 필요'가 같은 판정이다(서버 `changeWithdrawalReport` · DB 'cancel'). */
+export function canCancelReport(r: Pick<WithdrawalReport, "status" | "requested_by">, userId: string, writable: boolean, directorLevel = false) {
+  return writable && (r.requested_by === userId || directorLevel) && !["completed", "canceled"].includes(r.status);
+}
 /**
  * 보고서에서 환불을 승인(= 데스크 환불 요청서를 만든다)할 수 있나 — **원장급만**(원장 2026-10-29 *"환불승인은 원장급이상만 · 이외의 관리자는 확인만"*).
  * 관리자·요청자·작성 강사는 청구·요청서·담당·완료 여부를 보기만 한다. 취소된 보고서는 안 된다. 처리가 끝난 보고서는 된다(기다리게 하지 않는다).
@@ -190,7 +195,7 @@ export function reportCapabilities(r: WithdrawalReport, userId: string, writable
   return {
     edit: writable && draft && r.teacher_id === userId,
     approve: writable && ((r.status === "manager_pending" && managerIds(r).includes(userId) && !r.manager_decisions?.[userId]) || (r.status === "director_pending" && directorIds(r).includes(userId) && !r.director_decisions?.[userId])),
-    cancel: writable && (r.requested_by === userId || directorLevel) && !["completed", "canceled"].includes(r.status),
+    cancel: canCancelReport(r, userId, writable, directorLevel),
     refund: canRequestRefund(r, writable, directorLevel),
   };
 }

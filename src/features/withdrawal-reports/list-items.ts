@@ -2,8 +2,9 @@ import { inRange, resolveRange, type RangeKey, type RangeWindow } from "@/featur
 import { monthRange } from "@/lib/date-kst";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import type { ArchiveRow } from "./archive-model";
+import { formViewHref } from "@/features/documents/categories";
 import { archiveReason, webReportReason, type ListReason } from "./list-reason";
-import { directorIds, hasJobTitle, isDirectReport, isParticipant, managerIds, managerStepSkipped, refundWaiting, reportStatusChips, titledName, type RefundStep, type ReportListRow, type StaffOption } from "./model";
+import { REPORT_STATUS, canCancelReport, directorIds, hasJobTitle, isDirectReport, isParticipant, managerIds, managerStepSkipped, refundWaiting, reportStatusChips, titledName, type RefundStep, type ReportListRow, type ReportStatus, type StaffOption } from "./model";
 
 /**
  * 퇴원보고서 목록 한 벌 — 웹에서 작성·승인하는 보고서와 기존 스프레드시트 보고서(원문 보관)를 **한 목록**에 세운다.
@@ -41,10 +42,11 @@ export type ListItem = {
   reason: ListReason;
   subjects: string[];
   status: ListStatus;
+  /**
+   * 상태 글 — 웹 보고서는 `reportStatusLabel`과 같은 글(검색에 든다) · 기존 기록은 '스프레드시트 기록'(상태 칸에 그대로).
+   * 웹 보고서의 상태 칸은 이 글이 아니라 3단계 막대(`reportProgress`)로 그린다(원장 2026-11-06 시안 A).
+   */
   statusLabel: string;
-  /** 상태 칩 — 데스크 환불이 남았으면 원래 단계와 '데스크 환불 요청'을 함께(원장 2026-11-03 · `reportStatusChips`). 글은 `statusLabel`과 같다. */
-  statusChips: string[];
-  tone: "done" | "alert" | "muted";
   approval: { text: string; muted?: boolean }[];
   /** 기존 기록만 — 학생 연결 상태. 웹 보고서는 늘 학생에서 출발하므로 null. */
   link: ListLink | null;
@@ -56,7 +58,69 @@ export type ListItem = {
   mine: "approve" | "view" | "none";
   /** 내 차례가 데스크 환불 처리다(원장 2026-11-03) — 상태 칸 글을 '내 환불 처리 필요'로. 승인 차례와 같은 '내 승인 필요' 필터에 든다. */
   deskTurn?: boolean;
+  /** 진행 막대 재료 — 웹 보고서만(기존 기록은 없음 = 막대 없이 '스프레드시트 기록'). 판정은 `reportProgress`. */
+  flow?: ReportFlow | null;
+  /**
+   * 환불 단계 — `decision` 환불 결정 대기 · `desk` 데스크 환불 대기(지금은 `refundWaiting`과 같은 판정) · 없으면 null.
+   * 진행 막대 아래 한 줄에 '환불 결정 대기'·'데스크 환불 대기'로 선다.
+   */
+  refundStage?: "decision" | "desk" | null;
+  /** 요청 취소 기록 — 사유(이전 취소는 null)·취소한 사람·시각(ISO). 있으면 '요청 취소 · 취소일'에 마우스를 올려 본다. */
+  cancel?: { reason: string | null; by: string; at: string } | null;
+  /**
+   * 데스크 환불을 처리하는 화면 주소 — '내 환불 처리 필요' 링크가 새 창(수납 메뉴)으로 간다(없으면 보고서 상세).
+   * 데스크 차례일 때만 = 내 몫·완료 전 환불 요청서 중 가장 먼저 만든 것(`/billing/refunds/{id}` — `formViewHref`).
+   */
+  deskHref?: string | null;
   search: string;
+};
+
+/** 진행 막대 재료(웹 보고서 한 건) — `buildListItems`가 채우고 `reportProgress`가 읽는다. */
+export type ReportFlow = {
+  status: ReportStatus;
+  /**
+   * 같은 묶음에 아직 승인 전(작성 요청·반려·관리자 요청·원장 승인 대기)인 다른 과목 보고서가 있나 — 승인 완료(approved) 줄의 단계를 가른다.
+   * DB의 approved는 '다른 과목 대기'와 '전부 승인 · 환불(또는 처리)만 대기'를 둘 다 뜻해 환불 유무로는 못 가른다(리뷰 2026-11-06).
+   */
+  othersPending: boolean;
+  /** 마지막 수업일 — 처리 예약이면 그날 처리한다(DB 'apply' · `effective_date <= today`). */
+  effectiveDate: string;
+  /** 처리 시각(처리 완료일) · 마지막 변경 시각(취소 기록이 없는 취소의 취소일 — DB 'cancel'이 `updated_at`을 새로 적는다). */
+  appliedAt: string | null;
+  updatedAt: string;
+  /** 이 사람이 요청을 취소할 수 있나(`canCancelReport` — 요청자 · 원장급) — 재검토 건의 '내 재요청 필요'. */
+  canCancel: boolean;
+};
+
+/** 진행 막대 세 단계(원장 2026-11-06 시안 A). */
+export const PROGRESS_STEPS = ["강사 작성", "관리자 승인", "처리 완료"] as const;
+/** 막대 한 칸 — 끝남 · 지금(빗금) · 지금인데 반려·재검토(빨강) · 아직 · 요청 취소(옅은 회색). */
+export type ProgressCell = "done" | "now" | "alert" | "todo" | "off";
+/** 막대 아래 단계 이름 — 처리 완료면 칸은 셋 다 'done'이고 이름은 '처리 완료'만 'now'(굵게)다. */
+export type ProgressName = ProgressCell;
+export type ProgressNote = {
+  text: string;
+  tone: "plain" | "alert" | "done";
+  /** 요청 취소 말풍선(취소 기록이 있을 때만) — 제목 '취소 사유' · 사유 · '취소한 사람 · MM-DD HH:mm'(KST). */
+  cancel?: { reason: string; meta: string };
+};
+/**
+ * 꼬리 — 내 할 일은 링크(`href`) · 할 일 없는 열람은 '승인 대상 아님'(링크 아님).
+ * `newWindow` = 다른 메뉴(수납의 환불 요청서)라 새 창으로 연다 — 보고서 상세로 가는 꼬리는 같은 창.
+ */
+export type ProgressTail =
+  | { text: "내 승인 필요" | "내 작성 대기" | "내 환불 처리 필요" | "내 재요청 필요"; href: string; newWindow?: boolean }
+  | { text: "승인 대상 아님"; href: null };
+export type ReportProgress = {
+  /** 지금 단계(1~3) · 처리 완료 3 · 요청 취소 0. */
+  step: 0 | 1 | 2 | 3;
+  cells: ProgressCell[];
+  names: { text: string; state: ProgressName }[];
+  /** 막대로 알 수 없는 것만(평상시 '작성 요청'·'관리자 요청'은 막대와 겹쳐 쓰지 않는다). */
+  notes: ProgressNote[];
+  tail: ProgressTail | null;
+  /** 막대(`role="img"`)의 이름 — 예: '진행 2/3단계 · 관리자 승인 — 다른 과목 승인 대기'. */
+  label: string;
 };
 
 export const LIST_PAGE_SIZE = 50;
@@ -76,9 +140,27 @@ export function buildListItems(input: {
   writable?: boolean;
   /** 데스크 환불 단계(원장 2026-11-03) — 묶음 id(옛 단건은 보고서 id) → 단계(`loadRefundSteps`). 없으면 단계 없음. */
   refunds?: ReadonlyMap<string, readonly RefundStep[]>;
+  /** 원장급(`cancelsAsDirector`) — 남이 요청한 보고서도 취소한다(재검토 건의 '내 재요청 필요'). 기본 false. */
+  directorLevel?: boolean;
+  /**
+   * 묶음 id → 그 묶음 보고서 전부의 상태(`listReports` — 형제가 열람 범위 밖이라 목록에 없어도 읽는다).
+   * 없는 묶음은 이 목록에 보이는 형제로만 본다. 통째로 없으면(조회 실패) 승인 완료인데 기다릴 환불이 없는 줄은 다른 과목 대기로 본다.
+   */
+  groupStatuses?: ReadonlyMap<string, readonly { id: string; status: ReportStatus }[]>;
 }): ListItem[] {
   const { staff, labelOf, userId } = input;
   const writable = input.writable ?? true;
+  const directorLevel = input.directorLevel ?? false;
+  const listedByGroup = new Map<string, { id: string; status: ReportStatus }[]>();
+  for (const r of input.reports) if (r.group_id) listedByGroup.set(r.group_id, [...(listedByGroup.get(r.group_id) ?? []), r]);
+  // 같은 묶음에 아직 승인 전인 다른 과목 보고서가 있나(승인 완료 줄이 막대를 앞지르지 않게 — 리뷰 2026-11-06).
+  // 형제 조회가 실패했으면(`groupStatuses` 없음) 보이는 형제만으론 모른다 — DB상 승인 완료인데 기다릴 환불이 없으면
+  // 사실상 다른 과목 대기라 그렇게 본다(형제가 안 보이는 열람자에게 3단계로 앞질러 보이지 않게 · 재리뷰 2026-11-06).
+  const othersPending = (r: ReportListRow, steps: readonly RefundStep[]) => {
+    if (!r.group_id) return false;
+    const siblings = input.groupStatuses?.get(r.group_id) ?? listedByGroup.get(r.group_id) ?? [];
+    return siblings.some((q) => q.id !== r.id && BEFORE_APPROVAL.includes(q.status)) || (input.groupStatuses === undefined && r.status === "approved" && !refundWaiting(r, steps));
+  };
   const staffOf = (id: string) => staff.find((s) => s.id === id);
   const staffName = (id: string) => staffOf(id)?.name ?? FORMER_STAFF;
   const titledOf = (id: string) => titledName(staffOf(id), FORMER_STAFF);
@@ -108,7 +190,9 @@ export function buildListItems(input: {
     // 데스크 줄(원장 2026-11-03 '데스크 환불 요청' 단계) — ○ 대기 · ✓ 환불완료일자 입력됨, 담당 이름.
     const desk = steps.length ? [{ text: `데스크 ${steps.map((s) => `${s.completedDate ? "✓" : "○"} ${s.deskName}`).join(" · ")}` }] : [];
     const deskTurn = writable && myDeskTurn(r, steps, userId);
-    return {
+    // 내 몫·완료 전 환불 요청서 중 가장 먼저 만든 것(단계는 만든 순 — `loadRefundSteps`).
+    const myDesk = deskTurn ? steps.find((s) => !s.completedDate && s.deskId === userId) : undefined;
+    const item: ListItem = {
       key: `r:${r.id}`,
       href: `${LIST_PATH}/${r.id}`,
       name: r.snapshot.name,
@@ -127,8 +211,6 @@ export function buildListItems(input: {
       subjects: r.subjects,
       status: r.status === "completed" ? "completed" : r.status === "canceled" ? "canceled" : "pending",
       statusLabel: chips.join(" · "),
-      statusChips: chips,
-      tone: r.status === "completed" ? "done" : r.status === "revision" || r.status === "blocked" ? "alert" : "muted",
       approval: [
         ...(direct
           ? [{ text: `관리자 바로 처리 · ${titledName(staffOf(r.requested_by), FORMER_STAFF)}` }, { text: "강사 작성 없음", muted: true }]
@@ -139,10 +221,22 @@ export function buildListItems(input: {
         ...desk,
       ],
       link: null,
-      myTurn: ["requested", "revision"].includes(r.status) && r.teacher_id === userId,
+      // 작성 차례도 쓰기 권한이 있을 때만(다른 꼬리와 같게 — 읽기 전용 보기엔 작성 버튼이 없다 · 리뷰 2026-11-06).
+      myTurn: writable && ["requested", "revision"].includes(r.status) && r.teacher_id === userId,
       // 열람 표시는 진행 중에만(끝난 보고서엔 승인할 일이 없다 — 리뷰). 데스크 환불 차례도 내 차례다.
       mine: writable && (myApprovalTurn(r, userId) || deskTurn) ? "approve" : !isParticipant(r, userId) && !["completed", "canceled"].includes(r.status) ? "view" : "none",
       ...(deskTurn && !myApprovalTurn(r, userId) ? { deskTurn: true } : {}),
+      flow: {
+        status: r.status,
+        othersPending: othersPending(r, steps),
+        effectiveDate: r.effective_date,
+        appliedAt: r.applied_at,
+        updatedAt: r.updated_at,
+        canCancel: canCancelReport(r, userId, writable, directorLevel),
+      },
+      // 환불 단계 — 지금은 데스크 환불 대기만(`refundWaiting`). 취소 기록(`cancel`)은 아직 채우지 않는다(DB에 사유 없음).
+      refundStage: refundWaiting(r, steps) ? "desk" : null,
+      deskHref: myDesk ? formViewHref("refund_request", myDesk.documentId) : null,
       // 검색 = 보이는 칸 + 보고서 본문 글 전부(원장 2026-10-30 *"검색은 내용등 모든것을 검색가능하게"*) — 상담 내용·담임 의견·요청 메모·반려 사유·승인자까지.
       search: [r.snapshot.name, r.snapshot.school, r.snapshot.grade, schoolGradeLabel(r.snapshot.school, r.snapshot.grade), ...r.snapshot.courses.map((c) => c.className), teacher, reason.text, reason.note ?? "", direct ? "관리자 바로 처리" : "",
         managerStepSkipped(r) && !direct ? `관리자 승인 생략 ${skippedBy(r.teacher_id)}` : "", ...steps.map((s) => s.deskName),
@@ -150,6 +244,10 @@ export function buildListItems(input: {
         r.exit_kind === "withdrawal" ? "퇴원" : "수강종료", ...r.subjects.map(labelOf), chips.join(" "), titledOf(r.requested_by), ...managerIds(r).map(titledOf), ...directorIds(r).map(titledOf),
         r.request_note, r.last_comment ?? "", r.body_detail ?? "", r.body_student ?? "", r.body_parent ?? "", r.body_opinion ?? "", r.body_attendance ?? "", r.body_tuition ?? "", r.body_arrears_note ?? ""].join(" "),
     };
+    // 상태 칸에 보이는 글도 검색에 — 상태 이름(REPORT_STATUS) · 아래 한 줄 조각(다른 과목 승인 대기 · 데스크 환불 대기 · 처리 예약 · MM-DD ·
+    // 재검토 문구 · 처리일 · 요청 취소 · 취소일 …)과 꼬리('보이는 칸은 다 검색' — 원장 2026-10-30 · 리뷰 2026-11-06).
+    const p = reportProgress(item);
+    return { ...item, search: [item.search, REPORT_STATUS[r.status], ...(p?.notes.map((n) => n.text) ?? []), p?.tail?.text ?? ""].join(" ") };
   });
   const archived = input.archives.map((a): ListItem => {
     const className = a.class_name.replace(/\s+/g, " ").trim();
@@ -173,8 +271,6 @@ export function buildListItems(input: {
       subjects: a.subject ? [a.subject] : [],
       status: "archive",
       statusLabel: "스프레드시트 기록",
-      statusChips: ["스프레드시트 기록"],
-      tone: "muted",
       approval: [{ text: `원본 · ${a.sheet_title}`, muted: true }],
       link: a.mapped_student_id ? (a.mapping_kind === "manual" ? "manual" : "auto") : "unmapped",
       myTurn: false,
@@ -294,4 +390,84 @@ export function myApprovalTurn(r: Pick<ReportListRow, "status" | "manager_id" | 
  */
 export function myDeskTurn(r: Pick<ReportListRow, "status">, steps: readonly RefundStep[], userId: string): boolean {
   return refundWaiting(r, steps) && steps.some((s) => !s.completedDate && s.deskId === userId);
+}
+
+/** 아직 승인 전 상태 — 같은 묶음의 이런 형제가 있으면 승인 완료 줄은 다른 과목을 기다리는 중이다. */
+const BEFORE_APPROVAL: readonly ReportStatus[] = ["requested", "revision", "manager_pending", "director_pending"];
+/**
+ * 상태 → 지금 단계(요청 취소 0). 승인 완료(approved)는 같은 묶음에 승인 전 과목이 남았으면 2(다른 과목 승인 대기 — 환불이 걸려 있어도),
+ * 다 승인됐으면 3(데스크 환불·처리만 남음) — 환불이 끝나도 단계가 되돌아가지 않는다(리뷰 2026-11-06).
+ */
+const STEP_OF: Record<Exclude<ReportStatus, "approved">, ReportProgress["step"]> = {
+  requested: 1, revision: 1, manager_pending: 2, director_pending: 2, scheduled: 3, blocked: 3, completed: 3, canceled: 0,
+};
+/** 시각 → KST 'MM-DD HH:mm'. */
+const kstMinute = (iso: string) => new Date(Date.parse(iso) + 9 * 3_600_000).toISOString().slice(5, 16).replace("T", " ");
+
+/**
+ * 상태 칸 판정 — 3단계 막대(강사 작성 · 관리자 승인 · 처리 완료)와 그 아래 한 줄(원장 2026-11-06 시안 A). 화면은 이 결과만 그린다.
+ * - 칸: 끝남 · 지금(빗금) · 반려·재검토면 지금 칸이 빨강 · 아직 · 처리 완료는 셋 다 끝남 · 요청 취소는 셋 다 옅은 회색.
+ *   🔑 지금 단계 뒤 칸은 늘 비운다 — 관리자 승인 생략·바로 처리도 앞질러 채우지 않는다(작성 중인 생략 보고서의 2칸이 꽉 차 보여
+ *   헷갈렸다 — 리뷰 2026-11-06). 생략 보고서는 제출해 다음 단계로 넘어가면 2칸이 채워진다(이유는 승인 진행 칸의 '승인 생략' 글).
+ * - 아래 한 줄 = [추가 정보, 꼬리] 중 있는 것만. 막대와 겹치는 말('작성 요청'·'관리자 요청')은 쓰지 않는다.
+ * - 꼬리 = 내 할 일이면 링크(내 승인 필요 · 내 환불 처리 필요 · 내 작성 대기 · 내 재요청 필요), 할 일 없는 열람이면 '승인 대상 아님'.
+ *   처리 완료·요청 취소 줄엔 꼬리가 없다. 기존 기록(스프레드시트)은 막대가 없다(null).
+ */
+export function reportProgress(item: Pick<ListItem, "href" | "flow" | "refundStage" | "cancel" | "deskHref" | "mine" | "myTurn" | "deskTurn">): ReportProgress | null {
+  const f = item.flow;
+  if (!f) return null;
+  const canceled = f.status === "canceled";
+  const finished = f.status === "completed";
+  const active = !canceled && !finished;
+  // 환불 단계는 기다릴 처리가 남은 보고서에만(재검토·끝난·취소 보고서엔 없다 — `refundWaiting`과 같은 축).
+  const refund = active && f.status !== "blocked" ? (item.refundStage ?? null) : null;
+  const waitingOthers = f.status === "approved" && f.othersPending;
+  const step = f.status === "approved" ? (waitingOthers ? 2 : 3) : STEP_OF[f.status];
+  const alert = f.status === "revision" || f.status === "blocked";
+  const cells = PROGRESS_STEPS.map((_, i): ProgressCell => {
+    const n = i + 1;
+    if (canceled) return "off";
+    if (finished || n < step) return "done";
+    if (n === step) return alert ? "alert" : "now";
+    return "todo";
+  });
+  const names = PROGRESS_STEPS.map((text, i) => ({ text, state: finished ? (i === 2 ? "now" : "done") : cells[i]! }));
+
+  const notes: ProgressNote[] = [];
+  if (f.status === "revision") notes.push({ text: REPORT_STATUS.revision, tone: "alert" });
+  if (f.status === "director_pending") notes.push({ text: REPORT_STATUS.director_pending, tone: "plain" }); // 옛 원장 단계 — 막대는 '관리자 승인'이라 원장 차례를 글로
+  if (waitingOthers) notes.push({ text: "다른 과목 승인 대기", tone: "plain" });
+  if (f.status === "scheduled") notes.push({ text: `처리 예약 · ${f.effectiveDate.slice(5, 10)}`, tone: "plain" });
+  if (refund) notes.push({ text: refund === "decision" ? "환불 결정 대기" : "데스크 환불 대기", tone: "plain" });
+  if (f.status === "blocked") notes.push({ text: `${REPORT_STATUS.blocked} — 취소 후 다시 요청`, tone: "alert" });
+  if (finished) notes.push({ text: `처리일 ${kstDay(f.appliedAt ?? f.updatedAt).slice(5)}`, tone: "done" });
+  if (canceled) {
+    const c = item.cancel;
+    notes.push({
+      text: `요청 취소 · 취소일 ${kstDay(c?.at ?? f.updatedAt).slice(5)}`,
+      tone: "plain",
+      ...(c ? { cancel: { reason: c.reason?.trim() || "사유 기록 없음(이전 취소)", meta: `${c.by} · ${kstMinute(c.at)}` } } : {}),
+    });
+  }
+
+  const approveTurn = item.mine === "approve" && !item.deskTurn;
+  const tail: ProgressTail | null = !active
+    ? null
+    : approveTurn
+      ? { text: "내 승인 필요", href: item.href }
+      : item.deskTurn
+        ? item.deskHref
+          ? { text: "내 환불 처리 필요", href: item.deskHref, newWindow: true }
+          : { text: "내 환불 처리 필요", href: item.href }
+        : item.myTurn
+          ? { text: "내 작성 대기", href: item.href }
+          : f.status === "blocked" && f.canCancel
+            ? { text: "내 재요청 필요", href: item.href }
+            : item.mine === "view"
+              ? { text: "승인 대상 아님", href: null }
+              : null;
+
+  const head = canceled ? "진행 중단" : finished ? "3단계 모두 완료" : `진행 ${step}/3단계 · ${PROGRESS_STEPS[step - 1]}`;
+  const said = notes.map((n) => n.text).join(" · ");
+  return { step, cells, names, notes, tail, label: said ? `${head} — ${said}` : head };
 }
