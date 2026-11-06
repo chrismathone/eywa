@@ -36,6 +36,7 @@ const WITHDRAWN_AT_VALUE = /withdrawn_at:\s*(?!null\b|string\b)[^\s,}|;)]/g;
 const ALLOWED: Record<string, [number, number, string]> = {
   "src/app/api/cron/apply-due-withdrawals/route.ts": [1, 0, "이번 변경 전에 걸린 퇴원 예약의 당일 처리(새 예약 입구는 막혔다)"],
   "src/features/admin/server/actions.ts": [1, 1, "학생 병합(진 쪽 정리) — 장부 정리는 바로 처리 보고서(DB 함수)로 옮겼다"],
+  "src/features/assistant/catalog/tables-b.ts": [0, 1, "학원 비서 칸 설명 글(`withdrawn_at: \"퇴원일(또는 예약된 퇴원일)\"` — 쓰기가 아니다)"],
   "src/features/audit/activity.ts": [0, 1, "감사로그 칸 이름표(`withdrawn_at: \"퇴원일\"` — 쓰기가 아니다)"],
   "src/features/demo-roster/dashboard-apply.ts": [1, 0, "데모 데이터"],
   "src/features/excel-import/importers/students.ts": [0, 1, "옛 기록 가져오기(새 원생 · 지난 퇴원만 — 예약은 거절)"],
