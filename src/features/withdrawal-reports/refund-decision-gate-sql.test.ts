@@ -167,6 +167,7 @@ describe("원장 환불 결정 전에는 처리하지 않는다(s2_0033)", () =>
     // 연결 표는 claimed(이 묶음 요청서가 잡은 줄) 확인에만 — 이 묶음(g.id)에 이어진 요청서만 본다(다른 묶음의 요청서는 결정이 아니다).
     expect(note.match(/withdrawal_report_refunds/g)).toHaveLength(1);
     expect(note).toContain("join public.withdrawal_report_refunds f on f.tenant_id = a.tenant_id and f.document_id = a.id and f.group_id = g.id");
+    expect(note).toContain("select e->>'key', null::uuid, 1000000 + ord from jsonb_array_elements(p_check->'claimed') with ordinality x(e, ord)\n     where not exists(select 1 from public.academy_documents a");
     expect(note).toContain("and (e->>'key') = any(string_to_array(substring(a.description from 'lines:([^[:space:]·]+)'), ','))");
     // 확인 값 모양(refundable[{key, report, paid}] · claimed[{key, doc}] · asOf · scope) — 하나라도 어긋나면 거절
     expect(note).toContain("or jsonb_typeof(p_check->'claimed') is distinct from 'array'");
@@ -224,6 +225,7 @@ describe("원장 환불 결정 전에는 처리하지 않는다(s2_0033)", () =>
     expect(att.indexOf("pg_advisory_xact_lock")).toBeGreaterThan(att.indexOf("for update;"));
     expect(att.indexOf("pg_advisory_xact_lock")).toBeLessThan(att.indexOf("insert into public.withdrawal_report_refunds("));
     expect(att).toContain("where og.status <> 'canceled' or coalesce(btrim(a.form_data #>> '{result,completedDate}'), '') <> '')");
+    expect(att).toContain("then raise exception '다른 요청의 요청서가 이미 담은 건이 있습니다. 그 건은 고르지 말고(환불하지 않음) 요청서를 확인해 주세요.'; end if;");
     expect(att).toContain("open_n := public.withdrawal_report_refund_note(p_tenant, gid, p_check, p_actor, true);");
     // 앱 설정 칸 이름과 같다.
     expect(SPECIAL_ACCESS_ID_LISTS).toContain("withdrawalDeskIds");
@@ -247,6 +249,8 @@ describe("원장 환불 결정 전에는 처리하지 않는다(s2_0033)", () =>
     expect(g).toContain("if NEW.id is distinct from OLD.id or NEW.tenant_id is distinct from OLD.tenant_id or NEW.form_type is distinct from OLD.form_type or NEW.description is distinct from OLD.description then");
     expect(g).not.toContain("NEW.form_type is distinct from 'refund_request'");  // 서식을 바꿔 검사를 건너뛰는 갈래가 없다
     expect(g).toContain("if (v_uid = v_desk and exists(select 1 from public.users u where u.tenant_id = NEW.tenant_id and u.id = v_desk and u.status = 'active'))");
+    expect(g).toContain("     or exists(select 1 from public.users u where u.tenant_id = NEW.tenant_id and u.id = v_uid and u.status = 'active' and u.system_role::text = 'master') then return NEW; end if;");
+    expect(g).toContain("raise exception using errcode = '42501', message = '퇴원보고서에서 이어진 환불 요청서의 환불완료일자는 그 요청서의 데스크 담당자와 원장만 넣거나 지울 수 있습니다.';");
     // 🔴 원장 C.3 — 취소된 요청에만 이어진 요청서의 첫 완료일자 · 같은 청구 줄의 새 요청서(취소되지 않은 묶음 · 문서 남음)가 있으면 누구도(관리 키 포함) 거절
     expect(g).toContain("perform pg_advisory_xact_lock(hashtextextended('withdrawal_refund_lines:' || NEW.tenant_id::text || ':' || v_student::text, 0));");
     expect(g).toContain("raise exception using errcode = '23514', message = '같은 청구에 새 퇴원 요청의 요청서가 있습니다 — 새 요청서로 처리하세요.';");
