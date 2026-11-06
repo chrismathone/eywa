@@ -12,6 +12,7 @@ import {
   splitNdjson,
   stepSummary,
   stepSummaryText,
+  stepTrouble,
   threadKey,
   turnFromMessage,
   type AssistantAction,
@@ -259,9 +260,27 @@ describe("진행 단계 요약", () => {
       step("s4", { kind: "query", state: "error", at: 2500, ms: 100, detail: "문법 오류" }),
       step("s5", { kind: "report", state: "done", at: 3000, ms: 15_000 }),
     ];
-    expect(stepSummary(steps)).toEqual({ queries: 2, tables: 2, ms: 18_000, failed: 1 });
+    // 답이 실패한 차례(settled 아님) — 막힌 단계는 그대로 막힘(어디서 막혔는지가 곧 까닭)
+    expect(stepSummary(steps)).toEqual({ queries: 2, tables: 2, ms: 18_000, retried: 0, limited: 0, failed: 1 });
     expect(stepSummaryText(steps)).toBe("조회 2번 · 표 2개 · 18초 · 막힌 단계 1개");
     expect(stepSummaryText([step("s1", { kind: "understand", state: "done", at: 0, ms: 1200 })])).toBe("1.2초");
+  });
+
+  it("막힌 단계의 뜻 — 답이 끝까지 나왔고 뒤에 같은 종류가 이어졌을 때만 '다시 시도'(원장 2026-11-06 · 적대 리뷰)", () => {
+    const steps: AskStep[] = [
+      step("s1", { kind: "query", state: "error", at: 0, ms: 100, detail: "없는 칸을 썼습니다" }),
+      step("s2", { kind: "query", state: "done", at: 200, ms: 100 }),
+      step("s3", { kind: "write_sql", state: "error", at: 400, ms: 100, cause: "limit", detail: "조회는 질문당 12번까지라 여기까지 봤습니다" }),
+      step("s4", { kind: "report", state: "error", at: 600, ms: 100, detail: "조회 결과와 맞지 않는 곳이 있어 고칩니다" }),
+      step("s5", { kind: "fix", state: "done", at: 800, ms: 100 }),
+      step("s6", { kind: "query", state: "error", at: 1000, ms: 100, detail: "8초 안에 끝나지 않았습니다" }),
+      step("s7", { kind: "report", state: "done", at: 1200, ms: 100 }),
+    ];
+    // 보고서로 끝난 차례: s1(뒤에 조회 성공) · s4(뒤에 고친 보고서) = 다시 시도 · s3 = 한도 · s6(뒤에 성공한 조회 없음) = 막힘
+    expect([0, 1, 2, 3, 4, 5, 6].map((i) => stepTrouble(steps, i, true))).toEqual(["retried", null, "limit", "retried", null, "failed", null]);
+    expect(stepSummaryText(steps, true)).toBe("조회 3번 · 1.3초 · 다시 시도 2번 · 시간·한도로 여기까지 · 막힌 단계 1개");
+    // 같은 단계라도 답이 실패한 차례면 다시 시도로 보지 않는다(한도는 그대로 한도)
+    expect([0, 2, 3].map((i) => stepTrouble(steps, i, false))).toEqual(["failed", "limit", "failed"]);
   });
 });
 

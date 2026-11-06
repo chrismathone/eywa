@@ -1,7 +1,6 @@
 "use client";
 
-import { useId, useState, type ReactNode } from "react";
-import { BigStat } from "@/components/atoms/big-stat";
+import { Fragment, useId, useState, type ReactNode } from "react";
 import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { ADVICE_WHEN_LABEL, type ReportBlock, type SettledReport } from "@/features/assistant/report";
@@ -80,28 +79,56 @@ function Block({ block, datasets, omitted }: { block: ReportBlock; datasets: Set
 
 const DELTA_TONE: Record<DeltaTone, string> = { good: "text-green", bad: "text-danger", neutral: "text-foreground" };
 
-/** KPI 칸 수 — 넷까지는 한 줄에, 다섯·여섯은 세 칸씩. 좁으면 두 칸 → 한 칸. (클래스는 정적 문자열이어야 Tailwind가 만든다.) */
+/**
+ * KPI 칸 수 — 오버레이(약 860px)에서도 넷이 한 줄에 서게 촘촘히. 좁으면 두 칸(한 칸으로 늘이지 않는다).
+ * 🔴 원장 2026-11-06 *"카드 크기 너무 거대해지지 않게"* — 앱 공용 BigStat(운영실 큰 숫자 카드)은 오버레이 반쪽을 한 장이 차지해
+ *    보고서에서 숫자 넷이 화면 하나를 먹었다 → 비서 보고서만 작은 칸을 쓴다. 공용 BigStat은 그대로 둔다.
+ * (클래스는 정적 문자열이어야 Tailwind가 만든다.)
+ */
 const KPI_GRID: Record<number, string> = {
-  1: "grid-cols-1 max-w-sm",
-  2: "grid-cols-1 @sm:grid-cols-2",
-  3: "grid-cols-1 @sm:grid-cols-2 @2xl:grid-cols-3",
-  4: "grid-cols-1 @sm:grid-cols-2 @4xl:grid-cols-4",
-  5: "grid-cols-1 @sm:grid-cols-2 @2xl:grid-cols-3",
-  6: "grid-cols-1 @sm:grid-cols-2 @2xl:grid-cols-3",
+  1: "grid-cols-1 max-w-[14rem]",
+  2: "grid-cols-2 max-w-md",
+  3: "grid-cols-2 @lg:grid-cols-3",
+  4: "grid-cols-2 @2xl:grid-cols-4",
+  5: "grid-cols-2 @lg:grid-cols-3 @3xl:grid-cols-5",
+  6: "grid-cols-2 @lg:grid-cols-3",
 };
 
 function KpiGrid({ block }: { block: KpiBlock }) {
   return (
-    <div className={`grid gap-3 ${KPI_GRID[block.items.length] ?? KPI_GRID[6]}`}>
-      {block.items.map((item, i) => (
-        <BigStat
-          key={i}
-          label={item.label}
-          value={formatKpiValue(item.value, item.unit)}
-          unit={item.unit || undefined}
-          sub={<KpiDelta delta={item.delta} label={item.deltaLabel} unit={item.unit} goodWhen={item.goodWhen} />}
-        />
-      ))}
+    <div className={`grid gap-2 ${KPI_GRID[block.items.length] ?? KPI_GRID[6]}`}>
+      {block.items.map((item, i) => {
+        const hasSub = (typeof item.delta === "number" && Number.isFinite(item.delta)) || !!item.deltaLabel;
+        return (
+          <div key={i} data-stat="" className="bg-card shadow-card min-w-0 rounded-xl px-3 py-2.5">
+            <p className="text-text-dim text-xs leading-snug font-medium break-keep">{item.label}</p>
+            {/* 🔴 숫자는 자르지 않는다 — 금액이 말없이 '1,234,567,…'로 잘리면 원장이 잘못 읽는다(적대 리뷰 2026-11-06).
+                좁으면 쉼표 뒤에서만 줄을 바꾼다(<wbr> — 숫자 한가운데서 끊지 않게) · 큰 글자는 넓은 화면(@4xl)에서만. */}
+            <p className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-1">
+              <span className="num text-foreground min-w-0 text-xl leading-tight font-bold tracking-tight [overflow-wrap:anywhere] @4xl:text-2xl">
+                {formatKpiValue(item.value, item.unit)
+                  .split(",")
+                  .map((part, j) => (
+                    <Fragment key={j}>
+                      {j > 0 ? (
+                        <>
+                          ,<wbr />
+                        </>
+                      ) : null}
+                      {part}
+                    </Fragment>
+                  ))}
+              </span>
+              {item.unit ? <span className="text-text-dim shrink-0 text-xs font-medium">{item.unit}</span> : null}
+            </p>
+            {hasSub ? (
+              <p className="text-text-faint mt-1 text-xs">
+                <KpiDelta delta={item.delta} label={item.deltaLabel} unit={item.unit} goodWhen={item.goodWhen} />
+              </p>
+            ) : null}
+          </div>
+        );
+      })}
     </div>
   );
 }

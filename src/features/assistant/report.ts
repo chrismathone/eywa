@@ -7,6 +7,7 @@
  * DB에 들어 있던 학부모 글이 지시처럼 읽혀 바깥 주소를 불러오게 하는 길을 막는다).
  */
 import { z } from "zod";
+import { labelCodeColumns } from "./code-labels";
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 
@@ -119,6 +120,13 @@ export function settleReport(
   }
   const errors: string[] = [];
   const used = new Set<string>();
+  // 화면·저장용 자료 — 코드 칸(present·math 등)은 한국어 이름으로(code-labels.ts). AI가 본 원래 결과(results)는 그대로.
+  const labeled = new Map<string, QueryResult["rows"]>();
+  const rowsOf = (r: QueryResult) => {
+    let rows = labeled.get(r.id);
+    if (!rows) labeled.set(r.id, (rows = labelCodeColumns(r.columns, r.rows)));
+    return rows;
+  };
   const need = (where: string, query: string, columns: string[]) => {
     const r = results.get(query);
     if (!r) return void errors.push(`${where}: 조회 ${query}가 없습니다(이번 답에서 돌린 조회: ${[...results.keys()].join(", ") || "없음"})`);
@@ -135,7 +143,7 @@ export function settleReport(
         items: block.items.map((item, j) => {
           if (!item.ref) return item;
           const r = results.get(item.ref.query);
-          const row = r?.rows[item.ref.row];
+          const row = r ? rowsOf(r)[item.ref.row] : undefined;
           // Object.hasOwn — `in`은 `constructor` 같은 프로토타입 이름도 맞춘다(적대 리뷰 2026-11-06).
           if (!r || !row || !Object.hasOwn(row, item.ref.column)) {
             errors.push(`${where}.items.${j}: ref ${item.ref.query}[${item.ref.row}].${item.ref.column}이(가) 없습니다`);
@@ -156,7 +164,7 @@ export function settleReport(
   const datasets: SettledReport["datasets"] = {};
   for (const id of used) {
     const r = results.get(id)!;
-    datasets[id] = { columns: r.columns, rows: r.rows, truncated: r.truncated, purpose: r.purpose };
+    datasets[id] = { columns: r.columns, rows: rowsOf(r), truncated: r.truncated, purpose: r.purpose };
   }
   return { ok: true, report: { title: parsed.data.title, blocks, datasets } };
 }

@@ -36,14 +36,14 @@ export const ONTOLOGY_DOCS: readonly AssistantTableDoc[] = [
     label: "출결(정정 반영)",
     ko: "유효 출결만(정정 이력 중 최신 한 줄) — 출석률·결석 수는 이 보기로 센다",
     notes:
-      "attendance_records는 정정을 새 줄로 쌓는다 — 이 보기는 학생·반·수업일·교시(slot_start)마다 recorded_at이 가장 늦은 한 줄만 남겼다(앱 effectiveAttendanceRecords와 같다). session_date = 수업 날짜. taught_by = 실제로 수업한 사람(담임 배정과 다를 수 있다). status 값의 뜻·출석률 공식은 attendance_records 설명을 본다.",
+      "attendance_records는 정정을 새 줄로 쌓는다 — 이 보기는 학생·반·수업일·교시(slot_start)마다 recorded_at이 가장 늦은 한 줄만 남겼다(앱 effectiveAttendanceRecords와 같다). session_date = 수업 날짜. taught_by = 남의 반을 대신 보강한 강사(드물다 — 비어 있으면 원래 담당이 수업한 것: 교시 담당 → 담임, 온톨로지 '출결 귀속'). status 값의 뜻·출석률 공식은 attendance_records 설명을 본다. homework_required·homework_done은 쓰지 않는 반이 많다(숙제 수행 = lesson_reports.homework_score).",
   },
   {
     name: "onto_class_teachers",
     label: "반 담당",
     ko: "반→강사 배정 — 담임(지금) · 교시 담당(기간) · 임시 위임(기간)",
     notes:
-      "role = homeroom(담임 — 지금 값, 기간 없음) · scheduled(교시 담당 — valid_from~valid_to) · delegated(임시 위임 — 기간). 배정이지 실제 수업 증거가 아니다(실제 = onto_attendance.taught_by). 과거 시점 질문은 그 날짜가 기간 안인 배정만 본다. teacher_id = users.id.",
+      "role = homeroom(담임 — 지금 값, 기간 없음) · scheduled(교시 담당 — valid_from~valid_to) · delegated(임시 위임 — 기간). 🔴 배정 목록이지 출결 귀속 계산용이 아니다 — 요일·교시 칸이 없다(귀속은 온톨로지 '출결 귀속' 규칙으로 class_schedules에서). 과거 시점 질문은 그 날짜가 기간 안인 배정만 본다. teacher_id = users.id. class_closed_on = 반 종강일. 폐지(is_active)·보강용 반(is_makeup_pool) 칸이 없으니 '담당 반'은 classes와 class_id로 이어 셋 다로 거른다(묻지 않으면 폐지·보강용 반은 빼고, 종강 반은 지금 목록에서 뺀다).",
   },
 ];
 

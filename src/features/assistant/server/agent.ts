@@ -318,7 +318,7 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
   async function runTool(call: Anthropic.ToolUseBlock, stepId: string): Promise<Anthropic.ToolResultBlockParam> {
     const fail = (content: string): Anthropic.ToolResultBlockParam => ({ type: "tool_result", tool_use_id: call.id, is_error: true, content });
     if ((call.name === "describe_table" || call.name === "run_sql") && now() - started > SOFT_DEADLINE_MS) {
-      close(stepId, { state: "error", detail: "시간이 다 돼 더 조회하지 않습니다" });
+      close(stepId, { state: "error", cause: "limit", detail: "시간이 다 돼 여기까지 봤습니다" });
       return fail("시간이 다 됐습니다. 더 조회하지 말고 지금까지의 결과로 render_report를 호출하세요.");
     }
     if (call.name === "describe_table") {
@@ -348,7 +348,7 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
       }
       const purpose = parsed.data.purpose;
       if (queries.length >= MAX_QUERIES) {
-        close(stepId, { state: "error", label: `조회문 작성 · ${purpose}`, detail: `조회는 질문당 ${MAX_QUERIES}번까지` });
+        close(stepId, { state: "error", cause: "limit", label: `조회문 작성 · ${purpose}`, detail: `조회는 질문당 ${MAX_QUERIES}번까지라 여기까지 봤습니다` });
         return fail(`조회는 질문당 ${MAX_QUERIES}번까지입니다. 지금까지의 결과로 render_report를 호출하세요.`);
       }
       let gate: Awaited<ReturnType<typeof checkAssistantSql>>;
