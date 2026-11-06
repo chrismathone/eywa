@@ -548,6 +548,7 @@ describe("지점 보기 — Supabase를 거치지 않는 일(바깥으로 나가
     //   ① 저장 함수가 `assertTenantViewOutboundAllowed()`를 먼저 부른다(아래 검사)  ② 사용자 요청에서 불리지 않는다(cron · 연동 PC 전용).
     const direct = SRC_FILES.filter((f) => /from "(@\/lib\/db(\/[a-z-]+)?|postgres|pg|drizzle-orm\/postgres-js)"/.test(readFileSync(f, "utf8"))).map(rel).sort();
     expect(direct).toEqual([
+      "src/features/assistant/server/executor.ts", // ③ 쓰지 않는다 — 학원 비서 전용 읽기 역할(쓰기 함수 0 · 읽기 전용 거래) · 지점 보기 중엔 문(gate.ts)이 막는다(아래)
       "src/features/classes/server/class-period-names.ts", // ② cron(끝난 반 이름 정리)
       "src/features/classes/server/class-term-store.ts", // ① endClassWithName · reopenClassWithSchedules
       "src/features/demo-history/math-refresh.ts", // ② cron(데모 지점 새로 고침)
@@ -571,6 +572,9 @@ describe("지점 보기 — Supabase를 거치지 않는 일(바깥으로 나가
       ["src/features/demo-roster/apply.ts", "replaceDemoRoster"],
     ];
     for (const [file, fn] of STORES) expect(body(file, fn), `${file} · ${fn}`).toContain("await assertTenantViewOutboundAllowed();");
+    // ③ 학원 비서 — 읽기 전용 거래로만 조회하고, 지점 보기 중에는 문이 먼저 거절한다(AI 호출도 requireAiLicense가 막는다).
+    expect(read("src/features/assistant/server/executor.ts")).toContain('sql.begin("read only"');
+    expect(body("src/features/assistant/server/gate.ts", "assistantViewer")).toContain("if (user.tenantView) return");
   });
 
   it("drizzle(`@/lib/db`)을 쓰는 곳은 데모 재원 구성뿐이다", () => {

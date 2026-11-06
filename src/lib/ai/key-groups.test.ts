@@ -260,13 +260,14 @@ function aiCallSites(): { sites: CallSite[]; missing: string[]; noTenant: string
   for (const file of walk(join(process.cwd(), "src"))) {
     if (file.includes(join("src", "lib", "ai"))) continue; // 진입점 자신
     const src = readFileSync(file, "utf8");
-    if (!src.includes("generateJSON")) continue;
+    // 자체 도구 루프(학원 비서 — getAnthropic 직접)는 generateJSON 대신 recordUsage로 사용량을 남긴다 — 그 호출도 호출부로 본다.
+    if (!src.includes("generateJSON") && !src.includes("recordUsage")) continue;
     const rel = file.slice(file.indexOf(`src${sep}`));
     const source = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 
     const visit = (node: ts.Node): void => {
       // endsWith — 별칭(`gen(...)`은 못 잡지만)·네임스페이스 호출(`ai.generateJSON(...)`)까지 본다.
-      if (ts.isCallExpression(node) && node.expression.getText(source).endsWith("generateJSON")) {
+      if (ts.isCallExpression(node) && /(generateJSON|recordUsage)$/.test(node.expression.getText(source))) {
         const arg = node.arguments[0];
         const at = `${rel}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1}`;
         if (!arg || !ts.isObjectLiteralExpression(arg)) {

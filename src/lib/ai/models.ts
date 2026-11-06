@@ -50,7 +50,8 @@ export type AiKeyGroup =
   | "notice"
   | "staff"
   | "video"
-  | "student_ontology";
+  | "student_ontology"
+  | "assistant";
 
 /**
  * 호출부 식별자(generateJSON `meta.feature`) → 키 그룹. 🔴 **새 AI 기능을 만들면 여기 한 줄**을 더한다 —
@@ -97,6 +98,8 @@ export const FEATURE_KEY_GROUP: Readonly<Record<string, AiKeyGroup>> = {
   // 영상 숙제 설명 AI 참고 메모 — 판정(Haiku) · 실수 확인(Sonnet). 밤 배치 + '다시 분석' 즉시 호출(원장 2026-10-20)
   video_review_judge: "video",
   video_review_verify: "video",
+  // 학원 비서(원장 자연어 질의 · 2026-11-06) — 질문마다 여러 번 부르는 도구 루프라 따로 센다(`ANTHROPIC_API_KEY_ASSISTANT`, 없으면 기본 키).
+  academy_assistant: "assistant",
 };
 
 /** 기능 이름 → 키 그룹(표에 없으면 null — 옛 버킷·기본 키로). 원형 속성 이름(`constructor` 등)은 거른다. */

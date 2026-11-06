@@ -91,12 +91,14 @@ TypeSafe Jev의 제한된 선택지 판정도 `generateJSON({ mode: "decision", 
 문장 생성 provider/폴백에는 넣지 않는다. `TYPESAFE_API_KEY_<그룹>` → `TYPESAFE_API_KEY` 순서이며,
 현재 `parent_attendance_jev_shadow`는 수동 비교 전용이다. 지점 allowlist가 없으면 꺼져 있고 분류 변경·발송은 하지 않는다.
 직접 `getAnthropic`/`getDeepseek`를 부르지 말 것 — provider 라우팅·파싱·폴백이 한 곳에 모여 있다.
+**예외 하나 = 학원 비서**(원장 2026-11-06 · [`agent.ts`](src/features/assistant/server/agent.ts)) — 도구를 여러 번 부르는 루프라 Claude 스트림을 직접 쓴다.
+대신 같은 관문을 손으로 다 지난다: 라이선스 `requireAiLicense` · 사용량 `recordUsage`(feature `academy_assistant` · 키 그룹 `ASSISTANT`) · 사실 원칙 `withFactGuard`(시스템 프롬프트 맨 앞 · 가드 `prompt.test.ts`). Claude 전용(다른 회사로 바꾸지 않는다).
 
 - **⚠️ 사실 원칙은 모든 AI 호출에 예외 없이 붙는다 (원장 지시 2026-07-23, 불변)**: *"'팩트' '환각금지'
   '사실만 작성' '창작 금지' '추측 금지'도 항상 거쳐야 해."* → [`FACT_GUARD`](src/lib/ai/fact-guard.ts)가
   `generateJSON()` 안에서 **모든 프롬프트 앞에 자동 부착**(멱등). generateJSON을 안 거치는 자체 루프를
-  새로 만들면 시스템 프롬프트에 같은 상수를 직접 이을 것 — 유일한 실례였던 대화형 비서(`runAssistantLoop`)가
-  2026-09-03 제거돼 **지금 자체 루프는 0개**다(전 AI 호출이 `generateJSON()` 단일 진입점).
+  새로 만들면 시스템 프롬프트에 같은 상수를 직접 이을 것 — 옛 대화형 비서(`runAssistantLoop`)는 2026-09-03 제거됐고,
+  **지금 자체 루프는 학원 비서 하나**다(2026-11-06 · `buildSystemPrompt`가 `withFactGuard`로 잇는다). 나머지 AI 호출은 전부 `generateJSON()`.
   🔴 **호출부 프롬프트 본문에만 적지 말 것** — 본문은 원장이 화면에서 편집 가능(`ai_prompt_overrides`)이라
   편집 한 번에 가드가 사라진다. 지울 수 없는 자리(코드)에 둬야 "항상"이 성립한다. 문구 완화·삭제 금지
   (Vitest가 5개 원칙 단어를 잠근다). 항목별 세부 규칙은 호출부가 계속 담당 — 여기는 최소 공통 바닥.
@@ -160,6 +162,7 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 | `NOTICE` | notice_translate | Claude(Sonnet 5.5) |
 | `STAFF` | staff_contract_pdf · staff_contract_pdf_ocr | Claude(OCR은 **Claude 전용**) |
 | `VIDEO` | video_review_judge · video_review_verify | Claude(판정 Haiku · 확인 Sonnet · 밤 배치) |
+| `ASSISTANT` | academy_assistant(학원 비서 — 원장 자연어 질의 · 자체 도구 루프라 `recordUsage`로 센다, 2026-11-06) | Claude 전용(강도 적음 Haiku · 보통 Sonnet · 강함 Opus 5.5) |
 
 - **키 고르는 순서 = 그룹 키 → 옛 버킷 키(`_CONSULTATIONS`) → 기본 키**(`resolveKeyEnv`). 그룹 키가 아직 없어도
   기본 키로 돌아 **멈추는 기능이 없다**(키를 하나씩 넣는 동안의 안전장치).
@@ -421,6 +424,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - 운영실 카드 표시 규칙 10종 · 취소된 일정은 목록에 취소선, 숫자·링크에선 뺀다
 - 운영실 일정 카드의 학생 이름·콜&상담 링크 = 저장 없이 갱신마다 판정 · 모호하면 안 붙인다
 - 운영실에서 '대화형 비서'·'실시간 운영'·'빠른 작업'을 걷어냈다 · '학원 펄스' → '학원생 증감'
+- 학원 비서(원장 2026-11-06 직접 지시 — 9/3 '챗봇 영구 제외'를 원장이 바꿨다) = 원장·슈퍼관리자 · 어디서나 오버레이 · 그 지점 DB 전부(전용 역할 `aywa_assistant` · `assistant.*` 보기 · DB 서명 증표로 지점 묶기(service_role만 발급) · 비밀 칸만 뺌) · 보고서 블록(차트·표는 조회 결과를 가리킨다) + 비서 의견 필수 · 온톨로지 보기 `onto_*` · 진행 단계 · 강도 적음/보통/강함 → [`docs/features/academy-assistant.md`](docs/features/academy-assistant.md)
 - 상단 '강좌수' 칸(재원생 오른쪽 · 지금 듣는 반을 학생마다 모두 · 재원생 칸과 같은 조회·줄 판정) + '강좌수 추이' 카드(재원생 추이와 같은 원본·날짜·시작 달 · 오늘 점 = 칸) · 원생 통계 '강좌수 추이' · 9칸 흐름 배치는 3열 6 + 2열 3
 - 상단 '금일 입테' → '전일 입테'(전일 = 어제 · 월요일엔 토·일 주말 전체 — `previousDayRange` 한 곳 · 일정은 어제부터 읽고 일정 카드는 `upcomingAdmissionsRows`로 오늘부터) · '전일 / 이달 신규' 팝업에 배정 반(과목 · 반 이름 · 칸반과 같은 필터)
 - 운영실 상단 KPI = 9칸(재원생·강좌수·퇴원생·신규문의·전일 입테·

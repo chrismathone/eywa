@@ -46,6 +46,7 @@ import { EVENT_LABEL, OUTCOME_LABEL, STATUS_LABEL, WORK_OUTCOMES, type WorkOutco
 export const AUDIT_TYPE_LABEL: Record<string, string> = {
   work_request: "업무 요청",
   dashboard_secretary: "업무 비서",
+  assistant: "학원 비서",
   // 오늘 수학 사용 메뉴(2026-10-19) — 에이와 · 오늘 수학 어느 쪽에서 바꿔도 같은 대상.
   todays_math: "오늘 수학",
   // ── 2026-09-09 전수 보강 — 여기 없으면 감사로그 '대상' 열에 영문이 그대로 뜬다. ──
@@ -2232,6 +2233,11 @@ export function auditDetail(
         outcome && (WORK_OUTCOMES as readonly string[]).includes(outcome) ? OUTCOME_LABEL[outcome as WorkOutcome] : null,
         status && Object.hasOwn(STATUS_LABEL, status) ? `→ ${STATUS_LABEL[status as WorkStatus]}` : null,
       );
+    }
+    case "assistant_ask": {
+      // 강도 · 조회 수 · 실패만(질문 앞부분은 대상 열에 이미 있다).
+      const queries = num(m.queries);
+      return join(str(m.levelLabel) ? `강도 ${str(m.levelLabel)}` : null, queries === null ? null : `조회 ${queries}번`, str(m.outcome) === "error" ? "실패" : null);
     }
     case "dashboard_secretary_run": {
       // 결과 — 성공은 적지 않는다(정리가 화면에 남는다). AI를 부른 뒤 저장하지 못한 시도만 까닭을 적는다.

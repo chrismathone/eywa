@@ -28,7 +28,12 @@ const nextConfig: NextConfig = {
   // pnpm 심볼릭 링크 너머 rimraf를 못 풀어 그걸 import하는 서버액션(엑셀 가져오기/내보내기)이 붙은 라우트
   // (예: /timetable)가 통째로 "Module not found: rimraf"로 안 뜬다. external로 두면 Node가 런타임에 resolve
   // (rimraf는 실제로 존재·해결됨) → 번들 대상에서 빠져 dev/프로덕션 모두 안정 + 서버 번들도 가벼워진다.
-  serverExternalPackages: ["exceljs"],
+  // libpg-query(학원 비서 SQL 검사 — Postgres 17 파서 WASM)는 실행 중에 `__dirname`으로 .wasm을 읽는다 — 번들하면 경로가 깨지고,
+  // 파일 추적이 동적 경로를 못 따라가니 비서 질문 라우트에 .wasm을 명시로 싣는다(outputFileTracingIncludes).
+  serverExternalPackages: ["exceljs", "libpg-query"],
+  outputFileTracingIncludes: {
+    "/api/assistant/ask": ["./node_modules/libpg-query/wasm/**/*", "./node_modules/.pnpm/libpg-query@*/node_modules/libpg-query/wasm/**/*"],
+  },
   // ── Vercel 빌드 비용(2026-07-23) ────────────────────────────────────────────────────────
   // 빌드 과금 = **올림(분) × CPU 수 × 단가**라, 빌드에서 1~2분만 덜어도 배포마다 그만큼 곱해서 줄어든다.
   // 실측: 이번 청구주기 2일 만에 포함 크레딧 $20 중 $7.64 소진, 그중 **Build CPU Minutes가 $4.86(64%)**.

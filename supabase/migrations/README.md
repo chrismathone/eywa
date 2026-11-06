@@ -12,6 +12,18 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-11-06 학원 비서 — 전용 역할 · 지점 보기 · 온톨로지 보기 · 대화 저장 (s2_0031 · ⏳ 미적용 · 🔴 원장 승인 전 적용 금지 · 번호는 병합 때 확정)
+
+`s2_0031_academy_assistant.sql` — 원장 2026-11-06 *"모든 db에 접근가능한 챗봇을 만들어서 원장이상급이 챗봇에게 자연어로 질문하면 ai가 피드백해주는 학원 비서 챗봇"* · *"원장 자료니까 db를 하나도 빠짐없이 해당 지점 db를 조회하고 답변할 수 있어야함"* · *"온톨로지 기반의 답변"*. 설계 = [`docs/features/academy-assistant.md`](../../docs/features/academy-assistant.md).
+- §1 `assistant_threads` · `assistant_messages`(정책 0 · anon/authenticated 권한 회수 · 서버 키로만) + 사람당 '도는 질문' 하나 부분 고유 색인 `assistant_messages_one_running_idx`(멈춤 누른 질문 제외 — 두 탭 동시 질문 막기 · 5분 넘은 '도는 중'은 앱이 실패로 닫는다).
+- §2 로그인 역할 `aywa_assistant`(LOGIN NOINHERIT · 구성원 아님 · 쓰기 함수·권한 0 · 8초 · 연결 4 · 조회는 앱이 읽기 전용 거래로). 🔴 비밀번호는 저장소 밖에서 SQL 편집기로 한 번(`alter role … password`) → Vercel env `ASSISTANT_DATABASE_URL`(거래 방식 풀러 6543 · 사용자 `aywa_assistant.<project ref>`).
+- §3 스키마 `assistant`(보기만 · 이 역할만 SELECT) · `assistant_private`(정책·생성 함수 · 서명 키) + 지점 묶기 = DB 서명 증표(`public.assistant_issue_binding` — service_role만 · HMAC · 5분 → `set_config('assistant.binding', …, true)` → `bound_tenant()`). 🔴 **public 보안 정의자 함수 11개(`auth_*` · `is_super_admin` · `operator_view_tenant`)의 PUBLIC 실행권 회수**(적대 리뷰 — 모든 역할은 PUBLIC 구성원이라 비서 역할이 부를 수 있었다 · 운영 확인: 11개 모두 anon·authenticated·service_role·postgres 명시 실행권이 따로 있어 앱 영향 없음 · 트리거 14개는 그대로 · 회수 목록 `assistant_private.revoked_public_execute`).
+- §4 정책 표(제외 표 · 숨길 칸 · 가릴 칸) + 비밀 칸 이름 패턴. §5 `refresh_views()`(public의 지점 칸 있는 표마다 보기) · `public.assistant_refresh_views_if_stale()`(service_role · 앱이 질문마다 — 표·칸·정책 지문이 바뀌었을 때만 다시). §6 온톨로지 보기 `onto_students` · `onto_enrollments` · `onto_attendance` · `onto_class_teachers`.
+- §7 사후 확인: 보기 200개 이상 · 이 역할이 앱 자료 스키마의 표를 못 읽는다 · 로그인 사용자가 assistant 스키마·갱신 함수를 못 쓴다 · 이 역할이 다른 역할의 구성원이 아니다 · 이 역할이 부를 수 있는 보안 정의자 함수 = `bound_tenant()` 하나 · 증표 발급 불가.
+- 로컬 PGlite(운영 표 구조 284개 그대로) 64건 통과 — 지점 격리 · 증표 위조·만료 0행 · 우회 9종 거절 · 비밀 칸 · 온톨로지 규칙 · 자동 갱신 · 도는 질문 하나(고유 색인) · 두 번 적용 · 되돌리기 → 다시 적용. 🔴 운영에서 ALTER 리허설은 하지 않는다.
+- 순서: 이 SQL → 비밀번호 · env → 앱 배포(앱은 표가 없으면 비서 버튼째 쉬고, env가 없으면 '연결이 설정되지 않았습니다'로 끝난다).
+- 되돌리기 = `scripts/_oneoff/revert-s2_0031-academy-assistant.sql`(회수한 PUBLIC 실행권을 기록대로 되살리고 · 보기·증표·역할을 걷고 · 대화 표는 남긴다 · 로컬 왕복 확인).
+
 ## 2026-11-06 퇴원보고서: 관리자 승인자에서 원장급을 DB에서도 막는다 (s2_0030 · ⏳ 미적용 · 원장 결정 *"DB도 막기"* · 가지 번호 s2_0028 → 병합 때 s2_0030(main의 s2_0028·0029 = 상담 약속·인계))
 
 `s2_0030_withdrawal_approver_no_master.sql` — 원장 2026-11-05 *"관리자 승인에 '원일' 넣지 말것. 항상 '정유진' 혹은 '허은진'. 지정된 사람으로. 원장이상급은 뺴기로 했는데 자꾸 들어가있네"*. 앱 수리(후보에서 원장급 빼기 · 서버 재계산)와 별개로 DB가 마지막에 막는다. 관리자 승인자 = 관리자·매니저 `('admin','manager')`만이고, 운영자 계정은 기존 방식 `is_super_admin`으로 뺀다.

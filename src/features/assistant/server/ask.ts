@@ -1,0 +1,186 @@
+import "server-only";
+/**
+ * 학원 비서 질문 한 번 — 문(원장·슈퍼관리자) → 지점 AI 라이선스 → 하루 상한·겹침 → 대화 저장('도는 중') →
+ * 비서 DB 연결(이 지점으로 묶음) → AI 루프 → 답 저장 · 감사 기록 · 사용량 장부. 진행은 `emit`으로 흘려보낸다.
+ * 🔴 화면 연결이 끊겨도 끝까지 돌고 저장한다(화면은 대화를 다시 읽는다) — 그래서 `signal`은 사람이 '멈춤'을 눌렀을 때만 쓴다.
+ */
+import Anthropic from "@anthropic-ai/sdk";
+import { getAnthropic } from "@/lib/ai/anthropic";
+import { anthropicUsage, isCreditExhaustedError, recordUsage, requireAiLicense } from "@/lib/ai/generate";
+import { keyGroupOf, keyLabelOf, resolveKeyEnv } from "@/lib/ai/models";
+import { logActionAs } from "@/features/audit/server/log";
+import { reportError } from "@/lib/observability/report-error";
+import { ASSISTANT_LEVEL_LABEL, type AssistantLevel } from "../levels";
+import { ASSISTANT_HARD_DEADLINE_MS, type AskEvent, type AskStep } from "../protocol";
+import type { QueryResult, SettledReport } from "../report";
+import { ASSISTANT_DOCS } from "../catalog";
+import { clipText } from "../text";
+import { AssistantError, runAssistantAgent } from "./agent";
+import { openAssistantDb } from "./executor";
+import { assistantViewer, isGateFailure } from "./gate";
+import { ASSISTANT_FEATURE, ASSISTANT_MODEL } from "./models";
+import { admission, BUSY_MESSAGE, compactReport, finishMessage, markFailed, pastTurns, startMessage, stopRequested, type Usage } from "./store";
+
+export type AskInput = { threadId?: string | null; question: string; level: AssistantLevel };
+
+/** 사람에게 보일 오류 문장(한국어가 아닌 원문은 내지 않는다). */
+export function assistantErrorMessage(error: unknown): string {
+  if (error instanceof AssistantError) return error.message;
+  if (isCreditExhaustedError(error)) return "AI 사용 한도가 찼습니다. 관리자에게 알려 주세요";
+  if (error instanceof Anthropic.RateLimitError) return "AI 요청이 잠시 몰렸습니다. 1분 뒤 다시 물어봐 주세요";
+  if (error instanceof Anthropic.APIConnectionError) return "AI에 연결하지 못했습니다. 잠시 뒤 다시 물어봐 주세요";
+  if (error instanceof Anthropic.APIError && (error.status ?? 0) >= 500) return "AI 서버가 잠시 응답하지 않습니다. 잠시 뒤 다시 물어봐 주세요";
+  if (error instanceof Error && /[가-힣]/.test(error.message)) return error.message;
+  return "답을 만들지 못했습니다. 잠시 뒤 다시 물어봐 주세요";
+}
+
+/** 시작 전에 막히면 `{ error, status }`(JSON 응답), 시작하면 흐름 함수. */
+export async function prepareAsk(
+  input: AskInput,
+): Promise<{ error: string; status: number } | { messageId: string; run: (emit: (e: AskEvent) => void) => Promise<void> }> {
+  const begun = Date.now();
+  const viewer = await assistantViewer();
+  if (isGateFailure(viewer)) return viewer;
+  const { owner } = viewer;
+  try {
+    await requireAiLicense({ tenantId: owner.tenantId, feature: ASSISTANT_FEATURE });
+  } catch (error) {
+    return { error: assistantErrorMessage(error), status: 403 };
+  }
+  const blocked = await admission(owner);
+  if (blocked) return { error: blocked, status: 429 };
+  const started = await startMessage(owner, input);
+  if (started === "no_thread") return { error: "대화를 찾지 못했습니다. 새 질문으로 물어봐 주세요", status: 404 };
+  if (started === "busy") return { error: BUSY_MESSAGE, status: 429 };
+
+  return {
+    messageId: started.messageId,
+    run: async (emit) => {
+      // 멈춤 = 사람이 누른 ‘멈춤’(DB 표시) 또는 고정 기한 — 화면 연결이 끊겨도 끝까지 돈다.
+      // 🔴 고정 기한: 라우트 기한(300초)에 함수가 죽으면 저장·감사 기록·사용량이 통째로 빠지고 줄이 '도는 중'으로 남는다 →
+      //    250초에 스스로 끊고 실패로 저장한다(적대 리뷰 2026-11-06). 150초 '마무리 요청'(agent.ts)은 부탁일 뿐이라 따로 둔다.
+      const stop = new AbortController();
+      const signal = stop.signal;
+      let stoppedBy: "user" | "deadline" | null = null;
+      const poll = setInterval(() => {
+        void stopRequested(owner, started.messageId).then(
+          (yes) => {
+            if (!yes || stoppedBy) return;
+            stoppedBy = "user";
+            stop.abort();
+          },
+          () => undefined,
+        );
+      }, 2000);
+      const deadline = setTimeout(
+        () => {
+          if (stoppedBy) return;
+          stoppedBy = "deadline";
+          stop.abort();
+        },
+        Math.max(0, ASSISTANT_HARD_DEADLINE_MS - (Date.now() - begun)),
+      );
+      emit({ type: "started", messageId: started.messageId });
+      if (started.created) emit({ type: "thread", threadId: started.threadId, title: started.title });
+      const { model, effort } = ASSISTANT_MODEL[input.level];
+      const group = keyGroupOf(ASSISTANT_FEATURE);
+      const keyName = keyLabelOf("anthropic", resolveKeyEnv("anthropic", "default", group));
+      const usage: Usage[] = [];
+      const steps = new Map<string, AskStep>();
+      let report: SettledReport | null = null;
+      let queries: QueryResult[] = [];
+      let failure: string | null = null;
+      const db = await openAssistantDb(owner.tenantId).catch((error: unknown) => {
+        reportError(error, { scope: "assistant.db.open", tenantId: owner.tenantId });
+        return null;
+      });
+      try {
+        if (!db) throw new AssistantError("비서 DB에 연결하지 못했습니다. 잠시 뒤 다시 물어봐 주세요");
+        const history = started.created ? [] : await pastTurns(owner, started.threadId);
+        const out = await runAssistantAgent({
+          client: getAnthropic("default", group),
+          model,
+          effort,
+          db,
+          docs: ASSISTANT_DOCS,
+          question: input.question,
+          history,
+          emit: (event) => {
+            steps.set(event.step.id, event.step);
+            emit(event);
+          },
+          signal,
+          onUsage: async (u) => {
+            usage.push({
+              model: u.model,
+              input: u.usage.input_tokens ?? 0,
+              output: u.usage.output_tokens ?? 0,
+              cacheRead: u.usage.cache_read_input_tokens ?? 0,
+              cacheWrite: u.usage.cache_creation_input_tokens ?? 0,
+            });
+            await recordUsage({ meta: { tenantId: owner.tenantId, feature: "academy_assistant" }, provider: "anthropic", model: u.model, keyName, usage: anthropicUsage(u.usage), ok: true });
+          },
+        });
+        // 흘려보내는 답과 저장본을 같게 — 긴 글 칸·큰 자료를 줄인다(store.ts compactReport).
+        report = compactReport(out.report);
+        queries = out.queries;
+      } catch (error) {
+        failure =
+          stoppedBy === "user"
+            ? "질문을 멈췄습니다"
+            : stoppedBy === "deadline"
+              ? "시간이 오래 걸려 멈췄습니다. 질문을 좁히거나 나눠서 다시 물어봐 주세요"
+              : assistantErrorMessage(error);
+        if (!(error instanceof AssistantError) && !stoppedBy) reportError(error, { scope: "assistant.ask", tenantId: owner.tenantId });
+        // 사람이 누른 멈춤은 실패가 아니다 — 장부에 실패로 남기지 않는다(쓴 토큰은 agent가 차례마다 이미 적었다).
+        // 고정 기한은 늘 실패로 적는다 — 조회 도중 걸리면 agent가 다음 차례 시작에서 AssistantError로 끝내므로 오류 종류로 가리지 않는다(재리뷰 2026-11-06).
+        // ⚠️ 끊긴 차례의 사용량은 message_start 시점 값이라 출력 토큰이 거의 0으로 적힌다(알려진 한계 — agent.ts).
+        if (stoppedBy === "deadline" || (!(error instanceof AssistantError) && !stoppedBy)) {
+          const reason = stoppedBy === "deadline" ? "hard deadline" : error instanceof Error ? error.message : String(error);
+          await recordUsage({ meta: { tenantId: owner.tenantId, feature: "academy_assistant" }, provider: "anthropic", model, keyName, ok: false, error: clipText(reason, 300) });
+        }
+      } finally {
+        clearInterval(poll);
+        clearTimeout(deadline);
+        await db?.close().catch(() => undefined);
+      }
+      // 저장 — 흘려보낸 답과 저장본이 어긋나지 않게(재리뷰 2026-11-06): 실패하면 표·차트 자료를 뺀 보고서로 한 번 더,
+      // 그래도 안 되면 상태만 '실패'로 닫고 화면에도 실패로 보낸다(화면에 보인 답이 다시 열면 사라지거나 다음 질문이 맥락을 잃지 않게).
+      const save = (r: SettledReport | null) =>
+        finishMessage(owner, { threadId: started.threadId, messageId: started.messageId, level: input.level, report: r, error: failure, queries, steps: [...steps.values()], usage });
+      try {
+        await save(report);
+      } catch (error) {
+        reportError(error, { scope: "assistant.save", tenantId: owner.tenantId });
+        const slim: SettledReport | null = report ? { ...report, datasets: {}, datasetsOmitted: true } : null;
+        try {
+          if (!slim) throw error;
+          await save(slim);
+          report = slim;
+        } catch {
+          if (report) failure = "답을 저장하지 못했습니다. 다시 물어봐 주세요";
+          report = null;
+          await markFailed(owner, started.messageId, failure ?? "답을 저장하지 못했습니다. 다시 물어봐 주세요").catch((e: unknown) =>
+            reportError(e, { scope: "assistant.save.mark_failed", tenantId: owner.tenantId }),
+          );
+        }
+      }
+      // 시작할 때 확인한 사람으로 남긴다 — 끝에서 쿠키 세션을 다시 찾으면 긴 질문 사이 토큰 만료로 빠질 수 있다(적대 리뷰 2026-11-06).
+      await logActionAs({ tenantId: owner.tenantId, actorId: viewer.user.id, actorName: viewer.user.displayName }, {
+        action: "assistant_ask",
+        targetType: "assistant",
+        targetLabel: started.title,
+        metadata: {
+          level: input.level,
+          levelLabel: ASSISTANT_LEVEL_LABEL[input.level],
+          question: clipText(input.question, 80),
+          queries: queries.length,
+          outcome: report ? "ok" : "error",
+          inputTokens: usage.reduce((s, u) => s + u.input + u.cacheRead + u.cacheWrite, 0),
+          outputTokens: usage.reduce((s, u) => s + u.output, 0),
+        },
+      });
+      emit(report ? { type: "report", messageId: started.messageId, report } : { type: "error", message: failure ?? "답을 만들지 못했습니다", messageId: started.messageId });
+    },
+  };
+}

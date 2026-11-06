@@ -7,6 +7,7 @@ import { UserMenu } from "@/components/user-menu";
 import { EyIcon, MENU_ICON } from "@/components/icons/aywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
+import { AssistantNavButton } from "@/features/assistant/components/assistant-nav-button";
 import { findNavItem } from "@/lib/navigation";
 import { HUB_GROUPS, SUPPORT_GROUPS, hubGroupsFor, hubDestinationForPath } from "@/lib/menu-hub";
 import { useNavigationSettings, useMenuPresentation } from "@/features/owner/navigation-context";
@@ -42,9 +43,12 @@ export function MobileTopNav({
   isGenericTenant = false,
   canViewVendors = false,
   connectedApps = [],
+  canUseAssistant = false,
 }: {
   systemRole: SystemRole;
   email: string;
+  /** 학원 비서 버튼(서버 판정 — AppSidebar와 같은 값). */
+  canUseAssistant?: boolean;
   className?: string;
   brand?: string;
   logoSrc?: string | null;
@@ -111,6 +115,7 @@ export function MobileTopNav({
         </div>
         <div className="flex shrink-0 items-center gap-1 [&_button]:min-h-11 [&_button]:min-w-11">
           {/* 데스크톱에선 사이드바 하단이 벨을 갖는다 — 여기(숨겨진 바)까지 마운트하면 폴링·팝업 중복. */}
+          {!isDesktop && canUseAssistant ? <AssistantNavButton /> : null}
           {!isDesktop ? <NotificationBell /> : null}
           {/* 햄버거 토글 — 기본 접힘, 탭하면 메뉴 그리드 펼침(선택 시 자동 닫힘). */}
           <button

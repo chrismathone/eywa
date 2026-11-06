@@ -112,6 +112,8 @@ const RULES: readonly [string, string][] = [
   ["briefing_", "comms"],
   // 운영실 업무 비서 'AI로 정리'(사람이 누른 유료 AI) — 감사로그 화면에서만(FORBID_KEYS).
   ["dashboard_secretary_", "comms"],
+  // 학원 비서(원장 자연어 질의 · 2026-11-06) — 업무 비서와 같은 묶음.
+  ["assistant_", "comms"],
   ["shuttle_", "ops"],
   ["parent_account_", "ops"], // 학부모 계정 발급·삭제(셔틀 학부모 등하원)
   ["inventory_", "ops"],
@@ -169,6 +171,9 @@ const FORBID_KEYS = new Set([
   "work_request_create",
   "work_request_act",
   "dashboard_secretary_run",
+  // 학원 비서 — 질문 글(대상 문구)에 원생 이름·금액이 그대로 들 수 있다. 슬랙으로 내보내지 않는다.
+  "assistant_ask",
+  "assistant_thread_delete",
 ]);
 /** 대상 문구 없이 — 돈 계열(금액·계좌가 대상 라벨에 섞일 수 있다) + 연차. */
 const OPAQUE_CATEGORIES = new Set(["billing"]);
