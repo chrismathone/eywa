@@ -72,7 +72,7 @@ describe("퇴원 뒤 청구(원장 2026-10-29)", () => {
     // 취소된 요청의 환불 전 요청서 — 다시 고를 수 있다
     const a = render(<LaterInvoices reportId="r" deskStaff={desks} canApprove rows={[{ ...nov, lines: [{ ...nov.lines[0], otherRefund: other(true, false) }, nov.lines[1]] }]} />);
     expect(screen.getAllByRole("switch")).toHaveLength(2);
-    expect(screen.getByText("취소된 요청의 요청서(환불 전) · 데스크 확인").closest("a")).toHaveAttribute("href", "/billing/refunds/old");
+    expect(screen.getByText("취소된 요청의 요청서(환불 전) · 다시 환불을 승인하면 이 요청서는 완료할 수 없습니다").closest("a")).toHaveAttribute("href", "/billing/refunds/old");
     a.unmount();
     // 다른 요청에서 환불 완료 · 진행 중인 다른 요청 — 그 줄은 고를 수 없다(결정은 '환불하지 않음'으로만) · 결정 전 표시는 그대로
     const all = [`${id}#0`, `${id}#1`];
@@ -86,7 +86,7 @@ describe("퇴원 뒤 청구(원장 2026-10-29)", () => {
     b.unmount();
     // 원장이 아니어도 같은 참고 표시
     render(<LaterInvoices reportId="r" deskStaff={[]} canApprove={false} rows={[{ ...nov, lines: [{ ...nov.lines[0], otherRefund: other(true, false) }] }]} />);
-    expect(screen.getByText("취소된 요청의 요청서(환불 전) · 데스크 확인")).toBeInTheDocument();
+    expect(screen.getByText("취소된 요청의 요청서(환불 전) · 다시 환불을 승인하면 이 요청서는 완료할 수 없습니다")).toBeInTheDocument();
   });
 });
 

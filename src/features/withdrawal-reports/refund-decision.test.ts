@@ -9,7 +9,7 @@ import {
 } from "./refund-decision";
 
 /**
- * 원장 환불 결정(원장 2026-11-06 · DB s2_0032) — 순수 판정. DB `withdrawal_report_refund_note`와 같은 규칙:
+ * 원장 환불 결정(원장 2026-11-06 · DB s2_0033) — 순수 판정. DB `withdrawal_report_refund_note`와 같은 규칙:
  * 결정 안 됨 = 환불 가능 줄 중 '환불하지 않음'도, 아직 남은 요청서의 '환불'도 없는 줄. 결정 뒤 새로 생긴 줄 · 요청서가 지워진 줄은 다시 결정 안 됨.
  */
 const INV = "40000000-0000-4000-8000-000000000001";
@@ -28,12 +28,17 @@ describe("환불 가능 줄 · 확인 값", () => {
   it("한 화면의 환불 가능 줄 키 — 보이는 차례 · 겹침 없음", () => {
     expect(refundableKeys([inv([l(k("a")), l(k("b"), { paidNet: 0 })]), inv([l(k("c")), l(k("a"))])])).toEqual([k("a"), k("c")]);
   });
-  it("묶음 확인 값 — 보고서마다 · 같은 줄은 먼저 본(대표) 보고서 몫", () => {
+  it("묶음 확인 값 — 보고서마다 · 같은 줄은 먼저 본(대표) 보고서 몫 · 낸 돈 · 이 묶음 요청서가 잡은 줄(claimed) · asOf · scope", () => {
+    const meta = { asOf: "2026-11-06T01:02:03.456789+00:00", scope: "withdrawal" as const };
     expect(buildRefundCheck([
-      { reportId: "R1", later: [inv([l(k("a")), l(k("b"))])] },
-      { reportId: "R2", later: [inv([l(k("b")), l(k("c"))])] },
-    ])).toEqual({ refundable: [{ key: k("a"), report: "R1" }, { key: k("b"), report: "R1" }, { key: k("c"), report: "R2" }] });
-    expect(buildRefundCheck([{ reportId: "R1", later: [] }])).toEqual({ refundable: [] });
+      { reportId: "R1", later: [inv([l(k("a")), l(k("b"), { paidNet: 7000 }), l(k("d"), { refund: { documentId: "doc1" } })])] },
+      { reportId: "R2", later: [inv([l(k("b")), l(k("c")), l(k("d"), { refund: { documentId: "doc1" } }), l(k("e"), { paidNet: 0 })])] },
+    ], meta)).toEqual({
+      refundable: [{ key: k("a"), report: "R1", paid: 1000 }, { key: k("b"), report: "R1", paid: 7000 }, { key: k("c"), report: "R2", paid: 1000 }],
+      claimed: [{ key: k("d"), doc: "doc1" }],   // 낸 돈이 없는 줄(e)은 잡힌 줄도 아니다
+      asOf: meta.asOf, scope: "withdrawal",
+    });
+    expect(buildRefundCheck([{ reportId: "R1", later: [] }], { asOf: null, scope: "subject_end" })).toEqual({ refundable: [], claimed: [], asOf: null, scope: "subject_end" });
   });
 });
 
@@ -47,6 +52,12 @@ describe("결정 안 된 줄(DB와 같은 규칙)", () => {
   it("'환불하지 않음' · 남은 요청서의 '환불'은 결정됨 · 지운 요청서 줄과 새 줄은 결정 안 됨", () => {
     expect(undecidedKeys(keys, decisions)).toEqual([k("c"), k("d")]);
     expect(declinedKeys(keys, decisions)).toEqual([k("a")]);
+  });
+  it("결정 뒤 그 줄의 낸 돈이 늘면 다시 결정 안 됨(리뷰 #12 · DB paid_net) · 줄거나 같으면 그대로 · 결정 때 값을 모르면 그대로", () => {
+    const ds = new Map([[k("a"), { decision: "none" as const, live: false, paidNet: 1000 }], [k("b"), { decision: "none" as const, live: false, paidNet: null }]]);
+    expect(undecidedKeys([k("a"), k("b")], ds, new Map([[k("a"), 1500], [k("b"), 9999]]))).toEqual([k("a")]);
+    expect(undecidedKeys([k("a")], ds, new Map([[k("a"), 1000]]))).toEqual([]);
+    expect(undecidedKeys([k("a")], ds, new Map([[k("a"), 800]]))).toEqual([]);
   });
   it("결정이 없으면 전부 결정 안 됨 · 줄이 없으면 결정할 것 없음", () => {
     expect(undecidedKeys(keys, new Map())).toEqual(keys);
@@ -122,6 +133,10 @@ describe("강사뷰 완료일자 — 화면 행위자와 실제 로그인 계정
     expect(linkedCompletionLock(link, who("desk"), who("desk"))).toBeNull();
     expect(linkedCompletionLock(link, who("desk"), who("boss", true))).toBeNull(); // 원장이 강사뷰로 데스크 화면
     expect(linkedCompletionLock(null, who("x"), who("y"))).toBeNull();
+  });
+  it("🔴 원장 결정 C.3 — 같은 청구 줄에 새 요청서가 있는 옛 요청서(취소된 요청)는 누구도 못 넣는다(DB 트리거와 같은 문구)", () => {
+    expect(linkedCompletionLock({ ...link, superseded: true }, who("desk"), who("boss", true))).toBe("같은 청구에 새 퇴원 요청의 요청서가 있습니다 — 새 요청서로 처리하세요.");
+    expect(linkedCompletionLock({ ...link, superseded: false }, who("desk"), who("desk"))).toBeNull();
   });
   it("🔴 행위자가 데스크여도 실제 계정이 아니면 잠그고 사유 · 행위자가 아니면 종전 사유", () => {
     expect(linkedCompletionLock(link, who("desk"), who("office"))).toBe("'다른 강사 뷰'로 보고 있습니다. 퇴원보고서에서 이어진 환불 요청서의 환불완료일자는 실제 로그인한 계정이 담당 데스크(데스크)이거나 원장일 때만 넣거나 지울 수 있습니다.");

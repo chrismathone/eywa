@@ -47,16 +47,50 @@ export async function loadRefundSteps(tenantId: string, keys: { id: string; grou
 
 /**
  * 이 환불 요청서가 퇴원보고서에 이어졌나(s2_0025 `withdrawal_report_refunds`) — 이어졌으면 데스크 담당(id · 이름). 이어지지 않았거나 표가 없는 DB면 null.
- * 원장 2026-11-06: 이어진 요청서의 환불완료일자는 그 데스크 담당과 원장급만 넣거나 지운다(`canEditLinkedCompletion` · DB 트리거 s2_0032). 못 읽으면 던진다.
+ * 원장 2026-11-06: 이어진 요청서의 환불완료일자는 그 데스크 담당과 원장급만 넣거나 지운다(`canEditLinkedCompletion` · DB 트리거 s2_0033). 못 읽으면 던진다.
  */
-export async function loadRefundLink(tenantId: string, documentId: string): Promise<{ deskId: string | null; deskName: string | null } | null> {
+export async function loadRefundLink(tenantId: string, documentId: string): Promise<{ deskId: string | null; deskName: string | null; superseded: boolean } | null> {
   const db = createAdminClient();
-  const { data, error } = await db.from("withdrawal_report_refunds").select("desk_id").eq("tenant_id", tenantId).eq("document_id", documentId).maybeSingle();
+  const { data, error } = await db.from("withdrawal_report_refunds").select("desk_id,report_id").eq("tenant_id", tenantId).eq("document_id", documentId).maybeSingle();
   if (missingReportSchema(error)) return null;
   if (error) throw new Error(`환불 요청서의 퇴원보고서 연결 조회 실패: ${error.message}`);
   if (!data) return null;
-  const deskId = (data as { desk_id: string | null }).desk_id;
-  if (!deskId) return { deskId: null, deskName: null };
+  const row = data as { desk_id: string | null; report_id: string };
+  const superseded = await supersededByNewRequest(db, tenantId, documentId, String(row.report_id));
+  const deskId = row.desk_id;
+  if (!deskId) return { deskId: null, deskName: null, superseded };
   const { data: user } = await db.from("users").select("display_name").eq("tenant_id", tenantId).eq("id", deskId).maybeSingle();
-  return { deskId, deskName: (user as { display_name: string | null } | null)?.display_name?.trim() || null };
+  return { deskId, deskName: (user as { display_name: string | null } | null)?.display_name?.trim() || null, superseded };
+}
+
+/**
+ * 원장 결정(2026-11-06 · C.3) — 이 요청서가 **취소된 요청에만** 이어졌고, 같은 청구 줄을 담은 **새 퇴원 요청의 요청서**(취소되지 않은 묶음 · 문서가 남음)가
+ * 있나. 있으면 환불완료일자를 넣을 수 없다(DB 완료일자 트리거와 같은 판정 — 줄 겹침 = 같은 청구 · 같은 식별값(차례 번호 뺀) 또는 청구 전체).
+ * 화면은 칸을 잠그고 사유를 보인다 · 저장 액션도 같은 판정으로 먼저 막는다. 못 읽으면 던진다(부르는 쪽이 잠근다).
+ */
+async function supersededByNewRequest(db: ReturnType<typeof createAdminClient>, tenantId: string, documentId: string, reportId: string): Promise<boolean> {
+  const { data: rep, error: repError } = await db.from("withdrawal_reports").select("status").eq("tenant_id", tenantId).eq("id", reportId).maybeSingle();
+  if (repError) throw new Error(`환불 요청서의 보고서 상태 조회 실패: ${repError.message}`);
+  if ((rep as { status?: string } | null)?.status !== "canceled") return false;
+  const { data: mine, error: mineError } = await db.from("withdrawal_report_refund_decisions").select("line_key").eq("tenant_id", tenantId).eq("document_id", documentId).eq("decision", "refund").limit(200);
+  if (missingReportSchema(mineError) || mineError?.code === "42703") return false;
+  if (mineError) throw new Error(`환불 결정 조회 실패: ${mineError.message}`);
+  const keys = (mine ?? []).map(r => String(r.line_key));
+  if (!keys.length) return false;
+  const invoices = [...new Set(keys.map(k => k.split("#")[0]!))];
+  const { data: others, error: othersError } = await db.from("withdrawal_report_refund_decisions").select("line_key,document_id,group_id")
+    .eq("tenant_id", tenantId).eq("decision", "refund").neq("document_id", documentId).or(invoices.map(i => `line_key.like.${i}#*`).join(",")).limit(500);
+  if (othersError) throw new Error(`환불 결정 조회 실패: ${othersError.message}`);
+  const base = (k: string) => (k.split("#")[1] ?? "").replace(/-\d+$/, "");
+  const overlaps = (a: string, b: string) => a.split("#")[0] === b.split("#")[0] && (base(a) === "all" || base(b) === "all" || base(a) === base(b));
+  const hits = (others ?? []).filter(o => keys.some(k => overlaps(k, String(o.line_key))));
+  if (!hits.length) return false;
+  const [{ data: groups, error: gError }, { data: docs, error: dError }] = await Promise.all([
+    db.from("withdrawal_report_groups").select("id,status").eq("tenant_id", tenantId).in("id", [...new Set(hits.map(h => String(h.group_id)))]),
+    db.from("academy_documents").select("id").eq("tenant_id", tenantId).eq("form_type", "refund_request").in("id", [...new Set(hits.map(h => String(h.document_id)))]),
+  ]);
+  if (gError || dError) throw new Error(`새 요청서 확인 실패: ${(gError ?? dError)!.message}`);
+  const liveGroups = new Set((groups ?? []).filter(g => g.status !== "canceled").map(g => String(g.id)));
+  const liveDocs = new Set((docs ?? []).map(d => String(d.id)));
+  return hits.some(h => liveGroups.has(String(h.group_id)) && liveDocs.has(String(h.document_id)));
 }

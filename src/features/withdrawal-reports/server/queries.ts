@@ -186,7 +186,7 @@ export async function getReport(id: string) {
   // 데스크 담당자 목록은 환불을 승인할 수 있는 원장급에게만(이름 목록을 다른 사람에게 내리지 않는다) — 권한 판정 한 곳 `canRequestRefund`
   // · 후보 = 학원 설정 '데스크 담당자' 중 수납 쓰기 권한이 있는 직원(`loadDeskStaff` · 원장 2026-11-06) · 자기 자신은 빼고(자기 알림은 가지 않음 — notifyUsers).
   //   지정이 비었으면 고를 사람이 없다 — 안내(`deskNotice`)로 환불 승인을 막는다(원장 등으로 대신하지 않는다).
-  // 데스크 환불 단계(s2_0025)·원장 환불 결정(s2_0032 — 줄마다 결정 · 묶음의 '환불 결정 대기' 표시)은 함께 읽는다 — 못 읽으면 없이(화면은 연다).
+  // 데스크 환불 단계(s2_0025)·원장 환불 결정(s2_0033 — 줄마다 결정 · 묶음의 '환불 결정 대기' 표시)은 함께 읽는다 — 못 읽으면 없이(화면은 연다).
   const refundAllowed = canRequestRefund(data as WithdrawalReport, viewer.writable, cancelsAsDirector(viewer.user.systemRole, !!viewer.teacherId));
   const groupId = (data as WithdrawalReport).group_id ?? null;
   const refundable = refundableKeys(laterInvoices);
@@ -206,7 +206,8 @@ export async function getReport(id: string) {
     : !desk.staff.length ? "학원 설정에 지정된 데스크 담당자 중 고를 수 있는 사람(수납 쓰기 권한이 있고 본인이 아닌 사람)이 없습니다. 학원 설정에서 데스크 담당자를 다시 지정해 주세요."
     : undefined;
   // 원장 환불 결정(원장 2026-11-06) — 이 보고서 화면의 환불 가능 줄 중 결정 안 된 줄 · '환불하지 않음'으로 정한 줄 · 묶음의 대기 표시(목록 칩과 같은 값).
-  const refundDecision = { hold, undecided: undecidedKeys(refundable, decisions), declined: declinedKeys(refundable, decisions), outcome: (groupId ? outcomes.get(groupId) : undefined) ?? null };
+  const paidOf = new Map(laterInvoices.flatMap(inv => inv.lines.map(l => [l.key, l.paidNet] as const)));
+  const refundDecision = { hold, undecided: undecidedKeys(refundable, decisions, paidOf), declined: declinedKeys(refundable, decisions), outcome: (groupId ? outcomes.get(groupId) : undefined) ?? null };
   return { report: data as WithdrawalReport, events: [...(events ?? [])].reverse() as ReportEvent[], assignmentChanged, consultations, laterInvoices, deskStaff: desk.staff, deskNotice, refundDecision, refundSteps, subjectHistory, ...prefill };
 }
 /**

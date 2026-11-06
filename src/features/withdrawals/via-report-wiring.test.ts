@@ -123,7 +123,7 @@ describe("퇴원은 퇴원보고서로만", () => {
     expect(fn).toContain(".or(`end_date.is.null,end_date.gte.${today}`)");
     expect(fn).toContain('admin.rpc("direct_withdrawal_report"');
     expect(fn).toContain("enrollmentIds: [], effectiveDate: today, reason: \"other\"");
-    // 처리일이 오늘이어도 DB 안의 처리는 환불 확인 값이 없어 미룬다(s2_0032) — 바로 처리와 같은 도우미로 이어서 처리.
+    // 처리일이 오늘이어도 DB 안의 처리는 환불 확인 값이 없어 미룬다(s2_0033) — 바로 처리와 같은 도우미로 이어서 처리.
     expect(fn).toContain("const applied = await applyDirectNow(report as WithdrawalReport, user.id);");
     expect(fn).not.toMatch(/from\("students"\)\s*\.update\(/);
     expect(fn).not.toMatch(/from\("enrollments"\)\s*\.update\(/);
@@ -158,7 +158,7 @@ describe("퇴원은 퇴원보고서로만", () => {
     const direct = action.slice(action.indexOf("export async function processWithdrawalDirectly"), action.indexOf("export async function changeWithdrawalReport"));
     expect(direct).toContain("if (!viewer?.request)");
     expect(direct).toContain('db.rpc("direct_withdrawal_report"');
-    // 처리일이 지난 바로 처리는 같은 요청에서 환불 확인 값과 같은 처리 함수(apply)로 — 원장 환불 결정 전이면 DB가 처리하지 않는다(s2_0032).
+    // 처리일이 지난 바로 처리는 같은 요청에서 환불 확인 값과 같은 처리 함수(apply)로 — 원장 환불 결정 전이면 DB가 처리하지 않는다(s2_0033).
     expect(direct).toContain('const done = await applyDirectNow(report as WithdrawalReport, viewer.user.id);');
     expect(read("src/features/withdrawal-reports/server/direct-apply.ts")).toContain('p_action: "apply", p_payload: { refundCheck }');
     expect(direct).toContain('await finish(done.report, "direct", done.extra);');

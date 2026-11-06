@@ -102,7 +102,7 @@ export async function saveRefundRequest(
       .maybeSingle();
     const prev = existing ? normalizeRefund(existing.form_data) : null;
     // 퇴원보고서에 이어진 요청서의 환불완료일자(원장 2026-11-06) — 넣거나 지우는 것은 그 요청서의 데스크 담당과 원장급만.
-    // 완료일자가 기다리던 퇴원·수강종료 처리를 푼다(release). DB 트리거(s2_0032)도 직원 세션 쓰기를 같은 판정으로 막는다.
+    // 완료일자가 기다리던 퇴원·수강종료 처리를 푼다(release). DB 트리거(s2_0033)도 직원 세션 쓰기를 같은 판정으로 막는다.
     const denied = await completionDenied(gate.user, id, parsed, prev);
     if (denied) return { error: denied };
     const data = stampCompletion(parsed, prev, gate.user);

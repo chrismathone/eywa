@@ -1280,11 +1280,11 @@ export function auditDetail(
     }
     // 퇴원보고서 환불 승인(2026-10-29) — 어느 달 청구 · 금액 · 마지막 수업일 · 데스크 단계(2026-11-03 — 환불이 끝나야 처리하는지).
     // 만든 환불 요청서는 refund_request_create에 같은 documentId로 남는다(데스크 단계에 못 이으면 refund_request_delete로 되돌린 기록).
-    // 2026-11-06: 같은 화면에서 고르지 않은 환불 가능 줄은 '환불하지 않음'으로 남는다(원장 결정 · s2_0032) — 그 건수.
+    // 2026-11-06: 같은 화면에서 고르지 않은 환불 가능 줄은 '환불하지 않음'으로 남는다(원장 결정 · s2_0033) — 그 건수.
     case "withdrawal_refund_approve":
       return join(Array.isArray(m.items) ? `${m.items.slice(0, 3).map(String).join(", ")}${m.items.length > 3 ? ` 외 ${m.items.length - 3}건` : ""}` : str(m.invoicePeriod) ? `${str(m.invoicePeriod)} 청구` : null, str(m.totalAmount), str(m.effectiveDate) ? `마지막 수업일 ${str(m.effectiveDate)}` : null, str(m.deskStep), "환불 요청서 작성",
         Array.isArray(m.notRefunded) && m.notRefunded.length ? `환불하지 않음 ${m.notRefunded.length}건` : null);
-    // 원장 '환불 없음'(2026-11-06 · s2_0032) — 어느 줄을 · 마지막 수업일 · 다음(이어서 처리했는지 · 남은 결정).
+    // 원장 '환불 없음'(2026-11-06 · s2_0033) — 어느 줄을 · 마지막 수업일 · 다음(이어서 처리했는지 · 남은 결정).
     case "withdrawal_refund_decline":
       return join(Array.isArray(m.items) ? `환불하지 않음 ${m.items.slice(0, 3).map(String).join(", ")}${m.items.length > 3 ? ` 외 ${m.items.length - 3}건` : ""}` : null,
         str(m.effectiveDate) ? `마지막 수업일 ${str(m.effectiveDate)}` : null, str(m.next));

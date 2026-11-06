@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EMPTY_BODY } from "../model";
 
 /**
- * 원장 환불 결정(원장 2026-11-06 · DB s2_0032) — 서버 동작이 **처리할 수 있는 요청마다** 같은 요청에서 계산한 환불 확인 값을 DB에 넘기는지,
+ * 원장 환불 결정(원장 2026-11-06 · DB s2_0033) — 서버 동작이 **처리할 수 있는 요청마다** 같은 요청에서 계산한 환불 확인 값을 DB에 넘기는지,
  * 못 만들면 처리를 맡기지 않는지(닫힘), 원장 결정 동작이 권한·화면이 본 줄·지정 데스크를 지키는지. DB는 모의(부른 함수와 인자만 본다).
  * 확인 값이 없을 때 DB가 처리하지 않는 것 자체는 SQL 시험(refund-decision-gate-sql.test.ts)과 PGlite 확인(마이그레이션 머리말)이 본다.
  */
@@ -14,7 +14,7 @@ const INV = "40000000-0000-4000-8000-000000000001";
 const K0 = `${INV}#a0`, K1 = `${INV}#a1`;
 const CHECK = { refundable: [{ key: K0, report: REPORT_ID }, { key: K1, report: REPORT_ID }] };
 
-const m = vi.hoisted(() => ({
+const m = vi.hoisted(() => ({ ready: vi.fn(async () => true),
   viewer: null as null | Record<string, unknown>,
   record: null as null | { report: Record<string, unknown>; consultations: unknown[] },
   calls: [] as [string, Record<string, unknown>][],
@@ -39,7 +39,7 @@ vi.mock("@/features/students/server/status-access", () => ({ canManageStudentSta
 vi.mock("./completed-target", () => ({ completedEnrollmentIds: async () => [] }));
 vi.mock("./billing", () => ({ loadReportBilling: async () => ({ tuition: "", arrears: "no", arrearsNote: "" }) }));
 vi.mock("./queries", () => ({ reportViewer: async () => m.viewer, getReport: async () => m.record, getReportForSave: async () => m.record }));
-vi.mock("./refund-check", () => ({ loadGroupRefundCheck: m.check, loadRefundDecisions: async () => new Map(), loadRefundHolds: async () => new Map() }));
+vi.mock("./refund-check", () => ({ loadGroupRefundCheck: m.check, refundGateReady: () => m.ready(), REFUND_GATE_NOT_READY: "DB 적용 전", loadRefundDecisions: async () => new Map(), loadRefundHolds: async () => new Map() }));
 vi.mock("./release", () => ({ releaseWithdrawalGroup: m.releaseGroup, releaseWithdrawalRefunds: vi.fn() }));
 vi.mock("./refund", async (orig) => ({ ...(await orig<typeof import("./refund")>()), loadLaterInvoices: m.later, loadDeskStaff: m.desks, claimedEarlier: async () => false }));
 vi.mock("@/lib/supabase/admin", () => ({
@@ -84,6 +84,7 @@ beforeEach(() => {
   m.releaseGroup.mockReset(); m.releaseGroup.mockResolvedValue({ released: 1, blocked: 0, failed: 0 });
   m.logAction.mockReset(); m.notify.mockReset();
   m.status.mockReset(); m.status.mockResolvedValue(true);
+  m.ready.mockReset(); m.ready.mockResolvedValue(true);
 });
 
 describe("제출·승인 — 같은 요청에서 계산한 환불 확인 값을 처리 함수에 넘긴다", () => {
@@ -103,6 +104,23 @@ describe("제출·승인 — 같은 요청에서 계산한 환불 확인 값을 
     m.check.mockRejectedValue(new Error("invoices down"));
     expect(await changeWithdrawalReport(REPORT_ID, "approve", 3)).toEqual({ error: "환불할 수 있는 청구를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." });
     expect(rpcNames()).not.toContain("transition_withdrawal_report");
+  });
+  it("🔴 DB 준비 전(새 앱 + 옛 DB)이면 처리 함수를 부르지 않는다 — 'DB 적용 전'(리뷰 #5)", async () => {
+    m.ready.mockResolvedValue(false);
+    expect(await changeWithdrawalReport(REPORT_ID, "approve", 3)).toEqual({ error: "DB 적용 전" });
+    expect(rpcNames()).toEqual([]);
+    expect(m.check).not.toHaveBeenCalled();
+  });
+  it("전원 승인인데 묶음이 기다리면 감사로그에 그 까닭(refundWait — 리뷰 #8)", async () => {
+    m.from.mockImplementation(async (table: string) => table === "withdrawal_report_groups" ? { data: { status: "pending", refund_hold: true }, error: null }
+      : table === "withdrawal_reports" ? { data: [{ status: "approved" }], error: null } : { data: null, error: null });
+    await changeWithdrawalReport(REPORT_ID, "approve", 3);
+    expect(m.logAction).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ refundWait: "원장 환불 결정 대기" }) }));
+    m.logAction.mockReset();
+    m.from.mockImplementation(async (table: string) => table === "withdrawal_report_groups" ? { data: { status: "pending", refund_hold: false }, error: null }
+      : table === "withdrawal_reports" ? { data: [{ status: "approved" }, { status: "manager_pending" }], error: null } : { data: null, error: null });
+    await changeWithdrawalReport(REPORT_ID, "approve", 3);
+    expect(m.logAction).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.not.objectContaining({ refundWait: expect.anything() }) }));
   });
   it("반려·취소는 처리로 이어지지 않는다 — 확인 값을 계산하지 않는다", async () => {
     await changeWithdrawalReport(REPORT_ID, "reject", 3, "고쳐 주세요");
@@ -128,6 +146,11 @@ describe("바로 처리 — DB 안의 apply는 확인 값이 없어 미룬다 �
     m.rpc.mockImplementation(async (name: string) => name === "direct_withdrawal_report" ? { data: REPORT_ID, error: null } : { data: { ...baseReport, status: "scheduled", direct: true }, error: null });
     await processWithdrawalDirectly(direct);
     expect(m.logAction).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ refundWait: "원장 환불 결정 대기" }) }));
+  });
+  it("🔴 DB 준비 전이면 바로 처리 함수를 **부르기 전에** 거절(리뷰 #5)", async () => {
+    m.ready.mockResolvedValue(false);
+    expect(await processWithdrawalDirectly(direct)).toEqual({ error: "DB 적용 전" });
+    expect(rpcNames()).toEqual([]);
   });
   it("🔴 확인 값을 못 만들면 apply를 부르지 않는다(처리 예약으로 남고 cron이 다시 계산)", async () => {
     m.check.mockRejectedValue(new Error("down"));

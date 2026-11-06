@@ -179,6 +179,15 @@ describe("퇴원보고서에 이어진 요청서의 환불완료일자 — 담�
     expect(writes()).toEqual([]);
   });
 
+  it("🔴 원장 결정 C.3 — 같은 청구 줄에 새 퇴원 요청의 요청서가 있는 옛 요청서(취소된 요청)는 담당 데스크·원장도 완료일자를 넣지 못한다", async () => {
+    m.user.mockResolvedValue(desk); m.viewAs.mockResolvedValue(null);
+    m.link.mockResolvedValue({ deskId: "desk", deskName: "데스크", superseded: true });
+    const res = await saveRefundRequest(undefined, edit("2026-11-06"));
+    expect(res?.error).toBe("같은 청구에 새 퇴원 요청의 요청서가 있습니다 — 새 요청서로 처리하세요.");
+    expect(writes()).toEqual([]);
+    expect(m.release).not.toHaveBeenCalled();
+  });
+
   it("🔴 강사뷰로 담당 데스크 화면에 들어가도 실제 로그인 계정이 그 데스크·원장급이 아니면 막는다(DB 트리거 = 실제 계정 · 관리 키 재쓰기로 지나가지 않게)", async () => {
     const admin = { id: "office", tenantId: "t1", systemRole: "admin", displayName: "관리" };
     m.user.mockImplementation(async (o?: { teacherView: boolean }) => (o?.teacherView ? desk : admin));

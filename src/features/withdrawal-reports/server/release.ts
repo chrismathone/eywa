@@ -10,7 +10,7 @@ import { completedEnrollmentIds } from "./completed-target";
 import { appliedAuditMeta } from "../audit-meta";
 import { missingReportSchema, REPORT_ACTION_LABEL, type WithdrawalReport } from "../model";
 import type { RefundCheck } from "../refund-decision";
-import { loadGroupRefundCheck } from "./refund-check";
+import { loadGroupRefundCheck, refundGateReady } from "./refund-check";
 
 type Released = { reportId: string; groupId: string; tenantId: string; status?: string; groupStatus?: string; error?: string };
 export type ReleaseResult = { released: number; blocked: number; failed: number };
@@ -19,7 +19,7 @@ const SYSTEM_ACTOR = "시스템(환불 확인 뒤 처리)";
 type Db = ReturnType<typeof createAdminClient>;
 
 /**
- * **환불 확인이 끝난 퇴원보고서 묶음을 처리**한다(DB `release_withdrawal_report_refunds` — s2_0025 · s2_0032) —
+ * **환불 확인이 끝난 퇴원보고서 묶음을 처리**한다(DB `release_withdrawal_report_refunds` — s2_0025 · s2_0033) —
  * 관리자 승인은 끝났고(또는 처리일이 된 예약) 데스크 환불·원장 환불 결정이 남아 기다리던 묶음을 지금 처리한다(미래 날짜면 예약 · 정보가 바뀌었으면 재검토).
  * 🔴 묶음마다 **이 요청 안에서** 환불 확인 값(`loadGroupRefundCheck`)을 계산해 함께 넘긴다 — DB는 확인 값이 있는 묶음만, 결정 안 된 환불 가능 줄이 0일 때만
  *    처리한다(원장 2026-11-06). 확인 값을 못 만든 묶음은 넘기지 않는다(처리하지 않는 쪽 · 오류 보고). 확인 값은 처리 전 묶음의 '환불 결정 대기' 표시도 맞춘다 —
@@ -32,18 +32,21 @@ type Db = ReturnType<typeof createAdminClient>;
  */
 export async function releaseWithdrawalRefunds(opts: { tenantId: string | null; documentId: string | null; actorId: string | null }): Promise<ReleaseResult> {
   try {
+    // 새 앱 + 옛 DB(s2_0033 전)면 부르지 않는다(리뷰 #5 — 옛 release는 확인 값을 모른다).
+    if (!(await refundGateReady())) return NONE;
     const db = createAdminClient();
     const groups = await candidateGroups(db, opts);
     if (!groups.length) return NONE;
-    const checks: Record<string, RefundCheck> = {};
-    let failed = 0;
+    // 묶음마다 확인 값을 계산하고 **바로** 처리 함수를 부른다(리뷰 #14) — 여러 묶음을 다 계산한 뒤 한 번에 부르면 앞 묶음의 확인 값이 낡는다.
+    const total = { ...NONE };
     for (const g of groups) {
-      try { checks[g.id] = await loadGroupRefundCheck(g.tenantId, g.id); }
-      catch (e) { failed++; reportError(e, { where: "withdrawal-reports.release.check", groupId: g.id }); }
+      let check: RefundCheck;
+      try { check = await loadGroupRefundCheck(g.tenantId, g.id); }
+      catch (e) { total.failed++; reportError(e, { where: "withdrawal-reports.release.check", groupId: g.id }); continue; }
+      const out = await runRelease(db, opts, { [g.id]: check });
+      total.released += out.released; total.blocked += out.blocked; total.failed += out.failed;
     }
-    if (!Object.keys(checks).length) return { ...NONE, failed };
-    const out = await runRelease(db, opts, checks);
-    return { ...out, failed: out.failed + failed };
+    return total;
   } catch (e) {
     reportError(e, { where: "withdrawal-reports.release" });
     return { ...NONE, failed: 1 };

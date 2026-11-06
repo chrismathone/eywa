@@ -13,6 +13,8 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { foldedReason } from "@/lib/folded-read";
 import { missingReportSchema } from "../model";
 import { orphanSubjects } from "../target-courses";
+import type { RefundScope } from "../refund-decision";
+import { kstToday } from "@/lib/date-kst";
 
 /**
  * 퇴원월 **뒤** 청구 — 원장 2026-10-29 *"11월까지 납부했는데, 퇴원보고서상에는 10월납부밖에 없음… 이후에 납부한건 혹은 환불한 건에
@@ -28,8 +30,12 @@ export type LaterLine = RefundPrefillLine & {
   paidNet: number;
   /** 과목 수강종료에서 어느 반에도 묶이지 않은 줄(차량비·교재 등) — 보이기만 하고 토글은 기본 꺼짐(원장 2026-10-29). */
   unbound?: boolean;
-  /** 수납(makeedu)에 이미 환불 기록이 있는 줄 — 여기서 다시 환불하지 않는다. */
+  /** 수납(makeedu)에 **전체** 환불 기록이 있는 줄 — 여기서 다시 환불하지 않는다(부분 환불이면 false · 남은 돈이 `paidNet` — 리뷰 #6). */
   billingRefund: boolean;
+  /** makeedu 부분 환불액(취소되지 않은 환불 합) — 남은 낸 돈 = 줄 납부액 − 이 값. 금액을 모르는 환불이 섞이면 null(낸 돈 전부를 결정 대상으로 · 닫히는 쪽). */
+  billingRefundAmount?: number | null;
+  /** 줄별 납부 기록이 없어 청구 납부액이 줄에 다 나뉘지 않은 돈(리뷰 차단 2) — 확인 값에 든다(원장이 정한다). */
+  unallocated?: true;
   /** 이 묶음(옛 단건은 이 보고서)에 이어진 요청서 — 이것만 줄을 잡는다(팀장 결정 2026-11-06). */
   refund: RefundRef | null;
   /**
@@ -48,6 +54,24 @@ export type LaterInvoice = {
 };
 
 export { LINE_KEY, REFUND_TAG_PREFIX, refundTag } from "../refund-keys";
+
+/** 퇴원월 뒤 청구 상한 — 닿으면 잘렸을 수 있어 확인 값을 만들지 않는다. */
+const LATER_LIMIT = 120;
+/** 미배분 납부 줄의 식별값(줄 키 `<청구 id>#unalloc` — DB 줄 키 형식 안). */
+export const UNALLOCATED_LINE = "unalloc";
+/** makeedu 부분 환불액 — 취소되지 않은 환불의 금액 합. 금액을 모르는 환불이 섞이면 null. */
+function partialRefundAmount(v: unknown): number | null {
+  const refunds = Array.isArray((v as { refunds?: unknown } | null)?.refunds) ? ((v as { refunds: unknown[] }).refunds) : [];
+  let total = 0;
+  for (const r of refunds) {
+    const row = (r ?? {}) as { status?: unknown; amount?: unknown };
+    if (row.status === "cancelled") continue;
+    const n = Number(row.amount);
+    if (!Number.isFinite(n) || n < 0) return null;
+    total += n;
+  }
+  return total;
+}
 
 /** 수업 줄인가 — makeedu 한글 '수업' · 옛 영문 'tuition'. */
 const isLessonKind = (kind: string) => ["수업", "수강료", "tuition"].includes(kind.trim());
@@ -70,7 +94,7 @@ const docCompleted = (d: { form_data?: unknown }) => !!((d.form_data ?? {}) as {
 
 /**
  * 요청서 문서를 연결로 가른다 — 줄을 '잡는' 것은 **보고서에 이어진 요청서**(s2_0025 `withdrawal_report_refunds`)뿐이다(검토 2026-11-06). 표식(설명)은 자료실에서
- * 고칠 수 있어, 이어지지 않은 문서에 표식을 적어 환불 가능 줄을 숨기면 원장 결정·데스크 환불 없이 처리될 수 있었다. 이어진 요청서의 표식·번호·서식은 DB 트리거가 막는다(s2_0032).
+ * 고칠 수 있어, 이어지지 않은 문서에 표식을 적어 환불 가능 줄을 숨기면 원장 결정·데스크 환불 없이 처리될 수 있었다. 이어진 요청서의 표식·번호·서식은 DB 트리거가 막는다(s2_0033).
  * - `own` = **이 묶음(옛 단건은 이 보고서)에 이어진 요청서** — 🔴 이 묶음의 줄을 잡는 것은 이것뿐이다(팀장 결정 2026-11-06 · DB 결정도 묶음마다).
  *   다른 묶음(취소된 요청 · 끝난 과목 수강종료 등)에 이어진 요청서가 담은 줄은 이 묶음에선 결정 안 됨 → 원장 환불 결정 대기.
  * - `other` = 다른 묶음에 이어진 요청서 — 줄을 잡지 않고 화면이 참고로 보인다(`otherRefund` · 같은 돈을 두 번 돌려주지 않게 원장·데스크가 본다).
@@ -120,11 +144,38 @@ async function classifyDocs<D extends { id: unknown; created_at?: unknown; form_
  *   그 줄이 어느 화면에도 없으면 원장이 정할 수 없고, 확인 값에서 빠지면 결정 없이 처리된다. 그 과목은 따로 계산해 줄 단위로 합친다
  *   (재등록 달 자르기가 대표 보고서 과목 줄까지 번지지 않게). `opts.orphans`를 주면 묶음을 다시 읽지 않는다.
  */
-type LaterReport = Pick<WithdrawalReport, "id" | "tenant_id" | "student_id" | "effective_date" | "exit_kind" | "subjects" | "snapshot"> & { group_id?: string | null; group_leader?: boolean };
-export async function loadLaterInvoices(report: LaterReport, opts?: { orphans?: readonly string[] }): Promise<LaterInvoice[]> {
+type LaterReport = Pick<WithdrawalReport, "id" | "tenant_id" | "student_id" | "effective_date" | "exit_kind" | "subjects" | "snapshot"> & { group_id?: string | null; group_leader?: boolean; enrollment_ids?: string[] | null };
+export async function loadLaterInvoices(report: LaterReport, opts?: { orphans?: readonly string[]; scope?: RefundScope }): Promise<LaterInvoice[]> {
+  // 처리 범위(리뷰 #13) — 과목 수강종료인데 남는 수강이 없으면 처리 함수가 전체 퇴원으로 바꾼다 → 화면·확인 값도 전체 범위(퇴원월 뒤 청구 전체)로.
+  const scope = opts?.scope ?? await refundScopeOf(report);
+  if (scope === "withdrawal" && report.exit_kind !== "withdrawal") return laterInvoicesFor({ ...report, exit_kind: "withdrawal" });
   const orphans = opts?.orphans ?? await orphanSubjectsFor(report);
   const own = await laterInvoicesFor(report);
   return orphans.length ? mergeLater(own, await laterInvoicesFor({ ...report, subjects: [...orphans] })) : own;
+}
+
+/**
+ * 처리 범위 — 처리 함수(`transition_withdrawal_report` 처리 갈래 · DB note)와 같은 판정: 과목 수강종료 묶음인데 끝낼 수강(`enrollment_ids`) 밖에
+ * 운영 중인 반의 수강이 마지막 수업일·오늘 뒤까지 남지 않으면 전체 퇴원. 못 읽으면 던진다(확인 값을 못 만들면 처리하지 않는다).
+ */
+export async function refundScopeOf(report: Pick<LaterReport, "tenant_id" | "student_id" | "exit_kind" | "group_id">): Promise<RefundScope> {
+  if (report.exit_kind === "withdrawal" || !report.group_id) return report.exit_kind === "withdrawal" ? "withdrawal" : "subject_end";
+  const db = createAdminClient();
+  const { data: g, error } = await db.from("withdrawal_report_groups").select("exit_kind,enrollment_ids,effective_date").eq("tenant_id", report.tenant_id).eq("id", report.group_id).maybeSingle();
+  if (error) throw new Error(`처리 범위 확인 실패: ${error.message}`);
+  if (!g) throw new Error("처리 범위를 확인할 묶음을 찾지 못했습니다.");
+  if (g.exit_kind === "withdrawal") return "withdrawal";
+  const targets = new Set(((g.enrollment_ids ?? []) as string[]).map(String));
+  const { data: rest, error: restError } = await db.from("enrollments").select("id,end_date,classes!inner(is_active,closed_at,tenant_id)")
+    .eq("tenant_id", report.tenant_id).eq("student_id", report.student_id).limit(500);
+  if (restError) throw new Error(`처리 범위 확인 실패: ${restError.message}`);
+  const today = kstToday();
+  const cutoff = String(g.effective_date) > today ? String(g.effective_date) : today;
+  const remains = (rest ?? []).some(e => {
+    const c = e.classes as unknown as { is_active: boolean; closed_at: string | null; tenant_id: string } | null;
+    return !targets.has(String(e.id)) && !!c && c.is_active && !c.closed_at && String(c.tenant_id) === report.tenant_id && (!e.end_date || String(e.end_date) > cutoff);
+  });
+  return remains ? "subject_end" : "withdrawal";
 }
 
 /**
@@ -171,12 +222,14 @@ export async function laterInvoicesFor(report: Pick<WithdrawalReport, "id" | "te
   const [{ data: rows, error }, { data: again, error: againError }] = await Promise.all([
     admin.from("invoices").select("id,period,category,status,amount_total,amount_discount,amount_paid,line_items")
       .eq("tenant_id", report.tenant_id).eq("student_id", report.student_id).gt("period", month).neq("status", "void")
-      .order("period").limit(60),
-    admin.from("enrollments").select("start_date, classes!inner(subject)")
-      .eq("tenant_id", report.tenant_id).eq("student_id", report.student_id).gt("start_date", report.effective_date).order("start_date").limit(20),
+      .order("period").limit(LATER_LIMIT),
+    admin.from("enrollments").select("id, start_date, end_date, classes!inner(subject)")
+      .eq("tenant_id", report.tenant_id).eq("student_id", report.student_id).gt("start_date", report.effective_date).order("start_date").limit(50),
   ]);
   if (error) throw new Error(`퇴원 뒤 청구 조회 실패: ${error.message}`);
   if (againError) throw new Error(`재등록 확인 실패: ${againError.message}`);
+  // 상한에 닿으면 뒤 청구가 잘렸을 수 있다 — 확인 값을 만들지 않는다(닫히는 쪽 · 운영 학생당 청구 최대 11건).
+  if ((rows ?? []).length >= LATER_LIMIT) throw new Error("퇴원월 뒤 청구가 너무 많아 환불할 수 있는 청구를 다 확인하지 못했습니다.");
   // 과목 수강종료 — 수납 줄의 과목을 가리려고 지점 반 목록(이 학생이 안 다니는 같은 과목 반·보강 반도 맞추게).
   const { data: tenantClasses, error: classError } = ended
     ? await admin.from("classes").select("id,class_name,subject").eq("tenant_id", report.tenant_id).limit(2000)
@@ -186,7 +239,12 @@ export async function laterInvoicesFor(report: Pick<WithdrawalReport, "id" | "te
   const endedHints = ended ? [...new Set(report.snapshot.courses.filter(c => ended.has(c.classId))
     .flatMap(c => [norm(c.className), norm(c.teacherName ?? "")]).filter(h => h.length >= 2))] : [];
   const allClasses = (tenantClasses ?? []).map(c => ({ classId: String(c.id), className: String(c.class_name ?? ""), subject: String(c.subject ?? "") }));
+  // 재등록 판정(리뷰 차단 1) — 이 묶음이 끝낼 수강(요청 때 스냅숏의 열린 수강 · 보고서 종료 대상)과 처리 뒤 생기는 0일 수강(시작일 = 종료일)은
+  // 다시 등록한 것이 아니다. 미래 시작으로 옮겨 둔 반이 함께 닫히는데 그 달부터 청구를 자르면 낸 돈이 확인 값에서 빠졌다.
+  const ending = new Set([...report.snapshot.courses.map(c => String(c.id)), ...((report as { enrollment_ids?: string[] | null }).enrollment_ids ?? []).map(String)]);
   const restart = (again ?? []).find(e => {
+    if (ending.has(String(e.id))) return false;
+    if (e.end_date && String(e.end_date) <= String(e.start_date)) return false;
     const subject = (e.classes as unknown as { subject: string } | null)?.subject;
     return report.exit_kind === "withdrawal" || (subject != null && report.subjects.includes(subject));
   });
@@ -217,22 +275,29 @@ export async function laterInvoicesFor(report: Pick<WithdrawalReport, "id" | "te
     const id = String(r.id);
     const status = String(r.status);
     const amountPaidTotal = Number(r.amount_paid);
+    if (!Number.isFinite(amountPaidTotal)) throw new Error("청구 납부액을 읽지 못했습니다.");
     const raw = receiptHistoryLines(r.line_items);
     let all = toPrefillLines(r.line_items);
     let ids = lineIds(raw);
-    let refunded = raw.map(v => receiptRefundState(v) !== "none");
+    // makeedu 환불 — 전체 환불이면 다시 환불하지 않는다 · 부분 환불이면 남은 돈만 결정 대상(리뷰 #6) · 금액을 모르면 낸 돈 전부(닫히는 쪽).
+    let refunded = raw.map(v => receiptRefundState(v) === "full");
+    let refundedAmount: (number | null)[] = raw.map(v => receiptRefundState(v) === "partial" ? partialRefundAmount(v) : 0);
     // 줄 기록이 없는 청구는 청구 한 줄(`all`)로 본다.
     if (!all.length) {
       all = [{ kind: "", description: INVOICE_CATEGORY_LABEL[String(r.category)] ?? "기타", amount: Number(r.amount_total), discount: Number(r.amount_discount), paid: amountPaidTotal }];
       ids = ["all"];
       refunded = [false];
+      refundedAmount = [0];
     }
     // 줄별 납부액 — 없으면 한 줄 청구는 청구 납부액, 완납 청구는 줄 청구액. 합이 청구 납부액을 넘으면 비율로 줄인다(청구 할인이 줄에 없을 때 과다 환불 방지).
     const rawPaid = all.map(l => l.paid ?? (all.length === 1 ? amountPaidTotal : status === "paid" ? Math.max(0, l.amount - (l.discount ?? 0)) : 0));
     const sum = rawPaid.reduce((s, v) => s + v, 0);
     const paid = sum > amountPaidTotal ? rawPaid.map(v => Math.floor(v * Math.max(0, amountPaidTotal) / sum)) : rawPaid;
-    const taken = claimedLines(ids, claims.get(id));
-    const otherTaken = claimedLines(ids, otherClaims.get(id));
+    // 미배분 납부(리뷰 차단 2) — 청구 납부액 − 줄에 나뉜 납부액 > 0(부분 납부 여러 줄 청구에 줄별 납부 기록이 없음 · 줄 합보다 더 냄)이면 그 차액을 한 줄로.
+    const unallocated = Math.max(0, amountPaidTotal - sum);
+    const keyIds = unallocated > 0 ? [...ids, UNALLOCATED_LINE] : ids;
+    const taken = claimedLines(keyIds, claims.get(id));
+    const otherTaken = claimedLines(keyIds, otherClaims.get(id));
     const lines: LaterLine[] = [];
     all.forEach((l, i) => {
       // 과목 수강종료(원장 2026-10-29 *"반에 안 묶인 줄도 보이게 … 같은 과목이면 전부 환불요청 토글 가능하게"*):
@@ -252,8 +317,19 @@ export async function laterInvoicesFor(report: Pick<WithdrawalReport, "id" | "te
       const own = taken[i];
       const refund: RefundRef | null = own ? { documentId: own.documentId, deskName: own.deskName, completed: own.completed } : null;
       const otherRefund = refund ? null : otherTaken[i];
-      lines.push({ ...l, key: `${id}#${ids[i]}`, paidNet: paid[i], billingRefund: refunded[i], refund, ...(unbound ? { unbound } : {}), ...(otherRefund ? { otherRefund } : {}) });
+      const back = refundedAmount[i];
+      const net = back == null ? paid[i]! : Math.max(0, paid[i]! - back);
+      lines.push({ ...l, key: `${id}#${ids[i]}`, paidNet: net, billingRefund: refunded[i]!, refund, ...(unbound ? { unbound } : {}), ...(otherRefund ? { otherRefund } : {}),
+        ...(back !== 0 ? { billingRefundAmount: back } : {}) });
     });
+    if (unallocated > 0) {
+      const i = keyIds.length - 1;
+      const own = taken[i];
+      const refund: RefundRef | null = own ? { documentId: own.documentId, deskName: own.deskName, completed: own.completed } : null;
+      const otherRefund = refund ? null : otherTaken[i];
+      lines.push({ kind: "미배분", description: "미배분 납부(줄별 납부 기록 없음)", amount: unallocated, paid: unallocated, key: `${id}#${UNALLOCATED_LINE}`, paidNet: unallocated,
+        billingRefund: false, refund, unallocated: true, ...(ended ? { unbound: true as const } : {}), ...(otherRefund ? { otherRefund } : {}) });
+    }
     if (!lines.length) continue;
     out.push({
       id, period: String(r.period), category: String(r.category), status,

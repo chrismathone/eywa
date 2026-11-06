@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * 원장 환불 결정(원장 2026-11-06 · s2_0032) — 처리일 cron(apply)과 release(수납 완료 입력·요청서 삭제·cron 안전망)가
+ * 원장 환불 결정(원장 2026-11-06 · s2_0033) — 처리일 cron(apply)과 release(수납 완료 입력·요청서 삭제·cron 안전망)가
  * 묶음마다 **같은 요청에서** 계산한 환불 확인 값을 넘기는지 · 못 만든 묶음은 넘기지 않는지(DB는 확인 값이 없는 묶음을 처리하지 않는다).
  */
 const T = "t1";
@@ -12,7 +12,7 @@ const R2 = "10000000-0000-4000-8000-000000000002";
 const DOC = "60000000-0000-4000-8000-000000000001";
 const check = (rid: string) => ({ refundable: [{ key: `40000000-0000-4000-8000-000000000001#${rid.slice(-1)}`, report: rid }] });
 
-const m = vi.hoisted(() => ({
+const m = vi.hoisted(() => ({ ready: vi.fn(async () => true),
   calls: [] as [string, Record<string, unknown>][],
   rpc: vi.fn(),
   tables: {} as Record<string, unknown[]>,
@@ -26,7 +26,7 @@ vi.mock("@/features/slack/server/poke", () => ({ pokeSlack: vi.fn() }));
 vi.mock("@/features/withdrawals/server/withdrawal-sheet", () => ({ recordMathWithdrawalToSheet: vi.fn() }));
 vi.mock("@/lib/observability/report-error", () => ({ reportError: vi.fn() }));
 vi.mock("./completed-target", () => ({ completedEnrollmentIds: async () => [] }));
-vi.mock("./refund-check", () => ({ loadGroupRefundCheck: m.check }));
+vi.mock("./refund-check", () => ({ loadGroupRefundCheck: m.check, refundGateReady: () => m.ready(), REFUND_GATE_NOT_READY: "DB 적용 전" }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     rpc: (name: string, args: Record<string, unknown>) => {
@@ -102,6 +102,32 @@ describe("release — 묶음마다 확인 값(p_checks)", () => {
     expect(argsOf("release_withdrawal_report_refunds")).toEqual([{ p_tenant: null, p_document: null, p_actor: null, p_checks: { [G1]: check(R1) } }]);
     expect(out).toMatchObject({ released: 1, failed: 0 });
     expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actorName: "시스템(환불 확인 뒤 처리)" }), expect.objectContaining({ metadata: expect.objectContaining({ operation: "환불 확인 뒤 처리" }) }));
+  });
+  it("🔴 묶음마다 확인 값을 계산하고 **바로** release를 부른다(리뷰 #14 — 다 계산한 뒤 한 번에 부르면 앞 묶음 확인 값이 낡는다)", async () => {
+    m.tables.withdrawal_report_groups = [
+      { id: G1, tenant_id: T, status: "pending", effective_date: "2026-11-01" },
+      { id: G2, tenant_id: T, status: "scheduled", effective_date: "2026-11-01" },
+    ];
+    m.tables.withdrawal_reports = [];
+    const order: string[] = [];
+    m.check.mockImplementation(async (_t: string, gid: string) => { order.push(`check:${gid}`); return check(R1); });
+    m.rpc.mockImplementation(async (name: string, args: { p_checks?: Record<string, unknown> }) => {
+      if (name === "release_withdrawal_report_refunds") order.push(`release:${Object.keys(args.p_checks ?? {}).join(",")}`);
+      return { data: [], error: null };
+    });
+    await releaseWithdrawalRefunds({ tenantId: null, documentId: null, actorId: null });
+    expect(order).toEqual([`check:${G1}`, `release:${G1}`, `check:${G2}`, `release:${G2}`]);
+  });
+  it("🔴 DB 준비 전(새 앱 + 옛 DB)이면 release·처리일 apply를 부르지 않는다(리뷰 #5)", async () => {
+    m.ready.mockResolvedValue(false);
+    m.tables.withdrawal_report_refunds = [{ group_id: G1, tenant_id: T }];
+    m.tables.withdrawal_report_groups = [{ id: G1, tenant_id: T }];
+    m.tables.withdrawal_reports = [{ id: R1, tenant_id: T, group_id: G1 }];
+    await releaseWithdrawalRefunds({ tenantId: T, documentId: DOC, actorId: "desk" });
+    expect((await applyDueWithdrawalReports()).failed).toBe(1);
+    expect(argsOf("release_withdrawal_report_refunds")).toEqual([]);
+    expect(argsOf("transition_withdrawal_report")).toEqual([]);
+    m.ready.mockResolvedValue(true);
   });
   it("승인이 남은 진행 중 묶음은 후보가 아니다", async () => {
     m.tables.withdrawal_report_groups = [{ id: G1, tenant_id: T, status: "pending", effective_date: "2026-11-01" }];

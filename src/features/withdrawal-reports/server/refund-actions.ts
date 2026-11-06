@@ -33,7 +33,7 @@ const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
  *   요청서만 남고 기다림이 걸리지 않는 일이 없게. 할 일·알림은 잇기가 끝난 뒤에만 만든다. 화면이 본 상태(처리 전인가)를 DB에 넘겨 같이 대조한다.
  * - 할 일: `refund_desk_task_open`(s2_0011) — 환불완료일자를 넣으면 처리됨. 알림: 데스크 담당자 한 사람(자기 자신은 고를 수 없음).
  * - 감사로그: `withdrawal_refund_approve`(퇴원보고서 쪽 · 데스크 단계 여부 · 환불하지 않음으로 기록한 줄) + `refund_request_create`(요청서 쪽).
- * - **원장 환불 결정**(원장 2026-11-06 · s2_0032): 이 동작이 곧 결정이다 — 고른 줄 = '환불'(이 요청서), 이 화면의 **고르지 않은 환불 가능 줄 = '환불하지 않음'**.
+ * - **원장 환불 결정**(원장 2026-11-06 · s2_0033): 이 동작이 곧 결정이다 — 고른 줄 = '환불'(이 요청서), 이 화면의 **고르지 않은 환불 가능 줄 = '환불하지 않음'**.
  *   화면이 본 고르지 않은 줄(`skipped`)과 지금 줄이 다르면(새 납부 동기화 등) 거절한다 — 원장이 보지 않은 줄을 '환불하지 않음'으로 남기지 않게.
  *   묶음 환불 확인 값을 같은 요청에서 계산해 DB에 넘긴다(결정 대기 표시 맞춤).
  * - 데스크 담당자 = **학원 설정 '데스크 담당자'로 지정한 사람**(그중 수납 쓰기 권한자 · `loadDeskStaff`)만. 지정이 비면 막는다(대체 없음 · DB도 같은 명단).
@@ -181,7 +181,7 @@ async function linkedStep(tenantId: string, documentId: string): Promise<{ linke
 }
 
 /**
- * 데스크 환불 단계 잇기(s2_0025 · s2_0032) — 처리 전 묶음이면 `gates`. 화면이 본 상태와 다르거나 옛 DB(함수 없음)·실패면 `ok: false`(호출부가 요청서를 지운다).
+ * 데스크 환불 단계 잇기(s2_0025 · s2_0033) — 처리 전 묶음이면 `gates`. 화면이 본 상태와 다르거나 옛 DB(함수 없음)·실패면 `ok: false`(호출부가 요청서를 지운다).
  * DB가 행위자(원장급) · 데스크(학원 설정 지정자 · null 거절)를 다시 보고, 고른 줄 '환불' · `none` 줄 '환불하지 않음'을 같은 거래에서 남긴다.
  */
 async function attachRefundStep(tenantId: string, actorId: string, reportId: string, documentId: string, deskId: string, expectGate: boolean, none: string[] | null, check: RefundCheck | null): Promise<{ ok: boolean; gates: boolean; error?: string }> {
@@ -195,7 +195,7 @@ async function attachRefundStep(tenantId: string, actorId: string, reportId: str
 }
 
 /**
- * 원장 **'환불 없음'**(원장 2026-11-06 · s2_0032 `decide_withdrawal_report_refund`) — 이 보고서의 지금 환불 가능 줄을 모두 '환불하지 않음'으로 정한다.
+ * 원장 **'환불 없음'**(원장 2026-11-06 · s2_0033 `decide_withdrawal_report_refund`) — 이 보고서의 지금 환불 가능 줄을 모두 '환불하지 않음'으로 정한다.
  * - 권한: 원장급만(`canRequestRefund` — 환불 승인과 같은 판정) · 처리 전 보고서만(처리 완료·취소·재검토엔 기다릴 처리가 없다). DB도 행위자 역할을 본다.
  * - `keys` = 화면이 본 환불 가능 줄 전부 — 지금 줄과 다르면(새 납부 동기화 등) 거절한다(원장이 보지 않은 줄을 정하지 않게).
  * - 묶음 환불 확인 값을 같은 요청에서 계산해 넘긴다 → DB가 결정 대기를 다시 센다. 결정할 줄이 없고 승인·데스크 환불이 끝났으면(ready)

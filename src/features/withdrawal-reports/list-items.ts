@@ -155,7 +155,7 @@ export function buildListItems(input: {
   holds?: ReadonlyMap<string, string | null>;
   /** 원장 결정 요약(`loadRefundOutcomes`) — 묶음 id → 환불 승인/환불 없음 · 결정한 사람. 승인 진행의 '✓ 결정한 원장'. */
   outcomes?: ReadonlyMap<string, RefundOutcome>;
-  /** 요청 취소 기록(`loadCancelNotes` · s2_0032 사유) — 보고서 id → 사유·취소한 사람·시각. 취소된 보고서만 싣는다. */
+  /** 요청 취소 기록(`loadCancelNotes` · s2_0033 사유) — 보고서 id → 사유·취소한 사람·시각. 취소된 보고서만 싣는다. */
   cancels?: ReadonlyMap<string, { reason: string | null; actorId: string | null; at: string }>;
 }): ListItem[] {
   const { staff, labelOf, userId } = input;
@@ -254,7 +254,7 @@ export function buildListItems(input: {
       },
       // 환불 단계 — 원장 환불 결정 대기가 먼저(원장이 정해야 데스크 단계가 생긴다 · DB 묶음 표시 `refund_hold` · 처리 전) · 데스크 환불 대기(`refundWaiting`) · 그 밖 null.
       refundStage: refundInput.waiting ? "decision" : refundWaiting(r, steps) ? "desk" : null,
-      // 요청 취소 기록(s2_0032 — 사유는 1~500자 · 그 전 취소는 사유 null → 말풍선 '사유 기록 없음(이전 취소)').
+      // 요청 취소 기록(s2_0033 — 사유는 1~500자 · 그 전 취소는 사유 null → 말풍선 '사유 기록 없음(이전 취소)').
       cancel: cancelNote ? { reason: cancelNote.reason, by: cancelNote.actorId ? titledOf(cancelNote.actorId) : FORMER_STAFF, at: cancelNote.at } : null,
       deskHref: myDesk ? formViewHref("refund_request", myDesk.documentId) : null,
       // 검색 = 보이는 칸 + 보고서 본문 글 전부(원장 2026-10-30 *"검색은 내용등 모든것을 검색가능하게"*) — 상담 내용·담임 의견·요청 메모·반려 사유·승인자까지.

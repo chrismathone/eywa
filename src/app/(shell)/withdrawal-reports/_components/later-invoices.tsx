@@ -12,12 +12,17 @@ import type { LaterInvoice, LaterLine, OtherRefundRef } from "@/features/withdra
 
 /** 다른 요청(묶음)의 요청서 표시 — 취소된 요청의 환불 전 요청서 · 다른 요청에서 환불 완료 · 다른 요청에서 데스크 환불 대기. */
 const otherRefundText = (o: OtherRefundRef) =>
-  o.completed ? "다른 요청에서 환불 완료 · 요청서" : o.canceled ? "취소된 요청의 요청서(환불 전) · 데스크 확인" : "다른 요청의 요청서(데스크 환불 대기) · 요청서";
+  // 취소된 요청의 환불 전 요청서 — 다시 환불을 승인하면 그 옛 요청서는 완료일자를 넣을 수 없게 DB가 막는다(원장 결정 C.3).
+  o.completed ? "다른 요청에서 환불 완료 · 요청서" : o.canceled ? "취소된 요청의 요청서(환불 전) · 다시 환불을 승인하면 이 요청서는 완료할 수 없습니다" : "다른 요청의 요청서(데스크 환불 대기) · 요청서";
 
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 const control = "rounded-md border bg-background px-2 py-1.5 text-sm";
 function lineStatus(inv: LaterInvoice, l: LaterLine): string {
   if (inv.status === "refunded" || l.billingRefund) return "수납 환불 기록";
+  // makeedu 부분 환불(리뷰 #6) — 남은 돈만 결정 대상 · 금액을 모르면 낸 돈 전부.
+  if (l.billingRefundAmount === null) return "수납 부분 환불(금액 모름)";
+  if (l.billingRefundAmount) return `수납 부분 환불 ${won(l.billingRefundAmount)}`;
+  if (l.unallocated) return "줄별 납부 기록 없음";
   const net = Math.max(0, l.amount - (l.discount ?? 0));
   return l.paidNet >= net && net > 0 ? "납부" : l.paidNet > 0 ? "일부 납부" : "미납";
 }

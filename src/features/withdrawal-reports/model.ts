@@ -17,7 +17,7 @@ export type ReportStatus = keyof typeof REPORT_STATUS;
 export type ReportAction = "save" | "submit" | "approve" | "reject" | "cancel";
 /**
  * 처리 이력 이름 — `refund`(보고서에서 데스크 환불 요청) · `release`(환불 확인 뒤 처리)는 s2_0025(원장 2026-11-03).
- * `refund_hold`·`refund_hold_clear`·`refund_decision`(원장 환불 결정 대기 · 풀림 · '환불 없음')은 s2_0032(원장 2026-11-06).
+ * `refund_hold`·`refund_hold_clear`·`refund_decision`(원장 환불 결정 대기 · 풀림 · '환불 없음')은 s2_0033(원장 2026-11-06).
  * `release`는 데스크 환불 완료 뒤에도, 원장 결정 뒤에도 지난다 — 이름을 '환불 확인 뒤 처리'로(그 전 이름 '데스크 환불 완료 · 처리' · 운영 기록 0건).
  */
 export const REPORT_ACTION_LABEL = { request: "작성 요청", save: "임시 저장", submit: "보고서 제출", approve: "승인", reject: "반려", cancel: "요청 취소", apply: "퇴원·수강종료 처리", direct: "관리자 바로 처리", refund: "데스크 환불 요청", release: "환불 확인 뒤 처리", reassign: "승인자 정리", refund_notice: "데스크 환불 확인 알림", refund_hold: "환불 결정 대기", refund_hold_clear: "환불 결정 대기 해제", refund_decision: "원장 환불 결정" } as const;
@@ -167,7 +167,7 @@ export function refundWaiting(r: Pick<WithdrawalReport, "status">, refunds: read
  * 상태 칩 — 데스크 환불이 남았으면 원래 단계와 '데스크 환불 요청'을 함께(원장 2026-11-03 *"'관리자 승인 요청' '데스크 환불 요청' 같이 나타내줄것"*).
  * 관리자 단계는 환불과 상관없이 늘 '관리자 요청'(REPORT_STATUS · 2026-11-06 이름) · 이 보고서 승인이 끝났으면 '관리자 승인 완료' + 데스크 단계
  * ('데스크 환불 요청' 대기 · 환불은 끝났는데 아직 처리 전이면 '데스크 환불 완료' — '다른 보고서 대기'로 잘못 읽히지 않게).
- * 원장 환불 결정 대기(원장 2026-11-06 · DB 묶음 표시 `refund_hold` — s2_0032)면 원래 단계 바로 뒤에 '환불 결정 대기'. 처리 완료·취소·재검토엔 붙이지 않는다.
+ * 원장 환불 결정 대기(원장 2026-11-06 · DB 묶음 표시 `refund_hold` — s2_0033)면 원래 단계 바로 뒤에 '환불 결정 대기'. 처리 완료·취소·재검토엔 붙이지 않는다.
  */
 export function reportStatusChips(r: Pick<WithdrawalReport, "status">, refunds: readonly RefundStep[] = [], decisionHold = false): string[] {
   const hold = decisionHold && !["completed", "canceled", "blocked"].includes(r.status);
@@ -191,7 +191,7 @@ export function cancelsAsDirector(role: SystemRole, teacherView: boolean) { retu
 export function canCancelReport(r: Pick<WithdrawalReport, "status" | "requested_by">, userId: string, writable: boolean, directorLevel = false) {
   return writable && (r.requested_by === userId || directorLevel) && !["completed", "canceled"].includes(r.status);
 }
-/** 요청 취소 사유 최대 글자 수(원장 2026-11-06 — 취소 사유 입력 · DB s2_0032 'cancel'도 1~500자로 거른다). 바꿀 땐 함께 바꾼다. */
+/** 요청 취소 사유 최대 글자 수(원장 2026-11-06 — 취소 사유 입력 · DB s2_0033 'cancel'도 1~500자로 거른다). 바꿀 땐 함께 바꾼다. */
 export const CANCEL_REASON_MAX = 500;
 /**
  * 보고서에서 환불을 승인(= 데스크 환불 요청서를 만든다)할 수 있나 — **원장급만**(원장 2026-10-29 *"환불승인은 원장급이상만 · 이외의 관리자는 확인만"*).

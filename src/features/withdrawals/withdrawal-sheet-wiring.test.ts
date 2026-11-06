@@ -16,7 +16,7 @@ describe("수학 퇴원 시트 기입 — 퇴원·수강 종료가 일어나는 
   it("퇴원보고서 처리 — 승인 · 관리자 바로 처리(같은 마무리 함수) · 처리일 cron", () => {
     const actions = read("features", "withdrawal-reports", "server", "actions.ts");
     expect(actions).toContain("await recordMathWithdrawalToSheet(");
-    // 바로 처리 — 처리일이 지났으면 같은 요청에서 환불 확인 값과 apply(원장 2026-11-06 · s2_0032) 뒤 같은 마무리 함수.
+    // 바로 처리 — 처리일이 지났으면 같은 요청에서 환불 확인 값과 apply(원장 2026-11-06 · s2_0033) 뒤 같은 마무리 함수.
     expect(actions).toContain('await finish(done.report, "direct", done.extra);');
     expect(read("features", "withdrawal-reports", "server", "scheduled.ts")).toContain("await recordMathWithdrawalToSheet(");
     // 데스크 환불 완료 뒤 처리(원장 2026-11-03 · s2_0025 release) — 수납 환불완료 저장·요청서 삭제·cron 안전망이 같은 마무리를 지난다.

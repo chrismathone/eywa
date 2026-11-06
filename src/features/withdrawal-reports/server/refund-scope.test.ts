@@ -24,7 +24,7 @@ const base = { tenant_id: T, student_id: "s1", effective_date: "2026-11-06", exi
 const LEADER = { ...base, id: "ra", subjects: ["math"], group_leader: true };
 const OTHER = { ...base, id: "rb", subjects: ["english"], group_leader: false };
 
-const m = vi.hoisted(() => ({ reports: [] as unknown[], groupSubjects: [] as string[], groupError: false }));
+const m = vi.hoisted(() => ({ reports: [] as unknown[], groupSubjects: [] as string[], groupError: false, noRest: false }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: vi.fn() }));
 vi.mock("@/features/owner/server/platform-settings", () => ({ platformAccountIds: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({
@@ -34,11 +34,14 @@ vi.mock("@/lib/supabase/admin", () => ({
       for (const k of ["select", "eq", "gt", "neq", "order", "like", "or", "in"]) q[k] = () => q;
       const data = table === "invoices" ? [{ id: INV, period: "2026-12", category: "tuition", status: "paid", amount_total: 530000, amount_discount: 0, amount_paid: 530000, line_items: items }]
         : table === "classes" ? [{ id: "c-math", class_name: "수학반", subject: "math" }, { id: "c-eng", class_name: "영어반", subject: "english" }, { id: "c-sci", class_name: "과학반", subject: "science" }]
-        : table === "withdrawal_reports" ? m.reports : [];
+        : table === "withdrawal_reports" ? m.reports
+        // 계속 다니는 다른 과목 반(국어) — 처리 범위가 과목 수강종료로 남는다(refundScopeOf). noRest = 남는 반 없음(전체 퇴원으로 바뀜).
+        : table === "enrollments" ? (m.noRest ? [] : [{ id: "e9", start_date: "2026-03-01", end_date: null, classes: { is_active: true, closed_at: null, tenant_id: T, subject: "korean" } }]) : [];
       const result = { data, error: null };
       q.limit = async () => result;
       q.then = (a: (v: unknown) => unknown) => Promise.resolve(result).then(a);
-      q.maybeSingle = async () => (m.groupError ? { data: null, error: { message: "boom" } } : { data: { subjects: m.groupSubjects }, error: null });
+      q.maybeSingle = async () => (m.groupError ? { data: null, error: { message: "boom" } }
+        : { data: { subjects: m.groupSubjects, exit_kind: "subject_end", enrollment_ids: ["e1", "e2", "e3"], effective_date: "2026-11-06" }, error: null });
       return q;
     },
   }),
@@ -62,14 +65,15 @@ describe("작성 강사가 없는 대상 과목 — 환불 확인 값은 묶음 
 
   it("🔴 확인 값에 과학 줄이 든다(대표 보고서 몫) — 빠지면 원장 결정 없이 처리됐다", async () => {
     const check = await loadGroupRefundCheck(T, G);
-    expect(check.refundable).toEqual(expect.arrayContaining([{ key: MATH, report: "ra" }, { key: ENG, report: "rb" }, { key: SCI, report: "ra" }]));
+    expect(check.refundable).toEqual(expect.arrayContaining([{ key: MATH, report: "ra", paid: 200000 }, { key: ENG, report: "rb", paid: 180000 }, { key: SCI, report: "ra", paid: 150000 }]));
+    expect(check).toMatchObject({ scope: "subject_end", claimed: [] });
     expect(check.refundable).toHaveLength(3);
   });
 
   it("🔴 대표 표시가 없는 묶음(옛 데이터)이어도 묶음 전체 계산이 과학 줄을 확인 값에 넣는다(첫 보고서 몫 — 화면엔 없어 결정 대기로 남는 쪽)", async () => {
     m.reports = [{ ...LEADER, group_leader: false }, OTHER];
     const check = await loadGroupRefundCheck(T, G);
-    expect(check.refundable).toEqual(expect.arrayContaining([{ key: SCI, report: "ra" }]));
+    expect(check.refundable).toEqual(expect.arrayContaining([{ key: SCI, report: "ra", paid: 150000 }]));
   });
 
   it("대표 보고서 화면은 과학 줄까지 보인다(원장이 정할 수 있게) · 다른 보고서는 자기 과목만", async () => {
@@ -77,9 +81,19 @@ describe("작성 강사가 없는 대상 과목 — 환불 확인 값은 묶음 
     expect(await keysOf(OTHER)).toEqual([ENG]);
   });
 
+  it("🔴 처리 범위(리뷰 #13) — 다른 과목 반이 남지 않으면 처리 함수가 전체 퇴원으로 바꾸니 확인 값·화면도 전체 범위(퇴원월 뒤 청구 전체)", async () => {
+    m.noRest = true;
+    const check = await loadGroupRefundCheck(T, G);
+    expect(check.scope).toBe("withdrawal");
+    expect(check.refundable.map((r) => r.key).sort()).toEqual([MATH, ENG, SCI].sort());
+    expect(check.refundable.every((r) => r.report === "ra")).toBe(true);
+    expect((await keysOf(OTHER)).sort()).toEqual([MATH, ENG, SCI].sort());  // 대표 아닌 보고서 화면도 전체
+    m.noRest = false;
+  });
+
   it("묶음을 못 읽으면 던진다 — 확인 값을 만들지 못하면 처리하지 않는다(화면은 빈 목록)", async () => {
     m.groupError = true;
-    await expect(loadGroupRefundCheck(T, G)).rejects.toThrow(/묶음 조회 실패/);
-    await expect(loadLaterInvoices(LEADER)).rejects.toThrow(/묶음 과목 조회 실패/);
+    await expect(loadGroupRefundCheck(T, G)).rejects.toThrow(/처리 범위 확인 실패|묶음 조회 실패/);
+    await expect(loadLaterInvoices(LEADER)).rejects.toThrow(/처리 범위 확인 실패|묶음 과목 조회 실패/);
   });
 });

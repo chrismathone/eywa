@@ -32,7 +32,7 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
   deskStaff?: { id: string; name: string }[];
   /** 데스크 담당자를 고를 수 없는 까닭(학원 설정 미지정 등 — 원장 2026-11-06) — 있으면 환불 승인을 막는다. */
   deskNotice?: string;
-  /** 원장 환불 결정(원장 2026-11-06 · s2_0032) — 묶음의 '환불 결정 대기' 표시 · 이 화면의 결정 안 된 줄 · '환불하지 않음' 줄 · 묶음의 결정 요약(결재란 '환불 결정' 칸). */
+  /** 원장 환불 결정(원장 2026-11-06 · s2_0033) — 묶음의 '환불 결정 대기' 표시 · 이 화면의 결정 안 된 줄 · '환불하지 않음' 줄 · 묶음의 결정 요약(결재란 '환불 결정' 칸). */
   refundDecision?: RefundDecisionView & { hold: boolean; outcome?: RefundOutcome | null };
   /** 데스크 환불 단계(원장 2026-11-03) — 이 묶음에서 만든 환불 요청서와 완료 여부. */
   refundSteps?: RefundStep[];
