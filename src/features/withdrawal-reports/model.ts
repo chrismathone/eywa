@@ -29,7 +29,7 @@ export const EMPTY_BODY: ReportBody = { reason: "other", detail: "", studentCons
 export const requestSchema = z.object({
   studentId: z.uuid(), teacherId: z.uuid(), managerId: z.uuid(), directorId: z.uuid(),
   exitKind: z.enum(["withdrawal", "subject_end"]), subjects: z.array(z.string().min(1).max(80)).min(1).max(20),
-  effectiveDate: z.iso.date(), note: z.string().trim().max(1000),
+  effectiveDate: z.iso.date({ error: "마지막 수업일을 확인해 주세요." }), note: z.string().trim().max(1000),
 }).superRefine((r, ctx) => {
   if (new Set([r.teacherId, r.managerId, r.directorId]).size !== 3)
     ctx.addIssue({ code: "custom", message: "작성 강사, 관리자, 원장은 서로 다른 사람을 지정해 주세요." });
@@ -45,7 +45,7 @@ export const batchRequestSchema = z.object({
   enrollmentIds: z.array(z.uuid()).min(1, "종료할 반을 선택해 주세요.").max(100).optional(),
   subjects: z.array(z.string().min(1).max(80)).min(1).max(20),
   reportManagerIds: z.record(z.uuid(), z.array(z.uuid()).max(20)).optional(),
-  effectiveDate: z.iso.date(), note: z.string().trim().max(1000),
+  effectiveDate: z.iso.date({ error: "마지막 수업일을 확인해 주세요." }), note: z.string().trim().max(1000),
 }).superRefine((r, ctx) => {
   if (r.teacherIds.some(id => r.reportManagerIds?.[id]?.includes(id)))
     ctx.addIssue({ code: "custom", message: "작성자·관리자를 서로 다르게 지정해 주세요." });
@@ -59,7 +59,7 @@ export const batchRequestSchema = z.object({
 export const directSchema = z.object({
   studentId: z.uuid(),
   enrollmentIds: z.array(z.uuid()).max(100),
-  effectiveDate: z.iso.date(),
+  effectiveDate: z.iso.date({ error: "마지막 수업일을 확인해 주세요." }),
   reason: z.enum(Object.keys(REASON_LABEL) as [keyof typeof REASON_LABEL, ...Array<keyof typeof REASON_LABEL>], { error: "퇴원 사유를 골라 주세요." }),
   reasonDetail: z.string().max(80).optional(),
   memo: z.string().trim().max(5000, "메모는 5,000자 이내로 입력해 주세요."),

@@ -13,13 +13,18 @@ import type { LastLessonSource } from "@/features/withdrawal-reports/last-lesson
  * 지금 고른 학생·반으로 다시 찾는다. 같은 차례 번호를 쓰므로 그 사이 학생·반을 바꾸거나 다시 고치면 늦게 온 응답은 버려진다.
  * 다시 불러오기가 날짜를 얻지 못하면(권한 없음·기록 없음·오류) 칸의 날짜를 지우지 않는다(`kept`) — 이 날짜가 곧 수강 종료일이다(리뷰 2026-11-06).
  * 출결 권한이 없다는 답을 한 번 받으면 `denied` — 창이 다시 불러오기 단추를 숨긴다.
+ * 빈칸(원장 2026-11-06 — 고르기 전에 오늘 날짜가 미리 들어가 있지 않게): 학생을 고르기 전 · 반이 있는 학생인데 반을 하나도 안 골랐을 때 ·
+ * 새 학생의 출결을 찾는 동안은 날짜를 비운다. 오늘 날짜는 출결에서 못 찾았을 때(기록 없음·권한 없음·오류)와 다니는 반이 없는 학생에게만(11-03 결정).
  */
 type Keep = { date: string; manual: boolean };
-export function useLastLessonDate(initial: { studentId: string; enrollmentIds: string[] }) {
+/** 고른 반이 없을 때의 날짜 — 다니는 반이 없는 학생(바로 처리 · 출결로 찾을 수 없다)만 오늘, 반을 고르는 중이면 빈칸. */
+const idleDate = (hasCourses: boolean) => (hasCourses ? "" : kstToday());
+export function useLastLessonDate(initial: { studentId: string; enrollmentIds: string[]; hasCourses: boolean }) {
   const [first] = useState(initial);
   // reloading = 지금 찾는 중인 것이 '다시 불러오기'로 시작했나(단추를 숨기지 않고 꺼 두려고) · kept = 다시 불러오기가 실패해 날짜를 그대로 둠.
   const [state, setState] = useState<{ date: string; source: LastLessonSource; reloading?: boolean; kept?: boolean }>(() => ({
-    date: kstToday(), source: !first.studentId ? "today" : first.enrollmentIds.length ? "loading" : "nocourses",
+    date: first.studentId && !first.enrollmentIds.length ? idleDate(first.hasCourses) : "",
+    source: !first.studentId ? "today" : first.enrollmentIds.length ? "loading" : "nocourses",
   }));
   const [denied, setDenied] = useState(false);
   const manual = useRef(false);
@@ -45,20 +50,22 @@ export function useLastLessonDate(initial: { studentId: string; enrollmentIds: s
   }, []);
   // 원생 화면에서 그 학생을 고른 채 열린 창 — 처음 한 번만.
   useEffect(() => { if (first.studentId && first.enrollmentIds.length) run(first.studentId, first.enrollmentIds); }, [first, run]);
-  function refresh(studentId: string, enrollmentIds: string[], newStudent: boolean, reloading = false) {
+  /** `hasCourses` = 그 학생에게 다니는 반이 있나(고른 반이 없을 때 빈칸 ↔ 오늘을 가른다). */
+  function refresh(studentId: string, enrollmentIds: string[], newStudent: boolean, reloading = false, hasCourses = true) {
     if (newStudent) { manual.current = false; keepRef.current = null; }
     // 손으로 고친 날짜는 반을 바꿔도 덮지 않는다 — 다만 바꾸기 전 반 기준의 '그대로 두었습니다' 안내는 지운다(리뷰 2026-11-06 2차).
     if (manual.current) { setState(s => (s.kept ? { date: s.date, source: "manual" } : s)); return; }
     seq.current++;
-    if (!studentId) { setState({ date: kstToday(), source: "today" }); return; }
+    if (!studentId) { setState({ date: "", source: "today" }); return; }
     // 고른 반이 없다(다니는 반이 없는 학생의 바로 처리 · 반을 모두 끔) — 출결을 찾지 않았다('기록 없음'과 까닭이 다르다 · 창이 반 고르는 중이면 흐린 안내로).
     // 다시 불러오는 중이면 지키기로 한 날짜를 그대로 둔다.
     if (!enrollmentIds.length) {
       if (keepRef.current) { setState({ date: keepRef.current.date, source: "nocourses" }); return; }
-      setState({ date: kstToday(), source: "nocourses" }); return;
+      setState({ date: idleDate(hasCourses), source: "nocourses" }); return;
     }
     const carrying = reloading || keepRef.current !== null;
-    setState(s => ({ ...s, source: "loading", reloading: carrying, kept: false }));
+    // 새 학생이면 앞 학생의 날짜를 남기지 않는다(찾는 동안 빈칸 — 요청 단추도 잠겨 있다).
+    setState(s => ({ ...s, date: newStudent ? "" : s.date, source: "loading", reloading: carrying, kept: false }));
     run(studentId, enrollmentIds);
   }
   /** '출결에서 다시 불러오기' — 지금 학생·반으로 다시 찾는다. 날짜를 얻으면 손으로 고친 값을 바꾸고, 못 얻으면 지금 날짜를 그대로 둔다. */

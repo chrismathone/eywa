@@ -202,14 +202,15 @@ describe("compact request overlay and optional principal", () => {
     await waitFor(() => expect(screen.getByLabelText("마지막 수업일")).toHaveValue("2026-10-27"));
     expect(mocks.lastLesson).toHaveBeenLastCalledWith({ studentId: "student", enrollmentIds: ["course"] });
   });
-  it("반을 모두 끄면(다시 불러오는 중이 아님) 흐린 안내 · 오늘 날짜 · 다시 고르면 출결을 찾는다", async () => {
+  it("반을 모두 끄면(다시 불러오는 중이 아님) 흐린 안내 · 빈칸(원장 2026-11-06 — 고르기 전 오늘 날짜 없음) · 다시 고르면 출결을 찾는다", async () => {
     mocks.lastLesson.mockResolvedValueOnce({ date: "2026-10-28" });
     render(<RequestDialog {...props} />); await fill();
     await waitFor(() => expect(screen.getByLabelText("마지막 수업일")).toHaveValue("2026-10-28"));
     fireEvent.click(screen.getByRole("checkbox", { name: "수학반 · 수학 · 담당 강사" }));
     expect(screen.getByRole("status")).toHaveTextContent("종료할 반을 고르면 출결에서 찾습니다");
     expect(screen.getByRole("status")).not.toHaveClass("text-att-late-ink");
-    expect(screen.getByLabelText("마지막 수업일")).toHaveValue(kstToday());
+    expect(screen.getByLabelText("마지막 수업일")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "강사에게 작성 요청" })).toBeDisabled();
     mocks.lastLesson.mockResolvedValueOnce({ date: "2026-10-21" });
     fireEvent.click(screen.getByRole("checkbox", { name: "수학반 · 수학 · 담당 강사" }));
     await waitFor(() => expect(screen.getByLabelText("마지막 수업일")).toHaveValue("2026-10-21"));
@@ -347,6 +348,52 @@ describe("compact request overlay and optional principal", () => {
     expect(screen.getByRole("button", { name: "관리자 승인: 수학 관리자2" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "강사에게 작성 요청" }));
     await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ managerIds: ["math-manager-2"] })));
+  });
+  it("학생을 고르기 전 마지막 수업일은 빈칸 · 안내는 날짜 칸 바로 아래(오른쪽 칸 · 원장 2026-11-06)", async () => {
+    render(<RequestDialog {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "+ 보고서 작성 요청" }));
+    await screen.findByRole("dialog");
+    expect(screen.getByLabelText("마지막 수업일")).toHaveValue("");
+    const hint = screen.getByRole("status");
+    expect(hint).toHaveTextContent("학생과 반을 고르면 출결에서 채웁니다");
+    expect(hint).toHaveClass("sm:col-start-2");
+    expect(hint).not.toHaveClass("sm:col-span-2");
+    // 고르기 전에 손으로 넣은 날짜는 그 학생을 고르면 출결로 바뀐다(새 학생 = 출결에서 다시) · ‘직접 입력한 날짜’도 날짜 칸 아래.
+    fireEvent.change(screen.getByLabelText("마지막 수업일"), { target: { value: "2026-10-02" } });
+    expect(screen.getByRole("status")).toHaveTextContent("직접 입력한 날짜");
+    expect(screen.getByRole("status")).toHaveClass("sm:col-start-2");
+    mocks.lastLesson.mockResolvedValueOnce({ date: "2026-10-28" });
+    fireEvent.click(screen.getByRole("button", { name: /^대상 학생:/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "학생 학교 중1" }));
+    await waitFor(() => expect(screen.getByLabelText("마지막 수업일")).toHaveValue("2026-10-28"));
+  });
+  it("날짜 칸을 손으로 비우면 요청 단추를 막고 칸 아래에 알린다(서버 형식 오류가 영문으로 뜨지 않게)", async () => {
+    mocks.lastLesson.mockResolvedValueOnce({ date: "2026-10-28" });
+    render(<RequestDialog {...props} />); await fill();
+    await waitFor(() => expect(screen.getByLabelText("마지막 수업일")).toHaveValue("2026-10-28"));
+    fireEvent.change(screen.getByLabelText("마지막 수업일"), { target: { value: "" } });
+    const hint = screen.getByRole("status");
+    expect(hint).toHaveTextContent("마지막 수업일을 입력해 주세요.");
+    expect(hint).toHaveClass("text-att-late-ink");
+    expect(hint).toHaveClass("sm:col-start-2"); // 날짜 칸 아래 짧은 글씨(두 칸 상자가 아니다)
+    expect(hint).not.toHaveClass("sm:col-span-2");
+    expect(screen.getByRole("button", { name: "강사에게 작성 요청" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("마지막 수업일"), { target: { value: "2026-10-27" } });
+    expect(screen.getByRole("button", { name: "강사에게 작성 요청" })).toBeEnabled();
+  });
+  it("다른 학생을 고르면 앞 학생의 날짜를 남기지 않는다 — 찾는 동안 빈칸 · 단추 잠김", async () => {
+    const other: StudentOption = { ...students[0], id: "student2", name: "학생2", grade: "중2", courses: [{ ...students[0].courses[0], id: "course2" }] };
+    mocks.lastLesson.mockResolvedValueOnce({ date: "2026-10-28" });
+    render(<RequestDialog {...props} students={[...students, other]} />); await fill();
+    await waitFor(() => expect(screen.getByLabelText("마지막 수업일")).toHaveValue("2026-10-28"));
+    let answer!: (v: { date: string }) => void;
+    mocks.lastLesson.mockImplementationOnce(() => new Promise(resolve => { answer = resolve; }));
+    fireEvent.click(screen.getByRole("button", { name: /^대상 학생:/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "학생2 학교 중2" }));
+    expect(screen.getByLabelText("마지막 수업일")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "강사에게 작성 요청" })).toBeDisabled();
+    answer({ date: "2026-10-24" });
+    await waitFor(() => expect(screen.getByLabelText("마지막 수업일")).toHaveValue("2026-10-24"));
   });
 });
 
