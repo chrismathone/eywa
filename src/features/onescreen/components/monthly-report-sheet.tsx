@@ -40,7 +40,10 @@ export function MonthlyReportSheet({
         {/* eslint-disable-next-line @next/next/no-img-element -- 공개/인쇄 페이지 고정 마크(최적화 불필요) */}
         <img src={EIE_LOGO_SRC} alt="EiE" className={styles.logo} />
         <div className={styles.headMain}>
-          <h1 className={styles.title}>Monthly Evaluation Report</h1>
+          {/* 'Monthly Evaluation'만 빨강(원장 2026-11-06 *"Monthly Evaluation <- 빨간색으로 변경"*). */}
+          <h1 className={styles.title}>
+            <span className={styles.titleAccent}>Monthly Evaluation</span> Report
+          </h1>
           <table className={styles.info}>
             <tbody>
               <tr>
