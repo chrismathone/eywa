@@ -57,7 +57,7 @@ SQL = `supabase/migrations/s2_0031_academy_assistant.sql`(번호는 병합 때 �
 ## 3. DB 지도 · 온톨로지
 
 - `catalog/tables-a.ts`·`tables-b.ts` — 표마다 `label`(진행 단계 칩) · `ko`(한 줄) · `notes`(상태 값 뜻 · 소프트 삭제 · 금액 단위 · 날짜 칸) · `columns`. 표 목록 + `ko`는 시스템 프롬프트(캐시), 나머지는 `describe_table`.
-- **온톨로지**(`catalog/ontology.ts` — 학생 중심 온톨로지 결정 2026-10-22를 비서의 읽는 틀로): 개체(원생·보호자·형제·반·강사·과목·학원) · 기간 있는 관계(수강 · 담임 = 지금 값 · 교시 담당 · 임시 위임 — 🔴 배정은 실제 수업 증거가 아니다, 실제 = `taught_by`) · 사실(발생일·근거) · **근거 세 층**(기록 / 규칙 판정 / AI 해석 — 섞지 않는다) · 세는 규칙.
+- **온톨로지**(`catalog/ontology.ts` — 학생 중심 온톨로지 결정 2026-10-22를 비서의 읽는 틀로): 개체(원생·보호자·형제·반·강사·과목·학원) · 기간 있는 관계(수강 · 담임 = 지금 값 · 교시 담당 · 임시 위임) · 🔴 **출결 귀속**(`teacher-axis.ts` 순서) = `taught_by`(남의 반 대신 보강 — 드물다) → 자리 수업(JJ·LAB 세 표식)은 누구 몫도 아님 → 요일·기간·교시가 맞는 시간표 줄의 담당이 한 명이면 그 사람(여럿이면 불명) → 그날의 담임(`taught_by`가 비면 '원래 담당이 수업' · 강사별 정확한 시수는 앱 화면이 정답이라 비서는 반 단위로 비교) · 묻지 않으면 빼는 것(폐지·보강용 반은 전 기간 · 종강 반은 지금 목록만 — 추이는 그 날짜에 운영 중이던 반 · 테스트 원생 · 학생 계정 · 퇴사 직원은 지금 목록만) · 비어 있는 게 정상인 칸(`taught_by` · 출석부 과제 체크) · 사실(발생일·근거) · **근거 세 층**(기록 / 규칙 판정 / AI 해석 — 섞지 않는다) · 세는 규칙.
 - **온톨로지 보기 `onto_*`** — 앱 판정 함수와 같은 뜻을 칸으로: `onto_students`(counted · is_merged · exit_kind real/bookkeeping/system_bulk/scheduled · status_label) · `onto_enrollments`(active_today · 과목) · `onto_attendance`(정정된 옛 줄 제외) · `onto_class_teachers`(담임·교시 담당·위임). 🔴 규칙을 바꾸면 SQL §6 · `ontology.ts` · 앱 판정(`isMergedStudent` · `isBookkeepingOnlyExit` · `isSystemBulkWithdrawal`)을 함께.
 
 ## 4. 보고서 블록(`report.ts`)
@@ -75,10 +75,23 @@ SQL = `supabase/migrations/s2_0031_academy_assistant.sql`(번호는 병합 때 �
 SQL → **원장 승인** → 운영 적용(SQL 편집기 또는 직결) → `alter role aywa_assistant password …`(저장소 밖) → Vercel env `ASSISTANT_DATABASE_URL`(+ 원하면 `ANTHROPIC_API_KEY_ASSISTANT`) → 앱 배포 → 원장 계정으로 질문 한 번(지점 격리 · 진행 단계 · 보고서 확인).
 
 - ✅ SQL 운영 적용 2026-11-06 17:37(원장 승인 · 확인 결과는 [README](../../supabase/migrations/README.md) 해당 절).
-- ⏳ 비밀번호 — Supabase SQL 편집기에서 `alter role aywa_assistant with password '<긴 무작위 값>';`(값은 저장소·대화에 남기지 않는다).
-- ⏳ env — Vercel(Production) `ASSISTANT_DATABASE_URL = postgresql://aywa_assistant.<project ref>:<그 비밀번호>@<지금 DATABASE_URL과 같은 풀러 호스트>:6543/postgres`(거래 방식 풀러 · 사용자 이름에 `.<project ref>`를 붙인다). 넣은 뒤 재배포해야 읽힌다.
-- ⏳ 앱 배포(main 병합) → 원장 계정으로 질문 한 번.
+- ✅ 비밀번호 — Supabase SQL 편집기에서 `alter role aywa_assistant with password '<긴 무작위 값>';`(값은 저장소·대화에 남기지 않는다).
+- ✅ env — Vercel(Production) `ASSISTANT_DATABASE_URL = postgresql://aywa_assistant.<project ref>:<그 비밀번호>@<지금 DATABASE_URL과 같은 풀러 호스트>:6543/postgres`(거래 방식 풀러 · 사용자 이름에 `.<project ref>`를 붙인다). 넣은 뒤 재배포해야 읽힌다.
+  - ⚠️ 첫 연결 실패(11-06): `postgres` 주소를 본떠 고치다 옛 비밀번호가 남아 `사용자:옛값:새값@…` 꼴 — 첫 `:` 뒤 `@` 앞이 통째로 비밀번호로 읽혀 `password authentication failed for user "aywa_assistant"`. 화면에는 일반 문구만 나오니 **원문 오류는 `ai_usage_logs`(feature `academy_assistant`, ok=false)의 error 칸**에서 본다.
+- ✅ 앱 배포 — `8aa4eca09`(Vercel 함수 묶음 거절 고침: `outputFileTracingIncludes`에 pnpm 링크 경로를 쓰면 Turbopack이 링크를 풀지 않고 그 경로로 실어 'symlinked directories'로 업로드가 실패한다 → `.pnpm` 실제 경로만) → 원장 질문으로 연결·진행 단계·보고서 확인(11-06 저녁).
 
-## 7. 다음(2단계)
+## 7. 운영 첫 점검 반영(11-06 저녁 · 원장 "김윤하 선생님을 분석해봐")
 
-답을 운영실 카드로 고정 · 엑셀/PDF 내보내기 · 아침 자동 브리핑 · 서버 거절 대체(`fallbacks` — SDK 0.98에 타입이 없어 지금은 거절 시 한국어 안내).
+- **틀린 설명 바로잡음** — 온톨로지·`onto_*` 설명이 "실제 수업 = `taught_by`"라고 했는데 `taught_by`는 **대신 보강 귀속**이라 운영 41,160건 중 0건이 정상이다 → 비서가 "수업 기록 0건 · 입력 방식 점검"을 권했다. 출석부 과제 체크(`homework_required/done`)도 쓰지 않는 반이 많아 "숙제 0건"으로 읽었다 → 둘 다 '비어 있는 게 정상인 칸'으로 적고, 칸이 비었다는 이유만으로 '기록하세요'를 권하지 않게(다른 반·강사가 채우는지 먼저 조회). SQL s2_0031 §6 주석의 같은 문구는 적용된 파일이라 두었다(이 문서가 정답).
+- **종강 반 빼기** — 운영 중 = `is_active and (closed_at is null or closed_at ≥ 오늘)` · 폐지·보강용 반은 전 기간 제외 · 종강 반은 지금 목록에서만(추이는 그 날짜 기준) · `onto_class_teachers`에는 `is_active`·`is_makeup_pool` 칸이 없어 `classes`와 이어 거른다(다음 SQL 때 보기에 칸 추가 후보 — `onto_attendance`의 `seat_label`·`recorded_via`도).
+- **원장이 읽는 말** — 코드값(출결 상태·과목·원생 상태·역할)을 SQL에서 한국어로 + 화면 안전망 `code-labels.ts`(한 칸 값이 **모두** 한 묶음 코드일 때만 바꾼다 · 흔한 낱말 `active`·`manual`은 안 바꾼다 · AI가 보는 원래 결과는 그대로) · 조회 이름·칸 별칭에 칸 이름·영어 금지.
+- **'분석해 줘' 기본 틀** — 강사: 강사평가 월 점수(`teacher_portfolio_months`) → 담당 규모·추이 → 퇴원 → 귀속 출결 → 수업보고서(발송·읽음·직접/자동 멘트) → 숙제(보고서) → 성적, 각 축을 지점 평균과 나란히. 원생·반도 축을 정했다. "원하시면 알려 주세요"로 미루지 않는다.
+- **비서 의견** — 되묻기 항목 금지 · why에 '무엇이 어떻게 바뀌면 효과'(다음에 확인할 숫자)를 담는다(결과 피드백 구조의 바탕 — §8).
+- **화면** — KPI를 비서 전용 작은 칸으로(공용 BigStat은 오버레이 반쪽을 한 장이 차지했다 · 넷이 한 줄 · 숫자는 자르지 않고 줄바꿈) · 막힌 단계 세 갈래(`stepTrouble`): 답이 보고서로 끝났고 뒤에 같은 종류가 이어졌으면 옅게 '다른 조회로 이어 갔습니다' · 시간·조회 한도(서버 표식 `cause: "limit"`)는 주황 '여기까지 봤습니다' · 나머지(답 전체 실패 포함)는 빨강. 과정 한 줄도 `다시 시도 N번 · 시간·한도로 여기까지 · 막힌 단계 N개`.
+- **'분석' 실행** — 축마다 조회 하나(대상 + 지점 평균) · 서로 다른 축은 한 차례에 함께 · 못 본 축은 '이번에 못 본 것'으로 밝힘. 강사평가 점수는 앱이 계산·마감한 점수(원장이 매긴 점수가 아니다).
+- **코드값 안전망 경계** — 원생 상태 코드(on_hold·enrolled)는 다른 표에서 뜻이 달라(보강 건 '보류'·상담 결과 '등록') 서로 다른 코드가 둘 이상일 때만 · excused = '공결'(앱 출석부 말) · 이미 한국어인 값은 건너뛰고 남은 코드만 · 다시 열 때(`threadDetail`)도 같은 변환.
+
+## 8. 다음(2단계)
+
+- **제안 → 실행 → 결과 확인 → 학습**(원장 11-06 *"그 해결책이 어떤 결과를 가져왔는지에 대한 결과 피드백까지 … 지속적인 학습"*) — 설계 중(새 표 필요 → SQL 원장 승인).
+- 답을 운영실 카드로 고정 · 엑셀/PDF 내보내기 · 아침 자동 브리핑 · 서버 거절 대체(`fallbacks` — SDK 0.98에 타입이 없어 지금은 거절 시 한국어 안내).

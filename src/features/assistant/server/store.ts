@@ -5,6 +5,7 @@ import "server-only";
  * 표가 아직 없는 DB(SQL 적용 전)면 `enabled: false`로 버튼째 쉰다(#95).
  */
 import { createAdminClient } from "@/lib/supabase/admin";
+import { labelDatasets } from "../code-labels";
 import { isAssistantLevel, type AssistantLevel } from "../levels";
 import { ASSISTANT_RUNNING_MS, type AskStep, type QuerySummary, type ThreadDetailResponse, type ThreadMessage, type ThreadSummary } from "../protocol";
 import type { AssistantReport, QueryResult, SettledReport } from "../report";
@@ -109,12 +110,30 @@ async function ownThread(owner: Owner, threadId: string): Promise<ThreadRow | nu
   return (data as ThreadRow | null) ?? null;
 }
 
+/**
+ * KPI `ref` 글자 값을 (다시 열 때 한국어 이름으로 바꾼) 자료와 맞춘다 — 안전망 전에 저장된 답이 표는 '수학', KPI는 'math'로
+ * 갈리지 않게(재리뷰 2026-11-06). settleReport가 처음에 한 일(ref = 그 칸 값)과 같은 뜻이라 글자 값만 다시 잇는다.
+ */
+export function kpiFromData(blocks: AssistantReport["blocks"], data: Datasets): AssistantReport["blocks"] {
+  return blocks.map((b) =>
+    b.type !== "kpi"
+      ? b
+      : {
+          ...b,
+          items: b.items.map((item) => {
+            const v = item.ref ? data[item.ref.query]?.rows[item.ref.row]?.[item.ref.column] : undefined;
+            return typeof v === "string" && v !== item.value ? { ...item, value: v } : item;
+          }),
+        },
+  );
+}
+
 function toMessage(m: MessageRow, now: number, datasets: ReadonlyMap<string, Datasets>): ThreadMessage {
   const running = m.status === "running" && now - Date.parse(m.created_at) < RUNNING_MS;
   const data = datasets.get(m.id);
   const report: SettledReport | null =
     m.status === "done" && m.report_title !== null && Array.isArray(m.report_blocks)
-      ? { title: m.report_title, blocks: m.report_blocks, datasets: data ?? {}, ...(data ? {} : { datasetsOmitted: true }) }
+      ? { title: m.report_title, blocks: data ? kpiFromData(m.report_blocks, data) : m.report_blocks, datasets: data ?? {}, ...(data ? {} : { datasetsOmitted: true }) }
       : null;
   return {
     id: m.id,
@@ -162,7 +181,8 @@ export async function threadDetail(owner: Owner, threadId: string): Promise<Thre
       const size = JSON.stringify(d).length;
       if (size > budget) continue;
       budget -= size;
-      datasets.set(id, d);
+      // 코드 칸 한국어 이름 — 안전망(code-labels) 전에 저장된 답도 다시 열면 같은 이름으로(적대 리뷰 2026-11-06).
+      datasets.set(id, labelDatasets(d));
     }
   }
   const now = Date.now();

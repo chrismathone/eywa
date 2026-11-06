@@ -161,7 +161,7 @@ export const TABLES_A: readonly AssistantTableDoc[] = [
     label: "출결",
     ko: "수업 출결 — 학생×반×수업일(×교시). 정정은 새 행으로 쌓인다",
     notes:
-      "status: present=출석 · late=지각 · absent=결석 · excused=인정결석(출석부엔 결석 표시) · early_leave=조퇴 · makeup=보강. 🔴 같은 (학생·반·session_date·slot_start)에 행이 여럿이면 recorded_at 최신 1건만 유효(distinct on). 출석률 = (present+late) ÷ 유효 기록 수(보강·조퇴는 분자 아님, 기록 없는 칸은 분모 밖). 시수 = present·late·early_leave·makeup의 coalesce(session_units,1) 합. 반 없는 보강은 classes.is_makeup_pool 반에 앉는다. students.is_test 제외.",
+      "status: present=출석 · late=지각 · absent=결석 · excused=공결(인정 결석 — 출석부 칸엔 결석 표시) · early_leave=조퇴 · makeup=보강. 🔴 같은 (학생·반·session_date·slot_start)에 행이 여럿이면 recorded_at 최신 1건만 유효(distinct on). 출석률 = (present+late) ÷ 유효 기록 수(보강·조퇴는 분자 아님, 기록 없는 칸은 분모 밖). 시수 = present·late·early_leave·makeup의 coalesce(session_units,1) 합. 반 없는 보강은 classes.is_makeup_pool 반에 앉는다. students.is_test 제외.",
     columns: {
       session_date: "수업일(한국 날짜)",
       slot_start: "교시 시작 시각(class_schedules.start_time과 같은 값). null=그날 전체(2026-08-10 이전 기록)",
@@ -173,8 +173,8 @@ export const TABLES_A: readonly AssistantTableDoc[] = [
       supersedes_id: "이 행이 정정한 이전 행",
       access_method: "manual=수동 · kiosk=키오스크",
       salary_tier: "이 출결 1건만의 급여 단가 티어 예외(null=수강의 티어)",
-      homework_required: "과제 부여",
-      homework_done: "과제 완료",
+      homework_required: "출석부 과제 체크(부여) — 쓰지 않는 반이 많다. 0건은 '숙제 없음'이 아니라 '체크를 안 쓰는 반'. 숙제 수행은 lesson_reports.homework_score",
+      homework_done: "출석부 과제 체크(완료) — 위와 같다",
     },
   },
   {
@@ -283,7 +283,7 @@ export const TABLES_A: readonly AssistantTableDoc[] = [
     label: "시간표",
     ko: "반 시간표 한 줄 — 요일·시작·종료 시각(유효 기간 이력 포함)",
     notes:
-      "day_of_week: mon~sun. 🔴 지난 배치 이력이 섞여 있다 — 날짜 D에 유효한 줄 = valid_from ≤ D and (valid_to is null or valid_to ≥ D)(valid_to 포함). teacher_id·classroom_id = 교시별 담당·강의실(null=classes.teacher_id·classroom_id 상속). merge_group이 같으면 합반. 시각은 time(한국 시각). 교시 출결은 attendance_records.slot_start = start_time으로 잇는다.",
+      "day_of_week: mon~sun. 🔴 지난 배치 이력이 섞여 있다 — 날짜 D에 유효한 줄 = valid_from ≤ D and (valid_to is null or valid_to ≥ D)(valid_to 포함). teacher_id·classroom_id = 교시별 담당·강의실(null=classes.teacher_id·classroom_id 상속 — 단 teacher_id null + 자리 라벨이면 자리 교시라 담임 상속이 아니라 누구 몫도 아니다 — 자리 라벨 = lower(btrim(slot_teacher_label)) in ('lab','lab실','랩실','이주희','jj','집중자율수업실','자율실'), 앱 timetable/lib/teacher-label.ts 별칭과 같이 고칠 것). day_of_week는 enum이라 글자와 비교할 때 ::text. merge_group이 같으면 합반. 시각은 time(한국 시각). 교시 출결은 attendance_records.slot_start = start_time으로 잇는다.",
     columns: {
       period_label: "표시용 교시 이름('3교시') — 시각이 정본",
       slot_teacher_label: "표시용 강사 라벨(영문 닉네임 등, null=반 기본)",

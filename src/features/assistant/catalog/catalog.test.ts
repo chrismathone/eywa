@@ -62,3 +62,14 @@ describe("학원 비서 DB 지도", () => {
     expect(new Set(views)).toEqual(new Set(ONTOLOGY_DOCS.map((d) => d.name)));
   });
 });
+
+describe("온톨로지 자리 라벨 = 앱 별칭(teacher-label.ts)", () => {
+  it("자리 교시 별칭이 앱과 같다 — 별칭이 늘면 온톨로지·class_schedules 설명도 함께(적대 리뷰 2026-11-06)", async () => {
+    const { SPECIAL_SLOT_ALIAS_KEYS } = await import("@/features/timetable/lib/teacher-label");
+    const { ONTOLOGY_MAP } = await import("./ontology");
+    const notes = ASSISTANT_DOCS.find((d) => d.name === "class_schedules")?.notes ?? "";
+    const listed = (text: string) => [...(text.match(/in \(('[^)]*')\)/)?.[1] ?? "").matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
+    expect(listed(ONTOLOGY_MAP)).toEqual([...SPECIAL_SLOT_ALIAS_KEYS].sort());
+    expect(listed(notes)).toEqual([...SPECIAL_SLOT_ALIAS_KEYS].sort());
+  });
+});
