@@ -13,6 +13,8 @@ export const AUDIT_ACTIONS = {
   withdrawal_report_update: "퇴원보고서 처리",
   // 퇴원월 뒤 청구의 환불을 원장이 퇴원보고서에서 승인 → 환불 요청서 생성(2026-10-29). 요청서 쪽 refund_request_create도 함께 남는다.
   withdrawal_refund_approve: "퇴원보고서 환불 승인",
+  // 원장 '환불 없음'(2026-11-06) — 퇴원월 뒤 청구의 환불 가능 줄을 환불하지 않기로 정함(정해야 퇴원·수강종료를 처리한다 · DB s2_0032).
+  withdrawal_refund_decline: "퇴원보고서 환불 없음(원장 결정)",
   // ── 학원 설정 감사 커버리지(2026-08-27 원장 점검) — 연동·프롬프트·강의실 수정·팝업 수정이
   //    통째로 무기록이었다. 특히 연동은 user_integrations에 updated_by조차 없어 흔적이 0이었다.
   integration_sync_toggle: "makeedu 자동 동기화 토글",
@@ -560,6 +562,8 @@ export const AUDIT_ACTIONS = {
   refund_request_create: "환불 요청서 작성",
   refund_request_update: "환불 요청서 수정",
   refund_request_delete: "환불 요청서 삭제",
+  // 퇴원보고서에 이어진 요청서의 환불완료일자를 담당 데스크·원장이 아닌 사람이 넣거나 지우려다 막힘(2026-11-06 · DB 트리거도 같은 판정).
+  refund_request_complete_denied: "환불완료일자 입력 거절",
   textbook_notice_send: "교재 요청서 학부모 발송",
   session_terms_refresh: "청구 회차 계획 갱신",
   // 출석부 줄인데 회차 행이 없던 학생 — 확정·배분을 저장하는 순간 행이 생긴다(`term-materialize.ts`, 원장 2026-09-18).

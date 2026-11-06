@@ -1275,12 +1275,23 @@ export function auditDetail(
       const skipped = Array.isArray(m.managerSkipped) ? m.managerSkipped.flatMap((v) => str(v) ?? []) : [];
       const notified = Array.isArray(m.deskRefundsNotified) ? m.deskRefundsNotified.flatMap((v) => str(v) ?? []) : [];
       return join(str(m.operation), str(m.result), str(m.date) ? `마지막 수업일 ${str(m.date)}` : null, ended.length ? `끝난 수업 ${ended.join("·")}` : null,
-        skipped.length ? `관리자 승인 생략 ${skipped.join(", ")}` : null, notified.length ? `데스크 알림 ${notified.join(", ")}` : null);
+        skipped.length ? `관리자 승인 생략 ${skipped.join(", ")}` : null, notified.length ? `데스크 알림 ${notified.join(", ")}` : null,
+        str(m.refundWait) ? `처리 대기: ${str(m.refundWait)}` : null, str(m.cancelReason) ? `취소 사유: ${str(m.cancelReason)}` : null);
     }
     // 퇴원보고서 환불 승인(2026-10-29) — 어느 달 청구 · 금액 · 마지막 수업일 · 데스크 단계(2026-11-03 — 환불이 끝나야 처리하는지).
     // 만든 환불 요청서는 refund_request_create에 같은 documentId로 남는다(데스크 단계에 못 이으면 refund_request_delete로 되돌린 기록).
+    // 2026-11-06: 같은 화면에서 고르지 않은 환불 가능 줄은 '환불하지 않음'으로 남는다(원장 결정 · s2_0032) — 그 건수.
     case "withdrawal_refund_approve":
-      return join(Array.isArray(m.items) ? `${m.items.slice(0, 3).map(String).join(", ")}${m.items.length > 3 ? ` 외 ${m.items.length - 3}건` : ""}` : str(m.invoicePeriod) ? `${str(m.invoicePeriod)} 청구` : null, str(m.totalAmount), str(m.effectiveDate) ? `마지막 수업일 ${str(m.effectiveDate)}` : null, str(m.deskStep), "환불 요청서 작성");
+      return join(Array.isArray(m.items) ? `${m.items.slice(0, 3).map(String).join(", ")}${m.items.length > 3 ? ` 외 ${m.items.length - 3}건` : ""}` : str(m.invoicePeriod) ? `${str(m.invoicePeriod)} 청구` : null, str(m.totalAmount), str(m.effectiveDate) ? `마지막 수업일 ${str(m.effectiveDate)}` : null, str(m.deskStep), "환불 요청서 작성",
+        Array.isArray(m.notRefunded) && m.notRefunded.length ? `환불하지 않음 ${m.notRefunded.length}건` : null);
+    // 원장 '환불 없음'(2026-11-06 · s2_0032) — 어느 줄을 · 마지막 수업일 · 다음(이어서 처리했는지 · 남은 결정).
+    case "withdrawal_refund_decline":
+      return join(Array.isArray(m.items) ? `환불하지 않음 ${m.items.slice(0, 3).map(String).join(", ")}${m.items.length > 3 ? ` 외 ${m.items.length - 3}건` : ""}` : null,
+        str(m.effectiveDate) ? `마지막 수업일 ${str(m.effectiveDate)}` : null, str(m.next));
+    // 이어진 요청서의 환불완료일자 입력·지움 거절(2026-11-06) — 학생 · 무엇을 하려 했나 · 담당 데스크.
+    case "refund_request_complete_denied":
+      return join(str(m.studentName), str(m.attempted), str(m.deskName) ? `담당 데스크 ${str(m.deskName)}` : null, "담당 데스크·원장만 할 수 있음",
+        m.viaTeacherView === true ? "'다른 강사 뷰' — 실제 로그인 계정 기준" : null);
     // 잘못 만든 수업 이력 **삭제**(원장·super_admin) — 행이 사라지므로 이 로그가 유일한 흔적이다.
     // metadata.snapshot에 삭제된 행 전체가 들어 있다(뷰어 title 툴팁의 원문 JSON으로 확인).
     case "enrollment_delete": {

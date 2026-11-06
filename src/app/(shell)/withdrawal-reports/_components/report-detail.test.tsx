@@ -141,8 +141,10 @@ describe("report submission and review", () => {
   it("요청자의 '요청 취소'는 본 상태를 함께 보낸다", async () => {
     render(<ReportDetail {...props} userId={manager} />);
     fireEvent.click(screen.getByRole("button", { name: "요청 취소" }));
+    // 취소 사유는 필수(원장 2026-11-06) — 사유와 함께 보낸다.
+    fireEvent.change(screen.getByLabelText("취소 사유"), { target: { value: "다시 다님" } });
     fireEvent.click(screen.getByRole("button", { name: "요청 취소 확인" }));
-    await waitFor(() => expect(mocks.change).toHaveBeenCalledWith(r.id, "cancel", 3, { seenStatus: "requested" }));
+    await waitFor(() => expect(mocks.change).toHaveBeenCalledWith(r.id, "cancel", 3, { seenStatus: "requested", reason: "다시 다님" }));
     expect(mocks.autosave).not.toHaveBeenCalled();
   });
   it("shows final withdrawal consequences before director approval", async () => {
@@ -256,5 +258,81 @@ describe("같은 상태로 다시 그려질 때 — 본문은 서버와 함께 �
     await screen.findByText(/처리를 멈췄습니다/);
     expect(mocks.autosave).toHaveBeenCalledTimes(1);
     expect(mocks.change).not.toHaveBeenCalled();
+  });
+});
+
+describe("원장 환불 결정 안내(원장 2026-11-06)", () => {
+  const note = "원장 환불 결정 전 — 승인해도 환불 결정 뒤에 처리됩니다";
+  const pendingApproval: WithdrawalReport = { ...r, status: "manager_pending", manager_ids: [manager] };
+  it("관리자(승인 차례) — 상태 칩 '환불 결정 대기' · 안내 · 승인 확인 칸에도 같은 글", () => {
+    render(<ReportDetail {...props} report={pendingApproval} userId={manager} refundDecision={{ hold: true, undecided: [], declined: [] }} />);
+    expect(screen.getByText("환불 결정 대기")).toBeInTheDocument();
+    expect(screen.getByText(note)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "승인" }));
+    expect(screen.getByRole("region", { name: "처리 확인" })).toHaveTextContent(note);
+    cleanup();
+  });
+  it("작성 강사도 — 이 화면에 결정 안 된 줄만 있어도(묶음 표시 전) 안내", () => {
+    render(<ReportDetail {...props} refundDecision={{ hold: false, undecided: ["40000000-0000-4000-8000-000000000001#a1"], declined: [] }} />);
+    expect(screen.getByText(note)).toBeInTheDocument();
+    expect(screen.queryByText("환불 결정 대기")).not.toBeInTheDocument();  // 칩은 묶음 표시(DB)로만 — 목록과 같은 값
+    cleanup();
+  });
+  it("원장급에게는 안내 대신 '환불 확인' 칸에서 정하게 한다 · 처리가 끝난 보고서엔 안내 없음", () => {
+    render(<ReportDetail {...props} report={{ ...r, status: "approved" }} userId={director} directorLevel refundDecision={{ hold: true, undecided: [], declined: [] }} />);
+    expect(screen.queryByText(note)).not.toBeInTheDocument();
+    expect(screen.getByText(/원장 환불 결정\(퇴원월 뒤 청구의 환불 승인 또는 환불 없음\)이 끝나면 처리합니다/)).toBeInTheDocument();
+    // 이 화면엔 결정할 줄이 없는데 묶음은 대기 — 다른 보고서로 안내.
+    expect(screen.getByText(/함께 요청한 다른 보고서의 퇴원월 뒤 청구에 정할 건이 남아 있습니다/)).toBeInTheDocument();
+    cleanup();
+    render(<ReportDetail {...props} report={{ ...r, status: "completed" }} userId={manager} refundDecision={{ hold: true, undecided: ["x"], declined: [] }} />);
+    expect(screen.queryByText(note)).not.toBeInTheDocument();
+    expect(screen.queryByText("환불 결정 대기")).not.toBeInTheDocument();
+  });
+});
+
+describe("요청 취소 사유 · 결재란 환불 줄(원장 2026-11-06)", () => {
+  it("취소 확인 칸 — 사유 필수(비면 단추 막음) · 사유를 함께 보낸다", async () => {
+    mocks.change.mockResolvedValue({ ok: true, id: r.id });
+    render(<ReportDetail {...props} userId={manager} />);
+    fireEvent.click(screen.getByRole("button", { name: "요청 취소" }));
+    const confirm = screen.getByRole("button", { name: "요청 취소 확인" });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("취소 사유"), { target: { value: "   " } });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("취소 사유"), { target: { value: "학부모 요청으로 계속 다님" } });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(mocks.change).toHaveBeenCalledWith(r.id, "cancel", r.revision, { seenStatus: "requested", reason: "학부모 요청으로 계속 다님" }));
+    cleanup();
+  });
+  it("처리 이력에 취소 사유가 보인다", () => {
+    render(<ReportDetail {...props} report={{ ...r, status: "canceled" }} events={[{ id: "e1", actor_id: manager, action: "cancel", from_status: "requested", to_status: "canceled", comment: "학부모 요청으로 계속 다님", created_at: "2026-11-06T05:00:00Z" }]} />);
+    expect(screen.getByText("학부모 요청으로 계속 다님")).toBeInTheDocument();
+    cleanup();
+  });
+  it("결재란 — 관리자 다음에 '환불 결정'(결정한 원장 · 결정일) → '데스크'(직급 이름 · 환불완료일)", () => {
+    const boss = { id: director, name: "설현", role: "master" as const, subjects: [], jobTitle: "원장" };
+    render(<ReportDetail {...props} report={{ ...r, status: "approved", group_id: "g1" }} userId={manager} staff={[boss]}
+      refundDecision={{ hold: false, undecided: [], declined: [], outcome: { outcome: "refund", by: director, at: "2026-11-06T03:00:00Z" } }}
+      refundSteps={[{ documentId: "d1", deskId: "dk", deskName: "홍길동", deskTitle: "대리", deskActive: true, completedDate: null }]} />);
+    const heads = screen.getAllByRole("columnheader").map((h) => h.textContent);
+    expect(heads.indexOf("환불 결정")).toBeGreaterThan(heads.indexOf("관리자"));
+    expect(heads.indexOf("데스크")).toBeGreaterThan(heads.indexOf("환불 결정"));
+    // 결재란 칸(머리 '환불 결정' 아래) — 결정한 원장 · 결정일.
+    // 결재란: 1행 = 칸 이름(과목 · 담임 · 관리자 · …) · 2행 = [과목, 날짜…] · 3행 = 이름…
+    const cell = (role: string) => {
+      const table = screen.getAllByRole("columnheader").find((h) => h.textContent === role)!.closest("table")!;
+      const rows = table.querySelectorAll("tr");
+      const roles = [...rows[0]!.querySelectorAll('th[scope="col"]')].map((h) => h.textContent).slice(1);
+      const i = roles.indexOf(role);
+      return { date: rows[1]!.children[i + 1]!.textContent, name: rows[2]!.children[i]!.textContent };
+    };
+    expect(cell("환불 결정")).toEqual({ name: "설현 원장", date: "결정일 : 2026-11-06" });
+    expect(cell("데스크")).toEqual({ name: "홍길동 대리", date: "환불완료일 : " });
+    cleanup();
+    // 결정 대기면 받는 원장급 · 결정일 빈칸.
+    render(<ReportDetail {...props} report={{ ...r, status: "approved", group_id: "g1" }} userId={manager} staff={[boss]} refundDecision={{ hold: true, undecided: [], declined: [] }} />);
+    expect(screen.getByText("결정일 :")).toBeInTheDocument();
+    expect(screen.getAllByText("설현 원장").length).toBeGreaterThan(0);
   });
 });

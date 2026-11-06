@@ -1513,6 +1513,20 @@ describe("auditDetail — 퇴원보고서 처리 결과(2026-10-23)", () => {
     expect(auditDetail("withdrawal_refund_approve", { items: ["2026-11 영어 315,000원"], totalAmount: "315,000원", effectiveDate: "2026-10-28", deskStep: "데스크 환불 완료 뒤 처리" }, ctx()))
       .toBe("2026-11 영어 315,000원 · 315,000원 · 마지막 수업일 2026-10-28 · 데스크 환불 완료 뒤 처리 · 환불 요청서 작성");
   });
+  it("원장 환불 결정(2026-11-06) — 환불 승인의 '환불하지 않음' 건수 · '환불 없음' · 완료 입력 거절 · 바로 처리의 처리 대기", () => {
+    expect(auditDetail("withdrawal_refund_approve", { items: ["2026-12 영어 300,000원"], totalAmount: "300,000원", effectiveDate: "2026-11-06", deskStep: "데스크 환불 완료 뒤 처리", notRefunded: ["2026-12 차량비 50,000원"] }, ctx()))
+      .toBe("2026-12 영어 300,000원 · 300,000원 · 마지막 수업일 2026-11-06 · 데스크 환불 완료 뒤 처리 · 환불 요청서 작성 · 환불하지 않음 1건");
+    expect(auditDetail("withdrawal_refund_decline", { items: ["2026-12 영어 300,000원", "2026-12 차량비 50,000원"], effectiveDate: "2026-11-06", next: "이어서 처리" }, ctx()))
+      .toBe("환불하지 않음 2026-12 영어 300,000원, 2026-12 차량비 50,000원 · 마지막 수업일 2026-11-06 · 이어서 처리");
+    expect(auditDetail("refund_request_complete_denied", { studentName: "학생", attempted: "환불완료일자 2026-11-06 입력", deskName: "데스크A" }, ctx()))
+      .toBe("학생 · 환불완료일자 2026-11-06 입력 · 담당 데스크 데스크A · 담당 데스크·원장만 할 수 있음");
+    expect(auditDetail("refund_request_complete_denied", { studentName: "학생", attempted: "환불완료일자 지움", deskName: "데스크A", viaTeacherView: true }, ctx()))
+      .toBe("학생 · 환불완료일자 지움 · 담당 데스크 데스크A · 담당 데스크·원장만 할 수 있음 · '다른 강사 뷰' — 실제 로그인 계정 기준");
+    expect(auditDetail("withdrawal_report_update", { operation: "관리자 바로 처리", result: "처리 예약", date: "2026-11-06", refundWait: "원장 환불 결정 대기" }, ctx()))
+      .toBe("관리자 바로 처리 · 처리 예약 · 마지막 수업일 2026-11-06 · 처리 대기: 원장 환불 결정 대기");
+    expect(auditDetail("withdrawal_report_update", { operation: "요청 취소", date: "2026-11-06", cancelReason: "학부모 요청으로 계속 다님" }, ctx()))
+      .toBe("요청 취소 · 마지막 수업일 2026-11-06 · 취소 사유: 학부모 요청으로 계속 다님");
+  });
 });
 
 describe("auditDetail — 학습 추세 미발송 설정(2026-10-23)", () => {

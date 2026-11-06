@@ -10,6 +10,8 @@ import { directProcessingReady, listReports, reportViewer, reportStaff, requestS
 import { canManageStudentStatusNow } from "@/features/students/server/status-access";
 import { listArchives } from "@/features/withdrawal-reports/server/archives";
 import { loadRefundSteps } from "@/features/withdrawal-reports/server/refund-steps";
+import { loadRefundHolds, loadRefundOutcomes } from "@/features/withdrawal-reports/server/refund-check";
+import { loadCancelNotes } from "@/features/withdrawal-reports/server/cancel-notes";
 import { cancelsAsDirector } from "@/features/withdrawal-reports/model";
 import {
   LIST_PAGE_SIZE,
@@ -84,12 +86,27 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
   const canSeeArchive = !!viewer.teacherId || viewer.manage;
   // 데스크 환불 단계(원장 2026-11-03) — 못 읽으면 단계 없이(목록은 연다).
-  const refunds = await loadRefundSteps(viewer.user.tenantId, list.rows, staff).catch((error: unknown) => {
-    console.error("[withdrawal-reports] 데스크 환불 단계 조회 실패", error);
-    return undefined;
-  });
-  const items = buildListItems({ reports: list.rows, archives: archives ?? [], staff, labelOf: subjectMaps.labelOf, userId: viewer.user.id, writable: viewer.writable, refunds,
-    // 원장급은 남이 요청한 보고서도 취소한다 — 재검토 건의 '내 재요청 필요'(상세 화면과 같은 판정).
+  // 원장 환불 결정 대기·결정 요약(승인 진행의 원장 줄) · 요청 취소 기록(상태 칸 말풍선 — 원장 2026-11-06 · s2_0032) — 못 읽으면 없이(목록은 연다).
+  const [refunds, holds, outcomes, cancels] = await Promise.all([
+    loadRefundSteps(viewer.user.tenantId, list.rows, staff).catch((error: unknown) => {
+      console.error("[withdrawal-reports] 데스크 환불 단계 조회 실패", error);
+      return undefined;
+    }),
+    loadRefundHolds(viewer.user.tenantId, list.rows.filter((r) => !["completed", "canceled", "blocked"].includes(r.status)).map((r) => r.group_id)).catch((error: unknown) => {
+      console.error("[withdrawal-reports] 환불 결정 대기 조회 실패", error);
+      return undefined;
+    }),
+    loadRefundOutcomes(viewer.user.tenantId, list.rows.filter((r) => r.status !== "canceled").map((r) => r.group_id)).catch((error: unknown) => {
+      console.error("[withdrawal-reports] 환불 결정 조회 실패", error);
+      return undefined;
+    }),
+    loadCancelNotes(viewer.user.tenantId, list.rows.filter((r) => r.status === "canceled").map((r) => r.id)).catch((error: unknown) => {
+      console.error("[withdrawal-reports] 요청 취소 기록 조회 실패", error);
+      return undefined;
+    }),
+  ]);
+  const items = buildListItems({ reports: list.rows, archives: archives ?? [], staff, labelOf: subjectMaps.labelOf, userId: viewer.user.id, writable: viewer.writable, refunds, holds, outcomes, cancels,
+    // 원장급은 남이 요청한 보고서도 취소한다 — 재검토 건의 '내 재요청 필요'(상세 화면과 같은 판정) · 환불 결정 대기의 '내 환불 결정 필요'도 이 판정.
     directorLevel: cancelsAsDirector(viewer.user.systemRole, !!viewer.teacherId),
     // 승인 완료 줄의 묶음 형제 상태(형제가 목록에 없어도) — 상태 칸이 '다른 과목 승인 대기'와 '환불·처리만 남음'을 가른다.
     groupStatuses: list.groupStatuses });

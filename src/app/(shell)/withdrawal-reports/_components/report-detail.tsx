@@ -7,18 +7,20 @@ import { Button } from "@/components/ui/button";
 import { WindowLink } from "@/components/workspace/window-link";
 import type { ReportConsultation } from "@/features/withdrawal-reports/consultation";
 import { ReportForm } from "./report-form";
-import { LaterInvoices } from "./later-invoices";
+import { LaterInvoices, type RefundDecisionView } from "./later-invoices";
+import { REFUND_DECISION_WAIT_NOTE, decisionBlocksProcessing } from "@/features/withdrawal-reports/refund-decision";
+import { FORMER_STAFF, type RefundOutcome } from "@/features/withdrawal-reports/approval-lines";
 import type { LaterInvoice } from "@/features/withdrawal-reports/server/refund";
 import type { SubjectHistoryRow } from "@/features/withdrawal-reports/course-period";
 import { fillEmptyReportFields } from "@/features/withdrawal-reports/prefill";
 import { autosaveWithdrawalReport, changeWithdrawalReport } from "@/features/withdrawal-reports/server/actions";
 import { createReportSaver, type ReportSaver, type ReportSaverStatus } from "@/features/withdrawal-reports/autosave";
 import { windowDirtyMessage } from "@/components/workspace/window-bridge";
-import { EMPTY_BODY, REPORT_ACTION_LABEL, directorIds, titledName, isDirectReport, managerStepSkipped, refundWaiting, reportCapabilities, reportStatusChips, type RefundStep, type WithdrawalReport, type ReportEvent, type StaffOption, type ReportAction, type ReportBody } from "@/features/withdrawal-reports/model";
+import { CANCEL_REASON_MAX, EMPTY_BODY, REPORT_ACTION_LABEL, directorIds, titledName, isDirectReport, managerStepSkipped, refundWaiting, reportCapabilities, reportStatusChips, type RefundStep, type WithdrawalReport, type ReportEvent, type StaffOption, type ReportAction, type ReportBody } from "@/features/withdrawal-reports/model";
 
 const control = "w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm disabled:bg-muted/20 disabled:text-foreground";
 const dateTime = (v: string) => new Date(v).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
-export function ReportDetail({ report: r, events, staff, labels, userId, writable, directorLevel = false, consultations = [], assignmentChanged = false, prefill = {}, prefillWarning, withdrawalHref, laterInvoices = [], deskStaff = [], refundSteps = [], subjectHistory = [] }: {
+export function ReportDetail({ report: r, events, staff, labels, userId, writable, directorLevel = false, consultations = [], assignmentChanged = false, prefill = {}, prefillWarning, withdrawalHref, laterInvoices = [], deskStaff = [], deskNotice, refundDecision = { hold: false, undecided: [], declined: [] }, refundSteps = [], subjectHistory = [] }: {
   report: WithdrawalReport; events: ReportEvent[]; staff: StaffOption[]; labels: Record<string, string>; userId: string; writable: boolean; consultations?: ReportConsultation[]; assignmentChanged?: boolean; prefill?: Partial<ReportBody>; prefillWarning?: string;
   /** 원장 이상(`cancelsAsDirector`) — 남이 요청한 보고서도 취소하고, 데스크 환불을 요청할 수 있다. */
   directorLevel?: boolean;
@@ -26,8 +28,12 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
   withdrawalHref?: string | null;
   /** 퇴원월 뒤 청구(원장 2026-10-29) — 환불을 요청할 수 있는 사람(`canRequestRefund`)은 토글, 나머지는 보기만. */
   laterInvoices?: LaterInvoice[];
-  /** 환불 요청 때 고를 데스크 담당자(환불을 요청할 수 있는 사람에게만 내려온다). */
+  /** 환불 요청 때 고를 데스크 담당자(환불을 요청할 수 있는 사람에게만 내려온다 · 학원 설정 '데스크 담당자' 중 수납 쓰기 권한자). */
   deskStaff?: { id: string; name: string }[];
+  /** 데스크 담당자를 고를 수 없는 까닭(학원 설정 미지정 등 — 원장 2026-11-06) — 있으면 환불 승인을 막는다. */
+  deskNotice?: string;
+  /** 원장 환불 결정(원장 2026-11-06 · s2_0032) — 묶음의 '환불 결정 대기' 표시 · 이 화면의 결정 안 된 줄 · '환불하지 않음' 줄 · 묶음의 결정 요약(결재란 '환불 결정' 칸). */
+  refundDecision?: RefundDecisionView & { hold: boolean; outcome?: RefundOutcome | null };
   /** 데스크 환불 단계(원장 2026-11-03) — 이 묶음에서 만든 환불 요청서와 완료 여부. */
   refundSteps?: RefundStep[];
   subjectHistory?: SubjectHistoryRow[];
@@ -41,14 +47,23 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
   const decisionRef = useRef<HTMLElement>(null);
   useEffect(() => { if (decision) decisionRef.current?.scrollIntoView?.({ behavior: "smooth", block: "center" }); }, [decision]);
   const [comment, setComment] = useState("");
+  // 요청 취소 사유(원장 2026-11-06) — 반려 사유 칸과 따로(다른 처리로 옮겨 가도 섞이지 않게).
+  const [cancelReason, setCancelReason] = useState("");
   const [pending, startTransition] = useTransition();
   const capabilities = reportCapabilities(r, userId, writable, directorLevel);
   // 관리자 승인 생략(원장 2026-11-03 — 작성 강사가 과목 관리자) · 데스크 환불 대기(보고서에서 환불을 요청함).
   const skipped = managerStepSkipped(r) && !isDirectReport(r);
   const deskWaiting = refundWaiting(r, refundSteps);
+  // 원장 환불 결정 전(원장 2026-11-06) — 묶음이 '환불 결정 대기'이거나 이 화면에 결정 안 된 환불 가능 줄이 있으면 처리는 결정 뒤다.
+  const decisionOpen = decisionBlocksProcessing(r.status);
+  const decisionWaiting = decisionOpen && (refundDecision.hold || refundDecision.undecided.length > 0);
   const nameOf = (id: string | null) => id ? staff.find(s => s.id === id)?.name ?? r.snapshot.courses.find(c => c.teacherId === id)?.teacherName ?? "이전 담당자" : "자동 처리";
   // 결재란 승인자 — 직급이 있으면 '정유진 부원장'(원장 2026-11-05). 담임·요청자·처리 이력은 이름 그대로.
   const approverName = (id: string | null) => { const u = id ? staff.find(s => s.id === id) : undefined; return u ? titledName(u, u.name) : nameOf(id); };
+  // 결재란 '환불 결정' 칸(목록 승인 진행과 같은 줄 — 결정 대기는 DB 묶음 표시로만): 대기면 받는 원장급(운영자 계정 제외 — 표시 역할 master), 결정했으면 결정한 원장.
+  const refundDecisionSign = decisionOpen && refundDecision.hold
+    ? { names: staff.some(s => s.role === "master") ? staff.filter(s => s.role === "master").map(s => titledName(s, s.name)) : ["원장"], at: null }
+    : refundDecision.outcome ? { names: [refundDecision.outcome.by ? approverName(refundDecision.outcome.by) : FORMER_STAFF], at: refundDecision.outcome.at } : null;
   // 실시간 저장(원장 2026-11-05 "퇴원보고서도 실시간으로 입력되고 저장되게") — 작성할 수 있을 때만 저장기를 둔다(autosave.ts).
   // 저장 단추는 없다: 칸을 고치면 잠시 뒤 저장하고, 제출·취소 직전에 남은 글을 마저 보낸 뒤 그 revision으로 처리한다.
   const [saveStatus, setSaveStatus] = useState<ReportSaverStatus>({ kind: "idle" });
@@ -107,37 +122,43 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
           revision = settled.revision;
         }
         // 취소는 본 상태를 함께 보낸다 — 같으면 서버가 지금 revision으로 처리한다(작성 중 자동 저장에 막히지 않게 · actions.ts).
-        const input = action === "save" || action === "submit" ? body : action === "reject" ? comment : action === "cancel" ? { seenStatus: r.status } : undefined;
+        const input = action === "save" || action === "submit" ? body : action === "reject" ? comment : action === "cancel" ? { seenStatus: r.status, reason: cancelReason } : undefined;
         const result = await changeWithdrawalReport(r.id, action, revision, input);
         if ("error" in result) { setError(result.error); return; }
         if (action === "submit" || action === "cancel") saver?.stop();
-        setDecision(null); setComment(""); toast.success(`${REPORT_ACTION_LABEL[action]}했습니다.`); router.refresh();
+        setDecision(null); setComment(""); setCancelReason(""); toast.success(`${REPORT_ACTION_LABEL[action]}했습니다.`); router.refresh();
       } catch { setError("처리를 완료하지 못했습니다. 새로고침 후 상태를 확인해 주세요."); }
     });
   }
   return <>
-    <div className="flex flex-wrap items-center justify-between gap-3"><span className="flex flex-wrap items-center gap-3 text-sm"><Link className="text-primary hover:underline" href="/withdrawal-reports">← 보고서 목록</Link>{withdrawalHref && <WindowLink href={withdrawalHref} className="text-primary hover:underline">퇴원 상세</WindowLink>}</span><span className="flex flex-wrap items-center gap-2">{capabilities.cancel && <Button variant="outline" size="sm" disabled={pending} onClick={() => setDecision("cancel")}>요청 취소</Button>}{reportStatusChips(r, refundSteps).map(chip => <span key={chip} className="rounded-full bg-muted px-3 py-1.5 text-sm">{chip}</span>)}</span></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><span className="flex flex-wrap items-center gap-3 text-sm"><Link className="text-primary hover:underline" href="/withdrawal-reports">← 보고서 목록</Link>{withdrawalHref && <WindowLink href={withdrawalHref} className="text-primary hover:underline">퇴원 상세</WindowLink>}</span><span className="flex flex-wrap items-center gap-2">{capabilities.cancel && <Button variant="outline" size="sm" disabled={pending} onClick={() => setDecision("cancel")}>요청 취소</Button>}{reportStatusChips(r, refundSteps, refundDecision.hold).map(chip => <span key={chip} className="rounded-full bg-muted px-3 py-1.5 text-sm">{chip}</span>)}</span></div>
     <p className="text-sm">{r.exit_kind === "withdrawal" ? "퇴원" : "반 수강종료"} · {r.subjects.length ? r.subjects.map(s => labels[s] ?? "기타 과목").join(" · ") : "다니는 반 없음"}</p>
     {/* 관리자 바로 처리(강사 작성 없이, 원장 2026-10-23) — 누가·언제 처리했는지 먼저 말한다(양식의 상담·담임 의견 칸은 비어 있다). */}
     {isDirectReport(r) && <p className="rounded-lg border bg-muted/20 p-4 text-sm">관리자 바로 처리 · {nameOf(r.requested_by)} · {dateTime(r.created_at)} — 강사 작성과 승인 없이 처리한 기록입니다.</p>}
     {r.request_note && <div className="rounded-lg border bg-muted/20 p-4 text-sm"><div className="mb-2 font-medium">작성 요청 · {nameOf(r.requested_by)}</div><p className="whitespace-pre-wrap">{r.request_note}</p></div>}
     {r.last_comment && <p className="whitespace-pre-wrap rounded-lg border border-att-late-ink/20 bg-att-late p-4 text-sm text-att-late-ink">{r.last_comment}</p>}
     {skipped && ["requested", "revision"].includes(r.status) && <p className="rounded-lg border bg-muted/20 p-4 text-sm">관리자 승인 생략 — 작성 강사가 이 과목 관리자입니다. 제출하면 바로 승인 완료로 넘어갑니다.</p>}
-    {r.status === "scheduled" && <p className="rounded-lg border bg-muted/20 p-4 text-sm">{isDirectReport(r) ? "처리 예약입니다." : "승인이 완료되었습니다."} {r.effective_date}{deskWaiting ? " 이후 데스크 환불 처리(환불완료일자)가 끝나면 처리하며" : "에 처리하며"}, 그 전까지는 기존 수강 상태를 유지합니다.</p>}
-    {r.status === "approved" && <p className="rounded-lg border bg-muted/20 p-4 text-sm">{deskWaiting ? "관리자 승인이 끝났습니다. 데스크 환불 처리(환불 요청서의 환불완료일자)가 끝나면 함께 요청한 보고서와 함께 처리합니다." : refundSteps.length ? "관리자 승인과 데스크 환불이 끝났습니다. 함께 요청한 보고서의 승인까지 끝나면 바로 처리합니다(모두 끝났는데 남아 있으면 다음 날 00:05 확인 때 처리합니다)." : "이 보고서는 승인이 완료되었습니다. 함께 요청한 다른 강사의 보고서 승인까지 모두 끝나면 처리합니다."}</p>}
+    {r.status === "scheduled" && <p className="rounded-lg border bg-muted/20 p-4 text-sm">{isDirectReport(r) ? "처리 예약입니다." : "승인이 완료되었습니다."} {r.effective_date}{decisionWaiting ? " 이후 원장 환불 결정" + (deskWaiting ? "과 데스크 환불 처리" : "") + "가 끝나면 처리하며" : deskWaiting ? " 이후 데스크 환불 처리(환불완료일자)가 끝나면 처리하며" : "에 처리하며"}, 그 전까지는 기존 수강 상태를 유지합니다.</p>}
+    {r.status === "approved" && <p className="rounded-lg border bg-muted/20 p-4 text-sm">{decisionWaiting ? "관리자 승인이 끝났습니다. 원장 환불 결정(퇴원월 뒤 청구의 환불 승인 또는 환불 없음)이 끝나면 처리합니다." : deskWaiting ? "관리자 승인이 끝났습니다. 데스크 환불 처리(환불 요청서의 환불완료일자)가 끝나면 함께 요청한 보고서와 함께 처리합니다." : refundSteps.length ? "관리자 승인과 데스크 환불이 끝났습니다. 함께 요청한 보고서의 승인까지 끝나면 바로 처리합니다(모두 끝났는데 남아 있으면 다음 날 00:05 확인 때 처리합니다)." : "이 보고서는 승인이 완료되었습니다. 함께 요청한 다른 강사의 보고서 승인까지 모두 끝나면 처리합니다."}</p>}
+    {/* 관리자·요청자·작성 강사 안내(원장 2026-11-06) — 원장은 아래 '환불 확인' 칸에서 정한다. */}
+    {decisionWaiting && !capabilities.refund && <p className="rounded-lg border bg-muted/20 p-4 text-sm">{REFUND_DECISION_WAIT_NOTE}</p>}
+    {/* 원장급 — 묶음은 결정 대기인데 이 보고서 화면엔 결정할 줄이 없으면 함께 요청한 다른 보고서에 있다(목록 '내 환불 결정 필요' · 할 일 링크가 그 보고서). */}
+    {capabilities.refund && decisionOpen && refundDecision.hold && !refundDecision.undecided.length && <p className="rounded-lg border bg-muted/20 p-4 text-sm">원장 환불 결정 대기 — 함께 요청한 다른 보고서의 퇴원월 뒤 청구에 정할 건이 남아 있습니다. 목록의 &apos;내 환불 결정 필요&apos;나 할 일에서 그 보고서를 여세요.</p>}
     {assignmentChanged && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">요청 이후 학생·수강·담당 강사가 변경되었습니다. 아래 내용은 요청 당시 기록이며, 제출·승인을 진행할 수 없습니다. 요청한 사람이 요청을 취소하고 현재 담당 기준으로 다시 요청해 주세요.</p>}
     {prefillWarning && <p role="alert" className="rounded-lg border p-4 text-sm">{prefillWarning}</p>}
-    <ReportForm managerSkipped={skipped} refundSteps={refundSteps} consultations={consultations} report={r} body={body} events={events} labels={labels} nameOf={nameOf} approverName={approverName} editable={capabilities.edit} pending={pending} onChange={update} subjectHistory={subjectHistory}
-      refundCheck={r.status === "canceled" ? undefined : <LaterInvoices reportId={r.id} rows={laterInvoices} canApprove={capabilities.refund} deskStaff={deskStaff} gates={!["completed", "blocked"].includes(r.status)} />} />
+    <ReportForm managerSkipped={skipped} refundSteps={refundSteps} refundDecisionSign={refundDecisionSign} consultations={consultations} report={r} body={body} events={events} labels={labels} nameOf={nameOf} approverName={approverName} editable={capabilities.edit} pending={pending} onChange={update} subjectHistory={subjectHistory}
+      refundCheck={r.status === "canceled" ? undefined : <LaterInvoices reportId={r.id} rows={laterInvoices} canApprove={capabilities.refund} deskStaff={deskStaff} gates={!["completed", "blocked"].includes(r.status)}
+        decisionOpen={decisionOpen} decision={refundDecision} deskNotice={deskNotice} />} />
     {error && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
     <div className="flex flex-wrap gap-2">
       {capabilities.edit && <><Button disabled={pending || assignmentChanged || saveStatus.kind === "conflict"} onClick={() => setDecision("submit")}>{skipped ? "보고서 제출" : "관리자에게 제출"}</Button><AutosaveNote status={saveStatus} /></>}
       {capabilities.approve && <><Button disabled={pending || assignmentChanged} onClick={() => setDecision("approve")}>승인</Button><Button disabled={pending} variant="outline" onClick={() => setDecision("reject")}>반려</Button></>}
     </div>
     {decision && <section ref={decisionRef} className="space-y-3 rounded-xl border bg-muted/20 p-5" aria-label="처리 확인">
-      <p className="text-sm">{decision === "submit" ? (skipped ? `보고서를 제출하면 관리자 승인 없이 바로 승인 완료로 넘어갑니다(작성 강사가 이 과목 관리자). 제출한 뒤에는 수정할 수 없습니다.${deskWaiting ? " 데스크 환불 처리가 끝나면 처리합니다." : ""}` : "보고서를 제출하면 관리자 검토가 시작됩니다. 이후 수정은 반려 후 가능합니다.") : decision === "approve" ? `이 보고서를 승인합니다. ${r.status === "manager_pending" && directorIds(r).length ? "관리자 전원 승인 후 원장 검토로 넘어갑니다." : `함께 요청한 보고서와 모든 승인자의 승인이 끝나면${deskWaiting ? " 데스크 환불 처리까지 끝난 뒤" : ""} ${r.effective_date}에 ${r.exit_kind === "withdrawal" ? "퇴원" : "선택 과목 수강종료"}을 처리합니다. 처리일이 지났다면 즉시 반영됩니다.`}` : decision === "cancel" ? "함께 요청한 모든 강사의 보고서를 취소합니다. 학생의 수강 상태는 유지됩니다." : "수정이 필요한 내용을 적어 주세요. 이 보고서의 승인을 초기화하고 강사가 수정 후 다시 제출합니다."}</p>
+      <p className="text-sm">{decision === "submit" ? (skipped ? `보고서를 제출하면 관리자 승인 없이 바로 승인 완료로 넘어갑니다(작성 강사가 이 과목 관리자). 제출한 뒤에는 수정할 수 없습니다.${deskWaiting ? " 데스크 환불 처리가 끝나면 처리합니다." : ""}${decisionWaiting ? ` ${REFUND_DECISION_WAIT_NOTE}.` : ""}` : "보고서를 제출하면 관리자 검토가 시작됩니다. 이후 수정은 반려 후 가능합니다.") : decision === "approve" ? `이 보고서를 승인합니다. ${r.status === "manager_pending" && directorIds(r).length ? "관리자 전원 승인 후 원장 검토로 넘어갑니다." : `함께 요청한 보고서와 모든 승인자의 승인이 끝나면${deskWaiting ? " 데스크 환불 처리까지 끝난 뒤" : ""} ${r.effective_date}에 ${r.exit_kind === "withdrawal" ? "퇴원" : "선택 과목 수강종료"}을 처리합니다. 처리일이 지났다면 즉시 반영됩니다.`}${decisionWaiting ? ` ${REFUND_DECISION_WAIT_NOTE}.` : ""}` : decision === "cancel" ? "함께 요청한 모든 강사의 보고서를 취소합니다. 학생의 수강 상태는 유지됩니다. 취소 사유는 처리 이력에 남고 목록에서 확인할 수 있습니다." : "수정이 필요한 내용을 적어 주세요. 이 보고서의 승인을 초기화하고 강사가 수정 후 다시 제출합니다."}</p>
       {decision === "reject" && <textarea className={control} aria-label="반려 사유" rows={3} maxLength={1000} value={comment} onChange={e => setComment(e.target.value)} />}
-      <div className="flex gap-2"><Button disabled={pending || (decision === "reject" && !comment.trim())} onClick={() => change(decision)}>{pending ? "처리 중…" : `${REPORT_ACTION_LABEL[decision]} 확인`}</Button><Button variant="outline" disabled={pending} onClick={() => setDecision(null)}>닫기</Button></div>
+      {decision === "cancel" && <textarea className={control} aria-label="취소 사유" placeholder="취소하는 까닭을 적어 주세요(필수)" rows={3} maxLength={CANCEL_REASON_MAX} value={cancelReason} onChange={e => setCancelReason(e.target.value)} />}
+      <div className="flex gap-2"><Button disabled={pending || (decision === "reject" && !comment.trim()) || (decision === "cancel" && !cancelReason.trim())} onClick={() => change(decision)}>{pending ? "처리 중…" : `${REPORT_ACTION_LABEL[decision]} 확인`}</Button><Button variant="outline" disabled={pending} onClick={() => setDecision(null)}>닫기</Button></div>
     </section>}
     <section className="rounded-xl border p-5"><h2 className="mb-4 text-sm font-semibold">처리 이력</h2><ol className="space-y-3">{events.map(e => <li key={e.id} className="text-sm"><div>{REPORT_ACTION_LABEL[e.action]} · {nameOf(e.actor_id)} <span className="ml-2 text-xs text-muted-foreground">{dateTime(e.created_at)}</span></div>{e.comment && <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{e.comment}</p>}</li>)}</ol></section>
   </>;

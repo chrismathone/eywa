@@ -11,15 +11,21 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { ReportSheet } from "./report-sheet";
 import { TuitionDetail } from "./tuition-detail";
 import { reportCourses } from "@/features/withdrawal-reports/target-courses";
+import { deskLabel } from "@/features/withdrawal-reports/approval-lines";
 
 const date = (value: string) => new Date(value).toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
-export function ReportForm({ report: r, body, events, labels, nameOf, approverName = nameOf, editable, pending, onChange, consultations = [], subjectHistory = [], refundCheck, managerSkipped = false, refundSteps = [] }: {
+export function ReportForm({ report: r, body, events, labels, nameOf, approverName = nameOf, editable, pending, onChange, consultations = [], subjectHistory = [], refundCheck, managerSkipped = false, refundSteps = [], refundDecisionSign = null }: {
   /** 관리자 승인 생략(원장 2026-11-03 — 작성 강사가 과목 관리자) — 결재란 관리자 칸 '생략'. */
   managerSkipped?: boolean;
   /** 결재란 승인자 표기 — 직급이 있으면 '정유진 부원장'(원장 2026-11-05). 없으면 `nameOf`. */
   approverName?: (id: string | null) => string;
   /** 데스크 환불 단계(원장 2026-11-03) — 있으면 결재란에 '데스크' 칸(담당 · 환불완료일). */
   refundSteps?: RefundStep[];
+  /**
+   * 원장 환불 결정(원장 2026-11-06 — 목록 '승인 진행'과 같은 줄·차례: 관리자 → 환불 결정 → 데스크) — 결정 대기면 받는 원장급(결정일 빈칸),
+   * 결정했으면 결정한 원장(결정일). 없으면 칸 없음(환불과 무관).
+   */
+  refundDecisionSign?: { names: string[]; at: string | null } | null;
   consultations?: ReportConsultation[];
   refundCheck?: ReactNode;
   subjectHistory?: SubjectHistoryRow[];
@@ -47,7 +53,11 @@ export function ReportForm({ report: r, body, events, labels, nameOf, approverNa
   const direct = isDirectReport(r);
   const homeroom = [...new Set(courses.map(c => c.teacherName).filter(Boolean))].join(", ") || "—";
   // 결재란(원장 2026-11-03): 원장 칸은 원장을 지정했던 옛 보고서에만 · 데스크 환불을 요청했으면 '데스크' 칸(담당 · 환불완료일).
-  const desk = refundSteps.length ? [{ role: "데스크", name: refundSteps.map(s => s.deskName).join("\n"), date: refundSteps.map(s => `환불완료일 : ${s.completedDate ?? ""}`).join("\n") }] : [];
+  // 2026-11-06: 데스크 담당은 직급 이름(`deskLabel` — 목록 승인 진행과 같은 표기) · 그 앞에 '환불 결정'(원장) 칸.
+  const desk = [
+    ...(refundDecisionSign ? [{ role: "환불 결정", name: refundDecisionSign.names.join("\n"), date: `결정일 : ${refundDecisionSign.at ? date(refundDecisionSign.at) : ""}` }] : []),
+    ...(refundSteps.length ? [{ role: "데스크", name: refundSteps.map(deskLabel).join("\n"), date: refundSteps.map(s => `환불완료일 : ${s.completedDate ?? ""}`).join("\n") }] : []),
+  ];
   const deskWaiting = refundWaiting(r, refundSteps);
   return <ReportSheet
     refundCheck={refundCheck}

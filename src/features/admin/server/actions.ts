@@ -11,7 +11,8 @@ import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
 import { mergeNoteFor } from "@/features/students/status/merged";
 import { CLEANUP_WITHDRAWAL_MEMO } from "@/features/withdrawals/system-bulk";
-import { canRequestReport, missingReportSchema } from "@/features/withdrawal-reports/model";
+import { canRequestReport, missingReportSchema, type WithdrawalReport } from "@/features/withdrawal-reports/model";
+import { applyDirectNow } from "@/features/withdrawal-reports/server/direct-apply";
 import { explainDbError, logDbError } from "@/lib/supabase/db-error";
 import { MERGE_TABLES } from "../merge-scope";
 import { planMakeeduCarry } from "../makeedu-carry";
@@ -453,6 +454,8 @@ export async function bulkWithdrawStudents(
   // 🔴 중간에 멈춰도 **이미 퇴원된 만큼은** 기록한다(무기록 창 방지, 적대 리뷰 F6) — 로그 id는 실제로 처리된 학생.
   const done: string[] = [];
   const reportIds: string[] = [];
+  /** 기록은 했지만 아직 처리되지 않은 학생(원장 환불 결정 대기 · 확인 실패 — 처리일 cron이 다시 본다). */
+  const waiting: string[] = [];
   let failed = 0;
   let firstFailure: string | null = null;
   let notReady = false;
@@ -475,12 +478,18 @@ export async function bulkWithdrawStudents(
     }
     done.push(id);
     reportIds.push(String(data));
+    // 처리일이 오늘이라도 DB 안의 처리는 환불 확인 값이 없어 미룬다(s2_0032) — 같은 요청에서 확인 값과 처리(원장 환불 결정 전이면 처리 예약으로 남는다).
+    const { data: report } = await admin.from("withdrawal_reports").select("*").eq("tenant_id", user.tenantId).eq("id", String(data)).maybeSingle();
+    if (report) {
+      const applied = await applyDirectNow(report as WithdrawalReport, user.id);
+      if (applied.report.status !== "completed") waiting.push(id);
+    } else waiting.push(id);
   }
   if (done.length > 0) {
     await logAction({
       action: "student_bulk_withdraw",
       targetType: "student",
-      metadata: { count: done.length, studentIds: done, reportIds, ...(failed > 0 ? { failed } : {}) },
+      metadata: { count: done.length, studentIds: done, reportIds, ...(failed > 0 ? { failed } : {}), ...(waiting.length ? { refundWait: waiting.length } : {}) },
     });
   }
   if (done.length === 0) {

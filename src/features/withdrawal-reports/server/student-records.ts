@@ -7,6 +7,7 @@ import type { ArchiveRow } from "../archive-model";
 import { canReadReport, reportViewer } from "./queries";
 import { canReadArchive } from "./archives";
 import { loadRefundSteps } from "./refund-steps";
+import { loadRefundHolds } from "./refund-check";
 
 /**
  * 퇴원 상세의 '퇴원보고서' 카드 — **한 학생**의 새 보고서와 기존 원본(원장 2026-10-23 *"퇴원보고서 연동"*).
@@ -107,7 +108,9 @@ export async function loadStudentReportRecords(studentId: string): Promise<Stude
     const readable = reports.rows.filter((r) => canReadReport(r, viewer));
     // 데스크 환불 단계(s2_0025)는 아직 처리 전인 보고서에만 의미가 있다 — 그런 보고서가 있을 때만 읽고, 못 읽으면 단계 없이.
     const open = readable.filter((r) => !["completed", "canceled", "blocked"].includes(r.status));
-    const steps = open.length ? await loadRefundSteps(tenant, open).catch(() => undefined) : undefined;
+    const [steps, holds] = open.length
+      ? await Promise.all([loadRefundSteps(tenant, open).catch(() => undefined), loadRefundHolds(tenant, open.map((r) => r.group_id)).catch(() => undefined)])
+      : [undefined, undefined];
     return {
       status: "ok",
       // 다 보는 사람만 '없습니다'를 단정한다 — 원장, 그리고 열람 과목 제한이 없는 관리자급(원장 2026-10-30 열람 확대).
@@ -117,7 +120,7 @@ export async function loadStudentReportRecords(studentId: string): Promise<Stude
           id: r.id,
           groupId: r.group_id ?? r.id,
           status: r.status,
-          statusLabel: reportStatusLabel(r, steps?.get(r.group_id ?? r.id) ?? []),
+          statusLabel: reportStatusLabel(r, steps?.get(r.group_id ?? r.id) ?? [], !!r.group_id && !!holds?.has(r.group_id)),
           exitKind: r.exit_kind,
           subjects: r.subjects ?? [],
           effectiveDate: r.effective_date,

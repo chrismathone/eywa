@@ -4,6 +4,7 @@ import type { SubjectHistoryRow } from "./course-period";
 import { reasonDetailOf } from "@/features/withdrawals/reason-detail";
 import { REASON_LABEL } from "@/features/withdrawals/types";
 import { CLEANUP_WITHDRAWAL_MEMO } from "@/features/withdrawals/system-bulk";
+import { REFUND_DECISION_CHIP } from "./refund-decision";
 
 /** 상태 이름 — 관리자 단계는 '관리자 요청'(원장 2026-11-06 *"2줄 처리 안되게 관리자 요청으로"* · DB 알림 제목 '퇴원보고서 관리자 승인 요청'은 그대로). */
 export const REPORT_STATUS = {
@@ -14,8 +15,12 @@ export const REPORT_STATUS = {
 } as const;
 export type ReportStatus = keyof typeof REPORT_STATUS;
 export type ReportAction = "save" | "submit" | "approve" | "reject" | "cancel";
-/** 처리 이력 이름 — `refund`(보고서에서 데스크 환불 요청) · `release`(데스크 환불 완료 뒤 처리)는 s2_0025(원장 2026-11-03). */
-export const REPORT_ACTION_LABEL = { request: "작성 요청", save: "임시 저장", submit: "보고서 제출", approve: "승인", reject: "반려", cancel: "요청 취소", apply: "퇴원·수강종료 처리", direct: "관리자 바로 처리", refund: "데스크 환불 요청", release: "데스크 환불 완료 · 처리", reassign: "승인자 정리", refund_notice: "데스크 환불 확인 알림" } as const;
+/**
+ * 처리 이력 이름 — `refund`(보고서에서 데스크 환불 요청) · `release`(환불 확인 뒤 처리)는 s2_0025(원장 2026-11-03).
+ * `refund_hold`·`refund_hold_clear`·`refund_decision`(원장 환불 결정 대기 · 풀림 · '환불 없음')은 s2_0032(원장 2026-11-06).
+ * `release`는 데스크 환불 완료 뒤에도, 원장 결정 뒤에도 지난다 — 이름을 '환불 확인 뒤 처리'로(그 전 이름 '데스크 환불 완료 · 처리' · 운영 기록 0건).
+ */
+export const REPORT_ACTION_LABEL = { request: "작성 요청", save: "임시 저장", submit: "보고서 제출", approve: "승인", reject: "반려", cancel: "요청 취소", apply: "퇴원·수강종료 처리", direct: "관리자 바로 처리", refund: "데스크 환불 요청", release: "환불 확인 뒤 처리", reassign: "승인자 정리", refund_notice: "데스크 환불 확인 알림", refund_hold: "환불 결정 대기", refund_hold_clear: "환불 결정 대기 해제", refund_decision: "원장 환불 결정" } as const;
 const text = z.string().trim().max(5000, "항목별 5,000자 이내로 입력해 주세요.");
 export const bodySchema = z.object({
   reason: z.enum(Object.keys(REASON_LABEL) as [keyof typeof REASON_LABEL, ...Array<keyof typeof REASON_LABEL>]),
@@ -151,7 +156,9 @@ export function managerStepSkipped(r: Pick<WithdrawalReport, "manager_id" | "man
  * 데스크 환불 단계(원장 2026-11-03 *"환불요청시 퇴원보고서에 '데스크 환불 요청 승인 단계'도 같이 추가"*) — 보고서에서 만든 환불 요청서 한 장.
  * 환불완료일자(`completedDate`)가 들어가면 끝. 요청서를 지우면 단계에서 빠진다(DB `withdrawal_report_refund_pending`과 같은 판정).
  */
-export type RefundStep = { documentId: string; deskId: string | null; deskName: string; completedDate: string | null };
+export type RefundStep = { documentId: string; deskId: string | null; deskName: string; completedDate: string | null;
+  /** 데스크 담당의 직급(`users.job_title`) · 재직 여부 — 승인 진행의 '○ 홍길동 대리'(원장 2026-11-06 · `deskLabel`). 못 읽었으면 없음(이름만). */
+  deskTitle?: string | null; deskActive?: boolean };
 /** 처리를 기다리게 하는 데스크 환불이 남았나 — 끝난·취소·재검토 보고서엔 기다릴 처리가 없다. */
 export function refundWaiting(r: Pick<WithdrawalReport, "status">, refunds: readonly RefundStep[]) {
   return !["completed", "canceled", "blocked"].includes(r.status) && refunds.some(s => !s.completedDate);
@@ -160,14 +167,16 @@ export function refundWaiting(r: Pick<WithdrawalReport, "status">, refunds: read
  * 상태 칩 — 데스크 환불이 남았으면 원래 단계와 '데스크 환불 요청'을 함께(원장 2026-11-03 *"'관리자 승인 요청' '데스크 환불 요청' 같이 나타내줄것"*).
  * 관리자 단계는 환불과 상관없이 늘 '관리자 요청'(REPORT_STATUS · 2026-11-06 이름) · 이 보고서 승인이 끝났으면 '관리자 승인 완료' + 데스크 단계
  * ('데스크 환불 요청' 대기 · 환불은 끝났는데 아직 처리 전이면 '데스크 환불 완료' — '다른 보고서 대기'로 잘못 읽히지 않게).
+ * 원장 환불 결정 대기(원장 2026-11-06 · DB 묶음 표시 `refund_hold` — s2_0032)면 원래 단계 바로 뒤에 '환불 결정 대기'. 처리 완료·취소·재검토엔 붙이지 않는다.
  */
-export function reportStatusChips(r: Pick<WithdrawalReport, "status">, refunds: readonly RefundStep[] = []): string[] {
-  if (refundWaiting(r, refunds)) return [r.status === "approved" ? "관리자 승인 완료" : REPORT_STATUS[r.status], "데스크 환불 요청"];
-  if (r.status === "approved" && refunds.length) return ["관리자 승인 완료", "데스크 환불 완료"];
-  return [REPORT_STATUS[r.status]];
+export function reportStatusChips(r: Pick<WithdrawalReport, "status">, refunds: readonly RefundStep[] = [], decisionHold = false): string[] {
+  const hold = decisionHold && !["completed", "canceled", "blocked"].includes(r.status);
+  const desk = refundWaiting(r, refunds) ? "데스크 환불 요청" : r.status === "approved" && refunds.length ? "데스크 환불 완료" : null;
+  if (!hold && !desk) return [REPORT_STATUS[r.status]];
+  return [r.status === "approved" ? "관리자 승인 완료" : REPORT_STATUS[r.status], ...(hold ? [REFUND_DECISION_CHIP] : []), ...(desk ? [desk] : [])];
 }
-export function reportStatusLabel(r: Pick<WithdrawalReport, "status">, refunds: readonly RefundStep[] = []) {
-  return reportStatusChips(r, refunds).join(" · ");
+export function reportStatusLabel(r: Pick<WithdrawalReport, "status">, refunds: readonly RefundStep[] = [], decisionHold = false) {
+  return reportStatusChips(r, refunds, decisionHold).join(" · ");
 }
 export function isParticipant(r: Pick<WithdrawalReport, "requested_by" | "teacher_id" | "manager_id" | "director_id" | "manager_ids" | "director_ids">, userId: string) {
   return [r.requested_by, r.teacher_id, ...managerIds(r), ...directorIds(r)].includes(userId);
@@ -182,6 +191,8 @@ export function cancelsAsDirector(role: SystemRole, teacherView: boolean) { retu
 export function canCancelReport(r: Pick<WithdrawalReport, "status" | "requested_by">, userId: string, writable: boolean, directorLevel = false) {
   return writable && (r.requested_by === userId || directorLevel) && !["completed", "canceled"].includes(r.status);
 }
+/** 요청 취소 사유 최대 글자 수(원장 2026-11-06 — 취소 사유 입력 · DB s2_0032 'cancel'도 1~500자로 거른다). 바꿀 땐 함께 바꾼다. */
+export const CANCEL_REASON_MAX = 500;
 /**
  * 보고서에서 환불을 승인(= 데스크 환불 요청서를 만든다)할 수 있나 — **원장급만**(원장 2026-10-29 *"환불승인은 원장급이상만 · 이외의 관리자는 확인만"*).
  * 관리자·요청자·작성 강사는 청구·요청서·담당·완료 여부를 보기만 한다. 취소된 보고서는 안 된다. 처리가 끝난 보고서는 된다(기다리게 하지 않는다).

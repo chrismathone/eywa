@@ -44,6 +44,7 @@ export function RefundSheet({
   userId,
   canWrite = false,
   startEditing = false,
+  completionLock = null,
 }: {
   data: RefundRequestData;
   id?: string;
@@ -51,6 +52,11 @@ export function RefundSheet({
   userId: string;
   canWrite?: boolean;
   startEditing?: boolean;
+  /**
+   * 환불완료일자 잠금 사유(원장 2026-11-06) — 퇴원보고서에 이어진 요청서는 그 데스크 담당과 원장만 넣거나 지운다. 잠기면 수정 중에도 칸 대신
+   * 지금 값과 사유를 보이고, 같은 값을 숨은 칸으로 보낸다(저장해도 바뀌지 않는다 · 서버 저장 액션·DB 트리거가 다시 막는다).
+   */
+  completionLock?: string | null;
 }) {
   const [editing, setEditing] = useState(startEditing);
   const [state, formAction] = useActionState<RefundActionState, FormData>(saveRefundRequest, undefined);
@@ -278,7 +284,17 @@ export function RefundSheet({
           </tr>
           <tr>
             <th className={head}>환불완료일자</th>
-            <td className={`${cell} num`}>{field("res_completedDate", res.completedDate, { label: "환불완료일자", type: "date" })}</td>
+            <td className={`${cell} num`}>
+              {editing && completionLock ? (
+                <>
+                  <input type="hidden" name="res_completedDate" value={res.completedDate} />
+                  {V(res.completedDate)}
+                  <span className="text-text-faint mt-0.5 block text-[11px] print:hidden">{completionLock}</span>
+                </>
+              ) : (
+                field("res_completedDate", res.completedDate, { label: "환불완료일자", type: "date" })
+              )}
+            </td>
           </tr>
           <tr>
             {/* 완료 처리자 = 환불완료일자 저장 시 서버가 자동 기록(읽기 전용, 위조 불가) */}

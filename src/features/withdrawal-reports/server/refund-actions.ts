@@ -8,8 +8,11 @@ import { notifyUsers } from "@/features/notifications/server/notify";
 import { emptyRefund, refundTitle, REFUND_FORM_TYPE } from "@/features/billing/refund-request";
 import { formatPaymentLines } from "@/features/billing/refund-prefill";
 import { canRequestRefund, cancelsAsDirector, missingReportSchema } from "../model";
+import { DESK_NOT_DESIGNATED, decisionBlocksProcessing, reapprovable, refundableKeys, type RefundCheck } from "../refund-decision";
 import { reportViewer, getReport } from "./queries";
 import { LINE_KEY, claimedEarlier, lineRefundable, loadDeskStaff, loadLaterInvoices, refundTag, type LaterInvoice, type LaterLine } from "./refund";
+import { loadGroupRefundCheck } from "./refund-check";
+import { releaseWithdrawalGroup } from "./release";
 
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 
@@ -29,11 +32,16 @@ const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
  *   🔴 **원자적으로**: 잇기가 실패하면(그 사이 묶음이 처리·재검토·취소됨 · DB 준비 전 등) 방금 만든 요청서를 지우고(감사로그) 오류를 돌려준다 —
  *   요청서만 남고 기다림이 걸리지 않는 일이 없게. 할 일·알림은 잇기가 끝난 뒤에만 만든다. 화면이 본 상태(처리 전인가)를 DB에 넘겨 같이 대조한다.
  * - 할 일: `refund_desk_task_open`(s2_0011) — 환불완료일자를 넣으면 처리됨. 알림: 데스크 담당자 한 사람(자기 자신은 고를 수 없음).
- * - 감사로그: `withdrawal_refund_approve`(퇴원보고서 쪽 · 데스크 단계 여부) + `refund_request_create`(요청서 쪽).
+ * - 감사로그: `withdrawal_refund_approve`(퇴원보고서 쪽 · 데스크 단계 여부 · 환불하지 않음으로 기록한 줄) + `refund_request_create`(요청서 쪽).
+ * - **원장 환불 결정**(원장 2026-11-06 · s2_0032): 이 동작이 곧 결정이다 — 고른 줄 = '환불'(이 요청서), 이 화면의 **고르지 않은 환불 가능 줄 = '환불하지 않음'**.
+ *   화면이 본 고르지 않은 줄(`skipped`)과 지금 줄이 다르면(새 납부 동기화 등) 거절한다 — 원장이 보지 않은 줄을 '환불하지 않음'으로 남기지 않게.
+ *   묶음 환불 확인 값을 같은 요청에서 계산해 DB에 넘긴다(결정 대기 표시 맞춤).
+ * - 데스크 담당자 = **학원 설정 '데스크 담당자'로 지정한 사람**(그중 수납 쓰기 권한자 · `loadDeskStaff`)만. 지정이 비면 막는다(대체 없음 · DB도 같은 명단).
  */
-export async function approveWithdrawalRefund(reportId: string, keys: string[], deskId: string): Promise<{ ok: true; documentId: string; gates: boolean } | { error: string }> {
+export async function approveWithdrawalRefund(reportId: string, keys: string[], deskId: string, skipped: string[]): Promise<{ ok: true; documentId: string; gates: boolean } | { error: string }> {
   if (![reportId, deskId].every(v => /^[0-9a-f-]{36}$/i.test(v))) return { error: "요청 내용을 확인해 주세요." };
   if (!Array.isArray(keys) || !keys.length || keys.length > 40 || !keys.every(k => typeof k === "string" && LINE_KEY.test(k))) return { error: "환불할 건을 골라 주세요." };
+  if (!Array.isArray(skipped) || skipped.length > 200 || !skipped.every(k => typeof k === "string" && LINE_KEY.test(k))) return { error: "퇴원월 뒤 청구가 바뀌었습니다. 새로고침 후 다시 골라 주세요." };
   const picked = [...new Set(keys)];
   const viewer = await reportViewer();
   if (!viewer?.writable) return { error: "이 화면에서는 처리할 수 없습니다." };
@@ -45,10 +53,20 @@ export async function approveWithdrawalRefund(reportId: string, keys: string[], 
   // 화면이 본 상태 — 처리 전(묶음이 진행 중·처리 예약)이면 이 환불이 끝나야 처리한다. DB가 같은 판정으로 다시 대조한다(attach).
   const expectGate = !!report.group_id && !["completed", "blocked", "canceled"].includes(report.status);
   const [later, desks] = await Promise.all([loadLaterInvoices(report), loadDeskStaff(report.tenant_id)]);
-  const desk = desks.find(d => d.id === deskId && d.id !== viewer.user.id);
-  if (!desk) return { error: "데스크 담당자를 다시 골라 주세요." };
+  if (!desks.designated) return { error: DESK_NOT_DESIGNATED };
+  const desk = desks.staff.find(d => d.id === deskId && d.id !== viewer.user.id);
+  if (!desk) return { error: "데스크 담당자를 다시 골라 주세요. 학원 설정에 지정된 데스크 담당자 중 수납 쓰기 권한이 있는 사람만 고를 수 있습니다." };
   const chosen = pick(later, picked);
   if ("error" in chosen) return chosen;
+  // 고르지 않은 줄 = 이 화면의 지금 환불 가능 줄 중 고르지 않은 것 — 화면이 본 것과 같아야 한다(원장이 보지 않은 줄을 '환불하지 않음'으로 남기지 않는다).
+  const none = refundableKeys(later).filter(k => !picked.includes(k));
+  if (!sameKeys(none, skipped)) return { error: "퇴원월 뒤 청구가 바뀌었습니다. 새로고침 후 다시 골라 주세요." };
+  // 묶음 환불 확인 값(같은 요청 · 요청서를 만들기 전) — 못 만들면 요청서를 만들지 않는다.
+  let check: RefundCheck | null = null;
+  if (report.group_id) {
+    try { check = await loadGroupRefundCheck(report.tenant_id, report.group_id); }
+    catch (e) { console.error("[withdrawal-refund] 환불 확인 실패", e); return { error: "환불할 수 있는 청구를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." }; }
+  }
 
   const admin = createAdminClient();
   const { data: invRows, error: invError } = await admin.from("invoices").select("id,payment_method,paid_at")
@@ -106,7 +124,7 @@ export async function approveWithdrawalRefund(reportId: string, keys: string[], 
   }
 
   // 데스크 환불 단계 — 요청서를 보고서에 잇는다(처리 전 묶음이면 환불 완료까지 처리를 기다린다 · s2_0025). 실패하면 요청서를 지우고 그만둔다.
-  let link = await attachRefundStep(report.tenant_id, viewer.user.id, report.id, documentId, desk.id, expectGate);
+  let link = await attachRefundStep(report.tenant_id, viewer.user.id, report.id, documentId, desk.id, expectGate, report.group_id ? none : null, check);
   if (!link.ok) {
     // DB에선 이어졌는데 응답만 잃었을 수 있다 — 지우기 전에 실제로 이어졌는지 한 번 더 본다(이어졌으면 지우지 않고 그대로 간다).
     const recheck = await linkedStep(report.tenant_id, documentId);
@@ -129,8 +147,9 @@ export async function approveWithdrawalRefund(reportId: string, keys: string[], 
   }
 
   const items = chosen.map(c => `${c.inv.period} ${c.line.description.trim()} ${won(c.line.paidNet)}`);
+  const notRefunded = describeLines(later, none);
   const meta = { reportId: report.id, documentId, items, totalAmount: data.refund.totalAmount, effectiveDate: report.effective_date, deskId: desk.id, deskName: desk.name,
-    deskStep: link.gates ? "데스크 환불 완료 뒤 처리" : "처리를 기다리지 않음" };
+    deskStep: link.gates ? "데스크 환불 완료 뒤 처리" : "처리를 기다리지 않음", ...(notRefunded.length ? { notRefunded } : {}) };
   await logAction({ action: "withdrawal_refund_approve", targetType: "student", targetLabel: snapshot.name, metadata: meta });
   await logAction({ action: "refund_request_create", targetType: "refund_request", targetLabel: refundTitle(data),
     metadata: { documentId, studentName: snapshot.name, totalAmount: data.refund.totalAmount, requestDate: data.student.requestDate, source: "퇴원보고서 환불 승인" } });
@@ -161,15 +180,66 @@ async function linkedStep(tenantId: string, documentId: string): Promise<{ linke
   return { linked: true, gates: !groupError && ["pending", "scheduled"].includes(String(group?.status ?? "")) };
 }
 
-/** 데스크 환불 단계 잇기(s2_0025) — 처리 전 묶음이면 `gates`. 화면이 본 상태와 다르거나 옛 DB(함수 없음)·실패면 `ok: false`(호출부가 요청서를 지운다). */
-async function attachRefundStep(tenantId: string, actorId: string, reportId: string, documentId: string, deskId: string, expectGate: boolean): Promise<{ ok: boolean; gates: boolean; error?: string }> {
-  const { data, error } = await createAdminClient().rpc("attach_withdrawal_report_refund", { p_tenant: tenantId, p_actor: actorId, p_report: reportId, p_document: documentId, p_desk: deskId, p_expect_gate: expectGate })
+/**
+ * 데스크 환불 단계 잇기(s2_0025 · s2_0032) — 처리 전 묶음이면 `gates`. 화면이 본 상태와 다르거나 옛 DB(함수 없음)·실패면 `ok: false`(호출부가 요청서를 지운다).
+ * DB가 행위자(원장급) · 데스크(학원 설정 지정자 · null 거절)를 다시 보고, 고른 줄 '환불' · `none` 줄 '환불하지 않음'을 같은 거래에서 남긴다.
+ */
+async function attachRefundStep(tenantId: string, actorId: string, reportId: string, documentId: string, deskId: string, expectGate: boolean, none: string[] | null, check: RefundCheck | null): Promise<{ ok: boolean; gates: boolean; error?: string }> {
+  const { data, error } = await createAdminClient().rpc("attach_withdrawal_report_refund", { p_tenant: tenantId, p_actor: actorId, p_report: reportId, p_document: documentId, p_desk: deskId, p_expect_gate: expectGate, p_none: none, p_check: check })
     .then(r => r, (e: unknown) => ({ data: null, error: { message: e instanceof Error ? e.message : String(e), code: "" } }));
   if (error) {
     console.error("[withdrawal-refund] 데스크 환불 단계 연결 실패", error.message);
     return { ok: false, gates: false, error: missingReportSchema(error) ? "데스크 환불 단계를 준비 중입니다(DB 적용 전). 잠시 후 다시 시도해 주세요." : error.message };
   }
   return { ok: true, gates: !!(data as { gates?: boolean } | null)?.gates };
+}
+
+/**
+ * 원장 **'환불 없음'**(원장 2026-11-06 · s2_0032 `decide_withdrawal_report_refund`) — 이 보고서의 지금 환불 가능 줄을 모두 '환불하지 않음'으로 정한다.
+ * - 권한: 원장급만(`canRequestRefund` — 환불 승인과 같은 판정) · 처리 전 보고서만(처리 완료·취소·재검토엔 기다릴 처리가 없다). DB도 행위자 역할을 본다.
+ * - `keys` = 화면이 본 환불 가능 줄 전부 — 지금 줄과 다르면(새 납부 동기화 등) 거절한다(원장이 보지 않은 줄을 정하지 않게).
+ * - 묶음 환불 확인 값을 같은 요청에서 계산해 넘긴다 → DB가 결정 대기를 다시 센다. 결정할 줄이 없고 승인·데스크 환불이 끝났으면(ready)
+ *   같은 확인 값으로 이어서 처리한다(release — 실패해도 결정은 남고 처리일 cron이 다시 처리한다).
+ * - 감사로그 `withdrawal_refund_decline`(줄 · 금액 · 다음 단계) · 보고서 이력 '원장 환불 결정'(DB).
+ */
+export async function declineWithdrawalRefund(reportId: string, keys: string[]): Promise<{ ok: true; processed: boolean; undecided: number } | { error: string }> {
+  if (!/^[0-9a-f-]{36}$/i.test(reportId)) return { error: "요청 내용을 확인해 주세요." };
+  if (!Array.isArray(keys) || !keys.length || keys.length > 200 || !keys.every(k => typeof k === "string" && LINE_KEY.test(k))) return { error: "환불하지 않을 건을 확인해 주세요." };
+  const viewer = await reportViewer();
+  if (!viewer?.writable) return { error: "이 화면에서는 처리할 수 없습니다." };
+  const record = await getReport(reportId);
+  if (!record) return { error: "보고서에 접근할 수 없습니다." };
+  const report = record.report;
+  if (report.status === "canceled") return { error: "취소된 보고서입니다." };
+  if (!canRequestRefund(report, viewer.writable, cancelsAsDirector(viewer.user.systemRole, !!viewer.teacherId))) return { error: "환불 결정은 원장만 할 수 있습니다." };
+  if (!report.group_id || !decisionBlocksProcessing(report.status)) return { error: "처리 전 퇴원보고서에서만 환불 없음을 정할 수 있습니다." };
+  const groupId = report.group_id;
+  let later: LaterInvoice[], check: RefundCheck;
+  try { [later, check] = await Promise.all([loadLaterInvoices(report), loadGroupRefundCheck(report.tenant_id, groupId)]); }
+  catch (e) { console.error("[withdrawal-refund-decline] 환불 확인 실패", e); return { error: "환불할 수 있는 청구를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." }; }
+  const current = refundableKeys(later);
+  if (!sameKeys(current, keys)) return { error: "퇴원월 뒤 청구가 바뀌었습니다. 새로고침 후 다시 확인해 주세요." };
+  const { data, error } = await createAdminClient().rpc("decide_withdrawal_report_refund", { p_tenant: report.tenant_id, p_actor: viewer.user.id, p_report: report.id, p_none: current, p_check: check });
+  if (error) return { error: missingReportSchema(error) ? "환불 결정 기능을 준비 중입니다(DB 적용 전). 잠시 후 다시 시도해 주세요." : error.message };
+  const result = (data ?? {}) as { undecided?: number | null; ready?: boolean };
+  const released = result.ready ? await releaseWithdrawalGroup({ tenantId: report.tenant_id, groupId, actorId: viewer.user.id, check }) : null;
+  const processed = !!released && released.released + released.blocked > 0;
+  const undecided = result.undecided ?? 0;
+  await logAction({ action: "withdrawal_refund_decline", targetType: "student", targetLabel: report.snapshot.name,
+    metadata: { reportId: report.id, items: describeLines(later, current), effectiveDate: report.effective_date,
+      next: processed ? "이어서 처리" : undecided > 0 ? `다른 보고서의 결정 안 된 줄 ${undecided}건` : "승인·데스크 환불이 끝나면 처리" } });
+  revalidatePath("/withdrawal-reports", "layout");
+  return { ok: true, processed, undecided };
+}
+
+/** 두 키 목록이 같은 집합인가(차례 무관 · 겹침 무시). */
+function sameKeys(a: readonly string[], b: readonly string[]) {
+  const x = new Set(a), y = new Set(b);
+  return x.size === y.size && [...x].every(k => y.has(k));
+}
+/** 줄 키 → 감사로그 글('2026-11 영어 반 315,000원'). */
+function describeLines(later: LaterInvoice[], keys: readonly string[]): string[] {
+  return later.flatMap(inv => inv.lines.filter(l => keys.includes(l.key)).map(l => `${inv.period} ${l.description.trim()} ${won(l.paidNet)}`));
 }
 
 /** 고른 줄 → (청구, 줄). 하나라도 이 보고서의 환불 가능한 줄이 아니면 거절한다. */
@@ -181,6 +251,8 @@ function pick(later: LaterInvoice[], keys: string[]): { inv: LaterInvoice; line:
     if (!inv || !line) return { error: "퇴원월 뒤 청구 줄이 아닙니다. 새로고침 후 다시 골라 주세요." };
     if (line.refund) return { error: "이미 환불 요청서가 있는 건이 섞여 있습니다. 새로고침 후 다시 골라 주세요." };
     if (!lineRefundable(inv, line)) return { error: "낸 금액이 없거나 이미 환불된 건이 섞여 있습니다." };
+    // 다른 요청의 요청서가 담은 줄 — 돈을 돌려줬거나 진행 중이면 다시 승인하지 않는다(같은 돈 두 번 막기 · 팀장 결정 2026-11-06).
+    if (!reapprovable(line)) return { error: "다른 요청의 요청서가 이미 담은 건이 섞여 있습니다. 그 건은 고르지 말고(환불하지 않음) 요청서를 확인해 주세요." };
     out.push({ inv, line });
   }
   return out;

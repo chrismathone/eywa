@@ -16,6 +16,9 @@ import { staffSubjectScopeOf } from "@/features/staff/department/subject-scope";
 import { loadReportPrefill } from "./prefill";
 import { loadReportBilling } from "./billing";
 import { loadDeskStaff, loadLaterInvoices, type LaterInvoice } from "./refund";
+import { loadRefundDecisions, loadRefundHolds, loadRefundOutcomes } from "./refund-check";
+import { DESK_NOT_DESIGNATED, declinedKeys, refundableKeys, undecidedKeys, type RefundDecision } from "../refund-decision";
+import type { RefundOutcome } from "../approval-lines";
 import { loadRefundSteps } from "./refund-steps";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { liveBillingForSubmitted } from "../prefill";
@@ -181,14 +184,30 @@ export async function getReport(id: string) {
   const laterInvoices: LaterInvoice[] = data.status === "canceled" || !billingOk ? []
     : await loadLaterInvoices(data as WithdrawalReport).catch((e) => { console.error("[withdrawal-report-later-invoices]", e); return []; });
   // 데스크 담당자 목록은 환불을 승인할 수 있는 원장급에게만(이름 목록을 다른 사람에게 내리지 않는다) — 권한 판정 한 곳 `canRequestRefund`
-  // · 후보 = 수납 쓰기 권한이 있는 직원(`loadDeskStaff`) · 자기 자신은 빼고(자기 알림은 가지 않음 — notifyUsers).
-  // 데스크 환불 단계(s2_0025)는 함께 읽는다 — 못 읽으면 단계 없이(화면은 연다).
+  // · 후보 = 학원 설정 '데스크 담당자' 중 수납 쓰기 권한이 있는 직원(`loadDeskStaff` · 원장 2026-11-06) · 자기 자신은 빼고(자기 알림은 가지 않음 — notifyUsers).
+  //   지정이 비었으면 고를 사람이 없다 — 안내(`deskNotice`)로 환불 승인을 막는다(원장 등으로 대신하지 않는다).
+  // 데스크 환불 단계(s2_0025)·원장 환불 결정(s2_0032 — 줄마다 결정 · 묶음의 '환불 결정 대기' 표시)은 함께 읽는다 — 못 읽으면 없이(화면은 연다).
   const refundAllowed = canRequestRefund(data as WithdrawalReport, viewer.writable, cancelsAsDirector(viewer.user.systemRole, !!viewer.teacherId));
-  const [deskStaff, refundSteps] = await Promise.all([
-    laterInvoices.length && refundAllowed ? loadDeskStaff(viewer.user.tenantId).then(list => list.filter(s => s.id !== viewer.user.id), () => []) : Promise.resolve([]),
+  const groupId = (data as WithdrawalReport).group_id ?? null;
+  const refundable = refundableKeys(laterInvoices);
+  const [desk, refundSteps, decisions, hold, outcomes] = await Promise.all([
+    refundable.length && refundAllowed
+      ? loadDeskStaff(viewer.user.tenantId).then(d => ({ staff: d.staff.filter(s => s.id !== viewer.user.id), designated: d.designated, failed: false }),
+        (e: unknown) => { console.error("[withdrawal-report-desk-staff]", e); return { staff: [], designated: true, failed: true }; })
+      : Promise.resolve({ staff: [] as { id: string; name: string }[], designated: true, failed: false }),
     loadRefundSteps(viewer.user.tenantId, [data as WithdrawalReport]).then(map => map.get(data.group_id ?? data.id) ?? [], (e: unknown) => { console.error("[withdrawal-report-refund-steps]", e); return [] as RefundStep[]; }),
+    groupId ? loadRefundDecisions(viewer.user.tenantId, groupId).catch((e: unknown) => { console.error("[withdrawal-report-refund-decisions]", e); return new Map<string, RefundDecision>(); }) : Promise.resolve(new Map<string, RefundDecision>()),
+    groupId ? loadRefundHolds(viewer.user.tenantId, [groupId]).then(map => map.has(groupId), () => false) : Promise.resolve(false),
+    groupId ? loadRefundOutcomes(viewer.user.tenantId, [groupId]).catch((e: unknown) => { console.error("[withdrawal-report-refund-outcomes]", e); return new Map<string, RefundOutcome>(); }) : Promise.resolve(new Map<string, RefundOutcome>()),
   ]);
-  return { report: data as WithdrawalReport, events: [...(events ?? [])].reverse() as ReportEvent[], assignmentChanged, consultations, laterInvoices, deskStaff, refundSteps, subjectHistory, ...prefill };
+  const deskNotice = !refundAllowed || !refundable.length ? undefined
+    : desk.failed ? "데스크 담당자를 불러오지 못했습니다. 새로고침해 주세요."
+    : !desk.designated ? DESK_NOT_DESIGNATED
+    : !desk.staff.length ? "학원 설정에 지정된 데스크 담당자 중 고를 수 있는 사람(수납 쓰기 권한이 있고 본인이 아닌 사람)이 없습니다. 학원 설정에서 데스크 담당자를 다시 지정해 주세요."
+    : undefined;
+  // 원장 환불 결정(원장 2026-11-06) — 이 보고서 화면의 환불 가능 줄 중 결정 안 된 줄 · '환불하지 않음'으로 정한 줄 · 묶음의 대기 표시(목록 칩과 같은 값).
+  const refundDecision = { hold, undecided: undecidedKeys(refundable, decisions), declined: declinedKeys(refundable, decisions), outcome: (groupId ? outcomes.get(groupId) : undefined) ?? null };
+  return { report: data as WithdrawalReport, events: [...(events ?? [])].reverse() as ReportEvent[], assignmentChanged, consultations, laterInvoices, deskStaff: desk.staff, deskNotice, refundDecision, refundSteps, subjectHistory, ...prefill };
 }
 /**
  * 자동 저장용 가벼운 조회(원장 2026-11-05 실시간 저장 · 리뷰: 입력이 멈출 때마다 상세 전체 — 이력 300줄 · 스냅숏 · 수강 이력 · 장부 · 뒤 청구 ·

@@ -11,6 +11,11 @@ const m = vi.hoisted(() => ({
   sessionInsertError: null as { code: string; message: string } | null,
   sessionRows: [{ id: "doc1" }] as unknown[],
   listRows: [] as unknown[],
+  /** 퇴원보고서 연결(원장 2026-11-06) — 이어진 요청서면 데스크 담당. 기본 = 이어지지 않음. */
+  link: vi.fn(),
+  release: vi.fn(),
+  /** 고치기 전 저장돼 있던 요청서(form_data) — 기본 = 없음. */
+  existing: null as unknown,
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: m.user }));
@@ -18,6 +23,9 @@ vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: m.canWrite }));
 vi.mock("@/lib/auth/view-as", () => ({ viewAsTeacher: m.viewAs }));
 vi.mock("@/features/audit/server/log", () => ({ logAction: m.log }));
 vi.mock("@/features/students/server/queries", () => ({ getStudentEnrollments: vi.fn() }));
+// 퇴원보고서 쪽(이어진 요청서 · 이어서 처리)은 그쪽 시험이 본다 — 여기서는 부르는지와 판정만.
+vi.mock("@/features/withdrawal-reports/server/refund-steps", () => ({ loadRefundLink: m.link }));
+vi.mock("@/features/withdrawal-reports/server/release", () => ({ releaseWithdrawalRefunds: m.release }));
 /** 어느 클라이언트(`via`)로 무엇을 했는지 적는다. */
 const db = (via: "session" | "admin") => ({
   from: (table: string) => {
@@ -30,7 +38,7 @@ const db = (via: "session" | "admin") => ({
     };
     Object.assign(q, {
       select: rec("select"), eq: rec("eq"), update: rec("update"), delete: rec("delete"), insert: rec("insert"), order: rec("order"),
-      maybeSingle: async () => ({ data: null, error: null }),
+      maybeSingle: async () => ({ data: m.existing, error: null }),
       single: async () =>
         via === "session" && op === "insert" && m.sessionInsertError
           ? { data: null, error: m.sessionInsertError }
@@ -71,6 +79,9 @@ beforeEach(() => {
   m.sessionInsertError = null;
   m.sessionRows = [{ id: "doc1" }];
   m.listRows = [];
+  m.link.mockResolvedValue(null);
+  m.release.mockResolvedValue({ released: 0, blocked: 0, failed: 0 });
+  m.existing = null;
 });
 
 describe("saveRefundRequest — 대상 직원 명의 · 세션 먼저", () => {
@@ -132,6 +143,89 @@ describe("deleteRefundRequest — 읽기는 강사뷰 관리 클라이언트, �
     expect(writes().map((c) => c[0])).toEqual(["session", "admin"]);
     const adminEqs = m.calls.filter((c) => c[0] === "admin" && c[2] === "eq").map((c) => c[3]);
     expect(adminEqs).toEqual(expect.arrayContaining(["tenant_id", "id", "form_type"]));
+  });
+});
+
+describe("퇴원보고서에 이어진 요청서의 환불완료일자 — 담당 데스크와 원장급만(원장 2026-11-06)", () => {
+  const edit = (completedDate: string) => { const fd = form(); fd.set("id", "doc1"); fd.set("res_completedDate", completedDate); return fd; };
+  const desk = { id: "desk", tenantId: "t1", systemRole: "accountant", displayName: "데스크" };
+
+  it("🔴 담당 데스크가 아닌 수납 쓰기 권한자는 넣지 못한다 — 쓰지 않고 · 사유 · 감사로그(거절) · 처리도 부르지 않는다", async () => {
+    m.user.mockResolvedValue(target); m.viewAs.mockResolvedValue(null);
+    m.link.mockResolvedValue({ deskId: "desk", deskName: "데스크" });
+    const res = await saveRefundRequest(undefined, edit("2026-11-06"));
+    expect(res?.error).toContain("담당 데스크(데스크)와 원장만");
+    expect(writes()).toEqual([]);
+    expect(m.link).toHaveBeenCalledWith("t1", "doc1");
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ action: "refund_request_complete_denied", metadata: expect.objectContaining({ documentId: "doc1", attempted: "환불완료일자 2026-11-06 입력", deskName: "데스크" }) }));
+    expect(m.release).not.toHaveBeenCalled();
+  });
+
+  it("담당 데스크는 넣는다 → 기다리던 퇴원보고서를 이어서 처리(release)", async () => {
+    m.user.mockResolvedValue(desk); m.viewAs.mockResolvedValue(null);
+    m.link.mockResolvedValue({ deskId: "desk", deskName: "데스크" });
+    expect(await saveRefundRequest(undefined, edit("2026-11-06"))).toMatchObject({ ok: true });
+    expect(writes().map((c) => c[2])).toEqual(["update"]);
+    expect(m.release).toHaveBeenCalledWith({ tenantId: "t1", documentId: "doc1", actorId: "desk" });
+  });
+
+  it("원장급은 넣는다 · 강사뷰로 남의 화면에 들어간 원장은 원장 몫이 아니다(대상 직원 기준)", async () => {
+    m.user.mockResolvedValue(actual); m.viewAs.mockResolvedValue(null);
+    m.link.mockResolvedValue({ deskId: "desk", deskName: "데스크" });
+    expect(await saveRefundRequest(undefined, edit("2026-11-06"))).toMatchObject({ ok: true });
+    m.calls = [];
+    asTeacherView(target);
+    expect((await saveRefundRequest(undefined, edit("2026-11-06")))?.error).toContain("담당 데스크");
+    expect(writes()).toEqual([]);
+  });
+
+  it("🔴 강사뷰로 담당 데스크 화면에 들어가도 실제 로그인 계정이 그 데스크·원장급이 아니면 막는다(DB 트리거 = 실제 계정 · 관리 키 재쓰기로 지나가지 않게)", async () => {
+    const admin = { id: "office", tenantId: "t1", systemRole: "admin", displayName: "관리" };
+    m.user.mockImplementation(async (o?: { teacherView: boolean }) => (o?.teacherView ? desk : admin));
+    m.viewAs.mockResolvedValue({ teacherId: "desk" });
+    m.link.mockResolvedValue({ deskId: "desk", deskName: "데스크" });
+    const res = await saveRefundRequest(undefined, edit("2026-11-06"));
+    expect(res?.error).toContain("실제 로그인한 계정이 담당 데스크(데스크)이거나 원장일 때만");
+    expect(writes()).toEqual([]);
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ action: "refund_request_complete_denied", metadata: expect.objectContaining({ viaTeacherView: true }) }));
+    expect(m.release).not.toHaveBeenCalled();
+    // 실제 계정이 원장이면(강사뷰로 데스크 화면) 연다 — 행위자(데스크)와 실제 계정(원장) 둘 다 통과
+    m.calls = []; m.log.mockClear();
+    m.user.mockImplementation(async (o?: { teacherView: boolean }) => (o?.teacherView ? desk : actual));
+    expect(await saveRefundRequest(undefined, edit("2026-11-06"))).toMatchObject({ ok: true });
+  });
+
+  it("지우는 것도 같다(완료 해제) · 저장돼 있던 값과 같으면(다른 칸만 고침) 막지 않는다", async () => {
+    m.user.mockResolvedValue(target); m.viewAs.mockResolvedValue(null);
+    m.link.mockResolvedValue({ deskId: "desk", deskName: null });
+    m.existing = { form_data: { student: { name: "학생" }, result: { completedDate: "2026-11-05" } } };
+    const res = await saveRefundRequest(undefined, edit(""));
+    expect(res?.error).toContain("담당 데스크와 원장만");
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ action: "refund_request_complete_denied", metadata: expect.objectContaining({ attempted: "환불완료일자 지움" }) }));
+    expect(writes()).toEqual([]);
+    expect(await saveRefundRequest(undefined, edit("2026-11-05"))).toMatchObject({ ok: true });
+  });
+
+  it("이어지지 않은 요청서는 종전대로 · 완료일자가 그대로면 연결을 보지도 않는다", async () => {
+    m.user.mockResolvedValue(target); m.viewAs.mockResolvedValue(null);
+    m.link.mockResolvedValue(null);
+    expect(await saveRefundRequest(undefined, edit("2026-11-06"))).toMatchObject({ ok: true });
+    m.link.mockClear();
+    expect(await saveRefundRequest(undefined, edit(""))).toMatchObject({ ok: true });
+    expect(m.link).not.toHaveBeenCalled();
+  });
+
+  it("🔴 연결을 못 읽으면 막는다(풀리는 쪽으로 넘어가지 않는다)", async () => {
+    m.user.mockResolvedValue(target); m.viewAs.mockResolvedValue(null);
+    m.link.mockRejectedValue(new Error("db down"));
+    expect((await saveRefundRequest(undefined, edit("2026-11-06")))?.error).toContain("퇴원보고서 연결을 확인하지 못해");
+    expect(writes()).toEqual([]);
+  });
+
+  it("요청서를 지우면 이어진 퇴원보고서를 다시 계산하게 부른다(release — 결정 안 됨으로 돌아가는지는 DB가 센다)", async () => {
+    m.user.mockResolvedValue(target); m.viewAs.mockResolvedValue(null);
+    expect(await deleteRefundRequest("doc1")).toEqual({ ok: true });
+    expect(m.release).toHaveBeenCalledWith({ tenantId: "t1", documentId: "doc1", actorId: "target" });
   });
 });
 

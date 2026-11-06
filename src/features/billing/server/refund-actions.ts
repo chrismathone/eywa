@@ -7,6 +7,9 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { canSeeRestrictedDocuments } from "@/features/documents/server/restricted";
 import { teacherViewReadDb, writeSessionFirst } from "./teacher-view-db";
 import { releaseWithdrawalRefunds } from "@/features/withdrawal-reports/server/release";
+import { loadRefundLink } from "@/features/withdrawal-reports/server/refund-steps";
+import { linkedCompletionLock } from "@/features/withdrawal-reports/refund-decision";
+import { viewAsTeacher } from "@/lib/auth/view-as";
 import {
   normalizeRefund,
   parseRefundForm,
@@ -98,6 +101,10 @@ export async function saveRefundRequest(
       .eq("form_type", REFUND_FORM_TYPE)
       .maybeSingle();
     const prev = existing ? normalizeRefund(existing.form_data) : null;
+    // 퇴원보고서에 이어진 요청서의 환불완료일자(원장 2026-11-06) — 넣거나 지우는 것은 그 요청서의 데스크 담당과 원장급만.
+    // 완료일자가 기다리던 퇴원·수강종료 처리를 푼다(release). DB 트리거(s2_0032)도 직원 세션 쓰기를 같은 판정으로 막는다.
+    const denied = await completionDenied(gate.user, id, parsed, prev);
+    if (denied) return { error: denied };
     const data = stampCompletion(parsed, prev, gate.user);
     // 세션 먼저(행위자 A) · 강사뷰에서 RLS에 막히면 관리 클라이언트로 같은 문장(teacher-view-db.ts).
     // select 없으면 RLS에 막혀 0행을 고쳐도 성공으로 보고된다(삭제와 같은 규약) — 0행은 아래에서 "저장되지 않았습니다".
@@ -139,6 +146,28 @@ export async function saveRefundRequest(
   await logAction({ action: "refund_request_create", ...refundAuditFields(row.id, data, null) });
   revalidateRefund(row.id);
   return { ok: true, id: row.id, nonce: Date.now(), redirectTo: `/billing/refunds/${row.id}` };
+}
+
+/**
+ * 이어진 요청서의 완료일자를 바꾸려는데 담당 데스크·원장급이 아니면 거절 문구(감사로그 `refund_request_complete_denied`). 바꾸지 않거나 이어지지 않았으면 null.
+ * 행위자 = 수납 게이트와 같은 사람(강사뷰면 대상 직원 — 원장 몫으로 치지 않는다 · `cancelsAsDirector`와 같은 축). 연결을 못 읽으면 막는다.
+ * 🔴 실제 로그인 계정도 담당 데스크·원장급이어야 한다(팀장 결정 2026-11-06 · `linkedCompletionLock`) — DB 트리거는 세션의 실제 계정을 보는데,
+ *    강사뷰 쓰기(`writeSessionFirst`)는 세션이 막히면 관리 키로 다시 써 트리거를 지나 버린다. 그래서 앱이 같은 기준으로 먼저 막는다.
+ */
+async function completionDenied(user: { id: string; tenantId: string; systemRole: string }, id: string, next: RefundRequestData, prev: RefundRequestData | null): Promise<string | null> {
+  const before = (prev?.result.completedDate ?? "").trim();
+  const after = next.result.completedDate.trim();
+  if (before === after) return null;
+  let link: Awaited<ReturnType<typeof loadRefundLink>>;
+  try { link = await loadRefundLink(user.tenantId, id); }
+  catch { return "퇴원보고서 연결을 확인하지 못해 저장하지 않았습니다. 잠시 후 다시 시도해 주세요."; }
+  const directorLevel = user.systemRole === "master" && !(await viewAsTeacher());
+  const account = (await getCurrentUser()) ?? user;
+  const reason = linkedCompletionLock(link, { id: user.id, directorLevel }, { id: account.id, directorLevel: account.systemRole === "master" });
+  if (!reason) return null;
+  await logAction({ action: "refund_request_complete_denied", targetType: "refund_request", targetLabel: refundTitle(next),
+    metadata: { documentId: id, studentName: next.student.name || null, attempted: after ? `환불완료일자 ${after} 입력` : "환불완료일자 지움", deskName: link?.deskName ?? null, ...(account.id !== user.id ? { viaTeacherView: true } : {}) } });
+  return reason;
 }
 
 /**

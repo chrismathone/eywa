@@ -8,7 +8,7 @@ import { logAction } from "@/features/audit/server/log";
 import { pokeSlack } from "@/features/slack/server/poke";
 import { describeDbError } from "@/lib/supabase/db-error";
 import { recordMathWithdrawalToSheet } from "@/features/withdrawals/server/withdrawal-sheet";
-import { bodySchema, batchRequestSchema, cancelsAsDirector, directSchema, managerStepSkipped, submissionError, missingReportSchema, REPORT_ACTION_LABEL, type ReportAction, type ReportBody, type WithdrawalReport } from "../model";
+import { CANCEL_REASON_MAX, bodySchema, batchRequestSchema, cancelsAsDirector, directSchema, managerStepSkipped, submissionError, missingReportSchema, REPORT_ACTION_LABEL, type ReportAction, type ReportBody, type WithdrawalReport } from "../model";
 import { checkReasonInput } from "@/features/withdrawals/reason-detail";
 import { canManageStudentStatusNow } from "@/features/students/server/status-access";
 import { reportViewer, getReport, getReportForSave } from "./queries";
@@ -18,6 +18,8 @@ import { appliedAuditMeta } from "../audit-meta";
 import { loadReportBilling } from "./billing";
 import { withoutBillingFields } from "../prefill";
 import { REPORT_UNCONFIRMED_LIMIT } from "../autosave";
+import { applyDirectNow } from "./direct-apply";
+import { loadGroupRefundCheck } from "./refund-check";
 
 export type ReportResult = { ok: true; id: string } | { error: string };
 function refresh() {
@@ -86,8 +88,9 @@ export async function processWithdrawalDirectly(input: unknown): Promise<ReportR
   if (error) return { error: missingReportSchema(error) ? "바로 처리 기능을 준비 중입니다." : error.code === "23505" ? "이 학생의 진행 중인 보고서가 있습니다. 기존 보고서를 먼저 확인해 주세요." : describeDbError(error, { fallback: "바로 처리하지 못했습니다." }).message };
   const { data: report, error: readError } = await db.from("withdrawal_reports").select("*").eq("tenant_id", viewer.user.tenantId).eq("id", data as string).single();
   if (readError || !report) { refresh(); return { error: "처리는 저장됐지만 화면을 불러오지 못했습니다. 목록에서 확인해 주세요." }; }
-  await finish(report as WithdrawalReport, "direct");
-  return { ok: true, id: (report as WithdrawalReport).id };
+  const done = await applyDirectNow(report as WithdrawalReport, viewer.user.id);
+  await finish(done.report, "direct", done.extra);
+  return { ok: true, id: done.report.id };
 }
 export async function changeWithdrawalReport(id: string, action: ReportAction, revision: number, input?: unknown): Promise<ReportResult> {
   const viewer = await reportViewer();
@@ -101,7 +104,7 @@ export async function changeWithdrawalReport(id: string, action: ReportAction, r
   // 자동 저장이 revision을 계속 올려 요청자 · 원장의 취소가 '보고서가 변경되었습니다'로 거절됐다). 상태가 바뀌었으면(그사이 제출 · 승인)
   // 화면의 revision 그대로 보내 DB가 거절한다 — 새로 보고 다시 판단하게.
   const seenStatus = action === "cancel" && input && typeof input === "object" ? (input as { seenStatus?: unknown }).seenStatus : undefined;
-  const payload: { revision: number; body?: unknown; comment?: string } = { revision: seenStatus === record.report.status ? record.report.revision : revision };
+  const payload: { revision: number; body?: unknown; comment?: string; refundCheck?: unknown } = { revision: seenStatus === record.report.status ? record.report.revision : revision };
   if (action === "save" || action === "submit") {
     const body = await reportBodyFor(record, input, action === "submit");
     if ("error" in body) return body;
@@ -111,15 +114,36 @@ export async function changeWithdrawalReport(id: string, action: ReportAction, r
     if (typeof input !== "string" || !input.trim() || input.trim().length > 1000) return { error: "반려 사유를 1~1,000자로 작성해 주세요." };
     payload.comment = input.trim();
   }
+  // 요청 취소 사유(원장 2026-11-06 *"요청 취소시에 '사유' 입력할 수 있고 마우스 올리면 사유 확인가능하게"*) — 필수 · 앞뒤 공백 빼고 1~500자.
+  // DB(s2_0032)는 사유가 오면 같은 검사로 묶음의 모든 보고서 이력 'cancel' 줄에 남긴다(오지 않으면 종전처럼 — 옛 앱 호환은 DB 몫).
+  const cancelReason = action === "cancel" ? cancelReasonOf(input) : null;
+  if (action === "cancel") {
+    if (!cancelReason) return { error: `취소 사유를 1~${CANCEL_REASON_MAX.toLocaleString("ko-KR")}자로 작성해 주세요.` };
+    payload.comment = cancelReason;
+  }
+  // 원장 환불 결정(원장 2026-11-06 · s2_0032) — 제출·승인은 전원 승인으로 이어질 수 있다. **이 요청 안에서** 묶음의 환불 확인 값을 계산해 함께 넘긴다:
+  // DB가 결정 안 된 환불 가능 줄을 세어 '환불 결정 대기'를 맞추고(원장 알림·할 일), 전원 승인이어도 0이 아니면 처리하지 않는다.
+  // 못 만들면 처리를 맡기지 않는다(확인 값 없이 보내면 DB는 처리하지 않지만, 승인만 기록되고 처리는 다음 날로 밀린다 — 여기서 멈추고 다시 하게).
+  if ((action === "submit" || action === "approve") && record.report.group_id) {
+    try { payload.refundCheck = await loadGroupRefundCheck(viewer.user.tenantId, record.report.group_id); }
+    catch (e) { console.error("[withdrawal-report-refund-check]", e); return { error: "환불할 수 있는 청구를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." }; }
+  }
   const { data, error } = await createAdminClient().rpc("transition_withdrawal_report", {
     p_tenant: viewer.user.tenantId, p_actor: viewer.user.id, p_report: id, p_action: action, p_payload: payload,
   }).single();
   if (error) return { error: describeDbError(error, { fallback: "보고서 처리를 완료하지 못했습니다." }).message };
   const changed = data as WithdrawalReport;
   // 취소 — DB가 미완료 데스크 환불의 할 일을 취소하고 데스크 담당자에게 '환불 진행 전 확인'을 보냈다(s2_0025 · 요청서는 남긴다). 기록에도 남긴다.
-  const extra = action === "cancel" ? await cancelRefundAudit(changed) : {};
+  const extra = action === "cancel" ? { cancelReason, ...await cancelRefundAudit(changed) } : {};
   await finish(changed, action, { ...extra, ...await teacherViewMeta(viewer.user) });
   return { ok: true, id };
+}
+
+/** 취소 입력의 사유 — `{ reason }`의 앞뒤 공백을 뺀 1~500자(아니면 null). */
+function cancelReasonOf(input: unknown): string | null {
+  const raw = input && typeof input === "object" ? (input as { reason?: unknown }).reason : undefined;
+  const reason = typeof raw === "string" ? raw.trim() : "";
+  return reason && Array.from(reason).length <= CANCEL_REASON_MAX ? reason : null;
 }
 
 /** 작성 칸만 검사 형식으로(수납 칸 빼고) — 저장 본문 · 충돌 판정이 같은 값을 본다. */
