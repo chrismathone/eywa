@@ -1,18 +1,23 @@
 import "server-only";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { viewAsTeacher } from "@/lib/auth/view-as";
 import { visibleCareStudents } from "./student-scope";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CareAccessError, isCareStorageMissing } from "./errors";
 
-/** 약속 열람·처리 문 — 실패는 `CareAccessError`(까닭: 권한 · 준비 안 됨 · 조회 실패)로 던진다(errors.ts). */
+/**
+ * 약속 열람·처리 문 — 실패는 `CareAccessError`(까닭: 권한 · 준비 안 됨 · 조회 실패)로 던진다(errors.ts).
+ * 🔴 신원 = 보는 강사(`teacherView`) — '배정된 약속'·담당자 본인 판정과 저장 명의가 강사뷰에서 열람자 본인으로 새지 않게(#154 ①).
+ *    감사로그는 `logAction`이 실제 계정으로 남긴다. `actor.proxy` = '다른 강사 뷰' 중 — 본인 확인(인수 확인)은 대신 하지 않는다(model.ts).
+ */
 export async function careAccess(studentId?: string) {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ teacherView: true });
   if (!user) throw new CareAccessError("로그인이 필요합니다", "denied");
-  const [readAll, studentAccess, canManage, newcomerWrite, consultationWrite] = await Promise.all([
+  const [readAll, studentAccess, canManage, newcomerWrite, consultationWrite, viewing] = await Promise.all([
     canAccessTenant(user.systemRole, "newcomers"), canAccessTenant(user.systemRole, "students"),
     canManageTenant(user.systemRole, "newcomers"), canWriteTenant(user.systemRole, "newcomers"),
-    canWriteTenant(user.systemRole, "consultations"),
+    canWriteTenant(user.systemRole, "consultations"), viewAsTeacher(),
   ]);
   if (!readAll && !studentAccess) throw new CareAccessError("약속을 열람할 권한이 없습니다", "denied");
   if (studentId && readAll && !(await visibleCareStudents([studentId])).has(studentId)) throw new CareAccessError("학생을 열람할 권한이 없습니다", "denied");
@@ -23,7 +28,7 @@ export async function careAccess(studentId?: string) {
     if (assigned.error) throw new CareAccessError(careStorageMessage(assigned.error), isCareStorageMissing(assigned.error) ? "unavailable" : "error");
     if (!assigned.data) throw new CareAccessError("약속을 열람할 권한이 없습니다", "denied");
   }
-  return { user, readAll, actor: { id: user.id, canManage, canContribute: newcomerWrite || consultationWrite } };
+  return { user, readAll, actor: { id: user.id, canManage, canContribute: newcomerWrite || consultationWrite, proxy: viewing !== null } };
 }
 
 export async function careStudent(studentId: string, tenantId: string) {

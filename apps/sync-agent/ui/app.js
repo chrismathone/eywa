@@ -24,6 +24,28 @@ function updateControls(s){
   $('update').disabled=!allowed||s.updateInfo?.pending||s.update==='downloading';
   for(const id of ['update-now','update-schedule','update-at'])$(id).disabled=!allowed||s.updateInfo?.pending||!s.updateInfo?.ready||s.update==='applying';
   $('update-cancel').disabled=pending||s.updateInfo?.closing||s.update==='applying';
+  $('makeedu-login').disabled=pending||!!s.makeeduLogin?.running||!!s.updateInfo?.closing;
+}
+// 메이크에듀 '다시 로그인'(2026-11-06) — 창이 열려 있는 동안 · 자동 로그인 멈춤 사유를 메이크에듀 칸 아래 한 줄로.
+function makeeduLoginText(s){
+  const m=s.makeeduLogin;if(!m)return'';
+  // 창을 열 때 비밀번호를 채웠나 — blocked = 비밀번호·계정 확인 멈춤이라 일부러 안 채움(틀린 값을 그대로 누르면 시도 횟수가 준다) · locked = 설정 잠금.
+  const pw={filled:'',locked:'비밀번호는 직접 입력해 주세요. ',blocked:'자동 로그인 멈춤(비밀번호·계정 확인) 중이라 저장된 비밀번호는 채우지 않았습니다 — 비밀번호를 직접 입력해 주세요. '}[m.passwordNote]??'';
+  if(m.running)return`로그인 창이 열려 있습니다 — 안 보이면 작업 표시줄의 Chrome for Testing 창을 눌러 주세요. ${pw}로그인 버튼과 사람 확인은 그 창에서 직접 눌러 주세요(5분 안에).`;
+  if(!m.blocked)return'';
+  const b=m.blocked,family=b.family??(b.human?'human':'password');
+  const since=b.at?` (${new Date(b.at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})}부터)`:'';
+  // 직전 '다시 로그인'이 makeedu 쪽에서 막혔으면(headless 재사용 거절 · 캡차를 풀었는데 거절) 다시 눌러도 풀리지 않는다 — makeedu 문의.
+  const vendorBlocked=['HEADLESS_REJECTED','CAPTCHA_REJECTED'].includes(m.result?.code);
+  const todo=family==='human'?(vendorBlocked?"'makeedu 다시 로그인'으로는 풀리지 않았습니다 — makeedu 문의가 필요합니다(위 안내 참고).":"'makeedu 다시 로그인'을 눌러 주세요.")
+    :family==='password'?"관리 코드로 설정을 연 뒤 '연동 계정'에서 메이크에듀 비밀번호를 확인해 다시 저장하면 풀립니다(그동안 'makeedu 다시 로그인'으로 받은 세션은 계속 씁니다 · 그 창에서는 비밀번호를 직접 입력)."
+    // 멈춤 기록 파일을 읽지 못함 — makeedu가 거절한 게 아니라 안전을 위해 멈춘 것(makeedu에서 해결할 일 없음).
+    // 파일 읽기 자체 실패(readError)는 비밀번호 저장으로 풀리지 않는다 — PC 재시작·백신 예외·폴더 권한(fix4).
+    :b.code==='BLOCK_UNREADABLE'&&b.readError?"안전을 위해 멈춰 두었습니다 · 동기화 PC를 다시 시작하거나 백신 예외·폴더 권한을 확인해 주세요(파일을 다시 읽을 수 있으면 원래 상태로 돌아갑니다)."
+    :b.code==='BLOCK_UNREADABLE'?"안전을 위해 멈춰 두었습니다 · 관리 코드로 설정을 연 '연동 계정'에서 메이크에듀 비밀번호를 한 번 더 저장하면(같은 값이어도) 다시 시도합니다."
+    :"makeedu에서 해결한 뒤 관리 코드로 설정을 연 '연동 계정'에서 메이크에듀 비밀번호를 한 번 더 저장하면(같은 값이어도) 자동 로그인을 다시 시도합니다.";
+  const alt=b.fallback?' ⚠️ 멈춤 표시를 예비 파일에 남겼습니다(본 파일 저장 실패 — 로그 폴더를 확인해 주세요).':'';
+  return`자동 로그인 멈춤 · ${b.reason}${since} — ${todo}${alt}`;
 }
 function render(s){latest=s;$('version').textContent=`v${s.version}`;$('subtitle').textContent=s.tenantName||'하나의 앱에서 지점의 연동을 관리합니다.';
   $('pair').hidden=s.paired;$('status').hidden=!s.paired;$('unlock').hidden=!s.paired||s.unlocked;$('management').hidden=!s.paired||!s.unlocked;
@@ -31,6 +53,7 @@ function render(s){latest=s;$('version').textContent=`v${s.version}`;$('subtitle
   if(s.unlocked&&$('unlock-code').value)$('unlock-code').value='';if(s.paired&&$('pair-code').value)$('pair-code').value='';
   $('message').textContent=s.message;$('online').textContent=s.online?'서버 연결됨':'서버 연결 확인 중';
   for(const m of ['classnote','makeedu']){const a=(s.activity??[]).find(x=>x.module===m);$(m+'-state').textContent=(states[s.modules[m]]||'확인 중')+(a?.label?` · ${a.label}`:'');}
+  const loginText=makeeduLoginText(s);$('makeedu-login-state').textContent=loginText;$('makeedu-login-state').hidden=!loginText;
   $('server-gate').textContent=!s.configuration?.cutoverReady?'기존 워커 확인과 계정 설정을 마치면 연동을 시작합니다.':s.configuration.enabled?'웹과 이 PC 양쪽에서 켜 둔 연동이 작동합니다.':'웹에서 이 PC의 연동 실행이 꺼져 있습니다.';
   const progress=s.updateInfo?.progress;
   $('update-state').textContent=phases[progress?.phase]||updates[s.update]||'확인 중';
@@ -75,6 +98,6 @@ $('credentials-form').addEventListener('submit',async e=>{e.preventDefault();con
 $('settings-form').addEventListener('submit',async e=>{e.preventDefault();const settings={...latest.local};for(const key of Object.keys(options))settings[key]=$(key).checked;if(await command('settings',settings))dirty=false;});
 $('schedule-form').addEventListener('submit',e=>{e.preventDefault();const at=new Date($('update-at').value);if(!Number.isFinite(at.getTime())){$('error').textContent='예약 날짜와 시간을 지정해 주세요.';return;}void command('update-schedule',{sequence:latest.updateInfo?.ready?.sequence,at:at.toISOString()});});
 $('update-now').addEventListener('click',()=>void command('update-now',{sequence:latest.updateInfo?.ready?.sequence}));
-for(const id of ['import','legacy','cutover','update','update-cancel','quit','reset','logs'])$(id).addEventListener('click',()=>void command(id));
+for(const id of ['import','legacy','cutover','update','update-cancel','quit','reset','logs','makeedu-login'])$(id).addEventListener('click',()=>void command(id));
 $('apply-cancel').addEventListener('click',()=>void command('update-cancel'));
 window.agent.onState(render);void command('state');

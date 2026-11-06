@@ -20,6 +20,10 @@ const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), "utf8")
 /** ② 명시 가드 파일 — effectiveTeacherId(또는 본인 축 우회)가 쓰기 게이트인 액션들. */
 const GUARDED_ACTION_FILES: { file: string[]; what: string }[] = [
   {
+    file: ["src", "features", "student-care", "server", "actions.ts"],
+    what: "상담 약속·인계 저장(대상 명의 · 관리 클라이언트 · 2026-11-06)",
+  },
+  {
     file: ["src", "features", "onescreen", "server", "actions.ts"],
     what: "보고서 저장·발송·공유링크·AI 멘트·개인 설정",
   },

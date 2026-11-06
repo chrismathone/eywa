@@ -44,7 +44,8 @@ export const careCommandSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("cancel"), reason: text(1000) }).strict(),
 ]);
 export type CareCommand = z.infer<typeof careCommandSchema>;
-export type CareActor = { id: string; canManage: boolean; canContribute: boolean };
+/** `proxy` = '다른 강사 뷰'로 그 강사 명의를 쓰는 중 — 본인 확인(인수 확인)은 대신 하지 않는다(#154 · 전자결재 서명과 같은 결). */
+export type CareActor = { id: string; canManage: boolean; canContribute: boolean; proxy: boolean };
 
 /** 화면 문구 — 증거 종류(영문 키를 화면에 흘리지 않는다). */
 export const EVIDENCE_KIND_LABEL: Record<CareEvidenceKind, string> = {
@@ -68,6 +69,7 @@ export function transitionCare(current: CareDocument | null, command: CareComman
   if (current.state !== "open") throw new Error("종료된 약속입니다. 변경 사유를 남겨 새 버전으로 열어 주세요");
   if (command.kind === "acknowledge") {
     if (current.content.ownerId !== actor.id || !actor.canContribute) throw new Error("담당자 본인만 인수 확인할 수 있습니다");
+    if (actor.proxy) throw new Error("담당자 본인만 인수 확인할 수 있습니다(강사뷰에서는 대신 확인하지 않습니다)");
     if (current.acknowledged) throw new Error("이미 인수 확인했습니다");
     return { ...current, acknowledged: { by: actor.id, at } };
   }

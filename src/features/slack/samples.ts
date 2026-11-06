@@ -114,9 +114,10 @@ export const SAMPLE_NOTIFICATIONS: Record<string, SampleNotification> = {
   },
   report_send_failed: { title: "수업 보고서 발송 실패", body: "김하늘 · 09-26 — 학부모 보드를 찾지 못했습니다", link: "/lesson-reports" },
   notice_send_failed: { title: "학부모 공지 게시 실패", body: "10월 휴원 안내 — 3명에게 게시하지 못했습니다", link: "/lesson-reports" },
+  // 실제 문구 = scripts/_makeedu/login-guard.cjs notificationTextFor(사람 확인 · 비밀번호 틀림 · 그 밖) — 견본은 가장 흔한 사람 확인.
   makeedu_login_failed: {
-    title: "makeedu 접속이 실패했습니다",
-    body: "makeedu 동기화가 멈춥니다 — 비밀번호 변경·CAPTCHA·계정 잠금을 확인해 주세요. (감지 2026-09-28)",
+    title: "makeedu가 사람 확인을 요구합니다",
+    body: "makeedu 자동 동기화가 멈췄습니다 — 동기화 PC의 AYWA 연동 앱에서 'makeedu 다시 로그인'을 눌러 확인 한 번 해 주세요. (감지 2026-11-06)",
     link: "/owner?tab=sheets&sub=makeedu",
   },
   support_answer: { title: "개선요청에 답변이 달렸습니다", body: "출석부 인쇄 여백 조정 요청 — 처리 완료", link: "/help" },

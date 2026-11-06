@@ -1,6 +1,6 @@
 import "server-only";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, readonlyViewErasedScope } from "@/lib/auth/perm-matrix";
 import { teacherViewableClassIds, READ_GRACE_DAYS } from "@/features/students/server/read-scope";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
@@ -10,7 +10,9 @@ import { addDays, kstToday } from "@/lib/date-kst";
 export async function visibleCareStudents(ids: string[]): Promise<Set<string>> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return new Set();
-  if ((await accessLevelTenant(user.systemRole, "students")) !== "scoped") return new Set(ids);
+  // 읽기 강사뷰는 대상 강사의 담당(scoped)을 읽기로 누른다 — 그 범위를 되살려 그 강사의 반으로 좁힌다(#154 ③ · 학생 상세 read-scope와 같은 조건).
+  const level = await accessLevelTenant(user.systemRole, "students");
+  if (level !== "scoped" && !(level === "readonly" && (await readonlyViewErasedScope("students")))) return new Set(ids);
   if (!ids.length) return new Set();
   const classes = await teacherViewableClassIds(user.id);
   const client = await createClient();

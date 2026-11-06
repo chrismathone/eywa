@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { careContentSchema, careStatus, evidenceHref, transitionCare, type CareContent } from "./model";
 import { careGraph } from "./graph";
 
-const manager = { id: "00000000-0000-4000-8000-000000000001", canManage: true, canContribute: true };
-const teacher = { id: "00000000-0000-4000-8000-000000000002", canManage: false, canContribute: true };
+const manager = { id: "00000000-0000-4000-8000-000000000001", canManage: true, canContribute: true, proxy: false };
+const teacher = { id: "00000000-0000-4000-8000-000000000002", canManage: false, canContribute: true, proxy: false };
 const at = "2026-11-01T01:00:00.000Z";
 const content: CareContent = { need: "중3 선행 희망", promise: "11월 말 중2 진도 완료", criterion: "진도·확인평가 기록 확인", dueOn: "2026-11-30", ownerId: teacher.id, subject: "수학", sourceId: null };
 const create = () => transitionCare(null, { kind: "create", content }, manager, at);

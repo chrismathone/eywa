@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
+import { readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { careCommandSchema, careTargetSchema, careHref, targetHref, transitionCare, type CareEvidenceKind } from "../model";
 import { careAccess, careStorageMessage, careStudent } from "./access";
 import { CARE_COLUMNS, careRow } from "./queries";
@@ -23,6 +24,9 @@ function publicMessage(error: unknown, fallback: string) {
 
 const requestSchema = z.object({ studentId: z.string().uuid().optional(), intakeId: z.string().uuid().optional(), id: z.string().uuid(), version: z.number().int().nonnegative(), command: careCommandSchema }).strict().refine((v) => !!v.studentId !== !!v.intakeId);
 export async function saveCare(input: unknown): Promise<{ ok: true } | { ok: false; error: string }> {
+  // 저장 명의 = 보는 강사(careAccess) · 관리 클라이언트 쓰기 — 읽기 강사뷰·지점 보기는 판정보다 먼저 거절한다(#154 · view-as-wiring 가드 목록).
+  const blocked = await readonlyTeacherViewError();
+  if (blocked) return { ok: false, error: blocked };
   const parsed = requestSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "목표일·담당자·필수 내용을 확인해 주세요" };
   const { intakeId, id, version, command } = parsed.data;

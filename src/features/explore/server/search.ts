@@ -1,6 +1,7 @@
 import "server-only";
 import type { CurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { isScopedRead } from "./shared";
 import { ASSIGNABLE_TEACHER_ROLES } from "@/lib/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -29,8 +30,7 @@ export async function searchExploreTargets(q: string, user: CurrentUser): Promis
 }
 
 async function searchRooms(term: string, user: CurrentUser): Promise<ExploreTarget[]> {
-  const level = await accessLevelTenant(user.systemRole, "classes");
-  if (level === "none" || level === "scoped") return [];
+  if ((await accessLevelTenant(user.systemRole, "classes")) === "none" || (await isScopedRead(user.systemRole, "classes"))) return [];
   const supabase = await createClient();
   const { data, error } = await supabase.from("classrooms").select("id, name, capacity, archived_at").ilike("name", `%${term}%`).order("name").limit(ROOM_LIMIT);
   if (error) {
@@ -48,6 +48,7 @@ async function searchRooms(term: string, user: CurrentUser): Promise<ExploreTarg
 async function searchTeachers(term: string, user: CurrentUser): Promise<ExploreTarget[]> {
   const level = await accessLevelTenant(user.systemRole, "classes");
   if (level === "none") return [];
+  const scoped = await isScopedRead(user.systemRole, "classes");
   const supabase = await createClient();
   let qb = supabase
     .from("users")
@@ -55,7 +56,8 @@ async function searchTeachers(term: string, user: CurrentUser): Promise<ExploreT
     .in("system_role", [...ASSIGNABLE_TEACHER_ROLES])
     .eq("status", "active")
     .or(`display_name.ilike.%${term}%,english_name.ilike.%${term}%`);
-  if (level === "scoped") qb = qb.eq("id", user.id);
+  // `user` = 보는 강사(라우트가 teacherView 신원으로 넘긴다 · #154 ①) — 읽기 강사뷰에서 열람자 본인이 아니라 그 강사만.
+  if (scoped) qb = qb.eq("id", user.id);
   const [{ data, error }, settings] = await Promise.all([qb.order("display_name").limit(TEACHER_LIMIT), getTenantSettings()]);
   if (error) {
     console.error(`[explore] 강사 검색 실패: ${error.message}`);
