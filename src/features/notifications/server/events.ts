@@ -16,7 +16,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { createClient } from "@/lib/supabase/server";
 import { reportError } from "@/lib/observability/report-error";
-import { kstToday } from "@/lib/date-kst";
+import { kstDateOf, kstToday } from "@/lib/date-kst";
 import { followUpUrgency } from "@/features/consultations/follow-up-urgency";
 import { getAbsenceRiskStudents } from "@/features/dashboard/server/queries";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
@@ -44,7 +44,12 @@ import {
   buildOutstandingEvents,
   buildProgressAnomalyEvents,
   buildSendDeadlineEvents,
-  buildUnsentReportEvents,
+  planUnsentAlerts,
+  splitRecordedUnsent,
+  unsentSendWindowEnd,
+  unsentTeacherDigestBody,
+  type UnsentPriorEvent,
+  type UnsentRouting,
   followupBody,
   weekKey,
   buildEnrollmentFollowupEvents,
@@ -603,6 +608,29 @@ async function syncUnsentTasks(
   return out;
 }
 
+/**
+ * 미발송 보고서들의 지난 알림 기록 — 직원 몫 횟수(최대 3번)·오늘 울림 판정(`unsentTeacherAlertHistory`) 재료.
+ * 청크 100건 × 보고서당 기록 몇 줄(원장 1회분 + 직원 몫 최대 3 + 시드)이라 한 번에 1,000행 상한 아래다(B2).
+ */
+async function unsentPriorEvents(admin: SupabaseClient, tenantId: string, reportIds: readonly string[]): Promise<UnsentPriorEvent[]> {
+  const rows = await fetchInChunks<{ subject_key: string; bucket: string; seeded: boolean | null; created_at: string | null }>(
+    [...reportIds],
+    (chunk) =>
+      admin
+        .from("notification_events")
+        .select("subject_key, bucket, seeded, created_at")
+        .eq("tenant_id", tenantId) // admin RLS 우회 — 테넌트 필터가 유일한 격리선
+        .eq("event_type", "unsent_report")
+        .in("subject_key", chunk),
+  );
+  return rows.map((row) => ({
+    subjectKey: row.subject_key,
+    bucket: row.bucket,
+    seeded: row.seeded === true,
+    createdDate: kstDateOf(row.created_at),
+  }));
+}
+
 /** 진도 이상 이벤트의 progress_events.id — dedup bucket이 `pe:${id}`다(events-core). */
 function progressEventId(event: ProgressAnomalyEvent): string {
   return event.bucket.replace(/^pe:/, "");
@@ -669,8 +697,16 @@ async function detectOutstanding(admin: SupabaseClient, tenantId: string): Promi
  * ④ isClassnoteAllowed(too_old: 전 달 1일 이후) ⑤ isClassnoteSubjectEnabled(과목 opt-in — injaewon은
  * math만) ⑥ classnoteSendEnabled(발송 스위치 OFF면 아예 감지 안 함 — 보낼 수 없는데 재촉 금지).
  * 창은 어제까지 최근 7일(오늘 작성분은 아직 발송 중일 수 있어 제외, 오래된 건 무한 잔소리 방지).
+ *
+ * 받는 사람 · 반복(2026-11-05 원장 *"… '깜빡한 보고서'가 있으면 최대 3일간 선생님에게 알려줄것."* · 적대 리뷰 C2·I1):
+ * - 보고서 하나는 **딱 한 곳** — 작성 계정(재직) → 그 보고서 반(보강은 앵커 반)의 재직 담임 → 원장(`unsentRecipientOf`).
+ *   학생의 다른 반 담임에게는 보내지 않는다.
+ * - **직원 몫** = 하루 한 번, 처음 잡힌 날을 포함해 보고서당 최대 3번(bucket `remind:{KST 오늘}` · 횟수는 지난 기록으로 센다).
+ * - **원장 1회분**(받을 직원이 없는 건) = 종전 그대로 보고서당 1회(bucket `"unsent"`). 콜드스타트 판정도 같은 event_type 하나.
+ * 이벤트는 한 번의 upsert로 기록한다(한쪽만 기록되고 알림이 빠지는 틈을 만들지 않게).
+ * 내보내는 까닭 = 가짜 DB로 통째 도는 시험(`unsent-detect.test.ts`) — 운영 호출처는 `detectAndNotifyEvents` 하나다.
  */
-async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Promise<number> {
+export async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Promise<number> {
   const today = kstToday();
   const settings = await getTenantSettingsByTenantId(tenantId);
   // ⑥ 발송 자체가 꺼진 테넌트는 감지도 하지 않는다(시드도 남기지 않음 — 켜는 날 콜드스타트로 시작).
@@ -683,14 +719,15 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
 
   const { data, error } = await admin
     .from("lesson_reports")
-    .select("id, student_id, report_date, subject, class_id, makeup, notes, student:student_id ( name )")
+    .select("id, student_id, report_date, subject, class_id, makeup_class_id, makeup, notes, created_at, created_by, student:student_id ( name )")
     .eq("tenant_id", tenantId) // admin RLS 우회 — 테넌트 필터가 유일한 격리선
     .is("classnote_status", null)
     .is("revoked_at", null)
     .or("source.is.null,source.neq.edutrix_import")
     .gte("report_date", windowStart)
     .lte("report_date", yesterday)
-    .order("report_date", { ascending: true })
+    // 최근 순 — 상한 500에 잘리는 쪽이 가장 오래된(곧 기한이 끝나는) 건이 되게(종전 오래된 순은 최근분이 잘렸다, 리뷰 M1).
+    .order("report_date", { ascending: false })
     .limit(500);
   if (error) throw new Error(`detectUnsentReports query: ${error.message}`);
 
@@ -701,17 +738,25 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
   //    ⚠️ 멘트 게이트는 2026-09-09에 여기로 들어왔다 — 종전엔 알림만 이 항목이 없어, 발송 콘솔이 거절하는
   //       빈 멘트 보고서까지 재촉하고 있었다.
   //    ⚠️ class_id가 NULL인 건(보강·이관분)은 반 판정이 불가능하니 그대로 둔다 — 모르면 빼지 않는다.
-  const rows: (UnsentRow & { studentName: string })[] = (data ?? []).map((row) => {
+  const rows: (UnsentRow & { studentName: string; createdDate: string | null } & UnsentRouting)[] = (data ?? []).map((row) => {
     const student = (Array.isArray(row.student) ? row.student[0] : row.student) as { name?: string } | undefined;
+    const classId = (row.class_id as string | null) ?? null;
+    const makeup = row.makeup as boolean | null;
     return {
       id: row.id as string,
       studentId: row.student_id as string,
       reportDate: (row.report_date as string).slice(0, 10),
       subject: row.subject as string | null,
-      classId: (row.class_id as string | null) ?? null,
-      makeup: row.makeup as boolean | null,
+      classId,
+      makeup,
       ment: (row.notes as string | null) ?? null,
       studentName: student?.name ?? "(학생)",
+      // 작성일 = 첫 저장 시각의 **KST** 날짜(원스크린 저장은 unit_key upsert라 다시 저장해도 created_at은 그대로).
+      // ⚠️ `.slice(0, 10)` 금지 — UTC 날짜라 00:00~08:59 KST 저장분이 하루 앞당겨진다.
+      createdDate: kstDateOf(row.created_at),
+      // 받는 사람 재료 — 작성 계정(0172a 트리거가 갱신에도 보존) · 반(보강은 class_id가 비고 앵커가 makeup_class_id).
+      createdBy: (row.created_by as string | null) ?? null,
+      anchorClassId: makeup ? ((row.makeup_class_id as string | null) ?? classId) : classId,
     };
   });
   // 🔴 테스트 학생은 재촉하지 않는다(원장 2026-09-13) — **후보 선정 단계**에서 뺀다. 알림 본문이 묶음이라
@@ -749,35 +794,34 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
   // 같은 게이트(sendable) 한 벌이라 할 일과 발송 콘솔이 어긋나지 않는다. 읽었는데 빠진 건은 DB가 닫는다.
   // 닫는 판정은 이번에 실제로 읽은 보고서만(조회 상한 500에 밀린 보고서의 할 일은 건드리지 않는다).
   const taskByReport = await syncUnsentTasks(admin, tenantId, sendable.map((row) => row.id), rows.map((row) => row.id));
-  const candidates = buildUnsentReportEvents(
-    sendable.map((row) => ({
-      reportId: row.id,
-      studentId: row.studentId,
-      studentName: row.studentName,
-      subjectLabel: (row.subject ? subjects.labelOf(row.subject) : null) ?? row.subject ?? "수업",
-      reportDate: row.reportDate,
-    })),
-  );
+  const inputs = sendable.map((row) => ({
+    reportId: row.id,
+    studentId: row.studentId,
+    studentName: row.studentName,
+    subjectLabel: (row.subject ? subjects.labelOf(row.subject) : null) ?? row.subject ?? "수업",
+    reportDate: row.reportDate,
+    createdDate: row.createdDate,
+    // 발송 마지막 날 — 7일 규칙 한 곳(classnote-guard)에서 받는다(본문 '…까지만 보낼 수 있습니다').
+    sendDeadline: classnoteRetryDeadline(row.reportDate, today).lastDate || null,
+    createdBy: row.createdBy,
+    anchorClassId: row.anchorClassId,
+  }));
+  // 받는 사람 재료(작성 계정 재직 여부 · 반 → 재직 담임)와 지난 알림 기록 — 서로 독립이라 병렬(B4).
+  const [activeStaff, classTeacher, prior] = await Promise.all([
+    activeUserIds(admin, tenantId, inputs.flatMap((input) => (input.createdBy ? [input.createdBy] : []))),
+    activeClassTeachers(admin, tenantId, inputs.flatMap((input) => (input.anchorClassId ? [input.anchorClassId] : []))),
+    unsentPriorEvents(admin, tenantId, inputs.map((input) => input.reportId)),
+  ]);
+  const candidates = planUnsentAlerts({ rows: inputs, todayKst: today, activeStaff, classTeacher, prior });
   const cold = await isColdStart(admin, tenantId, "unsent_report");
-  const fresh = (await recordNew(admin, tenantId, "unsent_report", candidates, cold)) as UnsentReportEvent[];
-  if (cold || fresh.length === 0) return 0;
+  // 한 번의 upsert로 원장 1회분·직원 몫을 함께 기록(원자적). 같은 날 다시 돌면 오늘 bucket이 이미 있어 새로 들어가지 않는다.
+  const recorded = (await recordNew(admin, tenantId, "unsent_report", candidates, cold)) as UnsentReportEvent[];
+  if (cold || recorded.length === 0) return 0;
+  const { master, byRecipient } = splitRecordedUnsent(recorded, today);
 
   const items: NotifyInput[] = [];
-  const studentTeachers = await getStudentActiveTeachers(
-    admin,
-    tenantId,
-    [...new Set(fresh.map((event) => event.studentId))],
-    today,
-  );
-  // 원장 = 그 보고서 반에 재직 담임이 없는 건만(원장 2026-10-29 '나와 관련 있는 알림만'). 반이 없는 건(보강·이관)도 원장.
-  //    학생의 다른 과목 강사로 판정하지 않는다 — 그 강사는 이 보고서를 보낼 수 없다(리뷰 2026-10-29).
-  const classOfReport = new Map(sendable.map((row) => [row.id, row.classId]));
-  const unsentClassTeacher = await activeClassTeachers(admin, tenantId, [...classOfReport.values()].filter((id): id is string => !!id));
-  const orphanUnsent = fresh.filter((event) => {
-    const classId = classOfReport.get(event.subjectKey);
-    return !classId || !unsentClassTeacher.has(classId);
-  });
-  const masterBody = unsentReportDigestBody(orphanUnsent);
+  // 원장 = 받을 직원(작성자·반 담임)이 없는 건만, 보고서당 한 번(원장 2026-10-29 '나와 관련 있는 알림만').
+  const masterBody = unsentReportDigestBody(master);
   if (masterBody) {
     for (const recipientId of await activeMasterIds(admin, tenantId)) {
       items.push({
@@ -792,27 +836,31 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
         // 원장이 "알림엔 미발송이 많은데 들어가면 없다"고 물었다(2026-09-09 — 알림이 옳았다).
         link: `/lesson-reports?tab=list&status=${encodeURIComponent(UNSENT_FILTER)}`,
         actorId: null,
-        taskIds: orphanUnsent.flatMap((event) => taskByReport.get(event.subjectKey) ?? []),
+        taskIds: master.flatMap((event) => taskByReport.get(event.subjectKey) ?? []),
       });
     }
   }
-  // 담당 강사 = 자기 학생 건만. ⚠️ subjectKey가 보고서 id라 studentIdOf 추출자 필수(안 넘기면 0건).
-  for (const [teacherId, teacherEvents] of groupEventsByTeacher(fresh, studentTeachers, (e) => e.studentId)) {
-    const body = unsentReportDigestBody(teacherEvents);
+  // 직원 몫 = 받는 사람(작성자 또는 반 담임)마다 묶음 한 건. 마지막 날 마감 시각 = 발송 시간창 끝(워커가 다시 본다).
+  const windowEnd = unsentSendWindowEnd(settings.report.classnoteSendWindowStart ?? "", settings.report.classnoteSendWindowEnd ?? "");
+  for (const [recipientId, events] of byRecipient) {
+    const body = unsentTeacherDigestBody(events, today, windowEnd);
     if (!body) continue;
     items.push({
       tenantId,
-      recipientId: teacherId,
+      recipientId,
       type: "unsent_report",
       title: "미발송 보고서 확인",
       body,
       link: "/onescreen", // 강사는 lesson_reports 권한이 없다 — 원스크린에서 발송
       actorId: null,
-      taskIds: teacherEvents.flatMap((event) => taskByReport.get(event.subjectKey) ?? []),
+      // 할 일 연결은 받는 사람이 그 할 일의 담당(report_assignees — 반 담임 우선)이 아니어도 잇는다: 벨 칩은 '내가 맡은
+      // 할 일'만 보이고(taskBadgesFor), 보고서를 보내 할 일이 닫히면 이 알림도 읽음이 된다(0447a 트리거). 담당 규칙은 그대로.
+      taskIds: events.flatMap((event) => taskByReport.get(event.subjectKey) ?? []),
     });
   }
   await notifyUsers(items);
-  return fresh.length;
+  // 관측용 = 이번에 새로 기록된 보고서 수(원장 1회분과 직원 몫을 보고서 단위로 — 한 보고서를 두 번 세지 않게).
+  return new Set(recorded.map((event) => event.subjectKey)).size;
 }
 
 /**
