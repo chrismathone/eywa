@@ -57,6 +57,8 @@ import { PageMaximizeFallbackBar } from "@/components/page-maximize/page-maximiz
 import { EmbedProvider } from "@/components/workspace/embed-context";
 import { EmbedMainMarker } from "@/components/workspace/embed-main-marker";
 import { PaletteHotkeyForward } from "@/components/workspace/palette-hotkey-forward";
+import { AssistantLauncher } from "@/features/assistant/components/assistant-launcher";
+import { AssistantHotkeyForward } from "@/features/assistant/components/assistant-hotkey-forward";
 import { EmbedFocusSignal } from "@/components/workspace/embed-focus-signal";
 import { EmbedRefreshListener } from "@/components/workspace/embed-refresh-listener";
 import { EmbedUrlKeeper } from "@/components/workspace/embed-url-keeper";
@@ -136,6 +138,13 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   const embed = (await headers()).get("x-embed") === "1";
   if (embed) {
     const teacherEmbed = (await getShellView()) === "teacher";
+    // 창 안 Ctrl/⌘+J → 부모의 학원 비서(원장·슈퍼관리자만 · 강사뷰·지점 보기 아님 · 지점 AI 켜짐 — 부모 셸의 canUseAssistant와 같은 축).
+    const embedAssistant =
+      !teacherEmbed &&
+      !viewAs &&
+      !user.tenantView &&
+      (user.systemRole === "master" || (await isCurrentUserSuperAdmin())) &&
+      (await licensesPromise).ai_analysis !== false;
     // 이전 화면 유지 방식이면 이 창 문서는 **한 화면**이다 — 단일 화면과 같은 모양(머리글 한 줄·여백)으로 그린다(keepalive-frame.ts).
     // 🔴 판정은 **부모 셸이 이 문서에서 쓰는 방식**(쿠키 `SHELL_MODE_COOKIE` — 셸 공급자가 적는다)을 먼저 따른다. 부모는 문서를 연 순간의
     //    방식을 끝까지 쓰므로, DB를 다시 읽으면 그 사이 방식 전환·라이선스 조회 실패(fail-open) 때 새 화면만 다른 모양이 된다(적대 리뷰).
@@ -204,6 +213,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             <FilterSeenTracker />
             {/* 창 안에서도 Shift+F/Ctrl·Cmd+K로 검색 팰릿 — keydown은 프레임을 못 넘어 postMessage 포워딩. */}
             <PaletteHotkeyForward />
+            {/* 창 안에서도 Ctrl/⌘+J로 학원 비서 — 원장·슈퍼관리자만(그 밖엔 브라우저 단축키를 가로채지 않는다). */}
+            {embedAssistant ? <AssistantHotkeyForward /> : null}
             {/* 창이 그 메뉴의 최소 크기(ROUTE_WINDOW_SIZE)보다 작으면 맨 위에 안내 — 화면은 접지 않는다(원장 2026-09-03). */}
             {keepaliveFrame ? null : <WindowMinSizeNotice />}
             <ScreenHelpOverlay />
@@ -445,6 +456,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // (총괄은 역할이 아니라 별도 표라 users.system_role이 'admin'인 사람이 실제로 있다).
   // 요청 캐시라 master가 아닐 때만 PK 조회 1회.
   const isSuperAdmin = await isCurrentUserSuperAdmin();
+  // 학원 비서(원장 2026-11-06 *"원장이상급"*) — 풀셸(여기까지 오면 강사 미니셸이 아니다) · 원장·슈퍼관리자 · 강사뷰·지점 보기 아님 · 지점 AI 켜짐. 서버 라우트(gate.ts)도 같은 축으로 다시 막는다.
+  const canUseAssistant =
+    !viewAs && !user.tenantView && (user.systemRole === "master" || isSuperAdmin) && (await licensesPromise).ai_analysis !== false;
   // 창 모드(플로팅 창 = 메뉴마다 iframe) — **지점 설정**(원장 2026-09-25 *"iframe 모드를 켜고 끌수 잇게 … 모드를 켜면
   // 일반적인 웹앱처럼 단일창으로"* · *"지점별 세팅"* · *"admin에서 토글가능하게"*). 슈퍼관리자 학원 상세 라이선스 카드의
   // `window_mode`를 읽는다 — 행이 없으면 켜짐(지금까지와 같다). 끄면 아래 WorkspaceEnabledProvider가 false라 캔버스가
@@ -512,13 +526,14 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           menuLayout={menuLayout}
           isGenericTenant={genericTenant} canViewVendors={vendorsVisible}
           connectedApps={connectedApps}
+          canUseAssistant={canUseAssistant}
           className="hidden desk:flex"
         />
       </HideInFrame>
 
       {/* 데스크톱이 아니면(좁은 폭·터치) 상단 horizontal nav / 데스크톱(≥1240 + 마우스, `desk:`): 숨김 */}
       <HideInFrame>
-        <MobileTopNav systemRole={user.systemRole} email={user.email} brand={brand} logoSrc={logoSrc} permMatrix={permMatrix} menuLayout={menuLayout} canTeacherView={canTeacherView} isSuperAdmin={isSuperAdmin} isGenericTenant={genericTenant} canViewVendors={vendorsVisible} connectedApps={connectedApps} className="desk:hidden" />
+        <MobileTopNav systemRole={user.systemRole} email={user.email} brand={brand} logoSrc={logoSrc} permMatrix={permMatrix} menuLayout={menuLayout} canTeacherView={canTeacherView} isSuperAdmin={isSuperAdmin} isGenericTenant={genericTenant} canViewVendors={vendorsVisible} connectedApps={connectedApps} canUseAssistant={canUseAssistant} className="desk:hidden" />
       </HideInFrame>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden print:overflow-visible">
@@ -552,6 +567,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
         </main>
       </div>
 
+      {/* 학원 비서(원장 2026-11-06) — 오버레이·단축키 한 벌. 버튼은 사이드바 아래 줄 · 폰 위쪽 줄(canUseAssistant). 포털 렌더라 위치 무관. */}
+      {canUseAssistant ? <AssistantLauncher trigger={false} /> : null}
       {/* 검색 메뉴 점프 팰릿 — 헤더 검색 클릭으로 열림, 포털 렌더라 위치 무관 */}
       <CommandPalette systemRole={user.systemRole} permMatrix={permMatrix} canTeacherView={canTeacherView} isSuperAdmin={isSuperAdmin} menuLayout={menuLayout} isGenericTenant={genericTenant} canViewVendors={vendorsVisible} />
 

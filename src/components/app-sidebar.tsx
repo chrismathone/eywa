@@ -14,6 +14,7 @@ import {
 import { PanelLeftClose, PanelLeftOpen } from "@/components/icons/aywa-icon-compat";
 import { UserMenu } from "@/components/user-menu";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
+import { AssistantNavButton } from "@/features/assistant/components/assistant-nav-button";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { findNavItem, navItemByKey, navPresentation, type NavItem } from "@/lib/navigation";
@@ -141,8 +142,11 @@ export function AppSidebar({
   isGenericTenant = false,
   canViewVendors = false,
   connectedApps = [],
+  canUseAssistant = false,
 }: {
   systemRole: SystemRole;
+  /** 학원 비서 버튼(원장·슈퍼관리자 · 강사뷰·지점 보기 아님 · 지점 AI 켜짐 — 서버 판정). 오버레이는 레이아웃의 AssistantLauncher. */
+  canUseAssistant?: boolean;
   /** 총괄(super_admin) — master 전용 목적지를 함께 연다. */
   isSuperAdmin?: boolean;
   email: string;
@@ -547,7 +551,8 @@ export function AppSidebar({
             <div className="text-text-dim truncate text-xs leading-tight">{title}</div>
           </div>
           {isDesktop ? (
-            <div className={expanded ? "ml-auto shrink-0" : "shrink-0"}>
+            <div className={expanded ? "ml-auto flex shrink-0 items-center gap-0.5" : "flex shrink-0 flex-col items-center gap-0.5"}>
+              {canUseAssistant ? <AssistantNavButton /> : null}
               <NotificationBell />
             </div>
           ) : null}

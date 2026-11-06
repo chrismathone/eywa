@@ -619,6 +619,9 @@ export const AUDIT_ACTIONS = {
   briefing_regenerate: "일일 브리핑 다시 생성",
   // 운영실 계기판 '업무 비서' — 사람이 'AI로 정리'를 눌러 유료 AI를 태운 경로(예약 정리는 사람이 한 일이 아니라 남기지 않는다).
   dashboard_secretary_run: "업무 비서 AI 정리",
+  // 학원 비서(원장 자연어 질의 · 2026-11-06) — 질문마다 유료 AI와 지점 DB 조회를 태운다.
+  assistant_ask: "학원 비서 질문",
+  assistant_thread_delete: "학원 비서 대화 삭제",
 
   // 인재원 학습 프로그램 짝(students.ijw_student_id, 0259a) — 학생 행을 바꾸므로 기록한다.
   student_ijw_link: "인재원 학습 계정 연결",
@@ -777,9 +780,11 @@ export async function logAction(args: LogArgs): Promise<void> {
  * ⚠️ `actor_id`는 null이다(컬럼이 nullable, 0031a) — 사람을 지어내지 않는다. `actor_name`에 문 이름을 적어
  *    감사로그 화면에서 "누가"가 빈칸이 아니라 "랩실 PIN(비로그인)"으로 읽힌다.
  * best-effort — `logAction`과 같이 실패해도 본 작업을 막지 않는다.
+ * `actorId` — 세션이 끝까지 살아 있다고 볼 수 없는 **긴 작업**(학원 비서 질문 — 응답 뒤 `after`로 최대 5분)이 시작할 때 확인한 사람을
+ *    넘긴다(끝에서 쿠키 세션으로 다시 찾으면 토큰이 만료돼 기록이 조용히 빠질 수 있다 — 적대 리뷰 2026-11-06). 검증을 끝낸 사람만.
  */
 export async function logActionAs(
-  actor: { tenantId: string; actorName: string },
+  actor: { tenantId: string; actorName: string; actorId?: string | null },
   args: LogArgs,
 ): Promise<void> {
   try {
@@ -787,7 +792,7 @@ export async function logActionAs(
       .from("audit_logs")
       .insert({
         tenant_id: actor.tenantId,
-        actor_id: null,
+        actor_id: actor.actorId ?? null,
         actor_name: actor.actorName,
         action: args.action,
         target_type: args.targetType ?? null,

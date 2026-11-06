@@ -10,6 +10,7 @@ import { directProcessingReady, listReports, reportViewer, reportStaff, requestS
 import { canManageStudentStatusNow } from "@/features/students/server/status-access";
 import { listArchives } from "@/features/withdrawal-reports/server/archives";
 import { loadRefundSteps } from "@/features/withdrawal-reports/server/refund-steps";
+import { cancelsAsDirector } from "@/features/withdrawal-reports/model";
 import {
   LIST_PAGE_SIZE,
   buildListItems,
@@ -87,7 +88,11 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
     console.error("[withdrawal-reports] 데스크 환불 단계 조회 실패", error);
     return undefined;
   });
-  const items = buildListItems({ reports: list.rows, archives: archives ?? [], staff, labelOf: subjectMaps.labelOf, userId: viewer.user.id, writable: viewer.writable, refunds });
+  const items = buildListItems({ reports: list.rows, archives: archives ?? [], staff, labelOf: subjectMaps.labelOf, userId: viewer.user.id, writable: viewer.writable, refunds,
+    // 원장급은 남이 요청한 보고서도 취소한다 — 재검토 건의 '내 재요청 필요'(상세 화면과 같은 판정).
+    directorLevel: cancelsAsDirector(viewer.user.systemRole, !!viewer.teacherId),
+    // 승인 완료 줄의 묶음 형제 상태(형제가 목록에 없어도) — 상태 칸이 '다른 과목 승인 대기'와 '환불·처리만 남음'을 가른다.
+    groupStatuses: list.groupStatuses });
   const filters = parseListFilters(sp, canSeeArchive);
   const rangeWindow = listWindow(filters, kstToday());
   const found = filterListItems(items, filters, rangeWindow);

@@ -1,0 +1,758 @@
+{
+ "students": [
+  [
+   {
+    "Plan": {
+     "Node Type": "Limit",
+     "Parallel Aware": false,
+     "Async Capable": false,
+     "Startup Cost": 10000000011.16,
+     "Total Cost": 10000000011.18,
+     "Plan Rows": 1,
+     "Plan Width": 40,
+     "Output": [
+      "students.status",
+      "(count(*))"
+     ],
+     "Plans": [
+      {
+       "Node Type": "Aggregate",
+       "Strategy": "Sorted",
+       "Partial Mode": "Simple",
+       "Parent Relationship": "Outer",
+       "Parallel Aware": false,
+       "Async Capable": false,
+       "Startup Cost": 10000000011.16,
+       "Total Cost": 10000000011.18,
+       "Plan Rows": 1,
+       "Plan Width": 40,
+       "Output": [
+        "students.status",
+        "count(*)"
+       ],
+       "Group Key": [
+        "students.status"
+       ],
+       "Plans": [
+        {
+         "Node Type": "Sort",
+         "Parent Relationship": "Outer",
+         "Parallel Aware": false,
+         "Async Capable": false,
+         "Startup Cost": 10000000011.16,
+         "Total Cost": 10000000011.16,
+         "Plan Rows": 1,
+         "Plan Width": 32,
+         "Output": [
+          "students.status"
+         ],
+         "Sort Key": [
+          "students.status"
+         ],
+         "Plans": [
+          {
+           "Node Type": "Subquery Scan",
+           "Parent Relationship": "Outer",
+           "Parallel Aware": false,
+           "Async Capable": false,
+           "Alias": "students",
+           "Startup Cost": 10000000000.26,
+           "Total Cost": 10000000011.15,
+           "Plan Rows": 1,
+           "Plan Width": 32,
+           "Output": [
+            "students.status"
+           ],
+           "Plans": [
+            {
+             "Node Type": "Seq Scan",
+             "Parent Relationship": "Subquery",
+             "Parallel Aware": false,
+             "Async Capable": false,
+             "Relation Name": "students",
+             "Schema": "public",
+             "Alias": "t",
+             "Startup Cost": 10000000000.26,
+             "Total Cost": 10000000011.14,
+             "Plan Rows": 1,
+             "Plan Width": 1134,
+             "Output": [
+              "NULL::uuid",
+              "NULL::uuid",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "t.status",
+              "NULL::date",
+              "NULL::date",
+              "NULL::timestamp with time zone",
+              "NULL::timestamp with time zone",
+              "NULL::text",
+              "NULL::text",
+              "NULL::jsonb",
+              "NULL::text",
+              "NULL::timestamp with time zone",
+              "NULL::text",
+              "NULL::jsonb",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::date",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::timestamp with time zone",
+              "NULL::boolean",
+              "NULL::text",
+              "NULL::text",
+              "NULL::boolean",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text"
+             ],
+             "Filter": "(t.tenant_id = (InitPlan 1).col1)",
+             "Plans": [
+              {
+               "Node Type": "Result",
+               "Parent Relationship": "InitPlan",
+               "Subplan Name": "InitPlan 1",
+               "Parallel Aware": false,
+               "Async Capable": false,
+               "Startup Cost": 0,
+               "Total Cost": 0.26,
+               "Plan Rows": 1,
+               "Plan Width": 16,
+               "Output": [
+                "assistant_private.bound_tenant()"
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   }
+  ]
+ ],
+ "join": [
+  [
+   {
+    "Plan": {
+     "Node Type": "Limit",
+     "Parallel Aware": false,
+     "Async Capable": false,
+     "Startup Cost": 30000000000.83,
+     "Total Cost": 40000000052.77,
+     "Plan Rows": 1,
+     "Plan Width": 64,
+     "Output": [
+      "st.name",
+      "c.class_name"
+     ],
+     "Plans": [
+      {
+       "Node Type": "Nested Loop",
+       "Parent Relationship": "Outer",
+       "Parallel Aware": false,
+       "Async Capable": false,
+       "Join Type": "Inner",
+       "Startup Cost": 30000000000.83,
+       "Total Cost": 40000000052.77,
+       "Plan Rows": 1,
+       "Plan Width": 64,
+       "Output": [
+        "st.name",
+        "c.class_name"
+       ],
+       "Inner Unique": false,
+       "Join Filter": "(st.id = t_1.student_id)",
+       "Plans": [
+        {
+         "Node Type": "Subquery Scan",
+         "Parent Relationship": "Outer",
+         "Parallel Aware": false,
+         "Async Capable": false,
+         "Alias": "st",
+         "Startup Cost": 10000000000.31,
+         "Total Cost": 20000000026.01,
+         "Plan Rows": 1,
+         "Plan Width": 308,
+         "Output": [
+          "st.id",
+          "st.name",
+          "NULL::text",
+          "NULL::text",
+          "NULL::text",
+          "NULL::text",
+          "NULL::text",
+          "NULL::date",
+          "NULL::date",
+          "NULL::text",
+          "NULL::boolean",
+          "NULL::boolean",
+          "NULL::uuid",
+          "NULL::boolean",
+          "NULL::text",
+          "NULL::boolean",
+          "NULL::timestamp with time zone"
+         ],
+         "Filter": "((NOT COALESCE(st.is_test, false)) AND (regexp_replace(COALESCE(st.notes, ''::text), '^\\s+'::text, ''::text) !~ '^중복 병합:\\s*\\S+와 통합됨'::text) AND ((ANY (st.id = (hashed SubPlan 4).col1)) OR ((NULLIF((st.withdrawal_metadata ->> 'reason'::text), ''::text) IS NOT NULL) AND (NULLIF((st.withdrawal_metadata ->> 'reason'::text), ''::text) <> 'other'::text) AND (NULLIF((st.withdrawal_metadata ->> 'reason'::text), ''::text) = ANY ('{dissatisfaction,grades,motivation,method,competitor,schedule,financial,career,peers,illness,advised,relocation,graduated,other,dissatisfied,unsatisfied,moved,graduate,cost,money}'::text[]))) OR ((btrim(COALESCE((st.withdrawal_metadata ->> 'memo'::text), ''::text)) <> '데이터 정리 일괄 퇴원'::text) AND (btrim(COALESCE((st.withdrawal_metadata ->> 'memo'::text), ''::text)) !~~ '수강 반 없음 일괄 퇴원 처리%'::text))))",
+         "Plans": [
+          {
+           "Node Type": "Seq Scan",
+           "Parent Relationship": "Subquery",
+           "Parallel Aware": false,
+           "Async Capable": false,
+           "Relation Name": "students",
+           "Schema": "public",
+           "Alias": "t",
+           "Startup Cost": 10000000000.26,
+           "Total Cost": 10000000011.14,
+           "Plan Rows": 1,
+           "Plan Width": 1134,
+           "Output": [
+            "t.id",
+            "NULL::uuid",
+            "NULL::text",
+            "t.name",
+            "NULL::text",
+            "NULL::text",
+            "NULL::text",
+            "NULL::text",
+            "NULL::text",
+            "NULL::date",
+            "NULL::date",
+            "NULL::timestamp with time zone",
+            "NULL::timestamp with time zone",
+            "NULL::text",
+            "NULL::text",
+            "NULL::jsonb",
+            "NULL::text",
+            "NULL::timestamp with time zone",
+            "t.notes",
+            "t.withdrawal_metadata",
+            "NULL::text",
+            "NULL::text",
+            "NULL::text",
+            "NULL::text",
+            "NULL::date",
+            "NULL::text",
+            "NULL::text",
+            "NULL::text",
+            "NULL::text",
+            "NULL::text",
+            "NULL::text",
+            "NULL::text",
+            "NULL::text",
+            "NULL::text",
+            "NULL::text",
+            "NULL::timestamp with time zone",
+            "NULL::boolean",
+            "NULL::text",
+            "NULL::text",
+            "t.is_test",
+            "NULL::text",
+            "NULL::text",
+            "NULL::text",
+            "NULL::text"
+           ],
+           "Filter": "(t.tenant_id = (InitPlan 5).col1)",
+           "Plans": [
+            {
+             "Node Type": "Result",
+             "Parent Relationship": "InitPlan",
+             "Subplan Name": "InitPlan 5",
+             "Parallel Aware": false,
+             "Async Capable": false,
+             "Startup Cost": 0,
+             "Total Cost": 0.26,
+             "Plan Rows": 1,
+             "Plan Width": 16,
+             "Output": [
+              "assistant_private.bound_tenant()"
+             ]
+            }
+           ]
+          },
+          {
+           "Node Type": "Subquery Scan",
+           "Parent Relationship": "SubPlan",
+           "Subplan Name": "SubPlan 4",
+           "Parallel Aware": false,
+           "Async Capable": false,
+           "Alias": "e",
+           "Startup Cost": 10000000000.26,
+           "Total Cost": 10000000014.02,
+           "Plan Rows": 1,
+           "Plan Width": 16,
+           "Output": [
+            "e.student_id"
+           ],
+           "Plans": [
+            {
+             "Node Type": "Seq Scan",
+             "Parent Relationship": "Subquery",
+             "Parallel Aware": false,
+             "Async Capable": false,
+             "Relation Name": "enrollments",
+             "Schema": "public",
+             "Alias": "t_3",
+             "Startup Cost": 10000000000.26,
+             "Total Cost": 10000000014.01,
+             "Plan Rows": 1,
+             "Plan Width": 244,
+             "Output": [
+              "NULL::uuid",
+              "NULL::uuid",
+              "t_3.student_id",
+              "NULL::uuid",
+              "NULL::date",
+              "NULL::date",
+              "NULL::boolean",
+              "NULL::text",
+              "NULL::timestamp with time zone",
+              "NULL::text[]",
+              "NULL::boolean",
+              "NULL::boolean",
+              "NULL::text",
+              "NULL::boolean",
+              "NULL::text",
+              "NULL::text"
+             ],
+             "Filter": "((t_3.end_date IS NOT NULL) AND (t_3.tenant_id = (InitPlan 3).col1))",
+             "Plans": [
+              {
+               "Node Type": "Result",
+               "Parent Relationship": "InitPlan",
+               "Subplan Name": "InitPlan 3",
+               "Parallel Aware": false,
+               "Async Capable": false,
+               "Startup Cost": 0,
+               "Total Cost": 0.26,
+               "Plan Rows": 1,
+               "Plan Width": 16,
+               "Output": [
+                "assistant_private.bound_tenant()"
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "Node Type": "Nested Loop",
+         "Parent Relationship": "Inner",
+         "Parallel Aware": false,
+         "Async Capable": false,
+         "Join Type": "Left",
+         "Startup Cost": 20000000000.52,
+         "Total Cost": 20000000026.71,
+         "Plan Rows": 2,
+         "Plan Width": 174,
+         "Output": [
+          "NULL::uuid",
+          "t_1.student_id",
+          "NULL::uuid",
+          "c.class_name",
+          "NULL::text",
+          "NULL::uuid",
+          "NULL::date",
+          "NULL::date",
+          "NULL::boolean",
+          "NULL::boolean",
+          "NULL::boolean",
+          "NULL::boolean",
+          "NULL::text",
+          "NULL::boolean",
+          "NULL::boolean"
+         ],
+         "Inner Unique": false,
+         "Join Filter": "(c.id = t_1.class_id)",
+         "Plans": [
+          {
+           "Node Type": "Seq Scan",
+           "Parent Relationship": "Outer",
+           "Parallel Aware": false,
+           "Async Capable": false,
+           "Relation Name": "enrollments",
+           "Schema": "public",
+           "Alias": "t_1",
+           "Startup Cost": 10000000000.26,
+           "Total Cost": 10000000014.01,
+           "Plan Rows": 2,
+           "Plan Width": 244,
+           "Output": [
+            "NULL::uuid",
+            "NULL::uuid",
+            "t_1.student_id",
+            "t_1.class_id",
+            "NULL::date",
+            "NULL::date",
+            "NULL::boolean",
+            "NULL::text",
+            "NULL::timestamp with time zone",
+            "NULL::text[]",
+            "NULL::boolean",
+            "NULL::boolean",
+            "NULL::text",
+            "NULL::boolean",
+            "NULL::text",
+            "NULL::text"
+           ],
+           "Filter": "(t_1.tenant_id = (InitPlan 6).col1)",
+           "Plans": [
+            {
+             "Node Type": "Result",
+             "Parent Relationship": "InitPlan",
+             "Subplan Name": "InitPlan 6",
+             "Parallel Aware": false,
+             "Async Capable": false,
+             "Startup Cost": 0,
+             "Total Cost": 0.26,
+             "Plan Rows": 1,
+             "Plan Width": 16,
+             "Output": [
+              "assistant_private.bound_tenant()"
+             ]
+            }
+           ]
+          },
+          {
+           "Node Type": "Materialize",
+           "Parent Relationship": "Inner",
+           "Parallel Aware": false,
+           "Async Capable": false,
+           "Startup Cost": 10000000000.26,
+           "Total Cost": 10000000012.65,
+           "Plan Rows": 1,
+           "Plan Width": 48,
+           "Output": [
+            "c.class_name",
+            "c.id"
+           ],
+           "Plans": [
+            {
+             "Node Type": "Subquery Scan",
+             "Parent Relationship": "Outer",
+             "Parallel Aware": false,
+             "Async Capable": false,
+             "Alias": "c",
+             "Startup Cost": 10000000000.26,
+             "Total Cost": 10000000012.65,
+             "Plan Rows": 1,
+             "Plan Width": 48,
+             "Output": [
+              "c.class_name",
+              "c.id"
+             ],
+             "Plans": [
+              {
+               "Node Type": "Seq Scan",
+               "Parent Relationship": "Subquery",
+               "Parallel Aware": false,
+               "Async Capable": false,
+               "Relation Name": "classes",
+               "Schema": "public",
+               "Alias": "t_2",
+               "Startup Cost": 10000000000.26,
+               "Total Cost": 10000000012.64,
+               "Plan Rows": 1,
+               "Plan Width": 388,
+               "Output": [
+                "t_2.id",
+                "NULL::uuid",
+                "t_2.class_name",
+                "NULL::text",
+                "NULL::uuid",
+                "NULL::uuid",
+                "NULL::boolean",
+                "NULL::timestamp with time zone",
+                "NULL::text",
+                "NULL::text",
+                "NULL::text",
+                "NULL::uuid",
+                "NULL::date",
+                "NULL::text",
+                "NULL::text",
+                "NULL::date",
+                "NULL::boolean",
+                "NULL::boolean",
+                "NULL::text",
+                "NULL::boolean",
+                "NULL::text"
+               ],
+               "Filter": "(t_2.tenant_id = (InitPlan 7).col1)",
+               "Plans": [
+                {
+                 "Node Type": "Result",
+                 "Parent Relationship": "InitPlan",
+                 "Subplan Name": "InitPlan 7",
+                 "Parallel Aware": false,
+                 "Async Capable": false,
+                 "Startup Cost": 0,
+                 "Total Cost": 0.26,
+                 "Plan Rows": 1,
+                 "Plan Width": 16,
+                 "Output": [
+                  "assistant_private.bound_tenant()"
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   }
+  ]
+ ],
+ "settings": [
+  [
+   {
+    "Plan": {
+     "Node Type": "Limit",
+     "Parallel Aware": false,
+     "Async Capable": false,
+     "Startup Cost": 10000000000.26,
+     "Total Cost": 10000000020.44,
+     "Plan Rows": 4,
+     "Plan Width": 32,
+     "Output": [
+      "tenant_settings.data"
+     ],
+     "Plans": [
+      {
+       "Node Type": "Subquery Scan",
+       "Parent Relationship": "Outer",
+       "Parallel Aware": false,
+       "Async Capable": false,
+       "Alias": "tenant_settings",
+       "Startup Cost": 10000000000.26,
+       "Total Cost": 10000000020.44,
+       "Plan Rows": 4,
+       "Plan Width": 32,
+       "Output": [
+        "tenant_settings.data"
+       ],
+       "Plans": [
+        {
+         "Node Type": "Seq Scan",
+         "Parent Relationship": "Subquery",
+         "Parallel Aware": false,
+         "Async Capable": false,
+         "Relation Name": "tenant_settings",
+         "Schema": "public",
+         "Alias": "t",
+         "Startup Cost": 10000000000.26,
+         "Total Cost": 10000000020.4,
+         "Plan Rows": 4,
+         "Plan Width": 72,
+         "Output": [
+          "NULL::uuid",
+          "(t.data #- '{operations,seatPins}'::text[])",
+          "NULL::uuid",
+          "NULL::timestamp with time zone"
+         ],
+         "Filter": "(t.tenant_id = (InitPlan 1).col1)",
+         "Plans": [
+          {
+           "Node Type": "Result",
+           "Parent Relationship": "InitPlan",
+           "Subplan Name": "InitPlan 1",
+           "Parallel Aware": false,
+           "Async Capable": false,
+           "Startup Cost": 0,
+           "Total Cost": 0.26,
+           "Plan Rows": 1,
+           "Plan Width": 16,
+           "Output": [
+            "assistant_private.bound_tenant()"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   }
+  ]
+ ],
+ "dates": [
+  [
+   {
+    "Plan": {
+     "Node Type": "Limit",
+     "Parallel Aware": false,
+     "Async Capable": false,
+     "Startup Cost": 10000000011.16,
+     "Total Cost": 10000000011.18,
+     "Plan Rows": 1,
+     "Plan Width": 16,
+     "Output": [
+      "(date_trunc('month'::text, (students.created_at AT TIME ZONE 'Asia/Seoul'::text)))",
+      "(count(*))"
+     ],
+     "Plans": [
+      {
+       "Node Type": "Aggregate",
+       "Strategy": "Sorted",
+       "Partial Mode": "Simple",
+       "Parent Relationship": "Outer",
+       "Parallel Aware": false,
+       "Async Capable": false,
+       "Startup Cost": 10000000011.16,
+       "Total Cost": 10000000011.18,
+       "Plan Rows": 1,
+       "Plan Width": 16,
+       "Output": [
+        "(date_trunc('month'::text, (students.created_at AT TIME ZONE 'Asia/Seoul'::text)))",
+        "count(*)"
+       ],
+       "Group Key": [
+        "(date_trunc('month'::text, (students.created_at AT TIME ZONE 'Asia/Seoul'::text)))"
+       ],
+       "Plans": [
+        {
+         "Node Type": "Sort",
+         "Parent Relationship": "Outer",
+         "Parallel Aware": false,
+         "Async Capable": false,
+         "Startup Cost": 10000000011.16,
+         "Total Cost": 10000000011.16,
+         "Plan Rows": 1,
+         "Plan Width": 8,
+         "Output": [
+          "(date_trunc('month'::text, (students.created_at AT TIME ZONE 'Asia/Seoul'::text)))"
+         ],
+         "Sort Key": [
+          "(date_trunc('month'::text, (students.created_at AT TIME ZONE 'Asia/Seoul'::text)))"
+         ],
+         "Plans": [
+          {
+           "Node Type": "Subquery Scan",
+           "Parent Relationship": "Outer",
+           "Parallel Aware": false,
+           "Async Capable": false,
+           "Alias": "students",
+           "Startup Cost": 10000000000.26,
+           "Total Cost": 10000000011.15,
+           "Plan Rows": 1,
+           "Plan Width": 8,
+           "Output": [
+            "date_trunc('month'::text, (students.created_at AT TIME ZONE 'Asia/Seoul'::text))"
+           ],
+           "Plans": [
+            {
+             "Node Type": "Seq Scan",
+             "Parent Relationship": "Subquery",
+             "Parallel Aware": false,
+             "Async Capable": false,
+             "Relation Name": "students",
+             "Schema": "public",
+             "Alias": "t",
+             "Startup Cost": 10000000000.26,
+             "Total Cost": 10000000011.14,
+             "Plan Rows": 1,
+             "Plan Width": 1134,
+             "Output": [
+              "NULL::uuid",
+              "NULL::uuid",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::date",
+              "NULL::date",
+              "t.created_at",
+              "NULL::timestamp with time zone",
+              "NULL::text",
+              "NULL::text",
+              "NULL::jsonb",
+              "NULL::text",
+              "NULL::timestamp with time zone",
+              "NULL::text",
+              "NULL::jsonb",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::date",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::timestamp with time zone",
+              "NULL::boolean",
+              "NULL::text",
+              "NULL::text",
+              "NULL::boolean",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text",
+              "NULL::text"
+             ],
+             "Filter": "(t.tenant_id = (InitPlan 1).col1)",
+             "Plans": [
+              {
+               "Node Type": "Result",
+               "Parent Relationship": "InitPlan",
+               "Subplan Name": "InitPlan 1",
+               "Parallel Aware": false,
+               "Async Capable": false,
+               "Startup Cost": 0,
+               "Total Cost": 0.26,
+               "Plan Rows": 1,
+               "Plan Width": 16,
+               "Output": [
+                "assistant_private.bound_tenant()"
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   }
+  ]
+ ]
+}

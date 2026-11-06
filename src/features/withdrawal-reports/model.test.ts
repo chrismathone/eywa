@@ -43,14 +43,14 @@ describe("withdrawal reports", () => {
   it("상태 칩 — 데스크 환불이 남았으면 원래 단계와 '데스크 환불 요청'을 함께", () => {
     const waiting = [{ documentId: "d", deskId: "desk", deskName: "데스크A", completedDate: null }];
     const done = [{ ...waiting[0], completedDate: "2026-11-03" }];
-    expect(reportStatusChips({ status: "manager_pending" }, waiting)).toEqual(["관리자 승인 요청", "데스크 환불 요청"]);
+    expect(reportStatusChips({ status: "manager_pending" }, waiting)).toEqual(["관리자 요청", "데스크 환불 요청"]);
     expect(reportStatusChips({ status: "approved" }, waiting)).toEqual(["관리자 승인 완료", "데스크 환불 요청"]);
     expect(reportStatusChips({ status: "scheduled" }, waiting)).toEqual(["처리 예약", "데스크 환불 요청"]);
-    expect(reportStatusChips({ status: "manager_pending" }, done)).toEqual(["관리자 승인 요청"]); // 관리자 단계는 늘 같은 이름
+    expect(reportStatusChips({ status: "manager_pending" }, done)).toEqual(["관리자 요청"]); // 관리자 단계는 늘 같은 이름(원장 2026-11-06 "관리자 요청")
     expect(reportStatusChips({ status: "approved" }, done)).toEqual(["관리자 승인 완료", "데스크 환불 완료"]); // 환불은 끝났고 처리 전
     expect(reportStatusChips({ status: "approved" })).toEqual(["승인 완료 · 다른 보고서 대기"]);
     expect(reportStatusChips({ status: "completed" }, waiting)).toEqual(["처리 완료"]);
-    expect(reportStatusLabel({ status: "manager_pending" })).toBe("관리자 승인 요청");
+    expect(reportStatusLabel({ status: "manager_pending" })).toBe("관리자 요청");
   });
   it("infers whole withdrawal only when every enrollment is selected, including same-subject classes", () => {
     const courses = [{ id: "math-a", subject: "math" }, { id: "math-b", subject: "math" }];
