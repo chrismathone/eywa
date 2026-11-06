@@ -4986,6 +4986,8 @@ export const SHEET_DICT = {
   "cls.d.sheetWin": { ko: "영어 강사 시트", en: "English class sheet" },
   "cls.d.attendance": { ko: "오늘 출석 입력", en: "Take today's attendance" },
   "cls.d.attendanceWin": { ko: "출석 입력", en: "Attendance entry" },
+  "cls.d.explore": { ko: "연결 탐색", en: "Connections" },
+  "cls.d.exploreWin": { ko: "{name} 연결 탐색", en: "{name} · connections" },
   "cls.d.schedTitle": { ko: "시간표 예약", en: "Timetable change scheduled" },
   "cls.d.schedHint": {
     ko: "그날 자동으로 바뀝니다. 되돌리려면 시간표 화면의 적용 예정 배지에서 취소하세요.",
