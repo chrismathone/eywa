@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ASSISTANT_LEVEL_LABEL } from "@/features/assistant/levels";
 import type { AskStep, QuerySummary } from "@/features/assistant/protocol";
 import { kstTimeOf } from "@/lib/date-kst";
-import { formatDuration, stepSummaryText, type Turn } from "./assistant-state";
+import { formatDuration, stepSummaryText, stepTrouble, type Turn } from "./assistant-state";
 import { ReportView } from "./report-view";
 
 /**
@@ -52,7 +52,7 @@ function Answer({ turn, canRetry, onRetry, onReload }: { turn: Turn; canRetry: b
     case "done":
       return (
         <div className="space-y-4">
-          {turn.steps.length ? <ProcessDetails steps={turn.steps} /> : null}
+          {turn.steps.length ? <ProcessDetails steps={turn.steps} settled /> : null}
           {turn.report ? <ReportView report={turn.report} /> : null}
         </div>
       );
@@ -143,19 +143,19 @@ const KIND_ICON: Record<AskStep["kind"], AywaIconName> = {
  * 끝난 답의 과정 — 한 줄로 접힌다: `조회 3번 · 표 5개 · 18초 — 과정 보기`(누르면 타임라인 전체). JS 없이 `<details>`.
  * 다시 연 대화도 저장된 단계(`ThreadMessage.steps`)로 같은 줄을 보인다.
  */
-function ProcessDetails({ steps, defaultOpen = false }: { steps: readonly AskStep[]; defaultOpen?: boolean }) {
+function ProcessDetails({ steps, defaultOpen = false, settled = false }: { steps: readonly AskStep[]; defaultOpen?: boolean; settled?: boolean }) {
   return (
     <details open={defaultOpen} className="group">
       <summary className="hover:bg-muted inline-flex cursor-pointer list-none flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-lg px-2 py-1 text-sm font-medium select-none [&::-webkit-details-marker]:hidden">
         <EyIcon name="listChecks" size={16} className="shrink-0" />
-        <span className="num">{stepSummaryText(steps)}</span>
+        <span className="num">{stepSummaryText(steps, settled)}</span>
         <span aria-hidden>—</span>
         <span className="text-primary font-bold group-open:hidden">과정 보기</span>
         <span className="text-primary hidden font-bold group-open:inline">과정 접기</span>
         <EyIcon name="chevronDown" size={16} className="text-primary transition-transform group-open:rotate-180 motion-reduce:transition-none" />
       </summary>
       <div className="pt-2.5 pl-2">
-        <StepTimeline steps={steps} live={false} />
+        <StepTimeline steps={steps} live={false} settled={settled} />
       </div>
     </details>
   );
@@ -211,6 +211,7 @@ function StepTimeline({
   now = null,
   startedAt = Number.NaN,
   currentId = null,
+  settled = false,
 }: {
   steps: readonly AskStep[];
   live: boolean;
@@ -218,15 +219,21 @@ function StepTimeline({
   /** 질문을 보낸 시각(ms) — 도는 단계의 흐르는 초 = 지금 − (보낸 시각 + 단계 시작 `at`). */
   startedAt?: number;
   currentId?: string | null;
+  /** 답이 보고서로 끝난 차례 — 막혔다가 이어 간 단계를 옅게 그린다(`stepTrouble`). */
+  settled?: boolean;
 }) {
   return (
     <ol className="space-y-2" aria-label="답을 만드는 단계">
-      {steps.map((s) => {
+      {steps.map((s, index) => {
         const running = s.state === "running";
         const current = live && s.id === currentId;
         const ticking = live && running && now !== null && !Number.isNaN(startedAt) ? Math.max(0, now - startedAt - s.at) : null;
         const tail =
           s.state === "error" ? null : running ? (ticking !== null ? formatDuration(ticking) : null) : (s.detail ?? (typeof s.ms === "number" ? seconds(s.ms) : null));
+        // 막힌 단계의 뜻(`stepTrouble`) — 답이 끝까지 나왔고 뒤에 같은 종류가 이어졌으면 옅게(다른 조회로 이어 감) ·
+        // 시간·한도면 주황(분석이 잘렸다는 신호) · 나머지는 빨강(원장 2026-11-06 · 적대 리뷰 2026-11-06).
+        const trouble = stepTrouble(steps, index, settled);
+        const retried = trouble === "retried";
         return (
           <li
             key={s.id}
@@ -237,6 +244,10 @@ function StepTimeline({
                 <EyIcon name="loader" size={16} className="text-primary animate-spin motion-reduce:animate-none" aria-label="진행 중" />
               ) : running ? (
                 <EyIcon name="circle" size={14} aria-label="멈춤" />
+              ) : retried ? (
+                <EyIcon name="undo" size={14} className="text-text-faint" aria-label="다른 조회로 이어 감" />
+              ) : trouble === "limit" ? (
+                <EyIcon name="clock" size={15} className="text-amber" aria-label="시간·한도로 멈춤" />
               ) : s.state === "error" ? (
                 <EyIcon name="alertCircle" size={16} className="text-danger" aria-label="막힘" />
               ) : (
@@ -261,7 +272,11 @@ function StepTimeline({
               ) : null}
               {tail ? <span className="num ml-auto text-xs whitespace-nowrap">{tail}</span> : null}
             </div>
-            {s.state === "error" && s.detail ? <p className="text-danger mt-0.5 px-1.5 text-xs break-words">{s.detail}</p> : null}
+            {s.state === "error" && s.detail ? (
+              <p className={`mt-0.5 px-1.5 text-xs break-words ${retried ? "text-text-faint" : trouble === "limit" ? "text-amber" : "text-danger"}`}>
+                {retried && !/고칩니다|고쳐/.test(s.detail) ? `${s.detail} — 다른 조회로 이어 갔습니다` : s.detail}
+              </p>
+            ) : null}
           </li>
         );
       })}

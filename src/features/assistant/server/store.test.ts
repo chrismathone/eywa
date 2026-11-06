@@ -5,7 +5,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 
 import type { SettledReport } from "../report";
-import { compactReport } from "./store";
+import { compactReport, kpiFromData } from "./store";
 
 const report = (rows: Array<Record<string, string | number | null>>, extra: SettledReport["datasets"] = {}): SettledReport => ({
   title: "t",
@@ -36,5 +36,26 @@ describe("compactReport", () => {
     expect(out.datasets.q1!.rows[0]).toEqual(big[0]);
     // 작은 자료는 건드리지 않는다.
     expect(out.datasets.q2).toEqual(small.q2);
+  });
+});
+
+describe("다시 연 답의 KPI — 한국어 이름으로 바꾼 자료와 맞춘다(재리뷰 2026-11-06)", () => {
+  it("ref 글자 값만 자료 값으로 · 숫자·ref 없음·없는 줄은 그대로", () => {
+    const blocks: SettledReport["blocks"] = [
+      {
+        type: "kpi",
+        items: [
+          { label: "과목", value: "math", ref: { query: "q1", row: 0, column: "과목" } },
+          { label: "인원", value: 12, ref: { query: "q1", row: 0, column: "인원" } },
+          { label: "메모", value: "그대로" },
+          { label: "없는 줄", value: "english", ref: { query: "q1", row: 9, column: "과목" } },
+        ],
+      },
+      { type: "summary", text: "요약" },
+    ];
+    const data: SettledReport["datasets"] = { q1: { columns: ["과목", "인원"], rows: [{ 과목: "수학", 인원: 12 }], truncated: false, purpose: "과목별 인원" } };
+    const out = kpiFromData(blocks, data);
+    expect(out[0]).toMatchObject({ items: [{ value: "수학" }, { value: 12 }, { value: "그대로" }, { value: "english" }] });
+    expect(out[1]).toBe(blocks[1]);
   });
 });

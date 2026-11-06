@@ -300,31 +300,58 @@ export function formatDuration(ms: number): string {
 }
 
 /**
- * 끝난 답의 과정 한 줄 재료 — 조회 횟수(조회 실행 단계 수) · 본 표 수(겹치지 않게) · 걸린 시간(가장 늦게 끝난 단계의 끝) · 막힌 단계 수.
+ * 막힌 단계 하나의 뜻(원장 2026-11-06 *"왜 없는 칸을 썼다고 나오는지"* — 답은 잘 나왔는데 빨간 오류가 남아 문제처럼 보였다):
+ * - `limit` = 시간·조회 한도로 여기서 멈춤(서버 표식 `cause` — 고칠 실수가 아니라 분석이 잘렸다는 신호).
+ * - `retried` = **답이 보고서로 끝났고**(settled) 뒤에 같은 종류 단계가 끝까지 됐다 — 다른 조회로 이어 갔다.
+ *   🔴 답 전체가 실패한 차례는 늘 `failed` — 실패 안내는 '어디서 막혔나'를 보여 주는 자리다(적대 리뷰 2026-11-06).
+ * - `failed` = 나머지. 막히지 않았으면 null.
+ */
+export function stepTrouble(steps: readonly AskStep[], index: number, settled: boolean): "retried" | "limit" | "failed" | null {
+  const s = steps[index];
+  if (!s || s.state !== "error") return null;
+  if (s.cause === "limit") return "limit";
+  const family = (k: AskStep["kind"]) => (k === "fix" ? "report" : k);
+  if (settled && steps.slice(index + 1).some((t) => t.state === "done" && family(t.kind) === family(s.kind))) return "retried";
+  return "failed";
+}
+
+/**
+ * 끝난 답의 과정 한 줄 재료 — 조회 횟수(조회 실행 단계 수) · 본 표 수(겹치지 않게) · 걸린 시간(가장 늦게 끝난 단계의 끝) ·
+ * 막힌 단계를 `stepTrouble`로 가른 수(다시 시도 · 한도로 멈춤 · 막힘). `settled` = 답이 보고서로 끝난 차례.
  * 같은 id가 여러 번 온 단계는 이미 하나로 합쳐져 있다(리듀서).
  */
-export function stepSummary(steps: readonly AskStep[]): { queries: number; tables: number; ms: number; failed: number } {
+export function stepSummary(
+  steps: readonly AskStep[],
+  settled = false,
+): { queries: number; tables: number; ms: number; retried: number; limited: number; failed: number } {
   const tables = new Set<string>();
   let ms = 0;
-  for (const s of steps) {
+  const count = { retried: 0, limit: 0, failed: 0 };
+  steps.forEach((s, i) => {
     for (const t of s.tables ?? []) tables.add(t.name);
     ms = Math.max(ms, s.at + (s.ms ?? 0));
-  }
+    const trouble = stepTrouble(steps, i, settled);
+    if (trouble) count[trouble]++;
+  });
   return {
     queries: steps.filter((s) => s.kind === "query").length,
     tables: tables.size,
     ms,
-    failed: steps.filter((s) => s.state === "error").length,
+    retried: count.retried,
+    limited: count.limit,
+    failed: count.failed,
   };
 }
 
-/** 과정 한 줄 — `조회 3번 · 표 5개 · 18초`(0인 칸은 뺀다 · 막힌 단계가 있으면 덧붙인다). */
-export function stepSummaryText(steps: readonly AskStep[]): string {
-  const s = stepSummary(steps);
+/** 과정 한 줄 — `조회 3번 · 표 5개 · 18초`(0인 칸은 뺀다 · 다시 시도·한도로 멈춤·막힌 단계가 있으면 덧붙인다). */
+export function stepSummaryText(steps: readonly AskStep[], settled = false): string {
+  const s = stepSummary(steps, settled);
   return [
     s.queries ? `조회 ${s.queries}번` : null,
     s.tables ? `표 ${s.tables}개` : null,
     formatDuration(s.ms),
+    s.retried ? `다시 시도 ${s.retried}번` : null,
+    s.limited ? `시간·한도로 여기까지` : null,
     s.failed ? `막힌 단계 ${s.failed}개` : null,
   ]
     .filter(Boolean)
@@ -395,6 +422,7 @@ export function parseStep(v: unknown): AskStep | null {
     ...(tables && tables.length ? { tables } : {}),
     ...(str(v.detail) ? { detail: v.detail } : {}),
     ...(num(v.ms) ? { ms: v.ms } : {}),
+    ...(v.cause === "limit" ? { cause: "limit" as const } : {}),
   };
 }
 

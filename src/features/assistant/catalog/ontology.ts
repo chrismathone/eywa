@@ -11,15 +11,36 @@ export const ONTOLOGY_MAP = `## 온톨로지 — 이 학원의 자료를 읽는 
 
 ### 개체
 - 원생 = students(보호자는 같은 줄의 parent_* · parent2_* 칸) · 형제 = student_siblings(student_a · student_b · linked)
-- 반 = classes(subject = 과목 · teacher_id = 지금 담임 · closed_at = 닫은 날 · is_makeup_pool = 보강용 반)
+- 반 = classes(subject = 과목 · teacher_id = 지금 담임 · closed_at = 종강일 · is_active=false = 폐지 · is_makeup_pool = 보강용 반). 운영 중인 반 = is_active and (closed_at is null or closed_at ≥ 오늘)
 - 강사·직원 = users · 학원 = 이 지점(보기가 이미 이 지점만 보여 준다)
 
 ### 관계 — 기간이 있다
 - 수강(원생→반) = enrollments(start_date ~ end_date, end_date 없음 = 진행 중 · on_hold = 휴원 중)
 - 담임(반→강사) = classes.teacher_id — 🔴 지금 값이다. 과거 기록을 지금 담임에게 덮어씌우지 않는다.
 - 교시 담당(반→강사) = class_schedules.teacher_id(valid_from ~ valid_to) · 임시 위임 = class_delegations
-- 🔴 담임·교시 담당·위임은 '배정'이지 실제로 가르쳤다는 증거가 아니다. 실제로 수업한 사람은 출결의 attendance_records.taught_by.
+- 🔴 출결 귀속 — 출결 한 칸을 어느 강사 몫으로 보나(앱 teacher-axis 규칙 · 이 순서로):
+  ① attendance_records.taught_by가 있으면 그 사람(남의 반을 대신 보강 — 드물다).
+  ② 자리 수업이면 누구 몫도 아니다: seat_label 있음 · recorded_via='seat' · 맞는 교시 줄이 전부 자리(class_schedules.teacher_id null + lower(btrim(slot_teacher_label)) in ('lab','lab실','랩실','이주희','jj','집중자율수업실','자율실') — 라벨 원문은 별칭이 섞여 있다). 담임에게 떨어뜨리지 않는다.
+  ③ 그 반 class_schedules 중 요일(s.day_of_week::text = to_char(a.session_date,'dy') — day_of_week는 enum이라 ::text) · 기간(valid_from ≤ 날짜 ≤ valid_to 또는 null) · 교시(slot_start = start_time, slot_start가 null이면 그날 모든 교시)가 맞는 줄의 담당(teacher_id)이 한 명이면 그 사람, 여럿이면 귀속 불명(빼고 밝힌다).
+  ④ 맞는 줄이 없거나 담당 칸이 모두 비면 그날의 담임(수학은 거의 다 이 경로).
+  taught_by가 비어 있는 것은 '원래 담당이 수업했다'는 뜻이다 — "수업 기록이 없다"·"입력 누락"으로 읽지 않는다. onto_class_teachers는 배정 목록이라 귀속 계산에 쓰지 않는다(요일·교시 칸이 없다).
+  강사별 수업 수·시수·급여의 정답은 앱 화면(출석부 정산·강사 보기)이다 — 비서 숫자는 근사라고 밝히고, 강사 비교는 반 단위 지표(그 강사가 맡은 반들의 출석률 등)로 보되 개인 성과로 단정하지 않는다.
+- 담임(classes.teacher_id)은 지금 값이다. 기간을 담임 기준으로 셀 때 그 사이 담임이 바뀐 반은 바뀐 날 이전을 새 담임 몫으로 세지 않는다.
+  담임 전이 = audit_logs 중 action 'class_handover_apply'·'class_update'이면서 metadata->>'newTeacherId'가 있는 줄만(class_update는 강의실 수정 등도 섞여 있다).
+  반 = metadata->>'classId'(2026년 9월 하순부터 남긴 로그), 없으면 target_label(반 이름)이 이 지점에서 하나뿐일 때만(종강하면 반 이름이 바뀌어 이름으로는 어긋날 수 있다). 날짜 = metadata->>'effectiveDate', 없으면 created_at.
+  이렇게 가리지 못하는 반은 빼고 요약에 밝힌다.
 - 과거 시점을 물으면 그때 유효했던 관계(수강 기간·교시 담당 기간)로 본다.
+
+### 묻지 않으면 빼는 것(뺐다고 밝힐 필요 없다)
+- 폐지 반(is_active=false — 종강일 없이 폐지되기도 한다)과 보강용 반(is_makeup_pool)은 전 기간 뺀다.
+- 종강 반(closed_at)은 '지금' 목록·지금 숫자(담당 반·반별 인원)에서 closed_at < 오늘이면 뺀다. 추이·과거 시점은 그 날짜에 운영 중이던 반(closed_at is null or closed_at ≥ 그 날짜)으로 본다 — 종강으로 줄어든 것을 가리지 않게. 원장이 지난 반·종강 반을 물으면 넣는다.
+- onto_class_teachers에는 class_closed_on만 있다 — classes와 class_id로 이어 is_active · is_makeup_pool · closed_at 셋 다로 거른다.
+- 집계 제외 원생(onto_students.counted=false — 테스트·중복 병합·장부 정리) · 학생 계정(users.system_role='student'). 퇴사·대기 직원(users.status='inactive'·'pending')은 '지금 직원' 목록에서만 빼고, 지난 기간의 지점 평균·추이에는 그때 일한 사람으로 넣는다.
+- '운영 중인 반' 숫자는 화면마다 조금 다를 수 있다 — 시간표·운영실은 위 정의(종강일 당일·미래 종강 예약 반 포함), 수업목록의 '운영' 표시는 종강일이 비어 있는 반만 센다. 원장이 화면 숫자와 다르다고 하면 이 차이를 설명한다.
+
+### 비어 있는 게 정상인 칸 — '기록 없음'·'입력 누락'으로 결론 내지 않는다
+- attendance_records.taught_by(대신 보강 때만) · attendance_records.homework_required·homework_done(출석부 과제 체크 — 쓰지 않는 반이 많다. 숙제 수행의 주 출처는 수업보고서 lesson_reports.homework_score, 영상 숙제는 video_homework_marks).
+- 칸이 비어 있다는 걸 근거로 "기록하세요"를 권하려면, 그 칸이 이 학원에서 평소 채워지는지(다른 반·다른 강사는 채우는지)를 먼저 조회로 확인한다.
 
 ### 사실 — 언제(발생)와 근거(원본 줄)가 있다
 상담 enrollment_consultations · 수강 enrollments · 청구 invoices(period = 청구 달 · 금액 원) · 옛 청구 makeedu_history_bills ·

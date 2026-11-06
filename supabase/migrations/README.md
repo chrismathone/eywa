@@ -24,6 +24,14 @@
 - 남은 틈(그대로 · 팀장 2026-11-06): 이어진 요청서 삭제와 release가 같은 순간(ms)에 겹치면 처리될 틈 — 잠금 순서상 매우 드묾.
 - 되돌리기 = `scripts/_oneoff/revert-s2_0032-withdrawal-refund-decision-gate.sql`(앱 먼저 · 적용 뒤 지문일 때만 · 진행 중 '환불 결정 대기'나 승인이 끝났는데 처리 안 된 묶음이 있으면 멈춤 · 처리 함수 = s2_0030 본문 · 연결·release = s2_0025 본문 · 결정 표·칸은 남김 · 되돌린 뒤 지문 확인).
 
+## 2026-11-06 연동 PC 역할에 도우미 함수 실행권 — 학원 비서 SQL 뒤 연동 PC 정지 복구 (s2_0032 · ✅ 운영 적용 2026-11-06 19:16 · 원장 *"수정할 수 있으면 빠르게 수정하고 적용시켜"* · 직결(node · do 블록 한 문장))
+
+`s2_0032_sync_agent_helper_grants.sql` — s2_0031이 PUBLIC 실행권을 거둔 public 보안 정의자 함수 11개(`assistant_private.revoked_public_execute`에서 비서 증표 발급 함수를 뺀 것)를 연동 PC 역할 `eywa_sync_agent`에 명시로 준다. s2_0031 적용(거래 시각 17:37:44) 직후 첫 42501(`permission denied for function operator_view_tenant`)이 17:37:50에 기록됐고, 연동 PC의 ClassNote 작업자 확인 · 신호 질의(`classnote_workers`)가 막혀 ClassNote 발송 · 학부모 글 감지가 멈췄고, 메이크에듀 모듈의 작업자 신호 · 요청 집기 질의도 막혔다. 이 역할은 PUBLIC 정책의 `auth_tenant_id()` · `auth_system_role()`(0406a가 이 역할에 준 겉함수) **속의** `operator_view_tenant()` · `auth_*_base()`를 PUBLIC으로 부르고 있었다(함정 #155).
+- = 17:37 전 이 역할이 갖던 실행권 그대로. PUBLIC 회수는 그대로라 비서 역할(`aywa_assistant`)은 여전히 못 부른다. 연동 PC는 게이트웨이의 고정 질의 목록만 실행한다(임의 SQL 없음).
+- 적용 뒤 확인(읽기 전용): 11개 모두 `eywa_sync_agent` 실행 가능 · `aywa_assistant` · PUBLIC은 여전히 불가 · 게이트웨이처럼 역할을 바꿔(`set_config('eywa.agent_tenant', …)` → `set local role eywa_sync_agent`) 연동 질의 목록이 쓰는 표 전부의 읽기 · 넣기 · 고치기 계획(`explain`)에서 정책 식의 함수 권한 막힘 0(표 권한이 없는 두 곳 `student_history_monthly` · `sync_agent_settings`은 원래부터 · explain은 트리거 · plpgsql 본문까지는 돌리지 않는다) · 19:17:06 첫 재발송 · 19:24 대기 0(38건 발송 · 실패 0) · 그 뒤 42501 0건.
+- 함수 목록은 운영 기록으로 고정했다(12줄 − 증표 발급 1) — 다른 DB에서 없는 함수는 알림만 남기고 건너뛴다. 다시 돌려도 같다(grant 멱등).
+- 별건: 메이크에듀 스크래핑 동기화는 같은 날 06:00부터 로그인 사람 확인(reCAPTCHA)으로 실패 중이다(고침 40d598ac7 · AywaSync 1.0.17 릴리스 필요).
+
 ## 2026-11-06 학원 비서 — 전용 역할 · 지점 보기 · 온톨로지 보기 · 대화 저장 (s2_0031 · ✅ 운영 적용 2026-11-06 17:37 · 원장 승인 *"승인 — 지금 적용"* · 직결(node · 파일 그대로 한 거래) · 🔴 번호는 병합 때 확정 — 바뀌면 이 줄도 · 본문은 적용한 그대로)
 
 `s2_0031_academy_assistant.sql` — 원장 2026-11-06 *"모든 db에 접근가능한 챗봇을 만들어서 원장이상급이 챗봇에게 자연어로 질문하면 ai가 피드백해주는 학원 비서 챗봇"* · *"원장 자료니까 db를 하나도 빠짐없이 해당 지점 db를 조회하고 답변할 수 있어야함"* · *"온톨로지 기반의 답변"*. 설계 = [`docs/features/academy-assistant.md`](../../docs/features/academy-assistant.md).
@@ -36,6 +44,7 @@
 - 순서: 이 SQL → 비밀번호 · env → 앱 배포(앱은 표가 없으면 비서 버튼째 쉬고, env가 없으면 '연결이 설정되지 않았습니다'로 끝난다).
 - 운영 적용 뒤 확인(2026-11-06 · 읽기 전용 · 되돌림): 보기 276개(지점 표 272 + 온톨로지 4) · 역할 LOGIN·NOINHERIT·연결 4·구성원 0·**비밀번호 아직 없음** · PUBLIC은 `auth_*`를 못 부르고 로그인 사용자·anon은 그대로 · 비서 역할은 `bound_tenant`만 · 증표 없으면 0행 · 증표 지점 원생 수 = public과 같음 · 다른 지점 0행 · 지점만 바꾼 위조 0행 · 비밀 칸 0 · 로그인 사용자 권한으로 원생·반·수강·출결·청구·감사 기록 조회 정상. 회수 기록은 12줄 = 기존 함수 11개 + 이번에 만든 `assistant_issue_binding`(운영 기본 권한으로 anon·authenticated·service_role 실행권이 붙어 회수 조건에 걸림 → 최종 권한은 service_role만 · 되돌리기는 재부여 뒤 삭제라 문제없음).
 - 되돌리기 = `scripts/_oneoff/revert-s2_0031-academy-assistant.sql`(회수한 PUBLIC 실행권을 기록대로 되살리고 · 보기·증표·역할을 걷고 · 대화 표는 남긴다 · 로컬 왕복 확인).
+- 🔴 정정(2026-11-06 19:16): '앱 영향 없음'은 로그인 사용자 · anon · 서버 키 기준이었다. 연동 PC 역할 `eywa_sync_agent`는 이 함수들을 PUBLIC으로 불렀다(정책의 겉함수 `auth_tenant_id()` 속) — 적용 직후부터 연동 PC의 ClassNote 발송 · 학부모 글 감지가 멈췄고 s2_0032로 복구했다(함정 #155).
 
 ## 2026-11-06 퇴원보고서: 관리자 승인자에서 원장급을 DB에서도 막는다 (s2_0030 · ✅ 운영 적용 2026-11-06 · 원장 결정 *"DB도 막기"* · 가지 번호 s2_0028 → 병합 때 s2_0030(main의 s2_0028·0029 = 상담 약속·인계))
 
