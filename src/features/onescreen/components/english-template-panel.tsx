@@ -12,7 +12,7 @@ import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect, type ComboOption } from "@/components/ui/searchable-select";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
-import { builtinTemplateLabelKey, type ReportTemplate } from "@/features/report-templates/defaults";
+import { builtinTemplateLabelKey, isHiddenBuiltinTemplate, type ReportTemplate } from "@/features/report-templates/defaults";
 import { EnglishMediaButton } from "./english-media-button";
 import { JjStatusLine, type EnglishJjStatus } from "./english-jj-status-line";
 import { JjExamPicker, type JjExamPickState } from "./english-jj-exam-picker";
@@ -22,6 +22,10 @@ export type { EnglishJjStatus } from "./english-jj-status-line";
 export type EnglishTemplateState = {
   templateId: string;
   nextTest: string;
+  /** EiE 일일 보고서(원장 2026-11-06) — 단어 테스트 피드백 · 재시험. `wordFields` = 그 칸을 쓰는 템플릿이라 칸을 연다. */
+  wordFeedback: string;
+  wordRetest: boolean;
+  wordFields: boolean;
   /** 지금 글에 학생 이름이 없다(저장값이 아니라 **지금 글** 기준 — 새로고침·일괄 작성 뒤에도 맞다). */
   nameMissing: boolean;
   /** 템플릿이나 진도·숙제·테스트 칸이 마지막으로 채운 글과 달라졌다(다시 채우기 필요). */
@@ -47,6 +51,8 @@ export type EnglishTemplateState = {
 export type EnglishTemplateHandlers = {
   onTemplate: (templateId: string) => void;
   onNextTest: (text: string) => void;
+  onWordFeedback: (text: string) => void;
+  onWordRetest: (on: boolean) => void;
   onRefill: () => void;
   onCopy: () => void;
   onManage: () => void;
@@ -90,13 +96,14 @@ export function EnglishTemplatePanel({
   };
   const options = useMemo<ComboOption[]>(
     () =>
-      templates.map((tp) => ({
+      // 숨긴 기본 템플릿(ECS 자동 둘)은 이 행에 지금 걸려 있을 때만 남긴다.
+      templates.filter((tp) => !isHiddenBuiltinTemplate(tp.id) || tp.id === state.templateId).map((tp) => ({
         value: tp.id,
         // 기본 템플릿 이름은 화면 언어를 따른다(사용자 템플릿 이름은 사용자가 적은 그대로).
         label: tp.builtIn ? t(builtinTemplateLabelKey(tp.id)) : tp.name,
         hint: tp.builtIn ? t("os.tpl.builtIn") : undefined,
       })),
-    [templates, t],
+    [templates, t, state.templateId],
   );
   return (
     <div className="border-line bg-bg-soft/40 flex flex-col gap-2 rounded-lg border p-2">
@@ -117,8 +124,33 @@ export function EnglishTemplatePanel({
           {t("os.tpl.manage")}
         </Button>
       </div>
+      {state.wordFields ? (
+        <>
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={state.wordRetest}
+              onChange={(e) => handlers.onWordRetest(e.target.checked)}
+              className="accent-danger size-4"
+            />
+            <span className="text-foreground text-xs font-bold">{t("os.tpl.wordRetest")}</span>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-text-faint text-xs font-bold">{t("os.tpl.wordFeedback")}</span>
+            <textarea
+              value={state.wordFeedback}
+              onChange={(e) => handlers.onWordFeedback(e.target.value)}
+              placeholder={t("os.tpl.wordFeedbackPh")}
+              rows={2}
+              maxLength={1000}
+              // iOS 확대 방지 — 좁은 화면만 16px(아래 입력칸과 같은 규약).
+              className="border-line bg-card focus:border-primary rounded-lg border px-2 py-1 text-base outline-none sm:text-xs"
+            />
+          </label>
+        </>
+      ) : null}
       <label className="flex flex-col gap-1">
-        <span className="text-text-faint text-xs font-bold">{t("os.tpl.nextTest")}</span>
+        <span className="text-text-faint text-xs font-bold">{t(state.wordFields ? "os.tpl.nextWordTest" : "os.tpl.nextTest")}</span>
         <input
           value={state.nextTest}
           onChange={(e) => handlers.onNextTest(e.target.value)}

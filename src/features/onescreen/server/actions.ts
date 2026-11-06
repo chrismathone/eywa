@@ -1458,6 +1458,9 @@ export type SaveOnescreenSessionInput = {
        */
       templateId?: string;
       nextTest?: string;
+      /** EiE 일일 보고서(2026-11-06) — 단어 테스트 피드백 · 재시험. 영어 행만. 로스터가 같은 키로 복원한다. */
+      wordFeedback?: string;
+      wordRetest?: boolean;
       aiIntro?: string;
       aiComment?: string;
       /** 템플릿 글 지문 · AI 사실 지문(provenance.ts) — 영어 행만. */

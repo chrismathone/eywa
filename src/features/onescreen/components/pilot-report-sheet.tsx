@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import {
+  isEieDailySections,
   isPilotTitle,
   parseLevelRows,
   type PilotNoteSection,
@@ -8,6 +9,9 @@ import { PilotSheetHead, type PilotSheetHeadProps } from "./pilot-sheet-head";
 import { PilotNoteBox, SectionBody } from "./pilot-notes-body";
 import { splitImageSlots } from "@/features/report-templates/image-slots";
 import { attendanceMarkIsEnough, attendanceMarkOf } from "../attendance-sentence";
+
+/** EiE 가로 로고(원장이 보내 준 그림 — 'Express In English · 고려대학교 영어교육 프로그램'). 일일 보고서 학원 로고 아래에 놓는다. */
+export const EIE_WIDE_LOGO_SRC = "/eie-logo-wide.png";
 
 // 수학 보고서 시범의 학부모 카드 = **데일리 학습알림 표**(원장 2026-10-23: 참고 시안 + *"색감은 쨍하게 눈에 잘 띄어야함 ·
 // 좌측상단 인재원 마크 · 담임도 들어가야함 · 밑의 내용란들과 전체적인 디자인을 다시 재편성"*).
@@ -92,7 +96,14 @@ export function PilotReportSheet({
   const hasProgress = rest.some((s) => isPilotTitle(s.title, "progress"));
   return (
     <article className="bg-card border-primary overflow-hidden border-2">
-      <PilotSheetHead {...head} tests={tests} levels={levels} attendance={attendance} />
+      <PilotSheetHead
+        {...head}
+        tests={tests}
+        levels={levels}
+        attendance={attendance}
+        // EiE 일일 보고서(원장 2026-11-06 *"왼쪽 인재원 로고 밑에 해당 로고 배치"*) — 글이 EiE 일일 템플릿일 때만.
+        programLogoSrc={isEieDailySections(sections) ? EIE_WIDE_LOGO_SRC : null}
+      />
       {textbook && !hasProgress ? <TextbookRow textbook={textbook} /> : null}
       {rest.map((s, i) => (
         <SheetBand key={`${i}-${s.title}`} title={s.title}>

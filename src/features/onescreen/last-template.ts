@@ -11,7 +11,7 @@
  *    다른 템플릿으로 다시 짠다. 붙인 값은 **표시만**(`templateImplicit`) — 세션에 저장하지 않는다(저장하면 기본값을 바꿔도 그 행이 옛
  *    기본값에 묶인다). 강사가 고르거나 글을 짜는 순간 진짜 선택이 된다.
  */
-import { BUILTIN_ENGLISH_TEMPLATES, BUILTIN_JJ_SHEET_TEMPLATE_ID } from "@/features/report-templates/defaults";
+import { BUILTIN_ENGLISH_TEMPLATES, BUILTIN_JJ_SHEET_TEMPLATE_ID, isHiddenBuiltinTemplate } from "@/features/report-templates/defaults";
 
 export const LAST_TEMPLATE_PREF = "lastTemplateId";
 export const LAST_TEMPLATE_BY_CLASS_PREF = "lastTemplateByClass";
@@ -60,8 +60,10 @@ export function rememberTemplate(prefs: TemplatePrefs, templateId: string, class
 
 /** 이 반의 빈 행이 시작할 템플릿 — 반 기록 → (JJ가 아니면) 계정의 마지막 선택 → 없음(코드 기본 템플릿). */
 export function preferredTemplateFor(prefs: TemplatePrefs, classId: string | null | undefined): string | null {
-  if (classId && prefs.byClass[classId]) return prefs.byClass[classId]!;
-  return prefs.last && prefs.last !== BUILTIN_JJ_SHEET_TEMPLATE_ID ? prefs.last : null;
+  // 숨긴 기본 템플릿(ECS 자동 둘, 2026-11-06)이 기록돼 있으면 없는 것으로 본다 — 새 행은 기본 템플릿으로.
+  const byClass = classId ? prefs.byClass[classId] : undefined;
+  if (byClass && !isHiddenBuiltinTemplate(byClass)) return byClass;
+  return prefs.last && prefs.last !== BUILTIN_JJ_SHEET_TEMPLATE_ID && !isHiddenBuiltinTemplate(prefs.last) ? prefs.last : null;
 }
 
 export function isBuiltinTemplateId(id: string): boolean {

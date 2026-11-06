@@ -34,6 +34,8 @@ const RULES: readonly [string, string][] = [
   ["student_care_analysis", "consult"],
   // 상담 약속·인계(s2_0028) — 학부모 요구에 대한 약속이라 상담 묶음.
   ["student_care_save", "consult"],
+  // 원생 흐름 분석 '다시 분석'(s2_0027) — 상담·타임라인 기록을 읽은 분석이라 상담 묶음.
+  ["student_flow_insight_refresh", "consult"],
   ["student_ijw_", "settings"],
   ["enrollment_consultation_", "consult"],
   ["consultation_", "consult"],

@@ -48,7 +48,7 @@ export function RequestDialog({ staff, students, labels, scope, initialStudentId
   // 작성 강사는 고르지 않는다 — 과목마다 담당 선생님(`reportAuthorIds` · 메인반 담임)으로 고정(원장 2026-10-30 *"무조건 담당 선생님만 작성하고 나머지는 해당 보고서에서 반이 다 딸려가서 하나로"*).
   const authorNames = staff.filter(u => teacherIds.includes(u.id)).map(u => u.name);
   const [managerIds, setManagers] = useState<string[]>(initialPick.managerIds);
-  const lastLesson = useLastLessonDate({ studentId: initial?.id ?? "", enrollmentIds: initialPick.enrollmentIds });
+  const lastLesson = useLastLessonDate({ studentId: initial?.id ?? "", enrollmentIds: initialPick.enrollmentIds, hasCourses: (initial?.courses.length ?? 0) > 0 });
   const date = lastLesson.date;
   // 출결에서 날짜를 찾는 동안은 보내지 않는다 — 오늘 날짜로 먼저 요청되지 않게.
   const dateLoading = lastLesson.source === "loading";
@@ -78,7 +78,7 @@ export function RequestDialog({ staff, students, labels, scope, initialStudentId
     const pick = selectionFor(staff, s, next);
     setEnrollments(pick.enrollmentIds); setTeachers(pick.teacherIds); setManagers(pick.managerIds);
     setError("");
-    lastLesson.refresh(s?.id ?? "", pick.enrollmentIds, newStudent);
+    lastLesson.refresh(s?.id ?? "", pick.enrollmentIds, newStudent, false, (s?.courses.length ?? 0) > 0);
   }
   function chooseMode(next: Mode) {
     if (pending) return;
@@ -90,6 +90,14 @@ export function RequestDialog({ staff, students, labels, scope, initialStudentId
   const reloadable = !!student && courses.length > 0 && lastLessonReloadable(lastLesson.source, lastLesson.reloading, lastLesson.denied);
   // 고른 반이 없을 때 — 반이 있는 원생이면 '반을 고르는 중'(흐린 안내), 다니는 반이 없는 원생(바로 처리)만 경고(리뷰 2026-11-06).
   const hintSource = lastLesson.source === "nocourses" && !!student && student.courses.length > 0 ? "unselected" : lastLesson.source;
+  const ready = !!studentId && (noCourses ? direct : courses.length > 0);
+  // 날짜 칸을 손으로 비웠다 — 요청을 막고 칸 아래에 적는다(서버도 날짜 형식을 본다 · 원장 2026-11-06 기본값 빈칸).
+  const dateMissing = ready && !date && !dateLoading;
+  const hintText = dateMissing ? "마지막 수업일을 입력해 주세요." : lastLessonHint(hintSource, lastLesson.kept);
+  // 긴 알림(출결에서 못 찾음)만 두 칸 너비 상자 — 날짜를 비운 경고는 짧아 칸 아래 글씨로(입력 중 빈 값이 잠깐 와도 상자가 튀지 않게).
+  const hintClass = !dateMissing && lastLessonNeedsCheck(hintSource)
+    ? "rounded-md border border-att-late-ink/20 bg-att-late px-3 py-2 text-sm text-att-late-ink sm:col-span-2"
+    : `text-xs ${dateMissing ? "text-att-late-ink" : "text-muted-foreground"} sm:col-start-2 sm:-mt-2`;
   function reloadLastLesson() {
     if (pending || dateLoading || !student || !courses.length) return;
     lastLesson.reload(student.id, courses.map(c => c.id));
@@ -124,7 +132,6 @@ export function RequestDialog({ staff, students, labels, scope, initialStudentId
   }
   // 승인자 고르기 — 직급이 있으면 '정유진 부원장'(원장 2026-11-05).
   const staffOptions = (people: StaffOption[]) => people.map(u => ({ value: u.id, label: titledName(u, u.name), hint: (u.approvalSubjects ?? u.subjects).map(s => labels[s] ?? s).join("·") }));
-  const ready = !!studentId && (noCourses ? direct : courses.length > 0);
   const summary = !student ? "학생과 종료할 반을 선택해 주세요." : noCourses ? "퇴원 · 다니는 반 없음 · 강사 작성 없음"
     : courses.length ? `${kind === "withdrawal" ? "퇴원" : "반 수강종료"} · ${courses.length}개 반 · ${direct ? "강사 작성 없음" : `보고서 ${teacherIds.length}건`}` : "종료할 반을 선택해 주세요.";
   return <Dialog open={open} onOpenChange={v => { if (!pending) setOpen(v); }}>
@@ -141,8 +148,9 @@ export function RequestDialog({ staff, students, labels, scope, initialStudentId
           <div className="space-y-1 text-sm"><p>대상 학생</p><SearchableSelect portal options={choices.map(s => ({ value: s.id, label: s.name, hint: `${s.school ?? ""} ${s.grade ?? ""}`.trim() }))} value={studentId} ariaLabel="대상 학생" placeholder="학생 검색·선택" searchPlaceholder="이름·학교로 검색" onValueChange={id => { if (pending) return; const s = choices.find(x => x.id === id); setStudentId(id); chooseCourses(s, s?.courses.filter(c => !scope || scope.includes(c.subject)).map(c => c.id) ?? [], true); }} /></div>
           <div className="space-y-1 text-sm"><label className="block space-y-1">마지막 수업일<input className={control} type="date" value={date} onChange={e => lastLesson.edit(e.target.value)} /></label>
             {reloadable && <Button type="button" variant="outline" size="sm" className="w-full" disabled={pending || dateLoading} onClick={reloadLastLesson}>출결에서 다시 불러오기</Button>}</div>
-          {/* 안내 줄은 늘 둔다(role=status — 글만 바꾼다). 출결에서 날짜를 얻지 못했으면 까닭별 알림으로(원장 2026-11-05). */}
-          <p role="status" className={lastLessonNeedsCheck(hintSource) ? "rounded-md border border-att-late-ink/20 bg-att-late px-3 py-2 text-sm text-att-late-ink sm:col-span-2" : "text-xs text-muted-foreground sm:col-span-2"}>{lastLessonHint(hintSource, lastLesson.kept)}</p>
+          {/* 안내 줄은 늘 둔다(role=status — 글만 바꾼다). 출결에서 날짜를 얻지 못했으면 까닭별 알림으로(원장 2026-11-05) — 긴 알림은 두 칸 너비.
+              짧은 안내('직접 입력한 날짜' 등)는 날짜 칸 바로 아래(오른쪽 칸)에 붙인다 — 왼쪽 학생 칸 밑에 있으면 날짜와 무관해 보였다(원장 2026-11-06). */}
+          <p role="status" className={hintClass}>{hintText}</p>
         </div>
         {student && !noCourses && <fieldset className="rounded-lg border px-3 py-2"><legend className="px-1 text-sm">종료할 반</legend><div className="flex flex-wrap gap-x-5 gap-y-2">{student.courses.map(c => <label key={c.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={enrollmentIds.includes(c.id)} disabled={!!scope && !scope.includes(c.subject)} onChange={() => chooseCourses(student, toggleCourseGroup(student.courses, enrollmentIds, c.id))} />{c.className} · {labels[c.subject] ?? c.subject} · {c.teacherName ?? "담당자 미지정"}{c.reportOptout && <span className="text-muted-foreground">(수업보고서 미발송)</span>}</label>)}</div><p className="mt-2 text-xs text-muted-foreground">한 반을 고르면 같은 과목의 반도 함께 종료합니다. 모든 과목을 고르면 퇴원으로 처리합니다.</p>{busy.length > 0 && <p role="note" className="mt-1 text-xs text-muted-foreground">{[...new Set(busy.map(c => labels[c.subject] ?? c.subject))].join("·")} 반({busy.map(c => c.className).join(", ")})은 진행 중인 퇴원보고서가 있어 여기서 고를 수 없습니다. 그 보고서까지 끝나 남은 반이 없으면 퇴원으로 처리됩니다.</p>}</fieldset>}
         {!noCourses && endGroups.length > 0 && <div role="note" className="border-line space-y-1 rounded-lg border border-dashed px-3 py-2 text-sm">{endGroups.map(g => <p key={g.name}><b>{g.name}</b> 수업 {g.classNames.length}개를 모두 종료합니다 — {g.classNames.join(", ")}</p>)}<p className="text-xs text-muted-foreground">같은 과목의 수업은 하나만 골라도 모두 함께 종료됩니다.{direct ? "" : " 보고서는 과목마다 작성 강사 한 명이 쓰고, 다른 반 담임에게는 작성 요청이 가지 않습니다."}</p></div>}
@@ -164,8 +172,8 @@ export function RequestDialog({ staff, students, labels, scope, initialStudentId
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-muted/20 px-5 py-3"><p className="text-xs text-muted-foreground">{summary}</p><div className="flex gap-2"><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>닫기</Button>{direct
-        ? <Button disabled={pending || !ready || dateLoading} onClick={submitDirect}>{pending ? "처리 중…" : kind === "withdrawal" ? "바로 퇴원 처리" : "바로 수강종료"}</Button>
-        : <Button disabled={pending || !ready || dateLoading || settingsUnavailable || !teacherIds.length || perReport.missing.length > 0} onClick={submit}>{pending ? "요청 중…" : "강사에게 작성 요청"}</Button>}</div></div>
+        ? <Button disabled={pending || !ready || dateLoading || !date} onClick={submitDirect}>{pending ? "처리 중…" : kind === "withdrawal" ? "바로 퇴원 처리" : "바로 수강종료"}</Button>
+        : <Button disabled={pending || !ready || dateLoading || !date || settingsUnavailable || !teacherIds.length || perReport.missing.length > 0} onClick={submit}>{pending ? "요청 중…" : "강사에게 작성 요청"}</Button>}</div></div>
     </DialogContent>
   </Dialog>;
 }

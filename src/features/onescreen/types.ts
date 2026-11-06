@@ -4,6 +4,7 @@
  * 데모 충실 이식: 입력은 클라이언트 state로만 돌고 DB에 영속화하지 않는다.
  */
 import type { MonthlyEval } from "@/features/report-templates/monthly-eval";
+import type { MonthlyActivity } from "@/features/report-templates/monthly-activity";
 
 /** 과목 톤 — aywa 디자인 토큰(globals.css)에 매핑된 색 키 */
 export type SubjectTone = "primary" | "blue" | "rose" | "purple" | "gold" | "neutral";
@@ -41,6 +42,8 @@ export type Subject = {
    * 없으면(점수 없음·영역 칸 미적용·조회 실패) undefined — 월간 템플릿의 점수 줄이 빠질 뿐 다른 동작은 그대로다.
    */
   monthlyEval?: MonthlyEval;
+  /** 그 반·그 달 일일 보고서에서 모은 숙제·태도·단어 테스트(2026-11-06, EiE 월간 보고서 — EiE 반만). 없으면 기록 줄이 빠진다. */
+  monthlyActivity?: MonthlyActivity;
   today: string; // 오늘 진도 — "Unit 8 · p.90"
   /**
    * 오늘 수업의 **성격**(복습·문제풀이) — 진도 차시와 **함께** 기록되는 별개 축(progress-mode.ts).
@@ -175,6 +178,9 @@ export type Subject = {
    */
   templateId?: string;
   nextTest?: string;
+  /** EiE 일일 보고서(2026-11-06) — 단어 테스트 피드백 · 재시험. 세션 복원값(영어 행만). */
+  wordFeedback?: string;
+  wordRetest?: boolean;
   aiIntro?: string;
   aiComment?: string;
   /** 템플릿이 마지막으로 만든 글의 지문 · AI에 넘긴 사실의 지문(provenance.ts) — 세션 복원값. */

@@ -11,6 +11,7 @@
  */
 import { IMAGE_SLOT_KEYS, imageSlotMarker, type ImageSlotKey } from "./image-slots";
 import { monthlyEvalMarker } from "./monthly-eval";
+import { monthlyActivityMarker } from "./monthly-activity";
 
 export type TemplateTokenKey =
   | "학생"
@@ -24,7 +25,9 @@ export type TemplateTokenKey =
   | SheetTokenKey
   | ImageSlotKey
   // EiE 월간 보고서 점수 자리(2026-11-05) — 값은 점수를 담은 한 줄(monthly-eval.ts). 그 달 Monthly Test 점수가 없으면 빈 값.
-  | "월간평가";
+  | "월간평가"
+  // EiE 월간 보고서 한 달 기록 자리(2026-11-06) — 값은 그 달 숙제·태도·단어 테스트를 담은 한 줄(monthly-activity.ts). 기록이 없으면 빈 값.
+  | "월간학습";
 
 /**
  * **항목 칸**(원장 2026-10-26 *"수학보고서 디자인을 영어보고서에도 적용"*) — 수학 새 보고서와 **같은 문장**을 영어 칸 값으로 만든 것.
@@ -39,9 +42,12 @@ export type SheetTokenKey =
   | "수업태도"
   | "숙제완성도"
   | "오늘의숙제"
-  | "한마디";
+  | "한마디"
+  // EiE 일일 보고서(원장 2026-11-06) — 단어 테스트(일일 테스트 문장 + 재시험 표시) · 강사가 적은 단어 테스트 피드백.
+  | "단어테스트"
+  | "단어피드백";
 
-export const SHEET_TOKEN_KEYS: readonly SheetTokenKey[] = ["출결", "수업평가", "태도평가", "일일테스트", "확인테스트", "수업태도", "숙제완성도", "오늘의숙제", "한마디"];
+export const SHEET_TOKEN_KEYS: readonly SheetTokenKey[] = ["출결", "수업평가", "태도평가", "일일테스트", "확인테스트", "수업태도", "숙제완성도", "오늘의숙제", "한마디", "단어테스트", "단어피드백"];
 
 export type TemplateToken = {
   key: TemplateTokenKey;
@@ -107,6 +113,14 @@ export const ENGLISH_TEMPLATE_TOKENS: readonly TemplateToken[] = [
     source: "성적관리 영어 Monthly Test의 쓰기·말하기·읽기·듣기 점수와 반 평균 — 그 달 점수가 없으면 줄이 빠진다",
     image: true,
   },
+  {
+    key: "월간학습",
+    label: "한 달 학습 기록(그래프·표)",
+    source: "그 달 일일 보고서의 숙제 완성도·수업 태도·단어 테스트(재시험 포함) — EiE 반만, 기록이 없으면 줄이 빠진다",
+    image: true,
+  },
+  { key: "단어테스트", label: "단어 테스트 문장", source: "일일 테스트 점수 + 한마디. 재시험을 체크하면 '재시험' 표시가 붙는다" },
+  { key: "단어피드백", label: "단어 테스트 피드백", source: "원스크린 '단어 테스트 피드백' 칸 원문. 비면 줄이 빠진다" },
 ] as const;
 
 export const ENGLISH_TEMPLATE_TOKEN_KEYS: readonly TemplateTokenKey[] = ENGLISH_TEMPLATE_TOKENS.map((t) => t.key);
@@ -205,7 +219,7 @@ export const BUILTIN_ENGLISH_SHEET_TEMPLATE_ID = "builtin:english-sheet";
  */
 export const BUILTIN_ENGLISH_SHEET_TEMPLATE: ReportTemplate = {
   id: BUILTIN_ENGLISH_SHEET_TEMPLATE_ID,
-  name: "수학과 같은 항목 보고서 (기본)",
+  name: "영어 보고서", // 원장 2026-11-06 이름만 바꿈(옛 이름 '수학과 같은 항목 보고서 (기본)') — id·본문 그대로
   builtIn: true,
   body: [
     "■ 수업 평가",
@@ -303,8 +317,9 @@ export const BUILTIN_EIE_DAILY_TEMPLATE: ReportTemplate = {
     "■ 출결",
     "{출결}",
     "",
-    "■ 일일 테스트",
-    "{일일테스트}",
+    // 원장 2026-11-06 *"일일테스트 -> 단어테스트 이름변경 · 재시험이면 단어테스트 옆에 재시험 마크"* — 같은 표 머리 칸(PILOT_ALIAS_TITLES).
+    "■ 단어 테스트",
+    "{단어테스트}",
     "",
     "■ 확인 테스트",
     "{확인테스트}",
@@ -322,7 +337,11 @@ export const BUILTIN_EIE_DAILY_TEMPLATE: ReportTemplate = {
     "■ 오늘의 숙제",
     "{오늘의숙제}",
     "",
-    "■ 다음 테스트",
+    // 원장 2026-11-06 *"오늘의 숙제 다음에 단어테스트 피드백 및 다음시간에 칠 단어테스트 범위안내 영역 추가"* — 비면 항목째 빠진다.
+    "■ 단어 테스트 피드백",
+    "{단어피드백}",
+    "",
+    "■ 다음 단어 테스트 범위",
     "{다음테스트}",
     "",
     "■ 사랑의 한마디",
@@ -342,7 +361,8 @@ export const BUILTIN_EIE_MONTHLY_TEMPLATE: ReportTemplate = {
   id: BUILTIN_EIE_MONTHLY_TEMPLATE_ID,
   name: "EiE 월간 보고서",
   builtIn: true,
-  body: ["{월간평가}", "", "{한마디}"].join("\n"),
+  // 한 달 기록(원장 2026-11-06 *"해당 달에 쌓은 데이터 가지고 그래프나 도표로 숙제완성도, 수업태도, 단어테스트 통계"*)은 점수 아래.
+  body: ["{월간평가}", "", "{월간학습}", "", "{한마디}"].join("\n"),
 };
 
 /**
@@ -361,6 +381,18 @@ export const BUILTIN_ENGLISH_TEMPLATES: readonly ReportTemplate[] = [
   BUILTIN_EIE_DAILY_TEMPLATE,
   BUILTIN_EIE_MONTHLY_TEMPLATE,
 ];
+
+/**
+ * 고르는 목록에서 **숨긴** 기본 템플릿(원장 2026-11-06 *"ecs 자동 · ecs 자동 + 인재원 결과지를 템플릿에서 일단 숨김"*).
+ * 🔑 지우지 않는다 — 이미 이 템플릿으로 쓴 행은 그대로 찾아 그리고(findTemplateIn은 BUILTIN_ENGLISH_TEMPLATES 전체),
+ *    지금 그 템플릿이 걸린 행의 드롭다운에는 그 하나만 남는다. 새로 고르는 목록·관리 창·계정의 마지막 선택에서만 빠진다.
+ *    다시 열려면 이 목록에서 id를 뺀다.
+ */
+export const HIDDEN_BUILTIN_TEMPLATE_IDS: ReadonlySet<string> = new Set([BUILTIN_ENGLISH_TEMPLATE_ID, BUILTIN_ENGLISH_JJ_TEMPLATE_ID]);
+
+export function isHiddenBuiltinTemplate(id: string | null | undefined): boolean {
+  return !!id && HIDDEN_BUILTIN_TEMPLATE_IDS.has(id);
+}
 
 /** 기본 템플릿 이름의 화면 문구 키(teacher-view/i18n.ts) — 기본 템플릿 이름은 화면 언어를 따른다. */
 export function builtinTemplateLabelKey(
@@ -407,6 +439,8 @@ export const TEMPLATE_PREVIEW_SAMPLE: Readonly<Record<TemplateTokenKey, string>>
   숙제완성도: "지난 시간 과제를 빠짐없이 모두 해 왔습니다. 성실하게 잘 해 왔습니다.",
   오늘의숙제: "Work Book : p.30~33 풀어오기",
   한마디: "오늘도 끝까지 집중해 줘서 고마웠어요!",
+  단어테스트: "[재시험]\n20문제 중 18개 맞음\n대부분 잘 맞혔습니다. 틀린 문제는 다음 시간에 다시 짚고 넘어가겠습니다.",
+  단어피드백: "철자를 헷갈린 단어 2개는 다음 시간 전까지 다시 외워 오도록 지도하겠습니다.",
   시험결과지: imageSlotMarker("시험결과지"),
   학습분석지: imageSlotMarker("학습분석지"),
   단어백분위: imageSlotMarker("단어백분위"),
@@ -420,6 +454,15 @@ export const TEMPLATE_PREVIEW_SAMPLE: Readonly<Record<TemplateTokenKey, string>>
       reading: { score: 80, average: 96 },
       listening: { score: 90, average: 96 },
     },
+  }),
+  월간학습: monthlyActivityMarker({
+    month: "2026-10",
+    lessons: [
+      { date: "2026-10-06", homework: 100, attitude: "상", word: { right: 18, total: 20 }, retest: false },
+      { date: "2026-10-08", homework: 80, attitude: "중상", word: { right: 12, total: 20 }, retest: true },
+      { date: "2026-10-13", homework: 100, attitude: "상", word: { right: 19, total: 20 }, retest: false },
+      { date: "2026-10-15", homework: 90, attitude: "중상", word: { right: 20, total: 20 }, retest: false },
+    ],
   }),
 };
 

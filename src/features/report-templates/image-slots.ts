@@ -17,6 +17,7 @@
  */
 
 import { monthlyEvalOfLine, type MonthlyEval } from "./monthly-eval";
+import { monthlyActivityOfLine, type MonthlyActivity } from "./monthly-activity";
 
 export type ImageSlotKey = "시험결과지" | "학습분석지" | "단어백분위" | "학습배지";
 
@@ -55,7 +56,9 @@ export type BodySegment =
   | { kind: "slot"; key: ImageSlotKey }
   | { kind: "attachment"; name: string }
   // EiE 월간 보고서 점수 자리(2026-11-05, monthly-eval.ts) — 점수를 줄 안에 동결해 둔다.
-  | { kind: "monthly"; eval: MonthlyEval };
+  | { kind: "monthly"; eval: MonthlyEval }
+  // EiE 월간 보고서 한 달 기록 자리(2026-11-06, monthly-activity.ts) — 숙제·태도·단어 테스트를 줄 안에 동결해 둔다.
+  | { kind: "activity"; activity: MonthlyActivity };
 
 type MarkerSegment = Exclude<BodySegment, { kind: "text" }>;
 
@@ -64,6 +67,8 @@ function markerOfLine(line: string): MarkerSegment | null {
   if (key) return { kind: "slot", key };
   const monthly = monthlyEvalOfLine(line);
   if (monthly) return { kind: "monthly", eval: monthly };
+  const activity = monthlyActivityOfLine(line);
+  if (activity) return { kind: "activity", activity };
   const name = attachmentNameOfLine(line);
   return name ? { kind: "attachment", name } : null;
 }

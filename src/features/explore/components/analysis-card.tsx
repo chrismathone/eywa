@@ -83,6 +83,7 @@ function Block({ studentId, block: b, canRefresh, dim }: { studentId: string | n
           </Button>
         ) : null}
       </h3>
+      {b.notice ? <p className="bg-amber-soft text-amber mt-1 rounded-xl px-2.5 py-1.5 text-xs break-keep">{b.notice}</p> : null}
       {b.headline ? (
         <>
           <p className="text-foreground mt-1 text-sm leading-relaxed font-medium break-keep">{b.headline}</p>

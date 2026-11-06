@@ -4,6 +4,7 @@ import { ParentReportCard, type ParentReportCardProps } from "./parent-report-ca
 import { DEFAULT_SETTINGS } from "@/features/owner/defaults";
 import { monthlyEvalMarker, type MonthlyEval } from "@/features/report-templates/monthly-eval";
 import { fillReportTemplate } from "@/features/report-templates/fill";
+import { monthlyActivityMarker } from "@/features/report-templates/monthly-activity";
 import {
   BUILTIN_EIE_DAILY_TEMPLATE,
   BUILTIN_EIE_MONTHLY_TEMPLATE,
@@ -53,7 +54,7 @@ describe("EiE 월간 보고서 카드(시트 모양)", () => {
   const html = renderToStaticMarkup(<ParentReportCard {...props(notes)} />);
 
   it("시트의 머리·표·그래프·코멘트를 그린다", () => {
-    for (const s of ["Monthly Evaluation Report", "Date :", "2026-11-02", "Name :", "조현우", "Class :", "Pre Let&#x27;s 5", "Teacher :", "Yoojin"]) {
+    for (const s of ["Monthly Evaluation</span> Report", "Date :", "2026-11-02", "Name :", "조현우", "Class :", "Pre Let&#x27;s 5", "Teacher :", "Yoojin"]) {
       expect(html).toContain(s);
     }
     expect(html).toContain("Monthly Test Result");
@@ -69,7 +70,7 @@ describe("EiE 월간 보고서 카드(시트 모양)", () => {
 
   it("점수 줄이 없는 영어 글은 예전 카드 그대로", () => {
     const plain = renderToStaticMarkup(<ParentReportCard {...props("그냥 글")} />);
-    expect(plain).not.toContain("Monthly Evaluation Report");
+    expect(plain).not.toContain("Monthly Evaluation</span> Report");
   });
 });
 
@@ -80,21 +81,61 @@ describe("EiE 템플릿 두 종류", () => {
     }
   });
 
-  it("일일 보고서 항목 제목은 영어 항목 보고서(수학 표로 그려지는 것)와 글자까지 같다 · 인재원 결과지만 없다", () => {
+  it("일일 보고서 항목 = 영어 항목 보고서에서 인재원 결과지를 빼고 · 일일 테스트 → 단어 테스트 · 오늘의 숙제 뒤 피드백·다음 범위(2026-11-06)", () => {
     const titles = (body: string) =>
       body
         .split("\n")
         .filter((l) => l.startsWith("■ "))
         .map((l) => l.slice(2));
-    const known = titles(BUILTIN_ENGLISH_SHEET_TEMPLATE.body);
-    expect(titles(BUILTIN_EIE_DAILY_TEMPLATE.body)).toEqual(known.filter((t) => t !== "인재원 결과지"));
+    const known = titles(BUILTIN_ENGLISH_SHEET_TEMPLATE.body)
+      .filter((t) => t !== "인재원 결과지")
+      .flatMap((t) =>
+        t === "일일 테스트" ? ["단어 테스트"] : t === "다음 테스트" ? ["단어 테스트 피드백", "다음 단어 테스트 범위"] : [t],
+      );
+    expect(titles(BUILTIN_EIE_DAILY_TEMPLATE.body)).toEqual(known);
+  });
+
+  it("EiE 일일 글 = 단어 테스트가 표 머리에 서고 · 재시험 표시 · 학원 로고 아래 EiE 로고", () => {
+    const notes = "■ 단어 테스트\n[재시험]\n20문제 중 12개 맞음\n\n■ 단어 테스트 피드백\n철자 복습\n\n■ 진도\nUnit 1";
+    const h = renderToStaticMarkup(<ParentReportCard {...props(notes)} />);
+    expect(h).toContain("/eie-logo-wide.png");
+    // 제목 = 'EiE 보고서'(원장 2026-11-06) — 다른 영어 항목 글은 과목 보고서 그대로.
+    expect(h).toContain("EiE 보고서");
+    expect(h).toContain("재시험");
+    expect(h).not.toContain("[재시험]");
+    expect(h).toContain("철자 복습");
+    // 재시험이 아니면 표시가 없다 · 다른 영어 항목 글엔 EiE 로고가 없다.
+    const plain = renderToStaticMarkup(<ParentReportCard {...props("■ 단어 테스트\n20문제 중 18개 맞음\n\n■ 진도\nUnit 1")} />);
+    expect(plain).not.toContain("재시험");
+    const other = renderToStaticMarkup(<ParentReportCard {...props("■ 일일 테스트\n20문제 중 18개 맞음\n\n■ 진도\nUnit 1")} />);
+    expect(other).not.toContain("/eie-logo-wide.png");
+    expect(other).not.toContain("EiE 보고서");
+  });
+
+  it("월간 글에 한 달 기록 줄이 있으면 그래프·표를 그린다 — 점수가 없는 달도 시트 모양", () => {
+    const line = monthlyActivityMarker({
+      month: "2026-10",
+      lessons: [
+        { date: "2026-10-06", homework: 100, attitude: "상", word: { right: 18, total: 20 }, retest: false },
+        { date: "2026-10-08", homework: 80, attitude: "중상", word: { right: 12, total: 20 }, retest: true },
+      ],
+    });
+    const h = renderToStaticMarkup(<ParentReportCard {...props(`${line}\n\n잘했어요`)} />);
+    expect(h).toContain("Monthly Evaluation</span> Report");
+    expect(h).toContain("Monthly Class Record");
+    expect(h).toContain("90%"); // 숙제 평균
+    expect(h).toContain("75%"); // 단어 정답률 평균(90·60)
+    expect(h).toContain("재시험 1회");
+    expect(h).not.toContain("Monthly Test Result");
+    expect(h).not.toContain("[월간학습");
+    expect(h).toContain("잘했어요");
   });
 
   it("일일 보고서 글은 수학 보고서 표(항목 카드)로 그려진다", () => {
     const notes = "■ 진도\nUnit 1\n\n■ 수업 태도\n오늘 수업 태도가 좋았습니다.";
     const h = renderToStaticMarkup(<ParentReportCard {...props(notes)} />);
     expect(h).toContain("Unit 1");
-    expect(h).not.toContain("Monthly Evaluation Report");
+    expect(h).not.toContain("Monthly Evaluation</span> Report");
   });
 
   it("월간 보고서 = 점수 줄 + 코멘트 · 점수가 없으면 점수 줄이 빠진다", () => {

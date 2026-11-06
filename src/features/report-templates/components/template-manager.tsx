@@ -17,7 +17,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import {
   BUILTIN_ENGLISH_TEMPLATE,
+  isHiddenBuiltinTemplate,
   BUILTIN_ENGLISH_TEMPLATES,
+  DEFAULT_ENGLISH_TEMPLATE,
   TEMPLATE_BODY_MAX,
   TEMPLATE_DECORATION_TOKENS,
   TEMPLATE_NAME_MAX,
@@ -70,7 +72,7 @@ export function TemplateManager({
 }) {
   const t = useSheetT();
   const tf = useSheetTf();
-  const [editing, setEditing] = useState<Editing>(() => editingOf(BUILTIN_ENGLISH_TEMPLATE));
+  const [editing, setEditing] = useState<Editing>(() => editingOf(DEFAULT_ENGLISH_TEMPLATE)); // 처음엔 영어 기본(옛 ECS 자동은 숨김, 2026-11-06)
   const [busy, setBusy] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const teacher = teacherName.trim();
@@ -156,7 +158,7 @@ export function TemplateManager({
         ) : null}
         <div className="grid gap-4 md:grid-cols-[200px_minmax(0,1fr)]">
           <nav className="flex flex-col gap-1">
-            {templates.map((tp) => (
+            {templates.filter((tp) => !isHiddenBuiltinTemplate(tp.id)).map((tp) => (
               <button
                 key={tp.id}
                 type="button"

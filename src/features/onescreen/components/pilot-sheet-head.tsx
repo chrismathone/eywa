@@ -3,6 +3,7 @@ import { ATT_SOFT } from "@/features/attendance/status-color";
 import type { AttendanceMark } from "../attendance-sentence";
 import {
   parseScoreLine,
+  splitRetest,
   type LevelRow,
   type PilotNoteSection,
 } from "../pilot-notes";
@@ -51,8 +52,8 @@ export function sheetDateLabel(date: string | null): string {
 }
 
 /** 테스트 한 줄 — 점수 줄이면 큰 숫자 + 문제마다 점, 아니면(안 친 날 사유 등) 글 그대로. */
-function TestCell({ s }: { s: PilotNoteSection }) {
-  const lines = s.body.split("\n");
+function TestCell({ body }: { body: string }) {
+  const lines = body.split("\n");
   const score = parseScoreLine(lines[0] ?? "");
   const rest = (score ? lines.slice(1) : lines).join("\n").trim();
   return (
@@ -124,6 +125,8 @@ export type PilotSheetHeadProps = {
   levels: LevelRow[] | null;
   /** 그날 출결 — 날짜 옆 작은 표시(원장 2026-10-26). 모르면 null(표시 없음). */
   attendance?: AttendanceMark | null;
+  /** 학원 로고 아래에 함께 놓는 프로그램 마크(EiE 일일 보고서, 원장 2026-11-06). 없으면 null. */
+  programLogoSrc?: string | null;
 };
 
 /**
@@ -164,6 +167,10 @@ export function PilotSheetHead(p: PilotSheetHeadProps) {
               ) : (
                 <p className="text-primary text-lg font-black break-keep">{p.academyName}</p>
               )}
+              {p.programLogoSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element -- 공개/인쇄 페이지 고정 마크(최적화 불필요)
+                <img src={p.programLogoSrc} alt="EiE" className="mx-auto mt-2 block w-full max-w-[118px] object-contain" />
+              ) : null}
               {p.subjectLabel ? (
                 <span className="bg-report-accent text-primary-deep mt-1.5 inline-block rounded-full px-2.5 py-0.5 text-xs font-black">
                   {p.subjectLabel}
@@ -203,14 +210,23 @@ export function PilotSheetHead(p: PilotSheetHeadProps) {
           ))}
         </colgroup>
         <tbody>
-        {p.tests.map((s) => (
-          <tr key={s.title}>
-            <th scope="row" className={LABEL}>
-              {s.title}
-            </th>
-            <TestCell s={s} />
-          </tr>
-        ))}
+        {p.tests.map((s) => {
+          // 재시험(EiE 단어 테스트, 원장 2026-11-06) — 본문 맨 윗줄 표시를 떼어 제목 옆 붉은 표시로 단다.
+          const { retest, body } = splitRetest(s.body);
+          return (
+            <tr key={s.title}>
+              <th scope="row" className={LABEL}>
+                {s.title}
+                {retest ? (
+                  <span className="bg-danger mx-auto mt-1 block w-fit rounded-full px-2 py-0.5 text-xs font-black text-white">
+                    재시험
+                  </span>
+                ) : null}
+              </th>
+              <TestCell body={body} />
+            </tr>
+          );
+        })}
 
         {p.levels ? (
           <>

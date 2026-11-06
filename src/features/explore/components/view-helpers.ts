@@ -61,7 +61,8 @@ export function netAnalysesOf(blocks: readonly ExploreAnalysisBlock[] | undefine
   return withText.map((b) => ({
     id: b.id,
     title: b.title,
-    detail: b.headline ?? "",
+    // 카드의 안내(퇴원·휴원 · 석 달 넘은 분석 · 반영 전 기록)를 함께 — 점만 보는 사람도 옛 분석을 지금으로 읽지 않게.
+    detail: [b.notice, b.headline].filter(Boolean).join(" "),
     kind: b.kind,
     evidence: b.related.flatMap((k) => (k === "subject:*" ? subjects : [k])),
   }));
