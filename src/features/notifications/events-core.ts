@@ -10,6 +10,8 @@
  *   지남 전환 1회 = 후속조치당 최대 2건, 매일 nag 안 함(v1). soon/later는 알림 대상 아님.
  */
 
+import { monthDayLabel } from "@/lib/date-kst";
+import { classnoteSendWindowLabel } from "@/features/onescreen/classnote-guard";
 import { REPEATED_ABSENCES_LINK } from "./presentation";
 
 /** 결석 마일스톤 tier(낮→높). 이 값 이상이면 그 tier 도달. */
@@ -398,34 +400,75 @@ export function pruneCutoffs(nowMs: number): { eventsBefore: string; readNotific
 /** 미발송 재촉 창(일). 이보다 오래된 건 재촉하지 않는다(무한 잔소리 방지 — too_old가 최종 방어). */
 export const UNSENT_REPORT_WINDOW_DAYS = 7;
 
+/**
+ * '깜빡한 보고서' 강사 알림 최대 횟수 — 원장 2026-11-05 *"앞으로 작성하고 미발송된 '깜빡한 보고서'가 있으면 최대 3일간
+ * 선생님에게 알려줄것."* 보고서마다 **하루 한 번, 처음 잡힌 날을 포함해 최대 3번**.
+ * 🔴 횟수는 날짜 계산이 아니라 **지난 알림 기록**(`notification_events`의 강사 몫)으로 센다 — 작성일로 세면 4일째부터
+ *    보낼 수 있게 된 건(멘트를 늦게 채움·결석 정정)은 0번, 미리 쓴 건은 2번만 울렸다(적대 리뷰 2026-11-05 I1).
+ * 작성 당일(작성일 = 오늘)은 울리지 않는다(아직 발송 중일 수 있다). 발송·취소·기한 경과는 게이트가 후보에서 빼므로 그대로 멈춘다.
+ */
+export const UNSENT_TEACHER_ALERTS_MAX = 3;
+
+/**
+ * 원장 1회분 bucket — 받을 직원이 없는 보고서를 원장에게 **한 번만**(하루씩 반복하지 않는다).
+ * ⚠️ 2026-11-05 이전에는 강사 1회분도 이 이름이었다 — 그래서 강사 횟수를 셀 때 이 기록도 한 번으로 센다.
+ */
+export const UNSENT_ONCE_BUCKET = "unsent";
+
 export type UnsentReportInput = {
   reportId: string;
   studentId: string;
   studentName: string;
   subjectLabel: string; // 한글 라벨(raw 과목 키 노출 금지)
   reportDate: string; // YYYY-MM-DD
+  /** 작성일 = `lesson_reports.created_at`의 **KST** 날짜(YYYY-MM-DD). 오늘 저장분은 그날 강사에게 울리지 않는다 · 본문 'M/D 저장'. */
+  createdDate?: string | null;
+  /** 발송 마지막 날(YYYY-MM-DD) — 호출부가 `classnoteRetryDeadline().lastDate`로 넘긴다(7일 규칙을 여기서 다시 세지 않는다). */
+  sendDeadline?: string | null;
+};
+
+/** 받는 사람 판정 재료(`unsentRecipientOf`). */
+export type UnsentRouting = {
+  /** 이 보고서를 처음 저장한 계정(`lesson_reports.created_by` — 갱신에도 보존된다(0172a 트리거) · 관리자 직접 작성은 비어 있다(채우지 않는다 — `unsentRecipientOf`)). */
+  createdBy: string | null;
+  /** 받는 사람 판정용 반 — 정규 = `class_id` · 보강 = `makeup_class_id`(앵커). 게이트의 반 판정(`classId`)과 별개다. */
+  anchorClassId: string | null;
 };
 
 export type UnsentReportEvent = {
-  /** dedup 주체 = 보고서 id(학생이 아님 — groupEventsByTeacher에 studentIdOf 필수). */
+  /** dedup 주체 = 보고서 id(학생이 아님). */
   subjectKey: string;
   /**
-   * 보고서당 1회 고정 — 발송하면 status가 채워져 후보에서 빠지고, 안 하면 창(7일)을 벗어나 조용해진다.
-   * ⚠️ 알려진 한계(의도적): 공유링크 재발급·첨부 변경은 `classnote_status`를 null로 되돌리는데
-   * (onescreen `reissueShareLink`·`attachment-actions` CLASSNOTE_RESET), bucket이 고정이라 그 건은
-   * **재알림하지 않는다**. 스팸보다 조용한 미탐을 택한 것(적대 리뷰에서 major 아님으로 기각).
+   * 같은 event_type `unsent_report`에 bucket 두 가지:
+   * - `"unsent"`(`UNSENT_ONCE_BUCKET`) = **원장 1회분** — 받을 직원이 없는 보고서, 보고서당 한 번.
+   * - `remind:{KST 오늘}` = **직원(작성자·반 담임) 몫** — 날짜가 키라 같은 날 cron이 여러 번 돌아도 한 번,
+   *   보고서당 최대 `UNSENT_TEACHER_ALERTS_MAX`번(`planUnsentAlerts`).
+   * ⚠️ 공유링크 재발급·첨부 변경은 `classnote_status`를 null로 되돌린다(onescreen `reissueShareLink`·`attachment-actions`
+   * CLASSNOTE_RESET — `classnote_sent_at`까지 지워 이미 나갔었는지 행으로는 모른다). 그래서 직원 본문은 '지금 미발송 상태'라고만
+   * 쓴다('저장만 되고'라고 단정하지 않는다). 원장 1회분은 고정 bucket이라 그런 건을 다시 알리지 않는다(종전 그대로).
    */
   bucket: string;
   studentId: string;
   studentName: string;
   subjectLabel: string;
   reportDate: string;
+  /** 직원 몫만 — 받는 사람(작성자 또는 반 담임). 원장 1회분엔 없다. */
+  recipientId?: string;
+  /** 직원 몫만 — 작성일(KST · 본문 'M/D 저장'). */
+  createdDate?: string | null;
+  /** 직원 몫만 — 발송 마지막 날(YYYY-MM-DD). */
+  sendDeadline?: string | null;
 };
+
+/** 오래된 것 먼저(먼저 챙길 것) — 같은 날은 보고서 id로 안정 정렬. */
+function oldestUnsentFirst(a: UnsentReportInput, b: UnsentReportInput): number {
+  return a.reportDate.localeCompare(b.reportDate) || a.reportId.localeCompare(b.reportId);
+}
 
 /** 미발송 후보 행 → 이벤트(보고서당 1건). 날짜 오름차순(오래된 것 먼저 = 먼저 챙길 것). */
 export function buildUnsentReportEvents(rows: readonly UnsentReportInput[]): UnsentReportEvent[] {
   return [...rows]
-    .sort((a, b) => a.reportDate.localeCompare(b.reportDate) || a.reportId.localeCompare(b.reportId))
+    .sort(oldestUnsentFirst)
     .map((row) => ({
       subjectKey: row.reportId,
       bucket: "unsent",
@@ -445,6 +488,161 @@ export function unsentReportDigestBody(events: readonly UnsentReportEvent[]): st
   }
   const names = summarizeNames([...new Set(events.map((event) => event.studentName))]);
   return `${names} 학생의 수업 보고서 ${events.length}건이 저장만 되고 아직 발송되지 않았습니다(${events[0].reportDate}~).`;
+}
+
+/** 직원 몫 bucket — **KST 오늘 날짜**가 키다(같은 날 cron이 여러 번 돌아도 같은 키 = 하루 한 번). */
+export function unsentReminderBucket(todayKst: string): string {
+  return `remind:${todayKst}`;
+}
+
+/**
+ * 미발송 알림을 받는 사람 — 보고서 하나는 **딱 한 곳**(원장 2026-10-29 *"나와 관련있는 알림만"*):
+ * ① 작성 계정(`created_by`, 재직) → ② 그 보고서 반(보강은 앵커 반)의 재직 담임 → ③ 없으면 null = 원장.
+ * 🔴 학생의 **다른 반 담임**에게는 보내지 않는다 — 그 사람은 이 보고서를 쓰지도 보내지도 않는다(적대 리뷰 2026-11-05 C2:
+ *    학생 220명 중 130명이 담임 2명 이상 · 60일간 반 담임이 아닌 사람이 쓴 보고서 206건).
+ * `activeStaff` = 재직 계정 id(본 테넌트) · `classTeacher` = 반 → 재직 담임(호출부 `activeClassTeachers`).
+ * ⚠️ 관리자 직접 작성(compose)은 created_by가 비어 반 담임에게 간다 — created_by는 보강 귀속(`pickMakeupOwner`)·원스크린
+ *    보강 되살리기(`ownsMakeupReport`)·영상 과제 소유 판정에도 쓰여 채우지 않는다(채우면 2026-09-02 사고가 되살아난다 · 2026-11-06 결정).
+ */
+export function unsentRecipientOf(
+  routing: UnsentRouting,
+  activeStaff: ReadonlySet<string>,
+  classTeacher: ReadonlyMap<string, string>,
+): string | null {
+  if (routing.createdBy && activeStaff.has(routing.createdBy)) return routing.createdBy;
+  if (routing.anchorClassId) return classTeacher.get(routing.anchorClassId) ?? null;
+  return null;
+}
+
+/** 지난 알림 기록 한 줄(`notification_events`, event_type `unsent_report`). `createdDate` = 기록 시각의 KST 날짜. */
+export type UnsentPriorEvent = { subjectKey: string; bucket: string; seeded: boolean; createdDate: string | null };
+
+/**
+ * 보고서별 직원 알림 이력 — `sent` = 보낸 직원 몫 수(`remind:*` + 2026-11-05 이전의 강사 1회분 `"unsent"`).
+ * 🔴 **시드(콜드스타트 기록)는 상한으로 센다** — 종전 콜드스타트 뜻 그대로, 첫 실행에 잡힌 보고서는 그 뒤로도 직원에게
+ *    울리지 않는다(시드를 0으로 세면 기록 0건인 학원의 밀린 건이 다음 날 한꺼번에 울린다 — 적대 리뷰 r2 X3).
+ * `today` = 오늘 이미 울렸나(오늘 bucket이 있거나, 오늘 기록된 `"unsent"` — 배포 당일 옛 코드가 아침에 이미 보낸 뒤
+ * cron을 손으로 다시 돌려도 두 번 울리지 않게).
+ */
+export function unsentTeacherAlertHistory(
+  prior: readonly UnsentPriorEvent[],
+  todayKst: string,
+): Map<string, { sent: number; today: boolean }> {
+  const todayBucket = unsentReminderBucket(todayKst);
+  const out = new Map<string, { sent: number; today: boolean }>();
+  for (const row of prior) {
+    const once = row.bucket === UNSENT_ONCE_BUCKET;
+    if (!once && !row.bucket.startsWith("remind:")) continue;
+    const entry = out.get(row.subjectKey) ?? { sent: 0, today: false };
+    entry.sent += row.seeded ? UNSENT_TEACHER_ALERTS_MAX : 1;
+    if (row.bucket === todayBucket || (once && row.createdDate === todayKst)) entry.today = true;
+    out.set(row.subjectKey, entry);
+  }
+  return out;
+}
+
+/**
+ * 오늘 기록할 미발송 이벤트 — 게이트(`filterUnsentSendable`)를 지난 행만 넘긴다(새 게이트를 만들지 않는다).
+ *  · 받을 직원이 없으면(`unsentRecipientOf` = null) 원장 1회분(`"unsent"`) — 중복은 호출부 upsert가 막는다(종전 그대로).
+ *  · 받을 직원이 있으면 `remind:{오늘}` — 작성 당일이 아니고 · 오늘 아직 안 울렸고 · 지금까지 `UNSENT_TEACHER_ALERTS_MAX`번
+ *    미만일 때만(시드는 상한으로 센다). 처음 잡힌 날부터 센다(작성일·수업일로 세지 않는다).
+ *    단 오늘이 **발송 마지막 날**이면 작성 당일이라도 울린다 — 마지막 날 새벽(cron 07:00 전)에 저장한 건은 내일이면 기한이
+ *    지나 한 번도 못 울린다(적대 리뷰 r2 X1).
+ * 날짜 오름차순(오래된 것 먼저).
+ */
+export function planUnsentAlerts(args: {
+  rows: readonly (UnsentReportInput & UnsentRouting)[];
+  todayKst: string;
+  activeStaff: ReadonlySet<string>;
+  classTeacher: ReadonlyMap<string, string>;
+  prior: readonly UnsentPriorEvent[];
+}): UnsentReportEvent[] {
+  const history = unsentTeacherAlertHistory(args.prior, args.todayKst);
+  const bucket = unsentReminderBucket(args.todayKst);
+  const events: UnsentReportEvent[] = [];
+  for (const row of [...args.rows].sort(oldestUnsentFirst)) {
+    const recipientId = unsentRecipientOf(row, args.activeStaff, args.classTeacher);
+    if (recipientId === null) {
+      events.push(...buildUnsentReportEvents([row]));
+      continue;
+    }
+    if (row.createdDate === args.todayKst && row.sendDeadline !== args.todayKst) continue;
+    const seen = history.get(row.reportId);
+    if (seen?.today || (seen?.sent ?? 0) >= UNSENT_TEACHER_ALERTS_MAX) continue;
+    events.push({
+      subjectKey: row.reportId,
+      bucket,
+      studentId: row.studentId,
+      studentName: row.studentName,
+      subjectLabel: row.subjectLabel,
+      reportDate: row.reportDate,
+      recipientId,
+      createdDate: row.createdDate ?? null,
+      sendDeadline: row.sendDeadline ?? null,
+    });
+  }
+  return events;
+}
+
+/** 새로 기록된 이벤트(`recordNew` 결과) → 원장 1회분 · 받는 사람별 직원 몫. 다른 날 bucket은 버린다(방어). */
+export function splitRecordedUnsent(
+  recorded: readonly UnsentReportEvent[],
+  todayKst: string,
+): { master: UnsentReportEvent[]; byRecipient: Map<string, UnsentReportEvent[]> } {
+  const bucket = unsentReminderBucket(todayKst);
+  const master: UnsentReportEvent[] = [];
+  const byRecipient = new Map<string, UnsentReportEvent[]>();
+  for (const event of recorded) {
+    if (event.bucket === UNSENT_ONCE_BUCKET) master.push(event);
+    else if (event.bucket === bucket && event.recipientId) {
+      const list = byRecipient.get(event.recipientId) ?? [];
+      list.push(event);
+      byRecipient.set(event.recipientId, list);
+    }
+  }
+  return { master, byRecipient };
+}
+
+/**
+ * 발송 시간창 끝 시각(HH:MM) — 시간창이 켜져 있고 **하루 안에서** 끝날 때만(시작 < 끝). 워커가 시간창을 다시 보므로
+ * 마지막 날은 이 시각이 진짜 마감이다(침산 08:30~22:30). 무제한·자정을 넘는 창은 null(그날 자정까지 — 날짜 기한이 먼저 닫힌다).
+ * 활성 판정은 `classnoteSendWindowLabel`(워커 fail-open 규약 미러) 그대로.
+ */
+export function unsentSendWindowEnd(start: string, end: string): string | null {
+  const label = classnoteSendWindowLabel(start, end);
+  if (!label) return null;
+  const [from, to] = label.split("~");
+  return from && to && from < to ? to : null;
+}
+
+/**
+ * 직원 몫 본문(없으면 null). 날짜는 전부 'M/D'(`monthDayLabel`) — 수업일 · 저장일 · 마감일이 한 가지 표기.
+ * '지금 미발송 상태'라고만 쓴다(재발급·첨부 변경으로 다시 미발송이 된 건이 있어 '저장만 되고'라고 단정하지 않는다).
+ * 꼬리 = 발송 마지막 날(여러 건이면 가장 이른 것 · 오늘이면 '오늘') + 시간창 끝 시각 — '오늘 22:30까지만 보낼 수 있습니다'.
+ */
+export function unsentTeacherDigestBody(
+  events: readonly UnsentReportEvent[],
+  todayKst: string,
+  windowEnd: string | null,
+): string | null {
+  if (events.length === 0) return null;
+  const deadline = events
+    .map((event) => event.sendDeadline)
+    .filter((date): date is string => !!date)
+    .sort()[0];
+  const until = deadline
+    ? `${deadline === todayKst ? "오늘" : monthDayLabel(deadline)}${windowEnd ? ` ${windowEnd}` : ""}`
+    : null;
+  if (events.length === 1) {
+    const event = events[0];
+    const saved = event.createdDate ? `(${monthDayLabel(event.createdDate)} 저장)` : "";
+    const head = `${event.studentName} 학생 ${monthDayLabel(event.reportDate)} ${event.subjectLabel} 수업 보고서${saved}가 지금 미발송 상태입니다`;
+    return until ? `${head} — ${until}까지만 보낼 수 있습니다.` : `${head}.`;
+  }
+  const names = summarizeNames([...new Set(events.map((event) => event.studentName))]);
+  const oldest = [...events].sort((a, b) => a.reportDate.localeCompare(b.reportDate))[0]!.reportDate;
+  const head = `${names} 학생의 수업 보고서 ${events.length}건이 지금 미발송 상태입니다(${monthDayLabel(oldest)}~)`;
+  return until ? `${head} — 가장 이른 건은 ${until}까지만 보낼 수 있습니다.` : `${head}.`;
 }
 
 // ─────────── 발송 실패 "마감" 이벤트 ───────────

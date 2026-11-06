@@ -16,8 +16,21 @@ import {
   progressAnomalyLink,
   progressAnomalyStudentBody,
   buildUnsentReportEvents,
+  planUnsentAlerts,
+  splitRecordedUnsent,
+  unsentRecipientOf,
+  unsentReminderBucket,
   unsentReportDigestBody,
+  unsentSendWindowEnd,
+  unsentTeacherAlertHistory,
+  unsentTeacherDigestBody,
+  UNSENT_ONCE_BUCKET,
   UNSENT_REPORT_WINDOW_DAYS,
+  UNSENT_TEACHER_ALERTS_MAX,
+  type UnsentPriorEvent,
+  type UnsentReportEvent,
+  type UnsentReportInput,
+  type UnsentRouting,
   outstandingDigestBody,
   outstandingTier,
   followupBody,
@@ -330,6 +343,219 @@ describe("미발송 보고서 이벤트", () => {
 
   it("재촉 창 상수 고정(회귀 방지)", () => {
     expect(UNSENT_REPORT_WINDOW_DAYS).toBe(7);
+  });
+});
+
+describe("깜빡한 보고서 — 받는 사람 한 곳 · 보고서당 하루 한 번 최대 3번(원장 2026-11-05 · 적대 리뷰 C2·I1)", () => {
+  type PlanRow = UnsentReportInput & UnsentRouting;
+  const input = (reportId: string, p: Partial<PlanRow> = {}): PlanRow => ({
+    reportId,
+    studentId: "s1",
+    studentName: "김민준",
+    subjectLabel: "수학",
+    reportDate: "2026-11-02",
+    createdDate: "2026-11-02",
+    sendDeadline: "2026-11-08",
+    createdBy: "author",
+    anchorClassId: "c1",
+    ...p,
+  });
+  const staff = new Set(["author", "teacher"]);
+  const teachers = new Map([["c1", "teacher"]]);
+
+  /**
+   * 서버 하루 한 번의 흉내 — 지난 기록(store)으로 계획을 세우고, `recordNew`(upsert ignoreDuplicates)처럼 새 키만 기록해
+   * 원장 몫·받는 사람별 몫으로 나눈다. 반환 = 그날 실제로 보낼 것.
+   */
+  type Stored = UnsentPriorEvent;
+  const runDay = (store: Stored[], rows: readonly PlanRow[], today: string, cold = false) => {
+    const planned = planUnsentAlerts({ rows, todayKst: today, activeStaff: staff, classTeacher: teachers, prior: store });
+    const recorded = planned.filter((event) => {
+      if (store.some((row) => row.subjectKey === event.subjectKey && row.bucket === event.bucket)) return false;
+      store.push({ subjectKey: event.subjectKey, bucket: event.bucket, seeded: cold, createdDate: today });
+      return true;
+    });
+    return cold ? { master: [], byRecipient: new Map<string, UnsentReportEvent[]>() } : splitRecordedUnsent(recorded, today);
+  };
+  /** 여러 날을 돌려 보고서별로 직원 몫이 울린 날을 모은다(받는 사람도 함께). */
+  const simulate = (rowsOn: (day: string) => PlanRow[], days: string[], store: Stored[] = []) => {
+    const rang: Record<string, string[]> = {};
+    const masterDays: Record<string, string[]> = {};
+    for (const day of days) {
+      const { master, byRecipient } = runDay(store, rowsOn(day), day);
+      for (const [recipientId, events] of byRecipient) for (const event of events) (rang[event.subjectKey] ??= []).push(`${day}@${recipientId}`);
+      for (const event of master) (masterDays[event.subjectKey] ??= []).push(day);
+    }
+    return { rang, masterDays };
+  };
+  const NOV = ["2026-11-02", "2026-11-03", "2026-11-03", "2026-11-04", "2026-11-05", "2026-11-05", "2026-11-06", "2026-11-07", "2026-11-08"];
+
+  it("받는 사람 = 작성 계정(재직) → 그 반 재직 담임 → 없으면 원장(null) · 보강은 앵커 반", () => {
+    expect(unsentRecipientOf({ createdBy: "author", anchorClassId: "c1" }, staff, teachers)).toBe("author");
+    expect(unsentRecipientOf({ createdBy: "gone", anchorClassId: "c1" }, staff, teachers)).toBe("teacher"); // 퇴사 작성자
+    expect(unsentRecipientOf({ createdBy: null, anchorClassId: "c1" }, staff, teachers)).toBe("teacher"); // 관리자 직접 작성
+    expect(unsentRecipientOf({ createdBy: null, anchorClassId: "c2" }, staff, teachers)).toBeNull(); // 담임 없는 반
+    expect(unsentRecipientOf({ createdBy: "gone", anchorClassId: null }, staff, teachers)).toBeNull();
+  });
+
+  it("보통(11/2 저장·안 보냄) → 작성자에게 11/3·11/4·11/5 세 번 — 같은 날 재실행은 한 번, 4번째 날부터 멈춤", () => {
+    const { rang, masterDays } = simulate(() => [input("r1")], NOV);
+    expect(rang.r1).toEqual(["2026-11-03@author", "2026-11-04@author", "2026-11-05@author"]);
+    expect(masterDays.r1).toBeUndefined(); // 받을 직원이 있으면 원장에게 가지 않는다(한 곳)
+    expect(UNSENT_TEACHER_ALERTS_MAX).toBe(3);
+  });
+
+  it("작성 당일은 울리지 않는다(11/3 01시에 11/2 수업분 저장 → 11/3 아침 조용 · 11/4부터)", () => {
+    const { rang } = simulate((day) => (day >= "2026-11-03" ? [input("r1", { createdDate: "2026-11-03" })] : []), NOV);
+    expect(rang.r1).toEqual(["2026-11-04@author", "2026-11-05@author", "2026-11-06@author"]);
+  });
+
+  it("4일째에야 보낼 수 있게 된 건도 처음 잡힌 날부터 세 번(종전 작성일 기준은 0번)", () => {
+    const { rang } = simulate((day) => (day >= "2026-11-06" ? [input("r1")] : []), NOV);
+    expect(rang.r1).toEqual(["2026-11-06@author", "2026-11-07@author", "2026-11-08@author"]);
+  });
+
+  it("미리 쓴 보고서(11/3 수업분을 11/2 저장)도 세 번(종전 작성일 기준은 두 번)", () => {
+    // 조회 창은 수업일 다음 날부터(어제까지) — 11/4에 처음 잡힌다.
+    const { rang } = simulate((day) => (day > "2026-11-03" ? [input("r1", { reportDate: "2026-11-03", createdDate: "2026-11-02" })] : []), NOV);
+    expect(rang.r1).toEqual(["2026-11-04@author", "2026-11-05@author", "2026-11-06@author"]);
+  });
+
+  it("받을 직원이 없으면 원장 1회분(bucket 'unsent')만 — 날마다 반복하지 않고 작성 당일도 막지 않는다(종전 그대로)", () => {
+    // 11/2 수업분을 11/3에 늦게 저장 — 원장 1회분은 작성 당일(11/3)에도 나간다(종전과 같다).
+    const late = input("r1", { createdBy: null, anchorClassId: "c9", createdDate: "2026-11-03" });
+    const { rang, masterDays } = simulate((day) => (day >= "2026-11-03" ? [late] : []), NOV);
+    expect(rang.r1).toBeUndefined();
+    expect(masterDays.r1).toEqual(["2026-11-03"]);
+    const [once] = planUnsentAlerts({ rows: [input("r1", { createdBy: null, anchorClassId: null })], todayKst: "2026-11-05", activeStaff: staff, classTeacher: teachers, prior: [] });
+    expect(once).toEqual({ subjectKey: "r1", bucket: UNSENT_ONCE_BUCKET, studentId: "s1", studentName: "김민준", subjectLabel: "수학", reportDate: "2026-11-02" });
+  });
+
+  it("옛 강사 1회분('unsent')도 한 번으로 센다 — 어제 받은 보고서는 두 번만 더", () => {
+    const store: Stored[] = [{ subjectKey: "r1", bucket: UNSENT_ONCE_BUCKET, seeded: false, createdDate: "2026-11-04" }];
+    const { rang } = simulate(() => [input("r1")], ["2026-11-05", "2026-11-06", "2026-11-07"], store);
+    expect(rang.r1).toEqual(["2026-11-05@author", "2026-11-06@author"]);
+  });
+
+  it("배포 당일: 옛 코드가 오늘 아침 'unsent'로 이미 보냈으면 오늘 다시 돌려도 울리지 않는다(M5)", () => {
+    const prior: Stored[] = [{ subjectKey: "r1", bucket: UNSENT_ONCE_BUCKET, seeded: false, createdDate: "2026-11-05" }];
+    expect(planUnsentAlerts({ rows: [input("r1")], todayKst: "2026-11-05", activeStaff: staff, classTeacher: teachers, prior })).toEqual([]);
+    expect(unsentTeacherAlertHistory(prior, "2026-11-05").get("r1")).toEqual({ sent: 1, today: true });
+  });
+
+  it("시드(콜드스타트 기록)된 보고서는 직원 몫도 그 뒤로 울리지 않는다 — 종전 콜드스타트 뜻(리뷰 r2 X3)", () => {
+    const store: Stored[] = [];
+    runDay(store, [input("r1")], "2026-11-03", true); // 콜드스타트 — 기록만
+    expect(unsentTeacherAlertHistory(store, "2026-11-03").get("r1")).toEqual({ sent: UNSENT_TEACHER_ALERTS_MAX, today: true });
+    const { rang } = simulate(() => [input("r1"), input("r2", { createdDate: "2026-11-03" })], ["2026-11-04", "2026-11-05", "2026-11-06", "2026-11-07"], store);
+    expect(rang.r1).toBeUndefined();
+    // 콜드스타트 날 작성 당일이라 기록되지 않은 r2는 시드가 아니다 — 다음 날부터 세 번.
+    expect(rang.r2).toEqual(["2026-11-04@author", "2026-11-05@author", "2026-11-06@author"]);
+  });
+
+  it("발송 마지막 날 새벽에 저장한 건은 작성 당일이라도 그날 울린다(리뷰 r2 X1)", () => {
+    // 11/2 수업분 → 마지막 날 11/8. 11/8 01시에 저장 — 07시 cron이 건너뛰면 다음 날엔 기한이 지나 한 번도 못 울린다.
+    const last = input("r1", { reportDate: "2026-11-02", createdDate: "2026-11-08", sendDeadline: "2026-11-08" });
+    expect(planUnsentAlerts({ rows: [last], todayKst: "2026-11-08", activeStaff: staff, classTeacher: teachers, prior: [] })).toHaveLength(1);
+    // 마지막 날이 아니면 작성 당일은 그대로 건너뛴다.
+    const notLast = input("r2", { reportDate: "2026-11-05", createdDate: "2026-11-06", sendDeadline: "2026-11-11" });
+    expect(planUnsentAlerts({ rows: [notLast], todayKst: "2026-11-06", activeStaff: staff, classTeacher: teachers, prior: [] })).toEqual([]);
+    // 마지막 날이라도 오늘 이미 울렸으면 다시 울리지 않는다 — 배포 당일 옛 'unsent'·오늘 bucket 모두(리뷰 r3 N7d).
+    const earlier = input("r3", { reportDate: "2026-11-02", createdDate: "2026-11-02", sendDeadline: "2026-11-08" });
+    const onceToday: Stored[] = [{ subjectKey: "r3", bucket: UNSENT_ONCE_BUCKET, seeded: false, createdDate: "2026-11-08" }];
+    const remindToday: Stored[] = [{ subjectKey: "r3", bucket: "remind:2026-11-08", seeded: false, createdDate: "2026-11-08" }];
+    for (const prior of [onceToday, remindToday]) {
+      expect(planUnsentAlerts({ rows: [earlier], todayKst: "2026-11-08", activeStaff: staff, classTeacher: teachers, prior })).toEqual([]);
+      expect(planUnsentAlerts({ rows: [last], todayKst: "2026-11-08", activeStaff: staff, classTeacher: teachers, prior: prior.map((p) => ({ ...p, subjectKey: "r1" })) })).toEqual([]);
+    }
+  });
+
+  it("이력 판정 — 다른 종류 bucket은 세지 않는다 · 오늘 bucket이면 today", () => {
+    const history = unsentTeacherAlertHistory(
+      [
+        { subjectKey: "a", bucket: "remind:2026-11-03", seeded: false, createdDate: "2026-11-03" },
+        { subjectKey: "a", bucket: "remind:2026-11-05", seeded: false, createdDate: "2026-11-05" },
+        { subjectKey: "a", bucket: "other", seeded: false, createdDate: "2026-11-05" },
+        { subjectKey: "b", bucket: UNSENT_ONCE_BUCKET, seeded: true, createdDate: "2026-11-01" },
+      ],
+      "2026-11-05",
+    );
+    expect(history.get("a")).toEqual({ sent: 2, today: true });
+    expect(history.get("b")).toEqual({ sent: UNSENT_TEACHER_ALERTS_MAX, today: false }); // 시드 = 상한
+    expect(unsentReminderBucket("2026-11-05")).toBe("remind:2026-11-05");
+  });
+
+  it("나누기 — 원장 1회분 · 받는 사람별 · 다른 날 bucket은 버린다", () => {
+    const { master, byRecipient } = splitRecordedUnsent(
+      [
+        { subjectKey: "m", bucket: UNSENT_ONCE_BUCKET, studentId: "s", studentName: "가", subjectLabel: "수학", reportDate: "2026-11-02" },
+        { subjectKey: "x", bucket: "remind:2026-11-05", studentId: "s", studentName: "가", subjectLabel: "수학", reportDate: "2026-11-02", recipientId: "t1" },
+        { subjectKey: "y", bucket: "remind:2026-11-05", studentId: "s", studentName: "가", subjectLabel: "수학", reportDate: "2026-11-03", recipientId: "t1" },
+        { subjectKey: "z", bucket: "remind:2026-11-04", studentId: "s", studentName: "가", subjectLabel: "수학", reportDate: "2026-11-03", recipientId: "t2" },
+      ],
+      "2026-11-05",
+    );
+    expect(master.map((event) => event.subjectKey)).toEqual(["m"]);
+    expect([...byRecipient.keys()]).toEqual(["t1"]);
+    expect(byRecipient.get("t1")!.map((event) => event.subjectKey)).toEqual(["x", "y"]);
+  });
+
+  it("시간창 끝 시각 — 켜져 있고 하루 안에서 끝날 때만", () => {
+    expect(unsentSendWindowEnd("08:30", "22:30")).toBe("22:30");
+    expect(unsentSendWindowEnd("22:00", "06:00")).toBeNull(); // 자정을 넘는 창
+    expect(unsentSendWindowEnd("", "")).toBeNull(); // 무제한
+    expect(unsentSendWindowEnd("09:00", "09:00")).toBeNull();
+    expect(unsentSendWindowEnd("08:30", "")).toBeNull();
+  });
+
+  const teacherEvent = (p: Partial<UnsentReportEvent> = {}): UnsentReportEvent => ({
+    subjectKey: "r1",
+    bucket: "remind:2026-11-05",
+    studentId: "s1",
+    studentName: "김민준",
+    subjectLabel: "수학",
+    reportDate: "2026-11-03",
+    recipientId: "author",
+    createdDate: "2026-11-04",
+    sendDeadline: "2026-11-09",
+    ...p,
+  });
+
+  it("직원 본문 — 날짜는 전부 M/D · 'M/D 저장' · 마감일 + 시간창 끝 · 중립 문구", () => {
+    expect(unsentTeacherDigestBody([teacherEvent()], "2026-11-05", "22:30")).toBe(
+      "김민준 학생 11/3 수학 수업 보고서(11/4 저장)가 지금 미발송 상태입니다 — 11/9 22:30까지만 보낼 수 있습니다.",
+    );
+  });
+
+  it("직원 본문 — 마지막 날이 오늘이면 '오늘 22:30까지만' · 시간창이 없으면 '오늘까지만'", () => {
+    const event = teacherEvent({ sendDeadline: "2026-11-09" });
+    expect(unsentTeacherDigestBody([event], "2026-11-09", "22:30")).toContain("— 오늘 22:30까지만 보낼 수 있습니다.");
+    expect(unsentTeacherDigestBody([event], "2026-11-09", null)).toContain("— 오늘까지만 보낼 수 있습니다.");
+  });
+
+  it("직원 본문 — 여러 건이면 건수 · 가장 이른 수업일~ · 가장 이른 마감", () => {
+    const body = unsentTeacherDigestBody(
+      [
+        teacherEvent({ subjectKey: "a", reportDate: "2026-11-04", sendDeadline: "2026-11-10" }),
+        teacherEvent({ subjectKey: "b", studentName: "이서연", reportDate: "2026-11-02", sendDeadline: "2026-11-08" }),
+      ],
+      "2026-11-05",
+      "22:30",
+    );
+    expect(body).toBe("김민준·이서연 학생의 수업 보고서 2건이 지금 미발송 상태입니다(11/2~) — 가장 이른 건은 11/8 22:30까지만 보낼 수 있습니다.");
+  });
+
+  it("직원 본문 — 마감·저장일을 모르면 그 조각 없이, 빈 배열은 null · '저장만 되고'라고 단정하지 않는다", () => {
+    expect(unsentTeacherDigestBody([teacherEvent({ sendDeadline: null, createdDate: null })], "2026-11-05", "22:30")).toBe(
+      "김민준 학생 11/3 수학 수업 보고서가 지금 미발송 상태입니다.",
+    );
+    expect(unsentTeacherDigestBody([], "2026-11-05", null)).toBeNull();
+    expect(unsentTeacherDigestBody([teacherEvent()], "2026-11-05", null)).not.toContain("저장만");
+  });
+
+  it("원장 1회분 본문은 종전 그대로", () => {
+    const [once] = buildUnsentReportEvents([input("r1", { reportDate: "2026-11-04" })]);
+    expect(unsentReportDigestBody([once!])).toBe("김민준 학생 2026-11-04 수학 수업 보고서가 저장만 되고 아직 발송되지 않았습니다.");
   });
 });
 
