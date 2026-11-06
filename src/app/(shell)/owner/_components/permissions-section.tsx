@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { nextPermissionAccess, sparseRoleOverrides } from "@/features/owner/permission-edit";
+import { cycleSkipsScoped, nextPermissionAccess, sparseRoleOverrides } from "@/features/owner/permission-edit";
 import { editablePermissionRowGroups, type PermissionNavigation } from "@/features/owner/permission-rows";
 import { TEACHER_TOGGLE_KEYS, teacherToggleOnAccess } from "@/features/owner/teacher-toggle-rows";
 import { SETTINGS_ROLE_KEYS, type SettingsRoleKey } from "@/lib/settings-role-catalog";
@@ -11,6 +11,7 @@ import type { PermissionsSettings } from "@/features/owner/settings-types";
 import {
   MENU_KEYS,
   MENU_LABEL,
+  SCOPED_FORBIDDEN_MESSAGE,
   SYSTEM_ROLES,
   isConnectedAppMenu,
   isPermissionLocked,
@@ -122,11 +123,52 @@ export function PermissionsSection({
   ));
   const staffName = (id: string) => staffOptions.find((s) => s.id === id)?.name || userOverrideNames[id] || `${id.slice(0, 8)}…`;
 
+  // 강사보다 낮은 직급(열람·아르바이트) 칸에서 '담당'을 건너뛰었으면 그 칸과 까닭을 알린다 — 말없이 건너뛰지 않는다
+  // (원장 2026-11-05 *"무조건적으로 안되게하지말고 알림메시지도 배선"*). 다른 칸을 누르거나 닫기·저장하면 사라진다.
+  // 서버 값으로 표를 갈아끼우면(`adoptions`) 그 안내는 이미 지난 표의 것이라 함께 지운다(렌더에서 파생 — effect 안 setState 금지).
+  const [skipState, setScopedSkip] = useState<{ menu: MenuKey; role: SystemRole; to: Access; adoptions: number } | null>(null);
+  const scopedSkip = skipState && skipState.adoptions === adoptions ? skipState : null;
   function cycle(menu: MenuKey, role: SystemRole) {
-    const next = nextPermissionAccess(menu, role, matrix[menu][role]);
+    const current = matrix[menu][role];
+    const next = nextPermissionAccess(menu, role, current);
     if (isPermissionLocked(menu, role, next)) return; // 가드레일 셀은 변경 거부
+    setScopedSkip(cycleSkipsScoped(menu, role, current) ? { menu, role, to: next, adoptions } : null);
     setMatrix((m) => ({ ...m, [menu]: { ...m[menu], [role]: next } }));
   }
+  /**
+   * 이 표(카드)의 칸에서 건너뛴 것만 그 표 **아래**에 — 메뉴 표와 설정 표가 같은 `cycle`을 쓴다.
+   * 🔴 표 위에 두면 표가 길어(메뉴 표 30여 줄) 아래쪽 줄을 누를 때 안내가 화면 밖에 떠 결국 '말없이 건너뜀'이 됐다(리뷰 2026-11-05).
+   *    표 아래에 두고 창 아래(저장 줄 바로 위 — `bottom-16`)에 붙인다: 표 어디를 누르든 보이고, 표 위 칸을 밀어내지 않는다.
+   *    바탕은 불투명(표를 덮는다) · 닫기 단추로 치울 수 있다(덮인 줄을 누르려면). 닫으면 단추가 사라지므로 초점을 안내를 띄운 칸으로
+   *    돌려준다(문서 맨 처음이나 표 밖으로 빠지지 않게 — 재리뷰 2026-11-05). 그 칸을 못 찾으면 안내 자리로.
+   * ⚠️ 알림 자리(`aria-live`)는 **늘 붙여 두고 글만 바꾼다** — 내용과 함께 새로 끼우면 화면낭독기가 읽지 않는 경우가 있다.
+   *    `role="status"` 대신 `aria-live`인 까닭: 늘 붙어 있는 빈 status 요소가 이 면의 다른 안내(같은 칸 중복 — role=status)와 섞인다.
+   */
+  const scopedSkipNotice = (cardGroups: readonly { rows: readonly { menu: MenuKey }[] }[]) => {
+    const shown = scopedSkip && cardGroups.some((g) => g.rows.some((r) => r.menu === scopedSkip.menu)) ? scopedSkip : null;
+    return (
+      <div data-scoped-skip-notice="" tabIndex={-1} className="sticky bottom-16 z-20 outline-none">
+        <div className={shown ? "bg-card mt-3 rounded-md shadow-[0_4px_14px_-4px_rgba(29,29,31,0.25)]" : undefined}>
+          <div className={shown ? "border-amber/30 bg-amber-soft flex items-start gap-2 rounded-md border px-3 py-2" : undefined}>
+            <p aria-live="polite" aria-atomic="true" className="min-w-0 flex-1 text-xs leading-relaxed">
+              {shown ? <>
+                <b>{MENU_LABEL[shown.menu]} · {ROLE_LABEL[shown.role]}: ‘담당’을 건너뛰고 ‘{ACCESS_LABEL[shown.to]}’{shown.to === "none" ? "으로" : "로"} 바꿨습니다.</b>{" "}
+                {SCOPED_FORBIDDEN_MESSAGE}
+              </> : null}
+            </p>
+            {shown ? (
+              <button type="button" onClick={(e) => {
+                const cell = e.currentTarget.closest("section")?.querySelector<HTMLElement>(`[data-perm-cell="${shown.menu}:${shown.role}"]`);
+                (cell ?? e.currentTarget.closest<HTMLElement>("[data-scoped-skip-notice]"))?.focus();
+                setScopedSkip(null);
+              }} aria-label="안내 닫기" title="닫기"
+                className="text-text-dim hover:text-foreground -my-0.5 flex size-6 shrink-0 items-center justify-center rounded text-sm leading-none">×</button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // '강사 내 메뉴 표시' 빠른 토글 — 같은 matrix 상태를 편집(별도 저장/필드 없음, 아래 표와 한 폼).
   // 켜기 복원값 = '끄기 직전의 실제 강사 접근값'(세션 중 매트릭스로 바꾼 readonly 등도 보존). 화면을 연 때의 값으로 시작한다.
@@ -157,6 +199,7 @@ export function PermissionsSection({
       extraFields={{ permissionsBaseline: baseline }}
       onSubmit={noteSubmitted}
       onSaved={(state) => {
+        setScopedSkip(null);
         setSavedToken(state.permissions?.token);
         confirmSaved(state.permissions?.token, state.version);
       }}
@@ -177,7 +220,8 @@ export function PermissionsSection({
           {/* 설명은 접는 제목 줄이 아니라 본문에 둔다 — 제목 줄 안의 글자를 누르면 카드가 접히고, 화면 낭독기가 설명 전체를 단추 이름으로 읽는다. */}
           <p className="text-text-dim text-xs">
             셀을 클릭하면 <b>전체 → 담당 → 읽기 → 없음</b> 순으로 바뀝니다. 기본값과 다른 셀만 저장됩니다
-            (기본값과 다른 셀 {overrides.filter((o) => !isConnectedAppMenu(o.menu)).length}개). 강사뷰 접근은 <b>전체 → 읽기 → 없음</b>만 사용합니다. 줄은 <b>탭 및 메뉴 구성에서 쓰는 메뉴</b>가 <b>왼쪽 탭과 그 안의 메뉴 차례</b>대로 서 있습니다(구성에서 감춘 메뉴는 표에 없고 — 강사 ‘내 메뉴’에 보이면 ‘관리자뷰에서 감춤’으로 남습니다 — 구성을 바꾸면
+            (기본값과 다른 셀 {overrides.filter((o) => !isConnectedAppMenu(o.menu)).length}개). 강사뷰 접근은 <b>전체 → 읽기 → 없음</b>만 사용합니다. 강사보다 낮은 직급(열람·아르바이트)도{" "}
+            <b>전체 → 읽기 → 없음</b>만 씁니다(맡은 반이 없어 ‘담당’이 ‘전체’처럼 열리므로 ‘담당’을 건너뜁니다). 줄은 <b>탭 및 메뉴 구성에서 쓰는 메뉴</b>가 <b>왼쪽 탭과 그 안의 메뉴 차례</b>대로 서 있습니다(구성에서 감춘 메뉴는 표에 없고 — 강사 ‘내 메뉴’에 보이면 ‘관리자뷰에서 감춤’으로 남습니다 — 구성을 바꾸면
             함께 바뀝니다). 선생님 원스크린·내 학습은 강사·학생 전용 화면이라 표에 없고, 학생 역할과 원장의 설정·대시보드 접근은
             잠글 수 없습니다. 강사 대시보드는 담당 범위 집계가 없어 비활성화됩니다.
           </p>
@@ -200,6 +244,7 @@ export function PermissionsSection({
           ) : null}
           <RoleMatrixTable groups={menuGroups} matrix={matrix} savedMatrix={savedMatrix} onCycle={cycle} />
           </div>
+          {scopedSkipNotice(menuGroups)}
         </SettingsCard>
         <ConnectedAppPermissionsCard apps={connectedApps} matrix={matrix} savedMatrix={savedMatrix} onCycle={cycle} />
         <SettingsCard
@@ -207,9 +252,11 @@ export function PermissionsSection({
           description="각 메뉴에 있던 ‘역할 설정’을 여기에서 관리합니다. 기존 권한은 그대로 유지되며, 메뉴·개인 권한과 함께 저장됩니다."
         >
           <RoleMatrixTable groups={settingGroups} matrix={matrix} savedMatrix={savedMatrix} onCycle={cycle} />
+          {scopedSkipNotice(settingGroups)}
         </SettingsCard>
         <UserOverrideEditor
           overrides={userOverrides}
+          roleMatrix={matrix}
           hiddenUserIds={hiddenUserIds}
           staffOptions={staffOptions}
           nameOf={staffName}

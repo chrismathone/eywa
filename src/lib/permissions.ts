@@ -473,8 +473,39 @@ const ROLE_LOCKED_MENUS = new Set<MenuKey>(["teacher_onescreen", "my_learning"])
 export function isRoleOnlyMenu(menu: MenuKey): boolean {
   return ROLE_LOCKED_MENUS.has(menu);
 }
+/**
+ * **'담당'을 줄 수 없는 역할** — 강사보다 낮은 직급(`ROLE_HIERARCHY`: 강사 5 < 열람 6 · 아르바이트 7 — 가드 시험이 맞춘다).
+ * 원장 2026-11-05 *"관리자도 수업을 할 수 있기 때문에 '담당'일 수도 있음. 강사보다 낮은 직급은 담당 금지."*
+ * 이 역할은 맡을 반이 없어(담임·위임 대상 = 강사 이상) '담당'이 '본인 것만'으로 좁혀지지 않고 대부분의 화면에서 '전체'처럼 열린다
+ * (조사 2026-11-05 — 목록 범위는 강사 판정 `effectiveTeacherId`만 본다). 학생은 컬럼 전체가 이미 잠겨 있다.
+ * 🔴 말없이 막지 않는다(원장 *"무조건적으로 안되게하지말고 알림메시지도 배선"*) — 권한 표·개인별 권한·저장 거절이 아래 문구를 보인다.
+ */
+export const SCOPED_FORBIDDEN_ROLES = ["viewer", "parttime"] as const satisfies readonly SystemRole[];
+export function isScopedForbiddenRole(role: SystemRole): boolean {
+  return (SCOPED_FORBIDDEN_ROLES as readonly SystemRole[]).includes(role);
+}
+/** 위 금지의 안내 문구 — 권한 표 · 개인별 권한 · 저장 거절이 같은 말을 쓴다(역할 이름은 권한 화면 표기 — 시험이 맞춘다). */
+export const SCOPED_FORBIDDEN_MESSAGE =
+  "‘담당’은 강사보다 낮은 직급(열람·아르바이트)에는 줄 수 없습니다 — 맡은 반이 없어 ‘담당’이 ‘전체’처럼 열리기 때문입니다. ‘전체’·‘읽기’·‘없음’ 중에서 골라 주세요.";
+
+/**
+ * 저장돼 있던 금지 '담당'(손으로 넣은 값 · 역할이 바뀐 사람의 개인 줄)은 **'읽기'와 "그 줄이 없을 때의 값"(`fallback`) 중 좁은 쪽**으로
+ * 내려 적용한다 — 그 줄이 없을 때보다 넓어지는 일이 없다.
+ * - 버리면 `fallback`(예: 역할 칸 '전체')으로 돌아가 오히려 넓어진다(리뷰 2026-11-05 — 역할 '전체' + 개인 '담당'으로 좁혀 둔 사람).
+ * - 무조건 '읽기'로 올려도 넓어진다 — `fallback`이 '없음'인 칸(아르바이트 기본값 등)에서 학원 전체 원생 상세(전화·주소·보호자)가
+ *   열린다. '담당'은 원생 상세·실시간 출결을 본인 반으로 좁혀, 맡은 반이 없는 이 역할에게는 열지 않았다(재리뷰 2026-11-05).
+ * 그래서 `fallback`이 '없음'이면 '없음', 아니면 '읽기'다(이 역할의 코드 기본값에는 '담당'이 없다 — 시험이 맞춘다).
+ * `fallback` = 역할 칸이면 그 칸의 코드 기본값(앞서 저장된 같은 칸이 있으면 그 값), 개인 줄이면 그 사람 역할 칸의 값.
+ * 강사뷰 접근의 '담당'은 원래 뜻이 없는 값이라 그대로 둔다(잠금이 버린다).
+ */
+export function storedScopedAccess(menu: MenuKey, role: SystemRole, access: Access, fallback: Access): Access {
+  if (access !== "scoped" || menu === "teacher_view" || !isScopedForbiddenRole(role)) return access;
+  return fallback === "none" ? "none" : "readonly";
+}
+
 export function isPermissionLocked(menu: MenuKey, role: SystemRole, access: Access): boolean {
   if (menu === "teacher_view" && access === "scoped") return true;
+  if (access === "scoped" && isScopedForbiddenRole(role)) return true;
   // 연결 앱은 링크를 세우나 마나뿐이다 — 담당·읽기는 뜻이 없다(전체 = 보임 · 없음 = 안 보임).
   if (isConnectedAppMenu(menu) && (access === "scoped" || access === "readonly")) return true;
   if (ROLE_LOCKED_MENUS.has(menu)) return true;
@@ -493,14 +524,17 @@ export function isPermissionLocked(menu: MenuKey, role: SystemRole, access: Acce
 /**
  * 하드코딩 MENU_ACCESS(기본값) 위에 저장된 sparse override를 셀 단위로 덮어쓴 "유효 매트릭스".
  * 순수 함수(Vitest 대상). 가드레일에 걸리는 셀(잠긴 메뉴·master 자기잠금)은 무시한다(DB 직접 변조 대비).
+ * 단 강사보다 낮은 직급의 저장된 '담당'은 무시하지 않고 '읽기'(그 칸이 원래 '없음'이면 '없음')로 내린다(`storedScopedAccess`).
  */
 export function resolveMatrix(overrides: readonly PermissionOverride[]): AccessMatrix {
   const matrix = Object.fromEntries(
     MENU_KEYS.map((k) => [k, { ...MENU_ACCESS[k] }]),
   ) as AccessMatrix;
   for (const o of overrides) {
-    if (!matrix[o.menu] || isPermissionLocked(o.menu, o.role, o.access)) continue;
-    matrix[o.menu][o.role] = o.access;
+    if (!matrix[o.menu]) continue;
+    const access = storedScopedAccess(o.menu, o.role, o.access, matrix[o.menu][o.role]);
+    if (isPermissionLocked(o.menu, o.role, access)) continue;
+    matrix[o.menu][o.role] = access;
   }
   return matrix;
 }
@@ -524,15 +558,16 @@ export function applyUserOverrides(
   role: SystemRole,
   overrides: readonly UserPermissionOverride[],
 ): AccessMatrix {
-  const mine = overrides.filter(
-    (o) => o.userId === userId && matrix[o.menu] && !isPermissionLocked(o.menu, role, o.access),
-  );
-  if (mine.length === 0) return matrix;
-  const out = { ...matrix };
-  for (const o of mine) {
-    out[o.menu] = { ...out[o.menu], [role]: o.access };
+  let out: AccessMatrix | null = null;
+  for (const o of overrides) {
+    if (o.userId !== userId || !matrix[o.menu]) continue;
+    // 금지 '담당'은 그 사람 역할 칸 값(= 이 줄이 없을 때의 값)보다 넓어지지 않게 내린다(storedScopedAccess).
+    const access = storedScopedAccess(o.menu, role, o.access, (out ?? matrix)[o.menu][role]);
+    if (isPermissionLocked(o.menu, role, access)) continue;
+    out ??= { ...matrix };
+    out[o.menu] = { ...out[o.menu], [role]: access };
   }
-  return out;
+  return out ?? matrix;
 }
 
 /**

@@ -92,6 +92,7 @@ export function RoleMatrixTable({ groups, matrix, savedMatrix, onCycle, rowHeade
               type="button"
               disabled={locked}
               onClick={() => onCycle(item.menu, role)}
+              data-perm-cell={`${item.menu}:${role}`}
               aria-label={`${item.label} · ${ROLE_LABEL[role]}: ${ACCESS_LABEL[access]}`}
               title={locked ? "고정" : changed ? `${ACCESS_LABEL[saved]} → ${ACCESS_LABEL[access]} · 저장 전 변경` : "클릭하여 변경"}
               className={`w-full rounded px-1.5 py-1 text-xs font-medium transition ${ACCESS_CLS[access]} ${changed ? "ring-amber ring-2" : ""} ${

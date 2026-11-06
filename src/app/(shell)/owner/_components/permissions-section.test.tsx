@@ -99,10 +99,10 @@ describe("학원설정 '강사 내 메뉴 표시' — 메뉴에서 뺀 탭은 �
     }
   });
 
-  it("'내 메뉴'에 서는 이름이 권한 이름과 다르면 그 이름을 함께 적는다(출석부 = 출결 모드 · 출석부)", () => {
+  it("칸은 탭 이름 한 줄 — '내 메뉴'의 다른 입구 이름(출결 모드 등)을 덧붙이지 않는다(원장 2026-11-05 \"항상 탭 이름을 기본으로\")", () => {
     render(<PermissionsSection initial={EMPTY} />);
     const label = within(toggleCard()).getByRole("checkbox", { name: new RegExp(`^${MENU_LABEL.attendance}`), hidden: true }).closest("label")!;
-    expect(label.textContent).toContain("출결 모드 · 출석부");
+    expect(label.textContent).toBe(MENU_LABEL.attendance);
   });
 
   it("캘린더는 메뉴 구성에 없는 화면이라 '역할별 메뉴 권한' 표에도 없다(원장 2026-10-06 — 구성에 있는 화면의 권한만 세운다)", () => {

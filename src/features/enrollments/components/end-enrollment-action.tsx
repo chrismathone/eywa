@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { LogOut, Loader2, X } from "@/components/icons/aywa-icon-compat";
 import { kstToday } from "@/lib/date-kst";
@@ -28,6 +29,9 @@ import { endScopeText, endScopeViaReport, fetchEndScope } from "@/features/timet
  *    판정은 시간표 확인 문구와 같은 서버 판정이고, 조회가 실패해도 저장 때 `endSingleEnrollment`가 다시 막는다.
  * ⚠️ 아직 시작 안 한 수강(배정 예정)엔 붙이지 말 것 — 종료일이 시작일로 클램프돼 두 갈래가 **같은
  *    결과**가 된다(그건 '종료'가 아니라 배정 취소라 학생 상세의 삭제가 맡는다).
+ * 🔴 창은 **`document.body`로 포털한다**(2026-11-05, 원장 제보 — 막힘 문구가 한 줄로 창 밖까지 나갔다). 이 버튼은 학생 상세
+ *    수업 탭 표의 `text-right` 칸 안에 있고 표가 `[&_td]:whitespace-nowrap`이라, 창이 DOM상 `<td>` 자손이면 nowrap·오른쪽
+ *    정렬을 그대로 물려받는다(`ConfirmDialog`·`MoveEnrollmentButton`과 같은 선례). `whitespace-normal`은 이중 방어.
  */
 export function EndEnrollmentAction({
   enrollmentId,
@@ -62,7 +66,7 @@ export function EndEnrollmentAction({
         <LogOut className="size-3" />
         수강 종료
       </button>
-      {open ? (
+      {open ? createPortal(
         <EndDialog
           enrollmentId={enrollmentId}
           studentId={studentId}
@@ -72,7 +76,7 @@ export function EndEnrollmentAction({
           startDate={startDate}
           today={today}
           onClose={() => setOpen(false)}
-        />
+        />, document.body,
       ) : null}
     </>
   );
@@ -146,14 +150,14 @@ function EndDialog({
   const working = busy || pending;
   if (gate.blocked) {
     return (
-      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 whitespace-normal sm:items-center">
         <div role="alertdialog" aria-label="수강 종료 불가" className="bg-background border-border w-full max-w-md rounded-2xl border p-6 shadow-lg">
           <p className="eyebrow">수강 종료</p>
           <h2 className="text-foreground mt-1 truncate text-lg font-bold">
             {studentName ? `${studentName} · ` : ""}
             {className}
           </h2>
-          <p className="text-danger mt-3 text-sm font-medium">{gate.blocked}</p>
+          <p className="text-danger mt-3 text-sm font-medium break-keep">{gate.blocked}</p>
           <div className="mt-4 flex justify-end">
             <button type="button" onClick={onClose} className="text-text-dim hover:text-foreground px-3 py-1.5 text-sm">
               닫기
@@ -164,7 +168,7 @@ function EndDialog({
     );
   }
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 whitespace-normal sm:items-center">
       <div className="bg-background border-border max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -221,7 +225,7 @@ function EndDialog({
           ))}
         </div>
 
-        {error ? <p className="text-danger mt-3 text-xs">{error}</p> : null}
+        {error ? <p className="text-danger mt-3 text-xs break-keep">{error}</p> : null}
 
         <div className="mt-4 flex items-center justify-end gap-2">
           {working ? <Loader2 className="text-text-faint size-4 animate-spin" /> : null}

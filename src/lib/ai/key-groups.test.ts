@@ -165,11 +165,13 @@ describe("🔴 오늘 프로덕션 키 조합에서 라우팅이 그대로다(�
   const oldEnv = (base: string, keyName: "default" | "consultations") =>
     keyName === "default" ? base : `${base}_${keyName.toUpperCase()}`;
 
-  it("호출부를 코드에서 읽었다 — 전용 버킷을 쓰는 곳은 상담 둘뿐", () => {
+  it("호출부를 코드에서 읽었다 — 전용 버킷을 쓰는 곳은 상담 계열 넷뿐(분석·케어 + 흐름 분석 둘, 2026-11-03)", () => {
     expect(CASES.length).toBeGreaterThanOrEqual(16);
     expect([...new Set(CASES.filter((s) => s.keyName === "consultations").map((s) => s.feature))].sort()).toEqual([
       "consultation_analysis",
       "student_care",
+      "student_flow_consultations",
+      "student_flow_timeline",
     ]);
   });
 

@@ -1,7 +1,7 @@
 "use server";
 
 import { taughtByColumnReady } from "./taught-by-db";
-import { makeupAnchorDeleteBlock } from "./makeup-anchor-cells";
+import { anchorCellKey, makeupAnchorDeleteCheck } from "./makeup-anchor-cells";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
@@ -853,8 +853,12 @@ export async function setAttendanceCell(input: {
     if ("error" in deskGate) return deskGate;
     // 🔴 보강 보고서가 가리키는 반(앵커)의 칸은 지우지 않는다(원장 2026-09-30 *"보고서 반 = 출석부 반"*, 설계 g) — 지우면 보고서는
     //    이 반을 가리키는데 출석부엔 칸이 없어 둘이 갈린다. 반을 바꾸려면 원스크린 '보강 반 바꾸기'(칸도 함께 옮긴다)·'보강 빼기'.
-    const anchoredBlock = await makeupAnchorDeleteBlock(user.tenantId, [{ studentId, classId, date: sessionDate }]);
-    if (anchoredBlock) return { error: anchoredBlock };
+    //    예외 = **학부모에게 발송된** 보강 보고서의 칸은 지운다 · 보고서는 그대로(원장 2026-11-05 — 급여 시수를 바로잡는 길).
+    const anchorCheck = await makeupAnchorDeleteCheck(user.tenantId, [{ studentId, classId, date: sessionDate }], { allowSent: true });
+    if (anchorCheck.block) return { error: anchorCheck.block };
+    // 발송된 보강 보고서의 칸 — 지운 뒤 보강 예약 되돌림을 건너뛰고(예약은 '완료' 그대로), 행을 실제로 지웠을 때만 감사로그에 적는다.
+    const keptSentCell = anchorCheck.keptCells.has(anchorCellKey({ studentId, classId, date: sessionDate }));
+    let clearedRows = false;
     // 강사 보기가 손대지 않고 남긴 자리(JJ·랩실) 행 수 — 감사로그(역검수)용.
     let skippedSeatRows = 0;
     if (scopeTeacherId) {
@@ -889,17 +893,19 @@ export async function setAttendanceCell(input: {
             write.map((r) => r.id),
           );
         if (error) return { error: attendanceDbWhy(error, "attendance.cell.update") };
+        clearedRows = true;
       }
     } else {
       let del = supabase
         .from("attendance_records")
-        .delete()
+        .delete({ count: "exact" })
         .eq("class_id", classId)
         .eq("student_id", studentId)
         .eq("session_date", sessionDate);
       if (slot !== null) del = del.eq("slot_start", slot);
-      const { error } = await del;
+      const { error, count } = await del;
       if (error) return { error: attendanceDbWhy(error, "attendance.cell.clear", "delete") };
+      clearedRows = (count ?? 0) > 0;
     }
     /**
      * 감사로그 — **지우기가 이 파일에서 가장 값진 줄**이다. 출결 행은 스스로 `recorded_by`·`recorded_at`을
@@ -918,11 +924,17 @@ export async function setAttendanceCell(input: {
         ...(scopeTeacherId ? { scopeTeacherId } : {}),
         ...(skippedSeatRows > 0 ? { skippedSeatRows } : {}),
         ...(input.source ? { source: input.source } : {}),
+        // 발송된 보강 보고서의 칸을 지웠다 — 보고서는 그대로 두었다(원장 2026-11-05).
+        ...(keptSentCell && clearedRows ? { keptSentMakeupReports: 1 } : {}),
         ...backdatedFlag([sessionDate], kstToday()),
       },
     });
     // 보강 예약 되돌림(0264a) — 이행된 예약의 보강일 칸을 지웠으면 예약을 `reserved`로 되돌린다(fail-soft).
-    await completeMakeupReservations({ tenantId: user.tenantId }, [{ studentId, classId, date: sessionDate, status: null }]);
+    // 🔴 발송된 보강 보고서의 칸은 건너뛴다 — 보강은 했고 보고서도 나갔다. 되돌리면 결석 메모가 '보강 예정'으로 바뀌고 원스크린이
+    //    '보강 진행 여부 확인'을 띄워, 그걸 누르면 지운 칸이 다시 생긴다(적대 리뷰 2026-11-05). 예약 연결은 DB가 null로 푼다(on delete set null).
+    if (!keptSentCell) {
+      await completeMakeupReservations({ tenantId: user.tenantId }, [{ studentId, classId, date: sessionDate, status: null }]);
+    }
     if (!input.quiet) revalidateAttendanceSurfaces();
     return { ok: true };
   }
@@ -2232,11 +2244,13 @@ export async function setAttendanceRange(input: {
   if (status === null) {
     // 🔴 보강 보고서가 가리키는 반(앵커)의 칸이 섞여 있으면 **범위 전체를** 지우지 않는다(셀 지우기와 같은 게이트, 설계 g) —
     //    일부만 지우고 "몇 칸 빠졌다"고 하면 어느 칸이 보고서에 묶였는지 격자에서 알 수 없다.
-    const anchoredBlock = await makeupAnchorDeleteBlock(
+    //    예외도 셀 지우기와 같다 — 학부모에게 발송된 보강 보고서의 칸은 지우고 보고서는 그대로 둔다(원장 2026-11-05).
+    const anchorCheck = await makeupAnchorDeleteCheck(
       user.tenantId,
       allowed.map((c) => ({ studentId: c.studentId, classId: c.classId, date: c.sessionDate })),
+      { allowSent: true },
     );
-    if (anchoredBlock) return { error: anchoredBlock };
+    if (anchorCheck.block) return { error: anchorCheck.block };
     /**
      * 🔴 강사 보기의 지우기는 **자리(JJ·랩실) 행을 남긴다**(원장 2026-09-12) — 그 행은 자리 출석부(JJ실)의 진실이다.
      *    본인 교시만 삭제한다. 빗금 칸은 채우기와 같은 문장으로 건너뛴다.
@@ -2249,6 +2263,9 @@ export async function setAttendanceRange(input: {
     }
     const ids: string[] = [];
     let skippedSeatRows = 0;
+    /** 행을 실제로 지우는 칸(`anchorCellKey`) — 감사로그의 '발송된 보강 보고서는 그대로 둔 칸' 수를 여기서 센다(건너뛴 칸·빈칸 제외). */
+    const clearedCells = new Set<string>();
+    const anchorKeyOf = (c: (typeof allowed)[number]) => anchorCellKey({ studentId: c.studentId, classId: c.classId, date: c.sessionDate });
     allowed = allowed.filter((c) => {
       const plan = scopedPlanOf(c, true);
       if (plan?.kind === "reject") {
@@ -2260,9 +2277,11 @@ export async function setAttendanceRange(input: {
       if (plan?.kind === "skip") return true;
       const { write, seat } = splitOutSeatRows(rowsByCell.get(cellKeyOf(c)) ?? [], seatOf(c), ownerOf(c));
       for (const r of write) ids.push(r.id);
+      if (write.length > 0) clearedCells.add(anchorKeyOf(c));
       skippedSeatRows += seat.length;
       return true;
     });
+    const keptSentCleared = [...clearedCells].filter((k) => anchorCheck.keptCells.has(k)).length;
     if (allowed.length === 0 && notTaught + noneOwned > 0) {
       // 조용한 0건 금지 — 격자가 그 칸에 하는 말과 같은 문장으로 알린다(채우기 갈래와 같은 규약).
       return { error: notTaught > 0 ? SCOPE_NOT_TAUGHT_MESSAGE : rejectMessage() };
@@ -2293,14 +2312,19 @@ export async function setAttendanceRange(input: {
           // 강사 전체 보기에서 온 지우기 — 자리(JJ·랩실) 행은 남겼다(원장 2026-09-12).
           ...(scopeTeacherId ? { scopeTeacherId } : {}),
           ...(skippedSeatRows > 0 ? { skippedSeatRows } : {}),
+          // 발송된 보강 보고서의 칸을 지웠다 — 보고서는 그대로 두었다(원장 2026-11-05). 실제로 행을 지운 칸만 센다.
+          ...(keptSentCleared > 0 ? { keptSentMakeupReports: keptSentCleared } : {}),
           ...backdatedFlag(allowed.map((c) => c.sessionDate), kstToday()),
         },
       });
     }
     // 보강 예약 되돌림(0264a) — 범위로 지운 칸 중 이행된 예약이 있으면 `reserved`로 되돌린다(fail-soft).
+    // 🔴 발송된 보강 보고서의 칸은 뺀다(셀 지우기와 같은 이유 — 되돌리면 '보강 진행 여부 확인'을 눌러 칸이 다시 생긴다).
     await completeMakeupReservations(
       { tenantId: user.tenantId },
-      allowed.map((c) => ({ studentId: c.studentId, classId: c.classId, date: c.sessionDate, status: null })),
+      allowed
+        .filter((c) => !anchorCheck.keptCells.has(anchorKeyOf(c)))
+        .map((c) => ({ studentId: c.studentId, classId: c.classId, date: c.sessionDate, status: null })),
     );
     revalidateAttendanceSurfaces();
     return { ok: true, applied: allowed.length, blocked: cells.length - allowed.length };

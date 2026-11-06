@@ -214,6 +214,15 @@ describe("원장이 메뉴 구성을 바꾸면 표도 따라 바뀐다", () => {
     expect(desk.rows[0]).toMatchObject({ label: MENU_LABEL.students, covers: ["학생 명부"] });
   });
 
+  it("이름을 권한 이름과 같게 바꾸면 줄 아래에 같은 글자를 또 적지 않고, 겹친 이름은 한 번만(리뷰 2026-11-05)", () => {
+    const attendance = (menus: PermissionNavigation["menus"]) =>
+      permissionRowGroups({ menus }).flatMap((g) => g.rows).find((r) => r.menu === "attendance")!;
+    // 관리자뷰 '오늘 출결'(출석부 권한의 다른 입구) — 다른 이름으로 바꾸면 적히고(이 입구가 실제로 이 줄에 든다는 확인), 권한 이름 '출석부'로 바꾸면 안 적힌다.
+    expect(attendance([{ href: "/attendance/live", label: "오늘 출석" }]).covers).toEqual(["오늘 출석"]);
+    expect(attendance([{ href: "/attendance/live", label: MENU_LABEL.attendance }]).covers).toEqual([]);
+    expect(attendance([{ href: "/attendance/live", label: "출석" }, { href: "/attendance", label: "출석" }]).covers).toEqual(["출석"]);
+  });
+
   it("면 하나만 다른 탭으로 옮겨도 그 권한의 줄은 대표 화면이 있는 탭에 남는다", () => {
     expect(menusOf("custom-desk", BUSY)).not.toContain("attendance");
     expect(menusOf("class", BUSY)).toContain("attendance");
@@ -254,12 +263,34 @@ describe("'강사 내 메뉴 표시' 칸 = 강사 '내 메뉴'가 실제로 세�
     expect(teacherToggleRows(BUSY).map((r) => r.menu).slice(0, 2)).toEqual(["teacher_onescreen", "expense_requests"]);
   });
 
-  it("'내 메뉴'에 서는 이름이 권한 이름과 다르면 그 이름을 함께 적는다", () => {
-    const row = (menu: MenuKey) => teacherToggleRows().find((r) => r.menu === menu)!;
-    expect(row("attendance").covers).toEqual(["출결 모드", "출석부"]);
-    expect(row("teacher_onescreen").covers).toEqual(["수업 마감 (원스크린)", "영상 제출 현황"]);
-    expect(row("students").covers).toEqual(["내 학생"]);
+  it("칸은 권한 이름(탭 이름) 한 줄 — '내 메뉴'의 여러 입구·다른 이름을 나열하지 않는다(원장 2026-11-05 \"항상 탭 이름을 기본으로\")", () => {
+    for (const r of teacherToggleRows()) {
+      expect(r.label, r.menu).toBe(MENU_LABEL[r.menu]);
+      expect(r.covers, r.menu).toEqual([]);
+    }
+  });
+
+  it("강사뷰 구성에서 이름을 바꾼 입구만 바꾼 이름을 함께 적는다 — 권한 표와 같은 판정", () => {
+    const nav: PermissionNavigation = { teacherMenus: [{ href: "/attendance", label: "우리 반 출석" }, { href: "/timetable", label: "시간표" }] };
+    const row = (menu: MenuKey) => teacherToggleRows(nav).find((r) => r.menu === menu)!;
+    // 출석부 권한의 두 입구(출결 모드 · 출석부) 중 이름을 바꾼 것만.
+    expect(row("attendance").covers).toEqual(["우리 반 출석"]);
+    // 이름 칸을 원래 이름 그대로 저장한 것은 바꾼 것이 아니다(시간표 = 기본 이름도 권한 이름과 같다).
     expect(row("timetable").covers).toEqual([]);
+  });
+
+  it("기본 이름이 권한 이름과 다른 칸('내 학생' ↔ 원생목록) — 원래 이름 그대로 저장하면 안 적고, 권한 이름으로 바꿔도 같은 글자를 두 번 적지 않는다", () => {
+    const covers = (label: string) => teacherToggleRows({ teacherMenus: [{ href: "/students", label }] }).find((r) => r.menu === "students")!.covers;
+    expect(covers("내 학생")).toEqual([]);
+    expect(covers(MENU_LABEL.students)).toEqual([]);
+    expect(covers("우리 반 학생")).toEqual(["우리 반 학생"]);
+  });
+
+  it("한 칸의 입구를 둘 다 바꾸면 '내 메뉴' 차례대로 둘 다 — 같은 이름으로 바꾸면 한 번만", () => {
+    const covers = (quick: string, book: string) =>
+      teacherToggleRows({ teacherMenus: [{ href: "/attendance/quick", label: quick }, { href: "/attendance", label: book }] }).find((r) => r.menu === "attendance")!.covers;
+    expect(covers("빠른 출결", "우리 반 출석")).toEqual(["빠른 출결", "우리 반 출석"]);
+    expect(covers("출석", "출석")).toEqual(["출석"]);
   });
 
   it("🔴 꺼져 있던 칸을 켜면 '없음'이 아닌 수준이 된다 — 기본값이 '없음'인 전자결재·직원 평가는 담당으로 켠다(안 그러면 체크가 안 눌린다)", () => {

@@ -206,34 +206,93 @@ export async function applyAnchorMove(input: {
  * **이 칸들이 보강 보고서의 반(앵커)인가** — 출석부 쪽에서 그 칸을 지우려 할 때의 게이트(원장 결정 1, 설계 g).
  * 지우면 보고서는 그 반을 가리키는데 출석부엔 칸이 없어 불변식이 깨진다. 막힌 칸이 있으면 한국어 사유를, 없으면 null.
  * 🔴 조회 실패는 **막는다**(fail-closed) — 지우기는 되돌릴 수 없고, 모르고 지우면 보고서가 빈 반을 가리킨다.
+ * ECS 보강 빼기가 쓴다(발송된 보고서의 칸도 막는다). 출석부 지우기는 아래 `makeupAnchorDeleteCheck`(발송분은 지운다).
  */
 export async function makeupAnchorDeleteBlock(
   tenantId: string,
   cells: readonly { studentId: string; classId: string; date: string }[],
 ): Promise<string | null> {
-  if (cells.length === 0) return null;
+  return (await makeupAnchorDeleteCheck(tenantId, cells, { allowSent: false })).block;
+}
+
+/** 출석부 칸 하나의 열쇠 — `makeupAnchorDeleteCheck`의 `keptCells`와 호출부가 같은 모양으로 맞춘다. */
+export const anchorCellKey = (c: { studentId: string; classId: string; date: string }) => `${c.studentId}|${c.classId}|${c.date}`;
+
+/** 진행 중이거나 학부모에게 게시됐을 수 있는 발송 상태 — '성공'은 따로(허용) · 상태 없음과 게시 전에 멈춘 상태는 '보내기 전'. */
+const UNSETTLED_STATUSES: ReadonlySet<string> = new Set(["queued", "processing", "failed", "recall_requested", "recalling", "recall_failed", "recalled"]);
+
+/** 발송 상태가 애매한 보강 보고서(발송 대기·실패·회수 등)의 칸 — 지우지도, '보강 빼기'를 권하지도 않는다(학부모가 받았을 수 있다). */
+export const ANCHOR_UNSETTLED_MESSAGE =
+  "이 칸은 발송 상태를 먼저 확인해야 하는 보강 보고서(발송 대기·실패·회수 등)의 반입니다 — 지우지 않았습니다. 수업보고서 발송 목록에서 상태를 확인해 주세요(다시 보내 성공하면 지울 수 있습니다)";
+
+/**
+ * 출석부 칸·범위 지우기(`setAttendanceCell`·`setAttendanceRange` — 월별·반별·강사 보기·원스크린 출결 지우기)의 게이트 — 위와 같은 조회에
+ * 하나를 더한다: **학부모에게 발송된(발송 상태 '성공') 보강 보고서의 칸은 지운다 · 보고서는 그대로 둔다**(원장 2026-11-05 *"보고서 나간것도
+ * 출석부에서는 그냥 지울 수 있게 해줘야겠는데. 왜냐면 급여 계산할때 시수 햇갈릴 수 있어서 수정은 해주고 보고서는 그냥 그대로 두게"*).
+ * - 허용은 **'성공'만**이다 — 원스크린이 편집을 잠그는 상태와 같아서, 보고서를 다시 저장해 칸이 되살아나는 길이 없다. 발송 대기·실패·회수처럼
+ *   애매한 상태는 막고 '보강 빼기'도 권하지 않는다(학부모가 이미 받은 보고서를 지우게 된다 — 적대 리뷰 2026-11-05).
+ * - 보내기 전 보고서의 칸은 종전대로 막는다(보고서를 저장할 때 칸을 다시 세워 지운 것이 되살아난다 — 원스크린 '보강 빼기'가 보고서와 함께 지운다).
+ * - `keptCells` = 지우기를 허용한 발송분 칸의 열쇠(`anchorCellKey`). 호출부는 이 칸들의 **보강 예약 되돌림을 건너뛴다**(예약은 '완료' 그대로 —
+ *   보강은 실제로 했고 보고서도 나갔다. 되돌리면 결석 메모가 '보강 예정'으로 바뀌고 원스크린이 '보강 진행 여부 확인'을 띄워, 그걸 누르면 칸이
+ *   다시 생긴다). 감사로그의 수는 실제로 행을 지운 칸에서 다시 센다.
+ */
+export async function makeupAnchorDeleteCheck(
+  tenantId: string,
+  cells: readonly { studentId: string; classId: string; date: string }[],
+  options: { allowSent: boolean },
+): Promise<{ block: string | null; keptSent: number; keptCells: ReadonlySet<string> }> {
+  const none = new Set<string>();
+  if (cells.length === 0) return { block: null, keptSent: 0, keptCells: none };
   const admin = createAdminClient();
   const students = [...new Set(cells.map((c) => c.studentId))];
   const classes = [...new Set(cells.map((c) => c.classId))];
   const dates = [...new Set(cells.map((c) => c.date))];
-  const found: { student_id: string; makeup_class_id: string; report_date: string; classnote_status: string | null; classnote_sent_at: string | null }[] = [];
+  // 조회는 반·날짜를 100개씩만 싣는다 — 넘으면 다 확인하지 못하니 막는다(fail-closed · 범위 상한 300칸이라 실제로는 거의 없다).
+  if (classes.length > 100 || dates.length > 100) {
+    return { block: "범위가 너무 넓어 보강 보고서를 다 확인하지 못했습니다 — 범위를 나눠 지워 주세요", keptSent: 0, keptCells: none };
+  }
+  const found: {
+    student_id: string; makeup_class_id: string; report_date: string;
+    classnote_status: string | null; classnote_sent_at: string | null; classnote_read_at?: string | null;
+  }[] = [];
   for (let i = 0; i < students.length; i += 100) {
     const { data, error } = await admin
       .from("lesson_reports")
-      .select("student_id, makeup_class_id, report_date, classnote_status, classnote_sent_at")
+      .select("student_id, makeup_class_id, report_date, classnote_status, classnote_sent_at, classnote_read_at")
       .eq("tenant_id", tenantId)
       .eq("makeup", true)
       .is("class_id", null)
       .in("student_id", students.slice(i, i + 100))
       .in("makeup_class_id", classes.slice(0, 100))
       .in("report_date", dates.slice(0, 100));
-    if (error) return "보강 보고서를 확인하지 못해 지우지 않았습니다 — 다시 시도해 주세요";
+    if (error) return { block: "보강 보고서를 확인하지 못해 지우지 않았습니다 — 다시 시도해 주세요", keptSent: 0, keptCells: none };
     found.push(...((data ?? []) as typeof found));
   }
-  const want = new Set(cells.map((c) => `${c.studentId}|${c.classId}|${c.date}`));
-  const hit = found.find((r) => want.has(`${r.student_id}|${r.makeup_class_id}|${r.report_date}`));
-  if (!hit) return null;
-  return hit.classnote_sent_at || hit.classnote_status === "success"
-    ? "이 칸은 학부모에게 발송된 보강 보고서의 반입니다 — 지울 수 없습니다(보고서와 출석부 반이 갈라집니다)"
-    : "이 칸은 보강 보고서가 가리키는 반입니다 — 원스크린에서 '보강 빼기'로 보고서와 함께 지우거나, 보강 반을 바꿔 주세요";
+  const want = new Set(cells.map(anchorCellKey));
+  const keyOf = (r: (typeof found)[number]) => anchorCellKey({ studentId: r.student_id, classId: r.makeup_class_id, date: r.report_date });
+  const hits = found.filter((r) => want.has(keyOf(r)));
+  // 학부모에게 보이는 발송 = '성공'(원스크린 저장 잠금과 같은 상태). 애매 = 발송 시각이 남았거나 진행 중·게시됐을 수 있는 상태
+  // (대기·처리 중·실패(일부 게시·응답 없음도 실패로 남는다)·회수 계열). 나머지(상태 없음 · 게시 전에 멈춘 이름 충돌·공유 차단·기한 지남)는 보내기 전.
+  const live = (r: (typeof found)[number]) => r.classnote_status === "success";
+  // 재발급으로 상태가 지워졌어도 학부모가 읽은 흔적이 남았으면 애매로 본다(원스크린 '보강 빼기'의 발송 판정과 같은 결 — makeup-remove-plan.ts).
+  const unsettled = (r: (typeof found)[number]) =>
+    !live(r) && (!!r.classnote_sent_at || UNSETTLED_STATUSES.has(r.classnote_status ?? "") || (!r.classnote_status && !!r.classnote_read_at));
+  const unsent = (r: (typeof found)[number]) => !live(r) && !unsettled(r);
+  // 하나라도 걸리면 범위 지우기는 통째로 막는다 — 어느 칸이 묶였는지 격자에서 알 수 없다. 애매한 상태를 먼저 말한다('보강 빼기'를 권하지 않게).
+  if (hits.some(unsettled)) return { block: ANCHOR_UNSETTLED_MESSAGE, keptSent: 0, keptCells: none };
+  if (hits.some(unsent)) {
+    return { block: "이 칸은 보강 보고서가 가리키는 반입니다 — 원스크린에서 '보강 빼기'로 보고서와 함께 지우거나, 보강 반을 바꿔 주세요", keptSent: 0, keptCells: none };
+  }
+  if (hits.length === 0) return { block: null, keptSent: 0, keptCells: none };
+  if (!options.allowSent) {
+    // ECS '보강 빼기' — 보고서까지 빼는 길이라 발송분은 여기서 막는다. 시수만 빼는 길은 출석부 지우기(위 설명).
+    return {
+      block: "이 칸은 학부모에게 발송된 보강 보고서의 반입니다 — 여기서는 뺄 수 없습니다(시수만 빼려면 출석부에서 그 칸을 지우세요 · 보고서는 그대로 둡니다)",
+      keptSent: 0,
+      keptCells: none,
+    };
+  }
+  // 발송된 보고서의 칸 — 칸(시수)만 지우고 보고서는 그대로 둔다. 같은 칸을 가리키는 보고서가 둘이어도 칸은 하나로 센다.
+  const keptCells = new Set(hits.map(keyOf));
+  return { block: null, keptSent: keptCells.size, keptCells };
 }

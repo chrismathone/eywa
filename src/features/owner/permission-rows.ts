@@ -81,12 +81,21 @@ function finish(placed: Placed): PermissionRow {
   // 나열하지 않는다(원장 2026-11-05 *"문구 특별한 일 없으면 나누지마. 하위로 따로 빼는것만 빼도록"* · *"항상 탭 이름을 기본으로 가져가도록해"*).
   // 따로 권한이 있는 화면만 제 줄(└ 랩실·JJ실 출석부 등)로 선다. 예외('특별한 일') = 메뉴 구성에서 **이름을 바꾼** 화면 — 표의 이름(권한 이름)과
   // 메뉴에 보이는 이름이 달라 무엇인지 못 알아보므로 바꾼 이름만 적는다.
-  const covers = listed.filter((d) => d.renamed).map((d) => d.label);
+  const covers = renamedCovers(listed, placed.row.label);
   return { ...placed.row, covers, hiddenInMenu: placed.dests.length > 0 && placed.dests.every((d) => d.hidden) };
 }
 
 const newRow = (menu: MenuKey, inner = false): PermissionRow => ({ menu, label: MENU_LABEL[menu], covers: [], hiddenInMenu: false, inner });
-const renamed = (d: HubDest) => !!d.originalLabel && d.originalLabel !== d.label;
+/** 메뉴 구성에서 **이름을 바꾼** 목적지인가 — 권한 표 · 강사 '내 메뉴' 표시 칸이 같은 판정으로 `covers`를 채운다(원장 2026-11-05 "항상 탭 이름을 기본으로"). */
+export const isRenamedDest = (d: Pick<HubDest, "label" | "originalLabel">) => !!d.originalLabel && d.originalLabel !== d.label;
+const renamed = isRenamedDest;
+/**
+ * 줄(칸) 아래 적을 이름 — 이름을 바꾼 목적지의 바뀐 이름만. 바꾼 이름이 줄 이름(권한 이름)과 같으면 적지 않고("원생목록 / 원생목록"),
+ * 겹치면 한 번만 적는다("출석 · 출석") — 리뷰 2026-11-05. 권한 표 · 강사 '내 메뉴' 표시 칸이 같이 쓴다.
+ */
+export function renamedCovers(dests: readonly { label: string; renamed: boolean }[], rowLabel: string): string[] {
+  return [...new Set(dests.filter((d) => d.renamed && d.label !== rowLabel).map((d) => d.label))];
+}
 
 /**
  * 권한 표의 묶음과 줄 — **모든 권한 키가 정확히 한 번** 선다.

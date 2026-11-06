@@ -70,15 +70,42 @@ describe("경로 ④ 출석부 쪽 지우기(월별·반별·강사 보기·ECS)
     const att = strip(read("src/features/attendance/server/actions.ts"));
     const cell = att.slice(att.indexOf("export async function setAttendanceCell"), att.indexOf("export async function linkMakeupToAbsence"));
     const range = att.slice(att.indexOf("export async function setAttendanceRange"));
-    expect(cell).toContain("makeupAnchorDeleteBlock(user.tenantId, [{ studentId, classId, date: sessionDate }])");
-    expect(range).toContain("makeupAnchorDeleteBlock(");
+    // 출석부(셀·범위)는 발송된 보고서의 칸만 지운다(원장 2026-11-05 — 보고서는 그대로) · 보내기 전은 종전대로 막는다.
+    expect(cell).toContain("makeupAnchorDeleteCheck(user.tenantId, [{ studentId, classId, date: sessionDate }], { allowSent: true })");
+    expect(cell).toContain("if (anchorCheck.block) return { error: anchorCheck.block };");
+    expect(range).toMatch(/makeupAnchorDeleteCheck\([\s\S]*?\{ allowSent: true \},?\s*\)/);
+    expect(range).toContain("if (anchorCheck.block) return { error: anchorCheck.block };");
+    // ECS 보강 빼기는 발송분도 막는다(출석부만 푼다).
     const ecs = strip(read("src/features/class-sheets/server/actions.ts"));
     expect(ecs.slice(ecs.indexOf("export async function removeMakeupAttendee"))).toContain("makeupAnchorDeleteBlock(tenantId,");
   });
   it("게이트는 조회 실패를 **막는다**(fail-closed — 지우기는 되돌릴 수 없다)", () => {
     const cells = strip(read("src/features/attendance/server/makeup-anchor-cells.ts"));
-    const fn = cells.slice(cells.indexOf("export async function makeupAnchorDeleteBlock"));
-    expect(fn).toMatch(/if \(error\) return "보강 보고서를 확인하지 못해/);
+    const fn = cells.slice(cells.indexOf("export async function makeupAnchorDeleteCheck"));
+    expect(fn).toMatch(/if \(error\) return \{ block: "보강 보고서를 확인하지 못해/);
+  });
+  it("발송된 보고서의 칸을 지우면 감사로그에 '보고서는 그대로 둔 칸'을 남긴다(셀·범위 — 실제로 행을 지운 칸만)", () => {
+    const att = strip(read("src/features/attendance/server/actions.ts"));
+    const cell = att.slice(att.indexOf("export async function setAttendanceCell"), att.indexOf("export async function linkMakeupToAbsence"));
+    const range = att.slice(att.indexOf("export async function setAttendanceRange"));
+    expect(cell).toContain("keptSentCell && clearedRows ? { keptSentMakeupReports: 1 }");
+    expect(range).toContain("keptSentCleared > 0 ? { keptSentMakeupReports: keptSentCleared }");
+    expect(range).toMatch(/if \(write\.length > 0\) clearedCells\.add\(anchorKeyOf\(c\)\)/);
+  });
+  it("🔴 발송된 보고서의 칸을 지운 뒤에는 보강 예약을 되돌리지 않는다 — 되돌리면 '보강 진행 여부 확인'으로 칸이 되살아난다(적대 리뷰 2026-11-05)", () => {
+    const att = strip(read("src/features/attendance/server/actions.ts"));
+    const cell = att.slice(att.indexOf("export async function setAttendanceCell"), att.indexOf("export async function linkMakeupToAbsence"));
+    const range = att.slice(att.indexOf("export async function setAttendanceRange"));
+    // 셀: 발송분 칸이면 예약 맞춤을 부르지 않는다.
+    expect(cell).toMatch(/if \(!keptSentCell\) \{\s*await completeMakeupReservations\(\{ tenantId: user\.tenantId \}, \[\{ studentId, classId, date: sessionDate, status: null \}\]\);/);
+    // 범위: 발송분 칸을 빼고 부른다.
+    expect(range).toMatch(/completeMakeupReservations\(\s*\{ tenantId: user\.tenantId \},\s*allowed\s*\.filter\(\(c\) => !anchorCheck\.keptCells\.has\(anchorKeyOf\(c\)\)\)/);
+  });
+  it("점검 스크립트는 발송 '성공' 보고서의 칸 없음을 되살리지 않는다(목록만)", () => {
+    const drift = read("scripts/_reports/makeup-class-drift.mts");
+    expect(drift).toContain('const noCellsToCreate = noCellsAnywhere.filter((x) => x.r.classnote_status !== "success");');
+    expect(drift).toContain("for (const x of noCellsToCreate) {");
+    expect(drift).not.toContain("for (const x of noCellsAnywhere) {");
   });
 });
 

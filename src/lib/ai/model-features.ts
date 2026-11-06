@@ -20,6 +20,9 @@ export const TENANT_MODEL_FEATURES: readonly TenantModelFeature[] = [
   { key: "consultation_analysis", label: "녹음 분석", area: "원생상담" },
   // 직원이 버튼을 누르고 결과를 기다린다(서버 액션이 끝까지 기다림 — 2026-10-19 리뷰).
   { key: "student_care", label: "원생 AI 케어", area: "원생상담", waits: true },
+  // 원생 흐름 분석(연결 탐색 · 2026-11-03) — 상담 저장 뒤·밤 배치가 돌린다. '다시 분석' 버튼은 기다리지만 응답 상한을 바꾸지 않으려 waits는 두지 않았다(병합 2026-11-05).
+  { key: "student_flow_consultations", label: "원생 흐름 분석(상담)", area: "원생상담" },
+  { key: "student_flow_timeline", label: "원생 흐름 분석(타임라인)", area: "원생상담" },
   { key: "meeting_analysis", label: "녹음 분석", area: "회의록" },
   { key: "daily_briefing", label: "일일 브리핑", area: "운영실" },
   // 원장 · 관리자가 'AI로 정리'를 누르고 화면에서 기다린다(2026-11-02).
