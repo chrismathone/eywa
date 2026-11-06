@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canManageTenant } from "@/lib/auth/perm-matrix";
 import { logAction } from "@/features/audit/server/log";
 import { FLOW_KINDS, type FlowKind } from "../flow-insight";
 import { refreshFlowInsight } from "./flow-insights";
@@ -16,7 +16,8 @@ export type FlowRefreshState = { ok: true; status: "updated" | "unchanged" | "em
 export async function requestFlowInsight(studentId: string, kind: FlowKind): Promise<FlowRefreshState> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "consultations"))) return { ok: false, error: "원생상담 관리 권한이 있어야 분석을 돌릴 수 있습니다" };
+  // 🔴 canWriteTenant는 담당(scoped) 강사도 통과한다 — 담당 원생을 좁히지 않는 합산 분석이라 '전체'만(화면 버튼 조건 student.ts canRefresh와 같은 판정).
+  if (!(await canManageTenant(user.systemRole, "consultations"))) return { ok: false, error: "원생상담 관리 권한이 있어야 분석을 돌릴 수 있습니다" };
   if (!studentId || !(FLOW_KINDS as readonly string[]).includes(kind)) return { ok: false, error: "대상이 올바르지 않습니다" };
   const result = await refreshFlowInsight({ tenantId: user.tenantId, studentId, kind, reason: "manual" });
   await logAction({
