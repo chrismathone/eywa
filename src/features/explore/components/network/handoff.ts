@@ -1,5 +1,6 @@
 import type { ExploreKind } from "../../model";
-import { netFitView, type NetBoard, type NetHead, type NetSize } from "./graph";
+import type { NetBoard, NetHead, NetSize } from "./graph";
+import { netFitView } from "./layout";
 
 /**
  * 네트워크 판 이어달리기 — 중심 전환은 **주소 이동**이라 화면(`ExploreView`)이 새로 마운트된다. 시안처럼 판을 그대로 두고 보간하려면
@@ -24,10 +25,12 @@ export type LiveNet = {
   head: () => NetHead;
   /** 방금 더블클릭한 점(1.5초 안) — 축 후보. */
   lastOpened: () => string | null;
+  /** 펼치거나 접은 날짜 묶음(엔진 `toggled`) — 되돌아올 때 같은 모습으로 다시 짠다. */
+  toggled: () => string[];
 };
 
 export type PendingNet = { to: string; dir: "in" | "out"; at: number; board: NetBoard; pivot: string | null; from: string; size: NetSize; head: NetHead };
-export type SavedNet = { board: NetBoard; pivotA: string | null; pivotB: string; size: NetSize };
+export type SavedNet = { board: NetBoard; pivotA: string | null; pivotB: string; size: NetSize; toggled: string[] };
 
 const STALE_MS = 10_000;
 const SAVED_MAX = 16;
@@ -70,7 +73,7 @@ export function prepareNetworkLeave(next: NetLeaveTarget, opts: { dir: "in" | "o
     const own = next.sector && (l.centerId === base || l.centerId.startsWith(`${base}:`)) ? `hub:${next.sector}` : null;
     pivot = [opts.pivotId, l.lastOpened(), to, own].find((id): id is string => !!id && !!board.pos[id]) ?? null;
     saved.delete(l.centerId);
-    saved.set(l.centerId, { board: copyBoard(board), pivotA: pivot, pivotB: to, size });
+    saved.set(l.centerId, { board: copyBoard(board), pivotA: pivot, pivotB: to, size, toggled: l.toggled() });
     while (saved.size > SAVED_MAX) saved.delete(saved.keys().next().value as string);
   }
   pending = { to, dir: opts.dir, at: Date.now(), board, pivot, from: l.centerId, size, head: l.head() };

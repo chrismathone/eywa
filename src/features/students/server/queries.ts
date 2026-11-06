@@ -13,7 +13,7 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { consultParentMatchStudentIds } from "./parent-search";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
-import { addDays, kstToday } from "@/lib/date-kst";
+import { addDays, kstDateOf, kstToday } from "@/lib/date-kst";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { attendanceRate, attendedCount } from "@/lib/calc/attendance";
@@ -1804,6 +1804,15 @@ type EnrollConsultRow = {
   parent_request: string | null;
 };
 
+/**
+ * 타임라인의 시각(timestamptz) → KST 날짜 — 상담 탭(`toLocaleDateString` Asia/Seoul)·연결 탐색과 같은 날. `slice(0, 10)`은 UTC 날짜라
+ * 아침 9시 전 상담·메모가 하루 앞으로 적혔다(2026-11-06 연결 탐색 검수). 날짜만 든 값은 그대로.
+ */
+function timelineKstDay(v: unknown): string {
+  const s = String(v ?? "");
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : (kstDateOf(s) ?? s.slice(0, 10));
+}
+
 export async function getStudentTimeline(studentId: string): Promise<TimelineEvent[]> {
   const supabase = await createClient();
 
@@ -1906,7 +1915,7 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
     const catLabel = c.category ? CONSULT_CATEGORY_LABEL[c.category] : null;
     const p = parseImportedNote(visibleConsultationSummary(c.summary));
     events.push({
-      date: String(c.consulted_at).slice(0, 10),
+      date: timelineKstDay(c.consulted_at),
       kind: "consultation",
       title: p.title ?? (catLabel ? `상담 — ${catLabel}` : "상담 기록"),
       description: p.body,
@@ -1917,7 +1926,7 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
   for (const m of memos ?? []) {
     const p = parseImportedNote(m.content);
     events.push({
-      date: String(m.created_at).slice(0, 10),
+      date: timelineKstDay(m.created_at),
       kind: "memo",
       title: p.title ?? (m.category ? `특이사항 — ${m.category}` : "특이사항"),
       description: p.body,
@@ -1948,7 +1957,7 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
       t.ordered_at ? "주문" : null,
     ].filter(Boolean) as string[];
     events.push({
-      date: String(t.request_date ?? t.created_at ?? "").slice(0, 10),
+      date: t.request_date ? String(t.request_date).slice(0, 10) : timelineKstDay(t.created_at),
       kind: "textbook",
       title: t.book_name,
       description: [t.book_detail, done.length === 3 ? "처리 완료" : done.length ? `${done.join("·")} 완료` : "처리 대기"]
@@ -1979,7 +1988,7 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
     // makeedu 목록 동기화가 채우는 안내 sentinel("ℹ️ …")은 상담 내용이 아니라 노이즈라 본문에서 뺀다.
     const body = ec.parent_request?.startsWith("ℹ️") ? null : ec.parent_request;
     events.push({
-      date: String(ec.consulted_at).slice(0, 10),
+      date: timelineKstDay(ec.consulted_at),
       kind: "enrollment_consultation",
       title: [ec.subject ? subjectMaps.labelOf(ec.subject) : null, "입학 상담"].filter(Boolean).join(" "),
       description: [outcome, body].filter(Boolean).join(" · ") || null,

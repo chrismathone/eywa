@@ -1,7 +1,8 @@
 import { drawBoard, type DrawClasses } from "./draw";
-import { netFitView, netLayout, netRootId, type NetBoard, type NetCallbacks, type NetCam, type NetInput, type NetSize, type NetViewMode } from "./graph";
-import { activeOf } from "./node-actions";
-import { animateView } from "./camera";
+import { netRootId, type NetBoard, type NetCallbacks, type NetCam, type NetInput, type NetSize, type NetViewMode } from "./graph";
+import { netFitView, netLayout } from "./layout";
+import { drawFocus, revealRecord } from "./node-actions";
+import { animateView, keepInView } from "./camera";
 import { backArrival, type PendingNet } from "./handoff";
 import { NET_MORPH_MS, NET_VIEW_MS, easeInOutCubic, planMorphBack, planMorphTo, type NetPlan } from "./morph";
 
@@ -14,7 +15,7 @@ import { NET_MORPH_MS, NET_VIEW_MS, easeInOutCubic, planMorphBack, planMorphTo, 
 export type EngineProps = { input: NetInput; selected: string | null; record: string | null; view: NetViewMode; colored: boolean; labels: boolean; instant: boolean };
 export type EngineDom = { svg: SVGSVGElement; card: HTMLElement; zoom: HTMLOutputElement | null; cls: DrawClasses & { dragging: string } };
 
-type Morph = { raf: number; t0: number; kind: "center" | "view"; finish: () => void };
+type Morph = { raf: number; t0: number; kind: "center" | "view"; finish: () => void; end: NetBoard };
 const STUCK_MS = 3000;
 
 export class NetEngine {
@@ -28,6 +29,7 @@ export class NetEngine {
   lastOpen = 0;
   /** 방금 더블클릭한 점 — 떠날 때 축 후보([`node-actions.ts`](./node-actions.ts) `lastOpened`). */
   opened: { id: string; at: number } | null = null;
+  readonly toggled = new Set<string>(); // 사람이 펼치거나 접은 날짜 묶음(기본에서 뒤집은 것 — layout.ts `isGroupOpen`) · 판(중심) 하나 동안만
   private frozenUntil = 0;
   private queuedView: NetViewMode | null = null;
   private planSize: NetSize | null = null;
@@ -48,12 +50,8 @@ export class NetEngine {
   get centerId(): string {
     return netRootId(this.p.input.model.center);
   }
-  measure(): NetSize {
-    return { w: this.dom.svg.clientWidth, h: this.dom.svg.clientHeight };
-  }
-  frozen(): boolean {
-    return performance.now() < this.frozenUntil;
-  }
+  measure = (): NetSize => ({ w: this.dom.svg.clientWidth, h: this.dom.svg.clientHeight });
+  frozen = (): boolean => performance.now() < this.frozenUntil;
   /** 멈춘 전환(가려진 탭 등)이 남았으면 끝 모습으로 끝낸다. */
   private unstick(): void {
     if (this.morph && performance.now() - this.morph.t0 > STUCK_MS) this.morph.finish();
@@ -71,15 +69,14 @@ export class NetEngine {
   private stop(): void {
     if (this.viewAnim) cancelAnimationFrame(this.viewAnim.raf);
     if (this.morph) cancelAnimationFrame(this.morph.raf);
-    this.viewAnim = null;
-    this.morph = null;
+    this.viewAnim = this.morph = null;
   }
 
   /** 첫 판 — 맡겨진 판이 있으면 그 프레임에서 이어 보간(들어감 = 새 판으로 · 되돌아감 = 남겨 둔 판으로 역재생), 없으면 전체 맞춤. */
   start(pending: PendingNet | null): void {
     this.size = this.measure();
     this.built = this.p.input;
-    const g = netLayout(this.p.input, this.view);
+    const g = netLayout(this.p.input, this.view, this.toggled);
     if (!pending) return this.settleAt({ ...g, view: netFitView(g, this.size) });
     if (pending.dir === "in") {
       if (this.p.instant) return this.settleAt({ ...g, view: netFitView(g, this.size) });
@@ -118,7 +115,7 @@ export class NetEngine {
       if (t < 1) m.raf = requestAnimationFrame(frame);
       else finish();
     };
-    const m: Morph = { raf: 0, t0, kind, finish };
+    const m: Morph = { raf: 0, t0, kind, finish, end };
     this.morph = m;
     frame(t0);
   }
@@ -140,12 +137,19 @@ export class NetEngine {
       this.queuedView = view;
       return;
     }
-    this.stop();
     this.view = view;
+    this.relayout(this.board.centerId, NET_VIEW_MS);
+  }
+
+  /** 같은 중심에서 판을 다시 짠다(`pivot` 축 보간) — 보기 전환(전체 맞춤) · 묶음 펼치기·접기(`keep` = 지금 보기·자리 유지 · 전환 중이면 그 끝 판 기준, node-actions.ts). */
+  relayout(pivot: string, ms: number, keep?: { around: string; focus: string }): void {
+    const base = keep ? (this.morph?.end ?? this.board) : null;
+    this.stop();
     this.built = this.p.input;
-    const g2 = netLayout(this.p.input, view);
-    if (this.p.instant) return this.settleAt({ ...g2, view: netFitView(g2, this.size) });
-    this.run(planMorphTo(this.board, g2, this.board.centerId, g2.centerId, this.size), NET_VIEW_MS, "view");
+    const g2 = netLayout(this.p.input, this.view, this.toggled, base && keep ? { from: base.pos, around: keep.around } : null);
+    const view = base && keep ? keepInView(base.view, g2.pos[keep.focus], this.size) : netFitView(g2, this.size);
+    if (this.p.instant || !this.board) return this.settleAt({ ...g2, view });
+    this.run(planMorphTo(this.board, g2, pivot, pivot, this.size, base ? view : undefined), ms, "view");
   }
 
   /** 부모 상태가 바뀌었을 때 — 보기가 바뀌면 전환, 입력(모델)이 바뀌면 지금 자리·보기를 지킨 채 판을 다시 짠다. */
@@ -157,26 +161,22 @@ export class NetEngine {
       this.rebuild();
     }
     if (next.view !== this.view) this.setView(next.view);
-    else this.draw();
+    else if (!(next.record && next.record !== prev.record && revealRecord(this, next.record))) this.draw(); // 접힌 묶음 안 기록 = 펼쳐 세운다
   }
 
   private rebuild(): void {
     const B = this.board;
     if (!B) return;
     this.built = this.p.input;
-    const g = netLayout(this.p.input, this.view);
+    const g = netLayout(this.p.input, this.view, this.toggled);
     for (const id in g.pos) if (B.pos[id]) g.pos[id] = { ...B.pos[id] };
     this.settleAt({ ...g, view: B.view, hover: B.hover });
   }
 
   draw(): void {
-    const B = this.board;
-    if (!B) return;
-    const active = activeOf(this);
-    const hubHover = !!(B.hover && active === B.hover && B.nodes.some((n) => n.id === active && n.kind === "hub"));
-    const z = drawBoard(this.dom.svg, B, { active, hubHover, colored: this.p.colored, labels: this.p.labels, dark: this.view === "summary", cls: this.dom.cls });
-    if (z !== this.zoomText && this.dom.zoom) this.dom.zoom.textContent = z;
-    this.zoomText = z;
+    const z = this.board ? drawBoard(this.dom.svg, this.board, { ...drawFocus(this), colored: this.p.colored, labels: this.p.labels, dark: this.view === "summary", cls: this.dom.cls, size: this.size }) : null;
+    if (z !== null && z !== this.zoomText && this.dom.zoom) this.dom.zoom.textContent = z;
+    if (z !== null) this.zoomText = z;
   }
 
   /** 떠나기 직전 — 움직임을 그 자리에서 멈추고 강조·hover를 지운다(맡기는 판 = 이 모습). 이동이 취소돼도 3초 뒤엔 다시 받는다. */

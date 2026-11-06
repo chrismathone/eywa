@@ -11,7 +11,8 @@ vi.mock("@/features/staff/department/server/subject-scope", () => ({ getViewerSt
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: state.db }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({ operations: { subjects: [] } }) }));
 vi.mock("./prefill", () => ({ loadReportPrefill: state.prefill }));
-import { reportViewer, canReadReport, listReports, requestStudents, getReport } from "./queries";
+import { reportViewer, canReadReport, listReports, requestStudents, getReport, groupStatusesOf } from "./queries";
+import type { ReportListRow } from "../model";
 const report = { requested_by: "requester", teacher_id: "actor", manager_id: "manager", director_id: "director", subjects: ["math"] } as WithdrawalReport;
 describe("report read boundaries", () => {
   beforeEach(() => { state.user = { id: "actor", tenantId: "tenant", systemRole: "teacher" }; state.access = true; state.write = true; state.lab = true; state.labAssigned = true; state.scope = null; state.teacherId = null; state.db.mockReset(); });
@@ -141,5 +142,43 @@ describe("automatic report fields stay within a fresh authorized draft", () => {
     storage({ ...draft, status: "completed" });
     expect((await getReport("report"))?.prefill).toBeUndefined();
     expect(state.prefill).not.toHaveBeenCalled();
+  });
+});
+
+describe("groupStatusesOf — 승인 완료 줄의 묶음 형제 상태(목록 상태 칸 · 리뷰 2026-11-06)", () => {
+  beforeEach(() => { state.db.mockReset(); });
+  const row = (over: Partial<ReportListRow>) => ({ id: "r1", group_id: "g1", status: "approved", ...over }) as ReportListRow;
+  /** from → select → eq → in(마지막 · 결과) 사슬을 적어 두는 가짜 조회. */
+  const fake = (result: { data: unknown[] | null; error: { message: string } | null }) => {
+    const calls = { from: [] as string[], select: [] as string[], eq: [] as unknown[][], in: [] as unknown[][] };
+    const q = {
+      select: (c: string) => { calls.select.push(c); return q; },
+      eq: (...a: unknown[]) => { calls.eq.push(a); return q; },
+      in: async (...a: unknown[]) => { calls.in.push(a); return result; },
+    };
+    state.db.mockReturnValue({ from: (t: string) => { calls.from.push(t); return q; } });
+    return calls;
+  };
+  it("승인 완료 줄의 묶음만 · 같은 학원에서 · 묶음 id로 상태 한 칸만 읽어 묶음별로 모은다", async () => {
+    const calls = fake({ data: [{ id: "r1", group_id: "g1", status: "approved" }, { id: "r2", group_id: "g1", status: "manager_pending" }], error: null });
+    const out = await groupStatusesOf("tenant", [row({}), row({ id: "r1b", group_id: "g1" }), row({ id: "r3", group_id: "g2", status: "manager_pending" }), row({ id: "r4", group_id: null }), row({ id: "r5", group_id: "g3", status: "completed" })]);
+    expect(calls.from).toEqual(["withdrawal_reports"]);
+    expect(calls.select).toEqual(["id,group_id,status"]); // 본문·이름은 읽지 않는다
+    expect(calls.eq).toEqual([["tenant_id", "tenant"]]); // 다른 학원 묶음은 안 섞인다
+    expect(calls.in).toEqual([["group_id", ["g1"]]]); // 승인 완료 줄의 묶음만(중복 없이)
+    expect(out).toEqual(new Map([["g1", [{ id: "r1", status: "approved" }, { id: "r2", status: "manager_pending" }]]]));
+  });
+  it("승인 완료 줄이 없으면 읽지 않고 빈 판", async () => {
+    expect(await groupStatusesOf("tenant", [row({ status: "manager_pending" }), row({ id: "r2", group_id: null })])).toEqual(new Map());
+    expect(state.db).not.toHaveBeenCalled();
+  });
+  it("못 읽으면 undefined — 목록 전체를 죽이지 않는다(조회 오류 · 클라이언트 오류 모두)", async () => {
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    fake({ data: null, error: { message: "boom" } });
+    await expect(groupStatusesOf("tenant", [row({})])).resolves.toBeUndefined();
+    state.db.mockImplementation(() => { throw new Error("no client"); });
+    await expect(groupStatusesOf("tenant", [row({})])).resolves.toBeUndefined();
+    expect(quiet).toHaveBeenCalled();
+    quiet.mockRestore();
   });
 });

@@ -4,8 +4,9 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type M
 import { toast } from "sonner";
 import { centerOnSelection, fitAnimated, resizeBoard, zoomAt } from "./camera";
 import { NetEngine } from "./engine";
-import { fullGraphOf, netHeadOf, netLayout, netRootId, type ExploreNetworkProps, type NetBoard, type NetCallbacks, type NetHead, type NetInput, type NetViewMode } from "./graph";
-import { consumePendingNet, copyBoard, peekPendingNet, registerLiveNet } from "./handoff";
+import { fullGraphOf, netHeadOf, netRootId, type ExploreNetworkProps, type NetBoard, type NetCallbacks, type NetHead, type NetInput, type NetViewMode } from "./graph";
+import { netLayout } from "./layout";
+import { consumePendingNet, copyBoard, peekPendingNet, registerLiveNet, savedNetFor } from "./handoff";
 import { attachPointer } from "./interact";
 import { NetLegend, NetToolbar } from "./net-chrome";
 import { lastOpened, sectorOfSelection } from "./node-actions";
@@ -29,7 +30,7 @@ export function ExploreNetwork(props: ExploreNetworkProps): JSX.Element {
   const input = useMemo<NetInput>(() => ({ model, analyses, facts }), [model, analyses, facts]);
   const centerId = netRootId(model.center);
   const [pending] = useState(() => peekPendingNet(centerId));
-  const [head, setHead] = useState<NetHead>(() => pending?.head ?? netHeadOf(netLayout(input, view), model.center.name));
+  const [head, setHead] = useState<NetHead>(() => pending?.head ?? netHeadOf(netLayout(input, view), model.center.name, fullGraphOf(input)));
   const svgRef = useRef<SVGSVGElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef<HTMLOutputElement>(null);
@@ -58,7 +59,7 @@ export function ExploreNetwork(props: ExploreNetworkProps): JSX.Element {
       onCenterZoom: () => propsRef.current.onCenterZoom(),
     };
     const settle = (b: NetBoard) => {
-      const next = netHeadOf(b, propsRef.current.model.center.name);
+      const next = netHeadOf(b, propsRef.current.model.center.name, fullGraphOf(inputRef.current));
       if (!sameHead(next, headRef.current)) {
         headRef.current = next;
         setHead(next);
@@ -72,6 +73,8 @@ export function ExploreNetwork(props: ExploreNetworkProps): JSX.Element {
     );
     engineRef.current = E;
     const mine = pending && pending.to === E.centerId ? pending : null;
+    // 되돌아올 때 = 떠날 때 펼쳐 둔 날짜 묶음 그대로(되살린 확대 보기 자리에 빈 판이 남지 않게).
+    if (mine?.dir === "out") for (const id of savedNetFor(E.centerId)?.toggled ?? []) E.toggled.add(id);
     E.start(mine);
     if (mine) consumePendingNet(mine);
     const detach = attachPointer(E);
@@ -82,6 +85,7 @@ export function ExploreNetwork(props: ExploreNetworkProps): JSX.Element {
       size: () => ({ ...E.size }),
       head: () => headRef.current,
       lastOpened: () => lastOpened(E),
+      toggled: () => [...E.toggled],
     });
     const ro = new ResizeObserver(() => resizeBoard(E));
     ro.observe(svg);
