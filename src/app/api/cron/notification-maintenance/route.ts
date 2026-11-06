@@ -63,7 +63,7 @@ export async function GET(req: Request) {
     // 일반 이벤트 알림은 일일 AI 브리핑 중단과 독립적으로 유지한다.
     try {
       const detected = await detectAndNotifyEvents(tenantId);
-      events[tenantId] = `결석 ${detected.absence}·후속 ${detected.followup}·콜상담 후속 ${detected.enrollmentFollowup}·성적 ${detected.gradeDrop}·미수 ${detected.outstanding}·미발송 ${detected.unsentReport}·진도이상 ${detected.progressAnomaly}·재발송마감 ${detected.sendDeadline}`;
+      events[tenantId] = `결석 ${detected.absence}·후속 ${detected.followup}·콜상담 후속 ${detected.enrollmentFollowup}·성적 ${detected.gradeDrop}·미수 ${detected.outstanding}·미발송 ${detected.unsentReport}·미저장 ${detected.unsentDraft}·진도이상 ${detected.progressAnomaly}·재발송마감 ${detected.sendDeadline}`;
     } catch (e) {
       reportError(e, { scope: "cron.notification-maintenance.events", tenantId });
       events[tenantId] = `실패: ${e instanceof Error ? e.message : String(e)}`;

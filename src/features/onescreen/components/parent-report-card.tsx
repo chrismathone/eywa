@@ -5,13 +5,14 @@ import type { JjReportSnapshot } from "@/features/ijw/snapshot";
 import { parentStudentName } from "@/features/report-templates/student-name";
 import { splitImageSlots, stripImageSlots } from "@/features/report-templates/image-slots";
 import { monthlyEvalOfText } from "@/features/report-templates/monthly-eval";
+import { monthlyActivityOfText } from "@/features/report-templates/monthly-activity";
 import { hasTrend, type TrendPoint } from "../report-trend";
 import { isImageAttachment, pickInlineAttachments } from "../attachment-utils";
 import { isSkipStatusProgress } from "../progress-status";
 import { collapseProgressRanges } from "../progress-range";
-import { isSrsReportSections, reportTitleText, SRS_REPORT_TITLE } from "../report-title";
+import { EIE_REPORT_TITLE, isSrsReportSections, reportTitleText, SRS_REPORT_TITLE } from "../report-title";
 import { videoHomeworkDueLabel } from "../video-homework-label";
-import { isPilotReportSections, parsePilotNotes, splitPilotNote } from "../pilot-notes";
+import { isEieDailySections, isPilotReportSections, parsePilotNotes, splitPilotNote } from "../pilot-notes";
 import { PilotNoteBox, PilotNotesBody } from "./pilot-notes-body";
 import { ReportTrendGraph } from "./report-trend-graph";
 import { PilotReportSheet } from "./pilot-report-sheet";
@@ -150,7 +151,9 @@ export function ParentReportCard({
   const pilotOwns = !!pilotSections && isPilotReportSections(pilotSections);
   // 제목 — SRS 보고서(JJ 양식)는 '어휘 관리 보고서', 그 밖은 과목 보고서(report-title.ts 한 곳). [특강]·보강 꼬리는 둘 다 같다.
   const srsReport = templateMode && isSrsReportSections(pilotSections);
-  const title = reportTitleText(srsReport ? SRS_REPORT_TITLE : rpt.title, report);
+  // EiE 일일 보고서는 'EiE 보고서'(원장 2026-11-06) — 판정은 EiE 로고와 같은 기준(isEieDailySections).
+  const eieReport = templateMode && !!pilotSections && isEieDailySections(pilotSections);
+  const title = reportTitleText(srsReport ? SRS_REPORT_TITLE : eieReport ? EIE_REPORT_TITLE : rpt.title, report);
   // 강사 칸 이름 — 영어 보고서는 '담당자'(원장 2026-10-30). 이름은 호출부가 영문 이름으로 넘긴다(formatReportAuthorName english).
   // SRS 보고서는 '보고자'(원장 2026-10-30 *"srs 보고서의 경우 보고자로 이름 변경"*) — 판정은 제목과 같은 기준.
   const teacherLabel = srsReport ? "보고자" : templateMode ? "담당자" : "담임";
@@ -178,12 +181,15 @@ export function ParentReportCard({
   // EiE 월간 보고서(원장 2026-11-05 *"월간 보고서 디자인은 해당 시트로 동일하게"*) — 영어 글에 월간 점수 줄이 있고 항목 글(■)이
   // 아니면 시트 모양으로 그린다. 점수 줄을 뺀 나머지 글이 Teacher's Comment다(템플릿 = BUILTIN_EIE_MONTHLY_TEMPLATE).
   const monthly = templateMode && !pilotOwns ? monthlyEvalOfText(report.notes) : null;
-  if (monthly) {
+  // 한 달 학습 기록(2026-11-06) — 점수가 없는 달도 기록만으로 같은 시트 모양을 쓴다.
+  const activity = templateMode && !pilotOwns ? monthlyActivityOfText(report.notes) : null;
+  if (monthly || activity) {
     return (
       // ⚠️ report-capture = ClassNote 워커 스크린샷 대상(아래 카드들과 같은 클래스·폭).
       <div className="report-capture flex w-full max-w-lg flex-col">
         <MonthlyReportSheet
           evaluation={monthly}
+          activity={activity}
           date={report.reportDate}
           studentName={parentStudent?.name || "-"}
           className={report.className ? originalClassName(report.className) : null}

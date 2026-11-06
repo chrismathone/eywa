@@ -17,6 +17,8 @@
   border-left: 14px solid var(--eie-red);
   border-right: 14px solid var(--eie-red);
   padding: 18px 16px 22px;
+  /* 머리 글씨·배치를 카드 폭에 맞춘다(원장 2026-11-06 *"표가 짤리는데"* — 미리보기 폭에서 정보 표가 오른쪽으로 넘쳤다). */
+  container-type: inline-size;
 }
 
 .head {
@@ -32,6 +34,21 @@
   object-fit: contain;
 }
 
+/* 좁은 카드(폰·미리보기 창)에서는 마크를 위로 올리고 제목·정보 표가 폭 전체를 쓴다. */
+@container (max-width: 520px) {
+  .head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .logo {
+    width: 64px;
+    height: 64px;
+    align-self: center;
+  }
+}
+
 .headMain {
   min-width: 0;
   flex: 1;
@@ -42,9 +59,14 @@
   padding-bottom: 4px;
   border-bottom: 4px solid var(--eie-red);
   text-align: center;
-  font-size: 1.6rem;
+  font-size: clamp(1.15rem, 5.4cqi, 1.6rem);
   font-weight: 700;
   line-height: 1.2;
+  word-break: keep-all;
+}
+
+.titleAccent {
+  color: var(--eie-red);
 }
 
 .info {
@@ -52,13 +74,27 @@
   margin-top: 8px;
   border-collapse: collapse;
   border: 1px solid #121212;
-  font-size: 0.95rem;
+  /* 고정 폭 — 긴 반 이름이 표를 밀어 오른쪽 칸(Name·Teacher)이 잘리지 않게. 값은 어절 단위로 줄을 바꾼다. */
+  table-layout: fixed;
+  font-size: clamp(0.8rem, 3.2cqi, 0.95rem);
   font-weight: 700;
 }
 
 .info td {
-  padding: 3px 4px;
+  padding: 3px 3px;
   text-align: center;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+/* 라벨 칸(Date·Class / Name·Teacher)은 좁게 한 줄로, 값 칸이 남는 폭을 나눈다. */
+.info td:nth-child(odd) {
+  width: 21%;
+  white-space: nowrap;
+}
+
+/* 날짜는 짧아도 '2026-11-' / '06'으로 꺾이면 읽기 어렵다 — 첫 줄(Date·Name)은 한 줄로. */
+.info tr:first-child td {
   white-space: nowrap;
 }
 
@@ -149,13 +185,24 @@
   font-size: 0.7rem;
 }
 
+/* 점수 표·그래프는 이 덩어리 폭을 기준으로 줄인다(월간 카드 안이든 다른 글 속 자리든). */
+.block {
+  container-type: inline-size;
+}
+
 .scores {
   width: 100%;
   margin-top: 14px;
   border-collapse: collapse;
-  font-size: 0.85rem;
+  /* 고정 폭 + 폭 비례 글씨 — 폰 폭에서 영역 이름이 표 밖으로 넘치지 않게(2026-11-06). */
+  table-layout: fixed;
+  font-size: clamp(0.7rem, 3cqi, 0.85rem);
   font-weight: 700;
   text-align: center;
+}
+
+.scores th:first-child {
+  width: 27%;
 }
 
 .scores th,
@@ -169,7 +216,7 @@
 
 .scores tbody th {
   background: #efefef;
-  white-space: nowrap;
+  word-break: keep-all;
 }
 
 .commentTitle {

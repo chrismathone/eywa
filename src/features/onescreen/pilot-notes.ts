@@ -6,7 +6,7 @@
  * 이 조각으로 진짜 표와 항목 블록을 그린다. 그래서 형식이 안 맞으면 null — 카드는 예전처럼 글을 그대로 보인다.
  */
 
-import { PILOT_LEGACY_TITLES, PILOT_SECTION_TITLES } from "./math-report-pilot";
+import { PILOT_ALIAS_TITLES, PILOT_LEGACY_TITLES, PILOT_SECTION_TITLES, RETEST_MARK } from "./math-report-pilot";
 import { LEVEL_NONE_SEP, LEVELS, type Level } from "./math-report-pilot-sections";
 
 export type PilotNoteSection = { title: string; body: string };
@@ -29,7 +29,21 @@ export function parsePilotNotes(notes: string | null | undefined): PilotNoteSect
 export function isPilotTitle(title: string, key: keyof typeof PILOT_SECTION_TITLES): boolean {
   if (title === PILOT_SECTION_TITLES[key]) return true;
   const legacy = (PILOT_LEGACY_TITLES as Partial<Record<string, string>>)[key];
-  return legacy !== undefined && title === legacy;
+  if (legacy !== undefined && title === legacy) return true;
+  const alias = (PILOT_ALIAS_TITLES as Partial<Record<string, string>>)[key];
+  return alias !== undefined && title === alias;
+}
+
+/** EiE 일일 보고서 글인가 — '단어 테스트' 항목이 있으면(그 템플릿만 이 제목을 쓴다). 카드가 EiE 마크를 함께 단다. */
+export function isEieDailySections(sections: PilotNoteSection[]): boolean {
+  return sections.some((s) => s.title === PILOT_ALIAS_TITLES.daily);
+}
+
+/** 테스트 본문의 재시험 표시를 뗀다 — 맨 윗줄이 `[재시험]`이면 retest. */
+export function splitRetest(body: string): { retest: boolean; body: string } {
+  const lines = body.split("\n");
+  if ((lines[0] ?? "").trim() !== RETEST_MARK) return { retest: false, body };
+  return { retest: true, body: lines.slice(1).join("\n").trim() };
 }
 
 /** 시범 자동작성 글인가 — 아는 항목 제목이 하나라도 있으면. 손으로 '■'로 시작한 글을 시범 글로 오인하지 않게. */

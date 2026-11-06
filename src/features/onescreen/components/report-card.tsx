@@ -92,6 +92,9 @@ export type SubjectReport = {
   templateImplicit?: boolean;
   /** 다음 시간 테스트 안내 — 템플릿 `{다음테스트}` 칸. */
   nextTest?: string;
+  /** EiE 일일 보고서(2026-11-06) — 단어 테스트 피드백(`{단어피드백}`) · 재시험 표시(`{단어테스트}` 맨 윗줄). 세션에 실린다. */
+  wordFeedback?: string;
+  wordRetest?: boolean;
   /** 마지막 AI 인사말·코멘트 — 템플릿을 바꾸거나 다시 채울 때 AI를 다시 부르지 않고 쓴다. */
   aiIntro?: string;
   aiComment?: string;

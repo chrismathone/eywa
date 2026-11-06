@@ -307,6 +307,17 @@ export const PILOT_LEGACY_TITLES = {
   note: "선생님 한마디",
 } as const;
 
+/**
+ * **EiE 일일 보고서의 다른 이름**(원장 2026-11-06 *"eie 일일보고서일 경우 일일테스트 -> 단어테스트 이름변경"*) — 같은 항목으로 본다
+ * (표 머리의 테스트 칸에 선다). 수학·다른 영어 글은 그대로 '일일 테스트'다.
+ */
+export const PILOT_ALIAS_TITLES = {
+  daily: "단어 테스트",
+} as const;
+
+/** 단어 테스트 본문 맨 윗줄이 이 글자면 재시험이다(EiE 일일 보고서 — 카드가 제목 옆에 '재시험' 표시를 단다). */
+export const RETEST_MARK = "[재시험]";
+
 /** 항목 하나 — 내용이 비면 항목째 뺀다(없는 것을 '없음'으로 지어 쓰지 않는다). */
 export function pilotSection(title: string, body: string | null | undefined): string {
   const b = (body ?? "").trim();

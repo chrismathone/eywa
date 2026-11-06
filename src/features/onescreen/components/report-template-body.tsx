@@ -10,6 +10,7 @@ import { isVocabkingDeck } from "@/features/vocabking/deck";
 import { buildVocabkingReport } from "@/features/vocabking/model";
 import { VocabkingReportView } from "@/features/vocabking/components/vocabking-report";
 import { MonthlyEvalBlock } from "./monthly-report-sheet";
+import { MonthlyActivityBlock } from "./monthly-activity-block";
 
 /**
  * 학부모 카드의 **템플릿 모드 본문**(영어) — ParentReportCard에서 떼어 냈다(2026-09-11, 첨부 자리를 더하며).
@@ -58,6 +59,12 @@ export function TemplateBody({
       if (drawn.has("monthly")) return [];
       drawn.add("monthly");
       return [<MonthlyEvalBlock key={`m${i}`} evaluation={seg.eval} />];
+    }
+    // EiE 한 달 학습 기록 자리(2026-11-06) — 같은 결(글에 동결된 기록으로 그래프·표).
+    if (seg.kind === "activity") {
+      if (drawn.has("activity")) return [];
+      drawn.add("activity");
+      return [<MonthlyActivityBlock key={`ma${i}`} activity={seg.activity} />];
     }
     const once = seg.kind === "slot" ? `slot:${seg.key}` : `att:${seg.name}`;
     if (drawn.has(once)) return [];

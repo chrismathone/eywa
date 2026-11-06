@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUILTIN_ENGLISH_TEMPLATE_ID, BUILTIN_JJ_SHEET_TEMPLATE_ID } from "@/features/report-templates/defaults";
+import { BUILTIN_ENGLISH_JJ_TEMPLATE_ID, BUILTIN_ENGLISH_TEMPLATE_ID, BUILTIN_JJ_SHEET_TEMPLATE_ID } from "@/features/report-templates/defaults";
 import {
   EMPTY_TEMPLATE_PREFS,
   LAST_TEMPLATE_BY_CLASS_MAX,
@@ -14,6 +14,7 @@ import {
 
 const JJ = BUILTIN_JJ_SHEET_TEMPLATE_ID;
 const ECS = BUILTIN_ENGLISH_TEMPLATE_ID;
+const MINE = "0b6f3c1e-1111-4222-8333-444455556666"; // 사용자 템플릿
 
 describe("내 기본 템플릿 = 마지막으로 고른 것(원장 2026-10-27)", () => {
   it("ui_prefs에서 읽기 — 모양이 아닌 값은 버린다", () => {
@@ -29,9 +30,16 @@ describe("내 기본 템플릿 = 마지막으로 고른 것(원장 2026-10-27)",
     expect(preferredTemplateFor(p, "jj-class")).toBe(JJ);
     // 🔴 일반 영어 반이 JJ로 시작하면 숙제 완성도가 빠지고 한마디 필수가 풀린다(적대 리뷰)
     expect(preferredTemplateFor(p, "regular")).toBeNull();
-    const p2 = rememberTemplate(p, ECS, "other");
-    expect(preferredTemplateFor(p2, "regular")).toBe(ECS);
+    const p2 = rememberTemplate(p, MINE, "other");
+    expect(preferredTemplateFor(p2, "regular")).toBe(MINE);
     expect(preferredTemplateFor(p2, "jj-class")).toBe(JJ);
+  });
+
+  it("숨긴 기본 템플릿(ECS 자동, 2026-11-06)이 기록돼 있으면 새 행은 기본 템플릿으로", () => {
+    const p = rememberTemplate(rememberTemplate(EMPTY_TEMPLATE_PREFS, ECS, "c1"), BUILTIN_ENGLISH_JJ_TEMPLATE_ID, "c2");
+    expect(preferredTemplateFor(p, "c1")).toBeNull();
+    expect(preferredTemplateFor(p, "c2")).toBeNull();
+    expect(preferredTemplateFor(p, "other")).toBeNull();
   });
 
   it("반 기록 상한 — 오래된 것부터 버린다", () => {

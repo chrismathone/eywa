@@ -10,8 +10,10 @@
  *   지남 전환 1회 = 후속조치당 최대 2건, 매일 nag 안 함(v1). soon/later는 알림 대상 아님.
  */
 
-import { monthDayLabel } from "@/lib/date-kst";
-import { classnoteSendWindowLabel } from "@/features/onescreen/classnote-guard";
+import { monthDayLabel, weekdayIndexOf } from "@/lib/date-kst";
+import { classnoteSendWindowLabel, isClassnoteAllowed, isClassnoteSubjectEnabled } from "@/features/onescreen/classnote-guard";
+import type { TodaysMathFillRow } from "@/features/onescreen/todays-math-fill-rules";
+import { LEGACY_REPORT_SUBJECT } from "@/features/timetable/lib/report-subject";
 import { REPEATED_ABSENCES_LINK } from "./presentation";
 
 /** 결석 마일스톤 tier(낮→높). 이 값 이상이면 그 tier 도달. */
@@ -177,9 +179,11 @@ export function followupBody(event: FollowupEvent): string {
  * 🔴 신규 콜&상담 후속 조치는 아니다(2026-10-23 Codex 검토): 빈 실행은 기록을 안 남겨 콜드스타트가 **첫 후보까지** 이어지므로,
  *    그 지점의 **첫 실제 다음 상담 알림이 조용히 빠진다**. 이 종류는 감지 범위가 이미 좁아(도입일 `FOLLOW_UP_ALERT_START` 이후 ·
  *    내일까지 · 아직 정하지 않은 상담) 첫 실행에도 옛 건이 쏟아지지 않는다. 다른 종류는 종전 그대로 시드한다.
+ * 🔴 저장 안 된 수업 보고서(`unsent_draft`)도 시드하지 않는다(원장 2026-11-06 *밀린 건도 알림*) — 감지 범위가 수업 이틀째~발송 기한
+ *    (D+2~D+6)이라 첫날도 밀린 건이 쏟아지지 않는다(4주 실측: 첫날 벨 4건 · 보고서 18건).
  */
 export function seedsOnColdStart(eventType: string): boolean {
-  return eventType !== "enrollment_followup";
+  return eventType !== "enrollment_followup" && eventType !== "unsent_draft";
 }
 
 export type EnrollmentFollowupStage = "soon" | "due" | "overdue";
@@ -546,8 +550,9 @@ export function unsentTeacherAlertHistory(
  *  · 받을 직원이 없으면(`unsentRecipientOf` = null) 원장 1회분(`"unsent"`) — 중복은 호출부 upsert가 막는다(종전 그대로).
  *  · 받을 직원이 있으면 `remind:{오늘}` — 작성 당일이 아니고 · 오늘 아직 안 울렸고 · 지금까지 `UNSENT_TEACHER_ALERTS_MAX`번
  *    미만일 때만(시드는 상한으로 센다). 처음 잡힌 날부터 센다(작성일·수업일로 세지 않는다).
- *    단 오늘이 **발송 마지막 날**이면 작성 당일이라도 울린다 — 마지막 날 새벽(cron 07:00 전)에 저장한 건은 내일이면 기한이
- *    지나 한 번도 못 울린다(적대 리뷰 r2 X1).
+ *    단 오늘이 **마지막으로 울릴 수 있는 날**이면 작성 당일이라도 울린다(`unsentLastRingDay`) — 그날 새벽(cron 07:00 전)에
+ *    저장한 건은 내일이면 기한이 지나거나 조용한 날이라 한 번도 못 울린다(적대 리뷰 r2 X1 · C1 r2 경미 3).
+ *    입력 단계(`unsent_draft`)는 작성일이 없어(`createdDate: null`) 이 건너뜀 자체가 없다 — 조용한 날 판정만 같이 쓴다.
  * 날짜 오름차순(오래된 것 먼저).
  */
 export function planUnsentAlerts(args: {
@@ -566,7 +571,7 @@ export function planUnsentAlerts(args: {
       events.push(...buildUnsentReportEvents([row]));
       continue;
     }
-    if (row.createdDate === args.todayKst && row.sendDeadline !== args.todayKst) continue;
+    if (row.createdDate === args.todayKst && !unsentLastRingDay(row.sendDeadline, args.todayKst)) continue;
     const seen = history.get(row.reportId);
     if (seen?.today || (seen?.sent ?? 0) >= UNSENT_TEACHER_ALERTS_MAX) continue;
     events.push({
@@ -643,6 +648,427 @@ export function unsentTeacherDigestBody(
   const oldest = [...events].sort((a, b) => a.reportDate.localeCompare(b.reportDate))[0]!.reportDate;
   const head = `${names} 학생의 수업 보고서 ${events.length}건이 지금 미발송 상태입니다(${monthDayLabel(oldest)}~)`;
   return until ? `${head} — 가장 이른 건은 ${until}까지만 보낼 수 있습니다.` : `${head}.`;
+}
+
+// ─────────── 저장 안 된 수업 보고서(원스크린에 입력만 함) ───────────
+// 원장 2026-11-06 결정(권장안 · 밀린 건도 알림): 원스크린에 입력만 하고 보고서로 저장하지 않은 수업도 입력한 선생님에게
+// 하루 한 번 · 최대 3번 알린다. 10/19 PS3A 5건이 이 유형이다(입력은 했는데 보고서가 없어 기한 7일을 넘겼다).
+// 입력 = 원스크린 자동저장 세션(`onescreen_daily_sessions` — 강사·학생·날짜당 한 행)의 반별 칸(`subject_progress[반 id]` ·
+// 보강은 `subject_progress["makeup::과목"]`). 보고서 행은 저장·발송 버튼에서만 생기고 자동저장은 만들지 않는다.
+// 4주 실측(2026-10-09~11-05, 인재원 침산) 근거 = docs/changelog.md 2026-11-06.
+
+/** 첫 알림 = 수업 이틀째(D+2) 07시 cron — 다음 날 저녁에 몰아 저장하는 습관(4주 173건)을 잔소리하지 않게. 기한(D+6)까지 최대 3번. */
+export const UNSENT_DRAFT_START_DAYS = 2;
+/** '평소 보고서를 쓰는 반' 판정 창(일) — 오늘 기준 최근 28일(어제까지). */
+export const UNSENT_DRAFT_HISTORY_DAYS = 28;
+/** '평소 쓰는 반' = 창 안 입력일이 이 일수 이상이고… */
+export const UNSENT_DRAFT_USUAL_MIN_DAYS = 4;
+/** …그중 이 비율 이상의 날에 그 반 보고서가 1건 이상. */
+export const UNSENT_DRAFT_USUAL_MIN_RATE = 0.5;
+
+const UUID_KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** 세션 한 행(필요한 칸만). */
+export type DraftSession = { studentId: string; date: string; updatedBy: string | null; subjectProgress: unknown; updatedAt?: string | null };
+
+/**
+ * 칸에 적힌 것(직접 쓴 흔적 판정 재료 — 원장 2026-11-06 A).
+ * 🔑 자동저장은 그 학생의 **모든 줄**을 한꺼번에 싣는다(onescreen-client `buildSessionInput`) — 그래서 앱이 미리 채운 값
+ *    (진도·오늘 과제 = ECS 시트 초안 · 교재 = 직전 보고서 교재/교재요청서/시트, roster.ts ③④ · 일일·확인 점수 = 오늘 수학 채점 결과,
+ *    `applyTodaysMathFill`)이 강사가 손대지 않아도 세션에 남는다.
+ *    그 값들은 자동 값과 다를 때만 직접 쓴 흔적이다(`unsentDraftDirectInput`). 표식이 따로 없어 감지 때 자동 값을 다시 계산한다.
+ */
+export type DraftCell = {
+  today: string | null;
+  homeworkToday: string | null;
+  textbook: string | null;
+  /** 멘트 초안이 있다 — 직접 입력·자동작성 누름(템플릿 기본값은 표시만 붙고 글을 넣지 않는다). */
+  draft: boolean;
+  /** 줄 단위 평가값이 있다(태도·과제 수행률·특이사항·이해도·태도 의견·수업 메모·미제출 사유·보강 사유 — 값을 넣었을 때만 세션에 실린다). 점수는 따로(아래). */
+  rowFields: boolean;
+  /** 일일·확인 점수(0점도 값) — 오늘 수학 결과로 자동 채워질 수 있어 자동 값과 비교한다(C1 r2 경미 1). */
+  dailyScore: number | null;
+  checkScore: number | null;
+};
+
+/**
+ * 직접 쓴 흔적으로 세는 줄 단위 칸(값을 넣었을 때만 세션에 실린다 — 문항수(`dailyMax`·`checkMax`)는 승계 값이라 빼고, '시험 없음' 토글도 뺀다).
+ * 점수(`dailyScore`·`checkScore`)는 여기 없다 — 오늘 수학 채우기로 앱이 채웠을 수 있어 자동 값과 따로 비교한다.
+ */
+const DRAFT_ROW_FIELDS = ["attitude", "homework", "note", "understanding", "attitudeNote", "lessonMemo", "homeworkMissReason", "makeupReason"] as const;
+
+/** 줄 단위 값이 실제로 있나 — 글은 빈칸·'-' 제외 · 숫자는 있음 · 객체·배열은 비지 않았을 때. */
+function draftValuePresent(value: unknown): boolean {
+  if (typeof value === "string") return draftFilled(value);
+  if (typeof value === "number") return Number.isFinite(value);
+  if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === "object") return Object.values(value).some((v) => v !== null && v !== undefined && v !== "");
+  return false;
+}
+
+/** 점수 칸 → 숫자(0점 포함) · 없으면 null. 세션엔 숫자로 실리지만 숫자 글도 받는다. */
+function draftScore(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) return Number(value);
+  return null;
+}
+
+/** 세션 칸 → 적힌 것. */
+function draftCellOf(entry: Record<string, unknown>): DraftCell {
+  const text = (v: unknown) => (draftFilled(v) ? String(v).trim() : null);
+  return {
+    today: text(entry.today),
+    homeworkToday: text(entry.homeworkToday),
+    textbook: text(entry.textbook),
+    draft: draftFilled(entry.draft),
+    rowFields: DRAFT_ROW_FIELDS.some((k) => draftValuePresent(entry[k])),
+    dailyScore: draftScore(entry.dailyScore),
+    checkScore: draftScore(entry.checkScore),
+  };
+}
+
+/** 칸에 뭔가 적혀 있나(넓은 기준 — '평소 쓰는 반' 입력일 · 입력 단위). */
+function draftCellAny(cell: DraftCell): boolean {
+  return !!(cell.today || cell.homeworkToday || cell.textbook || cell.draft || cell.rowFields || cell.dailyScore != null || cell.checkScore != null);
+}
+
+/** 입력 단위 — 세션의 반별 칸 하나(또는 보강 칸 하나). */
+export type DraftUnit = {
+  /** dedup 주체(`notification_events.subject_key`) — `unsentDraftKey`. */
+  key: string;
+  studentId: string;
+  date: string;
+  /** 정규 반 칸이면 그 반 · 보강 칸이면 null. */
+  classId: string | null;
+  subject: string | null;
+  makeup: boolean;
+  /** 받는 사람 판정용 반 — 정규 = 그 반 · 보강 = 등록 때 고른 앵커 반(`makeupClassId`, 없으면 null). */
+  anchorClassId: string | null;
+  /** 입력한 계정(세션 `updated_by` — 강사뷰 대리 입력은 보는 강사 · 위임 반은 대체 강사 본인). */
+  updatedBy: string | null;
+  /** 세션 마지막 저장 시각(같은 키를 여러 입력자가 가질 때 고르는 데 — `pickDraftUnitPerKey`). */
+  updatedAt: string | null;
+  /** 칸에 적힌 것. */
+  cell: DraftCell;
+};
+
+/**
+ * 입력 단위 키 — `draft:{학생}:{날짜}:{과목}:{반 id | makeup}`. 과목을 키에 넣어 저장 뒤 보고서와 같은 학생·날짜·과목으로
+ * 짝지을 수 있게 한다(느슨한 짝과 같은 규칙 — 입력 단계 알림 횟수를 저장 뒤 재알림 횟수에 더할 때 `draftPriorForReports`).
+ */
+export function unsentDraftKey(u: { studentId: string; date: string; subject: string | null; classId: string | null; makeup: boolean }): string {
+  return `draft:${u.studentId}:${u.date}:${u.subject ?? ""}:${u.makeup ? "makeup" : u.classId}`;
+}
+
+/** 칸에 실제로 적혀 있나 — 빈칸·공백·'-'는 입력이 아니다(조사 규칙과 같음). */
+function draftFilled(value: unknown): boolean {
+  return typeof value === "string" && value.trim() !== "" && value.trim() !== "-";
+}
+
+/**
+ * 세션 → 입력 단위. 뭔가 적힌 칸만 — 진도(`today`)·멘트 초안(`draft`)·오늘 과제(`homeworkToday`)·교재(`textbook`)·줄 단위 평가값·점수.
+ * (앱이 미리 채운 값만 남은 칸인지는 `unsentDraftDirectInput`이 따로 가른다 — '평소 쓰는 반'의 입력일은 이 넓은 기준으로 센다.)
+ * 정규 칸 = 키가 반 id(0134a) · 보강 칸 = `makeup::과목`(`{makeup:false}` = '보강 빼기' 표시는 버린다). 옛 과목키 칸은 버린다(4주 0건).
+ */
+export function unsentDraftUnits(sessions: readonly DraftSession[], subjectOfClass: (classId: string) => string | null): DraftUnit[] {
+  const units: DraftUnit[] = [];
+  for (const s of sessions) {
+    const progress = s.subjectProgress;
+    if (!progress || typeof progress !== "object" || Array.isArray(progress)) continue;
+    for (const [key, raw] of Object.entries(progress as Record<string, unknown>)) {
+      if (!raw || typeof raw !== "object") continue;
+      const entry = raw as Record<string, unknown>;
+      const cell = draftCellOf(entry);
+      if (!draftCellAny(cell)) continue;
+      const who = { updatedBy: s.updatedBy, updatedAt: s.updatedAt ?? null, cell };
+      if (key.startsWith("makeup::")) {
+        if (entry.makeup === false) continue;
+        const subject = key.slice(8) || null;
+        const anchor = typeof entry.makeupClassId === "string" ? entry.makeupClassId : null;
+        const base = { studentId: s.studentId, date: s.date, classId: null, subject, makeup: true };
+        units.push({ ...base, key: unsentDraftKey(base), anchorClassId: anchor, ...who });
+      } else if (UUID_KEY.test(key)) {
+        const base = { studentId: s.studentId, date: s.date, classId: key, subject: subjectOfClass(key), makeup: false };
+        units.push({ ...base, key: unsentDraftKey(base), anchorClassId: key, ...who });
+      }
+    }
+  }
+  return units;
+}
+
+/** 앱이 그 칸에 미리 채웠을 값(감지 때 다시 계산 — roster.ts ③④와 같은 원천). */
+export type DraftAutoValues = {
+  /** ECS 시트 초안의 진도(그 반·그날 계획 — 없으면 null). */
+  progress: string | null;
+  /** ECS 시트 초안의 오늘 과제. */
+  homework: string | null;
+  /** 교재 후보 — 시트 교재 · 직전 보고서 교재(끝 쪽수 뗀 것과 원문) · 교재요청서 교재(수학 줄만). */
+  textbooks: ReadonlySet<string>;
+  /** 일일·확인 점수 후보 — 오늘 수학 채점 결과로 원스크린이 채웠을 점수(`todaysMathAutoScores` · 오늘 수학 라이선스가 없는 학원은 빈 집합). */
+  dailyScores: ReadonlySet<number>;
+  checkScores: ReadonlySet<number>;
+};
+
+/**
+ * 직접 쓴 흔적이 있나(원장 2026-11-06 A) — 멘트 초안·줄 단위 평가값은 그 자체로 흔적이고,
+ * 진도·오늘 과제·교재·점수는 앱이 미리 채운 값과 **다를 때만** 흔적이다(같으면 강사가 손대지 않은 것으로 본다 — 똑같이 다시 쳤어도 가를 수 없다).
+ */
+export function unsentDraftDirectInput(cell: DraftCell, auto: DraftAutoValues): boolean {
+  if (cell.draft || cell.rowFields) return true;
+  const same = (value: string, autoValue: string | null) => !!autoValue && value === autoValue.trim();
+  if (cell.today && !same(cell.today, auto.progress)) return true;
+  if (cell.homeworkToday && !same(cell.homeworkToday, auto.homework)) return true;
+  if (cell.textbook && !auto.textbooks.has(cell.textbook)) return true;
+  if (cell.dailyScore != null && !auto.dailyScores.has(cell.dailyScore)) return true;
+  if (cell.checkScore != null && !auto.checkScores.has(cell.checkScore)) return true;
+  return false;
+}
+
+/** 오늘 수학 결과 종류 → 칸(`applyTodaysMathFill`의 KIND_TO와 같다 — 월말평가 등 다른 종류는 채우지 않는다). */
+const TODAYS_MATH_KIND: Record<string, "daily" | "check"> = { daily: "daily", review: "check" };
+
+/**
+ * 오늘 수학 채점 결과로 원스크린이 그 칸에 채웠을 점수(C1 r2 경미 1) — `applyTodaysMathFill`(todays-math-fill-rules.ts)과 같은 원천·규칙:
+ *  · 그 학생·그날 결과(`rows`는 호출부가 학생·날짜로 거른 것) 중 결시 · 맞은 수 모름 · 문항 0 · 맞은 수 > 문항 수는 뺀다
+ *  · 일일(`daily`) → 일일 칸 · 확인(`review`) → 확인 칸, 그 칸이 보고서 표시 항목에서 켜졌을 때만(`opts` = showDailyTest/showCheckTest)
+ *  · 수학 정규 반 줄만(보강 줄은 채우지 않는다) · 같은 반 결과 중 마지막 채점
+ *  · 반 연결 없는 결과는 그 학생 수학 줄이 하나일 때만 — 로스터는 그날 등록 반으로 세는데 여기선 알 수 없어
+ *    두 경우의 답(같은 반만 · 같은 반+반 없음)을 다 후보로 둔다(넓게 — 자동 값을 흔적으로 잘못 세지 않는 쪽).
+ * ⚠️ 강사가 같은 점수를 직접 쳤어도 가를 수 없다(감사로그 `todaysMathSameOnSave`와 같은 한계 — '같다'만 안다).
+ */
+export function todaysMathAutoScores(
+  rows: readonly TodaysMathFillRow[],
+  unit: Pick<DraftUnit, "studentId" | "classId" | "makeup" | "subject">,
+  opts: { daily: boolean; check: boolean },
+): { daily: Set<number>; check: Set<number> } {
+  const out = { daily: new Set<number>(), check: new Set<number>() };
+  const isMath = (unit.subject?.trim() || LEGACY_REPORT_SUBJECT) === LEGACY_REPORT_SUBJECT;
+  if (!isMath || unit.makeup || !unit.classId) return out;
+  const valid = rows.filter(
+    (r) => r.student_id === unit.studentId && !r.absent && r.correct_count != null && r.question_count > 0 && r.correct_count <= r.question_count,
+  );
+  const latest = (list: readonly TodaysMathFillRow[]) => [...list].sort((a, b) => b.taken_at.localeCompare(a.taken_at))[0];
+  for (const which of ["daily", "check"] as const) {
+    if (!opts[which]) continue;
+    const ofKind = valid.filter((r) => TODAYS_MATH_KIND[r.kind] === which);
+    for (const pick of [latest(ofKind.filter((r) => r.class_id === unit.classId)), latest(ofKind.filter((r) => r.class_id === unit.classId || r.class_id == null))]) {
+      if (pick) out[which].add(pick.correct_count!);
+    }
+  }
+  return out;
+}
+
+/**
+ * 같은 입력 키(학생·날짜·반)를 여러 입력자가 가지면 **하나만** 남긴다(적대 리뷰 C1 경미 1 — 둘 다 받던 문제).
+ * 고르는 순서: ① 그 반(보강은 앵커 반) 재직 담임 본인 ② 그 밖의 재직 입력자(대체·위임 강사 등) ③ 퇴사·알 수 없음.
+ * 같은 순위면 세션을 가장 늦게 저장한 사람, 그다음 계정 id 순(결정적).
+ */
+export function pickDraftUnitPerKey(
+  units: readonly DraftUnit[],
+  classTeacher: ReadonlyMap<string, string>,
+  activeStaff: ReadonlySet<string>,
+): DraftUnit[] {
+  const rank = (u: DraftUnit) =>
+    u.updatedBy && u.anchorClassId && classTeacher.get(u.anchorClassId) === u.updatedBy ? 0 : u.updatedBy && activeStaff.has(u.updatedBy) ? 1 : 2;
+  const best = new Map<string, DraftUnit>();
+  for (const u of units) {
+    const cur = best.get(u.key);
+    if (!cur) {
+      best.set(u.key, u);
+      continue;
+    }
+    const byRank = rank(u) - rank(cur);
+    const byTime = (u.updatedAt ?? "").localeCompare(cur.updatedAt ?? "");
+    if (byRank < 0 || (byRank === 0 && (byTime > 0 || (byTime === 0 && (u.updatedBy ?? "") < (cur.updatedBy ?? ""))))) best.set(u.key, u);
+  }
+  return [...best.values()];
+}
+
+/**
+ * 일요일(KST)엔 미발송 알림(저장 후 미발송 · 입력만 함)을 기록하지도 보내지도 않는다(원장 2026-11-06 B) — 월요일부터 이어서 센다
+ * (횟수 기준이라 최대 3번 그대로). 다른 cron 정리 작업과 할 일 동기화는 그대로 돈다.
+ * 마감일(D+6)이 일요일인 보고서는 토요일이 마지막으로 울릴 수 있는 날이다(`unsentLastRingDay`) — 토요일 07시 cron 전에 처음
+ * 저장했으면 작성 당일이라도 토요일에 한 번 울린다(C1 r2 경미 3).
+ * ⚠️ 그래도 한 번도 안 울리는 경우: 마감일이 일요일인데 토요일 07시 cron **뒤**부터 일요일 사이에 처음 저장한 보고서
+ *    (토요일 cron은 아직 못 봤고 · 일요일은 조용하고 · 월요일엔 기한이 지났다) — 일요일 무알림이 우선(원장 결정 범위 · 드묾).
+ */
+export function isUnsentQuietDay(todayKst: string): boolean {
+  return weekdayIndexOf(todayKst) === 0;
+}
+
+/**
+ * 오늘이 그 보고서가 마지막으로 울릴 수 있는 날인가 — 오늘이 마감일이거나, 내일이 마감일인데 내일이 조용한 날(일요일)일 때.
+ * (마감일이 오늘이고 오늘이 일요일이면 참이지만 일요일엔 감지가 먼저 멈춘다 — 서버 `isUnsentQuietDay` 조기 반환.)
+ */
+export function unsentLastRingDay(sendDeadline: string | null | undefined, todayKst: string): boolean {
+  if (!sendDeadline) return false;
+  return sendDeadline === todayKst || (sendDeadline === addDaysYmd(todayKst, 1) && isUnsentQuietDay(sendDeadline));
+}
+
+/** 저장 짝 판정용 보고서(필요한 칸만). */
+export type DraftReportRef = { studentId: string; date: string; classId: string | null; makeup: boolean | null; subject: string | null };
+
+/**
+ * 이 입력이 이미 보고서로 저장됐나 — 조사 규칙 그대로:
+ * 정확한 짝(정규 = 같은 학생·날짜·반 / 보강 = 같은 학생·날짜·과목의 반 없는 보강) **또는** 같은 학생·날짜·과목의 보고서가
+ * 아무 반에라도 있으면(느슨한 짝 — 반을 잘못 고르거나 '정규+보강'으로 합쳐 저장한 경우) 저장된 것으로 본다.
+ * 회수된 보고서도 저장된 것이다(행이 있다).
+ */
+export function unsentDraftSavedIndex(
+  reports: readonly DraftReportRef[],
+  subjectOfClass: (classId: string) => string | null,
+): (unit: DraftUnit) => boolean {
+  const keys = new Set<string>();
+  for (const r of reports) {
+    if (r.classId) keys.add(`c|${r.studentId}|${r.date}|${r.classId}`);
+    else if (r.makeup) keys.add(`m|${r.studentId}|${r.date}|${r.subject ?? ""}`);
+    const subject = r.subject ?? (r.classId ? subjectOfClass(r.classId) : null);
+    if (subject) keys.add(`s|${r.studentId}|${r.date}|${subject}`);
+  }
+  return (unit) =>
+    keys.has(unit.makeup ? `m|${unit.studentId}|${unit.date}|${unit.subject ?? ""}` : `c|${unit.studentId}|${unit.date}|${unit.classId}`) ||
+    (!!unit.subject && keys.has(`s|${unit.studentId}|${unit.date}|${unit.subject}`));
+}
+
+/**
+ * '평소 보고서를 쓰는 반' — 창(최근 28일) 안 그 반의 **입력일**(입력 단위가 있는 날) 중 그 반 보고서가 1건 이상인 날의 비율.
+ * 입력일 `UNSENT_DRAFT_USUAL_MIN_DAYS`일 이상 · 비율 `UNSENT_DRAFT_USUAL_MIN_RATE` 이상인 반만(입력일이 적으면 비율을 믿을 수 없다).
+ * 입력일엔 지금 따지는 그 수업일도 든다(창 안이므로 — 조사 규칙과 같다).
+ * 4주 실측: 이 조건이 평소 보고서를 거의 안 쓰는 반(영어 브릿지·심화 등)의 입력 50건을 뺀다. PS3A는 8/8일.
+ */
+export function unsentDraftUsualClasses(units: readonly DraftUnit[], reports: readonly DraftReportRef[]): Set<string> {
+  const inputDays = new Map<string, Set<string>>();
+  for (const u of units) {
+    if (!u.classId) continue;
+    (inputDays.get(u.classId) ?? inputDays.set(u.classId, new Set()).get(u.classId)!).add(u.date);
+  }
+  const reportDays = new Set(reports.filter((r) => r.classId).map((r) => `${r.classId}|${r.date}`));
+  const usual = new Set<string>();
+  for (const [classId, days] of inputDays) {
+    const withReport = [...days].filter((d) => reportDays.has(`${classId}|${d}`)).length;
+    if (days.size >= UNSENT_DRAFT_USUAL_MIN_DAYS && withReport / days.size >= UNSENT_DRAFT_USUAL_MIN_RATE) usual.add(classId);
+  }
+  return usual;
+}
+
+/**
+ * 알림 대상 입력 단위 — 원장 2026-11-06 권장안. 모두 만족할 때만:
+ *  ① 수업 이틀째 이후(수업일 ≤ 오늘 − 2) · 발송 기한 안(`isClassnoteAllowed`, 오늘 포함 7일)
+ *  ② 저장 안 됨(`saved`) ③ 테스트 학생 아님 ④ 과목 opt-in ⑤ '수업보고서 미발송' 반 아님
+ *  ⑥ 그날 결석·공결 아님(보강 칸은 게이트 밖 — 발송 콘솔과 같음)
+ *  ⑦ 그 반 그날 출결이 1건 이상(4주 실측: 10/09 대체휴무 3개 반 19건처럼 수업이 없던 날을 뺀다)
+ *  ⑧ 평소 보고서를 쓰는 반(`unsentDraftUsualClasses`)
+ *  ⑨ 직접 쓴 흔적이 있음(`direct` — `unsentDraftDirectInput`: 앱이 미리 채운 교재·진도·과제만 남은 칸은 입력이 아니다 · 원장 2026-11-06 A)
+ * 🔑 보강 칸에는 ⑦·⑧을 걸지 않는다 — 보강은 그 학생 한 명의 일회성 수업이라 앵커 반의 보고서 습관이 보강 보고서 여부를 말해 주지
+ *    않고, 보강 출석부 칸은 등록 문(`registerMakeupEntries`)·보고서 저장 때만 생겨 자동저장 내용 칸만 있는 보강엔 없을 수 있다
+ *    (⑦을 걸면 정상 보강 입력이 빠진다). 조사 수치와 같은 규칙(보강 칸 12건/4주).
+ */
+export function eligibleUnsentDrafts(args: {
+  units: readonly DraftUnit[];
+  todayKst: string;
+  saved: (unit: DraftUnit) => boolean;
+  testStudentIds: ReadonlySet<string>;
+  classnoteSubjects: readonly string[];
+  optoutClassIds: ReadonlySet<string>;
+  absent: (unit: DraftUnit) => boolean;
+  classAttendance: (classId: string, date: string) => number;
+  usualClasses: ReadonlySet<string>;
+  direct: (unit: DraftUnit) => boolean;
+}): DraftUnit[] {
+  const lastLessonDay = addDaysYmd(args.todayKst, -UNSENT_DRAFT_START_DAYS);
+  return args.units.filter((u) => {
+    if (u.date > lastLessonDay || !isClassnoteAllowed(u.date, args.todayKst)) return false;
+    if (args.saved(u)) return false;
+    if (!args.direct(u)) return false;
+    if (args.testStudentIds.has(u.studentId)) return false;
+    if (!isClassnoteSubjectEnabled(u.subject, args.classnoteSubjects)) return false;
+    if (u.makeup) return true;
+    if (!u.classId || args.optoutClassIds.has(u.classId)) return false;
+    if (args.absent(u)) return false;
+    if (args.classAttendance(u.classId, u.date) < 1) return false;
+    return args.usualClasses.has(u.classId);
+  });
+}
+
+/** YYYY-MM-DD ± n일(UTC 산술 — 서버 TZ 무관). */
+function addDaysYmd(ymd: string, n: number): string {
+  const t = new Date(`${ymd}T00:00:00Z`);
+  t.setUTCDate(t.getUTCDate() + n);
+  return t.toISOString().slice(0, 10);
+}
+
+/**
+ * 입력 단계(`unsent_draft`) 직원 몫 기록 → 저장된 보고서의 이력으로 옮긴다(원장 2026-11-06 *두 단계를 합쳐 최대 3번*).
+ * 짝 = 같은 학생·날짜·과목(입력 키 `draft:{학생}:{날짜}:{과목}:` 앞부분 — 저장 짝의 느슨한 규칙과 같다).
+ * 원장 1회분(`"unsent"`)은 옮기지 않는다 — 그건 받을 직원이 없을 때 원장에게 간 것이라 저장한 직원의 횟수가 아니다.
+ * 🔑 반대 방향(저장 뒤 알림이 먼저 울리고 다시 입력 단계로 돌아가는 경우)은 생기지 않는다 — 회수된 보고서도 행이 남아 저장으로 보고,
+ *    앱에서 보고서 행을 지우는 길은 '보강 빼기' 하나인데 그때 세션 칸도 `{makeup:false}`가 되어 입력 단위에서 빠진다
+ *    (수강 삭제는 세션 초안이 있으면 아예 막힌다 — enrollments/deletable.ts).
+ */
+export function draftPriorForReports(
+  draftPrior: readonly UnsentPriorEvent[],
+  reports: readonly { reportId: string; studentId: string; reportDate: string; subject: string | null }[],
+): UnsentPriorEvent[] {
+  const byPrefix = new Map<string, string[]>();
+  for (const r of reports) {
+    if (!r.subject) continue;
+    const prefix = `draft:${r.studentId}:${r.reportDate}:${r.subject}:`;
+    (byPrefix.get(prefix) ?? byPrefix.set(prefix, []).get(prefix)!).push(r.reportId);
+  }
+  const out: UnsentPriorEvent[] = [];
+  // 보고서·날짜(bucket)마다 한 줄 — 같은 날 같은 과목 두 반의 입력이 함께 울렸어도 그 보고서엔 하루 한 번으로 센다(적대 리뷰 C1 경미 2).
+  const seen = new Set<string>();
+  for (const row of draftPrior) {
+    if (!row.bucket.startsWith("remind:")) continue;
+    const prefix = row.subjectKey.slice(0, row.subjectKey.lastIndexOf(":") + 1);
+    for (const reportId of byPrefix.get(prefix) ?? []) {
+      const once = `${reportId}|${row.bucket}`;
+      if (seen.has(once)) continue;
+      seen.add(once);
+      out.push({ ...row, subjectKey: reportId });
+    }
+  }
+  return out;
+}
+
+/**
+ * 저장 안 된 수업 보고서 본문(없으면 null) — 직원 몫·원장 1회분 공용. 날짜는 전부 M/D · 꼬리는 미발송 재알림과 같은 마감
+ * (가장 이른 발송 마지막 날 · 오늘이면 '오늘' · 시간창 끝 시각).
+ * `byOthers` = 받는 사람이 입력한 본인이 아니다(퇴사한 입력자 대신 반 담임 · 원장) — 세션 초안은 강사별이라 그 사람 원스크린엔
+ * 그 입력이 보이지 않는다. 그래서 "다른 선생님이 입력만 해 두고 저장하지 않았다 — 보고서를 작성해 달라"고 쓴다(적대 리뷰 C1 경미 3).
+ */
+export function unsentDraftDigestBody(
+  events: readonly UnsentReportEvent[],
+  todayKst: string,
+  windowEnd: string | null,
+  byOthers = false,
+): string | null {
+  if (events.length === 0) return null;
+  const deadline = events
+    .map((event) => event.sendDeadline)
+    .filter((date): date is string => !!date)
+    .sort()[0];
+  const until = deadline ? `${deadline === todayKst ? "오늘" : monthDayLabel(deadline)}${windowEnd ? ` ${windowEnd}` : ""}` : null;
+  const many = events.length > 1;
+  const names = summarizeNames([...new Set(events.map((event) => event.studentName))]);
+  const oldest = [...events].sort((a, b) => a.reportDate.localeCompare(b.reportDate))[0]!.reportDate;
+  const who = many
+    ? `${names} 학생의 수업 ${events.length}건`
+    : `${events[0].studentName} 학생 ${monthDayLabel(events[0].reportDate)} ${events[0].subjectLabel} 수업`;
+  const since = many ? `(${monthDayLabel(oldest)}~)` : "";
+  const deadlineText = until ? `${many ? "가장 이른 건은 " : ""}${until}까지만 보낼 수 있습니다` : null;
+  if (byOthers) {
+    const head = `${who}은 다른 선생님이 원스크린에 입력만 해 두고 보고서로 저장하지 않았습니다${since} — 보고서를 작성해 주세요`;
+    return deadlineText ? `${head}(${deadlineText}).` : `${head}.`;
+  }
+  const head = `${who}이 원스크린에 입력만 되고 보고서로 저장되지 않았습니다${since}`;
+  return deadlineText ? `${head} — ${deadlineText}.` : `${head}.`;
+}
+
+/** 직원 몫 링크 — 가장 이른 수업일의 원스크린(그 날짜로 열어야 입력해 둔 칸이 보인다). */
+export function unsentDraftLink(events: readonly UnsentReportEvent[]): string {
+  const oldest = [...events].sort((a, b) => a.reportDate.localeCompare(b.reportDate))[0]?.reportDate;
+  return oldest ? `/onescreen?date=${oldest}` : "/onescreen";
 }
 
 // ─────────── 발송 실패 "마감" 이벤트 ───────────
