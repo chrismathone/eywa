@@ -6,6 +6,7 @@ import { ChevronRight } from "@/components/icons/aywa-icon-compat";
 import { Pill } from "@/components/atoms/pill";
 import { WindowLink } from "@/components/workspace/window-link";
 import { KIND_LABEL, TONE_BG_CLASS, TONE_INK_CLASS, type ExploreModel, type ExploreTarget, type ExploreTone } from "../model";
+import { netDateText } from "./network/time-tree";
 import type { NetNeighbor, NetRecordInfo } from "./network/types";
 import { useScrollFade } from "./use-scroll-fade";
 import styles from "./layout.module.css";
@@ -25,10 +26,13 @@ type Props = {
 };
 
 const NEIGHBOR_MAX = 12;
+/** 날짜 묶음의 목록은 다 보인다(한 달 · 하루 안 기록 — 본문이 스크롤된다). */
+const GROUP_MAX = 60;
 
 /**
  * 네트워크에서 기록·대상·분석·사실 점을 골랐을 때 오른쪽 위 '펼친 영역' 자리에 서는 패널(원장 2026-11-05 시안 :3978 `recordPanel`).
  * 머리(영역 그림 · 이름 · 종류) · 중심으로 보기 · 날짜·내용·원본 · 본문 · 이 기록에 이어진 것(점 id 그대로 — 고르면 그 점) · 바닥 '영역으로'.
+ * 날짜 묶음(연도·월·일자)을 고르면 그 묶음에 든 기록·묶음 목록(최근 먼저 — 고르면 그 기록). 날짜는 판의 hover 카드와 같은 표기('2026년 9월 30일 (수)').
  * 🔴 시안의 '근거 · 확인 날짜' 줄은 가짜 값이라 싣지 않는다 — 원본 화면 링크는 그 영역의 첫 링크(없으면 줄 없음).
  */
 export function RecordPanel({ rec, model, neighbors, centerTarget, onNavigate, onPick, onClose, pending }: Props) {
@@ -42,8 +46,15 @@ export function RecordPanel({ rec, model, neighbors, centerTarget, onNavigate, o
       : rec.kind === "fact"
         ? { label: "온톨로지 사실", icon: "layers", tone: "gold" }
         : { label: "기록", icon: "report", tone: "primary" };
-  const kindLabel = rec.kind === "target" && rec.target ? KIND_LABEL[rec.target.kind] : rec.kind === "analysis" ? "분석" : rec.kind === "fact" ? "사실" : look.label;
-  const source = rec.kind === "analysis" ? "저장된 분석" : rec.kind === "fact" ? "판정" : rec.kind === "target" ? "연결" : "기록";
+  const kindLabel = rec.kind === "target" && rec.target ? KIND_LABEL[rec.target.kind] : rec.kind === "analysis" ? "분석" : rec.kind === "fact" ? "사실" : rec.kind === "group" ? "날짜 묶음" : look.label;
+  const source = rec.kind === "analysis" ? "저장된 분석" : rec.kind === "fact" ? "판정" : rec.kind === "target" ? "연결" : rec.kind === "group" ? "기록 묶음" : "기록";
+  const group = rec.kind === "group";
+  const max = group ? GROUP_MAX : NEIGHBOR_MAX;
+  // 묶음 목록의 수 = 단위별로('일자 12개 · 기록 3건') — 묶음 이름의 'N건'(기록 수)과 목록 줄 수가 다른 까닭을 글로 밝힌다.
+  const subGroups = neighbors.filter((n) => n.unit);
+  const listCount = group
+    ? [subGroups.length > 0 && `${subGroups[0].unit} ${subGroups.length}개`, neighbors.length > subGroups.length && `기록 ${neighbors.length - subGroups.length}건`].filter(Boolean).join(" · ")
+    : `${neighbors.length}개`;
   const link = sector?.links?.[0] ?? null;
   const body = rec.body && rec.body !== rec.detail ? rec.body : null;
 
@@ -77,7 +88,7 @@ export function RecordPanel({ rec, model, neighbors, centerTarget, onNavigate, o
           {rec.date ? (
             <>
               <dt className="text-text-dim text-xs">날짜</dt>
-              <dd className="text-foreground num">{rec.date}</dd>
+              <dd className="text-foreground num">{netDateText(rec.date)}</dd>
             </>
           ) : null}
           {rec.detail ? (
@@ -102,11 +113,11 @@ export function RecordPanel({ rec, model, neighbors, centerTarget, onNavigate, o
 
         <section>
           <p className="text-foreground mb-1.5 text-xs font-extrabold opacity-85">
-            이 기록에 이어진 것 <span className="text-text-dim num font-medium">{neighbors.length}개</span>
+            {group ? "이 묶음에 든 것" : "이 기록에 이어진 것"} <span className="text-text-dim num font-medium">{listCount}</span>
           </p>
           {neighbors.length > 0 ? (
             <ul className="flex flex-col">
-              {neighbors.slice(0, NEIGHBOR_MAX).map((n) => (
+              {neighbors.slice(0, max).map((n) => (
                 <li key={n.id}>
                   <button type="button" onClick={() => onPick(n.id)} className="hover:bg-bg-soft flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left text-sm">
                     <span className={`size-2 shrink-0 rounded-full bg-current ${TONE_INK_CLASS[n.tone]}`} aria-hidden="true" />
@@ -115,10 +126,10 @@ export function RecordPanel({ rec, model, neighbors, centerTarget, onNavigate, o
                   </button>
                 </li>
               ))}
-              {neighbors.length > NEIGHBOR_MAX ? <li className="text-text-dim px-1.5 py-1 text-xs">… {neighbors.length - NEIGHBOR_MAX}개 더</li> : null}
+              {neighbors.length > max ? <li className="text-text-dim px-1.5 py-1 text-xs">… {neighbors.length - max}개 더</li> : null}
             </ul>
           ) : (
-            <p className="text-text-dim text-xs">영역 밖으로 이어진 기록이 없습니다.</p>
+            <p className="text-text-dim text-xs">{group ? "이 묶음에 든 기록이 없습니다." : "영역 밖으로 이어진 기록이 없습니다."}</p>
           )}
         </section>
 

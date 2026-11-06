@@ -1,4 +1,5 @@
-import { netRadius, type NetBoard, type NetNode } from "./graph";
+import type { NetBoard, NetNode } from "./graph";
+import { netRadius } from "./layout";
 import { placeLabels } from "./labels";
 
 /**
@@ -62,7 +63,8 @@ function sweep(L: Layers): void {
 }
 
 export type DrawClasses = { node: string; nlabel: string; hub: string; root: string };
-export type DrawOpts = { active: string | null; hubHover: boolean; colored: boolean; labels: boolean; dark: boolean; cls: DrawClasses };
+/** `size` = 판 크기(엔진이 든 값 — 그리는 중에 DOM 크기를 읽어 레이아웃을 강제하지 않는다). */
+export type DrawOpts = { active: string | null; hubHover: boolean; colored: boolean; labels: boolean; dark: boolean; cls: DrawClasses; size: { w: number; h: number } };
 
 const V = {
   edge: "var(--net-edge)",
@@ -74,8 +76,10 @@ const V = {
   rootFill: "var(--net-root-fill)",
   ring: "var(--net-ring)",
   lead: "var(--net-lead)",
+  groupRing: "var(--net-group-ring)",
 };
 const tone = (n: NetNode) => `var(--net-t-${n.tone})`;
+const tree = (id: string) => id.startsWith("hub:") || id.startsWith("grp:");
 const f1 = (n: number) => n.toFixed(1);
 
 /** 한 프레임을 그린다. 돌려주는 값 = 확대 비율 글('130%'). */
@@ -98,7 +102,8 @@ export function drawBoard(svg: SVGSVGElement, B: NetBoard, o: DrawOpts): string 
       b = { x: mx + (b.x - mx) * ext, y: my + (b.y - my) * ext };
     }
     const hi = !!active && (e.from === active || e.to === active);
-    const cross = !e.from.startsWith("hub:") && !e.to.startsWith("hub:") && e.from !== B.centerId && e.to !== B.centerId;
+    // 교차 선(점선) = 영역·날짜 묶음·가운데를 거치지 않는 선(분석 근거 등) — 묶음 아래 기록 선은 자리 선이다.
+    const cross = !tree(e.from) && !tree(e.to) && e.from !== B.centerId && e.to !== B.centerId;
     const so = (active ? (hi ? 0.85 : 0.06) : cross ? 0.5 : o.dark ? 0.55 : 0.28) * Math.sqrt(ext);
     upsert(L, L.edges, `e:${e.from}|${e.to}`, "line", {
       x1: f1(a.x), y1: f1(a.y), x2: f1(b.x), y2: f1(b.y),
@@ -115,7 +120,7 @@ export function drawBoard(svg: SVGSVGElement, B: NetBoard, o: DrawOpts): string 
     const chosen = n.id === active;
     const near = !!neighbors?.has(n.id);
     const color = tone(n);
-    const fill = chosen ? V.chosen : n.kind === "root" ? V.rootFill : o.colored || n.kind === "hub" || n.kind === "analysis" ? color : near ? V.near : V.node;
+    const fill = chosen ? V.chosen : n.kind === "root" ? V.rootFill : o.colored || n.kind === "hub" || n.kind === "analysis" || n.kind === "group" ? color : near ? V.near : V.node;
     const op = ((active && !chosen && !near ? 0.18 : 1) * (n.op ?? 1)).toFixed(3);
     if (n.kind === "analysis")
       upsert(L, L.nodes, `n:${n.id}`, "path", {
@@ -127,8 +132,9 @@ export function drawBoard(svg: SVGSVGElement, B: NetBoard, o: DrawOpts): string 
       upsert(L, L.nodes, `n:${n.id}`, "circle", {
         class: o.cls.node, "data-id": n.id, cx: f1(p.x), cy: f1(p.y), r: f1(r),
         fill, "fill-opacity": op, "stroke-opacity": op,
-        stroke: n.kind === "root" || chosen ? V.ring : "",
-        "stroke-width": n.kind === "root" ? "3" : chosen ? "2" : "",
+        // 날짜 묶음 = 영역 색 + 흰 테(기록 점과 구별 · 큰 영역 점보다 작다).
+        stroke: n.kind === "root" || chosen ? V.ring : n.kind === "group" ? V.groupRing : "",
+        "stroke-width": n.kind === "root" ? "3" : chosen ? "2" : n.kind === "group" ? "1.5" : "",
       });
     if (chosen) upsert(L, L.nodes, `ring:${n.id}`, "circle", { cx: f1(p.x), cy: f1(p.y), r: f1(r + 3), fill: "none", stroke: V.ring, "stroke-width": "1" });
   }
@@ -143,6 +149,7 @@ export function drawBoard(svg: SVGSVGElement, B: NetBoard, o: DrawOpts): string 
     k: view.k,
     dark: o.dark,
     centerId: B.centerId,
+    bounds: o.size.w > 0 ? o.size : undefined,
   });
   for (const t of placed) {
     if (t.lead) upsert(L, L.labels, `lead:${t.id}`, "line", { x1: f1(t.lead.x1), y1: f1(t.lead.y1), x2: f1(t.lead.x2), y2: f1(t.lead.y2), stroke: V.lead, "stroke-width": "1", opacity: t.opacity });

@@ -4,7 +4,9 @@ import { useState, type CSSProperties } from "react";
 import { toast } from "sonner";
 import { isExploreKind, zoomPlan, type ExploreTarget } from "@/features/explore/model";
 import { ExploreNetwork, prepareNetworkLeave, type NetRecordInfo } from "@/features/explore/components/network/explore-network";
+import { fullGraphOf, netNeighbors, netRecordInfo } from "@/features/explore/components/network/graph";
 import { CENTERS } from "@/features/explore/components/network/testing/fixture";
+import { RecordPanel } from "@/features/explore/components/record-panel";
 
 /**
  * 개발 전용 — 로그인 없이 네트워크 보기를 가상 값으로 띄워 중심 전환 보간·역재생·보기 전환을 눈으로 확인한다.
@@ -15,8 +17,8 @@ const parse = (key: string) => {
   return isExploreKind(kind) ? { kind, id, ...(rest.length ? { sector: rest.join(":") } : {}) } : null;
 };
 
-export function Harness() {
-  const [center, setCenter] = useState("student:s1");
+export function Harness({ initial }: { initial: string }) {
+  const [center, setCenter] = useState(CENTERS[initial] ? initial : "student:s1");
   const [trail, setTrail] = useState<string[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [record, setRecord] = useState<NetRecordInfo | null>(null);
@@ -115,7 +117,21 @@ export function Harness() {
           <p>
             고른 기록 <b data-rec="">{record ? `${record.kind} · ${record.title}` : "—"}</b>
           </p>
-          {record?.detail ? <p>{record.detail}</p> : null}
+          {record ? (
+            <RecordPanel
+              rec={record}
+              model={input.model}
+              neighbors={netNeighbors(input, record.id)}
+              centerTarget={record.target}
+              onNavigate={(t) => openTarget(t, record.id)}
+              onPick={(id) => {
+                const n = fullGraphOf(input).nodes.find((x) => x.id === id);
+                if (n) setRecord(netRecordInfo(n, { adjacency: new Map() }));
+              }}
+              onClose={() => setRecord(null)}
+              pending={false}
+            />
+          ) : null}
           <ol className="space-y-1" data-log="">
             {log.map((l, i) => (
               <li key={`${i}-${l}`}>{l}</li>
