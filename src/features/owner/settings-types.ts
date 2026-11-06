@@ -653,6 +653,9 @@ export const permissionsSchema = z
       if (r.role === "student") {
         ctx.addIssue({ code: "custom", message: "학생 계정은 '내 학습' 전용이라 메뉴 권한을 줄 수 없습니다" });
       }
+      // ⚠️ 강사보다 낮은 직급의 '담당'(원장 2026-11-05)은 **여기서 보지 않는다** — 이 스키마는 이미 저장된 값을 읽는 데도 쓰여서
+      //    (운영 설정 보호 검사 `platformSettingsError`), 그런 칸이 저장돼 있는 학원은 역할·권한을 아예 저장할 수 없게 된다(리뷰 2026-11-05).
+      //    저장 액션(saveOwnerSection)이 **요청 값만** 보고 같은 문구로 거절한다(같은 칸 중복 검사와 같은 자리).
       if (r.role === "master" && (r.menu === "owner" || r.menu === "admin" || r.menu === "dashboard") && r.access === "none") {
         ctx.addIssue({
           code: "custom",

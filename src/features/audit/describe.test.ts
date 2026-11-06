@@ -456,6 +456,14 @@ describe("collectAuditNameIds / auditTargetName", () => {
     expect(d).not.toContain("skippedSeatRows");
   });
 
+  it("발송된 보강 보고서의 칸 지우기(keptSentMakeupReports)는 한글로 — 보고서는 그대로 두었다(원장 2026-11-05)", () => {
+    for (const action of ["attendance_clear", "attendance_range_clear"]) {
+      const d = auditDetail(action, { studentId: SID, date: "2026-11-05", keptSentMakeupReports: 1 }, ctx({ [SID]: "이윤건" }));
+      expect(d, action).toContain("발송된 보강 보고서는 그대로 둔 칸");
+      expect(d, action).not.toContain("keptSentMakeupReports");
+    }
+  });
+
   it("빗금 칸 입력(ghostTransfer)은 한글로 — 영문 키를 흘리지 않는다(원장 2026-09-14)", () => {
     const d = auditDetail(
       "attendance_cell",

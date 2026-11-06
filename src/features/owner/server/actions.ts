@@ -6,7 +6,7 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isPermissionLocked, type SystemRole } from "@/lib/permissions";
+import { isPermissionLocked, isScopedForbiddenRole, SCOPED_FORBIDDEN_MESSAGE, type SystemRole } from "@/lib/permissions";
 import { createUploadTicket, MEDIA_KIND } from "@/lib/storage/media-storage";
 import { isTenantBrandingPath } from "@/lib/storage/legacy-audio-path";
 import type { UploadTicket } from "@/lib/storage/types";
@@ -160,6 +160,11 @@ export async function saveOwnerSection(
   if (section === "permissions" && result && hasDuplicateRoleCells((result.data as PermissionsSettings).overrides)) {
     return { error: "같은 메뉴·직급의 권한을 두 번 지정할 수 없습니다" };
   }
+  // 강사보다 낮은 직급(열람·아르바이트)의 '담당'(원장 2026-11-05) — 같은 까닭으로 스키마가 아니라 여기서 **요청 값만** 본다.
+  // 화면은 저장돼 있던 그런 칸을 '읽기'(그 칸 기본값이 '없음'이면 '없음')로 내려(resolveMatrix) 보내므로, 저장값에 남아 있어도 이 면의 저장은 막히지 않는다.
+  if (section === "permissions" && result && (result.data as PermissionsSettings).overrides.some((r) => r.access === "scoped" && isScopedForbiddenRole(r.role))) {
+    return { error: SCOPED_FORBIDDEN_MESSAGE };
+  }
 
   const supabase = await createClient();
   // 기존 문서 읽어 섹션만 교체(다른 섹션 보존). RLS로 자기 테넌트만.
@@ -204,19 +209,24 @@ export async function saveOwnerSection(
     const fresh = resolveSettings(existing?.data ?? null, { name: "" });
     const rowKey = (r: { userId: string; menu: string; access: string }) => `${r.userId}:${r.menu}:${r.access}`;
     // 저장돼 있던 줄은 깨져 있을 수 있다(손으로 넣은 값 — 줄이 null) — 읽을 수 있는 줄만 "그대로 둔 줄"로 친다.
-    const storedRows: unknown[] = preset === "generic" ? [] : fresh.permissions.userOverrides;
+    const readableStored: unknown[] = fresh.permissions.userOverrides;
+    const storedRows: unknown[] = preset === "generic" ? [] : readableStored;
     const special = specialAccessTargets(p.specialAccess, fresh.permissions.specialAccess);
     // 과목 범위의 과목은 학원 설정에 있는 과목이어야 한다 — 없는 키는 아무와도 안 맞아 그 사람에게 직원이 한 명도 안 보인다.
     const knownSubjects = new Set(fresh.operations.subjects.map((s) => s.key));
     if (special.subjects.some((key) => !knownSubjects.has(key))) {
       return { error: "과목 범위에는 학원 설정에 있는 과목만 넣을 수 있습니다" };
     }
-    const kept = new Set(storedRows.flatMap((r) => {
+    const keysOf = (rows: unknown[]) => new Set(rows.flatMap((r) => {
       const row = r as { userId?: unknown; menu?: unknown; access?: unknown } | null;
       return row && typeof row.userId === "string" && typeof row.menu === "string" && typeof row.access === "string"
         ? [rowKey({ userId: row.userId, menu: row.menu, access: row.access })]
         : [];
     }));
+    const kept = keysOf(storedRows);
+    // 역할이 바뀌어(강사 → 아르바이트 등) 남은 옛 '담당' 개인 줄은 **어느 학원에서나** 그대로 둘 수 있다 — '읽기'(역할 칸이 '없음'이면 '없음')로 내려 적용되고
+    // 화면은 그 까닭을 줄에 적는다(user-override-editor). 막으면 그 줄 하나 때문에 이 면 전체를 저장할 수 없다(리뷰 2026-11-05 · 일반판).
+    const storedKeys = keysOf(readableStored);
     const checkedRows = p.userOverrides.filter((r) => !kept.has(rowKey(r)));
     const ids = [...new Set([...checkedRows.map((r) => r.userId), ...special.userIds])];
     if (ids.length > 0) {
@@ -235,8 +245,14 @@ export async function saveOwnerSection(
         .map((u) => u.id));
       if (ids.some((id) => !validIds.has(id))) return { error: "현재 지점의 재직 직원만 권한 대상에 지정할 수 있습니다" };
       const roles = new Map((people ?? []).map((u) => [u.id, u.system_role as SystemRole]));
-      if (checkedRows.some((r) => isPermissionLocked(r.menu, roles.get(r.userId)!, r.access))) {
-        return { error: "이 역할에서 잠긴 메뉴 권한은 변경할 수 없습니다" };
+      const locked = checkedRows.find((r) => {
+        const role = roles.get(r.userId)!;
+        if (!isPermissionLocked(r.menu, role, r.access)) return false;
+        return !(r.access === "scoped" && isScopedForbiddenRole(role) && storedKeys.has(rowKey(r)));
+      });
+      if (locked) {
+        // 강사보다 낮은 직급의 '담당'이면 까닭을 알린다(원장 2026-11-05 "알림메시지도 배선" — 권한 표·개인별 권한 화면과 같은 문구).
+        return { error: locked.access === "scoped" && isScopedForbiddenRole(roles.get(locked.userId)!) ? SCOPED_FORBIDDEN_MESSAGE : "이 역할에서 잠긴 메뉴 권한은 변경할 수 없습니다" };
       }
     }
   }
