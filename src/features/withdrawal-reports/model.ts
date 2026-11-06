@@ -107,7 +107,21 @@ export type ReportListRow = Omit<WithdrawalReport, "body"> & {
   /** 목록 검색용 본문 글 칸(원장 2026-10-30 *"검색은 내용등 모든것을 검색가능하게"*) — 목록 조회만 싣는다. */
   body_student?: string | null; body_parent?: string | null; body_opinion?: string | null; body_attendance?: string | null; body_tuition?: string | null; body_arrears_note?: string | null;
 };
-export type StaffOption = { id: string; name: string; role: SystemRole; subjects: string[]; approvalSubjects?: string[] };
+export type StaffOption = { id: string; name: string; role: SystemRole; subjects: string[]; approvalSubjects?: string[];
+  /** 직급(`users.job_title` — 예: '부원장') · 퇴원보고서 화면의 승인자 표기에만 쓴다(원장 2026-11-05 *"퇴원 보고서에서는 '부원장'으로 적어줘"*). */
+  jobTitle?: string | null;
+  /** 학원 설정 '퇴원보고서 승인자'로 지정된 사람(관리자·매니저 — 원장급·운영자 계정은 표시하지 않는다 · `reportStaff` → `narrowApprovalSubjects`). */
+  withdrawalApprover?: boolean };
+/**
+ * 퇴원보고서 화면의 사람 표기 — 직급이 있으면 '정유진 부원장', 없으면 이름만(호출하는 쪽이 종전 '관리자 ○ 이름' 모양으로 돌아간다).
+ * 원장 2026-11-05 *"직급이 있으니까. 퇴원 보고서에서는 '부원장'으로 적어줘. 정유진 부원장 등"* — 다른 메뉴 표기는 건드리지 않는다.
+ */
+export function titledName(u: Pick<StaffOption, "name" | "jobTitle"> | undefined, fallback: string): string {
+  if (!u) return fallback;
+  const title = u.jobTitle?.trim();
+  return title ? `${u.name} ${title}` : u.name;
+}
+export function hasJobTitle(u: Pick<StaffOption, "jobTitle"> | undefined) { return !!u?.jobTitle?.trim(); }
 export type StudentOption = { id: string; name: string; school: string | null; grade: string | null; courses: CourseSnapshot[];
   /** 진행 중인 다른 퇴원보고서가 맡은 과목의 반(s2_0014 — 과목이 다르면 따로 요청한다) · 여기서는 고를 수 없고 처리 구분(퇴원/수강종료)만 센다. */
   busyCourses?: CourseSnapshot[] };

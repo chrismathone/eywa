@@ -1,6 +1,6 @@
 import "server-only";
 import { currentSnapshot, reportStaff, reportSubjectLabels } from "./queries";
-import { reportApprovalPlan, reportAuthorIds } from "../request-options";
+import { missingApproverNotice, reportApprovalPlan, reportAuthorIds } from "../request-options";
 
 export type ApprovalDecision =
   | { ok: true; teacherIds: string[]; byTeacher: Record<string, string[]>; managerIds: string[]; skipped: string[]; approvers: string[] }
@@ -18,13 +18,17 @@ export type ApprovalDecision =
 export async function decideReportApprovals(tenantId: string, input: {
   studentId: string; teacherIds: string[]; subjects: string[]; enrollmentIds?: string[]; managerIds: string[]; reportManagerIds?: Record<string, string[]>;
 }): Promise<ApprovalDecision> {
-  const [staff, snapshot, labels] = await Promise.all([reportStaff(), currentSnapshot(tenantId, input.studentId), reportSubjectLabels()]);
+  // forRequest — 학원 설정을 못 읽었으면 승인자를 정하지 않고 멈춘다(화면 자리와 달리 '아무도 지정 아님'으로 이어 가지 않는다).
+  const [staff, snapshot, labels] = await Promise.all([reportStaff({ forRequest: true }), currentSnapshot(tenantId, input.studentId), reportSubjectLabels()]);
   if (!snapshot) return { ok: false, error: "학생의 수강 정보를 확인하지 못했습니다." };
   const courses = snapshot.courses.filter(c => (input.enrollmentIds ? input.enrollmentIds.includes(c.id) : input.subjects.includes(c.subject)));
   const authors = reportAuthorIds(courses.filter(c => staff.some(u => u.id === c.teacherId)));
   const teacherIds = staff.filter(u => authors.includes(u.id)).map(u => u.id);
   if (!teacherIds.length) return { ok: false, error: "선택한 반의 작성 강사를 찾지 못했습니다. 반의 담임 배정을 확인해 주세요." };
   const plan = reportApprovalPlan(staff, courses, teacherIds);
+  // 지정 명단이 있는데 승인할 사람이 없는 보고서(유효한 지정자 없음 · 지정 승인자가 작성 강사 본인뿐) — 요청 창과 같은 판정·같은 글(리뷰 2026-11-06).
+  const notice = plan.map(p => missingApproverNotice(staff, p)).find(Boolean);
+  if (notice) return { ok: false, error: notice };
   const nameOf = (id: string) => staff.find(u => u.id === id)?.name ?? "이전 담당자";
   const subjectText = (subjects: string[]) => subjects.map(s => labels[s] ?? s).join("·");
   const byTeacher: Record<string, string[]> = {};

@@ -3,7 +3,7 @@ import { monthRange } from "@/lib/date-kst";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import type { ArchiveRow } from "./archive-model";
 import { archiveReason, webReportReason, type ListReason } from "./list-reason";
-import { directorIds, isDirectReport, isParticipant, managerIds, managerStepSkipped, refundWaiting, reportStatusChips, type RefundStep, type ReportListRow, type StaffOption } from "./model";
+import { directorIds, hasJobTitle, isDirectReport, isParticipant, managerIds, managerStepSkipped, refundWaiting, reportStatusChips, titledName, type RefundStep, type ReportListRow, type StaffOption } from "./model";
 
 /**
  * 퇴원보고서 목록 한 벌 — 웹에서 작성·승인하는 보고서와 기존 스프레드시트 보고서(원문 보관)를 **한 목록**에 세운다.
@@ -79,12 +79,24 @@ export function buildListItems(input: {
 }): ListItem[] {
   const { staff, labelOf, userId } = input;
   const writable = input.writable ?? true;
-  const staffName = (id: string) => staff.find((s) => s.id === id)?.name ?? FORMER_STAFF;
+  const staffOf = (id: string) => staff.find((s) => s.id === id);
+  const staffName = (id: string) => staffOf(id)?.name ?? FORMER_STAFF;
+  const titledOf = (id: string) => titledName(staffOf(id), FORMER_STAFF);
+  // 승인자 줄 — 직급으로 적는다(원장 2026-11-05 *"퇴원 보고서에서는 '부원장'으로 적어줘. 정유진 부원장 등"*): 모두 직급이 있으면
+  // '✓ 정유진 부원장 · ○ 허은진 부원장', 직급이 빈 사람이 있으면 종전 모양('관리자 ○ 김그린' — 직급 있는 사람은 이름 뒤에 직급).
+  // 원장 단계가 있는 옛 보고서는 직급이 있어도 '관리자'·'원장' 머리말을 남긴다(두 단계를 구분 — 리뷰 2026-11-06).
   const reviewers = (r: ReportListRow, kind: "manager" | "director") => {
     const ids = kind === "manager" ? managerIds(r) : directorIds(r);
     const decisions = kind === "manager" ? r.manager_decisions : r.director_decisions;
     const at = kind === "manager" ? r.manager_approved_at : r.director_approved_at;
-    return ids.map((id) => `${decisions?.[id] || at ? "✓" : "○"} ${staffName(id)}`).join(" · ");
+    const marks = ids.map((id) => `${decisions?.[id] || at ? "✓" : "○"} ${titledName(staffOf(id), FORMER_STAFF)}`).join(" · ");
+    const staged = directorIds(r).length > 0;
+    return !staged && ids.length && ids.every((id) => hasJobTitle(staffOf(id))) ? marks : `${kind === "manager" ? "관리자" : "원장"} ${marks}`;
+  };
+  // 관리자 승인 생략 줄 — 작성 강사 본인과 생략 사실을 함께(원장 2026-11-05 '정유진 부원장 · 승인 생략') · 직급이 비면 '관리자 김그린 · 승인 생략'.
+  const skippedBy = (teacherId: string) => {
+    const writer = staffOf(teacherId);
+    return `${hasJobTitle(writer) ? titledName(writer, FORMER_STAFF) : `관리자 ${staffName(teacherId)}`} · 승인 생략`;
   };
   const web = input.reports.map((r): ListItem => {
     const teacher = staffName(r.teacher_id);
@@ -119,11 +131,11 @@ export function buildListItems(input: {
       tone: r.status === "completed" ? "done" : r.status === "revision" || r.status === "blocked" ? "alert" : "muted",
       approval: [
         ...(direct
-          ? [{ text: `관리자 바로 처리 · ${staffName(r.requested_by)}` }, { text: "강사 작성 없음", muted: true }]
-          // 관리자 승인 생략(원장 2026-11-03 — 작성 강사가 과목 관리자) · 원장 칸은 옛 보고서에만.
+          ? [{ text: `관리자 바로 처리 · ${titledName(staffOf(r.requested_by), FORMER_STAFF)}` }, { text: "강사 작성 없음", muted: true }]
+          // 관리자 승인 생략(원장 2026-11-03 — 작성 강사가 그 과목 승인 담당) · 원장 칸은 옛 보고서에만.
           : managerStepSkipped(r)
-            ? [{ text: "관리자 승인 생략 · 작성 강사가 과목 관리자", muted: true }]
-            : [{ text: `관리자 ${reviewers(r, "manager")}` }, ...(directorIds(r).length ? [{ text: `원장 ${reviewers(r, "director")}` }] : [])]),
+            ? [{ text: skippedBy(r.teacher_id), muted: true }]
+            : [{ text: reviewers(r, "manager") }, ...(directorIds(r).length ? [{ text: reviewers(r, "director") }] : [])]),
         ...desk,
       ],
       link: null,
@@ -133,8 +145,9 @@ export function buildListItems(input: {
       ...(deskTurn && !myApprovalTurn(r, userId) ? { deskTurn: true } : {}),
       // 검색 = 보이는 칸 + 보고서 본문 글 전부(원장 2026-10-30 *"검색은 내용등 모든것을 검색가능하게"*) — 상담 내용·담임 의견·요청 메모·반려 사유·승인자까지.
       search: [r.snapshot.name, r.snapshot.school, r.snapshot.grade, schoolGradeLabel(r.snapshot.school, r.snapshot.grade), ...r.snapshot.courses.map((c) => c.className), teacher, reason.text, reason.note ?? "", direct ? "관리자 바로 처리" : "",
-        managerStepSkipped(r) && !direct ? "관리자 승인 생략" : "", ...steps.map((s) => s.deskName),
-        r.exit_kind === "withdrawal" ? "퇴원" : "수강종료", ...r.subjects.map(labelOf), chips.join(" "), staffName(r.requested_by), ...managerIds(r).map(staffName), ...directorIds(r).map(staffName),
+        managerStepSkipped(r) && !direct ? `관리자 승인 생략 ${skippedBy(r.teacher_id)}` : "", ...steps.map((s) => s.deskName),
+        // 승인자·요청자는 보이는 표기 그대로(직급 포함 — '정유진 부원장'으로도 찾는다 · 리뷰 2026-11-06).
+        r.exit_kind === "withdrawal" ? "퇴원" : "수강종료", ...r.subjects.map(labelOf), chips.join(" "), titledOf(r.requested_by), ...managerIds(r).map(titledOf), ...directorIds(r).map(titledOf),
         r.request_note, r.last_comment ?? "", r.body_detail ?? "", r.body_student ?? "", r.body_parent ?? "", r.body_opinion ?? "", r.body_attendance ?? "", r.body_tuition ?? "", r.body_arrears_note ?? ""].join(" "),
     };
   });
