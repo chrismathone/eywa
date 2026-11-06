@@ -30,9 +30,12 @@ const nextConfig: NextConfig = {
   // (rimraf는 실제로 존재·해결됨) → 번들 대상에서 빠져 dev/프로덕션 모두 안정 + 서버 번들도 가벼워진다.
   // libpg-query(학원 비서 SQL 검사 — Postgres 17 파서 WASM)는 실행 중에 `__dirname`으로 .wasm을 읽는다 — 번들하면 경로가 깨지고,
   // 파일 추적이 동적 경로를 못 따라가니 비서 질문 라우트에 .wasm을 명시로 싣는다(outputFileTracingIncludes).
+  // 🔴 **실제 경로(.pnpm)만** — `./node_modules/libpg-query/…`는 pnpm 링크라, 그 아래 파일을 따로 실으면 같은 자리가 '링크'이면서
+  //    '파일 든 폴더'가 돼 Vercel이 함수 묶음을 거절한다("invalid deployment package … symlinked directories" · 2026-11-06 배포 실패).
+  //    Node는 require 때 링크를 실제 경로로 풀므로 `__dirname` = .pnpm 경로 → 여기 실은 .wasm을 읽는다.
   serverExternalPackages: ["exceljs", "libpg-query"],
   outputFileTracingIncludes: {
-    "/api/assistant/ask": ["./node_modules/libpg-query/wasm/**/*", "./node_modules/.pnpm/libpg-query@*/node_modules/libpg-query/wasm/**/*"],
+    "/api/assistant/ask": ["./node_modules/.pnpm/libpg-query@*/node_modules/libpg-query/wasm/**/*"],
   },
   // ── Vercel 빌드 비용(2026-07-23) ────────────────────────────────────────────────────────
   // 빌드 과금 = **올림(분) × CPU 수 × 단가**라, 빌드에서 1~2분만 덜어도 배포마다 그만큼 곱해서 줄어든다.
