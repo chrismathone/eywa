@@ -3646,7 +3646,7 @@ export const SHEET_DICT = {
   // ── 인재원 그림 칸(2026-09-11) — 시험 결과지·학습 분석지 ──
   "os.tpl.builtinJjName": { ko: "ECS 자동 + 인재원 결과지", en: "ECS auto + Injaewon sheets" },
   // 영어 기본 = 수학과 같은 항목 보고서(원장 2026-10-26) — report-templates/defaults.ts BUILTIN_ENGLISH_SHEET_TEMPLATE.
-  "os.tpl.builtinSheetName": { ko: "수학과 같은 항목 보고서 (기본)", en: "Section report like math (default)" },
+  "os.tpl.builtinSheetName": { ko: "영어 보고서", en: "English report" }, // 2026-11-06 이름만 바꿈
   "os.tpl.builtinJjSheetName": { ko: "SRS 보고서", en: "SRS report" },
   "os.tpl.builtinEieDailyName": { ko: "EiE 일일 보고서", en: "EiE daily report" },
   "os.tpl.builtinEieMonthlyName": { ko: "EiE 월간 보고서", en: "EiE monthly report" },

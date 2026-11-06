@@ -219,7 +219,7 @@ export const BUILTIN_ENGLISH_SHEET_TEMPLATE_ID = "builtin:english-sheet";
  */
 export const BUILTIN_ENGLISH_SHEET_TEMPLATE: ReportTemplate = {
   id: BUILTIN_ENGLISH_SHEET_TEMPLATE_ID,
-  name: "수학과 같은 항목 보고서 (기본)",
+  name: "영어 보고서", // 원장 2026-11-06 이름만 바꿈(옛 이름 '수학과 같은 항목 보고서 (기본)') — id·본문 그대로
   builtIn: true,
   body: [
     "■ 수업 평가",
@@ -381,6 +381,18 @@ export const BUILTIN_ENGLISH_TEMPLATES: readonly ReportTemplate[] = [
   BUILTIN_EIE_DAILY_TEMPLATE,
   BUILTIN_EIE_MONTHLY_TEMPLATE,
 ];
+
+/**
+ * 고르는 목록에서 **숨긴** 기본 템플릿(원장 2026-11-06 *"ecs 자동 · ecs 자동 + 인재원 결과지를 템플릿에서 일단 숨김"*).
+ * 🔑 지우지 않는다 — 이미 이 템플릿으로 쓴 행은 그대로 찾아 그리고(findTemplateIn은 BUILTIN_ENGLISH_TEMPLATES 전체),
+ *    지금 그 템플릿이 걸린 행의 드롭다운에는 그 하나만 남는다. 새로 고르는 목록·관리 창·계정의 마지막 선택에서만 빠진다.
+ *    다시 열려면 이 목록에서 id를 뺀다.
+ */
+export const HIDDEN_BUILTIN_TEMPLATE_IDS: ReadonlySet<string> = new Set([BUILTIN_ENGLISH_TEMPLATE_ID, BUILTIN_ENGLISH_JJ_TEMPLATE_ID]);
+
+export function isHiddenBuiltinTemplate(id: string | null | undefined): boolean {
+  return !!id && HIDDEN_BUILTIN_TEMPLATE_IDS.has(id);
+}
 
 /** 기본 템플릿 이름의 화면 문구 키(teacher-view/i18n.ts) — 기본 템플릿 이름은 화면 언어를 따른다. */
 export function builtinTemplateLabelKey(
