@@ -1,0 +1,184 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>MakeEdu 학원관리</title>
+<meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0"/>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<meta http-equiv="imagetoolbar" content="no" />
+<meta http-equiv="Expires" content="0"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Cache-Control" content="No-Cache"/>
+<meta name="robots" content="none" />
+<link rel="shortcut icon" href="/favicon.ico"/>
+<link rel="stylesheet" type="text/css" href="/css/login.css" />
+<link rel="stylesheet" type="text/css" href="/css/jquery/jquery-ui.css" />
+<script type="text/javascript" src="/js/jquery/jquery-1.11.3.min.js"></script>
+<script type="text/javascript" src="/js/jquery/jquery-ui.js"></script>
+<script type="text/javascript" src="/js/common.js"></script>
+<script type="text/javascript" src="/js/common_jquery.js"></script>
+<script type="text/javascript" src="/js/jquery/jquery.validate.js"></script>
+<script type="text/javascript" src="/js/jquery/jquery.cookie.js"></script>
+<script type="text/javascript" src="/js/jquery/jquery.dialog.min.js"></script>
+<script type="text/javascript" src="/js/jquery/jquery.form.js"></script>
+<script type="text/javascript" src="/js/login-bot-check.js"></script>
+<script type="text/javascript">
+//<![CDATA[
+$(document).ready(function() {
+	$('body').keypress(function(e){
+		if(e.keyCode!=13) return;
+		$('form:eq(0)').submit();
+	});
+
+	$("#form").validate({
+		groups: {
+		    username: "membId password"
+		},		
+		rules: {
+			 membId: {required: true}
+			,password: {required: true}
+		},
+		messages: {
+			membId: {
+				required: ""
+			}
+			,password: {
+				required: ""
+			}
+		},
+	    errorPlacement: function(error, element) {
+			error.appendTo("#error" );
+		},
+		errorClass: "errorMsg"
+		,
+	    submitHandler: function(form) {
+	    	$("#error" ).text("");
+            if (!LoginBotCheck.beginSubmission()) return false;
+	    	
+			$("#membId").val($("#membId").val().trim());
+			if( $("#rememberMeYn").is(":checked") ){
+				$.cookie("saveMembId",$('#membId').val(), { expires:3000, path: '/' });
+				$("#rememberMeYn").val("Y");
+			}else{
+				$.cookie("saveMembId", "");
+			}
+			
+			$.post("/loginPopProc.do;jsessionid=FIXTURE0JSESSIONID000000000000000", $('#form').serialize(), function(data){
+                LoginBotCheck.finishSubmission();
+                if (LoginBotCheck.handleResult(data)) return;
+				if (data.result=="OK") {
+					location.href = data.locationUrl;
+				} else if (data.result=="NO_LOGIN_CNT") {
+					$("#error").text("로그인 정보가 올바르지 않습니다.");
+					$.msgDialog.error("로그인 시도 가능 횟수가 " + data.result_cnt +"번 남았습니다.");		
+				} else if (data.result=="NOK") {
+					$("#error").text("회원님은 미인증 상태 입니다.");
+				} else if (data.result=="NO_CHK") {
+					$("#error").text("인증정보가 올바르지 않습니다.");
+				} else if (data.result=="NO_REJECT") {
+					location.href = "/loginReCert.do";
+				} else if (data.result=="NO_PTYPE") {
+					if (data.priceType=="F") {
+						alert("회원님은 [무료형] 사용자입니다. 확인 버튼을 누르면 해당 사이트로 이동합니다.");
+						location.href = "https://free.makeedu.co.kr";
+					} else {
+						alert("회원님은 [실속형] 사용자입니다. 확인 버튼을 누르면 실속형 사이트로 이동합니다.");
+						location.href = "https://lite.makeedu.co.kr";
+					}
+				} else if (data.result=="NO_PASS") {
+					$("#error").text("호출정보가 올바르지 않습니다.");
+				} else if (data.result=="NOK_LIMIT") {
+					location.href = "/loginUsePay.do?membId="+ $("#membId").val();
+				} else {
+					$("#error").text("로그인 정보가 올바르지 않습니다.");
+				}				
+			}, 'json').fail(function () { LoginBotCheck.networkError(); });
+
+			return false;
+		}
+	});
+
+    $('.login_btn').click(function() {
+    	$('#form').submit();
+        return false;
+    });
+
+    $('.input_item').bind("keyup change", function(e) {
+    	$("#error" ).text("");
+		var in_val = $(this).val();
+		
+		if ( in_val != "" ) {
+			$(this).closest("div").find("label").hide();
+		} else {
+			$(this).closest("div").find("label").show();
+		}
+		return false;
+	});
+});
+function fnCloseIe() {$("#ieWarn").hide();}
+$( document ).ready(function() {
+	try {
+	 	if (Number(getIeVersion()) <= 9.0) {
+			$("#ieWarn").show();
+	 	}
+	}catch (e) {console.log(e);}
+});
+//]]>
+</script>
+</head>
+<body>
+<div id="ieWarn" class="ieWarn">현재 이용하시는 브라우저의 버전이 너무 낮습니다. 정상적인 서비스 이용을 위해 업데이트를 권장 합니다.  <a href="javascript:void 0" class="cl" onclick="fnCloseIe()">X</a></div>
+<div id="login_wrap">
+<form method="post" id="form" name="form" action="/loginPopProc.do;jsessionid=FIXTURE0JSESSIONID000000000000000">
+
+<div class="title_bar">
+		<h1><a href="/login.do" class=""><img src="/images/common/logo_new.png" alt="logo" style="vertical-align:top"/></a></h1>
+	</div>
+	<div class="title_info">
+		메이크에듀 학원관리 서비스
+	</div>
+	<div class="content_body">
+	
+	<input type="hidden" name="pid" id="pid" value="fixture-pid-0000000000000000000000"/>
+    <input type="hidden" name="loginBrowserToken" value="00000000-0000-4000-8000-000000000000"/>
+    <input type="hidden" name="loginBrowserRuntime" id="login-browser-runtime" value=""/>
+	<input type="hidden" name="requestPage" id="requestPage" value=""/>
+		
+	<fieldset class="fld_comm">
+		<div class="input_div">
+			<label for="membId" class="input_box">아이디</label>
+			<input type="text" id="membId" name="membId" value="" class="input_item" style="ime-mode:disabled;"/>
+		</div>
+		<div class="input_div">
+			<label for="password" class="input_box">비밀번호</label>
+			<input type="password" id="password" name="password" class="input_item" maxlength="32" style="ime-mode:disabled;"/>
+		</div>
+		<a href="javascript:void 0;"  class="login_btn">로그인</a>
+	</fieldset>
+	<p class="msg_box" style="display:block" id="error"></p>
+	
+    <div id="login-human-check" style="display:none; margin:12px auto; max-width:304px" aria-live="polite">
+        <p style="margin-bottom:8px">사람이 맞습니까?</p>
+        <div id="login-human-widget" data-sitekey="fixture-sitekey"></div>
+    </div>
+	
+	<div class="find_box">
+		<ul>
+			<li class="rememb"><input type="checkbox" id="rememberMeYn" name="rememberMeYn" value="1" class="tf_check"/>
+				<label id="lbStln" for="rememberMeYn" class="lab_check">로그인상태유지</label></li>
+			<li class="find"><a href="/findId.do;jsessionid=FIXTURE0JSESSIONID000000000000000" id="btnFindId" class="link_rel fw_b">아이디 찾기</a> &nbsp;
+				<a href="/findPassword.do;jsessionid=FIXTURE0JSESSIONID000000000000000" id="btnFindPassword" class="link_rel fw_b">비밀번호 찾기</a></li>
+		</ul>
+	</div>
+	</div>
+	<div class="cust">
+	
+		고객센터 <a href="tel:0000000000">00-0000-0000</a> (평일 10~19시)
+		</div>
+	<div class="copyright">
+		Copyright <span>MakeEdu</span> All right reserved
+	</div>
+</form>
+</div>
+</body>
+</html>

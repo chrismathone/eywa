@@ -26,6 +26,7 @@
  */
 const postgres = require("postgres");
 const L = require("./lib.cjs");
+const G = require("./login-guard.cjs");
 const {
   makeCounselorMatcher, loadSubjectLabels, resolveConsultationSubject, loadEnrolledSubjects, SUBJECT_REASON_LABEL,
 } = require("./consultation-counselor.cjs");
@@ -78,20 +79,6 @@ function mapCategory(v) {
   if (/진로|진학|입시/.test(s)) return "career";
   if (/교우|친구/.test(s)) return "social";
   return "general";
-}
-
-// ── makeedu 로그인(scrape.cjs 패턴) ────────────────────────────────────────
-async function login(page) {
-  const id = process.env.MAKEEDU_ID, pw = process.env.MAKEEDU_PW;
-  if (!id || !pw) throw new Error("MAKEEDU_ID / MAKEEDU_PW 누락(.env.local)");
-  await page.goto(`${BASE}/login.do`, { waitUntil: "domcontentloaded" });
-  const pwIn = page.locator('input[type="password"]').first();
-  await pwIn.waitFor({ timeout: 15000 });
-  await page.locator('input[type="text"], input:not([type])').first().fill(id);
-  await pwIn.fill(pw);
-  await Promise.all([page.waitForLoadState("networkidle").catch(() => {}), pwIn.press("Enter")]);
-  await page.waitForTimeout(1200);
-  if (/\/login\.do|loginReCert/i.test(page.url())) throw new Error("makeedu 로그인 실패/재인증 벽 — 신뢰 IP·크리덴셜 확인");
 }
 
 // ── 목록 추출(sync-consultations.cjs EXTRACT_LIST 확장: +구분·보호자연락처·상담구분) ──
@@ -210,10 +197,9 @@ function EXTRACT_DETAIL() {
 
     // ── 목록 걷기(fromYmd 검색 필터 없이 — 날짜 조기종료가 correctness 담당) ──
     browser = await chromium.launch({ headless: !process.env.HEADED });
-    const ctx = await browser.newContext();
-    const page = await ctx.newPage();
+    // 로그인 한 벌(login-guard.cjs) — sync-all 안에서는 앞 단계 scrape가 저장한 세션을 그대로 쓴다(로그인 0회).
+    const { page } = await G.openMakeeduContext(browser, { log: (m) => console.log(m) });
     page.setDefaultTimeout(20000);
-    await login(page);
     await page.goto(`${BASE}/counsel/counselList.do`, { waitUntil: "networkidle" });
     const ls = page.locator('select[name="listSize"]');
     if (await ls.count()) {
