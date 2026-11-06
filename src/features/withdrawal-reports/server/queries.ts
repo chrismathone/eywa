@@ -23,6 +23,7 @@ import type { SubjectHistoryRow } from "../course-period";
 import { reportCourses, withUnassignedCourses } from "../target-courses";
 import { isReportOptout } from "@/features/classes/report-optout";
 import { narrowApprovalSubjects } from "../request-options";
+import { foldedReason } from "@/lib/folded-read";
 import { loadOpenReportScopes, withOpenReports, type OpenReportScope } from "./open-reports";
 
 // 실험실 판정은 운영 콘솔 배정을 따른다(`isLaboratoryMenuAvailable`) — 예전엔 실험실 사용 여부를 배정과 무관하게 물어서,
@@ -206,21 +207,39 @@ async function loadSubjectHistory(report: WithdrawalReport): Promise<SubjectHist
     return [{ enrollmentId: String(row.id), subject: klass.subject, className: (klass.class_name ?? "").trim() || "이름 없는 반", startDate: String(row.start_date).slice(0, 10), endDate: row.end_date ? String(row.end_date).slice(0, 10) : null, isSpecial: klass.is_special === true }];
   });
 }
-export async function reportStaff() {
+/**
+ * 퇴원보고서 직원 목록(이름·직급·역할·승인 과목·'퇴원보고서 승인자' 표시).
+ * `forRequest` = 작성 요청의 승인자를 정하는 자리(서버 `decideReportApprovals`) — 학원 설정을 못 읽었으면 던진다.
+ * 목록·상세 화면(이름 표기 · 요청 창)은 설정을 못 읽어도 열린다 — 그때는 '명단 있음 + 아무도 지정 아님'으로 돌려 승인자가 나오지 않게 하고,
+ * 요청 창이 '학원 설정을 확인하지 못했습니다'로 막는다(읽기는 열고 쓰기만 막는다 — 3차 재리뷰 2026-11-06 · 다른 접힌 설정 관례와 같다).
+ * 승인·제출은 DB에 저장된 승인자로만 판정하므로 설정과 무관하다.
+ */
+export async function reportStaff(options: { forRequest?: boolean } = {}) {
   const viewer = await reportViewer();
   if (!viewer) return [] as StaffOption[];
-  const { data, error } = await createAdminClient().from("users").select("id,display_name,system_role,subjects")
+  // job_title = 퇴원보고서 화면의 승인자 표기('정유진 부원장' — 원장 2026-11-05)에만 쓴다.
+  const { data, error } = await createAdminClient().from("users").select("id,display_name,system_role,subjects,job_title")
     .eq("tenant_id", viewer.user.tenantId).eq("status", "active").in("system_role", ["teacher", "manager", "admin", "master"]).order("display_name");
   if (error) throw new Error("직원 목록을 불러오지 못했습니다.");
   const [protection, settings] = await Promise.all([protectedAccountIds((data ?? []).map(u => u.id)), getTenantSettings()]);
   if (protection.lookupFailed) throw new Error("직원 정보를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  // 🔴 학원 설정을 못 읽어 기본값으로 접혔으면 — 기본값의 '퇴원보고서 승인자'는 빈 명단이라 그대로 쓰면 '명단 없는 학원'으로 풀려
+  //    지정 밖 승인자·승인 생략이 저장된다(리뷰 2026-11-06 2차). 작성 요청 자리는 멈추고(서버 액션이 '승인 관리자를 확인하지 못했습니다'로 막는다),
+  //    화면 자리는 아무도 지정하지 않은 명단으로 돌려준다(아래 `folded`).
+  const folded = !!foldedReason(settings);
+  if (folded && options.forRequest) throw new Error("승인 관리자를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.");
   // 🔴 침산 지점 superadmin(lsy93@gmail.com · st2000423@gmail.com 등)은 절대 승인자로 넣지 않는다 — 원장 칸에는 진짜 원장만(원장 2026-10-30).
   //    system_role이 master라 그대로 두면 원장 후보가 되고, DB도 관리자 칸은 막지 않는다. 표시 역할을 admin으로 바꿔 원장 후보에서,
-  //    승인 과목을 비워 관리자 후보에서 뺀다(요청 화면에 superadmin 여부를 내려보내지 않는다).
-  //    학원 설정 '퇴원보고서 승인자'가 있으면 그 사람이 맡은 과목은 그 사람만 승인 후보(`narrowApprovalSubjects`).
+  //    승인 과목을 비워 관리자 후보에서 뺀다(요청 화면에 superadmin 여부를 내려보내지 않는다). '퇴원보고서 승인자' 명단에 있어도 뺀다
+  //    (지정 승인자는 과목과 무관하게 후보가 될 수 있어서 — `reportApprovalPlan`).
+  //    원장급(master)은 관리자 승인 후보가 아니다(원장 2026-11-05 — `reportApprovalPlan`). 학원 설정 '퇴원보고서 승인자'가 있으면 그 사람들 중에서만(`narrowApprovalSubjects`).
+  //    원본 명단이 비어 있지 않은데 유효한 사람이 0명(운영자 계정만 · 퇴사 · 평강사·원장급만)이면 '승인자 없음'으로 막는다(종전 동작으로 돌아가지 않는다 — 리뷰 2026-11-06).
+  const listed = settings.permissions.specialAccess.withdrawalApproverIds ?? [];
+  const approverIds = listed.filter(id => !protection.protectedIds.has(id));
   return narrowApprovalSubjects((data ?? []).map(u => ({ id: u.id, name: u.display_name, role: displayRoleFor(u.id, u.system_role, protection.protectedIds), subjects: u.subjects ?? [],
+    jobTitle: typeof u.job_title === "string" && u.job_title.trim() ? u.job_title.trim() : null,
     approvalSubjects: protection.protectedIds.has(u.id) ? [] : staffSubjectScopeOf(u.id, settings.permissions.specialAccess.staffSubjectScopes) ?? u.subjects ?? [] })) as StaffOption[],
-    settings.permissions.specialAccess.withdrawalApproverIds ?? []);
+    folded ? [] : approverIds, folded || listed.length > 0);
 }
 /**
  * 작성 요청·바로 처리 창의 학생 선택지 — 재원·휴원 · 퇴원 예약 없음 · 시험 학생 제외.

@@ -22,6 +22,7 @@ import {
 import { ReportList } from "./_components/report-list";
 import { ListToolbar } from "./_components/list-toolbar";
 import { RequestDialog } from "./_components/request-dialog";
+import { foldedReason } from "@/lib/folded-read";
 
 export const metadata = { title: "퇴원보고서 — 에이와" };
 
@@ -117,7 +118,7 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
         hideCanceled={filters.status === "all" ? { active: hiding, href: listHref(sp, { canceled: hiding ? "show" : null }), count: canceledCount } : null}
         resultText={found.length === total ? `전체 ${total}건` : `${found.length}건 / 전체 ${total}건`}
         resetHref={filterActive ? listHref(sp.embed ? { embed: sp.embed } : {}, {}) : null}
-        request={viewer.request ? <RequestDialog key={requestFor ?? "none"} staff={staff} students={students} labels={labels} scope={viewer.scope} initialStudentId={requestFor} directReady={directReady} /> : null}
+        request={viewer.request ? <RequestDialog key={requestFor ?? "none"} staff={staff} students={students} labels={labels} scope={viewer.scope} initialStudentId={requestFor} directReady={directReady} settingsUnavailable={!!foldedReason(settings)} /> : null}
       />
       {archives === null && canSeeArchive ? (
         <p role="alert" className="text-danger text-sm">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lastAttendedDate, lastAttendedSettled, lastLessonHint, type LastLessonRow } from "./last-lesson";
+import { lastAttendedDate, lastAttendedSettled, lastLessonHint, lastLessonNeedsCheck, lastLessonReloadable, type LastLessonRow } from "./last-lesson";
 
 let seq = 0;
 const row = (session_date: string, status: string, over: Partial<LastLessonRow> = {}): LastLessonRow => ({
@@ -37,9 +37,32 @@ describe("마지막 수업일 — 출결 기준(원장 2026-11-03)", () => {
     expect(lastAttendedSettled([row("2026-10-31", "absent")], ["c1"], "2026-11-03", false)).toEqual({ date: null, settled: false });
     expect(lastAttendedSettled([row("2026-10-31", "absent")], ["c1"], "2026-11-03", true)).toEqual({ date: null, settled: true });
   });
-  it("칸 아래 안내 — 출결 기준 / 출결 기록 없음 → 오늘", () => {
+  it("칸 아래 안내 — 출결 기준 / 못 찾으면 까닭별 알림(원장 2026-11-05 '조회되지 않는다는 알림문구')", () => {
     expect(lastLessonHint("attendance")).toContain("출결 기준");
-    expect(lastLessonHint("none")).toBe("출결 기록 없음 → 오늘");
-    expect(lastLessonHint("denied")).toBe("출결을 볼 권한이 없어 오늘로 채웠습니다");
+    expect(lastLessonHint("none")).toBe("고른 반에서 출석 기록을 찾지 못했습니다 — 마지막 수업일을 직접 확인해 입력해 주세요(지금은 오늘 날짜).");
+    expect(lastLessonHint("nocourses")).toContain("다니는 반이 없어 출결에서 찾을 수 없습니다");
+    expect(lastLessonHint("denied")).toContain("출결을 볼 권한이 없어");
+    expect(lastLessonHint("error")).toContain("출결을 불러오지 못했습니다");
+    const reasons = (["none", "nocourses", "denied", "error"] as const).map(s => lastLessonHint(s));
+    expect(new Set(reasons).size).toBe(4);
+    for (const s of ["none", "nocourses", "denied", "error"] as const) expect(lastLessonNeedsCheck(s)).toBe(true);
+    // 반을 고르는 중(반이 있는 원생이 모두 끔)은 경고가 아니라 흐린 안내(리뷰 2026-11-06).
+    expect(lastLessonHint("unselected")).toBe("종료할 반을 고르면 출결에서 찾습니다");
+    for (const s of ["today", "loading", "attendance", "manual", "unselected"] as const) expect(lastLessonNeedsCheck(s)).toBe(false);
+  });
+  it("다시 불러오기가 날짜를 못 얻으면 '그대로 두었다'고 적는다 — '(지금은 오늘 날짜)'가 아니다(리뷰 2026-11-06)", () => {
+    for (const s of ["none", "denied", "error"] as const) {
+      expect(lastLessonHint(s, true)).toContain("마지막 수업일 칸의 날짜를 그대로 두었습니다");
+      expect(lastLessonHint(s, true)).not.toContain("오늘 날짜");
+    }
+    expect(new Set((["none", "denied", "error"] as const).map(s => lastLessonHint(s, true))).size).toBe(3);
+  });
+  it("'출결에서 다시 불러오기' 단추 — 손으로 고쳤거나 오류일 때 · 다시 부르는 중엔 보이되(꺼 둔다) 처음 찾는 중엔 숨긴다 · 권한 없음을 받았으면 숨긴다", () => {
+    expect(lastLessonReloadable("manual")).toBe(true);
+    expect(lastLessonReloadable("error")).toBe(true);
+    expect(lastLessonReloadable("loading", true)).toBe(true);
+    for (const s of ["today", "loading", "attendance", "none", "nocourses", "unselected", "denied"] as const) expect(lastLessonReloadable(s)).toBe(false);
+    for (const s of ["manual", "error"] as const) expect(lastLessonReloadable(s, false, true)).toBe(false);
+    expect(lastLessonReloadable("loading", true, true)).toBe(false);
   });
 });

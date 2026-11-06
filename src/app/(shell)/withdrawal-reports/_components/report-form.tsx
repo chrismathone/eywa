@@ -13,9 +13,11 @@ import { TuitionDetail } from "./tuition-detail";
 import { reportCourses } from "@/features/withdrawal-reports/target-courses";
 
 const date = (value: string) => new Date(value).toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
-export function ReportForm({ report: r, body, events, labels, nameOf, editable, pending, onChange, consultations = [], subjectHistory = [], refundCheck, managerSkipped = false, refundSteps = [] }: {
+export function ReportForm({ report: r, body, events, labels, nameOf, approverName = nameOf, editable, pending, onChange, consultations = [], subjectHistory = [], refundCheck, managerSkipped = false, refundSteps = [] }: {
   /** 관리자 승인 생략(원장 2026-11-03 — 작성 강사가 과목 관리자) — 결재란 관리자 칸 '생략'. */
   managerSkipped?: boolean;
+  /** 결재란 승인자 표기 — 직급이 있으면 '정유진 부원장'(원장 2026-11-05). 없으면 `nameOf`. */
+  approverName?: (id: string | null) => string;
   /** 데스크 환불 단계(원장 2026-11-03) — 있으면 결재란에 '데스크' 칸(담당 · 환불완료일). */
   refundSteps?: RefundStep[];
   consultations?: ReportConsultation[];
@@ -36,7 +38,7 @@ export function ReportForm({ report: r, body, events, labels, nameOf, editable, 
     const legacyAt = kind === "manager" ? r.manager_approved_at : r.director_approved_at;
     return {
       role: kind === "manager" ? "관리자" : "원장",
-      name: ids.map(nameOf).join("\n"),
+      name: ids.map(approverName).join("\n"),
       date: ids.length ? ids.map(id => `결재일 : ${decisions?.[id] || legacyAt ? date(decisions?.[id] ?? legacyAt!) : ""}`).join("\n") : "결재일 :",
     };
   };
@@ -52,10 +54,12 @@ export function ReportForm({ report: r, body, events, labels, nameOf, editable, 
     subject={r.subjects.map(s => labels[s] ?? "기타 과목").join(" · ")}
     consultationLinks={<ConsultationLinks records={consultations} selected={body.consultationIds ?? []} editable={editable} pending={pending} onChange={ids => onChange("consultationIds", ids)} />}
     signatures={direct
-      ? [{ role: "바로 처리", name: nameOf(r.requested_by), date: `처리 요청일 : ${date(r.created_at)}` }, ...desk]
+      // 바로 처리한 관리자도 결재란에선 직급으로(리뷰 2026-11-06 — 목록 '관리자 바로 처리 · 정유진 부원장'과 같게).
+      ? [{ role: "바로 처리", name: approverName(r.requested_by), date: `처리 요청일 : ${date(r.created_at)}` }, ...desk]
       : [
           { role: "담임", name: nameOf(r.teacher_id), date: `작성일 : ${writtenAt ? date(writtenAt) : ""}` },
-          managerSkipped ? { role: "관리자", name: "생략", date: "작성 강사가 과목 관리자" } : approvers("manager"),
+          // 생략 칸에 작성 강사 본인을 함께(원장 2026-11-05 '정유진 부원장 · 승인 생략').
+          managerSkipped ? { role: "관리자", name: "생략", date: `${approverName(r.teacher_id)} · 승인 생략` } : approvers("manager"),
           ...(directorIds(r).length ? [approvers("director")] : []),
           ...desk,
         ]}

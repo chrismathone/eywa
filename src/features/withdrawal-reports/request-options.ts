@@ -43,25 +43,67 @@ export function reportAuthorIds(courses: readonly Pick<CourseSnapshot, "subject"
   return [...new Set([...best.values()].map(c => c.teacherId!))];
 }
 /**
- * 학원 설정 '퇴원보고서 승인자'(`specialAccess.withdrawalApproverIds`)로 승인 과목을 좁힌다 — 지정한 사람이 승인 담당인 과목은
- * 다른 사람의 승인 과목에서 뺀다(원장 2026-10-30 *"수학의 경우 허은진 부원장 한명만"*). 지정한 사람이 없는 과목은 그대로.
- * 승인 계획(`reportApprovalPlan` — 후보·관리자 승인 생략)은 이 결과의 approvalSubjects만 보므로 창·기본 선택이 함께 따른다.
+ * 관리자 승인을 맡을 수 있는 역할 — 관리자·매니저뿐이다. **원장급(master)은 어떤 경우에도 아니다**(원장 2026-11-05 *"관리자 승인에 '원일' 넣지 말것 …
+ * 원장이상급은 뺴기로 했는데 자꾸 들어가있네"*). 운영자 계정(superadmin)은 `reportStaff`가 역할을 admin으로, 승인 과목을 빈 값으로 넘기고
+ * '퇴원보고서 승인자' 표시도 하지 않는다.
  */
-export function narrowApprovalSubjects(staff: readonly StaffOption[], approverIds: readonly string[]): StaffOption[] {
-  const listed = new Set(approverIds);
-  const owned = new Set(staff.filter(u => listed.has(u.id) && canRequestReport(u.role)).flatMap(u => u.approvalSubjects ?? u.subjects));
-  if (!owned.size) return [...staff];
-  return staff.map(u => listed.has(u.id) ? u : { ...u, approvalSubjects: (u.approvalSubjects ?? u.subjects).filter(s => !owned.has(s)) });
+const approverRole = (u: Pick<StaffOption, "role">) => canRequestReport(u.role) && u.role !== "master";
+/**
+ * 학원 설정 '퇴원보고서 승인자'(`specialAccess.withdrawalApproverIds`) — 사람마다 `withdrawalApprover`를 단다
+ * (원장 2026-10-30 *"수학의 경우 허은진 부원장 한명만"* · 2026-11-05 *"항상 '정유진' 혹은 '허은진'. 지정된 사람으로"*):
+ * `true` = 지정된 관리자·매니저 · `false` = 명단이 있는데 이 사람은 아님 · 없음 = 명단 자체가 없다(종전 — 과목 관리자 전원 · 원장급 제외).
+ * 지정한 사람이 있으면 관리자 승인은 **그 사람들 중에서만** 나온다(`reportApprovalPlan`). 다른 사람의 승인 과목 좁히기는 종전대로 둔다
+ * (지정이 있으면 승인 계획은 지정 밖 사람의 과목을 보지 않는다 — 과목 칸에 기대지 않으려고).
+ * 🔴 명단은 있는데 유효한 사람이 0명(퇴사·비활성 · 평강사·원장급만 · 운영자 계정만)이면 **모두 `false`** — '승인자 없음'으로 요청을 막는다
+ *    (지정 밖 관리자로 조용히 돌아가면 김그린이 쓴 영어 보고서가 생략된다 — 리뷰 2026-11-06). `configured` = 원본 명단이 비어 있지 않은가
+ *    (`reportStaff`가 운영자 계정을 걸러 낸 뒤에도 원본 기준으로 넘긴다).
+ * 원장급(master)은 명단에 있어도 지정하지 않는다. 운영자 계정은 부르는 쪽(`reportStaff`)이 명단에서 뺀다.
+ */
+export function narrowApprovalSubjects(staff: readonly StaffOption[], approverIds: readonly string[], configured = approverIds.length > 0): StaffOption[] {
+  const listed = new Set(staff.filter(u => approverIds.includes(u.id) && approverRole(u)).map(u => u.id));
+  if (!configured) return [...staff];
+  if (!listed.size) return staff.map(u => ({ ...u, withdrawalApprover: false }));
+  const owned = new Set(staff.filter(u => listed.has(u.id)).flatMap(u => u.approvalSubjects ?? u.subjects));
+  return staff.map(u => listed.has(u.id) ? { ...u, withdrawalApprover: true } : { ...u, withdrawalApprover: false, approvalSubjects: (u.approvalSubjects ?? u.subjects).filter(s => !owned.has(s)) });
+}
+/** 학원 설정 '퇴원보고서 승인자' 명단이 있는가(유효한 사람이 0명이어도 — `narrowApprovalSubjects`가 단 표시로 본다). */
+export function approverListConfigured(staff: readonly Pick<StaffOption, "withdrawalApprover">[]) {
+  return staff.some(u => u.withdrawalApprover !== undefined);
+}
+/** 지정 명단이 있는데 유효한 지정자가 0명일 때의 안내(요청 창 · 서버 같은 글 — 리뷰 2026-11-06). */
+export const NO_DESIGNATED_APPROVER = "지정된 퇴원보고서 승인자가 없습니다 — 학원 설정에서 지정해 주세요";
+/** 학원 설정을 읽지 못해 승인자를 정할 수 없을 때(요청 창 — 목록·상세는 열고 작성 요청만 막는다 · 서버는 `reportStaff({ forRequest })`가 멈춘다). */
+export const APPROVER_SETTINGS_UNAVAILABLE = "학원 설정을 확인하지 못했습니다 — 잠시 후 다시 시도해 주세요";
+/** 지정자는 있는데 그 보고서 과목의 지정 승인자가 작성 강사 본인뿐일 때(지정자가 아무도 맡지 않은 과목 · 지정자 한 명이 직접 씀). */
+export const WRITER_ONLY_APPROVER = "이 과목의 지정 승인자가 작성 강사 본인뿐이라 승인할 사람이 없습니다 — 학원 설정에서 승인자를 더 지정해 주세요";
+/**
+ * 지정 명단이 있는데 이 보고서를 승인할 사람이 없을 때 그 까닭 — 생략이 아니고 후보가 0명일 때만(명단이 없는 학원은 null — 부르는 쪽의 종전 문구).
+ * 유효한 지정자가 0명이면 `NO_DESIGNATED_APPROVER`, 지정자가 있는데도 0명이면 남은 지정자가 작성 강사뿐이다(`WRITER_ONLY_APPROVER`).
+ * 요청 창(경고 줄 · 보고서별 안내)과 서버(`decideReportApprovals`)가 이 한 곳을 본다(리뷰 2026-11-06 2차).
+ */
+export function missingApproverNotice(staff: readonly StaffOption[], p: Pick<ReportApproval, "skip" | "candidates">, settingsUnavailable = false): string | null {
+  if (p.skip || p.candidates.length) return null;
+  // 학원 설정을 못 읽었다(목록이 '아무도 지정 아님'으로 접힘) — 설정을 고치러 가지 않게 다시 시도하라고만 알린다(3차 재리뷰 2026-11-06).
+  if (settingsUnavailable) return APPROVER_SETTINGS_UNAVAILABLE;
+  if (!approverListConfigured(staff)) return null;
+  return staff.some(u => u.withdrawalApprover && approverRole(u)) ? WRITER_ONLY_APPROVER : NO_DESIGNATED_APPROVER;
 }
 /**
  * 보고서 하나(작성 강사)의 승인 계획 — 원장 2026-11-03 *"작성 강사가 그 과목 관리자 본인이면 관리자 승인 생략"*, **보고서마다** 판정한다.
  * - 보고서 과목 = DB가 보고서에 싣는 과목과 같은 규칙: 작성 강사가 한 명이면 고른 반 전부, 여럿이면 그 강사가 담임인 반(`request_withdrawal_report_group`).
- * - 생략(`skip`) = 작성 강사가 관리자·매니저(원장·운영자 계정 아님)이고 그 보고서 과목을 **모두** 승인 과목으로 가진다.
- * - 후보(`candidates`) = 작성 강사 본인을 뺀 관리자급 중 그 보고서의 **작성 강사가 맡지 않은 과목**을 승인하는 사람
- *   (같은 묶음의 다른 작성 강사도 후보가 될 수 있다 — EiE·일반 영어처럼 같은 과목에 작성자가 둘이면 관리자인 작성자가 평강사 보고서를 승인한다).
+ * - 과목 승인 담당(`approversFor`) — 원장급(master)은 **어떤 경우에도 아니다**(원장 2026-11-05):
+ *   · 학원 설정 '퇴원보고서 승인자'가 있으면 그 사람들 중 그 과목을 승인 과목으로 가진 사람.
+ *   · 그런 사람이 없는 과목(지정자가 아무도 맡지 않은 과목)은 '그 과목 승인 담당 본인'이 없다 — **생략하지 않고** 지정한 사람 전원(작성 강사 제외)이 승인한다
+ *     (과목 칸이 비거나 어긋나도 지정 밖의 사람·원장이 들어오지 않게 — 원장 2026-11-05 *"항상 '정유진' 혹은 '허은진'. 지정된 사람으로"* · 리뷰 2026-11-06 결정).
+ *   · 명단은 있는데 유효한 사람이 0명이면 승인 담당도 0명 — 후보 없음 · 생략 없음 → 요청을 막는다(`NO_DESIGNATED_APPROVER`).
+ *   · 명단이 없으면 그 과목을 승인 과목으로 가진 관리자·매니저 전원(종전 · 원장급 제외).
+ * - 생략(`skip`) = 작성 강사가 그 보고서 과목 **모두**의 승인 담당 본인 — 원장으로 대신하지 않는다(11-03 · 11-05). 제출이 곧 승인(DB s2_0025).
+ * - 후보(`candidates`) = 작성 강사 본인을 뺀, 그 보고서의 **작성 강사가 맡지 않은 과목**의 승인 담당
+ *   (같은 묶음의 다른 작성 강사도 후보가 될 수 있다 — EiE·일반 영어처럼 같은 과목에 작성자가 둘이면 승인 담당인 작성자가 평강사 보고서를 승인한다).
+ *   지정 명단이 있는데 후보가 0명이면(유효한 지정자 없음 · 지정자가 작성 강사 한 명뿐인 과목) '승인자 없음'이다.
  * - 승인 과목 = `approvalSubjects`(직원 과목 범위 덮어쓰기 → 학원 설정 '퇴원보고서 승인자' 좁히기까지 반영된 값 — `reportStaff`) · 없으면 담당 과목.
- * 🔴 침산 지점 superadmin(lsy93@gmail.com · st2000423@gmail.com 등)을 여기에 넣으면 안 된다 — `reportStaff`가 역할을 admin으로, 승인 과목을 빈 값으로 넘겨
- *    후보에서도 생략에서도 빠진다. `role`을 실제 system_role로 바꾸거나 다른 직원 목록을 넘기면 이 보호가 사라진다.
+ * 🔴 침산 지점 superadmin(lsy93@gmail.com · st2000423@gmail.com 등)을 여기에 넣으면 안 된다 — `reportStaff`가 역할을 admin으로, 승인 과목을 빈 값으로 넘기고
+ *    '퇴원보고서 승인자' 표시도 하지 않아 후보에서도 생략에서도 빠진다. `role`을 실제 system_role로 바꾸거나 다른 직원 목록을 넘기면 이 보호가 사라진다.
  */
 export type ReportApproval = { teacherId: string; subjects: string[]; skip: boolean; candidates: StaffOption[] };
 const approves = (u: Pick<StaffOption, "approvalSubjects" | "subjects">, subject: string) => (u.approvalSubjects ?? u.subjects).includes(subject);
@@ -70,14 +112,21 @@ export function reportApprovalPlan(
   courses: readonly Pick<CourseSnapshot, "subject" | "teacherId">[],
   teacherIds: readonly string[],
 ): ReportApproval[] {
+  const configured = approverListConfigured(staff);
+  const designated = staff.filter(u => u.withdrawalApprover && approverRole(u));
+  // 과목의 승인 담당 — `own` = 그 과목 '승인 담당 본인'(생략 판정에 쓴다) · `all` = 후보(지정자가 아무도 맡지 않은 과목은 지정자 전원).
+  const approversFor = (subject: string): { own: readonly StaffOption[]; all: readonly StaffOption[] } => {
+    if (!configured) { const list = staff.filter(u => approverRole(u) && approves(u, subject)); return { own: list, all: list }; }
+    const own = designated.filter(u => approves(u, subject));
+    return { own, all: own.length ? own : designated };
+  };
   return teacherIds.map(teacherId => {
     const own = teacherIds.length === 1 ? courses : courses.filter(c => c.teacherId === teacherId);
     const subjects = [...new Set(own.map(c => c.subject))];
-    const writer = staff.find(u => u.id === teacherId);
-    const managed = writer && canRequestReport(writer.role) && writer.role !== "master" ? subjects.filter(s => approves(writer, s)) : [];
+    const managed = subjects.filter(s => approversFor(s).own.some(u => u.id === teacherId));
     const skip = subjects.length > 0 && managed.length === subjects.length;
     const rest = subjects.filter(s => !managed.includes(s));
-    const candidates = skip ? [] : staff.filter(u => canRequestReport(u.role) && u.id !== teacherId && rest.some(s => approves(u, s)));
+    const candidates = skip ? [] : staff.filter(u => u.id !== teacherId && rest.some(s => approversFor(s).all.some(a => a.id === u.id)));
     return { teacherId, subjects, skip, candidates };
   });
 }

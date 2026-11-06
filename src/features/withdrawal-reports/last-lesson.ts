@@ -26,16 +26,42 @@ export function lastAttendedSettled(rows: readonly LastLessonRow[], classIds: re
   return { date, settled: date !== null && oldest !== null && oldest < date };
 }
 
-/** 칸 아래 한 줄 — 값이 어디서 왔는지(원장 2026-11-03 *"출결 기준 / 출결 기록 없음 → 오늘"*). */
-export type LastLessonSource = "today" | "loading" | "attendance" | "none" | "denied" | "error" | "manual";
-export function lastLessonHint(source: LastLessonSource): string {
+/**
+ * 칸 아래 한 줄 — 값이 어디서 왔는지(원장 2026-11-03 *"출결 기준 / 출결 기록 없음 → 오늘"*).
+ * 출결에서 날짜를 얻지 못한 경우(`lastLessonNeedsCheck`)는 눈에 띄는 알림으로, 까닭(기록 없음 · 고른 반 없음 · 권한 없음 · 오류)마다 다른 글로
+ * 알린다(원장 2026-11-05 *"마지막 출결일이 조회되지 않으면 조회되지않는다는 알림문구도 같이."*).
+ */
+export type LastLessonSource = "today" | "loading" | "attendance" | "none" | "nocourses" | "unselected" | "denied" | "error" | "manual";
+/**
+ * `nocourses` = 다니는 반이 없는 원생(바로 처리 — 경고) · `unselected` = 반이 있는데 지금 하나도 고르지 않음(흐린 안내 — 고르면 출결을 찾는다).
+ * 훅은 고른 반이 없으면 `nocourses`를 주고, 창이 원생에게 반이 있으면 `unselected`로 바꿔 보인다(리뷰 2026-11-06).
+ * `kept` = '출결에서 다시 불러오기'가 날짜를 얻지 못해 칸의 날짜를 그대로 둔 상태 — '(지금은 오늘 날짜)'가 아니다(이 날짜가 곧 수강 종료일).
+ */
+export function lastLessonHint(source: LastLessonSource, kept = false): string {
+  if (kept && source === "none") return "고른 반에서 출석 기록을 찾지 못해 마지막 수업일 칸의 날짜를 그대로 두었습니다 — 직접 확인해 주세요.";
+  if (kept && source === "denied") return "출결을 볼 권한이 없어 마지막 수업일 칸의 날짜를 그대로 두었습니다 — 직접 확인해 주세요.";
+  if (kept && source === "error") return "출결을 불러오지 못해 마지막 수업일 칸의 날짜를 그대로 두었습니다 — 다시 불러오거나 직접 확인해 주세요.";
   switch (source) {
     case "loading": return "출결에서 마지막 수업일을 찾는 중…";
     case "attendance": return "출결 기준 — 고른 반의 마지막 출석일";
-    case "none": return "출결 기록 없음 → 오늘";
-    case "denied": return "출결을 볼 권한이 없어 오늘로 채웠습니다";
-    case "error": return "출결을 확인하지 못해 오늘로 두었습니다";
+    case "none": return "고른 반에서 출석 기록을 찾지 못했습니다 — 마지막 수업일을 직접 확인해 입력해 주세요(지금은 오늘 날짜).";
+    case "nocourses": return "다니는 반이 없어 출결에서 찾을 수 없습니다 — 마지막 수업일을 직접 확인해 입력해 주세요(지금은 오늘 날짜).";
+    case "unselected": return "종료할 반을 고르면 출결에서 찾습니다";
+    case "denied": return "출결을 볼 권한이 없어 마지막 수업일을 찾지 못했습니다 — 직접 확인해 입력해 주세요(지금은 오늘 날짜).";
+    case "error": return "출결을 불러오지 못했습니다 — ‘출결에서 다시 불러오기’를 누르거나 마지막 수업일을 직접 입력해 주세요(지금은 오늘 날짜).";
     case "manual": return "직접 입력한 날짜";
     default: return "학생과 반을 고르면 출결에서 채웁니다";
   }
+}
+/** 출결에서 마지막 수업일을 얻지 못한 상태인가 — 알림으로 보인다(반을 고르는 중인 `unselected`는 흐린 안내). */
+export function lastLessonNeedsCheck(source: LastLessonSource): boolean {
+  return source === "none" || source === "nocourses" || source === "denied" || source === "error";
+}
+/**
+ * '출결에서 다시 불러오기' 단추를 보일 때 — 손으로 고쳤거나 오류였을 때(다시 부르는 중엔 보이되 꺼 둔다).
+ * 출결 권한이 없다는 답을 한 번이라도 받았으면(`denied`) 숨긴다 — 눌러도 찾을 수 없다(리뷰 2026-11-06).
+ */
+export function lastLessonReloadable(source: LastLessonSource, reloading = false, denied = false): boolean {
+  if (denied) return false;
+  return source === "manual" || source === "error" || (source === "loading" && reloading);
 }
