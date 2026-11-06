@@ -16,10 +16,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { createClient } from "@/lib/supabase/server";
 import { reportError } from "@/lib/observability/report-error";
-import { kstDateOf, kstToday } from "@/lib/date-kst";
+import { addDays, kstDateOf, kstToday } from "@/lib/date-kst";
 import { followUpUrgency } from "@/features/consultations/follow-up-urgency";
 import { getAbsenceRiskStudents } from "@/features/dashboard/server/queries";
-import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { notifyUsers, type NotifyInput } from "./notify";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
@@ -35,6 +35,11 @@ import { fetchReportOptoutClassIds } from "@/features/classes/server/report-opto
 import { UNSENT_FILTER } from "@/features/report-admin/report-filters";
 import { filterUnsentSendable, type UnsentRow } from "@/features/report-admin/unsent-sendable";
 import { getTestStudentIds } from "@/features/students/server/test-students";
+import { buildSheetDraft, type SheetPlanLine } from "@/features/class-sheets/sheet-report-draft";
+import { resolveSkillAreas } from "@/features/owner/skill-areas";
+import { stripTextbookPages } from "@/features/onescreen/textbook-carry";
+import type { TodaysMathFillRow } from "@/features/onescreen/todays-math-fill-rules";
+import { isFeatureOptedIn } from "@/lib/license/server";
 import {
   absenceDigestBody,
   absenceNotificationLink,
@@ -50,6 +55,20 @@ import {
   unsentTeacherDigestBody,
   type UnsentPriorEvent,
   type UnsentRouting,
+  draftPriorForReports,
+  eligibleUnsentDrafts,
+  unsentDraftDigestBody,
+  unsentDraftLink,
+  unsentDraftSavedIndex,
+  unsentDraftUnits,
+  unsentDraftUsualClasses,
+  UNSENT_DRAFT_HISTORY_DAYS,
+  isUnsentQuietDay,
+  pickDraftUnitPerKey,
+  unsentDraftDirectInput,
+  todaysMathAutoScores,
+  type DraftAutoValues,
+  type DraftUnit,
   followupBody,
   weekKey,
   buildEnrollmentFollowupEvents,
@@ -89,7 +108,9 @@ type EventType =
   | "unsent_report"
   | "progress_anomaly"
   // 발송 실패 보고서의 **재발송 마지막 날**(실패 자체는 0143a 트리거+스윕이 이미 알린다).
-  | "send_deadline";
+  | "send_deadline"
+  // 저장 안 된 수업 보고서(원스크린에 입력만 함, 2026-11-06) — 알림 type은 unsent_report 그대로, 기록·콜드스타트만 따로.
+  | "unsent_draft";
 type EventRow = { tenant_id: string; event_type: EventType; subject_key: string; bucket: string; seeded: boolean };
 /** admin client(RLS 우회)를 쿠키-클라 시그니처 db 주입에 넘길 때의 캐스트 별칭(briefing.ts 선례). */
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -794,6 +815,8 @@ export async function detectUnsentReports(admin: SupabaseClient, tenantId: strin
   // 같은 게이트(sendable) 한 벌이라 할 일과 발송 콘솔이 어긋나지 않는다. 읽었는데 빠진 건은 DB가 닫는다.
   // 닫는 판정은 이번에 실제로 읽은 보고서만(조회 상한 500에 밀린 보고서의 할 일은 건드리지 않는다).
   const taskByReport = await syncUnsentTasks(admin, tenantId, sendable.map((row) => row.id), rows.map((row) => row.id));
+  // 일요일(KST)엔 알림을 기록·발송하지 않는다(원장 2026-11-06 B) — 할 일 동기화(위)는 그대로 돌고, 월요일부터 이어서 센다.
+  if (isUnsentQuietDay(today)) return 0;
   const inputs = sendable.map((row) => ({
     reportId: row.id,
     studentId: row.studentId,
@@ -807,11 +830,18 @@ export async function detectUnsentReports(admin: SupabaseClient, tenantId: strin
     anchorClassId: row.anchorClassId,
   }));
   // 받는 사람 재료(작성 계정 재직 여부 · 반 → 재직 담임)와 지난 알림 기록 — 서로 독립이라 병렬(B4).
-  const [activeStaff, classTeacher, prior] = await Promise.all([
+  const [activeStaff, classTeacher, reportPrior, draftPrior] = await Promise.all([
     activeUserIds(admin, tenantId, inputs.flatMap((input) => (input.createdBy ? [input.createdBy] : []))),
     activeClassTeachers(admin, tenantId, inputs.flatMap((input) => (input.anchorClassId ? [input.anchorClassId] : []))),
     unsentPriorEvents(admin, tenantId, inputs.map((input) => input.reportId)),
+    recentDraftEvents(admin, tenantId, today),
   ]);
+  // 두 단계 합쳐 최대 3번(원장 2026-11-06) — 입력 단계(저장 안 된 수업 보고서)에서 직원에게 울린 횟수를 같은 학생·날짜·과목
+  // 보고서의 이력에 더한다(오늘 입력 단계로 울렸으면 오늘은 이 단계도 울리지 않는다).
+  const prior = [
+    ...reportPrior,
+    ...draftPriorForReports(draftPrior, sendable.map((row) => ({ reportId: row.id, studentId: row.studentId, reportDate: row.reportDate, subject: row.subject }))),
+  ];
   const candidates = planUnsentAlerts({ rows: inputs, todayKst: today, activeStaff, classTeacher, prior });
   const cold = await isColdStart(admin, tenantId, "unsent_report");
   // 한 번의 upsert로 원장 1회분·직원 몫을 함께 기록(원자적). 같은 날 다시 돌면 오늘 bucket이 이미 있어 새로 들어가지 않는다.
@@ -860,6 +890,312 @@ export async function detectUnsentReports(admin: SupabaseClient, tenantId: strin
   }
   await notifyUsers(items);
   // 관측용 = 이번에 새로 기록된 보고서 수(원장 1회분과 직원 몫을 보고서 단위로 — 한 보고서를 두 번 세지 않게).
+  return new Set(recorded.map((event) => event.subjectKey)).size;
+}
+
+/**
+ * 최근 10일 '저장 안 된 수업 보고서'(`unsent_draft`) 기록 — 입력 단계 횟수·오늘 울림 판정과, 저장 뒤 미발송 재알림 횟수에 더하는 데
+ * 쓴다. 입력 단계 알림은 수업 이틀째~기한(D+2~D+6)에만 생기므로 지금 판정에 필요한 기록은 모두 이 창 안에 있다(최대 수백 줄 — 페이지로, B2).
+ */
+async function recentDraftEvents(admin: SupabaseClient, tenantId: string, today: string): Promise<UnsentPriorEvent[]> {
+  const since = new Date(`${addDays(today, -10)}T00:00:00+09:00`).toISOString();
+  const rows = await fetchAllPaged<{ subject_key: string; bucket: string; seeded: boolean | null; created_at: string | null }>((from, to) =>
+    admin
+      .from("notification_events")
+      .select("subject_key, bucket, seeded, created_at")
+      .eq("tenant_id", tenantId) // admin RLS 우회 — 테넌트 필터가 유일한 격리선
+      .eq("event_type", "unsent_draft")
+      .gte("created_at", since)
+      .order("id")
+      .range(from, to),
+  );
+  return rows.map((row) => ({ subjectKey: row.subject_key, bucket: row.bucket, seeded: row.seeded === true, createdDate: kstDateOf(row.created_at) }));
+}
+
+/**
+ * 앱이 그 칸에 미리 채웠을 값을 감지 때 다시 계산한다(원장 2026-11-06 A — 세션엔 자동 값 표식이 없다). roster.ts ③④와 같은 원천:
+ *  · ECS 시트 초안 — `class_sheet_plan_lines`(그 반·그날) → `buildSheetDraft`(영역 라벨은 roster와 같은 `resolveSkillAreas`): 진도·오늘 과제·교재
+ *  · 직전 보고서 교재 — 그 학생의 같은 과목(과목 없는 옛 보고서 포함) 보고서 중 수업일 전 1년 · 끝 쪽수 뗀 것(`stripTextbookPages`)과 원문
+ *    (roster가 어느 보고서를 '직전'으로 골랐을지 다시 짜지 않고 모두 후보로 둔다 — roster RPC `onescreen_prior_reports`(0135a·0152a)가
+ *    고르는 '반·과목별 수업일 전 최신 1건'은 늘 이 후보 안에 든다, 1년 안이면).
+ *    1년인 까닭(C1 r2 경미 2): RPC는 기간 제한이 없지만 여기서 같은 걸 하려면 학생마다 전 이력을 매일 읽어야 한다(이력이 쌓일수록
+ *    끝없이 는다 — 침산 2026-11-06 실측 28일 입력 학생 240명 보고서 17,741행 · 학생당 1년 약 74행). 1년이면 읽는 양에 상한이 있고,
+ *    침산 자료는 2025-11-03부터라 지금은 '제한 없음'과 같은 행을 읽는다. 1년 넘게 그 반·과목 보고서가 없던 학생의 이어 채운 교재만
+ *    '직접 쓴 것'으로 잘못 셀 수 있다(드묾 — 120일 창일 땐 4주 교재 칸 1,908개 중 11개가 창 밖이었고, 1년 창이면 지금 0개).
+ *  · 교재요청서 교재 — `textbook_orders` 그 학생 주문 전부 · **수학 줄만**(roster 규칙 — 그 표엔 과목 칸이 없다)
+ *  · 일일·확인 점수 — 오늘 수학 채점 결과(`todays_math_test_results`, roster `loadTodaysMathFill`과 같은 표·같은 거름):
+ *    지점 라이선스(`todays_math`)가 있으면 학원 설정 '시험 결과 채우기'(`report.todaysMathTestFill`)와 상관없이 읽는다 — 설정을 켰다
+ *    끈 뒤에도 그동안 원스크린이 채워 세션에 남긴 점수를 자동 값으로 알아야 한다(모르면 '직접 쓴 흔적'으로 세어 거짓 알림이 최대 3번 ·
+ *    C1 r3 재리뷰). 읽기만이라 설정이 꺼져도 해가 없다. 라이선스가 없는 학원은 조회 0번(일요일도 0번).
+ *    침산 2026-11-06: 라이선스 켜짐 · 채우기 꺼짐 · 결과 표 0행 → 평일엔 조회한다(비용 작음). 짝짓기는 `todaysMathAutoScores`.
+ * 넓게 잡는다 = 자동 값을 놓쳐 '직접 쓴 것'으로 잘못 세는 쪽(거짓 알림)보다 덜 우는 쪽. ⚠️ 시트 계획이 세션 저장 뒤 바뀌었으면 옛 자동 값은 알 수 없다.
+ */
+async function draftAutoValues(
+  admin: SupabaseClient,
+  tenantId: string,
+  settings: Awaited<ReturnType<typeof getTenantSettingsByTenantId>>,
+  scope: { classIds: readonly string[]; students: readonly string[]; from: string; to: string },
+): Promise<(unit: DraftUnit) => DraftAutoValues> {
+  type PlanRow = { class_id: string; plan_date: string; slot_start: string; line_no: number; skill_area: string | null; textbook: string | null; page_range: string | null; progress: string | null; homework: string | null };
+  type MathRow = TodaysMathFillRow & { test_date: string };
+  const [planRows, priorRows, orderRows, mathRows] = await Promise.all([
+    scope.classIds.length
+      ? fetchAllPagedInChunks<PlanRow>([...scope.classIds], (chunk, from, to) =>
+          admin
+            .from("class_sheet_plan_lines")
+            .select("class_id, plan_date, slot_start, line_no, skill_area, textbook, page_range, progress, homework")
+            .eq("tenant_id", tenantId) // admin — 이 표는 RLS 정책이 없어 사용자 클라이언트로는 0행(roster와 같다)
+            .in("class_id", chunk)
+            .gte("plan_date", scope.from)
+            .lte("plan_date", scope.to)
+            .order("id")
+            .range(from, to),
+        )
+      : Promise.resolve([] as PlanRow[]),
+    fetchAllPagedInChunks<{ student_id: string; report_date: string; subject: string | null; textbook: string | null }>([...scope.students], (chunk, from, to) =>
+      admin
+        .from("lesson_reports")
+        .select("student_id, report_date, subject, textbook")
+        .eq("tenant_id", tenantId)
+        .in("student_id", chunk)
+        .gte("report_date", addDays(scope.from, -365))
+        .lte("report_date", scope.to)
+        .order("id")
+        .range(from, to),
+    ),
+    fetchAllPagedInChunks<{ student_id: string; book_name: string | null }>([...scope.students], (chunk, from, to) =>
+      admin.from("textbook_orders").select("student_id, book_name").eq("tenant_id", tenantId).in("student_id", chunk).order("id").range(from, to),
+    ),
+    (async () => {
+      if (!(await isFeatureOptedIn(tenantId, "todays_math"))) return [] as MathRow[];
+      return fetchAllPagedInChunks<MathRow>([...scope.students], (chunk, from, to) =>
+        admin
+          .from("todays_math_test_results")
+          .select("student_id, class_id, kind, question_count, absent, correct_count, taken_at, test_date")
+          .eq("tenant_id", tenantId) // admin — 정책 없는 RLS(서버 전용) 표라 지점 id가 유일한 격리선(roster와 같다)
+          .in("kind", ["daily", "review"])
+          .in("student_id", chunk)
+          .gte("test_date", scope.from)
+          .lte("test_date", scope.to)
+          // 이 표엔 id 칸이 없다 — 기본 키(tenant_id, source_test_id, student_id) 순으로 페이지를 넘긴다(결정적).
+          .order("source_test_id")
+          .order("student_id")
+          .range(from, to),
+      );
+    })(),
+  ]);
+  const areaLabel = new Map(resolveSkillAreas(settings.operations.subjects.find((s) => s.key === "english")).map((a) => [a.key, a.label]));
+  const linesBy = new Map<string, SheetPlanLine[]>();
+  for (const r of planRows) {
+    const k = `${r.class_id}|${r.plan_date.slice(0, 10)}`;
+    (linesBy.get(k) ?? linesBy.set(k, []).get(k)!).push({
+      slotStart: r.slot_start, lineNo: r.line_no, skillArea: r.skill_area, textbook: r.textbook, pageRange: r.page_range, progress: r.progress, homework: r.homework,
+    });
+  }
+  const sheetBy = new Map([...linesBy].map(([k, lines]) => [k, buildSheetDraft(lines, (key) => areaLabel.get(key) ?? null)]));
+  const priorBy = new Map<string, { date: string; subject: string | null; textbook: string }[]>();
+  for (const r of priorRows) {
+    if (!r.textbook?.trim()) continue;
+    (priorBy.get(r.student_id) ?? priorBy.set(r.student_id, []).get(r.student_id)!).push({ date: r.report_date.slice(0, 10), subject: r.subject, textbook: r.textbook });
+  }
+  const ordersBy = new Map<string, Set<string>>();
+  for (const r of orderRows) {
+    if (!r.book_name?.trim()) continue;
+    (ordersBy.get(r.student_id) ?? ordersBy.set(r.student_id, new Set()).get(r.student_id)!).add(r.book_name.trim());
+  }
+  const mathBy = new Map<string, MathRow[]>();
+  for (const r of mathRows) {
+    const k = `${r.student_id}|${r.test_date.slice(0, 10)}`;
+    (mathBy.get(k) ?? mathBy.set(k, []).get(k)!).push(r);
+  }
+  const showTests = { daily: settings.report.showDailyTest, check: settings.report.showCheckTest };
+  return (u) => {
+    const sheet = u.classId ? sheetBy.get(`${u.classId}|${u.date}`) : undefined;
+    const textbooks = new Set<string>();
+    if (sheet?.textbook) textbooks.add(sheet.textbook.trim());
+    for (const r of priorBy.get(u.studentId) ?? []) {
+      if (r.date >= u.date || (r.subject && r.subject !== u.subject)) continue;
+      textbooks.add(stripTextbookPages(r.textbook));
+      textbooks.add(r.textbook.trim());
+    }
+    if (u.subject === "math") for (const book of ordersBy.get(u.studentId) ?? []) textbooks.add(book);
+    const scores = todaysMathAutoScores(mathBy.get(`${u.studentId}|${u.date}`) ?? [], u, showTests);
+    return { progress: sheet?.progress || null, homework: sheet?.homework || null, textbooks, dailyScores: scores.daily, checkScores: scores.check };
+  };
+}
+
+/**
+ * 저장 안 된 수업 보고서 감지 — 원스크린에 입력만 하고 보고서로 저장하지 않은 수업 → 입력한 선생님(원장 2026-11-06 결정: 권장안 ·
+ * 밀린 건도 알림 = 콜드스타트 시드 없음 `seedsOnColdStart("unsent_draft") = false`).
+ * 판정은 순수 함수 `eligibleUnsentDrafts`(events-core) 한 곳 — 기준(이틀째·기한·저장 짝·게이트·반 출결·평소 쓰는 반)은 그 주석.
+ * 받는 사람(입력 계정 재직 → 그 반 재직 담임 → 원장 1회분)·하루 한 번·최대 3번은 미발송 재알림과 같은 함수를 쓴다(키만 입력 단위).
+ * 할 일은 잇지 않는다(알림만 — 할 일 동기화는 보고서 id 기준이라 저장 전 입력엔 열 수 없다).
+ * 내보내는 까닭 = 가짜 DB로 통째 도는 시험(`unsent-detect.test.ts`) — 운영 호출처는 `detectAndNotifyEvents` 하나다.
+ */
+export async function detectUnsentDrafts(admin: SupabaseClient, tenantId: string): Promise<number> {
+  const today = kstToday();
+  const settings = await getTenantSettingsByTenantId(tenantId);
+  // 발송이 꺼진 테넌트는 감지하지 않는다(보낼 수 없는데 재촉 금지 — 미발송과 같다).
+  if (!classnoteSendOn(settings)) return 0;
+  // 일요일(KST)엔 기록·발송하지 않는다(원장 2026-11-06 B) — 월요일부터 이어서 센다.
+  if (isUnsentQuietDay(today)) return 0;
+  const historyFrom = addDays(today, -UNSENT_DRAFT_HISTORY_DAYS);
+  const yesterday = addDays(today, -1);
+
+  // 최근 28일 세션·보고서·반 과목 — '평소 쓰는 반'과 저장 짝 판정 재료. 1,000행을 넘으니 페이지로(B2) · 서로 독립이라 병렬(B4).
+  const [sessionRows, reportRows, classRows] = await Promise.all([
+    fetchAllPaged<{ student_id: string; session_date: string; updated_by: string | null; subject_progress: unknown; updated_at: string | null }>((from, to) =>
+      admin
+        .from("onescreen_daily_sessions")
+        .select("student_id, session_date, updated_by, subject_progress, updated_at")
+        .eq("tenant_id", tenantId) // admin RLS 우회 — 테넌트 필터가 유일한 격리선
+        .gte("session_date", historyFrom)
+        .lte("session_date", yesterday)
+        .order("id")
+        .range(from, to),
+    ),
+    fetchAllPaged<{ student_id: string; report_date: string; class_id: string | null; makeup: boolean | null; subject: string | null }>((from, to) =>
+      admin
+        .from("lesson_reports")
+        .select("student_id, report_date, class_id, makeup, subject")
+        .eq("tenant_id", tenantId)
+        .gte("report_date", historyFrom)
+        .lte("report_date", yesterday)
+        .order("id")
+        .range(from, to),
+    ),
+    fetchAllPaged<{ id: string; subject: string | null }>((from, to) =>
+      admin.from("classes").select("id, subject").eq("tenant_id", tenantId).order("id").range(from, to),
+    ),
+  ]);
+  const subjectByClass = new Map(classRows.map((c) => [c.id, c.subject]));
+  const subjectOfClass = (classId: string) => subjectByClass.get(classId) ?? null;
+  const units = unsentDraftUnits(
+    sessionRows.map((s) => ({ studentId: s.student_id, date: s.session_date.slice(0, 10), updatedBy: s.updated_by, subjectProgress: s.subject_progress, updatedAt: s.updated_at })),
+    subjectOfClass,
+  );
+  const reports = reportRows.map((r) => ({ studentId: r.student_id, date: r.report_date.slice(0, 10), classId: r.class_id, makeup: r.makeup, subject: r.subject }));
+  const saved = unsentDraftSavedIndex(reports, subjectOfClass);
+  const usualClasses = unsentDraftUsualClasses(units, reports);
+
+  // 값싼 판정을 먼저(조회가 필요한 결석·반 출결은 남은 것만) — 결석·출결은 '아무것도 없음'으로 두고 한 번 거른다.
+  const [testStudentIds, optoutClassIds] = await Promise.all([getTestStudentIds(admin, tenantId), fetchReportOptoutClassIds(admin, tenantId)]);
+  const gateArgs = { todayKst: today, saved, testStudentIds, classnoteSubjects: settings.report.classnoteSubjects, optoutClassIds, usualClasses };
+  const rough = eligibleUnsentDrafts({ ...gateArgs, units, absent: () => false, classAttendance: () => 1, direct: () => true });
+  if (rough.length === 0) return 0;
+
+  // 남은 단위만 조회 — 결석(반 단위 · 보강 제외) · 그 반 그날 출결 수 · 앱이 미리 채웠을 값(직접 쓴 흔적 판정 재료).
+  const keyOf = (u: DraftUnit) => ({ studentId: u.studentId, reportDate: u.date, subject: u.subject, classId: u.classId });
+  const regular = rough.filter((u) => !u.makeup && u.classId);
+  const classIds = [...new Set(regular.map((u) => u.classId as string))];
+  const dates = regular.map((u) => u.date).sort();
+  const roughStudents = [...new Set(rough.map((u) => u.studentId))];
+  const roughDates = rough.map((u) => u.date).sort();
+  const [absenceBlockedKeys, attendanceRows, autoOf] = await Promise.all([
+    getAbsenceBlockedKeys(admin, tenantId, regular.map(keyOf)),
+    dates.length
+      ? fetchAllPagedInChunks<{ class_id: string; session_date: string }>(classIds, (chunk, from, to) =>
+          admin
+            .from("attendance_records")
+            .select("class_id, session_date")
+            .eq("tenant_id", tenantId)
+            .in("class_id", chunk)
+            .gte("session_date", dates[0]!)
+            .lte("session_date", dates[dates.length - 1]!)
+            .order("id")
+            .range(from, to),
+        )
+      : Promise.resolve([] as { class_id: string; session_date: string }[]),
+    draftAutoValues(admin, tenantId, settings, { classIds, students: roughStudents, from: roughDates[0]!, to: roughDates[roughDates.length - 1]! }),
+  ]);
+  const attendanceByClassDay = new Map<string, number>();
+  for (const a of attendanceRows) {
+    const k = `${a.class_id}|${a.session_date.slice(0, 10)}`;
+    attendanceByClassDay.set(k, (attendanceByClassDay.get(k) ?? 0) + 1);
+  }
+  const eligible = eligibleUnsentDrafts({
+    ...gateArgs,
+    units: rough,
+    absent: (u) => absenceBlockedKeys.has(absenceKeyOf(keyOf(u))),
+    classAttendance: (classId, date) => attendanceByClassDay.get(`${classId}|${date}`) ?? 0,
+    direct: (u) => unsentDraftDirectInput(u.cell, autoOf(u)),
+  });
+  if (eligible.length === 0) return 0;
+
+  // 이름 · 과목 라벨 · 받는 사람 재료 · 지난 기록 — 서로 독립이라 병렬(B4).
+  const subjects = buildSubjectMaps(settings.operations.subjects);
+  const [students, activeStaff, classTeacher, prior] = await Promise.all([
+    fetchInChunks<{ id: string; name: string | null }>([...new Set(eligible.map((u) => u.studentId))], (chunk) =>
+      admin.from("students").select("id, name").eq("tenant_id", tenantId).in("id", chunk),
+    ),
+    activeUserIds(admin, tenantId, eligible.flatMap((u) => (u.updatedBy ? [u.updatedBy] : []))),
+    activeClassTeachers(admin, tenantId, eligible.flatMap((u) => (u.anchorClassId ? [u.anchorClassId] : []))),
+    recentDraftEvents(admin, tenantId, today),
+  ]);
+  const nameOf = new Map(students.map((s) => [s.id, s.name ?? "(학생)"]));
+  // 같은 입력 키를 여러 입력자가 가지면 하나만(재직 담임 → 그 밖의 재직 입력자 → 퇴사·알 수 없음 · 같으면 늦게 저장한 사람).
+  const chosen = pickDraftUnitPerKey(eligible, classTeacher, activeStaff);
+  const inputByKey = new Map(chosen.map((u) => [u.key, u.updatedBy]));
+  const candidates = planUnsentAlerts({
+    rows: chosen.map((u) => ({
+      reportId: u.key,
+      studentId: u.studentId,
+      studentName: nameOf.get(u.studentId) ?? "(학생)",
+      subjectLabel: (u.subject ? subjects.labelOf(u.subject) : null) ?? u.subject ?? "수업",
+      reportDate: u.date,
+      createdDate: null, // 저장 전 — 작성 당일 판정 없음(이틀째부터만 후보다)
+      sendDeadline: classnoteRetryDeadline(u.date, today).lastDate || null,
+      createdBy: u.updatedBy, // 받는 사람 ① = 입력한 계정
+      anchorClassId: u.anchorClassId,
+    })),
+    todayKst: today,
+    activeStaff,
+    classTeacher,
+    prior,
+  });
+  const cold = await isColdStart(admin, tenantId, "unsent_draft"); // 시드하지 않는 종류 — 늘 false(밀린 건도 알림)
+  const recorded = (await recordNew(admin, tenantId, "unsent_draft", candidates, cold)) as UnsentReportEvent[];
+  if (cold || recorded.length === 0) return 0;
+  const { master, byRecipient } = splitRecordedUnsent(recorded, today);
+
+  const windowEnd = unsentSendWindowEnd(settings.report.classnoteSendWindowStart ?? "", settings.report.classnoteSendWindowEnd ?? "");
+  const items: NotifyInput[] = [];
+  // 원장 1회분 = 받을 직원이 없는 건(입력자도 퇴사) — 원장은 입력한 본인이 아니다.
+  const masterBody = unsentDraftDigestBody(master, today, windowEnd, true);
+  if (masterBody) {
+    for (const recipientId of await activeMasterIds(admin, tenantId)) {
+      items.push({
+        tenantId,
+        recipientId,
+        type: "unsent_report",
+        title: "저장 안 된 수업 보고서(담당 강사 없음)",
+        body: masterBody,
+        // 저장 전 입력은 보고서 목록에 없다 — 반별 작성 현황('작성률' 표)이 그 반의 빈 보고서를 보여 준다.
+        link: "/lesson-reports?tab=writing",
+        actorId: null,
+      });
+    }
+  }
+  for (const [recipientId, events] of byRecipient) {
+    // 본인이 입력한 것 / 다른 선생님(퇴사한 입력자)이 입력한 것을 따로 — 세션 초안은 강사별이라 남의 입력은 내 원스크린에 안 보인다.
+    // 링크는 둘 다 그 수업일의 원스크린: 본인 것은 입력해 둔 칸이, 남의 것은 그 날짜 내 반 줄이 떠 거기서 보고서를 쓴다.
+    const own = events.filter((event) => inputByKey.get(event.subjectKey) === recipientId);
+    const others = events.filter((event) => inputByKey.get(event.subjectKey) !== recipientId);
+    for (const [group, byOthers] of [[own, false], [others, true]] as const) {
+      const body = unsentDraftDigestBody(group, today, windowEnd, byOthers);
+      if (!body) continue;
+      items.push({
+        tenantId,
+        recipientId,
+        type: "unsent_report",
+        title: "저장 안 된 수업 보고서",
+        body,
+        link: unsentDraftLink(group),
+        actorId: null,
+      });
+    }
+  }
+  await notifyUsers(items);
   return new Set(recorded.map((event) => event.subjectKey)).size;
 }
 
@@ -1001,6 +1337,7 @@ export async function detectAndNotifyEvents(
   gradeDrop: number;
   outstanding: number;
   unsentReport: number;
+  unsentDraft: number;
   progressAnomaly: number;
   sendDeadline: number;
 }> {
@@ -1011,6 +1348,7 @@ export async function detectAndNotifyEvents(
   let gradeDrop = 0;
   let outstanding = 0;
   let unsentReport = 0;
+  let unsentDraft = 0;
   let progressAnomaly = 0;
   let sendDeadline = 0;
   try {
@@ -1044,6 +1382,11 @@ export async function detectAndNotifyEvents(
     reportError(e, { scope: "events.unsentReport", tenantId });
   }
   try {
+    unsentDraft = await detectUnsentDrafts(admin, tenantId);
+  } catch (e) {
+    reportError(e, { scope: "events.unsentDraft", tenantId });
+  }
+  try {
     progressAnomaly = await detectProgressAnomaly(admin, tenantId);
   } catch (e) {
     reportError(e, { scope: "events.progressAnomaly", tenantId });
@@ -1053,5 +1396,5 @@ export async function detectAndNotifyEvents(
   } catch (e) {
     reportError(e, { scope: "events.sendDeadline", tenantId });
   }
-  return { absence, followup, enrollmentFollowup, gradeDrop, outstanding, unsentReport, progressAnomaly, sendDeadline };
+  return { absence, followup, enrollmentFollowup, gradeDrop, outstanding, unsentReport, unsentDraft, progressAnomaly, sendDeadline };
 }

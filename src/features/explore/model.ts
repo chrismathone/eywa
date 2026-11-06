@@ -214,6 +214,8 @@ export type ExploreAnalysisBlock = {
   /** AI 흐름 분석이면 그 종류 — '다시 분석' 버튼이 이 값으로 부른다. */
   flowKind?: import("./flow-insight").FlowKind;
   badge: { label: string; color: PillColor } | null;
+  /** 머리 줄 아래 안내 — 퇴원생 · 휴원 · 분석이 석 달보다 오래됨 · 분석 뒤 반영 전 기록(보는 날 기준 · `flowCardState`). */
+  notice?: string | null;
   headline: string | null;
   change: string | null;
   watch: string[];

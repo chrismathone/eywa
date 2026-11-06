@@ -255,6 +255,11 @@ export async function loadStudentCenter(id: string): Promise<ExploreLoad> {
     allowed: flowAllowed,
     canRefresh: consultLevel === "full",
     rows: !flowRows ? null : flowRows.ok ? { ok: true, value: Object.fromEntries(FLOW_KINDS.map((k) => [k, toFlowView(k, flowRows.value[k])])) } : { ok: false },
+    // 보는 날 기준으로 배지·안내를 바로잡는다(퇴원 · 휴원 · 마지막 기록이 석 달보다 오래됨 — 원장 2026-11-06).
+    standing: { status: student.status, withdrawnOn: student.status === "withdrawn" ? kstDateOf(student.withdrawnAt) : null },
+    today,
+    // 분석 뒤 새 상담(분석 갱신을 안 부르는 저장 경로 — 이탈 방어 · 성적 화면 상담 · 엑셀 가져오기)을 알리는 재료 = 상담 조각과 같은 조회.
+    actualAts: { consultations: consultations.ok ? consultations.value.map((c) => c.consultedAt) : null },
   });
   // 자료 연결 상태(원장 2026-11-05 시안) — 이 화면이 읽은 원천은 그 조각 상태로, 내용을 안 싣는 원천은 연결 여부로(꺼진 기능·해당 없는 원천은 줄째 뺀다).
   const byKey = (k: string) => sectors.find((s) => s.key === k);

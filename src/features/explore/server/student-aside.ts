@@ -7,7 +7,9 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { maskPhone } from "@/features/attendance/kiosk/message";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import type { StudentDetail } from "@/features/students/server/queries";
-import { DIRECTION_META, FLOW_KINDS, type FlowInsightView, type FlowKind } from "../flow-insight";
+import { studentStatusMeta } from "@/features/students/status/status-labels";
+import { DIRECTION_META, FLOW_KINDS, FLOW_UNIT, type FlowInsightView, type FlowKind } from "../flow-insight";
+import { flowCardState, type FlowStanding } from "../flow-recency";
 import type { CoverageState, ExploreAnalysis, ExploreAnalysisBlock, ExploreAside, ExploreCoverageItem, ExploreSector } from "../model";
 import { settle, type Settled } from "./shared";
 
@@ -105,18 +107,31 @@ const FLOW_RELATED: Record<FlowKind, string[]> = {
   timeline: ["timeline", "memos", "grades", "subject:*", "classes"],
 };
 const FLOW_TITLE: Record<FlowKind, string> = { consultations: "상담", timeline: "타임라인" };
-const FLOW_UNIT: Record<FlowKind, string> = { consultations: "상담", timeline: "기록" };
 
-export function buildStudentAnalysis(
-  flow: { allowed: boolean; canRefresh: boolean; rows: Settled<Partial<Record<FlowKind, FlowInsightView>>> | null },
-): ExploreAnalysis {
+/**
+ * `standing`·`today` = 보는 날의 원생 상태(재원·휴원·퇴원)와 KST 오늘 — 저장된 분석이 오래됐어도 배지·안내는 보는 날 기준으로 바로잡는다
+ * (원장 2026-11-06 — 4월 상담만 보고 11월에 '좋아지는 중'). 판정은 `flowCardState` 한 곳. 퇴원·휴원 배지 = 원생 상태 배지(`studentStatusMeta`) 그대로.
+ * `actualAts` = 화면이 같은 표에서 읽은 실제 기록 시각(상담 흐름 = 상담 조각 · 못 읽었거나 같은 표가 아니면 없음) — '아직 반영 전' 안내.
+ */
+export function buildStudentAnalysis(flow: {
+  allowed: boolean;
+  canRefresh: boolean;
+  rows: Settled<Partial<Record<FlowKind, FlowInsightView>>> | null;
+  standing: FlowStanding;
+  today: string;
+  actualAts?: Partial<Record<FlowKind, readonly string[] | null>>;
+}): ExploreAnalysis {
   if (!flow.allowed) return { state: "denied", blocks: [], canRefresh: false, note: "원생상담 열람 권한(전체)이 있어야 흐름 분석을 볼 수 있습니다." };
   if (!flow.rows || !flow.rows.ok) return { state: "error", blocks: [], canRefresh: false, note: "흐름 분석을 조회하지 못했습니다. 잠시 뒤 다시 열어 주세요." };
   const views = flow.rows.value;
   const blocks: ExploreAnalysisBlock[] = FLOW_KINDS.map((kind) => {
     const v = views[kind];
     const i = v?.insight ?? null;
-    const dir = i ? DIRECTION_META[i.direction] : null;
+    const card = i
+      ? flowCardState({ unit: FLOW_UNIT[kind], direction: i.direction, coveredThrough: v?.coveredThrough ?? null, standing: flow.standing, today: flow.today, actualAts: flow.actualAts?.[kind] ?? null })
+      : null;
+    const status = card?.badge === "status" ? studentStatusMeta(flow.standing.status) : null;
+    const dir = !i ? null : status ? { label: status.label, color: status.color } : DIRECTION_META[card?.badge === "unknown" ? "unknown" : i.direction];
     const stamp = v?.generatedAt ? kstShortStamp(v.generatedAt) : null;
     return {
       id: `flow:${kind}`,
@@ -124,6 +139,7 @@ export function buildStudentAnalysis(
       title: FLOW_TITLE[kind],
       flowKind: kind,
       badge: dir ? { label: dir.label, color: dir.color } : null,
+      notice: card?.notice ?? null,
       headline: i?.headline ?? null,
       change: i?.recentChange ? i.recentChange : null,
       watch: i?.watch ?? [],

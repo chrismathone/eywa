@@ -370,8 +370,11 @@ export function StudentInfoCard({
     labSeparate;
   return (
     <div className="space-y-2 break-keep text-xs">
-      {/* 헤더 한 줄: 이름(좌) + 학년·학교(우상단). 별도 줄을 없애 세로 공간 절약. */}
-      <div className="flex items-start justify-between gap-2">
+      {/* 헤더 한 줄: 이름(좌) + 학년·학교(우). 별도 줄을 없애 세로 공간 절약.
+          🔴 items-baseline — 이름(14px)과 학교·학년(12px)의 글자 바닥선을 맞춘다. 예전 items-start는 작은 글씨를
+          줄 위쪽 끝에 붙여 학교·학년이 이름보다 위로 떠 보였다(원장 2026-11-06 *"학교학년이 이름보다 위쪽에 있어서"*).
+          이름 묶음이 줄바꿈돼도 첫 줄(이름) 바닥선에 맞는다. */}
+      <div className="flex items-baseline justify-between gap-2">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <span className="text-foreground text-sm font-bold">{display.student(name, englishName)}</span>
           {display.lang !== "en" && englishName ? <span className="text-text-dim">({englishName})</span> : null}

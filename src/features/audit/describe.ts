@@ -841,6 +841,12 @@ export function auditDetail(
       const revision = num(m.revision);
       return join(kind, revision === null ? null : `v${revision}`, evidence ? `${evidence} 기록` : null, str(m.reason));
     }
+    case "student_flow_insight_refresh": {
+      // 원생 흐름 분석 '다시 분석' — 종류·결과만(분석 본문은 담지 않는다 · 모르는 값은 싣지 않는다).
+      const kind = ({ consultations: "상담 흐름", timeline: "타임라인 흐름" } as Record<string, string>)[str(m.kind) ?? ""] ?? null;
+      const status = ({ updated: "분석 갱신", unchanged: "새 기록 없음", empty: "분석할 기록 없음", failed: "분석 실패" } as Record<string, string>)[str(m.status) ?? ""] ?? null;
+      return join(kind, status);
+    }
     case "student_contribution_summary_generate": {
       const outcome = ({ saved: "저장 완료", failed: "생성 실패", quota: "일일 한도 도달", busy: "중복 요청 중단",
         unavailable: "요약 조건 미충족", input_limit: "입력량 제한", source_changed: "원본 변경으로 저장 중단" } as Record<string, string>)[str(m.outcome) ?? ""] ?? "결과 확인 필요";
