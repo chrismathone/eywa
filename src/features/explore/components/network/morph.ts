@@ -1,4 +1,5 @@
-import { netFitView, netRadius, type NetBoard, type NetCam, type NetEdge, type NetNode, type NetPoint, type NetSize } from "./graph";
+import type { NetBoard, NetCam, NetEdge, NetNode, NetPoint, NetSize } from "./graph";
+import { netFitView, netRadius } from "./layout";
 
 /**
  * 판 전환 보간(시안 `netMorphTo` · `netMorphBack`) — 순수 함수. `frame(u)`(u = 0~1, 이미 easing을 거친 값)가 그 순간의 점·선·자리·보기를 돌려준다.
@@ -11,6 +12,8 @@ import { netFitView, netRadius, type NetBoard, type NetCam, type NetEdge, type N
 
 export const NET_MORPH_MS = 760;
 export const NET_VIEW_MS = 900;
+/** 날짜 묶음 펼치기·접기 — 보기 전환보다 짧게(같은 판 안의 작은 변화). */
+export const NET_TOGGLE_MS = 560;
 export const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 export const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
@@ -26,8 +29,8 @@ type Item =
   | { n: NetNode; gone: true; pos: NetPoint; hub: string | null; off: NetPoint | null; op0: number; s0: number }
   | { n: NetNode; gone: false; appear: boolean; hub: string | null; off: NetPoint | null; r0: number; op0: number };
 
-/** 지금 판(old) → 다음 판(g2, 배치만) · 끝 보기 = g2 전체 맞춤. pivotOld = 지금 판의 축 점 · pivotNew = 다음 판의 축 점(보통 새 가운데). */
-export function planMorphTo(old: NetBoard, g2: NetBoard, pivotOld: string | null, pivotNew: string | null, size: NetSize): NetPlan {
+/** 지금 판(old) → 다음 판(g2, 배치만) · 끝 보기 = g2 전체 맞춤(`endView`를 주면 그 보기 — 묶음 펼치기는 지금 보기 그대로). pivotOld = 지금 판의 축 점 · pivotNew = 다음 판의 축 점(보통 새 가운데). */
+export function planMorphTo(old: NetBoard, g2: NetBoard, pivotOld: string | null, pivotNew: string | null, size: NetSize, endView?: NetCam): NetPlan {
   const C = { x: size.w / 2, y: size.h / 2 };
   const hasPivot = !!(pivotOld && old.pos[pivotOld]);
   const po = hasPivot ? old.pos[pivotOld!] : { x: 0, y: 0 };
@@ -35,15 +38,17 @@ export function planMorphTo(old: NetBoard, g2: NetBoard, pivotOld: string | null
   const P = hasPivot ? { x: po.x * old.view.k + old.view.x, y: po.y * old.view.k + old.view.y } : C; // 축의 지금 화면 자리
   const shift = { x: pn.x - po.x, y: pn.y - po.y }; // 옛 좌표 → 새 좌표(축이 겹치게)
   const view0: NetCam = { k: old.view.k, x: P.x - pn.x * old.view.k, y: P.y - pn.y * old.view.k };
-  const view1 = netFitView(g2, size);
+  const view1 = endView ?? netFitView(g2, size);
   const items: Item[] = [];
   const start: Record<string, NetPoint> = {};
   const oldById = new Map(old.nodes.map((n) => [n.id, n]));
-  const hubBoth = (id: string | undefined) => (id && old.pos[id] && g2.pos[id] ? id : null);
+  const both = (id: string | undefined) => (id && old.pos[id] && g2.pos[id] ? id : null);
+  /** 피고 지는 기준 점 — 바로 위 점(날짜 묶음)이 두 판에 다 있으면 그 점, 아니면 영역. */
+  const hubBoth = (n: NetNode) => both(n.parent) ?? both(n.hub);
   for (const n of g2.nodes) {
     const o = old.pos[n.id];
     const on = oldById.get(n.id);
-    const hub = o ? null : hubBoth(n.hub);
+    const hub = o ? null : hubBoth(n);
     start[n.id] = o ? { x: o.x + shift.x, y: o.y + shift.y } : hub ? { x: old.pos[hub].x + shift.x, y: old.pos[hub].y + shift.y } : { x: pn.x, y: pn.y };
     const off = hub ? { x: g2.pos[n.id].x - g2.pos[hub].x, y: g2.pos[n.id].y - g2.pos[hub].y } : null;
     const r0 = on ? (netRadius(on, old) * (on.rScale ?? 1)) / netRadius(n, g2) : 0.25;
@@ -51,7 +56,7 @@ export function planMorphTo(old: NetBoard, g2: NetBoard, pivotOld: string | null
   }
   for (const n of old.nodes) {
     if (g2.pos[n.id]) continue;
-    const hub = hubBoth(n.hub);
+    const hub = hubBoth(n);
     const p = { x: old.pos[n.id].x + shift.x, y: old.pos[n.id].y + shift.y };
     items.push({ n, gone: true, pos: p, hub, off: hub ? { x: p.x - (old.pos[hub].x + shift.x), y: p.y - (old.pos[hub].y + shift.y) } : null, op0: n.op ?? 1, s0: n.rScale ?? 1 });
   }
@@ -99,19 +104,20 @@ export function planMorphBack(cur: NetBoard, A: NetBoard, pivotA: string | null,
   const view0 = { ...cur.view };
   const view1: NetCam = { k: A.view.k, x: A.view.x - shift.x * A.view.k, y: A.view.y - shift.y * A.view.k };
   const tgt = (id: string) => ({ x: A.pos[id].x + shift.x, y: A.pos[id].y + shift.y });
-  const hubBoth = (id: string | undefined) => (id && A.pos[id] && cur.pos[id] ? id : null);
+  const both = (id: string | undefined) => (id && A.pos[id] && cur.pos[id] ? id : null);
+  const hubBoth = (n: NetNode) => both(n.parent) ?? both(n.hub);
   const curById = new Map(cur.nodes.map((n) => [n.id, n]));
   type Back = { n: NetNode; gone: boolean; from: NetPoint | null; to: NetPoint | null; hub: string | null; off: NetPoint | null; r0: number; sink: NetPoint | null };
   const items: Back[] = [];
   for (const n of A.nodes) {
     const c = cur.pos[n.id];
     const cn = c ? curById.get(n.id) : undefined;
-    const hub = c ? null : hubBoth(n.hub);
+    const hub = c ? null : hubBoth(n);
     items.push({ n, gone: false, from: c ? { ...c } : null, to: tgt(n.id), hub, off: hub ? { x: A.pos[n.id].x - A.pos[hub].x, y: A.pos[n.id].y - A.pos[hub].y } : null, r0: cn ? netRadius(cn, cur) / netRadius(n, A) : 1, sink: null });
   }
   for (const n of cur.nodes) {
     if (A.pos[n.id]) continue;
-    const hub = hubBoth(n.hub);
+    const hub = hubBoth(n);
     const p = { ...cur.pos[n.id] };
     items.push({ n, gone: true, from: p, to: null, hub, off: hub ? { x: p.x - cur.pos[hub].x, y: p.y - cur.pos[hub].y } : null, r0: 1, sink: hub ? null : { ...pb } });
   }

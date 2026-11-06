@@ -1,7 +1,10 @@
 import { splitSelKey } from "../../model";
 import type { NetEngine } from "./engine";
-import { netFitView, type NetCam } from "./graph";
+import type { NetCam, NetPoint, NetSize } from "./graph";
+import { netFitView } from "./layout";
+import { fullGraphOf } from "./graph";
 import { easeOutCubic } from "./morph";
+import { visibleOf } from "./node-actions";
 
 /**
  * 보기(배율·이동) 움직임(시안 `netAnimateView` · `zoomAt` · 전체 맞춤 · 선택 중심 · ResizeObserver 재맞춤) — 전부 부드럽게
@@ -42,6 +45,15 @@ export function zoomAt(E: NetEngine, f: number, x = E.size.w / 2, y = E.size.h /
   animateView(E, { k: next, x: x - (x - base.x) * ratio, y: y - (y - base.y) * ratio }, ms);
 }
 
+/** 보기는 그대로 — 그 점이 판 가장자리(40px) 밖이면 배율은 둔 채 그 점이 가운데 오게(목록에서 고른 접힌 기록이 판 밖에서 펼쳐질 때). */
+export function keepInView(v: NetCam, p: NetPoint | undefined, size: NetSize): NetCam {
+  if (!p || size.w <= 0) return { ...v };
+  const x = p.x * v.k + v.x;
+  const y = p.y * v.k + v.y;
+  if (x >= 40 && x <= size.w - 40 && y >= 40 && y <= size.h - 40) return { ...v };
+  return { k: v.k, x: size.w / 2 - p.x * v.k, y: size.h / 2 - p.y * v.k };
+}
+
 export function fitAnimated(E: NetEngine): void {
   if (E.board) animateView(E, netFitView(E.board, E.size), 450);
 }
@@ -50,8 +62,9 @@ export function fitAnimated(E: NetEngine): void {
 export function centerOnSelection(E: NetEngine): boolean {
   const B = E.board;
   const { record, selected } = E.p;
-  const id = record ?? (selected ? `hub:${splitSelKey(selected).sectorKey}` : null);
-  if (!B || !id || !B.pos[id]) return false;
+  const want = record ?? (selected ? `hub:${splitSelKey(selected).sectorKey}` : null);
+  const id = B && want ? visibleOf(B, fullGraphOf(E.p.input).nodes, want) : null; // 접힌 묶음 안 기록이면 그 묶음
+  if (!B || !id) return false;
   const k = Math.max(B.view.k, 2);
   animateView(E, { k, x: E.size.w / 2 - B.pos[id].x * k, y: E.size.h / 2 - B.pos[id].y * k }, 450);
   return true;

@@ -10,15 +10,39 @@ export type NetViewMode = "records" | "summary";
 export type NetPoint = { x: number; y: number };
 /** 보기 = 배율(k)과 이동(x·y) — 화면 px = 판 좌표 × k + (x, y). */
 export type NetCam = { x: number; y: number; k: number };
-export type NetNodeKind = "root" | "hub" | "record" | "target" | "analysis" | "fact";
+/** `group` = 날짜 묶음(연도 · 월 · 같은 날 여러 건이면 일자) — 기록을 한꺼번에 뿌리지 않고 영역 아래 연도 → 월 → 일자로 묶는다(원장 2026-11-06). */
+export type NetNodeKind = "root" | "hub" | "record" | "target" | "analysis" | "fact" | "group";
+/** 날짜 묶음의 단계. */
+export type NetGroupLevel = "year" | "month" | "day";
+/** 영역 점을 더블클릭하면 — 영역이 중심(흡수) · 그 대상이 중심 · 원본 화면 열기(영역 중심 안의 통계·기록 조각). */
+export type NetHubOpen = "absorb" | "center" | "link";
 
 export type NetNode = {
   id: string;
   title: string;
   kind: NetNodeKind;
   tone: ExploreTone;
-  /** 기록·대상·사실이 속한 영역 점 id. */
+  /** 기록·대상·사실·날짜 묶음이 속한 영역 점 id(맨 위 영역). */
   hub?: string;
+  /** 바로 위 점(영역 · 연도 · 월 · 일자) — 배치·펼치기의 축. 없으면 `hub`. */
+  parent?: string;
+  /** 판에 적는 짧은 이름(없으면 `title`) — 묶음 아래 기록은 '7일 · 제목', 값이 있는 줄은 '총 청구 5건'. */
+  label?: string;
+  /** 날짜 묶음의 단계 · 영역 점을 더블클릭했을 때 할 일 · 영역의 한 줄 요약(도넛 조각과 같은 글). */
+  level?: NetGroupLevel;
+  open?: NetHubOpen;
+  /** `open = "center"`일 때 중심이 될 대상 이름(과목 조각은 첫 반). */
+  openTo?: string;
+  summary?: string | null;
+  /** 날짜 묶음·영역 아래 기록 수 — 묶음 이름의 'N건'과 hover 카드가 같은 값을 쓴다. 영역의 대상(수업·강사·원생) 수는 `members`. */
+  tally?: number;
+  members?: number;
+  /** 영역의 날짜 없는 항목(통계·속성 줄) 수 · 영역 중심에서 더 좁은 영역으로 옮겨 선 기록 수 · 조각 자체가 기록 하나인가(영역 중심 `r:<줄 id>`). */
+  items?: number;
+  moved?: number;
+  self?: boolean;
+  /** 영역 중심에서 이 영역의 기록이 더 작은 영역으로 옮겨 섰으면 그 영역 이름들(hover 카드 안내). */
+  movedTo?: string[];
   /** 영역 점이면 그 조각 key · 기록·대상이면 처음 속한 조각 key. */
   sectorKey?: string;
   /** 영역 점 더블클릭 때 넘기는 선택 key(작은 조각이 있으면 첫 작은 조각 — 시안). */
@@ -58,8 +82,8 @@ export const netHubId = (sectorKey: string) => `hub:${sectorKey}`;
 /** 고른·연 점의 정보(패널·상세가 읽는다) — `id` = 점 id(그대로 `record` prop으로 돌려주면 그 점이 강조된다). */
 export type NetRecordInfo = {
   id: string;
-  /** 기록 · 대상(수업·강사·원생) · 분석 · 온톨로지 사실(영역 점 포함). */
-  kind: "record" | "target" | "analysis" | "fact";
+  /** 기록 · 대상(수업·강사·원생) · 분석 · 온톨로지 사실(영역 점 포함) · 날짜 묶음. */
+  kind: "record" | "target" | "analysis" | "fact" | "group";
   title: string;
   date: string | null;
   detail: string | null;
@@ -69,7 +93,8 @@ export type NetRecordInfo = {
   target: ExploreTarget | null;
 };
 
-export type NetNeighbor = { id: string; title: string; rel: string; tone: ExploreTone };
+/** `unit` = 날짜 묶음이면 그 단계 이름('월' · '일자') — 기록 패널이 '일자 12개 · 기록 3건'처럼 센다. */
+export type NetNeighbor = { id: string; title: string; rel: string; tone: ExploreTone; date?: string | null; unit?: string };
 
 /** 도구줄 머리 — '98개 기록 · 121개 연결선 · 중심 김서연' · 요약은 '11개 영역 · 26개 연결'. */
 export type NetHead = { mode: NetViewMode; nodes: number; hubs: number; edges: number; name: string };

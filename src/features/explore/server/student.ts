@@ -1,7 +1,7 @@
 import "server-only";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, canAccessTenant } from "@/lib/auth/perm-matrix";
-import { addDays, kstToday } from "@/lib/date-kst";
+import { addDays, kstDateOf, kstToday } from "@/lib/date-kst";
 import { attendanceRate, attendedCount } from "@/lib/calc/attendance";
 import { attendanceStatusLabel, formatSlotStart } from "@/features/students/detail/attendance-tab";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
@@ -173,12 +173,12 @@ export async function loadStudentCenter(id: string): Promise<ExploreLoad> {
       const rows = consultations.value;
       const latest = rows[0];
       return makeSector(dConsult, {
-        summary: latest ? `최근 상담 ${monthDayKo(latest.consultedAt)}` : "상담 기록 없음",
+        summary: latest ? `최근 상담 ${monthDayKo(kstDay(latest.consultedAt))}` : "상담 기록 없음",
         state: latest ? "ready" : "empty",
         rows: rows.slice(0, 5).map((c) => ({
           id: c.id,
           title: oneLine(c.summary, 70),
-          date: c.consultedAt.slice(0, 10),
+          date: kstDay(c.consultedAt),
           detail: [c.subject ? subjects.labelOf(c.subject) : null, c.counselorName].filter(Boolean).join(" · ") || null,
           // 전문 — `getStudentConsultationHistory`가 내부 연결 마커를 이미 뗀 글(visibleConsultationSummary).
           body: [c.summary, c.followUpAction ? `후속 조치: ${c.followUpAction}${c.followUpDate ? ` (${c.followUpDate})` : ""}${c.followUpDone ? " — 완료" : ""}` : null].filter(Boolean).join("\n\n"),
@@ -196,7 +196,7 @@ export async function loadStudentCenter(id: string): Promise<ExploreLoad> {
         rows: rows.slice(0, 5).map((m) => ({
           id: m.id,
           title: oneLine(m.content, 70),
-          date: m.createdAt.slice(0, 10),
+          date: kstDay(m.createdAt),
           detail: [memoCategoryLabel(m.category), m.pinned ? "고정" : null, m.createdByName].filter(Boolean).join(" · "),
           body: m.content,
         })),
@@ -318,6 +318,9 @@ export async function loadStudentCenter(id: string): Promise<ExploreLoad> {
     },
   };
 }
+
+/** 시각(timestamptz) → KST 날짜 — 원생 상세 상담 탭(`toLocaleDateString` Asia/Seoul)과 같은 날. `slice(0, 10)`은 UTC 날짜라 아침 9시 전 기록이 하루 앞선다. */
+const kstDay = (v: string) => kstDateOf(v) ?? v.slice(0, 10);
 
 function scoreText(g: UnifiedRow): string {
   if (g.noExam) return "시험없음";
