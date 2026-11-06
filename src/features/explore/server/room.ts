@@ -1,6 +1,6 @@
 import "server-only";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { accessLevelTenant, canAccessTenant } from "@/lib/auth/perm-matrix";
+import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { logDbError } from "@/lib/supabase/db-error";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
@@ -12,7 +12,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { ownerFaceMenu } from "@/features/owner/face-access";
 import { sheetDowLabel } from "@/features/teacher-view/i18n";
 import { DEFAULT_SECTOR, SECTOR_DEFS, othersLabel, type ExploreTarget } from "../model";
-import { NOT_FOUND, distinct, errorSector, forbidden, makeSector, settle, type ExploreLoad } from "./shared";
+import { NOT_FOUND, distinct, errorSector, forbidden, isScopedRead, makeSector, settle, type ExploreLoad } from "./shared";
 import { roomRuleAnalysis } from "./rule-analysis";
 
 type Who = { display_name: string | null } | { display_name: string | null }[] | null;
@@ -37,7 +37,7 @@ export async function loadRoomCenter(id: string): Promise<ExploreLoad> {
   if (!user) return forbidden("로그인이 필요합니다.");
   // 주소의 id가 uuid 모양이 아니면 없는 강의실(다른 중심과 같은 404 — DB 형식 오류로 오류 화면이 뜨지 않게).
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return NOT_FOUND;
-  if ((await accessLevelTenant(user.systemRole, "classes")) === "scoped") return forbidden("강의실은 모든 수업을 볼 수 있는 계정만 열람할 수 있어요.");
+  if (await isScopedRead(user.systemRole, "classes")) return forbidden("강의실은 모든 수업을 볼 수 있는 계정만 열람할 수 있어요.");
   const supabase = await createClient();
   const today = kstToday();
   const live = `valid_to.is.null,valid_to.gte.${today}`;

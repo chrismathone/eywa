@@ -8,7 +8,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: m.refresh }) })
 vi.mock("../server/actions", () => ({ saveCare: m.save, getCareHistory: async () => ({ events: [], error: null }) }));
 vi.mock("@/components/workspace/window-link", () => ({ WindowLink: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a> }));
 const content = { need: "중3 선행 희망", promise: "중2 진도 완료", criterion: "단원 평가 확인", dueOn: "2026-11-30", ownerId: "teacher", subject: "수학", sourceId: null };
-const view = (): StudentCareView => ({ student: { id: "student", name: "검증 학생", enrolledOn: "2026-08-01" }, actor: { id: "teacher", canManage: false, canContribute: true }, today: "2026-11-01", error: null, more: false, page: 0,
+const view = (): StudentCareView => ({ student: { id: "student", name: "검증 학생", enrolledOn: "2026-08-01" }, actor: { id: "teacher", canManage: false, canContribute: true, proxy: false }, today: "2026-11-01", error: null, more: false, page: 0,
   records: [{ id: "promise", studentId: "student", version: 1, updatedAt: "now", document: { revision: 1, content, acknowledged: null, evidence: [], state: "open", closed: null } }],
   references: { sources: [{ id: "intake", date: "2026-08-01", need: "상담 원문 요구사항" }], evidence: [{ kind: "lesson_report", id: "report", label: "11월 수업", href: "/lesson_reports/report/print" }], evidenceKinds: ["lesson_report"], warning: null }, staff: [{ id: "teacher", name: "담당 강사" }], staffError: false });
 beforeEach(() => { vi.clearAllMocks(); m.save.mockResolvedValue({ ok: true }); });
@@ -40,7 +40,7 @@ describe("약속 관리 실제 화면", () => {
     expect(screen.queryByRole("button", { name: "증거 제출" })).toBeNull();
   });
   it("완료 기준을 갖추기 전 관리자의 완료 버튼을 잠근다", () => {
-    const v = view(); v.actor = { id: "manager", canManage: true, canContribute: true };
+    const v = view(); v.actor = { id: "manager", canManage: true, canContribute: true, proxy: false };
     render(<CareWorkspace view={v} />);
     fireEvent.change(screen.getByLabelText("완료 확인 또는 취소 사유"), { target: { value: "확인" } });
     expect(screen.getByRole("button", { name: "이행 확인·완료" })).toBeDisabled();

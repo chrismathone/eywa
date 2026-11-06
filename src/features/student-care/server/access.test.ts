@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ user: vi.fn(), access: vi.fn(), manage: vi.fn(), write: vi.fn(), visible: vi.fn(), from: vi.fn() }));
+const m = vi.hoisted(() => ({ user: vi.fn(), access: vi.fn(), manage: vi.fn(), write: vi.fn(), visible: vi.fn(), from: vi.fn(), viewAs: vi.fn() }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: m.user }));
+vi.mock("@/lib/auth/view-as", () => ({ viewAsTeacher: m.viewAs }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ canAccessTenant: m.access, canManageTenant: m.manage, canWriteTenant: m.write }));
 vi.mock("./student-scope", () => ({ visibleCareStudents: m.visible }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: m.from }) }));
 import { careAccess, careStorageMessage } from "./access";
 beforeEach(() => {
-  vi.clearAllMocks(); m.user.mockResolvedValue({ id: "teacher", tenantId: "tenant", systemRole: "teacher" });
+  vi.clearAllMocks(); m.user.mockResolvedValue({ id: "teacher", tenantId: "tenant", systemRole: "teacher" }); m.viewAs.mockResolvedValue(null);
   m.access.mockImplementation(async (_: string, key: string) => key === "students");
   m.manage.mockResolvedValue(false); m.write.mockResolvedValue(false); m.visible.mockResolvedValue(new Set(["student"]));
 });
@@ -14,6 +15,16 @@ function assigned(data: unknown) {
   const q = { select: vi.fn(), eq: vi.fn(), limit: vi.fn(), maybeSingle: vi.fn(async () => ({ data, error: null })) };
   q.select.mockReturnValue(q); q.eq.mockReturnValue(q); q.limit.mockReturnValue(q); m.from.mockReturnValue(q); return q;
 }
+describe("'다른 강사 뷰' = 그 사람(#154)", () => {
+  it("신원은 보는 강사(teacherView)로 묻고, 강사뷰 대상이 있으면 proxy(본인 확인은 대신 안 함) · 없으면 아님", async () => {
+    m.access.mockResolvedValue(true);
+    m.viewAs.mockResolvedValue({ id: "teacher", tenantId: "tenant", systemRole: "teacher", access: "full" });
+    expect((await careAccess()).actor.proxy).toBe(true);
+    expect(m.user).toHaveBeenCalledWith({ teacherView: true });
+    m.viewAs.mockResolvedValue(null);
+    expect((await careAccess()).actor.proxy).toBe(false);
+  });
+});
 describe("담당자 한정 열람", () => {
   it("신규생 전체 권한 없이도 명시 배정된 약속만 읽는다", async () => {
     const q = assigned({ id: "promise" });

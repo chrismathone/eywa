@@ -40,7 +40,7 @@ export function CareCard({ record, view, busy, onSave }: { record: CareRecord; v
         <dt className="font-bold">완료 확인 기준</dt><dd className="whitespace-pre-wrap">{doc.content.criterion}</dd>
       </dl>
       {doc.content.sourceId && view.references.sources.some((s) => s.id === doc.content.sourceId) ? <WindowLink className="text-primary text-sm font-semibold hover:underline" href={`/enrollment/${doc.content.sourceId}`}>입학상담 원본</WindowLink> : null}
-      {own && view.actor.canContribute && state.handoffPending ? <Button className="self-start" disabled={busy} onClick={() => onSave({ kind: "acknowledge" })}>내용 확인·인수</Button> : null}
+      {own && view.actor.canContribute && !view.actor.proxy && state.handoffPending ? <Button className="self-start" disabled={busy} onClick={() => onSave({ kind: "acknowledge" })}>내용 확인·인수</Button> : null}
       <section aria-label="이행 증거" className="flex flex-col gap-2 text-sm">
         <h3 className="font-bold">이번 버전의 이행 증거 {state.currentEvidence.length}건</h3>
         {state.currentEvidence.map((item) => (

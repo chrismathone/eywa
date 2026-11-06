@@ -792,6 +792,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **#151** 고친 코드가 현장에 안 닿는 자리 — AywaSync **실행기(`AywaSync.exe`)는 앱 안 업데이트로 안 바뀐다**(본체만 `versions/<순번>`) → 1.0.7 수정이 10/15 설치본 PC에 없어 업데이트 세 번째마다 앱이 안 켜졌다(1.0.8·1.0.11). 1.0.13부터 본체가 설치 폴더 실행기를 더 높은 판으로 바꾸고 옛 실행기에서 넘겨받는다 · 🔴 실행기 동작을 바꾸면 `LauncherVersion`을 올릴 것 · ⚠️ 넘겨받을 실행기를 버전 폴더에서 띄우지 말 것(다음 업데이트 정리가 막힌다)
 - **#152** '요청 이후 바뀌었나' 스냅숏 대조에 **표시용 칸(반 이름)**을 넣으면 이름만 바꿔도 승인이 막힌다(퇴원보고서 LE1→LE2 · 고침 = 대조 열쇠 `withdrawal_report_compare_key` · 앱 `snapshotMatches` 같은 규칙) · ⚠️ 스크립트: `select (f()).*`는 f를 열 수만큼 부른다 · postgres.js 템플릿 안 `'\s+'`는 백슬래시가 사라진다(`[[:space:]]+`)
 - **#153** Next 16은 **경로 매개변수를 디코딩하지 않는다**(`subject:math` → `params = "subject%3Amath"` → 모양 검사에서 404) — 만드는 쪽 `encodeURIComponent` + 받는 쪽 `decodeURIComponent`를 짝으로 · `loading.tsx`는 세그먼트 값마다 새 Suspense 경계라 종류 바뀜 전환마다 뼈대가 뜬다 → 부드러운 전환은 윗 `layout.tsx`의 Suspense 하나 · 창 주소를 최상위 문서로 열면 셸이 `/dashboard`로 바꾼다(자동 확인은 `?embed=1`)
+- **#154** '다른 강사 뷰'는 **권한표만 갈아 끼운다** — 담당·본인 판정·기록 명의는 `getCurrentUser({ teacherView: true })`(감사·인증·표시 취향만 실제 계정) · `=== "scoped"`로 읽기를 좁히는 자리는 `readonlyViewErasedScope`도 본다(연결 탐색은 `isScopedRead`) · 확인 못 한 강사뷰는 읽기 전용 · 본인 확인(결재·인수 확인)은 강사뷰에서 대신 안 함 (⚠️ 연결 탐색·약속 폴더는 `teacher-view-scope.test.ts`가 자동으로 훑는다 — 다른 기능의 새 '담당만' 읽기는 그 시험의 폴더 목록에, 대상 명의 쓰기 액션은 `view-as-wiring.test.ts` 가드 목록에 한 줄)
 - **#82** postgres.js에서 `${JSON.stringify(v)}::jsonb` = **이중 인코딩**(`"#153e75"` 9자 저장 → 검증 실패 → 설정 침묵 무시). 스칼라는 `to_jsonb(${v}::text)`·객체는 `sql.json(obj)`, 검증은 **길이까지** (⚠️ 눈으로 따옴표 구분 안 됨)
 
 ## 🎨 디자인 규칙 인덱스 (상세는 `docs/design-conventions.md`)

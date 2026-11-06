@@ -1,6 +1,6 @@
 import "server-only";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { accessLevelTenant, canAccessTenant } from "@/lib/auth/perm-matrix";
+import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { addDays, kstToday } from "@/lib/date-kst";
@@ -17,7 +17,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { sheetDowLabel, sheetT } from "@/features/teacher-view/i18n";
 import { DEFAULT_SECTOR, SECTOR_DEFS, monthDayKo, othersLabel, type ExploreRow, type ExploreSector, type ExploreTarget } from "../model";
-import { NOT_FOUND, deniedSector, distinct, errorSector, forbidden, makeSector, settle, type ExploreLoad } from "./shared";
+import { NOT_FOUND, deniedSector, distinct, errorSector, forbidden, isScopedRead, makeSector, settle, type ExploreLoad } from "./shared";
 import { classRuleAnalysis } from "./rule-analysis";
 
 type AttRow = {
@@ -35,7 +35,7 @@ export async function loadClassCenter(id: string): Promise<ExploreLoad> {
   if (!user) return forbidden("로그인이 필요합니다.");
   const klass = await getClassDetail(id);
   if (!klass) {
-    if ((await accessLevelTenant(user.systemRole, "classes")) === "scoped") return forbidden("담당 반만 열람할 수 있어요. 이 반은 내가 담임·교시 담당·임시 위임으로 맡은 반이 아니에요.");
+    if (await isScopedRead(user.systemRole, "classes")) return forbidden("담당 반만 열람할 수 있어요. 이 반은 내가 담임·교시 담당·임시 위임으로 맡은 반이 아니에요.");
     return NOT_FOUND;
   }
   const today = kstToday();
@@ -45,7 +45,7 @@ export async function loadClassCenter(id: string): Promise<ExploreLoad> {
   const slotTeacherIds = distinct(liveSlots.map((s) => s.teacherId)).filter((t) => t !== klass.teacherId);
   const roomIds = distinct(liveSlots.map((s) => s.classroomId));
   const supabase = await createClient();
-  const [students, stats, delegations, settings, teacherRows, roomRows, canEcs, canMcs, canAttendance, canTimetable, attRows, classLevel] = await Promise.all([
+  const [students, stats, delegations, settings, teacherRows, roomRows, canEcs, canMcs, canAttendance, canTimetable, attRows, classScoped] = await Promise.all([
     settle("explore.class.students", getClassStudents(id)),
     settle("explore.class.attendance", getClassAttendanceStats(id, 30)),
     settle("explore.class.delegations", getClassDelegationList(id)),
@@ -60,8 +60,8 @@ export async function loadClassCenter(id: string): Promise<ExploreLoad> {
     settle("explore.class.attendanceRows", fetchAllPaged<AttRow>((from, to) =>
       supabase.from("attendance_records").select("id, student_id, class_id, session_date, slot_start, recorded_at, status, note, student:student_id ( name )")
         .eq("class_id", id).gte("session_date", addDays(today, -30)).order("id").range(from, to))),
-    // 강의실 중심은 수업 전체를 보는 계정만 연다(room.ts) — 담당 반만 보는 계정엔 강의실을 대상으로 올리지 않는다.
-    accessLevelTenant(user.systemRole, "classes"),
+    // 강의실 중심은 수업 전체를 보는 계정만 연다(room.ts) — 담당 반만 보는 계정엔 강의실을 대상으로 올리지 않는다(읽기 강사뷰 포함 · #154).
+    isScopedRead(user.systemRole, "classes"),
   ]);
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const [dStudents, dTeacher, dTimetable, dRoom, dAttendance, dSheet] = SECTOR_DEFS.class;
@@ -135,7 +135,7 @@ export async function loadClassCenter(id: string): Promise<ExploreLoad> {
       const name = klass.classroomName ?? slotRooms[0] ?? null;
       // 등록된 강의실(배치에 이어진 방 + 반 기본 강의실) = 대상 — 더블클릭하면 그 강의실이 중심(시안 :3978 강의실 중심).
       const roomTargets: ExploreTarget[] =
-        classLevel === "scoped"
+        classScoped
           ? []
           : distinct([...liveSlots.map((s) => s.classroomId), klass.classroomId]).map((rid) => {
               const n = liveSlots.filter((s) => s.classroomId === rid).length;

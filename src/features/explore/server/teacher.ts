@@ -17,7 +17,7 @@ import { roleMeta } from "@/features/staff/status-labels";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { DEFAULT_SECTOR, SECTOR_DEFS, monthDayKo, othersLabel, type ExploreSector, type ExploreTarget } from "../model";
-import { NOT_FOUND, deniedSector, distinct, errorSector, forbidden, makeSector, settle, type ExploreLoad } from "./shared";
+import { NOT_FOUND, deniedSector, distinct, errorSector, forbidden, isScopedRead, makeSector, settle, type ExploreLoad } from "./shared";
 import { teacherRuleAnalysis } from "./rule-analysis";
 
 type UserRow = { id: string; display_name: string; english_name: string | null; subjects: string[] | null; system_role: string; status: string; job_title: string | null };
@@ -37,8 +37,12 @@ export async function loadTeacherCenter(id: string): Promise<ExploreLoad> {
   if (!user) return forbidden("로그인이 필요합니다.");
   const level = await accessLevelTenant(user.systemRole, "classes");
   if (level === "none") return forbidden("수업 정보를 볼 권한이 없습니다.");
-  // 강사(scoped)는 자기 자신만 — 남의 담당 반 목록은 수업목록 권한 밖이다. 총괄은 새 제한을 자동 통과한다.
-  if (level === "scoped" && user.id !== id && !(await isCurrentUserSuperAdmin())) return forbidden("다른 선생님의 담당 수업·원생은 열람할 수 없어요.");
+  // 강사(scoped)는 자기 자신만 — 남의 담당 반 목록은 수업목록 권한 밖이다. 총괄은 새 제한을 자동 통과한다(강사뷰 중엔 안 통과).
+  // 🔴 읽기 강사뷰는 담당을 읽기로 누르고(isScopedRead) '본인'은 보는 강사다(teacherView — #154 ①·③).
+  if (await isScopedRead(user.systemRole, "classes")) {
+    const me = await getCurrentUser({ teacherView: true });
+    if (me?.id !== id && !(await isCurrentUserSuperAdmin())) return forbidden("다른 선생님의 담당 수업·원생은 열람할 수 없어요.");
+  }
   const supabase = await createClient();
   const { data: u, error: uErr } = await supabase.from("users")
     .select("id, display_name, english_name, subjects, system_role, status, job_title").eq("id", id).maybeSingle<UserRow>();

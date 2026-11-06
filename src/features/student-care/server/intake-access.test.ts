@@ -12,6 +12,11 @@ beforeEach(() => {
   vi.clearAllMocks(); m.access.mockResolvedValue({ user: { id: "teacher", tenantId: "tenant", systemRole: "teacher" }, readAll: false, actor: { id: "teacher", canManage: false, canContribute: true } });
   m.enrollment.mockResolvedValue(false);
 });
+it("입학 전 약속도 '다른 강사 뷰' 표시(proxy)를 그대로 넘긴다 — 본인 확인(인수)을 대신하지 않게", async () => {
+  m.access.mockResolvedValue({ user: { id: "teacher", tenantId: "tenant", systemRole: "teacher" }, readAll: false, actor: { id: "teacher", canManage: false, canContribute: true, proxy: true } });
+  m.from.mockImplementation((table) => table === "student_care_commitments" ? query({ id: "promise" }) : query({ id: "intake", prospect_name: "상담 학생", student_id: null }));
+  expect((await intakeCareAccess("intake")).actor.proxy).toBe(true);
+});
 it("상담 메뉴 권한 없는 강사는 배정 확인 전 잠재 학생 이름도 읽지 않는다", async () => {
   const q = query(null); m.from.mockReturnValue(q);
   await expect(intakeCareAccess("intake")).rejects.toThrow("권한");

@@ -22,8 +22,8 @@ import { getStudentCareForExplore } from "./explore";
 
 const uid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const student = uid(3);
-const manager = { id: uid(1), canManage: true, canContribute: true };
-const teacher = { id: uid(2), canManage: false, canContribute: true };
+const manager = { id: uid(1), canManage: true, canContribute: true, proxy: false };
+const teacher = { id: uid(2), canManage: false, canContribute: true, proxy: false };
 const at = "2026-11-01T01:00:00.000Z";
 const content: CareContent = { need: "중3 선행 희망", promise: "중2 진도 완료", criterion: "단원 평가 확인", dueOn: "2026-11-30", ownerId: teacher.id, subject: "수학", sourceId: null };
 const evidence = { kind: "lesson_report" as const, recordId: uid(7), note: "마지막 단원" };

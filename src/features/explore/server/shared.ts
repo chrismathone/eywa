@@ -1,6 +1,17 @@
 import "server-only";
 import { reportError } from "@/lib/observability/report-error";
+import { accessLevelTenant, readonlyViewErasedScope } from "@/lib/auth/perm-matrix";
+import type { MenuKey, SystemRole } from "@/lib/permissions";
 import type { ExploreModel, ExploreSector, SectorDef } from "../model";
+
+/**
+ * '담당만' 읽기인가 — 담당(scoped)이거나, 읽기 강사뷰가 대상 강사의 담당을 읽기(readonly)로 누른 경우(#154 ③ · `readonlyViewErasedScope`).
+ * 🔴 연결 탐색에서 `=== "scoped"`로 읽기를 좁히던 자리는 이 함수를 쓴다 — 그대로 두면 '다른 강사 뷰'가 학원 전체를 연다(가드 teacher-view-scope.test.ts).
+ */
+export async function isScopedRead(role: SystemRole, menu: MenuKey): Promise<boolean> {
+  const level = await accessLevelTenant(role, menu);
+  return level === "scoped" || (level === "readonly" && (await readonlyViewErasedScope(menu)));
+}
 
 /** 조회 하나의 결과 — 실패를 빈 값으로 바꾸지 않고 **실패했음**을 남긴다(조각이 `error` 상태로 선다). */
 export type Settled<T> = { ok: true; value: T } | { ok: false };

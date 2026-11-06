@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { transitionCare } from "../model";
 
-const m = vi.hoisted(() => ({ access: vi.fn(), intake: vi.fn(), student: vi.fn(), verify: vi.fn(), rpc: vi.fn(), from: vi.fn(), refresh: vi.fn(), sourceAccess: vi.fn(), log: vi.fn(), refs: vi.fn() }));
+const m = vi.hoisted(() => ({ access: vi.fn(), intake: vi.fn(), student: vi.fn(), verify: vi.fn(), rpc: vi.fn(), from: vi.fn(), refresh: vi.fn(), sourceAccess: vi.fn(), log: vi.fn(), refs: vi.fn(), blocked: vi.fn() }));
 vi.mock("./intake-access", () => ({ intakeCareAccess: m.intake }));
 vi.mock("./access", () => ({ careAccess: m.access, careStudent: m.student, careStorageMessage: (e: { code?: string }) => e.code === "40001" ? "다른 변경이 있습니다" : "저장 기능 확인 필요" }));
 vi.mock("./records", () => ({ verifyEvidence: m.verify, careReferences: m.refs }));
@@ -10,11 +10,13 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: m.fro
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: m.from }) }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ canAccessTenant: m.sourceAccess }));
 vi.mock("next/cache", () => ({ revalidatePath: m.refresh }));
+// 읽기 강사뷰 · 지점 보기 거절(저장 맨 앞 — #154). 평소엔 null.
+vi.mock("@/lib/auth/view-as", () => ({ readonlyTeacherViewError: m.blocked }));
 import { listCareEvidenceOptions, saveCare } from "./actions";
 
 const uid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const content = { need: "학습 습관", promise: "매주 과제 확인", criterion: "보고서 확인", dueOn: "2026-12-01", ownerId: uid(2), subject: "수학", sourceId: null };
-const manager = { id: uid(1), canManage: true, canContribute: true };
+const manager = { id: uid(1), canManage: true, canContribute: true, proxy: false };
 const current = transitionCare(null, { kind: "create", content }, manager, "2026-11-01T00:00:00.000Z");
 const request = { studentId: uid(3), id: uid(4), version: 0, command: { kind: "create", content } };
 function query(data: unknown, error: unknown = null) {
@@ -23,6 +25,7 @@ function query(data: unknown, error: unknown = null) {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  m.blocked.mockResolvedValue(null);
   m.access.mockResolvedValue({ user: { id: uid(1), tenantId: uid(9), systemRole: "master" }, readAll: true, actor: manager });
   m.student.mockResolvedValue({ id: uid(3) }); m.verify.mockResolvedValue(undefined); m.rpc.mockResolvedValue({ data: 1, error: null });
   m.sourceAccess.mockResolvedValue(true); m.from.mockReturnValue(query(null));
@@ -30,6 +33,13 @@ beforeEach(() => {
 });
 
 describe("약속 서버 쓰기 경계", () => {
+  it("읽기 강사뷰 · 지점 보기면 권한 판정 전에 거절하고 아무것도 쓰지 않는다(대상 명의 쓰기 — #154)", async () => {
+    m.blocked.mockResolvedValue("열람 전용 강사뷰에서는 저장할 수 없습니다");
+    expect(await saveCare(request)).toEqual({ ok: false, error: "열람 전용 강사뷰에서는 저장할 수 없습니다" });
+    expect(m.access).not.toHaveBeenCalled();
+    expect(m.rpc).not.toHaveBeenCalled();
+    expect(m.log).not.toHaveBeenCalled();
+  });
   it("입학 전 약속은 상담을 대상으로 저장하고 임의 학생 ID를 함께 받지 않는다", async () => {
     const base = { id: request.id, version: request.version };
     const intakeRequest = { ...base, intakeId: uid(8), command: { kind: "create", content: { ...content, sourceId: uid(8) } } };
