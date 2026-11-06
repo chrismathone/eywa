@@ -53,6 +53,8 @@ export const AUDIT_ACTIONS = {
   teacher_portfolio_refresh: "직원 포트폴리오 집계",
   // 상담 약속·인계(s2_0028 · 2026-11-05 AX 인계본 이식) — 등록·내용 변경·인수 확인·기록 추가·완료 확인·취소. 종류는 metadata.kind(describe.ts가 한글로).
   student_care_save: "상담 약속·인계 처리",
+  // 원생 흐름 분석 '다시 분석'(s2_0027 · 명시 버튼 — 유료 AI 호출) — 종류·결과는 metadata(describe.ts가 한글로).
+  student_flow_insight_refresh: "원생 흐름 분석 다시 분석",
   student_contribution_refresh: "원생 기여도 집계·마감",
   student_contribution_settings_save: "원생 기여도 배점 저장",
   student_contribution_signal_cancel: "원생 긍정 신호 판정 취소",

@@ -1,5 +1,15 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-06 — 원생 흐름 분석: 오늘 기준 판정 · 재원·휴원·퇴원 구분 · 90일 넘은 기록뿐이면 판단 보류
+
+- 원장 제보: 4월 28일 상담만 있는 원생을 11월 6일에 ‘좋아지는 중’으로 판정 → 결정 본문 [decisions/students.md](decisions/students.md) 11-06.
+- 프롬프트 재료 = 오늘(KST) · 지금 상태(재원·휴원·퇴원 + 다니는 반 · 대기 중인 반 · 배정 예정 — `server/flow-standing.ts`) · 마지막 기록과 최근 90일 건수 · 기록마다 경과 · 먼저 맞는 규칙 하나(퇴원 → 90일 공백 → 그 밖 — [`flow-insight.ts`](../src/features/explore/flow-insight.ts) `buildFlowPrompt`). 기록은 오늘(KST)까지만(예정 수강은 ‘배정 예정’으로만 · 반영 시점이 앞날인 옛 분석은 처음부터 · 밤 배치는 남는 자리에서).
+- 코드 바로잡기 = 저장 직전 `settleDirection`(90일 넘음·퇴원 = 판단 보류 · 걱정은 그때의 판단으로 · 최근 기록 둘 미만이면 ‘좋아지는 중’ 금지) · 카드 `flowCardState`(퇴원·휴원 = 원생 상태 배지 · 90일 넘음 = ‘판단 보류’ + ‘그때 판단: 주의’ · 분석 뒤 상담이 보이면 ‘아직 반영 전 N건’ · ‘새 상담 없음’ 단정 안 함 · 머리 아래 안내 줄 `notice` · 네트워크 ‘분석’ 점도 같은 안내) — [`flow-recency.ts`](../src/features/explore/flow-recency.ts) 한 곳.
+- ‘다시 분석’ = 새 기록이 없어도 전체로 다시(옛 판정을 고칠 길) · 반 조회가 실패해도 갱신 · 감사 액션 `student_flow_insight_refresh` 한글 라벨·상세·슬랙 분류(감사 화면에 영문 키가 뜨던 것).
+- KST: 타임라인의 ‘오늘’·재원 시작·퇴원 날짜와 밤 배치 후보의 ‘오늘’이 UTC였다(`new Date().toISOString().slice`) → `kstToday`·`kstDateOf`(KST 날짜 가드 통과).
+- 기록 읽기·밤 배치 후보는 `server/flow-records.ts`로(200줄 · 크론은 `flow-insights.ts`가 다시 내보내는 이름 그대로).
+- 시험: flow-insight · flow-recency · 카드 조립·지금 상태 줄(`server/flow-card.test.ts` 새) · 밤 배치 후보(`server/flow-records.test.ts` 새) · 감사 레지스트리·슬랙 분류(이 액션) · KST 가드. 적대적 리뷰 1회(13건) + 수리분 재리뷰 1회(13건) → 수리 + 시험으로 잠금.
+
 ## 2026-11-06 — 퇴원보고서 요청 창: 마지막 수업일 기본값 빈칸 · 안내를 날짜 칸 아래로
 
 - 원장 *"마지막 수업일 디폴트"* · *"이상하게 두행처리되서 직접 입력한 날짜가 마지막 수업일과 관련 없어 보이는데 위치 조정"* → 기본값은 원장 선택 ‘빈칸’.
