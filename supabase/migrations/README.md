@@ -12,6 +12,20 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-11-06 퇴원보고서: 관리자 승인자에서 원장급을 DB에서도 막는다 (s2_0028 · ⏳ 미적용 · 원장 결정 *"DB도 막기"* · 🔴 병합 때 번호가 바뀌면 이 줄도)
+
+`s2_0028_withdrawal_approver_no_master.sql` — 원장 2026-11-05 *"관리자 승인에 '원일' 넣지 말것. 항상 '정유진' 혹은 '허은진'. 지정된 사람으로. 원장이상급은 뺴기로 했는데 자꾸 들어가있네"*. 앱 수리(후보에서 원장급 빼기 · 서버 재계산)와 별개로 DB가 마지막에 막는다. 관리자 승인자 = 관리자·매니저 `('admin','manager')`만이고, 운영자 계정은 기존 방식 `is_super_admin`으로 뺀다.
+- 기준: 운영 정의(2026-11-06 읽기 전용 덤프). 요청·처리 함수 본문은 s2_0025와 글자까지 같았다. 지문(공백 뺀 md5) 셋이 맞을 때만 바꾼다.
+- `request_withdrawal_report_group`(CREATE OR REPLACE): 승인 관리자와 생략(빈 목록) 작성자에서 master를 뺀다. 원장급 승인자는 '원장급은 관리자 승인자로 지정할 수 없습니다'로 따로 거절한다.
+- `transition_withdrawal_report`(CREATE OR REPLACE): 관리자 차례 승인·반려, 최종 처리 재검사의 승인 관리자(바로 처리 보고서는 종전대로), 생략 작성자에서 master·운영자를 뺀다.
+- `transition_withdrawal_report_v1`(옛 단건): s2_0025처럼 운영 정의에서 세 줄만 치환한다.
+- 그대로: 원장 승인 단계 · 바로 처리(`direct_withdrawal_report`) · 최종 처리 권한 · 취소 · 작성 요청자 · 작성 강사 · 시그니처 · 실행 권한 · SECURITY INVOKER.
+- 원장이 작성 강사인 보고서는 관리자 승인을 생략하지 않고 지정 승인자가 승인한다(지금 앱 `reportApprovalPlan`과 같다). 원장은 바로 처리로도 끝낼 수 있다.
+- 진행 중 2건(승인 관리자 둘 다 정유진)에는 영향이 없다. 승인 칸에 master·운영자가 든 진행 중 보고서와 원장 작성 생략 보고서도 0건이다.
+- 앱보다 먼저든 나중이든 된다. 지금 앱은 원장급(승인 과목 없음)을 후보로 내지 않는다. 가드: `src/features/withdrawal-reports/approver-no-master-sql.test.ts`.
+- 적용 = 파일 하나(한 거래 · 기본 search_path 세션 · 실패하면 ROLLBACK). do 블록으로 감쌀 때는 `begin;` 다음 줄부터 `commit;` 앞까지만 감싸고(머리 주석은 빼고) 바깥 표식은 본문에 없는 새 이름으로 고른다 — 그 안에서 statement_timeout은 그 do 문장에 걸리지 않는다(lock_timeout은 걸린다). 확인 쿼리와 적용 뒤 지문은 파일 머리 주석에 있다. 🔴 다시 돌리면 지문 검사로 멈춘다.
+- 되돌리기 = `scripts/_oneoff/revert-s2_0028-withdrawal-approver-no-master.sql`(적용 뒤 지문일 때만 · s2_0025 본문 + _v1 거꾸로 치환 · 되돌린 뒤 적용 전 운영 지문인지 확인 · 로컬 PGlite에서 왕복 확인).
+
 ## 2026-11-03 원생 흐름 분석 저장 표 (s2_0027 · ✅ 운영 적용 2026-11-03 · 적용 때 가지 번호 s2_0018 → 합치며 s2_0027(main의 s2_0018 = 업무 요청 · 2026-11-05 밤 병합) · 본문 글자는 적용한 그대로)
 
 `s2_0027_student_flow_insights.sql` — 원장 2026-11-03 *"새 상담 올릴때마다 상담 분석 돌릴것 … 이전 상담 분석에 합산"* · *"타임라인도 비슷하게"*. 표 `student_flow_insights`(학생 × 종류 consultations·timeline마다 마지막 분석 한 벌) — 연결 탐색(`/explore`) 왼쪽 '흐름' 카드가 읽는다. 읽기·쓰기 정책 없음(서버 service_role만 · admin 클라이언트 + tenant_id 필터). 🔴 다시 실행하지 말 것(운영에 이미 있다).
