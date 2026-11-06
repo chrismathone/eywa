@@ -1,0 +1,309 @@
+/* 연결 탐색 네트워크 보기 — 시안(:3978 `.net-wrap` · `.net-tools` · `.net-stage` · `.nlabel` · `.hover-card` · `.net-legend` · `.seg.zoom`)을 옮긴 것.
+ *
+ * 색: 판(SVG)의 선·점 색은 아래 `--net-*` 변수 하나로 읽는다(draw.ts는 `var(--net-…)`만 적는다 — TS에 hex 금지). 흰 판 값은 팔레트 토큰,
+ * 어두운 판(주체별 요약)은 시안의 값을 여기 한 곳에 적는다. 글자 크기: 도구줄·범례·hover 카드는 바닥 14px(--text-xs) · 판 위 이름은 시안
+ * 그대로(12 · 14/15 · 17 — 이름 자리 계산 `labelWidth`가 이 값을 쓴다).
+ */
+
+.wrap {
+  --net-edge: #8c9198;
+  --net-edge-hi: var(--primary);
+  --net-edge-cross: var(--purple);
+  --net-node: #7d8389;
+  --net-node-near: #77718e;
+  --net-chosen: var(--primary);
+  --net-root-fill: var(--card);
+  --net-ring: var(--primary);
+  --net-lead: #c3c8d2;
+  --net-text: var(--foreground);
+  --net-halo: var(--card);
+  --net-t-primary: var(--primary);
+  --net-t-blue: var(--blue);
+  --net-t-green: var(--green);
+  --net-t-purple: var(--purple);
+  --net-t-rose: var(--rose);
+  --net-t-gold: var(--gold);
+  --net-t-amber: var(--amber);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: var(--net-h, calc(100dvh - 13rem));
+  min-height: 420px;
+  overflow: hidden;
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+  border-radius: var(--radius-2xl);
+}
+
+/* 주체별 요약 = 어두운 판(시안 2차 인계본 '개별 기록 / 주체별 요약'). */
+.summary {
+  --net-edge: #6b7694;
+  --net-edge-hi: #9fc1ff;
+  --net-edge-cross: #a894f0;
+  --net-node: #aab4cc;
+  --net-node-near: #cbd3ea;
+  --net-chosen: #ffffff;
+  --net-root-fill: #1b2742;
+  --net-ring: #9fc1ff;
+  --net-lead: #5a6580;
+  --net-text: #edf0fc;
+  --net-halo: #11192b;
+  --net-t-primary: #8fb4ff;
+  --net-t-blue: #7fa6ff;
+  --net-t-green: #5fd39b;
+  --net-t-purple: #b9a6ff;
+  --net-t-rose: #ff8fb5;
+  --net-t-gold: #e6c46a;
+  --net-t-amber: #f2b45a;
+}
+
+.enter {
+  animation: net-swap-in 300ms ease-out both;
+}
+
+@keyframes net-swap-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── 도구줄 ── */
+.tools {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line-faint);
+  font-size: var(--text-xs);
+  flex-wrap: wrap;
+}
+
+.tools > div {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.head b {
+  font-weight: 700;
+}
+
+.seg {
+  display: inline-flex;
+  height: 26px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  background: var(--card);
+}
+
+.seg button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.seg button[aria-pressed="true"] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.zoom button {
+  padding: 0 9px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.zoom output {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 50px;
+  padding: 0 6px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  border-left: 1px solid var(--line-faint);
+  border-right: 1px solid var(--line-faint);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--radius-lg);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  box-shadow: var(--shadow-card);
+  background: var(--card);
+}
+
+.btn:hover {
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* ── 판 ── */
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: var(--card);
+  transition: background-color 0.35s ease;
+}
+
+.summary .stage {
+  background: #11192b;
+}
+
+.stage svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+  touch-action: none;
+}
+
+.stage svg.dragging {
+  cursor: grabbing;
+}
+
+.node {
+  cursor: pointer;
+}
+
+.stage svg text {
+  font-size: 12px;
+  fill: var(--net-text);
+  paint-order: stroke;
+  stroke: var(--net-halo);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.nlabel.hub {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.summary .nlabel.hub {
+  font-size: 15px;
+}
+
+.nlabel.root {
+  font-size: 17px;
+  font-weight: 800;
+}
+
+/* hover 카드 — 판 왼쪽 아래(포인터를 막지 않는다). */
+.hoverCard {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: calc(100% - 28px);
+  padding: 8px 12px;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: var(--shadow-card);
+  pointer-events: none;
+  animation: net-fade-in 140ms ease-out both;
+}
+
+.hoverCard[hidden] {
+  display: none;
+}
+
+.hoverCard strong {
+  font-size: var(--text-sm);
+}
+
+.hoverCard span {
+  font-size: var(--text-xs);
+  opacity: 0.85;
+}
+
+.summary .hoverCard {
+  background: rgba(21, 29, 49, 0.96);
+  color: #edf0fc;
+  box-shadow: 0 0 0 1px #2b354e;
+}
+
+@keyframes net-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ── 범례 — 두 줄 높이로 고정(보기마다 글 길이가 달라도 판 높이가 안 바뀐다 · 시안 원인 ③) ── */
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-height: 68px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line-faint);
+  font-size: var(--text-xs);
+}
+
+.legend > div {
+  display: flex;
+  gap: 12px;
+}
+
+.legend small {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  opacity: 0.8;
+}
+
+.summary .legend {
+  background: #151d31;
+  color: #cfd7ea;
+  border-top-color: #2b354e;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.toggle input {
+  accent-color: var(--primary);
+  width: 15px;
+  height: 15px;
+  margin: 0;
+}
+
+.gold {
+  color: var(--gold);
+}
+
+/* 전환 효과 생략 — 등장·hover 카드·판 배경 전환까지 바로. */
+.instant,
+.instant * {
+  animation: none !important;
+  transition: none !important;
+}

@@ -16,6 +16,7 @@ import { explainDbError, logDbError } from "@/lib/supabase/db-error";
 import { MERGE_TABLES } from "../merge-scope";
 import { planMakeeduCarry } from "../makeedu-carry";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { moveCareToKeeperStudent } from "@/features/student-care/server/merge-move";
 
 /** `warning` = 병합은 끝났지만 마무리 한 가지가 남았을 때(화면이 그대로 보여 준다). */
 export type MergeStudentsState =
@@ -167,6 +168,11 @@ export async function mergeStudents(
     if (referrerMove.error && !skipReferrer(referrerMove.error)) logDbError(referrerMove.error, "admin.mergeStudents.referrer");
     else if (referrerMove.count) moved["enrollment_consultations.referrer"] = referrerMove.count;
   }
+
+  // 상담 약속·인계(s2_0028) — 진 쪽 학생의 약속도 남는 쪽으로. 약속 표는 서버 전용이라 위 표 목록(사용자 클라이언트)으로는 못 옮긴다.
+  // 보조 이동이라 실패해도 병합은 멈추지 않고 로그만(표가 없는 DB는 조용히 0건).
+  const careMoved = await moveCareToKeeperStudent(user.tenantId, mergeeId, keeperId);
+  if (careMoved) moved["student_care_commitments"] = careMoved;
 
   // mergee soft delete — 🔴 실제로 한 줄이 바뀌었는지 본다(`.select`). 권한이 막으면 오류 없이 0줄이고,
   //    그걸 완료로 치면 "병합했다"는 기록과 달리 학생은 재원인 채 남는다.

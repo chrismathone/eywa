@@ -18,7 +18,7 @@ export function ExploreLanding() {
   const pick = (t: ExploreTarget) => startTransition(() => router.push(exploreHref(t, { embed })));
   return (
     <div className="space-y-4">
-      <PageHeader title="연결 탐색" description="원생·수업·강사 중 하나를 가운데 놓고, 이어진 수업·출결·성적·담임·원생을 한눈에 돌아봅니다." embedLabel="원생·수업·강사를 검색해 시작하세요" />
+      <PageHeader title="연결 탐색" description="원생·수업·강사·강의실 중 하나를 가운데 놓고, 이어진 수업·출결·성적·담임·원생을 한눈에 돌아봅니다." embedLabel="원생·수업·강사·강의실을 검색해 시작하세요" />
       <div className="bg-card shadow-card mx-auto w-full max-w-2xl space-y-5 rounded-2xl p-6" aria-busy={pending || undefined}>
         <div className="space-y-1">
           <h2 className="text-foreground text-xl font-bold">무엇을 가운데 놓을까요?</h2>
@@ -30,7 +30,7 @@ export function ExploreLanding() {
             <Loader2 className="size-4 animate-spin" /> 불러오는 중…
           </p>
         ) : null}
-        <ul className="grid gap-3 sm:grid-cols-3">
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {EXPLORE_KINDS.map((kind) => (
             <li key={kind} className="border-line rounded-xl border p-3">
               <p className="text-foreground inline-flex items-center gap-1.5 text-sm font-bold">

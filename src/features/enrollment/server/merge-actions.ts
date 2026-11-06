@@ -11,6 +11,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
+import { moveCareToMergeWinner, revertCareMerge } from "@/features/student-care/server/merge-move";
 import { COLUMN_LABEL } from "@/features/enrollment/merge-policy";
 import { buildMergePatch, planMerge, type ConsultRow, type MergePlan } from "@/features/enrollment/merge-plan";
 
@@ -160,20 +161,35 @@ export async function mergeConsultations(
   const patch = built.patch;
   const discarded = built.discarded.map((d) => ({ field: COLUMN_LABEL[d.key] ?? d.key, values: d.values }));
 
+  // 상담 약속·인계(s2_0028·s2_0029)를 이긴 쪽 상담으로 먼저 옮긴다 — 진 쪽이 지워지면 등록 전 약속이 함께 지워진다. 못 옮기면 멈춘다(되돌릴 수 없다).
+  if (!gate.user) return { error: "로그인이 필요합니다" };
+  const winnerStudentId = winner.student_id ? String(winner.student_id) : null;
+  // 병합 뒤 이긴 쪽의 학생 = 병합값에 학생 칸이 있으면 그 값(사람이 고른 쪽), 없으면 지금 값.
+  const finalStudent = "student_id" in patch ? (patch as Record<string, unknown>).student_id : winnerStudentId;
+  const care = await moveCareToMergeWinner({
+    tenantId: gate.user.tenantId, actorId: gate.user.id, winnerId,
+    finalStudentId: finalStudent ? String(finalStudent) : null, loserIds: targetLoserIds,
+  });
+  if (!care.ok) return { error: "상담 약속을 옮기지 못해 병합을 멈췄습니다. 잠시 뒤 다시 시도해 주세요. 바뀐 상담은 없습니다." };
+
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("merge_enrollment_consultations", {
     p_winner: winnerId,
     p_losers: targetLoserIds,
     p_patch: patch,
   });
-  if (error) return { error: error.message };
+  if (error) {
+    // 병합이 안 됐으면 옮긴 약속도 되돌린다(진 쪽 상담이 그대로 남아 있다).
+    await revertCareMerge(gate.user.tenantId, gate.user.id, care.moved);
+    return { error: error.message };
+  }
 
   await logAction({
     action: "consultation_merge",
     targetType: "enrollment_consultations",
     targetLabel: String(winner.prospect_name ?? ""),
     // 🔴 "무엇을 버렸나"가 되돌릴 유일한 근거다. 전사·브리프 같은 큰 본문은 빼고 버린 값만 남긴다.
-    metadata: { winnerId, loserIds: targetLoserIds, discarded, result: data },
+    metadata: { winnerId, loserIds: targetLoserIds, discarded, result: data, ...(care.moved.length ? { careMoved: care.moved.map((m) => m.id) } : {}) },
   });
 
   revalidatePath("/enrollment");

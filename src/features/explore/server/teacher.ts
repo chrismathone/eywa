@@ -4,7 +4,8 @@ import { accessLevelTenant, canAccessTenant } from "@/lib/auth/perm-matrix";
 import { getSuperAdminIds, displayRoleFor, isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
-import { addDays, kstToday } from "@/lib/date-kst";
+import { addDays, kstMonth, kstMonthStartIso, kstToday } from "@/lib/date-kst";
+import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { isModuleEnabled } from "@/lib/modules";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import type { SystemRole } from "@/lib/permissions";
@@ -17,6 +18,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { DEFAULT_SECTOR, SECTOR_DEFS, monthDayKo, othersLabel, type ExploreSector, type ExploreTarget } from "../model";
 import { NOT_FOUND, deniedSector, distinct, errorSector, forbidden, makeSector, settle, type ExploreLoad } from "./shared";
+import { teacherRuleAnalysis } from "./rule-analysis";
 
 type UserRow = { id: string; display_name: string; english_name: string | null; subjects: string[] | null; system_role: string; status: string; job_title: string | null };
 type ClassRow = { id: string; class_name: string; subject: string; closed_at: string | null; classroom: { name?: string } | { name?: string }[] | null };
@@ -43,7 +45,7 @@ export async function loadTeacherCenter(id: string): Promise<ExploreLoad> {
   if (uErr) return forbidden("강사 정보를 읽지 못했습니다. 잠시 뒤 다시 열어 주세요.");
   if (!u) return NOT_FOUND;
   const today = kstToday();
-  const [homeroom, assist, delegated, settings, superIds, canStaff, canReports, canEcs, canMcs, canTimetable] = await Promise.all([
+  const [homeroom, assist, delegated, settings, superIds, canStaff, canReports, canEcs, canMcs, canTimetable, consultLevel] = await Promise.all([
     settle("explore.teacher.homeroom", supabase.from("classes").select("id, class_name, subject, closed_at, classroom:classroom_id ( name )")
       .eq("teacher_id", id).eq("is_active", true).order("class_name").then((r) => { if (r.error) throw new Error(r.error.message); return (r.data ?? []) as ClassRow[]; })),
     settle("explore.teacher.assist", getActiveAssistSlotClasses(id)),
@@ -58,14 +60,17 @@ export async function loadTeacherCenter(id: string): Promise<ExploreLoad> {
     canAccessTenant(user.systemRole, "ecs"),
     canAccessTenant(user.systemRole, "mcs"),
     canAccessTenant(user.systemRole, "timetable"),
+    accessLevelTenant(user.systemRole, "consultations"),
   ]);
+  // '담당 원생' 상담 판정은 원생상담을 볼 수 있는 계정에게만(#77 — 원생상담 표 RLS는 지점 조건뿐이라 화면에서 가른다).
+  const canConsult = consultLevel !== "none";
   const subjects = buildSubjectMaps(settings.operations.subjects);
   // 종강일이 지난 반은 담당 수업으로 세지 않는다(종강은 배치도 그날로 닫힌다).
   const homeroomRows = (homeroom.ok ? homeroom.value : []).filter((c) => !c.closed_at || c.closed_at.slice(0, 10) >= today);
   const assistRows = assist.ok ? assist.value : [];
   const classIds = distinct([...homeroomRows.map((c) => c.id), ...assistRows.map((c) => c.id)]);
   const delegatedIds = delegated.ok ? distinct(delegated.value.map((d) => d.class_id)) : [];
-  const [slots, enrolls, reportCount, reportRows, staff, delegatedClasses] = await Promise.all([
+  const [slots, enrolls, reportCount, reportRows, staff, delegatedClasses, attRows, consultRows] = await Promise.all([
     settle("explore.teacher.slots", fetchAllPagedInChunks<SlotRow>(classIds, (chunk, from, to) =>
       supabase.from("class_schedules").select("id, class_id, day_of_week, start_time, end_time, valid_from, valid_to, teacher_id").in("class_id", chunk).order("id").range(from, to))),
     settle("explore.teacher.roster", fetchAllPagedInChunks<EnrollRow>(classIds, (chunk, from, to) =>
@@ -78,6 +83,14 @@ export async function loadTeacherCenter(id: string): Promise<ExploreLoad> {
     canStaff ? settle("explore.teacher.staff", getStaffById(id)) : Promise.resolve(null),
     settle("explore.teacher.delegatedClasses", fetchInChunks<{ id: string; class_name: string; subject: string }>(delegatedIds, (chunk) =>
       supabase.from("classes").select("id, class_name, subject").in("id", chunk))),
+    // 분석·판단 재료 — 담당 반 최근 30일 출결(수업 중심과 같은 창·같은 정정 접기) · 이번 달 이 선생님이 상담자인 원생상담.
+    settle("explore.teacher.attendance", fetchAllPagedInChunks<{ id: string; student_id: string; class_id: string; session_date: string; slot_start: string | null; recorded_at: string; status: string }>(classIds, (chunk, from, to) =>
+      supabase.from("attendance_records").select("id, student_id, class_id, session_date, slot_start, recorded_at, status").in("class_id", chunk).gte("session_date", addDays(today, -30)).order("id").range(from, to))),
+    // 상담 시각(timestamptz)은 KST 1일 00:00의 절대시각과 견준다(날짜 글자와 견주면 1일 0~9시 상담이 빠진다).
+    canConsult
+      ? settle("explore.teacher.consultations", fetchAllPagedInChunks<{ student_id: string }>([id], (chunk, from, to) =>
+          supabase.from("student_consultations").select("student_id").in("counselor_id", chunk).gte("consulted_at", kstMonthStartIso(kstMonth())).order("id").range(from, to)))
+      : Promise.resolve(null),
   ]);
   const delegatedClass = new Map((delegatedClasses.ok ? delegatedClasses.value : []).map((c) => [c.id, c]));
   const studentNames = reportRows?.ok && reportRows.value.length > 0
@@ -221,14 +234,42 @@ export async function loadTeacherCenter(id: string): Promise<ExploreLoad> {
       sectors,
       defaultSector: DEFAULT_SECTOR.teacher,
       asOf: today,
+      // 오른쪽 아래 '분석·판단' — 규칙 판정(담당 반 · 담당 원생). 반·원생 수는 위 조각과 같은 명단(rosterByClass).
+      // 담임 반을 못 읽었으면 반·원생 수가 줄어든 채 사실처럼 보인다 — 판정하지 않고 까닭을 밝힌다(같은 화면의 '담당 수업' 조각도 오류다).
+      analysis: !homeroom.ok ? { state: "error", blocks: [], canRefresh: false, note: "담당 반을 조회하지 못해 판정할 수 없습니다." } : (() => {
+        const att = attRows.ok
+          ? (() => {
+              const m = new Map<string, { total: number; present: number; late: number }>();
+              for (const r of effectiveAttendanceRecords(attRows.value)) {
+                const a = m.get(r.class_id) ?? { total: 0, present: 0, late: 0 };
+                a.total += 1;
+                if (r.status === "present") a.present += 1;
+                if (r.status === "late") a.late += 1;
+                m.set(r.class_id, a);
+              }
+              return m;
+            })()
+          : null;
+        const rosterIds = new Set([...rosterByClass.values()].flat().map((e) => (Array.isArray(e.student) ? e.student[0]?.id : e.student?.id)).filter((x): x is string => !!x));
+        const met = consultRows?.ok ? new Set(consultRows.value.map((c) => c.student_id).filter((sid) => rosterIds.has(sid))).size : null;
+        return teacherRuleAnalysis({
+          today,
+          classes: classIds.map((cid) => ({ id: cid, name: className.get(cid) ?? "반" })),
+          students: enrolls.ok ? rosterIds.size : null,
+          attendance: att,
+          consult: met === null || !enrolls.ok ? null : { met, of: rosterIds.size },
+          reports7: reportCount && reportCount.ok ? reportCount.value : null,
+        });
+      })(),
       aside: {
-        facts: [
+        heading: "강사 정보",
+        basics: { title: "강사 기본 정보", spacer: u.display_name, link: staff?.ok && staff.value ? { href: `/staff/${id}`, label: "직원 상세 열기" } : null, facts: [
           { label: "담당 과목", value: subjectLabel || "—" },
           { label: "역할", value: role.label },
           { label: "담임 반", value: `${homeroomRows.length}개` },
           { label: "교시 담당 반", value: assist.ok ? `${assistRows.length}개` : "확인 불가" },
           ...(u.english_name ? [{ label: "영어 이름", value: u.english_name }] : []),
-        ],
+        ] },
       },
     },
   };

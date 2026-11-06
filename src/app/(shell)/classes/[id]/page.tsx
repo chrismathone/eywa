@@ -310,9 +310,9 @@ export default async function ClassDetailPage({
           ) : null}
           {showJjLink ? <JjClassLink classId={klass.id} lang={lang} /> : null}
           {/* 연결 탐색(2026-11-03) — 이 반을 가운데 놓은 도넛(수강 원생·담임·시간표·강의실·출석부·강사 시트). 창 안에서도 제 창으로 연다. */}
-          <Button variant="outline" render={<WindowLink href={`/explore/class/${klass.id}`} title={`${klass.className} 연결 탐색`} frameTarget="window" />}>
+          <Button variant="outline" render={<WindowLink href={`/explore/class/${klass.id}`} title={sheetTf(lang, "cls.d.exploreWin", { name: klass.className })} frameTarget="window" />}>
             <EyIcon name="pieChart" size={16} />
-            <SheetText value={"연결 탐색"} />
+            {sheetT(lang, "cls.d.explore")}
           </Button>
           <Button
             render={

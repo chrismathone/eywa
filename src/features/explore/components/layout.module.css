@@ -1,0 +1,197 @@
+/* 연결 탐색 세 열 배치 — 원장 2026-11-05 시안(:3978 mockup-merged)과 같은 구조.
+ * [왼쪽 '원생 정보' 300] [가운데 도넛] [오른쪽 440 = 위 '펼친 영역' : 아래 '분석·판단' = 1 : 1].
+ * 좌우 열의 높이 = 가운데 요소(도넛+설명줄) 높이(`--stage-h` — explore-view가 ResizeObserver로 넣는다). 색·글자 크기는 토큰만. */
+
+.grid {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* 넓은 화면(≥1536px) — 시안 그대로 세 열. */
+@media (min-width: 1536px) {
+  .grid {
+    grid-template-columns: 300px minmax(0, 1fr) 440px;
+    transition: grid-template-columns 0.4s ease;
+  }
+  .grid[data-wide="true"] {
+    grid-template-columns: minmax(0, 1fr) 440px;
+  }
+  .grid[data-wide="true"] > .aside {
+    display: none;
+  }
+  .aside,
+  .right {
+    height: var(--stage-h, auto);
+    max-height: var(--stage-h, none);
+  }
+  .aside {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .stage {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .right {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  .grid[data-wide="true"] > .stage {
+    grid-column: 1;
+  }
+  .grid[data-wide="true"] > .right {
+    grid-column: 2;
+  }
+}
+
+/* 중간 폭(1024~1535px) — [도넛 | 오른쪽] 아래에 왼쪽 열. */
+@media (min-width: 1024px) and (max-width: 1535px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr) minmax(20rem, 27.5rem);
+  }
+  .stage {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .right {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    height: var(--stage-h, auto);
+  }
+  .aside {
+    grid-column: 1;
+    grid-row: 2;
+  }
+}
+
+.stage {
+  min-width: 0;
+}
+
+/* 왼쪽 열 — 첫 카드는 머리글 바로 아래, 둘째부터는 남는 공간을 나눠 가진다(시안 `.aside > .col > .card + .card { margin-top: auto }`). */
+.aside {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 2px;
+}
+.aside > .card + .card {
+  margin-top: auto;
+}
+.grid[data-mode="network"] .aside > .card + .card {
+  margin-top: 0;
+}
+
+/* 오른쪽 열 — 위·아래 같은 높이(1:1). 칸마다 머리 + 카드, 카드는 칸을 꽉 채우고 몸통만 스크롤. */
+.right {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 2px;
+}
+.half {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+.half > .card {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* 열 머리 — '원생 정보' · '펼친 영역' · '분석·판단'. */
+.colHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 18px;
+  padding: 0 4px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  opacity: 0.75;
+}
+
+/* 카드 겉모습(면·그림자·둥글기)은 공용 유틸(bg-card shadow-card rounded-2xl)이 맡고 여기는 배치만. */
+.card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* 칸을 꽉 채우는 카드의 몸통 — 스크롤바 없이 넘치면 가장자리가 흐려진다(data-fade = top · bottom · both). 링이 잘리지 않게 3px 여백. */
+.scrollBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 3px;
+  margin: -3px;
+  scrollbar-width: none;
+}
+.scrollBody::-webkit-scrollbar {
+  display: none;
+}
+.scrollBody[data-fade="bottom"] {
+  -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 44px), transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 44px), transparent 100%);
+}
+.scrollBody[data-fade="top"] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 44px, #000 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 44px, #000 100%);
+}
+.scrollBody[data-fade="both"] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 44px, #000 calc(100% - 44px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 44px, #000 calc(100% - 44px), transparent 100%);
+}
+
+/* 분석 블록 — 고른 요소와 안 이어진 것은 옅게. */
+.block {
+  border-top: 1px solid var(--line-faint);
+  padding-top: 6px;
+  margin-top: 6px;
+  transition: opacity 0.25s;
+}
+.block:first-child,
+.focusNote + .block {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 0;
+}
+.block[data-dim="true"] {
+  opacity: 0.45;
+}
+.focusNote {
+  margin: 0 0 6px;
+  opacity: 0.85;
+}
+
+/* 패널·분석이 바뀔 때 — 왼쪽에서 살짝 들어온다(가로로 밀면 스크롤 넘침으로 잡혀 가로 스크롤바가 깜빡였다 — 시안 11-05). */
+.enter {
+  animation: explore-enter 240ms ease-out both;
+}
+@keyframes explore-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 전환 효과 생략 — 이 화면 안의 모든 애니메이션·전환을 끈다(도넛 펼침·접힘 포함). */
+.instant,
+.instant * {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  transition-duration: 0s !important;
+}

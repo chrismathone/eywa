@@ -10,16 +10,22 @@ import { sameCenter, type TrailItem } from "../model";
  *
  * 모듈 변수 하나 — 문서를 새로 열면 없다(SSR·첫 로드와 어긋나지 않는다). 클라이언트 모듈에서만 부른다.
  */
-export type Handoff = { to: TrailItem; ready: Promise<void>; at: number };
+/**
+ * `dir` = 들어감(in · 고른 조각이 가운데로) · 되돌아감(out · 흡수의 역재생 — 원장 2026-11-05 *"도넛처럼 자연스럽게"*). `from` = 떠난 중심 —
+ * 되돌아갈 때 새 화면이 "어느 조각에서 왔었나"(그 조각이 가운데에서 되살아난다)를 이것으로 찾는다.
+ */
+export type Handoff = { to: TrailItem; from: TrailItem | null; dir: "in" | "out"; ready: Promise<void>; at: number };
 
 /** 이 시간이 지난 기록은 버린다 — 이동이 취소된 채 남은 기록이 다음 방문의 모션을 건너뛰지 않게. */
 const STALE_MS = 10_000;
 
 let current: Handoff | null = null;
 
-export function beginHandoff(to: TrailItem, holdMs: number): Handoff {
+export function beginHandoff(to: TrailItem, holdMs: number, opts: { from?: TrailItem | null; dir?: "in" | "out" } = {}): Handoff {
   const h: Handoff = {
     to,
+    from: opts.from ?? null,
+    dir: opts.dir ?? "in",
     at: Date.now(),
     ready: new Promise((resolve) => {
       window.setTimeout(resolve, holdMs);
