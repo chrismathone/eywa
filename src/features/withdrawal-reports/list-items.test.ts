@@ -205,11 +205,44 @@ describe("원장 2026-10-30 — 내 승인 구분 · 요청일 정렬 · 구분/
 describe("원장 2026-11-03 — 관리자 승인 생략 · 데스크 환불 단계 · 원장 칸 없음", () => {
   const as = (userId: string, reports: ReportListRow[], refunds?: Map<string, { documentId: string; deskId: string | null; deskName: string; completedDate: string | null }[]>) =>
     buildListItems({ reports, archives: [], staff, labelOf, userId, refunds });
-  it("관리자 0명 보고서는 '관리자 승인 생략' 한 줄 · 원장 줄·'관리자가 최종 승인' 줄은 없다", () => {
+  it("관리자 0명 보고서는 '작성 강사 · 승인 생략' 한 줄(직급이 비면 '관리자 이름') · 원장 줄·'관리자가 최종 승인' 줄은 없다", () => {
     const [skip] = as("t1", [report({ manager_id: null, manager_ids: [], status: "requested" })]);
-    expect(skip!.approval).toEqual([{ text: "관리자 승인 생략 · 작성 강사가 과목 관리자", muted: true }]);
+    expect(skip!.approval).toEqual([{ text: "관리자 이성우 · 승인 생략", muted: true }]);
     const [normal] = as("t1", [report()]);
     expect(normal!.approval).toEqual([{ text: "관리자 ○ 관리자" }]);
+    expect(filterListItems([skip!], { ...all, q: "관리자 승인 생략" }, listWindow(all, "2026-11-03"))).toHaveLength(1);
+  });
+  it("직급으로 적는다(원장 2026-11-05 '정유진 부원장') — 승인자 · 생략 · 바로 처리 · 옛 원장 줄 · 직급이 비면 종전 표기", () => {
+    const titled: StaffOption[] = [
+      { id: "kg", name: "김그린", role: "admin", subjects: ["english"], jobTitle: null },
+      { id: "jy", name: "정유진", role: "admin", subjects: ["english"], jobTitle: "부원장" },
+      { id: "he", name: "허은진", role: "admin", subjects: ["math"], jobTitle: "부원장" },
+      { id: "wi", name: "원일", role: "master", subjects: [], jobTitle: "대표" },
+      { id: "t", name: "강사", role: "teacher", subjects: ["english"], jobTitle: "  " },
+    ];
+    const rows = (r: Partial<ReportListRow>) => buildListItems({ reports: [report({ teacher_id: "t", requested_by: "jy", ...r })], archives: [], staff: titled, labelOf, userId: "x" })[0]!;
+    expect(rows({ manager_id: "jy", manager_ids: ["jy", "he"], manager_decisions: { jy: "2026-11-05" } }).approval).toEqual([{ text: "✓ 정유진 부원장 · ○ 허은진 부원장" }]);
+    // 직급이 빈 사람이 끼면 종전 모양('관리자 ○ 이름') — 직급 있는 사람은 이름 뒤에 직급.
+    expect(rows({ manager_id: "kg", manager_ids: ["kg", "jy"] }).approval).toEqual([{ text: "관리자 ○ 김그린 · ○ 정유진 부원장" }]);
+    expect(rows({ manager_id: "kg", manager_ids: ["kg"] }).approval).toEqual([{ text: "관리자 ○ 김그린" }]);
+    // 승인 생략 — 작성 강사 본인과 생략 사실.
+    expect(rows({ teacher_id: "jy", manager_id: null, manager_ids: [], status: "requested" }).approval).toEqual([{ text: "정유진 부원장 · 승인 생략", muted: true }]);
+    expect(rows({ teacher_id: "kg", manager_id: null, manager_ids: [], status: "requested" }).approval).toEqual([{ text: "관리자 김그린 · 승인 생략", muted: true }]);
+    // 공백뿐인 직급은 없는 것으로 · 바로 처리 줄 · 옛 보고서의 원장 줄(동작은 그대로, 표기만).
+    expect(rows({ manager_id: "t", manager_ids: ["t"] }).approval).toEqual([{ text: "관리자 ○ 강사" }]);
+    expect(rows({ teacher_id: "jy", manager_id: "jy", manager_ids: ["jy"], requested_by: "jy" }).approval[0]).toEqual({ text: "관리자 바로 처리 · 정유진 부원장" });
+    // 원장 단계가 있는 옛 보고서는 직급이 있어도 '관리자'·'원장' 머리말을 남긴다(두 단계 구분 — 리뷰 2026-11-06).
+    expect(rows({ manager_id: "jy", manager_ids: ["jy"], director_id: "wi", director_ids: ["wi"] }).approval).toEqual([{ text: "관리자 ○ 정유진 부원장" }, { text: "원장 ○ 원일 대표" }]);
+    // 검색은 보이는 표기로도 — '정유진 부원장'·'원일 대표'·생략 줄(리뷰 2026-11-06).
+    const win = listWindow(all, "2026-11-05");
+    const found = (r: Partial<ReportListRow>, q: string) => filterListItems([rows(r)], { ...all, q }, win).length;
+    expect(found({ manager_id: "he", manager_ids: ["he"] }, "허은진 부원장")).toBe(1);
+    expect(found({ manager_id: "jy", manager_ids: ["jy"], director_id: "wi", director_ids: ["wi"] }, "원일 대표")).toBe(1);
+    expect(found({ teacher_id: "jy", manager_id: null, manager_ids: [], status: "requested" }, "정유진 부원장 · 승인 생략")).toBe(1);
+    expect(found({ manager_id: "he", manager_ids: ["he"] }, "정유진 부원장")).toBe(1); // 요청자(정유진)
+    expect(found({ manager_id: "kg", manager_ids: ["kg"], requested_by: "kg" }, "부원장")).toBe(0);
+    // 작성 강사 칸·강사 필터는 이름 그대로(다른 표기를 건드리지 않는다).
+    expect(rows({ teacher_id: "jy", manager_id: "he", manager_ids: ["he"] }).teacher).toBe("정유진");
   });
   it("데스크 환불이 남으면 상태 칩 둘 · 승인 진행에 데스크 줄(○ 대기 / ✓ 완료 · 담당 이름)", () => {
     const steps = new Map([["g1", [{ documentId: "d1", deskId: "desk", deskName: "데스크A", completedDate: null }]]]);

@@ -51,6 +51,8 @@ export const AUDIT_ACTIONS = {
   ment_style_rebuild: "강사 말투 프로파일 갱신",
   // 직원 포트폴리오(0357a) — [지금 집계]와, 매일 cron이 달을 마감했을 때 남긴다(매일의 재집계는 남기지 않는다).
   teacher_portfolio_refresh: "직원 포트폴리오 집계",
+  // 상담 약속·인계(s2_0028 · 2026-11-05 AX 인계본 이식) — 등록·내용 변경·인수 확인·기록 추가·완료 확인·취소. 종류는 metadata.kind(describe.ts가 한글로).
+  student_care_save: "상담 약속·인계 처리",
   student_contribution_refresh: "원생 기여도 집계·마감",
   student_contribution_settings_save: "원생 기여도 배점 저장",
   student_contribution_signal_cancel: "원생 긍정 신호 판정 취소",

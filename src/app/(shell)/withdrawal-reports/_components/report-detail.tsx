@@ -14,7 +14,7 @@ import { fillEmptyReportFields } from "@/features/withdrawal-reports/prefill";
 import { autosaveWithdrawalReport, changeWithdrawalReport } from "@/features/withdrawal-reports/server/actions";
 import { createReportSaver, type ReportSaver, type ReportSaverStatus } from "@/features/withdrawal-reports/autosave";
 import { windowDirtyMessage } from "@/components/workspace/window-bridge";
-import { EMPTY_BODY, REPORT_ACTION_LABEL, directorIds, isDirectReport, managerStepSkipped, refundWaiting, reportCapabilities, reportStatusChips, type RefundStep, type WithdrawalReport, type ReportEvent, type StaffOption, type ReportAction, type ReportBody } from "@/features/withdrawal-reports/model";
+import { EMPTY_BODY, REPORT_ACTION_LABEL, directorIds, titledName, isDirectReport, managerStepSkipped, refundWaiting, reportCapabilities, reportStatusChips, type RefundStep, type WithdrawalReport, type ReportEvent, type StaffOption, type ReportAction, type ReportBody } from "@/features/withdrawal-reports/model";
 
 const control = "w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm disabled:bg-muted/20 disabled:text-foreground";
 const dateTime = (v: string) => new Date(v).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
@@ -47,6 +47,8 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
   const skipped = managerStepSkipped(r) && !isDirectReport(r);
   const deskWaiting = refundWaiting(r, refundSteps);
   const nameOf = (id: string | null) => id ? staff.find(s => s.id === id)?.name ?? r.snapshot.courses.find(c => c.teacherId === id)?.teacherName ?? "이전 담당자" : "자동 처리";
+  // 결재란 승인자 — 직급이 있으면 '정유진 부원장'(원장 2026-11-05). 담임·요청자·처리 이력은 이름 그대로.
+  const approverName = (id: string | null) => { const u = id ? staff.find(s => s.id === id) : undefined; return u ? titledName(u, u.name) : nameOf(id); };
   // 실시간 저장(원장 2026-11-05 "퇴원보고서도 실시간으로 입력되고 저장되게") — 작성할 수 있을 때만 저장기를 둔다(autosave.ts).
   // 저장 단추는 없다: 칸을 고치면 잠시 뒤 저장하고, 제출·취소 직전에 남은 글을 마저 보낸 뒤 그 revision으로 처리한다.
   const [saveStatus, setSaveStatus] = useState<ReportSaverStatus>({ kind: "idle" });
@@ -125,7 +127,7 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
     {r.status === "approved" && <p className="rounded-lg border bg-muted/20 p-4 text-sm">{deskWaiting ? "관리자 승인이 끝났습니다. 데스크 환불 처리(환불 요청서의 환불완료일자)가 끝나면 함께 요청한 보고서와 함께 처리합니다." : refundSteps.length ? "관리자 승인과 데스크 환불이 끝났습니다. 함께 요청한 보고서의 승인까지 끝나면 바로 처리합니다(모두 끝났는데 남아 있으면 다음 날 00:05 확인 때 처리합니다)." : "이 보고서는 승인이 완료되었습니다. 함께 요청한 다른 강사의 보고서 승인까지 모두 끝나면 처리합니다."}</p>}
     {assignmentChanged && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">요청 이후 학생·수강·담당 강사가 변경되었습니다. 아래 내용은 요청 당시 기록이며, 제출·승인을 진행할 수 없습니다. 요청한 사람이 요청을 취소하고 현재 담당 기준으로 다시 요청해 주세요.</p>}
     {prefillWarning && <p role="alert" className="rounded-lg border p-4 text-sm">{prefillWarning}</p>}
-    <ReportForm managerSkipped={skipped} refundSteps={refundSteps} consultations={consultations} report={r} body={body} events={events} labels={labels} nameOf={nameOf} editable={capabilities.edit} pending={pending} onChange={update} subjectHistory={subjectHistory}
+    <ReportForm managerSkipped={skipped} refundSteps={refundSteps} consultations={consultations} report={r} body={body} events={events} labels={labels} nameOf={nameOf} approverName={approverName} editable={capabilities.edit} pending={pending} onChange={update} subjectHistory={subjectHistory}
       refundCheck={r.status === "canceled" ? undefined : <LaterInvoices reportId={r.id} rows={laterInvoices} canApprove={capabilities.refund} deskStaff={deskStaff} gates={!["completed", "blocked"].includes(r.status)} />} />
     {error && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
     <div className="flex flex-wrap gap-2">

@@ -263,7 +263,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 경로)은 fail-open — 페이지 requireAccess가 판정(신규 라우트 과잉 차단 방지).
   if (view === "teacher") {
     const pathname = (await headers()).get("x-pathname") ?? "";
-    const menu = menuKeyForPath(pathname);
+    // 등록 전 상담 약속(`/enrollment/<id>/care`)은 그 약속을 맡은 강사도 연다 — 화면이 약속 담당 범위를 직접 가른다(student-care `careAccess`).
+    const menu = /^\/enrollment\/[0-9a-f-]{36}\/care\/?$/i.test(pathname) ? "students" : menuKeyForPath(pathname);
     const hasDelegatedSetting = SETTINGS_ROLE_KEYS.some(key => SETTINGS_ROLE_HREF[key].split("?")[0] === pathname
       && canAccess("teacher", key, teacherViewMatrix) && canAccess(user.systemRole, key, permMatrix));
     // 설정 화면의 실제 탭은 페이지에서 개별 권한을 다시 검사한다.

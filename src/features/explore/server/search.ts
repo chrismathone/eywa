@@ -11,19 +11,38 @@ import type { ExploreTarget } from "../model";
 /** 검색 팰릿과 같은 안전화 — PostgREST .or()/ilike 구분자·와일드카드 제거(한글·공백 보존). */
 const sanitize = (q: string) => q.replace(/[%,()*\\]/g, " ").trim();
 const TEACHER_LIMIT = 8;
+const ROOM_LIMIT = 6;
 
 /**
  * 연결 탐색의 검색 — 원생·수업은 **검색 팰릿과 같은 조회**(`searchPalette`: 강사 스코프·재원 먼저 규칙 그대로),
- * 강사는 수업목록 권한이 있을 때 배정 가능한 재직자 중에서(강사 본인은 자기만). 고르면 그 대상이 새 중심이 된다.
+ * 강사는 수업목록 권한이 있을 때 배정 가능한 재직자 중에서(강사 본인은 자기만) · 강의실은 수업 전체를 보는 계정만(강의실 중심과 같은 문).
+ * 고르면 그 대상이 새 중심이 된다.
  */
 export async function searchExploreTargets(q: string, user: CurrentUser): Promise<ExploreTarget[]> {
   const term = sanitize(q);
   if (term.length < 2) return [];
-  const [palette, teachers] = await Promise.all([searchPalette(term, user.systemRole), searchTeachers(term, user)]);
+  const [palette, teachers, rooms] = await Promise.all([searchPalette(term, user.systemRole), searchTeachers(term, user), searchRooms(term, user)]);
   const fromPalette: ExploreTarget[] = palette.hits
     .filter((h) => h.kind === "student" || h.kind === "class")
     .map((h) => ({ kind: h.kind === "student" ? "student" : "class", id: h.id, label: h.title, detail: h.subtitle }));
-  return [...fromPalette.filter((t) => t.kind === "student"), ...fromPalette.filter((t) => t.kind === "class"), ...teachers];
+  return [...fromPalette.filter((t) => t.kind === "student"), ...fromPalette.filter((t) => t.kind === "class"), ...teachers, ...rooms];
+}
+
+async function searchRooms(term: string, user: CurrentUser): Promise<ExploreTarget[]> {
+  const level = await accessLevelTenant(user.systemRole, "classes");
+  if (level === "none" || level === "scoped") return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("classrooms").select("id, name, capacity, archived_at").ilike("name", `%${term}%`).order("name").limit(ROOM_LIMIT);
+  if (error) {
+    console.error(`[explore] 강의실 검색 실패: ${error.message}`);
+    return [];
+  }
+  return (data ?? []).map((r) => ({
+    kind: "room",
+    id: r.id,
+    label: r.name,
+    detail: [r.capacity ? `정원 ${r.capacity}석` : null, r.archived_at ? "보관됨" : null].filter(Boolean).join(" · ") || null,
+  }));
 }
 
 async function searchTeachers(term: string, user: CurrentUser): Promise<ExploreTarget[]> {

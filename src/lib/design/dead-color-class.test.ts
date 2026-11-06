@@ -31,8 +31,9 @@ const BUILTIN = new Set([
  * `text-`/`border-`/`bg-`는 색이 아닌 유틸과 접두사를 공유한다(크기·정렬·선 종류·그라디언트).
  * 색 후보만 남기려고 그것들을 걸러낸다 — 걸러내지 못한 건 아래 ALLOW에 이유와 함께 적는다.
  */
+// `anchor` = SVG 속성 이름 `text-anchor`(그림 모듈이 setAttribute로 쓰는 속성 키 — 클래스가 아니다 · 연결 탐색 네트워크 draw.ts).
 const NON_COLOR =
-  /^(xs|sm|md|lg|xl|[2-9]xl|base|left|right|center|justify|start|end|top|bottom|solid|dashed|dotted|double|hidden|none|collapse|separate|balance|pretty|nowrap|wrap|ellipsis|clip|visible|auto|fixed|local|scroll|repeat|contain|cover|origin|opacity|box|color|gradient|linear|radial|conic|t|b|l|r|x|y|s|e|\d)/;
+  /^(xs|sm|md|lg|xl|[2-9]xl|base|left|right|center|justify|start|end|top|bottom|solid|dashed|dotted|double|hidden|none|collapse|separate|balance|pretty|nowrap|wrap|ellipsis|clip|visible|auto|fixed|local|scroll|repeat|contain|cover|origin|opacity|box|color|gradient|linear|radial|conic|anchor|t|b|l|r|x|y|s|e|\d)/;
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {

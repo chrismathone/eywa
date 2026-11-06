@@ -18,6 +18,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { sheetDowLabel, sheetT } from "@/features/teacher-view/i18n";
 import { DEFAULT_SECTOR, SECTOR_DEFS, monthDayKo, othersLabel, type ExploreRow, type ExploreSector, type ExploreTarget } from "../model";
 import { NOT_FOUND, deniedSector, distinct, errorSector, forbidden, makeSector, settle, type ExploreLoad } from "./shared";
+import { classRuleAnalysis } from "./rule-analysis";
 
 type AttRow = {
   id: string; student_id: string; class_id: string; session_date: string; slot_start: string | null; recorded_at: string; status: string; note: string | null;
@@ -44,7 +45,7 @@ export async function loadClassCenter(id: string): Promise<ExploreLoad> {
   const slotTeacherIds = distinct(liveSlots.map((s) => s.teacherId)).filter((t) => t !== klass.teacherId);
   const roomIds = distinct(liveSlots.map((s) => s.classroomId));
   const supabase = await createClient();
-  const [students, stats, delegations, settings, teacherRows, roomRows, canEcs, canMcs, canAttendance, canTimetable, attRows] = await Promise.all([
+  const [students, stats, delegations, settings, teacherRows, roomRows, canEcs, canMcs, canAttendance, canTimetable, attRows, classLevel] = await Promise.all([
     settle("explore.class.students", getClassStudents(id)),
     settle("explore.class.attendance", getClassAttendanceStats(id, 30)),
     settle("explore.class.delegations", getClassDelegationList(id)),
@@ -59,6 +60,8 @@ export async function loadClassCenter(id: string): Promise<ExploreLoad> {
     settle("explore.class.attendanceRows", fetchAllPaged<AttRow>((from, to) =>
       supabase.from("attendance_records").select("id, student_id, class_id, session_date, slot_start, recorded_at, status, note, student:student_id ( name )")
         .eq("class_id", id).gte("session_date", addDays(today, -30)).order("id").range(from, to))),
+    // 강의실 중심은 수업 전체를 보는 계정만 연다(room.ts) — 담당 반만 보는 계정엔 강의실을 대상으로 올리지 않는다.
+    accessLevelTenant(user.systemRole, "classes"),
   ]);
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const [dStudents, dTeacher, dTimetable, dRoom, dAttendance, dSheet] = SECTOR_DEFS.class;
@@ -130,7 +133,16 @@ export async function loadClassCenter(id: string): Promise<ExploreLoad> {
     (() => {
       const slotRooms = distinct(liveSlots.map((s) => (s.classroomId ? roomName.get(s.classroomId) ?? null : null)));
       const name = klass.classroomName ?? slotRooms[0] ?? null;
+      // 등록된 강의실(배치에 이어진 방 + 반 기본 강의실) = 대상 — 더블클릭하면 그 강의실이 중심(시안 :3978 강의실 중심).
+      const roomTargets: ExploreTarget[] =
+        classLevel === "scoped"
+          ? []
+          : distinct([...liveSlots.map((s) => s.classroomId), klass.classroomId]).map((rid) => {
+              const n = liveSlots.filter((s) => s.classroomId === rid).length;
+              return { kind: "room" as const, id: rid, label: roomName.get(rid) ?? (rid === klass.classroomId ? klass.classroomName : null) ?? "강의실", meta: n > 0 ? `${n}칸` : "반 기본 강의실" };
+            });
       return makeSector(dRoom, {
+        targets: roomTargets,
         summary: name ? (slotRooms.length > 1 ? `${name} 외 ${slotRooms.length - 1}` : name) : "강의실 미지정",
         state: name ? "ready" : "empty",
         rows: liveSlots.map((s) => ({ id: s.id, title: slotLabel(s), right: (s.classroomId ? roomName.get(s.classroomId) : null) ?? klass.classroomName ?? "—" })),
@@ -196,14 +208,37 @@ export async function loadClassCenter(id: string): Promise<ExploreLoad> {
       sectors,
       defaultSector: DEFAULT_SECTOR.class,
       asOf: today,
+      // 오른쪽 아래 '분석·판단' — 규칙 판정(출결 · 구성). 숫자는 위 조각과 같은 조회 결과(30일 통계 · 정정 접은 출결 · 오늘 명단).
+      analysis: classRuleAnalysis({
+        today,
+        stats: stats.ok ? stats.value : null,
+        recs: attRows.ok ? effectiveAttendanceRecords(attRows.value) : null,
+        roster: students.ok
+          ? (() => {
+              const roster = students.value.filter((s) => s.phase !== "upcoming");
+              const by = new Map<string, number>();
+              for (const s of roster) {
+                const g = schoolGradeLabel(s.school, s.grade) || "학교 미입력";
+                by.set(g, (by.get(g) ?? 0) + 1);
+              }
+              return {
+                count: roster.length,
+                upcoming: students.value.length - roster.length,
+                onHold: roster.filter((s) => s.onHold).length,
+                groups: [...by.entries()].sort((a, b) => b[1] - a[1]).map(([g, n]) => `${g} ${n}명`),
+              };
+            })()
+          : null,
+      }),
       aside: {
-        facts: [
+        heading: "수업 정보",
+        basics: { title: "수업 기본 정보", spacer: klass.className, link: { href: `/classes/${id}`, label: "수업 상세 열기" }, facts: [
           { label: "과목", value: subjects.labelOf(klass.subject) },
           { label: "담임", value: klass.teacherName ?? "미지정" },
           { label: "강의실", value: klass.classroomName ?? "미지정" },
           { label: "오늘 명단", value: `${klass.studentCount}명${klass.upcomingCount ? ` · 배정 예정 ${klass.upcomingCount}명` : ""}` },
           ...(klass.closedAt ? [{ label: "종강일", value: klass.closedAt.slice(0, 10) }] : []),
-        ],
+        ] },
       },
     },
   };

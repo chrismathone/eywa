@@ -163,6 +163,23 @@ describe("report submission and review", () => {
     fireEvent.click(screen.getByRole("button", { name: "보고서 제출" }));
     expect(screen.getByText(/관리자 승인 없이 바로 승인 완료로 넘어갑니다/)).toBeInTheDocument();
   });
+  it("결재란 승인자는 직급으로(원장 2026-11-05 '정유진 부원장') · 직급이 비면 이름 · 생략 칸엔 작성 강사 본인", () => {
+    const staff = [{ id: teacher, name: "김그린", role: "admin" as const, subjects: ["english"], jobTitle: null }, { id: manager, name: "정유진", role: "admin" as const, subjects: ["english"], jobTitle: "부원장" }];
+    const view = render(<ReportDetail {...props} staff={staff} report={{ ...r, manager_ids: [manager], director_id: null, director_ids: [] }} />);
+    const approval = screen.getByRole("table", { name: "결재란" });
+    expect(approval).toHaveTextContent("정유진 부원장");
+    expect(approval).toHaveTextContent("김그린");
+    expect(approval).not.toHaveTextContent("김그린 부원장");
+    view.unmount();
+    const skipView = render(<ReportDetail {...props} staff={[{ ...staff[0], jobTitle: "부원장" }, staff[1]]} report={{ ...r, manager_id: null, manager_ids: [], director_id: null, director_ids: [] }} />);
+    expect(screen.getByRole("table", { name: "결재란" })).toHaveTextContent("김그린 부원장 · 승인 생략");
+    skipView.unmount();
+    // 바로 처리 칸도 직급으로(리뷰 2026-11-06 — 목록 '관리자 바로 처리 · 정유진 부원장'과 같게).
+    render(<ReportDetail {...props} staff={staff} userId={manager} report={{ ...r, teacher_id: manager, manager_id: manager, requested_by: manager, manager_ids: [manager], director_id: null, director_ids: [], status: "completed" }} />);
+    const direct = screen.getByRole("table", { name: "결재란" });
+    expect(direct).toHaveTextContent("바로 처리");
+    expect(direct).toHaveTextContent("정유진 부원장");
+  });
   it("데스크 환불 대기 — 상태 칩 둘 · 안내 · 결재란 '데스크' 칸(담당 · 환불완료일)", () => {
     const steps = [{ documentId: "doc", deskId: "desk", deskName: "데스크A", completedDate: null }];
     render(<ReportDetail {...props} report={{ ...r, status: "approved", director_id: null, director_ids: [] }} userId={manager} refundSteps={steps} />);

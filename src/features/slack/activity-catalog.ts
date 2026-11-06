@@ -32,6 +32,8 @@ export const ACTIVITY_CATEGORIES: readonly ActivityCategory[] = [
 const RULES: readonly [string, string][] = [
   ["student_consultation_", "consult"],
   ["student_care_analysis", "consult"],
+  // 상담 약속·인계(s2_0028) — 학부모 요구에 대한 약속이라 상담 묶음.
+  ["student_care_save", "consult"],
   ["student_ijw_", "settings"],
   ["enrollment_consultation_", "consult"],
   ["consultation_", "consult"],

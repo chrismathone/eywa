@@ -96,7 +96,7 @@ export function ExploreSearch({ onPick, size = "sm", autoFocus }: Props) {
           aria-autocomplete="list"
           aria-activedescendant={showList && hits[active] ? `${listId}-${active}` : undefined}
           aria-label="원생·수업·강사 검색"
-          placeholder="원생명, 반, 수업, 강사 검색"
+          placeholder="원생명, 반, 수업, 강사, 강의실 검색"
           autoFocus={autoFocus}
           value={q}
           onChange={(e) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import type { AywaIconName } from "@/components/icons/aywa-icons";
 import { Pill } from "@/components/atoms/pill";
@@ -24,11 +24,12 @@ import {
   type ExploreCenter,
   type ExploreKind,
   type ExploreSector,
+  type TrailItem,
 } from "../model";
 import styles from "./explore.module.css";
 
 /** 떠나는 중 — 고른 대상(가운데 원이 먼저 이 이름을 받는다)과 그 대상을 고른 쐐기(가운데로 빨려 들어간다). */
-export type Leaving = { key: string | null; kind: ExploreKind; label: string; icon?: AywaIconName };
+export type Leaving = { key: string | null; kind: ExploreKind; label: string; icon?: AywaIconName; /** out = 되돌아가기(흡수의 역재생). */ dir?: "in" | "out" };
 
 type Props = {
   center: ExploreCenter;
@@ -44,6 +45,8 @@ type Props = {
   leaving: Leaving | null;
   /** 떠난 화면에서 이어 받아 뜬 화면 — 가운데 원은 이미 이 이름으로 떠 있었으니 등장 모션을 건너뛴다(조각 펼침은 그대로). */
   arrived?: boolean;
+  /** 되돌아와 뜬 화면 — `from`(떠난 중심)으로 이어진 쐐기가 가운데에서 되살아나고 나머지는 사라지던 그대로 돌아온다. */
+  back?: { from: TrailItem | null } | null;
 };
 
 /**
@@ -53,7 +56,7 @@ type Props = {
  * 바깥 <g>(도넛 중심 축)과 안쪽 <g>(제 중심 축)을 겹쳐 펼침·흡수와 올리기가 서로의 축을 건드리지 않는다.
  * 키보드 — Tab으로 도넛에 들어오면 고른 쐐기에 초점, ←→↑↓로 옆 쐐기, Enter/Space로 고르기·흡수. 선택은 색만이 아니라 돌출·테두리·그림자·`aria-pressed`로도.
  */
-export function ExploreDonut({ center, sectors, selected, onSelect, onZoom, onCenterZoom, leaving, arrived = false }: Props) {
+export function ExploreDonut({ center, sectors, selected, onSelect, onZoom, onCenterZoom, leaving, arrived = false, back = null }: Props) {
   const [hover, setHover] = useState<string | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
   const refs = useRef<(SVGGElement | null)[]>([]);
@@ -62,6 +65,20 @@ export function ExploreDonut({ center, sectors, selected, onSelect, onZoom, onCe
   const C = DONUT_CENTER;
   const stagger = Math.min(60, Math.round(520 / Math.max(n, 1)));
   const fullSpan = 360 / Math.max(sectors.length, 1);
+  const out = leaving?.dir === "out";
+  // 되돌아와 뜬 화면 — 떠난 중심으로 이어진 쐐기(그 반·그 영역·그 대상)를 찾는다. 못 찾으면 고리만 거꾸로 돌아온다.
+  const [via] = useState<string | null>(() => (back ? viaWedgeOf(wedges, back.from) : null));
+  const [settled, setSettled] = useState(!back);
+  const [labelsMoved, setLabelsMoved] = useState(!back);
+  useEffect(() => {
+    if (!back) return;
+    const moveT = window.setTimeout(() => setLabelsMoved(true), 140);
+    const doneT = window.setTimeout(() => setSettled(true), 600);
+    return () => {
+      window.clearTimeout(moveT);
+      window.clearTimeout(doneT);
+    };
+  }, [back]);
 
   const move = (from: number, delta: number) => {
     const next = (from + delta + n) % n;
@@ -87,7 +104,7 @@ export function ExploreDonut({ center, sectors, selected, onSelect, onZoom, onCe
   };
 
   const geo = wedges.map((w) => {
-    const isSel = w.selKey === selected;
+    const isSel = w.selKey === selected || (!settled && w.selKey === via);
     const isHot = !isSel && (w.selKey === hover || w.selKey === focus);
     const lift = isSel ? OFFSET_SELECTED : isHot ? OFFSET_HOVER : 0;
     const span = w.angles.end - w.angles.start;
@@ -110,13 +127,14 @@ export function ExploreDonut({ center, sectors, selected, onSelect, onZoom, onCe
         <circle cx={C} cy={C} r={DONUT_OUTER + 10} fill="var(--card)" stroke="var(--line-faint)" />
         {wedges.map((w, i) => {
           const g = geo[i];
-          const isSel = w.selKey === selected;
+          const isSel = w.selKey === selected || (!settled && w.selKey === via);
           const isFocus = w.selKey === focus;
           // 🔴 바깥 <g>는 늘 `.sectorOuter`를 지닌다(변형 축 = 도넛 중심). 떠날 때 그 클래스를 떼면 축이 좌상단(0,0)으로 떨어져
           //    고른 조각이 가운데가 아니라 **왼쪽 위로** 빨려 갔다(원장 2026-11-03 캡처).
-          const outerCls = `${styles.sectorOuter} ${leaving ? (leaving.key === w.selKey ? styles.sectorOuterLeaveChosen : styles.sectorOuterLeave) : ""}`;
+          const outerCls = `${styles.sectorOuter} ${leaving ? (out ? styles.sectorOuterUnenter : leaving.key === w.selKey ? styles.sectorOuterLeaveChosen : styles.sectorOuterLeave) : via !== null ? (w.selKey === via ? styles.sectorOuterBackChosen : styles.sectorOuterBack) : back ? styles.sectorOuterBack : ""}`;
+          const delay = leaving ? (out ? (n - 1 - i) * stagger : (n - 1 - i) * LEAVE_STAGGER_MS) : back ? (w.selKey === via ? 0 : Math.max(0, 320 - (n - 1 - i) * LEAVE_STAGGER_MS)) : i * stagger;
           return (
-            <g key={w.selKey} className={outerCls} style={{ animationDelay: leaving ? `${(n - 1 - i) * LEAVE_STAGGER_MS}ms` : `${i * stagger}ms` }}>
+            <g key={w.selKey} className={outerCls} style={{ animationDelay: `${delay}ms` }}>
               <g
                 ref={(el) => {
                   refs.current[i] = el;
@@ -147,21 +165,24 @@ export function ExploreDonut({ center, sectors, selected, onSelect, onZoom, onCe
       <div className="pointer-events-none absolute inset-0" aria-hidden="true">
         {wedges.map((w, i) => {
           const g = geo[i];
-          const isSel = w.selKey === selected;
+          const isSel = w.selKey === selected || (!settled && w.selKey === via);
           const muted = w.sector.state === "denied" || w.sector.state === "error";
-          const chosen = leaving?.key === w.selKey;
-          const midCls = leaving ? (chosen ? styles.labelLeaveChosen : styles.labelLeave) : styles.labelEnter;
+          const chosen = !out && leaving?.key === w.selKey;
+          // 되살아나는 쐐기의 글자는 가운데에서 출발해 140ms 뒤 제자리로 미끄러진다(들어올 때의 거꾸로).
+          const fromCenter = w.selKey === via && !settled;
+          const midCls = leaving ? (out ? styles.labelUnenter : chosen ? styles.labelLeaveChosen : styles.labelLeave) : back ? (w.selKey === via ? styles.labelBackChosen : styles.labelBack) : styles.labelEnter;
+          const midDelay = leaving ? (out ? 40 + (n - 1 - i) * stagger : 0) : back ? (w.selKey === via ? 120 : 360) : i * stagger + 60;
           return (
             <div
               key={w.selKey}
               className={`absolute -translate-x-1/2 -translate-y-1/2 ${styles.labelOuter}`}
               style={{
                 width: `${g.widthPct}%`,
-                left: chosen ? "50%" : `${(g.label.x / DONUT_SIZE) * 100}%`,
-                top: chosen ? "50%" : `${(g.label.y / DONUT_SIZE) * 100}%`,
+                left: chosen || (fromCenter && !labelsMoved) ? "50%" : `${(g.label.x / DONUT_SIZE) * 100}%`,
+                top: chosen || (fromCenter && !labelsMoved) ? "50%" : `${(g.label.y / DONUT_SIZE) * 100}%`,
               }}
             >
-              <div className={midCls} style={{ animationDelay: leaving ? "0ms" : `${i * stagger + 60}ms` }}>
+              <div className={midCls} style={{ animationDelay: `${midDelay}ms` }}>
                 <div className={`flex flex-col items-center gap-1 text-center ${styles.label}`} style={{ transform: `translate(${g.dx}px, ${g.dy}px)` }}>
                   {w.eyebrow ? <span className={`text-xs leading-none font-medium ${isSel ? "text-primary-foreground" : "text-text-dim"}`}>{w.eyebrow}</span> : null}
                   <EyIcon name={w.icon} size={g.narrow ? 22 : 30} className={isSel ? "text-primary-foreground" : TONE_INK_CLASS[w.tone]} />
@@ -185,7 +206,7 @@ export function ExploreDonut({ center, sectors, selected, onSelect, onZoom, onCe
       </div>
 
       {/* 고른 쐐기 자리에서 자라나 가운데 원이 되는 둥근 면 — "가운데로 들어와 원이 되는" 장면. 쐐기 색 그대로(선택된 쐐기면 primary). */}
-      {leaving?.key
+      {leaving?.key && !out
         ? (() => {
             const i = wedges.findIndex((w) => w.selKey === leaving.key);
             if (i < 0) return null;
@@ -199,12 +220,24 @@ export function ExploreDonut({ center, sectors, selected, onSelect, onZoom, onCe
           })()
         : null}
 
+      {/* 되돌아와 뜬 화면 — 들어갈 때 가운데에 닿은 구슬이 거꾸로 떠올라 왔던 조각 자리로(고른 색 그대로). */}
+      {via !== null && !settled
+        ? (() => {
+            const i = wedges.findIndex((w) => w.selKey === via);
+            if (i < 0) return null;
+            const g = geo[i];
+            const style = { "--ox": `${(g.label.x / DONUT_SIZE) * 100}%`, "--oy": `${(g.label.y / DONUT_SIZE) * 100}%`, background: "var(--primary)" } as CSSProperties;
+            return <div className={`${styles.orb} ${styles.orbOut}`} style={style} aria-hidden="true" />;
+          })()
+        : null}
+
       {/* 가운데 원 — 지금 중심. 다른 대상을 고르면 **이 자리의 내용이 바뀐다**(옆에 노드를 더하지 않는다). 떠날 땐 고른 대상의 이름을 먼저 받는다. */}
       <div
         className={`bg-card shadow-card ring-primary-softer absolute top-1/2 left-1/2 flex aspect-square w-[40%] flex-col items-center justify-center gap-1.5 rounded-full px-4 text-center ring-8 ${
           center.detailHref ? "cursor-pointer" : ""
-        } ${leaving ? styles.centerSwap : arrived ? "" : styles.centerEnter}`}
-        style={leaving ? undefined : { transform: "translate(-50%, -50%)" }}
+        } ${leaving ? styles.centerSwap : back ? styles.centerSwapOut : arrived ? "" : styles.centerEnter}`}
+        style={leaving || back ? undefined : { transform: "translate(-50%, -50%)" }}
+        data-explore-center=""
         onDoubleClick={() => onCenterZoom()}
         title={center.detailHref ? `더블클릭: ${center.detailLabel}` : undefined}
       >
@@ -234,4 +267,25 @@ export function ExploreDonut({ center, sectors, selected, onSelect, onZoom, onCe
       </div>
     </div>
   );
+}
+
+/**
+ * 되돌아와 뜬 화면에서 "어느 쐐기에서 왔었나" — 떠난 중심(`from`)이 이 화면의 작은 조각(반)의 대상이거나, 이 중심의 영역 중심(같은 대상 + 영역 key)이거나,
+ * 한 대상짜리 조각의 대상이면 그 쐐기. 못 찾으면 null(고리만 거꾸로 돌아온다).
+ */
+function viaWedgeOf(wedges: ReturnType<typeof wedgesOf>, from: TrailItem | null): string | null {
+  if (!from) return null;
+  for (const w of wedges) {
+    if (w.part && w.part.target.kind === from.kind && w.part.target.id === from.id && !from.sector) return w.selKey;
+  }
+  for (const w of wedges) {
+    if (from.sector && w.sector.key === from.sector && !w.part) return w.selKey;
+    if (from.sector && w.sector.key === from.sector && w.part) return w.selKey;
+  }
+  for (const w of wedges) {
+    const only = w.sector.focus ?? (w.sector.targets?.length === 1 ? w.sector.targets[0] : null);
+    if (only && only.kind === from.kind && only.id === from.id && !from.sector) return w.selKey;
+    if (!from.sector && w.sector.targets?.some((t) => t.kind === from.kind && t.id === from.id)) return w.selKey;
+  }
+  return null;
 }

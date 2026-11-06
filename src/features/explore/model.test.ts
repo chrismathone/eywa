@@ -21,10 +21,11 @@ import {
 } from "./model";
 
 describe("조각 표 — 시안의 수와 차례", () => {
-  it("원생 8 · 수업 6 · 강사 6, 맨 위 조각이 기본 패널", () => {
-    expect(SECTOR_DEFS.student.map((s) => s.label)).toEqual(["수업", "출결", "성적", "진도", "상담", "특이사항", "수납", "타임라인"]);
+  it("원생 9 · 수업 6 · 강사 6 · 강의실 4, 맨 위 조각이 기본 패널", () => {
+    expect(SECTOR_DEFS.student.map((s) => s.label)).toEqual(["수업", "출결", "성적", "진도", "상담", "특이사항", "수납", "타임라인", "약속·할 일"]);
     expect(SECTOR_DEFS.class.map((s) => s.label)).toEqual(["수강 원생", "담임 강사", "시간표", "강의실", "출석부", "강사 시트"]);
     expect(SECTOR_DEFS.teacher.map((s) => s.label)).toEqual(["담당 수업", "수업 시간표", "담당 원생", "강사 시트", "수업보고서", "직원 정보"]);
+    expect(SECTOR_DEFS.room.map((s) => s.label)).toEqual(["수업", "강사", "시간표", "강의실 정보"]);
     for (const kind of EXPLORE_KINDS) {
       const keys = SECTOR_DEFS[kind].map((s) => s.key);
       expect(new Set(keys).size).toBe(keys.length);
