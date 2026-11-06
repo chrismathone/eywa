@@ -1,6 +1,7 @@
 import { zoomAt } from "./camera";
 import type { NetEngine } from "./engine";
-import { netRadius, type NetNode, type NetPoint } from "./graph";
+import type { NetNode, NetPoint } from "./graph";
+import { netRadius } from "./layout";
 import { hoverText, openNode, selectNode } from "./node-actions";
 
 /**
@@ -31,7 +32,7 @@ export function attachPointer(E: NetEngine): () => void {
       const q = B.pos[n.id];
       if (!q) continue;
       const d = Math.hypot(q.x * B.view.k + B.view.x - p.x, q.y * B.view.k + B.view.y - p.y);
-      const r = n.kind === "root" ? 26 : n.kind === "hub" ? netRadius(n, B) + 4 : n.kind === "analysis" ? 9 : 5;
+      const r = n.kind === "root" ? 26 : n.kind === "hub" ? netRadius(n, B) + 4 : n.kind === "group" ? netRadius(n, B) + 3 : n.kind === "analysis" ? 9 : 5;
       if (d < Math.max(7, r * Math.sqrt(B.view.k) + 3) && d < d0) {
         best = n;
         d0 = d;

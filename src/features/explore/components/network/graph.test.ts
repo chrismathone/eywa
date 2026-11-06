@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildNetGraph, netFitView, netLayout, netNeighbors, netRadius, summaryGraph, type NetBoard } from "./graph";
+import { buildNetGraph, netNeighbors, summaryGraph, type NetBoard } from "./graph";
+import { netFitView, netLayout, netRadius } from "./layout";
 import { placeLabels } from "./labels";
 import { planMorphBack, planMorphTo } from "./morph";
 import { CENTERS, STUDENT } from "./testing/fixture";
@@ -11,7 +12,7 @@ const fitted = (b: NetBoard): NetBoard => ({ ...b, view: netFitView(b, SIZE) });
 const screen = (b: { pos: NetBoard["pos"]; view: NetBoard["view"] }, id: string) => ({ x: b.pos[id].x * b.view.k + b.view.x, y: b.pos[id].y * b.view.k + b.view.y });
 
 describe("판 짜기 — 모델 → 점·선", () => {
-  it("가운데 1 · 영역 = 조각 수 + 온톨로지 · 출결 '기록' 줄은 하루하루 기록으로 펼친다", () => {
+  it("가운데 1 · 영역 = 조각 수 + 온톨로지 · 출결 7줄의 하루하루 기록은 한 번씩만(같은 id) · 반별 줄 3", () => {
     const g = buildNetGraph(S);
     const count = (k: string) => g.nodes.filter((n) => n.kind === k).length;
     expect(count("root")).toBe(1);
@@ -19,9 +20,15 @@ describe("판 짜기 — 모델 → 점·선", () => {
     expect(count("analysis")).toBe(2);
     expect(count("fact")).toBe(4);
     expect(count("target")).toBe(3);
-    // 출결: 반별 2 + 하루 기록 19(결석 줄의 기록은 같은 id라 한 번만)
-    expect(g.nodes.filter((n) => n.hub === "hub:attendance")).toHaveLength(21);
-    expect(g.nodes.find((n) => n.id === "rec:attendance:att0")?.title).toBe("10.06 중2 수학 A반");
+    // 출결: 반별 3 + 30일 하루 기록 27(출석 횟수·기록·출석 줄에 같은 기록이 있어도 점은 하나) · 묶음은 따로 센다
+    const att = g.nodes.filter((n) => n.hub === "hub:attendance" && n.kind === "record");
+    expect(att).toHaveLength(30);
+    const hub = g.nodes.find((n) => n.id === "hub:attendance")!;
+    expect([hub.tally, hub.items]).toEqual([27, 3]); // 날짜 기록 27(연도 묶음과 같은 수) · 반별 출석률 항목 3
+    // 반별 줄 = 이름에 값까지(통계 줄) · 하루 기록 = 월 묶음 아래 '일 · 반 이름'
+    expect(g.nodes.find((n) => n.id === "rec:attendance:c:중2 수학 A반")?.label).toMatch(/^중2 수학 A반 \d+%$/);
+    const day = g.nodes.find((n) => n.id === "rec:attendance:2026-10-21-중2 수학 A반-16:20")!;
+    expect([day.parent, day.label]).toEqual(["grp:attendance:2026-10", "21일 · 중2 수학 A반"]);
     // 점 id는 겹치지 않고 선은 이미 있는 점만 잇는다
     const ids = new Set(g.nodes.map((n) => n.id));
     expect(ids.size).toBe(g.nodes.length);
@@ -46,7 +53,7 @@ describe("주체별 요약", () => {
   it("가운데 + 영역(기록 수) + 분석만 · 영역 사이 선은 굵기(w)로 합친다", () => {
     const sum = summaryGraph(buildNetGraph(S));
     expect(sum.nodes.every((n) => ["root", "hub", "analysis"].includes(n.kind))).toBe(true);
-    expect(sum.nodes.find((n) => n.id === "hub:attendance")?.count).toBe(21);
+    expect(sum.nodes.find((n) => n.id === "hub:attendance")?.count).toBe(30); // 날짜 묶음은 세지 않는다
     expect(sum.nodes.find((n) => n.id === "hub:ontology")?.count).toBe(4);
     const an = sum.edges.find((e) => e.from === "an:flow-consult" || e.to === "an:flow-consult");
     expect(an).toBeTruthy();
@@ -125,13 +132,14 @@ describe("보간", () => {
     // 사라지는 출결 기록은 제 영역 안으로(흡수)
     const sum = netLayout(S, "summary");
     const toSum = planMorphTo(old, sum, old.centerId, sum.centerId, SIZE).frame(1);
-    const d = Math.hypot(toSum.pos["rec:attendance:att0"].x - toSum.pos["hub:attendance"].x, toSum.pos["rec:attendance:att0"].y - toSum.pos["hub:attendance"].y);
+    const rid = "rec:attendance:c:중2 수학 A반";
+    const d = Math.hypot(toSum.pos[rid].x - toSum.pos["hub:attendance"].x, toSum.pos[rid].y - toSum.pos["hub:attendance"].y);
     expect(d).toBeLessThan(0.01);
   });
 
   it("되돌아가기 — 끝은 남겨 둔 판 그대로(보기·자리), 지금 중심은 왔던 점 자리로", () => {
     const A = fitted(netLayout(S, "records"));
-    A.pos["rec:consultations:cs1"] = { x: A.pos["rec:consultations:cs1"].x + 55, y: A.pos["rec:consultations:cs1"].y - 30 };
+    A.pos["grp:consultations:2026-10"] = { x: A.pos["grp:consultations:2026-10"].x + 55, y: A.pos["grp:consultations:2026-10"].y - 30 };
     const cur = fitted(netLayout(C, "records"));
     const plan = planMorphBack(cur, A, "class:c1", "class:c1");
     expect(plan.end.view).toEqual(A.view);

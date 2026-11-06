@@ -15,6 +15,7 @@
   --net-root-fill: var(--card);
   --net-ring: var(--primary);
   --net-lead: #c3c8d2;
+  --net-group-ring: var(--card);
   --net-text: var(--foreground);
   --net-halo: var(--card);
   --net-t-primary: var(--primary);
@@ -47,6 +48,7 @@
   --net-root-fill: #1b2742;
   --net-ring: #9fc1ff;
   --net-lead: #5a6580;
+  --net-group-ring: #11192b;
   --net-text: #edf0fc;
   --net-halo: #11192b;
   --net-t-primary: #8fb4ff;
