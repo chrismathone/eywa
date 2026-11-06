@@ -17,12 +17,15 @@ import { isTenantReportAttachmentPath } from "@/lib/storage/legacy-audio-path";
 import type { UploadTicket } from "@/lib/storage/types";
 import { logAction } from "@/features/audit/server/log";
 import { teacherOwnsStudent } from "./scope";
+import { hasVideoAttachment, isReportVideoCT, isVideoAttachment, REPORT_FILE_MAX_BYTES, REPORT_VIDEO_MAX_BYTES, videoExtOf, withVideoExt } from "../report-video";
+import { reportVideoWorkerGate } from "./report-video-gate";
 
 // 수업 보고서 학생 사진 첨부(P2b) — documents 2단계 티켓 업로드 패턴(issue→클라 uploadToTicket→register).
 // ⚠️ 첨부는 **저장된 보고서 행에만**(유령 row 금지). 변경 시 ClassNote 상태 리셋(옛 스샷 死링크 방지).
 
 const MAX_ATTACHMENTS = 6;
 const KIND = "report_attachment" as const;
+const VIDEO_ONE_ERROR = "영상은 보고서 한 장에 하나만 넣을 수 있습니다 — 넣은 영상을 지운 뒤 다시 넣어 주세요";
 const BUCKET = MEDIA_KIND[KIND].supabaseBucket; // removeObject Supabase 분기용(bucket 없으면 no-op)
 
 // 첨부 변경 시 ClassNote 상태 리셋 — 이미 발송된 보고서에 사진을 더/빼면 옛 스샷과 불일치 → 미발송으로 되돌려 재발송 유도.
@@ -152,15 +155,26 @@ export async function issueReportAttachmentUploadTicket(
   const g = await gate(input.studentId, input.reportDate);
   if ("error" in g) return { error: g.error };
   if (!MEDIA_KIND[KIND].allowCT(input.contentType))
-    return { error: "사진·문서(pdf·hwp·office·mp3 등)만 첨부할 수 있습니다" };
-  if (!Number.isFinite(input.size) || input.size <= 0 || input.size > MEDIA_KIND[KIND].maxBytes)
-    return { error: "파일이 너무 큽니다 (최대 20MB)" };
+    return { error: "사진·문서(pdf·hwp·office·mp3 등)·영상(mp4·mov)만 첨부할 수 있습니다" };
+  // 영상(2026-11-06) = 100MB · 한 장에 하나 · 영상을 올릴 수 있는 연동 PC일 때만. 그 밖의 첨부는 종전 20MB.
+  const video = isReportVideoCT(input.contentType);
+  const maxBytes = video ? REPORT_VIDEO_MAX_BYTES : REPORT_FILE_MAX_BYTES;
+  if (!Number.isFinite(input.size) || input.size <= 0 || input.size > maxBytes)
+    return { error: video ? "영상이 너무 큽니다 (최대 100MB)" : "파일이 너무 큽니다 (최대 20MB)" };
   const row = await findReportRow(g.supabase, input.studentId, input.subject, input.reportDate, input.classId);
   if (!row) return { error: "먼저 보고서를 저장하세요" };
   if (isSentLocked(row)) return { error: SENT_LOCK_ERROR };
   if ((row.attachments ?? []).length >= MAX_ATTACHMENTS)
     return { error: `사진은 최대 ${MAX_ATTACHMENTS}장까지 첨부할 수 있습니다` };
-  const ext = input.ext.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+  if (video) {
+    // 영상은 영어 보고서만(EiE 일일·월간 — 2026-11-06). 표 끌어 놓기 등 다른 길로 수학 보고서에 들어오지 않게 서버가 막는다.
+    if (input.subject !== "english") return { error: "영상은 영어 보고서에만 넣을 수 있습니다" };
+    if (hasVideoAttachment(row.attachments)) return { error: VIDEO_ONE_ERROR };
+    const blocked = await reportVideoWorkerGate(g.supabase);
+    if (blocked) return { error: blocked };
+  }
+  // 영상의 확장자는 형식에서(이름에 확장자가 없어도 경로가 영상으로 읽히게 — 발송 PC는 이름·경로로 영상을 가른다).
+  const ext = (video ? videoExtOf(input.contentType) : null) ?? (input.ext.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg");
   const path = `${g.user.tenantId}/report-attachments/${randomUUID()}.${ext}`;
   if (!isTenantReportAttachmentPath(path, g.user.tenantId)) return { error: "경로 생성 실패" };
   try {
@@ -211,9 +225,28 @@ export async function registerReportAttachment(
     await removeObject(input.path, { bucket: BUCKET }).catch(() => {});
     return { ok: false, error: e instanceof Error ? e.message : "업로드 검증 실패" };
   }
+  // 영상 판정은 **실제 올라온 객체 형식** 또는 이름으로(티켓의 주장만 믿지 않는다) — 영상은 한 장에 하나, 영상 아닌 첨부는 20MB.
+  // 발송 PC는 **이름**으로 영상을 가른다 — 그래서 형식이 영상이거나 이름·경로가 영상 확장자면 모두 영상으로 보고,
+  // 티켓 단계의 검사(영어만 · 연동 PC 지원)를 여기서 다시 한다(audio/mp4 티켓으로 'rec.mp4'를 올리는 길 — 재리뷰 2026-11-06).
+  const isVideo =
+    isReportVideoCT(verified.contentType) || isVideoAttachment(input.name || "") || isVideoAttachment(input.path);
+  if (isVideo) {
+    const blocked = input.subject !== "english" ? "영상은 영어 보고서에만 넣을 수 있습니다" : await reportVideoWorkerGate(g.supabase);
+    if (blocked) {
+      await removeObject(input.path, { bucket: BUCKET }).catch(() => {});
+      return { ok: false, error: blocked };
+    }
+  }
+  // 영상인데 경로가 영상 확장자가 아니면(티켓을 거치지 않은 올리기) 받지 않는다 — 이름·경로가 영상 판정의 기준이다.
+  if (isVideo ? hasVideoAttachment(current) || !isVideoAttachment(input.path) : verified.size > REPORT_FILE_MAX_BYTES) {
+    await removeObject(input.path, { bucket: BUCKET }).catch(() => {});
+    return { ok: false, error: isVideo ? (hasVideoAttachment(current) ? VIDEO_ONE_ERROR : "영상 형식을 알 수 없습니다 — mp4·mov 파일을 넣어 주세요") : "파일이 너무 큽니다 (최대 20MB)" };
+  }
+  // 영상 이름은 영상 확장자로 끝나게(발송 PC가 이름으로 영상을 가른다 — 확장자 없는 'video'면 문서로 갈 뻔했다).
+  const storedName = isVideo ? withVideoExt(input.name || "", verified.contentType || "video/mp4") : input.name || "photo";
   const next: Attachment[] = [
     ...current,
-    { path: input.path, name: input.name || "photo", size: verified.size || input.size || 0 },
+    { path: input.path, name: storedName, size: verified.size || input.size || 0 },
   ];
   const { data: resetRows, error } = await g.supabase
     .from("lesson_reports")

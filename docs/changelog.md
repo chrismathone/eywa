@@ -1,5 +1,14 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-06 — 수업보고서 영상 첨부(EiE 일일·월간 → ClassNote 글의 영상 칸) · 🔴 AywaSync 릴리스 필요
+
+- 원장 *"영상 밑에 이미지 붙어서 나간 … 그런식으로 첨부해야한다면 일단 기능 만들어서 테스트"* · *"eie 일일이랑 월간에 첨부파일 붙이고 클래스노트 발송 테스트"*.
+- ClassNote 화면 코드 실측: 사진·영상은 같은 입력(`media-attachment-add-input`) · 영상은 kage `file_type=video` · 글에는 `attached_video` **하나**(`{access_key, original_file_name, file_size}`) · ClassNote 영상 상한 1GB(mp4·mov 등).
+- 앱: 원스크린 영어 템플릿 칸 '영상 넣기'(보고서 한 장에 하나 · mp4·mov · 100MB · 글 속 자리 줄 없음) — 같은 첨부 함수(`addAttachmentsFor`). 서버 = 영상 100MB · 한 장에 하나 · 영상 아닌 첨부 20MB 그대로(공지 이미지도 20MB) · **연동 PC가 전부 `caps.reportVideo`를 알릴 때만** 받는다([`report-video-gate.ts`](../src/features/onescreen/server/report-video-gate.ts) — 옛 판은 영상을 문서 칸으로 올리다 막히거나 영상 없이 '완료'). 규약 한 벌 [`report-video.ts`](../src/features/onescreen/report-video.ts).
+- 발송 PC: 영상을 임시 파일로 받아 **경로로** 올린다(Playwright가 50MB 넘는 버퍼를 거절) · 대기 = 30초 + 1MB당 2초(상한 6분 · 종전 12초면 50MB가 중간에 '응답 없음') · 작성 화면을 새로 열고 올린다 · 미리보기 그림 응답은 영상으로 잡지 않는다 · 영상을 못 올리면 보내지 않고 재시도(영상 없이 나가지 않게) · 첨부 표시 설정과 무관 ([`report-video.mjs`](../scripts/_classnote/report-video.mjs) · `uploadReportVideo`).
+- 저장소: `report-attachments` 버킷 상한 20→100MB + 영상 형식 3개(`scripts/setup-storage.ts` · 운영 버킷 설정은 따로 바꾼다).
+- ⏳ 실제 발송 시험 = AywaSync 새 판(서명 키가 있는 빌드 PC) 게시 → 연동 PC 적용 → 테스트 학생(학원이·학원삼)의 EiE 보고서. 업로드가 kmb 경로로 가거나 영상 응답 모양이 다르면 '응답 없음'으로 실패하고 사유가 남는다.
+
 ## 2026-11-06 — 🔴 연동 PC의 ClassNote 발송 정지(17:37~19:17) 복구: 학원 비서 SQL이 거둔 함수 실행권을 연동 역할에 명시로(SQL s2_0032 · ✅ 운영 적용 19:16)
 
 - 원장 *"지금 클래스노트 발송이 워커에서 제대로 되고 있는지 체크"* → *"수정할 수 있으면 빠르게 수정하고 적용시켜"*.

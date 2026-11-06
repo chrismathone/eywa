@@ -3703,6 +3703,17 @@ export const SHEET_DICT = {
     ko: "첨부가 가득 찼습니다 — 아래 첨부에서 하나를 지우면 넣을 수 있습니다",
     en: "Attachments are full — delete one below to insert another",
   },
+  // ── 영상 첨부(2026-11-06) — ClassNote 글의 영상 칸으로 따로 올라간다(보고서 한 장에 하나) ──
+  "os.video.add": { ko: "영상 넣기", en: "Add a video" },
+  "os.video.help": {
+    ko: "영상 1개(mp4·mov, 100MB까지) — ClassNote 글에 영상으로 붙고 보고서 그림은 그 아래에 붙습니다",
+    en: "One video (mp4/mov, up to 100MB) — it goes on the ClassNote post as a video, with the report image below",
+  },
+  "os.video.has": {
+    ko: "영상이 들어 있습니다 — 바꾸려면 아래 첨부에서 지운 뒤 다시 넣으세요",
+    en: "A video is attached — delete it below to add a different one",
+  },
+  "os.video.tooBig": { ko: "영상이 너무 큽니다 (최대 100MB)", en: "The video is too large (max 100MB)" },
   // ClassNote 반 보드 매칭 아이콘(2026-09-29) — 사유 문장은 연동 PC가 적은 데이터라 사전 밖이다.
   // ⚠️ `os.cn.*`는 '반 서술'(class narrative)이 이미 쓴다 — 이 묶음은 `os.cnMatch.*`.
   "os.cnMatch.title": { ko: "ClassNote 반 매칭", en: "ClassNote class match" },

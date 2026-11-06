@@ -445,6 +445,16 @@ export async function scrapeStudentBoards(page) {
  * 문서=`doc-attachment-add-input`(etc). 반환 `{ access_key, info }`(문서 info={orgname,size,ext} / 이미지 info={img:{length,width,height},…}).
  */
 export const KAGE_WAIT_MS = 12000;
+/** kage 업로드 응답의 주소인가 — **호스트로** 본다(경로·쿼리 속 글자에 속지 않게). 종전 `kids-kage.kakao.com` 포함 + 영상의 카카오 미디어 업로드(kmb) 호스트. */
+export function isKageUploadHost(url) {
+  let host = "";
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return /kids-kage\.kakao\.com$/.test(host) || (/(^|[.-])kmb[a-z0-9-]*\./.test(host) && /\.(kakao\.com|kakaocdn\.net)$/.test(host));
+}
 const KAGE_POLL_MS = 100;
 
 /**
@@ -459,19 +469,23 @@ const KAGE_POLL_MS = 100;
  * ⚠️ `error`에는 첨부 칸 조작 중 난 예외를 그대로 담는다 — 아래 종전 시그니처가 **그대로 다시 던지기**
  *    위해서다(파일첨부·공지 경로의 동작을 바꾸지 않는다).
  */
-export async function uploadToKageDetailed(page, inputTestId, { name, mimeType, buffer }, { subject = "첨부 파일" } = {}) {
+export async function uploadToKageDetailed(page, inputTestId, { name, mimeType, buffer, filePath = null }, { subject = "첨부 파일", waitMs = KAGE_WAIT_MS, accept = null } = {}) {
   // 올릴 바이트가 없으면 올릴 것도 없다 — 그대로 넣으면 kage가 access_key를 안 주고, 그 결과가
   // "무응답"과 구분이 안 된 채 12초를 버린다(캡처 실패의 조용한 얼굴).
-  if (!buffer?.length) return { ok: false, kage: null, reason: kageFailureReason({ subject, kind: "empty" }), error: null };
+  // `filePath`(영상, 2026-11-06) = 버퍼 대신 **파일 경로**로 넘긴다 — Playwright가 50MB 넘는 버퍼를 거절한다(report-video.mjs).
+  if (!filePath && !buffer?.length) return { ok: false, kage: null, reason: kageFailureReason({ subject, kind: "empty" }), error: null };
 
   let result = null;
   /** kage POST 응답 기록(성공 여부·상태코드·본문 요약) — 실패 사유를 짚는 유일한 단서. */
   const seen = [];
   const onResp = async (res) => {
-    if (!/kids-kage\.kakao\.com/.test(res.url()) || res.request().method() !== "POST") return;
+    // 영상은 같은 kage 또는 카카오 미디어 업로드(kmb)로 갈 수 있다(ClassNote 화면 코드에 두 경로가 다 있다 — 2026-11-06) — 둘 다 받는다.
+    if (!isKageUploadHost(res.url()) || res.request().method() !== "POST") return;
     const status = res.status();
     try {
       const j = await res.json();
+      // `accept`(영상) = 그 응답이 **영상 자체**인가 — 작성 화면이 영상 미리보기 그림을 따로 올리면 그 키를 영상으로 잡지 않게.
+      if (j?.access_key && accept && !accept(j)) { seen.push({ status, ok: true, detail: "다른 파일 응답(건너뜀)" }); return; }
       if (j?.access_key) { result = j; seen.push({ status, ok: true, detail: "" }); return; }
       seen.push({ status, ok: false, detail: j?.message ?? j?.error ?? j?.msg ?? "access_key 없음" });
     } catch {
@@ -481,13 +495,14 @@ export async function uploadToKageDetailed(page, inputTestId, { name, mimeType, 
   page.on("response", onResp);
   try {
     try {
-      await page.locator(`input[data-testid='${inputTestId}']`).setInputFiles({ name, mimeType, buffer });
+      await page.locator(`input[data-testid='${inputTestId}']`).setInputFiles(filePath ?? { name, mimeType, buffer });
     } catch (e) {
       return { ok: false, kage: null, reason: kageFailureReason({ subject, kind: "no_input", detail: e?.message ?? "" }), error: e };
     }
     // 업로드 완료 폴링 — 총 상한 12초는 유지하고 **간격만 300→100ms**(2026-07-28 속도).
     // 응답을 감지하고도 최대 300ms를 더 기다리던 낭비를 줄인다(건당 평균 ~150ms, 부하 증가 없음 — 로컬 폴링).
-    for (let i = 0; i < KAGE_WAIT_MS / KAGE_POLL_MS && !result; i++) await page.waitForTimeout(KAGE_POLL_MS);
+    // 영상은 크기에 비례해 더 기다린다(호출부가 waitMs를 준다 — report-video.mjs `videoUploadWaitMs`).
+    for (let i = 0; i < waitMs / KAGE_POLL_MS && !result; i++) await page.waitForTimeout(KAGE_POLL_MS);
   } finally {
     page.off("response", onResp);
   }
@@ -496,7 +511,7 @@ export async function uploadToKageDetailed(page, inputTestId, { name, mimeType, 
   const bad = seen.filter((s) => !s.ok).pop();
   return bad
     ? { ok: false, kage: null, reason: kageFailureReason({ subject, kind: "rejected", status: bad.status, detail: bad.detail }), error: null }
-    : { ok: false, kage: null, reason: kageFailureReason({ subject, kind: "timeout", waitedMs: KAGE_WAIT_MS }), error: null };
+    : { ok: false, kage: null, reason: kageFailureReason({ subject, kind: "timeout", waitedMs: waitMs }), error: null };
 }
 
 /**
@@ -567,9 +582,9 @@ export async function resolveBoardChildEnrollments(page, boardId, studentName, c
  * ⚠️ 본문은 **호출부가 `detail`로만** 쓴다(원문은 화면에 그대로 내보내지 않는다 — 한글 요약이 `note`).
  *    길이는 500자로 자른다(로그·jsonb 비대 방지).
  */
-export async function postClassnoteReport(page, { cls, child, enrollment, content, dateWritten, authorName, attachedImages = [], attachedFiles = [] }) {
+export async function postClassnoteReport(page, { cls, child, enrollment, content, dateWritten, authorName, attachedImages = [], attachedFiles = [], attachedVideo = null }) {
   return page.evaluate(
-    async ([cls, child, enrollment, body, author, date, ai, af]) => {
+    async ([cls, child, enrollment, body, author, date, ai, af, av]) => {
       const csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1];
       const res = await fetch("/api/v1_2/reports/", {
         method: "POST",
@@ -578,6 +593,8 @@ export async function postClassnoteReport(page, { cls, child, enrollment, conten
           cls, child, enrollment, content: body, date_written: date, author_name: author, tz: "Asia/Seoul",
           ...(ai.length ? { attached_images: ai } : {}),
           ...(af.length ? { attached_files: af } : {}),
+          // 영상(2026-11-06) — 글 하나에 하나. ClassNote 화면은 영상을 위에, 이미지(보고서 그림)를 그 아래에 그린다.
+          ...(av ? { attached_video: av } : {}),
         }),
       });
       // 성공(2xx)은 본문을 읽지 않는다 — 빈 201이라 읽을 게 없고, 기존 동작을 그대로 둔다.
@@ -585,7 +602,7 @@ export async function postClassnoteReport(page, { cls, child, enrollment, conten
       const detail = await res.text().catch(() => "");
       return { status: res.status, detail: (detail || "").slice(0, 500) };
     },
-    [cls, child, enrollment, content, authorName, dateWritten, attachedImages, attachedFiles],
+    [cls, child, enrollment, content, authorName, dateWritten, attachedImages, attachedFiles, attachedVideo],
   );
 }
 

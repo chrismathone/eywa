@@ -51,8 +51,13 @@ const REPORT_ATTACHMENT_MIME_TYPES = [
   "audio/mpeg",
   "audio/mp4",
   "audio/x-m4a",
+  // 영상(2026-11-06) — 보고서 한 장에 하나 · ClassNote 글의 영상 칸으로(src/features/onescreen/report-video.ts).
+  "video/mp4",
+  "video/quicktime",
+  "video/x-m4v",
 ];
-const REPORT_ATTACHMENT_SIZE_LIMIT = 20 * 1024 * 1024; // 20 MB — 스캔 PDF 등
+// 100 MB = 영상 상한(REPORT_VIDEO_MAX_BYTES) — 영상 아닌 첨부의 20MB는 앱(attachment-actions)이 따로 거절한다.
+const REPORT_ATTACHMENT_SIZE_LIMIT = 100 * 1024 * 1024;
 
 // 교재 표지 사진(0266a) — 사진만. 앱 isReportImageCT(media-storage.ts MEDIA_KIND.textbook_cover)와 **일치 필수**.
 // 학생 PII는 아니지만 학원 자산이라 다른 버킷과 같이 비공개 + signed URL.
