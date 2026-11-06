@@ -13,6 +13,7 @@
  */
 const postgres = require("postgres");
 const L = require("./lib.cjs");
+const G = require("./login-guard.cjs");
 
 let chromium;
 try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require("@playwright/test")); }
@@ -20,19 +21,6 @@ try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require(
 const BASE = "https://school.makeedu.co.kr";
 const APPLY = process.argv.includes("--apply");
 const CONC = Number(process.env.MAKEEDU_CONC || 8);
-
-async function login(page) {
-  const id = process.env.MAKEEDU_ID, pw = process.env.MAKEEDU_PW;
-  if (!id || !pw) throw new Error("MAKEEDU_ID / MAKEEDU_PW 누락(.env.local)");
-  await page.goto(`${BASE}/login.do`, { waitUntil: "domcontentloaded" });
-  const pwIn = page.locator('input[type="password"]').first();
-  await pwIn.waitFor({ timeout: 15000 });
-  await page.locator('input[type="text"], input:not([type])').first().fill(id);
-  await pwIn.fill(pw);
-  await Promise.all([page.waitForLoadState("networkidle").catch(() => {}), pwIn.press("Enter")]);
-  await page.waitForTimeout(1200);
-  if (/\/login\.do/i.test(page.url())) throw new Error("로그인 실패");
-}
 
 // 상세 페이지: META 셀(보호자명·원생명(성별)·보호자연락처(관계)) + '내용' 셀(◆-구조 본문) 추출.
 function EXTRACT_DETAIL() {
@@ -110,11 +98,9 @@ function toFields(meta, content) {
   console.log("대상 예비상담(makeedu_id):", targets.length);
 
   const browser = await chromium.launch({ headless: !process.env.HEADED });
-  const ctx = await browser.newContext();
-  const page = await ctx.newPage();
   try {
-    await login(page);
-    console.log("login ok");
+    // 로그인 한 벌(login-guard.cjs) — 저장 세션 → 자동 로그인 멈춤 표시 → ID/PW 한 번.
+    const { ctx, page } = await G.openMakeeduContext(browser, { log: (m) => console.log(m) });
 
     if (!APPLY) {
       // dry: 앞 3건만 fetch해 파싱 결과 표본.

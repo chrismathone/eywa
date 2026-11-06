@@ -4,6 +4,7 @@ const {AgentApi}=require('./lib/api.cjs');const {DeviceLease}=require('./lib/lea
 const {atomicWrite,secretStore,eventQueue}=require('./lib/storage.cjs');const {Updater,verifyManifest}=require('./lib/update.cjs');
 const {UpdatePlan}=require('./lib/update-plan.cjs');
 const {createWorkerLog}=require('./lib/worker-log.cjs');
+const {humanLoginEnv,humanLoginMessage,readLoginBlock,startHumanLogin,passwordPrefill,credentialsSaved}=require('./lib/makeedu-login.cjs');
 const {launcherVersion,refreshInstalledLauncher,handoverTarget,handoverEnv,cleanupOldLaunchers,signedLauncherSha}=require('./lib/launcher.cjs');const {spawn,execFile}=require('node:child_process');
 const {inspectLegacy,disableLegacyTasks,readLegacySettings,copyLegacyState}=require('./lib/legacy.cjs');
 const {LocalSettingsInput,StoredLocalSettingsInput,DEFAULT_LOCAL_SETTINGS,EventInput,EVENT_LABELS,LOG_CODE_LABELS,UPDATE_ERROR_LABELS,TASK_LABELS}=require('./lib/protocol.cjs');
@@ -18,6 +19,8 @@ if(!app.requestSingleInstanceLock()){if(process.env.AYWA_HEALTH_FILE&&!process.a
 let window,tray,store,events,connection=null,local={...DEFAULT_LOCAL_SETTINGS},lease,api,supervisor,updater,updatePlan,configuration=null;
 let message='',unlockedUntil=0,looping=false,quitting=false,closing=false,applying=false,suspended=false,nextConnect=0,revoked=false;
 let notifiedUpdate=0;
+// 메이크에듀 '다시 로그인'(사람 로그인 창, 2026-11-06) — 열려 있는 동안의 실행 · 마지막 결과(화면 문구).
+let humanLogin=null,humanLoginResult=null,humanLoginNote=null; // humanLoginNote = 창을 열 때 비밀번호를 채웠나(filled·locked·blocked)
 // 업데이트 적용 단계(화면 가운데 진행 표시, 1.0.7): 'drain'(진행 중인 작업 마무리) → 'switch'(새 버전으로 바꾸기). 새 버전은 justUpdated로 이어 받는다.
 let applyStep=null,justUpdated=null;
 // 실행기가 이 버전의 건강 확인을 받아 갔는가 — 그 전에 끝나면 실행기가 시작 실패로 읽어 되돌린다(업데이트 적용은 그 뒤에만).
@@ -31,11 +34,15 @@ const afterUpdateFile=path.join(dataRoot,'after-update.json');
 function dropAfterUpdate(){try{fs.rmSync(afterUpdateFile,{force:true});}catch{}}
 const uiFile=path.join(__dirname,'ui','index.html');
 function event(kind,module='app',level='info',detail={}){const row={id:randomUUID(),at:new Date().toISOString(),kind,module,level,detail};if(EventInput.safeParse(row).success){events?.add(row);try{createWorkerLog(path.join(dataRoot,...(connection?.tenantId?['tenants',connection.tenantId]:[]),'log')).append('app',`${module} · ${detail.logCode?LOG_CODE_LABELS[detail.logCode]:EVENT_LABELS[kind]??'실행 기록'}${detail.version?' · '+detail.version:''}${detail.updateError?' · '+UPDATE_ERROR_LABELS[detail.updateError]:''}`);}catch{}}}
+// 앱 자원 폴더(runtime·browsers·WorkerHost) — 설치본은 resources, 개발 실행은 build.
+function resourcesRoot(){return app.isPackaged?process.resourcesPath:path.join(__dirname,'build');}
+function tenantStateRoot(){return connection?.tenantId?path.join(dataRoot,'tenants',connection.tenantId,'state'):null;}
+function makeeduLoginState(){const root=tenantStateRoot();return{running:!!humanLogin,passwordNote:humanLogin?humanLoginNote:null,result:humanLoginResult,blocked:root?readLoginBlock(root):null};}
 function snapshot(){return{version:build.version,tenantName:connection?.tenantName??'',paired:!!connection?.tenantId,revoked,online:!!lease?.held,unlocked:Date.now()<unlockedUntil,local,
   configuration,modules:{classnote:supervisor?.status('classnote')??'off',makeedu:supervisor?.status('makeedu')??'off'},update:updater?.state??'idle',message,
   updateInfo:{ready:updater?.ready??null,plan:updatePlan?.plan??null,progress:updater?.progress??null,pending:!!updater?.pending,failure:updater?.failure?UPDATE_ERROR_LABELS[updater.failure]:null,checkedAt:updater?.checkedAt??null,draining:applying&&!closing,closing,applyStep,justUpdated},
   activity:(supervisor?.activity()??[]).map(a=>({module:a.module,task:a.task,label:a.task&&Object.hasOwn(TASK_LABELS,a.task)?TASK_LABELS[a.task]:null,since:a.since,draining:a.draining})),
-  credentials:Object.fromEntries(CREDENTIAL_KEYS.map(k=>[k,!!connection?.credentials?.[k]])),events:events?.peek().slice(-12)??[]};}
+  credentials:Object.fromEntries(CREDENTIAL_KEYS.map(k=>[k,!!connection?.credentials?.[k]])),makeeduLogin:makeeduLoginState(),events:events?.peek().slice(-12)??[]};}
 function broadcast(){if(window&&!window.isDestroyed())window.webContents.send('state',snapshot());}
 function show(){if(!window)return;if(window.isMinimized())window.restore();window.show();window.focus();}
 function requireUnlocked(){if(Date.now()>=unlockedUntil)throw new Error('웹의 연동 PC 탭에서 관리 코드를 발급받아 입력해 주세요.');}
@@ -100,7 +107,7 @@ async function tick(){
       if(supervisor?.busy)return;
       lease=new DeviceLease(api,{instanceId:randomUUID(),version:build.version,onLost:()=>{interruptUpdate();supervisor?.kill();event('lease_lost','app','warning');nextConnect=Date.now()+15000;}});
       if(!await lease.acquire())throw new Error('lease_lost');
-      supervisor=new Supervisor({resources:app.isPackaged?process.resourcesPath:path.join(__dirname,'build'),root:dataRoot,api,identity:connection,lease,event,base:build.apiOrigin});
+      supervisor=new Supervisor({resources:resourcesRoot(),root:dataRoot,api,identity:connection,lease,event,base:build.apiOrigin});
       event('connection_restored');
     }
     const status={state:local.paused?'paused':supervisor?.busy?'working':'ready',classnote:supervisor?.status('classnote')??'off',makeedu:supervisor?.status('makeedu')??'off',update:updater?.state??'idle',busy:!!supervisor?.busy};
@@ -175,7 +182,7 @@ async function exitForUpdate(){
 function interruptUpdate(){updatePlan?.interrupt();if(!closing){applying=false;if(!quitting)applyStep=null;if(supervisor)supervisor.draining=false;}}
 function requireUpdateAllowed(){if(closing||quitting)throw new Error('앱이 종료 중입니다. 다시 실행한 뒤 선택해 주세요.');if(!lease?.held||!configuration?.updatesEnabled)throw new Error('서버 연결과 웹의 업데이트 허용 설정을 확인해 주세요.');}
 async function shutdown(){
-  if(quitting||closing)return;closing=true;applying=true;applyStep=null;supervisor?.drain();message='진행 중인 작업을 마친 뒤 종료합니다.';broadcast();
+  if(quitting||closing)return;closing=true;applying=true;applyStep=null;supervisor?.drain();humanLogin?.stop();message='진행 중인 작업을 마친 뒤 종료합니다.';broadcast();
   const check=setInterval(async()=>{if(supervisor?.busy)return;clearInterval(check);event('app_stopped');await lease?.release().catch(()=>{});quitting=true;app.quit();},500);
 }
 function registerIpc(){
@@ -185,6 +192,27 @@ function registerIpc(){
       switch(action){
         case 'state':return{ok:true,state:snapshot()};
         case 'logs':{const dir=path.join(dataRoot,...(connection?.tenantId?['tenants',connection.tenantId]:[]),'log');fs.mkdirSync(dir,{recursive:true});const error=await shell.openPath(dir);if(error)throw Error('로그 폴더를 열지 못했습니다.');return{ok:true};}
+        case 'makeedu-login':{
+          // 메이크에듀 '다시 로그인'(2026-11-06) — makeedu가 자동 로그인에 사람 확인을 요구한다. 보이는 창에서 사람이 로그인 버튼·사람 확인을 누르면
+          // 그 세션을 모듈이 그대로 쓴다. 창은 바로 열고, 결과는 상태(makeeduLogin)와 안내 문구로 알린다(최대 5분 · 그동안 다른 버튼도 쓸 수 있다).
+          if(!connection?.tenantId)throw new Error('지점을 먼저 연결해 주세요.');
+          if(closing||quitting)throw new Error('앱이 종료 중입니다.');
+          if(humanLogin)throw new Error('makeedu 로그인 창이 이미 열려 있습니다. 그 창에서 로그인을 마쳐 주세요.');
+          const credentials=connection.credentials??{},resources=resourcesRoot();
+          const logs=createWorkerLog(path.join(dataRoot,'tenants',connection.tenantId,'log'),{secrets:Object.values(credentials)}),sink=logs.sink('makeedu');
+          try{logs.append('app','makeedu · 다시 로그인 창 열기');}catch{}
+          humanLoginResult=null;
+          // 비밀번호 미리 채우기 — PC 설정이 열려 있고(개발자 도구로 칸 값을 읽을 수 있어 계정 설정과 같은 잠금) 비밀번호·계정 계열 멈춤이 없을 때만
+          // (틀린 것으로 확인된 비밀번호를 채워 사람이 그대로 누르면 시도 횟수가 준다 — 리뷰 2026-11-06). 아이디는 늘 채운다.
+          const prefill=passwordPrefill({unlocked:Date.now()<unlockedUntil,block:readLoginBlock(tenantStateRoot())});
+          humanLoginNote=prefill.note;
+          humanLogin=startHumanLogin({resources,executable:process.execPath,onOutput:sink.write,
+            env:humanLoginEnv({resources,stateRoot:tenantStateRoot(),credentials,includePassword:prefill.include}),
+            onDone:result=>{sink.end();humanLogin=null;humanLoginNote=null;humanLoginResult={ok:result.ok,code:result.code,message:humanLoginMessage(result),at:new Date().toISOString()};message=humanLoginResult.message;
+              try{logs.append('app',`makeedu · 다시 로그인 ${result.ok?'성공':'실패'}(${result.code}${result.headless?` · headless 재사용 ${result.headless}`:''})`);}catch{}show();broadcast();}});
+          // 창은 보이지만(WorkerHost는 콘솔만 숨긴다 — 2026-11-06 실측 visible) Windows가 뒤에서 띄운 창을 앞으로 올려 주지 않을 수 있다 — 작업 표시줄 안내.
+          message=`makeedu 로그인 창을 열었습니다 — 그 창(안 보이면 작업 표시줄의 Chrome for Testing)에서 ${prefill.include?'':'비밀번호를 직접 입력하고 '}로그인 버튼을 누르고 사람 확인을 마쳐 주세요(5분 안에).`;break;
+        }
         case 'pair':{
           if(connection?.tenantId)throw new Error('연결된 PC입니다. 웹에서 기존 연결을 해제해 주세요.');
           const code=String(input?.code??'').replace(/[\s-]/g,'');if(!/^\d{12}$/.test(code))throw new Error('12자리 연결 코드를 입력해 주세요.');
@@ -203,6 +231,10 @@ function registerIpc(){
           requireUnlocked();if(!connection?.tenantId)throw new Error('지점을 먼저 연결해 주세요.');
           if(!input||Object.keys(input).some(k=>!CREDENTIAL_KEYS.includes(k))||Object.values(input).some(v=>typeof v!=='string'||v.length>30000))throw new Error('계정 값을 확인해 주세요.');
           connection.credentials={...connection.credentials,...input};store.write(connection);supervisor?.drain();message='현재 작업이 끝난 뒤 새 계정 설정으로 다시 시작합니다.';
+          // 메이크에듀 **비밀번호**를 저장하면(같은 값이어도) 비밀번호·계정 계열 자동 로그인 멈춤을 푼다 · 사람 확인 계열은 그대로 · 아이디만 바꾼
+          // 저장은 풀지 않는다(자격이 바뀌면 워커의 지문 비교가 이미 한 번 다시 시도하게 한다) — 2026-11-06 리뷰.
+          {let cleared=null;try{cleared=credentialsSaved(tenantStateRoot(),input);}catch{}
+            if(cleared){appLog(`makeedu · 비밀번호 다시 저장 — 비밀번호·계정 확인 멈춤(${cleared}) 해제`);message='현재 작업이 끝난 뒤 새 계정 설정으로 다시 시작합니다. 메이크에듀 자동 로그인 멈춤도 풀었습니다 — 저장 세션이 끊겨 있으면 다음 실행이 저장한 비밀번호로 한 번 로그인합니다.';}}
           const reset=setInterval(()=>{if(!supervisor?.busy){clearInterval(reset);if(supervisor&&!applying)supervisor.draining=false;void tick();}},1000);break;
         }
         case 'import':{

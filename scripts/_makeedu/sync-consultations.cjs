@@ -11,6 +11,7 @@
  */
 const postgres = require("postgres");
 const L = require("./lib.cjs");
+const G = require("./login-guard.cjs");
 const { makeCounselorMatcher, loadSubjectLabels, resolveConsultationSubject, loadEnrolledSubjects } = require("./consultation-counselor.cjs");
 // 반 매핑(0318a) — 앱과 같은 판정 한 벌. 칸이 없으면(SQL 적용 전) 반 없이 적재([[#95]]).
 const { assignClasses, hasClassColumns } = require("./consultation-class.cjs");
@@ -48,19 +49,6 @@ if (!process.argv.includes("--force")) {
       "       의도적으로 makeedu 상담을 추가하려면 --force 플래그로 실행.",
   );
   process.exit(0);
-}
-
-async function login(page) {
-  const id = process.env.MAKEEDU_ID, pw = process.env.MAKEEDU_PW;
-  if (!id || !pw) throw new Error("MAKEEDU_ID / MAKEEDU_PW 누락(.env.local)");
-  await page.goto(`${BASE}/login.do`, { waitUntil: "domcontentloaded" });
-  const pwIn = page.locator('input[type="password"]').first();
-  await pwIn.waitFor({ timeout: 15000 });
-  await page.locator('input[type="text"], input:not([type])').first().fill(id);
-  await pwIn.fill(pw);
-  await Promise.all([page.waitForLoadState("networkidle").catch(() => {}), pwIn.press("Enter")]);
-  await page.waitForTimeout(1200);
-  if (/\/login\.do/i.test(page.url())) throw new Error("로그인 실패");
 }
 
 // 목록 행 추출: counselSeq(히든 counselSeqTmp) + 이름/학교/학년/제목/등록자/상담일.
@@ -115,11 +103,9 @@ function EXTRACT_DETAIL() {
   const subjectLabels = await loadSubjectLabels(sql, tenantId);
 
   const browser = await chromium.launch({ headless: !process.env.HEADED });
-  const ctx = await browser.newContext();
-  const page = await ctx.newPage();
   try {
-    await login(page);
-    console.log("login ok");
+    // 로그인 한 벌(login-guard.cjs) — 저장 세션 → 자동 로그인 멈춤 표시 → ID/PW 한 번.
+    const { ctx, page } = await G.openMakeeduContext(browser, { log: (m) => console.log(m) });
     await page.goto(`${BASE}/counsel/counselList.do`, { waitUntil: "networkidle" });
     const ls = page.locator('select[name="listSize"]');
     if (await ls.count()) {

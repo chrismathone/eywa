@@ -3,6 +3,7 @@ const fs=require('node:fs');
 const {spawn}=require('node:child_process');
 const {createBroker}=require('./broker.cjs');
 const {createWorkerLog}=require('./worker-log.cjs');
+const {makeeduSessionFile}=require('./makeedu-login.cjs'); // '다시 로그인'(사람 로그인)과 같은 세션 파일
 const CREDENTIAL_KEYS=['CLASSNOTE_UPLOAD_ID','CLASSNOTE_UPLOAD_PW','CLASSNOTE_AUTHOR_NAME','MAKEEDU_ID','MAKEEDU_PW','GOOGLE_DRIVE_CLIENT_ID','GOOGLE_DRIVE_CLIENT_SECRET','GOOGLE_DRIVE_REFRESH_TOKEN','GOOGLE_SERVICE_ACCOUNT_KEY','GOOGLE_DRIVE_GCLOUD_ACCOUNT','GOOGLE_DRIVE_GCLOUD_PATH','CLASSNOTE_VIDEO_DRIVE_FOLDER_ID','CLASSNOTE_VIDEO_TEACHER_FOLDERS'];
 // Preserve existing behavior switches during migration, including intentionally disabled automation.
 // ClassNote 자동 해제·명부 퇴원처리 스위치(2026-11-03) — 이 목록에 없으면 워커에 안 넘어간다. 값은 계정 저장소에 있을 때만 넘어가는데
@@ -51,7 +52,7 @@ class Supervisor {
       Object.assign(env,{ELECTRON_RUN_AS_NODE:'1',SYNC_AGENT_MODE:'1',SYNC_AGENT_BROKER_PORT:String(record.broker.port),SYNC_AGENT_BROKER_TOKEN:record.broker.token,
         DATABASE_URL:'agent://registered',CLASSNOTE_TENANT_ID:this.identity.tenantId,CLASSNOTE_VIDEO_TENANT_ID:this.identity.tenantId,MAKEEDU_TENANT_ID:this.identity.tenantId,
         CLASSNOTE_SHARE_BASE:this.base,CLASSNOTE_SCREENSHOT_BASE:this.base,CLASSNOTE_INTERNAL_SECRET:`agent:${this.identity.deviceId}.${this.identity.secret}:${this.lease.instanceId}:${this.lease.generation}`,
-        CLASSNOTE_OUT:path.join(this.stateRoot,'classnote'),CLASSNOTE_VIDEO_OUT:path.join(this.stateRoot,'classnote','videos'),MAKEEDU_OUT:path.join(this.stateRoot,'makeedu'),MAKEEDU_SESSION_FILE:path.join(this.stateRoot,'makeedu','session.json'),
+        CLASSNOTE_OUT:path.join(this.stateRoot,'classnote'),CLASSNOTE_VIDEO_OUT:path.join(this.stateRoot,'classnote','videos'),MAKEEDU_OUT:path.join(this.stateRoot,'makeedu'),MAKEEDU_SESSION_FILE:makeeduSessionFile(this.stateRoot),
         CLASSNOTE_PUBLISH_MODE:'post',PLAYWRIGHT_BROWSERS_PATH:path.join(this.resources,'browsers'),
         CLASSNOTE_FFMPEG_PATH:path.join(this.resources,'ffmpeg','ffmpeg.exe'),CLASSNOTE_FFPROBE_PATH:path.join(this.resources,'ffmpeg','ffprobe.exe')});
       const runtime=path.join(this.resources,'runtime');const entry=module==='classnote'?'scripts/_classnote/watch-classnote-queue.mjs':'scripts/_makeedu/watch-sync-requests.cjs';

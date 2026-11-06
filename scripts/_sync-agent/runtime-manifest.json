@@ -21,7 +21,8 @@
       "import-consultations-excel.cjs",
       "sync-prospects.cjs",
       "reconcile-invoices.cjs",
-      "import-monthly-enrolled.mjs"
+      "import-monthly-enrolled.mjs",
+      "human-login.cjs"
     ]
   },
   "sources": [
@@ -145,6 +146,7 @@
     "scripts/_makeedu/consultation-class.cjs",
     "scripts/_makeedu/consultation-counselor.cjs",
     "scripts/_makeedu/extract-table.cjs",
+    "scripts/_makeedu/human-login.cjs",
     "scripts/_makeedu/import-classes.cjs",
     "scripts/_makeedu/import-consultations-excel.cjs",
     "scripts/_makeedu/import-enrollments.cjs",
@@ -156,6 +158,7 @@
     "scripts/_makeedu/invoice-stale.cjs",
     "scripts/_makeedu/invoice-student-matcher.cjs",
     "scripts/_makeedu/lib.cjs",
+    "scripts/_makeedu/login-guard.cjs",
     "scripts/_makeedu/mirror-textbook-checks.cjs",
     "scripts/_makeedu/monthly-enrolled.cjs",
     "scripts/_makeedu/push-consultations.cjs",
