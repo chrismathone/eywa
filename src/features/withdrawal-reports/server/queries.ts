@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
 import { getViewerStaffScope } from "@/features/staff/department/server/subject-scope";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { EMPTY_BODY, cancelsAsDirector, canRequestRefund, canRequestReport, isBookkeepingReport, isParticipant, missingReportSchema, snapshotMatches, type RefundStep, type StudentSnapshot, type WithdrawalReport, type ReportListRow, type ReportEvent, type StaffOption, type StudentOption, type CourseSnapshot } from "../model";
+import { EMPTY_BODY, cancelsAsDirector, canRequestRefund, canRequestReport, isBookkeepingReport, isParticipant, missingReportSchema, snapshotMatches, type RefundStep, type ReportStatus, type StudentSnapshot, type WithdrawalReport, type ReportListRow, type ReportEvent, type StaffOption, type StudentOption, type CourseSnapshot } from "../model";
 import { kstToday } from "@/lib/date-kst";
 import { subjectLabelRecord } from "@/features/owner/subjects";
 import { protectedAccountIds } from "@/lib/auth/protected-accounts";
@@ -17,6 +17,7 @@ import { loadReportPrefill } from "./prefill";
 import { loadReportBilling } from "./billing";
 import { loadDeskStaff, loadLaterInvoices, type LaterInvoice } from "./refund";
 import { loadRefundSteps } from "./refund-steps";
+import { fetchInChunks } from "@/lib/supabase/batch";
 import { liveBillingForSubmitted } from "../prefill";
 import { reportConsultations } from "./consultations";
 import type { SubjectHistoryRow } from "../course-period";
@@ -74,7 +75,7 @@ export async function currentSnapshot(tenant: string, student: string): Promise<
 }
 export async function listReports() {
   const viewer = await reportViewer();
-  if (!viewer) return { rows: [] as ReportListRow[], available: false, completedLimited: false };
+  if (!viewer) return { rows: [] as ReportListRow[], available: false, completedLimited: false, groupStatuses: undefined };
   const base = () => {
     let q = createAdminClient().from("withdrawal_reports").select(REPORT_LIST_COLUMNS).eq("tenant_id", viewer.user.tenantId);
     if (viewer.teacherId) q = q.eq("teacher_id", viewer.teacherId);
@@ -90,7 +91,7 @@ export async function listReports() {
   const rows: ReportListRow[] = [];
   for (let offset = 0; ; offset += 400) {
     const { data, error } = await base().not("status", "in", "(completed,canceled)").order("created_at", { ascending: false }).order("id").range(offset, offset + 399);
-    if (missingReportSchema(error)) return { rows: [], available: false, completedLimited: false };
+    if (missingReportSchema(error)) return { rows: [], available: false, completedLimited: false, groupStatuses: undefined };
     if (error) throw new Error("퇴원보고서를 불러오지 못했습니다.");
     rows.push(...((data ?? []) as ReportListRow[]).filter(r => canReadReport(r, viewer)));
     if (!data || data.length < 400) break;
@@ -108,7 +109,27 @@ export async function listReports() {
     if (completed.length >= 200 || offset >= 800) { completedLimited = true; break; }
   }
   rows.push(...completed.slice(0, 200));
-  return { rows, available: true, completedLimited: completedLimited || completed.length > 200 };
+  return { rows, available: true, completedLimited: completedLimited || completed.length > 200, groupStatuses: await groupStatusesOf(viewer.user.tenantId, rows) };
+}
+/**
+ * 승인 완료(approved) 줄의 묶음 형제 상태 — 목록 상태 칸이 '다른 과목 승인 대기'(2단계)와 '환불·처리만 남음'(3단계)을 가른다
+ * (리뷰 2026-11-06 — 형제가 열람 범위 밖이라 목록에 없어도). 묶음 id로 상태 한 칸만 한 번 더 읽는다(본문·이름은 읽지 않는다).
+ * 못 읽으면 undefined — 목록에 보이는 형제로만 판정한다(목록은 연다).
+ */
+export async function groupStatusesOf(tenantId: string, rows: readonly ReportListRow[]): Promise<Map<string, { id: string; status: ReportStatus }[]> | undefined> {
+  const groupIds = [...new Set(rows.filter(r => r.status === "approved" && r.group_id).map(r => r.group_id!))];
+  const out = new Map<string, { id: string; status: ReportStatus }[]>();
+  if (!groupIds.length) return out;
+  try {
+    const db = createAdminClient();
+    const found = await fetchInChunks<{ id: string; group_id: string; status: ReportStatus }>(groupIds, async chunk =>
+      (await db.from("withdrawal_reports").select("id,group_id,status").eq("tenant_id", tenantId).in("group_id", chunk)) as unknown as { data: { id: string; group_id: string; status: ReportStatus }[] | null; error: { message: string } | null });
+    for (const r of found) out.set(r.group_id, [...(out.get(r.group_id) ?? []), { id: r.id, status: r.status }]);
+    return out;
+  } catch (error) {
+    console.error("[withdrawal-reports] 묶음 형제 상태 조회 실패", error);
+    return undefined;
+  }
 }
 export async function getReport(id: string) {
   const viewer = await reportViewer();

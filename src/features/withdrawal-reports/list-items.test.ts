@@ -7,8 +7,11 @@ import {
   listHref,
   listWindow,
   parseListFilters,
+  reportProgress,
   teacherOptions,
   type ListItem,
+  type ReportFlow,
+  type ReportProgress,
 } from "./list-items";
 
 const staff: StaffOption[] = [
@@ -244,17 +247,18 @@ describe("원장 2026-11-03 — 관리자 승인 생략 · 데스크 환불 단�
     // 작성 강사 칸·강사 필터는 이름 그대로(다른 표기를 건드리지 않는다).
     expect(rows({ teacher_id: "jy", manager_id: "he", manager_ids: ["he"] }).teacher).toBe("정유진");
   });
-  it("데스크 환불이 남으면 상태 칩 둘 · 승인 진행에 데스크 줄(○ 대기 / ✓ 완료 · 담당 이름)", () => {
+  it("데스크 환불이 남으면 상태 글에 '데스크 환불 요청' · 환불 단계 desk · 승인 진행에 데스크 줄(○ 대기 / ✓ 완료 · 담당 이름)", () => {
     const steps = new Map([["g1", [{ documentId: "d1", deskId: "desk", deskName: "데스크A", completedDate: null }]]]);
     const [w] = as("m1", [report({ group_id: "g1", status: "manager_pending" })], steps);
-    expect(w!.statusChips).toEqual(["관리자 승인 요청", "데스크 환불 요청"]);
-    expect(w!.statusLabel).toBe("관리자 승인 요청 · 데스크 환불 요청");
+    expect(w!.statusLabel).toBe("관리자 요청 · 데스크 환불 요청"); // 원장 2026-11-06 '관리자 승인 요청' → '관리자 요청'
+    expect(w!.refundStage).toBe("desk");
     expect(w!.approval.at(-1)).toEqual({ text: "데스크 ○ 데스크A" });
     expect(w!.mine).toBe("approve");
     expect(w!.deskTurn).toBeUndefined(); // 관리자 차례가 먼저다
     const done = new Map([["g1", [{ documentId: "d1", deskId: "desk", deskName: "데스크A", completedDate: "2026-11-03" }]]]);
     const [d] = as("m1", [report({ group_id: "g1", status: "completed" })], done);
-    expect(d!.statusChips).toEqual(["처리 완료"]);
+    expect(d!.statusLabel).toBe("처리 완료");
+    expect(d!.refundStage).toBeNull(); // 끝난 보고서엔 기다릴 환불이 없다
     expect(d!.approval.at(-1)).toEqual({ text: "데스크 ✓ 데스크A" });
   });
   it("데스크 담당자의 차례 — '내 승인 필요' 필터에 들고 표시는 데스크 차례", () => {
@@ -266,5 +270,274 @@ describe("원장 2026-11-03 — 관리자 승인 생략 · 데스크 환불 단�
     expect(filterListItems([w!], { ...all, q: "데스크A" }, win)).toHaveLength(1);
     // 읽기 전용 보기면 차례를 세우지 않는다
     expect(buildListItems({ reports: [report({ group_id: "g1", status: "approved" })], archives: [], staff, labelOf, userId: "desk", refunds: steps, writable: false })[0]!.mine).not.toBe("approve");
+  });
+});
+
+describe("원장 2026-11-06 시안 A — 상태 칸 3단계 막대(reportProgress)", () => {
+  const flow = (over: Partial<ReportFlow> = {}): ReportFlow => ({
+    status: "requested", othersPending: false, effectiveDate: "2026-11-20", appliedAt: null, updatedAt: "2026-11-04T16:30:00Z", canCancel: false, ...over,
+  });
+  const progress = (f: Partial<ReportFlow>, over: Partial<ListItem> = {}): ReportProgress =>
+    reportProgress({ href: "/withdrawal-reports/r1", mine: "none", myTurn: false, flow: flow(f), ...over })!;
+  const names = (p: ReportProgress) => p.names.map((n) => n.state);
+  const notes = (p: ReportProgress) => p.notes.map((n) => n.text);
+  type Step = { documentId: string; deskId: string | null; deskName: string; completedDate: string | null };
+  const refundMap = (key: string, ...steps: Step[]) => new Map([[key, steps]]);
+
+  it("진행 중 상태마다 지금 단계 · 칸 · 추가 정보 — 막대와 겹치는 '작성 요청'·'관리자 요청'은 쓰지 않는다", () => {
+    const cases: [Partial<ReportFlow>, Partial<ListItem>, string[], string[], string][] = [
+      [{ status: "requested" }, {}, ["now", "todo", "todo"], [], "진행 1/3단계 · 강사 작성"],
+      [{ status: "revision" }, {}, ["alert", "todo", "todo"], ["반려 · 수정 요청"], "진행 1/3단계 · 강사 작성 — 반려 · 수정 요청"],
+      [{ status: "manager_pending" }, {}, ["done", "now", "todo"], [], "진행 2/3단계 · 관리자 승인"],
+      [{ status: "director_pending" }, {}, ["done", "now", "todo"], ["원장 승인 대기"], "진행 2/3단계 · 관리자 승인 — 원장 승인 대기"], // 옛 원장 단계 = 2단계
+      // 승인 완료 — 같은 묶음에 승인 전 과목이 남았으면 2단계(환불이 걸려 있어도 앞지르지 않는다 · 리뷰 2026-11-06)
+      [{ status: "approved", othersPending: true }, {}, ["done", "now", "todo"], ["다른 과목 승인 대기"], "진행 2/3단계 · 관리자 승인 — 다른 과목 승인 대기"],
+      [{ status: "approved", othersPending: true }, { refundStage: "desk" }, ["done", "now", "todo"], ["다른 과목 승인 대기", "데스크 환불 대기"], "진행 2/3단계 · 관리자 승인 — 다른 과목 승인 대기 · 데스크 환불 대기"],
+      [{ status: "approved", othersPending: true }, { refundStage: "decision" }, ["done", "now", "todo"], ["다른 과목 승인 대기", "환불 결정 대기"], "진행 2/3단계 · 관리자 승인 — 다른 과목 승인 대기 · 환불 결정 대기"],
+      // 다 승인됐으면 3단계 — 환불만 남았거나, 환불까지 끝나 처리만 남음
+      [{ status: "approved" }, { refundStage: "desk" }, ["done", "done", "now"], ["데스크 환불 대기"], "진행 3/3단계 · 처리 완료 — 데스크 환불 대기"],
+      [{ status: "approved" }, { refundStage: "decision" }, ["done", "done", "now"], ["환불 결정 대기"], "진행 3/3단계 · 처리 완료 — 환불 결정 대기"],
+      [{ status: "approved" }, {}, ["done", "done", "now"], [], "진행 3/3단계 · 처리 완료"],
+      [{ status: "manager_pending" }, { refundStage: "desk" }, ["done", "now", "todo"], ["데스크 환불 대기"], "진행 2/3단계 · 관리자 승인 — 데스크 환불 대기"], // 승인 전 환불은 2단계 그대로
+      [{ status: "scheduled" }, {}, ["done", "done", "now"], ["처리 예약 · 11-20"], "진행 3/3단계 · 처리 완료 — 처리 예약 · 11-20"],
+      [{ status: "scheduled" }, { refundStage: "desk" }, ["done", "done", "now"], ["처리 예약 · 11-20", "데스크 환불 대기"], "진행 3/3단계 · 처리 완료 — 처리 예약 · 11-20 · 데스크 환불 대기"],
+      [{ status: "blocked" }, { refundStage: "desk" }, ["done", "done", "alert"], ["수강 변경 · 재검토 필요 — 취소 후 다시 요청"], "진행 3/3단계 · 처리 완료 — 수강 변경 · 재검토 필요 — 취소 후 다시 요청"], // 재검토엔 환불 대기가 없다
+    ];
+    for (const [f, over, cells, said, label] of cases) {
+      const p = progress(f, over);
+      expect(p.cells, label).toEqual(cells);
+      expect(names(p), label).toEqual(cells); // 진행 중엔 단계 이름이 칸과 같은 상태
+      expect(notes(p), label).toEqual(said);
+      expect(p.label).toBe(label);
+      expect(p.names.map((n) => n.text)).toEqual(["강사 작성", "관리자 승인", "처리 완료"]);
+    }
+    expect(progress({ status: "revision" }).notes[0]!.tone).toBe("alert");
+    expect(progress({ status: "blocked" }).notes[0]!.tone).toBe("alert");
+    expect(progress({ status: "approved", othersPending: true }).notes[0]!.tone).toBe("plain");
+    expect(progress({ status: "manager_pending", othersPending: true }).cells).toEqual(["done", "now", "todo"]); // 형제 대기는 승인 완료 줄에만 쓴다
+  });
+
+  it("처리 완료 — 세 칸 모두 채움 · 이름은 '처리 완료'만 굵게 · 처리일(KST, 처리 시각) 초록 · 꼬리 없음", () => {
+    const p = progress({ status: "completed", appliedAt: "2026-11-04T15:30:00Z", updatedAt: "2026-11-09T00:00:00Z" }, { mine: "view", myTurn: true });
+    expect(p.step).toBe(3);
+    expect(p.cells).toEqual(["done", "done", "done"]);
+    expect(names(p)).toEqual(["done", "done", "now"]);
+    expect(p.notes).toEqual([{ text: "처리일 11-05", tone: "done" }]); // UTC 11-04 15:30 = KST 11-05 00:30
+    expect(p.tail).toBeNull();
+    expect(p.label).toBe("3단계 모두 완료 — 처리일 11-05");
+  });
+
+  it("요청 취소 — 세 칸 옅은 회색 · 이름 취소선 · 취소일 · 꼬리 없음 · 취소 기록이 있으면 말풍선(사유 · 사람 · 시각)", () => {
+    const plain = progress({ status: "canceled", updatedAt: "2026-11-04T16:30:00Z" }, { mine: "view" });
+    expect(plain.step).toBe(0);
+    expect(plain.cells).toEqual(["off", "off", "off"]);
+    expect(names(plain)).toEqual(["off", "off", "off"]);
+    expect(plain.notes).toEqual([{ text: "요청 취소 · 취소일 11-05", tone: "plain" }]); // 취소 기록이 없으면 마지막 변경 시각(KST) · 말풍선 없음
+    expect(plain.tail).toBeNull();
+    expect(plain.label).toBe("진행 중단 — 요청 취소 · 취소일 11-05");
+    const noted = progress({ status: "canceled", updatedAt: "2026-11-09T00:00:00Z" }, { cancel: { reason: " 학부모가 다시 다니기로 함 ", by: "김원장 원장", at: "2026-11-05T05:20:00Z" } });
+    expect(noted.notes).toEqual([{ text: "요청 취소 · 취소일 11-05", tone: "plain", cancel: { reason: "학부모가 다시 다니기로 함", meta: "김원장 원장 · 11-05 14:20" } }]);
+    for (const reason of [null, "  "]) {
+      expect(progress({ status: "canceled" }, { cancel: { reason, by: "정유진 부원장", at: "2026-11-01T23:59:00Z" } }).notes[0]!.cancel).toEqual({ reason: "사유 기록 없음(이전 취소)", meta: "정유진 부원장 · 11-02 08:59" });
+    }
+  });
+
+  it("지금 단계 뒤 칸은 늘 비운다 — 어느 상태·형제 대기·환불 단계에서도 지금 칸 뒤에 채운 칸이 없다(리뷰 2026-11-06)", () => {
+    const statuses = ["requested", "revision", "manager_pending", "director_pending", "approved", "scheduled", "blocked"] as const;
+    for (const status of statuses)
+      for (const othersPending of [false, true])
+        for (const refundStage of [null, "desk", "decision"] as const) {
+          const { cells, step } = progress({ status, othersPending }, { refundStage });
+          const at = `${status}/${othersPending}/${refundStage}`;
+          const now = cells.findIndex((c) => c === "now" || c === "alert");
+          expect(now, at).toBe(step - 1);
+          expect(cells.slice(0, now), at).toEqual(Array(now).fill("done"));
+          expect(cells.slice(now + 1), at).toEqual(Array(2 - now).fill("todo"));
+        }
+  });
+
+  it("2과목 묶음 — 먼저 승인된 과목은 다른 과목이 승인될 때까지 2단계, 환불이 끝나도 되돌아가지 않는다(리뷰 2026-11-06 재현)", () => {
+    const math = report({ id: "r-math", group_id: "g1", subjects: ["math"], status: "approved", manager_decisions: { m1: "2026-11-05" } });
+    const eng = report({ id: "r-eng", group_id: "g1", subjects: ["english"], teacher_id: "t2", manager_id: "m2", manager_ids: ["m2"], status: "manager_pending", created_at: "2026-10-09T00:00:00Z" }); // 목록은 요청일 최신 순 — 수학이 위
+    const line = (reports: ReportListRow[], completedDate: string | null) =>
+      buildListItems({ reports, archives: [], staff, labelOf, userId: "boss", directorLevel: true, refunds: refundMap("g1", { documentId: "d1", deskId: "desk", deskName: "데스크A", completedDate }) })
+        .map((i) => [i.subjects[0], reportProgress(i)!.cells.join("/"), reportProgress(i)!.label]);
+    expect(line([math, eng], null)).toEqual([
+      ["math", "done/now/todo", "진행 2/3단계 · 관리자 승인 — 다른 과목 승인 대기 · 데스크 환불 대기"],
+      ["english", "done/now/todo", "진행 2/3단계 · 관리자 승인 — 데스크 환불 대기"],
+    ]);
+    expect(line([math, eng], "2026-11-06")).toEqual([
+      ["math", "done/now/todo", "진행 2/3단계 · 관리자 승인 — 다른 과목 승인 대기"],
+      ["english", "done/now/todo", "진행 2/3단계 · 관리자 승인"],
+    ]);
+    // 영어도 승인되면 둘 다 환불만 남은 3단계
+    const engDone = { ...eng, status: "approved" as const, manager_decisions: { m2: "2026-11-06" } };
+    expect(line([math, engDone], null).map(([, cells, label]) => [cells, label])).toEqual([
+      ["done/done/now", "진행 3/3단계 · 처리 완료 — 데스크 환불 대기"],
+      ["done/done/now", "진행 3/3단계 · 처리 완료 — 데스크 환불 대기"],
+    ]);
+  });
+
+  it("형제가 목록에 없는 열람자 — 목록 조회가 실어 온 묶음 상태(groupStatuses)로 판정 · 없으면 보이는 형제로만", () => {
+    const math = report({ id: "r-math", group_id: "g1", status: "approved", manager_decisions: { m1: "2026-11-05" } });
+    const only = (groupStatuses?: Map<string, { id: string; status: ReportListRow["status"] }[]>) =>
+      reportProgress(buildListItems({ reports: [math], archives: [], staff, labelOf, userId: "m1", groupStatuses, refunds: refundMap("g1", { documentId: "d1", deskId: "desk", deskName: "데스크A", completedDate: null }) })[0]!)!;
+    const pending = only(new Map([["g1", [{ id: "r-math", status: "approved" }, { id: "r-eng", status: "manager_pending" }]]]));
+    expect(pending.cells).toEqual(["done", "now", "todo"]);
+    expect(notes(pending)).toEqual(["다른 과목 승인 대기", "데스크 환불 대기"]);
+    for (const status of ["requested", "revision", "director_pending"] as const)
+      expect(only(new Map([["g1", [{ id: "r-math", status: "approved" }, { id: "r-eng", status }]]])).step, status).toBe(2);
+    expect(only(new Map([["g1", [{ id: "r-math", status: "approved" }, { id: "r-eng", status: "approved" }]]])).step).toBe(3);
+    expect(only().step).toBe(3); // 형제 조회 실패 · 형제 안 보임 · 환불 대기 → 다 승인되고 환불만 남은 것으로
+    // 실어 온 묶음 상태가 보이는 줄보다 앞선다
+    const eng = report({ id: "r-eng", group_id: "g1", status: "manager_pending" });
+    const listed = buildListItems({ reports: [math, eng], archives: [], staff, labelOf, userId: "m1", groupStatuses: new Map([["g1", [{ id: "r-math", status: "approved" }, { id: "r-eng", status: "approved" }]]]) });
+    expect(reportProgress(listed.find((i) => i.key === "r:r-math")!)!.step).toBe(3);
+  });
+
+  it("형제 조회가 실패하면(groupStatuses 없음) 승인 완료인데 기다릴 환불이 없는 줄은 다른 과목 대기로 — 3단계로 앞지르지 않는다(재리뷰 2026-11-06 재현)", () => {
+    const math = report({ id: "r-math", group_id: "g1", status: "approved", manager_decisions: { m1: "x" } });
+    const teacher = (groupStatuses?: Map<string, { id: string; status: ReportListRow["status"] }[]>, refunds?: Map<string, Step[]>) =>
+      reportProgress(buildListItems({ reports: [math], archives: [], staff, labelOf, userId: "t1", groupStatuses, refunds })[0]!)!;
+    const pendingMap = new Map([["g1", [{ id: "r-math", status: "approved" as const }, { id: "r-eng", status: "manager_pending" as const }]]]);
+    const desk = refundMap("g1", { documentId: "d1", deskId: "desk", deskName: "데스크A", completedDate: null });
+    // 조회 성공 · 영어 승인 전 → 2단계
+    expect(teacher(pendingMap).label).toBe("진행 2/3단계 · 관리자 승인 — 다른 과목 승인 대기");
+    // 조회 실패 · 환불 없음 → 다른 과목 대기로(2단계)
+    const failed = teacher();
+    expect(failed.cells).toEqual(["done", "now", "todo"]);
+    expect(failed.label).toBe("진행 2/3단계 · 관리자 승인 — 다른 과목 승인 대기");
+    // 조회 실패 · 환불 대기 → 다 승인되고 환불만 남은 것으로(3단계)
+    expect(teacher(undefined, desk).label).toBe("진행 3/3단계 · 처리 완료 — 데스크 환불 대기");
+    // 조회 실패 · 환불은 끝남 → 기다릴 환불이 없으니 다시 다른 과목 대기로
+    expect(teacher(undefined, refundMap("g1", { documentId: "d1", deskId: "desk", deskName: "데스크A", completedDate: "2026-11-06" })).step).toBe(2);
+    // 조회는 성공했고 형제가 다 승인 → 환불이 없어도 3단계(처리만 남음 — 보조 판정은 조회 실패 때만)
+    expect(teacher(new Map([["g1", [{ id: "r-math", status: "approved" as const }, { id: "r-eng", status: "approved" as const }]]])).step).toBe(3);
+    // 묶음이 없는 옛 단건은 형제가 없다
+    expect(reportProgress(buildListItems({ reports: [report({ status: "approved" })], archives: [], staff, labelOf, userId: "t1" })[0]!)!.step).toBe(3);
+  });
+
+  it("관리자 바로 처리 — 칸은 상태대로 · 아래 한 줄에 '관리자 바로 처리'를 쓰지 않는다(승인 진행 칸과 겹침 · 리뷰 2026-11-06)", () => {
+    const direct = (r: Partial<ReportListRow>) => buildListItems({ reports: [report({ teacher_id: "m1", manager_id: "m1", requested_by: "m1", ...r })], archives: [], staff, labelOf, userId: "x" })[0]!;
+    const scheduled = direct({ status: "scheduled", effective_date: "2026-11-25" });
+    expect(scheduled.approval[0]!.text).toBe("관리자 바로 처리 · 관리자");
+    expect(reportProgress(scheduled)!.cells).toEqual(["done", "done", "now"]);
+    expect(notes(reportProgress(scheduled)!)).toEqual(["처리 예약 · 11-25"]);
+    expect(notes(reportProgress(direct({ status: "completed", applied_at: "2026-11-05T01:00:00Z" }))!)).toEqual(["처리일 11-05"]);
+    expect(reportProgress(direct({ status: "canceled" }))!.cells).toEqual(["off", "off", "off"]);
+  });
+
+  it("관리자 승인 생략 — 작성 중엔 2칸을 비우고, 제출해 다음 단계로 넘어가면 채운다(이유는 승인 진행 칸 '승인 생략')", () => {
+    const skip = (r: Partial<ReportListRow>, extra: ReportListRow[] = [], refunds?: Map<string, Step[]>) =>
+      reportProgress(buildListItems({ reports: [report({ manager_id: null, manager_ids: [], group_id: "g1", ...r }), ...extra], archives: [], staff, labelOf, userId: "x", refunds })[0]!)!;
+    const writing = skip({ status: "requested" });
+    expect(writing.cells).toEqual(["now", "todo", "todo"]);
+    expect(names(writing)).toEqual(["now", "todo", "todo"]);
+    expect(writing.label).toBe("진행 1/3단계 · 강사 작성");
+    expect(skip({ status: "revision" }).cells).toEqual(["alert", "todo", "todo"]);
+    // 제출 = 승인 완료 — 혼자면 처리 예약·데스크 환불로(2칸 채움), 다른 과목을 기다리면 보통 보고서처럼 묶음의 승인 단계
+    expect(skip({ status: "scheduled" }).cells).toEqual(["done", "done", "now"]);
+    expect(skip({ status: "approved" }, [], refundMap("g1", { documentId: "d1", deskId: "desk", deskName: "데스크A", completedDate: null })).cells).toEqual(["done", "done", "now"]);
+    expect(skip({ status: "approved" }, [report({ id: "r2", group_id: "g1", status: "manager_pending", created_at: "2026-10-01T00:00:00Z" })]).cells).toEqual(["done", "now", "todo"]);
+  });
+
+  it("꼬리 — 내 할 일은 링크(승인 · 환불 · 작성 · 재요청) · 할 일 없는 열람은 '승인 대상 아님' · 관여만 했으면 없음", () => {
+    const href = "/withdrawal-reports/r1";
+    expect(progress({ status: "manager_pending" }, { mine: "approve" }).tail).toEqual({ text: "내 승인 필요", href });
+    expect(progress({ status: "approved" }, { mine: "approve", deskTurn: true, refundStage: "desk" }).tail).toEqual({ text: "내 환불 처리 필요", href });
+    // 데스크 화면이 있으면 그 환불 요청서로 — 수납 메뉴라 새 창
+    expect(progress({ status: "approved" }, { mine: "approve", deskTurn: true, refundStage: "desk", deskHref: "/billing/refunds/d1" }).tail).toEqual({ text: "내 환불 처리 필요", href: "/billing/refunds/d1", newWindow: true });
+    expect(progress({ status: "approved" }, { mine: "approve", deskTurn: true, deskHref: "" }).tail).toEqual({ text: "내 환불 처리 필요", href });
+    expect(progress({ status: "requested" }, { myTurn: true }).tail).toEqual({ text: "내 작성 대기", href });
+    expect(progress({ status: "revision" }, { myTurn: true }).tail).toEqual({ text: "내 작성 대기", href });
+    expect(progress({ status: "blocked", canCancel: true }, { mine: "view" }).tail).toEqual({ text: "내 재요청 필요", href }); // 원장급 열람도 취소할 수 있으면 할 일
+    expect(progress({ status: "blocked", canCancel: false }, { mine: "view" }).tail).toEqual({ text: "승인 대상 아님", href: null });
+    expect(progress({ status: "scheduled", canCancel: true }).tail).toBeNull(); // 재요청은 재검토 건만
+    expect(progress({ status: "manager_pending" }, { mine: "view" }).tail).toEqual({ text: "승인 대상 아님", href: null });
+    expect(progress({ status: "manager_pending" }, { mine: "none" }).tail).toBeNull();
+    expect(progress({ status: "completed" }, { mine: "approve" }).tail).toBeNull();
+    expect(progress({ status: "canceled" }, { myTurn: true }).tail).toBeNull();
+  });
+
+  it("기존 기록(스프레드시트)은 막대가 없다", () => {
+    const [old] = build([], [archive()]);
+    expect(old!.flow).toBeUndefined();
+    expect(reportProgress(old!)).toBeNull();
+  });
+
+  it("목록 한 벌이 막대 재료를 채운다 — 처리·변경 시각 · 환불 단계 · 재요청 자격(요청자 · 원장급 · 쓰기 권한)", () => {
+    const one = (r: Partial<ReportListRow>, userId = "t1", extra: { directorLevel?: boolean; writable?: boolean } = {}) =>
+      buildListItems({ reports: [report(r)], archives: [], staff, labelOf, userId, ...extra })[0]!;
+    expect(one({ status: "completed", applied_at: "2026-11-05T01:00:00Z", updated_at: "2026-11-06T00:00:00Z" }).flow).toEqual({
+      status: "completed", othersPending: false, effectiveDate: "2026-10-10", appliedAt: "2026-11-05T01:00:00Z", updatedAt: "2026-11-06T00:00:00Z", canCancel: false,
+    });
+    expect(one({}).refundStage).toBeNull();
+    expect(one({}).deskHref).toBeNull();
+    expect(one({ status: "manager_pending", group_id: "g9" }).flow!.othersPending).toBe(false); // 자기 자신은 형제가 아니다
+    // 재검토 건 — 요청자(m1)와 원장급은 '내 재요청 필요', 그 밖·읽기 전용은 아니다
+    const blocked = { status: "blocked" as const };
+    expect(reportProgress(one(blocked, "m1"))!.tail).toEqual({ text: "내 재요청 필요", href: "/withdrawal-reports/r1" });
+    expect(reportProgress(one(blocked, "boss", { directorLevel: true }))!.tail).toEqual({ text: "내 재요청 필요", href: "/withdrawal-reports/r1" });
+    expect(reportProgress(one(blocked, "boss"))!.tail).toEqual({ text: "승인 대상 아님", href: null });
+    expect(reportProgress(one(blocked, "m1", { writable: false }))!.tail).toBeNull();
+    // 승인 차례 · 작성 차례가 목록에서 그대로 꼬리가 된다
+    expect(reportProgress(one({ status: "manager_pending" }, "m1"))!.tail).toEqual({ text: "내 승인 필요", href: "/withdrawal-reports/r1" });
+    expect(reportProgress(one({ status: "requested" }, "t1"))!.tail).toEqual({ text: "내 작성 대기", href: "/withdrawal-reports/r1" });
+  });
+
+  it("'내 작성 대기'도 쓰기 권한이 있을 때만 — 읽기 전용 보기의 작성 강사는 꼬리 없음(관여자라 '승인 대상 아님'도 아님 · 리뷰 2026-11-06)", () => {
+    const mine = (writable: boolean, status: "requested" | "revision") => buildListItems({ reports: [report({ status })], archives: [], staff, labelOf, userId: "t1", writable })[0]!;
+    for (const status of ["requested", "revision"] as const) {
+      expect(mine(true, status).myTurn).toBe(true);
+      expect(mine(false, status).myTurn).toBe(false);
+      expect(mine(false, status).mine).toBe("none");
+      expect(reportProgress(mine(false, status))!.tail).toBeNull();
+    }
+  });
+
+  it("데스크 담당자 — 승인 완료 · 데스크 환불 대기 = 3단계 · '내 환불 처리 필요'는 내 몫·완료 전 요청서 중 가장 먼저 만든 것으로(새 창)", () => {
+    const steps = refundMap("g1",
+      { documentId: "d0", deskId: "desk", deskName: "데스크A", completedDate: "2026-11-04" }, // 끝난 내 몫
+      { documentId: "d1", deskId: "other", deskName: "데스크B", completedDate: null }, // 다른 데스크 몫
+      { documentId: "d2", deskId: "desk", deskName: "데스크A", completedDate: null },
+      { documentId: "d3", deskId: "desk", deskName: "데스크A", completedDate: null });
+    const at = (userId: string, writable = true) =>
+      buildListItems({ reports: [report({ group_id: "g1", status: "approved", manager_decisions: { m1: "2026-11-03" } })], archives: [], staff, labelOf, userId, refunds: steps, writable })[0]!;
+    const desk = at("desk");
+    expect(desk.deskHref).toBe("/billing/refunds/d2");
+    const p = reportProgress(desk)!;
+    expect(p.cells).toEqual(["done", "done", "now"]);
+    expect(p.notes.map((n) => n.text)).toEqual(["데스크 환불 대기"]);
+    expect(p.tail).toEqual({ text: "내 환불 처리 필요", href: "/billing/refunds/d2", newWindow: true });
+    expect(at("other").deskHref).toBe("/billing/refunds/d1");
+    expect(at("m1").deskHref).toBeNull(); // 데스크 차례가 아니면 없음
+    expect(at("desk", false).deskHref).toBeNull(); // 읽기 전용 보기
+  });
+
+  it("상태 칸에 보이는 글로도 찾는다 — 상태 이름 · 아래 한 줄 조각 · 꼬리('보이는 칸은 다 검색' · 리뷰 2026-11-06)", () => {
+    const win = listWindow(all, "2026-11-06");
+    const items = buildListItems({
+      reports: [
+        report({ id: "mp", status: "manager_pending" }),
+        report({ id: "ap", group_id: "g1", status: "approved", manager_decisions: { m1: "x" } }),
+        report({ id: "ap2", group_id: "g1", status: "manager_pending", teacher_id: "t2", created_at: "2026-10-01T00:00:00Z" }),
+        report({ id: "sc", status: "scheduled", effective_date: "2026-11-20" }),
+        report({ id: "bl", status: "blocked" }),
+        report({ id: "dn", status: "completed", applied_at: "2026-11-05T01:00:00Z" }),
+        report({ id: "cx", status: "canceled", updated_at: "2026-11-04T01:00:00Z" }),
+        report({ id: "rf", group_id: "g2", status: "scheduled", effective_date: "2026-11-21" }),
+      ],
+      archives: [], staff, labelOf, userId: "viewer",
+      refunds: refundMap("g2", { documentId: "d9", deskId: "desk", deskName: "데스크A", completedDate: null }),
+    });
+    const found = (q: string) => keys(filterListItems(items, { ...all, hideCanceled: false, q }, win)).sort();
+    expect(found("관리자 요청")).toEqual(["r:ap2", "r:mp"]); // REPORT_STATUS 새 이름
+    expect(found("다른 과목 승인 대기")).toEqual(["r:ap"]);
+    expect(found("처리 예약 · 11-20")).toEqual(["r:sc"]);
+    expect(found("데스크 환불 대기")).toEqual(["r:rf"]);
+    expect(found("재검토 필요 — 취소 후 다시 요청")).toEqual(["r:bl"]);
+    expect(found("처리일 11-05")).toEqual(["r:dn"]);
+    expect(found("요청 취소 · 취소일 11-04")).toEqual(["r:cx"]);
+    expect(found("승인 대상 아님")).toEqual(["r:ap", "r:ap2", "r:bl", "r:mp", "r:rf", "r:sc"]); // 열람자의 꼬리
   });
 });
