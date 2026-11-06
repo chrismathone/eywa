@@ -16,7 +16,8 @@
  *   … --html <저장한 화면.html>   브라우저 없이 저장한 HTML로(오르카 내장 브라우저 등에서 받은 화면 · 검증·수동 적용용)
  *   … --overwrite                 지난달보다 앞 달의 다른 값도 고친다(메이크에듀가 지난 기록을 고쳤을 때만)
  * 세션: MAKEEDU_SESSION_FILE(기본 <repo>/.makeedu-tmp/session.json) → 없거나 만료면 MAKEEDU_ID/PW로 **1회** 로그인(재시도 안 함 —
- *   계정 잠금 방지 · 신뢰 IP인 연동 PC에선 통과한다 · 성공하면 세션을 저장해 다음 실행은 로그인하지 않는다).
+ *   계정 잠금 방지 · 성공하면 세션을 저장해 다음 실행은 로그인하지 않는다). 규칙은 login-guard.cjs 한 벌 — makeedu가 사람 확인을
+ *   요구하면(2026-11-06~) 자동 로그인 멈춤 표시를 남기고 멈춘다 → 연동 앱 'makeedu 다시 로그인'.
  *   MAKEEDU_BROWSER_CHANNEL=chrome이면 설치된 크롬으로 연다.
  * 끝 코드: 0 = 끝 · 1 = 오류(아무것도 안 씀) · 2 = 썼지만 사람이 볼 것이 남음(덮지 않은 다른 값 · 화면에 없는 달).
  * 지점: MAKEEDU_TENANT_ID(지점이 둘 이상이면 필수 — `resolveTenantId`).
@@ -24,12 +25,12 @@
  *   남은 일이 있다 — docs/changelog.md 2026-10-21 '메이크에듀 재원생 기록 이어 받기' 줄.
  */
 import fs from "node:fs";
-import path from "node:path";
 import { createRequire } from "node:module";
 import postgres from "postgres";
 
 const require = createRequire(import.meta.url);
 const L = require("./lib.cjs");
+const G = require("./login-guard.cjs");
 const { parseMonthlyEnrolledHtml, planEnrolledRecords, defaultFrom, addMonths, kstMonth, MONTH_RE } = require("./monthly-enrolled.cjs");
 
 const BASE = "https://school.makeedu.co.kr";
@@ -57,7 +58,7 @@ for (const m of [FROM_ARG, TO]) {
     process.exit(1);
   }
 }
-const SESSION_FILE = process.env.MAKEEDU_SESSION_FILE ?? path.resolve(process.cwd(), ".makeedu-tmp", "session.json");
+const SESSION_FILE = G.defaultSessionFile(process.env);
 
 /** 로그인된 브라우저에서 화면 검색과 같은 요청을 한 번 보내 HTML을 받는다. */
 async function fetchReportHtml(checkFrom) {
@@ -70,36 +71,9 @@ async function fetchReportHtml(checkFrom) {
   const channel = process.env.MAKEEDU_BROWSER_CHANNEL || undefined;
   const browser = await chromium.launch({ headless: true, channel });
   try {
-    let page = null;
-    if (fs.existsSync(SESSION_FILE)) {
-      const ctx = await browser.newContext({ storageState: JSON.parse(fs.readFileSync(SESSION_FILE, "utf8")) });
-      const p = await ctx.newPage();
-      await p.goto(`${BASE}${REPORT}`, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
-      if (!/login/i.test(p.url())) page = p;
-      else await ctx.close();
-    }
-    if (!page) {
-      const id = process.env.MAKEEDU_ID;
-      const pw = process.env.MAKEEDU_PW;
-      if (!id || !pw) throw new Error("저장된 세션이 없거나 만료됐고 MAKEEDU_ID/PW도 없습니다 — capture-session.cjs로 세션을 받거나 연동 PC에서 실행하세요");
-      const ctx = await browser.newContext();
-      page = await ctx.newPage();
-      await page.goto(`${BASE}/login.do`, { waitUntil: "domcontentloaded", timeout: 30000 });
-      const pwInput = page.locator('input[type="password"]').first();
-      await pwInput.waitFor({ timeout: 15000 });
-      await page.locator('input[type="text"], input:not([type])').first().fill(id);
-      await pwInput.fill(pw);
-      await Promise.all([page.waitForLoadState("networkidle").catch(() => {}), pwInput.press("Enter")]);
-      await page.waitForTimeout(2500);
-      if (/login|reCert/i.test(page.url())) throw new Error("메이크에듀 로그인이 실패했습니다(1회만 시도 — 비밀번호 변경·재인증 화면 의심)");
-      try {
-        fs.mkdirSync(path.dirname(SESSION_FILE), { recursive: true });
-        fs.writeFileSync(SESSION_FILE, JSON.stringify(await ctx.storageState()));
-      } catch {
-        /* 저장 실패는 치명적이지 않다 — 다음 실행이 다시 로그인한다 */
-      }
-      await page.goto(`${BASE}${REPORT}`, { waitUntil: "domcontentloaded", timeout: 30000 });
-    }
+    // 로그인 한 벌(login-guard.cjs) — 저장 세션 → 자동 로그인 멈춤 표시 → ID/PW 한 번(재시도 없음 · 성공하면 세션 저장).
+    const { page } = await G.openMakeeduContext(browser, { sessionFile: SESSION_FILE, log: (m) => console.log(m) });
+    await page.goto(`${BASE}${REPORT}`, { waitUntil: "domcontentloaded", timeout: 30000 });
     // 화면의 '검색' 버튼이 보내는 폼과 같은 값(currentPage는 비우면 400) · baseType 1 = '현재'.
     const res = await page.evaluate(
       async ({ url, from, to }) => {

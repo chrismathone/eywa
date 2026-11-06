@@ -9,13 +9,15 @@
  *   node --env-file=.env.local scripts/_makeedu/scrape.cjs --list=invoices
  *   HEADED=1 node --env-file=.env.local scripts/_makeedu/scrape.cjs   # 디버그(브라우저 보임)
  *
- * 필요: .env.local 에 MAKEEDU_ID / MAKEEDU_PW (사용자가 입력 — 스크립트만 읽고, 사람은 안 봄).
+ * 필요: 저장 세션(MAKEEDU_SESSION_FILE · 'makeedu 다시 로그인'으로 받는다) 또는 .env.local 의 MAKEEDU_ID / MAKEEDU_PW
+ *   (사용자가 입력 — 스크립트만 읽고, 사람은 안 봄). 로그인 규칙은 login-guard.cjs 한 벌(2026-11-06 사람 확인 대응).
  * 출력: $MAKEEDU_OUT(기본 <repo>/.makeedu-tmp)/<key>.json  = { key, scrapedAt, headers, rows:[[...cells]] }.
  *   ⚠️ 실 PII — repo 안 .makeedu-tmp(gitignore로 제외)에 저장. rows는 [헤더→셀] 배열, 임포터가 헤더 substring으로 인덱싱.
  */
 const fs = require("fs");
 const path = require("path");
 const L = require("./lib.cjs");
+const G = require("./login-guard.cjs");
 
 let chromium;
 try {
@@ -76,35 +78,6 @@ async function applyDisplayCookies(ctx) {
     // 실패해도 진행 — 합계가 없으면 '검증 안 함'으로 떨어질 뿐 동기화는 계속된다.
     console.warn(`  ⚠️ 화면설정 쿠키를 심지 못했습니다(${e.message}) — 외부 대조가 안 설 수 있습니다.`);
   });
-}
-
-async function login(page) {
-  const id = process.env.MAKEEDU_ID;
-  const pw = process.env.MAKEEDU_PW;
-  if (!id || !pw) throw new Error("MAKEEDU_ID / MAKEEDU_PW 가 .env.local 에 없습니다.");
-  await page.goto(`${BASE}/login.do`, { waitUntil: "domcontentloaded" });
-  const pwInput = page.locator('input[type="password"]').first();
-  await pwInput.waitFor({ timeout: 15000 });
-  // ID = password 앞의 첫 text/무타입 input.
-  const idInput = page.locator('input[type="text"], input:not([type])').first();
-  await idInput.fill(id);
-  await pwInput.fill(pw);
-  await Promise.all([
-    page.waitForLoadState("networkidle").catch(() => {}),
-    pwInput.press("Enter"),
-  ]);
-  await page.waitForTimeout(1500);
-  const url = page.url();
-  if (/\/login\.do/i.test(url)) {
-    throw new Error("로그인 실패(여전히 login.do) — ID/PW 또는 폼 셀렉터 확인.");
-  }
-  // makeedu는 낯선 IP·헤드리스 새 로그인을 재인증(CAPTCHA+휴대폰)으로 막는다. 그 페이지에 떨어지면 명확히 실패.
-  if (/loginReCert\.do|reCert/i.test(url)) {
-    throw new Error(
-      "makeedu 재인증 벽(loginReCert.do) — CAPTCHA+휴대폰 인증 필요. 헤드리스/낯선 IP 새 로그인은 못 뚫는다. " +
-        "capture-session.cjs로 세션을 캡처해 MAKEEDU_STORAGE_STATE로 재사용하거나, 신뢰 IP(로컬/셀프호스티드)에서 실행하세요.",
-    );
-  }
 }
 
 // 페이지에 표시된 "총 N건"을 숫자로. 없으면 null(대조를 건너뛴다 — 모르면 경고하지 않는다).
@@ -354,36 +327,11 @@ async function harvestList(page, key, cfg) {
   fs.mkdirSync(OUT, { recursive: true });
 
   const browser = await chromium.launch({ headless: !HEADED });
-  // 세션 재사용 — MAKEEDU_STORAGE_STATE(capture-session.cjs로 캡처한 storageState JSON)가 있으면 로그인을 건너뛴다.
-  // makeedu가 낯선 IP/헤드리스 새 로그인을 CAPTCHA로 막으므로, 신뢰 IP에서 캡처한 세션을 들고 바로 접근(CAPTCHA 회피).
-  let storage = null;
-  if (process.env.MAKEEDU_STORAGE_STATE) {
-    try {
-      storage = JSON.parse(process.env.MAKEEDU_STORAGE_STATE);
-    } catch {
-      throw new Error("MAKEEDU_STORAGE_STATE 파싱 실패 — capture-session.cjs로 다시 캡처해 시크릿을 갱신하세요.");
-    }
-  }
-  const ctx = storage
-    ? await browser.newContext({ storageState: storage })
-    : await browser.newContext();
-  await applyDisplayCookies(ctx);
-  const page = await ctx.newPage();
   try {
-    if (storage) {
-      // 로그인 건너뜀 — main.do로 세션 유효성만 확인(만료/IP거부면 로그인·재인증으로 튕긴다).
-      await page.goto(`${BASE}/main.do`, { waitUntil: "domcontentloaded" }).catch(() => {});
-      if (/login\.do|loginReCert\.do/i.test(page.url())) {
-        throw new Error(
-          "저장된 세션이 무효/만료됐거나 IP에서 거부됨(main.do→로그인 리다이렉트). capture-session.cjs로 재캡처해 " +
-            "MAKEEDU_STORAGE_STATE를 갱신하세요. 재캡처해도 GitHub에서만 실패하면 세션이 IP에 묶인 것 → 로컬/셀프호스티드 실행 필요.",
-        );
-      }
-      console.log("session reuse ok →", page.url().slice(0, 60));
-    } else {
-      await login(page);
-      console.log("login ok →", page.url().slice(0, 60));
-    }
+    // 로그인 한 벌(login-guard.cjs) — ① 저장 세션(MAKEEDU_SESSION_FILE · 옛 MAKEEDU_STORAGE_STATE) → ② 자동 로그인 멈춤 표시 →
+    // ③ ID/PW 한 번. 살아 있는 세션을 파일에 다시 저장해 두므로 sync-all의 뒤 단계(재원상담 증분 등)는 로그인하지 않는다.
+    const { ctx, page } = await G.openMakeeduContext(browser, { log: (m) => console.log(m) });
+    await applyDisplayCookies(ctx);
     for (const key of keys) {
       const cfg = LISTS[key];
       if (!cfg) {

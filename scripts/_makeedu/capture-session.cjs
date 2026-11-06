@@ -10,15 +10,15 @@
  *   → 세션 저장(기본 <repo>/.makeedu-tmp/session.json) → GitHub 시크릿 등록:
  *        gh secret set MAKEEDU_STORAGE_STATE < .makeedu-tmp/session.json
  * ⚠️ 세션은 만료될 수 있음 — 동기화가 "세션 무효/만료"로 실패하면 이 캡처를 다시 실행해 시크릿을 갱신.
+ * 📌 연동 PC는 이 스크립트 대신 AYWA 연동 앱 'makeedu 다시 로그인'(human-login.cjs — 로그인되면 저절로 저장·5분 제한)을 쓴다(2026-11-06).
  */
-const fs = require("fs");
-const path = require("path");
+const G = require("./login-guard.cjs");
 
 let chromium;
 try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require("@playwright/test")); }
 
-const BASE = "https://school.makeedu.co.kr";
-const OUT = process.env.MAKEEDU_SESSION_FILE || path.resolve(__dirname, "..", "..", ".makeedu-tmp", "session.json");
+const BASE = G.BASE;
+const OUT = G.defaultSessionFile(process.env);
 
 (async () => {
   const browser = await chromium.launch({ headless: false }); // 사람이 직접 보고 로그인
@@ -37,12 +37,18 @@ const OUT = process.env.MAKEEDU_SESSION_FILE || path.resolve(__dirname, "..", ".
   });
 
   const url = page.url();
-  if (/login\.do|loginReCert\.do/i.test(url)) {
-    console.warn(`⚠️ 현재 URL이 아직 로그인/재인증 페이지입니다(${url}). 로그인 완료 후 다시 실행하세요.`);
+  if (!G.isLoggedInUrl(url)) {
+    // 로그인 안 된 상태로 저장하면 살아 있던 세션 파일을 덮어 지운다 — 저장하지 않는다(2026-11-06).
+    console.warn(`⚠️ 현재 URL이 아직 로그인/재인증 페이지입니다(${url}). 저장하지 않았습니다 — 로그인 완료 후 다시 실행하세요.`);
+    await browser.close();
+    process.exit(1);
   }
 
-  fs.mkdirSync(path.dirname(OUT), { recursive: true });
-  await ctx.storageState({ path: OUT });
+  // 같은 파일 규칙(login-guard.cjs) — 원자 저장 · 로그인 시각 · 사람 확인 계열 멈춤만 지움(비밀번호·계정 계열은 계정을 다시 저장해야 풀린다).
+  await G.saveSession(ctx, OUT);
+  G.writeMeta(OUT, "capture");
+  const kept = G.clearHumanBlock(OUT);
+  if (kept) console.warn(`⚠️ 비밀번호·계정 확인 멈춤(${kept})은 남아 있습니다 — MAKEEDU_ID/PW를 다시 저장해야 자동 로그인이 풀립니다.`);
   console.log(`\n✅ 세션 저장됨 → ${OUT}`);
   console.log("   GitHub 시크릿 등록:");
   console.log(`     gh secret set MAKEEDU_STORAGE_STATE < "${OUT}"`);

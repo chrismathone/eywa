@@ -13,11 +13,12 @@
  *   node --env-file=.env.local scripts/_makeedu/push-consultations.cjs               # pending 요청 전부 dry-run
  *   node --env-file=.env.local scripts/_makeedu/push-consultations.cjs --apply       # 실제 제출
  *   node --env-file=.env.local scripts/_makeedu/push-consultations.cjs --ids=<uuid>  # 특정 상담만(요청 무관, 검증용)
- * env: MAKEEDU_ID/PW 또는 MAKEEDU_STORAGE_STATE(세션) · DATABASE_URL · HEADED=1(브라우저 표시).
+ * env: 저장 세션(MAKEEDU_SESSION_FILE · 옛 MAKEEDU_STORAGE_STATE) 또는 MAKEEDU_ID/PW(login-guard.cjs) · DATABASE_URL · HEADED=1(브라우저 표시).
  */
 const path = require("path");
 const postgres = require("postgres");
 const L = require("./lib.cjs");
+const G = require("./login-guard.cjs");
 
 let chromium;
 try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require("@playwright/test")); }
@@ -105,35 +106,9 @@ function buildNoteText(c) {
 }
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-// makeedu 로그인 or 세션 재사용(scrape.cjs와 동일 패턴).
+// makeedu 로그인 한 벌(login-guard.cjs) — 저장 세션(MAKEEDU_SESSION_FILE · 옛 MAKEEDU_STORAGE_STATE) → 자동 로그인 멈춤 표시 → ID/PW 한 번.
 async function makeContext(browser) {
-  if (process.env.MAKEEDU_STORAGE_STATE) {
-    let storage;
-    try { storage = JSON.parse(process.env.MAKEEDU_STORAGE_STATE); }
-    catch { throw new Error("MAKEEDU_STORAGE_STATE 파싱 실패 — capture-session.cjs로 재캡처."); }
-    const ctx = await browser.newContext({ storageState: storage });
-    const page = await ctx.newPage();
-    await page.goto(`${BASE}/main.do`, { waitUntil: "domcontentloaded" }).catch(() => {});
-    if (/login\.do|loginReCert\.do/i.test(page.url())) throw new Error("저장 세션 무효/만료 — capture-session.cjs 재캡처.");
-    console.log("session reuse ok →", page.url().slice(0, 50));
-    return { ctx, page };
-  }
-  const ctx = await browser.newContext();
-  const page = await ctx.newPage();
-  const id = process.env.MAKEEDU_ID, pw = process.env.MAKEEDU_PW;
-  if (!id || !pw) throw new Error("MAKEEDU_ID / MAKEEDU_PW 없음(.env.local)");
-  await page.goto(`${BASE}/login.do`, { waitUntil: "domcontentloaded" });
-  const pwInput = page.locator('input[type="password"]').first();
-  await pwInput.waitFor({ timeout: 15000 });
-  await page.locator('input[type="text"], input:not([type])').first().fill(id);
-  await pwInput.fill(pw);
-  await Promise.all([page.waitForLoadState("networkidle").catch(() => {}), pwInput.press("Enter")]);
-  await page.waitForTimeout(1500);
-  if (/login\.do|loginReCert/i.test(page.url())) {
-    throw new Error("makeedu 로그인 실패/재인증 벽 — 신뢰 IP(로컬)에서 실행하거나 세션 재사용 필요.");
-  }
-  console.log("login ok →", page.url().slice(0, 50));
-  return { ctx, page };
+  return G.openMakeeduContext(browser, { log: (m) => console.log(m) });
 }
 
 // 폼 필드 채우기(공용, dry-run·apply 둘 다). 채운 뒤 값 되읽어 반환(검증).
@@ -263,8 +238,29 @@ async function captureCounselSeq(page, c) {
     }
 
     console.log(`대상 ${targets.length}건 · 모드: ${APPLY ? "APPLY(실제 제출)" : "DRY-RUN(제출 안 함)"}`);
-    browser = await chromium.launch({ headless: !HEADED });
-    const { page } = await makeContext(browser);
+    let page;
+    try {
+      // 브라우저 실행 실패도 여기서 받는다(리뷰 12 — 집은 요청이 running에 남지 않게).
+      browser = await chromium.launch({ headless: !HEADED });
+      ({ page } = await makeContext(browser));
+    } catch (e) {
+      // 로그인 못 함(자동 로그인 멈춤 · 사람 확인 · 판정 불가 — 2026-11-06) · 브라우저 못 띄움. 집어 온 요청을 'running'에 묶어 두지 않고
+      // **기존 마감 문장**으로 닫는다(예전엔 running으로 남아 주간 자동 적재가 그 상담을 영영 건너뛰었다 — weekly-push는 pending·running만 거른다).
+      // ⚠️ 마감이 로그인 시도를 늘리지 않는다: 워처는 'pending'만 세어 이 스크립트를 부르고(error는 안 집는다), 주간 적재가 주 1회 다시 실어도
+      //    login-guard가 세션 → 멈춤 표시 순으로 막아 같은 자격의 ID/PW는 다시 나가지 않는다(push-consultations-login.test.ts가 고정).
+      // 사람이 읽을 사유 — 로그인 한 벌의 한글 사유(e.reason · 코드 꼬리표 없이) 또는 접속 준비 실패의 첫 줄(경로는 가림). 아이디·비밀번호 없음.
+      const why = (
+        e instanceof G.MakeeduLoginError
+          ? `makeedu에 로그인하지 못해 보내지 못했습니다 — ${String(e.reason).replace(/\s+/g, " ").trim()}`
+          : `makeedu 접속 준비(브라우저)에 실패해 보내지 못했습니다 — ${String(e.message || e).split("\n")[0].replace(/[A-Za-z]:\\[^\s]*/g, "…").replace(/\s+/g, " ").trim()}`
+      ).slice(0, 300);
+      for (const { requestId } of targets) {
+        if (!requestId) continue;
+        if (APPLY) await finish(sql, requestId, "error", null, why);
+        else await sql`update makeedu_push_requests set status = 'pending', started_at = null where id = ${requestId}`;
+      }
+      throw e;
+    }
 
     for (const { requestId, consultation: c } of targets) {
       if (!c) { results.push({ requestId, skip: "상담 없음" }); if (requestId) await finish(sql, requestId, "error", null, "상담 레코드 없음"); continue; }

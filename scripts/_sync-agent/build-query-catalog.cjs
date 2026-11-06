@@ -6,7 +6,7 @@ const ts = require('typescript');
 const root = path.resolve(__dirname, '../..');
 const entries = {
   classnote: ['watch-classnote-queue.mjs', 'process-classnote-queue.mjs', 'process-classnote-notices.mjs', 'process-classnote-recalls.mjs', 'process-parent-replies.mjs', 'process-parent-reactions.mjs', 'sync-child-map.mjs', 'sync-classnote-reads.mjs', 'backfill-attach-only-messages.mjs'],
-  makeedu: ['watch-sync-requests.cjs', 'sync-all.cjs', 'check-session.mjs', 'check-login.cjs', 'push-consultations.cjs', 'import-enrollments.cjs', 'import-consultations-excel.cjs', 'sync-prospects.cjs', 'reconcile-invoices.cjs', 'import-monthly-enrolled.mjs'],
+  makeedu: ['watch-sync-requests.cjs', 'sync-all.cjs', 'check-session.mjs', 'check-login.cjs', 'push-consultations.cjs', 'import-enrollments.cjs', 'import-consultations-excel.cjs', 'sync-prospects.cjs', 'reconcile-invoices.cjs', 'import-monthly-enrolled.mjs', 'human-login.cjs'],
 };
 // Retain released query IDs across web deployments. Installed PCs may update hours later.
 const catalogPath=path.join(root,'src/features/sync-agent/server/query-catalog.json');
