@@ -7,10 +7,10 @@ import "server-only";
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { kstToday } from "@/lib/date-kst";
+import { addDays, kstToday } from "@/lib/date-kst";
 import { reportError } from "@/lib/observability/report-error";
-import type { AdviceRating, AdviceStatus, AdviceView } from "../advice";
-import { ADVICE_VIEW_COLUMNS, actedTiming, adviceDrafts, adviceViewOf, type AdviceCheckResult, type AdviceRow } from "../advice-rows";
+import { ADVICE_INSERT_COLUMNS, ADVICE_VIEW_COLUMNS, adviceDrafts, adviceViewOf, SETTLE_DAYS, type AdviceCheckResult, type AdviceRating, type AdviceRow, type AdviceStatus, type AdviceView } from "../advice";
+import { askedOnOf } from "../advice-outcome";
 import type { SettledReport } from "../report";
 import type { Owner } from "./store";
 
@@ -33,7 +33,9 @@ export async function saveAdvice(
     asked_by: owner.userId,
     baseline_at: d.baseline_value === null ? null : now,
   }));
-  const { data, error } = await createAdminClient().from(ADVICE).insert(rows).select(ADVICE_VIEW_COLUMNS);
+  // 넣은 줄을 돌려받는 칸은 1단계 칸만 — insert와 select가 한 요청이라, 뒤 단계 칸(s2_0038)이 없는 DB에서 select가 틀리면 insert까지 함께 실패한다
+  // (새 의견은 결과가 없어 뒤 단계 칸이 필요 없다 · 적대 리뷰 2026-11-09).
+  const { data, error } = await createAdminClient().from(ADVICE).insert(rows).select(ADVICE_INSERT_COLUMNS);
   if (error) throw new Error(error.message);
   return ((data ?? []) as unknown as AdviceRow[]).map(adviceViewOf).sort((a, b) => a.itemNo - b.itemNo);
 }
@@ -76,7 +78,7 @@ export async function updateAdvice(
   const db = createAdminClient();
   const { data: current, error: readError } = await db
     .from(ADVICE)
-    .select("status, status_at, acted_on, created_at, baseline_to, check_after_days, measure_state")
+    .select("status, status_at, done_on, check_sql, check_after_days, baseline_to, measure_state, measure_anchor, latest_from")
     .eq("id", id)
     .eq("tenant_id", owner.tenantId)
     .eq("asked_by", owner.userId)
@@ -87,7 +89,22 @@ export async function updateAdvice(
   const done = patch.status === "done";
   const memo = patch.status === "open" ? null : patch.memo?.trim() || null;
   const doneOn = done ? patch.doneOn || kstToday() : null;
-  const timing = actedTiming(current, patch.status, doneOn);
+  // 완료하면 재측정 기준일을 그 날로 다시 잡는다(2단계 · 실행 전 기간을 '결과'로 판정하지 않게 · 적대 리뷰 2026-11-09) —
+  // 확인 지표가 있고 재측정을 기다리거나 이미 잰 의견만 · 🔴 기준일이 실제로 바뀔 때만(완료일이 질문일 이전 · 같은 날 다시 저장 · 처리 전→완료 왕복은 그대로)
+  // · 이미 잰 결과가 완료일 뒤 기간이면 그 결과를 남긴다(원장이 평가를 남기려 '완료'를 눌러도 결과가 사라지지 않게 · 재리뷰 2026-11-09).
+  const askedOn = current.baseline_to ? askedOnOf(current.baseline_to as string) : null;
+  const nextAnchor = done && askedOn ? maxYmd(doneOn!, askedOn) : null;
+  const currentAnchor = (current.measure_anchor as string | null) ?? askedOn;
+  const measuredAfterDone = current.measure_state === "measured" && typeof current.latest_from === "string" && !!doneOn && current.latest_from >= doneOn;
+  const anchor =
+    nextAnchor &&
+    !!current.check_sql &&
+    typeof current.check_after_days === "number" &&
+    (current.measure_state === "waiting" || current.measure_state === "measured") &&
+    nextAnchor !== currentAnchor &&
+    !measuredAfterDone
+      ? nextAnchor
+      : null;
   const { data, error } = await db
     .from(ADVICE)
     .update({
@@ -98,7 +115,14 @@ export async function updateAdvice(
       status_at: new Date().toISOString(),
       done_on: doneOn,
       self_rating: done ? (patch.selfRating ?? null) : null,
-      ...timing,
+      ...(anchor
+        ? {
+            measure_anchor: anchor,
+            next_check_on: addDays(anchor, (current.check_after_days as number) + SETTLE_DAYS),
+            measure_state: "waiting",
+            ...CLEARED_RESULT,
+          }
+        : {}),
     })
     .eq("id", id)
     .eq("tenant_id", owner.tenantId)
@@ -122,3 +146,22 @@ export async function updateAdvice(
   if (eventError) reportError(new Error(eventError.message), { scope: "assistant.advice.event", tenantId: owner.tenantId });
   return { ok: true, view, from };
 }
+
+const maxYmd = (a: string, b: string) => (a > b ? a : b);
+
+/** 다시 잡을 때 비우는 결과 칸(s2_0038). */
+const CLEARED_RESULT = {
+  latest_verdict: null,
+  latest_value: null,
+  latest_sample: null,
+  latest_base: null,
+  latest_base_sample: null,
+  latest_from: null,
+  latest_to: null,
+  latest_delta: null,
+  latest_threshold: null,
+  latest_reason: null,
+  latest_checked_at: null,
+  fail_count: 0,
+  last_error: null,
+};

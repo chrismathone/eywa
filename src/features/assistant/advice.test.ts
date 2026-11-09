@@ -1,7 +1,8 @@
 // 비서 의견 확인 지표 · 처리 상태(제안 → 결과 → 학습 1단계 · 2026-11-09) — 순수 함수.
 import { describe, expect, it } from "vitest";
-import { adviceDrafts, adviceViewOf, type AdviceRow } from "./advice-rows";
 import {
+  adviceDrafts,
+  adviceViewOf,
   baselineWindow,
   CHECK_FAILED,
   CHECK_SKIPPED,
@@ -13,6 +14,7 @@ import {
   NO_CHECK_GIVEN,
   readCheckRow,
   type AdviceCheck,
+  type AdviceRow,
 } from "./advice";
 import { settleReport } from "./report";
 
@@ -92,12 +94,21 @@ describe("의견 표 줄", () => {
       id: "a1", message_id: "m1", item_no: 0, status: "done", status_at: "2026-11-09T06:00:00.123456+00:00", status_memo: "전화 3통", done_on: "2026-11-09", self_rating: "good",
       check_label: CHECK.label, check_unit: "percent", check_better: "down", window_days: 14, baseline_value: "18.0", baseline_sample: "50",
       baseline_from: "2026-10-26", baseline_to: "2026-11-09", next_check_on: "2026-12-09", no_check_reason: null,
+      measure_state: "waiting", latest_verdict: null, latest_value: null, latest_sample: null, latest_base: null, latest_base_sample: null,
+      latest_from: null, latest_to: null, latest_checked_at: null, latest_reason: null,
     };
     const v = adviceViewOf(row);
     expect(v).toMatchObject({ id: "a1", itemNo: 0, status: "done", memo: "전화 3통", selfRating: "good", noCheck: null });
     expect(v.check).toEqual({ label: CHECK.label, unit: "percent", better: "down", windowDays: 14, baseline: { value: 18, sample: 50, from: "2026-10-26", to: "2026-11-09" }, nextCheckOn: "2026-12-09" });
     expect(JSON.stringify(v)).not.toContain("select");
     expect(adviceViewOf({ ...row, status: "weird", self_rating: "x", check_label: null, no_check_reason: "까닭" })).toMatchObject({ status: "open", selfRating: null, check: null, noCheck: "까닭" });
+    expect(v).toMatchObject({ measureState: "waiting", result: null });
+    // 다시 잰 결과(2단계) — 숫자 글자도 숫자로 · 모르는 판정·상태는 결과 없음
+    // 화면의 기준값 = 저장된 기준값(판정이 견준 값) — 같은 날 다시 잰 기준(latest_base 16)이 아니다
+    const measured = adviceViewOf({ ...row, measure_state: "measured", latest_verdict: "worse", latest_value: "22.0", latest_sample: "40", latest_base: "16.0", latest_base_sample: "44", latest_from: "2026-11-23", latest_to: "2026-12-07", latest_checked_at: "2026-12-09T00:00:00+00:00", latest_reason: null, latest_threshold: "3.5" });
+    expect(measured).toMatchObject({ measureState: "measured", result: { verdict: "worse", value: 22, sample: 40, base: 18, baseSample: 50, from: "2026-11-23", to: "2026-12-07", basis: "asked", anchor: "2026-11-11", threshold: 3.5 } });
+    expect(adviceViewOf({ ...row, measure_state: "measured", latest_verdict: "flat", latest_value: 1, latest_from: "2026-11-20", latest_to: "2026-12-04", latest_checked_at: "x", measure_anchor: "2026-11-20" }).result).toMatchObject({ basis: "done", anchor: "2026-11-20" });
+    expect(adviceViewOf({ ...row, measure_state: "x", latest_verdict: "great", latest_value: 1, latest_base: 1, latest_from: "a", latest_to: "b", latest_checked_at: "c" })).toMatchObject({ measureState: "none", result: null });
   });
 });
 

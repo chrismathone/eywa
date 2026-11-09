@@ -10,7 +10,8 @@
 import { z } from "zod";
 import { labelCodeColumns } from "./code-labels";
 import { plainRich } from "./rich-text";
-import { ADVICE_METHODS, ADVICE_TOPICS, AdviceCheckSchema, AdviceTargetsSchema, CHECK_FAILED, checkIntegrityProblem, checkTemplateProblem, type AdviceView } from "./advice";
+import { ADVICE_METHODS, ADVICE_TOPICS, AdviceCheckSchema, CHECK_FAILED, checkTemplateProblem, type AdviceView } from "./advice";
+import { AdviceTargetsSchema, checkIntegrityProblem } from "./advice-targets";
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 /**
@@ -87,7 +88,7 @@ export const ReportBlockSchema = z.discriminatedUnion("type", [
           topic: z.enum(ADVICE_TOPICS).optional(),
           method: z.enum(ADVICE_METHODS).optional(),
           check: AdviceCheckSchema.optional().describe("결과 지표 — 이 일을 해서 바라는 결과가 났나"),
-          /** 실행 지표 · 대상 명단(s2_0038 · 2026-11-09 답 검토 — 일을 했는지와 결과가 났는지를 나눠 보고, 다시 잴 대상을 굳힌다). */
+          /** 실행 지표 · 대상 명단(s2_0039 · 2026-11-09 답 검토 — 일을 했는지와 결과가 났는지를 나눠 보고, 다시 잴 대상을 굳힌다). */
           doneCheck: AdviceCheckSchema.optional().describe("실행 지표 — 할 일을 했는지(형식은 check와 같다)"),
           targets: AdviceTargetsSchema.optional(),
           noCheck: z.string().trim().min(1).max(80).optional().describe("숫자로 다시 재기 어려운 의견이면 그 까닭(확인 지표 대신)"),

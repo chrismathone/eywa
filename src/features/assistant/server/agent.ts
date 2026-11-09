@@ -11,8 +11,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { REPORT_TOOL_SCHEMA, settleReport, type QueryResult, type ReportBlock, type SettledReport } from "../report";
-import { baselineWindow, fillTargets, fillWindow, formatCheckValue, readCheckRow, type AdviceCheck } from "../advice";
-import type { AdviceCheckResult } from "../advice-rows";
+import { baselineWindow, fillWindow, formatCheckValue, readCheckRow, type AdviceCheck, type AdviceCheckResult } from "../advice";
+import { fillTargets } from "../advice-targets";
 import type { AskStep, StepKind, StepTable } from "../protocol";
 import type { AssistantTableDoc } from "../catalog/types";
 import { clipText } from "../text";
@@ -371,7 +371,7 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
     const measured = await (async (): Promise<{ value: number; sample: number | null } | string> => {
       let gate: Awaited<ReturnType<typeof checkAssistantSql>>;
       try {
-        // 대상 자리는 굳힌 명단으로 채운다(s2_0038 · 저장은 틀 그대로 — 다시 잴 때도 같은 명단으로 채운다).
+        // 대상 자리는 굳힌 명단으로 채운다(s2_0039 · 저장은 틀 그대로 — 다시 잴 때도 같은 명단으로 채운다).
         gate = await checkAssistantSql(fillTargets(fillWindow(check.sql, from, to), targets), views);
       } catch {
         return "조회문을 검사하지 못했습니다(일시 오류)";
@@ -407,7 +407,7 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
         continue;
       }
       const baseline = await measureOne(check, "확인 지표", item.targets?.ids);
-      // 실행 지표(s2_0038) — 결과 지표를 잰 의견만 · 시간이 남으면 잰다(못 재도 지표는 남긴다 — 처음 값만 없다).
+      // 실행 지표(s2_0039) — 결과 지표를 잰 의견만 · 시간이 남으면 잰다(못 재도 지표는 남긴다 — 처음 값만 없다).
       const done = item.doneCheck;
       const doneCheck = done ? { check: done, baseline: outOfTime() ? null : await measureOne(done, "실행 지표", item.targets?.ids) } : undefined;
       out.push({ itemNo: i, check, baseline, ...(doneCheck ? { doneCheck } : {}), ...(item.targets ? { targets: item.targets } : {}) });

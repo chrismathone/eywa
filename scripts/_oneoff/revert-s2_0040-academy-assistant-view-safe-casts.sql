@@ -1,93 +1,8 @@
--- s2_0038_academy_assistant_analysis_views.sql — 학원 비서: 분석용 보기 5개 + 비서 의견 대상 고정·실행 지표·실행일 기준 재측정 · 2026-11-09
---
--- 원장 2026-11-09 *"학원 전체에서 학생이 점점 줄어드는 원인 찾아봐. 필요한 팩터가 더 있는지도"* 답을 Claude·Codex가 따로 검토(판정 '부분 적절')
--- → 개선안 2·3순위. 검토가 짚은 비서의 잘못 읽기를 DB가 미리 계산한 보기로 막는다:
---   · 담임 교체 비교에서 없는 키(oldTeacherId)를 읽어 81건이 모두 비었다 → onto_homeroom_history(앱 teacher-as-of.ts와 같은 규칙)
---   · 형제를 '수동 지정 표 0쌍'으로 읽었다(앱은 휴대폰·학부모 이름으로 자동 판정) → onto_siblings · onto_households(앱 siblings.ts와 같은 규칙)
---   · 총원(장부 정리 포함 427)과 학년별 합계(416)가 어긋났다 · 영어를 합쳐 인재원 영어 감소가 가려졌다 → onto_tuition_months(학생·청구 달)
---   · 지금 담임을 3월 학생에게 붙여 강사별 퇴원율을 지어냈다 → onto_teacher_churn(앱 강사평가가 계산·마감한 값 그대로)
---   · 종강 반 절반을 못 봤다 → onto_classes(상태 칸: 운영 중 · 종강 · 종강 예정 · 폐지 · 프로그램)
--- 비서 의견(s2_0036 표): 대상 명단 고정(target_kind · target_ids) · 실행 지표(exec_check — 결과 지표 check_*와 따로) · 실행일(acted_on — 원장이
--- 채택·완료로 처리한 날, 다시 잴 날의 기준) — 처음 저장한 대상·지표 원문은 바꿀 수 없다(트리거).
---
--- 🔴 보기 생성 함수(create_ontology_views)는 s2_0031 본문을 그대로 두고 뒤에 새 보기만 더한다(운영 본문 = s2_0031 파일과 같음을 2026-11-09 확인).
---    생성 규칙 판을 rules-v2로 올려 앱의 '바뀌었을 때만 다시 만들기'가 다음 질문에서 저절로 다시 만들게 하고, 여기서도 한 번 다시 만든다.
--- 🔴 새 보기는 assistant.* 보기(이미 지점으로 묶임)만 읽는다 — 지점 조건을 따로 두지 않는다. 새 함수 없음(비서 역할 실행권 변화 없음 · #155).
--- 순서 = 이 SQL → 앱 배포(앱이 새 칸에 쓴다 — 앱을 먼저 올리면 의견 저장이 실패해 처리 단추만 안 보인다(ask.ts) · 답은 산다).
--- 되돌리기 = scripts/_oneoff/revert-s2_0038-academy-assistant-analysis-views.sql(앱 먼저 되돌린 뒤).
-
+-- 되돌리기: s2_0040_academy_assistant_view_safe_casts.sql — 보기 생성 함수를 s2_0039 본문으로, 실행 지표 크기 상한을 20,000바이트로.
+-- ⚠️ 40,000 상한 아래에서 저장된 큰 실행 지표 줄이 있으면 제약 추가가 실패한다 — 그 줄부터 정리할 것.
 begin;
 set local lock_timeout = '5s';
-set local statement_timeout = '120s';
 
--- ── §1 비서 의견: 대상 고정 · 실행 지표 · 실행일 ───────────────────────────────────────────────
-alter table public.assistant_advice
-  add column if not exists target_kind text,
-  add column if not exists target_ids uuid[],
-  add column if not exists exec_check jsonb,
-  add column if not exists acted_on date;
-
-alter table public.assistant_advice drop constraint if exists assistant_advice_target_kind_check;
-alter table public.assistant_advice add constraint assistant_advice_target_kind_check
-  check (target_kind is null or target_kind in ('student', 'class', 'teacher', 'consultation'));
-alter table public.assistant_advice drop constraint if exists assistant_advice_target_pair;
-alter table public.assistant_advice add constraint assistant_advice_target_pair
-  check ((target_kind is null) = (target_ids is null) and (target_ids is null or cardinality(target_ids) between 1 and 500));
-alter table public.assistant_advice drop constraint if exists assistant_advice_exec_check_shape;
-alter table public.assistant_advice add constraint assistant_advice_exec_check_shape
-  check (exec_check is null or (jsonb_typeof(exec_check) = 'object' and exec_check ? 'label' and exec_check ? 'sql' and octet_length(exec_check::text) <= 20000));
-
-create or replace function assistant_private.advice_guard() returns trigger
-language plpgsql security definer set search_path = '' as $$
-begin
-  if tg_op = 'UPDATE' and (new.tenant_id, new.message_id, new.thread_id, new.item_no, new.asked_by)
-       is distinct from (old.tenant_id, old.message_id, old.thread_id, old.item_no, old.asked_by) then
-    raise exception '비서 의견의 지점·답·순번·묻는 사람은 바꿀 수 없습니다' using errcode = '42501';
-  end if;
-  -- s2_0038: 대상 명단·지표 원문은 처음 저장한 그대로(다시 잴 때 대상·조회문이 바뀌면 비교가 안 된다).
-  if tg_op = 'UPDATE' and (new.target_kind, new.target_ids, new.check_sql, new.exec_check -> 'sql')
-       is distinct from (old.target_kind, old.target_ids, old.check_sql, old.exec_check -> 'sql') then
-    raise exception '비서 의견의 대상 명단·확인 지표 조회문은 바꿀 수 없습니다' using errcode = '42501';
-  end if;
-  if tg_op = 'INSERT' then
-    if not exists (select 1 from public.assistant_messages m
-                    where m.id = new.message_id and m.tenant_id = new.tenant_id and m.thread_id = new.thread_id and m.user_id = new.asked_by) then
-      raise exception '비서 의견의 답·대화·지점·묻는 사람이 맞지 않습니다' using errcode = '42501';
-    end if;
-    if new.status <> 'open' then
-      raise exception '새 비서 의견은 처리 전(open)으로만 만듭니다' using errcode = '42501';
-    end if;
-  end if;
-  if new.status_by is not null and new.status_by is distinct from old.status_by
-     and not exists (select 1 from public.users u where u.id = new.status_by and u.tenant_id = new.tenant_id) then
-    raise exception '처리한 사람이 이 지점 직원이 아닙니다' using errcode = '42501';
-  end if;
-  if tg_op = 'UPDATE' and new.status_at is distinct from old.status_at then
-    new.status_at := now();
-  end if;
-  new.updated_at := now();
-  return new;
-end $$;
-revoke all on function assistant_private.advice_guard() from public, anon, authenticated, service_role;
-
--- ── §2 생성 규칙 판 rules-v2(보기가 바뀌었다 — 앱의 '바뀌었을 때만 다시 만들기'가 알아보게) ─────────────
-create or replace function assistant_private.schema_signature() returns text
-language sql stable security definer set search_path = '' as $$
-  select md5(
-    coalesce((select string_agg(c.relname || '.' || a.attname || ':' || a.atttypid::text, ',' order by c.relname, a.attnum)
-                from pg_class c
-                join pg_namespace n on n.oid = c.relnamespace
-                join pg_attribute a on a.attrelid = c.oid
-               where n.nspname = 'public' and c.relkind in ('r', 'p') and a.attnum > 0 and not a.attisdropped), '')
-    || '|' || coalesce((select string_agg(table_name, ',' order by table_name) from assistant_private.excluded_tables), '')
-    || '|' || coalesce((select string_agg(table_name || '.' || column_name, ',' order by table_name, column_name) from assistant_private.hidden_columns), '')
-    || '|' || coalesce((select string_agg(table_name || '.' || column_name || '=' || expr, ',' order by table_name, column_name) from assistant_private.masked_columns), '')
-    || '|rules-v2'
-  )
-$$;
-
--- ── §3 온톨로지 보기 — s2_0031 넷 그대로 + 분석용 다섯(onto_classes · onto_homeroom_history · onto_siblings · onto_households ·
---     onto_tuition_months · onto_teacher_churn) ─────────────────────────────────────────────────────────
 create or replace function assistant_private.create_ontology_views() returns void
 language plpgsql security definer set search_path = '' as $$
 begin
@@ -209,7 +124,7 @@ begin
     $v$;
   end if;
 
-  -- ── s2_0038 · 분석용 보기(원장 2026-11-09 "학생이 줄어드는 원인" 답 검토 → 개선) ─────────────────────────────────
+  -- ── s2_0039 · 분석용 보기(원장 2026-11-09 "학생이 줄어드는 원인" 답 검토 → 개선) ─────────────────────────────────
 
   -- 반 한 줄 + 프로그램 · 상태(운영 중 · 종강 · 종강 예정 · 폐지)를 칸으로. 프로그램 = 영어 반은 english_track='eie'면 EiE, 아니면 인재원 영어
   -- (english-track.ts 'EiE가 아닌 전부') · 그 밖은 과목 키. 과목 이름은 학원 설정(tenant_settings operations.subjects)에서.
@@ -496,35 +411,12 @@ begin
 end $$;
 
 revoke all on function assistant_private.create_ontology_views() from public, anon, authenticated, service_role;
--- 연동 역할 실행권 확인: advice_guard는 트리거 함수(실행권 없이 발화) · create_ontology_views는 refresh_views(보안 정의자)만 부른다 — 둘 다 s2_0031·s2_0036 그대로 거둔 상태를 되풀이할 뿐이고 연동 PC 역할(eywa_sync_agent)의 RLS·질의 경로에 없다.
 
--- ── §4 지금 다시 만든다(refresh_views가 보기 전부를 지우고 다시 만든 뒤 비서 역할에 읽기만 준다) ─────────────
+alter table public.assistant_advice drop constraint if exists assistant_advice_exec_check_shape;
+alter table public.assistant_advice add constraint assistant_advice_exec_check_shape
+  check (exec_check is null or (jsonb_typeof(exec_check) = 'object' and exec_check ? 'label' and exec_check ? 'sql' and octet_length(exec_check::text) <= 20000));
+
 select assistant_private.refresh_views();
-
--- ── §5 사후 확인 ─────────────────────────────────────────────────────────────────────────────
-do $$
-declare
-  v text;
-begin
-  foreach v in array array['onto_students', 'onto_enrollments', 'onto_attendance', 'onto_class_teachers',
-                           'onto_classes', 'onto_homeroom_history', 'onto_siblings', 'onto_households', 'onto_tuition_months', 'onto_teacher_churn'] loop
-    if to_regclass('assistant.' || v) is null then
-      raise exception 's2_0038: 보기 assistant.%가 만들어지지 않았습니다', v;
-    end if;
-    if exists (select 1 from pg_roles where rolname = 'aywa_assistant') and not has_table_privilege('aywa_assistant', 'assistant.' || v, 'select') then
-      raise exception 's2_0038: 비서 역할이 assistant.%를 읽을 수 없습니다', v;
-    end if;
-    if has_table_privilege('anon', 'assistant.' || v, 'select') or has_table_privilege('authenticated', 'assistant.' || v, 'select') then
-      raise exception 's2_0038: 로그인·비로그인 사용자가 assistant.%를 읽을 수 있습니다', v;
-    end if;
-  end loop;
-  if (select signature from assistant_private.state where id) is distinct from assistant_private.schema_signature() then
-    raise exception 's2_0038: 보기 상태의 생성 규칙 판이 새 값이 아닙니다';
-  end if;
-  if to_regclass('assistant.assistant_advice') is not null then
-    raise exception 's2_0038: 비서 보기에 의견 표가 있습니다';
-  end if;
-end $$;
 
 commit;
 

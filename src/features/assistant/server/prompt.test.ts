@@ -70,7 +70,7 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toMatch(/doneCheck\(\*\*실행 지표\*\*/);
     expect(prompt).toMatch(/targets\(kind = student/);
     expect(prompt).toMatch(/일을 안 해도 좋아지는 지표를 쓰지 않는다/);
-    expect(prompt).toMatch(/채택·완료'로 처리한 날\(실행일\)부터/);
+    expect(prompt).toMatch(/'완료'로 처리하면 그 날\(실행일/);
   });
   it("바뀌는 값(오늘 날짜)이 없다 — 캐시가 깨지지 않게", () => {
     expect(prompt).not.toMatch(/20\d\d-\d\d-\d\d/);

@@ -81,7 +81,8 @@ export function defaultItems(bundle: Bundle): Item[] {
     case "owner":
       return ownerItems();
     case "manager":
-      return ownerItems(SENSITIVE_PANELS);
+      // 등록 후 3개월 내 퇴원(학생 이름)은 원장 화면에만 있던 카드 — 실장 기본으로 넓히지 않는다(원장이 설정에서 넣을 수 있다 · 리뷰 2026-11-09).
+      return ownerItems([...SENSITIVE_PANELS, "earlyExits"]);
     case "desk":
       return DESK.map((i) => ({ ...i }));
     case "subject":

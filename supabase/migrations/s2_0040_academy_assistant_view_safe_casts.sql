@@ -1,10 +1,10 @@
--- s2_0039_academy_assistant_view_safe_casts.sql — 학원 비서 보기: 형식 검사 뒤 캐스트 · 실행 지표 크기 상한 · 2026-11-09
+-- s2_0040_academy_assistant_view_safe_casts.sql — 학원 비서 보기: 형식 검사 뒤 캐스트 · 실행 지표 크기 상한 · 2026-11-09
 --
--- s2_0038 독립 리뷰(2026-11-09): 보기의 ::uuid · ::date · ::timestamptz · to_date 캐스트가 모양만 정규식으로 보고 있었다
+-- s2_0039 독립 리뷰(2026-11-09): 보기의 ::uuid · ::date · ::timestamptz · to_date 캐스트가 모양만 정규식으로 보고 있었다
 -- ('-'만 36자 · 2026-13-45 같은 값 한 줄이면 그 보기를 읽는 조회 전체가 오류). → pg_input_is_valid(PG16+, 운영 17.6)로 값이 맞을 때만 캐스트한다.
 -- 원래 s2_0031 onto_students의 merged_into(병합 대상 id)도 같은 자리라 함께 고친다. 정수 칸은 9자리까지만.
 -- 실행 지표(exec_check jsonb) 크기 상한 20,000 → 40,000바이트(조회문 상한을 check_sql과 같은 8,000자로 올렸다 — 한글 주석이면 바이트가 늘어난다).
--- 순서: 이 SQL은 앱과 무관하게 먼저 적용해도 된다(보기 칸·이름 변화 없음). 되돌리기 = s2_0038 함수 본문으로 다시 정의(scripts/_oneoff/revert-s2_0039-…).
+-- 순서: 이 SQL은 앱과 무관하게 먼저 적용해도 된다(보기 칸·이름 변화 없음). 되돌리기 = s2_0039 함수 본문으로 다시 정의(scripts/_oneoff/revert-s2_0040-…).
 
 begin;
 set local lock_timeout = '5s';
@@ -135,7 +135,7 @@ begin
     $v$;
   end if;
 
-  -- ── s2_0038 · 분석용 보기(원장 2026-11-09 "학생이 줄어드는 원인" 답 검토 → 개선) ─────────────────────────────────
+  -- ── s2_0039 · 분석용 보기(원장 2026-11-09 "학생이 줄어드는 원인" 답 검토 → 개선) ─────────────────────────────────
 
   -- 반 한 줄 + 프로그램 · 상태(운영 중 · 종강 · 종강 예정 · 폐지)를 칸으로. 프로그램 = 영어 반은 english_track='eie'면 EiE, 아니면 인재원 영어
   -- (english-track.ts 'EiE가 아닌 전부') · 그 밖은 과목 키. 과목 이름은 학원 설정(tenant_settings operations.subjects)에서.
@@ -422,7 +422,7 @@ begin
 end $$;
 
 revoke all on function assistant_private.create_ontology_views() from public, anon, authenticated, service_role;
--- 연동 역할 실행권 확인: create_ontology_views는 refresh_views(보안 정의자)만 부른다 — s2_0031·s2_0038과 같은 거두기를 되풀이할 뿐 연동 PC 역할(eywa_sync_agent)의 RLS·질의 경로에 없다. pg_input_is_valid는 내장 함수(PUBLIC 실행).
+-- 연동 역할 실행권 확인: create_ontology_views는 refresh_views(보안 정의자)만 부른다 — s2_0031·s2_0039과 같은 거두기를 되풀이할 뿐 연동 PC 역할(eywa_sync_agent)의 RLS·질의 경로에 없다. pg_input_is_valid는 내장 함수(PUBLIC 실행).
 
 select assistant_private.refresh_views();
 
@@ -433,14 +433,14 @@ begin
   foreach v in array array['onto_students', 'onto_enrollments', 'onto_attendance', 'onto_class_teachers',
                            'onto_classes', 'onto_homeroom_history', 'onto_siblings', 'onto_households', 'onto_tuition_months', 'onto_teacher_churn'] loop
     if to_regclass('assistant.' || v) is null then
-      raise exception 's2_0039: 보기 assistant.%가 만들어지지 않았습니다', v;
+      raise exception 's2_0040: 보기 assistant.%가 만들어지지 않았습니다', v;
     end if;
     if exists (select 1 from pg_roles where rolname = 'aywa_assistant') and not has_table_privilege('aywa_assistant', 'assistant.' || v, 'select') then
-      raise exception 's2_0039: 비서 역할이 assistant.%를 읽을 수 없습니다', v;
+      raise exception 's2_0040: 비서 역할이 assistant.%를 읽을 수 없습니다', v;
     end if;
   end loop;
   if exists (select 1 from pg_roles where rolname = 'aywa_assistant') and not has_function_privilege('aywa_assistant', 'pg_input_is_valid(text, text)', 'execute') then
-    raise exception 's2_0039: 비서 역할이 pg_input_is_valid를 부를 수 없습니다';
+    raise exception 's2_0040: 비서 역할이 pg_input_is_valid를 부를 수 없습니다';
   end if;
 end $$;
 

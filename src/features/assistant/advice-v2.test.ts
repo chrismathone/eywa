@@ -1,7 +1,7 @@
-// 비서 의견 2단계 앞부분(s2_0038 · 2026-11-09 답 검토 + 독립 리뷰) — 대상 고정({{대상}} 자리) · 일을 안 해도 좋아지는 지표 막기 · 실행 지표 · 실행일 기준 재측정.
+// 비서 의견 대상 고정·실행 지표(s2_0039 · 2026-11-09 답 검토 + 독립 리뷰) — {{대상}} 자리 · 일을 안 해도 좋아지는 지표 막기 · 실행 지표.
 import { describe, expect, it } from "vitest";
-import { AdviceTargetsSchema, CHECK_FAILED, checkIntegrityProblem, fillTargets, type AdviceCheck } from "./advice";
-import { actedTiming, adviceDrafts, adviceViewOf, askedOnOf, type AdviceRow } from "./advice-rows";
+import { adviceDrafts, adviceViewOf, CHECK_FAILED, type AdviceCheck, type AdviceRow } from "./advice";
+import { AdviceTargetsSchema, checkIntegrityProblem, fillTargets } from "./advice-targets";
 import { settleReport } from "./report";
 
 const A = "11111111-1111-4111-8111-111111111111";
@@ -101,41 +101,18 @@ describe("저장 줄", () => {
     const [none] = adviceDrafts([{ action: "a", why: "b" }], [{ itemNo: 0, check: OUTCOME, baseline: null, targets: T }], "2026-11-09");
     expect(none).toMatchObject({ target_kind: null, target_ids: null, exec_check: null, check_sql: null });
   });
-  it("화면 모양 — 실행 지표 · 대상 인원 · 실행일 · 질문일(조회문은 싣지 않는다)", () => {
+  it("화면 모양 — 실행 지표 · 대상 인원 · 질문일(조회문은 싣지 않는다)", () => {
     const row = {
       id: "x", message_id: "m", item_no: 0, status: "adopted", status_at: "t", status_memo: null, done_on: null, self_rating: null,
       check_label: OUTCOME.label, check_unit: "percent", check_better: "up", window_days: 28, baseline_value: 50, baseline_sample: 2,
-      baseline_from: "2026-10-10", baseline_to: "2026-11-07", next_check_on: "2026-12-09", no_check_reason: null, created_at: "2026-11-09T01:00:00Z",
-      target_kind: "student", target_ids: [A, B], acted_on: "2026-11-10", exec_label: DONE.label, exec_unit: "count", exec_better: "up", exec_baseline: { value: 0, sample: null },
+      baseline_from: "2026-10-10", baseline_to: "2026-11-07", next_check_on: "2026-12-09", no_check_reason: null, measure_state: "waiting",
+      target_kind: "student", target_ids: [A, B], exec_label: DONE.label, exec_unit: "count", exec_better: "up", exec_baseline: { value: 0, sample: null },
     } satisfies AdviceRow;
     const view = adviceViewOf(row);
     expect(view.targets).toEqual({ kind: "student", count: 2 });
     expect(view.doneCheck).toEqual({ label: DONE.label, unit: "count", better: "up", baseline: { value: 0, sample: null } });
-    expect(view.actedOn).toBe("2026-11-10");
+    // 질문일 = 기준값 기간 끝 + 2일 — 완료 '한 날' 입력의 하한(리뷰 중1)
     expect(view.askedOn).toBe("2026-11-09");
     expect(JSON.stringify(view)).not.toContain("select");
-  });
-});
-
-describe("실행일 · 다시 잴 날", () => {
-  const row = { acted_on: null, created_at: "2026-11-09T01:00:00Z", baseline_to: "2026-11-07", check_after_days: 28, measure_state: "waiting" };
-  it("질문일 = 기준값 기간 끝 + 2일(없으면 저장 시각)", () => {
-    expect(askedOnOf(row)).toBe("2026-11-09");
-    expect(askedOnOf({ baseline_to: null, created_at: "2026-11-08T16:00:00Z" })).toBe("2026-11-09");
-  });
-  it("채택 = 그날부터 · 이미 채택했으면 그 날 그대로", () => {
-    expect(actedTiming(row, "adopted", null, "2026-11-12")).toEqual({ acted_on: "2026-11-12", next_check_on: "2026-12-12" });
-    expect(actedTiming({ ...row, acted_on: "2026-11-10" }, "adopted", null, "2026-11-12")).toEqual({ acted_on: "2026-11-10", next_check_on: "2026-12-10" });
-  });
-  it("완료 = 한 날부터 · 처리 전·보류·안 함 = 질문일로 돌아간다", () => {
-    expect(actedTiming(row, "done", "2026-11-20", "2026-11-21")).toEqual({ acted_on: "2026-11-20", next_check_on: "2026-12-20" });
-    expect(actedTiming({ ...row, acted_on: "2026-11-10" }, "open", null, "2026-11-12")).toEqual({ acted_on: null, next_check_on: "2026-12-09" });
-  });
-  it("🔴 질문일보다 앞선 한 날은 재측정 기준만 질문일로 올린다(리뷰 중1)", () => {
-    expect(actedTiming(row, "done", "2026-11-01", "2026-11-12")).toEqual({ acted_on: "2026-11-09", next_check_on: "2026-12-09" });
-  });
-  it("이미 잰 지표·지표 없는 의견은 다시 잴 날을 안 건드린다", () => {
-    expect(actedTiming({ ...row, measure_state: "measured" }, "done", "2026-11-20")).toEqual({ acted_on: "2026-11-20" });
-    expect(actedTiming({ ...row, check_after_days: null, measure_state: "none" }, "adopted", null, "2026-11-12")).toEqual({ acted_on: "2026-11-12" });
   });
 });
