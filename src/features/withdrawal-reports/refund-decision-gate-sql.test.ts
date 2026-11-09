@@ -46,7 +46,7 @@ const BEFORE = {
 const AFTER = {
   "public.transition_withdrawal_report(uuid,uuid,uuid,text,jsonb)": "99c4175fd9f02dab3091086f456890b1",
   "public.transition_withdrawal_report_v1(uuid,uuid,uuid,text,jsonb)": "c8d87498a853195d7c86de12b21ae6d8",
-  "public.attach_withdrawal_report_refund(uuid,uuid,uuid,uuid,uuid,boolean,jsonb,jsonb,jsonb)": "4d4be34ba7d4068ef5751ec618e5de35",
+  "public.attach_withdrawal_report_refund(uuid,uuid,uuid,uuid,uuid,boolean,jsonb,jsonb,jsonb)": "f87f992c7ce096a2e5c1dd44c278ce39",
   "public.release_withdrawal_report_refunds(uuid,uuid,uuid,jsonb)": "2516d0340b850c14faa4f91e9ea673ca",
   "staff_tasks_private.withdrawal_sync_report(uuid)": "577ba3f3c9f2c429b051b8656a660cb0",
   "public.withdrawal_report_refund_note(uuid,uuid,jsonb,uuid,boolean)": "dce627cbb631b2160ebd8d74b7a46384",
@@ -241,6 +241,14 @@ describe("원장 환불 결정 전에는 처리하지 않는다(s2_0036)", () =>
     // 🔴 같은 묶음이어도 살아 있는 다른 요청서가 같은 키를 담았으면 거절(리뷰 r3 R-1 · P6b 이중 환불)
     expect(att).toContain("join public.withdrawal_report_refund_decisions o on o.tenant_id = p_tenant and o.group_id = gid and o.line_key = x and o.decision = 'refund' and o.document_id is distinct from p_document");
     expect(att.indexOf("o.group_id = gid and o.line_key = x")).toBeLessThan(att.indexOf("insert into public.withdrawal_report_refunds"));
+    // 🔴 요청서의 첫 총액도 상한과 맞댄다(리뷰 r3 R3-1 — 상한 모름 · 못 읽음 · 넘음이면 거절 · 결정 행을 남긴 뒤 · 이벤트·표시 전)
+    expect(att).toContain("select count(*) > 0 and bool_and(d.paid_net is not null), sum(d.paid_net) into cap_known, cap");
+    expect(att).toContain("first_total := public.withdrawal_refund_won((select a.form_data #>> '{refund,totalAmount}' from public.academy_documents a where a.tenant_id = p_tenant and a.id = p_document));");
+    expect(att).toContain("if not coalesce(cap_known, false) or first_total is null or first_total > cap then");
+    expect(att.indexOf("first_total > cap")).toBeGreaterThan(att.indexOf("perform public.withdrawal_refund_record_none(p_tenant, gid, r.id, k,"));
+    expect(att.indexOf("first_total > cap")).toBeLessThan(att.indexOf("insert into public.withdrawal_report_events"));
+    // 머리말 '적용 확인' 줄은 6인자 decide(리뷰 r3 R3-2 — 5인자로 찾으면 바르게 적용해도 false)
+    expect(sql).toContain("--   select to_regprocedure('public.decide_withdrawal_report_refund(uuid,uuid,uuid,jsonb,jsonb,jsonb)') is not null");
     // 대체 옛 요청서는 고른 줄과 같은 청구를 담은 것만(리뷰 r3 R-4)
     expect(att).toContain("then raise exception '대체할 옛 요청서가 고른 청구를 담고 있지 않습니다. 새로고침 후 다시 확인해 주세요.'; end if;");
     // 고르지 않은 줄 = 환불 가능 줄 · 다시 정할 이 묶음 요청서 줄(claimed) — '환불하지 않음' 기록은 한 함수(withdrawal_refund_record_none)

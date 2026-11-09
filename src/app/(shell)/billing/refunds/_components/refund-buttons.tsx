@@ -29,9 +29,10 @@ export function DeleteRefundButton({ id, name, confirmText }: { id: string; name
 
   if (confirming) {
     return (
+      // 긴 확인 글 옆에서도 단추가 한 글자씩 꺾이지 않게 — 글은 줄어들고(min-w-0) 단추는 그대로(리뷰 r3 R3-m3).
       <span className="flex items-center gap-1.5 text-sm">
-        <span className="text-text-dim whitespace-nowrap">{name || "이"} 요청서 삭제?</span>
-        {confirmText ? <span role="note" className="text-danger text-xs">{confirmText}</span> : null}
+        <span className="text-text-dim shrink-0 whitespace-nowrap">{name || "이"} 요청서 삭제?</span>
+        {confirmText ? <span role="note" className="text-danger min-w-0 text-xs">{confirmText}</span> : null}
         <button
           type="button"
           disabled={busy}
@@ -52,11 +53,11 @@ export function DeleteRefundButton({ id, name, confirmText }: { id: string; name
             //    `replace`인 건 지운 요청서 주소가 죽은 칸이라서다(뒤로가기가 그 404에 걸리지 않게 — 학생 삭제와 같은 규약).
             window.location.replace(inFrame ? withEmbed(REFUNDS_HREF) : REFUNDS_HREF);
           }}
-          className="text-danger font-bold hover:underline"
+          className="text-danger shrink-0 font-bold whitespace-nowrap hover:underline"
         >
           {busy ? <Loader2 className="size-3.5 animate-spin" /> : "삭제"}
         </button>
-        <button type="button" onClick={() => setConfirming(false)} className="text-text-dim hover:underline">
+        <button type="button" onClick={() => setConfirming(false)} className="text-text-dim shrink-0 whitespace-nowrap hover:underline">
           취소
         </button>
       </span>

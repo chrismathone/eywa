@@ -122,6 +122,16 @@ export function openClaims(later: Lines, decisions: ReadonlyMap<string, RefundDe
   }
   return out;
 }
+/**
+ * 늘어난 몫 줄(결정 뒤 낸 돈이 는 이 묶음 요청서 줄)이 정해지지 않았으면 다른 줄의 '환불 승인'을 막는다(리뷰 r3 R3-I1 — 승인하면 그 줄이 안내 없이
+ * '환불하지 않음'으로 굳는다). 화면 단추 옆·확인 칸과 서버 승인 액션이 같은 글. 늘어난 몫이 없으면 null.
+ */
+export function pendingIncrease(claims: readonly OpenClaim[]): { total: number; text: string } | null {
+  const inc = claims.filter(o => o.reason === "increase");
+  if (!inc.length) return null;
+  const total = inc.reduce((s, o) => s + Math.max(0, o.now - (o.before ?? 0)), 0);
+  return { total, text: `늘어난 몫 ${total.toLocaleString("ko-KR")}원 줄을 먼저 정하세요 — ${inc.every(o => o.separable) ? "따로 처리 또는 환불 없음" : "환불 없음(환불을 마친 줄은 따로 처리)"}` };
+}
 /** 줄마다 다시 승인할 때 빼는 몫(이전 환불 완료 기록 · 따로 환불 — 화면 표시 · 리뷰 r3 R2-I2). 뺄 몫이 없는 줄은 없다. */
 export type LineDeduction = { key: string; refunded: number; separate: number; separateAt: string | null; separateBy: string | null };
 export function lineDeductions(later: Lines, decisions: ReadonlyMap<string, RefundDecision>): LineDeduction[] {

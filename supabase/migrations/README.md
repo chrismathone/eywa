@@ -35,6 +35,8 @@
   원장 결정 '늘어난 몫은 수납에서 따로 처리': 결정 표 칸 `separate_amount`·`separate_at`·`separate_by`·`refunded_total`·`refunded_docs` · `decide_withdrawal_report_refund` 6인자(`p_separate` · 옛 5인자 지움) ·
   트리거가 완료 때 환불 완료 기록 · attach 다시 승인 상한 = 낸 돈 − 따로 − 완료 기록. 되돌리기는 두 함수 btrim 복원 · 연결 표 권한 복원 · 6인자 지움(칸은 남김).
   확인: PGlite r3 시나리오 13건(R-1 ×2 · R-2 ×3 · R-4 · R-5 · R-6 · R-9 ×2 · 따로 환불 ×3) + r2 21건 회귀 0 + 지난 리뷰 사례 회귀 0 · 되돌리기 왕복.
+  리뷰 수리 r4(2026-11-09): R3-1 attach가 요청서의 첫 총액도 상한과 맞댄다(상한 모름·못 읽음·넘음 = 23514 — 옛 6인자 호출은 상한 모름이라 거절) · R3-2 머리말 적용 확인 줄 6인자 decide.
+  확인: PGlite r4 4건(첫 승인 300만 원 거절 · 다시 승인 상한 0에 35만 원 거절 · 옛 6인자 거절 · 적용 확인 줄 true) + r2 21 · r3 13 · 지난 30 회귀 0.
   DB가 스스로 못 막는 길(앱이 막거나 설계상 둔다) = [결정 문서 r3](../../docs/decisions/withdrawal-reports.md)의 ①~⑩(관리 키의 '누가' · 앱 확인 값 · R-3 수납명 변경 대체 · 같은 묶음 형제 겹침 · TRUNCATE · 결제내역 '원' 없는 숫자 · R-4 같은 청구 다른 줄 · R-9 날짜 꼴만 · D-9 · 따로 환불 실제 지급 · 완료 기록 = 상한).
 - 연동 역할(eywa_sync_agent) 실행권: 이 파일이 다시 만드는 attach·release는 s2_0025부터 service_role만 — 연동 역할 실행권 없음 · RLS·다른 함수·연동 앱이 부르지 않음(운영 읽기 전용 2026-11-09) → 확인 줄 `-- 연동 역할 실행권 확인:`(가드 `sync-agent-execute-grants.test.ts`). 적용 뒤 연동 PC 워커 신호·42501을 본다.
 - 🔴 적용 직전 확인(화면 리뷰 m16): `select count(*) from public.withdrawal_report_refunds;` 가 **0**이어야 한다(2026-11-09 운영 0). s2_0036 전에 이어진 요청서는 결정 행이 없어 C.3·같은 돈 두 번 막기(DB) 밖이다(앱 `reapprovable`만 막는다) — 0이 아니면 적용 전에 원장에게 알린다.

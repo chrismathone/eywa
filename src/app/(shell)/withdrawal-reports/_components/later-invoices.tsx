@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { approveWithdrawalRefund, declineWithdrawalRefund } from "@/features/withdrawal-reports/server/refund-actions";
 import { separateWithdrawalRefundIncrease } from "@/features/withdrawal-reports/server/refund-separate-actions";
-import { lineRefundable as refundable, unpickedNotice, type OpenClaim } from "@/features/withdrawal-reports/refund-decision";
+import { lineRefundable as refundable, pendingIncrease, unpickedNotice, type OpenClaim } from "@/features/withdrawal-reports/refund-decision";
 import { LATER_FAILED_TEXT, LATER_HIDDEN_TEXT, LATER_LIMIT_TEXT, type DetailRefundNote, type LaterState } from "@/features/withdrawal-reports/refund-detail-notes";
 import { titledName } from "@/features/withdrawal-reports/model";
 import type { LaterInvoice } from "@/features/withdrawal-reports/server/refund";
@@ -109,7 +109,8 @@ export function LaterInvoices({ reportId, rows, canApprove, deskStaff, gates = f
     const result = await separateWithdrawalRefundIncrease(reportId, key);
     if ("error" in result) return result.error;
     setSeparating(null);
-    const head = `늘어난 ${won(result.amount)}은 수납에서 따로 환불하기로 정했습니다(담당 데스크에게 알림).`;
+    // 알림을 못 보냈으면 사실대로(담당 퇴사·없음 · 리뷰 r3 R3-m2).
+    const head = `늘어난 ${won(result.amount)}은 수납에서 따로 환불하기로 정했습니다${result.notified ? "(담당 데스크에게 알림)." : " — 담당 데스크에게 알리지 못했습니다(퇴사·지정 없음 등). 수납 담당에게 직접 알려 주세요."}`;
     toast.success(result.processed ? `${head} 이어서 퇴원·수강종료를 처리했습니다.`
       : result.undecided === null ? `${head} 처리 확인 대기 — 다음 확인(매일 00:05) 때 다시 판정합니다.`
       : result.undecided > 0 ? `${head} 결정할 건 ${result.undecided}건이 남아 있습니다.` : `${head} 남은 승인·데스크 환불이 끝나면 처리합니다.`);
@@ -122,6 +123,9 @@ export function LaterInvoices({ reportId, rows, canApprove, deskStaff, gates = f
   const otherDone = open.filter(x => x.line.otherRefund?.completed).length;
   // 환불을 마친 줄의 늘어난 몫 — '환불 없음'이면 그 몫도 환불하지 않음으로 남는다(따로 환불하려면 그 줄의 단추 · 원장 결정 2026-11-09).
   const increase = open.reduce((s, x) => { const o = reopen.get(x.line.key); return o?.separable ? s + o.now - (o.before ?? 0) : s; }, 0);
+  // 늘어난 몫 줄이 정해지지 않았으면 다른 줄의 환불 승인을 막는다(리뷰 r3 R3-I1 · 서버 같은 글) — 처리 전만(끝난 보고서는 확인 칸이 그 몫을 말한다).
+  const incPending = pendingIncrease(decision.openClaims ?? []);
+  const approveBlocked = decisionOpen && incPending ? incPending.text : null;
   return <div id="refund" className="space-y-2" aria-label="환불 확인">
     {lead}
     {decision.failed && <p role="alert" className="text-sm text-destructive">{decision.decisionsFailed ? "환불 결정 기록을 불러오지 못했습니다(새로고침) — 이미 정한 건을 다시 정하지 않게 결정 단추를 막았습니다."
@@ -142,16 +146,18 @@ export function LaterInvoices({ reportId, rows, canApprove, deskStaff, gates = f
     {canDecide && chosen.length > 0 && !asking && !sepClaim && <div className="flex flex-wrap items-center gap-3">
       <span className="text-sm">선택 {chosen.length}건 · 환불 {won(total)}</span>
       <Button disabled={pending} onClick={() => { setError(""); setDesk(""); setSeparating(null); setAsking("approve"); }}>환불 승인</Button>
+      {approveBlocked && <span role="note" className="text-sm text-destructive">{approveBlocked}</span>}
     </div>}
     {canDecide && chosen.length === 0 && waiting && !asking && !sepClaim && <div className="flex flex-wrap items-center gap-3">
       <Button variant="outline" disabled={pending} onClick={() => { setError(""); setSeparating(null); setAsking("decline"); }}>환불 없음</Button>
     </div>}
     {canDecide && sepClaim && <div className="space-y-3 rounded-lg border bg-muted/20 p-4" role="alertdialog" aria-label="늘어난 몫 따로 환불 확인">
-      <p className="text-sm">늘어난 {won(sepClaim.now - (sepClaim.before ?? 0))}은 수납에서 일반 환불 요청서로 따로 환불합니다. 이 건은 &apos;환불하지 않음 — 늘어난 몫은 수납에서 따로 처리&apos;로 남고, 환불을 마친 요청서는 그대로 둡니다. 담당 데스크에게 알림이 갑니다. 정할 건이 더 없고 승인·데스크 환불이 끝났으면 바로 퇴원·수강종료를 처리합니다.</p>
+      <p className="text-sm">늘어난 {won(sepClaim.now - (sepClaim.before ?? 0))}은 수납에서 일반 환불 요청서로 따로 환불합니다. 이 건은 &apos;환불하지 않음 — 늘어난 몫은 수납에서 따로 처리&apos;로 남고, 환불을 마친 요청서는 그대로 둡니다. 담당 데스크에게 알림을 보냅니다(담당이 퇴사했거나 없으면 보내지 못하고 결과에 알립니다). 정할 건이 더 없고 승인·데스크 환불이 끝났으면 바로 퇴원·수강종료를 처리합니다.</p>
       <div className="flex gap-2"><Button disabled={pending} onClick={() => separate(sepClaim.key)}>{pending ? "처리 중…" : "따로 환불 확인"}</Button><Button variant="outline" disabled={pending} onClick={() => setSeparating(null)}>닫기</Button></div>
     </div>}
     {asking === "approve" && chosen.length > 0 && <div className="space-y-3 rounded-lg border bg-muted/20 p-4" role="alertdialog" aria-label="환불 승인 확인">
-      <p className="text-sm">환불을 승인하시겠습니까? 고른 {chosen.length}건 · {won(total)}에 대한 환불 요청서가 만들어지고, 고른 데스크 담당자의 할 일·알림으로 갑니다.{gates ? " 데스크가 환불을 처리(환불완료일자 입력)해야 퇴원·수강종료를 처리합니다." : ""}{unpicked.length ? ` ${unpickedNotice(unpicked.length)}.` : ""}</p>
+      <p className="text-sm">환불을 승인하시겠습니까? 고른 {chosen.length}건 · {won(total)}에 대한 환불 요청서가 만들어지고, 고른 데스크 담당자의 할 일·알림으로 갑니다.{gates ? " 데스크가 환불을 처리(환불완료일자 입력)해야 퇴원·수강종료를 처리합니다." : ""}{unpicked.length ? ` ${unpickedNotice(unpicked.length)}.` : ""}{!decisionOpen && incPending ? ` 결정 뒤 늘어난 몫 ${won(incPending.total)}은 이 승인으로 환불하지 않음으로 남습니다(수납에서 따로 확인).` : ""}</p>
+      {approveBlocked && <p role="alert" className="text-sm text-destructive">{approveBlocked}</p>}
       <ul className="list-disc pl-5 text-xs text-muted-foreground">{chosen.map(x => { const r = remainOf(x.line.key, x.line.paidNet); return <li key={x.line.key}>{label(x.inv, x.line)} {won(r)}{r < x.line.paidNet ? ` (낸 돈 ${won(x.line.paidNet)} − 이전 환불·따로 환불 ${won(x.line.paidNet - r)})` : ""}</li>; })}</ul>
       {deskNotice
         ? <p role="alert" className="text-sm text-destructive">{deskNotice}</p>
@@ -162,7 +168,7 @@ export function LaterInvoices({ reportId, rows, canApprove, deskStaff, gates = f
             {deskStaff.map(s => <option key={s.id} value={s.id}>{titledName({ name: s.name, jobTitle: s.jobTitle ?? null }, s.name)}</option>)}
           </select>
         </label>}
-      <div className="flex gap-2"><Button disabled={pending || !desk || !!deskNotice} onClick={approve}>{pending ? "처리 중…" : "환불 승인"}</Button><Button variant="outline" disabled={pending} onClick={() => setAsking(null)}>닫기</Button></div>
+      <div className="flex gap-2"><Button disabled={pending || !desk || !!deskNotice || !!approveBlocked} onClick={approve}>{pending ? "처리 중…" : "환불 승인"}</Button><Button variant="outline" disabled={pending} onClick={() => setAsking(null)}>닫기</Button></div>
     </div>}
     {asking === "decline" && <div className="space-y-3 rounded-lg border bg-muted/20 p-4" role="alertdialog" aria-label="환불 없음 확인">
       <p className="text-sm">환불 없음으로 정하시겠습니까? 이 보고서에서 정할 {open.length}건{declined.size ? `(이미 '환불 안 함' ${open.filter(x => declined.has(x.line.key)).length}건 포함)` : ""}을 모두 환불하지 않음으로 기록합니다.{otherDone ? ` 다른 요청에서 이미 환불을 마친 ${otherDone}건도 이 요청에선 '환불하지 않음'으로 남습니다(다시 돌려주지 않습니다).` : ""}{increase ? ` 환불을 마친 줄의 늘어난 몫 ${won(increase)}도 환불하지 않음으로 남습니다 — 수납에서 따로 환불하려면 그 줄의 '늘어난 몫은 수납에서 따로 처리'를 쓰세요.` : ""} 남은 승인·데스크 환불이 끝났으면 바로 퇴원·수강종료를 처리합니다.</p>

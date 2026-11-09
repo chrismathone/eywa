@@ -27,7 +27,7 @@ declare
   want constant jsonb := jsonb_build_object(
     'public.transition_withdrawal_report(uuid,uuid,uuid,text,jsonb)', '99c4175fd9f02dab3091086f456890b1',
     'public.transition_withdrawal_report_v1(uuid,uuid,uuid,text,jsonb)', 'c8d87498a853195d7c86de12b21ae6d8',
-    'public.attach_withdrawal_report_refund(uuid,uuid,uuid,uuid,uuid,boolean,jsonb,jsonb,jsonb)', '4d4be34ba7d4068ef5751ec618e5de35',
+    'public.attach_withdrawal_report_refund(uuid,uuid,uuid,uuid,uuid,boolean,jsonb,jsonb,jsonb)', 'f87f992c7ce096a2e5c1dd44c278ce39',
     'public.release_withdrawal_report_refunds(uuid,uuid,uuid,jsonb)', '2516d0340b850c14faa4f91e9ea673ca',
     'staff_tasks_private.withdrawal_sync_report(uuid)', '577ba3f3c9f2c429b051b8656a660cb0',
     'public.withdrawal_report_refund_note(uuid,uuid,jsonb,uuid,boolean)', 'dce627cbb631b2160ebd8d74b7a46384',

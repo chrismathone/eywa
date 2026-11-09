@@ -219,7 +219,7 @@ describe("리뷰 r3 — 늘어난 몫 따로 환불(원장 결정 2026-11-09) ·
   const done = (paidNet: number) => ({ ...nov, lines: [{ ...nov.lines[0]!, paidNet, refund: { documentId: DOC, deskName: "데스크A", completed: true, exact: true } }, nov.lines[1]!] });
   const claim = { key: `${id}#0`, reason: "increase" as const, before: 315000, now: 365000, documentId: DOC, separable: true };
   it("🔴 환불을 마친 줄에 낸 돈이 늘면 — 늘어난 금액 · '환불하지 않음 — 늘어난 몫은 수납에서 따로 처리' → 확인 → 그 줄만 보냄(첫 요청서는 그대로)", async () => {
-    mocks.separate.mockResolvedValue({ ok: true, processed: false, undecided: 1, amount: 50000 });
+    mocks.separate.mockResolvedValue({ ok: true, processed: false, undecided: 1, amount: 50000, notified: true });
     render(<LaterInvoices reportId="r" rows={[done(365000)]} canApprove deskStaff={desks} gates decisionOpen decision={{ undecided: [`${id}#0`, `${id}#1`], declined: [], openClaims: [claim] }} />);
     expect(screen.getByText(/환불을 마친 뒤 낸 돈이 늘었습니다\(315,000원 → 365,000원 · \+50,000원\) — 이 요청서는 그대로 두고, 늘어난 50,000원은 수납에서 따로 환불하거나 '환불 없음'으로 정하세요/)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/비우|지우고 다시/);
@@ -236,7 +236,9 @@ describe("리뷰 r3 — 늘어난 몫 따로 환불(원장 결정 2026-11-09) ·
   it("환불 전 요청서 · 처리 끝난 보고서 · 원장 아님 — 따로 환불 단추 없음(환불 전이면 지우고 다시 승인 안내 · 끝났으면 수납 확인)", () => {
     const a = render(<LaterInvoices reportId="r" rows={[{ ...done(365000), lines: [{ ...done(365000).lines[0]!, refund: { documentId: DOC, deskName: null, completed: false, exact: true } }] }]} canApprove deskStaff={desks} decisionOpen decision={{ undecided: [`${id}#0`], declined: [], openClaims: [{ ...claim, separable: false }] }} />);
     expect(screen.queryByRole("button", { name: /따로 처리/ })).toBeNull();
-    expect(screen.getByText(/이 요청서\(환불 전\)를 지우고 다시 환불 승인/)).toBeInTheDocument();
+    // 완료일자가 없을 뿐 이미 돌려줬을 수 있다 — '환불 전'이라 단정하지 않는다(리뷰 r3 R3-m1)
+    expect(screen.getByText(/이 요청서는 완료일자가 없을 뿐 이미 돌려줬을 수 있습니다\. 수납에서 확인한 뒤, 돌려주지 않았으면 요청서를 지우고 다시 환불 승인/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/환불 전\)/);
     a.unmount();
     const b = render(<LaterInvoices reportId="r" rows={[done(365000)]} canApprove deskStaff={desks} decisionOpen={false} decision={{ undecided: [], declined: [], openClaims: [claim] }} />);
     expect(screen.queryByRole("button", { name: /따로 처리/ })).toBeNull();
@@ -301,5 +303,42 @@ describe("리뷰 r3 — 늘어난 몫 따로 환불(원장 결정 2026-11-09) ·
     const unalloc = screen.getByText(/미배분 납부/).closest("tr")!;
     expect(unalloc.querySelectorAll("td")[2]!.textContent).toBe("—");
     expect(unalloc.textContent).toContain("청구 전체 미배분 300,000원(참고)");
+  });
+});
+
+describe("리뷰 r3 R3-I1 — 늘어난 몫 줄이 정해지지 않았으면 다른 줄의 환불 승인을 막는다", () => {
+  const DOC = "33333333-3333-3333-3333-333333333333";
+  const rows = [{ ...nov, lines: [{ ...nov.lines[0]!, paidNet: 365000, refund: { documentId: DOC, deskName: "데스크A", completed: true, exact: true } }, nov.lines[1]!] }];
+  const claim = { key: `${id}#0`, reason: "increase" as const, before: 315000, now: 365000, documentId: DOC, separable: true };
+  it("🔴 처리 전 — 단추 옆·확인 칸에 이유 · 확인 칸의 '환불 승인' 막힘 · 줄은 '따로 처리' 또는 '환불 없음'으로 정한다", () => {
+    render(<LaterInvoices reportId="r" rows={rows} canApprove deskStaff={desks} gates decisionOpen decision={{ undecided: [`${id}#0`, `${id}#1`], declined: [], openClaims: [claim] }} />);
+    fireEvent.click(screen.getByRole("switch", { name: "2026-11 수강료 · 중2 수학 A 환불" }));
+    expect(screen.getByRole("note")).toHaveTextContent("늘어난 몫 50,000원 줄을 먼저 정하세요 — 따로 처리 또는 환불 없음");
+    fireEvent.click(screen.getByRole("button", { name: "환불 승인" }));
+    const dialog = screen.getByRole("alertdialog", { name: "환불 승인 확인" });
+    expect(dialog).toHaveTextContent("늘어난 몫 50,000원 줄을 먼저 정하세요 — 따로 처리 또는 환불 없음");
+    fireEvent.change(screen.getByRole("combobox", { name: "데스크 담당자" }), { target: { value: desks[0].id } });
+    expect(screen.getAllByRole("button", { name: "환불 승인" }).at(-1)).toBeDisabled();
+  });
+  it("처리가 끝난 보고서 — 막지 않고(정할 길이 없다) 확인 칸이 그 몫이 환불하지 않음으로 남는다고 말한다 · 늘어난 몫이 없으면 종전대로", () => {
+    const a = render(<LaterInvoices reportId="r" rows={rows} canApprove deskStaff={desks} decisionOpen={false} decision={{ undecided: [], declined: [], openClaims: [claim] }} />);
+    fireEvent.click(screen.getByRole("switch"));
+    fireEvent.click(screen.getByRole("button", { name: "환불 승인" }));
+    expect(screen.getByRole("alertdialog", { name: "환불 승인 확인" })).toHaveTextContent("결정 뒤 늘어난 몫 50,000원은 이 승인으로 환불하지 않음으로 남습니다(수납에서 따로 확인)");
+    fireEvent.change(screen.getByRole("combobox", { name: "데스크 담당자" }), { target: { value: desks[0].id } });
+    expect(screen.getAllByRole("button", { name: "환불 승인" }).at(-1)).not.toBeDisabled();
+    a.unmount();
+    render(<LaterInvoices reportId="r" rows={[nov]} canApprove deskStaff={desks} gates decisionOpen decision={{ undecided: [`${id}#0`, `${id}#1`], declined: [] }} />);
+    fireEvent.click(screen.getByRole("switch", { name: "2026-11 수강료 · 중2 수학 A 환불" }));
+    expect(screen.queryByText(/늘어난 몫/)).toBeNull();
+  });
+  it("따로 처리 뒤 알림을 못 보냈으면 사실대로(리뷰 r3 R3-m2) · 확인 칸도 '알림이 갑니다'라고 단정하지 않는다", async () => {
+    mocks.separate.mockResolvedValue({ ok: true, processed: false, undecided: 1, amount: 50000, notified: false });
+    const { toast } = await import("sonner");
+    render(<LaterInvoices reportId="r" rows={rows} canApprove deskStaff={desks} gates decisionOpen decision={{ undecided: [`${id}#0`, `${id}#1`], declined: [], openClaims: [claim] }} />);
+    fireEvent.click(screen.getByRole("button", { name: "환불하지 않음 — 늘어난 몫은 수납에서 따로 처리" }));
+    expect(screen.getByRole("alertdialog", { name: "늘어난 몫 따로 환불 확인" })).toHaveTextContent("담당 데스크에게 알림을 보냅니다(담당이 퇴사했거나 없으면 보내지 못하고 결과에 알립니다)");
+    fireEvent.click(screen.getByRole("button", { name: "따로 환불 확인" }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith(expect.stringContaining("담당 데스크에게 알리지 못했습니다(퇴사·지정 없음 등). 수납 담당에게 직접 알려 주세요.")));
   });
 });

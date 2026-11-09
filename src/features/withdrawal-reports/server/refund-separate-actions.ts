@@ -25,7 +25,7 @@ const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
  * - 알림: 그 요청서의 담당 데스크(재직)에게 기존 알림 종류로 한 번(새 알림 체계 없음) — 일반 요청서 설명에 표식을 쓰지 말라는 안내(함정 ⅱ)와 함께.
  * - 감사로그 `withdrawal_refund_separate`(줄 · 늘어난 금액 · 요청서 · 다음 단계).
  */
-export async function separateWithdrawalRefundIncrease(reportId: string, key: string): Promise<{ ok: true; processed: boolean; undecided: number | null; amount: number } | { error: string }> {
+export async function separateWithdrawalRefundIncrease(reportId: string, key: string): Promise<{ ok: true; processed: boolean; undecided: number | null; amount: number; notified: boolean } | { error: string }> {
   if (!/^[0-9a-f-]{36}$/i.test(reportId) || typeof key !== "string" || !LINE_KEY.test(key)) return { error: "요청 내용을 확인해 주세요." };
   const viewer = await reportViewer();
   if (!viewer?.writable) return { error: "이 화면에서는 처리할 수 없습니다." };
@@ -57,13 +57,15 @@ export async function separateWithdrawalRefundIncrease(reportId: string, key: st
     metadata: { reportId: report.id, documentId: claim.documentId, item, before: claim.before, now: claim.now, amount, effectiveDate: report.effective_date,
       next: processed ? "이어서 처리" : undecided === null ? "처리 확인 대기(확인 값 낡음 — 다음 확인 때 다시 판정)" : undecided > 0 ? `결정 안 된 줄 ${undecided}건` : "승인·데스크 환불이 끝나면 처리" } });
   // 담당 데스크(재직)에게 — 못 읽으면 알리지 않는다(결정은 남았다 · 보고서 상세에 늘 보인다).
+  // 알리지 못했으면(담당 퇴사·없음·조회 실패) 결과에 그대로 돌려준다 — 화면이 '알림'이라고 말하지 않게(리뷰 r3 R3-m2).
   const link = await loadRefundLink(report.tenant_id, claim.documentId).catch((e: unknown) => { console.error("[withdrawal-refund-separate] 담당 데스크 확인 실패", e); return null; });
-  if (link?.deskId && link.deskActive) {
+  const notified = !!(link?.deskId && link.deskActive && link.deskId !== viewer.user.id);
+  if (notified && link?.deskId) {
     await notifyUsers([{ tenantId: report.tenant_id, recipientId: link.deskId, type: "refund_request_approved", actorId: viewer.user.id,
       title: `${report.snapshot.name} 늘어난 몫 ${won(amount)} — 따로 환불`,
       body: `${item}: 환불을 마친 뒤 낸 돈이 ${won(claim.before)}에서 ${won(claim.now)}로 늘었습니다. 원장이 늘어난 ${won(amount)}은 수납에서 따로 환불하기로 정했습니다 — 일반 환불 요청서로 처리해 주세요(앞선 요청서는 그대로 둡니다 · 설명에 '${REFUND_TAG_PREFIX}'을 쓰지 마세요).`,
       link: "/billing/refunds/new" }]);
   }
   revalidatePath("/withdrawal-reports", "layout");
-  return { ok: true, processed, undecided, amount };
+  return { ok: true, processed, undecided, amount, notified };
 }

@@ -122,7 +122,7 @@ export function detailRefundNotes(i: DetailRefundInput): DetailRefundNote[] {
   // 리뷰 r2 m19 — 퇴사한(또는 없는) 데스크의 미완료 요청서는 할 일 받는 사람이 없다. 처리 길(요청서 링크)은 원장에게만(리뷰 r3 R2-m14 — 열 수 없는 링크를 보이지 않는다).
   if (open && i.orphanDesk) out.push(i.director
     ? { key: "orphan-desk", tone: "alert", href: `/billing/refunds/${i.orphanDesk.documentId}`, linkText: "요청서 열기",
-        text: "데스크 담당자가 퇴사해 이 환불 요청서의 할 일을 받는 사람이 없습니다 — 원장이 환불완료일자를 넣거나, 요청서를 지우고 다시 환불 승인하세요." }
+        text: "데스크 담당자가 퇴사해 이 환불 요청서의 할 일을 받는 사람이 없습니다 — 원장이 수납에서 돌려줬는지 확인한 뒤 환불완료일자를 넣거나, 돌려주지 않았으면 요청서를 지우고 다시 환불 승인하세요." }
     : { key: "orphan-desk", tone: "plain", text: "데스크 담당자가 퇴사해 이 환불 요청서는 원장 확인 대기입니다." });
   return out;
 }

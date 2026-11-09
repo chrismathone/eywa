@@ -86,10 +86,11 @@
 --   데스크 본인·운영자 계정·퇴사) · C.3 ①~⑤(새 요청서가 있으면 옛 요청서 완료 거절 — 세션·관리 키 · 새 요청서 지우면 됨 · 옛 것이 먼저 완료면 새 승인 거절 · 줄 겹침)) ·
 --   역할 시험(운영 실행권을 옮겨 service_role로 경로 전체 · authenticated·anon·eywa_sync_agent·student_status_lifecycle은 못 부름) · 되돌리기 왕복 · CRLF/LF 줄바꿈 모두 통과.
 -- 적용 확인(읽기만):
---   select to_regprocedure('public.decide_withdrawal_report_refund(uuid,uuid,uuid,jsonb,jsonb)') is not null
---      and to_regprocedure('public.release_withdrawal_report_refunds(uuid,uuid,uuid)') is null;  -- 기대: true
+--   select to_regprocedure('public.decide_withdrawal_report_refund(uuid,uuid,uuid,jsonb,jsonb,jsonb)') is not null
+--      and to_regprocedure('public.decide_withdrawal_report_refund(uuid,uuid,uuid,jsonb,jsonb)') is null
+--      and to_regprocedure('public.release_withdrawal_report_refunds(uuid,uuid,uuid)') is null;  -- 기대: true(리뷰 r3 R3-2 — decide는 r3부터 6인자)
 --   적용 뒤 지문(공백 뺀 md5 · 위 PGlite 값):
---     transition_withdrawal_report 99c4175fd9f02dab3091086f456890b1 · transition_withdrawal_report_v1 c8d87498a853195d7c86de12b21ae6d8 · attach_withdrawal_report_refund(9인자) 4d4be34ba7d4068ef5751ec618e5de35 ·
+--     transition_withdrawal_report 99c4175fd9f02dab3091086f456890b1 · transition_withdrawal_report_v1 c8d87498a853195d7c86de12b21ae6d8 · attach_withdrawal_report_refund(9인자) f87f992c7ce096a2e5c1dd44c278ce39 ·
 --     release_withdrawal_report_refunds(4인자) 2516d0340b850c14faa4f91e9ea673ca · staff_tasks_private.withdrawal_sync_report 577ba3f3c9f2c429b051b8656a660cb0 · withdrawal_report_refund_note dce627cbb631b2160ebd8d74b7a46384 ·
 --     decide_withdrawal_report_refund 7da06d12497b76d8d11fd846d5d31e43 · withdrawal_report_refund_complete_guard 690c049376af96d280680c168c20199c · withdrawal_report_refund_pending 8950ddbc8a25c4229996235e12a2593e ·
 --     staff_tasks_private.tg_refund_task 25ac92f780f3741fd98f82a8d6eeee5f · withdrawal_report_refunds_on_cancel bc3ed5062ec278a6f015635c7d098e4d
@@ -647,6 +648,7 @@ returns jsonb language plpgsql security invoker set search_path = public as $$
 declare
   gid uuid; g public.withdrawal_report_groups; r public.withdrawal_reports; doc_description text; doc_done text; desk_name text; gates boolean := false; link uuid;
   desks jsonb; picked text[] := '{}'; skipped text[] := '{}'; open_n integer; old_docs uuid[] := '{}'; k text;
+  cap numeric; cap_known boolean; first_total numeric;
 begin
   -- 환불 승인은 원장급만(원장 2026-10-29 · 앱 canRequestRefund와 같은 축 = 원장 역할).
   if not exists(select 1 from public.users where tenant_id = p_tenant and id = p_actor and status = 'active' and system_role::text = 'master') then raise exception '환불 승인은 원장만 할 수 있습니다.'; end if;
@@ -754,6 +756,15 @@ begin
            and coalesce(e->>'doc', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' limit 1),
         p_actor);
     end loop;
+    -- 요청서의 첫 총액도 상한과 맞댄다(리뷰 r3 R3-1 — 상한 = 이 요청서 '환불' 결정 paid_net 합 · 다시 승인이면 낸 돈 − 따로 − 완료 기록 · 그 뒤 수정은 트리거가 본다).
+    -- 상한을 모르거나(확인 값 없음 — 옛 6인자 호출) 총액을 못 읽거나(엄격 꼴 — R-2) 넘으면 거절 — 앱은 같은 공식으로 총액을 만든다(refundDeduction).
+    select count(*) > 0 and bool_and(d.paid_net is not null), sum(d.paid_net) into cap_known, cap
+      from public.withdrawal_report_refund_decisions d where d.tenant_id = p_tenant and d.document_id = p_document and d.decision = 'refund';
+    first_total := public.withdrawal_refund_won((select a.form_data #>> '{refund,totalAmount}' from public.academy_documents a where a.tenant_id = p_tenant and a.id = p_document));
+    if not coalesce(cap_known, false) or first_total is null or first_total > cap then
+      raise exception using errcode = '23514', message = format('환불 요청서의 총 환불금액이 원장이 승인한 줄의 낸 돈 합계(상한 %s)를 넘거나 읽을 수 없습니다. 새로고침 후 다시 확인해 주세요.',
+        coalesce(to_char(cap, 'FM999,999,999,999,999') || '원', '모름'));
+    end if;
   end if;
   insert into public.withdrawal_report_events(tenant_id, report_id, actor_id, action, from_status, to_status, comment)
     values (p_tenant, r.id, p_actor, 'refund', r.status, r.status,

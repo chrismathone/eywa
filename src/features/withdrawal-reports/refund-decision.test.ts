@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { reportStatusChips, reportStatusLabel, type ReportListRow } from "./model";
 import { buildListItems } from "./list-items";
 import {
-  approvable, buildRefundCheck, canEditLinkedCompletion, decisionTargets, lineDeductions, openClaims, refundDeduction, decisionBlocksProcessing, declinedKeys, lineRefundable, linkedCompletionLock, reapprovable, refundableKeys, refundHoldGap, undecidedKeys,
+  approvable, buildRefundCheck, canEditLinkedCompletion, decisionTargets, lineDeductions, openClaims, pendingIncrease, refundDeduction, decisionBlocksProcessing, declinedKeys, lineRefundable, linkedCompletionLock, reapprovable, refundableKeys, refundHoldGap, undecidedKeys,
   REFUND_DECISION_CHIP, REFUND_DECISION_WAIT_NOTE, DESK_NOT_DESIGNATED, unpickedNotice,
 } from "./refund-decision";
 
@@ -210,6 +210,13 @@ describe("다른 묶음의 요청서가 담은 줄 — 다시 고를 수 있나(
     expect(openClaims(done, new Map([["i#c", { decision: "none" as const, live: false, paidNet: 2500, paidSeen: 2500, documentId: "D1" }]]))[0]!.separable).toBe(false);
     // 원장이 지금 정할 줄 = 환불 가능 줄 + 다시 정할 줄(서버 대조·'환불 없음'·고르지 않은 줄이 같은 값)
     expect(decisionTargets(later, decisions)).toEqual(["i#e", "i#b", "i#c"]);
+  });
+  it("🔴 늘어난 몫 줄이 남았나(리뷰 r3 R3-I1) — 늘어난 몫 합 · 모두 따로 처리할 수 있으면 '따로 처리 또는 환불 없음' · 표식 낡음(inexact)은 세지 않는다", () => {
+    const inc = (key: string, before: number, now: number, separable: boolean) => ({ key, reason: "increase" as const, before, now, documentId: "D1", separable });
+    expect(pendingIncrease([])).toBeNull();
+    expect(pendingIncrease([{ key: "i#x", reason: "inexact", before: null, now: 1000, documentId: "D1", separable: false }])).toBeNull();
+    expect(pendingIncrease([inc("i#a", 315000, 365000, true)])).toEqual({ total: 50000, text: "늘어난 몫 50,000원 줄을 먼저 정하세요 — 따로 처리 또는 환불 없음" });
+    expect(pendingIncrease([inc("i#a", 100, 200, true), inc("i#b", 100, 150, false)])).toEqual({ total: 150, text: "늘어난 몫 150원 줄을 먼저 정하세요 — 환불 없음(환불을 마친 줄은 따로 처리)" });
   });
   it("🔴 다시 승인할 때 빼는 몫 = 따로 환불한 금액 + 환불 완료 기록(DB attach 상한과 같은 식 · 리뷰 r3 R2-I2 · 함정 ⅰ)", () => {
     expect(refundDeduction(undefined)).toBe(0);

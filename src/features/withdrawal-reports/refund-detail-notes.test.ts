@@ -98,7 +98,7 @@ describe("처리 안내 — 기다리는 까닭을 모두 · 조사 · 모르면
   });
   it("🔴 퇴사한(또는 없는) 데스크의 미완료 요청서 — 할 일 받는 사람이 없다 · 원장이 할 일 · 요청서 링크(m19) · 끝난 보고서엔 없음", () => {
     expect(detailRefundNotes(base({ orphanDesk: { documentId: "d9" } })).find((n) => n.key === "orphan-desk")).toEqual({ key: "orphan-desk", tone: "alert", href: "/billing/refunds/d9", linkText: "요청서 열기",
-      text: "데스크 담당자가 퇴사해 이 환불 요청서의 할 일을 받는 사람이 없습니다 — 원장이 환불완료일자를 넣거나, 요청서를 지우고 다시 환불 승인하세요." });
+      text: "데스크 담당자가 퇴사해 이 환불 요청서의 할 일을 받는 사람이 없습니다 — 원장이 수납에서 돌려줬는지 확인한 뒤 환불완료일자를 넣거나, 돌려주지 않았으면 요청서를 지우고 다시 환불 승인하세요." });
     expect(detailRefundNotes(base({ report: { id: "r1", status: "completed", effective_date: "2026-11-01" }, orphanDesk: { documentId: "d9" } })).some((n) => n.key === "orphan-desk")).toBe(false);
   });
 });

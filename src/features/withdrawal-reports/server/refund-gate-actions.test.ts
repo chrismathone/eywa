@@ -266,6 +266,17 @@ describe("원장 환불 승인 — 지정 데스크만 · 고르지 않은 줄�
     expect(await approveWithdrawalRefund(REPORT_ID, [K0], DESK, [K1])).toEqual({ error: "겹친 승인이 있는지 확인하지 못했고, 만든 환불 요청서가 남았습니다. 환불 요청 목록에서 확인해 주세요." });
     expect(m.logAction).toHaveBeenCalledWith(expect.objectContaining({ action: "refund_request_create", metadata: expect.objectContaining({ source: expect.stringContaining("겹침 확인 실패") }) }));
   });
+  it("🔴 늘어난 몫 줄이 정해지지 않았으면(처리 전) 다른 줄의 환불 승인을 거절한다 — 요청서를 만들지 않는다(리뷰 r3 R3-I1 · 화면과 같은 글) · 처리 끝난 보고서는 막지 않는다", async () => {
+    const DOC = "50000000-0000-4000-8000-0000000000aa";
+    m.later.mockResolvedValue([{ ...later[0]!, lines: [{ ...line(K0, 200000), paidNet: 250000, refund: { documentId: DOC, deskName: "데스크", completed: true, exact: true } }, line(K1, 100000)] }]);
+    m.decisions = new Map([[K0, { decision: "refund", live: true, paidNet: 200000, paidSeen: 200000, documentId: DOC }]]);
+    m.record = { report: { ...baseReport, status: "approved" }, consultations: [] };
+    expect(await approveWithdrawalRefund(REPORT_ID, [K1], DESK, [K0])).toEqual({ error: "늘어난 몫 50,000원 줄을 먼저 정하세요 — 따로 처리 또는 환불 없음." });
+    expect(rpcNames()).toEqual([]);
+    expect(m.from.mock.calls.some(([t]) => t === "academy_documents")).toBe(false);
+    m.record = { report: { ...baseReport, status: "completed" }, consultations: [] };
+    expect(await approveWithdrawalRefund(REPORT_ID, [K1], DESK, [K0])).toMatchObject({ ok: true });
+  });
   it("대체할 옛 요청서가 없으면 빈 목록", async () => {
     expect(await approveWithdrawalRefund(REPORT_ID, [K0], DESK, [K1])).toEqual({ ok: true, documentId: "doc1", gates: true, undecided: null });
     expect(argsOf("attach_withdrawal_report_refund")).toMatchObject({ p_supersedes: [] });
@@ -288,7 +299,7 @@ describe("원장 결정 2026-11-09 — '환불하지 않음 — 늘어난 몫은
     m.rpc.mockImplementation(async () => ({ data: { groupId: GROUP_ID, undecided: 0, ready: true, separate: 50000 }, error: null }));
   });
   it("🔴 그 줄만 정하고 늘어난 몫을 DB에(p_none = p_separate = 그 줄 · 같은 확인 값) → 처리할 차례면 이어서 처리 · 감사로그 · 담당 데스크 알림(표식 쓰지 말라는 안내)", async () => {
-    expect(await separateWithdrawalRefundIncrease(REPORT_ID, K0)).toEqual({ ok: true, processed: true, undecided: 0, amount: 50000 });
+    expect(await separateWithdrawalRefundIncrease(REPORT_ID, K0)).toEqual({ ok: true, processed: true, undecided: 0, amount: 50000, notified: true });
     expect(argsOf("decide_withdrawal_report_refund")).toEqual({ p_tenant: "t1", p_actor: "boss", p_report: REPORT_ID, p_none: [K0], p_check: CHECK, p_separate: [K0] });
     expect(m.releaseGroup).toHaveBeenCalledWith({ tenantId: "t1", groupId: GROUP_ID, actorId: "boss", check: CHECK });
     expect(m.logAction).toHaveBeenCalledWith(expect.objectContaining({ action: "withdrawal_refund_separate",
@@ -299,7 +310,8 @@ describe("원장 결정 2026-11-09 — '환불하지 않음 — 늘어난 몫은
   it("처리할 차례가 아니면 처리하지 않는다 · 담당 데스크가 퇴사했거나 못 읽으면 알리지 않는다(결정은 남는다)", async () => {
     m.rpc.mockImplementation(async () => ({ data: { groupId: GROUP_ID, undecided: 1, ready: false, separate: 50000 }, error: null }));
     m.link.mockResolvedValue({ deskId: DESK, deskName: "데스크", deskActive: false });
-    expect(await separateWithdrawalRefundIncrease(REPORT_ID, K0)).toEqual({ ok: true, processed: false, undecided: 1, amount: 50000 });
+    // 알리지 못했으면 결과에 그대로(리뷰 r3 R3-m2 — 화면이 '알림'이라고 말하지 않게)
+    expect(await separateWithdrawalRefundIncrease(REPORT_ID, K0)).toEqual({ ok: true, processed: false, undecided: 1, amount: 50000, notified: false });
     expect(m.releaseGroup).not.toHaveBeenCalled();
     expect(m.notify).not.toHaveBeenCalled();
     m.link.mockRejectedValue(new Error("down"));

@@ -50,7 +50,8 @@ export function increaseText(re: OpenClaim, completed: boolean, decisionOpen: bo
   if (!decisionOpen) return `${completed ? "환불을 마친 뒤" : "결정 뒤"} 낸 돈이 늘었습니다(${change}) — 늘어난 몫은 수납에서 따로 확인하세요`;
   if (re.separable) return `환불을 마친 뒤 낸 돈이 늘었습니다(${change}) — 이 요청서는 그대로 두고, 늘어난 ${won(inc)}은 수납에서 따로 환불하거나 '환불 없음'으로 정하세요`;
   if (completed) return `환불을 마친 뒤 낸 돈이 늘었습니다(${change}) — 늘어난 몫은 수납에서 따로 확인하세요. 더 환불하지 않으면 '환불 없음'`;
-  return `결정 뒤 낸 돈이 늘었습니다(${change}) — 늘어난 몫도 돌려주려면 이 요청서(환불 전)를 지우고 다시 환불 승인, 더 환불하지 않으면 '환불 없음'`;
+  // 완료일자가 없을 뿐 데스크가 이미 돌려줬을 수 있다(리뷰 r3 R3-m1 · r2 m9와 같은 원칙) — '환불 전'이라 단정하지 않고 확인을 먼저 말한다.
+  return `결정 뒤 낸 돈이 늘었습니다(${change}) — 이 요청서는 완료일자가 없을 뿐 이미 돌려줬을 수 있습니다. 수납에서 확인한 뒤, 돌려주지 않았으면 요청서를 지우고 다시 환불 승인하고, 더 환불하지 않으면 '환불 없음'`;
 }
 /** 화면용 뺄 몫(결정자 이름은 화면이 붙인다). */
 export type LineDeductionView = LineDeduction & { byName?: string | null };

@@ -8,7 +8,7 @@ import { notifyUsers } from "@/features/notifications/server/notify";
 import { emptyRefund, refundTitle, REFUND_FORM_TYPE } from "@/features/billing/refund-request";
 import { formatPaymentLines } from "@/features/billing/refund-prefill";
 import { canRequestRefund, cancelsAsDirector, missingReportSchema } from "../model";
-import { DESK_NOT_DESIGNATED, decisionBlocksProcessing, decisionTargets, reapprovable, refundDeduction, type RefundCheck, type RefundDecision } from "../refund-decision";
+import { DESK_NOT_DESIGNATED, decisionBlocksProcessing, decisionTargets, openClaims, pendingIncrease, reapprovable, refundDeduction, type RefundCheck, type RefundDecision } from "../refund-decision";
 import { reportViewer, getReport } from "./queries";
 import { LINE_KEY, claimedEarlier, lineRefundable, loadDeskStaff, loadLaterInvoices, refundTag, type LaterInvoice, type LaterLine } from "./refund";
 import { REFUND_GATE_NOT_READY, loadGroupRefundCheck, loadRefundDecisions, loadRefundHoldState, refundGateReady } from "./refund-check";
@@ -66,6 +66,10 @@ export async function approveWithdrawalRefund(reportId: string, keys: string[], 
   if (!desk) return { error: "데스크 담당자를 다시 골라 주세요. 학원 설정에 지정된 데스크 담당자 중 수납 쓰기 권한이 있는 사람만 고를 수 있습니다." };
   const chosen = pick(later, picked);
   if ("error" in chosen) return chosen;
+  // 늘어난 몫 줄이 정해지지 않았으면 다른 줄의 환불 승인을 막는다(리뷰 r3 R3-I1 — 승인하면 그 줄이 안내 없이 '환불하지 않음'으로 굳는다 · 화면과 같은 글).
+  // 처리 전 보고서만 — 처리가 끝난 보고서엔 그 줄을 정할 길('따로 처리'·'환불 없음')이 없어 막으면 막다른 길이 된다(화면 확인 칸이 그 몫을 말한다).
+  const increase = report.group_id && decisionBlocksProcessing(report.status) ? pendingIncrease(openClaims(later, decisions)) : null;
+  if (increase) return { error: `${increase.text}.` };
   // 다시 환불 승인하는 줄 — 따로 환불하기로 한 금액·환불 완료 기록을 빼고 요청한다(DB attach 상한과 같은 식 · 원장 결정 2026-11-09 · 리뷰 r3 R2-I2).
   const amountOf = (c: { line: LaterLine }) => Math.max(0, c.line.paidNet - refundDeduction(decisions.get(c.line.key)));
   if (chosen.some(c => amountOf(c) <= 0)) return { error: "이미 돌려준 건(환불 완료 기록·따로 환불)이라 환불할 남은 돈이 없습니다. 그 건은 고르지 말고(환불하지 않음) 다시 확인해 주세요." };
