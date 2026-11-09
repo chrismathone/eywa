@@ -35,6 +35,7 @@ import styles from "./learning-overview.module.css";
 import { ClassTextbookBar, StudentTextbookChip } from "./math-textbook-assign";
 import { BookWindowBar } from "./book-window-bar";
 import { StudentPlanCard } from "./student-plan-card";
+import { StudentBasics } from "./student-basics";
 import { SchoolExamButton } from "./school-exam-dialog";
 import { useMathTextbooks } from "./math-textbook-context";
 import { MATH_LEARNING_CADENCE, type MathLearningTrack } from "@/features/progress/learning-cadence";
@@ -467,6 +468,9 @@ function StudentFocus({
         className={styles.focusMain}
         aria-label={`${student.name} 진도 상세`}
       >
+        {student.basicInfo ? <div className={styles.stickyBasics}>
+          <StudentBasics info={student.basicInfo} studentName={student.name} identity={[student.name, student.school, student.grade].filter(Boolean).join(" · ")} />
+        </div> : null}
         {!goal || !progress ? <><div className={styles.focusTitle}>
           <h3>{student.name}</h3>
           <Status student={student} progress={summary} />

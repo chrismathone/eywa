@@ -57,20 +57,20 @@
 .aywa-instruments .work { min-width: 0; }
 .aywa-instruments .body { max-width: 1760px; margin: 0 auto; padding: 4px 4px 40px; }
 .aywa-instruments .head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 14px; scroll-margin-top: 16px; }
-.aywa-instruments .eyebrow { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 2px; }
-.aywa-instruments .head h1 { font-size: 26px; letter-spacing: -.045em; font-weight: 800; display: flex; align-items: baseline; gap: 10px; }
-.aywa-instruments .head h1 span { font-size: 14px; font-weight: 600; letter-spacing: 0; color: var(--muted); }
+.aywa-instruments .eyebrow { display: block; font-size: var(--text-xs); font-weight: 700; color: var(--muted); margin-bottom: 2px; }
+.aywa-instruments .head h1 { font-size: var(--text-xl); letter-spacing: -.045em; font-weight: 800; display: flex; align-items: baseline; gap: 10px; }
+.aywa-instruments .head h1 span { font-size: var(--text-xs); font-weight: 600; letter-spacing: 0; color: var(--muted); }
 .aywa-instruments .head-tools { display: flex; align-items: center; gap: 12px; }
-.aywa-instruments .fresh { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
+.aywa-instruments .fresh { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-xs); font-weight: 700; color: var(--ink-2); white-space: nowrap; }
 .aywa-instruments .fresh i { width: 7px; height: 7px; border-radius: 50%; background: #3f8f5f; }
-.aywa-instruments .fresh small { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 2px; }
+.aywa-instruments .fresh small { font-size: var(--text-xs); font-weight: 500; color: var(--muted); margin-left: 2px; }
 
 
 /* ---------- 구역 ---------- */
 .aywa-instruments .block { margin-top: 26px; scroll-margin-top: 16px; }
 .aywa-instruments .block-title { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding-bottom: 8px; margin-bottom: 12px; border-bottom: 2px solid var(--charcoal); }
-.aywa-instruments .block-title h2 { font-size: 18px; font-weight: 800; letter-spacing: -.035em; }
-.aywa-instruments .block-title p { font-size: 13px; color: var(--muted); }
+.aywa-instruments .block-title h2 { font-size: var(--text-base); font-weight: 800; letter-spacing: -.035em; }
+.aywa-instruments .block-title p { font-size: var(--text-xs); color: var(--muted); }
 
 /* ---------- KPI ---------- */
 .aywa-instruments .kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
@@ -80,17 +80,17 @@
 .aywa-instruments .kpi-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .aywa-instruments .kpi { cursor: pointer; transition: background .12s; }
 .aywa-instruments .kpi:hover { background: #fdfaf1; }
-.aywa-instruments .kpi-head small { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.aywa-instruments .kpi-head small { font-size: var(--text-xs); color: var(--muted); white-space: nowrap; }
 /* 앞말 + 달 꼬리표(퇴원 "지난달 (26.10)") — 기존 운영실 칸(`kpiPeriodSplit`)과 같은 방식: 달이 먼저 자리를 잡고(거꾸로 놓임) 앞말은 같은 줄에
    들어갈 때만 보인다. 자리가 모자라면 앞말이 둘째 줄로 넘어가 가려진다(한 줄 높이 + 넘침 숨김) — 말줄임처럼 달이 잘리지 않는다. */
 .aywa-instruments .kpi-head .kpi-period-split { display: inline-flex; flex-direction: row-reverse; flex-wrap: wrap; justify-content: flex-end; column-gap: .3em; height: 1lh; overflow: hidden; min-width: 0; }
 .aywa-instruments .kpi-body { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-top: 4px; }
-.aywa-instruments .kpi-value { font-size: 30px; font-weight: 850; letter-spacing: -.045em; line-height: 1.15; white-space: nowrap; }
-.aywa-instruments .kpi-value em { font-style: normal; font-size: 14px; font-weight: 700; margin-left: 3px; letter-spacing: 0; }
-.aywa-instruments .kpi-note { font-size: 13px; color: var(--muted); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aywa-instruments .kpi-value { font-size: var(--text-2xl); font-weight: 850; letter-spacing: -.045em; line-height: 1.15; white-space: nowrap; }
+.aywa-instruments .kpi-value em { font-style: normal; font-size: var(--text-xs); font-weight: 700; margin-left: 3px; letter-spacing: 0; }
+.aywa-instruments .kpi-note { font-size: var(--text-xs); color: var(--muted); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .aywa-instruments .kpi-chart { flex: 0 0 116px; width: 116px; }
 .aywa-instruments .time-chips { list-style: none; margin: 0 0 2px; padding: 0; display: flex; gap: 4px; flex: none; }
-.aywa-instruments .time-chips li { font-size: 13px; font-weight: 700; line-height: 1; padding: 6px 8px; border-radius: 5px; white-space: nowrap; }
+.aywa-instruments .time-chips li { font-size: var(--text-xs); font-weight: 700; line-height: 1; padding: 6px 8px; border-radius: 5px; white-space: nowrap; }
 .aywa-instruments .time-chips .is-done { background: var(--charcoal); color: #fff; }
 .aywa-instruments .time-chips .is-next { background: var(--yellow); color: var(--ink); }
 
@@ -101,22 +101,22 @@
 .aywa-instruments .card { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
 .aywa-instruments .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .aywa-instruments .card-title { min-width: 0; }
-.aywa-instruments .card-title h3 { font-size: 15px; font-weight: 750; letter-spacing: -.025em; line-height: 1.35; }
-.aywa-instruments .card-open { all: unset; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-size: 15px; font-weight: 750; letter-spacing: -.025em; }
-.aywa-instruments .kpi-head .card-open { font-size: 14px; }
+.aywa-instruments .card-title h3 { font-size: var(--text-sm); font-weight: 750; letter-spacing: -.025em; line-height: 1.35; }
+.aywa-instruments .card-open { all: unset; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-size: var(--text-sm); font-weight: 750; letter-spacing: -.025em; }
+.aywa-instruments .kpi-head .card-open { font-size: var(--text-xs); }
 .aywa-instruments .card-open:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; border-radius: 3px; }
 .aywa-instruments .card { cursor: pointer; transition: border-color .12s, box-shadow .12s; }
 .aywa-instruments .card:hover { border-color: #cfd2cd; box-shadow: 0 6px 18px rgba(30, 35, 38, .07); }
-.aywa-instruments .card-title p { font-size: 12.5px; color: var(--muted); margin-top: 2px; line-height: 1.45; }
+.aywa-instruments .card-title p { font-size: var(--text-xs); color: var(--muted); margin-top: 2px; line-height: 1.45; }
 .aywa-instruments .go { width: 11px; height: 11px; fill: none; stroke: #a3abae; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 .aywa-instruments .card:hover .go, .aywa-instruments .kpi:hover .go, .aywa-instruments .card-open:focus-visible .go { stroke: var(--yellow-ink); }
 .aywa-instruments .card-head:has(.card-tools) { flex-wrap: wrap; }
 .aywa-instruments .card-head:has(.card-tools) .card-title { flex: 1 1 300px; }
 .aywa-instruments .card-tools { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
 .aywa-instruments .card-value { display: flex; align-items: baseline; gap: 3px; white-space: nowrap; flex: none; }
-.aywa-instruments .card-value span { font-size: 12.5px; color: var(--muted); margin-right: 4px; }
-.aywa-instruments .card-value b { font-size: 21px; font-weight: 850; letter-spacing: -.035em; }
-.aywa-instruments .card-value em { font-style: normal; font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.aywa-instruments .card-value span { font-size: var(--text-xs); color: var(--muted); margin-right: 4px; }
+.aywa-instruments .card-value b { font-size: var(--text-lg); font-weight: 850; letter-spacing: -.035em; }
+.aywa-instruments .card-value em { font-style: normal; font-size: var(--text-xs); font-weight: 700; color: var(--ink-2); }
 .aywa-instruments .card.is-alert .card-value::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--red); align-self: center; margin-right: 5px; }
 .aywa-instruments .card-body { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 8px; min-width: 0; }
 .aywa-instruments .dot-late { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--red); margin-right: 4px; vertical-align: 1px; }
@@ -132,50 +132,50 @@
 .aywa-instruments .gauge-stats { margin: 0; display: grid; gap: 0; }
 .aywa-instruments .gauge-stats div { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--grid); }
 .aywa-instruments .gauge-stats div:last-child { border-bottom: 0; }
-.aywa-instruments .gauge-stats dt { font-size: 13px; color: var(--muted); }
-.aywa-instruments .gauge-stats dd { margin: 0; font-size: 16px; font-weight: 800; white-space: nowrap; }
+.aywa-instruments .gauge-stats dt { font-size: var(--text-xs); color: var(--muted); }
+.aywa-instruments .gauge-stats dd { margin: 0; font-size: var(--text-sm); font-weight: 800; white-space: nowrap; }
 .aywa-instruments .gauge-stats .is-alert dd { color: var(--red); }
 
 .aywa-instruments .notice-list { list-style: none; margin: 0; padding: 0; display: grid; }
 .aywa-instruments .notice-list li { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--grid); }
 .aywa-instruments .notice-list li:first-child { padding-top: 0; }
 .aywa-instruments .notice-list li:last-child { border-bottom: 0; padding-bottom: 0; }
-.aywa-instruments .notice-list em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--yellow-ink); background: #fdf1cf; border-radius: 4px; padding: 1px 6px; flex: none; }
-.aywa-instruments .notice-list b { font-size: 14px; font-weight: 600; min-width: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.aywa-instruments .notice-list time { font-size: 12.5px; color: var(--muted); flex: none; }
+.aywa-instruments .notice-list em { font-style: normal; font-size: var(--text-xs); font-weight: 700; color: var(--yellow-ink); background: #fdf1cf; border-radius: 4px; padding: 1px 6px; flex: none; }
+.aywa-instruments .notice-list b { font-size: var(--text-xs); font-weight: 600; min-width: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aywa-instruments .notice-list time { font-size: var(--text-xs); color: var(--muted); flex: none; }
 
-.aywa-instruments .headline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; font-size: 13px; color: var(--ink-2); }
-.aywa-instruments .headline b { font-size: 20px; font-weight: 850; letter-spacing: -.03em; color: var(--ink); margin-left: 3px; }
+.aywa-instruments .headline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; font-size: var(--text-xs); color: var(--ink-2); }
+.aywa-instruments .headline b { font-size: var(--text-lg); font-weight: 850; letter-spacing: -.03em; color: var(--ink); margin-left: 3px; }
 .aywa-instruments .headline b.is-alert { color: var(--red); }
-.aywa-instruments .headline i { font-style: normal; font-size: 12.5px; color: var(--muted); }
+.aywa-instruments .headline i { font-style: normal; font-size: var(--text-xs); color: var(--muted); }
 .aywa-instruments .stat-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 14px; }
-.aywa-instruments .stat { font-size: 13px; color: var(--muted); }
-.aywa-instruments .stat b { font-size: 14px; font-weight: 800; color: var(--ink); margin-left: 2px; }
+.aywa-instruments .stat { font-size: var(--text-xs); color: var(--muted); }
+.aywa-instruments .stat b { font-size: var(--text-xs); font-weight: 800; color: var(--ink); margin-left: 2px; }
 .aywa-instruments .stat.is-alert b { color: var(--red); }
-.aywa-instruments .foot { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.aywa-instruments .foot { font-size: var(--text-xs); color: var(--muted); line-height: 1.45; }
 .aywa-instruments .foot b { color: var(--ink-2); }
 
 .aywa-instruments .admission-months { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .aywa-instruments .admission-months section { min-width: 0; display: grid; gap: 4px; }
-.aywa-instruments .admission-months header { display: flex; align-items: baseline; gap: 6px; font-size: 13px; }
-.aywa-instruments .admission-months header span { color: var(--muted); font-size: 12px; }
-.aywa-instruments .admission-months strong { font-size: 26px; font-weight: 850; letter-spacing: -.04em; line-height: 1.1; }
-.aywa-instruments .admission-months p { font-size: 12px; color: var(--muted); }
+.aywa-instruments .admission-months header { display: flex; align-items: baseline; gap: 6px; font-size: var(--text-xs); }
+.aywa-instruments .admission-months header span { color: var(--muted); font-size: var(--text-xs); }
+.aywa-instruments .admission-months strong { font-size: var(--text-xl); font-weight: 850; letter-spacing: -.04em; line-height: 1.1; }
+.aywa-instruments .admission-months p { font-size: var(--text-xs); color: var(--muted); }
 .aywa-instruments .admission-months ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 10px; }
-.aywa-instruments .admission-months li { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--muted); }
+.aywa-instruments .admission-months li { display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--muted); }
 .aywa-instruments .admission-months li b { color: var(--ink); font-weight: 700; }
 
 .aywa-instruments .op-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-.aywa-instruments .op-grid li { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 9px 10px; background: var(--wash); border-radius: 6px; font-size: 13px; color: var(--ink-2); min-width: 0; }
-.aywa-instruments .op-grid b { font-size: 16px; font-weight: 800; color: var(--ink); white-space: nowrap; }
-.aywa-instruments .op-grid small { font-size: 12px; font-weight: 600; color: var(--muted); margin-left: 1px; }
+.aywa-instruments .op-grid li { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 9px 10px; background: var(--wash); border-radius: 6px; font-size: var(--text-xs); color: var(--ink-2); min-width: 0; }
+.aywa-instruments .op-grid b { font-size: var(--text-sm); font-weight: 800; color: var(--ink); white-space: nowrap; }
+.aywa-instruments .op-grid small { font-size: var(--text-xs); font-weight: 600; color: var(--muted); margin-left: 1px; }
 
 .aywa-instruments .work-scroll { overflow-x: auto; }
 .aywa-instruments .work-board { display: grid; grid-template-columns: 112px repeat(8, minmax(92px, 1fr)); align-items: center; gap: 7px 14px; min-width: 900px; }
-.aywa-instruments .work-label { font-size: 13px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.aywa-instruments .work-label { font-size: var(--text-xs); font-weight: 600; color: var(--ink-2); white-space: nowrap; }
 .aywa-instruments .work-head { padding-bottom: 3px; }
-.aywa-instruments .work-head b { display: block; font-size: 13px; font-weight: 700; }
-.aywa-instruments .work-head small { display: block; font-size: 12px; color: var(--muted); }
+.aywa-instruments .work-head b { display: block; font-size: var(--text-xs); font-weight: 700; }
+.aywa-instruments .work-head small { display: block; font-size: var(--text-xs); color: var(--muted); }
 .aywa-instruments .work-fuel { min-width: 0; }
 .aywa-instruments .fuel-cell { fill: var(--pale); }
 .aywa-instruments .fuel:hover { filter: brightness(1.05); }
@@ -189,32 +189,32 @@
 .aywa-instruments .drawer-root.is-open .drawer { transform: none; opacity: 1; }
 .aywa-instruments .drawer-root.is-open .drawer-scrim { opacity: 1; }
 .aywa-instruments .drawer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 18px 22px 14px; background: var(--charcoal); color: #fff; }
-.aywa-instruments .drawer-period { display: block; font-size: 13px; font-weight: 600; color: var(--yellow); margin-bottom: 2px; }
-.aywa-instruments .drawer-head h2 { font-size: 22px; font-weight: 800; letter-spacing: -.04em; }
+.aywa-instruments .drawer-period { display: block; font-size: var(--text-xs); font-weight: 600; color: var(--yellow); margin-bottom: 2px; }
+.aywa-instruments .drawer-head h2 { font-size: var(--text-lg); font-weight: 800; letter-spacing: -.04em; }
 .aywa-instruments .drawer-close { flex: none; width: 34px; height: 34px; border: 0; border-radius: 6px; background: #454c51; cursor: pointer; display: grid; place-items: center; }
 .aywa-instruments .drawer-close:hover { background: #565e63; }
 .aywa-instruments .drawer-close svg { width: 16px; height: 16px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; }
 .aywa-instruments .drawer-body { flex: 1; overflow-y: auto; padding: 16px 22px 26px; display: grid; gap: 18px; align-content: start; }
 .aywa-instruments .drawer-stats { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
 .aywa-instruments .drawer-stats div { background: var(--wash); border-radius: 8px; padding: 10px 12px; min-width: 0; }
-.aywa-instruments .drawer-stats dt { font-size: 12.5px; color: var(--muted); }
-.aywa-instruments .drawer-stats dd { margin: 2px 0 0; font-size: 20px; font-weight: 850; letter-spacing: -.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aywa-instruments .drawer-stats dt { font-size: var(--text-xs); color: var(--muted); }
+.aywa-instruments .drawer-stats dd { margin: 2px 0 0; font-size: var(--text-lg); font-weight: 850; letter-spacing: -.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .aywa-instruments .drawer-tools { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
-.aywa-instruments .drawer-tools h3, .aywa-instruments .drawer-table h3 { font-size: 15px; font-weight: 750; letter-spacing: -.02em; }
+.aywa-instruments .drawer-tools h3, .aywa-instruments .drawer-table h3 { font-size: var(--text-sm); font-weight: 750; letter-spacing: -.02em; }
 .aywa-instruments .drawer-table h3 { margin-bottom: 8px; }
-.aywa-instruments .drawer-table h3 small { font-size: 12.5px; font-weight: 600; color: var(--muted); margin-left: 3px; }
+.aywa-instruments .drawer-table h3 small { font-size: var(--text-xs); font-weight: 600; color: var(--muted); margin-left: 3px; }
 .aywa-instruments .drawer-facets { display: flex; flex-wrap: wrap; gap: 8px 18px; }
 .aywa-instruments .drawer-facet { display: flex; align-items: center; gap: 7px; }
-.aywa-instruments .drawer-facet > span { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.aywa-instruments .drawer-facet > span { font-size: var(--text-xs); font-weight: 600; color: var(--muted); }
 .aywa-instruments .drawer-toggles { display: flex; gap: 8px; }
-.aywa-instruments .drawer-note { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+.aywa-instruments .drawer-note { font-size: var(--text-xs); color: var(--muted); margin-top: 6px; }
 .aywa-instruments .seg-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--surface); flex: none; }
-.aywa-instruments .seg-toggle button { border: 0; background: transparent; padding: 4px 9px; font-size: 12.5px; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.aywa-instruments .seg-toggle button { border: 0; background: transparent; padding: 4px 9px; font-size: var(--text-xs); font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap; }
 .aywa-instruments .seg-toggle button + button { border-left: 1px solid var(--line); }
 .aywa-instruments .seg-toggle button[aria-pressed="true"] { background: var(--charcoal); color: #fff; }
 .aywa-instruments .table-wrap { overflow-x: auto; }
 .aywa-instruments .drawer-table table { width: 100%; border-collapse: collapse; }
-.aywa-instruments .drawer-table th, .aywa-instruments .drawer-table td { font-size: 13.5px; padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--grid); white-space: nowrap; font-weight: 500; }
+.aywa-instruments .drawer-table th, .aywa-instruments .drawer-table td { font-size: var(--text-xs); padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--grid); white-space: nowrap; font-weight: 500; }
 .aywa-instruments .drawer-table th:first-child { padding-left: 0; font-weight: 600; }
 .aywa-instruments .drawer-table .is-num { text-align: right; }
 .aywa-instruments .tree-toggle { width: 16px; height: 16px; margin-right: 6px; padding: 0; border: 0; background: none; cursor: pointer; vertical-align: -3px; color: var(--muted); }
@@ -224,30 +224,30 @@
 .aywa-instruments .drawer-table tr[data-depth='2'] th { padding-left: 62px; font-weight: 500; }
 .aywa-instruments .check-wrap { overflow-x: auto; }
 .aywa-instruments .check-card table { width: 100%; border-collapse: collapse; }
-.aywa-instruments .check-card th, .aywa-instruments .check-card td { font-size: 14px; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--grid); white-space: nowrap; font-weight: 500; }
-.aywa-instruments .check-card thead th { color: var(--muted); font-size: 12.5px; padding-top: 0; border-bottom: 1px solid var(--axis); }
+.aywa-instruments .check-card th, .aywa-instruments .check-card td { font-size: var(--text-xs); padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--grid); white-space: nowrap; font-weight: 500; }
+.aywa-instruments .check-card thead th { color: var(--muted); font-size: var(--text-xs); padding-top: 0; border-bottom: 1px solid var(--axis); }
 .aywa-instruments .check-card tbody tr:last-child th, .aywa-instruments .check-card tbody tr:last-child td { border-bottom: 0; }
 .aywa-instruments .check-card tbody th { font-weight: 700; }
 .aywa-instruments .check-card tbody tr:hover th, .aywa-instruments .check-card tbody tr:hover td { background: var(--wash); }
 .aywa-instruments .check-card .is-num { text-align: right; }
-.aywa-instruments .check-card .strong { font-weight: 800; font-size: 16px; }
-.aywa-instruments .check-card .area, .aywa-instruments .check-card .basis { color: var(--muted); font-size: 13px; }
+.aywa-instruments .check-card .strong { font-weight: 800; font-size: var(--text-sm); }
+.aywa-instruments .check-card .area, .aywa-instruments .check-card .basis { color: var(--muted); font-size: var(--text-xs); }
 .aywa-instruments .check-card .go-cell { width: 18px; padding-right: 0; text-align: right; }
 .aywa-instruments .check-card a { color: inherit; text-decoration: none; }
 .aywa-instruments .check-open { all: unset; cursor: pointer; }
-.aywa-instruments .drawer-table thead th { color: var(--muted); font-size: 12.5px; border-bottom: 1px solid var(--axis); }
+.aywa-instruments .drawer-table thead th { color: var(--muted); font-size: var(--text-xs); border-bottom: 1px solid var(--axis); }
 .aywa-instruments .drawer-table td:last-child, .aywa-instruments .drawer-table th:last-child { padding-right: 0; }
 .aywa-instruments .drawer-table tr.is-focus th, .aywa-instruments .drawer-table tr.is-focus td { background: #fdf4d6; font-weight: 700; }
 
 /* ---------- 차트 공통(SVG) ---------- */
 .aywa-instruments .viz { position: relative; width: 100%; min-width: 0; }
 .aywa-instruments .chart { display: block; overflow: visible; }
-.aywa-instruments .t-axis { font-size: 12px; font-weight: 500; fill: var(--muted); }
-.aywa-instruments .t-label { font-size: 13px; font-weight: 500; fill: var(--ink-2); }
-.aywa-instruments .t-strong { font-size: 13px; font-weight: 700; fill: var(--ink); }
-.aywa-instruments .t-value { font-size: 14px; font-weight: 800; fill: var(--ink); }
-.aywa-instruments .t-stat { font-size: 20px; font-weight: 800; fill: var(--ink); }
-.aywa-instruments .t-inbar { font-size: 12px; font-weight: 700; }
+.aywa-instruments .t-axis { font-size: var(--text-xs); font-weight: 500; fill: var(--muted); }
+.aywa-instruments .t-label { font-size: var(--text-xs); font-weight: 500; fill: var(--ink-2); }
+.aywa-instruments .t-strong { font-size: var(--text-xs); font-weight: 700; fill: var(--ink); }
+.aywa-instruments .t-value { font-size: var(--text-xs); font-weight: 800; fill: var(--ink); }
+.aywa-instruments .t-stat { font-size: var(--text-lg); font-weight: 800; fill: var(--ink); }
+.aywa-instruments .t-inbar { font-size: var(--text-xs); font-weight: 700; }
 .aywa-instruments .strong-axis { font-weight: 700; fill: var(--ink-2); }
 .aywa-instruments .today { font-weight: 800; fill: var(--ink); }
 .aywa-instruments .mid { dominant-baseline: central; }
@@ -332,11 +332,11 @@
 /* 하나의 말풍선 */
 .aywa-instruments #viz-tip { position: fixed; z-index: 50; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 11px; box-shadow: 0 8px 22px rgba(20, 24, 27, .18); display: grid; gap: 3px; white-space: nowrap; }
 .aywa-instruments #viz-tip[hidden] { display: none; }
-.aywa-instruments #viz-tip > b { font-size: 15px; font-weight: 800; }
-.aywa-instruments #viz-tip > span { font-size: 12.5px; color: var(--muted); }
+.aywa-instruments #viz-tip > b { font-size: var(--text-sm); font-weight: 800; }
+.aywa-instruments #viz-tip > span { font-size: var(--text-xs); color: var(--muted); }
 .aywa-instruments #viz-tip .tip-title { font-weight: 600; margin-bottom: 2px; }
-.aywa-instruments .tip-row { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; column-gap: 7px; font-size: 13px; color: var(--ink-2); }
-.aywa-instruments .tip-row b { font-size: 14px; font-weight: 800; color: var(--ink); margin-left: 14px; text-align: right; }
+.aywa-instruments .tip-row { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; column-gap: 7px; font-size: var(--text-xs); color: var(--ink-2); }
+.aywa-instruments .tip-row b { font-size: var(--text-xs); font-weight: 800; color: var(--ink); margin-left: 14px; text-align: right; }
 .aywa-instruments .tip-key { width: 10px; height: 10px; border-radius: 2px; }
 .aywa-instruments .tip-key.m-yellow { background: var(--yellow); }
 .aywa-instruments .tip-key.m-char { background: var(--charcoal); }
@@ -381,11 +381,11 @@
   .aywa-instruments .head { display: block; }
   .aywa-instruments .head-tools { margin-top: 6px; }
   .aywa-instruments .body { padding: 16px 14px 84px; }
-  .aywa-instruments .head h1 { font-size: 22px; }
+  .aywa-instruments .head h1 { font-size: var(--text-lg); }
   .aywa-instruments .kpi-grid, .aywa-instruments .card-grid { grid-template-columns: 1fr; }
   .aywa-instruments .kpi { border-right: 0 !important; border-bottom: 1px solid var(--line) !important; }
   .aywa-instruments .kpi:last-child { border-bottom: 0 !important; }
-  .aywa-instruments .block-title { font-size: 17px; }
+  .aywa-instruments .block-title { font-size: var(--text-sm); }
 }
 @media (prefers-reduced-motion: reduce) {
   .aywa-instruments .enter .grow-y, .aywa-instruments .enter .grow-x, .aywa-instruments .enter .draw, .aywa-instruments .enter .pt, .aywa-instruments .enter .area { animation: none; }
@@ -405,13 +405,13 @@ body:has(.aywa-board) [data-shell-sidebar] {
   --primary-foreground: #fdb811;
 }
 body:has(.aywa-board) [data-shell-sidebar] .shadow-primary-glow { box-shadow: none; }
-.aywa-instruments .design-switch { font-size: 13px; font-weight: 800; color: var(--charcoal); background: var(--yellow); border: 1px solid var(--yellow); border-radius: 6px; padding: 6px 12px; white-space: nowrap; cursor: pointer; }
+.aywa-instruments .design-switch { font-size: var(--text-xs); font-weight: 800; color: var(--charcoal); background: var(--yellow); border: 1px solid var(--yellow); border-radius: 6px; padding: 6px 12px; white-space: nowrap; cursor: pointer; }
 .aywa-instruments .design-switch:hover { filter: brightness(.96); }
 .aywa-instruments .refresh { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; color: var(--ink-2); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
 .aywa-instruments .refresh:disabled { opacity: .5; cursor: default; }
 .aywa-instruments .fresh i.is-warn { background: var(--red); }
 .aywa-instruments .subject-choices { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-.aywa-instruments .subject-choices a { font-size: 13px; font-weight: 700; padding: 5px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.aywa-instruments .subject-choices a { font-size: var(--text-xs); font-weight: 700; padding: 5px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
 .aywa-instruments .subject-choices a[aria-current='page'] { background: var(--charcoal); border-color: var(--charcoal); color: #fff; }
 .aywa-instruments .op-grid a { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; width: 100%; }
 .aywa-instruments .foot.is-alert { color: var(--red); }

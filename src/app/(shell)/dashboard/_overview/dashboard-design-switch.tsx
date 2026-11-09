@@ -9,6 +9,8 @@ import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
 import type { DemoRosterControl } from "@/features/demo-roster/types";
 import { InstrumentsSkeleton } from "../_instruments/instruments-skeleton";
 import { Overview } from "./overview";
+import { NEW_SHAPE } from "./new-shape-flag";
+
 
 /** 계기판 화면은 고른 사람만 받는다(그림 엔진을 운영실 첫 묶음에 넣지 않는다 — B5). 버튼에 손이 가면 미리 받아 전환 때 빈 화면이 안 보이게 한다. */
 const loadBoard = () => import("../_instruments/instrument-board");
@@ -33,7 +35,8 @@ export function DashboardDesignSwitch({ initial, demoRoster, chartKinds, design:
     setSwitched(true);
     void saveDashboardDesign(next).catch(() => undefined);
   };
-  if (design === "instruments") return <InstrumentBoard initial={initial} chartKinds={chartKinds} checkView={checkView} demoRoster={demoRoster} onSwitchDesign={toggle} />;
+  // 시안: 새 대시보드가 곧 운영실 — 전환 없이 늘 이 화면(옛 운영실로 돌아가는 버튼도 없다).
+  if (design === "instruments" || NEW_SHAPE) return <InstrumentBoard initial={initial} chartKinds={chartKinds} checkView={checkView} demoRoster={demoRoster} onSwitchDesign={toggle} />;
   return (
     <div className={switched ? "animate-in fade-in-0 duration-200" : undefined}>
       <Overview initial={initial} demoRoster={demoRoster} chartKinds={chartKinds} onSwitchDesign={toggle} onPreloadDesign={() => void loadBoard()} />

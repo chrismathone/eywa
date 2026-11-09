@@ -3,7 +3,7 @@ import { hasTrend, type TrendPoint } from "../report-trend";
 
 // 학부모 보고서 성적 추이 — **순수 SVG**(라이브러리 0). ClassNote 워커가 headless로 스크린샷하므로
 // recharts(ResizeObserver) 불가 → edutrix ReportPaper의 PureSvgChart를 aywa 톤으로 이식(CLAUDE.md B5).
-// 색은 인라인 hex(스크린샷 안정): 시험=primary #153e75, 과제=blue #2962ce. 격자/축은 회색.
+// 색은 인라인 hex(스크린샷 안정): 시험=primary #363c41, 과제=blue #2962ce. 격자/축은 회색.
 // ⚠️ CSS 변수를 못 쓴다(워커 headless 렌더에 앱 스타일시트가 없다) — 그래서 여기만 hex를 적는다.
 //    globals.css의 `--primary`/`--blue`를 바꾸면 **이 두 값도 함께** 고칠 것(v4에서 blue를 조였다).
 // ⚠️ 이 그래프는 **학부모 문서**다(parent-report-card → 공유 링크 `/r/…`·인쇄·ClassNote 이미지) — 디자인 v5의
@@ -120,7 +120,7 @@ export function ReportTrendGraph({ points }: { points: TrendPoint[] }) {
   if (!showExam && !showHomework) return null;
   return (
     <div className="flex flex-col gap-5">
-      <MetricBlock points={points} metric="exam" color="#153e75" title="시험 점수 추이" />
+      <MetricBlock points={points} metric="exam" color="#363c41" title="시험 점수 추이" />
       {/* 🔴 "과제 점수"가 아니라 "수행률" — 학부모가 50을 **점수**로 읽고 학생을 혼낸 사고(2026-08-03).
           축은 그대로 0~100이고 값의 뜻만 또렷해진다(= 지난 과제를 몇 % 해왔는가). */}
       <MetricBlock points={points} metric="homework" color="#2962ce" title="과제 수행률 추이" />

@@ -96,6 +96,24 @@ export function kpiDetails(ctx: DetailContext): Details {
     };
   }
 
+  // 시안: 오늘 입테 — 전일 입테와 같은 일정 · 같은 표, 날짜만 오늘 하루(한눈에 보기 머리 칸 'kpi:todayTests').
+  if (calendar) {
+    const list = levelTestListIn(calendar, { from: today, to: today });
+    const first = list.active[0];
+    out["kpi:todayTests"] = {
+      title: "오늘 입테", period: `오늘 · ${monthDay(today)}`,
+      stats: [["입학 테스트", `${num(list.active.length)}건`], ["첫 일정", first ? hhmm(first.startTime) || "종일" : "—"], ["취소", `${num(list.cancelled)}건`]],
+      tables: [{
+        title: "일정", cols: ["시각", "일정", "상태"],
+        rows: list.rows.map((e) => ({
+          cells: [hhmm(e.startTime) || "종일", e.displayTitle ?? e.title, e.kind === null ? "취소" : "예정"],
+          ...(e.matchedConsultation && can("enrollment") ? { href: `/enrollment/${e.matchedConsultation.id}`, linkTitle: e.matchedConsultation.name } : {}),
+          ...(e.kind === null ? { state: "struck" as const } : {}),
+        })),
+      }],
+    };
+  }
+
   // 명단에 없는 반의 과목(학원 설정 이름) → 탭 — 키로 바꿔 다른 카드와 같은 규칙(`subjectTab` · 반을 모르는 영어는 인재원 영어). 모르면 이름 그대로.
   const classTab = (label: string | null) => {
     const key = Object.entries(ctx.snapshot.subjects).find(([k, l]) => l === label || k === label)?.[0];

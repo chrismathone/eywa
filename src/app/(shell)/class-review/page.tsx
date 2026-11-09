@@ -64,6 +64,7 @@ export default async function ClassReviewPage({ searchParams }: { searchParams: 
           title="직원 포트폴리오"
           description="강사별 월간 점수와 근거를 봅니다. 매월 1일에 새로 시작해 말일에 마감합니다."
           embedLabel="직원 포트폴리오"
+          actions={viewer.systemRole === "master" ? <Button variant="outline" render={<Link href={`/class-review/knowledge${sp.teacher ? `?teacher=${encodeURIComponent(sp.teacher)}` : ""}`} />}>강사 지식그래프</Button> : undefined}
         />
         {faceTabs}
         <PortfolioFace role={viewer.systemRole} teacherId={sp.teacher ?? null} />

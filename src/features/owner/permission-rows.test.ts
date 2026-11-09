@@ -122,8 +122,10 @@ describe("모든 권한 키가 정확히 한 번 선다", () => {
 
 describe("차례 = 왼쪽 탭 → 그 탭의 내부 메뉴", () => {
   it("묶음의 차례와 이름이 사이드바의 탭 그대로다", () => {
-    const tabs = configuredHubGroups([...HUB_GROUPS, ...SUPPORT_GROUPS], undefined, undefined, true);
     const groups = permissionRowGroups();
+    // 다른 메뉴의 면만 담은 탭(지식그래프·조직·OKR·홍보·마케팅 = 대시보드 권한)은 권한 줄이 없어 묶음이 서지 않는다.
+    const tabs = configuredHubGroups([...HUB_GROUPS, ...SUPPORT_GROUPS], undefined, undefined, true)
+      .filter((t) => groups.some((g) => g.id === t.id) || !["knowledge-model", "organization", "marketing"].includes(t.id));
     expect(groups.slice(0, tabs.length).map((g) => [g.id, g.label])).toEqual(tabs.map((g) => [g.id, g.label]));
     expect(groups.slice(tabs.length).map((g) => g.id)).toEqual([TEACHER_ONLY_GROUP.id, NO_MENU_GROUP.id, CONNECTED_APP_GROUP.id]);
   });

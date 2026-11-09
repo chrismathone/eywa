@@ -9,7 +9,7 @@
 .lp .scard .cap{padding:22px 22px 18px;display:grid;gap:6px}
 .lp .scard .cap b{font-size:20px;font-weight:900;letter-spacing:-.02em}
 .lp .scard .cap p{font-size:15px;color:var(--ink2)}
-.lp .scard .shot{margin:0 16px 16px;border-radius:14px;background-color:#f5f5f7;box-shadow:inset 0 0 0 1px var(--line2);overflow:hidden;font-size:2.9cqw;line-height:1.35;min-height:78cqw;display:grid;align-content:stretch}
+.lp .scard .shot{margin:0 16px 16px;border-radius:14px;background-color:#f4f4f1;box-shadow:inset 0 0 0 1px var(--line2);overflow:hidden;font-size:2.9cqw;line-height:1.35;min-height:78cqw;display:grid;align-content:stretch}
 .lp .scard .shot.photo{background-color:#2a3140;background-size:cover;background-position:center;background-repeat:no-repeat;box-shadow:none;position:relative}
 .lp .scard .shot.photo .ov{position:absolute;left:3cqw;right:3cqw;bottom:3cqw;background:rgba(255,255,255,.94);border-radius:2.4cqw;padding:2.4cqw 2.8cqw;display:grid;gap:1.4cqw;font-size:2.7cqw}
 .lp .scard .shot.photo .ov b{font-size:3cqw;font-weight:900}
@@ -37,7 +37,7 @@
 .lp .phone .foot{display:flex;justify-content:space-between;color:var(--ink2);font-size:2.3cqw;padding-top:1.6cqw;border-top:1px solid var(--line2)}
 .lp .phone .foot b{color:var(--green);font-weight:800}
 .lp .phone .kv b{color:var(--ink2);font-weight:700}
-.lp .phone .ment{background:#f5f5f7;border-radius:2.4cqw;padding:2.4cqw;line-height:1.5}
+.lp .phone .ment{background:#f4f4f1;border-radius:2.4cqw;padding:2.4cqw;line-height:1.5}
 /* 캘린더 카드 */
 .lp .cal{padding:3cqw;display:grid;grid-template-rows:auto 1fr;gap:2cqw}
 .lp .cal-h{display:flex;justify-content:space-between;align-items:baseline;font-size:3cqw}

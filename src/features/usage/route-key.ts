@@ -73,7 +73,8 @@ export function isCanonicalRouteKey(key: string): boolean {
  *    (가드 `labels-query.test.ts`가 잡는다).
  */
 // explore = 연결 탐색(원생·수업·강사 중심 도넛) — 메뉴 밖 화면, 원생·수업·직원 상세의 '연결 탐색' 버튼과 검색으로 연다(2026-11-03).
-export const NON_MENU_SHELL_SEGMENTS: ReadonlySet<string> = new Set(["me", "menu", "explore"]);
+// marketing·organization·work-records = 시안 이식 화면(2026-11-09) — 메뉴 키가 아직 없어 기타로 센다(정식 메뉴로 들일 때 메뉴 표로 옮긴다).
+export const NON_MENU_SHELL_SEGMENTS: ReadonlySet<string> = new Set(["me", "menu", "explore", "marketing", "organization", "work-records"]);
 
 /** 화면 식별자가 속한 메뉴 — 메뉴 표에 없는 주소(내 정보·메뉴 판 등)는 `other`. */
 export type UsageMenuKey = MenuKey | "other";

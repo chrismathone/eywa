@@ -13,6 +13,7 @@ import { RoadmapGoal } from "./roadmap-goal";
 import { OtherBookBody } from "./other-book";
 import { roadmapStatusLabel } from "../lib/roadmap-status";
 import css from "./plan-card.module.css";
+import { StudentBasics } from "./student-basics";
 
 const pct = (n: number, total: number) => `${Math.max(0, Math.min(100, (n / Math.max(1, total)) * 100))}%`;
 
@@ -59,6 +60,7 @@ export function StudentPlanCard({ student, goal, progress, summary, onOpen }: {
           <StudentTextbookChip studentId={student.studentId} studentName={student.name} />
         </div>
         <span className={css.badge} data-tone={tone}>{badge}</span>
+        <StudentBasics info={student.basicInfo} studentName={student.name} />
         {tabs.length > 1 || others.length > 0 ? (
           <div className={css.bookTabs} role="tablist" aria-label={`${student.name} 교재`}>
             {tabs.map((t) => (

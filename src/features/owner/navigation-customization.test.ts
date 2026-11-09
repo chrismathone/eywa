@@ -54,7 +54,7 @@ describe("학원 탭 구성: 원본 목적지와 표시 설정", () => {
     expect(frequentFor({ ...gate, groupLayout: hidden, menuLayout: [{ href: "/timetable", groupId: "custom-desk", label: "일정판", icon: "star" }] }, ["timetable"])[0]).toMatchObject({ label: "일정판", icon: "star" });
   });
   it("코드에 새로 생긴 목적지는 설정된 순서 뒤에 자동으로 보인다", () => {
-    const source = [{ id: "example", label: "예시", icon: "book" as const, kind: "hub" as const, items: all[1].items.slice(0, 3) }];
+    const source = [{ id: "example", label: "예시", icon: "book" as const, kind: "hub" as const, items: all.find((g) => g.id === "class")!.items.slice(0, 3) }];
     const result = configuredHubGroups(source, [{ href: source[0].items[1].href, order: 0 }]);
     expect(result[0].items.map((d) => d.href)).toEqual([source[0].items[1].href, source[0].items[0].href, source[0].items[2].href]);
   });

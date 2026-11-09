@@ -1,8 +1,8 @@
 .selectionTheme,
 .surface {
-  --map-completed-tick: #174481;
+  --map-completed-tick: #363c41;
   --map-focus-fill: #ffd25b;
-  --map-focus-ink: #174481;
+  --map-focus-ink: #363c41;
   --map-focus-stroke: #ffd25b;
   --map-holiday-selected-ink: #9f2637;
 }
@@ -18,7 +18,7 @@
 }
 
 .surface {
-  --map-week-completed-fill: #174481;
+  --map-week-completed-fill: #363c41;
   --map-week-completed-ink: #ffffff;
   background: var(--card);
   border: 1px solid var(--line);

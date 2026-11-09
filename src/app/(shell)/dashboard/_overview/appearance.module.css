@@ -18,7 +18,7 @@
 .dashboard :global([data-overview="kpi-label"]) { font-size: var(--text-sm); gap: 8px; font-weight: 700; }
 .dashboard :global([data-overview="kpi-label"]) > span:first-child { display: inline-flex; }
 .dashboard :global([data-overview="kpi-label"]) img { width: 26px !important; height: 26px !important; }
-.dashboard :global([data-overview="kpi-value"]) { font-size: var(--text-4xl); line-height: 1.1; margin-top: 14px; margin-bottom: 12px; letter-spacing: -.04em; color: #173e76; }
+.dashboard :global([data-overview="kpi-value"]) { font-size: var(--text-4xl); line-height: 1.1; margin-top: 14px; margin-bottom: 12px; letter-spacing: -.04em; color: #23282c; }
 .dashboard :global([data-overview="kpi-value"]) > span { margin-left: 5px; font-size: var(--text-sm); color: #121212; }
 .dashboard :global([data-kpi="최근 결석"]) { border-color: #e6c8c3; background: #fff9f7; }
 .dashboard :global([data-kpi="최근 결석"] [data-overview="kpi-value"]) { color: #ac3333; }
@@ -32,7 +32,7 @@
 .dashboard :global([data-overview="board"] > [id] > span) { font-size: var(--text-lg); }
 .dashboard :global([data-overview="panel"]) [role="img"] { max-width: 100%; }
 .dashboard :global([data-overview="panel"]) a:hover { text-decoration: underline; text-underline-offset: 3px; }
-.dashboard :is(button, a, input):focus-visible { outline: 2px solid #327fa8; outline-offset: 3px; }
+.dashboard :is(button, a, input):focus-visible { outline: 2px solid #485055; outline-offset: 3px; }
 /* 일곱 칸(보강예정 포함) — 581~1300px에서 4칸 × 2줄(마지막 칸이 두 칸: 7칸 × 157px는 여섯 칸의 1100px 폭보다 좁다).
    🔴 특이도: 이 파일의 격자 규칙(.dashboard + 속성 하나 = 0,2,0)과 같은 층에 두면 승자가 CSS 순서라 dev/prod에서 다른 구간이
    깨진다(적대 리뷰 2026-09-14) — 속성 둘을 겹쳐 0,3,0(마지막 칸은 0,5,0)으로 올린다. 580 이하는 아래 2열 규칙(홀수면 마지막이 한 줄). */

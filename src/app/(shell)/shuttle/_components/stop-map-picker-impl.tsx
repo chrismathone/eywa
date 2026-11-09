@@ -201,9 +201,9 @@ export function StopMapPickerImpl({ appKey, lat, lng, radiusM, onPick }: StopMap
           radius: radiusM,
           map,
           strokeWeight: 2,
-          strokeColor: "#153e75",
+          strokeColor: "#363c41",
           strokeOpacity: 0.8,
-          fillColor: "#153e75",
+          fillColor: "#363c41",
           fillOpacity: 0.12,
         });
 

@@ -14,6 +14,11 @@
 .card > .sec:last-child .lab { border-bottom-left-radius: 13px; }
 .card[data-ended] { opacity: 0.55; }
 .top {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--card);
+  border-radius: 13px 13px 0 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;

@@ -82,7 +82,7 @@
   margin-top: -5px;
   border-radius: 50%;
   appearance: none;
-  background: #174481;
+  background: #363c41;
 }
 
 .scrubber input::-moz-range-thumb {
@@ -90,7 +90,7 @@
   height: 16px;
   border: 0;
   border-radius: 50%;
-  background: #174481;
+  background: #363c41;
 }
 
 .stops { position: relative; height: 36px; margin-inline: 8px; }
@@ -126,7 +126,7 @@
 .stop[data-edge="end"] { transform: translateX(-100%); text-align: right; }
 .stop[data-edge="end"]::before { left: 100%; }
 .stop[data-current="true"] { font-weight: 800; }
-.stop[data-current="true"]::before { background: #174481; }
+.stop[data-current="true"]::before { background: #363c41; }
 .stop:hover { background: var(--bg-soft); }
 
 @media (max-width: 600px) {

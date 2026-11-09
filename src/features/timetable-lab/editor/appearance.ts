@@ -10,7 +10,7 @@ export const defaultAppearance: LabAppearance = {
   hideEmptyDays: false, hideStudents: false, pxPerMin: 1.4, sectionLines: [], excludedTeachers: [], breaks: [], subjectColor: 'neutral',
 };
 const palette: Record<string, string> = { blue: '#2962ce', purple: '#6c50c8', rose: '#b63767', green: '#0d7743',
-  amber: '#995709', primary: '#153e75', neutral: '#555555', danger: '#bc3838' };
+  amber: '#995709', primary: '#363c41', neutral: '#555555', danger: '#b44832' };
 export const appearanceOf = (draft: Draft) => draft.appearance ?? defaultAppearance;
 export const paint = (color: LabColor) => ({ backgroundColor: color.bg, color: color.text });
 export function subjectTone(draft: Draft): LabColor {

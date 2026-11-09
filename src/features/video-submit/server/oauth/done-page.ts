@@ -42,7 +42,7 @@ export const VIDEO_OAUTH_PAGE_HEADERS = {
 export function renderVideoOAuthDonePage(input: unknown): string {
   const status: VideoOAuthDoneStatus = isVideoOAuthDoneStatus(input) ? input : "failed";
   const [title, body] = MESSAGES[status];
-  const tone = status === "connected" ? "#0d7743" : "#bc3838";
+  const tone = status === "connected" ? "#0d7743" : "#b44832";
   return `<!doctype html>
 <html lang="ko">
 <head>
@@ -56,7 +56,7 @@ font-family:Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","M
 main{background:#fff;border:1px solid rgba(29,29,31,.14);border-radius:16px;padding:28px 24px;margin:16px;max-width:420px}
 h1{margin:0 0 10px;font-size:20px;line-height:1.4;color:${tone}}
 p{margin:0 0 20px;font-size:16px;line-height:1.6}
-button{font:inherit;font-weight:700;color:#fff;background:#153e75;border:0;border-radius:8px;padding:10px 18px;cursor:pointer}
+button{font:inherit;font-weight:700;color:#fff;background:#363c41;border:0;border-radius:8px;padding:10px 18px;cursor:pointer}
 </style>
 </head>
 <body>

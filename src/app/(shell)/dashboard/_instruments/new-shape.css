@@ -1,0 +1,160 @@
+/*
+ * 시안(dev 전용): 새 대시보드 모양 — 계기판(.aywa-instruments) 토큰·카드를 그대로 쓰고 배치만 바꾼다.
+ * 맨 아래는 '전체 페이지 바탕도 대시보드 색감' — 계기판 화면이 떠 있을 때만(:has) 셸 바탕을 같은 종이색으로.
+ */
+
+/* ---------- 핵심 업무 3칸 ---------- */
+.aywa-instruments .ns-core { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0 0 18px; }
+.aywa-instruments .ns-core-item {
+  display: grid; gap: 4px; min-width: 0; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  transition: border-color .12s, box-shadow .12s, background .12s;
+}
+.aywa-instruments a.ns-core-item:hover { background: #fdfaf1; border-color: #cfd2cd; box-shadow: 0 6px 18px rgba(30, 35, 38, .07); }
+.aywa-instruments .ns-core-item strong { font-size: var(--text-sm); font-weight: 750; letter-spacing: -.025em; color: var(--ink); }
+.aywa-instruments .ns-core-item strong span { color: var(--yellow-ink); }
+.aywa-instruments .ns-core-item > span { font-size: var(--text-xs); line-height: 1.45; color: var(--muted); }
+.aywa-instruments .ns-core-item em { font-style: normal; font-size: var(--text-xs); font-weight: 700; color: var(--muted); background: var(--wash); border-radius: 4px; padding: 1px 6px; margin-left: 4px; vertical-align: 1px; }
+.aywa-instruments .ns-core-item.is-pending { cursor: default; }
+
+/* ---------- 보기 전환 ---------- */
+.aywa-instruments .ns-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; margin: 4px 0 16px; }
+.aywa-instruments .ns-switch { border-radius: 8px; }
+.aywa-instruments .ns-switch button { padding: 9px 18px; font-size: var(--text-xs); font-weight: 750; color: var(--ink-2); }
+.aywa-instruments .ns-switch button[aria-pressed="false"]:hover { background: var(--wash); color: var(--ink); }
+.aywa-instruments .ns-toolbar p { font-size: var(--text-xs); color: var(--muted); }
+
+/* ---------- 한눈에 보기: 머리 칸 = 업무 비서(왼쪽) + KPI(오른쪽) ---------- */
+.aywa-instruments .ns-summary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 12px; align-items: stretch; margin-bottom: 14px; }
+.aywa-instruments .ns-brief { min-width: 0; display: flex; }
+.aywa-instruments .ns-brief > .sec { flex: 1; margin: 0; }
+.aywa-instruments .ns-kpis { min-width: 0; display: flex; }
+.aywa-instruments .ns-kpis > .kpi-grid { flex: 1; align-content: stretch; }
+/* 비서가 없는 화면(강사 범위 · 과목 관리자)은 KPI가 줄 전체를 쓴다 */
+.aywa-instruments .ns-summary:has(> .ns-brief:empty) { grid-template-columns: minmax(0, 1fr); }
+.aywa-instruments .ns-brief:empty { display: none; }
+
+/* 현황 필터 줄 */
+.aywa-instruments .ns-filter { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; margin-bottom: 4px; }
+.aywa-instruments .ns-filter > div:first-child { padding-right: 16px; border-right: 1px solid var(--line); }
+.aywa-instruments .ns-filter strong { display: block; font-size: var(--text-xs); font-weight: 750; }
+.aywa-instruments .ns-filter span { font-size: var(--text-xs); color: var(--muted); }
+.aywa-instruments .ns-filter p { margin-left: auto; font-size: var(--text-xs); color: var(--muted); }
+.aywa-instruments .ns-filter .seg-toggle button[aria-pressed="false"]:hover { background: var(--wash); color: var(--ink); }
+.aywa-instruments .ns-group:first-of-type { margin-top: 18px; }
+.aywa-instruments .ns-foot { font-size: var(--text-xs); color: var(--muted); line-height: 1.6; padding: 16px 2px 0; }
+
+/* 마우스를 올렸을 때 대비 — 표시 방식·과목 탭의 선택 안 된 버튼도 글자를 진하게 */
+.aywa-instruments .seg-toggle button[aria-pressed="false"]:hover { background: var(--wash); color: var(--ink); }
+
+@container aywa (max-width: 1100px) {
+  .aywa-instruments .ns-summary { grid-template-columns: minmax(0, 1fr); }
+}
+@container aywa (max-width: 650px) {
+  .aywa-instruments .ns-core { grid-template-columns: minmax(0, 1fr); }
+  .aywa-instruments .ns-filter > div:first-child { border-right: 0; padding-right: 0; width: 100%; }
+  .aywa-instruments .ns-filter p { margin-left: 0; }
+}
+
+/* ---------- 전체 페이지 바탕 = 대시보드 종이색 ---------- */
+body:has(.aywa-board) main { background-color: #f1f1ed !important; }
+body:has(.aywa-board) [data-slot="sidebar-inner"],
+body:has(.aywa-board) [data-slot="sidebar"] { background-color: #f7f7f3 !important; }
+body:has(.aywa-board) header:not(.aywa-instruments header) { background-color: #f7f7f3; }
+.aywa-instruments .ns-brief > .sec { border-radius: 10px; }
+
+/* ---------- 머리 칸: 업무 비서 요약 ↔ KPI 6칸 — 같은 행 높이 ---------- */
+.aywa-instruments .ns-summary { grid-template-columns: minmax(300px, 1fr) minmax(0, 2fr); }
+.aywa-instruments .ns-kpis > .kpi-grid { grid-auto-rows: 1fr; height: 100%; }
+.aywa-instruments .ns-kpis .kpi { display: flex; flex-direction: column; justify-content: space-between; }
+.aywa-instruments .ns-brief > .sec-compact { flex: 1; margin: 0; }
+
+/* 업무 비서 간단 요약 — 카드 한 장(차콜 판). 넘치는 글은 줄여 KPI 높이를 넘지 않는다. */
+.aywa-instruments .sec.sec-compact {
+  display: flex; flex-direction: column; gap: 8px; min-width: 0; width: 100%; text-align: left; border: 0; cursor: pointer;
+  font: inherit; color: #fff; border-radius: 10px; padding: 14px 16px; overflow: hidden; transition: background .12s;
+}
+.aywa-instruments .sec.sec-compact:hover { background: #2f3439; }
+.aywa-instruments .sec-compact:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
+.aywa-instruments .sec-compact .sec-head { flex-wrap: nowrap; min-width: 0; }
+.aywa-instruments .sec-compact-title { font-size: var(--text-sm); font-weight: 800; letter-spacing: -.02em; flex: none; }
+.aywa-instruments .sec-compact .sec-source { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aywa-instruments .sec-compact-headline {
+  font-size: var(--text-sm); font-weight: 700; line-height: 1.45; letter-spacing: -.02em; word-break: keep-all;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.aywa-instruments .sec-compact-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.aywa-instruments .sec-compact-steps li { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--text-xs); font-weight: 600; color: #e8ecee; }
+.aywa-instruments .sec-compact-steps li > span:last-child { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aywa-instruments .sec-compact-steps .sec-no { width: 20px; height: 20px; font-size: var(--text-xs); }
+.aywa-instruments .sec-compact-foot { margin-top: auto; display: flex; align-items: center; gap: 12px; font-size: var(--text-xs); color: #aeb6b9; }
+.aywa-instruments .sec-compact-foot b { margin-left: auto; color: var(--yellow); font-weight: 800; }
+
+/* 크게 보기 — 오버레이(상세 창 z 40·41보다 아래라 단계의 '상세'가 이 위에 뜬다) */
+.aywa-instruments.sec-overlay { position: fixed; inset: 0; z-index: 38; display: grid; place-items: center; padding: 24px; background: transparent; }
+.aywa-instruments .sec-overlay-scrim { position: absolute; inset: 0; background: rgba(30, 35, 38, .45); animation: sec-fade .16s ease-out; }
+.aywa-instruments .sec-overlay-panel { position: relative; width: min(1040px, 100%); max-height: min(86vh, 900px); overflow-y: auto; border-radius: 12px; box-shadow: 0 24px 60px rgba(20, 24, 27, .35); animation: sec-rise .18s cubic-bezier(.2, .8, .2, 1); }
+.aywa-instruments .sec-overlay-panel > .sec { margin: 0; border-radius: 12px; padding: 22px 24px 20px; gap: 14px; }
+.aywa-instruments .sec-overlay-panel .sec-head { padding-right: 44px; }
+.aywa-instruments .sec-overlay-panel .sec-headline { font-size: var(--text-base); }
+.aywa-instruments .sec-overlay-close { position: absolute; top: 16px; right: 16px; z-index: 1; width: 34px; height: 34px; border: 0; border-radius: 6px; background: #454c51; cursor: pointer; display: grid; place-items: center; }
+.aywa-instruments .sec-overlay-close:hover { background: #565e63; }
+.aywa-instruments .sec-overlay-close svg { width: 16px; height: 16px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; }
+@keyframes sec-fade { from { opacity: 0; } }
+@keyframes sec-rise { from { opacity: 0; transform: translateY(12px); } }
+@media (prefers-reduced-motion: reduce) { .aywa-instruments .sec-overlay-scrim, .aywa-instruments .sec-overlay-panel { animation: none; } }
+
+/* ---------- 한눈에 보기 카드 크기 — 반쪽 크기로 고르게 · 같은 줄 높이 같게 ---------- */
+.aywa-instruments .ns-group .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: auto; align-items: stretch; }
+.aywa-instruments .ns-group .card-grid > .card { grid-column: auto !important; }
+.aywa-instruments .ns-group .card-grid > .card:last-child:nth-child(odd) { grid-column: 1 / -1 !important; }
+@container aywa (min-width: 1500px) {
+  /* 구성(계기판) 카드는 넓은 화면에서 4칸 한 줄 */
+  .aywa-instruments .ns-group.is-mix .card-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .aywa-instruments .ns-group.is-mix .card-grid > .card:last-child:nth-child(odd) { grid-column: auto !important; }
+}
+@container aywa (max-width: 704px) {
+  .aywa-instruments .ns-group .card-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* 행 높이 = KPI 6칸(3×2). 비서 요약은 높이를 정하지 않고 칸을 그대로 채운다(넘치는 글은 잘린다). */
+.aywa-instruments .ns-brief { position: relative; min-height: 180px; }
+.aywa-instruments .ns-brief > .sec.sec-compact { position: absolute; inset: 0; gap: 6px; padding: 12px 16px; }
+.aywa-instruments .sec-compact .sec-mark { width: 22px; height: 22px; border-radius: 6px; }
+.aywa-instruments .sec-compact-headline { font-size: var(--text-xs); line-height: 1.4; }
+.aywa-instruments .sec-compact-steps { gap: 3px; }
+.aywa-instruments .sec-compact-steps li { font-size: var(--text-xs); line-height: 1.45; }
+.aywa-instruments .sec-compact-foot { font-size: var(--text-xs); }
+/* 한 줄로 접힐 때(좁은 화면)는 KPI와 겹치지 않으니 원래 흐름으로 */
+@container aywa (max-width: 1100px) {
+  .aywa-instruments .ns-brief { min-height: 0; }
+  .aywa-instruments .ns-brief > .sec.sec-compact { position: static; }
+}
+
+/* 머리 칸 KPI = 6칸(전일 입테 · 오늘 첫수업은 '오늘 운영'에만) · 구역 여백 없이 비서와 같은 줄에서 시작 */
+.aywa-instruments .ns-kpis > .block { margin: 0; flex: 1; display: flex; min-width: 0; }
+.aywa-instruments .ns-kpis > .block > .kpi-grid { flex: 1; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: 1fr 1fr; }
+.aywa-instruments .ns-kpis .kpi { padding: 12px 16px; }
+.aywa-instruments .ns-kpis .kpi-value { font-size: var(--text-2xl); }
+.aywa-instruments .ns-kpis .kpi-chart { flex-basis: 96px; width: 96px; }
+@container aywa (max-width: 704px) {
+  .aywa-instruments .ns-kpis > .block > .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: none; }
+}
+
+/* 요약 카드 — 남는 높이를 단계 셋이 고르게 나눠 쓴다(제목 + 이유 한 줄). 머리 한 줄 · 꼬리 한 줄. */
+.aywa-instruments .ns-brief > .sec.sec-compact { gap: 8px; padding: 14px 16px 12px; }
+.aywa-instruments .sec-compact-headline { -webkit-line-clamp: 1; font-size: var(--text-xs); }
+.aywa-instruments .sec-compact-steps { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: space-evenly; gap: 4px; }
+.aywa-instruments .sec-compact-steps li { align-items: flex-start; padding: 6px 8px; border-radius: 7px; background: rgba(255, 255, 255, .06); }
+.aywa-instruments .sec-compact-steps .sec-no { margin-top: 1px; }
+.aywa-instruments .sec-compact-step { display: grid; min-width: 0; }
+.aywa-instruments .sec-compact-step b, .aywa-instruments .sec-compact-step small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aywa-instruments .sec-compact-step b { font-size: var(--text-xs); font-weight: 700; color: #fff; }
+.aywa-instruments .sec-compact-step small { font-size: var(--text-xs); color: #c3c9cb; }
+.aywa-instruments .sec-compact-foot { margin-top: 0; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, .12); }
+
+/* 요약 카드 꼬리 줄 없음 · 제목 줄 오른쪽 끝 = 크게 보기 아이콘 */
+.aywa-instruments .sec-compact .sec-head { width: 100%; }
+.aywa-instruments .sec-compact-open { margin-left: auto; flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; background: rgba(255, 255, 255, .1); transition: background .12s; }
+.aywa-instruments .sec-compact-open svg { width: 14px; height: 14px; fill: none; stroke: var(--yellow); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.aywa-instruments .sec.sec-compact:hover .sec-compact-open { background: rgba(253, 184, 17, .2); }
+.aywa-instruments .ns-brief > .sec.sec-compact { padding-bottom: 14px; }

@@ -197,8 +197,8 @@ describe("왼쪽 탭 설정 — 보기만 바꾼다(권한 아님)", () => {
     const counsel = (layout?: MenuLayout) =>
       hubGroupsFor(HUB_GROUPS, { ...base, menuLayout: layout }).find((g) => g.id === "counsel")!.items.map((d) => d.href);
     const before = counsel(undefined);
-    const moved = counsel([{ href: "/newcomers", order: 0 }]);
-    expect(moved[0]).toBe("/newcomers");
+    const moved = counsel([{ href: "/withdrawals", order: 0 }]);
+    expect(moved[0]).toBe("/withdrawals");
     expect([...moved].sort()).toEqual([...before].sort()); // 사라진 것도 생긴 것도 없다
   });
 

@@ -5,7 +5,7 @@
 .draft-library input { flex: 1; max-width: none; min-width: 0; }
 .draft-library small { display: block; color: #65768b; margin-top: 7px; }
 .draft-list { padding: 0; list-style: none; max-height: 280px; overflow: auto; }
-.draft-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid #dbe3ec; }
+.draft-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid #e1e3df; }
 .draft-list li > div { min-width: 0; overflow-wrap: anywhere; }
 .draft-list li strong { overflow-wrap: anywhere; }
 .draft-list li button { flex-shrink: 0; }
@@ -13,7 +13,7 @@
 .draft-confirm { margin: 10px 0; padding: 10px; color: #924521; background: #fff2e8; border: 1px solid #ecc9a8; border-radius: 5px; }
 .draft-confirm p { margin: 0 0 8px; }
 .draft-confirm div { display: flex; gap: 8px; }
-.draft-compare-picker { border-top: 1px solid #dbe3ec; padding-top: 10px; }
+.draft-compare-picker { border-top: 1px solid #e1e3df; padding-top: 10px; }
 .draft-compare-picker > div { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
 .draft-compare-picker label { display: grid; gap: 8px; flex: 1; min-width: 200px; }
 .draft-compare-picker select { width: 100%; min-width: 0; padding: 7px; }

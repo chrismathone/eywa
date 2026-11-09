@@ -25,6 +25,19 @@ const EXTRA_WINDOW_ROUTES: Record<string, string> = {
   // 출석 키오스크 설정(원장 전용) — 사이드바에 없고 **도움말 링크가 유일한 입구**다. 창으로 못 열면 그 링크가
   // 도움말 창을 통째로 키오스크 설정으로 바꾼다(2026-09-11 전수검사). id는 딥링크가 쓰던 경로 id 그대로.
   "/kiosk-settings": MENU_LABEL.kiosk_settings,
+  // 업무 작성센터 시안(새 대시보드 '핵심 업무' 칸이 유일한 입구) — 창으로 안 열면 운영실 자체가 그 화면으로 바뀐다.
+  "/work-records": "업무 작성센터",
+  // 시안(aywa-next 이식) — 왼쪽 메뉴의 새 줄들. 등록하지 않으면 창으로 안 열려 메뉴를 눌러도 반응이 없다.
+  "/work-records/knowledge": "관찰·후속 조치·OKR",
+  "/dashboard/management": "경영 분석",
+  "/dashboard/management/knowledge": "스키마·지식그래프",
+  "/organization/okr": "조직·OKR",
+  "/marketing": "연간 운영계획",
+  "/marketing/annual": "3개년 비교",
+  "/billing/management/marketing": "홍보·마케팅",
+  "/billing/management/marketing/inputs": "홍보·마케팅 입력 검토",
+  "/enrollment/visits": "방문·등록 점검",
+  "/class-review/knowledge": "강사 지식그래프",
 };
 
 const routePath = (href: string): string => href.split("?")[0].split("#")[0];

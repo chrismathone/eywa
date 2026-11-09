@@ -30,7 +30,7 @@
   border: 1px solid #b8c9df;
   border-radius: 999px;
   background: #ffffff;
-  color: #174481;
+  color: #363c41;
   box-shadow: 0 1px 5px #16294318;
   font-size: clamp(10px, 1.85cqw, 19px);
   font-weight: 750;
@@ -39,7 +39,7 @@
   transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
 }
 .pill::before { content: ""; width: .55cqw; height: .55cqw; min-width: 3px; min-height: 3px; border-radius: 50%; background: #829ab8; }
-.pill[data-active="true"] { background: #174481; color: white; border-color: white; box-shadow: 0 0 0 1px white, 0 2px 6px #16294330; }
+.pill[data-active="true"] { background: #363c41; color: white; border-color: white; box-shadow: 0 0 0 1px white, 0 2px 6px #16294330; }
 .pill[data-active="true"]::before { background: #ffd25b; }
 
 @media (prefers-reduced-motion: reduce) {

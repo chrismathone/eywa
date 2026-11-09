@@ -28,7 +28,7 @@ const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 // 값 = 각 토큰 hex를 흰 배경에 alpha 0.22로 합성(화면 soft는 0.08~0.11이라 엑셀 셀에선 거의 안 보여
 // 기존 표가 쓰던 시각 무게 0.19~0.27을 유지).
 const PILL_HEX: Record<PillColor, string> = {
-  primary: "FFCCD5E1", // #153e75 navy
+  primary: "FFCCD5E1", // #363c41 navy
   green: "FFCFE5DA", // #0e7c46 성공/완료
   blue: "FFD1DEF8", // #2d6be0
   rose: "FFF2D4DF", // #c23a6e
