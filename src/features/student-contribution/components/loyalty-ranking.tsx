@@ -20,7 +20,7 @@ function rawRecord(r: RankedStudent, k: RankingKey) {
   if (!f) return "집계 필요";
   if (k === "tenure") return `${n(f.billing.months)}개월 · ${n(f.billing.subjectMonths)}과목개월`;
   if (k === "payment") return `${n(f.billing.paid / 10000)}만원 순납부`;
-  if (k === "seminar") return f.seminar.attended === null ? "명단 확인" : `참석 확인 ${f.seminar.attended}회`;
+  if (k === "seminar") return f.seminar.attended === null ? "명단 미연결" : `참석 확인 ${f.seminar.attended}회${f.seminar.pending ? " · 명단 확인 중" : ""}`;
   if (k === "attendance") return r.attendanceAllowed ? `기록 ${f.attendance.recorded}/${f.attendance.scheduled}교시` : "열람 제한";
   return !r.schoolAllowed ? "열람 제한" : f.school.current === null ? "학교 성적 미입력" : `최근 ${n(f.school.current)}점 · 향상 ${f.school.improvement === null ? "미확인" : `${f.school.improvement > 0 ? "+" : ""}${n(f.school.improvement)}%p`}`;
 }
