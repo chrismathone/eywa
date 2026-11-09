@@ -12,6 +12,14 @@
 - 생성기 = 30분 cron `/api/cron/duties`(`src/features/duties/server/sync.ts`): 오늘(새벽 3시 전엔 어제도)의 출결 입력·수업보고서 작성·보고서 발송 의무를 시간표·명단으로 만들고(`model/daily.ts` — `reportWorkObligations`·`resolveTaughtBy` 재사용 · AI 없음) 원 표의 사실로 닫는다. 담당 = 그 교시 실제 수업자(없으면 담임) · 기한 당일 자정 / 발송 다음 날 정오 · 기한 지남 → 할 일(기한 +1일) → 관리자 +3 → 원장 +7. 기한 지난 열린 의무가 남은 지난 날(7일)은 다시 맞춰 닫는다.
 - 강사 홈(원스크린·ECS) '오늘 내 업무 N/M · 기한 초과 K' 줄(`components/my-duties-strip*.tsx` · GET `/api/duties/mine`) — 학생별 칸 펼침. 표가 없으면 줄이 안 선다. DB 전수 조사로 일간·월간·건별 카탈로그 확정, 주간 의무는 없음(일간 7일 접기). 시안 `work/auto-work-design/completion-flow.local.html`.
 
+## 2026-11-09 — 로컬 게이트 `pnpm verify` — 수정 계획 P0-1
+
+- 바뀐 파일과 그 영향만 검사(`scripts/verify-changed.mjs` · `verify-deps.mjs` · `verify-baseline.mjs` · `verify-vitest.config.mts`): eslint · 바뀐 TS와 import·**역의존**(바뀐·지운·옮긴 TS 전부, 재수출 한 단계)만 담은 임시 tsconfig로 tsc(많으면 전체) · `vitest related` + 파일 이름(SQL·CSS 포함)을 적은 테스트 + 폴더를 훑는 가드 · **기준선 비교**(main의 기존 빨간 테스트 9건은 따로 보이고, 스택을 뺀 메시지 전체가 달라진 실패만 막는다 · 값을 줄여 쓰지 않는 설정 · 실패 파일은 혼자 재실행해 흔들림 제거 · 기준 사본은 내장 디스크 임시 폴더) · 외장 SSD `._*` 정리. 결과는 `.verify/log.txt`. 재현해 막히는 것 확인: 여러 줄 시그니처 변경 · 파일 삭제 · 규칙 밖 SQL만 추가 · 빨간 가드에 위반 추가 · 위반 바꿔치기(개수 같음). 중단(Ctrl-C) 시 사본 정리. `docs/setup-and-ops.md` "검증 게이트"와 AGENTS.md를 이 규칙으로(옛 문서는 커밋마다 전체 4단계). CI가 꺼져 있고 배포를 막지 못하는 동안 유일한 게이트.
+
+## 2026-11-09 — 운영 DB 직접 쓰기 통로 차단(`db:push` · `drizzle-kit push/migrate`) — 수정 계획 P0-4
+
+- `pnpm db:push`는 `db:migrate`처럼 안내 후 종료(`package.json`). 스크립트만 막으면 `npx drizzle-kit push`로 우회돼 `drizzle.config.ts` 맨 위에서 명령 자리가 push·migrate·up·drop이면 종료(generate·studio·check는 그대로). `supabase/migrations/README.md`의 시즌1 설명에 안내 한 줄. SQL 없음.
+
 ## 2026-11-09 — 학원 비서: 원인 분석 규칙 · 분석용 보기 6개 · 의견 대상 고정·실행 지표(SQL s2_0039 · s2_0040)
 
 - 원장 질문 '학생이 줄어드는 원인' 답을 Claude·Codex가 교차 검토(부분 적절) → 프롬프트 '먼저 쪼개기 · 기간 바꿔 확인 · 말의 범위 · 요인 점검표 · 첫 화면'(`prompt-analysis.ts`) · 보기 `onto_classes`·`onto_homeroom_history`·`onto_siblings`·`onto_households`·`onto_tuition_months`·`onto_teacher_churn`(앱 판정과 같은 규칙) · 의견 `targets`(`{{대상}}` 자리 — 재측정 크론도 같은 명단으로 채움)·`doneCheck`(일을 안 해도 좋아지는 지표 거름 · 재측정 기준일은 2단계 `measure_anchor`). s2_0040 = 보기 캐스트를 형식 검사 뒤로. 운영 DB 적용 끝(11-09). 본문 = `docs/features/academy-assistant.md` §7-7.

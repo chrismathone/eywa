@@ -5,7 +5,9 @@ import { EyIcon } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { CONTROL_H_SM } from "@/components/ui/control-scale";
 import type { ColumnFormat, SettledReport } from "@/features/assistant/report";
+import { tipProps } from "@/components/hover-tip/tip";
 import { kstToday } from "@/lib/date-kst";
+import { fitColumn, mayOverflow, oneLine, tableMinWidth } from "./report-columns";
 import {
   columnAlign,
   columnTotals,
@@ -54,7 +56,7 @@ export function ReportTable({
       columns.map((c) => {
         const values = dataset.rows.map((r) => r[c.column]);
         const format = effectiveFormat(c.format, values);
-        return { ...c, format, align: columnAlign(format, values) };
+        return { ...c, format, align: columnAlign(format, values), texts: values.map((v) => formatCell(v, format)) };
       }),
     [columns, dataset.rows],
   );
@@ -64,6 +66,19 @@ export function ReportTable({
     return col ? sortRows(dataset.rows, sort.column, sort.dir, col.format) : dataset.rows;
   }, [cols, dataset.rows, sort]);
   const sums = useMemo(() => (totals?.length ? columnTotals(dataset.rows, cols, totals) : null), [cols, dataset.rows, totals]);
+  // 열 폭 — 값 · 머리 · 합계 줄 글까지 한 줄로 들어가게(합계가 칸 밖으로 새지 않게).
+  const fits = useMemo(
+    () =>
+      cols.map((c, i) => {
+        const extra = [
+          ...(sums && Object.hasOwn(sums, c.column) ? [`${i === 0 ? "합계(받은 000행) " : ""}${formatCell(sums[c.column] ?? null, c.format)}`] : []),
+          ...(sums && i === 0 ? ["합계(받은 000행)"] : []),
+        ];
+        return fitColumn(c.label, [...c.texts, ...extra]);
+      }),
+    [cols, sums],
+  );
+  const minWidth = useMemo(() => tableMinWidth(fits), [fits]);
 
   const total = rows.length;
   const visible = rows.slice(0, shown);
@@ -98,7 +113,13 @@ export function ReportTable({
   return (
     <div>
       <div className="max-h-[min(64vh,560px)] overflow-auto overscroll-x-contain">
-        <table className="w-full border-separate border-spacing-0 text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
+        {/* 한 줄 고정 행 · 열 폭은 내용에 맞춤(report-columns) — 긴 글 열만 남은 폭을 나누고 넘치면 말줄임 + 카드. */}
+        <table style={{ minWidth }} className="w-full table-fixed border-separate border-spacing-0 text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
+          <colgroup>
+            {fits.map((f, i) => (
+              <col key={cols[i]!.column} style={f.width === null ? undefined : { width: f.width }} />
+            ))}
+          </colgroup>
           <thead className="sticky top-0 z-[1]">
             <tr>
               {cols.map((c) => {
@@ -110,7 +131,7 @@ export function ReportTable({
                     key={c.column}
                     scope="col"
                     aria-sort={current === "asc" ? "ascending" : current === "desc" ? "descending" : "none"}
-                    className={`bg-bg-soft border-line h-10 border-b px-2 font-bold whitespace-nowrap ${ALIGN_TEXT[c.align]}`}
+                    className={`bg-bg-soft border-line h-10 overflow-hidden border-b px-2 font-bold whitespace-nowrap ${ALIGN_TEXT[c.align]}`}
                   >
                     {/* 버튼 이름 = 열 이름 그대로(숨김 글자를 섞으면 칸마다 열 제목이 길게 읽힌다) — 상태는 aria-sort가 말한다. */}
                     <button
@@ -118,8 +139,8 @@ export function ReportTable({
                       onClick={() => toggleSort(c.column, c.format)}
                       className={`${CONTROL_H_SM} hover:bg-muted inline-flex w-full cursor-pointer items-center gap-1 rounded-md px-1 ${ALIGN_FLEX[c.align]} ${current ? "text-primary" : ""}`}
                     >
-                      <span>{c.label}</span>
-                      <EyIcon name={dir === "desc" ? "arrowDown" : "arrowUp"} size={14} strokeWidth={current ? 2.6 : 1.6} className={current ? "" : "opacity-40"} />
+                      <span className="min-w-0 truncate">{c.label}</span>
+                      <EyIcon name={dir === "desc" ? "arrowDown" : "arrowUp"} size={14} strokeWidth={current ? 2.6 : 1.6} className={`shrink-0 ${current ? "" : "opacity-40"}`} />
                     </button>
                   </th>
                 );
@@ -136,17 +157,18 @@ export function ReportTable({
             ) : (
               visible.map((row, i) => (
                 <tr key={i} className="hover:bg-muted/60 [&>td]:border-line [&:not(:first-child)>td]:border-t">
-                  {cols.map((c) => {
+                  {cols.map((c, ci) => {
                     const numeric = c.format === "number" || c.format === "won" || c.format === "percent";
-                    const dated = c.format === "date" || c.format === "datetime";
                     const text = formatCell(row[c.column], c.format);
+                    // 한 줄 고정 — 넘칠 수 있는 칸만 원문 전체를 마우스 오버 카드로(문서마다 한 장인 레이어 · 글자로만 그린다).
+                    const tip = mayOverflow(text, fits[ci]!) ? tipProps({ lines: [text], wide: text.length > 60 }) : {};
                     return (
                       <td
                         key={c.column}
-                        className={`h-10 px-3 py-2 align-middle ${ALIGN_TEXT[c.align]} ${numeric ? "num whitespace-nowrap" : c.align === "left" ? "" : "whitespace-nowrap"}`}
+                        {...tip}
+                        className={`h-10 overflow-hidden px-3 py-0 align-middle text-ellipsis whitespace-nowrap ${ALIGN_TEXT[c.align]} ${numeric ? "num" : ""}`}
                       >
-                        {/* 긴 글은 폭을 묶어 줄바꿈(표 칸의 max-width는 자동 배치에서 안 먹는다 — 안쪽 상자로 묶는다). */}
-                        {c.align === "left" && !dated ? <div className="max-w-[28rem] min-w-[10rem] whitespace-pre-line">{text}</div> : text}
+                        {oneLine(text)}
                       </td>
                     );
                   })}
@@ -163,7 +185,7 @@ export function ReportTable({
                   return (
                     <td
                       key={c.column}
-                      className={`bg-bg-soft border-line-strong h-10 border-t px-3 font-bold whitespace-nowrap ${has ? `num ${ALIGN_TEXT[c.align]}` : i === 0 ? "text-center" : ""}`}
+                      className={`bg-bg-soft border-line-strong h-10 overflow-hidden border-t px-3 font-bold text-ellipsis whitespace-nowrap ${has ? `num ${ALIGN_TEXT[c.align]}` : i === 0 ? "text-center" : ""}`}
                     >
                       {i === 0 && !firstIsSum ? sumLabel : null}
                       {i === 0 && firstIsSum ? `${sumLabel} ` : null}
