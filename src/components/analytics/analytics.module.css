@@ -4,19 +4,19 @@
  * 카드 = 흰 면 + 1px 선 + 10px 라운드. 색 띠·짙은 그림자·파랑/보라 그라데이션은 쓰지 않는다.
  */
 .dashboard {
-  --av-ink: #23282c;
-  --av-ink-2: #485055;
-  --av-muted: #646d72;
-  --av-line: #e1e3df;
-  --av-wash: #f4f4f1;
-  --av-hover: #fdfaf1;
-  --av-charcoal: #363c41;
-  --av-yellow: #fdb811;
-  --av-yellow-ink: #8a6100;
-  --av-red: #b44832;
-  --av-ring-track: #eceeea;
-  --av-grid-line: #eceeea;
-  --av-axis-line: #c3c8c5;
+  --av-ink: var(--ink);
+  --av-ink-2: color-mix(in srgb, var(--ink) 86%, var(--card));
+  --av-muted: color-mix(in srgb, var(--ink) 72%, var(--card));
+  --av-line: var(--line);
+  --av-wash: var(--bg-soft);
+  --av-hover: color-mix(in srgb, var(--gold-bright) 6%, var(--card));
+  --av-charcoal: var(--primary);
+  --av-yellow: var(--gold-bright);
+  --av-yellow-ink: var(--gold);
+  --av-red: var(--danger);
+  --av-ring-track: var(--line-faint);
+  --av-grid-line: var(--line-faint);
+  --av-axis-line: var(--line-strong);
 }
 
 .hero {
@@ -98,7 +98,7 @@
   min-width: 0;
   transition: box-shadow .15s ease;
 }
-.chartCard:hover { box-shadow: 0 2px 10px rgba(35, 40, 44, .07); }
+.chartCard:hover { box-shadow: 0 2px 10px color-mix(in srgb, var(--ink) 7%, transparent); }
 .wide { grid-column: span 2; }
 .chartHeader { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
 .chartHeader h3 { font-size: 15px; font-weight: 750; margin: 0; color: var(--av-ink); }

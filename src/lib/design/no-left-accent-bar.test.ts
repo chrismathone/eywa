@@ -45,7 +45,7 @@ const ALLOWED: { file: string; line: RegExp; reason: string }[] = [
   },
   {
     file: "features/timetable-lab/editor/timetable-views.css",
-    line: /\.teacher-start \{ border-left: 2px solid #777/,
+    line: /\.teacher-start \{ border-left: 2px solid var\(--neutral-fill\)/,
     reason: "시간표 편집기에서 강사가 바뀌는 첫 요일 칸의 경계선 — 칸과 칸 사이를 가르는 구조선",
   },
   {

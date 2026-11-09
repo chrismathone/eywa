@@ -53,14 +53,14 @@ export function LessonsEditor({
         <h3 className="text-xs font-bold">차수별 진도·과제</h3>
         <span className="text-text-faint text-xs">비워 두면 그 차수는 시트에 기입되지 않습니다.</span>
       </div>
-      <div className="border-line-faint max-h-[42vh] overflow-y-auto rounded-lg border px-1">
+      <div className="bg-card border-line-faint max-h-[42vh] overflow-y-auto rounded-lg border px-1">
         <table className="w-full border-collapse text-xs">
           <colgroup>
             <col style={{ width: 52 }} />
             <col />
             <col />
           </colgroup>
-          <thead className="bg-background sticky top-0 z-10">
+          <thead className="bg-card sticky top-0 z-10">
             <tr className="text-text-dim text-xs">
               <th className="py-1.5 text-center font-bold">차수</th>
               <th className="py-1.5 text-left font-bold">진도</th>

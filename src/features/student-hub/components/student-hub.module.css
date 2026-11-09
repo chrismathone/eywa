@@ -2,8 +2,8 @@
  * 학생 통합보기 — aywa-next(375d27df4) 화면을 운영실 '계기판' 토큰으로 다시 칠했다.
  * 차콜 #363c41 · 노랑 #fdb811 · 붉은색 #b44832(경고만) · 글자 #23282c / #646d72 · 선 #e1e3df · 바탕 #f4f4f1 · 화면 #f1f1ed.
  */
-.page { --ink: #23282c; --ink-2: #485055; --muted: #646d72; --line: #e1e3df; --wash: #f4f4f1; --hover: #fdfaf1; --charcoal: #363c41; --yellow: #fdb811; --red: #b44832;
-  display: grid; gap: 14px; padding: 16px 20px 32px; background: #f1f1ed; color: var(--ink); font-size: var(--text-sm); line-height: 1.6; min-width: 0; }
+.page { --ink-2: color-mix(in srgb, var(--ink) 86%, var(--card)); --muted: color-mix(in srgb, var(--ink) 72%, var(--card)); --wash: var(--bg-soft); --hover: color-mix(in srgb, var(--gold-bright) 6%, var(--card)); --charcoal: var(--primary); --yellow: var(--gold-bright); --red: var(--danger);
+  display: grid; gap: 14px; padding: 16px 20px 32px; background: transparent; color: var(--ink); font-size: var(--text-sm); line-height: 1.6; min-width: 0; }
 .page :is(a, button, input, select, textarea):focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
 .hero { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
 .heroTop { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
@@ -30,7 +30,7 @@
 .toolbar { display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--ink-2); }
 .toolbar input { border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; background: #fff; color: var(--ink); font-size: var(--text-sm); }
 .toolbar button { border-radius: 8px; background: var(--charcoal); color: #fff; border: 1px solid var(--charcoal); padding: 5px 12px; font-weight: 650; font-size: var(--text-sm); }
-.toolbar button:hover { background: #2b3034; }
+.toolbar button:hover { background: var(--primary-deep); }
 .analysisGrid { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
 .analysisCard { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
 .analysisHead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }

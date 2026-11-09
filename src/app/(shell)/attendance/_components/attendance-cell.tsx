@@ -463,7 +463,7 @@ export function AttendanceCell({
             aria-hidden
             className="pointer-events-none absolute top-0 right-0 size-2"
             style={{
-              background: "linear-gradient(225deg,#fbbf24 0%,#f59e0b 48%,rgba(0,0,0,0.25) 50%,transparent 51%)",
+              background: "linear-gradient(225deg,color-mix(in srgb, var(--gold-bright) 80%, white) 0%,var(--gold-bright) 48%,rgba(0,0,0,0.25) 50%,transparent 51%)",
             }}
           />
         ) : null}

@@ -149,7 +149,7 @@
   height: 26px;
   border-radius: 999px;
   border: 2px solid var(--card);
-  background: #2b2b2e;
+  background: var(--primary);
   color: #fff;
   font-size: 18px;
   line-height: 1;
@@ -279,7 +279,7 @@
 }
 .badge[data-tone="warn"] {
   background: var(--amber-soft);
-  color: #7a4a00;
+  color: var(--amber);
 }
 .badge[data-tone="info"] {
   background: var(--primary-soft);
@@ -293,7 +293,7 @@
   background: var(--card);
   box-shadow:
     0 0 0 2px var(--primary),
-    0 22px 44px -14px rgba(18, 18, 18, 0.38);
+    0 22px 44px -14px color-mix(in srgb, var(--ink) 38%, transparent);
   transform: scale(1.04);
   cursor: grabbing;
   animation: lift 160ms ease-out;
@@ -301,7 +301,7 @@
 .lifted[data-blocked] {
   box-shadow:
     0 0 0 2px var(--danger),
-    0 22px 44px -14px rgba(18, 18, 18, 0.38);
+    0 22px 44px -14px color-mix(in srgb, var(--ink) 38%, transparent);
 }
 @keyframes lift {
   from {
@@ -387,11 +387,11 @@
   height: 52px;
   border-radius: 999px;
   translate: -50% 0;
-  background: #2b2b2e;
+  background: var(--primary);
   color: #fff;
   font-size: var(--text-sm);
   font-weight: 700;
-  box-shadow: 0 14px 30px -10px rgba(18, 18, 18, 0.5);
+  box-shadow: 0 14px 30px -10px color-mix(in srgb, var(--ink) 50%, transparent);
   animation: rise 180ms ease-out;
 }
 .trash[data-over] {
@@ -464,7 +464,7 @@
 }
 .note[data-tone="warn"] {
   background: var(--amber-soft);
-  color: #7a4a00;
+  color: var(--amber);
 }
 .srLive {
   position: absolute;
@@ -506,12 +506,12 @@
 .liftedChip {
   box-shadow:
     0 0 0 2px var(--primary),
-    0 16px 30px -12px rgba(18, 18, 18, 0.38);
+    0 16px 30px -12px color-mix(in srgb, var(--ink) 38%, transparent);
   transform: scale(1.06);
   cursor: grabbing;
 }
 .liftedChip[data-blocked] {
   box-shadow:
     0 0 0 2px var(--danger),
-    0 16px 30px -12px rgba(18, 18, 18, 0.38);
+    0 16px 30px -12px color-mix(in srgb, var(--ink) 38%, transparent);
 }

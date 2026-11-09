@@ -2,8 +2,8 @@
  * 방문·등록 기록 시안 — 운영실 '계기판' 토큰과 같은 값.
  * 차콜 #363c41 · 노랑 #fdb811 · 붉은색 #b44832(경고만) · 글자 #23282c / #646d72 · 선 #e1e3df · 바탕 #f4f4f1 · 화면 #f1f1ed.
  */
-.root { --ink: #23282c; --ink-2: #485055; --muted: #646d72; --line: #e1e3df; --wash: #f4f4f1; --hover: #fdfaf1; --charcoal: #363c41; --yellow: #fdb811; --yellow-ink: #8a6100; --red: #b44832;
-  display: grid; gap: 14px; min-width: 0; padding: 16px 20px 32px; background: #f1f1ed; color: var(--ink); font-size: var(--text-sm); line-height: 1.6; }
+.root { --ink-2: color-mix(in srgb, var(--ink) 86%, var(--card)); --muted: color-mix(in srgb, var(--ink) 72%, var(--card)); --wash: var(--bg-soft); --hover: color-mix(in srgb, var(--gold-bright) 6%, var(--card)); --charcoal: var(--primary); --yellow: var(--gold-bright); --yellow-ink: var(--gold); --red: var(--danger);
+  display: grid; gap: 14px; min-width: 0; padding: 16px 20px 32px; background: transparent; color: var(--ink); font-size: var(--text-sm); line-height: 1.6; }
 .root :is(a, button, input, select, textarea):focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
 .hero { padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; background: #fff; display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
 .hero h1 { font-size: var(--text-xl); font-weight: 800; letter-spacing: -.02em; margin: 2px 0 4px; }
@@ -24,7 +24,7 @@
 .warning b { color: var(--red); }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
 .actions button { border-radius: 8px; background: var(--charcoal); color: #fff; padding: 8px 14px; font-weight: 650; font-size: var(--text-sm); border: 1px solid var(--charcoal); }
-.actions button:hover { background: #2b3034; }
+.actions button:hover { background: var(--primary-deep); }
 .actions button:disabled { background: var(--wash); border-color: var(--line); color: var(--muted); }
 .actions button.secondary { background: #fff; color: var(--ink); border-color: var(--line); }
 .actions button.secondary:hover { background: var(--hover); }
@@ -47,7 +47,7 @@
 .table button { color: var(--ink); font-weight: 650; margin-right: 10px; white-space: nowrap; text-decoration: underline; text-underline-offset: 3px; }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; background: var(--wash); border: 1px solid var(--line); color: var(--ink-2); font-size: var(--text-xs); margin: 2px 4px 2px 0; }
 .late { color: var(--red); border-color: var(--red); background: #fff; }
-.done { background: #fff6dc; border-color: var(--yellow); color: var(--yellow-ink); }
+.done { background: var(--amber-soft); border-color: var(--yellow); color: var(--yellow-ink); }
 .muted { color: var(--muted); font-size: var(--text-xs); }
 .empty { padding: 30px 10px; text-align: center; color: var(--muted); font-size: var(--text-sm); line-height: 1.8; }
 .history { padding: 14px; background: var(--wash); border: 1px solid var(--line); border-radius: 10px; margin-top: 12px; display: grid; gap: 12px; font-size: var(--text-xs); }

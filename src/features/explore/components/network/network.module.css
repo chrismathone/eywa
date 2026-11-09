@@ -1,20 +1,21 @@
 /* 연결 탐색 네트워크 보기 — 시안(:3978 `.net-wrap` · `.net-tools` · `.net-stage` · `.nlabel` · `.hover-card` · `.net-legend` · `.seg.zoom`)을 옮긴 것.
  *
  * 색: 판(SVG)의 선·점 색은 아래 `--net-*` 변수 하나로 읽는다(draw.ts는 `var(--net-…)`만 적는다 — TS에 hex 금지). 흰 판 값은 팔레트 토큰,
- * 어두운 판(주체별 요약)은 시안의 값을 여기 한 곳에 적는다. 글자 크기: 도구줄·범례·hover 카드는 바닥 14px(--text-xs) · 판 위 이름은 시안
+ * 어두운 판(주체별 요약)도 테마 변수에서
+ * 만든다(바탕 = --primary를 검정과 섞은 값 · 범주 색 = 각 의미색을 흰색과 섞은 값 · 강조 = 노랑) — 2026-11-09 색감 통일. 글자 크기: 도구줄·범례·hover 카드는 바닥 14px(--text-xs) · 판 위 이름은 시안
  * 그대로(12 · 14/15 · 17 — 이름 자리 계산 `labelWidth`가 이 값을 쓴다).
  */
 
 .wrap {
-  --net-edge: #8c9198;
+  --net-edge: color-mix(in srgb, var(--neutral-fill) 80%, var(--card));
   --net-edge-hi: var(--primary);
   --net-edge-cross: var(--purple);
-  --net-node: #7d8389;
-  --net-node-near: #77718e;
+  --net-node: var(--neutral-fill);
+  --net-node-near: color-mix(in srgb, var(--purple) 70%, var(--neutral-fill));
   --net-chosen: var(--primary);
   --net-root-fill: var(--card);
   --net-ring: var(--primary);
-  --net-lead: #c3c8d2;
+  --net-lead: var(--line-strong);
   --net-group-ring: var(--card);
   --net-text: var(--foreground);
   --net-halo: var(--card);
@@ -39,25 +40,25 @@
 
 /* 주체별 요약 = 어두운 판(시안 2차 인계본 '개별 기록 / 주체별 요약'). */
 .summary {
-  --net-edge: #6b7694;
-  --net-edge-hi: #9fc1ff;
-  --net-edge-cross: #a894f0;
-  --net-node: #aab4cc;
-  --net-node-near: #cbd3ea;
+  --net-edge: color-mix(in srgb, var(--primary-foreground) 40%, var(--primary));
+  --net-edge-hi: var(--gold-bright);
+  --net-edge-cross: color-mix(in srgb, var(--purple) 55%, white);
+  --net-node: color-mix(in srgb, var(--primary-foreground) 65%, var(--primary));
+  --net-node-near: color-mix(in srgb, var(--primary-foreground) 82%, var(--primary));
   --net-chosen: #ffffff;
-  --net-root-fill: #1b2742;
-  --net-ring: #9fc1ff;
-  --net-lead: #5a6580;
-  --net-group-ring: #11192b;
-  --net-text: #edf0fc;
-  --net-halo: #11192b;
-  --net-t-primary: #8fb4ff;
-  --net-t-blue: #7fa6ff;
-  --net-t-green: #5fd39b;
-  --net-t-purple: #b9a6ff;
-  --net-t-rose: #ff8fb5;
-  --net-t-gold: #e6c46a;
-  --net-t-amber: #f2b45a;
+  --net-root-fill: var(--primary);
+  --net-ring: var(--gold-bright);
+  --net-lead: color-mix(in srgb, var(--primary-foreground) 30%, var(--primary));
+  --net-group-ring: color-mix(in srgb, var(--primary) 55%, black);
+  --net-text: color-mix(in srgb, var(--primary-foreground) 92%, var(--primary));
+  --net-halo: color-mix(in srgb, var(--primary) 55%, black);
+  --net-t-primary: color-mix(in srgb, var(--primary) 35%, white);
+  --net-t-blue: color-mix(in srgb, var(--blue) 50%, white);
+  --net-t-green: color-mix(in srgb, var(--green) 55%, white);
+  --net-t-purple: color-mix(in srgb, var(--purple) 50%, white);
+  --net-t-rose: color-mix(in srgb, var(--rose) 50%, white);
+  --net-t-gold: var(--gold-bright);
+  --net-t-amber: color-mix(in srgb, var(--gold-bright) 80%, white);
 }
 
 .enter {
@@ -167,7 +168,7 @@
 }
 
 .summary .stage {
-  background: #11192b;
+  background: color-mix(in srgb, var(--primary) 55%, black);
 }
 
 .stage svg {
@@ -241,9 +242,9 @@
 }
 
 .summary .hoverCard {
-  background: rgba(21, 29, 49, 0.96);
-  color: #edf0fc;
-  box-shadow: 0 0 0 1px #2b354e;
+  background: color-mix(in srgb, var(--primary) 96%, transparent);
+  color: color-mix(in srgb, var(--primary-foreground) 92%, var(--primary));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary-foreground) 18%, var(--primary));
 }
 
 @keyframes net-fade-in {
@@ -279,9 +280,9 @@
 }
 
 .summary .legend {
-  background: #151d31;
-  color: #cfd7ea;
-  border-top-color: #2b354e;
+  background: color-mix(in srgb, var(--primary) 70%, black);
+  color: color-mix(in srgb, var(--primary-foreground) 82%, var(--primary));
+  border-top-color: color-mix(in srgb, var(--primary-foreground) 18%, var(--primary));
 }
 
 .toggle {

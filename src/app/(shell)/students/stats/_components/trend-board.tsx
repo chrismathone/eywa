@@ -154,7 +154,7 @@ export function TrendBoard({
       strong: l.strong,
       ...(stackMix ? (l.key === "total" ? { tooltipOnly: true } : { stack: "mix" }) : {}),
     })),
-    ...(unsplit.some((v) => v !== null) ? [{ key: "_unsplit", name: "구성을 셀 수 없는 칸", color: "#c5ccd4", values: unsplit, stack: "mix" }] : []),
+    ...(unsplit.some((v) => v !== null) ? [{ key: "_unsplit", name: "구성을 셀 수 없는 칸", color: "color-mix(in srgb, var(--neutral-fill) 40%, var(--card))", values: unsplit, stack: "mix" }] : []),
   ];
   const clipped = !!breakdownFrom && totalPoints.some((p) => p.date.slice(0, 7) < breakdownFrom && p.source !== "history") && lines.length > 1;
 

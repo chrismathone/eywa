@@ -1,18 +1,18 @@
 @scope (.timetable-workspace) {
-.class-tools { border-block: 1px solid #e1e3df; padding-block: 14px; margin-block: 14px; }
+.class-tools { border-block: 1px solid var(--line); padding-block: 14px; margin-block: 14px; }
 .class-actions { display: flex; gap: 6px; margin-block: 9px; }
 .class-actions button { flex: 1; padding-inline: 4px; }
 .duration-presets { display: flex; flex-wrap: wrap; gap: 4px; }
 .duration-presets button { padding: 6px 9px; }
-.integrated-roster .student-moved, .student-chips .student-moved { background: #eee3fa; color: #663399; font-weight: 700; }
+.integrated-roster .student-moved, .student-chips .student-moved { background: var(--purple-soft); color: var(--purple); font-weight: 700; }
 .class-tools summary { cursor: pointer; margin-block: 12px; }
 .class-dialog { max-height: 88vh; overflow: auto; width: min(560px, 94vw); }
 .class-dialog select { min-width: 180px; max-width: 65%; padding: 7px; }
-.class-dialog fieldset { border: 1px solid #d1dce8; margin-top: 18px; max-height: 220px; overflow: auto; }
+.class-dialog fieldset { border: 1px solid var(--line); margin-top: 18px; max-height: 220px; overflow: auto; }
 .class-dialog fieldset label { justify-content: flex-start; gap: 8px; padding: 5px; }
 .class-dialog li { margin-block: 6px; }
-.class-dialog footer { position: sticky; bottom: -24px; padding-block: 14px; background: white; border-top: 1px solid #e1e3df; }
+.class-dialog footer { position: sticky; bottom: -24px; padding-block: 14px; background: white; border-top: 1px solid var(--line); }
 .integrated-roster button.student-drag { cursor: grab; touch-action: none; user-select: none; }
-.integrated-class[data-student-drop=true] { outline: 3px solid #2d76c2; outline-offset: -3px; background: #edf5ff; }
-.roster-drag-ghost { position: fixed; z-index: 90; pointer-events: none; padding: 8px 12px; background: #363c41; color: white; border-radius: 5px; box-shadow: 0 3px 14px #18324f33; }
+.integrated-class[data-student-drop=true] { outline: 3px solid var(--primary); outline-offset: -3px; background: var(--primary-soft); }
+.roster-drag-ghost { position: fixed; z-index: 90; pointer-events: none; padding: 8px 12px; background: var(--primary); color: white; border-radius: 5px; box-shadow: 0 3px 14px color-mix(in srgb, var(--ink) 20%, transparent); }
 }

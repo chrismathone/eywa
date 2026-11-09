@@ -108,7 +108,7 @@ export function MonthCalendar({
           {dows.map((dow) => {
             const date = cellDateOf(week, dow);
             if (!date) {
-              return <div key={dow} className="border-line rounded-[10px] border border-dashed bg-[#fafbfc]" />;
+              return <div key={dow} className="border-line rounded-[10px] border border-dashed bg-bg-soft/50" />;
             }
             return (
               <DayCell
@@ -173,7 +173,7 @@ function DayCell({
   const isToday = date === data.today;
 
   if (allSlots.length === 0) {
-    return <div className="border-line rounded-[10px] border bg-[#fafbfc]" />;
+    return <div className="border-line rounded-[10px] border bg-bg-soft/50" />;
   }
 
   return (

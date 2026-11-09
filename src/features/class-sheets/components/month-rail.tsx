@@ -191,7 +191,7 @@ export function MonthRail({
                     <td
                       key={date}
                       className={`border-line-faint border-r border-b px-2 py-1.5 align-top ${
-                        cells.length === 0 ? "bg-[#fbfcfd]" : offDays.has(date) ? "bg-amber-soft/40" : ""
+                        cells.length === 0 ? "bg-bg-soft/40" : offDays.has(date) ? "bg-amber-soft/40" : ""
                       }`}
                     >
                       {cells.map(({ line, seat }) => {

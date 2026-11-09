@@ -63,7 +63,7 @@
   align-items: baseline;
   gap: 13px;
   padding: 4px 2px 7px;
-  border-bottom: 1px solid #d7e0e9;
+  border-bottom: 1px solid var(--line);
   align-self: end;
 }
 .heading > * {

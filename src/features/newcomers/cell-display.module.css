@@ -1,10 +1,10 @@
 .badge { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 52px; min-height: 25px; padding: 2px 8px; border: 1px solid transparent; border-radius: 6px; font-size: var(--nc-badge-font-size, var(--nc-font-size, var(--text-sm))); line-height: var(--nc-badge-line-height, 1.25); font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.done { color: #047857; background: #ecfdf5; }
-.overdue { color: #c92525; background: #fef0f0; }
-.due { color: #92400e; background: #fffbeb; }
-.today { color: #85410d; background: #ffedbf; border-color: #f6d788; }
-.neutral { color: #646d72; background: #f3f6fa; font-weight: 500; }
-.waived { color: #7b8798; background: transparent; font-weight: 400; }
+.done { color: var(--green); background: var(--green-soft); }
+.overdue { color: var(--danger); background: var(--bg-soft); }
+.due { color: var(--amber); background: var(--amber-soft); }
+.today { color: var(--amber); background: var(--amber-soft); border-color: color-mix(in srgb, var(--gold-bright) 45%, var(--card)); }
+.neutral { color: color-mix(in srgb, var(--ink) 72%, var(--card)); background: var(--bg-soft); font-weight: 500; }
+.waived { color: color-mix(in srgb, var(--ink) 72%, var(--card)); background: transparent; font-weight: 400; }
 button.badge:not(:disabled):hover { filter: brightness(.96); border-color: currentColor; }
-button.badge:focus-visible { outline: 2px solid #485055; outline-offset: 2px; }
+button.badge:focus-visible { outline: 2px solid color-mix(in srgb, var(--ink) 86%, var(--card)); outline-offset: 2px; }
 button.badge:disabled { cursor: default; }

@@ -15,9 +15,9 @@ import { DASHBOARD_SUBJECT_COLORS } from "@/features/dashboard/overview/subject-
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 const TOTAL_COLOR = "var(--color-primary)";
-const UNKNOWN_COLOR = "#687787";
+const UNKNOWN_COLOR = "var(--neutral-fill)";
 /** 쌓은 막대의 '과목 모름' — 그 밖의 다과목 조합(회색)과 갈리게 더 옅게. */
-const UNKNOWN_STACK = "#b8c0c9";
+const UNKNOWN_STACK = "color-mix(in srgb, var(--neutral-fill) 45%, var(--card))";
 
 /**
  * 통계 보기 맨 위 **신규 문의 추이**(원장 2026-10-20 *"신규 문의 추이는 없네 신규 문의 상세에서 그것도 추가"*) — 운영실 '신규문의' ↗가 연다.

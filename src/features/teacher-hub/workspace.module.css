@@ -2,11 +2,11 @@
  * 강사 지식그래프 — aywa-next(375d27df4)에서 옮긴 화면을 운영실 '계기판' 토큰으로 다시 칠했다.
  * 차콜 #363c41 · 노랑 #fdb811 · 붉은색 #b44832(경고만) · 글자 #23282c / #646d72 · 선 #e1e3df · 바탕 #f4f4f1 · 화면 #f1f1ed.
  */
-.main { --ink: #23282c; --ink-2: #485055; --muted: #646d72; --line: #e1e3df; --wash: #f4f4f1; --hover: #fdfaf1; --charcoal: #363c41; --yellow: #fdb811; --yellow-soft: #fff6dc; --yellow-ink: #8a6100; --red: #b44832;
-  padding: 16px 20px 32px; max-width: 1700px; margin: auto; color: var(--ink); background: #f1f1ed; font-size: var(--text-sm); line-height: 1.6; min-width: 0; }
+.main { --ink-2: color-mix(in srgb, var(--ink) 86%, var(--card)); --muted: color-mix(in srgb, var(--ink) 72%, var(--card)); --wash: var(--bg-soft); --hover: color-mix(in srgb, var(--gold-bright) 6%, var(--card)); --charcoal: var(--primary); --yellow: var(--gold-bright); --yellow-soft: var(--amber-soft); --yellow-ink: var(--gold); --red: var(--danger);
+  padding: 16px 20px 32px; max-width: 1700px; margin: auto; color: var(--ink); background: transparent; font-size: var(--text-sm); line-height: 1.6; min-width: 0; }
 .main select, .main input, .main textarea { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: #fff; color: var(--ink); font: inherit; font-size: var(--text-sm); }
 .main button { border-radius: 8px; background: var(--charcoal); color: #fff; padding: 7px 14px; font-weight: 650; border: 1px solid var(--charcoal); cursor: pointer; }
-.main button:hover { background: #2b3034; }
+.main button:hover { background: var(--primary-deep); }
 .main button:disabled { background: var(--wash); border-color: var(--line); color: var(--muted); cursor: not-allowed; }
 .main a { color: var(--ink); font-weight: 600; }
 .main a:hover { text-decoration: underline; text-underline-offset: 3px; }
@@ -37,12 +37,12 @@
 .root { background: var(--charcoal); padding: 24px 18px; border-radius: 10px; color: #fff; display: grid; gap: 10px; text-align: center; position: relative; }
 .root strong { font-size: var(--text-2xl); }
 .root span { font-size: var(--text-sm); }
-.root small { line-height: 1.7; font-size: var(--text-xs); color: #e1e3df; }
-.root::after { content: ""; position: absolute; top: 50%; right: -40px; width: 40px; border-top: 2px solid #c3c8c5; }
-.branches { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; border-left: 2px solid #c3c8c5; padding-left: 20px; }
+.root small { line-height: 1.7; font-size: var(--text-xs); color: var(--line); }
+.root::after { content: ""; position: absolute; top: 50%; right: -40px; width: 40px; border-top: 2px solid var(--line-strong); }
+.branches { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; border-left: 2px solid var(--line-strong); padding-left: 20px; }
 .branches a { display: grid; gap: 6px; border: 1px solid var(--line); border-radius: 10px; padding: 14px; background: #fff; position: relative; text-decoration: none; }
 .branches a:hover { background: var(--hover); text-decoration: none; }
-.branches a::before { content: ""; position: absolute; left: -22px; top: 50%; width: 20px; border-top: 1px solid #c3c8c5; }
+.branches a::before { content: ""; position: absolute; left: -22px; top: 50%; width: 20px; border-top: 1px solid var(--line-strong); }
 .branches .pending { border-style: dashed; }
 .branches .pending small { color: var(--red); }
 .branches span { font-size: var(--text-xs); color: var(--ink-2); }
