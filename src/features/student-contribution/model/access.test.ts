@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MENU_ACCESS, applyUserOverrides, resolveMatrix } from "@/lib/permissions";
 import { capContributionMenu, CONTRIBUTION_PILOT_TENANT } from "./access";
 
-describe("원생 충성도 두 열쇠", () => {
+describe("원생 로열티 두 열쇠", () => {
   it("기본값은 원장만 열고 다른 지점은 시범 메뉴를 닫는다", () => {
     expect(Object.entries(MENU_ACCESS.student_contribution).filter(([, v]) => v !== "none")).toEqual([["master", "full"]]);
     expect(capContributionMenu(resolveMatrix([]), "other").student_contribution.master).toBe("none");

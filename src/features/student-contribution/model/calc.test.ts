@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_CONFIG, emptyRaws } from "./config";
 import { reconcileMonth, scoreRaws, sumRaws } from "./calc";
 
-describe("원생 충성도 누적과 정정", () => {
+describe("원생 로열티 누적과 정정", () => {
   it("직원 점수의 100/100000 상한을 물려받지 않는다", () => {
     expect(scoreRaws({ ...emptyRaws(), referralConsult: 100_000 }, DEFAULT_CONFIG).total).toBe(500_000);
   });

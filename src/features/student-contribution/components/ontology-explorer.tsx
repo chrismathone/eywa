@@ -87,7 +87,7 @@ export function OntologyExplorer({ data, initialScope }: { data: Data; initialSc
         </section>
       </div>
       <aside className="space-y-4"><OntologyConnections key={`${kind}:${id}:${data.month}`} links={result.related} labels={data.labels} selected={selected} currentKind={kind} onSelect={choose} />
-        <div className="rounded-xl bg-secondary p-5 text-xs leading-relaxed"><h3 className="mb-2 text-sm font-semibold">이렇게 읽어 주세요</h3><p>같은 기록을 여러 관점에서 살펴봅니다. 학원 전체에서는 같은 기록을 한 번만 셉니다. 당시 확인된 수강·담당 관계를 사용합니다.</p><p className="mt-3">학생 충성도를 강사 평가 점수로 합산하지 않습니다. 여러 과목의 합계 금액은 과목별로 임의 배분하지 않습니다.</p>
+        <div className="rounded-xl bg-secondary p-5 text-xs leading-relaxed"><h3 className="mb-2 text-sm font-semibold">이렇게 읽어 주세요</h3><p>같은 기록을 여러 관점에서 살펴봅니다. 학원 전체에서는 같은 기록을 한 번만 셉니다. 당시 확인된 수강·담당 관계를 사용합니다.</p><p className="mt-3">학생 로열티를 강사 평가 점수로 합산하지 않습니다. 여러 과목의 합계 금액은 과목별로 임의 배분하지 않습니다.</p>
           {result.unallocatedTuitionFacts > 0 && <p className="mt-3">어느 과목의 금액인지 확인되지 않은 수업료 기록 {numberText(result.unallocatedTuitionFacts)}건은 위 금액에 포함되지 않았습니다.</p>}
           {result.recordedAt && <p className="mt-3 border-t border-line pt-3">최근 근거 확인 {new Date(result.recordedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</p>}</div></aside>
     </div></>}

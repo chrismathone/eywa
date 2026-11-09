@@ -12,7 +12,7 @@ async function loadRelativeScore({ studentId, total, recent, revision, refreshed
     const data = await getContributionList();
     if (!data?.ready || !data.historyReady) return { ...empty, error: "전체 학생 집계가 준비되면 상대 위치를 표시합니다." };
     const rows = relativeRows(data.rows, data.config), student = rows.find(r => r.id === studentId);
-    if (total === null) return { ...empty, error: "가족 재원 자료가 확인될 때까지 충성도 상대평가를 보류합니다." };
+    if (total === null) return { ...empty, error: "가족 재원 자료가 확인될 때까지 로열티 상대평가를 보류합니다." };
     if (data.revision !== revision || data.refreshedAt !== refreshedAt || (student?.total !== null && student?.total !== undefined && Math.abs(student.total - total) > .005)
       || (student?.recent !== null && student?.recent !== undefined && Math.abs(student.recent - recent) > .005)) {
       return { ...empty, error: "학생 점수와 비교 집계의 기준이 달라 상대평가를 보류합니다. 최신 집계 후 새로고침해 주세요." };

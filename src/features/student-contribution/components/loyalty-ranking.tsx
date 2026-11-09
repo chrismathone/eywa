@@ -49,7 +49,7 @@ export function LoyaltyRanking({ data }: { data: LoyaltyRankingData }) {
       active="ranking" canConfigure={data.canConfigure} actions={data.canWrite && <Button disabled={busy} onClick={refresh}>{busy ? "기록 집계 중…" : "최신 기록 집계"}</Button>} />
     <section className={styles.hero} aria-label="로열티 랭킹 개요">
       <div><span className={styles.kicker}>AYWA · LOYALTY RECORDS</span><h2>꾸준한 선택이 만드는<br /><em>우리 학원의 로열티.</em></h2><p>기간 · 납부 · 가족 · 참여 · 출결 · 성적</p></div>
-      <div className={styles.heroStats}><div><strong>{data.rows.length}<small>명</small></strong><span>{data.scoped ? "열람 범위 내 재원생" : "전체 재원생"}</span></div><div><strong>{complete.length}<small>명</small></strong><span>평가 항목 확인 완료</span></div><div><strong>100<small>점</small></strong><span>종합 만점 · 가족 기본 40점</span></div></div>
+      <div className={styles.heroStats}><div><strong>{data.rows.length}<small>명</small></strong><span>{data.scoped ? "열람 범위 내 재원생" : "전체 재원생"}</span></div><div><strong>{complete.length}<small>명</small></strong><span>평가 항목 확인 완료</span></div><div><strong>100<small>점</small></strong><span>종합 만점 · 현재 배점 기준</span></div></div>
     </section>
     <div className={styles.status} role="status"><span>조회 기준 {data.today} · 마지막 집계 {data.refreshedAt ? new Date(data.refreshedAt).toLocaleString("ko-KR",{timeZone:"Asia/Seoul"}) : "집계 전"}</span><span>{message || (data.missing ? `${data.missing}명 새 기록 집계 필요` : "누적 수강·납부 / 2026년부터 출결·성적 / 연결된 설명회 명단")}</span></div>
     {data.scoped && <p className={styles.notice}>본인이 열람할 수 있는 학생끼리 비교합니다. 전체 학원 순위와 다르며, 가족 정보는 담당 범위 보호를 위해 표시하지 않습니다.</p>}

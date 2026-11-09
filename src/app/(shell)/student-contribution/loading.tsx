@@ -2,16 +2,16 @@ import { ToolbarSkeletonItem } from "@/components/toolbar";
 import { Bar, ContributionHeaderSkeleton, ScoreBreakdownSkeleton } from "./_components/contribution-skeleton";
 
 /**
- * 원생 충성도 목록 스켈레톤 — 실물 `ContributionList`와 같은 골격.
+ * 원생 로열티 목록 스켈레톤 — 실물 `ContributionList`와 같은 골격.
  * 🔴 옛 것은 `p-4` 안에 막대 둘(`bg-muted`)이라 실물(셸 여백만 · `p-4` 없음)보다 16px 안쪽에서 시작했고, 하위 화면 넷이 이걸 재수출해
  *    모양이 다른 화면에도 같은 막대가 떴다 — 이제 화면마다 자기 스켈레톤을 둔다.
  * 머리 → 요약 띠 → 2xl 2열[학생 목록(기본 접힘) | 22rem 점수 구성] → '점수와 자료 범위 안내'(접힘).
  */
 export default function Loading() {
   return (
-    <div role="status" aria-label="원생 충성도 불러오는 중" className="w-full min-w-0 space-y-5 pb-6">
+    <div role="status" aria-label="원생 로열티 불러오는 중" className="w-full min-w-0 space-y-5 pb-6">
       <ContributionHeaderSkeleton
-        title="원생 충성도"
+        title="원생 로열티"
         description="학생의 운영 기여와 학습·참여 기록을 모아 봅니다. 학생을 선택하면 점수의 계산 근거를 확인할 수 있습니다."
         actions={<ToolbarSkeletonItem className="w-28" />}
       />

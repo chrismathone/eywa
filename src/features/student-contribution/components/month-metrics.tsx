@@ -23,7 +23,7 @@ export function MonthMetrics({ selected, through, config }: { selected: StoredCo
   const groupHead = (g: (typeof groups)[number]) => <span className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1"><span className="font-semibold text-primary">{g.name}</span>
     <span className="text-xs font-normal tabular-nums">이 달(정정 포함) {signedText(g.month)}점 · 누적 {numberText(g.cumulative)}점</span></span>;
   return <div>{emptyCount > 0 && <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-5 py-3 text-xs"><span>이 달까지 실적·정정·확인할 자료가 있는 항목을 표시합니다.</span><button type="button" aria-expanded={showAll} onClick={() => setShowAll(!showAll)} className="text-primary underline underline-offset-4">{showAll ? `실적 없는 ${emptyCount}개 항목 접기` : `실적 없는 ${emptyCount}개 항목도 보기`}</button></div>}
-    {!groups.length && <p className="px-5 py-6 text-sm">이 달까지 집계된 충성도 실적이 없습니다.</p>}
+    {!groups.length && <p className="px-5 py-6 text-sm">이 달까지 집계된 로열티 실적이 없습니다.</p>}
     {!!groups.length && <div className="overflow-x-auto phone:hidden"><table className="w-full min-w-170 table-fixed text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
       <colgroup><col className="w-[24%]" /><col className="w-[19%]" /><col className="w-[19%]" /><col className="w-[19%]" /><col className="w-[19%]" /></colgroup>
       <thead className="bg-secondary"><tr><th scope="col" className="px-4 py-3 text-left font-medium">평가 항목 · 배점</th>

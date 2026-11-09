@@ -222,7 +222,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       // 2026-09-09 개칭 전 이름(학생 → 원생) — 개칭 당일부터 한동안은 옛 이름으로 찾는다.
       { href: "/students", label: "원생목록", icon: MENU_ICON.students, menuKey: "students", aliases: ["학생목록", "학생"] },
-      { href: "/student-contribution/ranking", label: "원생 충성도", icon: MENU_ICON.student_contribution, menuKey: "student_contribution", aliases: ["원생 기여도", "학생 기여도", "로열티 랭킹"] },
+      { href: "/student-contribution/ranking", label: "원생 로열티", icon: MENU_ICON.student_contribution, menuKey: "student_contribution", aliases: ["원생 기여도", "학생 기여도", "로열티 랭킹"] },
       { href: "/exams", label: "성적관리", icon: MENU_ICON.exams, menuKey: "exams", aliases: ["시험"] },
       { href: "/consultations", label: "원생상담", icon: MENU_ICON.consultations, menuKey: "consultations", aliases: ["학생상담"] },
       // 등록상담은 별도 권한(menuKey=enrollment)을 가지므로 숨기지 않고 독립 진입점을 제공한다.

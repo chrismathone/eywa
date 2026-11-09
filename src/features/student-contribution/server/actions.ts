@@ -33,7 +33,7 @@ export async function saveContributionSettings(value: unknown, revision: number)
       .eq("tenant_id", gate.tenantId).eq("revision", revision).is("refresh_token", null).select("revision").maybeSingle();
     if (error) throw new Error("설정을 저장하지 못했습니다");
     if (!data) throw new Error("집계 중이거나 설정이 바뀌었습니다. 집계가 끝난 뒤 다시 저장해 주세요");
-    await logAction({ action: "student_contribution_settings_save", targetType: "student_contribution", targetLabel: "원생 충성도",
+    await logAction({ action: "student_contribution_settings_save", targetType: "student_contribution", targetLabel: "원생 로열티",
       metadata: { before: before.config, after: config, beforeTotal: prevScore, afterTotal: nextScore, students: list?.rows.length ?? 0 } });
     invalidate();
     return { ok: true, message: "배점이 지난 실적 전체에 반영되었습니다. 인정 기준을 바꿨다면 지금 집계를 눌러 주세요." };
@@ -45,7 +45,7 @@ export async function refreshContribution() {
     let summary;
     try { summary = await refreshStudentContribution(createAdminClient(), gate.tenantId, { deadline: Date.now() + 85_000 }); }
     finally { updateTag(contributionSnapshotTag(gate.tenantId)); }
-    await logAction({ action: "student_contribution_refresh", targetType: "student_contribution", targetLabel: "원생 충성도", metadata: { ...summary, trigger: "manual" } });
+    await logAction({ action: "student_contribution_refresh", targetType: "student_contribution", targetLabel: "원생 로열티", metadata: { ...summary, trigger: "manual" } });
     invalidate();
     return { ok: true, message: summary.unavailable ? "기여도 저장 준비가 필요합니다" : summary.busy ? "다른 집계가 진행 중입니다" : summary.complete
       ? `${summary.students}명 집계 · ${summary.closed}개 월 기록 마감` : `${summary.written}개 월 기록 저장 · 다음 집계에서 이어집니다` };

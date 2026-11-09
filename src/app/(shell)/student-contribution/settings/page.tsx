@@ -1,2 +1,2 @@
 export { SettingsView as default } from "@/features/student-contribution/components/settings-view";
-export const metadata = { title: "충성도 배점 설정 — 에이와" };
+export const metadata = { title: "로열티 배점 설정 — 에이와" };
