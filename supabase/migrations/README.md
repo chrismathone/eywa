@@ -314,6 +314,8 @@
 
 ## 1. 두 갈래
 
+> 📜 아래 표와 설명은 **시즌1 시절** 이야기다. 2026-10-27 시즌2부터 `pnpm db:migrate`는 안내만 내고 종료하고, 운영 DB에는 새 `s2_NNNN` 파일 하나만 원장 승인 뒤 적용한다(`docs/sql-season2.md`).
+
 | 종류 | 파일 | 적용 | 추적 |
 |---|---|---|---|
 | **drizzle 번호본** | `000N_*.sql` (예: `0024_slimy_zombie.sql`) | `pnpm db:migrate`가 **자동** | `meta/_journal.json` |
@@ -324,7 +326,7 @@ SECURITY DEFINER 함수·확장(extension)·GiST EXCLUDE·generated 컬럼·GIN 
 drizzle이 표현 못 하므로 손으로 작성해 `000Na_*` 파일로 둔다. `pnpm db:migrate`는 **번호본만** 적용하고
 alpha는 건드리지 않는다 → alpha는 사람이 직접 돌려야 한다.
 
-> ⚠️ `db:push`(`drizzle-kit push`)는 alpha의 객체(RLS/트리거 등)를 모르고 drift로 **삭제 제안**할 수 있다. 쓰지 말 것. 항상 `db:generate` → `db:migrate` + alpha 수동.
+> ⚠️ `db:push`(`drizzle-kit push`)는 alpha의 객체(RLS/트리거 등)를 모르고 drift로 **삭제 제안**할 수 있다. 쓰지 말 것 — 2026-11-09부터 `pnpm db:push`는 `db:migrate`처럼 안내만 내고 종료한다. 운영 DB에는 새 `s2_NNNN` 파일 하나만 원장 승인 뒤 적용(`docs/sql-season2.md`).
 
 ## 2. 멱등성 — 재실행 안전
 
