@@ -232,6 +232,21 @@ async function writeProxyRows(
 export type SaveAttendanceState = { error?: string; saved?: number } | undefined;
 
 /**
+ * 출결 쓰기의 판정 재료(담당 반·위임·수강) 조회가 실패했다 — 액션은 던지지 않고 이 문구로 돌려준다.
+ * 판정을 `strict`로 바꾼 뒤(조회 실패를 "담당 반 없음"·데스크 입력으로 읽지 않게) 던지게만 두면 일별 폼은 오류 화면으로 넘어가고
+ * 출석부 격자는 실패를 모른 채 남는다(4-1 리뷰) — 호출부는 이미 `{ error }`를 보여 준다. 판정은 늘 쓰기 **전**이라 반쯤 저장되지 않는다.
+ */
+const LOOKUP_FAILED = "담당 반·수강을 확인하지 못해 저장하지 않았습니다 — 잠시 후 다시 시도해 주세요";
+async function settle<T>(work: Promise<T>): Promise<T | null> {
+  try {
+    return await work;
+  } catch (err) {
+    console.error("[attendance] 쓰기 판정 재료 조회 실패 — 저장 안 함:", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+/**
  * Save attendance for a single class on a single date. Format:
  *   classId, date, then rows `status:{studentId}=<status>` for each student.
  *   Also accepts `note:{studentId}`, `homeworkRequired:{studentId}`, `homeworkDone:{studentId}`.
@@ -341,12 +356,14 @@ export async function saveAttendance(
     //    읽기만 넓히면 슬롯 담당 강사는 반이 보이는데 저장은 '담당 반이 아닙니다'로 막힌다 —
     //    실제로 걸리는 사람이 있다(실측 2026-08-18: Florence Park = teacher·슬롯 9·담임 0).
     //    읽기 ⊆ 쓰기가 되도록 같은 축을 쓴다(#77: 한 레코드의 모든 표면이 공용 게이트를 통과).
-    const myClassIds = await userTaughtClassSet(supabase, user.id, date);
+    const myClassIds = await settle(userTaughtClassSet(supabase, user.id, date, true));
+    if (!myClassIds) return { error: LOOKUP_FAILED };
     if (!myClassIds.has(classId)) return { error: "담당 반이 아닙니다" };
   }
 
   const nowIso = new Date().toISOString();
-  const via = await resolveWriteVia(supabase, user.id, classId, date);
+  const via = await settle(resolveWriteVia(supabase, user.id, classId, date));
+  if (!via) return { error: LOOKUP_FAILED };
 
   // 반별 입력 폼은 월간 출석부 경로 — 데스크 게이트를 걸지 않는다(#103).
   // recorded_via 스탬프만 남긴다. 당일 화면의 제한은 source:"live"인 셀·일괄만.
@@ -640,9 +657,9 @@ export async function setAttendanceCell(input: {
     if (!noteOnly && !isWithinAttendanceEditWindow(sessionDate, kstToday())) {
       return { error: attendanceLockMessage(sessionDate, kstToday()) };
     }
-    const [teaching, { count: enrolled }, { count: existing }] = await Promise.all([
+    const cellFacts = await settle(Promise.all([
       // 담당 반 ∪ 그날 위임받은 반(0173a).
-      userTaughtClassSet(supabase, user.id, sessionDate),
+      userTaughtClassSet(supabase, user.id, sessionDate, true),
       supabase
         .from("enrollments")
         .select("*", { count: "exact", head: true })
@@ -657,7 +674,9 @@ export async function setAttendanceCell(input: {
         .eq("class_id", classId)
         .eq("student_id", studentId)
         .eq("session_date", sessionDate),
-    ]);
+    ]));
+    if (!cellFacts) return { error: LOOKUP_FAILED };
+    const [teaching, { count: enrolled }, { count: existing }] = cellFacts;
     if (!teaching.has(classId)) return { error: "담당 반이 아닙니다" };
     if (
       !canWriteAttendanceStudent({
@@ -687,7 +706,8 @@ export async function setAttendanceCell(input: {
   // 교시 지정(0196a) — 넘어온 값만 그 교시로 좁힌다. `slot`은 아래 세 경로가 공유한다.
   const slot = input.slotStart ?? null;
   const periodStart = input.periodStart ?? slot;
-  const via = await resolveWriteVia(supabase, user.id, classId, sessionDate);
+  const via = await settle(resolveWriteVia(supabase, user.id, classId, sessionDate));
+  if (!via) return { error: LOOKUP_FAILED };
   /**
    * 강사 전체 보기에서 온 **그날 칸** 저장이면 그 강사 id — 시수를 그 강사 몫 행에만 나누고(원장 제보 2026-09-11),
    * **자리(JJ·랩실) 행은 아예 안 쓴다**(원장 2026-09-12 *"jj는 개인강사 출석부에 넣음 안되지."* — 메모만·지우기·쓰기 전부).
@@ -1420,8 +1440,8 @@ export async function linkMakeupToAbsence(input: {
     if (!isWithinAttendanceEditWindow(makeupDate, kstToday())) {
       return { error: attendanceLockMessage(makeupDate, kstToday()) };
     }
-    const [teaching, { count: enrolled }] = await Promise.all([
-      userTaughtClassSet(supabase, user.id, makeupDate),
+    const linkFacts = await settle(Promise.all([
+      userTaughtClassSet(supabase, user.id, makeupDate, true),
       supabase
         .from("enrollments")
         .select("*", { count: "exact", head: true })
@@ -1429,7 +1449,9 @@ export async function linkMakeupToAbsence(input: {
         .eq("student_id", studentId)
         .or(`start_date.is.null,start_date.lte.${makeupDate}`)
         .or(`end_date.is.null,end_date.gte.${makeupDate}`),
-    ]);
+    ]));
+    if (!linkFacts) return { error: LOOKUP_FAILED };
+    const [teaching, { count: enrolled }] = linkFacts;
     if (!teaching.has(classId)) return { error: "담당 반이 아닙니다" };
     if (!enrolled) return { error: "이 반 수강생이 아닙니다" };
   }
@@ -1652,19 +1674,24 @@ export async function setAttendanceBulk(input: {
     const classIds = [...new Set(cells.map((c) => c.classId))];
     const studentIds = [...new Set(cells.map((c) => c.studentId))];
     // ⚠️ 수강 판정은 **세션 날짜 기준**(셀 액션과 동일 의미) — 반이동·종강 학생의 그날 기록을 막지 않는다.
-    const [teaching, enrolled] = await Promise.all([
+    const bulkFacts = await settle(Promise.all([
       // 담당 반 ∪ 그날 위임받은 반(0173a) — 셀 액션과 **같은 소스**여야 일괄이 개별과 다른 말을 하지 않는다.
-      userTaughtClassSet(supabase, user.id, sessionDate),
-      fetchInChunks<{ class_id: string; student_id: string }>(studentIds, (chunk) =>
+      userTaughtClassSet(supabase, user.id, sessionDate, true),
+      // 청크 안에서도 1000행에서 잘릴 수 있다(B2) — 페이지까지 나눈다(수정 계획 P1-A).
+      fetchAllPagedInChunks<{ class_id: string; student_id: string }>(studentIds, (chunk, from, to) =>
         supabase
           .from("enrollments")
-          .select("class_id, student_id")
+          .select("id, class_id, student_id")
           .in("class_id", classIds)
           .in("student_id", chunk)
           .or(`start_date.is.null,start_date.lte.${sessionDate}`)
-          .or(`end_date.is.null,end_date.gte.${sessionDate}`),
+          .or(`end_date.is.null,end_date.gte.${sessionDate}`)
+          .order("id")
+          .range(from, to),
       ),
-    ]);
+    ]));
+    if (!bulkFacts) return { error: LOOKUP_FAILED };
+    const [teaching, enrolled] = bulkFacts;
     const ownSet = teaching;
     const enrolledSet = new Set(enrolled.map((e) => `${e.student_id}::${e.class_id}`));
     // 🔴 보강 예약된 학생(0264a)은 수강행이 없어도 그날 그 반에 오기로 한 사람 — 단건 게이트(`hasReservedMakeup`)와 같은
@@ -1741,7 +1768,9 @@ export async function setAttendanceBulk(input: {
   // 반마다 주체(강사/데스크)를 한 번만 판정 — 같은 요청에 여러 반이 섞일 수 있다.
   const viaByClass = new Map<string, RecordedVia>();
   for (const classId of classIds) {
-    viaByClass.set(classId, await resolveWriteVia(supabase, user.id, classId, sessionDate));
+    const via = await settle(resolveWriteVia(supabase, user.id, classId, sessionDate));
+    if (!via) return { error: LOOKUP_FAILED };
+    viaByClass.set(classId, via);
   }
 
   // 데스크 게이트 — 당일 출결 화면만. 이미 찍힌 칸·유예 안 칸은 건너뛴다(blocked).
@@ -2055,20 +2084,25 @@ export async function setAttendanceRange(input: {
     const today = kstToday();
     // 담당 반은 **날짜마다** 다를 수 있다(그날 위임, 0173a) → 날짜별로 병렬 조회(B4).
     // 수강 여부는 기간이라 한 번에 받아 칸마다 JS로 판정한다(날짜별 쿼리 반복 금지).
-    const [teachingByDate, enrollments] = await Promise.all([
+    const rangeFacts = await settle(Promise.all([
       Promise.all(
-        dates.map(async (d) => [d, await userTaughtClassSet(supabase, user.id, d)] as const),
+        dates.map(async (d) => [d, await userTaughtClassSet(supabase, user.id, d, true)] as const),
       ),
-      fetchInChunks<{ class_id: string; student_id: string; start_date: string | null; end_date: string | null }>(
+      // 수강 이력 전부(날짜 거름 없음)라 청크 안에서도 1000행을 넘을 수 있다(B2) — 페이지까지 나눈다(수정 계획 P1-A).
+      fetchAllPagedInChunks<{ class_id: string; student_id: string; start_date: string | null; end_date: string | null }>(
         studentIds,
-        (chunk) =>
+        (chunk, from, to) =>
           supabase
             .from("enrollments")
-            .select("class_id, student_id, start_date, end_date")
+            .select("id, class_id, student_id, start_date, end_date")
             .in("class_id", classIds)
-            .in("student_id", chunk),
+            .in("student_id", chunk)
+            .order("id")
+            .range(from, to),
       ),
-    ]);
+    ]));
+    if (!rangeFacts) return { error: LOOKUP_FAILED };
+    const [teachingByDate, enrollments] = rangeFacts;
     const teaching = new Map(teachingByDate);
     const spans = new Map<string, { start: string | null; end: string | null }[]>();
     for (const e of enrollments) {
@@ -2396,7 +2430,9 @@ export async function setAttendanceRange(input: {
 
   const rangeViaByClass = new Map<string, RecordedVia>();
   for (const classId of classIds) {
-    rangeViaByClass.set(classId, await resolveWriteVia(supabase, user.id, classId, dates[0] ?? kstToday()));
+    const via = await settle(resolveWriteVia(supabase, user.id, classId, dates[0] ?? kstToday()));
+    if (!via) return { error: LOOKUP_FAILED };
+    rangeViaByClass.set(classId, via);
   }
 
   /** 빗금 칸 입력으로 실제로 상태를 옮긴 행 수 — 감사로그가 계획이 아니라 이 숫자를 쓴다(중간에 멈춰도). */
@@ -2693,6 +2729,7 @@ export async function searchMakeupStudents(
   const supabase = await createClient();
   const when = onDate && /^\d{4}-\d{2}-\d{2}$/.test(onDate) ? onDate : kstToday();
   if ((await accessLevelTenant(user.systemRole, "attendance")) === "scoped") {
+    // 검색은 쓰기가 아니다 — 조회 실패는 "결과 없음"으로 닫힌다(strict면 던져 화면 검색이 멈춘다 · 4-1 리뷰).
     const myClassIds = await userTaughtClassSet(supabase, user.id, when);
     if (!myClassIds.has(classId)) return [];
   }
