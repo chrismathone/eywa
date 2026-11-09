@@ -134,6 +134,83 @@ export async function loadStudentCarryRows(db: Db, period: string, studentId: st
   return studentRows(db, period, await liveInvoiceIds(db, period, studentId), studentId);
 }
 
+/** 보낸 이월이 있는 줄의 상태 — 확정·배분 저장 **전후**를 비교해 이번 저장이 그 이월을 무효로 만들었는지 본다. */
+export type CarryOutState = { valid: boolean; amount: number; toPeriod: string; period: string; studentName: string; className: string | null; allocationStale: boolean };
+
+/**
+ * 줄들 가운데 **다음 달로 보낸 이월이 있는 줄**의 유효 여부(회차 확정 화면과 같은 줄·같은 붙이기 — `studentRows`).
+ * 보낸 이월이 없으면 조회 한 번으로 끝난다(대부분의 확정·배분 저장). 조회 실패 = null(경고하지 않는다 — 저장은 이미 끝났다).
+ * 원장 2026-11-09 *"남은 한계는 근본 해결해"* — 확정·배분 저장으로 보낸 이월이 조용히 '이월 재확인'이 되고 다음 달 실납에서 빠지던 한계.
+ */
+export async function loadCarryOutStates(db: Db, termIds: readonly string[]): Promise<Map<string, CarryOutState> | null> {
+  const ids = [...new Set(termIds)].filter((id) => UUID.test(id));
+  if (ids.length === 0) return new Map();
+  try {
+    type Sending = { id: string; invoice: Embed<{ period: string; student_id: string; status: string | null }> };
+    const sending = await fetchInChunks<Sending>(ids, (chunk) =>
+      db.from("invoice_session_terms").select("id, invoice:invoice_id ( period, student_id, status )").gt("allocation_carry_out", 0).in("id", chunk));
+    const want = new Set<string>();
+    const pairs = new Map<string, { period: string; studentId: string }>();
+    for (const s of sending) {
+      const inv = one(s.invoice);
+      if (!inv || inv.status === "void") continue;
+      want.add(s.id);
+      pairs.set(`${inv.period}|${inv.student_id}`, { period: inv.period, studentId: inv.student_id });
+    }
+    const out = new Map<string, CarryOutState>();
+    // 학생마다 따로 읽는다 — 서로 기다릴 이유가 없다(B4).
+    const loaded = await Promise.all([...pairs.values()].map(async ({ period, studentId }) =>
+      ({ period, rows: await studentRows(db, period, await liveInvoiceIds(db, period, studentId), studentId) })));
+    for (const { period, rows } of loaded) {
+      if (!rows) return null;
+      for (const r of rows) {
+        if (!want.has(r.id) || !r.carryOut) continue;
+        out.set(r.id, {
+          valid: carryOutValid(r, r.carryOut.amount), amount: r.carryOut.amount, toPeriod: r.carryOut.toPeriod, period,
+          studentName: r.studentName, className: r.className, allocationStale: !!r.allocationStale,
+        });
+      }
+    }
+    return out;
+  } catch (error) {
+    logDbError(error, "billing.session-terms.carryOutStates", {});
+    return null;
+  }
+}
+
+/**
+ * 저장 **전에는 유효**했는데 **뒤에는 무효**가 된 보낸 이월의 경고(줄 id → 문구). 원래 무효였던 이월('이월 재확인')은 이번 저장 탓이 아니라 뺀다 —
+ * 단 저장 전 무효의 이유가 **배분 재확인뿐**이었는데 이번 저장으로 재확인이 풀렸는데도 무효면 알린다(배분을 다시 저장하면 될 줄 알았는데
+ * 확정액이 함께 커져 모자란 경우 — 적대 재리뷰 2026-11-09). 어느 쪽이든 모르면(null) 비운다.
+ */
+export function carryOutBreakWarnings(before: ReadonlyMap<string, CarryOutState> | null, after: ReadonlyMap<string, CarryOutState> | null): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!before || !after) return out;
+  for (const [id, b] of before) {
+    const a = after.get(id);
+    if (!a || a.valid) continue;
+    const staleOnlyBefore = !b.valid && b.allocationStale && !a.allocationStale;
+    if (!b.valid && !staleOnlyBefore) continue;
+    if (staleOnlyBefore) {
+      out.set(id, `${lineName(a)}: 수납 배분을 다시 저장했지만 ${month(a.toPeriod)}로 넘긴 ${won(a.amount)} 이월이 여전히 무효입니다(확정액보다 더 받은 몫이 모자람 · ${month(a.toPeriod)} 실납에서 빠짐) — 이월을 고치거나 취소하고, 다음 달 회차 확정을 확인해 주세요.`);
+      continue;
+    }
+    // 배분이 재확인 상태가 되어 무효가 된 것이면 고칠 것은 이월이 아니라 배분이다(배분을 다시 저장하면 저절로 다시 유효해진다 — 적대 리뷰 2026-11-09).
+    out.set(id, a.allocationStale
+      ? `${lineName(a)}: 수납 배분이 재확인 상태가 되어 ${month(a.toPeriod)}로 넘긴 ${won(a.amount)} 이월이 잠시 무효입니다(${month(a.toPeriod)} 실납에서 빠짐) — 이 달 수납 배분을 먼저 다시 저장해 주세요. 그래도 '이월 재확인'이면 이월을 고치거나 취소하세요.`
+      : `${lineName(a)}: 확정·배분이 바뀌어 ${month(a.toPeriod)}로 넘긴 ${won(a.amount)} 이월이 무효가 되었습니다 — ${month(a.toPeriod)} 실납에서도 빠졌습니다. 이월을 고치거나 취소하고, 다음 달 회차 확정을 확인해 주세요.`);
+  }
+  return out;
+}
+
+/** 저장 뒤 상태를 읽어 경고를 만든다 — 저장 전에 유효했거나 배분 재확인 때문에만 무효였던 보낸 이월만 다시 읽는다(대부분 0건이라 조회 없음). */
+export async function carryBreaksAfter(db: Db, before: ReadonlyMap<string, CarryOutState> | null): Promise<Map<string, string>> {
+  // 유효했던 줄 + 배분 재확인 때문에만 무효였던 줄(이번 저장으로 재확인이 풀렸는데도 무효면 알린다).
+  const ids = before ? [...before].filter(([, s]) => s.valid || s.allocationStale).map(([id]) => id) : [];
+  if (ids.length === 0) return new Map();
+  return carryOutBreakWarnings(before, await loadCarryOutStates(db, ids));
+}
+
 /** 낮춘 시수 되돌리기의 결과 — 시수·배분 모두 원래대로 · 시수만 되돌림(배분 재확인) · 되돌리지 못함(낮춘 시수로 남음). */
 export type CarryRevertResult = "reverted" | "reverted_needs_allocation" | "stuck";
 
