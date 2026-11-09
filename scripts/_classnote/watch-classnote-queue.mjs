@@ -125,7 +125,7 @@ const recentIssues = [];
 // noticeEnglishRoom=영어 개별 공지·교재요청서를 그 영어 반의 **반 방**으로 1:1 보내는 버전인가(2026-11-04 · 1.0.15, notice-class-route.mjs
 // `resolveNoticeEnglishTarget`). 앱은 이 키가 있을 때만 영어 대상에 반(`classId` + `subject: "english"`)을 싣는다 — 옛 워커는 그 대상을
 // 수학 반 보드로 보고 실패시킨다(오발송은 아니다).
-const WORKER_CAPS = { autoBoardSync: POST && autoSyncMode() === "on", classNoticeImages: true, noticeClassRoute: true, noticeEnglishRoom: true, noticeAttachments: true, nativePublish: true, reportAuthorClassPrefix: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true, classBoardSync: true, syncRequests: true, homeworkVideoArchive: true, homeworkVideoTenantFolders: true, homeworkVideoTenantAccounts: true, homeworkVideoReportLink: true, homeworkVideoLinkCompress: true, parentReply: true, parentReplySettings: true, parentReaction: true, attachmentMessageRepair: true };
+const WORKER_CAPS = { reportVideo: true, autoBoardSync: POST && autoSyncMode() === "on", classNoticeImages: true, noticeClassRoute: true, noticeEnglishRoom: true, noticeAttachments: true, nativePublish: true, reportAuthorClassPrefix: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true, classBoardSync: true, syncRequests: true, homeworkVideoArchive: true, homeworkVideoTenantFolders: true, homeworkVideoTenantAccounts: true, homeworkVideoReportLink: true, homeworkVideoLinkCompress: true, parentReply: true, parentReplySettings: true, parentReaction: true, attachmentMessageRepair: true };
 
 // 로그 타임스탬프 = KST(UTC+9) 고정 오프셋 — 연동 PC의 시스템 로케일/타임존과 무관하게 "YYYY-MM-DD HH:MM:SS".
 // watch.log이 UTC(…Z)로 찍혀 실제 시각과 9시간 어긋나 보이던 문제(2026-07-22 원장 제보). DB/하트비트는 ISO 유지(기계용).

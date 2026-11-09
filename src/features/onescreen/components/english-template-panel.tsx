@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { SearchableSelect, type ComboOption } from "@/components/ui/searchable-select";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { builtinTemplateLabelKey, isHiddenBuiltinTemplate, type ReportTemplate } from "@/features/report-templates/defaults";
-import { EnglishMediaButton } from "./english-media-button";
+import { EnglishMediaButton, EnglishVideoButton } from "./english-media-button";
 import { JjStatusLine, type EnglishJjStatus } from "./english-jj-status-line";
 import { JjExamPicker, type JjExamPickState } from "./english-jj-exam-picker";
 
@@ -44,8 +44,8 @@ export type EnglishTemplateState = {
   jjPick: JjExamPickState | null;
   /** 짝을 이을 수 있는 사람인가 — 미연결 줄에 짝 잇기 링크를 달지(아니면 관리자에게 요청하라고 적는다). */
   canLinkJj: boolean;
-  /** 글 속 사진·PDF — 올리는 중 · 첨부가 가득 참(서버 상한과 같은 수). */
-  media: { busy: boolean; full: boolean };
+  /** 글 속 사진·PDF — 올리는 중 · 첨부가 가득 참(서버 상한과 같은 수) · 영상이 이미 있음(한 장에 하나, 2026-11-06). */
+  media: { busy: boolean; full: boolean; hasVideo: boolean };
 };
 
 export type EnglishTemplateHandlers = {
@@ -64,6 +64,8 @@ export type EnglishTemplateHandlers = {
   onJjPick: (pick: string[] | null) => void;
   /** 고른(사진이면 자른) 파일 — 부모가 올리고 글의 커서 줄에 첨부 자리를 넣는다. */
   onInsertFile: (file: File) => void;
+  /** 고른 영상 — 부모가 첨부로 올린다(글 속 자리 줄 없음 · ClassNote 글의 영상 칸으로 따로 붙는다). */
+  onVideoFile: (file: File) => void;
 };
 
 /** 알림 칩 한 개 — 모양이 모두 같다(앰버 = 사람이 손쓸 일). */
@@ -185,6 +187,10 @@ export function EnglishTemplatePanel({
         <span className="text-text-faint min-w-0 flex-1 text-xs break-keep">
           {state.media.full ? t("os.media.full") : t("os.media.help")}
         </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <EnglishVideoButton disabled={state.media.full || state.media.hasVideo} busy={state.media.busy} onFile={handlers.onVideoFile} />
+        <span className="text-text-faint min-w-0 flex-1 text-xs break-keep">{t(state.media.hasVideo ? "os.video.has" : "os.video.help")}</span>
       </div>
       <JjStatusLine jj={state.jj} canLink={state.canLinkJj} onRetry={handlers.onJjRetry} />
       {state.jjPick ? <JjExamPicker state={state.jjPick} onPick={handlers.onJjPick} /> : null}

@@ -20,6 +20,14 @@ import { resolveSendWindow, isWithinSendWindow, formatSendWindow } from "./send-
 import { hasMentText } from "./ment-text.mjs";
 import { CURRENT_SHARE_BASE, shareUrlVariants } from "./share-bases.mjs";
 import { fetchVideoSubmitLine, reportPostContent } from "./report-video-line.mjs";
+import { attachedVideoOf, isVideoName, videoUploadWaitMs } from "./report-video.mjs";
+import { createWriteStream } from "node:fs";
+import { stat, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { decideRoute, pickRouteClass, ROUTE_BLOCKED_MESSAGE } from "./class-route-decide.mjs";
 import { crossCheckOthers, isClassRouteEligible, resolveClassTargets } from "./classnote-class-route.mjs";
 import { classRouteHaltReason, haltClassRoute } from "./class-route-halt.mjs";
@@ -221,6 +229,53 @@ export async function isShowAttachmentsEnabled(sql, tenant) {
 const IMG_ATTACHMENT_RE = /\.(jpe?g|png|webp|gif)(\?|$)/i;
 
 /**
+ * 보고서 영상 하나 → ClassNote 영상 칸(2026-11-06). 앱 서명 주소에서 **임시 파일로** 받아(50MB 넘는 버퍼는 Playwright가 거절)
+ * 작성 화면의 사진·영상 입력에 경로로 넣고, 영상 응답(그림 응답이 아닌 것)의 키를 잡는다. 임시 파일은 늘 지운다.
+ * 반환 `{ ok, video }` 또는 `{ ok:false, error }`(사람 문장 — classnote_error에 그대로 남는다).
+ */
+async function uploadReportVideo(adminPage, file, { log, studentName, deadline }) {
+  // 🔴 마감(deadline) = 게시 1건 상한(POST_TIMEOUT_MS)보다 **먼저** 끝나게(적대적 리뷰 2026-11-06). 상한을 넘기면 행은 failed로
+  //    넘어가지만 이 호출은 같은 작성 화면에서 계속 돌아, 다음 보고서의 응답 키를 잡거나 늦게 게시할 수 있다.
+  const left = () => deadline - Date.now();
+  const ext = (String(file.name).split(".").pop() || "mp4").toLowerCase().replace(/[^a-z0-9]/g, "") || "mp4";
+  const tmp = path.join(tmpdir(), `aywa-report-video-${randomUUID()}.${ext}`);
+  const started = Date.now();
+  try {
+    try {
+      const signal = AbortSignal.timeout(Math.max(1_000, Math.min(120_000, left() - 60_000)));
+      const res = await fetch(file.url, { signal });
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      await pipeline(Readable.fromWeb(res.body), createWriteStream(tmp), { signal });
+    } catch (e) {
+      log(`  · ${studentName}: 영상 "${file.name}" 다운로드 실패 — ${e.message}`);
+      return { ok: false, error: `영상 첨부 실패 — 영상을 내려받지 못했습니다("${file.name}")` };
+    }
+    const size = (await stat(tmp)).size;
+    if (left() < 60_000) return { ok: false, error: "영상 첨부 실패 — 영상을 받는 데 시간이 너무 걸렸습니다(다시 시도합니다)" };
+    // 작성 화면을 새로 연다 — 같은 화면에 이미 보고서 그림을 넣어 둔 상태라 화면이 영상을 함께 받지 않을 수 있다
+    // (사진·영상이 한 칸이다). 그림·파일의 키는 이미 받아 두었으므로 새로 열어도 잃는 것이 없다.
+    try {
+      await adminPage.goto(`${CLASSNOTE_BASE}/service/report/add`, { waitUntil: "domcontentloaded", timeout: 30000 });
+    } catch {
+      return { ok: false, error: "영상 첨부 실패 — ClassNote 작성 화면을 열지 못했습니다" };
+    }
+    await adminPage.locator("input[data-testid='media-attachment-add-input']").waitFor({ state: "attached", timeout: 15000 }).catch(() => {});
+    const up = await uploadToKageDetailed(
+      adminPage,
+      "media-attachment-add-input",
+      { name: file.name, filePath: tmp },
+      { subject: "영상", waitMs: Math.min(videoUploadWaitMs(size), left() - 30_000), accept: (j) => !j?.info?.img },
+    );
+    const video = up.ok ? attachedVideoOf(up.kage, { name: file.name, size }) : null;
+    log(`  · ${studentName}: 영상 ${(size / 1024 / 1024).toFixed(1)}MB ${video ? "업로드" : "업로드 실패"} (${Math.round((Date.now() - started) / 1000)}초)`);
+    if (!video) return { ok: false, error: up.reason || "영상 첨부 실패 — ClassNote가 영상을 받지 않았습니다" };
+    return { ok: true, video };
+  } finally {
+    await unlink(tmp).catch(() => {});
+  }
+}
+
+/**
  * 리포트를 **내부 API로 게시**(2026-07-29부터 **모든** 리포트의 유일 경로) — 스샷=`attached_images` + 파일=`attached_files` 한 POST.
  * ① 스샷 buffer → kage(`img`) ② aywa 내부 엔드포인트로 파일 signed URL → fetch → kage(`etc`) ③ board→child→enrollment
  * 해석 후 postClassnoteReport(이중 계정이면 전원). 반환 { ok, error? }. 리버스엔지니어링·학원이 POC 검증(2026-07-16).
@@ -228,7 +283,8 @@ const IMG_ATTACHMENT_RE = /\.(jpe?g|png|webp|gif)(\?|$)/i;
  *    완결(ParentReportCard). ClassNote가 attached_images를 가로로 나열해 세로가 안 됐던 문제를 스샷 내 배치로 우회.
  *    → 이미지만 있는 리포트는 `fileAtts`가 비어 파일 첨부 없이 **스샷만** 게시된다(경로는 동일).
  */
-export async function sendReportViaApi(adminPage, { report, studentName, boardId, centerId = null, screenshot, shareUrl, videoUrl = null, base, fileAtts = [], children, boardFallback = null, verifyDedup = true, targets = null, log }) {
+export async function sendReportViaApi(adminPage, { report, studentName, boardId, centerId = null, screenshot, shareUrl, videoUrl = null, base, fileAtts = [], videoAtts = [], children, boardFallback = null, verifyDedup = true, targets = null, log }) {
+  const sendStarted = Date.now();
   // kage 업로드는 작성폼 네이티브 file input 경유(수동 FormData는 415) → adminPage를 add 폼으로 이동.
   // 이후 API 호출(resolve·post)은 same-origin이라 add 폼에서도 그대로 유효.
   await adminPage.goto(`${CLASSNOTE_BASE}/service/report/add`, { waitUntil: "domcontentloaded", timeout: 30000 });
@@ -268,7 +324,9 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
   // error는 DB(lesson_reports.classnote_error)에 남아 발송 콘솔·원격에서 그대로 읽힌다 = 물리 접근 불필요.
   // 무첨부 리포트(local 게시 모드의 기본 케이스, 2026-07-28)는 이 블록을 통째로 건너뛴다(스샷만 게시).
   const attachedFiles = [];
-  if (fileAtts.length) {
+  // 영상(2026-11-06) — 글의 영상 칸(attached_video) 하나. 같은 내부 엔드포인트가 주는 주소로 받는다(문서 칸으로는 올리지 않는다).
+  let attachedVideo = null;
+  if (fileAtts.length || videoAtts.length) {
   let epStatus = 0;
   const ep = await fetch(`${base}/api/internal/report-attachments/${report.id}`, {
     redirect: "error", headers: INTERNAL_SECRET ? { "x-eywa-internal": INTERNAL_SECRET } : {},
@@ -298,7 +356,9 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
     return { ok: false, error: `첨부 목록 조회 실패 — ${why}` };
   }
   const failures = [];
-  for (const f of epFiles) {
+  // 문서 칸에는 영상이 아닌 파일만(첨부 표시가 켜져 있을 때 = fileAtts가 있을 때만) — 영상은 아래에서 영상 칸으로.
+  const docFiles = fileAtts.length ? epFiles.filter((f) => !isVideoName(f.name)) : [];
+  for (const f of docFiles) {
     let bytes;
     try {
       const res = await fetch(f.url);
@@ -318,9 +378,20 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
       log(`  · ${studentName}: 파일 "${f.name}" ClassNote 업로드 실패 — ${e.message}`);
     }
   }
-  if (attachedFiles.length !== fileAtts.length) log(`  · ${studentName}: 파일 ${attachedFiles.length}/${fileAtts.length} 업로드`);
-  if (!attachedFiles.length) return { ok: false, error: `파일 첨부 실패 — ${failures.join(" / ") || "원인 불명"}` };
-  } // if (fileAtts.length)
+  if (fileAtts.length) {
+    if (attachedFiles.length !== fileAtts.length) log(`  · ${studentName}: 파일 ${attachedFiles.length}/${fileAtts.length} 업로드`);
+    if (!attachedFiles.length) return { ok: false, error: `파일 첨부 실패 — ${failures.join(" / ") || "원인 불명"}` };
+  }
+  if (videoAtts.length) {
+    // 🔴 영상을 못 올리면 **보내지 않는다**(영상 없이 나가면 선생님이 붙인 영상이 조용히 빠진다) — 재시도에 맡긴다.
+    const vf = epFiles.find((f) => isVideoName(f.name));
+    if (!vf) return { ok: false, error: "영상 첨부 실패 — 앱이 영상 주소를 주지 않았습니다(스토리지 서명 실패)" };
+    // 마감 = 이 게시 호출 시작 + 상한 − 3분(게시·중복 확인 몫)
+    const v = await uploadReportVideo(adminPage, vf, { log, studentName, deadline: sendStarted + POST_TIMEOUT_MS - 3 * 60_000 });
+    if (!v.ok) return { ok: false, error: v.error };
+    attachedVideo = v.video;
+  }
+  } // if (fileAtts.length || videoAtts.length)
 
   // 3) board → child → enrollment
   // 이름으로 못 찾으면 **보드가 곧 매핑** 폴백(생년 대조 통과분만) — 학부모가 ClassNote에서 원아 이름을
@@ -374,7 +445,7 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
       // 본문 = 공유 링크 한 줄, 앱이 영상 줄을 주면 두 줄('보고서 :'·'영상첨부 :' — 2026-10-03부터 올리기 사이트 주소 `/v`)로 낸다(report-video-line.mjs). 아래 확인들은 세 모양을 다 알아본다.
       cls: boardId, child: child.id, enrollment: enrollment.id, content: reportPostContent(shareUrl, videoUrl),
       dateWritten: report.report_date, authorName: report.teacher_name || DEFAULT_AUTHOR_NAME,
-      attachedImages, attachedFiles,
+      attachedImages, attachedFiles, attachedVideo,
     });
     // 실패 사유는 **응답 본문까지** 남긴다(2026-07-27) — status만 적으면 왜 거부됐는지 영영 모른다.
     // 화면은 humanizeClassnoteError가 한글로 요약하고 원문은 '자세히'로만 보여준다(raw 노출 금지 규약).
@@ -901,7 +972,10 @@ export async function processQueueOnce(sql, browser, opts) {
       // ── 게시 = 내부 API 단일 경로(2026-07-29, Cloud Run 분기 제거) ──
       // 파일 첨부(비이미지)는 showAttachments ON일 때만 싣는다(기존 정책 유지).
       // ⚠️ 이미지 첨부만 있는 리포트는 파일로 싣지 않는다(2026-07-22 방향 B) — 이미지는 /r 스샷 하단에 크게 실림.
-      const fileAtts = (r.attachments ?? []).filter((a) => a?.name && !IMG_ATTACHMENT_RE.test(a.name));
+      const nonImageAtts = (r.attachments ?? []).filter((a) => a?.name && !IMG_ATTACHMENT_RE.test(a.name));
+      // 영상(2026-11-06) = 글의 영상 칸으로 **첨부 표시 설정과 무관하게** 싣는다(한 장에 하나 — 앱이 막지만 여기서도 첫 하나만).
+      const videoAtts = nonImageAtts.filter((a) => isVideoName(a.name)).slice(0, 1);
+      const fileAtts = nonImageAtts.filter((a) => !isVideoName(a.name));
       // ⚠️ `!boardId`가 아니라 null/빈문자만 본다 — 보드 id가 숫자 0이면 falsy라 정상 건을 보류시킨다.
       // ⚠️ 재시도 카운트를 **올린다**: 예전엔 조건부 경로였지만 이제 전건이 지나므로, 카운트 없이 재큐하면
       //    게이트 결함 1건이 15초마다 영원히 되돌아오는 무한 루프가 된다(로그인 폭풍 유발). 3회면 failed로 고정돼
@@ -938,7 +1012,7 @@ export async function processQueueOnce(sql, browser, opts) {
         // 발송용 이름(0217a) — 게시 작성자명만 바꾼다. DB의 teacher_name(귀속 축)은 불변(2-b 주석).
         report: { ...r, teacher_name: authorNameFor(r) },
         studentName, boardId, centerId, screenshot: buf, shareUrl: `${shareBase}/r/${r.share_token}`, videoUrl,
-        base, fileAtts: sendFiles, children: childrenCache, log,
+        base, fileAtts: sendFiles, videoAtts, children: childrenCache, log,
         // 첫 발송만 3중 방어(멱등·사후확인) — classnote_sent_at 있는 행 = 의도적 재발송이라 content 판정이
         // 옛 게시물에 오염된다(sendReportViaApi 4) 주석). 재발송은 status 코드를 신뢰한다.
         verifyDedup: !r.classnote_sent_at,
@@ -982,7 +1056,7 @@ export async function processQueueOnce(sql, browser, opts) {
       if (result.ok) {
         await sql`update lesson_reports set classnote_status='success', classnote_sent_at=now(), classnote_error=null where id=${r.id}`;
         summary.success++;
-        log(`    → success (내부 API${classTarget ? " · 반별" : ""}${sendFiles.length ? `, 파일 ${sendFiles.length}건` : ""}${videoUrl ? " · 영상첨부 줄" : ""})`);
+        log(`    → success (내부 API${classTarget ? " · 반별" : ""}${sendFiles.length ? `, 파일 ${sendFiles.length}건` : ""}${videoAtts.length ? " · 영상" : ""}${videoUrl ? " · 영상첨부 줄" : ""})`);
       } else if (result.partial) {
         // 🔴 이중 계정(부모·본인) 학생에서 **일부 원아는 이미 받았다**. 재시도하면 그 집에 같은 글이 또 간다
         // (ClassNote는 삭제·수정 불가) → 자동 재시도 없이 failed 고정, 사람이 알림장에서 확인 후 판단한다.
