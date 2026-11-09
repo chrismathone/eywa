@@ -2,7 +2,7 @@
 
 ## 2026-11-09 — 업무 완성도 1단계: 의무 장부(duty_items) + 강사 홈 '오늘 내 업무'
 
-- 원장 구상(선생님 → 과목 관리자 → 원장 완료도 관찰 · [결정](decisions/duties.md)). **s2_0039**(⏳ 미적용 · 앱보다 먼저): `duty_items`(학생×종류×회차 분모+분자) · `duty_daily`(일별 스냅숏) · RPC 6개(열기·맞춤·void·늦음 사다리→staff_tasks `duty_late`·스냅숏·집계) — 할 일 0377a와 같은 service_role 전용.
+- 원장 구상(선생님 → 과목 관리자 → 원장 완료도 관찰 · [결정](decisions/duties.md)). **s2_0040**(⏳ 미적용 · 앱보다 먼저): `duty_items`(학생×종류×회차 분모+분자) · `duty_daily`(일별 스냅숏) · RPC 6개(열기·맞춤·void·늦음 사다리→staff_tasks `duty_late`·스냅숏·집계) — 할 일 0377a와 같은 service_role 전용.
 - 생성기 = 30분 cron `/api/cron/duties`(`src/features/duties/server/sync.ts`): 오늘(새벽 3시 전엔 어제도)의 출결 입력·수업보고서 작성·보고서 발송 의무를 시간표·명단으로 만들고(`model/daily.ts` — `reportWorkObligations`·`resolveTaughtBy` 재사용 · AI 없음) 원 표의 사실로 닫는다. 담당 = 그 교시 실제 수업자(없으면 담임) · 기한 당일 자정 / 발송 다음 날 정오 · 기한 지남 → 할 일(기한 +1일) → 관리자 +3 → 원장 +7. 기한 지난 열린 의무가 남은 지난 날(7일)은 다시 맞춰 닫는다.
 - 강사 홈(원스크린·ECS) '오늘 내 업무 N/M · 기한 초과 K' 줄(`components/my-duties-strip*.tsx` · GET `/api/duties/mine`) — 학생별 칸 펼침. 표가 없으면 줄이 안 선다. DB 전수 조사로 일간·월간·건별 카탈로그 확정, 주간 의무는 없음(일간 7일 접기). 시안 `work/auto-work-design/completion-flow.local.html`.
 

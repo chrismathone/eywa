@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { DutyItemView, DutyKind, DutyPeriod, DutyStatus } from "../kinds";
 
 /**
- * 의무 장부 조회 — 표는 서버 전용(s2_0039 정책 0개)이라 관리 키로 읽는다. 🔴 모든 조회에 지점(tenant_id) 조건 —
+ * 의무 장부 조회 — 표는 서버 전용(s2_0040 정책 0개)이라 관리 키로 읽는다. 🔴 모든 조회에 지점(tenant_id) 조건 —
  * 사람 확인(내 것 / 현황 권한)은 부르는 쪽이 `getStaffTaskViewer`로 먼저 한다(할 일과 같은 문).
  */
 export type DutyCount = { ownerId: string | null; kind: string; period: DutyPeriod; total: number; done: number; late: number };
