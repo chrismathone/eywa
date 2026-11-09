@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { METRICS, METRIC_LABELS, OPERATION_METRICS, PARTICIPATION_METRICS } from "../model/config";
 import { familyRates, familyBonus } from "../model/family-loyalty";
+import { RankingSettings } from "./ranking-settings";
 import { scoreRaws } from "../model/calc";
 import type { getContributionSettingsPreview } from "../server/queries";
 import { saveContributionSettings } from "../server/actions";
@@ -29,7 +30,8 @@ export function ContributionSettings({ data }: { data: NonNullable<Awaited<Retur
       const r = await saveContributionSettings(config, data.revision); setMessage(r.error ?? r.message ?? ""); router.refresh();
     }); }} className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(22rem,1fr)]">
       <fieldset disabled={!data.gate.canWrite || !data.ready || busy} className="min-w-0 space-y-5 disabled:opacity-60">
-        <section className="rounded-xl border border-amber/40 bg-amber-soft p-5 text-foreground"><h2 className="font-bold">가족 동시 재원 · 가장 높은 기본 배점</h2>
+        <RankingSettings config={config} onChange={ranking=>setConfig({...config,ranking})} />
+        <section className="rounded-xl border border-amber/40 bg-amber-soft p-5 text-foreground"><h2 className="font-bold">기존 누적 활동 기록 · 가족 가점</h2>
           <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={family.enabled} onChange={e=>setConfig({...config,family:{...family,enabled:e.target.checked}})} />가족 재원 가점 반영</label>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">{([['two','2명 재원'],['three','3남매 재원'],['fourPlus','4명 이상 재원']] as const).map(([key,label])=><label key={key} className="text-sm">본인 포함 {label}<input aria-label={`${label} 가족 배점`} type="number" min="0" max="10000" step="any" required disabled={!family.enabled} value={family[key]} onChange={e=>setConfig({...config,family:{...family,[key]:Number(e.target.value)}})} className={`${fieldClass} mt-2 w-full`} /></label>)}</div>
           <p className="mt-3 text-xs">기본값 100·250·400점. 현재 함께 수강 중인 가족 수에 따라 한 번 가산합니다. 매달 중복 누적하지 않으며, 과거 활동 기록을 수정하지 않습니다. 가족 수가 많을수록 같은 점수 또는 더 높은 점수를 설정하세요.</p>
