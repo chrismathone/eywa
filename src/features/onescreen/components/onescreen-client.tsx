@@ -73,6 +73,7 @@ import {
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { resizeImageForUpload } from "../resize-image";
 import { ENGLISH_DRAFT_TEXTAREA_ID, REPORT_ATTACHMENT_MAX, uniqueAttachmentName } from "../attachment-utils";
+import { hasVideoAttachment } from "../report-video";
 import type { CellState, OneScreenStudent, Subject } from "../types";
 import dynamic from "next/dynamic";
 import { OneScreenTopBar } from "./top-bar";
@@ -5513,6 +5514,7 @@ selected ? (
                         media: {
                           busy: uploadingAttKey === rowKey(selected.id, previewSubject.name),
                           full: (previewReport?.attachments?.length ?? 0) >= REPORT_ATTACHMENT_MAX,
+                          hasVideo: hasVideoAttachment(previewReport?.attachments),
                         },
                       }}
                       notice={templateNotice ?? (templateListFailed ? t("os.tpl.listFailed") : null)}
@@ -5533,6 +5535,8 @@ selected ? (
                         onJjPick: (pick) =>
                           void jj.choose(selected.id, pick, { outOfClass: rowOutOfClass(selected, previewSubject) }),
                         onInsertFile: (file) => void insertEnglishMediaFor(selected, previewSubject.name, file),
+                        // 영상(2026-11-06) — 사진·PDF와 같은 올리기 함수(저장 보장·게이트 동일) · 글 속 자리 줄은 넣지 않는다.
+                        onVideoFile: (file) => void addAttachmentsFor(selected, previewSubject.name, [file]),
                       }}
                     />
                   ) : null

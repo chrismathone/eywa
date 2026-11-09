@@ -14,10 +14,12 @@ import "server-only";
  */
 
 import { randomUUID } from "node:crypto";
-import { createUploadTicket, MEDIA_KIND, verifyUploadedObject } from "@/lib/storage/media-storage";
+import { createUploadTicket, verifyUploadedObject } from "@/lib/storage/media-storage";
 import { isTenantReportAttachmentPath } from "@/lib/storage/legacy-audio-path";
 import type { UploadTicket } from "@/lib/storage/types";
 import type { NoticeAttachment } from "../notice-attachments";
+// 버킷 바깥 상한은 영상 때문에 100MB(2026-11-06) — 공지 이미지는 종전 20MB 그대로.
+import { REPORT_FILE_MAX_BYTES } from "../report-video";
 
 const KIND = "report_attachment" as const;
 
@@ -44,7 +46,7 @@ export async function issueNoticeImageTicket(
 ): Promise<{ ticket?: UploadTicket; error?: string }> {
   const ct = (input.contentType ?? "").toLowerCase();
   if (!IMAGE_CT.has(ct)) return { error: CT_ERROR };
-  if (!Number.isFinite(input.size) || input.size <= 0 || input.size > MEDIA_KIND[KIND].maxBytes)
+  if (!Number.isFinite(input.size) || input.size <= 0 || input.size > REPORT_FILE_MAX_BYTES)
     return { error: "이미지가 너무 큽니다 (최대 20MB)" };
 
   const file = input.fileName?.trim() || `${randomUUID()}.${EXT_BY_CT[ct]}`;
@@ -73,6 +75,7 @@ export async function verifyNoticeImage(
     // 실제 올라온 객체가 이미지인지 재확인(kind 공용 allowCT는 문서·오디오까지 통과시킨다).
     // ⚠️ Supabase 백엔드는 verify가 best-effort(빈 값)라 값이 있을 때만 검사.
     if (verified.contentType && !IMAGE_CT.has(verified.contentType.toLowerCase())) return { error: CT_ERROR };
+    if (verified.size > REPORT_FILE_MAX_BYTES) return { error: "이미지가 너무 큽니다 (최대 20MB)" };
     // Supabase 백엔드는 size도 0으로 오므로 클라가 보낸 크기로 폴백(표시용 값일 뿐).
     const size = verified.size || Math.max(0, Math.floor(Number(input.size) || 0));
     return { attachment: { path: input.path, name: (input.name || "첨부").slice(0, 120), size } };
