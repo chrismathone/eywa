@@ -22,6 +22,6 @@ export const getContributionGate = cache(async () => {
 
 export async function requireContributionWrite() {
   const gate = await getContributionGate();
-  if (!gate?.canWrite) throw new Error("기여도 설정을 변경할 권한이 없습니다");
+  if (!gate?.canWrite) throw new Error("충성도 설정을 변경할 권한이 없습니다");
   return gate;
 }

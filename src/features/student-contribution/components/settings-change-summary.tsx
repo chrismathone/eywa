@@ -1,3 +1,4 @@
+import { familyRates } from "../model/family-loyalty";
 import { METRICS, type ContributionConfig } from "../model/config";
 import { metricLabels, numberText } from "./presentation";
 
@@ -8,6 +9,8 @@ export function SettingsChangeSummary({ before, after, delta }: { before: Contri
     const label = (rate: typeof old) => `${numberText(rate.points)}점${rate.enabled ? "" : " (평가 제외)"}`;
     return [`${metricLabels[id]}: ${label(old)} → ${label(next)}`];
   });
+  const oldFamily = familyRates(before), newFamily = familyRates(after);
+  if (JSON.stringify(oldFamily) !== JSON.stringify(newFamily)) changes.push(`가족 가점: ${oldFamily.two}·${oldFamily.three}·${oldFamily.fourPlus}점 → ${newFamily.two}·${newFamily.three}·${newFamily.fourPlus}점 (${newFamily.enabled ? "반영" : "제외"})`);
   const rules = [before.referrals.months !== after.referrals.months ? `소개 재인정 간격: ${before.referrals.months} → ${after.referrals.months}개월` : null,
     before.referrals.key !== after.referrals.key ? `소개 중복 기준: ${after.referrals.key === "student" ? "같은 학생" : "같은 학생 + 같은 과목"}` : null,
     before.attendance.allowLate !== after.attendance.allowLate ? `지각 개근 인정: ${after.attendance.allowLate ? "인정" : "제외"}` : null].filter(Boolean);
