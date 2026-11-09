@@ -55,7 +55,7 @@ export const ONTOLOGY_MAP = `## 온톨로지 — 이 학원의 자료를 읽는 
 
 ### 세는 규칙 — onto_* 보기에 미리 계산돼 있다(원생·출결·수강 수는 이 보기로 센다)
 - onto_students: 원생 한 사람 한 줄. counted = 집계에 넣는 원생(테스트 원생 is_test · 중복 병합으로 흡수된 원생 · 수업 기록 없는 장부 정리 퇴원을 뺀다). status_label = 예비·상담완료·재원·휴원·퇴원.
-  exit_kind = real(실제 퇴원) · bookkeeping(장부 정리 — 퇴원으로 세지 않는다) · system_bulk(시스템 일괄 처리 날짜 미상 — 월별 퇴원 추이에서 뺀다) · null(퇴원 아님). withdrawn_on = 한국 날짜 퇴원일.
+  exit_kind = real(실제 퇴원) · bookkeeping(장부 정리 — 퇴원으로 세지 않고 말하지도 않는다 · 끝난 수강이 없거나, 있어도 출결·수업료 청구가 한 번도 없다고 표식된 정리 퇴원) · system_bulk(시스템 일괄 처리 날짜 미상 — 월별 퇴원 추이에서 뺀다) · null(퇴원 아님). withdrawn_on = 한국 날짜 퇴원일.
 - 한 원생은 여러 반·과목을 들어도 학원 인원에서는 한 명이다(count(distinct)).
 - onto_attendance: 유효 출결만 — 정정은 새 줄로 쌓이니 학생·반·수업일·교시마다 가장 늦게 기록한 한 줄.
 - onto_enrollments: 수강 + 반 과목 + 오늘 명단(on_roster_today, 휴원 포함 · 반이동은 이동일부터 빠짐) · 오늘 수업 대상(active_today, 휴원 제외).

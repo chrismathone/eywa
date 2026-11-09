@@ -19,6 +19,10 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toMatch(/비서 의견\(advice\) 블록을 꼭 하나/);
     expect(prompt).toMatch(/형식적인 보고서 작성기가 아니다/);
   });
+  it("장부 정리 퇴원은 세지도 말하지도 않는다(원장 2026-11-09 \"왜 자꾸 언급하나\")", () => {
+    expect(prompt).toMatch(/장부 정리 퇴원\(onto_students\.exit_kind='bookkeeping'.*\*\*언급하지 않는다\*\*/);
+    expect(prompt).toMatch(/설명 문단·callout·각주도 쓰지 않는다/);
+  });
   it("표 목록 — 설명 있는 표 · 내부 표 · 설명 없는 새 표", () => {
     expect(prompt).toContain("- students: 원생 기본 정보");
     expect(prompt).toMatch(/내부 기록 표.*sync_queue/);

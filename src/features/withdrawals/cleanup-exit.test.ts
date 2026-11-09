@@ -35,6 +35,13 @@ describe("isBookkeepingOnlyExit — 수업 기록이 없는 장부 정리만 뺀
     expect(isBookkeepingOnlyExit({ withdrawalMetadata: { ...cleanup, reason: "relocation" }, hasEnrollmentHistory: false })).toBe(false);
     expect(isBookkeepingOnlyExit({ withdrawalMetadata: { memo: CLEANUP_WITHDRAWAL_MEMO }, hasEnrollmentHistory: false })).toBe(true);
   });
+  it("끝난 수강이 있어도 '수업 흔적 없음' 표식(출결·수업료 청구 0)이면 장부 정리 — 뺀다(원장 2026-11-09, 07-15 정리 26명)", () => {
+    expect(isBookkeepingOnlyExit({ withdrawalMetadata: { ...cleanup, noClassRecord: true }, hasEnrollmentHistory: true })).toBe(true);
+    // 표식은 진짜 true만 — 글자 "true"·다른 값은 아니다.
+    expect(isBookkeepingOnlyExit({ withdrawalMetadata: { ...cleanup, noClassRecord: "true" }, hasEnrollmentHistory: true })).toBe(false);
+    // 장부 정리가 아닌 퇴원(사유를 고친 경우)은 표식이 남아 있어도 실제 퇴원이다.
+    expect(isBookkeepingOnlyExit({ withdrawalMetadata: { reason: "relocation", memo: CLEANUP_WITHDRAWAL_MEMO, noClassRecord: true }, hasEnrollmentHistory: true })).toBe(false);
+  });
   it("장부 정리가 아니면 수업 기록이 없어도 퇴원이다", () => {
     expect(isBookkeepingOnlyExit({ withdrawalMetadata: { reason: "relocation" }, hasEnrollmentHistory: false })).toBe(false);
     expect(isBookkeepingOnlyExit({ withdrawalMetadata: null, hasEnrollmentHistory: false })).toBe(false);
