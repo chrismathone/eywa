@@ -15,6 +15,8 @@ import {
 } from "@/features/billing/refund-request";
 import { saveRefundRequest, type RefundActionState } from "@/features/billing/server/refund-actions";
 import { DeleteRefundButton, PrintRefundButton } from "./refund-buttons";
+import { LinkedRequestBanner, type LinkedRequestView } from "./linked-request-banner";
+import { LINKED_CLEAR_WARNING, LINKED_DELETE_CONFIRM, LINKED_DELETE_CONFIRM_CANCELED } from "@/features/withdrawal-reports/refund-decision";
 import { RefundStudentPicker } from "./refund-student-picker";
 
 // 종이 서식("환불처리요청서") 레이아웃을 재현한 시트 — 읽기(뷰) ↔ 인라인 편집 한 컴포넌트(WYSIWYG).
@@ -44,6 +46,8 @@ export function RefundSheet({
   userId,
   canWrite = false,
   startEditing = false,
+  completionLock = null,
+  linked = null,
 }: {
   data: RefundRequestData;
   id?: string;
@@ -51,6 +55,16 @@ export function RefundSheet({
   userId: string;
   canWrite?: boolean;
   startEditing?: boolean;
+  /**
+   * 환불완료일자 잠금 사유(원장 2026-11-06) — 퇴원보고서에 이어진 요청서는 그 데스크 담당과 원장만 넣거나 지운다. 잠기면 수정 중에도 칸 대신
+   * 지금 값과 사유를 보이고, 같은 값을 숨은 칸으로 보낸다(저장해도 바뀌지 않는다 · 서버 저장 액션·DB 트리거가 다시 막는다).
+   */
+  completionLock?: string | null;
+  /**
+   * 퇴원보고서에 이어진 요청서(리뷰 r2 I4·I6·B1) — 맨 위 경고(대체됨 · 잠금 사유)·상한 · 고칠 수 없으면 `editLock`(수정 단추 대신 사유) ·
+   * 지울 수 없으면 `deleteLock`(삭제 단추 없음 · 사유). 이어지지 않은 요청서는 null.
+   */
+  linked?: (LinkedRequestView & { editLock: string | null; deleteLock: string | null }) | null;
 }) {
   const [editing, setEditing] = useState(startEditing);
   const [state, formAction] = useActionState<RefundActionState, FormData>(saveRefundRequest, undefined);
@@ -114,6 +128,18 @@ export function RefundSheet({
       <>{V(value)}</>
     );
 
+  // 수정 중에도 바꿀 수 없는 칸(리뷰 r3 R2-m8) — 지금 값 + 사유 · 같은 값을 숨은 칸으로 보낸다(저장 액션·DB 트리거가 다시 막는다).
+  const locked = (name: string, value: string, note: string) => (
+    <>
+      <input type="hidden" name={name} value={value} />
+      <span className="whitespace-pre-wrap">{V(value)}</span>
+      <span className="text-text-faint mt-0.5 block text-xs print:hidden">{note}</span>
+    </>
+  );
+  // 이어진 요청서 — 상한을 모르면 금액 칸(총 환불금액·결제내역)을 잠근다 · 환불을 마친 요청서의 완료일자는 비울 수 있는 사람(원장)만 연다.
+  const amountLock = editing && linked && linked.cap === null ? "원장 승인 금액(상한)을 알 수 없어 바꿀 수 없습니다 — 원장 확인." : null;
+  const completedAtOpen = !!data.result.completedDate.trim();
+  const clearLock = editing && linked && completedAtOpen ? linked.clearLock : null;
   const areaField = (name: string, value: string, rows: number, label: string, ph?: string) =>
     editing ? (
       <textarea
@@ -160,6 +186,8 @@ export function RefundSheet({
                 ) : (
                   V(data.approval[a.key])
                 )}
+                {/* 원장 C.3로 대체된 옛 요청서 — 담당 자리에 '대체됨'(이 요청서로 환불하지 않는다 · 리뷰 r2 I4). */}
+                {a.key === "staff" && linked?.superseded ? <span className="text-danger block text-[11px] font-bold">대체됨</span> : null}
               </td>
             ))}
           </tr>
@@ -227,7 +255,7 @@ export function RefundSheet({
             <th className={`${head} w-28`}>결제내역</th>
             <td className={cell} colSpan={2}>
               {/* 자동입력이 월×항목별로 줄을 만들어 길다 — 8줄 기본(더 길면 resize-y로 늘린다). */}
-              {areaField("r_paymentDetails", r.paymentDetails, 8, "결제내역", "결제 내역(월·금액·결제수단 등)")}
+              {amountLock ? locked("r_paymentDetails", r.paymentDetails, amountLock) : areaField("r_paymentDetails", r.paymentDetails, 8, "결제내역", "결제 내역(월·금액·결제수단 등)")}
             </td>
           </tr>
           <tr>
@@ -239,7 +267,7 @@ export function RefundSheet({
           <tr>
             <th className={head}>총 환불금액</th>
             <td className={`${cell} num font-bold`} colSpan={2}>
-              {field("r_totalAmount", r.totalAmount, { label: "총 환불금액", ph: "예: 200,000원" })}
+              {amountLock ? locked("r_totalAmount", r.totalAmount, amountLock) : field("r_totalAmount", r.totalAmount, { label: "총 환불금액", ph: "예: 200,000원" })}
             </td>
           </tr>
           {REFUND_METHODS.map((m, i) => (
@@ -278,7 +306,17 @@ export function RefundSheet({
           </tr>
           <tr>
             <th className={head}>환불완료일자</th>
-            <td className={`${cell} num`}>{field("res_completedDate", res.completedDate, { label: "환불완료일자", type: "date" })}</td>
+            <td className={`${cell} num`}>
+              {editing && (completionLock || clearLock) ? (
+                locked("res_completedDate", res.completedDate, (completionLock ?? clearLock)!)
+              ) : (
+                <>
+                  {field("res_completedDate", res.completedDate, { label: "환불완료일자", type: "date" })}
+                  {/* 원장이 이어진 요청서의 완료일자를 비울 때 — 이미 돌려준 돈이면 비우지 말 것(리뷰 r3 R2-I2 · 늘어난 몫은 '따로 환불'). */}
+                  {editing && linked && completedAtOpen ? <span role="note" className="text-destructive mt-0.5 block text-xs print:hidden">{LINKED_CLEAR_WARNING}</span> : null}
+                </>
+              )}
+            </td>
           </tr>
           <tr>
             {/* 완료 처리자 = 환불완료일자 저장 시 서버가 자동 기록(읽기 전용, 위조 불가) */}
@@ -309,7 +347,7 @@ export function RefundSheet({
           </>
         ) : (
           // 읽기 권한에겐 '수정'이 없다 — 할 수 없는 일을 안내하지 않는다(원장 2026-11-05).
-          canWrite ? "종이 서식 그대로 — 인쇄하거나 수정할 수 있습니다." : "종이 서식 그대로 — 인쇄할 수 있습니다."
+          canWrite && !linked?.editLock ? "종이 서식 그대로 — 인쇄하거나 수정할 수 있습니다." : linked?.editLock ? linked.editLock : "종이 서식 그대로 — 인쇄할 수 있습니다."
         )}
       </p>
       <div className="flex flex-wrap items-center gap-2">
@@ -323,24 +361,30 @@ export function RefundSheet({
           </>
         ) : (
           <>
-            {canWrite ? (
+            {canWrite && !linked?.editLock ? (
               <Button type="button" onClick={() => setEditing(true)}>
                 <Pencil className="size-4" />
                 수정
               </Button>
             ) : null}
             <PrintRefundButton />
-            {canWrite && id ? <DeleteRefundButton id={id} name={s.name} /> : null}
+            {/* 이어진 요청서 — 완료된 것은 아무도 · 미완료는 담당 데스크·원장만(리뷰 r2 B1) · 확인 문구에 원장 결정 대기로 돌아감을 적는다. */}
+            {canWrite && id && !linked?.deleteLock ? <DeleteRefundButton id={id} name={s.name} confirmText={linked ? (linked.canceledOnly ? LINKED_DELETE_CONFIRM_CANCELED : LINKED_DELETE_CONFIRM) : undefined} /> : null}
           </>
         )}
       </div>
     </div>
   );
 
+  // 잠금 사유가 있으면 보기 화면 맨 위에도 늘 보인다(리뷰 r2 I4) — 연결 사정(linked)을 못 받은 호출이어도 사유만은 경고 상자로.
+  const banner = linked ? <LinkedRequestBanner view={linked} />
+    : completionLock ? <p role="alert" className="rounded-lg border p-4 text-sm print:hidden">{completionLock}</p> : null;
   if (!editing) {
     return (
       <div className="space-y-4">
+        {banner}
         {toolbar}
+        {linked?.deleteLock && canWrite ? <p className="text-text-dim text-xs print:hidden">{linked.deleteLock}</p> : null}
         {sheet}
       </div>
     );
@@ -349,6 +393,7 @@ export function RefundSheet({
   return (
     <form action={formAction} ref={formRef} className="space-y-4">
       {id ? <input type="hidden" name="id" value={id} /> : null}
+      {banner}
       {toolbar}
       <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
       <RefundStudentPicker formRef={formRef} />

@@ -246,7 +246,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
   },
   // 권한 override는 sparse(빈 배열) — 진짜 기본값은 permissions.ts의 MENU_ACCESS. 매트릭스 복제 금지.
   // userOverrides = 개인 예외(특정 사용자에게만 메뉴 셀 덮어쓰기, 2026-08-01) — 역시 sparse.
-  permissions: { overrides: [], userOverrides: [], specialAccess: { payslipViewerIds: [], payslipManagerIds: [], leaveAdjusterIds: [], classSplitterIds: [], enrollmentDateEditorIds: [], studentStatusManagerIds: [], staffTaskMonitorIds: [], vendorViewerIds: [], jjReportManagerIds: [], beforeClassReportIds: [], withdrawalApproverIds: [], staffSubjectScopes: [] } },
+  permissions: { overrides: [], userOverrides: [], specialAccess: { payslipViewerIds: [], payslipManagerIds: [], leaveAdjusterIds: [], classSplitterIds: [], enrollmentDateEditorIds: [], studentStatusManagerIds: [], staffTaskMonitorIds: [], vendorViewerIds: [], jjReportManagerIds: [], beforeClassReportIds: [], withdrawalApproverIds: [], withdrawalDeskIds: [], staffSubjectScopes: [] } },
   // 사이드바 표시도 sparse(빈 배열) — **비면 지금과 글자 그대로 같다**(전부 표시·코드 순서).
   // 기본 목록을 여기 복제하지 말 것: 복제하면 메뉴를 새로 만들 때마다 두 곳을 고쳐야 하고,
   // 한쪽을 잊으면 새 메뉴가 조용히 안 보인다(이 기능이 애초에 풀려던 문제 그 자체).

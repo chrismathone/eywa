@@ -13,6 +13,16 @@ export function withUnassignedCourses(
   return [...new Set([...(report.enrollment_ids ?? []), ...unassigned.map(c => c.id)])];
 }
 
+/**
+ * 작성 강사가 하나도 없는 대상 과목(결정 2026-11-06) — 작성자가 둘 이상이면 보고서 과목은 그 강사가 맡은 반의 과목뿐이라(DB `request_withdrawal_report_group`),
+ * 담임이 없거나 직원 목록 밖(퇴사) 담임뿐인 과목은 어느 보고서에도 안 실린다(종료는 묶음이 한다). 그 과목의 퇴원월 뒤 청구 줄이 환불 확인 값에서 빠지면
+ * 원장 결정 없이 처리되니, 환불 계산에서는 **대표 보고서**가 이 과목까지 맡는다(`loadLaterInvoices` · `loadGroupRefundCheck`).
+ */
+export function orphanSubjects(groupSubjects: readonly string[], reportSubjects: readonly (readonly string[])[]): string[] {
+  const covered = new Set(reportSubjects.flat());
+  return [...new Set(groupSubjects.filter(s => !covered.has(s)))];
+}
+
 /** 수강 ID가 없는 이전 보고서만 당시 과목·담임 범위를 사용한다. */
 export function reportCourses(report: Pick<WithdrawalReport, "snapshot" | "enrollment_ids" | "subjects" | "group_id" | "teacher_id">) {
   return report.snapshot.courses.filter(c => report.enrollment_ids != null

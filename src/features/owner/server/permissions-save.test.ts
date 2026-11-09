@@ -407,7 +407,7 @@ describe("자기 저장 뒤 재저장", () => {
 
   it("침산 — 개인별 기능 권한을 저장하고, 응답 token은 그렇게 저장된 값의 것이다(어긋나면 재저장이 막힌다)", async () => {
     const w = openWindow();
-    const sent = { ...w.draft, specialAccess: { payslipViewerIds: [STAFF_A], payslipManagerIds: [], leaveAdjusterIds: [], classSplitterIds: [STAFF_B], enrollmentDateEditorIds: [], staffTaskMonitorIds: [], vendorViewerIds: [], jjReportManagerIds: [], beforeClassReportIds: [], withdrawalApproverIds: [], staffSubjectScopes: [{ userId: STAFF_B, subjects: ["english"] }] } };
+    const sent = { ...w.draft, specialAccess: { payslipViewerIds: [STAFF_A], payslipManagerIds: [], leaveAdjusterIds: [], classSplitterIds: [STAFF_B], enrollmentDateEditorIds: [], staffTaskMonitorIds: [], vendorViewerIds: [], jjReportManagerIds: [], beforeClassReportIds: [], withdrawalApproverIds: [], withdrawalDeskIds: [], staffSubjectScopes: [{ userId: STAFF_B, subjects: ["english"] }] } };
     const res = await w.save(sent);
     expect(res?.ok).toBe(true);
     expect(stored().specialAccess).toEqual(sent.specialAccess);
@@ -423,11 +423,11 @@ describe("자기 저장 뒤 재저장", () => {
     const w = openWindow();
     const res = await w.save({ ...w.draft, specialAccess: { payslipViewerIds: [STAFF_B], payslipManagerIds: [], leaveAdjusterIds: [STAFF_A], classSplitterIds: [], staffSubjectScopes: [] } });
     expect(res?.ok).toBe(true);
-    expect(stored().specialAccess).toEqual({ payslipViewerIds: [STAFF_B], payslipManagerIds: [], leaveAdjusterIds: [STAFF_A], classSplitterIds: [], enrollmentDateEditorIds: [], staffTaskMonitorIds: [], vendorViewerIds: [], jjReportManagerIds: [], beforeClassReportIds: [], withdrawalApproverIds: [], staffSubjectScopes: [] });
+    expect(stored().specialAccess).toEqual({ payslipViewerIds: [STAFF_B], payslipManagerIds: [], leaveAdjusterIds: [STAFF_A], classSplitterIds: [], enrollmentDateEditorIds: [], staffTaskMonitorIds: [], vendorViewerIds: [], jjReportManagerIds: [], beforeClassReportIds: [], withdrawalApproverIds: [], withdrawalDeskIds: [], staffSubjectScopes: [] });
     expect(res?.permissions?.token).toBe(permissionsToken(stored()));
     const again = await w.save({ ...stored(), userOverrides: [] }, res!.permissions!.token);
     expect(again?.ok).toBe(true);
-    expect(stored().specialAccess).toEqual({ payslipViewerIds: [STAFF_B], payslipManagerIds: [], leaveAdjusterIds: [STAFF_A], classSplitterIds: [], enrollmentDateEditorIds: [], staffTaskMonitorIds: [], vendorViewerIds: [], jjReportManagerIds: [], beforeClassReportIds: [], withdrawalApproverIds: [], staffSubjectScopes: [] });
+    expect(stored().specialAccess).toEqual({ payslipViewerIds: [STAFF_B], payslipManagerIds: [], leaveAdjusterIds: [STAFF_A], classSplitterIds: [], enrollmentDateEditorIds: [], staffTaskMonitorIds: [], vendorViewerIds: [], jjReportManagerIds: [], beforeClassReportIds: [], withdrawalApproverIds: [], withdrawalDeskIds: [], staffSubjectScopes: [] });
   });
 });
 
@@ -513,7 +513,7 @@ describe("개인별 기능 권한 — 어느 학원에서나 화면에서 지정
     const bad = openWindow();
     expect((await bad.save({ ...bad.draft, specialAccess: { ...bad.draft.specialAccess, enrollmentDateEditorIds: ["77777777-7777-4777-8777-777777777777"] } }))?.error).toContain("재직 직원");
   });
-  const none = { payslipViewerIds: [], payslipManagerIds: [], leaveAdjusterIds: [], classSplitterIds: [], enrollmentDateEditorIds: [], staffTaskMonitorIds: [], vendorViewerIds: [], jjReportManagerIds: [], beforeClassReportIds: [], withdrawalApproverIds: [], staffSubjectScopes: [] };
+  const none = { payslipViewerIds: [], payslipManagerIds: [], leaveAdjusterIds: [], classSplitterIds: [], enrollmentDateEditorIds: [], staffTaskMonitorIds: [], vendorViewerIds: [], jjReportManagerIds: [], beforeClassReportIds: [], withdrawalApproverIds: [], withdrawalDeskIds: [], staffSubjectScopes: [] };
 
   it("🔴 새로 지정하는 사람은 지금 이 학원의 재직 직원이어야 한다 — 칸마다 본다", async () => {
     seed("chinsan");
@@ -523,6 +523,7 @@ describe("개인별 기능 권한 — 어느 학원에서나 화면에서 지정
       { ...none, payslipViewerIds: [STAFF_B] },
       { ...none, leaveAdjusterIds: [STAFF_B] },
       { ...none, classSplitterIds: [STAFF_B] },
+      { ...none, withdrawalDeskIds: [STAFF_B] },
       { ...none, staffSubjectScopes: [{ userId: STAFF_B, subjects: ["math"] }] },
     ]) {
       expect((await w.save({ ...w.draft, specialAccess: special }))?.error).toContain("재직 직원");

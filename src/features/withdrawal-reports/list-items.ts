@@ -5,6 +5,8 @@ import type { ArchiveRow } from "./archive-model";
 import { formViewHref } from "@/features/documents/categories";
 import { archiveReason, webReportReason, type ListReason } from "./list-reason";
 import { REPORT_STATUS, canCancelReport, directorIds, hasJobTitle, isDirectReport, isParticipant, managerIds, managerStepSkipped, refundWaiting, reportStatusChips, titledName, type RefundStep, type ReportListRow, type ReportStatus, type StaffOption } from "./model";
+import { decisionBlocksProcessing } from "./refund-decision";
+import { refundApprovalLines, refundApprovalNames, type RefundOutcome } from "./approval-lines";
 
 /**
  * 퇴원보고서 목록 한 벌 — 웹에서 작성·승인하는 보고서와 기존 스프레드시트 보고서(원문 보관)를 **한 목록**에 세운다.
@@ -58,13 +60,15 @@ export type ListItem = {
   mine: "approve" | "view" | "none";
   /** 내 차례가 데스크 환불 처리다(원장 2026-11-03) — 상태 칸 글을 '내 환불 처리 필요'로. 승인 차례와 같은 '내 승인 필요' 필터에 든다. */
   deskTurn?: boolean;
+  /** 내 차례가 원장 환불 결정이다(원장 2026-11-06 · 결정할 줄을 보이는 보고서 줄에만 · 원장급·쓰기 권한) — 상태 칸 꼬리 '내 환불 결정 필요'(보고서 상세로). '내 승인 필요' 필터에 든다. */
+  refundTurn?: boolean;
   /** 진행 막대 재료 — 웹 보고서만(기존 기록은 없음 = 막대 없이 '스프레드시트 기록'). 판정은 `reportProgress`. */
   flow?: ReportFlow | null;
   /**
-   * 환불 단계 — `decision` 환불 결정 대기 · `desk` 데스크 환불 대기(지금은 `refundWaiting`과 같은 판정) · 없으면 null.
-   * 진행 막대 아래 한 줄에 '환불 결정 대기'·'데스크 환불 대기'로 선다.
+   * 환불 단계 — `decision` 환불 결정 대기 · `desk` 데스크 환불 대기(지금은 `refundWaiting`과 같은 판정) · `both` 둘 다(결정 뒤 새 줄이 생겨 다시 결정 대기인데
+   * 앞 요청서의 데스크 환불도 남음 — 리뷰 r2 m5) · 없으면 null. 진행 막대 아래 한 줄에 '환불 결정 대기'·'데스크 환불 대기'(둘 다면 둘 다)로 선다.
    */
-  refundStage?: "decision" | "desk" | null;
+  refundStage?: "decision" | "desk" | "both" | null;
   /** 요청 취소 기록 — 사유(이전 취소는 null)·취소한 사람·시각(ISO). 있으면 '요청 취소 · 취소일'에 마우스를 올려 본다. */
   cancel?: { reason: string | null; by: string; at: string } | null;
   /**
@@ -83,6 +87,12 @@ export type ReportFlow = {
    * DB의 approved는 '다른 과목 대기'와 '전부 승인 · 환불(또는 처리)만 대기'를 둘 다 뜻해 환불 유무로는 못 가른다(리뷰 2026-11-06).
    */
   othersPending: boolean;
+  /**
+   * 형제 조회가 실패해(`groupStatuses` 없음) 다른 과목 보고서가 다 승인됐는지 **모른다**(승인 완료 줄 · 보이는 형제엔 승인 전이 없음 — 리뷰 r2 (a)).
+   * 막대는 2단계로 두고(3단계로 앞지르지 않는다) 아래 한 줄은 '다른 과목 승인 확인 못 함'(사실 그대로 — '다른 과목 승인 대기'라고 단정하지 않는다).
+   * 환불 대기 유무로 형제 상태를 추측하지 않는다(데스크 대기를 '다 승인됨'으로 읽으면 앞질러 보였다).
+   */
+  othersUnknown?: boolean;
   /** 마지막 수업일 — 처리 예약이면 그날 처리한다(DB 'apply' · `effective_date <= today`). */
   effectiveDate: string;
   /** 처리 시각(처리 완료일) · 마지막 변경 시각(취소 기록이 없는 취소의 취소일 — DB 'cancel'이 `updated_at`을 새로 적는다). */
@@ -109,7 +119,7 @@ export type ProgressNote = {
  * `newWindow` = 다른 메뉴(수납의 환불 요청서)라 새 창으로 연다 — 보고서 상세로 가는 꼬리는 같은 창.
  */
 export type ProgressTail =
-  | { text: "내 승인 필요" | "내 작성 대기" | "내 환불 처리 필요" | "내 재요청 필요"; href: string; newWindow?: boolean }
+  | { text: "내 승인 필요" | "내 환불 결정 필요" | "내 작성 대기" | "내 환불 처리 필요" | "내 재요청 필요"; href: string; newWindow?: boolean }
   | { text: "승인 대상 아님"; href: null };
 export type ReportProgress = {
   /** 지금 단계(1~3) · 처리 완료 3 · 요청 취소 0. */
@@ -144,9 +154,18 @@ export function buildListItems(input: {
   directorLevel?: boolean;
   /**
    * 묶음 id → 그 묶음 보고서 전부의 상태(`listReports` — 형제가 열람 범위 밖이라 목록에 없어도 읽는다).
-   * 없는 묶음은 이 목록에 보이는 형제로만 본다. 통째로 없으면(조회 실패) 승인 완료인데 기다릴 환불이 없는 줄은 다른 과목 대기로 본다.
+   * 없는 묶음은 이 목록에 보이는 형제로만 본다. 통째로 없으면(조회 실패) 승인 완료 줄은 '다른 과목 승인 확인 못 함'(2단계 · 다른 과목 대기라고 단정하지 않는다 —
+   * 리뷰 r2 (a) · 보이는 형제가 승인 전이면 그것은 확인된 사실이라 '다른 과목 승인 대기').
    */
   groupStatuses?: ReadonlyMap<string, readonly { id: string; status: ReportStatus }[]>;
+  /** 원장 환불 결정 대기(원장 2026-11-06 · DB `refund_hold`) — 묶음 id → 결정할 줄을 보이는 보고서(`loadRefundHolds`). 없으면 대기 없음. */
+  holds?: ReadonlyMap<string, string | null>;
+  /** 데스크 환불 단계·결정 대기 조회가 실패했다(리뷰 r3 R2-m10) — 승인 완료 칩을 '처리 확인 대기'라고 단정하지 않는다('환불 단계 확인 못 함'). */
+  refundsFailed?: boolean;
+  /** 원장 결정 요약(`loadRefundOutcomes`) — 묶음 id → 환불 승인/환불 없음 · 결정한 사람. 승인 진행의 '✓ 결정한 원장'. */
+  outcomes?: ReadonlyMap<string, RefundOutcome>;
+  /** 요청 취소 기록(`loadCancelNotes` · s2_0037 사유) — 보고서 id → 사유·취소한 사람·시각. 취소된 보고서만 싣는다. */
+  cancels?: ReadonlyMap<string, { reason: string | null; actorId: string | null; at: string }>;
 }): ListItem[] {
   const { staff, labelOf, userId } = input;
   const writable = input.writable ?? true;
@@ -154,12 +173,14 @@ export function buildListItems(input: {
   const listedByGroup = new Map<string, { id: string; status: ReportStatus }[]>();
   for (const r of input.reports) if (r.group_id) listedByGroup.set(r.group_id, [...(listedByGroup.get(r.group_id) ?? []), r]);
   // 같은 묶음에 아직 승인 전인 다른 과목 보고서가 있나(승인 완료 줄이 막대를 앞지르지 않게 — 리뷰 2026-11-06).
-  // 형제 조회가 실패했으면(`groupStatuses` 없음) 보이는 형제만으론 모른다 — DB상 승인 완료인데 기다릴 환불이 없으면
-  // 사실상 다른 과목 대기라 그렇게 본다(형제가 안 보이는 열람자에게 3단계로 앞질러 보이지 않게 · 재리뷰 2026-11-06).
-  const othersPending = (r: ReportListRow, steps: readonly RefundStep[]) => {
-    if (!r.group_id) return false;
+  // `pending` = 승인 전 형제가 실제로 있다(조회한 묶음 상태 · 없으면 이 목록에 보이는 형제) · `unknown` = 형제 조회가 실패했고(`groupStatuses` 없음)
+  // 보이는 형제엔 승인 전이 없다 — 승인 완료 줄은 모른다(2단계 · '다른 과목 승인 확인 못 함'). 환불 대기 유무로 형제 상태를 추측하지 않는다(리뷰 r2 (a) —
+  // 데스크 대기를 '다 승인됨'으로, 결정 대기 없음을 '다른 과목 대기'로 읽어 1과목 보고서가 '다른 과목 승인 대기'로, 형제가 안 보이는 관리자에게 3단계로 보였다).
+  const othersState = (r: ReportListRow): "pending" | "unknown" | null => {
+    if (!r.group_id) return null;
     const siblings = input.groupStatuses?.get(r.group_id) ?? listedByGroup.get(r.group_id) ?? [];
-    return siblings.some((q) => q.id !== r.id && BEFORE_APPROVAL.includes(q.status)) || (input.groupStatuses === undefined && r.status === "approved" && !refundWaiting(r, steps));
+    if (siblings.some((q) => q.id !== r.id && BEFORE_APPROVAL.includes(q.status))) return "pending";
+    return input.groupStatuses === undefined && r.status === "approved" ? "unknown" : null;
   };
   const staffOf = (id: string) => staff.find((s) => s.id === id);
   const staffName = (id: string) => staffOf(id)?.name ?? FORMER_STAFF;
@@ -186,12 +207,21 @@ export function buildListItems(input: {
     // 관리자 바로 처리(강사 작성 없이, 원장 2026-10-23) — 작성자 칸은 처리한 관리자, 승인 칸 대신 '관리자 바로 처리'.
     const direct = isDirectReport(r);
     const steps = input.refunds?.get(r.group_id ?? r.id) ?? [];
-    const chips = reportStatusChips(r, steps);
-    // 데스크 줄(원장 2026-11-03 '데스크 환불 요청' 단계) — ○ 대기 · ✓ 환불완료일자 입력됨, 담당 이름.
-    const desk = steps.length ? [{ text: `데스크 ${steps.map((s) => `${s.completedDate ? "✓" : "○"} ${s.deskName}`).join(" · ")}` }] : [];
+    const hold = !!r.group_id && !!input.holds?.has(r.group_id);
+    const others = othersState(r);
+    // 상태 칩 — 1과목·형제 모두 승인이면 '다른 보고서 대기'가 아니다(리뷰 r3 R2-m2 · 상세와 같은 판정).
+    const chips = reportStatusChips(r, steps, hold, others ?? (input.refundsFailed ? "failed" : "done"));
+    // 환불 줄(원장 2026-11-06 — 관리자 줄 다음 · 이름 직급만): 환불 결정(원장 · 결정 대기 ○ 받는 원장급 / 결정 ✓ 결정한 원장 · 환불 없음은 흐리게) → 데스크 담당마다(○ 대기 · ✓ 환불완료일자).
+    const refundInput = { waiting: hold && decisionBlocksProcessing(r.status), outcome: r.group_id ? input.outcomes?.get(r.group_id) : undefined,
+      directors: staff.filter((s) => s.role === "master"), personOf: staffOf, steps, canceled: r.status === "canceled" };
+    const refundLines = refundApprovalLines(refundInput);
+    const cancelNote = r.status === "canceled" ? input.cancels?.get(r.id) : undefined;
     const deskTurn = writable && myDeskTurn(r, steps, userId);
     // 내 몫·완료 전 환불 요청서 중 가장 먼저 만든 것(단계는 만든 순 — `loadRefundSteps`).
     const myDesk = deskTurn ? steps.find((s) => !s.completedDate && s.deskId === userId) : undefined;
+    // 원장 환불 결정 차례(원장급 · 쓰기 권한) — 대기 묶음에서 결정할 줄을 보이는 보고서 줄(DB가 원장 할 일을 건 보고서 · 모르면 대표 보고서)에만.
+    const holdReport = r.group_id ? input.holds?.get(r.group_id) : undefined;
+    const refundTurn = writable && directorLevel && refundInput.waiting && (holdReport ? holdReport === r.id : !!r.group_leader);
     const item: ListItem = {
       key: `r:${r.id}`,
       href: `${LIST_PATH}/${r.id}`,
@@ -218,28 +248,33 @@ export function buildListItems(input: {
           : managerStepSkipped(r)
             ? [{ text: skippedBy(r.teacher_id), muted: true }]
             : [{ text: reviewers(r, "manager") }, ...(directorIds(r).length ? [{ text: reviewers(r, "director") }] : [])]),
-        ...desk,
+        ...refundLines,
       ],
       link: null,
       // 작성 차례도 쓰기 권한이 있을 때만(다른 꼬리와 같게 — 읽기 전용 보기엔 작성 버튼이 없다 · 리뷰 2026-11-06).
       myTurn: writable && ["requested", "revision"].includes(r.status) && r.teacher_id === userId,
       // 열람 표시는 진행 중에만(끝난 보고서엔 승인할 일이 없다 — 리뷰). 데스크 환불 차례도 내 차례다.
-      mine: writable && (myApprovalTurn(r, userId) || deskTurn) ? "approve" : !isParticipant(r, userId) && !["completed", "canceled"].includes(r.status) ? "view" : "none",
+      mine: writable && (myApprovalTurn(r, userId) || deskTurn || refundTurn) ? "approve" : !isParticipant(r, userId) && !["completed", "canceled"].includes(r.status) ? "view" : "none",
       ...(deskTurn && !myApprovalTurn(r, userId) ? { deskTurn: true } : {}),
+      ...(refundTurn && !deskTurn && !myApprovalTurn(r, userId) ? { refundTurn: true } : {}),
       flow: {
         status: r.status,
-        othersPending: othersPending(r, steps),
+        othersPending: others === "pending",
+        ...(others === "unknown" ? { othersUnknown: true } : {}),
         effectiveDate: r.effective_date,
         appliedAt: r.applied_at,
         updatedAt: r.updated_at,
         canCancel: canCancelReport(r, userId, writable, directorLevel),
       },
-      // 환불 단계 — 지금은 데스크 환불 대기만(`refundWaiting`). 취소 기록(`cancel`)은 아직 채우지 않는다(DB에 사유 없음).
-      refundStage: refundWaiting(r, steps) ? "desk" : null,
+      // 환불 단계 — 원장 환불 결정 대기(DB 묶음 표시 `refund_hold` · 처리 전) · 데스크 환불 대기(`refundWaiting`) · 둘 다면 둘 다(리뷰 r2 m5 — 결정 뒤 새 줄로
+      // 다시 결정 대기인데 앞 요청서의 데스크 환불도 남음 · 데스크에게 '환불 결정 대기'만 보이지 않게) · 그 밖 null.
+      refundStage: refundInput.waiting ? (refundWaiting(r, steps) ? "both" : "decision") : refundWaiting(r, steps) ? "desk" : null,
+      // 요청 취소 기록(s2_0037 — 사유는 1~500자 · 그 전 취소는 사유 null → 말풍선 '사유 기록 없음(이전 취소)').
+      cancel: cancelNote ? { reason: cancelNote.reason, by: cancelNote.actorId ? titledOf(cancelNote.actorId) : FORMER_STAFF, at: cancelNote.at } : null,
       deskHref: myDesk ? formViewHref("refund_request", myDesk.documentId) : null,
       // 검색 = 보이는 칸 + 보고서 본문 글 전부(원장 2026-10-30 *"검색은 내용등 모든것을 검색가능하게"*) — 상담 내용·담임 의견·요청 메모·반려 사유·승인자까지.
       search: [r.snapshot.name, r.snapshot.school, r.snapshot.grade, schoolGradeLabel(r.snapshot.school, r.snapshot.grade), ...r.snapshot.courses.map((c) => c.className), teacher, reason.text, reason.note ?? "", direct ? "관리자 바로 처리" : "",
-        managerStepSkipped(r) && !direct ? `관리자 승인 생략 ${skippedBy(r.teacher_id)}` : "", ...steps.map((s) => s.deskName),
+        managerStepSkipped(r) && !direct ? `관리자 승인 생략 ${skippedBy(r.teacher_id)}` : "", ...refundApprovalNames(refundInput), cancelNote?.reason ?? "", cancelNote ? (cancelNote.actorId ? titledOf(cancelNote.actorId) : FORMER_STAFF) : "",
         // 승인자·요청자는 보이는 표기 그대로(직급 포함 — '정유진 부원장'으로도 찾는다 · 리뷰 2026-11-06).
         r.exit_kind === "withdrawal" ? "퇴원" : "수강종료", ...r.subjects.map(labelOf), chips.join(" "), titledOf(r.requested_by), ...managerIds(r).map(titledOf), ...directorIds(r).map(titledOf),
         r.request_note, r.last_comment ?? "", r.body_detail ?? "", r.body_student ?? "", r.body_parent ?? "", r.body_opinion ?? "", r.body_attendance ?? "", r.body_tuition ?? "", r.body_arrears_note ?? ""].join(" "),
@@ -392,6 +427,8 @@ export function myDeskTurn(r: Pick<ReportListRow, "status">, steps: readonly Ref
   return refundWaiting(r, steps) && steps.some((s) => !s.completedDate && s.deskId === userId);
 }
 
+/** 형제 조회 실패 때 승인 완료 줄의 아래 한 줄(리뷰 r2 (a)) — '다른 과목 승인 대기'(형제를 실제로 확인)와 다른 말이다. 검색·막대 이름에도 이 글이 든다. */
+export const OTHERS_UNKNOWN = "다른 과목 승인 확인 못 함";
 /** 아직 승인 전 상태 — 같은 묶음의 이런 형제가 있으면 승인 완료 줄은 다른 과목을 기다리는 중이다. */
 const BEFORE_APPROVAL: readonly ReportStatus[] = ["requested", "revision", "manager_pending", "director_pending"];
 /**
@@ -410,10 +447,10 @@ const kstMinute = (iso: string) => new Date(Date.parse(iso) + 9 * 3_600_000).toI
  *   🔑 지금 단계 뒤 칸은 늘 비운다 — 관리자 승인 생략·바로 처리도 앞질러 채우지 않는다(작성 중인 생략 보고서의 2칸이 꽉 차 보여
  *   헷갈렸다 — 리뷰 2026-11-06). 생략 보고서는 제출해 다음 단계로 넘어가면 2칸이 채워진다(이유는 승인 진행 칸의 '승인 생략' 글).
  * - 아래 한 줄 = [추가 정보, 꼬리] 중 있는 것만. 막대와 겹치는 말('작성 요청'·'관리자 요청')은 쓰지 않는다.
- * - 꼬리 = 내 할 일이면 링크(내 승인 필요 · 내 환불 처리 필요 · 내 작성 대기 · 내 재요청 필요), 할 일 없는 열람이면 '승인 대상 아님'.
+ * - 꼬리 = 내 할 일이면 링크(내 승인 필요 · 내 환불 결정 필요(원장급 · 보고서 상세로) · 내 환불 처리 필요 · 내 작성 대기 · 내 재요청 필요), 할 일 없는 열람이면 '승인 대상 아님'.
  *   처리 완료·요청 취소 줄엔 꼬리가 없다. 기존 기록(스프레드시트)은 막대가 없다(null).
  */
-export function reportProgress(item: Pick<ListItem, "href" | "flow" | "refundStage" | "cancel" | "deskHref" | "mine" | "myTurn" | "deskTurn">): ReportProgress | null {
+export function reportProgress(item: Pick<ListItem, "href" | "flow" | "refundStage" | "cancel" | "deskHref" | "mine" | "myTurn" | "deskTurn" | "refundTurn">): ReportProgress | null {
   const f = item.flow;
   if (!f) return null;
   const canceled = f.status === "canceled";
@@ -421,7 +458,8 @@ export function reportProgress(item: Pick<ListItem, "href" | "flow" | "refundSta
   const active = !canceled && !finished;
   // 환불 단계는 기다릴 처리가 남은 보고서에만(재검토·끝난·취소 보고서엔 없다 — `refundWaiting`과 같은 축).
   const refund = active && f.status !== "blocked" ? (item.refundStage ?? null) : null;
-  const waitingOthers = f.status === "approved" && f.othersPending;
+  // 다른 과목 대기 — 실제로 승인 전 형제가 있거나(`othersPending`) 형제 조회가 실패해 모를 때(`othersUnknown` — 3단계로 앞지르지 않는다 · 리뷰 r2 (a)).
+  const waitingOthers = f.status === "approved" && (f.othersPending || !!f.othersUnknown);
   const step = f.status === "approved" ? (waitingOthers ? 2 : 3) : STEP_OF[f.status];
   const alert = f.status === "revision" || f.status === "blocked";
   const cells = PROGRESS_STEPS.map((_, i): ProgressCell => {
@@ -436,9 +474,10 @@ export function reportProgress(item: Pick<ListItem, "href" | "flow" | "refundSta
   const notes: ProgressNote[] = [];
   if (f.status === "revision") notes.push({ text: REPORT_STATUS.revision, tone: "alert" });
   if (f.status === "director_pending") notes.push({ text: REPORT_STATUS.director_pending, tone: "plain" }); // 옛 원장 단계 — 막대는 '관리자 승인'이라 원장 차례를 글로
-  if (waitingOthers) notes.push({ text: "다른 과목 승인 대기", tone: "plain" });
+  if (waitingOthers) notes.push({ text: f.othersPending ? "다른 과목 승인 대기" : OTHERS_UNKNOWN, tone: "plain" });
   if (f.status === "scheduled") notes.push({ text: `처리 예약 · ${f.effectiveDate.slice(5, 10)}`, tone: "plain" });
-  if (refund) notes.push({ text: refund === "decision" ? "환불 결정 대기" : "데스크 환불 대기", tone: "plain" });
+  if (refund === "decision" || refund === "both") notes.push({ text: "환불 결정 대기", tone: "plain" });
+  if (refund === "desk" || refund === "both") notes.push({ text: "데스크 환불 대기", tone: "plain" });
   if (f.status === "blocked") notes.push({ text: `${REPORT_STATUS.blocked} — 취소 후 다시 요청`, tone: "alert" });
   if (finished) notes.push({ text: `처리일 ${kstDay(f.appliedAt ?? f.updatedAt).slice(5)}`, tone: "done" });
   if (canceled) {
@@ -454,7 +493,8 @@ export function reportProgress(item: Pick<ListItem, "href" | "flow" | "refundSta
   const tail: ProgressTail | null = !active
     ? null
     : approveTurn
-      ? { text: "내 승인 필요", href: item.href }
+      // 환불 결정 차례는 결정 자리(상세 '환불 확인' 칸 `#refund`)로 바로(리뷰 r2 m8).
+      ? item.refundTurn ? { text: "내 환불 결정 필요", href: `${item.href}#refund` } : { text: "내 승인 필요", href: item.href }
       : item.deskTurn
         ? item.deskHref
           ? { text: "내 환불 처리 필요", href: item.deskHref, newWindow: true }

@@ -34,6 +34,7 @@ export function permissionsCanonical(permissions: PermissionsSettings): string {
     jj: sortedIds(permissions?.specialAccess?.jjReportManagerIds),
     beforeClass: sortedIds(permissions?.specialAccess?.beforeClassReportIds),
     withdrawal: sortedIds(permissions?.specialAccess?.withdrawalApproverIds),
+    withdrawalDesk: sortedIds(permissions?.specialAccess?.withdrawalDeskIds),
     studentStatus: studentStatusManagerIds(permissions?.specialAccess) === undefined ? "legacy" : sortedIds(studentStatusManagerIds(permissions?.specialAccess)),
     scopes: rowsByCell(permissions?.specialAccess?.staffSubjectScopes, ["userId"]),
   });
