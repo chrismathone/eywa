@@ -18,6 +18,8 @@ vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: vi.fn() }
 vi.mock("@/features/owner/server/platform-settings", () => ({ platformAccountIds: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
+    // 퇴원월 뒤 청구 내용 지문(리뷰 r2 D-12 — loadGroupRefundCheck의 asOf)
+    rpc: async (name: string) => (name === "withdrawal_refund_later_fingerprint" ? { data: "fp-test", error: null } : { data: null, error: { message: `모의에 없는 rpc ${name}` } }),
     from: (table: string) => {
       const q: Record<string, unknown> = {};
       for (const k of ["select", "eq", "gt", "neq", "order", "like", "or", "in"]) q[k] = () => q;

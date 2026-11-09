@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ approve: vi.fn(), decline: vi.fn(), refresh: vi.fn() }));
@@ -59,7 +59,7 @@ describe("퇴원 뒤 청구(원장 2026-10-29)", () => {
   });
   it("이미 요청서가 있는 줄은 담당·완료와 링크 · 낸 돈이 없는 줄은 토글 없음", () => {
     render(<LaterInvoices reportId="r" deskStaff={desks} canApprove rows={[{ ...nov, lines: [
-      { ...nov.lines[0], refund: { documentId: "doc", deskName: "데스크A", completed: true } },
+      { ...nov.lines[0], refund: { documentId: "doc", deskName: "데스크A", completed: true, exact: true } },
       { ...nov.lines[1], paid: 0, paidNet: 0 },
       { ...nov.lines[1], key: `${id}#9`, billingRefund: true },
     ] }]} />);
@@ -72,21 +72,60 @@ describe("퇴원 뒤 청구(원장 2026-10-29)", () => {
     // 취소된 요청의 환불 전 요청서 — 다시 고를 수 있다
     const a = render(<LaterInvoices reportId="r" deskStaff={desks} canApprove rows={[{ ...nov, lines: [{ ...nov.lines[0], otherRefund: other(true, false) }, nov.lines[1]] }]} />);
     expect(screen.getAllByRole("switch")).toHaveLength(2);
-    expect(screen.getByText("취소된 요청의 요청서(환불 전) · 다시 환불을 승인하면 이 요청서는 완료할 수 없습니다").closest("a")).toHaveAttribute("href", "/billing/refunds/old");
+    expect(screen.getByText("취소된 요청의 요청서(환불완료일자 없음 · 담당 데스크A — 돌려줬는지 확인한 뒤 다시 승인) · 다시 환불을 승인하면 이 요청서는 완료할 수 없습니다").closest("a")).toHaveAttribute("href", "/billing/refunds/old");
     a.unmount();
     // 다른 요청에서 환불 완료 · 진행 중인 다른 요청 — 그 줄은 고를 수 없다(결정은 '환불하지 않음'으로만) · 결정 전 표시는 그대로
     const all = [`${id}#0`, `${id}#1`];
     const b = render(<LaterInvoices reportId="r" deskStaff={desks} canApprove decisionOpen decision={{ undecided: all, declined: [] }}
       rows={[{ ...nov, lines: [{ ...nov.lines[0], otherRefund: other(false, true) }, { ...nov.lines[1], otherRefund: other(false, false) }] }]} />);
     expect(screen.queryByRole("switch")).toBeNull();
-    expect(screen.getByText("다른 요청에서 환불 완료 · 요청서")).toBeInTheDocument();
-    expect(screen.getByText("다른 요청의 요청서(데스크 환불 대기) · 요청서")).toBeInTheDocument();
+    // 그 요청서의 담당도 함께(옛 데스크에게 확인할 수 있게 · 리뷰 r2 m9)
+    expect(screen.getByText("다른 요청에서 환불 완료 · 담당 데스크A · 요청서")).toBeInTheDocument();
+    expect(screen.getByText("다른 요청의 요청서(데스크 환불 대기 · 담당 데스크A) · 요청서")).toBeInTheDocument();
     expect(screen.getAllByText("결정 전")).toHaveLength(2);
     expect(screen.getByRole("button", { name: "환불 없음" })).toBeInTheDocument();
+    // '환불 없음' 확인은 다른 요청에서 이미 환불을 마친 줄도 이 요청에선 '환불하지 않음'으로 남는다고 말한다(리뷰 r2 m10)
+    fireEvent.click(screen.getByRole("button", { name: "환불 없음" }));
+    expect(screen.getByRole("alertdialog", { name: "환불 없음 확인" })).toHaveTextContent("다른 요청에서 이미 환불을 마친 1건도 이 요청에선 '환불하지 않음'으로 남습니다(다시 돌려주지 않습니다).");
     b.unmount();
     // 원장이 아니어도 같은 참고 표시
     render(<LaterInvoices reportId="r" deskStaff={[]} canApprove={false} rows={[{ ...nov, lines: [{ ...nov.lines[0], otherRefund: other(true, false) }] }]} />);
-    expect(screen.getByText("취소된 요청의 요청서(환불 전) · 다시 환불을 승인하면 이 요청서는 완료할 수 없습니다")).toBeInTheDocument();
+    expect(screen.getByText("취소된 요청의 요청서(환불완료일자 없음 · 담당 데스크A — 돌려줬는지 확인한 뒤 다시 승인) · 다시 환불을 승인하면 이 요청서는 완료할 수 없습니다")).toBeInTheDocument();
+  });
+});
+
+describe("리뷰 r2 — 청구 칸 상태(I3) · 미배분·부분 환불 표시(m11) · 데스크 직급(m15) · 결정 자리 앵커(m8)", () => {
+  it("🔴 퇴원월 뒤 청구를 못 읽었거나 수납 열람권이 없으면 '없음'이라고 말하지 않는다", () => {
+    const a = render(<LaterInvoices reportId="r" rows={[]} canApprove deskStaff={desks} laterState="failed" />);
+    expect(screen.getByRole("alert")).toHaveTextContent("퇴원월 뒤 청구를 불러오지 못했습니다(새로고침).");
+    expect(screen.queryByText(/환불할 건이 없습니다/)).toBeNull();
+    a.unmount();
+    const b = render(<LaterInvoices reportId="r" rows={[]} canApprove={false} deskStaff={[]} laterState="hidden" />);
+    expect(screen.getByText("수납 권한이 없어 청구는 보이지 않습니다.")).toBeInTheDocument();
+    expect(screen.queryByText(/환불할 건이 없습니다/)).toBeNull();
+    b.unmount();
+    // 읽었는데 비었으면 종전대로
+    const c = render(<LaterInvoices reportId="r" rows={[]} canApprove deskStaff={desks} laterState="ok" />);
+    expect(screen.getByText("퇴원월 뒤 청구 없음 — 환불할 건이 없습니다.")).toHaveAttribute("id", "refund");
+    c.unmount();
+    render(<LaterInvoices reportId="r" rows={[nov]} canApprove deskStaff={desks} />);
+    expect(screen.getByLabelText("환불 확인")).toHaveAttribute("id", "refund");
+  });
+  it("미배분 납부 줄은 청구액 '—'(청구된 항목이 아니다) · 부분 환불 줄은 남은 낸 돈과 그 내역", () => {
+    const rows = [{ ...nov, status: "unpaid", lines: [
+      { kind: "미배분", description: "미배분 납부(줄별 납부 기록 없음)", amount: 100000, paid: 100000, key: `${id}#unalloc`, paidNet: 100000, billingRefund: false, refund: null, unallocated: true as const },
+      { ...nov.lines[0], paidNet: 265000, billingRefundAmount: 50000 },
+    ] }];
+    render(<LaterInvoices reportId="r" rows={rows} canApprove={false} deskStaff={[]} />);
+    const unalloc = screen.getByText(/미배분 납부/).closest("tr")!;
+    expect(unalloc.querySelectorAll("td")[1]!.textContent).toBe("—");
+    expect(screen.getByText("265,000원").closest("td")).toHaveTextContent("265,000원 (낸 돈 315,000원 · 환불 50,000원)");
+  });
+  it("데스크 고르기 목록은 직급 이름(목록·결재란과 같은 표기)", () => {
+    render(<LaterInvoices reportId="r" rows={[nov]} canApprove deskStaff={[{ ...desks[0]!, jobTitle: "대리" }]} />);
+    fireEvent.click(screen.getByRole("switch", { name: "2026-11 수강료 · 중2 수학 A 환불" }));
+    fireEvent.click(screen.getByRole("button", { name: "환불 승인" }));
+    expect(screen.getByRole("option", { name: "데스크A 대리" })).toBeInTheDocument();
   });
 });
 
@@ -98,7 +137,7 @@ describe("원장 환불 결정(원장 2026-11-06) — 처리 전 보고서의 �
     expect(screen.getAllByText("결정 전")).toHaveLength(2);
     expect(screen.getByText(/환불할 건이 없으면 '환불 없음'을 누르세요. 원장이 정하기 전에는 퇴원·수강종료를 처리하지 않습니다/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "환불 없음" }));
-    expect(screen.getByRole("alertdialog", { name: "환불 없음 확인" })).toHaveTextContent("환불할 수 있는 2건을 모두 환불하지 않음으로 기록합니다");
+    expect(screen.getByRole("alertdialog", { name: "환불 없음 확인" })).toHaveTextContent("이 보고서에서 정할 2건을 모두 환불하지 않음으로 기록합니다");
     fireEvent.click(screen.getByRole("button", { name: "환불 없음 확인" }));
     await waitFor(() => expect(mocks.decline).toHaveBeenCalledWith("r", all));
     await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
@@ -118,6 +157,38 @@ describe("원장 환불 결정(원장 2026-11-06) — 처리 전 보고서의 �
     render(<LaterInvoices reportId="r" rows={[nov]} canApprove deskStaff={desks} decisionOpen={false} decision={{ undecided: all, declined: [] }} />);
     expect(screen.queryByText("결정 전")).toBeNull();
     expect(screen.queryByRole("button", { name: "환불 없음" })).toBeNull();
+  });
+  it("🔴 낸 돈이 있는 무효(void) 청구 — 상태 칸 '무효 청구'(미납으로 적지 않음) · 낸 돈 줄은 토글·'결정 전'(리뷰 r2 (c))", () => {
+    const june = { id, period: "2026-06", category: "tuition", status: "void", amountBilled: 725750, amountPaid: 725750, partial: false, lines: [
+      { kind: "수업", description: "가반", amount: 327000, key: `${id}#0`, paidNet: 0, billingRefund: false, refund: null },
+      { kind: "미배분", description: "미배분 납부(줄별 납부 기록 없음)", amount: 725750, paid: 725750, key: `${id}#unalloc`, paidNet: 725750, billingRefund: false, refund: null, unallocated: true as const },
+      { kind: "교재", description: "교재", amount: 20000, paid: 20000, key: `${id}#1`, paidNet: 20000, billingRefund: false, refund: null },
+    ] };
+    render(<LaterInvoices reportId="r" rows={[june]} canApprove deskStaff={desks} gates decisionOpen decision={{ undecided: [`${id}#unalloc`, `${id}#1`], declined: [] }} />);
+    expect(screen.getByText("무효 청구")).toBeInTheDocument();
+    expect(screen.getByText("무효 청구 · 줄별 납부 기록 없음")).toBeInTheDocument();
+    expect(screen.getByText("무효 청구 · 낸 돈 있음")).toBeInTheDocument();
+    expect(screen.queryByText("미납")).toBeNull();
+    expect(screen.getAllByRole("switch")).toHaveLength(2);
+    expect(screen.getAllByText("결정 전")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "환불 없음" })).toBeInTheDocument();
+    // 재발행 청구가 없으면 경고 없음 · 있으면 경고(결정은 열어 둔다 — 토글 그대로)
+    expect(screen.queryByText(/같은 달 재발행 청구가 있습니다/)).toBeNull();
+    cleanup();
+    render(<LaterInvoices reportId="r" rows={[{ ...june, reissued: true as const }]} canApprove deskStaff={desks} gates decisionOpen decision={{ undecided: [`${id}#unalloc`, `${id}#1`], declined: [] }} />);
+    expect(screen.getAllByText("같은 달 재발행 청구가 있습니다 — 낸 돈이 옮겨졌는지 수납에서 확인")).toHaveLength(1);   // 청구마다 한 번(첫 줄)
+    expect(screen.getAllByRole("switch")).toHaveLength(2);
+  });
+  it("🔴 금액 모름 미배분 줄(과목 몫을 셀 수 없음 · 리뷰 r2 I5) — 토글 없음 · '결정 전' · 환불 없음으로만", () => {
+    const dec = { id, period: "2026-12", category: "tuition", status: "partial", amountBilled: 0, amountPaid: 50000, partial: true, lines: [
+      { kind: "미배분", description: "미배분 납부(줄별 납부 기록 없음)", amount: 50000, paid: 50000, key: `${id}#unalloc:math`, paidNet: 50000, billingRefund: false, refund: null,
+        unallocated: true as const, unallocTotal: 50000, unallocScope: "math", amountUnknown: true as const },
+    ] };
+    render(<LaterInvoices reportId="r" rows={[dec]} canApprove deskStaff={desks} gates decisionOpen decision={{ undecided: [`${id}#unalloc:math`], declined: [] }} subjectLabels={{ math: "수학" }} />);
+    expect(screen.queryByRole("switch")).toBeNull();
+    expect(screen.getByText("결정 전")).toBeInTheDocument();
+    expect(screen.getByText(/수학 몫 · 몫을 계산할 수 없음\(환불하지 않음만\)/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "환불 없음" })).toBeInTheDocument();
   });
   it("원장이 아니면 줄마다 '원장 결정 전'만(단추 없음)", () => {
     render(<LaterInvoices reportId="r" rows={[nov]} canApprove={false} deskStaff={[]} decisionOpen decision={{ undecided: [`${id}#0`], declined: [`${id}#1`] }} />);

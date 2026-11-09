@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EMPTY_BODY } from "../model";
 
 /**
- * 원장 환불 결정(원장 2026-11-06 · DB s2_0033) — 서버 동작이 **처리할 수 있는 요청마다** 같은 요청에서 계산한 환불 확인 값을 DB에 넘기는지,
+ * 원장 환불 결정(원장 2026-11-06 · DB s2_0036) — 서버 동작이 **처리할 수 있는 요청마다** 같은 요청에서 계산한 환불 확인 값을 DB에 넘기는지,
  * 못 만들면 처리를 맡기지 않는지(닫힘), 원장 결정 동작이 권한·화면이 본 줄·지정 데스크를 지키는지. DB는 모의(부른 함수와 인자만 본다).
  * 확인 값이 없을 때 DB가 처리하지 않는 것 자체는 SQL 시험(refund-decision-gate-sql.test.ts)과 PGlite 확인(마이그레이션 머리말)이 본다.
  */
@@ -27,6 +27,7 @@ const m = vi.hoisted(() => ({ ready: vi.fn(async () => true),
   logAction: vi.fn(),
   notify: vi.fn(),
   status: vi.fn(),
+  holdAfter: null as null | { hold: boolean },
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/server", () => ({ after: vi.fn() }));
@@ -39,7 +40,8 @@ vi.mock("@/features/students/server/status-access", () => ({ canManageStudentSta
 vi.mock("./completed-target", () => ({ completedEnrollmentIds: async () => [] }));
 vi.mock("./billing", () => ({ loadReportBilling: async () => ({ tuition: "", arrears: "no", arrearsNote: "" }) }));
 vi.mock("./queries", () => ({ reportViewer: async () => m.viewer, getReport: async () => m.record, getReportForSave: async () => m.record }));
-vi.mock("./refund-check", () => ({ loadGroupRefundCheck: m.check, refundGateReady: () => m.ready(), REFUND_GATE_NOT_READY: "DB 적용 전", loadRefundDecisions: async () => new Map(), loadRefundHolds: async () => new Map() }));
+vi.mock("./refund-check", () => ({ loadGroupRefundCheck: m.check, refundGateReady: () => m.ready(), REFUND_GATE_NOT_READY: "DB 적용 전", loadRefundDecisions: async () => new Map(), loadRefundHolds: async () => new Map(),
+  loadRefundHoldState: async () => m.holdAfter }));
 vi.mock("./release", () => ({ releaseWithdrawalGroup: m.releaseGroup, releaseWithdrawalRefunds: vi.fn() }));
 vi.mock("./refund", async (orig) => ({ ...(await orig<typeof import("./refund")>()), loadLaterInvoices: m.later, loadDeskStaff: m.desks, claimedEarlier: async () => false }));
 vi.mock("@/lib/supabase/admin", () => ({
@@ -62,7 +64,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 import { changeWithdrawalReport, processWithdrawalDirectly } from "./actions";
-import { approveWithdrawalRefund, declineWithdrawalRefund } from "./refund-actions";
+import { approveWithdrawalRefund, declineWithdrawalRefund, recheckWithdrawalRefund } from "./refund-actions";
 
 const today = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10);
 const baseReport = { id: REPORT_ID, tenant_id: "t1", student_id: "s1", group_id: GROUP_ID, group_leader: true, teacher_id: "teacher", requested_by: "req", manager_id: "mgr", manager_ids: ["mgr"],
@@ -185,9 +187,32 @@ describe("원장 환불 승인 — 지정 데스크만 · 고르지 않은 줄�
     expect(rpcNames()).toEqual([]);
   });
   it("연결 함수에 고르지 않은 줄(p_none)과 확인 값(p_check)을 함께 · 감사로그에 '환불하지 않음' 줄", async () => {
-    expect(await approveWithdrawalRefund(REPORT_ID, [K0], DESK, [K1])).toEqual({ ok: true, documentId: "doc1", gates: true });
+    expect(await approveWithdrawalRefund(REPORT_ID, [K0], DESK, [K1])).toEqual({ ok: true, documentId: "doc1", gates: true, undecided: null });
     expect(argsOf("attach_withdrawal_report_refund")).toMatchObject({ p_desk: DESK, p_none: [K1], p_check: CHECK, p_expect_gate: true });
     expect(m.logAction).toHaveBeenCalledWith(expect.objectContaining({ action: "withdrawal_refund_approve", metadata: expect.objectContaining({ notRefunded: ["2026-12 차량비 100,000원"] }) }));
+  });
+  it("연결 함수가 센 결정 안 된 줄을 화면에 넘긴다(다른 보고서에 남은 결정 — 리뷰 r2 m12)", async () => {
+    m.rpc.mockImplementation(async (name: string) => ({ data: name === "attach_withdrawal_report_refund" ? { attached: true, gates: true, undecided: 2 } : name === "refund_desk_task_open" ? "task" : null, error: null }));
+    expect(await approveWithdrawalRefund(REPORT_ID, [K0], DESK, [K1])).toEqual({ ok: true, documentId: "doc1", gates: true, undecided: 2 });
+  });
+  it("🔴 학원 설정을 못 읽었으면(접힘) '데스크를 지정하세요'가 아니라 다시 시도(리뷰 r2 m7)", async () => {
+    m.desks.mockResolvedValue({ staff: [], designated: false, folded: true });
+    expect(await approveWithdrawalRefund(REPORT_ID, [K0], DESK, [K1])).toEqual({ error: "학원 설정을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요." });
+  });
+  it("🔴 무효(void) 청구의 낸 돈 줄도 요청서 결제내역에 남는다 — 달 옆 '무효 청구' · 총 환불금액과 맞게(리뷰 r2 (c) · 결제내역 서식은 void를 통째로 뺀다)", async () => {
+    m.later.mockResolvedValue([{ ...later[0]!, status: "void" }]);
+    expect(await approveWithdrawalRefund(REPORT_ID, [K0], DESK, [K1])).toEqual({ ok: true, documentId: "doc1", gates: true, undecided: null });
+    const inserted = m.from.mock.calls.flatMap(([t, ops]) => (t === "academy_documents" ? (ops as unknown[][]).filter((o) => o[0] === "insert") : []))[0]?.[1] as
+      { form_data: { refund: { paymentDetails: string; totalAmount: string } } } | undefined;
+    expect(inserted?.form_data.refund.totalAmount).toBe("200,000원");
+    expect(inserted?.form_data.refund.paymentDetails).toMatch(/^2026-12 무효 청구 수업 수학 반 200,000원 납부/);
+    // 무효가 아닌 청구는 종전 그대로(달만)
+    m.later.mockResolvedValue(later);
+    m.from.mockClear();
+    await approveWithdrawalRefund(REPORT_ID, [K0], DESK, [K1]);
+    const plain = m.from.mock.calls.flatMap(([t, ops]) => (t === "academy_documents" ? (ops as unknown[][]).filter((o) => o[0] === "insert") : []))[0]?.[1] as
+      { form_data: { refund: { paymentDetails: string } } } | undefined;
+    expect(plain?.form_data.refund.paymentDetails).toMatch(/^2026-12 수업 수학 반 200,000원 납부/);
   });
   it("🔴 다른 요청의 요청서가 담은 줄(환불 완료·진행 중)은 고를 수 없다 — 요청서를 만들지 않는다(같은 돈 두 번 · 팀장 결정 2026-11-06)", async () => {
     const withOther = (canceled: boolean, completed: boolean) => [{ ...later[0]!, lines: [{ ...later[0]!.lines[0]!, otherRefund: { documentId: "old", deskName: null, canceled, completed } }, later[0]!.lines[1]!] }];
@@ -196,9 +221,19 @@ describe("원장 환불 승인 — 지정 데스크만 · 고르지 않은 줄�
     m.later.mockResolvedValue(withOther(false, false));
     expect((await approveWithdrawalRefund(REPORT_ID, [K0], DESK, [K1])) as { error: string }).toMatchObject({ error: expect.stringContaining("다른 요청의 요청서가 이미 담은 건") });
     expect(rpcNames()).toEqual([]);
-    // 취소된 요청의 환불 전 요청서면 다시 승인할 수 있다
+    // 취소된 요청의 환불 전 요청서면 다시 승인할 수 있다 — 대체되는 옛 요청서 id를 함께 넘긴다(리뷰 r2 D-1 ⅰ · 수납명이 바뀌어도 C.3가 문서 id로 막는다)
     m.later.mockResolvedValue(withOther(true, false));
-    expect(await approveWithdrawalRefund(REPORT_ID, [K0], DESK, [K1])).toEqual({ ok: true, documentId: "doc1", gates: true });
+    expect(await approveWithdrawalRefund(REPORT_ID, [K0], DESK, [K1])).toEqual({ ok: true, documentId: "doc1", gates: true, undecided: null });
+    expect(argsOf("attach_withdrawal_report_refund")).toMatchObject({ p_supersedes: ["old"] });
+  });
+  it("🔴 금액 모름 미배분 줄은 환불 승인으로 고를 수 없다(리뷰 r2 I5 — 화면을 지나도 서버가 거절)", async () => {
+    m.later.mockResolvedValue([{ ...later[0]!, lines: [{ ...later[0]!.lines[0]!, amountUnknown: true }, later[0]!.lines[1]!] }]);
+    expect((await approveWithdrawalRefund(REPORT_ID, [K0], DESK, [K1])) as { error: string }).toMatchObject({ error: expect.stringContaining("금액을 알 수 없는 미배분 납부") });
+    expect(rpcNames()).toEqual([]);
+  });
+  it("대체할 옛 요청서가 없으면 빈 목록", async () => {
+    expect(await approveWithdrawalRefund(REPORT_ID, [K0], DESK, [K1])).toEqual({ ok: true, documentId: "doc1", gates: true, undecided: null });
+    expect(argsOf("attach_withdrawal_report_refund")).toMatchObject({ p_supersedes: [] });
   });
   it("확인 값을 못 만들면 요청서를 만들지 않는다", async () => {
     m.check.mockRejectedValue(new Error("down"));
@@ -240,6 +275,51 @@ describe("원장 '환불 없음'", () => {
     m.rpc.mockImplementation(async () => ({ data: { groupId: GROUP_ID, undecided: 0, ready: false }, error: null }));
     expect(await declineWithdrawalRefund(REPORT_ID, [K0, K1])).toEqual({ ok: true, processed: false, undecided: 0 });
     expect(m.releaseGroup).not.toHaveBeenCalled();
+  });
+  it("🔴 DB가 확인 값을 '모름'(낡음·범위 다름 → null)으로 보류하면 0으로 접지 않는다 — 화면·감사로그가 '처리 확인 대기'(리뷰 r2 m6)", async () => {
+    m.rpc.mockImplementation(async () => ({ data: { groupId: GROUP_ID, undecided: null, ready: false }, error: null }));
+    expect(await declineWithdrawalRefund(REPORT_ID, [K0, K1])).toEqual({ ok: true, processed: false, undecided: null });
+    expect(m.logAction).toHaveBeenCalledWith(expect.objectContaining({ action: "withdrawal_refund_decline", metadata: expect.objectContaining({ next: "처리 확인 대기(확인 값 낡음 — 다음 확인 때 다시 판정)" }) }));
+  });
+});
+
+describe("원장 '지금 다시 판정'(리뷰 r2 (b)) — cron 안전망과 같은 release 함수 · 새 쓰기 길 아님", () => {
+  beforeEach(() => {
+    m.viewer = { ...m.viewer!, user: { id: "boss", tenantId: "t1", systemRole: "master", displayName: "원장" } };
+    m.record = { report: { ...baseReport, status: "approved" }, consultations: [] };
+    m.ready.mockResolvedValue(true);
+    m.check.mockReset().mockResolvedValue(CHECK);
+    m.releaseGroup.mockReset().mockResolvedValue({ released: 0, blocked: 0, failed: 0 });
+    m.holdAfter = { hold: false };
+  });
+  it("🔴 지금 계산한 확인 값을 그대로 release에 넘긴다 · 다시 읽은 표시를 돌려준다 · 감사로그", async () => {
+    expect(await recheckWithdrawalRefund(REPORT_ID)).toEqual({ ok: true, processed: false, hold: false });
+    expect(m.check).toHaveBeenCalledWith("t1", GROUP_ID);
+    expect(m.releaseGroup).toHaveBeenCalledWith({ tenantId: "t1", groupId: GROUP_ID, actorId: "boss", check: CHECK });
+    expect(m.logAction).toHaveBeenCalledWith(expect.objectContaining({ action: "withdrawal_refund_recheck", metadata: expect.objectContaining({ result: "환불 결정 대기 풀림" }) }));
+    m.holdAfter = { hold: true };
+    expect(await recheckWithdrawalRefund(REPORT_ID)).toEqual({ ok: true, processed: false, hold: true });
+    m.releaseGroup.mockResolvedValue({ released: 1, blocked: 0, failed: 0 });
+    expect(await recheckWithdrawalRefund(REPORT_ID)).toEqual({ ok: true, processed: true, hold: null });
+  });
+  it("원장급만 · 강사뷰 아님 · 처리 전 · 묶음 · 관문 SQL 적용 뒤 · 확인 값을 못 만들면 부르지 않는다", async () => {
+    m.viewer = { ...m.viewer!, user: { id: "mgr", tenantId: "t1", systemRole: "admin", displayName: "관리자" } };
+    expect(await recheckWithdrawalRefund(REPORT_ID)).toEqual({ error: "환불 결정은 원장만 할 수 있습니다." });
+    m.viewer = { ...m.viewer!, user: { id: "boss", tenantId: "t1", systemRole: "master", displayName: "원장" }, teacherId: "teacher" };
+    expect(await recheckWithdrawalRefund(REPORT_ID)).toEqual({ error: "환불 결정은 원장만 할 수 있습니다." });
+    m.viewer = { ...m.viewer!, teacherId: null };
+    m.record = { report: { ...baseReport, status: "completed" }, consultations: [] };
+    expect(await recheckWithdrawalRefund(REPORT_ID)).toEqual({ error: "처리 전 퇴원보고서에서만 다시 판정할 수 있습니다." });
+    m.record = { report: { ...baseReport, status: "approved" }, consultations: [] };
+    m.ready.mockResolvedValue(false);
+    expect(await recheckWithdrawalRefund(REPORT_ID)).toEqual({ error: "DB 적용 전" });
+    m.ready.mockResolvedValue(true);
+    m.check.mockRejectedValue(new Error("invoices down"));
+    expect(await recheckWithdrawalRefund(REPORT_ID)).toEqual({ error: "환불할 수 있는 청구를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." });
+    expect(m.releaseGroup).not.toHaveBeenCalled();
+    m.check.mockResolvedValue(CHECK);
+    m.releaseGroup.mockResolvedValue({ released: 0, blocked: 0, failed: 1 });
+    expect(await recheckWithdrawalRefund(REPORT_ID)).toEqual({ error: "다시 판정하지 못했습니다. 잠시 후 다시 시도해 주세요." });
   });
 });
 

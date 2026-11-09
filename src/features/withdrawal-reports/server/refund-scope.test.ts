@@ -24,11 +24,13 @@ const base = { tenant_id: T, student_id: "s1", effective_date: "2026-11-06", exi
 const LEADER = { ...base, id: "ra", subjects: ["math"], group_leader: true };
 const OTHER = { ...base, id: "rb", subjects: ["english"], group_leader: false };
 
-const m = vi.hoisted(() => ({ reports: [] as unknown[], groupSubjects: [] as string[], groupError: false, noRest: false }));
+const m = vi.hoisted(() => ({ reports: [] as unknown[], groupSubjects: [] as string[], groupError: false, noRest: false, fp: "fp-test" as string | null }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: vi.fn() }));
 vi.mock("@/features/owner/server/platform-settings", () => ({ platformAccountIds: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
+    // 퇴원월 뒤 청구 내용 지문(리뷰 r2 D-12 — loadGroupRefundCheck의 asOf)
+    rpc: async (name: string) => (name === "withdrawal_refund_later_fingerprint" ? { data: m.fp, error: null } : { data: null, error: { message: `모의에 없는 rpc ${name}` } }),
     from: (table: string) => {
       const q: Record<string, unknown> = {};
       for (const k of ["select", "eq", "gt", "neq", "order", "like", "or", "in"]) q[k] = () => q;
@@ -55,6 +57,7 @@ beforeEach(() => {
   m.reports = [LEADER, OTHER];
   m.groupSubjects = ["english", "math", "science"];
   m.groupError = false;
+  m.fp = "fp-test";
 });
 
 describe("작성 강사가 없는 대상 과목 — 환불 확인 값은 묶음 대상 전체로", () => {
@@ -95,5 +98,10 @@ describe("작성 강사가 없는 대상 과목 — 환불 확인 값은 묶음 
     m.groupError = true;
     await expect(loadGroupRefundCheck(T, G)).rejects.toThrow(/처리 범위 확인 실패|묶음 조회 실패/);
     await expect(loadLaterInvoices(LEADER)).rejects.toThrow(/처리 범위 확인 실패|묶음 과목 조회 실패/);
+  });
+  it("🔴 확인 값의 asOf = DB 청구 내용 지문(리뷰 r2 D-12) · 지문을 못 받으면 확인 값을 만들지 않는다", async () => {
+    expect((await loadGroupRefundCheck(T, G)).asOf).toBe("fp-test");
+    m.fp = null;
+    await expect(loadGroupRefundCheck(T, G)).rejects.toThrow("환불 확인용 청구 지문을 읽지 못했습니다.");
   });
 });

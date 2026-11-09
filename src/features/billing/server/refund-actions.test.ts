@@ -16,6 +16,8 @@ const m = vi.hoisted(() => ({
   release: vi.fn(),
   /** 고치기 전 저장돼 있던 요청서(form_data) — 기본 = 없음. */
   existing: null as unknown,
+  /** 그 요청서를 다시 읽을 때의 오류(리뷰 r2 D-8). */
+  existingError: null as { message: string } | null,
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: m.user }));
@@ -38,7 +40,7 @@ const db = (via: "session" | "admin") => ({
     };
     Object.assign(q, {
       select: rec("select"), eq: rec("eq"), update: rec("update"), delete: rec("delete"), insert: rec("insert"), order: rec("order"),
-      maybeSingle: async () => ({ data: m.existing, error: null }),
+      maybeSingle: async () => ({ data: m.existing, error: m.existingError }),
       single: async () =>
         via === "session" && op === "insert" && m.sessionInsertError
           ? { data: null, error: m.sessionInsertError }
@@ -82,6 +84,7 @@ beforeEach(() => {
   m.link.mockResolvedValue(null);
   m.release.mockResolvedValue({ released: 0, blocked: 0, failed: 0 });
   m.existing = null;
+  m.existingError = null;
 });
 
 describe("saveRefundRequest — 대상 직원 명의 · 세션 먼저", () => {
@@ -154,10 +157,11 @@ describe("퇴원보고서에 이어진 요청서의 환불완료일자 — 담�
     m.user.mockResolvedValue(target); m.viewAs.mockResolvedValue(null);
     m.link.mockResolvedValue({ deskId: "desk", deskName: "데스크" });
     const res = await saveRefundRequest(undefined, edit("2026-11-06"));
-    expect(res?.error).toContain("담당 데스크(데스크)와 원장만");
+    // 이어진 요청서는 고치는 것 자체가 담당 데스크·원장만(원장 결정 2026-11-09 · 리뷰 r2 I6) — 완료일자 입력보다 먼저 막힌다.
+    expect(res?.error).toContain("고치는 것은 담당 데스크(데스크)와 원장만");
     expect(writes()).toEqual([]);
     expect(m.link).toHaveBeenCalledWith("t1", "doc1");
-    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ action: "refund_request_complete_denied", metadata: expect.objectContaining({ documentId: "doc1", attempted: "환불완료일자 2026-11-06 입력", deskName: "데스크" }) }));
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ action: "refund_request_linked_denied", metadata: expect.objectContaining({ documentId: "doc1", attempted: "요청서 수정", deskName: "데스크" }) }));
     expect(m.release).not.toHaveBeenCalled();
   });
 
@@ -196,7 +200,7 @@ describe("퇴원보고서에 이어진 요청서의 환불완료일자 — 담�
     const res = await saveRefundRequest(undefined, edit("2026-11-06"));
     expect(res?.error).toContain("실제 로그인한 계정이 담당 데스크(데스크)이거나 원장일 때만");
     expect(writes()).toEqual([]);
-    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ action: "refund_request_complete_denied", metadata: expect.objectContaining({ viaTeacherView: true }) }));
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ action: "refund_request_linked_denied", metadata: expect.objectContaining({ viaTeacherView: true }) }));
     expect(m.release).not.toHaveBeenCalled();
     // 실제 계정이 원장이면(강사뷰로 데스크 화면) 연다 — 행위자(데스크)와 실제 계정(원장) 둘 다 통과
     m.calls = []; m.log.mockClear();
@@ -204,24 +208,78 @@ describe("퇴원보고서에 이어진 요청서의 환불완료일자 — 담�
     expect(await saveRefundRequest(undefined, edit("2026-11-06"))).toMatchObject({ ok: true });
   });
 
-  it("지우는 것도 같다(완료 해제) · 저장돼 있던 값과 같으면(다른 칸만 고침) 막지 않는다", async () => {
-    m.user.mockResolvedValue(target); m.viewAs.mockResolvedValue(null);
-    m.link.mockResolvedValue({ deskId: "desk", deskName: null });
+  it("🔴 담당 아닌 사람은 다른 칸만 고쳐도 막는다 · 완료일자 비우기는 원장만(담당 데스크도 못 비운다 — 리뷰 r2 B1·D-13)", async () => {
     m.existing = { form_data: { student: { name: "학생" }, result: { completedDate: "2026-11-05" } } };
-    const res = await saveRefundRequest(undefined, edit(""));
-    expect(res?.error).toContain("담당 데스크와 원장만");
+    m.link.mockResolvedValue({ deskId: "desk", deskName: null });
+    m.user.mockResolvedValue(target); m.viewAs.mockResolvedValue(null);
+    expect((await saveRefundRequest(undefined, edit("2026-11-05")))?.error).toContain("고치는 것은 담당 데스크와 원장만");
+    expect(writes()).toEqual([]);
+    // 담당 데스크 — 완료일자를 지우려 하면 원장만
+    m.user.mockResolvedValue(desk); m.log.mockClear();
+    m.link.mockResolvedValue({ deskId: "desk", deskName: null, deskActive: true });
+    expect((await saveRefundRequest(undefined, edit("")))?.error).toBe("이어진 환불 요청서의 환불완료일자를 비우는 것은 원장만 할 수 있습니다(돌려준 기록이 사라집니다).");
     expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ action: "refund_request_complete_denied", metadata: expect.objectContaining({ attempted: "환불완료일자 지움" }) }));
     expect(writes()).toEqual([]);
-    expect(await saveRefundRequest(undefined, edit("2026-11-05"))).toMatchObject({ ok: true });
+    // 원장은 비운다
+    m.user.mockResolvedValue(actual);
+    expect(await saveRefundRequest(undefined, edit(""))).toMatchObject({ ok: true });
+    // 퇴사한 담당 데스크는 고치지 못한다(DB 트리거와 같다)
+    m.calls = [];
+    m.user.mockResolvedValue(desk);
+    m.link.mockResolvedValue({ deskId: "desk", deskName: "데스크", deskActive: false });
+    expect((await saveRefundRequest(undefined, edit("2026-11-05")))?.error).toContain("고치는 것은 담당 데스크(데스크)와 원장만");
+    expect(writes()).toEqual([]);
   });
 
-  it("이어지지 않은 요청서는 종전대로 · 완료일자가 그대로면 연결을 보지도 않는다", async () => {
+  it("🔴 상한(원장 승인 줄 낸 돈 합) — 넘는 총 환불금액은 막는다 · 상한을 모르면 금액 칸을 바꾸는 저장만 막고 완료일자는 받는다(리뷰 r2 I6)", async () => {
+    m.user.mockResolvedValue(desk); m.viewAs.mockResolvedValue(null);
+    m.existing = { form_data: { student: { name: "학생" }, refund: { totalAmount: "100,000원", paymentDetails: "결제" }, result: { completedDate: "" } } };
+    const amount = (total: string, payment = "결제", done = "") => { const fd = edit(done); fd.set("r_totalAmount", total); fd.set("r_paymentDetails", payment); return fd; };
+    m.link.mockResolvedValue({ deskId: "desk", deskName: "데스크", deskActive: true, cap: 100000, capLines: 1 });
+    expect(await saveRefundRequest(undefined, amount("90,000원"))).toMatchObject({ ok: true });
+    m.calls = [];
+    expect((await saveRefundRequest(undefined, amount("100,001원")))?.error).toBe("총 환불금액 100,001원이 원장이 승인한 줄의 낸 돈 합계 100,000원(상한)을 넘습니다.");
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ action: "refund_request_linked_denied", metadata: expect.objectContaining({ reason: "상한 100,000원" }) }));
+    expect(writes()).toEqual([]);
+    // 상한 모름(옛 연결 · paid_net 없음) — 금액 칸 변경은 막고 · 같은 금액에 완료일자만 넣는 것은 받는다(막으면 그 묶음이 영원히 기다린다)
+    m.link.mockResolvedValue({ deskId: "desk", deskName: "데스크", deskActive: true, cap: null, capLines: 0 });
+    expect((await saveRefundRequest(undefined, amount("1원")))?.error).toContain("상한)을 알 수 없어");
+    expect((await saveRefundRequest(undefined, amount("100,000원", "고친 결제")))?.error).toContain("상한)을 알 수 없어");
+    expect(await saveRefundRequest(undefined, amount("100,000원", "결제", "2026-11-09"))).toMatchObject({ ok: true });
+  });
+
+  it("🔴 요청서를 다시 읽지 못하면 저장하지 않는다(리뷰 r2 D-8 — 완료 처리자가 이번 저장자로 바뀌던 길)", async () => {
+    m.user.mockResolvedValue(actual); m.viewAs.mockResolvedValue(null);
+    m.existingError = { message: "timeout" };
+    expect((await saveRefundRequest(undefined, edit("2026-11-06")))?.error).toBe("요청서를 다시 불러오지 못해 저장하지 않았습니다. 잠시 후 다시 시도해 주세요.");
+    expect(writes()).toEqual([]);
+  });
+
+  it("이어지지 않은 요청서는 종전대로(수납 쓰기 권한이면 된다) — 연결은 늘 본다(고치기 잠금)", async () => {
     m.user.mockResolvedValue(target); m.viewAs.mockResolvedValue(null);
     m.link.mockResolvedValue(null);
     expect(await saveRefundRequest(undefined, edit("2026-11-06"))).toMatchObject({ ok: true });
-    m.link.mockClear();
     expect(await saveRefundRequest(undefined, edit(""))).toMatchObject({ ok: true });
-    expect(m.link).not.toHaveBeenCalled();
+    expect(m.link).toHaveBeenCalledTimes(2);
+  });
+
+  it("🔴 이어진 요청서 지우기(리뷰 r2 B1) — 완료된 것은 누구도 · 미완료는 담당 데스크·원장만 · 0행 삭제는 실패로", async () => {
+    m.viewAs.mockResolvedValue(null);
+    m.existing = { title: "환불", form_data: { student: { name: "학생" }, result: { completedDate: "2026-11-05" } } };
+    m.link.mockResolvedValue({ deskId: "desk", deskName: "데스크", deskActive: true });
+    m.user.mockResolvedValue(actual);
+    expect((await deleteRefundRequest("doc1")).error).toBe("환불완료일자가 들어간(돈을 돌려준) 이어진 환불 요청서는 지울 수 없습니다. 지워야 하면 원장이 먼저 환불완료일자를 비우세요.");
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ action: "refund_request_linked_denied", metadata: expect.objectContaining({ attempted: "요청서 삭제", reason: "환불완료일자 있음" }) }));
+    m.existing = { title: "환불", form_data: { student: { name: "학생" }, result: { completedDate: "" } } };
+    m.user.mockResolvedValue(target);
+    expect((await deleteRefundRequest("doc1")).error).toContain("지우는 것은 담당 데스크(데스크)와 원장만");
+    expect(writes()).toEqual([]);
+    m.user.mockResolvedValue(desk);
+    expect(await deleteRefundRequest("doc1")).toEqual({ ok: true });
+    expect(m.release).toHaveBeenCalledWith({ tenantId: "t1", documentId: "doc1", actorId: "desk" });
+    // 세션이 0행을 지웠고 강사뷰가 아니면(관리 키로 내려가지 않음) 실패 — 지운 것으로 알고 다시 승인하지 않게
+    m.sessionRows = [];
+    expect((await deleteRefundRequest("doc1")).error).toBe("지워지지 않았습니다 — 이 요청서를 지울 권한이 없거나 이미 지워졌습니다.");
   });
 
   it("🔴 연결을 못 읽으면 막는다(풀리는 쪽으로 넘어가지 않는다)", async () => {

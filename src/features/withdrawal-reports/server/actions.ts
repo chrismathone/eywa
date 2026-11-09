@@ -20,6 +20,7 @@ import { withoutBillingFields } from "../prefill";
 import { REPORT_UNCONFIRMED_LIMIT } from "../autosave";
 import { applyDirectNow } from "./direct-apply";
 import { REFUND_GATE_NOT_READY, loadGroupRefundCheck, refundGateReady } from "./refund-check";
+import { loadRefundSteps } from "./refund-steps";
 
 export type ReportResult = { ok: true; id: string } | { error: string };
 function refresh() {
@@ -118,17 +119,17 @@ export async function changeWithdrawalReport(id: string, action: ReportAction, r
     payload.comment = input.trim();
   }
   // 요청 취소 사유(원장 2026-11-06 *"요청 취소시에 '사유' 입력할 수 있고 마우스 올리면 사유 확인가능하게"*) — 필수 · 앞뒤 공백 빼고 1~500자.
-  // DB(s2_0033)는 사유가 오면 같은 검사로 묶음의 모든 보고서 이력 'cancel' 줄에 남긴다(오지 않으면 종전처럼 — 옛 앱 호환은 DB 몫).
+  // DB(s2_0036)는 사유가 오면 같은 검사로 묶음의 모든 보고서 이력 'cancel' 줄에 남긴다(오지 않으면 종전처럼 — 옛 앱 호환은 DB 몫).
   const cancelReason = action === "cancel" ? cancelReasonOf(input) : null;
   if (action === "cancel") {
     if (!cancelReason) return { error: `취소 사유를 1~${CANCEL_REASON_MAX.toLocaleString("ko-KR")}자로 작성해 주세요.` };
     payload.comment = cancelReason;
   }
-  // 원장 환불 결정(원장 2026-11-06 · s2_0033) — 제출·승인은 전원 승인으로 이어질 수 있다. **이 요청 안에서** 묶음의 환불 확인 값을 계산해 함께 넘긴다:
+  // 원장 환불 결정(원장 2026-11-06 · s2_0036) — 제출·승인은 전원 승인으로 이어질 수 있다. **이 요청 안에서** 묶음의 환불 확인 값을 계산해 함께 넘긴다:
   // DB가 결정 안 된 환불 가능 줄을 세어 '환불 결정 대기'를 맞추고(원장 알림·할 일), 전원 승인이어도 0이 아니면 처리하지 않는다.
   // 못 만들면 처리를 맡기지 않는다(확인 값 없이 보내면 DB는 처리하지 않지만, 승인만 기록되고 처리는 다음 날로 밀린다 — 여기서 멈추고 다시 하게).
   if ((action === "submit" || action === "approve") && record.report.group_id) {
-    // 새 앱 + 옛 DB(s2_0033 전)면 처리 함수가 확인 값을 모른 채 처리한다 — 부르지 않는다(리뷰 #5).
+    // 새 앱 + 옛 DB(s2_0036 전)면 처리 함수가 확인 값을 모른 채 처리한다 — 부르지 않는다(리뷰 #5).
     try { if (!(await refundGateReady())) return { error: REFUND_GATE_NOT_READY }; }
     catch (e) { console.error("[withdrawal-report-gate-ready]", e); return { error: "환불할 수 있는 청구를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." }; }
     try { payload.refundCheck = await loadGroupRefundCheck(viewer.user.tenantId, record.report.group_id); }
@@ -153,13 +154,17 @@ export async function changeWithdrawalReport(id: string, action: ReportAction, r
 async function approvalRefundWait(r: WithdrawalReport): Promise<{ refundWait?: string }> {
   if (!r.group_id || r.status !== "approved") return {};
   const db = createAdminClient();
-  const [{ data: g }, { data: rs }] = await Promise.all([
+  const [{ data: g }, { data: rs }, steps] = await Promise.all([
     db.from("withdrawal_report_groups").select("status,refund_hold").eq("tenant_id", r.tenant_id).eq("id", r.group_id).maybeSingle(),
     db.from("withdrawal_reports").select("status").eq("tenant_id", r.tenant_id).eq("group_id", r.group_id).limit(30),
+    loadRefundSteps(r.tenant_id, [r]).then(map => map.get(r.group_id!) ?? [], () => null),
   ]);
   const group = g as { status: string; refund_hold?: boolean } | null;
   if (!group || group.status !== "pending" || (rs ?? []).some(x => x.status !== "approved")) return {};
-  return { refundWait: group.refund_hold ? "원장 환불 결정 대기" : "데스크 환불·처리 확인 대기" };
+  // 까닭을 모두 · 결정·데스크 대기가 아니면 DB가 확인 값을 '모름'(낡음·범위 다름)으로 보류한 것 — 다음 확인(00:05) 때 다시 판정(리뷰 r2 m6).
+  const desk = steps === null ? null : steps.some(s => !s.completedDate);
+  const parts = [...(group.refund_hold ? ["원장 환불 결정 대기"] : []), ...(desk ? ["데스크 환불 대기"] : [])];
+  return { refundWait: parts.length ? parts.join(" · ") : desk === null ? "데스크 환불 확인 실패 · 처리 확인 대기" : "처리 확인 대기(확인 값 낡음 — 다음 확인 때 다시 판정)" };
 }
 
 /** 취소 입력의 사유 — `{ reason }`의 앞뒤 공백을 뺀 1~500자(아니면 null). */

@@ -8,7 +8,10 @@ import { WindowLink } from "@/components/workspace/window-link";
 import type { ReportConsultation } from "@/features/withdrawal-reports/consultation";
 import { ReportForm } from "./report-form";
 import { LaterInvoices, type RefundDecisionView } from "./later-invoices";
-import { REFUND_DECISION_WAIT_NOTE, decisionBlocksProcessing } from "@/features/withdrawal-reports/refund-decision";
+import { REFUND_DECISION_WAIT_NOTE, decisionBlocksProcessing, type RefundHoldGap } from "@/features/withdrawal-reports/refund-decision";
+import { approveConfirmText, cancelConfirmText, decisionWaitingOf, detailRefundNotes, type LaterState, type OthersState } from "@/features/withdrawal-reports/refund-detail-notes";
+import { kstToday } from "@/lib/date-kst";
+import { RefundNotes } from "./refund-notes";
 import { FORMER_STAFF, type RefundOutcome } from "@/features/withdrawal-reports/approval-lines";
 import type { LaterInvoice } from "@/features/withdrawal-reports/server/refund";
 import type { SubjectHistoryRow } from "@/features/withdrawal-reports/course-period";
@@ -32,8 +35,13 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
   deskStaff?: { id: string; name: string }[];
   /** 데스크 담당자를 고를 수 없는 까닭(학원 설정 미지정 등 — 원장 2026-11-06) — 있으면 환불 승인을 막는다. */
   deskNotice?: string;
-  /** 원장 환불 결정(원장 2026-11-06 · s2_0033) — 묶음의 '환불 결정 대기' 표시 · 이 화면의 결정 안 된 줄 · '환불하지 않음' 줄 · 묶음의 결정 요약(결재란 '환불 결정' 칸). */
-  refundDecision?: RefundDecisionView & { hold: boolean; outcome?: RefundOutcome | null };
+  /**
+   * 원장 환불 결정(원장 2026-11-06 · s2_0036) — 묶음의 '환불 결정 대기' 표시 · 이 화면의 결정 안 된 줄 · '환불하지 않음' 줄 · 묶음의 결정 요약(결재란 '환불 결정' 칸) ·
+   * 목록 표시(DB)와 지금 계산의 어긋남(`gap` — 리뷰 r2 (b) · 서버 `refundHoldGap`) · DB가 센 결정 안 된 줄 수 · 결정할 줄을 보이는 다른 보고서 ·
+   * 퇴원월 뒤 청구 칸 상태(I3) · 다른 과목 보고서 승인(m5·m6) · 관문 SQL 적용 여부(m13). 결정 버튼·확인 값은 지금 계산 그대로다.
+   */
+  refundDecision?: RefundDecisionView & { hold: boolean; outcome?: RefundOutcome | null; gap?: RefundHoldGap | null; holdCount?: number; laterState?: LaterState;
+    holdReport?: { id: string; subjects: string[]; readable: boolean } | null; others?: OthersState; gateReady?: boolean };
   /** 데스크 환불 단계(원장 2026-11-03) — 이 묶음에서 만든 환불 요청서와 완료 여부. */
   refundSteps?: RefundStep[];
   subjectHistory?: SubjectHistoryRow[];
@@ -56,7 +64,19 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
   const deskWaiting = refundWaiting(r, refundSteps);
   // 원장 환불 결정 전(원장 2026-11-06) — 묶음이 '환불 결정 대기'이거나 이 화면에 결정 안 된 환불 가능 줄이 있으면 처리는 결정 뒤다.
   const decisionOpen = decisionBlocksProcessing(r.status);
-  const decisionWaiting = decisionOpen && (refundDecision.hold || refundDecision.undecided.length > 0);
+  const decisionWaiting = decisionWaitingOf(r.status, refundDecision.hold, refundDecision.undecided);
+  // 환불·처리 안내 한 벌(리뷰 r2 (b)·I3·m1·m4·m5·m6·m19 — `detailRefundNotes`). 칩·결재란은 DB 표시 · 결정 단추는 지금 계산 · 다르면 한 줄.
+  const laterState = refundDecision.laterState ?? "ok";
+  const orphanDesk = refundSteps.find(s => !s.completedDate && (!s.deskId || s.deskActive === false));
+  const notes = detailRefundNotes({
+    report: { id: r.id, status: r.status, effective_date: r.effective_date, direct: isDirectReport(r) }, director: capabilities.refund, approver: capabilities.approve || capabilities.edit,
+    later: laterState, undecided: refundDecision.undecided,
+    hold: { hold: refundDecision.hold, report: null, undecided: refundDecision.holdCount ?? 0, checkedAt: null },
+    holdReport: refundDecision.holdReport ? { id: refundDecision.holdReport.id, readable: refundDecision.holdReport.readable,
+      label: refundDecision.holdReport.subjects.length ? refundDecision.holdReport.subjects.map(s => labels[s] ?? "기타 과목").join(" · ") : "함께 요청한 보고서" } : null,
+    others: refundDecision.others ?? "done", deskWaiting, hadDesk: refundSteps.length > 0, gap: refundDecision.gap ?? null,
+    orphanDesk: orphanDesk ? { documentId: orphanDesk.documentId } : null, today: kstToday(),
+  });
   const nameOf = (id: string | null) => id ? staff.find(s => s.id === id)?.name ?? r.snapshot.courses.find(c => c.teacherId === id)?.teacherName ?? "이전 담당자" : "자동 처리";
   // 결재란 승인자 — 직급이 있으면 '정유진 부원장'(원장 2026-11-05). 담임·요청자·처리 이력은 이름 그대로.
   const approverName = (id: string | null) => { const u = id ? staff.find(s => s.id === id) : undefined; return u ? titledName(u, u.name) : nameOf(id); };
@@ -138,24 +158,20 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
     {r.request_note && <div className="rounded-lg border bg-muted/20 p-4 text-sm"><div className="mb-2 font-medium">작성 요청 · {nameOf(r.requested_by)}</div><p className="whitespace-pre-wrap">{r.request_note}</p></div>}
     {r.last_comment && <p className="whitespace-pre-wrap rounded-lg border border-att-late-ink/20 bg-att-late p-4 text-sm text-att-late-ink">{r.last_comment}</p>}
     {skipped && ["requested", "revision"].includes(r.status) && <p className="rounded-lg border bg-muted/20 p-4 text-sm">관리자 승인 생략 — 작성 강사가 이 과목 관리자입니다. 제출하면 바로 승인 완료로 넘어갑니다.</p>}
-    {r.status === "scheduled" && <p className="rounded-lg border bg-muted/20 p-4 text-sm">{isDirectReport(r) ? "처리 예약입니다." : "승인이 완료되었습니다."} {r.effective_date}{decisionWaiting ? " 이후 원장 환불 결정" + (deskWaiting ? "과 데스크 환불 처리" : "") + "가 끝나면 처리하며" : deskWaiting ? " 이후 데스크 환불 처리(환불완료일자)가 끝나면 처리하며" : "에 처리하며"}, 그 전까지는 기존 수강 상태를 유지합니다.</p>}
-    {r.status === "approved" && <p className="rounded-lg border bg-muted/20 p-4 text-sm">{decisionWaiting ? "관리자 승인이 끝났습니다. 원장 환불 결정(퇴원월 뒤 청구의 환불 승인 또는 환불 없음)이 끝나면 처리합니다." : deskWaiting ? "관리자 승인이 끝났습니다. 데스크 환불 처리(환불 요청서의 환불완료일자)가 끝나면 함께 요청한 보고서와 함께 처리합니다." : refundSteps.length ? "관리자 승인과 데스크 환불이 끝났습니다. 함께 요청한 보고서의 승인까지 끝나면 바로 처리합니다(모두 끝났는데 남아 있으면 다음 날 00:05 확인 때 처리합니다)." : "이 보고서는 승인이 완료되었습니다. 함께 요청한 다른 강사의 보고서 승인까지 모두 끝나면 처리합니다."}</p>}
-    {/* 관리자·요청자·작성 강사 안내(원장 2026-11-06) — 원장은 아래 '환불 확인' 칸에서 정한다. */}
-    {decisionWaiting && !capabilities.refund && <p className="rounded-lg border bg-muted/20 p-4 text-sm">{REFUND_DECISION_WAIT_NOTE}</p>}
-    {/* 원장급 — 묶음은 결정 대기인데 이 보고서 화면엔 결정할 줄이 없으면 함께 요청한 다른 보고서에 있다(목록 '내 환불 결정 필요' · 할 일 링크가 그 보고서). */}
-    {capabilities.refund && decisionOpen && refundDecision.hold && !refundDecision.undecided.length && <p className="rounded-lg border bg-muted/20 p-4 text-sm">원장 환불 결정 대기 — 함께 요청한 다른 보고서의 퇴원월 뒤 청구에 정할 건이 남아 있습니다. 목록의 &apos;내 환불 결정 필요&apos;나 할 일에서 그 보고서를 여세요.</p>}
+    {/* 처리 안내 · 결정 대기 안내 · 결정할 줄이 있는 다른 보고서(링크) · 목록 표시와 지금 계산의 어긋남 · 퇴사한 데스크(리뷰 r2 — `detailRefundNotes` 한 곳). */}
+    <RefundNotes notes={notes} reportId={r.id} />
     {assignmentChanged && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">요청 이후 학생·수강·담당 강사가 변경되었습니다. 아래 내용은 요청 당시 기록이며, 제출·승인을 진행할 수 없습니다. 요청한 사람이 요청을 취소하고 현재 담당 기준으로 다시 요청해 주세요.</p>}
     {prefillWarning && <p role="alert" className="rounded-lg border p-4 text-sm">{prefillWarning}</p>}
-    <ReportForm managerSkipped={skipped} refundSteps={refundSteps} refundDecisionSign={refundDecisionSign} consultations={consultations} report={r} body={body} events={events} labels={labels} nameOf={nameOf} approverName={approverName} editable={capabilities.edit} pending={pending} onChange={update} subjectHistory={subjectHistory}
+    <ReportForm managerSkipped={skipped} refundSteps={refundSteps} refundDecisionSign={refundDecisionSign} decisionWaiting={decisionWaiting} consultations={consultations} report={r} body={body} events={events} labels={labels} nameOf={nameOf} approverName={approverName} editable={capabilities.edit} pending={pending} onChange={update} subjectHistory={subjectHistory}
       refundCheck={r.status === "canceled" ? undefined : <LaterInvoices reportId={r.id} rows={laterInvoices} canApprove={capabilities.refund} deskStaff={deskStaff} gates={!["completed", "blocked"].includes(r.status)}
-        decisionOpen={decisionOpen} decision={refundDecision} deskNotice={deskNotice} />} />
+        decisionOpen={decisionOpen} decision={refundDecision} deskNotice={deskNotice} laterState={laterState} subjectLabels={labels} />} />
     {error && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
     <div className="flex flex-wrap gap-2">
       {capabilities.edit && <><Button disabled={pending || assignmentChanged || saveStatus.kind === "conflict"} onClick={() => setDecision("submit")}>{skipped ? "보고서 제출" : "관리자에게 제출"}</Button><AutosaveNote status={saveStatus} /></>}
       {capabilities.approve && <><Button disabled={pending || assignmentChanged} onClick={() => setDecision("approve")}>승인</Button><Button disabled={pending} variant="outline" onClick={() => setDecision("reject")}>반려</Button></>}
     </div>
     {decision && <section ref={decisionRef} className="space-y-3 rounded-xl border bg-muted/20 p-5" aria-label="처리 확인">
-      <p className="text-sm">{decision === "submit" ? (skipped ? `보고서를 제출하면 관리자 승인 없이 바로 승인 완료로 넘어갑니다(작성 강사가 이 과목 관리자). 제출한 뒤에는 수정할 수 없습니다.${deskWaiting ? " 데스크 환불 처리가 끝나면 처리합니다." : ""}${decisionWaiting ? ` ${REFUND_DECISION_WAIT_NOTE}.` : ""}` : "보고서를 제출하면 관리자 검토가 시작됩니다. 이후 수정은 반려 후 가능합니다.") : decision === "approve" ? `이 보고서를 승인합니다. ${r.status === "manager_pending" && directorIds(r).length ? "관리자 전원 승인 후 원장 검토로 넘어갑니다." : `함께 요청한 보고서와 모든 승인자의 승인이 끝나면${deskWaiting ? " 데스크 환불 처리까지 끝난 뒤" : ""} ${r.effective_date}에 ${r.exit_kind === "withdrawal" ? "퇴원" : "선택 과목 수강종료"}을 처리합니다. 처리일이 지났다면 즉시 반영됩니다.`}${decisionWaiting ? ` ${REFUND_DECISION_WAIT_NOTE}.` : ""}` : decision === "cancel" ? "함께 요청한 모든 강사의 보고서를 취소합니다. 학생의 수강 상태는 유지됩니다. 취소 사유는 처리 이력에 남고 목록에서 확인할 수 있습니다." : "수정이 필요한 내용을 적어 주세요. 이 보고서의 승인을 초기화하고 강사가 수정 후 다시 제출합니다."}</p>
+      <p className="text-sm">{decision === "submit" ? (skipped ? `보고서를 제출하면 관리자 승인 없이 바로 승인 완료로 넘어갑니다(작성 강사가 이 과목 관리자). 제출한 뒤에는 수정할 수 없습니다.${deskWaiting ? " 데스크 환불 처리가 끝나면 처리합니다." : ""}${decisionWaiting ? ` ${REFUND_DECISION_WAIT_NOTE}.` : ""}` : "보고서를 제출하면 관리자 검토가 시작됩니다. 이후 수정은 반려 후 가능합니다.") : decision === "approve" ? approveConfirmText({ effectiveDate: r.effective_date, withdrawal: r.exit_kind === "withdrawal", deskWaiting, decisionWaiting, directorStep: r.status === "manager_pending" && directorIds(r).length > 0 }) : decision === "cancel" ? cancelConfirmText(refundSteps, refundDecision.gateReady ?? true) : "수정이 필요한 내용을 적어 주세요. 이 보고서의 승인을 초기화하고 강사가 수정 후 다시 제출합니다."}</p>
       {decision === "reject" && <textarea className={control} aria-label="반려 사유" rows={3} maxLength={1000} value={comment} onChange={e => setComment(e.target.value)} />}
       {decision === "cancel" && <textarea className={control} aria-label="취소 사유" placeholder="취소하는 까닭을 적어 주세요(필수)" rows={3} maxLength={CANCEL_REASON_MAX} value={cancelReason} onChange={e => setCancelReason(e.target.value)} />}
       <div className="flex gap-2"><Button disabled={pending || (decision === "reject" && !comment.trim()) || (decision === "cancel" && !cancelReason.trim())} onClick={() => change(decision)}>{pending ? "처리 중…" : `${REPORT_ACTION_LABEL[decision]} 확인`}</Button><Button variant="outline" disabled={pending} onClick={() => setDecision(null)}>닫기</Button></div>

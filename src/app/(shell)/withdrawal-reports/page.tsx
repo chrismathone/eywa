@@ -86,7 +86,7 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
   const canSeeArchive = !!viewer.teacherId || viewer.manage;
   // 데스크 환불 단계(원장 2026-11-03) — 못 읽으면 단계 없이(목록은 연다).
-  // 원장 환불 결정 대기·결정 요약(승인 진행의 원장 줄) · 요청 취소 기록(상태 칸 말풍선 — 원장 2026-11-06 · s2_0033) — 못 읽으면 없이(목록은 연다).
+  // 원장 환불 결정 대기·결정 요약(승인 진행의 원장 줄) · 요청 취소 기록(상태 칸 말풍선 — 원장 2026-11-06 · s2_0036) — 못 읽으면 없이(목록은 연다).
   const [refunds, holds, outcomes, cancels] = await Promise.all([
     loadRefundSteps(viewer.user.tenantId, list.rows, staff).catch((error: unknown) => {
       console.error("[withdrawal-reports] 데스크 환불 단계 조회 실패", error);

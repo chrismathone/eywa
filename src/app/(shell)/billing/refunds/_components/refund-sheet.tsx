@@ -15,6 +15,8 @@ import {
 } from "@/features/billing/refund-request";
 import { saveRefundRequest, type RefundActionState } from "@/features/billing/server/refund-actions";
 import { DeleteRefundButton, PrintRefundButton } from "./refund-buttons";
+import { LinkedRequestBanner, type LinkedRequestView } from "./linked-request-banner";
+import { LINKED_DELETE_CONFIRM } from "@/features/withdrawal-reports/refund-decision";
 import { RefundStudentPicker } from "./refund-student-picker";
 
 // 종이 서식("환불처리요청서") 레이아웃을 재현한 시트 — 읽기(뷰) ↔ 인라인 편집 한 컴포넌트(WYSIWYG).
@@ -45,6 +47,7 @@ export function RefundSheet({
   canWrite = false,
   startEditing = false,
   completionLock = null,
+  linked = null,
 }: {
   data: RefundRequestData;
   id?: string;
@@ -57,6 +60,11 @@ export function RefundSheet({
    * 지금 값과 사유를 보이고, 같은 값을 숨은 칸으로 보낸다(저장해도 바뀌지 않는다 · 서버 저장 액션·DB 트리거가 다시 막는다).
    */
   completionLock?: string | null;
+  /**
+   * 퇴원보고서에 이어진 요청서(리뷰 r2 I4·I6·B1) — 맨 위 경고(대체됨 · 잠금 사유)·상한 · 고칠 수 없으면 `editLock`(수정 단추 대신 사유) ·
+   * 지울 수 없으면 `deleteLock`(삭제 단추 없음 · 사유). 이어지지 않은 요청서는 null.
+   */
+  linked?: (LinkedRequestView & { editLock: string | null; deleteLock: string | null }) | null;
 }) {
   const [editing, setEditing] = useState(startEditing);
   const [state, formAction] = useActionState<RefundActionState, FormData>(saveRefundRequest, undefined);
@@ -166,6 +174,8 @@ export function RefundSheet({
                 ) : (
                   V(data.approval[a.key])
                 )}
+                {/* 원장 C.3로 대체된 옛 요청서 — 담당 자리에 '대체됨'(이 요청서로 환불하지 않는다 · 리뷰 r2 I4). */}
+                {a.key === "staff" && linked?.superseded ? <span className="text-danger block text-[11px] font-bold">대체됨</span> : null}
               </td>
             ))}
           </tr>
@@ -325,7 +335,7 @@ export function RefundSheet({
           </>
         ) : (
           // 읽기 권한에겐 '수정'이 없다 — 할 수 없는 일을 안내하지 않는다(원장 2026-11-05).
-          canWrite ? "종이 서식 그대로 — 인쇄하거나 수정할 수 있습니다." : "종이 서식 그대로 — 인쇄할 수 있습니다."
+          canWrite && !linked?.editLock ? "종이 서식 그대로 — 인쇄하거나 수정할 수 있습니다." : linked?.editLock ? linked.editLock : "종이 서식 그대로 — 인쇄할 수 있습니다."
         )}
       </p>
       <div className="flex flex-wrap items-center gap-2">
@@ -339,24 +349,30 @@ export function RefundSheet({
           </>
         ) : (
           <>
-            {canWrite ? (
+            {canWrite && !linked?.editLock ? (
               <Button type="button" onClick={() => setEditing(true)}>
                 <Pencil className="size-4" />
                 수정
               </Button>
             ) : null}
             <PrintRefundButton />
-            {canWrite && id ? <DeleteRefundButton id={id} name={s.name} /> : null}
+            {/* 이어진 요청서 — 완료된 것은 아무도 · 미완료는 담당 데스크·원장만(리뷰 r2 B1) · 확인 문구에 원장 결정 대기로 돌아감을 적는다. */}
+            {canWrite && id && !linked?.deleteLock ? <DeleteRefundButton id={id} name={s.name} confirmText={linked ? LINKED_DELETE_CONFIRM : undefined} /> : null}
           </>
         )}
       </div>
     </div>
   );
 
+  // 잠금 사유가 있으면 보기 화면 맨 위에도 늘 보인다(리뷰 r2 I4) — 연결 사정(linked)을 못 받은 호출이어도 사유만은 경고 상자로.
+  const banner = linked ? <LinkedRequestBanner view={linked} />
+    : completionLock ? <p role="alert" className="rounded-lg border p-4 text-sm print:hidden">{completionLock}</p> : null;
   if (!editing) {
     return (
       <div className="space-y-4">
+        {banner}
         {toolbar}
+        {linked?.deleteLock && canWrite ? <p className="text-text-dim text-xs print:hidden">{linked.deleteLock}</p> : null}
         {sheet}
       </div>
     );
@@ -365,6 +381,7 @@ export function RefundSheet({
   return (
     <form action={formAction} ref={formRef} className="space-y-4">
       {id ? <input type="hidden" name="id" value={id} /> : null}
+      {banner}
       {toolbar}
       <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
       <RefundStudentPicker formRef={formRef} />

@@ -4,12 +4,12 @@ import { describe, expect, it } from "vitest";
 import { reportStatusChips, reportStatusLabel, type ReportListRow } from "./model";
 import { buildListItems } from "./list-items";
 import {
-  buildRefundCheck, canEditLinkedCompletion, decisionBlocksProcessing, declinedKeys, lineRefundable, linkedCompletionLock, reapprovable, refundableKeys, undecidedKeys,
+  approvable, buildRefundCheck, canEditLinkedCompletion, decisionTargets, openClaims, decisionBlocksProcessing, declinedKeys, lineRefundable, linkedCompletionLock, reapprovable, refundableKeys, refundHoldGap, undecidedKeys,
   REFUND_DECISION_CHIP, REFUND_DECISION_WAIT_NOTE, DESK_NOT_DESIGNATED, unpickedNotice,
 } from "./refund-decision";
 
 /**
- * 원장 환불 결정(원장 2026-11-06 · DB s2_0033) — 순수 판정. DB `withdrawal_report_refund_note`와 같은 규칙:
+ * 원장 환불 결정(원장 2026-11-06 · DB s2_0036) — 순수 판정. DB `withdrawal_report_refund_note`와 같은 규칙:
  * 결정 안 됨 = 환불 가능 줄 중 '환불하지 않음'도, 아직 남은 요청서의 '환불'도 없는 줄. 결정 뒤 새로 생긴 줄 · 요청서가 지워진 줄은 다시 결정 안 됨.
  */
 const INV = "40000000-0000-4000-8000-000000000001";
@@ -35,7 +35,8 @@ describe("환불 가능 줄 · 확인 값", () => {
       { reportId: "R2", later: [inv([l(k("b")), l(k("c")), l(k("d"), { refund: { documentId: "doc1" } }), l(k("e"), { paidNet: 0 })])] },
     ], meta)).toEqual({
       refundable: [{ key: k("a"), report: "R1", paid: 1000 }, { key: k("b"), report: "R1", paid: 7000 }, { key: k("c"), report: "R2", paid: 1000 }],
-      claimed: [{ key: k("d"), doc: "doc1" }],   // 낸 돈이 없는 줄(e)은 잡힌 줄도 아니다
+      // 잡힌 줄 = 요청서 · 지금 낸 돈(결정 뒤 늘면 다시 묻는다 — 리뷰 r2 D-4) · 그 줄을 보이는 보고서(결정 대기 링크). 낸 돈이 없는 줄(e)은 잡힌 줄도 아니다.
+      claimed: [{ key: k("d"), doc: "doc1", paid: 1000, report: "R1" }],
       asOf: meta.asOf, scope: "withdrawal",
     });
     expect(buildRefundCheck([{ reportId: "R1", later: [] }], { asOf: null, scope: "subject_end" })).toEqual({ refundable: [], claimed: [], asOf: null, scope: "subject_end" });
@@ -144,7 +145,12 @@ describe("강사뷰 완료일자 — 화면 행위자와 실제 로그인 계정
   });
   it("수납 화면은 실제 계정(user)을 함께 넘긴다 — 저장 액션과 같은 함수", () => {
     const page = readFileSync(join(process.cwd(), "src/app/(shell)/billing/refunds/[id]/page.tsx"), "utf8");
-    expect(page).toContain("linkedCompletionLock(link, { id: actor.id, directorLevel: actor.systemRole === \"master\" && !(await viewAsTeacher()) }, { id: user.id, directorLevel: user.systemRole === \"master\" })");
+    expect(page).toContain("const who = { id: actor.id, directorLevel: actor.systemRole === \"master\" && !(await viewAsTeacher()) };");
+    expect(page).toContain("const account = { id: user.id, directorLevel: user.systemRole === \"master\" };");
+    // 완료일자 · 고치기 · 지우기 잠금이 모두 같은 두 사람(화면 행위자 · 실제 계정)으로(리뷰 r2 I6·B1)
+    expect(page).toContain("linkedCompletionLock(link, who, account)");
+    expect(page).toContain("linkedEditLock(link, who, account)");
+    expect(page).toMatch(/linkedDeleteLock\(link, .+?, who, account\)/);
     const action = readFileSync(join(process.cwd(), "src/features/billing/server/refund-actions.ts"), "utf8");
     expect(action).toContain("const account = (await getCurrentUser()) ?? user;");
   });
@@ -158,5 +164,76 @@ describe("다른 묶음의 요청서가 담은 줄 — 다시 고를 수 있나(
     expect(reapprovable({ otherRefund: { canceled: false, completed: false } })).toBe(false);
     // 그래도 그 줄은 이 묶음에서 결정 안 됨이다(확인 값에 든다)
     expect(lineRefundable({ status: "paid" }, { paidNet: 1000, billingRefund: false, refund: null })).toBe(true);
+  });
+  it("🔴 이 묶음 요청서가 잡은 줄도 다시 정할 때가 있다(리뷰 r2 D-2·D-4) — 표식에 정확히 없음(결정 행 없음) · 결정 뒤 낸 돈 증가('환불' 결정도)", () => {
+    const R = (documentId: string, exact: boolean) => ({ documentId, deskName: null, completed: false, exact });
+    const later = [{ status: "paid", lines: [
+      { key: "i#a", paidNet: 1000, billingRefund: false, refund: R("D1", true) },     // 정확히 담음 · 결정 행 있음 · 그대로
+      { key: "i#b", paidNet: 2000, billingRefund: false, refund: R("D1", false) },    // 형제·낡은 표식으로 넓혀 담음 · 결정 행 없음 → 다시
+      { key: "i#c", paidNet: 3000, billingRefund: false, refund: R("D1", true) },     // '환불' 결정 뒤 낸 돈 증가 → 다시
+      { key: "i#d", paidNet: 4000, billingRefund: false, refund: R("D1", true) },     // 정확히 담음 · 결정 행 없음(옛 연결) → 그대로
+      { key: "i#e", paidNet: 500, billingRefund: false, refund: null },               // 환불 가능 줄
+    ] }];
+    const decisions = new Map([
+      ["i#a", { decision: "refund" as const, live: true, paidNet: 1000, paidSeen: 1000, documentId: "D1" }],
+      ["i#c", { decision: "refund" as const, live: true, paidNet: 2500, paidSeen: null, documentId: "D1" }],
+    ]);
+    expect(openClaims(later, decisions)).toEqual([
+      { key: "i#b", reason: "inexact", before: null, now: 2000, documentId: "D1" },
+      { key: "i#c", reason: "increase", before: 2500, now: 3000, documentId: "D1" },
+    ]);
+    // 본 낸 돈(paid_seen)이 있으면 그것으로 본다 — 다시 정한 뒤(본 낸 돈 = 지금)엔 열리지 않는다
+    expect(openClaims(later, new Map([...decisions, ["i#c", { decision: "refund" as const, live: true, paidNet: 2500, paidSeen: 3000, documentId: "D1" }]]))).toEqual([
+      { key: "i#b", reason: "inexact", before: null, now: 2000, documentId: "D1" },
+    ]);
+    // 원장이 지금 정할 줄 = 환불 가능 줄 + 다시 정할 줄(서버 대조·'환불 없음'·고르지 않은 줄이 같은 값)
+    expect(decisionTargets(later, decisions)).toEqual(["i#e", "i#b", "i#c"]);
+  });
+  it("🔴 금액 모름 미배분 줄(과목 몫을 셀 수 없음 · 리뷰 r2 I5) — 결정 대상(확인 값에 든다)이지만 환불 승인은 못 고른다(환불하지 않음만)", () => {
+    const line = { paidNet: 300000, billingRefund: false, refund: null, amountUnknown: true };
+    expect(lineRefundable({ status: "paid" }, line)).toBe(true);
+    expect(approvable({ status: "paid" }, line)).toBe(false);
+    expect(approvable({ status: "paid" }, { ...line, amountUnknown: false })).toBe(true);
+    expect(approvable({ status: "paid" }, { ...line, otherRefund: { canceled: false, completed: false } })).toBe(false);
+  });
+});
+
+describe("목록 표시(DB refund_hold)와 상세의 지금 계산이 어긋나면 한 줄(리뷰 r2 (b) · refundHoldGap)", () => {
+  const me = { id: "r1", status: "approved", group_leader: true };
+  const key = "40000000-0000-4000-8000-000000000001#a1";
+  const judged = "2026-11-08T03:00:00Z";
+  it("🔴 방향 ① 지금 계산은 결정 전인데 DB는 대기 아님 → 'app'(DB가 판정했어야 할 때만)", () => {
+    expect(refundHoldGap(me, { hold: false, report: null, undecided: 0, checkedAt: judged }, [key])).toBe("app");
+    // 판정 시각이 없어도 이 보고서가 제출됐으면(승인 대기·승인 완료·처리 예약) DB가 판정했어야 한다 — 그 판정이 확인 값 없음·낡음으로 보류됐어도 목록엔 대기가 없다.
+    for (const status of ["manager_pending", "director_pending", "approved", "scheduled"])
+      expect(refundHoldGap({ ...me, status }, { hold: false, report: null, undecided: 0, checkedAt: null }, [key]), status).toBe("app");
+    // 제출 전 작성 중이고 판정한 적 없음 → 아직 판정 전(목록은 판정 뒤에 대기를 보인다) — 어긋남이 아니다
+    for (const status of ["requested", "revision"]) {
+      expect(refundHoldGap({ ...me, status }, { hold: false, report: null, undecided: 0, checkedAt: null }, [key]), status).toBeNull();
+      // 다른 과목 보고서가 제출돼 판정한 적이 있으면 작성 중이어도 어긋남이다
+      expect(refundHoldGap({ ...me, status }, { hold: false, report: null, undecided: 0, checkedAt: judged }, [key]), status).toBe("app");
+    }
+    // 결정 전인 줄이 없으면 둘 다 대기 아님 — 같다
+    expect(refundHoldGap(me, { hold: false, report: null, undecided: 0, checkedAt: judged }, [])).toBeNull();
+  });
+  it("🔴 방향 ② DB는 대기인데 지금 계산은 이 보고서에 정할 건 없음 → 'db'(결정 보고서가 이 보고서일 때만)", () => {
+    expect(refundHoldGap(me, { hold: true, report: "r1", undecided: 1, checkedAt: judged }, [])).toBe("db");
+    // 결정 보고서를 모르면(옛 표시) 대표 보고서가 맡는다
+    expect(refundHoldGap(me, { hold: true, report: null, undecided: 1, checkedAt: judged }, [])).toBe("db");
+    expect(refundHoldGap({ ...me, group_leader: false }, { hold: true, report: null, undecided: 1, checkedAt: judged }, [])).toBeNull();
+    // 결정 보고서가 다른 보고서 → 어긋남 아님(원장에겐 '함께 요청한 다른 보고서' 안내)
+    expect(refundHoldGap(me, { hold: true, report: "r2", undecided: 1, checkedAt: judged }, [])).toBeNull();
+    // 이 화면에도 결정 전인 줄이 있으면 같다
+    expect(refundHoldGap(me, { hold: true, report: "r1", undecided: 1, checkedAt: judged }, [key])).toBeNull();
+    expect(refundHoldGap(me, { hold: true, report: "r2", undecided: 1, checkedAt: judged }, [key])).toBeNull();
+  });
+  it("모르면 말하지 않는다 — DB 표시를 못 읽음 · 지금 계산을 못 함 · 처리 전 단계가 아님", () => {
+    expect(refundHoldGap(me, null, [key])).toBeNull();
+    expect(refundHoldGap(me, { hold: false, report: null, undecided: 0, checkedAt: judged }, [key], false)).toBeNull();
+    expect(refundHoldGap(me, { hold: true, report: "r1", undecided: 1, checkedAt: judged }, [], false)).toBeNull();
+    for (const status of ["completed", "canceled", "blocked"]) {
+      expect(refundHoldGap({ ...me, status }, { hold: false, report: null, undecided: 0, checkedAt: judged }, [key]), status).toBeNull();
+      expect(refundHoldGap({ ...me, status }, { hold: true, report: "r1", undecided: 1, checkedAt: judged }, []), status).toBeNull();
+    }
   });
 });

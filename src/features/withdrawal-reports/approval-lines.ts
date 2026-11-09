@@ -36,13 +36,16 @@ export function refundApprovalLines(input: {
   directors: readonly Person[];
   personOf: (id: string) => Person | undefined;
   steps: readonly RefundStep[];
+  /** 요청이 취소됐다 — 완료 전 데스크 줄은 흐리게 '(요청 취소)'(기다리는 일처럼 보이지 않게 · 리뷰 r2 m14). */
+  canceled?: boolean;
 }): ApprovalLine[] {
   const decision: ApprovalLine[] = input.waiting
     ? [{ text: marks(input.directors, "○") }]
     : input.outcome
       ? [{ text: marks([input.outcome.by ? input.personOf(input.outcome.by) : undefined], "✓"), ...(input.outcome.outcome === "none" ? { muted: true } : {}) }]
       : [];
-  const desk = input.steps.map((s): ApprovalLine => ({ text: `${s.completedDate ? "✓" : "○"} ${deskLabel(s)}` }));
+  const desk = input.steps.map((s): ApprovalLine => s.completedDate ? { text: `✓ ${deskLabel(s)}` }
+    : input.canceled ? { text: `○ ${deskLabel(s)} (요청 취소)`, muted: true } : { text: `○ ${deskLabel(s)}` });
   return [...decision, ...desk];
 }
 

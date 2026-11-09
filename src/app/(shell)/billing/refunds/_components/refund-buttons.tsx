@@ -21,7 +21,8 @@ export function PrintRefundButton() {
   );
 }
 
-export function DeleteRefundButton({ id, name }: { id: string; name: string }) {
+/** `confirmText` = 확인 때 덧붙일 글(퇴원보고서에 이어진 요청서 — 지우면 원장 환불 결정 대기로 돌아감 · 리뷰 r2 B1). */
+export function DeleteRefundButton({ id, name, confirmText }: { id: string; name: string; confirmText?: string }) {
   const inFrame = useInFrame();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -30,6 +31,7 @@ export function DeleteRefundButton({ id, name }: { id: string; name: string }) {
     return (
       <span className="flex items-center gap-1.5 text-sm">
         <span className="text-text-dim whitespace-nowrap">{name || "이"} 요청서 삭제?</span>
+        {confirmText ? <span role="note" className="text-danger text-xs">{confirmText}</span> : null}
         <button
           type="button"
           disabled={busy}

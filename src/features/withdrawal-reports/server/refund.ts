@@ -6,7 +6,7 @@ import { receiptRefundState } from "@/features/billing/session-terms/receipt-ref
 import type { RefundPrefillLine } from "@/features/billing/refund-prefill";
 import { INVOICE_CATEGORY_LABEL } from "../prefill";
 import type { WithdrawalReport } from "../model";
-import { REFUND_TAG_PREFIX, claimedKeys, claimedLines, courseOfLine, lineBase, lineIds, norm, splitKey } from "../refund-keys";
+import { REFUND_TAG_PREFIX, claimedKeys, claimsOf, courseOfLine, keysOverlap, lineIds, norm, splitKey, unallocId } from "../refund-keys";
 import { billingWriters, type DeskStaffRow } from "../desk-staff";
 import { platformAccountIds } from "@/features/owner/server/platform-settings";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -18,11 +18,15 @@ import { kstToday } from "@/lib/date-kst";
 
 /**
  * 퇴원월 **뒤** 청구 — 원장 2026-10-29 *"11월까지 납부했는데, 퇴원보고서상에는 10월납부밖에 없음… 이후에 납부한건 혹은 환불한 건에
- * 대해서도 표시할 수 있어야함"*(김덕현 — 영어만 수강종료 10-28 · 11월 청구에 영어 반 줄 315,000원 납부). 무효(void) 청구는 뺀다.
+ * 대해서도 표시할 수 있어야함"*(김덕현 — 영어만 수강종료 10-28 · 11월 청구에 영어 반 줄 315,000원 납부).
+ * 무효(void) 청구는 **낸 돈이 있으면 넣는다**(리뷰 r2 (c) · 결정 2026-11-09) — 빼면 그 돈을 원장이 못 보고 결정 없이 처리된다(환불을 놓친다).
+ * 넣는 비용은 결정 한 번(원장이 '환불 없음'을 고르면 된다). 낸 돈이 없는 무효 청구는 종전대로 뺀다(돌려줄 돈이 없다).
  * 환불은 **청구 줄 단위** — 원장 *"어떤건을 환불할건지 토글토글토글해서 선택선택선택해 그 건을 환불하게"*.
  * 환불 요청서(academy_documents · refund_request)는 설명 칸의 표식(`lines:<청구id>#<줄 식별값>,…`)으로 줄과 잇는다.
  */
 export type RefundRef = { documentId: string; deskName: string | null; completed: boolean };
+/** 이 묶음 요청서가 담은 줄 — `exact` = 그 줄 키가 요청서 표식에 정확히 있다(아니면 표식 키가 낡아 겹침으로 담은 것 — DB가 원장 결정을 다시 묻는다 · 리뷰 r2 D-2). */
+export type OwnRefundRef = RefundRef & { exact: boolean };
 export type LaterLine = RefundPrefillLine & {
   /** `<청구 id>#<줄 식별값>` — 환불 선택·표식의 단위. 줄 내용(구분·반·수납명·묶음) 기준이라 동기화로 순서가 바뀌어도 같은 줄을 가리킨다. */
   key: string;
@@ -36,13 +40,19 @@ export type LaterLine = RefundPrefillLine & {
   billingRefundAmount?: number | null;
   /** 줄별 납부 기록이 없어 청구 납부액이 줄에 다 나뉘지 않은 돈(리뷰 차단 2) — 확인 값에 든다(원장이 정한다). */
   unallocated?: true;
+  /** 미배분 줄 — 청구 전체 미배분액(참고 · 리뷰 r2 I5) · 범위(과목 몫이면 과목 키 · '나머지'면 `~과목`) · 몫을 계산할 수 없음(금액 모름 — 결정 대상 · 환불 승인 불가). */
+  unallocTotal?: number;
+  unallocScope?: string;
+  amountUnknown?: true;
   /** 이 묶음(옛 단건은 이 보고서)에 이어진 요청서 — 이것만 줄을 잡는다(팀장 결정 2026-11-06). */
-  refund: RefundRef | null;
+  refund: OwnRefundRef | null;
   /**
    * **다른 묶음**에 이어진 요청서가 이 줄을 담고 있다 — 줄을 잡지 않는다(`refund`는 null · 이 묶음에선 원장 결정 대기). 화면은 참고로 그 요청서를 보인다.
    * `canceled` = 그 요청서가 이어진 보고서가 모두 취소됨. 다시 환불 승인은 '취소된 요청의 미완료 요청서'일 때만(`reapprovable`) — 그 밖엔 '환불하지 않음'으로만 정한다.
    */
   otherRefund?: OtherRefundRef;
+  /** 이 줄과 겹치는 다른 묶음 요청서가 둘 이상이면 전부(다시 환불 승인은 모두 '취소된 요청의 미완료'일 때만 · 대체 요청서 id로 넘긴다 — 리뷰 r2 D-1). */
+  otherAll?: OtherRefundRef[];
 };
 export type OtherRefundRef = RefundRef & { canceled: boolean };
 export type LaterInvoice = {
@@ -51,13 +61,15 @@ export type LaterInvoice = {
   amountBilled: number; amountPaid: number;
   lines: LaterLine[];
   partial: boolean;
+  /** 무효 청구인데 같은 달·같은 구분에 무효가 아닌 청구가 있다(재발행 — 낸 돈이 옮겨졌을 수 있다 · 경고만 · 리뷰 r2 (c)). */
+  reissued?: true;
 };
 
 export { LINE_KEY, REFUND_TAG_PREFIX, refundTag } from "../refund-keys";
 
 /** 퇴원월 뒤 청구 상한 — 닿으면 잘렸을 수 있어 확인 값을 만들지 않는다. */
 const LATER_LIMIT = 120;
-/** 미배분 납부 줄의 식별값(줄 키 `<청구 id>#unalloc` — DB 줄 키 형식 안). */
+/** 미배분 납부 줄의 식별값 머리(줄 키 `<청구 id>#unalloc` · 과목 몫 `#unalloc:<과목>` · 나머지 `#unalloc:~<과목>` — DB 줄 키 형식 안 · `unallocId`). */
 export const UNALLOCATED_LINE = "unalloc";
 /** makeedu 부분 환불액 — 취소되지 않은 환불의 금액 합. 금액을 모르는 환불이 섞이면 null. */
 function partialRefundAmount(v: unknown): number | null {
@@ -94,7 +106,7 @@ const docCompleted = (d: { form_data?: unknown }) => !!((d.form_data ?? {}) as {
 
 /**
  * 요청서 문서를 연결로 가른다 — 줄을 '잡는' 것은 **보고서에 이어진 요청서**(s2_0025 `withdrawal_report_refunds`)뿐이다(검토 2026-11-06). 표식(설명)은 자료실에서
- * 고칠 수 있어, 이어지지 않은 문서에 표식을 적어 환불 가능 줄을 숨기면 원장 결정·데스크 환불 없이 처리될 수 있었다. 이어진 요청서의 표식·번호·서식은 DB 트리거가 막는다(s2_0033).
+ * 고칠 수 있어, 이어지지 않은 문서에 표식을 적어 환불 가능 줄을 숨기면 원장 결정·데스크 환불 없이 처리될 수 있었다. 이어진 요청서의 표식·번호·서식은 DB 트리거가 막는다(s2_0036).
  * - `own` = **이 묶음(옛 단건은 이 보고서)에 이어진 요청서** — 🔴 이 묶음의 줄을 잡는 것은 이것뿐이다(팀장 결정 2026-11-06 · DB 결정도 묶음마다).
  *   다른 묶음(취소된 요청 · 끝난 과목 수강종료 등)에 이어진 요청서가 담은 줄은 이 묶음에선 결정 안 됨 → 원장 환불 결정 대기.
  * - `other` = 다른 묶음에 이어진 요청서 — 줄을 잡지 않고 화면이 참고로 보인다(`otherRefund` · 같은 돈을 두 번 돌려주지 않게 원장·데스크가 본다).
@@ -221,7 +233,7 @@ export async function laterInvoicesFor(report: Pick<WithdrawalReport, "id" | "te
     : new Set(report.snapshot.courses.filter(c => report.subjects.includes(c.subject)).map(c => c.classId));
   const [{ data: rows, error }, { data: again, error: againError }] = await Promise.all([
     admin.from("invoices").select("id,period,category,status,amount_total,amount_discount,amount_paid,line_items")
-      .eq("tenant_id", report.tenant_id).eq("student_id", report.student_id).gt("period", month).neq("status", "void")
+      .eq("tenant_id", report.tenant_id).eq("student_id", report.student_id).gt("period", month)
       .order("period").limit(LATER_LIMIT),
     admin.from("enrollments").select("id, start_date, end_date, classes!inner(subject)")
       .eq("tenant_id", report.tenant_id).eq("student_id", report.student_id).gt("start_date", report.effective_date).order("start_date").limit(50),
@@ -249,26 +261,33 @@ export async function laterInvoicesFor(report: Pick<WithdrawalReport, "id" | "te
     return report.exit_kind === "withdrawal" || (subject != null && report.subjects.includes(subject));
   });
   const reenrolled = restart?.start_date ? String(restart.start_date).slice(0, 7) : null;
-  const invoices = (rows ?? []).filter(r => !(reenrolled && String(r.period) >= reenrolled));
+  // 무효(void) 청구는 낸 돈이 있을 때만(리뷰 r2 (c)) — 납부액을 못 읽으면 남겨 아래에서 던진다(모르면 처리하지 않는 쪽).
+  const voidWithoutMoney = (r: { status: unknown; amount_paid: unknown }) => String(r.status) === "void" && Number.isFinite(Number(r.amount_paid)) && !(Number(r.amount_paid) > 0);
+  const invoices = (rows ?? []).filter(r => !(reenrolled && String(r.period) >= reenrolled) && !voidWithoutMoney(r));
+  // 같은 달·같은 구분에 무효가 아닌 청구가 있으면 무효 청구의 낸 돈이 재발행 청구로 옮겨 갔을 수 있다(리뷰 r2 (c) — 경고만 · 결정은 열어 둔다).
+  const reissued = new Set((rows ?? []).filter(r => String(r.status) !== "void").map(r => `${r.period}|${r.category}`));
   const docs = await classifyDocs(report.tenant_id, await docsForInvoices(report.tenant_id, invoices.map(r => String(r.id))), { groupId: report.group_id ?? null, reportId: report.id });
 
-  // 청구 id → (줄 식별값 | "*") → 요청서. 먼저 만든 요청서가 이긴다(created_at 순). `otherClaims` = 다른 묶음에 이어진 요청서(줄을 잡지 않음 · 참고).
+  // 청구 id → [(담은 줄 식별값 | "*"), 요청서] — 요청서를 만든 차례(created_at 순 · 먼저 만든 요청서가 앞). `other` = 다른 묶음에 이어진 요청서(줄을 잡지 않음 · 참고).
   const claimMap = (list: typeof docs.own) => {
-    const claims = new Map<string, Map<string, OtherRefundRef>>();
+    const claims = new Map<string, [string, OtherRefundRef][]>();
     for (const d of list) {
       const form = (d.form_data ?? {}) as { approval?: { staff?: string } };
       const ref: OtherRefundRef = { documentId: String(d.id), deskName: form.approval?.staff?.trim() || null, completed: docCompleted(d), canceled: docs.canceledOnly(d) };
       for (const key of claimedKeys(String(d.description ?? ""))) {
         const [invoiceId, lineId] = splitKey(key);
-        const map = claims.get(invoiceId) ?? new Map<string, OtherRefundRef>();
-        if (!map.has(lineId)) map.set(lineId, ref);
-        claims.set(invoiceId, map);
+        claims.set(invoiceId.toLowerCase(), [...(claims.get(invoiceId.toLowerCase()) ?? []), [lineId, ref]]);
       }
     }
     return claims;
   };
   const claims = claimMap(docs.own);
   const otherClaims = claimMap(docs.other);
+  // 전체 퇴원의 미배분 납부 — 다른 묶음이 이미 잡았거나(취소되지 않은 요청 · 또는 환불을 마친 요청서) 정한 과목 몫은 뺀다(리뷰 r2 D-10).
+  const scopeWhole = !ended;
+  const takenSubjects = scopeWhole ? await takenUnallocSubjects(report.tenant_id, report.group_id ?? null, invoices.map(r => String(r.id)), otherClaims) : new Map<string, Set<string>>();
+  // 줄의 과목(미배분 과목 몫 · 리뷰 r2 I5) — 과목 수강종료는 위에서 읽은 지점 반 목록, 전체 퇴원은 다른 묶음이 과목 몫을 잡았을 때만 읽는다.
+  const classesForShare = ended ? allClasses : takenSubjects.size ? await tenantClassList(report.tenant_id) : [];
 
   const out: LaterInvoice[] = [];
   for (const r of invoices) {
@@ -293,20 +312,51 @@ export async function laterInvoicesFor(report: Pick<WithdrawalReport, "id" | "te
     const rawPaid = all.map(l => l.paid ?? (all.length === 1 ? amountPaidTotal : status === "paid" ? Math.max(0, l.amount - (l.discount ?? 0)) : 0));
     const sum = rawPaid.reduce((s, v) => s + v, 0);
     const paid = sum > amountPaidTotal ? rawPaid.map(v => Math.floor(v * Math.max(0, amountPaidTotal) / sum)) : rawPaid;
-    // 미배분 납부(리뷰 차단 2) — 청구 납부액 − 줄에 나뉜 납부액 > 0(부분 납부 여러 줄 청구에 줄별 납부 기록이 없음 · 줄 합보다 더 냄)이면 그 차액을 한 줄로.
+    // 미배분 납부(리뷰 차단 2) — 청구 납부액 − 줄에 나뉜 납부액 > 0(부분 납부 여러 줄 청구에 줄별 납부 기록이 없음 · 줄 합보다 더 냄)이면 그 차액.
     const unallocated = Math.max(0, amountPaidTotal - sum);
-    const keyIds = unallocated > 0 ? [...ids, UNALLOCATED_LINE] : ids;
-    const taken = claimedLines(keyIds, claims.get(id));
-    const otherTaken = claimedLines(keyIds, otherClaims.get(id));
+    // 줄마다 과목(반 → 과목 · 끝내는 반 이름·강사 이름 단서) · 청구액(할인 뺀 값). 과목 몫 = 미배분 × 그 과목 줄 청구액 ÷ 청구 전체 줄 청구액(내림 · 리뷰 r2 I5).
+    const lineInfo = all.map((l, i) => {
+      const line = { classId: (raw[i] as { classId?: unknown } | null)?.classId, description: l.description };
+      const course = classesForShare.length || ended ? courseOfLine(line, report.snapshot.courses) ?? courseOfLine(line, classesForShare) : null;
+      const hint = !course && ended && isLessonKind(l.kind) ? report.snapshot.courses.find(c => ended.has(c.classId) && [norm(c.className), norm(c.teacherName ?? "")].some(h => h.length >= 2 && norm(l.description).includes(h))) : undefined;
+      return { course, subject: course?.subject ?? hint?.subject ?? null, billed: Math.max(0, Number(l.amount) - Number(l.discount ?? 0)) };
+    });
+    const totalBilled = lineInfo.reduce((s, x) => s + x.billed, 0);
+    const shareKnown = Number.isFinite(totalBilled) && totalBilled > 0;
+    const shareOf = (subjects: readonly string[]) => Math.floor(unallocated * lineInfo.filter(x => x.subject && subjects.includes(x.subject)).reduce((s, x) => s + x.billed, 0) / totalBilled);
+    // 미배분 줄들 — 과목 수강종료 = 끝내는 과목마다 한 줄(그 과목 줄이 이 청구에 있을 때만 · 묶음 전체 계산과 같은 키) · 전체 퇴원 = 청구 전체 몫(다른 묶음이 잡은 과목 몫을 빼면 '나머지').
+    type Unalloc = { id: string; amount: number; unknown: boolean; label: string };
+    const unallocLines: Unalloc[] = [];
+    if (unallocated > 0) {
+      if (ended) {
+        for (const subject of [...new Set(report.subjects)].sort()) {
+          if (!lineInfo.some(x => x.subject === subject)) continue;
+          unallocLines.push({ id: unallocId({ subjects: [subject] }), amount: shareKnown ? shareOf([subject]) : unallocated, unknown: !shareKnown, label: subject });
+        }
+      } else {
+        const taken = [...(takenSubjects.get(id) ?? [])];
+        if (!taken.length) unallocLines.push({ id: unallocId(), amount: unallocated, unknown: false, label: "" });
+        else unallocLines.push({ id: unallocId({ except: taken }), amount: shareKnown ? unallocated - taken.reduce((s, subj) => s + shareOf([subj]), 0) : unallocated, unknown: !shareKnown, label: `~${[...taken].sort().join(".")}` });
+      }
+    }
+    // 잡힘 판정 재료 = 그 청구의 모든 줄 + 모든 과목 몫 미배분 키(이 보고서 화면에 없는 과목 몫도 — 다른 보고서 과목 키를 '낡은 키'로 읽지 않게) · 미배분이 남았나.
+    const subjectsHere = ended ? [...new Set(lineInfo.flatMap(x => x.subject ? [x.subject] : []))] : [];
+    const keyIds = [...new Set([...ids, ...unallocLines.map(u => u.id), ...(unallocated > 0 ? subjectsHere.map(subject => unallocId({ subjects: [subject] })) : [])])];
+    const own = claimsOf(keyIds, claims.get(id), "own", unallocated > 0);
+    const other = claimsOf(keyIds, otherClaims.get(id), "other");
+    const refOf = (i: number): { refund: OwnRefundRef | null; otherRefund?: OtherRefundRef; otherAll?: OtherRefundRef[] } => {
+      const o = own[i]!;
+      if (o.ref) return { refund: { documentId: o.ref.documentId, deskName: o.ref.deskName, completed: o.ref.completed, exact: o.exact } };
+      const x = other[i]!;
+      return x.ref ? { refund: null, otherRefund: x.ref, ...(x.all.length > 1 ? { otherAll: x.all } : {}) } : { refund: null };
+    };
     const lines: LaterLine[] = [];
     all.forEach((l, i) => {
       // 과목 수강종료(원장 2026-10-29 *"반에 안 묶인 줄도 보이게 … 같은 과목이면 전부 환불요청 토글 가능하게"*):
       //   끝내는 반 줄 · 끝내는 과목의 다른 반 줄 → 보임 / 계속 다니는 과목 반 줄 → 뺌 / 어느 반에도 안 묶인 줄 → 보임(화면 표시 '기타 항목').
       let unbound = false;
       if (ended) {
-        const line = { classId: (raw[i] as { classId?: unknown } | null)?.classId, description: l.description };
-        const own = courseOfLine(line, report.snapshot.courses);
-        const course = own ?? courseOfLine(line, allClasses);
+        const course = lineInfo[i]!.course;
         if (course) { if (!(ended.has(course.classId) || report.subjects.includes(course.subject))) return; }
         // 어느 반에도 안 맞는 '수업' 줄(다른 과목 보강·특강 등 — 김덕현 '이성우반 내신대비 주말보강')은 뺀다.
         // 기타 항목 = 수업이 아닌 줄(차량비·교재 등)만 — 원장 2026-10-30 *"다른 과목 기납건은 리스트에서 넣지말것 퇴원보고서 작성하거나 기타 항목에 대해서만"*.
@@ -314,30 +364,66 @@ export async function laterInvoicesFor(report: Pick<WithdrawalReport, "id" | "te
         else if (isLessonKind(l.kind)) { if (!endedHints.some(h => norm(l.description).includes(h))) return; }
         else unbound = true;
       }
-      const own = taken[i];
-      const refund: RefundRef | null = own ? { documentId: own.documentId, deskName: own.deskName, completed: own.completed } : null;
-      const otherRefund = refund ? null : otherTaken[i];
       const back = refundedAmount[i];
       const net = back == null ? paid[i]! : Math.max(0, paid[i]! - back);
-      lines.push({ ...l, key: `${id}#${ids[i]}`, paidNet: net, billingRefund: refunded[i]!, refund, ...(unbound ? { unbound } : {}), ...(otherRefund ? { otherRefund } : {}),
+      lines.push({ ...l, key: `${id}#${ids[i]}`, paidNet: net, billingRefund: refunded[i]!, ...refOf(i), ...(unbound ? { unbound } : {}),
         ...(back !== 0 ? { billingRefundAmount: back } : {}) });
     });
-    if (unallocated > 0) {
-      const i = keyIds.length - 1;
-      const own = taken[i];
-      const refund: RefundRef | null = own ? { documentId: own.documentId, deskName: own.deskName, completed: own.completed } : null;
-      const otherRefund = refund ? null : otherTaken[i];
-      lines.push({ kind: "미배분", description: "미배분 납부(줄별 납부 기록 없음)", amount: unallocated, paid: unallocated, key: `${id}#${UNALLOCATED_LINE}`, paidNet: unallocated,
-        billingRefund: false, refund, unallocated: true, ...(ended ? { unbound: true as const } : {}), ...(otherRefund ? { otherRefund } : {}) });
-    }
+    unallocLines.forEach((u) => {
+      const i = keyIds.indexOf(u.id);
+      // 미배분 줄 — 청구 전체 미배분액은 참고로(`unallocTotal`) · 과목 몫은 추정(수납에서 확인) · 몫을 모르면 금액 모름(결정 대상 · 환불 승인 불가 — 리뷰 r2 I5).
+      if (u.amount <= 0 && !u.unknown) return;
+      lines.push({ kind: "미배분", description: "미배분 납부(줄별 납부 기록 없음)", amount: u.amount, paid: u.amount, key: `${id}#${u.id}`, paidNet: u.amount,
+        billingRefund: false, ...refOf(i), unallocated: true, unallocTotal: unallocated,
+        ...(u.label ? { unallocScope: u.label } : {}), ...(u.unknown ? { amountUnknown: true as const } : {}) });
+    });
     if (!lines.length) continue;
     out.push({
       id, period: String(r.period), category: String(r.category), status,
-      amountBilled: ended ? lines.reduce((s, l) => s + Math.max(0, l.amount - (l.discount ?? 0)), 0) : Math.max(0, Number(r.amount_total) - Number(r.amount_discount)),
+      amountBilled: ended ? lines.reduce((s, l) => s + (l.unallocated ? 0 : Math.max(0, l.amount - (l.discount ?? 0))), 0) : Math.max(0, Number(r.amount_total) - Number(r.amount_discount)),
       amountPaid: ended ? lines.reduce((s, l) => s + l.paidNet, 0) : amountPaidTotal,
       lines, partial: !!ended,
+      ...(status === "void" && reissued.has(`${r.period}|${r.category}`) ? { reissued: true as const } : {}),
     });
   }
+  return out;
+}
+
+/** 지점 반 목록(줄 → 과목 · 미배분 과목 몫) — 과목 수강종료 계산과 같은 조회. */
+async function tenantClassList(tenantId: string) {
+  const { data, error } = await createAdminClient().from("classes").select("id,class_name,subject").eq("tenant_id", tenantId).limit(2000);
+  if (error) throw new Error(`반 목록 조회 실패: ${error.message}`);
+  return (data ?? []).map(c => ({ classId: String(c.id), className: String(c.class_name ?? ""), subject: String(c.subject ?? "") }));
+}
+
+/**
+ * 청구 id → 다른 묶음이 이미 **잡았거나 정한** 미배분 과목 몫(`unalloc:<과목>` — 리뷰 r2 D-10). 전체 퇴원은 그 몫을 빼고 나머지(`unalloc:~<과목>`)만 묻는다.
+ * - 잡음 = 다른 묶음 요청서의 표식(취소되지 않은 요청 · 또는 환불을 마친 요청서 — 이미 돌려준 돈).
+ * - 정함 = 다른 묶음(취소되지 않음)의 결정 행('환불하지 않음' 포함). 취소된 요청의 미완료 요청서·결정은 빼지 않는다(이 묶음에서 다시 정한다 · C.3가 옛 요청서를 막는다).
+ * 못 읽으면 던진다(확인 값을 만들지 않는다 — 보류 쪽).
+ */
+async function takenUnallocSubjects(tenantId: string, groupId: string | null, invoiceIds: string[], otherClaims: Map<string, [string, OtherRefundRef][]>): Promise<Map<string, Set<string>>> {
+  const out = new Map<string, Set<string>>();
+  const add = (inv: string, lineId: string) => {
+    const m = /^unalloc:([a-z0-9_.]+)$/i.exec(lineId);
+    if (!m) return;
+    const set = out.get(inv) ?? new Set<string>();
+    for (const s of m[1]!.split(".")) if (s) set.add(s);
+    out.set(inv, set);
+  };
+  for (const [inv, entries] of otherClaims) for (const [lineId, ref] of entries) if (!ref.canceled || ref.completed) add(inv, lineId);
+  if (!invoiceIds.length) return out;
+  const db = createAdminClient();
+  const { data, error } = await db.from("withdrawal_report_refund_decisions").select("line_key,group_id")
+    .eq("tenant_id", tenantId).or(invoiceIds.map(i => `line_key.like.${i}#unalloc:*`).join(",")).limit(500);
+  if (missingReportSchema(error) || error?.code === "42703") return out;
+  if (error) throw new Error(`미배분 과목 몫 결정 조회 실패: ${error.message}`);
+  const rows = ((data ?? []) as { line_key: string; group_id: string }[]).filter(r => String(r.group_id) !== groupId);
+  if (!rows.length) return out;
+  const { data: groups, error: gError } = await db.from("withdrawal_report_groups").select("id,status").eq("tenant_id", tenantId).in("id", [...new Set(rows.map(r => String(r.group_id)))]);
+  if (gError) throw new Error(`미배분 과목 몫 묶음 조회 실패: ${gError.message}`);
+  const live = new Set((groups ?? []).filter(g => g.status !== "canceled").map(g => String(g.id)));
+  for (const r of rows) if (live.has(String(r.group_id))) { const [inv, lineId] = splitKey(r.line_key); add(inv.toLowerCase(), lineId); }
   return out;
 }
 
@@ -353,15 +439,11 @@ export async function claimedEarlier(tenantId: string, documentId: string, keys:
   const mine = docs.find(d => String(d.id) === documentId);
   if (!mine) return false;
   const at = (d: { created_at: unknown }) => Date.parse(String(d.created_at));
-  // 같은 청구의 같은 식별값 형제면 겹친 것으로 본다(번호 밀림 대비).
-  const want = new Set(keys.map(k => { const [inv, line] = splitKey(k); return `${inv}#${lineBase(line)}`; }));
+  // 겹침 = 줄 키 겹침 규칙 한 벌(`keysOverlap` — 형제 · 미배분 ↔ 줄 · 청구 전체 · DB attach 반대쪽·C.3과 같다 · 리뷰 r2 D-1).
   return docs.some(d => {
     if (String(d.id) === documentId) return false;
     if (at(d) > at(mine) || (at(d) === at(mine) && String(d.id) > documentId)) return false;
-    return claimedKeys(String(d.description ?? "")).some(k => {
-      const [inv, line] = splitKey(k);
-      return line === "*" ? invoiceIds.includes(inv) : want.has(`${inv}#${lineBase(line)}`);
-    });
+    return claimedKeys(String(d.description ?? "")).some(k => keys.some(mineKey => keysOverlap(k, mineKey)));
   });
 }
 
@@ -372,14 +454,18 @@ export async function claimedEarlier(tenantId: string, documentId: string, keys:
  * `designated` = 학원 설정에 지정한 사람이 있나(유효한 사람이 0명이어도) — 비었으면 환불 승인을 막는다(원장 등으로 대신하지 않는다 · DB attach도 같은 명단을 본다).
  * 🔴 학원 설정을 못 읽어 기본값으로 접혔으면 아무도 고를 수 없다(기본값의 명단은 비어 있다 — 지정 밖 사람으로 풀리지 않는다).
  */
-export async function loadDeskStaff(tenantId: string): Promise<{ staff: { id: string; name: string }[]; designated: boolean }> {
+export async function loadDeskStaff(tenantId: string): Promise<{ staff: { id: string; name: string; jobTitle?: string | null }[]; designated: boolean; folded: boolean }> {
   const settings = await getTenantSettings();
-  const listed = foldedReason(settings) ? [] : settings.permissions.specialAccess.withdrawalDeskIds ?? [];
-  if (!listed.length) return { staff: [], designated: false };
-  const { data, error } = await createAdminClient().from("users").select("id,display_name,system_role")
+  // `folded` = 학원 설정을 못 읽어 기본값으로 접혔다(지정 명단을 모른다 — 화면은 '설정을 불러오지 못했습니다' · 리뷰 r2 m7).
+  const folded = !!foldedReason(settings);
+  const listed = folded ? [] : settings.permissions.specialAccess.withdrawalDeskIds ?? [];
+  if (!listed.length) return { staff: [], designated: false, folded };
+  const { data, error } = await createAdminClient().from("users").select("id,display_name,system_role,job_title")
     .eq("tenant_id", tenantId).eq("status", "active").neq("system_role", "student").in("id", listed).order("display_name").limit(100);
   if (error) throw new Error(`데스크 담당자 조회 실패: ${error.message}`);
-  const rows = (data ?? []) as DeskStaffRow[];
+  const rows = (data ?? []) as (DeskStaffRow & { job_title?: string | null })[];
   const superIds = await platformAccountIds(rows.map(r => r.id));
-  return { staff: billingWriters(rows, superIds, settings), designated: true };
+  // 직급(고르기 목록 '홍길동 대리' — 목록·결재란과 같은 표기 · 리뷰 r2 m15).
+  const titles = new Map(rows.map(r => [r.id, typeof r.job_title === "string" && r.job_title.trim() ? r.job_title.trim() : null]));
+  return { staff: billingWriters(rows, superIds, settings).map(s => ({ ...s, jobTitle: titles.get(s.id) ?? null })), designated: true, folded: false };
 }
