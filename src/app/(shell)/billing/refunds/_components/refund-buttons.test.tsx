@@ -77,3 +77,14 @@ describe("환불 요청서 삭제 뒤 이동(#102)", () => {
     expect(screen.queryByRole("button", { name: "취소" })).toBeNull();
   });
 });
+
+describe("삭제 확인 줄 — 긴 확인 글 옆에서도 단추가 꺾이지 않는다(리뷰 r3 R3-m3)", () => {
+  it("'삭제'·'취소'·물음 글은 줄어들지 않고 한 줄 · 확인 글만 줄어든다", () => {
+    render(<DeleteRefundButton id="r1" name="홍길동" confirmText={"취소된 퇴원 요청에 이어진 요청서입니다 — ".repeat(5)} />);
+    fireEvent.click(screen.getByRole("button", { name: /삭제/ }));
+    const buttons = screen.getAllByRole("button");
+    for (const b of buttons) expect(b.className).toMatch(/\bshrink-0\b.*\bwhitespace-nowrap\b|\bwhitespace-nowrap\b.*\bshrink-0\b/);
+    expect(screen.getByText("홍길동 요청서 삭제?").className).toMatch(/\bshrink-0\b/);
+    expect(screen.getByRole("note").className).toMatch(/\bmin-w-0\b/);
+  });
+});

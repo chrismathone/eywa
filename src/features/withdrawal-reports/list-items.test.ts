@@ -18,6 +18,12 @@ const staff: StaffOption[] = [
   { id: "t1", name: "이성우", role: "teacher", subjects: ["math"] },
   { id: "m1", name: "관리자", role: "admin", subjects: ["math"] },
 ];
+/** 형제 조회가 성공했을 때의 묶음 상태(목록에 보이는 보고서 그대로) — 빠뜨리면 '조회 실패'로 읽힌다(리뷰 r2 (a) · 2단계 '확인 못 함'). */
+const seen = (reports: readonly ReportListRow[]) => {
+  const out = new Map<string, { id: string; status: ReportListRow["status"] }[]>();
+  for (const r of reports) if (r.group_id) out.set(r.group_id, [...(out.get(r.group_id) ?? []), { id: r.id, status: r.status }]);
+  return out;
+};
 const report = (over: Partial<ReportListRow> = {}): ReportListRow => ({
   id: "r1", tenant_id: "x", student_id: "s1", requested_by: "m1", teacher_id: "t1", manager_id: "m1", director_id: null,
   manager_ids: ["m1"], director_ids: [], manager_decisions: {}, director_decisions: {},
@@ -247,19 +253,19 @@ describe("원장 2026-11-03 — 관리자 승인 생략 · 데스크 환불 단�
     // 작성 강사 칸·강사 필터는 이름 그대로(다른 표기를 건드리지 않는다).
     expect(rows({ teacher_id: "jy", manager_id: "he", manager_ids: ["he"] }).teacher).toBe("정유진");
   });
-  it("데스크 환불이 남으면 상태 글에 '데스크 환불 요청' · 환불 단계 desk · 승인 진행에 데스크 줄(○ 대기 / ✓ 완료 · 담당 이름)", () => {
+  it("데스크 환불이 남으면 상태 글에 '데스크 환불 요청' · 환불 단계 desk · 승인 진행에 데스크 줄(○ 대기 / ✓ 완료 · 담당 이름 — 2026-11-06부터 머리말 없이 이름 직급만)", () => {
     const steps = new Map([["g1", [{ documentId: "d1", deskId: "desk", deskName: "데스크A", completedDate: null }]]]);
     const [w] = as("m1", [report({ group_id: "g1", status: "manager_pending" })], steps);
     expect(w!.statusLabel).toBe("관리자 요청 · 데스크 환불 요청"); // 원장 2026-11-06 '관리자 승인 요청' → '관리자 요청'
     expect(w!.refundStage).toBe("desk");
-    expect(w!.approval.at(-1)).toEqual({ text: "데스크 ○ 데스크A" });
+    expect(w!.approval.at(-1)).toEqual({ text: "○ 데스크A" });
     expect(w!.mine).toBe("approve");
     expect(w!.deskTurn).toBeUndefined(); // 관리자 차례가 먼저다
     const done = new Map([["g1", [{ documentId: "d1", deskId: "desk", deskName: "데스크A", completedDate: "2026-11-03" }]]]);
     const [d] = as("m1", [report({ group_id: "g1", status: "completed" })], done);
     expect(d!.statusLabel).toBe("처리 완료");
     expect(d!.refundStage).toBeNull(); // 끝난 보고서엔 기다릴 환불이 없다
-    expect(d!.approval.at(-1)).toEqual({ text: "데스크 ✓ 데스크A" });
+    expect(d!.approval.at(-1)).toEqual({ text: "✓ 데스크A" });
   });
   it("데스크 담당자의 차례 — '내 승인 필요' 필터에 들고 표시는 데스크 차례", () => {
     const steps = new Map([["g1", [{ documentId: "d1", deskId: "desk", deskName: "데스크A", completedDate: null }]]]);
@@ -360,7 +366,7 @@ describe("원장 2026-11-06 시안 A — 상태 칸 3단계 막대(reportProgres
     const math = report({ id: "r-math", group_id: "g1", subjects: ["math"], status: "approved", manager_decisions: { m1: "2026-11-05" } });
     const eng = report({ id: "r-eng", group_id: "g1", subjects: ["english"], teacher_id: "t2", manager_id: "m2", manager_ids: ["m2"], status: "manager_pending", created_at: "2026-10-09T00:00:00Z" }); // 목록은 요청일 최신 순 — 수학이 위
     const line = (reports: ReportListRow[], completedDate: string | null) =>
-      buildListItems({ reports, archives: [], staff, labelOf, userId: "boss", directorLevel: true, refunds: refundMap("g1", { documentId: "d1", deskId: "desk", deskName: "데스크A", completedDate }) })
+      buildListItems({ reports, archives: [], staff, labelOf, userId: "boss", directorLevel: true, groupStatuses: seen(reports), refunds: refundMap("g1", { documentId: "d1", deskId: "desk", deskName: "데스크A", completedDate }) })
         .map((i) => [i.subjects[0], reportProgress(i)!.cells.join("/"), reportProgress(i)!.label]);
     expect(line([math, eng], null)).toEqual([
       ["math", "done/now/todo", "진행 2/3단계 · 관리자 승인 — 다른 과목 승인 대기 · 데스크 환불 대기"],
@@ -388,14 +394,15 @@ describe("원장 2026-11-06 시안 A — 상태 칸 3단계 막대(reportProgres
     for (const status of ["requested", "revision", "director_pending"] as const)
       expect(only(new Map([["g1", [{ id: "r-math", status: "approved" }, { id: "r-eng", status }]]])).step, status).toBe(2);
     expect(only(new Map([["g1", [{ id: "r-math", status: "approved" }, { id: "r-eng", status: "approved" }]]])).step).toBe(3);
-    expect(only().step).toBe(3); // 형제 조회 실패 · 형제 안 보임 · 환불 대기 → 다 승인되고 환불만 남은 것으로
+    // 형제 조회 실패 · 형제 안 보임 · 환불 대기 → 모른다: 2단계 · '다른 과목 승인 확인 못 함' · 환불 글은 덧붙인다(환불 대기로 형제를 추측하지 않는다 — 리뷰 r2 (a))
+    expect(only().label).toBe("진행 2/3단계 · 관리자 승인 — 다른 과목 승인 확인 못 함 · 데스크 환불 대기");
     // 실어 온 묶음 상태가 보이는 줄보다 앞선다
     const eng = report({ id: "r-eng", group_id: "g1", status: "manager_pending" });
     const listed = buildListItems({ reports: [math, eng], archives: [], staff, labelOf, userId: "m1", groupStatuses: new Map([["g1", [{ id: "r-math", status: "approved" }, { id: "r-eng", status: "approved" }]]]) });
     expect(reportProgress(listed.find((i) => i.key === "r:r-math")!)!.step).toBe(3);
   });
 
-  it("형제 조회가 실패하면(groupStatuses 없음) 승인 완료인데 기다릴 환불이 없는 줄은 다른 과목 대기로 — 3단계로 앞지르지 않는다(재리뷰 2026-11-06 재현)", () => {
+  it("형제 조회가 실패하면(groupStatuses 없음) 승인 완료 줄은 2단계 · '다른 과목 승인 확인 못 함' — 환불 대기와 상관없이 3단계로 앞지르지 않는다(재리뷰 2026-11-06 · 리뷰 r2 (a))", () => {
     const math = report({ id: "r-math", group_id: "g1", status: "approved", manager_decisions: { m1: "x" } });
     const teacher = (groupStatuses?: Map<string, { id: string; status: ReportListRow["status"] }[]>, refunds?: Map<string, Step[]>) =>
       reportProgress(buildListItems({ reports: [math], archives: [], staff, labelOf, userId: "t1", groupStatuses, refunds })[0]!)!;
@@ -403,18 +410,83 @@ describe("원장 2026-11-06 시안 A — 상태 칸 3단계 막대(reportProgres
     const desk = refundMap("g1", { documentId: "d1", deskId: "desk", deskName: "데스크A", completedDate: null });
     // 조회 성공 · 영어 승인 전 → 2단계
     expect(teacher(pendingMap).label).toBe("진행 2/3단계 · 관리자 승인 — 다른 과목 승인 대기");
-    // 조회 실패 · 환불 없음 → 다른 과목 대기로(2단계)
+    // 조회 실패 · 환불 없음 → 모른다(2단계 · '확인 못 함' — '다른 과목 승인 대기'라고 단정하지 않는다)
     const failed = teacher();
     expect(failed.cells).toEqual(["done", "now", "todo"]);
-    expect(failed.label).toBe("진행 2/3단계 · 관리자 승인 — 다른 과목 승인 대기");
-    // 조회 실패 · 환불 대기 → 다 승인되고 환불만 남은 것으로(3단계)
-    expect(teacher(undefined, desk).label).toBe("진행 3/3단계 · 처리 완료 — 데스크 환불 대기");
-    // 조회 실패 · 환불은 끝남 → 기다릴 환불이 없으니 다시 다른 과목 대기로
+    expect(failed.label).toBe("진행 2/3단계 · 관리자 승인 — 다른 과목 승인 확인 못 함");
+    // 조회 실패 · 데스크 환불 대기 → 그래도 모른다(형제가 안 보이는 관리자에게 3단계로 앞질러 보이던 것 · 리뷰 r2 (a) ③) · 환불 글은 덧붙인다
+    expect(teacher(undefined, desk).label).toBe("진행 2/3단계 · 관리자 승인 — 다른 과목 승인 확인 못 함 · 데스크 환불 대기");
+    // 조회 실패 · 환불은 끝남 → 2단계 그대로
     expect(teacher(undefined, refundMap("g1", { documentId: "d1", deskId: "desk", deskName: "데스크A", completedDate: "2026-11-06" })).step).toBe(2);
     // 조회는 성공했고 형제가 다 승인 → 환불이 없어도 3단계(처리만 남음 — 보조 판정은 조회 실패 때만)
     expect(teacher(new Map([["g1", [{ id: "r-math", status: "approved" as const }, { id: "r-eng", status: "approved" as const }]]])).step).toBe(3);
     // 묶음이 없는 옛 단건은 형제가 없다
     expect(reportProgress(buildListItems({ reports: [report({ status: "approved" })], archives: [], staff, labelOf, userId: "t1" })[0]!)!.step).toBe(3);
+  });
+
+  it("🔴 형제 조회 실패 × 대기 까닭 — 승인 완료 줄은 2단계 · '다른 과목 승인 확인 못 함' + 환불 글(결정·데스크·둘 다) · 실제로 승인 전 형제가 보이면 '다른 과목 승인 대기'(리뷰 r2 (a))", () => {
+    const math = report({ id: "r-math", group_id: "g1", status: "approved", manager_decisions: { m1: "x" } });
+    const eng = report({ id: "r-eng", group_id: "g1", subjects: ["english"], teacher_id: "t2", manager_id: "m2", manager_ids: ["m2"], status: "manager_pending", created_at: "2026-10-09T00:00:00Z" });
+    const engDone = { ...eng, status: "approved" as const };
+    type Groups = Map<string, { id: string; status: ReportListRow["status"] }[]> | undefined;
+    const groups: Record<string, { reports: ReportListRow[]; groupStatuses: Groups }> = {
+      "1과목": { reports: [math], groupStatuses: new Map([["g1", [{ id: "r-math", status: "approved" }]]]) },
+      "2과목(영어 승인 전)": { reports: [math], groupStatuses: new Map([["g1", [{ id: "r-math", status: "approved" }, { id: "r-eng", status: "manager_pending" }]]]) },
+      "조회 실패": { reports: [math], groupStatuses: undefined },
+      "조회 실패 · 승인 전 형제가 목록에 보임": { reports: [math, eng], groupStatuses: undefined },
+      "조회 실패 · 승인한 형제가 목록에 보임": { reports: [math, engDone], groupStatuses: undefined },
+    };
+    const desk = refundMap("g1", { documentId: "d1", deskId: "desk", deskName: "데스크A", completedDate: null });
+    const waits: Record<string, Partial<Parameters<typeof buildListItems>[0]>> = {
+      결정: { holds: new Map([["g1", "r-math"]]) },
+      데스크: { refunds: desk },
+      "결정+데스크": { holds: new Map([["g1", "r-math"]]), refunds: desk },
+      없음: {},
+    };
+    const got: Record<string, string> = {};
+    for (const [g, { reports, groupStatuses }] of Object.entries(groups))
+      for (const [w, extra] of Object.entries(waits)) {
+        const item = buildListItems({ reports, archives: [], staff, labelOf, userId: "t1", groupStatuses, ...extra }).find((i) => i.key === "r:r-math")!;
+        got[`${g} × ${w}`] = reportProgress(item)!.label;
+      }
+    const head2 = "진행 2/3단계 · 관리자 승인 — ";
+    expect(got).toEqual({
+      "1과목 × 결정": "진행 3/3단계 · 처리 완료 — 환불 결정 대기",
+      "1과목 × 데스크": "진행 3/3단계 · 처리 완료 — 데스크 환불 대기",
+      // 결정 뒤 새 줄로 다시 결정 대기인데 앞 요청서의 데스크 환불도 남음 — 둘 다 쓴다(리뷰 r2 m5 · 데스크에게 '환불 결정 대기'만 보이지 않게)
+      "1과목 × 결정+데스크": "진행 3/3단계 · 처리 완료 — 환불 결정 대기 · 데스크 환불 대기",
+      "1과목 × 없음": "진행 3/3단계 · 처리 완료",
+      "2과목(영어 승인 전) × 결정": `${head2}다른 과목 승인 대기 · 환불 결정 대기`,
+      "2과목(영어 승인 전) × 데스크": `${head2}다른 과목 승인 대기 · 데스크 환불 대기`,
+      "2과목(영어 승인 전) × 결정+데스크": `${head2}다른 과목 승인 대기 · 환불 결정 대기 · 데스크 환불 대기`,
+      "2과목(영어 승인 전) × 없음": `${head2}다른 과목 승인 대기`,
+      // 🔴 r1 재현: 결정 대기 → '다른 과목 승인 대기'(1과목인데 단정) · 데스크 대기 → 3단계(형제가 안 보이는 관리자에게 앞질러) — 이제 모두 '확인 못 함'
+      "조회 실패 × 결정": `${head2}다른 과목 승인 확인 못 함 · 환불 결정 대기`,
+      "조회 실패 × 데스크": `${head2}다른 과목 승인 확인 못 함 · 데스크 환불 대기`,
+      "조회 실패 × 결정+데스크": `${head2}다른 과목 승인 확인 못 함 · 환불 결정 대기 · 데스크 환불 대기`,
+      "조회 실패 × 없음": `${head2}다른 과목 승인 확인 못 함`,
+      // 보이는 형제가 승인 전이면 사실로 안다 — '다른 과목 승인 대기'
+      "조회 실패 · 승인 전 형제가 목록에 보임 × 결정": `${head2}다른 과목 승인 대기 · 환불 결정 대기`,
+      "조회 실패 · 승인 전 형제가 목록에 보임 × 데스크": `${head2}다른 과목 승인 대기 · 데스크 환불 대기`,
+      "조회 실패 · 승인 전 형제가 목록에 보임 × 결정+데스크": `${head2}다른 과목 승인 대기 · 환불 결정 대기 · 데스크 환불 대기`,
+      "조회 실패 · 승인 전 형제가 목록에 보임 × 없음": `${head2}다른 과목 승인 대기`,
+      // 보이는 형제가 다 승인돼도 안 보이는 형제가 있을 수 있다 — 모른다
+      "조회 실패 · 승인한 형제가 목록에 보임 × 결정": `${head2}다른 과목 승인 확인 못 함 · 환불 결정 대기`,
+      "조회 실패 · 승인한 형제가 목록에 보임 × 데스크": `${head2}다른 과목 승인 확인 못 함 · 데스크 환불 대기`,
+      "조회 실패 · 승인한 형제가 목록에 보임 × 결정+데스크": `${head2}다른 과목 승인 확인 못 함 · 환불 결정 대기 · 데스크 환불 대기`,
+      "조회 실패 · 승인한 형제가 목록에 보임 × 없음": `${head2}다른 과목 승인 확인 못 함`,
+    });
+    // '확인 못 함'은 검색에도 그대로(막대 이름·아래 한 줄과 같은 글) · '다른 과목 승인 대기'로는 안 찾아진다
+    const failed = buildListItems({ reports: [math], archives: [], staff, labelOf, userId: "t1", groupStatuses: undefined })[0]!;
+    expect(failed.search).toContain("다른 과목 승인 확인 못 함");
+    expect(failed.search).not.toContain("다른 과목 승인 대기");
+    expect(failed.flow).toMatchObject({ othersPending: false, othersUnknown: true });
+    // 승인 완료가 아닌 줄 · 묶음 없는 옛 단건은 조회 실패와 무관(모름 표시 없음)
+    expect(buildListItems({ reports: [{ ...math, status: "manager_pending" }], archives: [], staff, labelOf, userId: "t1" })[0]!.flow!.othersUnknown).toBeUndefined();
+    expect(buildListItems({ reports: [report({ status: "approved" })], archives: [], staff, labelOf, userId: "t1" })[0]!.flow!.othersUnknown).toBeUndefined();
+    // 처리 완료·취소·재검토 줄은 단계가 상태대로(모름 표시 없음)
+    expect(reportProgress(buildListItems({ reports: [{ ...math, status: "blocked" }], archives: [], staff, labelOf, userId: "t1", holds: new Map([["g1", "r-math"]]) })[0]!)!.label)
+      .toBe("진행 3/3단계 · 처리 완료 — 수강 변경 · 재검토 필요 — 취소 후 다시 요청");
   });
 
   it("관리자 바로 처리 — 칸은 상태대로 · 아래 한 줄에 '관리자 바로 처리'를 쓰지 않는다(승인 진행 칸과 겹침 · 리뷰 2026-11-06)", () => {
@@ -428,8 +500,10 @@ describe("원장 2026-11-06 시안 A — 상태 칸 3단계 막대(reportProgres
   });
 
   it("관리자 승인 생략 — 작성 중엔 2칸을 비우고, 제출해 다음 단계로 넘어가면 채운다(이유는 승인 진행 칸 '승인 생략')", () => {
-    const skip = (r: Partial<ReportListRow>, extra: ReportListRow[] = [], refunds?: Map<string, Step[]>) =>
-      reportProgress(buildListItems({ reports: [report({ manager_id: null, manager_ids: [], group_id: "g1", ...r }), ...extra], archives: [], staff, labelOf, userId: "x", refunds })[0]!)!;
+    const skip = (r: Partial<ReportListRow>, extra: ReportListRow[] = [], refunds?: Map<string, Step[]>) => {
+      const reports = [report({ manager_id: null, manager_ids: [], group_id: "g1", ...r }), ...extra];
+      return reportProgress(buildListItems({ reports, archives: [], staff, labelOf, userId: "x", refunds, groupStatuses: seen(reports) })[0]!)!;
+    };
     const writing = skip({ status: "requested" });
     expect(writing.cells).toEqual(["now", "todo", "todo"]);
     expect(names(writing)).toEqual(["now", "todo", "todo"]);
@@ -502,7 +576,8 @@ describe("원장 2026-11-06 시안 A — 상태 칸 3단계 막대(reportProgres
       { documentId: "d2", deskId: "desk", deskName: "데스크A", completedDate: null },
       { documentId: "d3", deskId: "desk", deskName: "데스크A", completedDate: null });
     const at = (userId: string, writable = true) =>
-      buildListItems({ reports: [report({ group_id: "g1", status: "approved", manager_decisions: { m1: "2026-11-03" } })], archives: [], staff, labelOf, userId, refunds: steps, writable })[0]!;
+      buildListItems({ reports: [report({ group_id: "g1", status: "approved", manager_decisions: { m1: "2026-11-03" } })], archives: [], staff, labelOf, userId, refunds: steps, writable,
+        groupStatuses: seen([report({ group_id: "g1", status: "approved" })]) })[0]!;
     const desk = at("desk");
     expect(desk.deskHref).toBe("/billing/refunds/d2");
     const p = reportProgress(desk)!;
@@ -539,5 +614,115 @@ describe("원장 2026-11-06 시안 A — 상태 칸 3단계 막대(reportProgres
     expect(found("처리일 11-05")).toEqual(["r:dn"]);
     expect(found("요청 취소 · 취소일 11-04")).toEqual(["r:cx"]);
     expect(found("승인 대상 아님")).toEqual(["r:ap", "r:ap2", "r:bl", "r:mp", "r:rf", "r:sc"]); // 열람자의 꼬리
+  });
+});
+
+describe("원장 2026-11-06 — 승인 진행에 환불 줄(관리자 → 환불 결정 → 데스크 · 이름 직급만) · 환불 단계 · 요청 취소 정보", () => {
+  const people: StaffOption[] = [
+    { id: "t1", name: "이성우", role: "teacher", subjects: ["math"] },
+    { id: "jy", name: "정유진", role: "admin", subjects: ["math"], jobTitle: "부원장" },
+    { id: "sh", name: "설현", role: "master", subjects: [], jobTitle: "원장" },
+    { id: "wi", name: "원일", role: "master", subjects: [], jobTitle: "대표" },
+    { id: "nt", name: "무직급", role: "master", subjects: [], jobTitle: null },
+    // 운영자 계정은 표시 역할이 admin이라(reportStaff) 받는 원장급에 들지 않는다.
+    { id: "op", name: "운영", role: "admin", subjects: [] },
+  ];
+  type Step = { documentId: string; deskId: string | null; deskName: string; completedDate: string | null; deskTitle?: string | null; deskActive?: boolean };
+  const step = (over: Partial<Step> = {}): Step => ({ documentId: "d1", deskId: "dk", deskName: "홍길동", completedDate: null, deskTitle: "대리", deskActive: true, ...over });
+  const row = (over: Partial<ReportListRow> = {}) => report({ group_id: "g1", requested_by: "jy", manager_id: "jy", manager_ids: ["jy"], ...over });
+  type Extra = Partial<Parameters<typeof buildListItems>[0]>;
+  const one = (r: ReportListRow, extra: Extra = {}, staffList: StaffOption[] = people.filter((p) => p.id !== "nt")) =>
+    buildListItems({ reports: [r], archives: [], staff: staffList, labelOf, userId: "x", ...extra })[0]!;
+  const win = listWindow(all, "2026-11-06");
+  const found = (item: ListItem, q: string) => filterListItems([item], { ...all, q }, win).length;
+
+  it("결정 전 — 관리자 줄 다음에 '○ 받는 원장급'(관리자 줄과 같은 표기 · 운영자 계정 없음) · 환불 단계 decision", () => {
+    const w = one(row({ status: "approved", manager_decisions: { jy: "2026-11-06" } }), { holds: new Map([["g1", "r1"]]) });
+    expect(w.approval).toEqual([{ text: "✓ 정유진 부원장" }, { text: "○ 설현 원장 · ○ 원일 대표" }]);
+    expect(w.refundStage).toBe("decision");
+    expect(found(w, "설현 원장")).toBe(1);
+    // 직급이 빈 원장급이 끼면 관리자 줄처럼 '원장' 머리말.
+    expect(one(row(), { holds: new Map([["g1", null]]) }, people).approval.at(-1)).toEqual({ text: "원장 ○ 설현 원장 · ○ 원일 대표 · ○ 무직급" });
+    // 처리가 끝났거나 취소된 보고서엔 결정 대기 줄이 없다.
+    expect(one(row({ status: "completed" }), { holds: new Map([["g1", "r1"]]) }).approval).toEqual([{ text: "○ 정유진 부원장" }]);
+  });
+
+  it("환불 없음으로 결정 — 흐린 '✓ 결정한 원장' · 환불 단계 없음 · 검색은 이름 직급", () => {
+    const w = one(row({ status: "approved" }), { outcomes: new Map([["g1", { outcome: "none" as const, by: "sh", at: "2026-11-06T03:00:00Z" }]]) });
+    expect(w.approval.slice(1)).toEqual([{ text: "✓ 설현 원장", muted: true }]);
+    expect(w.refundStage).toBeNull();
+    expect(found(w, "설현 원장")).toBe(1);
+  });
+
+  it("환불 승인 — '✓ 승인한 원장'(흐리지 않음) 다음에 데스크 담당마다 한 줄 · 대기 '○' → 환불완료일자 '✓' · 환불 단계 desk", () => {
+    const outcomes = new Map([["g1", { outcome: "refund" as const, by: "wi", at: "2026-11-06T03:00:00Z" }]]);
+    const waiting = one(row({ status: "approved" }), { outcomes, refunds: new Map([["g1", [step(), step({ documentId: "d2", deskId: "d2", deskName: "김회계", deskTitle: "주임" })]]]) });
+    expect(waiting.approval.slice(1)).toEqual([{ text: "✓ 원일 대표" }, { text: "○ 홍길동 대리" }, { text: "○ 김회계 주임" }]);
+    expect(waiting.refundStage).toBe("desk");
+    expect(found(waiting, "홍길동 대리")).toBe(1);
+    expect(found(waiting, "원일 대표")).toBe(1);
+    const done = one(row({ status: "approved" }), { outcomes, refunds: new Map([["g1", [step({ completedDate: "2026-11-06" })]]]) });
+    expect(done.approval.slice(1)).toEqual([{ text: "✓ 원일 대표" }, { text: "✓ 홍길동 대리" }]);
+    expect(done.refundStage).toBeNull();
+    // 결정 뒤 새 줄이 생겨 다시 대기면 원장 줄이 '○'로 돌아가고 데스크 줄은 그대로 · 단계는 결정이 먼저.
+    const again = one(row({ status: "approved" }), { outcomes, holds: new Map([["g1", "r1"]]), refunds: new Map([["g1", [step()]]]) });
+    expect(again.approval.slice(1)).toEqual([{ text: "○ 설현 원장 · ○ 원일 대표" }, { text: "○ 홍길동 대리" }]);
+    expect(again.refundStage).toBe("both"); // 결정 대기 + 데스크 대기 둘 다(리뷰 r2 m5)
+  });
+
+  it("원장 차례 — 상태 칸 아래 줄 '환불 결정 대기' · 꼬리 '내 환불 결정 필요'(원장급·쓰기 권한 · 보고서 상세로) · 둘 다 검색 · '내 승인 필요' 필터", () => {
+    const holds = new Map([["g1", "r1"]]);
+    // 목록 조회가 실어 온 묶음 형제 상태(형제 모두 승인) — 없으면 main 규칙대로 '다른 과목 승인 대기'로 보수적으로 본다.
+    const groupStatuses = new Map([["g1", [{ id: "r1", status: "approved" as const }]]]);
+    const mine = one(row({ status: "approved", manager_decisions: { jy: "2026-11-06" } }), { holds, userId: "sh", directorLevel: true, groupStatuses });
+    expect(mine).toMatchObject({ refundTurn: true, mine: "approve", refundStage: "decision" });
+    const p = reportProgress(mine)!;
+    expect(p.notes.map((n) => n.text)).toEqual(["환불 결정 대기"]);
+    expect(p.tail).toEqual({ text: "내 환불 결정 필요", href: "/withdrawal-reports/r1#refund" }); // 결정 자리로 바로(리뷰 r2 m8)
+    expect(found(mine, "내 환불 결정 필요")).toBe(1);
+    expect(found(mine, "환불 결정 대기")).toBe(1);
+    expect(filterListItems([mine], { ...all, mine: true }, win)).toHaveLength(1);
+    // 원장급이 아니면 · 읽기 전용이면 · 결정할 줄을 보이는 보고서가 다른 보고서면 차례가 아니다(아래 줄 '환불 결정 대기'는 그대로)
+    const notDirector = one(row({ status: "approved" }), { holds, userId: "sh", directorLevel: false });
+    expect(notDirector.refundTurn).toBeUndefined();
+    expect(reportProgress(notDirector)!.tail?.text).not.toBe("내 환불 결정 필요");
+    expect(reportProgress(notDirector)!.notes.map((n) => n.text)).toContain("환불 결정 대기");
+    expect(one(row({ status: "approved" }), { holds, userId: "sh", directorLevel: true, writable: false }).refundTurn).toBeUndefined();
+    expect(one(row({ status: "approved" }), { holds: new Map([["g1", "other"]]), userId: "sh", directorLevel: true }).refundTurn).toBeUndefined();
+  });
+
+  it("직급이 비면 이름만 · 퇴사(비활성)·지운 담당과 명단에 없는 결정자는 '이전 담당자'", () => {
+    const outcomes = new Map([["g1", { outcome: "refund" as const, by: "gone", at: "2026-11-06T03:00:00Z" }]]);
+    const w = one(row({ status: "approved" }), { outcomes, refunds: new Map([["g1", [step({ deskTitle: null }), step({ documentId: "d2", deskActive: false }), step({ documentId: "d3", deskId: null })]]]) });
+    expect(w.approval.slice(1)).toEqual([{ text: "원장 ✓ 이전 담당자" }, { text: "○ 홍길동" }, { text: "○ 이전 담당자" }, { text: "○ 이전 담당자" }]);
+    // 직급을 못 읽은 단계(옛 데이터)는 이름만.
+    expect(one(row({ status: "approved" }), { refunds: new Map([["g1", [{ documentId: "d1", deskId: "dk", deskName: "홍길동", completedDate: null }]]]) }).approval.at(-1)).toEqual({ text: "○ 홍길동" });
+  });
+
+  it("같은 사람이 단계마다 겹쳐도 줄을 따로 둔다(관리자 → 환불 결정 → 데스크)", () => {
+    const w = one(row({ status: "approved", manager_decisions: { jy: "2026-11-06" } }), {
+      outcomes: new Map([["g1", { outcome: "refund" as const, by: "sh", at: "2026-11-06T03:00:00Z" }]]),
+      refunds: new Map([["g1", [step({ deskId: "sh", deskName: "설현", deskTitle: "원장" })]]]),
+    });
+    expect(w.approval).toEqual([{ text: "✓ 정유진 부원장" }, { text: "✓ 설현 원장" }, { text: "○ 설현 원장" }]);
+  });
+
+  it("환불과 무관하면 줄도 단계도 없다 · 바로 처리 보고서도 같은 자리에 환불 줄", () => {
+    const plain = one(row());
+    expect(plain.approval).toEqual([{ text: "○ 정유진 부원장" }]);
+    expect(plain.refundStage).toBeNull();
+    expect(plain.cancel).toBeNull();
+    const direct = one(row({ teacher_id: "jy", requested_by: "jy", status: "scheduled" }), { holds: new Map([["g1", "r1"]]) });
+    expect(direct.approval).toEqual([{ text: "관리자 바로 처리 · 정유진 부원장" }, { text: "강사 작성 없음", muted: true }, { text: "○ 설현 원장 · ○ 원일 대표" }]);
+  });
+
+  it("요청 취소 정보 — 사유 · 취소한 사람(직급 이름) · 시각 · 옛 취소는 사유 null · 취소 안 된 보고서엔 없음 · 사유도 검색", () => {
+    const at = "2026-11-06T05:00:00Z";
+    const c = one(row({ status: "canceled" }), { cancels: new Map([["r1", { reason: "학부모 요청으로 계속 다님", actorId: "jy", at }]]) });
+    expect(c.cancel).toEqual({ reason: "학부모 요청으로 계속 다님", by: "정유진 부원장", at });
+    expect(filterListItems([c], { ...all, hideCanceled: false, q: "학부모 요청" }, win)).toHaveLength(1);  // 취소 줄은 기본으로 숨으니 숨김을 끄고
+    expect(one(row({ status: "canceled" }), { cancels: new Map([["r1", { reason: null, actorId: "gone", at }]]) }).cancel).toEqual({ reason: null, by: "이전 담당자", at });
+    expect(one(row({ status: "canceled" })).cancel).toBeNull(); // 기록을 못 읽었으면 없음(상태 칸은 취소일만)
+    expect(one(row({ status: "manager_pending" }), { cancels: new Map([["r1", { reason: "x", actorId: "jy", at }]]) }).cancel).toBeNull();
   });
 });
