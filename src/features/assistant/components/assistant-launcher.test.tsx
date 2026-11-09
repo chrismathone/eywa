@@ -161,7 +161,14 @@ describe("AssistantLauncher", () => {
       push({ type: "step", step: { id: "s2", kind: "write_sql", label: "조회문을 쓰는 중 · 반별 미납액", state: "running", at: 800, tables: [{ name: "invoices", label: "청구서" }] } });
     });
     const steps = await within(dialog).findByRole("list", { name: "답을 만드는 단계" });
+    // 기본은 접힘 — 최신 단계 한 줄만(원장 2026-11-06) · 펼치면 지난 단계까지
+    await waitFor(() => expect(within(steps).getAllByRole("listitem")).toHaveLength(1));
+    expect(within(steps).queryByText("질문을 이해하는 중")).toBeNull();
+    const more = within(dialog).getByRole("button", { name: /지난 단계 1개 펼치기/ });
+    expect(more).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(more);
     await waitFor(() => expect(within(steps).getAllByRole("listitem")).toHaveLength(2));
+    expect(within(dialog).getByRole("button", { name: /과정 접기/ })).toHaveAttribute("aria-expanded", "true");
     expect(within(steps).getByText("조회문을 쓰는 중 · 반별 미납액")).toBeInTheDocument();
     expect(within(steps).getByText("청구서")).toHaveAttribute("data-tip", expect.stringContaining("invoices"));
     expect(within(steps).getByLabelText("진행 중")).toBeInTheDocument();
@@ -362,5 +369,69 @@ describe("AssistantLauncher", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "지우기" }));
     await waitFor(() => expect(within(dialog).getByText("무엇이 궁금하세요?")).toBeInTheDocument());
     expect(within(dialog).queryByRole("button", { name: /지난 질문/ })).toBeNull();
+  });
+
+  it("대화 이름 바꾸기 — 머리·목록이 함께 · Esc는 판이 아니라 고치기만 닫는다 · 실패 이유(원장 2026-11-06)", async () => {
+    routes["GET /api/assistant/threads"] = () => json({ enabled: true, threads: [{ id: "T1", title: "지난 질문", level: "high", updatedAt: NOW }] });
+    routes["GET /api/assistant/threads/T1"] = () =>
+      json({
+        thread: { id: "T1", title: "지난 질문", level: "high", updatedAt: NOW },
+        messages: [{ id: "M1", question: "지난 질문 본문", level: "high", createdAt: NOW, report, error: null, running: false, queries: [], steps: [] }],
+      });
+    let renameStatus = 200;
+    routes["PATCH /api/assistant/threads/T1"] = () =>
+      renameStatus === 200 ? json({ title: "김윤하 선생님 분석" }) : json({ error: "이름은 80자까지입니다" }, renameStatus);
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: q.includes("min-width"), media: q, addEventListener() {}, removeEventListener() {} }));
+    render(<AssistantLauncher />);
+    fireEvent.click(screen.getByRole("button", { name: /비서/ }));
+    const dialog = await findDialog();
+    fireEvent.click(await within(dialog).findByRole("button", { name: /지난 질문/ }));
+    expect(await within(dialog).findByText("지난 질문 본문")).toBeInTheDocument();
+
+    // Esc — 고치기만 닫고 판은 그대로
+    fireEvent.click(within(dialog).getByRole("button", { name: "이름 바꾸기" }));
+    const field = within(dialog).getByRole("textbox", { name: "대화 이름" });
+    expect(field).toHaveValue("지난 질문");
+    fireEvent.keyDown(field, { key: "Escape" });
+    expect(within(dialog).queryByRole("textbox", { name: "대화 이름" })).toBeNull();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // 저장·취소 뒤 포커스는 '이름 바꾸기' 버튼으로
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: "이름 바꾸기" })).toHaveFocus());
+    // 고치는 중에 목록에서 대화를 고르면 고치기는 닫힌다(남은 표시가 Esc를 삼키지 않게)
+    fireEvent.click(within(dialog).getByRole("button", { name: "이름 바꾸기" }));
+    expect(within(dialog).getByRole("textbox", { name: "대화 이름" })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: /지난 질문/ }));
+    await waitFor(() => expect(within(dialog).queryByRole("textbox", { name: "대화 이름" })).toBeNull());
+
+    // 실패 — 이유를 보이고 고치기 칸은 남는다
+    renameStatus = 400;
+    fireEvent.click(within(dialog).getByRole("button", { name: "이름 바꾸기" }));
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "대화 이름" }), { target: { value: "너무 긴 이름" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "저장" }));
+    expect(await within(dialog).findByText("이름은 80자까지입니다")).toBeInTheDocument();
+
+    // 저장 중 Esc — 저장 버튼에 초점이 있어도(막지 않는다) 편집 칸은 닫히지 않고 결과를 기다린다(재리뷰 2026-11-09)
+    let release: () => void = () => {};
+    renameStatus = 409;
+    routes['PATCH /api/assistant/threads/T1'] = () => new Promise((resolve) => (release = () => resolve(json({ error: '잠시 뒤 다시' }, 409))));
+    const saveButton = within(dialog).getByRole('button', { name: '저장' });
+    saveButton.focus();
+    fireEvent.click(saveButton);
+    expect(await within(dialog).findByRole('button', { name: '저장 중' })).toHaveFocus();
+    fireEvent.keyDown(within(dialog).getByRole('button', { name: '저장 중' }), { key: 'Escape' });
+    expect(within(dialog).getByRole('textbox', { name: '대화 이름' })).toBeInTheDocument();
+    await act(async () => release());
+    expect(await within(dialog).findByText('잠시 뒤 다시')).toBeInTheDocument();
+    routes['PATCH /api/assistant/threads/T1'] = () =>
+      renameStatus === 200 ? json({ title: '김윤하 선생님 분석' }) : json({ error: '이름은 80자까지입니다' }, renameStatus);
+
+    // 성공 — 서버가 정리한 이름이 머리와 목록에
+    renameStatus = 200;
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "대화 이름" }), { target: { value: "  김윤하   선생님 분석 " } });
+    fireEvent.submit(within(dialog).getByRole("textbox", { name: "대화 이름" }).closest("form")!);
+    expect(await within(dialog).findByRole("heading", { name: "김윤하 선생님 분석" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /김윤하 선생님 분석/ })).toBeInTheDocument();
+    const patch = calls.filter((c) => c.method === "PATCH");
+    expect(patch.at(-1)).toEqual({ url: "/api/assistant/threads/T1", method: "PATCH", body: { title: "김윤하 선생님 분석" } });
   });
 });

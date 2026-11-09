@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useId, useState, type ReactNode } from "react";
+import { tipProps } from "@/components/hover-tip/tip";
 import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { ADVICE_WHEN_LABEL, type ReportBlock, type SettledReport } from "@/features/assistant/report";
@@ -48,6 +49,7 @@ export function ReportView({ report }: { report: SettledReport }) {
           <Block key={g.index} block={g.block} datasets={report.datasets} omitted={report.datasetsOmitted} />
         ),
       )}
+      {report.coverage?.surveys?.length ? <Coverage coverage={report.coverage} /> : null}
       <Sources report={report} />
     </article>
   );
@@ -330,6 +332,54 @@ function AdviceCard({ block }: { block: AdviceBlock }) {
 }
 
 // ───────────────────────────── 근거 ─────────────────────────────
+
+/**
+ * 확인한 자료 범위 — 원장 2026-11-06 *"DB 전체 조회하고 답변하는거 맞아? … 하나도 빠짐없이 남김없이"*.
+ * 전수 조회(서버)가 센 표 중 자료가 있는 표마다: 기간 건수 · 최근 날짜 · 이번 답이 자세히 봤나(✓) / 건수만 셌나 — 빠진 것을 원장이 직접 본다.
+ * 표 이름은 한국어 라벨로(마우스를 올리면 실제 표 이름). 기본은 접힘 — 머리 줄에 '표 N개 확인 · 자료 있는 표 M개 · 자세히 본 표 K개'.
+ */
+function Coverage({ coverage }: { coverage: NonNullable<SettledReport["coverage"]> }) {
+  return (
+    <>
+      {coverage.surveys.map((s, i) => {
+        const withData = s.tables.filter((t) => !t.failed);
+        const seen = withData.filter((t) => t.examined).length;
+        const failed = s.tables.filter((t) => t.failed).length;
+        return (
+          <details key={i} className="group border-line rounded-xl border">
+            <summary className="hover:bg-muted flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-1 rounded-xl px-4 py-2.5 text-sm font-medium select-none [&::-webkit-details-marker]:hidden">
+              <EyIcon name="listChecks" size={16} />
+              <span className="font-bold">확인한 자료 범위</span>
+              <span className="min-w-0 break-words">{`${s.target} ${s.name} · ${s.from}~${s.to}`}</span>
+              <span className="num">{`표 ${s.checked}개 확인 · 자료 있는 표 ${withData.length}개 · 자세히 본 표 ${seen}개${failed ? ` · 세지 못한 표 ${failed}개` : ""}`}</span>
+              <EyIcon name="chevronDown" size={16} className="ml-auto transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+            </summary>
+            <ul className="border-line space-y-1 border-t px-4 py-3 text-sm">
+              {s.tables.map((t) => (
+                <li key={t.key ?? t.table} className="flex flex-wrap items-baseline gap-x-2">
+                  <span {...tipProps({ title: t.label, rows: [["DB 표", t.table]] })} className="min-w-0 font-medium break-words">
+                    {t.label}
+                  </span>
+                  {t.failed ? (
+                    <span className="text-amber font-bold">세지 못함</span>
+                  ) : (
+                    <span className="num whitespace-nowrap">
+                      {t.inPeriod !== null ? `기간 ${t.inPeriod.toLocaleString("ko-KR")}건 · 전체 ${(t.total ?? 0).toLocaleString("ko-KR")}건` : `전체 ${(t.total ?? 0).toLocaleString("ko-KR")}건`}
+                      {t.latest ? ` · 최근 ${t.latest}` : ""}
+                    </span>
+                  )}
+                  {!t.failed ? (
+                    <span className={`ml-auto text-xs font-bold whitespace-nowrap ${t.examined ? "text-green" : "text-text-faint"}`}>{t.examined ? "✓ 자세히 봄" : "건수만 셈"}</span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </details>
+        );
+      })}
+    </>
+  );
+}
 
 /** 근거 — 이 보고서가 읽은 조회의 목적과 행 수(접힘 · JS 없이 `<details>`). 🔴 SQL은 보이지 않는다. */
 function Sources({ report }: { report: SettledReport }) {

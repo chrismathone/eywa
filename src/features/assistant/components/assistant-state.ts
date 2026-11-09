@@ -93,7 +93,8 @@ export type AssistantAction =
   | { type: "ask/failed"; turnKey: string; error: string }
   | { type: "ask/stopped"; turnKey: string }
   | { type: "ask/end"; turnKey: string }
-  | { type: "thread/deleted"; threadId: string; newKey: string };
+  | { type: "thread/deleted"; threadId: string; newKey: string }
+  | { type: "thread/renamed"; threadId: string; title: string };
 
 /** 저장된 메시지 → 화면 차례. 끝난 답·실패·진행 중 어느 것도 아니면 "답을 받지 못했다"로(빈 차례를 남기지 않는다). */
 export function turnFromMessage(m: ThreadMessage): Turn {
@@ -273,6 +274,17 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
       conversations[action.newKey] = emptyConversation(action.newKey);
       return { ...state, conversations, threads, currentKey: action.newKey };
     }
+
+    // 이름 바꾸기 — 목록과 열려 있는 그 대화 머리를 함께(목록 순서는 그대로).
+    case "thread/renamed": {
+      const key = threadKey(action.threadId);
+      const conv = state.conversations[key];
+      return {
+        ...state,
+        threads: state.threads.map((t) => (t.id === action.threadId ? { ...t, title: action.title } : t)),
+        conversations: conv ? { ...state.conversations, [key]: { ...conv, title: action.title } } : state.conversations,
+      };
+    }
   }
 }
 
@@ -403,7 +415,7 @@ const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object
 const str = (v: unknown): v is string => typeof v === "string";
 const num = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-const STEP_KINDS: readonly AskStep["kind"][] = ["understand", "schema", "write_sql", "query", "analyze", "report", "fix"];
+const STEP_KINDS: readonly AskStep["kind"][] = ["understand", "schema", "write_sql", "query", "analyze", "report", "fix", "survey"];
 const STEP_STATES: readonly AskStep["state"][] = ["running", "done", "error"];
 
 /** 단계 하나 — 모양이 틀리면 null. 표 칩은 이름·라벨이 글자인 것만 남긴다. */

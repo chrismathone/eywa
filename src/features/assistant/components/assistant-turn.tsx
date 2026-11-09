@@ -62,7 +62,7 @@ function Answer({ turn, canRetry, onRetry, onReload }: { turn: Turn; canRetry: b
       return <Progress turn={turn} note="연결이 끊겨 저장된 답을 다시 불러오는 중입니다." />;
     case "running":
       return (
-        <Notice icon="clock" tone="neutral" text="아직 답을 만드는 중입니다. 끝나면 이 자리에 보고서가 뜹니다." steps={turn.steps}>
+        <Notice icon="clock" tone="neutral" text="아직 답을 만드는 중입니다. 끝나면 이 자리에 보고서가 뜹니다." steps={turn.steps} pending>
           <Button type="button" variant="ghost" onClick={onReload}>
             <EyIcon name="sync" />
             지금 다시 불러오기
@@ -100,6 +100,7 @@ function Notice({
   steps,
   queries,
   children,
+  pending = false,
 }: {
   icon: "clock" | "pause" | "error";
   tone: "neutral" | "danger";
@@ -107,6 +108,8 @@ function Notice({
   steps: readonly AskStep[];
   queries?: readonly QuerySummary[];
   children?: ReactNode;
+  /** 서버가 아직 답을 만드는 중(다시 연 화면) — 막힌 단계를 실시간 화면처럼 옅게. */
+  pending?: boolean;
 }) {
   return (
     // 역할(alert)을 달지 않는다 — 지난 대화를 열면 저장된 실패가 한꺼번에 낭독된다. 방금 끝난 답의 결과는 오버레이의 알림 줄(aria-live)이 읽는다.
@@ -118,7 +121,7 @@ function Notice({
       </div>
       {steps.length ? (
         // 실패했으면 어디서 막혔는지가 곧 까닭이다 — 과정을 펼친 채로 둔다.
-        <ProcessDetails steps={steps} defaultOpen={tone === "danger"} />
+        <ProcessDetails steps={steps} defaultOpen={tone === "danger"} pending={pending} />
       ) : queries && queries.length ? (
         <QueryList queries={queries} />
       ) : null}
@@ -137,13 +140,24 @@ const KIND_ICON: Record<AskStep["kind"], AywaIconName> = {
   analyze: "chart",
   report: "report",
   fix: "wrench",
+  survey: "layers",
 };
 
 /**
  * 끝난 답의 과정 — 한 줄로 접힌다: `조회 3번 · 표 5개 · 18초 — 과정 보기`(누르면 타임라인 전체). JS 없이 `<details>`.
  * 다시 연 대화도 저장된 단계(`ThreadMessage.steps`)로 같은 줄을 보인다.
  */
-function ProcessDetails({ steps, defaultOpen = false, settled = false }: { steps: readonly AskStep[]; defaultOpen?: boolean; settled?: boolean }) {
+function ProcessDetails({
+  steps,
+  defaultOpen = false,
+  settled = false,
+  pending = false,
+}: {
+  steps: readonly AskStep[];
+  defaultOpen?: boolean;
+  settled?: boolean;
+  pending?: boolean;
+}) {
   return (
     <details open={defaultOpen} className="group">
       <summary className="hover:bg-muted inline-flex cursor-pointer list-none flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-lg px-2 py-1 text-sm font-medium select-none [&::-webkit-details-marker]:hidden">
@@ -155,14 +169,19 @@ function ProcessDetails({ steps, defaultOpen = false, settled = false }: { steps
         <EyIcon name="chevronDown" size={16} className="text-primary transition-transform group-open:rotate-180 motion-reduce:transition-none" />
       </summary>
       <div className="pt-2.5 pl-2">
-        <StepTimeline steps={steps} live={false} settled={settled} />
+        <StepTimeline steps={steps} live={false} settled={settled} pending={pending} />
       </div>
     </details>
   );
 }
 
-/** 답을 만드는 동안 — 지금 하는 단계(큰 글 · 낭독) + 단계 타임라인 + 걸린 시간(1초마다). */
+/**
+ * 답을 만드는 동안 — 지금 하는 단계(큰 글 · 낭독) + 단계 타임라인 + 걸린 시간(1초마다).
+ * 🔴 타임라인은 **기본 접힘 — 최신 단계 한 줄만**(원장 2026-11-06 *"이렇게 나열하지말고 펼치기 할때만 나열하고, 디폴트로 접기한 상태에서
+ *    최신 상태만 보여주도록"*). '지난 단계 N개 펼치기'를 누르면 전체를 나열한다(그 차례 동안 펼친 채로 둔다).
+ */
 function Progress({ turn, note }: { turn: Turn; note?: string }) {
+  const [expanded, setExpanded] = useState(false);
   // '지금'은 1초마다 effect가 적는다(렌더 중에 시계를 읽지 않는다 — 첫 1초는 비워 둔다).
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
@@ -186,7 +205,18 @@ function Progress({ turn, note }: { turn: Turn; note?: string }) {
       </div>
       {turn.steps.length ? (
         <div className="mt-3.5 pl-1">
-          <StepTimeline steps={turn.steps} live now={now} startedAt={started} currentId={running?.id ?? null} />
+          <StepTimeline steps={expanded ? turn.steps : turn.steps.slice(-1)} live now={now} startedAt={started} currentId={running?.id ?? null} />
+          {turn.steps.length > 1 ? (
+            <button
+              type="button"
+              aria-expanded={expanded}
+              onClick={() => setExpanded((v) => !v)}
+              className="text-primary hover:bg-muted mt-1.5 inline-flex cursor-pointer items-center gap-1 rounded-lg px-1.5 py-0.5 text-sm font-bold"
+            >
+              {expanded ? "과정 접기" : `지난 단계 ${turn.steps.length - 1}개 펼치기`}
+              <EyIcon name="chevronDown" size={16} className={`transition-transform motion-reduce:transition-none ${expanded ? "rotate-180" : ""}`} />
+            </button>
+          ) : null}
         </div>
       ) : (
         // 첫 단계가 오기 전 — 화면이 비어 보이지 않게(단계 두 줄 모양).
@@ -212,6 +242,7 @@ function StepTimeline({
   startedAt = Number.NaN,
   currentId = null,
   settled = false,
+  pending = false,
 }: {
   steps: readonly AskStep[];
   live: boolean;
@@ -221,6 +252,8 @@ function StepTimeline({
   currentId?: string | null;
   /** 답이 보고서로 끝난 차례 — 막혔다가 이어 간 단계를 옅게 그린다(`stepTrouble`). */
   settled?: boolean;
+  /** 서버가 아직 답을 만드는 중(다시 연 화면) — 실시간 화면(live)처럼 막힘을 옅게 '다시 해 봅니다'. */
+  pending?: boolean;
 }) {
   return (
     <ol className="space-y-2" aria-label="답을 만드는 단계">
@@ -233,7 +266,10 @@ function StepTimeline({
         // 막힌 단계의 뜻(`stepTrouble`) — 답이 끝까지 나왔고 뒤에 같은 종류가 이어졌으면 옅게(다른 조회로 이어 감) ·
         // 시간·한도면 주황(분석이 잘렸다는 신호) · 나머지는 빨강(원장 2026-11-06 · 적대 리뷰 2026-11-06).
         const trouble = stepTrouble(steps, index, settled);
-        const retried = trouble === "retried";
+        // 진행 중(live)의 막힘은 아직 결말이 아니다 — 비서가 고쳐 다시 하는 게 보통이라 옅게 '다시 해 봅니다'.
+        // 끝내 답이 실패하면 실패 안내(Notice · settled 아님)에서 빨강으로 남는다.
+        const retrying = (live || pending) && trouble === "failed";
+        const retried = trouble === "retried" || retrying;
         return (
           <li
             key={s.id}
@@ -245,7 +281,7 @@ function StepTimeline({
               ) : running ? (
                 <EyIcon name="circle" size={14} aria-label="멈춤" />
               ) : retried ? (
-                <EyIcon name="undo" size={14} className="text-text-faint" aria-label="다른 조회로 이어 감" />
+                <EyIcon name="undo" size={14} className="text-text-faint" aria-label={retrying ? "다시 해 보는 중" : "다른 조회로 이어 감"} />
               ) : trouble === "limit" ? (
                 <EyIcon name="clock" size={15} className="text-amber" aria-label="시간·한도로 멈춤" />
               ) : s.state === "error" ? (
@@ -274,7 +310,7 @@ function StepTimeline({
             </div>
             {s.state === "error" && s.detail ? (
               <p className={`mt-0.5 px-1.5 text-xs break-words ${retried ? "text-text-faint" : trouble === "limit" ? "text-amber" : "text-danger"}`}>
-                {retried && !/고칩니다|고쳐/.test(s.detail) ? `${s.detail} — 다른 조회로 이어 갔습니다` : s.detail}
+                {retried && !/고칩니다|고쳐/.test(s.detail) ? `${s.detail} — ${retrying ? "다시 해 봅니다" : "다른 조회로 이어 갔습니다"}` : s.detail}
               </p>
             ) : null}
           </li>

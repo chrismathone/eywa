@@ -59,10 +59,13 @@ function render(s){latest=s;$('version').textContent=`v${s.version}`;$('subtitle
   $('update-state').textContent=phases[progress?.phase]||updates[s.update]||'확인 중';
   $('updates').hidden=!s.paired;
   const ready=s.updateInfo?.ready,plan=s.updateInfo?.plan;
-  const count=progress?.total>0,percent=count?Math.min(100,Math.floor(progress.completed/progress.total*100)):0;
+  // 복사·압축 해제는 용량으로 센다(원장 2026-11-06 — 큰 파일이 앞에 몰려 있어 파일 수로 세면 '67 / 10,021개 파일 · 0%'가 용량으로는 약 23%였다). 문구엔 파일 수도 함께 쓴다 — 작은 파일이 많아 막대가 80%대에서 오래 머물 수 있어 움직임을 보인다(1.0.18 리뷰). 용량이 없는 값(옛 판·다른 단계)은 종전대로.
+  const sized=['copying','extracting'].includes(progress?.phase)&&progress.totalBytes>0,count=sized||progress?.total>0;
+  const percent=sized?Math.min(100,Math.floor((Number(progress.bytes)||0)/progress.totalBytes*100)):count?Math.min(100,Math.floor(progress.completed/progress.total*100)):0;
+  const toMB=n=>((Number(n)||0)/1024/1024).toLocaleString('ko-KR',{minimumFractionDigits:1,maximumFractionDigits:1}),toCount=n=>(Number(n)||0).toLocaleString('ko-KR');
   $('update-progress-wrap').hidden=!count;
   $('update-progress').value=percent;
-  $('update-progress-text').textContent=count?(['copying','extracting','finalizing'].includes(progress.phase)?`${progress.completed.toLocaleString('ko-KR')} / ${progress.total.toLocaleString('ko-KR')}개 파일 · ${percent}%`:`${(progress.completed/1024/1024).toFixed(1)} / ${(progress.total/1024/1024).toFixed(1)} MB · ${percent}%`):'';
+  $('update-progress-text').textContent=!count?'':sized?`${toMB(progress.bytes)} / ${toMB(progress.totalBytes)} MB · ${toCount(progress.completed)} / ${toCount(progress.total)}개 파일 · ${percent}%`:['copying','extracting','finalizing'].includes(progress.phase)?`${progress.completed.toLocaleString('ko-KR')} / ${progress.total.toLocaleString('ko-KR')}개 파일 · ${percent}%`:`${toMB(progress.completed)} / ${toMB(progress.total)} MB · ${percent}%`;
   let detail=ready?`v${ready.version} 다운로드 완료. 지금 업데이트하거나 시간을 지정해 주세요.`:
     progress?.phase==='checking'?'서버에서 새 버전을 확인하고 있습니다.':
     progress?.phase==='copying'?`v${progress.version} · 지금 버전에서 그대로 쓸 수 있는 파일을 복사하고 있습니다.`:

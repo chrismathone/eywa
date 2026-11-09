@@ -6,8 +6,11 @@ import { ASSISTANT_QUESTION_MAX, type AskEvent } from "@/features/assistant/prot
 import { reportError } from "@/lib/observability/report-error";
 
 export const dynamic = "force-dynamic";
-/** 조회를 여러 번 하는 질문은 1~3분 걸린다(강함은 더). */
-export const maxDuration = 300;
+/**
+ * Vercel Pro 최대(800초) — 원장 2026-11-06 *"한도 두지마"*: 조회 횟수 한도를 없앴고, 전수 조회 + 깊은 분석은 몇 분이 걸릴 수 있다.
+ * 서버는 ASSISTANT_HARD_DEADLINE_MS(760초)에 스스로 끊고 저장한다.
+ */
+export const maxDuration = 800;
 
 const Body = z.object({
   threadId: z.string().uuid().nullish(),

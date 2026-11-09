@@ -5,6 +5,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import { tipProps } from "@/components/hover-tip/tip";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { AssistantLevel } from "@/features/assistant/levels";
 import { ASSISTANT_SUGGESTIONS } from "@/features/assistant/protocol";
 import { isConversationStreaming, type Conversation, type Turn } from "./assistant-state";
@@ -76,6 +77,10 @@ export function AssistantOverlay({
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  /** 이름을 고치는 중인 대화(원장 2026-11-06 *"대화 이름 변경도 가능하게"*) — Esc는 이것부터 닫는다. */
+  const [renaming, setRenaming] = useState<string | null>(null);
+  /** 이름을 저장하는 중인 대화 — 그 대화의 편집 칸은 Esc로 닫지 않는다(결과·실패 이유를 기다린다 · 재리뷰 2026-11-09). 다른 대화의 편집 칸은 막지 않는다. */
+  const renameSavingFor = useRef<string | null>(null);
 
   const streamingHere = isConversationStreaming(state, current);
   const streamingThreadId = state.inflight
@@ -118,6 +123,7 @@ export function AssistantOverlay({
   const startNew = () => {
     assistant.newConversation();
     setConfirmDelete(null);
+    setRenaming(null);
     closeListOnPhone();
     requestAnimationFrame(() => inputRef.current?.focus());
   };
@@ -127,7 +133,10 @@ export function AssistantOverlay({
     const error = await assistant.deleteThread(threadId);
     setDeleting(false);
     setDeleteError(error);
-    if (!error) setConfirmDelete(null);
+    if (!error) {
+      setConfirmDelete(null);
+      setRenaming(null);
+    }
   };
 
   // 화면 낭독기용 알림 줄 — 방금 끝난 답의 결과를 읽는다(지난 대화의 실패를 한꺼번에 읽지 않게 차례 상자엔 역할을 달지 않았다).
@@ -148,7 +157,13 @@ export function AssistantOverlay({
       open={open}
       onOpenChange={(next, details) => {
         if (!next && details.reason === "escape-key") {
-          // Esc는 안쪽부터 — 지우기 확인 → 폰 서랍 → 판.
+          // Esc는 안쪽부터 — 이름 고치기 → 지우기 확인 → 폰 서랍 → 판.
+          // 지금 보는 대화의 이름을 고치는 중일 때만 — 다른 대화로 옮긴 뒤 남은 표시가 Esc를 삼키지 않게(리뷰 2026-11-06).
+          if (renaming && renaming === current.threadId) {
+            details.cancel();
+            if (renameSavingFor.current !== renaming) setRenaming(null);
+            return;
+          }
           if (confirmDelete) {
             details.cancel();
             setConfirmDelete(null);
@@ -235,6 +250,7 @@ export function AssistantOverlay({
                 today={today}
                 onSelect={(id) => {
                   setConfirmDelete(null);
+                  setRenaming(null);
                   assistant.selectThread(id);
                   closeListOnPhone();
                 }}
@@ -263,6 +279,25 @@ export function AssistantOverlay({
                     onDelete={() => current.threadId && void remove(current.threadId)}
                     deleting={deleting}
                     deleteError={deleteError}
+                    renaming={!!current.threadId && renaming === current.threadId}
+                    onAskRename={() => {
+                      setConfirmDelete(null);
+                      setRenaming(current.threadId);
+                    }}
+                    onCancelRename={() => setRenaming(null)}
+                    onRenameSaving={(v) => {
+                      const id = current.threadId;
+                      if (v) renameSavingFor.current = id;
+                      else if (renameSavingFor.current === id) renameSavingFor.current = null;
+                    }}
+                    onRename={async (title) => {
+                      const id = current.threadId;
+                      if (!id) return "대화를 찾지 못했습니다";
+                      const error = await assistant.renameThread(id, title);
+                      // 그사이 다른 대화의 이름을 고치기 시작했으면 그 편집 칸은 닫지 않는다(재리뷰 2026-11-09).
+                      if (!error) setRenaming((cur) => (cur === id ? null : cur));
+                      return error;
+                    }}
                   />
                 </div>
               </div>
@@ -307,6 +342,11 @@ function ConversationBody({
   onDelete,
   deleting,
   deleteError,
+  renaming,
+  onAskRename,
+  onCancelRename,
+  onRenameSaving,
+  onRename,
 }: {
   conv: Conversation;
   enabled: boolean | null;
@@ -321,7 +361,22 @@ function ConversationBody({
   onDelete: () => void;
   deleting: boolean;
   deleteError: string | null;
+  renaming: boolean;
+  onAskRename: () => void;
+  onCancelRename: () => void;
+  onRenameSaving: (saving: boolean) => void;
+  /** 실패하면 이유(한국어), 성공하면 null. */
+  onRename: (title: string) => Promise<string | null>;
 }) {
+  // 이름 고치기를 마치면(저장·취소) 포커스를 '이름 바꾸기' 버튼으로 돌려준다 — 편집 칸이 사라지며 포커스가 body로 빠지지 않게(리뷰 2026-11-06).
+  // 🔴 같은 대화일 때만 — 고치다가 목록에서 다른 대화를 고르면 그 대화의 버튼으로 초점이 튀지 않게(재리뷰 2026-11-09).
+  const renameButtonRef = useRef<HTMLButtonElement>(null);
+  const renamingFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (renamingFor.current && !renaming && renamingFor.current === conv.threadId) renameButtonRef.current?.focus();
+    renamingFor.current = renaming ? conv.threadId : null;
+  }, [renaming, conv.threadId]);
+
   if (conv.turns.length === 0) {
     if (conv.threadId && (conv.load === "loading" || conv.load === "idle")) return <LoadingConversation />;
     if (conv.threadId && conv.load === "error") {
@@ -342,8 +397,12 @@ function ConversationBody({
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h2 className="text-foreground min-w-0 flex-1 text-lg font-bold break-words">{conv.title ?? "새 대화"}</h2>
-        {conv.threadId ? (
+        {renaming && conv.threadId ? (
+          <TitleEditor title={conv.title ?? ""} onCancel={onCancelRename} onSave={onRename} onSavingChange={onRenameSaving} />
+        ) : (
+          <h2 className="text-foreground min-w-0 flex-1 text-lg font-bold break-words">{conv.title ?? "새 대화"}</h2>
+        )}
+        {conv.threadId && !renaming ? (
           confirmDelete ? (
             <div role="group" aria-label="대화 지우기 확인" className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium">이 대화를 지울까요? 되돌릴 수 없습니다.</span>
@@ -356,10 +415,16 @@ function ConversationBody({
               </Button>
             </div>
           ) : (
-            <Button type="button" variant="ghost" onClick={onAskDelete} disabled={streamingHere}>
-              <EyIcon name="trash" />
-              대화 지우기
-            </Button>
+            <span className="flex flex-wrap items-center gap-1">
+              <Button ref={renameButtonRef} type="button" variant="ghost" onClick={onAskRename}>
+                <EyIcon name="edit" />
+                이름 바꾸기
+              </Button>
+              <Button type="button" variant="ghost" onClick={onAskDelete} disabled={streamingHere}>
+                <EyIcon name="trash" />
+                대화 지우기
+              </Button>
+            </span>
           )
         ) : null}
       </div>
@@ -437,5 +502,83 @@ function EmptyState({ enabled, canAsk, onSuggest }: { enabled: boolean | null; c
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * 대화 이름 고치기 — 제목 자리가 입력칸이 된다(Enter 저장 · Esc 취소 · 80자). 열 때마다 새로 그려 지금 이름에서 시작한다.
+ * 서버가 공백을 정리한 이름을 돌려주면 그 이름이 목록·머리에 들어간다(use-assistant renameThread).
+ */
+function TitleEditor({
+  title,
+  onCancel,
+  onSave,
+  onSavingChange,
+}: {
+  title: string;
+  onCancel: () => void;
+  onSave: (title: string) => Promise<string | null>;
+  onSavingChange: (saving: boolean) => void;
+}) {
+  const [draft, setDraft] = useState(title);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputId = useId();
+  const save = async () => {
+    if (saving) return;
+    const next = draft.replace(/\s+/g, " ").trim();
+    if (!next) return setError("이름을 적어 주세요");
+    if (next === title) return onCancel();
+    setSaving(true);
+    onSavingChange(true);
+    const failed = await onSave(next);
+    onSavingChange(false);
+    setSaving(false);
+    if (failed) setError(failed);
+  };
+  return (
+    <form
+      className="flex min-w-0 flex-1 flex-wrap items-center gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save();
+      }}
+    >
+      <label htmlFor={inputId} className="sr-only">
+        대화 이름
+      </label>
+      <Input
+        id={inputId}
+        autoFocus
+        value={draft}
+        maxLength={80}
+        // 저장 중엔 막지 않고 읽기 전용 — 막으면 포커스가 빠져 그사이 Esc가 판의 Esc 사슬로 가 편집 칸을 닫고 실패 이유가 사라진다(리뷰 2026-11-06).
+        readOnly={saving}
+        aria-busy={saving || undefined}
+        aria-invalid={error ? true : undefined}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          setError(null);
+        }}
+        onKeyDown={(e) => {
+          if (e.key !== "Escape") return;
+          // 한글 조합 중의 Esc는 조합만 끝낸다 · 저장 중엔 닫지 않는다(결과·실패 이유를 기다린다).
+          if (e.nativeEvent.isComposing) return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (!saving) onCancel();
+        }}
+        className="h-9 min-w-[12rem] flex-1 text-base font-bold md:text-base"
+      />
+      {/* 저장 중에도 disabled로 두지 않는다 — 누른 버튼이 막히면 포커스가 body로 빠져 그사이 Esc가 판의 Esc 사슬로 가 편집 칸을 닫고 실패 이유가 사라진다(재리뷰 2026-11-09). 두 번 눌림은 save가 거른다. */}
+      <Button type="submit" aria-disabled={saving || undefined} className={saving ? "opacity-50" : undefined}>
+        <EyIcon name="check" />
+        {saving ? "저장 중" : "저장"}
+      </Button>
+      <Button type="button" variant="ghost" onClick={onCancel} disabled={saving}>
+        취소
+      </Button>
+      {error ? <p className="text-danger w-full text-sm font-medium">{error}</p> : null}
+    </form>
   );
 }

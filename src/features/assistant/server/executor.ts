@@ -54,7 +54,12 @@ export function queryError(error: unknown): AssistantQueryError {
     "53200": "조회가 너무 큽니다 — 집계하거나 조건을 좁혀 주세요",
     "54000": "조회가 너무 큽니다 — 집계하거나 조건을 좁혀 주세요",
   };
-  return new AssistantQueryError(ko[e?.code ?? ""] ?? "조회하지 못했습니다", clipText(raw, 500));
+  // 연결·서버 쪽 오류(SQLSTATE가 아님 — postgres.js의 CONNECT_TIMEOUT·CONNECTION_CLOSED 등 · 08xxx 연결 · 57P 서버 종료 · 53300 연결 수 · 25P 거래 시간 초과)는
+  // 같은 조회를 다시 해도 같다 — 전수 조회가 표를 반씩 쪼개 수십 번 다시 하지 않게 가른다(재리뷰 2026-11-09).
+  const code = e?.code ?? "";
+  const sqlState = /^[0-9A-Z]{5}$/.test(code) ? code : null;
+  const connection = !sqlState || /^(08|57P|25P)/.test(sqlState) || sqlState === "53300";
+  return new AssistantQueryError(ko[code] ?? "조회하지 못했습니다", clipText(raw, 500), connection ? "connection" : "query");
 }
 
 // postgres.js 타입 oid → 화면에 옮길 값(셀은 문자·숫자·참거짓·null만).
