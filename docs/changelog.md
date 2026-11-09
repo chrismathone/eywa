@@ -1,5 +1,9 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-09 — 운영 DB 직접 쓰기 통로 차단(`db:push` · `drizzle-kit push/migrate`) — 수정 계획 P0-4
+
+- `pnpm db:push`는 `db:migrate`처럼 안내 후 종료(`package.json`). 스크립트만 막으면 `npx drizzle-kit push`로 우회돼 `drizzle.config.ts` 맨 위에서 명령 자리가 push·migrate·up·drop이면 종료(generate·studio·check는 그대로). `supabase/migrations/README.md`의 시즌1 설명에 안내 한 줄. SQL 없음.
+
 ## 2026-11-09 — 대시보드 관리를 새 대시보드 칸 목록으로 · 역할별 기본 새로 · 보기 전환 렉 수정
 
 - 설정 '대시보드 관리' = 핵심 업무 · KPI(한눈에 보기 6칸 / 오늘 운영) · 추이·비교 · 비중·구성 · 오늘 운영 구역 칸 목록 + 역할 미리보기(`src/features/dashboard/layout/board.ts` · `board-edit.ts` · `owner/_components/dashboard/board-*.tsx`). 끌기 캔버스 편집기 제거. 옛 저장 배치는 읽을 때 새 모양으로(운영 DB 무변경). 대시보드가 배치를 그대로 읽는다(`instrument-board.tsx`). 보기 전환 1,038ms → 55~85ms(`viz-slot.tsx` 일괄 측정·그리기).
