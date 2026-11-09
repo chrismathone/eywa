@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { migrationFiles } from "@/lib/db/migrations-corpus.mjs";
 import { ASSISTANT_DOCS, ONTOLOGY_DOCS } from ".";
+import { AUTO_CONTRIBUTION_FACTORS } from "./tables-extra";
 
 function liveTables(): Set<string> {
   const created = new Set<string>();
@@ -71,5 +72,12 @@ describe("온톨로지 자리 라벨 = 앱 별칭(teacher-label.ts)", () => {
     const listed = (text: string) => [...(text.match(/in \(('[^)]*')\)/)?.[1] ?? "").matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
     expect(listed(ONTOLOGY_MAP)).toEqual([...SPECIAL_SLOT_ALIAS_KEYS].sort());
     expect(listed(notes)).toEqual([...SPECIAL_SLOT_ALIAS_KEYS].sort());
+  });
+
+  it("기여도 요인 — 앱이 자동 계산하는 번호 목록이 factor-query.ts와 같다(어긋나면 비서가 화면에 있는 값을 '기록 없음'이라 한다)", () => {
+    const src = readFileSync(join(process.cwd(), "src/features/student-contribution/server/factor-query.ts"), "utf8");
+    const ids = [...new Set([...src.matchAll(/\bput\("(F\d\d)"/g)].map((m) => m[1]!))].sort();
+    expect(ids.length).toBeGreaterThan(0);
+    expect([...AUTO_CONTRIBUTION_FACTORS].sort()).toEqual(ids);
   });
 });
