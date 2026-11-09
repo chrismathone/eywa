@@ -32,7 +32,6 @@ function blockedState(code,extra={}){
 }
 
 test('index.html에 메이크에듀 칸 버튼·안내 줄이 있다',()=>{
-  // 버튼은 칸 제목 줄 오른쪽(원장 2026-11-06 "우상단에 · 하단에 공간낭비 하지말고") · 안내 줄은 상태 아래.
   assert.match(HTML,/<article><div class="module-head"><h3>메이크에듀<\/h3><button id="makeedu-login" class="secondary">makeedu 다시 로그인<\/button><\/div><strong id="makeedu-state"><\/strong><p id="makeedu-login-state" hidden><\/p><\/article>/);
 });
 

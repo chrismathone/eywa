@@ -51,6 +51,7 @@ test('updater exposes extraction progress and only marks fully verified files re
   await updater.check();assert.equal(updater.state,'ready');assert.equal(updater.ready.sequence,2);assert.equal(updater.pending,false);assert.equal(updater.progress,null);assert.equal(updater.failure,null);
   assert.deepEqual([...new Set(progress.map(p=>p.phase))],['checking','downloading','verifying','extracting','finalizing']);
   assert.equal(progress.filter(p=>p.phase==='extracting').at(-1).completed,m.files.length);
+  assert.equal(progress.filter(p=>p.phase==='extracting').at(-1).bytes,m.files.reduce((n,f)=>n+f.size,0)); // 용량 진행률(2026-11-06)
   assert.equal(events.at(-1)[0],'update_downloaded');assert.equal(fs.readdirSync(path.join(root,'versions')).some(n=>n.includes('.stage-')),false);
 });
 test('failure records a fixed reason, cleans only its staging files and permits manual retry',async()=>{

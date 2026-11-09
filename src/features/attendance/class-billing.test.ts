@@ -86,6 +86,19 @@ describe("출석부 이 반 청구액", () => {
     expect(attendanceClassBilledAmounts(classes, [inv, { ...inv, id: "i9" }], twice, { outs: new Map(), ins })[key]).toBe(160000 * 2 + 5000);
   });
 
+  it("연쇄 이월(원장 2026-11-09) — 받은 이월에서 남은 몫을 보낸 줄은 그만큼 빼고, 받은 이월은 더한다(회차 확정 실납과 같은 판정)", () => {
+    // 조은준 9월 모양: 확정 324,000(27시수) · 배분 312,000 + 8월 이월 24,000 = 336,000 → 12,000을 10월로.
+    const paid = { ...line, amount: 312000 };
+    const allocated = term({ amount: 324000, confirmed_sessions: 27, allocation_line_index: 0, allocation_amount: 312000, allocation_source: paid, allocation_base_amount: 324000 });
+    const inv = { ...invoice, line_items: [paid] };
+    const ins = new Map([["s1|c1", [{ amount: 24000, fromPeriod: "2026-08", fromClassName: "고등M 개별 TP4E", note: null, valid: true }]]]);
+    expect(attendanceClassBilledAmounts(classes, [inv], [allocated], { outs: new Map([["t1", 12000]]), ins })).toEqual({ [key]: 324000 });
+    // 받은 이월이 없으면 더 받은 몫이 없다 — 보낸 이월은 무효라 빼지 않는다(받는 달도 같은 판정으로 안 더한다).
+    expect(attendanceClassBilledAmounts(classes, [inv], [allocated], { outs: new Map([["t1", 12000]]), ins: new Map() })).toEqual({ [key]: 312000 });
+    // 남은 몫보다 많이 보낸 이월은 무효.
+    expect(attendanceClassBilledAmounts(classes, [inv], [allocated], { outs: new Map([["t1", 12001]]), ins })).toEqual({ [key]: 336000 });
+  });
+
   it("이월 표식(원장 2026-10-06) — 금액과 같은 판정으로 받은·보낸 이월을 줄마다 내고, 단가로 나눠 회차를 적는다", () => {
     const paid = { ...line, amount: 160000 };
     const allocated = term({ unit_price: 30000, allocation_line_index: 0, allocation_amount: 160000, allocation_source: paid, allocation_base_amount: 150000 });
