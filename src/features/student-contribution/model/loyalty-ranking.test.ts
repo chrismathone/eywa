@@ -38,15 +38,17 @@ describe("six-factor loyalty ranking",()=>{
   });
   it("keeps missing axes unknown and shows the possible upper bound without reweighting",()=>{
     const r=buildLoyaltyRanking([student()],config)[0]!;
-    expect(r.metrics.school.points).toBeNull();expect(r.metrics.attendance.points).toBeNull();expect(r.score).toBe(85);expect(r.upper).toBe(95);expect(r.complete).toBe(false);
+    // 2026-11-09: 100점 환산 대신 단위당 가산점을 그대로 더한다 — 모르는 칸은 0으로 메우거나 다른 칸으로 재배분하지 않는다.
+    const known=Object.values(r.metrics).reduce((sum,m)=>sum+(m.points??0),0);
+    expect(r.metrics.school.points).toBeNull();expect(r.metrics.attendance.points).toBeNull();expect(r.score).toBe(Math.round(known*100)/100);expect(r.score!).toBeGreaterThan(0);expect(r.upper).toBe(r.score);expect(r.complete).toBe(false);
   });
   it("does not rank a missing snapshot from a family zero alone",()=>{const s=student();s.facts=null;s.family.activeSiblings=0;expect(buildLoyaltyRanking([s],config)[0]!.score).toBeNull();});
   it("ties share competition rank and the conservative ending percentile",()=>{
     const rows=Array.from({length:5},(_,i)=>{const s=student(String(i));s.facts!.billing.paid=i<2?600000:100000;s.facts!.billing.concurrentPaid=0;s.facts!.billing.extraSubjectPaid=0;return s;});
-    const r=buildLoyaltyRanking(rows,config);expect(r[0]).toMatchObject({rank:1,top:40,band:2,tied:true});expect(r[1]).toMatchObject({rank:1,top:40,band:2});expect(r[2]!.rank).toBe(3);
+    const r=buildLoyaltyRanking(rows,config);expect(r[0]).toMatchObject({rank:1,top:40,band:4,tied:true});expect(r[1]).toMatchObject({rank:1,top:40,band:4});expect(r[2]!.rank).toBe(3);
   });
   it("withholds bands for small cohorts and for identical scores",()=>{expect(buildLoyaltyRanking([student()],config)[0]!.band).toBeNull();expect(buildLoyaltyRanking(Array.from({length:5},(_,i)=>student(String(i))),config).every(r=>r.band===null)).toBe(true);});
-  it("a disabled axis does not create an unknown-weight penalty",()=>{const c={...config,weights:{...config.weights,school:0,attendance:0,family:35}};const r=buildLoyaltyRanking([student()],c)[0]!;expect(r.complete).toBe(true);expect(r.score).toBe(95);});
+  it("a disabled axis does not create an unknown-weight penalty",()=>{const c={...config,weights:{...config.weights,school:0,attendance:0,family:35}};const r=buildLoyaltyRanking([student()],c)[0]!;expect(r.complete).toBe(true);expect(r.metrics.school.points).toBe(0);expect(r.metrics.attendance.points).toBe(0);expect(r.score).toBe(Math.round(Object.values(r.metrics).reduce((sum,m)=>sum+(m.points??0),0)*100)/100);});
   it("validates the 100-point total and bounded bonuses",()=>{expect(rankingConfigSchema.safeParse(config).success).toBe(true);expect(rankingConfigSchema.safeParse({...config,weights:{...config.weights,family:50}}).success).toBe(false);expect(rankingConfigSchema.safeParse({...config,concurrentBonus:-1}).success).toBe(false);});
 });
 describe("school records",()=>{

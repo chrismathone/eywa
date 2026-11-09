@@ -1,0 +1,22 @@
+.card { background: #fff; border: 1px solid #e1e3df; border-radius: 10px; padding: 16px 18px; display: grid; gap: 12px; color: #23282c; }
+.head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.head h3 { font-size: var(--text-lg); font-weight: 800; letter-spacing: -.03em; }
+.head p { font-size: var(--text-xs); color: #646d72; }
+.head p b { color: #23282c; font-size: var(--text-sm); font-weight: 850; }
+.stack { display: flex; height: 12px; border-radius: 3px; overflow: hidden; background: #e7e9e6; gap: 2px; }
+.stack span { min-width: 0; }
+.operations { background: #363c41; }
+.participation { background: #7a8388; }
+.family { background: #fdb811; }
+.sections { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
+.section { background: #f4f4f1; border-radius: 8px; padding: 12px 14px; min-width: 0; }
+.section h4 { display: flex; align-items: center; gap: 7px; font-size: var(--text-sm); font-weight: 800; margin-bottom: 8px; }
+.section h4 i { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.section h4 b { margin-left: auto; font-size: var(--text-sm); }
+.section ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.section li { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label points" "detail detail" "bar bar"; gap: 2px 10px; min-width: 0; }
+.label { grid-area: label; font-size: var(--text-xs); font-weight: 700; }
+.points { grid-area: points; font-size: var(--text-xs); font-weight: 850; white-space: nowrap; }
+.detail { grid-area: detail; font-size: var(--text-xs); color: #646d72; line-height: 1.45; }
+.bar { grid-area: bar; height: 5px; border-radius: 3px; background: #e1e3df; overflow: hidden; margin-top: 2px; }
+.bar i { display: block; height: 100%; border-radius: inherit; }

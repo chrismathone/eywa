@@ -38,14 +38,15 @@ V.ticks = (min, max, count = 3) => {
 V.edges = (values, total, x0, width) => {
   let run = 0;
   const out = [Math.round(x0)];
-  values.forEach((v) => { run += v; out.push(Math.round(x0 + (run / total) * width)); });
+  values.forEach((v) => { run += v; out.push(Math.round(x0 + (total > 0 ? run / total : 0) * width)); }); // 합계 0인 줄(학생 0명) = 0÷0 NaN 방지
   return out;
 };
 
 /* 글자는 측정한 뒤 배치한다. 크기·굵기는 style.css의 .t-* 와 같은 값이다. */
+/* 시안: 앱 글자 단계와 통일 — 차트 글자도 xs(14) 바닥 · 큰 숫자는 lg(20). instruments.css의 .t-* 와 같은 값. */
 const TYPE = {
-  axis: [12, 500], label: [13, 500], strong: [13, 700],
-  value: [14, 800], stat: [20, 800], inbar: [12, 700],
+  axis: [14, 500], label: [14, 500], strong: [14, 700],
+  value: [14, 800], stat: [20, 800], inbar: [14, 700],
 };
 V.TYPE = TYPE;
 /* 앱 글꼴(next/font)의 실제 이름을 읽는다. canvas는 CSS 변수를 못 읽어서 값을 풀어 넘긴다. */

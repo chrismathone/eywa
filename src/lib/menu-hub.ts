@@ -110,6 +110,9 @@ function billingFace(href: string, desc?: string, extra?: Partial<HubDest>): Hub
   return tab ? face("billing", tab.href, tab.label, desc, extra) : null;
 }
 
+// 시안 이식 탭의 그룹 아이콘 = 그 탭 한 줄(면)의 그림과 같다 — 같은 메뉴라 한 번만 센다(menu-glyph 중복 검사는 면의 그림을 본다).
+const SAMPLE_GROUP_ICON = { organization: "target", marketing: "barChart" } as const;
+
 export const HUB_GROUPS: HubGroup[] = [
   {
     id: "dashboard",
@@ -117,6 +120,11 @@ export const HUB_GROUPS: HubGroup[] = [
     icon: MENU_ICON.dashboard,
     kind: "direct",
     items: keep([fromMenu("dashboard")]),
+  },
+  // 시안(aywa-next 이식): 스키마·지식그래프 — 경영 분석 화면의 한 면(원장·관리자만, 페이지가 다시 막는다).
+  {
+    id: "knowledge-model", label: "스키마·지식그래프", icon: MENU_ICON.dashboard, kind: "direct",
+    items: keep([face("dashboard", "/dashboard/management/knowledge", "스키마·지식그래프", "시트 설계 사전·실제 관계 지도·미입력 점검", { icon: "merge", adminOnly: true })]),
   },
   // 🔴 **캘린더는 메뉴에 세우지 않는다** (원장 2026-09-10: *"캘린더 탭은 메뉴에서 제외시켜. 그냥 내부
   //    구글 달력용으로 사용할예정임."* → *"즉, 동기화하지만 외부로 보여주지않고 내부 끌어오기 참고용으로만 할것"*).
@@ -127,24 +135,24 @@ export const HUB_GROUPS: HubGroup[] = [
     label: "수업",
     icon: MENU_ICON.timetable,
     kind: "hub",
-    note: "수업 운영에 필요한 메뉴를 선택하세요.",
+    note: "수업 전 계획부터 수업 기록, 검토·전달까지 이어서 처리합니다.",
     items: keep([
-      fromMenu("timetable", "과목별 수업 배치·조회"),
+      fromMenu("timetable", "과목별 수업 배치·조회", { section: "1. 수업 전 · 계획" }),
       // 강사 시트는 영어·수학이 **독립 권한**이라 버튼도 둘이다(사이드바에선 한 줄 + 하부탭이었다).
       // 아이콘은 형제 한 쌍(열/행) — 나란히 서므로 같은 글리프를 쓰지 말 것.
-      face("ecs", "/ecs", "영어 강사 시트", "영어 반별 주간 수업·진도"),
-      { menuKey: "mcs", href: "/mcs", label: "수학 강사 시트", icon: MENU_ICON.mcs, desc: "수학 반별 월간 진도" },
-      fromMenu("attendance", "월별 출석·정산"),
-      fromMenu("makeups", "보강 일정·실시 검토·미처리 업무"),
-      fromMenu("classes", "반 목록·반 정보 관리"),
-      fromMenu("textbooks", "교재·차수별 진도·과제"),
-      fromMenu("lesson_reports", "목록·작성률·발송 관리"),
-      fromMenu("before_class_checklist", "수업 전 숙제·준비 체크"),
-      fromMenu("class_review", "수업 참관·평가 기록"),
-      fromMenu("teacher_onescreen", "담당 학생 수업 마감", { teacherOnly: true }),
+      face("ecs", "/ecs", "영어 강사 시트", "영어 반별 주간 수업·진도", { section: "1. 수업 전 · 계획" }),
+      { menuKey: "mcs", href: "/mcs", label: "수학 강사 시트", icon: MENU_ICON.mcs, desc: "수학 반별 월간 진도", section: "1. 수업 전 · 계획" },
+      fromMenu("classes", "반 목록·반 정보 관리", { section: "1. 수업 전 · 계획" }),
+      fromMenu("textbooks", "교재·차수별 진도·과제", { section: "1. 수업 전 · 계획" }),
+      fromMenu("before_class_checklist", "수업 전 숙제·준비 체크", { section: "1. 수업 전 · 계획" }),
+      face("attendance", "/attendance/live", "오늘 출결", "오늘 등원·확인 큐", { section: "2. 수업 중 · 기록", icon: "clipboardList" }),
+      fromMenu("attendance", "월별 출석·정산", { section: "2. 수업 중 · 기록" }),
+      fromMenu("teacher_onescreen", "담당 학생 수업 마감", { teacherOnly: true, section: "2. 수업 중 · 기록" }),
+      fromMenu("lesson_reports", "목록·작성률·발송 관리", { section: "3. 수업 후 · 검토·전달" }),
+      fromMenu("makeups", "보강 일정·실시 검토·미처리 업무", { section: "3. 수업 후 · 검토·전달" }),
+      fromMenu("class_review", "수업 참관·평가 기록", { section: "3. 수업 후 · 검토·전달" }),
       // 출석부의 다른 면 — 자주 쓰는 자리는 위 버튼이고, 나머지는 작은 줄로. 설명도 둔다 — 탭 및 메뉴 구성에서 묶음을 바꾸면 큰 카드로 서는데
       // 설명이 없으면 빈 줄이 남는다(점검 2026-10-19).
-      face("attendance", "/attendance/live", "오늘 출결", "오늘 등원·확인 큐", { tool: true, icon: "clipboardList" }),
       face("attendance", "/attendance/quick", "출결 모드", "내 반 빠른 출결", { tool: true, teacherOnly: true, icon: "listChecks" }),
     ]),
   },
@@ -156,9 +164,18 @@ export const HUB_GROUPS: HubGroup[] = [
     note: "원생 기록을 보고 성적을 관리합니다.",
     items: keep([
       fromMenu("students", "원생 명단·상세 기록"),
+      face("students", "/students/care", "상담 약속·인계", "담당자 인수·미완료 약속·90일 이후 계속 관리"),
       fromMenu("student_contribution", "학생별 운영 기여·학습 참여·연결 기록"),
       fromMenu("exams", "시험 성적 입력·분석"),
     ]),
+  },
+  // 시안(aywa-next 이식): 신규생 90일 관리 = 왼쪽 한 줄(상담·재원 묶음에서 꺼냈다).
+  {
+    id: "newcomers",
+    label: "신규생 90일 관리",
+    icon: MENU_ICON.newcomers,
+    kind: "direct",
+    items: keep([fromMenu("newcomers", "신규생 90일 체크리스트·적응 확인")]),
   },
   {
     id: "counsel",
@@ -169,8 +186,6 @@ export const HUB_GROUPS: HubGroup[] = [
     items: keep([
       fromMenu("consultations", "재원생 상담 기록"),
       fromMenu("enrollment", "상담 접수·반 배정"),
-      // 신규생 관리 — 등록상담(들어오기 전)과 이탈 방어(흔들릴 때) 사이의 90일을 맡는다.
-      fromMenu("newcomers", "신입 90일 체크리스트"),
       fromMenu("retention", "이탈 위험 원생 관리"),
       fromMenu("withdrawals", "퇴원·수강 종료 기록"),
       fromMenu("withdrawal_reports", "강사 작성·순차 승인"),
@@ -208,6 +223,19 @@ export const HUB_GROUPS: HubGroup[] = [
       face("shuttle", SHUTTLE_PARENTS_PATH, "학부모 관리 현황", "학부모 계정·연결 원생", { tool: true, adminOnly: true }),
     ]),
   },
+  // 시안(aywa-next 이식): 조직·OKR · 홍보·마케팅.
+  {
+    id: "organization", label: "조직·OKR", icon: SAMPLE_GROUP_ICON.organization, kind: "direct",
+    items: keep([face("dashboard", "/organization/okr", "조직·OKR", "조직 목표·내 핵심결과·실행·주간 점검·피드백", { icon: "target" })]),
+  },
+  {
+    id: "marketing", label: "홍보·마케팅", icon: SAMPLE_GROUP_ICON.marketing, kind: "hub",
+    note: "연간 홍보·행사 기록부터 채널 성과와 학생 유입까지 연결합니다.",
+    items: keep([
+      face("dashboard", "/marketing", "연간 운영계획", "행사 기획·준비 일정·담당 업무·초대와 참석·회고", { icon: "send" }),
+      face("dashboard", "/billing/management/marketing", "홍보·마케팅", "연간 마케팅 지도·행사 기록·채널별 성과", { icon: "barChart", adminOnly: true }),
+    ]),
+  },
   // 🔴 **회의록은 업무군에 넣지 않고 왼쪽 탭 한 줄로 세운다** (원장 2026-09-10:
   //    *"회의록은 따로 왼쪽 탭으로 빼주고"*). `direct`라 누르면 메뉴 판을 거치지 않고 바로 열린다.
   //    ⚠️ 업무군에서 뺐다고 권한이 달라지지 않는다 — menuKey는 그대로 `meetings`다.
@@ -227,6 +255,7 @@ export const HUB_GROUPS: HubGroup[] = [
     note: "기록과 결재 문서입니다.",
     items: keep([
       fromMenu("approvals", "기안·결재함"),
+      face("documents", "/work-records", "업무 작성센터", "내 계정으로 수업·상담·업무 서식 작성", { icon: "filePlus" }),
       fromMenu("documents", "서식·문서 저장소"),
     ]),
   },

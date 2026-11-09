@@ -26,8 +26,9 @@ function excludedInSql(): string[] {
     .filter((f: { name: string }) => /academy_assistant/.test(f.name))
     .map((f: { sql: string }) => f.sql)
     .join("\n");
-  const block = sql.slice(sql.indexOf("insert into assistant_private.excluded_tables"), sql.indexOf("on conflict (table_name) do update set reason"));
-  return [...block.matchAll(/\('([a-z_]+)',/g)].map((m) => m[1]!);
+  // 비서 SQL마다 제외 목록 넣기가 있을 수 있다(s2_0031 · s2_0036 의견 표 …) — 블록을 전부 읽는다.
+  const blocks = [...sql.matchAll(/insert into assistant_private\.excluded_tables[\s\S]*?on conflict \(table_name\) do update set reason/g)].map((m) => m[0]);
+  return blocks.flatMap((block) => [...block.matchAll(/\('([a-z_]+)',/g)].map((m) => m[1]!));
 }
 
 describe("학원 비서 DB 지도", () => {
@@ -37,7 +38,7 @@ describe("학원 비서 DB 지도", () => {
 
   it("마이그레이션에서 표를 실제로 찾았다(빈 집합으로 통과하지 않게)", () => {
     expect(live.size).toBeGreaterThan(250);
-    expect(excluded).toEqual(expect.arrayContaining(["assistant_threads", "assistant_messages", "assistant_conversations"]));
+    expect(excluded).toEqual(expect.arrayContaining(["assistant_threads", "assistant_messages", "assistant_conversations", "assistant_advice", "assistant_advice_events"]));
   });
 
   it("🔴 비서가 읽는 표는 하나도 빠짐없이 설명이 있다(새 표 = tables-a/b/extra에 한 줄)", () => {

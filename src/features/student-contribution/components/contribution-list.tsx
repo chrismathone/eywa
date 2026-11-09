@@ -55,7 +55,7 @@ export function ContributionList({ data }: { data: Data }) {
   const largestRecent = Math.max(1e-9, ...rows.map((r) => Math.abs(r.recent ?? 0)));
   const reset = () => { setFamilyOnly(false); update({ ...DEFAULT_LIST_STATE, pageSize }); };
   return <div className="w-full min-w-0 space-y-5 pb-6">
-    <ContributionHeader title="원생 로열티" description="함께 재원하는 가족을 우선 평가합니다. 기존 활동 누적에 현재 가족 가점을 더해 1~5등급과 상위 %로 비교합니다."
+    <ContributionHeader title="원생 로열티" description="함께 재원하는 가족을 우선 평가합니다. 기존 활동 누적에 현재 가족 가점을 더해 별 9등급(반 개 포함)과 상위 %로 비교합니다."
       active="students" canConfigure={data.gate.canConfigure} actions={data.gate.canWrite && <Button disabled={busy || !data.ready} onClick={() => start(async () => {
         const result = await refreshContribution(); setMessage(result.error ?? result.message ?? ""); router.refresh();
       })}><EyIcon name="sync" size={16} />{busy ? "집계 중…" : "지금 집계"}</Button>} />
@@ -108,7 +108,7 @@ export function ContributionList({ data }: { data: Data }) {
     </div>
     <details className="rounded-xl border border-line p-4 text-xs leading-relaxed"><summary className="cursor-pointer text-sm font-medium">점수와 자료 범위 안내</summary><div className="mt-3 space-y-2">
       <p>목록의 등급·순위는 전체 재원생의 로열티(가족 가점 포함) 기준입니다. 검색·학년·과목 필터로 목록을 좁혀도 기준은 유지됩니다. 학생을 선택하면 같은 학년·비슷한 재원기간·최근 12개월로 비교할 수 있습니다. 미확인 자료가 있으면 잠정 등급이며, 5명 미만 또는 전원 동점이면 등급을 보류합니다.</p>
-      <p>로열티 = 기존 활동 누적 + 현재 가족 가점입니다. 전체 만점은 없으며 1~5등급·상위 %로 상대 위치를 봅니다. 가족 가점은 현재 동시 재원 상태에 한 번만 적용하며, 월별 활동 증감과 최근 12개월 활동 비교에는 포함하지 않습니다. 기간별 증감은 선택한 기간에 반영된 점수의 합계로, 정정과 집계 중인 이번 달도 포함합니다. 이전의 같은 길이 기간과 비교한 증감률은 아닙니다. 환불 등으로 줄면 마이너스로 표시합니다.</p>
+      <p>로열티 = 기존 활동 누적 + 현재 가족 가점입니다. 전체 만점은 없으며 별 9등급·상위 %로 상대 위치를 봅니다. 가족 가점은 현재 동시 재원 상태에 한 번만 적용하며, 월별 활동 증감과 최근 12개월 활동 비교에는 포함하지 않습니다. 기간별 증감은 선택한 기간에 반영된 점수의 합계로, 정정과 집계 중인 이번 달도 포함합니다. 이전의 같은 길이 기간과 비교한 증감률은 아닙니다. 환불 등으로 줄면 마이너스로 표시합니다.</p>
       <p>수업료·수강 기간: 메이크에듀 2020년부터, 에이와 2026년부터. EiE는 2025년 5월부터입니다. 재원 기간은 유효한 수업료 청구가 있는 달 수로 계산합니다.</p>
       <p>재원 개월이 집계 전인 학생은 다음 로열티 집계에서 표시됩니다. 실제 입원일부터 지난 달 수와는 다를 수 있습니다.</p>
       <p>출결은 2026년부터, 영상 숙제는 기능 도입 후 실제 제출 기록을 확인합니다. 학부모 글은 수집한 기록, 선생님 답글은 2026년 9월 30일 이후 에이와 발송분을 사용합니다.</p>

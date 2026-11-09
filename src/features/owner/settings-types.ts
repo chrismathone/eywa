@@ -630,7 +630,7 @@ const specialAccessSchema = z.object({
   withdrawalApproverIds: z.array(z.string().uuid()).max(80).optional(),
   // 퇴원보고서 데스크 담당자(원장 2026-11-06 *"데스크 담당자는 학원 설정에서 지정"*) — 퇴원보고서에서 원장이 환불을 승인할 때 고르는 데스크 담당은
   // 여기 지정한 사람(그중 수납 쓰기 권한이 있는 사람 — `billingWriters`)만. 없음 = 빈 명단 = 환불 승인을 막는다(원장 등으로 대신하지 않는다).
-  // 소비처 = `loadDeskStaff`(withdrawal-reports/server/refund.ts) · DB `attach_withdrawal_report_refund`(s2_0036 — 같은 칸을 읽는다).
+  // 소비처 = `loadDeskStaff`(withdrawal-reports/server/refund.ts) · DB `attach_withdrawal_report_refund`(s2_0037 — 같은 칸을 읽는다).
   withdrawalDeskIds: z.array(z.string().uuid()).max(80).optional(),
   staffSubjectScopes: z.array(staffSubjectScopeSchema).max(80).default([]),
 });

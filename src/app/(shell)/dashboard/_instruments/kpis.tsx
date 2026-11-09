@@ -72,6 +72,15 @@ function useKpis(): Kpi[] {
       note: tests ? [tests.active.length ? (prev.from === prev.to ? `${text} · 첫 일정 ${hhmm(first?.startTime) || "종일"}` : text) : tests.cancelled ? text : `${text} 일정 없음`, tests.cancelled ? `취소 ${num(tests.cancelled)}` : null].filter(Boolean).join(" · ") : "학원 일정 기준",
       chips: tests?.active.length ? <Chips title="전일 입테" items={tests.active.map((e) => ({ text: hhmm(e.startTime) || "종일", done: true, tip: `${hhmm(e.startTime) || "종일"}|전일 입테` }))} /> : undefined });
   }
+  // 시안: '오늘 입테' — 같은 학원 일정(어제부터 읽는다)을 오늘 하루로 거른다. 한눈에 보기 머리 칸에서 최근 결석 자리에 선다.
+  if (v.calendar) {
+    const day = { from: today, to: today };
+    const tests = v.calendar.data ? levelTestListIn(v.calendar.data, day) : null;
+    const first = tests?.active[0];
+    list.push({ key: "todayTests" as KpiKey, label: "오늘 입테", value: tests ? num(tests.active.length) : "—", unit: "건",
+      note: tests ? [tests.active.length ? `첫 일정 ${hhmm(first?.startTime) || "종일"}` : "오늘 일정 없음", tests.cancelled ? `취소 ${num(tests.cancelled)}` : null].filter(Boolean).join(" · ") : "학원 일정 기준",
+      chips: tests?.active.length ? <Chips title="오늘 입테" items={tests.active.map((e) => ({ text: hhmm(e.startTime) || "종일", done: false, tip: `${hhmm(e.startTime) || "종일"}|오늘 입테` }))} /> : undefined });
+  }
   if (v.enrolledToday) {
     const rows = v.enrolledToday.data;
     const recent = rows ? splitEnrolledRecent(rows, today) : null;

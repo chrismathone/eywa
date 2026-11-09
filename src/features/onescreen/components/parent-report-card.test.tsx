@@ -129,9 +129,11 @@ const SPARSE: ParentReportCardProps = {
 
 /** 템플릿 모드 도입 직전(2026-09-10) 원본 컴포넌트의 정적 마크업 SHA-256.
  *  2026-09-21 FULL 갱신 — 제품 개명(eywa→aywa)으로 아이콘 표식 속성 `data-eywa-icon`이 `data-aywa-icon`이 됐다(보이는 글자·모양 불변,
- *  마크업의 aywa를 eywa로 되돌리면 옛 해시 b2e6adcf…와 정확히 같다). SPARSE엔 아이콘이 없어 그대로다. */
+ *  마크업의 aywa를 eywa로 되돌리면 옛 해시 b2e6adcf…와 정확히 같다). SPARSE엔 아이콘이 없어 그대로다.
+ *  2026-11-09 FULL 갱신 — 앱 기본색 차콜 전환(instrument-theme · `--primary` #153e75→#363c41)에 맞춰 성적 추이 그래프 시험 선 색만 바뀌었다
+ *  (마크업의 #363c41을 #153e75로 되돌리면 옛 해시 7de0e398…와 정확히 같다 — 글자·구조 불변). */
 const GOLDEN = {
-  FULL: "7de0e398a70799065a52f83363c6b3675e19796d215a53c16ec19f03e9f33f1c",
+  FULL: "5dea1d393981019d46b0199ad1e4ac8dac27567d61808c5e841566f540833b10",
   SPARSE: "954922ef759e90eed08e34fbce0e1a4ad9cdd5eeb5338fc4e4fb9d03473d5169",
 };
 

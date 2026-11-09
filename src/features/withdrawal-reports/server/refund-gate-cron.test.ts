@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * 원장 환불 결정(원장 2026-11-06 · s2_0036) — 처리일 cron(apply)과 release(수납 완료 입력·요청서 삭제·cron 안전망)가
+ * 원장 환불 결정(원장 2026-11-06 · s2_0037) — 처리일 cron(apply)과 release(수납 완료 입력·요청서 삭제·cron 안전망)가
  * 묶음마다 **같은 요청에서** 계산한 환불 확인 값을 넘기는지 · 못 만든 묶음은 넘기지 않는지(DB는 확인 값이 없는 묶음을 처리하지 않는다).
  */
 const T = "t1";

@@ -47,6 +47,12 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toMatch(/"~ 때문입니다"로 단정하지 않고/);
     expect(prompt).toMatch(/지어내지 않는다/);
   });
+  it("비서 의견마다 확인 지표(제안 → 결과 → 학습 · 원장 2026-11-06)", () => {
+    expect(prompt).toMatch(/의견마다 확인 지표 check 하나/);
+    expect(prompt).toMatch(/\{\{시작\}\}\(포함\)·\{\{끝\}\}\(제외\)/);
+    expect(prompt).toMatch(/이번 조회로 찾은 id를 SQL에 글자로 적는다/);
+    expect(prompt).toMatch(/noCheck에 까닭 한 줄/);
+  });
   it("바뀌는 값(오늘 날짜)이 없다 — 캐시가 깨지지 않게", () => {
     expect(prompt).not.toMatch(/20\d\d-\d\d-\d\d/);
     expect(buildSystemPrompt("x")).toBe(buildSystemPrompt("x"));

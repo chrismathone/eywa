@@ -31,8 +31,10 @@ function Act({ c, onAct, quiet }: { c: Candidate; onAct: (c: Candidate) => void;
  * 처음엔 자동 정리(규칙 · 지금 숫자)이고, AI 정리는 매일 01:00 · 13:00 예약과 'AI로 정리' 버튼으로 만든다(같은 후보에서 순서 · 이유만 —
  * 페이지 로드는 AI를 부르지 않는다). 숫자가 바뀌면 마지막 후보를 서버에 남겨 예약 정리가 그 값으로 돈다. 언제 돌렸는지 늘 적는다.
  */
-export function SecretaryPanel({ brief, today, clock, numbers, canAsk, onAct }: {
+export function SecretaryPanel({ brief, today, clock, numbers, canAsk, onAct, variant = "full", onOpen }: {
   brief: SecretaryBrief; today: string; clock: string; numbers: Numbers; canAsk: boolean; onAct: (c: Candidate) => void;
+  /** 시안: 'compact' = 대시보드 머리 칸의 간단 요약(누르면 `onOpen` — 오버레이로 크게). */
+  variant?: "full" | "compact"; onOpen?: () => void;
 }) {
   const [state, setState] = useState<State>({ enabled: false, note: null, runs: [] });
   const [busy, setBusy] = useState<number | null>(null);
@@ -117,11 +119,29 @@ export function SecretaryPanel({ brief, today, clock, numbers, canAsk, onAct }: 
   if (!has && !d.waiting) return null;
   const askable = canAsk && aiOn && state.enabled && has;
 
+  if (variant === "compact") {
+    const source = note ? `${noteSource(note, today)}${model ? ` · ${model}` : ""}` : `자동 정리 · ${clock} 숫자`;
+    return (
+      <div role="button" tabIndex={0} className="sec sec-compact" data-noopen onClick={onOpen} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen?.(); } }} aria-label={`오늘의 브리핑 크게 보기 — ${plan.headline}`}>
+        <span className="sec-head">
+          <span className="sec-mark" aria-hidden><EyIcon name="sparkle" size={15} /></span>
+          <span className="sec-compact-title">오늘의 브리핑</span>
+          <span className="sec-source">{source}</span>
+          <span className="sec-compact-open" aria-hidden><svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M6.5 3.5h-3v9h9v-3" /></svg></span>
+        </span>
+        <span className="sec-compact-headline">{plan.headline}</span>
+        <ol className="sec-compact-steps">
+          {steps.slice(0, FIRST).map((st, i) => <li key={st.ref}><span className="sec-no">{i + 1}</span><span className="sec-compact-step"><b>{st.title}</b><small>{st.why}</small></span></li>)}
+        </ol>
+      </div>
+    );
+  }
+
   return (
     <div className="sec">
       <div className="sec-head">
         <span className="sec-mark" aria-hidden><EyIcon name="sparkle" size={15} /></span>
-        <h3>업무 비서</h3>
+        <h3>오늘의 브리핑</h3>
         <span className="sec-source">{note ? `${noteSource(note, today)}${model ? ` · ${model}` : ""}` : `자동 정리 · ${clock} 숫자${askable ? ` · AI 정리는 매일 ${schedule}` : ""}`}</span>
         {askable ? (
           // 숫자를 다 받기 전엔 누르지 않는다 — 일부 후보로 정리하면 마지막 후보까지 덮인다.

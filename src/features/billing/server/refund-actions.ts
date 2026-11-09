@@ -104,7 +104,7 @@ export async function saveRefundRequest(
     if (existingError) return { error: "요청서를 다시 불러오지 못해 저장하지 않았습니다. 잠시 후 다시 시도해 주세요." };
     const prev = existing ? normalizeRefund(existing.form_data) : null;
     // 퇴원보고서에 이어진 요청서(원장 2026-11-06·11-09) — 고치는 것(모든 칸)·환불완료일자는 그 요청서의 데스크 담당(재직)과 원장급만 · 비우기는 원장만 ·
-    // 총 환불금액은 원장 승인 줄의 낸 돈 합(상한)을 넘지 않는다. 완료일자가 기다리던 퇴원·수강종료 처리를 푼다(release). DB 트리거(s2_0036)도 같은 규칙으로 막는다.
+    // 총 환불금액은 원장 승인 줄의 낸 돈 합(상한)을 넘지 않는다. 완료일자가 기다리던 퇴원·수강종료 처리를 푼다(release). DB 트리거(s2_0037)도 같은 규칙으로 막는다.
     const denied = await linkedSaveDenied(gate.user, id, parsed, prev);
     if (denied) return { error: denied };
     const data = stampCompletion(parsed, prev, gate.user);

@@ -1,16 +1,16 @@
--- s2_0036 되돌리기 — 원장 환불 결정 단계·데스크 지정 검사·완료 입력 트리거를 걷고 s2_0036 적용 전(= s2_0030 적용 뒤) 정의로 돌린다.
+-- s2_0037 되돌리기 — 원장 환불 결정 단계·데스크 지정 검사·완료 입력 트리거를 걷고 s2_0037 적용 전(= s2_0030 적용 뒤) 정의로 돌린다.
 -- 🔴 앱을 먼저 되돌린 뒤 쓴다(새 앱은 결정 함수·4인자 release·8인자 연결을 부른다). 되돌리면 환불할 줄이 남아도 마지막 승인에 바로 처리되는 종전 동작으로 돌아간다.
--- 멈추는 경우: 지문이 s2_0036 적용 뒤가 아니다 · 진행 중 '환불 결정 대기' 묶음이 있다 · 승인이 다 끝났는데 처리하지 않은 묶음(데스크 환불 대기 제외)이 있다
+-- 멈추는 경우: 지문이 s2_0037 적용 뒤가 아니다 · 진행 중 '환불 결정 대기' 묶음이 있다 · 승인이 다 끝났는데 처리하지 않은 묶음(데스크 환불 대기 제외)이 있다
 --   (되돌린 옛 처리 함수는 마지막 승인 순간에만 처리하므로 그 묶음을 처리할 길이 없다 — 원장 결정·처리·취소로 정리한 뒤 되돌린다).
 -- 함께 사라지는 것: 원장 결정 C.3(새 요청서가 있으면 옛 요청서 완료 막기 · 완료일자 트리거 안) · 학생 단위 거래 잠금 · 확인 값 claimed·asOf·scope 검사(note 안) ·
 --   attach의 같은 돈 두 번 막기 · 사후 확인 블록은 적용 때만 돈다. 결정 표의 paid_net 칸은 표와 함께 남는다.
--- 무엇: transition_withdrawal_report = s2_0030 본문 그대로 · _v1·할 일 동기화 = s2_0036 치환을 거꾸로(정확히 한 번 · 줄바꿈 글자 차이는 지우고 맞춘다) ·
+-- 무엇: transition_withdrawal_report = s2_0030 본문 그대로 · _v1·할 일 동기화 = s2_0037 치환을 거꾸로(정확히 한 번 · 줄바꿈 글자 차이는 지우고 맞춘다) ·
 --   attach(6인자)·release(3인자) = s2_0025 본문 그대로(운영 정의와 지문이 같다) · 결정 함수·표시 함수·완료 입력 트리거를 지운다.
 --   결정 표(withdrawal_report_refund_decisions)와 묶음 칸 넷은 남긴다(데이터 보존 · 옛 함수는 읽지 않는다 · 다시 적용하면 그대로 쓴다).
--- 되돌린 뒤 다섯 함수가 s2_0036 적용 전 지문인지 다시 보고, 아니면 거래 전체를 취소한다.
+-- 되돌린 뒤 다섯 함수가 s2_0037 적용 전 지문인지 다시 보고, 아니면 거래 전체를 취소한다.
 -- 적용할 때: 기본 search_path 세션에서 begin…commit 그대로 실행한다(빈 search_path면 지문이 달라져 멈춘다 — 안전한 쪽 실패). 중간에 실패하면 ROLLBACK.
--- 확인(로컬 PGlite 0.3.16 · PG 17.5 · 운영 정의를 올려서): 운영 정의 → s2_0030 → s2_0036 → 이 파일 → 여섯 함수 지문이 s2_0036 적용 전과 같다 ·
---   다시 s2_0036을 적용할 수 있다.
+-- 확인(로컬 PGlite 0.3.16 · PG 17.5 · 운영 정의를 올려서): 운영 정의 → s2_0030 → s2_0037 → 이 파일 → 여섯 함수 지문이 s2_0037 적용 전과 같다 ·
+--   다시 s2_0037을 적용할 수 있다.
 -- 리뷰 수리 r2(2026-11-09): 9인자 연결 · 겹침·빈칸·금액·지문·관문 표식·'환불하지 않음' 기록 함수(새로 만든 여섯)를 지운다 · refund_pending은 s2_0025 본문(btrim)으로 돌린다 ·
 --   🔴 관문 표식 함수(withdrawal_refund_gate_ready)가 사라져 '새 앱 + 되돌린 DB'면 앱 refundGateReady()가 거짓 → 'DB 적용 전'으로 멈춘다(리뷰 r2 D-7 · 칸은 남아도).
 --   결정 표의 paid_seen·supersedes 칸과 새 줄 키 검사는 표와 함께 남는다(데이터 보존).
@@ -21,11 +21,11 @@ begin;
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';
 
--- s2_0036 적용 뒤 지문일 때만 되돌린다.
+-- s2_0037 적용 뒤 지문일 때만 되돌린다.
 do $$
 declare
   want constant jsonb := jsonb_build_object(
-    'public.transition_withdrawal_report(uuid,uuid,uuid,text,jsonb)', '99c4175fd9f02dab3091086f456890b1',
+    'public.transition_withdrawal_report(uuid,uuid,uuid,text,jsonb)', '81a4e70527f09e39df7e2ab50ff13658',
     'public.transition_withdrawal_report_v1(uuid,uuid,uuid,text,jsonb)', 'c8d87498a853195d7c86de12b21ae6d8',
     'public.attach_withdrawal_report_refund(uuid,uuid,uuid,uuid,uuid,boolean,jsonb,jsonb,jsonb)', 'f87f992c7ce096a2e5c1dd44c278ce39',
     'public.release_withdrawal_report_refunds(uuid,uuid,uuid,jsonb)', '2516d0340b850c14faa4f91e9ea673ca',
@@ -42,7 +42,7 @@ begin
   for fn in select jsonb_object_keys(want) loop
     select md5(regexp_replace(pg_get_functiondef(fn::regprocedure), '[[:space:]]+', '', 'g')) into got;
     if got is distinct from want->>fn then
-      raise exception 'revert-s2_0036: % 의 정의가 s2_0036 적용 뒤와 다릅니다(%). 되돌리지 않습니다.', fn, got;
+      raise exception 'revert-s2_0037: % 의 정의가 s2_0037 적용 뒤와 다릅니다(%). 되돌리지 않습니다.', fn, got;
     end if;
   end loop;
 end $$;
@@ -59,7 +59,7 @@ begin
    where g.status = 'pending' and not exists(select 1 from public.withdrawal_reports q where q.group_id = g.id and q.status <> 'approved')
      and not public.withdrawal_report_refund_pending(g.id);
   if held > 0 or stuck > 0 then
-    raise exception 'revert-s2_0036: 환불 결정 대기 묶음 %건 · 승인이 끝났는데 처리하지 않은 묶음 %건이 있습니다. 원장 결정·처리·취소로 정리한 뒤 되돌리세요.', held, stuck;
+    raise exception 'revert-s2_0037: 환불 결정 대기 묶음 %건 · 승인이 끝났는데 처리하지 않은 묶음 %건이 있습니다. 원장 결정·처리·취소로 정리한 뒤 되돌리세요.', held, stuck;
   end if;
 end $$;
 
@@ -234,7 +234,7 @@ begin
   for i in 1 .. array_length(pairs, 1) / 2 loop
     needle := replace(pairs[2*i-1], chr(13), '');
     hits := (length(definition) - length(replace(definition, needle, ''))) / length(needle);
-    if hits <> 1 then raise exception 'revert-s2_0036: _v1의 되돌릴 줄 %번이 하나가 아닙니다(%건)', i, hits; end if;
+    if hits <> 1 then raise exception 'revert-s2_0037: _v1의 되돌릴 줄 %번이 하나가 아닙니다(%건)', i, hits; end if;
     definition := replace(definition, needle, replace(pairs[2*i], chr(13), ''));
   end loop;
   execute definition;
@@ -280,7 +280,7 @@ begin
   for i in 1 .. array_length(pairs, 1) / 2 loop
     needle := replace(pairs[2*i-1], chr(13), '');
     hits := (length(definition) - length(replace(definition, needle, ''))) / length(needle);
-    if hits <> 1 then raise exception 'revert-s2_0036: 할 일 동기화의 되돌릴 줄 %번이 하나가 아닙니다(%건)', i, hits; end if;
+    if hits <> 1 then raise exception 'revert-s2_0037: 할 일 동기화의 되돌릴 줄 %번이 하나가 아닙니다(%건)', i, hits; end if;
     definition := replace(definition, needle, replace(pairs[2*i], chr(13), ''));
   end loop;
   execute definition;
@@ -388,16 +388,16 @@ begin
   for i in 1 .. array_length(pairs, 1) / 2 loop
     needle := pairs[2*i-1];
     hits := (length(definition) - length(replace(definition, needle, ''))) / length(needle);
-    if hits <> 1 then raise exception 'revert-s2_0036: 할 일 닫기의 되돌릴 조건 %번이 하나가 아닙니다(%건)', i, hits; end if;
+    if hits <> 1 then raise exception 'revert-s2_0037: 할 일 닫기의 되돌릴 조건 %번이 하나가 아닙니다(%건)', i, hits; end if;
     definition := replace(definition, needle, pairs[2*i]);
   end loop;
   execute definition;
   select pg_get_functiondef('public.withdrawal_report_refunds_on_cancel(uuid,uuid,uuid,text)'::regprocedure) into definition;
   hits := (length(definition) - length(replace(definition, cancel_old, ''))) / length(cancel_old);
-  if hits <> 1 then raise exception 'revert-s2_0036: 취소 알림의 되돌릴 조건이 하나가 아닙니다(%건)', hits; end if;
+  if hits <> 1 then raise exception 'revert-s2_0037: 취소 알림의 되돌릴 조건이 하나가 아닙니다(%건)', hits; end if;
   execute replace(definition, cancel_old, cancel_new);
 end $$;
--- 연결 표 권한 = Supabase 기본(s2_0036 전 운영 그대로 · 리뷰 r3 R-6을 거꾸로).
+-- 연결 표 권한 = Supabase 기본(s2_0037 전 운영 그대로 · 리뷰 r3 R-6을 거꾸로).
 grant update, delete, truncate, references, trigger on public.withdrawal_report_refunds to service_role;
 
 -- 새로 만든 함수·트리거를 지운다. 결정 표·묶음 칸은 남긴다(데이터 보존 · 옛 함수는 읽지 않는다 · 다시 적용하면 그대로 쓴다).
@@ -413,7 +413,7 @@ drop function public.withdrawal_refund_blank(text);
 -- 관문 표식(앱 refundGateReady) — 지우면 새 앱은 'DB 적용 전'으로 관문 경로를 멈춘다(리뷰 r2 D-7).
 drop function public.withdrawal_refund_gate_ready();
 
--- 되돌린 뒤 = s2_0036 적용 전 지문(s2_0030 적용 뒤 · 2026-11-06 운영)이어야 한다.
+-- 되돌린 뒤 = s2_0037 적용 전 지문(s2_0030 적용 뒤 · 2026-11-06 운영)이어야 한다.
 do $$
 declare
   want constant jsonb := jsonb_build_object(
@@ -431,7 +431,7 @@ begin
   for fn in select jsonb_object_keys(want) loop
     select md5(regexp_replace(pg_get_functiondef(fn::regprocedure), '[[:space:]]+', '', 'g')) into got;
     if got is distinct from want->>fn then
-      raise exception 'revert-s2_0036: 되돌린 뒤 % 의 정의가 s2_0036 적용 전 지문과 다릅니다(%). 거래를 취소합니다.', fn, got;
+      raise exception 'revert-s2_0037: 되돌린 뒤 % 의 정의가 s2_0037 적용 전 지문과 다릅니다(%). 거래를 취소합니다.', fn, got;
     end if;
   end loop;
 end $$;

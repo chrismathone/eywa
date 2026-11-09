@@ -320,7 +320,7 @@ export function Overview({
               value: attendance.present,
               color: COLORS[2],
             },
-            { label: "결석", value: attendance.absent, color: "#bc3838" },
+            { label: "결석", value: attendance.absent, color: "#b44832" },
             { label: "지각", value: attendance.late, color: COLORS[3] },
             {
               label: "사유",
@@ -433,7 +433,7 @@ export function Overview({
               {
                 label: "미납",
                 value: bill.unpaidCount,
-                color: "#bc3838",
+                color: "#b44832",
               },
               {
                 label: "기타 상태",
@@ -970,7 +970,7 @@ export function Overview({
               {
                 label: "수행률 0% 학생",
                 value: homework.zero,
-                color: "#bc3838",
+                color: "#b44832",
               },
             ]}
           />
@@ -1017,7 +1017,7 @@ export function Overview({
               {
                 label: "기한 경과",
                 value: consultations.overdueFollowUps,
-                color: "#bc3838",
+                color: "#b44832",
               },
               {
                 label: "기한 예정",
@@ -1069,7 +1069,7 @@ export function Overview({
                     {
                       label: "기한 경과",
                       value: item.overdue,
-                      color: "#bc3838",
+                      color: "#b44832",
                     },
                     {
                       label: "3일 내",
@@ -1093,7 +1093,7 @@ export function Overview({
           <Legend
             items={[
               { label: "완료", color: COLORS[2] },
-              { label: "기한 경과", color: "#bc3838" },
+              { label: "기한 경과", color: "#b44832" },
               { label: "3일 내", color: COLORS[3] },
             ]}
           />

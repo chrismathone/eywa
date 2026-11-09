@@ -55,10 +55,10 @@
   gap: 7px;
   min-height: 34px;
   padding: 7px 11px;
-  border: 1px solid #173e76;
+  border: 1px solid #23282c;
   border-radius: 6px;
-  color: #173e76;
-  background: #edf3fa;
+  color: #23282c;
+  background: #f4f4f1;
   font-weight: 650;
   white-space: nowrap;
 }
@@ -104,7 +104,7 @@
   cursor: pointer;
 }
 .refresh:hover {
-  background: #edf3fa;
+  background: #f4f4f1;
 }
 .refresh:disabled {
   opacity: 0.5;
@@ -144,7 +144,7 @@
   transition: background 0.15s;
 }
 .kpiBody:hover {
-  background: #edf3fa;
+  background: #f4f4f1;
 }
 .root .kpiBody:focus-visible {
   outline-offset: -3px;
@@ -162,7 +162,7 @@
   color: var(--foreground);
 }
 .kpiJump:hover {
-  background: #dde8f5;
+  background: #e7e9e6;
   color: var(--primary);
 }
 .kpiLabel {
@@ -367,7 +367,7 @@
 }
 .barTrack {
   display: block;
-  background: #f1f4f7;
+  background: #f4f4f1;
   height: 9px;
   border-radius: 2px;
   overflow: hidden;
@@ -413,7 +413,7 @@
   gap: 20px;
 }
 .schoolGroups > section + section {
-  border-top: 1px solid #e4eaf0;
+  border-top: 1px solid #eceeea;
   padding-top: 16px;
 }
 .schoolGroups .empty {
@@ -547,7 +547,7 @@
   flex-shrink: 0;
   gap: 12px;
   padding: 16px 20px;
-  border-bottom: 1px solid #e4eaf0;
+  border-bottom: 1px solid #eceeea;
 }
 .popupClose {
   display: grid;
@@ -559,7 +559,7 @@
   cursor: pointer;
 }
 .popupClose:hover {
-  background: #f1f4f7;
+  background: #f4f4f1;
 }
 .popupBody {
   min-height: 0;
@@ -579,7 +579,7 @@
   margin-top: 12px;
 }
 .detailPopup :is(button, a):focus-visible {
-  outline: 2px solid #327fa8;
+  outline: 2px solid #485055;
   outline-offset: 3px;
 }
 .donutLayout {
@@ -712,7 +712,7 @@
 }
 .dataTable th,
 .dataTable td {
-  border-bottom: 1px solid #e4eaf0;
+  border-bottom: 1px solid #eceeea;
   padding: 5px 4px;
   text-align: right;
 }
@@ -803,7 +803,7 @@
   color: var(--foreground);
 }
 .separated {
-  border-top: 1px solid #e4eaf0;
+  border-top: 1px solid #eceeea;
   margin-top: 12px;
   padding-top: 10px;
 }
@@ -853,7 +853,7 @@
 .subjectSchedule + .subjectSchedule {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #e4eaf0;
+  border-top: 1px solid #eceeea;
 }
 .subjectHeading {
   display: flex;
@@ -902,7 +902,7 @@
   background: #dbe2eb;
 }
 .scheduleSoon {
-  background: #327fa8;
+  background: #485055;
 }
 .scheduleRow > span {
   min-width: 0;
@@ -1043,12 +1043,12 @@
   }
 }
 .root :is(a, button, summary):focus-visible {
-  outline: 2px solid #327fa8;
+  outline: 2px solid #485055;
   outline-offset: 4px;
   border-radius: 3px;
 }
 .sheetSummary + .sheetSummary {
-  border-top: 1px solid #e4eaf0;
+  border-top: 1px solid #eceeea;
   margin-top: 12px;
   padding-top: 10px;
 }
@@ -1070,7 +1070,7 @@
   border-radius: 4px;
 }
 .riskNames > a:hover {
-  background: #f1f4f7;
+  background: #f4f4f1;
 }
 .riskNames > a:hover > span,
 .studentLink {
@@ -1215,7 +1215,7 @@
 .kpiCounts {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid #e4eaf0;
+  border-top: 1px solid #eceeea;
 }
 .kpiCountRow {
   display: flex;
@@ -1236,7 +1236,7 @@
   margin-left: 3px;
 }
 a.kpiCountRow:hover {
-  background: #f1f4f7;
+  background: #f4f4f1;
 }
 a.kpiCountRow:hover > span {
   color: var(--primary);
@@ -1246,7 +1246,7 @@ a.kpiCountRow:hover > span {
   list-style: none;
   margin: 12px 0 0;
   padding: 0;
-  border-top: 1px solid #e4eaf0;
+  border-top: 1px solid #eceeea;
 }
 /* 운영실 퇴원 명단 — 열 맞춘 표(원장 2026-11-03 *"반까지 표시하고 열정렬해서 깔끔하게"*) · 길면 2단(*"스크롤 길게 하지말고 2단으로 … 공간활용"*).
    열 = 이름 · 구분 · 학교·학년 · 과목 · 반 · 마지막 수업일 (+ '앞 달로 센' 표는 센 달).
@@ -1270,7 +1270,7 @@ a.kpiCountRow:hover > span {
   }
   .exitColumns > .exitTable + .exitTable {
     margin-top: 12px;
-    border-top: 1px solid #e4eaf0;
+    border-top: 1px solid #eceeea;
   }
   .exitColumns > .exitTable + .exitTable > .exitHead {
     display: grid;
@@ -1281,7 +1281,7 @@ a.kpiCountRow:hover > span {
   list-style: none;
   margin: 12px 0 0;
   padding: 0;
-  border-top: 1px solid #e4eaf0;
+  border-top: 1px solid #eceeea;
   min-width: 0;
 }
 .exitTableCounted {
@@ -1363,7 +1363,7 @@ a.kpiCountRow:hover > span {
   color: var(--amber);
 }
 .kpiTagMuted {
-  background: #f1f4f7;
+  background: #f4f4f1;
   color: var(--foreground);
 }
 /* 취소된 일정 제목 — 목록엔 남기고 줄을 긋는다(원장 2026-09-30). 글자색은 한 값이라 색 대신 선 + '취소' 표식이 뜻을 나른다. */
@@ -1403,7 +1403,7 @@ a.kpiCountRow:hover > span {
   display: block;
   height: 12px;
   border-radius: 2px;
-  background: #f1f4f7;
+  background: #f4f4f1;
   overflow: hidden;
 }
 .gradeBar {
@@ -1439,14 +1439,14 @@ a.levelTrack:focus-visible { outline: 2px solid var(--primary); outline-offset: 
 .subjectPopoverLink { display: inline-flex; align-items: center; gap: inherit; color: inherit; text-decoration: none; cursor: pointer; }
 .subjectPopoverLinkRow:hover .subjectPopoverLink { text-decoration: underline; text-underline-offset: 3px; }
 .subjectPopoverLink:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
-.levelTrack { height: 18px; background: #f1f4f7; border-radius: 3px; overflow: hidden; }
+.levelTrack { height: 18px; background: #f4f4f1; border-radius: 3px; overflow: hidden; }
 .levelCount { min-width: 3.2em; text-align: right; font-weight: 700; }
 .admissionMonths { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 12px; }
 .admissionMonths > section + section { border-left: 1px solid #e1e7ee; padding-left: 14px; }
 .admissionMonths header { display: flex; gap: 5px; align-items: baseline; flex-wrap: wrap; }
 .admissionMonths header b { font-size: var(--text-sm); }
 .admissionMonths header span, .admissionMonths p { font-size: var(--text-xs); }
-.admissionRate { display: block; font-size: var(--text-xl); margin: 8px 0 2px; font-weight: 700; letter-spacing: -.04em; color: #173e76; }
+.admissionRate { display: block; font-size: var(--text-xl); margin: 8px 0 2px; font-weight: 700; letter-spacing: -.04em; color: #23282c; }
 .admissionTable { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
 .admissionTable th, .admissionTable td { padding: 7px 0; border-bottom: 1px solid #edf0f4; text-align: right; }
 .admissionTable th { font-weight: 500; }

@@ -43,7 +43,13 @@ const routePath = (href: string) => href.split(/[?#]/, 1)[0] ?? href;
  * 2026-10-06 키오스크 설정을 설정 메뉴 판에 올리면서 메뉴 판의 목적지에도 이런 화면이 생겼다.
  */
 // 학부모 관리 현황(원장·관리자 전용)은 셔틀 탭 줄 밖의 화면이라 제 창이다(navigation.ts 주석).
-const PATH_ID_DESTS: Record<string, string> = { "/kiosk-settings": "kiosk-settings", "/shuttle/parents": "shuttle/parents" };
+// 시안 이식 화면(2026-11-09)도 메뉴 창에 접히지 않는 제 창이다(window-link.tsx EXTRA_WINDOW_ROUTES · 원생 상세 하위 /students/care).
+const PATH_ID_DESTS: Record<string, string> = {
+  "/kiosk-settings": "kiosk-settings", "/shuttle/parents": "shuttle/parents",
+  "/dashboard/management/knowledge": "dashboard/management/knowledge", "/students/care": "students/care",
+  "/organization/okr": "organization/okr", "/marketing": "marketing", "/billing/management/marketing": "billing/management/marketing",
+  "/work-records": "work-records",
+};
 
 function ownerMenuOf(d: HubDest): string {
   const byPath = PATH_ID_DESTS[routePath(d.href)];

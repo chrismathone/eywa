@@ -3,8 +3,8 @@
 .overdue { color: #c92525; background: #fef0f0; }
 .due { color: #92400e; background: #fffbeb; }
 .today { color: #85410d; background: #ffedbf; border-color: #f6d788; }
-.neutral { color: #64748b; background: #f3f6fa; font-weight: 500; }
+.neutral { color: #646d72; background: #f3f6fa; font-weight: 500; }
 .waived { color: #7b8798; background: transparent; font-weight: 400; }
 button.badge:not(:disabled):hover { filter: brightness(.96); border-color: currentColor; }
-button.badge:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+button.badge:focus-visible { outline: 2px solid #485055; outline-offset: 2px; }
 button.badge:disabled { cursor: default; }

@@ -72,7 +72,8 @@ export function MenuHubPanel({
   const main = group.items.filter((d) => !d.tool);
   const tools = group.items.filter((d) => d.tool);
   // 설정처럼 목적지가 많은 허브는 묶음 제목으로 나눈다(순서는 정의 순서 그대로).
-  const sections = [...new Set(main.map((d) => d.section).filter((s): s is string => !!s))];
+  // 묶음 제목은 모든 메뉴에 붙어 있을 때만 쓴다 — 학원 설정에서 옮긴 줄은 묶음이 지워져, 섞이면 일부만 묶음에 서고 나머지가 흩어진다.
+  const sections = main.every((d) => !!d.section) ? [...new Set(main.map((d) => d.section!))] : [];
 
   return (
     <div
@@ -109,12 +110,21 @@ export function MenuHubPanel({
           </header>
 
           {sections.length > 0 ? (
-            sections.map((s) => (
-              <section key={s} className="mb-5">
-                <h2 className="text-text-dim mb-2 text-base font-bold">{s}</h2>
-                <HubGrid dests={main.filter((d) => d.section === s)} onGo={go} />
-              </section>
-            ))
+            <>
+              {sections.map((s) => (
+                <section key={s} className="mb-5">
+                  <h2 className="text-text-dim mb-2 text-base font-bold">{s}</h2>
+                  <HubGrid dests={main.filter((d) => d.section === s)} onGo={go} />
+                </section>
+              ))}
+              {/* 묶음 제목이 없는 메뉴(학원 설정 '탭 및 메뉴 구성'에서 옮긴 줄은 묶음이 지워진다)도 빠뜨리지 않는다 — 안 그리면 'N개 메뉴'인데 일부만 보였다. */}
+              {main.some((d) => !d.section) ? (
+                <section className="mb-5">
+                  <h2 className="text-text-dim mb-2 text-base font-bold">그 밖의 메뉴</h2>
+                  <HubGrid dests={main.filter((d) => !d.section)} onGo={go} />
+                </section>
+              ) : null}
+            </>
           ) : (
             <HubGrid dests={main} onGo={go} />
           )}

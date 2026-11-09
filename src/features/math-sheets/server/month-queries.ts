@@ -39,6 +39,8 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { isHolidayOn } from "@/features/class-sheets/lib/holiday";
 import type { LearningContext } from "../lib/learning-plan";
+import type { StudentBasics } from "../lib/student-basics";
+import { loadMcsStudentBasics } from "./student-basics";
 
 /**
  * MCS **월간 뷰** 조회 — 반 1개 × 달 1개, 축은 **학생 × 수업일**.
@@ -56,6 +58,8 @@ export type MathStudentRow = {
   name: string;
   school: string | null;
   grade: string | null;
+  /** 과거 진도 조회 중에도 기준일이 명시된 현재 과목·수강 시작·담임을 표시한다. */
+  basicInfo?: StudentBasics;
   /** 날짜 → 그 칸의 상태. 열에 없는 날짜는 키가 없다. */
   cells: Record<string, MathCellState>;
   /** 날짜 → 그 날 기록(있을 때만). */
@@ -491,15 +495,18 @@ export async function getMathSheetMonth(
 
   // 신입·퇴원·반이동 표식 — **화면에 세운 학생만**. 경계가 없는 달이면 추가 쿼리가 0이다.
   if (rows.length > 0) {
-    const badgeMap = await mathLifecycleBadges({
+    const [badgeMap, basicsMap] = await Promise.all([mathLifecycleBadges({
       admin,
       tenantId,
       classId: access.classId,
       range: { first: from, last: to },
       spansByStudent,
       withdrawnByStudent,
-    });
-    for (const row of rows) row.badges = badgeMap.get(row.studentId) ?? [];
+    }), loadMcsStudentBasics({ admin, tenantId, studentIds: rows.map(row => row.studentId), asOf: today, withdrawnByStudent })]);
+    for (const row of rows) {
+      row.badges = badgeMap.get(row.studentId) ?? [];
+      row.basicInfo = basicsMap.get(row.studentId);
+    }
   }
 
   // ⚠️ 종전 '진도 레일'이 읽던 `progress_containers`(현행·선행)는 더 이상 조회하지 않는다(2026-09-02) —

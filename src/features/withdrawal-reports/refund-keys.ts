@@ -8,7 +8,7 @@ const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 /** 과목 키 한 조각(학원 설정 과목 키 — math · english · subject_1 …). 미배분 키의 과목 범위에 쓴다. */
 const SUBJECT = "[a-z0-9_]{1,32}";
 /**
- * 줄 키 형식(DB s2_0036 줄 키 검사와 같은 글자 — 바꿀 땐 함께) — `all`(줄 기록 없는 청구) · 미배분 납부(`unalloc` · 과목 범위 `unalloc:<과목.과목>` ·
+ * 줄 키 형식(DB s2_0037 줄 키 검사와 같은 글자 — 바꿀 땐 함께) — `all`(줄 기록 없는 청구) · 미배분 납부(`unalloc` · 과목 범위 `unalloc:<과목.과목>` ·
  * 나머지 `unalloc:~<과목.과목>` — 리뷰 r2 D-10) · 줄 식별값(해시 · 같은 값이면 `-n`).
  */
 export const LINE_KEY = new RegExp(`^${UUID}#(all|unalloc(:~?${SUBJECT}(\\.${SUBJECT}){0,9})?|[0-9a-z]{1,8}(-\\d{1,2})?)$`, "i");
@@ -28,7 +28,7 @@ function unallocRange(id: string): { kind: "whole" } | { kind: "only" | "except"
   return { kind: except ? "except" : "only", subjects: body.slice(except ? 2 : 1).split(".").filter(Boolean) };
 }
 /**
- * 🔴 두 줄 식별값이 **같은 돈일 수 있나**(겹침) — 같은 청구 안에서. 앱(이 함수)과 DB(`withdrawal_refund_keys_overlap` · s2_0036)가 같은 규칙 한 벌(리뷰 r2 D-1 ⅱ):
+ * 🔴 두 줄 식별값이 **같은 돈일 수 있나**(겹침) — 같은 청구 안에서. 앱(이 함수)과 DB(`withdrawal_refund_keys_overlap` · s2_0037)가 같은 규칙 한 벌(리뷰 r2 D-1 ⅱ):
  * - `all`·`*`(줄 기록 없는 청구 · 옛 표식) ↔ 모든 줄.
  * - 미배분 ↔ 실제 줄: 겹친다(미배분 돈은 어느 줄 몫인지 모른다 — 줄별 납부가 나중에 채워지면 그 줄 돈이 된다).
  * - 미배분끼리: 청구 전체 몫(`unalloc`)은 모두와 · 과목 몫끼리는 과목이 하나라도 같으면 · '나머지' 몫은 그 밖 과목이 있는 과목 몫과 · 나머지끼리는 늘.

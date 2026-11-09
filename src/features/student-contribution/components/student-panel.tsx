@@ -9,6 +9,7 @@ import { sumRaws, scoreRaws } from "../model/calc";
 import { contributionTrend, rawsBetween, scoreBetween } from "../model/score-trend";
 import { ScoreTrend } from "./score-trend";
 import { ScoreBreakdown } from "./score-breakdown";
+import { TotalBreakdown } from "./total-breakdown";
 import { StudentDetailTabs } from "./student-detail-tabs";
 import { ContributionEvidence } from "./contribution-evidence";
 import { numberText, monthText, signedText } from "./presentation";
@@ -39,6 +40,7 @@ export async function ContributionStudentPanel({ studentId, month }: { studentId
       {cells.map(([label, value, note], i) => <div key={label} className={`flex min-w-0 items-baseline justify-between gap-3 border-t border-line px-5 py-2.5 @2xl:block @2xl:py-4 @4xl:border-t-0 @4xl:px-6 @4xl:py-5 ${i ? "@2xl:border-l" : "@4xl:border-l"}`}>
         <h3 className="text-sm font-medium">{label}</h3><p className="whitespace-nowrap text-lg font-bold tabular-nums @2xl:mt-1 @2xl:text-xl @4xl:mt-2 @4xl:text-2xl">{value}<span className="ml-1 text-xs font-normal @4xl:text-sm">점</span></p><p className="mt-2 hidden text-xs @2xl:block">{note}</p></div>)}
     </section>
+    <TotalBreakdown raws={total} points={scored.points} config={config} family={data.family} familyBonus={bonus} total={loyalty} />
     <FamilyLoyaltyCard family={data.family} config={config} studentId={studentId} />
     <Suspense fallback={<p role="status" className="rounded-xl border border-line p-6 text-sm">다른 재원생과 비교한 위치를 불러오고 있습니다…</p>}>
       <RelativeScorePanel studentId={studentId} total={loyalty} recent={recent} revision={data.settings.revision} refreshedAt={data.settings.refreshedAt} />

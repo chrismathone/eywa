@@ -6,7 +6,7 @@ import { LINE_KEY } from "./refund-keys";
 import { SPECIAL_ACCESS_ID_LISTS } from "@/features/owner/settings-types";
 
 /**
- * **원장 환불 결정 전에는 처리하지 않는다**(원장 2026-11-06 · s2_0036) — SQL 글자 가드.
+ * **원장 환불 결정 전에는 처리하지 않는다**(원장 2026-11-06 · s2_0037) — SQL 글자 가드.
  * 이 시험이 글자로 고정하는 것:
  * - 처리 함수 본문 = s2_0030 본문 + 정해진 일곱 자리(선언 · apply · release · 취소 사유 · 자식 이력 · 전원 승인 · 끝난 묶음 표시 내림)만 바꿈 · 머리 그대로.
  * - 취소 사유(원장 2026-11-06): 있으면 1~500자 검사 · 묶음 모든 보고서의 cancel 이력에 · last_comment는 그대로 · 없으면 종전대로(옛 앱).
@@ -20,16 +20,16 @@ import { SPECIAL_ACCESS_ID_LISTS } from "@/features/owner/settings-types";
  * 동작은 로컬 PGlite(운영 정의 · 운영 지문 일치)에서 경로별 21개 사례와 되돌리기 왕복으로 확인했다(마이그레이션 머리말).
  */
 const lf = (s: string) => s.replace(/\r\n/g, "\n");
-const sql = lf(readMigration("s2_0036_withdrawal_refund_decision_gate.sql"));
+const sql = lf(readMigration("s2_0037_withdrawal_refund_decision_gate.sql"));
 const base = lf(readMigration("s2_0030_withdrawal_approver_no_master.sql"));
 const s25 = lf(readMigration("s2_0025_withdrawal_report_desk_refund.sql"));
-const REVERT_FILE = "scripts/_oneoff/revert-s2_0036-withdrawal-refund-decision-gate.sql";
+const REVERT_FILE = "scripts/_oneoff/revert-s2_0037-withdrawal-refund-decision-gate.sql";
 const revert = lf(readFile(join(REPO_ROOT, REVERT_FILE), "utf8"));
 const count = (s: string, sub: string) => s.split(sub).length - 1;
 const noComments = (s: string) => s.replace(/^\s*--.*$/gm, "");
 const squash = (s: string) => s.replace(/\s+/g, " ").trim();
 
-/** s2_0036 적용 전 지문(= s2_0030 적용 뒤 · 공백 뺀 md5) — 마이그레이션은 이 값일 때만 바꾸고, 되돌리기는 이 값으로 돌아왔는지 본다. */
+/** s2_0037 적용 전 지문(= s2_0030 적용 뒤 · 공백 뺀 md5) — 마이그레이션은 이 값일 때만 바꾸고, 되돌리기는 이 값으로 돌아왔는지 본다. */
 const BEFORE = {
   "public.transition_withdrawal_report(uuid,uuid,uuid,text,jsonb)": "a105bba84b9630353d04729397e190d9",
   "public.transition_withdrawal_report_v1(uuid,uuid,uuid,text,jsonb)": "5a11f3fc0e920c413902ba2f137d0666",
@@ -42,9 +42,9 @@ const BEFORE = {
   "staff_tasks_private.tg_refund_task()": "7ba5b00c225d849f5368182b8ffaee06",
   "public.withdrawal_report_refunds_on_cancel(uuid,uuid,uuid,text)": "9e3981d9e2cb7e319c308adf193efbbe",
 } as const;
-/** s2_0036 적용 뒤 지문(로컬 PGlite · r3) — 되돌리기는 이 값일 때만 되돌린다. */
+/** s2_0037 적용 뒤 지문(로컬 PGlite · r3) — 되돌리기는 이 값일 때만 되돌린다. */
 const AFTER = {
-  "public.transition_withdrawal_report(uuid,uuid,uuid,text,jsonb)": "99c4175fd9f02dab3091086f456890b1",
+  "public.transition_withdrawal_report(uuid,uuid,uuid,text,jsonb)": "81a4e70527f09e39df7e2ab50ff13658",
   "public.transition_withdrawal_report_v1(uuid,uuid,uuid,text,jsonb)": "c8d87498a853195d7c86de12b21ae6d8",
   "public.attach_withdrawal_report_refund(uuid,uuid,uuid,uuid,uuid,boolean,jsonb,jsonb,jsonb)": "f87f992c7ce096a2e5c1dd44c278ce39",
   "public.release_withdrawal_report_refunds(uuid,uuid,uuid,jsonb)": "2516d0340b850c14faa4f91e9ea673ca",
@@ -102,25 +102,25 @@ function pairsOf(block: string, from: "o" | "n") {
   const re = new RegExp(String.raw`\$${from}\$([\s\S]*?)\$${from}\$,\s*\$${to}\$([\s\S]*?)\$${to}\$`, "g");
   return [...block.matchAll(re)].map((x) => [x[1]!, x[2]!] as const);
 }
-/** s2_0030 처리 함수 본문 → s2_0036(마이그레이션 생성에 쓴 목록과 같은 글자). */
+/** s2_0030 처리 함수 본문 → s2_0037(마이그레이션 생성에 쓴 목록과 같은 글자). */
 const TRANSITION: readonly (readonly [string, string])[] = [
   [" field text; child public.withdrawal_reports; valid boolean; targets uuid[]; affected integer; cmp_subjects text[]; all_approved boolean; mgrs uuid[];",
-   " field text; child public.withdrawal_reports; valid boolean; targets uuid[]; affected integer; cmp_subjects text[]; all_approved boolean; mgrs uuid[];\n -- 결정하지 않은 환불 가능 줄 수(s2_0036 · withdrawal_report_refund_note) — null = 앱이 환불 확인 값을 넘기지 않음(모름 → 처리하지 않는다).\n refund_open integer;"],
+   " field text; child public.withdrawal_reports; valid boolean; targets uuid[]; affected integer; cmp_subjects text[]; all_approved boolean; mgrs uuid[];\n -- 결정하지 않은 환불 가능 줄 수(s2_0037 · withdrawal_report_refund_note) — null = 앱이 환불 확인 값을 넘기지 않음(모름 → 처리하지 않는다).\n refund_open integer;"],
   ["  -- 데스크 환불이 남은 예약은 처리일이 돼도 미룬다 — 오류 없이 그대로 돌려준다(앱 cron이 '미룸'으로 세고 다음 날 다시 · 환불 완료 때 release).\n  if public.withdrawal_report_refund_pending(g.id) then return r; end if;",
-   "  -- 환불 결정(s2_0036 · 원장 2026-11-06) — 앱이 같은 요청에서 계산한 환불 가능 줄(refundCheck)로 '환불 결정 대기'를 맞춘다.\n  refund_open:=public.withdrawal_report_refund_note(p_tenant,g.id,p_payload->'refundCheck',p_actor);\n  -- 데스크 환불이 남았거나 · 원장이 결정하지 않은 환불 가능 줄이 있거나 · 환불 확인 값이 없으면(옛 앱 · 계산 빠뜨림) 처리일이 돼도 미룬다 —\n  -- 오류 없이 그대로 돌려준다(앱 cron이 '미룸'으로 세고 다음 날 다시 · 원장 결정·환불 완료 때 release).\n  if public.withdrawal_report_refund_pending(g.id) or refund_open is distinct from 0 then return r; end if;"],
+   "  -- 환불 결정(s2_0037 · 원장 2026-11-06) — 앱이 같은 요청에서 계산한 환불 가능 줄(refundCheck)로 '환불 결정 대기'를 맞춘다.\n  refund_open:=public.withdrawal_report_refund_note(p_tenant,g.id,p_payload->'refundCheck',p_actor);\n  -- 데스크 환불이 남았거나 · 원장이 결정하지 않은 환불 가능 줄이 있거나 · 환불 확인 값이 없으면(옛 앱 · 계산 빠뜨림) 처리일이 돼도 미룬다 —\n  -- 오류 없이 그대로 돌려준다(앱 cron이 '미룸'으로 세고 다음 날 다시 · 원장 결정·환불 완료 때 release).\n  if public.withdrawal_report_refund_pending(g.id) or refund_open is distinct from 0 then return r; end if;"],
   ["or (g.status='scheduled' and g.effective_date<=today)) then raise exception '데스크 환불이 끝난 승인 완료 보고서만 처리할 수 있습니다.'; end if;",
-   "or (g.status='scheduled' and g.effective_date<=today)) then raise exception '데스크 환불이 끝난 승인 완료 보고서만 처리할 수 있습니다.'; end if;\n  -- 환불 결정(s2_0036) — 결정하지 않은 환불 가능 줄이 있거나 환불 확인 값이 없으면(직접 호출 포함) 처리하지 않고 그대로 돌려준다(표시는 남는다).\n  refund_open:=public.withdrawal_report_refund_note(p_tenant,g.id,p_payload->'refundCheck',p_actor);\n  if refund_open is distinct from 0 then return r; end if;"],
+   "or (g.status='scheduled' and g.effective_date<=today)) then raise exception '데스크 환불이 끝난 승인 완료 보고서만 처리할 수 있습니다.'; end if;\n  -- 환불 결정(s2_0037) — 결정하지 않은 환불 가능 줄이 있거나 환불 확인 값이 없으면(직접 호출 포함) 처리하지 않고 그대로 돌려준다(표시는 남는다).\n  refund_open:=public.withdrawal_report_refund_note(p_tenant,g.id,p_payload->'refundCheck',p_actor);\n  if refund_open is distinct from 0 then return r; end if;"],
   [" if all_approved and public.withdrawal_report_refund_pending(g.id) then\n  -- 승인은 모두 끝났고 데스크 환불만 남았다 — 묶음은 기다린다(원장 2026-11-03 '데스크 환불 요청' 단계). 환불 완료 때 release가 처리한다.\n  recipients:=array[r.teacher_id,g.requested_by]; headline:='퇴원보고서 데스크 환불 요청';",
-   " -- 환불 결정(s2_0036) — 제출·승인 때 앱이 넘긴 환불 확인으로 '환불 결정 대기'를 맞춘다(원장에게 미리 알린다). 전원 승인이면 이 값으로 처리 여부를 정한다.\n if p_action in ('submit','approve') and g.status='pending' then refund_open:=public.withdrawal_report_refund_note(p_tenant,g.id,p_payload->'refundCheck',p_actor); end if;\n if all_approved and (public.withdrawal_report_refund_pending(g.id) or refund_open is distinct from 0) then\n  -- 승인은 모두 끝났고 환불 결정·데스크 환불이 남았다 — 묶음은 기다린다(원장 2026-11-03 '데스크 환불 요청' · 2026-11-06 '환불 결정 대기').\n  -- 원장 결정·환불 완료 때 release가 처리한다. 환불 확인 값이 없으면(옛 앱 · 계산 빠뜨림) 처리하지 않고 다음 확인(처리일 cron)을 기다린다.\n  recipients:=array[r.teacher_id,g.requested_by];\n  headline:=case when refund_open>0 then '퇴원보고서 환불 결정 대기' when public.withdrawal_report_refund_pending(g.id) then '퇴원보고서 데스크 환불 요청' else '퇴원보고서 승인 완료 · 처리 확인 대기' end;"],
+   " -- 환불 결정(s2_0037) — 제출·승인 때 앱이 넘긴 환불 확인으로 '환불 결정 대기'를 맞춘다(원장에게 미리 알린다). 전원 승인이면 이 값으로 처리 여부를 정한다.\n if p_action in ('submit','approve') and g.status='pending' then refund_open:=public.withdrawal_report_refund_note(p_tenant,g.id,p_payload->'refundCheck',p_actor); end if;\n if all_approved and (public.withdrawal_report_refund_pending(g.id) or refund_open is distinct from 0) then\n  -- 승인은 모두 끝났고 환불 결정·데스크 환불이 남았다 — 묶음은 기다린다(원장 2026-11-03 '데스크 환불 요청' · 2026-11-06 '환불 결정 대기').\n  -- 원장 결정·환불 완료 때 release가 처리한다. 환불 확인 값이 없으면(옛 앱 · 계산 빠뜨림) 처리하지 않고 다음 확인(처리일 cron)을 기다린다.\n  recipients:=array[r.teacher_id,g.requested_by];\n  headline:=case when refund_open>0 then '퇴원보고서 환불 결정 대기' when public.withdrawal_report_refund_pending(g.id) then '퇴원보고서 데스크 환불 요청' else '퇴원보고서 승인 완료 · 처리 확인 대기' end;"],
   ["  g.status:='canceled'; headline:='퇴원보고서 요청 취소';",
-   "  -- 취소 사유(원장 2026-11-06 · s2_0036) — 있으면 앞뒤 공백을 빼고 1~500자(공백·줄바꿈·탭만이면 거절 · 리뷰 #11) · 묶음의 모든 보고서 이력 'cancel' 줄에 같은 사유가 남는다(아래 반복).\n  -- 없으면(옛 앱) 종전처럼 사유 없이 취소한다 — 필수 여부는 앱이 정한다.\n  if p_payload->>'comment' is not null then\n   comment_text:=btrim(p_payload->>'comment');\n   if char_length(comment_text) not between 1 and 500 or comment_text !~ '[^[:space:]]' then raise exception '취소 사유를 1~500자로 작성해 주세요.'; end if;\n  end if;\n  g.status:='canceled'; headline:='퇴원보고서 요청 취소';"],
+   "  -- 취소 사유(원장 2026-11-06 · s2_0037) — 있으면 앞뒤 공백을 빼고 1~500자(공백·줄바꿈·탭만이면 거절 · 리뷰 #11) · 묶음의 모든 보고서 이력 'cancel' 줄에 같은 사유가 남는다(아래 반복).\n  -- 없으면(옛 앱) 종전처럼 사유 없이 취소한다 — 필수 여부는 앱이 정한다.\n  if p_payload->>'comment' is not null then\n   comment_text:=btrim(p_payload->>'comment');\n   if char_length(comment_text) not between 1 and 500 or comment_text !~ '[^[:space:]]' then raise exception '취소 사유를 1~500자로 작성해 주세요.'; end if;\n  end if;\n  g.status:='canceled'; headline:='퇴원보고서 요청 취소';"],
   ["   update public.withdrawal_reports set status=g.status,applied_at=g.applied_at,last_comment=coalesce(comment_text,last_comment),revision=revision+1,updated_at=now() where id=child.id;",
-   "   -- 취소 사유는 이력에만 남긴다(last_comment = 반려 사유·재검토 안내 칸 — 상세의 안내 상자로 읽히지 않게 · s2_0036).\n   update public.withdrawal_reports set status=g.status,applied_at=g.applied_at,last_comment=coalesce(case when p_action='cancel' then null else comment_text end,last_comment),revision=revision+1,updated_at=now() where id=child.id;"],
+   "   -- 취소 사유는 이력에만 남긴다(last_comment = 반려 사유·재검토 안내 칸 — 상세의 안내 상자로 읽히지 않게 · s2_0037).\n   update public.withdrawal_reports set status=g.status,applied_at=g.applied_at,last_comment=coalesce(case when p_action='cancel' then null else comment_text end,last_comment),revision=revision+1,updated_at=now() where id=child.id;"],
   ["  update public.withdrawal_report_groups set status=g.status,applied_at=g.applied_at where id=g.id;",
-   "  -- 끝난 묶음(처리 예약 밖 · 처리 완료·재검토·취소)엔 기다릴 환불 결정이 없다 — 표시를 내린다(s2_0036).\n  update public.withdrawal_report_groups set status=g.status,applied_at=g.applied_at,refund_hold=refund_hold and g.status in ('pending','scheduled') where id=g.id;"],
+   "  -- 끝난 묶음(처리 예약 밖 · 처리 완료·재검토·취소)엔 기다릴 환불 결정이 없다 — 표시를 내린다(s2_0037).\n  update public.withdrawal_report_groups set status=g.status,applied_at=g.applied_at,refund_hold=refund_hold and g.status in ('pending','scheduled') where id=g.id;"],
 ];
 
-describe("원장 환불 결정 전에는 처리하지 않는다(s2_0036)", () => {
+describe("원장 환불 결정 전에는 처리하지 않는다(s2_0037)", () => {
   it("🔴 처리 함수 = s2_0030 본문 + 정해진 일곱 자리만(글자 그대로) · 머리(시그니처·속성) 그대로", () => {
     const before = fn(base, "transition_withdrawal_report"), after = fn(sql, "transition_withdrawal_report");
     expect(after.body).toBe(applyChanges(before.body, TRANSITION));
@@ -344,7 +344,7 @@ describe("원장 환불 결정 전에는 처리하지 않는다(s2_0036)", () =>
     expect(blocks).toHaveLength(5); // 지문 검사 · _v1 · 할 일 동기화 · 할 일 닫기·취소 알림 빈칸(r3) · 사후 확인(함정 #155)
     const v1 = blocks[1]!;
     expect(v1).toContain("select pg_get_functiondef('public.transition_withdrawal_report_v1(uuid,uuid,uuid,text,jsonb)'::regprocedure) into definition;");
-    expect(v1).toContain("if hits <> 1 then raise exception 's2_0036: _v1의 바꿀 줄 %번이 하나가 아닙니다(%건)', i, hits; end if;");
+    expect(v1).toContain("if hits <> 1 then raise exception 's2_0037: _v1의 바꿀 줄 %번이 하나가 아닙니다(%건)', i, hits; end if;");
     const pairs = pairsOf(v1, "o");
     expect(pairs).toEqual([[
       "if p_action not in ('request','save','submit','approve','reject','cancel','apply') then raise exception '지원하지 않는 처리입니다.'; end if;",
@@ -355,7 +355,7 @@ describe("원장 환불 결정 전에는 처리하지 않는다(s2_0036)", () =>
   it("할 일 동기화 — 원장 '환불 결정' 차례(refund:<원장 id>) · 세 줄 정확히 한 번 · 운영자 계정 제외 · 풀리면 처리됨", () => {
     const sync = doBlocks(noComments(sql))[2]!;
     expect(sync).toContain("select pg_get_functiondef('staff_tasks_private.withdrawal_sync_report(uuid)'::regprocedure) into definition;");
-    expect(sync).toContain("if hits <> 1 then raise exception 's2_0036: 할 일 동기화의 바꿀 줄 %번이 하나가 아닙니다(%건)', i, hits; end if;");
+    expect(sync).toContain("if hits <> 1 then raise exception 's2_0037: 할 일 동기화의 바꿀 줄 %번이 하나가 아닙니다(%건)', i, hits; end if;");
     const pairs = pairsOf(sync, "o");
     expect(pairs.map(([o]) => o)).toEqual(["  v_today date := (now() at time zone 'Asia/Seoul')::date;", "  for x in", "    v_user := nullif(split_part(x.cycle, ':', 2), '')::uuid;"]);
     for (const [o, n] of pairs) expect(n.startsWith(o) || n.endsWith(o)).toBe(true);  // 원래 줄은 남기고 앞뒤에 더한다
@@ -393,7 +393,7 @@ describe("원장 환불 결정 전에는 처리하지 않는다(s2_0036)", () =>
   it("🔴 안전장치 — 지문 검사는 기대 글자 그대로(s2_0030 적용 뒤가 아니면 멈춤) · 거래 하나 · 시간 제한 한 번씩 · 다시 읽기 알림", () => {
     const code = noComments(sql);
     const blocks = doBlocks(code);
-    expect(squash(blocks[0]!)).toBe(squash(guardText(BEFORE, "s2_0036: % 의 운영 정의가 기준(s2_0030 적용 뒤 · 2026-11-06)과 다릅니다(%). s2_0030을 먼저 적용했는지 보고, 바뀐 내용을 이 파일에 옮긴 뒤 지문을 갱신하세요.")));
+    expect(squash(blocks[0]!)).toBe(squash(guardText(BEFORE, "s2_0037: % 의 운영 정의가 기준(s2_0030 적용 뒤 · 2026-11-06)과 다릅니다(%). s2_0030을 먼저 적용했는지 보고, 바뀐 내용을 이 파일에 옮긴 뒤 지문을 갱신하세요.")));
     expect(code.indexOf(blocks[0]!)).toBeLessThan(code.indexOf("alter table"));
     expect(code.match(/\bbegin\s*;/gi)).toHaveLength(1);
     expect(code.match(/\bcommit\s*;/gi)).toHaveLength(1);
@@ -405,7 +405,7 @@ describe("원장 환불 결정 전에는 처리하지 않는다(s2_0036)", () =>
     expect(sql).toContain(`되돌리기 = ${REVERT_FILE}`);
   });
 
-  it("🔴 선행 지문 = s2_0030 파일에 적힌 '적용 뒤' 지문(처리 함수 · _v1) — 원장이 s2_0030 → s2_0036 차례로 적용(운영 2026-11-06 읽기 전용 확인 때 같은 값)", () => {
+  it("🔴 선행 지문 = s2_0030 파일에 적힌 '적용 뒤' 지문(처리 함수 · _v1) — 원장이 s2_0030 → s2_0037 차례로 적용(운영 2026-11-06 읽기 전용 확인 때 같은 값)", () => {
     // s2_0030 머리말의 '적용 뒤 지문' 줄: '… transition_withdrawal_report <md5> · transition_withdrawal_report_v1 <md5>'
     const after30 = (name: string) => base.match(new RegExp(`--[^\\n]*\\b${name} ([0-9a-f]{32})`))?.[1];
     expect(after30("transition_withdrawal_report")).toBe(BEFORE["public.transition_withdrawal_report(uuid,uuid,uuid,text,jsonb)"]);
@@ -477,7 +477,7 @@ describe("원장 환불 결정 전에는 처리하지 않는다(s2_0036)", () =>
     const code = noComments(revert);
     const blocks = doBlocks(code);
     expect(blocks).toHaveLength(6); // 적용 뒤 지문 · 멈춤 검사 · _v1 거꾸로 · 동기화 거꾸로 · 할 일 닫기·취소 알림 거꾸로(r3) · 되돌린 뒤 지문
-    expect(squash(blocks[0]!)).toBe(squash(guardText(AFTER, "revert-s2_0036: % 의 정의가 s2_0036 적용 뒤와 다릅니다(%). 되돌리지 않습니다.")));
+    expect(squash(blocks[0]!)).toBe(squash(guardText(AFTER, "revert-s2_0037: % 의 정의가 s2_0037 적용 뒤와 다릅니다(%). 되돌리지 않습니다.")));
     expect(blocks[1]).toContain("select count(*) into held from public.withdrawal_report_groups where refund_hold and status in ('pending', 'scheduled');");
     expect(blocks[1]).toContain("and not public.withdrawal_report_refund_pending(g.id);");
     expect(blocks[1]).toContain("if held > 0 or stuck > 0 then");
@@ -493,13 +493,13 @@ describe("원장 환불 결정 전에는 처리하지 않는다(s2_0036)", () =>
     const forward = doBlocks(noComments(sql));
     expect(pairsOf(blocks[2]!, "n")).toEqual(pairsOf(forward[1]!, "o").map(([o, n]) => [n, o]));
     expect(pairsOf(blocks[3]!, "n")).toEqual(pairsOf(forward[2]!, "o").map(([o, n]) => [n, o]));
-    expect(squash(blocks[5]!)).toBe(squash(guardText(BEFORE, "revert-s2_0036: 되돌린 뒤 % 의 정의가 s2_0036 적용 전 지문과 다릅니다(%). 거래를 취소합니다.")));
+    expect(squash(blocks[5]!)).toBe(squash(guardText(BEFORE, "revert-s2_0037: 되돌린 뒤 % 의 정의가 s2_0037 적용 전 지문과 다릅니다(%). 거래를 취소합니다.")));
     // r3 거꾸로 — 할 일 닫기·취소 알림 빈칸 = btrim · 연결 표 권한 복원
     expect(pairsOf(blocks[4]!, "o")).toEqual(pairsOf(forward[3]!, "o").map(([o, n]) => [n, o]));
     expect(code).toContain("grant update, delete, truncate, references, trigger on public.withdrawal_report_refunds to service_role;");
     expect(forward[3]).toContain("cancel_old constant text := $o$coalesce(btrim(d.form_data #>> '{result,completedDate}'), '') <> '' completed$o$;");
     expect(forward[3]).toContain("cancel_new constant text := $n$not public.withdrawal_refund_blank(d.form_data #>> '{result,completedDate}') completed$n$;");
-    expect(forward[3]).toContain("if hits <> 1 then raise exception 's2_0036: 취소 알림의 바꿀 조건이 하나가 아닙니다(%건)', hits; end if;");
+    expect(forward[3]).toContain("if hits <> 1 then raise exception 's2_0037: 취소 알림의 바꿀 조건이 하나가 아닙니다(%건)', hits; end if;");
     expect(blocks[4]).toContain("cancel_old constant text := $o$not public.withdrawal_refund_blank(d.form_data #>> '{result,completedDate}') completed$o$;");
     expect(blocks[4]).toContain("cancel_new constant text := $n$coalesce(btrim(d.form_data #>> '{result,completedDate}'), '') <> '' completed$n$;");
     // 빈칸 함수를 지우기 전에 되돌린다(되돌린 본문이 지운 함수를 부르지 않게)

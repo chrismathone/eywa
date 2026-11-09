@@ -1,0 +1,10 @@
+.banner {
+  margin: 0 0 12px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #f4f4f1;
+  border: 1px solid #e1e3df;
+  color: #646d72;
+  font-size: 13px;
+  font-weight: 600;
+}

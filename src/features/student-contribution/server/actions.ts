@@ -10,6 +10,7 @@ import { requireContributionWrite } from "./access";
 import { getContributionList } from "./queries";
 import { contributionReady, loadContributionSettings, SETTINGS_TABLE, SIGNALS_TABLE } from "./store";
 import { refreshStudentContribution } from "./refresh";
+import { manualRefreshDoneToday } from "./refresh-limit";
 import { contributionSnapshotTag } from "./snapshot-cache";
 import { hasApprovedParentEventImport } from "./parent-events";
 
@@ -42,6 +43,8 @@ export async function saveContributionSettings(value: unknown, revision: number)
 export async function refreshContribution() {
   try {
     const gate = await requireContributionWrite();
+    const doneAt = await manualRefreshDoneToday(gate.tenantId);
+    if (doneAt) return { error: `오늘은 ${doneAt}에 이미 집계했습니다. 최신 기록 집계는 하루 1회입니다(밤 정기 집계는 그대로 돕니다).` };
     let summary;
     try { summary = await refreshStudentContribution(createAdminClient(), gate.tenantId, { deadline: Date.now() + 85_000 }); }
     finally { updateTag(contributionSnapshotTag(gate.tenantId)); }

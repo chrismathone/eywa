@@ -357,6 +357,9 @@ export default async function EnrollmentPage({
         // 한 줄을 계속 먹는다. 숫자(전체·AI·배정)는 아래 툴바 검색창 왼쪽으로 옮겼다.
         actions={
           <>
+            <Button variant="ghost" render={<WindowLink href="/enrollment/visits" title="방문·등록 점검" />}>
+              방문·등록 점검
+            </Button>
             <Suspense
               fallback={
                 <Button variant="ghost" disabled>

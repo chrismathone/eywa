@@ -2,7 +2,7 @@
 .cover, .toc, .end { box-sizing: border-box; min-height: 250mm; display: flex; flex-direction: column; break-after: page; }
 .cover { padding: 20mm 0 12mm; justify-content: space-between; }
 .brand { color: #1e40af; font-size: 23px; font-weight: 850; letter-spacing: -.06em; }
-.brand span { display: block; margin-top: 2px; color: #64748b; font-size: 10px; font-weight: 700; letter-spacing: .2em; }
+.brand span { display: block; margin-top: 2px; color: #646d72; font-size: 10px; font-weight: 700; letter-spacing: .2em; }
 .coverTitle { margin-top: auto; margin-bottom: auto; }
 .coverTitle > p:first-child, .sectionEyebrow { color: #1d4ed8; font-size: 11px; font-weight: 750; letter-spacing: .14em; }
 .coverTitle h1 { margin: 12px 0 0; font-size: 38px; font-weight: 850; letter-spacing: -.055em; }
@@ -11,17 +11,17 @@
 .coverMeta { border-top: 1px solid #cbd5e1; padding-top: 17px; }
 .coverMeta > p { display: flex; gap: 22px; margin: 6px 0; font-size: 12px; }
 .coverMeta strong { min-width: 22mm; color: #475569; }
-.coverMeta > p:last-child { margin-top: 18px; color: #64748b; font-size: 10px; }
+.coverMeta > p:last-child { margin-top: 18px; color: #646d72; font-size: 10px; }
 .toc { padding-top: 15mm; }
 .toc h2 { margin: 7px 0 4px; font-size: 29px; font-weight: 830; }
-.toc > p { margin-bottom: 24px; color: #64748b; font-size: 11px; }
+.toc > p { margin-bottom: 24px; color: #646d72; font-size: 11px; }
 .tocColumns { columns: 2; column-gap: 12mm; }
 .tocGroup { margin-bottom: 13px; break-inside: avoid; }
 .tocGroup h3 { padding-bottom: 4px; border-bottom: 1px solid #93c5fd; color: #1d4ed8; font-size: 13px; font-weight: 750; }
 .tocGroup a { display: flex; gap: 9px; padding: 4px 0; color: #17233b; font-size: 11px; text-decoration: none; }
-.tocGroup a span { color: #64748b; font-variant-numeric: tabular-nums; }
+.tocGroup a span { color: #646d72; font-variant-numeric: tabular-nums; }
 .chapter { padding: 15mm 0 10mm; break-before: page; }
-.chapterTop { display: flex; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid #cbd5e1; color: #64748b; font-size: 9px; font-weight: 750; letter-spacing: .08em; }
+.chapterTop { display: flex; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid #cbd5e1; color: #646d72; font-size: 9px; font-weight: 750; letter-spacing: .08em; }
 .chapter h2 { margin: 19px 0 9px; font-size: 27px; font-weight: 820; letter-spacing: -.04em; }
 .summary { margin: 0 0 23px; color: #334155; font-size: 12px; line-height: 1.7; }
 .chapter h3 { margin: 18px 0 9px; color: #1e40af; font-size: 15px; font-weight: 760; }
@@ -32,12 +32,12 @@
 .steps strong { font-size: 11px; }
 .steps p, .face > p { margin: 4px 0 0; font-size: 10px; line-height: 1.55; color: #475569; white-space: pre-line; }
 .face { margin-top: 24px; break-inside: avoid-page; }
-.chapterFoot { margin-top: 22px; color: #64748b; font-size: 9px; }
+.chapterFoot { margin-top: 22px; color: #646d72; font-size: 9px; }
 .end { justify-content: center; padding: 20mm 0; break-before: page; break-after: auto; }
 .end h2 { max-width: 125mm; margin: 12px 0 25px; font-size: 31px; line-height: 1.25; letter-spacing: -.04em; }
 .end p { margin: 7px 0; color: #334155; font-size: 13px; line-height: 1.6; }
 .endRule { width: 35mm; height: 3px; margin: 30px 0; background: #1d4ed8; }
-.end small { color: #64748b; font-size: 10px; }
+.end small { color: #646d72; font-size: 10px; }
 @media print {
   .book { width: auto; margin: 0; padding: 0; }
   .cover, .toc, .end { min-height: 245mm; }

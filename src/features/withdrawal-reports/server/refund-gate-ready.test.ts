@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * 관문 DB 준비(리뷰 r2 D-7) — 판정은 s2_0036이 만들고 되돌리기가 **지우는** 표식 함수 `withdrawal_refund_gate_ready()`로 한다.
+ * 관문 DB 준비(리뷰 r2 D-7) — 판정은 s2_0037이 만들고 되돌리기가 **지우는** 표식 함수 `withdrawal_refund_gate_ready()`로 한다.
  * 함수가 참일 때만 준비 · 함수가 없으면(적용 전 · 되돌림) 거짓(관문 경로를 막는다) · 그 밖의 오류는 던진다(부르는 쪽이 처리하지 않는다).
  */
 const m = vi.hoisted(() => ({ result: { data: true as unknown, error: null as null | { code?: string; message: string } }, names: [] as string[] }));

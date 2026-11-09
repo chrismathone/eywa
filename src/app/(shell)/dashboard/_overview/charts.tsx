@@ -7,8 +7,8 @@ import { DetailPopup } from "./detail-popup";
 import s from "./overview.module.css";
 
 export const COLORS = [
-  "#153e75",
-  "#327fa8",
+  "#363c41",
+  "#485055",
   "#0d7743",
   "#bc7f26",
   "#8666a5",

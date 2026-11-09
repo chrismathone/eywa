@@ -42,7 +42,8 @@ export function useOpenMenu(): (dest: HubDest, shift?: boolean) => void {
         router.push(dest.href);
         return;
       }
-      if (item && navPresentation(item) === "desktop") {
+      // 시안: 권한만 빌린 목적지(홍보·마케팅 등 — 대시보드 권한)는 그 메뉴의 바탕 화면이 아니라 자기 창으로 연다.
+      if (item && item.href === dest.href && navPresentation(item) === "desktop") {
         // 배경 자체를 보여 달라는 뜻이라 허브는 **닫는다**(배경에 남으면 그 배경을 가린다).
         closeHub();
         showDesktop();

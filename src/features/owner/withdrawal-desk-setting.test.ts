@@ -11,7 +11,7 @@ import { specialAccessTargets } from "./special-access";
 /**
  * 학원 설정 '데스크 담당자'(원장 2026-11-06 *"데스크 담당자는 학원 설정에서 지정"* · `specialAccess.withdrawalDeskIds`) —
  * '퇴원보고서 승인자'와 같은 화면·같은 저장 방식(c0974591d). 퇴원보고서 환불 승인의 데스크 담당은 여기 지정한 사람(그중 수납 쓰기 권한자)만이고,
- * DB(s2_0036 `attach_withdrawal_report_refund`)도 같은 칸을 읽는다. 비면 환불 승인을 막는다.
+ * DB(s2_0037 `attach_withdrawal_report_refund`)도 같은 칸을 읽는다. 비면 환불 승인을 막는다.
  */
 const A = "11111111-1111-4111-8111-111111111111";
 const B = "22222222-2222-4222-8222-222222222222";

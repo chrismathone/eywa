@@ -1,5 +1,7 @@
 "use client";
 
+import { windowIdForHref } from "@/components/workspace/window-link";
+
 import { useNavigationSettings } from "@/features/owner/navigation-context";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -671,7 +673,10 @@ function railState(
   const active = isDesktop
     ? presentation === "desktop"
       ? !hasFocus && !hubOpen && isItemActive(item.href, pathname)
-      : hasFocus && !hubOpen && !!focusedPath && findNavItem(focusedPath)?.menuKey === item.menuKey
+      : hasFocus && !hubOpen && !!focusedPath && (navItemByKey(item.menuKey)?.href === item.href
+        ? findNavItem(focusedPath)?.menuKey === item.menuKey
+        // 시안: 권한만 빌린 줄(조직·OKR · 스키마·지식그래프)은 메뉴 키가 같아도 서로 다른 화면 — 주소로 가른다.
+        : focusedPath.split("?")[0] === item.href || focusedPath.startsWith(`${item.href}/`))
     : isItemActive(item.href, pathname);
   // 🔴 열려 있는 창은 표시하지 않는다(원장 2026-09-09) — 표시는 **지금 보고 있는 창 하나**뿐이다.
   //    `openIds`는 포커스 판정(hasFocus)에만 남는다.
@@ -759,7 +764,9 @@ function GroupRail({
   const search = useSearchParams();
   const currentHref = `${pathname}?${search.toString()}`;
   const base = group.kind === "direct" ? navItemByKey(group.items[0]!.menuKey) : undefined;
-  const direct = base ? { ...base, ...group.items[0]!, label: group.label, icon: group.icon } : undefined;
+  // 시안: 권한만 빌린 줄(예: 대시보드 권한의 '조직·OKR')은 그 메뉴의 '바탕 화면' 표시 방식을 물려받지 않는다 — 물려받으면 눌러도 대시보드만 보인다.
+  const borrowed = base && group.items[0]!.href !== base.href;
+  const direct = base ? { ...base, ...group.items[0]!, label: group.label, icon: group.icon, ...(borrowed ? { presentation: undefined } : {}) } : undefined;
   if (direct) {
     return (
       <MenuRail
@@ -853,7 +860,8 @@ function RailItem({
       onShowDesktop();
       return;
     }
-    const params = { id: item.menuKey, title: hubDestinationForPath(item.href)?.label ?? item.label, href: item.href };
+    // 창 id는 주소에서(메뉴 판·창 링크와 같은 규칙) — 권한만 빌린 줄이 그 메뉴의 창(예: 대시보드)을 가리키지 않게.
+    const params = { id: windowIdForHref(item.href)?.id ?? item.menuKey, title: hubDestinationForPath(item.href)?.label ?? item.label, href: item.href };
     // shift+클릭 = 같은 메뉴를 새 창으로 한 벌 더(듀얼).
     if (e.shiftKey) {
       useWindowStore.getState().openNewInstance("route", params);

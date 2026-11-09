@@ -119,17 +119,17 @@ export async function changeWithdrawalReport(id: string, action: ReportAction, r
     payload.comment = input.trim();
   }
   // 요청 취소 사유(원장 2026-11-06 *"요청 취소시에 '사유' 입력할 수 있고 마우스 올리면 사유 확인가능하게"*) — 필수 · 앞뒤 공백 빼고 1~500자.
-  // DB(s2_0036)는 사유가 오면 같은 검사로 묶음의 모든 보고서 이력 'cancel' 줄에 남긴다(오지 않으면 종전처럼 — 옛 앱 호환은 DB 몫).
+  // DB(s2_0037)는 사유가 오면 같은 검사로 묶음의 모든 보고서 이력 'cancel' 줄에 남긴다(오지 않으면 종전처럼 — 옛 앱 호환은 DB 몫).
   const cancelReason = action === "cancel" ? cancelReasonOf(input) : null;
   if (action === "cancel") {
     if (!cancelReason) return { error: `취소 사유를 1~${CANCEL_REASON_MAX.toLocaleString("ko-KR")}자로 작성해 주세요.` };
     payload.comment = cancelReason;
   }
-  // 원장 환불 결정(원장 2026-11-06 · s2_0036) — 제출·승인은 전원 승인으로 이어질 수 있다. **이 요청 안에서** 묶음의 환불 확인 값을 계산해 함께 넘긴다:
+  // 원장 환불 결정(원장 2026-11-06 · s2_0037) — 제출·승인은 전원 승인으로 이어질 수 있다. **이 요청 안에서** 묶음의 환불 확인 값을 계산해 함께 넘긴다:
   // DB가 결정 안 된 환불 가능 줄을 세어 '환불 결정 대기'를 맞추고(원장 알림·할 일), 전원 승인이어도 0이 아니면 처리하지 않는다.
   // 못 만들면 처리를 맡기지 않는다(확인 값 없이 보내면 DB는 처리하지 않지만, 승인만 기록되고 처리는 다음 날로 밀린다 — 여기서 멈추고 다시 하게).
   if ((action === "submit" || action === "approve") && record.report.group_id) {
-    // 새 앱 + 옛 DB(s2_0036 전)면 처리 함수가 확인 값을 모른 채 처리한다 — 부르지 않는다(리뷰 #5).
+    // 새 앱 + 옛 DB(s2_0037 전)면 처리 함수가 확인 값을 모른 채 처리한다 — 부르지 않는다(리뷰 #5).
     try { if (!(await refundGateReady())) return { error: REFUND_GATE_NOT_READY }; }
     catch (e) { console.error("[withdrawal-report-gate-ready]", e); return { error: "환불할 수 있는 청구를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." }; }
     try { payload.refundCheck = await loadGroupRefundCheck(viewer.user.tenantId, record.report.group_id); }

@@ -122,9 +122,9 @@ describe("상세 getReport — 목록 표시(DB)와 지금 계산의 어긋남(�
     // 리뷰 r3 R2-m10 — 이미 정한 줄을 '결정 전'으로 세지 않는다(빈 결정) · 실패를 알리고 결정 단추를 막는다(failed)
     expect((await getReport("r1"))!.refundDecision).toMatchObject({ hold: false, undecided: [], declined: [], gap: null, failed: true, decisionsFailed: true, lookupFailed: { decisions: true, hold: false, steps: false }, deductions: [] });
   });
-  it("DB 표시를 못 읽으면(조회 실패 · s2_0036 전) 대기 없음으로 보이고 어긋남은 말하지 않는다", async () => {
+  it("DB 표시를 못 읽으면(조회 실패 · s2_0037 전) 대기 없음으로 보이고 어긋남은 말하지 않는다", async () => {
     m.holdState.mockRejectedValue(new Error("조회 실패"));
-    // 조회 실패는 '모름'으로 알리고 결정 단추를 막는다(리뷰 r3 R2-m10) · s2_0036 전(null)은 실패가 아니다
+    // 조회 실패는 '모름'으로 알리고 결정 단추를 막는다(리뷰 r3 R2-m10) · s2_0037 전(null)은 실패가 아니다
     expect((await getReport("r1"))!.refundDecision).toMatchObject({ hold: false, undecided: [KEY], gap: null, failed: true, decisionsFailed: false, lookupFailed: { decisions: false, hold: true, steps: false } });
     m.holdState.mockResolvedValue(null);
     expect((await getReport("r1"))!.refundDecision).toMatchObject({ hold: false, undecided: [KEY], gap: null, failed: false });

@@ -7,6 +7,8 @@ import { ContributionStudentPanel } from "./student-panel";
 import { CurrentConnections, ConnectionSkeleton } from "./current-connections";
 import { StoredSummary } from "./stored-summary";
 import { EyIcon } from "@/components/icons/aywa-icons";
+import { ContributionLink } from "./student-contribution-scope";
+import "./loyalty-detail.css";
 
 async function Heading({ studentId }: { studentId: string }) {
   const [students, gate] = await Promise.all([getContributionStudents(), getContributionGate()]);
@@ -16,7 +18,9 @@ async function Heading({ studentId }: { studentId: string }) {
     actions={<StudentDetailActions studentId={studentId} />} />;
 }
 export function StudentOntologyPanel({ studentId, month }: { studentId: string; month?: string }) {
-  return <div className="w-full min-w-0 space-y-5 pb-6">
+  return <div className="loyalty-detail w-full min-w-0 space-y-5 pb-6">
+    {/* 시안: 상세에서 랭킹으로 돌아가는 길 — 머리(탭)가 늦게 뜨거나 못 떠도 늘 보인다. */}
+    <ContributionLink href="/student-contribution/ranking" className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-card px-3 py-1.5 text-sm font-semibold hover:bg-secondary"><EyIcon name="chevronLeft" size={16} />로열티 랭킹으로</ContributionLink>
     <Suspense fallback={<ConnectionSkeleton label="학생 기록" />}><Heading studentId={studentId} /></Suspense>
     <Suspense fallback={<ConnectionSkeleton label="월별 로열티" />}><ContributionStudentPanel studentId={studentId} month={month} /></Suspense>
     <details key={studentId} id={`current-connections-${studentId}`} tabIndex={-1} className="group rounded-xl border border-line" aria-label="현재 연결">

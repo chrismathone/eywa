@@ -13,7 +13,7 @@ export const AUDIT_ACTIONS = {
   withdrawal_report_update: "퇴원보고서 처리",
   // 퇴원월 뒤 청구의 환불을 원장이 퇴원보고서에서 승인 → 환불 요청서 생성(2026-10-29). 요청서 쪽 refund_request_create도 함께 남는다.
   withdrawal_refund_approve: "퇴원보고서 환불 승인",
-  // 원장 '환불 없음'(2026-11-06) — 퇴원월 뒤 청구의 환불 가능 줄을 환불하지 않기로 정함(정해야 퇴원·수강종료를 처리한다 · DB s2_0036).
+  // 원장 '환불 없음'(2026-11-06) — 퇴원월 뒤 청구의 환불 가능 줄을 환불하지 않기로 정함(정해야 퇴원·수강종료를 처리한다 · DB s2_0037).
   withdrawal_refund_decline: "퇴원보고서 환불 없음(원장 결정)",
   // 원장 '지금 다시 판정'(리뷰 r2 (b) · 2026-11-09) — 목록은 '환불 결정 대기'인데 지금 계산으론 정할 건이 없을 때. cron 안전망과 같은 release 함수로 지금 계산한 확인 값을 넘긴다.
   withdrawal_refund_recheck: "퇴원보고서 환불 결정 다시 판정",
@@ -635,6 +635,7 @@ export const AUDIT_ACTIONS = {
   assistant_ask: "학원 비서 질문",
   assistant_thread_delete: "학원 비서 대화 삭제",
   assistant_thread_rename: "학원 비서 대화 이름 변경",
+  assistant_advice_update: "학원 비서 의견 처리",
 
   // 인재원 학습 프로그램 짝(students.ijw_student_id, 0259a) — 학생 행을 바꾸므로 기록한다.
   student_ijw_link: "인재원 학습 계정 연결",

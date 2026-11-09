@@ -3,6 +3,9 @@ const m=vi.hoisted(()=>({scope:null as Set<string>|null,allowed:true,attendance:
 vi.mock("./directory",()=>({getContributionDirectory:async()=>m.allowed?{gate:{tenantId:"tenant",canWrite:true,canConfigure:true},rows:[{id:"own",name:"내 학생",status:"enrolled",subjects:[],school:null,grade:null},{id:"outside",name:"다른 학생",status:"enrolled",subjects:[],school:null,grade:null},{id:"left",name:"퇴원생",status:"withdrawn",subjects:[],school:null,grade:null}],subjects:[]}:null,getContributionSnapshot:async()=>({config:{},refreshedAt:"2026-11-08T15:40:00Z"})}));
 vi.mock("./family-loyalty",()=>({getFamilyLoyaltyDirectory:async()=>({byStudent:new Map(),fallback:{state:"restricted",asOf:"2026-11-09",members:[],activeCount:null,activeSiblings:null,selfActive:false,needsReview:0}})}));
 vi.mock("./fact-access",()=>({readableFactStudents:async()=>m.scope}));
+vi.mock("./refresh-limit",()=>({manualRefreshDoneToday:async()=>null}));
+vi.mock("./queries",()=>({getContributionList:async()=>null}));
+vi.mock("@/lib/ui-prefs/read",()=>({readMyUiPrefs:async()=>({})}));
 vi.mock("@/lib/auth/current-user",()=>({getCurrentUser:async()=>({systemRole:"teacher"})}));
 vi.mock("@/lib/auth/perm-matrix",()=>({canAccessTenant:async(_role:string,key:string)=>key==="attendance"?m.attendance:m.exams}));
 vi.mock("@/lib/date-kst",()=>({kstToday:()=>"2026-11-09"}));

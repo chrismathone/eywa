@@ -26,6 +26,8 @@ import { AttendanceCard, Billing6Card, BillingMonthCard, ChangesCard, CourseTren
 import { AdmissionsCard, Attendance14Card, ConsultProgressCard, GradesCard, RepeatAbsenceCard, ReportsCard, SchoolsCard, StudentConsultCard, SubjectsCard } from "./panels-students";
 import { AdmissionsScheduleCard, ExpensesCard, NewcomerChecksCard, NoticesCard, NowClassesCard, OperationsCard, SheetsCard, StaffCard, TeacherWorkCard } from "./panels-work";
 import "./instruments.css";
+import "./new-shape.css";
+import { CoreWork, ViewSwitch, GraphFilter, MIX_PANELS, TREND_PANELS, type BoardMode, type GraphKind } from "./new-shape";
 
 const CARDS: Record<PanelId, () => ReactNode> = {
   studentsComp: StudentsCompCard, attendance: AttendanceCard, billingMonth: BillingMonthCard, newcomerStages: NewcomerStagesCard, changes: ChangesCard, billing6: Billing6Card,
@@ -82,7 +84,16 @@ function sectionsOf(snapshot: OverviewSnapshot) {
   };
 }
 
-export function InstrumentBoard({ initial, chartKinds, checkView, demoRoster, onSwitchDesign, initialExtras, initialWork }: {
+/**
+ * 시안: 한눈에 보기 머리 칸의 KPI 6칸 — 전일 입테 · 오늘 첫수업은 빼고, 최근 결석 자리에 '오늘 입테'를 둔다
+ * (빠진 칸들은 '오늘 운영' 보기에 그대로 있다).
+ */
+function glanceKpis(kpis: readonly KpiKey[] | undefined): KpiKey[] | undefined {
+  if (!kpis) return undefined;
+  return kpis.filter((k) => k !== "calendar" && k !== "firstClass").map((k): KpiKey => (k === "absent" ? ("todayTests" as KpiKey) : k));
+}
+
+export function InstrumentBoard({ initial, chartKinds, checkView, demoRoster, initialExtras, initialWork }: {
   initial: OverviewSnapshot; chartKinds: ChartKinds; checkView?: CheckView; demoRoster: DemoRosterControl | null; onSwitchDesign: () => void;
   /** 개발 화면 전용 — 주면 서버에 묻지 않는다. */
   initialExtras?: InstrumentExtras;
@@ -92,6 +103,8 @@ export function InstrumentBoard({ initial, chartKinds, checkView, demoRoster, on
   const [extras, setExtras] = useState<InstrumentExtras>(initialExtras ?? NO_EXTRAS);
   const [extrasFailed, setExtrasFailed] = useState<readonly string[] | null>(initialExtras ? [] : null);
   const [tick, setTick] = useState(0);
+  const [mode, setMode] = useState<BoardMode>("glance");
+  const [graph, setGraph] = useState<GraphKind>("all");
   const [kinds, setKinds] = useState(chartKinds);
   const [picks, setPicks] = useState<Record<TrendId, string>>({ changes: "전체", billing: "전체", enrolledTrend: "전체", courseTrend: "전체" });
   const openDetail = useRef<(key: string, focus: string | undefined, from: HTMLElement | null) => void>(() => undefined);
@@ -159,6 +172,7 @@ export function InstrumentBoard({ initial, chartKinds, checkView, demoRoster, on
       <WorkProvider today={snapshot.today} demo={initialWork} tick={tick}>
       <div className="aywa-instruments aywa-board" onClick={onClick}>
         <div className="body">
+          <CoreWork />
           <div className="head" id="top">
             <div>
               <span className="eyebrow">{snapshot.academy || "에이와"} · ACADEMY OVERVIEW</span>
@@ -166,7 +180,6 @@ export function InstrumentBoard({ initial, chartKinds, checkView, demoRoster, on
             </div>
             <div className="head-tools" data-noopen>
               {demoRoster ? <DemoRosterSwitch control={demoRoster} /> : null}
-              <button type="button" className="design-switch" onClick={onSwitchDesign}>대시보드 전환</button>
               <span className="fresh"><i className={failed ? "is-warn" : undefined} />{query.isFetching ? "최신 정보 확인 중" : failed ? "일부 정보 갱신 필요" : "자동 갱신"}<small>{clock} 확인 · 5분 주기</small></span>
               <button type="button" className="refresh" aria-label="전체 정보 새로고침" disabled={query.isFetching} onClick={() => { void query.refetch({ cancelRefetch: false }); setTick((n) => n + 1); }}><EyIcon name="sync" size={17} /></button>
             </div>
@@ -176,17 +189,59 @@ export function InstrumentBoard({ initial, chartKinds, checkView, demoRoster, on
               {view!.subjectChoices!.map((choice) => <Link key={choice.key} href={`/dashboard?subject=${encodeURIComponent(choice.key)}`} aria-current={view?.activeSubject === choice.key ? "page" : undefined}>{choice.label}</Link>)}
             </nav>
           ) : null}
-          <KpiGrid only={layout.kpis} />
-          <CheckBoard initialView={checkView} />
-          <WorkSection />
-          {layout.sections.map((section) => (
-            <section key={section.id} id={section.id} className="block dashboard-section">
-              {section.title ? <div className="block-title"><h2>{section.title}</h2><p>{section.note}</p></div> : null}
-              <div className="card-grid">
-                {section.panels.map((id) => { const Item = CARDS[id]; return Item ? <Fragment key={id}><Item /></Fragment> : null; })}
+          {/* 시안: 새 대시보드 모양 — 카드·숫자는 계기판 그대로, 배치만 '한눈에 보기 / 오늘 운영 / 경영 현황'. */}
+          <ViewSwitch mode={mode} onMode={setMode} />
+          {mode === "glance" ? (
+            <>
+              <div className="ns-summary">
+                <div className="ns-brief"><CheckBoard initialView={checkView} part="secretary" /></div>
+                <div className="ns-kpis"><KpiGrid only={glanceKpis(layout.kpis)} /></div>
               </div>
-            </section>
-          ))}
+              <GraphFilter graph={graph} onGraph={setGraph} />
+              {(() => {
+                const glance = layout.sections.find((x) => x.id === "academy-overview") ?? layout.sections[0];
+                if (!glance) return null;
+                const pick = (ids: PanelId[]) => glance.panels.filter((id) => ids.includes(id));
+                const groups = [
+                  graph !== "mix" ? { id: "trend", title: "추이 · 비교", note: "과목을 골라 보거나 '비교'로 과목끼리 겹쳐 봅니다", panels: pick(TREND_PANELS) } : null,
+                  graph !== "trend" ? { id: "mix", title: "비중 · 구성", note: "지금 구성과 비율", panels: pick(MIX_PANELS) } : null,
+                ].filter((g): g is BoardSection => !!g && g.panels.length > 0);
+                return groups.map((g) => (
+                  <section key={g.id} className={`block dashboard-section ns-group is-${g.id}`}>
+                    <div className="block-title"><h2>{g.title}</h2><p>{g.note}</p></div>
+                    <div className="card-grid">{g.panels.map((id) => { const Item = CARDS[id]; return Item ? <Fragment key={id}><Item /></Fragment> : null; })}</div>
+                  </section>
+                ));
+              })()}
+              <p className="ns-foot">각 카드의 집계 기준은 기존 업무 화면과 같습니다. 원기록이 없거나 확인되지 않은 값은 그래프를 만들어 채우지 않습니다.</p>
+            </>
+          ) : mode === "today" ? (
+            <>
+              <KpiGrid only={layout.kpis} />
+              <CheckBoard initialView={checkView} part="table" />
+              <WorkSection />
+              {layout.sections.filter((x) => x.id !== "academy-overview").map((section) => (
+                <section key={section.id} id={section.id} className="block dashboard-section">
+                  {section.title ? <div className="block-title"><h2>{section.title}</h2><p>{section.note}</p></div> : null}
+                  <div className="card-grid">
+                    {section.panels.map((id) => { const Item = CARDS[id]; return Item ? <Fragment key={id}><Item /></Fragment> : null; })}
+                  </div>
+                </section>
+              ))}
+            </>
+          ) : (
+            <>
+              <KpiGrid only={layout.kpis} />
+              {layout.sections.map((section) => (
+                <section key={section.id} id={section.id} className="block dashboard-section">
+                  {section.title ? <div className="block-title"><h2>{section.title}</h2><p>{section.note}</p></div> : null}
+                  <div className="card-grid">
+                    {section.panels.map((id) => { const Item = CARDS[id]; return Item ? <Fragment key={id}><Item /></Fragment> : null; })}
+                  </div>
+                </section>
+              ))}
+            </>
+          )}
         </div>
       </div>
       <DetailDrawer openRef={openDetail} />

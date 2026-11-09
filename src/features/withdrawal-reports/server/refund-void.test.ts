@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * 리뷰 r2 (c) · 결정 2026-11-09 — **낸 돈이 있는 무효(void) 청구는 관문에 넣는다**(퇴원월 뒤 청구에 한함). 빼면 그 돈을 원장이 못 보고 결정 없이 처리된다.
  * 낸 돈이 없는 무효 청구는 종전대로 뺀다. 납부액을 못 읽으면 확인 값을 만들지 않는다(처리하지 않는 쪽).
- * DB(s2_0036 note)는 청구를 따로 거르지 않고 이 확인 값을 믿는다(asOf만 void 포함으로 같은 범위를 읽는다) — 앱 한 곳(`laterInvoicesFor`)이 기준이다.
+ * DB(s2_0037 note)는 청구를 따로 거르지 않고 이 확인 값을 믿는다(asOf만 void 포함으로 같은 범위를 읽는다) — 앱 한 곳(`laterInvoicesFor`)이 기준이다.
  * 이 모의는 청구 조회의 거르기(eq · neq · gt)를 실제로 적용한다 — 무효 청구를 조회에서 다시 빼면 이 시험이 잡는다.
  */
 const T = "t1";
@@ -86,7 +86,7 @@ describe("낸 돈이 있는 무효(void) 청구는 관문에 든다(리뷰 r2 (c
 });
 
 describe("상세용 DB 표시 한 벌 loadRefundHoldState(리뷰 r2 (b))", () => {
-  it("대기 · 결정 보고서 · 마지막 판정 시각을 그대로 · 칸이 없는 DB(s2_0036 전)·묶음 없음은 모름(null) · 그 밖 오류는 던진다", async () => {
+  it("대기 · 결정 보고서 · 마지막 판정 시각을 그대로 · 칸이 없는 DB(s2_0037 전)·묶음 없음은 모름(null) · 그 밖 오류는 던진다", async () => {
     m.group = { refund_hold: true, refund_hold_report: "ra", refund_undecided: ["k1", "k2"], refund_checked_at: "2026-11-08T03:00:00+00:00" };
     expect(await loadRefundHoldState(T, G)).toEqual({ hold: true, report: "ra", undecided: 2, checkedAt: "2026-11-08T03:00:00+00:00" });
     m.group = { refund_hold: false, refund_hold_report: null, refund_undecided: [], refund_checked_at: null };

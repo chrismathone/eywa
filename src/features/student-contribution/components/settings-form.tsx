@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { METRICS, METRIC_LABELS, OPERATION_METRICS, PARTICIPATION_METRICS } from "../model/config";
 import { familyRates, familyBonus } from "../model/family-loyalty";
-import { RankingSettings } from "./ranking-settings";
 import { scoreRaws } from "../model/calc";
 import type { getContributionSettingsPreview } from "../server/queries";
 import { saveContributionSettings } from "../server/actions";
@@ -30,11 +29,10 @@ export function ContributionSettings({ data }: { data: NonNullable<Awaited<Retur
       const r = await saveContributionSettings(config, data.revision); setMessage(r.error ?? r.message ?? ""); router.refresh();
     }); }} className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(22rem,1fr)]">
       <fieldset disabled={!data.gate.canWrite || !data.ready || busy} className="min-w-0 space-y-5 disabled:opacity-60">
-        <RankingSettings config={config} onChange={ranking=>setConfig({...config,ranking})} />
-        <section className="rounded-xl border border-amber/40 bg-amber-soft p-5 text-foreground"><h2 className="font-bold">기존 누적 활동 기록 · 가족 가점</h2>
+        <section className="rounded-xl border border-line bg-card p-5 text-foreground"><h2 className="font-bold">가족 가점</h2>
           <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={family.enabled} onChange={e=>setConfig({...config,family:{...family,enabled:e.target.checked}})} />가족 재원 가점 반영</label>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">{([['two','2명 재원'],['three','3남매 재원'],['fourPlus','4명 이상 재원']] as const).map(([key,label])=><label key={key} className="text-sm">본인 포함 {label}<input aria-label={`${label} 가족 배점`} type="number" min="0" max="10000" step="any" required disabled={!family.enabled} value={family[key]} onChange={e=>setConfig({...config,family:{...family,[key]:Number(e.target.value)}})} className={`${fieldClass} mt-2 w-full`} /></label>)}</div>
-          <p className="mt-3 text-xs">기본값 100·250·400점. 현재 함께 수강 중인 가족 수에 따라 한 번 가산합니다. 매달 중복 누적하지 않으며, 과거 활동 기록을 수정하지 않습니다. 가족 수가 많을수록 같은 점수 또는 더 높은 점수를 설정하세요.</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-4">{([['two','2명 재원'],['three','3남매 재원'],['fourPlus','4명 이상 재원']] as const).map(([key,label])=><label key={key} className="text-sm">본인 포함 {label}<input aria-label={`${label} 가족 배점`} type="number" min="0" max="10000" step="any" required disabled={!family.enabled} value={family[key]} onChange={e=>setConfig({...config,family:{...family,[key]:Number(e.target.value)}})} className={`${fieldClass} mt-2 w-full`} /></label>)}<label className="text-sm">형제와 함께 다닌 1개월당<input aria-label="형제와 함께 다닌 기간 1개월당 가점" type="number" min="0" max="1000" step="any" required disabled={!family.enabled} value={family.perTogetherMonth ?? 2} onChange={e=>setConfig({...config,family:{...family,perTogetherMonth:Number(e.target.value)}})} className={`${fieldClass} mt-2 w-full`} /></label></div>
+          <p className="mt-3 text-xs">가족 가점 = 형제 수 기본 가점(기본 100·250·400점) + 형제마다 본인과 함께 다닌 기간(둘 중 늦은 등록일부터) 합 × 1개월당 가점(기본 2점). 본인 재원기간은 넣지 않습니다. 현재 함께 수강 중인 가족 상태에 한 번 가산합니다. 매달 중복 누적하지 않으며, 과거 활동 기록을 수정하지 않습니다. 가족 수가 많을수록 같은 점수 또는 더 높은 점수를 설정하세요.</p>
         </section>
         <div className="grid grid-cols-2 gap-5 phone:grid-cols-1">{[["운영 기여", OPERATION_METRICS], ["학습·참여", PARTICIPATION_METRICS]] .map(([title, metrics]) => <section key={title as string} className="min-w-0 overflow-hidden rounded-xl border border-line">
           <h2 className="border-b border-line bg-primary-softer px-5 py-4 font-semibold">{title as string}</h2>

@@ -6,6 +6,7 @@ import { AYWA_SHARE_METADATA, AYWA_SITE_DESCRIPTION } from "@/lib/config/site-me
 import { deskDetectScript } from "@/components/workspace/desk-detect";
 import { pretendard } from "./fonts";
 import "./globals.css";
+import "./instrument-theme.css"; // 시안(dev 전용): 앱 전체 색감 = 새 대시보드 색감
 
 // ⚠️ preload:false — de-mono 정책(2026-07-19) 이후 모노는 kbd 힌트·팔레트 라벨 등 극소수에서만 쓴다
 // (`.num`은 tabular-nums만 걸고 Pretendard 유지). 그런데 next/font는 문서마다 preload 링크를 넣고,

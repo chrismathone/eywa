@@ -1,4 +1,4 @@
--- s2_0036 — 퇴원보고서: 원장 환불 결정 전에는 처리하지 않는다 · 데스크 담당자는 학원 설정 지정자만 · 이어진 요청서의 완료 입력은 담당 데스크와 원장만 (2026-11-06)
+-- s2_0037 — 퇴원보고서: 원장 환불 결정 전에는 처리하지 않는다 · 데스크 담당자는 학원 설정 지정자만 · 이어진 요청서의 완료 입력은 담당 데스크와 원장만 (2026-11-06)
 --
 -- 왜(운영 읽기 전용 확인 2026-11-06): 데스크 환불 단계(s2_0025)는 원장급이 '환불 승인'을 눌러 요청서를 이어야만 생긴다.
 --   ① 처리일이 오늘이거나 지난 묶음은 관리자 마지막 승인(승인 생략 보고서의 제출) 순간 바로 처리된다(처리 완료 13건 모두 '마지막 승인 시각 = 처리 시각').
@@ -57,8 +57,10 @@
 -- 번호: 가지에서는 s2_0031로 만들었으나 main의 학원 비서(s2_0031_academy_assistant · 운영 적용 2026-11-06 17:37)와 겹쳐 s2_0032로, 다시 main의 연동 PC 실행권
 --   (s2_0032_sync_agent_helper_grants · 운영 적용 2026-11-06 19:16)과 겹쳐 s2_0033으로, 다시 main의 금액 이월 연쇄(s2_0033_money_carry_chain · 운영 적용 2026-11-09)·
 --   학원 비서 마무리(s2_0034_assistant_parallel_finish · 운영 적용 2026-11-09)·원생 충성도(s2_0035_student_loyalty_factors · 운영 적용 2026-11-09)와 겹쳐
---   s2_0036으로 옮겼다(2026-11-09 병합 두 번). 이 파일들은 서로 다른 객체만 건드린다
---   (이 파일의 검사는 위 함수 지문만 본다 · 금액 이월은 invoices를 읽기만 하고 · 학원 비서 마무리는 assistant_messages만 · 원생 충성도는 새 표 student_contribution_factor_records만 바꾼다).
+--   s2_0036으로, 다시 main의 학원 비서 의견(s2_0036_academy_assistant_advice · 운영 적용 2026-11-09 18:41)과 겹쳐
+--   s2_0037로 옮겼다(2026-11-09 병합 세 번). 이 파일들은 서로 다른 객체만 건드린다
+--   (이 파일의 검사는 위 함수 지문만 본다 · 금액 이월은 invoices를 읽기만 하고 · 학원 비서 마무리는 assistant_messages만 · 원생 충성도는 새 표 student_contribution_factor_records만 ·
+--    학원 비서 의견은 새 표 assistant_advice·assistant_advice_events·그 지킴 트리거(assistant_private)와 비서 보기 제외 목록만 바꾼다).
 -- 옛 앱이 도는 동안(적용 ~ 새 앱 배포) — 옛 앱은 확인 값을 넘기지 않는다. 처리는 하지 않는 쪽으로 닫힌다:
 --   · 제출·승인: 승인은 그대로 기록된다. 전원 승인이 되어도 처리하지 않고 기다린다(알림 '퇴원보고서 승인 완료 · 처리 확인 대기').
 --   · 처리일 cron(apply): 미룬다(오류 없음 — 옛 앱은 '미룸'으로 센다).
@@ -90,13 +92,13 @@
 --      and to_regprocedure('public.decide_withdrawal_report_refund(uuid,uuid,uuid,jsonb,jsonb)') is null
 --      and to_regprocedure('public.release_withdrawal_report_refunds(uuid,uuid,uuid)') is null;  -- 기대: true(리뷰 r3 R3-2 — decide는 r3부터 6인자)
 --   적용 뒤 지문(공백 뺀 md5 · 위 PGlite 값):
---     transition_withdrawal_report 99c4175fd9f02dab3091086f456890b1 · transition_withdrawal_report_v1 c8d87498a853195d7c86de12b21ae6d8 · attach_withdrawal_report_refund(9인자) f87f992c7ce096a2e5c1dd44c278ce39 ·
+--     transition_withdrawal_report 81a4e70527f09e39df7e2ab50ff13658 · transition_withdrawal_report_v1 c8d87498a853195d7c86de12b21ae6d8 · attach_withdrawal_report_refund(9인자) f87f992c7ce096a2e5c1dd44c278ce39 ·
 --     release_withdrawal_report_refunds(4인자) 2516d0340b850c14faa4f91e9ea673ca · staff_tasks_private.withdrawal_sync_report 577ba3f3c9f2c429b051b8656a660cb0 · withdrawal_report_refund_note dce627cbb631b2160ebd8d74b7a46384 ·
 --     decide_withdrawal_report_refund 7da06d12497b76d8d11fd846d5d31e43 · withdrawal_report_refund_complete_guard 690c049376af96d280680c168c20199c · withdrawal_report_refund_pending 8950ddbc8a25c4229996235e12a2593e ·
 --     staff_tasks_private.tg_refund_task 25ac92f780f3741fd98f82a8d6eeee5f · withdrawal_report_refunds_on_cancel bc3ed5062ec278a6f015635c7d098e4d
 -- 적용할 때: 기본 search_path 세션(운영 기본값 = 사용자 이름 스키마 · public · extensions)에서 아래 begin…commit 그대로 실행한다
 --   (빈 search_path면 지문이 달라져 멈춘다 — 안전한 쪽 실패). 중간에 실패하면 ROLLBACK 하거나 연결을 닫는다.
--- 되돌리기 = scripts/_oneoff/revert-s2_0036-withdrawal-refund-decision-gate.sql(앱을 먼저 되돌린 뒤 · 진행 중 '환불 결정 대기'나 승인이 끝났는데 처리 안 된 묶음이 있으면 멈춘다).
+-- 되돌리기 = scripts/_oneoff/revert-s2_0037-withdrawal-refund-decision-gate.sql(앱을 먼저 되돌린 뒤 · 진행 중 '환불 결정 대기'나 승인이 끝났는데 처리 안 된 묶음이 있으면 멈춘다).
 -- 🔴 한 번만 적용한다(다시 돌리면 지문 검사로 멈춘다).
 -- ── 리뷰 수리 r2(2026-11-09 · DB 리뷰 r1 D-1~D-13 · 화면 리뷰 r1 B1·I5·I6) ─────────────────────────────────────────────
 --   · 줄 키 겹침 규칙 한 벌(withdrawal_refund_keys_overlap · 앱 refund-keys.ts lineIdsOverlap과 같은 사례표): all ↔ 모두 · 미배분(unalloc) ↔ 실제 줄 모두 ·
@@ -112,7 +114,7 @@
 --     수정(form_data·title)은 세션이면 담당 데스크(재직)·원장(분류·고정·직원 연쇄는 막지 않음) · 완료일자 비우기 = 원장만(D-13) · 상한(총 환불금액 숫자 ≤ '환불' 결정 paid_net 합 —
 --     관리 키 포함 · 모르면 금액 칸 변경만 거절) · 오류코드 23514(42501이면 강사뷰 쓰기가 관리 키로 다시 써 우회한다).
 --   · 결정 표 service_role delete·truncate·references·trigger 회수(Supabase 표 기본 권한 · D-5) · 관문 준비 표식 함수 withdrawal_refund_gate_ready(되돌리기가 지운다 · D-7).
---   · 🔴 s2_0036 전에 이어진 요청서(결정 행 없음)는 C.3·상한 밖이다 — 운영 0건(2026-11-09 읽기 전용 · 연결 0). 적용 직전 `select count(*) from withdrawal_report_refunds`가 0인지 다시 본다.
+--   · 🔴 s2_0037 전에 이어진 요청서(결정 행 없음)는 C.3·상한 밖이다 — 운영 0건(2026-11-09 읽기 전용 · 연결 0). 적용 직전 `select count(*) from withdrawal_report_refunds`가 0인지 다시 본다.
 -- ── 리뷰 수리 r3(2026-11-09 · DB 재리뷰 r2 R-1~R-9 · 화면 재리뷰 r2 R2-I2 · 원장 결정 '늘어난 몫은 따로 환불') ──────────────────
 --   · 같은 묶음이어도 살아 있는 다른 요청서가 **같은 키**를 담았으면 attach가 거절(R-1 — r2에서 같은 묶음을 통째로 빼 이중 환불이 됐다 · 형제·과목 몫은 그대로 둔다).
 --   · 총 환불금액 = `숫자(쉼표 세 자리)` + 선택 `원`만(앞뒤 빈칸 허용 · 앱 parseWonStrict와 같은 규칙) — '300만원'·'1.5백만원'·'삼백만 원'은 못 읽음 → 금액 칸 변경 거절(R-2).
@@ -146,7 +148,7 @@ begin
   for fn in select jsonb_object_keys(want) loop
     select md5(regexp_replace(pg_get_functiondef(fn::regprocedure), '[[:space:]]+', '', 'g')) into got;
     if got is distinct from want->>fn then
-      raise exception 's2_0036: % 의 운영 정의가 기준(s2_0030 적용 뒤 · 2026-11-06)과 다릅니다(%). s2_0030을 먼저 적용했는지 보고, 바뀐 내용을 이 파일에 옮긴 뒤 지문을 갱신하세요.', fn, got;
+      raise exception 's2_0037: % 의 운영 정의가 기준(s2_0030 적용 뒤 · 2026-11-06)과 다릅니다(%). s2_0030을 먼저 적용했는지 보고, 바뀐 내용을 이 파일에 옮긴 뒤 지문을 갱신하세요.', fn, got;
     end if;
   end loop;
 end $$;
@@ -159,7 +161,7 @@ alter table public.withdrawal_report_groups
   add column if not exists refund_hold_report uuid,
   add column if not exists refund_undecided text[] not null default '{}',
   add column if not exists refund_checked_at timestamptz;
-comment on column public.withdrawal_report_groups.refund_hold is '환불 결정 대기(s2_0036) — 원장이 결정하지 않은 환불 가능 청구 줄이 있어 퇴원·수강종료를 처리하지 않고 기다린다.';
+comment on column public.withdrawal_report_groups.refund_hold is '환불 결정 대기(s2_0037) — 원장이 결정하지 않은 환불 가능 청구 줄이 있어 퇴원·수강종료를 처리하지 않고 기다린다.';
 
 -- ── 1b) 앱과 같은 규칙 한 벌(리뷰 r2) — 앱 파일 이름을 함께 적는다(바꿀 땐 같이) ───────────────────────────────────────
 -- 완료일자 '빈칸' = 앱 String.prototype.trim()이 지우는 글자만 있음(공백·탭·줄바꿈·NBSP·전각 공백 등 · 앱 refund.ts·refund-steps.ts·수납 저장 — D-11).
@@ -230,7 +232,7 @@ create table if not exists public.withdrawal_report_refund_decisions (
   unique (group_id, line_key),
   check ((decision = 'refund') = (document_id is not null))
 );
-comment on table public.withdrawal_report_refund_decisions is '퇴원보고서 원장 환불 결정(s2_0036) — 줄 키(<청구 id>#<줄 식별값>)마다. 결정 뒤 새로 생긴 줄 · 요청서가 지워진 줄 · 본 뒤 낸 돈이 는 줄은 다시 결정 안 됨.';
+comment on table public.withdrawal_report_refund_decisions is '퇴원보고서 원장 환불 결정(s2_0037) — 줄 키(<청구 id>#<줄 식별값>)마다. 결정 뒤 새로 생긴 줄 · 요청서가 지워진 줄 · 본 뒤 낸 돈이 는 줄은 다시 결정 안 됨.';
 alter table public.withdrawal_report_refund_decisions add column if not exists paid_net numeric;
 alter table public.withdrawal_report_refund_decisions add column if not exists paid_seen numeric;
 alter table public.withdrawal_report_refund_decisions add column if not exists supersedes uuid[] not null default '{}';
@@ -404,7 +406,7 @@ declare
  r public.withdrawal_reports; g public.withdrawal_report_groups; actor public.users; snap jsonb;
  gid uuid; prior text; recipient uuid; recipients uuid[]:='{}'; headline text; comment_text text;
  field text; child public.withdrawal_reports; valid boolean; targets uuid[]; affected integer; cmp_subjects text[]; all_approved boolean; mgrs uuid[];
- -- 결정하지 않은 환불 가능 줄 수(s2_0036 · withdrawal_report_refund_note) — null = 앱이 환불 확인 값을 넘기지 않음(모름 → 처리하지 않는다).
+ -- 결정하지 않은 환불 가능 줄 수(s2_0037 · withdrawal_report_refund_note) — null = 앱이 환불 확인 값을 넘기지 않음(모름 → 처리하지 않는다).
  refund_open integer;
  today date:=(now() at time zone 'Asia/Seoul')::date;
 begin
@@ -470,7 +472,7 @@ begin
   end if;
  elsif p_action='cancel' then
   if ((p_actor is distinct from g.requested_by) and not exists(select 1 from public.users u where u.tenant_id=p_tenant and u.id=p_actor and u.status='active' and u.system_role::text='master')) or g.status in ('completed','canceled') then raise exception '이 요청을 취소할 수 없습니다.'; end if;
-  -- 취소 사유(원장 2026-11-06 · s2_0036) — 있으면 앞뒤 공백을 빼고 1~500자(공백·줄바꿈·탭만이면 거절 · 리뷰 #11) · 묶음의 모든 보고서 이력 'cancel' 줄에 같은 사유가 남는다(아래 반복).
+  -- 취소 사유(원장 2026-11-06 · s2_0037) — 있으면 앞뒤 공백을 빼고 1~500자(공백·줄바꿈·탭만이면 거절 · 리뷰 #11) · 묶음의 모든 보고서 이력 'cancel' 줄에 같은 사유가 남는다(아래 반복).
   -- 없으면(옛 앱) 종전처럼 사유 없이 취소한다 — 필수 여부는 앱이 정한다.
   if p_payload->>'comment' is not null then
    comment_text:=btrim(p_payload->>'comment');
@@ -481,21 +483,21 @@ begin
   perform public.withdrawal_report_refunds_on_cancel(p_tenant,g.id,p_actor,g.snapshot->>'name');
  elsif p_action='apply' then
   if (p_actor is not null and not (r.direct and p_actor=g.requested_by)) or g.status<>'scheduled' or g.effective_date>today then raise exception '처리일이 된 승인 보고서만 처리할 수 있습니다.'; end if;
-  -- 환불 결정(s2_0036 · 원장 2026-11-06) — 앱이 같은 요청에서 계산한 환불 가능 줄(refundCheck)로 '환불 결정 대기'를 맞춘다.
+  -- 환불 결정(s2_0037 · 원장 2026-11-06) — 앱이 같은 요청에서 계산한 환불 가능 줄(refundCheck)로 '환불 결정 대기'를 맞춘다.
   refund_open:=public.withdrawal_report_refund_note(p_tenant,g.id,p_payload->'refundCheck',p_actor);
   -- 데스크 환불이 남았거나 · 원장이 결정하지 않은 환불 가능 줄이 있거나 · 환불 확인 값이 없으면(옛 앱 · 계산 빠뜨림) 처리일이 돼도 미룬다 —
   -- 오류 없이 그대로 돌려준다(앱 cron이 '미룸'으로 세고 다음 날 다시 · 원장 결정·환불 완료 때 release).
   if public.withdrawal_report_refund_pending(g.id) or refund_open is distinct from 0 then return r; end if;
  elsif p_action='release' then
   if public.withdrawal_report_refund_pending(g.id) or not ((g.status='pending' and not exists(select 1 from public.withdrawal_reports q where q.group_id=g.id and q.status<>'approved')) or (g.status='scheduled' and g.effective_date<=today)) then raise exception '데스크 환불이 끝난 승인 완료 보고서만 처리할 수 있습니다.'; end if;
-  -- 환불 결정(s2_0036) — 결정하지 않은 환불 가능 줄이 있거나 환불 확인 값이 없으면(직접 호출 포함) 처리하지 않고 그대로 돌려준다(표시는 남는다).
+  -- 환불 결정(s2_0037) — 결정하지 않은 환불 가능 줄이 있거나 환불 확인 값이 없으면(직접 호출 포함) 처리하지 않고 그대로 돌려준다(표시는 남는다).
   refund_open:=public.withdrawal_report_refund_note(p_tenant,g.id,p_payload->'refundCheck',p_actor);
   if refund_open is distinct from 0 then return r; end if;
  end if;
  update public.withdrawal_reports set body=r.body,status=r.status,manager_decisions=r.manager_decisions,director_decisions=r.director_decisions,
   manager_approved_at=r.manager_approved_at,director_approved_at=r.director_approved_at,last_comment=r.last_comment,revision=revision+1,updated_at=now() where id=r.id;
  all_approved:=r.status='approved' and p_action in ('approve','submit') and not exists(select 1 from public.withdrawal_reports where group_id=g.id and status<>'approved');
- -- 환불 결정(s2_0036) — 제출·승인 때 앱이 넘긴 환불 확인으로 '환불 결정 대기'를 맞춘다(원장에게 미리 알린다). 전원 승인이면 이 값으로 처리 여부를 정한다.
+ -- 환불 결정(s2_0037) — 제출·승인 때 앱이 넘긴 환불 확인으로 '환불 결정 대기'를 맞춘다(원장에게 미리 알린다). 전원 승인이면 이 값으로 처리 여부를 정한다.
  if p_action in ('submit','approve') and g.status='pending' then refund_open:=public.withdrawal_report_refund_note(p_tenant,g.id,p_payload->'refundCheck',p_actor); end if;
  if all_approved and (public.withdrawal_report_refund_pending(g.id) or refund_open is distinct from 0) then
   -- 승인은 모두 끝났고 환불 결정·데스크 환불이 남았다 — 묶음은 기다린다(원장 2026-11-03 '데스크 환불 요청' · 2026-11-06 '환불 결정 대기').
@@ -546,7 +548,7 @@ begin
  if g.status in ('scheduled','completed','blocked','canceled') then
   -- Each child keeps a complete audit trail and its own notification link.
   for child in select * from public.withdrawal_reports where group_id=g.id order by id loop
-   -- 취소 사유는 이력에만 남긴다(last_comment = 반려 사유·재검토 안내 칸 — 상세의 안내 상자로 읽히지 않게 · s2_0036).
+   -- 취소 사유는 이력에만 남긴다(last_comment = 반려 사유·재검토 안내 칸 — 상세의 안내 상자로 읽히지 않게 · s2_0037).
    update public.withdrawal_reports set status=g.status,applied_at=g.applied_at,last_comment=coalesce(case when p_action='cancel' then null else comment_text end,last_comment),revision=revision+1,updated_at=now() where id=child.id;
    insert into public.withdrawal_report_events(tenant_id,report_id,actor_id,action,from_status,to_status,comment) values(p_tenant,child.id,p_actor,p_action,child.status,g.status,comment_text);
    -- 받는 사람 = 요청자 · 그 보고서 작성 강사 · **그 보고서의** 승인 관리자(묶음 합집합이면 다른 과목 관리자에게 무관한 링크가 간다) · 옛 원장.
@@ -554,7 +556,7 @@ begin
     insert into public.notifications(tenant_id,recipient_id,type,title,body,link,actor_id) values(p_tenant,recipient,'approval_decided',headline,g.snapshot->>'name'||' · '||g.effective_date::text,'/withdrawal-reports/'||child.id::text,p_actor);
    end loop;
   end loop;
-  -- 끝난 묶음(처리 예약 밖 · 처리 완료·재검토·취소)엔 기다릴 환불 결정이 없다 — 표시를 내린다(s2_0036).
+  -- 끝난 묶음(처리 예약 밖 · 처리 완료·재검토·취소)엔 기다릴 환불 결정이 없다 — 표시를 내린다(s2_0037).
   update public.withdrawal_report_groups set status=g.status,applied_at=g.applied_at,refund_hold=refund_hold and g.status in ('pending','scheduled') where id=g.id;
  else
   -- 자동 저장(원장 2026-11-05 "실시간으로 입력되고 저장되게") — 마지막 이력이 같은 사람의 10분 안 '임시 저장'이면 새 줄을 넣지 않는다
@@ -585,7 +587,7 @@ begin
   select pg_get_functiondef('public.transition_withdrawal_report_v1(uuid,uuid,uuid,text,jsonb)'::regprocedure) into definition;
   for i in 1 .. array_length(pairs, 1) / 2 loop
     hits := (length(definition) - length(replace(definition, pairs[2*i-1], ''))) / length(pairs[2*i-1]);
-    if hits <> 1 then raise exception 's2_0036: _v1의 바꿀 줄 %번이 하나가 아닙니다(%건)', i, hits; end if;
+    if hits <> 1 then raise exception 's2_0037: _v1의 바꿀 줄 %번이 하나가 아닙니다(%건)', i, hits; end if;
     definition := replace(definition, pairs[2*i-1], pairs[2*i]);
   end loop;
   execute definition;
@@ -631,7 +633,7 @@ begin
   select pg_get_functiondef('staff_tasks_private.withdrawal_sync_report(uuid)'::regprocedure) into definition;
   for i in 1 .. array_length(pairs, 1) / 2 loop
     hits := (length(definition) - length(replace(definition, pairs[2*i-1], ''))) / length(pairs[2*i-1]);
-    if hits <> 1 then raise exception 's2_0036: 할 일 동기화의 바꿀 줄 %번이 하나가 아닙니다(%건)', i, hits; end if;
+    if hits <> 1 then raise exception 's2_0037: 할 일 동기화의 바꿀 줄 %번이 하나가 아닙니다(%건)', i, hits; end if;
     definition := replace(definition, pairs[2*i-1], pairs[2*i]);
   end loop;
   execute definition;
@@ -1042,13 +1044,13 @@ begin
   select pg_get_functiondef('staff_tasks_private.tg_refund_task()'::regprocedure) into definition;
   for i in 1 .. array_length(pairs, 1) / 2 loop
     hits := (length(definition) - length(replace(definition, pairs[2*i-1], ''))) / length(pairs[2*i-1]);
-    if hits <> 1 then raise exception 's2_0036: 할 일 닫기의 바꿀 조건 %번이 하나가 아닙니다(%건)', i, hits; end if;
+    if hits <> 1 then raise exception 's2_0037: 할 일 닫기의 바꿀 조건 %번이 하나가 아닙니다(%건)', i, hits; end if;
     definition := replace(definition, pairs[2*i-1], pairs[2*i]);
   end loop;
   execute definition;
   select pg_get_functiondef('public.withdrawal_report_refunds_on_cancel(uuid,uuid,uuid,text)'::regprocedure) into definition;
   hits := (length(definition) - length(replace(definition, cancel_old, ''))) / length(cancel_old);
-  if hits <> 1 then raise exception 's2_0036: 취소 알림의 바꿀 조건이 하나가 아닙니다(%건)', hits; end if;
+  if hits <> 1 then raise exception 's2_0037: 취소 알림의 바꿀 조건이 하나가 아닙니다(%건)', hits; end if;
   execute replace(definition, cancel_old, cancel_new);
 end $$;
 
@@ -1070,47 +1072,47 @@ begin
     'public.withdrawal_refund_later_fingerprint(uuid,uuid,text)', 'public.withdrawal_refund_gate_ready()',
     'public.withdrawal_refund_record_none(uuid,uuid,uuid,text,numeric,uuid,uuid)'
   ] loop
-    if not has_function_privilege('service_role', f, 'execute') then raise exception 's2_0036 사후 확인: % — service_role이 부를 수 없습니다(함정 #155).', f; end if;
+    if not has_function_privilege('service_role', f, 'execute') then raise exception 's2_0037 사후 확인: % — service_role이 부를 수 없습니다(함정 #155).', f; end if;
     if has_function_privilege('anon', f, 'execute') or has_function_privilege('authenticated', f, 'execute') then
-      raise exception 's2_0036 사후 확인: % — anon·authenticated가 부를 수 있습니다.', f;
+      raise exception 's2_0037 사후 확인: % — anon·authenticated가 부를 수 있습니다.', f;
     end if;
   end loop;
   if to_regprocedure('public.attach_withdrawal_report_refund(uuid,uuid,uuid,uuid,uuid,boolean,jsonb,jsonb)') is not null then
-    raise exception 's2_0036 사후 확인: 옛 8인자 연결 함수가 남아 있습니다.';
+    raise exception 's2_0037 사후 확인: 옛 8인자 연결 함수가 남아 있습니다.';
   end if;
   if has_function_privilege('anon', 'public.withdrawal_report_refund_complete_guard()', 'execute') or has_function_privilege('authenticated', 'public.withdrawal_report_refund_complete_guard()', 'execute') then
-    raise exception 's2_0036 사후 확인: 완료일자 트리거 함수를 anon·authenticated가 부를 수 있습니다.';
+    raise exception 's2_0037 사후 확인: 완료일자 트리거 함수를 anon·authenticated가 부를 수 있습니다.';
   end if;
   if has_function_privilege('anon', 'staff_tasks_private.tg_refund_task()', 'execute') or has_function_privilege('authenticated', 'staff_tasks_private.tg_refund_task()', 'execute') then
-    raise exception 's2_0036 사후 확인: 할 일 닫기 트리거 함수를 anon·authenticated가 부를 수 있습니다.';
+    raise exception 's2_0037 사후 확인: 할 일 닫기 트리거 함수를 anon·authenticated가 부를 수 있습니다.';
   end if;
   if to_regprocedure('public.decide_withdrawal_report_refund(uuid,uuid,uuid,jsonb,jsonb)') is not null then
-    raise exception 's2_0036 사후 확인: 옛 5인자 환불 없음 함수가 남아 있습니다.';
+    raise exception 's2_0037 사후 확인: 옛 5인자 환불 없음 함수가 남아 있습니다.';
   end if;
   -- 연결 표 — service_role은 select·insert만(리뷰 r3 R-6) · anon·authenticated는 아무것도.
   foreach p in array array['select', 'insert'] loop
-    if not has_table_privilege('service_role', 'public.withdrawal_report_refunds', p) then raise exception 's2_0036 사후 확인: 연결 표 service_role % 권한이 없습니다.', p; end if;
+    if not has_table_privilege('service_role', 'public.withdrawal_report_refunds', p) then raise exception 's2_0037 사후 확인: 연결 표 service_role % 권한이 없습니다.', p; end if;
   end loop;
   foreach p in array array['update', 'delete', 'truncate', 'references', 'trigger'] loop
-    if has_table_privilege('service_role', 'public.withdrawal_report_refunds', p) then raise exception 's2_0036 사후 확인: 연결 표 service_role에 % 권한이 남았습니다(리뷰 r3 R-6).', p; end if;
+    if has_table_privilege('service_role', 'public.withdrawal_report_refunds', p) then raise exception 's2_0037 사후 확인: 연결 표 service_role에 % 권한이 남았습니다(리뷰 r3 R-6).', p; end if;
     if has_table_privilege('anon', 'public.withdrawal_report_refunds', p) or has_table_privilege('authenticated', 'public.withdrawal_report_refunds', p) then
-      raise exception 's2_0036 사후 확인: 연결 표를 anon·authenticated가 % 할 수 있습니다.', p;
+      raise exception 's2_0037 사후 확인: 연결 표를 anon·authenticated가 % 할 수 있습니다.', p;
     end if;
   end loop;
   -- 트리거 사건 비트: INSERT 4 · DELETE 8 · UPDATE 16 — 셋 다(삭제 막기 · 리뷰 r2 B1).
   if not exists(select 1 from pg_trigger where tgname = 'withdrawal_report_refund_complete_guard' and tgrelid = 'public.academy_documents'::regclass and (tgtype::int & 28) = 28) then
-    raise exception 's2_0036 사후 확인: 완료일자 트리거가 없거나 INSERT·UPDATE·DELETE를 다 받지 않습니다.';
+    raise exception 's2_0037 사후 확인: 완료일자 트리거가 없거나 INSERT·UPDATE·DELETE를 다 받지 않습니다.';
   end if;
   -- 결정 표 — service_role은 select·insert·update만(지우기·비우기·참조·트리거 없음 · Supabase 기본 권한을 거뒀는지) · anon·authenticated는 아무것도.
   foreach p in array array['select', 'insert', 'update'] loop
-    if not has_table_privilege('service_role', 'public.withdrawal_report_refund_decisions', p) then raise exception 's2_0036 사후 확인: 결정 표 service_role % 권한이 없습니다.', p; end if;
+    if not has_table_privilege('service_role', 'public.withdrawal_report_refund_decisions', p) then raise exception 's2_0037 사후 확인: 결정 표 service_role % 권한이 없습니다.', p; end if;
   end loop;
   foreach p in array array['delete', 'truncate', 'references', 'trigger'] loop
-    if has_table_privilege('service_role', 'public.withdrawal_report_refund_decisions', p) then raise exception 's2_0036 사후 확인: 결정 표 service_role에 % 권한이 남았습니다(리뷰 r2 D-5).', p; end if;
+    if has_table_privilege('service_role', 'public.withdrawal_report_refund_decisions', p) then raise exception 's2_0037 사후 확인: 결정 표 service_role에 % 권한이 남았습니다(리뷰 r2 D-5).', p; end if;
   end loop;
   foreach p in array array['select', 'insert', 'update', 'delete', 'truncate'] loop
     if has_table_privilege('anon', 'public.withdrawal_report_refund_decisions', p) or has_table_privilege('authenticated', 'public.withdrawal_report_refund_decisions', p) then
-      raise exception 's2_0036 사후 확인: 결정 표를 anon·authenticated가 % 할 수 있습니다.', p;
+      raise exception 's2_0037 사후 확인: 결정 표를 anon·authenticated가 % 할 수 있습니다.', p;
     end if;
   end loop;
 end $$;

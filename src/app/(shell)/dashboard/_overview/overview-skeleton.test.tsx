@@ -8,6 +8,8 @@ import { MENU_KEYS } from "@/lib/permissions";
 import DashboardLoading from "../loading";
 import { OverviewDashboard } from "./overview-server";
 import { OverviewSkeleton } from "./overview-skeleton";
+import { NEW_SHAPE } from "./new-shape-flag";
+import { InstrumentsSkeleton } from "../_instruments/instruments-skeleton";
 
 const mocks = vi.hoisted(() => ({
   loadOverview: vi.fn(),
@@ -45,18 +47,13 @@ const html = (el: ReactElement) => {
 };
 
 describe("운영실 로딩 뼈대 — loading은 머리·KPI 띠까지, 본문은 배치대로", () => {
-  it("loading.tsx = 확정 디자인 표식을 단 머리 + KPI 아홉 칸뿐(본문·보조 줄 없음)", () => {
-    const root = html(<DashboardLoading />);
-    expect(root.querySelector('[data-overview="root"] > [data-overview="board"] > [data-overview="header"]')).not.toBeNull();
-    expect(root.querySelectorAll('[data-overview="kpis"] > [data-overview="kpi"]')).toHaveLength(9);
-    // 몸통은 실물처럼 button — 로딩 중엔 포커스에서 뺀다.
-    for (const b of root.querySelectorAll('[data-overview="kpi"] > button')) {
-      expect(b.getAttribute("tabindex")).toBe("-1");
-      expect(b.hasAttribute("disabled")).toBe(true);
-    }
-    expect(root.querySelector('[data-kpi="최근 결석"] [data-overview="kpi-value"]')).not.toBeNull();
-    expect(root.querySelector('[data-overview="grid"], [data-overview="panel"], [data-overview="free-grid"]')).toBeNull();
-    expect(root.textContent).not.toMatch(/EiE|인재원|2026\.|9월/);
+  // 새 대시보드 모양이 운영실 기본(NEW_SHAPE · 원장 2026-11-09) — loading은 처음부터 새 모양 뼈대(옛 색이 한 번 비치지 않게).
+  it("loading.tsx = 새 대시보드(계기판) 뼈대 그대로", () => {
+    expect(NEW_SHAPE).toBe(true);
+    const markup = renderToStaticMarkup(<DashboardLoading />);
+    expect(markup).toBe(renderToStaticMarkup(<InstrumentsSkeleton />));
+    expect(markup.length).toBeGreaterThan(0);
+    expect(html(<DashboardLoading />).textContent).not.toMatch(/EiE|인재원|2026\.|9월/);
   });
 
   it("원장 기본(classic) = KPI 띠 + 구역 제목줄(보드 바로 아래 id) + 기본 배치 패널 수", () => {
@@ -143,7 +140,7 @@ describe("OverviewDashboard — 배치를 알면 바로 뼈대, 스냅샷은 Sus
     expect(isValidElement(el) && el.type).toBe(Suspense);
     const fallback = (el as ReactElement<{ fallback: ReactElement<{ view: ResolvedView; design: string }> }>).props.fallback;
     expect(fallback.type).toBe(OverviewSkeleton);
-    expect(fallback.props).toMatchObject({ view, design: "standard" });
+    expect(fallback.props).toMatchObject({ view, design: NEW_SHAPE ? "instruments" : "standard" });
   });
 
   it("스냅샷이 배치를 알리지 않고 끝나도(대체 경로) 그 스냅샷의 view로 fallback을 낸다", async () => {

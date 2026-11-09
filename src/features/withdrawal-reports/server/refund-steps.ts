@@ -65,7 +65,7 @@ export type RefundLink = {
 
 /**
  * 이 환불 요청서가 퇴원보고서에 이어졌나(s2_0025 `withdrawal_report_refunds`) — 이어졌으면 데스크 담당 · 대체 여부 · 상한. 이어지지 않았거나 표가 없는 DB면 null.
- * 원장 2026-11-06·11-09: 이어진 요청서의 환불완료일자·수정·삭제는 그 데스크 담당(재직)과 원장급만(`linked-request.ts` · DB 트리거 s2_0036). 못 읽으면 던진다.
+ * 원장 2026-11-06·11-09: 이어진 요청서의 환불완료일자·수정·삭제는 그 데스크 담당(재직)과 원장급만(`linked-request.ts` · DB 트리거 s2_0037). 못 읽으면 던진다.
  */
 export async function loadRefundLink(tenantId: string, documentId: string): Promise<RefundLink | null> {
   const db = createAdminClient();

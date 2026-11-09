@@ -1,15 +1,23 @@
 "use client";
-import { useState } from "react";
-import { CONTRIBUTION_TIERS, type RelativeMetric, type RelativeResult, type RelativeScope, type TierName } from "../model/relative-score";
+import { useState, type CSSProperties } from "react";
+import { CONTRIBUTION_TIERS, tierStars, type RelativeMetric, type RelativeResult, type RelativeScope, type TierName } from "../model/relative-score";
 import { numberText } from "./presentation";
+import { OverlayGuide } from "@/components/overlay-guide";
 import styles from "./relative-score.module.css";
 
-const tierClasses: Record<TierName, string> = { "5등급": styles.iron, "4등급": styles.bronze, "3등급": styles.silver, "2등급": styles.gold, "1등급": styles.platinum };
+const tierClasses: Record<TierName, string> = { "1등급": styles.platinum, "2등급": styles.platinum, "3등급": styles.gold, "4등급": styles.gold, "5등급": styles.silver, "6등급": styles.silver, "7등급": styles.bronze, "8등급": styles.bronze, "9등급": styles.iron };
+/** 별 다섯 칸(반 개 포함). 0개 = 등급 보류. 읽는 이름은 'N등급 · 별 M개'. */
+export function TierStars({ tier, size = "md" }: { tier: TierName | null; size?: "md" | "lg" }) {
+  const stars = tierStars(tier);
+  return <span className={`${styles.stars} ${size === "lg" ? styles.starsLg : ""}`} role="img" aria-label={tier ? `${tier} · 별 ${stars}개` : "등급 보류 · 별 0개"}>
+    {[0, 1, 2, 3, 4].map(i => <span key={i} className={styles.star} style={{ "--fill": `${Math.max(0, Math.min(1, stars - i)) * 100}%` } as CSSProperties} aria-hidden>★</span>)}
+  </span>;
+}
 // Round upward so a value just outside a grade boundary is not displayed inside it.
 const topText = (value: number | null) => value === null ? "상위 비율 —" : `상위 ${numberText(Math.ceil(value * 10 - 1e-9) / 10)}%`;
 export function RelativeScoreBadge({ result }: { result: RelativeResult }) {
   return <span className={styles.badgeWrap}>
-    <span className={`${styles.badge} ${result.tier ? tierClasses[result.tier] : styles.iron}`}>{result.tier ?? "등급 보류"}{result.tier && result.partial > 0 ? " · 잠정" : ""}</span>
+    <span className={`${styles.badge} ${result.tier ? tierClasses[result.tier] : styles.iron}`}><TierStars tier={result.tier} />{result.tier ?? "등급 보류"}</span>
     {result.topPercent !== null && <span className={styles.rankSmall}>{topText(result.topPercent)}</span>}
     <span className={styles.rankSmall}>{result.rank !== null ? `${result.ties > 1 ? "공동 " : ""}${result.rank}위 / ${result.count}명` : "재원생 비교 대상 아님"}</span>
   </span>;
@@ -34,25 +42,32 @@ export function RelativeScore({ options, refreshedAt, periodLabel, error }: {
       <div className={styles.body}>
         <div className={`${styles.level} ${result.tier ? tierClasses[result.tier] : styles.iron}`}>
           <p>{result.partial > 0 ? "확인된 실적 기준 · 잠정 등급" : "로열티 등급"}</p>
+          <TierStars tier={result.tier} size="lg" />
           <strong>{result.tier ?? "등급 보류"}</strong>
           <span>{topText(result.topPercent)}</span>
           <div className={styles.score}>{result.score === null ? "—" : numberText(result.score)}<small> 점</small></div>
           <span>{result.rank === null ? "순위 확인 필요" : `${result.ties > 1 ? "공동 " : ""}${result.rank}위 / ${result.count}명`}</span>
         </div>
         <div className={styles.distribution}>
-          <div className={styles.positionHeading}><h3>실제 최저점에서 최고점 사이</h3><span>1등급이 가장 높습니다</span></div>
-          {result.position !== null && <div className={styles.track} role="img" aria-label={`최저 ${numberText(result.min!)}점, 이 학생 ${numberText(result.score!)}점, 최고 ${numberText(result.max!)}점`}>
+          
+          {result.position !== null && <div className={styles.track} role="img" aria-label={`최저점 ${numberText(result.min!)}점, 이 학생 ${numberText(result.score!)}점, 최고 ${numberText(result.max!)}점`}>
             <div className={styles.fill} style={{ width: `${result.position}%` }} />
             <span className={styles.marker} style={{ left: `${Math.max(2, Math.min(98, result.position))}%` }}><b>{numberText(result.score!)}점</b><i /></span>
+            {result.averages.map(a => { const span = result.max! - result.min!; const at = span > 0 ? (a.value - result.min!) / span * 100 : 50;
+              return <span key={a.key} className={`${styles.avg} ${styles[`avg_${a.key}`] ?? ""}`} style={{ left: `${Math.max(1, Math.min(99, at))}%` }} data-tip={`${a.label} ${numberText(a.value)}점 · ${a.count}명`} aria-hidden><i /></span>; })}
           </div>}
-          <dl className={styles.stats}>{[["실제 최저", result.min], ["중앙값", result.median], ["실제 최고", result.max]].map(([label, value]) => <div key={String(label)}><dt>{label}</dt><dd>{typeof value === "number" ? `${numberText(value)}점` : "—"}</dd></div>)}</dl>
-          <div className={styles.tiers} aria-label="상위 비율별 5등급">{CONTRIBUTION_TIERS.map(t => <div key={t.name} className={`${tierClasses[t.name]} ${result.tier === t.name ? styles.selected : ""}`} aria-current={result.tier === t.name ? "step" : undefined}><strong>{t.name}</strong><small>{t.range}</small></div>)}</div>
-          <p className={styles.explanation}>상위 비율이 작을수록 높은 순위입니다. 1등급은 상위 20% 이내이며, 위 막대는 실제 점수 간격을 보여줍니다.</p>
+          {result.averages.length ? <ul className={styles.avgLegend} aria-label="비슷한 학생 평균과 내 위치">
+            {result.averages.map(a => <li key={a.key}><i className={`${styles.avgDot} ${styles[`avg_${a.key}`] ?? ""}`} aria-hidden /><span>{a.label}</span><b>{numberText(a.value)}점</b>
+              {result.score !== null ? <em className={result.score >= a.value ? styles.above : styles.below}>{result.score >= a.value ? "+" : "−"}{numberText(Math.abs(Math.round((result.score - a.value) * 10) / 10))}</em> : null}</li>)}
+          </ul> : null}
+          <dl className={styles.stats}>{[["최저점", result.min], ["중앙값", result.median], ["최고점", result.max]].map(([label, value]) => <div key={String(label)}><dt>{label}</dt><dd>{typeof value === "number" ? `${numberText(value)}점` : "—"}</dd></div>)}</dl>
+          <div className={styles.tiers} aria-label="상위 비율별 9등급">{[...CONTRIBUTION_TIERS].reverse().map(t => <div key={t.name} className={`${tierClasses[t.name]} ${result.tier === t.name ? styles.selected : ""}`} aria-current={result.tier === t.name ? "step" : undefined}><TierStars tier={t.name} /><strong>{t.name}</strong><small>{t.range}</small></div>)}</div>
+          <p className={styles.explanation}>상위 비율이 작을수록 높은 순위입니다. 1등급(별 5개)은 상위 4% 이내, 9등급(별 1개)은 96% 초과이며, 위 막대는 실제 점수 간격을 보여줍니다.</p>
         </div>
       </div>
       {result.reason && <p role="status" className={styles.notice}>{result.reason}</p>}
       {(result.partial > 0 || result.missing > 0) && <p className={styles.notice}>미확인 항목이 있는 {result.partial}명은 확인된 실적만으로 잠정 비교합니다. 미집계 {result.missing}명은 0점으로 넣지 않고 비교에서 제외합니다.</p>}
-      <details className={styles.method}><summary>등급 기준과 비교 시 유의점</summary><p>상위 비율은 순위 ÷ 집계 인원 × 100으로 계산합니다. 소수 둘째 자리까지 같은 점수는 공동 순위·동일 등급이며, 비율 계산에는 동점 구간의 평균 순위를 사용합니다. 예를 들어 공동 1위가 2명이면 비율은 1.5위로 계산합니다. 표시 비율은 소수 첫째 자리까지 올림하며 등급은 올림 전 값으로 정합니다. 비교 인원이 5명 미만이거나 전원 동점이면 등급을 보류합니다.</p><p>로열티 점수에는 현재 가족 가점이 포함됩니다. 활동 누적은 오래 다닌 학생에게 유리합니다. 가족 가점을 제외한 최근 활동은 ‘최근 12개월’, 비슷한 수강 기간끼리는 ‘비슷한 재원기간’으로 확인하세요. 재원기간은 유효한 수업료 청구가 있는 달 수이며, 최근 12개월에도 이번 달 집계분과 정정이 포함됩니다.</p><p>현재 배점에 따른 운영·학습 참여 지표이며, 학업 성취도나 학생의 가치를 평가하는 등급은 아닙니다. 실제 최고점은 비교 집단의 관측값이며 고정 만점은 아닙니다.</p></details>
+      <OverlayGuide className={styles.method} label="등급 기준과 비교 시 유의점"><p>상위 비율은 순위 ÷ 집계 인원 × 100으로 계산합니다. 소수 둘째 자리까지 같은 점수는 공동 순위·동일 등급이며, 비율 계산에는 동점 구간의 평균 순위를 사용합니다. 예를 들어 공동 1위가 2명이면 비율은 1.5위로 계산합니다. 표시 비율은 소수 첫째 자리까지 올림하며 등급은 올림 전 값으로 정합니다. 비교 인원이 5명 미만이거나 전원 동점이면 등급을 보류합니다.</p><p>로열티 점수에는 현재 가족 가점이 포함됩니다. 활동 누적은 오래 다닌 학생에게 유리합니다. 가족 가점을 제외한 최근 활동은 ‘최근 12개월’, 비슷한 수강 기간끼리는 ‘비슷한 재원기간’으로 확인하세요. 재원기간은 유효한 수업료 청구가 있는 달 수이며, 최근 12개월에도 이번 달 집계분과 정정이 포함됩니다.</p><p>현재 배점에 따른 운영·학습 참여 지표이며, 학업 성취도나 학생의 가치를 평가하는 등급은 아닙니다. 실제 최고점은 비교 집단의 관측값이며 고정 만점은 아닙니다.</p></OverlayGuide>
     </>}
   </section>;
 }

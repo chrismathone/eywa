@@ -47,7 +47,7 @@ export function DemoRosterSwitch({ control }: { control: DemoRosterControl }) {
       <DropdownMenu>
         <DropdownMenuTrigger
           disabled={pending}
-          className="inline-flex min-h-[34px] items-center gap-1 rounded-md border border-[#173e76] bg-[#edf3fa] px-2.5 font-semibold text-[#173e76] disabled:opacity-50"
+          className="inline-flex min-h-[34px] items-center gap-1 rounded-md border border-[#23282c] bg-[#f4f4f1] px-2.5 font-semibold text-[#23282c] disabled:opacity-50"
         >
           {pending ? "바꾸는 중" : current ? `데모 데이터 · ${current.label}` : "데모 데이터"}
           <span aria-hidden>▾</span>

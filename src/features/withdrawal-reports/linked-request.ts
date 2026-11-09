@@ -1,12 +1,12 @@
 /**
  * 퇴원보고서에 **이어진 환불 요청서**(s2_0025 연결 표)의 잠금·상한 — 순수 판정(화면·서버 공용 · server-only 밖).
  * 원장 결정 2026-11-06(완료일자 = 담당 데스크·원장) · 2026-11-09(수정·삭제 = 담당 데스크(재직)·원장 · 완료된 것은 지우지 않음 · 총 환불금액 ≤ 원장 승인 줄 낸 돈 합).
- * DB 트리거(s2_0036 `withdrawal_report_refund_complete_guard`)가 같은 규칙으로 직원 세션 쓰기를 막는다 — 관리 키(강사뷰 재시도 · 서버)는 이 판정이 먼저 막는다.
+ * DB 트리거(s2_0037 `withdrawal_report_refund_complete_guard`)가 같은 규칙으로 직원 세션 쓰기를 막는다 — 관리 키(강사뷰 재시도 · 서버)는 이 판정이 먼저 막는다.
  */
 /**
  * 보고서에 이어진 환불 요청서를 고치거나(모든 칸 — 원장 결정 2026-11-09) 환불완료일자를 넣을 수 있나 — 그 요청서의 **재직 중인** 데스크 담당과 원장급만.
  * 이어지지 않은 요청서(`link` 없음)는 종전대로 수납 쓰기 권한이면 된다. `directorLevel` = 원장 역할 · 강사뷰 아님(`cancelsAsDirector`).
- * DB도 같은 판정으로 직원 세션의 쓰기를 막는다(s2_0036 `withdrawal_report_refund_complete_guard`).
+ * DB도 같은 판정으로 직원 세션의 쓰기를 막는다(s2_0037 `withdrawal_report_refund_complete_guard`).
  */
 export function canEditLinkedCompletion(link: { deskId: string | null; deskActive?: boolean } | null, user: { id: string; directorLevel: boolean }): boolean {
   return !link || user.directorLevel || (!!link.deskId && link.deskId === user.id && link.deskActive !== false);
@@ -93,7 +93,7 @@ export const completionAccountLockReason = (deskName: string | null) =>
 
 /**
  * 이어진 요청서의 환불완료일자 잠금 사유(통과면 null) — **화면 행위자**(강사뷰면 대상 직원 · 강사뷰 = 그 사람)와 **실제 로그인 계정** 둘 다
- * 담당 데스크이거나 원장급이어야 한다(팀장 결정 2026-11-06). DB 트리거(s2_0036)는 세션의 실제 계정을 본다 — 앱이 행위자만 보면 저장이 DB에서
+ * 담당 데스크이거나 원장급이어야 한다(팀장 결정 2026-11-06). DB 트리거(s2_0037)는 세션의 실제 계정을 본다 — 앱이 행위자만 보면 저장이 DB에서
  * 막히거나, 강사뷰 쓰기(`writeSessionFirst`)가 관리 키로 다시 써 트리거를 지나 버린다. 화면 잠금과 저장 액션이 같은 함수를 쓴다.
  */
 export function linkedCompletionLock(

@@ -8,12 +8,12 @@ import { laterInvoicesFor, loadLaterInvoices, refundScopeOf } from "./refund";
 import { orphanSubjects } from "../target-courses";
 
 /**
- * 원장 환불 결정(원장 2026-11-06 · DB s2_0036)의 서버 재료.
+ * 원장 환불 결정(원장 2026-11-06 · DB s2_0037)의 서버 재료.
  * 🔴 처리할 수 있는 요청(제출·승인 · 처리일 apply · 바로 처리 · release)은 **그 요청 안에서** `loadGroupRefundCheck`를 계산해 DB에 넘긴다.
  *    DB는 확인 값이 없으면 처리하지 않는다 — 한 경로가 계산을 빠뜨려도 처리되지 않는 쪽으로 닫힌다.
  */
 type GroupReport = Pick<WithdrawalReport, "id" | "tenant_id" | "student_id" | "effective_date" | "exit_kind" | "subjects" | "snapshot"> & { group_id?: string | null; group_leader?: boolean };
-/** 칸·표가 없는 DB(s2_0036 전)인가 — 그때는 결정·표시 없이(종전 화면) 연다(#95). */
+/** 칸·표가 없는 DB(s2_0037 전)인가 — 그때는 결정·표시 없이(종전 화면) 연다(#95). */
 const missingDecisionSchema = (error: { code?: string; message?: string } | null) => missingReportSchema(error) || error?.code === "42703";
 
 /**
@@ -58,16 +58,16 @@ export async function loadGroupRefundCheck(tenantId: string, groupId: string): P
 }
 
 /**
- * 관문 DB 준비(리뷰 #5) — 새 앱 + 옛 DB(s2_0036 전)면 처리 함수가 확인 값을 모른 채 처리한다(열린 쪽). 제출·승인·바로 처리·release·처리일 cron은
+ * 관문 DB 준비(리뷰 #5) — 새 앱 + 옛 DB(s2_0037 전)면 처리 함수가 확인 값을 모른 채 처리한다(열린 쪽). 제출·승인·바로 처리·release·처리일 cron은
  * 이 값이 false면 부르지 않는다(거절 · 'DB 적용 전'). 함수가 없으면 false · 그 밖의 오류는 던진다(부르는 쪽이 처리하지 않는다).
- * 🔑 판정은 s2_0036이 만들고 되돌리기가 **지우는** 표식 함수(`withdrawal_refund_gate_ready`)로 한다(리뷰 r2 D-7) — 칸(refund_hold)은 되돌려도 남아
+ * 🔑 판정은 s2_0037이 만들고 되돌리기가 **지우는** 표식 함수(`withdrawal_refund_gate_ready`)로 한다(리뷰 r2 D-7) — 칸(refund_hold)은 되돌려도 남아
  *    '새 앱 + 되돌린 DB'에서 참이 되어 확인 값을 옛 처리 함수(확인 값 무시)에 넘겼다.
  */
 export async function refundGateReady(): Promise<boolean> {
   const { data, error } = await createAdminClient().rpc("withdrawal_refund_gate_ready");
   if (!error) return data === true;
   // 운영자가 알아볼 수 있게 서버 로그에만 SQL 번호를 남긴다(화면 글 `REFUND_GATE_NOT_READY`엔 없다 — 리뷰 r2 m13).
-  if (missingDecisionSchema(error)) { console.error("[withdrawal-refund-gate] s2_0036 적용 전이거나 되돌림(관문 표식 함수 withdrawal_refund_gate_ready 없음) — 관문 경로를 막았습니다."); return false; }
+  if (missingDecisionSchema(error)) { console.error("[withdrawal-refund-gate] s2_0037 적용 전이거나 되돌림(관문 표식 함수 withdrawal_refund_gate_ready 없음) — 관문 경로를 막았습니다."); return false; }
   throw new Error(`퇴원보고서 환불 관문 확인 실패: ${error.message}`);
 }
 // 리뷰 r2 m13 — 작성 강사도 보는 글이라 SQL 번호·'관리자'(이 앱에선 승인 관리자) 대신 할 일만. 운영자 확인용 번호는 오류 보고(서버 로그)에 남긴다.
@@ -108,7 +108,7 @@ export async function loadRefundHolds(tenantId: string, groupIds: readonly (stri
 
 /**
  * 상세용 — 묶음의 DB '환불 결정 대기' 표시 한 벌(대기 · 결정할 줄을 보이는 보고서 · 마지막 판정 시각 · 리뷰 r2 (b)). 목록 칩과 같은 칸이다.
- * 칸이 없는 DB(s2_0036 전) · 묶음 없음은 null(모름 — 상세는 어긋남을 말하지 않는다). 그 밖의 오류는 던진다(부르는 쪽이 모름으로 접는다).
+ * 칸이 없는 DB(s2_0037 전) · 묶음 없음은 null(모름 — 상세는 어긋남을 말하지 않는다). 그 밖의 오류는 던진다(부르는 쪽이 모름으로 접는다).
  */
 export async function loadRefundHoldState(tenantId: string, groupId: string): Promise<RefundHoldState | null> {
   const { data, error } = await createAdminClient().from("withdrawal_report_groups").select("refund_hold,refund_hold_report,refund_undecided,refund_checked_at")
@@ -123,7 +123,7 @@ export async function loadRefundHoldState(tenantId: string, groupId: string): Pr
 
 /**
  * 묶음마다 원장 결정 요약(승인 진행의 '✓ 결정한 원장' — 원장 2026-11-06) — 환불 승인이 하나라도 있으면 'refund', 아니면 'none' ·
- * 그 결정을 마지막에 한 사람·시각. 결정이 없는 묶음은 빠진다. 표가 없는 DB(s2_0036 전)는 빈 지도.
+ * 그 결정을 마지막에 한 사람·시각. 결정이 없는 묶음은 빠진다. 표가 없는 DB(s2_0037 전)는 빈 지도.
  */
 export async function loadRefundOutcomes(tenantId: string, groupIds: readonly (string | null | undefined)[]): Promise<Map<string, RefundOutcome>> {
   const ids = [...new Set(groupIds.filter((g): g is string => !!g))];

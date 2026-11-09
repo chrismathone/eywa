@@ -31,34 +31,31 @@ function BlockSkeleton({ cards, height }: { cards: number; height: number }) {
   );
 }
 
+/** 시안: 새 대시보드 모양(핵심 업무 3칸 · 보기 전환 · 오늘의 브리핑 + KPI 6칸 · 현황 필터 · 카드 2열)의 뼈대 — 색도 같은 계기판 톤. */
 export function InstrumentsSkeleton() {
   return (
-    // 바깥 = 실물 `.aywa-board`(컨테이너 aywa) · 안 = `.body`(704·524px 이하에서 여백이 넓어진다).
     <div className="@container/aywa w-full" aria-busy="true" aria-label="학원 전체 현황을 불러오는 중">
-      <div className="mx-auto w-full max-w-[1760px] px-1 pt-1 pb-10 @max-[705px]/aywa:px-[18px] @max-[705px]/aywa:pt-[18px] @max-[705px]/aywa:pb-14 @max-[525px]/aywa:px-3.5 @max-[525px]/aywa:pt-4 @max-[525px]/aywa:pb-[84px]">
-        <div className="mb-3.5 flex items-end justify-between gap-4 @max-[525px]/aywa:block">
-          <div>
-            <span className={`${PULSE} mb-0.5 block h-[18px] w-40`} />
-            <span className={`${PULSE} block h-[34px] w-72`} />
-          </div>
-          <div className="flex items-center gap-3 @max-[525px]/aywa:mt-1.5">
-            <span className={`${PULSE} block h-[30px] w-24`} />
-            <span className={`${PULSE} block h-5 w-36`} />
-            <span className={`${PULSE} block size-8`} />
-          </div>
-        </div>
-        <div className={`border-line bg-card mt-[26px] grid overflow-hidden rounded-[10px] border ${KPI_COLS}`}>
-          {Array.from({ length: 9 }, (_, i) => (
-            <div key={i} className="border-line border-r border-b px-[18px] py-3.5 @max-[705px]/aywa:last:col-span-full">
-              <span className={`${PULSE} block h-5 w-24`} />
-              <span className={`${PULSE} mt-1 block h-[34px] w-20`} />
-              <span className={`${PULSE} mt-1 block h-5 w-40`} />
-            </div>
+      <div className="mx-auto w-full max-w-[1760px] px-1 pt-1 pb-10">
+        <div className="mb-[18px] grid grid-cols-3 gap-3 @max-[651px]/aywa:grid-cols-1">
+          {Array.from({ length: 3 }, (_, i) => (
+            <div key={i} className="border-line bg-card rounded-[10px] border px-4 py-3.5"><span className={`${PULSE} block h-5 w-40`} /><span className={`${PULSE} mt-2 block h-4 w-56`} /></div>
           ))}
         </div>
-        {/* KPI 다음 구역들(확인할 일 · 업무 흐름 · 카드 구역) 자리 — 높이는 흔한 내용 높이의 근삿값. */}
-        <BlockSkeleton cards={3} height={220} />
-        <BlockSkeleton cards={3} height={280} />
+        <div className="mb-3.5 flex items-end justify-between gap-4">
+          <div><span className={`${PULSE} mb-0.5 block h-[18px] w-40`} /><span className={`${PULSE} block h-[30px] w-72`} /></div>
+          <span className={`${PULSE} block h-5 w-36`} />
+        </div>
+        <div className="mb-4 flex items-center gap-4"><span className={`${PULSE} block h-[42px] w-80`} /><span className={`${PULSE} block h-4 w-64`} /></div>
+        <div className="mb-3.5 grid grid-cols-[minmax(300px,1fr)_minmax(0,2fr)] gap-3 @max-[1101px]/aywa:grid-cols-1">
+          <div className="min-h-[180px] animate-pulse rounded-[10px] bg-[#363c41]" />
+          <div className={`border-line bg-card grid overflow-hidden rounded-[10px] border ${KPI_COLS} [grid-template-rows:1fr_1fr]`}>
+            {Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className="border-line border-r border-b px-4 py-3"><span className={`${PULSE} block h-5 w-24`} /><span className={`${PULSE} mt-1 block h-[30px] w-20`} /><span className={`${PULSE} mt-1 block h-4 w-36`} /></div>
+            ))}
+          </div>
+        </div>
+        <div className="border-line bg-card flex items-center gap-4 rounded-[10px] border px-4 py-2.5"><span className={`${PULSE} block h-5 w-28`} /><span className={`${PULSE} block h-8 w-72`} /></div>
+        <BlockSkeleton cards={4} height={260} />
       </div>
     </div>
   );

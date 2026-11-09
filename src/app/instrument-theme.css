@@ -1,0 +1,126 @@
+/*
+ * 시안(dev 전용): 앱 전체 색감 = 새 대시보드(계기판) 색감.
+ * 인재원 로고 차콜 #363c41 · 노랑 #fdb811 · 주의 빨강 #b44832 · 종이색 바탕 #f1f1ed · 흰 카드 · 따뜻한 회색 선.
+ * globals.css 값을 고치지 않고 이 파일 하나가 덮는다(시안을 걷을 때 import 한 줄만 지우면 된다).
+ * 학원별 브랜드색이 셸에 inline으로 주입돼도(`brandColorVars`) 시안에서는 이 색이 이긴다(!important).
+ */
+:root, html body, html body [style*="--primary"] {
+  --primary: #363c41 !important;
+  --primary-foreground: #ffffff !important;
+  --primary-soft: rgba(54, 60, 65, 0.1) !important;
+  --primary-softer: rgba(54, 60, 65, 0.05) !important;
+  --ring: #fdb811 !important;
+
+  --bg-soft: #f4f4f1 !important;
+  --secondary: #f4f4f1 !important;
+  --secondary-foreground: #23282c !important;
+  --muted: #f4f4f1 !important;
+  --muted-foreground: #23282c !important;
+  --accent: rgba(253, 184, 17, 0.16) !important;
+  --accent-foreground: #8a6100 !important;
+
+  --foreground: #23282c !important;
+  --ink: #23282c !important;
+  --text-dim: #23282c !important;
+  --text-faint: #23282c !important;
+  --card-foreground: #23282c !important;
+  --popover-foreground: #23282c !important;
+  --neutral-fill: #7a8388 !important;
+
+  --border: #e1e3df !important;
+  --line: #e1e3df !important;
+  --line-strong: #c3c8c5 !important;
+  --line-faint: #eceeea !important;
+  --input: #d5d8d3 !important;
+  --shadow-card: 0 0 0 1px #e1e3df !important;
+  --shadow-card-hover: 0 0 0 1px #cfd2cd, 0 6px 18px rgba(30, 35, 38, 0.07) !important;
+  --shadow-primary-glow: 0 6px 16px rgba(54, 60, 65, 0.22) !important;
+  --shadow-primary-deep: 0 14px 36px rgba(54, 60, 65, 0.26) !important;
+
+  /* 의미색 — 계기판처럼 색은 뜻에만: 진행·정보 = 먹색 · 완료·긍정 = 노랑 계열 진한 글자 · 주의 = 빨강 */
+  --destructive: #b44832 !important;
+  --danger: #b44832 !important;
+  --danger-soft: rgba(180, 72, 50, 0.12) !important;
+  --gold: #8a6100 !important;
+  --gold-soft: rgba(253, 184, 17, 0.18) !important;
+  --gold-bright: #fdb811 !important;
+  --blue: #485055 !important;
+  --blue-soft: rgba(54, 60, 65, 0.1) !important;
+  --green: #3f7f55 !important;
+  --green-soft: rgba(63, 127, 85, 0.12) !important;
+  --amber: #8a6100 !important;
+  --amber-soft: rgba(253, 184, 17, 0.18) !important;
+  --purple: #5b6469 !important;
+  --purple-soft: rgba(91, 100, 105, 0.12) !important;
+  --rose: #b44832 !important;
+  --rose-soft: rgba(180, 72, 50, 0.1) !important;
+
+  --chart-1: #363c41 !important;
+  --chart-2: #fdb811 !important;
+  --chart-3: #7a8388 !important;
+  --chart-4: #b44832 !important;
+  --chart-5: #a3abae !important;
+
+  --sidebar: #f7f7f3 !important;
+  --sidebar-foreground: #23282c !important;
+  --sidebar-primary: #363c41 !important;
+  --sidebar-primary-foreground: #ffffff !important;
+  --sidebar-accent: rgba(253, 184, 17, 0.16) !important;
+  --sidebar-accent-foreground: #23282c !important;
+  --sidebar-border: #e1e3df !important;
+  --sidebar-ring: #fdb811 !important;
+}
+
+/* 바탕 = 종이색, 카드·입력은 흰 면 그대로 */
+html body main:not(.paper-scale) { background-color: #f1f1ed; }
+html body { background-color: #f1f1ed; }
+/* 포커스 표시 = 노랑(계기판과 같다) */
+html body :where(button, a, input, select, textarea, summary, [tabindex]):focus-visible { outline-color: #fdb811; }
+
+/* 카드·패널 라운드 = 계기판 10px(칩은 그대로 둥글게) */
+:root { --radius-2xl: 10px !important; --radius-xl: 10px !important; }
+
+/* Tailwind 색 이름을 직접 쓴 곳 — 파랑·보라·청록 계열은 먹색 단계로, 노랑·주황은 계기판 노랑 단계로, 빨강·장미는 주의 빨강으로 */
+:root {
+  --color-blue-50: #f4f4f1; --color-blue-100: #eceeea; --color-blue-200: #d5d8d3; --color-blue-300: #a3abae; --color-blue-400: #7a8388;
+  --color-blue-500: #5b6469; --color-blue-600: #485055; --color-blue-700: #363c41; --color-blue-800: #2b3034; --color-blue-900: #23282c; --color-blue-950: #1b1f22;
+  --color-indigo-50: #f4f4f1; --color-indigo-100: #eceeea; --color-indigo-200: #d5d8d3; --color-indigo-300: #a3abae; --color-indigo-400: #7a8388;
+  --color-indigo-500: #5b6469; --color-indigo-600: #485055; --color-indigo-700: #363c41; --color-indigo-800: #2b3034; --color-indigo-900: #23282c; --color-indigo-950: #1b1f22;
+  --color-sky-50: #f4f4f1; --color-sky-100: #eceeea; --color-sky-200: #d5d8d3; --color-sky-300: #a3abae; --color-sky-400: #7a8388;
+  --color-sky-500: #5b6469; --color-sky-600: #485055; --color-sky-700: #363c41; --color-sky-800: #2b3034; --color-sky-900: #23282c; --color-sky-950: #1b1f22;
+  --color-violet-50: #f4f4f1; --color-violet-100: #eceeea; --color-violet-200: #d5d8d3; --color-violet-300: #a3abae; --color-violet-400: #7a8388;
+  --color-violet-500: #5b6469; --color-violet-600: #485055; --color-violet-700: #363c41; --color-violet-800: #2b3034; --color-violet-900: #23282c; --color-violet-950: #1b1f22;
+  --color-purple-50: #f4f4f1; --color-purple-100: #eceeea; --color-purple-200: #d5d8d3; --color-purple-300: #a3abae; --color-purple-400: #7a8388;
+  --color-purple-500: #5b6469; --color-purple-600: #485055; --color-purple-700: #363c41; --color-purple-800: #2b3034; --color-purple-900: #23282c; --color-purple-950: #1b1f22;
+  --color-fuchsia-50: #f4f4f1; --color-fuchsia-100: #eceeea; --color-fuchsia-500: #5b6469; --color-fuchsia-600: #485055; --color-fuchsia-700: #363c41;
+  --color-cyan-50: #f4f4f1; --color-cyan-100: #eceeea; --color-cyan-500: #5b6469; --color-cyan-600: #485055; --color-cyan-700: #363c41;
+  --color-teal-50: #f4f4f1; --color-teal-100: #eceeea; --color-teal-200: #d5d8d3; --color-teal-500: #5b6469; --color-teal-600: #485055; --color-teal-700: #363c41; --color-teal-800: #2b3034; --color-teal-900: #23282c;
+  --color-slate-50: #f7f7f3; --color-slate-100: #f4f4f1; --color-slate-200: #e1e3df; --color-slate-300: #c3c8c5; --color-slate-400: #a3abae;
+  --color-slate-500: #7a8388; --color-slate-600: #646d72; --color-slate-700: #485055; --color-slate-800: #363c41; --color-slate-900: #23282c; --color-slate-950: #1b1f22;
+  --color-gray-50: #f7f7f3; --color-gray-100: #f4f4f1; --color-gray-200: #e1e3df; --color-gray-300: #c3c8c5; --color-gray-400: #a3abae;
+  --color-gray-500: #7a8388; --color-gray-600: #646d72; --color-gray-700: #485055; --color-gray-800: #363c41; --color-gray-900: #23282c; --color-gray-950: #1b1f22;
+  --color-amber-50: #fdf8e8; --color-amber-100: #fdf1cf; --color-amber-200: #fce3a0; --color-amber-300: #fbd76f; --color-amber-400: #fdc43a;
+  --color-amber-500: #fdb811; --color-amber-600: #e0a20d; --color-amber-700: #a87800; --color-amber-800: #8a6100; --color-amber-900: #6b4b00;
+  --color-yellow-50: #fdf8e8; --color-yellow-100: #fdf1cf; --color-yellow-200: #fce3a0; --color-yellow-300: #fbd76f; --color-yellow-400: #fdc43a;
+  --color-yellow-500: #fdb811; --color-yellow-600: #e0a20d; --color-yellow-700: #a87800; --color-yellow-800: #8a6100; --color-yellow-900: #6b4b00;
+  --color-orange-50: #fdf8e8; --color-orange-100: #fdf1cf; --color-orange-500: #fdb811; --color-orange-600: #e0a20d; --color-orange-700: #8a6100;
+  --color-red-50: #fbf1ee; --color-red-100: #f5ddd7; --color-red-200: #ebbcb1; --color-red-500: #c45a42; --color-red-600: #b44832; --color-red-700: #973a27; --color-red-800: #7a2f20;
+  --color-rose-50: #fbf1ee; --color-rose-100: #f5ddd7; --color-rose-200: #ebbcb1; --color-rose-500: #c45a42; --color-rose-600: #b44832; --color-rose-700: #973a27; --color-rose-800: #7a2f20;
+  --color-pink-50: #fbf1ee; --color-pink-100: #f5ddd7; --color-pink-500: #c45a42; --color-pink-600: #b44832; --color-pink-700: #973a27;
+  --color-emerald-50: #eef5f0; --color-emerald-100: #dcebe1; --color-emerald-200: #b9d6c3; --color-emerald-500: #4f8f65; --color-emerald-600: #3f7f55; --color-emerald-700: #326645; --color-emerald-800: #284f37;
+  --color-green-50: #eef5f0; --color-green-100: #dcebe1; --color-green-500: #4f8f65; --color-green-600: #3f7f55; --color-green-700: #326645;
+  --color-lime-50: #eef5f0; --color-lime-100: #dcebe1; --color-lime-500: #4f8f65; --color-lime-600: #3f7f55;
+}
+
+/* ---------- 줄바꿈 정리(원장 2026-11-09 *"줄바꿈이 이상한곳에서 되지 않게"*) ----------
+ * ① 한글은 어절 단위(keep-all · 기존 전역 규칙 그대로).
+ * ② 긴 낱말 강제 끊기 = anywhere → break-word: anywhere는 좁은 칸·flex 항목의 최소 폭을 글자 하나로 줄여
+ *    '박/소/선'처럼 낱말 중간이 갈라졌다. break-word는 넘칠 때만 끊어 최소 폭을 지킨다(긴 주소는 여전히 칸 안에서 끊긴다).
+ * ③ Tailwind `break-all`(25곳)도 한글을 글자마다 끊으므로 같은 규칙으로 되돌린다.
+ * ④ 제목·라벨은 줄 길이를 고르게(balance), 문단은 마지막 줄에 한 글자만 남지 않게(pretty).
+ * ⑤ 숫자+단위·날짜는 붙여 둔다. */
+html body { overflow-wrap: break-word; }
+html body .break-all { word-break: keep-all !important; overflow-wrap: break-word !important; }
+html body :where(h1, h2, h3, h4, h5, h6, th, legend, summary, [role="tab"], [data-slot="card-title"]) { text-wrap: balance; }
+html body :where(p, li, dd, blockquote, figcaption, [data-tip]) { text-wrap: pretty; }
+html body :where(time) { white-space: nowrap; }

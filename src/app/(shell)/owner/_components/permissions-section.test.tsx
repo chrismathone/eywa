@@ -427,7 +427,7 @@ describe("개인별 메뉴 권한 — 역할 표 아래에서 주고 거둔다(�
   it("메뉴 고르기의 묶음 = 위 표의 묶음(왼쪽 탭)", () => {
     render(<PermissionsSection initial={EMPTY} staffOptions={staff} />);
     const groups = [...screen.getByLabelText("메뉴 선택").querySelectorAll("optgroup")].map((g) => g.label);
-    expect(groups.slice(0, 4)).toEqual(["대시보드", "수업", "원생", "상담·재원"]);
+    expect(groups.slice(0, 4)).toEqual(["대시보드", "수업", "원생", "신규생 90일 관리"]);
   });
 });
 

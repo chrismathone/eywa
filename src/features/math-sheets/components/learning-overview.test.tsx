@@ -5,6 +5,7 @@ import { learningMapFixture } from "@/features/math-progress-map/learning-map.te
 import type { MathSheetMonthData, MathStudentRow } from "../server/month-queries";
 import type { LearningData } from "../lib/learning-plan";
 import { learningRailMetrics } from "../lib/learning-axis";
+import { buildStudentBasics } from "../lib/student-basics";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 // Next의 App Router 번들러가 사용하는 동적 로더를 테스트에서도 사용한다.
@@ -30,6 +31,21 @@ beforeEach(() => window.history.replaceState(null, "", "/mcs/test/month?month=20
 afterEach(cleanup);
 
 describe("학생 집중 보기의 진도맵 통합", { timeout: 15000 }, () => {
+  it("반 전체 카드와 학생 상세에서 수강정보를 유지하고 학생을 바꾸면 함께 전환한다", async () => {
+    const { data, learning, first, second } = fixture();
+    first.basicInfo = buildStudentBasics(["english", "math"].map(subject => ({ subject: subject as "english" | "math", startDate: "2026-03-01", endDate: null,
+      isTransferred: false, onHold: false, classActive: true, closedAt: null, teacherAssigned: true, teacherName: subject === "english" ? "영어 테스트 담임" : "수학 테스트 담임" })), "2026-11-02");
+    second.basicInfo = buildStudentBasics([], "2026-11-02");
+    render(<LearningOverview data={data} learning={learning} classOptions={[]} />);
+    expect(screen.getByRole("region", { name: `${first.name} 수강 기본정보` })).toHaveTextContent("영어·수학 동시수강");
+    fireEvent.click(screen.getByRole("button", { name: first.name }));
+    await screen.findByLabelText("전체 진도율");
+    expect(screen.getByRole("region", { name: `${first.name} 수강 기본정보` })).toHaveTextContent("영어 테스트 담임");
+    expect(screen.getByRole("region", { name: `${first.name} 수강 기본정보` })).toHaveTextContent("2026.11.02 기준");
+    fireEvent.click(within(screen.getByRole("complementary", { name: "학생 선택" })).getByRole("button", { name: new RegExp(second.name) }));
+    expect(screen.getByRole("region", { name: `${second.name} 수강 기본정보` })).toHaveTextContent("현재 수강 없음");
+    expect(screen.queryByText("영어 테스트 담임")).not.toBeInTheDocument();
+  });
   it("저장 시각이 다른 동일 목표는 공통 요약을 유지하고 실제 내용 차이만 개별로 표시한다", () => {
     const { data, learning, first, second, f } = fixture();
     const goals = { [first.studentId]: { ...f.goal, updatedAt: "first" }, [second.studentId]: { ...f.goal, studentId: second.studentId, updatedAt: "second" } };

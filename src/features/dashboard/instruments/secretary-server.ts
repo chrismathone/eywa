@@ -55,7 +55,7 @@ export async function loadSecretaryNote(viewer: StaffTaskViewer): Promise<Secret
   const error = runs.error ?? last.error;
   if (error) {
     if (isMissingSecretaryTable(error)) return OFF;
-    throw new Error(explainDbError(error, { scope: "dashboard-secretary.load", fallback: "업무 비서 정리를 불러오지 못했습니다" }).message);
+    throw new Error(explainDbError(error, { scope: "dashboard-secretary.load", fallback: "오늘의 브리핑을 불러오지 못했습니다" }).message);
   }
   // 고르는 칸을 글자로 넘겨 행 모양을 추론하지 못한다 — 읽은 칸 그대로 적는다.
   const times = (runs.data ?? []) as unknown as { created_at: string; run_kind: RunKind | null }[];
@@ -83,7 +83,7 @@ async function claim(args: RunArgs): Promise<{ id: number } | AskResult> {
   const made = await admin.from(NOTES)
     .insert({ tenant_id: args.tenantId, user_id: args.userId, for_date: kstToday(), model: null, input: args.input, result: { pending: true }, run_kind: args.runKind, basis_at: args.basisAt })
     .select("id, created_at").single();
-  if (made.error || !made.data) return isMissingSecretaryTable(made.error) ? { ok: false, error: "업무 비서를 아직 쓸 수 없습니다", status: 503 } : saveFail(made.error, "정리를 시작하지 못했습니다. 잠시 뒤 다시 눌러 주세요");
+  if (made.error || !made.data) return isMissingSecretaryTable(made.error) ? { ok: false, error: "오늘의 브리핑을 아직 쓸 수 없습니다", status: 503 } : saveFail(made.error, "정리를 시작하지 못했습니다. 잠시 뒤 다시 눌러 주세요");
   const { id, created_at } = made.data as { id: number; created_at: string };
   const since = (ms: number) => new Date(Date.parse(created_at) - ms).toISOString();
   const [sameKind, running] = await Promise.all([
@@ -131,7 +131,7 @@ export async function runSecretary(args: RunArgs): Promise<AskResult> {
 
 /** 'AI로 정리' 버튼 — 지금 화면의 후보로. 같은 사람 30초 · 하루 30번까지(실패한 시도 포함). */
 export async function askSecretary(viewer: StaffTaskViewer, input: SecretaryInput): Promise<AskResult> {
-  if (!canCreateWork(viewer)) return { ok: false, error: "업무 비서는 업무를 요청할 수 있는 사람이 씁니다", status: 403 };
+  if (!canCreateWork(viewer)) return { ok: false, error: "오늘의 브리핑은 업무를 요청할 수 있는 사람이 씁니다", status: 403 };
   const tenantId = viewer.user.tenantId;
   if (!(await aiOn(tenantId))) return { ok: false, error: LICENSE_BLOCKED_MESSAGE.ai_analysis, status: 403 };
   const today = kstToday();
@@ -139,7 +139,7 @@ export async function askSecretary(viewer: StaffTaskViewer, input: SecretaryInpu
   const recent = await createAdminClient().from(NOTES).select("created_at").eq("tenant_id", tenantId).eq("user_id", viewer.user.id).eq("for_date", today)
     .eq("run_kind", "button").order("created_at", { ascending: false }).limit(DAY_MAX);
   if (recent.error) {
-    if (isMissingSecretaryTable(recent.error)) return { ok: false, error: "업무 비서를 아직 쓸 수 없습니다", status: 503 };
+    if (isMissingSecretaryTable(recent.error)) return { ok: false, error: "오늘의 브리핑을 아직 쓸 수 없습니다", status: 503 };
     return { ok: false, error: explainDbError(recent.error, { scope: "dashboard-secretary.recent", fallback: "잠시 뒤 다시 눌러 주세요" }).message, status: 500 };
   }
   const rows = recent.data ?? [];

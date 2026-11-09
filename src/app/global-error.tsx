@@ -32,7 +32,7 @@ export default function GlobalError({
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#f5f5f7",
+          background: "#f4f4f1",
           color: "#121212",
           fontFamily:
             "Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
@@ -61,7 +61,7 @@ export default function GlobalError({
               fontSize: 14,
               fontWeight: 600,
               color: "#ffffff",
-              background: "#153e75",
+              background: "#363c41",
               border: "none",
               borderRadius: 10,
               cursor: "pointer",
@@ -70,7 +70,7 @@ export default function GlobalError({
             다시 시도
           </button>
           <p style={{ marginTop: 16, fontSize: 14 }}>
-            <a href={VIEW_RESET_PATH} target="_top" style={{ color: "#153e75", textDecoration: "underline" }}>
+            <a href={VIEW_RESET_PATH} target="_top" style={{ color: "#363c41", textDecoration: "underline" }}>
               원래 화면으로 돌아가기
             </a>
           </p>

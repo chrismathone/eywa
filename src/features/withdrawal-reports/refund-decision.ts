@@ -1,5 +1,5 @@
 /**
- * 퇴원보고서 **원장 환불 결정**(원장 2026-11-06 · DB s2_0036) — 순수 판정(테스트용 · server-only 밖 · 화면·서버 공용).
+ * 퇴원보고서 **원장 환불 결정**(원장 2026-11-06 · DB s2_0037) — 순수 판정(테스트용 · server-only 밖 · 화면·서버 공용).
  *
  * - 환불할 수 있는 줄(`lineRefundable` — 과목 수강종료면 끝내는 반 줄·기타 항목 규칙은 `loadLaterInvoices`가 이미 걸렀다)이 남았고
  *   원장급이 그 줄을 정하지 않았으면 퇴원·수강종료를 처리하지 않는다('환불 결정 대기'). 결정 = '환불 승인'(고른 줄 → 데스크 요청서 ·
@@ -10,7 +10,7 @@
  */
 
 /**
- * 확인 값(리뷰 2026-11-06 수리판 · DB s2_0036 `withdrawal_report_refund_note`가 같은 모양을 검사한다):
+ * 확인 값(리뷰 2026-11-06 수리판 · DB s2_0037 `withdrawal_report_refund_note`가 같은 모양을 검사한다):
  * - `refundable` = 묶음의 지금 환불 가능 줄 · 그 줄을 보이는 보고서(할 일·알림 링크) · 지금 낸 돈(`paid` — 결정 뒤 늘면 다시 결정 안 됨).
  * - `claimed` = 이 묶음 요청서가 잡아 확인 값에서 뺀 줄 · 그 요청서 · 지금 낸 돈(`paid` — 리뷰 r2 D-4) — 처리 순간 그 요청서가 없으면 결정 안 됨(삭제 경합).
  *   그 줄의 결정 행이 있으면 결정 때 본 낸 돈(`paid_seen`)보다 지금이 크면 결정 안 됨('환불' 결정도 — 늘어난 돈은 다시 묻는다) · 결정 행이 없으면 표식에 그 키가
@@ -159,7 +159,7 @@ export function decisionBlocksProcessing(status: string): boolean {
 }
 
 /**
- * DB '환불 결정 대기' 표시 한 벌(s2_0036 묶음 칸) — `hold` = `refund_hold` · `report` = 결정할 줄을 보이는 보고서(`refund_hold_report`) ·
+ * DB '환불 결정 대기' 표시 한 벌(s2_0037 묶음 칸) — `hold` = `refund_hold` · `report` = 결정할 줄을 보이는 보고서(`refund_hold_report`) ·
  * `checkedAt` = DB가 마지막으로 판정한 시각(`refund_checked_at` · 판정한 적 없으면 null).
  */
 export type RefundHoldState = { hold: boolean; report: string | null; /** DB가 센 결정 안 된 줄 수(`refund_undecided`) — 결정할 건이 다른 보고서에 있을 때 'N건'. */ undecided: number; checkedAt: string | null };

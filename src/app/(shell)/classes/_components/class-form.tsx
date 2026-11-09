@@ -421,7 +421,7 @@ export function ClassForm({
             <input type="hidden" name="bgColor" value={bgColor} />
             <input
               type="color"
-              value={bgColor || "#153e75"}
+              value={bgColor || "#363c41"}
               onChange={(e) => setBgColor(e.target.value)}
               className="border-border bg-card size-9 cursor-pointer rounded-md border"
               aria-label="반 배경색"

@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { NEW_SHAPE } from "./new-shape-flag";
 import { loadOverview } from "@/features/dashboard/overview/server";
 import { loadDashboardPrefs } from "@/features/dashboard/overview/chart-prefs-server";
 import type { ResolvedView } from "@/features/dashboard/layout/view";
@@ -31,7 +32,7 @@ export async function OverviewDashboard({ subject }: { subject?: string } = {}) 
   // 스냅샷이 배치를 알리기 전에 실패하면 그 실패가 그대로 올라간다(전처럼 오류 경계로) — 알렸으면 그 값, 못 알리고 끝났으면 스냅샷의 값.
   const [view, { design }] = await Promise.all([Promise.race([earlyView, initial.then((snapshot) => snapshot.view)]), prefs]);
   return (
-    <Suspense fallback={<OverviewSkeleton view={view} design={design} />}>
+    <Suspense fallback={<OverviewSkeleton view={view} design={NEW_SHAPE ? "instruments" : design} />}>
       <OverviewContent initial={initial} onboarding={onboarding} demoRoster={demoRoster} prefs={prefs} />
     </Suspense>
   );
