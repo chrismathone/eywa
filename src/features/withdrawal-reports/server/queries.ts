@@ -16,6 +16,10 @@ import { staffSubjectScopeOf } from "@/features/staff/department/subject-scope";
 import { loadReportPrefill } from "./prefill";
 import { loadReportBilling } from "./billing";
 import { loadDeskStaff, loadLaterInvoices, type LaterInvoice } from "./refund";
+import { loadRefundDecisions, loadRefundHoldState, loadRefundOutcomes, refundGateReady } from "./refund-check";
+import { DESK_NOT_DESIGNATED, declinedKeys, lineDeductions, openClaims, refundHoldGap, refundableKeys, undecidedKeys, type RefundDecision, type RefundHoldState } from "../refund-decision";
+import type { LaterState, OthersState } from "../refund-detail-notes";
+import type { RefundOutcome } from "../approval-lines";
 import { loadRefundSteps } from "./refund-steps";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { liveBillingForSubmitted } from "../prefill";
@@ -178,17 +182,75 @@ export async function getReport(id: string) {
   ]);
   const subjectHistory = await historyPromise;
   // 퇴원월 뒤 청구(원장 2026-10-29) — 취소된 보고서는 보이지 않는다. 못 읽으면 빈 목록(보고서 화면은 연다).
+  // `computed` = 지금 계산을 실제로 했나(못 읽음 · 수납을 못 보는 열람자 · 결정 표 조회 실패면 false) — 목록 표시와의 어긋남(리뷰 r2 (b))은 계산했을 때만 말한다.
+  // `laterState` = 칸이 '없음'이라고 말해도 되나(리뷰 r2 I3) — 조회 실패 · 수납 열람권 없음이면 '없음' 대신 그 사실을 보인다(결정 위치·어긋남 안내도 띄우지 않는다).
+  let computed = data.status !== "canceled" && billingOk;
+  let laterState: LaterState = billingOk ? "ok" : "hidden";
   const laterInvoices: LaterInvoice[] = data.status === "canceled" || !billingOk ? []
-    : await loadLaterInvoices(data as WithdrawalReport).catch((e) => { console.error("[withdrawal-report-later-invoices]", e); return []; });
+    : await loadLaterInvoices(data as WithdrawalReport).catch((e) => { console.error("[withdrawal-report-later-invoices]", e); computed = false; laterState = e instanceof Error && e.name === "LaterLimitError" ? "limit" : "failed"; return []; });
   // 데스크 담당자 목록은 환불을 승인할 수 있는 원장급에게만(이름 목록을 다른 사람에게 내리지 않는다) — 권한 판정 한 곳 `canRequestRefund`
-  // · 후보 = 수납 쓰기 권한이 있는 직원(`loadDeskStaff`) · 자기 자신은 빼고(자기 알림은 가지 않음 — notifyUsers).
-  // 데스크 환불 단계(s2_0025)는 함께 읽는다 — 못 읽으면 단계 없이(화면은 연다).
+  // · 후보 = 학원 설정 '데스크 담당자' 중 수납 쓰기 권한이 있는 직원(`loadDeskStaff` · 원장 2026-11-06) · 자기 자신은 빼고(자기 알림은 가지 않음 — notifyUsers).
+  //   지정이 비었으면 고를 사람이 없다 — 안내(`deskNotice`)로 환불 승인을 막는다(원장 등으로 대신하지 않는다).
+  // 데스크 환불 단계(s2_0025)·원장 환불 결정(s2_0037 — 줄마다 결정 · 묶음의 '환불 결정 대기' 표시)은 함께 읽는다 — 못 읽으면 없이(화면은 연다).
   const refundAllowed = canRequestRefund(data as WithdrawalReport, viewer.writable, cancelsAsDirector(viewer.user.systemRole, !!viewer.teacherId));
-  const [deskStaff, refundSteps] = await Promise.all([
-    laterInvoices.length && refundAllowed ? loadDeskStaff(viewer.user.tenantId).then(list => list.filter(s => s.id !== viewer.user.id), () => []) : Promise.resolve([]),
-    loadRefundSteps(viewer.user.tenantId, [data as WithdrawalReport]).then(map => map.get(data.group_id ?? data.id) ?? [], (e: unknown) => { console.error("[withdrawal-report-refund-steps]", e); return [] as RefundStep[]; }),
+  const groupId = (data as WithdrawalReport).group_id ?? null;
+  const refundable = refundableKeys(laterInvoices);
+  // 부가 조회 실패는 '없음'으로 접지 않는다(리뷰 r3 R2-m10) — 안내가 사실대로 말하고, 결정 기록·대기 표시를 못 읽었으면 결정 단추를 막는다.
+  const failed = { decisions: false, hold: false, steps: false };
+  const [desk, refundSteps, decisions, holdState, outcomes, siblings, gateReady] = await Promise.all([
+    refundable.length && refundAllowed
+      ? loadDeskStaff(viewer.user.tenantId).then(d => ({ staff: d.staff.filter(s => s.id !== viewer.user.id), designated: d.designated, folded: d.folded, failed: false }),
+        (e: unknown) => { console.error("[withdrawal-report-desk-staff]", e); return { staff: [] as DeskOption[], designated: true, folded: false, failed: true }; })
+      : Promise.resolve({ staff: [] as DeskOption[], designated: true, folded: false, failed: false }),
+    loadRefundSteps(viewer.user.tenantId, [data as WithdrawalReport]).then(map => map.get(data.group_id ?? data.id) ?? [], (e: unknown) => { console.error("[withdrawal-report-refund-steps]", e); failed.steps = true; return [] as RefundStep[]; }),
+    groupId ? loadRefundDecisions(viewer.user.tenantId, groupId).catch((e: unknown) => { console.error("[withdrawal-report-refund-decisions]", e); computed = false; failed.decisions = true; return new Map<string, RefundDecision>(); }) : Promise.resolve(new Map<string, RefundDecision>()),
+    // DB '환불 결정 대기' 표시 한 벌(목록 칩과 같은 칸 · 결정 보고서 · 마지막 판정 시각) — 못 읽으면 모름(null · 대기 없음으로 보이고 어긋남은 말하지 않는다).
+    groupId ? loadRefundHoldState(viewer.user.tenantId, groupId).catch((e: unknown) => { console.error("[withdrawal-report-refund-hold]", e); failed.hold = true; return null; }) : Promise.resolve(null as RefundHoldState | null),
+    groupId ? loadRefundOutcomes(viewer.user.tenantId, [groupId]).catch((e: unknown) => { console.error("[withdrawal-report-refund-outcomes]", e); return new Map<string, RefundOutcome>(); }) : Promise.resolve(new Map<string, RefundOutcome>()),
+    // 같은 묶음 보고서(상태 · 대표 · 열람 판정 칸) — 승인 완료 안내('다른 과목 승인' · 리뷰 r2 m5·m6)와 결정할 줄을 보이는 다른 보고서 링크(리뷰 r2 (b)). 못 읽으면 null(모름).
+    groupId ? groupSiblings(viewer.user.tenantId, groupId) : Promise.resolve([] as SiblingRow[]),
+    // 관문 SQL 적용 여부 — 취소 확인 칸이 '사유는 처리 이력에 남는다'고 말해도 되나(리뷰 r2 m13). 못 읽으면 모름(false 쪽 문구).
+    refundGateReady().catch(() => false),
   ]);
-  return { report: data as WithdrawalReport, events: [...(events ?? [])].reverse() as ReportEvent[], assignmentChanged, consultations, laterInvoices, deskStaff, refundSteps, subjectHistory, ...prefill };
+  const deskNotice = !refundAllowed || !refundable.length ? undefined
+    : desk.failed ? "데스크 담당자를 불러오지 못했습니다. 새로고침해 주세요."
+    // 학원 설정을 못 읽어 기본값으로 접혔다 — 지정이 비어 보여도 '지정하세요'로 헛걸음시키지 않는다(리뷰 r2 m7).
+    : desk.folded ? "학원 설정을 불러오지 못했습니다. 새로고침해 주세요."
+    : !desk.designated ? DESK_NOT_DESIGNATED
+    : !desk.staff.length ? "학원 설정에 지정된 데스크 담당자 중 고를 수 있는 사람(수납 쓰기 권한이 있고 본인이 아닌 사람)이 없습니다. 학원 설정에서 데스크 담당자를 다시 지정해 주세요."
+    : undefined;
+  // 원장 환불 결정(원장 2026-11-06) — 이 보고서 화면의 환불 가능 줄 중 결정 안 된 줄 · '환불하지 않음'으로 정한 줄 · 묶음의 대기 표시(목록 칩과 같은 값).
+  // 결정 버튼·확인 값은 지금 계산 그대로 · 목록 표시(DB)와 어긋나면 `gap`으로 상세에 한 줄(리뷰 r2 (b) · `refundHoldGap`).
+  const paidOf = new Map(laterInvoices.flatMap(inv => inv.lines.map(l => [l.key, l.paidNet] as const)));
+  // 결정 안 된 줄 = 환불 가능 줄 중 결정 전 + 이 묶음 요청서가 담은 줄 중 다시 정할 것(결정 뒤 낸 돈이 늚 · 표식 키가 낡음 — DB note claimed 갈래와 같은 판정 · 리뷰 r2 D-2·D-4).
+  // 결정 기록을 못 읽었으면 '결정 전'으로 세지 않는다(이미 정한 줄을 결정 전으로 보이지 않게 · 결정 단추는 막는다).
+  const reopen = groupId && !failed.decisions ? openClaims(laterInvoices, decisions) : [];
+  const undecided = failed.decisions ? [] : [...undecidedKeys(refundable, decisions, paidOf), ...reopen.map(o => o.key)];
+  // 결정할 줄을 보이는 보고서(DB 표시 · 모르면 대표 보고서) — 이 보고서가 아니면 그 보고서로 바로 가는 링크(열 수 있을 때만 · 과목은 화면이 이름으로).
+  const holdReportId = holdState?.hold ? holdState.report ?? siblings?.find(s => s.group_leader)?.id ?? null : null;
+  const holdRow = holdReportId && holdReportId !== data.id ? siblings?.find(s => s.id === holdReportId) : undefined;
+  const refundDecision = { hold: holdState?.hold ?? false, undecided, declined: declinedKeys(refundable, decisions), outcome: (groupId ? outcomes.get(groupId) : undefined) ?? null,
+    gap: refundHoldGap(data as WithdrawalReport, holdState, undecided, computed),
+    holdCount: holdState?.undecided ?? 0, laterState,
+    holdReport: holdRow ? { id: holdRow.id, subjects: holdRow.subjects ?? [], readable: canReadReport(holdRow as ReportListRow, viewer) } : null,
+    others: othersOf(data.id, siblings), gateReady, openClaims: reopen,
+    // 줄별 뺄 몫(이전 환불 완료 기록 · 따로 환불 — 리뷰 r3 R2-I2) · 조회 실패(결정 단추 막음 — R2-m10).
+    deductions: lineDeductions(laterInvoices, decisions), failed: failed.decisions || failed.hold, decisionsFailed: failed.decisions, lookupFailed: failed };
+  return { report: data as WithdrawalReport, events: [...(events ?? [])].reverse() as ReportEvent[], assignmentChanged, consultations, laterInvoices, deskStaff: desk.staff, deskNotice, refundDecision, refundSteps, subjectHistory, ...prefill };
+}
+type DeskOption = { id: string; name: string; jobTitle?: string | null };
+type SiblingRow = Pick<ReportListRow, "id" | "status" | "subjects" | "group_leader" | "teacher_id" | "requested_by" | "manager_id" | "director_id" | "manager_ids" | "director_ids">;
+/** 같은 묶음 보고서(본문·이름 없이 상태·열람 판정 칸만) — 못 읽으면 null(모름). */
+async function groupSiblings(tenantId: string, groupId: string): Promise<SiblingRow[] | null> {
+  const { data, error } = await createAdminClient().from("withdrawal_reports").select("id,status,subjects,group_leader,teacher_id,requested_by,manager_id,director_id,manager_ids,director_ids")
+    .eq("tenant_id", tenantId).eq("group_id", groupId).limit(30);
+  if (error) { console.error("[withdrawal-report-siblings]", error.message); return null; }
+  return (data ?? []) as SiblingRow[];
+}
+/** 다른 과목 보고서 승인 — 승인 전 형제가 있으면 pending · 못 읽었으면 unknown · 그 밖 done(목록 상태 칸과 같은 축 — 리뷰 r2 (a)). */
+function othersOf(id: string, siblings: readonly SiblingRow[] | null): OthersState {
+  if (!siblings) return "unknown";
+  return siblings.some(s => s.id !== id && ["requested", "revision", "manager_pending", "director_pending"].includes(s.status)) ? "pending" : "done";
 }
 /**
  * 자동 저장용 가벼운 조회(원장 2026-11-05 실시간 저장 · 리뷰: 입력이 멈출 때마다 상세 전체 — 이력 300줄 · 스냅숏 · 수강 이력 · 장부 · 뒤 청구 ·

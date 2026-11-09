@@ -12,6 +12,7 @@ import type { SessionPricingMode } from "@/features/billing/session-pricing";
 import { monthRange } from "../plan";
 import { isVirtualTermId } from "../month-roster";
 import type { SessionTermPatch } from "./actions";
+import { carryBreaksAfter, loadCarryOutStates } from "./carry-session-sync";
 
 /** 한 번에 받는 최대 행 수 — 선택 일괄 확정과 같은 값. */
 const MAX_ITEMS = 200;
@@ -81,6 +82,8 @@ export async function unconfirmClassTerms(
   }
   const before = new Map(rows.filter((r) => r.confirmed_sessions !== null).map((r) => [r.id, r]));
   const targets = ids.filter((id) => before.has(id));
+  // 보낸 이월이 있는 줄의 해제 전 상태 — 해제하면 다시 확정할 때까지 이월이 무효라 알린다(2026-11-09 · 대부분 조회 한 번).
+  const carryBefore = await loadCarryOutStates(supabase, targets);
 
   const terms: SessionTermPatch[] = [];
   const failures: { id: string; reason: string }[] = [];
@@ -139,7 +142,8 @@ export async function unconfirmClassTerms(
     });
   }
   const failedIds = failures.map((f) => f.id);
-  const allTerms = [...terms, ...patchesForStale];
+  const carryWarnings = await carryBreaksAfter(supabase, carryBefore, "unconfirm");
+  const allTerms = [...terms.map((t) => (carryWarnings.has(t.id) ? { ...t, carryWarning: carryWarnings.get(t.id) } : t)), ...patchesForStale];
   if (failures.length) {
     return { unconfirmed: released, skipped, failedIds, terms: allTerms, error: `${failures.length}명은 해제하지 못했습니다 — ${failures[0]!.reason}` };
   }

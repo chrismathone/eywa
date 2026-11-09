@@ -104,6 +104,15 @@ export function SpecialAccessEditor({ value, hiddenUserIds, staffOptions, nameOf
           nameOf={nameOf}
           onChange={(update) => onChange((prev) => ({ ...prev, withdrawalApproverIds: update(prev.withdrawalApproverIds ?? []) }))}
         />
+        <SpecialAccessList
+          label="데스크 담당자"
+          hint="퇴원보고서에서 원장이 환불을 승인할 때 데스크 담당자로 고를 수 있는 사람입니다. 여기 지정한 사람 중 수납 쓰기 권한이 있는 사람만 고를 수 있습니다. 비워 두면 퇴원보고서의 환불 승인을 할 수 없습니다. 보고서에서 이어진 환불 요청서의 환불완료일자는 그 요청서의 데스크 담당자와 원장만 넣거나 지울 수 있습니다."
+          ids={value.withdrawalDeskIds ?? []}
+          hiddenUserIds={hiddenUserIds}
+          staffOptions={pickable}
+          nameOf={nameOf}
+          onChange={(update) => onChange((prev) => ({ ...prev, withdrawalDeskIds: update(prev.withdrawalDeskIds ?? []) }))}
+        />
       </div>
     </SettingsCard>
   );

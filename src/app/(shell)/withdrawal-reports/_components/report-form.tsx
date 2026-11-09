@@ -11,15 +11,23 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { ReportSheet } from "./report-sheet";
 import { TuitionDetail } from "./tuition-detail";
 import { reportCourses } from "@/features/withdrawal-reports/target-courses";
+import { deskLabel } from "@/features/withdrawal-reports/approval-lines";
 
 const date = (value: string) => new Date(value).toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
-export function ReportForm({ report: r, body, events, labels, nameOf, approverName = nameOf, editable, pending, onChange, consultations = [], subjectHistory = [], refundCheck, managerSkipped = false, refundSteps = [] }: {
+export function ReportForm({ report: r, body, events, labels, nameOf, approverName = nameOf, editable, pending, onChange, consultations = [], subjectHistory = [], refundCheck, managerSkipped = false, refundSteps = [], refundDecisionSign = null, decisionWaiting = false }: {
+  /** 원장 환불 결정 대기(DB 표시 또는 이 화면의 지금 계산 — `decisionWaitingOf`) — '퇴원 처리' 칸이 결정 뒤 처리임을 말한다(리뷰 r2 m3). */
+  decisionWaiting?: boolean;
   /** 관리자 승인 생략(원장 2026-11-03 — 작성 강사가 과목 관리자) — 결재란 관리자 칸 '생략'. */
   managerSkipped?: boolean;
   /** 결재란 승인자 표기 — 직급이 있으면 '정유진 부원장'(원장 2026-11-05). 없으면 `nameOf`. */
   approverName?: (id: string | null) => string;
   /** 데스크 환불 단계(원장 2026-11-03) — 있으면 결재란에 '데스크' 칸(담당 · 환불완료일). */
   refundSteps?: RefundStep[];
+  /**
+   * 원장 환불 결정(원장 2026-11-06 — 목록 '승인 진행'과 같은 줄·차례: 관리자 → 환불 결정 → 데스크) — 결정 대기면 받는 원장급(결정일 빈칸),
+   * 결정했으면 결정한 원장(결정일). 없으면 칸 없음(환불과 무관).
+   */
+  refundDecisionSign?: { names: string[]; at: string | null } | null;
   consultations?: ReportConsultation[];
   refundCheck?: ReactNode;
   subjectHistory?: SubjectHistoryRow[];
@@ -47,8 +55,15 @@ export function ReportForm({ report: r, body, events, labels, nameOf, approverNa
   const direct = isDirectReport(r);
   const homeroom = [...new Set(courses.map(c => c.teacherName).filter(Boolean))].join(", ") || "—";
   // 결재란(원장 2026-11-03): 원장 칸은 원장을 지정했던 옛 보고서에만 · 데스크 환불을 요청했으면 '데스크' 칸(담당 · 환불완료일).
-  const desk = refundSteps.length ? [{ role: "데스크", name: refundSteps.map(s => s.deskName).join("\n"), date: refundSteps.map(s => `환불완료일 : ${s.completedDate ?? ""}`).join("\n") }] : [];
+  // 2026-11-06: 데스크 담당은 직급 이름(`deskLabel` — 목록 승인 진행과 같은 표기) · 그 앞에 '환불 결정'(원장) 칸.
+  const desk = [
+    ...(refundDecisionSign ? [{ role: "환불 결정", name: refundDecisionSign.names.join("\n"), date: `결정일 : ${refundDecisionSign.at ? date(refundDecisionSign.at) : ""}` }] : []),
+    // 취소된 요청의 완료 전 데스크 칸은 '(요청 취소)' — 기다리는 결재처럼 보이지 않게(리뷰 r2 m14).
+    ...(refundSteps.length ? [{ role: "데스크", name: refundSteps.map(s => `${deskLabel(s)}${r.status === "canceled" && !s.completedDate ? " (요청 취소)" : ""}`).join("\n"), date: refundSteps.map(s => `환불완료일 : ${s.completedDate ?? ""}`).join("\n") }] : []),
+  ];
   const deskWaiting = refundWaiting(r, refundSteps);
+  // '퇴원 처리' 칸 — 기다리는 환불 단계를 모두(원장 환불 결정 · 데스크 환불 · 리뷰 r2 m3).
+  const waitTail = [...(decisionWaiting ? ["원장 환불 결정"] : []), ...(deskWaiting ? ["데스크 환불"] : [])].join("·");
   return <ReportSheet
     refundCheck={refundCheck}
     subject={r.subjects.map(s => labels[s] ?? "기타 과목").join(" · ")}
@@ -78,7 +93,7 @@ export function ReportForm({ report: r, body, events, labels, nameOf, approverNa
       teacherOpinion: textField("teacherOpinion", "담임 의견"),
       tuition: <TuitionDetail text={body.tuition || "수납 기록 확인 필요"} />,
       arrears: <><span>{ { unknown: "청구 기록 확인 필요", no: "미납 없음", yes: "미납 있음" }[body.arrears]}</span>{body.arrearsNote && <div className="whitespace-pre-line">{body.arrearsNote}</div>}</>,
-      processing: r.applied_at ? `${nameOf(applied?.actor_id ?? null)} · ${date(r.applied_at)} 처리 완료${direct ? " (관리자 바로 처리)" : ""}` : `${direct ? "관리자 바로 처리" : "요청"}: ${nameOf(r.requested_by)} · ${r.status === "canceled" ? "요청 취소" : direct ? `${r.effective_date} 처리 예약${deskWaiting ? " · 데스크 환불 완료 후" : ""}` : deskWaiting ? "승인·데스크 환불 완료 후 자동 처리" : "승인 완료 후 자동 처리"}`,
+      processing: r.applied_at ? `${nameOf(applied?.actor_id ?? null)} · ${date(r.applied_at)} 처리 완료${direct ? " (관리자 바로 처리)" : ""}` : `${direct ? "관리자 바로 처리" : "요청"}: ${nameOf(r.requested_by)} · ${r.status === "canceled" ? "요청 취소" : direct ? `${r.effective_date} 처리 예약${waitTail ? ` · ${waitTail} 후` : ""}` : `승인${waitTail ? `·${waitTail}` : ""} 완료 후 자동 처리`}`,
     }}
   />;
 }

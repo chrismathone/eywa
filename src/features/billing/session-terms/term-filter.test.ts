@@ -68,7 +68,7 @@ describe("보기 필터 — 하나의 값에서 여러 개", () => {
   });
 
   it("켜진 필터는 선택지 순서로 정리된다 — 주소·엑셀 링크·드롭다운 값이 같은 한 벌 · 모르는 값은 버린다", () => {
-    expect(TERM_ONLY_KEYS).toEqual(["open", "pending", "share"]);
+    expect(TERM_ONLY_KEYS).toEqual(["open", "pending", "share", "carry"]);
     expect(filterSessionTermRows(ROWS, { only: "share,open", shareClassIds: SHARE }).only).toEqual(["open", "share"]);
     expect(filterSessionTermRows(ROWS, { only: " pending , nope,,all", shareClassIds: SHARE }).only).toEqual(["pending"]);
     expect(filterSessionTermRows(ROWS, { only: "" }).only).toEqual([]);
@@ -131,5 +131,28 @@ describe("배선 — 화면과 엑셀이 같은 줄 집합", () => {
     expect(manual.callouts.some((c) => c.target.css === '[aria-label^="확정·배분·몫 보기 필터"]')).toBe(true);
     // 없어진 두 드롭다운을 가리키는 번호가 남지 않았다.
     expect(JSON.stringify(manual)).not.toMatch(/확정 상태 필터|배분 상태 필터|미확정만 보기|미배분만 보기/);
+  });
+});
+
+describe("보기 필터 — 이월 재확인(2026-11-09)", () => {
+  // 확정 5시수(120,000) · 배분 120,000 · 10월로 24,000을 넘겨 둠 → 더 받은 몫 0이라 무효.
+  const out = { amount: 24000, toClassId: "c-b", toClassName: "B반", toPeriod: "2026-10", note: null, at: null };
+  const inn = (valid: boolean, orphan = false) => ({ amount: 24000, fromPeriod: "2026-08", fromClassName: "A반", note: null, valid, ...(orphan ? { orphan } : {}) });
+  const CARRY: Row[] = [
+    row("ok"),
+    row("send-bad", { amount: 120000, allocatedAmount: 120000, carryOut: out }),
+    row("send-ok", { amount: 96000, allocatedAmount: 120000, carryOut: out }),
+    row("send-orphan", { amount: 96000, allocatedAmount: 120000, carryOut: { ...out, landing: "orphan" } }),
+    row("recv-bad", { amount: 120000, carryIns: [inn(false)] }),
+    row("recv-orphan", { amount: 120000, carryIns: [inn(true, true)] }),
+    row("recv-ok", { amount: 120000, carryIns: [inn(true)] }),
+  ];
+  it("보낸 이월 무효·받을 반 없음 · 받은 이월 무효·받을 곳 없음만 — 표 표식과 같은 기준", () => {
+    const r = filterSessionTermRows(CARRY, { only: "carry" });
+    expect(r.filtered.map((x) => x.id)).toEqual(["send-bad", "send-orphan", "recv-bad", "recv-orphan"]);
+    expect(r.carryCount).toBe(4);
+    expect(r.only).toEqual(["carry"]);
+    // 다른 필터와는 '모두에 해당'으로 묶인다.
+    expect(filterSessionTermRows(CARRY, { only: "carry,open" }).filtered).toEqual([]);
   });
 });

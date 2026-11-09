@@ -53,7 +53,7 @@ export const TASK_KINDS: Record<string, StaffTaskKindInfo> = {
   },
   withdrawal_step: {
     label: "퇴원보고서",
-    doneRule: "작성 차례는 보고서를 제출하면, 승인 차례는 승인하면 처리됩니다. 보완 요청·취소로 차례가 없어지면 취소됩니다. 작성은 이틀, 승인은 다음 날까지 안 하면 늦음입니다.",
+    doneRule: "작성 차례는 보고서를 제출하면, 승인 차례는 승인하면 처리됩니다. 원장 환불 결정 차례는 퇴원월 뒤 청구에서 환불 승인이나 환불 없음을 정하면 처리됩니다. 보완 요청·취소로 차례가 없어지면 취소됩니다. 작성은 이틀, 승인·환불 결정은 다음 날까지 안 하면 늦음입니다.",
   },
   refund_process: {
     label: "환불 처리",
@@ -122,6 +122,7 @@ const CLOSE_REASON: Record<string, string> = {
   turn_skipped: "내 차례가 생략됨",
   withdrawal_acted: "제출하거나 승인함",
   withdrawal_canceled: "퇴원보고서가 취소됨",
+  refund_settled: "원장 환불 결정이 끝남(또는 결정할 청구가 없어짐)",
   turn_changed: "차례가 바뀜",
   help_answered: "답변이 달림",
 };

@@ -5,6 +5,7 @@ import { documentFileName, titleWithFileExtension } from "../file-name";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   createUploadTicket,
   MEDIA_KIND,
@@ -20,6 +21,9 @@ import { canViewResume, RESUME_LOCKED_MSG } from "@/features/staff/resume/server
 import { logAction } from "@/features/audit/server/log";
 import { REFUND_FORM_TYPE } from "@/features/billing/refund-request";
 import { releaseWithdrawalRefunds } from "@/features/withdrawal-reports/server/release";
+import { loadRefundLink } from "@/features/withdrawal-reports/server/refund-steps";
+import { linkedDeleteLock, linkedEditLock } from "@/features/withdrawal-reports/refund-decision";
+import { viewAsTeacher } from "@/lib/auth/view-as";
 import { FALLBACK_CATEGORY, normalizeLinkUrl } from "../categories";
 import { getDocumentCategories } from "./category-queries";
 import { hideRestrictedDocuments } from "./restricted";
@@ -252,7 +256,7 @@ export async function updateDocument(
   const [supabase, hideRestricted] = await Promise.all([createClient(), hideRestrictedDocuments()]);
   let currentQuery = supabase
     .from("academy_documents")
-    .select("kind, file_name, file_path")
+    .select("kind, file_name, file_path, form_type, title")
     .eq("id", id)
     .eq("tenant_id", gate.user.tenantId)
     .is("staff_user_id", null);
@@ -265,6 +269,15 @@ export async function updateDocument(
   const savedTitle = current.kind === "file"
     ? titleWithFileExtension(title, current.file_name ?? current.file_path?.split("/").pop() ?? null)
     : title;
+  // 퇴원보고서에 이어진 환불 요청서의 제목을 바꾸는 것은 담당 데스크(재직)·원장만(원장 결정 2026-11-09 · 리뷰 r2 I6 — DB 트리거도 막는다).
+  // 분류(폴더)·고정은 막지 않는다(돈과 무관 · 폴더 옮기기·흡수가 깨지지 않게).
+  if (current.form_type === REFUND_FORM_TYPE && savedTitle !== current.title) {
+    const denied = await linkedDocumentLock(gate.user, id, "edit");
+    if (denied) {
+      await logAction({ action: "refund_request_linked_denied", targetType: "refund_request", targetLabel: current.title ?? null, metadata: { documentId: id, attempted: "자료실에서 제목 수정", reason: denied } });
+      return { error: denied };
+    }
+  }
   const patch: Record<string, unknown> = {
     title: savedTitle,
     category: cat.category,
@@ -323,7 +336,16 @@ export async function deleteDocument(id: string): Promise<{ ok?: boolean; error?
     .eq("id", id)
     .is("staff_user_id", null); // 직원 연결 문서는 여기서 안 지운다(#77) — 이력서는 deleteStaffResume 전용
   if (hideRestricted) rowQuery = rowQuery.eq("restricted", false);
-  const { data: row } = await rowQuery.maybeSingle();
+  const { data: row, error: rowError } = await rowQuery.maybeSingle();
+  if (rowError) { logDbError(rowError, "documents.deleteDocument"); return { error: "문서를 확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }; }
+  // 퇴원보고서에 이어진 환불 요청서(원장 결정 2026-11-09 · 리뷰 r2 B1) — 완료된 것은 누구도 · 미완료는 담당 데스크(재직)·원장만(수납 화면 삭제와 같은 판정 · DB 트리거도 막는다).
+  if (row?.form_type === REFUND_FORM_TYPE) {
+    const denied = await linkedDocumentLock(gate.user, id, "delete");
+    if (denied) {
+      await logAction({ action: "refund_request_linked_denied", targetType: "refund_request", targetLabel: row.title ?? null, metadata: { documentId: id, attempted: "자료실에서 요청서 삭제", reason: denied } });
+      return { error: denied };
+    }
+  }
 
   // ⚠️ 이력서는 같은 행이 여기(탐색기)에도 뜨지만 **열람은 원장·관리자로 잠겨 있다**(재인증 제거 2026-07-28) —
   // 열람 못 하는 이력서를 이 경로로 삭제할 수 있으면 잠금이 무의미해진다(2026-07-15 적대검수 실적발). 같은 게이트를 건다.
@@ -362,6 +384,26 @@ export async function deleteDocument(id: string): Promise<{ ok?: boolean; error?
   if (row?.form_type === REFUND_FORM_TYPE) await releaseWithdrawalRefunds({ tenantId: gate.user.tenantId, documentId: id, actorId: gate.user.id });
   revalidatePath("/documents");
   return { ok: true };
+}
+
+/**
+ * 이어진 환불 요청서 잠금(수납 화면과 같은 판정 — `linked-request.ts`) — 행위자(강사뷰면 대상 직원)와 실제 로그인 계정 둘 다. 이어지지 않았으면 null · 연결을 못 읽으면 막는다.
+ */
+async function linkedDocumentLock(user: { id: string; tenantId: string; systemRole: string }, id: string, mode: "edit" | "delete"): Promise<string | null> {
+  let link: Awaited<ReturnType<typeof loadRefundLink>>;
+  try { link = await loadRefundLink(user.tenantId, id); }
+  catch { return "퇴원보고서 연결을 확인하지 못했습니다 — 잠시 후 다시 시도해 주세요"; }
+  if (!link) return null;
+  const account = (await getCurrentUser()) ?? user;
+  const actor = { id: user.id, directorLevel: user.systemRole === "master" && !(await viewAsTeacher()) };
+  const real = { id: account.id, directorLevel: account.systemRole === "master" };
+  if (mode === "edit") return linkedEditLock(link, actor, real);
+  // 완료 여부는 지금 행에서(관리 키로 읽는다 — 이 함수는 앱 판정만 · DB 트리거가 다시 막는다).
+  const { data, error } = await createAdminClient().from("academy_documents").select("form_data").eq("tenant_id", user.tenantId).eq("id", id).maybeSingle();
+  // 못 읽으면 막는다(리뷰 r3 R2-m15 — 오류를 '미완료'로 읽으면 앱 판정을 지나간다 · DB 트리거가 다시 막지만 오류를 삼키지 않는다).
+  if (error) { logDbError(error, "documents.linkedDocumentLock"); return "환불 요청서를 다시 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요"; }
+  const completed = !!String(((data?.form_data ?? {}) as { result?: { completedDate?: unknown } }).result?.completedDate ?? "").trim();
+  return linkedDeleteLock(link, completed, actor, real);
 }
 
 /**

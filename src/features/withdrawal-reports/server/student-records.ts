@@ -7,6 +7,7 @@ import type { ArchiveRow } from "../archive-model";
 import { canReadReport, reportViewer } from "./queries";
 import { canReadArchive } from "./archives";
 import { loadRefundSteps } from "./refund-steps";
+import { loadRefundHolds } from "./refund-check";
 
 /**
  * 퇴원 상세의 '퇴원보고서' 카드 — **한 학생**의 새 보고서와 기존 원본(원장 2026-10-23 *"퇴원보고서 연동"*).
@@ -107,7 +108,11 @@ export async function loadStudentReportRecords(studentId: string): Promise<Stude
     const readable = reports.rows.filter((r) => canReadReport(r, viewer));
     // 데스크 환불 단계(s2_0025)는 아직 처리 전인 보고서에만 의미가 있다 — 그런 보고서가 있을 때만 읽고, 못 읽으면 단계 없이.
     const open = readable.filter((r) => !["completed", "canceled", "blocked"].includes(r.status));
-    const steps = open.length ? await loadRefundSteps(tenant, open).catch(() => undefined) : undefined;
+    const [steps, holds] = open.length
+      ? await Promise.all([loadRefundSteps(tenant, open).catch(() => undefined), loadRefundHolds(tenant, open.map((r) => r.group_id)).catch(() => undefined)])
+      : [undefined, undefined];
+    // 환불 단계 조회 실패 — 승인 완료 칩을 '처리 확인 대기'라고 단정하지 않는다(리뷰 r3 R2-m10).
+    const refundsFailed = open.length > 0 && (!steps || !holds);
     return {
       status: "ok",
       // 다 보는 사람만 '없습니다'를 단정한다 — 원장, 그리고 열람 과목 제한이 없는 관리자급(원장 2026-10-30 열람 확대).
@@ -117,7 +122,10 @@ export async function loadStudentReportRecords(studentId: string): Promise<Stude
           id: r.id,
           groupId: r.group_id ?? r.id,
           status: r.status,
-          statusLabel: reportStatusLabel(r, steps?.get(r.group_id ?? r.id) ?? []),
+          // 형제 승인(리뷰 r3 R2-m2) — 이 학생의 보고서를 다 읽은 사람만(강사는 자기 보고서만 읽어 형제를 모른다 → 종전 글).
+          statusLabel: reportStatusLabel(r, steps?.get(r.group_id ?? r.id) ?? [], !!r.group_id && !!holds?.has(r.group_id),
+            viewer.teacherId ? undefined : reports.rows.some((q) => q.group_id && q.group_id === r.group_id && q.id !== r.id && ["requested", "revision", "manager_pending", "director_pending"].includes(q.status)) ? "pending"
+              : refundsFailed ? "failed" : "done"),
           exitKind: r.exit_kind,
           subjects: r.subjects ?? [],
           effectiveDate: r.effective_date,
