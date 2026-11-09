@@ -1,5 +1,9 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-09 — 즉석 보강(`allowMakeup`) 서버 검증 — 수정 계획 P1-A(4-3), 결정 #5 ②
+
+- `setAttendanceCell`은 `allowMakeup`을 상태가 `makeup`인 저장에서만 듣는다(그 밖은 무시 → 서버 판정) · 켜지면 학생·반이 이 지점에 있는지 확인(`instantMakeupTargetsOk`, 강사 조회와 병렬). 수업 나누기 칸(좌석표·원스크린 알약)이 `present`에 실어 보내던 플래그를 걷었다 — 서버가 `hasSplitInto`로 연다. 보내는 화면 = `makeup-add-flow.tsx` 하나(가드).
+
 ## 2026-11-09 — 강사 출결 쓰기 학생 자격 = 단건·일괄·범위 한 벌 — 수정 계획 P1-A(4-2), 결정 #5
 
 - 순수 판정 `write-eligibility.ts`(`writeEligibility`·`blockedByCorrectOnly`) — 새 행 근거 = 수강·보강 예약·수업 나누기·native 보강 참여 · **기존 기록은 정정만**(다른 교시 새 행 불가). 세 경로가 손으로 따로 짜서 어긋나 있던 것(범위는 나누기 없음 · 일괄·범위는 기존 기록·native 없음 · 단건은 기록이 있으면 예약을 안 물음). 일괄·범위의 native는 기간 한 번(`nativeWriteKeys`), 권한 거절은 근거 없음(sharedRead), 조회 실패는 새 행이 필요한 칸이 있을 때만 전체 거절(정정은 그대로). 일괄·범위 입력자 판정은 걸러진 칸의 반만. 옛 `canWriteAttendanceStudent`(makeup-write.ts) 삭제. 배선 가드 `write-eligibility-wiring.test.ts`. 결정 로그 `docs/decisions/attendance.md`.

@@ -2085,8 +2085,7 @@ export function OneScreenClient({
         //    화면에 상태가 보이는 행의 변경(정정)은 종전대로 덮는다 — 그건 보고 하는 편집이다.
         //    보강 흐름은 opts.overwrite로 이 보호를 끈다(위 opts 주석 — 성공 안내와 기록이 갈리는 것 방지).
         onlyIfEmpty: status !== null && prev.raw === null && !opts?.overwrite,
-        // 수업 나누기로 온 학생(0351a)은 이 반 수강행이 없다 — 보강 추가와 같은 문으로 연다(받는 반 = 출결 몫).
-        ...(row?.splitIn ? { allowMakeup: true } : {}),
+        // 수업 나누기로 온 학생(0351a)은 서버가 나누기 표를 직접 보고 연다(`hasSplitInto` · 받는 반 = 출결 몫) — 플래그 없음(결정 #5 ②).
       });
       if ("error" in res) {
         rollbackAttendance(studentId, classId, prev);

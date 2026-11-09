@@ -25,6 +25,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { logAction } from "@/features/audit/server/log";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import { isUuid } from "@/lib/auth/tenant-view-shared";
 import { explainDbError } from "@/lib/supabase/db-error";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { blockedByCorrectOnly, CORRECT_ONLY_MESSAGE, writeEligibility, type WriteEligibility } from "../write-eligibility";
@@ -539,6 +540,25 @@ export type CellResult =
   | { error: string };
 
 /**
+ * 즉석 보강(`allowMakeup`)의 학생·반이 **이 지점에** 있는가(결정 #5 ②). `attendance_records`의 FK는 학생·반 id만 묶고
+ * 지점은 안 묶어서, 확인 없이 쓰면 다른 지점 학생을 가리키는 기록이 생길 수 있다. 조회 실패는 throw(호출부 `settle`).
+ */
+async function instantMakeupTargetsOk(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tenantId: string,
+  studentId: string,
+  classId: string,
+): Promise<boolean> {
+  if (!isUuid(studentId) || !isUuid(classId)) return false;
+  const [st, cl] = await Promise.all([
+    supabase.from("students").select("*", { count: "exact", head: true }).eq("id", studentId).eq("tenant_id", tenantId),
+    supabase.from("classes").select("*", { count: "exact", head: true }).eq("id", classId).eq("tenant_id", tenantId),
+  ]);
+  if (st.error || cl.error) throw st.error ?? cl.error;
+  return (st.count ?? 0) > 0 && (cl.count ?? 0) > 0;
+}
+
+/**
  * 매트릭스 인라인 셀 1건 출결 토글 — 페이지 이동 없이 빠르게 찍는다(반응속도 1순위).
  * status=null 이면 해당 셀 기록 삭제(지우기). 기존 record가 있으면 update, 없으면 insert.
  * 상세 입력폼(메모·숙제)은 별도 유지 — 여기선 상태·메모·시수만 다룬다.
@@ -592,9 +612,11 @@ export async function setAttendanceCell(input: {
    */
   source?: "live";
   /**
-   * 보강(수업외)으로 **지금 넣는** 저장 — 수강행이 없어도 그 반·날짜 칸을 연다.
-   * ECS·원스크린·출석부 '+ 보강 학생 추가'가 켠다. 이미 있는 보강 칸을 고치는 건
-   * 이 플래그 없이 기존 기록으로 통과한다(정정만 — `writeEligibility`, write-eligibility.ts).
+   * **즉석 보강** — '+ 보강 학생 추가'(ECS·원스크린·출석부, `makeup-add-flow.tsx`)만 켠다. 수강행이 없어도 그 반·날짜 칸을 연다.
+   * 🔴 상태가 `makeup`인 저장에서만 듣는다(결정 #5 ②) — 그 밖(일반 저장·메모만)에서 오면 **무시**하고 서버 판정대로 간다.
+   *    예전엔 어떤 상태든 이 값 하나로 수강 게이트를 넘었다(수업 나누기 칸이 `present`에 실어 보냈다 — 지금은 서버가 표를 본다).
+   * 🔴 켜져 오면 서버가 학생·반이 **이 지점에 실재**하는지 확인한다(역할 무관). 담당 반·7일 창은 종전대로(강사).
+   * 이미 있는 보강 칸을 고치는 건 이 플래그 없이 기존 기록으로 통과한다(정정만 — `writeEligibility`).
    */
   allowMakeup?: boolean;
   /**
@@ -640,6 +662,11 @@ export async function setAttendanceCell(input: {
   }
 
   const supabase = await createClient();
+  /** 즉석 보강 — '+ 보강 학생 추가'의 `makeup` 저장일 때만(결정 #5 ②). 다른 저장의 플래그는 듣지 않는다. */
+  const instantMakeup = input.allowMakeup === true && status === "makeup" && !noteOnly;
+  // 학생·반이 이 지점에 있는지 — 강사 조회와 겹쳐 돌린다(B4). `settle`로 바로 감싼다(강사 게이트가 먼저 거절해도
+  // 거부된 약속이 떠돌지 않게). 실패 = null → 아래에서 LOOKUP_FAILED.
+  const makeupTargets = instantMakeup ? settle(instantMakeupTargetsOk(supabase, user.tenantId, studentId, classId)) : null;
 
   // scoped(강사) 담당 반 강제 — 원스크린 인라인 출결(2단계)이 이 액션을 재사용하면서 서버 검증 추가.
   // RLS는 tenant 격리뿐이라 여기서 막지 않으면 강사가 테넌트 내 아무 반에나 기록 가능(검수 지적).
@@ -691,7 +718,7 @@ export async function setAttendanceCell(input: {
     let splitInto = false;
     let native = false;
     let nativeUnknown: string | null = null;
-    if (!isEnrolled && input.allowMakeup !== true) {
+    if (!isEnrolled && !instantMakeup) {
       [reserved, splitInto] = await Promise.all([
         hasReservedMakeup(user.tenantId, { studentId, classId, date: sessionDate }),
         hasSplitInto(classId, studentId, sessionDate),
@@ -704,12 +731,17 @@ export async function setAttendanceCell(input: {
         native = n.allow;
       }
     }
-    // 클라 `allowMakeup`('+ 보강 학생 추가')은 아직 종전대로 새 행까지 연다 — 서버 검증으로 바꾸는 것은 수정 계획 P1-A 4-3.
-    cellEligibility = input.allowMakeup === true
+    // 즉석 보강은 새 행까지 — 학생·반 실재는 아래 `makeupTargets`가, 담당 반·7일 창은 위가 이미 봤다(결정 #5 ②).
+    cellEligibility = instantMakeup
       ? "create"
       : writeEligibility({ enrolled: isEnrolled, reserved, splitInto, native, hasRecord });
     if (cellEligibility === "none") return { error: "이 반 수강생이 아닙니다" };
     cellNativeUnknown = nativeUnknown;
+  }
+  if (makeupTargets) {
+    const ok = await makeupTargets;
+    if (ok === null) return { error: LOOKUP_FAILED };
+    if (!ok) return { error: "보강할 학생이나 반을 찾지 못했습니다" };
   }
 
   // 메모만 — 있는 기록의 note만 갈아끼운다. 🔴 **지우기 분기보다 먼저** 온다(status가 null로 와도

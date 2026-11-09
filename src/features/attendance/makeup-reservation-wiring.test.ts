@@ -88,7 +88,7 @@ describe("② 단건 저장의 강사 게이트 — 예약된 학생은 수강�
     const body = fnBody(ACTIONS, "setAttendanceCell");
     expect(body).toContain("hasReservedMakeup(user.tenantId, { studentId, classId, date: sessionDate })");
     const gate = body.slice(body.indexOf("const isEnrolled"), body.indexOf("이 반 수강생이 아닙니다"));
-    expect(gate).toContain("if (!isEnrolled && input.allowMakeup !== true)");
+    expect(gate).toContain("if (!isEnrolled && !instantMakeup)");
     expect(gate).not.toContain("(existing ?? 0) === 0");
     expect(gate).toContain("writeEligibility({ enrolled: isEnrolled, reserved, splitInto, native, hasRecord })");
   });

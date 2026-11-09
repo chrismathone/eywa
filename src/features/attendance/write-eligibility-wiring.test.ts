@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -37,5 +37,33 @@ describe("출결 쓰기 학생 자격 — 세 경로가 판정 한 벌을 부른
     expect(fnBody("setAttendanceRange")).toContain("if (correctOnlyDropped > 0 && rangeNativeUnknown) return { error: rangeNativeUnknown };");
     // 단건: 기록이 있으면 조회 실패에도 정정은 진행한다
     expect(fnBody("setAttendanceCell")).toContain("if (n.error && !hasRecord) return { error: n.error };");
+  });
+
+  it("즉석 보강(allowMakeup)은 makeup 저장에서만 듣고, 학생·반의 지점 실재를 서버가 확인한다(결정 #5 ②)", () => {
+    const body = fnBody("setAttendanceCell");
+    expect(body).toContain('const instantMakeup = input.allowMakeup === true && status === "makeup" && !noteOnly;');
+    expect(body).toContain("instantMakeupTargetsOk(supabase, user.tenantId, studentId, classId)");
+    // 판정에서 플래그를 직접 읽는 곳은 instantMakeup 한 줄뿐이다
+    expect(body.split("input.allowMakeup").length - 1).toBe(1);
+  });
+});
+
+/** 화면에서 `allowMakeup: true`를 싣는 곳 = '+ 보강 학생 추가' 한 곳뿐(일반 저장 우회 금지, 결정 #5 ②). */
+describe("allowMakeup을 보내는 화면", () => {
+  function walk(dir: string, out: string[] = []): string[] {
+    for (const name of readdirSync(dir)) {
+      if (name.startsWith(".") || name === "node_modules") continue;
+      const p = path.join(dir, name);
+      if (statSync(p).isDirectory()) walk(p, out);
+      else if (/\.(ts|tsx)$/.test(name) && !/\.test\.tsx?$/.test(name)) out.push(p);
+    }
+    return out;
+  }
+  it("보강 추가 흐름(makeup-add-flow.tsx)만", () => {
+    const root = path.join(process.cwd(), "src");
+    const hits = walk(root)
+      .filter((f) => /allowMakeup:\s*true/.test(readFileSync(f, "utf8")))
+      .map((f) => path.relative(root, f));
+    expect(hits).toEqual(["features/attendance/components/makeup-add-flow.tsx"]);
   });
 });
