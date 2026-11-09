@@ -45,6 +45,11 @@ export type CarrySource = {
   refundState?: string;
   /** 환불로 만든 배분 0(반 이름 매칭 밖의 공유 줄 환불 포함, `invoiceAllocationStates.refundedAllocation`). */
   refundedAllocation?: boolean;
+  /**
+   * 이 줄에 붙은 **받은 이월**(지난 달에서) — 실납에 더해지고(`netAllocatedAmount`) **더 받은 몫에도 든다**(`carrySurplus`, 연쇄 이월).
+   * 🔴 붙이는 줄은 `attachMoneyCarry`(화면) · `loadMoneyCarryIns`(받는 달이 보낸 달을 다시 볼 때)가 같은 줄이다 — (학생, 반)의 그 달 회차 행 하나.
+   */
+  carryIns?: readonly MoneyCarryIn[];
 };
 
 /** 환불로 배분이 0이 된 줄 — 이월을 받을 수 없다. */
@@ -87,12 +92,17 @@ export function isCarryColumnMissing(message: string): boolean {
 }
 
 /**
- * 확정액보다 더 받은 몫 = 이월할 수 있는 최대 금액. 시수 확정·유효 배분이 없거나 재확인 필요면 0
+ * 확정액보다 더 받은 몫 = 이월할 수 있는 최대 금액 = **배분액 + 받은 이월 − 확정액**. 시수 확정·유효 배분이 없거나 재확인 필요면 0
  * (전액 환불은 배분액이 0이라 저절로 0).
+ * 🔑 받은 이월도 넣는다 — 원장 2026-11-09(조은준 9월: 배분 312,000 + 8월 이월 24,000 = 실납 336,000 · 확정 27시수 324,000)
+ *    *"이미 8월 → 9월로 한번 이월을 받았는데, 9월에서 남은 시수를 10월로 이월이 안되게 막혀있음"*. 배분액만 보면 0원이라 '이월' 버튼이
+ *    아예 안 섰다. 받은 이월에서 남은 몫도 다음 달로 다시 넘길 수 있다(연쇄 이월).
+ * 🔴 받는 달이 이 판정을 다시 할 때도 보내는 달 행에 **그 달이 받은 이월**을 붙여야 같은 값이 나온다(`loadMoneyCarryIns`) —
+ *    한쪽만 넣으면 보낸 달은 빼고 받는 달은 안 더해 돈이 사라진다. DB 함수 상한도 같은 뜻이다(s2_0033).
  */
 export function carrySurplus(r: CarrySource): number {
   if (r.allocatedAmount == null || r.allocationStale || r.amount == null || r.confirmedSessions == null) return 0;
-  return Math.max(0, r.allocatedAmount - r.amount);
+  return Math.max(0, r.allocatedAmount + receivedCarry(r) - r.amount);
 }
 
 /** 저장된 이월이 지금도 유효한가 — 배분을 다시 저장해 더 받은 몫이 줄었으면 무효(보내는 쪽도 받는 쪽도 반영 안 함). */
@@ -106,20 +116,28 @@ export function carryInTotal(carryIns: readonly MoneyCarryIn[] | undefined): num
 }
 
 /**
+ * 이 줄 실납에 **지금 실리는** 받은 이월 — 받을 수 없는 줄(배분 없음·재확인·환불)이면 0.
+ * 실납(`netAllocatedAmount`)과 더 받은 몫(`carrySurplus`)이 이 한 값을 쓴다.
+ */
+export function receivedCarry(r: CarrySource): number {
+  return canReceiveCarry(r) ? carryInTotal(r.carryIns) : 0;
+}
+
+/**
  * 분배·표시가 쓰는 실납 = 배분액 − 유효한 보낸 이월 + 유효한 받은 이월.
  * 배분이 없으면 null — 받은 이월은 그 달 배분을 저장해야 실린다(그 전엔 '이월 +N' 표식만). 전액 환불 줄에도 안 싣는다.
  */
-export function netAllocatedAmount(r: CarrySource & { carryOut?: MoneyCarryOut | null; carryIns?: readonly MoneyCarryIn[] }): number | null {
+export function netAllocatedAmount(r: CarrySource & { carryOut?: MoneyCarryOut | null }): number | null {
   if (r.allocatedAmount == null) return null;
   const out = r.carryOut && carryOutValid(r, r.carryOut.amount) ? r.carryOut.amount : 0;
-  return r.allocatedAmount - out + (canReceiveCarry(r) ? carryInTotal(r.carryIns) : 0);
+  return r.allocatedAmount - out + receivedCarry(r);
 }
 
 /**
  * 분배 저장을 막을 이월 문제 — 받을 줄이 없는 이월(보낸 쪽 `orphan` · 받는 쪽 `orphan`)은 어느 달에도 분배되지 않는다.
  * 보낸 달에서 이월을 취소하거나 받을 반을 다시 골라야 한다.
  */
-export function carryBlocksSplits(r: CarrySource & { carryOut?: MoneyCarryOut | null; carryIns?: readonly MoneyCarryIn[] }): boolean {
+export function carryBlocksSplits(r: CarrySource & { carryOut?: MoneyCarryOut | null }): boolean {
   return (!!r.carryOut && r.carryOut.landing === "orphan" && carryOutValid(r, r.carryOut.amount)) || (r.carryIns ?? []).some((c) => c.orphan && c.valid);
 }
 

@@ -6,7 +6,7 @@ import { tipProps } from "@/components/hover-tip/tip";
 import { TONE_SOFT } from "@/lib/design/semantic-color";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { publishRecordSaved } from "@/lib/realtime/record-channel";
-import { carryOutValid, carrySurplus, MONEY_CARRY_NOTE_MAX } from "@/features/billing/session-terms/money-carryover";
+import { carryOutValid, carrySurplus, MONEY_CARRY_NOTE_MAX, receivedCarry } from "@/features/billing/session-terms/money-carryover";
 import { getMoneyCarryoverOptions, saveMoneyCarryover, type MoneyCarryOptions } from "@/features/billing/session-terms/server/money-carryover-actions";
 import type { SessionTermRow } from "@/features/billing/session-terms/server/queries";
 import { CELL_ACTION_BUTTON } from "./cell-action-button";
@@ -24,12 +24,15 @@ export function MoneyCarryTags({ r }: { r: SessionTermRow }) {
   const out = r.carryOut;
   const ins = r.carryIns ?? [];
   if (!out && ins.length === 0) return null;
+  const received = receivedCarry(r);
   return (
     <>
       {out ? (carryOutValid(r, out.amount) ? (
         <span className={`${out.landing === "orphan" ? TONE_SOFT.caution : TONE_SOFT.info} ${pill}`} {...tipProps({ title: `${monthKo(out.toPeriod)}로 이월`, lines: [
           `확정액보다 더 받은 몫 중 ${won(out.amount)}을 ${monthKo(out.toPeriod)} ${out.toClassName ?? "받을 반"}으로 넘겼습니다.`,
-          `옆의 실납은 배분액 ${won(r.allocatedAmount ?? 0)}에서 이월을 뺀 금액입니다(수납액 분배도 이 금액 기준).`,
+          received > 0
+            ? `옆의 실납은 배분액 ${won(r.allocatedAmount ?? 0)}에 받은 이월 ${won(received)}을 더하고 이 이월을 뺀 금액입니다(수납액 분배도 이 금액 기준).`
+            : `옆의 실납은 배분액 ${won(r.allocatedAmount ?? 0)}에서 이월을 뺀 금액입니다(수납액 분배도 이 금액 기준).`,
           out.landing === "landed" ? `${monthKo(out.toPeriod)} 그 반 실납에 더해졌습니다.`
             : out.landing === "waiting" ? `${monthKo(out.toPeriod)} 그 반 수납 배분을 저장하면 더해집니다(아직 가는 중).`
             : out.landing === "orphan" ? `${monthKo(out.toPeriod)}에 그 반 줄이 없거나 전액 환불이라 어디에도 분배되지 않습니다 — 이월을 취소하거나 받을 반을 다시 고르세요(분배 저장이 막힙니다).`
@@ -38,7 +41,7 @@ export function MoneyCarryTags({ r }: { r: SessionTermRow }) {
         ] })}>{monthKo(out.toPeriod)} 이월 −{won(out.amount)}{out.landing === "orphan" ? " · 받을 반 없음" : ""}</span>
       ) : (
         <span className={`${TONE_SOFT.caution} ${pill}`} {...tipProps({ title: "이월 재확인 필요", lines: [
-          `${won(out.amount)}을 ${monthKo(out.toPeriod)} ${out.toClassName ?? "받을 반"}으로 넘겨 두었는데, 지금은 확정액보다 더 받은 몫이 그만큼 없습니다(배분·확정이 바뀜).`,
+          `${won(out.amount)}을 ${monthKo(out.toPeriod)} ${out.toClassName ?? "받을 반"}으로 넘겨 두었는데, 지금은 확정액보다 더 받은 몫이 그만큼 없습니다(배분·확정·받은 이월이 바뀜).`,
           "이 이월은 실납·분배에 반영하지 않습니다. '이월'을 눌러 금액을 고치거나 취소하세요.",
         ] })}>이월 재확인</span>
       )) : null}
@@ -122,12 +125,15 @@ function MoneyCarryDialog({ data, onClose }: { data: MoneyCarryOptions; onClose:
         </div>
         <button type="button" disabled={pending} onClick={onClose} className="shrink-0 text-sm whitespace-nowrap">닫기</button>
       </header>
-      <dl className="bg-bg-soft mb-4 grid grid-cols-3 gap-2 rounded-lg p-3 text-sm">
+      {/* 받은 이월이 있으면 그것도 더 받은 몫에 든다(연쇄 이월 — `carrySurplus`). 숫자 셋이 안 맞아 보이지 않게 칸을 보인다. */}
+      <dl className={`bg-bg-soft mb-4 grid gap-2 rounded-lg p-3 text-sm ${data.carriedIn > 0 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>
         <div><dt className="text-text-dim text-xs">배분액</dt><dd className="num font-bold">{data.allocatedAmount == null ? "—" : won(data.allocatedAmount)}</dd></div>
+        {data.carriedIn > 0 ? <div><dt className="text-text-dim text-xs">받은 이월</dt><dd className="num font-bold">+{won(data.carriedIn)}</dd></div> : null}
         <div><dt className="text-text-dim text-xs">확정액</dt><dd className="num font-bold">{data.amount == null ? "—" : won(data.amount)}</dd></div>
         <div><dt className="text-text-dim text-xs">더 받은 몫(최대)</dt><dd className="num font-bold">{won(data.surplus)}</dd></div>
       </dl>
-      {data.surplus <= 0 ? <p role="status" className="text-amber mb-3 text-sm">지금은 확정액보다 더 받은 몫이 없어 새로 넘길 수 없습니다. 넘겨 둔 이월은 취소할 수 있습니다.</p> : null}
+      {data.degraded ? <p role="status" className="text-amber mb-3 text-sm">앞 달 이월 정보를 불러오지 못해 지금은 새로 넘길 수 없습니다. 넘겨 둔 이월은 취소할 수 있습니다.</p>
+        : data.surplus <= 0 ? <p role="status" className="text-amber mb-3 text-sm">지금은 확정액보다 더 받은 몫이 없어 새로 넘길 수 없습니다. 넘겨 둔 이월은 취소할 수 있습니다.</p> : null}
       {data.classes.length === 0 ? <p role="status" className="text-amber mb-3 text-sm">{monthKo(data.nextPeriod)} 출석부에 이 학생의 반이 아직 없습니다. 다음 달 반이 정해지면 넘길 수 있습니다.</p> : null}
       <div className="grid gap-3">
         <label className="grid gap-1 text-sm">

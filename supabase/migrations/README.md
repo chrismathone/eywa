@@ -12,6 +12,12 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-11-09 금액 이월 저장 함수 상한에 받은 이월을 더한다 — 연쇄 이월 (s2_0033 · ⏳ 운영 미적용 · 원장 승인 대기)
+
+`s2_0033_money_carry_chain.sql` — 원장 2026-11-09 *"이미 8월 -> 9월로 한번 이월을 받았는데, 9월에서 남은 시수를 10월로 이월이 안되게 기능이 막혀있음"*. `save_session_term_money_carryover`(0278a)의 상한 `allocation_amount − amount`에 **지난 달 청구서(취소 제외)에서 이 학생 · 이 반으로 넘긴 이월 합계**를 더한다(상한일 뿐 — 유효성·붙는 줄은 앱이 화면과 같은 판정으로 먼저 본다). 서명·권한·나머지 본문은 0278a 그대로 → 옛 앱도 그대로 돈다(옛 상한 안의 값은 새 상한도 통과).
+- 순서: 이 SQL → 앱 배포(앱만 먼저 나가면 새로 선 '이월' 버튼이 저장에서 "최대 0원"으로 거절된다 — 화면은 안 죽는다).
+- 적용 전 확인: 운영 함수 정의가 0278a와 같은지(`pg_get_functiondef`) · 적용 뒤: 같은 정의에 받은 이월 조회가 들어갔는지 · 조은준 9월 줄로 거래 안에서 12,000 저장 → 되돌림.
+
 ## 2026-11-06 연동 PC 역할에 도우미 함수 실행권 — 학원 비서 SQL 뒤 연동 PC 정지 복구 (s2_0032 · ✅ 운영 적용 2026-11-06 19:16 · 원장 *"수정할 수 있으면 빠르게 수정하고 적용시켜"* · 직결(node · do 블록 한 문장))
 
 `s2_0032_sync_agent_helper_grants.sql` — s2_0031이 PUBLIC 실행권을 거둔 public 보안 정의자 함수 11개(`assistant_private.revoked_public_execute`에서 비서 증표 발급 함수를 뺀 것)를 연동 PC 역할 `eywa_sync_agent`에 명시로 준다. s2_0031 적용(거래 시각 17:37:44) 직후 첫 42501(`permission denied for function operator_view_tenant`)이 17:37:50에 기록됐고, 연동 PC의 ClassNote 작업자 확인 · 신호 질의(`classnote_workers`)가 막혀 ClassNote 발송 · 학부모 글 감지가 멈췄고, 메이크에듀 모듈의 작업자 신호 · 요청 집기 질의도 막혔다. 이 역할은 PUBLIC 정책의 `auth_tenant_id()` · `auth_system_role()`(0406a가 이 역할에 준 겉함수) **속의** `operator_view_tenant()` · `auth_*_base()`를 PUBLIC으로 부르고 있었다(함정 #155).

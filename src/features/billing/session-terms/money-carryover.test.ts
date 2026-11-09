@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canReceiveCarry, carryBlocksSplits, carryInTotal, carryLanding, carryOutValid, carrySurplus, carryTargetRank, isCarryColumnMissing, netAllocatedAmount, validateMoneyCarry, type MoneyCarryIn, type MoneyCarryOut } from "./money-carryover";
+import { canReceiveCarry, carryBlocksSplits, carryInTotal, carryLanding, carryOutValid, carrySurplus, carryTargetRank, isCarryColumnMissing, netAllocatedAmount, receivedCarry, validateMoneyCarry, type MoneyCarryIn, type MoneyCarryOut } from "./money-carryover";
 import { invoiceAllocationStates, type AllocationTermRow } from "./allocation-state";
 
 // 김지호 2026-09 모양 — 수업 청구 169,375원 한 줄을 '고등M 개별 토' 63,750 · '고등M_일 개별진도' 105,625로 나눴는데
@@ -58,6 +58,28 @@ describe("금액 이월 — 실납(분배·표시 공통)", () => {
   it("이월이 없으면 배분액 그대로다", () => {
     expect(netAllocatedAmount(extra)).toBe(105625);
     expect(netAllocatedAmount({ ...extra, carryOut: null, carryIns: [] })).toBe(105625);
+  });
+});
+
+describe("연쇄 이월 — 받은 이월에서 남은 몫도 다음 달로(원장 2026-11-09)", () => {
+  // 조은준 9월 '중등E_중1 SKY' — 배분 312,000(26시수) + 8월 이월 24,000 = 실납 336,000 · 확정 27시수 324,000 → 12,000 남음.
+  const sep = { allocatedAmount: 312000, allocationStale: false, amount: 324000, confirmedSessions: 27, carryIns: [inn(24000, { fromPeriod: "2026-08" })] };
+  it("받은 이월도 더 받은 몫에 든다 — 배분액만 보면 0원이라 '이월' 버튼이 안 섰다", () => {
+    expect(carrySurplus({ ...sep, carryIns: undefined })).toBe(0);
+    expect(carrySurplus(sep)).toBe(12000);
+    expect(receivedCarry(sep)).toBe(24000);
+  });
+  it("남은 12,000을 넘기면 9월 실납 = 확정액 · 그보다 많이는 무효", () => {
+    expect(carryOutValid(sep, 12000)).toBe(true);
+    expect(netAllocatedAmount({ ...sep, carryOut: out(12000) })).toBe(324000);
+    expect(carryOutValid(sep, 12001)).toBe(false);
+    expect(netAllocatedAmount({ ...sep, carryOut: out(12001) })).toBe(336000);
+  });
+  it("받은 이월이 무효·옮겨 붙음(orphan)이거나 이 줄이 받을 수 없으면(재확인·환불) 더 받은 몫에 안 든다 — 실납과 같은 판정", () => {
+    expect(carrySurplus({ ...sep, carryIns: [inn(24000, { valid: false })] })).toBe(0);
+    expect(carrySurplus({ ...sep, carryIns: [inn(24000, { orphan: true })] })).toBe(0);
+    expect(carrySurplus({ ...sep, allocationStale: true })).toBe(0);
+    expect(carrySurplus({ ...sep, refundedAllocation: true, allocatedAmount: 0 })).toBe(0);
   });
 });
 

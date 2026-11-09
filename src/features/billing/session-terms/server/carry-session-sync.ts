@@ -6,6 +6,7 @@ import { fetchInChunks } from "@/lib/supabase/batch";
 import { logDbError } from "@/lib/supabase/db-error";
 import { planAutoReallocation } from "../auto-reallocation";
 import { carryShortfall, planCarrySessionSync } from "../carry-session-sync";
+import { carryOutValid } from "../money-carryover";
 import { attachMoneyCarry } from "../money-carry-attach";
 import { autoReallocateAfterConfirm, loadAutoInvoices } from "./auto-reallocate";
 import { loadMoneyCarryIns, loadMoneyCarryOuts } from "./money-carryover-queries";
@@ -47,6 +48,20 @@ export type CarrySyncChange = {
 
 /** 이월이 빠져 **덜 받게 된** 줄 — 자동으로 내리지 않고 알리기만 한다. */
 export type CarrySyncShort = { termId: string; period: string; studentName: string; className: string | null; sessions: number; amount: number; shortBy: number };
+
+/**
+ * 연쇄 이월이 **끊긴** 줄(2026-11-09) — 이번 저장으로 덜 받게 된 줄이 다음 달로 넘긴 이월이 무효가 됐다(받은 이월로 남았던 몫이 사라짐).
+ * 그 다음 달 실납에서도 빠지므로, 사람이 그 이월을 고치거나 취소하고 다음 달을 확인해야 한다.
+ */
+export type CarryChainBreak = { period: string; toPeriod: string; studentName: string; className: string | null; amount: number };
+
+/** 끊긴 연쇄 이월 안내 — "9월 조은준 중등E_중1 SKY: 10월로 넘긴 12,000원 이월이 무효가 되었습니다 …". */
+export function carryChainBreakNotice(broken: readonly CarryChainBreak[]): string | undefined {
+  if (broken.length === 0) return undefined;
+  return broken
+    .map((b) => `${lineName(b)}: 받은 이월이 줄어 ${month(b.toPeriod)}로 넘긴 ${won(b.amount)} 이월이 무효가 되었습니다 — ${month(b.toPeriod)} 실납에서도 빠졌으니 ${month(b.period)} 이월을 고치거나 취소하고 ${month(b.toPeriod)} 회차 확정을 확인해 주세요.`)
+    .join("\n");
+}
 
 const lineName = (c: { period: string; studentName: string; className: string | null }) => `${month(c.period)} ${c.studentName}${c.className ? ` ${c.className}` : ""}`;
 
@@ -109,6 +124,14 @@ async function studentRows(db: Db, period: string, invoiceIds: readonly string[]
   const rows = views.flatMap((v) => v.rows);
   attachMoneyCarry(rows, outs.map, ins.map);
   return rows;
+}
+
+/**
+ * 그 학생의 `period` 줄 전부 + 금액 이월 — 이월 창·저장(`money-carryover-actions`)이 더 받은 몫을 **회차 확정 화면과 같은 값**으로
+ * 다시 구할 때 쓴다(연쇄 이월: 받은 이월도 더 받은 몫에 든다 — 배분 창 모드 조회는 이월을 안 붙인다). 이월 조회가 실패하면 null.
+ */
+export async function loadStudentCarryRows(db: Db, period: string, studentId: string): Promise<SessionTermRow[] | null> {
+  return studentRows(db, period, await liveInvoiceIds(db, period, studentId), studentId);
 }
 
 type Planned = { row: SessionTermRow; plan: Extract<ReturnType<typeof planCarrySessionSync>, { kind: "adjust" }>; invoiceId: string };
@@ -212,7 +235,7 @@ export async function syncCarrySessionsAfterCarry(
   db: Db,
   input: { period: string; studentId: string; previous: CarryTarget; next: CarryTarget },
   userId: string,
-): Promise<{ changes: CarrySyncChange[]; shorts: CarrySyncShort[] }> {
+): Promise<{ changes: CarrySyncChange[]; shorts: CarrySyncShort[]; broken?: CarryChainBreak[] }> {
   try {
     const invoiceIds = await liveInvoiceIds(db, input.period, input.studentId);
     if (invoiceIds.length === 0) return { changes: [], shorts: [] };
@@ -238,7 +261,19 @@ export async function syncCarrySessionsAfterCarry(
             : [];
         })
       : [];
-    return { changes, shorts };
+    // 연쇄 이월: 덜 받게 된 줄이 다음 달로 넘긴 이월이 무효가 됐으면 알린다 — 그 다음 달 실납까지 바뀐다(적대 리뷰 2026-11-09).
+    // 🔴 이번 저장 **전에도** 무효였던 이월(이미 '이월 재확인')은 이 저장 탓이 아니다 — 빠진 몫을 되돌린 줄로는 유효했던 것만 알린다.
+    const broken = lostAmount > 0
+      ? rows.flatMap<CarryChainBreak>((row) => {
+          const out = row.carryOut;
+          if (row.classId !== prev!.classId || !out || !(out.amount > 0) || carryOutValid(row, out.amount)) return [];
+          const before = { ...row, carryIns: [...(row.carryIns ?? []), { amount: lostAmount, fromPeriod: "", fromClassName: null, note: null, valid: true }] };
+          return carryOutValid(before, out.amount)
+            ? [{ period: input.period, toPeriod: out.toPeriod, studentName: row.studentName, className: row.className, amount: out.amount }]
+            : [];
+        })
+      : [];
+    return { changes, shorts, ...(broken.length > 0 ? { broken } : {}) };
   } catch (error) {
     logDbError(error, "billing.session-terms.carrySync.afterCarry", { period: input.period });
     return { changes: [], shorts: [] };
