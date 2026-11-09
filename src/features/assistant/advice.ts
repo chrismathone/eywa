@@ -9,6 +9,7 @@
  *    기준값만 바로 재면 '오르면 좋은' 건수 지표가 저절로 좋아진 것처럼 보인다(적대 리뷰 2026-11-09).
  */
 import { z } from "zod";
+import { TARGET_KINDS, type AdviceTargets } from "./advice-targets";
 import { addDays } from "@/lib/date-kst";
 
 export const ADVICE_TOPICS = ["attendance", "homework", "grades", "retention", "enrollment", "billing", "teacher", "class_ops", "parent", "cost", "data", "other"] as const;
@@ -32,7 +33,7 @@ export const AdviceCheckSchema = z.object({
     .string()
     .trim()
     .min(1)
-    .max(4000)
+    .max(8000)
     .describe("SELECT 한 문장 — 기간은 {{시작}}(포함)·{{끝}}(제외) 자리로(따옴표 없이 — 서버가 날짜 글자로 채운다) · 결과는 한 줄 · 칸 값(필수) · 비율이면 표본(분모, 필수)"),
   unit: z.enum(CHECK_UNITS).describe("percent = 0~100 비율 · count = 건수·명수 · won = 원 · number = 그 밖의 숫자"),
   better: z.enum(["up", "down"]).describe("값이 오르면 좋은가(up) 내리면 좋은가(down)"),
@@ -122,6 +123,31 @@ export type AdviceView = {
     nextCheckOn: string | null;
   } | null;
   noCheck: string | null;
+  /** 재측정 상태(2단계 · s2_0038) — waiting = 다시 잴 날을 기다림 · measured = 결과 있음 · broken = 여러 번 못 잼 · stopped = 재지 않음(지운 대화 등). */
+  measureState: "none" | "waiting" | "measured" | "broken" | "stopped";
+  /** 다시 잰 결과 — 같은 날 기준 기간도 다시 잰 값(`base`)과 재측정 기간 값(`value`). 판정 = 개선·변화 없음·악화·판정 보류. */
+  result: {
+    verdict: "improved" | "flat" | "worse" | "unknown";
+    base: number;
+    baseSample: number | null;
+    value: number;
+    sample: number | null;
+    from: string;
+    to: string;
+    checkedAt: string;
+    reason: string | null;
+    /** 무엇을 기준으로 쟀나 — done = 원장이 '완료'한 날(`anchor`)부터 · asked = 의견을 낸 날부터(처리 표시와 상관없이). */
+    basis: "done" | "asked";
+    anchor: string;
+    /** 판정 문턱(오차 범위) — '뚜렷한 차이 없음'일 때 ±값으로 보인다. 판정 보류면 null. */
+    threshold: number | null;
+  } | null;
+  /** 실행 지표(일을 했는지 — s2_0039) · 기준값. */
+  doneCheck: { label: string; unit: CheckUnit; better: "up" | "down"; baseline: { value: number; sample: number | null } | null } | null;
+  /** 굳혀 둔 대상 명단(종류 · 인원 — s2_0039). */
+  targets: { kind: AdviceTargets["kind"]; count: number } | null;
+  /** 질문일 — 완료 '한 날' 입력의 하한(기준값 기간 끝 + 2일). */
+  askedOn: string | null;
 };
 
 /** 화면 숫자 — 비율 18.0% · 원 12,000원 · 그 밖은 천 단위 쉼표(소수 한 자리까지). */
@@ -148,6 +174,10 @@ export type AdviceCheckResult = {
   baseline: { from: string; to: string; value: number; sample: number | null } | null;
   /** 재지 않고 넘겼다(시간 상한·멈춤·'바로 결과 보기') — 틀린 지표와 까닭을 가른다. */
   skipped?: boolean;
+  /** 실행 지표와 기준값(s2_0039) — 못 쟀으면 baseline null(실행 지표는 기준값 없이도 남긴다). */
+  doneCheck?: { check: AdviceCheck; baseline: { from: string; to: string; value: number; sample: number | null } | null };
+  /** 대상 명단 — 보고서 블록에서는 뺐으므로 여기에만. 결과 지표가 저장될 때만 싣는다. */
+  targets?: AdviceTargets;
 };
 
 /** 의견 표(assistant_advice)에 넣을 줄 — 지점·답·대화·묻는 사람은 저장하는 쪽이 붙인다. 기준값을 못 잰 확인 지표는 까닭으로 바꾼다. */
@@ -175,13 +205,36 @@ export function adviceDrafts(items: readonly AdviceItemLike[], checks: readonly 
       baseline_sample: check && baseline!.sample !== null && baseline!.sample >= 0 ? baseline!.sample : null,
       measure_state: check ? "waiting" : "none",
       next_check_on: check ? nextCheckOn(askedOn, check.checkAfterDays) : null,
+      // 대상 명단·실행 지표(s2_0039)는 결과 지표가 저장될 때만(지표 없이 명단만 남기지 않는다).
+      target_kind: check && result?.targets ? result.targets.kind : null,
+      target_ids: check && result?.targets ? [...new Set(result.targets.ids.map((id) => id.toLowerCase()))] : null,
+      exec_check: check && result?.doneCheck ? execCheckJson(result.doneCheck) : null,
     };
   });
 }
 
+/** 실행 지표 저장 모양(jsonb exec_check) — 조회문 원문 + 기준값. */
+function execCheckJson(d: NonNullable<AdviceCheckResult["doneCheck"]>) {
+  const b = d.baseline;
+  return {
+    label: d.check.label,
+    sql: d.check.sql,
+    unit: d.check.unit,
+    better: d.check.better,
+    windowDays: d.check.windowDays,
+    checkAfterDays: d.check.checkAfterDays,
+    baseline: b ? { from: b.from, to: b.to, value: b.value, sample: b.sample !== null && b.sample >= 0 ? b.sample : null } : null,
+  };
+}
+
+/** 대상 명단·실행 지표(s2_0039) — 조회문 원문은 읽지 않고 이름·단위·기준값만. */
+const TARGET_EXEC_COLUMNS = "target_kind, target_ids, exec_label:exec_check->>label, exec_unit:exec_check->>unit, exec_better:exec_check->>better, exec_baseline:exec_check->baseline";
 /** 화면이 읽는 칸(조회문 원문은 읽지 않는다). */
 export const ADVICE_VIEW_COLUMNS =
-  "id, message_id, item_no, status, status_at, status_memo, done_on, self_rating, check_label, check_unit, check_better, window_days, baseline_value, baseline_sample, baseline_from, baseline_to, next_check_on, no_check_reason";
+  "id, message_id, item_no, status, status_at, status_memo, done_on, self_rating, check_label, check_unit, check_better, window_days, baseline_value, baseline_sample, baseline_from, baseline_to, next_check_on, no_check_reason, measure_state, latest_verdict, latest_value, latest_sample, latest_base, latest_base_sample, latest_from, latest_to, latest_checked_at, latest_reason, measure_anchor, latest_threshold, " + TARGET_EXEC_COLUMNS;
+/** 의견을 넣으며 돌려받는 칸 — 1단계 칸만(새 의견엔 결과가 없다 · 뒤 단계 칸이 없는 DB에서도 insert가 산다). */
+export const ADVICE_INSERT_COLUMNS =
+  "id, message_id, item_no, status, status_at, status_memo, done_on, self_rating, check_label, check_unit, check_better, window_days, baseline_value, baseline_sample, baseline_from, baseline_to, next_check_on, no_check_reason, measure_state, " + TARGET_EXEC_COLUMNS;
 
 export type AdviceRow = {
   id: string;
@@ -202,6 +255,26 @@ export type AdviceRow = {
   baseline_to: string | null;
   next_check_on: string | null;
   no_check_reason: string | null;
+  measure_state: string;
+  // 2단계 결과 칸(s2_0038) — 넣으며 돌려받을 때는 없다(ADVICE_INSERT_COLUMNS).
+  latest_verdict?: string | null;
+  latest_value?: number | string | null;
+  latest_sample?: number | string | null;
+  latest_base?: number | string | null;
+  latest_base_sample?: number | string | null;
+  latest_from?: string | null;
+  latest_to?: string | null;
+  latest_checked_at?: string | null;
+  latest_reason?: string | null;
+  measure_anchor?: string | null;
+  latest_threshold?: number | string | null;
+  // 대상 명단·실행 지표(s2_0039)
+  target_kind?: string | null;
+  target_ids?: string[] | null;
+  exec_label?: string | null;
+  exec_unit?: string | null;
+  exec_better?: string | null;
+  exec_baseline?: { value?: unknown; sample?: unknown } | null;
 };
 
 const isStatus = (v: string): v is AdviceStatus => (ADVICE_STATUSES as readonly string[]).includes(v);
@@ -232,5 +305,47 @@ export function adviceViewOf(r: AdviceRow): AdviceView {
     selfRating: isRating(r.self_rating) ? r.self_rating : null,
     check,
     noCheck: check ? null : r.no_check_reason,
+    measureState: isMeasureState(r.measure_state) ? r.measure_state : "none",
+    result: resultOf(r),
+    doneCheck: doneCheckOf(r),
+    targets: r.target_kind && (TARGET_KINDS as readonly string[]).includes(r.target_kind) && r.target_ids?.length
+      ? { kind: r.target_kind as AdviceTargets["kind"], count: r.target_ids.length }
+      : null,
+    askedOn: r.baseline_to ? addDays(r.baseline_to, SETTLE_DAYS) : null,
+  };
+}
+
+function doneCheckOf(r: AdviceRow): AdviceView["doneCheck"] {
+  const unit = r.exec_unit ?? null;
+  const better = r.exec_better === "up" || r.exec_better === "down" ? r.exec_better : null;
+  if (!r.exec_label || !isUnit(unit) || !better) return null;
+  const value = num(r.exec_baseline?.value);
+  return { label: r.exec_label, unit, better, baseline: value === null ? null : { value, sample: num(r.exec_baseline?.sample) } };
+}
+
+const MEASURE_STATES = ["none", "waiting", "measured", "broken", "stopped"] as const;
+const isMeasureState = (v: string): v is AdviceView["measureState"] => (MEASURE_STATES as readonly string[]).includes(v);
+const VERDICT_KEYS = ["improved", "flat", "worse", "unknown"] as const;
+
+function resultOf(r: AdviceRow): AdviceView["result"] {
+  const verdict = VERDICT_KEYS.find((v) => v === r.latest_verdict);
+  const value = num(r.latest_value);
+  const base = num(r.baseline_value);
+  // latest_base(같은 날 다시 잰 기준)는 판정이 기준을 확인하는 데만 쓴다 — 화면의 '기준값'은 저장된 기준값(판정이 견준 값)이다.
+  if (!verdict || value === null || base === null || !r.latest_from || !r.latest_to || !r.latest_checked_at) return null;
+  const anchor = r.measure_anchor ?? (r.baseline_to ? addDays(r.baseline_to, SETTLE_DAYS) : r.latest_from);
+  return {
+    verdict,
+    base,
+    baseSample: num(r.baseline_sample),
+    value,
+    sample: num(r.latest_sample),
+    from: r.latest_from,
+    to: r.latest_to,
+    checkedAt: r.latest_checked_at,
+    reason: r.latest_reason ?? null,
+    basis: r.measure_anchor ? "done" : "asked",
+    anchor,
+    threshold: num(r.latest_threshold),
   };
 }

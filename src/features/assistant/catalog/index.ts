@@ -2,6 +2,7 @@
  * 학원 비서 DB 지도 전체 = 표 설명(a~l · m~z) + 온톨로지 보기(onto_*). 보기 이름은 SQL(s2_0031)이 정한다 —
  * 설명이 없는 새 표도 비서는 읽는다(시스템 프롬프트의 '설명이 아직 없는 표' 줄). 설명을 빠짐없이 두는 것은 가드 시험 몫.
  */
+import { ONTOLOGY_ANALYSIS_DOCS } from "./ontology-analysis";
 import { TABLES_A } from "./tables-a";
 import { TABLES_B } from "./tables-b";
 import { TABLES_EXTRA } from "./tables-extra";
@@ -45,6 +46,7 @@ export const ONTOLOGY_DOCS: readonly AssistantTableDoc[] = [
     notes:
       "role = homeroom(담임 — 지금 값, 기간 없음) · scheduled(교시 담당 — valid_from~valid_to) · delegated(임시 위임 — 기간). 🔴 배정 목록이지 출결 귀속 계산용이 아니다 — 요일·교시 칸이 없다(귀속은 온톨로지 '출결 귀속' 규칙으로 class_schedules에서). 과거 시점 질문은 그 날짜가 기간 안인 배정만 본다. teacher_id = users.id. class_closed_on = 반 종강일. 폐지(is_active)·보강용 반(is_makeup_pool) 칸이 없으니 '담당 반'은 classes와 class_id로 이어 셋 다로 거른다(묻지 않으면 폐지·보강용 반은 빼고, 종강 반은 지금 목록에서 뺀다).",
   },
+  ...ONTOLOGY_ANALYSIS_DOCS,
 ];
 
 export const ASSISTANT_DOCS: readonly AssistantTableDoc[] = [...ONTOLOGY_DOCS, ...TABLES_A, ...TABLES_B, ...TABLES_EXTRA];

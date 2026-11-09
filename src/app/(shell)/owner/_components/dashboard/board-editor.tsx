@@ -3,10 +3,11 @@
 import type { ReactNode } from "react";
 import type { MenuKey } from "@/lib/permissions";
 import { GLANCE_MAX } from "@/features/dashboard/layout/board";
-import { addSection, moveKpi, moveSection, removeSection, renameSection, setKpi, toggleCore, type EditBoard } from "@/features/dashboard/layout/board-edit";
+import { addSection, itemsOf, moveKpi, moveSection, patchPanel, removeSection, renameSection, setKpi, toggleCore, type EditBoard } from "@/features/dashboard/layout/board-edit";
 import { BOARD_KPIS, cardDef, missingMenuLabel } from "@/features/dashboard/layout/registry";
 import { CORE_KEYS, type Bundle, type CoreKey } from "@/features/dashboard/layout/types";
 import { canOpenCore } from "@/features/dashboard/layout/view";
+import { exposureOf, optionOn, sensitiveReason } from "./badges";
 import { CardList, RowButtons } from "./board-cards";
 import b from "./board-editor.module.css";
 
@@ -23,11 +24,16 @@ function Block({ title, note, children }: { title: string; note: string; childre
   );
 }
 
-/** KPI 표 — 칸마다 '한눈에 보기'(6칸까지) · '오늘 운영'(오늘 운영·경영 현황 띠) 두 곳을 켜고 끈다. 켠 칸만 순서를 바꾼다. */
-function KpiTable({ board, menus, readOnly, onChange }: Props) {
+/**
+ * KPI 표 — 칸마다 '한눈에 보기'(6칸까지) · '오늘 운영'(오늘 운영·경영 현황 띠) 두 곳을 켜고 끈다. 켠 칸만 순서를 바꾼다.
+ * 일정이 실리는 칸(전일·오늘 입테)은 일정 카드처럼 '전화번호 그대로'를 고른다 — 서버는 번호가 실리는 칸이 **모두** 켜져야
+ * 번호를 그대로 보낸다(`resolveView`). 꼬리표는 그 실제 결과(`exposureOf`)를 적는다(리뷰 2026-11-09).
+ */
+function KpiTable({ board, role, menus, readOnly, onChange }: Props) {
   const placed = board.kpis.map((i) => i.id);
   const rest = BOARD_KPIS.map((k) => `kpi:${k}`).filter((id) => !placed.includes(id));
   const glanceCount = board.kpis.filter((i) => i.glance).length;
+  const phonesShown = exposureOf(itemsOf(board), role, menus).phones;
   return (
     <table className={b.kpis}>
       <thead><tr><th>칸</th><th>한눈에 보기 <small>{glanceCount}/{GLANCE_MAX}</small></th><th>오늘 운영 · 경영 현황</th><th className="sr-only">순서</th></tr></thead>
@@ -41,7 +47,18 @@ function KpiTable({ board, menus, readOnly, onChange }: Props) {
           const hidden = missingMenuLabel(def, menus);
           return (
             <tr key={id} data-muted={!item || hidden ? "" : undefined}>
-              <td>{def.label}{hidden ? <span className={b.tag} data-tip={`${hidden} 권한이 없어 이 역할에는 보이지 않습니다`}>권한 없음</span> : null}</td>
+              <td>{def.label}{hidden ? <span className={b.tag} data-tip={`${hidden} 권한이 없어 이 역할에는 보이지 않습니다`}>권한 없음</span> : null}
+                {item && sensitiveReason(id, role) ? <span className={b.tag} data-tone="warn" data-tip={sensitiveReason(id, role)!}>민감</span> : null}
+                {item && def.options.includes("phones") ? (
+                  <label className={b.option}>
+                    <input type="checkbox" disabled={readOnly} checked={optionOn(item, "phones", role)}
+                      onChange={(e) => onChange(patchPanel(board, id, { phones: e.target.checked }))} />
+                    전화번호 그대로
+                    <span className={b.tag} data-tone={phonesShown ? "warn" : undefined}
+                      data-tip="일정이 실리는 칸과 카드가 모두 켜져 있어야 번호가 그대로 보입니다">{phonesShown ? "번호 보임" : "번호 가림"}</span>
+                  </label>
+                ) : null}
+              </td>
               <td><input type="checkbox" aria-label={`${def.label} 한눈에 보기`} disabled={readOnly || (!item?.glance && glanceCount >= GLANCE_MAX)}
                 checked={!!item?.glance} onChange={(e) => onChange(setKpi(board, key, { glance: e.target.checked }))} /></td>
               <td><input type="checkbox" aria-label={`${def.label} 오늘 운영`} disabled={readOnly}
