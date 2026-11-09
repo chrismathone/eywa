@@ -3,6 +3,7 @@ import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
+import { familyBonus } from "../model/family-loyalty";
 import { sumRaws, scoreRaws } from "../model/calc";
 import { configForStorage, contributionConfigSchema } from "../model/config";
 import { requireContributionWrite } from "./access";
@@ -24,14 +25,15 @@ export async function saveContributionSettings(value: unknown, revision: number)
       throw new Error("설명회 자료와 배점의 반영 범위를 확인한 뒤 사용할 수 있습니다");
     if (before.revision !== revision) throw new Error("설정이 바뀌었습니다. 새로고침 후 다시 저장해 주세요");
     const raws = sumRaws((list?.rows ?? []).flatMap((r) => r.total ? [r.total.raws] : []));
-    const prevScore = scoreRaws(raws, before.config).total, nextScore = scoreRaws(raws, config).total;
+    const familySum = (c: typeof config) => (list?.rows ?? []).reduce((s,r)=>s+(familyBonus(r.family,c)??0),0);
+    const prevScore = scoreRaws(raws, before.config).total + familySum(before.config), nextScore = scoreRaws(raws, config).total + familySum(config);
     const initial = await db.from(SETTINGS_TABLE).upsert({ tenant_id: gate.tenantId }, { onConflict: "tenant_id", ignoreDuplicates: true });
     if (initial.error) throw new Error("기여도 설정 준비에 실패했습니다");
     const { data, error } = await db.from(SETTINGS_TABLE).update({ config: configForStorage(config), revision: revision + 1, updated_by: gate.userId, updated_at: new Date().toISOString() })
       .eq("tenant_id", gate.tenantId).eq("revision", revision).is("refresh_token", null).select("revision").maybeSingle();
     if (error) throw new Error("설정을 저장하지 못했습니다");
     if (!data) throw new Error("집계 중이거나 설정이 바뀌었습니다. 집계가 끝난 뒤 다시 저장해 주세요");
-    await logAction({ action: "student_contribution_settings_save", targetType: "student_contribution", targetLabel: "원생 기여도",
+    await logAction({ action: "student_contribution_settings_save", targetType: "student_contribution", targetLabel: "원생 충성도",
       metadata: { before: before.config, after: config, beforeTotal: prevScore, afterTotal: nextScore, students: list?.rows.length ?? 0 } });
     invalidate();
     return { ok: true, message: "배점이 지난 실적 전체에 반영되었습니다. 인정 기준을 바꿨다면 지금 집계를 눌러 주세요." };
@@ -43,7 +45,7 @@ export async function refreshContribution() {
     let summary;
     try { summary = await refreshStudentContribution(createAdminClient(), gate.tenantId, { deadline: Date.now() + 85_000 }); }
     finally { updateTag(contributionSnapshotTag(gate.tenantId)); }
-    await logAction({ action: "student_contribution_refresh", targetType: "student_contribution", targetLabel: "원생 기여도", metadata: { ...summary, trigger: "manual" } });
+    await logAction({ action: "student_contribution_refresh", targetType: "student_contribution", targetLabel: "원생 충성도", metadata: { ...summary, trigger: "manual" } });
     invalidate();
     return { ok: true, message: summary.unavailable ? "기여도 저장 준비가 필요합니다" : summary.busy ? "다른 집계가 진행 중입니다" : summary.complete
       ? `${summary.students}명 집계 · ${summary.closed}개 월 기록 마감` : `${summary.written}개 월 기록 저장 · 다음 집계에서 이어집니다` };

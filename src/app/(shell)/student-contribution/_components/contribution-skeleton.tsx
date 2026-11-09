@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 /**
- * 원생 기여도 화면들의 스켈레톤 부품 — 다섯 화면이 같은 머리(`ContributionHeader`)와 같은 점수 구성 상자(`ScoreBreakdown`)를 쓴다.
+ * 원생 충성도 화면들의 스켈레톤 부품 — 다섯 화면이 같은 머리(`ContributionHeader`)와 같은 점수 구성 상자(`ScoreBreakdown`)를 쓴다.
  * 🔴 클래스는 실물(`features/student-contribution/components/contribution-shell.tsx` · `score-breakdown.tsx`)과 같은 문자열로 옮겼다 —
  *    실물을 고치면 여기도 같이 고칠 것(가능하면 실물 파일 옆으로 옮겨 상수를 함께 쓰는 게 낫다).
  * 글자 자리는 투명 글자 막대 — 실물과 같은 글로 줄 높이·줄바꿈을 잡는다(손 치수 대신).
@@ -13,7 +13,7 @@ export function Bar({ children, className = "" }: { children: ReactNode; classNa
   return <span className={`${TEXT_BAR} ${className}`}>{children}</span>;
 }
 
-const TABS = ["원생 기여도", "학생 기록 연결", "지난 소개 확인", "배점 설정"];
+const TABS = ["원생 충성도", "학생 기록 연결", "지난 소개 확인", "배점 설정"];
 
 /**
  * `ContributionHeader` 자리 — 제목·설명(실물과 같은 글을 넘겨 줄바꿈까지 같게) + 오른쪽 동작 + 아래 탭 줄(`border-b`, 링크 `pb-3`).

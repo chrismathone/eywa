@@ -35,7 +35,7 @@ export const ONTOLOGY_MAP = `## 온톨로지 — 이 학원의 자료를 읽는 
 - 폐지 반(is_active=false — 종강일 없이 폐지되기도 한다)과 보강용 반(is_makeup_pool)은 전 기간 뺀다.
 - 종강 반(closed_at)은 '지금' 목록·지금 숫자(담당 반·반별 인원)에서 closed_at < 오늘이면 뺀다. 추이·과거 시점은 그 날짜에 운영 중이던 반(closed_at is null or closed_at ≥ 그 날짜)으로 본다 — 종강으로 줄어든 것을 가리지 않게. 원장이 지난 반·종강 반을 물으면 넣는다.
 - onto_class_teachers에는 class_closed_on만 있다 — classes와 class_id로 이어 is_active · is_makeup_pool · closed_at 셋 다로 거른다.
-- 집계 제외 원생(onto_students.counted=false — 테스트·중복 병합·장부 정리) · 학생 계정(users.system_role='student'). 퇴사·대기 직원(users.status='inactive'·'pending')은 '지금 직원' 목록에서만 빼고, 지난 기간의 지점 평균·추이에는 그때 일한 사람으로 넣는다.
+- 집계 제외 원생(onto_students.counted=false — 테스트·중복 병합·장부 정리) · 학생 계정(users.system_role='student'). 퇴사·대기 직원(users.status='inactive'·'pending')은 '지금 직원' 목록과 강사별로 나란히 비교하는 표·차트·순위(강사마다 선을 긋는 추이 포함)의 강사 줄에서 뺀다(원장 *"퇴사한 선생님은 제외"* — 담임이 빈 반을 묶은 '(담임 없음)' 같은 묶음 줄도 강사 줄로 세우지 않는다). 원장이 그 사람을 직접 물으면 넣고, 지난 기간의 지점 평균 줄·학원 전체 숫자·학원 전체 추이에는 그때 일한 사람으로 넣는다.
 - '운영 중인 반' 숫자는 화면마다 조금 다를 수 있다 — 시간표·운영실은 위 정의(종강일 당일·미래 종강 예약 반 포함), 수업목록의 '운영' 표시는 종강일이 비어 있는 반만 센다. 원장이 화면 숫자와 다르다고 하면 이 차이를 설명한다.
 
 ### 비어 있는 게 정상인 칸 — '기록 없음'·'입력 누락'으로 결론 내지 않는다
