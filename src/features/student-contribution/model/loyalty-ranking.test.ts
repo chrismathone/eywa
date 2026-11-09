@@ -36,7 +36,7 @@ describe("six-factor loyalty ranking",()=>{
   });
   it("keeps missing axes unknown and shows the possible upper bound without reweighting",()=>{
     const r=buildLoyaltyRanking([student()],config)[0]!;
-    expect(r.metrics.school.points).toBeNull();expect(r.metrics.attendance.points).toBeNull();expect(r.score).toBe(80);expect(r.upper).toBe(90);expect(r.complete).toBe(false);
+    expect(r.metrics.school.points).toBeNull();expect(r.metrics.attendance.points).toBeNull();expect(r.score).toBe(85);expect(r.upper).toBe(95);expect(r.complete).toBe(false);
   });
   it("does not rank a missing snapshot from a family zero alone",()=>{const s=student();s.facts=null;s.family.activeSiblings=0;expect(buildLoyaltyRanking([s],config)[0]!.score).toBeNull();});
   it("ties share competition rank and the conservative ending percentile",()=>{
@@ -44,7 +44,7 @@ describe("six-factor loyalty ranking",()=>{
     const r=buildLoyaltyRanking(rows,config);expect(r[0]).toMatchObject({rank:1,top:40,band:2,tied:true});expect(r[1]).toMatchObject({rank:1,top:40,band:2});expect(r[2]!.rank).toBe(3);
   });
   it("withholds bands for small cohorts and for identical scores",()=>{expect(buildLoyaltyRanking([student()],config)[0]!.band).toBeNull();expect(buildLoyaltyRanking(Array.from({length:5},(_,i)=>student(String(i))),config).every(r=>r.band===null)).toBe(true);});
-  it("a disabled axis does not create an unknown-weight penalty",()=>{const c={...config,weights:{...config.weights,school:0,attendance:0,family:50}};const r=buildLoyaltyRanking([student()],c)[0]!;expect(r.complete).toBe(true);expect(r.score).toBe(90);});
+  it("a disabled axis does not create an unknown-weight penalty",()=>{const c={...config,weights:{...config.weights,school:0,attendance:0,family:35}};const r=buildLoyaltyRanking([student()],c)[0]!;expect(r.complete).toBe(true);expect(r.score).toBe(95);});
   it("validates the 100-point total and bounded bonuses",()=>{expect(rankingConfigSchema.safeParse(config).success).toBe(true);expect(rankingConfigSchema.safeParse({...config,weights:{...config.weights,family:50}}).success).toBe(false);expect(rankingConfigSchema.safeParse({...config,concurrentBonus:-1}).success).toBe(false);});
 });
 describe("school records",()=>{

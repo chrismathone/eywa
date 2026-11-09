@@ -7,9 +7,9 @@ export function FamilyLoyaltyCard({ family, config, studentId }: { family: Famil
   const points = familyBonus(family, config), rates = familyRates(config);
   if (family.state !== "ready") return <section className="rounded-xl border border-line bg-secondary p-5" aria-label="가족 재원 확인">
     <h3 className="font-semibold">가족 동시 재원 · 점수 확인 대기</h3>
-    <p className="mt-2 text-sm">{family.state === "restricted" ? "가족 전체 자료의 열람 권한이 필요합니다. 담당 관리자 화면에서 확인해 주세요." : "가족 또는 수강 자료를 읽지 못했습니다. 0점으로 처리하지 않고 충성도 순위를 보류합니다."}</p>
+    <p className="mt-2 text-sm">{family.state === "restricted" ? "가족 전체 자료의 열람 권한이 필요합니다. 담당 관리자 화면에서 확인해 주세요." : "가족 또는 수강 자료를 읽지 못했습니다. 0점으로 처리하지 않고 로열티 순위를 보류합니다."}</p>
   </section>;
-  return <section className="rounded-2xl border border-amber/40 bg-gradient-to-r from-amber-soft via-background to-card p-5 text-foreground" aria-label="가족 동시 재원 충성도">
+  return <section className="rounded-2xl border border-amber/40 bg-gradient-to-r from-amber-soft via-background to-card p-5 text-foreground" aria-label="가족 동시 재원 로열티">
     <div className="flex flex-wrap items-center justify-between gap-4">
       <div><p className="text-xs font-bold tracking-wider text-att-late-ink">가족 동시 재원 · 우선 배점</p>
         <h3 className="mt-2 text-2xl font-bold">{family.activeCount! >= 2 ? `${family.activeCount}남매 함께 재원` : "연결된 가족의 재원 현황"}</h3>

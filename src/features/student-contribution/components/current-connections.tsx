@@ -16,7 +16,7 @@ export async function CurrentConnections({ studentId }: { studentId: string }) {
   if (!context) return <p className="rounded-xl border border-line p-5 text-sm">현재 연결을 보려면 해당 학생의 원본 열람 권한이 필요합니다.</p>;
   return <section className="space-y-3" aria-labelledby="current-connections-title">
     <div className="flex flex-wrap items-end justify-between gap-2"><div><h2 id="current-connections-title" className="font-semibold">현재 수강과 최근 기록</h2>
-      <p className="mt-1 text-xs">지금 확인한 자료로, 월별 충성도와는 기준 시점이 다릅니다.</p></div><span className="text-xs tabular-nums">{context.today} 기준</span></div>
+      <p className="mt-1 text-xs">지금 확인한 자료로, 월별 로열티와는 기준 시점이 다릅니다.</p></div><span className="text-xs tabular-nums">{context.today} 기준</span></div>
     <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 lg:grid-cols-3">
       {[["classes", "family"], ["consultations", "memos"], ["reservations", "makeups"]].map((keys) => <div key={keys[0]} className="min-w-0 space-y-4">
         {keys.map((key) => { const reader = liveSectionReaders.find((r) => r.key === key)!;

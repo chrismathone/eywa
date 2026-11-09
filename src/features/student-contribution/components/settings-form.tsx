@@ -25,7 +25,7 @@ export function ContributionSettings({ data }: { data: NonNullable<Awaited<Retur
   const changed = JSON.stringify(config) !== JSON.stringify(data.config);
   const rulesChanged = JSON.stringify(config.referrals) !== JSON.stringify(data.config.referrals) || config.attendance.allowLate !== data.config.attendance.allowLate;
   return <div className="w-full min-w-0 space-y-5 pb-6">
-    <ContributionHeader title="충성도 배점 설정" description="어떤 실적에 몇 점을 더할지 정합니다. 저장하면 과거 실적 전체에도 새 배점을 적용합니다." active="settings" canConfigure />
+    <ContributionHeader title="로열티 배점 설정" description="어떤 실적에 몇 점을 더할지 정합니다. 저장하면 과거 실적 전체에도 새 배점을 적용합니다." active="settings" canConfigure />
     <form onSubmit={(e) => { e.preventDefault(); start(async () => {
       const r = await saveContributionSettings(config, data.revision); setMessage(r.error ?? r.message ?? ""); router.refresh();
     }); }} className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(22rem,1fr)]">
@@ -50,7 +50,7 @@ export function ContributionSettings({ data }: { data: NonNullable<Awaited<Retur
           <label className="mt-5 flex items-center gap-2 border-t border-line pt-4 text-sm"><input type="checkbox" className="h-4 w-4 accent-primary" checked={config.attendance.allowLate} onChange={(e) => setConfig({ ...config, attendance: { allowLate: e.target.checked } })} />지각도 개근으로 인정</label>
         </section>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-card p-4"><SettingsChangeSummary before={data.config} after={config} delta={delta} /><p className="text-sm">{changed ? "과거 실적 전체에 새 배점을 적용합니다." : "현재 저장된 배점입니다."}</p>{data.gate.canWrite ? <div className="flex gap-2"><Button type="button" variant="outline" disabled={!changed || busy} onClick={() => { setConfig(data.config); setMessage(""); }}>변경 취소</Button><Button type="submit" disabled={busy || !changed}>{busy ? "저장 중…" : "배점 저장"}</Button></div> : null}
-          <p role="status" className="w-full text-sm">{message || (!data.ready ? "충성도 저장 준비가 필요합니다." : !data.gate.canWrite ? writeLockedNote("student_contribution") : "")}</p></div>
+          <p role="status" className="w-full text-sm">{message || (!data.ready ? "로열티 저장 준비가 필요합니다." : !data.gate.canWrite ? writeLockedNote("student_contribution") : "")}</p></div>
       </fieldset>
       <aside className="min-w-0 space-y-4">
         <section className="rounded-xl border border-primary/30 bg-primary-softer p-5" aria-label="배점 미리보기"><h2 className="font-semibold">저장 전 미리보기</h2><p className="mt-1 text-xs">전체 학생 {data.studentCount}명 · 목록 필터와 무관한 누적 실적</p>

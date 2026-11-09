@@ -38,7 +38,7 @@ it("요약 바로가기를 눌렀을 때만 현재 연결을 펼치고 목록 �
   render(<><StudentDetailActions studentId="s" /><details id="current-connections-s"><summary>현재 연결</summary><section id="record-summary-s" tabIndex={-1}>저장된 요약 내용</section></details></>);
   const panel = screen.getByText("현재 연결").closest("details")!;
   expect(panel.open).toBe(false);
-  expect(screen.getByRole("link", { name: "전체 충성도 목록" }).getAttribute("href")).toBe("/student-contribution?page=2");
+  expect(screen.getByRole("link", { name: "전체 로열티 목록" }).getAttribute("href")).toBe("/student-contribution?page=2");
   fireEvent.click(screen.getByRole("button", { name: "최근 기록 요약" }));
   expect(panel.open).toBe(true); expect(scroll).toHaveBeenCalledOnce();
   expect(document.activeElement?.id).toBe("record-summary-s"); scroll.mockRestore();
