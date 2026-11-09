@@ -64,6 +64,22 @@ describe("원생상담 녹음의 학생 구분과 저장 확인", () => {
     expect(assign).toHaveBeenCalledWith("/consultations/consultation-a/edit?embed=1");
     expect(screen.getByRole("button", { name: "분석 시작", hidden: true })).toBeDisabled();
   });
+  it("이동이 끝나지 않으면 잠시 뒤 상담 링크와 새로 작성을 보이고 버튼은 잠근 채 둔다", async () => {
+    mocks.action.mockResolvedValue({ id: "consultation-a" });
+    await restoreA();
+    vi.useFakeTimers();
+    try {
+      await submit();
+      expect(assign).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole("link", { name: "상담 열기" })).toBeNull();
+      await act(async () => { vi.advanceTimersByTime(5000); });
+      expect(screen.getByRole("link", { name: "상담 열기" })).toHaveAttribute("href", "/consultations/consultation-a/edit?embed=1");
+      expect(screen.getByRole("button", { name: "새로 작성" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "저장됨", hidden: true })).toBeDisabled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it.each([undefined, { error: "상담 저장 실패" }])("keeps the backup when the save is not confirmed (%j)", async (response) => {
     mocks.action.mockResolvedValue(response);
     await restoreA();
