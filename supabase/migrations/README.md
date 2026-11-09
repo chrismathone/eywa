@@ -29,6 +29,13 @@
   금액 숫자 `withdrawal_refund_won` · '환불하지 않음' 기록 `withdrawal_refund_record_none` · 관문 표식 `withdrawal_refund_gate_ready`(되돌리기가 지운다 → 새 앱 + 되돌린 DB는 닫힌 쪽) · 완료된 요청서 잇기 거절 ·
   결정 표 service_role 지우기·비우기 회수(Supabase 기본 권한) · 사후 확인에 새 함수 여섯·트리거 사건 셋·결정 표 권한 · 옛 8인자 연결 없음.
   확인: PGlite r2 시나리오 21건(겹침 사례표 양방향 · D-1·D-2·D-4·D-6·D-11·D-12 · 삭제·고치기·비우기 = 담당 데스크/원장/비담당/관리 키 × 미완료/완료 · 폴더 분류·고정·직원 삭제 연쇄 · 지점 삭제 연쇄 · 되돌리기 왕복) + 지난 리뷰 사례 30건 회귀 0.
+- 리뷰 수리 r3(2026-11-09 · 아직 미적용이라 이 파일을 고쳤다): R-1 같은 묶음 같은 키 중복 연결 거절 · R-2 금액 엄격 꼴(`withdrawal_refund_won` · 결제내역 금액 표기도 읽어 상한) · R-4 대체 옛 요청서 같은 청구 확인 ·
+  R-5 claimed 판정에 결정 행 요청서 생존 · R-6 연결 표 service_role update·delete·truncate·references·trigger 회수 + anon·authenticated 회수(사후 확인) · R-9 완료일자 꼴(빈칸 또는 YYYY-MM-DD · 23514) +
+  `staff_tasks_private.tg_refund_task`·`withdrawal_report_refunds_on_cancel` 빈칸 규칙 = `withdrawal_refund_blank`(적용 전 지문 7ba5b00c…·9e3981d9… · 치환 정확히 한 번) ·
+  원장 결정 '늘어난 몫은 수납에서 따로 처리': 결정 표 칸 `separate_amount`·`separate_at`·`separate_by`·`refunded_total`·`refunded_docs` · `decide_withdrawal_report_refund` 6인자(`p_separate` · 옛 5인자 지움) ·
+  트리거가 완료 때 환불 완료 기록 · attach 다시 승인 상한 = 낸 돈 − 따로 − 완료 기록. 되돌리기는 두 함수 btrim 복원 · 연결 표 권한 복원 · 6인자 지움(칸은 남김).
+  확인: PGlite r3 시나리오 13건(R-1 ×2 · R-2 ×3 · R-4 · R-5 · R-6 · R-9 ×2 · 따로 환불 ×3) + r2 21건 회귀 0 + 지난 리뷰 사례 회귀 0 · 되돌리기 왕복.
+  DB가 스스로 못 막는 길(앱이 막거나 설계상 둔다) = [결정 문서 r3](../../docs/decisions/withdrawal-reports.md)의 ①~⑩(관리 키의 '누가' · 앱 확인 값 · R-3 수납명 변경 대체 · 같은 묶음 형제 겹침 · TRUNCATE · 결제내역 '원' 없는 숫자 · R-4 같은 청구 다른 줄 · R-9 날짜 꼴만 · D-9 · 따로 환불 실제 지급 · 완료 기록 = 상한).
 - 연동 역할(eywa_sync_agent) 실행권: 이 파일이 다시 만드는 attach·release는 s2_0025부터 service_role만 — 연동 역할 실행권 없음 · RLS·다른 함수·연동 앱이 부르지 않음(운영 읽기 전용 2026-11-09) → 확인 줄 `-- 연동 역할 실행권 확인:`(가드 `sync-agent-execute-grants.test.ts`). 적용 뒤 연동 PC 워커 신호·42501을 본다.
 - 🔴 적용 직전 확인(화면 리뷰 m16): `select count(*) from public.withdrawal_report_refunds;` 가 **0**이어야 한다(2026-11-09 운영 0). s2_0036 전에 이어진 요청서는 결정 행이 없어 C.3·같은 돈 두 번 막기(DB) 밖이다(앱 `reapprovable`만 막는다) — 0이 아니면 적용 전에 원장에게 알린다.
 - 🔴 적용 안내: ① 이 SQL → ② 새 앱 배포 → ③ 배포가 **끝난 뒤** 학원 설정 '데스크 담당자' 지정(옛 앱은 '역할·권한'을 저장할 때 그 칸을 버린다) → ④ /api/cron/apply-due-withdrawals 한 번.

@@ -1307,6 +1307,10 @@ export function auditDetail(
     // 원장 '지금 다시 판정'(리뷰 r2 (b)) — 다시 판정한 뒤 결과(대기 · 풀림 · 처리) · 마지막 수업일.
     case "withdrawal_refund_recheck":
       return join(str(m.result), str(m.effectiveDate) ? `마지막 수업일 ${str(m.effectiveDate)}` : null);
+    // 원장 '늘어난 몫은 수납에서 따로 처리'(원장 결정 2026-11-09) — 어느 줄 · 낸 돈 변화 · 따로 환불할 금액 · 마지막 수업일 · 다음.
+    case "withdrawal_refund_separate":
+      return join(str(m.item), typeof m.before === "number" && typeof m.now === "number" ? `낸 돈 ${m.before.toLocaleString("ko-KR")}원 → ${m.now.toLocaleString("ko-KR")}원` : null,
+        typeof m.amount === "number" ? `늘어난 몫 ${m.amount.toLocaleString("ko-KR")}원은 수납에서 따로 환불` : null, str(m.effectiveDate) ? `마지막 수업일 ${str(m.effectiveDate)}` : null, str(m.next));
     // 이어진 요청서의 수정·삭제 거절(리뷰 r2 I6·B1) — 학생 · 무엇을 하려 했나 · 까닭 · 담당 데스크.
     case "refund_request_linked_denied":
       return join(str(m.studentName), str(m.attempted), str(m.reason), str(m.deskName) ? `담당 데스크 ${str(m.deskName)}` : null,

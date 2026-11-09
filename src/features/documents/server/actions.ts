@@ -399,7 +399,9 @@ async function linkedDocumentLock(user: { id: string; tenantId: string; systemRo
   const real = { id: account.id, directorLevel: account.systemRole === "master" };
   if (mode === "edit") return linkedEditLock(link, actor, real);
   // 완료 여부는 지금 행에서(관리 키로 읽는다 — 이 함수는 앱 판정만 · DB 트리거가 다시 막는다).
-  const { data } = await createAdminClient().from("academy_documents").select("form_data").eq("tenant_id", user.tenantId).eq("id", id).maybeSingle();
+  const { data, error } = await createAdminClient().from("academy_documents").select("form_data").eq("tenant_id", user.tenantId).eq("id", id).maybeSingle();
+  // 못 읽으면 막는다(리뷰 r3 R2-m15 — 오류를 '미완료'로 읽으면 앱 판정을 지나간다 · DB 트리거가 다시 막지만 오류를 삼키지 않는다).
+  if (error) { logDbError(error, "documents.linkedDocumentLock"); return "환불 요청서를 다시 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요"; }
   const completed = !!String(((data?.form_data ?? {}) as { result?: { completedDate?: unknown } }).result?.completedDate ?? "").trim();
   return linkedDeleteLock(link, completed, actor, real);
 }

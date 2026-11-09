@@ -217,7 +217,7 @@ describe("퇴원보고서에 이어진 요청서의 환불완료일자 — 담�
     // 담당 데스크 — 완료일자를 지우려 하면 원장만
     m.user.mockResolvedValue(desk); m.log.mockClear();
     m.link.mockResolvedValue({ deskId: "desk", deskName: null, deskActive: true });
-    expect((await saveRefundRequest(undefined, edit("")))?.error).toBe("이어진 환불 요청서의 환불완료일자를 비우는 것은 원장만 할 수 있습니다(돌려준 기록이 사라집니다).");
+    expect((await saveRefundRequest(undefined, edit("")))?.error).toBe("이어진 환불 요청서의 환불완료일자를 비우는 것은 원장만 할 수 있습니다(요청서의 환불 완료 표시가 사라집니다).");
     expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ action: "refund_request_complete_denied", metadata: expect.objectContaining({ attempted: "환불완료일자 지움" }) }));
     expect(writes()).toEqual([]);
     // 원장은 비운다
@@ -227,8 +227,22 @@ describe("퇴원보고서에 이어진 요청서의 환불완료일자 — 담�
     m.calls = [];
     m.user.mockResolvedValue(desk);
     m.link.mockResolvedValue({ deskId: "desk", deskName: "데스크", deskActive: false });
-    expect((await saveRefundRequest(undefined, edit("2026-11-05")))?.error).toContain("고치는 것은 담당 데스크(데스크)와 원장만");
+    // 퇴사한 사람 이름을 할 수 있는 사람으로 적지 않는다(리뷰 r3 R2-m7)
+    expect((await saveRefundRequest(undefined, edit("2026-11-05")))?.error).toContain("고치는 것은 원장만(담당 데스크 퇴사)");
     expect(writes()).toEqual([]);
+  });
+
+  it("🔴 환불완료일자 꼴 — 빈칸 또는 YYYY-MM-DD만(리뷰 r3 R-9 · DB 트리거와 같다 — '확인 중' 같은 글이 완료로 읽혀 데스크 대기가 풀렸다)", async () => {
+    m.user.mockResolvedValue(desk); m.viewAs.mockResolvedValue(null);
+    m.link.mockResolvedValue({ deskId: "desk", deskName: "데스크", deskActive: true });
+    for (const bad of ["확인 중", "2026.11.09", "11/09"]) {
+      m.calls = []; m.log.mockClear();
+      expect((await saveRefundRequest(undefined, edit(bad)))?.error, bad).toBe("환불완료일자는 날짜(예: 2026-11-09)로 넣어 주세요.");
+      expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ action: "refund_request_linked_denied", metadata: expect.objectContaining({ reason: "날짜 꼴 아님" }) }));
+      expect(writes()).toEqual([]);
+      expect(m.release).not.toHaveBeenCalled();
+    }
+    expect(await saveRefundRequest(undefined, edit("2026-11-09"))).toMatchObject({ ok: true });
   });
 
   it("🔴 상한(원장 승인 줄 낸 돈 합) — 넘는 총 환불금액은 막는다 · 상한을 모르면 금액 칸을 바꾸는 저장만 막고 완료일자는 받는다(리뷰 r2 I6)", async () => {
@@ -268,7 +282,8 @@ describe("퇴원보고서에 이어진 요청서의 환불완료일자 — 담�
     m.existing = { title: "환불", form_data: { student: { name: "학생" }, result: { completedDate: "2026-11-05" } } };
     m.link.mockResolvedValue({ deskId: "desk", deskName: "데스크", deskActive: true });
     m.user.mockResolvedValue(actual);
-    expect((await deleteRefundRequest("doc1")).error).toBe("환불완료일자가 들어간(돈을 돌려준) 이어진 환불 요청서는 지울 수 없습니다. 지워야 하면 원장이 먼저 환불완료일자를 비우세요.");
+    // 🔴 '완료일자를 비우고 지우라'고 안내하지 않는다(리뷰 r3 R2-I2 — 이미 돌려준 돈까지 다시 담긴다) · 늘어난 몫은 '따로 환불'
+    expect((await deleteRefundRequest("doc1")).error).toBe("환불완료일자가 들어간(돈을 돌려준) 이어진 환불 요청서는 지울 수 없습니다. 그 뒤 늘어난 몫은 따로 환불로 처리합니다(수납의 일반 환불 요청서).");
     expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ action: "refund_request_linked_denied", metadata: expect.objectContaining({ attempted: "요청서 삭제", reason: "환불완료일자 있음" }) }));
     m.existing = { title: "환불", form_data: { student: { name: "학생" }, result: { completedDate: "" } } };
     m.user.mockResolvedValue(target);

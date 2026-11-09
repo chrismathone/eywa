@@ -10,8 +10,8 @@
 import type { RefundStep, ReportStatus } from "./model";
 import { REFUND_DECISION_WAIT_NOTE } from "./refund-decision";
 
-/** 퇴원월 뒤 청구 칸 상태 — 읽음 · 조회 실패 · 수납 열람권 없음(리뷰 r2 I3). */
-export type LaterState = "ok" | "failed" | "hidden";
+/** 퇴원월 뒤 청구 칸 상태 — 읽음 · 조회 실패 · 수납 열람권 없음(리뷰 r2 I3) · 청구가 너무 많아 다 확인하지 못함(상한 · 새로고침으로 안 풀린다 — 리뷰 r3 R2-m10). */
+export type LaterState = "ok" | "failed" | "hidden" | "limit";
 /** DB 묶음 표시 한 벌(상세용) — 대기 · 결정할 줄을 보이는 보고서(모르면 대표 보고서로 서버가 채운다) · DB가 센 결정 안 된 줄 수 · 마지막 판정 시각. */
 export type HoldView = { hold: boolean; report: string | null; undecided: number; checkedAt: string | null };
 /** 같은 묶음의 다른 과목 보고서 승인 — 승인 전이 있다 · 다 승인 · 모름(조회 실패). 묶음이 없으면 done. */
@@ -19,8 +19,11 @@ export type OthersState = "pending" | "done" | "unknown";
 
 export const LATER_FAILED_TEXT = "퇴원월 뒤 청구를 불러오지 못했습니다(새로고침).";
 export const LATER_HIDDEN_TEXT = "수납 권한이 없어 청구는 보이지 않습니다.";
+export const LATER_LIMIT_TEXT = "퇴원월 뒤 청구가 너무 많아(120건 이상) 환불할 수 있는 청구를 다 확인하지 못했습니다 — 수납에서 청구를 정리한 뒤 다시 열어 주세요.";
 /** 원장이 아닌 사람(승인 차례가 아님)의 결정 대기 안내 — '승인해도'는 승인할 사람에게만(리뷰 r2 m4 · 원장이 정한 글은 `REFUND_DECISION_WAIT_NOTE` 그대로). */
 export const REFUND_DECISION_WAIT_PLAIN = "원장 환불 결정 전 — 환불 결정 뒤에 처리됩니다";
+/** 작성 강사(제출 차례)에게 — 강사는 승인하지 않고 제출한다(리뷰 r3 R2-m3). */
+export const REFUND_DECISION_SUBMIT_NOTE = "원장 환불 결정 전 — 제출해도 환불 결정 뒤에 처리됩니다";
 const BEFORE_APPROVAL: readonly string[] = ["requested", "revision", "manager_pending", "director_pending"];
 
 export type DetailRefundInput = {
@@ -29,6 +32,10 @@ export type DetailRefundInput = {
   director: boolean;
   /** 지금 제출·승인 차례인가(`capabilities.approve || capabilities.edit`) — 결정 대기 안내의 '승인해도'. */
   approver: boolean;
+  /** 그중 작성 차례(`capabilities.edit`)인가 — '승인해도' 대신 '제출해도'(리뷰 r3 R2-m3). */
+  author?: boolean;
+  /** 부가 조회 실패(리뷰 r3 R2-m10 — '없음'으로 접지 않는다) — 결정 기록 · DB 결정 대기 표시 · 데스크 환불 단계. */
+  failed?: { decisions?: boolean; hold?: boolean; steps?: boolean };
   later: LaterState;
   undecided: readonly string[];
   hold: HoldView | null;
@@ -45,7 +52,8 @@ export type DetailRefundInput = {
   today: string;
 };
 
-export type DetailRefundNote = { key: string; text: string; tone: "plain" | "note" | "alert"; href?: string; linkText?: string; recheck?: boolean };
+/** `place: "refund"` = 보고서 양식의 '환불 확인' 칸 안에 보인다(목록 '내 환불 결정 필요' 링크가 떨어지는 자리 · 리뷰 r3 R2-I1). */
+export type DetailRefundNote = { key: string; text: string; tone: "plain" | "note" | "alert"; href?: string; linkText?: string; recheck?: boolean; place?: "refund" };
 
 /** 결정 대기(처리 전 단계) — DB 표시 또는 이 화면의 지금 계산. 상세 안내·승인 확인·결재 문서의 '퇴원 처리' 칸이 같은 값을 쓴다. */
 export function decisionWaitingOf(status: string, hold: boolean, undecided: readonly string[]): boolean {
@@ -70,6 +78,8 @@ function waitParts(i: DetailRefundInput, decisionWaiting: boolean): string[] {
   ];
 }
 
+/** 목적격 조사(받침 있으면 '을') — 실패한 조회 이름 뒤. */
+const objectJosa = (w: string) => ((w.charCodeAt(w.length - 1) - 0xac00) % 28 ? "을" : "를");
 export function detailRefundNotes(i: DetailRefundInput): DetailRefundNote[] {
   const { report: r } = i;
   const open = !["completed", "canceled", "blocked"].includes(r.status);
@@ -77,17 +87,22 @@ export function detailRefundNotes(i: DetailRefundInput): DetailRefundNote[] {
   const decisionWaiting = decisionWaitingOf(r.status, hold, i.undecided);
   const out: DetailRefundNote[] = [];
   const waits = waitParts(i, decisionWaiting);
+  const failedWhat = [i.failed?.decisions ? "환불 결정 기록" : null, i.failed?.hold ? "환불 결정 대기 표시" : null, i.failed?.steps ? "데스크 환불 단계" : null].filter(Boolean);
+  if (open && failedWhat.length) out.push({ key: "failed", tone: "alert", text: `${failedWhat.join(" · ")}${objectJosa(failedWhat[failedWhat.length - 1]!)} 불러오지 못했습니다(새로고침) — 아래 처리 안내가 맞지 않을 수 있습니다.${i.failed?.decisions || i.failed?.hold ? " 환불 결정 단추를 막았습니다." : ""}` });
   if (r.status === "scheduled") {
     out.push({ key: "status", tone: "plain", text: `${r.direct ? "처리 예약입니다." : "승인이 완료되었습니다."} ${r.effective_date}${waits.length ? ` 이후 ${waits.join(" · ")}까지 끝나면 처리하며` : "에 처리하며"}, 그 전까지는 기존 수강 상태를 유지합니다.` });
   } else if (r.status === "approved") {
     const head = i.hadDesk && !i.deskWaiting ? "관리자 승인과 데스크 환불이 끝났습니다." : "관리자 승인이 끝났습니다.";
-    out.push({ key: "status", tone: "plain", text: waits.length ? `${head} ${waits.join(" · ")}까지 끝나면 처리합니다.`
-      // 형제 조회 실패(리뷰 r2 (a)와 같은 축) — '다른 과목 대기'라고 단정하지 않는다.
-      : i.others === "unknown" ? `${head} 함께 요청한 다른 과목 보고서의 승인 여부를 확인하지 못했습니다(새로고침). 모두 승인됐으면 매일 00:05 확인 때 처리합니다.`
+    // 형제 조회 실패(리뷰 r2 (a)와 같은 축) — '다른 과목 대기'라고 단정하지 않는다 · 다른 대기 까닭이 있어도 앞에 잇는다(리뷰 r3 R2-m5 — 목록과 같은 말).
+    const unknownOthers = i.others === "unknown" ? " 함께 요청한 다른 과목 보고서의 승인 여부를 확인하지 못했습니다(새로고침)." : "";
+    out.push({ key: "status", tone: "plain", text: waits.length ? `${head}${unknownOthers} ${waits.join(" · ")}까지 끝나면 처리합니다.`
+      : i.others === "unknown" ? `${head}${unknownOthers} 모두 승인됐으면 매일 00:05 확인 때 처리합니다.`
+      // 결정·데스크 단계를 못 읽었으면 '처리 확인 대기'라고 단정하지 않는다(리뷰 r3 R2-m10).
+      : failedWhat.length ? `${head} 남은 처리 단계를 확인하지 못했습니다(새로고침).`
       // 리뷰 r2 m6 — DB가 확인 값을 '모름'(낡음·범위 다름)으로 보류한 경우 등: 다음 확인 때 저절로 처리된다.
       : `${head} 처리 확인 대기 — 다음 확인(매일 00:05) 때 처리합니다.` });
   }
-  if (decisionWaiting && !i.director) out.push({ key: "wait", tone: "plain", text: i.approver && BEFORE_APPROVAL.includes(r.status) ? REFUND_DECISION_WAIT_NOTE : REFUND_DECISION_WAIT_PLAIN });
+  if (decisionWaiting && !i.director) out.push({ key: "wait", tone: "plain", text: i.approver && BEFORE_APPROVAL.includes(r.status) ? (i.author ? REFUND_DECISION_SUBMIT_NOTE : REFUND_DECISION_WAIT_NOTE) : REFUND_DECISION_WAIT_PLAIN });
   // 결정할 줄이 다른 보고서에 있다(DB 표시 · 이 화면 지금 계산 0건) — 그 보고서로 바로 간다(막다른 고리 없음 · 리뷰 r2 (b) I2(ⅰ)). 지금 계산을 못 했으면 말하지 않는다(I3).
   if (open && hold && i.later === "ok" && !i.undecided.length && i.holdReport && i.gap === null) {
     const n = i.hold!.undecided;
@@ -95,25 +110,32 @@ export function detailRefundNotes(i: DetailRefundInput): DetailRefundNote[] {
       text: `원장 환불 결정 대기 — 결정할 건${n > 0 ? ` ${n}건` : ""}은 다른 보고서(${i.holdReport.label})에 있습니다.${i.director ? " 그 보고서의 '환불 확인'에서 정하세요." : ""}`,
       ...(i.holdReport.readable ? { href: `/withdrawal-reports/${i.holdReport.id}#refund`, linkText: "그 보고서 열기" } : {}) });
   }
+  // 목록 표시와 지금 계산의 어긋남 — 본문은 '환불 확인' 칸 안에(목록 링크가 떨어지는 자리 · '지금 다시 판정'도 그 안에 · 리뷰 r3 R2-I1), 위에는 가리키는 한 줄.
   if (open && i.gap) {
     const when = nextJudgementText(r.status, i.others, r.effective_date, i.today);
+    out.push({ key: "gap-pointer", tone: "note", text: "목록 표시와 다릅니다 — 아래 '환불 확인'에 까닭을 적었습니다.", href: "#refund", linkText: "환불 확인으로 가기" });
     out.push(i.gap === "app"
-      ? { key: "gap", tone: "note", text: `목록 표시와 다릅니다 — 목록과 위 칩에는 '환불 결정 대기'가 없지만(마지막 판정 기준), 지금 계산으로는 원장이 정하지 않은 환불 가능 건이 ${i.undecided.length}건 있습니다. ${when} DB가 다시 판정하고, 그때도 남아 있으면 처리하지 않습니다.` }
-      : { key: "gap", tone: "note", text: `목록 표시와 다릅니다 — 목록과 위 칩·결재란은 '환불 결정 대기'(마지막 판정 기준)지만, 지금 계산으로는 이 보고서에 정할 환불 가능 건이 없습니다. ${when} DB가 다시 판정합니다.${i.director ? " 지금 다시 판정하려면 아래 단추를 누르세요." : ""}`,
+      ? { key: "gap", tone: "note", place: "refund", text: `목록 표시와 다릅니다 — 목록·위 칩·결재란의 '환불 결정' 칸은 마지막 판정 기준이라 '환불 결정 대기'가 아니지만, 지금 계산으로는 원장이 정하지 않은 환불 가능 건이 ${i.undecided.length}건 있습니다(다시 결정 필요). ${when} 시스템이 다시 확인하고, 그때도 남아 있으면 처리하지 않습니다.` }
+      : { key: "gap", tone: "note", place: "refund", text: `목록 표시와 다릅니다 — 목록·위 칩·결재란은 '환불 결정 대기'(마지막 판정 기준)지만, 지금 계산으로는 이 보고서에 정할 환불 가능 건이 없습니다. ${when} 시스템이 다시 확인합니다.${i.director ? " 지금 다시 판정하려면 아래 단추를 누르세요." : ""}`,
         ...(i.director ? { recheck: true } : {}) });
   }
-  // 리뷰 r2 m19 — 퇴사한(또는 없는) 데스크의 미완료 요청서는 할 일 받는 사람이 없다.
-  if (open && i.orphanDesk) out.push({ key: "orphan-desk", tone: "alert", href: `/billing/refunds/${i.orphanDesk.documentId}`, linkText: "요청서 열기",
-    text: "데스크 담당자가 퇴사해 이 환불 요청서의 할 일을 받는 사람이 없습니다 — 원장이 환불완료일자를 넣거나, 요청서를 지우고 다시 환불 승인하세요." });
+  // 리뷰 r2 m19 — 퇴사한(또는 없는) 데스크의 미완료 요청서는 할 일 받는 사람이 없다. 처리 길(요청서 링크)은 원장에게만(리뷰 r3 R2-m14 — 열 수 없는 링크를 보이지 않는다).
+  if (open && i.orphanDesk) out.push(i.director
+    ? { key: "orphan-desk", tone: "alert", href: `/billing/refunds/${i.orphanDesk.documentId}`, linkText: "요청서 열기",
+        text: "데스크 담당자가 퇴사해 이 환불 요청서의 할 일을 받는 사람이 없습니다 — 원장이 환불완료일자를 넣거나, 요청서를 지우고 다시 환불 승인하세요." }
+    : { key: "orphan-desk", tone: "plain", text: "데스크 담당자가 퇴사해 이 환불 요청서는 원장 확인 대기입니다." });
   return out;
 }
 
-/** 승인·제출 확인 칸의 처리 안내(리뷰 r2 m2 — 결정 대기면 '처리일이 지났다면 즉시 반영됩니다'를 빼고 한 문장으로). */
-export function approveConfirmText(i: { effectiveDate: string; withdrawal: boolean; deskWaiting: boolean; decisionWaiting: boolean; directorStep: boolean }): string {
+/** 승인·제출 확인 칸의 처리 안내(리뷰 r2 m2 — 결정 대기면 '처리일이 지났다면 즉시 반영됩니다'를 빼고 한 문장으로 · r3 R2-m6 — 처리일을 넣고 같은 뜻을 되풀이하지 않는다). */
+export function approveConfirmText(i: { effectiveDate: string; withdrawal: boolean; deskWaiting: boolean; decisionWaiting: boolean; directorStep: boolean; today?: string }): string {
   if (i.directorStep) return `이 보고서를 승인합니다. 관리자 전원 승인 후 원장 검토로 넘어갑니다.${i.decisionWaiting ? ` ${REFUND_DECISION_WAIT_NOTE}.` : ""}`;
   // 조사까지(종전 글은 '수강종료을'이었다).
   const what = i.withdrawal ? "퇴원을" : "선택 과목 수강종료를";
-  if (i.decisionWaiting) return `이 보고서를 승인합니다. 함께 요청한 보고서와 모든 승인자의 승인이 끝나도 원장 환불 결정${i.deskWaiting ? "과 데스크 환불 처리" : ""}까지 끝난 뒤 ${what} 처리합니다. ${REFUND_DECISION_WAIT_NOTE}.`;
+  if (i.decisionWaiting) {
+    const when = i.today && i.effectiveDate > i.today ? `${i.effectiveDate}에` : i.today ? "바로" : `${i.effectiveDate}에(지났으면 끝나는 대로)`;
+    return `이 보고서를 승인합니다. 함께 요청한 보고서와 모든 승인자의 승인, 원장 환불 결정${i.deskWaiting ? "과 데스크 환불 처리" : ""}까지 끝나면 ${when} ${what} 처리합니다(원장 환불 결정 전에는 처리하지 않습니다).`;
+  }
   return `이 보고서를 승인합니다. 함께 요청한 보고서와 모든 승인자의 승인이 끝나면${i.deskWaiting ? " 데스크 환불 처리까지 끝난 뒤" : ""} ${i.effectiveDate}에 ${what} 처리합니다. 처리일이 지났다면 즉시 반영됩니다.`;
 }
 

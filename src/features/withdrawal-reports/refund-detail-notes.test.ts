@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approveConfirmText, cancelConfirmText, decisionWaitingOf, detailRefundNotes, nextJudgementText, REFUND_DECISION_WAIT_PLAIN, type DetailRefundInput } from "./refund-detail-notes";
+import { approveConfirmText, cancelConfirmText, decisionWaitingOf, detailRefundNotes, nextJudgementText, REFUND_DECISION_SUBMIT_NOTE, REFUND_DECISION_WAIT_PLAIN, type DetailRefundInput } from "./refund-detail-notes";
 import { REFUND_DECISION_WAIT_NOTE, refundHoldGap } from "./refund-decision";
 
 /**
@@ -26,7 +26,9 @@ describe("상세 안내 — 1과목 · 2과목(결정 보고서 = 다른 / 이 �
   it("🔴 방향 ① 지금 계산은 결정 전 · DB는 대기 아님 → 모든 모양에서 '목록 표시와 다릅니다'(건수 · 다음 판정 때) · 링크 없음", () => {
     for (const shape of ["1과목", "2과목·결정은 다른 보고서", "2과목·결정은 이 보고서"] as const) {
       const got = scenario(shape, "app");
-      expect(got, shape).toContain("gap:목록 표시와 다릅니다 — 목록과 위 칩에는 '환불 결정 대기'가 없지만(마지막 판정 기준), 지금 계산으로는 원장이 정하지 않은 환불 가능 건이 1건 있습니다. 매일 00:05 확인 때 DB가 다시 판정하고, 그때도 남아 있으면 처리하지 않습니다.");
+      // 결재란도 말한다(리뷰 r3 R2-m4) · 기술 용어 없이(R2-m1)
+      expect(got, shape).toContain("gap:목록 표시와 다릅니다 — 목록·위 칩·결재란의 '환불 결정' 칸은 마지막 판정 기준이라 '환불 결정 대기'가 아니지만, 지금 계산으로는 원장이 정하지 않은 환불 가능 건이 1건 있습니다(다시 결정 필요). 매일 00:05 확인 때 시스템이 다시 확인하고, 그때도 남아 있으면 처리하지 않습니다.");
+      expect(got.join("\n"), shape).not.toMatch(/DB/);
       expect(got.some((t) => t.startsWith("elsewhere:")), shape).toBe(false);
     }
   });
@@ -38,8 +40,14 @@ describe("상세 안내 — 1과목 · 2과목(결정 보고서 = 다른 / 이 �
     for (const shape of ["1과목", "2과목·결정은 이 보고서"] as const)
       expect(scenario(shape, "db"), shape).toEqual([
         "status:관리자 승인이 끝났습니다. 원장 환불 결정(퇴원월 뒤 청구의 환불 승인 또는 환불 없음)까지 끝나면 처리합니다.",
-        "gap:목록 표시와 다릅니다 — 목록과 위 칩·결재란은 '환불 결정 대기'(마지막 판정 기준)지만, 지금 계산으로는 이 보고서에 정할 환불 가능 건이 없습니다. 매일 00:05 확인 때 DB가 다시 판정합니다. 지금 다시 판정하려면 아래 단추를 누르세요. [지금 다시 판정]",
+        "gap-pointer:목록 표시와 다릅니다 — 아래 '환불 확인'에 까닭을 적었습니다. [환불 확인으로 가기 → #refund]",
+        "gap:목록 표시와 다릅니다 — 목록·위 칩·결재란은 '환불 결정 대기'(마지막 판정 기준)지만, 지금 계산으로는 이 보고서에 정할 환불 가능 건이 없습니다. 매일 00:05 확인 때 시스템이 다시 확인합니다. 지금 다시 판정하려면 아래 단추를 누르세요. [지금 다시 판정]",
       ]);
+    // 🔴 리뷰 r3 R2-I1 — 본문·'지금 다시 판정'은 '환불 확인' 칸 안(목록 '내 환불 결정 필요' 링크가 떨어지는 자리) · 위에는 가리키는 한 줄만
+    const notes = detailRefundNotes(base({ undecided: [], hold: { hold: true, report: "r1", undecided: 1, checkedAt: null }, gap: "db" }));
+    expect(notes.filter((n) => n.place === "refund").map((n) => [n.key, !!n.recheck])).toEqual([["gap", true]]);
+    expect(notes.find((n) => n.key === "gap-pointer")).toMatchObject({ href: "#refund", linkText: "환불 확인으로 가기" });
+    expect(notes.find((n) => n.key === "gap-pointer")!.place).toBeUndefined();
     // 🔴 1과목에 '함께 요청한 다른 보고서' 같은 거짓 안내가 없다(리뷰 r1 b2 — 막다른 고리)
     expect(scenario("1과목", "db").join("\n")).not.toMatch(/다른 보고서/);
   });
@@ -112,12 +120,45 @@ describe("다음 DB 판정 때(코드 확인 — 제출·승인 · cron 00:05 ap
   });
 });
 
+describe("리뷰 r3 경미 — 작성 강사 '제출해도'(m3) · 형제 모름 + 다른 대기(m5) · 퇴사 데스크 링크(m14) · 조회 실패(m10)", () => {
+  it("작성 차례면 '제출해도' · 승인 차례면 '승인해도' · 그 밖은 PLAIN", () => {
+    const wait = (over: Partial<DetailRefundInput>) => detailRefundNotes(base({ report: { id: "r1", status: "requested", effective_date: "2026-11-01" }, director: false, undecided: [KEY], ...over })).find((n) => n.key === "wait")?.text;
+    expect(wait({ approver: true, author: true })).toBe(REFUND_DECISION_SUBMIT_NOTE);
+    expect(wait({ approver: true })).toBe(REFUND_DECISION_WAIT_NOTE);
+    expect(wait({ approver: false })).toBe(REFUND_DECISION_WAIT_PLAIN);
+  });
+  it("🔴 형제 조회 실패 + 결정·데스크 대기 — 대기 까닭 앞에 '확인하지 못했습니다'를 잇는다(목록과 같은 말)", () => {
+    const got = texts(base({ others: "unknown", deskWaiting: true, hold: { hold: true, report: "r1", undecided: 1, checkedAt: null }, undecided: [KEY] }));
+    expect(got[0]).toBe("status:관리자 승인이 끝났습니다. 함께 요청한 다른 과목 보고서의 승인 여부를 확인하지 못했습니다(새로고침). 원장 환불 결정(퇴원월 뒤 청구의 환불 승인 또는 환불 없음) · 데스크 환불 처리(환불 요청서의 환불완료일자)까지 끝나면 처리합니다.");
+  });
+  it("퇴사 데스크 — 원장에게만 요청서 링크와 처리 길 · 나머지는 '원장 확인 대기'", () => {
+    expect(texts(base({ orphanDesk: { documentId: "d1" } })).find((t) => t.startsWith("orphan-desk:"))).toContain("[요청서 열기 → /billing/refunds/d1]");
+    const plain = detailRefundNotes(base({ director: false, orphanDesk: { documentId: "d1" } })).find((n) => n.key === "orphan-desk")!;
+    expect(plain).toEqual({ key: "orphan-desk", tone: "plain", text: "데스크 담당자가 퇴사해 이 환불 요청서는 원장 확인 대기입니다." });
+  });
+  it("🔴 조회 실패를 '없음'으로 접지 않는다 — 무엇을 못 읽었는지 · 결정 기록·대기 표시면 결정 단추를 막았다고 · '처리 확인 대기'라고 단정하지 않는다", () => {
+    const got = texts(base({ failed: { decisions: true, steps: true } }));
+    expect(got).toEqual([
+      "failed:환불 결정 기록 · 데스크 환불 단계를 불러오지 못했습니다(새로고침) — 아래 처리 안내가 맞지 않을 수 있습니다. 환불 결정 단추를 막았습니다.",
+      "status:관리자 승인이 끝났습니다. 남은 처리 단계를 확인하지 못했습니다(새로고침).",
+    ]);
+    expect(texts(base({ failed: { hold: true } }))[0]).toBe("failed:환불 결정 대기 표시를 불러오지 못했습니다(새로고침) — 아래 처리 안내가 맞지 않을 수 있습니다. 환불 결정 단추를 막았습니다.");
+    expect(texts(base({ failed: { steps: true } }))[0]).toBe("failed:데스크 환불 단계를 불러오지 못했습니다(새로고침) — 아래 처리 안내가 맞지 않을 수 있습니다.");
+    expect(texts(base({ report: { id: "r1", status: "completed", effective_date: "2026-11-01" }, failed: { decisions: true } }))).toEqual([]);
+  });
+});
+
 describe("확인 칸 글 — 승인(m2) · 요청 취소(m13 · m18)", () => {
   it("🔴 결정 대기면 '처리일이 지났다면 즉시 반영됩니다'를 빼고 한 문장(앞뒤 모순 없음)", () => {
     const t = approveConfirmText({ effectiveDate: "2026-11-01", withdrawal: true, deskWaiting: false, decisionWaiting: true, directorStep: false });
     expect(t).not.toMatch(/즉시 반영/);
-    expect(t).toBe(`이 보고서를 승인합니다. 함께 요청한 보고서와 모든 승인자의 승인이 끝나도 원장 환불 결정까지 끝난 뒤 퇴원을 처리합니다. ${REFUND_DECISION_WAIT_NOTE}.`);
-    expect(approveConfirmText({ effectiveDate: "2026-11-01", withdrawal: false, deskWaiting: true, decisionWaiting: true, directorStep: false })).toMatch(/원장 환불 결정과 데스크 환불 처리까지 끝난 뒤 선택 과목 수강종료를 처리합니다/);
+    expect(t).toBe("이 보고서를 승인합니다. 함께 요청한 보고서와 모든 승인자의 승인, 원장 환불 결정까지 끝나면 2026-11-01에(지났으면 끝나는 대로) 퇴원을 처리합니다(원장 환불 결정 전에는 처리하지 않습니다).");
+    // 리뷰 r3 R2-m6 — 처리일이 미래면 그 날짜 · 지났으면 '바로' · 같은 뜻을 되풀이하지 않는다
+    const future = approveConfirmText({ effectiveDate: "2026-12-20", withdrawal: true, deskWaiting: false, decisionWaiting: true, directorStep: false, today: "2026-11-09" });
+    expect(future).toBe("이 보고서를 승인합니다. 함께 요청한 보고서와 모든 승인자의 승인, 원장 환불 결정까지 끝나면 2026-12-20에 퇴원을 처리합니다(원장 환불 결정 전에는 처리하지 않습니다).");
+    expect(future).not.toContain(REFUND_DECISION_WAIT_NOTE);
+    expect(approveConfirmText({ effectiveDate: "2026-11-01", withdrawal: true, deskWaiting: false, decisionWaiting: true, directorStep: false, today: "2026-11-09" })).toContain("끝나면 바로 퇴원을 처리합니다");
+    expect(approveConfirmText({ effectiveDate: "2026-11-01", withdrawal: false, deskWaiting: true, decisionWaiting: true, directorStep: false })).toMatch(/원장 환불 결정과 데스크 환불 처리까지 끝나면 .+ 선택 과목 수강종료를 처리합니다/);
     expect(approveConfirmText({ effectiveDate: "2026-11-01", withdrawal: true, deskWaiting: false, decisionWaiting: false, directorStep: false }))
       .toBe("이 보고서를 승인합니다. 함께 요청한 보고서와 모든 승인자의 승인이 끝나면 2026-11-01에 퇴원을 처리합니다. 처리일이 지났다면 즉시 반영됩니다.");
     expect(approveConfirmText({ effectiveDate: "2026-11-01", withdrawal: true, deskWaiting: false, decisionWaiting: false, directorStep: true })).toBe("이 보고서를 승인합니다. 관리자 전원 승인 후 원장 검토로 넘어갑니다.");

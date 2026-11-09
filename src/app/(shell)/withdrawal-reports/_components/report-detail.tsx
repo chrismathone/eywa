@@ -8,8 +8,8 @@ import { WindowLink } from "@/components/workspace/window-link";
 import type { ReportConsultation } from "@/features/withdrawal-reports/consultation";
 import { ReportForm } from "./report-form";
 import { LaterInvoices, type RefundDecisionView } from "./later-invoices";
-import { REFUND_DECISION_WAIT_NOTE, decisionBlocksProcessing, type RefundHoldGap } from "@/features/withdrawal-reports/refund-decision";
-import { approveConfirmText, cancelConfirmText, decisionWaitingOf, detailRefundNotes, type LaterState, type OthersState } from "@/features/withdrawal-reports/refund-detail-notes";
+import { decisionBlocksProcessing, type LineDeduction, type RefundHoldGap } from "@/features/withdrawal-reports/refund-decision";
+import { REFUND_DECISION_SUBMIT_NOTE, approveConfirmText, cancelConfirmText, decisionWaitingOf, detailRefundNotes, type LaterState, type OthersState } from "@/features/withdrawal-reports/refund-detail-notes";
 import { kstToday } from "@/lib/date-kst";
 import { RefundNotes } from "./refund-notes";
 import { FORMER_STAFF, type RefundOutcome } from "@/features/withdrawal-reports/approval-lines";
@@ -40,8 +40,10 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
    * 목록 표시(DB)와 지금 계산의 어긋남(`gap` — 리뷰 r2 (b) · 서버 `refundHoldGap`) · DB가 센 결정 안 된 줄 수 · 결정할 줄을 보이는 다른 보고서 ·
    * 퇴원월 뒤 청구 칸 상태(I3) · 다른 과목 보고서 승인(m5·m6) · 관문 SQL 적용 여부(m13). 결정 버튼·확인 값은 지금 계산 그대로다.
    */
-  refundDecision?: RefundDecisionView & { hold: boolean; outcome?: RefundOutcome | null; gap?: RefundHoldGap | null; holdCount?: number; laterState?: LaterState;
-    holdReport?: { id: string; subjects: string[]; readable: boolean } | null; others?: OthersState; gateReady?: boolean };
+  refundDecision?: Omit<RefundDecisionView, "deductions" | "notes"> & { hold: boolean; outcome?: RefundOutcome | null; gap?: RefundHoldGap | null; holdCount?: number; laterState?: LaterState;
+    holdReport?: { id: string; subjects: string[]; readable: boolean } | null; others?: OthersState; gateReady?: boolean;
+    /** 줄별 뺄 몫(리뷰 r3 R2-I2 — 결정자 이름은 여기서 붙인다) · 부가 조회 실패(R2-m10). */
+    deductions?: readonly LineDeduction[]; lookupFailed?: { decisions?: boolean; hold?: boolean; steps?: boolean } };
   /** 데스크 환불 단계(원장 2026-11-03) — 이 묶음에서 만든 환불 요청서와 완료 여부. */
   refundSteps?: RefundStep[];
   subjectHistory?: SubjectHistoryRow[];
@@ -69,7 +71,7 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
   const laterState = refundDecision.laterState ?? "ok";
   const orphanDesk = refundSteps.find(s => !s.completedDate && (!s.deskId || s.deskActive === false));
   const notes = detailRefundNotes({
-    report: { id: r.id, status: r.status, effective_date: r.effective_date, direct: isDirectReport(r) }, director: capabilities.refund, approver: capabilities.approve || capabilities.edit,
+    report: { id: r.id, status: r.status, effective_date: r.effective_date, direct: isDirectReport(r) }, director: capabilities.refund, approver: capabilities.approve || capabilities.edit, author: capabilities.edit, failed: refundDecision.lookupFailed,
     later: laterState, undecided: refundDecision.undecided,
     hold: { hold: refundDecision.hold, report: null, undecided: refundDecision.holdCount ?? 0, checkedAt: null },
     holdReport: refundDecision.holdReport ? { id: refundDecision.holdReport.id, readable: refundDecision.holdReport.readable,
@@ -151,7 +153,7 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
     });
   }
   return <>
-    <div className="flex flex-wrap items-center justify-between gap-3"><span className="flex flex-wrap items-center gap-3 text-sm"><Link className="text-primary hover:underline" href="/withdrawal-reports">← 보고서 목록</Link>{withdrawalHref && <WindowLink href={withdrawalHref} className="text-primary hover:underline">퇴원 상세</WindowLink>}</span><span className="flex flex-wrap items-center gap-2">{capabilities.cancel && <Button variant="outline" size="sm" disabled={pending} onClick={() => setDecision("cancel")}>요청 취소</Button>}{reportStatusChips(r, refundSteps, refundDecision.hold).map(chip => <span key={chip} className="rounded-full bg-muted px-3 py-1.5 text-sm">{chip}</span>)}</span></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><span className="flex flex-wrap items-center gap-3 text-sm"><Link className="text-primary hover:underline" href="/withdrawal-reports">← 보고서 목록</Link>{withdrawalHref && <WindowLink href={withdrawalHref} className="text-primary hover:underline">퇴원 상세</WindowLink>}</span><span className="flex flex-wrap items-center gap-2">{capabilities.cancel && <Button variant="outline" size="sm" disabled={pending} onClick={() => setDecision("cancel")}>요청 취소</Button>}{reportStatusChips(r, refundSteps, refundDecision.hold, refundDecision.lookupFailed?.hold || refundDecision.lookupFailed?.steps ? "failed" : refundDecision.others ?? "done").map(chip => <span key={chip} className="rounded-full bg-muted px-3 py-1.5 text-sm">{chip}</span>)}</span></div>
     <p className="text-sm">{r.exit_kind === "withdrawal" ? "퇴원" : "반 수강종료"} · {r.subjects.length ? r.subjects.map(s => labels[s] ?? "기타 과목").join(" · ") : "다니는 반 없음"}</p>
     {/* 관리자 바로 처리(강사 작성 없이, 원장 2026-10-23) — 누가·언제 처리했는지 먼저 말한다(양식의 상담·담임 의견 칸은 비어 있다). */}
     {isDirectReport(r) && <p className="rounded-lg border bg-muted/20 p-4 text-sm">관리자 바로 처리 · {nameOf(r.requested_by)} · {dateTime(r.created_at)} — 강사 작성과 승인 없이 처리한 기록입니다.</p>}
@@ -159,19 +161,20 @@ export function ReportDetail({ report: r, events, staff, labels, userId, writabl
     {r.last_comment && <p className="whitespace-pre-wrap rounded-lg border border-att-late-ink/20 bg-att-late p-4 text-sm text-att-late-ink">{r.last_comment}</p>}
     {skipped && ["requested", "revision"].includes(r.status) && <p className="rounded-lg border bg-muted/20 p-4 text-sm">관리자 승인 생략 — 작성 강사가 이 과목 관리자입니다. 제출하면 바로 승인 완료로 넘어갑니다.</p>}
     {/* 처리 안내 · 결정 대기 안내 · 결정할 줄이 있는 다른 보고서(링크) · 목록 표시와 지금 계산의 어긋남 · 퇴사한 데스크(리뷰 r2 — `detailRefundNotes` 한 곳). */}
-    <RefundNotes notes={notes} reportId={r.id} />
+    <RefundNotes notes={notes.filter(n => n.place !== "refund")} reportId={r.id} />
     {assignmentChanged && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">요청 이후 학생·수강·담당 강사가 변경되었습니다. 아래 내용은 요청 당시 기록이며, 제출·승인을 진행할 수 없습니다. 요청한 사람이 요청을 취소하고 현재 담당 기준으로 다시 요청해 주세요.</p>}
     {prefillWarning && <p role="alert" className="rounded-lg border p-4 text-sm">{prefillWarning}</p>}
     <ReportForm managerSkipped={skipped} refundSteps={refundSteps} refundDecisionSign={refundDecisionSign} decisionWaiting={decisionWaiting} consultations={consultations} report={r} body={body} events={events} labels={labels} nameOf={nameOf} approverName={approverName} editable={capabilities.edit} pending={pending} onChange={update} subjectHistory={subjectHistory}
       refundCheck={r.status === "canceled" ? undefined : <LaterInvoices reportId={r.id} rows={laterInvoices} canApprove={capabilities.refund} deskStaff={deskStaff} gates={!["completed", "blocked"].includes(r.status)}
-        decisionOpen={decisionOpen} decision={refundDecision} deskNotice={deskNotice} laterState={laterState} subjectLabels={labels} />} />
+        decisionOpen={decisionOpen} deskNotice={deskNotice} laterState={laterState} subjectLabels={labels}
+        decision={{ ...refundDecision, notes: notes.filter(n => n.place === "refund"), deductions: refundDecision.deductions?.map(d => ({ ...d, byName: d.separateBy ? approverName(d.separateBy) : null })) }} />} />
     {error && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
     <div className="flex flex-wrap gap-2">
       {capabilities.edit && <><Button disabled={pending || assignmentChanged || saveStatus.kind === "conflict"} onClick={() => setDecision("submit")}>{skipped ? "보고서 제출" : "관리자에게 제출"}</Button><AutosaveNote status={saveStatus} /></>}
       {capabilities.approve && <><Button disabled={pending || assignmentChanged} onClick={() => setDecision("approve")}>승인</Button><Button disabled={pending} variant="outline" onClick={() => setDecision("reject")}>반려</Button></>}
     </div>
     {decision && <section ref={decisionRef} className="space-y-3 rounded-xl border bg-muted/20 p-5" aria-label="처리 확인">
-      <p className="text-sm">{decision === "submit" ? (skipped ? `보고서를 제출하면 관리자 승인 없이 바로 승인 완료로 넘어갑니다(작성 강사가 이 과목 관리자). 제출한 뒤에는 수정할 수 없습니다.${deskWaiting ? " 데스크 환불 처리가 끝나면 처리합니다." : ""}${decisionWaiting ? ` ${REFUND_DECISION_WAIT_NOTE}.` : ""}` : "보고서를 제출하면 관리자 검토가 시작됩니다. 이후 수정은 반려 후 가능합니다.") : decision === "approve" ? approveConfirmText({ effectiveDate: r.effective_date, withdrawal: r.exit_kind === "withdrawal", deskWaiting, decisionWaiting, directorStep: r.status === "manager_pending" && directorIds(r).length > 0 }) : decision === "cancel" ? cancelConfirmText(refundSteps, refundDecision.gateReady ?? true) : "수정이 필요한 내용을 적어 주세요. 이 보고서의 승인을 초기화하고 강사가 수정 후 다시 제출합니다."}</p>
+      <p className="text-sm">{decision === "submit" ? (skipped ? `보고서를 제출하면 관리자 승인 없이 바로 승인 완료로 넘어갑니다(작성 강사가 이 과목 관리자). 제출한 뒤에는 수정할 수 없습니다.${deskWaiting ? " 데스크 환불 처리가 끝나면 처리합니다." : ""}${decisionWaiting ? ` ${REFUND_DECISION_SUBMIT_NOTE}.` : ""}` : "보고서를 제출하면 관리자 검토가 시작됩니다. 이후 수정은 반려 후 가능합니다.") : decision === "approve" ? approveConfirmText({ effectiveDate: r.effective_date, withdrawal: r.exit_kind === "withdrawal", deskWaiting, decisionWaiting, directorStep: r.status === "manager_pending" && directorIds(r).length > 0, today: kstToday() }) : decision === "cancel" ? cancelConfirmText(refundSteps, refundDecision.gateReady ?? true) : "수정이 필요한 내용을 적어 주세요. 이 보고서의 승인을 초기화하고 강사가 수정 후 다시 제출합니다."}</p>
       {decision === "reject" && <textarea className={control} aria-label="반려 사유" rows={3} maxLength={1000} value={comment} onChange={e => setComment(e.target.value)} />}
       {decision === "cancel" && <textarea className={control} aria-label="취소 사유" placeholder="취소하는 까닭을 적어 주세요(필수)" rows={3} maxLength={CANCEL_REASON_MAX} value={cancelReason} onChange={e => setCancelReason(e.target.value)} />}
       <div className="flex gap-2"><Button disabled={pending || (decision === "reject" && !comment.trim()) || (decision === "cancel" && !cancelReason.trim())} onClick={() => change(decision)}>{pending ? "처리 중…" : `${REPORT_ACTION_LABEL[decision]} 확인`}</Button><Button variant="outline" disabled={pending} onClick={() => setDecision(null)}>닫기</Button></div>

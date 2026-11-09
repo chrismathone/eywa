@@ -38,18 +38,23 @@ const BEFORE = {
   "staff_tasks_private.withdrawal_sync_report(uuid)": "a8a0fb1aa5b897ff1eac199a33b03a5f",
   // r2 — 완료일자 빈칸 규칙(D-11)으로 바꾸는 데스크 환불 미완료 판정(s2_0025 본문 · 운영 지문 2026-11-09 읽기 전용 확인 = 같음).
   "public.withdrawal_report_refund_pending(uuid)": "e0eab20d959cd68364cd4a7c349385cd",
+  // r3 — 빈칸 판정을 바꾸는 할 일 닫기(s2_0011)·취소 알림(s2_0025) · 운영 지문 2026-11-09 읽기 전용 확인 = 같음(PGlite 운영 정의도 같은 값).
+  "staff_tasks_private.tg_refund_task()": "7ba5b00c225d849f5368182b8ffaee06",
+  "public.withdrawal_report_refunds_on_cancel(uuid,uuid,uuid,text)": "9e3981d9e2cb7e319c308adf193efbbe",
 } as const;
-/** s2_0036 적용 뒤 지문(로컬 PGlite · r2 · 번호를 옮겨 처리 함수 본문 주석의 번호가 바뀌어 처리 함수 지문도 새로 셌다) — 되돌리기는 이 값일 때만 되돌린다. */
+/** s2_0036 적용 뒤 지문(로컬 PGlite · r3) — 되돌리기는 이 값일 때만 되돌린다. */
 const AFTER = {
   "public.transition_withdrawal_report(uuid,uuid,uuid,text,jsonb)": "99c4175fd9f02dab3091086f456890b1",
   "public.transition_withdrawal_report_v1(uuid,uuid,uuid,text,jsonb)": "c8d87498a853195d7c86de12b21ae6d8",
-  "public.attach_withdrawal_report_refund(uuid,uuid,uuid,uuid,uuid,boolean,jsonb,jsonb,jsonb)": "c07c11dc199fe91308485bcef79bf5d8",
+  "public.attach_withdrawal_report_refund(uuid,uuid,uuid,uuid,uuid,boolean,jsonb,jsonb,jsonb)": "4d4be34ba7d4068ef5751ec618e5de35",
   "public.release_withdrawal_report_refunds(uuid,uuid,uuid,jsonb)": "2516d0340b850c14faa4f91e9ea673ca",
   "staff_tasks_private.withdrawal_sync_report(uuid)": "577ba3f3c9f2c429b051b8656a660cb0",
-  "public.withdrawal_report_refund_note(uuid,uuid,jsonb,uuid,boolean)": "b257588a5c8c60b2437437617283073a",
-  "public.decide_withdrawal_report_refund(uuid,uuid,uuid,jsonb,jsonb)": "c89f741e23059ac7050931453e086f81",
-  "public.withdrawal_report_refund_complete_guard()": "5fb08e4f531d6ea84de7173592f2d502",
+  "public.withdrawal_report_refund_note(uuid,uuid,jsonb,uuid,boolean)": "dce627cbb631b2160ebd8d74b7a46384",
+  "public.decide_withdrawal_report_refund(uuid,uuid,uuid,jsonb,jsonb,jsonb)": "7da06d12497b76d8d11fd846d5d31e43",
+  "public.withdrawal_report_refund_complete_guard()": "690c049376af96d280680c168c20199c",
   "public.withdrawal_report_refund_pending(uuid)": "8950ddbc8a25c4229996235e12a2593e",
+  "staff_tasks_private.tg_refund_task()": "25ac92f780f3741fd98f82a8d6eeee5f",
+  "public.withdrawal_report_refunds_on_cancel(uuid,uuid,uuid,text)": "bc3ed5062ec278a6f015635c7d098e4d",
 } as const;
 
 /** 지문 검사 블록 기대 글자. */
@@ -177,7 +182,9 @@ describe("원장 환불 결정 전에는 처리하지 않는다(s2_0036)", () =>
     // ② 결정 행이 있으면 본 낸 돈보다 지금이 크면 결정 안 됨('환불' 결정도 — 리뷰 r2 D-4)
     expect(note).toContain("and coalesce(d.paid_seen, d.paid_net) is not null and jsonb_typeof(e->'paid') = 'number' and (e->>'paid')::numeric > coalesce(d.paid_seen, d.paid_net))");
     // ③ 결정 행이 없으면 표식에 정확히 그 키(앱이 넓혀 담은 줄은 원장이 한 번 정한다)
-    expect(note).toContain("or (not exists(select 1 from public.withdrawal_report_refund_decisions d where d.tenant_id = p_tenant and d.group_id = g.id and d.line_key = e->>'key')");
+    expect(note).toContain("or (not exists(select 1 from public.withdrawal_report_refund_decisions d where d.tenant_id = p_tenant and d.group_id = g.id and d.line_key = e->>'key'");
+    // 🔴 ②·③의 결정 행은 그 요청서가 남아 있을 때만('환불하지 않음'은 그대로) — 지워진 요청서의 결정 행으로 결정됨이 되지 않게(리뷰 r3 R-5)
+    expect(count(note, "and (d.decision = 'none' or exists(select 1 from public.academy_documents doc where doc.tenant_id = p_tenant and doc.id = d.document_id and doc.form_type = 'refund_request'))")).toBe(3);
     expect(note).toContain("and (e->>'key') = any(string_to_array(substring(a.description from 'lines:([^[:space:]·]+)'), ','))))");
     // 확인 값 모양(refundable[{key, report, paid}] · claimed[{key, doc}] · asOf · scope) — 하나라도 어긋나면 거절
     expect(note).toContain("or jsonb_typeof(p_check->'claimed') is distinct from 'array'");
@@ -229,7 +236,13 @@ describe("원장 환불 결정 전에는 처리하지 않는다(s2_0036)", () =>
     expect(att).toContain("system_role::text in ('master','admin','manager','accountant')");
     expect(att).toContain("and not coalesce(public.is_super_admin(id), false) and id is distinct from p_actor;");
     expect(att).toContain("select p_tenant, gid, r.id, s.k, 'refund', p_document, p_actor, s.pv, s.pv, old_docs");
-    expect(att).toContain("decided_at = now(), paid_net = excluded.paid_net, paid_seen = excluded.paid_seen, supersedes = excluded.supersedes;");
+    // 다시 승인 상한 = 낸 돈 − 따로 처리하기로 한 금액 − 환불 완료 기록(원장 결정 2026-11-09 · 리뷰 r3)
+    expect(att).toContain("decided_at = now(), paid_net = greatest(0, excluded.paid_net - coalesce(t.separate_amount, 0) - coalesce(t.refunded_total, 0)), paid_seen = excluded.paid_seen,");
+    // 🔴 같은 묶음이어도 살아 있는 다른 요청서가 같은 키를 담았으면 거절(리뷰 r3 R-1 · P6b 이중 환불)
+    expect(att).toContain("join public.withdrawal_report_refund_decisions o on o.tenant_id = p_tenant and o.group_id = gid and o.line_key = x and o.decision = 'refund' and o.document_id is distinct from p_document");
+    expect(att.indexOf("o.group_id = gid and o.line_key = x")).toBeLessThan(att.indexOf("insert into public.withdrawal_report_refunds"));
+    // 대체 옛 요청서는 고른 줄과 같은 청구를 담은 것만(리뷰 r3 R-4)
+    expect(att).toContain("then raise exception '대체할 옛 요청서가 고른 청구를 담고 있지 않습니다. 새로고침 후 다시 확인해 주세요.'; end if;");
     // 고르지 않은 줄 = 환불 가능 줄 · 다시 정할 이 묶음 요청서 줄(claimed) — '환불하지 않음' 기록은 한 함수(withdrawal_refund_record_none)
     expect(att).toContain("perform public.withdrawal_refund_record_none(p_tenant, gid, r.id, k,");
     expect(att).toContain("and not exists(select 1 from jsonb_array_elements(coalesce(p_check->'claimed', '[]'::jsonb)) e where e->>'key' = x)))");
@@ -291,7 +304,16 @@ describe("원장 환불 결정 전에는 처리하지 않는다(s2_0036)", () =>
     expect(g).toContain("if v_old_done and not v_new_done and not v_director then");
     // 상한(관리 키 포함 · 금액 칸이 바뀔 때만 · 모르면 거절)
     expect(g).toContain("select count(*) > 0 and bool_and(d.paid_net is not null), sum(d.paid_net) into v_cap_known, v_cap");
-    expect(g).toContain("and public.withdrawal_refund_won(NEW.form_data #>> '{refund,totalAmount}') > v_cap then");
+    expect(g).toContain("v_total := public.withdrawal_refund_won(NEW.form_data #>> '{refund,totalAmount}');");
+    expect(g).toContain("if v_total is null then");   // 못 읽는 표기('300만원' 등)는 거절(리뷰 r3 R-2)
+    expect(g).toContain("if v_total > v_cap then");
+    expect(g).toContain("for v_tok in select m[1] from regexp_matches(coalesce(NEW.form_data #>> '{refund,paymentDetails}', '')");
+    expect(g).toContain("if v_amt > v_cap and not exists(select 1 from regexp_matches(coalesce(OLD.form_data #>> '{refund,paymentDetails}', '')");
+    // 완료일자 = 빈칸 또는 YYYY-MM-DD(리뷰 r3 R-9)
+    expect(g).toContain("and (NEW.form_data #>> '{result,completedDate}') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then");
+    // 환불 완료 기록(완료일자가 처음 들어갈 때 · 관리 키 포함 · 요청서마다 한 번)
+    expect(g).toContain("update public.withdrawal_report_refund_decisions d set refunded_total = coalesce(d.refunded_total, 0) + coalesce(d.paid_net, 0), refunded_docs = d.refunded_docs || NEW.id");
+    expect(g.indexOf("refunded_total = coalesce")).toBeLessThan(g.indexOf("if v_uid is null then return NEW; end if;"));
     expect(g.indexOf("v_cap_known")).toBeLessThan(g.indexOf("if v_uid is null then return NEW; end if;"));
     // 🔴 원장 C.3 — 취소된 요청에만 이어진 요청서의 첫 완료일자 · 같은 청구 줄의 새 요청서(취소되지 않은 묶음 · 문서 남음)가 있으면 누구도(관리 키 포함) 거절
     expect(g).toContain("perform pg_advisory_xact_lock(hashtextextended('withdrawal_refund_lines:' || NEW.tenant_id::text || ':' || v_student::text, 0));");
@@ -311,7 +333,7 @@ describe("원장 환불 결정 전에는 처리하지 않는다(s2_0036)", () =>
 
   it("옛 단건(_v1) — 받는 처리 줄 하나만 정확히 한 번 치환(요청·승인·처리 거절)", () => {
     const blocks = doBlocks(noComments(sql));
-    expect(blocks).toHaveLength(4); // 지문 검사 · _v1 · 할 일 동기화 · 사후 확인(함정 #155)
+    expect(blocks).toHaveLength(5); // 지문 검사 · _v1 · 할 일 동기화 · 할 일 닫기·취소 알림 빈칸(r3) · 사후 확인(함정 #155)
     const v1 = blocks[1]!;
     expect(v1).toContain("select pg_get_functiondef('public.transition_withdrawal_report_v1(uuid,uuid,uuid,text,jsonb)'::regprocedure) into definition;");
     expect(v1).toContain("if hits <> 1 then raise exception 's2_0036: _v1의 바꿀 줄 %번이 하나가 아닙니다(%건)', i, hits; end if;");
@@ -338,16 +360,22 @@ describe("원장 환불 결정 전에는 처리하지 않는다(s2_0036)", () =>
   });
 
   it("🔴 사후 확인(함정 #155) — 바꾼 함수·새 함수는 service_role이 부르고 anon·authenticated는 못 부른다 · 트리거가 있다 · 아니면 거래 취소", () => {
-    const post = doBlocks(noComments(sql))[3]!;
+    const post = doBlocks(noComments(sql))[4]!;
     for (const f of ["public.transition_withdrawal_report(uuid,uuid,uuid,text,jsonb)", "public.attach_withdrawal_report_refund(uuid,uuid,uuid,uuid,uuid,boolean,jsonb,jsonb,jsonb)",
       "public.release_withdrawal_report_refunds(uuid,uuid,uuid,jsonb)", "public.withdrawal_report_refund_note(uuid,uuid,jsonb,uuid,boolean)",
-      "public.decide_withdrawal_report_refund(uuid,uuid,uuid,jsonb,jsonb)", "staff_tasks_private.withdrawal_sync_report(uuid)",
+      "public.decide_withdrawal_report_refund(uuid,uuid,uuid,jsonb,jsonb,jsonb)", "staff_tasks_private.withdrawal_sync_report(uuid)",
+      "public.withdrawal_report_refunds_on_cancel(uuid,uuid,uuid,text)",
       "public.withdrawal_refund_blank(text)", "public.withdrawal_refund_won(text)", "public.withdrawal_refund_keys_overlap(text,text)",
       "public.withdrawal_refund_later_fingerprint(uuid,uuid,text)", "public.withdrawal_refund_gate_ready()", "public.withdrawal_refund_record_none(uuid,uuid,uuid,text,numeric,uuid,uuid)"]) expect(post).toContain(`'${f}'`);
     // 트리거 사건 셋 · 결정 표 권한(service_role에 지우기·비우기 없음 — 리뷰 r2 D-5) · 옛 8인자 연결 없음
     expect(post).toContain("(tgtype::int & 28) = 28");
     expect(post).toContain("foreach p in array array['delete', 'truncate', 'references', 'trigger'] loop");
     expect(post).toContain("if to_regprocedure('public.attach_withdrawal_report_refund(uuid,uuid,uuid,uuid,uuid,boolean,jsonb,jsonb)') is not null then");
+    // r3 — 옛 5인자 환불 없음 없음 · 할 일 닫기 트리거 함수 실행권 · 연결 표 service_role은 select·insert만(R-6)
+    expect(post).toContain("if to_regprocedure('public.decide_withdrawal_report_refund(uuid,uuid,uuid,jsonb,jsonb)') is not null then");
+    expect(post).toContain("has_function_privilege('anon', 'staff_tasks_private.tg_refund_task()', 'execute')");
+    expect(post).toContain("foreach p in array array['update', 'delete', 'truncate', 'references', 'trigger'] loop");
+    expect(post).toContain("if has_table_privilege('service_role', 'public.withdrawal_report_refunds', p) then raise exception");
     expect(post).toContain("if not has_function_privilege('service_role', f, 'execute') then raise exception");
     expect(post).toContain("if has_function_privilege('anon', f, 'execute') or has_function_privilege('authenticated', f, 'execute') then");
     expect(post).toContain("tgname = 'withdrawal_report_refund_complete_guard'");
@@ -382,7 +410,7 @@ describe("원장 환불 결정 전에는 처리하지 않는다(s2_0036)", () =>
     const code = noComments(sql);
     for (const sig of [
       "public.withdrawal_report_refund_note(uuid, uuid, jsonb, uuid, boolean)", "public.attach_withdrawal_report_refund(uuid, uuid, uuid, uuid, uuid, boolean, jsonb, jsonb, jsonb)",
-      "public.decide_withdrawal_report_refund(uuid, uuid, uuid, jsonb, jsonb)", "public.release_withdrawal_report_refunds(uuid, uuid, uuid, jsonb)",
+      "public.decide_withdrawal_report_refund(uuid, uuid, uuid, jsonb, jsonb, jsonb)", "public.release_withdrawal_report_refunds(uuid, uuid, uuid, jsonb)",
       "public.withdrawal_refund_record_none(uuid, uuid, uuid, text, numeric, uuid, uuid)",
     ]) {
       expect(code).toContain(`revoke all on function ${sig} from public, anon, authenticated;`);
@@ -393,6 +421,9 @@ describe("원장 환불 결정 전에는 처리하지 않는다(s2_0036)", () =>
     // 🔴 Supabase 기본 권한까지 거둔다(service_role 포함 — 리뷰 r2 D-5) · service_role은 select·insert·update만
     expect(code).toContain("revoke all on public.withdrawal_report_refund_decisions from public, anon, authenticated, service_role;");
     expect(code).toContain("grant select, insert, update on public.withdrawal_report_refund_decisions to service_role;");
+    // 연결 표 — service_role은 넣기·읽기만(리뷰 r3 R-6)
+    expect(code).toContain("revoke update, delete, truncate, references, trigger on public.withdrawal_report_refunds from service_role;");
+    expect(code).toContain("revoke all on public.withdrawal_report_refunds from public, anon, authenticated;");
     for (const f of ["withdrawal_refund_blank(text)", "withdrawal_refund_won(text)", "withdrawal_refund_keys_overlap(text, text)", "withdrawal_refund_later_fingerprint(uuid, uuid, text)", "withdrawal_refund_gate_ready()"])
       expect(code).toContain(`revoke all on function public.${f} from public, anon, authenticated;`);
     expect(code.match(/\bdrop function\b[^;]*;/gi)).toEqual([
@@ -437,7 +468,7 @@ describe("원장 환불 결정 전에는 처리하지 않는다(s2_0036)", () =>
   it("되돌리기 — 적용 뒤 지문일 때만 · 진행 중 대기·처리 안 된 승인 묶음이면 멈춤 · 처리 함수 = s2_0030 본문 · 연결·release = s2_0025 본문 · 거꾸로 치환 · 되돌린 뒤 지문 확인 · 거래 하나", () => {
     const code = noComments(revert);
     const blocks = doBlocks(code);
-    expect(blocks).toHaveLength(5); // 적용 뒤 지문 · 멈춤 검사 · _v1 거꾸로 · 동기화 거꾸로 · 되돌린 뒤 지문
+    expect(blocks).toHaveLength(6); // 적용 뒤 지문 · 멈춤 검사 · _v1 거꾸로 · 동기화 거꾸로 · 할 일 닫기·취소 알림 거꾸로(r3) · 되돌린 뒤 지문
     expect(squash(blocks[0]!)).toBe(squash(guardText(AFTER, "revert-s2_0036: % 의 정의가 s2_0036 적용 뒤와 다릅니다(%). 되돌리지 않습니다.")));
     expect(blocks[1]).toContain("select count(*) into held from public.withdrawal_report_groups where refund_hold and status in ('pending', 'scheduled');");
     expect(blocks[1]).toContain("and not public.withdrawal_report_refund_pending(g.id);");
@@ -454,10 +485,20 @@ describe("원장 환불 결정 전에는 처리하지 않는다(s2_0036)", () =>
     const forward = doBlocks(noComments(sql));
     expect(pairsOf(blocks[2]!, "n")).toEqual(pairsOf(forward[1]!, "o").map(([o, n]) => [n, o]));
     expect(pairsOf(blocks[3]!, "n")).toEqual(pairsOf(forward[2]!, "o").map(([o, n]) => [n, o]));
-    expect(squash(blocks[4]!)).toBe(squash(guardText(BEFORE, "revert-s2_0036: 되돌린 뒤 % 의 정의가 s2_0036 적용 전 지문과 다릅니다(%). 거래를 취소합니다.")));
+    expect(squash(blocks[5]!)).toBe(squash(guardText(BEFORE, "revert-s2_0036: 되돌린 뒤 % 의 정의가 s2_0036 적용 전 지문과 다릅니다(%). 거래를 취소합니다.")));
+    // r3 거꾸로 — 할 일 닫기·취소 알림 빈칸 = btrim · 연결 표 권한 복원
+    expect(pairsOf(blocks[4]!, "o")).toEqual(pairsOf(forward[3]!, "o").map(([o, n]) => [n, o]));
+    expect(code).toContain("grant update, delete, truncate, references, trigger on public.withdrawal_report_refunds to service_role;");
+    expect(forward[3]).toContain("cancel_old constant text := $o$coalesce(btrim(d.form_data #>> '{result,completedDate}'), '') <> '' completed$o$;");
+    expect(forward[3]).toContain("cancel_new constant text := $n$not public.withdrawal_refund_blank(d.form_data #>> '{result,completedDate}') completed$n$;");
+    expect(forward[3]).toContain("if hits <> 1 then raise exception 's2_0036: 취소 알림의 바꿀 조건이 하나가 아닙니다(%건)', hits; end if;");
+    expect(blocks[4]).toContain("cancel_old constant text := $o$not public.withdrawal_refund_blank(d.form_data #>> '{result,completedDate}') completed$o$;");
+    expect(blocks[4]).toContain("cancel_new constant text := $n$coalesce(btrim(d.form_data #>> '{result,completedDate}'), '') <> '' completed$n$;");
+    // 빈칸 함수를 지우기 전에 되돌린다(되돌린 본문이 지운 함수를 부르지 않게)
+    expect(code.indexOf("cancel_new constant text")).toBeLessThan(code.indexOf("drop function public.withdrawal_refund_blank(text);"));
     expect(code.match(/\bbegin\s*;/gi)).toHaveLength(1);
     expect(code.match(/\bcommit\s*;/gi)).toHaveLength(1);
-    expect(code).toContain("drop function public.decide_withdrawal_report_refund(uuid, uuid, uuid, jsonb, jsonb);");
+    expect(code).toContain("drop function public.decide_withdrawal_report_refund(uuid, uuid, uuid, jsonb, jsonb, jsonb);");
     expect(code).toContain("drop function public.withdrawal_report_refund_note(uuid, uuid, jsonb, uuid, boolean);");
     expect(code).toContain("drop trigger withdrawal_report_refund_complete_guard on public.academy_documents;");
     expect(code).not.toMatch(/drop table/i);  // 결정 기록은 남긴다

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { reportStatusChips, reportStatusLabel, type ReportListRow } from "./model";
 import { buildListItems } from "./list-items";
 import {
-  approvable, buildRefundCheck, canEditLinkedCompletion, decisionTargets, openClaims, decisionBlocksProcessing, declinedKeys, lineRefundable, linkedCompletionLock, reapprovable, refundableKeys, refundHoldGap, undecidedKeys,
+  approvable, buildRefundCheck, canEditLinkedCompletion, decisionTargets, lineDeductions, openClaims, refundDeduction, decisionBlocksProcessing, declinedKeys, lineRefundable, linkedCompletionLock, reapprovable, refundableKeys, refundHoldGap, undecidedKeys,
   REFUND_DECISION_CHIP, REFUND_DECISION_WAIT_NOTE, DESK_NOT_DESIGNATED, unpickedNotice,
 } from "./refund-decision";
 
@@ -84,6 +84,13 @@ describe("상태 칩 '환불 결정 대기'(기존 reportStatusChips에 더함)"
   it("처리 완료·취소·재검토엔 붙이지 않는다 · 대기가 아니면 종전 그대로", () => {
     for (const status of ["completed", "canceled", "blocked"] as const) expect(reportStatusChips({ status }, [], true)).not.toContain("환불 결정 대기");
     expect(reportStatusChips({ status: "approved" })).toEqual(["승인 완료 · 다른 보고서 대기"]);
+    // 리뷰 r3 R2-m2 — 형제 승인을 알면: 승인 전 형제 있음 = 종전 · 없음(1과목 포함) = '처리 확인 대기' · 모름 = '확인 못 함'
+    expect(reportStatusChips({ status: "approved" }, [], false, "pending")).toEqual(["승인 완료 · 다른 보고서 대기"]);
+    expect(reportStatusChips({ status: "approved" }, [], false, "done")).toEqual(["관리자 승인 완료", "처리 확인 대기"]);
+    expect(reportStatusChips({ status: "approved" }, [], false, "unknown")).toEqual(["관리자 승인 완료", "다른 과목 승인 확인 못 함"]);
+    expect(reportStatusChips({ status: "approved" }, [], false, "failed")).toEqual(["관리자 승인 완료", "환불 단계 확인 못 함"]);   // 상세 — 결정 대기·데스크 단계를 못 읽음
+    expect(reportStatusChips({ status: "approved" }, [], true, "done")).toEqual(["관리자 승인 완료", "환불 결정 대기"]);
+    expect(reportStatusChips({ status: "scheduled" }, [], false, "done")).toEqual(["처리 예약"]);
     expect(reportStatusChips({ status: "approved" }, waiting)).toEqual(["관리자 승인 완료", "데스크 환불 요청"]);
   });
 });
@@ -122,8 +129,15 @@ describe("목록 — 상태 글 · '내 환불 결정 필요'(원장급 · 결�
   it("결정할 보고서를 모르면 대표 보고서 · 원장급이 아니면 차례 없음 · 대기가 없으면 종전 상태 글", () => {
     expect(build(true, new Map([["G1", null]])).map((i) => !!i.refundTurn)).toEqual([true, false]);
     expect(build(false, new Map([["G1", "R1"]])).some((i) => i.refundTurn)).toBe(false);
-    expect(build(true, new Map()).map((i) => i.statusLabel)).toEqual(["승인 완료 · 다른 보고서 대기", "승인 완료 · 다른 보고서 대기"]);
+    // 형제 상태를 모르면(묶음 상태 조회 없음 · 보이는 형제는 모두 승인) '다른 보고서 대기'라고 단정하지 않는다(리뷰 r3 R2-m2 · 아래 진행 줄과 같은 말)
+    expect(build(true, new Map()).map((i) => i.statusLabel)).toEqual(["관리자 승인 완료 · 다른 과목 승인 확인 못 함", "관리자 승인 완료 · 다른 과목 승인 확인 못 함"]);
     expect(build(true, new Map()).map((i) => i.refundStage)).toEqual([null, null]);
+  });
+  it("형제 모두 승인(묶음 상태를 읽음) — '처리 확인 대기' · 환불 단계 조회 실패면 '환불 단계 확인 못 함'(리뷰 r3 R2-m2·R2-m10)", () => {
+    const seen = new Map([["G1", [{ id: "R1", status: "approved" as const }, { id: "R2", status: "approved" as const }]]]);
+    const base = { reports: [row("R1"), row("R2", { teacher_id: "t2" })], archives: [], staff: [], labelOf: (s: string) => s, userId: "boss", writable: true, holds: new Map<string, string | null>(), groupStatuses: seen };
+    expect(buildListItems(base).map((i) => i.statusLabel)).toEqual(["관리자 승인 완료 · 처리 확인 대기", "관리자 승인 완료 · 처리 확인 대기"]);
+    expect(buildListItems({ ...base, refundsFailed: true }).map((i) => i.statusLabel)).toEqual(["관리자 승인 완료 · 환불 단계 확인 못 함", "관리자 승인 완료 · 환불 단계 확인 못 함"]);
   });
 });
 
@@ -140,8 +154,10 @@ describe("강사뷰 완료일자 — 화면 행위자와 실제 로그인 계정
     expect(linkedCompletionLock({ ...link, superseded: false }, who("desk"), who("desk"))).toBeNull();
   });
   it("🔴 행위자가 데스크여도 실제 계정이 아니면 잠그고 사유 · 행위자가 아니면 종전 사유", () => {
-    expect(linkedCompletionLock(link, who("desk"), who("office"))).toBe("'다른 강사 뷰'로 보고 있습니다. 퇴원보고서에서 이어진 환불 요청서의 환불완료일자는 실제 로그인한 계정이 담당 데스크(데스크)이거나 원장일 때만 넣거나 지울 수 있습니다.");
-    expect(linkedCompletionLock(link, who("acct"), who("boss", true))).toContain("담당 데스크(데스크)와 원장만");
+    expect(linkedCompletionLock(link, who("desk"), who("office"))).toBe("'다른 강사 뷰'로 보고 있습니다. 퇴원보고서에서 이어진 환불 요청서의 환불완료일자는 실제 로그인한 계정이 담당 데스크(데스크)이거나 원장일 때만 넣을 수 있고, 비우는 것은 원장만 할 수 있습니다.");
+    // 원장이 '다른 강사 뷰'로 담당 아닌 사람 화면을 보면 — 왜 막혔는지 그 사실을(리뷰 r3 R2-m7 · 종전엔 일반 문구)
+    expect(linkedCompletionLock(link, who("acct"), who("boss", true))).toContain("'다른 강사 뷰'로 보고 있습니다 — 환불완료일자 입력은 본인 화면에서만");
+    expect(linkedCompletionLock(link, who("acct"), who("acct"))).toContain("담당 데스크(데스크)와 원장만 넣을 수 있고, 비우는 것은 원장만");
   });
   it("수납 화면은 실제 계정(user)을 함께 넘긴다 — 저장 액션과 같은 함수", () => {
     const page = readFileSync(join(process.cwd(), "src/app/(shell)/billing/refunds/[id]/page.tsx"), "utf8");
@@ -179,15 +195,35 @@ describe("다른 묶음의 요청서가 담은 줄 — 다시 고를 수 있나(
       ["i#c", { decision: "refund" as const, live: true, paidNet: 2500, paidSeen: null, documentId: "D1" }],
     ]);
     expect(openClaims(later, decisions)).toEqual([
-      { key: "i#b", reason: "inexact", before: null, now: 2000, documentId: "D1" },
-      { key: "i#c", reason: "increase", before: 2500, now: 3000, documentId: "D1" },
+      { key: "i#b", reason: "inexact", before: null, now: 2000, documentId: "D1", separable: false },
+      { key: "i#c", reason: "increase", before: 2500, now: 3000, documentId: "D1", separable: false },   // 요청서가 환불 전 — 따로 환불 아님
     ]);
     // 본 낸 돈(paid_seen)이 있으면 그것으로 본다 — 다시 정한 뒤(본 낸 돈 = 지금)엔 열리지 않는다
     expect(openClaims(later, new Map([...decisions, ["i#c", { decision: "refund" as const, live: true, paidNet: 2500, paidSeen: 3000, documentId: "D1" }]]))).toEqual([
-      { key: "i#b", reason: "inexact", before: null, now: 2000, documentId: "D1" },
+      { key: "i#b", reason: "inexact", before: null, now: 2000, documentId: "D1", separable: false },
     ]);
+    // 🔴 원장 결정 2026-11-09 — 환불을 마친 이 요청서의 '환불' 줄에 그 뒤 낸 돈이 늘면 '따로 환불'을 고를 수 있다(DB decide p_separate와 같은 조건)
+    const done = [{ status: "paid", lines: [{ key: "i#c", paidNet: 3000, billingRefund: false, refund: { ...R("D1", true), completed: true } }] }];
+    expect(openClaims(done, decisions)).toEqual([{ key: "i#c", reason: "increase", before: 2500, now: 3000, documentId: "D1", separable: true }]);
+    // 결정 행이 다른 요청서를 가리키면(대체 등) 아니다 · '환불하지 않음' 결정도 아니다
+    expect(openClaims(done, new Map([["i#c", { decision: "refund" as const, live: true, paidNet: 2500, paidSeen: 2500, documentId: "D2" }]]))[0]!.separable).toBe(false);
+    expect(openClaims(done, new Map([["i#c", { decision: "none" as const, live: false, paidNet: 2500, paidSeen: 2500, documentId: "D1" }]]))[0]!.separable).toBe(false);
     // 원장이 지금 정할 줄 = 환불 가능 줄 + 다시 정할 줄(서버 대조·'환불 없음'·고르지 않은 줄이 같은 값)
     expect(decisionTargets(later, decisions)).toEqual(["i#e", "i#b", "i#c"]);
+  });
+  it("🔴 다시 승인할 때 빼는 몫 = 따로 환불한 금액 + 환불 완료 기록(DB attach 상한과 같은 식 · 리뷰 r3 R2-I2 · 함정 ⅰ)", () => {
+    expect(refundDeduction(undefined)).toBe(0);
+    expect(refundDeduction({ decision: "refund", live: false })).toBe(0);
+    expect(refundDeduction({ decision: "refund", live: false, refundedTotal: 315000, separateAmount: 50000 })).toBe(365000);
+    expect(refundDeduction({ decision: "refund", live: false, refundedTotal: -1, separateAmount: null })).toBe(0);
+    const later = [{ status: "paid", lines: [
+      { key: "i#a", paidNet: 365000, billingRefund: false, refund: null },
+      { key: "i#b", paidNet: 1000, billingRefund: false, refund: null },
+    ] }];
+    expect(lineDeductions(later, new Map([
+      ["i#a", { decision: "refund" as const, live: false, refundedTotal: 315000, separateAmount: 50000, separateAt: "2026-11-09T01:00:00Z", separateBy: "boss" }],
+      ["i#b", { decision: "none" as const, live: false }],
+    ]))).toEqual([{ key: "i#a", refunded: 315000, separate: 50000, separateAt: "2026-11-09T01:00:00Z", separateBy: "boss" }]);
   });
   it("🔴 금액 모름 미배분 줄(과목 몫을 셀 수 없음 · 리뷰 r2 I5) — 결정 대상(확인 값에 든다)이지만 환불 승인은 못 고른다(환불하지 않음만)", () => {
     const line = { paidNet: 300000, billingRefund: false, refund: null, amountUnknown: true };

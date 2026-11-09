@@ -51,7 +51,7 @@ beforeEach(() => {
 
 describe("C.3 — 같은 청구 줄에 새 요청서가 있는 옛 요청서", () => {
   it("🔴 취소된 요청의 옛 요청서 + 새 요청(진행 중)의 요청서가 형제 줄(차례 번호만 다름)을 담음 → superseded", async () => {
-    expect(await loadRefundLink(T, DOC)).toEqual({ deskId: "desk", deskName: "데스크", deskActive: true, superseded: true, supersededBy: { documentId: NEW, deskName: "데스크" }, cap: 315000, capLines: 1 });
+    expect(await loadRefundLink(T, DOC)).toEqual({ deskId: "desk", deskName: "데스크", deskActive: true, superseded: true, supersededBy: { documentId: NEW, deskName: "데스크" }, cap: 315000, capLines: 1, canceledOnly: true });
   });
   it("청구 전체('all')도 겹친 것으로 본다", async () => {
     m.others = [{ line_key: `${INV}#all`, document_id: NEW, group_id: "g-new" }];

@@ -81,7 +81,13 @@ export function buildRefundCheck(perReport: readonly { reportId: string; later: 
 export type RefundDecision = { decision: "refund" | "none"; /** '환불' 결정의 요청서가 아직 있나(지워지면 그 줄은 다시 결정 안 됨). */ live: boolean;
   /** 결정 때 그 줄의 낸 돈(DB paid_net — '환불'이면 요청서 상한에 드는 돈). 모르면 없음. */ paidNet?: number | null;
   /** 원장이 마지막으로 본 낸 돈(DB paid_seen · 없으면 paid_net) — 지금 낸 돈이 더 크면 다시 결정 안 됨('환불' 결정도 · 리뷰 #12 · r2 D-4). */ paidSeen?: number | null;
-  /** '환불' 결정의 요청서 id. */ documentId?: string | null };
+  /** '환불' 결정의 요청서 id. */ documentId?: string | null;
+  /** 원장 결정 2026-11-09 — 환불을 마친 줄의 늘어난 몫을 수납에서 따로 환불하기로 한 금액(누계)·시각·결정자(DB separate_*). */
+  separateAmount?: number | null; separateAt?: string | null; separateBy?: string | null;
+  /** 이어진 요청서에 완료일자가 들어갈 때 남긴 환불 완료 기록(누계 · 완료일자를 비워도 남는다 — DB refunded_total). */
+  refundedTotal?: number | null };
+/** 다시 환불 승인할 때 빼는 돈(DB attach와 같은 식 — 낸 돈 − 따로 처리한 금액 − 환불 완료 기록 · 리뷰 r3 R2-I2). */
+export const refundDeduction = (d: RefundDecision | undefined) => (d ? Math.max(0, d.separateAmount ?? 0) + Math.max(0, d.refundedTotal ?? 0) : 0);
 
 const seenOf = (d: RefundDecision) => d.paidSeen ?? d.paidNet ?? null;
 /** 결정 안 된 줄 — DB `withdrawal_report_refund_note`(환불 가능 갈래)와 같은 판정: '환불하지 않음'도, 아직 남은 요청서의 '환불'도 없는 줄 · 본 뒤 낸 돈이 는 줄. */
@@ -97,18 +103,33 @@ export function undecidedKeys(refundable: readonly string[], decisions: Readonly
 /**
  * 이 묶음 요청서가 담은 줄 중 다시 정할 것(DB note claimed 갈래와 같은 판정 · 리뷰 r2 D-2·D-4) — 결정 행이 있으면 본 뒤 낸 돈이 늘었을 때(`increase`),
  * 없으면 표식에 그 키가 정확히 없을 때(`inexact` — 수납명이 바뀌었거나 미배분이 줄에 배분돼 겹침으로 담은 줄). 원장은 '환불 없음'으로 정한다(그 요청서가 담은 것으로
- * 보고 더 환불하지 않음 — 늘어난 몫을 환불하려면 요청서를 지우고 다시 환불 승인한다).
+ * 보고 더 환불하지 않음). 그 요청서가 환불을 마쳤고 그 뒤 낸 돈이 늘었으면(`separable`) '환불하지 않음 — 늘어난 몫은 수납에서 따로 처리'도 고를 수 있다
+ * (원장 결정 2026-11-09 · 첫 환불 기록은 그대로 · 데스크가 일반 요청서로 · DB가 늘어난 몫을 결정 행에 남긴다). 🔴 완료일자를 비우고 지운 뒤 다시 승인하라고 안내하지 않는다.
  */
-export type OpenClaim = { key: string; reason: "increase" | "inexact"; before: number | null; now: number; documentId: string };
+export type OpenClaim = { key: string; reason: "increase" | "inexact"; before: number | null; now: number; documentId: string;
+  /** 환불을 마친 이 요청서의 '환불' 줄이고 그 뒤 낸 돈이 늘었다 — '늘어난 몫은 수납에서 따로 처리'를 고를 수 있다(DB decide p_separate와 같은 조건). */
+  separable: boolean };
 export function openClaims(later: Lines, decisions: ReadonlyMap<string, RefundDecision>): OpenClaim[] {
   const out: OpenClaim[] = [];
   for (const inv of later) for (const l of inv.lines) {
-    const ref = l.refund as { documentId?: unknown; exact?: unknown } | null;
+    const ref = l.refund as { documentId?: unknown; exact?: unknown; completed?: unknown } | null;
     if (!ref || typeof ref.documentId !== "string" || out.some(o => o.key === l.key)) continue;
     const d = decisions.get(l.key);
-    if (!d) { if (ref.exact === false) out.push({ key: l.key, reason: "inexact", before: null, now: l.paidNet, documentId: ref.documentId }); continue; }
+    if (!d) { if (ref.exact === false) out.push({ key: l.key, reason: "inexact", before: null, now: l.paidNet, documentId: ref.documentId, separable: false }); continue; }
     const seen = seenOf(d);
-    if (seen != null && l.paidNet > seen) out.push({ key: l.key, reason: "increase", before: seen, now: l.paidNet, documentId: ref.documentId });
+    if (seen != null && l.paidNet > seen) out.push({ key: l.key, reason: "increase", before: seen, now: l.paidNet, documentId: ref.documentId,
+      separable: ref.completed === true && d.decision === "refund" && d.documentId === ref.documentId });
+  }
+  return out;
+}
+/** 줄마다 다시 승인할 때 빼는 몫(이전 환불 완료 기록 · 따로 환불 — 화면 표시 · 리뷰 r3 R2-I2). 뺄 몫이 없는 줄은 없다. */
+export type LineDeduction = { key: string; refunded: number; separate: number; separateAt: string | null; separateBy: string | null };
+export function lineDeductions(later: Lines, decisions: ReadonlyMap<string, RefundDecision>): LineDeduction[] {
+  const out: LineDeduction[] = [];
+  for (const inv of later) for (const l of inv.lines) {
+    const d = decisions.get(l.key);
+    if (!d || refundDeduction(d) <= 0 || out.some(o => o.key === l.key)) continue;
+    out.push({ key: l.key, refunded: Math.max(0, d.refundedTotal ?? 0), separate: Math.max(0, d.separateAmount ?? 0), separateAt: d.separateAt ?? null, separateBy: d.separateBy ?? null });
   }
   return out;
 }

@@ -63,6 +63,10 @@ describe("상세 getReport — 목록 표시(DB)와 지금 계산의 어긋남(�
     const d = (await getReport("r1"))!.refundDecision;
     expect(d).toMatchObject({ hold: false, undecided: [KEY], gap: "app" });
   });
+  it("🔴 줄별 뺄 몫(이전 환불 완료 기록 · 따로 환불)을 화면에 넘긴다(리뷰 r3 R2-I2 — 다시 승인 때 빼는 몫)", async () => {
+    m.decisions.mockResolvedValue(new Map([[KEY, { decision: "refund", live: false, paidNet: 300000, refundedTotal: 250000, separateAmount: 20000, separateAt: "2026-11-09T01:00:00Z", separateBy: "boss" }]]));
+    expect((await getReport("r1"))!.refundDecision.deductions).toEqual([{ key: KEY, refunded: 250000, separate: 20000, separateAt: "2026-11-09T01:00:00Z", separateBy: "boss" }]);
+  });
   it("🔴 방향 ② DB는 대기(결정 보고서 = 이 보고서) · 지금 계산은 정할 건 없음 → gap 'db' · hold true", async () => {
     m.holdState.mockResolvedValue({ hold: true, report: "r1", undecided: 1, ...judged });
     m.decisions.mockResolvedValue(new Map([[KEY, { decision: "none", live: false, paidNet: 300000 }]]));
@@ -103,6 +107,9 @@ describe("상세 getReport — 목록 표시(DB)와 지금 계산의 어긋남(�
     expect((await getReport("r1"))!.refundDecision.laterState).toBe("ok");
     m.later.mockRejectedValue(new Error("청구 조회 실패"));
     expect((await getReport("r1"))!.refundDecision.laterState).toBe("failed");
+    // 청구 상한(120건)은 새로고침으로 풀리지 않는다 — 따로 가른다(리뷰 r3 R2-m10)
+    m.later.mockRejectedValue(Object.assign(new Error("퇴원월 뒤 청구가 너무 많아"), { name: "LaterLimitError" }));
+    expect((await getReport("r1"))!.refundDecision.laterState).toBe("limit");
   });
   it("🔴 지금 계산을 못 하면 말하지 않는다 — 뒤 청구 조회 실패(빈 목록이 '정할 건 없음'으로 읽히지 않게) · 결정 표 조회 실패(빈 결정이 '전부 결정 전'으로 읽히지 않게)", async () => {
     m.holdState.mockResolvedValue({ hold: true, report: "r1", undecided: 1, ...judged });
@@ -112,12 +119,14 @@ describe("상세 getReport — 목록 표시(DB)와 지금 계산의 어긋남(�
     m.later.mockResolvedValue([paidLine]);
     m.holdState.mockResolvedValue({ hold: false, report: null, undecided: 0, ...judged });
     m.decisions.mockRejectedValue(new Error("결정 표 조회 실패"));
-    expect((await getReport("r1"))!.refundDecision).toMatchObject({ hold: false, undecided: [KEY], gap: null });
+    // 리뷰 r3 R2-m10 — 이미 정한 줄을 '결정 전'으로 세지 않는다(빈 결정) · 실패를 알리고 결정 단추를 막는다(failed)
+    expect((await getReport("r1"))!.refundDecision).toMatchObject({ hold: false, undecided: [], declined: [], gap: null, failed: true, decisionsFailed: true, lookupFailed: { decisions: true, hold: false, steps: false }, deductions: [] });
   });
   it("DB 표시를 못 읽으면(조회 실패 · s2_0036 전) 대기 없음으로 보이고 어긋남은 말하지 않는다", async () => {
     m.holdState.mockRejectedValue(new Error("조회 실패"));
-    expect((await getReport("r1"))!.refundDecision).toMatchObject({ hold: false, undecided: [KEY], gap: null });
+    // 조회 실패는 '모름'으로 알리고 결정 단추를 막는다(리뷰 r3 R2-m10) · s2_0036 전(null)은 실패가 아니다
+    expect((await getReport("r1"))!.refundDecision).toMatchObject({ hold: false, undecided: [KEY], gap: null, failed: true, decisionsFailed: false, lookupFailed: { decisions: false, hold: true, steps: false } });
     m.holdState.mockResolvedValue(null);
-    expect((await getReport("r1"))!.refundDecision).toMatchObject({ hold: false, undecided: [KEY], gap: null });
+    expect((await getReport("r1"))!.refundDecision).toMatchObject({ hold: false, undecided: [KEY], gap: null, failed: false });
   });
 });

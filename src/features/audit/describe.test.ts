@@ -1520,6 +1520,9 @@ describe("auditDetail — 퇴원보고서 처리 결과(2026-10-23)", () => {
       .toBe("환불하지 않음 2026-12 영어 300,000원, 2026-12 차량비 50,000원 · 마지막 수업일 2026-11-06 · 이어서 처리");
     expect(auditDetail("withdrawal_refund_recheck", { result: "환불 결정 대기 풀림", effectiveDate: "2026-11-06" }, ctx()))
       .toBe("환불 결정 대기 풀림 · 마지막 수업일 2026-11-06");
+    // 원장 결정 2026-11-09 — 늘어난 몫은 수납에서 따로 환불.
+    expect(auditDetail("withdrawal_refund_separate", { item: "2026-12 영어 반", before: 315000, now: 365000, amount: 50000, effectiveDate: "2026-11-06", next: "이어서 처리" }, ctx()))
+      .toBe("2026-12 영어 반 · 낸 돈 315,000원 → 365,000원 · 늘어난 몫 50,000원은 수납에서 따로 환불 · 마지막 수업일 2026-11-06 · 이어서 처리");
     expect(auditDetail("refund_request_linked_denied", { studentName: "학생", attempted: "요청서 삭제", reason: "담당 데스크·원장만", deskName: "데스크A", viaTeacherView: true }, ctx()))
       .toBe("학생 · 요청서 삭제 · 담당 데스크·원장만 · 담당 데스크 데스크A · '다른 강사 뷰' — 실제 로그인 계정 기준");
     expect(auditDetail("refund_request_complete_denied", { studentName: "학생", attempted: "환불완료일자 2026-11-06 입력", deskName: "데스크A" }, ctx()))

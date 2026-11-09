@@ -67,6 +67,8 @@ export type LaterInvoice = {
 
 export { LINE_KEY, REFUND_TAG_PREFIX, refundTag } from "../refund-keys";
 
+/** 퇴원월 뒤 청구 상한에 닿음 — 새로고침으로 풀리지 않는다(상세가 '불러오지 못함'과 가른다 · 리뷰 r3 R2-m10). */
+export class LaterLimitError extends Error { override name = "LaterLimitError"; }
 /** 퇴원월 뒤 청구 상한 — 닿으면 잘렸을 수 있어 확인 값을 만들지 않는다. */
 const LATER_LIMIT = 120;
 /** 미배분 납부 줄의 식별값 머리(줄 키 `<청구 id>#unalloc` · 과목 몫 `#unalloc:<과목>` · 나머지 `#unalloc:~<과목>` — DB 줄 키 형식 안 · `unallocId`). */
@@ -241,7 +243,7 @@ export async function laterInvoicesFor(report: Pick<WithdrawalReport, "id" | "te
   if (error) throw new Error(`퇴원 뒤 청구 조회 실패: ${error.message}`);
   if (againError) throw new Error(`재등록 확인 실패: ${againError.message}`);
   // 상한에 닿으면 뒤 청구가 잘렸을 수 있다 — 확인 값을 만들지 않는다(닫히는 쪽 · 운영 학생당 청구 최대 11건).
-  if ((rows ?? []).length >= LATER_LIMIT) throw new Error("퇴원월 뒤 청구가 너무 많아 환불할 수 있는 청구를 다 확인하지 못했습니다.");
+  if ((rows ?? []).length >= LATER_LIMIT) throw new LaterLimitError("퇴원월 뒤 청구가 너무 많아 환불할 수 있는 청구를 다 확인하지 못했습니다.");
   // 과목 수강종료 — 수납 줄의 과목을 가리려고 지점 반 목록(이 학생이 안 다니는 같은 과목 반·보강 반도 맞추게).
   const { data: tenantClasses, error: classError } = ended
     ? await admin.from("classes").select("id,class_name,subject").eq("tenant_id", report.tenant_id).limit(2000)

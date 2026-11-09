@@ -106,6 +106,7 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
     }),
   ]);
   const items = buildListItems({ reports: list.rows, archives: archives ?? [], staff, labelOf: subjectMaps.labelOf, userId: viewer.user.id, writable: viewer.writable, refunds, holds, outcomes, cancels,
+    refundsFailed: refunds === undefined || holds === undefined,
     // 원장급은 남이 요청한 보고서도 취소한다 — 재검토 건의 '내 재요청 필요'(상세 화면과 같은 판정) · 환불 결정 대기의 '내 환불 결정 필요'도 이 판정.
     directorLevel: cancelsAsDirector(viewer.user.systemRole, !!viewer.teacherId),
     // 승인 완료 줄의 묶음 형제 상태(형제가 목록에 없어도) — 상태 칸이 '다른 과목 승인 대기'와 '환불·처리만 남음'을 가른다.
@@ -142,6 +143,12 @@ export default async function WithdrawalReportsPage({ searchParams }: { searchPa
         resetHref={filterActive ? listHref(sp.embed ? { embed: sp.embed } : {}, {}) : null}
         request={viewer.request ? <RequestDialog key={requestFor ?? "none"} staff={staff} students={students} labels={labels} scope={viewer.scope} initialStudentId={requestFor} directReady={directReady} settingsUnavailable={!!foldedReason(settings)} /> : null}
       />
+      {/* 환불 단계 조회 실패를 '없음'으로 접지 않는다(리뷰 r3 R2-m10) — 칩·'내 환불 … 필요'가 빠졌을 수 있다고 사실대로. */}
+      {refunds === undefined || holds === undefined ? (
+        <p role="alert" className="text-danger text-sm">
+          {[refunds === undefined ? "데스크 환불 단계" : null, holds === undefined ? "원장 환불 결정 대기" : null].filter(Boolean).join("·")}를 불러오지 못했습니다(새로고침) — 목록의 &apos;데스크 환불 대기&apos;·&apos;환불 결정 대기&apos;와 &apos;내 환불 … 필요&apos; 표시가 빠졌을 수 있습니다.
+        </p>
+      ) : null}
       {archives === null && canSeeArchive ? (
         <p role="alert" className="text-danger text-sm">
           기존 스프레드시트 기록을 불러오지 못했습니다. 웹에서 작성한 보고서만 표시합니다.

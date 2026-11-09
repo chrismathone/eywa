@@ -11,6 +11,7 @@ const m = vi.hoisted(() => ({
   release: vi.fn(),
   row: null as Record<string, unknown> | null,
   formData: {} as Record<string, unknown>,
+  adminError: null as null | { message: string },
   calls: [] as { op: string; payload?: unknown }[],
 }));
 
@@ -29,7 +30,7 @@ vi.mock("@/lib/storage/media-storage", () => ({
 }));
 vi.mock("@/features/staff/resume/server/resume-access", () => ({ canViewResume: vi.fn(async () => true), RESUME_LOCKED_MSG: "잠김" }));
 vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: () => ({ from: () => { const q: Record<string, unknown> = {}; for (const k of ["select", "eq"]) q[k] = () => q; q.maybeSingle = async () => ({ data: { form_data: m.formData }, error: null }); return q; } }),
+  createAdminClient: () => ({ from: () => { const q: Record<string, unknown> = {}; for (const k of ["select", "eq"]) q[k] = () => q; q.maybeSingle = async () => (m.adminError ? { data: null, error: m.adminError } : { data: { form_data: m.formData }, error: null }); return q; } }),
 }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
@@ -58,6 +59,7 @@ beforeEach(() => {
   m.user = { id: "X", tenantId: "t1", systemRole: "teacher" };
   m.row = { title: "환불 요청서", kind: "form", category: "billing", file_path: null, file_name: null, form_type: "refund_request", uploaded_by: "desk" };
   m.formData = { result: { completedDate: "" } };
+  m.adminError = null;
   m.calls = [];
   m.link.mockResolvedValue(linked);
 });
@@ -78,6 +80,13 @@ describe("자료실 — 이어진 환불 요청서", () => {
     m.link.mockRejectedValue(new Error("timeout"));
     expect((await deleteDocument("d1")).error).toContain("퇴원보고서 연결을 확인하지 못했습니다");
     expect(writes()).toEqual([]);
+  });
+  it("🔴 완료 여부를 다시 읽지 못하면 담당 데스크도 지우지 못한다(오류를 '미완료'로 읽지 않는다 · 리뷰 r3 R2-m15)", async () => {
+    m.user = { id: "desk", tenantId: "t1", systemRole: "accountant" };
+    m.adminError = { message: "timeout" };
+    expect((await deleteDocument("d1")).error).toBe("환불 요청서를 다시 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요");
+    expect(writes()).toEqual([]);
+    expect(m.release).not.toHaveBeenCalled();
   });
   it("이어지지 않은 요청서·다른 문서는 종전대로", async () => {
     m.link.mockResolvedValue(null);

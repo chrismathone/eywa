@@ -59,6 +59,8 @@ export type RefundLink = {
   cap: number | null;
   /** 원장 승인 줄 수(상한 표시 'N건'). */
   capLines: number;
+  /** 이어진 보고서가 취소된 요청이다(삭제 확인 문구 — 지워도 결정 대기로 돌아갈 것이 없다 · 리뷰 r3 R2-m9). */
+  canceledOnly: boolean;
 };
 
 /**
@@ -72,9 +74,12 @@ export async function loadRefundLink(tenantId: string, documentId: string): Prom
   if (error) throw new Error(`환불 요청서의 퇴원보고서 연결 조회 실패: ${error.message}`);
   if (!data) return null;
   const row = data as { desk_id: string | null; report_id: string };
-  const [by, cap] = await Promise.all([supersedingRequest(db, tenantId, documentId, String(row.report_id)), linkedCap(db, tenantId, documentId)]);
+  const { data: rep, error: repError } = await db.from("withdrawal_reports").select("status").eq("tenant_id", tenantId).eq("id", row.report_id).maybeSingle();
+  if (repError) throw new Error(`환불 요청서의 보고서 상태 조회 실패: ${repError.message}`);
+  const canceledOnly = (rep as { status?: string } | null)?.status === "canceled";
+  const [by, cap] = await Promise.all([canceledOnly ? supersedingRequest(db, tenantId, documentId) : Promise.resolve(null), linkedCap(db, tenantId, documentId)]);
   const desk = row.desk_id ? await deskOf(db, tenantId, row.desk_id) : null;
-  return { deskId: row.desk_id, deskName: desk?.name ?? null, deskActive: desk ? desk.active : true, superseded: !!by, supersededBy: by, ...cap };
+  return { deskId: row.desk_id, deskName: desk?.name ?? null, deskActive: desk ? desk.active : true, superseded: !!by, supersededBy: by, ...cap, canceledOnly };
 }
 
 async function deskOf(db: ReturnType<typeof createAdminClient>, tenantId: string, userId: string): Promise<{ name: string | null; active: boolean } | null> {
@@ -100,10 +105,7 @@ async function linkedCap(db: ReturnType<typeof createAdminClient>, tenantId: str
  * 있으면 환불완료일자를 넣을 수 없다(DB 완료일자 트리거와 같은 판정 — 줄 키 겹침 규칙 `keysOverlap` 한 벌 · 또는 새 결정 행이 이 요청서를 대체한다고 적음(supersedes ·
  * 수납명이 바뀌어 키가 달라도 맞다 — 리뷰 r2 D-1 ⅰ)). 화면은 경고하고 칸을 잠근다 · 저장 액션도 같은 판정으로 먼저 막는다. 못 읽으면 던진다(부르는 쪽이 잠근다).
  */
-async function supersedingRequest(db: ReturnType<typeof createAdminClient>, tenantId: string, documentId: string, reportId: string): Promise<{ documentId: string; deskName: string | null } | null> {
-  const { data: rep, error: repError } = await db.from("withdrawal_reports").select("status").eq("tenant_id", tenantId).eq("id", reportId).maybeSingle();
-  if (repError) throw new Error(`환불 요청서의 보고서 상태 조회 실패: ${repError.message}`);
-  if ((rep as { status?: string } | null)?.status !== "canceled") return null;
+async function supersedingRequest(db: ReturnType<typeof createAdminClient>, tenantId: string, documentId: string): Promise<{ documentId: string; deskName: string | null } | null> {
   const { data: mine, error: mineError } = await db.from("withdrawal_report_refund_decisions").select("line_key").eq("tenant_id", tenantId).eq("document_id", documentId).eq("decision", "refund").limit(200);
   if (missingReportSchema(mineError) || mineError?.code === "42703") return null;
   if (mineError) throw new Error(`환불 결정 조회 실패: ${mineError.message}`);

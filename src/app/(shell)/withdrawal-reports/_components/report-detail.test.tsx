@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
 import { ReportDetail } from "./report-detail";
 import { EMPTY_BODY, type WithdrawalReport } from "@/features/withdrawal-reports/model";
 const mocks = vi.hoisted(() => ({ change: vi.fn(), autosave: vi.fn(), refresh: vi.fn() }));
@@ -272,9 +272,10 @@ describe("원장 환불 결정 안내(원장 2026-11-06)", () => {
     expect(screen.getByRole("region", { name: "처리 확인" })).toHaveTextContent(note);
     cleanup();
   });
-  it("작성 강사도 — 이 화면에 결정 안 된 줄만 있어도(묶음 표시 전) 안내", () => {
+  it("작성 강사도 — 이 화면에 결정 안 된 줄만 있어도(묶음 표시 전) 안내 · 강사는 승인하지 않고 제출한다('제출해도' — 리뷰 r3 R2-m3)", () => {
     render(<ReportDetail {...props} refundDecision={{ hold: false, undecided: ["40000000-0000-4000-8000-000000000001#a1"], declined: [] }} />);
-    expect(screen.getByText(note)).toBeInTheDocument();
+    expect(screen.getByText("원장 환불 결정 전 — 제출해도 환불 결정 뒤에 처리됩니다")).toBeInTheDocument();
+    expect(screen.queryByText(note)).not.toBeInTheDocument();
     expect(screen.queryByText("환불 결정 대기")).not.toBeInTheDocument();  // 칩은 묶음 표시(DB)로만 — 목록과 같은 값
     cleanup();
   });
@@ -303,7 +304,10 @@ describe("원장 환불 결정 안내(원장 2026-11-06)", () => {
     // ① 지금 계산은 결정 전 · DB는 대기 아님 — 칩은 DB대로(대기 없음) · 줄은 '결정 전' · '환불 없음' 단추 그대로 · 한 줄(건수 · 다음 판정 때)
     render(<ReportDetail {...props} report={{ ...r, status: "approved", group_id: "g1" }} userId={director} directorLevel laterInvoices={later}
       refundDecision={{ hold: false, undecided: ["40000000-0000-4000-8000-000000000001#a1"], declined: [], gap: "app" }} />);
-    expect(screen.getByRole("note")).toHaveTextContent("목록 표시와 다릅니다 — 목록과 위 칩에는 '환불 결정 대기'가 없지만(마지막 판정 기준), 지금 계산으로는 원장이 정하지 않은 환불 가능 건이 1건 있습니다. 매일 00:05 확인 때 DB가 다시 판정하고, 그때도 남아 있으면 처리하지 않습니다.");
+    // 본문은 '환불 확인' 칸 안(리뷰 r3 R2-I1) · 위에는 그 칸을 가리키는 한 줄
+    const refundBox = () => within(screen.getByLabelText("환불 확인"));
+    expect(refundBox().getByRole("note")).toHaveTextContent("목록 표시와 다릅니다 — 목록·위 칩·결재란의 '환불 결정' 칸은 마지막 판정 기준이라 '환불 결정 대기'가 아니지만, 지금 계산으로는 원장이 정하지 않은 환불 가능 건이 1건 있습니다(다시 결정 필요). 매일 00:05 확인 때 시스템이 다시 확인하고, 그때도 남아 있으면 처리하지 않습니다.");
+    expect(screen.getByRole("link", { name: "환불 확인으로 가기" })).toHaveAttribute("href", "#refund");
     expect(screen.queryByText("환불 결정 대기")).not.toBeInTheDocument();
     expect(screen.getByText("결정 전")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "환불 없음" })).toBeInTheDocument();
@@ -311,7 +315,9 @@ describe("원장 환불 결정 안내(원장 2026-11-06)", () => {
     cleanup();
     // ② DB는 대기 · 지금 계산은 이 보고서에 정할 건 없음 — 칩은 DB대로(대기) · 한 줄 + 원장에게 '지금 다시 판정'(막다른 고리 풀기)
     render(<ReportDetail {...props} report={{ ...r, status: "approved", group_id: "g1" }} userId={director} directorLevel refundDecision={{ hold: true, undecided: [], declined: [], gap: "db" }} />);
-    expect(screen.getByRole("note")).toHaveTextContent("목록 표시와 다릅니다 — 목록과 위 칩·결재란은 '환불 결정 대기'(마지막 판정 기준)지만, 지금 계산으로는 이 보고서에 정할 환불 가능 건이 없습니다. 매일 00:05 확인 때 DB가 다시 판정합니다. 지금 다시 판정하려면 아래 단추를 누르세요.");
+    expect(refundBox().getByRole("note")).toHaveTextContent("목록 표시와 다릅니다 — 목록·위 칩·결재란은 '환불 결정 대기'(마지막 판정 기준)지만, 지금 계산으로는 이 보고서에 정할 환불 가능 건이 없습니다. 매일 00:05 확인 때 시스템이 다시 확인합니다. 지금 다시 판정하려면 아래 단추를 누르세요.");
+    // '지금 다시 판정'은 목록 링크가 떨어지는 '환불 확인' 칸 안에(리뷰 r3 R2-I1)
+    expect(refundBox().getByRole("button", { name: "지금 다시 판정" })).toBeInTheDocument();
     expect(screen.getByText("환불 결정 대기")).toBeInTheDocument();
     expect(screen.queryByText(/다른 보고서\(/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "환불 없음" })).not.toBeInTheDocument();
@@ -320,7 +326,7 @@ describe("원장 환불 결정 안내(원장 2026-11-06)", () => {
     cleanup();
     // 원장이 아닌 사람(작성 강사)에게도 같은 한 줄(단추 없이) — 목록 칩은 모두가 본다 · 처리 예약 미래면 '처리일 00:05'
     render(<ReportDetail {...props} report={{ ...r, status: "scheduled", effective_date: "2999-01-01", group_id: "g1" }} refundDecision={{ hold: true, undecided: [], declined: [], gap: "db" }} />);
-    expect(screen.getByRole("note")).toHaveTextContent("처리일(2999-01-01) 00:05 확인 때 DB가 다시 판정합니다.");
+    expect(within(screen.getByLabelText("환불 확인")).getByRole("note")).toHaveTextContent("처리일(2999-01-01) 00:05 확인 때 시스템이 다시 확인합니다.");
     expect(screen.queryByRole("button", { name: "지금 다시 판정" })).not.toBeInTheDocument();
     expect(screen.getByText("원장 환불 결정 전 — 환불 결정 뒤에 처리됩니다")).toBeInTheDocument(); // 승인할 일이 없는 사람에겐 '승인해도' 없이(리뷰 r2 m4)
     cleanup();
@@ -384,5 +390,43 @@ describe("요청 취소 사유 · 결재란 환불 줄(원장 2026-11-06)", () =
     render(<ReportDetail {...props} report={{ ...r, status: "approved", group_id: "g1" }} userId={manager} staff={[boss]} refundDecision={{ hold: true, undecided: [], declined: [] }} />);
     expect(screen.getByText("결정일 :")).toBeInTheDocument();
     expect(screen.getAllByText("설현 원장").length).toBeGreaterThan(0);
+  });
+});
+
+describe("상세 칩 — 환불 단계 조회 실패(리뷰 r3 R2-m10)", () => {
+  it("결정 대기 표시·데스크 단계를 못 읽으면 승인 완료 칩을 '처리 확인 대기'라고 단정하지 않는다 · 결정 기록만 실패면 DB 표시대로", () => {
+    const approved = { ...r, status: "approved" as const, group_id: "g1" };
+    render(<ReportDetail {...props} report={approved} userId={manager} refundDecision={{ hold: false, undecided: [], declined: [], failed: true, lookupFailed: { decisions: false, hold: true, steps: false } }} />);
+    expect(screen.getByText("환불 단계 확인 못 함")).toBeInTheDocument();
+    expect(screen.queryByText("처리 확인 대기")).not.toBeInTheDocument();
+    cleanup();
+    render(<ReportDetail {...props} report={approved} userId={manager} refundDecision={{ hold: false, undecided: [], declined: [], lookupFailed: { decisions: false, hold: false, steps: true } }} />);
+    expect(screen.getByText("환불 단계 확인 못 함")).toBeInTheDocument();
+    cleanup();
+    render(<ReportDetail {...props} report={approved} userId={manager} refundDecision={{ hold: false, undecided: [], declined: [], failed: true, decisionsFailed: true, lookupFailed: { decisions: true, hold: false, steps: false } }} />);
+    expect(screen.getByText("처리 확인 대기")).toBeInTheDocument();
+    cleanup();
+  });
+});
+
+describe("상세 맨 위 한 줄(리뷰 r3 R2-I1)", () => {
+  it("목록과 다를 때(정할 건 없음) — '열람 — 승인자로 지정되지 않았습니다' 대신 그 사실과 '환불 확인' 칸으로", async () => {
+    const { ReportPageBanner } = await import("./report-page-banner");
+    render(<ReportPageBanner kind="recheck" />);
+    expect(screen.getByText(/원장 환불 결정 대기 — 목록 표시와 다릅니다\. 지금 계산으로는 이 보고서에 정할 건이 없습니다\. 아래 '환불 확인'에서 지금 다시 판정하세요\./)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "환불 확인으로 가기" })).toHaveAttribute("href", "#refund");
+    expect(screen.queryByText(/승인자로 지정되지 않았습니다/)).not.toBeInTheDocument();
+    cleanup();
+    render(<ReportPageBanner kind="view" />);
+    expect(screen.getByText(/열람 — 이 보고서의 승인자로 지정되지 않았습니다/)).toBeInTheDocument();
+    cleanup();
+    const { container } = render(<ReportPageBanner kind={null} />);
+    expect(container.textContent).toBe("");
+  });
+  it("page.tsx — 결정 차례 → 다시 판정(gap db · 원장) → 열람 차례로 고른다", async () => {
+    const { readFileSync } = await import("node:fs");
+    const page = readFileSync("src/app/(shell)/withdrawal-reports/[id]/page.tsx", "utf8");
+    expect(page).toContain('const recheckTurn = director && record.refundDecision.gap === "db";');
+    expect(page).toContain('const banner = decisionTurn ? "decision" : recheckTurn ? "recheck" : !viewer.teacherId && !isParticipant(record.report, viewer.user.id) ? "view" : null;');
   });
 });

@@ -31,8 +31,9 @@ export default async function RefundViewPage({ params }: { params: Promise<{ id:
   const completionLock = link === "error" ? failed : linkedCompletionLock(link, who, account);
   // 이어진 요청서 — 대체됨 경고(새 요청서 링크·담당) · 잠금 사유 · 상한(원장 승인 줄 낸 돈 합) · 고치기·지우기 잠금(담당 데스크(재직)·원장만 · 완료된 것은 지우지 않음).
   const linked = link === "error"
-    ? { superseded: null, lock: failed, cap: null, capLines: 0, editLock: failed, deleteLock: failed }
-    : link ? { superseded: link.supersededBy, lock: completionLock, cap: link.cap, capLines: link.capLines,
+    ? { superseded: null, lock: failed, cap: null, capLines: 0, editLock: failed, deleteLock: failed, canceledOnly: false, clearLock: failed }
+    : link ? { superseded: link.supersededBy, lock: completionLock, cap: link.cap, capLines: link.capLines, canceledOnly: link.canceledOnly,
+        clearLock: linkedCompletionLock(link, who, account, true),
         editLock: linkedEditLock(link, who, account), deleteLock: linkedDeleteLock(link, !!refund.data.result.completedDate.trim(), who, account) }
     : null;
 

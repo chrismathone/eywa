@@ -34,7 +34,10 @@ export function RefundNotes({ notes, reportId }: { notes: DetailRefundNote[]; re
     });
   }
   return <>{notes.map(n => <div key={n.key} role={n.tone === "note" ? "note" : n.tone === "alert" ? "alert" : undefined} className={box[n.tone]}>
-    <p>{n.text}{n.href && <> {n.href.startsWith("/billing/")
+    <p>{n.text}{n.href && <> {n.href.startsWith("#")
+      // 같은 화면 안 자리(리뷰 r3 R2-I1 — '환불 확인' 칸으로) — 화면 이동 없이 그 자리로.
+      ? <a href={n.href} className="text-primary hover:underline">{n.linkText}</a>
+      : n.href.startsWith("/billing/")
       ? <WindowLink href={n.href} className="text-primary hover:underline">{n.linkText}</WindowLink>
       : <Link href={n.href} className="text-primary hover:underline">{n.linkText}</Link>}</>}</p>
     {n.recheck && (asking

@@ -111,6 +111,8 @@ export async function loadStudentReportRecords(studentId: string): Promise<Stude
     const [steps, holds] = open.length
       ? await Promise.all([loadRefundSteps(tenant, open).catch(() => undefined), loadRefundHolds(tenant, open.map((r) => r.group_id)).catch(() => undefined)])
       : [undefined, undefined];
+    // 환불 단계 조회 실패 — 승인 완료 칩을 '처리 확인 대기'라고 단정하지 않는다(리뷰 r3 R2-m10).
+    const refundsFailed = open.length > 0 && (!steps || !holds);
     return {
       status: "ok",
       // 다 보는 사람만 '없습니다'를 단정한다 — 원장, 그리고 열람 과목 제한이 없는 관리자급(원장 2026-10-30 열람 확대).
@@ -120,7 +122,10 @@ export async function loadStudentReportRecords(studentId: string): Promise<Stude
           id: r.id,
           groupId: r.group_id ?? r.id,
           status: r.status,
-          statusLabel: reportStatusLabel(r, steps?.get(r.group_id ?? r.id) ?? [], !!r.group_id && !!holds?.has(r.group_id)),
+          // 형제 승인(리뷰 r3 R2-m2) — 이 학생의 보고서를 다 읽은 사람만(강사는 자기 보고서만 읽어 형제를 모른다 → 종전 글).
+          statusLabel: reportStatusLabel(r, steps?.get(r.group_id ?? r.id) ?? [], !!r.group_id && !!holds?.has(r.group_id),
+            viewer.teacherId ? undefined : reports.rows.some((q) => q.group_id && q.group_id === r.group_id && q.id !== r.id && ["requested", "revision", "manager_pending", "director_pending"].includes(q.status)) ? "pending"
+              : refundsFailed ? "failed" : "done"),
           exitKind: r.exit_kind,
           subjects: r.subjects ?? [],
           effectiveDate: r.effective_date,

@@ -76,16 +76,20 @@ export const REFUND_GATE_NOT_READY = "시스템 준비 중이라 제출·승인�
 /** 묶음의 원장 환불 결정 — 줄 키 → 결정('환불'이면 그 요청서가 아직 있나). 표가 없는 DB는 빈 지도. */
 export async function loadRefundDecisions(tenantId: string, groupId: string): Promise<Map<string, RefundDecision>> {
   const db = createAdminClient();
-  const { data, error } = await db.from("withdrawal_report_refund_decisions").select("line_key,decision,document_id,paid_net,paid_seen").eq("tenant_id", tenantId).eq("group_id", groupId).limit(1000);
+  const { data, error } = await db.from("withdrawal_report_refund_decisions").select("line_key,decision,document_id,paid_net,paid_seen,separate_amount,separate_at,separate_by,refunded_total")
+    .eq("tenant_id", tenantId).eq("group_id", groupId).limit(1000);
   if (missingDecisionSchema(error)) return new Map();
   if (error) throw new Error(`환불 결정 조회 실패: ${error.message}`);
-  const rows = (data ?? []) as { line_key: string; decision: "refund" | "none"; document_id: string | null; paid_net?: number | string | null; paid_seen?: number | string | null }[];
+  const num = (v: number | string | null | undefined) => (v == null ? null : Number(v));
+  const rows = (data ?? []) as { line_key: string; decision: "refund" | "none"; document_id: string | null; paid_net?: number | string | null; paid_seen?: number | string | null;
+    separate_amount?: number | string | null; separate_at?: string | null; separate_by?: string | null; refunded_total?: number | string | null }[];
   const docIds = [...new Set(rows.flatMap(r => r.document_id ? [r.document_id] : []))];
   const live = new Set(docIds.length ? (await fetchInChunks<{ id: string }>(docIds, async chunk =>
     (await db.from("academy_documents").select("id").eq("tenant_id", tenantId).eq("form_type", "refund_request").in("id", chunk)) as unknown as { data: { id: string }[] | null; error: { message: string } | null }))
     .map(d => String(d.id)) : []);
   return new Map(rows.map(r => [r.line_key, { decision: r.decision, live: r.decision === "refund" && !!r.document_id && live.has(r.document_id),
-    paidNet: r.paid_net == null ? null : Number(r.paid_net), paidSeen: r.paid_seen == null ? null : Number(r.paid_seen), documentId: r.document_id }]));
+    paidNet: num(r.paid_net), paidSeen: num(r.paid_seen), documentId: r.document_id,
+    separateAmount: num(r.separate_amount), separateAt: r.separate_at ?? null, separateBy: r.separate_by ?? null, refundedTotal: num(r.refunded_total) }]));
 }
 
 /** '환불 결정 대기' 표시가 선 묶음(DB `refund_hold`) → 결정할 줄을 보이는 보고서(원장 할 일이 걸린 보고서 · 없으면 null). 칸이 없는 DB는 빈 지도. */

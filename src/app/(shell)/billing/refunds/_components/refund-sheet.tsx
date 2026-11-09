@@ -16,7 +16,7 @@ import {
 import { saveRefundRequest, type RefundActionState } from "@/features/billing/server/refund-actions";
 import { DeleteRefundButton, PrintRefundButton } from "./refund-buttons";
 import { LinkedRequestBanner, type LinkedRequestView } from "./linked-request-banner";
-import { LINKED_DELETE_CONFIRM } from "@/features/withdrawal-reports/refund-decision";
+import { LINKED_CLEAR_WARNING, LINKED_DELETE_CONFIRM, LINKED_DELETE_CONFIRM_CANCELED } from "@/features/withdrawal-reports/refund-decision";
 import { RefundStudentPicker } from "./refund-student-picker";
 
 // 종이 서식("환불처리요청서") 레이아웃을 재현한 시트 — 읽기(뷰) ↔ 인라인 편집 한 컴포넌트(WYSIWYG).
@@ -128,6 +128,18 @@ export function RefundSheet({
       <>{V(value)}</>
     );
 
+  // 수정 중에도 바꿀 수 없는 칸(리뷰 r3 R2-m8) — 지금 값 + 사유 · 같은 값을 숨은 칸으로 보낸다(저장 액션·DB 트리거가 다시 막는다).
+  const locked = (name: string, value: string, note: string) => (
+    <>
+      <input type="hidden" name={name} value={value} />
+      <span className="whitespace-pre-wrap">{V(value)}</span>
+      <span className="text-text-faint mt-0.5 block text-xs print:hidden">{note}</span>
+    </>
+  );
+  // 이어진 요청서 — 상한을 모르면 금액 칸(총 환불금액·결제내역)을 잠근다 · 환불을 마친 요청서의 완료일자는 비울 수 있는 사람(원장)만 연다.
+  const amountLock = editing && linked && linked.cap === null ? "원장 승인 금액(상한)을 알 수 없어 바꿀 수 없습니다 — 원장 확인." : null;
+  const completedAtOpen = !!data.result.completedDate.trim();
+  const clearLock = editing && linked && completedAtOpen ? linked.clearLock : null;
   const areaField = (name: string, value: string, rows: number, label: string, ph?: string) =>
     editing ? (
       <textarea
@@ -243,7 +255,7 @@ export function RefundSheet({
             <th className={`${head} w-28`}>결제내역</th>
             <td className={cell} colSpan={2}>
               {/* 자동입력이 월×항목별로 줄을 만들어 길다 — 8줄 기본(더 길면 resize-y로 늘린다). */}
-              {areaField("r_paymentDetails", r.paymentDetails, 8, "결제내역", "결제 내역(월·금액·결제수단 등)")}
+              {amountLock ? locked("r_paymentDetails", r.paymentDetails, amountLock) : areaField("r_paymentDetails", r.paymentDetails, 8, "결제내역", "결제 내역(월·금액·결제수단 등)")}
             </td>
           </tr>
           <tr>
@@ -255,7 +267,7 @@ export function RefundSheet({
           <tr>
             <th className={head}>총 환불금액</th>
             <td className={`${cell} num font-bold`} colSpan={2}>
-              {field("r_totalAmount", r.totalAmount, { label: "총 환불금액", ph: "예: 200,000원" })}
+              {amountLock ? locked("r_totalAmount", r.totalAmount, amountLock) : field("r_totalAmount", r.totalAmount, { label: "총 환불금액", ph: "예: 200,000원" })}
             </td>
           </tr>
           {REFUND_METHODS.map((m, i) => (
@@ -295,14 +307,14 @@ export function RefundSheet({
           <tr>
             <th className={head}>환불완료일자</th>
             <td className={`${cell} num`}>
-              {editing && completionLock ? (
-                <>
-                  <input type="hidden" name="res_completedDate" value={res.completedDate} />
-                  {V(res.completedDate)}
-                  <span className="text-text-faint mt-0.5 block text-[11px] print:hidden">{completionLock}</span>
-                </>
+              {editing && (completionLock || clearLock) ? (
+                locked("res_completedDate", res.completedDate, (completionLock ?? clearLock)!)
               ) : (
-                field("res_completedDate", res.completedDate, { label: "환불완료일자", type: "date" })
+                <>
+                  {field("res_completedDate", res.completedDate, { label: "환불완료일자", type: "date" })}
+                  {/* 원장이 이어진 요청서의 완료일자를 비울 때 — 이미 돌려준 돈이면 비우지 말 것(리뷰 r3 R2-I2 · 늘어난 몫은 '따로 환불'). */}
+                  {editing && linked && completedAtOpen ? <span role="note" className="text-destructive mt-0.5 block text-xs print:hidden">{LINKED_CLEAR_WARNING}</span> : null}
+                </>
               )}
             </td>
           </tr>
@@ -357,7 +369,7 @@ export function RefundSheet({
             ) : null}
             <PrintRefundButton />
             {/* 이어진 요청서 — 완료된 것은 아무도 · 미완료는 담당 데스크·원장만(리뷰 r2 B1) · 확인 문구에 원장 결정 대기로 돌아감을 적는다. */}
-            {canWrite && id && !linked?.deleteLock ? <DeleteRefundButton id={id} name={s.name} confirmText={linked ? LINKED_DELETE_CONFIRM : undefined} /> : null}
+            {canWrite && id && !linked?.deleteLock ? <DeleteRefundButton id={id} name={s.name} confirmText={linked ? (linked.canceledOnly ? LINKED_DELETE_CONFIRM_CANCELED : LINKED_DELETE_CONFIRM) : undefined} /> : null}
           </>
         )}
       </div>

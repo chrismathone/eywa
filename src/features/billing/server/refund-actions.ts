@@ -8,7 +8,7 @@ import { canSeeRestrictedDocuments } from "@/features/documents/server/restricte
 import { teacherViewReadDb, writeSessionFirst } from "./teacher-view-db";
 import { releaseWithdrawalRefunds } from "@/features/withdrawal-reports/server/release";
 import { loadRefundLink } from "@/features/withdrawal-reports/server/refund-steps";
-import { linkedCapError, linkedCompletionLock, linkedDeleteLock, linkedEditLock } from "@/features/withdrawal-reports/refund-decision";
+import { COMPLETION_DATE_FORMAT, completionDateOk, linkedCapError, linkedCompletionLock, linkedDeleteLock, linkedEditLock } from "@/features/withdrawal-reports/refund-decision";
 import { viewAsTeacher } from "@/lib/auth/view-as";
 import {
   normalizeRefund,
@@ -176,6 +176,12 @@ async function linkedSaveDenied(user: { id: string; tenantId: string; systemRole
   }
   const before = (prev?.result.completedDate ?? "").trim();
   const after = next.result.completedDate.trim();
+  // 완료일자 꼴 = 빈칸 또는 YYYY-MM-DD(리뷰 r3 R-9 · DB 트리거와 같다 — '확인 중' 같은 글이 완료로 읽혀 데스크 대기가 풀렸다).
+  if (before !== after && !completionDateOk(next.result.completedDate)) {
+    await logAction({ action: "refund_request_linked_denied", targetType: "refund_request", targetLabel: refundTitle(next),
+      metadata: { ...base, attempted: `환불완료일자 ${after}`, reason: "날짜 꼴 아님" } });
+    return COMPLETION_DATE_FORMAT;
+  }
   if (before !== after) {
     const reason = linkedCompletionLock(link, actor, account, !!before && !after);
     if (reason) {

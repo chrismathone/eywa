@@ -10,6 +10,10 @@ export type LinkedRequestView = {
   lock: string | null;
   cap: number | null;
   capLines: number;
+  /** 이어진 보고서가 취소된 요청이다(삭제 확인 문구를 가른다 · 리뷰 r3 R2-m9). */
+  canceledOnly: boolean;
+  /** 완료일자를 비울 수 없는 까닭(원장만 — 리뷰 r2 D-13 · r3 R2-m8 화면에서도 잠금) · 통과면 null. */
+  clearLock: string | null;
 };
 
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
@@ -32,7 +36,7 @@ export function LinkedRequestBanner({ view }: { view: LinkedRequestView }) {
       <p className="text-text-dim text-xs" aria-label="원장 승인 상한">
         {view.cap === null
           ? "원장 승인 금액(상한) 모름 — 원장 확인. 총 환불금액·결제내역은 바꿀 수 없습니다."
-          : `원장 승인 ${view.capLines}건 · 낸 돈 합계(상한) ${won(view.cap)} — 총 환불금액은 이 금액을 넘을 수 없습니다(숫자만 읽습니다).`}
+          : `원장 승인 ${view.capLines}건 · 낸 돈 합계(상한) ${won(view.cap)} — 총 환불금액은 이 금액을 넘을 수 없습니다(숫자와 쉼표·'원'만 씁니다 — 예: 315,000원).`}
       </p>
     </div>
   );

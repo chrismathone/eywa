@@ -14,6 +14,9 @@
 -- 리뷰 수리 r2(2026-11-09): 9인자 연결 · 겹침·빈칸·금액·지문·관문 표식·'환불하지 않음' 기록 함수(새로 만든 여섯)를 지운다 · refund_pending은 s2_0025 본문(btrim)으로 돌린다 ·
 --   🔴 관문 표식 함수(withdrawal_refund_gate_ready)가 사라져 '새 앱 + 되돌린 DB'면 앱 refundGateReady()가 거짓 → 'DB 적용 전'으로 멈춘다(리뷰 r2 D-7 · 칸은 남아도).
 --   결정 표의 paid_seen·supersedes 칸과 새 줄 키 검사는 표와 함께 남는다(데이터 보존).
+-- 리뷰 수리 r3(2026-11-09): 할 일 닫기(tg_refund_task)·취소 알림(refunds_on_cancel)의 빈칸 판정을 btrim으로 되돌린다(치환을 거꾸로 · 정확히 한 번) ·
+--   환불 없음 함수는 6인자(p_separate)를 지운다 · 연결 표 service_role 권한(update·delete·truncate·references·trigger)을 Supabase 기본대로 다시 준다 ·
+--   결정 표의 separate_*·refunded_* 칸은 표와 함께 남는다(데이터 보존 — 다시 적용하면 그대로 쓴다).
 begin;
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';
@@ -24,13 +27,15 @@ declare
   want constant jsonb := jsonb_build_object(
     'public.transition_withdrawal_report(uuid,uuid,uuid,text,jsonb)', '99c4175fd9f02dab3091086f456890b1',
     'public.transition_withdrawal_report_v1(uuid,uuid,uuid,text,jsonb)', 'c8d87498a853195d7c86de12b21ae6d8',
-    'public.attach_withdrawal_report_refund(uuid,uuid,uuid,uuid,uuid,boolean,jsonb,jsonb,jsonb)', 'c07c11dc199fe91308485bcef79bf5d8',
+    'public.attach_withdrawal_report_refund(uuid,uuid,uuid,uuid,uuid,boolean,jsonb,jsonb,jsonb)', '4d4be34ba7d4068ef5751ec618e5de35',
     'public.release_withdrawal_report_refunds(uuid,uuid,uuid,jsonb)', '2516d0340b850c14faa4f91e9ea673ca',
     'staff_tasks_private.withdrawal_sync_report(uuid)', '577ba3f3c9f2c429b051b8656a660cb0',
-    'public.withdrawal_report_refund_note(uuid,uuid,jsonb,uuid,boolean)', 'b257588a5c8c60b2437437617283073a',
-    'public.decide_withdrawal_report_refund(uuid,uuid,uuid,jsonb,jsonb)', 'c89f741e23059ac7050931453e086f81',
-    'public.withdrawal_report_refund_complete_guard()', '5fb08e4f531d6ea84de7173592f2d502',
-    'public.withdrawal_report_refund_pending(uuid)', '8950ddbc8a25c4229996235e12a2593e');
+    'public.withdrawal_report_refund_note(uuid,uuid,jsonb,uuid,boolean)', 'dce627cbb631b2160ebd8d74b7a46384',
+    'public.decide_withdrawal_report_refund(uuid,uuid,uuid,jsonb,jsonb,jsonb)', '7da06d12497b76d8d11fd846d5d31e43',
+    'public.withdrawal_report_refund_complete_guard()', '690c049376af96d280680c168c20199c',
+    'public.withdrawal_report_refund_pending(uuid)', '8950ddbc8a25c4229996235e12a2593e',
+    'staff_tasks_private.tg_refund_task()', '25ac92f780f3741fd98f82a8d6eeee5f',
+    'public.withdrawal_report_refunds_on_cancel(uuid,uuid,uuid,text)', 'bc3ed5062ec278a6f015635c7d098e4d');
   fn text;
   got text;
 begin
@@ -367,8 +372,36 @@ as $function$
    where f.group_id = p_group and coalesce(btrim(d.form_data #>> '{result,completedDate}'), '') = '')
 $function$;
 
+-- 할 일 닫기 · 취소 알림 = 빈칸 판정을 btrim으로(r3 치환을 거꾸로 · 정확히 한 번 · 빈칸 함수를 지우기 전에).
+do $$
+declare
+  definition text;
+  hits int;
+  needle text;
+  pairs constant text[] := array[
+    $o$not public.withdrawal_refund_blank(NEW.form_data #>> '{result,completedDate}')$o$, $n$coalesce(btrim(NEW.form_data #>> '{result,completedDate}'), '') <> ''$n$,
+    $o$public.withdrawal_refund_blank(OLD.form_data #>> '{result,completedDate}')$o$, $n$coalesce(btrim(OLD.form_data #>> '{result,completedDate}'), '') = ''$n$];
+  cancel_old constant text := $o$not public.withdrawal_refund_blank(d.form_data #>> '{result,completedDate}') completed$o$;
+  cancel_new constant text := $n$coalesce(btrim(d.form_data #>> '{result,completedDate}'), '') <> '' completed$n$;
+begin
+  select pg_get_functiondef('staff_tasks_private.tg_refund_task()'::regprocedure) into definition;
+  for i in 1 .. array_length(pairs, 1) / 2 loop
+    needle := pairs[2*i-1];
+    hits := (length(definition) - length(replace(definition, needle, ''))) / length(needle);
+    if hits <> 1 then raise exception 'revert-s2_0036: 할 일 닫기의 되돌릴 조건 %번이 하나가 아닙니다(%건)', i, hits; end if;
+    definition := replace(definition, needle, pairs[2*i]);
+  end loop;
+  execute definition;
+  select pg_get_functiondef('public.withdrawal_report_refunds_on_cancel(uuid,uuid,uuid,text)'::regprocedure) into definition;
+  hits := (length(definition) - length(replace(definition, cancel_old, ''))) / length(cancel_old);
+  if hits <> 1 then raise exception 'revert-s2_0036: 취소 알림의 되돌릴 조건이 하나가 아닙니다(%건)', hits; end if;
+  execute replace(definition, cancel_old, cancel_new);
+end $$;
+-- 연결 표 권한 = Supabase 기본(s2_0036 전 운영 그대로 · 리뷰 r3 R-6을 거꾸로).
+grant update, delete, truncate, references, trigger on public.withdrawal_report_refunds to service_role;
+
 -- 새로 만든 함수·트리거를 지운다. 결정 표·묶음 칸은 남긴다(데이터 보존 · 옛 함수는 읽지 않는다 · 다시 적용하면 그대로 쓴다).
-drop function public.decide_withdrawal_report_refund(uuid, uuid, uuid, jsonb, jsonb);
+drop function public.decide_withdrawal_report_refund(uuid, uuid, uuid, jsonb, jsonb, jsonb);
 drop function public.withdrawal_report_refund_note(uuid, uuid, jsonb, uuid, boolean);
 drop trigger withdrawal_report_refund_complete_guard on public.academy_documents;
 drop function public.withdrawal_report_refund_complete_guard();
@@ -389,7 +422,9 @@ declare
     'public.attach_withdrawal_report_refund(uuid,uuid,uuid,uuid,uuid,boolean)', '846a34cb47bf901eb959c3e51f2b87e5',
     'public.release_withdrawal_report_refunds(uuid,uuid,uuid)', 'b03844a446c9db506fef5669c552c187',
     'staff_tasks_private.withdrawal_sync_report(uuid)', 'a8a0fb1aa5b897ff1eac199a33b03a5f',
-    'public.withdrawal_report_refund_pending(uuid)', 'e0eab20d959cd68364cd4a7c349385cd');
+    'public.withdrawal_report_refund_pending(uuid)', 'e0eab20d959cd68364cd4a7c349385cd',
+    'staff_tasks_private.tg_refund_task()', '7ba5b00c225d849f5368182b8ffaee06',
+    'public.withdrawal_report_refunds_on_cancel(uuid,uuid,uuid,text)', '9e3981d9e2cb7e319c308adf193efbbe');
   fn text;
   got text;
 begin

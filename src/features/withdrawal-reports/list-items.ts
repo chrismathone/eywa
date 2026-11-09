@@ -154,11 +154,14 @@ export function buildListItems(input: {
   directorLevel?: boolean;
   /**
    * 묶음 id → 그 묶음 보고서 전부의 상태(`listReports` — 형제가 열람 범위 밖이라 목록에 없어도 읽는다).
-   * 없는 묶음은 이 목록에 보이는 형제로만 본다. 통째로 없으면(조회 실패) 승인 완료인데 기다릴 환불(데스크 환불 · 원장 환불 결정)이 없는 줄은 다른 과목 대기로 본다.
+   * 없는 묶음은 이 목록에 보이는 형제로만 본다. 통째로 없으면(조회 실패) 승인 완료 줄은 '다른 과목 승인 확인 못 함'(2단계 · 다른 과목 대기라고 단정하지 않는다 —
+   * 리뷰 r2 (a) · 보이는 형제가 승인 전이면 그것은 확인된 사실이라 '다른 과목 승인 대기').
    */
   groupStatuses?: ReadonlyMap<string, readonly { id: string; status: ReportStatus }[]>;
   /** 원장 환불 결정 대기(원장 2026-11-06 · DB `refund_hold`) — 묶음 id → 결정할 줄을 보이는 보고서(`loadRefundHolds`). 없으면 대기 없음. */
   holds?: ReadonlyMap<string, string | null>;
+  /** 데스크 환불 단계·결정 대기 조회가 실패했다(리뷰 r3 R2-m10) — 승인 완료 칩을 '처리 확인 대기'라고 단정하지 않는다('환불 단계 확인 못 함'). */
+  refundsFailed?: boolean;
   /** 원장 결정 요약(`loadRefundOutcomes`) — 묶음 id → 환불 승인/환불 없음 · 결정한 사람. 승인 진행의 '✓ 결정한 원장'. */
   outcomes?: ReadonlyMap<string, RefundOutcome>;
   /** 요청 취소 기록(`loadCancelNotes` · s2_0036 사유) — 보고서 id → 사유·취소한 사람·시각. 취소된 보고서만 싣는다. */
@@ -205,7 +208,9 @@ export function buildListItems(input: {
     const direct = isDirectReport(r);
     const steps = input.refunds?.get(r.group_id ?? r.id) ?? [];
     const hold = !!r.group_id && !!input.holds?.has(r.group_id);
-    const chips = reportStatusChips(r, steps, hold);
+    const others = othersState(r);
+    // 상태 칩 — 1과목·형제 모두 승인이면 '다른 보고서 대기'가 아니다(리뷰 r3 R2-m2 · 상세와 같은 판정).
+    const chips = reportStatusChips(r, steps, hold, others ?? (input.refundsFailed ? "failed" : "done"));
     // 환불 줄(원장 2026-11-06 — 관리자 줄 다음 · 이름 직급만): 환불 결정(원장 · 결정 대기 ○ 받는 원장급 / 결정 ✓ 결정한 원장 · 환불 없음은 흐리게) → 데스크 담당마다(○ 대기 · ✓ 환불완료일자).
     const refundInput = { waiting: hold && decisionBlocksProcessing(r.status), outcome: r.group_id ? input.outcomes?.get(r.group_id) : undefined,
       directors: staff.filter((s) => s.role === "master"), personOf: staffOf, steps, canceled: r.status === "canceled" };
@@ -217,7 +222,6 @@ export function buildListItems(input: {
     // 원장 환불 결정 차례(원장급 · 쓰기 권한) — 대기 묶음에서 결정할 줄을 보이는 보고서 줄(DB가 원장 할 일을 건 보고서 · 모르면 대표 보고서)에만.
     const holdReport = r.group_id ? input.holds?.get(r.group_id) : undefined;
     const refundTurn = writable && directorLevel && refundInput.waiting && (holdReport ? holdReport === r.id : !!r.group_leader);
-    const others = othersState(r);
     const item: ListItem = {
       key: `r:${r.id}`,
       href: `${LIST_PATH}/${r.id}`,

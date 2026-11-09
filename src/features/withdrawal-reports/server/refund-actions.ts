@@ -8,7 +8,7 @@ import { notifyUsers } from "@/features/notifications/server/notify";
 import { emptyRefund, refundTitle, REFUND_FORM_TYPE } from "@/features/billing/refund-request";
 import { formatPaymentLines } from "@/features/billing/refund-prefill";
 import { canRequestRefund, cancelsAsDirector, missingReportSchema } from "../model";
-import { DESK_NOT_DESIGNATED, decisionBlocksProcessing, decisionTargets, reapprovable, type RefundCheck, type RefundDecision } from "../refund-decision";
+import { DESK_NOT_DESIGNATED, decisionBlocksProcessing, decisionTargets, reapprovable, refundDeduction, type RefundCheck, type RefundDecision } from "../refund-decision";
 import { reportViewer, getReport } from "./queries";
 import { LINE_KEY, claimedEarlier, lineRefundable, loadDeskStaff, loadLaterInvoices, refundTag, type LaterInvoice, type LaterLine } from "./refund";
 import { REFUND_GATE_NOT_READY, loadGroupRefundCheck, loadRefundDecisions, loadRefundHoldState, refundGateReady } from "./refund-check";
@@ -66,6 +66,9 @@ export async function approveWithdrawalRefund(reportId: string, keys: string[], 
   if (!desk) return { error: "데스크 담당자를 다시 골라 주세요. 학원 설정에 지정된 데스크 담당자 중 수납 쓰기 권한이 있는 사람만 고를 수 있습니다." };
   const chosen = pick(later, picked);
   if ("error" in chosen) return chosen;
+  // 다시 환불 승인하는 줄 — 따로 환불하기로 한 금액·환불 완료 기록을 빼고 요청한다(DB attach 상한과 같은 식 · 원장 결정 2026-11-09 · 리뷰 r3 R2-I2).
+  const amountOf = (c: { line: LaterLine }) => Math.max(0, c.line.paidNet - refundDeduction(decisions.get(c.line.key)));
+  if (chosen.some(c => amountOf(c) <= 0)) return { error: "이미 돌려준 건(환불 완료 기록·따로 환불)이라 환불할 남은 돈이 없습니다. 그 건은 고르지 말고(환불하지 않음) 다시 확인해 주세요." };
   // 고르지 않은 줄 = 이 화면에서 원장이 지금 정할 줄(환불 가능 줄 + 다시 정할 이 묶음 요청서 줄 — `decisionTargets`) 중 고르지 않은 것 — 화면이 본 것과 같아야 한다
   // (원장이 보지 않은 줄을 '환불하지 않음'으로 남기지 않는다).
   const none = decisionTargets(later, decisions).filter(k => !picked.includes(k));
@@ -95,7 +98,10 @@ export async function approveWithdrawalRefund(reportId: string, keys: string[], 
     paymentMethod: paidInfo.get(inv.id)?.method ?? null, paidAt: paidInfo.get(inv.id)?.paidAt ?? null,
     lineItems: lines.map(l => ({ ...l, paid: l.paidNet })),
   })));
-  const total = chosen.reduce((s, c) => s + c.line.paidNet, 0);
+  // 결제내역은 실제 낸 돈 그대로 — 뺀 몫은 줄을 더해 밝힌다(총 환불금액 = 낸 돈 − 뺀 몫 · 리뷰 r3 R2-I2).
+  for (const c of chosen) if (amountOf(c) < c.line.paidNet)
+    payment.push(`※ ${c.inv.period} ${c.line.description.trim()} — 이전 환불 완료 기록·따로 환불 ${won(c.line.paidNet - amountOf(c))}은 빼고 요청`);
+  const total = chosen.reduce((s, c) => s + amountOf(c), 0);
   const periods = [...new Set(chosen.map(c => c.inv.period))].join(", ");
 
   const snapshot = report.snapshot;
@@ -122,8 +128,17 @@ export async function approveWithdrawalRefund(reportId: string, keys: string[], 
   if (error || !row) return { error: "환불 요청서를 만들지 못했습니다." };
   const documentId = String(row.id);
   // 동시에 두 창에서 같은 줄을 승인했으면 늦은 쪽이 물러난다(확인과 넣기 사이의 틈 — 리뷰 2026-10-29).
-  // 확인 조회가 실패하면 지우지 않고 그대로 간다(넣기 직전 확인은 이미 통과했다).
-  const lost = await claimedEarlier(report.tenant_id, documentId, picked).catch((e: unknown) => { console.error("[withdrawal-refund] 겹침 확인 실패", e); return false; });
+  // 🔴 확인 조회가 실패하면 진행하지 않는다(닫힌 쪽 · 리뷰 r3 R-1 — 같은 묶음 같은 키는 DB도 막지만 형제 경합까지 앱이 먼저 본다) — 만든 요청서를 지우고 다시 하게.
+  const lost = await claimedEarlier(report.tenant_id, documentId, picked).then(v => v ? "lost" as const : null, (e: unknown) => { console.error("[withdrawal-refund] 겹침 확인 실패", e); return "unknown" as const; });
+  if (lost === "unknown") {
+    const { error: undoError } = await admin.from("academy_documents").delete().eq("tenant_id", report.tenant_id).eq("id", documentId);
+    if (undoError) {
+      await logAction({ action: "refund_request_create", targetType: "refund_request", targetLabel: refundTitle(data),
+        metadata: { documentId, studentName: snapshot.name, totalAmount: data.refund.totalAmount, source: "퇴원보고서 환불 승인 — 겹침 확인 실패, 되돌리기 실패(확인 필요)" } });
+      return { error: "겹친 승인이 있는지 확인하지 못했고, 만든 환불 요청서가 남았습니다. 환불 요청 목록에서 확인해 주세요." };
+    }
+    return { error: "같은 건이 다른 창에서 승인됐는지 확인하지 못해 요청서를 만들지 않았습니다. 잠시 후 다시 시도해 주세요." };
+  }
   if (lost) {
     const { error: undoError } = await admin.from("academy_documents").delete().eq("tenant_id", report.tenant_id).eq("id", documentId);
     if (undoError) {
@@ -159,7 +174,7 @@ export async function approveWithdrawalRefund(reportId: string, keys: string[], 
     }
   }
 
-  const items = chosen.map(c => `${c.inv.period} ${c.line.description.trim()} ${won(c.line.paidNet)}`);
+  const items = chosen.map(c => `${c.inv.period} ${c.line.description.trim()} ${won(amountOf(c))}${amountOf(c) < c.line.paidNet ? `(낸 돈 ${won(c.line.paidNet)} − 이전 환불·따로 환불 ${won(c.line.paidNet - amountOf(c))})` : ""}`);
   const notRefunded = describeLines(later, none);
   const meta = { reportId: report.id, documentId, items, totalAmount: data.refund.totalAmount, effectiveDate: report.effective_date, deskId: desk.id, deskName: desk.name,
     deskStep: link.gates ? "데스크 환불 완료 뒤 처리" : "처리를 기다리지 않음", ...(notRefunded.length ? { notRefunded } : {}) };
@@ -203,7 +218,7 @@ async function attachRefundStep(tenantId: string, actorId: string, reportId: str
     .then(r => r, (e: unknown) => ({ data: null, error: { message: e instanceof Error ? e.message : String(e), code: "" } }));
   if (error) {
     console.error("[withdrawal-refund] 데스크 환불 단계 연결 실패", error.message);
-    return { ok: false, gates: false, undecided: null, error: missingReportSchema(error) ? "데스크 환불 단계를 준비 중입니다(DB 적용 전). 잠시 후 다시 시도해 주세요." : error.message };
+    return { ok: false, gates: false, undecided: null, error: missingReportSchema(error) ? "데스크 환불 단계를 준비 중입니다. 잠시 후 다시 시도해 주세요." : error.message };
   }
   const out = (data ?? {}) as { gates?: boolean; undecided?: number | null };
   return { ok: true, gates: !!out.gates, undecided: typeof out.undecided === "number" ? out.undecided : null };
@@ -236,7 +251,7 @@ export async function declineWithdrawalRefund(reportId: string, keys: string[]):
   const current = decisionTargets(later, decisions);
   if (!sameKeys(current, keys)) return { error: "퇴원월 뒤 청구가 바뀌었습니다. 새로고침 후 다시 확인해 주세요." };
   const { data, error } = await createAdminClient().rpc("decide_withdrawal_report_refund", { p_tenant: report.tenant_id, p_actor: viewer.user.id, p_report: report.id, p_none: current, p_check: check });
-  if (error) return { error: missingReportSchema(error) ? "환불 결정 기능을 준비 중입니다(DB 적용 전). 잠시 후 다시 시도해 주세요." : error.message };
+  if (error) return { error: missingReportSchema(error) ? "환불 결정 기능을 준비 중입니다. 잠시 후 다시 시도해 주세요." : error.message };
   const result = (data ?? {}) as { undecided?: number | null; ready?: boolean };
   const released = result.ready ? await releaseWithdrawalGroup({ tenantId: report.tenant_id, groupId, actorId: viewer.user.id, check }) : null;
   const processed = !!released && released.released + released.blocked > 0;

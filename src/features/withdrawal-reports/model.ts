@@ -169,14 +169,21 @@ export function refundWaiting(r: Pick<WithdrawalReport, "status">, refunds: read
  * ('데스크 환불 요청' 대기 · 환불은 끝났는데 아직 처리 전이면 '데스크 환불 완료' — '다른 보고서 대기'로 잘못 읽히지 않게).
  * 원장 환불 결정 대기(원장 2026-11-06 · DB 묶음 표시 `refund_hold` — s2_0036)면 원래 단계 바로 뒤에 '환불 결정 대기'. 처리 완료·취소·재검토엔 붙이지 않는다.
  */
-export function reportStatusChips(r: Pick<WithdrawalReport, "status">, refunds: readonly RefundStep[] = [], decisionHold = false): string[] {
+/**
+ * `others` = 같은 묶음의 다른 과목 보고서 승인(리뷰 r3 R2-m2 — 1과목·형제 모두 승인인데 '다른 보고서 대기'라고 적지 않는다):
+ * 승인 전 형제 있음(pending) · 없음(done · 묶음 없음도) · 모름(unknown — 조회 실패) · 환불 단계(결정 대기 표시·데스크 단계)를 못 읽음(failed — 상세 · 리뷰 r3 R2-m10).
+ * 모르는 호출부(undefined)는 종전 글 그대로.
+ */
+export function reportStatusChips(r: Pick<WithdrawalReport, "status">, refunds: readonly RefundStep[] = [], decisionHold = false, others?: "pending" | "done" | "unknown" | "failed"): string[] {
   const hold = decisionHold && !["completed", "canceled", "blocked"].includes(r.status);
   const desk = refundWaiting(r, refunds) ? "데스크 환불 요청" : r.status === "approved" && refunds.length ? "데스크 환불 완료" : null;
+  if (!hold && !desk && r.status === "approved" && others && others !== "pending")
+    return ["관리자 승인 완료", others === "unknown" ? "다른 과목 승인 확인 못 함" : others === "failed" ? "환불 단계 확인 못 함" : "처리 확인 대기"];
   if (!hold && !desk) return [REPORT_STATUS[r.status]];
   return [r.status === "approved" ? "관리자 승인 완료" : REPORT_STATUS[r.status], ...(hold ? [REFUND_DECISION_CHIP] : []), ...(desk ? [desk] : [])];
 }
-export function reportStatusLabel(r: Pick<WithdrawalReport, "status">, refunds: readonly RefundStep[] = [], decisionHold = false) {
-  return reportStatusChips(r, refunds, decisionHold).join(" · ");
+export function reportStatusLabel(r: Pick<WithdrawalReport, "status">, refunds: readonly RefundStep[] = [], decisionHold = false, others?: "pending" | "done" | "unknown" | "failed") {
+  return reportStatusChips(r, refunds, decisionHold, others).join(" · ");
 }
 export function isParticipant(r: Pick<WithdrawalReport, "requested_by" | "teacher_id" | "manager_id" | "director_id" | "manager_ids" | "director_ids">, userId: string) {
   return [r.requested_by, r.teacher_id, ...managerIds(r), ...directorIds(r)].includes(userId);
