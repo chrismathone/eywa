@@ -7,6 +7,7 @@ import { withFactGuard } from "@/lib/ai/fact-guard";
 import { ONTOLOGY_MAP } from "../catalog/ontology";
 import type { AssistantReport, QueryResult } from "../report";
 import type { AssistantTableDoc } from "../catalog/types";
+import { plainRich } from "../rich-text";
 import { clipText } from "../text";
 
 export function catalogLines(docs: readonly AssistantTableDoc[], views: ReadonlySet<string>): string {
@@ -94,7 +95,12 @@ export function buildSystemPrompt(catalog: string): string {
   - why에는 근거와 함께 '무엇이 어떻게 바뀌면 효과가 난 것인지'(다음에 확인할 숫자 — 예: "A반 4주 출석률 79.5% → 90% 이상")를 한 마디 담는다.
 - 질문이 여러 뜻으로 읽히면 가장 그럴듯한 뜻으로 답하고 summary에 어떻게 해석했는지 밝힌다. 되묻지 않는다.
 - 자료를 바꿔 달라는 요청에는 "비서는 조회만 합니다"라고 답하고, 어느 화면에서 바꾸면 되는지 안다면 알려 준다.
-- 링크·이미지·마크다운 문법을 쓰지 않는다(화면은 글자로만 그린다). 원장에게 쓰는 존댓말(합니다체)로, 짧고 분명하게 — 보고서 투가 아니라 곁에서 말하는 비서의 말씨로.
+- 링크·이미지·마크다운 문법(제목 #·목록 -·표·링크)을 쓰지 않는다(화면은 글자로만 그린다). 원장에게 쓰는 존댓말(합니다체)로, 짧고 분명하게 — 보고서 투가 아니라 곁에서 말하는 비서의 말씨로.
+- 강조(원장 *"중요한 문구에는 색상이나 볼드 등 서식을 자유롭게 사용해줘"*) — summary · callout(title·text) · list items · advice(action·why)에서만 쓴다. 긴 글이 한 덩어리로 보이지 않게 **판단을 가르는 숫자·이름·결론**에 자유롭게 쓰되, 한 문단에 서너 군데까지(다 칠하면 아무것도 강조되지 않는다).
+  - \`**굵게**\` — 핵심 숫자·이름·결론.
+  - \`[[good:…]]\` 초록 = 좋아진 것·잘 된 것 · \`[[bad:…]]\` 빨강 = 나빠진 것·위험 · \`[[warn:…]]\` 앰버 = 지켜볼 것·주의. 색 안에 \`**굵게**\`는 되고 색 안에 색은 안 된다.
+  - 예: "최근 3개월 퇴원 **8명** 중 [[bad:불만족 3명]] · 수업 방식 1명입니다. 중2 A반은 6개월 동안 [[bad:**7명**]]이 나갔습니다."
+  - 제목·이름 칸(보고서·차트·표 제목 · 칸 이름 · KPI · 담당)과 SQL에는 쓰지 않는다(서버가 벗긴다). 표시 글자는 글자 수에 세지 않는다.
 
 ${ONTOLOGY_MAP}
 
@@ -125,11 +131,12 @@ export function pastAnswerText(turn: PastTurn): string {
   if (r) {
     lines.push(`[보고서] ${r.title}`);
     for (const b of r.blocks) {
-      if (b.type === "summary") lines.push(b.text);
+      // 강조 표시는 벗긴다(화면 서식일 뿐 — 맥락 글자만 넘긴다 · rich-text.ts).
+      if (b.type === "summary") lines.push(plainRich(b.text));
       else if (b.type === "kpi") lines.push(b.items.map((i) => `${i.label} ${i.value}${i.unit ?? ""}`).join(" · "));
-      else if (b.type === "callout") lines.push(`${b.title}: ${b.text}`);
-      else if (b.type === "list") lines.push(...b.items.map((i) => `- ${i}`));
-      else if (b.type === "advice") lines.push(...b.items.map((i) => `[비서 의견] ${i.action} — ${i.why}`));
+      else if (b.type === "callout") lines.push(`${plainRich(b.title)}: ${plainRich(b.text)}`);
+      else if (b.type === "list") lines.push(...b.items.map((i) => `- ${plainRich(i)}`));
+      else if (b.type === "advice") lines.push(...b.items.map((i) => `[비서 의견] ${plainRich(i.action)} — ${plainRich(i.why)}`));
       else lines.push(`(${b.type === "chart" ? "차트" : "표"} ${b.title})`);
     }
   } else {

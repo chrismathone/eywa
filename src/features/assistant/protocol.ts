@@ -5,12 +5,23 @@
  *   마지막 줄은 늘 `report` 또는 `error`다. 연결이 끊기면 화면은 `GET /api/assistant/threads/[id]`로 다시 읽는다(서버는 끝까지 돌고 저장한다).
  * - `GET /api/assistant/threads` → `ThreadListResponse` · `GET /api/assistant/threads/[id]` → `ThreadDetailResponse` ·
  *   `DELETE /api/assistant/threads/[id]` → `{ ok: true }`.
- * 오류 응답(JSON)은 `{ error: string }`(한국어) + 상태 코드.
+ * - `POST /api/assistant/messages/[id]/stop` · `/finish` → `{ ok }` — id = 질문 번호(`started`), `?by=ref`면 화면이 만든 `clientRef`.
+ * 오류 응답(JSON)은 `{ error: string; code?: "busy" | "day" }`(한국어) + 상태 코드. `busy` = 자리 없음 · 같은 대화가 도는 중(실패가 아니라 '잠시 뒤').
  */
 import type { AssistantLevel } from "./levels";
 import type { SettledReport } from "./report";
 
-export type AskBody = { threadId?: string | null; question: string; level: AssistantLevel };
+/**
+ * `clientRef` — 화면이 보낼 때 만든 번호(uuid). 질문 번호(`started`)를 받기 전에 누른 멈춤·마무리가 그 질문을 찾는다
+ * (동시에 여러 질문이 돌 수 있어 '지금 도는 내 질문'으로는 어느 것인지 모른다 · SQL s2_0033).
+ */
+export type AskBody = { threadId?: string | null; question: string; level: AssistantLevel; clientRef?: string };
+
+/**
+ * 한 사람이 동시에 만들 수 있는 답 — 원장 2026-11-06 '동시에 3개까지'(조회 한도를 없애 답 하나가 최대 13분쯤 걸린다).
+ * DB 자리 색인(s2_0033 run_slot 1~3)과 같은 수다. 같은 대화에는 하나씩(앞 답을 알고 이어 답하도록).
+ */
+export const ASSISTANT_MAX_RUNNING = 3;
 
 /**
  * 진행 단계 — 원장 2026-11-06 *"진짜 Ai 대화하는것처럼 어떤 db를 조회중이고 어떤 프로그레스중인지 단계가 표시되면 좋을듯"*.
@@ -46,9 +57,10 @@ export type AskStep = {
   detail?: string;
   /**
    * `error`의 종류 — `limit` = 고칠 수 있는 실수가 아니라 시간·조회 한도로 여기서 멈춘 것(분석이 잘렸다는 신호 — 화면은 주황).
+   * `user` = 원장이 누른 '여기서 끝내고 결과 보기'로 더 조회하지 않은 것(화면은 옅은 멈춤 표시 — 실수도 한도도 아니다).
    * 없으면 보통 실패(답이 끝까지 나왔고 뒤에 같은 종류 단계가 이어졌으면 화면이 '다른 조회로 이어 갔습니다'로 옅게 — 적대 리뷰 2026-11-06).
    */
-  cause?: "limit";
+  cause?: "limit" | "user";
   /** 질문을 받은 때부터 이 단계가 시작된 시각(ms) · 걸린 시간(ms). */
   at: number;
   ms?: number;
@@ -67,7 +79,8 @@ export type AskEvent =
   | { type: "report"; messageId: string; report: SettledReport }
   | { type: "error"; message: string; messageId?: string };
 
-export type ThreadSummary = { id: string; title: string; level: AssistantLevel; updatedAt: string };
+/** `running` — 아직 답을 만드는 대화(다른 탭·기기에서 물었거나 새로 고친 뒤에도 목록 표시 · 보내기 막기가 맞게). */
+export type ThreadSummary = { id: string; title: string; level: AssistantLevel; updatedAt: string; running?: boolean };
 export type ThreadListResponse = { enabled: boolean; threads: ThreadSummary[] };
 
 export type QuerySummary = { id: string; purpose: string; rowCount: number; ms: number; error?: string };

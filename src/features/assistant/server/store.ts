@@ -5,9 +5,10 @@ import "server-only";
  * 표가 아직 없는 DB(SQL 적용 전)면 `enabled: false`로 버튼째 쉰다(#95).
  */
 import { createAdminClient } from "@/lib/supabase/admin";
+import { reportWarning } from "@/lib/observability/report-error";
 import { labelDatasets } from "../code-labels";
 import { isAssistantLevel, type AssistantLevel } from "../levels";
-import { ASSISTANT_RUNNING_MS, type AskStep, type QuerySummary, type ThreadDetailResponse, type ThreadMessage, type ThreadSummary } from "../protocol";
+import { ASSISTANT_MAX_RUNNING, ASSISTANT_RUNNING_MS, type AskStep, type QuerySummary, type ThreadDetailResponse, type ThreadMessage, type ThreadSummary } from "../protocol";
 import type { AssistantReport, QueryResult, SettledReport } from "../report";
 import { clipText } from "../text";
 import type { PastTurn } from "./prompt";
@@ -46,6 +47,10 @@ type MessageRow = {
   report_blocks: AssistantReport["blocks"] | null;
   /** 확인한 자료 범위(전수 조회를 한 답만 · 작다 — 글과 함께 읽는다). */
   report_coverage: SettledReport["coverage"] | null;
+  /** 조회를 일찍 끝내고 정리한 답이면 그 까닭(원장이 누른 '바로 결과 보기' · 시간 · 읽은 분량). */
+  report_cut: string | null;
+  /** 멈춤을 누른 때(도는 중이어도 마무리 중이다). */
+  cancel_requested_at: string | null;
   error: string | null;
   queries: Array<QuerySummary & { sql?: string }> | null;
   steps: AskStep[] | null;
@@ -54,6 +59,7 @@ type MessageRow = {
 type Datasets = SettledReport["datasets"];
 
 const level = (v: string): AssistantLevel => (isAssistantLevel(v) ? v : "normal");
+const isCutShort = (v: string | null): v is NonNullable<SettledReport["cutShort"]> => v === "user" || v === "time" || v === "context";
 const missingTable = (e: { code?: string; message?: string } | null) => !!e && (e.code === "42P01" || e.code === "PGRST205" || /does not exist|schema cache/i.test(e.message ?? ""));
 
 /**
@@ -86,17 +92,48 @@ export function compactReport(report: SettledReport): SettledReport {
 }
 
 export async function listThreads(owner: Owner): Promise<{ enabled: boolean; threads: ThreadSummary[] }> {
-  const { data, error } = await createAdminClient()
-    .from(THREADS)
-    .select("id, title, level, updated_at")
-    .eq("tenant_id", owner.tenantId)
-    .eq("user_id", owner.userId)
-    .is("deleted_at", null)
-    .order("updated_at", { ascending: false })
-    .limit(100);
+  // 아직 답을 만드는 대화 — 다른 탭·기기에서 물었거나 새로 고친 뒤에도 목록·보내기 막기가 맞게(원장 2026-11-06 *"정상적인 동작으로 인식되게"*).
+  // 목록과 따로 읽는다(서로 기다리지 않게) · 이것만 실패하면 표시 없이 목록은 낸다(적대 리뷰 2026-11-09).
+  const [{ data, error }, running] = await Promise.all([
+    createAdminClient()
+      .from(THREADS)
+      .select("id, title, level, updated_at")
+      .eq("tenant_id", owner.tenantId)
+      .eq("user_id", owner.userId)
+      .is("deleted_at", null)
+      .order("updated_at", { ascending: false })
+      .limit(100),
+    runningThreadIds(owner).catch((e: unknown) => {
+      reportWarning("학원 비서 도는 대화 읽기 실패", { scope: "assistant.threads.running", tenantId: owner.tenantId, error: e instanceof Error ? e.message : String(e) });
+      return new Set<string>();
+    }),
+  ]);
   if (missingTable(error)) return { enabled: false, threads: [] };
   if (error) throw new Error(error.message);
-  return { enabled: true, threads: ((data ?? []) as ThreadRow[]).map((t) => ({ id: t.id, title: t.title, level: level(t.level), updatedAt: t.updated_at })) };
+  return {
+    enabled: true,
+    threads: ((data ?? []) as ThreadRow[]).map((t) => ({
+      id: t.id,
+      title: t.title,
+      level: level(t.level),
+      updatedAt: t.updated_at,
+      ...(running.has(t.id) ? { running: true } : {}),
+    })),
+  };
+}
+
+/** 지금 답을 만드는 본인 질문의 대화(멈춤을 누른 것 · 15분 넘은 것은 뺀다 — 자리를 차지하지 않는다). */
+async function runningThreadIds(owner: Owner, now = Date.now()): Promise<Set<string>> {
+  const { data, error } = await createAdminClient()
+    .from(MESSAGES)
+    .select("thread_id")
+    .eq("tenant_id", owner.tenantId)
+    .eq("user_id", owner.userId)
+    .eq("status", "running")
+    .is("cancel_requested_at", null)
+    .gte("created_at", new Date(now - RUNNING_MS).toISOString());
+  if (error) throw new Error(error.message);
+  return new Set(((data ?? []) as Array<{ thread_id: string }>).map((r) => r.thread_id));
 }
 
 async function ownThread(owner: Owner, threadId: string): Promise<ThreadRow | null> {
@@ -131,7 +168,9 @@ export function kpiFromData(blocks: AssistantReport["blocks"], data: Datasets): 
 }
 
 function toMessage(m: MessageRow, now: number, datasets: ReadonlyMap<string, Datasets>): ThreadMessage {
-  const running = m.status === "running" && now - Date.parse(m.created_at) < RUNNING_MS;
+  // 멈춤을 누른 질문은 정리 중이어도 '멈춤'으로 보인다(도는 중으로 막지 않는다 · 적대 리뷰 2026-11-09).
+  const stopped = m.status === "running" && !!m.cancel_requested_at;
+  const running = m.status === "running" && !stopped && now - Date.parse(m.created_at) < RUNNING_MS;
   const data = datasets.get(m.id);
   const report: SettledReport | null =
     m.status === "done" && m.report_title !== null && Array.isArray(m.report_blocks)
@@ -141,6 +180,7 @@ function toMessage(m: MessageRow, now: number, datasets: ReadonlyMap<string, Dat
           datasets: data ?? {},
           ...(data ? {} : { datasetsOmitted: true }),
           ...(m.report_coverage && Array.isArray(m.report_coverage.surveys) ? { coverage: m.report_coverage } : {}),
+          ...(isCutShort(m.report_cut) ? { cutShort: m.report_cut } : {}),
         }
       : null;
   return {
@@ -149,7 +189,7 @@ function toMessage(m: MessageRow, now: number, datasets: ReadonlyMap<string, Dat
     level: level(m.level),
     createdAt: m.created_at,
     report,
-    error: m.status === "failed" ? m.error : m.status === "running" && !running ? "답을 끝내지 못했습니다. 다시 물어봐 주세요" : null,
+    error: m.status === "failed" ? m.error : stopped ? "질문을 멈췄습니다" : m.status === "running" && !running ? "답을 끝내지 못했습니다. 다시 물어봐 주세요" : null,
     running,
     queries: (m.queries ?? []).map(({ id, purpose, rowCount, ms, error }) => ({ id, purpose, rowCount, ms, ...(error ? { error } : {}) })),
     steps: m.steps ?? [],
@@ -162,7 +202,7 @@ export async function threadDetail(owner: Owner, threadId: string): Promise<Thre
   const db = createAdminClient();
   const { data, error } = await db
     .from(MESSAGES)
-    .select("id, question, level, status, report_title:report->>title, report_blocks:report->blocks, report_coverage:report->coverage, error, queries, steps, created_at")
+    .select("id, question, level, status, report_title:report->>title, report_blocks:report->blocks, report_coverage:report->coverage, report_cut:report->>cutShort, cancel_requested_at, error, queries, steps, created_at")
     .eq("thread_id", threadId)
     .eq("tenant_id", owner.tenantId)
     .eq("user_id", owner.userId)
@@ -200,7 +240,12 @@ export async function threadDetail(owner: Owner, threadId: string): Promise<Thre
   };
 }
 
-export async function deleteThread(owner: Owner, threadId: string): Promise<boolean> {
+/**
+ * 대화 지우기 — 🔴 아직 답을 만드는 질문(멈춤 안 누름 · 15분 안)이 있으면 지우지 않는다: 지우면 목록에서 사라져 멈출 화면이 없는 질문이
+ * 동시 자리(3개)를 최대 13분 차지한다(적대 리뷰 2026-11-09). 화면도 도는 대화엔 x를 감추지만 다른 탭은 모를 수 있다.
+ */
+export async function deleteThread(owner: Owner, threadId: string): Promise<"ok" | "missing" | "running"> {
+  if (await threadRunning(owner, threadId)) return "running";
   const { data, error } = await createAdminClient()
     .from(THREADS)
     .update({ deleted_at: new Date().toISOString() })
@@ -210,7 +255,7 @@ export async function deleteThread(owner: Owner, threadId: string): Promise<bool
     .is("deleted_at", null)
     .select("id");
   if (error) throw new Error(error.message);
-  return (data ?? []).length > 0;
+  return (data ?? []).length > 0 ? "ok" : "missing";
 }
 
 /** 대화 제목 길이 상한 — DB `assistant_threads.title` check(1~80자)와 같다. */
@@ -262,16 +307,22 @@ function kstDayStartIso(now: Date): string {
   return new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate()) - 9 * 3_600_000).toISOString();
 }
 
-export const BUSY_MESSAGE = "앞 질문의 답을 아직 만드는 중입니다. 끝난 뒤 물어봐 주세요";
+/** 동시에 만들 수 있는 답이 다 찼다(원장 2026-11-06 '동시에 3개까지'). */
+export const BUSY_FULL_MESSAGE = `답은 동시에 ${ASSISTANT_MAX_RUNNING}개까지 만들 수 있습니다. 하나가 끝나면 물어봐 주세요`;
+/** 이 대화에 아직 도는 질문이 있다 — 같은 대화는 앞 답을 알고 이어 답하도록 하나씩. */
+export const BUSY_THREAD_MESSAGE = "이 대화는 아직 앞 질문의 답을 만드는 중입니다. 끝난 뒤 물어보거나 새 대화에서 물어봐 주세요";
 const STALE_MESSAGE = "답을 끝내지 못했습니다. 다시 물어봐 주세요";
+
+/** 막힌 까닭 — `busy`(자리 없음 · 같은 대화가 도는 중)는 실패가 아니라 '잠시 뒤' 안내다(화면이 글을 되돌려 놓는다). */
+export type Admission = { error: string; code: "busy" | "day" };
 
 /**
  * 하루 상한 · 겹친 질문 확인. 막히면 한국어 이유.
- * 먼저 함수가 죽어 남은 '도는 중'(RUNNING_MS — 15분 넘은 것)을 실패로 닫는다 — 사람당 '도는 질문 하나' 고유 색인(s2_0031)이 영영 막히지 않게.
+ * 먼저 함수가 죽어 남은 '도는 중'(RUNNING_MS — 15분 넘은 것)을 실패로 닫는다 — 자리 색인(s2_0033)이 영영 막히지 않게.
  * '멈춤'을 누른 질문은 마무리 중이어도 도는 것으로 세지 않는다(멈추고 바로 다시 물을 수 있게 · 적대 리뷰 2026-11-06).
- * 동시에 두 번 들어오는 경우는 이 확인이 아니라 고유 색인이 막는다(`startMessage` → "busy").
+ * 동시에 들어오는 경우는 이 확인이 아니라 고유 색인이 막는다(`startMessage` → "busy" · "busy_thread").
  */
-export async function admission(owner: Owner, now = new Date()): Promise<string | null> {
+export async function admission(owner: Owner, threadId: string | null | undefined, now = new Date()): Promise<Admission | null> {
   const db = createAdminClient();
   const { error: staleError } = await db
     .from(MESSAGES)
@@ -283,29 +334,36 @@ export async function admission(owner: Owner, now = new Date()): Promise<string 
   if (staleError) throw new Error(staleError.message);
   const { data, error } = await db
     .from(MESSAGES)
-    .select("status, created_at, cancel_requested_at")
+    .select("status, created_at, cancel_requested_at, thread_id")
     .eq("tenant_id", owner.tenantId)
     .eq("user_id", owner.userId)
     .gte("created_at", kstDayStartIso(now))
     .order("created_at", { ascending: false })
     .limit(DAY_MAX);
   if (error) throw new Error(error.message);
-  const rows = (data ?? []) as Array<{ status: string; created_at: string; cancel_requested_at: string | null }>;
-  if (rows.some((r) => r.status === "running" && !r.cancel_requested_at && now.getTime() - Date.parse(r.created_at) < RUNNING_MS)) return BUSY_MESSAGE;
-  if (rows.length >= DAY_MAX) return `오늘은 질문을 ${DAY_MAX}번 해서 더 물을 수 없습니다. 내일 다시 써 주세요`;
+  const rows = (data ?? []) as Array<{ status: string; created_at: string; cancel_requested_at: string | null; thread_id: string }>;
+  // 자정 전에 시작해 아직 도는 질문은 오늘 줄에 없다 — 빈 자리는 startMessage가 색인 조건으로 따로 센다(여기는 보통의 경우를 먼저 안내).
+  const live = rows.filter((r) => r.status === "running" && !r.cancel_requested_at && now.getTime() - Date.parse(r.created_at) < RUNNING_MS);
+  if (threadId && live.some((r) => r.thread_id === threadId)) return { error: BUSY_THREAD_MESSAGE, code: "busy" };
+  if (live.length >= ASSISTANT_MAX_RUNNING) return { error: BUSY_FULL_MESSAGE, code: "busy" };
+  if (rows.length >= DAY_MAX) return { error: `오늘은 질문을 ${DAY_MAX}번 해서 더 물을 수 없습니다. 내일 다시 써 주세요`, code: "day" };
   return null;
 }
 
 const titleOf = (question: string) => clipText(question.replace(/\s+/g, " ").trim(), 40, "…");
+const SLOTS = Array.from({ length: ASSISTANT_MAX_RUNNING }, (_, i) => i + 1);
+/** 23505가 '대화마다 하나' 색인에서 났나(아니면 자리 색인 — 다음 자리를 해 본다). */
+const threadClash = (e: { message?: string; details?: string }) => /running_thread_idx/.test(`${e.message ?? ""} ${e.details ?? ""}`);
 
 /**
- * 대화(없으면 새로) + '도는 중' 메시지 한 줄. 대화가 없으면 "no_thread", 이미 도는 질문이 있으면(고유 색인 23505) "busy" —
- * 이때 방금 만든 빈 대화는 지운다.
+ * 대화(없으면 새로) + '도는 중' 메시지 한 줄. 대화가 없으면 "no_thread".
+ * 자리(run_slot 1~3)는 비어 있는 것부터 넣어 보고, 고유 색인 23505면 다음 자리 — 다 차면 "busy", 같은 대화가 도는 중이면 "busy_thread".
+ * 막히면 방금 만든 빈 대화는 지운다.
  */
 export async function startMessage(
   owner: Owner,
-  input: { threadId?: string | null; question: string; level: AssistantLevel },
-): Promise<{ threadId: string; title: string; messageId: string; created: boolean } | "no_thread" | "busy"> {
+  input: { threadId?: string | null; question: string; level: AssistantLevel; clientRef?: string | null },
+): Promise<{ threadId: string; title: string; messageId: string; created: boolean } | "no_thread" | "busy" | "busy_thread"> {
   const db = createAdminClient();
   let threadId = input.threadId ?? null;
   let title = titleOf(input.question);
@@ -324,17 +382,50 @@ export async function startMessage(
     threadId = (data as { id: string }).id;
     created = true;
   }
-  const { data, error } = await db
-    .from(MESSAGES)
-    .insert({ tenant_id: owner.tenantId, user_id: owner.userId, thread_id: threadId, question: input.question, level: input.level, status: "running" })
-    .select("id")
-    .single();
-  if (error) {
+  const dropThread = async () => {
     if (created) await db.from(THREADS).delete().eq("id", threadId).eq("tenant_id", owner.tenantId).eq("user_id", owner.userId);
-    if (error.code === "23505") return "busy";
-    throw new Error(error.message);
+  };
+  // 지금 쓰는 자리 — 색인과 같은 조건(도는 중 · 멈춤 안 누름). 15분 넘은 줄은 admission이 방금 닫았다.
+  const { data: usedRows, error: usedError } = await db
+    .from(MESSAGES)
+    .select("run_slot")
+    .eq("tenant_id", owner.tenantId)
+    .eq("user_id", owner.userId)
+    .eq("status", "running")
+    .is("cancel_requested_at", null);
+  if (usedError) {
+    await dropThread();
+    throw new Error(usedError.message);
   }
-  return { threadId, title, messageId: (data as { id: string }).id, created };
+  const used = new Set(((usedRows ?? []) as Array<{ run_slot: number | null }>).map((r) => r.run_slot));
+  for (const slot of SLOTS.filter((n) => !used.has(n))) {
+    const { data, error } = await db
+      .from(MESSAGES)
+      .insert({
+        tenant_id: owner.tenantId,
+        user_id: owner.userId,
+        thread_id: threadId,
+        question: input.question,
+        level: input.level,
+        status: "running",
+        run_slot: slot,
+        client_ref: input.clientRef ?? null,
+      })
+      .select("id")
+      .single();
+    if (!error) return { threadId, title, messageId: (data as { id: string }).id, created };
+    if (error.code !== "23505") {
+      await dropThread();
+      throw new Error(error.message);
+    }
+    if (threadClash(error)) {
+      await dropThread();
+      return "busy_thread";
+    }
+    // 다른 탭이 방금 이 자리를 가져갔다 — 다음 자리.
+  }
+  await dropThread();
+  return "busy";
 }
 
 export type Usage = { model: string; input: number; output: number; cacheRead: number; cacheWrite: number };
@@ -395,6 +486,8 @@ export async function threadRunning(owner: Owner, threadId: string, now = new Da
     .eq("tenant_id", owner.tenantId)
     .eq("user_id", owner.userId)
     .eq("status", "running")
+    // 멈춤을 누른 질문은 정리 중이어도 도는 것으로 보지 않는다 — 서버는 바로 새 질문을 받는데 화면만 막히지 않게(적대 리뷰 2026-11-09).
+    .is("cancel_requested_at", null)
     .gte("created_at", new Date(now.getTime() - RUNNING_MS).toISOString())
     .limit(1);
   if (error) throw new Error(error.message);
@@ -402,43 +495,61 @@ export async function threadRunning(owner: Owner, threadId: string, now = new Da
 }
 
 /**
- * '지금 도는 내 질문' 멈춤 — 화면이 질문 번호를 모를 때(번호를 받기 전 · 번호로 보낸 멈춤이 실패) 쓴다.
- * 사람당 도는 질문은 하나(고유 색인)라 본인의 '도는 중' 줄에 표시하면 그 질문이다.
+ * 멈춤·마무리를 보낼 곳 — 질문 번호, 또는 번호를 받기 전이면 화면이 보낼 때 만든 번호(client_ref · s2_0033).
+ * `latest` = 배포 전에 열린 옛 화면의 `/messages/current/stop`(그 화면은 한 번에 하나만 묻는다) — 가장 최근에 시작한 본인 질문 하나.
  */
-export async function requestStopCurrent(owner: Owner): Promise<boolean> {
-  const { data, error } = await createAdminClient()
+export type MessageTarget = { messageId: string } | { clientRef: string } | { latest: true };
+
+/** 도는 본인 질문 하나에 표시를 남긴다(도는 쪽이 2초마다 본다 — 다른 서버 인스턴스에서 돌아도 같다). 맞는 줄이 있었나. */
+async function markRunning(owner: Owner, target: MessageTarget, patch: Record<string, string>): Promise<boolean> {
+  const base = createAdminClient()
     .from(MESSAGES)
-    .update({ cancel_requested_at: new Date().toISOString() })
+    .update(patch)
     .eq("tenant_id", owner.tenantId)
     .eq("user_id", owner.userId)
-    .eq("status", "running")
-    .is("cancel_requested_at", null)
-    .select("id");
+    .eq("status", "running");
+  let q;
+  if ("messageId" in target) q = base.eq("id", target.messageId);
+  else if ("clientRef" in target) q = base.eq("client_ref", target.clientRef);
+  else {
+    const { data: last, error: lastError } = await createAdminClient()
+      .from(MESSAGES)
+      .select("id")
+      .eq("tenant_id", owner.tenantId)
+      .eq("user_id", owner.userId)
+      .eq("status", "running")
+      .is("cancel_requested_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (lastError) throw new Error(lastError.message);
+    const id = (last as Array<{ id: string }> | null)?.[0]?.id;
+    if (!id) return false;
+    q = base.eq("id", id);
+  }
+  const { data, error } = await q.select("id");
   if (error) throw new Error(error.message);
   return (data ?? []).length > 0;
 }
 
-/** '멈춤' — 다른 서버 인스턴스에서 도는 질문도 멈추게 표시만 남긴다(도는 쪽이 몇 초마다 본다). */
-export async function requestStop(owner: Owner, messageId: string): Promise<boolean> {
-  const { data, error } = await createAdminClient()
-    .from(MESSAGES)
-    .update({ cancel_requested_at: new Date().toISOString() })
-    .eq("id", messageId)
-    .eq("tenant_id", owner.tenantId)
-    .eq("user_id", owner.userId)
-    .eq("status", "running")
-    .select("id");
-  if (error) throw new Error(error.message);
-  return (data ?? []).length > 0;
+/** '멈춤' — 질문을 버린다('질문을 멈췄습니다'로 저장). */
+export function requestStop(owner: Owner, target: MessageTarget): Promise<boolean> {
+  return markRunning(owner, target, { cancel_requested_at: new Date().toISOString() });
 }
 
-export async function stopRequested(owner: Owner, messageId: string): Promise<boolean> {
+/** '여기서 끝내고 결과 보기'(원장 2026-11-06) — 더 조회하지 않고 지금까지의 결과로 보고서를 쓴다. */
+export function requestWrap(owner: Owner, target: MessageTarget): Promise<boolean> {
+  return markRunning(owner, target, { wrap_requested_at: new Date().toISOString() });
+}
+
+/** 도는 쪽이 2초마다 묻는다 — 멈춤 · 마무리 표시. 읽지 못하면 둘 다 아니다(다음 차례에 다시). */
+export async function controlFlags(owner: Owner, messageId: string): Promise<{ cancel: boolean; wrap: boolean }> {
   const { data } = await createAdminClient()
     .from(MESSAGES)
-    .select("cancel_requested_at")
+    .select("cancel_requested_at, wrap_requested_at")
     .eq("id", messageId)
     .eq("tenant_id", owner.tenantId)
     .eq("user_id", owner.userId)
     .maybeSingle();
-  return !!(data as { cancel_requested_at: string | null } | null)?.cancel_requested_at;
+  const row = data as { cancel_requested_at: string | null; wrap_requested_at: string | null } | null;
+  return { cancel: !!row?.cancel_requested_at, wrap: !!row?.wrap_requested_at };
 }

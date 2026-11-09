@@ -19,12 +19,23 @@ import { AssistantError, runAssistantAgent } from "./agent";
 import { openAssistantDb } from "./executor";
 import { assistantViewer, isGateFailure } from "./gate";
 import { ASSISTANT_FEATURE, ASSISTANT_MODEL } from "./models";
-import { admission, BUSY_MESSAGE, compactReport, finishMessage, markFailed, pastTurns, startMessage, stopRequested, type Usage } from "./store";
+import {
+  admission,
+  BUSY_FULL_MESSAGE,
+  BUSY_THREAD_MESSAGE,
+  compactReport,
+  controlFlags,
+  finishMessage,
+  markFailed,
+  pastTurns,
+  startMessage,
+  type Usage,
+} from "./store";
 
 /** 보고서를 쓸 시간 — 고정 기한에서 이만큼 앞이 마무리 시각이다. */
 const REPORT_RESERVE_MS = 200_000;
 
-export type AskInput = { threadId?: string | null; question: string; level: AssistantLevel };
+export type AskInput = { threadId?: string | null; question: string; level: AssistantLevel; clientRef?: string | null };
 
 /** 사람에게 보일 오류 문장(한국어가 아닌 원문은 내지 않는다). */
 export function assistantErrorMessage(error: unknown): string {
@@ -37,10 +48,13 @@ export function assistantErrorMessage(error: unknown): string {
   return "답을 만들지 못했습니다. 잠시 뒤 다시 물어봐 주세요";
 }
 
-/** 시작 전에 막히면 `{ error, status }`(JSON 응답), 시작하면 흐름 함수. */
+/**
+ * 시작 전에 막히면 `{ error, status, code? }`(JSON 응답), 시작하면 흐름 함수.
+ * `code: "busy"` = 동시 자리(3개)가 찼거나 같은 대화가 아직 도는 중 — 실패가 아니라 '잠시 뒤'(화면은 보낸 글을 입력칸에 되돌린다).
+ */
 export async function prepareAsk(
   input: AskInput,
-): Promise<{ error: string; status: number } | { messageId: string; run: (emit: (e: AskEvent) => void) => Promise<void> }> {
+): Promise<{ error: string; status: number; code?: "busy" | "day" } | { messageId: string; run: (emit: (e: AskEvent) => void) => Promise<void> }> {
   const begun = Date.now();
   const viewer = await assistantViewer();
   if (isGateFailure(viewer)) return viewer;
@@ -50,25 +64,29 @@ export async function prepareAsk(
   } catch (error) {
     return { error: assistantErrorMessage(error), status: 403 };
   }
-  const blocked = await admission(owner);
-  if (blocked) return { error: blocked, status: 429 };
+  const blocked = await admission(owner, input.threadId);
+  if (blocked) return { error: blocked.error, status: 429, code: blocked.code };
   const started = await startMessage(owner, input);
   if (started === "no_thread") return { error: "대화를 찾지 못했습니다. 새 질문으로 물어봐 주세요", status: 404 };
-  if (started === "busy") return { error: BUSY_MESSAGE, status: 429 };
+  if (started === "busy") return { error: BUSY_FULL_MESSAGE, status: 429, code: "busy" };
+  if (started === "busy_thread") return { error: BUSY_THREAD_MESSAGE, status: 429, code: "busy" };
 
   return {
     messageId: started.messageId,
     run: async (emit) => {
       // 멈춤 = 사람이 누른 ‘멈춤’(DB 표시) 또는 고정 기한 — 화면 연결이 끊겨도 끝까지 돈다.
+      // 마무리 = 사람이 누른 '여기서 끝내고 결과 보기'(DB 표시 wrap_requested_at · 원장 2026-11-06) — 질문을 버리지 않고 지금까지로 보고서를 쓴다.
       // 🔴 고정 기한: 라우트 기한(800초)에 함수가 죽으면 저장·감사 기록·사용량이 통째로 빠지고 줄이 '도는 중'으로 남는다 →
       //    760초(ASSISTANT_HARD_DEADLINE_MS)에 스스로 끊고 실패로 저장한다(적대 리뷰 2026-11-06). 그보다 200초(REPORT_RESERVE_MS) 앞의 '마무리'(agent.ts)는 부탁일 뿐이라 따로 둔다.
       const stop = new AbortController();
       const signal = stop.signal;
+      const wrap = new AbortController();
       let stoppedBy: "user" | "deadline" | null = null;
       const poll = setInterval(() => {
-        void stopRequested(owner, started.messageId).then(
-          (yes) => {
-            if (!yes || stoppedBy) return;
+        void controlFlags(owner, started.messageId).then(
+          (flags) => {
+            if (flags.wrap && !wrap.signal.aborted) wrap.abort();
+            if (!flags.cancel || stoppedBy) return;
             stoppedBy = "user";
             stop.abort();
           },
@@ -119,6 +137,7 @@ export async function prepareAsk(
             emit(event);
           },
           signal,
+          wrapSignal: wrap.signal,
           onUsage: async (u) => {
             usage.push({
               model: u.model,
@@ -185,6 +204,7 @@ export async function prepareAsk(
           question: clipText(input.question, 80),
           queries: queries.length,
           outcome: report ? "ok" : "error",
+          ...(report?.cutShort ? { cutShort: report.cutShort } : {}),
           inputTokens: usage.reduce((s, u) => s + u.input + u.cacheRead + u.cacheWrite, 0),
           outputTokens: usage.reduce((s, u) => s + u.output, 0),
         },
