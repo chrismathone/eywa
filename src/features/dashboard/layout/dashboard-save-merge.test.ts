@@ -6,6 +6,8 @@ const a: Item = { id: "panel:notices", x: 0, y: 0, w: 6, h: 2 };
 const b: Item = { id: "panel:nowClasses", x: 6, y: 0, w: 6, h: 2 };
 const c: Item = { id: "panel:subjects", x: 12, y: 0, w: 6, h: 2 };
 const assign = { userId: "11111111-1111-4111-8111-111111111111", scope: "subjects" as const, adminLayout: "subject" as const, subjects: ["math"] };
+/** 새 대시보드 모양으로 옮긴 뒤의 카드 순서(핵심 업무·머리줄 제외) — 저장 병합은 카드 자리를 그대로 둔다. */
+const panels = (items: readonly Item[] | undefined) => items?.filter((i) => i.id.startsWith("panel:")).map((i) => i.id);
 const settings = (layouts: DashboardSettings["layouts"], assignments: unknown[] = []) => ({ version: DASHBOARD_VERSION, layouts, assignments });
 
 describe("대시보드 동시 저장 — 마지막 저장이 이기되 고친 배치만(원장 2026-10-14)", () => {
@@ -15,8 +17,8 @@ describe("대시보드 동시 저장 — 마지막 저장이 이기되 고친 �
     // 내 화면: 처음 받은 값으로 데스크만 고쳐 보냈다(실장은 옛 값 그대로 실려 있다).
     const sent = settings([{ role: "manager", items: [a] }, { role: "desk", items: [a, b] }]);
     const out = normalizeDashboard(mergeDashboardSave(fresh, sent, "layouts", ["desk"]));
-    expect(out.layouts.find((l) => l.role === "manager")?.items.map((i) => i.id)).toEqual(["panel:notices", "panel:subjects"]);
-    expect(out.layouts.find((l) => l.role === "desk")?.items.map((i) => i.id)).toEqual(["panel:notices", "panel:nowClasses"]);
+    expect(panels(out.layouts.find((l) => l.role === "manager")?.items)).toEqual(["panel:notices", "panel:subjects"]);
+    expect(panels(out.layouts.find((l) => l.role === "desk")?.items)).toEqual(["panel:notices", "panel:nowClasses"]);
     expect(out.assignments).toHaveLength(1);
   });
 
@@ -24,15 +26,15 @@ describe("대시보드 동시 저장 — 마지막 저장이 이기되 고친 �
     const fresh = settings([{ role: "subject", subject: "math", items: [a, c] }, { role: "subject", subject: "english", items: [c] }]);
     const sent = settings([{ role: "subject", subject: "math", items: [b] }, { role: "subject", subject: "english", items: [a] }]);
     const out = mergeDashboardSave(fresh, sent, "layouts", ["subject:math"]);
-    expect(out.layouts.find((l) => l.subject === "math")?.items.map((i) => i.id)).toEqual(["panel:nowClasses"]);
-    expect(out.layouts.find((l) => l.subject === "english")?.items.map((i) => i.id)).toEqual(["panel:subjects"]);
+    expect(panels(out.layouts.find((l) => l.subject === "math")?.items)).toEqual(["panel:nowClasses"]);
+    expect(panels(out.layouts.find((l) => l.subject === "english")?.items)).toEqual(["panel:subjects"]);
   });
 
   it("직원 배정 저장은 배치를 건드리지 않는다", () => {
     const fresh = settings([{ role: "desk", items: [a, b] }]);
     const sent = settings([{ role: "desk", items: [a] }], [assign]);
     const out = mergeDashboardSave(fresh, sent, "assignments", [assign.userId]);
-    expect(out.layouts[0]?.items.map((i) => i.id)).toEqual(["panel:notices", "panel:nowClasses"]);
+    expect(panels(out.layouts[0]?.items)).toEqual(["panel:notices", "panel:nowClasses"]);
     expect(out.assignments).toHaveLength(1);
   });
 

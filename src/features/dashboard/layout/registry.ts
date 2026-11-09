@@ -10,7 +10,7 @@
 import { MENU_LABEL, type MenuKey } from "@/lib/permissions";
 import { KPI_KEYS, type KpiKey, type PanelId } from "@/features/dashboard/overview/layout";
 import type { Area } from "@/features/dashboard/overview/model";
-import { isStructuralId, type Item } from "./types";
+import { isCoreId, isStructuralId, type Item } from "./types";
 
 /** 영역 → 그 영역을 읽으려면 필요한 메뉴 권한(서버 `add()`의 두 번째 인자와 같다 — `registry.test.ts`가 대조). */
 export const AREA_MENUS: Record<Area, readonly MenuKey[]> = {
@@ -72,10 +72,14 @@ const KPI_SIZES: readonly SizePreset[] = [
   { key: "k-one", label: "1×1", hint: "넓게", w: 6, h: 1 },
 ];
 
+/** 새 대시보드의 KPI 칸 — 옛 9칸 + '오늘 입테'(전일 입테와 같은 일정 영역을 오늘 하루로 · 한눈에 보기 머리 칸). */
+export type BoardKpi = KpiKey | "todayTests";
+export const BOARD_KPIS: readonly BoardKpi[] = [...KPI_KEYS, "todayTests"];
+
 export type CardDef = {
   id: string;
   kind: "kpi" | "panel";
-  key: KpiKey | PanelId;
+  key: BoardKpi | PanelId;
   /** 기본 이름(편집기·팔레트). 운영실 화면의 실제 제목은 날짜가 들어가는 카드가 있어 조금 다를 수 있다(`9월 수납 현황`). */
   label: string;
   group: CardGroup;
@@ -136,7 +140,8 @@ const PANELS: Record<PanelId, PanelSpec> = {
 };
 
 type KpiSpec = Pick<CardDef, "label"> & Partial<Pick<CardDef, "subjectScope" | "options">>;
-const KPIS: Record<KpiKey, KpiSpec> = {
+const KPIS: Record<BoardKpi, KpiSpec & { areas?: readonly Area[] }> = {
+  todayTests: { label: "오늘 입테", subjectScope: "subject", options: ["phones"], areas: ["calendar"] },
   students: { label: "재원생", subjectScope: "subject" },
   courses: { label: "강좌수", subjectScope: "subject" },
   withdrawals: { label: "퇴원", subjectScope: "subject" },
@@ -157,9 +162,9 @@ const RETIRED_PANELS: ReadonlySet<PanelId> = new Set<PanelId>(["teacherWork"]);
 /** 뺀 카드만 읽던 영역 — 대시보드 관리 미리보기(full)도 조회하지 않는다. */
 export const RETIRED_AREAS: ReadonlySet<Area> = new Set<Area>(["teacherWork"]);
 
-/** 편집기 갤러리 순서 = KPI 9칸(운영실 순서) → 패널(배열 순서). */
+/** 편집기 순서 = KPI 10칸(옛 9칸 + 오늘 입테) → 패널(배열 순서). */
 export const CARDS: readonly CardDef[] = [
-  ...KPI_KEYS.map(
+  ...BOARD_KPIS.map(
     (k): CardDef => ({
       id: `kpi:${k}`,
       kind: "kpi",
@@ -167,7 +172,7 @@ export const CARDS: readonly CardDef[] = [
       label: KPIS[k].label,
       group: "KPI",
       thumb: "number",
-      areas: [k],
+      areas: KPIS[k].areas ?? [k as KpiKey],
       subjectScope: KPIS[k].subjectScope ?? "academy",
       options: KPIS[k].options ?? [],
       sizes: KPI_SIZES,
@@ -193,7 +198,7 @@ export const CARDS: readonly CardDef[] = [
 
 const BY_ID = new Map(CARDS.map((c) => [c.id, c]));
 export const cardDef = (id: string): CardDef | undefined => BY_ID.get(id);
-export const isKnownId = (id: string) => isStructuralId(id) || BY_ID.has(id);
+export const isKnownId = (id: string) => isStructuralId(id) || isCoreId(id) || BY_ID.has(id);
 
 /** 카드가 필요로 하는 메뉴 권한(영역 합집합). */
 export function menusOf(def: CardDef): MenuKey[] {

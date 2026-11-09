@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { CSSProperties } from "react";
-import type { KpiKey } from "@/features/dashboard/overview/layout";
+import type { BoardKpi } from "@/features/dashboard/layout/registry";
 import { levelTestListIn } from "@/features/dashboard/overview/display";
 import { previousDayRange, previousDayText } from "@/features/dashboard/overview/previous-day";
 import { splitEnrolledRecent } from "@/features/dashboard/overview/enrolled-recent";
@@ -16,7 +16,7 @@ import { V } from "./engine";
 import { GoIcon, VizSlot, useBoard } from "./parts";
 
 /** `periodLead` = 꼬리표 앞말('지난달') — 자리가 있을 때만 보이고, 모자라면 앞말만 빠진다(`period`의 달은 남는다). */
-type Kpi = { key: KpiKey; label: string; period?: string; periodLead?: string; value: string; unit: string; note: string; chart?: (w: number, h: number) => string; chips?: ReactNode };
+type Kpi = { key: BoardKpi; label: string; period?: string; periodLead?: string; value: string; unit: string; note: string; chart?: (w: number, h: number) => string; chips?: ReactNode };
 
 /** 시각·구분을 그대로 적는 칩. 건수가 적은 칸은 축 위의 점보다 읽기 쉽다. */
 function Chips({ title, items }: { title: string; items: { text: string; done: boolean; tip: string }[] }) {
@@ -77,7 +77,7 @@ function useKpis(): Kpi[] {
     const day = { from: today, to: today };
     const tests = v.calendar.data ? levelTestListIn(v.calendar.data, day) : null;
     const first = tests?.active[0];
-    list.push({ key: "todayTests" as KpiKey, label: "오늘 입테", value: tests ? num(tests.active.length) : "—", unit: "건",
+    list.push({ key: "todayTests", label: "오늘 입테", value: tests ? num(tests.active.length) : "—", unit: "건",
       note: tests ? [tests.active.length ? `첫 일정 ${hhmm(first?.startTime) || "종일"}` : "오늘 일정 없음", tests.cancelled ? `취소 ${num(tests.cancelled)}` : null].filter(Boolean).join(" · ") : "학원 일정 기준",
       chips: tests?.active.length ? <Chips title="오늘 입테" items={tests.active.map((e) => ({ text: hhmm(e.startTime) || "종일", done: false, tip: `${hhmm(e.startTime) || "종일"}|오늘 입테` }))} /> : undefined });
   }
@@ -116,7 +116,7 @@ function useKpis(): Kpi[] {
   return list;
 }
 
-export function KpiGrid({ only }: { only?: readonly KpiKey[] }) {
+export function KpiGrid({ only }: { only?: readonly BoardKpi[] }) {
   const { snapshot, v } = useBoard();
   const custom = new Map((snapshot.view?.items ?? []).flatMap((i) => (i.title ? [[i.id, i.title] as const] : [])));
   const list = useKpis();
@@ -138,7 +138,7 @@ export function KpiGrid({ only }: { only?: readonly KpiKey[] }) {
               <div className="kpi-value">{k.value}<em>{k.unit}</em></div>
               {k.chips ?? (k.chart ? <VizSlot h={44} className="kpi-chart" draw={k.chart} /> : null)}
             </div>
-            <div className="kpi-note">{v[k.key]?.error ? "일부 갱신 실패 · 확인값 표시 중" : k.note}</div>
+            <div className="kpi-note">{v[k.key === "todayTests" ? "calendar" : k.key]?.error ? "일부 갱신 실패 · 확인값 표시 중" : k.note}</div>
           </div>
         ))}
       </div>

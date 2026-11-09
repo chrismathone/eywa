@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { toBoardItems } from "@/features/dashboard/layout/board";
 import { navigationRevision } from "../normalize-navigation";
 import { resolveSettings } from "../resolve";
 
@@ -105,7 +106,8 @@ describe("실제 학원 설정 저장 액션", () => {
     expect(m.write).not.toHaveBeenCalled();
   });
   it("원장의 대시보드 배치를 정리해 현재 지점에 저장하고 운영실을 갱신한다", async () => {
-    const dashboard = { version: 1, layouts: [{ role: "desk", items: [{ id: "panel:notices", w: 6, h: 1 }] }], assignments: [] };
+    // 저장값은 새 대시보드 모양(`board.ts`)으로 정리된다 — 이미 그 모양인 배치는 그대로 저장된다.
+    const dashboard = { version: 1, layouts: [{ role: "desk", items: toBoardItems([{ id: "panel:notices", w: 6, h: 1 }]) }], assignments: [] };
     const fd = new FormData();
     fd.set("section", "dashboard");
     fd.set("data", JSON.stringify(dashboard));

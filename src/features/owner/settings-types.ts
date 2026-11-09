@@ -806,6 +806,9 @@ export const dashboardItemSchema = z.object({
   note: z.string().trim().max(80).optional(),
   amounts: z.boolean().optional(),
   phones: z.boolean().optional(),
+  /** KPI 칸 — 새 대시보드 '한눈에 보기' 머리 칸 · 오늘 운영 띠에서 뺌(`features/dashboard/layout/board.ts`). */
+  glance: z.boolean().optional(),
+  today: z.boolean().optional(),
 });
 export const dashboardRoleLayoutSchema = z.object({
   role: z.enum(BUNDLES),

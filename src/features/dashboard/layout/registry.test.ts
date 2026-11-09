@@ -18,10 +18,10 @@ const LAYOUT = read("src/features/dashboard/overview/layout.ts");
 const PANEL_IDS = [...LAYOUT.matchAll(/^\s+\| "(\w+)";?\r?$/gm)].map((m) => m[1]!).filter((k) => !KPI_KEYS.includes(k as never)) as PanelId[];
 
 describe("레지스트리 = 운영실 카드 전부", () => {
-  it("KPI 8칸 + PanelId 전부가 한 번씩", () => {
+  it("KPI 10칸(옛 9칸 + 오늘 입테) + PanelId 전부가 한 번씩", () => {
     const ids = CARDS.map((c) => c.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids.filter((id) => id.startsWith("kpi:"))).toEqual(KPI_KEYS.map((k) => `kpi:${k}`));
+    expect(ids.filter((id) => id.startsWith("kpi:"))).toEqual([...KPI_KEYS, "todayTests"].map((k) => `kpi:${k}`));
     expect(PANEL_IDS.length).toBeGreaterThanOrEqual(24);
     // 대시보드에서 뺀 카드(registry RETIRED_PANELS)는 갤러리에 없다 — 강사별 업무 현황 → 직원 평가 '업무 현황'(2026-10-30).
     for (const p of PANEL_IDS) {
@@ -91,7 +91,8 @@ describe("레지스트리 = 운영실 카드 전부", () => {
         mathSheet: ok({ period: "", classes: 0, filled: 0, total: 0 }),
       },
     } as unknown as OverviewSnapshot;
-    for (const c of CARDS.filter((x) => x.sizes.some((z) => z.mode === "summary") || x.kind === "kpi")) {
+    // 오늘 입테는 새 대시보드 전용 칸이라 옛 운영실 요약형(summary.ts)이 없다 — 옛 렌더러는 그리지 않는다.
+    for (const c of CARDS.filter((x) => (x.sizes.some((z) => z.mode === "summary") || x.kind === "kpi") && x.id !== "kpi:todayTests")) {
       expect(summaryOf(c.id, full), c.id).not.toBeNull();
     }
   });

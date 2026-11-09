@@ -10,10 +10,20 @@
 import { KPI_KEYS, type OverviewLayout } from "@/features/dashboard/overview/layout";
 import type { Area } from "@/features/dashboard/overview/model";
 import type { MenuKey } from "@/lib/permissions";
-import { classicDefault, defaultItems, optionDefault } from "./defaults";
+import { defaultItems, optionDefault } from "./defaults";
 import { dropEmptyHeadings, sanitizeItems } from "./engine";
 import { AREA_MENUS, canSeeCard, cardDef } from "./registry";
-import { isHeadingId, isStructuralId, type Bundle, type DashboardSettings, type Item } from "./types";
+import { isCoreId, isHeadingId, isStructuralId, type Bundle, type DashboardSettings, type Item } from "./types";
+
+/**
+ * 핵심 업무 칸을 이 사람이 열 수 있는가 — 칸이 데려가는 화면의 문과 같은 판정(열 수 없는 칸은 세우지 않는다).
+ * 신입생 90일 = 신규생 관리 메뉴 · 경영 분석 = 원장·관리자(`requireManagementSample` — 원장·과목 운영형·경영지원형) · 업무 작성센터 = 대시보드를 여는 사람 모두.
+ */
+export function canOpenCore(id: string, bundle: Bundle, menus: ReadonlySet<MenuKey>): boolean {
+  if (id === "core:newcomers") return menus.has("newcomers");
+  if (id === "core:management") return bundle === "owner" || bundle === "super" || bundle === "subject" || bundle === "desk";
+  return id === "core:workRecords";
+}
 
 export type ResolvedView = {
   bundle: Bundle;
@@ -46,7 +56,7 @@ const hash = (text: string) => {
 
 /** 놓인 카드 id(머리줄 제외) — 옛 격자면 그 배치의 KPI·패널. */
 export function placedOf(view: Pick<ResolvedView, "mode" | "items" | "classic">): string[] {
-  if (view.mode === "grid") return (view.items ?? []).filter((i) => !isHeadingId(i.id)).map((i) => i.id);
+  if (view.mode === "grid") return (view.items ?? []).filter((i) => !isHeadingId(i.id) && !isCoreId(i.id)).map((i) => i.id);
   const layout = view.classic;
   const kpis = (layout?.kpis ?? KPI_KEYS).map((k) => `kpi:${k}`);
   const panels = (layout?.sections ?? []).flatMap((s) =>
@@ -84,7 +94,8 @@ export type ResolveInput = {
 export function resolveView({ stored, bundle, menus, subjectLabels = [], subjectScoped = bundle === "subject", subject }: ResolveInput): ResolvedView {
   const role = (bundle === "subject" && subject ? stored.layouts.find((l) => l.role === bundle && l.subject === subject) : undefined)
     ?? stored.layouts.find((l) => l.role === bundle && !l.subject);
-  const classic = role || subjectScoped ? null : classicDefault(bundle);
+  // 옛 CSS 격자(원장 기본)는 2026-11-09 새 대시보드로 끝났다 — 모든 역할이 배치 목록으로 그린다(옛 렌더러 호환으로 칸만 남긴다).
+  const classic: OverviewLayout | null = null;
   let items: Item[] | undefined;
   if (!classic) {
     const base = role ? sanitizeItems(role.items) : defaultItems(bundle);
@@ -94,7 +105,7 @@ export function resolveView({ stored, bundle, menus, subjectLabels = [], subject
     // 🔴 과목 범위를 받은 **다른 역할**(실장·경영지원 등)은 종전대로 그 카드를 숨긴다 — 원장이 그 역할 배치를 고칠 때 편집기에
     //    '학원 전체 값' 꼬리표가 안 서서, 열면 원장 모르게 학원 전체 카드가 새로 뜬다(리뷰 2026-10-14). 과목으로 나누면(2단계) 함께 연다.
     const hideAcademy = subjectScoped && bundle !== "subject";
-    items = dropEmptyHeadings(base.filter((i) => isStructuralId(i.id) || (cardDef(i.id) && canSeeCard(cardDef(i.id)!, menus)
+    items = dropEmptyHeadings(base.filter((i) => isStructuralId(i.id) || (isCoreId(i.id) ? canOpenCore(i.id, bundle, menus) : cardDef(i.id) && canSeeCard(cardDef(i.id)!, menus)
       && !(hideAcademy && cardDef(i.id)!.subjectScope === "academy"))));
     // 미지정은 학원 전체 집계로 폴백하지 않는다. 범위를 정할 때까지 공지만 표시한다.
     if (subjectScoped && !subjectLabels.length) items = items.filter((i) => cardDef(i.id)?.subjectScope === "none");

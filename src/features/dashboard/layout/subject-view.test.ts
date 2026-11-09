@@ -9,15 +9,17 @@ import { subjectLabelRecord } from "@/features/owner/subjects";
 
 const math = [{ id: "panel:repeatAbsence", w: 6, h: 1 }];
 const english = [{ id: "panel:notices", w: 6, h: 1 }];
+/** 옛 배치는 읽을 때 새 대시보드 모양으로 옮겨진다 — 비교는 카드만. */
+const cards = (items: readonly { id: string }[] | undefined) => items?.filter((i) => i.id.startsWith("panel:")).map((i) => i.id);
 describe("관리자 과목별 배치", () => {
   it("기존 공통 배치를 보존하면서 수학·영어 카드를 따로 저장·적용한다", () => {
     const saved = normalizeDashboard({ version: 1, layouts: [{ role: "subject", items: english }, { role: "subject", subject: "math", items: math }] }, { dropDefaults: true });
     expect(dashboardSchema.safeParse(saved).success).toBe(true);
-    expect(roleItems(saved, "subject", "math")).toEqual(math);
-    expect(roleItems(saved, "subject", "english")).toEqual(english);
+    expect(cards(roleItems(saved, "subject", "math"))).toEqual(cards(math));
+    expect(cards(roleItems(saved, "subject", "english"))).toEqual(cards(english));
     const view = (subject: string) => resolveView({ stored: saved, bundle: "subject", subject, subjectLabels: [subject], menus: new Set(MENU_KEYS) }).items;
-    expect(view("math")).toEqual(math);
-    expect(view("english")).toEqual(english);
+    expect(cards(view("math"))).toEqual(cards(math));
+    expect(cards(view("english"))).toEqual(cards(english));
   });
   it("공통 배치와 다른 과목별 기본값은 저장에서 지우지 않는다", () => {
     const saved = normalizeDashboard({ version: 1, layouts: [{ role: "subject", items: english }, { role: "subject", subject: "math", items: defaultItems("subject") }] }, { dropDefaults: true });
@@ -33,7 +35,7 @@ describe("관리자 과목별 배치", () => {
     expect(picked.active?.key).toBe("math");
     expect(picked.subjects).toEqual(["math"]);
     const saved = normalizeDashboard({ version: 1, layouts: [{ role: "subject", items: english }, { role: "subject", subject: "math", items: math }] }, { dropDefaults: true });
-    expect(resolveView({ stored: saved, bundle: "subject", subject: picked.active?.key, subjectLabels: ["수학"], menus: new Set(MENU_KEYS) }).items).toEqual(math);
+    expect(resolveView({ stored: saved, bundle: "subject", subject: picked.active?.key, subjectLabels: ["수학"], menus: new Set(MENU_KEYS) }).items).toEqual(expect.arrayContaining(math.map((m) => expect.objectContaining({ id: m.id }))));
     // 옛 키만 담당으로 가진 계정도 같은 수학 배치를 본다.
     expect(selectSubjectView(labels, ["highmath"]).active?.key).toBe("math");
   });

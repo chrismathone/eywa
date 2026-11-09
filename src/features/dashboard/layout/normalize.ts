@@ -1,3 +1,4 @@
+import { toBoardItems } from "./board";
 import { defaultItems } from "./defaults";
 import { normalizeAssignments } from "./assignment";
 import { placedIds, sameItems, sanitizeItems } from "./engine";
@@ -25,7 +26,8 @@ export function normalizeDashboard(raw: unknown, opts?: { dropDefaults?: boolean
     const subjectKey = typeof subject === "string" ? subject.trim() : undefined;
     const key = layoutKey(role, subjectKey);
     if (byRole.has(key)) continue;
-    const items = sanitizeItems(rawItems);
+    // 옛 배치(새 대시보드 전)는 읽을 때 새 모양으로 옮긴다 — 카드·제목·민감 옵션은 그대로(`board.ts`).
+    const items = toBoardItems(sanitizeItems(rawItems), { owner: role === "owner" || role === "super" });
     if (placedIds(items).length === 0) continue;
     // 과목별 기본값도 명시적 재정의다. 지우면 다른 공통 배치가 다시 적용될 수 있다.
     if (opts?.dropDefaults && !subjectKey && sameItems(items, defaultItems(role))) continue;

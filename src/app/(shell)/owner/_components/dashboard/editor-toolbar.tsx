@@ -2,8 +2,7 @@
 
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { Toolbar, ToolbarButton, ToolbarDivider, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import type { KpiWidth } from "@/features/dashboard/layout/fixed-grid";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { BUNDLE_LABELS, BUNDLES, type Bundle } from "@/features/dashboard/layout/types";
 import { DASHBOARD_ROLES, DASHBOARD_ROLE_LABELS, ROLE_BUNDLE, roleOfBundle } from "@/features/dashboard/layout/roles";
@@ -39,22 +38,16 @@ export function RoleBar({
 }
 
 /**
- * 편집 동작 줄 — '편집' ↔ '완료'가 맨 앞(iOS처럼 진입·끝이 분명), 편집 중에만 위젯 추가·구역 제목·되돌리기·복사가 선다.
- * '기본값으로'는 코드의 기본 배치로 되돌린다. 과목 관리자는 배치를 적용할 과목을 고른다.
+ * 편집 동작 줄 — 되돌리기 · 다른 역할/과목 배치 복사 · 기본값으로. 과목 관리자는 배치를 적용할 과목을 고른다.
+ * (새 대시보드는 크기를 쓰지 않아 옛 '편집 · 위젯 추가 · KPI 크기 통일'은 없앴다 — 칸 목록에서 바로 고친다.)
  */
 export function EditorActions(p: {
   role: Bundle;
-  editing: boolean;
   canUndo: boolean;
   canRedo: boolean;
   isDefault: boolean;
   subjects: readonly { key: string; label: string }[];
   subject: string | null;
-  onEditing: (on: boolean) => void;
-  onGallery: () => void;
-  onHeading: () => void;
-  hasKpis: boolean;
-  onUniformKpis: (width: KpiWidth) => void;
   onUndo: () => void;
   onRedo: () => void;
   onCopy: (from: Bundle) => void;
@@ -63,83 +56,40 @@ export function EditorActions(p: {
   onReset: () => void;
   onSubject: (key: string) => void;
 }) {
+  const menuButton = `${CONTROL_H} ${CONTROL_LABEL} text-primary hover:bg-bg-soft inline-flex items-center gap-0.5 rounded-md px-1.5 font-medium whitespace-nowrap transition`;
   return (
     <Toolbar>
-      <ToolbarButton variant="primary" onClick={() => p.onEditing(!p.editing)} aria-pressed={p.editing}>
-        <EyIcon name={p.editing ? "check" : "edit"} aria-hidden />
-        {p.editing ? "완료" : "편집"}
+      <ToolbarButton onClick={p.onUndo} disabled={!p.canUndo} aria-keyshortcuts="Control+Z">
+        <EyIcon name="undo" aria-hidden />
+        되돌리기
       </ToolbarButton>
-      {p.editing ? (
-        <>
-          <ToolbarButton onClick={p.onGallery}>
-            <EyIcon name="plus" aria-hidden />
-            위젯 추가
-          </ToolbarButton>
-          <ToolbarButton onClick={p.onHeading}>구역 제목 넣기</ToolbarButton>
-          <DropdownMenu>
-            <DropdownMenuTrigger disabled={!p.hasKpis} render={<button type="button" className={`${CONTROL_H} ${CONTROL_LABEL} text-primary hover:bg-bg-soft inline-flex items-center gap-0.5 rounded-md px-1.5 font-medium whitespace-nowrap transition disabled:opacity-50`} />}>
-              KPI 크기 통일
-              <EyIcon name="chevronDown" size={18} className="opacity-60" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-64">
-              <DropdownMenuLabel>모든 KPI를 같은 폭·높이로 정렬</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => p.onUniformKpis(2)}>작게 · 한 줄 최대 12개</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => p.onUniformKpis(3)}>보통 · 한 줄 최대 8개</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => p.onUniformKpis(6)}>크게 · 한 줄 최대 4개</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <ToolbarDivider />
-          <ToolbarButton onClick={p.onUndo} disabled={!p.canUndo} aria-keyshortcuts="Control+Z">
-            <EyIcon name="undo" aria-hidden />
-            되돌리기
-          </ToolbarButton>
-          <ToolbarButton onClick={p.onRedo} disabled={!p.canRedo} aria-keyshortcuts="Control+Shift+Z">
-            다시 하기
-          </ToolbarButton>
-          <ToolbarDivider />
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <button
-                  type="button"
-                  className={`${CONTROL_H} ${CONTROL_LABEL} text-primary hover:bg-bg-soft inline-flex items-center gap-0.5 rounded-md px-1.5 font-medium whitespace-nowrap transition`}
-                />
-              }
-            >
-              다른 역할 배치 복사
-              <EyIcon name="chevronDown" size={18} className="opacity-60" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-52">
-              {BUNDLES.filter((b) => b !== "super" && b !== p.role).map((b) => (
-                <DropdownMenuItem key={b} onClick={() => p.onCopy(b)}>
-                  {BUNDLE_LABELS[b]} 배치로 바꾸기
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          {p.role === "subject" && p.subjects.length > 1 ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <button
-                    type="button"
-                    className={`${CONTROL_H} ${CONTROL_LABEL} text-primary hover:bg-bg-soft inline-flex items-center gap-0.5 rounded-md px-1.5 font-medium whitespace-nowrap transition`}
-                  />
-                }
-              >
-                다른 과목 배치 복사
-                <EyIcon name="chevronDown" size={18} className="opacity-60" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-52">
-                {p.subjects.filter((s) => s.key !== p.subject).map((s) => (
-                  <DropdownMenuItem key={s.key} onClick={() => p.onCopySubject(s.key)}>
-                    {s.label} 배치로 바꾸기
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null}
-        </>
+      <ToolbarButton onClick={p.onRedo} disabled={!p.canRedo} aria-keyshortcuts="Control+Shift+Z">
+        다시 하기
+      </ToolbarButton>
+      <ToolbarDivider />
+      <DropdownMenu>
+        <DropdownMenuTrigger render={<button type="button" className={menuButton} />}>
+          다른 역할 배치 복사
+          <EyIcon name="chevronDown" size={18} className="opacity-60" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-52">
+          {BUNDLES.filter((b) => b !== "super" && b !== p.role).map((b) => (
+            <DropdownMenuItem key={b} onClick={() => p.onCopy(b)}>{BUNDLE_LABELS[b]} 배치로 바꾸기</DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {p.role === "subject" && p.subjects.length > 1 ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<button type="button" className={menuButton} />}>
+            다른 과목 배치 복사
+            <EyIcon name="chevronDown" size={18} className="opacity-60" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-52">
+            {p.subjects.filter((s) => s.key !== p.subject).map((s) => (
+              <DropdownMenuItem key={s.key} onClick={() => p.onCopySubject(s.key)}>{s.label} 배치로 바꾸기</DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       ) : null}
       <ToolbarButton onClick={p.onReset} disabled={p.isDefault}>
         기본값으로

@@ -183,7 +183,11 @@ export async function loadCarryOutStates(db: Db, termIds: readonly string[]): Pr
  * 단 저장 전 무효의 이유가 **배분 재확인뿐**이었는데 이번 저장으로 재확인이 풀렸는데도 무효면 알린다(배분을 다시 저장하면 될 줄 알았는데
  * 확정액이 함께 커져 모자란 경우 — 적대 재리뷰 2026-11-09). 어느 쪽이든 모르면(null) 비운다.
  */
-export function carryOutBreakWarnings(before: ReadonlyMap<string, CarryOutState> | null, after: ReadonlyMap<string, CarryOutState> | null): Map<string, string> {
+export function carryOutBreakWarnings(
+  before: ReadonlyMap<string, CarryOutState> | null,
+  after: ReadonlyMap<string, CarryOutState> | null,
+  cause: "change" | "unconfirm" = "change",
+): Map<string, string> {
   const out = new Map<string, string>();
   if (!before || !after) return out;
   for (const [id, b] of before) {
@@ -191,6 +195,11 @@ export function carryOutBreakWarnings(before: ReadonlyMap<string, CarryOutState>
     if (!a || a.valid) continue;
     const staleOnlyBefore = !b.valid && b.allocationStale && !a.allocationStale;
     if (!b.valid && !staleOnlyBefore) continue;
+    // 확정 해제 — 다시 확정하기 전까지 이월이 무효다(배분·이월을 고칠 일이 아니라 다시 확정할 일 — 2026-11-09).
+    if (cause === "unconfirm") {
+      out.set(id, `${lineName(a)}: 확정을 해제해 ${month(a.toPeriod)}로 넘긴 ${won(a.amount)} 이월이 다시 확정할 때까지 무효입니다(${month(a.toPeriod)} 실납에서 빠짐) — 다시 확정하면 유효해집니다(수납 배분이 재확인으로 남으면 배분도 다시 저장 · 확정액이 커지면 이월을 고쳐야 합니다).`);
+      continue;
+    }
     if (staleOnlyBefore) {
       out.set(id, `${lineName(a)}: 수납 배분을 다시 저장했지만 ${month(a.toPeriod)}로 넘긴 ${won(a.amount)} 이월이 여전히 무효입니다(확정액보다 더 받은 몫이 모자람 · ${month(a.toPeriod)} 실납에서 빠짐) — 이월을 고치거나 취소하고, 다음 달 회차 확정을 확인해 주세요.`);
       continue;
@@ -204,11 +213,11 @@ export function carryOutBreakWarnings(before: ReadonlyMap<string, CarryOutState>
 }
 
 /** 저장 뒤 상태를 읽어 경고를 만든다 — 저장 전에 유효했거나 배분 재확인 때문에만 무효였던 보낸 이월만 다시 읽는다(대부분 0건이라 조회 없음). */
-export async function carryBreaksAfter(db: Db, before: ReadonlyMap<string, CarryOutState> | null): Promise<Map<string, string>> {
+export async function carryBreaksAfter(db: Db, before: ReadonlyMap<string, CarryOutState> | null, cause: "change" | "unconfirm" = "change"): Promise<Map<string, string>> {
   // 유효했던 줄 + 배분 재확인 때문에만 무효였던 줄(이번 저장으로 재확인이 풀렸는데도 무효면 알린다).
   const ids = before ? [...before].filter(([, s]) => s.valid || s.allocationStale).map(([id]) => id) : [];
   if (ids.length === 0) return new Map();
-  return carryOutBreakWarnings(before, await loadCarryOutStates(db, ids));
+  return carryOutBreakWarnings(before, await loadCarryOutStates(db, ids), cause);
 }
 
 /** 낮춘 시수 되돌리기의 결과 — 시수·배분 모두 원래대로 · 시수만 되돌림(배분 재확인) · 되돌리지 못함(낮춘 시수로 남음). */

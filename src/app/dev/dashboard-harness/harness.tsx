@@ -84,7 +84,6 @@ export function Harness({ mode, role }: { mode: string; role: string }) {
           { id: "sample-math", name: "수학 담당 예시", role: "admin", bundle: "subject", scopeLabel: "수학", canOpen: true, inherited: false },
           { id: "sample-desk", name: "경영지원 예시", role: "admin", bundle: "desk", scopeLabel: "전 과목", canOpen: true, inherited: false },
         ] }}
-        preview={Promise.resolve(FIXTURE)}
       />
     </div>
   );
