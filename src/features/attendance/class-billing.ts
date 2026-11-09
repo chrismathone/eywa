@@ -170,14 +170,16 @@ export function attendanceClassBilledDetail(
       if (base !== undefined) {
         const sent = carry.outs.get(term.id) ?? 0;
         const state = states?.get(term.id);
-        if (sent > 0 && state && carryOutValid({ ...state, amount: term.amount === null ? null : Number(term.amount), confirmedSessions: term.confirmed_sessions === null ? null : Number(term.confirmed_sessions) }, sent)) {
+        const source = state ? { ...state, amount: term.amount === null ? null : Number(term.amount), confirmedSessions: term.confirmed_sessions === null ? null : Number(term.confirmed_sessions) } : null;
+        const inKey = monthRosterKey(invoice.student_id, cls.classId);
+        // 받은 이월은 받을 수 있는 줄에만(회차 확정 `netAllocatedAmount`와 같은 `canReceiveCarry` — 환불로 만든 0이면 안 싣는다).
+        const takesIn = !!source && canReceiveCarry(source) && !carriedIn.has(inKey) && carry.ins.has(inKey);
+        // 보낸 이월의 유효성엔 이 줄이 **받은 이월**도 든다(연쇄 이월 — 회차 확정 `carrySurplus`와 같은 판정, 원장 2026-11-09).
+        if (sent > 0 && source && carryOutValid({ ...source, carryIns: takesIn ? carry.ins.get(inKey) : undefined }, sent)) {
           amount -= sent;
           carryOut[key] = (carryOut[key] ?? 0) + sent;
         }
-        const inKey = monthRosterKey(invoice.student_id, cls.classId);
-        // 받은 이월은 받을 수 있는 줄에만(회차 확정 `netAllocatedAmount`와 같은 `canReceiveCarry` — 환불로 만든 0이면 안 싣는다).
-        const receivable = !!state && canReceiveCarry({ ...state, amount: term.amount === null ? null : Number(term.amount), confirmedSessions: term.confirmed_sessions === null ? null : Number(term.confirmed_sessions) });
-        if (!carriedIn.has(inKey) && carry.ins.has(inKey) && receivable) {
+        if (takesIn) {
           carriedIn.add(inKey);
           amount += carryInTotal(carry.ins.get(inKey));
           carryInApplied.add(key);

@@ -32,7 +32,7 @@ function blockedState(code,extra={}){
 }
 
 test('index.html에 메이크에듀 칸 버튼·안내 줄이 있다',()=>{
-  assert.match(HTML,/<article><h3>메이크에듀<\/h3>[^]*<p id="makeedu-login-state" hidden><\/p><button id="makeedu-login" class="secondary">makeedu 다시 로그인<\/button><\/article>/);
+  assert.match(HTML,/<article><div class="module-head"><h3>메이크에듀<\/h3><button id="makeedu-login" class="secondary">makeedu 다시 로그인<\/button><\/div><strong id="makeedu-state"><\/strong><p id="makeedu-login-state" hidden><\/p><\/article>/);
 });
 
 test('사람 확인·재인증 멈춤 — "makeedu 다시 로그인을 눌러 주세요"',()=>{

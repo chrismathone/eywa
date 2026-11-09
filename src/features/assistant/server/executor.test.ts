@@ -66,3 +66,14 @@ describe("openAssistantDb", () => {
     if (before !== undefined) process.env.ASSISTANT_DATABASE_URL = before;
   });
 });
+
+describe("조회 오류의 종류 — 연결·서버 쪽은 쪼개도 같다(전수 조회가 다시 하지 않게 · 재리뷰 2026-11-09)", () => {
+  it("SQLSTATE 조회 오류는 query · 연결·서버 쪽은 connection", () => {
+    expect(queryError({ code: "42703", message: "column x does not exist" }).kind).toBe("query");
+    expect(queryError({ code: "57014", message: "canceling statement due to statement timeout" }).kind).toBe("query");
+    expect(queryError({ code: "CONNECT_TIMEOUT", message: "write CONNECT_TIMEOUT" }).kind).toBe("connection");
+    expect(queryError({ code: "08006", message: "connection failure" }).kind).toBe("connection");
+    expect(queryError({ code: "57P01", message: "terminating connection" }).kind).toBe("connection");
+    expect(queryError(new Error("socket hang up")).kind).toBe("connection");
+  });
+});

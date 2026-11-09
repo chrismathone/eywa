@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { carryShortfall, landedCarryIn, planCarrySessionSync, type CarrySyncRow } from "./carry-session-sync";
-import type { MoneyCarryIn } from "./money-carryover";
+import { netAllocatedAmount, type MoneyCarryIn } from "./money-carryover";
 
 const carryIn = (amount: number, over: Partial<MoneyCarryIn> = {}): MoneyCarryIn => ({ amount, fromPeriod: "2026-08", fromClassName: "중등M 개별", note: null, valid: true, ...over });
 /** 원장 캡처(9월 홍도연): 예정 5 · 확정 5 · 단가 24,000 · 확정액 120,000 · 배분 120,000 + 8월 이월 24,000 = 실납 144,000. */
@@ -78,11 +78,19 @@ describe("금액 이월 → 확정 시수 자동 반영(올리기)", () => {
     expect(planCarrySessionSync(row({ unitPrice: 0 }))).toEqual({ kind: "none", reason: "no-price" });
   });
 
-  it("🔴 이 줄이 다음 달로 보낸 이월이 있으면 — 확정액이 커져 그 이월이 무효가 되는 줄은 손대지 않는다", () => {
-    // 배분 130,000 · 확정액 120,000 → 10,000을 10월로 보냄(유효). 실납 = 130,000 − 10,000 + 24,000 = 144,000.
-    // 6으로 올리면 확정액 144,000 > 배분 130,000 → 보낸 이월이 무효가 되고 실납은 154,000 — 맞지 않는다.
-    const sending = row({ allocatedAmount: 130000, carryOut: { amount: 10000, toClassId: "c", toClassName: "중등M", toPeriod: "2026-10", note: null, at: null } });
-    expect(planCarrySessionSync(sending)).toEqual({ kind: "none", reason: "unexplained" });
+  it("🔴 이 줄이 다음 달로 보낸 이월이 있으면 올리지 않는다 — 남은 몫을 넘기려고 맞춘 확정이다(연쇄 이월 2026-11-09)", () => {
+    // 배분 130,000 · 확정액 120,000 · 받은 이월 24,000 → 10,000을 10월로 보냄. 실납 = 130,000 − 10,000 + 24,000 = 144,000.
+    // 받은 이월까지 더 받은 몫으로 세면(2026-11-09) 6으로 올려도 보낸 이월이 유효하지만, 사람이 확정한 시수를 받은 이월만큼 또 올리면
+    // 확정이 실제보다 많아진다 — 보낸 이월이 있는 줄은 그대로 둔다(그 전에도 올리면 보낸 이월이 무효가 되어 손대지 않던 줄이다).
+    const carryOut = { amount: 10000, toClassId: "c", toClassName: "중등M", toPeriod: "2026-10", note: null, at: null };
+    const sending = row({ allocatedAmount: 130000, carryOut });
+    expect(planCarrySessionSync(sending)).toEqual({ kind: "none", reason: "sending" });
+    // 조은준 9월 모양: 배분 312,000 + 받은 24,000 · 27시수 324,000 → 12,000을 넘김 → 실납 = 확정액(차이 0).
+    const jo = row({ unitPrice: 12000, confirmedSessions: 27, amount: 324000, allocatedAmount: 312000, carryOut: { ...carryOut, amount: 12000 } });
+    expect(netAllocatedAmount(jo)).toBe(324000);
+    expect(planCarrySessionSync(jo)).toEqual({ kind: "none", reason: "balanced" });
+    // 이월을 넘기기 전(27시수 · 차이 12,000 ≠ 받은 24,000)에도 올리지 않는다 — 일부만 넘기려는 확정을 되돌리지 않는다.
+    expect(planCarrySessionSync({ ...jo, carryOut: null })).toEqual({ kind: "none", reason: "unexplained" });
   });
 
   it("0~99 밖이 되는 시수는 만들지 않는다", () => {

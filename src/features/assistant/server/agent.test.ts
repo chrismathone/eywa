@@ -166,7 +166,7 @@ describe("runAssistantAgent", () => {
     expect(String(results[0]!.content)).toMatch(/표 구조를 읽지 못했습니다/);
   });
 
-  it("마무리 시각(150초)이 지나면 조회를 실행하지 않고 보고서를 내라고 돌려준다", async () => {
+  it("마무리 시각(여기선 150초)이 지나면 조회를 실행하지 않고 보고서를 내라고 돌려준다", async () => {
     const run = vi.mocked(db.run);
     run.mockClear();
     let t = Date.parse("2026-11-06T06:00:00Z");
@@ -174,7 +174,7 @@ describe("runAssistantAgent", () => {
     const { client, calls } = fakeClient([
       msg([tool("t2", "render_report", { title: "t", blocks: [{ type: "summary", text: "s" }, { type: "advice", items: [{ action: "a", why: "b" }] }] })]),
     ]);
-    const input = { ...base(client), now: () => t };
+    const input = { ...base(client), now: () => t, softDeadlineMs: 150_000 };
     // 첫 응답을 받는 사이 160초가 흘렀다.
     vi.mocked(client.messages.stream).mockImplementationOnce(((params: Anthropic.MessageCreateParams) => {
       calls.push(structuredClone(params));
@@ -186,6 +186,29 @@ describe("runAssistantAgent", () => {
     const results = calls[1]!.messages.at(-1)!.content as Array<Anthropic.ToolResultBlockParam | Anthropic.TextBlockParam>;
     expect(results[0]).toMatchObject({ type: "tool_result", is_error: true });
     expect(JSON.stringify(results)).toMatch(/시간이 다 됐습니다/);
+  });
+
+  it("조회 횟수 한도는 없다 · 읽은 분량이 많으면(입력 15만 토큰 초과) 그때 마무리를 부탁한다(원장 2026-11-06 '한도 두지마')", async () => {
+    const run = vi.mocked(db.run);
+    run.mockClear();
+    const sqlCall = (id: string) => tool(id, "run_sql", { purpose: `조회 ${id}`, sql: "select count(*) as n from students" });
+    // 조회 20번(옛 한도 12번을 넘는다) — 모두 실행된다.
+    const many = Array.from({ length: 20 }, (_, i) => msg([sqlCall(`q${i}`)]));
+    const big = msg([sqlCall("big")]);
+    (big as unknown as { usage: Anthropic.Usage }).usage = { input_tokens: 2_000, cache_read_input_tokens: 160_000, output_tokens: 5 } as Anthropic.Usage;
+    const { client, calls } = fakeClient([
+      ...many,
+      big,
+      msg([sqlCall("after")]),
+      msg([tool("r", "render_report", { title: "t", blocks: [{ type: "summary", text: "s" }, { type: "advice", items: [{ action: "a", why: "b" }] }] })]),
+    ]);
+    await runAssistantAgent(base(client));
+    // 20번 모두 실행 · 분량이 넘은 차례(big)부터는 실행하지 않고 마무리를 부탁한다
+    expect(run).toHaveBeenCalledTimes(20);
+    const afterBig = calls.at(-2)!.messages.at(-1)!.content as Array<Anthropic.ToolResultBlockParam | Anthropic.TextBlockParam>;
+    expect(JSON.stringify(afterBig)).toMatch(/읽은 자료가 많아/);
+    const last = calls.at(-1)!.messages.at(-1)!.content as Array<Anthropic.ToolResultBlockParam | Anthropic.TextBlockParam>;
+    expect(last[0]).toMatchObject({ type: "tool_result", is_error: true });
   });
 
   it("끝까지 못 받은 차례(도구 입력 JSON 깨짐)도 쓴 토큰을 적고 다시 묻는다", async () => {
@@ -202,6 +225,246 @@ describe("runAssistantAgent", () => {
     const input = base(client);
     await runAssistantAgent(input);
     expect(input.onUsage).toHaveBeenCalledTimes(2);
+  });
+
+  it("마무리 시각이 차례 도중에 오면 쓰던 응답(다음 조회)을 끊고 기록에 넣지 않은 채 곧장 보고서를 부탁한다(적대 리뷰 2026-11-09)", async () => {
+    const calls: Anthropic.MessageCreateParams[] = [];
+    let n = 0;
+    const client = {
+      messages: {
+        stream: (params: Anthropic.MessageCreateParams, opts?: { signal?: AbortSignal }) => {
+          calls.push(structuredClone(params));
+          n += 1;
+          if (n === 1) {
+            // 끝나지 않는 응답 — 마무리 시각(30ms)에 끊긴다
+            return { finalMessage: () => new Promise((_, reject) => opts?.signal?.addEventListener("abort", () => reject(new Error("aborted")))) };
+          }
+          return { finalMessage: async () => msg([tool("r", "render_report", { title: "t", blocks: [{ type: "summary", text: "s" }, { type: "advice", items: [{ action: "a", why: "b" }] }] })]) };
+        },
+      },
+    } as unknown as Pick<Anthropic, "messages">;
+    const events: AgentEvent[] = [];
+    const r = await runAssistantAgent({ ...base(client, events), now: Date.now, softDeadlineMs: 30 });
+    expect(r.report.title).toBe("t");
+    expect(calls).toHaveLength(2);
+    // 끊은 응답은 기록에 없다 — 둘째 요청도 사람 차례 하나(질문)에 마무리 부탁이 덧붙었다(앞 블록은 그대로 — 캐시 접두가 같다)
+    expect(calls[1]!.messages).toHaveLength(1);
+    const first = calls[0]!.messages[0]!.content;
+    const second = calls[1]!.messages[0]!.content as Anthropic.TextBlockParam[];
+    expect(second[0]).toMatchObject({ type: "text", text: typeof first === "string" ? first : (first[0] as Anthropic.TextBlockParam).text });
+    expect(second.at(-1)!.text).toMatch(/시간이 다 됐습니다/);
+    const last = [...new Map(events.map((e) => [e.step.id, e.step])).values()];
+    expect(last.some((st) => st.label === "지금까지 조회한 내용으로 보고서를 쓰는 중")).toBe(true);
+  });
+
+  it("'적음'처럼 분량 기준을 낮게 주면(contextWrapTokens) 그 앞에서 마무리한다", async () => {
+    const sqlCall = (id: string) => tool(id, "run_sql", { purpose: `조회 ${id}`, sql: "select count(*) as n from students" });
+    const mid = msg([sqlCall("mid")]);
+    (mid as unknown as { usage: Anthropic.Usage }).usage = { input_tokens: 2_000, cache_read_input_tokens: 98_000, output_tokens: 5 } as Anthropic.Usage;
+    const { client, calls } = fakeClient([mid, msg([tool("r", "render_report", { title: "t", blocks: [{ type: "summary", text: "s" }, { type: "advice", items: [{ action: "a", why: "b" }] }] })])]);
+    await runAssistantAgent({ ...base(client), contextWrapTokens: 95_000 });
+    expect(JSON.stringify(calls[1]!.messages.at(-1)!.content)).toMatch(/읽은 자료가 많아/);
+  });
+
+  it("보고서를 쓰기 시작한 응답은 마무리 시각이 와도 끊지 않는다(그게 곧 결과다)", async () => {
+    let n = 0;
+    const client = {
+      messages: {
+        stream: (_p: unknown, opts?: { signal?: AbortSignal }) => {
+          n += 1;
+          const listeners: Record<string, (...a: unknown[]) => void> = {};
+          const stream = {
+            on: (name: string, fn: (...a: unknown[]) => void) => ((listeners[name] = fn), stream),
+            finalMessage: () =>
+              new Promise((resolve, reject) => {
+                opts?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+                // 보고서 도구를 쓰기 시작한 뒤 마무리 시각(20ms)이 지나고, 그 뒤에 끝난다
+                listeners.streamEvent?.({ type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "r", name: "render_report", input: {} } });
+                setTimeout(
+                  () => resolve(msg([tool("r", "render_report", { title: "끝까지 쓴 보고서", blocks: [{ type: "summary", text: "s" }, { type: "advice", items: [{ action: "a", why: "b" }] }] })])),
+                  60,
+                );
+              }),
+          };
+          return stream;
+        },
+      },
+    } as unknown as Pick<Anthropic, "messages">;
+    const r = await runAssistantAgent({ ...base(client), now: Date.now, softDeadlineMs: 20 });
+    expect(n).toBe(1);
+    expect(r.report.title).toBe("끝까지 쓴 보고서");
+  });
+
+  describe("전수 조회(survey_entity)", () => {
+    const T = "20000000-0000-4000-8000-000000000001";
+    const C = "30000000-0000-4000-8000-000000000001";
+    const COLS: Record<string, Array<{ name: string; type: string }>> = {
+      attendance_records: [{ name: "id", type: "uuid" }, { name: "class_id", type: "uuid" }, { name: "taught_by", type: "uuid" }, { name: "session_date", type: "date" }],
+      video_homework_marks: [{ name: "id", type: "uuid" }, { name: "class_id", type: "uuid" }, { name: "homework_date", type: "date" }],
+      classes: [{ name: "id", type: "uuid" }, { name: "teacher_id", type: "uuid" }],
+      users: [{ name: "id", type: "uuid" }, { name: "display_name", type: "text" }],
+      onto_class_teachers: [{ name: "class_id", type: "uuid" }, { name: "teacher_id", type: "uuid" }],
+    };
+    const surveyDb = (opts: { self: Array<Record<string, string | number>>; classes?: string[] }) => {
+      const sqls: string[] = [];
+      const sdb: AssistantDb = {
+        views: async () => new Set(["students", "classes", "users", "onto_class_teachers", "attendance_records", "video_homework_marks"]),
+        describe: async (tables) => tables.map((t) => ({ table: t, columns: COLS[t] ?? [{ name: "id", type: "uuid" }] })),
+        run: vi.fn(async (sql: string) => {
+          sqls.push(sql);
+          if (/ as 이름/.test(sql)) return { columns: [], rows: opts.self, rowCount: opts.self.length, truncated: false, ms: 1 };
+          if (/ as 반수 /.test(sql)) return { columns: ["반수"], rows: [{ 반수: (opts.classes ?? []).length }], rowCount: 1, truncated: false, ms: 1 };
+          if (/ as 표/.test(sql)) {
+            const keys = [...sql.matchAll(/select '([a-z0-9_@반]+)'::text as 표/g)].map((m) => m[1]!);
+            return { columns: ["표"], rows: keys.map((k) => ({ 표: k, 전체: 4, 기간: 2, 최근: "2026-11-01" })), rowCount: keys.length, truncated: false, ms: 1 };
+          }
+          return { columns: ["n"], rows: [{ n: 1 }], rowCount: 1, truncated: false, ms: 1 };
+        }),
+      };
+      return { sdb, sqls };
+    };
+    const report = () => msg([tool("r", "render_report", { title: "t", blocks: [{ type: "summary", text: "s" }, { type: "advice", items: [{ action: "a", why: "b" }] }] })]);
+
+    it("강사 — DB 이름으로 · 맡은 반을 거친 표(영상 숙제 검사)도 센다 · 그 뒤 조회만 '자세히 봄'", async () => {
+      const { sdb, sqls } = surveyDb({ self: [{ 이름: "김윤하", 같은이름: 1 }], classes: [C] });
+      const { client, calls } = fakeClient([
+        msg([tool("s1", "survey_entity", { target: "teacher", id: T, name: "김 선생" })]),
+        msg([tool("q1", "run_sql", { purpose: "영상 숙제 검사", sql: "select count(*) as n from video_homework_marks" })]),
+        report(),
+      ]);
+      const r = await runAssistantAgent({ ...base(client), db: sdb });
+      const result = JSON.stringify(calls[1]!.messages.at(-1)!.content);
+      expect(result).toContain("강사 김윤하");
+      expect(result).toContain("video_homework_marks(video_homework_marks(맡은 반)) · 맡은 반을 거쳐");
+      expect(result).toContain("이 기간에 맡은(맡았던) 반 1개를 거친 자료도 셌다");
+      // 맡은 반은 SQL 안에서 같은 조건으로 다시 고른다(반 id를 늘어놓지 않는다)
+      expect(sqls.some((q) => q.startsWith("with taught_classes as") || q.includes("with taught_classes as"))).toBe(true);
+      const cov = r.report.coverage!.surveys[0]!;
+      expect(cov.name).toBe("김윤하");
+      expect(cov.tables.find((t) => t.table === "video_homework_marks")!.examined).toBe(true);
+      expect(cov.tables.find((t) => t.table === "attendance_records")!.examined).toBe(false);
+    });
+
+    it("대상 id가 그 종류의 표에 없으면 세지 않고 돌려보낸다(모든 표 0건 → '자료 없음'으로 보고하지 않게)", async () => {
+      const { sdb, sqls } = surveyDb({ self: [] });
+      const { client, calls } = fakeClient([msg([tool("s1", "survey_entity", { target: "class", id: T, name: "PS3A" })]), report()]);
+      await runAssistantAgent({ ...base(client), db: sdb });
+      const result = calls[1]!.messages.at(-1)!.content as Anthropic.ToolResultBlockParam[];
+      expect(result[0]).toMatchObject({ is_error: true });
+      expect(String(result[0]!.content)).toMatch(/대상을 찾지 못했습니다/);
+      expect(sqls.some((q) => / as 표/.test(q))).toBe(false);
+    });
+
+    it("이름이 같은 강사가 있으면 이름 글자로 적힌 기록은 세지 않고 그렇게 알린다 · 없는 날짜는 받지 않는다", async () => {
+      const { sdb } = surveyDb({ self: [{ 이름: "김윤하", 같은이름: 2 }], classes: [] });
+      const { client, calls } = fakeClient([
+        msg([
+          tool("s1", "survey_entity", { target: "teacher", id: T, name: "김윤하" }),
+          tool("s2", "survey_entity", { target: "class", id: C, name: "PS3A", from: "2026-02-01", to: "2026-02-29" }),
+        ]),
+        report(),
+      ]);
+      await runAssistantAgent({ ...base(client), db: sdb });
+      const results = calls[1]!.messages.at(-1)!.content as Anthropic.ToolResultBlockParam[];
+      expect(String(results[0]!.content)).toContain("이름이 같은 사용자가 2명");
+      expect(results[1]).toMatchObject({ is_error: true });
+      expect(String(results[1]!.content)).toMatch(/INVALID_INPUT/);
+    });
+  });
+
+  it("'바로 결과 보기'(원장 2026-11-06) — 조회 사이에 누르면 남은 조회는 하지 않고 다음 요청에 마무리 부탁 · 보고서에 cutShort", async () => {
+    const events: AgentEvent[] = [];
+    const run = vi.mocked(db.run);
+    run.mockClear();
+    const wrap = new AbortController();
+    // 첫 조회가 도는 사이 원장이 누른다.
+    run.mockImplementationOnce(async () => {
+      wrap.abort();
+      return { columns: ["n"], rows: [{ n: 1 }], rowCount: 1, truncated: false, ms: 3 };
+    });
+    const sqlCall = (id: string) => tool(id, "run_sql", { purpose: `조회 ${id}`, sql: "select count(*) as n from students" });
+    const { client, calls } = fakeClient([
+      msg([sqlCall("a"), sqlCall("b")]),
+      msg([tool("r", "render_report", { title: "t", blocks: [{ type: "summary", text: "s" }, { type: "advice", items: [{ action: "a", why: "b" }] }] })]),
+    ]);
+    const r = await runAssistantAgent({ ...base(client, events), wrapSignal: wrap.signal });
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(r.report.cutShort).toBe("user");
+    const sent = calls[1]!.messages.at(-1)!.content as Array<Anthropic.ToolResultBlockParam | Anthropic.TextBlockParam>;
+    expect(sent[1]).toMatchObject({ type: "tool_result", tool_use_id: "b", is_error: true });
+    expect(JSON.stringify(sent)).toMatch(/원장님이 '여기서 끝내고 결과 보기'를 누르셨습니다/);
+    const last = [...new Map(events.map((e) => [e.step.id, e.step])).values()];
+    expect(last.find((st) => st.cause === "user")).toMatchObject({ state: "error", detail: "여기서 조회를 끝냈습니다" });
+    expect(last.some((st) => st.label.startsWith("원장님 요청으로 여기서 조회를 끝냈습니다"))).toBe(true);
+    expect(last.some((st) => st.label === "지금까지 조회한 내용으로 보고서를 쓰는 중")).toBe(true);
+  });
+
+  it("'바로 결과 보기' — AI가 다음 조회를 쓰는 중이면 그 응답을 버리고(기록에 넣지 않는다) 곧장 보고서를 부탁한다", async () => {
+    const wrap = new AbortController();
+    const calls: Anthropic.MessageCreateParams[] = [];
+    let n = 0;
+    const report = msg([tool("r", "render_report", { title: "t", blocks: [{ type: "summary", text: "s" }, { type: "advice", items: [{ action: "a", why: "b" }] }] })]);
+    const client = {
+      messages: {
+        stream: (params: Anthropic.MessageCreateParams, opts?: { signal?: AbortSignal }) => {
+          calls.push(structuredClone(params));
+          n += 1;
+          // 1) 조회 하나 → 2) 다음 조회를 쓰는 중에 원장이 누른다(끊긴다) → 3) 보고서
+          if (n === 1) return { finalMessage: async () => msg([tool("q1", "run_sql", { purpose: "재원생", sql: "select count(*) as n from students" })]) };
+          if (n === 2) {
+            return {
+              finalMessage: () =>
+                new Promise((_, reject) => {
+                  opts?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+                  setTimeout(() => wrap.abort(), 0);
+                }),
+            };
+          }
+          return { finalMessage: async () => report };
+        },
+      },
+    } as unknown as Pick<Anthropic, "messages">;
+    const r = await runAssistantAgent({ ...base(client), wrapSignal: wrap.signal });
+    expect(r.report.cutShort).toBe("user");
+    expect(calls).toHaveLength(3);
+    // 버린 응답은 기록에 없다 — 셋째 요청도 둘째와 같은 차례 수이고, 마지막 사람 차례(조회 결과)에 마무리 부탁이 덧붙었다(앞 블록은 그대로).
+    expect(calls[2]!.messages).toHaveLength(calls[1]!.messages.length);
+    const before = calls[1]!.messages.at(-1)!.content as Anthropic.ContentBlockParam[];
+    const after = calls[2]!.messages.at(-1)!.content as Anthropic.ContentBlockParam[];
+    expect(after.slice(0, before.length)).toEqual(before);
+    expect((after.at(-1) as Anthropic.TextBlockParam).text).toMatch(/원장님이 '여기서 끝내고 결과 보기'를 누르셨습니다/);
+  });
+
+  it("'바로 결과 보기'를 자료를 읽기 전에 누르면 끊지 않고 첫 자료를 읽은 뒤에 든다(근거 없는 보고서 금지 · 재리뷰 2026-11-09)", async () => {
+    const wrap = new AbortController();
+    wrap.abort(); // 다른 탭 버튼처럼 처음부터 눌린 채
+    const { client, calls } = fakeClient([
+      msg([tool("q1", "run_sql", { purpose: "재원생", sql: "select count(*) as n from students" })]),
+      msg([tool("r", "render_report", { title: "t", blocks: [{ type: "summary", text: "s" }, { type: "advice", items: [{ action: "a", why: "b" }] }] })]),
+    ]);
+    const run = vi.mocked(db.run);
+    run.mockClear();
+    const r = await runAssistantAgent({ ...base(client), wrapSignal: wrap.signal });
+    expect(run).toHaveBeenCalledTimes(1); // 첫 조회는 돌았다
+    expect(JSON.stringify(calls[0]!.messages)).not.toMatch(/원장님이 '여기서 끝내고/); // 첫 요청엔 부탁이 없다
+    expect(JSON.stringify(calls[1]!.messages.at(-1)!.content)).toMatch(/원장님이 '여기서 끝내고 결과 보기'를 누르셨습니다/);
+    expect(r.report.cutShort).toBe("user");
+  });
+
+  it("'멈춤'(signal)은 여전히 질문째 끝낸다 — '바로 결과 보기'와 다르다", async () => {
+    const stop = new AbortController();
+    const client = {
+      messages: {
+        stream: (_p: unknown, opts?: { signal?: AbortSignal }) => ({
+          finalMessage: () =>
+            new Promise((_, reject) => {
+              opts?.signal?.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
+              setTimeout(() => stop.abort(), 0);
+            }),
+        }),
+      },
+    } as unknown as Pick<Anthropic, "messages">;
+    await expect(runAssistantAgent({ ...base(client), signal: stop.signal })).rejects.toThrow();
   });
 
   it("거절(refusal)·잘림(max_tokens)은 한국어 오류", async () => {

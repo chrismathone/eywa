@@ -176,6 +176,7 @@ const FORBID_KEYS = new Set([
   // 학원 비서 — 질문 글(대상 문구)에 원생 이름·금액이 그대로 들 수 있다. 슬랙으로 내보내지 않는다.
   "assistant_ask",
   "assistant_thread_delete",
+  "assistant_thread_rename",
 ]);
 /** 대상 문구 없이 — 돈 계열(금액·계좌가 대상 라벨에 섞일 수 있다) + 연차. */
 const OPAQUE_CATEGORIES = new Set(["billing"]);

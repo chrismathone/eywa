@@ -8,15 +8,16 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { shiftMonth } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
-import { getSessionTermsView } from "./queries";
 import { loadMonthRoster } from "./month-roster";
-import { loadMoneyCarryOuts } from "./money-carryover-queries";
-import { carrySurplus, validateMoneyCarry, type MoneyCarryOut } from "../money-carryover";
+import { carrySurplus, receivedCarry, validateMoneyCarry, type MoneyCarryOut } from "../money-carryover";
 import { isVirtualTermId } from "../month-roster";
-import { carryShortNotice, carrySyncNotice, syncCarrySessionsAfterCarry } from "./carry-session-sync";
+import { getSessionTermsView } from "./queries";
+import { loadMoneyCarryOuts } from "./money-carryover-queries";
+import { carryChainBreakNotice, carryShortNotice, carrySyncNotice, loadStudentCarryRows, syncCarrySessionsAfterCarry } from "./carry-session-sync";
 
 // 금액 이월 저장·취소(0278a) — 원장 2026-09-21 *"만원 남은걸 다음달로 금액 넘기는 기능 … '이월' 기능 추가"*.
-// 🔴 게이트는 화면이 아니라 여기서 다시 본다(#77): 유효 배분(`getSessionTermsView` 한 벌)으로 더 받은 몫을 다시 구하고,
+// 🔴 게이트는 화면이 아니라 여기서 다시 본다(#77): 유효 배분 + 받은 이월(`loadStudentCarryRows` — 화면과 같은 줄·같은 붙이기)로
+//    더 받은 몫을 다시 구하고,
 //    받을 반은 그 학생의 **다음 달 줄 집합**(`loadMonthRoster` — 출석부·회차 확정과 같은 규칙)에서만 받는다.
 
 export type MoneyCarryOptions = {
@@ -29,6 +30,10 @@ export type MoneyCarryOptions = {
   allocatedAmount: number | null;
   amount: number | null;
   surplus: number;
+  /** 이 줄 실납에 실린 **받은 이월**(지난 달에서) — 더 받은 몫에 든다(연쇄 이월, 원장 2026-11-09). 없으면 0. */
+  carriedIn: number;
+  /** 앞 달 이월 정보를 못 읽어 그 줄만 본 창 — 더 받은 몫을 모르니 새 이월은 막고 넘겨 둔 이월 취소만 받는다. */
+  degraded?: boolean;
   current: MoneyCarryOut | null;
   classes: { classId: string; className: string }[];
 };
@@ -37,7 +42,11 @@ type Context = MoneyCarryOptions & { invoiceId: string; studentId: string; class
 
 const UNAVAILABLE = "금액 이월 기능이 아직 켜지지 않았습니다. 관리자에게 알려 주세요(SQL 적용 필요)";
 
-async function loadContext(termId: string): Promise<{ data?: Context; error?: string }> {
+/**
+ * `allowDegraded` = 창 열기·이월 취소(0원) — 더 받은 몫이 필요 없는 일이라, 이월 조회가 실패해도 그 줄의 보낸 이월만 확인하고 진행한다
+ * (`degraded` — 더 받은 몫 0 · 새 이월은 저장에서 다시 막힌다).
+ */
+async function loadContext(termId: string, allowDegraded = false): Promise<{ data?: Context; error?: string }> {
   if (typeof termId !== "string" || !termId || isVirtualTermId(termId)) return { error: "회차 행이 있는 반만 이월할 수 있습니다" };
   const db = await createClient();
   const { data: term, error } = await db.from("invoice_session_terms")
@@ -49,12 +58,32 @@ async function loadContext(termId: string): Promise<{ data?: Context; error?: st
   const inv = term ? (Array.isArray(term.invoice) ? term.invoice[0] : term.invoice) as { period: string; student_id: string; status: string | null } | null : null;
   if (!term || !inv || inv.status === "void") return { error: "회차 행을 찾을 수 없습니다" };
   const nextPeriod = shiftMonth(inv.period, 1);
-  const [view, carryOuts, roster] = await Promise.all([
-    getSessionTermsView(inv.period, term.invoice_id),
-    loadMoneyCarryOuts(db, inv.period, [term.invoice_id]),
-    loadMonthRoster(db, nextPeriod, { studentIds: [inv.student_id] }),
-  ]);
-  const row = view.rows.find((r) => r.id === termId);
+  // 그 학생의 이 달 줄 전부 + 보낸·받은 이월 — 회차 확정 화면과 **같은 붙이기**(`attachMoneyCarry`)라 더 받은 몫이 화면과 같다.
+  // 🔴 배분 창 모드(`getSessionTermsView(period, invoiceId)`)만 읽으면 받은 이월이 안 붙어 연쇄 이월의 더 받은 몫이 0원으로 거절된다.
+  let rows: Awaited<ReturnType<typeof loadStudentCarryRows>>;
+  let roster: Awaited<ReturnType<typeof loadMonthRoster>>;
+  try {
+    [rows, roster] = await Promise.all([
+      loadStudentCarryRows(db, inv.period, inv.student_id),
+      loadMonthRoster(db, nextPeriod, { studentIds: [inv.student_id] }),
+    ]);
+  } catch (e) {
+    console.error("[money-carryover] 이월 정보 조회 실패", e instanceof Error ? e.message : String(e));
+    return { error: "이월 정보를 불러오지 못했습니다. 다시 시도해 주세요" };
+  }
+  const degraded = !rows && allowDegraded;
+  if (degraded) {
+    // 취소는 '재확인·받을 반 없음' 이월을 푸는 길이다 — 앞 달 이월 조회 실패 같은 무관한 실패에 막히지 않게 그 줄만 본다(적대 리뷰 2026-11-09).
+    try {
+      const [view, outs] = await Promise.all([getSessionTermsView(inv.period, term.invoice_id), loadMoneyCarryOuts(db, inv.period, [term.invoice_id])]);
+      const own = view.rows.find((r) => r.id === termId);
+      if (own && !outs.failed) rows = [{ ...own, carryOut: outs.map.get(termId) ?? null }];
+    } catch (e) {
+      console.error("[money-carryover] 취소용 회차 행 조회 실패", e instanceof Error ? e.message : String(e));
+    }
+  }
+  if (!rows) return { error: "이월 정보를 불러오지 못했습니다. 다시 시도해 주세요" };
+  const row = rows.find((r) => r.id === termId);
   if (!row) return { error: "회차 행을 찾을 수 없습니다" };
   const classes = roster.pairs
     .filter((p) => p.studentId === inv.student_id)
@@ -63,8 +92,9 @@ async function loadContext(termId: string): Promise<{ data?: Context; error?: st
   return { data: {
     termId, invoiceId: term.invoice_id, studentId: inv.student_id, classId: term.class_id,
     studentName: row.studentName, className: row.className, period: inv.period, nextPeriod,
-    allocatedAmount: row.allocatedAmount ?? null, amount: row.amount, surplus: carrySurplus(row),
-    current: carryOuts.map.get(termId) ?? null, classes,
+    allocatedAmount: row.allocatedAmount ?? null, amount: row.amount,
+    surplus: degraded ? 0 : carrySurplus(row), carriedIn: degraded ? 0 : receivedCarry(row), ...(degraded ? { degraded: true } : {}),
+    current: row.carryOut ?? null, classes,
   } };
 }
 
@@ -72,12 +102,12 @@ export async function getMoneyCarryoverOptions(termId: string): Promise<{ data?:
   const user = await getCurrentUser({ teacherView: true });
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
-  const ctx = await loadContext(termId);
+  const ctx = await loadContext(termId, true);
   if (!ctx.data) return { error: ctx.error };
   const c = ctx.data;
   return { data: {
     termId: c.termId, studentName: c.studentName, className: c.className, period: c.period, nextPeriod: c.nextPeriod,
-    allocatedAmount: c.allocatedAmount, amount: c.amount, surplus: c.surplus, current: c.current, classes: c.classes,
+    allocatedAmount: c.allocatedAmount, amount: c.amount, surplus: c.surplus, carriedIn: c.carriedIn, ...(c.degraded ? { degraded: true } : {}), current: c.current, classes: c.classes,
   } };
 }
 
@@ -86,7 +116,7 @@ export async function saveMoneyCarryover(input: { termId: string; amount: number
   const user = await getCurrentUser({ teacherView: true });
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
-  const ctx = await loadContext(input?.termId);
+  const ctx = await loadContext(input?.termId, Number(input?.amount) === 0);
   if (!ctx.data) return { error: ctx.error };
   const c = ctx.data;
   const note = typeof input.note === "string" ? input.note.trim() || null : null;
@@ -128,6 +158,9 @@ export async function saveMoneyCarryover(input: { termId: string; amount: number
       toClassNameBefore: c.current?.toClassName ?? null,
       allocatedAmount: c.allocatedAmount,
       confirmedAmount: c.amount,
+      // 상한의 근거 — 받은 이월도 더 받은 몫에 든다(연쇄 이월, 2026-11-09). "왜 배분보다 많이 넘겼나"를 되짚는 재료.
+      carriedIn: c.carriedIn,
+      surplus: c.surplus,
       note,
     },
   });
@@ -140,16 +173,19 @@ export async function saveMoneyCarryover(input: { termId: string; amount: number
   }, user.id);
   const notice = carrySyncNotice(synced.changes);
   const shortNotice = carryShortNotice(synced.shorts);
+  // 연쇄 이월이 끊긴 줄 — 다음 달이 그다음 달로 넘긴 이월이 무효가 되어 그 달 실납도 바뀌었다(적대 리뷰 2026-11-09).
+  const broken = synced.broken ?? [];
+  const breakNotice = carryChainBreakNotice(broken);
   revalidatePath("/billing");
-  // 두 달 중 이미 **분배를 저장한** 달이 있으면 그 저장본이 낡았다 — 다시 저장하라고 알린다(적대 리뷰 2026-09-21).
+  // 바뀐 달(이 달 · 다음 달 · 끊긴 이월이 가던 달) 중 이미 **분배를 저장한** 달이 있으면 그 저장본이 낡았다 — 다시 저장하라고 알린다(적대 리뷰 2026-09-21).
   // 달마다 따로 센다(한 번에 limit로 읽으면 한 달 행만으로 채워져 다른 달이 빠진다). 조회가 실패하면 모른다고 알린다.
-  const counts = await Promise.all([c.period, c.nextPeriod].map(async (p) => {
+  const counts = await Promise.all([...new Set([c.period, c.nextPeriod, ...broken.map((b) => b.toPeriod)])].map(async (p) => {
     const { count, error: countError } = await db.from("invoice_teacher_splits").select("*", { count: "exact", head: true }).eq("period", p);
     return { p, has: countError ? null : (count ?? 0) > 0 };
   }));
   // 이월이 빠져 덜 받게 된 줄 안내를 분배 경고 앞에 붙인다(둘 다 사람이 손봐야 하는 일이라 한 창으로).
-  const withShort = (text: string | undefined) => [shortNotice, text].filter(Boolean).join("\n\n") || undefined;
-  if (counts.some((x) => x.has === null)) return { ok: true, ...(notice ? { notice } : {}), warning: withShort("강사 분배 저장본을 확인하지 못했습니다 — 두 달 분배를 저장해 두었다면 회차 확정의 ‘청구 시수 대조’에서 다시 저장해 주세요.") };
+  const withShort = (text: string | undefined) => [shortNotice, breakNotice, text].filter(Boolean).join("\n\n") || undefined;
+  if (counts.some((x) => x.has === null)) return { ok: true, ...(notice ? { notice } : {}), warning: withShort("강사 분배 저장본을 확인하지 못했습니다 — 바뀐 달의 분배를 저장해 두었다면 회차 확정의 ‘청구 시수 대조’에서 다시 저장해 주세요.") };
   const stale = counts.filter((x) => x.has).map((x) => x.p);
   const warning = withShort(stale.length
     ? `${stale.map((p) => `${Number(p.slice(5, 7))}월`).join("·")} 강사 분배를 이미 저장해 두었습니다 — 회차 확정의 ‘청구 시수 대조’에서 분배를 다시 저장해 주세요.`

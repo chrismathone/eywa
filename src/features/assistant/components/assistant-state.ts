@@ -7,7 +7,7 @@
  */
 import type { AssistantLevel } from "@/features/assistant/levels";
 import { isAssistantLevel } from "@/features/assistant/levels";
-import type { AskEvent, AskStep, QuerySummary, ThreadDetailResponse, ThreadMessage, ThreadSummary } from "@/features/assistant/protocol";
+import { ASSISTANT_MAX_RUNNING, type AskEvent, type AskStep, type QuerySummary, type ThreadDetailResponse, type ThreadMessage, type ThreadSummary } from "@/features/assistant/protocol";
 import type { SettledReport } from "@/features/assistant/report";
 import { addDays, kstDateOf, kstTimeOf, monthDayLabel } from "@/lib/date-kst";
 
@@ -51,8 +51,16 @@ export type AssistantState = {
   enabled: boolean | null;
   conversations: Record<string, Conversation>;
   currentKey: string;
-  /** 지금 답을 받는 차례(한 번에 하나 — 서버 동시 실행 상한과 같은 결). */
-  inflight: { turnKey: string } | null;
+  /**
+   * 지금 답을 받는 차례들(turnKey) — 동시에 `ASSISTANT_MAX_RUNNING`(3)개까지 · 대화마다 하나(원장 2026-11-06 '동시에 3개까지' ·
+   * 서버 자리 색인 s2_0034과 같은 결). 다른 탭·기기에서 도는 질문은 목록의 `running`·저장본의 '도는 중'으로 안다(`runningCount`).
+   */
+  inflight: readonly string[];
+  /** 목록을 다시 읽은 횟수 — 자리 없음 안내는 그 뒤 목록을 다시 읽을 때까지만 보인다(그 뒤엔 목록이 진실 · 적대 리뷰 2026-11-09). */
+  threadsSeq: number;
+  /** 지우기·이름 바꾸기 순번 · 최근 것 — 그 전에 읽기 시작한 목록이 늦게 와도 방금 한 변경을 덮지 않게 다시 얹는다(재리뷰 2026-11-09). */
+  editSeq: number;
+  threadEdits: ReadonlyArray<{ seq: number; threadId: string; deleted?: true; title?: string }>;
 };
 
 export const threadKey = (threadId: string) => `t:${threadId}`;
@@ -74,26 +82,40 @@ export function initialAssistantState(newKey = "new:0"): AssistantState {
     enabled: null,
     conversations: { [newKey]: emptyConversation(newKey) },
     currentKey: newKey,
-    inflight: null,
+    inflight: [],
+    threadsSeq: 0,
+    editSeq: 0,
+    threadEdits: [],
   };
+}
+
+/** 지우기·이름 바꾸기 기록 하나를 더한다(최근 20개만). */
+function withEdit(state: AssistantState, edit: { threadId: string; deleted?: true; title?: string }): Pick<AssistantState, "editSeq" | "threadEdits"> {
+  const seq = state.editSeq + 1;
+  return { editSeq: seq, threadEdits: [...state.threadEdits, { seq, ...edit }].slice(-20) };
 }
 
 export type AssistantAction =
   | { type: "threads/loading" }
-  | { type: "threads/loaded"; enabled: boolean; threads: ThreadSummary[] }
+  /** `since` = 이 목록을 읽기 시작할 때의 `editSeq`(그 뒤 지우기·이름 바꾸기는 다시 얹는다). */
+  | { type: "threads/loaded"; enabled: boolean; threads: ThreadSummary[]; since?: number }
   | { type: "threads/failed"; error: string }
   | { type: "conv/new"; key: string }
   | { type: "conv/select"; threadId: string; title?: string | null }
   | { type: "conv/loading"; key: string }
   | { type: "conv/loaded"; key: string; detail: ThreadDetailResponse }
-  | { type: "conv/failed"; key: string; error: string }
+  /** `gone` = 대화가 없다(다른 곳에서 지웠다) — 도는 표시를 풀고 목록에서 뺀다. */
+  | { type: "conv/failed"; key: string; error: string; gone?: boolean }
   | { type: "ask/start"; convKey: string; turn: Turn }
   | { type: "ask/event"; turnKey: string; event: AskEvent; now: string }
   | { type: "ask/broken"; turnKey: string }
   | { type: "ask/failed"; turnKey: string; error: string }
+  /** 서버가 자리 없음·같은 대화 도는 중으로 받지 않았다(`code: "busy"`) — 실패가 아니라 보낸 차례를 거둔다(화면이 글을 입력칸에 되돌린다). */
+  | { type: "ask/rejected"; turnKey: string }
   | { type: "ask/stopped"; turnKey: string }
   | { type: "ask/end"; turnKey: string }
-  | { type: "thread/deleted"; threadId: string; newKey: string };
+  | { type: "thread/deleted"; threadId: string; newKey: string }
+  | { type: "thread/renamed"; threadId: string; title: string };
 
 /** 저장된 메시지 → 화면 차례. 끝난 답·실패·진행 중 어느 것도 아니면 "답을 받지 못했다"로(빈 차례를 남기지 않는다). */
 export function turnFromMessage(m: ThreadMessage): Turn {
@@ -175,7 +197,7 @@ function onEvent(state: AssistantState, turnKey: string, event: AskEvent, now: s
           : { ...t, status: "error", messageId: event.messageId ?? t.messageId, error: event.message },
       );
       const threadId = findTurn(next, turnKey)?.conv.threadId;
-      return threadId ? { ...next, threads: bumpThread(next.threads, threadId, now) } : next;
+      return threadId ? { ...next, threads: bumpThread(next.threads, threadId, now).map((t) => (t.id === threadId && t.running ? { ...t, running: false } : t)) } : next;
     }
   }
 }
@@ -184,8 +206,19 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
   switch (action.type) {
     case "threads/loading":
       return { ...state, threadsLoad: state.threadsLoad === "ready" ? "ready" : "loading", threadsError: null };
-    case "threads/loaded":
-      return { ...state, threads: action.threads, enabled: action.enabled, threadsLoad: "ready", threadsError: null };
+    case "threads/loaded": {
+      // 늦게 온 목록(새 대화가 생기기 전에 읽힌 것)이 방금 생긴 — 답을 받는 중인 — 대화를 빼지 않게 남긴다(적대 리뷰 2026-11-09).
+      const ids = new Set(action.threads.map((t) => t.id));
+      const keep = state.threads.filter(
+        (t) => !ids.has(t.id) && Object.values(state.conversations).some((c) => c.threadId === t.id && isConversationStreaming(state, c)),
+      );
+      // 읽기 시작한 뒤에 한 지우기·이름 바꾸기는 다시 얹는다(늦게 온 목록이 되돌리지 않게).
+      const later = state.threadEdits.filter((e) => e.seq > (action.since ?? state.editSeq));
+      const gone = new Set(later.filter((e) => e.deleted).map((e) => e.threadId));
+      const titles = new Map(later.filter((e) => e.title).map((e) => [e.threadId, e.title!]));
+      const threads = [...keep, ...action.threads].filter((t) => !gone.has(t.id)).map((t) => (titles.has(t.id) ? { ...t, title: titles.get(t.id)! } : t));
+      return { ...state, threads, enabled: action.enabled, threadsLoad: "ready", threadsError: null, threadsSeq: state.threadsSeq + 1 };
+    }
     case "threads/failed":
       return { ...state, threadsLoad: state.threadsLoad === "ready" ? "ready" : "error", threadsError: action.error };
 
@@ -210,7 +243,7 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
       const conv = state.conversations[action.key];
       if (!conv) return state;
       // 🔴 이 대화에서 답을 받는 중이면 그 차례는 남긴다(로컬이 저장본보다 새롭다) — 저장본의 '도는 중' 같은 질문은 뺀다.
-      const live = state.inflight ? conv.turns.find((t) => t.key === state.inflight!.turnKey) : undefined;
+      const live = conv.turns.find((t) => state.inflight.includes(t.key));
       let turns = action.detail.messages.map(turnFromMessage);
       if (live) {
         // 같은 차례 = 질문 번호가 같은 것(같은 글을 두 번 물은 차례를 잘못 빼지 않게 — 적대 리뷰 2026-11-06).
@@ -222,29 +255,39 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
         turns = [...turns, live];
       }
       const t = action.detail.thread;
+      // 목록의 '도는 중'도 저장본에 맞춘다(다른 탭에서 끝났으면 풀리고, 끊긴 뒤 서버만 도는 중이면 걸린다).
+      const running = !!live || action.detail.messages.some((m) => m.running);
       return {
         ...state,
         conversations: { ...state.conversations, [action.key]: { ...conv, title: t.title, turns, load: "ready", loadError: null } },
-        threads: state.threads.map((x) => (x.id === t.id ? { ...x, title: t.title } : x)),
+        threads: state.threads.map((x) => (x.id === t.id ? { ...x, title: t.title, running } : x)),
       };
     }
     case "conv/failed": {
       const conv = state.conversations[action.key];
       if (!conv) return state;
       // 끊긴 차례를 되살리지 못했으면 그 차례에 이유를 적는다(빙글빙글 도는 채로 남기지 않는다).
+      // 대화가 없으면(다른 곳에서 지웠다) 서버가 아직 만드는 중이라던 차례도 풀고 목록에서 뺀다 — 끝없이 다시 묻고 자리를 세지 않게(재리뷰 2026-11-09).
       const turns = conv.turns.map((t) =>
-        t.status === "recovering" ? { ...t, status: "error" as const, error: "연결이 끊겼고 결과를 다시 불러오지 못했습니다." } : t,
+        t.status === "recovering" || (action.gone && t.status === "running")
+          ? { ...t, status: "error" as const, error: action.gone ? "다른 곳에서 지운 대화입니다." : "연결이 끊겼고 결과를 다시 불러오지 못했습니다." }
+          : t,
       );
-      return { ...state, conversations: { ...state.conversations, [action.key]: { ...conv, turns, load: "error", loadError: action.error } } };
+      return {
+        ...state,
+        conversations: { ...state.conversations, [action.key]: { ...conv, turns, load: "error", loadError: action.error } },
+        ...(action.gone && conv.threadId ? { threads: state.threads.filter((t) => t.id !== conv.threadId) } : {}),
+      };
     }
 
     case "ask/start": {
       const conv = state.conversations[action.convKey];
-      if (!conv || state.inflight) return state;
+      // 같은 대화에 둘은 안 된다(대화마다 하나). 자리 수는 화면·훅이 먼저 막고 서버가 마지막에 가른다 — 여기서 거르면 보낸 질문이 보이지 않게 돈다.
+      if (!conv || isConversationStreaming(state, conv)) return state;
       return {
         ...state,
         conversations: { ...state.conversations, [conv.key]: { ...conv, turns: [...conv.turns, action.turn] } },
-        inflight: { turnKey: action.turn.key },
+        inflight: [...state.inflight, action.turn.key],
       };
     }
     case "ask/event":
@@ -255,23 +298,44 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
       return patchTurn(state, action.turnKey, (t) =>
         t.status === "done" ? t : { ...t, status: "error", error: action.error },
       );
-    case "ask/stopped":
-      return patchTurn(state, action.turnKey, (t) =>
-        t.status === "streaming" || t.status === "recovering" ? { ...t, status: "stopped" } : t,
-      );
+    case "ask/stopped": {
+      const next = patchTurn(state, action.turnKey, (t) => (t.status === "streaming" || t.status === "recovering" ? { ...t, status: "stopped" } : t));
+      // 멈춘 질문은 자리를 바로 비운다(서버 색인도 멈춤 누른 줄을 빼고 센다) — 목록의 '도는 중'도 내린다(적대 리뷰 2026-11-09).
+      const threadId = findTurn(next, action.turnKey)?.conv.threadId;
+      return threadId ? { ...next, threads: next.threads.map((t) => (t.id === threadId && t.running ? { ...t, running: false } : t)) } : next;
+    }
+    case "ask/rejected": {
+      const hit = findTurn(state, action.turnKey);
+      if (!hit) return state;
+      const turns = hit.conv.turns.filter((t) => t.key !== action.turnKey);
+      return { ...state, conversations: { ...state.conversations, [hit.conv.key]: { ...hit.conv, turns } } };
+    }
     case "ask/end":
-      return state.inflight?.turnKey === action.turnKey ? { ...state, inflight: null } : state;
+      return state.inflight.includes(action.turnKey) ? { ...state, inflight: state.inflight.filter((k) => k !== action.turnKey) } : state;
 
     case "thread/deleted": {
       const key = threadKey(action.threadId);
       const conversations = { ...state.conversations };
       delete conversations[key];
       const threads = state.threads.filter((t) => t.id !== action.threadId);
-      if (state.currentKey !== key) return { ...state, conversations, threads };
+      const edits = withEdit(state, { threadId: action.threadId, deleted: true });
+      if (state.currentKey !== key) return { ...state, ...edits, conversations, threads };
       const blank = Object.values(conversations).find((c) => !c.threadId && c.turns.length === 0);
-      if (blank) return { ...state, conversations, threads, currentKey: blank.key };
+      if (blank) return { ...state, ...edits, conversations, threads, currentKey: blank.key };
       conversations[action.newKey] = emptyConversation(action.newKey);
-      return { ...state, conversations, threads, currentKey: action.newKey };
+      return { ...state, ...edits, conversations, threads, currentKey: action.newKey };
+    }
+
+    // 이름 바꾸기 — 목록과 열려 있는 그 대화 머리를 함께(목록 순서는 그대로).
+    case "thread/renamed": {
+      const key = threadKey(action.threadId);
+      const conv = state.conversations[key];
+      return {
+        ...state,
+        ...withEdit(state, { threadId: action.threadId, title: action.title }),
+        threads: state.threads.map((t) => (t.id === action.threadId ? { ...t, title: action.title } : t)),
+        conversations: conv ? { ...state.conversations, [key]: { ...conv, title: action.title } } : state.conversations,
+      };
     }
   }
 }
@@ -281,9 +345,57 @@ export function currentConversation(state: AssistantState): Conversation {
   return state.conversations[state.currentKey] ?? emptyConversation(state.currentKey);
 }
 
+/** 이 대화에서 지금 답을 받는 차례(대화마다 하나). */
+export function liveTurnOf(state: AssistantState, conv: Conversation): Turn | null {
+  return conv.turns.find((t) => state.inflight.includes(t.key)) ?? null;
+}
+
 /** 답을 받는 차례가 이 대화에 있나. */
 export function isConversationStreaming(state: AssistantState, conv: Conversation): boolean {
-  return !!state.inflight && conv.turns.some((t) => t.key === state.inflight!.turnKey);
+  return liveTurnOf(state, conv) !== null;
+}
+
+/** 이 대화의 답을 서버가 아직 만드는 중인데 이 화면은 받지 않는다(다른 탭·기기에서 물었다 · 연결이 끊긴 뒤 · 새로 고친 뒤). */
+export function isConversationRunningElsewhere(state: AssistantState, conv: Conversation): boolean {
+  if (isConversationStreaming(state, conv)) return false;
+  if (conv.turns.some((t) => t.status === "running" || t.status === "recovering")) return true;
+  return !!conv.threadId && state.threads.some((t) => t.id === conv.threadId && t.running);
+}
+
+/**
+ * 서버가 아직 만드는 중이라고 저장본이 말했는데(차례 `running`·`recovering`) 이 화면이 보지 않는 대화 — 지금 보는 대화는 3초마다 다시 읽으니 뺀다.
+ * 끝났는지 따로 물어 풀어 줘야 한다(안 그러면 다른 대화로 옮긴 뒤 끝난 대화가 영영 '도는 중'으로 자리를 센다 · 적대 리뷰 2026-11-09).
+ */
+export function staleRunningThreadIds(state: AssistantState): string[] {
+  const out: string[] = [];
+  for (const conv of Object.values(state.conversations)) {
+    if (!conv.threadId || conv.key === state.currentKey || isConversationStreaming(state, conv)) continue;
+    if (conv.turns.some((t) => t.status === "running" || t.status === "recovering")) out.push(conv.threadId);
+  }
+  return out.sort();
+}
+
+/**
+ * 지금 답을 만드는 대화 수 — 이 화면이 받는 차례 + 서버가 도는 중이라고 알려 준 대화(목록 `running` · 저장본 '도는 중'), 겹치지 않게.
+ * 이 수가 `ASSISTANT_MAX_RUNNING`이면 보내기를 미리 막는다(그래도 서버가 마지막에 자리 색인으로 가른다).
+ */
+export function runningThreadKeys(state: AssistantState): Set<string> {
+  const keys = new Set<string>();
+  for (const conv of Object.values(state.conversations)) {
+    if (isConversationStreaming(state, conv) || isConversationRunningElsewhere(state, conv)) keys.add(conv.threadId ?? conv.key);
+  }
+  for (const t of state.threads) if (t.running) keys.add(t.id);
+  return keys;
+}
+
+export function runningCount(state: AssistantState): number {
+  return runningThreadKeys(state).size;
+}
+
+/** 이 대화에서 새 질문을 보낼 수 있나 — 이 대화가 도는 중이 아니고, 동시 자리가 남았다. */
+export function canStartIn(state: AssistantState, conv: Conversation): boolean {
+  if (isConversationStreaming(state, conv) || isConversationRunningElsewhere(state, conv)) return false;
+  return runningCount(state) < ASSISTANT_MAX_RUNNING;
 }
 
 // ───────────────────────────── 진행 단계 요약 ─────────────────────────────
@@ -302,14 +414,16 @@ export function formatDuration(ms: number): string {
 /**
  * 막힌 단계 하나의 뜻(원장 2026-11-06 *"왜 없는 칸을 썼다고 나오는지"* — 답은 잘 나왔는데 빨간 오류가 남아 문제처럼 보였다):
  * - `limit` = 시간·조회 한도로 여기서 멈춤(서버 표식 `cause` — 고칠 실수가 아니라 분석이 잘렸다는 신호).
+ * - `user` = 원장이 누른 '여기서 끝내고 결과 보기'로 하지 않은 조회(서버 표식 `cause` — 원장이 고른 것이라 옅게).
  * - `retried` = **답이 보고서로 끝났고**(settled) 뒤에 같은 종류 단계가 끝까지 됐다 — 다른 조회로 이어 갔다.
  *   🔴 답 전체가 실패한 차례는 늘 `failed` — 실패 안내는 '어디서 막혔나'를 보여 주는 자리다(적대 리뷰 2026-11-06).
  * - `failed` = 나머지. 막히지 않았으면 null.
  */
-export function stepTrouble(steps: readonly AskStep[], index: number, settled: boolean): "retried" | "limit" | "failed" | null {
+export function stepTrouble(steps: readonly AskStep[], index: number, settled: boolean): "retried" | "limit" | "user" | "failed" | null {
   const s = steps[index];
   if (!s || s.state !== "error") return null;
   if (s.cause === "limit") return "limit";
+  if (s.cause === "user") return "user";
   const family = (k: AskStep["kind"]) => (k === "fix" ? "report" : k);
   if (settled && steps.slice(index + 1).some((t) => t.state === "done" && family(t.kind) === family(s.kind))) return "retried";
   return "failed";
@@ -323,10 +437,10 @@ export function stepTrouble(steps: readonly AskStep[], index: number, settled: b
 export function stepSummary(
   steps: readonly AskStep[],
   settled = false,
-): { queries: number; tables: number; ms: number; retried: number; limited: number; failed: number } {
+): { queries: number; tables: number; ms: number; retried: number; limited: number; cut: number; failed: number } {
   const tables = new Set<string>();
   let ms = 0;
-  const count = { retried: 0, limit: 0, failed: 0 };
+  const count = { retried: 0, limit: 0, user: 0, failed: 0 };
   steps.forEach((s, i) => {
     for (const t of s.tables ?? []) tables.add(t.name);
     ms = Math.max(ms, s.at + (s.ms ?? 0));
@@ -339,6 +453,7 @@ export function stepSummary(
     ms,
     retried: count.retried,
     limited: count.limit,
+    cut: count.user,
     failed: count.failed,
   };
 }
@@ -352,6 +467,7 @@ export function stepSummaryText(steps: readonly AskStep[], settled = false): str
     formatDuration(s.ms),
     s.retried ? `다시 시도 ${s.retried}번` : null,
     s.limited ? `시간·한도로 여기까지` : null,
+    s.cut ? `여기서 조회를 끝냄` : null,
     s.failed ? `막힌 단계 ${s.failed}개` : null,
   ]
     .filter(Boolean)
@@ -403,7 +519,7 @@ const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object
 const str = (v: unknown): v is string => typeof v === "string";
 const num = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-const STEP_KINDS: readonly AskStep["kind"][] = ["understand", "schema", "write_sql", "query", "analyze", "report", "fix"];
+const STEP_KINDS: readonly AskStep["kind"][] = ["understand", "schema", "write_sql", "query", "analyze", "report", "fix", "survey"];
 const STEP_STATES: readonly AskStep["state"][] = ["running", "done", "error"];
 
 /** 단계 하나 — 모양이 틀리면 null. 표 칩은 이름·라벨이 글자인 것만 남긴다. */
@@ -422,7 +538,7 @@ export function parseStep(v: unknown): AskStep | null {
     ...(tables && tables.length ? { tables } : {}),
     ...(str(v.detail) ? { detail: v.detail } : {}),
     ...(num(v.ms) ? { ms: v.ms } : {}),
-    ...(v.cause === "limit" ? { cause: "limit" as const } : {}),
+    ...(v.cause === "limit" || v.cause === "user" ? { cause: v.cause } : {}),
   };
 }
 

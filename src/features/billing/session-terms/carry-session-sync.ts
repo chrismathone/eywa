@@ -17,9 +17,12 @@
 //    없으므로 내리는 쪽은 **알리기만** 한다(`carryShortfall` — 실납이 확정액보다 적어진 줄).
 // 🔴 하지 않는 것: 월 정액(EiE) · 옛 일수 기준 확정 · **0.5시수 단위로 안 떨어지는 이월**(만 원 같은 잔돈 — 단가 25,000에 10,000을
 //    0.4시수로 바꾸면 분배가 그만큼 줄어 넘긴 돈이 분배에서 빠진다) · 배분이 없거나 재확인이 필요한 줄(이월이 아직 안 실렸다) ·
-//    고치면 이 줄이 **보낸** 이월이 무효가 되는 줄 · 0~99 밖이 되는 시수.
+//    고치면 이 줄이 **보낸** 이월이 무효가 되는 줄 · **다음 달로 보낸 이월이 있는 줄**(아래) · 0~99 밖이 되는 시수.
+// 🔴 다음 달로 보낸 이월이 있는 줄은 올리지 않는다(연쇄 이월, 2026-11-09) — 받은 이월에서 남은 몫을 다시 넘길 수 있게 된 뒤로는
+//    "확정액 = 배분 − 보낸 이월"로 맞춰 둔 줄(사람이 실제 시수로 확정하고 남은 몫을 넘긴 줄)을 받은 이월만큼 또 올리면 확정이 실제보다
+//    많아진다(적대 리뷰 2026-11-09). 그 전에는 올리면 보낸 이월이 무효가 되어 아래 재확인에서 저절로 걸렸던 줄이다 — 같은 동작을 명시로 지킨다.
 import { sessionPricingAmount, validSessionQuantity, type SessionPricingMode } from "@/features/billing/session-pricing";
-import { canReceiveCarry, carryInTotal, netAllocatedAmount, type CarrySource, type MoneyCarryIn, type MoneyCarryOut } from "./money-carryover";
+import { carryOutValid, netAllocatedAmount, receivedCarry, type CarrySource, type MoneyCarryIn, type MoneyCarryOut } from "./money-carryover";
 
 export type CarrySyncRow = CarrySource & {
   /** 회차 행만 대상이다(가상 행은 확정이 없다). 모르면 대상으로 본다. */
@@ -31,14 +34,14 @@ export type CarrySyncRow = CarrySource & {
   carryIns?: readonly MoneyCarryIn[];
 };
 
-export type CarrySyncSkip = "not-term" | "unconfirmed" | "monthly" | "days-basis" | "no-price" | "no-allocation" | "balanced" | "unexplained" | "not-half" | "out-of-range";
+export type CarrySyncSkip = "not-term" | "unconfirmed" | "monthly" | "days-basis" | "no-price" | "no-allocation" | "balanced" | "unexplained" | "not-half" | "out-of-range" | "sending";
 export type CarrySyncPlan =
   | { kind: "none"; reason: CarrySyncSkip }
   | { kind: "adjust"; sessions: number; amount: number; bySessions: number; byAmount: number };
 
 /** 이 줄에 **지금 실제로 실리는** 받은 이월 합계 — 받을 수 없는 줄(배분 없음·재확인·환불)이면 0. `netAllocatedAmount`와 같은 판정. */
 export function landedCarryIn(row: CarrySyncRow): number {
-  return canReceiveCarry(row) ? carryInTotal(row.carryIns) : 0;
+  return receivedCarry(row);
 }
 
 /** 자동으로 바꾸는 시수의 단위 — 출석부 시수는 0.5 단위로 찍는다(1.5T 등). 더 잘게 쪼개지는 금액은 회차가 아니라 잔돈이다. */
@@ -61,6 +64,9 @@ export function planCarrySessionSync(row: CarrySyncRow, added = 0): CarrySyncPla
   if (net == null) return { kind: "none", reason: "no-allocation" };
   const gap = net - row.amount;
   if (gap === 0) return { kind: "none", reason: "balanced" };
+  // 다음 달로 보낸 이월이 있는 줄 — 사람이 남은 몫을 넘기려고 맞춘 확정이다(위 🔴). 받은 이월만큼 올리지 않는다.
+  // '이월 재확인'(무효) 상태의 보낸 이월은 실납에서 빠져 있으니 종전처럼 판정한다(사람이 고칠 이월 — 적대 재리뷰 2026-11-09).
+  if (row.carryOut && carryOutValid(row, row.carryOut.amount)) return { kind: "none", reason: "sending" };
   // 덜 받은 줄(차이 < 0)은 건드리지 않는다 — 내리는 쪽은 사람이 한다(위 🔴). 더 받은 몫이 이월과 다르면 이월 탓이 아니다.
   const landed = landedCarryIn(row);
   // `added`는 실제로 이 줄에 실린 이월의 일부여야 한다(실린 합계보다 크면 이 줄에 실린 돈이 아니다).

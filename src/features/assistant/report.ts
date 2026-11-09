@@ -5,11 +5,31 @@
  * 그리므로 AI가 숫자를 다시 타이핑하지 않는다 — 지어낸 숫자가 차트·표에 들어갈 길이 없다. KPI는 값을 글로 쓰되 `ref`를
  * 달면 서버가 그 칸의 실제 값으로 맞춘다(`settleReport`). 보고서 글에는 링크·이미지를 두지 않는다(화면은 글자로만 그린다 —
  * DB에 들어 있던 학부모 글이 지시처럼 읽혀 바깥 주소를 불러오게 하는 길을 막는다).
+ * 읽는 글 칸(요약·주의·목록 항목·비서 의견)만 강조 표시(굵게·뜻 색 — rich-text.ts)를 받는다. 제목·이름 칸은 표시를 벗긴다(`settleReport`).
  */
 import { z } from "zod";
 import { labelCodeColumns } from "./code-labels";
+import { plainRich } from "./rich-text";
 
 const text = (max: number) => z.string().trim().min(1).max(max);
+/**
+ * 강조 표시를 받는 글 칸 — 원장 2026-11-06 *"중요한 문구에는 색상이나 볼드 등 서식을 자유롭게"*.
+ * 글자 수는 **표시를 뺀 글**로 잰다(표시 때문에 쓸 말이 모자라지 않게) · 표시까지 넣은 원문은 1.3배까지.
+ */
+const richText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .min(1)
+    .max(Math.ceil(max * 1.3))
+    .refine((v) => {
+      // 원문 상한을 넘었으면 표시를 풀지 않는다 — zod는 .max가 실패해도 refine을 돌리고, 닫히지 않은 표시가 많은 아주 긴 글은
+      // 푸는 데 오래 걸린다(28만 자 요약 38초 · 적대 리뷰 2026-11-09). 원문 상한 오류만으로 충분하다.
+      if (v.length > Math.ceil(max * 1.3)) return true;
+      const plain = plainRich(v);
+      return plain.trim().length > 0 && plain.length <= max;
+    }, `강조 표시를 뺀 글이 1~${max}자여야 합니다`)
+    .describe(`강조 표시 가능(**굵게** · [[good:…]] · [[bad:…]] · [[warn:…]]) — 표시를 뺀 글 ${max}자까지`);
 
 export const QueryRefSchema = z.object({ query: z.string(), row: z.number().int().min(0), column: z.string() });
 
@@ -28,7 +48,7 @@ export const KpiItemSchema = z.object({
 export const ColumnFormatSchema = z.enum(["text", "number", "won", "percent", "date", "datetime"]);
 
 export const ReportBlockSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("summary"), text: text(800) }),
+  z.object({ type: z.literal("summary"), text: richText(800) }),
   z.object({ type: z.literal("kpi"), items: z.array(KpiItemSchema).min(1).max(6) }),
   z.object({
     type: z.literal("chart"),
@@ -47,8 +67,8 @@ export const ReportBlockSchema = z.discriminatedUnion("type", [
     /** 합계 줄을 낼 칸(숫자 칸만). */
     totals: z.array(z.string()).max(12).optional(),
   }),
-  z.object({ type: z.literal("callout"), tone: z.enum(["info", "warn", "good"]), title: text(60), text: text(600) }),
-  z.object({ type: z.literal("list"), title: z.string().trim().max(60).optional(), items: z.array(text(200)).min(1).max(12) }),
+  z.object({ type: z.literal("callout"), tone: z.enum(["info", "warn", "good"]), title: richText(60), text: richText(600) }),
+  z.object({ type: z.literal("list"), title: z.string().trim().max(60).optional(), items: z.array(richText(200)).min(1).max(12) }),
   /**
    * 비서 의견 — 원장 2026-11-06 *"형식적인 답변이 아닌 비서답게 어떻게 처리하면 좋겠다 같은 의견 제시도 같이"*.
    * 보고서마다 하나 꼭 넣는다(`settleReport`가 없으면 돌려보낸다). 할 일 · 까닭(데이터 근거) · 언제 · 누가.
@@ -58,8 +78,8 @@ export const ReportBlockSchema = z.discriminatedUnion("type", [
     items: z
       .array(
         z.object({
-          action: text(160),
-          why: text(300),
+          action: richText(160),
+          why: richText(300),
           when: z.enum(["today", "this_week", "this_month", "watch"]).optional(),
           who: z.string().trim().max(30).optional(),
         }),
@@ -100,6 +120,30 @@ export type QueryResult = {
 export type SettledReport = AssistantReport & {
   datasets: Record<string, Pick<QueryResult, "columns" | "rows" | "truncated" | "purpose">>;
   datasetsOmitted?: boolean;
+  /** 확인한 자료 범위 — 전수 조회(server/survey.ts)를 했으면 서버가 붙인다(AI가 쓰지 않는다). */
+  coverage?: ReportCoverage;
+  /**
+   * 조회를 일찍 끝내고 지금까지 본 자료로 정리한 답 — 서버가 붙인다(AI가 쓰지 않는다). 화면은 보고서 위에 한 줄로 알린다.
+   * `user` = 원장이 누른 '여기서 끝내고 결과 보기'(2026-11-06) · `time` = 시간이 다 됨 · `context` = 읽은 자료가 많아 정리.
+   */
+  cutShort?: "user" | "time" | "context";
+};
+
+/**
+ * 확인한 자료 범위 — 원장 2026-11-06 *"DB 전체 조회하고 답변하는거 맞아? … 하나도 빠짐없이"*. 전수 조회로 센 표 중 자료가 있는 표(또는 세지 못한 표)와,
+ * 그 표를 이번 답에서 조회로 자세히 봤는지(`examined`). 원장이 '빠진 것'을 직접 확인한다.
+ */
+export type ReportCoverage = {
+  surveys: Array<{
+    target: string;
+    name: string;
+    from: string;
+    to: string;
+    /** 센 표 수(자료 없는 표 포함). */
+    checked: number;
+    /** `key` = 표 하나를 강사와 직접 · 맡은 반을 거쳐 두 번 셀 때 줄을 가르는 이름(옛 저장본엔 없다 — 그때는 table). */
+    tables: Array<{ key?: string; table: string; label: string; via?: "class"; total: number | null; inPeriod: number | null; latest: string | null; examined: boolean; failed?: boolean }>;
+  }>;
 };
 
 /** `render_report` 도구 설명용 JSON 스키마(strict는 쓰지 않는다 — 서버가 zod로 검증하고 틀리면 이유를 돌려준다). */
@@ -133,7 +177,8 @@ export function settleReport(
     used.add(query);
     for (const c of columns) if (!r.columns.includes(c)) errors.push(`${where}: ${query}에 칸 ${c}가 없습니다(칸: ${r.columns.join(", ")})`);
   };
-  const blocks = parsed.data.blocks.map((block, i): ReportBlock => {
+  const blocks = parsed.data.blocks.map((raw, i): ReportBlock => {
+    const block = plainTitles(raw);
     const where = `blocks.${i}(${block.type})`;
     if (block.type === "chart") need(where, block.query, [block.x, ...block.series.map((s) => s.column)]);
     if (block.type === "table") need(where, block.query, [...block.columns.map((c) => c.column), ...(block.totals ?? [])]);
@@ -166,5 +211,36 @@ export function settleReport(
     const r = results.get(id)!;
     datasets[id] = { columns: r.columns, rows: rowsOf(r), truncated: r.truncated, purpose: r.purpose };
   }
-  return { ok: true, report: { title: parsed.data.title, blocks, datasets } };
+  return { ok: true, report: { title: plainRich(parsed.data.title), blocks, datasets } };
+}
+
+/**
+ * 제목·이름 칸(보고서·차트·표 제목 · 계열·칸 이름 · KPI 이름·값·단위 · 목록 제목 · 담당)은 강조 표시를 벗긴다 —
+ * 화면이 이미 굵게 그리거나 낭독·파일 이름·알림 글로 쓰이는 칸이라 `**`가 글자로 보이지 않게. 글 칸(rich)은 그대로.
+ * KPI `ref` 값은 settleReport가 DB 값으로 바꾼다(DB 값은 건드리지 않는다).
+ */
+function plainTitles(block: ReportBlock): ReportBlock {
+  switch (block.type) {
+    case "chart":
+      return { ...block, title: plainRich(block.title), series: block.series.map((s) => ({ ...s, label: plainRich(s.label) })), ...(block.unit ? { unit: plainRich(block.unit) } : {}) };
+    case "table":
+      return { ...block, title: plainRich(block.title), columns: block.columns.map((c) => ({ ...c, label: plainRich(c.label) })) };
+    case "kpi":
+      return {
+        ...block,
+        items: block.items.map((item) => ({
+          ...item,
+          label: plainRich(item.label),
+          ...(typeof item.value === "string" ? { value: plainRich(item.value) } : {}),
+          ...(item.unit ? { unit: plainRich(item.unit) } : {}),
+          ...(item.deltaLabel ? { deltaLabel: plainRich(item.deltaLabel) } : {}),
+        })),
+      };
+    case "list":
+      return block.title ? { ...block, title: plainRich(block.title) } : block;
+    case "advice":
+      return { ...block, items: block.items.map((item) => (item.who ? { ...item, who: plainRich(item.who) } : item)) };
+    default:
+      return block;
+  }
 }

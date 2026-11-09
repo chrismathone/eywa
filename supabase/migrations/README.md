@@ -28,6 +28,19 @@
   새 앱 + 옛 DB(순서 위반)면 관문 경로가 처리 함수를 부르지 않는다('DB 적용 전').
 - 되돌리기 = `scripts/_oneoff/revert-s2_0033-withdrawal-refund-decision-gate.sql`(앱 먼저 · 적용 뒤 지문일 때만 · 진행 중 '환불 결정 대기'나 승인이 끝났는데 처리 안 된 묶음이 있으면 멈춤 · 처리 함수 = s2_0030 본문 · 연결·release = s2_0025 본문 · 결정 표·칸은 남김 · 되돌린 뒤 지문 확인).
 
+## 2026-11-09 학원 비서 — 동시에 3개 · '바로 결과 보기' (s2_0034 · ✅ 운영 적용 2026-11-09 14:52 · 원장 *"sql은 그냥 승인"* · 직결(node · 파일 그대로 한 거래) · 가지 번호 s2_0033 → 병합 때 s2_0034(main의 s2_0033 = 금액 이월 연쇄))
+
+`s2_0034_assistant_parallel_finish.sql` — 원장 2026-11-09 '동시에 3개까지'(*"대화를 여러개 동시에 시작할 수 있는지 … 정상적인 동작으로 인식되게"*) · *"'여기서 조회 끝내고 바로 결과 출력' 버튼 만들자"*. `assistant_messages`에 `run_slot`(1~3) · `client_ref` · `wrap_requested_at` · 부분 고유 색인 둘(사람·자리 / 대화 — 둘 다 `status='running' and cancel_requested_at is null`) · 옛 사람당 하나 색인 삭제 · 비서 역할 연결 상한 4 → 12. 설계 = [`docs/features/academy-assistant.md`](../../docs/features/academy-assistant.md) §7-3.
+- 적용 전(읽기 전용): 도는 질문 0 · 같은 대화·같은 사람 겹침 0 · max_connections 90 · 쓰는 연결 43. 적용 뒤: 새 칸 3 · 새 색인 2 · 옛 색인 없음 · 연결 상한 12(사후 확인 DO 통과).
+- 로컬 시험(PGlite · 운영 표 구조) 22건: 자리 1~3 · 넷째 거절 · 자리 4 check · 같은 대화 둘째(빈 자리여도) 대화 색인 · 멈춘·끝난 질문은 자리를 비움 · 옛 앱 줄(run_slot 없음) · 두 번 적용 · 되돌리기 → 다시 적용.
+- 되돌리기 = `scripts/_oneoff/revert-s2_0034-assistant-parallel-finish.sql`(앱을 먼저 되돌린 뒤 · 사람당 둘 이상이면 오래된 하나만 남기고 닫는다).
+
+## 2026-11-09 금액 이월 저장 함수 상한에 받은 이월을 더한다 — 연쇄 이월 (s2_0033 · ✅ 운영 적용 2026-11-09 · 원장 *"확인하고 해결"* · 직결(node · 파일 그대로 한 거래))
+
+`s2_0033_money_carry_chain.sql` — 원장 2026-11-09 *"이미 8월 -> 9월로 한번 이월을 받았는데, 9월에서 남은 시수를 10월로 이월이 안되게 기능이 막혀있음"*. `save_session_term_money_carryover`(0278a)의 상한 `allocation_amount − amount`에 **지난 달 청구서(취소 제외)에서 이 학생 · 이 반으로 넘긴 이월 합계**를 더한다(상한일 뿐 — 유효성·붙는 줄은 앱이 화면과 같은 판정으로 먼저 본다). 서명·권한·나머지 본문은 0278a 그대로 → 옛 앱도 그대로 돈다(옛 상한 안의 값은 새 상한도 통과).
+- 순서: 이 SQL → 앱 배포(앱만 먼저 나가면 새로 선 '이월' 버튼이 저장에서 "최대 0원"으로 거절된다 — 화면은 안 죽는다).
+- 적용 전 확인(읽기 전용): 운영 함수 본문 = 0278a(본문 안 주석 한 줄만 빠짐) · ACL postgres·authenticated·service_role · 새 조회를 조은준 9월 줄 값으로 돌려 받은 이월 24,000 → 상한 12,000. 적용 뒤: 받은 이월 조회·새 상한이 정의에 있음 · ACL 그대로.
+
 ## 2026-11-06 연동 PC 역할에 도우미 함수 실행권 — 학원 비서 SQL 뒤 연동 PC 정지 복구 (s2_0032 · ✅ 운영 적용 2026-11-06 19:16 · 원장 *"수정할 수 있으면 빠르게 수정하고 적용시켜"* · 직결(node · do 블록 한 문장))
 
 `s2_0032_sync_agent_helper_grants.sql` — s2_0031이 PUBLIC 실행권을 거둔 public 보안 정의자 함수 11개(`assistant_private.revoked_public_execute`에서 비서 증표 발급 함수를 뺀 것)를 연동 PC 역할 `eywa_sync_agent`에 명시로 준다. s2_0031 적용(거래 시각 17:37:44) 직후 첫 42501(`permission denied for function operator_view_tenant`)이 17:37:50에 기록됐고, 연동 PC의 ClassNote 작업자 확인 · 신호 질의(`classnote_workers`)가 막혀 ClassNote 발송 · 학부모 글 감지가 멈췄고, 메이크에듀 모듈의 작업자 신호 · 요청 집기 질의도 막혔다. 이 역할은 PUBLIC 정책의 `auth_tenant_id()` · `auth_system_role()`(0406a가 이 역할에 준 겉함수) **속의** `operator_view_tenant()` · `auth_*_base()`를 PUBLIC으로 부르고 있었다(함정 #155).

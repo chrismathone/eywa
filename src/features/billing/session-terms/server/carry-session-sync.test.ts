@@ -18,7 +18,7 @@ vi.mock("./queries", () => ({ getSessionTermsView: h.view }));
 vi.mock("./money-carryover-queries", () => ({ loadMoneyCarryOuts: h.outs, loadMoneyCarryIns: h.ins }));
 vi.mock("./auto-reallocate", () => ({ loadAutoInvoices: h.autos, autoReallocateAfterConfirm: h.realloc }));
 
-import { applyCarrySync, carryShortNotice, carrySyncNotice, syncCarrySessionsAfter, syncCarrySessionsAfterCarry } from "./carry-session-sync";
+import { applyCarrySync, carryChainBreakNotice, carryShortNotice, carrySyncNotice, syncCarrySessionsAfter, syncCarrySessionsAfterCarry } from "./carry-session-sync";
 
 const T1 = "aaaaaaaa-1111-4111-8111-111111111111";
 const T2 = "aaaaaaaa-2222-4222-8222-222222222222";
@@ -261,6 +261,24 @@ describe("이월 저장·취소 뒤", () => {
     h.updates = [];
     expect(await syncCarrySessionsAfter(db(), { termIds: [T1] }, "user-1", "confirm")).toEqual([]);
     expect(h.updates).toEqual([]);
+  });
+
+  it("🔴 연쇄 이월이 끊기면 알린다 — 받은 이월이 빠져 다음 달로 넘긴 이월이 무효가 된 줄(그다음 달 실납도 바뀐다, 2026-11-09)", async () => {
+    // 9월: 배분 120,000 · 확정 5시수 120,000 · 8월에서 받던 24,000으로 남은 12,000을 10월로 넘겨 두었다 → 8월 이월 취소.
+    rowsOf(row());
+    carries({});
+    h.outs.mockResolvedValue({ map: new Map([[T1, { amount: 12000, toClassId: CLASS, toClassName: "중등M 개별 JJ3I", toPeriod: "2026-10", note: null, at: null }]]), failed: false });
+    const result = await syncCarrySessionsAfterCarry(db(), args({ previous: { classId: CLASS, amount: 24000 }, next: null }), "user-1");
+    expect(result.shorts).toEqual([]); // 9월 실납 = 확정액(무효가 된 이월은 빼지 않는다)
+    expect(result.broken).toEqual([{ period: "2026-09", toPeriod: "2026-10", studentName: "홍도연", className: "중등M 개별 JJ3I", amount: 12000 }]);
+    expect(carryChainBreakNotice(result.broken!)).toBe("9월 홍도연 중등M 개별 JJ3I: 받은 이월이 줄어 10월로 넘긴 12,000원 이월이 무효가 되었습니다 — 10월 실납에서도 빠졌으니 9월 이월을 고치거나 취소하고 10월 회차 확정을 확인해 주세요.");
+    // 이번 저장 전에도 무효였던 이월(받은 이월을 되돌려도 모자람 — 이미 '이월 재확인')은 이 저장 탓으로 알리지 않는다.
+    h.outs.mockResolvedValue({ map: new Map([[T1, { amount: 50000, toClassId: CLASS, toClassName: "중등M 개별 JJ3I", toPeriod: "2026-10", note: null, at: null }]]), failed: false });
+    expect((await syncCarrySessionsAfterCarry(db(), args({ previous: { classId: CLASS, amount: 24000 }, next: null }), "user-1")).broken).toBeUndefined();
+    h.outs.mockResolvedValue({ map: new Map(), failed: false });
+    // 받은 이월이 그대로면(취소가 아니라 새로 저장) 끊긴 줄이 없다 — 반환 모양도 종전 그대로.
+    carries({ [KEY]: [carryIn(24000)] });
+    expect((await syncCarrySessionsAfterCarry(db(), args(), "user-1")).broken).toBeUndefined();
   });
 
   it("🔴 원래 덜 받던 줄을 이월 탓으로 말하지 않는다 — 부족분이 빠진 이월보다 크면 알리지 않는다", async () => {

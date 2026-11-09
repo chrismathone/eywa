@@ -97,7 +97,7 @@ export function ReportTable({
 
   return (
     <div>
-      <div className="max-h-[min(64vh,560px)] overflow-auto overscroll-contain">
+      <div className="max-h-[min(64vh,560px)] overflow-auto overscroll-x-contain">
         <table className="w-full border-separate border-spacing-0 text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
           <thead className="sticky top-0 z-[1]">
             <tr>

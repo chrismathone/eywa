@@ -31,8 +31,10 @@ async function copyReusable(m,currentRoot,target,{onProgress=()=>{},concurrency=
   for(const f of m.files)if(await sameSize(currentRoot,f))candidate+=f.size;
   if(candidate<total*MIN_REUSE)throw new Error('delta_not_worth');
   await fsp.mkdir(target,{recursive:false});
-  const needed=[],queue=[...m.files];let completed=0,failure=null;
-  onProgress({phase:'copying',completed,total:m.files.length});
+  const needed=[],queue=[...m.files];let completed=0,bytes=0,failure=null;
+  // 진행률은 용량으로도 낸다(원장 2026-11-06 — 큰 파일이 앞에 몰려 있어 파일 수로 세면 '67 / 10,021개 파일 · 0%'가 용량으로는 약 23%였다). bytes = 처리를 마친 파일(복사했든 받을 목록으로 넘겼든)의 크기 합.
+  const report=()=>onProgress({phase:'copying',completed,total:m.files.length,bytes,totalBytes:total});
+  report();
   const one=async f=>{
     if(!(await sameSize(currentRoot,f))){needed.push(f);return;}
     const dest=sourceOf(target,f);await fsp.mkdir(path.dirname(dest),{recursive:true});const check=hashing(f);
@@ -42,7 +44,7 @@ async function copyReusable(m,currentRoot,target,{onProgress=()=>{},concurrency=
   };
   // 한 작업자가 실패하면 나머지도 멈추고, 모두 끝난 뒤에 던진다 — 부르는 쪽이 폴더를 지우는 동안 다른 작업자가 다시 쓰지 않게.
   await Promise.allSettled(Array.from({length:concurrency},async()=>{
-    for(let f;!failure&&(f=queue.shift());){try{await one(f);onProgress({phase:'copying',completed:++completed,total:m.files.length});}catch(error){failure??=error;return;}}
+    for(let f;!failure&&(f=queue.shift());){try{await one(f);completed++;bytes+=f.size;report();}catch(error){failure??=error;return;}}
   }));
   if(failure)throw failure;
   if(completed!==m.files.length)throw new Error('copy_incomplete');

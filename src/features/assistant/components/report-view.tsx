@@ -1,10 +1,13 @@
 "use client";
 
 import { Fragment, useId, useState, type ReactNode } from "react";
+import { tipProps } from "@/components/hover-tip/tip";
 import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { ADVICE_WHEN_LABEL, type ReportBlock, type SettledReport } from "@/features/assistant/report";
+import { plainRich } from "@/features/assistant/rich-text";
 import { ReportChart } from "./report-chart";
+import { RichText } from "./rich-text";
 import { ReportTable, type ReportTableColumn } from "./report-table";
 import {
   chartColumnFormat,
@@ -29,14 +32,29 @@ type AdviceBlock = Extract<ReportBlock, { type: "advice" }>;
  *
  * 🔴 **모든 글은 글자로만 그린다** — 마크다운·링크·이미지·`dangerouslySetInnerHTML` 없음. 보고서 글과 표 칸에는 DB에 들어 있던
  *    학부모 글처럼 남이 쓴 글이 섞인다(지시처럼 쓰인 글이 링크·이미지가 되어 바깥 주소를 부르지 않게 — report.ts 머리말).
- *    줄바꿈만 살린다(`whitespace-pre-line`).
+ *    줄바꿈만 살린다(`whitespace-pre-line`). 읽는 글 칸(요약·주의·목록 항목·비서 의견)만 강조 표시를 굵기·색으로 그린다
+ *    (원장 2026-11-06 *"중요한 문구에는 색상이나 볼드 등 서식을 자유롭게"* — `RichText` · rich-text.ts). 표 칸(DB 값)은 늘 글자 그대로.
  * 넓이는 이 상자(@container)가 정한다 — 오버레이(약 860px)와 전체 화면(그 이상)에서 같은 보고서가 다르게 접힌다.
  */
+/** 조회를 일찍 끝내고 정리한 답 — 보고서 위 한 줄(서버가 붙인 `cutShort`). 못 본 자료는 보고서의 '이번에 깊이 보지 않은 자료'·확인한 자료 범위에 있다. */
+const CUT_SHORT_TEXT: Record<NonNullable<SettledReport["cutShort"]>, string> = {
+  user: "'바로 결과 보기'로 여기서 조회를 끝내고, 지금까지 조회한 내용으로만 정리한 답입니다.",
+  time: "시간이 다 돼 여기까지 조회한 내용으로 정리한 답입니다.",
+  context: "읽은 자료가 많아 여기까지 조회한 내용으로 정리한 답입니다.",
+};
+
 export function ReportView({ report }: { report: SettledReport }) {
   const groups = groupBlocks(report.blocks);
   return (
     <article className="@container space-y-5" aria-label={report.title}>
+      {/* 제목은 저장 때(settleReport) 이미 표시를 벗겼다 — 화면에서 또 벗기면 글자 그대로 쓴 '**'가 사라진다(적대 리뷰 2026-11-09). */}
       <h3 className="text-foreground text-xl leading-snug font-bold break-words">{report.title}</h3>
+      {report.cutShort ? (
+        <p className="bg-bg-soft/60 flex items-start gap-2 rounded-xl px-3.5 py-2.5 text-sm font-medium">
+          <EyIcon name={report.cutShort === "user" ? "pause" : "clock"} size={16} className="mt-0.5 shrink-0" />
+          <span className="min-w-0 break-words">{CUT_SHORT_TEXT[report.cutShort]}</span>
+        </p>
+      ) : null}
       {groups.map((g) =>
         g.kind === "charts" ? (
           <div key={g.index} className={`grid grid-cols-1 gap-4 ${g.blocks.length > 1 ? "@4xl:grid-cols-2" : ""}`}>
@@ -48,6 +66,7 @@ export function ReportView({ report }: { report: SettledReport }) {
           <Block key={g.index} block={g.block} datasets={report.datasets} omitted={report.datasetsOmitted} />
         ),
       )}
+      {report.coverage?.surveys?.length ? <Coverage coverage={report.coverage} /> : null}
       <Sources report={report} />
     </article>
   );
@@ -56,7 +75,11 @@ export function ReportView({ report }: { report: SettledReport }) {
 function Block({ block, datasets, omitted }: { block: ReportBlock; datasets: SettledReport["datasets"]; omitted?: boolean }) {
   switch (block.type) {
     case "summary":
-      return <p className="text-foreground text-base leading-relaxed font-medium break-words whitespace-pre-line">{block.text}</p>;
+      return (
+        <p className="text-foreground text-base leading-relaxed font-medium break-words whitespace-pre-line">
+          <RichText text={block.text} />
+        </p>
+      );
     case "kpi":
       return <KpiGrid block={block} />;
     case "table":
@@ -253,11 +276,15 @@ const CALLOUT: Record<CalloutBlock["tone"], { box: string; icon: AywaIconName; i
 function Callout({ block }: { block: CalloutBlock }) {
   const t = CALLOUT[block.tone] ?? CALLOUT.info;
   return (
-    <section role="note" aria-label={`${t.label}: ${block.title}`} className={`${t.box} flex gap-3 rounded-xl px-4 py-3.5`}>
+    <section role="note" aria-label={`${t.label}: ${plainRich(block.title)}`} className={`${t.box} flex gap-3 rounded-xl px-4 py-3.5`}>
       <EyIcon name={t.icon} size={20} className={`${t.ink} mt-0.5 shrink-0`} />
       <div className="min-w-0 space-y-1">
-        <h4 className="text-foreground text-base font-bold break-words">{block.title}</h4>
-        <p className="text-foreground text-sm leading-relaxed break-words whitespace-pre-line">{block.text}</p>
+        <h4 className="text-foreground text-base font-bold break-words">
+          <RichText text={block.title} />
+        </h4>
+        <p className="text-foreground text-sm leading-relaxed break-words whitespace-pre-line">
+          <RichText text={block.text} />
+        </p>
       </div>
     </section>
   );
@@ -271,7 +298,9 @@ function ListView({ block }: { block: ListBlock }) {
         {block.items.map((item, i) => (
           <li key={i} className="flex gap-2.5">
             <span aria-hidden className="bg-primary mt-[0.6em] size-1.5 shrink-0 rounded-full" />
-            <span className="min-w-0 break-words whitespace-pre-line">{item}</span>
+            <span className="min-w-0 break-words whitespace-pre-line">
+              <RichText text={item} />
+            </span>
           </li>
         ))}
       </ul>
@@ -307,7 +336,9 @@ function AdviceCard({ block }: { block: AdviceBlock }) {
             </span>
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <p className="min-w-0 text-base leading-snug font-bold break-words">{item.action}</p>
+                <p className="min-w-0 text-base leading-snug font-bold break-words">
+                  <RichText text={item.action} />
+                </p>
                 {item.when ? (
                   <span
                     className={`rounded-full px-2 py-0.5 text-xs font-bold whitespace-nowrap ${item.when === "today" ? "bg-amber-soft text-amber" : "bg-bg-soft"}`}
@@ -319,7 +350,7 @@ function AdviceCard({ block }: { block: AdviceBlock }) {
               </div>
               <p className="text-sm leading-relaxed break-words whitespace-pre-line">
                 <span className="mr-1.5 font-bold">근거</span>
-                {item.why}
+                <RichText text={item.why} />
               </p>
             </div>
           </li>
@@ -330,6 +361,54 @@ function AdviceCard({ block }: { block: AdviceBlock }) {
 }
 
 // ───────────────────────────── 근거 ─────────────────────────────
+
+/**
+ * 확인한 자료 범위 — 원장 2026-11-06 *"DB 전체 조회하고 답변하는거 맞아? … 하나도 빠짐없이 남김없이"*.
+ * 전수 조회(서버)가 센 표 중 자료가 있는 표마다: 기간 건수 · 최근 날짜 · 이번 답이 자세히 봤나(✓) / 건수만 셌나 — 빠진 것을 원장이 직접 본다.
+ * 표 이름은 한국어 라벨로(마우스를 올리면 실제 표 이름). 기본은 접힘 — 머리 줄에 '표 N개 확인 · 자료 있는 표 M개 · 자세히 본 표 K개'.
+ */
+function Coverage({ coverage }: { coverage: NonNullable<SettledReport["coverage"]> }) {
+  return (
+    <>
+      {coverage.surveys.map((s, i) => {
+        const withData = s.tables.filter((t) => !t.failed);
+        const seen = withData.filter((t) => t.examined).length;
+        const failed = s.tables.filter((t) => t.failed).length;
+        return (
+          <details key={i} className="group border-line rounded-xl border">
+            <summary className="hover:bg-muted flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-1 rounded-xl px-4 py-2.5 text-sm font-medium select-none [&::-webkit-details-marker]:hidden">
+              <EyIcon name="listChecks" size={16} />
+              <span className="font-bold">확인한 자료 범위</span>
+              <span className="min-w-0 break-words">{`${s.target} ${s.name} · ${s.from}~${s.to}`}</span>
+              <span className="num">{`표 ${s.checked}개 확인 · 자료 있는 표 ${withData.length}개 · 자세히 본 표 ${seen}개${failed ? ` · 세지 못한 표 ${failed}개` : ""}`}</span>
+              <EyIcon name="chevronDown" size={16} className="ml-auto transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+            </summary>
+            <ul className="border-line space-y-1 border-t px-4 py-3 text-sm">
+              {s.tables.map((t) => (
+                <li key={t.key ?? t.table} className="flex flex-wrap items-baseline gap-x-2">
+                  <span {...tipProps({ title: t.label, rows: [["DB 표", t.table]] })} className="min-w-0 font-medium break-words">
+                    {t.label}
+                  </span>
+                  {t.failed ? (
+                    <span className="text-amber font-bold">세지 못함</span>
+                  ) : (
+                    <span className="num whitespace-nowrap">
+                      {t.inPeriod !== null ? `기간 ${t.inPeriod.toLocaleString("ko-KR")}건 · 전체 ${(t.total ?? 0).toLocaleString("ko-KR")}건` : `전체 ${(t.total ?? 0).toLocaleString("ko-KR")}건`}
+                      {t.latest ? ` · 최근 ${t.latest}` : ""}
+                    </span>
+                  )}
+                  {!t.failed ? (
+                    <span className={`ml-auto text-xs font-bold whitespace-nowrap ${t.examined ? "text-green" : "text-text-faint"}`}>{t.examined ? "✓ 자세히 봄" : "건수만 셈"}</span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </details>
+        );
+      })}
+    </>
+  );
+}
 
 /** 근거 — 이 보고서가 읽은 조회의 목적과 행 수(접힘 · JS 없이 `<details>`). 🔴 SQL은 보이지 않는다. */
 function Sources({ report }: { report: SettledReport }) {

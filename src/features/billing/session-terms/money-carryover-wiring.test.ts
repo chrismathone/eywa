@@ -78,6 +78,17 @@ describe("금액 이월 배선", () => {
     expect(registry.session_term_money_carryover_cancel).toBeTruthy();
   });
 
+  it("🔴 연쇄 이월(2026-11-09) — 더 받은 몫을 다시 구하는 세 곳이 모두 받은 이월을 붙인 줄로 판정한다(한쪽만 빠지면 돈이 사라진다)", () => {
+    const actions = read(`${Q}money-carryover-actions.ts`);
+    // 이월 창·저장 = 학생 줄 + 이월 붙이기(화면과 같은 경로). 배분 창 모드 조회는 이월 조회가 실패했을 때의 취소 전용 경로에서만(새 이월은 저장에서 다시 막힌다).
+    expect(actions).toContain("loadStudentCarryRows(db, inv.period, inv.student_id)");
+    expect(actions.indexOf("getSessionTermsView(inv.period")).toBeGreaterThan(actions.indexOf("if (degraded) {"));
+    // 받는 달 = 보내는 줄에 그 줄의 (학생, 반)으로 온 이월을 붙여 `carryOutValid`.
+    expect(read(`${Q}money-carryover-queries.ts`)).toMatch(/carryIns: t\.class_id \? prior\.get\(monthRosterKey\(inv\.student_id, t\.class_id\)\)/);
+    // 출석부 금액 열 = 이 줄이 받는 이월을 넣고 보낸 이월 유효성을 본다.
+    expect(read("src/features/attendance/class-billing.ts")).toContain("carryOutValid({ ...source, carryIns: takesIn ? carry.ins.get(inKey) : undefined }, sent)");
+  });
+
   it("서버 액션이 더 받은 몫·다음 달 반을 다시 구한다(#77) — 화면 값을 믿지 않는다", () => {
     const actions = read(`${Q}money-carryover-actions.ts`);
     expect(actions).toContain("carrySurplus(row)");

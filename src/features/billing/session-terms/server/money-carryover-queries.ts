@@ -99,33 +99,67 @@ export async function loadMoneyCarryOuts(db: Db, period: string, invoiceIds: rea
 }
 
 /**
+ * 연쇄 이월을 거슬러 읽는 깊이의 **안전 상한**(달) — 사슬은 (학생, 반)마다 제 몫으로 덮이지 않는 이월이 끊긴 달에서 저절로 멈춘다
+ * (받은 이월을 다시 넘긴 달만 이어진다 · 0278a 2026-09부터라 실제로는 몇 달). 넘으면 조용히 끊지 않고 **조회 실패**로 올린다(`failed` → 분배 저장 거절) — 끊어 읽으면 보내는 달 화면(한 달 덜 거슬러 본다)과
+ * 받는 달이 다른 답을 내 돈이 사라진다(적대 리뷰 2026-11-09).
+ */
+const CARRY_CHAIN_MAX_MONTHS = 120;
+
+const numOrNull = (v: number | string | null) => (v === null ? null : Number(v));
+
+/** 거슬러 읽는 범위 — 맨 위는 학생(없으면 전부), 그 아래는 **보내는 줄의 (학생, 반)**으로 그 반에 온 이월만 따라간다. */
+type CarryInsScope = { students: ReadonlySet<string> | null } | { keys: ReadonlySet<string> };
+
+/**
+ * `period`에 받은 이월(키 = `monthRosterKey(학생, 받을 반)`) — `loadMoneyCarryIns`의 본체. 실패는 throw(바깥이 `failed`로 접는다).
+ * 🔑 보내는 달 행의 유효성(`carryOutValid` → `carrySurplus`)에는 **그 행이 그 앞 달에서 받은 이월**도 든다(연쇄 이월, 원장 2026-11-09) —
+ *    그래서 보내는 줄의 (학생, 반)으로 온 이월을 같은 함수로 한 달씩 거슬러 읽어 그 줄에 붙인다.
+ * 🔑 붙는 줄 = 그 (학생, 반)의 그 달 회차 행 **하나뿐**이다 — 청구서는 (지점, 학생, 달)당 한 장(`invoices_tenant_student_period_idx`),
+ *    회차 행은 (청구서, 반)당 하나(`invoice_session_terms_tenant_id_invoice_id_class_id_key`)라 화면(`attachMoneyCarry`)이 고르는 줄과 같다.
+ *    그 줄이 받을 수 없는 줄(배분 없음·재확인·환불)이면 `receivedCarry`가 0으로 본다 — 화면의 orphan·환불 처리와 같은 답.
+ */
+async function carryInsInto(db: Db, period: string, scope: CarryInsScope, tenantId: string | undefined, depth: number): Promise<Map<string, MoneyCarryIn[]>> {
+  const fromPeriod = shiftMonth(period, -1);
+  const carried = (await carriedRowsOf(db, fromPeriod, tenantId)).filter((t) => {
+    const inv = one(t.invoice);
+    if (!inv || inv.status === "void" || !t.allocation_carry_class_id) return false;
+    return "keys" in scope ? scope.keys.has(monthRosterKey(inv.student_id, t.allocation_carry_class_id)) : !scope.students || scope.students.has(inv.student_id);
+  });
+  if (carried.length === 0) return new Map();
+  if (depth >= CARRY_CHAIN_MAX_MONTHS) throw new Error(`금액 이월 사슬이 ${CARRY_CHAIN_MAX_MONTHS}달을 넘습니다(${fromPeriod})`);
+  const byInvoice = await siblingsByInvoice(db, [...new Set(carried.map((t) => t.invoice_id))], tenantId);
+  const judged = carried.map((t) => {
+    const inv = one(t.invoice)!;
+    const s = invoiceAllocationStates({ id: t.invoice_id, line_items: inv.line_items, status: inv.status }, byInvoice.get(t.invoice_id) ?? []).get(t.id);
+    const own: CarrySource | null = s ? {
+      allocatedAmount: s.allocatedAmount, allocationStale: s.allocationStale, refundState: s.refundState, refundedAllocation: s.refundedAllocation,
+      amount: numOrNull(t.amount), confirmedSessions: numOrNull(t.confirmed_sessions),
+    } : null;
+    return { t, inv, own, amount: Number(t.allocation_carry_out) };
+  });
+  // 제 몫(배분 − 확정액)으로 덮이는 이월은 받은 이월과 무관하게 유효하다 — **모자란 줄**의 (학생, 반)만 거슬러 읽는다
+  // (매달 제 몫 잔돈을 같은 반으로 넘기는 학생 때문에 사슬이 달마다 깊어지지 않게 — 적대 재리뷰 2026-11-09). 그 반으로 온 이월만 든다.
+  const needKeys = new Set(judged.flatMap(({ t, inv, own, amount }) => (own && t.class_id && !carryOutValid(own, amount) ? [monthRosterKey(inv.student_id, t.class_id)] : [])));
+  const prior = needKeys.size > 0 ? await carryInsInto(db, fromPeriod, { keys: needKeys }, tenantId, depth + 1) : new Map<string, MoneyCarryIn[]>();
+  const out = new Map<string, MoneyCarryIn[]>();
+  for (const { t, inv, own, amount } of judged) {
+    const source: CarrySource | null = own ? { ...own, carryIns: t.class_id ? prior.get(monthRosterKey(inv.student_id, t.class_id)) : undefined } : null;
+    const valid = !!source && carryOutValid(source, amount);
+    const key = monthRosterKey(inv.student_id, t.allocation_carry_class_id!);
+    (out.get(key) ?? out.set(key, []).get(key)!).push({ amount, fromPeriod, fromClassName: nameOf(t.class), note: t.allocation_carry_note, valid });
+  }
+  return out;
+}
+
+/**
  * `period`에 **받은 이월** — 지난 달 청구서의 이월 행을 읽어 `monthRosterKey(학생, 받을 반)` → 이월 목록.
- * 🔴 유효성은 보내는 달 행을 **같은 판정**(`invoiceAllocationStates` → `carryOutValid`)으로 다시 본다.
+ * 🔴 유효성은 보내는 달 행을 **같은 판정**(`invoiceAllocationStates` → `carryOutValid`)으로 다시 본다 — 그 행이 받은 이월까지(연쇄).
  * 🔴 취소된 청구서의 이월은 **목록에서 뺀다**(보내는 달 화면에 그 행이 없어 취소할 수도 없다 — 영구 경고가 된다).
  * `studentIds`를 주면 그 학생 것만 돌려준다(메모리 필터).
  */
 export async function loadMoneyCarryIns(db: Db, period: string, studentIds: ReadonlySet<string> | null, tenantId?: string): Promise<{ map: Map<string, MoneyCarryIn[]>; failed: boolean }> {
-  const fromPeriod = shiftMonth(period, -1);
   try {
-    const carried = (await carriedRowsOf(db, fromPeriod, tenantId)).filter((t) => {
-      const inv = one(t.invoice);
-      return inv && inv.status !== "void" && !!t.allocation_carry_class_id && (!studentIds || studentIds.has(inv.student_id));
-    });
-    if (carried.length === 0) return { map: new Map(), failed: false };
-    const byInvoice = await siblingsByInvoice(db, [...new Set(carried.map((t) => t.invoice_id))], tenantId);
-    const out = new Map<string, MoneyCarryIn[]>();
-    for (const t of carried) {
-      const inv = one(t.invoice)!;
-      const state = invoiceAllocationStates({ id: t.invoice_id, line_items: inv.line_items, status: inv.status }, byInvoice.get(t.invoice_id) ?? []).get(t.id);
-      const amount = Number(t.allocation_carry_out);
-      const valid = !!state && carryOutValid({
-        allocatedAmount: state.allocatedAmount, allocationStale: state.allocationStale,
-        amount: t.amount === null ? null : Number(t.amount), confirmedSessions: t.confirmed_sessions === null ? null : Number(t.confirmed_sessions),
-      }, amount);
-      const key = monthRosterKey(inv.student_id, t.allocation_carry_class_id!);
-      (out.get(key) ?? out.set(key, []).get(key)!).push({ amount, fromPeriod, fromClassName: nameOf(t.class), note: t.allocation_carry_note, valid });
-    }
-    return { map: out, failed: false };
+    return { map: await carryInsInto(db, period, { students: studentIds }, tenantId, 0), failed: false };
   } catch (e) {
     return { map: new Map(), failed: classify(e) };
   }

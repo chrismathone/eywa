@@ -83,13 +83,42 @@ describe("ReportView", () => {
     expect(screen.queryByText("?")).toBeNull();
   });
 
-  it("🔴 DB·AI 글은 글자로만 — 태그·링크·이미지가 생기지 않는다", () => {
+  it("🔴 DB·AI 글은 글자로만 — 태그·링크·이미지가 생기지 않는다(강조 표시만 굵기·색)", () => {
     const { container } = render(<ReportView report={report} />);
     expect(container.querySelector("img")).toBeNull();
     expect(container.querySelector("a")).toBeNull();
-    expect(container.querySelector("strong")).toBeNull();
     // 같은 글이 요약·주의·목록·비서 의견·표 칸에 그대로 글자로 선다.
-    expect(screen.getAllByText((_, el) => !!el && el.children.length === 0 && (el.textContent ?? "").includes('<img src=x onerror="alert(1)">')).length).toBeGreaterThanOrEqual(4);
+    const hostileCount = (container.textContent ?? "").split('<img src=x onerror="alert(1)"> [눌러 주세요](https://evil.example)').length - 1;
+    expect(hostileCount).toBeGreaterThanOrEqual(5);
+    // 글 칸의 `**굵게**`는 굵게(<strong> — 표시 글자는 사라진다) · 표 칸(DB 값)은 글자 그대로.
+    const strong = [...container.querySelectorAll("strong")].map((el) => el.textContent);
+    expect(strong.filter((t) => t === "굵게").length).toBe(4);
+    const cell = within(screen.getByRole("table")).getByText((_, el) => el?.tagName === "TD" && (el.textContent ?? "").includes("**굵게**"));
+    expect(cell.querySelector("strong")).toBeNull();
+  });
+
+  it("강조 표시 — 굵게 · 좋음 초록 · 위험 빨강 · 주의 앰버 · 제목·낭독 이름엔 표시가 없다", () => {
+    const marked: SettledReport = {
+      // 제목은 저장 때 표시를 벗긴 글이다(settleReport) — 화면은 그대로 쓴다.
+      title: "퇴원 점검",
+      blocks: [
+        { type: "summary", text: "최근 3개월 퇴원 **8명** 중 [[bad:불만족 3명]]입니다." },
+        { type: "callout", tone: "warn", title: "퇴원 사유 — [[bad:절반]]이 수업", text: "[[good:출석은 **95%**]] · [[warn:지켜볼 반 2곳]]" },
+        { type: "advice", items: [{ action: "**BS3B** 담임 면담", why: "6개월 [[bad:**7명**]] 퇴원" }] },
+      ],
+      datasets: {},
+    };
+    const { container } = render(<ReportView report={marked} />);
+    expect(screen.getByRole("heading", { name: "퇴원 점검" })).toBeInTheDocument();
+    expect(screen.getByRole("note", { name: "주의: 퇴원 사유 — 절반이 수업" })).toBeInTheDocument();
+    expect(screen.getByText("8명").tagName).toBe("STRONG");
+    expect(screen.getByText("불만족 3명").className).toContain("text-danger");
+    expect(screen.getByText("절반").className).toContain("text-danger");
+    expect(screen.getByText("95%")).toMatchObject({ tagName: "STRONG" });
+    expect(screen.getByText("95%").className).toContain("text-green");
+    expect(screen.getByText("지켜볼 반 2곳").className).toContain("text-amber");
+    expect(screen.getByText("7명").className).toContain("text-danger");
+    expect(container.textContent).not.toMatch(/\*\*|\[\[/);
   });
 
   it("비서 의견 — 온 순서대로 번호 · 할 일 · '근거' 줄 · 오늘만 앰버 · 자료 카드와 다른 바탕", () => {
