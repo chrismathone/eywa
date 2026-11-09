@@ -16,6 +16,8 @@ export const DUTY_KINDS = {
   attendance: { label: "출결 입력", period: "daily", doneRule: "그 반 그날 그 학생의 출결 기록이 생기면 완료. 기한은 당일 자정." },
   report_write: { label: "수업보고서 작성", period: "daily", doneRule: "그날 그 학생의 수업보고서(또는 그날을 대신하는 보고서)가 있으면 완료. 결석이면 의무가 사라진다. 기한은 당일 자정." },
   report_send: { label: "보고서 발송", period: "daily", doneRule: "쓴 보고서가 학부모에게 실제로 나가면(발송 성공) 완료. 회수·발송 기한 지남이면 의무에서 빠진다. 기한은 다음 날 정오." },
+  counsel_monthly: { label: "월 학부모 상담", period: "monthly", doneRule: "상담 의무 학생(같은 과목에서 가장 많은 요일을 맡은 담임 · 영어는 반 담임 전원 — 강사평가·원생상담 통계와 같은 판정)마다 그 달 본인이 상담을 1건 이상 기록하면 완료. 기한은 말일." },
+  newcomer_call: { label: "신규생 정착 콜", period: "case", doneRule: "신규생 관리 체크리스트(사전 콜 · 첫 수업 안내 · OJT · 첫 수업 후 콜 · 1개월 콜 · 3개월 콜)의 항목을 체크하면 완료. 기한은 그 항목의 날(등록일·첫 수업일 기준). 담당 = 그 학생의 상담 의무 담임." },
 } as const satisfies Record<string, DutyKindInfo>;
 
 export type DutyKind = keyof typeof DUTY_KINDS;
@@ -37,7 +39,13 @@ export const DUTY_LATE_TASK_KIND = "duty_late";
 
 /** 화면에 내려가는 의무 한 건(강사 홈 '내 업무' 목록). */
 export type DutyItemView = {
-  id: string; kind: DutyKind | string; period: DutyPeriod; cycle: string; status: DutyStatus; dueAt: string;
-  studentId: string | null; studentName: string | null; classId: string | null; className: string | null; subject: string | null;
+  id: string; kind: DutyKind | string; period: DutyPeriod; cycle: string; status: DutyStatus; dueAt: string; doneAt: string | null;
+  studentId: string | null; studentName: string | null; school: string | null; grade: string | null;
+  classId: string | null; className: string | null; subject: string | null;
   escalation: number;
+};
+
+/** 신규생 콜 회차(항목 키) → 화면 이름 — `ONBOARDING_ITEMS`와 같은 글자(클라에서 그 모듈을 다시 묶지 않으려 여기 둔다). */
+export const NEWCOMER_ITEM_LABEL: Record<string, string> = {
+  pre_call: "수업 전 사전 콜", first_class_guide: "첫 수업 안내", ojt: "신입생 OJT", after_first_call: "첫 수업 후 콜", month1_call: "1개월 콜", month2_call: "2개월 콜", month3_call: "3개월 콜",
 };

@@ -7,7 +7,9 @@ import { programSubjectsOf, subjectGroupOf } from "@/features/students/enrollmen
 import { isReportTrackedSubject } from "@/features/dashboard/report-subjects";
 import { isTestClass, type WorkEnrollment } from "@/features/dashboard/overview/work-targets";
 import { buildDailyDuties, type DutyAttendance, type DutyClass, type DutyDraft, type DutyReport, type DutySchedule } from "../model/daily";
-import { DUTY_KIND_KEYS } from "../kinds";
+import { DUTY_KIND_KEYS, DUTY_KINDS } from "../kinds";
+
+const DAILY_KINDS = DUTY_KIND_KEYS.filter((k) => DUTY_KINDS[k].period === "daily");
 
 /**
  * 하루치 의무 맞춤(지점 × 날짜) — 생성기가 분모를 만들고(`duty_upsert_items`), 명단에서 빠진 것은 void(`duty_void_stale`),
@@ -60,10 +62,14 @@ export async function syncDailyDuties(tenantId: string, date: string, settings: 
     status: r.classnote_status, videoHomework: false, recalled: !!r.revoked_at, createdAt: r.created_at, sentAt: r.classnote_sent_at }));
   const drafts = buildDailyDuties({ date, holidays: new Set(settings.operations.holidays.map((h) => h.date)), classes: dutyClasses, schedules, enrollments, attendance,
     reports: dutyReports, posts: posts.map((p) => ({ boardName: p.board_name, postedOn: p.posted_on })), classnoteOn, inactiveTeacherIds: inactive });
-  return { drafts: drafts.length, ...(await writeDrafts(tenantId, date, drafts)) };
+  return { drafts: drafts.length, ...(await writeDrafts(tenantId, drafts, { rekey: true, cyclesOf: Object.fromEntries(DAILY_KINDS.map((k) => [k, [date]])) })) };
 }
 
-async function writeDrafts(tenantId: string, date: string, drafts: readonly DutyDraft[]): Promise<{ inserted: number; done: number; voided: number }> {
+/**
+ * 초안을 장부에 쓴다 — 열기(upsert) → 명단에서 빠진 것 void(종류 × 회차마다 · 보고서·상담처럼 열쇠에 담당이 든 종류는 rekey 정리) → 사실로 닫거나 되살림.
+ * `kinds`를 주면 초안이 하나도 없는 종류도 그 회차들을 정리한다(예: 신규생이 0명이 된 날).
+ */
+export async function writeDrafts(tenantId: string, drafts: readonly DutyDraft[], options: { rekey: boolean; /** 초안이 비어도 정리할 종류 → 회차. 건별(case) 종류는 회차 목록 대신 열린 회차를 DB에서 찾는다. */ cyclesOf?: Readonly<Record<string, readonly string[]>> } = { rekey: false }): Promise<{ inserted: number; done: number; voided: number }> {
   const admin = createAdminClient();
   let inserted = 0, done = 0, voided = 0;
   for (let i = 0; i < drafts.length; i += 500) {
@@ -74,13 +80,20 @@ async function writeDrafts(tenantId: string, date: string, drafts: readonly Duty
     if (error) throw new Error(`의무 장부 열기: ${error.message}`);
     inserted += Number((data as { inserted?: number } | null)?.inserted ?? 0);
   }
-  // 명단에서 빠진 것(결석 전원 · 반 이동 · 시간표 변경)은 분모에서 뺀다 — 종류마다 그날 회차 안에서만.
-  for (const kind of DUTY_KIND_KEYS) {
-    const keep = drafts.filter((d) => d.kind === kind && d.cycle === date).map((d) => d.subjectKey);
-    // 보고서 종류는 열쇠에 담당이 든다 — 담임이 바뀐 뒤 지난 회차를 다시 맞추면 옛 열쇠 행(done 포함)을 'rekeyed'로 정리(두 번 세지 않게).
-    const { data, error } = await admin.rpc("duty_void_stale", { p_tenant: tenantId, p_kind: kind, p_cycle: date, p_keep_keys: keep, p_reason: "not_due", p_rekey: kind !== "attendance" });
-    if (error) throw new Error(`의무 장부 정리(${kind}): ${error.message}`);
-    voided += Number(data ?? 0);
+  // 명단에서 빠진 것(결석 전원 · 반 이동 · 시간표 변경 · 창을 나간 신규생)은 분모에서 뺀다 — 종류 × 회차 안에서만.
+  const cycles = new Map<string, Set<string>>();
+  for (const d of drafts) cycles.set(d.kind, (cycles.get(d.kind) ?? new Set()).add(d.cycle));
+  for (const kind of Object.keys(options.cyclesOf ?? {})) if (!cycles.has(kind)) cycles.set(kind, new Set());
+  for (const [kind, set] of cycles) {
+    // 🔴 초안이 빈 종류는 **부르는 쪽이 지정한 회차만** 정리한다(휴원일에 그날 초안이 비었다고 지난 날들을 void하면 안 된다).
+    //    건별(case) 종류만 회차가 항목 키라 열린 회차를 DB에서 찾는다.
+    const targets = set.size ? [...set] : options.cyclesOf?.[kind]?.length ? [...options.cyclesOf[kind]!] : DUTY_KINDS[kind as keyof typeof DUTY_KINDS]?.period === "case" ? await openCyclesOfKind(tenantId, kind) : [];
+    for (const cycle of targets) {
+      const keep = drafts.filter((d) => d.kind === kind && d.cycle === cycle).map((d) => d.subjectKey);
+      const { data, error } = await admin.rpc("duty_void_stale", { p_tenant: tenantId, p_kind: kind, p_cycle: cycle, p_keep_keys: keep, p_reason: "not_due", p_rekey: options.rekey });
+      if (error) throw new Error(`의무 장부 정리(${kind}): ${error.message}`);
+      voided += Number(data ?? 0);
+    }
   }
   for (let i = 0; i < drafts.length; i += 500) {
     const chunk = drafts.slice(i, i + 500);
@@ -92,6 +105,12 @@ async function writeDrafts(tenantId: string, date: string, drafts: readonly Duty
     voided += Number(r?.void ?? 0);
   }
   return { inserted, done, voided };
+}
+
+async function openCyclesOfKind(tenantId: string, kind: string): Promise<string[]> {
+  const { data, error } = await createAdminClient().from("duty_items").select("cycle").eq("tenant_id", tenantId).eq("kind", kind).eq("status", "open").limit(1000);
+  if (error) throw new Error(`의무 열린 회차(${kind}): ${error.message}`);
+  return [...new Set(((data ?? []) as { cycle: string }[]).map((r) => r.cycle))];
 }
 
 /** 기한이 지났는데 열린 의무가 남은 지난 날들(최근 7일) — 오늘 말고도 다시 맞춰 봐야 닫힌다(다음 날 아침 발송 · 늦게 찍은 출결). */

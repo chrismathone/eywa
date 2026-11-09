@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { getStaffTaskViewer } from "@/features/staff-tasks/server/gate";
-import { listOwnerDuties } from "@/features/duties/server/queries";
+import { listOwnerDuties, listOwnerMonthDuties, weekCells } from "@/features/duties/server/queries";
+import { lastDays } from "@/features/duties/view";
 import { isValidYmd, kstToday } from "@/lib/date-kst";
 import { reportError } from "@/lib/observability/report-error";
 
 /**
- * 내 의무 목록(GET) — 강사 홈 '오늘 내 업무' 줄을 펼칠 때 부른다(s2_0041). 사람 확인은 할 일과 같은 문(`getStaffTaskViewer` — '다른 강사 뷰'면 그 강사).
- * 내 것만 내려간다(관리자 범위 화면은 2단계). 사람마다 다른 응답이라 캐시 금지.
+ * 내 의무(GET) — 강사 홈 '오늘 내 업무'를 펼칠 때 부른다(s2_0041). 사람 확인은 할 일과 같은 문(`getStaffTaskViewer` — '다른 강사 뷰'면 그 강사).
+ * 그날 일간 의무 + 최근 7일 학생별 완료 재료 + 이번 달 의무(월 상담 · 신규생 콜). 내 것만(관리자 범위 화면은 다음 단계). 사람마다 다른 응답이라 캐시 금지.
  */
 export const dynamic = "force-dynamic";
 const NO_STORE = { "Cache-Control": "no-store" } as const;
@@ -17,8 +18,13 @@ export async function GET(request: Request) {
   try {
     const viewer = await getStaffTaskViewer();
     if (!viewer) return NextResponse.json({ error: "로그인이 필요합니다" }, { status: 401, headers: NO_STORE });
-    const items = await listOwnerDuties(viewer.user.tenantId, viewer.user.id, date);
-    return NextResponse.json({ date, items }, { headers: NO_STORE });
+    const days = lastDays(date, 7);
+    const [items, week, month] = await Promise.all([
+      listOwnerDuties(viewer.user.tenantId, viewer.user.id, date),
+      weekCells(viewer.user.tenantId, viewer.user.id, days[0]!, date),
+      listOwnerMonthDuties(viewer.user.tenantId, viewer.user.id, date.slice(0, 7)),
+    ]);
+    return NextResponse.json({ date, days, items, week, month }, { headers: NO_STORE });
   } catch (error) {
     reportError(error, { scope: "api.duties.mine" });
     return NextResponse.json({ error: "오늘 업무를 불러오지 못했습니다" }, { status: 500, headers: NO_STORE });

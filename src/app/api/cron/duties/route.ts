@@ -6,6 +6,7 @@ import { reportError } from "@/lib/observability/report-error";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { escalateAndSnapshot, openPastCycles, syncDailyDuties } from "@/features/duties/server/sync";
+import { syncMonthlyDuties } from "@/features/duties/server/monthly-sync";
 
 /**
  * 의무 장부 30분 맞춤(s2_0041) — 지점마다 **오늘**의 일간 의무를 만들고(시간표·명단 · AI 없음) 원 표의 사실로 닫는다.
@@ -25,6 +26,8 @@ export async function GET(req: Request) {
   const today = kstToday();
   // hourCycle h23 — `hour12:false`만 주면 ICU 판에 따라 자정이 "24"로 나온다(check-time.ts와 같은 주의).
   const kstHour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", hour: "2-digit", hourCycle: "h23" }).format(new Date()));
+  // 월간·건별(상담 · 신규생 콜)은 한 시간에 한 번(:05 실행)이면 충분하다 — 상담 의무 판정이 반·수강·시간표를 다 읽는다.
+  const monthlyTurn = new Date().getUTCMinutes() < 30 || req.headers.get("x-duties-monthly") === "1";
   const yesterday = addDays(today, -1);
   let drafts = 0, taskOpened = 0, taskClosed = 0, failed = 0;
   const synced: Record<string, number> = {};
@@ -33,6 +36,7 @@ export async function GET(req: Request) {
       const settings = await getTenantSettingsByTenantId(tenantId, { failOnReadError: true });
       const days = [...new Set([...(await openPastCycles(tenantId)), ...(kstHour < 3 ? [yesterday] : []), today])].sort();
       for (const day of days) drafts += (await syncDailyDuties(tenantId, day, settings)).drafts;
+      if (monthlyTurn) { const m = await syncMonthlyDuties(tenantId, today, settings); drafts += m.counsel + m.newcomer; }
       const r = await escalateAndSnapshot(tenantId, days);
       taskOpened += r.taskOpened;
       taskClosed += r.taskClosed;

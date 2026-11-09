@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { DutyItemView, DutyKind, DutyPeriod, DutyStatus } from "../kinds";
+import type { DutyWeekCell } from "../view";
 
 /**
  * 의무 장부 조회 — 표는 서버 전용(s2_0041 정책 0개)이라 관리 키로 읽는다. 🔴 모든 조회에 지점(tenant_id) 조건 —
@@ -22,21 +23,56 @@ export function foldCounts(rows: readonly DutyCount[]): { total: number; done: n
 }
 
 type ItemRow = {
-  id: string; kind: string; period: DutyPeriod; cycle: string; status: DutyStatus; due_at: string; student_id: string | null; class_id: string | null; subject: string | null; escalation: number;
-  student: { name: string | null } | { name: string | null }[] | null; class: { class_name: string | null } | { class_name: string | null }[] | null;
+  id: string; kind: string; period: DutyPeriod; cycle: string; status: DutyStatus; due_at: string; done_at: string | null; student_id: string | null; class_id: string | null; subject: string | null; escalation: number;
+  student: { name: string | null; school: string | null; grade: string | null } | { name: string | null; school: string | null; grade: string | null }[] | null;
+  class: { class_name: string | null } | { class_name: string | null }[] | null;
 };
 const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? v[0] ?? null : v);
+const COLS = "id,kind,period,cycle,status,due_at,done_at,student_id,class_id,subject,escalation,student:students!duty_items_student_id_fkey(name,school,grade),class:classes!duty_items_class_id_fkey(class_name)";
+const toView = (r: ItemRow): DutyItemView => {
+  const st = one(r.student);
+  return { id: r.id, kind: r.kind as DutyKind, period: r.period, cycle: r.cycle, status: r.status, dueAt: r.due_at, doneAt: r.done_at,
+    studentId: r.student_id, studentName: st?.name ?? null, school: st?.school ?? null, grade: st?.grade ?? null,
+    classId: r.class_id, className: one(r.class)?.class_name ?? null, subject: r.subject, escalation: r.escalation };
+};
+/** void는 빼되 기한 지남 확정(expired)은 미완으로 보이게 싣는다. */
+const VISIBLE = "status.neq.void,void_reason.eq.expired";
 
-/** 한 사람의 그날(일간 회차) 의무 목록 — 학생 이름·반 이름을 붙여 내려준다(임베드는 FK 이름 명시 · #94). */
+/** 한 사람의 그날(일간 회차) 의무 목록 — 학생 이름·학교·학년·반 이름을 붙여 내려준다(임베드는 FK 이름 명시 · #94). */
 export async function listOwnerDuties(tenantId: string, ownerId: string, cycle: string): Promise<DutyItemView[]> {
-  const { data, error } = await createAdminClient().from("duty_items")
-    .select("id,kind,period,cycle,status,due_at,student_id,class_id,subject,escalation,student:students!duty_items_student_id_fkey(name),class:classes!duty_items_class_id_fkey(class_name)")
-    .eq("tenant_id", tenantId).eq("owner_id", ownerId).eq("cycle", cycle).neq("status", "void")
+  const { data, error } = await createAdminClient().from("duty_items").select(COLS)
+    .eq("tenant_id", tenantId).eq("owner_id", ownerId).eq("period", "daily").eq("cycle", cycle).or(VISIBLE)
     .order("kind").order("due_at").limit(1000);
   if (error) throw new Error(`의무 목록: ${error.message}`);
-  return ((data ?? []) as unknown as ItemRow[]).map((r) => ({
-    id: r.id, kind: r.kind as DutyKind, period: r.period, cycle: r.cycle, status: r.status, dueAt: r.due_at,
-    studentId: r.student_id, studentName: one(r.student)?.name ?? null, classId: r.class_id, className: one(r.class)?.class_name ?? null,
-    subject: r.subject, escalation: r.escalation,
-  }));
+  return ((data ?? []) as unknown as ItemRow[]).map(toView);
+}
+
+/** 한 사람의 이번 달 의무(월간 회차 = 그 달) + 건별 의무(신규생 콜 — 열린 것과 이번 달에 끝난 것). */
+export async function listOwnerMonthDuties(tenantId: string, ownerId: string, month: string): Promise<DutyItemView[]> {
+  const admin = createAdminClient();
+  const [monthly, cases] = await Promise.all([
+    admin.from("duty_items").select(COLS).eq("tenant_id", tenantId).eq("owner_id", ownerId).eq("period", "monthly").eq("cycle", month).or(VISIBLE).order("kind").limit(1000),
+    admin.from("duty_items").select(COLS).eq("tenant_id", tenantId).eq("owner_id", ownerId).eq("period", "case").or(VISIBLE)
+      .or(`status.eq.open,done_at.gte.${month}-01T00:00:00+09:00`).order("due_at").limit(1000),
+  ]);
+  if (monthly.error) throw new Error(`이번 달 의무: ${monthly.error.message}`);
+  if (cases.error) throw new Error(`건별 의무: ${cases.error.message}`);
+  return [...((monthly.data ?? []) as unknown as ItemRow[]), ...((cases.data ?? []) as unknown as ItemRow[])].map(toView);
+}
+
+/** 최근 며칠의 학생별 완료 비율 재료(학생 × 날 · 전체/완료) — 카드의 '최근 7일' 띠. 한 사람 × 7일이라 작다(상한 5,000행). */
+export async function weekCells(tenantId: string, ownerId: string, from: string, to: string): Promise<DutyWeekCell[]> {
+  const { data, error } = await createAdminClient().from("duty_items").select("cycle,status,student_id,class_id,void_reason")
+    .eq("tenant_id", tenantId).eq("owner_id", ownerId).eq("period", "daily").gte("cycle", from).lte("cycle", to).or(VISIBLE).limit(5000);
+  if (error) throw new Error(`의무 주간: ${error.message}`);
+  const out = new Map<string, DutyWeekCell>();
+  for (const r of (data ?? []) as { cycle: string; status: DutyStatus; student_id: string | null; class_id: string | null }[]) {
+    const studentKey = r.student_id ?? `class:${r.class_id}`;
+    const key = `${studentKey}|${r.cycle}`;
+    const c = out.get(key) ?? { day: r.cycle, studentKey, total: 0, done: 0 };
+    c.total++;
+    if (r.status === "done") c.done++;
+    out.set(key, c);
+  }
+  return [...out.values()];
 }
