@@ -41,6 +41,8 @@ export type PermissionRow = {
   hiddenInMenu: boolean;
   /** 메뉴 버튼 없이 다른 화면 **안에서** 쓰는 권한 — 그 화면의 줄 바로 아래에 들여 세운다. */
   inner: boolean;
+  /** 다른 역할에 열기 전에 알아야 할 것 — 줄 아래 작은 글(`ROW_NOTE`). 없으면 비운다. */
+  note?: string;
 };
 
 export type PermissionRowGroup = {
@@ -57,6 +59,27 @@ export const TEACHER_ONLY_GROUP = { id: "teacher-menu", label: "강사 ‘내 �
 export const NO_MENU_GROUP = { id: "no-menu", label: "메뉴에 없는 화면" } as const;
 /** 연결 앱(바깥 앱 링크) 권한 — 역할별 메뉴 표가 아니라 그 아래 '연결 앱 권한' 표에 선다(원장 2026-11-05 *"역할별 밑에 넣어줘"* · connected-app-permissions-card). */
 export const CONNECTED_APP_GROUP = { id: "connected-apps", label: "연결 앱" } as const;
+
+/**
+ * 메뉴가 아니라 **사이드바 맨 아래 줄의 단추**로 여는 도구의 권한(학원 비서 — 폰은 위쪽 줄 · 어느 화면에서나 Ctrl+J).
+ * 탭 묶음 뒤(도움말 다음)에 도구마다 제 줄로 선다 — 사이드바에서 그 단추가 서는 차례 그대로다(원장 2026-11-09 *"역할에 '비서 추가' 권한은 없네"*).
+ * 🔴 새 도구 단추를 만들면 여기에 키를 더하고 그 단추의 판정을 그 권한으로 할 것(코드에 역할로 박지 않는다).
+ */
+export const SIDEBAR_TOOL_KEYS = ["assistant"] as const satisfies readonly MenuKey[];
+export const SIDEBAR_TOOL_GROUP_PREFIX = "sidebar-tool:";
+
+/**
+ * 다른 역할에 열 때 알아야 할 위험·까닭 — 권한 표의 그 줄 아래 작은 글. 화면 문구라 내부 역할 이름은 쓰지 않는다(AGENTS.md).
+ * 시안 화면은 예시 값만 보여 준다는 것을 적는다 — 열어도 실제 자료가 나가지 않는다.
+ */
+const SAMPLE_NOTE = "시안 화면 — 예시 값만 보여 주고 실제 자료를 읽거나 저장하지 않습니다";
+export const ROW_NOTE: Partial<Record<MenuKey, string>> = {
+  assistant: "지점 자료 전부(급여·계약·연락처·계좌 포함)를 조회해 답합니다 — 다른 역할에 열면 그 사람도 모두 묻고 볼 수 있습니다. 전체·없음만 쓰고, 강사 화면에는 비서가 없어 강사 칸은 고정입니다.",
+  management: SAMPLE_NOTE,
+  okr: SAMPLE_NOTE,
+  marketing: SAMPLE_NOTE,
+  work_records: SAMPLE_NOTE,
+};
 
 /**
  * 메뉴 버튼이 없는 권한이 속한 화면 — **다른 화면 안의 버튼·드롭다운으로만 닿는 것**만 손으로 적는다. 설정 권한은 그 설정의
@@ -85,7 +108,9 @@ function finish(placed: Placed): PermissionRow {
   return { ...placed.row, covers, hiddenInMenu: placed.dests.length > 0 && placed.dests.every((d) => d.hidden) };
 }
 
-const newRow = (menu: MenuKey, inner = false): PermissionRow => ({ menu, label: MENU_LABEL[menu], covers: [], hiddenInMenu: false, inner });
+const newRow = (menu: MenuKey, inner = false): PermissionRow => ({
+  menu, label: MENU_LABEL[menu], covers: [], hiddenInMenu: false, inner, ...(ROW_NOTE[menu] ? { note: ROW_NOTE[menu] } : {}),
+});
 /** 메뉴 구성에서 **이름을 바꾼** 목적지인가 — 권한 표 · 강사 '내 메뉴' 표시 칸이 같은 판정으로 `covers`를 채운다(원장 2026-11-05 "항상 탭 이름을 기본으로"). */
 export const isRenamedDest = (d: Pick<HubDest, "label" | "originalLabel">) => !!d.originalLabel && d.originalLabel !== d.label;
 const renamed = isRenamedDest;
@@ -171,6 +196,13 @@ export function permissionRowGroups(navigation?: PermissionNavigation, options?:
       rows: g.keys.flatMap((menu) => [finish(placed.get(menu)!), ...(innerOf.get(menu) ?? []).map((inner) => newRow(inner, true))]),
     }))
     .filter((g) => g.rows.length > 0);
+
+  // ②′ 사이드바 맨 아래 줄 단추(학원 비서) — 탭 묶음 뒤에 도구마다 제 줄. 메뉴 구성이 감추거나 옮기는 자리가 아니라 늘 선다.
+  for (const menu of SIDEBAR_TOOL_KEYS) {
+    if (taken.has(menu)) continue;
+    out.push({ id: `${SIDEBAR_TOOL_GROUP_PREFIX}${menu}`, label: MENU_LABEL[menu], hiddenInMenu: false, rows: [newRow(menu)] });
+    taken.add(menu);
+  }
 
   // ③ 강사 '내 메뉴'에만 입구가 있는 권한 — 강사뷰 구성 차례.
   const teacherMenus = navigation?.teacherMenus;

@@ -31,6 +31,7 @@ import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-emai
 import { isLoginEmailTakenElsewhere } from "./login-email-taken";
 import { getActiveAssistSlotClasses } from "./queries";
 import { setStaffLoginBlocked } from "./auth-ban";
+import { cleanupPersonSettings } from "@/features/owner/server/retired-people";
 
 /** 직원 저장의 DB 오류 → 이유(+이메일 중복이면 그 칸) + 로그([[#138]]). 보호 트리거(42501·P0001)의 한글 이유는 그대로 보인다. */
 function staffSaveError(error: unknown, scope: string): StaffFormState {
@@ -659,6 +660,11 @@ export async function deactivateStaff(
   // 퇴사일 기록(원장 지시 2026-08-07) — users에 퇴사일 컬럼이 없어(SQL 접근 보류) **계약 이력 한 줄**로 남긴다.
   // kind='note'는 기간 없는 이력 줄이라 현재계약·차수 계산을 건드리지 않는다(contract.ts contractsOnly).
   if (next === "inactive") await recordResignNote(id, String(formData.get("resignDate") ?? ""), actor);
+  // 퇴사자 권한 정리(원장 2026-11-09 *"퇴사시 같이 사라지게"*) — 학원 설정의 사람 칸(개인별 기능·메뉴 권한 · 과목 범위 · 대시보드 배정)에서 뺀다.
+  // 🔴 다시 재직으로 돌릴 때도 뺀다(퇴사 동안 걸러지던 옛 줄이 되살아나지 않게 — 권한은 원장이 다시 지정한다).
+  if (next === "inactive" || target.status === "inactive") {
+    await cleanupPersonSettings({ tenantId: actor.tenantId, userId: id, targetLabel: target.displayName, reason: next === "inactive" ? "retire" : "reactivate" });
+  }
 
   // 퇴사 시 담임으로 남는 진행중 반 수 — 퇴사를 막지 않고 알림용으로만 반환.
   // (status 변경은 classes.teacher_id에 아무 전파가 없어 "(퇴직)" 담임이 시간표·출석부에 남는다.
@@ -842,6 +848,8 @@ export async function handoverAndDeactivate(
   });
   await setStaffLoginBlocked(id, true); // 퇴사자 로그인 차단(원장 2026-09-29)
   await recordResignNote(id, String(formData.get("resignDate") ?? ""), actor);
+  // 퇴사자 권한 정리(원장 2026-11-09) — 퇴사(deactivateStaff)와 같은 함수.
+  await cleanupPersonSettings({ tenantId: actor.tenantId, userId: id, targetLabel: target.displayName, reason: "retire" });
 
   // 인계 후에도 남은 담임 반(화면이 stale했거나 일부만 선택한 경우) — 막지 않고 사후 안내용. head:true(B2).
   const { count } = await supabase

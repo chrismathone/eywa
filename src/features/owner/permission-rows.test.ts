@@ -14,7 +14,7 @@ import { CONNECTED_APP_MENU_KEYS, MENU_KEYS, MENU_LABEL, resolveMatrix, TEACHER_
 import { SETTINGS_ROLE_HREF } from "@/lib/settings-role-catalog";
 import { teacherNavigationSource } from "@/lib/teacher-navigation";
 import { TEACHER_MENU_LINKS } from "@/lib/teacher-menu-links";
-import { CONNECTED_APP_GROUP, editablePermissionRowGroups, NO_MENU_GROUP, permissionRowGroups, TEACHER_ONLY_GROUP, type PermissionNavigation } from "./permission-rows";
+import { CONNECTED_APP_GROUP, editablePermissionRowGroups, NO_MENU_GROUP, permissionRowGroups, SIDEBAR_TOOL_GROUP_PREFIX, SIDEBAR_TOOL_KEYS, TEACHER_ONLY_GROUP, type PermissionNavigation } from "./permission-rows";
 import { TEACHER_TOGGLE_KEYS, teacherToggleOnAccess, teacherToggleRows } from "./teacher-toggle-rows";
 
 const keysOf = (nav?: PermissionNavigation, generic = false) => permissionRowGroups(nav, { generic }).flatMap((g) => g.rows.map((r) => r.menu));
@@ -123,11 +123,44 @@ describe("모든 권한 키가 정확히 한 번 선다", () => {
 describe("차례 = 왼쪽 탭 → 그 탭의 내부 메뉴", () => {
   it("묶음의 차례와 이름이 사이드바의 탭 그대로다", () => {
     const groups = permissionRowGroups();
-    // 다른 메뉴의 면만 담은 탭(지식그래프·조직·OKR·홍보·마케팅 = 대시보드 권한)은 권한 줄이 없어 묶음이 서지 않는다.
-    const tabs = configuredHubGroups([...HUB_GROUPS, ...SUPPORT_GROUPS], undefined, undefined, true)
-      .filter((t) => groups.some((g) => g.id === t.id) || !["knowledge-model", "organization", "marketing"].includes(t.id));
+    // 시안 탭(스키마·지식그래프 · 조직·OKR · 홍보·마케팅)도 제 권한 줄이 있어 모든 탭이 묶음으로 선다(2026-11-09 권한 줄 정비).
+    const tabs = configuredHubGroups([...HUB_GROUPS, ...SUPPORT_GROUPS], undefined, undefined, true);
     expect(groups.slice(0, tabs.length).map((g) => [g.id, g.label])).toEqual(tabs.map((g) => [g.id, g.label]));
-    expect(groups.slice(tabs.length).map((g) => g.id)).toEqual([TEACHER_ONLY_GROUP.id, NO_MENU_GROUP.id, CONNECTED_APP_GROUP.id]);
+    // 탭 뒤 = 사이드바 맨 아래 줄 단추(학원 비서) → 강사 '내 메뉴' 전용 → 메뉴에 없는 화면 → 연결 앱.
+    expect(groups.slice(tabs.length).map((g) => g.id)).toEqual([
+      ...SIDEBAR_TOOL_KEYS.map((menu) => `${SIDEBAR_TOOL_GROUP_PREFIX}${menu}`), TEACHER_ONLY_GROUP.id, NO_MENU_GROUP.id, CONNECTED_APP_GROUP.id,
+    ]);
+  });
+
+  it("🔴 시안 탭의 줄은 제 권한이다 — 대시보드·데이터베이스 권한을 빌리지 않는다(2026-11-09 · 페이지 문과 같은 키)", () => {
+    expect(menusOf("knowledge-model")).toEqual(["management"]);
+    expect(menusOf("organization")).toEqual(["okr"]);
+    expect(menusOf("marketing")).toEqual(["marketing"]);
+    // 업무 작성센터는 문서·결재 탭 안 그 버튼 자리(전자결재와 데이터베이스 사이).
+    expect(menusOf("document")).toEqual(["approvals", "work_records", "documents"]);
+    for (const [g, menu] of [["knowledge-model", "management"], ["organization", "okr"], ["marketing", "marketing"], ["document", "work_records"]] as const) {
+      expect(group(g)!.rows.find((r) => r.menu === menu)?.note, menu).toMatch(/시안 화면/);
+    }
+    // 화면에 세우는 표에도 선다(감추지 않은 기본 구성).
+    const shown = editablePermissionRowGroups().flatMap((g) => g.rows.map((r) => r.menu));
+    for (const menu of ["management", "okr", "marketing", "work_records"] as const) expect(shown, menu).toContain(menu);
+  });
+
+  it("🔴 학원 비서 = 탭 묶음 맨 뒤(도움말 다음) 제 줄 · 다른 역할에 열 때의 위험을 줄 아래에 적는다(원장 2026-11-09)", () => {
+    const shown = editablePermissionRowGroups();
+    const at = shown.findIndex((g) => g.id === `${SIDEBAR_TOOL_GROUP_PREFIX}assistant`);
+    expect(at).toBeGreaterThan(0);
+    expect(shown[at - 1]!.id).toBe("help");
+    const row = shown[at]!.rows;
+    expect(row.map((r) => r.menu)).toEqual(["assistant"]);
+    // 묶음 이름 = 줄 이름이라 권한 표가 '대시보드'·'도움말'처럼 한 줄로 그린다.
+    expect(shown[at]!.label).toBe(MENU_LABEL.assistant);
+    expect(row[0]!.note).toMatch(/지점 자료 전부/);
+    expect(row[0]!.note).toMatch(/급여/);
+    // 일반 화면 문구 — 내부 역할 이름을 쓰지 않는다(AGENTS.md).
+    for (const r of shown.flatMap((g) => g.rows)) expect(r.note ?? "", r.menu).not.toMatch(/슈퍼|super_admin|총괄/);
+    // 메뉴 구성을 바꿔도(탭 감춤 · 옮김) 그대로 선다 — 메뉴가 아니라 단추다.
+    expect(editablePermissionRowGroups(BUSY).some((g) => g.id === `${SIDEBAR_TOOL_GROUP_PREFIX}assistant`)).toBe(true);
   });
 
   it("탭 안의 줄 차례 = 내부 메뉴 차례(같은 권한의 면은 한 줄로 접힌다)", () => {

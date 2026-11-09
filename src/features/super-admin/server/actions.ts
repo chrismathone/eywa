@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
 import { PUBLIC_BRANDING_TENANTS_TAG } from "@/features/owner/server/public-branding";
 import { tenantSettingsTag } from "@/features/owner/server/queries";
+import { dropPersonFromSettings } from "@/features/owner/server/retired-people";
 import { licenseFlagsTag } from "@/lib/license/server";
 import { flagsFromMode, isShellMode } from "@/lib/license/shell-mode";
 import { SYSTEM_ROLES } from "@/lib/permissions";
@@ -295,7 +296,7 @@ export async function setUserActive(
 
   const admin = createAdminClient();
   const { data: account, error: accountError } = await admin.from("users")
-    .select("id").eq("id", userId).eq("tenant_id", tenantId).maybeSingle();
+    .select("id, status").eq("id", userId).eq("tenant_id", tenantId).maybeSingle();
   if (accountError || !account) {
     logDbError(accountError, "super-admin.setUserActive");
     return { error: "해당 지점의 계정을 찾을 수 없습니다" };
@@ -316,6 +317,12 @@ export async function setUserActive(
   });
   if (authErr) return { error: authErr.message };
   await admin.from("users").update({ status: active ? "active" : "inactive" }).eq("id", userId).eq("tenant_id", tenantId);
+  // 퇴사자 권한 정리(원장 2026-11-09 *"퇴사시 같이 사라지게"*) — 직원관리의 퇴사·재입사와 같은 함수(그 지점 학원 설정의 사람 칸에서 뺀다).
+  // 퇴사 상태에서 다시 활성으로 돌릴 때도 뺀다(옛 줄이 되살아나지 않게). 이미 활성인 계정을 다시 '활성'으로 누른 것은 건드리지 않는다.
+  // 결과는 아래 운영 감사의 같은 줄에 싣는다.
+  const cleans = !active || account.status === "inactive";
+  const permissionCleanup = cleans ? await dropPersonFromSettings(tenantId, userId, admin) : null;
+  updateTag(tenantSettingsTag(tenantId));
 
   await logSuperAdminAction({
     actorId: sa.id,
@@ -323,7 +330,11 @@ export async function setUserActive(
     action: "set_user_active",
     targetTenantId: tenantId || null,
     targetLabel: tenantName || null,
-    metadata: { userId, active },
+    metadata: {
+      userId,
+      active,
+      ...(permissionCleanup ? { permissionCleanup: permissionCleanup.ok ? { removed: permissionCleanup.removed, kept: permissionCleanup.kept } : { failed: permissionCleanup.reason } } : {}),
+    },
   });
   revalidatePath(`/super-admin/tenants/${tenantId}`);
   return { ok: true };

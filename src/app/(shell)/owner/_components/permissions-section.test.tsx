@@ -427,7 +427,31 @@ describe("개인별 메뉴 권한 — 역할 표 아래에서 주고 거둔다(�
   it("메뉴 고르기의 묶음 = 위 표의 묶음(왼쪽 탭)", () => {
     render(<PermissionsSection initial={EMPTY} staffOptions={staff} />);
     const groups = [...screen.getByLabelText("메뉴 선택").querySelectorAll("optgroup")].map((g) => g.label);
-    expect(groups.slice(0, 4)).toEqual(["대시보드", "수업", "원생", "신규생 90일 관리"]);
+    // 스키마·지식그래프(시안) 탭도 제 권한 줄이 있어 묶음으로 선다(2026-11-09 권한 줄 정비).
+    expect(groups.slice(0, 5)).toEqual(["대시보드", "스키마·지식그래프", "수업", "원생", "신규생 90일 관리"]);
+    // 학원 비서(사이드바 아래 줄 단추)도 개인에게 줄 수 있다 — 탭 묶음 맨 뒤.
+    expect(groups).toContain("학원 비서");
+  });
+
+  it("🔴 학원 비서 줄 — 위험 안내를 줄 아래 작은 글로 · 칸은 전체·없음만 · 강사 칸은 고정", () => {
+    render(<PermissionsSection initial={EMPTY} staffOptions={staff} />);
+    expect(screen.getAllByText(/지점 자료 전부\(급여·계약·연락처·계좌 포함\)/).length).toBeGreaterThan(0);
+    const cell = (role: keyof typeof ROLE_LABEL) => screen.getByRole("button", { name: new RegExp(`^${MENU_LABEL.assistant} · ${ROLE_LABEL[role]}:`) });
+    expect(cell("teacher")).toBeDisabled();
+    // 관리자 칸: 없음 → 전체 → (담당·읽기를 건너뛰고) 없음.
+    const admin = () => cell("admin");
+    expect(admin()).toHaveTextContent("없음");
+    fireEvent.click(admin());
+    expect(admin()).toHaveTextContent("전체");
+    fireEvent.click(admin());
+    expect(admin()).toHaveTextContent("없음");
+  });
+
+  it("지점 AI가 꺼져 있으면(페이지가 hiddenMenuKeys로 넘긴다) 학원 비서 줄이 표·개인별 메뉴 고르기 어디에도 없다", () => {
+    render(<PermissionsSection initial={EMPTY} staffOptions={staff} hiddenMenuKeys={["assistant"]} />);
+    expect(screen.queryAllByText(/지점 자료 전부/)).toHaveLength(0);
+    const groups = [...screen.getByLabelText("메뉴 선택").querySelectorAll("optgroup")].map((g) => g.label);
+    expect(groups).not.toContain("학원 비서");
   });
 });
 

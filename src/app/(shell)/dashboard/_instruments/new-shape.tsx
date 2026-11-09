@@ -52,9 +52,10 @@ export function CoreWork() {
   const { snapshot } = useBoard();
   const items: { title: string; text: string; href: string | null }[] = [
     { title: "신입생 90일 집중관리", text: "입학 약속 · 첫 수업 · 7/30/60/90일 액션과 결과", href: snapshot.allowed.includes("newcomers") ? "/newcomers" : null },
-    // 경영 분석·업무 작성센터 = aywa-next 화면을 옮긴 시안(예시 값 · 저장 안 함). 경영 분석은 원장·관리자만 열린다(페이지가 다시 막는다).
-    { title: "경영 분석", text: "매출 · 영업이익 · 인건비 · 채용 · 지식그래프", href: "/dashboard/management" },
-    { title: "업무 작성센터", text: "강사 기록 · 업무 서식 · 작성부터 결과 확인까지", href: "/work-records" },
+    // 경영 분석·업무 작성센터 = aywa-next 화면을 옮긴 시안(예시 값 · 저장 안 함). 권한 = 제 키(management · work_records — 2026-11-09 권한 줄 정비) ·
+    // 페이지가 같은 권한으로 다시 막는다. 권한이 없으면 칸만 남기고 누르지 않게 둔다(눌러서 대시보드로 튕기지 않게).
+    { title: "경영 분석", text: "매출 · 영업이익 · 인건비 · 채용 · 지식그래프", href: snapshot.allowed.includes("management") ? "/dashboard/management" : null },
+    { title: "업무 작성센터", text: "강사 기록 · 업무 서식 · 작성부터 결과 확인까지", href: snapshot.allowed.includes("work_records") ? "/work-records" : null },
   ];
   return (
     <nav className="ns-core" aria-label="핵심 업무" data-noopen>

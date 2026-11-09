@@ -22,6 +22,7 @@ import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
 import { HUB_GROUPS, SUPPORT_GROUPS } from "@/lib/menu-hub";
 import { BUNDLES, BUNDLE_LABELS } from "@/features/dashboard/layout/types";
 import { effectivePayslipManagerIds } from "./payslip-permissions";
+import { SPECIAL_ACCESS_LABEL } from "./retired-people";
 
 export type SettingChange = { label: string; from?: string; to?: string; note?: string };
 export type SettingsDiff = { changes: SettingChange[]; others: number };
@@ -264,20 +265,8 @@ function diffPermissions(before: unknown, after: unknown): SettingsDiff {
       if (v.specialAccess.studentStatusManagerIds !== undefined) {
         out.set("special:studentStatusMode", { label: "원생 상태 변경 · 담당자 지정 방식", access: "full" });
       }
-      for (const [key, label] of [
-        ["payslipViewerIds", "급여명세서 열람"],
-        ["payslipManagerIds", "급여명세서 관리"],
-        ["leaveAdjusterIds", "연차 조정"],
-        ["classSplitterIds", "수업 나누기"],
-        ["enrollmentDateEditorIds", "수강 날짜 수정"],
-        ["studentStatusManagerIds", "원생 상태 변경"],
-        ["staffTaskMonitorIds", "업무 처리 현황"],
-        ["vendorViewerIds", "업체리스트"],
-        ["jjReportManagerIds", "JJ 보고서 담당"],
-        ["beforeClassReportIds", "비포클래스 보고서 표"],
-        ["withdrawalApproverIds", "퇴원보고서 승인자"],
-        ["withdrawalDeskIds", "데스크 담당자"],
-      ] as const) {
+      // 칸 이름은 한 곳(`SPECIAL_ACCESS_LABEL` — 퇴사자 권한 정리·감사로그와 같은 말)에서 가져온다.
+      for (const [key, label] of Object.entries(SPECIAL_ACCESS_LABEL) as [keyof typeof SPECIAL_ACCESS_LABEL, string][]) {
         const ids = key === "payslipManagerIds" ? effectivePayslipManagerIds(v.specialAccess) : v.specialAccess[key];
         for (const id of Array.isArray(ids) ? ids : []) {
           if (typeof id !== "string") continue;

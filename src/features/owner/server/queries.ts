@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -8,7 +9,9 @@ import { markFolded } from "@/lib/folded-read";
 import { resolveSettings } from "../resolve";
 import { settingsRevOf } from "../settings-stamp";
 import type { TenantSettings } from "../settings-types";
+import { storedPersonIds, withoutRetiredPeople } from "../retired-people";
 import { platformAccountIds } from "./platform-settings";
+import { retiredPersonIds } from "./retired-lookup";
 
 /** owner 설정 캐시 무효화 태그(tenantId별). saveOwnerSection 저장 시 revalidateTag로 비운다. */
 export function tenantSettingsTag(tenantId: string): string {
@@ -77,6 +80,29 @@ export function storedForResolve(raw: { data: unknown; failed?: boolean }): unkn
 }
 
 /**
+ * 설정에 오른 사람 중 퇴사자(재직 아님) — **설정 캐시와 같은 태그**로 테넌트·명단별 캐시(B6 · 창마다 셸이 다시 돈다). 퇴사 처리(`cleanupPersonSettings`)가
+ * 그 태그를 비워 바로 반영된다. 조회 실패는 캐시하지 않고(던짐) 빈 집합 = **거르지 않음**으로 받는다 — 퇴사자는 로그인이 막혀 있어 본인 판정은 그대로 닫히고,
+ * 후보 목록(퇴원 승인자 · 데스크 담당)은 저마다 재직자만 다시 고른다. 원장 2026-11-09 *"퇴사시 같이 사라지게"*.
+ */
+const retiredPeopleCached = (tenantId: string, ids: readonly string[]) =>
+  unstable_cache(
+    async () => [...(await retiredPersonIds(ids))],
+    ["tenant-settings-retired-v1", tenantId, createHash("sha1").update([...ids].sort().join(",")).digest("hex")],
+    { tags: [tenantSettingsTag(tenantId)], revalidate: 300 },
+  )();
+
+async function retiredIn(tenantId: string, stored: unknown): Promise<Set<string>> {
+  const ids = storedPersonIds(stored);
+  if (ids.length === 0) return new Set();
+  try {
+    return new Set(await retiredPeopleCached(tenantId, ids));
+  } catch (e) {
+    console.error("[owner/queries] 퇴사자 조회 실패 — 이번엔 거르지 않는다", e);
+    return new Set();
+  }
+}
+
+/**
  * 현재 테넌트의 해석된 학원 설정(저장값 + DEFAULT_SETTINGS merge). getCurrentUser로 tenantId 확인 후
  * tenantId별 캐시에서 raw를 읽어 resolveSettings. React cache로 요청 내 중복도 제거.
  */
@@ -87,7 +113,9 @@ export const getTenantSettings = cache(async (): Promise<TenantSettings> => {
   const raw = await loadTenantSettingsRaw(user.tenantId);
   const settings = resolveSettings(storedForResolve(raw), { name: raw.name });
   // 못 읽어 기본값으로 접은 설정엔 표식을 남긴다 — 화면은 종전 그대로 쓰고, 금액 조립만 `foldedReason`으로 보고 멈춘다.
-  return raw.failed ? markFolded(settings, "학원 설정을 읽지 못했습니다") : settings;
+  if (raw.failed) return markFolded(settings, "학원 설정을 읽지 못했습니다");
+  // 퇴사자는 개인별 기능 권한(담당자 명단 · 과목 범위)에서 거른다 — 그 권한을 판정하는 게이트·후보 목록이 전부 이 값을 읽는다(retired-people.ts).
+  return withoutRetiredPeople(settings, await retiredIn(user.tenantId, raw.data));
 });
 
 /**
@@ -106,7 +134,8 @@ export async function getTenantSettingsByTenantId(tenantId: string, options?: { 
   if (settingsRes.error && options?.failOnReadError) throw new Error("학원 설정을 확인하지 못했습니다");
   // 조회 실패는 침산 기본값으로 — storedForResolve와 같은 규약.
   const stored = settingsRes.error ? {} : (settingsRes.data?.data ?? null);
-  return resolveSettings(stored, { name: tenantRes.data?.name ?? "" });
+  // 퇴사자 거르기는 getTenantSettings와 같다(정기 처리의 수신자 — 업무 처리 현황 요약 등 — 도 퇴사자에게 가지 않게).
+  return withoutRetiredPeople(resolveSettings(stored, { name: tenantRes.data?.name ?? "" }), await retiredIn(tenantId, stored));
 }
 
 /**

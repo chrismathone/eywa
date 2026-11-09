@@ -6,7 +6,7 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { CONNECTED_APP_ACCESS_MESSAGE, isConnectedAppMenu, isPermissionLocked, isScopedForbiddenRole, SCOPED_FORBIDDEN_MESSAGE, type SystemRole } from "@/lib/permissions";
+import { isOnOffMenu, isPermissionLocked, isScopedForbiddenRole, onOffAccessMessage, SCOPED_FORBIDDEN_MESSAGE, type SystemRole } from "@/lib/permissions";
 import { createUploadTicket, MEDIA_KIND } from "@/lib/storage/media-storage";
 import { isTenantBrandingPath } from "@/lib/storage/legacy-audio-path";
 import type { UploadTicket } from "@/lib/storage/types";
@@ -163,9 +163,11 @@ export async function saveOwnerSection(
   // 연결 앱 칸은 전체·없음만(원장 2026-11-05 — 링크를 세우나 마나) — 같은 까닭으로 여기서 **요청 값만** 본다. 저장돼 있던 그런 칸은
   // 화면이 기본값으로 읽어(resolveMatrix가 잠긴 값을 건너뛴다) 다시 싣지 않는다. 개인 줄은 아래 잠금 검사가 같은 문구로 본다.
   // 아래 '담당' 금지보다 먼저 본다 — 열람·아르바이트의 연결 앱 '담당'에 그 안내('읽기'를 고르라)를 내면 다시 보낸 '읽기'도 거절된다(재리뷰 2026-11-06).
-  if (section === "permissions" && result && (result.data as PermissionsSettings).overrides.some((r) => isConnectedAppMenu(r.menu) && r.access !== "full" && r.access !== "none")) {
-    return { error: CONNECTED_APP_ACCESS_MESSAGE };
-  }
+  // 학원 비서도 전체·없음만이다(isOnOffMenu — 2026-11-09). 연결 앱 칸은 종전 문구 그대로(onOffAccessMessage).
+  const onOffCell = section === "permissions" && result
+    ? (result.data as PermissionsSettings).overrides.find((r) => isOnOffMenu(r.menu) && r.access !== "full" && r.access !== "none")
+    : undefined;
+  if (onOffCell) return { error: onOffAccessMessage(onOffCell.menu) };
   // 강사보다 낮은 직급(열람·아르바이트)의 '담당'(원장 2026-11-05) — 같은 까닭으로 스키마가 아니라 여기서 **요청 값만** 본다.
   // 화면은 저장돼 있던 그런 칸을 '읽기'(그 칸 기본값이 '없음'이면 '없음')로 내려(resolveMatrix) 보내므로, 저장값에 남아 있어도 이 면의 저장은 막히지 않는다.
   if (section === "permissions" && result && (result.data as PermissionsSettings).overrides.some((r) => r.access === "scoped" && isScopedForbiddenRole(r.role))) {
@@ -255,11 +257,13 @@ export async function saveOwnerSection(
         const role = roles.get(r.userId)!;
         if (!isPermissionLocked(r.menu, role, r.access)) return false;
         // 저장돼 있던 연결 앱의 담당·읽기 줄(손으로 넣은 값)도 그대로 둘 수 있다 — 적용 단계가 건너뛴다(applyUserOverrides · 위 옛 '담당' 줄과 같은 까닭).
-        return !(((r.access === "scoped" && isScopedForbiddenRole(role)) || isConnectedAppMenu(r.menu)) && storedKeys.has(rowKey(r)));
+        // 학원 비서 줄도 같다(isOnOffMenu) — 그 사람이 뒤에 강사가 됐으면(강사 칸 잠금) 적용 단계가 건너뛰므로 남아 있어도 이 면의 저장을 막지 않는다.
+        return !(((r.access === "scoped" && isScopedForbiddenRole(role)) || isOnOffMenu(r.menu)) && storedKeys.has(rowKey(r)));
       });
       if (locked) {
-        // 연결 앱 칸이면 전체·없음만이라고 알린다(먼저 — 위 역할 칸 검사와 같은 차례) · 강사보다 낮은 직급의 '담당'이면 까닭을 알린다(원장 2026-11-05 "알림메시지도 배선" — 권한 표·개인별 권한 화면과 같은 문구).
-        return { error: isConnectedAppMenu(locked.menu) ? CONNECTED_APP_ACCESS_MESSAGE : locked.access === "scoped" && isScopedForbiddenRole(roles.get(locked.userId)!) ? SCOPED_FORBIDDEN_MESSAGE : "이 역할에서 잠긴 메뉴 권한은 변경할 수 없습니다" };
+        // 전체·없음만인 칸(연결 앱 · 학원 비서)에 담당·읽기면 그렇다고 알린다(먼저 — 위 역할 칸 검사와 같은 차례) · 강사보다 낮은 직급의 '담당'이면 까닭을 알린다(원장 2026-11-05 "알림메시지도 배선" — 권한 표·개인별 권한 화면과 같은 문구).
+        const onOffValue = isOnOffMenu(locked.menu) && locked.access !== "full" && locked.access !== "none";
+        return { error: onOffValue ? onOffAccessMessage(locked.menu) : locked.access === "scoped" && isScopedForbiddenRole(roles.get(locked.userId)!) ? SCOPED_FORBIDDEN_MESSAGE : "이 역할에서 잠긴 메뉴 권한은 변경할 수 없습니다" };
       }
     }
   }

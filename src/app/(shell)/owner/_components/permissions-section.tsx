@@ -32,6 +32,9 @@ import { TeacherMenuToggles } from "./teacher-menu-toggles";
 import { UserOverrideEditor } from "./user-override-editor";
 import { useSectionDraft } from "./use-section-draft";
 
+/** 숨길 메뉴 줄이 없을 때의 기본값 — 렌더마다 새 배열을 만들면 줄 목록 계산이 매번 다시 돈다. */
+const NO_MENU_KEYS: readonly MenuKey[] = [];
+
 /** 이 면이 고치는 세 칸 — 저장도 셋을 함께 보낸다(한 칸만 따로 저장하는 길은 없다). */
 type PermissionsDraft = {
   /** 역할별 권한 — 저장되는 목록(sparse)이 아니라 실제로 적용되는 표로 들고 편집한다. */
@@ -59,6 +62,7 @@ export function PermissionsSection({
   hiddenUserIds = [],
   generic = false,
   hiddenSettingKeys = [],
+  hiddenMenuKeys = NO_MENU_KEYS,
   connectedApps = [],
   baselineToken,
   baselineVersion,
@@ -73,6 +77,8 @@ export function PermissionsSection({
   hiddenUserIds?: string[];
   generic?: boolean;
   hiddenSettingKeys?: readonly SettingsRoleKey[];
+  /** 이 지점에서 꺼진 기능의 메뉴 줄(지점 AI가 꺼지면 학원 비서) — 표 · 개인별 메뉴 권한 고르기에 세우지 않는다(저장값은 그대로 실린다). */
+  hiddenMenuKeys?: readonly MenuKey[];
   /** 이 지점에서 켠 연결 앱 — 역할별 표 아래 '연결 앱 권한' 표의 줄(없으면 카드도 없다). */
   connectedApps?: readonly ConnectedAppPermissionRow[];
   /**
@@ -91,7 +97,13 @@ export function PermissionsSection({
   const { matrix, userOverrides, specialAccess } = draft;
   const setMatrix = (next: (m: AccessMatrix) => AccessMatrix) => setDraft((d) => ({ ...d, matrix: next(d.matrix) }));
   const overrides = useMemo(() => sparseRoleOverrides(matrix), [matrix]);
-  const groups = useMemo(() => editablePermissionRowGroups(navigation, { generic }), [navigation, generic]);
+  const groups = useMemo(
+    () =>
+      editablePermissionRowGroups(navigation, { generic })
+        .map((group) => ({ ...group, rows: group.rows.filter((row) => !hiddenMenuKeys.includes(row.menu)) }))
+        .filter((group) => group.rows.length > 0),
+    [navigation, generic, hiddenMenuKeys],
+  );
   const isSetting = (menu: MenuKey) => (SETTINGS_ROLE_KEYS as readonly string[]).includes(menu);
   const menuGroups = groups.map((group) => ({ ...group, rows: group.rows.filter((row) => !isSetting(row.menu)) })).filter((group) => group.rows.length > 0);
   const settingGroups = [{

@@ -3,6 +3,7 @@
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { formatSettingChange, type SettingChange } from "@/features/owner/settings-diff";
 import { SECTION_LABELS } from "@/features/owner/settings-types";
+import { PERSON_FIELD_LABEL, type PersonFieldKey } from "@/features/owner/retired-people";
 import { STEP_DECISION_LABEL, STEP_DECISIONS, type StepDecision } from "@/features/approvals/types";
 import { formatSignedDays } from "@/features/leave/balance";
 import { formatLeaveDays } from "@/features/leave/request-days";
@@ -957,6 +958,15 @@ export function auditDetail(
       // 스크립트 삭제 행은 role 대신 함께 지운 문서 수를 남긴다 — 데이터가 사라진 사실이라 꼭 보인다.
       const docs = num(m.docs);
       return join(r ? `삭제 당시 역할: ${r}` : null, docs ? `문서 ${docs}건 함께 삭제` : null);
+    }
+    case "staff_permission_cleanup": {
+      // 퇴사자 권한 정리 — 뺀 칸 · 마지막 한 명이라 남긴 칸(퇴원보고서 승인자 — 비우면 '지정 없음'으로 넓어진다).
+      const names = (v: unknown) => arr(v).flatMap((k) => (typeof k === "string" && k in PERSON_FIELD_LABEL ? [PERSON_FIELD_LABEL[k as PersonFieldKey]] : []));
+      const removed = names(m.removed);
+      const kept = names(m.kept);
+      const why = m.reason === "reactivate" ? "다시 재직으로 돌림" : m.reason === "delete" ? "완전 삭제" : "퇴사";
+      const parts = [removed.length ? `${removed.join(" · ")}에서 뺌` : null, kept.length ? `${kept.join(" · ")}는 마지막 지정자라 남김` : null].filter(Boolean);
+      return parts.length ? `${why} — ${parts.join(" / ")}` : null;
     }
     case "staff_protected_refused": {
       const what = m.attempt === "role" ? "역할 변경" : m.attempt === "delete" ? "삭제" : "재직 상태 변경";

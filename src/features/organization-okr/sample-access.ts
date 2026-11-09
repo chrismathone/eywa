@@ -1,15 +1,19 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { requireAccess } from "@/lib/auth/require-access";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 
 /**
- * 시안 화면의 문 — 원장(master)·관리자(admin)·매니저(manager)만. 새 권한 키·새 표를 쓰지 않는다.
- * 원래 화면의 권한 판정(새 메뉴 키가 필요)을 대신한다. 메뉴·권한 키는 시안을 정식으로 들일 때 정한다.
+ * 조직·OKR 시안의 문 — 학원 설정 → 역할·권한의 **'조직·OKR' 권한**(`okr` · 2026-11-09 권한 줄 정비).
+ * 전엔 코드의 원장·관리자·매니저 판정이었다 — 기본값이 그 세 역할이라(permissions.ts · 원장 결정 전 임시안) 지금 쓰는 사람은 그대로 연다.
+ * 운영 계정은 늘 통과(결정 로그 2026-08-13). 메뉴 판의 '조직·OKR'도 같은 권한을 본다(#77). 새 표를 읽지 않는다.
  */
 export async function requireSampleViewer() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (!["master", "admin", "manager"].includes(user.systemRole) && !(await isCurrentUserSuperAdmin())) redirect("/dashboard");
-  return user;
+  if (await isCurrentUserSuperAdmin()) {
+    const user = await getCurrentUser();
+    if (!user) redirect("/login");
+    return user;
+  }
+  return requireAccess("okr");
 }

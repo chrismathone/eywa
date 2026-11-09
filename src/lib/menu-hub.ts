@@ -121,10 +121,12 @@ export const HUB_GROUPS: HubGroup[] = [
     kind: "direct",
     items: keep([fromMenu("dashboard")]),
   },
-  // 시안(aywa-next 이식): 스키마·지식그래프 — 경영 분석 화면의 한 면(원장·관리자만, 페이지가 다시 막는다).
+  // 시안(aywa-next 이식): 스키마·지식그래프 — 경영 분석 화면의 한 면. 권한 = '경영 분석·지식그래프'(management · 2026-11-09 권한 줄 정비 —
+  // 전엔 대시보드 권한 + 코드의 원장·관리자 판정이었다). 페이지도 같은 권한으로 막는다(features/mockup/access.ts).
+  // ⚠️ 시안 키들은 메뉴 정의(NAV_GROUPS)가 없다 — 그림을 `MENU_ICON.<키>`로 받는다(문자열로 적으면 menu-glyph 중복 검사가 같은 그림을 두 번 센다).
   {
     id: "knowledge-model", label: "스키마·지식그래프", icon: MENU_ICON.dashboard, kind: "direct",
-    items: keep([face("dashboard", "/dashboard/management/knowledge", "스키마·지식그래프", "시트 설계 사전·실제 관계 지도·미입력 점검", { icon: "merge", adminOnly: true })]),
+    items: keep([face("dashboard", "/dashboard/management/knowledge", "스키마·지식그래프", "시트 설계 사전·실제 관계 지도·미입력 점검", { icon: MENU_ICON.management, menuKey: "management" })]),
   },
   // 🔴 **캘린더는 메뉴에 세우지 않는다** (원장 2026-09-10: *"캘린더 탭은 메뉴에서 제외시켜. 그냥 내부
   //    구글 달력용으로 사용할예정임."* → *"즉, 동기화하지만 외부로 보여주지않고 내부 끌어오기 참고용으로만 할것"*).
@@ -223,17 +225,18 @@ export const HUB_GROUPS: HubGroup[] = [
       face("shuttle", SHUTTLE_PARENTS_PATH, "학부모 관리 현황", "학부모 계정·연결 원생", { tool: true, adminOnly: true }),
     ]),
   },
-  // 시안(aywa-next 이식): 조직·OKR · 홍보·마케팅.
+  // 시안(aywa-next 이식): 조직·OKR · 홍보·마케팅. 권한 = 제 키(okr · marketing — 2026-11-09 권한 줄 정비. 전엔 대시보드 권한으로 메뉴만 세우고
+  // 페이지는 코드의 원장·관리자·매니저 판정이라 상담·회계·열람은 메뉴를 눌러도 대시보드로 돌아갔다). 페이지도 같은 권한(각 sample-access.ts).
   {
     id: "organization", label: "조직·OKR", icon: SAMPLE_GROUP_ICON.organization, kind: "direct",
-    items: keep([face("dashboard", "/organization/okr", "조직·OKR", "조직 목표·내 핵심결과·실행·주간 점검·피드백", { icon: "target" })]),
+    items: keep([face("dashboard", "/organization/okr", "조직·OKR", "조직 목표·내 핵심결과·실행·주간 점검·피드백", { icon: MENU_ICON.okr, menuKey: "okr" })]),
   },
   {
     id: "marketing", label: "홍보·마케팅", icon: SAMPLE_GROUP_ICON.marketing, kind: "hub",
     note: "연간 홍보·행사 기록부터 채널 성과와 학생 유입까지 연결합니다.",
     items: keep([
-      face("dashboard", "/marketing", "연간 운영계획", "행사 기획·준비 일정·담당 업무·초대와 참석·회고", { icon: "send" }),
-      face("dashboard", "/billing/management/marketing", "홍보·마케팅", "연간 마케팅 지도·행사 기록·채널별 성과", { icon: "barChart", adminOnly: true }),
+      face("dashboard", "/marketing", "연간 운영계획", "행사 기획·준비 일정·담당 업무·초대와 참석·회고", { icon: "send", menuKey: "marketing" }),
+      face("dashboard", "/billing/management/marketing", "홍보·마케팅", "연간 마케팅 지도·행사 기록·채널별 성과", { icon: MENU_ICON.marketing, menuKey: "marketing" }),
     ]),
   },
   // 🔴 **회의록은 업무군에 넣지 않고 왼쪽 탭 한 줄로 세운다** (원장 2026-09-10:
@@ -255,7 +258,8 @@ export const HUB_GROUPS: HubGroup[] = [
     note: "기록과 결재 문서입니다.",
     items: keep([
       fromMenu("approvals", "기안·결재함"),
-      face("documents", "/work-records", "업무 작성센터", "내 계정으로 수업·상담·업무 서식 작성", { icon: "filePlus" }),
+      // 업무 작성센터(시안) — 권한 = 제 키(work_records · 2026-11-09). 전엔 메뉴는 데이터베이스 권한, 페이지는 대시보드 권한이라 둘이 갈렸다.
+      face("documents", "/work-records", "업무 작성센터", "내 계정으로 수업·상담·업무 서식 작성", { icon: MENU_ICON.work_records, menuKey: "work_records" }),
       fromMenu("documents", "서식·문서 저장소"),
     ]),
   },

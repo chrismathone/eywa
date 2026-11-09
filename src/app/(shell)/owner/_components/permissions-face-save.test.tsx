@@ -337,7 +337,9 @@ describe("배선", () => {
   it("🔴 폼의 값과 기준 token은 **방금 읽은** 역할·권한에서 만든다 — 설정 캐시의 값으로 폼을 열지 않는다", () => {
     expect(page).toContain('const showsPermissions = tab === "permissions" && isMaster;');
     expect(page).toContain("const permissionsSource = showsPermissions ? editable?.settings.permissions : undefined;");
-    expect(page).toContain("initial={permissionsSource}");
+    // 폼의 값 = 방금 읽은 값에서 퇴사자만 거른 것(2026-11-09) · 기준 token = 방금 읽은 저장값 그대로(거른 값을 저장하면 저장값에서도 빠진다).
+    expect(page).toContain("const permissionsInitial = permissionsSource ? withoutRetiredPeople({ permissions: permissionsSource }, retiredPermissionIds).permissions : undefined;");
+    expect(page).toContain("initial={permissionsInitial ?? permissionsSource}");
     expect(page).toContain("baselineToken={permissionsToken(permissionsSource)}");
     expect(page).toContain("baselineVersion={editable?.versions.permissions}");
     expect(page).not.toMatch(/initial=\{settings\.permissions\}/);
