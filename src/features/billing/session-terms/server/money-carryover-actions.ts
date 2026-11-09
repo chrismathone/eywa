@@ -9,11 +9,11 @@ import { createClient } from "@/lib/supabase/server";
 import { shiftMonth } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
 import { loadMonthRoster } from "./month-roster";
-import { carrySurplus, receivedCarry, validateMoneyCarry, type MoneyCarryOut } from "../money-carryover";
+import { carryOutValid, carrySurplus, receivedCarry, validateMoneyCarry, type MoneyCarryOut } from "../money-carryover";
 import { isVirtualTermId } from "../month-roster";
 import { getSessionTermsView } from "./queries";
 import { loadMoneyCarryOuts } from "./money-carryover-queries";
-import { carryChainBreakNotice, carryShortNotice, carrySyncNotice, loadStudentCarryRows, lowerConfirmedForCarry, syncCarrySessionsAfterCarry } from "./carry-session-sync";
+import { carryChainBreakNotice, carryShortNotice, carrySyncNotice, loadStudentCarryRows, lowerConfirmedForCarry, syncCarrySessionsAfter, syncCarrySessionsAfterCarry } from "./carry-session-sync";
 import { carryUnreflectable, planCarryUnreflect } from "../carry-session-sync";
 import type { SessionTermRow } from "./queries";
 
@@ -250,7 +250,19 @@ export async function saveMoneyCarryover(input: { termId: string; amount: number
   const loweredNotice = unreflect.kind === "lower"
     ? `${Number(c.period.slice(5, 7))}월 ${c.studentName}${c.className ? ` ${c.className}` : ""}: 확정 시수 ${c.confirmedSessions} → ${unreflect.sessions}(${Number(c.nextPeriod.slice(5, 7))}월로 ${amount.toLocaleString("ko-KR")}원 넘김 · 그중 시수에 반영됐던 받은 이월 ${unreflect.byAmount.toLocaleString("ko-KR")}원)`
     : undefined;
-  const notice = [loweredNotice, carrySyncNotice(synced.changes)].filter(Boolean).join(" · ") || undefined;
+  // 이 줄이 보낸 이월을 **줄이거나 취소**했으면 이 달 줄을 그 자리에서 다시 판정한다(2026-11-09 — 남은 한계 근본 해결) — 받은 이월이 다시
+  // 이 달에 남으면 자동 맞춤 규칙대로 시수에 반영된다. 예전엔 이 달 확정·배분을 다시 저장하는 엉뚱한 때 갑자기 시수가 뛰었다(낮춰 넘긴 줄은 그대로 남고).
+  // 아직 보낸 이월이 남아 있으면(줄이기) `sending`이라 올리지 않는다 — 줄인 만큼은 더 받은 몫으로 남아 창에 다시 보인다.
+  const reopened = c.current && amount < c.current.amount
+    ? await syncCarrySessionsAfter(db, { termIds: [c.termId] }, user.id, "carry_out_change")
+    : [];
+  // 시수에 다시 반영되지 않았으면 줄이거나 취소한 몫이 이 달 '더 받은 몫'으로 남았다고 알린다(어디로 갔는지 말없이 두지 않는다).
+  // 종전 이월이 유효했고(무효였으면 더 받은 몫이 늘지 않는다) 앞 달 이월을 읽었고(degraded 아님) 이 줄이 다시 올라가지 않았을 때만 —
+  // 확인하지 못한 사실을 단정하지 않는다(적대 리뷰 2026-11-09).
+  const freed = c.current && amount < c.current.amount && !c.degraded && carryOutValid(c.row, c.current.amount) && !reopened.some((x) => x.termId === c.termId)
+    ? `${Number(c.period.slice(5, 7))}월 ${c.studentName}${c.className ? ` ${c.className}` : ""}: ${amount === 0 ? "취소한" : "줄인"} ${(c.current.amount - amount).toLocaleString("ko-KR")}원은 ${Number(c.period.slice(5, 7))}월 더 받은 몫으로 남았습니다`
+    : undefined;
+  const notice = [loweredNotice, carrySyncNotice(reopened), freed, carrySyncNotice(synced.changes)].filter(Boolean).join(" · ") || undefined;
   const shortNotice = carryShortNotice(synced.shorts);
   // 연쇄 이월이 끊긴 줄 — 다음 달이 그다음 달로 넘긴 이월이 무효가 되어 그 달 실납도 바뀌었다(적대 리뷰 2026-11-09).
   const broken = synced.broken ?? [];

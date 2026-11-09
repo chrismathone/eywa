@@ -20,7 +20,7 @@ import { unlinkedZeroBlockers } from "../unlinked-zero";
 import { isVirtualTermId } from "../month-roster";
 import { materializeVirtualTerms } from "./term-materialize";
 import { logDbError } from "@/lib/supabase/db-error";
-import { carrySyncNotice, syncCarrySessionsAfter } from "./carry-session-sync";
+import { carryBreaksAfter, carrySyncNotice, loadCarryOutStates, syncCarrySessionsAfter } from "./carry-session-sync";
 
 /**
  * `terms`엔 회차 행이 없는 줄(가상 id, `termState: "missing"`)도 선다 — 이 학생의 그 달 출석부 줄인데 행이 없는 반(보강 방문 등).
@@ -102,7 +102,7 @@ export async function mergeReceiptItems(invoiceId: string, source: unknown, indi
   return { committed: true, error: "수납 합산 변경은 저장됐습니다. 창을 다시 열어 확인해 주세요." };
 }
 
-export async function saveReceiptAllocation(invoiceId: string, source: unknown, input: ReceiptAllocationInput[]): Promise<{ ok?: boolean; error?: string; notice?: string }> {
+export async function saveReceiptAllocation(invoiceId: string, source: unknown, input: ReceiptAllocationInput[]): Promise<{ ok?: boolean; error?: string; notice?: string; warning?: string }> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
@@ -150,15 +150,18 @@ export async function saveReceiptAllocation(invoiceId: string, source: unknown, 
     if (block.matchedTerms.length) return { error: `${block.matchedTerms.map((t) => t.className ?? "반").join(", ")}에 맞는 수납 항목이 있습니다. 0원으로 두지 말고 연결해 주세요` };
     if (block.unlinkedLines.length && rows.some((row) => row.lineIndex === null && row.ackUnlinked !== true)) return { error: "어느 반에도 연결하지 않은 수업 항목이 남습니다. 확인한 뒤 다시 저장해 주세요" };
   }
+  // 보낸 이월이 있는 줄의 저장 전 상태 — 이번 배분이 그 이월을 무효로 만들면 알린다(2026-11-09).
+  const carryBefore = await loadCarryOutStates(db, rows.map((row) => row.termId));
   const { error } = await db.rpc("save_session_receipt_allocations", { p_invoice_id: invoiceId, p_expected_lines: source, p_rows: rows });
   if (error) return { error: error.message };
   // 이 저장으로 지난 달 이월이 이 달 줄에 실렸으면 확정 시수를 그만큼 맞춘다(원장 2026-10-07) — 응답 전에 끝내야 화면이 다시 읽을 때 맞는다.
   const notice = carrySyncNotice(await syncCarrySessionsAfter(db, { invoiceId }, user.id, "allocate"));
+  const warning = [...(await carryBreaksAfter(db, carryBefore)).values()].join("\n") || undefined;
   after(async () => {
     revalidatePath("/billing");
     await logAction({ action: "session_term_receipt_allocate", targetType: "invoice", metadata: { invoiceId, basis: "gross_bill", allocations: rows } });
   });
-  return { ok: true, ...(notice ? { notice } : {}) };
+  return { ok: true, ...(notice ? { notice } : {}), ...(warning ? { warning } : {}) };
 }
 
 /** 자유 배분 저장 행 — `confirmedAt`·`baseAmount`는 창을 열 때 본 값(그 사이 확정이 바뀌면 DB 함수가 거절한다). */
@@ -169,7 +172,7 @@ export type FreeAllocationInput = FreeAllocationRow & { confirmedAt: string | nu
  * *"받은 돈보다 더 지급할 순 없다 · 덜 지급하는건 괜찮다"*. 수납 항목에 연결하지 않고 반마다 금액만 — 합계 ≤ 수업 청구액.
  * 🔴 관리자 이상(+ super_admin)만 · 화면과 같은 판정(`validateFreeAllocation`)을 서버가 다시 본다(#77) · DB 함수도 다시 본다.
  */
-export async function saveFreeReceiptAllocation(invoiceId: string, source: unknown, input: FreeAllocationInput[]): Promise<{ ok?: boolean; error?: string }> {
+export async function saveFreeReceiptAllocation(invoiceId: string, source: unknown, input: FreeAllocationInput[]): Promise<{ ok?: boolean; error?: string; warning?: string }> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
@@ -193,6 +196,8 @@ export async function saveFreeReceiptAllocation(invoiceId: string, source: unkno
     if (made.failed.size > 0) return { error: `${made.failed.size}개 반의 회차 행을 만들지 못했습니다 — ${[...made.failed.values()][0]}` };
     rows = rows.map((row) => ({ ...row, termId: made.ids.get(row.termId) ?? row.termId }));
   }
+  // 보낸 이월이 있는 줄의 저장 전 상태 — 이번 자유 배분이 그 이월을 무효로 만들면 알린다(2026-11-09).
+  const carryBefore = await loadCarryOutStates(db, rows.map((row) => row.termId));
   const { error } = await db.rpc("save_session_receipt_allocations_free", { p_invoice_id: invoiceId, p_expected_lines: source, p_rows: rows });
   if (error) {
     if (error.code === "PGRST202" || error.code === "42883") return { error: "자유 배분 기능이 아직 켜지지 않았습니다. 관리자에게 알려 주세요(SQL 적용 필요)" };
@@ -207,5 +212,6 @@ export async function saveFreeReceiptAllocation(invoiceId: string, source: unkno
       allocations: rows.map((row) => ({ termId: row.termId, amount: row.amount, className: row.className })),
     } });
   });
-  return { ok: true };
+  const warning = [...(await carryBreaksAfter(db, carryBefore)).values()].join("\n") || undefined;
+  return { ok: true, ...(warning ? { warning } : {}) };
 }
