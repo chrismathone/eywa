@@ -8,10 +8,14 @@ export type RankingGrade = { id: string; student_id: string; subject: string; ex
 export type RankingFacts = {
   version: 1; asOf: string; activityFrom: string;
   billing: { months: number; subjectMonths: number; concurrentMonths: number; paid: number; extraSubjectPaid: number; concurrentPaid: number; unknownMonths: number; first: string | null; last: string | null };
-  attendance: { scheduled: number; recorded: number; present: number; late: number; absent: number; early: number; rate: number | null };
+  attendance: { scheduled: number; recorded: number; present: number; late: number; absent: number; early: number; rate: number | null;
+    /** 점수 기준: 최근 6개월(recent) · 전체 기록(all, 최근 6개월 기록 부족) · null(전체도 최소 기록 미만). 옛 저장본에는 없다. */
+    basis?: "recent" | "all" | null; windowFrom?: string; windowRecorded?: number };
   seminar: { attended: number | null; registeredOnly: number; from: string | null; pending: boolean;
-    /** 이 학원에 검토 전으로 남은 명단 행 수(학생 미상). 옛 저장본에는 없다. */
-    unreviewedRows?: number; connected?: boolean };
+    /** 이 학원에 검토 전으로 남은 명단 행 수(학생 미상 — 학생별 보류 사유가 아니다). 옛 저장본에는 없다. */
+    unreviewedRows?: number; connected?: boolean;
+    /** policy 2 = 취소되지 않은 신청도 참석(원장 2026-10-26). 없으면 옛 규칙(명시 참석만) 저장본. */
+    policy?: 2 };
   school: { current: number | null; improvement: number | null; subjects: number; pairs: number; latest: string | null };
 };
 const round = (n: number) => Math.round(n * 100) / 100;
@@ -85,7 +89,17 @@ export function schoolRankingFacts(rows: readonly RankingGrade[], asOf?: string)
  *   거의 전원이 '기록 0'이었다).
  * - 예정이 그날 한 칸뿐이면 교시 시각이 달라도 그날의 유일한 기록을 쓴다(시간표 시각 변경 대비).
  * - 오늘·미래 수업, 자리(seat_label) 기록, 보강·공결 등 네 상태 밖의 기록은 세지 않는다.
+ * - 점수 기준(원장 2026-11-09): 최근 6개월(예정 수업일 기준, asOf에서 끝나는 창) 기록이 ATTENDANCE_MIN_RECORDED 이상이면 그 창,
+ *   부족하면 전체 기록, 전체도 부족하면 미측정. scheduled·recorded·present 등은 전체 기간 수치다.
  */
+export const ATTENDANCE_MIN_RECORDED = 8;
+export const ATTENDANCE_WINDOW_MONTHS = 6;
+/** asOf에서 n개월 전 같은 날(그 달에 없는 날이면 말일). */
+export function monthsBefore(asOf: string, n: number): string {
+  const y = Number(asOf.slice(0, 4)), m = Number(asOf.slice(5, 7)) - 1 - n, d = Number(asOf.slice(8, 10));
+  const first = new Date(Date.UTC(y, m, 1)), last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+  return `${first.toISOString().slice(0, 8)}${String(Math.min(d, last)).padStart(2, "0")}`;
+}
 export function attendanceRankingFacts(targets: readonly AttendanceTarget[], rows: readonly ContributionAttendance[], asOf: string): RankingFacts["attendance"] {
   const key = (r: AttendanceTarget) => `${r.class_id}:${r.session_date}:${r.slot_start ?? ""}`;
   const unique = [...new Map(targets.filter(t => t.session_date < asOf).map(t => [key(t), t])).values()];
@@ -95,7 +109,9 @@ export function attendanceRankingFacts(targets: readonly AttendanceTarget[], row
   }
   const dayCounts = new Map<string, number>();
   unique.forEach(t => { const day = `${t.class_id}:${t.session_date}`; dayCounts.set(day, (dayCounts.get(day) ?? 0) + 1); });
-  const out = { scheduled: unique.length, recorded: 0, present: 0, late: 0, absent: 0, early: 0, rate: null as number | null };
+  const windowFrom = monthsBefore(asOf, ATTENDANCE_WINDOW_MONTHS);
+  const out: RankingFacts["attendance"] = { scheduled: unique.length, recorded: 0, present: 0, late: 0, absent: 0, early: 0, rate: null, basis: null, windowFrom, windowRecorded: 0 };
+  const credits: { day: string; credit: number }[] = [];
   for (const t of unique) {
     const day = `${t.class_id}:${t.session_date}`, records = byDay.get(day) ?? [];
     const exact = t.slot_start ? records.filter(r => r.slot_start === t.slot_start) : [];
@@ -105,13 +121,18 @@ export function attendanceRankingFacts(targets: readonly AttendanceTarget[], row
     const status = matched[0]!.status;
     if (!["present", "late", "absent", "early_leave"].includes(status)) continue;
     out.recorded++;
+    credits.push({ day: t.session_date, credit: status === "present" ? 1 : status === "absent" ? 0 : 0.5 });
     if (status === "present") out.present++;
     if (status === "late") out.late++;
     if (status === "absent") out.absent++;
     if (status === "early_leave") out.early++;
   }
   // Late / early leave receive half credit. The rate is over recorded slots; unrecorded scheduled slots stay unknown, not absent.
-  if (out.recorded) out.rate = round((out.present + (out.late + out.early) * 0.5) / out.recorded * 100);
+  const recent = credits.filter(c => c.day >= windowFrom);
+  out.windowRecorded = recent.length;
+  const basis = recent.length >= ATTENDANCE_MIN_RECORDED ? recent : credits.length >= ATTENDANCE_MIN_RECORDED ? credits : null;
+  out.basis = basis === recent ? "recent" : basis ? "all" : null;
+  if (basis) out.rate = round(basis.reduce((a, c) => a + c.credit, 0) / basis.length * 100);
   return out;
 }
 export function buildRankingFacts(input: { studentId: string; asOf: string; billing: readonly BillingSeed[];
@@ -128,15 +149,15 @@ export function buildRankingFacts(input: { studentId: string; asOf: string; bill
     if (subjects >= 2) billing.concurrentPaid += b.tuitionWon;
     if (b.active) { billing.subjectMonths += subjects; if (subjects >= 2) billing.concurrentMonths++; }
   }
+  // 설명회(원장 2026-10-26): 취소되지 않은 신청도 참석이다. 스냅샷은 '인정(recognized)'된 행만 주므로 취소·검토 중 행은 여기 오지 않는다.
+  // 학원 전체 검토 전 명단(학생 미상)은 학생별 보류 사유가 아니다 — 명단이 연결되지 않았을 때만 미측정.
   const ownEvents = input.events.records.filter(r => input.canonical(r.studentId) === input.studentId && r.eventDate <= input.asOf);
-  const attended = new Set(ownEvents.filter(r => r.attendanceBasis === "explicit_attendance").map(r => r.eventId));
-  const registered = new Set(ownEvents.filter(r => !attended.has(r.eventId)).map(r => r.eventId));
+  const explicit = new Set(ownEvents.filter(r => r.attendanceBasis === "explicit_attendance").map(r => r.eventId));
+  const credited = new Set(ownEvents.map(r => r.eventId));
   return { version: 1, asOf: input.asOf, activityFrom: "2026-01-01", billing,
     attendance: attendanceRankingFacts(input.targets, input.attendance, input.asOf),
-    seminar: { attended: input.events.ready ? attended.size : null, registeredOnly: registered.size, from: input.events.coverageFrom ?? null,
-      // 검토 전 명단이 남아 있으면 그 행이 누구의 참석인지 모르므로 0회로 단정하지 않는다(설명회 결정 문서: 일부 반영 ≠ 전체 확인).
-      pending: !input.events.ready || !!input.events.pendingRows || registered.size > 0,
-      unreviewedRows: input.events.ready ? input.events.pendingRows ?? 0 : 0, connected: input.events.ready },
+    seminar: { attended: input.events.ready ? credited.size : null, registeredOnly: [...credited].filter(e => !explicit.has(e)).length, from: input.events.coverageFrom ?? null,
+      pending: !input.events.ready, unreviewedRows: input.events.ready ? input.events.pendingRows ?? 0 : 0, connected: input.events.ready, policy: 2 },
     school: schoolRankingFacts(input.grades, input.asOf),
   };
 }

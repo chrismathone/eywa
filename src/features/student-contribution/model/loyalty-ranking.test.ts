@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_RANKING_CONFIG as config, rankingConfigSchema } from "./ranking-config";
 import { buildLoyaltyRanking, rankingValues, type RankingStudent } from "./loyalty-ranking";
-import { buildRankingFacts, attendanceRankingFacts, schoolRankingFacts, type RankingGrade } from "./ranking-facts";
+import { buildRankingFacts, attendanceRankingFacts, schoolRankingFacts, monthsBefore, ATTENDANCE_MIN_RECORDED, type RankingGrade } from "./ranking-facts";
+import { decideEventAttendance } from "./parent-events/attendance";
+import type { ParentEventRecord } from "./parent-events/facts";
 import { unknownFamily } from "./family-loyalty";
 import type { BillingSeed } from "./billing";
 import type { ContributionAttendance } from "./participation";
@@ -99,11 +101,40 @@ describe("school records",()=>{
 describe("attendance and seminars",()=>{
   const target={student_id:"s",class_id:"c",session_date:"2026-11-02",slot_start:"14:00"};
   const record=(id:string,status:string,slot_start:string|null="14:00"):ContributionAttendance=>({...target,id,status,slot_start,recorded_at:"2026-11-02T10:00:00Z"});
-  it("counts a late arrival as half and scores on recorded slots only, leaving unfilled slots unknown",()=>{
-    const a=attendanceRankingFacts([target],[record("a","late")],today);expect(a).toMatchObject({scheduled:1,recorded:1,late:1,rate:50});
-    const s=student();s.facts!.attendance=attendanceRankingFacts([target,{...target,slot_start:"15:00"}],[record("a","late")],today);
-    expect(s.facts!.attendance).toMatchObject({scheduled:2,recorded:1,rate:50});
-    expect(rankingValues(s,config).attendance.value).toBe(50);
+  // 하루 한 교시짜리 기록 n건(day0부터 7일 간격 거슬러) — 상태는 statuses 순환.
+  const history=(n:number,from:string,statuses:string[])=>{const ts:{student_id:string;class_id:string;session_date:string;slot_start:string}[]=[],rs:ContributionAttendance[]=[];
+    for(let i=0;i<n;i++){const d=new Date(Date.parse(from)-i*7*86_400_000).toISOString().slice(0,10);ts.push({...target,session_date:d});rs.push({...record(`h${from}${i}`,statuses[i%statuses.length]!),session_date:d,recorded_at:`${d}T10:00:00Z`});}
+    return {ts,rs};};
+  it("counts late as half over recorded slots only, leaving unfilled slots unknown (not absent)",()=>{
+    const h=history(8,"2026-11-02",["late"]);const extra={...target,session_date:"2026-11-03",slot_start:"15:00"};
+    const a=attendanceRankingFacts([...h.ts,extra],h.rs,today);
+    expect(a).toMatchObject({scheduled:9,recorded:8,late:8,rate:50,basis:"recent",windowRecorded:8});
+    const s=student();s.facts!.attendance=a;expect(rankingValues(s,config).attendance).toMatchObject({value:50,note:expect.stringContaining("최근 6개월 기록 8교시")});
+  });
+  it(`needs ${ATTENDANCE_MIN_RECORDED} recorded slots — fewer even in full history is unmeasured`,()=>{
+    const h=history(ATTENDANCE_MIN_RECORDED-1,"2026-11-02",["present"]);
+    const s=student();s.facts!.attendance=attendanceRankingFacts(h.ts,h.rs,today);
+    expect(s.facts!.attendance).toMatchObject({recorded:7,rate:null,basis:null});
+    expect(rankingValues(s,config).attendance).toMatchObject({value:null,note:expect.stringContaining("8교시 미만")});
+    expect(attendanceRankingFacts([],[],today)).toMatchObject({scheduled:0,recorded:0,rate:null,basis:null});
+  });
+  it("uses the last 6 months when it has enough records, else falls back to the full history",()=>{
+    expect(monthsBefore(today,6)).toBe("2026-05-09");expect(monthsBefore("2026-08-31",6)).toBe("2026-02-28");
+    // 최근 6개월: 결석 8회. 그 이전: 출석 20회. 창 안이 충분하면 창만 본다.
+    const recent=history(8,"2026-11-02",["absent"]),old=history(20,"2026-03-01",["present"]);
+    expect(attendanceRankingFacts([...recent.ts,...old.ts],[...recent.rs,...old.rs],today)).toMatchObject({recorded:28,windowRecorded:8,basis:"recent",rate:0});
+    // 창 안 7회(경계일 2026-05-09 포함) → 부족 → 전체 27회.
+    const thin=history(6,"2026-11-02",["absent"]),edge={...target,session_date:"2026-05-09"},edgeRec={...record("edge","absent"),session_date:"2026-05-09"};
+    const before={...target,session_date:"2026-05-08"},beforeRec={...record("before","present"),session_date:"2026-05-08"};
+    const all=attendanceRankingFacts([...thin.ts,edge,before,...old.ts],[...thin.rs,edgeRec,beforeRec,...old.rs],today);
+    expect(all).toMatchObject({recorded:28,windowRecorded:7,basis:"all",rate:75});
+    const s=student();s.facts!.attendance=all;expect(rankingValues(s,config).attendance.note).toContain("전체 기록 28교시 기준(최근 6개월 기록 7교시로 부족)");
+  });
+  it("an old stored payload without a basis scores only when it has the minimum records",()=>{
+    const s=student();s.facts!.attendance={scheduled:10,recorded:3,present:3,late:0,absent:0,early:0,rate:100};
+    expect(rankingValues(s,config).attendance.value).toBeNull();
+    s.facts!.attendance={scheduled:10,recorded:9,present:9,late:0,absent:0,early:0,rate:100};
+    expect(rankingValues(s,config).attendance.value).toBe(100);
   });
   it("no recorded slot at all stays unmeasured, not zero",()=>{
     const s=student();s.facts!.attendance=attendanceRankingFacts([target,{...target,session_date:"2026-10-26"}],[],today);
@@ -115,7 +146,7 @@ describe("attendance and seminars",()=>{
     const slots=["19:15:00","20:10:00","21:05:00"], days=["2026-07-27","2026-07-30","2026-08-03"];
     const targets=days.flatMap(d=>slots.map(slot_start=>({student_id:"s",class_id:"bs3d",session_date:d,slot_start})));
     const rows=days.map((d,i)=>({id:`r${i}`,student_id:"s",class_id:"bs3d",session_date:d,slot_start:null,status:i===2?"absent":"present",recorded_at:`${d}T12:00:00Z`,seat_label:null}));
-    expect(attendanceRankingFacts(targets,rows,today)).toMatchObject({scheduled:9,recorded:9,present:6,absent:3,rate:66.67});
+    expect(attendanceRankingFacts(targets,rows,today)).toMatchObject({scheduled:9,recorded:9,present:6,absent:3,rate:66.67,basis:"recent"});
   });
   it("prefers the exact slot mark over a whole-day mark, and uses the only mark of a single-slot day",()=>{
     const two=[target,{...target,slot_start:"15:00"}];
@@ -129,21 +160,32 @@ describe("attendance and seminars",()=>{
     expect(attendanceRankingFacts([target],[{...record("a","present"),seat_label:"보강"}],today).recorded).toBe(0);
     expect(attendanceRankingFacts([target],[record("a","makeup",null)],today).recorded).toBe(0);
   });
-  it("does not equate seminar registration with attendance and deduplicates confirmed events",()=>{
-    const common={tenantId:"t",studentId:"s",eventId:"e",eventDate:"2026-08-01",title:"설명회",sourceIds:["s"],familyKey:"f",basis:"direct" as const};
-    const facts=buildRankingFacts({studentId:"s",asOf:today,billing:[],targets:[],attendance:[],grades:[],canonical:id=>id,events:{ready:true,checkedAt:today,records:[{...common,attendanceBasis:"explicit_attendance"},{...common,attendanceBasis:"explicit_attendance"},{...common,eventId:"e2",attendanceBasis:"registration_policy"}]}});
-    expect(facts.seminar).toMatchObject({attended:1,registeredOnly:1,pending:true});
-    const s=student();s.facts=facts;expect(rankingValues(s,config).seminar.value).toBeNull();
+  const common={tenantId:"t",studentId:"s",eventId:"e",eventDate:"2026-08-01",title:"설명회",sourceIds:["s"],familyKey:"f",basis:"direct" as const};
+  const build=(events:Parameters<typeof buildRankingFacts>[0]["events"],canonical=(id:string)=>id)=>buildRankingFacts({studentId:"s",asOf:today,billing:[],targets:[],attendance:[],grades:[],canonical,events});
+  it("counts non-cancelled registrations as attendance (원장 2026-10-26) and deduplicates per event",()=>{
+    const facts=build({ready:true,checkedAt:today,records:[{...common,attendanceBasis:"explicit_attendance"},{...common,attendanceBasis:"registration_policy",basis:"sibling"},{...common,eventId:"e2",attendanceBasis:"registration_policy"}]});
+    expect(facts.seminar).toMatchObject({attended:2,registeredOnly:1,pending:false,policy:2});
+    const s=student();s.facts=facts;expect(rankingValues(s,config).seminar).toMatchObject({value:2,note:expect.stringContaining("신청 기준 1회")});
   });
-  it("explains why seminar stays unmeasured: unconnected vs tenant-wide unreviewed rows",()=>{
-    const build=(events:Parameters<typeof buildRankingFacts>[0]["events"])=>buildRankingFacts({studentId:"s",asOf:today,billing:[],targets:[],attendance:[],grades:[],canonical:id=>id,events});
-    const s=student();
-    s.facts=build({ready:false,checkedAt:null,records:[]});
+  it("a cancelled registration is classified cancelled upstream (the snapshot passes only recognized rows), so it is not counted",()=>{
+    const decide=(value:string)=>decideEventAttendance({eligibleList:true,eventDate:"2026-08-01",today,markers:[{kind:"cancellation",value}]});
+    expect(decide("취소").state).toBe("cancelled");expect(decide("").state).toBe("recognized");
+    // 스냅샷은 recognized 행만 records로 준다(student_parent_event_snapshot). 취소된 e2는 records에 없다.
+    const records:ParentEventRecord[]=[["e",decide("")],["e2",decide("취소")]].filter(([,d])=>(d as ReturnType<typeof decide>).state==="recognized")
+      .map(([eventId])=>({...common,eventId:eventId as string,attendanceBasis:"registration_policy"}));
+    expect(build({ready:true,checkedAt:today,records}).seminar.attended).toBe(1);
+  });
+  it("tenant-wide unreviewed rows and other students' records do not put this student on hold",()=>{
+    const facts=build({ready:true,checkedAt:today,pendingRows:652,records:[{...common,studentId:"other",eventId:"e9",attendanceBasis:"registration_policy"}]});
+    expect(facts.seminar).toMatchObject({attended:0,pending:false,unreviewedRows:652});
+    const s=student();s.facts=facts;expect(rankingValues(s,config).seminar).toMatchObject({value:0,note:expect.stringContaining("검토 전 명단 652행")});
+    // 병합된 학생의 행은 대표 학생 것으로 센다.
+    expect(build({ready:true,checkedAt:today,records:[{...common,studentId:"old"},{...common,attendanceBasis:"explicit_attendance"}]},id=>id==="old"?"s":id).seminar).toMatchObject({attended:1,registeredOnly:0});
+  });
+  it("unconnected lists stay unknown; old pending payloads keep an honest note",()=>{
+    const s=student();s.facts=build({ready:false,checkedAt:null,records:[]});
     expect(rankingValues(s,config).seminar).toMatchObject({value:null,note:expect.stringContaining("연결되지 않았")});
-    s.facts=build({ready:true,checkedAt:today,records:[],pendingRows:652});
-    expect(s.facts.seminar).toMatchObject({attended:0,pending:true,unreviewedRows:652});
-    expect(rankingValues(s,config).seminar).toMatchObject({value:null,note:expect.stringContaining("검토 전 명단 652행")});
-    s.facts=build({ready:true,checkedAt:today,records:[]});
-    expect(rankingValues(s,config).seminar.value).toBe(0);
+    s.facts={...s.facts,seminar:{attended:0,registeredOnly:0,from:null,pending:true,unreviewedRows:652,connected:true}};
+    expect(rankingValues(s,config).seminar).toMatchObject({value:null,note:expect.stringContaining("다시 집계하면")});
   });
 });
