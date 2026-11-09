@@ -1,5 +1,9 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-09 — 급여 자동 계산이 조회 실패를 0원으로 저장하지 않게 — 수정 계획 P1-M(3a)
+
+- `calculateMonthlyPayroll`이 단가·담당 반·시간표 조회 오류를 버려 0원/기본급만으로 계산했고 `autoComputePayroll`이 그대로 `payroll_records`에 저장했다(일반 지점은 급여 모듈을 켜면 쓴다). 이제 재료(단가·담당 반·시간표·출결)를 못 읽으면 `PayrollInputError` → 저장 안 함 + 이유 표시(원문은 로그로만). 급여 화면은 계산 실패 시 0원 대신 "자동 계산을 하지 못했습니다" · 자동 계산 단추 숨김 · 수동 폼에 안내. 자동 계산 액션 오류를 화면에 표시(예전엔 결과를 버렸다). 월별 개요의 직원 목록 조회 실패도 throw. 출결 페이지 조회에 `.order("id")`(페이지 경계 누락 방지). 쓰지 않던 시간표 임베드 제거. 남은 일: 시간표 이력 행이 반 평균 시간에 섞임(반·날짜별 산식 — 별도 착수).
+
 ## 2026-11-09 — 타입 오류 12건 → 0건 — 수정 계획 P0-3
 
 - CI가 꺼진 동안 쌓인 main의 타입 오류. 운영 코드 3건은 타입만 맞춤(동작 같음): `jj-books.ts` `isJjSheetDraft`가 `draft: null`을 받게 · `pilot-restyle-guard.ts` 숫자 목록 `string[]` · `love-note-draft-button.tsx` 이해도 줄의 점수 null 좁힘. 테스트 3건·dev 하네스는 새 필드를 채움. `scripts/student-contribution/verify-parent-event-import.ts`는 저장소 밖 PGlite를 실행 때 불러온다(정적 import면 그 설치가 없는 곳의 타입 검사가 늘 실패). 남은 정리: `UnderstandingRow.score`를 `number`로 좁히기(실제로 null이 안 들어온다).
