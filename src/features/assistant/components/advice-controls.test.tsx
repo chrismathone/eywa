@@ -19,6 +19,9 @@ const VIEW: AdviceView = {
   noCheck: null,
   measureState: "waiting",
   result: null,
+  doneCheck: null,
+  targets: null,
+  askedOn: null,
 };
 
 type Call = { url: string; body: Record<string, unknown> };

@@ -1,5 +1,9 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-09 — 타입 오류 12건 → 0건 — 수정 계획 P0-3
+
+- CI가 꺼진 동안 쌓인 main의 타입 오류. 운영 코드 3건은 타입만 맞춤(동작 같음): `jj-books.ts` `isJjSheetDraft`가 `draft: null`을 받게 · `pilot-restyle-guard.ts` 숫자 목록 `string[]` · `love-note-draft-button.tsx` 이해도 줄의 점수 null 좁힘. 테스트 3건·dev 하네스는 새 필드를 채움. `scripts/student-contribution/verify-parent-event-import.ts`는 저장소 밖 PGlite를 실행 때 불러온다(정적 import면 그 설치가 없는 곳의 타입 검사가 늘 실패). 남은 정리: `UnderstandingRow.score`를 `number`로 좁히기(실제로 null이 안 들어온다).
+
 ## 2026-11-09 — 로컬 게이트 `pnpm verify` — 수정 계획 P0-1
 
 - 바뀐 파일과 그 영향만 검사(`scripts/verify-changed.mjs` · `verify-deps.mjs` · `verify-baseline.mjs` · `verify-vitest.config.mts`): eslint · 바뀐 TS와 import·**역의존**(바뀐·지운·옮긴 TS 전부, 재수출 한 단계)만 담은 임시 tsconfig로 tsc(많으면 전체) · `vitest related` + 파일 이름(SQL·CSS 포함)을 적은 테스트 + 폴더를 훑는 가드 · **기준선 비교**(main의 기존 빨간 테스트 9건은 따로 보이고, 스택을 뺀 메시지 전체가 달라진 실패만 막는다 · 값을 줄여 쓰지 않는 설정 · 실패 파일은 혼자 재실행해 흔들림 제거 · 기준 사본은 내장 디스크 임시 폴더) · 외장 SSD `._*` 정리. 결과는 `.verify/log.txt`. 재현해 막히는 것 확인: 여러 줄 시그니처 변경 · 파일 삭제 · 규칙 밖 SQL만 추가 · 빨간 가드에 위반 추가 · 위반 바꿔치기(개수 같음). 중단(Ctrl-C) 시 사본 정리. `docs/setup-and-ops.md` "검증 게이트"와 AGENTS.md를 이 규칙으로(옛 문서는 커밋마다 전체 4단계). CI가 꺼져 있고 배포를 막지 못하는 동안 유일한 게이트.

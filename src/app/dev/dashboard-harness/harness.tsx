@@ -80,9 +80,9 @@ export function Harness({ mode, role }: { mode: string; role: string }) {
         roleMenus={menus}
         subjects={[{ key: "math", label: "수학" }, { key: "english", label: "영어" }]}
         members={{ failed: false, people: [
-          { id: "sample-owner", name: "원장 예시", role: "master", bundle: "owner", scopeLabel: "전 과목", canOpen: true, inherited: true },
-          { id: "sample-math", name: "수학 담당 예시", role: "admin", bundle: "subject", scopeLabel: "수학", canOpen: true, inherited: false },
-          { id: "sample-desk", name: "경영지원 예시", role: "admin", bundle: "desk", scopeLabel: "전 과목", canOpen: true, inherited: false },
+          { id: "sample-owner", name: "원장 예시", role: "master", bundle: "owner", scopeLabel: "전 과목", subjectKeys: ["math", "english"], canOpen: true, inherited: true },
+          { id: "sample-math", name: "수학 담당 예시", role: "admin", bundle: "subject", scopeLabel: "수학", subjectKeys: ["math"], canOpen: true, inherited: false },
+          { id: "sample-desk", name: "경영지원 예시", role: "admin", bundle: "desk", scopeLabel: "전 과목", subjectKeys: ["math", "english"], canOpen: true, inherited: false },
         ] }}
       />
     </div>

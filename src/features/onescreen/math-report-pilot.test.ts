@@ -125,7 +125,7 @@ describe("소단원별 이해도", () => {
     ]);
     // 글로 쓰는 이해도는 매긴 소단원만(원장 2026-10-28) — 표식이 없는 옛 값은 매긴 것으로 본다.
     expect(ratedUnderstanding(activeUnderstanding(today, { scores: { 소인수분해: 7 }, off: [] }))).toEqual([{ title: "소인수분해", score: 7, rated: true }]);
-    expect(ratedUnderstanding([{ title: "옛 값", score: 9 }])).toEqual([{ title: "옛 값", score: 9 }]);
+    expect(ratedUnderstanding<{ title: string; score: number; rated?: boolean }>([{ title: "옛 값", score: 9 }])).toEqual([{ title: "옛 값", score: 9 }]);
     expect(understandingRows(today, { scores: { 소인수분해: 7 }, off: [] }).map((r) => r.stored)).toEqual([false, true, false]);
   });
   it("단계 버튼 — 소단원 전부에 같은 점수, 뺀 소단원 목록은 그대로", () => {
