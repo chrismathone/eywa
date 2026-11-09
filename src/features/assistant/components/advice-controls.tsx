@@ -4,20 +4,17 @@ import { useId, useRef, useState } from "react";
 import { TOOLBAR_SEG_BOX, TOOLBAR_SEG_ITEM, TOOLBAR_SEG_OFF, TOOLBAR_SEG_ON_PRIMARY } from "@/components/toolbar-controls";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { addDays, kstToday } from "@/lib/date-kst";
+import { kstToday } from "@/lib/date-kst";
 import {
   ADVICE_RATING_LABEL,
   ADVICE_RATINGS,
   ADVICE_STATUS_LABEL,
-  CHECK_FAILED,
-  CHECK_SKIPPED,
-  formatCheckValue,
   monthDayLabel,
-  NO_CHECK_GIVEN,
   type AdviceRating,
   type AdviceStatus,
   type AdviceView,
 } from "../advice";
+import { CheckLine, PlanLine } from "./advice-lines";
 
 const ACTIONS: AdviceStatus[] = ["adopted", "done", "on_hold", "declined"];
 const SAVED_TEXT: Record<AdviceStatus, string> = {
@@ -118,6 +115,7 @@ export function AdviceStatusPanel({ initial }: { initial: AdviceView }) {
         {announce}
       </span>
       <CheckLine view={view} />
+      <PlanLine view={view} />
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
         <span id={`${id}-label`} className="text-sm font-bold">
           처리
@@ -159,7 +157,7 @@ export function AdviceStatusPanel({ initial }: { initial: AdviceView }) {
           {form === "done" ? (
             <label className="flex flex-wrap items-center gap-2 text-sm font-bold">
               한 날
-              <Input type="date" required max={kstToday()} value={doneOn} onChange={(e) => setDoneOn(e.target.value)} className="w-auto" />
+              <Input type="date" required min={view.askedOn ?? undefined} max={kstToday()} value={doneOn} onChange={(e) => setDoneOn(e.target.value)} className="w-auto" />
             </label>
           ) : null}
           <label className="block space-y-1 text-sm font-bold">
@@ -210,33 +208,6 @@ export function AdviceStatusPanel({ initial }: { initial: AdviceView }) {
         </p>
       ) : null}
     </div>
-  );
-}
-
-/** 확인 지표 한 줄 — 기준값과 그 기간 · 좋아지는 쪽. 잴 수 없는 의견은 까닭. */
-function CheckLine({ view }: { view: AdviceView }) {
-  const c = view.check;
-  if (!c) {
-    if (!view.noCheck) return null;
-    const server = view.noCheck === NO_CHECK_GIVEN || view.noCheck === CHECK_FAILED || view.noCheck === CHECK_SKIPPED;
-    return <p className="text-sm break-words">{server ? `확인 지표 없음 — ${view.noCheck}` : `숫자로 다시 재기 어려운 의견입니다 — ${view.noCheck}`}</p>;
-  }
-  const b = c.baseline;
-  return (
-    <p className="text-sm break-words">
-      <span className="font-bold">확인 지표</span> · {c.label}
-      {b ? (
-        <>
-          {" · 기준값 "}
-          <span className="num font-bold">{formatCheckValue(b.value, c.unit)}</span>
-          {c.unit === "percent" && b.sample !== null ? ` (${formatCheckValue(b.sample, "number")} 중)` : ""}
-          {` · ${monthDayLabel(b.from)}~${monthDayLabel(addDays(b.to, -1))}`}
-        </>
-      ) : (
-        " · 기준값을 재지 못했습니다"
-      )}
-      {` · ${c.better === "up" ? "오르면 좋음" : "내리면 좋음"}`}
-    </p>
   );
 }
 

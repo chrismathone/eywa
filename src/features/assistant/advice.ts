@@ -19,6 +19,9 @@ export type AdviceMethod = (typeof ADVICE_METHODS)[number];
 export type CheckUnit = (typeof CHECK_UNITS)[number];
 
 export const START_TOKEN = "{{시작}}";
+/** 대상 명단 자리 — 서버가 굳힌 대상 id를 uuid 배열 글자로 채운다(`id = any({{대상}})` · 분모 `cardinality({{대상}})`). */
+export const TARGET_TOKEN = "{{대상}}";
+export const UUID_SHAPE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 export const END_TOKEN = "{{끝}}";
 /** 확인 지표를 받지 못한(AI가 빠뜨린) 의견 · 기준값을 재지 못한 의견에 서버가 적는 까닭. */
 export const NO_CHECK_GIVEN = "확인 지표를 받지 못했습니다";
@@ -32,7 +35,7 @@ export const AdviceCheckSchema = z.object({
     .string()
     .trim()
     .min(1)
-    .max(4000)
+    .max(8000)
     .describe("SELECT 한 문장 — 기간은 {{시작}}(포함)·{{끝}}(제외) 자리로(따옴표 없이 — 서버가 날짜 글자로 채운다) · 결과는 한 줄 · 칸 값(필수) · 비율이면 표본(분모, 필수)"),
   unit: z.enum(CHECK_UNITS).describe("percent = 0~100 비율 · count = 건수·명수 · won = 원 · number = 그 밖의 숫자"),
   better: z.enum(["up", "down"]).describe("값이 오르면 좋은가(up) 내리면 좋은가(down)"),
@@ -54,6 +57,58 @@ export function checkTemplateProblem(check: Pick<AdviceCheck, "sql" | "windowDay
   return null;
 }
 
+/** 의견의 대상 명단(s2_0038) — 이번 조회로 찾은 id 전부. 서버가 굳혀 두고, 다시 잴 때 같은 명단으로 본다. */
+export const TARGET_KINDS = ["student", "class", "teacher", "consultation"] as const;
+export const AdviceTargetsSchema = z.object({
+  kind: z.enum(TARGET_KINDS).describe("대상 종류 — student 원생 · class 반 · teacher 강사 · consultation 상담"),
+  // 버전 비트를 보지 않는 uuid 모양(옛 자료·다른 생성기의 id도 받는다 — 리뷰 2026-11-09).
+  ids: z.array(z.string().regex(UUID_SHAPE, "uuid 모양이 아닙니다")).min(1).max(500).describe("대상 id 전부(이번 조회로 찾은 그대로)"),
+});
+export type AdviceTargets = z.infer<typeof AdviceTargetsSchema>;
+
+const codeOf = (sql: string) => sql.replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+
+/**
+ * 일을 안 해도 좋아지는 지표를 막는다(2026-11-09 답 검토 — '출석률 75% 미만 재원생 수'는 그 학생들이 퇴원해도 내려간다 · 리뷰 2026-11-09 우회 보강).
+ * ① '오늘' 칸(on_roster_today · active_today)은 기간 지표에 못 쓴다(다시 잴 날의 오늘로 바뀐다) — 결과·실행 지표 모두.
+ * ② 조회문에 uuid 글자가 있으면 대상 명단(targets)을 달아야 한다 — 명단은 `{{대상}}` 자리로 쓴다(결과·실행 지표 모두).
+ * ③ 대상 명단을 달았으면 `{{대상}}` 자리를 써야 한다(서버가 굳힌 명단으로 채운다 — 90명이 넘어도 조회문이 길어지지 않게).
+ * ④ 결과 지표 '내리면 좋음'은 지금 상태로 모집단을 거르면 안 된다 — 학생 상태(status·status_label · 재원·휴원·퇴원 값) · 퇴원 칸이 비었음
+ *    (withdrawn_on·exit_kind is null) · 수업료 청구가 살아 있는 학생만(onto_tuition_months·invoices). 학생이 나가면 저절로 내려간다.
+ * ⑤ 결과 지표 '오르면 좋음' 비율(percent)에 대상 명단이 있으면 분모는 대상 전원(`cardinality({{대상}})`) — 남은 학생·남은 수업만 분모로 두면
+ *    나간 학생이 비율을 올린다(수업 단위 출석률도 같다 — 나간 학생의 수업이 빠진다).
+ */
+const STATE_FILTER =
+  /\bstatus(?:_label)?\s*(?:::\s*text\s*)?(?:=|<>|!=|\bin\b|\bnot\s+in\b)\s*\(?\s*'(?:enrolled|on_hold|withdrawn|prospect|consulted|재원|휴원|퇴원|예비|상담완료)'|\b(?:withdrawn_on|withdrawn_at|exit_kind)\s+is\s+(?:not\s+)?null|\bon_hold\b|\bonto_tuition_months\b|\binvoices\b/i;
+const UUID_IN_SQL = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+export function checkIntegrityProblem(
+  check: Pick<AdviceCheck, "sql" | "better" | "unit">,
+  opts: { targets?: AdviceTargets | null; outcome: boolean },
+): string | null {
+  const code = codeOf(check.sql);
+  if (/\b(on_roster_today|active_today)\b/i.test(code)) return "on_roster_today·active_today는 '오늘' 기준 칸이라 기간 지표에 쓸 수 없습니다 — 기간 명단 규칙으로 쓰세요";
+  const usesTargets = code.includes(TARGET_TOKEN);
+  if (opts.targets && !usesTargets) return `대상 명단을 달았으면 조회문에 ${TARGET_TOKEN} 자리를 쓰세요(예: s.id = any(${TARGET_TOKEN})) — 서버가 명단으로 채웁니다`;
+  if (!opts.targets && usesTargets) return `${TARGET_TOKEN} 자리를 쓰려면 대상 명단(targets)을 달아야 합니다`;
+  if (UUID_IN_SQL.test(code.split(TARGET_TOKEN).join("")) && !opts.targets) return "조회문에 id를 글자로 적었으면 그 대상을 targets로 달고 {{대상}} 자리로 쓰세요(다시 잴 때 같은 명단으로)";
+  if (!opts.outcome) return null;
+  if (check.better === "down" && STATE_FILTER.test(code)) {
+    return "지금 상태(재원·휴원·퇴원 · 청구가 살아 있는 학생)로 거르는 '내리면 좋음' 지표는 학생이 나가도 내려가 좋아진 것처럼 보입니다 — 대상 명단을 고정하고 나간 학생도 나쁜 결과로 세세요";
+  }
+  if (check.better === "up" && check.unit === "percent" && opts.targets && !/cardinality\s*\(\s*\{\{대상\}\}\s*\)/.test(code)) {
+    return `대상 명단이 있는 비율 지표는 분모를 대상 전원(cardinality(${TARGET_TOKEN}))으로 두세요 — 남은 학생만 분모로 두면 나간 학생이 비율을 올립니다`;
+  }
+  return null;
+}
+
+/** 대상 자리를 굳힌 명단으로 채운다(`array['…','…']::uuid[]`) — 명단은 uuid 모양만(검사를 지난 값) · 소문자. */
+export function fillTargets(sql: string, ids: readonly string[] | null | undefined): string {
+  if (!sql.includes(TARGET_TOKEN)) return sql;
+  const safe = (ids ?? []).filter((id) => UUID_SHAPE.test(id)).map((id) => `'${id.toLowerCase()}'`);
+  return sql.split(TARGET_TOKEN).join(`array[${safe.join(",")}]::uuid[]`);
+}
+
 /** 기간 자리를 날짜 글자로 채운다(`'YYYY-MM-DD'` — 날짜·시각 칸 모두와 견줄 수 있다 · 조회 세션 시간대는 한국). */
 export function fillWindow(sql: string, from: string, to: string): string {
   return sql.split(START_TOKEN).join(`'${from}'`).split(END_TOKEN).join(`'${to}'`);
@@ -70,7 +125,7 @@ export function nextCheckOn(today: string, checkAfterDays: number): string {
   return addDays(today, checkAfterDays + SETTLE_DAYS);
 }
 
-const num = (v: unknown): number | null => {
+export const num = (v: unknown): number | null => {
   if (typeof v === "number") return Number.isFinite(v) ? v : null;
   if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) return Number(v);
   return null;
@@ -122,6 +177,14 @@ export type AdviceView = {
     nextCheckOn: string | null;
   } | null;
   noCheck: string | null;
+  /** 실행 지표(일을 했는지 — s2_0038) · 기준값. */
+  doneCheck: { label: string; unit: CheckUnit; better: "up" | "down"; baseline: { value: number; sample: number | null } | null } | null;
+  /** 굳혀 둔 대상 명단(종류 · 인원). */
+  targets: { kind: AdviceTargets["kind"]; count: number } | null;
+  /** 실행일 — 원장이 채택·완료로 처리한 날(다시 잴 날의 기준 · 질문일보다 앞이면 질문일). */
+  actedOn: string | null;
+  /** 질문일 — 완료 '한 날' 입력의 기본 하한. */
+  askedOn: string | null;
 };
 
 /** 화면 숫자 — 비율 18.0% · 원 12,000원 · 그 밖은 천 단위 쉼표(소수 한 자리까지). */
@@ -136,101 +199,4 @@ export function formatCheckValue(value: number, unit: CheckUnit): string {
 export function monthDayLabel(ymd: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
   return m ? `${Number(m[2])}월 ${Number(m[3])}일` : ymd;
-}
-
-// ───────────────────────────── 저장 줄 ↔ 화면 ─────────────────────────────
-
-type AdviceItemLike = { action: string; why: string; topic?: AdviceTopic; method?: AdviceMethod; noCheck?: string };
-/** 확인 지표 한 의견의 결과 — 보고서 블록에서는 조회문을 뺐으므로(화면·저장으로 보내지 않는다) 지표 원문은 여기에만. */
-export type AdviceCheckResult = {
-  itemNo: number;
-  check: AdviceCheck;
-  baseline: { from: string; to: string; value: number; sample: number | null } | null;
-  /** 재지 않고 넘겼다(시간 상한·멈춤·'바로 결과 보기') — 틀린 지표와 까닭을 가른다. */
-  skipped?: boolean;
-};
-
-/** 의견 표(assistant_advice)에 넣을 줄 — 지점·답·대화·묻는 사람은 저장하는 쪽이 붙인다. 기준값을 못 잰 확인 지표는 까닭으로 바꾼다. */
-export function adviceDrafts(items: readonly AdviceItemLike[], checks: readonly AdviceCheckResult[], askedOn: string) {
-  return items.slice(0, 5).map((item, i) => {
-    const result = checks.find((c) => c.itemNo === i);
-    const baseline = result?.baseline ?? null;
-    const check = result && baseline ? result.check : null;
-    return {
-      item_no: i,
-      action: item.action.slice(0, 400),
-      why: item.why.slice(0, 800),
-      topic: item.topic ?? "other",
-      method: item.method ?? null,
-      check_label: check?.label ?? null,
-      check_sql: check?.sql ?? null,
-      check_unit: check?.unit ?? null,
-      check_better: check?.better ?? null,
-      window_days: check?.windowDays ?? null,
-      check_after_days: check?.checkAfterDays ?? null,
-      no_check_reason: check ? null : (result ? (result.skipped ? CHECK_SKIPPED : CHECK_FAILED) : (item.noCheck ?? NO_CHECK_GIVEN)).slice(0, 120),
-      baseline_from: check ? baseline!.from : null,
-      baseline_to: check ? baseline!.to : null,
-      baseline_value: check ? baseline!.value : null,
-      baseline_sample: check && baseline!.sample !== null && baseline!.sample >= 0 ? baseline!.sample : null,
-      measure_state: check ? "waiting" : "none",
-      next_check_on: check ? nextCheckOn(askedOn, check.checkAfterDays) : null,
-    };
-  });
-}
-
-/** 화면이 읽는 칸(조회문 원문은 읽지 않는다). */
-export const ADVICE_VIEW_COLUMNS =
-  "id, message_id, item_no, status, status_at, status_memo, done_on, self_rating, check_label, check_unit, check_better, window_days, baseline_value, baseline_sample, baseline_from, baseline_to, next_check_on, no_check_reason";
-
-export type AdviceRow = {
-  id: string;
-  message_id: string;
-  item_no: number;
-  status: string;
-  status_at: string;
-  status_memo: string | null;
-  done_on: string | null;
-  self_rating: string | null;
-  check_label: string | null;
-  check_unit: string | null;
-  check_better: string | null;
-  window_days: number | null;
-  baseline_value: number | string | null;
-  baseline_sample: number | string | null;
-  baseline_from: string | null;
-  baseline_to: string | null;
-  next_check_on: string | null;
-  no_check_reason: string | null;
-};
-
-const isStatus = (v: string): v is AdviceStatus => (ADVICE_STATUSES as readonly string[]).includes(v);
-const isRating = (v: string | null): v is AdviceRating => v !== null && (ADVICE_RATINGS as readonly string[]).includes(v);
-const isUnit = (v: string | null): v is CheckUnit => v !== null && (CHECK_UNITS as readonly string[]).includes(v);
-
-export function adviceViewOf(r: AdviceRow): AdviceView {
-  const value = num(r.baseline_value);
-  const better = r.check_better === "up" || r.check_better === "down" ? r.check_better : null;
-  const check: AdviceView["check"] =
-    r.check_label && isUnit(r.check_unit) && better
-      ? {
-          label: r.check_label,
-          unit: r.check_unit,
-          better,
-          windowDays: r.window_days ?? 0,
-          baseline: value !== null && r.baseline_from && r.baseline_to ? { value, sample: num(r.baseline_sample), from: r.baseline_from, to: r.baseline_to } : null,
-          nextCheckOn: r.next_check_on,
-        }
-      : null;
-  return {
-    id: r.id,
-    itemNo: r.item_no,
-    status: isStatus(r.status) ? r.status : "open",
-    statusAt: r.status_at,
-    memo: r.status_memo,
-    doneOn: r.done_on,
-    selfRating: isRating(r.self_rating) ? r.self_rating : null,
-    check,
-    noCheck: check ? null : r.no_check_reason,
-  };
 }

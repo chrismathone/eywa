@@ -9,7 +9,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { reportError } from "@/lib/observability/report-error";
-import { ADVICE_VIEW_COLUMNS, adviceDrafts, adviceViewOf, type AdviceCheckResult, type AdviceRating, type AdviceRow, type AdviceStatus, type AdviceView } from "../advice";
+import type { AdviceRating, AdviceStatus, AdviceView } from "../advice";
+import { ADVICE_VIEW_COLUMNS, actedTiming, adviceDrafts, adviceViewOf, type AdviceCheckResult, type AdviceRow } from "../advice-rows";
 import type { SettledReport } from "../report";
 import type { Owner } from "./store";
 
@@ -75,7 +76,7 @@ export async function updateAdvice(
   const db = createAdminClient();
   const { data: current, error: readError } = await db
     .from(ADVICE)
-    .select("status, status_at")
+    .select("status, status_at, acted_on, created_at, baseline_to, check_after_days, measure_state")
     .eq("id", id)
     .eq("tenant_id", owner.tenantId)
     .eq("asked_by", owner.userId)
@@ -85,6 +86,8 @@ export async function updateAdvice(
   const from = current.status as AdviceStatus;
   const done = patch.status === "done";
   const memo = patch.status === "open" ? null : patch.memo?.trim() || null;
+  const doneOn = done ? patch.doneOn || kstToday() : null;
+  const timing = actedTiming(current, patch.status, doneOn);
   const { data, error } = await db
     .from(ADVICE)
     .update({
@@ -93,8 +96,9 @@ export async function updateAdvice(
       status_by: owner.userId,
       // 처리 시각은 DB 시계로(트리거가 now()로 바꾼다 — 서버마다 시계가 달라도 순서가 맞게 · 적대 리뷰 2026-11-09).
       status_at: new Date().toISOString(),
-      done_on: done ? patch.doneOn || kstToday() : null,
+      done_on: doneOn,
       self_rating: done ? (patch.selfRating ?? null) : null,
+      ...timing,
     })
     .eq("id", id)
     .eq("tenant_id", owner.tenantId)

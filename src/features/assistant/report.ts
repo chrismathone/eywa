@@ -10,7 +10,7 @@
 import { z } from "zod";
 import { labelCodeColumns } from "./code-labels";
 import { plainRich } from "./rich-text";
-import { ADVICE_METHODS, ADVICE_TOPICS, AdviceCheckSchema, CHECK_FAILED, checkTemplateProblem, type AdviceView } from "./advice";
+import { ADVICE_METHODS, ADVICE_TOPICS, AdviceCheckSchema, AdviceTargetsSchema, CHECK_FAILED, checkIntegrityProblem, checkTemplateProblem, type AdviceView } from "./advice";
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 /**
@@ -86,7 +86,10 @@ export const ReportBlockSchema = z.discriminatedUnion("type", [
           /** 제안 → 결과 → 학습(2026-11-09) — 주제 · 방법 · 확인 지표(나중에 다시 잴 숫자) 또는 잴 수 없는 까닭(advice.ts). */
           topic: z.enum(ADVICE_TOPICS).optional(),
           method: z.enum(ADVICE_METHODS).optional(),
-          check: AdviceCheckSchema.optional(),
+          check: AdviceCheckSchema.optional().describe("결과 지표 — 이 일을 해서 바라는 결과가 났나"),
+          /** 실행 지표 · 대상 명단(s2_0038 · 2026-11-09 답 검토 — 일을 했는지와 결과가 났는지를 나눠 보고, 다시 잴 대상을 굳힌다). */
+          doneCheck: AdviceCheckSchema.optional().describe("실행 지표 — 할 일을 했는지(형식은 check와 같다)"),
+          targets: AdviceTargetsSchema.optional(),
           noCheck: z.string().trim().min(1).max(80).optional().describe("숫자로 다시 재기 어려운 의견이면 그 까닭(확인 지표 대신)"),
         }),
       )
@@ -248,11 +251,22 @@ function looseAdvice(input: unknown): unknown {
             if (reason) item.noCheck = reason;
             else delete item.noCheck;
           } else delete item.noCheck;
+          // 대상 명단 — 틀리면 명단만 뺀다(지표 검사는 명단 없이).
+          const targets = item.targets === null || item.targets === undefined ? null : AdviceTargetsSchema.safeParse(item.targets);
+          if (targets?.success) item.targets = targets.data;
+          else delete item.targets;
+          const fixed = targets?.success ? targets.data : null;
+          // 실행 지표 — 틀리면 그 지표만 뺀다(의견·결과 지표는 그대로).
+          if (item.doneCheck !== null && item.doneCheck !== undefined) {
+            const done = AdviceCheckSchema.safeParse(item.doneCheck);
+            if (done.success && !checkTemplateProblem(done.data) && !checkIntegrityProblem(done.data, { targets: fixed, outcome: false })) item.doneCheck = done.data;
+            else delete item.doneCheck;
+          } else delete item.doneCheck;
           // 모델은 선택 칸을 null로 채우곤 한다 — 지표가 없다는 뜻일 뿐, 적어 둔 까닭을 지우지 않는다(재리뷰 2026-11-09).
           if (item.check === null || item.check === undefined) delete item.check;
           else {
             const check = AdviceCheckSchema.safeParse(item.check);
-            if (check.success && !checkTemplateProblem(check.data)) {
+            if (check.success && !checkTemplateProblem(check.data) && !checkIntegrityProblem(check.data, { targets: fixed, outcome: true })) {
               item.check = check.data;
               delete item.noCheck;
             } else {

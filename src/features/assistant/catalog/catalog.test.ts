@@ -59,7 +59,10 @@ describe("학원 비서 DB 지도", () => {
   });
 
   it("온톨로지 보기는 SQL(§6)이 만드는 이름과 같다", () => {
-    const sql = readFileSync(join(process.cwd(), "supabase/migrations/s2_0031_academy_assistant.sql"), "utf8");
+    // 보기 생성 함수는 비서 SQL마다 다시 정의된다(s2_0031 → s2_0038 분석용 보기) — 모든 비서 SQL의 이름을 모은다.
+    const sql = ["s2_0031_academy_assistant.sql", "s2_0038_academy_assistant_analysis_views.sql"]
+      .map((f) => readFileSync(join(process.cwd(), "supabase/migrations", f), "utf8"))
+      .join("\n");
     const views = [...sql.matchAll(/create view assistant\.(onto_[a-z_]+)/g)].map((m) => m[1]);
     expect(new Set(views)).toEqual(new Set(ONTOLOGY_DOCS.map((d) => d.name)));
   });

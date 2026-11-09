@@ -1,8 +1,7 @@
 // 비서 의견 확인 지표 · 처리 상태(제안 → 결과 → 학습 1단계 · 2026-11-09) — 순수 함수.
 import { describe, expect, it } from "vitest";
+import { adviceDrafts, adviceViewOf, type AdviceRow } from "./advice-rows";
 import {
-  adviceDrafts,
-  adviceViewOf,
   baselineWindow,
   CHECK_FAILED,
   CHECK_SKIPPED,
@@ -14,7 +13,6 @@ import {
   NO_CHECK_GIVEN,
   readCheckRow,
   type AdviceCheck,
-  type AdviceRow,
 } from "./advice";
 import { settleReport } from "./report";
 

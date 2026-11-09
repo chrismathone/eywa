@@ -11,7 +11,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { REPORT_TOOL_SCHEMA, settleReport, type QueryResult, type ReportBlock, type SettledReport } from "../report";
-import { baselineWindow, fillWindow, formatCheckValue, readCheckRow, type AdviceCheckResult } from "../advice";
+import { baselineWindow, fillTargets, fillWindow, formatCheckValue, readCheckRow, type AdviceCheck } from "../advice";
+import type { AdviceCheckResult } from "../advice-rows";
 import type { AskStep, StepKind, StepTable } from "../protocol";
 import type { AssistantTableDoc } from "../catalog/types";
 import { clipText } from "../text";
@@ -239,14 +240,18 @@ function describeText(docs: readonly AssistantTableDoc[], found: Awaited<ReturnT
 function withoutChecks(report: SettledReport): SettledReport {
   return {
     ...report,
-    blocks: report.blocks.map((b): ReportBlock => (b.type === "advice" && b.items.some((item) => item.check) ? { ...b, items: b.items.map(stripCheck) } : b)),
+    blocks: report.blocks.map((b): ReportBlock =>
+      b.type === "advice" && b.items.some((item) => item.check || item.doneCheck || item.targets) ? { ...b, items: b.items.map(stripCheck) } : b,
+    ),
   };
 }
 
-/** 의견 항목에서 확인 지표만 뺀다(나머지 칸은 그대로). */
-function stripCheck<T extends { check?: unknown }>(item: T): Omit<T, "check"> {
+/** 의견 항목에서 확인 지표(결과·실행)와 대상 명단만 뺀다(나머지 칸은 그대로 — 둘 다 의견 표에만 둔다). */
+function stripCheck<T extends { check?: unknown; doneCheck?: unknown; targets?: unknown }>(item: T): Omit<T, "check" | "doneCheck" | "targets"> {
   const rest = { ...item };
   delete rest.check;
+  delete rest.doneCheck;
+  delete rest.targets;
   return rest;
 }
 
@@ -360,44 +365,52 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
    *    실패하면 맞던 답까지 잃는다) 틀리거나 못 잰 지표는 기준값 없이 넘겨 '확인 지표를 만들지 못했습니다'로 남긴다(advice.ts adviceDrafts).
    *    멈춤·고정 기한 신호가 왔거나 상한(30초)을 넘으면 남은 지표는 재지 않는다. 단계 종류는 '보고서' — '조회 N번'에 세지 않는다.
    */
+  const measureOne = async (check: AdviceCheck, label: string, targets: readonly string[] | undefined): Promise<{ from: string; to: string; value: number; sample: number | null } | null> => {
+    const { from, to } = baselineWindow(askedOn, check.windowDays);
+    const stepId = open("report", `${label} 기준값 · ${clipText(check.label, 40)}`);
+    const measured = await (async (): Promise<{ value: number; sample: number | null } | string> => {
+      let gate: Awaited<ReturnType<typeof checkAssistantSql>>;
+      try {
+        // 대상 자리는 굳힌 명단으로 채운다(s2_0038 · 저장은 틀 그대로 — 다시 잴 때도 같은 명단으로 채운다).
+        gate = await checkAssistantSql(fillTargets(fillWindow(check.sql, from, to), targets), views);
+      } catch {
+        return "조회문을 검사하지 못했습니다(일시 오류)";
+      }
+      if (!gate.ok) return `쓸 수 없는 조회입니다 — ${gate.reason}`;
+      try {
+        const read = readCheckRow(await input.db.run(gate.sql), check.unit);
+        return read.ok ? { value: read.value, sample: read.sample } : read.error;
+      } catch (error) {
+        // 화면·저장본에 남는 단계 설명이라 한국어 요약만(DB 원문 detail은 싣지 않는다 — 일반 조회 단계와 같다 · 재리뷰 2026-11-09).
+        return error instanceof Error ? error.message : "조회 오류";
+      }
+    })();
+    if (typeof measured === "string") {
+      close(stepId, { detail: `재지 못해 ${label} 없이 둡니다 — ${clipText(measured, 80)}` });
+      return null;
+    }
+    close(stepId, { detail: `기준값 ${formatCheckValue(measured.value, check.unit)}` });
+    return { from, to, ...measured };
+  };
   const measureChecks = async (report: SettledReport): Promise<AdviceCheckResult[]> => {
     const out: AdviceCheckResult[] = [];
     const block = report.blocks.find((b) => b.type === "advice");
     const items = block?.type === "advice" ? block.items : [];
     const begun = now();
+    const outOfTime = () => !!input.signal?.aborted || wrapping === "user" || now() - begun > CHECK_BUDGET_MS;
     for (const [i, item] of items.entries()) {
       const check = item.check;
       if (!check) continue;
       // 원장이 '바로 결과 보기'를 눌렀으면 재지 않는다(답을 더 늦추지 않는다 · 재리뷰 2026-11-09).
-      if (input.signal?.aborted || wrapping === "user" || now() - begun > CHECK_BUDGET_MS) {
-        out.push({ itemNo: i, check, baseline: null, skipped: true });
+      if (outOfTime()) {
+        out.push({ itemNo: i, check, baseline: null, skipped: true, ...(item.targets ? { targets: item.targets } : {}) });
         continue;
       }
-      const { from, to } = baselineWindow(askedOn, check.windowDays);
-      const stepId = open("report", `확인 지표 기준값 · ${clipText(check.label, 40)}`);
-      const measured = await (async (): Promise<{ value: number; sample: number | null } | string> => {
-        let gate: Awaited<ReturnType<typeof checkAssistantSql>>;
-        try {
-          gate = await checkAssistantSql(fillWindow(check.sql, from, to), views);
-        } catch {
-          return "조회문을 검사하지 못했습니다(일시 오류)";
-        }
-        if (!gate.ok) return `쓸 수 없는 조회입니다 — ${gate.reason}`;
-        try {
-          const read = readCheckRow(await input.db.run(gate.sql), check.unit);
-          return read.ok ? { value: read.value, sample: read.sample } : read.error;
-        } catch (error) {
-          // 화면·저장본에 남는 단계 설명이라 한국어 요약만(DB 원문 detail은 싣지 않는다 — 일반 조회 단계와 같다 · 재리뷰 2026-11-09).
-          return error instanceof Error ? error.message : "조회 오류";
-        }
-      })();
-      if (typeof measured === "string") {
-        close(stepId, { detail: `재지 못해 확인 지표 없이 둡니다 — ${clipText(measured, 80)}` });
-        out.push({ itemNo: i, check, baseline: null });
-      } else {
-        close(stepId, { detail: `기준값 ${formatCheckValue(measured.value, check.unit)}` });
-        out.push({ itemNo: i, check, baseline: { from, to, ...measured } });
-      }
+      const baseline = await measureOne(check, "확인 지표", item.targets?.ids);
+      // 실행 지표(s2_0038) — 결과 지표를 잰 의견만 · 시간이 남으면 잰다(못 재도 지표는 남긴다 — 처음 값만 없다).
+      const done = item.doneCheck;
+      const doneCheck = done ? { check: done, baseline: outOfTime() ? null : await measureOne(done, "실행 지표", item.targets?.ids) } : undefined;
+      out.push({ itemNo: i, check, baseline, ...(doneCheck ? { doneCheck } : {}), ...(item.targets ? { targets: item.targets } : {}) });
     }
     return out;
   };

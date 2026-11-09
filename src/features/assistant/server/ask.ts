@@ -13,7 +13,7 @@ import { reportError } from "@/lib/observability/report-error";
 import { ASSISTANT_LEVEL_LABEL, type AssistantLevel } from "../levels";
 import { ASSISTANT_HARD_DEADLINE_MS, type AskEvent, type AskStep } from "../protocol";
 import type { QueryResult, SettledReport } from "../report";
-import type { AdviceCheckResult } from "../advice";
+import type { AdviceCheckResult } from "../advice-rows";
 import { ASSISTANT_DOCS } from "../catalog";
 import { clipText } from "../text";
 import { AssistantError, runAssistantAgent } from "./agent";
