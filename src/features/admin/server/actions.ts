@@ -11,6 +11,7 @@ import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
 import { mergeNoteFor } from "@/features/students/status/merged";
 import { CLEANUP_WITHDRAWAL_MEMO } from "@/features/withdrawals/system-bulk";
+import { markNoClassRecord } from "@/features/withdrawals/server/no-class-record";
 import { canRequestReport, missingReportSchema, type WithdrawalReport } from "@/features/withdrawal-reports/model";
 import { applyDirectNow } from "@/features/withdrawal-reports/server/direct-apply";
 import { REFUND_GATE_NOT_READY, refundGateReady } from "@/features/withdrawal-reports/server/refund-check";
@@ -489,11 +490,22 @@ export async function bulkWithdrawStudents(
       if (applied.report.status !== "completed") waiting.push(id);
     } else waiting.push(id);
   }
+  // 출결·수업료 청구가 한 번도 없는 학생은 '수업 흔적 없음' 표식 — 끝난 수강 줄이 남아 있어도 어디서나 장부 정리로 조용히 빠진다(원장 2026-11-09).
+  //  실패해도 정리는 그대로(기록만) — 최악이면 종전처럼 퇴원으로 보인다.
+  let noClassRecord: string[] = [];
+  const finished = done.filter((id) => !waiting.includes(id));
+  if (finished.length > 0) {
+    try { noClassRecord = await markNoClassRecord(admin, user.tenantId, finished); }
+    catch (error) { logDbError(error, "admin.bulkWithdraw.noClassRecord"); }
+  }
   if (done.length > 0) {
     await logAction({
       action: "student_bulk_withdraw",
       targetType: "student",
-      metadata: { count: done.length, studentIds: done, reportIds, ...(failed > 0 ? { failed } : {}), ...(waiting.length ? { refundWait: waiting.length } : {}) },
+      metadata: {
+        count: done.length, studentIds: done, reportIds, ...(failed > 0 ? { failed } : {}), ...(waiting.length ? { refundWait: waiting.length } : {}),
+        ...(noClassRecord.length ? { noClassRecord } : {}),
+      },
     });
   }
   if (done.length === 0) {

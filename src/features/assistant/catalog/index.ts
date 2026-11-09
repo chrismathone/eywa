@@ -14,7 +14,7 @@ export const ONTOLOGY_DOCS: readonly AssistantTableDoc[] = [
     label: "원생(규칙)",
     ko: "원생 한 사람 한 줄 + 세는 규칙(병합·테스트·장부 정리 퇴원 판정)을 칸으로 미리 계산한 보기",
     notes:
-      "원생 수·퇴원 수는 이 보기로 센다. counted=true만 집계(테스트 원생·중복 병합으로 흡수된 원생·수업 기록 없는 장부 정리 퇴원 제외). status_label = 예비·상담완료·재원·휴원·퇴원. exit_kind = real(실제 퇴원) · bookkeeping(장부 정리, 퇴원으로 안 셈 — counted=false) · system_bulk(시스템 일괄 처리 날짜 미상 — 월별 퇴원 추이에서 뺀다) · scheduled(퇴원 예정) · null(퇴원 아님). withdrawn_on = 퇴원일(날짜). 월별 퇴원 추이 = exit_kind='real' and counted로 withdrawn_on을 달로 묶는다.",
+      "원생 수·퇴원 수는 이 보기로 센다. counted=true만 집계(테스트 원생·중복 병합으로 흡수된 원생·수업 기록 없는 장부 정리 퇴원 제외). status_label = 예비·상담완료·재원·휴원·퇴원. exit_kind = real(실제 퇴원) · bookkeeping(장부 정리, 퇴원으로 안 셈·언급 안 함 — counted=false · 끝난 수강이 있어도 출결·수업료 청구가 0이라 표식된 정리 퇴원 포함) · system_bulk(시스템 일괄 처리 날짜 미상 — 월별 퇴원 추이에서 뺀다) · scheduled(퇴원 예정) · null(퇴원 아님). withdrawn_on = 퇴원일(날짜). 월별 퇴원 추이 = exit_kind='real' and counted로 withdrawn_on을 달로 묶는다.",
     columns: {
       counted: "집계에 넣는 원생인가",
       is_merged: "중복 병합으로 다른 원생에 흡수됨",

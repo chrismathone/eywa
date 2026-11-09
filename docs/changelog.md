@@ -1,5 +1,9 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-09 — 수강 줄만 남은 장부 정리 퇴원도 어디서나 조용히 제외(표식 noClassRecord · SQL s2_0041)
+
+- 원장 *"저렇게 처리했음 알아서 걸러야지 왜 자꾸 언급하나"* — 07-15 정리 26명(폐지 고등 수학반 · 출결·청구 0)이 7월 퇴원으로 섰다. `isBookkeepingOnlyExit` = 장부 정리 메모 + (끝난 수강 없음 또는 `withdrawal_metadata.noClassRecord`) · 일괄 퇴원이 표식을 적고(`markNoClassRecord`) 기존 40명은 백필 · 비서 보기 s2_0041 + 프롬프트 '장부 정리는 언급하지 않는다'. 7월 퇴원 73 → 47. 결정 = `docs/decisions/students.md` 2026-11-09.
+
 ## 2026-11-09 — 학원 비서: 원인 분석 규칙 · 분석용 보기 6개 · 의견 대상 고정·실행 지표(SQL s2_0039 · s2_0040)
 
 - 원장 질문 '학생이 줄어드는 원인' 답을 Claude·Codex가 교차 검토(부분 적절) → 프롬프트 '먼저 쪼개기 · 기간 바꿔 확인 · 말의 범위 · 요인 점검표 · 첫 화면'(`prompt-analysis.ts`) · 보기 `onto_classes`·`onto_homeroom_history`·`onto_siblings`·`onto_households`·`onto_tuition_months`·`onto_teacher_churn`(앱 판정과 같은 규칙) · 의견 `targets`(`{{대상}}` 자리 — 재측정 크론도 같은 명단으로 채움)·`doneCheck`(일을 안 해도 좋아지는 지표 거름 · 재측정 기준일은 2단계 `measure_anchor`). s2_0040 = 보기 캐스트를 형식 검사 뒤로. 운영 DB 적용 끝(11-09). 본문 = `docs/features/academy-assistant.md` §7-7.
