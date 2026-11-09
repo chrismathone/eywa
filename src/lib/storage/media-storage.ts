@@ -13,6 +13,7 @@ import {
   type AudioKind,
 } from "./legacy-audio-path";
 import type { MediaKind, UploadTicket } from "./types";
+import { isReportVideoCT, REPORT_VIDEO_MAX_BYTES } from "@/features/onescreen/report-video";
 
 // 단일 미디어 스토리지 — **Supabase Storage 전용**(2026-07-29). 옛 GCS(ijw Firebase) 분기는 제거했다:
 // 그 프로젝트를 삭제해 `MEDIA_STORAGE_BACKEND=gcs`로 되돌리면 업로드·읽기가 전부 실패하는데, 코드만 보면
@@ -24,7 +25,9 @@ const RECEIPT_MAX = 10 * 1024 * 1024; // 10MB
 const BRANDING_MAX = 5 * 1024 * 1024; // 5MB
 const TEXTBOOK_COVER_MAX = 5 * 1024 * 1024; // 5MB — 표지 사진 한 장(브랜딩과 같은 급)
 const DOCUMENT_MAX = 20 * 1024 * 1024; // 20MB — 스캔 PDF 등 큰 서식 고려
-const REPORT_ATTACHMENT_MAX = 20 * 1024 * 1024; // 20MB — 학생 풀이 사진 + 문서/오디오 첨부(pdf·hwp·office·mp3)
+// 보고서 첨부 = 영상 상한(100MB, 2026-11-06 영상 첨부). 영상 아닌 첨부의 20MB는 attachment-actions가 따로 거절한다
+// (report-video.ts `REPORT_FILE_MAX_BYTES`) — 여기 값은 업로드 확인(verifyUploadedObject)의 바깥 상한이다.
+const REPORT_ATTACHMENT_MAX = REPORT_VIDEO_MAX_BYTES;
 const READ_TTL_MS = 2 * 60 * 60 * 1000; // 2h — AssemblyAI 큐+다운로드 여유
 // 업로드 URL 수명은 Supabase createSignedUploadUrl 기본값을 따른다(옛 GCS signed PUT 15분 상수는 제거).
 
@@ -52,7 +55,8 @@ const isReportAttachmentCT = (ct: string) =>
   DOCUMENT_CT_ALLOW.has(ct) ||
   ct === "application/vnd.ms-powerpoint" ||
   ct === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
-  /^audio\/(mpeg|mp4|m4a|x-m4a)$/.test(ct);
+  /^audio\/(mpeg|mp4|m4a|x-m4a)$/.test(ct) ||
+  isReportVideoCT(ct); // 영상(2026-11-06) — 한 장에 하나·100MB는 attachment-actions가 본다
 
 type KindMeta = {
   /** 이 kind가 저장되는 Supabase Storage 버킷. */

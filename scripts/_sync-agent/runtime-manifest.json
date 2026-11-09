@@ -99,6 +99,7 @@
     "scripts/_classnote/repair-attachment-messages.mjs",
     "scripts/_classnote/report-author-name.mjs",
     "scripts/_classnote/report-video-line.mjs",
+    "scripts/_classnote/report-video.mjs",
     "scripts/_classnote/screenshot-auth.mjs",
     "scripts/_classnote/send-window.mjs",
     "scripts/_classnote/share-bases.mjs",
