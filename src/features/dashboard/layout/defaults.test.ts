@@ -52,6 +52,19 @@ describe("기본 배치", () => {
     expect(placedIds(defaultItems("manager"))).toContain("panel:reports");
   });
 
+  it("실장 기본에는 등록 후 3개월 내 퇴원(학생 이름) 카드가 없다 — 원장 화면에만 있던 카드(리뷰 2026-11-09)", () => {
+    expect(placedIds(defaultItems("manager"))).not.toContain("panel:earlyExits");
+    expect(placedIds(defaultItems("owner"))).toContain("panel:earlyExits");
+  });
+
+  it("핵심 업무 칸만 남긴 배치는 저장값으로 남는다 · 제목만 남은 옛 배치는 버린다(리뷰 2026-11-09)", () => {
+    const coreOnly = [{ id: "core:workRecords", w: 24, h: 1 }];
+    const out = normalizeDashboard({ version: 1, layouts: [{ role: "parttime", items: coreOnly }, { role: "manager", items: [{ id: "heading:x", w: 24, h: 1, title: "a" }] }] });
+    expect(out.layouts.map((l) => l.role)).toEqual(["parttime"]);
+    expect(boardOf(roleItems(out, "parttime")).core).toEqual(["workRecords"]);
+    expect(placedIds(roleItems(out, "parttime"))).toEqual([]);
+  });
+
   it("모든 기본 배치는 새 대시보드 모양이고 저장값 검증·읽기 변환을 그대로 통과한다", () => {
     for (const b of BUNDLES) {
       expect(isBoardItems(defaultItems(b))).toBe(true);

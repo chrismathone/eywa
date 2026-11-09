@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MENU_KEYS, type MenuKey } from "@/lib/permissions";
+import { defaultItems } from "@/features/dashboard/layout/defaults";
+import { editOf, itemsOf, patchPanel } from "@/features/dashboard/layout/board-edit";
 import { badgesFor, exposureOf, optionOn, scopeLine, sensitiveReason } from "./badges";
 
 
@@ -54,5 +56,16 @@ describe("꼬리표 = 서버가 실제로 내보내는 것(resolveView 판정)",
     expect(badgesFor(on, "manager", ALL, ex).map((b) => b.text)).toContain("번호 가림");
     const both = [on, { id: "kpi:calendar", w: 3, h: 1, phones: true }];
     expect(badgesFor(on, "manager", ALL, exposureOf(both, "manager", ALL)).map((b) => b.text)).toContain("번호 보임");
+  });
+
+  // 리뷰 2026-11-09: 새 편집기의 KPI 표에 번호 칸이 없어 일정 카드를 켜도 번호가 늘 가려졌다 — KPI 칸도 같은 patchPanel로 켠다.
+  it("데스크 기본: 일정 카드와 입테 KPI 칸을 모두 켜야 번호가 그대로 나간다(KPI 칸도 편집으로 켤 수 있다)", () => {
+    let board = editOf(defaultItems("desk"));
+    board = patchPanel(board, "panel:admissionsSchedule", { phones: true });
+    expect(exposureOf(itemsOf(board), "desk", ALL).phones).toBe(false);
+    for (const id of board.kpis.map((i) => i.id).filter((id) => id === "kpi:calendar" || id === "kpi:todayTests")) board = patchPanel(board, id, { phones: true });
+    expect(exposureOf(itemsOf(board), "desk", ALL).phones).toBe(true);
+    board = patchPanel(board, "kpi:calendar", { phones: false });
+    expect(exposureOf(itemsOf(board), "desk", ALL).phones).toBe(false);
   });
 });
