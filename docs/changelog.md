@@ -1,5 +1,9 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-09 — 로컬 게이트 `pnpm verify` — 수정 계획 P0-1
+
+- 바뀐 파일과 그 영향만 검사(`scripts/verify-changed.mjs` · `verify-deps.mjs` · `verify-baseline.mjs` · `verify-vitest.config.mts`): eslint · 바뀐 TS와 import·**역의존**(바뀐·지운·옮긴 TS 전부, 재수출 한 단계)만 담은 임시 tsconfig로 tsc(많으면 전체) · `vitest related` + 파일 이름(SQL·CSS 포함)을 적은 테스트 + 폴더를 훑는 가드 · **기준선 비교**(main의 기존 빨간 테스트 9건은 따로 보이고, 스택을 뺀 메시지 전체가 달라진 실패만 막는다 · 값을 줄여 쓰지 않는 설정 · 실패 파일은 혼자 재실행해 흔들림 제거 · 기준 사본은 내장 디스크 임시 폴더) · 외장 SSD `._*` 정리. 결과는 `.verify/log.txt`. 재현해 막히는 것 확인: 여러 줄 시그니처 변경 · 파일 삭제 · 규칙 밖 SQL만 추가 · 빨간 가드에 위반 추가 · 위반 바꿔치기(개수 같음). 중단(Ctrl-C) 시 사본 정리. `docs/setup-and-ops.md` "검증 게이트"와 AGENTS.md를 이 규칙으로(옛 문서는 커밋마다 전체 4단계). CI가 꺼져 있고 배포를 막지 못하는 동안 유일한 게이트.
+
 ## 2026-11-09 — 운영 DB 직접 쓰기 통로 차단(`db:push` · `drizzle-kit push/migrate`) — 수정 계획 P0-4
 
 - `pnpm db:push`는 `db:migrate`처럼 안내 후 종료(`package.json`). 스크립트만 막으면 `npx drizzle-kit push`로 우회돼 `drizzle.config.ts` 맨 위에서 명령 자리가 push·migrate·up·drop이면 종료(generate·studio·check는 그대로). `supabase/migrations/README.md`의 시즌1 설명에 안내 한 줄. SQL 없음.

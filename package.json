@@ -7,6 +7,7 @@
     "build": "vitest run src/features/students/server/past-class-teachers.test.ts src/features/students/lib/past-class-teacher.test.ts && next build",
     "start": "next start",
     "lint": "eslint",
+    "verify": "node scripts/verify-changed.mjs",
     "typecheck": "node --max-old-space-size=6144 node_modules/typescript/bin/tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
