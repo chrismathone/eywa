@@ -22,8 +22,8 @@ export function FactorWorkspace({data}:{data:Data}) {
   };
   return <main className={styles.root} aria-busy={pending}>
     <header className={styles.hero}>
-      <div><Link href={`/student-contribution/${data.student.id}`} className={styles.back}>← 충성도 점수·상위 %</Link>
-        <p className={styles.eyebrow}>STUDENT INSIGHT · 42 FACTORS</p><h1>{data.student.name}의 충성도 정밀분석</h1>
+      <div><Link href={`/student-contribution/${data.student.id}`} className={styles.back}>← 로열티 점수·상위 %</Link>
+        <p className={styles.eyebrow}>STUDENT INSIGHT · 42 FACTORS</p><h1>{data.student.name}의 로열티 정밀분석</h1>
         <p>수익부터 관계·지원까지, 기록의 근거를 따라 학생을 이해합니다.</p></div>
       <form onSubmit={e=>{e.preventDefault();start(()=>router.push(`?month=${month}${typeof window!=="undefined"&&new URLSearchParams(window.location.search).has("embed")?"&embed=1":""}`));}}>
         <label htmlFor="factor-month">분석 월</label><div><input id="factor-month" type="month" required min="2000-01" max={data.today.slice(0,7)} value={month} onChange={e=>setMonth(e.target.value)} /><button disabled={pending}>조회</button></div>
@@ -35,7 +35,7 @@ export function FactorWorkspace({data}:{data:Data}) {
     <section className={styles.summary} aria-label="정밀분석 요약">
       <article className={styles.total}><span>7축 종합 지수 · 최대 100</span><strong>{!data.storageReady?"조회 보류":result.score===null?"산출 대기":number(result.score)}</strong>
         <p>{data.storageReady&&result.score===null?`미측정값에 따른 가능 범위 ${number(result.lower)}~${number(result.upper)}`:"동일한 기준으로 측정한 24개 팩터의 가중 지수"}</p>
-        <small>기존 누적 점수·1~5등급과 별도 지표입니다.</small></article>
+        <small>기존 누적 점수·별 9등급과 별도 지표입니다.</small></article>
       <article><span>점수 근거 충족</span><strong>{result.known}<em> / {result.total}</em></strong><progress value={result.known} max={result.total||1} aria-label="점수 근거 충족" /><p>미측정·확인 필요는 0점으로 확정하지 않습니다.</p></article>
       <article><span>확인된 팩터</span><strong>{measured}<em> / 42</em></strong><p>점수 24개 + 맥락·지원 참고 18개</p><button className={styles.textButton} onClick={()=>{setAxis("all");setFilter("missing");}}>확인이 필요한 항목 보기 →</button></article>
     </section>

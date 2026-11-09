@@ -1,0 +1,12 @@
+/*
+ * 시안: 원생 로열티 학생 상세 — 대시보드(계기판) 카드 결로 통일.
+ * 테두리는 바깥 카드 한 겹(1px #e1e3df)만. 카드 안의 카드는 테두리 없이 옅은 바탕(#f4f4f1)으로 — 겹테두리·색 테두리·그림자·그라데이션을 걷는다.
+ */
+.loyalty-detail [class*="rounded"][class*="border"]:not([class*="rounded-full"]) { border-color: #e1e3df !important; box-shadow: none !important; background-image: none !important; }
+.loyalty-detail [class*="rounded"][class*="border"]:not([class*="rounded-full"]) [class*="rounded"][class*="border"]:not([class*="rounded-full"]):not(input):not(select):not(button):not(textarea) { border-color: transparent !important; background-color: #f4f4f1 !important; }
+.loyalty-detail [class*="shadow"] { box-shadow: none !important; }
+.loyalty-detail [class*="bg-gradient"] { background-image: none !important; }
+.loyalty-detail [class*="border-l-4"], .loyalty-detail [class*="border-t-4"], .loyalty-detail [class*="border-t-2"] { border-left-width: 1px !important; border-top-width: 1px !important; }
+.loyalty-detail details[class*="border"] > summary:hover { background: #fdfaf1; }
+.loyalty-detail table th { background: #f4f4f1; color: #485055; }
+.loyalty-detail tbody tr:hover > td { background: #fdfaf1; }

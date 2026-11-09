@@ -115,7 +115,7 @@ export const MENU_LABEL: Record<MenuKey, string> = {
   seat_attendance: "랩실·JJ실 출석부",
   classes: "수업목록",
   students: "원생목록",
-  student_contribution: "원생 충성도",
+  student_contribution: "원생 로열티",
   student_english_name: "원생목록 - 영어이름",
   exams: "성적관리",
   enrollment: "신규 콜&상담",

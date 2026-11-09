@@ -8,11 +8,11 @@ it("누적·최근 및 비교 대상을 바꾸면 실제 위치와 등급도 함
   render(<RelativeScore options={comparisonOptions(rows, "0")} refreshedAt={null} periodLabel="2025-12 ~ 2026-11" />);
   expect(screen.getByText("11위 / 11명")).toBeTruthy();
   expect(screen.getByText("상위 100%")).toBeTruthy();
-  expect(screen.getByRole("img", { name: "최저 0점, 이 학생 0점, 최고 100점" })).toBeTruthy();
+  expect(screen.getByRole("img", { name: "최저점 0점, 이 학생 0점, 최고 100점" })).toBeTruthy();
   fireEvent.change(screen.getByLabelText("상대평가 점수 기준"), { target: { value: "recent" } });
   expect(screen.getByText("1위 / 11명")).toBeTruthy();
   expect(screen.getByText("상위 9.1%")).toBeTruthy();
-  expect(screen.getByRole("img", { name: "최저 0점, 이 학생 100점, 최고 100점" })).toBeTruthy();
+  expect(screen.getByRole("img", { name: "최저점 0점, 이 학생 100점, 최고 100점" })).toBeTruthy();
   fireEvent.change(screen.getByLabelText("상대평가 비교 대상"), { target: { value: "grade" } });
   expect(screen.getByText("1위 / 6명")).toBeTruthy();
   expect(screen.getByText("상위 16.7%")).toBeTruthy();
@@ -20,5 +20,5 @@ it("누적·최근 및 비교 대상을 바꾸면 실제 위치와 등급도 함
 it("자료 실패는 최하위 등급으로 바꾸지 않는다", () => {
   render(<RelativeScore options={[]} refreshedAt={null} periodLabel="" error="비교 자료를 불러오지 못했습니다." />);
   expect(screen.getByRole("status").textContent).toContain("불러오지 못했습니다");
-  expect(screen.queryByText("5등급")).toBeNull();
+  expect(screen.queryByText("9등급")).toBeNull();
 });

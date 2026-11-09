@@ -31,13 +31,15 @@ export const contributionConfigSchema = z.object({
   attendance: z.object({ allowLate: z.boolean() }),
   ranking: rankingConfigSchema.optional(),
   family: z.object({ enabled: z.boolean(), two: z.number().finite().min(0).max(10000),
-    three: z.number().finite().min(0).max(10000), fourPlus: z.number().finite().min(0).max(10000) })
+    three: z.number().finite().min(0).max(10000), fourPlus: z.number().finite().min(0).max(10000),
+    // 시안: 형제와 함께 다닌 기간 1개월당 가점(원장 2026-11-09). 옛 저장값엔 없어 기본 2점.
+    perTogetherMonth: z.number().finite().min(0).max(1000).default(2) })
     .refine(v => v.two <= v.three && v.three <= v.fourPlus, "가족 수가 많을수록 배점이 같거나 높아야 합니다.").optional(),
 });
 export type ContributionConfig = z.infer<typeof contributionConfigSchema>;
 export const DEFAULT_CONFIG: ContributionConfig = {
   version: 1,
-  family: { enabled: true, two: 100, three: 250, fourPlus: 400 },
+  family: { enabled: true, two: 100, three: 250, fourPlus: 400, perTogetherMonth: 2 },
   rates: Object.fromEntries(METRICS.map((id) => [id, { enabled: id !== "parentSeminarEvents",
     points: id === "parentSeminarEvents" ? DEFAULT_PARENT_SEMINAR_POINTS : id === "referralConsult" || id === "tenureYears" ? 5 : id === "referralStarted" ? 15 : 1 }])) as ContributionConfig["rates"],
   referrals: { months: 12, key: "studentSubject" }, attendance: { allowLate: true },

@@ -10,14 +10,15 @@ const calculate = (students = three, active = new Set(students.map(s=>s.id))) =>
 describe("current family loyalty",()=>{
   it("three siblings each receive one family bonus; duplicate courses cannot multiply it",()=>{
     const f=calculate();expect(f).toMatchObject({activeCount:3,activeSiblings:2,selfActive:true});
-    expect(familyBonus(f,DEFAULT_CONFIG)).toBe(250);expect(loyaltyTotal(172.41,f,DEFAULT_CONFIG)).toBe(422.41);
+    // 가족 가점 = 형제 수 기본(셋 250) + 함께 다닌 형제 재원기간 합(2025-01~2026-11-09 = 23개월 × 2명) × 개월당 2점(원장 2026-11-09).
+    expect(f.siblingMonths).toBe(46);expect(familyBonus(f,DEFAULT_CONFIG)).toBe(250+46*2);expect(loyaltyTotal(172.41,f,DEFAULT_CONFIG)).toBe(514.41);
     expect(calculate([...three,three[1]])).toEqual(f);
     expect(loyaltyTotal(172.41,f,DEFAULT_CONFIG)).toBe(loyaltyTotal(172.41,calculate(),DEFAULT_CONFIG));
   });
   it("recounts when a sibling withdraws, holds or starts in the future, and removes bonus for a nonactive subject",()=>{
-    expect(familyBonus(calculate([three[0],three[1],person("c",{status:"withdrawn"})]),DEFAULT_CONFIG)).toBe(100);
-    expect(familyBonus(calculate(three,new Set(["a","b"])),DEFAULT_CONFIG)).toBe(100);
-    expect(familyBonus(calculate([three[0],three[1],person("c",{enrolled_at:"2026-12-01"})]),DEFAULT_CONFIG)).toBe(100);
+    expect(familyBonus(calculate([three[0],three[1],person("c",{status:"withdrawn"})]),DEFAULT_CONFIG)).toBe(100+23*2);
+    expect(familyBonus(calculate(three,new Set(["a","b"])),DEFAULT_CONFIG)).toBe(100+23*2);
+    expect(familyBonus(calculate([three[0],three[1],person("c",{enrolled_at:"2026-12-01"})]),DEFAULT_CONFIG)).toBe(100+23*2);
     expect(familyBonus(calculate(three,new Set(["b","c"])),DEFAULT_CONFIG)).toBe(0);
   });
   it("manual exclusions override phone matches; names alone and duplicate identities never earn points",()=>{
@@ -35,15 +36,15 @@ describe("current family loyalty",()=>{
   });
   it("family settings round-trip and reject descending or nonfinite weights",()=>{
     const c=contributionConfigSchema.parse({...DEFAULT_CONFIG,family:{enabled:true,two:80,three:240,fourPlus:500}});
-    expect(familyBonus(calculate(),c)).toBe(240);
+    expect(familyBonus(calculate(),c)).toBe(240+46*2);
     expect(()=>contributionConfigSchema.parse({...c,family:{...c.family,three:10}})).toThrow();
     expect(()=>contributionConfigSchema.parse({...c,family:{...c.family,two:NaN}})).toThrow();
-    const old={...DEFAULT_CONFIG};delete old.family;expect(familyBonus(calculate(),contributionConfigSchema.parse(old))).toBe(250);
+    const old={...DEFAULT_CONFIG};delete old.family;expect(familyBonus(calculate(),contributionConfigSchema.parse(old))).toBe(250+46*2);
   });
   it("current family bonus changes overall ranking score but never recent activity",()=>{
     const raw={...emptyRaws(),tenureYears:2};
     const rows=relativeRows([{id:"a",status:"enrolled",grade:null,enrolledMonths:24,family:calculate(),total:{raws:raw,recent:raw,unavailable:[]}}],DEFAULT_CONFIG);
-    expect(rows[0]).toMatchObject({total:260,recent:10});
+    expect(rows[0]).toMatchObject({total:10+250+46*2,recent:10});
   });
   it("F13 is the largest individual precision weight; three children earn 35/100 and all positives still sum to 100",()=>{
     const f=FACTORS.find(f=>f.id==="F13")!,axis=AXES.find(a=>a.id===f.axis)!;
