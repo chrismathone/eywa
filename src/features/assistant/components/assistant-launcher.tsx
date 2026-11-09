@@ -114,7 +114,8 @@ export function AssistantLauncher({ trigger = true, className }: { trigger?: boo
     return triggerRef.current ?? true;
   }, []);
 
-  const streaming = !!assistant.state.inflight;
+  const streamingCount = assistant.state.inflight.length;
+  const streaming = streamingCount > 0;
 
   return (
     <>
@@ -128,7 +129,7 @@ export function AssistantLauncher({ trigger = true, className }: { trigger?: boo
           aria-keyshortcuts="Control+J Meta+J"
           data-usage-chrome=""
           onClick={toggle}
-          {...tipProps({ title: "학원 비서", lines: [`${hotkeyLabel} — 어느 화면에서나 열고 닫습니다`, streaming ? "지금 답을 만드는 중입니다." : null] })}
+          {...tipProps({ title: "학원 비서", lines: [`${hotkeyLabel} — 어느 화면에서나 열고 닫습니다`, streaming ? `지금 답을 ${streamingCount}개 만드는 중입니다.` : null] })}
           className={className}
         >
           <EyIcon name="sparkle" className="text-gold" />

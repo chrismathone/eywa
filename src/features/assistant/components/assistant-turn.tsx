@@ -22,6 +22,7 @@ export function AssistantTurn({
   canRetry,
   onRetry,
   onReload,
+  onControl,
 }: {
   turn: Turn;
   /** 다시 묻기를 지금 할 수 있나(다른 답을 받는 중이면 못 한다). */
@@ -29,6 +30,8 @@ export function AssistantTurn({
   onRetry: (turn: Turn) => void;
   /** 저장본 다시 읽기(아직 만드는 중 · 끊김). */
   onReload: () => void;
+  /** 이 화면이 받지 않는 도는 질문(다른 탭 · 새로 고친 뒤)을 멈추거나 바로 결과 보기 — 서버가 그 질문을 찾았나. */
+  onControl?: (turn: Turn, action: "stop" | "finish") => Promise<boolean>;
 }) {
   const time = kstTimeOf(turn.createdAt);
   return (
@@ -42,12 +45,24 @@ export function AssistantTurn({
           {time ? <span className="num">{` · ${time}`}</span> : null}
         </p>
       </div>
-      <Answer turn={turn} canRetry={canRetry} onRetry={onRetry} onReload={onReload} />
+      <Answer turn={turn} canRetry={canRetry} onRetry={onRetry} onReload={onReload} onControl={onControl} />
     </div>
   );
 }
 
-function Answer({ turn, canRetry, onRetry, onReload }: { turn: Turn; canRetry: boolean; onRetry: (t: Turn) => void; onReload: () => void }) {
+function Answer({
+  turn,
+  canRetry,
+  onRetry,
+  onReload,
+  onControl,
+}: {
+  turn: Turn;
+  canRetry: boolean;
+  onRetry: (t: Turn) => void;
+  onReload: () => void;
+  onControl?: (turn: Turn, action: "stop" | "finish") => Promise<boolean>;
+}) {
   switch (turn.status) {
     case "done":
       return (
@@ -63,6 +78,7 @@ function Answer({ turn, canRetry, onRetry, onReload }: { turn: Turn; canRetry: b
     case "running":
       return (
         <Notice icon="clock" tone="neutral" text="아직 답을 만드는 중입니다. 끝나면 이 자리에 보고서가 뜹니다." steps={turn.steps} pending>
+          {onControl && turn.messageId ? <SavedControls turn={turn} onControl={onControl} /> : null}
           <Button type="button" variant="ghost" onClick={onReload}>
             <EyIcon name="sync" />
             지금 다시 불러오기
@@ -82,6 +98,36 @@ function Answer({ turn, canRetry, onRetry, onReload }: { turn: Turn; canRetry: b
         </Notice>
       );
   }
+}
+
+/**
+ * 이 화면이 받지 않는 도는 질문(다른 탭·기기에서 물었거나 새로 고친 뒤)의 '바로 결과 보기' · '멈추기' — 질문 번호로 서버에 알린다.
+ * 다른 곳에서 쥔 자리(동시 3개)를 여기서도 풀 수 있게(적대 리뷰 2026-11-09). 결과는 3초 다시 읽기가 가져온다.
+ */
+function SavedControls({ turn, onControl }: { turn: Turn; onControl: (turn: Turn, action: "stop" | "finish") => Promise<boolean> }) {
+  const [sent, setSent] = useState<"stop" | "finish" | null>(null);
+  const [failed, setFailed] = useState(false);
+  const send = async (action: "stop" | "finish") => {
+    setSent(action);
+    setFailed(false);
+    if (!(await onControl(turn, action))) {
+      setSent(null);
+      setFailed(true);
+    }
+  };
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <Button type="button" variant="outline" disabled={sent !== null} onClick={() => void send("finish")}>
+        <EyIcon name="report" />
+        {sent === "finish" ? "결과 정리 중…" : "바로 결과 보기"}
+      </Button>
+      <Button type="button" variant="outline" disabled={sent !== null} onClick={() => void send("stop")}>
+        <EyIcon name="stop" />
+        {sent === "stop" ? "멈추는 중…" : "멈추기"}
+      </Button>
+      {failed ? <span className="text-danger text-sm font-medium">이미 끝났거나 알리지 못했습니다. 다시 불러와 보세요.</span> : null}
+    </span>
+  );
 }
 
 function RetryButton({ turn, disabled, onRetry }: { turn: Turn; disabled: boolean; onRetry: (t: Turn) => void }) {
@@ -264,7 +310,7 @@ function StepTimeline({
         const tail =
           s.state === "error" ? null : running ? (ticking !== null ? formatDuration(ticking) : null) : (s.detail ?? (typeof s.ms === "number" ? seconds(s.ms) : null));
         // 막힌 단계의 뜻(`stepTrouble`) — 답이 끝까지 나왔고 뒤에 같은 종류가 이어졌으면 옅게(다른 조회로 이어 감) ·
-        // 시간·한도면 주황(분석이 잘렸다는 신호) · 나머지는 빨강(원장 2026-11-06 · 적대 리뷰 2026-11-06).
+        // 시간·한도면 주황(분석이 잘렸다는 신호) · 원장이 누른 '바로 결과 보기'면 옅은 멈춤 · 나머지는 빨강(원장 2026-11-06 · 적대 리뷰 2026-11-06).
         const trouble = stepTrouble(steps, index, settled);
         // 진행 중(live)의 막힘은 아직 결말이 아니다 — 비서가 고쳐 다시 하는 게 보통이라 옅게 '다시 해 봅니다'.
         // 끝내 답이 실패하면 실패 안내(Notice · settled 아님)에서 빨강으로 남는다.
@@ -284,6 +330,8 @@ function StepTimeline({
                 <EyIcon name="undo" size={14} className="text-text-faint" aria-label={retrying ? "다시 해 보는 중" : "다른 조회로 이어 감"} />
               ) : trouble === "limit" ? (
                 <EyIcon name="clock" size={15} className="text-amber" aria-label="시간·한도로 멈춤" />
+              ) : trouble === "user" ? (
+                <EyIcon name="pause" size={14} aria-label="여기서 조회를 끝냄" />
               ) : s.state === "error" ? (
                 <EyIcon name="alertCircle" size={16} className="text-danger" aria-label="막힘" />
               ) : (
@@ -309,7 +357,7 @@ function StepTimeline({
               {tail ? <span className="num ml-auto text-xs whitespace-nowrap">{tail}</span> : null}
             </div>
             {s.state === "error" && s.detail ? (
-              <p className={`mt-0.5 px-1.5 text-xs break-words ${retried ? "text-text-faint" : trouble === "limit" ? "text-amber" : "text-danger"}`}>
+              <p className={`mt-0.5 px-1.5 text-xs break-words ${retried ? "text-text-faint" : trouble === "limit" ? "text-amber" : trouble === "user" ? "" : "text-danger"}`}>
                 {retried && !/고칩니다|고쳐/.test(s.detail) ? `${s.detail} — ${retrying ? "다시 해 봅니다" : "다른 조회로 이어 갔습니다"}` : s.detail}
               </p>
             ) : null}

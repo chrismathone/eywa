@@ -3,12 +3,16 @@ import type { AskStep, ThreadDetailResponse, ThreadMessage } from "@/features/as
 import type { SettledReport } from "@/features/assistant/report";
 import {
   assistantReducer,
+  canStartIn,
   currentConversation,
   formatDuration,
   groupThreadsByDay,
   initialAssistantState,
+  isConversationRunningElsewhere,
   isConversationStreaming,
   parseAskEvent,
+  runningCount,
+  staleRunningThreadIds,
   splitNdjson,
   parseStep,
   stepSummary,
@@ -82,7 +86,7 @@ describe("새 대화에서 묻기 — thread 이벤트로 대화 키가 바뀌�
     expect(t.status).toBe("done");
     expect(t.messageId).toBe("M1");
     expect(t.report).toBe(report);
-    expect(done.inflight).toBeNull();
+    expect(done.inflight).toEqual([]);
   });
 
   it("다른 대화를 보는 동안에도 진행 중인 차례는 제 대화에 쌓인다", () => {
@@ -96,13 +100,73 @@ describe("새 대화에서 묻기 — thread 이벤트로 대화 키가 바뀌�
     expect(s.conversations[threadKey("T1")]!.turns).toHaveLength(1);
   });
 
-  it("한 번에 하나만 — 진행 중이면 두 번째 시작은 무시", () => {
+  it("대화마다 하나 — 같은 대화에서 진행 중이면 두 번째 시작은 무시", () => {
     const s = run(
       initialAssistantState("new:0"),
       { type: "ask/start", convKey: "new:0", turn: turn("k1") },
       { type: "ask/start", convKey: "new:0", turn: turn("k2") },
     );
     expect(currentConversation(s).turns.map((t) => t.key)).toEqual(["k1"]);
+  });
+
+  it("동시에 여러 대화(원장 2026-11-06 '동시에 3개까지') — 대화마다 제 흐름 · 셋이면 더 시작할 수 없다", () => {
+    let s = run(initialAssistantState("new:0"), { type: "ask/start", convKey: "new:0", turn: turn("k1") }, {
+      type: "ask/event",
+      turnKey: "k1",
+      event: { type: "thread", threadId: "T1", title: "하나" },
+      now: NOW,
+    });
+    s = run(s, { type: "conv/new", key: "new:1" }, { type: "ask/start", convKey: "new:1", turn: turn("k2") });
+    s = run(s, { type: "conv/new", key: "new:2" });
+    expect(s.inflight).toEqual(["k1", "k2"]);
+    expect(runningCount(s)).toBe(2);
+    expect(canStartIn(s, currentConversation(s))).toBe(true);
+    s = run(s, { type: "ask/start", convKey: "new:2", turn: turn("k3") }, { type: "conv/new", key: "new:3" });
+    expect(runningCount(s)).toBe(3);
+    expect(canStartIn(s, currentConversation(s))).toBe(false);
+    // 하나가 끝나면 자리가 난다 · 흐름은 서로 섞이지 않는다
+    s = run(
+      s,
+      { type: "ask/event", turnKey: "k2", event: { type: "report", messageId: "M2", report }, now: NOW },
+      { type: "ask/end", turnKey: "k2" },
+    );
+    expect(s.inflight).toEqual(["k1", "k3"]);
+    expect(runningCount(s)).toBe(2);
+    expect(canStartIn(s, currentConversation(s))).toBe(true);
+    expect(s.conversations[threadKey("T1")]!.turns[0]!.status).toBe("streaming");
+  });
+
+  it("다른 탭·기기에서 도는 대화도 센다(목록 running) · 그 대화에서는 보낼 수 없다 · 저장본이 끝났으면 풀린다", () => {
+    let s = run(initialAssistantState("new:0"), {
+      type: "threads/loaded",
+      enabled: true,
+      threads: [
+        { id: "A", title: "a", level: "normal", updatedAt: NOW, running: true },
+        { id: "B", title: "b", level: "normal", updatedAt: NOW, running: true },
+        { id: "C", title: "c", level: "normal", updatedAt: NOW, running: true },
+      ],
+    });
+    expect(runningCount(s)).toBe(3);
+    expect(canStartIn(s, currentConversation(s))).toBe(false);
+    s = run(s, { type: "conv/select", threadId: "A" });
+    expect(isConversationRunningElsewhere(s, currentConversation(s))).toBe(true);
+    const detail: ThreadDetailResponse = { thread: { id: "A", title: "a", level: "normal", updatedAt: NOW }, messages: [message({ id: "MA", report })] };
+    s = run(s, { type: "conv/loaded", key: threadKey("A"), detail });
+    expect(s.threads.find((t) => t.id === "A")!.running).toBe(false);
+    expect(isConversationRunningElsewhere(s, currentConversation(s))).toBe(false);
+    expect(runningCount(s)).toBe(2);
+    expect(canStartIn(s, currentConversation(s))).toBe(true);
+  });
+
+  it("서버가 자리 없음으로 받지 않으면(ask/rejected) 보낸 차례를 거둔다 — 실패 카드를 남기지 않는다", () => {
+    const s = run(
+      initialAssistantState("new:0"),
+      { type: "ask/start", convKey: "new:0", turn: turn("k1") },
+      { type: "ask/rejected", turnKey: "k1" },
+      { type: "ask/end", turnKey: "k1" },
+    );
+    expect(currentConversation(s).turns).toEqual([]);
+    expect(s.inflight).toEqual([]);
   });
 
   it("같은 단계 id는 그 자리에서 덮어쓴다(running → done) · 새 단계는 끝에", () => {
@@ -262,13 +326,15 @@ describe("진행 단계 요약", () => {
       step("s5", { kind: "report", state: "done", at: 3000, ms: 15_000 }),
     ];
     // 답이 실패한 차례(settled 아님) — 막힌 단계는 그대로 막힘(어디서 막혔는지가 곧 까닭)
-    expect(stepSummary(steps)).toEqual({ queries: 2, tables: 2, ms: 18_000, retried: 0, limited: 0, failed: 1 });
+    expect(stepSummary(steps)).toEqual({ queries: 2, tables: 2, ms: 18_000, retried: 0, limited: 0, cut: 0, failed: 1 });
     expect(stepSummaryText(steps)).toBe("조회 2번 · 표 2개 · 18초 · 막힌 단계 1개");
     expect(stepSummaryText([step("s1", { kind: "understand", state: "done", at: 0, ms: 1200 })])).toBe("1.2초");
   });
 
-  it("parseStep — 한도 표식(cause limit)만 받고 다른 값은 버린다", () => {
+  it("parseStep — 한도 표식(limit)·원장이 끝낸 표식(user)만 받고 다른 값은 버린다", () => {
     expect(parseStep({ id: "s1", kind: "query", label: "l", state: "error", at: 0, cause: "limit" })).toMatchObject({ cause: "limit" });
+    expect(parseStep({ id: "s1", kind: "query", label: "l", state: "error", at: 0, cause: "user" })).toMatchObject({ cause: "user" });
+    expect(parseStep({ id: "s1", kind: "survey", label: "l", state: "done", at: 0 })).toMatchObject({ kind: "survey" });
     expect(parseStep({ id: "s1", kind: "query", label: "l", state: "error", at: 0, cause: "boom" })).not.toHaveProperty("cause");
   });
 
@@ -341,3 +407,84 @@ describe("NDJSON", () => {
     expect(parseAskEvent("[1,2]")).toBeNull();
   });
 });
+
+describe("'바로 결과 보기'로 하지 않은 조회(cause user · 원장 2026-11-06)", () => {
+  it("막힘이 아니라 원장이 끝낸 것 — 요약 줄은 '여기서 조회를 끝냄'", () => {
+    const steps: AskStep[] = [
+      step("a", { state: "done", ms: 1000 }),
+      step("b", { state: "error", cause: "user", detail: "여기서 조회를 끝냈습니다", at: 1000, ms: 10 }),
+      step("r", { kind: "report", state: "done", at: 2000, ms: 3000 }),
+    ];
+    expect(stepTrouble(steps, 1, true)).toBe("user");
+    expect(stepSummary(steps, true)).toMatchObject({ cut: 1, failed: 0, limited: 0 });
+    expect(stepSummaryText(steps, true)).toContain("여기서 조회를 끝냄");
+    expect(stepSummaryText(steps, true)).not.toContain("막힌 단계");
+  });
+});
+
+describe("도는 중 표시가 남지 않게(적대 리뷰 2026-11-09)", () => {
+  it("저장본이 '도는 중'인 대화를 두고 다른 대화로 옮기면 따로 확인할 대화로 잡힌다", () => {
+    const detail: ThreadDetailResponse = { thread: { id: "A", title: "a", level: "normal", updatedAt: NOW }, messages: [message({ id: "MA", running: true })] };
+    let s = run(initialAssistantState("new:0"), { type: "conv/select", threadId: "A" }, { type: "conv/loaded", key: threadKey("A"), detail });
+    expect(staleRunningThreadIds(s)).toEqual([]); // 보고 있는 대화는 3초 다시 읽기가 맡는다
+    s = run(s, { type: "conv/new", key: "new:1" });
+    expect(staleRunningThreadIds(s)).toEqual(["A"]);
+    expect(runningCount(s)).toBe(1);
+  });
+
+  it("멈추면 목록의 '도는 중'이 바로 풀린다(멈춘 질문은 자리를 비운다)", () => {
+    let s = run(initialAssistantState("new:0"), {
+      type: "threads/loaded",
+      enabled: true,
+      threads: [{ id: "T1", title: "t", level: "normal", updatedAt: NOW, running: true }],
+    });
+    s = run(s, { type: "conv/select", threadId: "T1" }, { type: "ask/start", convKey: threadKey("T1"), turn: turn("k1") }, { type: "ask/stopped", turnKey: "k1" }, { type: "ask/end", turnKey: "k1" });
+    expect(s.threads[0]!.running).toBe(false);
+    expect(runningCount(s)).toBe(0);
+  });
+
+  it("늦게 온 목록이 방금 생긴(답을 받는 중인) 대화를 빼지 않는다", () => {
+    let s = run(
+      initialAssistantState("new:0"),
+      { type: "ask/start", convKey: "new:0", turn: turn("k1") },
+      { type: "ask/event", turnKey: "k1", event: { type: "thread", threadId: "T9", title: "새 대화" }, now: NOW },
+    );
+    s = run(s, { type: "threads/loaded", enabled: true, threads: [{ id: "OLD", title: "옛", level: "normal", updatedAt: NOW }] });
+    expect(s.threads.map((t) => t.id)).toEqual(["T9", "OLD"]);
+  });
+});
+
+describe("재리뷰 수리(2026-11-09)", () => {
+  it("다른 곳에서 지운 대화(404) — 도는 표시를 풀고 목록에서 뺀다(끝없이 다시 묻지 않게)", () => {
+    const detail: ThreadDetailResponse = { thread: { id: "X", title: "x", level: "normal", updatedAt: NOW }, messages: [message({ id: "MX", running: true })] };
+    let s = run(
+      initialAssistantState("new:0"),
+      { type: "threads/loaded", enabled: true, threads: [{ id: "X", title: "x", level: "normal", updatedAt: NOW, running: true }] },
+      { type: "conv/select", threadId: "X" },
+      { type: "conv/loaded", key: threadKey("X"), detail },
+      { type: "conv/new", key: "new:1" },
+    );
+    expect(staleRunningThreadIds(s)).toEqual(["X"]);
+    s = run(s, { type: "conv/failed", key: threadKey("X"), error: "대화를 찾지 못했습니다", gone: true });
+    expect(staleRunningThreadIds(s)).toEqual([]);
+    expect(s.threads.some((t) => t.id === "X")).toBe(false);
+    expect(runningCount(s)).toBe(0);
+  });
+
+  it("늦게 온 목록이 방금 지운·이름 바꾼 대화를 되돌리지 않는다", () => {
+    const list = [
+      { id: "A", title: "옛 이름", level: "normal" as const, updatedAt: NOW },
+      { id: "B", title: "b", level: "normal" as const, updatedAt: NOW },
+    ];
+    let s = run(initialAssistantState("new:0"), { type: "threads/loaded", enabled: true, threads: list });
+    const since = s.editSeq;
+    s = run(s, { type: "thread/renamed", threadId: "A", title: "새 이름" }, { type: "thread/deleted", threadId: "B", newKey: "new:2" });
+    // 고치기 전에 읽기 시작한 목록이 이제 도착한다
+    s = run(s, { type: "threads/loaded", enabled: true, threads: list, since });
+    expect(s.threads.map((t) => [t.id, t.title])).toEqual([["A", "새 이름"]]);
+    // 고친 뒤에 읽은 목록은 그대로 믿는다
+    s = run(s, { type: "threads/loaded", enabled: true, threads: [{ id: "A", title: "또 다른 이름", level: "normal", updatedAt: NOW }], since: s.editSeq });
+    expect(s.threads[0]!.title).toBe("또 다른 이름");
+  });
+});
+
