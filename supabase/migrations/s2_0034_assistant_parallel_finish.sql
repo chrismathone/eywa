@@ -1,4 +1,4 @@
--- s2_0033_assistant_parallel_finish.sql — 학원 비서: 동시에 3개까지 · '여기서 끝내고 결과 보기' · 2026-11-06
+-- s2_0034_assistant_parallel_finish.sql — 학원 비서: 동시에 3개까지 · '여기서 끝내고 결과 보기' · 2026-11-06
 --
 -- 원장 2026-11-06 *"대화를 여러개 동시에 시작할 수 있는지"* → '동시에 3개까지'를 골랐다(조회 한도를 없애 답 하나가 최대 13분쯤 걸릴 수 있다).
 -- 원장 2026-11-06 *"'여기서 조회 끝내고 바로 결과 출력' 버튼 만들자. 그럼 조회 멈추고, 지금까지 조회한 내용으로만 결과 출력"*.
@@ -46,17 +46,17 @@ begin
   if (select count(*) from information_schema.columns
        where table_schema = 'public' and table_name = 'assistant_messages'
          and column_name in ('run_slot', 'client_ref', 'wrap_requested_at')) <> 3 then
-    raise exception 's2_0033: 새 칸이 다 생기지 않았습니다';
+    raise exception 's2_0034: 새 칸이 다 생기지 않았습니다';
   end if;
   if to_regclass('public.assistant_messages_running_slot_idx') is null
      or to_regclass('public.assistant_messages_running_thread_idx') is null then
-    raise exception 's2_0033: 새 색인이 생기지 않았습니다';
+    raise exception 's2_0034: 새 색인이 생기지 않았습니다';
   end if;
   if to_regclass('public.assistant_messages_one_running_idx') is not null then
-    raise exception 's2_0033: 옛 색인(사람당 하나)이 남았습니다';
+    raise exception 's2_0034: 옛 색인(사람당 하나)이 남았습니다';
   end if;
   if (select rolconnlimit from pg_roles where rolname = 'aywa_assistant') <> 12 then
-    raise exception 's2_0033: 비서 역할 연결 상한이 12가 아닙니다';
+    raise exception 's2_0034: 비서 역할 연결 상한이 12가 아닙니다';
   end if;
 end $$;
 

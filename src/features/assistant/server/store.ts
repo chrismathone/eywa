@@ -318,7 +318,7 @@ export type Admission = { error: string; code: "busy" | "day" };
 
 /**
  * 하루 상한 · 겹친 질문 확인. 막히면 한국어 이유.
- * 먼저 함수가 죽어 남은 '도는 중'(RUNNING_MS — 15분 넘은 것)을 실패로 닫는다 — 자리 색인(s2_0033)이 영영 막히지 않게.
+ * 먼저 함수가 죽어 남은 '도는 중'(RUNNING_MS — 15분 넘은 것)을 실패로 닫는다 — 자리 색인(s2_0034)이 영영 막히지 않게.
  * '멈춤'을 누른 질문은 마무리 중이어도 도는 것으로 세지 않는다(멈추고 바로 다시 물을 수 있게 · 적대 리뷰 2026-11-06).
  * 동시에 들어오는 경우는 이 확인이 아니라 고유 색인이 막는다(`startMessage` → "busy" · "busy_thread").
  */
@@ -495,7 +495,7 @@ export async function threadRunning(owner: Owner, threadId: string, now = new Da
 }
 
 /**
- * 멈춤·마무리를 보낼 곳 — 질문 번호, 또는 번호를 받기 전이면 화면이 보낼 때 만든 번호(client_ref · s2_0033).
+ * 멈춤·마무리를 보낼 곳 — 질문 번호, 또는 번호를 받기 전이면 화면이 보낼 때 만든 번호(client_ref · s2_0034).
  * `latest` = 배포 전에 열린 옛 화면의 `/messages/current/stop`(그 화면은 한 번에 하나만 묻는다) — 가장 최근에 시작한 본인 질문 하나.
  */
 export type MessageTarget = { messageId: string } | { clientRef: string } | { latest: true };

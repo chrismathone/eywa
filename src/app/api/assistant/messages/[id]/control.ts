@@ -7,7 +7,7 @@ import { reportError } from "@/lib/observability/report-error";
 /**
  * 도는 질문에 표시만 남기는 두 손잡이('멈춤' · '바로 결과 보기')의 공통 — 도는 쪽이 2초마다 보고 따른다(다른 서버 인스턴스에서 돌아도 같다).
  * id = 질문 번호(`started`). `?by=ref`면 화면이 보낼 때 만든 번호(clientRef) — 질문 번호를 받기 전에 누른 경우(동시에 여러 질문이 돌 수 있어
- * '지금 도는 내 질문'으로는 어느 것인지 모른다 · SQL s2_0033).
+ * '지금 도는 내 질문'으로는 어느 것인지 모른다 · SQL s2_0034).
  */
 export async function controlRunning(
   request: Request,

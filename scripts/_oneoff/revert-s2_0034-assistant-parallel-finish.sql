@@ -1,4 +1,4 @@
--- s2_0033 되돌리기 — 앱을 s2_0033 이전 판으로 되돌린 **뒤에만** 쓴다(새 앱은 run_slot·client_ref·wrap_requested_at을 쓴다).
+-- s2_0034 되돌리기 — 앱을 s2_0034 이전 판으로 되돌린 **뒤에만** 쓴다(새 앱은 run_slot·client_ref·wrap_requested_at을 쓴다).
 -- 사람당 '도는 질문'이 둘 이상이면 옛 색인을 만들 수 없다 → 먼저 그 사람의 가장 오래된 하나만 남기고 나머지를 '실패'로 닫는다.
 begin;
 set local lock_timeout = '5s';

@@ -53,7 +53,7 @@ export type AssistantState = {
   currentKey: string;
   /**
    * 지금 답을 받는 차례들(turnKey) — 동시에 `ASSISTANT_MAX_RUNNING`(3)개까지 · 대화마다 하나(원장 2026-11-06 '동시에 3개까지' ·
-   * 서버 자리 색인 s2_0033과 같은 결). 다른 탭·기기에서 도는 질문은 목록의 `running`·저장본의 '도는 중'으로 안다(`runningCount`).
+   * 서버 자리 색인 s2_0034과 같은 결). 다른 탭·기기에서 도는 질문은 목록의 `running`·저장본의 '도는 중'으로 안다(`runningCount`).
    */
   inflight: readonly string[];
   /** 목록을 다시 읽은 횟수 — 자리 없음 안내는 그 뒤 목록을 다시 읽을 때까지만 보인다(그 뒤엔 목록이 진실 · 적대 리뷰 2026-11-09). */

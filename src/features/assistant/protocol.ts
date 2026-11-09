@@ -13,13 +13,13 @@ import type { SettledReport } from "./report";
 
 /**
  * `clientRef` — 화면이 보낼 때 만든 번호(uuid). 질문 번호(`started`)를 받기 전에 누른 멈춤·마무리가 그 질문을 찾는다
- * (동시에 여러 질문이 돌 수 있어 '지금 도는 내 질문'으로는 어느 것인지 모른다 · SQL s2_0033).
+ * (동시에 여러 질문이 돌 수 있어 '지금 도는 내 질문'으로는 어느 것인지 모른다 · SQL s2_0034).
  */
 export type AskBody = { threadId?: string | null; question: string; level: AssistantLevel; clientRef?: string };
 
 /**
  * 한 사람이 동시에 만들 수 있는 답 — 원장 2026-11-06 '동시에 3개까지'(조회 한도를 없애 답 하나가 최대 13분쯤 걸린다).
- * DB 자리 색인(s2_0033 run_slot 1~3)과 같은 수다. 같은 대화에는 하나씩(앞 답을 알고 이어 답하도록).
+ * DB 자리 색인(s2_0034 run_slot 1~3)과 같은 수다. 같은 대화에는 하나씩(앞 답을 알고 이어 답하도록).
  */
 export const ASSISTANT_MAX_RUNNING = 3;
 
