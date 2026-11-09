@@ -10,7 +10,8 @@
  */
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import { REPORT_TOOL_SCHEMA, settleReport, type QueryResult, type SettledReport } from "../report";
+import { REPORT_TOOL_SCHEMA, settleReport, type QueryResult, type ReportBlock, type SettledReport } from "../report";
+import { baselineWindow, fillWindow, formatCheckValue, readCheckRow, type AdviceCheckResult } from "../advice";
 import type { AskStep, StepKind, StepTable } from "../protocol";
 import type { AssistantTableDoc } from "../catalog/types";
 import { clipText } from "../text";
@@ -127,7 +128,13 @@ const WRAP_DETAIL: Record<WrapReason, string> = {
   context: "읽은 자료가 많아 여기까지 봤습니다",
 };
 
-export type AgentResult = { report: SettledReport; queries: QueryResult[] };
+/**
+ * `checks` = 비서 의견의 확인 지표(조회문 원문 포함 · 의견 순번 `itemNo` = advice 블록 items의 자리)와 기준값 — 의견 표에만 저장한다
+ * (보고서 블록에서는 뺐다 — 조회문을 화면·대화 저장본으로 보내지 않는다). `askedOn` = 질문일(한국 날짜) — 기준값 기간·다시 잴 날의 기준.
+ */
+export type AgentResult = { report: SettledReport; queries: QueryResult[]; checks: AdviceCheckResult[]; askedOn: string };
+/** 확인 지표 기준값 재기 전체의 상한 — 보고서가 이미 나온 뒤라 답을 늦추지 않는다(넘으면 남은 지표는 재지 않고 뺀다). */
+const CHECK_BUDGET_MS = 30_000;
 
 const DescribeInput = z.object({ tables: z.array(z.string().min(1)).min(1).max(6) });
 const RunSqlInput = z.object({ purpose: z.string().trim().min(1).max(80), sql: z.string().min(1) });
@@ -228,6 +235,21 @@ function describeText(docs: readonly AssistantTableDoc[], found: Awaited<ReturnT
   return JSON.stringify(out);
 }
 
+/** 보고서 블록에서 확인 지표(조회문 원문)를 뺀다 — 의견 표에만 둔다(화면·대화 저장본·지난 대화로 보내지 않는다 · 적대 리뷰 2026-11-09). */
+function withoutChecks(report: SettledReport): SettledReport {
+  return {
+    ...report,
+    blocks: report.blocks.map((b): ReportBlock => (b.type === "advice" && b.items.some((item) => item.check) ? { ...b, items: b.items.map(stripCheck) } : b)),
+  };
+}
+
+/** 의견 항목에서 확인 지표만 뺀다(나머지 칸은 그대로). */
+function stripCheck<T extends { check?: unknown }>(item: T): Omit<T, "check"> {
+  const rest = { ...item };
+  delete rest.check;
+  return rest;
+}
+
 /** 보고서 대신 글로 끝났을 때 — 글을 요약 블록 하나로. */
 function textOnlyReport(text: string): SettledReport {
   return { title: "답변", blocks: [{ type: "summary", text: clipText(text, 800) }], datasets: {} };
@@ -318,15 +340,67 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
     close(open("analyze", "원장님 요청으로 여기서 조회를 끝냈습니다 — 지금까지 조회한 내용으로 정리합니다"), { detail: `조회 ${queries.length}번까지` });
   /** 전수 조회 기록 — 그 뒤 성공한 조회가 읽은 보기를 각 기록의 `examined`에 쌓는다(확인한 자료 범위의 '자세히 봄'). */
   const surveys: SurveyRecord[] = [];
-  const finish = (report: SettledReport): AgentResult => ({
+  const askedOn = kstYmd(started);
+  const finish = (report: SettledReport, checks: AdviceCheckResult[] = []): AgentResult => ({
     report: {
-      ...report,
+      ...withoutChecks(report),
       ...(surveys.length ? { coverage: coverageOf(surveys) } : {}),
       // 조회를 일찍 끝내고 정리한 답 — 화면이 보고서 위에 한 줄로 알린다.
       ...(wrapping ? { cutShort: wrapping } : {}),
     },
     queries,
+    checks,
+    askedOn,
   });
+
+  /**
+   * 비서 의견의 확인 지표 기준값(제안 → 결과 → 학습 1단계 · 2026-11-09) — 조회문 틀을 [질문일 − 2일 − 기간, 질문일 − 2일)로 채워
+   * 같은 검사기·읽기 전용 실행기로 잰다(advice.ts baselineWindow).
+   * 🔴 보고서는 이미 나왔다 — 여기서는 답을 버리지 않는다(적대 리뷰 2026-11-09): AI에게 보고서를 다시 쓰게 하지 않고(1~3분 · 그 차례가
+   *    실패하면 맞던 답까지 잃는다) 틀리거나 못 잰 지표는 기준값 없이 넘겨 '확인 지표를 만들지 못했습니다'로 남긴다(advice.ts adviceDrafts).
+   *    멈춤·고정 기한 신호가 왔거나 상한(30초)을 넘으면 남은 지표는 재지 않는다. 단계 종류는 '보고서' — '조회 N번'에 세지 않는다.
+   */
+  const measureChecks = async (report: SettledReport): Promise<AdviceCheckResult[]> => {
+    const out: AdviceCheckResult[] = [];
+    const block = report.blocks.find((b) => b.type === "advice");
+    const items = block?.type === "advice" ? block.items : [];
+    const begun = now();
+    for (const [i, item] of items.entries()) {
+      const check = item.check;
+      if (!check) continue;
+      // 원장이 '바로 결과 보기'를 눌렀으면 재지 않는다(답을 더 늦추지 않는다 · 재리뷰 2026-11-09).
+      if (input.signal?.aborted || wrapping === "user" || now() - begun > CHECK_BUDGET_MS) {
+        out.push({ itemNo: i, check, baseline: null, skipped: true });
+        continue;
+      }
+      const { from, to } = baselineWindow(askedOn, check.windowDays);
+      const stepId = open("report", `확인 지표 기준값 · ${clipText(check.label, 40)}`);
+      const measured = await (async (): Promise<{ value: number; sample: number | null } | string> => {
+        let gate: Awaited<ReturnType<typeof checkAssistantSql>>;
+        try {
+          gate = await checkAssistantSql(fillWindow(check.sql, from, to), views);
+        } catch {
+          return "조회문을 검사하지 못했습니다(일시 오류)";
+        }
+        if (!gate.ok) return `쓸 수 없는 조회입니다 — ${gate.reason}`;
+        try {
+          const read = readCheckRow(await input.db.run(gate.sql), check.unit);
+          return read.ok ? { value: read.value, sample: read.sample } : read.error;
+        } catch (error) {
+          // 화면·저장본에 남는 단계 설명이라 한국어 요약만(DB 원문 detail은 싣지 않는다 — 일반 조회 단계와 같다 · 재리뷰 2026-11-09).
+          return error instanceof Error ? error.message : "조회 오류";
+        }
+      })();
+      if (typeof measured === "string") {
+        close(stepId, { detail: `재지 못해 확인 지표 없이 둡니다 — ${clipText(measured, 80)}` });
+        out.push({ itemNo: i, check, baseline: null });
+      } else {
+        close(stepId, { detail: `기준값 ${formatCheckValue(measured.value, check.unit)}` });
+        out.push({ itemNo: i, check, baseline: { from, to, ...measured } });
+      }
+    }
+    return out;
+  };
 
   for (let round = 0; ; round++) {
     if (input.signal?.aborted) throw new AssistantError("질문을 멈췄습니다");
@@ -483,7 +557,7 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
       const settled = settleReport(call.input, byId);
       if (settled.ok) {
         close(stepId, { label: "보고서 · 비서 의견 작성", detail: `블록 ${settled.report.blocks.length}개` });
-        return finish(settled.report);
+        return finish(settled.report, await measureChecks(settled.report));
       }
       reportFailed = true;
       close(stepId, { state: "error", label: "보고서 확인", detail: "조회 결과와 맞지 않는 곳이 있어 고칩니다" });

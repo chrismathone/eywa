@@ -116,10 +116,12 @@ export function assembleContribution(input: { tenant: string; today: string; cap
     { source: "enrollment_consultations", from: core.consultations.map((c) => c.consultation_date).filter((d): d is string => !!d).sort()[0] ?? null,
       through: today, state: "ready", note: "연결된 소개만 인정 · 지난 소개는 별도 확인 목록" },
   ];
+  // 랭킹도 기여도 설명회 점수(parentEventFacts)와 같은 대상 필터를 쓴다(테스트·미상 학생 제외).
+  const rankingEvents = input.parentEvents ? { ...input.parentEvents, records: input.parentEvents.records.filter(r => eligible(r.studentId)) } : emptyParentEvents();
   const rows = roster.flatMap((student): StoredContributionMonth[] => {
     const loyaltyRanking = buildRankingFacts({ studentId: student.id, asOf: today, billing: billingByStudent.get(student.id) ?? [],
       targets: targets.get(student.id) ?? [], attendance: attendance.get(student.id) ?? [], grades: schoolByStudent.get(student.id) ?? [],
-      events: input.parentEvents ?? emptyParentEvents(), canonical });
+      events: rankingEvents, canonical });
     const saved = storedByStudent.get(student.id) ?? [], savedMap = new Map(saved.map((r) => [r.month, r]));
     const facts = factsByStudent.get(student.id) ?? [];
     const points = pointsByStudent.get(student.id) ?? [];

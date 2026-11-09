@@ -20,7 +20,7 @@ vi.mock("./queries", () => ({ getSessionTermsView: h.view }));
 vi.mock("./money-carryover-queries", () => ({ loadMoneyCarryOuts: h.outs, loadMoneyCarryIns: h.ins }));
 vi.mock("./auto-reallocate", () => ({ loadAutoInvoices: h.autos, autoReallocateAfterConfirm: h.realloc }));
 
-import { applyCarrySync, carryChainBreakNotice, carryShortNotice, carrySyncNotice, lowerConfirmedForCarry, syncCarrySessionsAfter, syncCarrySessionsAfterCarry } from "./carry-session-sync";
+import { applyCarrySync, carryChainBreakNotice, carryOutBreakWarnings, carryShortNotice, carrySyncNotice, loadCarryOutStates, lowerConfirmedForCarry, syncCarrySessionsAfter, syncCarrySessionsAfterCarry } from "./carry-session-sync";
 
 const T1 = "aaaaaaaa-1111-4111-8111-111111111111";
 const T2 = "aaaaaaaa-2222-4222-8222-222222222222";
@@ -56,6 +56,7 @@ function db() {
     const builder: Record<string, unknown> = {};
     builder.select = () => builder;
     builder.neq = () => builder;
+    builder.gt = () => builder;
     builder.order = () => builder;
     builder.in = () => builder;
     builder.eq = (col: string, v: unknown) => { filters[col] = v; return builder; };
@@ -386,5 +387,38 @@ describe("이월 창 — 받은 이월을 다시 넘기며 확정 시수 낮추�
     h.realloc.mockResolvedValueOnce({ saved: 0, skipped: 1 }).mockResolvedValueOnce({ saved: 0, skipped: 1 });
     expect(await lowerConfirmedForCarry(db(), raised(), { sessions: 5, amount: 120000 }, "user-1"))
       .toEqual({ ok: false, error: expect.stringContaining("되돌렸지만 수납 배분을 다시 맞추지 못했습니다") });
+  });
+});
+
+describe("확정·배분 저장이 보낸 이월을 무효로 만들면 알린다(2026-11-09 — 남은 한계 근본 해결)", () => {
+  // 9월 줄: 배분 120,000 · 5시수(120,000) · 8월에서 받은 24,000 → 10월로 24,000을 넘겨 둔 줄.
+  const out = { amount: 24000, toClassId: CLASS, toClassName: "중등M 개별 JJ3I", toPeriod: "2026-10", note: null, at: null };
+  beforeEach(() => { h.outs.mockResolvedValue({ map: new Map([[T1, out]]), failed: false }); });
+
+  it("보낸 이월이 있는 줄의 유효 여부를 화면과 같은 줄·같은 붙이기로 읽는다", async () => {
+    const states = await loadCarryOutStates(db(), [T1]);
+    expect(states?.get(T1)).toEqual({ valid: true, amount: 24000, toPeriod: "2026-10", period: "2026-09", studentName: "홍도연", className: "중등M 개별 JJ3I", allocationStale: false });
+    // 확정을 6으로 올리면(144,000) 더 받은 몫이 0 → 무효.
+    rowsOf(row({ confirmedSessions: 6, amount: 144000 }));
+    expect((await loadCarryOutStates(db(), [T1]))?.get(T1)?.valid).toBe(false);
+    // 가상 행 id는 묻지 않는다.
+    expect(await loadCarryOutStates(db(), ["가상 행"])).toEqual(new Map());
+  });
+
+  it("저장 전 유효 → 뒤 무효만 경고한다 — 원래 무효('이월 재확인')·모름(null)은 이번 저장 탓으로 말하지 않는다", () => {
+    const s = (valid: boolean, allocationStale = false) => ({ valid, amount: 24000, toPeriod: "2026-10", period: "2026-09", studentName: "홍도연", className: "중등M 개별 JJ3I", allocationStale });
+    expect([...carryOutBreakWarnings(new Map([[T1, s(true)]]), new Map([[T1, s(false)]])).values()]).toEqual([
+      "9월 홍도연 중등M 개별 JJ3I: 확정·배분이 바뀌어 10월로 넘긴 24,000원 이월이 무효가 되었습니다 — 10월 실납에서도 빠졌습니다. 이월을 고치거나 취소하고, 다음 달 회차 확정을 확인해 주세요.",
+    ]);
+    // 배분이 재확인이 되어 무효면 고칠 것은 배분이다 — 이월을 취소하라고 하지 않는다.
+    expect(carryOutBreakWarnings(new Map([[T1, s(true)]]), new Map([[T1, s(false, true)]])).get(T1)).toContain("이 달 수납 배분을 먼저 다시 저장해 주세요");
+    // 배분 재확인 때문에만 무효였는데 배분을 다시 저장해 재확인이 풀렸는데도 무효면 — 이번엔 이월을 고치라고 알린다(적대 재리뷰 N1).
+    expect(carryOutBreakWarnings(new Map([[T1, s(false, true)]]), new Map([[T1, s(false)]])).get(T1)).toContain("수납 배분을 다시 저장했지만");
+    // 재확인이 그대로면(아직 배분을 안 맞춤) 다시 말하지 않는다.
+    expect(carryOutBreakWarnings(new Map([[T1, s(false, true)]]), new Map([[T1, s(false, true)]])).size).toBe(0);
+    expect(carryOutBreakWarnings(new Map([[T1, s(false)]]), new Map([[T1, s(false)]])).size).toBe(0);
+    expect(carryOutBreakWarnings(new Map([[T1, s(true)]]), new Map([[T1, s(true)]])).size).toBe(0);
+    expect(carryOutBreakWarnings(null, new Map([[T1, s(false)]])).size).toBe(0);
+    expect(carryOutBreakWarnings(new Map([[T1, s(true)]]), null).size).toBe(0);
   });
 });

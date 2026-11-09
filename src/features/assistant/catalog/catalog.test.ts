@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { migrationFiles } from "@/lib/db/migrations-corpus.mjs";
 import { ASSISTANT_DOCS, ONTOLOGY_DOCS } from ".";
+import { AUTO_CONTRIBUTION_FACTORS } from "./tables-extra";
 
 function liveTables(): Set<string> {
   const created = new Set<string>();
@@ -25,8 +26,9 @@ function excludedInSql(): string[] {
     .filter((f: { name: string }) => /academy_assistant/.test(f.name))
     .map((f: { sql: string }) => f.sql)
     .join("\n");
-  const block = sql.slice(sql.indexOf("insert into assistant_private.excluded_tables"), sql.indexOf("on conflict (table_name) do update set reason"));
-  return [...block.matchAll(/\('([a-z_]+)',/g)].map((m) => m[1]!);
+  // 비서 SQL마다 제외 목록 넣기가 있을 수 있다(s2_0031 · s2_0036 의견 표 …) — 블록을 전부 읽는다.
+  const blocks = [...sql.matchAll(/insert into assistant_private\.excluded_tables[\s\S]*?on conflict \(table_name\) do update set reason/g)].map((m) => m[0]);
+  return blocks.flatMap((block) => [...block.matchAll(/\('([a-z_]+)',/g)].map((m) => m[1]!));
 }
 
 describe("학원 비서 DB 지도", () => {
@@ -36,7 +38,7 @@ describe("학원 비서 DB 지도", () => {
 
   it("마이그레이션에서 표를 실제로 찾았다(빈 집합으로 통과하지 않게)", () => {
     expect(live.size).toBeGreaterThan(250);
-    expect(excluded).toEqual(expect.arrayContaining(["assistant_threads", "assistant_messages", "assistant_conversations"]));
+    expect(excluded).toEqual(expect.arrayContaining(["assistant_threads", "assistant_messages", "assistant_conversations", "assistant_advice", "assistant_advice_events"]));
   });
 
   it("🔴 비서가 읽는 표는 하나도 빠짐없이 설명이 있다(새 표 = tables-a/b/extra에 한 줄)", () => {
@@ -71,5 +73,12 @@ describe("온톨로지 자리 라벨 = 앱 별칭(teacher-label.ts)", () => {
     const listed = (text: string) => [...(text.match(/in \(('[^)]*')\)/)?.[1] ?? "").matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
     expect(listed(ONTOLOGY_MAP)).toEqual([...SPECIAL_SLOT_ALIAS_KEYS].sort());
     expect(listed(notes)).toEqual([...SPECIAL_SLOT_ALIAS_KEYS].sort());
+  });
+
+  it("기여도 요인 — 앱이 자동 계산하는 번호 목록이 factor-query.ts와 같다(어긋나면 비서가 화면에 있는 값을 '기록 없음'이라 한다)", () => {
+    const src = readFileSync(join(process.cwd(), "src/features/student-contribution/server/factor-query.ts"), "utf8");
+    const ids = [...new Set([...src.matchAll(/\bput\("(F\d\d)"/g)].map((m) => m[1]!))].sort();
+    expect(ids.length).toBeGreaterThan(0);
+    expect([...AUTO_CONTRIBUTION_FACTORS].sort()).toEqual(ids);
   });
 });

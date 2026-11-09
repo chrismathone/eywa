@@ -41,7 +41,7 @@ export function RelativeScore({ options, refreshedAt, periodLabel, error }: {
       </div>
       <div className={styles.body}>
         <div className={`${styles.level} ${result.tier ? tierClasses[result.tier] : styles.iron}`}>
-          <p>로열티 등급</p>
+          <p>{result.partial > 0 ? "확인된 실적 기준 · 잠정 등급" : "로열티 등급"}</p>
           <TierStars tier={result.tier} size="lg" />
           <strong>{result.tier ?? "등급 보류"}</strong>
           <span>{topText(result.topPercent)}</span>

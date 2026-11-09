@@ -10,6 +10,7 @@
 import { z } from "zod";
 import { labelCodeColumns } from "./code-labels";
 import { plainRich } from "./rich-text";
+import { ADVICE_METHODS, ADVICE_TOPICS, AdviceCheckSchema, CHECK_FAILED, checkTemplateProblem, type AdviceView } from "./advice";
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 /**
@@ -82,6 +83,11 @@ export const ReportBlockSchema = z.discriminatedUnion("type", [
           why: richText(300),
           when: z.enum(["today", "this_week", "this_month", "watch"]).optional(),
           who: z.string().trim().max(30).optional(),
+          /** 제안 → 결과 → 학습(2026-11-09) — 주제 · 방법 · 확인 지표(나중에 다시 잴 숫자) 또는 잴 수 없는 까닭(advice.ts). */
+          topic: z.enum(ADVICE_TOPICS).optional(),
+          method: z.enum(ADVICE_METHODS).optional(),
+          check: AdviceCheckSchema.optional(),
+          noCheck: z.string().trim().min(1).max(80).optional().describe("숫자로 다시 재기 어려운 의견이면 그 까닭(확인 지표 대신)"),
         }),
       )
       .min(1)
@@ -127,6 +133,11 @@ export type SettledReport = AssistantReport & {
    * `user` = 원장이 누른 '여기서 끝내고 결과 보기'(2026-11-06) · `time` = 시간이 다 됨 · `context` = 읽은 자료가 많아 정리.
    */
   cutShort?: "user" | "time" | "context";
+  /**
+   * 비서 의견의 처리 상태 · 확인 지표 기준값 — 서버가 의견 표(assistant_advice)에서 붙인다(보고서 JSON에 저장하지 않는다 · AI가 쓰지 않는다).
+   * 없으면(의견 줄 저장 실패 · 옛 답) 화면은 처리 단추 없이 의견만 그린다.
+   */
+  advice?: AdviceView[];
 };
 
 /**
@@ -158,7 +169,7 @@ export function settleReport(
   input: unknown,
   results: ReadonlyMap<string, QueryResult>,
 ): { ok: true; report: SettledReport } | { ok: false; errors: string[] } {
-  const parsed = ReportSchema.safeParse(input);
+  const parsed = ReportSchema.safeParse(looseAdvice(input));
   if (!parsed.success) {
     return { ok: false, errors: parsed.error.issues.slice(0, 8).map((i) => `${i.path.join(".") || "(전체)"}: ${i.message}`) };
   }
@@ -213,6 +224,50 @@ export function settleReport(
   }
   return { ok: true, report: { title: plainRich(parsed.data.title), blocks, datasets } };
 }
+
+/**
+ * 비서 의견의 확인 지표 칸은 **느슨하게** 받는다(적대 리뷰 2026-11-09) — 지표 하나가 틀렸다고 보고서 전체(1~3분)를 다시 쓰게 하면
+ * 느리고, 마무리 중에는 답 전체를 잃을 수 있다. 틀린 지표(형식 · 기간 자리 · 다시 잴 날)는 빼고 '확인 지표를 만들지 못했습니다'로,
+ * 목록 밖 주제·방법은 빼고, 긴 까닭은 자른다. 확인 지표와 까닭이 둘 다 있으면 지표를 쓴다. 나머지 보고서 검사는 그대로.
+ */
+function looseAdvice(input: unknown): unknown {
+  if (!isRecord(input) || !Array.isArray(input.blocks)) return input;
+  return {
+    ...input,
+    blocks: input.blocks.map((block: unknown) => {
+      if (!isRecord(block) || block.type !== "advice" || !Array.isArray(block.items)) return block;
+      return {
+        ...block,
+        items: block.items.map((raw: unknown) => {
+          if (!isRecord(raw)) return raw;
+          const item: Record<string, unknown> = { ...raw };
+          if (!(ADVICE_TOPICS as readonly unknown[]).includes(item.topic)) delete item.topic;
+          if (!(ADVICE_METHODS as readonly unknown[]).includes(item.method)) delete item.method;
+          if (typeof item.noCheck === "string") {
+            const reason = item.noCheck.trim().slice(0, 80);
+            if (reason) item.noCheck = reason;
+            else delete item.noCheck;
+          } else delete item.noCheck;
+          // 모델은 선택 칸을 null로 채우곤 한다 — 지표가 없다는 뜻일 뿐, 적어 둔 까닭을 지우지 않는다(재리뷰 2026-11-09).
+          if (item.check === null || item.check === undefined) delete item.check;
+          else {
+            const check = AdviceCheckSchema.safeParse(item.check);
+            if (check.success && !checkTemplateProblem(check.data)) {
+              item.check = check.data;
+              delete item.noCheck;
+            } else {
+              delete item.check;
+              item.noCheck = CHECK_FAILED;
+            }
+          }
+          return item;
+        }),
+      };
+    }),
+  };
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /**
  * 제목·이름 칸(보고서·차트·표 제목 · 계열·칸 이름 · KPI 이름·값·단위 · 목록 제목 · 담당)은 강조 표시를 벗긴다 —

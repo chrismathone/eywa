@@ -1,6 +1,8 @@
 "use client";
 
 import { Fragment, useId, useState, type ReactNode } from "react";
+import type { AdviceView } from "../advice";
+import { AdviceStatusPanel } from "./advice-controls";
 import { tipProps } from "@/components/hover-tip/tip";
 import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
@@ -63,7 +65,7 @@ export function ReportView({ report }: { report: SettledReport }) {
             ))}
           </div>
         ) : (
-          <Block key={g.index} block={g.block} datasets={report.datasets} omitted={report.datasetsOmitted} />
+          <Block key={g.index} block={g.block} datasets={report.datasets} omitted={report.datasetsOmitted} advice={report.advice} />
         ),
       )}
       {report.coverage?.surveys?.length ? <Coverage coverage={report.coverage} /> : null}
@@ -72,7 +74,7 @@ export function ReportView({ report }: { report: SettledReport }) {
   );
 }
 
-function Block({ block, datasets, omitted }: { block: ReportBlock; datasets: SettledReport["datasets"]; omitted?: boolean }) {
+function Block({ block, datasets, omitted, advice }: { block: ReportBlock; datasets: SettledReport["datasets"]; omitted?: boolean; advice?: AdviceView[] }) {
   switch (block.type) {
     case "summary":
       return (
@@ -91,7 +93,7 @@ function Block({ block, datasets, omitted }: { block: ReportBlock; datasets: Set
     case "chart":
       return <ChartCard block={block} dataset={datasets[block.query]} omitted={omitted} />;
     case "advice":
-      return <AdviceCard block={block} />;
+      return <AdviceCard block={block} views={advice} />;
     default:
       // 모르는 블록(새 종류가 화면보다 먼저 나간 경우)은 건너뛴다 — 보고서 전체를 깨뜨리지 않는다.
       return null;
@@ -315,7 +317,8 @@ function ListView({ block }: { block: ListBlock }) {
  * 자료 블록(흰 카드)·주의/제안(파랑·앰버·초록 바탕)과 갈리게 **금빛 바탕 판 + 그 안의 흰 항목 카드** — AI 표시는 앱 공통
  * `sparkle + gold-soft`. 항목은 온 순서(= 우선순위)대로 번호 · 할 일(굵게) · '근거' 줄 · 언제(오늘만 앰버 = 내가 할 일) · 누가.
  */
-function AdviceCard({ block }: { block: AdviceBlock }) {
+/** 비서 의견 — 항목마다 처리 단추 · 확인 지표(의견 표에 줄이 있을 때만 · 없으면 의견만 · 2026-11-09). */
+function AdviceCard({ block, views }: { block: AdviceBlock; views?: AdviceView[] }) {
   const id = useId();
   return (
     <section aria-labelledby={id} className="bg-gold-soft rounded-2xl px-3.5 pt-3.5 pb-3.5 sm:px-4">
@@ -352,6 +355,11 @@ function AdviceCard({ block }: { block: AdviceBlock }) {
                 <span className="mr-1.5 font-bold">근거</span>
                 <RichText text={item.why} />
               </p>
+              {(() => {
+                const view = views?.find((v) => v.itemNo === i);
+                // key는 의견 id만 — 같은 대화를 다시 읽어도(답이 끝날 때 등) 열어 둔 창·쓰던 메모가 그대로다. 더 새 값은 부품이 고른다.
+                return view ? <AdviceStatusPanel key={view.id} initial={view} /> : null;
+              })()}
             </div>
           </li>
         ))}
