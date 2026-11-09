@@ -15,7 +15,8 @@ export async function readParticipantRpc(filter: Record<string, unknown>, option
   const db = await createClient();
   const { data, error } = await db.rpc("makeup_list_participants", { p_filter: filter });
   if (error) {
-    // 기존 화면에서는 메뉴 권한이 없는 보강 부가 정보만 생략한다. 쓰기 보호는 이 옵션을 쓰지 않는다.
+    // 기존 화면에서는 메뉴 권한이 없는 보강 부가 정보만 생략한다. 쓰기를 **막는** 판정은 이 옵션을 쓰지 않는다(거절을 "없음"으로
+    // 읽으면 문이 열린다). 쓰기를 **여는** 근거를 찾는 판정(gates.ts nativeWriteKeys·nativeWriteAllowance)은 써도 좁아지는 쪽이다.
     if (options?.sharedRead && isParticipantPermissionDenied(error)) return { status: "off" };
     if (isModeOffError(error)) return { status: "off" };
     if (isMissingMakeupRpc(error)) return { status: "schema_missing" };

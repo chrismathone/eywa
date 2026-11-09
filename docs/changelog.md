@@ -1,5 +1,9 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-09 — 강사 출결 쓰기 학생 자격 = 단건·일괄·범위 한 벌 — 수정 계획 P1-A(4-2), 결정 #5
+
+- 순수 판정 `write-eligibility.ts`(`writeEligibility`·`blockedByCorrectOnly`) — 새 행 근거 = 수강·보강 예약·수업 나누기·native 보강 참여 · **기존 기록은 정정만**(다른 교시 새 행 불가). 세 경로가 손으로 따로 짜서 어긋나 있던 것(범위는 나누기 없음 · 일괄·범위는 기존 기록·native 없음 · 단건은 기록이 있으면 예약을 안 물음). 일괄·범위의 native는 기간 한 번(`nativeWriteKeys`), 권한 거절은 근거 없음(sharedRead), 조회 실패는 새 행이 필요한 칸이 있을 때만 전체 거절(정정은 그대로). 일괄·범위 입력자 판정은 걸러진 칸의 반만. 옛 `canWriteAttendanceStudent`(makeup-write.ts) 삭제. 배선 가드 `write-eligibility-wiring.test.ts`. 결정 로그 `docs/decisions/attendance.md`.
+
 ## 2026-11-09 — 출결 쓰기 판정 재료를 조회 실패에도 틀리게 읽지 않게 — 수정 계획 P1-A(4-1)
 
 - `userTaughtClassSet`·`getTeachingClassIds`(+위임·JJ 담당 갈래)에 `strict`: 조회 실패를 "담당 반 없음"으로 읽어 담당 강사 저장이 거짓 "담당 반이 아닙니다"로 막히거나 입력자 표식(`recorded_via`)이 데스크로 잘못 찍히던 것. 출결 쓰기 경로(일별 폼·단건·보강 연결·일괄·범위)와 `resolveWriteVia`만 strict — 실패하면 `settle()`이 `{ error: "담당 반·수강을 확인하지 못해 저장하지 않았습니다…" }`로 돌려준다(던지면 일별 폼은 오류 화면·격자는 무음). 판정은 늘 쓰기 전이라 반쯤 저장 없음. 위임 500건 상한 도달도 strict면 실패. 보강 학생 검색·읽기 화면은 그대로. 일괄·범위 수강 이력 조회 `fetchAllPagedInChunks`(청크 안 1000행 절단). 관리자 저장도 조회 실패 시 거절(잘못된 표식보다 재시도).

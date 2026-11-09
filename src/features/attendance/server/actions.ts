@@ -27,6 +27,7 @@ import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { explainDbError } from "@/lib/supabase/db-error";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
+import { blockedByCorrectOnly, CORRECT_ONLY_MESSAGE, writeEligibility, type WriteEligibility } from "../write-eligibility";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { COUNTABLE_STATUSES, isDefaultUnitsRaw, parseSessionUnits, round1 } from "../session-units";
 // 그날 칸 시수 배분(셀·범위 공용) + 강사 전체 보기의 몫 판정(원장 제보 2026-09-11) — 규칙은 순수 모듈, 조회는 server/.
@@ -67,12 +68,11 @@ import {
   unitsAfterMakeup,
 } from "@/features/onescreen/makeup-absence-link";
 import { attendanceLockMessage, isWithinAttendanceEditWindow } from "../edit-window";
-import { canWriteAttendanceStudent } from "../makeup-write";
 // 보강 예약(0264a) — 예약된 학생의 그날 칸은 수강행이 없어도 연다(`hasReservedMakeup`), 시수를 쓰는 출결이 찍히면
 // 예약을 이행 처리한다(`completeMakeupReservations`). 둘 다 fail-soft — 표가 없어도 출결 저장은 종전 그대로.
 import { hasReservedMakeup, reservedCellKey, reservedCellKeys } from "./makeup-reservation-queries";
 import { hasSplitInto, splitIntoKeys } from "@/features/class-splits/server/queries";
-import { nativeWriteAllowance } from "@/features/makeups/server/adapters/gates";
+import { nativeWriteAllowance, nativeWriteKeys } from "@/features/makeups/server/adapters/gates";
 import { completeMakeupReservations, completionKey } from "./makeup-reservation-complete";
 import { kstToday } from "@/lib/date-kst";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
@@ -594,7 +594,7 @@ export async function setAttendanceCell(input: {
   /**
    * 보강(수업외)으로 **지금 넣는** 저장 — 수강행이 없어도 그 반·날짜 칸을 연다.
    * ECS·원스크린·출석부 '+ 보강 학생 추가'가 켠다. 이미 있는 보강 칸을 고치는 건
-   * 이 플래그 없이 `hasRecord`로 통과한다(`canWriteAttendanceStudent`).
+   * 이 플래그 없이 기존 기록으로 통과한다(정정만 — `writeEligibility`, write-eligibility.ts).
    */
   allowMakeup?: boolean;
   /**
@@ -647,6 +647,10 @@ export async function setAttendanceCell(input: {
   // ⚠️ 수강생 판정은 **세션 날짜 기준**(start≤date AND (end null OR end≥date)) — 출석부 매트릭스는 그 달 중
   //    수강 종료(반이동·종강)된 학생의 과거 셀도 편집을 허용하므로, end_date IS NULL 고정이면 그 교정과
   //    미래 end_date(퇴원 예정) 재원생의 오늘 출결까지 차단되는 회귀(리뷰 확정). getAttendanceInputRows와 동일 의미.
+  /** 학생 자격 등급(결정 #5) — 관리자(full)는 종전대로 제한 없음. 강사(scoped)는 아래에서 정한다. */
+  let cellEligibility: WriteEligibility = "create";
+  /** native 조회가 실패해 "정정만"으로 내려간 경우의 사유 — 새 행이 필요해 막을 때 이 사유를 보인다. */
+  let cellNativeUnknown: string | null = null;
   if ((await accessLevelTenant(user.systemRole, "attendance")) === "scoped") {
     // 🔴 강사 계정은 **자기** 출석부로만 저장한다(원장 2026-09-17 *"남의 출석부를 건드리는건 아니지"*) — 남의 id로 보기를
     //    바꿔 보내면 그 선생님 몫 행을 고치게 된다. 화면(반별·강사 보기)은 늘 본인 id를 싣는다.
@@ -678,26 +682,34 @@ export async function setAttendanceCell(input: {
     if (!cellFacts) return { error: LOOKUP_FAILED };
     const [teaching, { count: enrolled }, { count: existing }] = cellFacts;
     if (!teaching.has(classId)) return { error: "담당 반이 아닙니다" };
-    if (
-      !canWriteAttendanceStudent({
-        enrolled: (enrolled ?? 0) > 0,
-        hasRecord: (existing ?? 0) > 0,
-        // 🔴 **보강 예약된 학생은 그날 그 반에 오기로 한 사람이다**(0264a) — 수강행도 기록도 없지만 `allowMakeup`과
-        //    같은 뜻으로 문을 연다. 판정은 서버가 표를 직접 본다(클라 플래그가 아니라, #77). 수강생·기록이 있으면
-        //    묻지 않는다(왕복 0).
-        allowMakeup:
-          input.allowMakeup === true ||
-          ((enrolled ?? 0) === 0 &&
-            (existing ?? 0) === 0 &&
-            ((await hasReservedMakeup(user.tenantId, { studentId, classId, date: sessionDate })) ||
-              // 수업 나누기(0351a)로 그날 이 반에 오는 학생 — 보강 예약과 같은 뜻(수강행 없이 오기로 한 사람).
-              (await hasSplitInto(classId, studentId, sessionDate)))),
-      })
-    ) {
-      const native = await nativeWriteAllowance({ studentId, classId, sessionDate });
-      if (native.error) return { error: native.error };
-      if (!native.allow) return { error: "이 반 수강생이 아닙니다" };
+    const isEnrolled = (enrolled ?? 0) > 0;
+    const hasRecord = (existing ?? 0) > 0;
+    // 새 행의 근거(보강 예약·수업 나누기·native)는 수강생이 아닐 때만 묻는다(수강생이면 왕복 0). 🔴 기존 기록이 있어도 묻는다 —
+    // 기록만으로는 **정정만** 허가된다(결정 #5). 예전엔 기록이 있으면 묻지 않아 예약 학생도 "기록만"으로 분류될 수 있었다.
+    // 판정은 서버가 표를 직접 본다(클라 플래그가 아니라, #77).
+    let reserved = false;
+    let splitInto = false;
+    let native = false;
+    let nativeUnknown: string | null = null;
+    if (!isEnrolled && input.allowMakeup !== true) {
+      [reserved, splitInto] = await Promise.all([
+        hasReservedMakeup(user.tenantId, { studentId, classId, date: sessionDate }),
+        hasSplitInto(classId, studentId, sessionDate),
+      ]);
+      if (!reserved && !splitInto) {
+        const n = await nativeWriteAllowance({ studentId, classId, sessionDate });
+        // 조회 실패는 새 행이 필요할 때만 막는다 — 기록이 있으면 정정은 native 여부와 무관하다(메모·지우기·상태 정정, 4-2 리뷰).
+        if (n.error && !hasRecord) return { error: n.error };
+        nativeUnknown = n.error;
+        native = n.allow;
+      }
     }
+    // 클라 `allowMakeup`('+ 보강 학생 추가')은 아직 종전대로 새 행까지 연다 — 서버 검증으로 바꾸는 것은 수정 계획 P1-A 4-3.
+    cellEligibility = input.allowMakeup === true
+      ? "create"
+      : writeEligibility({ enrolled: isEnrolled, reserved, splitInto, native, hasRecord });
+    if (cellEligibility === "none") return { error: "이 반 수강생이 아닙니다" };
+    cellNativeUnknown = nativeUnknown;
   }
 
   // 메모만 — 있는 기록의 note만 갈아끼운다. 🔴 **지우기 분기보다 먼저** 온다(status가 null로 와도
@@ -1075,6 +1087,8 @@ export async function setAttendanceCell(input: {
   let unitsAudit: UnitsAudit = null;
   // 감사로그용 — 아래 분기가 id 목록을 소비하기 전에 **덮어쓰기였는지**를 굳혀 둔다.
   const overwrote = !createOwn && (updateIds.length > 0 || promoteIds.length > 0);
+  // 기록만으로 허가된 학생(정정만)은 새 행을 만들지 않는다 — 다른 교시로 번지지 않게(결정 #5).
+  if (blockedByCorrectOnly(cellEligibility, !overwrote)) return { error: cellNativeUnknown ?? CORRECT_ONLY_MESSAGE };
   /** 새 행 + 숫자 안 고른 저장이면 실제로 넣은 시수(null = 1), 아니면 undefined — 수학 자동 시수(auto-units.ts). */
   let insertedAuto: number | null | undefined;
   /** 빗금 칸 입력으로 실제로 상태를 옮긴 행 수 — 응답·감사로그가 계획이 아니라 이 숫자를 쓴다. */
@@ -1666,6 +1680,10 @@ export async function setAttendanceBulk(input: {
   const supabase = await createClient();
   let allowed = cells;
 
+  /** 강사 일괄에서 **정정만** 허가된 칸(학생::반) — 기존 행을 읽은 뒤 고칠 대상이 없으면 뺀다(결정 #5). 관리자는 null. */
+  let bulkCorrectOnly: Set<string> | null = null;
+  /** native 조회 실패 사유 — 그 때문에 정정 후보로 내려간 칸이 새 행이 필요해 빠지면 이 사유로 막는다(새 행만 막고 정정은 그대로). */
+  let bulkNativeUnknown: string | null = null;
   // 강사(scoped) — 셀 액션과 같은 3중 게이트를 집합 단위로. full(관리자 계열)은 기존대로 전 반.
   if ((await accessLevelTenant(user.systemRole, "attendance")) === "scoped") {
     if (!isWithinAttendanceEditWindow(sessionDate, kstToday())) {
@@ -1705,13 +1723,29 @@ export async function setAttendanceBulk(input: {
     );
     // 수업 나누기(0351a)로 그날 들어오는 학생도 같은 문으로(단건 게이트 `hasSplitInto`와 같은 판정).
     const splitKeys = await splitIntoKeys(classIds, sessionDate);
-    allowed = cells.filter(
-      (c) =>
-        ownSet.has(c.classId) &&
-        (enrolledSet.has(`${c.studentId}::${c.classId}`) ||
-          splitKeys.has(`${c.studentId}::${c.classId}`) ||
-          reservedKeys.has(reservedCellKey({ studentId: c.studentId, classId: c.classId, date: sessionDate }))),
+    const keyOf = (c: { studentId: string; classId: string }) => `${c.studentId}::${c.classId}`;
+    const taught = cells.filter((c) => ownSet.has(c.classId));
+    const basis = (c: { studentId: string; classId: string }) =>
+      enrolledSet.has(keyOf(c)) ||
+      splitKeys.has(keyOf(c)) ||
+      reservedKeys.has(reservedCellKey({ studentId: c.studentId, classId: c.classId, date: sessionDate }));
+    // native 보강 참여 — 다른 근거가 없는 칸만, **한 번에** 묻는다(칸마다 왕복 금지).
+    const nativeAsk = taught.filter((c) => !basis(c));
+    const native = await nativeWriteKeys(nativeAsk.map((c) => ({ studentId: c.studentId, classId: c.classId, sessionDate })));
+    bulkNativeUnknown = native.error;
+    // 등급은 판정 한 벌(writeEligibility)로 — 기록 유무는 아직 모르니 "있다"고 보고 정정 후보로 싣는다(아래에서 고칠 대상이 없으면 뺀다).
+    bulkCorrectOnly = new Set(
+      taught
+        .filter((c) => writeEligibility({
+          enrolled: enrolledSet.has(keyOf(c)),
+          reserved: reservedKeys.has(reservedCellKey({ studentId: c.studentId, classId: c.classId, date: sessionDate })),
+          splitInto: splitKeys.has(keyOf(c)),
+          native: native.keys.has(`${keyOf(c)}::${sessionDate}`),
+          hasRecord: true,
+        }) !== "create")
+        .map(keyOf),
     );
+    allowed = taught;
     if (allowed.length === 0) return { error: "담당 반 수강생이 아니어서 기록할 수 없습니다" };
   }
 
@@ -1755,6 +1789,21 @@ export async function setAttendanceBulk(input: {
     const targets = pickSaveTargets(list, slot);
     if (hasSaveTarget(targets)) targetsByKey.set(k, targets);
   }
+  // 정정만 허가된 칸 — 이 교시에 고칠 행이 없으면 새 행을 만들게 되니 뺀다(결정 #5 · 단건과 같은 규칙).
+  if (bulkCorrectOnly) {
+    const correctOnly = bulkCorrectOnly;
+    const dropped = allowed.filter((c) => blockedByCorrectOnly(
+      correctOnly.has(`${c.studentId}::${c.classId}`) ? "correct" : "create",
+      !targetsByKey.has(`${c.studentId}::${c.classId}`),
+    ));
+    // native를 확인하지 못해 새 행 칸을 못 열었다 — 요청 전체를 저장하지 않는다(결정 #5). 정정만인 칸은 영향 없음.
+    if (dropped.length > 0 && bulkNativeUnknown) return { error: bulkNativeUnknown };
+    const droppedSet = new Set(dropped);
+    allowed = allowed.filter((c) => !droppedSet.has(c));
+    if (allowed.length === 0) return { error: "담당 반 수강생이 아니어서 기록할 수 없습니다" };
+  }
+  // 정정만으로 빠진 반에는 입력자 판정·완료 검사를 돌리지 않는다(빠진 반의 조회 실패가 요청을 막지 않게, 4-2 리뷰).
+  const writeClassIds = [...new Set(allowed.map((c) => c.classId))];
 
   // '빈 칸만' 모드 — 기존 기록이 있는 셀은 **여기서**(서버) 걸러 절대 update 경로를 안 탄다.
   // 이 필터가 클라에 있으면 낡은 탭이 남의 결석을 덮는다(위 fillEmptyOnly 주석). blocked로 집계돼
@@ -1767,7 +1816,7 @@ export async function setAttendanceBulk(input: {
   const nowIso = new Date().toISOString();
   // 반마다 주체(강사/데스크)를 한 번만 판정 — 같은 요청에 여러 반이 섞일 수 있다.
   const viaByClass = new Map<string, RecordedVia>();
-  for (const classId of classIds) {
+  for (const classId of writeClassIds) {
     const via = await settle(resolveWriteVia(supabase, user.id, classId, sessionDate));
     if (!via) return { error: LOOKUP_FAILED };
     viaByClass.set(classId, via);
@@ -1914,7 +1963,7 @@ export async function setAttendanceBulk(input: {
 
   // G4: 반마다 '전원 기록 완료' 전이 검사(셀 액션과 동일) — 백그라운드라 응답을 막지 않는다.
   after(async () => {
-    for (const classId of classIds) {
+    for (const classId of writeClassIds) {
       await notifyIfClassAttendanceComplete({
         tenantId: user.tenantId,
         classId,
@@ -2077,6 +2126,10 @@ export async function setAttendanceRange(input: {
   const studentIds = [...new Set(cells.map((c) => c.studentId))];
   const dates = [...new Set(cells.map((c) => c.sessionDate))];
   let allowed = cells;
+  /** 강사 범위에서 **정정만** 허가된 칸(학생::반::날짜) — 기존 행을 읽은 뒤 고칠 행이 없으면 뺀다(결정 #5). 관리자는 null. */
+  let rangeCorrectOnly: Set<string> | null = null;
+  /** native 조회 실패 사유 — 새 행이 필요한 칸이 그 때문에 빠지면 이 사유로 막는다. */
+  let rangeNativeUnknown: string | null = null;
 
   if ((await accessLevelTenant(user.systemRole, "attendance")) === "scoped") {
     // 🔴 강사 계정은 자기 출석부로만 저장한다(셀 저장과 같은 판정, 원장 2026-09-17).
@@ -2121,11 +2174,34 @@ export async function setAttendanceRange(input: {
       user.tenantId,
       cells.filter((c) => !enrolledOn(c)).map((c) => ({ studentId: c.studentId, classId: c.classId, date: c.sessionDate })),
     );
-    allowed = cells.filter((c) => {
-      if (!isWithinAttendanceEditWindow(c.sessionDate, today)) return false;
-      if (!teaching.get(c.sessionDate)?.has(c.classId)) return false;
-      return enrolledOn(c) || reservedKeys.has(reservedCellKey({ studentId: c.studentId, classId: c.classId, date: c.sessionDate }));
-    });
+    // 수업 나누기(0351a) — 날짜마다 다르다(단건·일괄과 같은 판정 · 예전엔 범위만 빠져 있었다).
+    const splitByDate = new Map(
+      await Promise.all(dates.map(async (d) => [d, await splitIntoKeys(classIds, d)] as const)),
+    );
+    const rkey = (c: RangeCell) => `${c.studentId}::${c.classId}::${c.sessionDate}`;
+    const basis = (c: RangeCell) =>
+      enrolledOn(c) ||
+      (splitByDate.get(c.sessionDate)?.has(`${c.studentId}::${c.classId}`) ?? false) ||
+      reservedKeys.has(reservedCellKey({ studentId: c.studentId, classId: c.classId, date: c.sessionDate }));
+    const inScope = cells.filter(
+      (c) => isWithinAttendanceEditWindow(c.sessionDate, today) && (teaching.get(c.sessionDate)?.has(c.classId) ?? false),
+    );
+    // native 보강 참여 — 다른 근거가 없는 칸만, **한 번에**(기간 조회) 묻는다(칸마다 왕복 금지).
+    const native = await nativeWriteKeys(inScope.filter((c) => !basis(c)));
+    rangeNativeUnknown = native.error;
+    // 등급은 판정 한 벌(writeEligibility)로 — 기록 유무는 아직 모르니 "있다"고 보고 정정 후보로 싣는다(아래에서 고칠 행이 없으면 뺀다).
+    rangeCorrectOnly = new Set(
+      inScope
+        .filter((c) => writeEligibility({
+          enrolled: enrolledOn(c),
+          reserved: reservedKeys.has(reservedCellKey({ studentId: c.studentId, classId: c.classId, date: c.sessionDate })),
+          splitInto: splitByDate.get(c.sessionDate)?.has(`${c.studentId}::${c.classId}`) ?? false,
+          native: native.keys.has(rkey(c)),
+          hasRecord: true,
+        }) !== "create")
+        .map(rkey),
+    );
+    allowed = inScope;
     if (allowed.length === 0) {
       // 조용한 0건 금지 — 가장 흔한 사유(기간)를 그대로 말해 준다.
       const late = cells.find((c) => !isWithinAttendanceEditWindow(c.sessionDate, today));
@@ -2402,6 +2478,22 @@ export async function setAttendanceRange(input: {
     plans.set(k, plan);
     return true;
   });
+  // 정정만 허가된 칸 — 고칠 행이 없거나(새 칸) 제 몫 행을 새로 만들 칸이면 뺀다(결정 #5 · 단건·일괄과 같은 규칙).
+  let correctOnlyDropped = 0;
+  if (rangeCorrectOnly) {
+    const correctOnly = rangeCorrectOnly;
+    const before = allowed.length;
+    allowed = allowed.filter((c) => {
+      const k = cellKeyOf(c);
+      return !blockedByCorrectOnly(correctOnly.has(k) ? "correct" : "create", !cellSlotRows.has(k) || createCells.has(k));
+    });
+    correctOnlyDropped = before - allowed.length;
+    // native를 확인하지 못해 새 행 칸을 못 열었다 — 요청 전체를 저장하지 않는다(결정 #5). 정정만인 칸은 영향 없음.
+    if (correctOnlyDropped > 0 && rangeNativeUnknown) return { error: rangeNativeUnknown };
+  }
+  if (allowed.length === 0 && correctOnlyDropped > 0 && notTaught + noneOwned === 0) {
+    return { error: CORRECT_ONLY_MESSAGE };
+  }
   if (allowed.length === 0 && notTaught + noneOwned > 0) {
     // 조용한 0건 금지 — 격자가 그 칸에 하는 말과 같은 문장으로 알린다.
     return { error: notTaught > 0 ? SCOPE_NOT_TAUGHT_MESSAGE : rejectMessage() };
@@ -2429,7 +2521,8 @@ export async function setAttendanceRange(input: {
   const inserts = allowed.filter((c) => !cellSlotRows.has(cellKeyOf(c)) || createCells.has(cellKeyOf(c)));
 
   const rangeViaByClass = new Map<string, RecordedVia>();
-  for (const classId of classIds) {
+  // 걸러진 칸의 반만 — 빠진 반의 조회 실패가 요청을 막지 않게(일괄과 같은 규칙).
+  for (const classId of new Set(allowed.map((c) => c.classId))) {
     const via = await settle(resolveWriteVia(supabase, user.id, classId, dates[0] ?? kstToday()));
     if (!via) return { error: LOOKUP_FAILED };
     rangeViaByClass.set(classId, via);
