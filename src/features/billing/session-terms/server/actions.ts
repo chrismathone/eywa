@@ -550,11 +550,15 @@ export async function unconfirmSessionTerm(
 
   const supabase = await createClient();
   // 🔴 확정 해제는 확정값을 **null로 지운다** — 지우기 전에 읽지 않으면 "얼마였는지"가 영영 사라진다.
-  const { data: before, error: readError } = await supabase
-    .from("invoice_session_terms")
-    .select("class_id, confirmed_sessions, unit_price, amount, pricing_mode")
-    .eq("id", id)
-    .maybeSingle();
+  // 보낸 이월이 있으면 그 상태도 함께 — 해제하면 다시 확정할 때까지 이월이 무효라 알린다(2026-11-09 · 나란히 — B4).
+  const [{ data: before, error: readError }, carryBefore] = await Promise.all([
+    supabase
+      .from("invoice_session_terms")
+      .select("class_id, confirmed_sessions, unit_price, amount, pricing_mode")
+      .eq("id", id)
+      .maybeSingle(),
+    loadCarryOutStates(supabase, [id]),
+  ]);
   if (readError) return { error: readError.message };
   if (!before) return { error: "대상을 찾을 수 없습니다" };
   const { data: saved, error } = await supabase
@@ -575,7 +579,8 @@ export async function unconfirmSessionTerm(
       amountBefore: before?.amount === null || before?.amount === undefined ? null : Number(before.amount),
     },
   });
-  return { ok: true, terms: [{ id, confirmedSessions: null, unitPrice: null, amount: null, confirmedAt: null, pricingMode: before.pricing_mode ?? "per_session" }] };
+  const carryWarning = (await carryBreaksAfter(supabase, carryBefore, "unconfirm")).get(id);
+  return { ok: true, terms: [{ id, confirmedSessions: null, unitPrice: null, amount: null, confirmedAt: null, pricingMode: before.pricing_mode ?? "per_session", ...(carryWarning ? { carryWarning } : {}) }] };
 }
 
 /** "YYYY-MM" 한 달 전. */
