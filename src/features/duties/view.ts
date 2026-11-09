@@ -9,7 +9,11 @@ export type DutyCard = {
   items: DutyItemView[]; worst: DutyState;
   /** 최근 7일(오늘 포함) 학생의 의무 완료 비율 — 그날 의무가 없으면 null. */
   week: (number | null)[];
+  /** 같은 7일의 완료/전체 건수 — 주간 표가 쓴다. */
+  weekCounts: ({ done: number; total: number } | null)[];
 };
+/** 장부가 쌓이기 시작한 날(s2_0041 운영 적용) — 그 전 날짜 칸은 "기록 전"이지 "0%"가 아니다. */
+export const DUTY_LEDGER_START = "2026-11-09";
 export type DutyWeekCell = { day: string; studentKey: string; total: number; done: number };
 export type DutyKindCount = { kind: string; total: number; done: number; late: number };
 
@@ -25,7 +29,7 @@ export function buildDutyCards(items: readonly DutyItemView[], week: readonly Du
   for (const it of items) {
     const key = studentKeyOf(it);
     const g = groups.get(key) ?? { key, title: it.studentName ?? it.className ?? "반", sub: it.studentId ? it.className ?? "" : "반 알림장",
-      classId: it.classId, studentId: it.studentId, items: [], worst: "done", week: [] };
+      classId: it.classId, studentId: it.studentId, items: [], worst: "done", week: [], weekCounts: [] };
     g.items.push(it);
     groups.set(key, g);
   }
@@ -35,6 +39,7 @@ export function buildDutyCards(items: readonly DutyItemView[], week: readonly Du
     g.items.sort((a, b) => DUTY_KIND_KEYS.indexOf(a.kind as never) - DUTY_KIND_KEYS.indexOf(b.kind as never));
     g.worst = worstState(g.items, now);
     g.week = days.map((d) => { const c = weekOf.get(g.key)?.get(d); return c && c.total ? c.done / c.total : null; });
+    g.weekCounts = days.map((d) => { const c = weekOf.get(g.key)?.get(d); return c && c.total ? { done: c.done, total: c.total } : null; });
   }
   return [...groups.values()].sort((a, b) => RANK[a.worst] - RANK[b.worst] || a.title.localeCompare(b.title, "ko"));
 }
