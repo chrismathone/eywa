@@ -11,6 +11,8 @@ import { isAssistantLevel, type AssistantLevel } from "../levels";
 import { ASSISTANT_MAX_RUNNING, ASSISTANT_RUNNING_MS, type AskStep, type QuerySummary, type ThreadDetailResponse, type ThreadMessage, type ThreadSummary } from "../protocol";
 import type { AssistantReport, QueryResult, SettledReport } from "../report";
 import { clipText } from "../text";
+import type { AdviceView } from "../advice";
+import { adviceForMessages } from "./advice-store";
 import type { PastTurn } from "./prompt";
 
 export const THREADS = "assistant_threads";
@@ -167,7 +169,7 @@ export function kpiFromData(blocks: AssistantReport["blocks"], data: Datasets): 
   );
 }
 
-function toMessage(m: MessageRow, now: number, datasets: ReadonlyMap<string, Datasets>): ThreadMessage {
+function toMessage(m: MessageRow, now: number, datasets: ReadonlyMap<string, Datasets>, advice?: AdviceView[]): ThreadMessage {
   // 멈춤을 누른 질문은 정리 중이어도 '멈춤'으로 보인다(도는 중으로 막지 않는다 · 적대 리뷰 2026-11-09).
   const stopped = m.status === "running" && !!m.cancel_requested_at;
   const running = m.status === "running" && !stopped && now - Date.parse(m.created_at) < RUNNING_MS;
@@ -181,6 +183,7 @@ function toMessage(m: MessageRow, now: number, datasets: ReadonlyMap<string, Dat
           ...(data ? {} : { datasetsOmitted: true }),
           ...(m.report_coverage && Array.isArray(m.report_coverage.surveys) ? { coverage: m.report_coverage } : {}),
           ...(isCutShort(m.report_cut) ? { cutShort: m.report_cut } : {}),
+          ...(advice?.length ? { advice } : {}),
         }
       : null;
   return {
@@ -210,6 +213,15 @@ export async function threadDetail(owner: Owner, threadId: string): Promise<Thre
     .limit(DETAIL_MESSAGES);
   if (error) throw new Error(error.message);
   const rows = ((data ?? []) as unknown as MessageRow[]).reverse();
+  // 비서 의견 처리 상태(제안 → 결과 → 학습 · s2_0036) — 표·차트 자료와 함께 읽는다(서로 기다릴 까닭이 없다 · B4).
+  // 못 읽어도 대화는 연다(처리 단추만 빠진다 · SQL 적용 전 배포도 산다 #95).
+  const advicePromise = adviceForMessages(
+    owner,
+    rows.filter((m) => m.status === "done").map((m) => m.id),
+  ).catch((error: unknown) => {
+    reportWarning("학원 비서 의견 처리 상태 읽기 실패", { scope: "assistant.advice.read", tenantId: owner.tenantId, error: error instanceof Error ? error.message : String(error) });
+    return new Map<string, AdviceView[]>();
+  });
   // 표·차트 자료는 최근 답 몇 편만(응답 크기 상한 — 오래된 답은 '생략' 안내).
   const recent = rows.filter((m) => m.status === "done").slice(-DETAIL_DATASET_TURNS).map((m) => m.id);
   const datasets = new Map<string, Datasets>();
@@ -233,10 +245,11 @@ export async function threadDetail(owner: Owner, threadId: string): Promise<Thre
       datasets.set(id, labelDatasets(d));
     }
   }
+  const advice = await advicePromise;
   const now = Date.now();
   return {
     thread: { id: thread.id, title: thread.title, level: level(thread.level), updatedAt: thread.updated_at },
-    messages: rows.map((m) => toMessage(m, now, datasets)),
+    messages: rows.map((m) => toMessage(m, now, datasets, advice.get(m.id))),
   };
 }
 

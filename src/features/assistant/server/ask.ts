@@ -13,9 +13,11 @@ import { reportError } from "@/lib/observability/report-error";
 import { ASSISTANT_LEVEL_LABEL, type AssistantLevel } from "../levels";
 import { ASSISTANT_HARD_DEADLINE_MS, type AskEvent, type AskStep } from "../protocol";
 import type { QueryResult, SettledReport } from "../report";
+import type { AdviceCheckResult } from "../advice";
 import { ASSISTANT_DOCS } from "../catalog";
 import { clipText } from "../text";
 import { AssistantError, runAssistantAgent } from "./agent";
+import { saveAdvice } from "./advice-store";
 import { openAssistantDb } from "./executor";
 import { assistantViewer, isGateFailure } from "./gate";
 import { ASSISTANT_FEATURE, ASSISTANT_MODEL } from "./models";
@@ -110,6 +112,8 @@ export async function prepareAsk(
       const steps = new Map<string, AskStep>();
       let report: SettledReport | null = null;
       let queries: QueryResult[] = [];
+      let checks: AdviceCheckResult[] = [];
+      let askedOn = "";
       let failure: string | null = null;
       const db = await openAssistantDb(owner.tenantId).catch((error: unknown) => {
         reportError(error, { scope: "assistant.db.open", tenantId: owner.tenantId });
@@ -152,6 +156,8 @@ export async function prepareAsk(
         // 흘려보내는 답과 저장본을 같게 — 긴 글 칸·큰 자료를 줄인다(store.ts compactReport).
         report = compactReport(out.report);
         queries = out.queries;
+        checks = out.checks;
+        askedOn = out.askedOn;
       } catch (error) {
         failure =
           stoppedBy === "user"
@@ -171,6 +177,13 @@ export async function prepareAsk(
         clearInterval(poll);
         clearTimeout(deadline);
         await db?.close().catch(() => undefined);
+      }
+      // 원장이 누른 멈춤 — 보고서 뒤 기준값을 재는 동안 눌러도 화면은 이미 '멈춤'이다. 저장본도 멈춤으로 남긴다
+      // (다시 열면 멈춘 질문에 답이 떠 있거나 '다시 묻기'로 같은 답이 두 벌 생기지 않게 · 재리뷰 2026-11-09). 고정 기한은 답을 살린다.
+      if (stoppedBy === "user" && report) {
+        report = null;
+        checks = [];
+        failure = "질문을 멈췄습니다";
       }
       // 저장 — 흘려보낸 답과 저장본이 어긋나지 않게(재리뷰 2026-11-06): 실패하면 표·차트 자료를 뺀 보고서로 한 번 더,
       // 그래도 안 되면 상태만 '실패'로 닫고 화면에도 실패로 보낸다(화면에 보인 답이 다시 열면 사라지거나 다음 질문이 맥락을 잃지 않게).
@@ -193,6 +206,17 @@ export async function prepareAsk(
           );
         }
       }
+      // 비서 의견 줄(제안 → 결과 → 학습 · s2_0036) — 답이 저장된 뒤에만(의견 줄이 답을 가리킨다). 실패해도 답은 산다(처리 단추만 빠진다).
+      let adviceCount = 0;
+      if (report && askedOn) {
+        try {
+          const advice = await saveAdvice(owner, { messageId: started.messageId, threadId: started.threadId, report, checks, askedOn });
+          adviceCount = advice.length;
+          if (advice.length) report = { ...report, advice };
+        } catch (error) {
+          reportError(error, { scope: "assistant.advice.save", tenantId: owner.tenantId });
+        }
+      }
       // 시작할 때 확인한 사람으로 남긴다 — 끝에서 쿠키 세션을 다시 찾으면 긴 질문 사이 토큰 만료로 빠질 수 있다(적대 리뷰 2026-11-06).
       await logActionAs({ tenantId: owner.tenantId, actorId: viewer.user.id, actorName: viewer.user.displayName }, {
         action: "assistant_ask",
@@ -203,6 +227,9 @@ export async function prepareAsk(
           levelLabel: ASSISTANT_LEVEL_LABEL[input.level],
           question: clipText(input.question, 80),
           queries: queries.length,
+          advice: adviceCount,
+          checks: checks.filter((c) => c.baseline).length,
+          checksFailed: checks.filter((c) => !c.baseline).length,
           outcome: report ? "ok" : "error",
           ...(report?.cutShort ? { cutShort: report.cutShort } : {}),
           inputTokens: usage.reduce((s, u) => s + u.input + u.cacheRead + u.cacheWrite, 0),

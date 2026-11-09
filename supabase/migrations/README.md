@@ -12,6 +12,12 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-11-09 학원 비서 — 비서 의견 기록 · 원장 처리 · 확인 지표 기준값 (s2_0036 · ⏳ 원장 승인 대기)
+
+`s2_0036_academy_assistant_advice.sql` — 원장 2026-11-06 *"그 해결책이 어떤 결과를 가져왔는지에 대한 결과 피드백까지 … 지속적인 학습"* 1단계. 새 표 `assistant_advice`(의견 항목마다 한 줄 · 확인 지표 조회문 틀 · 기준값 · 처리 상태) · `assistant_advice_events`(처리 이력 · 새 줄만). 표보다 먼저 비서 보기 제외 목록에 넣는다(같은 거래). RLS 켬 · 정책 0 · anon/authenticated 회수 · service_role만 · 지킴 트리거(지점·답·대화·묻는 사람 일치 · 처리한 사람은 그 지점 직원 · 이름표 칸 못 바꿈). 설계 = [`docs/features/academy-assistant.md`](../../docs/features/academy-assistant.md) §7-5.
+- 순서 = 이 SQL → 앱 배포(앱이 먼저 나가도 답은 산다 — 의견 줄 저장·읽기 실패는 처리 단추만 뺀다).
+- 되돌리기 = `scripts/_oneoff/revert-s2_0036-academy-assistant-advice.sql`(앱을 먼저 되돌린 뒤 · 의견·처리 이력이 함께 지워진다).
+
 ## 2026-11-09 원생 충성도 · 가족 동시 재원 (s2_0035 · 운영 적용 2026-11-09)
 
 `s2_0035_student_loyalty_factors.sql` — 사용자가 적용 프로젝트를 `bigshols-projects/eywa`로 지정. 기존 기여도 합계·배점·학생 자료를 변경하지 않고 정밀분석 확인 기록용 표만 추가했다. 서버에서 지점·학생·작성 권한을 확인하며 기록은 새 버전으로 추가한다. RLS 켜짐, anon/authenticated 직접 접근 없음, service_role은 SELECT/INSERT만 허용. 적용 직후 빈 표와 권한을 확인했다. 되돌릴 때는 앱을 이전 배포로 복귀하고 표·기록은 보존한다.
