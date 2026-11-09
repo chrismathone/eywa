@@ -24,6 +24,12 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toMatch(/내부 기록 표.*sync_queue/);
     expect(prompt).toMatch(/설명이 아직 없는 표.*brand_new/);
   });
+  it("글은 문단으로 나눠 쓰고 · 강사별 비교엔 재직 강사만(원장 2026-11-09)", () => {
+    expect(prompt).toMatch(/한 문단 2~3문장/);
+    expect(prompt).toMatch(/list 블록으로 뺀다/);
+    expect(prompt).toMatch(/지금 재직 중인 강사\(users\.status='active'\)만/);
+    expect(prompt).toMatch(/'\(담임 없음\)'/);
+  });
   it("바뀌는 값(오늘 날짜)이 없다 — 캐시가 깨지지 않게", () => {
     expect(prompt).not.toMatch(/20\d\d-\d\d-\d\d/);
     expect(buildSystemPrompt("x")).toBe(buildSystemPrompt("x"));

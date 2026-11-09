@@ -20,6 +20,26 @@ export function openAssistant(): void {
   window.dispatchEvent(new Event(ASSISTANT_OPEN_EVENT));
 }
 
+/**
+ * 지금 답을 만드는 대화 수 — 런처가 적고(상태는 런처가 든다) 다른 자리의 버튼(사이드바·모바일 위쪽 줄)이 읽어 로딩 테두리를 그린다
+ * (원장 2026-11-09 *"현재 답변중인 질문이 있을 경우에 로딩 테두리"*). 같은 문서 안에서만 — `useSyncExternalStore`로 읽는다(서버 값 0).
+ */
+let busyCount = 0;
+const busyListeners = new Set<() => void>();
+export function setAssistantBusy(count: number): void {
+  if (count === busyCount) return;
+  busyCount = count;
+  for (const listener of busyListeners) listener();
+}
+export function subscribeAssistantBusy(listener: () => void): () => void {
+  busyListeners.add(listener);
+  return () => {
+    busyListeners.delete(listener);
+  };
+}
+export const assistantBusySnapshot = (): number => busyCount;
+export const assistantBusyServerSnapshot = (): number => 0;
+
 type KeyLike = Pick<KeyboardEvent, "ctrlKey" | "metaKey" | "shiftKey" | "altKey" | "key" | "code">;
 
 /** 비서 토글 단축키인가 — Ctrl/⌘+J(입력 중에도). */

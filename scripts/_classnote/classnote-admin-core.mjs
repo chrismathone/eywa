@@ -456,6 +456,8 @@ export function isKageUploadHost(url) {
   return /kids-kage\.kakao\.com$/.test(host) || (/(^|[.-])kmb[a-z0-9-]*\./.test(host) && /\.(kakao\.com|kakaocdn\.net)$/.test(host));
 }
 const KAGE_POLL_MS = 100;
+/** 영상 업로드가 이 안에 시작도 안 하면 실패로 끝낸다(1.0.19 리뷰 — 상한 6분까지 기다리면 다른 발송이 밀린다). */
+export const VIDEO_START_WAIT_MS = 60_000;
 
 /**
  * 위 업로드의 **실패 사유까지 돌려주는 판**(2026-09-04). 반환 `{ ok, kage, reason, error }`.
@@ -480,7 +482,9 @@ export async function uploadToKageDetailed(page, inputTestId, { name, mimeType, 
   const seen = [];
   const onResp = async (res) => {
     // 영상은 같은 kage 또는 카카오 미디어 업로드(kmb)로 갈 수 있다(ClassNote 화면 코드에 두 경로가 다 있다 — 2026-11-06) — 둘 다 받는다.
-    if (!isKageUploadHost(res.url()) || res.request().method() !== "POST") return;
+    // 🔴 영상이 아닌 업로드(스크린샷·문서·공지 그림)는 **종전(1.0.17) 판정 그대로** — 잘 나가던 발송의 응답 잡기를 바꾸지 않는다(1.0.19 리뷰).
+    const u = res.url();
+    if (!(accept ? isKageUploadHost(u) : /kids-kage\.kakao\.com/.test(u)) || res.request().method() !== "POST") return;
     const status = res.status();
     try {
       const j = await res.json();
@@ -492,7 +496,12 @@ export async function uploadToKageDetailed(page, inputTestId, { name, mimeType, 
       seen.push({ status, ok: false, detail: "응답 본문을 읽지 못함" });
     }
   };
+  // 영상(accept)만 — 업로드 요청이 시작됐는가(거부·미시작이면 상한까지 기다리지 않으려고 · 1.0.19 리뷰: 실패하는 영상 하나가 같은 큐의
+  // 다른 발송·공지·회수를 한 시도에 몇 분씩 붙잡았다). 사진·문서(12초)는 이 감시를 걸지 않는다 — 종전 그대로.
+  let uploadStarted = false;
+  const onReq = (req) => { if (isKageUploadHost(req.url()) && req.method() === "POST") uploadStarted = true; };
   page.on("response", onResp);
+  if (accept) page.on("request", onReq);
   try {
     try {
       await page.locator(`input[data-testid='${inputTestId}']`).setInputFiles(filePath ?? { name, mimeType, buffer });
@@ -502,9 +511,13 @@ export async function uploadToKageDetailed(page, inputTestId, { name, mimeType, 
     // 업로드 완료 폴링 — 총 상한 12초는 유지하고 **간격만 300→100ms**(2026-07-28 속도).
     // 응답을 감지하고도 최대 300ms를 더 기다리던 낭비를 줄인다(건당 평균 ~150ms, 부하 증가 없음 — 로컬 폴링).
     // 영상은 크기에 비례해 더 기다린다(호출부가 waitMs를 준다 — report-video.mjs `videoUploadWaitMs`).
-    for (let i = 0; i < waitMs / KAGE_POLL_MS && !result; i++) await page.waitForTimeout(KAGE_POLL_MS);
+    for (let i = 0; i < waitMs / KAGE_POLL_MS && !result; i++) {
+      if (accept && (seen.some((s) => !s.ok && s.status >= 400) || (!uploadStarted && i * KAGE_POLL_MS >= VIDEO_START_WAIT_MS))) break;
+      await page.waitForTimeout(KAGE_POLL_MS);
+    }
   } finally {
     page.off("response", onResp);
+    if (accept) page.off("request", onReq);
   }
   if (result) return { ok: true, kage: result, reason: null, error: null };
   // 응답이 왔는데 거부된 것과, 응답 자체가 없는 것은 **다른 사고**다(전자는 파일 문제, 후자는 지연·미시작).

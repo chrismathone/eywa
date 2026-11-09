@@ -80,7 +80,7 @@ export const OWNER_FACES: readonly OwnerFaceDef[] = [
   // 강사평가 = 직원 포트폴리오의 지표·만점·점수 규칙(원장 2026-10-13 *"설정에서 강사평가 항목을 새로 추가하고 원장이 각종
   // 파라미터 지표를 세부 디테일 수정"*). 직원 평가가 실험실 메뉴인 동안은 실험실을 켠 지점에서만 선다(보강 운영과 같은 결).
   { key: "evaluation", label: "강사평가", href: "/owner?tab=evaluation", group: "설정", category: "수업·운영", masterOnly: true },
-  { key: "contribution", label: "원생 기여도", href: "/owner?tab=contribution", group: "설정", category: "수업·운영", masterOnly: true },
+  { key: "contribution", label: "원생 충성도", href: "/owner?tab=contribution", group: "설정", category: "수업·운영", masterOnly: true },
   { key: "billing", label: "수납·청구", href: "/owner?tab=billing", group: "설정", category: "청구·안내" },
   { key: "notifications", label: "알림·약관", href: "/owner?tab=notifications", group: "설정", category: "청구·안내" },
   { key: "consultations", label: "상담 양식", href: "/owner?tab=consultations", group: "설정", category: "청구·안내" },

@@ -61,7 +61,7 @@ it("blocks a competing navigation while a filter transition is pending", async (
   </OntologyNavigation>);
   fireEvent.change(screen.getByRole("combobox", { name: "재원 상태" }), { target: { value: "all" } });
   await waitFor(() => expect(container.querySelector("[inert]")).toBeTruthy());
-  fireEvent.click(screen.getByRole("link", { name: "월별 기여도 근거" }));
+  fireEvent.click(screen.getByRole("link", { name: "월별 충성도 근거" }));
   expect(m.push).toHaveBeenCalledOnce();
   await act(async () => finish());
   await waitFor(() => expect(container.querySelector("[inert]")).toBeNull());
