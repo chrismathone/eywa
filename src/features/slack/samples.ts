@@ -4,6 +4,8 @@
  * 🔴 실제 문구를 바꾸면 여기 샘플도 함께(어긋나면 "샘플과 실제가 다르다"). 링크는 가짜 id 대신 **목록 화면**으로
  *    (가짜 id로 열면 404). 받는 사람도 가상 이름 — 실제 직원 이름을 샘플에 쓰지 않는다.
  */
+import { heartbeatAlertText, HEARTBEAT_ALERT_LINK } from "@/features/sync-agent/heartbeat-alert";
+
 export type SampleNotification = { title: string; body: string; link: string };
 
 export const SAMPLE_RECIPIENTS = ["박지현"];
@@ -114,6 +116,8 @@ export const SAMPLE_NOTIFICATIONS: Record<string, SampleNotification> = {
   },
   report_send_failed: { title: "수업 보고서 발송 실패", body: "김하늘 · 09-26 — 학부모 보드를 찾지 못했습니다", link: "/lesson-reports" },
   notice_send_failed: { title: "학부모 공지 게시 실패", body: "10월 휴원 안내 — 3명에게 게시하지 못했습니다", link: "/lesson-reports" },
+  // 실제 문구 = src/features/sync-agent/heartbeat-alert.ts heartbeatAlertText(같은 함수 — 11-06 사고 시각으로).
+  sync_agent_offline: { ...heartbeatAlertText(new Date("2026-11-06T08:37:00Z"), new Date("2026-11-06T09:02:00Z")), link: HEARTBEAT_ALERT_LINK },
   // 실제 문구 = scripts/_makeedu/login-guard.cjs notificationTextFor(사람 확인 · 비밀번호 틀림 · 그 밖) — 견본은 가장 흔한 사람 확인.
   makeedu_login_failed: {
     title: "makeedu가 사람 확인을 요구합니다",

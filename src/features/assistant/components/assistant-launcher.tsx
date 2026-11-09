@@ -3,13 +3,14 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { tipProps } from "@/components/hover-tip/tip";
-import { EyIcon } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_ASSISTANT_LEVEL, type AssistantLevel } from "@/features/assistant/levels";
 import { isHelpHotkey } from "@/features/help/overlay-hotkey";
 import { kstToday } from "@/lib/date-kst";
 import { isPaletteHotkey } from "@/lib/palette-hotkey";
-import { ASSISTANT_OPEN_EVENT, ASSISTANT_TOGGLE_MESSAGE, assistantHotkeyLabel, isAssistantHotkey } from "./assistant-hotkey";
+import { AssistantBadge } from "./assistant-badge";
+import { ASSISTANT_OPEN_EVENT, ASSISTANT_TOGGLE_MESSAGE, assistantHotkeyLabel, isAssistantHotkey, setAssistantBusy } from "./assistant-hotkey";
+import { runningThreadKeys } from "./assistant-state";
 import { useAssistant } from "./use-assistant";
 
 /** 판은 처음 열 때 싣는다 — 런처는 원장 화면마다 레이아웃에 붙어 있어, 판 코드(보고서·표·차트 틀)를 페이지마다 실을 이유가 없다. */
@@ -114,8 +115,13 @@ export function AssistantLauncher({ trigger = true, className }: { trigger?: boo
     return triggerRef.current ?? true;
   }, []);
 
-  const streamingCount = assistant.state.inflight.length;
-  const streaming = streamingCount > 0;
+  // 사이드바·모바일 버튼의 로딩 테두리 — 이 화면이 받는 것 + 다른 탭·기기에서 도는 것(목록 running · 판을 한 번 열어 목록을 읽은 뒤부터)을 센다.
+  // 판을 닫아도 끝난 것은 풀린다 — `useAssistant`가 닫힌 동안에도 15초마다 끝났는지 묻는다(적대 리뷰 2026-11-09).
+  const busy = runningThreadKeys(assistant.state).size;
+  useEffect(() => {
+    setAssistantBusy(busy);
+  }, [busy]);
+  useEffect(() => () => setAssistantBusy(0), []);
 
   return (
     <>
@@ -129,14 +135,12 @@ export function AssistantLauncher({ trigger = true, className }: { trigger?: boo
           aria-keyshortcuts="Control+J Meta+J"
           data-usage-chrome=""
           onClick={toggle}
-          {...tipProps({ title: "학원 비서", lines: [`${hotkeyLabel} — 어느 화면에서나 열고 닫습니다`, streaming ? `지금 답을 ${streamingCount}개 만드는 중입니다.` : null] })}
-          className={className}
+          {...tipProps({ title: "학원 비서", lines: [`${hotkeyLabel} — 어느 화면에서나 열고 닫습니다`, busy > 0 ? `지금 답을 ${busy}개 만드는 중입니다.` : null] })}
+          className={`relative ${className ?? ""}`}
         >
-          <EyIcon name="sparkle" className="text-gold" />
+          <AssistantBadge busy={busy > 0} size={20} />
           비서
-          {streaming ? (
-            <span className="bg-gold size-1.5 animate-pulse rounded-full motion-reduce:animate-none" role="img" aria-label="답을 만드는 중" />
-          ) : null}
+          {busy > 0 ? <span className="sr-only"> — 답을 {busy}개 만드는 중</span> : null}
         </Button>
       ) : null}
       {everOpened ? (

@@ -39,6 +39,7 @@ const STOP_GIVE_UP_MS = 45_000;
  * 동시 자리 수(3개)가 실제와 맞게(원장 2026-11-06 *"정상적인 동작으로 인식되게"*).
  */
 const LIST_POLL_MS = 15_000;
+const LIST_POLL_MAX = Math.ceil(ASSISTANT_RUNNING_MS / LIST_POLL_MS) + 2;
 
 /** 오류 응답(JSON `{ error, code? }` · 한국어)의 문구와 종류 — 없으면 대신 쓸 말 + 상태 코드. */
 async function errorBody(res: Response, fallback: string): Promise<{ message: string; code: string | null }> {
@@ -441,33 +442,56 @@ export function useAssistant({ open }: { open: boolean }) {
   }, [pollThreadId, loadConversation]);
 
   // 다른 탭·기기에서 도는 대화(이 화면이 받지 않는 것)가 목록에 있거나, 저장본이 '도는 중'인 대화를 두고 다른 대화로 옮겼으면 —
-  // 판이 열린 동안 목록과 그 대화들을 다시 읽어 끝난 것을 푼다(안 그러면 끝난 대화가 자리를 계속 센다 · 적대 리뷰 2026-11-09).
-  const stale = open ? staleRunningThreadIds(state) : [];
+  // 목록과 그 대화들을 15초마다 다시 읽어 끝난 것을 푼다(안 그러면 끝난 대화가 자리를 계속 센다 · 적대 리뷰 2026-11-09).
+  // 🔴 판을 닫아도 돈다 — 사이드바·폰 버튼의 로딩 테두리가 이 수를 보는데, 닫힌 채 끝나면 영영 '만드는 중'으로 남았다(적대 리뷰 2026-11-09).
+  //    닫힌 동안은 지금 대화도 여기서 묻는다(3초 다시 읽기는 판이 열렸을 때만). 도는 것이 없으면 아무것도 묻지 않는다.
+  const currentStale =
+    !open && current.threadId && !isConversationStreaming(state, current) && current.turns.some((t) => t.status === "running" || t.status === "recovering")
+      ? [current.threadId]
+      : [];
+  const stale = [...staleRunningThreadIds(state), ...currentStale].sort();
   const staleKey = stale.join(",");
   const remoteRunning =
-    open &&
-    (stale.length > 0 ||
-      state.threads.some((t) => {
-        if (!t.running) return false;
-        const conv = state.conversations[threadKey(t.id)];
-        return !conv || !isConversationStreaming(state, conv);
-      }));
+    stale.length > 0 ||
+    state.threads.some((t) => {
+      if (!t.running) return false;
+      const conv = state.conversations[threadKey(t.id)];
+      return !conv || !isConversationStreaming(state, conv);
+    });
   useEffect(() => {
     if (!remoteRunning) return;
     const ids = staleKey ? staleKey.split(",") : [];
+    // 상한 — 서버가 '도는 중'으로 보는 시간(15분)이 지나면 마지막으로 한 번 전체를 읽고 멈춘다(3초 쪽과 같다).
+    // 실패만 돌아와도(지점 AI 꺼짐·권한 바뀜·오프라인) 판을 닫은 채 끝없이 묻지 않게 · 앞 차례가 안 끝났으면 건너뛴다 ·
+    // 권한 오류(401·403)면 바로 멈춘다(재리뷰 2026-11-09).
+    let count = 0;
+    let busy = false;
     const id = window.setInterval(() => {
-      void loadThreads();
-      for (const threadId of ids) {
-        void (async () => {
-          try {
-            const res = await fetch(`${API}/threads/${encodeURIComponent(threadId)}?status=1`, { cache: "no-store" });
-            const body = res.ok ? ((await res.json()) as { running?: unknown }) : null;
-            if (body && body.running === false) await loadConversation(threadId, { quiet: true });
-          } catch {
-            // 망이 잠깐 끊겼다 — 다음 차례에 다시.
-          }
-        })();
-      }
+      count += 1;
+      const last = count > LIST_POLL_MAX;
+      if (last) window.clearInterval(id);
+      if (busy && !last) return;
+      busy = true;
+      void (async () => {
+        try {
+          await Promise.all([
+            loadThreads(),
+            ...ids.map(async (threadId) => {
+              if (last) return loadConversation(threadId, { quiet: true });
+              try {
+                const res = await fetch(`${API}/threads/${encodeURIComponent(threadId)}?status=1`, { cache: "no-store" });
+                if (res.status === 401 || res.status === 403) return window.clearInterval(id);
+                const body = res.ok ? ((await res.json()) as { running?: unknown }) : null;
+                if (body && body.running === false) await loadConversation(threadId, { quiet: true });
+              } catch {
+                // 망이 잠깐 끊겼다 — 다음 차례에 다시.
+              }
+            }),
+          ]);
+        } finally {
+          busy = false;
+        }
+      })();
     }, LIST_POLL_MS);
     return () => window.clearInterval(id);
   }, [remoteRunning, staleKey, loadThreads, loadConversation]);
