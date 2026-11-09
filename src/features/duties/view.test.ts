@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDutyCards, classChips, countByKind, dutyHref, lastDays } from "./view";
+import { buildDutyCards, classChips, countByKind, dutyHref, groupCardsByClass, lastDays } from "./view";
 import type { DutyItemView } from "./kinds";
 
 const NOW = Date.parse("2026-11-09T12:00:00+09:00");
@@ -24,6 +24,22 @@ describe("buildDutyCards", () => {
   it("반 알림장(학생 없음)은 반 이름 카드", () => {
     const cards = buildDutyCards([it_({ studentId: null, studentName: null, className: "LE2", kind: "report_write" })], [], lastDays("2026-11-09", 7), NOW);
     expect(cards[0]).toMatchObject({ title: "LE2", sub: "반 알림장", key: "class:c1" });
+  });
+});
+
+describe("groupCardsByClass", () => {
+  it("반별로 묶고 늦은 반 → 아직 있는 반 → 다 한 반 · 반 알림장도 그 반에 · 반 없음은 맨 뒤", () => {
+    const items = [
+      it_({ studentId: "s1", classId: "c1", className: "중2 A", status: "done" }),
+      it_({ studentId: "s2", classId: "c2", className: "중3 B", dueAt: "2026-11-08T15:00:00.000Z" }),
+      it_({ studentId: "s3", classId: "c3", className: "중1 C" }),
+      it_({ studentId: null, studentName: null, classId: "c3", className: "중1 C", kind: "report_write" }),
+      it_({ studentId: "s4", classId: null, className: null }),
+    ];
+    const groups = groupCardsByClass(buildDutyCards(items, [], lastDays("2026-11-09", 7), NOW), NOW);
+    expect(groups.map((g) => g.name)).toEqual(["중3 B", "중1 C", "중2 A", "반 없음"]);
+    expect(groups[1]).toMatchObject({ total: 2, open: 2, cards: expect.any(Array) });
+    expect(groups[1]!.cards).toHaveLength(2);
   });
 });
 

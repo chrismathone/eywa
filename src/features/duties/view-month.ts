@@ -6,6 +6,8 @@ import { NEWCOMER_ITEM_LABEL, dutyState, type DutyItemView, type DutyState } fro
  */
 export type MonthRow = {
   id: string; kind: "counsel_monthly" | "newcomer_call" | string; title: string; sub: string; state: DutyState;
+  /** 반별 묶음 이름(원장 2026-11-09 *"항상 반별로 분리할것"*) — 상담은 반 이름, 신규생 콜은 반이 없어 과목. */
+  group: string;
   /** 완료일(KST YYYY-MM-DD) 또는 기한(YYYY-MM-DD). */
   dateLabel: string; href: string; dueAt: string; doneAt: string | null;
 };
@@ -25,8 +27,8 @@ export function buildMonthRows(items: readonly DutyItemView[], now: number): { c
     const dueDay = kstDay(new Date(Date.parse(it.dueAt) - 1).toISOString());
     const dateLabel = state === "done" && it.doneAt ? `${md(kstDay(it.doneAt))} 완료` : state === "late" ? `${md(dueDay)} 기한 지남` : `${md(dueDay)}까지`;
     const base = { id: it.id, kind: it.kind, state, dateLabel, href: monthHref(it), dueAt: it.dueAt, doneAt: it.doneAt };
-    if (it.kind === "counsel_monthly") return { ...base, title: it.studentName ?? "학생", sub: [it.className, subjectLabel(it.subject)].filter(Boolean).join(" · ") };
-    return { ...base, title: it.studentName ?? "학생", sub: `${NEWCOMER_ITEM_LABEL[it.cycle] ?? it.cycle}${it.subject ? ` · ${subjectLabel(it.subject)}` : ""}` };
+    if (it.kind === "counsel_monthly") return { ...base, group: it.className ?? "반 없음", title: it.studentName ?? "학생", sub: subjectLabel(it.subject) };
+    return { ...base, group: it.subject ? `${subjectLabel(it.subject) || "과목"} 신규생` : "과목 미정 신규생", title: it.studentName ?? "학생", sub: NEWCOMER_ITEM_LABEL[it.cycle] ?? it.cycle };
   });
   const sort = (a: MonthRow, b: MonthRow) => RANK[a.state] - RANK[b.state] || a.dueAt.localeCompare(b.dueAt) || a.title.localeCompare(b.title, "ko");
   return { counsel: rows.filter((r) => r.kind === "counsel_monthly").sort(sort), newcomer: rows.filter((r) => r.kind === "newcomer_call").sort(sort) };
@@ -40,4 +42,16 @@ function subjectLabel(key: string | null): string {
 
 export function foldRows(rows: readonly MonthRow[]): { total: number; done: number; late: number } {
   return { total: rows.length, done: rows.filter((r) => r.state === "done").length, late: rows.filter((r) => r.state === "late").length };
+}
+
+/** 묶음(반·과목)별로 가른 줄 — 늦은 묶음 → 아직 있는 묶음 → 다 한 묶음 순. */
+export function groupMonthRows(rows: readonly MonthRow[]): { name: string; rows: MonthRow[]; total: number; done: number; late: number }[] {
+  const groups = new Map<string, { name: string; rows: MonthRow[]; total: number; done: number; late: number }>();
+  for (const r of rows) {
+    const g = groups.get(r.group) ?? { name: r.group, rows: [], total: 0, done: 0, late: 0 };
+    g.rows.push(r); g.total++;
+    if (r.state === "done") g.done++; else if (r.state === "late") g.late++;
+    groups.set(r.group, g);
+  }
+  return [...groups.values()].sort((a, b) => b.late - a.late || (b.total - b.done) - (a.total - a.done) || a.name.localeCompare(b.name, "ko"));
 }

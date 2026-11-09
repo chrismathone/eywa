@@ -88,13 +88,12 @@ export function MyDutiesStripButton({ summary: initial, className = "" }: { summ
       <DialogContent className="flex h-[min(760px,90dvh)] flex-col gap-3 sm:max-w-5xl">
         <DialogHeader>
           <DialogTitle>내 업무</DialogTitle>
-          <DialogDescription>완료 여부는 원래 기록(출결 · 보고서 · 발송 · 상담 · 체크)으로 저절로 확인됩니다. 칸을 누르면 그 기록 화면으로 갑니다.</DialogDescription>
+          <DialogDescription>칸을 누르면 그 기록 화면으로 갑니다. 완료는 원래 기록으로 저절로 확인됩니다.</DialogDescription>
         </DialogHeader>
         <ToolbarSegment>
           {VIEWS.map((v) => <ToolbarSegmentItem key={v.key} active={v.key === view} onClick={() => setView(v.key)}>{v.label}</ToolbarSegmentItem>)}
         </ToolbarSegment>
         <div className="min-h-0 flex-1 overflow-y-auto px-1">
-          {view === "today" ? <p className="text-text-dim text-xs">빈 칸(아직)이 곧 오늘 할 일입니다. 결석·휴원이면 의무가 저절로 빠집니다.</p> : null}
           {failed ? <p className="text-text-dim mt-2 text-sm">업무를 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요.</p>
             : !loaded ? <p className="text-text-dim mt-2 text-sm">불러오는 중…</p>
             : view === "today" ? <MyDutiesPanel loaded={loaded} />

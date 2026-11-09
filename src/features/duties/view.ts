@@ -81,3 +81,23 @@ export function lastDays(today: string, n: number): string[] {
   const base = Date.parse(`${today}T00:00:00+09:00`) + 9 * 3_600_000;
   return Array.from({ length: n }, (_, i) => new Date(base - (n - 1 - i) * 86_400_000).toISOString().slice(0, 10));
 }
+
+/** 반별 묶음 — 화면은 **항상 반별로** 가른다(원장 2026-11-09 *"항상 반별로 분리할것"*). 늦은 반 → 아직 있는 반 → 다 한 반 순.
+ *  반 알림장(학생 없음) 카드도 그 반 묶음에 든다. 반을 모르는 카드는 '반 없음' 묶음 맨 뒤. */
+export type DutyClassGroup = { classId: string | null; name: string; cards: DutyCard[]; total: number; done: number; late: number; open: number };
+export function groupCardsByClass(cards: readonly DutyCard[], now: number): DutyClassGroup[] {
+  const groups = new Map<string, DutyClassGroup>();
+  for (const c of cards) {
+    const key = c.classId ?? "";
+    const name = c.items.find((i) => i.className)?.className ?? (c.classId ? "반" : "반 없음");
+    const g = groups.get(key) ?? { classId: c.classId, name, cards: [], total: 0, done: 0, late: 0, open: 0 };
+    g.cards.push(c);
+    for (const it of c.items) {
+      if (it.status !== "void") g.total++;
+      const st = dutyState(it.status, it.dueAt, now);
+      if (st === "done") g.done++; else if (st === "late") g.late++; else if (st === "open") g.open++;
+    }
+    groups.set(key, g);
+  }
+  return [...groups.values()].sort((a, b) => (a.classId === null ? 1 : 0) - (b.classId === null ? 1 : 0) || b.late - a.late || b.open - a.open || a.name.localeCompare(b.name, "ko"));
+}
