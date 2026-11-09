@@ -1,7 +1,7 @@
 "use client";
 
 import { WindowLink } from "@/components/workspace/window-link";
-import type { PanelId } from "@/features/dashboard/overview/layout";
+import type { CoreKey } from "@/features/dashboard/layout/types";
 import { useBoard } from "./parts";
 
 /**
@@ -11,9 +11,6 @@ import { useBoard } from "./parts";
 export type BoardMode = "glance" | "today" | "manage";
 export type GraphKind = "all" | "trend" | "mix";
 
-/** 한눈에 보기 — 추이(과목 탭 · 비교가 있는 카드)와 구성(지금 비율 · 계기판)으로 나눈다. */
-export const TREND_PANELS: PanelId[] = ["changes", "billing6", "enrolledTrend", "courseTrend", "earlyExits"];
-export const MIX_PANELS: PanelId[] = ["studentsComp", "attendance", "billingMonth", "newcomerStages"];
 
 const MODES: { key: BoardMode; label: string; note: string }[] = [
   { key: "glance", label: "한눈에 보기", note: "추이와 구성비를 비교하고, 오늘 필요한 업무로 이어가세요." },
@@ -47,21 +44,19 @@ export function GraphFilter({ graph, onGraph }: { graph: GraphKind; onGraph: (g:
   );
 }
 
-/** 맨 위 핵심 업무 3칸 — 새 대시보드의 자리 그대로. 권한이 없어 열 수 없는 칸(href null)만 '이식 예정' 모양으로 둔다(누르지 않는다). */
-export function CoreWork() {
-  const { snapshot } = useBoard();
-  const items: { title: string; text: string; href: string | null }[] = [
-    { title: "신입생 90일 집중관리", text: "입학 약속 · 첫 수업 · 7/30/60/90일 액션과 결과", href: snapshot.allowed.includes("newcomers") ? "/newcomers" : null },
-    // 경영 분석·업무 작성센터 = aywa-next 화면을 옮긴 시안(예시 값 · 저장 안 함). 경영 분석은 원장·관리자만 열린다(페이지가 다시 막는다).
-    { title: "경영 분석", text: "매출 · 영업이익 · 인건비 · 채용 · 지식그래프", href: "/dashboard/management" },
-    { title: "업무 작성센터", text: "강사 기록 · 업무 서식 · 작성부터 결과 확인까지", href: "/work-records" },
-  ];
+/** 맨 위 핵심 업무 칸 — 역할 배치(`core:*`)가 정한 칸만, 그 순서로(열 수 없는 칸은 서버가 이미 뺐다 — `canOpenCore`). */
+const CORE: Record<CoreKey, { title: string; text: string; href: string }> = {
+  newcomers: { title: "신입생 90일 집중관리", text: "입학 약속 · 첫 수업 · 7/30/60/90일 액션과 결과", href: "/newcomers" },
+  // 경영 분석·업무 작성센터 = aywa-next 화면을 옮긴 시안(예시 값 · 저장 안 함). 경영 분석은 원장·관리자만 열린다(페이지가 다시 막는다).
+  management: { title: "경영 분석", text: "매출 · 영업이익 · 인건비 · 채용 · 지식그래프", href: "/dashboard/management" },
+  workRecords: { title: "업무 작성센터", text: "강사 기록 · 업무 서식 · 작성부터 결과 확인까지", href: "/work-records" },
+};
+
+export function CoreWork({ keys }: { keys: readonly CoreKey[] }) {
   return (
-    <nav className="ns-core" aria-label="핵심 업무" data-noopen>
-      {items.map((i) => i.href ? (
-        <WindowLink key={i.title} href={i.href} className="ns-core-item"><strong>{i.title} <span aria-hidden>↗</span></strong><span>{i.text}</span></WindowLink>
-      ) : (
-        <div key={i.title} className="ns-core-item is-pending" title="새 대시보드 배포에만 있는 화면 — main 이식 예정"><strong>{i.title} <em>이식 예정</em></strong><span>{i.text}</span></div>
+    <nav className="ns-core" aria-label="핵심 업무" data-noopen data-count={keys.length}>
+      {keys.map((k) => (
+        <WindowLink key={k} href={CORE[k].href} className="ns-core-item"><strong>{CORE[k].title} <span aria-hidden>↗</span></strong><span>{CORE[k].text}</span></WindowLink>
       ))}
     </nav>
   );

@@ -9,7 +9,8 @@ import { optionDefault } from "@/features/dashboard/layout/defaults";
 import { cardDef, missingMenuLabel } from "@/features/dashboard/layout/registry";
 import { DASHBOARD_VERSION, type Bundle, type Item } from "@/features/dashboard/layout/types";
 import { resolveView } from "@/features/dashboard/layout/view";
-import type { FaceBadge } from "./widget-face";
+/** 편집기 꼬리표 한 개. */
+export type FaceBadge = { tone: "danger" | "warn" | "info"; text: string };
 
 /** 원장 밖 역할에 넣으면 '민감'인 카드 — 이유 한 줄(설정 칸에 그대로 적는다). */
 export function sensitiveReason(id: string, role: Bundle): string | null {

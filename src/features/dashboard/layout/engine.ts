@@ -4,7 +4,7 @@
  */
 import { KPI_KEYS, type OverviewLayout, type PanelId } from "@/features/dashboard/overview/layout";
 import { cardDef, defaultPreset, HEADING_SIZE, isKnownId, nearestPreset, presetOf, type SizePreset } from "./registry";
-import { GRID_COLS, MAX_ITEMS, isHeadingId, isStructuralId, type Item } from "./types";
+import { GRID_COLS, MAX_ITEMS, isCoreId, isHeadingId, isStructuralId, type Item } from "./types";
 import { gridBounds, isPositioned, placeItem, resizeGridItem } from "./fixed-grid";
 
 const TITLE_MAX = 40;
@@ -21,7 +21,7 @@ export function snapItem(item: Item): Item {
     return { ...rest, ...HEADING_SIZE };
   }
   const def = cardDef(item.id);
-  if (!def) return item;
+  if (!def) return isCoreId(item.id) ? { id: item.id, w: 6, h: 1 } : item;
   const w = Number.isFinite(item.w) ? item.w : def.size.w;
   const h = Number.isFinite(item.h) ? item.h : def.size.h;
   const exact = presetOf(def, { w, h, mode: item.mode });
@@ -49,8 +49,8 @@ export function sanitizeItems(raw: readonly unknown[]): Item[] {
     const o = r as Record<string, unknown>;
     const id = typeof o.id === "string" ? o.id : "";
     if (!id || !isKnownId(id) || seen.has(id)) continue;
-    const title = cleanText(o.title, TITLE_MAX);
-    if (isHeadingId(id) && !title) continue;
+    // 이름을 비운 구역 머리줄도 구역으로 남긴다(버리면 그 아래 카드가 앞 구역으로 붙는다 — 새 대시보드 칸 목록 2026-11-09).
+    const title = cleanText(o.title, TITLE_MAX) ?? (isHeadingId(id) ? "이름 없는 구역" : undefined);
     seen.add(id);
     const def = cardDef(id);
     const item: Item = {
@@ -63,6 +63,8 @@ export function sanitizeItems(raw: readonly unknown[]): Item[] {
       ...(cleanText(o.note, NOTE_MAX) ? { note: cleanText(o.note, NOTE_MAX) } : {}),
       ...(def?.options.includes("amounts") && typeof o.amounts === "boolean" ? { amounts: o.amounts } : {}),
       ...(def?.options.includes("phones") && typeof o.phones === "boolean" ? { phones: o.phones } : {}),
+      ...(def?.kind === "kpi" && o.glance === true ? { glance: true } : {}),
+      ...(def?.kind === "kpi" && o.today === false ? { today: false } : {}),
     };
     out.push(snapItem(item));
     if (out.length >= MAX_ITEMS) break;
@@ -123,7 +125,7 @@ export function patchItem(items: readonly Item[], id: string, patch: Partial<Pic
 }
 
 /** 놓인 카드 id들(머리줄 제외). */
-export const placedIds = (items: readonly Item[]) => items.filter((i) => !isStructuralId(i.id)).map((i) => i.id);
+export const placedIds = (items: readonly Item[]) => items.filter((i) => !isStructuralId(i.id) && !isCoreId(i.id)).map((i) => i.id);
 
 /** 아래에 카드가 하나도 없는 머리줄을 뺀다 — 권한으로 카드가 사라진 구역의 빈 제목줄이 남지 않게. */
 export function dropEmptyHeadings(items: readonly Item[]): Item[] {
@@ -136,7 +138,7 @@ export function dropEmptyHeadings(items: readonly Item[]): Item[] {
 
 /** 두 배치가 같은가(순서·크기·제목·옵션까지) — 기본과 같으면 저장값을 만들지 않는다. */
 export function sameItems(a: readonly Item[], b: readonly Item[]): boolean {
-  const key = (i: Item) => [i.id, i.w, i.h, i.x ?? null, i.y ?? null, i.mode ?? "", i.title ?? "", i.note ?? "", i.amounts ?? null, i.phones ?? null];
+  const key = (i: Item) => [i.id, i.w, i.h, i.x ?? null, i.y ?? null, i.mode ?? "", i.title ?? "", i.note ?? "", i.amounts ?? null, i.phones ?? null, i.glance ?? false, i.today ?? true];
   return JSON.stringify(a.map(key)) === JSON.stringify(b.map(key));
 }
 
