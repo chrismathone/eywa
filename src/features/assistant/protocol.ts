@@ -30,7 +30,9 @@ export type StepKind =
   /** 보고서 · 비서 의견 작성 */
   | "report"
   /** 보고서를 고쳐 다시 내는 중 */
-  | "fix";
+  | "fix"
+  /** 전수 조회 — 대상과 이어진 표를 빠짐없이 세는 중('조회 N번'에 세지 않는다) */
+  | "survey";
 export type StepTable = { name: string; label: string };
 export type AskStep = {
   id: string;
@@ -92,9 +94,12 @@ export const ASSISTANT_QUESTION_MAX = 2000;
  * '도는 중'으로 보는 시간 — 서버는 `ASSISTANT_HARD_DEADLINE_MS`에 스스로 끊고 저장하므로 이보다 오래 '도는 중'인 줄은 함수가 죽어 남은 것이다.
  * 화면의 다시 읽기(polling)도 이 시간까지 잇는다.
  */
-export const ASSISTANT_RUNNING_MS = 5 * 60_000;
-/** 서버가 질문을 스스로 끊는 시각(라우트 기한 300초 안 — 남은 시간에 저장·감사 기록을 마친다). */
-export const ASSISTANT_HARD_DEADLINE_MS = 250_000;
+export const ASSISTANT_RUNNING_MS = 15 * 60_000;
+/**
+ * 서버가 질문을 스스로 끊는 시각 — 라우트 기한 800초(Vercel Pro 최대) 안에서 남은 40초에 저장·감사 기록을 마친다.
+ * 원장 2026-11-06 *"한도 두지마"* — 조회 횟수 한도를 없애고 남은 물리적 한계가 이것이다(그 전 마무리는 agent.ts softDeadlineMs).
+ */
+export const ASSISTANT_HARD_DEADLINE_MS = 760_000;
 
 /** 처음 열었을 때 보여 줄 추천 질문. */
 export const ASSISTANT_SUGGESTIONS: readonly string[] = [

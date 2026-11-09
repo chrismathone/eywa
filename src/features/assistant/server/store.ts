@@ -44,6 +44,8 @@ type MessageRow = {
   status: "running" | "done" | "failed";
   report_title: string | null;
   report_blocks: AssistantReport["blocks"] | null;
+  /** 확인한 자료 범위(전수 조회를 한 답만 · 작다 — 글과 함께 읽는다). */
+  report_coverage: SettledReport["coverage"] | null;
   error: string | null;
   queries: Array<QuerySummary & { sql?: string }> | null;
   steps: AskStep[] | null;
@@ -133,7 +135,13 @@ function toMessage(m: MessageRow, now: number, datasets: ReadonlyMap<string, Dat
   const data = datasets.get(m.id);
   const report: SettledReport | null =
     m.status === "done" && m.report_title !== null && Array.isArray(m.report_blocks)
-      ? { title: m.report_title, blocks: data ? kpiFromData(m.report_blocks, data) : m.report_blocks, datasets: data ?? {}, ...(data ? {} : { datasetsOmitted: true }) }
+      ? {
+          title: m.report_title,
+          blocks: data ? kpiFromData(m.report_blocks, data) : m.report_blocks,
+          datasets: data ?? {},
+          ...(data ? {} : { datasetsOmitted: true }),
+          ...(m.report_coverage && Array.isArray(m.report_coverage.surveys) ? { coverage: m.report_coverage } : {}),
+        }
       : null;
   return {
     id: m.id,
@@ -154,7 +162,7 @@ export async function threadDetail(owner: Owner, threadId: string): Promise<Thre
   const db = createAdminClient();
   const { data, error } = await db
     .from(MESSAGES)
-    .select("id, question, level, status, report_title:report->>title, report_blocks:report->blocks, error, queries, steps, created_at")
+    .select("id, question, level, status, report_title:report->>title, report_blocks:report->blocks, report_coverage:report->coverage, error, queries, steps, created_at")
     .eq("thread_id", threadId)
     .eq("tenant_id", owner.tenantId)
     .eq("user_id", owner.userId)
@@ -205,6 +213,28 @@ export async function deleteThread(owner: Owner, threadId: string): Promise<bool
   return (data ?? []).length > 0;
 }
 
+/** 대화 제목 길이 상한 — DB `assistant_threads.title` check(1~80자)와 같다. */
+export const THREAD_TITLE_MAX = 80;
+
+/**
+ * 대화 이름 바꾸기(원장 2026-11-06 *"대화 이름 변경도 가능하게"*) — 본인 대화 · 지우지 않은 것만. 바뀐 이름을 돌려준다(없으면 null).
+ * 목록 순서(updated_at)는 건드리지 않는다 — 이름만 고쳤는데 '오늘' 맨 위로 올라가지 않게.
+ */
+export async function renameThread(owner: Owner, threadId: string, title: string): Promise<string | null> {
+  const clean = clipText(title.replace(/\s+/g, " ").trim(), THREAD_TITLE_MAX);
+  if (!clean) return null;
+  const { data, error } = await createAdminClient()
+    .from(THREADS)
+    .update({ title: clean })
+    .eq("id", threadId)
+    .eq("tenant_id", owner.tenantId)
+    .eq("user_id", owner.userId)
+    .is("deleted_at", null)
+    .select("id");
+  if (error) throw new Error(error.message);
+  return (data ?? []).length > 0 ? clean : null;
+}
+
 /** 다음 질문에 붙일 지난 차례(끝난 것만 · 최근 6). */
 export async function pastTurns(owner: Owner, threadId: string): Promise<PastTurn[]> {
   const { data, error } = await createAdminClient()
@@ -237,7 +267,7 @@ const STALE_MESSAGE = "답을 끝내지 못했습니다. 다시 물어봐 주세
 
 /**
  * 하루 상한 · 겹친 질문 확인. 막히면 한국어 이유.
- * 먼저 함수가 죽어 남은 '도는 중'(5분 넘은 것)을 실패로 닫는다 — 사람당 '도는 질문 하나' 고유 색인(s2_0031)이 영영 막히지 않게.
+ * 먼저 함수가 죽어 남은 '도는 중'(RUNNING_MS — 15분 넘은 것)을 실패로 닫는다 — 사람당 '도는 질문 하나' 고유 색인(s2_0031)이 영영 막히지 않게.
  * '멈춤'을 누른 질문은 마무리 중이어도 도는 것으로 세지 않는다(멈추고 바로 다시 물을 수 있게 · 적대 리뷰 2026-11-06).
  * 동시에 두 번 들어오는 경우는 이 확인이 아니라 고유 색인이 막는다(`startMessage` → "busy").
  */

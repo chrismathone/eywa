@@ -622,6 +622,7 @@ export const AUDIT_ACTIONS = {
   // 학원 비서(원장 자연어 질의 · 2026-11-06) — 질문마다 유료 AI와 지점 DB 조회를 태운다.
   assistant_ask: "학원 비서 질문",
   assistant_thread_delete: "학원 비서 대화 삭제",
+  assistant_thread_rename: "학원 비서 대화 이름 변경",
 
   // 인재원 학습 프로그램 짝(students.ijw_student_id, 0259a) — 학생 행을 바꾸므로 기록한다.
   student_ijw_link: "인재원 학습 계정 연결",

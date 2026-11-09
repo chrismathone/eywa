@@ -10,6 +10,7 @@ import {
   isConversationStreaming,
   parseAskEvent,
   splitNdjson,
+  parseStep,
   stepSummary,
   stepSummaryText,
   stepTrouble,
@@ -264,6 +265,11 @@ describe("진행 단계 요약", () => {
     expect(stepSummary(steps)).toEqual({ queries: 2, tables: 2, ms: 18_000, retried: 0, limited: 0, failed: 1 });
     expect(stepSummaryText(steps)).toBe("조회 2번 · 표 2개 · 18초 · 막힌 단계 1개");
     expect(stepSummaryText([step("s1", { kind: "understand", state: "done", at: 0, ms: 1200 })])).toBe("1.2초");
+  });
+
+  it("parseStep — 한도 표식(cause limit)만 받고 다른 값은 버린다", () => {
+    expect(parseStep({ id: "s1", kind: "query", label: "l", state: "error", at: 0, cause: "limit" })).toMatchObject({ cause: "limit" });
+    expect(parseStep({ id: "s1", kind: "query", label: "l", state: "error", at: 0, cause: "boom" })).not.toHaveProperty("cause");
   });
 
   it("막힌 단계의 뜻 — 답이 끝까지 나왔고 뒤에 같은 종류가 이어졌을 때만 '다시 시도'(원장 2026-11-06 · 적대 리뷰)", () => {

@@ -100,6 +100,25 @@ export type QueryResult = {
 export type SettledReport = AssistantReport & {
   datasets: Record<string, Pick<QueryResult, "columns" | "rows" | "truncated" | "purpose">>;
   datasetsOmitted?: boolean;
+  /** 확인한 자료 범위 — 전수 조회(server/survey.ts)를 했으면 서버가 붙인다(AI가 쓰지 않는다). */
+  coverage?: ReportCoverage;
+};
+
+/**
+ * 확인한 자료 범위 — 원장 2026-11-06 *"DB 전체 조회하고 답변하는거 맞아? … 하나도 빠짐없이"*. 전수 조회로 센 표 중 자료가 있는 표(또는 세지 못한 표)와,
+ * 그 표를 이번 답에서 조회로 자세히 봤는지(`examined`). 원장이 '빠진 것'을 직접 확인한다.
+ */
+export type ReportCoverage = {
+  surveys: Array<{
+    target: string;
+    name: string;
+    from: string;
+    to: string;
+    /** 센 표 수(자료 없는 표 포함). */
+    checked: number;
+    /** `key` = 표 하나를 강사와 직접 · 맡은 반을 거쳐 두 번 셀 때 줄을 가르는 이름(옛 저장본엔 없다 — 그때는 table). */
+    tables: Array<{ key?: string; table: string; label: string; via?: "class"; total: number | null; inPeriod: number | null; latest: string | null; examined: boolean; failed?: boolean }>;
+  }>;
 };
 
 /** `render_report` 도구 설명용 JSON 스키마(strict는 쓰지 않는다 — 서버가 zod로 검증하고 틀리면 이유를 돌려준다). */

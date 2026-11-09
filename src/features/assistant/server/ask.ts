@@ -21,6 +21,9 @@ import { assistantViewer, isGateFailure } from "./gate";
 import { ASSISTANT_FEATURE, ASSISTANT_MODEL } from "./models";
 import { admission, BUSY_MESSAGE, compactReport, finishMessage, markFailed, pastTurns, startMessage, stopRequested, type Usage } from "./store";
 
+/** 보고서를 쓸 시간 — 고정 기한에서 이만큼 앞이 마무리 시각이다. */
+const REPORT_RESERVE_MS = 200_000;
+
 export type AskInput = { threadId?: string | null; question: string; level: AssistantLevel };
 
 /** 사람에게 보일 오류 문장(한국어가 아닌 원문은 내지 않는다). */
@@ -57,8 +60,8 @@ export async function prepareAsk(
     messageId: started.messageId,
     run: async (emit) => {
       // 멈춤 = 사람이 누른 ‘멈춤’(DB 표시) 또는 고정 기한 — 화면 연결이 끊겨도 끝까지 돈다.
-      // 🔴 고정 기한: 라우트 기한(300초)에 함수가 죽으면 저장·감사 기록·사용량이 통째로 빠지고 줄이 '도는 중'으로 남는다 →
-      //    250초에 스스로 끊고 실패로 저장한다(적대 리뷰 2026-11-06). 150초 '마무리 요청'(agent.ts)은 부탁일 뿐이라 따로 둔다.
+      // 🔴 고정 기한: 라우트 기한(800초)에 함수가 죽으면 저장·감사 기록·사용량이 통째로 빠지고 줄이 '도는 중'으로 남는다 →
+      //    760초(ASSISTANT_HARD_DEADLINE_MS)에 스스로 끊고 실패로 저장한다(적대 리뷰 2026-11-06). 그보다 200초(REPORT_RESERVE_MS) 앞의 '마무리'(agent.ts)는 부탁일 뿐이라 따로 둔다.
       const stop = new AbortController();
       const signal = stop.signal;
       let stoppedBy: "user" | "deadline" | null = null;
@@ -105,6 +108,12 @@ export async function prepareAsk(
           docs: ASSISTANT_DOCS,
           question: input.question,
           history,
+          // 마무리 시각 = 고정 기한에서 보고서 쓸 시간(200초 — 15만 토큰을 읽고 긴 보고서를 쓰는 '강함'도 넉넉히 · 적대 리뷰 2026-11-09)을 뺀 것.
+          // 이 루프가 시작한 때부터 잰다(앞서 쓴 준비 시간을 뺀다). 마무리 시각이 차례 도중에 오면 agent가 그 응답을 끊고 곧장 보고서를 부탁한다.
+          softDeadlineMs: Math.max(60_000, ASSISTANT_HARD_DEADLINE_MS - REPORT_RESERVE_MS - (Date.now() - begun)),
+          // '적음'(Haiku)은 입력 10만 토큰을 넘으면 단가가 5배 — 그 앞에서 마무리(적대 리뷰 2026-11-09). 판정은 직전 차례 입력이라
+          // 한 차례 조회 결과(각 최대 2만 자)가 더 붙어도 10만을 넘지 않게 3만 여유를 둔다(재리뷰 2026-11-09).
+          ...(input.level === "low" ? { contextWrapTokens: 70_000 } : {}),
           emit: (event) => {
             steps.set(event.step.id, event.step);
             emit(event);
