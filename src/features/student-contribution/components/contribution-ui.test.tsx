@@ -18,14 +18,14 @@ type Data = Parameters<typeof ContributionList>[0]["data"];
 function fixture(): Data {
   const total = (id: string, tuition: number, recent: number) => ({ studentId: id, raws: { ...emptyRaws(), tuitionWon: tuition },
     recent: { ...emptyRaws(), tuitionWon: recent }, computedAt: "2026-10-22T00:00:00Z", unavailable: [] });
-  const row = (id: string, status: string, tuition: number, recent: number) => ({ id, name: id, status, school: "초등학교", grade: "초5", subjects: ["math"], enrolledMonths: 13, total: total(id, tuition, recent) });
+  const row = (id: string, status: string, tuition: number, recent: number) => ({ id, name: id, status, family: {state:"ready" as const,asOf:"2026-11-09",members:[],activeCount:status==="enrolled"?1:0,activeSiblings:0,selfActive:status==="enrolled",needsReview:0}, school: "초등학교", grade: "초5", subjects: ["math"], enrolledMonths: 13, total: total(id, tuition, recent) });
   return { month: "2026-10", checkedAt: "2026-10-22T01:00:00Z", refreshCron: "40 15 * * *", gate: { tenantId: "t", userId: "owner", canConfigure: true, canWrite: true }, ready: true, missing: false, historyReady: true,
     refreshedAt: "2026-10-22T00:00:00Z", revision: 0, config: structuredClone(DEFAULT_CONFIG), subjects: [{ key: "math", label: "수학" }], grades: ["초5"],
     rows: [row("오래다닌학생", "enrolled", 1000000, 100000), row("최근기여학생", "enrolled", 500000, 500000), row("퇴원학생", "withdrawn", 2000000, 0)] };
 }
 function settingsFixture(data = fixture()): Parameters<typeof ContributionSettings>[0]["data"] {
   return { parentEventsApproved: false, gate: data.gate, ready: data.ready, config: data.config, revision: data.revision, historyReady: data.historyReady,
-    studentCount: data.rows.length, raws: sumRaws(data.rows.flatMap((row) => row.total ? [row.total.raws] : [])) };
+    studentCount: data.rows.length, families:data.rows.map(r=>r.family), raws: sumRaws(data.rows.flatMap((row) => row.total ? [row.total.raws] : [])) };
 }
 beforeEach(() => { vi.resetAllMocks(); window.history.replaceState(null, "", "/student-contribution"); m.save.mockResolvedValue({ ok: true, message: "저장 완료" }); m.link.mockResolvedValue({ ok: true, message: "연결 완료" }); });
 afterEach(cleanup);
@@ -73,9 +73,9 @@ it("집계 기준이 바뀌면 옛 기준 재시도 대신 페이지 데이터�
 });
 it("원래 수치를 재호출하지 않아도 배점 변경 미리보기에 과거 실적 반영", async () => {
   render(<ContributionSettings data={settingsFixture()} />);
-  expect(screen.getByText("운영 35점 · 학습·참여 0점")).toBeTruthy();
+  expect(screen.getByText("운영 35점 · 학습·참여 0점 · 가족 0점")).toBeTruthy();
   fireEvent.change(screen.getByLabelText("수업료 기여 배점"), { target: { value: "2" } });
-  expect(screen.getByText("운영 70점 · 학습·참여 0점")).toBeTruthy();
+  expect(screen.getByText("운영 70점 · 학습·참여 0점 · 가족 0점")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "배점 저장" }));
   await waitFor(() => expect(m.save).toHaveBeenCalledWith(expect.objectContaining({ rates: expect.objectContaining({ tuitionWon: { enabled: true, points: 2 } }) }), 0));
 });
@@ -122,7 +122,7 @@ it("읽기 전용이면 집계 버튼이 없고 설정 입력도 잠긴다", () 
   const data = fixture(); data.gate.canWrite = false;
   const view = render(<ContributionList data={data} />); openList();
   expect(screen.queryByRole("button", { name: "지금 집계" })).toBeNull(); view.unmount();
-  render(<ContributionSettings data={settingsFixture(data)} />); expect(screen.getByLabelText("수업료 기여 배점").closest("fieldset")?.disabled).toBe(true);
+  render(<ContributionSettings data={settingsFixture(data)} />); expect(screen.queryByRole("button", {name:"배점 저장"})).toBeNull(); expect(screen.queryByRole("button", {name:"변경 취소"})).toBeNull(); expect(screen.getByLabelText("수업료 기여 배점").closest("fieldset")?.disabled).toBe(true);
 });
 it("창 안의 탭과 학생 상세 링크가 창 모드를 유지한다", () => {
   render(<EmbedProvider embed><ContributionList data={fixture()} /></EmbedProvider>); openList();
@@ -143,4 +143,14 @@ it("자동 후보가 없는 상담도 퇴원생 검색 후 근거를 적어 명�
   fireEvent.click(screen.getByRole("button", { name: "확인한 소개자 연결" }));
   await waitFor(() => expect(m.link).toHaveBeenCalledWith({ consultationId: "c", studentId: "withdrawn", reason: "상담 원문과 보호자 확인" }));
   expect(await screen.findByText("연결 완료")).toBeTruthy();
+});
+
+it("가족 배점을 수정하면 저장 미리보기와 저장 요청에 함께 반영한다", async () => {
+  const data=fixture();data.rows[0].family={...data.rows[0].family,activeCount:3,activeSiblings:2};
+  render(<ContributionSettings data={settingsFixture(data)} />);
+  expect(screen.getByText("운영 35점 · 학습·참여 0점 · 가족 250점")).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("3남매 재원 가족 배점"),{target:{value:"300"}});
+  expect(screen.getByText("운영 35점 · 학습·참여 0점 · 가족 300점")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button",{name:"배점 저장"}));
+  await waitFor(()=>expect(m.save).toHaveBeenCalledWith(expect.objectContaining({family:expect.objectContaining({three:300})}),0));
 });

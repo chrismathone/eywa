@@ -238,6 +238,16 @@ function Progress({ turn, note }: { turn: Turn; note?: string }) {
   const elapsed = now !== null && !Number.isNaN(started) ? Math.max(0, now - started) : null;
   const running = [...turn.steps].reverse().find((s) => s.state === "running");
   const headline = note ?? running?.label ?? (turn.steps.length ? "다음 단계를 준비하는 중" : "질문을 보내는 중");
+  const latest = turn.steps.at(-1);
+  // 접혀 있으면 단계 줄을 그리지 않는다 — 지금 단계가 이미 큰 글씨라 같은 문장이 두 번 보였다(원장 2026-11-09
+  // *"이 두 메시지가 결국은 똑같은데 따로 둘 필요가 있을까?"*). 지금 단계가 보는 표(칩)만 큰 글씨 아래에 붙인다.
+  // 단계 사이(끝난 뒤 다음 단계가 열리기 전)에도 줄을 띄우지 않는다 — 경계마다 카드가 늘었다 줄었다 한다.
+  // 예외: 마지막 단계가 막혔으면(그 까닭) · 다시 잇는 중이면(note) 줄을 그대로 보인다.
+  const lineHidden = !expanded && !note && !!latest && latest.state !== "error";
+  const chips = lineHidden && latest?.state === "running" && latest.tables?.length ? latest.tables : null;
+  const more = turn.steps.length > 1;
+  // 펼치면 보일 단계 수 — 단계 사이(마지막 단계가 끝나고 다음이 열리기 전)엔 마지막 단계도 숨어 있다.
+  const hiddenCount = lineHidden && latest?.state !== "running" ? turn.steps.length : turn.steps.length - 1;
   return (
     <div className="bg-card shadow-card rounded-2xl px-4 py-3.5">
       <div className="flex items-center gap-3">
@@ -249,29 +259,49 @@ function Progress({ turn, note }: { turn: Turn; note?: string }) {
         </p>
         {elapsed !== null ? <span className="num shrink-0 text-xs">{formatDuration(elapsed)}</span> : null}
       </div>
-      {turn.steps.length ? (
-        <div className="mt-3.5 pl-1">
-          <StepTimeline steps={expanded ? turn.steps : turn.steps.slice(-1)} live now={now} startedAt={started} currentId={running?.id ?? null} />
-          {turn.steps.length > 1 ? (
+      {/* 첫 단계가 오기 전엔 큰 글씨 한 줄뿐 — 접힌 카드엔 단계 줄이 오지 않으니 뼈대 막대로 줄을 예고하지 않는다(적대 리뷰 2026-11-09). */}
+      {turn.steps.length > 0 && (!lineHidden || chips || more) ? (
+        // 자식 자리(칩 · 단계 줄 · 펼치기)는 늘 같은 순서 — 펼치고 접어도 버튼이 그대로라 초점이 남는다.
+        // 접힌 때는 큰 글씨의 글자 선(pl-11)에 맞추고 칩과 펼치기를 한 줄에 — 칩이 오고 가도 카드 높이가 그대로다.
+        <div className={lineHidden ? "relative mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 pl-11" : "mt-3.5 pl-1"}>
+          {chips ? (
+            <>
+              <span className="sr-only">이 단계가 보는 표: </span>
+              <TableChips tables={chips} />
+            </>
+          ) : null}
+          {lineHidden ? null : <StepTimeline steps={expanded ? turn.steps : turn.steps.slice(-1)} live now={now} startedAt={started} currentId={running?.id ?? null} />}
+          {more ? (
             <button
               type="button"
               aria-expanded={expanded}
               onClick={() => setExpanded((v) => !v)}
-              className="text-primary hover:bg-muted mt-1.5 inline-flex cursor-pointer items-center gap-1 rounded-lg px-1.5 py-0.5 text-sm font-bold"
+              className={`text-primary hover:bg-muted inline-flex cursor-pointer items-center gap-1 rounded-lg px-1.5 py-0.5 text-sm font-bold ${lineHidden ? (chips ? "" : "-ml-1.5") : "mt-1.5"}`}
             >
-              {expanded ? "과정 접기" : `지난 단계 ${turn.steps.length - 1}개 펼치기`}
+              {expanded ? "과정 접기" : `지난 단계 ${hiddenCount}개 펼치기`}
               <EyIcon name="chevronDown" size={16} className={`transition-transform motion-reduce:transition-none ${expanded ? "rotate-180" : ""}`} />
             </button>
           ) : null}
         </div>
-      ) : (
-        // 첫 단계가 오기 전 — 화면이 비어 보이지 않게(단계 두 줄 모양).
-        <div aria-hidden className="mt-4 space-y-2.5 pl-11">
-          <div className="bg-bg-soft h-3.5 w-3/5 animate-pulse rounded motion-reduce:animate-none" />
-          <div className="bg-bg-soft h-3.5 w-2/5 animate-pulse rounded motion-reduce:animate-none" />
-        </div>
-      )}
+      ) : null}
     </div>
+  );
+}
+
+/** 단계가 보는 DB 표 — 짧은 이름 칩(마우스를 올리면 실제 표 이름). */
+function TableChips({ tables }: { tables: NonNullable<AskStep["tables"]> }) {
+  return (
+    <span className="flex flex-wrap gap-1">
+      {tables.map((t) => (
+        <span
+          key={t.name}
+          {...tipProps({ title: t.label, rows: [["DB 표", t.name]] })}
+          className="bg-bg-soft rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap"
+        >
+          {t.label}
+        </span>
+      ))}
+    </span>
   );
 }
 
@@ -341,19 +371,7 @@ function StepTimeline({
             <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg px-1.5 py-0.5 ${current ? "bg-primary-soft" : ""}`}>
               <EyIcon name={KIND_ICON[s.kind] ?? "dot"} size={15} className="shrink-0" />
               <span className={`min-w-0 text-sm break-words ${current ? "font-bold" : "font-medium"}`}>{s.label}</span>
-              {s.tables?.length ? (
-                <span className="flex flex-wrap gap-1">
-                  {s.tables.map((t) => (
-                    <span
-                      key={t.name}
-                      {...tipProps({ title: t.label, rows: [["DB 표", t.name]] })}
-                      className="bg-bg-soft rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap"
-                    >
-                      {t.label}
-                    </span>
-                  ))}
-                </span>
-              ) : null}
+              {s.tables?.length ? <TableChips tables={s.tables} /> : null}
               {tail ? <span className="num ml-auto text-xs whitespace-nowrap">{tail}</span> : null}
             </div>
             {s.state === "error" && s.detail ? (

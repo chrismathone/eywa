@@ -196,23 +196,55 @@ describe("AssistantLauncher", () => {
     await act(async () => {
       push({ type: "started", messageId: "M5" });
       push({ type: "thread", threadId: "T5", title: "미납" });
+      push({ type: "step", step: { id: "s1", kind: "understand", label: "질문을 이해하는 중", state: "running", at: 0 } });
+    });
+    // 단계가 하나뿐이면 큰 글씨 한 줄 — 같은 문장의 줄이 없다(적대 리뷰 2026-11-09)
+    await waitFor(() => expect(within(dialog).getByRole("status")).toHaveTextContent("질문을 이해하는 중"));
+    expect(within(dialog).getAllByText("질문을 이해하는 중")).toHaveLength(1);
+    expect(within(dialog).queryByRole("list", { name: "답을 만드는 단계" })).toBeNull();
+    await act(async () => {
       push({ type: "step", step: { id: "s1", kind: "understand", label: "질문을 이해하는 중", state: "done", at: 0, ms: 700 } });
+    });
+    // 끝난 뒤 다음 단계가 열리기 전 — 줄을 띄우지 않는다(경계마다 카드가 늘었다 줄었다 하지 않게)
+    await waitFor(() => expect(within(dialog).getByRole("status")).toHaveTextContent("다음 단계를 준비하는 중"));
+    expect(within(dialog).queryByRole("list", { name: "답을 만드는 단계" })).toBeNull();
+    await act(async () => {
       push({ type: "step", step: { id: "s2", kind: "write_sql", label: "조회문을 쓰는 중", state: "running", at: 800 } });
       push({ type: "step", step: { id: "s2", kind: "write_sql", label: "조회문을 쓰는 중 · 반별 미납액", state: "running", at: 800, tables: [{ name: "invoices", label: "청구서" }] } });
     });
-    const steps = await within(dialog).findByRole("list", { name: "답을 만드는 단계" });
-    // 기본은 접힘 — 최신 단계 한 줄만(원장 2026-11-06) · 펼치면 지난 단계까지
-    await waitFor(() => expect(within(steps).getAllByRole("listitem")).toHaveLength(1));
-    expect(within(steps).queryByText("질문을 이해하는 중")).toBeNull();
+    // 기본은 접힘 — 지금 단계는 큰 글씨 한 줄로만(같은 문장을 아래에 또 그리지 않는다 · 원장 2026-11-09) + 그 단계의 표 칩 · 펼치면 지난 단계까지
+    await waitFor(() => expect(within(dialog).getByRole("status")).toHaveTextContent("조회문을 쓰는 중 · 반별 미납액"));
+    expect(within(dialog).queryByRole("list", { name: "답을 만드는 단계" })).toBeNull();
+    expect(within(dialog).getAllByText("조회문을 쓰는 중 · 반별 미납액")).toHaveLength(1);
+    expect(within(dialog).getByText("청구서")).toHaveAttribute("data-tip", expect.stringContaining("invoices"));
     const more = within(dialog).getByRole("button", { name: /지난 단계 1개 펼치기/ });
     expect(more).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(more);
+    const steps = await within(dialog).findByRole("list", { name: "답을 만드는 단계" });
     await waitFor(() => expect(within(steps).getAllByRole("listitem")).toHaveLength(2));
-    expect(within(dialog).getByRole("button", { name: /과정 접기/ })).toHaveAttribute("aria-expanded", "true");
+    const less = within(dialog).getByRole("button", { name: /과정 접기/ });
+    expect(less).toHaveAttribute("aria-expanded", "true");
+    expect(less).toBe(more); // 펼쳐도 같은 버튼 — 초점이 남는다
     expect(within(steps).getByText("조회문을 쓰는 중 · 반별 미납액")).toBeInTheDocument();
     expect(within(steps).getByText("청구서")).toHaveAttribute("data-tip", expect.stringContaining("invoices"));
     expect(within(steps).getByLabelText("진행 중")).toBeInTheDocument();
     expect(within(dialog).getByRole("status")).toHaveTextContent("조회문을 쓰는 중 · 반별 미납액");
+    // 다시 접고, 마지막 단계가 막히면 — 접혀 있어도 그 줄(까닭)을 보인다 · 펼치기 수는 숨은 단계 수
+    fireEvent.click(less);
+    await act(async () => {
+      push({ type: "step", step: { id: "s2", kind: "write_sql", label: "조회문을 쓰는 중 · 반별 미납액", state: "done", at: 800, ms: 900 } });
+    });
+    // 단계 사이(마지막 단계가 끝나고 다음이 열리기 전) — 줄 없이, 펼치기 수는 숨은 단계 전부(둘)
+    await waitFor(() => expect(within(dialog).getByRole("status")).toHaveTextContent("다음 단계를 준비하는 중"));
+    expect(within(dialog).queryByRole("list", { name: "답을 만드는 단계" })).toBeNull();
+    expect(within(dialog).getByRole("button", { name: /지난 단계 2개 펼치기/ })).toBe(more);
+    await act(async () => {
+      push({ type: "step", step: { id: "s3", kind: "query", label: "조회 1 · 반별 미납액", state: "error", at: 1800, detail: "칸 이름이 틀렸습니다" } });
+    });
+    const blocked = await within(dialog).findByRole("list", { name: "답을 만드는 단계" });
+    expect(within(blocked).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(blocked).getByText(/칸 이름이 틀렸습니다/)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /지난 단계 2개 펼치기/ })).toBe(more);
     // 답을 받는 동안 보내기 대신 멈추기
     fireEvent.click(within(dialog).getByRole("button", { name: "멈추기" }));
     // 같은 문장이 화면 낭독기 알림 줄(sr-only)에도 선다.
@@ -533,6 +565,68 @@ describe("AssistantLauncher", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "멈추기" }));
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url === "/api/assistant/messages/M1/stop")).toBe(true));
     expect(await within(dialog).findByRole("button", { name: "멈추는 중…" })).toBeDisabled();
+  });
+
+  it("도는 테두리 — 판을 닫아도 15초마다 끝났는지 물어, 끝나면 테두리가 풀린다(적대 리뷰 2026-11-09)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ["setInterval", "clearInterval"] });
+    try {
+      let running = true;
+      routes["GET /api/assistant/threads"] = () =>
+        json({ enabled: true, threads: [{ id: "T1", title: "다른 탭 질문", level: "normal", updatedAt: NOW, running }] } satisfies ThreadListResponse);
+      render(<AssistantLauncher />);
+      fireEvent.click(screen.getByRole("button", { name: /비서/ }));
+      const dialog = await findDialog();
+      await within(dialog).findByRole("button", { name: /^다른 탭 질문/ });
+      fireEvent.click(within(dialog).getByRole("button", { name: "닫기" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      const trigger = screen.getByRole("button", { name: /비서/ });
+      expect(trigger.querySelector("[data-assistant-busy-ring]")).not.toBeNull();
+      expect(within(trigger).getByText(/답을 1개 만드는 중/)).toBeInTheDocument();
+
+      running = false;
+      const before = calls.filter((c) => c.method === "GET" && c.url === "/api/assistant/threads").length;
+      await act(async () => {
+        vi.advanceTimersByTime(15_000);
+      });
+      await waitFor(() => expect(calls.filter((c) => c.method === "GET" && c.url === "/api/assistant/threads").length).toBeGreaterThan(before));
+      await waitFor(() => expect(trigger.querySelector("[data-assistant-busy-ring]")).toBeNull());
+      expect(within(trigger).queryByText(/만드는 중/)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("도는 테두리 — 지금 보던 대화가 판을 닫은 채 끝나도 15초마다 물어 풀린다(재리뷰 2026-11-09)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ["setInterval", "clearInterval"] });
+    try {
+      let running = true;
+      // 목록은 도는 줄 모름(running 없음) — 저장본만 '도는 중'이라 목록 쪽 다시 읽기로는 풀리지 않는다.
+      routes["GET /api/assistant/threads"] = () => json({ enabled: true, threads: [{ id: "T1", title: "지난 질문", level: "normal", updatedAt: NOW }] } satisfies ThreadListResponse);
+      routes["GET /api/assistant/threads/T1"] = () =>
+        json({
+          thread: { id: "T1", title: "지난 질문", level: "normal", updatedAt: NOW },
+          messages: [{ id: "M1", question: "지난 본문", level: "normal", createdAt: NOW, report: null, error: running ? null : "끝내지 못했습니다", running, queries: [], steps: [] }],
+        } satisfies ThreadDetailResponse);
+      routes["GET /api/assistant/threads/T1?status=1"] = () => json({ running });
+      render(<AssistantLauncher />);
+      fireEvent.click(screen.getByRole("button", { name: /비서/ }));
+      const dialog = await findDialog();
+      fireEvent.click(await within(dialog).findByRole("button", { name: /^지난 질문/ }));
+      expect(await within(dialog).findByText(/아직 답을 만드는 중입니다/)).toBeInTheDocument();
+      fireEvent.click(within(dialog).getByRole("button", { name: "닫기" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      const trigger = screen.getByRole("button", { name: /비서/ });
+      expect(trigger.querySelector("[data-assistant-busy-ring]")).not.toBeNull();
+
+      running = false;
+      await act(async () => {
+        vi.advanceTimersByTime(15_000);
+      });
+      await waitFor(() => expect(calls.some((c) => c.method === "GET" && c.url === "/api/assistant/threads/T1?status=1")).toBe(true));
+      await waitFor(() => expect(trigger.querySelector("[data-assistant-busy-ring]")).toBeNull());
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("'바로 결과 보기'(원장 2026-11-06) — 조회를 하나 마친 뒤 누를 수 있고, 서버에 알린 뒤 그 자리에 보고서를 받는다", async () => {

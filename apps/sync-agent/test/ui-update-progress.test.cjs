@@ -28,10 +28,14 @@ function show(ui,progress){
   return{state:ui.el('update-state').textContent,text,bar,hidden:ui.el('update-progress-wrap').hidden};
 }
 
-test('복사·압축 해제 = 용량(MB) + 파일 수 · 퍼센트는 용량(원장 화면 "67 / 10,021개 파일 · 0%"가 용량으로는 22%)',()=>{
+test('복사·압축 해제 = 용량(MB) + 파일 수 · 퍼센트는 둘의 평균(원장 화면 "67 / 10,021개 파일 · 0%" → 11% · 2026-11-09)',()=>{
   const ui=mount();
   let r=show(ui,{phase:'copying',completed:67,total:10021,bytes:348*MB,totalBytes:1521*MB,version:'1.0.19'});
-  assert.deepEqual(r,{state:'그대로 쓸 파일 복사 중',text:'348.0 / 1,521.0 MB · 67 / 10,021개 파일 · 22%',bar:22,hidden:false});
+  assert.deepEqual(r,{state:'그대로 쓸 파일 복사 중',text:'348.0 / 1,521.0 MB · 67 / 10,021개 파일 · 11%',bar:11,hidden:false});
+  // 큰 파일이 앞에 몰린 모양(파일 10% · 용량 82%) — 용량만이면 81%, 평균이면 45%(80%대에 오래 머물지 않는다)
+  assert.equal(show(ui,{phase:'copying',completed:1002,total:10021,bytes:1247*MB,totalBytes:1521*MB,version:'1.0.19'}).bar,45);
+  // 파일은 반인데 용량은 거의 끝 — 평균이라 92%에 붙지 않는다
+  assert.equal(show(ui,{phase:'copying',completed:5010,total:10021,bytes:1400*MB,totalBytes:1521*MB,version:'1.0.19'}).bar,71);
   r=show(ui,{phase:'copying',completed:0,total:10021,bytes:0,totalBytes:1521*MB,version:'1.0.19'});
   assert.equal(r.text,'0.0 / 1,521.0 MB · 0 / 10,021개 파일 · 0%');
   r=show(ui,{phase:'copying',completed:10021,total:10021,bytes:1521*MB,totalBytes:1521*MB,version:'1.0.19'});
@@ -39,7 +43,7 @@ test('복사·압축 해제 = 용량(MB) + 파일 수 · 퍼센트는 용량(원
   r=show(ui,{phase:'extracting',completed:0,total:10021,bytes:0,totalBytes:1521*MB,version:'1.0.19'});
   assert.deepEqual(r,{state:'압축 해제 · 파일 검증 중',text:'0.0 / 1,521.0 MB · 0 / 10,021개 파일 · 0%',bar:0,hidden:false});
   r=show(ui,{phase:'extracting',completed:67,total:10021,bytes:348*MB,totalBytes:1521*MB,version:'1.0.19'});
-  assert.equal(r.text,'348.0 / 1,521.0 MB · 67 / 10,021개 파일 · 22%');
+  assert.equal(r.text,'348.0 / 1,521.0 MB · 67 / 10,021개 파일 · 11%');
 });
 
 test('용량 없는 옛 값 · 전체 크기 0 → 종전처럼 파일 수',()=>{

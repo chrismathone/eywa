@@ -28,6 +28,10 @@
   새 앱 + 옛 DB(순서 위반)면 관문 경로가 처리 함수를 부르지 않는다('DB 적용 전').
 - 되돌리기 = `scripts/_oneoff/revert-s2_0033-withdrawal-refund-decision-gate.sql`(앱 먼저 · 적용 뒤 지문일 때만 · 진행 중 '환불 결정 대기'나 승인이 끝났는데 처리 안 된 묶음이 있으면 멈춤 · 처리 함수 = s2_0030 본문 · 연결·release = s2_0025 본문 · 결정 표·칸은 남김 · 되돌린 뒤 지문 확인).
 
+## 2026-11-09 원생 충성도 · 가족 동시 재원 (s2_0035 · 운영 적용 2026-11-09)
+
+`s2_0035_student_loyalty_factors.sql` — 사용자가 적용 프로젝트를 `bigshols-projects/eywa`로 지정. 기존 기여도 합계·배점·학생 자료를 변경하지 않고 정밀분석 확인 기록용 표만 추가했다. 서버에서 지점·학생·작성 권한을 확인하며 기록은 새 버전으로 추가한다. RLS 켜짐, anon/authenticated 직접 접근 없음, service_role은 SELECT/INSERT만 허용. 적용 직후 빈 표와 권한을 확인했다. 되돌릴 때는 앱을 이전 배포로 복귀하고 표·기록은 보존한다.
+
 ## 2026-11-09 학원 비서 — 동시에 3개 · '바로 결과 보기' (s2_0034 · ✅ 운영 적용 2026-11-09 14:52 · 원장 *"sql은 그냥 승인"* · 직결(node · 파일 그대로 한 거래) · 가지 번호 s2_0033 → 병합 때 s2_0034(main의 s2_0033 = 금액 이월 연쇄))
 
 `s2_0034_assistant_parallel_finish.sql` — 원장 2026-11-09 '동시에 3개까지'(*"대화를 여러개 동시에 시작할 수 있는지 … 정상적인 동작으로 인식되게"*) · *"'여기서 조회 끝내고 바로 결과 출력' 버튼 만들자"*. `assistant_messages`에 `run_slot`(1~3) · `client_ref` · `wrap_requested_at` · 부분 고유 색인 둘(사람·자리 / 대화 — 둘 다 `status='running' and cancel_requested_at is null`) · 옛 사람당 하나 색인 삭제 · 비서 역할 연결 상한 4 → 12. 설계 = [`docs/features/academy-assistant.md`](../../docs/features/academy-assistant.md) §7-3.
