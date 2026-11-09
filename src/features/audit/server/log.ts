@@ -55,8 +55,8 @@ export const AUDIT_ACTIONS = {
   student_care_save: "상담 약속·인계 처리",
   // 원생 흐름 분석 '다시 분석'(s2_0027 · 명시 버튼 — 유료 AI 호출) — 종류·결과는 metadata(describe.ts가 한글로).
   student_flow_insight_refresh: "원생 흐름 분석 다시 분석",
-  student_contribution_refresh: "원생 충성도 집계·마감",
-  student_contribution_settings_save: "원생 충성도 배점 저장",
+  student_contribution_refresh: "원생 로열티 집계·마감",
+  student_contribution_settings_save: "원생 로열티 배점 저장",
   student_contribution_signal_cancel: "원생 긍정 신호 판정 취소",
   student_contribution_signal_rejudge: "원생 긍정 신호 재판정 요청",
   student_contribution_referral_backfill: "지난 원생 소개 연결",

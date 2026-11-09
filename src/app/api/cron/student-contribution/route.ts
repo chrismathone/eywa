@@ -17,7 +17,7 @@ export async function GET(request: Request) {
   try {
     const result = await refreshStudentContribution(createAdminClient(), tenant, { nightly: true, deadline: Date.now() + 250_000 });
     if (result.written) await logActionAs({ tenantId: tenant, actorName: "system:student-contribution" },
-      { action: "student_contribution_refresh", targetType: "student_contribution", targetLabel: "원생 충성도", metadata: { ...result, trigger: "cron" } });
+      { action: "student_contribution_refresh", targetType: "student_contribution", targetLabel: "원생 로열티", metadata: { ...result, trigger: "cron" } });
     return NextResponse.json(result);
   } catch (error) {
     console.error("[student-contribution] 집계 실패", error);

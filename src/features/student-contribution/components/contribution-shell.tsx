@@ -16,7 +16,7 @@ export function ContributionHeader({ title, description, active, canConfigure, a
       <div className="space-y-2"><h1 className="text-xl font-bold tracking-tight">{title}</h1><p className="max-w-3xl text-sm leading-relaxed">{description}</p></div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </div>
-    <nav aria-label="원생 충성도 메뉴" className="flex gap-5 overflow-x-auto border-b border-line">
+    <nav aria-label="원생 로열티 메뉴" className="flex gap-5 overflow-x-auto border-b border-line">
       {tabs.filter((tab) => canConfigure || tab.key === "ranking" || tab.key === "students" || tab.key === "ontology").map((tab) => <Link key={tab.key} href={tab.href}
         aria-current={active === tab.key ? "page" : undefined}
         className={`shrink-0 border-b-2 px-1 pb-3 text-sm transition-colors focus-visible:outline-primary ${active === tab.key ? "border-primary font-bold text-primary" : "border-transparent hover:border-line-strong"}`}><ContributionNavigationHint label={tab.label} /></Link>)}

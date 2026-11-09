@@ -111,6 +111,32 @@ describe("금액 이월 배선", () => {
     expect(options).not.toMatch(/\brow\b/);
   });
 
+  it("🔴 확정·배분 저장이 보낸 이월을 무효로 만들면 알린다 — 저장 전 상태를 먼저 읽고 뒤와 비교(2026-11-09)", () => {
+    const confirm = read(`${Q}actions.ts`);
+    // 개별 확정 · 반 일괄 확정 — 저장(update) 전에 상태를 읽는다.
+    const single = confirm.slice(confirm.indexOf("export async function confirmSessionTerm"));
+    expect(single.indexOf("loadCarryOutStates(supabase, [id])")).toBeLessThan(single.indexOf(".update({"));
+    expect(single).toContain("carryBreaksAfter(supabase, carryBefore)");
+    const bulk = confirm.slice(confirm.indexOf("export async function confirmClassTerms"), confirm.indexOf("export async function confirmSessionTerm"));
+    expect(bulk.indexOf("loadCarryOutStates(supabase, targets.map((r) => r.id))")).toBeLessThan(bulk.indexOf("for (const [n, ids] of byN)"));
+    expect(bulk).toContain("carryBreaksAfter(supabase, carryBefore)");
+    // 배분(항목 연결 · 자유) — 저장 함수(rpc) 전에 읽는다.
+    const alloc = read(`${Q}receipt-allocation-actions.ts`);
+    for (const rpc of ['db.rpc("save_session_receipt_allocations", {', 'db.rpc("save_session_receipt_allocations_free", {']) {
+      const at = alloc.indexOf(rpc);
+      expect(alloc.lastIndexOf("const carryBefore = await loadCarryOutStates(db, rows.map((row) => row.termId));", at)).toBeGreaterThan(0);
+    }
+    // 화면은 경고로 띄운다.
+    expect(read("src/app/(shell)/billing/_components/session-terms-state.tsx")).toContain("term.carryWarning");
+    expect(read("src/app/(shell)/billing/_components/receipt-allocation-dialog.tsx")).toContain("toast.warning(result.warning");
+  });
+
+  it("🔴 이 줄이 보낸 이월을 줄이거나 취소하면 이 달 줄을 그 자리에서 다시 판정한다(2026-11-09)", () => {
+    const actions = read(`${Q}money-carryover-actions.ts`);
+    expect(actions).toContain('syncCarrySessionsAfter(db, { termIds: [c.termId] }, user.id, "carry_out_change")');
+    expect(actions).toContain("c.current && amount < c.current.amount");
+  });
+
   it("서버 액션이 더 받은 몫·다음 달 반을 다시 구한다(#77) — 화면 값을 믿지 않는다", () => {
     const actions = read(`${Q}money-carryover-actions.ts`);
     expect(actions).toContain("carrySurplus(row)");

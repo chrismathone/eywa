@@ -21,7 +21,7 @@ import { isVirtualTermId, monthRosterKey, parseVirtualTermId, virtualTermId } fr
 import { loadMonthRoster, type MonthRoster } from "./month-roster";
 import { MATERIALIZE_ERROR, materializeVirtualTerms } from "./term-materialize";
 import { autoReallocateAfterConfirm } from "./auto-reallocate";
-import { applyCarrySync, syncCarrySessionsAfter } from "./carry-session-sync";
+import { applyCarrySync, carryBreaksAfter, loadCarryOutStates, syncCarrySessionsAfter } from "./carry-session-sync";
 
 const DOW: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 
@@ -35,6 +35,8 @@ export type SessionTermPatch = {
   quantityBasis?: SessionQuantityBasis;
   /** 받은 금액 이월 때문에 확정 시수를 자동으로 맞췄다(원장 2026-10-07) — 화면이 한 번 알린다(`SessionTermsState.apply`). */
   carryNotice?: string;
+  /** 이 확정으로 이 줄이 다음 달로 보낸 이월이 무효가 됐다(2026-11-09) — 화면이 경고로 알린다(조용히 다음 달 실납에서 빠지지 않게). */
+  carryWarning?: string;
 };
 /**
  * `created` = 이번 저장이 **회차 행을 새로 만든** 수(출석부 줄인데 행이 없던 학생 — `term-materialize.ts`). 0보다 크면 응답의 `terms`는
@@ -376,6 +378,8 @@ export async function confirmClassTerms(
   }
 
   const now = new Date().toISOString();
+  // 보낸 이월이 있는 줄의 저장 전 상태 — 이번 확정이 그 이월을 무효로 만들면 알린다(대부분 조회 한 번으로 끝).
+  const carryBefore = await loadCarryOutStates(supabase, targets.map((r) => r.id));
   const studentOf = (r: typeof targets[number]) => (Array.isArray(r.invoice) ? r.invoice[0] : r.invoice)?.student_id;
   // 월 정액·회차 미입력이면 각자 live plan — 위에서 읽은 것을 그대로 쓴다(같은 학생 집합).
   const liveMonthlyPlans: Awaited<ReturnType<typeof loadLivePlans>> | null = pricingMode === "monthly" && override === null ? livePlans : null;
@@ -409,7 +413,9 @@ export async function confirmClassTerms(
   // 배분을 저장해 둔 청구서는 사람이 다시 저장할 일만 대신한다(원장 2026-10-06) — 응답 전에 끝내야 화면이 다시 읽을 때 정상이다.
   await autoReallocateAfterConfirm(supabase, terms.map((t) => t.id), "confirm_class");
   // 받은 금액 이월이 실린 줄은 확정 시수를 그만큼 맞춘다(원장 2026-10-07) — 응답의 행 값도 고친 값으로.
-  const synced = applyCarrySync(terms, await syncCarrySessionsAfter(supabase, { termIds: terms.map((t) => t.id) }, user.id, "confirm_class"));
+  const syncedRaw = applyCarrySync(terms, await syncCarrySessionsAfter(supabase, { termIds: terms.map((t) => t.id) }, user.id, "confirm_class"));
+  const carryWarnings = await carryBreaksAfter(supabase, carryBefore);
+  const synced = syncedRaw.map((t) => (carryWarnings.has(t.id) ? { ...t, carryWarning: carryWarnings.get(t.id) } : t));
 
   // 🔴 한 번에 반 전체 청구 회차·단가를 못박는 자리 = 돈이 실제로 결정되는 지점. 단가·회차를 남긴다
   //    (`invoice_create`가 amountTotal을 남기는 것과 같은 결 — 금액 없이 "누가 눌렀다"만 남기면
@@ -468,11 +474,15 @@ export async function confirmSessionTerm(
   }
   // 반·이전 확정값을 함께 읽는다 — classId는 뷰어가 반 이름으로 풀어 주고(감사로그 '대상'), 이전 확정값은
   // "얼마에서 얼마로 고쳤나"의 답이다(행에는 마지막 값만 남는다).
-  const { data: before, error: readError } = await supabase
-    .from("invoice_session_terms")
-    .select("class_id, subject, confirmed_sessions, unit_price, pricing_mode, class:class_id ( english_track )")
-    .eq("id", id)
-    .maybeSingle();
+  // 보낸 이월이 있으면 저장 전 상태를 함께 적어 둔다 — 이번 확정이 그 이월을 무효로 만들면 알린다(앞 읽기와 나란히 — B4).
+  const [{ data: before, error: readError }, carryBefore] = await Promise.all([
+    supabase
+      .from("invoice_session_terms")
+      .select("class_id, subject, confirmed_sessions, unit_price, pricing_mode, class:class_id ( english_track )")
+      .eq("id", id)
+      .maybeSingle(),
+    loadCarryOutStates(supabase, [id]),
+  ]);
   if (readError) return { error: readError.message };
   if (!before) return { error: "대상을 찾을 수 없습니다" };
   const cls = Array.isArray(before.class) ? before.class[0] : before.class;
@@ -496,10 +506,12 @@ export async function confirmSessionTerm(
   if (!saved) return { error: "확정할 대상을 찾을 수 없습니다" };
   await autoReallocateAfterConfirm(supabase, [id], "confirm");
   // 받은 금액 이월이 실린 줄은 확정 시수를 그만큼 맞춘다(원장 2026-10-07) — 사람이 '해제 → 시수 올림 → 다시 확정'하던 일.
-  const synced = applyCarrySync(
+  const syncedRaw = applyCarrySync(
     [{ id, confirmedSessions: sessions, unitPrice, pricingMode, amount, confirmedAt, quantityBasis: "attendance_units" as const }],
     await syncCarrySessionsAfter(supabase, { termIds: [id] }, user.id, "confirm"),
   );
+  const carryWarnings = await carryBreaksAfter(supabase, carryBefore);
+  const synced = syncedRaw.map((t) => (carryWarnings.has(t.id) ? { ...t, carryWarning: carryWarnings.get(t.id) } : t));
 
   const hadPrev = before?.confirmed_sessions !== null && before?.confirmed_sessions !== undefined;
   finishTermMutation({

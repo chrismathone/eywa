@@ -22,8 +22,8 @@ export function FactorWorkspace({data}:{data:Data}) {
   };
   return <main className={styles.root} aria-busy={pending}>
     <header className={styles.hero}>
-      <div><Link href={`/student-contribution/${data.student.id}`} className={styles.back}>← 충성도 점수·상위 %</Link>
-        <p className={styles.eyebrow}>STUDENT INSIGHT · 42 FACTORS</p><h1>{data.student.name}의 충성도 정밀분석</h1>
+      <div><Link href={`/student-contribution/${data.student.id}`} className={styles.back}>← 로열티 점수·상위 %</Link>
+        <p className={styles.eyebrow}>STUDENT INSIGHT · 42 FACTORS</p><h1>{data.student.name}의 로열티 정밀분석</h1>
         <p>수익부터 관계·지원까지, 기록의 근거를 따라 학생을 이해합니다.</p></div>
       <form onSubmit={e=>{e.preventDefault();start(()=>router.push(`?month=${month}${typeof window!=="undefined"&&new URLSearchParams(window.location.search).has("embed")?"&embed=1":""}`));}}>
         <label htmlFor="factor-month">분석 월</label><div><input id="factor-month" type="month" required min="2000-01" max={data.today.slice(0,7)} value={month} onChange={e=>setMonth(e.target.value)} /><button disabled={pending}>조회</button></div>

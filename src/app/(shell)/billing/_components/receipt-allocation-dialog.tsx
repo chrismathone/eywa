@@ -83,6 +83,8 @@ function AllocationDialog({ invoiceId, studentName, data: initialData, onClose }
         const byId = new Map(data.terms.map((t) => [t.id, t]));
         const result = await saveFreeReceiptAllocation(invoiceId, data.source, rows.map((r) => ({ ...r, confirmedAt: byId.get(r.termId)?.confirmedAt ?? null, baseAmount: byId.get(r.termId)?.amount ?? null })));
         if (result.error) { setError(result.error); return; }
+        // 이 배분으로 다음 달로 보낸 이월이 무효가 됐으면 알린다(2026-11-09).
+        if (result.warning) toast.warning(result.warning, { duration: 15000 });
         publishRecordSaved("billing:session-terms");
         router.refresh();
         onClose();
@@ -102,6 +104,7 @@ function AllocationDialog({ invoiceId, studentName, data: initialData, onClose }
         if (result.error) { setError(result.error); return; }
         // 이 저장으로 지난 달 이월이 실려 확정 시수를 자동으로 맞췄으면 알린다(원장 2026-10-07).
         if (result.notice) toast.success(result.notice);
+        if (result.warning) toast.warning(result.warning, { duration: 15000 });
         publishRecordSaved("billing:session-terms");
         router.refresh();
         onClose();
