@@ -23,7 +23,7 @@ import {
 
 const API = "/api/assistant";
 /**
- * 서버가 아직 만드는 중인 답(다른 창에서 물은 질문 · 끊긴 뒤)을 다시 읽는 간격과 횟수 — 서버가 '도는 중'으로 보는 시간(5분)까지 잇는다
+ * 서버가 아직 만드는 중인 답(다른 창에서 물은 질문 · 끊긴 뒤)을 다시 읽는 간격과 횟수 — 서버가 '도는 중'으로 보는 시간(15분)까지 잇는다
  * (3분에서 끊으면 늦게 끝난 답이 계속 도는 표시로 남았다 — 적대 리뷰 2026-11-06).
  */
 const POLL_MS = 3000;
@@ -46,10 +46,12 @@ async function errorText(res: Response, fallback: string): Promise<string> {
 }
 
 const OFFLINE = "인터넷 연결을 확인해 주세요.";
+/** 이름 바꾸기 응답을 기다리는 시간. */
+const RENAME_TIMEOUT_MS = 15_000;
 
 /**
  * 서버에 '멈춤'을 알린다 — 번호로 보내고, 실패하면(세션 만료 · 500 · 망) '지금 도는 내 질문'(`current` — 사람당 하나)으로 한 번 더.
- * 번호가 없으면 바로 `current`. 끝까지 실패해도 화면은 끊는다(서버는 고정 기한 250초에 스스로 멈춘다).
+ * 번호가 없으면 바로 `current`. 끝까지 실패해도 화면은 끊는다(서버는 고정 기한 760초에 스스로 멈춘다).
  * `keepalive` — 판을 닫거나 화면을 옮겨도 요청이 끝까지 간다(재리뷰 2026-11-06).
  */
 async function sendStop(messageId: string | null): Promise<void> {
@@ -262,8 +264,32 @@ export function useAssistant({ open }: { open: boolean }) {
     [nextKey],
   );
 
+  /** 대화 이름 바꾸기 — 실패하면 그 이유(한국어)를, 성공하면 null. 화면에는 서버가 정리한 이름을 쓴다. */
+  const renameThread = useCallback(async (threadId: string, title: string): Promise<string | null> => {
+    // 응답이 오지 않으면 15초에 끊는다 — 저장 중엔 Esc·취소가 막혀 편집 칸에 갇히지 않게(재리뷰 2026-11-09).
+    const timeout = new AbortController();
+    const timer = window.setTimeout(() => timeout.abort(), RENAME_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${API}/threads/${encodeURIComponent(threadId)}`, {
+        method: "PATCH",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+        signal: timeout.signal,
+      });
+      if (!res.ok) return await errorText(res, "이름을 바꾸지 못했습니다");
+      const body = (await res.json().catch(() => null)) as { title?: unknown } | null;
+      dispatch({ type: "thread/renamed", threadId, title: typeof body?.title === "string" && body.title ? body.title : title.trim() });
+      return null;
+    } catch {
+      return timeout.signal.aborted ? "응답이 없어 이름을 바꾸지 못했습니다. 다시 눌러 주세요." : OFFLINE;
+    } finally {
+      window.clearTimeout(timer);
+    }
+  }, []);
+
   // 서버가 아직 만드는 중인 답 — 보고 있는 동안 3초마다 '아직 도는지'만 묻고(`?status=1` — 가볍게), 끝났으면 대화 전체를 한 번 읽는다
-  // (최대 5분 — 서버가 '도는 중'으로 보는 시간 · 매번 표·차트 자료까지 받지 않게 — 재리뷰 2026-11-06).
+  // (최대 15분 — 서버가 '도는 중'으로 보는 시간 · 매번 표·차트 자료까지 받지 않게 — 재리뷰 2026-11-06).
   const current = currentConversation(state);
   const pollThreadId =
     open && current.threadId && current.load !== "loading" && !isConversationStreaming(state, current) && current.turns.some((t) => t.status === "running" || t.status === "recovering")
@@ -277,7 +303,7 @@ export function useAssistant({ open }: { open: boolean }) {
       count += 1;
       if (count > POLL_MAX) {
         window.clearInterval(id);
-        // 마지막으로 한 번 전체를 읽는다 — 5분이 지났으면 서버는 그 줄을 '끝내지 못함'으로 보인다.
+        // 마지막으로 한 번 전체를 읽는다 — 15분이 지났으면 서버는 그 줄을 '끝내지 못함'으로 보인다.
         void loadConversation(pollThreadId, { quiet: true });
         return;
       }
@@ -298,5 +324,5 @@ export function useAssistant({ open }: { open: boolean }) {
     return () => window.clearInterval(id);
   }, [pollThreadId, loadConversation]);
 
-  return { state, current, stopping, loadThreads, loadConversation, selectThread, newConversation, ask, stop, deleteThread };
+  return { state, current, stopping, loadThreads, loadConversation, selectThread, newConversation, ask, stop, deleteThread, renameThread };
 }
