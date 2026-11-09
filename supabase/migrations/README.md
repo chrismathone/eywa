@@ -12,6 +12,13 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-11-09 업무 완성도 — 의무 장부 duty_items · duty_daily (s2_0039 · ⏳ 미적용 · 앱보다 먼저)
+
+`s2_0039_duty_ledger.sql` — 학생×종류×회차의 해야 할 일(분모)과 완료(분자)를 한 표에([결정](../../docs/decisions/duties.md)). 표 2개 + 스키마 `duties_private` + RPC 6개(`duty_upsert_items` · `duty_resolve_items` · `duty_void_stale` · `duty_escalate` · `duty_snapshot` · `duty_counts`) — 전부 service_role 전용(정책 0개 · 0377a 방식) · 늦음은 `staff_tasks_private.open_task`로 기존 할 일(`duty_late`)을 연다.
+- 확인(2026-11-09): 로컬 PGlite 0.3.16(PG17)에 스텁 표 + 0377a 함수 원문 + 이 파일을 올려 RPC 여섯 개 한 바퀴(열기 멱등 · 담당 갱신 · done/void/되살림 · 지점 격리 · 늦음 → 할 일 열고 닫기 · 스냅숏 · 집계) 통과(`work/pglite-smoke/smoke.mjs`, gitignore).
+- 적용 뒤 확인: `select count(*) from duty_items` (cron `/api/cron/duties`가 5·35분에 돌면 그날 행이 생긴다) · 강사 홈에 '오늘 내 업무' 줄.
+- 되돌리기: 스키마 `duties_private`와 표 `duty_daily` · `duty_items`를 지운다. 할 일 `duty_late` 행은 닫힌 기록이라 그대로 둬도 된다.
+
 ## 2026-11-06 퇴원보고서: 원장 환불 결정 전에는 처리하지 않는다 · 데스크 지정 · 완료 입력 제한 (s2_0037 · ⏳ 미적용 · 🔴 s2_0030 적용 뒤에만 · 앱보다 먼저 · 가지 번호 s2_0031 → s2_0033 → s2_0036 → 병합 때 s2_0037(main의 s2_0031 = 학원 비서 · s2_0033 = 금액 이월 연쇄 · s2_0034 = 학원 비서 마무리 · s2_0035 = 원생 충성도 · s2_0036 = 학원 비서 의견))
 
 `s2_0037_withdrawal_refund_decision_gate.sql` — 원장 2026-11-06 결정 셋(머리 주석에 원문 · [결정](../../docs/decisions/withdrawal-reports.md)).
