@@ -41,6 +41,9 @@ export function SessionTermsState({ rows, children }: { rows: (Pick<SessionTermR
     // 받은 금액 이월 때문에 확정 시수를 자동으로 맞춘 줄(원장 2026-10-07) — 친 값과 다른 숫자가 서므로 한 번 알린다.
     const notices = terms.flatMap((term) => (term.carryNotice ? [term.carryNotice] : []));
     if (notices.length) toast.success(notices.join(" · "));
+    // 이 확정으로 다음 달로 보낸 이월이 무효가 된 줄(2026-11-09) — 조용히 다음 달 실납에서 빠지지 않게 경고로.
+    const warnings = terms.flatMap((term) => (term.carryWarning ? [term.carryWarning] : []));
+    if (warnings.length) toast.warning(warnings.join(" · "), { duration: 15000 });
     if (affected.size) refresh();
     publishRecordSaved("billing:session-terms");
   }
