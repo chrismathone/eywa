@@ -62,10 +62,11 @@ describe("school records",()=>{
   });
   it("supports current/improvement/mixed modes, and a decline is known zero improvement",()=>{
     const s=student();s.facts!.school={current:80,improvement:10,pairs:1,subjects:1,latest:today};
-    expect(rankingValues(s,config).school.value).toBe(50);
+    expect(rankingValues(s,config).school.value).toBe(65);
+    expect(rankingValues(s,{...config,gradeMode:"improvement"}).school.value).toBe(50);
     expect(rankingValues(s,{...config,gradeMode:"current"}).school.value).toBe(80);
     expect(rankingValues(s,{...config,gradeMode:"both"}).school.value).toBe(65);
-    s.facts!.school.improvement=-10;expect(rankingValues(s,config).school.value).toBe(0);
+    s.facts!.school.improvement=-10;expect(rankingValues(s,{...config,gradeMode:"improvement"}).school.value).toBe(0);
   });
 });
 describe("attendance and seminars",()=>{

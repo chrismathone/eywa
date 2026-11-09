@@ -14,6 +14,6 @@ export const rankingConfigSchema = z.object({
 export type RankingConfig = z.infer<typeof rankingConfigSchema>;
 export const DEFAULT_RANKING_CONFIG: RankingConfig = {
   weights: { tenure: 20, payment: 20, family: 40, seminar: 10, attendance: 5, school: 5 },
-  concurrentBonus: 0.25, extraSubjectBonus: 0.25, gradeMode: "improvement",
+  concurrentBonus: 0.25, extraSubjectBonus: 0.25, gradeMode: "both",
 };
 export const rankingConfig = (config: { ranking?: RankingConfig }) => config.ranking ?? DEFAULT_RANKING_CONFIG;
