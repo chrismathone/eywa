@@ -12,13 +12,13 @@ async function Heading({ studentId }: { studentId: string }) {
   const [students, gate] = await Promise.all([getContributionStudents(), getContributionGate()]);
   const student = students.find((s) => s.id === studentId && !s.is_test);
   if (!student) return null;
-  return <ContributionHeader title={`${student.name}의 충성도와 기록`} description="월별 점수와 계산 근거를 확인하세요." active="students" canConfigure={gate?.canConfigure}
+  return <ContributionHeader title={`${student.name}의 로열티와 기록`} description="월별 점수와 계산 근거를 확인하세요." active="students" canConfigure={gate?.canConfigure}
     actions={<StudentDetailActions studentId={studentId} />} />;
 }
 export function StudentOntologyPanel({ studentId, month }: { studentId: string; month?: string }) {
   return <div className="w-full min-w-0 space-y-5 pb-6">
     <Suspense fallback={<ConnectionSkeleton label="학생 기록" />}><Heading studentId={studentId} /></Suspense>
-    <Suspense fallback={<ConnectionSkeleton label="월별 충성도" />}><ContributionStudentPanel studentId={studentId} month={month} /></Suspense>
+    <Suspense fallback={<ConnectionSkeleton label="월별 로열티" />}><ContributionStudentPanel studentId={studentId} month={month} /></Suspense>
     <details key={studentId} id={`current-connections-${studentId}`} tabIndex={-1} className="group rounded-xl border border-line" aria-label="현재 연결">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 focus-visible:outline-primary [&::-webkit-details-marker]:hidden">
         <span><span className="block font-semibold">현재 연결</span><span className="mt-1 block text-xs">현재 수강·담당자, 상담·메모와 최근 기록 요약</span></span>

@@ -15,6 +15,6 @@ export function StudentDetailActions({ studentId }: { studentId: string }) {
       (target ?? panel).scrollIntoView({ block: "start" });
       (target ?? panel).focus({ preventScroll: true });
     }}>최근 기록 요약</button>
-    <EmbedLink href={contributionListHref(params.get("list"))} className="rounded-lg border border-line px-3 py-2 text-sm hover:bg-muted">전체 충성도 목록</EmbedLink>
+    <EmbedLink href={contributionListHref(params.get("list"))} className="rounded-lg border border-line px-3 py-2 text-sm hover:bg-muted">전체 로열티 목록</EmbedLink>
   </div>;
 }

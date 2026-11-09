@@ -134,6 +134,64 @@ export async function loadStudentCarryRows(db: Db, period: string, studentId: st
   return studentRows(db, period, await liveInvoiceIds(db, period, studentId), studentId);
 }
 
+/** 낮춘 시수 되돌리기의 결과 — 시수·배분 모두 원래대로 · 시수만 되돌림(배분 재확인) · 되돌리지 못함(낮춘 시수로 남음). */
+export type CarryRevertResult = "reverted" | "reverted_needs_allocation" | "stuck";
+
+/**
+ * 받은 이월을 다음 달로 넘기며 **확정 시수를 낮춘다**(이월 창 — 순수 모듈 `planCarryUnreflect` 🔑, 원장 2026-11-09).
+ * 자동 맞춤(`raiseRows`)과 같은 길: 낮춘 뒤 그 청구서의 배분이 자동으로 다시 확정될 때만 · 읽은 값 그대로일 때만 저장 · 재확정에 실패하면
+ * 되돌린다. 성공하면 `revert`(이월 저장이 실패했을 때 되돌리기 — `reverted` 시수·배분 모두 원래대로 · `reverted_needs_allocation`
+ * 시수는 되돌렸지만 배분 재확정 실패 · `stuck` 시수를 되돌리지 못함)를 돌려준다.
+ * 실패는 한글 사유 — 되돌리지 못해 낮춘 시수로 남았으면 `stuck`(사람이 회차 확정에서 확인해야 한다 · 숨기지 않는다).
+ */
+export async function lowerConfirmedForCarry(
+  db: Db,
+  row: SessionTermRow,
+  next: { sessions: number; amount: number },
+  userId: string,
+): Promise<{ ok: true; revert: () => Promise<CarryRevertResult> } | { ok: false; error: string; stuck?: true }> {
+  const busy = "확정 시수를 낮추지 못했습니다 — 그 사이 회차 확정이 바뀌었을 수 있습니다. 창을 다시 열어 확인해 주세요";
+  if (!row.invoiceId || !UUID.test(row.id) || row.confirmedSessions == null || row.amount == null) return { ok: false, error: busy };
+  try {
+    const [autos, holder] = await Promise.all([
+      loadAutoInvoices(db, [row.invoiceId]),
+      db.from("invoice_session_terms").select("confirmed_by").eq("id", row.id).maybeSingle(),
+    ]);
+    const entry = autos.get(row.invoiceId);
+    const hypothetical = entry?.terms.map((t) => (t.id === row.id ? { ...t, confirmed_sessions: next.sessions, amount: next.amount } : t));
+    if (!entry?.inv || !hypothetical || planAutoReallocation(entry.inv, hypothetical).kind !== "save") {
+      return { ok: false, error: "이 청구서는 확정 시수를 낮춘 뒤 수납 배분을 자동으로 다시 맞출 수 없습니다 — 회차 확정에서 시수를 낮추고 배분을 저장한 뒤 더 받은 몫을 넘겨 주세요" };
+    }
+    const now = new Date().toISOString();
+    const { data, error } = await db.from("invoice_session_terms")
+      .update({ confirmed_sessions: next.sessions, amount: next.amount, confirmed_by: userId, confirmed_at: now })
+      .eq("id", row.id).eq("confirmed_sessions", row.confirmedSessions).eq("amount", row.amount).eq("unit_price", row.unitPrice as number)
+      .select("id").maybeSingle();
+    if (error) logDbError(error, "billing.session-terms.carryUnreflect.update", { termId: row.id });
+    if (error || !data) return { ok: false, error: busy };
+    const before = { confirmed_sessions: row.confirmedSessions, amount: row.amount, confirmed_by: (holder.data as { confirmed_by: string | null } | null)?.confirmed_by ?? null, confirmed_at: row.confirmedAt };
+    // 되돌리기 — 낮춘 값 그대로일 때만(0행 = 그 사이 누가 고침 → 되돌리지 못함) · 되돌린 뒤 배분도 다시 맞춰야 끝이다.
+    const revert = async (): Promise<CarryRevertResult> => {
+      const { data: back, error: revertError } = await db.from("invoice_session_terms").update(before)
+        .eq("id", row.id).eq("confirmed_sessions", next.sessions).eq("amount", next.amount).select("id").maybeSingle();
+      if (revertError) logDbError(revertError, "billing.session-terms.carryUnreflect.revert", { termId: row.id });
+      if (revertError || !back) return "stuck";
+      return (await autoReallocateAfterConfirm(db, [row.id], "carry_unreflect_revert")).saved > 0 ? "reverted" : "reverted_needs_allocation";
+    };
+    const realloc = await autoReallocateAfterConfirm(db, [row.id], "carry_unreflect");
+    if (realloc.saved === 0) {
+      const back = await revert();
+      if (back === "reverted") return { ok: false, error: "확정 시수를 낮춘 뒤 수납 배분을 다시 맞추지 못해 되돌렸습니다. 잠시 뒤 다시 시도해 주세요" };
+      if (back === "reverted_needs_allocation") return { ok: false, error: `확정 시수는 ${row.confirmedSessions}(으)로 되돌렸지만 수납 배분을 다시 맞추지 못했습니다 — 회차 확정에서 배분을 다시 저장해 주세요` };
+      return { ok: false, stuck: true, error: `확정 시수를 ${next.sessions}(으)로 낮춘 뒤 수납 배분을 다시 맞추지 못했고 되돌리지도 못했습니다 — 회차 확정에서 확정 시수를 확인하고 배분을 다시 저장해 주세요` };
+    }
+    return { ok: true, revert };
+  } catch (error) {
+    logDbError(error, "billing.session-terms.carryUnreflect", { termId: row.id });
+    return { ok: false, error: busy };
+  }
+}
+
 type Planned = { row: SessionTermRow; plan: Extract<ReturnType<typeof planCarrySessionSync>, { kind: "adjust" }>; invoiceId: string };
 
 /**

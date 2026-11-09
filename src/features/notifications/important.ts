@@ -24,6 +24,9 @@ export const IMPORTANT_NOTIFICATION_TYPES: readonly string[] = [
   // 않는다(같은 실패 모양으로 "7월 퇴원 152명"이 2주 넘게 읽혔다). 수신자는 master 1명, 발화는 하루 최대
   // 1회이고 그것도 **실제로 깨진 날에만** 울린다 → 경보 피로 위험이 report_send_failed보다도 낮다.
   "makeedu_login_failed",
+  // 연동 PC 신호 끊김(2026-11-09)도 같은 "아무도 모르는" 계열 — 11-06 발송이 1시간 40분 멈췄는데 원장이 물어보기 전까지 몰랐다.
+  // 받는 사람은 그 지점 원장 · 끊김 한 번에 한 번(지워도 다시 안 울림) · 09~24시 · 원장이 끈 연동은 제외 → 경보 피로 위험이 낮다.
+  "sync_agent_offline",
 ];
 
 /**

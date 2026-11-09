@@ -89,6 +89,28 @@ describe("금액 이월 배선", () => {
     expect(read("src/features/attendance/class-billing.ts")).toContain("carryOutValid({ ...source, carryIns: takesIn ? carry.ins.get(inKey) : undefined }, sent)");
   });
 
+  it("🔴 받은 이월 다시 넘기기(2026-11-09) — 더 받은 몫을 넘는 금액은 서버가 시수를 낮추고(이월 저장 전) 저장이 실패하면 되돌린다", () => {
+    const actions = read(`${Q}money-carryover-actions.ts`);
+    expect(actions).toContain("planCarryUnreflect(c.row, amount)");
+    const lower = actions.indexOf("await lowerConfirmedForCarry(db, c.row, unreflect, user.id)");
+    const rpc = actions.indexOf('db.rpc("save_session_term_money_carryover"');
+    expect(lower).toBeGreaterThan(0);
+    expect(rpc).toBeGreaterThan(lower); // DB 함수 상한이 낮춘 확정액으로 본다
+    // 이월 저장이 실패하면 되돌리고, 되돌리지 못하면 숨기지 않는다(안내 + 감사로그 stuck).
+    expect(actions).toContain("const back = error && lowered?.ok ? await lowered.revert() : null;");
+    expect(actions).toContain('if (back === "stuck" || back === "reverted_needs_allocation")');
+    expect(actions).toContain(`await logUnreflect(c, unreflect, amount, { stuck: true, stage: "carry", revert: back })`);
+    expect(actions).toContain(`await logUnreflect(c, unreflect, amount, { stuck: true, stage: "allocate", revert: "stuck" })`);
+    // 낮출 때는 창이 미리 보인 시수가 필수 · 출석부 시수보다 낮추면 사람이 확인해야 한다.
+    expect(actions).toContain("input.expectedSessions !== unreflect.sessions");
+    expect(actions).toContain("input.confirmBelowActual !== true");
+    // 상한 = 더 받은 몫 + 낮춰 넘길 수 있는 몫(창 값이 아니라 서버가 다시 구한 값).
+    expect(actions).toContain("surplus: c.surplus + c.unreflectable");
+    // 줄 전체(`row`)는 창으로 보내지 않는다 — 창 옵션은 필드를 골라 싣는다.
+    const options = actions.slice(actions.indexOf("export async function getMoneyCarryoverOptions"), actions.indexOf("export async function saveMoneyCarryover"));
+    expect(options).not.toMatch(/\brow\b/);
+  });
+
   it("서버 액션이 더 받은 몫·다음 달 반을 다시 구한다(#77) — 화면 값을 믿지 않는다", () => {
     const actions = read(`${Q}money-carryover-actions.ts`);
     expect(actions).toContain("carrySurplus(row)");

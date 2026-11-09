@@ -378,7 +378,7 @@ export const TABLES_B: readonly AssistantTableDoc[] = [
     name: "staff_contracts", label: "직원 계약",
     ko: "직원 계약 이력 — 회차별 계약 기간·조건",
     notes:
-      "kind: contract=계약 줄 · note=메모 줄(계약이 아님). seq = 계약 회차, start_date~end_date = 계약 기간, terms = 계약조건 원문(급여제·시간제 등 글자). '계약 만료 임박'은 kind='contract'의 end_date로 본다.",
+      "kind: contract=계약 줄 · note=메모 줄(계약이 아님 — terms에 '퇴사'가 들어간 note 줄 = 퇴사 기록(앱은 '퇴사 (날짜)' · 시트에서 옮긴 줄은 원문 그대로), start_date = 퇴사일(비어 있으면 날짜 모름) · '입사'가 들어간 note 줄 = 입사·재입사 기록). seq = 계약 회차, start_date~end_date = 계약 기간, terms = 계약조건 원문(급여제·시간제 등 글자). '계약 만료 임박'은 kind='contract'의 end_date로 본다.",
   },
   {
     name: "staff_leaves", label: "직원 휴가",
@@ -643,7 +643,7 @@ export const TABLES_B: readonly AssistantTableDoc[] = [
     name: "users", label: "직원",
     ko: "직원 계정 — 이름·역할·재직 상태·담당 과목·급여 설정",
     notes:
-      "system_role: master=원장 · admin=관리자 · manager=매니저 · teacher=강사 · counselor=상담사 · accountant=회계 · viewer=참관 · parttime=아르바이트 · student=학생 계정(직원이 아니다 — 직원 질문에서 뺀다). status: active=재직 · inactive=퇴사 · pending=대기. subjects = 담당 과목 키 배열, hire_date = 입사일. 금액 칸(hourly_rate·monthly_base)은 원. salary_type: commission=비율제 · fixed=급여제 · hybrid=혼합 · null=미설정. 급여 칸은 원장 전용 민감 정보.",
+      "system_role: master=원장 · admin=관리자 · manager=매니저 · teacher=강사 · counselor=상담사 · accountant=회계 · viewer=참관 · parttime=아르바이트 · student=학생 계정(직원이 아니다 — 직원 질문에서 뺀다). status: active=재직 · inactive=퇴사 · pending=대기. subjects = 담당 과목 키 배열, hire_date = 입사일(퇴사일 칸은 없다 — 퇴사 메모 줄은 staff_contracts의 kind='note' · terms에 '퇴사'가 들어간 줄 · start_date = 퇴사일 · 퇴사 처리 기록은 audit_logs·activity_log). 금액 칸(hourly_rate·monthly_base)은 원. salary_type: commission=비율제 · fixed=급여제 · hybrid=혼합 · null=미설정. 급여 칸은 원장 전용 민감 정보.",
     columns: {
       display_name: "실명(표시 이름)",
       report_display_name: "수업보고서 발송용 이름(null = 실명)",

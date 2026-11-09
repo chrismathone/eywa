@@ -6,6 +6,8 @@ import type { CorrectionDetail } from "./corrections";
 import type { PendingDetail } from "./pending-details";
 
 export type ContributionPayload = {
+  /** Six-factor records rebuilt from current sources; only the open month is updated. */
+  loyaltyRanking?: import("./ranking-facts").RankingFacts;
   /** Latest aggregation's eligible billed months, computed before closed-month preservation. */
   enrolledMonths?: number;
   evidenceIds: string[];

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { METRICS, METRIC_LABELS, OPERATION_METRICS, PARTICIPATION_METRICS } from "../model/config";
 import { familyRates, familyBonus } from "../model/family-loyalty";
+import { RankingSettings } from "./ranking-settings";
 import { scoreRaws } from "../model/calc";
 import type { getContributionSettingsPreview } from "../server/queries";
 import { saveContributionSettings } from "../server/actions";
@@ -24,12 +25,13 @@ export function ContributionSettings({ data }: { data: NonNullable<Awaited<Retur
   const changed = JSON.stringify(config) !== JSON.stringify(data.config);
   const rulesChanged = JSON.stringify(config.referrals) !== JSON.stringify(data.config.referrals) || config.attendance.allowLate !== data.config.attendance.allowLate;
   return <div className="w-full min-w-0 space-y-5 pb-6">
-    <ContributionHeader title="충성도 배점 설정" description="어떤 실적에 몇 점을 더할지 정합니다. 저장하면 과거 실적 전체에도 새 배점을 적용합니다." active="settings" canConfigure />
+    <ContributionHeader title="로열티 배점 설정" description="어떤 실적에 몇 점을 더할지 정합니다. 저장하면 과거 실적 전체에도 새 배점을 적용합니다." active="settings" canConfigure />
     <form onSubmit={(e) => { e.preventDefault(); start(async () => {
       const r = await saveContributionSettings(config, data.revision); setMessage(r.error ?? r.message ?? ""); router.refresh();
     }); }} className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(22rem,1fr)]">
       <fieldset disabled={!data.gate.canWrite || !data.ready || busy} className="min-w-0 space-y-5 disabled:opacity-60">
-        <section className="rounded-xl border border-amber/40 bg-amber-soft p-5 text-foreground"><h2 className="font-bold">가족 동시 재원 · 가장 높은 기본 배점</h2>
+        <RankingSettings config={config} onChange={ranking=>setConfig({...config,ranking})} />
+        <section className="rounded-xl border border-amber/40 bg-amber-soft p-5 text-foreground"><h2 className="font-bold">기존 누적 활동 기록 · 가족 가점</h2>
           <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={family.enabled} onChange={e=>setConfig({...config,family:{...family,enabled:e.target.checked}})} />가족 재원 가점 반영</label>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">{([['two','2명 재원'],['three','3남매 재원'],['fourPlus','4명 이상 재원']] as const).map(([key,label])=><label key={key} className="text-sm">본인 포함 {label}<input aria-label={`${label} 가족 배점`} type="number" min="0" max="10000" step="any" required disabled={!family.enabled} value={family[key]} onChange={e=>setConfig({...config,family:{...family,[key]:Number(e.target.value)}})} className={`${fieldClass} mt-2 w-full`} /></label>)}</div>
           <p className="mt-3 text-xs">기본값 100·250·400점. 현재 함께 수강 중인 가족 수에 따라 한 번 가산합니다. 매달 중복 누적하지 않으며, 과거 활동 기록을 수정하지 않습니다. 가족 수가 많을수록 같은 점수 또는 더 높은 점수를 설정하세요.</p>
@@ -48,7 +50,7 @@ export function ContributionSettings({ data }: { data: NonNullable<Awaited<Retur
           <label className="mt-5 flex items-center gap-2 border-t border-line pt-4 text-sm"><input type="checkbox" className="h-4 w-4 accent-primary" checked={config.attendance.allowLate} onChange={(e) => setConfig({ ...config, attendance: { allowLate: e.target.checked } })} />지각도 개근으로 인정</label>
         </section>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-card p-4"><SettingsChangeSummary before={data.config} after={config} delta={delta} /><p className="text-sm">{changed ? "과거 실적 전체에 새 배점을 적용합니다." : "현재 저장된 배점입니다."}</p>{data.gate.canWrite ? <div className="flex gap-2"><Button type="button" variant="outline" disabled={!changed || busy} onClick={() => { setConfig(data.config); setMessage(""); }}>변경 취소</Button><Button type="submit" disabled={busy || !changed}>{busy ? "저장 중…" : "배점 저장"}</Button></div> : null}
-          <p role="status" className="w-full text-sm">{message || (!data.ready ? "충성도 저장 준비가 필요합니다." : !data.gate.canWrite ? writeLockedNote("student_contribution") : "")}</p></div>
+          <p role="status" className="w-full text-sm">{message || (!data.ready ? "로열티 저장 준비가 필요합니다." : !data.gate.canWrite ? writeLockedNote("student_contribution") : "")}</p></div>
       </fieldset>
       <aside className="min-w-0 space-y-4">
         <section className="rounded-xl border border-primary/30 bg-primary-softer p-5" aria-label="배점 미리보기"><h2 className="font-semibold">저장 전 미리보기</h2><p className="mt-1 text-xs">전체 학생 {data.studentCount}명 · 목록 필터와 무관한 누적 실적</p>

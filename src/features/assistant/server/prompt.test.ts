@@ -24,11 +24,28 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toMatch(/내부 기록 표.*sync_queue/);
     expect(prompt).toMatch(/설명이 아직 없는 표.*brand_new/);
   });
-  it("글은 문단으로 나눠 쓰고 · 강사별 비교엔 재직 강사만(원장 2026-11-09)", () => {
+  it("글은 문단으로 나눠 쓰고 · 강사별 비교는 재직 기간 기준(원장 2026-11-09)", () => {
     expect(prompt).toMatch(/한 문단 2~3문장/);
     expect(prompt).toMatch(/list 블록으로 뺀다/);
-    expect(prompt).toMatch(/지금 재직 중인 강사\(users\.status='active'\)만/);
+    expect(prompt).toMatch(/\*\*재직 기간 기준\*\*/);
+    expect(prompt).toMatch(/users\.hire_date/);
+    expect(prompt).toMatch(/terms에 '퇴사'가 들어간 줄의 start_date/);
+    expect(prompt).toMatch(/마지막 복직 기록.*보다 앞이면 옛 재직의 끝이다/);
+    expect(prompt).toMatch(/changed->'status'->>'new'='inactive'/);
+    expect(prompt).toMatch(/재직 기간을 확인하지 못해 뺐습니다/);
+    expect(prompt).toMatch(/action='staff_status_change'/);
+    expect(prompt).toMatch(/기간 끝\(valid_to\)으로 재직 끝을 정하지 않는다/);
+    expect(prompt).toMatch(/강사와 상관없이 학원 전체 기록 그대로 센다/);
     expect(prompt).toMatch(/'\(담임 없음\)'/);
+  });
+  it("답의 질 — 모든 요인 종합 · 원장 입장 · 애매한 말·지어내기·추측 금지(원장 2026-11-09)", () => {
+    expect(prompt).toMatch(/## 답의 질/);
+    expect(prompt).toMatch(/요인을 빠짐없이 조회한 뒤 함께 판단한다/);
+    expect(prompt).toMatch(/시기가 겹친다는 것만으로 원인이라 하지 않는다/);
+    expect(prompt).toMatch(/애매한 말 금지/);
+    expect(prompt).toMatch(/숫자의 한계.*흐린 말이 아니다/);
+    expect(prompt).toMatch(/"~ 때문입니다"로 단정하지 않고/);
+    expect(prompt).toMatch(/지어내지 않는다/);
   });
   it("바뀌는 값(오늘 날짜)이 없다 — 캐시가 깨지지 않게", () => {
     expect(prompt).not.toMatch(/20\d\d-\d\d-\d\d/);

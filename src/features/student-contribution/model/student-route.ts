@@ -2,6 +2,7 @@
 export function studentContributionHref(href: string, studentId: string, back?: string) {
   if (!/^\/student-contribution(?:[/?#]|$)/.test(href)) return href;
   const url = new URL(href, "https://local.invalid"), part = url.pathname.slice("/student-contribution".length).replace(/^\//, "");
+  if (part === "ranking") return href;
   if (part.includes("/")) return href;
   const query = url.searchParams;
   query.set("tab", "contribution");

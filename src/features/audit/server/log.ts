@@ -59,8 +59,8 @@ export const AUDIT_ACTIONS = {
   student_care_save: "상담 약속·인계 처리",
   // 원생 흐름 분석 '다시 분석'(s2_0027 · 명시 버튼 — 유료 AI 호출) — 종류·결과는 metadata(describe.ts가 한글로).
   student_flow_insight_refresh: "원생 흐름 분석 다시 분석",
-  student_contribution_refresh: "원생 충성도 집계·마감",
-  student_contribution_settings_save: "원생 충성도 배점 저장",
+  student_contribution_refresh: "원생 로열티 집계·마감",
+  student_contribution_settings_save: "원생 로열티 배점 저장",
   student_contribution_signal_cancel: "원생 긍정 신호 판정 취소",
   student_contribution_signal_rejudge: "원생 긍정 신호 재판정 요청",
   student_contribution_referral_backfill: "지난 원생 소개 연결",
@@ -587,6 +587,8 @@ export const AUDIT_ACTIONS = {
   session_term_money_carryover_cancel: "청구 회차 금액 이월 취소",
   // 받은 금액 이월만큼 확정 시수를 자동으로 올림(원장 2026-10-07) — 사람이 '해제 → 시수 고침 → 다시 확정'하던 일.
   session_term_carry_sync: "확정 시수 자동 조정(받은 금액 이월 반영)",
+  // 받은 이월을 다음 달로 다시 넘기며 확정 시수를 낮춤(이월 창 · 원장 2026-11-09) — 사람이 한 일.
+  session_term_carry_unreflect: "확정 시수 낮춤(받은 이월 다시 넘기기)",
   session_term_note: "청구 회차 메모 수정",
   // 🔴 급여는 **"무슨 일이 있었나"만** 남긴다 — 조정한 항목 이름조차 안 담는다("인센티브를 고쳤다"
   //    만으로도 그 사람 급여 사정이 읽힌다). metadata는 `{userId, period}`뿐이다.

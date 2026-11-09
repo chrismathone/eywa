@@ -22,7 +22,7 @@
 //    "확정액 = 배분 − 보낸 이월"로 맞춰 둔 줄(사람이 실제 시수로 확정하고 남은 몫을 넘긴 줄)을 받은 이월만큼 또 올리면 확정이 실제보다
 //    많아진다(적대 리뷰 2026-11-09). 그 전에는 올리면 보낸 이월이 무효가 되어 아래 재확인에서 저절로 걸렸던 줄이다 — 같은 동작을 명시로 지킨다.
 import { sessionPricingAmount, validSessionQuantity, type SessionPricingMode } from "@/features/billing/session-pricing";
-import { carryOutValid, netAllocatedAmount, receivedCarry, type CarrySource, type MoneyCarryIn, type MoneyCarryOut } from "./money-carryover";
+import { carryOutValid, carrySurplus, netAllocatedAmount, receivedCarry, type CarrySource, type MoneyCarryIn, type MoneyCarryOut } from "./money-carryover";
 
 export type CarrySyncRow = CarrySource & {
   /** 회차 행만 대상이다(가상 행은 확정이 없다). 모르면 대상으로 본다. */
@@ -81,6 +81,73 @@ export function planCarrySessionSync(row: CarrySyncRow, added = 0): CarrySyncPla
   //    무효가 되는 줄(더 받은 몫이 줄어든다)은 고쳐도 안 맞는다. 맞출 수 없으면 손대지 않는다(다음 달로 보낸 돈을 조용히 되돌리지 않는다).
   if (netAllocatedAmount({ ...row, confirmedSessions: sessions, amount }) !== amount) return { kind: "none", reason: "unexplained" };
   return { kind: "adjust", sessions, amount, bySessions: Math.round(by * 10) / 10, byAmount: gap };
+}
+
+/**
+ * 🔑 **받은 이월을 다음 달로 다시 넘기기 = 이월 창에서 명시적으로**(원장 2026-11-09 *"남은 한계는 근본 해결해"*).
+ * 받은 이월이 확정 시수에 이미 반영된 줄(자동으로 올렸거나 사람이 올린 줄)은 더 받은 몫이 0이라 넘길 수 없었고, 이월 전 시수로 다시
+ * 확정하면 자동 맞춤이 매번 다시 올렸다(맞춤은 "이미 반영한 이월인지 · 사람이 일부러 낮췄는지"를 가릴 수 없다 — 반 일괄 확정은 이미 확정된
+ * 줄도 덮어써서 '낮춘 확정'이 사람의 뜻이라는 보장도 없다). 그래서 의도를 추측하지 않고 **넘기는 행동이 시수를 함께 낮춘다**:
+ * 이월 창의 금액이 더 받은 몫을 넘으면 그만큼 확정 시수를 낮추고(0.5시수 단위) 넘긴다. 넘긴 줄은 보낸 이월이 있어 자동 맞춤이 다시
+ * 올리지 않는다(`sending`). 낮출 수 있는 몫 = 확정액 가운데 받은 이월로 채운 부분(확정액 − 배분액, 받은 이월 이하) — 그보다 낮추는 것은
+ * 이 달 수업료로 낸 시수라 이월이 아니다(그건 사람이 확정 시수를 고친 뒤 더 받은 몫으로 넘긴다).
+ * ⚠️ 낮추는 저장은 자동 맞춤과 같은 길(배분이 자동으로 다시 확정될 청구서만 · 읽은 값 그대로일 때만 · 재확정 실패면 되돌림).
+ */
+/** 0.5시수 단위로 낮출 수 있는지 보는 공통 조건 — 맞으면 단가를, 아니면 null. */
+function unreflectPrice(row: CarrySyncRow): number | null {
+  if (row.termState !== undefined && row.termState !== "term") return null;
+  if (row.confirmedSessions == null || row.amount == null) return null;
+  if (row.pricingMode === "monthly" || row.quantityBasis === "days") return null;
+  const price = row.unitPrice;
+  if (price == null || !Number.isSafeInteger(price) || price <= 0) return null;
+  if (row.allocatedAmount == null || row.allocationStale) return null;
+  // 확정액이 시수 × 단가인 줄만(옛 손 맞춤 줄은 낮춘 뒤 금액을 맞출 수 없다).
+  if (sessionPricingAmount(row.pricingMode, row.confirmedSessions, price) !== row.amount) return null;
+  return price;
+}
+
+/** 이월 창에서 **확정 시수를 낮춰** 더 넘길 수 있는 최대 금액(원, 0.5시수 단위로 내림) — 대상이 아니면 0. */
+export function carryUnreflectable(row: CarrySyncRow): number {
+  const price = unreflectPrice(row);
+  if (price == null) return 0;
+  const received = landedCarryIn(row);
+  // 덜 받는 줄(배분 + 받은 이월 < 확정액)은 낮춰도 모자란 몫이 남아 넘긴 이월이 유효해지지 않는다 — 낮출 몫 없음(적대 리뷰 2026-11-09).
+  if ((row.allocatedAmount as number) + received < (row.amount as number)) return 0;
+  const funded = Math.min(received, Math.max(0, (row.amount as number) - (row.allocatedAmount as number)));
+  const step = price * STEP;
+  return Math.max(0, Math.floor(funded / step + 1e-9) * step);
+}
+
+export type CarryUnreflectPlan =
+  | { kind: "none" }
+  | { kind: "lower"; sessions: number; amount: number; bySessions: number; byAmount: number }
+  | { kind: "invalid"; error: string };
+
+/**
+ * 넘길 금액 `amount`가 더 받은 몫을 넘으면 확정 시수를 몇으로 낮출지 — 더 받은 몫 안이면 `none`(종전 그대로).
+ * 넘는 몫은 0.5시수 단위여야 하고 `carryUnreflectable` 이하여야 한다. 낮춘 뒤 이 이월이 유효한지까지 본다.
+ */
+export function planCarryUnreflect(row: CarrySyncRow, amount: number): CarryUnreflectPlan {
+  const surplus = carrySurplus(row);
+  if (!(amount > surplus)) return { kind: "none" };
+  const price = unreflectPrice(row);
+  const limit = carryUnreflectable(row);
+  if (price == null || limit <= 0) return { kind: "invalid", error: `넘길 수 있는 금액은 최대 ${surplus.toLocaleString("ko-KR")}원입니다(확정액보다 더 받은 몫)` };
+  const by = amount - surplus;
+  if (by > limit) {
+    return { kind: "invalid", error: `넘길 수 있는 금액은 최대 ${(surplus + limit).toLocaleString("ko-KR")}원입니다(더 받은 몫 ${surplus.toLocaleString("ko-KR")}원 + 확정 시수에 반영된 받은 이월 ${limit.toLocaleString("ko-KR")}원)` };
+  }
+  const bySessions = by / price;
+  if (Math.abs(bySessions / STEP - Math.round(bySessions / STEP)) > 1e-8) {
+    return { kind: "invalid", error: `더 받은 몫 ${surplus.toLocaleString("ko-KR")}원을 넘는 금액은 확정 시수를 0.5시수(${(price * STEP).toLocaleString("ko-KR")}원) 단위로 낮춰 넘깁니다 — 금액을 그 단위로 맞춰 주세요` };
+  }
+  const sessions = Math.round(((row.confirmedSessions as number) - bySessions) * 10) / 10;
+  if (!validSessionQuantity(sessions)) return { kind: "invalid", error: "확정 시수를 그만큼 낮출 수 없습니다" };
+  const next = sessionPricingAmount(row.pricingMode, sessions, price);
+  if (next !== (row.amount as number) - by || !carryOutValid({ ...row, confirmedSessions: sessions, amount: next }, amount)) {
+    return { kind: "invalid", error: "확정 시수를 낮춰도 넘길 금액이 맞지 않습니다 — 회차 확정에서 시수를 확인해 주세요" };
+  }
+  return { kind: "lower", sessions, amount: next, bySessions: Math.round(bySessions * 10) / 10, byAmount: by };
 }
 
 /**

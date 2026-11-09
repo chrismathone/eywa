@@ -48,7 +48,7 @@ function DetailTabs({ evidenceNote, summary, evidence }: Props) {
   };
   return <Context.Provider value={{ view, show }}>
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2" aria-busy={pending}>
-      <div role="tablist" aria-label="충성도 보기" className={TOOLBAR_SEG_BOX}>{TABS.map(([key, label]) => <button key={key} type="button" role="tab" id={`contribution-tab-${key}`}
+      <div role="tablist" aria-label="로열티 보기" className={TOOLBAR_SEG_BOX}>{TABS.map(([key, label]) => <button key={key} type="button" role="tab" id={`contribution-tab-${key}`}
         aria-selected={view === key} aria-controls={`contribution-panel-${key}`} aria-disabled={pending && view !== key} tabIndex={view === key ? 0 : -1} onKeyDown={onKeyDown} onClick={() => show(key)}
         className={`${TOOLBAR_SEG_ITEM} scroll-mt-4 ${view === key ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF} ${pending && view !== key ? "cursor-progress opacity-50" : ""}`}>{label}</button>)}</div>
       <p role={pending && !scope ? "status" : undefined} className="text-xs">{pending && !scope ? "선택한 달을 불러오는 중입니다. 끝나면 탭을 바꿀 수 있습니다." : view === "summary" ? "차트에서 달을 고르면 계산 근거도 같은 달로 바뀝니다." : evidenceNote}</p>

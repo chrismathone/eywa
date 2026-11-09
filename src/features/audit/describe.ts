@@ -109,7 +109,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   ai_prompt: "AI 프롬프트",
   ment_style: "강사 말투",
   teacher_portfolio: "직원 포트폴리오",
-  student_contribution: "원생 충성도",
+  student_contribution: "원생 로열티",
   kiosk_device: "키오스크 기기",
   // 시간표(개발중) 월별 계획(0232a) — 화면은 2026-10-23 지웠지만 남은 과거 기록(08-31 2건)을 읽으려고 라벨은 둔다.
   // 본 시간표가 아니라 **계획**임이 '대상' 칸에서 바로 읽혀야 한다.
@@ -616,6 +616,22 @@ export function auditDetail(
         str(m.studentName),
         before !== null && after !== null ? `확정 시수 ${before} → ${after}` : null,
         won(m.carryAmount) ? `받은 이월 ${won(m.carryAmount)} 반영` : null,
+      );
+    }
+    case "session_term_carry_unreflect": {
+      // 이월 창에서 받은 이월을 다음 달로 다시 넘기며 확정 시수를 낮춘 일 — 몇 시수에서 몇 시수로, 얼마를 어디로.
+      const before = num(m.sessionsBefore);
+      const after = num(m.sessions);
+      return join(
+        str(m.period),
+        str(m.studentName),
+        before !== null && after !== null ? `확정 시수 ${before} → ${after}` : null,
+        won(m.byAmount) ? `시수에 반영됐던 받은 이월 ${won(m.byAmount)}` : null,
+        // 실패(stuck)면 넘긴 것이 없다 — '넘기려던 금액'과 실패 단계(배분 재확정 · 이월 저장)를 적는다.
+        won(m.carryAmount) ? `${m.stuck === true ? "넘기려던 금액" : "넘긴 금액"} ${won(m.carryAmount)}(→ ${str(m.toPeriod) ?? "다음 달"})` : null,
+        m.stuck === true
+          ? `${m.stage === "allocate" ? "배분 재확정 실패" : "이월 저장 실패"} · ${m.revert === "reverted_needs_allocation" ? "시수는 되돌림 · 배분 재확인 필요" : "시수를 되돌리지 못함"}`
+          : null,
       );
     }
     case "session_term_money_carryover":

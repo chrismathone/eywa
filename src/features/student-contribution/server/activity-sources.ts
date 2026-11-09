@@ -36,9 +36,10 @@ export async function loadActivities(db: SupabaseClient, tenant: string, today: 
   const saved = new Map(signalRows.map((r) => [`${r.source}:${r.source_id}`, r]));
   const pendingSignals = signalSources.filter((s) => !saved.has(signalKey(s)) || saved.get(signalKey(s))?.rejudge_requested_at
     || saved.get(signalKey(s))?.source_hash !== s.hash);
-  return { attendance, grades: normalized, assignments, videos,
+  return { attendance, grades: normalized, schoolGrades: grades.filter(g => students.get(g.student_id)?.is_test === false), assignments, videos,
     marks: marks.map((r): VideoHomeworkMark => ({ classId: r.class_id, studentId: r.student_id, checkDate: r.check_date,
       homeworkDate: r.homework_date, status: r.status as VideoHomeworkStatus })),
     signals: currentSignals(signalRows, signalSources), signalRows, signalSources, pendingSignals, aiLicensed };
 }
-export type ActivitySources = Awaited<ReturnType<typeof loadActivities>>;
+type LoadedActivities = Awaited<ReturnType<typeof loadActivities>>;
+export type ActivitySources = Omit<LoadedActivities, "schoolGrades"> & { schoolGrades?: LoadedActivities["schoolGrades"] };

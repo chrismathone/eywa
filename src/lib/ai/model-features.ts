@@ -30,7 +30,7 @@ export const TENANT_MODEL_FEATURES: readonly TenantModelFeature[] = [
   { key: "attendance_recap", label: "출결 요약", area: "출결" },
   { key: "parent_attendance_intent", label: "학부모 결석 문자 판별", area: "출결" },
   { key: "parent_satisfaction", label: "학부모 글 만족도 판정", area: "강사평가" },
-  { key: "student_positive_signal", label: "원생 긍정 신호 판정", area: "원생 충성도" },
+  { key: "student_positive_signal", label: "원생 긍정 신호 판정", area: "원생 로열티" },
   { key: "notice_translate", label: "공지 번역", area: "공지" },
   { key: "staff_contract_pdf", label: "계약서 글자 추출", area: "직원" },
 ];

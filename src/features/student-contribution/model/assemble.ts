@@ -23,6 +23,7 @@ import { contributionLessonNames, contributionSubjectEvidence, lessonKey } from 
 import { reviewedHistoricalSubject } from "./reviewed-subjects";
 import { enrolledMonthCounts } from "./enrolled-months";
 import { emptyParentEvents, parentEventFacts, type ParentEventSources } from "./parent-events/facts";
+import { buildRankingFacts } from "./ranking-facts";
 
 export function assembleContribution(input: { tenant: string; today: string; capturedAt: string; core: CoreSources; activity: ActivitySources;
   settings: Awaited<ReturnType<typeof getTenantSettingsByTenantId>>; config: ContributionConfig; stored: StoredContributionMonth[];
@@ -99,6 +100,8 @@ export function assembleContribution(input: { tenant: string; today: string; cap
   const pointsByStudent = groupBy(contributionFacts(billing, referrals.credits, [...participation, ...recordMonths, ...events.points]), (f) => f.studentId);
   const storedByStudent = groupBy(input.stored, (r) => r.studentId);
   const seedsByStudent = groupBy(historySeeds, (s) => canonical(s.studentId));
+  const billingByStudent = groupBy(billing.map(b => b.seed), b => b.studentId);
+  const schoolByStudent = groupBy((activity.schoolGrades ?? []).filter(g => eligible(g.student_id)).map(g => ({ ...g, student_id: canonical(g.student_id) })), g => g.student_id);
   const unavailable = new Map(participation.map((p) => [`${p.studentId}:${p.month}`, p.unavailable]));
   const coverage: SourceCoverage[] = [
     events.coverage,
@@ -114,6 +117,9 @@ export function assembleContribution(input: { tenant: string; today: string; cap
       through: today, state: "ready", note: "연결된 소개만 인정 · 지난 소개는 별도 확인 목록" },
   ];
   const rows = roster.flatMap((student): StoredContributionMonth[] => {
+    const loyaltyRanking = buildRankingFacts({ studentId: student.id, asOf: today, billing: billingByStudent.get(student.id) ?? [],
+      targets: targets.get(student.id) ?? [], attendance: attendance.get(student.id) ?? [], grades: schoolByStudent.get(student.id) ?? [],
+      events: input.parentEvents ?? emptyParentEvents(), canonical });
     const saved = storedByStudent.get(student.id) ?? [], savedMap = new Map(saved.map((r) => [r.month, r]));
     const facts = factsByStudent.get(student.id) ?? [];
     const points = pointsByStudent.get(student.id) ?? [];
@@ -148,7 +154,7 @@ export function assembleContribution(input: { tenant: string; today: string; cap
       // A frozen month cannot be rewritten: preserve newly verified historical sources on the open month's payload.
       const subjectResolutions = (seedsByStudent.get(student.id) ?? []).filter(s => r.month === month || s.month === r.month).flatMap(s => s.subjectResolutions ?? []);
       return { ...r, studentId: student.id, computedAt: capturedAt, historical: (seedsByStudent.get(student.id) ?? []).filter((s) => s.month === r.month), unavailable: [...new Set(incomplete)],
-        payload: { ...emptyPayload(), ...(r.month === month ? { enrolledMonths: enrolledMonths.get(student.id) ?? 0 } : {}), evidenceIds: r.evidenceIds, facts: inMonth, relations: relationRows, coverage: ownCoverage, unavailableDetails: details, subjectResolutions,
+        payload: { ...emptyPayload(), ...(r.month === month ? { enrolledMonths: enrolledMonths.get(student.id) ?? 0, loyaltyRanking } : {}), evidenceIds: r.evidenceIds, facts: inMonth, relations: relationRows, coverage: ownCoverage, unavailableDetails: details, subjectResolutions,
           corrections: correctionDetails(r, built.filter((b) => !!b.closedAt), points),
           subjects: [...new Set(inMonth.flatMap((f) => f.related.filter((e) => e.kind === "subject").map((e) => e.id)))],
           correctionReasons: corrections.map((metric) => ({ metric, delta: r.correction[metric], reason: `${METRIC_LABELS[metric]}: 오늘 원본의 누적 수치와 마감한 달의 합계 차이(환불·연결 변경·병합·판정 변경 포함)` })) } };

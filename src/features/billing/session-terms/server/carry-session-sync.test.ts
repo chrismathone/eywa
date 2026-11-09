@@ -9,6 +9,8 @@ const h = vi.hoisted(() => ({
   view: vi.fn(), outs: vi.fn(), ins: vi.fn(), autos: vi.fn(), realloc: vi.fn(), log: vi.fn(),
   updates: [] as { values: Record<string, unknown>; filters: Record<string, unknown> }[],
   updateResult: { data: { id: "t1" }, error: null } as { data: unknown; error: unknown },
+  /** 쓰기 응답을 차례로 주고 싶을 때(앞에서부터 하나씩) — 비면 `updateResult`. */
+  updateQueue: [] as { data: unknown; error: unknown }[],
   invoices: [] as { id: string; period: string; student_id: string; status: string | null }[],
 }));
 vi.mock("server-only", () => ({}));
@@ -18,7 +20,7 @@ vi.mock("./queries", () => ({ getSessionTermsView: h.view }));
 vi.mock("./money-carryover-queries", () => ({ loadMoneyCarryOuts: h.outs, loadMoneyCarryIns: h.ins }));
 vi.mock("./auto-reallocate", () => ({ loadAutoInvoices: h.autos, autoReallocateAfterConfirm: h.realloc }));
 
-import { applyCarrySync, carryChainBreakNotice, carryShortNotice, carrySyncNotice, syncCarrySessionsAfter, syncCarrySessionsAfterCarry } from "./carry-session-sync";
+import { applyCarrySync, carryChainBreakNotice, carryShortNotice, carrySyncNotice, lowerConfirmedForCarry, syncCarrySessionsAfter, syncCarrySessionsAfterCarry } from "./carry-session-sync";
 
 const T1 = "aaaaaaaa-1111-4111-8111-111111111111";
 const T2 = "aaaaaaaa-2222-4222-8222-222222222222";
@@ -64,7 +66,7 @@ function db() {
         const list = h.invoices.filter((i) => (filters.id ? i.id === filters.id : i.period === filters.period && i.student_id === filters.student_id));
         return Promise.resolve({ data: filters.id ? list[0] ?? null : list, error: null }).then(resolve);
       }
-      if (values) { h.updates.push({ values, filters }); return Promise.resolve(h.updateResult).then(resolve); }
+      if (values) { h.updates.push({ values, filters }); return Promise.resolve(h.updateQueue.shift() ?? h.updateResult).then(resolve); }
       // 회차 행 조회 둘: 방금 확정한 줄들의 청구서 · 고칠 줄의 종전 확정자.
       return Promise.resolve({ data: [...h.invoices.map((invoice) => ({ invoice, id: T1, confirmed_by: "owner-1" }))], error: null }).then(resolve);
     };
@@ -74,7 +76,7 @@ function db() {
 }
 
 beforeEach(() => {
-  vi.clearAllMocks(); h.updates = []; h.updateResult = { data: { id: T1 }, error: null };
+  vi.clearAllMocks(); h.updates = []; h.updateQueue = []; h.updateResult = { data: { id: T1 }, error: null };
   h.invoices = [{ id: INV, period: "2026-09", student_id: STUDENT, status: "issued" }];
   rowsOf(row());
   h.outs.mockResolvedValue({ map: new Map(), failed: false });
@@ -329,5 +331,60 @@ describe("확정 응답 행 패치", () => {
     const other = applyCarrySync([patch], [{ ...change, termId: T2 }]);
     expect(other).toHaveLength(2);
     expect(other[1]).toMatchObject({ id: T2, confirmedSessions: 6, amount: 144000, unitPrice: 24000, pricingMode: "per_session" });
+  });
+});
+
+describe("이월 창 — 받은 이월을 다시 넘기며 확정 시수 낮추기(lowerConfirmedForCarry · 2026-11-09)", () => {
+  // 자동으로 6까지 올린 줄(배분 120,000 + 받은 24,000) — 24,000을 다음 달로 넘기며 5로 낮춘다.
+  const raised = () => row({ confirmedSessions: 6, amount: 144000, confirmedAt: "2026-10-07T00:00:00Z" }) as never;
+  beforeEach(() => { h.autos.mockResolvedValue(autoInvoice({ amount: 144000, confirmed_sessions: 6, allocation_base_amount: 144000 })); });
+
+  it("배분이 자동으로 다시 확정될 때만 · 읽은 값 그대로일 때만 낮추고 배분을 다시 맞춘다", async () => {
+    const r = await lowerConfirmedForCarry(db(), raised(), { sessions: 5, amount: 120000 }, "user-1");
+    expect(r.ok).toBe(true);
+    expect(h.updates).toHaveLength(1);
+    expect(h.updates[0]).toMatchObject({ values: { confirmed_sessions: 5, amount: 120000, confirmed_by: "user-1" }, filters: { id: T1, confirmed_sessions: 6, amount: 144000, unit_price: 24000 } });
+    expect(h.realloc).toHaveBeenCalledWith(expect.anything(), [T1], "carry_unreflect");
+    // 이월 저장이 실패하면 호출부가 되돌린다 — 읽은 값으로 · 배분도 다시.
+    expect(r.ok && await r.revert()).toBe("reverted");
+    expect(h.updates[1]).toMatchObject({ values: { confirmed_sessions: 6, amount: 144000, confirmed_at: "2026-10-07T00:00:00Z" }, filters: { id: T1, confirmed_sessions: 5, amount: 120000 } });
+    expect(h.realloc).toHaveBeenLastCalledWith(expect.anything(), [T1], "carry_unreflect_revert");
+  });
+
+  it("배분을 자동으로 다시 맞출 수 없는 청구서면 손대지 않고 이유를 말한다", async () => {
+    h.autos.mockResolvedValue(new Map());
+    const r = await lowerConfirmedForCarry(db(), raised(), { sessions: 5, amount: 120000 }, "user-1");
+    expect(r).toEqual({ ok: false, error: expect.stringContaining("자동으로 다시 맞출 수 없습니다") });
+    expect(h.updates).toEqual([]);
+  });
+
+  it("그 사이 확정이 바뀌었으면(0행) 저장하지 않는다 · 배분 재확정에 실패하면 되돌린다", async () => {
+    h.updateResult = { data: null, error: null };
+    expect(await lowerConfirmedForCarry(db(), raised(), { sessions: 5, amount: 120000 }, "user-1")).toMatchObject({ ok: false });
+    expect(h.realloc).not.toHaveBeenCalled();
+    h.updateResult = { data: { id: T1 }, error: null };
+    h.updates = [];
+    h.realloc.mockResolvedValueOnce({ saved: 0, skipped: 1 });
+    expect(await lowerConfirmedForCarry(db(), raised(), { sessions: 5, amount: 120000 }, "user-1")).toEqual({ ok: false, error: expect.stringContaining("되돌렸습니다") });
+    expect(h.updates.map((u) => u.values.confirmed_sessions)).toEqual([5, 6]);
+  });
+
+  it("🔴 재확정도 되돌리기도 못하면 숨기지 않는다 — 낮춘 시수로 남았다고 말한다(stuck) · revert 결과도 돌려준다", async () => {
+    h.updateQueue = [{ data: { id: T1 }, error: null }, { data: null, error: null }]; // 낮춤 성공 · 되돌림 0행(그 사이 누가 고침)
+    h.realloc.mockResolvedValueOnce({ saved: 0, skipped: 1 });
+    expect(await lowerConfirmedForCarry(db(), raised(), { sessions: 5, amount: 120000 }, "user-1"))
+      .toEqual({ ok: false, stuck: true, error: expect.stringContaining("되돌리지도 못했습니다") });
+    // 성공한 낮춤의 revert — 되돌림 0행이면 stuck(호출부가 '낮춘 시수로 남음'을 알린다) · 되돌렸지만 재확정 실패면 따로 구분.
+    h.updates = [];
+    h.updateQueue = [{ data: { id: T1 }, error: null }, { data: null, error: null }];
+    const r = await lowerConfirmedForCarry(db(), raised(), { sessions: 5, amount: 120000 }, "user-1");
+    expect(r.ok && await r.revert()).toBe("stuck");
+    const r2 = await lowerConfirmedForCarry(db(), raised(), { sessions: 5, amount: 120000 }, "user-1");
+    h.realloc.mockResolvedValueOnce({ saved: 0, skipped: 1 });
+    expect(r2.ok && await r2.revert()).toBe("reverted_needs_allocation");
+    // 낮춤 뒤 배분 재확정 실패 + 시수는 되돌림 → stuck 아님(배분만 다시 저장하라고 말한다).
+    h.realloc.mockResolvedValueOnce({ saved: 0, skipped: 1 }).mockResolvedValueOnce({ saved: 0, skipped: 1 });
+    expect(await lowerConfirmedForCarry(db(), raised(), { sessions: 5, amount: 120000 }, "user-1"))
+      .toEqual({ ok: false, error: expect.stringContaining("되돌렸지만 수납 배분을 다시 맞추지 못했습니다") });
   });
 });
