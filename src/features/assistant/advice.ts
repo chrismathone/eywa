@@ -122,6 +122,25 @@ export type AdviceView = {
     nextCheckOn: string | null;
   } | null;
   noCheck: string | null;
+  /** 재측정 상태(2단계 · s2_0038) — waiting = 다시 잴 날을 기다림 · measured = 결과 있음 · broken = 여러 번 못 잼 · stopped = 재지 않음(지운 대화 등). */
+  measureState: "none" | "waiting" | "measured" | "broken" | "stopped";
+  /** 다시 잰 결과 — 같은 날 기준 기간도 다시 잰 값(`base`)과 재측정 기간 값(`value`). 판정 = 개선·변화 없음·악화·판정 보류. */
+  result: {
+    verdict: "improved" | "flat" | "worse" | "unknown";
+    base: number;
+    baseSample: number | null;
+    value: number;
+    sample: number | null;
+    from: string;
+    to: string;
+    checkedAt: string;
+    reason: string | null;
+    /** 무엇을 기준으로 쟀나 — done = 원장이 '완료'한 날(`anchor`)부터 · asked = 의견을 낸 날부터(처리 표시와 상관없이). */
+    basis: "done" | "asked";
+    anchor: string;
+    /** 판정 문턱(오차 범위) — '뚜렷한 차이 없음'일 때 ±값으로 보인다. 판정 보류면 null. */
+    threshold: number | null;
+  } | null;
 };
 
 /** 화면 숫자 — 비율 18.0% · 원 12,000원 · 그 밖은 천 단위 쉼표(소수 한 자리까지). */
@@ -181,7 +200,10 @@ export function adviceDrafts(items: readonly AdviceItemLike[], checks: readonly 
 
 /** 화면이 읽는 칸(조회문 원문은 읽지 않는다). */
 export const ADVICE_VIEW_COLUMNS =
-  "id, message_id, item_no, status, status_at, status_memo, done_on, self_rating, check_label, check_unit, check_better, window_days, baseline_value, baseline_sample, baseline_from, baseline_to, next_check_on, no_check_reason";
+  "id, message_id, item_no, status, status_at, status_memo, done_on, self_rating, check_label, check_unit, check_better, window_days, baseline_value, baseline_sample, baseline_from, baseline_to, next_check_on, no_check_reason, measure_state, latest_verdict, latest_value, latest_sample, latest_base, latest_base_sample, latest_from, latest_to, latest_checked_at, latest_reason, measure_anchor, latest_threshold";
+/** 의견을 넣으며 돌려받는 칸 — 1단계 칸만(새 의견엔 결과가 없다 · 뒤 단계 칸이 없는 DB에서도 insert가 산다). */
+export const ADVICE_INSERT_COLUMNS =
+  "id, message_id, item_no, status, status_at, status_memo, done_on, self_rating, check_label, check_unit, check_better, window_days, baseline_value, baseline_sample, baseline_from, baseline_to, next_check_on, no_check_reason, measure_state";
 
 export type AdviceRow = {
   id: string;
@@ -202,6 +224,19 @@ export type AdviceRow = {
   baseline_to: string | null;
   next_check_on: string | null;
   no_check_reason: string | null;
+  measure_state: string;
+  // 2단계 결과 칸(s2_0038) — 넣으며 돌려받을 때는 없다(ADVICE_INSERT_COLUMNS).
+  latest_verdict?: string | null;
+  latest_value?: number | string | null;
+  latest_sample?: number | string | null;
+  latest_base?: number | string | null;
+  latest_base_sample?: number | string | null;
+  latest_from?: string | null;
+  latest_to?: string | null;
+  latest_checked_at?: string | null;
+  latest_reason?: string | null;
+  measure_anchor?: string | null;
+  latest_threshold?: number | string | null;
 };
 
 const isStatus = (v: string): v is AdviceStatus => (ADVICE_STATUSES as readonly string[]).includes(v);
@@ -232,5 +267,34 @@ export function adviceViewOf(r: AdviceRow): AdviceView {
     selfRating: isRating(r.self_rating) ? r.self_rating : null,
     check,
     noCheck: check ? null : r.no_check_reason,
+    measureState: isMeasureState(r.measure_state) ? r.measure_state : "none",
+    result: resultOf(r),
+  };
+}
+
+const MEASURE_STATES = ["none", "waiting", "measured", "broken", "stopped"] as const;
+const isMeasureState = (v: string): v is AdviceView["measureState"] => (MEASURE_STATES as readonly string[]).includes(v);
+const VERDICT_KEYS = ["improved", "flat", "worse", "unknown"] as const;
+
+function resultOf(r: AdviceRow): AdviceView["result"] {
+  const verdict = VERDICT_KEYS.find((v) => v === r.latest_verdict);
+  const value = num(r.latest_value);
+  const base = num(r.baseline_value);
+  // latest_base(같은 날 다시 잰 기준)는 판정이 기준을 확인하는 데만 쓴다 — 화면의 '기준값'은 저장된 기준값(판정이 견준 값)이다.
+  if (!verdict || value === null || base === null || !r.latest_from || !r.latest_to || !r.latest_checked_at) return null;
+  const anchor = r.measure_anchor ?? (r.baseline_to ? addDays(r.baseline_to, SETTLE_DAYS) : r.latest_from);
+  return {
+    verdict,
+    base,
+    baseSample: num(r.baseline_sample),
+    value,
+    sample: num(r.latest_sample),
+    from: r.latest_from,
+    to: r.latest_to,
+    checkedAt: r.latest_checked_at,
+    reason: r.latest_reason ?? null,
+    basis: r.measure_anchor ? "done" : "asked",
+    anchor,
+    threshold: num(r.latest_threshold),
   };
 }

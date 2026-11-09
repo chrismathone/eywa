@@ -1,7 +1,8 @@
 // 비서 의견 처리 단추 · 확인 지표 줄(제안 → 결과 → 학습 1단계 · 2026-11-09).
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AdviceView } from "../advice";
+import { addDays, kstToday } from "@/lib/date-kst";
+import { monthDayLabel, type AdviceView } from "../advice";
 import type { SettledReport } from "../report";
 import { AdviceStatusPanel } from "./advice-controls";
 import { ReportView } from "./report-view";
@@ -14,8 +15,10 @@ const VIEW: AdviceView = {
   memo: null,
   doneOn: null,
   selfRating: null,
-  check: { label: "A반 최근 14일 결석률", unit: "percent", better: "down", windowDays: 14, baseline: { value: 18, sample: 50, from: "2026-10-26", to: "2026-11-09" }, nextCheckOn: "2026-12-09" },
+  check: { label: "A반 최근 14일 결석률", unit: "percent", better: "down", windowDays: 14, baseline: { value: 18, sample: 50, from: "2026-10-26", to: "2026-11-09" }, nextCheckOn: addDays(kstToday(), 30) },
   noCheck: null,
+  measureState: "waiting",
+  result: null,
 };
 
 type Call = { url: string; body: Record<string, unknown> };
@@ -43,9 +46,50 @@ let seq = 0;
 const fresh = (over: Partial<AdviceView> = {}): AdviceView => ({ ...VIEW, id: `11111111-1111-4111-8111-${String(++seq).padStart(12, "0")}`, ...over });
 
 describe("비서 의견 처리", () => {
-  it("확인 지표 줄 — 기준값 · 표본 · 기간 · 좋아지는 쪽(다시 잴 날은 약속하지 않는다)", () => {
+  it("확인 지표 줄 — 기준값 · 표본 · 기간 · 좋아지는 쪽 · 다시 잴 날(재측정 기다림)", () => {
     render(<AdviceStatusPanel initial={fresh()} />);
-    expect(screen.getByText(/A반 최근 14일 결석률/).textContent).toBe("확인 지표 · A반 최근 14일 결석률 · 기준값 18.0% (50 중) · 10월 26일~11월 8일 · 내리면 좋음");
+    expect(screen.getByText(/A반 최근 14일 결석률/).textContent).toBe(
+      `확인 지표 · A반 최근 14일 결석률 · 기준값 18.0% (50 중) · 10월 26일~11월 8일 · 내리면 좋음 · ${monthDayLabel(addDays(kstToday(), 30))}에 다시 잽니다`,
+    );
+  });
+
+  it("다시 잴 날이 지났는데 아직 기다림이면 날짜를 약속하지 않는다", () => {
+    render(<AdviceStatusPanel initial={fresh({ check: { ...VIEW.check!, nextCheckOn: "2026-01-01" } })} />);
+    expect(screen.getByText(/다시 재기를 기다리는 중/)).toBeInTheDocument();
+    expect(screen.queryByText(/에 다시 잽니다/)).toBeNull();
+  });
+
+  it("다시 잰 값 — 판정 칩 · 저장된 기준값 → 재측정 · 재측정 기간 · 잰 날(한국 날짜)", () => {
+    const result = { verdict: "improved" as const, base: 18, baseSample: 50, value: 6.2, sample: 48, from: "2026-11-23", to: "2026-12-07", checkedAt: "2026-12-08T20:10:00+00:00", reason: null, basis: "asked" as const, anchor: "2026-11-09", threshold: 4.2 };
+    render(<AdviceStatusPanel initial={fresh({ measureState: "measured", result })} />);
+    expect(screen.queryByText(/다시 잽니다/)).toBeNull();
+    expect(screen.getByText("개선")).toHaveClass("text-green");
+    // 판정이 견준 값 = 저장된 기준값 · 무엇을 기준으로 쟀나 · 잰 날은 한국 날짜(05:10 KST = 전날 20:10 UTC)
+    expect(screen.getByText("개선").nextElementSibling?.textContent).toBe("기준값 18.0% → 재측정 6.2% · 11월 23일~12월 6일 · 의견을 낸 뒤 · 12월 9일에 잼");
+    expect(screen.getByText(/이 의견 때문이라고 단정하지 않습니다/)).toBeInTheDocument();
+  });
+
+  it("완료로 다시 잡은 결과는 '완료(날짜) 뒤'", () => {
+    const result = { verdict: "flat" as const, base: 18, baseSample: 50, value: 17, sample: 48, from: "2026-11-20", to: "2026-12-04", checkedAt: "2026-12-06T00:00:00+00:00", reason: null, basis: "done" as const, anchor: "2026-11-20", threshold: 4.24 };
+    const { unmount } = render(<AdviceStatusPanel initial={fresh({ status: "done", doneOn: "2026-11-20", measureState: "measured", result })} />);
+    // '변화 없음'이 아니라 '뚜렷한 차이 없음' + 오차 범위
+    expect(screen.getByText("뚜렷한 차이 없음")).toHaveClass("text-text-dim");
+    expect(screen.getByText("뚜렷한 차이 없음").nextElementSibling?.textContent).toBe("기준값 18.0% → 재측정 17.0% (차이가 ±4.2%p 안) · 11월 20일~12월 3일 · 완료(11월 20일) 뒤 · 12월 6일에 잼");
+    unmount();
+    // 완료를 거둔 뒤에는 '완료 뒤'라고 하지 않는다
+    render(<AdviceStatusPanel initial={fresh({ status: "open", measureState: "measured", result })} />);
+    expect(screen.getByText(/11월 20일부터/)).toBeInTheDocument();
+    expect(screen.queryByText(/완료\(11월 20일\) 뒤/)).toBeNull();
+  });
+
+  it("판정 보류는 까닭을 · 여러 번 못 잰 지표는 그렇다고", () => {
+    const result = { verdict: "unknown" as const, base: 50, baseSample: 4, value: 75, sample: 4, from: "2026-11-23", to: "2026-12-07", checkedAt: "2026-12-09T00:00:00+00:00", reason: "표본이 적어(8 미만) 판정하지 않습니다", basis: "asked" as const, anchor: "2026-11-09", threshold: null };
+    const { unmount } = render(<AdviceStatusPanel initial={fresh({ measureState: "measured", result })} />);
+    expect(screen.getByText("판정 보류")).toBeInTheDocument();
+    expect(screen.getByText(/표본이 적어/)).toBeInTheDocument();
+    unmount();
+    render(<AdviceStatusPanel initial={fresh({ measureState: "broken" })} />);
+    expect(screen.getByText("다시 잰 값 — 여러 번 다시 재지 못해 판정하지 않습니다")).toBeInTheDocument();
     expect(screen.queryByText(/다시 잽니다/)).toBeNull();
   });
 
