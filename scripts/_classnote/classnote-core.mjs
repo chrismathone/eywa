@@ -22,7 +22,7 @@ import { CURRENT_SHARE_BASE, shareUrlVariants } from "./share-bases.mjs";
 import { fetchVideoSubmitLine, reportPostContent } from "./report-video-line.mjs";
 import { attachedVideoOf, isVideoName, videoUploadWaitMs } from "./report-video.mjs";
 import { createWriteStream } from "node:fs";
-import { stat, unlink } from "node:fs/promises";
+import { readdir, stat, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -240,6 +240,14 @@ async function uploadReportVideo(adminPage, file, { log, studentName, deadline }
   const ext = (String(file.name).split(".").pop() || "mp4").toLowerCase().replace(/[^a-z0-9]/g, "") || "mp4";
   const tmp = path.join(tmpdir(), `aywa-report-video-${randomUUID()}.${ext}`);
   const started = Date.now();
+  // 지난 실행이 남긴 임시 영상(1시간 넘은 것)을 지운다 — 지우기 실패·강제 종료로 남을 수 있다(최대 100MB · 1.0.19 리뷰).
+  for (const n of await readdir(tmpdir()).catch(() => [])) {
+    if (!/^aywa-report-video-[0-9a-f-]{36}\.[a-z0-9]+$/.test(n)) continue;
+    const old = path.join(tmpdir(), n);
+    const st = await stat(old).catch(() => null);
+    if (st && Date.now() - st.mtimeMs > 3_600_000) await unlink(old).catch(() => {});
+  }
+  if (left() < 3 * 60_000) return { ok: false, error: "영상 첨부 실패 — 게시 시간 안에 올릴 시간이 모자랐습니다(다시 시도합니다)" };
   try {
     try {
       const signal = AbortSignal.timeout(Math.max(1_000, Math.min(120_000, left() - 60_000)));
@@ -260,6 +268,7 @@ async function uploadReportVideo(adminPage, file, { log, studentName, deadline }
       return { ok: false, error: "영상 첨부 실패 — ClassNote 작성 화면을 열지 못했습니다" };
     }
     await adminPage.locator("input[data-testid='media-attachment-add-input']").waitFor({ state: "attached", timeout: 15000 }).catch(() => {});
+    if (left() < 60_000) return { ok: false, error: "영상 첨부 실패 — 게시 시간 안에 올릴 시간이 모자랐습니다(다시 시도합니다)" };
     const up = await uploadToKageDetailed(
       adminPage,
       "media-attachment-add-input",
