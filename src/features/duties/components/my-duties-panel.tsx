@@ -24,7 +24,7 @@ export function MyDutiesPanel({ loaded }: { loaded: { payload: DutyPayload; at: 
         <header className="bg-bg-soft flex flex-wrap items-center justify-between gap-2 px-3 py-1.5">
           <h4 className="text-sm font-bold">{g.name}<span className="text-text-dim ml-2 text-xs font-medium">{g.cards.length}명</span></h4>
           <span className="text-xs font-semibold tabular-nums"><span className={g.done === g.total ? "text-green" : "text-foreground"}>{g.done}/{g.total}</span>
-            {g.late ? <span className="text-danger"> · 기한 초과 {g.late}</span> : g.open ? <span className="text-amber"> · 아직 {g.open}</span> : null}</span>
+            {g.late ? <span className="text-danger"> · 기한 초과 {g.late}</span> : g.open ? <span className="text-amber"> · 미완료 {g.open}</span> : null}</span>
         </header>
         <table className="w-full text-xs">
           <thead><tr className="text-text-dim">
@@ -49,7 +49,13 @@ function Row({ card, kinds, now }: { card: DutyCard; kinds: DutyKind[]; now: num
     <td className="px-3 py-1"><span className="font-bold">{card.title}</span>{who ? <span className="text-text-dim ml-1.5">{who}</span> : null}{!card.studentId ? <span className="text-text-dim ml-1.5">반 알림장</span> : null}</td>
     {kinds.map((k) => {
       const it = card.items.find((i) => i.kind === k);
-      if (!it) return <td key={k} className="px-1 py-1 text-center text-text-placeholder">—</td>;
+      if (!it) {
+        // 그 칸의 의무가 없는 까닭을 적는다 — 빈 '—'는 "왜?"를 낳는다(원장 2026-11-09). 발송은 보고서를 쓴 뒤에 생긴다.
+        const writeOpen = k === "report_send" && card.items.some((i) => i.kind === "report_write" && i.status !== "done");
+        const text = writeOpen ? "작성 뒤" : "의무 없음";
+        const why = writeOpen ? "보고서를 쓰면 발송 의무가 생깁니다" : k === "attendance" ? "오늘 이 반 수업 명단에 없습니다" : "결석 · 휴원 · 미발송 반 · 작성 면제 등으로 오늘은 이 학생의 작성 의무가 없습니다";
+        return <td key={k} className="px-1 py-1 text-center"><span title={why} className="text-text-placeholder inline-flex h-6 w-20 items-center justify-center rounded-md text-xs font-medium">{text}</span></td>;
+      }
       const st = dutyState(it.status, it.dueAt, now);
       return <td key={k} className="px-1 py-1 text-center">
         <button type="button" onClick={() => openWork({ href: dutyHref(it), title: `${card.title} · ${it.className ?? ""} · ${dutyKindLabel(k)}` })}

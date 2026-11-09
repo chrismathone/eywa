@@ -32,7 +32,8 @@ export function dutyState(status: DutyStatus, dueAt: string, now: number = Date.
   return Date.parse(dueAt) < now ? "late" : "open";
 }
 
-export const DUTY_STATE_LABEL: Record<DutyState, string> = { open: "아직", late: "기한 초과", done: "완료", void: "해당 없음" };
+/** 화면 이름 — 원장 2026-11-09 *"아직 → 미완료"*. */
+export const DUTY_STATE_LABEL: Record<DutyState, string> = { open: "미완료", late: "기한 초과", done: "완료", void: "해당 없음" };
 
 /** 할 일(staff_tasks) 종류 — 늦은 의무 묶음(담당자 × 종류 × 회차)마다 하나(`duty_escalate`). */
 export const DUTY_LATE_TASK_KIND = "duty_late";
