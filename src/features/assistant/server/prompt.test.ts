@@ -50,8 +50,27 @@ describe("buildSystemPrompt", () => {
   it("비서 의견마다 확인 지표(제안 → 결과 → 학습 · 원장 2026-11-06)", () => {
     expect(prompt).toMatch(/의견마다 확인 지표 check 하나/);
     expect(prompt).toMatch(/\{\{시작\}\}\(포함\)·\{\{끝\}\}\(제외\)/);
-    expect(prompt).toMatch(/이번 조회로 찾은 id를 SQL에 글자로 적는다/);
+    expect(prompt).toMatch(/\{\{대상\}\} 자리를 쓴다/);
     expect(prompt).toMatch(/noCheck에 까닭 한 줄/);
+  });
+  it("원인 질문 — 먼저 쪼개기 · 기간 바꿔 확인 · 말의 범위 · 요인 점검표 · 첫 화면(2026-11-09 답 검토)", () => {
+    expect(prompt).toMatch(/원인을 말하기 전에 먼저 쪼갠다/);
+    expect(prompt).toMatch(/영어를 하나로 합치지 않는다/);
+    expect(prompt).toMatch(/결론이 기간 선택에 기대지 않는지/);
+    expect(prompt).toMatch(/'원인이 아니다'는 비교군/);
+    expect(prompt).toMatch(/전향 검증/);
+    expect(prompt).toMatch(/'청구 끊김'.*퇴원이 아니다/);
+    expect(prompt).toMatch(/그 일보다 먼저 나간 학생을 넣지 않는다/);
+    expect(prompt).toMatch(/onto_teacher_churn/);
+    expect(prompt).toMatch(/'요인 점검표'/);
+    expect(prompt).toMatch(/'확인된 사실'.*'아직 모르는 것'/);
+  });
+  it("의견 지표 — 결과/실행 지표 · 대상 고정 · 일을 안 해도 좋아지는 지표 금지 · 실행일 기준", () => {
+    expect(prompt).toMatch(/\*\*결과 지표\*\*/);
+    expect(prompt).toMatch(/doneCheck\(\*\*실행 지표\*\*/);
+    expect(prompt).toMatch(/targets\(kind = student/);
+    expect(prompt).toMatch(/일을 안 해도 좋아지는 지표를 쓰지 않는다/);
+    expect(prompt).toMatch(/'완료'로 처리하면 그 날\(실행일/);
   });
   it("바뀌는 값(오늘 날짜)이 없다 — 캐시가 깨지지 않게", () => {
     expect(prompt).not.toMatch(/20\d\d-\d\d-\d\d/);
