@@ -26,7 +26,8 @@ export const MIX_PANELS: readonly PanelId[] = ["studentsComp", "attendance", "bi
 export type BoardSection = { id: string; title: string; note: string; panels: PanelId[] };
 export type Board = { core: CoreKey[]; kpis: BoardKpi[]; glance: BoardKpi[]; trend: PanelId[]; mix: PanelId[]; today: BoardSection[] };
 
-export const isBoardItems = (items: readonly Item[]) => items.some((i) => i.id === TREND_HEADING || i.id === MIX_HEADING);
+// 핵심 업무 칸(`core:*`)은 새 편집기에만 있다 — 그것만 남긴 배치도 새 모양이다(옛 배치로 보고 칸 셋을 다시 붙이지 않는다).
+export const isBoardItems = (items: readonly Item[]) => items.some((i) => i.id === TREND_HEADING || i.id === MIX_HEADING || isCoreId(i.id));
 
 /** 배치(새 모양) → 화면이 그리는 구조. 머리줄 앞에 떨어진 카드는 '오늘 운영'의 이름 없는 구역으로 둔다. */
 export function boardOf(items: readonly Item[]): Board {

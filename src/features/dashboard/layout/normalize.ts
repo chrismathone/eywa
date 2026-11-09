@@ -2,7 +2,7 @@ import { toBoardItems } from "./board";
 import { defaultItems } from "./defaults";
 import { normalizeAssignments } from "./assignment";
 import { placedIds, sameItems, sanitizeItems } from "./engine";
-import { BUNDLES, DASHBOARD_VERSION, EMPTY_DASHBOARD, type Bundle, type DashboardSettings, type RoleLayout } from "./types";
+import { BUNDLES, DASHBOARD_VERSION, EMPTY_DASHBOARD, isCoreId, type Bundle, type DashboardSettings, type RoleLayout } from "./types";
 
 const isBundle = (v: unknown): v is Bundle => typeof v === "string" && (BUNDLES as readonly string[]).includes(v);
 export const layoutKey = (bundle: Bundle, subject?: string | null) => bundle === "subject" && subject ? `${bundle}:${subject}` : bundle;
@@ -27,8 +27,11 @@ export function normalizeDashboard(raw: unknown, opts?: { dropDefaults?: boolean
     const key = layoutKey(role, subjectKey);
     if (byRole.has(key)) continue;
     // 옛 배치(새 대시보드 전)는 읽을 때 새 모양으로 옮긴다 — 카드·제목·민감 옵션은 그대로(`board.ts`).
-    const items = toBoardItems(sanitizeItems(rawItems), { owner: role === "owner" || role === "super" });
-    if (placedIds(items).length === 0) continue;
+    const saved = sanitizeItems(rawItems);
+    const items = toBoardItems(saved, { owner: role === "owner" || role === "super" });
+    // 비었나 = 카드·KPI도, 원장이 직접 남긴 핵심 업무 칸도 없다(바로가기 칸만 둔 배치도 원장이 고른 배치다 — 리뷰 2026-11-09).
+    // 옛 배치를 옮길 때 붙는 핵심 업무 칸은 세지 않는다(제목만 남은 옛 배치는 그대로 버린다).
+    if (placedIds(items).length === 0 && !saved.some((i) => isCoreId(i.id))) continue;
     // 과목별 기본값도 명시적 재정의다. 지우면 다른 공통 배치가 다시 적용될 수 있다.
     if (opts?.dropDefaults && !subjectKey && sameItems(items, defaultItems(role))) continue;
     byRole.set(key, { role, ...(subjectKey ? { subject: subjectKey } : {}), items });
