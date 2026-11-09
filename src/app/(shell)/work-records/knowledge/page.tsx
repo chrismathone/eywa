@@ -1,0 +1,12 @@
+import { requireAccess } from "@/lib/auth/require-access";
+import { kstToday } from "@/lib/date-kst";
+import { sampleKnowledgeRecords } from "@/features/academy-knowledge/sample-data";
+import { KnowledgeRecordsWorkspace } from "@/features/academy-knowledge/record-workspace";
+
+export const metadata = { title: "관찰·후속 조치·OKR — 에이와" };
+
+/** 관찰·후속 조치·OKR 시안 — 🔴 DB를 읽지 않는다(예시 값). 문은 대시보드 권한. */
+export default async function Page({ searchParams }: { searchParams: Promise<{ kind?: string; record?: string; student?: string; rule?: string }> }) {
+  await requireAccess("dashboard");
+  return <KnowledgeRecordsWorkspace data={sampleKnowledgeRecords(kstToday())} params={await searchParams}/>;
+}
