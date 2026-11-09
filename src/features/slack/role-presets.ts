@@ -48,7 +48,7 @@ export const ROLE_PRESETS: readonly RolePreset[] = [
     id: "master",
     label: "원장 기본",
     build: (o) => [
-      notif("결재·학생 경보·발송 실패 1:1", [...APPROVALS, ...STUDENT_WATCH, ...SEND_FAILS, "makeedu_login_failed", "slack_broken", "support_answer", "staff_task_digest", "withdrawal_bypass"]),
+      notif("결재·학생 경보·발송 실패 1:1", [...APPROVALS, ...STUDENT_WATCH, ...SEND_FAILS, "makeedu_login_failed", "sync_agent_offline", "slack_broken", "support_answer", "staff_task_digest", "withdrawal_bypass"]),
       feed("원생·상담·수납·직원 활동", activityKeys(o, (x) => ["students", "consult", "billing", "staff"].includes(x.category))),
     ],
   },

@@ -73,6 +73,8 @@ const RULES: readonly [string, string][] = [
   // 강사 급여 정책(누구만 남는다) — 급여 분류라 고를 수 없다.
   ["teacher_comp_", "payroll"],
   ["class_sheet_", "sheets"],
+  // 비포클래스체크리스트 반 추가·빼기(a29ec89a8 · 대상 = 반 이름) — 분류가 빠져 가드가 실패하던 것(2026-11-09 메인 세션).
+  ["before_class_target_", "classes"],
   ["class_", "classes"],
   ["classroom_", "classes"],
   ["timetable_", "classes"],
