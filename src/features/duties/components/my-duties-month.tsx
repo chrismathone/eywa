@@ -1,6 +1,6 @@
 "use client";
 
-import { EmbedAnchor } from "@/components/embed-link";
+import { useOpenDutyWork } from "./duty-work-context";
 import { DUTY_STATE_LABEL, type DutyState } from "../kinds";
 import { buildMonthRows, foldRows, groupMonthRows, type MonthRow } from "../view-month";
 import type { DutyItemView } from "../kinds";
@@ -23,6 +23,7 @@ const TONE: Record<DutyState, string> = { done: "bg-green-soft text-green", late
 const DOT: Record<DutyState, string> = { done: "bg-green", late: "bg-danger", open: "bg-amber", void: "bg-text-placeholder" };
 
 function Section({ title, count, hint, rows, empty }: { title: string; count: { total: number; done: number; late: number }; hint: string; rows: MonthRow[]; empty: string }) {
+  const openWork = useOpenDutyWork();
   const pct = count.total ? Math.round((count.done / count.total) * 100) : 0;
   const groups = groupMonthRows(rows);
   return <section className="border-line-faint rounded-xl border">
@@ -37,11 +38,11 @@ function Section({ title, count, hint, rows, empty }: { title: string; count: { 
           <span className="text-xs font-semibold tabular-nums"><span className={g.done === g.total ? "text-green" : "text-foreground"}>{g.done}/{g.total}</span>{g.late ? <span className="text-danger"> · 기한 초과 {g.late}</span> : null}</span></div>
         <ul className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
           {g.rows.map((r) => <li key={r.id}>
-            <EmbedAnchor href={r.href} className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold hover:brightness-95 ${TONE[r.state]}`} title={`${DUTY_STATE_LABEL[r.state]} — 누르면 기록 화면으로`}>
+            <button type="button" onClick={() => openWork({ href: r.href, title: `${r.title} · ${title}` })} className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold hover:brightness-95 ${TONE[r.state]}`} title={`${DUTY_STATE_LABEL[r.state]} — 누르면 창 안에서 바로 처리`}>
               <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${DOT[r.state]}`} aria-hidden />
               <span className="min-w-0 flex-1 truncate"><span className="text-foreground font-bold">{r.title}</span>{r.sub ? <span className="text-text-dim font-medium"> · {r.sub}</span> : null}</span>
               <span className="shrink-0 tabular-nums">{r.dateLabel}</span>
-            </EmbedAnchor>
+            </button>
           </li>)}
         </ul>
       </div>)}

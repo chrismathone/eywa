@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { EyIcon } from "@/components/icons/aywa-icons";
+import { EmbedAnchor } from "@/components/embed-link";
+import { withEmbed } from "@/components/workspace/embed-context";
+import { DutyWorkContext, type DutyWork } from "./duty-work-context";
 import { dutyKindLabel, type DutyItemView } from "../kinds";
 import type { DutyKindCount, DutyWeekCell } from "../view";
 import { MyDutiesPanel } from "./my-duties-panel";
@@ -27,6 +30,9 @@ export function MyDutiesStripButton({ summary: initial, className = "" }: { summ
   const [view, setView] = useState<View | null>(null);
   const [loaded, setLoaded] = useState<{ payload: DutyPayload; at: number } | null>(null);
   const [failed, setFailed] = useState(false);
+  // 셀을 누르면 창 안에 그 화면(간이 페이지 · iframe)을 띄운다. 돌아오면 목록·숫자를 다시 받는다(바로 처리한 것이 반영되게).
+  const [work, setWork] = useState<DutyWork | null>(null);
+  const closeWork = () => { setWork(null); setLoaded(null); void fetch("/api/duties/summary", { cache: "no-store" }).then(async (r) => { if (r.ok) { const next = (await r.json()) as Omit<DutyStripSummary, "lang">; setSummary((cur) => ({ ...next, lang: cur.lang })); } }).catch(() => undefined); };
   const openRef = useRef(false);
   useEffect(() => { openRef.current = view !== null; }, [view]);
   useEffect(() => {
@@ -84,22 +90,36 @@ export function MyDutiesStripButton({ summary: initial, className = "" }: { summ
       <Tile label={`${mm}월 학부모 상담`} value={`${counsel.done}`} unit={`/ ${counsel.total}`} pct={pct(counsel)} tone={counsel.total && pct(counsel) === 100 ? "green" : counsel.late ? "danger" : "primary"} note={counsel.total ? `의무 학생 ${counsel.total}명 · 말일까지` : "상담 의무 학생 없음"} onClick={() => setView("month")} />
       <Tile label="신규생 정착 콜" value={`${newcomer.done}`} unit={`/ ${newcomer.total}`} pct={pct(newcomer)} tone={newcomer.late ? "danger" : newcomer.total && pct(newcomer) === 100 ? "green" : "primary"} note={newcomer.total ? (newcomer.late ? `기한 지난 항목 ${newcomer.late}` : "항목마다 기한 안") : "맡은 신규생 없음"} onClick={() => setView("month")} />
     </div>
-    {view ? <Dialog open onOpenChange={(open) => (!open ? setView(null) : undefined)}>
-      <DialogContent className="flex h-[min(760px,90dvh)] flex-col gap-3 sm:max-w-5xl">
-        <DialogHeader>
-          <DialogTitle>내 업무</DialogTitle>
-          <DialogDescription>칸을 누르면 그 기록 화면으로 갑니다. 완료는 원래 기록으로 저절로 확인됩니다.</DialogDescription>
-        </DialogHeader>
-        <ToolbarSegment>
-          {VIEWS.map((v) => <ToolbarSegmentItem key={v.key} active={v.key === view} onClick={() => setView(v.key)}>{v.label}</ToolbarSegmentItem>)}
-        </ToolbarSegment>
-        <div className="min-h-0 flex-1 overflow-y-auto px-1">
-          {failed ? <p className="text-text-dim mt-2 text-sm">업무를 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요.</p>
-            : !loaded ? <p className="text-text-dim mt-2 text-sm">불러오는 중…</p>
-            : view === "today" ? <MyDutiesPanel loaded={loaded} />
-            : view === "week" ? <MyDutiesWeek items={loaded.payload.items} week={loaded.payload.week} days={loaded.payload.days} now={loaded.at} />
-            : <MyDutiesMonth items={loaded.payload.month} now={loaded.at} month={month} />}
-        </div>
+    {view ? <Dialog open onOpenChange={(open) => (!open ? (work ? closeWork() : setView(null)) : undefined)}>
+      <DialogContent className="flex h-[min(820px,92dvh)] flex-col gap-3 sm:max-w-6xl">
+        {work ? <>
+          <DialogHeader>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={closeWork} className="border-line hover:bg-bg-soft h-8 rounded-lg border px-3 text-sm font-semibold">‹ 목록</button>
+              <DialogTitle className="min-w-0 flex-1">{work.title}</DialogTitle>
+              <EmbedAnchor href={work.href} className="bg-primary text-primary-foreground inline-flex h-8 items-center rounded-lg px-3 text-sm font-semibold hover:brightness-95">이 화면으로 이동 ›</EmbedAnchor>
+            </div>
+            <DialogDescription>여기서 바로 처리할 수 있습니다. 끝나면 ‹ 목록으로 돌아오면 숫자가 다시 읽힙니다.</DialogDescription>
+          </DialogHeader>
+          <iframe key={work.href} src={withEmbed(work.href)} title={work.title} className="border-line min-h-0 w-full flex-1 rounded-xl border bg-background" />
+        </> : <>
+          <DialogHeader>
+            <DialogTitle>내 업무</DialogTitle>
+            <DialogDescription>칸을 누르면 이 창 안에서 바로 처리합니다. 완료는 원래 기록으로 저절로 확인됩니다.</DialogDescription>
+          </DialogHeader>
+          <ToolbarSegment>
+            {VIEWS.map((v) => <ToolbarSegmentItem key={v.key} active={v.key === view} onClick={() => setView(v.key)}>{v.label}</ToolbarSegmentItem>)}
+          </ToolbarSegment>
+          <DutyWorkContext.Provider value={setWork}>
+            <div className="min-h-0 flex-1 overflow-y-auto px-1">
+              {failed ? <p className="text-text-dim mt-2 text-sm">업무를 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요.</p>
+                : !loaded ? <p className="text-text-dim mt-2 text-sm">불러오는 중…</p>
+                : view === "today" ? <MyDutiesPanel loaded={loaded} />
+                : view === "week" ? <MyDutiesWeek items={loaded.payload.items} week={loaded.payload.week} days={loaded.payload.days} now={loaded.at} />
+                : <MyDutiesMonth items={loaded.payload.month} now={loaded.at} month={month} />}
+            </div>
+          </DutyWorkContext.Provider>
+        </>}
       </DialogContent>
     </Dialog> : null}
   </section>;

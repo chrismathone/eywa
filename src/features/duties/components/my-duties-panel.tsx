@@ -1,6 +1,6 @@
 "use client";
 
-import { EmbedAnchor } from "@/components/embed-link";
+import { useOpenDutyWork } from "./duty-work-context";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { DUTY_KIND_KEYS, DUTY_KINDS, DUTY_STATE_LABEL, dutyKindLabel, dutyState, type DutyKind, type DutyState } from "../kinds";
 import { buildDutyCards, dutyHref, groupCardsByClass, type DutyCard } from "../view";
@@ -8,7 +8,7 @@ import type { DutyPayload } from "./my-duties-strip-button";
 
 /**
  * '오늘' 보기 — **항상 반별로**(원장 2026-11-09) 표 하나씩: 줄 = 학생, 칸 = 출결 · 보고서 · 발송(상태 색) · 최근 7일. 늦은 반이 위.
- * 칸을 누르면 그 기록 화면. 🔴 링크는 하드 이동(`EmbedAnchor`) — 같은 경로(/onescreen)에서 쿼리만 바뀌면 Next 16이 페이지를 다시 그리지 않는다(#146).
+ * 칸을 누르면 창 안에 그 기록 화면(원스크린 그 학생)이 간이 페이지로 뜬다(`useOpenDutyWork` · 이동은 창의 '이 화면으로 이동' 버튼).
  */
 const DAILY: DutyKind[] = DUTY_KIND_KEYS.filter((k) => DUTY_KINDS[k].period === "daily");
 const SHORT: Record<string, string> = { attendance: "출결", report_write: "보고서", report_send: "발송" };
@@ -42,6 +42,7 @@ export function MyDutiesPanel({ loaded }: { loaded: { payload: DutyPayload; at: 
 const CELL: Record<DutyState, string> = { done: "bg-green-soft text-green", late: "bg-danger-soft text-danger", open: "bg-amber-soft text-amber", void: "bg-bg-soft text-text-placeholder" };
 
 function Row({ card, kinds, now }: { card: DutyCard; kinds: DutyKind[]; now: number }) {
+  const openWork = useOpenDutyWork();
   const first = card.items[0];
   const who = card.studentId && first ? schoolGradeLabel(first.school, first.grade) : null;
   return <tr className="border-line-faint border-t">
@@ -51,8 +52,9 @@ function Row({ card, kinds, now }: { card: DutyCard; kinds: DutyKind[]; now: num
       if (!it) return <td key={k} className="px-1 py-1 text-center text-text-placeholder">—</td>;
       const st = dutyState(it.status, it.dueAt, now);
       return <td key={k} className="px-1 py-1 text-center">
-        <EmbedAnchor href={dutyHref(it)} title={`${dutyKindLabel(k)} · ${DUTY_STATE_LABEL[st]} — 누르면 기록 화면으로`}
-          className={`inline-flex h-6 w-20 items-center justify-center rounded-md font-semibold hover:brightness-95 ${CELL[st]}`}>{DUTY_STATE_LABEL[st]}</EmbedAnchor>
+        <button type="button" onClick={() => openWork({ href: dutyHref(it), title: `${card.title} · ${it.className ?? ""} · ${dutyKindLabel(k)}` })}
+          title={`${dutyKindLabel(k)} · ${DUTY_STATE_LABEL[st]} — 누르면 창 안에서 바로 처리`}
+          className={`inline-flex h-6 w-20 items-center justify-center rounded-md font-semibold hover:brightness-95 ${CELL[st]}`}>{DUTY_STATE_LABEL[st]}</button>
       </td>;
     })}
     <td className="px-2 py-1">
