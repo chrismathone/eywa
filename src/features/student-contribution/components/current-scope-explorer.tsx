@@ -21,7 +21,7 @@ export function CurrentScopeExplorer({ view, embed }: { view: View; embed: boole
     <OntologyViewMode current filters={request} scope={request} />
     {!data ? <div className="space-y-3 rounded-xl border border-line p-6" role="status">
       <h2 className="font-semibold">{view.state === "schema_missing" ? "현재 연결 조회 준비 중" : view.state === "forbidden" ? "현재 연결을 열람할 수 없습니다" : "현재 연결을 불러오지 못했습니다"}</h2>
-      <p className="text-sm">{view.state === "schema_missing" ? "조회 설정이 준비되면 이곳에서 현재 수강 관계를 확인할 수 있습니다. 월별 기여도 근거는 계속 볼 수 있습니다." : "원본 기록은 그대로입니다. 열람 범위를 확인하거나 잠시 후 다시 시도해 주세요."}</p>
+      <p className="text-sm">{view.state === "schema_missing" ? "조회 설정이 준비되면 이곳에서 현재 수강 관계를 확인할 수 있습니다. 월별 충성도 근거는 계속 볼 수 있습니다." : "원본 기록은 그대로입니다. 열람 범위를 확인하거나 잠시 후 다시 시도해 주세요."}</p>
       <CurrentScopeRefresh />
     </div> : <>
       <section className="space-y-4 rounded-xl border border-line p-4">

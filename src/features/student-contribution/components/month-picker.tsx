@@ -18,7 +18,7 @@ export function ContributionMonthPicker({ month, months, scope }: { month: strin
   };
   return <div className="flex items-center gap-2" aria-busy={busy}>
     {choices && <Button size="icon-sm" variant="outline" aria-label="이전 기록 월" disabled={busy || index <= 0} onClick={() => move(choices[index - 1]!)}><EyIcon name="chevronLeft" size={16} /></Button>}
-    {choices ? <select aria-label="기여도 월 선택" value={month} onChange={(e) => move(e.target.value)} disabled={busy} className={`${fieldClass} font-semibold`}>
+    {choices ? <select aria-label="충성도 월 선택" value={month} onChange={(e) => move(e.target.value)} disabled={busy} className={`${fieldClass} font-semibold`}>
       {[...choices].reverse().map((m) => <option key={m} value={m}>{monthText(m)}</option>)}
     </select> : <input type="month" aria-label="기록 월" value={month} onChange={(e) => move(e.target.value)} disabled={busy} className={fieldClass} />}
     {choices && <Button size="icon-sm" variant="outline" aria-label="다음 기록 월" disabled={busy || index >= choices.length - 1} onClick={() => move(choices[index + 1]!)}><EyIcon name="chevronRight" size={16} /></Button>}
