@@ -7,12 +7,14 @@ import { EyIcon } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { AssistantLevel } from "@/features/assistant/levels";
-import { ASSISTANT_SUGGESTIONS } from "@/features/assistant/protocol";
-import { isConversationStreaming, type Conversation, type Turn } from "./assistant-state";
+import { ASSISTANT_MAX_RUNNING } from "@/features/assistant/protocol";
+import { monthDayLabel } from "@/lib/date-kst";
+import { isConversationRunningElsewhere, liveTurnOf, runningThreadKeys, type Conversation, type Turn } from "./assistant-state";
 import { AssistantComposer } from "./assistant-composer";
 import { AssistantThreadList } from "./assistant-thread-list";
 import { AssistantTurn } from "./assistant-turn";
 import type { useAssistant } from "./use-assistant";
+import { useAssistantSuggestions } from "./use-assistant-suggestions";
 
 type Assistant = ReturnType<typeof useAssistant>;
 
@@ -74,6 +76,7 @@ export function AssistantOverlay({
   const listId = useId();
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  /** 지울지 묻는 중인 대화(목록 행의 x — 원장 2026-11-06). */
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -82,16 +85,46 @@ export function AssistantOverlay({
   /** 이름을 저장하는 중인 대화 — 그 대화의 편집 칸은 Esc로 닫지 않는다(결과·실패 이유를 기다린다 · 재리뷰 2026-11-09). 다른 대화의 편집 칸은 막지 않는다. */
   const renameSavingFor = useRef<string | null>(null);
 
-  const streamingHere = isConversationStreaming(state, current);
-  const streamingThreadId = state.inflight
-    ? (Object.values(state.conversations).find((c) => c.turns.some((t) => t.key === state.inflight!.turnKey))?.threadId ?? null)
-    : null;
+  /**
+   * 서버가 자리 없음으로 받지 않은 질문의 안내 — 그 대화에서만, 목록을 다시 읽기 전까지만 보인다(받지 않으면 목록을 다시 읽는다 — 그 뒤엔
+   * 목록이 진실이라 막힘 까닭은 `blockedReason`이 말하고, 자리가 나면 저절로 풀린다 · 재리뷰 2026-11-09).
+   */
+  const [busyNotice, setBusyNotice] = useState<{ key: string; text: string; seq: number } | null>(null);
+  /** 지금 보는 대화 — 받지 않은 질문의 글을 되돌릴 때 그사이 다른 대화로 옮겼으면 그 입력칸에 넣지 않게(적대 리뷰 2026-11-09). */
+  const currentKeyRef = useRef(current.key);
+  useEffect(() => {
+    currentKeyRef.current = current.key;
+  }, [current.key]);
+  /** 지금 입력칸의 글 — 받지 않은 질문을 되돌릴 때 그사이 새로 쓴 글을 덮지 않게. */
+  const draftRef = useRef(draft);
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+
+  // 동시에 3개까지 · 대화마다 하나(원장 2026-11-06). 다른 탭·기기에서 도는 대화도 센다(목록 `running` · 저장본 '도는 중').
+  const live = liveTurnOf(state, current);
+  const streamingHere = live !== null;
+  const elsewhereHere = isConversationRunningElsewhere(state, current);
+  const running = runningThreadKeys(state);
+  const threadsSeqRef = useRef(state.threadsSeq);
+  useEffect(() => {
+    threadsSeqRef.current = state.threadsSeq;
+  }, [state.threadsSeq]);
+  /** 지우기 확인 — 그사이 답을 만들기 시작한 대화의 확인은 없는 것으로 본다(감춘 확인이 Esc를 먹지 않게 · 재리뷰 2026-11-09). */
+  const confirmDeleteLive = confirmDelete && !running.has(confirmDelete) ? confirmDelete : null;
+  const full = !streamingHere && !elsewhereHere && running.size >= ASSISTANT_MAX_RUNNING;
   const blockedReason =
     state.enabled === false
       ? "이 지점에서는 학원 비서를 쓸 수 없습니다."
-      : state.inflight && !streamingHere
-        ? "다른 대화에서 답을 만드는 중입니다. 끝나면 보낼 수 있습니다."
-        : null;
+      : elsewhereHere
+        ? "이 대화는 아직 앞 질문의 답을 만드는 중입니다. 끝나면 이어서 물을 수 있고, 다른 질문은 새 대화에서 물어보세요."
+        : full
+          ? `답은 동시에 ${ASSISTANT_MAX_RUNNING}개까지 만들 수 있습니다. 하나가 끝나면 보낼 수 있습니다.`
+          : null;
+  const canAskHere = !blockedReason && !streamingHere;
+  // '바로 결과 보기'는 자료를 하나라도 읽은 뒤 — 조회를 마쳤거나 전수 조회를 시작했다(센 데까지 보고서에 쓴다).
+  // 표 구조만 본 단계(schema)는 자료가 아니다 — 근거 없이 보고서를 쓰지 않게(적대 리뷰 2026-11-09).
+  const canFinish = !!live?.steps.some((st) => (st.kind === "query" && st.state === "done") || st.kind === "survey");
 
   const scrollToLastTurn = (behavior: ScrollBehavior) => scrollLastTurnIntoView(scrollRef.current, behavior);
 
@@ -102,21 +135,34 @@ export function AssistantOverlay({
   }, [readyKey]);
 
   const closeListOnPhone = () => {
-    if (isPhone()) onListOpenChange(false);
+    if (isPhone()) setListOpen(false);
+  };
+
+  /**
+   * 서버가 자리 없음·같은 대화 도는 중으로 받지 않았다 — 실패 카드 대신 입력칸 아래 안내 + 보낸 글을 입력칸에 되돌린다
+   * (그사이 새로 쓴 글이 있으면 그대로 둔다 · 원장 2026-11-06 *"정상적인 동작으로 인식되게"*).
+   */
+  const onBusy = (convKey: string, question: string) => (message: string) => {
+    if (currentKeyRef.current === convKey && !draftRef.current.trim()) onDraftChange(question);
+    setBusyNotice({ key: convKey, text: message, seq: threadsSeqRef.current });
   };
 
   const send = (text: string, fromDraft: boolean) => {
     const question = text.trim();
-    if (!question || blockedReason || state.inflight) return;
+    if (!question || !canAskHere) return;
     if (fromDraft) onDraftChange("");
-    void assistant.ask({ convKey: current.key, threadId: current.threadId, question, level });
+    setBusyNotice(null);
+    // 이 대화의 지우기 확인을 열어 둔 채 물으면 확인은 닫는다(답이 끝난 뒤 되살아나 초점을 빼앗지 않게).
+    if (confirmDelete && confirmDelete === current.threadId) setConfirmDelete(null);
+    void assistant.ask({ convKey: current.key, threadId: current.threadId, question, level, onBusy: onBusy(current.key, question) });
     // 보낸 질문이 판 맨 위에 오게 — 진행 상황과 보고서가 그 아래로 자란다.
     requestAnimationFrame(() => scrollToLastTurn(scrollBehavior()));
   };
 
   const retry = (turn: Turn) => {
-    if (state.inflight) return;
-    void assistant.ask({ convKey: current.key, threadId: current.threadId, question: turn.question, level: turn.level });
+    if (!canAskHere) return;
+    setBusyNotice(null);
+    void assistant.ask({ convKey: current.key, threadId: current.threadId, question: turn.question, level: turn.level, onBusy: onBusy(current.key, turn.question) });
     requestAnimationFrame(() => scrollToLastTurn(scrollBehavior()));
   };
 
@@ -129,14 +175,24 @@ export function AssistantOverlay({
   };
 
   const remove = async (threadId: string) => {
+    // 그사이 답을 만들기 시작한 대화는 지우지 않는다(서버도 거절한다 — 멈출 화면이 없는 질문이 자리를 차지하지 않게).
+    if (running.has(threadId)) return;
     setDeleting(true);
     const error = await assistant.deleteThread(threadId);
     setDeleting(false);
     setDeleteError(error);
     if (!error) {
       setConfirmDelete(null);
-      setRenaming(null);
+      if (renaming === threadId) setRenaming(null);
+      // 지운 행이 사라지며 초점이 body로 빠지지 않게 '새 질문'으로.
+      requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-assistant-new]")?.focus());
     }
+  };
+
+  /** 목록을 접으면 열어 둔 지우기 확인도 닫는다 — 보이지 않는 확인이 첫 Esc를 먹지 않게. */
+  const setListOpen = (v: boolean) => {
+    if (!v) setConfirmDelete(null);
+    onListOpenChange(v);
   };
 
   // 화면 낭독기용 알림 줄 — 방금 끝난 답의 결과를 읽는다(지난 대화의 실패를 한꺼번에 읽지 않게 차례 상자엔 역할을 달지 않았다).
@@ -157,21 +213,22 @@ export function AssistantOverlay({
       open={open}
       onOpenChange={(next, details) => {
         if (!next && details.reason === "escape-key") {
-          // Esc는 안쪽부터 — 이름 고치기 → 지우기 확인 → 폰 서랍 → 판.
+          // Esc는 안쪽부터 — 이름 고치기 → 지우기 확인(목록 행) → 폰 서랍 → 판.
           // 지금 보는 대화의 이름을 고치는 중일 때만 — 다른 대화로 옮긴 뒤 남은 표시가 Esc를 삼키지 않게(리뷰 2026-11-06).
           if (renaming && renaming === current.threadId) {
             details.cancel();
             if (renameSavingFor.current !== renaming) setRenaming(null);
             return;
           }
-          if (confirmDelete) {
+          if (confirmDeleteLive) {
             details.cancel();
-            setConfirmDelete(null);
+            // 지우는 중엔 닫지 않는다 — 실패하면 그 이유가 확인 안에 보인다.
+            if (!deleting) setConfirmDelete(null);
             return;
           }
           if (listOpen && isPhone()) {
             details.cancel();
-            onListOpenChange(false);
+            setListOpen(false);
             return;
           }
         }
@@ -194,7 +251,7 @@ export function AssistantOverlay({
               variant="ghost"
               aria-expanded={listOpen}
               aria-controls={listId}
-              onClick={() => onListOpenChange(!listOpen)}
+              onClick={() => setListOpen(!listOpen)}
             >
               <EyIcon name={listOpen ? "panelLeftClose" : "panelLeftOpen"} />
               목록
@@ -233,7 +290,7 @@ export function AssistantOverlay({
                 type="button"
                 tabIndex={-1}
                 aria-label="목록 닫기"
-                onClick={() => onListOpenChange(false)}
+                onClick={() => setListOpen(false)}
                 className="absolute inset-0 z-10 bg-black/20 md:hidden"
               />
             ) : null}
@@ -246,7 +303,7 @@ export function AssistantOverlay({
                 load={state.threadsLoad}
                 error={state.threadsError}
                 currentThreadId={current.threadId}
-                streamingThreadId={streamingThreadId}
+                runningThreadIds={running}
                 today={today}
                 onSelect={(id) => {
                   setConfirmDelete(null);
@@ -256,6 +313,17 @@ export function AssistantOverlay({
                 }}
                 onNew={startNew}
                 onRetry={() => void assistant.loadThreads()}
+                // 확인을 열어 둔 사이 답을 만들기 시작한 대화는 확인을 거둔다(도는 대화는 지우지 않는다 · 적대 리뷰 2026-11-09).
+                confirmDeleteId={confirmDeleteLive}
+                deleting={deleting}
+                deleteError={deleteError}
+                onAskDelete={(id) => {
+                  if (running.has(id)) return;
+                  setDeleteError(null);
+                  setConfirmDelete(id);
+                }}
+                onCancelDelete={() => setConfirmDelete(null)}
+                onDelete={(id) => void remove(id)}
               />
             </aside>
 
@@ -265,25 +333,14 @@ export function AssistantOverlay({
                   <ConversationBody
                     conv={current}
                     enabled={state.enabled}
-                    canAsk={!blockedReason && !state.inflight}
+                    canAsk={canAskHere}
                     onSuggest={(q) => send(q, false)}
                     onRetry={retry}
                     onReload={() => current.threadId && void assistant.loadConversation(current.threadId, { quiet: current.turns.length > 0 })}
-                    streamingHere={streamingHere}
-                    confirmDelete={confirmDelete === current.threadId}
-                    onAskDelete={() => {
-                      setDeleteError(null);
-                      setConfirmDelete(current.threadId);
-                    }}
-                    onCancelDelete={() => setConfirmDelete(null)}
-                    onDelete={() => current.threadId && void remove(current.threadId)}
-                    deleting={deleting}
-                    deleteError={deleteError}
+                    onControl={(turn, action) => (turn.messageId ? assistant.controlSaved(action, turn.messageId) : Promise.resolve(false))}
+                    today={today}
                     renaming={!!current.threadId && renaming === current.threadId}
-                    onAskRename={() => {
-                      setConfirmDelete(null);
-                      setRenaming(current.threadId);
-                    }}
+                    onAskRename={() => setRenaming(current.threadId)}
                     onCancelRename={() => setRenaming(null)}
                     onRenameSaving={(v) => {
                       const id = current.threadId;
@@ -309,10 +366,14 @@ export function AssistantOverlay({
                     level={level}
                     onLevelChange={onLevelChange}
                     onSend={() => send(draft, true)}
-                    onStop={assistant.stop}
+                    onStop={() => live && assistant.stop(live.key)}
+                    onFinish={() => live && assistant.finish(live.key)}
                     streaming={streamingHere}
-                    stopping={assistant.stopping}
+                    stopping={!!live && assistant.stopping.has(live.key)}
+                    finishing={!!live && assistant.finishing.has(live.key)}
+                    canFinish={canFinish}
                     blockedReason={blockedReason}
+                    notice={busyNotice && busyNotice.key === current.key && state.threadsSeq === busyNotice.seq ? busyNotice.text : null}
                     inputRef={inputRef}
                   />
                 </div>
@@ -335,13 +396,8 @@ function ConversationBody({
   onSuggest,
   onRetry,
   onReload,
-  streamingHere,
-  confirmDelete,
-  onAskDelete,
-  onCancelDelete,
-  onDelete,
-  deleting,
-  deleteError,
+  onControl,
+  today,
   renaming,
   onAskRename,
   onCancelRename,
@@ -354,13 +410,10 @@ function ConversationBody({
   onSuggest: (q: string) => void;
   onRetry: (t: Turn) => void;
   onReload: () => void;
-  streamingHere: boolean;
-  confirmDelete: boolean;
-  onAskDelete: () => void;
-  onCancelDelete: () => void;
-  onDelete: () => void;
-  deleting: boolean;
-  deleteError: string | null;
+  /** 이 화면이 받지 않는(다른 탭 · 새로 고친 뒤) 도는 질문을 멈추거나 바로 결과 보기. */
+  onControl: (turn: Turn, action: "stop" | "finish") => Promise<boolean>;
+  /** 한국 날짜(판을 열 때 정한다) — 추천 질문이 날짜가 바뀌면 다시 받는다. */
+  today: string;
   renaming: boolean;
   onAskRename: () => void;
   onCancelRename: () => void;
@@ -391,7 +444,7 @@ function ConversationBody({
         </div>
       );
     }
-    return <EmptyState enabled={enabled} canAsk={canAsk} onSuggest={onSuggest} />;
+    return <EmptyState enabled={enabled} canAsk={canAsk} onSuggest={onSuggest} today={today} />;
   }
 
   return (
@@ -403,32 +456,13 @@ function ConversationBody({
           <h2 className="text-foreground min-w-0 flex-1 text-lg font-bold break-words">{conv.title ?? "새 대화"}</h2>
         )}
         {conv.threadId && !renaming ? (
-          confirmDelete ? (
-            <div role="group" aria-label="대화 지우기 확인" className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-medium">이 대화를 지울까요? 되돌릴 수 없습니다.</span>
-              <Button type="button" variant="destructive" onClick={onDelete} disabled={deleting}>
-                <EyIcon name="trash" />
-                {deleting ? "지우는 중" : "지우기"}
-              </Button>
-              <Button type="button" variant="ghost" onClick={onCancelDelete} disabled={deleting}>
-                취소
-              </Button>
-            </div>
-          ) : (
-            <span className="flex flex-wrap items-center gap-1">
-              <Button ref={renameButtonRef} type="button" variant="ghost" onClick={onAskRename}>
-                <EyIcon name="edit" />
-                이름 바꾸기
-              </Button>
-              <Button type="button" variant="ghost" onClick={onAskDelete} disabled={streamingHere}>
-                <EyIcon name="trash" />
-                대화 지우기
-              </Button>
-            </span>
-          )
+          // 지우기는 목록 행의 x로 옮겼다(원장 2026-11-06 *"현재 대화 가장 위로 올라가야 지울 수 있는데"*).
+          <Button ref={renameButtonRef} type="button" variant="ghost" onClick={onAskRename}>
+            <EyIcon name="edit" />
+            이름 바꾸기
+          </Button>
         ) : null}
       </div>
-      {deleteError && confirmDelete ? <p className="text-danger text-sm font-medium">{deleteError}</p> : null}
       {conv.load === "error" && conv.loadError ? (
         <div className="bg-bg-soft/60 flex flex-wrap items-center gap-3 rounded-xl px-4 py-2.5 text-sm">
           <span className="min-w-0 flex-1">{`새로 고치지 못했습니다 — ${conv.loadError}`}</span>
@@ -441,7 +475,7 @@ function ConversationBody({
       <ol className="space-y-10">
         {conv.turns.map((turn) => (
           <li key={turn.key} data-turn="" className="scroll-mt-4">
-            <AssistantTurn turn={turn} canRetry={canAsk} onRetry={onRetry} onReload={onReload} />
+            <AssistantTurn turn={turn} canRetry={canAsk} onRetry={onRetry} onReload={onReload} onControl={onControl} />
           </li>
         ))}
       </ol>
@@ -467,8 +501,13 @@ function LoadingConversation() {
   );
 }
 
-/** 처음 화면 — 인사 + 추천 질문(누르면 바로 묻는다). 비서를 쓸 수 없는 지점이면 그 사실만. */
-function EmptyState({ enabled, canAsk, onSuggest }: { enabled: boolean | null; canAsk: boolean; onSuggest: (q: string) => void }) {
+/**
+ * 처음 화면 — 인사 + 추천 질문(누르면 바로 묻는다). 비서를 쓸 수 없는 지점이면 그 사실만.
+ * 추천 질문은 이 지점의 최근 추세로 고른 것(원장 2026-11-06 *"최근 학원 추세를 보고 스마트하게"*) — 하루 한 번 받고 '새로 고침'으로 다시 센다.
+ * 직전 묶음에 없던 질문에는 NEW(원장 *"이전과 변경된 새로운 질문이 배치될때마다 NEW 라벨"*).
+ */
+function EmptyState({ enabled, canAsk, onSuggest, today }: { enabled: boolean | null; canAsk: boolean; onSuggest: (q: string) => void; today: string }) {
+  const suggestions = useAssistantSuggestions(enabled !== false, today);
   return (
     <div className="@container my-auto flex flex-col items-center py-10 text-center">
       <span aria-hidden className="bg-gold-soft text-gold flex size-14 items-center justify-center rounded-2xl">
@@ -483,22 +522,60 @@ function EmptyState({ enabled, canAsk, onSuggest }: { enabled: boolean | null; c
         <>
           <h2 className="mt-5 text-2xl font-bold">무엇이 궁금하세요?</h2>
           <p className="mt-2 max-w-md text-base">학원 자료를 직접 찾아 숫자·표·차트로 정리해 드립니다.</p>
-          <ul className="mt-8 grid w-full max-w-3xl grid-cols-1 gap-2.5 text-left @2xl:grid-cols-2">
-            {ASSISTANT_SUGGESTIONS.map((q) => (
-              <li key={q}>
-                <button
-                  type="button"
-                  disabled={!canAsk}
-                  onClick={() => onSuggest(q)}
-                  className="border-line hover:bg-muted hover:border-line-strong focus-visible:outline-primary flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none"
-                >
-                  <EyIcon name="sparkle" size={16} className="text-gold shrink-0" />
-                  <span className="min-w-0 flex-1 break-words">{q}</span>
-                  <EyIcon name="arrowRight" size={16} className="shrink-0" />
-                </button>
-              </li>
-            ))}
-          </ul>
+          <div className="mt-8 w-full max-w-3xl">
+            <div className="flex items-center justify-between gap-3 px-1 pb-2 text-left">
+              <span className="text-xs font-medium">
+                {suggestions.day ? `${monthDayLabel(suggestions.day)} 학원 자료로 고른 질문` : "추천 질문"}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                onClick={suggestions.refresh}
+                disabled={!suggestions.canRefresh}
+                aria-busy={suggestions.refreshing || undefined}
+                {...tipProps({ title: "추천 질문 새로 고침", lines: ["지금 학원 자료로 다시 셉니다(하루 한 번은 저절로)."] })}
+              >
+                <EyIcon name="sync" size={14} className={suggestions.refreshing ? "animate-spin motion-reduce:animate-none" : undefined} />
+                {suggestions.refreshing ? "세는 중" : "새로 고침"}
+              </Button>
+            </div>
+            {suggestions.status === "loading" ? (
+              <ul aria-busy="true" aria-label="추천 질문을 고르는 중" className="grid grid-cols-1 gap-2.5 @2xl:grid-cols-2">
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                  <li key={i} className="bg-bg-soft h-14 animate-pulse rounded-xl motion-reduce:animate-none" />
+                ))}
+              </ul>
+            ) : (
+              <ul className="grid grid-cols-1 gap-2.5 text-left @2xl:grid-cols-2">
+                {suggestions.items.map((item) => {
+                  const isNew = suggestions.fresh.has(item.text);
+                  return (
+                    <li key={item.text}>
+                      <button
+                        type="button"
+                        disabled={!canAsk}
+                        onClick={() => onSuggest(item.text)}
+                        className="border-line hover:bg-muted hover:border-line-strong focus-visible:outline-primary flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none"
+                      >
+                        <EyIcon name="sparkle" size={16} className="text-gold shrink-0" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block break-words">{item.text}</span>
+                          {item.reason ? <span className="num mt-0.5 block text-xs font-normal">{item.reason}</span> : null}
+                        </span>
+                        {isNew ? (
+                          <span className="bg-primary text-primary-foreground shrink-0 rounded-md px-1.5 py-0.5 text-xs leading-none font-bold tracking-wide">
+                            NEW
+                          </span>
+                        ) : null}
+                        <EyIcon name="arrowRight" size={16} className="shrink-0" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
         </>
       )}
     </div>

@@ -54,4 +54,29 @@ describe("questionMessage · pastAnswerText", () => {
     // 지난 차례의 조회 번호는 넣지 않는다(새 차례도 q1부터 센다).
     expect(text).not.toMatch(/\bq1\b/);
   });
+  it("지난 답의 강조 표시는 벗기고 글자만 넘긴다", () => {
+    const text = pastAnswerText({
+      question: "퇴원은?",
+      report: {
+        title: "퇴원",
+        blocks: [
+          { type: "summary", text: "퇴원 **8명** 중 [[bad:불만족 3명]]" },
+          { type: "callout", tone: "warn", title: "[[warn:주의]]", text: "**BS3B** 7명" },
+          { type: "list", items: ["[[good:출석 95%]]"] },
+          { type: "advice", items: [{ action: "**담임** 면담", why: "[[bad:**7명**]] 퇴원" }] },
+        ],
+      },
+      queries: [],
+    });
+    expect(text).toContain("퇴원 8명 중 불만족 3명");
+    expect(text).toContain("주의: BS3B 7명");
+    expect(text).toContain("- 출석 95%");
+    expect(text).toContain("[비서 의견] 담임 면담 — 7명 퇴원");
+    expect(text).not.toMatch(/\*\*|\[\[/);
+  });
+  it("강조 규칙이 들어 있다(원장 서식 요청)", () => {
+    const prompt = buildSystemPrompt("x");
+    expect(prompt).toContain("[[bad:…]]");
+    expect(prompt).toMatch(/한 문단에 서너 군데까지/);
+  });
 });

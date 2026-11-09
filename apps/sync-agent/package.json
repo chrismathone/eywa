@@ -1,5 +1,5 @@
 {
-  "name": "eywa-sync-agent", "productName": "AYWA 연동", "version": "1.0.18", "private": true,
+  "name": "eywa-sync-agent", "productName": "AYWA 연동", "version": "1.0.19", "private": true,
   "description": "AYWA 지점 통합 연동 앱", "author": "AYWA", "main": "main.cjs",
   "scripts": { "start": "electron .", "prepare:runtime": "node prepare.cjs", "test": "node --test test/*.test.cjs", "package": "electron-builder --win nsis --x64 --publish never" },
   "dependencies": { "yauzl": "3.4.0", "zod": "4.4.3" },

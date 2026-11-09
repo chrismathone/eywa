@@ -58,7 +58,9 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const viewer = await assistantViewer();
   if (isGateFailure(viewer)) return NextResponse.json({ error: viewer.error }, { status: viewer.status });
   try {
-    if (!(await deleteThread(viewer.owner, id.data))) return NextResponse.json({ error: "대화를 찾지 못했습니다" }, { status: 404 });
+    const deleted = await deleteThread(viewer.owner, id.data);
+    if (deleted === "running") return NextResponse.json({ error: "답을 만드는 중인 대화는 지울 수 없습니다. 멈추거나 끝난 뒤 지워 주세요" }, { status: 409 });
+    if (deleted === "missing") return NextResponse.json({ error: "대화를 찾지 못했습니다" }, { status: 404 });
     await logAction({ action: "assistant_thread_delete", targetType: "assistant", targetLabel: id.data });
     return NextResponse.json({ ok: true });
   } catch (error) {
