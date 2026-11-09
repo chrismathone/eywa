@@ -180,7 +180,7 @@ describe("attendance and seminars",()=>{
     expect(facts.seminar).toMatchObject({attended:0,pending:false,unreviewedRows:652});
     const s=student();s.facts=facts;expect(rankingValues(s,config).seminar).toMatchObject({value:0,note:expect.stringContaining("검토 전 명단 652행")});
     // 병합된 학생의 행은 대표 학생 것으로 센다.
-    expect(build({ready:true,checkedAt:today,records:[{...common,studentId:"old"},{...common,attendanceBasis:"explicit_attendance"}]},id=>id==="old"?"s":id).seminar).toMatchObject({attended:1,registeredOnly:0});
+    expect(build({ready:true,checkedAt:today,records:[{...common,studentId:"old",attendanceBasis:"explicit_attendance" as const},{...common,attendanceBasis:"registration_policy" as const}]},id=>id==="old"?"s":id).seminar).toMatchObject({attended:1,registeredOnly:0});
   });
   it("unconnected lists stay unknown; old pending payloads keep an honest note",()=>{
     const s=student();s.facts=build({ready:false,checkedAt:null,records:[]});
