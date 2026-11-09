@@ -579,6 +579,8 @@ export const AUDIT_ACTIONS = {
   session_term_money_carryover_cancel: "청구 회차 금액 이월 취소",
   // 받은 금액 이월만큼 확정 시수를 자동으로 올림(원장 2026-10-07) — 사람이 '해제 → 시수 고침 → 다시 확정'하던 일.
   session_term_carry_sync: "확정 시수 자동 조정(받은 금액 이월 반영)",
+  // 받은 이월을 다음 달로 다시 넘기며 확정 시수를 낮춤(이월 창 · 원장 2026-11-09) — 사람이 한 일.
+  session_term_carry_unreflect: "확정 시수 낮춤(받은 이월 다시 넘기기)",
   session_term_note: "청구 회차 메모 수정",
   // 🔴 급여는 **"무슨 일이 있었나"만** 남긴다 — 조정한 항목 이름조차 안 담는다("인센티브를 고쳤다"
   //    만으로도 그 사람 급여 사정이 읽힌다). metadata는 `{userId, period}`뿐이다.

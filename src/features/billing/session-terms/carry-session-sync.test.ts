@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { carryShortfall, landedCarryIn, planCarrySessionSync, type CarrySyncRow } from "./carry-session-sync";
+import { carryShortfall, carryUnreflectable, landedCarryIn, planCarrySessionSync, planCarryUnreflect, type CarrySyncRow } from "./carry-session-sync";
 import { netAllocatedAmount, type MoneyCarryIn } from "./money-carryover";
 
 const carryIn = (amount: number, over: Partial<MoneyCarryIn> = {}): MoneyCarryIn => ({ amount, fromPeriod: "2026-08", fromClassName: "중등M 개별", note: null, valid: true, ...over });
@@ -120,5 +120,43 @@ describe("금액 이월 → 확정 시수 자동 반영(올리기)", () => {
     const two = [carryIn(24000), carryIn(24000, { fromClassName: "중등M 정규" })];
     expect(planCarrySessionSync(row({ carryIns: two }))).toEqual({ kind: "adjust", sessions: 7, amount: 168000, bySessions: 2, byAmount: 48000 });
     expect(planCarrySessionSync(row({ confirmedSessions: 6, amount: 144000, carryIns: two }))).toEqual({ kind: "none", reason: "unexplained" });
+  });
+});
+
+describe("🔴 받은 이월을 다음 달로 다시 넘기기 = 이월 창이 확정 시수를 함께 낮춘다(원장 2026-11-09 '남은 한계는 근본 해결해')", () => {
+  // 조은준 9월 — 배분 312,000 + 받은 24,000 · 27시수(324,000): 더 받은 몫 12,000 + 시수에 반영된 받은 이월 12,000.
+  const jo = (over: Partial<CarrySyncRow> = {}) => row({ unitPrice: 12000, confirmedSessions: 27, amount: 324000, allocatedAmount: 312000, ...over });
+
+  it("낮춰 넘길 수 있는 몫 = 확정액 가운데 받은 이월로 채운 부분(확정액 − 배분액, 받은 이월 이하)", () => {
+    expect(carryUnreflectable(jo())).toBe(12000);
+    expect(carryUnreflectable(jo({ confirmedSessions: 28, amount: 336000 }))).toBe(24000); // 자동으로 28까지 올린 줄
+    expect(carryUnreflectable(jo({ confirmedSessions: 26, amount: 312000 }))).toBe(0); // 받은 이월이 시수에 안 들어감
+    // 덜 받는 줄(배분 312,000 + 받은 24,000 < 30시수 360,000) — 낮춰도 모자란 몫이 남아 넘긴 이월이 유효해지지 않는다 → 버튼·상한 없음.
+    expect(carryUnreflectable(jo({ confirmedSessions: 30, amount: 360000 }))).toBe(0);
+    expect(planCarryUnreflect(jo({ confirmedSessions: 30, amount: 360000 }), 24000).kind).toBe("invalid");
+  });
+
+  it("더 받은 몫 안이면 낮추지 않는다 · 넘으면 그만큼 시수를 낮춘다(전액 24,000 → 27에서 26)", () => {
+    expect(planCarryUnreflect(jo(), 12000)).toEqual({ kind: "none" });
+    expect(planCarryUnreflect(jo(), 24000)).toEqual({ kind: "lower", sessions: 26, amount: 312000, bySessions: 1, byAmount: 12000 });
+    expect(planCarryUnreflect(jo(), 18000)).toEqual({ kind: "lower", sessions: 26.5, amount: 318000, bySessions: 0.5, byAmount: 6000 });
+    // 자동으로 올린 28시수 줄 — 더 받은 몫 0이어도 24,000을 넘기며 26으로.
+    expect(planCarryUnreflect(jo({ confirmedSessions: 28, amount: 336000 }), 24000)).toEqual({ kind: "lower", sessions: 26, amount: 312000, bySessions: 2, byAmount: 24000 });
+  });
+
+  it("거절 — 상한 초과 · 0.5시수 단위가 아님 · 대상이 아닌 줄(월 정액·일수 기준·확정액 ≠ 시수 × 단가·배분 재확인)", () => {
+    expect(planCarryUnreflect(jo(), 24001)).toMatchObject({ kind: "invalid", error: expect.stringContaining("최대 24,000원") });
+    expect(planCarryUnreflect(jo(), 15000)).toMatchObject({ kind: "invalid", error: expect.stringContaining("0.5시수(6,000원)") });
+    for (const r of [jo({ pricingMode: "monthly" }), jo({ quantityBasis: "days" }), jo({ amount: 323000 }), jo({ allocationStale: true })]) {
+      expect(carryUnreflectable(r)).toBe(0);
+      expect(planCarryUnreflect(r, 24000).kind).toBe("invalid");
+    }
+  });
+
+  it("낮춰 넘긴 줄은 자동 맞춤이 다시 올리지 않는다(보낸 이월 = sending) — 넘긴 뒤 실납 = 확정액", () => {
+    const after = jo({ confirmedSessions: 26, amount: 312000, carryOut: { amount: 24000, toClassId: "c", toClassName: "중등E_중1 SKY", toPeriod: "2026-10", note: null, at: null } });
+    expect(planCarrySessionSync(after)).toEqual({ kind: "none", reason: "balanced" });
+    // 사람이 그 뒤 27로 다시 확정해도 보낸 이월(24,000)이 무효가 되므로 종전 판정 — 올리지 않는다(차이 0 ≠ 받은 이월).
+    expect(planCarrySessionSync({ ...after, confirmedSessions: 27, amount: 324000 }).kind).toBe("none");
   });
 });

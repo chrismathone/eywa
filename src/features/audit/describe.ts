@@ -618,6 +618,22 @@ export function auditDetail(
         won(m.carryAmount) ? `받은 이월 ${won(m.carryAmount)} 반영` : null,
       );
     }
+    case "session_term_carry_unreflect": {
+      // 이월 창에서 받은 이월을 다음 달로 다시 넘기며 확정 시수를 낮춘 일 — 몇 시수에서 몇 시수로, 얼마를 어디로.
+      const before = num(m.sessionsBefore);
+      const after = num(m.sessions);
+      return join(
+        str(m.period),
+        str(m.studentName),
+        before !== null && after !== null ? `확정 시수 ${before} → ${after}` : null,
+        won(m.byAmount) ? `시수에 반영됐던 받은 이월 ${won(m.byAmount)}` : null,
+        // 실패(stuck)면 넘긴 것이 없다 — '넘기려던 금액'과 실패 단계(배분 재확정 · 이월 저장)를 적는다.
+        won(m.carryAmount) ? `${m.stuck === true ? "넘기려던 금액" : "넘긴 금액"} ${won(m.carryAmount)}(→ ${str(m.toPeriod) ?? "다음 달"})` : null,
+        m.stuck === true
+          ? `${m.stage === "allocate" ? "배분 재확정 실패" : "이월 저장 실패"} · ${m.revert === "reverted_needs_allocation" ? "시수는 되돌림 · 배분 재확인 필요" : "시수를 되돌리지 못함"}`
+          : null,
+      );
+    }
     case "session_term_money_carryover":
     case "session_term_money_carryover_cancel": {
       // 금액 이월(0278a) — 어느 달 어느 반에서 얼마를 다음 달 어느 반으로. 이름은 저장 시점 스냅샷(반 이름이 바뀌어도 그대로 읽힌다).
