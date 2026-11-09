@@ -39,6 +39,9 @@ test('같은 파일은 복사하고 바뀐 파일만 받는다 — 큰 같은 �
   const bytes=log.reduce((n,r)=>{const [,a,b]=/^bytes=(\d+)-(\d+)$/.exec(r);return n+Number(b)-Number(a)+1;},0);
   assert.ok(bytes<archive.length/2,`받은 바이트 ${bytes} / ${archive.length}`);
   assert.ok(progress.some(p=>p.phase==='copying')&&progress.some(p=>p.phase==='downloading'&&p.files===2));
+  // 복사 진행률은 용량으로도 — 0에서 시작해 줄지 않고, 끝 값이 판 목록 전체 크기와 같다(원장 2026-11-06).
+  const copying=progress.filter(p=>p.phase==='copying'),filesBytes=manifest().files.reduce((n,f)=>n+f.size,0);
+  assert.equal(copying[0].bytes,0);assert.equal(copying.at(-1).bytes,filesBytes);assert.equal(copying.at(-1).totalBytes,filesBytes);assert.ok(copying.every((p,i)=>!i||p.bytes>=copying[i-1].bytes));
 });
 
 test('같은 크기라도 내용이 다르면(해시) 복사하지 않고 받는다',async()=>{

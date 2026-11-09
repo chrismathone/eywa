@@ -50,8 +50,9 @@ async function download(m,file,fetchImpl=fetch,{onProgress=()=>{},idleTimeoutMs=
 }
 async function extractVerified(file,target,m,{onProgress=()=>{}}={}){
   // Target is a newly created directory; never follow pre-existing directories or symlinks.
-  await fsp.mkdir(target,{recursive:false});const expected=new Map(m.files.map(f=>[f.path.toLowerCase(),f]));const seen=new Set();let completed=0;
-  onProgress({phase:'extracting',completed,total:expected.size});
+  await fsp.mkdir(target,{recursive:false});const expected=new Map(m.files.map(f=>[f.path.toLowerCase(),f]));const seen=new Set();let completed=0,bytes=0;const totalBytes=m.files.reduce((n,f)=>n+f.size,0);
+  // 진행률은 용량으로도 낸다(원장 2026-11-06 — 큰 파일이 앞에 몰려 있어 파일 수로 세면 '67 / 10,021개 파일 · 0%'가 용량으로는 약 23%였다).
+  onProgress({phase:'extracting',completed,total:expected.size,bytes,totalBytes});
   const zip=await new Promise((resolve,reject)=>yauzl.open(file,{lazyEntries:true,decodeStrings:true,validateEntrySizes:true},(e,z)=>e?reject(e):resolve(z)));
   await new Promise((resolve,reject)=>{
     let failed=false;const fail=e=>{if(!failed){failed=true;zip.close();reject(e);}};
@@ -65,7 +66,7 @@ async function extractVerified(file,target,m,{onProgress=()=>{}}={}){
       seen.add(name.toLowerCase());const dest=path.join(target,...name.split('/'));await fsp.mkdir(path.dirname(dest),{recursive:true});
       const input=await new Promise((r,j)=>zip.openReadStream(entry,(e,s)=>e?j(e):r(s)));const hash=crypto.createHash('sha256');let count=0;
       await pipeline(input,new Transform({transform(c,_e,cb){count+=c.length;if(count>f.size)return cb(new Error('oversize'));hash.update(c);cb(null,c);}}),fs.createWriteStream(dest,{flags:'wx'}));
-      if(count!==f.size||hash.digest('hex')!==f.sha256)throw new Error('file_hash_mismatch');onProgress({phase:'extracting',completed:++completed,total:expected.size});zip.readEntry();
+      if(count!==f.size||hash.digest('hex')!==f.sha256)throw new Error('file_hash_mismatch');bytes+=f.size;onProgress({phase:'extracting',completed:++completed,total:expected.size,bytes,totalBytes});zip.readEntry();
     })().catch(fail);});zip.readEntry();
   });
 }
