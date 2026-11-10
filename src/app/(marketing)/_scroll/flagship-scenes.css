@@ -84,12 +84,24 @@
 .lp .words-box{width:min(1240px,100% - var(--wpad) * 2);display:grid;gap:clamp(36px,6vh,64px)}
 .lp .words-box .words{width:auto;font-size:clamp(30px,4.7vw,76px)}
 .lp .words{font-weight:800;letter-spacing:-.06em}
-.lp .words span{color:color-mix(in srgb,var(--ink) calc(var(--w) * 100%),#75689f)}
+/* 자모 타이핑(typing-words.tsx) — 스크롤 진해짐은 걷었다. 아직 안 친 글자는 투명하게 깔아 줄바꿈 자리를 미리 잡는다. 커서 = 잉크 막대(폭 0이라 글이 안 밀린다). */
+.lp .words span{color:inherit}
+.lp .words.typing{position:relative}
+.lp .words .ty-rest{color:transparent;text-decoration-color:transparent}
+.lp .ty-caret{display:inline;position:relative}
+.lp .ty-caret::after{content:"";position:absolute;left:.03em;top:0;bottom:0;width:.07em;background:var(--flag-ink);animation:ty-blink 1s steps(1) infinite}
+.lp .words[data-state="typing"] .ty-caret::after{animation:none}
+.lp .words[data-caret="off"] .ty-caret{display:none}
+@keyframes ty-blink{50%{opacity:0}}
+/* 아래 두 줄은 다 친 뒤에 떠오른다(치는 도중 장면을 벗어나면 바로 완성 → 같이 보인다) */
+.lp .words-legend{transition:opacity .6s var(--ease),transform .6s var(--ease)}
+.lp .words-box:has(.typing[data-state="armed"]) .words-legend{opacity:0;transform:translateY(10px)}
+.lp .words-box:has(.typing[data-state="typing"]) .words-legend{opacity:0;transform:translateY(10px)}
+@media print{.lp .words .ty-rest{color:inherit;text-decoration-color:currentColor}.lp .ty-caret{display:none}.lp .words-box .words-legend{opacity:1!important;transform:none!important}}
 .lp .words-legend{margin:0;display:grid;grid-template-columns:1fr 1fr;gap:28px;border-top:2px solid var(--flag-ink);padding-top:18px}
 .lp .words-legend dt{font-size:14px;font-weight:800}
 .lp .words-legend dd{margin:4px 0 0;font-size:clamp(17px,1.4vw,21px);color:#3a3157}
 @media (max-width:560px){.lp .words-legend{grid-template-columns:1fr;gap:14px}}
-.lp:not(.js) .words span,.lp.rm .words span{color:var(--ink)}
 /* 장면 B — 상담 분석(잉크 면) */
 .lp .pin.dark{background:var(--flag-ink)}
 .lp .pin.dark .ph::after{background:linear-gradient(90deg,rgba(24,32,18,.94) 0,rgba(24,32,18,.7) 42%,rgba(24,32,18,.28) 100%)}

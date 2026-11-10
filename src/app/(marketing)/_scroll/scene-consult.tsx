@@ -1,15 +1,15 @@
-import { Fragment } from "react";
 import { ScenePlayer } from "./scene-player";
-import { sv } from "./style";
+import { TypingWords, type TypingSegment } from "./typing-words";
 
-/** 선언문 — `KEY`는 한 덩어리 낱말로 밑줄 강조(낱말 사이 빈칸은 span 밖에 둬 밑줄이 빈칸까지 늘지 않게). */
-const BEFORE = "원장과 강사가 하루에도 수십 번 여는 화면이라, 에이와는";
-const KEY = "반응 속도부터";
-const AFTER = "맞췄습니다. 시간이 걸리는 일은 뒤에서 처리하고, 지금 볼 화면을 먼저 띄웁니다.";
-const WORDS: [string, boolean][] = [...BEFORE.split(" ").map((w): [string, boolean] => [w, false]), [KEY, true], ...AFTER.split(" ").map((w): [string, boolean] => [w, false])];
+/** 선언문 — 가운데 조각만 밑줄 강조(빈칸은 강조 조각 밖에 둬 밑줄이 빈칸까지 늘지 않게). */
+const WORDS: TypingSegment[] = [
+  { text: "원장과 강사가 하루에도 수십 번 여는 화면이라, 에이와는 " },
+  { text: "반응 속도부터", em: true },
+  { text: " 맞췄습니다. 시간이 걸리는 일은 뒤에서 처리하고, 지금 볼 화면을 먼저 띄웁니다." },
+];
 
 /**
- * 선언문(스크롤하면 낱말이 차례로 진해진다) + 고정 장면 B(콜&상담 녹음 → AI 정리, 어두운 면).
+ * 선언문(화면에 들어오면 자모 타이핑 — `TypingWords`, 2026-11-10 · 전엔 스크롤하면 낱말이 진해졌다) + 자동 재생 장면 B(콜&상담 녹음 → AI 정리, 어두운 면).
  * ⚠️ 처음 시안의 '아침 7시 브리핑' 장면은 뺐다 — 운영실이 2026-09-11 '학원 전체 현황'으로 바뀌며 브리핑 카드가 화면에서
  *    빠졌고 브리핑 알림도 생성이 멈췄다(없는 기능을 소개하면 안 된다). 카드 항목은 실제 상담 분석 항목(요약·요청·주의 신호·
  *    자동 입력·후속 조치, `consultation-analysis.ts`)에서 골랐다.
@@ -17,10 +17,10 @@ const WORDS: [string, boolean][] = [...BEFORE.split(" ").map((w): [string, boole
 export function SceneConsult() {
   return (
     <>
-      <section className="pin state" data-scene="words" data-steps="2" style={sv({"--steps": "2"})} aria-label="반응 속도 원칙">
+      <section className="pin state" data-scene="words" data-play="" aria-label="반응 속도 원칙">
         <div className="stage">
           <div className="words-box">
-            <p className="words" id="words">{WORDS.map(([w, key], i) => <Fragment key={i}><span className={key ? "em-rule" : undefined}>{w}</span>{" "}</Fragment>)}</p>
+            <TypingWords className="words" segments={WORDS} />
             {/* 빈 면 활용(원장 11-10 *"공간을 활용할 방안도 모색"*) — 사실 범위 안의 두 줄만(Codex 협의: 인포그래픽·진행 막대는 '항상 즉시'처럼 읽혀 뺐다).
                 근거 = CLAUDE.md 작업 원칙(무거운 작업은 백그라운드 · loading 뼈대 먼저) · 녹음 전사·분석은 웹훅이 응답 뒤에 돌린다. */}
             <dl className="words-legend">
