@@ -42,6 +42,9 @@ export const ONESCREEN_SCREEN_FILES = [
   "components/use-report-save-input.ts",
   "components/use-report-save-effects.ts",
   "components/use-report-send.ts",
+  "components/use-report-status-merge.ts",
+  "components/use-report-share-links.ts",
+  "components/report-send-notices.ts",
   "components/onescreen-card-column.tsx",
 ] as const;
 
