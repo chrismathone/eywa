@@ -236,6 +236,8 @@ export function ParentReportCard({
           middle={middle}
           footer={rpt.showFooter ? rpt.footerNote || academyName : null}
           // 영어 '인재원 결과지' 항목의 그림·첨부 자리 — 기본 카드와 같은 본문 그리기(TemplateBody)를 그 항목 안에서 쓴다.
+          // 영어 보고서(EiE 일간·항목 보고서) 띠 = EiE 월간 시트의 빨강(원장 2026-11-10). SRS(어휘 관리) 보고서는 그대로.
+          eieRed={templateMode && !srsReport}
           markerBody={templateMode ? (text) => <TemplateBody text={text} jj={jj} inline={inline} student={parentStudent} /> : undefined}
         />
       </div>

@@ -9,6 +9,7 @@ import { PilotSheetHead, type PilotSheetHeadProps } from "./pilot-sheet-head";
 import { PilotNoteBox, SectionBody } from "./pilot-notes-body";
 import { splitImageSlots } from "@/features/report-templates/image-slots";
 import { attendanceMarkIsEnough, attendanceMarkOf } from "../attendance-sentence";
+import styles from "./pilot-report-sheet.module.css";
 
 /** EiE 가로 로고(원장이 보내 준 그림 — 'Express In English · 고려대학교 영어교육 프로그램'). 일일 보고서 학원 로고 아래에 놓는다. */
 export const EIE_WIDE_LOGO_SRC = "/eie-logo-wide.png";
@@ -29,7 +30,7 @@ export function SheetBand({
 }) {
   return (
     <section className="border-line-strong border-t">
-      <h2 className="bg-primary flex items-center gap-2 px-4 py-2.5 text-base font-black text-white">
+      <h2 className="flex bg-[var(--sheet-band,var(--primary))] items-center gap-2 px-4 py-2.5 text-base font-black text-white">
         <span
           aria-hidden
           className="bg-report-accent size-2.5 shrink-0 rounded-sm"
@@ -76,6 +77,8 @@ export type PilotReportSheetProps = Omit<
    * 카드가 영어 본문 그리기(TemplateBody)를 넘긴다. 없으면(수학) 그 줄도 글 그대로다.
    */
   markerBody?: (text: string) => ReactNode;
+  /** 영어 보고서 — 띠·머리 칸·바닥글·테두리 배경을 EiE 월간 시트의 빨강으로(원장 2026-11-10). 없으면 학원 색. */
+  eieRed?: boolean;
 };
 
 /** 항목 본문에 그림·첨부 자리 줄이 있나 — 있으면 그 항목은 자리 그리기로 넘긴다. */
@@ -90,12 +93,13 @@ export function PilotReportSheet({
   middle,
   footer,
   markerBody,
+  eieRed = false,
   ...head
 }: PilotReportSheetProps) {
   const { tests, levels, rest, attendance } = splitSheetSections(sections);
   const hasProgress = rest.some((s) => isPilotTitle(s.title, "progress"));
   return (
-    <article className="bg-card border-primary overflow-hidden border-2">
+    <article className={`bg-card overflow-hidden border-2 border-[var(--sheet-band,var(--primary))] ${eieRed ? styles.eieRed : ""}`}>
       <PilotSheetHead
         {...head}
         tests={tests}
@@ -127,7 +131,7 @@ export function PilotReportSheet({
         </SheetBand>
       ) : null}
       {footer ? (
-        <footer className="bg-primary-deep px-3 py-2.5 text-center text-xs font-medium text-white/85">
+        <footer className="bg-[var(--sheet-band-deep,var(--primary-deep))] px-3 py-2.5 text-center text-xs font-medium text-white/85">
           {footer}
         </footer>
       ) : null}
