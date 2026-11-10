@@ -12,7 +12,8 @@ import { useDisplayOptions } from "./display-options-context";
 import type { SendMark } from "../send-mark";
 export type { SendMark } from "../send-mark";
 import { studentStatus, type TestConfig } from "../report";
-import { subjectTone, toneSolidClass } from "../data";
+import { SUBJECT_SOLID, subjectColorOfRow } from "@/features/owner/subjects";
+import { useSubjectMaps } from "@/features/owner/operations-context";
 import type { CellState, OneScreenStudent } from "../types";
 import { attendanceMarkBadgeClass, attendanceMarkLabel, MARK_PRESENT } from "../attendance-mark";
 import { CLASS_GROUP_MAKEUP, CLASS_GROUP_OTHER } from "../class-tags";
@@ -63,6 +64,7 @@ function StudentRow({
   const t = useSheetT();
   const s = studentStatus(st, testConfig);
   const tf = useSheetTf();
+  const subjectMaps = useSubjectMaps(); // 과목 점 색 = 학원설정(운영 enum 하드코딩 금지)
   const reportTitle = (sendMark?.overdue ?? 0) > 0 ? t("os.list.overdue")
     : sendMark && sendMark.sent > 0 ? tf("os.list.sendDetail", { label: sendMark.label, sent: sendMark.sent, total: sendMark.total }) : t("os.chip.rep.title");
   // 보(보고서) 셀은 과목별 발송 상태로 재정의 가능 (클라이언트가 reportCellById로 전달).
@@ -103,7 +105,7 @@ function StudentRow({
             {st.subjects.map((su, i) => (
               <span
                 key={i}
-                className={`size-1.5 rounded-full ${toneSolidClass(subjectTone(su.name).tone)}`}
+                className={`size-1.5 rounded-full ${SUBJECT_SOLID[subjectColorOfRow(subjectMaps, su)]}`}
                 title={su.name}
               />
             ))}

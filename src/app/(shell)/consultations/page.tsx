@@ -10,6 +10,8 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { isModuleEnabled } from "@/lib/modules";
+import { isFeatureOptedIn } from "@/lib/license/server";
+import { loadConsultationRatings } from "@/features/consultation-rating/server/ratings";
 import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import {
   getConsultationCounselorOptions,
@@ -95,7 +97,7 @@ export default async function ConsultationsPage({
     subject: subject || undefined,
     subjectLabel: subject ? subjects.labelOf(subject) : null,
   };
-  const [{ rows: items, total, classSupported, failed: listFailed }, counts, counselorOptions, canImportExcel, teacherId, canWrite] = await Promise.all([
+  const [{ rows: items, total, classSupported, failed: listFailed }, counts, counselorOptions, canImportExcel, teacherId, canWrite, ratingSwitch] = await Promise.all([
     getStudentConsultationsPage(filters, page, size),
     getStudentConsultationCounts(),
     getConsultationCounselorOptions(),
@@ -104,7 +106,11 @@ export default async function ConsultationsPage({
     effectiveTeacherId(),
     // '상담 추가' = 저장 게이트(createStudentConsultation)와 같은 판정 — 읽기 권한이면 단추를 그리지 않는다(원장 2026-11-05).
     canWriteTenant(user.systemRole, "consultations"),
+    // '상담 평점' 열 = 지점 스위치(consult_rating)가 켜진 지점만 — 꺼진 지점엔 열이 있었는지조차 모르게(요청마다 한 번 캐시).
+    isFeatureOptedIn(user.tenantId, "consult_rating"),
   ]);
+  // 상담자의 기록을 평가한 값 — 스위치가 켜져 있어도 상담 쓰기 권한이 있는 사람에게만 내려보낸다(수업보고서 평점과 같은 게이트 · #77).
+  const ratings = ratingSwitch && canWrite ? await loadConsultationRatings(user.tenantId, items.map((c) => c.id)) : null;
   const totalPages = Math.max(1, Math.ceil(total / size));
   const { thisMonth, lastWeek, pendingFollowUps, overdueFollowUps } = counts;
   const listParams: ConsultationListParams = { range, cat, urg, who, subject, q, size, page };
@@ -204,7 +210,7 @@ export default async function ConsultationsPage({
           </div>
         ) : (
           <>
-            <ConsultationList items={items} size={size} pageSizeKey={PAGE_SIZE_KEY} classOn={classSupported} />
+            <ConsultationList items={items} size={size} pageSizeKey={PAGE_SIZE_KEY} classOn={classSupported} ratings={ratings} />
             <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
           </>
         )}

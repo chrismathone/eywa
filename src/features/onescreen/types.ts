@@ -1,13 +1,10 @@
 /**
  * 선생님 원스크린 — 타입.
  * 프로토타입(data/원스크린_전달/data.js)의 학생 shape를 그대로 타입화.
- * 데모 충실 이식: 입력은 클라이언트 state로만 돌고 DB에 영속화하지 않는다.
+ * 입력은 클라이언트 state에서 돌고, 세션(onescreen_daily_sessions)·보고서(lesson_reports)로 저장된다.
  */
 import type { MonthlyEval } from "@/features/report-templates/monthly-eval";
 import type { MonthlyActivity } from "@/features/report-templates/monthly-activity";
-
-/** 과목 톤 — aywa 디자인 토큰(globals.css)에 매핑된 색 키 */
-export type SubjectTone = "primary" | "blue" | "rose" | "purple" | "gold" | "neutral";
 
 /** 직전 회차(이전 작성) 스냅샷 — 표뷰 '이전 회차 참고행'에 읽기전용 렌더. lesson_reports 한 행에서 추출. */
 export type PrevReport = {

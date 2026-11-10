@@ -10,18 +10,22 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { subjectTone } from "@/features/onescreen/data";
-import type { SubjectTone } from "@/features/onescreen/types";
+import type { PillColor } from "@/components/atoms/pill";
+import { subjectColorOfRow } from "@/features/owner/subjects";
+import { useSubjectMaps } from "@/features/owner/operations-context";
 import { pctOf, type Session } from "../history";
 
-// 과목 톤 → 차트 색. globals.css 토큰만 사용(리터럴 hex 금지 — primary만 v3 네이비로 갱신되고
+// 과목 색(학원설정 colorOf) → 차트 색. globals.css 토큰만 사용(리터럴 hex 금지 — primary만 v3 네이비로 갱신되고
 // rose/gold/neutral은 v1 값에 멈춰 마디아 정합 토큰과 어긋나 있었다, 2026-07-20 감사).
-const TONE_HEX: Record<SubjectTone, string> = {
+const TONE_HEX: Record<PillColor, string> = {
   primary: "var(--color-primary)",
+  green: "var(--color-green)",
   blue: "var(--color-blue)",
   rose: "var(--color-rose)",
   purple: "var(--color-purple)",
   gold: "var(--color-gold)",
+  amber: "var(--color-amber)",
+  danger: "var(--color-danger)",
   neutral: "var(--color-neutral-fill)",
 };
 const FAINT = "var(--color-neutral-fill)";
@@ -29,8 +33,9 @@ const FAINT = "var(--color-neutral-fill)";
 /** 테스트 점수 추이 — 확인(주선) + 일일(보조). 과목 필터로 시리즈 전환. */
 export function ScoreTrendChart({ history, subjects }: { history: Session[]; subjects: string[] }) {
   const [filt, setFilt] = useState<string>("all");
+  const subjectMaps = useSubjectMaps(); // 과목 색 = 학원설정(운영 enum 하드코딩 금지)
   const active = subjects.includes(filt) ? filt : "all";
-  const primaryHex = active === "all" ? TONE_HEX.primary : TONE_HEX[subjectTone(active).tone];
+  const primaryHex = active === "all" ? TONE_HEX.primary : TONE_HEX[subjectColorOfRow(subjectMaps, { name: active })];
 
   const valOf = (h: Session, kind: "daily" | "check") => {
     if (active === "all") return h[kind];

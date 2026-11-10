@@ -153,129 +153,144 @@ export function readAtLabel(iso: string, lang: SheetLang = "ko"): string {
 export function ReportCard({
   student,
   reports,
-  attitudes,
-  onAttitude,
-  onHomework,
-  onTextbook,
-  onHomeworkToday,
-  onMakeup,
-  onVideoHomework,
-  onVideoSubmitLink,
-  onVideoHomeworkDue,
-  onRemoveMakeup,
-  onJoinMakeup,
-  onSplitMakeup,
-  canRemoveMakeup,
-  onPickMakeupClass,
-  onCheckMakeup,
-  onSubjectDraft,
-  onSubjectTrend,
   trendOptOut,
-  onNote,
-  onAutoWrite,
-  generatingSubject,
-  onSend,
-  onQueueClassnote,
-  onRevoke,
-  onReissue,
-  onAddFiles,
-  onRemoveAttachment,
-  attachmentUrls,
-  uploadingSubject,
-  attachmentsHidden,
   attendance,
-  noticeMode = "A",
-  subjectIndex,
-  onSubjectIndex,
-  todayInputs,
-  homeworkExtra,
-  attitudeExtra,
-  makeupExtra,
-  templatePanel,
-  shareCopyWarning = null,
-  readonlyView = false,
+  fields: {
+    attitudes,
+    generatingSubject,
+    attachmentUrls,
+    uploadingSubject,
+    attachmentsHidden,
+    noticeMode = "A",
+    subjectIndex,
+    shareCopyWarning = null,
+    readonlyView = false,
+  },
+  rowActions: {
+    onAttitude,
+    onHomework,
+    onTextbook,
+    onHomeworkToday,
+    onMakeup,
+    onVideoHomework,
+    onVideoSubmitLink,
+    onVideoHomeworkDue,
+    onRemoveMakeup,
+    onJoinMakeup,
+    onSplitMakeup,
+    canRemoveMakeup,
+    onPickMakeupClass,
+    onCheckMakeup,
+    onSubjectDraft,
+    onSubjectTrend,
+    onNote,
+    onAutoWrite,
+    onSend,
+    onQueueClassnote,
+    onRevoke,
+    onReissue,
+    onAddFiles,
+    onRemoveAttachment,
+    onSubjectIndex,
+  },
+  slots: {
+    todayInputs,
+    homeworkExtra,
+    attitudeExtra,
+    makeupExtra,
+    templatePanel,
+  },
 }: {
   student: OneScreenStudent;
   reports: Record<string, SubjectReport>;
-  attitudes: readonly string[];
-  onAttitude: (a: string) => void;
-  onHomework: (h: string) => void;
-  onTextbook: (subjectName: string, text: string) => void; // 교재명(과목별) — 0089a
-  onHomeworkToday: (subjectName: string, text: string) => void; // 오늘 과제(숙제 내용, 과목별) — 0096a
-  /** 합침 취소(정규+보강 → 정규) — '정규+보강' 버튼에서만(옛 보강 토글은 2026-09-30 제거). */
-  onMakeup: (subjectName: string) => void;
-  /** 오늘 영상 과제 있음/없음(0308a). 없으면 버튼이 잠긴다. */
-  onVideoHomework?: (subjectName: string) => void;
-  /** 영상 첨부 링크 넣기(0328a) — '영상 과제'를 켠 행에서만 뜬다. 없으면 버튼이 잠긴다. */
-  onVideoSubmitLink?: (subjectName: string) => void;
-  /** 영상 숙제 마감(7일 · 다음 수업, 원장 2026-10-15) — '영상 과제'를 켠 행에서만 뜬다. 없으면 잠긴다. */
-  onVideoHomeworkDue?: (subjectName: string, mode: "week" | "next") => void;
-  /** 보강 빼기(2026-08-18) — 출결·저장된 보강 보고서를 지운다. 없으면 배지가 표시로만 남는다. */
-  onRemoveMakeup?: (subjectName: string) => void;
-  /** 보강 보고서 합치기 · 나누기(원장 2026-10-22 — 판정 makeup-switch.ts). 없으면 버튼이 없다. */
-  onJoinMakeup?: (subjectName: string) => void;
-  onSplitMakeup?: (subjectName: string) => void;
-  /** 이 행을 뺄 수 있나 — 발송·처리 중이면 false(발송된 보강은 취소 불가, 원장 2026-08-18). */
-  canRemoveMakeup?: (subjectName: string) => boolean;
-  /** 보강 반 고르기(원장 2026-09-30) — 없으면 반 표시만. */
-  onPickMakeupClass?: (subjectName: string) => void;
-  /** 보강 진행 여부 확인(원장 2026-10-27 — 보강 예약 표식을 눌러 했음/못 했음) — 없으면 표식은 표시만. */
-  onCheckMakeup?: (subjectName: string, outcome: "done" | "missed") => void;
-  onSubjectDraft: (subjectName: string, text: string) => void;
-  onSubjectTrend: (subjectName: string, text: string) => void; // 학습 추세 초안 편집(4a)
   /** '학습 추세 미발송'(원장 2026-09-18) — 표와 **같은 상태**(계정 ui_prefs). 없으면 체크를 안 그린다. */
   trendOptOut?: { hidden: (subjectName: string) => boolean; toggle: (subjectName: string) => void };
-  onNote: (text: string) => void; // 특이사항(강사 메모) 편집 — AI 멘트 입력(4c). 학생별.
-  onAutoWrite: (subjectName: string) => void;
-  generatingSubject?: string | null; // 현재 AI 멘트 생성 중인 과목(버튼 로딩)
-  onSend: (subjectName: string, channel: string) => void;
-  onQueueClassnote: (subjectName: string) => void; // ClassNote 발송 큐 적재
-  onRevoke: (subjectName: string) => void; // 공유링크 취소(열람 차단)
-  onReissue: (subjectName: string) => void; // 공유링크 재발급(새 토큰)
-  onAddFiles: (subjectName: string, files: File[]) => void; // 사진 첨부(P2b)
-  onRemoveAttachment: (subjectName: string, path: string) => void;
-  attachmentUrls?: Record<string, string>; // path→signed 썸네일 URL
-  uploadingSubject?: string | null; // 첨부 업로드 중인 과목
-  /** 학원설정 '사진/파일 첨부'가 꺼짐 — 첨부는 저장되지만 /r·인쇄·ClassNote 어디에도 안 실린다는 경고 표시. */
-  attachmentsHidden?: boolean;
   // 출결 인라인 입력(2-2) — 표뷰와 동일 pill. pendingKeys=(학생::반) 저장 중 잠금.
   attendance?: {
     pendingKeys: ReadonlySet<string>;
     onSet: (classId: string, status: AttendanceSelection, extra?: AttendanceExtra) => void;
     readOnly?: boolean; // 출결 쓰기 권한 없음 — pill 대신 표시 전용 배지
   };
-  // 실효 멘트 모드(강사 오버라이드 ?? 학원 기본) — 상단 토글의 하단 반영. B=수업내용·태도 2칸 분리 입력.
-  noticeMode?: "A" | "B";
-  /**
-   * 선택된 과목 칩(다과목 학생) — **부모가 들고 있다**. 옆 열의 학부모 미리보기가 "지금 보고 있는 과목"을
-   * 그려야 하는데, 카드 안에 state로 숨어 있으면 미리보기가 알 수 없다. 미지정이면 카드가 자체 state를 쓴다.
-   */
-  subjectIndex?: number;
-  onSubjectIndex?: (idx: number) => void;
-  /**
-   * 오늘 진도·테스트 입력(ProgressCard + TestCard) — **노드로 받는다**. 이 카드가 그 배선(진도 편집·점수·
-   * 문항수·표기모드 콜백 7개)까지 props로 받으면 카드 하나가 30개를 넘긴다(CLAUDE.md props 10개 규칙).
-   * 배선은 원래 있던 자리(onescreen-client)에 그대로 두고, 이 카드는 **자리만** 내준다.
-   */
-  todayInputs?: ReactNode;
-  /** 숙제 완성도 칸 바로 아래 자리(수학 보고서 시범의 '미제출 사유', 2026-10-23) — todayInputs와 같은 슬롯 규약. */
-  homeworkExtra?: ReactNode;
-  /** 수업 태도 칸 바로 아래 자리('수업 태도 의견' — 하·중하, 2026-10-26). 같은 슬롯 규약. */
-  attitudeExtra?: ReactNode;
-  /** 수업 태도 칸 위 자리('보강 사유' — 결석 날짜를 모르는 보강 줄, 2026-10-26). 같은 슬롯 규약. */
-  makeupExtra?: ReactNode;
-  /**
-   * 영어 행의 **템플릿 칸**(2026-09-10) — todayInputs와 같은 슬롯 규약(배선은 onescreen-client, 카드는 자리만).
-   * 영어 행일 때만 그린다. 수학 행은 이 값을 넘겨도 무시한다.
-   */
-  templatePanel?: ReactNode;
-  /**
-   * 학부모 링크를 복사하기 전에 물을 문장(없으면 묻지 않는다) — 영어 행에서 AI 인사말·코멘트가 옛 값 기준일 때만
-   * 부모가 넘긴다. 링크는 저장된 글을 그대로 보여 주므로 발송·글 복사와 같은 확인을 거친다. 판정은 부모 몫.
-   */
-  shareCopyWarning?: string | null;
-  /** '다른 강사 뷰'(열람 전용) — 카드 입력·발송·저장·공유링크 조작 전부 잠금(2026-08-19). */
-  readonlyView?: boolean;
+  /** 표시 값 — 고른 과목 칩·진행 표시·첨부 썸네일·모드·열람 전용. */
+  fields: {
+    attitudes: readonly string[];
+    generatingSubject?: string | null; // 현재 AI 멘트 생성 중인 과목(버튼 로딩)
+    attachmentUrls?: Record<string, string>; // path→signed 썸네일 URL
+    uploadingSubject?: string | null; // 첨부 업로드 중인 과목
+    /** 학원설정 '사진/파일 첨부'가 꺼짐 — 첨부는 저장되지만 /r·인쇄·ClassNote 어디에도 안 실린다는 경고 표시. */
+    attachmentsHidden?: boolean;
+    // 실효 멘트 모드(강사 오버라이드 ?? 학원 기본) — 상단 토글의 하단 반영. B=수업내용·태도 2칸 분리 입력.
+    noticeMode?: "A" | "B";
+    /**
+     * 선택된 과목 칩(다과목 학생) — **부모가 들고 있다**. 옆 열의 학부모 미리보기가 "지금 보고 있는 과목"을
+     * 그려야 하는데, 카드 안에 state로 숨어 있으면 미리보기가 알 수 없다. 미지정이면 카드가 자체 state를 쓴다.
+     */
+    subjectIndex?: number;
+    /**
+     * 학부모 링크를 복사하기 전에 물을 문장(없으면 묻지 않는다) — 영어 행에서 AI 인사말·코멘트가 옛 값 기준일 때만
+     * 부모가 넘긴다. 링크는 저장된 글을 그대로 보여 주므로 발송·글 복사와 같은 확인을 거친다. 판정은 부모 몫.
+     */
+    shareCopyWarning?: string | null;
+    /** '다른 강사 뷰'(열람 전용) — 카드 입력·발송·저장·공유링크 조작 전부 잠금(2026-08-19). */
+    readonlyView?: boolean;
+  };
+  /** 카드 동작(과목명을 받는다) — 부모가 선택 학생으로 감싸 넘긴다. */
+  rowActions: {
+    onAttitude: (a: string) => void;
+    onHomework: (h: string) => void;
+    onTextbook: (subjectName: string, text: string) => void; // 교재명(과목별) — 0089a
+    onHomeworkToday: (subjectName: string, text: string) => void; // 오늘 과제(숙제 내용, 과목별) — 0096a
+    /** 합침 취소(정규+보강 → 정규) — '정규+보강' 버튼에서만(옛 보강 토글은 2026-09-30 제거). */
+    onMakeup: (subjectName: string) => void;
+    /** 오늘 영상 과제 있음/없음(0308a). 없으면 버튼이 잠긴다. */
+    onVideoHomework?: (subjectName: string) => void;
+    /** 영상 첨부 링크 넣기(0328a) — '영상 과제'를 켠 행에서만 뜬다. 없으면 버튼이 잠긴다. */
+    onVideoSubmitLink?: (subjectName: string) => void;
+    /** 영상 숙제 마감(7일 · 다음 수업, 원장 2026-10-15) — '영상 과제'를 켠 행에서만 뜬다. 없으면 잠긴다. */
+    onVideoHomeworkDue?: (subjectName: string, mode: "week" | "next") => void;
+    /** 보강 빼기(2026-08-18) — 출결·저장된 보강 보고서를 지운다. 없으면 배지가 표시로만 남는다. */
+    onRemoveMakeup?: (subjectName: string) => void;
+    /** 보강 보고서 합치기 · 나누기(원장 2026-10-22 — 판정 makeup-switch.ts). 없으면 버튼이 없다. */
+    onJoinMakeup?: (subjectName: string) => void;
+    onSplitMakeup?: (subjectName: string) => void;
+    /** 이 행을 뺄 수 있나 — 발송·처리 중이면 false(발송된 보강은 취소 불가, 원장 2026-08-18). */
+    canRemoveMakeup?: (subjectName: string) => boolean;
+    /** 보강 반 고르기(원장 2026-09-30) — 없으면 반 표시만. */
+    onPickMakeupClass?: (subjectName: string) => void;
+    /** 보강 진행 여부 확인(원장 2026-10-27 — 보강 예약 표식을 눌러 했음/못 했음) — 없으면 표식은 표시만. */
+    onCheckMakeup?: (subjectName: string, outcome: "done" | "missed") => void;
+    onSubjectDraft: (subjectName: string, text: string) => void;
+    onSubjectTrend: (subjectName: string, text: string) => void; // 학습 추세 초안 편집(4a)
+    onNote: (text: string) => void; // 특이사항(강사 메모) 편집 — AI 멘트 입력(4c). 학생별.
+    onAutoWrite: (subjectName: string) => void;
+    onSend: (subjectName: string, channel: string) => void;
+    onQueueClassnote: (subjectName: string) => void; // ClassNote 발송 큐 적재
+    onRevoke: (subjectName: string) => void; // 공유링크 취소(열람 차단)
+    onReissue: (subjectName: string) => void; // 공유링크 재발급(새 토큰)
+    onAddFiles: (subjectName: string, files: File[]) => void; // 사진 첨부(P2b)
+    onRemoveAttachment: (subjectName: string, path: string) => void;
+    onSubjectIndex?: (idx: number) => void;
+  };
+  /** 부모가 배선해 둔 입력 노드를 놓을 자리(카드는 자리만 내준다 — props 10개 규칙). */
+  slots: {
+    /**
+     * 오늘 진도·테스트 입력(ProgressCard + TestCard) — **노드로 받는다**. 이 카드가 그 배선(진도 편집·점수·
+     * 문항수·표기모드 콜백 7개)까지 props로 받으면 카드 하나가 30개를 넘긴다(CLAUDE.md props 10개 규칙).
+     * 배선은 원래 있던 자리(onescreen-client)에 그대로 두고, 이 카드는 **자리만** 내준다.
+     */
+    todayInputs?: ReactNode;
+    /** 숙제 완성도 칸 바로 아래 자리(수학 보고서 시범의 '미제출 사유', 2026-10-23) — todayInputs와 같은 슬롯 규약. */
+    homeworkExtra?: ReactNode;
+    /** 수업 태도 칸 바로 아래 자리('수업 태도 의견' — 하·중하, 2026-10-26). 같은 슬롯 규약. */
+    attitudeExtra?: ReactNode;
+    /** 수업 태도 칸 위 자리('보강 사유' — 결석 날짜를 모르는 보강 줄, 2026-10-26). 같은 슬롯 규약. */
+    makeupExtra?: ReactNode;
+    /**
+     * 영어 행의 **템플릿 칸**(2026-09-10) — todayInputs와 같은 슬롯 규약(배선은 onescreen-client, 카드는 자리만).
+     * 영어 행일 때만 그린다. 수학 행은 이 값을 넘겨도 무시한다.
+     */
+    templatePanel?: ReactNode;
+  };
 }) {
   // 🔴 훅은 아래 early return(`if (!subject) return null`)보다 **앞**에 — 조건부 호출 금지.
   const lang = useSheetLang();

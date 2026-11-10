@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/aywa-icons";
-import { subjectTone, toneSolidClass, toneTextClass } from "../data";
+import { SUBJECT_SOLID, SUBJECT_TEXT, subjectColorOfRow } from "@/features/owner/subjects";
+import { useSubjectMaps } from "@/features/owner/operations-context";
 import { displayLessons, resolveStudyGrade } from "../curriculum";
 import { ProgressModePills } from "./progress-mode-pills";
 import { ProgressSelector } from "./progress-selector";
@@ -37,6 +38,7 @@ export function ProgressCard({
 }) {
   const t = useSheetT();
   const { options } = useDisplayOptions();
+  const subjectMaps = useSubjectMaps(); // 과목 색 = 학원설정(운영 enum 하드코딩 금지)
   const tf = useSheetTf();
   const studyGrade = resolveStudyGrade(student.studyGrade ?? student.grade);
   const isMathSubject = (key: string | undefined) => (key ?? "math") === "math";
@@ -80,13 +82,13 @@ export function ProgressCard({
 
       <div className={`flex flex-col gap-2 ${embedded ? "px-3 py-2" : "px-4 py-3"}`}>
         {student.subjects.map((su, i) => {
-          const { tone } = subjectTone(su.name);
+          const tone = subjectColorOfRow(subjectMaps, su);
           const isMath = isMathSubject(su.subjectKey);
           return (
             <fieldset key={i} disabled={lockedSubjects.includes(su.name)} className="flex min-w-0 items-start gap-3 disabled:opacity-60">
-              <span className={`mt-1 h-9 w-1 rounded-pill ${toneSolidClass(tone)}`} aria-hidden />
+              <span className={`mt-1 h-9 w-1 rounded-pill ${SUBJECT_SOLID[tone]}`} aria-hidden />
               <div className="min-w-0 flex-1">
-                <p className={`text-sm font-bold ${toneTextClass(tone)}`}>{su.name}</p>
+                <p className={`text-sm font-bold ${SUBJECT_TEXT[tone]}`}>{su.name}</p>
                 <div className="mt-1 space-y-1 text-xs">
                   {!options.hidePrevious ? <p className="text-text-faint truncate">
                     {tf("os.pc.prev", {
@@ -94,7 +96,7 @@ export function ProgressCard({
                     })}
                   </p> : null}
                   <div className="flex items-center gap-1.5">
-                    <span className={`inline-flex shrink-0 items-center gap-0.5 font-bold ${toneTextClass(tone)}`}>
+                    <span className={`inline-flex shrink-0 items-center gap-0.5 font-bold ${SUBJECT_TEXT[tone]}`}>
                       {t("os.pc.today")} <EyIcon name="arrowRight" size={11} />
                     </span>
                     {isMath ? (

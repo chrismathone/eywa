@@ -9,6 +9,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_VIDEO_HOMEWORK_POLICY } from "@/features/video-homework/policy";
 import { REPORT_VIDEO_LINK_RETIRED, reportLineMode, submitLinkChoosable, submitLinkModeAllows } from "./link-choice";
+// 원스크린 화면 + 옮겨 낸 훅(P3-O)을 한 덩어리로 읽는다 — 화면에서 코드를 옮겨도 같은 단언이 선다.
+import { readOnescreenScreen } from "../onescreen/components/onescreen-screen-source.test-util";
 
 const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), "utf8");
 const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
@@ -74,7 +76,7 @@ describe("핫패스 가드 — 로스터는 video_submit_link를 모른다", () 
 
 describe("배선 — 화면에서 고른 값이 저장되고, 발송 직전 판정이 그 값을 읽는다", () => {
   it("🔴 손대지 않은 행은 보내지 않는다 — 값이 있고 그 행에서 고를 수 있을 때만", () => {
-    const code = stripComments(read("src", "features", "onescreen", "components", "onescreen-client.tsx"));
+    const code = stripComments(readOnescreenScreen());
     // 다른 선생님이 처음 쓴 줄도 싣지 않는다(2026-10-03, video-homework/report-owner.ts).
     expect(code).toMatch(/videoHwSaveOk && typeof su\?\.videoSubmitLink === "boolean" && !videoHwByOther\(student\.id, su\?\.classId\) &&\s*submitLinkChoosable\(/);
     expect(code).not.toMatch(/videoSubmitLink: !!su\.videoSubmitLink/);

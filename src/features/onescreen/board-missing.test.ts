@@ -17,6 +17,8 @@ import {
   isBoardWaitStatus,
   type BoardMissingKind,
 } from "./send-class";
+// 원스크린 화면 + 옮겨 낸 훅(P3-O)을 한 덩어리로 읽는다 — 화면에서 코드를 옮겨도 같은 단언이 선다.
+import { readOnescreenScreen } from "./components/onescreen-screen-source.test-util";
 
 const m = vi.hoisted(() => ({
   enrollments: [] as { start_date: string | null; end_date: string | null }[],
@@ -348,7 +350,7 @@ describe("배선 — 두 발송 경로와 화면", () => {
   const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
   const ONESCREEN = read("src/features/onescreen/server/actions.ts");
   const COMPOSE = read("src/features/report-admin/server/compose-actions.ts");
-  const CLIENT = read("src/features/onescreen/components/onescreen-client.tsx");
+  const CLIENT = readOnescreenScreen();
   const FACE = read("src/app/(shell)/lesson-reports/_components/compose-face.tsx");
   it("원스크린·관리자 직접 작성의 발송은 까닭을 가리고 요청한다 · 관리자 미리 보기는 요청하지 않는다", () => {
     expect(ONESCREEN).toContain("explainBoardMissing(user.tenantId, input.classId, input.studentId, { request: true })");

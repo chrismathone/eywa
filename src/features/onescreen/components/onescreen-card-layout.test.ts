@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   ONESCREEN_CARD_FRAME,
@@ -14,9 +11,10 @@ import {
   ONESCREEN_THREE_COL_TRACKS_PX,
   ONESCREEN_TWO_COL_MIN_PX,
 } from "./onescreen-card-layout";
+import { readOnescreenScreen } from "./onescreen-screen-source.test-util";
 
-const clientPath = join(dirname(fileURLToPath(import.meta.url)), "onescreen-client.tsx");
-const client = readFileSync(clientPath, "utf8");
+// 화면 + 옮겨 낸 훅·가운데 열(P3-O) — 보고서 카드 요소가 화면 전체에서 하나인지 본다.
+const client = readOnescreenScreen();
 
 describe("onescreen card layout", () => {
   it("fits two columns at 846 and three only once 1420 clears the 1406 tracks", () => {

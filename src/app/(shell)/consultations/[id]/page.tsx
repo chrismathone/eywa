@@ -12,11 +12,14 @@ import {
   followUpUrgency,
   getStudentConsultationById,
 } from "@/features/consultations/server/queries";
+import { isFeatureOptedIn } from "@/lib/license/server";
+import { loadConsultationRatings } from "@/features/consultation-rating/server/ratings";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { RecordingPanel } from "../_components/recording-panel";
 import { ConsultationDeleteButton } from "../_components/consultation-delete-button";
 import { FollowUpToggle } from "../_components/follow-up-toggle";
+import { ConsultationRatingPanel } from "../_components/consultation-rating-panel";
 import { AUDIENCE_LABEL, CATEGORY_META, URGENCY_META } from "../_components/consultation-meta";
 
 export const metadata = { title: "상담 상세 — 에이와" };
@@ -33,13 +36,16 @@ export default async function ConsultationDetailPage({
 }) {
   const user = await requireAccess("consultations");
   const { id } = await params;
-  const [item, settings, canWrite] = await Promise.all([
+  const [item, settings, canWrite, ratings] = await Promise.all([
     getStudentConsultationById(id),
     getTenantSettings(),
     // 수정·삭제·후속 완료·AI 분석 게이트와 같은 판정 — 읽기 권한이면 쓰기 단추를 그리지 않는다(원장 2026-11-05).
     canWriteTenant(user.systemRole, "consultations"),
+    // 상담 평점 — 지점 스위치(consult_rating)가 켜진 지점에서만 읽는다(B4: 상담 조회와 병렬). 쓰기 권한 게이트는 아래에서(목록 열과 같은 게이트 · #77).
+    isFeatureOptedIn(user.tenantId, "consult_rating").then((on) => (on ? loadConsultationRatings(user.tenantId, [id]) : null)),
   ]);
   if (!item) notFound();
+  const rating = ratings && canWrite ? (ratings.get(item.id) ?? null) : null;
 
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const cat = item.category ? CATEGORY_META[item.category] : null;
@@ -138,6 +144,8 @@ export default async function ConsultationDetailPage({
           {item.summary}
         </p>
       </section>
+
+      {rating ? <ConsultationRatingPanel rating={rating} /> : null}
 
       {/* 후속 조치 — 내용 있을 때만 */}
       {hasFollowUp ? (

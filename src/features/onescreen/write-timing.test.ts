@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { IDLE_GAP_MS, addAutowrite, addEdit, sanitizePayload, toPayload } from "./write-timing";
+// 원스크린 화면 + 옮겨 낸 훅(P3-O)을 한 덩어리로 읽는다 — 화면에서 코드를 옮겨도 같은 단언이 선다.
+import { readOnescreenScreen } from "./components/onescreen-screen-source.test-util";
 
 describe("작성 시간 기록 — 영역에 시간 붙이기", () => {
   it("직전 손댄 때부터의 틈이 이번 영역 몫 · 첫 손댐은 0", () => {
@@ -71,7 +71,7 @@ describe("작성 시간 기록 — 서버 검증", () => {
 });
 
 describe("배선", () => {
-  const client = readFileSync(join(process.cwd(), "src/features/onescreen/components/onescreen-client.tsx"), "utf8");
+  const client = readOnescreenScreen();
   it("저장·발송 두 코어가 기록을 넘기고, 일괄 발송·저장은 '일괄'로", () => {
     expect(client.match(/queueWriteTiming\(res\.id/g)?.length).toBe(2);
     expect(client).toContain('saveRecord(student, r.subject.name, "bulk")');
