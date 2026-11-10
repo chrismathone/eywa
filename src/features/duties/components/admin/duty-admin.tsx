@@ -86,6 +86,8 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null }: 
   }, [period]);
 
   const cur = loaded[period];
+  // 볼 수 있는 첫 날 — 한 번 받은 값을 계속 쓴다(불러오는 동안에도 앞쪽 이동을 막는다).
+  const viewFrom = cur?.data.viewFrom ?? Object.values(loaded).find((l) => l?.data.viewFrom)?.data.viewFrom ?? null;
   const nowMs = cur ? Date.parse(cur.now) : 0;
   const tree = cur ? buildTree(cur.data.ownerKind, cur.data.classes, cur.data.owners, cur.data.classInfo, scope.labels, { load: cur.data.ownerLoad, managerIds: cur.data.managerIds }) : [];
   const multi = tree.length > 1;
@@ -155,9 +157,9 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null }: 
       <ToolbarSegment>{periodPresets(today).map((p) => <ToolbarSegmentItem key={p.key} active={period === p.key} onClick={() => setPeriod(p.key)}>{p.label}</ToolbarSegmentItem>)}</ToolbarSegment>
       {/* 날짜 이동 — 앱 공용 기간 네비(‹ 라벨 ›) + 달력. 고른 단위(하루 · 한 주 · 한 달)로 앞뒤로 옮기고, 달력에서 고른 날이 든 기간으로 간다. 앞날은 없다. */}
       <PeriodNav label={rangeLabel} labelWidth={unit === "week" ? 190 : 130}
-        labelControl={<DatePickerButton label={rangeLabel} value={anchor} max={today} onChange={(ymd) => setPeriod(periodKey(unit, ymd))} />}
+        labelControl={<DatePickerButton label={rangeLabel} value={anchor} min={viewFrom ?? undefined} max={today} onChange={(ymd) => setPeriod(periodKey(unit, viewFrom && ymd < viewFrom ? viewFrom : ymd))} />}
         prevHref={shiftPeriod(period, -1)} nextHref={shiftPeriod(period, 1)} currentHref={periodKey(unit, today)}
-        relation={period === periodKey(unit, today) ? "current" : "past"} nextDisabled={(periodParts(shiftPeriod(period, 1))?.anchor ?? "") > today}
+        relation={period === periodKey(unit, today) ? "current" : "past"} nextDisabled={(periodParts(shiftPeriod(period, 1))?.anchor ?? "") > today} prevDisabled={!!viewFrom && adminRange(shiftPeriod(period, -1), today).to < viewFrom}
         onNavigate={(key) => setPeriod(key)} />
       {cur && !stale ? <span className="text-text-dim text-xs font-medium">마지막 반영 {kstStamp(cur.now)}</span> : null}
       <ToolbarChip active={lateOnly} onClick={() => setLateOnly((v) => !v)} className="ml-auto">기한 초과만</ToolbarChip>

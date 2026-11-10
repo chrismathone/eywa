@@ -38,18 +38,25 @@ export async function resolveDutyAdminScope(viewer: CurrentUser): Promise<DutyAd
 const num = (v: unknown) => Number(v ?? 0);
 type CountRow = { total: number; done: number; due: number; ontime: number; late_done: number; open_late: number; expired: number; over7: number };
 const counts = (r: CountRow): Counts => ({ total: num(r.total), done: num(r.done), due: num(r.due), ontime: num(r.ontime), lateDone: num(r.late_done), late: num(r.open_late), expired: num(r.expired), over7: num(r.over7) });
+/** 볼 수 있는 첫 날(s2_0061)로 기간의 시작을 당긴다 — 관리 화면의 모든 조회(집계 · 학생 · 업무 목록)가 같은 시작을 쓴다(한 곳만 당기면 날이 낀 주에서 숫자가 어긋난다). */
+export async function clampDutyFrom(tenantId: string, from: string): Promise<string> {
+  const { viewFrom } = await loadDutySettings(tenantId);
+  return viewFrom && from < viewFrom ? viewFrom : from;
+}
+
 /** 지점의 장부 설정(s2_0050) — 평가 시작(live_from: 이보다 앞선 기한은 '이관') · 마지막 맞춤 시각. 줄이 없으면 둘 다 null. */
-async function loadDutySettings(tenantId: string): Promise<{ liveFrom: string | null; syncedAt: string | null }> {
-  const { data, error } = await createAdminClient().from("duty_settings").select("live_from,last_sync_at").eq("tenant_id", tenantId).maybeSingle();
+async function loadDutySettings(tenantId: string): Promise<{ liveFrom: string | null; syncedAt: string | null; viewFrom: string | null }> {
+  const { data, error } = await createAdminClient().from("duty_settings").select("live_from,last_sync_at,view_from").eq("tenant_id", tenantId).maybeSingle();
   if (error) throw new Error(`장부 설정: ${error.message}`);
-  return { liveFrom: (data?.live_from as string | null) ?? null, syncedAt: (data?.last_sync_at as string | null) ?? null };
+  return { liveFrom: (data?.live_from as string | null) ?? null, syncedAt: (data?.last_sync_at as string | null) ?? null, viewFrom: (data?.view_from as string | null) ?? null };
 }
 
 /** 매트릭스·반별·'오늘 확인할 것' 재료 — 세 조회는 독립(B4). 이름표(담당자·반)는 나온 id만 청크로. */
 export async function loadDutyAdmin(tenantId: string, from: string, to: string, scope: DutyAdminScope, periods: string[] | null): Promise<DutyAdminData> {
   const admin = createAdminClient();
-  const args = { p_tenant: tenantId, p_from: from, p_to: to, p_subjects: scope.subjects, p_periods: periods, p_owner: scope.ownerId };
   const settings = await loadDutySettings(tenantId);
+  // 볼 수 있는 첫 날(s2_0061) 전은 세지 않는다 — 에이와에 기록을 적기 전의 달은 수치가 실제 업무를 말하지 않는다(원장 2026-11-11).
+  const args = { p_tenant: tenantId, p_from: settings.viewFrom && from < settings.viewFrom ? settings.viewFrom : from, p_to: to, p_subjects: scope.subjects, p_periods: periods, p_owner: scope.ownerId };
   const [ok, cls, lateRaw, ownerLoad] = await Promise.all([
     fetchAllPaged<CountRow & { owner_id: string | null; subject: string | null; kind: string; period: DutyPeriod }>((a, b) =>
       admin.rpc("duty_rollup_owner_kind", args).order("owner_id").order("subject").order("kind").order("period").range(a, b)),
@@ -73,7 +80,7 @@ export async function loadDutyAdmin(tenantId: string, from: string, to: string, 
   // 원어민 담당 몫은 집계 · 기한 초과 목록 · 반/학생 수에서 통째로 뺀다 — 줄만 숨기면 과목 합계와 줄의 합이 어긋난다(합계는 남은 줄로 다시 선다).
   const native = new Set(Object.entries(owners.names).filter(([, name]) => isNativeName(name)).map(([id]) => id));
   const kept = <T extends { ownerId: string | null }>(rows: T[]): T[] => (native.size ? rows.filter((r) => !r.ownerId || !native.has(r.ownerId)) : rows);
-  return { ownerKind: kept(ownerKind), classes: kept(classes), late: kept(late), owners: owners.names, classInfo, syncedAt: settings.syncedAt, liveFrom: settings.liveFrom, ownerLoad: kept(ownerLoad), managerIds: owners.managerIds };
+  return { ownerKind: kept(ownerKind), classes: kept(classes), late: kept(late), owners: owners.names, classInfo, syncedAt: settings.syncedAt, liveFrom: settings.liveFrom, viewFrom: settings.viewFrom, ownerLoad: kept(ownerLoad), managerIds: owners.managerIds };
 }
 
 type LateRow = { id: string; kind: string; period: DutyPeriod; cycle: string; status: DutyStatus; due_at: string; done_at: string | null; void_reason: string | null; owner_id: string | null;

@@ -1,3 +1,4 @@
+import { clampDutyFrom } from "@/features/duties/server/admin";
 import { NextResponse } from "next/server";
 import { kstToday } from "@/lib/date-kst";
 import { getDutyAdminViewer } from "@/features/duties/server/admin-gate";
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
     const viewer = await getDutyAdminViewer();
     if (!viewer) return NextResponse.json({ error: "권한이 없습니다" }, { status: 403, headers: NO_STORE });
     const range = adminRange(period, today);
-    const items = await loadDutyCellItems(viewer.user.tenantId, range.from, range.to, viewer.scope, periodsOf(period), {
+    const items = await loadDutyCellItems(viewer.user.tenantId, await clampDutyFrom(viewer.user.tenantId, range.from), range.to, viewer.scope, periodsOf(period), {
       studentId, kind: kindRaw && (DUTY_KIND_KEYS as readonly string[]).includes(kindRaw) ? kindRaw : null,
       classId: uuidOrNull(q.get("class")), classNone: q.get("class") === "none", owner: uuidOrNull(q.get("owner")), ownerNone: q.get("owner") === "none",
       subject: subjectRaw && subjectRaw !== "none" && /^[a-z0-9_]{1,40}$/.test(subjectRaw) ? subjectRaw : null, subjectNone: subjectRaw === "none",

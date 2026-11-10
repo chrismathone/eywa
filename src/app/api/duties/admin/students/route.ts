@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { kstToday } from "@/lib/date-kst";
 import { getDutyAdminViewer } from "@/features/duties/server/admin-gate";
-import { loadDutyStudents } from "@/features/duties/server/admin";
+import { loadDutyStudents, clampDutyFrom } from "@/features/duties/server/admin";
 import { DUTY_KIND_KEYS } from "@/features/duties/kinds";
 import { adminRange, parseAdminPeriod, periodsOf } from "@/features/duties/view-admin";
 import { reportError } from "@/lib/observability/report-error";
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
     const subjectNone = subjectRaw === "none";
     const subject = subjectRaw && !subjectNone && /^[a-z0-9_]{1,40}$/.test(subjectRaw) ? subjectRaw : null;
     const ownerNone = q.get("owner") === "none";
-    const data = await loadDutyStudents(viewer.user.tenantId, range.from, range.to, viewer.scope, periodsOf(period), { owner: uuidOrNull(q.get("owner")), ownerNone, kind, classId: uuidOrNull(q.get("class")), subject, subjectNone, studentId: uuidOrNull(q.get("student")) });
+    const data = await loadDutyStudents(viewer.user.tenantId, await clampDutyFrom(viewer.user.tenantId, range.from), range.to, viewer.scope, periodsOf(period), { owner: uuidOrNull(q.get("owner")), ownerNone, kind, classId: uuidOrNull(q.get("class")), subject, subjectNone, studentId: uuidOrNull(q.get("student")) });
     return NextResponse.json(data, { headers: NO_STORE });
   } catch (error) {
     reportError(error, { scope: "api.duties.admin.students" });
