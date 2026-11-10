@@ -16,7 +16,9 @@ export type DutyCard = {
 export const DUTY_LEDGER_START = "2026-11-09";
 /** 학생 × 날 한 칸 — 전체/완료 + 종류별 상태(막대그래프용). */
 export type DutyWeekKind = { kind: string; state: "done" | "late" | "open" };
-export type DutyWeekCell = { day: string; studentKey: string; total: number; done: number; kinds?: DutyWeekKind[] };
+export type DutyWeekCell = { day: string; studentKey: string; total: number; done: number; kinds?: DutyWeekKind[];
+  /** 주간 표의 줄을 세우는 재료 — 학생·반 이름(주간 표는 그 주에 의무가 있던 학생 전원을 줄로 세운다 · 원장 2026-11-10). */
+  studentName?: string | null; classId?: string | null; className?: string | null };
 export type DutyKindCount = { kind: string; total: number; done: number; late: number };
 
 const RANK: Record<DutyState, number> = { late: 0, open: 1, done: 2, void: 3 };
@@ -35,8 +37,14 @@ export function buildDutyCards(items: readonly DutyItemView[], week: readonly Du
     g.items.push(it);
     groups.set(key, g);
   }
+  // 학생 기준(반이 여럿이면 합산) — 카드의 주간 띠.
   const weekOf = new Map<string, Map<string, DutyWeekCell>>();
-  for (const w of week) weekOf.set(w.studentKey, (weekOf.get(w.studentKey) ?? new Map()).set(w.day, w));
+  for (const w of week) {
+    const per = weekOf.get(w.studentKey) ?? new Map<string, DutyWeekCell>();
+    const cur = per.get(w.day);
+    per.set(w.day, cur ? { ...cur, total: cur.total + w.total, done: cur.done + w.done } : { day: w.day, studentKey: w.studentKey, total: w.total, done: w.done });
+    weekOf.set(w.studentKey, per);
+  }
   for (const g of groups.values()) {
     g.items.sort((a, b) => DUTY_KIND_KEYS.indexOf(a.kind as never) - DUTY_KIND_KEYS.indexOf(b.kind as never));
     g.worst = worstState(g.items, now);
@@ -113,5 +121,24 @@ export function groupCardsByClass(cards: readonly DutyCard[], now: number): Duty
     }
     groups.set(key, g);
   }
+  return [...groups.values()].sort((a, b) => (a.classId === null ? 1 : 0) - (b.classId === null ? 1 : 0) || b.late - a.late || b.open - a.open || a.name.localeCompare(b.name, "ko"));
+}
+
+/** 주간 표 — 그 주에 의무가 있던 **학생 × 반 전원**을 반별로 세운다(오늘 줄만이 아니라). 반 순서 = 늦음 많은 반 → 미완료 많은 반 → 이름. */
+export type WeekRow = { key: string; title: string; cells: Map<string, DutyWeekCell>; late: number; open: number };
+export type WeekGroup = { classId: string | null; name: string; rows: WeekRow[]; late: number; open: number; total: number; done: number };
+export function buildWeekTable(week: readonly DutyWeekCell[]): WeekGroup[] {
+  const groups = new Map<string, WeekGroup>();
+  for (const w of week) {
+    const gk = w.classId ?? "";
+    const g = groups.get(gk) ?? { classId: w.classId ?? null, name: w.className ?? (w.classId ? "반" : "반 없음"), rows: [], late: 0, open: 0, total: 0, done: 0 };
+    let row = g.rows.find((r) => r.key === w.studentKey);
+    if (!row) { row = { key: w.studentKey, title: w.studentName ?? w.className ?? "반", cells: new Map(), late: 0, open: 0 }; g.rows.push(row); }
+    row.cells.set(w.day, w);
+    for (const k of w.kinds ?? []) { if (k.state === "late") { row.late++; g.late++; } else if (k.state === "open") { row.open++; g.open++; } }
+    g.total += w.total; g.done += w.done;
+    groups.set(gk, g);
+  }
+  for (const g of groups.values()) g.rows.sort((a, b) => b.late - a.late || b.open - a.open || a.title.localeCompare(b.title, "ko"));
   return [...groups.values()].sort((a, b) => (a.classId === null ? 1 : 0) - (b.classId === null ? 1 : 0) || b.late - a.late || b.open - a.open || a.name.localeCompare(b.name, "ko"));
 }

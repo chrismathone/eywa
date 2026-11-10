@@ -62,16 +62,19 @@ export async function listOwnerMonthDuties(tenantId: string, ownerId: string, mo
 
 /** 최근 며칠의 학생별 완료 비율 재료(학생 × 날 · 전체/완료) — 카드의 '최근 7일' 띠. 한 사람 × 7일이라 작다(상한 5,000행). */
 export async function weekCells(tenantId: string, ownerId: string, from: string, to: string): Promise<DutyWeekCell[]> {
-  const { data, error } = await createAdminClient().from("duty_items").select("cycle,status,student_id,class_id,void_reason,kind,due_at")
+  const { data, error } = await createAdminClient().from("duty_items").select("cycle,status,student_id,class_id,void_reason,kind,due_at,student:students!duty_items_student_id_fkey(name),class:classes!duty_items_class_id_fkey(class_name)")
     .eq("tenant_id", tenantId).eq("owner_id", ownerId).eq("period", "daily").gte("cycle", from).lte("cycle", to).or(VISIBLE).limit(5000);
   if (error) throw new Error(`의무 주간: ${error.message}`);
   const out = new Map<string, DutyWeekCell>();
   const now = Date.now();
-  for (const r of (data ?? []) as { cycle: string; status: DutyStatus; void_reason: string | null; student_id: string | null; class_id: string | null; kind: string; due_at: string }[]) {
+  type WeekRowRaw = { cycle: string; status: DutyStatus; void_reason: string | null; student_id: string | null; class_id: string | null; kind: string; due_at: string;
+    student: { name: string | null } | { name: string | null }[] | null; class: { class_name: string | null } | { class_name: string | null }[] | null };
+  for (const r of (data ?? []) as unknown as WeekRowRaw[]) {
     if (r.status === "void" && r.void_reason !== "expired") continue;
     const studentKey = r.student_id ?? `class:${r.class_id}`;
-    const key = `${studentKey}|${r.cycle}`;
-    const c = out.get(key) ?? { day: r.cycle, studentKey, total: 0, done: 0, kinds: [] };
+    // 칸 = 학생 × 반 × 날(같은 학생이 두 반을 들으면 반마다 줄).
+    const key = `${studentKey}|${r.class_id ?? ""}|${r.cycle}`;
+    const c = out.get(key) ?? { day: r.cycle, studentKey, total: 0, done: 0, kinds: [], studentName: one(r.student)?.name ?? null, classId: r.class_id, className: one(r.class)?.class_name ?? null };
     c.total++;
     if (r.status === "done") c.done++;
     c.kinds!.push({ kind: r.kind, state: r.status === "done" ? "done" : Date.parse(r.due_at) < now ? "late" : "open" });
