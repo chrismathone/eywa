@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { humanizeDbError } from "@/lib/supabase/db-error";
+import { humanizeDbError, explainDbError } from "@/lib/supabase/db-error";
 import { payrollTotal } from "../calc";
 import { calculateMonthlyPayroll, PayrollInputError } from "./queries";
 import { logAction } from "@/features/audit/server/log";
@@ -239,7 +239,7 @@ export async function requestLeave(
     reason,
   });
 
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "payroll.actions.requestLeave", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   // 사유(자유 글)는 담지 않는다 — 누구의 어떤 휴가를 언제로 넣었는지만.
   await logAction({
@@ -275,7 +275,7 @@ export async function approveLeave(
     .eq("id", id)
     .select("user_id, leave_type, starts_on, ends_on"); // 감사로그 대상(폼의 userId는 클라 값이라 믿지 않는다)
 
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "payroll.actions.approveLeave", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   const row = approved?.[0];
   if (row) {
@@ -320,7 +320,7 @@ export async function deleteLeave(
     .eq("id", id)
     .select("user_id, leave_type, starts_on, ends_on"); // 지운 뒤엔 되짚을 원본이 없다 — 누구의 언제 휴가였는지 남긴다.
 
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "payroll.actions.deleteLeave", fallback: "삭제하지 못했습니다 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
 
   const row = removed?.[0];
   if (row) {

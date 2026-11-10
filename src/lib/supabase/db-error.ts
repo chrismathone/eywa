@@ -98,7 +98,8 @@ export function describeDbError(error: unknown, opts: DescribeDbErrorOptions): D
         return hit("in_use", usable?.message ?? "다른 기록이 이 항목을 쓰고 있어 지울 수 없습니다");
       return hit("missing_ref", usable?.message ?? "연결하려는 항목을 찾을 수 없습니다 — 이미 지워졌을 수 있으니 새로고침한 뒤 다시 시도해 주세요");
     case "23514": {
-      const byName = usable?.message ?? checkConstraintMessage(constraint);
+      // 트리거가 23514로 한글 사유를 RAISE하는 곳이 있다(퇴원보고서 환불 요청서 잠금 등 — 제약 이름 없음) → 그 문장을 살린다(P1-E 리뷰).
+      const byName = usable?.message ?? checkConstraintMessage(constraint) ?? (constraint ? null : displayableRaise(raw));
       return hit("invalid", byName ?? "입력한 값이 허용 범위를 벗어났습니다 — 날짜·숫자·선택 값을 확인해 주세요", usable?.field);
     }
     case "23502":
