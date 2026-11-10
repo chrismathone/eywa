@@ -78,7 +78,7 @@
 ## 핵심 사실 & 함정 (이어가기 전 필독)
 - **데모 데이터가 ijw 교시 시각 보존**: 수학 8교시 55분(14:30~22:00), 영어 10교시 40분(14:20~), 주말 8교시 시간단위(09:00~17:00). `class_schedules`는 **교시당 1행(55/40분)** — 2교시짜리 수업=2행 → `mergeSlotsByClass`로 합침.
 - `enrollments.attendance_days` **전건 비어있음**(분리등원 0). `students` 과목: english 371·math 227·highmath 30(국어/과학/예술 0).
-- **멀티세션 동시 작업**: 다른 Claude 세션이 `git add -A`로 미커밋 작업을 쓸어담아 커밋/push한 전례 多 → **커밋은 항상 명시경로** `git commit -F - -- <paths>`. push 전 `git pull --rebase origin main`.
+- **멀티세션 동시 작업**: 다른 Claude 세션이 `git add -A`로 미커밋 작업을 쓸어담아 커밋/push한 전례 多 → **커밋은 항상 명시경로** `git commit -F - -- <paths>`. push 전 `git fetch` + `git merge origin/main`(rebase 아님 — CLAUDE.md 작업 격리 정책).
 - **dev/build**: `PORT=3100 pnpm dev`(또는 3200). `pnpm build`는 dev와 `.next` 충돌(#36)하니 **dev 정지 후** 빌드.
 - Next.js 16(AGENTS.md): API가 학습데이터와 다름 — `node_modules/next/dist/docs/` 참고.
 

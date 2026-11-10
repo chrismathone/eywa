@@ -99,9 +99,7 @@
 
 ### ④ 주인 없는 표식 3건
 
-`payslip-doc`(`src/app/(print)/payroll/[teacherId]/payslip/page.tsx:74`) ·
-`not-num`(`src/app/(shell)/staff/[id]/_tabs/activity-log-tab.tsx:91`) ·
-`toaster`(`src/components/ui/sonner.tsx:10`).
+~~`payslip-doc` · `not-num`~~ 2026-11-10 효과 없는 클래스라 지움 · `toaster`(`src/components/ui/sonner.tsx:10`)는 허용 목록에(eslint.config.mjs).
 저장소 안에 이 이름을 찾는 CSS·스크립트가 없다. 쓰임이 없으면 지우고, 저장소 밖에서 찾는 이름이면 `allow`에 까닭과 함께 넣는다.
 
 ### ⑤ 오탐 4건 — 줄 단위 예외

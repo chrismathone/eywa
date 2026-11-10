@@ -91,12 +91,12 @@ supabase/migrations/            # 2026-10-27 SQL 시즌2 — 이 셋만 둔다(�
    ```
    origin/main에 내가 모르는 커밋이 있으면 **먼저 그 위로 맞춘 뒤** 작업.
 
-2. **push 전 반드시 최신에 merge/rebase**:
+2. **push 전 반드시 최신을 merge로 통합**(원장 2026-07-16 — 병렬 커밋 보존 · rebase 아님 · 절차 단일 소스 = CLAUDE.md '작업 격리 정책'):
    ```bash
-   git pull --rebase origin main   # 원격 최신을 내 커밋 아래로 당겨와 충돌 없이 쌓기
-   git push origin main
+   git fetch origin && git merge origin/main   # 충돌은 내 파일만 해결, 남의 hunk는 보존
+   git push origin HEAD:main
    ```
-   바로 `git push`로 reject되면(`non-fast-forward`) 위 rebase 후 재시도. **force push 금지.**
+   reject되면(`non-fast-forward`) fetch/merge 후 재시도. **force push 금지.**
 
 3. **working tree가 clean인데 "ahead of origin by N commits"** = 다른 세션이 만든 로컬 커밋이 push 안 된 상태일 수 있음. push 전 그 N개가 무엇인지 `git log origin/main..HEAD`로 확인하고, 의도된 것이면 함께 push.
 
@@ -106,7 +106,7 @@ supabase/migrations/            # 2026-10-27 SQL 시즌2 — 이 셋만 둔다(�
 
 **핵심 원칙: 두 세션이 같은 것을 동시에 *쓰면* 충돌, 다른 것을 쓰면 안전.** 여기서 "같은 것" = 파일 · `.next` · 같은 포트의 dev 서버 · Supabase DB · main 브랜치.
 
-⚠️ **이 repo는 세션들이 단일 작업 트리(`D:/eywa_refactoring`)를 공유**한다 (`git worktree list` 하면 워크트리 1개뿐). 그래서 격리 없는 동시 *쓰기*는 위험:
+⚠️ **공유 작업 트리에서 직접 편집하지 말 것** — 2026-07-15부터 작업은 항상 **격리 git 워크트리**(origin/main 기반)에서 한다(CLAUDE.md '작업 격리 정책'). 공유 트리에서 격리 없이 동시에 *쓰면* 위험했던 이유(옛 기록):
 - **같은 파일 동시 편집** → 나중 쓴 쪽이 덮어씀, 상대 세션의 화면은 stale
 - **둘 다 `pnpm dev`** → `.next` 락 충돌·생성파일 손상 (#17/#23 — `routes.d.ts` 깨짐 → `.next` nuke 후 재빌드해야 복구)
 - **둘 다 마이그레이션** → 같은 Supabase(운영 DB)에 동시 적용

@@ -108,7 +108,7 @@ TypeSafe Jev의 제한된 선택지 판정도 `generateJSON({ mode: "decision", 
   restricted RLS+재인증으로 잠근 대상). 학생 이름·학교·상담 내용 수준은 기존 관행상 전송 허용선.
   - **승인된 예외(원장 2026-08-03)**: **직원 계약서 스캔 PDF의 Claude 비전 전사(OCR)** — 종이 계약서 자동 인식을 위해
     스캔 이미지 전송을 원장이 명시 승인(질문·답변 로그 있음). 단 ① 전송은 전사 1회뿐, ② 이후 추출 프롬프트에 싣는
-    텍스트는 [`maskResidentRegNo`](src/features/staff/contract-extract.ts)로 **주민번호 뒤 7자리 항상 마스킹**(글자 PDF
+    텍스트는 [`maskResidentRegNo`](src/features/staff/contract/contract-extract.ts)로 **주민번호 뒤 7자리 항상 마스킹**(글자 PDF
     경로 포함), ③ `generateJSON({ document })`는 Anthropic 한정(폴백 없음 — 다른 provider로 첨부가 새는 것 방지).
     다른 스캔/이미지 전송을 새로 열 땐 이 예외를 근거로 확장하지 말고 다시 물을 것.
   - **승인된 예외(원장 2026-10-20)**: **학생 숙제 설명 영상의 화면(공책·교재 사진) Claude 판정** — 영상 설명 AI 참고 메모 한 기능에만
@@ -281,7 +281,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **도메인 구매한 날 할 일**(옛 호스트 308 켜기·env·Supabase Site URL·기기 재로그인) + 지점 하나 더 만드는 날 → [`docs/domain-cutover.md`](docs/domain-cutover.md) (코드는 전부 env로 켜지게 준비돼 있다 — 2026-09-18)
 - 탭 아이콘을 새로 만들 때(어떤 이미지 생성 모델이든 같은 세트가 나오게) → [`docs/icon-generation.md`](docs/icon-generation.md) (화풍 규격·브리프 뼈대·후처리 파이프라인 [`scripts/_icons/`](scripts/_icons)·배선 4곳·실패 사례)
 - **시간표 연습실**(다음 달 시간표를 여러 안으로 짜 보는 편집기 — 계획·검토·단계별 결과·남은 일) → [`docs/timetable-lab/README.md`](docs/timetable-lab/README.md) (앱 화면 = `/timetable/editor` · 편집기 본체 = `src/features/timetable-lab/editor` · 로그인 없이 띄우는 시험용 화면과 브라우저 시험 = `experiments/timetable-lab-p0`)
-- 기타 심층 문서 → `docs/` (audit-log · ijw-feature-port · makeedu-reverse-sync · payment-collection-plan · perf-open-window-backlog 등)
+- 기타 심층 문서 → `docs/` (audit-log · ijw-feature-port · makeedu-reverse-sync-v1 · payment-collection-plan · perf-open-window-backlog 등)
 
 > ⚠️ 새 기능·배선을 완성하면 그 요약을 `docs/changelog.md`에 한 줄 추가(진행 상황 로그). 새 함정을 만나면 `docs/gotchas.md`에 항목 추가 + 아래 인덱스에 트리거 한 줄. 새 UI 규칙은 `docs/design-conventions.md` + 디자인 인덱스.
 
@@ -289,7 +289,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 
 이미 확정된 결정이다. **재제안·재질문 금지.** 바꿔야 할 새 근거가 생기면 "이건 이미 X로 정해졌는데, 이런 이유로 재검토할까요?"라고 **명시적으로** 물어라(조용히 뒤집지 말 것).
 
-- **수업 나누기 = 수강이 아니라 별도 표(0351a `class_splits`) · 원래 반은 그대로** — 🔴 **2026-10-06 현재 기능 꺼 둠**(원장 *"나눔 이거 기능 일단 숨겨서 못쓰게"*, 스위치 = [`CLASS_SPLIT_ENABLED`](src/features/class-splits/access.ts) 하나 — 팝업 전환·반 블록 나누기·서버 저장/해제가 함께 닫힌다. 테스트 나눔 4건 삭제, 남은 행 0건). 다시 열 땐 그 값만 true로. 아래는 켰을 때의 규칙이다. (원장 2026-10-06: *"화금 이성우 수업 3시간에서 1시간만 유형숙으로"* → 이름 *"반이동이 아니라 수업나누기"* · *"출결은 맡아진 시간에는 그 선생님 몫 · 수강료는 원래반 · 수업보고서는 원래반 담임 · 겹치면 안내하고 확인하면 진행"*). 🔴 **받는 반에 수강행을 만들지 말 것** — 인원·청구 N회·재원 집계·보고서 대상이 그 행을 센다. 시간 단위 = **실제 교시 칸**(두 반 배치 행의 경계, [`splitBoundaries`](src/features/class-splits/rules.ts)) — 수학 55분 교시는 **"1시간"으로 표시**, EiE는 40분. 🔴 고정 분(60)으로 자르지 말 것: 55분 한 칸만 겹치는 두 반이 "같은 시간에 도는 요일이 없다"로 거절됐다(원장 제보 2026-10-06). 명목 단위(`splitUnitMinutes`, `english_track`)는 한 줄짜리 긴 행을 자르는 데만 쓴다, 고르는 것 = 시작 시각 + 길이(**받는 반의 수업 시간 안** — 요일은 두 반이 둘 다 도는 날만. 원장 2026-10-06 *"옮겨지는 쌤 시간 내에서"*: 겹치는 구간으로 좁히면 받는 선생님 반의 앞 교시를 못 고른다. 원래 반 수업 밖 시간이면 확인 단계에서 "이 시간이 더해집니다"를 알린다) + 기간(일별 · 월별=원래 반 세션 창 · 영구). 경고(정원·다른 수업과 겹침·이미 수강생)는 **막지 않고** 목록 → 확인 → 저장. 같은 학생·같은 시간 중복 나눔만 오류. 해제 = 시작 전이면 삭제, 시작 뒤면 어제까지로 끝(지난 출결 귀속 보존). 🔴 **권한 = 원장 역할 + 학원 설정에서 지정한 사람**([`class-splits/access.ts`](src/features/class-splits/access.ts) — 학원 설정 → 역할·권한 → 개인별 기능 권한 '수업 나누기', `permissions.specialAccess.classSplitterIds`) + super_admin, 그리고 **수업 관리 권한(전체)** 이 함께 있어야 한다(서버 게이트 `canSplitClassNow`). 2026-10-06 전에는 코드에 이름 명단 다섯이 있었다 — 코드에 명단을 다시 두지 말 것. admin 역할 전체에 열면 데스크 직원까지 열려서 역할이 아니라 사람을 지정한다. 진입 = 시간표 기본뷰에서 학생을 다른 반 칸에 놓을 때 뜨는 팝업 위 **`반 이동 / 수업 나누기`** 전환. 표시 = 두 칸 모두 '나눔' 박스(→/←) + 툴바 '나눔 N건' 목록. **출석부 연동(2단계)** = 규약 단일 소스 [`class-splits/attendance.ts`](src/features/class-splits/attendance.ts): **받는 반엔 수강행 없이 미리 선다**(보강 예약 0264a와 같은 결 — 일별·월별·오늘 출결·원스크린·ECS 오늘/주간) → 출결이 그 반에 찍혀 강사 귀속이 자동으로 받는 선생님. **원래 반은 명단에 남고 표식만**, 단 **교시 단위 화면(오늘 출결·ECS)은 겹치는 교시에서 뺀다**(그 교시에 이미 기록이 있으면 지우지 않고 표식). 강사 출결 저장 게이트는 서버가 표를 직접 본다(`hasSplitInto`/`splitIntoKeys` — 클라 플래그를 믿지 않는다, #77). 원스크린 받는 반 행은 **보고서 전부 잠금**(보고서는 원래 반 담임). ⚠️ **시수(돈)는 안 바꿨다**: 하루 단위 저장(일별 폼·원스크린)은 받는 반 기록에 그 반 하루 길이 시수가 자동으로 들어가고 원래 반 시수도 그대로다 — 급여 미가동이라 보류, 급여를 켤 때 원장 결정 후 손볼 것. **반 전체 나누기**(원장 2026-10-06 *"반으로 통으로 … 수업 나누기 기능만"*) = 반 블록을 **다른 반 칸 위에** 놓으면 같은 팝업(반 이동/수업 나누기)이 뜨고, 나누기는 그날 재원생 전원(휴원 제외·분리등원은 그 요일만)에게 **학생마다 같은 행**을 만든다(표는 학생 단위 그대로 — 출석부 규약 한 벌). 이미 그 시간이 나눠진 학생은 건너뛰고 알린다. 툴바 목록은 같은 반→반·시간·기간을 한 건으로 묶고 × 하나로 해제. 나누기 권한이 없으면 반 블록 드롭은 종전 그대로 반 이동만. ⚠️ 아직 없음: 강사뷰·통합뷰·학생 상세 표시.
+- **수업 나누기 = 수강이 아니라 별도 표(0351a `class_splits`) · 원래 반은 그대로** — 🔴 2026-10-06부터 꺼 둠(스위치 [`CLASS_SPLIT_ENABLED`](src/features/class-splits/access.ts) 하나) · 받는 반에 수강행을 만들지 말 것 · 시간 단위 = 실제 교시 칸 · 권한 = 원장 역할 + 지정한 사람 · 본문(규칙·출석부 연동·시수 보류) → [`docs/decisions/timetable.md`](docs/decisions/timetable.md) '수업 나누기'
 
 > 🔴 **아래는 제목만 있는 인덱스다. 그 영역을 만지기 전에 해당 `docs/decisions/*.md`를 반드시 Read** — 🔴 금지 조항·단일 소스 파일·실측 근거는 전부 그 파일에 있다. **새 결정은 해당 파일에 추가하고 여기엔 제목 한 줄만** 더한다(본문을 여기 쓰지 말 것 — CLAUDE.md가 비대해져 매 세션 토큰을 먹는다). `@docs/...` import로 바꾸지 말 것.
 
@@ -413,7 +413,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 ### 운영실(대시보드) → [`docs/decisions/dashboard.md`](docs/decisions/dashboard.md)
 - 업무 요청 내용 = 서식 글(전자결재 `RichEditor` · `.rich-content`) · 미리 채움은 담당자별 · 그 몫만 · 저장 전 · 읽을 때 `sanitizeRichHtml` · 서식 포함 20,000자 · 받는 글은 선생님마다 자기 이름 제목 아래만(`recipient-body.ts` · 서버가 가름 · 미리보기 같은 함수)
 - 업무 비서('확인할 일' 위 · s2_0019) = 같은 후보에서 자동 정리 · AI 정리(매일 01:00 · 13:00 예약 + 버튼 · 페이지 로드는 안 부름) · 단추는 후보가 정한다(AI는 ref로 순서 · 이유만) · 예약은 화면이 남긴 마지막 후보로(숫자 기준 시각을 적는다) · 사람 상세는 그 사람 몫만 · 대화형 비서 재도입 아님
-- '강의실 2D/3D' 제거 · 그 자리 '대시보드 전환' = 같은 스냅샷을 계기판 화면으로(실제 값 · 계정 귀속 `ui_prefs.dashboard.design` · 비율로 나눈 탭 값 없음 · 권한은 운영실과 같다 · 강사별 업무는 이 화면에만, `seePortfolio`)
+- 운영실 = 새 대시보드(계기판) 하나(2026-11-10 · 옛 운영실 화면·'대시보드 전환'·`ui_prefs.dashboard.design` 삭제 — 되살리지 말 것) · 강의실 2D/3D 제거(11-02) · 실제 값 · 비율로 나눈 탭 값 없음 · 권한은 운영실과 같다 · 강사별 업무는 이 화면에만(`seePortfolio`)
 - 운영실 카드 '상세' = 그 탭의 통계 화면(카드 몸통·팝업은 그대로) · 운영실에 보이는 지금 구성은 다시 싣지 않는다 · 정확히 셀 수 없는 과거(퇴원 기록 전 · 과목은 수강 종료 기록 전)는 그리지 않는다 · 과목 관리자는 자기 과목만 · 시범 = 원생 통계 `/students/stats`
 - 원생 매일 기록(0381a `student_daily_stats`) = 학년·학교·휴원처럼 지금 값만 남는 것을 오늘부터 하루 한 줄(23:55 cron · 운영실 재원생 카드와 같은 계산 · 서버 전용 표) · 빠진 날은 추정으로 채우지 않는다
 - 상단 '최근 결석' = 어제까지 7일 · 빠진 수업 단위(0221a와 한 벌) · 학생별 누적 많은 순 · 결석마다 그 수업을 가르친 선생님(teacher-axis · 입력자 아님) · ↗ 없음
@@ -623,7 +623,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **병렬 세션 주의(#62)**: 공유 작업트리를 여러 세션이 동시 사용한다. 통째 `git add` 금지 → **내 파일 명시 경로만** 커밋. 큰 변경 후 `git fetch` + `HEAD..origin/main`으로 내 WIP가 물렸는지, 의존하는 신규 파일 누락은 없는지 점검.
 - **운영 enum 하드코딩 금지**: 과목/학년/직급/교시 = 학원설정 단일 소스. 서버 `buildSubjectMaps(getTenantSettings)`, 클라 `useSubjectMaps()`/`useGradeLevels()`. `SUBJECT_META`/`LABEL`/`COLOR` 등 코드 상수 신설 금지.
 - **UI에 raw 코드·기술 원문 노출 금지 (반복 지적, 2026-07-10 재발)**: 화면에 `withdrawn`·`math`·`page.goto: net::ERR…` 같은
-  영문 enum/키/에러 원문을 그대로 내보내지 말 것. 상태=`studentStatusLabel`([status-labels.ts](src/features/students/status-labels.ts)),
+  영문 enum/키/에러 원문을 그대로 내보내지 말 것. 상태=`studentStatusLabel`([status-labels.ts](src/features/students/status/status-labels.ts)),
   과목=`labelOf`, 에러=한글 요약+원문은 `title` 툴팁([classnote-error.ts](src/features/report-admin/classnote-error.ts) 선례).
   **새 표시 문자열이 DB 값·에러 객체에서 오면 한글 매핑을 거쳤는지 확인이 완료 조건.**
 - **성능/병목 = 기능 버그 동급**: 새 쿼리·라우트·차트는 위 "성능/병목 절대 규칙(B1~B7)" 체크리스트 통과가 "완료" 조건.
@@ -724,7 +724,6 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **#78** 초안 자동저장은 name 가진 칸을 **전부** 캡처 — 민감 폼은 `exclude` 필수(안 그러면 주민번호가 IDB에 평문) (⚠️ 새 민감 칸 = exclude도 갱신)
 - **#79** `sr-only`=absolute라 positioned 부모 없으면 스크롤 컨테이너를 뚫고 나가 **창 안 스크롤바 2개** (⚠️ sr-only는 항상 positioned 부모 안에)
 - **#80** Anthropic Claude 5 계열은 `temperature`가 deprecated(400) — 직접 호출에 넣지 말 것, generateJSON은 자가 재시도 (⚠️ 모델 교체 시 재발 주의)
-- **#81** node_modules 정션은 Turbopack dev에서 panic — 워크트리 dev 서버는 실제 `pnpm install`(정션은 typecheck/lint까지만)
 - **#81** `"use client"` 모듈의 문자열 상수를 서버가 import = 런타임 undefined — 공유 상수는 일반 모듈로 (⚠️ 타입체크 통과하는 침묵 버그)
 - **#83** React 19는 `<form action={서버액션}>`을 제출할 때마다 **자동 리셋** — 컨트롤드 입력이 "저장했는데 옛 값"으로 굳고, 재저장 시 직전 저장이 되돌아감 (⚠️ 제출 후에도 남는 폼은 `onSubmit`+직접 디스패치)
 
@@ -800,6 +799,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **#153** Next 16은 **경로 매개변수를 디코딩하지 않는다**(`subject:math` → `params = "subject%3Amath"` → 모양 검사에서 404) — 만드는 쪽 `encodeURIComponent` + 받는 쪽 `decodeURIComponent`를 짝으로 · `loading.tsx`는 세그먼트 값마다 새 Suspense 경계라 종류 바뀜 전환마다 뼈대가 뜬다 → 부드러운 전환은 윗 `layout.tsx`의 Suspense 하나 · 창 주소를 최상위 문서로 열면 셸이 `/dashboard`로 바꾼다(자동 확인은 `?embed=1`)
 - **#154** '다른 강사 뷰'는 **권한표만 갈아 끼운다** — 담당·본인 판정·기록 명의는 `getCurrentUser({ teacherView: true })`(감사·인증·표시 취향만 실제 계정) · `=== "scoped"`로 읽기를 좁히는 자리는 `readonlyViewErasedScope`도 본다(연결 탐색은 `isScopedRead`) · 확인 못 한 강사뷰는 읽기 전용 · 본인 확인(결재·인수 확인)은 강사뷰에서 대신 안 함 (⚠️ 연결 탐색·약속 폴더는 `teacher-view-scope.test.ts`가 자동으로 훑는다 — 다른 기능의 새 '담당만' 읽기는 그 시험의 폴더 목록에, 대상 명의 쓰기 액션은 `view-as-wiring.test.ts` 가드 목록에 한 줄)
 - **#155** PUBLIC 실행권을 거두면 **앱 밖 역할**이 막힌다 — 학원 비서 SQL(s2_0031)이 `auth_*_base`·`operator_view_tenant`의 PUBLIC 실행권을 거두자 연동 PC 역할 `eywa_sync_agent`(게이트웨이 `set local role`)가 정책의 겉함수 `auth_tenant_id()` 속에서 막혀 42501 → ClassNote 발송·학부모 글 감지 1시간 40분 정지(고침 s2_0032 = 그 역할에 명시 실행권) · 🔑 거두기 전에 anon·authenticated·service_role 밖 역할(연동 PC·`student_status_lifecycle`(상속)·`supabase_*`)을 센다 — ① `has_function_privilege` ② 표 권한·BYPASSRLS ③ 정책→겉함수→속함수·호출자 트리거·보기·기본값 사슬 ④ SET ROLE 되는 역할만 `explain`(읽기 전용 거래 · `where random() < 0`)
+- **#156** node_modules 정션은 Turbopack dev에서 panic — 워크트리 dev 서버는 실제 `pnpm install`(정션은 typecheck/lint까지만 · 옛 #81 중복 번호)
 - **#82** postgres.js에서 `${JSON.stringify(v)}::jsonb` = **이중 인코딩**(`"#153e75"` 9자 저장 → 검증 실패 → 설정 침묵 무시). 스칼라는 `to_jsonb(${v}::text)`·객체는 `sql.json(obj)`, 검증은 **길이까지** (⚠️ 눈으로 따옴표 구분 안 됨)
 
 ## 🎨 디자인 규칙 인덱스 (상세는 `docs/design-conventions.md`)

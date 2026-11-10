@@ -22,12 +22,13 @@ export const CLASS_SPLIT_DENIED_MSG = "수업 나누기는 지정된 계정만 �
  */
 export const CLASS_SPLIT_ENABLED = false;
 
-/** 나누기 게이트(순수). */
+/** 나누기 게이트(순수). `enabled`는 시험이 켜진 규칙을 늘 돌려 보도록 주입한다(기본 = 스위치 · 리뷰 A7). */
 export function canSplitClass(
   user: { id: string; systemRole: SystemRole },
   policy: { isSuperAdmin: boolean; splitterIds: readonly string[] },
+  enabled: boolean = CLASS_SPLIT_ENABLED,
 ): boolean {
-  if (!CLASS_SPLIT_ENABLED) return false;
+  if (!enabled) return false;
   if (policy.isSuperAdmin || user.systemRole === "master") return true;
   // 저장값은 스키마를 거치지 않고 읽힌다 — 목록이 아니면(손으로 넣은 값) 지정된 사람이 없는 것으로 본다.
   return Array.isArray(policy.splitterIds) && policy.splitterIds.includes(user.id);

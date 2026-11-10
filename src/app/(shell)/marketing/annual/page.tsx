@@ -1,6 +1,6 @@
 import { SampleBanner } from "@/features/mockup/sample";
 import { AnnualPlanningWorkspace } from "@/features/marketing/annual-planning";
-import { requireSampleViewer } from "@/features/marketing/sample-access";
+import { requireSampleViewer } from "@/lib/auth/sample-viewer";
 import { sampleMarketing } from "@/features/marketing/sample-data";
 import { sampleOperations } from "@/features/marketing/sample-data-operations";
 import { attribute } from "@/features/marketing/calc";

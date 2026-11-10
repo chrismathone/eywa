@@ -26,7 +26,7 @@
 git fetch origin --tags
 git worktree add <리포 밖 경로> -b feat/dashboard-builder wip/2026-10-01/dashboard-builder
 ```
-- 워크트리에서 개발 서버를 띄우려면 실제 `pnpm install`(정션은 Turbopack에서 죽는다, #81) + `.env.local` 복사(git에 없다).
+- 워크트리에서 개발 서버를 띄우려면 실제 `pnpm install`(정션은 Turbopack에서 죽는다, #156) + `.env.local` 복사(git에 없다).
 - 🔴 이 브랜치들을 `git push origin <브랜치>`로 올리지 말 것(미리보기 배포). 끝나면 main에만 푸시하고 태그는 `git push origin :refs/tags/<태그>`로 지운다.
 - Claude 기억(`~/.claude/.../memory`)은 PC마다 따로라 다른 컴퓨터엔 없다 — 이 문서가 인계의 전부다.
 
@@ -54,7 +54,7 @@ git worktree add <리포 밖 경로> -b feat/dashboard-builder wip/2026-10-01/da
 - 워크트리 `D:\tmp\wt-keepalive` · 브랜치 `feat/single-view-keepalive` · 커밋 `fa7801190`(기능) + `00444b6f9`(병합). 미커밋 0.
 - 적대 리뷰 1회 + 재리뷰 1회는 커밋 메시지상 끝. **마지막 vitest 실행이 중단 때 끊겼다** → 이어받으면 대상 테스트 다시 돌릴 것.
 - origin/main보다 3커밋 뒤 → 푸시 전 `git merge origin/main`.
-- 개발 서버 3400(실제 `pnpm install` 된 워크트리, #81)으로 원장에게 보여 준 뒤 푸시. 지금 꺼져 있다.
+- 개발 서버 3400(실제 `pnpm install` 된 워크트리, #156)으로 원장에게 보여 준 뒤 푸시. 지금 꺼져 있다.
 - SQL 없음(새 opt-in 행 `window_keepalive`).
 
 ### 2-2. 대시보드 관리 편집기(설정 › 대시보드 관리) — **미완성**

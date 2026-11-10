@@ -687,7 +687,7 @@ scope에 userId도 없었다 → **로그인조차 없이** DevTools › Applica
 
 ---
 
-## #81 node_modules 정션은 Turbopack dev에서 panic — 워크트리 dev 서버는 실제 pnpm install (2026-07-19)
+## #156 (옛 #81 — 번호가 'use client 상수' 항목과 겹쳐 2026-11-10 옮김) node_modules 정션은 Turbopack dev에서 panic — 워크트리 dev 서버는 실제 pnpm install (2026-07-19)
 
 - **증상**: 격리 워크트리에 `mklink /J node_modules → 메인트리`로 정션을 걸고 `next dev`(Turbopack)를 띄우면
   `FATAL: Symlink [project]/node_modules is invalid, it points out of the filesystem root` panic으로 서버가 즉사.

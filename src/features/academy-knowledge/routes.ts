@@ -3,8 +3,9 @@
  * 예시 학생 id(`/students/<가짜 id>`)를 가리킨다. 누르면 없는 주소로 가지 않도록, 있는 화면으로 바꾸거나 링크를 뺀다(null).
  */
 const RENAMED: Record<string, string> = { "/class-review/knowledge": "/class-review", "/settings": "/owner" };
-const MISSING = ["/marketing", "/organization/okr", "/billing/management", "/api/"];
-const LIVE = ["/dashboard", "/work-records", "/billing", "/students", "/staff", "/classes", "/consultations", "/newcomers", "/withdrawals", "/enrollment", "/timetable", "/student-contribution", "/owner", "/class-review", "/ecs", "/mcs", "/onescreen", "/lesson-reports", "/meetings", "/approvals", "/documents"];
+// 연간 마케팅·조직 OKR·경영 관리(수납)는 같은 시안 이식으로 생긴 화면이라 LIVE에 둔다(리뷰 C9 — 예전엔 "이식 전"으로 거짓 표시).
+const MISSING = ["/api/"];
+const LIVE = ["/marketing", "/organization/okr", "/dashboard", "/work-records", "/billing", "/students", "/staff", "/classes", "/consultations", "/newcomers", "/withdrawals", "/enrollment", "/timetable", "/student-contribution", "/owner", "/class-review", "/ecs", "/mcs", "/onescreen", "/lesson-reports", "/meetings", "/approvals", "/documents"];
 
 export function liveHref(href: string | undefined | null): string | null {
   if (!href) return null;

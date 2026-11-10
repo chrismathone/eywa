@@ -1,8 +1,9 @@
 /*
- * 시안(dev 전용): 앱 전체 색감 = 새 대시보드(계기판) 색감.
+ * 앱 전체 색감 = 새 대시보드(계기판) 색감(원장 승인 · 운영 반영 — 루트 레이아웃이 늘 싣는다).
  * 인재원 로고 차콜 #363c41 · 노랑 #fdb811 · 주의 빨강 #b44832 · 종이색 바탕 #f1f1ed · 흰 카드 · 따뜻한 회색 선.
  * globals.css 값을 고치지 않고 이 파일 하나가 덮는다(시안을 걷을 때 import 한 줄만 지우면 된다).
- * 학원별 브랜드색이 셸에 inline으로 주입돼도(`brandColorVars`) 시안에서는 이 색이 이긴다(!important).
+ * 학원별 브랜드색이 셸에 inline으로 주입돼도(`brandColorVars`) 이 색이 이긴다(!important) — 그래서 학원 설정의 '브랜드 색상'
+ * 입력은 숨겨 둔다(`BRAND_COLOR_OVERRIDDEN_BY_THEME`, color-utils). 이 파일을 걷으면 그 값도 false로.
  */
 :root, html body, html body [style*="--primary"] {
   --primary: #363c41 !important;

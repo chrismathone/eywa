@@ -207,7 +207,7 @@ export function DeskView({
                     key={`${s.studentId}@${s.classId}@${s.slotStart}`}
                     className="text-text-dim flex flex-wrap items-center gap-x-2 gap-y-0.5 px-3 py-2 text-sm"
                   >
-                    <span className="text-text font-bold">{s.studentName}</span>
+                    <span className="text-foreground font-bold">{s.studentName}</span>
                     <span className="num text-xs">
                       {s.className} · {s.slotStart}
                     </span>

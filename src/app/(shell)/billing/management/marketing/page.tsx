@@ -1,5 +1,5 @@
 import { SampleBanner } from "@/features/mockup/sample";
-import { requireSampleViewer } from "@/features/marketing/sample-access";
+import { requireSampleViewer } from "@/lib/auth/sample-viewer";
 import { sampleMarketing, SAMPLE_TODAY } from "@/features/marketing/sample-data";
 import { MarketingWorkspace } from "@/features/marketing/workspace";
 

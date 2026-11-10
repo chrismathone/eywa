@@ -1,6 +1,6 @@
 # aywa — 인재원 학원관리 경량 버전
 
-[D:\ijw-calander](D:\ijw-calander)의 어설픈 구조와 부풀어 오른 메뉴(43개 탭)를 정리하여 12개 메뉴 + 단순한 카테고리로 다시 짠 데모 프로젝트입니다. 완성도가 충분히 올라가면 실 운영 데이터를 마이그레이션해 기존 시스템을 대체합니다.
+[D:\ijw-calander](D:\ijw-calander)의 어설픈 구조와 부풀어 오른 메뉴(43개 탭)를 정리하여 다시 짠 학원관리 SaaS입니다. **운영 중**이다(테넌트 `injaewon` = 실데이터 · 배포 = main). 작업 규칙·결정은 [`CLAUDE.md`](CLAUDE.md)가 단일 소스다.
 
 ## 스택
 
@@ -11,7 +11,7 @@
 - **TanStack Query** (client mutations) + **Zustand** (UI state only)
 - **Zod** (런타임 가드)
 - **Vitest** + **Testing Library** (단위), **Playwright** (E2E)
-- **AI**: Upstage Solar Pro 3 (기본) / Anthropic Claude (폴백) — 단일 진입점 `generateJSON()` (등록상담·학생케어·회의록)
+- **AI**: Anthropic Claude(1순위 — Sonnet 5.5 · 멘트는 Haiku 5.5) / DeepSeek(폴백만) — 단일 진입점 `generateJSON()`(예외: 학원 비서). Solar는 2026-10-19 제거. 상세 = CLAUDE.md 'AI 모델 정책'
 - 배포: **Vercel**
 
 ## 메뉴

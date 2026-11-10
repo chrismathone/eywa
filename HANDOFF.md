@@ -7,12 +7,12 @@
 > 아래는 2026-07-06 시점의 기록이다. 현재 작업의 검증 범위와 절차는 최신 `AGENTS.md`·`CLAUDE.md` 및 해당 작업 핸드오프를 우선한다.
 
 다른 컴퓨터/세션에서 **이 시점부터 바로** 이어가기 위한 문서. 상세 규약·함정은 [`CLAUDE.md`](CLAUDE.md),
-영어 시간표 동기화의 데이터/스크립트 상세는 [`ENGLISH_SYNC_HANDOFF.md`](ENGLISH_SYNC_HANDOFF.md).
+영어 시간표 동기화의 데이터/스크립트 상세는 [`docs/_archive/ENGLISH_SYNC_HANDOFF.md`](docs/_archive/ENGLISH_SYNC_HANDOFF.md).
 이 문서는 **현재 상태 + 셋업 + 다음 할 일 + 세션 경계**만 담는다.
 
 > ⚠️ **aywa는 실운영 중 — main = 프로덕션(`www.aywa.co.kr`, 옛 `eywa-alpha.vercel.app`은 넘김).** 변경은 **dev에서 검증을 끝낸 뒤
 > 사용자 승인이 있을 때만** main에 반영한다(곧바로 main 커밋·push 금지). 여러 세션이 병렬로 작업하므로 push 전
-> `git fetch` + `git pull --rebase`, **force push 금지**, 커밋은 **명시 경로**로. (CLAUDE.md "Git 협업 규칙")
+> `git fetch` + `git merge origin/main`(rebase 아님), **force push 금지**, 커밋은 **명시 경로**로. (CLAUDE.md "작업 격리 정책")
 
 ---
 
@@ -24,7 +24,7 @@
 > **(3) 운영 과목 삭제 = "다른 과목에 흡수"**(전 저장 표면 이동 + 0077a 원자 RPC)까지 구현·검증하고 **main에 반영·배포
 > 완료**(Vercel success)했다. 전 게이트 그린(typecheck·lint 0 / **test 703** / build) + 시트 패리티 diff 0 + 적대
 > 리뷰(병합 교차 CONFIRMED 4건 수정). ⚠️ **테넌트 `injaewon`은 운영 실데이터**(ijw 이관본) —
-> 데모 시드(`pnpm db:seed`)는 운영 DB를 지울 수 있어 **2026-09-19 영구 제거**했다. 시작 전 `HANDOFF.md` + `ENGLISH_SYNC_HANDOFF.md` + `CLAUDE.md`
+> 데모 시드(`pnpm db:seed`)는 운영 DB를 지울 수 있어 **2026-09-19 영구 제거**했다. 시작 전 `HANDOFF.md` + `docs/_archive/ENGLISH_SYNC_HANDOFF.md` + `CLAUDE.md`
 > ("디자인 시스템", "막혔던 점들", "AI 모델 정책", "Git 협업 규칙")를 읽어라. `.env.local` 필요(§2).
 
 ---
@@ -32,7 +32,7 @@
 ## 0. TL;DR — 새 컴에서 시작
 
 ```bash
-git clone https://github.com/BIGSHOL/eywa.git   # 또는: git switch main && git pull --rebase
+git clone https://github.com/BIGSHOL/eywa.git   # 또는: git switch main && git pull --no-rebase
 # .env.local 준비(§2 — 값은 Supabase/Vercel 대시보드 또는 기존 머신에서 복사)
 pnpm install        # openai·@google-cloud/storage 등 포함(누락 시 Module not found)
 pnpm dev            # 메인 체크아웃 포트 3100 / 영어 워크트리는 3002
@@ -96,7 +96,7 @@ node --env-file=.env.local scripts/_english_sync/verify-sheet-parity.cjs   # 영
 ## 5. 다음 할 일 (우선순위)
 
 1. **영어 시간표 "시트 반영" 버튼 정식화** — 시트↔앱 라운드트립(readSheetGridWithMerges + diff + 액션 + UI).
-   현재는 스크립트(`scripts/_english_sync/`)로만 반영. 상세 = ENGLISH_SYNC_HANDOFF §3-4.
+   현재는 스크립트(`scripts/_english_sync/`)로만 반영. 상세 = docs/_archive/ENGLISH_SYNC_HANDOFF.md §3-4.
 2. **영어 강사 5명(Elsa·Anna·Dom·JJ·이주희) 직원 등록** + `english_name` + 담임 재지정 —
    미등록이라 통합뷰 담임 폴백이 "이주희"로 뜰 수 있음.
 3. **`st2000423@gmail.com` 비밀번호 회전** — 검증 스크립트에서 env로 뺐으나 계정 자체 비번은 미회전

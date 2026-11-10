@@ -14,7 +14,7 @@ export const owner: HelpManual = {
       n: 1,
       label: "학원 정보 — 프로필·브랜드",
       zone: "header",
-      body: "학원 이름, 로고 글자, 브랜드 색. 색이 버튼·강조색이 됩니다.",
+      body: "학원 이름, 로고 글자, 인쇄물 로고·직인.",
     },
     {
       n: 2,

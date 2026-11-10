@@ -47,7 +47,7 @@ export default defineConfig({
       // 서버 액션을 쓰는 클라 컴포넌트를 렌더하는 테스트가 전부 "Cannot resolve server-only"로 죽었다.
       // 빈 모듈로 치환해 **테스트에서만** 통과시킨다 — 프로덕션 가드는 그대로다(빌드는 여전히 Next가 막는다).
       // 이 shim은 원래 이 용도로 만들어졌는데 어디에도 연결돼 있지 않았다(2026-08-05 배선).
-      "server-only": path.resolve(__dirname, "./scripts/_oneoff/_server-only-shim.ts"),
+      "server-only": path.resolve(__dirname, "./tests/support/server-only-shim.ts"),
     },
   },
 });

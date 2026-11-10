@@ -67,6 +67,12 @@ const shadcnConfig = !shadcn
                 "report-capture", // ClassNote 워커의 보고서 캡처 대상
                 "tt-editing", // 시간표의 `[.tt-editing_&]` 변형
                 "ecs-slot-edge", // today-roster-table의 `:not(.ecs-slot-edge)` 선택자
+                "conn-l", // route-line-diagram의 `[&>li:nth-child(…)_.conn-l]:hidden` 변형
+                "conn-r", // 같은 파일 `_.conn-r` 변형
+                "route-flow", // route-line-diagram이 품은 <style>의 애니메이션 클래스
+                "route-nudge", // 같은 <style>
+                "loyalty-detail", // student-contribution/components/loyalty-detail.css의 범위 클래스
+                "toaster", // shadcn sonner 기본 표식(Sonner가 받는 className)
               ],
             },
           ],

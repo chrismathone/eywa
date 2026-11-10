@@ -1,5 +1,40 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-10 — 정착: 안 쓰는 코드 보고서 · 대용량 HTML 추적 중단 · 문서·스크립트 정리 — 수정 계획 P4(일부)
+
+- 안 쓰는 코드 **보고서**(`docs/_audit/dead-code-report-2026-11-10.md` — 진입점에서 안 닿는 파일 80 · 정의만 있는 export 132 · 지우지 않음, 결정 #7 보고 모드 · knip은 새 의존성이라 import 그래프 스크립트로 대신).
+- `data/` 디자인 핸드오프 단독 HTML 4개(각 약 23MB) 추적 중단은 **보류** — 추적을 끊는 커밋을 받는 다른 PC·워크트리에서 그 파일이 지워진다(리뷰) · 원장 확인 뒤에 · `test-results/`·`playwright-report/` 무시 · 시험용 `server-only` 대역 `scripts/_oneoff/` → `tests/support/server-only-shim.ts`(vitest 두 설정·스크립트 tsconfig 3곳).
+- 문서: README의 Solar·'데모 프로젝트' 문구 → 지금 상태 · git 절차(`pull --rebase`)를 merge 우선·격리 워크트리로(setup-and-ops·ijw-feature-port·HANDOFF) · 루트 일회성 문서 3개 → `docs/_archive/`(HANDOFF.md는 살아 있어 유지) · CLAUDE.md 죽은 링크 3 · 막힌 점 `#81` 중복 → 정션 함정을 `#156`으로 · '수업 나누기' 결정 본문(4.7KB)을 `docs/decisions/timetable.md`로 옮기고 한 줄만.
+- A7: 꺼 둔 '수업 나누기' 권한 시험이 통째로 건너뛰어지던 것 → 스위치를 주입해 늘 돈다.
+- P3-A(출결 새 행·기본 시수 추출)는 이미 `newRowUnits`·교시 계획 함수로 네 경로가 한 벌이라 추가 추출 보류.
+- 남김: CLAUDE.md 400B 넘는 항목 일괄 이전(F3 나머지) · 미디어 Storage 이전(F2) · `_oneoff` 정리 규칙(F6) · prettier·pre-push 도구 · `taught_by`(결정 #10 보류) · 가드 교체(F7 — 파일을 만질 때).
+
+## 2026-11-10 — 시안·설정 정리 — 수정 계획 P3-U
+
+- C5(결정 #4 (a)): 앱 색 테마(`instrument-theme.css`)가 `--primary`를 `!important`로 덮어 학원 '브랜드 색상'이 화면에 안 닿는다 → 입력칸을 숨김(`BRAND_COLOR_OVERRIDDEN_BY_THEME`, color-utils · 저장값은 그대로). 테마 주석의 '시안(dev 전용)'을 실제 동작(운영 반영)으로.
+- C6: '신규생 관리' 첫 화면 = 실제 체크표(예전엔 예시 학생) · 예시 두 탭은 '(예시)'를 달고 뒤로(결정 #6 (c)).
+- C9: 지식그래프 링크 표가 실제로 있는 화면(연간 마케팅·조직 OKR·경영 관리)을 '없는 화면'으로 숨기던 것 해소 · 똑같은 시안 권한 문 두 벌 → `src/lib/auth/sample-viewer.ts` 하나. C11: 지식 사전 기본 시트를 위치 번호 대신 id로.
+- A6: `text-text`(없는 클래스 — 흐린 줄 안의 학생 이름이 진하게 안 보였다) → `text-foreground` 5곳 · 효과 없는 클래스 2개 삭제 · 표식 클래스 6개는 lint 허용 목록에 찾는 쪽과 함께.
+- 남김: C10 `/academy`(원장 확인) · C11 사전을 서버에서 넘기기(시안 화면 한 곳·경로별 번들이라 이득 작음) · D5 포맷은 P4.
+
+## 2026-11-10 — 운영실 = 새 대시보드 하나 · 옛 운영실 화면·'대시보드 전환' 삭제 — 수정 계획 P3-D
+
+- 원장 2026-11-09 결정(새 대시보드가 곧 운영실)을 코드로 굳혔다: 옛 `Overview`(+ 전용 카드·팝업·KPI 띠·배치 뼈대 27개), 전환 스위치·`NEW_SHAPE`, `ui_prefs.dashboard.design` 읽기·저장(`saveDashboardDesign`)을 지웠다. 운영실 서버(`overview-server.tsx`)는 배치를 먼저 기다리지 않고 계기판 뼈대를 곧바로 그린다(네 조회 동시 시작·Suspense·`next/dynamic` 경계 그대로).
+- 이미 아무도 안 쓰던 옛 한 화면 대시보드(`_onescreen/` 6 · `features/dashboard/onescreen/` 8)·옛 카드(`_components/` 14)·조회 export 17개(`features/dashboard/server/queries.ts` 8 등)도 함께 삭제(파일 96개 · 도달성 검사로 진입점에서 안 닿는 것만). 개발 샘플 `/dev/dashboard-harness`는 편집기·답글만 남김. 결정 로그 = `docs/decisions/dashboard.md` 2026-11-10.
+
+## 2026-11-10 — 공용 헬퍼 정리(diffDays · isRecord · round1 · Field) + 확인된 죽은 코드 삭제 — 수정 계획 P2-H · P3-X
+
+- P2-H: `diffDays(from, to)`(lib/date-kst · to − from) — 지역 사본 6벌 이전(출결 7일 잠금·보강 며칠 앞은 옛 a − b라 인자를 뒤집어 옮김 · 신규생 `daysBetween`은 같은 뜻 별칭, 연결 탐색은 null 계약 그대로) · `isRecord`·`round1` → `src/lib/guards.ts`(11벌 · 9벌) · 수납·문서 대화상자 `Field` 6벌 → `src/components/form-field.tsx`. 남김: 이름만 같은 요일 함수들(`weekdayOf`·`dowOf` — 뜻이 제각각, 이름 분리는 파일을 만질 때) · 제출 버튼 공용화는 P4.
+- P3-X: `findMakeupAnchor` · `getMostRecentAttendanceDate` · `dayOfWeekIndex`(+`DOW_INDEX`) · `STATUS_CHIPS` · `closeClassEnrollments`(반 닫기는 다른 경로) · `status-tone.ts`(+시험) · `pill-group.tsx` · `ranking-settings.tsx` 삭제 · 의존성 3개 제거(`@hookform/resolvers`·`next-themes`·`@google-cloud/firestore` — 코드 참조 0, lockfile은 그 꾸러미 줄만 빠짐). `date-fns`·`react-hook-form`도 참조 0이지만 지우면 lockfile peer 표기가 200줄 넘게 바뀌어 P4(knip)로.
+
+## 2026-11-10 — 1,000행 절단·직렬 조회·설정 저장 경합 정리 · SQL s2_0043(운영 적용함) — 수정 계획 P2-R
+
+- **DB 함수 셋(s2_0043, 운영 DB 적용 · 트랜잭션 시험 후)**: `search_student_consultations`(상담 검색 = 요약 OR 학생 이름 · 표 모양 그대로라 필터·count·반 임베드가 종전처럼 얹힘 · `set search_path`를 빼서 계획기가 펼친다 — EXPLAIN 지점 색인 스캔 확인) · `share_link_view_counts`(보고서별 열람 수) · `ui_prefs_patch`(설정 한 네임스페이스만 한 문장으로 — 서비스 역할 전용). 셋 다 없으면 앱이 종전 경로로 돈다(#95).
+- 상담 목록: 이름 검색이 학생 id 전부를 주소에 싣던 것 → DB 함수. 목록 조회 실패는 "상담 0건" 대신 안내 줄(B3).
+- 월별 출석부 '누가 수업했나' 이름: 청크 안 1,000행 절단 → 청크 × 페이지 + 실패 로그(B2) · 직원 상세 '담당 수업': 진행 중 반은 오늘 유효한 시간표 줄만(#88) · 개강 전 반은 예정 줄 · 학생 수 = 오늘 실제 수강 중(`isEnrollmentActiveOn` — **휴원·시작 전 학생은 빠지고 퇴원 예정은 든다**, 예전엔 '종료일 없음'만) · 오류를 삼키지 않음(B8) · 상담 후속조치 알림 감지 전건 페이지(B9) · 강사 지식그래프 강사 색인·수강 페이지(B13).
+- 원스크린 열람 수 = DB 집계(폴백도 페이지 전건) + 오늘 수학 조회와 함께 기다림(B11) · 시간표 블록 이동의 칸 × 표 조회를 동시 6개로(`mapPool` · 판정 순서 그대로, B12).
+- 설정(ui_prefs) 저장 20곳 → `writeUiPrefsNs`(`src/lib/ui-prefs/write.ts`) — 다른 화면 설정을 옛 값으로 되돌리던 경합 제거(B16). ⚠️ 같은 화면 안 경합은 그대로(교체형 저장 — 셔틀 '수정된 내용 확인'을 두 창에서 동시에 누르면 한쪽 확인이 빠질 수 있다 · 키 단위 저장은 6곳). 기여도 '하루 1회' 조회 실패는 제한을 풀지 않고 안내 · 나눔 반 이름·학생 통합 기록 API 실패 로그(권한만 403, 나머지 500).
+
 ## 2026-11-10 — 학원 비서 '지난 의견' 모음 — 제안 → 결과 → 학습 3단계 첫 조각(SQL 없음)
 
 - 비서 판 머리 '지난 의견' → 대화를 넘나든 내 의견 전부: 위 = 현황(처리 상태별 · 다시 잰 결과별 · 기다리는 수 · 가장 가까운 재측정) + 보기(전체·처리할 것·결과 나옴·끝낸 것) · 아래 = 답별 묶음 + '대화 열기' + 대화 안과 같은 처리 단추. 본인 의견만 · 지운 대화 제외 · `GET /api/assistant/advice`(전건 페이징 · AI 안 부름). 설계 = `docs/features/academy-assistant.md` §7-8. 교훈을 다음 질문에 싣는 일은 다시 잰 결과가 쌓이는 11-18 이후.

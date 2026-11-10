@@ -70,3 +70,7 @@ data/ijw-firebase-backup/
 
 # 로컬 게이트(scripts/verify-changed.mjs) 임시 tsconfig·결과 기록
 /.verify/
+
+# 시험 산출물
+test-results/
+playwright-report/

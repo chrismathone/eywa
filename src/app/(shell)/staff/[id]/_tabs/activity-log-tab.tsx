@@ -88,7 +88,7 @@ function RecentAccess({ sessions, logins }: { sessions: AccessSession[]; logins:
             {logins.map((l) => (
               <li key={l.id} className="num flex flex-wrap gap-x-2">
                 <span>{when(l.at)}</span>
-                <span className="not-num">{deviceLabel(l.userAgent)}</span>
+                <span>{deviceLabel(l.userAgent)}</span>
                 {l.ip ? <span>{l.ip}</span> : null}
               </li>
             ))}

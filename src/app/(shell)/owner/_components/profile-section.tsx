@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { ProfileSettings } from "@/features/owner/settings-types";
 import { issueBrandingUploadTicket } from "@/features/owner/server/actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
-import { isBrandColorApplied, DEFAULT_BRAND_COLOR } from "@/lib/color-utils";
+import { isBrandColorApplied, DEFAULT_BRAND_COLOR, BRAND_COLOR_OVERRIDDEN_BY_THEME } from "@/lib/color-utils";
 import { SectionForm, SettingsCard } from "./section-form";
 import { TextField, ColorField } from "./fields";
 import { useLockedPlaceholder, useWriteLock } from "./write-lock-context";
@@ -59,7 +59,7 @@ export function ProfileSection({ initial, readOnly = false }: { initial: Profile
         </div>
       </SettingsCard>
 
-      <SettingsCard title="브랜드" description="사이드바 워드마크·강조 색상과 인쇄물 로고·직인.">
+      <SettingsCard title="브랜드" description={BRAND_COLOR_OVERRIDDEN_BY_THEME ? "사이드바 워드마크와 인쇄물 로고·직인." : "사이드바 워드마크·강조 색상과 인쇄물 로고·직인."}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TextField
             label="워드마크"
@@ -68,24 +68,27 @@ export function ProfileSection({ initial, readOnly = false }: { initial: Profile
             onChange={(v) => set({ logoText: v })}
             placeholder="에이와"
           />
-          <ColorField
-            label="브랜드 색상"
-            hint="강조색 · hex"
-            value={p.brandColor}
-            onChange={(v) => set({ brandColor: v })}
-            placeholder={DEFAULT_BRAND_COLOR}
-            // 주입이 생략되는 값이면 그 사실을 알린다. 단 **왜** 생략되는지에 따라 문구가 갈린다:
-            // 저장값이 기본색과 같으면 "어긋남"이 아니라 정상 상태이므로 "적용 안 됨" 경고를 띄우면
-            // 사용자가 같은 네이비 스와치를 보면서 문제로 오해한다(2026-07-20 그린→네이비 정리 후 발견).
-            // 어긋남(옛 기본색·형식오류·빈값)일 때만 설명형 안내.
-            note={
-              isBrandColorApplied(p.brandColor)
-                ? undefined
-                : p.brandColor?.trim().toLowerCase() === DEFAULT_BRAND_COLOR
-                  ? "기본 팔레트와 같은 색입니다 — 그대로 표시됩니다."
-                  : `현재 기본 팔레트(${DEFAULT_BRAND_COLOR})로 표시됩니다 — 위 값은 기본색으로 간주되어 화면에 적용되지 않습니다. 다른 색을 넣으면 그 색이 적용됩니다.`
-            }
-          />
+          {/* 앱 색 테마가 브랜드색을 덮는 동안은 숨긴다(저장값은 그대로 · color-utils `BRAND_COLOR_OVERRIDDEN_BY_THEME`). */}
+          {BRAND_COLOR_OVERRIDDEN_BY_THEME ? null : (
+            <ColorField
+              label="브랜드 색상"
+              hint="강조색 · hex"
+              value={p.brandColor}
+              onChange={(v) => set({ brandColor: v })}
+              placeholder={DEFAULT_BRAND_COLOR}
+              // 주입이 생략되는 값이면 그 사실을 알린다. 단 **왜** 생략되는지에 따라 문구가 갈린다:
+              // 저장값이 기본색과 같으면 "어긋남"이 아니라 정상 상태이므로 "적용 안 됨" 경고를 띄우면
+              // 사용자가 같은 네이비 스와치를 보면서 문제로 오해한다(2026-07-20 그린→네이비 정리 후 발견).
+              // 어긋남(옛 기본색·형식오류·빈값)일 때만 설명형 안내.
+              note={
+                isBrandColorApplied(p.brandColor)
+                  ? undefined
+                  : p.brandColor?.trim().toLowerCase() === DEFAULT_BRAND_COLOR
+                    ? "기본 팔레트와 같은 색입니다 — 그대로 표시됩니다."
+                    : `현재 기본 팔레트(${DEFAULT_BRAND_COLOR})로 표시됩니다 — 위 값은 기본색으로 간주되어 화면에 적용되지 않습니다. 다른 색을 넣으면 그 색이 적용됩니다.`
+              }
+            />
+          )}
           <BrandingField
             label="로고 이미지"
             hint="인쇄물 머리글"

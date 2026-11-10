@@ -5,6 +5,9 @@ import { sampleSave } from "@/features/mockup/sample";
 import type { AcademyKnowledgeData } from "./sample-data";
 import { liveHref } from "./routes";
 import { blueprint } from "./blueprint";
+
+/** 처음 여는 시트 — 위치 번호가 아니라 id로(리뷰 C11 — 사전에 시트가 끼면 엉뚱한 시트가 열렸다). */
+const DEFAULT_SHEET_ID = "10_학생";
 import { entities } from "./catalog";
 import { expectations, focusGraph, nodeGaps, nodeHealth, overviewGraph, uniqueEdges, type StudioDocument, type StudioRow, type Expectation } from "./studio-model";
 import { GraphCanvas } from "./network-canvas";
@@ -22,7 +25,7 @@ function useSave() {
 function StoreNotice({data}:{data:AcademyKnowledgeData}) {return data.studio.error?<p role="alert" className={s.warning}>{data.studio.error}</p>:null;}
 
 export function SchemaTab({data}:{data:AcademyKnowledgeData}) {
-  const [sheetId,setSheetId]=useState<string>(blueprint[10].id),[search,setSearch]=useState(""),[editing,setEditing]=useState<string|null>(null);
+  const [sheetId,setSheetId]=useState<string>(DEFAULT_SHEET_ID),[search,setSearch]=useState(""),[editing,setEditing]=useState<string|null>(null);
   const sheet=blueprint.find(x=>x.id===sheetId)!,rows=new Map(data.studio.rows.map(r=>[r.key,r]));
   const filtered=blueprint.filter(x=>(x.id+" "+x.fields.map(f=>f.label).join(" ")).includes(search));
   const history=data.studio.history.filter(r=>r.document.kind==="field"&&r.document.sheet===sheetId).sort((a,b)=>b.recorded_at.localeCompare(a.recorded_at));

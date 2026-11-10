@@ -16,7 +16,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      "server-only": path.resolve(__dirname, "./scripts/_oneoff/_server-only-shim.ts"),
+      "server-only": path.resolve(__dirname, "./tests/support/server-only-shim.ts"),
     },
   },
 });

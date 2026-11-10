@@ -32,7 +32,8 @@ const sampleSave = async (): Promise<SaveResult> => ({ ok: false, error: SAMPLE_
 export function FollowupWorkspace({ data, legacy, canWriteChecks, initialFilters, initialStudent, syncInfo }: { data: FollowupView; legacy: NewcomersView; canWriteChecks: boolean; initialFilters: BoardFilters; initialStudent?: string; syncInfo?: EnrollmentSyncInfo }) {
   const { labelOf } = useSubjectMaps();
   const router = useRouter();
-  const [tab, setTab] = useState<"students" | "owners" | "checks">(initialFilters.item || initialFilters.bucket || initialFilters.status !== "all" || initialFilters.subject !== "all" ? "checks" : "students");
+  // 첫 화면 = 실제 체크표(리뷰 C6 — 운영 메뉴의 첫 화면이 예시 학생이었다). 예시 두 탭은 '(예시)'를 달고 뒤에 둔다(결정 #6 (c)).
+  const [tab, setTab] = useState<"students" | "owners" | "checks">("checks");
   const [query, setQuery] = useState(initialFilters.query);
   const [filter, setFilter] = useState("all"), [person, setPerson] = useState("all");
   const [selected, setSelected] = useState<string | null>(initialStudent ?? null);
@@ -80,19 +81,19 @@ export function FollowupWorkspace({ data, legacy, canWriteChecks, initialFilters
   }
 
   return <div className={`${css.root} ${a.dashboard}`}>
-    <SampleBanner />
+    {tab === "checks" ? null : <SampleBanner />}
     <header className={css.hero}>
       <div><p className={css.eyebrow}>신규생 관리 · 90일 정착</p><h1>신입생이 자리 잡을 때까지</h1><p>관리자는 연락을 챙기고, 담임은 적응을 살피고, 피드백은 다음 행동으로 이어집니다.</p></div>
       <div className={css.heroDate}><span>오늘의 관리 기준</span><strong>{data.today.replaceAll("-", ".")}</strong><Link href="/students/care">입학 약속·이행 보기 ↗</Link></div>
     </header>
     <nav className={css.nav} aria-label="신입생 관리 보기">
-      {([['students','학생별 정착 관리'],['owners','담당자별 점검'],['checks','전체 완료 체크표 (실제 기록)']] as const).map(([key,label]) => <button key={key} type="button" aria-pressed={tab === key} onClick={() => setTab(key)}>{label}</button>)}
+      {([['checks','전체 완료 체크표 (실제 기록)'],['students','학생별 정착 관리 (예시)'],['owners','담당자별 점검 (예시)']] as const).map(([key,label]) => <button key={key} type="button" aria-pressed={tab === key} onClick={() => setTab(key)}>{label}</button>)}
       <span>등록 → 첫 적응 → 30일 → 60일 → 90일 → 장기재원</span>
     </nav>
-    {data.defaults?.length?<aside className={css.defaultRules} aria-label="과목별 기본 관리자"><b>기본 관리 담당</b>{data.defaults.map(d=><span key={d.subject}>{d.subject==="eie"?"EiE":labelOf(d.subject)} · {d.manager?.name??"재지정 필요"}</span>)}<small>기존 개별 배정은 유지 · 동시 수강은 각 과목별 기록</small></aside>:null}
+    {tab !== "checks" && data.defaults?.length?<aside className={css.defaultRules} aria-label="과목별 기본 관리자"><b>기본 관리 담당</b>{data.defaults.map(d=><span key={d.subject}>{d.subject==="eie"?"EiE":labelOf(d.subject)} · {d.manager?.name??"재지정 필요"}</span>)}<small>기존 개별 배정은 유지 · 동시 수강은 각 과목별 기록</small></aside>:null}
     {data.error ? <p role="alert" className={css.error}>{data.error} <button type="button" onClick={() => router.refresh()}>다시 조회</button></p> : null}
     <EnrollmentSyncNote info={syncInfo} editing={!!selected || saving}/>
-    {tab === "checks" ? <><p className={css.realNote}>이 탭은 실제 신규생 기록입니다. 위 예시 학생과 연결되지 않습니다.</p><NewcomerBoard view={legacy} canWrite={canWriteChecks} initialFilters={initialFilters} /></> : <>
+    {tab === "checks" ? <><p className={css.realNote}>이 탭은 실제 신규생 기록입니다. 옆의 (예시) 탭은 예시 값이라 이 기록과 연결되지 않습니다.</p><NewcomerBoard view={legacy} canWrite={canWriteChecks} initialFilters={initialFilters} /></> : <>
       <section className={css.metrics} aria-label="신입생 관리 요약">
         <button type="button" onClick={() => setFilter("all")}><span>집중 관리 학생</span><strong>{data.students.length}<small>명</small></strong><em>학생 한 명 기준으로 관리</em></button>
         <button type="button" onClick={() => setFilter(unlinked > 0 ? "unlinked" : "unassigned")}><span>담당·수강 연결 확인</span><strong data-alert={unassigned + unlinked > 0}>{known ? unassigned + unlinked : "—"}<small>명</small></strong><em>{known ? `담당 미지정 ${unassigned}명 · 수강 연결 필요 ${unlinked}명` : "조회 확인 필요"}</em></button>
