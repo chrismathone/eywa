@@ -5,10 +5,11 @@ const BADGE = "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-me
 /**
  * 카드 색 = 받은 카드 그 색(원장 2026-10-28 *"받은 카드 색상으로"*) — 진한 바탕. 월별 현황 칸의 옅은 판정 색(파랑·주황·빨강)
  * 위에서도 카드가 따로 읽혀야 해서 옅은 톤을 쓰지 않는다. 카드 X는 중립(테두리).
+ * 블루·골드는 범주 색(`--cat-*`) — 차콜 테마가 의미색 파랑을 회색으로, 골드를 옐로와 같은 노랑으로 덮어 카드끼리 안 갈렸다(원장 2026-11-10).
  */
 const CARD_TONE: Record<BeforeClassCard, string> = {
-  blue: "bg-blue text-white",
-  gold: "bg-gold-bright text-primary-deep",
+  blue: "bg-cat-blue text-white",
+  gold: "bg-cat-gold-bright text-primary-deep",
   red: "bg-danger text-white",
   yellow: "bg-report-accent text-primary-deep",
   none: "bg-card text-text-dim border-line border",

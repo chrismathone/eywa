@@ -14,7 +14,7 @@ const won = (n: number | undefined) => (n === undefined ? "—" : `${n.toLocaleS
 const longMonth = (m: string) => `${m.slice(0, 4)}년 ${Number(m.slice(5, 7))}월`;
 const GENERAL = "var(--color-primary)";
 /** EiE = 원생 통계 강좌수·지난 기록의 EiE 색과 같은 금색 계열. */
-const EIE = "#b8860b";
+const EIE = "var(--gold)";
 
 /**
  * **지난 기록 — 수업료 수납**(원장 2026-10-21 *"청구 수납도 더 이전 데이터 못찾나?"*) — 메이크에듀(2020~2025) + 에이와 청구(2026~)를 청구월마다

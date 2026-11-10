@@ -17,12 +17,14 @@ import { isCoreId, isHeadingId, isStructuralId, type Bundle, type DashboardSetti
 
 /**
  * 핵심 업무 칸을 이 사람이 열 수 있는가 — 칸이 데려가는 화면의 문과 같은 판정(열 수 없는 칸은 세우지 않는다).
- * 신입생 90일 = 신규생 관리 메뉴 · 경영 분석 = 원장·관리자(`requireManagementSample` — 원장·과목 운영형·경영지원형) · 업무 작성센터 = 대시보드를 여는 사람 모두.
+ * 신입생 90일 = 신규생 관리 메뉴 · 경영 분석 = '경영 분석·지식그래프' 권한(`management` — 페이지 문 `requireManagementSample`) · 업무 작성센터 = '업무 작성센터' 권한(`work_records`).
+ * 🔴 역할 묶음(bundle)으로 판정하지 않는다 — 원장이 역할·권한에서 연 사람에게 칸이 서고, 닫으면 빠진다(2026-11-09 권한 줄 정비).
  */
 export function canOpenCore(id: string, bundle: Bundle, menus: ReadonlySet<MenuKey>): boolean {
   if (id === "core:newcomers") return menus.has("newcomers");
-  if (id === "core:management") return bundle === "owner" || bundle === "super" || bundle === "subject" || bundle === "desk";
-  return id === "core:workRecords";
+  if (id === "core:management") return menus.has("management");
+  if (id === "core:workRecords") return menus.has("work_records");
+  return false;
 }
 
 export type ResolvedView = {

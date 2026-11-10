@@ -95,7 +95,7 @@ export const SheetGrid = memo(function SheetGrid({
     <div className="w-full pb-2" style={{ minWidth, maxWidth }}>
       {/* sticky 밴드 — 불투명 배경 + 아래 여백 포함. z-10: 본문 위, StatusCell 팝오버(포털 z-50) 아래. */}
       <div
-        className="bg-background sticky top-0 z-10 grid pb-2"
+        className="bg-bg-canvas sticky top-0 z-10 grid pb-2"
         style={{ gridTemplateColumns: columns, columnGap: GAP_X }}
       >
         {days.map((day) => {

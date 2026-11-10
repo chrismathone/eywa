@@ -16,6 +16,7 @@ import { isLoginEmailTakenElsewhere } from "./login-email-taken";
 import { logAction } from "@/features/audit/server/log";
 import { isProtectedSuperAdminTarget, SUPER_ADMIN_TARGET_DENIED_MSG } from "@/lib/auth/super-admin";
 import { refuseIfProtectedStaff } from "./protected-guard";
+import { cleanupPersonSettings } from "@/features/owner/server/retired-people";
 import { authPasswordErrorMessage } from "@/lib/auth/auth-password-error";
 
 export type AccountActionState =
@@ -400,6 +401,8 @@ export async function deleteStaff(
     targetLabel: target.email,
     metadata: { role: target.role },
   });
+  // 지운 계정의 주는 값도 학원 설정에서 뺀다(원장 2026-11-09 — 퇴사와 같은 함수). 읽는 쪽은 계정이 없는 사람을 거르지 않으므로(모르는 사람 — 리뷰 r1 F3) 여기서 지운다.
+  await cleanupPersonSettings({ tenantId: actor.tenantId, userId: id, role: target.role, targetLabel: target.displayName ?? target.email, reason: "delete" });
   revalidatePath("/staff");
   redirect("/staff");
 }

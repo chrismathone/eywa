@@ -1,5 +1,5 @@
 /* Selected dashboard presentation; panel order and grid breakpoints remain in overview.module.css. */
-.dashboard { color: #121212; container: dashboard / inline-size; }
+.dashboard { color: var(--ink); container: dashboard / inline-size; }
 .dashboard :global([data-overview="root"]) { background: var(--background); font-size: var(--text-sm); }
 .dashboard :global([data-overview="board"]) { padding: 26px 28px 22px; }
 .dashboard :global([data-overview="header"]) { margin-bottom: 22px; }
@@ -7,24 +7,24 @@
 .dashboard :global([data-overview="header"]) h1 { font-size: var(--text-3xl); letter-spacing: -.04em; }
 .dashboard :global([data-overview="header"]) > div:first-child > span { display: none; }
 .dashboard :global([data-overview="kpis"]) { grid-template-columns: repeat(var(--kpi-n, 6), minmax(0, 1fr)); border: 0; border-radius: 0; gap: 10px; background: none; overflow: visible; }
-.dashboard :global([data-overview="kpi"]) { background: white; border: 1px solid #dce4ee; border-radius: 12px; box-shadow: 0 3px 0 #e7edf5; overflow: hidden; }
+.dashboard :global([data-overview="kpi"]) { background: white; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 3px 0 var(--line); overflow: hidden; }
 /* 🔴 맨 오른쪽 카드의 오른쪽 테두리 — 기본 모듈의 `.kpi:last-child { border-right: 0 }`(한 상자에 이어 붙이던 시절 규칙)이
    이 떨어진 카드 모양에도 남아 마지막 카드만 오른쪽 선이 없었다(원장 2026-09-14 "보강 예정 카드가 우측 테두리 잘리잖아").
    떨어진 카드는 네 변이 다 있어야 한다. ⚠️ 폭만 되살리면 안 된다 — 그 규칙의 `border-right: 0`이 선 종류(none)·색까지
    지우므로 셋을 함께 적는다(폭만 1px로 두면 계산값이 그대로 0px였다, 실측). 결석 카드가 맨 끝에 설 때(보강 조회 실패)는 그 카드의 붉은 테두리색. */
-.dashboard :global([data-overview="kpi"]:last-child) { border-right: 1px solid #dce4ee; }
-.dashboard :global([data-kpi="최근 결석"]:last-child) { border-right-color: #e6c8c3; }
+.dashboard :global([data-overview="kpi"]:last-child) { border-right: 1px solid var(--line); }
+.dashboard :global([data-kpi="최근 결석"]:last-child) { border-right-color: color-mix(in srgb, var(--danger) 30%, var(--card)); }
 .dashboard :global([data-overview="kpi"]) > button { padding: 16px 16px 14px; }
 .dashboard :global([data-overview="kpi-label"]) { font-size: var(--text-sm); gap: 8px; font-weight: 700; }
 .dashboard :global([data-overview="kpi-label"]) > span:first-child { display: inline-flex; }
 .dashboard :global([data-overview="kpi-label"]) img { width: 26px !important; height: 26px !important; }
-.dashboard :global([data-overview="kpi-value"]) { font-size: var(--text-4xl); line-height: 1.1; margin-top: 14px; margin-bottom: 12px; letter-spacing: -.04em; color: #23282c; }
-.dashboard :global([data-overview="kpi-value"]) > span { margin-left: 5px; font-size: var(--text-sm); color: #121212; }
-.dashboard :global([data-kpi="최근 결석"]) { border-color: #e6c8c3; background: #fff9f7; }
-.dashboard :global([data-kpi="최근 결석"] [data-overview="kpi-value"]) { color: #ac3333; }
+.dashboard :global([data-overview="kpi-value"]) { font-size: var(--text-4xl); line-height: 1.1; margin-top: 14px; margin-bottom: 12px; letter-spacing: -.04em; color: var(--ink); }
+.dashboard :global([data-overview="kpi-value"]) > span { margin-left: 5px; font-size: var(--text-sm); color: var(--ink); }
+.dashboard :global([data-kpi="최근 결석"]) { border-color: color-mix(in srgb, var(--danger) 30%, var(--card)); background: var(--bg-soft); }
+.dashboard :global([data-kpi="최근 결석"] [data-overview="kpi-value"]) { color: var(--danger); }
 .dashboard :global([data-overview="grid"]) { gap: 16px; }
-.dashboard :global([data-overview="panel"]) { padding: 20px 20px 17px; border: 1px solid #dce4ee; border-radius: 12px; box-shadow: 0 2px 2px #1a3f7210; }
-.dashboard :global([data-overview="panel-header"]) { padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid #edf0f5; }
+.dashboard :global([data-overview="panel"]) { padding: 20px 20px 17px; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 2px 2px color-mix(in srgb, var(--ink) 6%, transparent); }
+.dashboard :global([data-overview="panel-header"]) { padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--line-faint); }
 .dashboard :global([data-overview="panel-header"]) h2 { font-size: var(--text-base); letter-spacing: -.025em; }
 .dashboard :global([data-overview="panel-header"]) p { margin-top: 4px; }
 .dashboard :global([data-wide="true"]) svg[role="img"] { height: 210px; max-height: 210px; }
@@ -32,7 +32,7 @@
 .dashboard :global([data-overview="board"] > [id] > span) { font-size: var(--text-lg); }
 .dashboard :global([data-overview="panel"]) [role="img"] { max-width: 100%; }
 .dashboard :global([data-overview="panel"]) a:hover { text-decoration: underline; text-underline-offset: 3px; }
-.dashboard :is(button, a, input):focus-visible { outline: 2px solid #485055; outline-offset: 3px; }
+.dashboard :is(button, a, input):focus-visible { outline: 2px solid color-mix(in srgb, var(--ink) 86%, var(--card)); outline-offset: 3px; }
 /* 일곱 칸(보강예정 포함) — 581~1300px에서 4칸 × 2줄(마지막 칸이 두 칸: 7칸 × 157px는 여섯 칸의 1100px 폭보다 좁다).
    🔴 특이도: 이 파일의 격자 규칙(.dashboard + 속성 하나 = 0,2,0)과 같은 층에 두면 승자가 CSS 순서라 dev/prod에서 다른 구간이
    깨진다(적대 리뷰 2026-09-14) — 속성 둘을 겹쳐 0,3,0(마지막 칸은 0,5,0)으로 올린다. 580 이하는 아래 2열 규칙(홀수면 마지막이 한 줄). */

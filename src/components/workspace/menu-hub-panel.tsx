@@ -86,8 +86,10 @@ export function MenuHubPanel({
       aria-label={`${group.label} 메뉴`}
     >
       {/* 세로도 가운데 — 짧은 업무군(학생 2칸)이 화면 위쪽에 매달려 있으면 허전하다(원장 2026-09-07).
-          길어지면(설정 11칸) `min-h-full`이 자리를 넘겨 자연스럽게 스크롤된다. */}
-      <div className="bg-background h-full overflow-auto px-6 py-8 [scrollbar-gutter:stable]">
+          길어지면(설정 11칸) `min-h-full`이 자리를 넘겨 자연스럽게 스크롤된다.
+          바탕 = 사이드바와 같은 면(`bg-sidebar`) — 메뉴 판은 사이드바 업무군을 펼친 자리다. `bg-background`는 테마가 덮지 않아
+          종이색 화면 위에 흰 판이 떴다(원장 2026-11-09 수납관리 판 캡처). 기본 팔레트에선 둘 다 흰색이라 그대로다. */}
+      <div className="bg-sidebar h-full overflow-auto px-6 py-8 [scrollbar-gutter:stable]">
         <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col justify-center">
           <header className="mb-5 flex items-start justify-between gap-4">
             <div className="min-w-0">

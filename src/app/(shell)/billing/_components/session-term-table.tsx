@@ -776,7 +776,7 @@ export function SessionTermGroups({
     if (ids.length) setMemory((current) => ({ ...current, awaiting: new Set([...current.awaiting, ...ids]) }));
   };
   return (
-    <DragScrollArea className="border-border rounded-2xl border">
+    <DragScrollArea className="bg-card border-border rounded-2xl border">
       <datalist id={listId}>
         {catalog.map((c) => (
           <option key={c.price} value={c.price} label={`${won(c.price)}${c.label ? ` · ${c.label}` : ""}`} />

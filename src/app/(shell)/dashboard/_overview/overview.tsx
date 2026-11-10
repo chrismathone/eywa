@@ -320,7 +320,7 @@ export function Overview({
               value: attendance.present,
               color: COLORS[2],
             },
-            { label: "결석", value: attendance.absent, color: "#b44832" },
+            { label: "결석", value: attendance.absent, color: "var(--danger)" },
             { label: "지각", value: attendance.late, color: COLORS[3] },
             {
               label: "사유",
@@ -405,7 +405,7 @@ export function Overview({
                   0,
                   processing.expected - processing.recorded,
                 ),
-                color: "#e3e8ee",
+                color: "var(--line)",
               },
             ]}
           />
@@ -433,7 +433,7 @@ export function Overview({
               {
                 label: "미납",
                 value: bill.unpaidCount,
-                color: "#b44832",
+                color: "var(--danger)",
               },
               {
                 label: "기타 상태",
@@ -590,7 +590,7 @@ export function Overview({
               },
               {
                 name: "퇴원",
-                color: "#c77263",
+                color: "color-mix(in srgb, var(--danger) 75%, var(--card))",
                 values: change.map((r) => r.withdrawn),
               },
             ]}
@@ -970,7 +970,7 @@ export function Overview({
               {
                 label: "수행률 0% 학생",
                 value: homework.zero,
-                color: "#b44832",
+                color: "var(--danger)",
               },
             ]}
           />
@@ -1017,7 +1017,7 @@ export function Overview({
               {
                 label: "기한 경과",
                 value: consultations.overdueFollowUps,
-                color: "#b44832",
+                color: "var(--danger)",
               },
               {
                 label: "기한 예정",
@@ -1069,7 +1069,7 @@ export function Overview({
                     {
                       label: "기한 경과",
                       value: item.overdue,
-                      color: "#b44832",
+                      color: "var(--danger)",
                     },
                     {
                       label: "3일 내",
@@ -1079,7 +1079,7 @@ export function Overview({
                     {
                       label: "예정·기한 미정·시작 전",
                       value: item.upcoming + item.pending + item.waived,
-                      color: "#e3e8ee",
+                      color: "var(--line)",
                     },
                   ]}
                 />
@@ -1093,7 +1093,7 @@ export function Overview({
           <Legend
             items={[
               { label: "완료", color: COLORS[2] },
-              { label: "기한 경과", color: "#b44832" },
+              { label: "기한 경과", color: "var(--danger)" },
               { label: "3일 내", color: COLORS[3] },
             ]}
           />
@@ -1192,7 +1192,7 @@ export function Overview({
                         0,
                         section.data.total - section.data.filled,
                       ),
-                      color: "#e3e8ee",
+                      color: "var(--line)",
                     },
                   ]}
                 />

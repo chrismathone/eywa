@@ -36,7 +36,7 @@ export function RateTrendCard({
   const keys = trend?.keys ?? [];
   const axis = (k: string) => (daily ? `${Number(k.slice(5, 7))}.${Number(k.slice(8))}` : `${k.slice(2, 4)}.${k.slice(5, 7)}`);
   const tip = (k: string) => (daily ? formatKoreanDate(k) : monthLabel(k));
-  const lines = (trend?.groups ?? []).map((g) => ({ key: g.group, label: groups[g.group]?.label ?? g.group, color: groups[g.group]?.color ?? "#687787", rate: g.rate }));
+  const lines = (trend?.groups ?? []).map((g) => ({ key: g.group, label: groups[g.group]?.label ?? g.group, color: groups[g.group]?.color ?? "var(--neutral-fill)", rate: g.rate }));
   const series: ChartSeries[] = trend
     ? [{ key: "_total", name: "전체", color: TOTAL, values: trend.rate, strong: true }, ...lines.map((l) => ({ key: l.key, name: l.label, color: l.color, values: l.rate }))]
     : [];

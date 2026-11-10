@@ -763,10 +763,16 @@ function GroupRail({
 }) {
   const search = useSearchParams();
   const currentHref = `${pathname}?${search.toString()}`;
-  const base = group.kind === "direct" ? navItemByKey(group.items[0]!.menuKey) : undefined;
-  // 시안: 권한만 빌린 줄(예: 대시보드 권한의 '조직·OKR')은 그 메뉴의 '바탕 화면' 표시 방식을 물려받지 않는다 — 물려받으면 눌러도 대시보드만 보인다.
-  const borrowed = base && group.items[0]!.href !== base.href;
-  const direct = base ? { ...base, ...group.items[0]!, label: group.label, icon: group.icon, ...(borrowed ? { presentation: undefined } : {}) } : undefined;
+  const lead = group.kind === "direct" ? group.items[0] : undefined;
+  const base = lead ? navItemByKey(lead.menuKey) : undefined;
+  // 시안: 권한만 빌린 줄(예: 대시보드 권한의 화면)은 그 메뉴의 '바탕 화면' 표시 방식을 물려받지 않는다 — 물려받으면 눌러도 대시보드만 보인다.
+  const borrowed = base && lead!.href !== base.href;
+  // 메뉴 정의(NAV_GROUPS)가 없는 제 권한 키의 줄(시안 화면 — 조직·OKR · 스키마·지식그래프, 2026-11-09 권한 줄 정비)도 목적지 그대로 바로 연다.
+  const direct = lead
+    ? base
+      ? { ...base, ...lead, label: group.label, icon: group.icon, ...(borrowed ? { presentation: undefined } : {}) }
+      : { ...lead, label: group.label, icon: group.icon }
+    : undefined;
   if (direct) {
     return (
       <MenuRail

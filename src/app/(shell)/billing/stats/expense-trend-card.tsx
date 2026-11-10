@@ -13,7 +13,7 @@ import { TrendChart, type ChartSeries } from "../../students/stats/_components/t
 
 const TOTAL = "var(--color-primary)";
 const CATEGORY_COLORS = ["var(--color-amber)", "var(--color-green)", "var(--color-purple)", "var(--color-rose)"];
-const REST = "#9aa3ad";
+const REST = "color-mix(in srgb, var(--neutral-fill) 70%, var(--card))";
 
 /**
  * 지출 추이 — 운영실 '이번 달 지출 내역'의 '상세'가 여기 `#expenses`로 온다. 지출일 기준(결재 상태 무관 — 카드와 같은 줄)이라

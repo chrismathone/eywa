@@ -23,7 +23,7 @@ export function VehicleHeader({
   return (
     // ⚠️ 토큰 이름은 `--background`다 — `bg-bg`는 **정의가 없어 아무 색도 안 칠해지고**, 화이트 캔버스라
     //    "정상처럼" 보인 채 sticky 뒤로 본문이 비친다(죽은 색 클래스, 팔레트 v4 주의).
-    <div className="bg-background/95 border-line sticky top-0 z-10 flex flex-wrap items-center gap-x-2 gap-y-1 border-b py-1.5 backdrop-blur">
+    <div className="bg-bg-canvas/95 border-line sticky top-0 z-10 flex flex-wrap items-center gap-x-2 gap-y-1 border-b py-1.5 backdrop-blur">
       <h2 className="text-foreground text-base font-bold">{group.vehicleName}</h2>
       {group.driverName && (
         <span className="text-text-dim text-xs">
