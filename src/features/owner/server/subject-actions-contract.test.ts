@@ -23,6 +23,10 @@ const m = vi.hoisted(() => ({
   rpcFault: null as null | unknown,
   /** 쓰기를 시도한 표(차례대로). */
   writes: [] as string[],
+  /** 그 과목 키를 담은 신규생 관리 기록 수(null = 못 셈). */
+  newcomerRecords: 0 as number | null,
+  /** 흡수 첫 확인 **뒤에** 들어온 신규생 관리 기록 수 — 과목 행을 지우는 마지막 저장만 본다(null = 못 셈). */
+  lateNewcomerRecords: 0 as number | null,
   audit: vi.fn(),
 }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => m.actor }));
@@ -36,6 +40,12 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 vi.mock("./dashboard-assignments", () => ({ validateDashboardAssignments: vi.fn() }));
 vi.mock("@/lib/storage/media-storage", () => ({ createUploadTicket: vi.fn(), MEDIA_KIND: {} }));
+// 신규생 관리 기록(서버 전용 표 · s2_0060·s2_0061) — 기본 0건. 있으면 흡수를 막는다(맨 아래 시험).
+vi.mock("@/features/newcomers/server/subject-refs", () => ({
+  countNewcomerSubjectRecords: async () => m.newcomerRecords,
+  // 과목 행을 지우는 마지막 저장의 확인 — 그사이 들어온 기록(`lateNewcomerRecords`)이 있으면 그 과목을 돌려준다.
+  subjectsWithNewcomerRecords: async (_tenant: string, keys: string[]) => (m.lateNewcomerRecords === null ? null : m.lateNewcomerRecords > 0 ? keys : []),
+}));
 vi.mock("@/features/periods/server/queries", () => ({
   countPeriodsForSubject: async () => {
     const interleave = m.duringRecount;
@@ -153,6 +163,8 @@ const expectOtherWindowEditsKept = () => {
 };
 
 beforeEach(() => {
+  m.newcomerRecords = 0;
+  m.lateNewcomerRecords = 0;
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-05T01:00:00.000Z"));
   vi.clearAllMocks();
@@ -376,5 +388,36 @@ describe("흡수가 쓰다가 실패하면 — 무엇이 옮겨졌는지 사실�
     m.writeFault = { table: "classes", error: { code: "23505", message: 'duplicate key value violates unique constraint "classes_name_key"' } };
     expect(await run()).toBe("그 사이 같은 이름의 반이 생겨 흡수할 수 없습니다 — 반 이름을 바꾼 뒤 다시 시도해 주세요.");
     expectSubjectKept();
+  });
+});
+
+describe("신규생 관리 기록이 있는 과목은 흡수하지 않는다(옛 키에 담당 배정·피드백만 남지 않게)", () => {
+  it("기록이 있으면 거절하고 아무 표도 쓰지 않는다", async () => {
+    m.newcomerRecords = 3;
+    const result = await absorbSubject({ from: "science", to: "math" });
+    expect("error" in result ? result.error : "").toContain("신규생 관리 기록");
+    expect(m.writes).toEqual([]);
+  });
+  it("기록 수를 못 세면 0건으로 보지 않고 멈춘다", async () => {
+    m.newcomerRecords = null;
+    const result = await absorbSubject({ from: "science", to: "math" });
+    expect("error" in result && result.error).toBeTruthy();
+    expect(m.writes).toEqual([]);
+  });
+  it("🔴 첫 확인 뒤에 기록이 들어왔으면 과목 행을 지우는 마지막 저장이 거절한다(과목은 남는다)", async () => {
+    m.lateNewcomerRecords = 1;
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await absorbSubject({ from: "science", to: "math" });
+    spy.mockRestore();
+    expect("error" in result && result.error).toBeTruthy();
+    expect("science" in labels()).toBe(true);
+  });
+  it("마지막 저장이 기록 수를 못 세면 과목을 지우지 않는다", async () => {
+    m.lateNewcomerRecords = null;
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await absorbSubject({ from: "science", to: "math" });
+    spy.mockRestore();
+    expect("error" in result && result.error).toBeTruthy();
+    expect("science" in labels()).toBe(true);
   });
 });

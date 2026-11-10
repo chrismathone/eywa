@@ -10,6 +10,8 @@
 //   배열 1:   users.subjects[] (강사 담당 과목)                               (RPC absorb_subject_key)
 //   jsonb 2:  enrollment_consultations.subject_details · onescreen_daily_sessions.subject_progress (RPC)
 //   설정 1:   tenant_settings.data.operations.subjects (행 제거)
+//   옮기지 않고 **막는** 표 3: 신규생 관리(과목별 완료 체크 0256a · 과목별 담당 배정 · 적응 피드백 — s2_0060·s2_0061). 옮기는 규칙이 없는 관리 기록이라
+//             기록이 있는 과목은 흡수·삭제를 거절한다(countNewcomerSubjectRecords · 사용 현황에도 센다 · 과목 행을 지우는 마지막 저장도 다시 본다 — actions.ts).
 //   옮기지 않는 설정 1: permissions.specialAccess.staffSubjectScopes(직원관리 과목 범위) — 역할·권한은 원장만 저장하는 섹션이라
 //             여기서 대신 고치지 않는다. 없어진 키는 아무와도 안 맞아 **좁은 쪽**으로 남고, 역할·권한 면이 '(없어진 과목)'으로 보여 준다.
 // 의도적 제외: consultation_ai_analysis.print_payload 등 동결 스냅샷(불변 설계) · tuition_catalog.category(라벨 분류, 키 아님).
@@ -23,6 +25,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { logAction } from "@/features/audit/server/log";
 import { countPeriodsForSubject, moveSubjectPeriods } from "@/features/periods/server/queries";
+import { countNewcomerSubjectRecords } from "@/features/newcomers/server/subject-refs";
 import { resolveSettings } from "../resolve";
 import { isValidSubjectKey } from "../subject-absorb";
 import { cleanPreset, sanitizeGroups, sanitizeTeacherOrder } from "../subject-fields";
@@ -54,7 +57,13 @@ const SCALAR_TABLES = [
 export type SubjectUsage = {
   total: number;
   items: { label: string; count: number }[];
+  /** 흡수도 삭제도 못 하는 까닭(있을 때만) — 옮기는 규칙이 없는 기록(신규생 관리)이 이 과목에 걸려 있다. 삭제 창이 흡수 버튼 대신 이 문구를 보인다. */
+  blocked?: string;
 };
+
+/** 신규생 관리 기록이 걸린 과목의 안내 — 삭제 창 · 미사용 삭제 · 흡수가 같은 문구를 쓴다. */
+const newcomerBlocked = (count: number) =>
+  `이 과목에 신규생 관리 기록(완료 체크·담당 배정·적응 피드백)이 ${count}건 있어 다른 과목에 흡수하거나 지울 수 없습니다. 이 기록은 과목별 관리 이력이라 옮기지 않습니다.`;
 
 type OwnerWriteGate =
   | { error: string; actor?: undefined }
@@ -110,13 +119,15 @@ async function countSubjectUsage(supabase: Supabase, tenantId: string, key: stri
   // RLS 정책 0개(service_role 전용)라 이 supabase로는 0행으로 보인다 → admin 헬퍼로 따로 센다.
   const periodCount = countPeriodsForSubject(tenantId, key);
 
-  const [scalars, tc, dc, oc, pc] = await Promise.all([
+  const [scalars, tc, dc, oc, pc, nc] = await Promise.all([
     scalarCounts,
     teacherCount,
     detailsCount,
     onescreenCount,
     periodCount,
+    countNewcomerSubjectRecords(tenantId, key),
   ]);
+  if (nc === null) throw new Error(USAGE_READ_FAILED);
   for (const [table, res] of [["users", tc], ["subject_details", dc], ["subject_progress", oc]] as const) {
     if (res.error) {
       logDbError(res.error, "owner.subjectUsage", { table });
@@ -129,8 +140,9 @@ async function countSubjectUsage(supabase: Supabase, tenantId: string, key: stri
     { label: "상담 과목별 점수", count: dc.count ?? 0 },
     { label: "원스크린 세션", count: oc.count ?? 0 },
     { label: "세션 기간", count: pc },
+    { label: "신규생 관리 기록", count: nc },
   ].filter((i) => i.count > 0);
-  return { total: items.reduce((a, b) => a + b.count, 0), items };
+  return { total: items.reduce((a, b) => a + b.count, 0), items, ...(nc > 0 ? { blocked: newcomerBlocked(nc) } : {}) };
 }
 
 /** 과목 키를 참조하는 데이터 건수(표면별) — 삭제 다이얼로그 표시용. */
@@ -233,6 +245,14 @@ export async function absorbSubject(input: { from: string; to: string }): Promis
   const toRow = operations.subjects.find((s) => s.key === to);
   if (!toRow) return { error: "흡수 대상 과목이 설정에 없습니다" };
   const fromLabel = operations.subjects.find((s) => s.key === from)?.label || from;
+
+  // 0-0) 신규생 관리 기록(과목별 완료 체크·담당 배정·적응 피드백)은 흡수가 옮기지 않는다 — 데이터를 옮기기 **전에** 멈춘다(옛 키에 기록만 남지 않게).
+  //      마지막에 과목 행을 지우는 저장도 같은 확인을 한 번 더 한다(그사이 들어온 기록 · 다른 경로의 과목 삭제).
+  const newcomerRecords = await countNewcomerSubjectRecords(t, from);
+  if (newcomerRecords === null) return { error: USAGE_READ_FAILED };
+  if (newcomerRecords > 0) {
+    return { error: `'${fromLabel}' — ${newcomerBlocked(newcomerRecords)}` };
+  }
 
   // 0) classes 유니크 (tenant, class_name, subject) 충돌 사전 점검 — 같은 반 이름이 양쪽 과목에
   //    있으면 UPDATE가 통째로 실패하므로 먼저 친절하게 알린다(fetchAllPaged = 1000행 절단 회피 B2).
@@ -361,6 +381,8 @@ export async function removeUnusedSubject(key: string): Promise<AbsorbResult> {
 
   try {
     const usage = await countSubjectUsage(supabase, t, key);
+    // 흡수로도 못 옮기는 기록이 있으면 '흡수 삭제'로 보내지 않는다(거기서도 거절된다) — 까닭을 바로 말한다.
+    if (usage.blocked) return { error: usage.blocked };
     if (usage.total > 0) {
       return { error: `그 사이 이 과목을 쓰는 데이터가 ${usage.total}건 생겼습니다 — 흡수 삭제를 사용해 주세요.` };
     }

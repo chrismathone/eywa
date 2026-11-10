@@ -36,6 +36,9 @@ vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({ from: () => ({ select: () => ({ in: async () => ({ data: [], error: null }) }) }) }),
 }));
 vi.mock("./dashboard-assignments", () => ({ validateDashboardAssignments: vi.fn() }));
+// 과목 행이 사라지는 저장은 그 과목의 신규생 관리 기록(서버 전용 표)을 다시 본다 — 이 시험의 과목엔 기록이 없다
+// (기록이 있을 때 거절하는 것은 subject-actions-contract.test.ts).
+vi.mock("@/features/newcomers/server/subject-refs", () => ({ subjectsWithNewcomerRecords: async () => [] }));
 vi.mock("@/lib/storage/media-storage", () => ({ createUploadTicket: vi.fn(), MEDIA_KIND: {} }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({

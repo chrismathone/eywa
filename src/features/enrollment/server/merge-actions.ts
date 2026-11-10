@@ -9,10 +9,11 @@ import { consultOriginLabel } from "../consult-origin";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
 import { moveCareToMergeWinner, revertCareMerge } from "@/features/student-care/server/merge-move";
-import { moveJourneyToMergeWinner, revertJourneyMerge } from "@/features/enrollment/journey/merge-move";
 import { COLUMN_LABEL } from "@/features/enrollment/merge-policy";
 import { buildMergePatch, planMerge, type ConsultRow, type MergePlan } from "@/features/enrollment/merge-plan";
 import { explainDbError } from "@/lib/supabase/db-error";
@@ -31,6 +32,9 @@ async function requireMergeWrite(): Promise<Gate> {
   if (!(await canWriteTenant(user.systemRole, "enrollment"))) {
     return { error: "신규 콜&상담 권한이 없습니다" };
   }
+  // 병합은 서버 전용 DB 함수로 간다(관리 클라이언트) — 읽기 전용 보기(운영 콘솔의 지점 보기 · 읽기 강사뷰)를 DB가 대신 막아 주지 않으므로 여기서 거절한다.
+  const viewOnly = await readonlyTeacherViewError();
+  if (viewOnly) return { error: viewOnly };
   return { user };
 }
 
@@ -173,15 +177,14 @@ export async function mergeConsultations(
     finalStudentId: finalStudent ? String(finalStudent) : null, loserIds: targetLoserIds,
   });
   if (!care.ok) return { error: "상담 약속을 옮기지 못해 병합을 멈췄습니다. 잠시 뒤 다시 시도해 주세요. 바뀐 상담은 없습니다." };
-  // 전화·방문·등록 기록(s2_0062)도 이긴 쪽 상담으로 — 진 쪽이 지워지면 기록이 함께 지워진다. 못 옮기면 약속도 되돌리고 멈춘다.
-  const journey = await moveJourneyToMergeWinner(gate.user.tenantId, winnerId, targetLoserIds);
-  if (!journey.ok) {
-    await revertCareMerge(gate.user.tenantId, gate.user.id, care.moved);
-    return { error: "전화·방문 기록을 옮기지 못해 병합을 멈췄습니다. 잠시 뒤 다시 시도해 주세요. 바뀐 상담은 없습니다." };
-  }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("merge_enrollment_consultations", {
+  // 전화·방문·등록 기록(s2_0062)은 **병합과 같은 DB 거래**에서 이긴 쪽 상담으로 옮긴다(s2_0063):
+  // 상담 행 잠금 → 기록 옮김 → 종전 병합 함수. 따로 옮기던 때의 '옮긴 뒤 저장된 기록이 진 쪽과 함께 지워지는' 틈이 없다.
+  // 🔴 서버 전용 함수다(기록 표가 서버 전용) — 병합 권한은 위 `requireMergeWrite`가 봤고, 지점·요청자는 로그인 세션에서 정해 넘긴다.
+  //    함수가 요청자의 지점 소속과 대상 상담의 지점을 다시 확인한다. 활동 기록의 '누가'는 종전처럼 로그인한 사람이다.
+  const { data, error } = await createAdminClient().rpc("merge_enrollment_consultations_with_journey", {
+    p_tenant: gate.user.tenantId,
+    p_actor: gate.user.id,
     p_winner: winnerId,
     p_losers: targetLoserIds,
     p_patch: patch,
@@ -189,7 +192,6 @@ export async function mergeConsultations(
   if (error) {
     // 병합이 안 됐으면 옮긴 약속도 되돌린다(진 쪽 상담이 그대로 남아 있다).
     await revertCareMerge(gate.user.tenantId, gate.user.id, care.moved);
-    await revertJourneyMerge(gate.user.tenantId, journey.moved);
     return { error: explainDbError(error, { scope: "enrollment.merge-actions.mergeConsultations", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   }
 
@@ -198,7 +200,7 @@ export async function mergeConsultations(
     targetType: "enrollment_consultations",
     targetLabel: String(winner.prospect_name ?? ""),
     // 🔴 "무엇을 버렸나"가 되돌릴 유일한 근거다. 전사·브리프 같은 큰 본문은 빼고 버린 값만 남긴다.
-    metadata: { winnerId, loserIds: targetLoserIds, discarded, result: data, ...(care.moved.length ? { careMoved: care.moved.map((m) => m.id) } : {}), ...(journey.moved.length ? { journeyMoved: journey.moved.map((m) => m.id) } : {}) },
+    metadata: { winnerId, loserIds: targetLoserIds, discarded, result: data, ...(care.moved.length ? { careMoved: care.moved.map((m) => m.id) } : {}) },
   });
 
   revalidatePath("/enrollment");

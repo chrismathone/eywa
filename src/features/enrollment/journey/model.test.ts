@@ -17,6 +17,15 @@ describe("실제 방문과 등록의 확인 기준",()=>{
   it("방문 전 등록과 기준일 이후 등록은 전환에 포함하지 않는다",()=>{const r=stats([record(1),record(2,{kind:"registration",status:"confirmed",happenedOn:"2026-01-01"}),record(3,{kind:"registration",status:"confirmed",happenedOn:"2026-12-01"})]);expect(r.registered).toBe(0);});
   it("등록 취소는 등록 근거만 해제하고 실제 방문은 보존한다",()=>{const r=stats([record(1),record(2,{kind:"registration",status:"confirmed",happenedOn:"2026-01-07"}),record(3,{kind:"registration",status:"cancelled",happenedOn:"2026-01-09"})]);expect(r.registered).toBe(0);expect(r.visits).toBe(1);});
   it("제외된 오입력과 완료된 후속 업무는 실적·미완료에 남지 않는다",()=>{const r=stats([record(1,{}, {voided:true}),record(2,{nextAction:"전화",nextDue:"2026-01-10",nextDoneOn:"2026-01-10"})]);expect(r.visits).toBe(1);expect(r.overdue).toBe(0);});
+  it("🔴 다른 해의 상담을 거쳐 이어지는 같은 사람은 지점 전체 열쇠로 묶어야 한 명이다(그 해 상담만으로는 두 명)",()=>{
+    const a=row(1,{student_id:id(50)}),b=row(2,{parent_phone:"010-1234-5678"}),c=row(3,{student_id:id(50),parent_phone:"010-1234-5678",consulted_at:"2025-03-05T05:00:00Z"});
+    const records=[record(1),record(2,{},{consultation_id:id(2)}),record(3,{kind:"registration",status:"confirmed",happenedOn:"2026-02-01"},{consultation_id:id(2)})];
+    const narrow=summarizeJourney([a,b],records,"2026-01-01","2026-11-03");
+    expect(narrow.people).toBe(2);expect(narrow.conversion).toBe(50);
+    const exact=summarizeJourney([a,b],records,"2026-01-01","2026-11-03",[a,b,c]);
+    expect(exact.people).toBe(1);expect(exact.conversion).toBe(100);
+    expect(exact).toEqual(summarizeJourney([a,b,c],records,"2026-01-01","2026-11-03"));
+  });
   it("KST 경계를 정확히 처리한다",()=>expect(inquiryDay(row(1,{consulted_at:"2026-01-31T16:00:00Z"}))).toBe("2026-02-01"));
 });
 describe("입력 검증",()=>{

@@ -7,7 +7,6 @@ import { palette } from "@/components/analytics/chart-math";
 import a from "@/components/analytics/analytics.module.css";
 import { kinds, statuses, purposes, allowedStatuses, eventDay, saveJourneySchema, validateJourneyDates, type JourneyDocument, type JourneyRecord } from "./model";
 import type { JourneyData } from "./server";
-import baseline from "./historical-baseline.json";
 import s from "./workspace.module.css";
 
 /**
@@ -64,7 +63,8 @@ export function JourneyWorkspace({ data, compact = false }: { data: JourneyData;
     return !query || `${names.get(r.consultation_id)?.label ?? ""} ${r.document.evidence} ${staff.get(r.document.ownerId) ?? ""}`.includes(query);
   }).sort((x, y) => eventDay(y).localeCompare(eventDay(x)) || y.updated_at.localeCompare(x.updated_at));
   const issues = summary.issues.filter((r) => !query || `${r.name} ${r.school} ${r.reasons.join(" ")}`.includes(query));
-  const historical = baseline.monthly.filter((m) => m.month.startsWith(String(data.year)));
+  // 2021–2026 검증 자료는 귀속 지점에만 내려온다(server.ts) — 없으면 탭도 세우지 않는다.
+  const baseline = data.history, historical = baseline?.monthly ?? [];
   const visitRecords = summary.selected.filter((r) => r.document.kind === "visit");
   return <div id="journey" className={`${s.root} ${a.dashboard} ${compact ? s.compact : ""}`}>
     {!compact && <>
@@ -81,7 +81,7 @@ export function JourneyWorkspace({ data, compact = false }: { data: JourneyData;
         <ChartCard title="월별 확인된 방문" note="실제 방문 완료 기록만 집계합니다. 입력이 없는 달은 미확인입니다. 같은 사람은 한 달에 1대상, 다른 달 재방문은 각 달에 포함됩니다."><SeriesChart unit="건" points={summary.monthly.map((m) => ({ label: m.month.slice(5) + "월", values: [m.visits || null, m.people || null], partial: m.unverified > 0 }))} series={[{ label: "방문 횟수", color: palette[0] }, { label: "중복 제외 대상", color: palette[1] }]} /></ChartCard>
         <ChartCard title="방문 기록의 처리 상태" note="신규·재입학만 포함. 전화상담·기존 재원 상담·대상 미확인은 방문 통계에서 제외합니다."><DonutChart label="방문 기록" unit="건" data={(["completed", "scheduled", "no_show", "cancelled"] as const).map((k, i) => ({ label: statuses[k], value: visitRecords.filter((r) => r.document.status === k).length, color: [palette[1], palette[0], palette[2], palette[4]][i] }))} /></ChartCard>
       </div>
-      <nav className={s.toolbar} aria-label="방문 점검 보기"><button type="button" aria-pressed={tab === "records"} onClick={() => setTab("records")}>기록·후속 업무</button><button type="button" aria-pressed={tab === "quality"} onClick={() => setTab("quality")}>보완 대상 {summary.issues.length}</button><button type="button" aria-pressed={tab === "history"} onClick={() => setTab("history")}>2021–2026 검증 자료</button><input className={s.search} aria-label="방문 기록 검색" placeholder="학생·담당자·보완 항목 검색" value={query} onChange={(e) => setQuery(e.target.value)} /></nav>
+      <nav className={s.toolbar} aria-label="방문 점검 보기"><button type="button" aria-pressed={tab === "records"} onClick={() => setTab("records")}>기록·후속 업무</button><button type="button" aria-pressed={tab === "quality"} onClick={() => setTab("quality")}>보완 대상 {summary.issues.length}</button>{baseline ? <button type="button" aria-pressed={tab === "history"} onClick={() => setTab("history")}>2021–2026 검증 자료</button> : null}<input className={s.search} aria-label="방문 기록 검색" placeholder="학생·담당자·보완 항목 검색" value={query} onChange={(e) => setQuery(e.target.value)} /></nav>
     </>}
     {(compact || tab === "records") && <section className={s.panel}>
       <div className={s.toolbar}><h2>전화·방문·등록 기록</h2>{compact && <Link href="/enrollment/visits">전체 점검 →</Link>}</div>
@@ -89,7 +89,7 @@ export function JourneyWorkspace({ data, compact = false }: { data: JourneyData;
       {data.canWrite && <div className={s.actions}>{Object.entries(kinds).map(([k, v]) => <button key={k} type="button" onClick={() => start(k as JourneyDocument["kind"])}>+ {v}</button>)}</div>}
       {saved && <p role="status" className={s.success}>{saved}</p>}{error && <p role="alert" className={s.error}>{error}</p>}
       {editing && <form className={s.form} onSubmit={submit}>
-        <label className={s.full}>연결 상담<select required disabled={!!data.consultationId || editing.expectedVersion > 0} value={editing.consultationId} onChange={(e) => setEditing({ ...editing, consultationId: e.target.value })}><option value="">학생의 상담 기록 선택</option>{data.choices.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label>
+        <label className={s.full}>연결 상담<select required disabled={!!data.consultationId || editing.expectedVersion > 0} value={editing.consultationId} onChange={(e) => setEditing({ ...editing, consultationId: e.target.value })}><option value="">학생의 상담 기록 선택{data.consultationId ? "" : ` (${data.year - 1}~${data.year}년 접수 상담 · 더 오래된 상담은 그 상담 상세에서 기록)`}</option>{data.choices.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label>
         <label>기록 종류<input readOnly value={kinds[editing.document.kind]} /></label>
         <label>신규·재입학 구분<select value={editing.document.purpose} onChange={(e) => patch({ purpose: e.target.value as JourneyDocument["purpose"] })}>{Object.entries(purposes).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
         <label>처리 결과<select value={editing.document.status} onChange={(e) => patch({ status: e.target.value as JourneyDocument["status"], happenedOn: e.target.value === "scheduled" ? null : editing.document.happenedOn ?? data.today })}>{allowedStatuses[editing.document.kind].map((k) => <option key={k} value={k}>{statuses[k]}</option>)}</select></label>
@@ -110,7 +110,7 @@ export function JourneyWorkspace({ data, compact = false }: { data: JourneyData;
       {history && <div className={s.history}><div className={s.toolbar}><b>변경 이력</b><button type="button" onClick={() => setHistory(null)}>닫기</button></div>{history.rows.map((r) => <div key={r.version}><b>v{r.version} · {staff.get(r.actor_id) ?? "기록 담당자"} · {new Date(r.recorded_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</b><p>{r.voided ? "집계 제외" : statuses[r.document.status]} · 실제 {dateLabel(r.document.happenedOn)} · 예정 {dateLabel(r.document.scheduledOn)}</p><p>{r.document.evidence}</p><p>사유: {r.reason || "최초 기록"}</p></div>)}</div>}
     </section>}
     {!compact && tab === "quality" && <section className={s.panel}><h2>확인하고 보완할 상담</h2><p className={s.note}>접수일 기준, 접수일이 없으면 기존 정렬일로 찾은 후보입니다. 미확인을 미등록·노쇼로 바꾸지 않습니다. 이름을 눌러 기존 상담을 확인하고 실제 근거가 있을 때 기록하세요.</p><div className={s.scroll}><table className={s.table}><thead><tr><th>학생</th><th>접수·기록일</th><th>보완 항목</th><th>다음 액션</th></tr></thead><tbody>{issues.slice(0, 150).map((r) => <tr key={r.id}><td>{name(r.id, r.name)}<div className={s.muted}>{r.school} {r.grade}</div></td><td>{r.date}</td><td>{r.reasons.map((x) => <span key={x} className={`${s.badge} ${s.late}`}>{x}</span>)}</td><td><Link href={`/enrollment/${r.id}#journey`}>상담 확인·보완 →</Link></td></tr>)}</tbody></table></div><p className={s.note}>{issues.length}건 중 {Math.min(150, issues.length)}건 표시 · 검색으로 좁힐 수 있습니다.</p></section>}
-    {!compact && tab === "history" && <>
+    {!compact && tab === "history" && baseline && <>
       <section className={s.panel}><h2>첨부 분석과 현재 기록을 구분해서 보기</h2><p className={s.note}>{baseline.asOf}에 검증한 70개월 스냅샷입니다. 에이와 현재 기록에 중복 가산하지 않습니다. 월 방문자 합계는 연간 고유 학생 수가 아니며, 미확인은 방문 0명이 아닙니다.</p><div className={s.charts}><ChartCard title={`${data.year}년 과거 관측 방문·예약`} note="방문은 명·월, 예약은 횟수로 단위가 다릅니다."><SeriesChart unit="" points={historical.map((m) => ({ label: m.month.slice(5) + "월", values: [m.visitors, m.reservations], partial: m.month === "2026-10" }))} series={[{ label: "방문 관측(명·월)", color: palette[1] }, { label: "예약 기록(회)", color: palette[0] }]} /></ChartCard><ChartCard title="2023–2025 월별 평균 예약" note="예약 수요의 계절성 참고치입니다. 실제 방문·매출 효과로 단정하지 않습니다."><RankBars unit="회" data={baseline.seasonality.map((m) => ({ label: m.month, value: Math.round(m.average * 10) / 10, color: palette[0] }))} /></ChartCard></div></section>
       <section className={s.panel}><h2>{data.year}년 원본 검증표</h2><div className={s.scroll}><table className={s.table}><thead><tr><th>월</th><th>방문(명·월)</th><th>문의 사례</th><th>등록 근거 사례</th><th>결과 미확인</th><th>실제 등록일 확인(명)</th><th>자료 상태</th></tr></thead><tbody>{historical.map((m) => <tr key={m.month}><td>{m.month}</td><td>{m.visitors ?? "미확인"}</td><td>{m.cases ?? "미확인"}</td><td>{m.registeredEvidence ?? "미확인"}</td><td>{m.unknownResults ?? "미확인"}</td><td>{m.datedRegistrations ?? "미확인"}</td><td>{m.note}</td></tr>)}</tbody></table></div><p className={s.note}>출처: {baseline.source} · {baseline.range}. 상담 원문과 개인정보는 이 비교표에 복사하지 않았습니다.</p></section>
     </>}
