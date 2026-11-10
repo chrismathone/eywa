@@ -8,6 +8,16 @@ import { describe, expect, it } from "vitest";
  */
 const ACTIONS = readFileSync(path.join(process.cwd(), "src/features/attendance/server/actions.ts"), "utf8");
 
+function walk(dir: string, out: string[] = []): string[] {
+  for (const name of readdirSync(dir)) {
+    if (name.startsWith(".") || name === "node_modules") continue;
+    const p = path.join(dir, name);
+    if (statSync(p).isDirectory()) walk(p, out);
+    else if (/\.(ts|tsx)$/.test(name) && !/\.test\.tsx?$/.test(name)) out.push(p);
+  }
+  return out;
+}
+
 function fnBody(name: string): string {
   const start = ACTIONS.indexOf(`export async function ${name}(`);
   expect(start, `${name}가 없다`).toBeGreaterThanOrEqual(0);
@@ -60,17 +70,27 @@ describe("출결 쓰기 학생 자격 — 세 경로가 판정 한 벌을 부른
   });
 });
 
+/** 7일 창·입력자 표식 — 권한 단계·칸의 날짜로 판정한다(수정 계획 P1-A 4-5). */
+describe("7일 창은 권한 단계로 · 범위 입력자는 날짜별", () => {
+  it("7일 창은 역할 이름(teacher)이 아니라 출석 권한 단계로 — ECS·원스크린 보강 액션 어디서도", () => {
+    const root = path.join(process.cwd(), "src");
+    const offenders = walk(root).filter((f) =>
+      // 모양 불문(=== … && ! / !== … ||) — 역할 이름과 7일 창 판정이 한 식에 붙어 있으면 실패
+      /systemRole\s*[!=]==\s*"teacher"[^;]{0,40}isWithinAttendanceEditWindow/.test(readFileSync(f, "utf8")),
+    );
+    expect(offenders.map((f) => path.relative(root, f))).toEqual([]);
+    const ecs = readFileSync(path.join(root, "features/class-sheets/server/actions.ts"), "utf8");
+    expect(ecs.match(/attendanceWindowApplies\(user\.systemRole\)\) && !isWithinAttendanceEditWindow/g)?.length).toBe(3);
+  });
+  it("범위 저장의 recorded_via는 첫 날짜 하나가 아니라 칸의 날짜마다", () => {
+    const body = fnBody("setAttendanceRange");
+    expect(body).not.toContain("dates[0] ?? kstToday()");
+    expect(body).toContain("const rangeViaOf = (c: RangeCell): RecordedVia =>");
+  });
+});
+
 /** 화면에서 `allowMakeup: true`를 싣는 곳 = '+ 보강 학생 추가' 한 곳뿐(일반 저장 우회 금지, 결정 #5 ②). */
 describe("allowMakeup을 보내는 화면", () => {
-  function walk(dir: string, out: string[] = []): string[] {
-    for (const name of readdirSync(dir)) {
-      if (name.startsWith(".") || name === "node_modules") continue;
-      const p = path.join(dir, name);
-      if (statSync(p).isDirectory()) walk(p, out);
-      else if (/\.(ts|tsx)$/.test(name) && !/\.test\.tsx?$/.test(name)) out.push(p);
-    }
-    return out;
-  }
   it("보강 추가 흐름(makeup-add-flow.tsx)만", () => {
     const root = path.join(process.cwd(), "src");
     const hits = walk(root)

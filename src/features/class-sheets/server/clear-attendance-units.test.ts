@@ -9,7 +9,7 @@ const h = vi.hoisted(() => ({
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/server", () => ({ after: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: h.rpc, from: h.from }) }));
-vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: async () => true }));
+vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: async () => true, accessLevelTenant: async () => "full" }));
 vi.mock("@/features/attendance/server/auto-units", () => ({ resolveAutoUnits: h.resolve }));
 vi.mock("@/features/audit/server/log", () => ({ logAction: vi.fn() }));
 vi.mock("./access", () => ({ requireEcsClassAccess: h.gate }));

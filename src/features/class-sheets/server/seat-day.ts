@@ -1,4 +1,5 @@
 import "server-only";
+import { attendanceWindowApplies } from "@/features/attendance/server/edit-window-gate";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
@@ -156,7 +157,8 @@ export async function getEcsSeatDay(
 
   const attendanceWritable =
     (await canWriteTenant(user.systemRole, "attendance")) &&
-    (user.systemRole !== "teacher" || isWithinAttendanceEditWindow(date, today));
+    (!(await attendanceWindowApplies(user.systemRole)) || isWithinAttendanceEditWindow(date, today));
+  // ↑ 7일 창 = 출석 권한 단계(서버 액션과 같은 판정 — 화면과 서버가 갈리면 켜진 단추가 거절된다, 4-5 리뷰).
   const attendanceScoped = (await accessLevelTenant(user.systemRole, "attendance")) === "scoped";
   const teachingSet =
     attendanceWritable && attendanceScoped

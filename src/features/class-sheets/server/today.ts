@@ -1,4 +1,5 @@
 import "server-only";
+import { attendanceWindowApplies } from "@/features/attendance/server/edit-window-gate";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
@@ -691,7 +692,8 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
 
   const attendanceWritable =
     (await canWriteTenant(user.systemRole, "attendance")) &&
-    (user.systemRole !== "teacher" || isWithinAttendanceEditWindow(date, today));
+    (!(await attendanceWindowApplies(user.systemRole)) || isWithinAttendanceEditWindow(date, today));
+  // ↑ 7일 창 = 출석 권한 단계(서버 액션과 같은 판정 — 화면과 서버가 갈리면 켜진 단추가 거절된다, 4-5 리뷰).
   // 담당 반 게이트를 **서버 액션과 같은 소스**(`userTaughtClassSet` = 담임 ∪ 위임 ∪ 교시 담당)로 미리
   // 반영한다. full(관리자 계열)은 반 제한 없음.
   // 🔴 2026-08-19 원장 확인 *"'오늘'에 나온 본인 수업은 전부 출결 가능해야 한다"* — 종전엔 여기서

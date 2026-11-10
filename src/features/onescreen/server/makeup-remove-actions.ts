@@ -27,6 +27,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { attendanceWindowApplies } from "@/features/attendance/server/edit-window-gate";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { humanizeDbError, logDbError } from "@/lib/supabase/db-error";
@@ -82,7 +83,7 @@ export async function removeMakeupEntry(input: {
     return { ok: false, error: "출석 입력 권한이 없습니다" };
   }
   const today = kstToday();
-  if (user.systemRole === "teacher" && !isWithinAttendanceEditWindow(input.date, today)) {
+  if ((await attendanceWindowApplies(user.systemRole)) && !isWithinAttendanceEditWindow(input.date, today)) {
     return { ok: false, error: attendanceLockMessage(input.date, today) };
   }
 

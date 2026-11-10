@@ -20,7 +20,7 @@ import {
 import { noteMakeupAgainstAbsence } from "./makeup-note-action";
 import { makeupDeadlineError } from "./makeup-deadline-gate";
 import { fetchAbsenceCells, pickAbsenceNoteTarget } from "./absence-cell";
-import type { RecordedVia } from "@/features/attendance/live/recorded-via";
+import { resolveStaffVia, type RecordedVia } from "@/features/attendance/live/recorded-via";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { logAction } from "@/features/audit/server/log";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -2270,6 +2270,8 @@ export async function setAttendanceRange(input: {
   let rangeCorrectOnly: Set<string> | null = null;
   /** native 조회 실패 사유 — 새 행이 필요한 칸이 그 때문에 빠지면 이 사유로 막는다. */
   let rangeNativeUnknown: string | null = null;
+  /** 날짜 → 그날 담당 반(위임 포함) — 강사 게이트가 읽은 것을 입력자 표식(`recorded_via`)이 다시 쓴다(날짜별 · 4-5). */
+  const rangeTeachingByDate = new Map<string, Set<string>>();
 
   if ((await accessLevelTenant(user.systemRole, "attendance")) === "scoped") {
     // 🔴 강사 계정은 자기 출석부로만 저장한다(셀 저장과 같은 판정, 원장 2026-09-17).
@@ -2297,6 +2299,7 @@ export async function setAttendanceRange(input: {
     if (!rangeFacts) return { error: LOOKUP_FAILED };
     const [teachingByDate, enrollments] = rangeFacts;
     const teaching = new Map(teachingByDate);
+    for (const [d, set] of teachingByDate) rangeTeachingByDate.set(d, set);
     const spans = new Map<string, { start: string | null; end: string | null }[]>();
     for (const e of enrollments) {
       const k = `${e.student_id}::${e.class_id}`;
@@ -2660,13 +2663,19 @@ export async function setAttendanceRange(input: {
   const updateIds = allowed.flatMap((c) => writeIdsOf.get(cellKeyOf(c)) ?? []);
   const inserts = allowed.filter((c) => !cellSlotRows.has(cellKeyOf(c)) || createCells.has(cellKeyOf(c)));
 
-  const rangeViaByClass = new Map<string, RecordedVia>();
-  // 걸러진 칸의 반만 — 빠진 반의 조회 실패가 요청을 막지 않게(일괄과 같은 규칙).
-  for (const classId of new Set(allowed.map((c) => c.classId))) {
-    const via = await settle(resolveWriteVia(supabase, user.id, classId, dates[0] ?? kstToday()));
-    if (!via) return { error: LOOKUP_FAILED };
-    rangeViaByClass.set(classId, via);
+  // 입력자 표식은 **칸의 날짜마다** — 예전엔 첫 날짜(`dates[0]`) 하나로 모든 날을 찍어, 위임·담임 인계가 걸친 범위에서
+  // 다른 날 칸이 데스크/강사로 잘못 남았다(수정 계획 P1-A 4-5). 판정은 `resolveWriteVia`와 같다(그날 담당 반이면 teacher).
+  // 걸러진 칸의 날짜만 — 강사 게이트가 이미 읽은 날은 다시 묻지 않는다(관리자는 여기서 날짜별 병렬 한 번, B4).
+  const viaDatesToLoad = [...new Set(allowed.map((c) => c.sessionDate))].filter((d) => !rangeTeachingByDate.has(d));
+  if (viaDatesToLoad.length > 0) {
+    const loaded = await settle(
+      Promise.all(viaDatesToLoad.map(async (d) => [d, await userTaughtClassSet(supabase, user.id, d, true)] as const)),
+    );
+    if (!loaded) return { error: LOOKUP_FAILED };
+    for (const [d, set] of loaded) rangeTeachingByDate.set(d, set);
   }
+  const rangeViaOf = (c: RangeCell): RecordedVia =>
+    resolveStaffVia(rangeTeachingByDate.get(c.sessionDate)?.has(c.classId) === true);
 
   /** 빗금 칸 입력으로 실제로 상태를 옮긴 행 수 — 감사로그가 계획이 아니라 이 숫자를 쓴다(중간에 멈춰도). */
   let proxyWritten = 0;
@@ -2689,7 +2698,7 @@ export async function setAttendanceRange(input: {
       const ids = writeIdsOf.get(k) ?? [];
       if (ids.length === 0) continue;
       // 범위 채우기는 월간 격자 전용 — 데스크 게이트를 걸지 않는다(오클릭 결석을 여기서 되돌린다).
-      const via = rangeViaByClass.get(c.classId) ?? "teacher";
+      const via = rangeViaOf(c);
       const plan = plans.get(k);
       const moving = transferCells.has(k);
       ids.forEach((id) => {
@@ -2769,7 +2778,7 @@ export async function setAttendanceRange(input: {
   /** 칸 → 제 교시별로 새로 저장한 시수의 합. */
   const slotUnitsByCell = new Map<string, number>();
   for (const c of inserts) {
-    const via = rangeViaByClass.get(c.classId) ?? "teacher";
+    const via = rangeViaOf(c);
     const base = {
       tenant_id: user.tenantId,
       class_id: c.classId,
