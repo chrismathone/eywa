@@ -41,6 +41,8 @@ export const DUTY_LATE_TASK_KIND = "duty_late";
 /** 화면에 내려가는 의무 한 건(강사 홈 '내 업무' 목록). */
 export type DutyItemView = {
   id: string; kind: DutyKind | string; period: DutyPeriod; cycle: string; status: DutyStatus; dueAt: string; doneAt: string | null;
+  /** void일 때 까닭(absent · not_due · expired · rekeyed …) — 화면이 "결석"처럼 사람 말로 적는다. */
+  voidReason: string | null;
   studentId: string | null; studentName: string | null; school: string | null; grade: string | null;
   classId: string | null; className: string | null; subject: string | null;
   escalation: number;

@@ -23,20 +23,20 @@ export function foldCounts(rows: readonly DutyCount[]): { total: number; done: n
 }
 
 type ItemRow = {
-  id: string; kind: string; period: DutyPeriod; cycle: string; status: DutyStatus; due_at: string; done_at: string | null; student_id: string | null; class_id: string | null; subject: string | null; escalation: number;
+  id: string; kind: string; period: DutyPeriod; cycle: string; status: DutyStatus; due_at: string; done_at: string | null; void_reason: string | null; student_id: string | null; class_id: string | null; subject: string | null; escalation: number;
   student: { name: string | null; school: string | null; grade: string | null } | { name: string | null; school: string | null; grade: string | null }[] | null;
   class: { class_name: string | null } | { class_name: string | null }[] | null;
 };
 const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? v[0] ?? null : v);
-const COLS = "id,kind,period,cycle,status,due_at,done_at,student_id,class_id,subject,escalation,student:students!duty_items_student_id_fkey(name,school,grade),class:classes!duty_items_class_id_fkey(class_name)";
+const COLS = "id,kind,period,cycle,status,due_at,done_at,void_reason,student_id,class_id,subject,escalation,student:students!duty_items_student_id_fkey(name,school,grade),class:classes!duty_items_class_id_fkey(class_name)";
 const toView = (r: ItemRow): DutyItemView => {
   const st = one(r.student);
-  return { id: r.id, kind: r.kind as DutyKind, period: r.period, cycle: r.cycle, status: r.status, dueAt: r.due_at, doneAt: r.done_at,
+  return { id: r.id, kind: r.kind as DutyKind, period: r.period, cycle: r.cycle, status: r.status, dueAt: r.due_at, doneAt: r.done_at, voidReason: r.void_reason,
     studentId: r.student_id, studentName: st?.name ?? null, school: st?.school ?? null, grade: st?.grade ?? null,
     classId: r.class_id, className: one(r.class)?.class_name ?? null, subject: r.subject, escalation: r.escalation };
 };
-/** void는 빼되 기한 지남 확정(expired)은 미완으로 보이게 싣는다. */
-const VISIBLE = "status.neq.void,void_reason.eq.expired";
+/** void는 빼되 기한 지남 확정(expired)은 미완으로, 결석(absent)은 "결석"으로 보이게 싣는다. 집계(weekCells)는 expired만 센다. */
+const VISIBLE = "status.neq.void,void_reason.eq.expired,void_reason.eq.absent";
 
 /** 한 사람의 그날(일간 회차) 의무 목록 — 학생 이름·학교·학년·반 이름을 붙여 내려준다(임베드는 FK 이름 명시 · #94). */
 export async function listOwnerDuties(tenantId: string, ownerId: string, cycle: string): Promise<DutyItemView[]> {
@@ -66,7 +66,8 @@ export async function weekCells(tenantId: string, ownerId: string, from: string,
     .eq("tenant_id", tenantId).eq("owner_id", ownerId).eq("period", "daily").gte("cycle", from).lte("cycle", to).or(VISIBLE).limit(5000);
   if (error) throw new Error(`의무 주간: ${error.message}`);
   const out = new Map<string, DutyWeekCell>();
-  for (const r of (data ?? []) as { cycle: string; status: DutyStatus; student_id: string | null; class_id: string | null }[]) {
+  for (const r of (data ?? []) as { cycle: string; status: DutyStatus; void_reason: string | null; student_id: string | null; class_id: string | null }[]) {
+    if (r.status === "void" && r.void_reason !== "expired") continue;
     const studentKey = r.student_id ?? `class:${r.class_id}`;
     const key = `${studentKey}|${r.cycle}`;
     const c = out.get(key) ?? { day: r.cycle, studentKey, total: 0, done: 0 };

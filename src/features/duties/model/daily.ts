@@ -2,6 +2,7 @@ import { axisSlotFromRow, resolveTaughtBy, type AxisSlotRow, type TeacherAxisSou
 import { enrollmentAttendsOnDay, isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { dowOf, type ClassPostDay } from "@/features/report-admin/english-writing";
 import { isTestClass, reportWorkObligations, type WorkAttendance, type WorkEnrollment, type WorkSchedule } from "@/features/dashboard/overview/work-targets";
+import { absentClassKeysOf } from "@/features/dashboard/today-actions";
 import type { WorkClass, WorkReport } from "@/features/dashboard/overview/teacher-work";
 import type { DutyKind, DutyPeriod, DutyStatus } from "../kinds";
 
@@ -10,6 +11,7 @@ import type { DutyKind, DutyPeriod, DutyStatus } from "../kinds";
  *
  * 분모·완료 판정은 운영실·포트폴리오가 이미 쓰는 함수 그대로다:
  *   · 보고서 작성 = `reportWorkObligations`(결석 전원 제외 · 미발송 반 · 작성 면제 · `covers_date` · 영어 반 알림장은 반 단위 `class:<id>`).
+ *     결석으로 빠진 학생은 **void('absent') 행으로 남긴다** — 화면이 "결석"이라 적을 수 있게(원장 2026-11-10 *"의무 없음이 왜 나온다 그랬지?"*). 분모엔 안 든다.
  *     그날 수업이 아직 시작 안 했어도 의무로 센다(`nowMinutes` 하루 끝) — 아침에 하루치가 다 보여야 한다.
  *   · 출결 입력 = `judgeClassAttendanceDay`와 같은 명단 규칙(시작일 있는 유효 수강 · 등원 요일)을 **학생 단위로 펼친 것**.
  * 열쇠(subjectKey) — 출결 = `<학생>|<반>`(같은 날 두 반을 듣는 학생은 반마다 한 건) · 보고서 작성·발송 = `<학생>|<담당>:<과목>`(`reportWorkObligations`의 묶음과 같다 —
@@ -119,6 +121,20 @@ export function buildDailyDuties(input: DailyInput): DutyDraft[] {
     out.push({ kind: "report_send", period: "daily", cycle: date, subjectKey: key, studentId: ob.studentId, classId: ob.classId, subject: cls?.subject ?? null,
       ...owner, dueAt: DAILY_DUE.report_send(date), status, source: status === "void" ? (recalled ? "recalled" : "too_old") : status === "done" ? "classnote_success" : null,
       doneAt: status === "done" ? report?.sentAt ?? null : null });
+  }
+  // ── 결석으로 작성 의무가 빠진 학생 — 보고서 받는 반(lesson)의 그날 명단 중 결석 전원(absentClassKeysOf)이고 작성 의무가 없는 학생.
+  const absent = absentClassKeysOf(input.attendance.filter((a) => a.session_date === date));
+  const hasWrite = new Set(out.filter((d) => d.kind === "report_write").map((d) => d.subjectKey));
+  for (const cls of classes) {
+    if (cls.reportSource !== "lesson") continue;
+    for (const d of out) {
+      if (d.kind !== "attendance" || d.classId !== cls.id || !d.studentId) continue;
+      const key = reportSubjectKey(d.studentId, cls);
+      if (hasWrite.has(key) || !absent.has(`${d.studentId}::${cls.id}`)) continue;
+      hasWrite.add(key);
+      out.push({ kind: "report_write", period: "daily", cycle: date, subjectKey: key, studentId: d.studentId, classId: cls.id, subject: cls.subject,
+        ownerId: d.ownerId, ownerSource: d.ownerSource, dueAt: DAILY_DUE.report_write(date), status: "void", source: "absent", doneAt: null });
+    }
   }
   // 같은 열쇠가 둘이면 DB upsert가 깨진다(21000) — 먼저 온 것(명단 순)만 남긴다. 정상 입력에선 생기지 않는다.
   const seen = new Set<string>();

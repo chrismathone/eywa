@@ -4,7 +4,7 @@ import type { DutyItemView } from "./kinds";
 
 const NOW = Date.parse("2026-11-09T12:00:00+09:00");
 const it_ = (over: Partial<DutyItemView>): DutyItemView => ({ id: Math.random().toString(36).slice(2), kind: "attendance", period: "daily", cycle: "2026-11-09", status: "open",
-  dueAt: "2026-11-09T15:00:00.000Z", studentId: "s1", studentName: "김하준", classId: "c1", className: "중2 A", subject: "math", escalation: 0, ...over });
+  dueAt: "2026-11-09T15:00:00.000Z", doneAt: null, voidReason: null, school: null, grade: null, studentId: "s1", studentName: "김하준", classId: "c1", className: "중2 A", subject: "math", escalation: 0, ...over });
 
 describe("buildDutyCards", () => {
   it("학생 단위로 묶고 기한 초과 → 아직 → 완료 순 · 종류는 출결 → 보고서 → 발송 순 · 최근 7일 띠", () => {

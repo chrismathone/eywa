@@ -57,6 +57,11 @@ function Row({ card, kinds, now }: { card: DutyCard; kinds: DutyKind[]; now: num
         return <td key={k} className="px-1 py-1 text-center"><span title={why} className="text-text-placeholder inline-flex h-6 w-20 items-center justify-center rounded-md text-xs font-medium">{text}</span></td>;
       }
       const st = dutyState(it.status, it.dueAt, now);
+      if (st === "void") {
+        const text = it.voidReason === "absent" ? "결석" : "의무 없음";
+        const why = it.voidReason === "absent" ? "결석이라 오늘 보고서 작성 의무가 없습니다(출결에서 정정하면 의무가 다시 생깁니다)" : "오늘은 이 칸의 의무가 없습니다";
+        return <td key={k} className="px-1 py-1 text-center"><span title={why} className="text-text-placeholder inline-flex h-6 w-20 items-center justify-center rounded-md text-xs font-medium">{text}</span></td>;
+      }
       return <td key={k} className="px-1 py-1 text-center">
         <button type="button" onClick={() => openWork({ href: dutyHref(it), title: `${card.title} · ${it.className ?? ""} · ${dutyKindLabel(k)}` })}
           title={`${dutyKindLabel(k)} · ${DUTY_STATE_LABEL[st]} — 누르면 창 안에서 바로 처리`}

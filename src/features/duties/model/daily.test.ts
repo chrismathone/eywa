@@ -76,9 +76,9 @@ describe("buildDailyDuties — 보고서 작성 · 발송", () => {
     expect(pick(buildDailyDuties(base({ reports: [report("s1", "too_old")] })), "report_send", "s1")).toMatchObject({ status: "void", source: "too_old" });
     expect(buildDailyDuties(base({ classnoteOn: false, reports: [report("s1")] })).some((r) => r.kind === "report_send")).toBe(false);
   });
-  it("결석한 학생은 작성 의무에서 빠진다(출결 의무는 기록이 있으니 done) · 미리 쓴 보고서(covers_date = 오늘)는 그날 의무를 끝낸다", () => {
+  it("결석한 학생은 작성 의무에서 빠지되 void('absent') 행으로 남는다(출결 의무는 기록이 있으니 done) · 미리 쓴 보고서(covers_date = 오늘)는 그날 의무를 끝낸다", () => {
     const rows = buildDailyDuties(base({ attendance: [att("s1", "c-math", "absent")] }));
-    expect(pick(rows, "report_write", "s1")).toBeUndefined();
+    expect(pick(rows, "report_write", "s1")).toMatchObject({ status: "void", source: "absent", ownerId: "t1" });
     expect(pick(rows, "attendance", "s1")).toMatchObject({ status: "done" });
     const ahead = buildDailyDuties(base({ reports: [report("s2", null, { date: "2026-11-07", coversDate: DATE })] }));
     expect(pick(ahead, "report_write", "s2")).toBeUndefined();
