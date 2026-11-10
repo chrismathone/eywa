@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { EmbedAnchor } from "@/components/embed-link";
@@ -100,13 +100,11 @@ export function MyDutiesStripButton({ summary: initial, className = "" }: { summ
               <DialogTitle className="min-w-0 flex-1">{work.title}</DialogTitle>
               <EmbedAnchor href={work.href} className="bg-primary text-primary-foreground inline-flex h-8 items-center rounded-lg px-3 text-sm font-semibold hover:brightness-95">이 화면으로 이동 ›</EmbedAnchor>
             </div>
-            <DialogDescription>여기서 바로 처리할 수 있습니다. 끝나면 ‹ 목록으로 돌아오면 숫자가 다시 읽힙니다.</DialogDescription>
           </DialogHeader>
           <iframe key={work.href} src={withEmbed(work.href)} title={work.title} className="border-line min-h-0 w-full flex-1 rounded-xl border bg-background" />
         </> : <>
           <DialogHeader>
-            <DialogTitle>내 업무</DialogTitle>
-            <DialogDescription>칸을 누르면 이 창 안에서 바로 처리합니다. 완료는 원래 기록으로 저절로 확인됩니다.</DialogDescription>
+            <DialogTitle className="text-2xl">내 업무</DialogTitle>
           </DialogHeader>
           <ToolbarSegment>
             {VIEWS.map((v) => <ToolbarSegmentItem key={v.key} active={v.key === view} onClick={() => setView(v.key)}>{v.label}</ToolbarSegmentItem>)}
