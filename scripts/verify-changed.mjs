@@ -8,6 +8,7 @@
  *              역의존이 너무 많으면 전체 tsc로 올린다(바뀐 파일만 보면 시그니처 변경이 "통과"로 새어 나간다).
  *   ③ 테스트 — `vitest related` + 바뀐 파일 이름을 **글자로** 적은 테스트(SQL·CSS·JSON 포함 — 문자열로 소스를 읽는
  *              가드는 import 그래프에 안 잡힌다) + **폴더 전체를 훑는 가드**(파일 이름을 안 적으니 늘 돈다)
+ *   ④ 커버리지 — vitest.config.ts `coverage.thresholds`에 적힌 계산 파일이 바뀌었으면 관련 테스트로 재서 그 임계값을 강제(P0-5)
  *
  * 쓰는 법: `pnpm verify` (기준 = origin/main과의 merge-base) · `pnpm verify <기준>` · `--skip-tests` · `--all-types`
  * 결과 한 줄은 `.verify/log.txt`에 커밋 sha와 함께 남는다(gitignore).
@@ -112,7 +113,9 @@ rmSync(scoped, { force: true });
 // ③ 테스트
 if (!flag("--skip-tests")) {
   // 게이트 전용 설정(값을 줄여 쓰지 않음 — 기준선 비교가 내용을 본다) + 외장 SSD `._*` 제외
-  const APPLEDOUBLE = ["--config", path.join(root, "scripts", "verify-vitest.config.mts"), "--exclude", "**/._*"];
+  // 🔴 설정은 **상대 경로**로(위에서 root로 chdir했다) — 절대 경로(한글·공백이 든 외장 SSD 경로)를 주면 `vitest related`가 import 그래프를
+  //    못 따라가 관련 테스트를 1개만 돌렸다(31개 중 · P0-5 리뷰 실측). 그동안 ③도 덜 돌고 있었다.
+  const APPLEDOUBLE = ["--config", "scripts/verify-vitest.config.mts", "--exclude", "**/._*"];
   const srcChanged = code.filter((f) => !isTest(f) && /\.(m)?(t|j)sx?$/.test(f));
   const tests = new Set(changed.filter(isTest));
   // 이름 언급 — 코드뿐 아니라 SQL·CSS·JSON도(#139 시즌2 파일 이름 가드 같은 것). `server/actions.ts`처럼 이름이 흔하면
@@ -142,6 +145,13 @@ if (!flag("--skip-tests")) {
   };
   if (srcChanged.length) vitestJson(`테스트(import 그래프 — 바뀐 소스 ${srcChanged.length}개)`, ["related", "--run", ...APPLEDOUBLE, ...srcChanged], "related");
   if (tests.size) vitestJson(`테스트(바뀐 테스트 + 이름 언급 + 폴더 훑는 가드 ${tests.size}개)`, ["run", ...APPLEDOUBLE, ...tests], "named");
+  // 같은 테스트가 import 그래프·이름 언급 두 실행에 다 들면 실패가 두 번 잡힌다 — 한 번만 센다(P0-6 확인 때 발견).
+  const seen = new Set();
+  for (let i = failures.length - 1; i >= 0; i--) {
+    const k = `${failures[i].file}\u0000${failures[i].title}`;
+    if (seen.has(k)) failures.splice(i, 1);
+    else seen.add(k);
+  }
   // 많이 한꺼번에 돌리면 시간에 민감한 테스트가 흔들린다 — 실패한 파일만 혼자 한 번 더 돌려, 그때도 실패한 것만 남긴다.
   let steady = failures;
   let flaky = [];
@@ -168,6 +178,23 @@ if (!flag("--skip-tests")) {
     for (const f of known) console.log(`  기존 실패(기준에서도 같음) · ${f.file} · ${f.title}`);
     for (const f of fresh) console.log(`  ✗ 새 실패 · ${f.file} · ${f.title}\n      ${f.message}`);
     note(fresh.length ? `테스트 실패(새 ${fresh.length} · 기존 ${known.length})` : `테스트 통과(기존 실패 ${known.length}건 — 이번 변경 무관)`, fresh.length === 0);
+  }
+}
+
+// ④ 커버리지 — 임계값이 걸린 계산 파일이 바뀌었을 때만(전체 커버리지는 무겁고 대부분 해당 없다). 임계값은 vitest.config.ts 한 곳.
+if (!flag("--skip-tests")) {
+  const cfg = readFileSync("vitest.config.ts", "utf8");
+  const block = cfg.slice(cfg.indexOf("thresholds:"));
+  const globs = [...block.slice(0, block.indexOf("\n      },")).matchAll(/"(src\/[^"]+)":\s*\{/g)].map((m) => m[1]);
+  const toRe = (g) => new RegExp(`^${g.split("**").map((p) => p.split("*").map(escRe).join("[^/]*")).join(".*")}$`);
+  if (globs.length === 0) console.log("\n⚠️ vitest.config.ts에서 커버리지 임계값을 못 읽었다 — ④를 건너뛴다(설정 모양이 바뀌었으면 이 스크립트도 고칠 것)");
+  const covered = code.filter((f) => !isTest(f) && globs.some((g) => toRe(g).test(f)));
+  if (covered.length) {
+    console.log(`\n━━ 커버리지(임계값 걸린 계산 파일 ${covered.length}개) ━━`);
+    const r = spawnSync(bin("vitest"), ["related", "--run", "--config", "scripts/verify-vitest.config.mts", "--exclude", "**/._*",
+      "--coverage.enabled", ...covered.flatMap((f) => ["--coverage.include", f]), "--coverage.reporter=text", ...covered], { stdio: "inherit" });
+    // ⚠️ 종료 코드만 본다 — 관련 테스트가 (기준에서도) 실패해도 여기서 실패로 잡힌다. 위 출력에서 ERROR(임계값)인지 테스트 실패인지 볼 것.
+    note(r.status === 0 ? "커버리지 통과" : "커버리지 단계 실패(임계값 미달 또는 관련 테스트 실패 — 위 출력)", r.status === 0);
   }
 }
 

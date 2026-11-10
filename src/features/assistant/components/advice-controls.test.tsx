@@ -152,7 +152,7 @@ describe("비서 의견 처리", () => {
   });
 
   it("다른 곳에서 먼저 바꿨으면 서버 문구를 그대로 알린다", async () => {
-    stubFetch(() => ({ status: 409, json: { error: "다른 곳에서 먼저 바꿨습니다. 대화를 다시 열어 확인해 주세요", code: "stale" } }));
+    stubFetch(() => ({ status: 409, json: { error: "다른 곳에서 먼저 바꿨습니다. 대화를 다시 열거나 '지난 의견'을 새로 고쳐 확인해 주세요", code: "stale" } }));
     render(<AdviceStatusPanel initial={fresh()} />);
     fireEvent.click(screen.getByRole("button", { name: "보류" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("다른 곳에서 먼저 바꿨습니다");

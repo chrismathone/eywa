@@ -16,6 +16,7 @@ import { PeopleBoard } from "./people-board";
 import { SecretaryPanel, type Numbers } from "./secretary-panel";
 import { TaskPanel } from "./work/task-panel";
 import { useWork } from "./work/work-context";
+import { EyIcon } from "@/components/icons/aywa-icons";
 
 /**
  * 숫자에서 바로 처리로 — 줄을 누르면 그 카드의 상세가 열리고, '요청'을 누르면 근거 학생·담당자가 채워진 업무 요청이 열린다.
@@ -145,7 +146,7 @@ function SecretaryOverlay({ onClose, children }: { onClose: () => void; children
       <div className="sec-overlay-scrim" onClick={onClose} />
       <div className="sec-overlay-panel">
         <button type="button" className="sec-overlay-close" data-noopen onClick={onClose} aria-label="닫기">
-          <svg viewBox="0 0 16 16" aria-hidden><path d="M3 3l10 10M13 3L3 13" /></svg>
+          <EyIcon name="close" size={16} />
         </button>
         {children}
       </div>

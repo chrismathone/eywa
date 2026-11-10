@@ -64,6 +64,7 @@ export const AUDIT_ACTIONS = {
   student_contribution_refresh: "원생 로열티 집계·마감",
   student_contribution_settings_save: "원생 로열티 배점 저장",
   student_contribution_signal_cancel: "원생 긍정 신호 판정 취소",
+  student_contribution_factor_save: "원생 기여 요인 기록",
   student_contribution_signal_rejudge: "원생 긍정 신호 재판정 요청",
   student_contribution_referral_backfill: "지난 원생 소개 연결",
   // 운영 스크립트(원장 지시 · 2026-10-29 "오늘 작업건에 대해선 전부 감사로그 배정여부 체크하고 넣을것") — 행위자 = system:<스크립트>.

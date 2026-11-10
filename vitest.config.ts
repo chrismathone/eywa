@@ -31,6 +31,11 @@ export default defineConfig({
         "src/features/billing/calc.ts": { lines: 80, functions: 80 },
         "src/features/payroll/calc.ts": { lines: 80, functions: 80 },
         "src/features/makeups/quantity.ts": { lines: 80, functions: 80 },
+        // 돈 계산의 **함수 정의 파일**(수정 계획 P0-5) — 강사 정산 티어 · 회차 금액 이월 · 이월 시수 맞춤. 분기까지 본다.
+        // 로컬 게이트(scripts/verify-changed.mjs ④)가 이 파일들이 바뀔 때 관련 테스트로 커버리지를 재서 이 값을 강제한다.
+        "src/features/payroll/tier-settlement.ts": { lines: 80, functions: 80, branches: 70 },
+        "src/features/billing/session-terms/money-carryover.ts": { lines: 80, functions: 80, branches: 70 },
+        "src/features/billing/session-terms/carry-session-sync.ts": { lines: 80, functions: 80, branches: 70 },
       },
     },
   },

@@ -45,7 +45,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!out.ok) {
       return out.reason === "missing"
         ? NextResponse.json({ error: "의견을 찾지 못했습니다" }, { status: 404 })
-        : NextResponse.json({ error: "다른 곳에서 먼저 바꿨습니다. 대화를 다시 열어 확인해 주세요", code: "stale" }, { status: 409 });
+        : out.reason === "deleted"
+          ? NextResponse.json({ error: "지운 대화의 의견이라 처리할 수 없습니다" }, { status: 404 })
+          : NextResponse.json({ error: "다른 곳에서 먼저 바꿨습니다. 대화를 다시 열거나 '지난 의견'을 새로 고쳐 확인해 주세요", code: "stale" }, { status: 409 });
     }
     await logAction({
       action: "assistant_advice_update",
