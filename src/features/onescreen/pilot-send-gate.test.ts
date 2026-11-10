@@ -44,9 +44,22 @@ describe("배선", () => {
     const client = readOnescreenScreen();
     expect(client.match(/pilotSendBlocks\(/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
     // 파일이 나뉜 뒤(P3-O) 합친 개수만 보면 한 곳이 빠져도 다른 파일이 채운다 — 세 자리를 따로 본다.
-    for (const f of ["use-bulk-send.ts", "use-send-core.ts", "use-auto-write.ts"]) {
-      expect(read(`./components/${f}`), f).toMatch(/pilotSendBlocks\(/);
+    // 일괄 발송(batch D에서 bulk-send-preview.ts로) · 저장 입력(저장·발송 코어 — batch D에서 use-report-save-input.ts로) · 일괄 자동작성
+    // · 한 행 자동작성의 고친 글 합치기(batch D에서 use-report-draft-generation.ts로 — 네 번째 자리도 따로 본다).
+    for (const f of [
+      "bulk-send-preview.ts",
+      "components/use-report-save-input.ts",
+      "components/use-auto-write.ts",
+      "components/use-report-draft-generation.ts",
+    ]) {
+      expect(read(`./${f}`), f).toMatch(/pilotSendBlocks\(/);
     }
+    // 판정이 순수 모듈(bulk-send-preview)로 옮겨 간 뒤에는 **발송 훅이 그 판정을 실제로 거치는지**를 따로 본다(적대 리뷰 2026-11-11) —
+    // 거르지 않고 보내도 위 단언은 순수 모듈 덕에 그대로 통과한다.
+    const bulkSend = read("./components/use-bulk-send.ts");
+    expect(bulkSend).toMatch(/\}\s*=\s*planBulkSendExclusions\(\{/);
+    expect(bulkSend).toMatch(/rows = sendable;/);
+    expect(bulkSend.indexOf("rows = sendable;")).toBeLessThan(bulkSend.indexOf("await queueOne("));
     expect(client).toMatch(/pilotCheck: \{ factsCurrent:/);
     expect(client).toMatch(/isPilotGateError\(res\.error\)/);
     const server = read("./server/actions.ts");

@@ -12,6 +12,8 @@
 - 코드: `src/features/consultation-rating/`(하네스 `harness/` 순수 · 서버 `server/` 대기열·재료·배치·정기 처리·읽기) · cron `/api/cron/consultation-ratings` · 지점 스위치 `consult_rating`(`rule.ts`·`labels.ts`) · 키 그룹 CONSULTATIONS(`models.ts`·`model-features.ts`·key-groups 가드) · 목록 열 교체(`consultation-list.tsx`) · 상세 읽기 전용 패널 · 도움말·번역 사전. SQL `s2_0044`(표 2개 · 정책 0개) — 운영 DB 적용 끝(드라이런 롤백 검증 뒤).
 - 일괄 평점 도구 `scripts/_oneoff/consult-rating/`: extract(운영 DB 읽기 전용 → `~/eywa-data`) · sample · rate(구독 CLI · 응답 모델 검증 · 캐시) · codex-brief · deliver(운영 DB 쓰기 · 기본 롤백 시험 · `--commit`) · owner-sheet(원장 점수표 40건 xlsx).
 - Codex 협의 1차 반영(제 초안의 길이·자리표시 점수 규칙 폐기 · 4점 문안 정렬 · 인용 검증 등)과 교정 수치는 결정 본문에. 침산 상담 2,124건: 빈 양식·복사 200건(47묶음)·녹음 44건(summary가 '(녹음 분석 중)'로 남음) 확인.
+- **운영 반영(같은 날 새벽 · 원장 "배포 진행해" · "하이쿠로해")**: main 배포 2회(평점 기능 → 후속 화면 수정: 열 순서·요약 띠 보조 문구·검색칸 '닫기' 제거) · 침산 상담 **2,122건 평점 반영**(Haiku 5.5 · 구독 CLI · 1점 7 · 2점 276 · 3점 565 · 4점 1,216 · 5점 58 · 녹음 전사 기준 44) · 금지 정보가 든 2건은 보내지 않음 · 지점 스위치 `consult_rating` 켬(감사 기록 '명령줄 적용(원장 지시)'). 일괄 평점 중엔 '배치 보류' 줄(failed + 그때 상담 시각)로 정기 처리가 API로 중복 전송하지 않게 막았다가 끝난 뒤 풀었다(평점 있는 줄 done · 나머지 queued). 확인 = `scripts/_oneoff/consult-rating/due-check.ts`(운영 데이터로 줄 세우기 판정).
+- 남은 일: 원장 점수표 40건(`~/eywa-data/consult-rating/원장-상담-점수표-2026-11-11.xlsx` — 원문이 들어 있어 저장소 밖) → 앵커로 싣고 판 올리기(v2) · 구독 CLI ↔ 배치 동등성 확인(API 키 · 승인 뒤) · `auto_work` 브랜치 SQL 번호 재지정([`sql-season2.md`](sql-season2.md) §2).
 
 ## 2026-11-11 — 원스크린 화면 분리(수정 계획 P3-O)
 
