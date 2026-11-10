@@ -1,5 +1,12 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-11 — 원스크린 화면 분리(수정 계획 P3-O)
+
+- `onescreen-client.tsx` 5,890 → 2,290줄 — 동작은 그대로 두고 훅·부품으로 옮겼다: `session-input.ts`(순수) · `useSessionAutosave` · `useRosterView` · `useReportAttachments` · `useAutoWrite` · `useBulkOps`/`useBulkSend` · `useEnglishTemplateMode` · `useMakeupFlow`/`useMakeupPrev` · `useSendCore`/`useReportSend` · `<OneScreenCardColumn>`. 한 단계 = 한 커밋 · 단계마다 적대적 리뷰(결함 0).
+- `ReportCard` props 43 → 8(`fields`·`rowActions`·`slots` 묶음 · 본문 그대로).
+- 🔴 보이는 변경 하나: 원스크린 행·진도 카드·학생 목록·내 학습의 과목 색이 코드 고정(`subjectTone`)에서 **학원 설정 과목 색**(`subjectColorOfRow` → `colorOf`, 미등록 키는 `LEGACY_COLORS`)으로 — 설정과 다르던 색이 설정대로 바뀐다.
+- 원스크린 화면 원문을 읽는 가드는 `readOnescreenScreen()`(화면 + 옮겨 낸 파일을 한 덩어리로) — 새로 옮겨 낸 파일은 그 목록에 한 줄. 발송 판정 배선 가드는 파일별로도 본다.
+
 ## 2026-11-10 — 보류 항목 정리(Codex 협의 추천안) — 수정 계획 P4 나머지
 
 - 운영 DB 확인(읽기 전용): DB 함수 문구의 '총괄' **0건**(0332a가 이미 교체 — 고칠 것 없음) · `attendance_records.taught_by` 칸·FK 있음, 값 0/42,166건(입구를 걷은 10-07 결정과 맞음 · 백필 안 함 · 읽는 코드의 호환 분기는 그대로).
