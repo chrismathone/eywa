@@ -21,6 +21,8 @@ export const ONESCREEN_SCREEN_FILES = [
   "components/report-attachment-upload.ts",
   "components/use-report-attachment-extras.ts",
   "components/use-auto-write.ts",
+  "components/use-report-draft-generation.ts",
+  "components/use-english-refill.ts",
   "components/use-bulk-ops.ts",
   "components/bulk-ops-types.ts",
   "bulk-apply-plan.ts",
