@@ -183,7 +183,7 @@ export default async function OneScreenPage({
       <Suspense fallback={null}>
         <TodayAttendanceStrip className="mb-4" />
       </Suspense>
-      {/* 오늘 내 업무(s2_0041 의무 장부) — 오늘 출결·보고서·발송 의무의 완료도. 의무가 있을 때만 · 첫 페인트를 막지 않는다(B7). */}
+      {/* 오늘 내 업무(s2_0043 의무 장부) — 오늘 출결·보고서·발송 의무의 완료도. 의무가 있을 때만 · 첫 페인트를 막지 않는다(B7). */}
       <Suspense fallback={null}>
         <MyDutiesStrip className="mb-4" />
       </Suspense>

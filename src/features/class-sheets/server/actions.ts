@@ -13,6 +13,7 @@ import { explainDbError } from "@/lib/supabase/db-error";
 // ui_prefs 부분 병합은 **단일 구현**(화면마다 복붙하면 형제 키를 날린다 — CLAUDE.md).
 import { patchMyUiPrefs } from "@/lib/ui-prefs/patch";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { attendanceWindowApplies } from "@/features/attendance/server/edit-window-gate";
 import { autoUnitsKey } from "@/features/attendance/auto-units";
 import { resolveAutoUnits } from "@/features/attendance/server/auto-units";
 import { kstToday } from "@/lib/date-kst";
@@ -648,7 +649,7 @@ export async function removeMakeupAttendee(input: {
   if (!(await canWriteTenant(user.systemRole, "attendance"))) {
     return { ok: false, error: "출석 입력 권한이 없습니다" };
   }
-  if (user.systemRole === "teacher" && !isWithinAttendanceEditWindow(input.date, kstToday())) {
+  if ((await attendanceWindowApplies(user.systemRole)) && !isWithinAttendanceEditWindow(input.date, kstToday())) {
     return { ok: false, error: attendanceLockMessage(input.date, kstToday()) };
   }
 
@@ -764,7 +765,7 @@ export async function markPresentIfAbsent(input: {
     return { ok: false, error: "출석 입력 권한이 없습니다" };
   }
   const today = kstToday();
-  if (user.systemRole === "teacher" && !isWithinAttendanceEditWindow(input.date, today)) {
+  if ((await attendanceWindowApplies(user.systemRole)) && !isWithinAttendanceEditWindow(input.date, today)) {
     return { ok: false, error: attendanceLockMessage(input.date, today) };
   }
   const admin = createAdminClient();
@@ -847,7 +848,7 @@ export async function clearPresentAttendance(input: {
     return { ok: false, error: "출석 입력 권한이 없습니다" };
   }
   const today = kstToday();
-  if (user.systemRole === "teacher" && !isWithinAttendanceEditWindow(input.date, today)) {
+  if ((await attendanceWindowApplies(user.systemRole)) && !isWithinAttendanceEditWindow(input.date, today)) {
     return { ok: false, error: attendanceLockMessage(input.date, today) };
   }
   const admin = createAdminClient();

@@ -6,7 +6,7 @@ import { isValidYmd, kstToday } from "@/lib/date-kst";
 import { reportError } from "@/lib/observability/report-error";
 
 /**
- * 내 의무(GET) — 강사 홈 '오늘 내 업무'를 펼칠 때 부른다(s2_0041). 사람 확인은 할 일과 같은 문(`getStaffTaskViewer` — '다른 강사 뷰'면 그 강사).
+ * 내 의무(GET) — 강사 홈 '오늘 내 업무'를 펼칠 때 부른다(s2_0043). 사람 확인은 할 일과 같은 문(`getStaffTaskViewer` — '다른 강사 뷰'면 그 강사).
  * 그날 일간 의무 + 최근 7일 학생별 완료 재료 + 이번 달 의무(월 상담 · 신규생 콜). 내 것만(관리자 범위 화면은 다음 단계). 사람마다 다른 응답이라 캐시 금지.
  */
 export const dynamic = "force-dynamic";

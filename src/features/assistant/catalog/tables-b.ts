@@ -498,7 +498,7 @@ export const TABLES_B: readonly AssistantTableDoc[] = [
     name: "students", label: "원생",
     ko: "원생 — 학생 한 명당 한 줄(상태·학교·학년·보호자 연락처·등록일·퇴원일)",
     notes:
-      "status: enrolled=재원 · on_hold=휴원 · withdrawn=퇴원 · prospect=예비 · consulted=상담완료. 신규 = enrolled_at(등록일), 퇴원 = withdrawn_at(퇴원일) — 둘 다 한국 날짜. 퇴원이 아닌데 withdrawn_at이 있으면 퇴원 예약(그날 퇴원 처리). 집계에서 뺄 것: is_test=true · notes가 '중복 병합:'으로 시작(병합으로 흡수된 쪽) · withdrawal_metadata->>'memo'가 '데이터 정리 일괄 퇴원'이거나 '수강 반 없음 일괄 퇴원 처리'로 시작(장부 정리). 앱의 월 퇴원 수는 퇴원월을 수업료를 낸 마지막 달로 보정해 단순 집계와 조금 다를 수 있다. 반·과목은 enrollments.",
+      "status: enrolled=재원 · on_hold=휴원 · withdrawn=퇴원 · prospect=예비 · consulted=상담완료. 신규 = enrolled_at(등록일), 퇴원 = withdrawn_at(퇴원일) — 둘 다 한국 날짜. 퇴원이 아닌데 withdrawn_at이 있으면 퇴원 예약(그날 퇴원 처리). 집계에서 뺄 것: is_test=true · notes가 '중복 병합:'으로 시작(병합으로 흡수된 쪽) · withdrawal_metadata->>'memo'가 '데이터 정리 일괄 퇴원'이거나 '수강 반 없음 일괄 퇴원 처리'로 시작(장부 정리) — 끝난 수강이 없거나 withdrawal_metadata->>'noClassRecord'='true'(출결·청구 0)면 퇴원으로 세지도 말하지도 않는다(onto_students.exit_kind='bookkeeping'). 앱의 월 퇴원 수는 퇴원월을 수업료를 낸 마지막 달로 보정해 단순 집계와 조금 다를 수 있다. 반·과목은 enrollments.",
     columns: {
       grade: "학년 원문(예: 중2)",
       school: "학교 이름 원문",

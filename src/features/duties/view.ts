@@ -12,7 +12,7 @@ export type DutyCard = {
   /** 같은 7일의 완료/전체 건수 — 주간 표가 쓴다. */
   weekCounts: ({ done: number; total: number } | null)[];
 };
-/** 장부가 쌓이기 시작한 날(s2_0041 운영 적용) — 그 전 날짜 칸은 "기록 전"이지 "0%"가 아니다. */
+/** 장부가 쌓이기 시작한 날(s2_0043 운영 적용) — 그 전 날짜 칸은 "기록 전"이지 "0%"가 아니다. */
 export const DUTY_LEDGER_START = "2026-11-09";
 /** 학생 × 날 한 칸 — 전체/완료 + 종류별 상태(막대그래프용). */
 export type DutyWeekKind = { kind: string; state: "done" | "late" | "open" };

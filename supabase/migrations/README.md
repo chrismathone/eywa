@@ -12,25 +12,25 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
-## 2026-11-10 의무 장부: 건별 의무의 늦음 할 일은 담당자 × 종류에 하나 (s2_0045 · ✅ 운영 적용 2026-11-10 · 직결 · 시험 거래 뒤)
+## 2026-11-10 의무 장부: 건별 의무의 늦음 할 일은 담당자 × 종류에 하나 (s2_0047 · ✅ 운영 적용 2026-11-10 · 직결 · 시험 거래 뒤)
 
-`s2_0045_duty_task_group_case.sql` — 신규생 정착 콜처럼 회차가 항목 키인 건별 의무는 항목마다 할 일이 쪼개져 같은 이름이 네 줄로 보였다 → period='case'면 묶음 회차 ''. 본문 "이름(항목) · …"(`duties_private.cycle_label`). 옛 항목별 할 일은 cancelled로 닫히고 하나로 선다.
+`s2_0047_duty_task_group_case.sql` — 신규생 정착 콜처럼 회차가 항목 키인 건별 의무는 항목마다 할 일이 쪼개져 같은 이름이 네 줄로 보였다 → period='case'면 묶음 회차 ''. 본문 "이름(항목) · …"(`duties_private.cycle_label`). 옛 항목별 할 일은 cancelled로 닫히고 하나로 선다.
 
-## 2026-11-10 의무 장부: 할 일 본문에 업무 종류 (s2_0044 · ✅ 운영 적용 2026-11-10 · 직결 · 시험 거래 뒤)
+## 2026-11-10 의무 장부: 할 일 본문에 업무 종류 (s2_0046 · ✅ 운영 적용 2026-11-10 · 직결 · 시험 거래 뒤)
 
-`s2_0044_duty_task_detail.sql` — `duty_escalate`가 여는 할 일(`duty_late`)의 detail = "<종류> 기한 초과 N건 · MM/DD — 이름 · 이름"(할 일 창의 굵은 줄이 detail을 쓴다). 월말평가 링크 `/grades`.
+`s2_0048_duty_task_detail.sql` — `duty_escalate`가 여는 할 일(`duty_late`)의 detail = "<종류> 기한 초과 N건 · MM/DD — 이름 · 이름"(할 일 창의 굵은 줄이 detail을 쓴다). 월말평가 링크 `/grades`.
 
-## 2026-11-10 의무 장부: void 까닭 갱신 (s2_0043 · ✅ 운영 적용 2026-11-10 · 직결 · 시험 거래 뒤)
+## 2026-11-10 의무 장부: void 까닭 갱신 (s2_0045 · ✅ 운영 적용 2026-11-10 · 직결 · 시험 거래 뒤)
 
-`s2_0043_duty_resolve_void_reason.sql` — `duty_resolve_items`가 void → void로 까닭(source)만 바뀌어도 `void_reason`을 받아 적는다. 결석으로 빠진 보고서 칸을 "결석"으로 적기 위해(생성기가 void('absent') 행을 넘김). 'not_due'로 먼저 묻힌 3행이 'absent'로 바뀌었다.
+`s2_0047_duty_resolve_void_reason.sql` — `duty_resolve_items`가 void → void로 까닭(source)만 바뀌어도 `void_reason`을 받아 적는다. 결석으로 빠진 보고서 칸을 "결석"으로 적기 위해(생성기가 void('absent') 행을 넘김). 'not_due'로 먼저 묻힌 3행이 'absent'로 바뀌었다.
 
-## 2026-11-09 의무 장부: 기한 지남 확정은 일간만 (s2_0042 · ✅ 운영 적용 2026-11-09 밤 · 직결 · 시험 거래 뒤 · 되돌림 110행)
+## 2026-11-09 의무 장부: 기한 지남 확정은 일간만 (s2_0044 · ✅ 운영 적용 2026-11-09 밤 · 직결 · 시험 거래 뒤 · 되돌림 110행)
 
-`s2_0042_duty_expire_daily_only.sql` — `duty_escalate`의 'due_at + 7일 → void(expired)'에 `period = 'daily'` 조건. 월간(월 상담)·건별(신규생 콜)은 열린 채 늦음으로 남긴다. 첫 생성에서 잘못 확정된 신규생 콜 110행을 다시 열었다. 할 일 링크에 월 상담(`/consultations/new`)·신규생(`/newcomers`) 추가.
+`s2_0046_duty_expire_daily_only.sql` — `duty_escalate`의 'due_at + 7일 → void(expired)'에 `period = 'daily'` 조건. 월간(월 상담)·건별(신규생 콜)은 열린 채 늦음으로 남긴다. 첫 생성에서 잘못 확정된 신규생 콜 110행을 다시 열었다. 할 일 링크에 월 상담(`/consultations/new`)·신규생(`/newcomers`) 추가.
 
-## 2026-11-09 업무 완성도 — 의무 장부 duty_items · duty_daily (s2_0041 · ✅ 운영 적용 2026-11-09 밤 · 원장 지시 '직접 cli 적용' · 직결(node · 시험 거래 ROLLBACK → 실제 적용 → 사후 확인: 표 2 · RLS 켬 · 정책 0 · RPC 7 · authenticated 실행권 없음) · 앱보다 먼저)
+## 2026-11-09 업무 완성도 — 의무 장부 duty_items · duty_daily (s2_0043 · ✅ 운영 적용 2026-11-09 밤 · 원장 지시 '직접 cli 적용' · 직결(node · 시험 거래 ROLLBACK → 실제 적용 → 사후 확인: 표 2 · RLS 켬 · 정책 0 · RPC 7 · authenticated 실행권 없음) · 앱보다 먼저)
 
-`s2_0041_duty_ledger.sql` — 학생×종류×회차의 해야 할 일(분모)과 완료(분자)를 한 표에([결정](../../docs/decisions/duties.md)). 표 2개 + 스키마 `duties_private` + RPC 7개(`duty_upsert_items` · `duty_resolve_items` · `duty_void_stale` · `duty_open_cycles` · `duty_escalate` · `duty_snapshot` · `duty_counts`) — 전부 service_role 전용(정책 0개 · 0377a 방식) · 늦음은 `staff_tasks_private.open_task`로 기존 할 일(`duty_late`)을 연다.
+`s2_0045_duty_ledger.sql` — 학생×종류×회차의 해야 할 일(분모)과 완료(분자)를 한 표에([결정](../../docs/decisions/duties.md)). 표 2개 + 스키마 `duties_private` + RPC 7개(`duty_upsert_items` · `duty_resolve_items` · `duty_void_stale` · `duty_open_cycles` · `duty_escalate` · `duty_snapshot` · `duty_counts`) — 전부 service_role 전용(정책 0개 · 0377a 방식) · 늦음은 `staff_tasks_private.open_task`로 기존 할 일(`duty_late`)을 연다.
 - 확인(2026-11-09): 로컬 PGlite 0.3.16(PG17)에 스텁 표 + 0377a 함수 원문 + 이 파일을 올려 RPC 여섯 개 한 바퀴(열기 멱등 · 담당 갱신 · done/void/되살림 · 지점 격리 · 늦음 → 할 일 열고 닫기 · 스냅숏 · 집계) 통과(`work/pglite-smoke/smoke.mjs`, gitignore).
 - 적용 뒤 확인: `select count(*) from duty_items` (cron `/api/cron/duties`가 5·35분에 돌면 그날 행이 생긴다) · 강사 홈에 '오늘 내 업무' 줄.
 - 되돌리기: 스키마 `duties_private`와 표 `duty_daily` · `duty_items`를 지운다. 할 일 `duty_late` 행은 닫힌 기록이라 그대로 둬도 된다.

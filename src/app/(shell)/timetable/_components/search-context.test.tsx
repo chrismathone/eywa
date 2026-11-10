@@ -41,6 +41,7 @@ const index = buildTimetableSearchIndex([
 function editState(): TimetableEditState {
   return {
     canDrag: true,
+    notices: [],
     classMoves: new Map(),
     queueClassMove: () => {},
     pending: new Map(),

@@ -22,7 +22,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: () 
 vi.mock("@/features/classes/server/delegation", () => ({ getTeachingClasses: async () => [{ id: "c1", subject: "math", className: "내 수학반" }] }));
 vi.mock("./makeup-session-store", () => ({ changeMakeupSession: h.store }));
 // 앵커 후보 = 담당 반 ∪ 학생이 다니는 반(원장 결정 2, 2026-09-30) — B는 남의 반이지만 학생이 다닌다.
-vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: async () => true }));
+vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: async () => true, accessLevelTenant: async () => "full" }));
 vi.mock("@/features/audit/server/log", () => ({ logAction: async () => undefined }));
 vi.mock("./makeup-anchor-sync", () => ({
   syncAnchorCells: h.sync,

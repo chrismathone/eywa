@@ -34,7 +34,7 @@ export function isJjSheetReport(
  * 지금 글이 **JJ 수업보고서로 쓰인** 글인가 — 고르는 중인 템플릿(pending)은 보지 않는다(발송 조건은 실제로 나갈 글을 본다).
  * JJ 글은 사랑의 한마디가 **선택**이다(원장 2026-10-27 *"작성안하면 영역 삭제"*) — 다른 영어 글은 종전대로 필수.
  */
-export function isJjSheetDraft(rep: { templateId?: string; draft?: string } | undefined | null): boolean {
+export function isJjSheetDraft(rep: { templateId?: string | null; draft?: string | null } | undefined | null): boolean {
   return rep?.templateId === BUILTIN_JJ_SHEET_TEMPLATE_ID || isSrsDraftText(rep?.draft);
 }
 

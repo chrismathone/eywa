@@ -10,6 +10,7 @@ import { getStaffDetail } from "@/features/staff/server/queries";
 import {
   calculateMonthlyPayroll,
   getPayrollHistory,
+  PayrollInputError,
 } from "@/features/payroll/server/queries";
 import { PayrollClient } from "./_client";
 import { kstMonth } from "@/lib/date-kst";
@@ -41,7 +42,12 @@ export default async function StaffPayrollPage({
   const [staff, history, autoCalc] = await Promise.all([
     getStaffDetail(id),
     getPayrollHistory(id),
-    calculateMonthlyPayroll(id, period),
+    // 재료를 못 읽으면 0원을 보여 주지 않는다 — null이면 화면이 "계산 못 함"으로 보이고 자동 계산 단추를 감춘다(수정 계획 P1-M).
+    calculateMonthlyPayroll(id, period).catch((err) => {
+      if (!(err instanceof PayrollInputError)) throw err;
+      console.error("[payroll] 자동 계산 재료 조회 실패:", err.message, err.detail);
+      return null;
+    }),
   ]);
 
   if (!staff) notFound();

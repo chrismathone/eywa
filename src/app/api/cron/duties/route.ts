@@ -9,7 +9,7 @@ import { escalateAndSnapshot, openPastCycles, syncDailyDuties } from "@/features
 import { syncMonthlyDuties } from "@/features/duties/server/monthly-sync";
 
 /**
- * 의무 장부 30분 맞춤(s2_0041) — 지점마다 **오늘**의 일간 의무를 만들고(시간표·명단 · AI 없음) 원 표의 사실로 닫는다.
+ * 의무 장부 30분 맞춤(s2_0043) — 지점마다 **오늘**의 일간 의무를 만들고(시간표·명단 · AI 없음) 원 표의 사실로 닫는다.
  * 어제는 새벽 3시 전까지 함께, 그 뒤로도 **기한이 지났는데 열린 의무가 남은 지난 날**(최근 7일)은 다시 맞춘다 — 다음 날 아침에 보낸 보고서 ·
  * 늦게 찍은 출결이 닫히게(안 그러면 늦음 할 일이 영영 안 닫힌다). 그 뒤 늦음 사다리(할 일)와 일별 스냅숏. 한 지점이 실패해도 나머지는 돈다 · 실패는 500.
  */

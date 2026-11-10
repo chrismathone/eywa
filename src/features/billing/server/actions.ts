@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import { explainDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveDueDate } from "@/features/billing/tuition-calc";
@@ -19,6 +20,7 @@ const INVOICE_CATEGORIES: Record<string, string> = {
   exam: "시험",
   other: "기타",
 };
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PERIOD_RE = /^\d{4}-\d{2}$/;
 
 /**
@@ -57,6 +59,7 @@ export async function createInvoice(
 
   const fieldErrors: Record<string, string> = {};
   if (!studentId) fieldErrors.studentId = "학생을 선택해주세요";
+  else if (!UUID_RE.test(studentId)) fieldErrors.studentId = "학생을 다시 선택해주세요";
   if (!PERIOD_RE.test(period)) fieldErrors.period = "청구월 형식은 YYYY-MM 입니다";
   if (amountTotal <= 0) fieldErrors.amountTotal = "청구액을 입력해주세요";
   // 할인이 청구액을 넘으면 '실청구 음수' 상태가 되어 수납률·미수 집계가 어긋난다(공식은 0으로 바닥을 치지만
@@ -72,6 +75,18 @@ export async function createInvoice(
   }
 
   const supabase = await createClient();
+  // 이 지점 학생인지 서버에서 확인한다 — 폼의 학생 id만 믿으면 다른 지점 학생을 가리키는 청구서가 생길 수 있었다
+  // (DB도 s2_0042 복합 FK로 막는다 · 수정 계획 P1-M 3b). 조회 실패를 "없음"으로 읽지 않는다.
+  const { data: student, error: studentError } = await supabase
+    .from("students")
+    .select("id")
+    .eq("tenant_id", user.tenantId)
+    .eq("id", studentId)
+    .maybeSingle();
+  if (studentError) {
+    return { error: explainDbError(studentError, { scope: "billing.invoice.create.student", fallback: "학생을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
+  }
+  if (!student) return { fieldErrors: { studentId: "이 학원의 학생을 찾을 수 없습니다 — 다시 선택해주세요" } };
   const lineItems = [{ kind: category, description: INVOICE_CATEGORIES[category], amount: amountTotal }];
   const { error } = await supabase.from("invoices").insert({
     tenant_id: user.tenantId,
@@ -92,7 +107,7 @@ export async function createInvoice(
     if (error.code === "23505" || /duplicate|unique/i.test(error.message)) {
       return { error: "이미 해당 학생의 이 달 청구서가 있습니다" };
     }
-    return { error: error.message };
+    return { error: explainDbError(error, { scope: "billing.invoice.create", fallback: "청구서를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
   }
 
   await logAction({

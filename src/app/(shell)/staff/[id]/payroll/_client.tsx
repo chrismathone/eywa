@@ -58,7 +58,8 @@ export function PayrollClient({
 }: {
   userId: string;
   period: string;
-  autoCalc: PayrollCalcResult;
+  /** null = 자동 계산 재료(단가·담당 반·시간표·출결)를 못 읽었다 — 0원으로 보이지 않고 "계산 못 함"으로. */
+  autoCalc: PayrollCalcResult | null;
   history: PayrollRecord[];
   /**
    * 정산 저장·자동 계산·지급 완료 표시를 할 수 있는가 — page.tsx가 서버 액션(upsertPayroll 등)과 **같은 식**으로 계산한 값
@@ -69,12 +70,13 @@ export function PayrollClient({
   const existing = history.find((r) => r.period === period) ?? null;
 
   const [state, formAction] = useActionState<SavePayrollState, FormData>(upsertPayroll, undefined);
-  const [, autoAction] = useActionState<SavePayrollState, FormData>(autoComputePayroll, undefined);
+  // 자동 계산 실패(재료 조회 실패로 저장 거절 등)도 보여 준다 — 예전엔 결과를 버려 거절돼도 아무 말이 없었다.
+  const [autoState, autoAction] = useActionState<SavePayrollState, FormData>(autoComputePayroll, undefined);
 
-  const [baseAmount, setBaseAmount] = useState(existing?.baseAmount ?? autoCalc.baseAmount);
-  const [hoursWorked, setHoursWorked] = useState(existing?.hoursWorked ?? autoCalc.hoursWorked);
+  const [baseAmount, setBaseAmount] = useState(existing?.baseAmount ?? autoCalc?.baseAmount ?? 0);
+  const [hoursWorked, setHoursWorked] = useState(existing?.hoursWorked ?? autoCalc?.hoursWorked ?? 0);
   const [hourlyAmount, setHourlyAmount] = useState(
-    existing?.hourlyAmount ?? autoCalc.hourlyAmount,
+    existing?.hourlyAmount ?? autoCalc?.hourlyAmount ?? 0,
   );
   const [bonus, setBonus] = useState(existing?.bonus ?? 0);
   const [deduction, setDeduction] = useState(existing?.deduction ?? 0);
@@ -114,29 +116,42 @@ export function PayrollClient({
 
       {/* 자동 계산 카드 */}
       <section className="bg-card border-border rounded-2xl border p-5">
-        <header className="mb-3 flex items-baseline justify-between">
+        {autoCalc ? (
+          <>
+            <header className="mb-3 flex items-baseline justify-between">
+              <div>
+                <p className="eyebrow">자동 계산 (출석 × 시급)</p>
+                <h3 className="text-foreground mt-1 text-sm font-bold">
+                  담당 반 {autoCalc.classCount}개 · {autoCalc.hoursWorked}시간
+                </h3>
+              </div>
+              <span className="text-foreground num text-xl font-bold">
+                {KRW.format(autoCalc.baseAmount + autoCalc.hourlyAmount)}원
+              </span>
+            </header>
+            <div className="grid grid-cols-3 gap-3 text-sm">
+              <StatBox label="기본급" value={`${KRW.format(autoCalc.baseAmount)}원`} />
+              <StatBox label="시간 정산" value={`${KRW.format(autoCalc.hourlyAmount)}원`} />
+              <StatBox label="근무 시간" value={`${autoCalc.hoursWorked}h`} highlight="text-chart-2" />
+            </div>
+            {canWrite ? (
+              <form action={autoAction} className="mt-4">
+                <input type="hidden" name="userId" value={userId} />
+                <input type="hidden" name="period" value={period} />
+                <AutoBtn />
+              </form>
+            ) : null}
+            {autoState?.error ? <p className="text-chart-4 mt-3 text-sm">{autoState.error}</p> : null}
+          </>
+        ) : (
           <div>
             <p className="eyebrow">자동 계산 (출석 × 시급)</p>
-            <h3 className="text-foreground mt-1 text-sm font-bold">
-              담당 반 {autoCalc.classCount}개 · {autoCalc.hoursWorked}시간
-            </h3>
+            <p className="text-chart-4 mt-1 text-sm font-bold">자동 계산을 하지 못했습니다</p>
+            <p className="text-muted-foreground mt-1 text-sm">
+              단가·담당 반·시간표·출결 중 하나를 읽지 못했습니다. 0원으로 계산하지 않았습니다 — 잠시 뒤 새로고침해 주세요.
+            </p>
           </div>
-          <span className="text-foreground num text-xl font-bold">
-            {KRW.format(autoCalc.baseAmount + autoCalc.hourlyAmount)}원
-          </span>
-        </header>
-        <div className="grid grid-cols-3 gap-3 text-sm">
-          <StatBox label="기본급" value={`${KRW.format(autoCalc.baseAmount)}원`} />
-          <StatBox label="시간 정산" value={`${KRW.format(autoCalc.hourlyAmount)}원`} />
-          <StatBox label="근무 시간" value={`${autoCalc.hoursWorked}h`} highlight="text-chart-2" />
-        </div>
-        {canWrite ? (
-          <form action={autoAction} className="mt-4">
-            <input type="hidden" name="userId" value={userId} />
-            <input type="hidden" name="period" value={period} />
-            <AutoBtn />
-          </form>
-        ) : null}
+        )}
       </section>
 
       {/* 수동 정산 폼 */}
@@ -146,6 +161,9 @@ export function PayrollClient({
           <h3 className="text-foreground mt-1 text-sm font-bold">{canWrite ? "상세 항목 입력" : "상세 항목"}</h3>
           {/* 숫자칸은 값이 차 있어 placeholder로 알릴 수 없다 — 양식 머리에 한 줄로 알린다. */}
           {canWrite ? null : <p className="text-text-dim mt-1 text-xs">{writeLockedNote("staff")}</p>}
+          {canWrite && !autoCalc && !existing ? (
+            <p className="text-chart-4 mt-1 text-xs">자동 계산을 하지 못해 칸이 0으로 비어 있습니다 — 저장하면 직접 입력한 값 그대로 저장됩니다.</p>
+          ) : null}
         </header>
         <form onSubmit={(e) => submitAction(e, formAction)} className="space-y-3">
           <input type="hidden" name="userId" value={userId} />

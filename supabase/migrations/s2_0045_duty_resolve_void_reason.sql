@@ -1,9 +1,9 @@
--- s2_0043 — 의무 장부: void → void로 까닭만 바뀌어도 받아 적는다 (2026-11-10)
+-- s2_0045 — 의무 장부: void → void로 까닭만 바뀌어도 받아 적는다 (2026-11-10)
 --
 -- 왜: 결석으로 빠진 보고서 칸을 "결석"이라 적으려고(원장 2026-11-10 *"의무 없음 → 결석"*) 생성기가 void('absent') 행을 넘기는데,
---   s2_0041의 duty_resolve_items는 **상태가 같으면 건너뛰어** 먼저 'not_due'로 void된 행의 까닭이 그대로 남았다(운영 확인: 11/9 3행).
+--   s2_0043의 duty_resolve_items는 **상태가 같으면 건너뛰어** 먼저 'not_due'로 void된 행의 까닭이 그대로 남았다(운영 확인: 11/9 3행).
 -- 고침: status가 같아도 void이고 source(까닭)가 다르면 void_reason을 갱신. done의 done_source는 처음 것을 지킨다(종전과 같다).
--- 되돌리기: duty_resolve_items를 s2_0041 본문으로.
+-- 되돌리기: duty_resolve_items를 s2_0043 본문으로.
 begin;
 
 create or replace function public.duty_resolve_items(p_tenant uuid, p_updates jsonb) returns jsonb

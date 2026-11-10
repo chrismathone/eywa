@@ -20,7 +20,8 @@ describe("보강 참여 배선", () => {
     expect(read("src/features/attendance/server/actions.ts")).toContain("nativeWriteAllowance(");
     expect(read("src/features/video-homework/server/actions.ts")).toContain("nativeWriteAllowance(");
     expect(read("src/features/class-sheets/server/actions.ts")).toContain("nativeWriteAllowance(");
-    expect(read("src/features/attendance/makeup-write.ts")).toContain("nativeParticipant");
+    // 학생 자격 판정 한 벌(write-eligibility.ts — 옛 makeup-write.ts를 대신한다)이 native 참여를 새 행 근거로 본다.
+    expect(read("src/features/attendance/write-eligibility.ts")).toContain("f.native");
   });
 
   it("연결된 예약은 옛 이행을 타기 전에 갈라지고, 직접 삭제는 가드를 지난다", () => {

@@ -8,10 +8,54 @@
 
 ## 2026-11-09 — 업무 완성도 1단계: 의무 장부(duty_items) + 강사 홈 '오늘 내 업무'
 
-- 원장 구상(선생님 → 과목 관리자 → 원장 완료도 관찰 · [결정](decisions/duties.md)). **s2_0041**(✅ 운영 적용 11-09 밤 · 앱보다 먼저): `duty_items`(학생×종류×회차 분모+분자) · `duty_daily`(일별 스냅숏) · RPC 7개(열기·맞춤·void·열린 회차·늦음 사다리→staff_tasks `duty_late`·스냅숏·집계) — 할 일 0377a와 같은 service_role 전용.
+- 원장 구상(선생님 → 과목 관리자 → 원장 완료도 관찰 · [결정](decisions/duties.md)). **s2_0043**(✅ 운영 적용 11-09 밤 · 앱보다 먼저): `duty_items`(학생×종류×회차 분모+분자) · `duty_daily`(일별 스냅숏) · RPC 7개(열기·맞춤·void·열린 회차·늦음 사다리→staff_tasks `duty_late`·스냅숏·집계) — 할 일 0377a와 같은 service_role 전용.
 - 생성기 = 30분 cron `/api/cron/duties`(`src/features/duties/server/sync.ts`): 오늘(새벽 3시 전엔 어제도)의 출결 입력·수업보고서 작성·보고서 발송 의무를 시간표·명단으로 만들고(`model/daily.ts` — `reportWorkObligations`·`resolveTaughtBy` 재사용 · AI 없음) 원 표의 사실로 닫는다. 담당 = 그 교시 실제 수업자(없으면 담임) · 기한 당일 자정 / 발송 다음 날 정오 · 기한 지남 → 할 일(기한 +1일) → 관리자 +3 → 원장 +7. 기한 지난 열린 의무가 남은 지난 날(7일)은 다시 맞춰 닫는다.
 - 강사 홈(원스크린·ECS) '오늘 내 업무 N/M · 기한 초과 K' 줄(`components/my-duties-strip*.tsx` · GET `/api/duties/mine`) — 학생별 칸 펼침. 표가 없으면 줄이 안 선다. DB 전수 조사로 일간·월간·건별 카탈로그 확정, 주간 의무는 없음(일간 7일 접기). 시안 `work/auto-work-design/completion-flow.local.html`.
 
+## 2026-11-10 — 원스크린 자동저장 실패 처리 · 카드·표 발송 게이트 한 벌 — 수정 계획 P1-O(리뷰 B4·B5)
+
+- 자동저장 = 학생별 줄(`session-save-queue.ts`): 한 학생에 한 요청만(나가 있으면 응답·적용 뒤 최신 상태로 한 번 더 — 옛 기준 시각을 싣고 서버가 건너뛰던 응답 역전 제거) · 던진 실패는 2초·5초 뒤 재시도 후 '자동 저장에 실패했습니다' · 서버 거절은 종전대로 사유 토스트. 예전엔 `.catch`가 없어 네트워크 오류가 조용히 사라졌다. 화면 초안은 그대로 남는다. 날짜 이동 직전 진행 중이던 학생의 마지막 편집은 정리 뒤에도 보낸다. ⚠️ 남은 것(종전과 같음): flush 없이 언마운트되는 경로(다른 메뉴·창 닫기)는 대기 중 편집·재시도를 거둔다 — `dispose`에서 flush할지 검토.
+- 발송 게이트 재료 = `row-send-gate.ts` 한 벌(카드·표) — 표 행만 회수 진행 중을 안 넘겨 버튼이 살아 있던 것 해소. 가드 `row-send-gate-wiring.test.ts`.
+
+## 2026-11-10 — ECS 7일 창 = 출석 권한 단계 · 범위 저장 입력자 = 날짜별 — 수정 계획 P1-A(4-5)
+
+- ECS 출석 쓰기 3곳(보강 명단 빼기·출석 체크·지우기)과 원스크린 보강 액션 3곳(반·등록·빼기)의 7일 창을 `systemRole === "teacher"` 대신 출석 권한 '담당만'(scoped)으로(`edit-window-gate.ts` `attendanceWindowApplies` — 출석부 액션과 같은 판정 · 가드). '담당만' 권한의 다른 역할도 그 화면들에서 지난 출결을 못 고친다. `setAttendanceRange`의 `recorded_via`를 첫 날짜(`dates[0]`) 하나가 아니라 칸의 날짜마다(`rangeViaOf` — 강사 게이트의 날짜별 담당을 재사용). ECS 오늘 보드·자리 하루 화면의 단추 판정(`attendanceWritable`)도 같은 판정으로. ⚠️ 알려진 비용: 관리자의 여러 날 범위 저장은 날짜마다 담당 조회를 한다(예전 첫 날 1회 — 틀린 표식이었다) · 줄이려면 날짜 무관 부분(담임 반·교시 담당 기간)을 한 번 읽어 JS로 판정할 것.
+
+## 2026-11-09 — 일별 출결 폼 학생 자격·기존 기록 서버 재조회 — 수정 계획 P1-A(4-4), 결정 #5 ③
+
+- `saveAttendance`: 폼의 `existing:` id를 믿지 않고 서버가 그날 유효 기록을 다시 고른다(`day-record-ids.ts` — 화면과 같은 규칙 · 오래된 화면이 겹쳐 새 행을 만들지 않는다). 반·폼 학생이 이 지점에 있는지 확인(역할 무관). 강사는 행마다 `writeEligibility`(수강·예약·나누기·native·기존 기록) — 근거 없는 학생은 '보강' 상태로만 새 행. 예전엔 담당 반만 봤다.
+
+## 2026-11-09 — 즉석 보강(`allowMakeup`) 서버 검증 — 수정 계획 P1-A(4-3), 결정 #5 ②
+
+- `setAttendanceCell`은 `allowMakeup`을 상태가 `makeup`인 저장에서만 듣는다(그 밖은 무시 → 서버 판정) · 켜지면 학생·반이 이 지점에 있는지 확인(`instantMakeupTargetsOk`, 강사 조회와 병렬). 수업 나누기 칸(좌석표·원스크린 알약)이 `present`에 실어 보내던 플래그를 걷었다 — 서버가 `hasSplitInto`로 연다. 보내는 화면 = `makeup-add-flow.tsx` 하나(가드).
+
+## 2026-11-09 — 강사 출결 쓰기 학생 자격 = 단건·일괄·범위 한 벌 — 수정 계획 P1-A(4-2), 결정 #5
+
+- 순수 판정 `write-eligibility.ts`(`writeEligibility`·`blockedByCorrectOnly`) — 새 행 근거 = 수강·보강 예약·수업 나누기·native 보강 참여 · **기존 기록은 정정만**(다른 교시 새 행 불가). 세 경로가 손으로 따로 짜서 어긋나 있던 것(범위는 나누기 없음 · 일괄·범위는 기존 기록·native 없음 · 단건은 기록이 있으면 예약을 안 물음). 일괄·범위의 native는 기간 한 번(`nativeWriteKeys`), 권한 거절은 근거 없음(sharedRead), 조회 실패는 새 행이 필요한 칸이 있을 때만 전체 거절(정정은 그대로). 일괄·범위 입력자 판정은 걸러진 칸의 반만. 옛 `canWriteAttendanceStudent`(makeup-write.ts) 삭제. 배선 가드 `write-eligibility-wiring.test.ts`. 결정 로그 `docs/decisions/attendance.md`.
+
+## 2026-11-09 — 출결 쓰기 판정 재료를 조회 실패에도 틀리게 읽지 않게 — 수정 계획 P1-A(4-1)
+
+- `userTaughtClassSet`·`getTeachingClassIds`(+위임·JJ 담당 갈래)에 `strict`: 조회 실패를 "담당 반 없음"으로 읽어 담당 강사 저장이 거짓 "담당 반이 아닙니다"로 막히거나 입력자 표식(`recorded_via`)이 데스크로 잘못 찍히던 것. 출결 쓰기 경로(일별 폼·단건·보강 연결·일괄·범위)와 `resolveWriteVia`만 strict — 실패하면 `settle()`이 `{ error: "담당 반·수강을 확인하지 못해 저장하지 않았습니다…" }`로 돌려준다(던지면 일별 폼은 오류 화면·격자는 무음). 판정은 늘 쓰기 전이라 반쯤 저장 없음. 위임 500건 상한 도달도 strict면 실패. 보강 학생 검색·읽기 화면은 그대로. 일괄·범위 수강 이력 조회 `fetchAllPagedInChunks`(청크 안 1000행 절단). 관리자 저장도 조회 실패 시 거절(잘못된 표식보다 재시도).
+
+## 2026-11-09 — 환불 요청서 목록·상세가 조회 실패를 "없음"으로 보이지 않게 — 수정 계획 P1-M(3c)
+
+- 목록 = `fetchAllPaged`(1000행 절단 방지 · 생성일·id 순서 고정 · 강사뷰 restricted 필터는 페이지마다) · 실패는 던진다(빈 목록 = "요청서 없음" 거짓 방지). 상세 = 조회 오류를 404(null)와 구분해 로그 + throw. 테스트에 실패 사례 추가.
+
+## 2026-11-09 — 청구서 학생을 같은 지점 학생으로 묶음(SQL s2_0042 · 운영 적용함) — 수정 계획 P1-M(3b)
+
+- 수동 청구서 생성(`createInvoice`)이 폼 학생 id를 지점 확인 없이 넣었고 DB FK도 `student_id`만 봐서, 다른 지점 학생을 가리키는 청구서가 가능했다. DB = 복합 FK `invoices(tenant_id, student_id) → students(tenant_id, id)`(적용 전 검사: 4,977건 중 불일치 0 · 드라이런에서 같은 지점 통과·다른 지점 거절). 앱 = UUID 확인 + 이 지점 학생 존재 확인(조회 실패는 실패로) + DB 오류 원문 대신 `explainDbError` + 제약 문구 등록. 다른 쓰기 경로(취소·완납·엑셀·메이크에듀 스크립트·학생 병합)는 늘 같은 지점이라 영향 없음(리뷰 확인).
+
+## 2026-11-09 — 급여 자동 계산이 조회 실패를 0원으로 저장하지 않게 — 수정 계획 P1-M(3a)
+
+- `calculateMonthlyPayroll`이 단가·담당 반·시간표 조회 오류를 버려 0원/기본급만으로 계산했고 `autoComputePayroll`이 그대로 `payroll_records`에 저장했다(일반 지점은 급여 모듈을 켜면 쓴다). 이제 재료(단가·담당 반·시간표·출결)를 못 읽으면 `PayrollInputError` → 저장 안 함 + 이유 표시(원문은 로그로만). 급여 화면은 계산 실패 시 0원 대신 "자동 계산을 하지 못했습니다" · 자동 계산 단추 숨김 · 수동 폼에 안내. 자동 계산 액션 오류를 화면에 표시(예전엔 결과를 버렸다). 월별 개요의 직원 목록 조회 실패도 throw. 출결 페이지 조회에 `.order("id")`(페이지 경계 누락 방지). 쓰지 않던 시간표 임베드 제거. 남은 일: 시간표 이력 행이 반 평균 시간에 섞임(반·날짜별 산식 — 별도 착수).
+
+## 2026-11-09 — 타입 오류 12건 → 0건 — 수정 계획 P0-3
+
+- CI가 꺼진 동안 쌓인 main의 타입 오류. 운영 코드 3건은 타입만 맞춤(동작 같음): `jj-books.ts` `isJjSheetDraft`가 `draft: null`을 받게 · `pilot-restyle-guard.ts` 숫자 목록 `string[]` · `love-note-draft-button.tsx` 이해도 줄의 점수 null 좁힘. 테스트 3건·dev 하네스는 새 필드를 채움. `scripts/student-contribution/verify-parent-event-import.ts`는 저장소 밖 PGlite를 실행 때 불러온다(정적 import면 그 설치가 없는 곳의 타입 검사가 늘 실패). 남은 정리: `UnderstandingRow.score`를 `number`로 좁히기(실제로 null이 안 들어온다).
+
+## 2026-11-09 — 수강 줄만 남은 장부 정리 퇴원도 어디서나 조용히 제외(표식 noClassRecord · SQL s2_0041)
+
+- 원장 *"저렇게 처리했음 알아서 걸러야지 왜 자꾸 언급하나"* — 07-15 정리 26명(폐지 고등 수학반 · 출결·청구 0)이 7월 퇴원으로 섰다. `isBookkeepingOnlyExit` = 장부 정리 메모 + (끝난 수강 없음 또는 `withdrawal_metadata.noClassRecord`) · 일괄 퇴원이 표식을 적고(`markNoClassRecord`) 기존 40명은 백필 · 비서 보기 s2_0041 + 프롬프트 '장부 정리는 언급하지 않는다'. 7월 퇴원 73 → 47. 결정 = `docs/decisions/students.md` 2026-11-09.
 ## 2026-11-09 — 로컬 게이트 `pnpm verify` — 수정 계획 P0-1
 
 - 바뀐 파일과 그 영향만 검사(`scripts/verify-changed.mjs` · `verify-deps.mjs` · `verify-baseline.mjs` · `verify-vitest.config.mts`): eslint · 바뀐 TS와 import·**역의존**(바뀐·지운·옮긴 TS 전부, 재수출 한 단계)만 담은 임시 tsconfig로 tsc(많으면 전체) · `vitest related` + 파일 이름(SQL·CSS 포함)을 적은 테스트 + 폴더를 훑는 가드 · **기준선 비교**(main의 기존 빨간 테스트 9건은 따로 보이고, 스택을 뺀 메시지 전체가 달라진 실패만 막는다 · 값을 줄여 쓰지 않는 설정 · 실패 파일은 혼자 재실행해 흔들림 제거 · 기준 사본은 내장 디스크 임시 폴더) · 외장 SSD `._*` 정리. 결과는 `.verify/log.txt`. 재현해 막히는 것 확인: 여러 줄 시그니처 변경 · 파일 삭제 · 규칙 밖 SQL만 추가 · 빨간 가드에 위반 추가 · 위반 바꿔치기(개수 같음). 중단(Ctrl-C) 시 사본 정리. `docs/setup-and-ops.md` "검증 게이트"와 AGENTS.md를 이 규칙으로(옛 문서는 커밋마다 전체 4단계). CI가 꺼져 있고 배포를 막지 못하는 동안 유일한 게이트.

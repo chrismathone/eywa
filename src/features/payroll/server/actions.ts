@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { humanizeDbError } from "@/lib/supabase/db-error";
 import { payrollTotal } from "../calc";
-import { calculateMonthlyPayroll } from "./queries";
+import { calculateMonthlyPayroll, PayrollInputError } from "./queries";
 import { logAction } from "@/features/audit/server/log";
 import { canManageStaff } from "@/lib/auth/role-hierarchy";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
@@ -157,7 +157,17 @@ export async function autoComputePayroll(
   if (!userId || !period) return { error: "강사·정산 기간이 필요합니다" };
   if (!(await assertStaffInTenant(user.tenantId, userId))) return { error: "직원을 찾을 수 없습니다" };
 
-  const calc = await calculateMonthlyPayroll(userId, period);
+  // 재료(단가·담당 반·시간표·출결)를 못 읽으면 저장하지 않는다 — 예전엔 0원으로 계산한 값을 그대로 저장했다(수정 계획 P1-M).
+  let calc: Awaited<ReturnType<typeof calculateMonthlyPayroll>>;
+  try {
+    calc = await calculateMonthlyPayroll(userId, period);
+  } catch (err) {
+    if (err instanceof PayrollInputError) {
+      console.error("[payroll] 자동 계산 재료 조회 실패 — 저장 안 함:", err.message, err.detail);
+      return { error: `${err.message}. 저장하지 않았습니다 — 잠시 뒤 다시 시도해 주세요.` };
+    }
+    throw err;
+  }
 
   const supabase = createAdminClient();
   const total = payrollTotal({ baseAmount: calc.baseAmount, hourlyAmount: calc.hourlyAmount });

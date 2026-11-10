@@ -411,7 +411,7 @@ export async function loadLiveSlots(
         signal: classifySignal(status, hasAnyRecord),
         // 보강 예약(0264a) 표식 — 좌석표가 이름 옆에 '보강 예약'을 붙이고, 그 근거를 hover에 적는다.
         ...(reservedHere?.has(sid) ? { reservedMakeup: reservedHere.get(sid)! } : {}),
-        // 수업 나누기 표식 — 좌석표가 hover에 사정을 적고, 받는 쪽은 저장 때 수강행 없는 칸을 연다(allowMakeup).
+        // 수업 나누기 표식 — 좌석표가 hover에 사정을 적고, 받는 쪽 저장은 서버가 나누기 표로 연다(`hasSplitInto`).
         ...(split.marks.has(sid) ? { splitMark: split.marks.get(sid)! } : {}),
       });
     }
