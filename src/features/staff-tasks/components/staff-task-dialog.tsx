@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { kstShortStamp } from "@/lib/date-kst";
 import { TASK_FILTERS, TASK_FILTER_LABEL, closeReasonLabel, taskKindLabel, taskState, type StaffTaskFilter, type StaffTaskItem } from "../kinds";
@@ -20,13 +20,13 @@ export function StaffTaskDialog({ target, onClose }: { target: StaffTaskDialogTa
   const [filter, setFilter] = useState<StaffTaskFilter>(target.filter ?? "open");
   const [taskId, setTaskId] = useState<string | null>(target.taskId ?? null);
   const all = target.scope === "all";
-  const title = all ? (target.personName ? `${target.personName} 선생님의 할 일` : "업무 처리 현황") : "내 할 일";
+  // 원장 2026-11-10: '내 할 일' → '내 업무' · 제목 1.5배 · 설명 줄 없음.
+  const title = all ? (target.personName ? `${target.personName} 선생님의 업무` : "업무 처리 현황") : "내 업무";
   return (
     <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <DialogContent className="flex h-[min(640px,88dvh)] flex-col gap-3 sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>처리 여부는 원래 기록(보고서 발송 · 후속조치 완료)으로 저절로 확인됩니다.</DialogDescription>
+          <DialogTitle className="text-2xl">{title}</DialogTitle>
         </DialogHeader>
         {taskId ? <TaskDetail taskId={taskId} onBack={() => setTaskId(null)} onNavigate={onClose} /> : <>
           <ToolbarSegment>

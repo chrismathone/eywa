@@ -137,7 +137,7 @@ export function closeReasonLabel(reason: string | null): string | null {
 
 /** 이력 한 줄의 사건 이름. */
 const EVENT_LABEL: Record<string, string> = {
-  opened: "할 일 생김",
+  opened: "업무요청",
   reopened: "다시 열림",
   assigned: "담당 지정",
   retry_requested: "재발송 요청",
