@@ -43,6 +43,10 @@ describe("배선", () => {
   it("일괄 발송·저장 입력·일괄 자동작성이 같은 판정을 쓰고, 서버는 pilotCheck가 없으면 거절한다", () => {
     const client = readOnescreenScreen();
     expect(client.match(/pilotSendBlocks\(/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
+    // 파일이 나뉜 뒤(P3-O) 합친 개수만 보면 한 곳이 빠져도 다른 파일이 채운다 — 세 자리를 따로 본다.
+    for (const f of ["use-bulk-send.ts", "use-send-core.ts", "use-auto-write.ts"]) {
+      expect(read(`./components/${f}`), f).toMatch(/pilotSendBlocks\(/);
+    }
     expect(client).toMatch(/pilotCheck: \{ factsCurrent:/);
     expect(client).toMatch(/isPilotGateError\(res\.error\)/);
     const server = read("./server/actions.ts");
