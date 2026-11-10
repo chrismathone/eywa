@@ -13,7 +13,6 @@ import { getEcsToday, type EcsTodayResult } from "@/features/class-sheets/server
 import { getEcsSeatDay } from "@/features/class-sheets/server/seat-day";
 import { TodayBoard } from "@/features/class-sheets/components/today-board";
 import { TodayAttendanceStrip } from "@/features/attendance/live/components/today-strip";
-import { MyTasksStrip } from "@/features/staff-tasks/components/my-tasks-strip";
 import { MyDutiesStrip } from "@/features/duties/components/my-duties-strip";
 import { SheetClient } from "@/features/class-sheets/components/sheet-client";
 import { EcsSeatDayFace } from "@/features/class-sheets/components/seat-day-face";
@@ -425,10 +424,6 @@ function EcsTodayFace({
           <TodayAttendanceStrip />
         </Suspense>
       )}
-      {/* 내 할 일(0377a) — 원스크린과 같은 한 줄. 열린 할 일이 있을 때만. */}
-      <Suspense fallback={null}>
-        <MyTasksStrip />
-      </Suspense>
       {/* 오늘 내 업무(s2_0041) — 원스크린과 같은 한 줄(영어는 반 알림장 · 출결). */}
       <Suspense fallback={null}>
         <MyDutiesStrip />

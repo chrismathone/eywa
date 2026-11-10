@@ -2,10 +2,9 @@
 
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { DUTY_KIND_KEYS, DUTY_KINDS, DUTY_STATE_LABEL, dutyKindLabel, dutyState, type DutyKind, type DutyState } from "../kinds";
-import { buildDutyCards, dutyHref, groupCardsByClass, type DutyCard } from "../view";
+import { buildDutyCards, groupCardsByClass, type DutyCard } from "../view";
 import type { DutyPayload } from "./my-duties-strip-button";
-import { useOpenDutyWork } from "./duty-work-context";
-import { CollapseBar, useCollapse } from "./collapse";
+import { useCollapse } from "./collapse";
 
 /**
  * '오늘' 보기 — **항상 반별로**(원장 2026-11-09) 표 하나씩: 줄 = 학생, 칸 = 출결 · 보고서 · 발송(막대 색 = 상태 · 글자 = 종류). 머리 줄 없음(원장 2026-11-10 *"제목행 제거"*).
@@ -13,19 +12,19 @@ import { CollapseBar, useCollapse } from "./collapse";
  */
 const DAILY: DutyKind[] = DUTY_KIND_KEYS.filter((k) => DUTY_KINDS[k].period === "daily");
 const SHORT: Record<string, string> = { attendance: "출결", report_write: "보고서", report_send: "발송" };
-const CELL: Record<DutyState, string> = { done: "bg-green text-primary-foreground", late: "bg-danger text-primary-foreground", open: "bg-amber-soft text-amber", void: "bg-bg-soft text-text-placeholder" };
+// 미완료 = 완료와 같은 초록이되 속은 흰색(채워지지 않은 것처럼) · 글자 초록(원장 2026-11-10). 기한 초과만 빨강.
+const CELL: Record<DutyState, string> = { done: "bg-green text-primary-foreground border border-green", late: "bg-danger text-primary-foreground border border-danger", open: "bg-surface-hi text-green border border-green", void: "bg-bg-soft text-text-placeholder" };
 
-export function MyDutiesPanel({ loaded }: { loaded: { payload: DutyPayload; at: number } }) {
+export function MyDutiesPanel({ loaded, defaultClosed = false }: { loaded: { payload: DutyPayload; at: number }; defaultClosed?: boolean }) {
   const { payload, at: now } = loaded;
   if (!payload.items.length) return <p className="text-text-dim mt-2 text-sm">오늘 수업 의무가 없습니다.</p>;
   const groups = groupCardsByClass(buildDutyCards(payload.items, payload.week, payload.days, now), now);
-  return <GroupsView groups={groups} now={now} />;
+  return <GroupsView groups={groups} now={now} defaultClosed={defaultClosed} />;
 }
 
-function GroupsView({ groups, now }: { groups: ReturnType<typeof groupCardsByClass>; now: number }) {
-  const collapse = useCollapse(groups.map((g) => g.classId ?? ""));
+function GroupsView({ groups, now, defaultClosed }: { groups: ReturnType<typeof groupCardsByClass>; now: number; defaultClosed: boolean }) {
+  const collapse = useCollapse(groups.map((g) => g.classId ?? ""), defaultClosed);
   return <div className="grid gap-3">
-    <div className="flex justify-end"><CollapseBar collapse={collapse} /></div>
     {groups.map((g) => {
       const kinds = DAILY.filter((k) => g.cards.some((c) => c.items.some((i) => i.kind === k)));
       return <section key={g.classId ?? "none"} className="border-line-faint overflow-hidden rounded-xl border">
@@ -44,7 +43,6 @@ function GroupsView({ groups, now }: { groups: ReturnType<typeof groupCardsByCla
 }
 
 function Row({ card, kinds, now }: { card: DutyCard; kinds: DutyKind[]; now: number }) {
-  const openWork = useOpenDutyWork();
   const first = card.items[0];
   const who = card.studentId && first ? schoolGradeLabel(first.school, first.grade) : null;
   return <tr className="border-line-faint border-t">
@@ -64,12 +62,9 @@ function Row({ card, kinds, now }: { card: DutyCard; kinds: DutyKind[]; now: num
         const why = it.voidReason === "absent" ? "결석이라 오늘 보고서 작성 의무가 없습니다(출결에서 정정하면 의무가 다시 생깁니다)" : "오늘은 이 칸의 의무가 없습니다";
         return <td key={k} className="px-1 py-1"><span title={why} className="text-text-placeholder flex h-6 items-center justify-center rounded-md text-xs font-medium">{text}</span></td>;
       }
+      // 일간 칸은 누르지 않는다 — 창을 닫으면 바로 원스크린이라 거기서 처리한다(원장 2026-11-10).
       const title = `${dutyKindLabel(k)} · ${DUTY_STATE_LABEL[st]}`;
-      if (st === "done") return <td key={k} className="px-1 py-1"><span title={title} className={`flex h-6 items-center justify-center rounded-md font-semibold ${CELL[st]}`}>{label}</span></td>;
-      return <td key={k} className="px-1 py-1">
-        <button type="button" onClick={() => openWork({ href: dutyHref(it), title: `${card.title} · ${it.className ?? ""} · ${dutyKindLabel(k)}` })}
-          title={`${title} — 누르면 창 안에서 바로 처리`} className={`flex h-6 w-full items-center justify-center rounded-md font-semibold hover:brightness-95 ${CELL[st]}`}>{label} · {DUTY_STATE_LABEL[st]}</button>
-      </td>;
+      return <td key={k} className="px-1 py-1"><span title={title} className={`flex h-6 items-center justify-center rounded-md font-semibold ${CELL[st]}`}>{st === "done" ? label : `${label} · ${DUTY_STATE_LABEL[st]}`}</span></td>;
     })}
   </tr>;
 }

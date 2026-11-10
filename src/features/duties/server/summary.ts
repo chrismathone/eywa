@@ -8,6 +8,7 @@ export type DutyCountTriple = { total: number; done: number; late: number };
 export type DutySummary = {
   date: string; month: string; today: DutyCountTriple; week: DutyCountTriple;
   byKind: { kind: string; total: number; done: number; late: number }[]; counsel: DutyCountTriple; exam: DutyCountTriple; newcomer: DutyCountTriple;
+
 };
 
 /** 한 사람의 '내 업무' 숫자(오늘 · 이번 주 · 이번 달) — 강사 홈 첫 그리기와 60초 갱신(GET)이 같은 함수. 세 조회는 독립(B4). */

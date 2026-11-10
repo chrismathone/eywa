@@ -12,7 +12,6 @@ import { pickCnForRoster } from "@/features/onescreen/classnote-match";
 import { parseView } from "@/features/onescreen/view";
 import { OneScreenClient } from "@/features/onescreen/components/onescreen-client";
 import { TodayAttendanceStrip } from "@/features/attendance/live/components/today-strip";
-import { MyTasksStrip } from "@/features/staff-tasks/components/my-tasks-strip";
 import { MyDutiesStrip } from "@/features/duties/components/my-duties-strip";
 import { VideoHomeworkProvider } from "@/features/video-homework/components/video-homework-provider";
 import { getVideoHomeworkMarks } from "@/features/video-homework/server/queries";
@@ -183,10 +182,6 @@ export default async function OneScreenPage({
           된다(B7). 다 찍은 날엔 컴포넌트가 스스로 null을 돌려 아무 것도 그리지 않는다. */}
       <Suspense fallback={null}>
         <TodayAttendanceStrip className="mb-4" />
-      </Suspense>
-      {/* 내 할 일(0377a) — 열린 할 일이 있을 때만 한 줄. 첫 페인트를 막지 않는다(B7). */}
-      <Suspense fallback={null}>
-        <MyTasksStrip className="mb-4" />
       </Suspense>
       {/* 오늘 내 업무(s2_0041 의무 장부) — 오늘 출결·보고서·발송 의무의 완료도. 의무가 있을 때만 · 첫 페인트를 막지 않는다(B7). */}
       <Suspense fallback={null}>

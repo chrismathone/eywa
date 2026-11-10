@@ -9,7 +9,7 @@ import type { StaffTaskDialogTarget } from "./staff-task-dialog";
  * 업무 처리 현황 권한이 있으면 옆에 '업무 처리 현황'(모든 직원).
  */
 export function BellTaskRow({ summary, onOpen }: { summary: StaffTaskSummary; onOpen: (target: StaffTaskDialogTarget) => void }) {
-  const mine = summary.open > 0 ? `내 업무 ${summary.open.toLocaleString("ko-KR")}` : "내 업무 없음";
+  const mine = summary.open > 0 ? `내 할 일 ${summary.open.toLocaleString("ko-KR")}` : "내 할 일 없음";
   return (
     <div className="border-line flex items-center gap-2 border-b px-3 py-2">
       <button type="button" onClick={() => onOpen({ scope: "mine" })}

@@ -3,8 +3,8 @@
 import { useState } from "react";
 
 /** 반별 접기/펼치기 + 모두 접기/펼치기(원장 2026-11-10). 기본은 전부 펼침. */
-export function useCollapse(keys: readonly string[]) {
-  const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
+export function useCollapse(keys: readonly string[], initiallyClosed = false) {
+  const [closed, setClosed] = useState<ReadonlySet<string>>(() => new Set(initiallyClosed ? keys : []));
   return {
     isOpen: (k: string) => !closed.has(k),
     toggle: (k: string) => setClosed((cur) => { const next = new Set(cur); if (next.has(k)) next.delete(k); else next.add(k); return next; }),

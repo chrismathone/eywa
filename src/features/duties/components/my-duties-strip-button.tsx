@@ -7,7 +7,7 @@ import { EyIcon } from "@/components/icons/aywa-icons";
 import { EmbedAnchor } from "@/components/embed-link";
 import { withEmbed } from "@/components/workspace/embed-context";
 import { DutyWorkContext, type DutyWork } from "./duty-work-context";
-import { dutyKindLabel, type DutyItemView } from "../kinds";
+import type { DutyItemView } from "../kinds";
 import type { DutyKindCount, DutyWeekCell } from "../view";
 import { MyDutiesPanel } from "./my-duties-panel";
 import { MyDutiesWeek } from "./my-duties-week";
@@ -15,7 +15,7 @@ import { MyDutiesMonth } from "./my-duties-month";
 
 type Count = { total: number; done: number; late: number };
 export type DutyStripSummary = { date: string; month: string; today: Count; week: Count; byKind: DutyKindCount[]; counsel: Count; exam: Count; newcomer: Count; lang: "ko" | "en" };
-export type DutyPayload = { date: string; days: string[]; items: DutyItemView[]; week: DutyWeekCell[]; month: DutyItemView[]; /** 반 → 수업 요일(mon…sun) */ classDays?: Record<string, string[]> };
+export type DutyPayload = { date: string; days: string[]; items: DutyItemView[]; week: DutyWeekCell[]; month: DutyItemView[]; /** 반 → 수업 요일(mon…sun) */ classDays?: Record<string, string[]>; /** `<학생>|<반>` → 등원 요일 */ studentDays?: Record<string, string[]> };
 type View = "today" | "week" | "month";
 const VIEWS: { key: View; label: string }[] = [{ key: "today", label: "오늘" }, { key: "week", label: "이번 주" }, { key: "month", label: "이번 달" }];
 const REFRESH_MS = 60_000;
@@ -26,7 +26,9 @@ const REFRESH_MS = 60_000;
  */
 export function MyDutiesStripButton({ summary: initial, className = "" }: { summary: DutyStripSummary; className?: string }) {
   const [summary, setSummary] = useState(initial);
-  const { date, month, today, byKind, counsel, exam, newcomer, lang } = summary;
+  const { date, month, today, counsel, exam, newcomer, lang } = summary;
+  // 모두 접기/펼치기 — 패널을 다시 그려(key) 처음 상태를 바꾼다(원장 2026-11-10: 단추는 오늘/이번 주/이번 달 줄 맨 오른쪽).
+  const [fold, setFold] = useState<{ closed: boolean; v: number }>({ closed: false, v: 0 });
   const [view, setView] = useState<View | null>(null);
   const [loaded, setLoaded] = useState<{ payload: DutyPayload; at: number } | null>(null);
   const [failed, setFailed] = useState(false);
@@ -73,8 +75,6 @@ export function MyDutiesStripButton({ summary: initial, className = "" }: { summ
   const label = lang === "en"
     ? `My duties — today ${today.done}/${today.total}${lateAll ? ` · ${lateAll} overdue` : ""}`
     : `내 업무 — 오늘 ${today.done}/${today.total}${lateAll ? ` · 기한 초과 ${lateAll}` : ""}`;
-  const breakdown = byKind.map((c) => `${dutyKindLabel(c.kind)} ${c.done}/${c.total}`).join(" · ") || "오늘 수업 의무 없음";
-  const lateBreakdown = [...byKind.filter((c) => c.late).map((c) => `${dutyKindLabel(c.kind)} ${c.late}`), counsel.late ? `월 상담 ${counsel.late}` : "", exam.late ? `월말평가 ${exam.late}` : "", newcomer.late ? `신규생 콜 ${newcomer.late}` : ""].filter(Boolean).join(" · ");
   const mm = Number(month.slice(5, 7));
   return <section className={`border-line rounded-2xl border ${className}`}>
     <button type="button" onClick={() => setView("today")} className="hover:bg-bg-soft flex w-full flex-wrap items-center gap-2 rounded-t-2xl px-3 py-2 text-left">
@@ -84,11 +84,11 @@ export function MyDutiesStripButton({ summary: initial, className = "" }: { summ
       <span className="text-text-dim text-xs font-medium">{lang === "en" ? "Open ›" : "열기 ›"}</span>
     </button>
     <div className="grid gap-2 px-3 pb-3 sm:grid-cols-3 lg:grid-cols-5">
-      <Tile label="오늘 완료도" value={`${today.done}`} unit={`/ ${today.total}`} pct={pct(today)} tone={today.total && pct(today) === 100 ? "green" : "primary"} note={breakdown} onClick={() => setView("today")} />
-      <Tile label="기한 초과" value={`${lateAll}`} tone={lateAll ? "danger" : "muted"} note={lateAll ? lateBreakdown : "없음 — 출결·보고서 당일 자정 · 발송 다음 날 정오 · 상담 말일"} onClick={() => setView(today.late ? "today" : "month")} />
-      <Tile label={`${mm}월 학부모 상담`} value={`${counsel.done}`} unit={`/ ${counsel.total}`} pct={pct(counsel)} tone={counsel.total && pct(counsel) === 100 ? "green" : counsel.late ? "danger" : "primary"} note={counsel.total ? `의무 학생 ${counsel.total}명 · 말일까지` : "상담 의무 학생 없음"} onClick={() => setView("month")} />
-      <Tile label={`${mm}월 월말평가`} value={`${exam.done}`} unit={`/ ${exam.total}`} pct={pct(exam)} tone={exam.total && pct(exam) === 100 ? "green" : exam.late ? "danger" : "primary"} note={exam.total ? `담임 반 ${exam.total}명 · 말일까지 응시 기록` : "월말평가 치는 과목 없음"} onClick={() => setView("month")} />
-      <Tile label="신규생 정착 콜" value={`${newcomer.done}`} unit={`/ ${newcomer.total}`} pct={pct(newcomer)} tone={newcomer.late ? "danger" : newcomer.total && pct(newcomer) === 100 ? "green" : "primary"} note={newcomer.total ? (newcomer.late ? `기한 지난 항목 ${newcomer.late}` : "항목마다 기한 안") : "맡은 신규생 없음"} onClick={() => setView("month")} />
+      <Tile label="오늘 완료도" value={`${today.done}`} unit={`/ ${today.total}`} pct={pct(today)} tone={today.total && pct(today) === 100 ? "green" : "primary"} onClick={() => setView("today")} />
+      <Tile label="기한 초과" value={`${lateAll}`} tone={lateAll ? "danger" : "muted"} onClick={() => setView(today.late ? "today" : "month")} />
+      <Tile label={`${mm}월 학부모 상담`} value={`${counsel.done}`} unit={`/ ${counsel.total}`} pct={pct(counsel)} tone={counsel.total && pct(counsel) === 100 ? "green" : counsel.late ? "danger" : "primary"} onClick={() => setView("month")} />
+      <Tile label={`${mm}월 월말평가`} value={`${exam.done}`} unit={`/ ${exam.total}`} pct={pct(exam)} tone={exam.total && pct(exam) === 100 ? "green" : exam.late ? "danger" : "primary"} onClick={() => setView("month")} />
+      <Tile label="신규생 정착 콜" value={`${newcomer.done}`} unit={`/ ${newcomer.total}`} pct={pct(newcomer)} tone={newcomer.late ? "danger" : newcomer.total && pct(newcomer) === 100 ? "green" : "primary"} onClick={() => setView("month")} />
     </div>
     {/* z-[70]: 미니셸 헤더가 z-[60](공지 팝업 위)이라 기본 z-50 창은 헤더에 덮인다(원장 제보 2026-11-09). 창 안엔 셀렉트·팝오버가 없어 올려도 된다. */}
     {view ? <Dialog open onOpenChange={(open) => (!open ? (work ? closeWork() : setView(null)) : undefined)}>
@@ -106,15 +106,21 @@ export function MyDutiesStripButton({ summary: initial, className = "" }: { summ
           <DialogHeader>
             <DialogTitle className="text-2xl">내 업무</DialogTitle>
           </DialogHeader>
-          <ToolbarSegment>
-            {VIEWS.map((v) => <ToolbarSegmentItem key={v.key} active={v.key === view} onClick={() => setView(v.key)}>{v.label}</ToolbarSegmentItem>)}
-          </ToolbarSegment>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <ToolbarSegment>
+              {VIEWS.map((v) => <ToolbarSegmentItem key={v.key} active={v.key === view} onClick={() => setView(v.key)}>{v.label}</ToolbarSegmentItem>)}
+            </ToolbarSegment>
+            {view !== "month" ? <div className="flex gap-1.5">
+              <button type="button" onClick={() => setFold((f) => ({ closed: false, v: f.v + 1 }))} className="border-line hover:bg-bg-soft h-7 rounded-md border px-2.5 text-xs font-semibold">모두 펼치기</button>
+              <button type="button" onClick={() => setFold((f) => ({ closed: true, v: f.v + 1 }))} className="border-line hover:bg-bg-soft h-7 rounded-md border px-2.5 text-xs font-semibold">모두 접기</button>
+            </div> : null}
+          </div>
           <DutyWorkContext.Provider value={setWork}>
             <div className="min-h-0 flex-1 overflow-y-auto">
               {failed ? <p className="text-text-dim mt-2 text-sm">업무를 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요.</p>
                 : !loaded ? <p className="text-text-dim mt-2 text-sm">불러오는 중…</p>
-                : view === "today" ? <MyDutiesPanel loaded={loaded} />
-                : view === "week" ? <MyDutiesWeek week={loaded.payload.week} days={loaded.payload.days} today={date} classDays={loaded.payload.classDays ?? {}} />
+                : view === "today" ? <MyDutiesPanel key={`t-${fold.v}`} loaded={loaded} defaultClosed={fold.closed} />
+                : view === "week" ? <MyDutiesWeek key={`w-${fold.v}`} week={loaded.payload.week} days={loaded.payload.days} today={date} classDays={loaded.payload.classDays ?? {}} studentDays={loaded.payload.studentDays ?? {}} defaultClosed={fold.closed} />
                 : <MyDutiesMonth items={loaded.payload.month} now={loaded.at} month={month} />}
             </div>
           </DutyWorkContext.Provider>
@@ -124,13 +130,12 @@ export function MyDutiesStripButton({ summary: initial, className = "" }: { summ
   </section>;
 }
 
-function Tile({ label, value, unit, pct, tone, note, onClick }: { label: string; value: string; unit?: string; pct?: number; tone: "primary" | "green" | "danger" | "muted"; note: string; onClick: () => void }) {
+function Tile({ label, value, unit, pct, tone, onClick }: { label: string; value: string; unit?: string; pct?: number; tone: "primary" | "green" | "danger" | "muted"; onClick: () => void }) {
   const color = tone === "danger" ? "text-danger" : tone === "green" ? "text-green" : tone === "muted" ? "text-text-dim" : "text-foreground";
   const bar = tone === "danger" ? "bg-danger" : tone === "green" ? "bg-green" : "bg-primary";
   return <button type="button" onClick={onClick} className="border-line-faint hover:bg-bg-soft rounded-xl border px-3 py-2 text-left">
     <div className="text-text-dim text-xs font-semibold">{label}</div>
     <div className={`text-2xl font-bold leading-tight tabular-nums ${color}`}>{value}{unit ? <span className="text-text-placeholder ml-1 text-sm font-medium">{unit}</span> : null}</div>
     {pct != null ? <div className="bg-bg-soft mt-1 h-1.5 overflow-hidden rounded-full" aria-hidden><div className={`h-full rounded-full ${bar}`} style={{ width: `${pct}%` }} /></div> : null}
-    <div className="text-text-dim mt-1 truncate text-xs" title={note}>{note}</div>
   </button>;
 }

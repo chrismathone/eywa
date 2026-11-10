@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getStaffTaskViewer } from "@/features/staff-tasks/server/gate";
-import { classWeekdays, listOwnerDuties, listOwnerMonthDuties, weekCells } from "@/features/duties/server/queries";
+import { classWeekdays, listOwnerDuties, listOwnerMonthDuties, studentWeekdays, weekCells } from "@/features/duties/server/queries";
 import { weekDaysOf } from "@/features/duties/view";
 import { isValidYmd, kstToday } from "@/lib/date-kst";
 import { reportError } from "@/lib/observability/report-error";
@@ -24,8 +24,10 @@ export async function GET(request: Request) {
       weekCells(viewer.user.tenantId, viewer.user.id, days[0]!, days[6]!),
       listOwnerMonthDuties(viewer.user.tenantId, viewer.user.id, date.slice(0, 7)),
     ]);
-    const classDays = await classWeekdays(viewer.user.tenantId, [...new Set([...items, ...week].flatMap((x) => (x.classId ? [x.classId] : [])))], days[0]!, days[6]!);
-    return NextResponse.json({ date, days, items, week, month, classDays }, { headers: NO_STORE });
+    const classIds = [...new Set([...items, ...week].flatMap((x) => (x.classId ? [x.classId] : [])))];
+    const classDays = await classWeekdays(viewer.user.tenantId, classIds, days[0]!, days[6]!);
+    const studentDays = await studentWeekdays(viewer.user.tenantId, classIds, classDays);
+    return NextResponse.json({ date, days, items, week, month, classDays, studentDays }, { headers: NO_STORE });
   } catch (error) {
     reportError(error, { scope: "api.duties.mine" });
     return NextResponse.json({ error: "오늘 업무를 불러오지 못했습니다" }, { status: 500, headers: NO_STORE });

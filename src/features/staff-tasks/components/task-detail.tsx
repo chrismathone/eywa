@@ -30,13 +30,14 @@ export function TaskDetail({ taskId, onBack, onNavigate }: { taskId: string; onB
               <TaskStateChip state={taskState(data.item.status, data.item.dueAt)} />
               <span className="text-text-dim text-sm">{taskKindLabel(data.item.kind)}</span>
             </div>
-            <p className="text-base font-bold break-keep">{data.item.detail ?? data.item.title}</p>
+            <p className="text-base font-bold break-keep">{data.item.kind === "duty_late" ? data.item.title : (data.item.detail ?? data.item.title)}</p>
+            {data.item.kind === "duty_late" && data.item.detail ? <p className="text-sm break-keep whitespace-pre-line">{data.item.detail}</p> : null}
             {TASK_KINDS[data.item.kind]?.doneRule ? <p className="text-text-dim text-sm break-keep">{TASK_KINDS[data.item.kind]?.doneRule}</p> : null}
           </div>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
             <dt className="text-text-dim">담당</dt><dd>{data.item.assignees.map((a) => a.name).join(", ") || "—"}</dd>
-            <dt className="text-text-dim">발생</dt><dd>{kstShortStamp(data.item.openedAt) ?? "—"}</dd>
-            <dt className="text-text-dim">기한</dt><dd>{data.item.dueAt ? `${kstShortStamp(data.item.dueAt)} 이후` : "—"}</dd>
+            <dt className="text-text-dim">발생</dt><dd>{kstShortStamp(data.item.openedAt)?.slice(0, 8) ?? "—"}</dd>
+            <dt className="text-text-dim">기한</dt><dd>{data.item.dueAt ? kstShortStamp(data.item.dueAt)?.slice(0, 8) : "—"}</dd>
             {data.item.closedAt ? <>
               <dt className="text-text-dim">처리 시각</dt>
               <dd>{kstShortStamp(data.item.closedAt)}{closeReasonLabel(data.item.closeReason) ? ` · ${closeReasonLabel(data.item.closeReason)}` : ""}{data.item.closedBy ? ` · ${data.item.closedBy.name}` : ""}</dd>

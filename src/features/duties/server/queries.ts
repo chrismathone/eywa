@@ -94,3 +94,18 @@ export async function classWeekdays(tenantId: string, classIds: readonly string[
   for (const r of rows) (out[r.class_id] ??= new Set()).add(r.day_of_week);
   return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [...v]]));
 }
+
+/** 학생 × 반의 등원 요일 = 반 수업 요일 ∩ 수강의 분리등원 요일(없으면 전부) — 주간 표 '등원 요일' 열(원장 2026-11-10). 열쇠 `<학생>|<반>`. */
+export async function studentWeekdays(tenantId: string, classIds: readonly string[], classDays: Record<string, string[]>): Promise<Record<string, string[]>> {
+  if (!classIds.length) return {};
+  const { fetchInChunks } = await import("@/lib/supabase/batch");
+  const rows = await fetchInChunks<{ student_id: string; class_id: string; attendance_days: string[] | null; end_date: string | null }>([...new Set(classIds)], (chunk) =>
+    createAdminClient().from("enrollments").select("student_id,class_id,attendance_days,end_date").eq("tenant_id", tenantId).in("class_id", chunk));
+  const out: Record<string, string[]> = {};
+  for (const r of rows) {
+    const base = classDays[r.class_id] ?? [];
+    const days = r.attendance_days?.length ? base.filter((d) => r.attendance_days!.includes(d)) : base;
+    out[`${r.student_id}|${r.class_id}`] = days;
+  }
+  return out;
+}

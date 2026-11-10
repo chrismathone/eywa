@@ -343,13 +343,13 @@ export function NotificationBell() {
             />
           }
         >
-          {/* 벨 아이콘 — 안 읽음이면 은은히 "딸랑"(울린 뒤 쉼), 없으면 hover 시 1회 스윙(매단 것처럼 top 기준). */}
+          {/* 벨 아이콘 — 안 읽음이면 계속 흔들린다(원장 2026-11-10 *"알림 있으면 종이 계속 흔들리는 움짤"*), 없으면 hover 시 1회 스윙(매단 것처럼 top 기준). */}
           <EyIcon
             name="bell"
             size={15}
             className={`origin-top transition-transform ${
               unread > 0
-                ? "motion-safe:[animation:bell-swing_0.7s_ease-in-out]"
+                ? "motion-safe:[animation:bell-swing_1.1s_ease-in-out_infinite]"
                 : "motion-safe:group-hover:[animation:bell-swing_0.7s_ease-in-out]"
             }`}
           />

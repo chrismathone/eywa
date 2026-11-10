@@ -23,7 +23,7 @@ async function loadMine(): Promise<DutyStripSummary | null> {
     const [viewer, readonly, lang] = await Promise.all([getStaffTaskViewer(), isReadonlyTeacherView(), getTeacherViewLang()]);
     if (!viewer || readonly) return null;
     const summary = await loadDutySummary(viewer.user.tenantId, viewer.user.id);
-    if (!summary.today.total && !summary.counsel.total && !summary.newcomer.total) return null;
+    if (!summary.today.total && !summary.counsel.total && !summary.exam.total && !summary.newcomer.total) return null;
     return { ...summary, lang };
   } catch (error) {
     reportError(error, { scope: "duties.strip" });

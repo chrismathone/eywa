@@ -31,7 +31,8 @@ export function SearchToggle({
   resetParams?: string[];
 }) {
   const text = useSheetText();
-  const [opened, setOpen] = useState(false);
+  // 원장 2026-11-10 *"처음부터 펼쳐져 있게"* — 지시서 §10(필요할 때만)을 뒤집음. 처음부터 펼친 채, 접기는 그대로 된다.
+  const [opened, setOpen] = useState(true);
   // 검색어가 URL에 걸려 있으면 **언제나** 펼친다(뒤로 가기 등 클라 내비로 q가 나중에 생겨도 — 마운트 시점 state만 보면
   // "검색어는 걸려 있는데 입력창은 접힘"이 된다).
   const open = opened || Boolean(defaultValue);
