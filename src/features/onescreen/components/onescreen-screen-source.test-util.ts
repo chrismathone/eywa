@@ -39,6 +39,8 @@ export const ONESCREEN_SCREEN_FILES = [
   "components/use-makeup-row.ts",
   "components/use-makeup-prev.ts",
   "components/use-send-core.ts",
+  "components/use-report-save-input.ts",
+  "components/use-report-save-effects.ts",
   "components/use-report-send.ts",
   "components/onescreen-card-column.tsx",
 ] as const;

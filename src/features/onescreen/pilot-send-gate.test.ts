@@ -44,8 +44,9 @@ describe("배선", () => {
     const client = readOnescreenScreen();
     expect(client.match(/pilotSendBlocks\(/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
     // 파일이 나뉜 뒤(P3-O) 합친 개수만 보면 한 곳이 빠져도 다른 파일이 채운다 — 세 자리를 따로 본다.
-    for (const f of ["use-bulk-send.ts", "use-send-core.ts", "use-auto-write.ts"]) {
-      expect(read(`./components/${f}`), f).toMatch(/pilotSendBlocks\(/);
+    // 일괄 발송 · 저장 입력(저장·발송 코어 — batch D에서 use-report-save-input.ts로) · 일괄 자동작성.
+    for (const f of ["components/use-bulk-send.ts", "components/use-report-save-input.ts", "components/use-auto-write.ts"]) {
+      expect(read(`./${f}`), f).toMatch(/pilotSendBlocks\(/);
     }
     expect(client).toMatch(/pilotCheck: \{ factsCurrent:/);
     expect(client).toMatch(/isPilotGateError\(res\.error\)/);
