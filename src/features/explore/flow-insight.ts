@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { PillColor } from "@/components/atoms/pill";
 import { FLOW_STALE_DAYS, daysBetween, elapsedLabel, recordDay } from "./flow-recency";
+import { normalizeFlowInsight } from "./flow-insight-normalize";
 
 /**
  * 원생 흐름 분석(상담 · 타임라인) — **순수 계약**(서버 갱신 · 화면 카드 · 테스트가 함께 읽는다).
@@ -102,7 +103,7 @@ export function buildFlowPrompt(
     "당신은 학원 원장을 돕는 기록 분석가입니다. 한국어 합니다체로, 기록에 있는 사실만 씁니다. 기록에 없는 원인·감정·결과를 지어내지 않습니다.",
     KIND_GUIDE[kind],
     "출력은 아래 JSON 하나만(설명 문장·마크다운 금지):",
-    '{"headline": "한 줄 흐름(≤80자)", "direction": "improving|stable|concern|mixed|unknown", "themes": ["되풀이되는 주제 ≤6개"], "recentChange": "새 기록으로 달라진 점(없으면 빈 문자열)", "watch": ["지켜볼 점 ≤4개"], "nextSteps": ["다음 상담·확인 제안 ≤4개 — 기록에 근거한 것만"], "basis": "근거: 기간과 건수"}',
+    '{"headline": "한 줄 흐름(≤80자)", "direction": "improving|stable|concern|mixed|unknown", "themes": ["되풀이되는 주제 ≤6개 — 각각 20자 안팎의 짧은 말(문장 금지)"], "recentChange": "새 기록으로 달라진 점(≤400자 · 없으면 빈 문자열)", "watch": ["지켜볼 점 ≤4개 · 각 200자 안"], "nextSteps": ["다음 상담·확인 제안 ≤4개 · 각 200자 안 — 기록에 근거한 것만"], "basis": "근거: 기간과 건수(≤200자)"}',
     "direction은 오늘(판단 기준일) 기준의 방향입니다 — 좋아지는 중 improving · 큰 변화 없음 stable · 걱정되는 신호 concern · 좋고 나쁨이 엇갈림 mixed · 판단 보류 unknown.",
     `날짜: 기록마다 날짜와 오늘까지 지난 기간을 적어 두었습니다. '최근'·'지금'은 오늘 기준 ${span} 안의 기록만 가리킵니다.`,
     "direction·headline은 아래에서 먼저 맞는 규칙 하나를 따릅니다.",
@@ -143,7 +144,13 @@ export function buildFlowPrompt(
   return { system, prompt };
 }
 
-/** 모델 응답 → 계약 모양. 틀리면 throw(저장하지 않는다 — 그럴듯한 반쪽을 화면에 내지 않는다). */
-export function parseFlowInsight(data: unknown): FlowInsight {
-  return flowInsightSchema.parse(data);
+/**
+ * 모델 응답 → 계약 모양. 넘친 길이·개수는 먼저 다듬고(`normalizeFlowInsight` — 넘친 주제는 빼고 글은 말줄임),
+ * 구조가 틀리면 throw(저장하지 않는다 — 그럴듯한 반쪽을 화면에 내지 않는다). `onAdjust` = 손댄 칸 이름(로그용 · 학생 글 없음).
+ */
+export function parseFlowInsight(data: unknown, onAdjust?: (fields: string[]) => void): FlowInsight {
+  const { value, adjusted } = normalizeFlowInsight(data);
+  const parsed = flowInsightSchema.parse(value);
+  if (adjusted.length && onAdjust) onAdjust(adjusted);
+  return parsed;
 }

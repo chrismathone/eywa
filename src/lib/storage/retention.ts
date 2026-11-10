@@ -27,6 +27,28 @@ export const RETENTION_TABLES: ReadonlyArray<{
   { table: "enrollment_consultations", kind: "registration", dateColumn: "consulted_at" },
 ];
 
+/**
+ * 같은 원본을 두 표가 가리키는 짝 — 등록상담 녹음(`consultation_recordings`)이 원본이고, 상담 행(`enrollment_consultations.audio_path`)은
+ * 최신 녹음의 경로를 **베껴 둔 것**이다. 쓰는 순서: 녹음을 붙이는 액션(상담 만들기·음성 첨부)이 상담 행에 경로와 '업로드됨'을 **먼저** 쓰고
+ * 녹음 행은 그 뒤에 넣는다 · 전사 제출 실패와 웹훅의 전사 실패(`failRecording`)는 `recording-mirror.ts`가 **완료 녹음이 있을 때만**
+ * 상담 행을 그 경로로 되돌린다(라이선스 차단·녹음 행 넣기 실패는 상담 행이 새 경로·'업로드됨'인 채 남는다 — 재대조 cron이 '실패'로 돌린
+ * 다음 날 주인 없는 경로로 정리된다) · 웹훅의 성공 경로는 경로를 쓰지 않는다.
+ * 2026-11-11 운영 로그·Codex 협의:
+ * ① 상담 행은 상담일(`consulted_at`) 기준이라, **오래된 상담에 새 녹음을 붙이면** 상담 행 쪽 정리가 방금 올린 원본을 지울 수 있었다
+ *    → 상담 행 정리에서는 녹음 행이 가진 경로를 건너뛰고(그 원본은 녹음 행의 날짜로 판단한다), 전사가 도는 중인 행(`RETENTION_IN_FLIGHT` —
+ *    상담 행은 있는데 녹음 행이 아직 없는 틈)도 건너뛴다.
+ * ② 녹음 행 쪽 정리가 원본을 지우면 같은 경로를 가리키던 상담 행도 비운다(안 비우면 지운 파일을 가리킨다).
+ */
+export const RETENTION_MIRROR = { source: "consultation_recordings", mirror: "enrollment_consultations" } as const;
+
+/** 상담 행 정리에서 건너뛰는 처리 상태(PostgREST `not.in` 목록) — 업로드됨·전사 중·분석 중. */
+export const RETENTION_IN_FLIGHT = "(uploaded,transcribing,analyzing)";
+
+/** 상담 행 후보에서 녹음 행이 원본으로 가진 경로를 뺀다(①) — 경로가 비었으면 그대로 둔다(삭제 대상이 아니다). */
+export function withoutMirroredPaths<T extends { audio_path: string | null }>(rows: readonly T[], ownedBySource: ReadonlySet<string>): T[] {
+  return rows.filter((r) => !r.audio_path || !ownedBySource.has(r.audio_path));
+}
+
 /** 행 목록 → 버킷별 삭제 키 묶음(스토리지 remove는 버킷 단위 배열 호출). */
 export function groupPathsByBucket(
   rows: ReadonlyArray<{ audio_path: string | null }>,
