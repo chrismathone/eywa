@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDutyCards, classChips, countByKind, dutyHref, groupCardsByClass, lastDays } from "./view";
+import { buildDutyCards, classChips, countByKind, dutyHref, groupCardsByClass, lastDays, weekDaysOf } from "./view";
 import type { DutyItemView } from "./kinds";
 
 const NOW = Date.parse("2026-11-09T12:00:00+09:00");
@@ -53,5 +53,9 @@ describe("countByKind · classChips · dutyHref · lastDays", () => {
     expect(dutyHref({ studentId: "s1", classId: "c1", cycle: "2026-11-09", subject: "math" })).toBe("/onescreen?date=2026-11-09&class=c1&student=s1");
     expect(dutyHref({ studentId: null, classId: "c1", cycle: "2026-11-09", subject: "english" })).toBe("/ecs");
     expect(lastDays("2026-11-09", 3)).toEqual(["2026-11-07", "2026-11-08", "2026-11-09"]);
+    // 주는 항상 월요일 시작 — 화요일(11/10)이든 일요일(11/15)이든 같은 주.
+    expect(weekDaysOf("2026-11-10")).toEqual(["2026-11-09", "2026-11-10", "2026-11-11", "2026-11-12", "2026-11-13", "2026-11-14", "2026-11-15"]);
+    expect(weekDaysOf("2026-11-15")[0]).toBe("2026-11-09");
+    expect(weekDaysOf("2026-11-09")[0]).toBe("2026-11-09");
   });
 });

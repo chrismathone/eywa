@@ -81,6 +81,13 @@ export function dutyHref(it: Pick<DutyItemView, "studentId" | "classId" | "cycle
   return `/onescreen?${q.toString()}`;
 }
 
+/** 그 날짜가 든 주 — **항상 월요일 시작**, 월~일 7일(원장 2026-11-10 *"항상 월요일 시작으로 · 월화수목금 + 필요시 토일"*). */
+export function weekDaysOf(date: string): string[] {
+  const t = Date.parse(`${date}T00:00:00Z`);
+  const dow = new Date(t).getUTCDay(); // 0 = 일
+  const monday = t - ((dow + 6) % 7) * 86_400_000;
+  return Array.from({ length: 7 }, (_, i) => new Date(monday + i * 86_400_000).toISOString().slice(0, 10));
+}
 /** 오늘 포함 n일의 KST 날짜(YYYY-MM-DD) — UTC로 자르면 하루가 밀리므로 9시간을 더해 자른다. */
 export function lastDays(today: string, n: number): string[] {
   const base = Date.parse(`${today}T00:00:00+09:00`) + 9 * 3_600_000;
