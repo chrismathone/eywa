@@ -35,7 +35,7 @@ export async function getLoyaltyRanking() {
     // 시안: 가족 1등 표기('정채민 남매')의 재료 — 성별·생년월일만.
     fetchAllPaged<{ id: string; gender: string | null; birth_date: string | null }>((a, b) => createAdminClient().from("students")
       .select("id,gender,birth_date").eq("tenant_id", directory.gate.tenantId).order("id").range(a, b)).catch(() => []),
-    manualRefreshDoneToday(directory.gate.tenantId),
+    manualRefreshDoneToday(directory.gate.tenantId).catch(() => null), // 표시용 — 누를 때(액션)가 다시 확인한다
     readMyUiPrefs(),
   ]);
   const savedCols = (prefs.loyaltyRanking as { columns?: unknown } | undefined)?.columns;

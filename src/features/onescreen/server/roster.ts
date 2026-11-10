@@ -24,6 +24,7 @@ import {
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { reportLogoPath } from "@/features/owner/report-logo";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
+import { isMissingFunction } from "@/lib/supabase/db-error";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClasses } from "@/features/classes/server/delegation";
 import { addDays, resolveReportDate, weekdayIndexOf, formatKoreanDate } from "@/lib/date-kst";
@@ -359,6 +360,31 @@ const MAKEUP_UNREAD_NOTICE = "보강 배정을 확인하지 못했습니다. 새
  *    행이면 저장한 값이 화면에 돌아오지 않는다(2026-11-05 강사뷰 신원 적대 리뷰 — ECS `viewer-prefs.ts`와 같은 결정).
  * ⚠️ 반·보고서에 묶인 값(반별 마지막 템플릿 · 학습 추세 미발송 · 멘트 모드)은 여기서 읽지 않는다 — 화면 주인(대상 강사) 것이다.
  */
+/**
+ * 보고서별 학부모 열람 수 — DB 집계(s2_0043 `share_link_view_counts`, RLS = 제 지점). 함수가 아직 없으면(#95)
+ * 청크 × 페이지로 행을 전부 읽어 센다(종전처럼 청크 하나만 읽으면 1,000행에서 잘린다 — B11). 두 길은 같은 수를 낸다.
+ */
+async function loadViewCounts(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  reportIds: string[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (reportIds.length === 0) return out;
+  const { data, error } = await supabase.rpc("share_link_view_counts", { p_report_ids: reportIds });
+  if (!error) {
+    for (const r of (data ?? []) as { lesson_report_id: string; views: number | string }[])
+      out.set(r.lesson_report_id, Number(r.views) || 0);
+    return out;
+  }
+  // 원스크린은 강사 전원이 매일 여는 화면이다(#95) — 함수가 없거나 다른 이유로 실패해도 종전 방식으로 센다.
+  if (!isMissingFunction(error, "share_link_view_counts")) console.error("[onescreen] 열람 수 집계 함수 실패 — 행을 읽어 셉니다:", error);
+  const rows = await fetchAllPagedInChunks<{ lesson_report_id: string }>(reportIds, (chunk, from, to) =>
+    supabase.from("share_link_views").select("lesson_report_id").in("lesson_report_id", chunk).order("id").range(from, to),
+  );
+  for (const v of rows) out.set(v.lesson_report_id, (out.get(v.lesson_report_id) ?? 0) + 1);
+  return out;
+}
+
 async function viewerUiPrefs(supabase: Awaited<ReturnType<typeof createClient>>): Promise<unknown> {
   const me = await getCurrentUser();
   if (!me) return null;
@@ -1470,13 +1496,10 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       });
   }
 
-  // 오늘 보고서들의 학부모 열람 수(share_link_views) — PostgREST group-by 대신 행을 청크로 가져와 JS 집계(fetchInChunks).
-  const viewCountByReport = new Map<string, number>();
-  const viewRows = await fetchInChunks<{ lesson_report_id: string }>(todayReportIds, (chunk) =>
-    supabase.from("share_link_views").select("lesson_report_id").in("lesson_report_id", chunk),
-  );
-  for (const v of viewRows)
-    viewCountByReport.set(v.lesson_report_id, (viewCountByReport.get(v.lesson_report_id) ?? 0) + 1);
+  // 오늘 보고서들의 학부모 열람 수(share_link_views) — DB가 보고서별로 센다(s2_0043 `share_link_view_counts` · B11).
+  // 예전엔 행을 청크로 받아 JS로 셌는데 한 청크가 1,000행을 넘으면 조용히 적게 나왔다(#54). 함수가 없으면(#95) 페이지로 전건 읽어 센다.
+  // 아래 오늘 수학 조회와 서로 독립 — 먼저 띄워 두고 함께 기다린다(B4).
+  const viewCountsP = loadViewCounts(supabase, todayReportIds);
   // student별 오늘 출결이 있는 **내 반** — 행에 못 붙은 칸(반 모호 행 등)을 배지 재료로 넘기기 위해(아래 attendanceOffRow).
   // ⚠️ 강사 담당 반 기록만(myClassIdSet) — 타 강사·타 반의 그날 기록을 집으면 이 화면 배지가 행 pill과 모순된다.
   const myClassIdSet = new Set(allIds); // 강사 담당 전 반
@@ -1501,10 +1524,13 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
 
   // 오늘 수학 채점 결과(개발 중 — 학원 설정 → 연동 → 오늘 수학 토글 ∧ 지점 라이선스). 토글이 꺼진 학원은 조회 자체가 없다.
   // 아래 루프의 덮어쓰기(보고서 · 시트 · 세션)가 다 끝난 뒤 빈 칸만 채운다(todays-math-fill-rules.ts).
-  const todaysMathRows =
-    settings.report.todaysMathTestFill && (await isFeatureOptedIn(user.tenantId, "todays_math"))
-      ? await loadTodaysMathFill(admin, user.tenantId, targetDate, [...byStudent.keys()])
-      : [];
+  const [viewCountByReport, todaysMathRows] = await Promise.all([
+    viewCountsP,
+    (async () =>
+      settings.report.todaysMathTestFill && (await isFeatureOptedIn(user.tenantId, "todays_math"))
+        ? await loadTodaysMathFill(admin, user.tenantId, targetDate, [...byStudent.keys()])
+        : [])(),
+  ]);
 
   for (const os of byStudent.values()) {
     os.reportSent = sentToday.has(os.id);

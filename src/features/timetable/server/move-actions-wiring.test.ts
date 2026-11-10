@@ -29,7 +29,7 @@ describe("반 배치 이동(moveClassSlots) 배선", () => {
   it("적용일 이후 그 교시에 매달린 기록을 본다([[#126]]) — 요일까지 · 출결은 거절, 나머지는 함께 옮긴다(원장 2026-10-28 (가)안)", () => {
     expect(src).toContain("SLOT_ANCHORS");
     expect(src).toContain("const slot = String(row.start_time)");
-    expect(src).toContain('.eq("slot_start", slot)');
+    expect(src).toContain('.eq("slot_start", l.slot)'); // 칸 × 표 조회는 mapPool로 함께 읽는다(B12) — l = 그 칸
     expect(src).toContain("weekdayOf(d) !== row.day_of_week");
     const anchors = read("src/features/timetable/lib/slot-anchors.ts");
     for (const t of ["attendance_records", "class_sheet_plan_lines", "class_sheet_student_marks", "class_lesson_shifts"]) expect(anchors).toContain(`"${t}"`);
@@ -40,7 +40,7 @@ describe("반 배치 이동(moveClassSlots) 배선", () => {
     expect(src).not.toContain("carryOffset(row.day_of_week");
     expect(src).toContain("carryKeepsOrder(");
     // 제자리 줄은 옮기지도 막지도 않는다.
-    expect(src).toContain('if (days === 0 && slot.slice(0, 5) === w.start.slice(0, 5)) continue;');
+    expect(src).toContain('if (days === 0 && slot.slice(0, 5) === w.start.slice(0, 5)) return [];'); // 읽을 칸 목록(live)에서 뺀다(B12)
   });
 
   it("🔴 교재 배정의 고른 교시(slot_picks)도 따라간다 — 판정은 쓰기 전 · 쓸 땐 수정 시각을 조건으로 · 되짚기 일지(적대 리뷰 2026-10-28)", () => {

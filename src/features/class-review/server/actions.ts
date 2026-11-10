@@ -8,6 +8,7 @@ import { readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeObserverLimit } from "../observer-count";
 import { humanizeDbError, explainDbError } from "@/lib/supabase/db-error";
+import { writeUiPrefsNs } from "@/lib/ui-prefs/write";
 import { logAction } from "@/features/audit/server/log";
 import { kstToday } from "@/lib/date-kst";
 import { CHECKLIST_AREAS, firstCompletedAt, itemCountOf, normalizeScore, sanitizeAreas } from "../checklist";
@@ -253,36 +254,13 @@ export async function setMyClassReviewFilter(
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
 
-  const admin = createAdminClient();
-  const { data: row, error: readErr } = await admin
-    .from("users")
-    .select("ui_prefs")
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId)
-    .maybeSingle();
-  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "class-review.actions.setMyClassReviewFilter", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
-
-  const raw =
-    row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
-      ? (row.ui_prefs as Record<string, unknown>)
-      : {};
-  const ns =
-    raw.classReview && typeof raw.classReview === "object" && !Array.isArray(raw.classReview)
-      ? { ...(raw.classReview as Record<string, unknown>) }
-      : {};
-  // 기본값(전체)은 저장하지 않는다 — 빈 값이 쌓이지 않게(타임테이블·ECS와 같은 규약).
-  if (filter === DEFAULT_CLASS_REVIEW_FILTER) delete ns.listFilter;
-  else ns.listFilter = filter;
-
-  const merged = { ...raw };
-  if (Object.keys(ns).length === 0) delete merged.classReview;
-  else merged.classReview = ns;
-
-  const { error } = await admin
-    .from("users")
-    .update({ ui_prefs: merged })
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId);
+  // 기본값(전체)은 저장하지 않는다 — 빈 값이 쌓이지 않게(타임테이블·ECS와 같은 규약). 남은 키가 없으면 네임스페이스도 지운다.
+  const { error } = await writeUiPrefsNs(
+    createAdminClient(),
+    { userId: user.id, tenantId: user.tenantId },
+    "classReview",
+    filter === DEFAULT_CLASS_REVIEW_FILTER ? { unset: ["listFilter"] } : { set: { listFilter: filter } },
+  );
   if (error) return { ok: false, error: explainDbError(error, { scope: "class-review.actions.setMyClassReviewFilter", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }

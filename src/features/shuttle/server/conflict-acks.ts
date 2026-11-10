@@ -3,6 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { mergeAcks, parseAcks } from "../conflict-acks";
+import { writeUiPrefsNs } from "@/lib/ui-prefs/write";
 
 /**
  * 탑승 학생 시간표 "수정된 내용" **확인** — `users.ui_prefs.shuttleConflictAcks`에 열쇠를 더한다(사용자 2026-10-29).
@@ -17,7 +18,7 @@ export async function ackRideConflicts(keys: string[]): Promise<{ ok: boolean; e
   if (readErr) return { ok: false, error: "확인을 저장하지 못했어요" };
   const raw = row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs) ? (row.ui_prefs as Record<string, unknown>) : {};
   const next = mergeAcks(parseAcks(raw.shuttleConflictAcks), parseAcks(keys));
-  const { error } = await admin.from("users").update({ ui_prefs: { ...raw, shuttleConflictAcks: next } }).eq("id", user.id).eq("tenant_id", user.tenantId);
+  const { error } = await writeUiPrefsNs(admin, { userId: user.id, tenantId: user.tenantId }, "shuttleConflictAcks", { replace: next });
   if (error) return { ok: false, error: "확인을 저장하지 못했어요" };
   return { ok: true };
 }

@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant,canWriteTenant } from "@/lib/auth/perm-matrix";
 import { readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllPaged,fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged,fetchAllPagedInChunks,fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday,kstDateOf,monthRange,shiftMonth } from "@/lib/date-kst";
 import { getPortfolioGate } from "@/features/teacher-portfolio/server/queries";
 import { loadTeacherPeriods } from "@/features/teacher-portfolio/server/store";
@@ -35,14 +35,13 @@ export async function loadTeacherHub(opts:{teacherId?:string;month?:string}={}):
   if(opts.month&&!monthSchema.safeParse(opts.month).success)throw new TeacherHubError("조회 월을 확인해 주세요");
   const user=await teacherHubAccess(),db=createAdminClient(),tenant=user.tenantId,today=kstToday(),observedAt=new Date().toISOString();
   if(opts.month&&opts.month>today.slice(0,7))throw new TeacherHubError("미래 월은 조회할 수 없습니다");
-  const [indexResult,classRows,schedules,delegations]=await Promise.all([
-    db.from("teacher_portfolio_months").select("teacher_id,month").eq("tenant_id",tenant).order("month",{ascending:false}).limit(1000),
+  // 강사 × 달 색인은 쌓이는 표 — 1,000행 상한이면 오래된 달의 강사가 목록에서 빠진다(B13) → 페이지로 전건(키 = 달·강사).
+  const [index,classRows,schedules,delegations]=await Promise.all([
+    fetchAllPaged<{teacher_id:string;month:string}>((a,b)=>db.from("teacher_portfolio_months").select("teacher_id,month").eq("tenant_id",tenant).order("month",{ascending:false}).order("teacher_id").range(a,b)).catch(()=>{throw dbError();}),
     fetchAllPaged<ClassRow>((a,b)=>db.from("classes").select("id,class_name,subject,teacher_id,closed_at,is_active,is_makeup_pool").eq("tenant_id",tenant).order("id").range(a,b)),
     fetchAllPaged<ScheduleRow>((a,b)=>db.from("class_schedules").select("id,class_id,teacher_id,valid_from,valid_to").eq("tenant_id",tenant).order("id").range(a,b)),
     fetchAllPaged<DelegationRow>((a,b)=>db.from("class_delegations").select("id,class_id,delegate_user_id,from_date,to_date").eq("tenant_id",tenant).is("revoked_at",null).lte("from_date",today).gte("to_date",today).order("id").range(a,b)),
   ]);
-  if(indexResult.error)throw dbError();
-  const index=indexResult.data??[];
   const teacherIds=[...new Set([...index.map(r=>r.teacher_id),...classRows.map(c=>c.teacher_id),...schedules.map(s=>s.teacher_id),...delegations.map(d=>d.delegate_user_id)].filter((id):id is string=>!!id))];
   const people=await fetchInChunks<{id:string;display_name:string}>(teacherIds,ids=>db.from("users").select("id,display_name").eq("tenant_id",tenant).in("id",ids));
   const teachers=people.map(p=>({id:p.id,name:p.display_name})).sort((a,b)=>a.name.localeCompare(b.name,"ko"));
@@ -67,7 +66,7 @@ export async function loadTeacherHub(opts:{teacherId?:string;month?:string}={}):
   const proofPermissions={lesson_report:permissions[0],consultation:permissions[1],english_sheet:permissions[4],math_sheet:permissions[5]};
   const [periods,rawEnrollments,reports,consults,careRows,sheetRows]=await Promise.all([
     loadTeacherPeriods(db,tenant,teacher.id,[month,shiftMonth(month,-1)]),
-    fetchInChunks<{id:string;student_id:string;class_id:string;start_date:string;end_date:string|null;on_hold:boolean;is_transferred:boolean}>(classes.map(c=>c.id),ids=>db.from("enrollments").select("id,student_id,class_id,start_date,end_date,on_hold,is_transferred").eq("tenant_id",tenant).in("class_id",ids).lte("start_date",today).or(`end_date.is.null,end_date.gte.${today}`)),
+    fetchAllPagedInChunks<{id:string;student_id:string;class_id:string;start_date:string;end_date:string|null;on_hold:boolean;is_transferred:boolean}>(classes.map(c=>c.id),(ids,a,b)=>db.from("enrollments").select("id,student_id,class_id,start_date,end_date,on_hold,is_transferred").eq("tenant_id",tenant).in("class_id",ids).lte("start_date",today).or(`end_date.is.null,end_date.gte.${today}`).order("id").range(a,b)),
     optional("report","직접 작성 수업보고",permissions[0],()=>fetchAllPaged<{id:string;student_id:string;report_date:string;class_id:string|null}>((a,b)=>db.from("lesson_reports").select("id,student_id,report_date,class_id").eq("tenant_id",tenant).eq("created_by",teacher.id).is("revoked_at",null).gte("report_date",range.from).lte("report_date",end).order("id").range(a,b)),`${month} 수업일 기준 · 직접 작성 기록; 작성률은 저장 집계와 구분`),
     optional("consultation","직접 상담 기록",permissions[1],()=>fetchAllPaged<{id:string;student_id:string;consulted_at:string;follow_up_done:boolean|null}>((a,b)=>db.from("student_consultations").select("id,student_id,consulted_at,follow_up_done").eq("tenant_id",tenant).eq("counselor_id",teacher.id).gte("consulted_at",`${range.from}T00:00:00+09:00`).lte("consulted_at",`${end}T23:59:59.999+09:00`).order("id").range(a,b)),`${month} 상담일 기준 · 상담자ID 연결`),
     optional("promise","담당 약속",permissions[6],()=>fetchAllPaged<{id:string;student_id:string|null;due_on:string;state:string;document:unknown}>((a,b)=>db.from("student_care_commitments").select("id,student_id,due_on,state,document").eq("tenant_id",tenant).eq("owner_id",teacher.id).neq("state","cancelled").order("id").range(a,b)),"현재 담당 약속 전체 · 선택 월과 별도"),

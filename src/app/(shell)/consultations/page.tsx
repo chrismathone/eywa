@@ -95,7 +95,7 @@ export default async function ConsultationsPage({
     subject: subject || undefined,
     subjectLabel: subject ? subjects.labelOf(subject) : null,
   };
-  const [{ rows: items, total, classSupported }, counts, counselorOptions, canImportExcel, teacherId, canWrite] = await Promise.all([
+  const [{ rows: items, total, classSupported, failed: listFailed }, counts, counselorOptions, canImportExcel, teacherId, canWrite] = await Promise.all([
     getStudentConsultationsPage(filters, page, size),
     getStudentConsultationCounts(),
     getConsultationCounselorOptions(),
@@ -186,7 +186,12 @@ export default async function ConsultationsPage({
 
       {/* 목록 — 화면 폭을 다 쓴다(넓으면 2단, 좁으면 1단 · consultation-list.tsx). 통계는 옆 패널이 아니라 '통계 보기' 전용 화면(원장 2026-10-01). */}
       <div data-autopage-root="">
-        {total === 0 ? (
+        {listFailed ? (
+          // 조회 실패는 "상담 0건"이 아니다(B3) — 없다고 말하지 않고 다시 시도를 안내한다.
+          <p role="alert" className="border-danger/30 bg-danger-soft text-danger rounded-xl border px-4 py-2.5 text-sm">
+            상담 목록을 불러오지 못했습니다 — 잠시 뒤 새로 고쳐 주세요.
+          </p>
+        ) : total === 0 ? (
           <div className="mx-auto max-w-xl py-4">
             <PhotoCard
               src="/photos/consultations-hero.webp"

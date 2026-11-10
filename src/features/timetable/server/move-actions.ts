@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManageTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
+import { mapPool } from "@/lib/async-pool";
 import { isMissingColumnError, lookupLabSeparateIds } from "@/features/classes/server/lab-separate";
 import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
@@ -279,36 +280,54 @@ export async function moveClassSlots(input: {
     logDbError(e, `timetable.moveClassSlots.${MEMO_TABLE}`);
     return readFailed;
   }
-  for (const w of windows) {
+  // 칸 × 표 조회는 서로 독립이다 — 먼저 한꺼번에(동시 6개) 읽고, 판정·기록은 **종전과 같은 순서**로 한다(B12 · 칸 4개 × 표 6개 = 24번 직렬 왕복이었다).
+  type AnchorRead = { found: Record<string, unknown>[] } | { table: string; error: unknown };
+  const live = windows.flatMap((w) => {
     const row = byId.get(w.slotId)!;
     const until = row.valid_to ? String(row.valid_to).slice(0, 10) : null;
     const slot = String(row.start_time);
     const days = daysOf.get(w.slotId)!;
     // 제자리 줄(요일·시각 그대로 · 한 주 밀림 없음 — 다른 요일 그룹 표로 끌면 생긴다)은 기록이 이미 제자리다. 옮기지도 막지도
     // 않는다 — 같은 값으로 고쳐 쓰면 수정 시각만 바뀌고 '함께 옮긴 기록'으로 잘못 센다(적대 리뷰 2026-10-28).
-    if (days === 0 && slot.slice(0, 5) === w.start.slice(0, 5)) continue;
+    if (days === 0 && slot.slice(0, 5) === w.start.slice(0, 5)) return [];
+    return [{ w, row, until, slot, days }];
+  });
+  const reads = await mapPool(
+    live.flatMap((l) => SLOT_ANCHORS.map((a) => ({ l, a }))),
+    6,
+    async ({ l, a }): Promise<AnchorRead> => {
+      const keyColumns: readonly string[] = a.carry?.keyColumns ?? [];
+      try {
+        const found = await fetchAllPaged<Record<string, unknown>>((from, to) => {
+          let q = admin
+            .from(a.table)
+            .select(["id", a.dateColumn, ...keyColumns].join(", "))
+            .eq("tenant_id", user.tenantId)
+            .eq("class_id", l.row.class_id)
+            .eq("slot_start", l.slot)
+            .gte(a.dateColumn, effective);
+          if (l.until) q = q.lte(a.dateColumn, l.until);
+          return q.order(a.dateColumn).order("id").range(from, to) as unknown as RowsPage;
+        });
+        return { found };
+      } catch (error) {
+        return { table: a.table, error };
+      }
+    },
+  );
+  const readError = reads.find((r): r is { table: string; error: unknown } => "error" in r);
+  if (readError) {
+    logDbError(readError.error, `timetable.moveClassSlots.${readError.table}`);
+    return readFailed;
+  }
+  let readAt = 0;
+  for (const { w, row, until, slot, days } of live) {
     const take = (table: string, label: string, id: string, date: string, keyRest: string, slotInKey: boolean) => {
       carry.push({ table, label, id, fromDate: date, fromSlot: slot, toDate: shiftYmd(date, days), toSlot: w.start, keyRest, slotInKey, until });
     };
     for (const a of SLOT_ANCHORS) {
       const keyColumns: readonly string[] = a.carry?.keyColumns ?? [];
-      let found: Record<string, unknown>[];
-      try {
-        found = await fetchAllPaged<Record<string, unknown>>((from, to) => {
-          let q = admin
-            .from(a.table)
-            .select(["id", a.dateColumn, ...keyColumns].join(", "))
-            .eq("tenant_id", user.tenantId)
-            .eq("class_id", row.class_id)
-            .eq("slot_start", slot)
-            .gte(a.dateColumn, effective);
-          if (until) q = q.lte(a.dateColumn, until);
-          return q.order(a.dateColumn).order("id").range(from, to) as unknown as RowsPage;
-        });
-      } catch (e) {
-        logDbError(e, `timetable.moveClassSlots.${a.table}`);
-        return readFailed;
-      }
+      const found = (reads[readAt++] as { found: Record<string, unknown>[] }).found;
       for (const r of found) {
         const d = String(r[a.dateColumn]).slice(0, 10);
         if (weekdayOf(d) !== row.day_of_week) continue;
@@ -373,25 +392,22 @@ export async function moveClassSlots(input: {
   // 날 뒤로 넘어가도 막는다(`carryConflicts`). 판정을 다 끝낸 뒤에만 쓴다(쓰는 도중에 막히면 되돌릴 일이 늘어난다).
   if (carry.length > 0) {
     const occupants: CarryOccupant[] = [];
-    for (const table of new Set(carry.map((i) => i.table))) {
-      if (table === MEMO_TABLE) {
-        for (const m of memos) {
-          const p = parseSlotMemoKey(m.memo_key);
-          if (p) occupants.push({ table, id: m.id, date: p.date, slot: p.slot, keyRest: "", slotInKey: true });
-        }
-        continue;
-      }
-      const a = SLOT_ANCHORS.find((x) => x.table === table);
-      if (!a?.carry) continue;
-      const keyColumns: readonly string[] = a.carry.keyColumns;
-      const slotInKey = a.carry.slotInKey;
+    for (const m of new Set(carry.map((i) => i.table)).has(MEMO_TABLE) ? memos : []) {
+      const p = parseSlotMemoKey(m.memo_key);
+      if (p) occupants.push({ table: MEMO_TABLE, id: m.id, date: p.date, slot: p.slot, keyRest: "", slotInKey: true });
+    }
+    // 표마다 독립 조회 — 함께 읽고(B12) 결과는 표 순서대로 담는다.
+    const occTables = [...new Set(carry.map((i) => i.table))].flatMap((table) => {
+      const a = table === MEMO_TABLE ? undefined : SLOT_ANCHORS.find((x) => x.table === table);
+      return a?.carry ? [{ table, a, carryCfg: a.carry }] : [];
+    });
+    const occReads = await mapPool(occTables, 6, async ({ table, a, carryCfg }) => {
       const dates = carry.filter((i) => i.table === table).map((i) => i.toDate).sort();
-      let found: Record<string, unknown>[];
       try {
-        found = await fetchAllPaged<Record<string, unknown>>((from, to) =>
+        const found = await fetchAllPaged<Record<string, unknown>>((from, to) =>
           admin
             .from(a.table)
-            .select(["id", a.dateColumn, "slot_start", ...keyColumns].join(", "))
+            .select(["id", a.dateColumn, "slot_start", ...carryCfg.keyColumns].join(", "))
             .eq("tenant_id", user.tenantId)
             .eq("class_id", classId)
             .gte(a.dateColumn, dates[0]!)
@@ -400,18 +416,26 @@ export async function moveClassSlots(input: {
             .order("id")
             .range(from, to) as unknown as RowsPage,
         );
-      } catch (e) {
-        logDbError(e, `timetable.moveClassSlots.occupied.${a.table}`);
+        return { found } as const;
+      } catch (error) {
+        return { error } as const;
+      }
+    });
+    for (let i = 0; i < occTables.length; i++) {
+      const { table, a, carryCfg } = occTables[i]!;
+      const read = occReads[i]!;
+      if ("error" in read) {
+        logDbError(read.error, `timetable.moveClassSlots.occupied.${a.table}`);
         return readFailed;
       }
-      for (const r of found) {
+      for (const r of read.found) {
         occupants.push({
           table,
           id: String(r.id),
           date: String(r[a.dateColumn]).slice(0, 10),
           slot: String(r.slot_start),
-          keyRest: keyColumns.map((c) => String(r[c] ?? "")).join("|"),
-          slotInKey,
+          keyRest: carryCfg.keyColumns.map((c) => String(r[c] ?? "")).join("|"),
+          slotInKey: carryCfg.slotInKey,
         });
       }
     }

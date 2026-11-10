@@ -4,7 +4,18 @@ const classId = "11111111-1111-4111-8111-111111111111", studentId = "22222222-22
 vi.mock("./access", () => ({ requireMcsClassAccess: async () => ({ ok: true, access: { tenantId: "tenant", classId, className: "합성 반", teacherId: null, canWrite: true, user: { id: m.viewId } } }), mcsVisibleClassFilter: async () => null }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => ({ id: m.realId, tenantId: "tenant", systemRole: "master" }) }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ accessLevelTenant: async () => "full" }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: m.from }) }));
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => ({
+    from: m.from,
+    // ui_prefs_patch(키 단위 병합) 흉내 — 그 네임스페이스 안 키만 고친다.
+    rpc: async (_fn: string, a: { p_user: string; p_ns: string; p_set: Record<string, unknown> }) => {
+      const root = { ...((m.prefs[a.p_user] as Record<string, unknown>) ?? {}) };
+      root[a.p_ns] = { ...((root[a.p_ns] as Record<string, unknown>) ?? {}), ...a.p_set };
+      m.prefs[a.p_user] = root;
+      return { error: null };
+    },
+  }),
+}));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({ operations: { holidays: [] } }) }));
 vi.mock("@/features/audit/server/log", () => ({ logAction: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));

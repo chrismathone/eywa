@@ -174,8 +174,8 @@ const BASE = ["logAction", "logActionAs", "logActionAtDoor", "logSuperAdminActio
 const baseRe = new RegExp(`\\b(${BASE.join("|")})\\s*\\(`);
 /** `audit_logs`에 **넣는** 것만 기록이다(읽는 조회는 아니다). */
 const AUDIT_INSERT = /from\(\s*["'`]audit_logs["'`]\s*\)\s*\.insert\s*\(|insert\s+into\s+(?:public\.)?audit_logs\b/i;
-/** DB 쓰기 — supabase 빌더 · RPC · postgres.js 템플릿 SQL(`insert into` · `update … set` · `delete from`). */
-const WRITE = /\.(insert|update|upsert|delete)\s*\(|\.rpc\(\s*["'`]|\binsert\s+into\s|\bupdate\s+[\w."]+\s+set\s|\bdelete\s+from\s/i;
+/** DB 쓰기 — supabase 빌더 · RPC · postgres.js 템플릿 SQL(`insert into` · `update … set` · `delete from`) · ui_prefs 쓰기 도우미(`writeUiPrefsNs`). */
+const WRITE = /\.(insert|update|upsert|delete)\s*\(|\.rpc\(\s*["'`]|\bwriteUiPrefsNs\s*\(|\binsert\s+into\s|\bupdate\s+[\w."]+\s+set\s|\bdelete\s+from\s/i;
 
 type SrcFile = { rel: string; chunks: Chunk[]; local: Set<string>; imports: Map<string, string>; useServer: boolean };
 const files: SrcFile[] = walk(SRC).map((f) => {

@@ -341,15 +341,22 @@ async function detectAbsence(admin: SupabaseClient, tenantId: string): Promise<n
 async function detectFollowup(admin: SupabaseClient, tenantId: string): Promise<number> {
   const today = kstToday();
   // 전용 감지 쿼리 — getFollowUpConsultations의 .limit(60) 하드캡을 피하고 counselor_id를 함께 받는다.
-  const { data, error } = await admin
-    .from("student_consultations")
-    .select("id, follow_up_date, counselor_id, student:student_id ( name )")
-    .eq("tenant_id", tenantId)
-    .eq("follow_up_done", false)
-    .not("follow_up_date", "is", null)
-    .lte("follow_up_date", today) // 오늘 이하 = today(due) 또는 overdue만(soon/later 제외)
-    .order("follow_up_date", { ascending: true });
-  if (error) throw new Error(`detectFollowup query: ${error.message}`);
+  // 🔴 B9(수정 계획 P2-R): 지난 미완료가 쌓이면 오래된 순 1,000행에서 잘려 **오늘 건**이 빠졌다(#54) → 페이지로 전건.
+  type FollowupRow = { id: string; follow_up_date: string; counselor_id: string | null; student: { name?: string } | { name?: string }[] | null };
+  const data = await fetchAllPaged<FollowupRow>((from, to) =>
+    admin
+      .from("student_consultations")
+      .select("id, follow_up_date, counselor_id, student:student_id ( name )")
+      .eq("tenant_id", tenantId)
+      .eq("follow_up_done", false)
+      .not("follow_up_date", "is", null)
+      .lte("follow_up_date", today) // 오늘 이하 = today(due) 또는 overdue만(soon/later 제외)
+      .order("follow_up_date", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to) as unknown as PromiseLike<{ data: FollowupRow[] | null; error: { message: string } | null }>,
+  ).catch((e: unknown) => {
+    throw new Error(`detectFollowup query: ${e instanceof Error ? e.message : String(e)}`);
+  });
 
   const candidates = buildFollowupEvents(
     (data ?? []).map((row) => {

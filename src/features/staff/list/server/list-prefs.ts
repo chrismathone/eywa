@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { freshSavedFilters } from "@/lib/filter-reset/server";
 import { mergeStaffView, parseStaffListPrefs, pickStaffViewPrefs, type StaffListPrefs, type StaffViewPrefs } from "../list-prefs";
 import { explainDbError } from "@/lib/supabase/db-error";
+import { writeUiPrefsNs } from "@/lib/ui-prefs/write";
 
 /**
  * `users.ui_prefs.staff`만 **필드 단위로** 갱신 — 직원목록 보기 설정(필터·정렬·볼 열·표 글자 크기 — 한 쪽 행 수는 창이 정해 저장하지 않는다).
@@ -39,11 +40,7 @@ export async function saveStaffListPrefs(
   const stored = parseStaffListPrefs(raw.staff);
   const patch: Partial<StaffListPrefs> = base ? { ...next, ...mergeStaffView(pickStaffViewPrefs(stored), base, next) } : { ...next };
   const merged = parseStaffListPrefs({ ...stored, ...patch, rev: stored.rev + 1 });
-  const { error } = await admin
-    .from("users")
-    .update({ ui_prefs: { ...raw, staff: merged } })
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId);
+  const { error } = await writeUiPrefsNs(admin, { userId: user.id, tenantId: user.tenantId }, "staff", { replace: merged });
   if (error) return { ok: false, error: explainDbError(error, { scope: "staff.list.list-prefs.saveStaffListPrefs", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true, view: pickStaffViewPrefs(merged) };
 }

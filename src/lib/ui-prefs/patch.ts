@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { explainDbError } from "@/lib/supabase/db-error";
+import { writeUiPrefsNs } from "./write";
 
 /**
  * `users.ui_prefs.<ns>`의 키 몇 개를 **본인 계정**에 부분 저장하는 **단일 구현**.
@@ -25,37 +26,14 @@ export async function patchMyUiPrefs(
 ): Promise<{ ok: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  const admin = createAdminClient();
-  const { data: row, error: readErr } = await admin
-    .from("users")
-    .select("ui_prefs")
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId)
-    .maybeSingle();
-  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "ui-prefs.patch", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
-
-  const raw =
-    row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
-      ? (row.ui_prefs as Record<string, unknown>)
-      : {};
-  const scope =
-    raw[ns] && typeof raw[ns] === "object" && !Array.isArray(raw[ns])
-      ? { ...(raw[ns] as Record<string, unknown>) }
-      : {};
+  const set: Record<string, unknown> = {};
+  const unset: string[] = [];
   for (const [key, value] of Object.entries(patch)) {
-    if (value === undefined) delete scope[key];
-    else scope[key] = value;
+    if (value === undefined) unset.push(key);
+    else set[key] = value;
   }
 
-  const merged = { ...raw };
-  if (Object.keys(scope).length === 0) delete merged[ns];
-  else merged[ns] = scope;
-
-  const { error } = await admin
-    .from("users")
-    .update({ ui_prefs: merged })
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId);
+  const { error } = await writeUiPrefsNs(createAdminClient(), { userId: user.id, tenantId: user.tenantId }, ns, { set, unset });
   if (error) return { ok: false, error: explainDbError(error, { scope: "ui-prefs.patch", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }

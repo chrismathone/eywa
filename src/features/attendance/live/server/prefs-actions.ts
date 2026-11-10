@@ -16,6 +16,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { freshSavedFilters } from "@/lib/filter-reset/server";
 import { parseLiveViewPrefs, parseSubjectFilter, type LiveViewPrefs } from "../view-prefs";
 import { explainDbError } from "@/lib/supabase/db-error";
+import { writeUiPrefsNs } from "@/lib/ui-prefs/write";
 
 const NAMESPACE = "attendanceLive";
 
@@ -67,11 +68,7 @@ async function mergeLivePrefs(
       ? (row.ui_prefs as Record<string, unknown>)
       : {};
 
-  const { error } = await admin
-    .from("users")
-    .update({ ui_prefs: { ...raw, [NAMESPACE]: update(parseLiveViewPrefs(raw[NAMESPACE])) } })
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId);
+  const { error } = await writeUiPrefsNs(admin, { userId: user.id, tenantId: user.tenantId }, NAMESPACE, { replace: update(parseLiveViewPrefs(raw[NAMESPACE])) });
   if (error) return { ok: false, error: explainDbError(error, { scope: "attendance.live.prefs-actions.mergeLivePrefs", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }

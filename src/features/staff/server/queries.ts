@@ -1,7 +1,10 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
+import { kstToday } from "@/lib/date-kst";
+import { slotPhase } from "@/features/classes/schedule-summary";
+import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import type { SystemRole } from "@/lib/permissions";
@@ -512,41 +515,92 @@ export async function getStaffClasses(teacherId: string): Promise<StaffClassRow[
   const actor = await getCurrentUser();
   if (!actor) return [];
 
-  const { data: classes } = await supabase
+  const { data: classes, error: classesError } = await supabase
     .from("classes")
-    .select("id, class_name, subject, is_active")
+    .select("id, class_name, subject, is_active, closed_at")
     .eq("tenant_id", actor.tenantId)
     .eq("teacher_id", teacherId)
     .order("is_active", { ascending: false })
     .order("class_name", { ascending: true });
+  // 아래 배치·수강 조회와 같은 규약 — 실패를 "담당 수업 없음"으로 삼키지 않는다.
+  if (classesError) throw new Error(`담당 수업 조회 실패: ${classesError.message}`);
 
   if (!classes || classes.length === 0) return [];
 
   const ids = classes.map((c) => c.id);
 
-  // 강사 1인의 반은 소수(수십)라 단일 .in()로 안전.
-  const [{ data: schedules }, { data: enrolls }] = await Promise.all([
-    supabase
-      .from("class_schedules")
-      .select("class_id, day_of_week, start_time, end_time")
-      .in("class_id", ids),
-    supabase.from("enrollments").select("class_id, end_date").in("class_id", ids),
+  // 🔴 B8(수정 계획 P2-R): 시간표 표는 이력을 함께 담는다(#88) — 진행 중 반은 **오늘 유효한 줄만**(`slotPhase`), 오늘 유효한 줄이
+  //    없고 시작 예정 줄만 있으면(개강 전) 그 예정 줄을 보인다. 종강 반은 거르지 않는다(걸면 요일이 통째로 사라진다 — 종전처럼
+  //    지난 줄이 함께 보일 수 있다). 학생 수 = **오늘 실제 수강 중**(개강 전 반은 개강일 기준 · `isEnrollmentActiveOn` — 2026-11-10부터 휴원·시작 전 학생은
+  //    빼고, 퇴원 예정(종료일이 앞날)은 넣는다 · 예전엔 '종료일 없음'만 셌다). 이력이 쌓이는 표라 청크 × 페이지(#54) · 실패는 던진다.
+  const today = kstToday();
+  const [schedules, enrolls] = await Promise.all([
+    fetchAllPagedInChunks<{ id: string; class_id: string; day_of_week: string; start_time: string; end_time: string; valid_from: string | null; valid_to: string | null }>(
+      ids,
+      (chunk, f, t) =>
+        supabase
+          .from("class_schedules")
+          .select("id, class_id, day_of_week, start_time, end_time, valid_from, valid_to")
+          .eq("tenant_id", actor.tenantId)
+          .in("class_id", chunk)
+          .order("id")
+          .range(f, t),
+    ),
+    fetchAllPagedInChunks<{ id: string; class_id: string; start_date: string; end_date: string | null; on_hold: boolean | null; is_transferred: boolean | null }>(
+      ids,
+      (chunk, f, t) =>
+        supabase
+          .from("enrollments")
+          .select("id, class_id, start_date, end_date, on_hold, is_transferred")
+          .eq("tenant_id", actor.tenantId)
+          .in("class_id", chunk)
+          .or(`end_date.is.null,end_date.gte.${today}`)
+          .order("id")
+          .range(f, t),
+    ),
   ]);
 
+  // 반마다 '시간표를 볼 날' — 운영 중 = 오늘 · 종강(`closed_at`, is_active는 그대로 true) = 종강일(그날 모습 · 2026-11-02부터 종강하면
+  //    배치도 종강일로 닫혀 오늘 기준이면 요일이 통째로 사라진다 — 재리뷰) · 폐지(is_active=false)는 거르지 않는다.
+  const refDay = new Map<string, string>();
+  for (const c of classes) {
+    const closed = c.closed_at ? String(c.closed_at).slice(0, 10) : null;
+    if (closed && closed < today) refDay.set(c.id, closed);
+    else if (c.is_active) refDay.set(c.id, today);
+  }
+  const phaseOf = (s: (typeof schedules)[number], day: string) =>
+    slotPhase({ dayOfWeek: s.day_of_week, startTime: s.start_time, endTime: s.end_time, validFrom: s.valid_from, validTo: s.valid_to }, day);
+  const hasCurrent = new Set(schedules.filter((s) => refDay.has(s.class_id) && phaseOf(s, refDay.get(s.class_id)!) === "current").map((s) => s.class_id));
   const schedByClass = new Map<string, StaffClassRow["schedules"]>();
-  for (const s of schedules ?? []) {
+  const seenSlot = new Set<string>();
+  for (const s of schedules) {
+    const day = refDay.get(s.class_id);
+    if (day) {
+      const phase = phaseOf(s, day);
+      // 예정 줄은 운영 중인 반이 아직 개강 전일 때만(종강 반은 종강일 모습만 — 한 번도 유효하지 않았던 예정 줄을 세우지 않는다).
+      if (phase === "past" || (phase === "upcoming" && (hasCurrent.has(s.class_id) || day !== today))) continue;
+    }
+    const startTime = String(s.start_time).slice(0, 5);
+    const endTime = String(s.end_time).slice(0, 5);
+    const key = `${s.class_id}|${s.day_of_week}|${startTime}|${endTime}`;
+    if (seenSlot.has(key)) continue; // 이력 행이 같은 자리를 되풀이하면 한 줄만
+    seenSlot.add(key);
     const list = schedByClass.get(s.class_id) ?? [];
-    list.push({
-      day: s.day_of_week as WorkDay,
-      startTime: String(s.start_time).slice(0, 5),
-      endTime: String(s.end_time).slice(0, 5),
-    });
+    list.push({ day: s.day_of_week as WorkDay, startTime, endTime });
     schedByClass.set(s.class_id, list);
   }
 
+  // 개강 전 반(오늘 유효한 줄 없이 예정 줄만)은 **개강일** 기준으로 센다 — 오늘 기준이면 대기 학생이 전부 0명으로 보인다(리뷰).
+  const countDay = new Map<string, string>();
+  for (const s of schedules) {
+    if (refDay.get(s.class_id) !== today || hasCurrent.has(s.class_id)) continue;
+    const from = s.valid_from ? String(s.valid_from).slice(0, 10) : null;
+    if (from && from > today && (!countDay.has(s.class_id) || from < countDay.get(s.class_id)!)) countDay.set(s.class_id, from);
+  }
   const countByClass = new Map<string, number>();
-  for (const e of enrolls ?? []) {
-    if (e.end_date) continue; // 진행 중 등록만 카운트
+  for (const e of enrolls) {
+    const day = countDay.get(e.class_id) ?? today;
+    if (!isEnrollmentActiveOn({ startDate: e.start_date, endDate: e.end_date, onHold: !!e.on_hold, isTransferred: !!e.is_transferred }, day)) continue;
     countByClass.set(e.class_id, (countByClass.get(e.class_id) ?? 0) + 1);
   }
 

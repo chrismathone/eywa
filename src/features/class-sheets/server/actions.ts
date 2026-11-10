@@ -10,6 +10,7 @@ import { after } from "next/server";
 // 0169a — plain present만) 두 경로뿐. 결석·지각·시수 편집은 여전히 /attendance 전용(§E 완화판).
 import { createAdminClient } from "@/lib/supabase/admin";
 import { explainDbError } from "@/lib/supabase/db-error";
+import { writeUiPrefsNs } from "@/lib/ui-prefs/write";
 // ui_prefs 부분 병합은 **단일 구현**(화면마다 복붙하면 형제 키를 날린다 — CLAUDE.md).
 import { patchMyUiPrefs } from "@/lib/ui-prefs/patch";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -1085,16 +1086,13 @@ export async function setMyEcsMonthDisplay(
   ) {
     delete stored[view];
   } else stored[view] = display;
-  if (Object.keys(stored).length === 0) delete ecs.monthDisplay;
-  else ecs.monthDisplay = stored;
-  const merged = { ...prefs };
-  if (Object.keys(ecs).length === 0) delete merged.ecs;
-  else merged.ecs = ecs;
-  const { error } = await admin
-    .from("users")
-    .update({ ui_prefs: merged })
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId);
+  // ecs 안의 monthDisplay 키만 고친다 — ecs의 다른 키·다른 화면은 DB가 보존한다(남은 키가 없으면 ecs도 지운다).
+  const { error } = await writeUiPrefsNs(
+    admin,
+    { userId: user.id, tenantId: user.tenantId },
+    "ecs",
+    Object.keys(stored).length === 0 ? { unset: ["monthDisplay"] } : { set: { monthDisplay: stored } },
+  );
   if (error) return { ok: false, error: explainDbError(error, { scope: "class-sheets.actions.setMyEcsMonthDisplay", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { logDbError } from "@/lib/supabase/db-error";
+import { writeUiPrefsNs } from "@/lib/ui-prefs/write";
 
 /**
  * '시작하기' 카드 닫기/다시 보기 — `users.ui_prefs.onboarding.dismissed`만 갱신(계정 귀속 보기 설정, 원장 2026-08-04 규약).
@@ -13,26 +14,9 @@ import { logDbError } from "@/lib/supabase/db-error";
 export async function setOnboardingDismissed(dismissed: boolean): Promise<{ ok: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  const admin = createAdminClient();
-  const { data: row, error: readErr } = await admin
-    .from("users")
-    .select("ui_prefs")
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId)
-    .maybeSingle();
-  if (readErr) {
-    logDbError(readErr, "onboarding.setOnboardingDismissed");
-    return { ok: false, error: "저장하지 못했습니다" };
-  }
-  const raw =
-    row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
-      ? (row.ui_prefs as Record<string, unknown>)
-      : {};
-  const { error } = await admin
-    .from("users")
-    .update({ ui_prefs: { ...raw, onboarding: { dismissed: dismissed === true } } })
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId);
+  const { error } = await writeUiPrefsNs(createAdminClient(), { userId: user.id, tenantId: user.tenantId }, "onboarding", {
+    replace: { dismissed: dismissed === true },
+  });
   if (error) {
     logDbError(error, "onboarding.setOnboardingDismissed");
     return { ok: false, error: "저장하지 못했습니다" };

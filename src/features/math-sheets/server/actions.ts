@@ -10,6 +10,7 @@ import { shiftMonth } from "@/lib/date-kst";
 import { parseMcsFontSize } from "../font-size";
 import { requireMcsClassAccess } from "./access";
 import { explainDbError } from "@/lib/supabase/db-error";
+import { writeUiPrefsNs } from "@/lib/ui-prefs/write";
 
 /**
  * MCS 서버 액션 — **쓰기 경로는 목표 하나뿐**이다. 실제 진도(교재·진도·과제)는 원스크린이
@@ -186,30 +187,7 @@ export async function copyGoalsFromPreviousMonth(input: {
 async function patchMyMcsPrefs(patch: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  const admin = createAdminClient();
-  const { data: row, error: readErr } = await admin
-    .from("users")
-    .select("ui_prefs")
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId)
-    .maybeSingle();
-  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "math-sheets.actions.patchMyMcsPrefs", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
-
-  const raw0 =
-    row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
-      ? (row.ui_prefs as Record<string, unknown>)
-      : {};
-  const ns =
-    raw0.mcs && typeof raw0.mcs === "object" && !Array.isArray(raw0.mcs)
-      ? { ...(raw0.mcs as Record<string, unknown>) }
-      : {};
-  for (const [k, v] of Object.entries(patch)) ns[k] = v;
-
-  const { error } = await admin
-    .from("users")
-    .update({ ui_prefs: { ...raw0, mcs: ns } })
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId);
+  const { error } = await writeUiPrefsNs(createAdminClient(), { userId: user.id, tenantId: user.tenantId }, "mcs", { set: patch });
   if (error) return { ok: false, error: explainDbError(error, { scope: "math-sheets.actions.patchMyMcsPrefs", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }

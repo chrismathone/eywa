@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { freshSavedFilters } from "@/lib/filter-reset/server";
 import { parseSchoolStatsPrefs, type SchoolStatsPrefs } from "../school-view-prefs";
 import { explainDbError } from "@/lib/supabase/db-error";
+import { writeUiPrefsNs } from "@/lib/ui-prefs/write";
 
 /**
  * 학교별 점유율 보기 설정을 **본인 계정**에 저장 — `users.ui_prefs.enrollmentStats`.
@@ -27,25 +28,7 @@ export async function saveSchoolStatsPrefs(
   // 클라가 보낸 값을 그대로 믿지 않는다 — 파서를 한 번 태워 알 수 없는 값은 기본값으로 되돌린다.
   const safe = parseSchoolStatsPrefs(next);
 
-  const admin = createAdminClient();
-  const { data: row, error: readErr } = await admin
-    .from("users")
-    .select("ui_prefs")
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId)
-    .maybeSingle();
-  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "enrollment.school-prefs-actions.saveSchoolStatsPrefs", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
-
-  const raw =
-    row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
-      ? (row.ui_prefs as Record<string, unknown>)
-      : {};
-
-  const { error } = await admin
-    .from("users")
-    .update({ ui_prefs: { ...raw, enrollmentStats: safe } })
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId);
+  const { error } = await writeUiPrefsNs(createAdminClient(), { userId: user.id, tenantId: user.tenantId }, "enrollmentStats", { replace: safe });
   if (error) return { ok: false, error: explainDbError(error, { scope: "enrollment.school-prefs-actions.saveSchoolStatsPrefs", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }

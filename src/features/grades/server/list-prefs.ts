@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { GRADE_SORT_DEFAULT, parseGradeSort, type GradeSort } from "../list-prefs";
 import { explainDbError } from "@/lib/supabase/db-error";
+import { writeUiPrefsNs } from "@/lib/ui-prefs/write";
 
 /**
  * `users.ui_prefs.grades`만 **필드 단위로** 갱신 — 성적관리 정렬(원장 2026-08-04 *"뷰 세팅은 계정 귀속"*).
@@ -16,29 +17,10 @@ import { explainDbError } from "@/lib/supabase/db-error";
 export async function saveGradeSortPref(next: GradeSort): Promise<{ ok: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  const admin = createAdminClient();
-  const { data: row, error: readErr } = await admin
-    .from("users")
-    .select("ui_prefs")
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId)
-    .maybeSingle();
-  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "grades.list-prefs.saveGradeSortPref", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
-  const raw =
-    row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
-      ? (row.ui_prefs as Record<string, unknown>)
-      : {};
-  const prev =
-    raw.grades && typeof raw.grades === "object" && !Array.isArray(raw.grades)
-      ? (raw.grades as Record<string, unknown>)
-      : {};
   // 클라가 보낸 값을 그대로 믿지 않는다 — 파서를 한 번 태운다.
   const sort = parseGradeSort(next);
-  const { error } = await admin
-    .from("users")
-    .update({ ui_prefs: { ...raw, grades: { ...prev, sort } } })
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId);
+  // grades 안의 sort 키만 고친다 — 형제 키(다른 화면·grades의 다른 키)는 DB가 보존한다.
+  const { error } = await writeUiPrefsNs(createAdminClient(), { userId: user.id, tenantId: user.tenantId }, "grades", { set: { sort } });
   if (error) return { ok: false, error: explainDbError(error, { scope: "grades.list-prefs.saveGradeSortPref", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }
