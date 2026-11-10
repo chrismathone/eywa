@@ -1,14 +1,15 @@
+import { ScenePlayer } from "./scene-player";
 import { sv } from "./style";
 
 /**
- * 고정 장면 D — 학원 비서(원장이 말로 물으면 그 학원 기록을 찾아 보고서 + 비서 의견으로 답한다, 2026-11-06~).
+ * 자동 재생 장면 D(`data-play` · `ScenePlayer` — 원장 11-10 *"알아서 천천히 재생되는게 낫겠어 스크롤보다"*) — 학원 비서(원장이 말로 물으면 그 학원 기록을 찾아 보고서 + 비서 의견으로 답한다, 2026-11-06~).
  * 단계 = 실제 기능 순서(docs/features/academy-assistant.md): 묻기 → 기록 조회·보고서(표·차트) → 비서 의견(할 일·근거·언제·누가)
  * → 처리한 의견은 며칠 뒤 같은 지표를 다시 잰다(재측정 크론). 원장 계정 · AI 사용을 켠 학원에서만 열린다 — 문구에 그대로 적는다.
  * 스크롤 연출은 `LandingMotion`의 공용 `.pin`/`.ln` 규칙을 그대로 쓴다(새 스크립트 없음). 화면 속 숫자는 모두 예시다.
  */
 export function SceneAssistant() {
   return (
-    <section className="pin asst-scene" id="assistant" data-scene="assistant" data-steps="4" style={sv({"--steps": "4"})} aria-labelledby="asst-title">
+    <section className="pin asst-scene" id="assistant" data-scene="assistant" data-steps="4" data-play="" aria-labelledby="asst-title">
       <div className="stage">
         <div className="wrap two rev">
           <div className="caps">
@@ -21,7 +22,7 @@ export function SceneAssistant() {
               <li data-i="2"><b>비서 의견</b><span>보고서마다 무엇을, 누가, 언제 하면 좋을지 근거와 함께 의견이 붙습니다.</span></li>
               <li data-i="3"><b>다시 재 보기</b><span>확인할 지표가 있는 의견은 처리해 두면 정해진 날 다시 재서 달라졌는지 보여 줍니다.</span></li>
             </ol>
-            <div className="dots" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+            <div className="play-ctl"><div className="dots" aria-hidden="true"><i></i><i></i><i></i><i></i></div><ScenePlayer target="assistant" /></div>
           </div>
           <div className="canvas">
             <div className="asst" role="img" aria-label="학원 비서에게 묻고 보고서와 의견을 받는 화면 예시">

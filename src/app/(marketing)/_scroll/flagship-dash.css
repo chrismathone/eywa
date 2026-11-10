@@ -1,0 +1,58 @@
+/* 에이와 대시보드 예시(dash-mock.tsx) — 실제 운영실 토큰(instruments.css 7~32행)을 그대로 옮긴 축소판. 크기는 cqw(틀 폭 비례). */
+.lp .dmk-wrap{container-type:inline-size;background:#f1f1ed}
+.lp .dmk{--k-ink:#23282c;--k-ink2:#485055;--k-muted:#646d72;--k-line:#e1e3df;--k-grid:#eceeea;--k-char:#363c41;--k-yel:#fdb811;--k-wash:#f4f4f1;
+  color:var(--k-ink);padding:2.6cqw 2.8cqw 3cqw;display:grid;gap:1.8cqw;font-size:1.8cqw;line-height:1.35;letter-spacing:-.02em}
+.lp .dmk small{display:block;font-size:1.55cqw;font-weight:600;color:var(--k-muted);letter-spacing:0}
+.lp .dmk-head{display:flex;justify-content:space-between;align-items:flex-end}
+.lp .dmk-head b{display:block;font-size:3cqw;font-weight:800;letter-spacing:-.045em}
+.lp .dmk-fresh{display:inline-flex;align-items:center;gap:.6cqw;font-size:1.5cqw;font-weight:700;color:var(--k-ink2)}
+.lp .dmk-fresh i{width:.8cqw;height:.8cqw;border-radius:50%;background:#3f8f5f}
+.lp .dmk-switch{display:flex;width:max-content;border:1px solid var(--k-line);border-radius:.8cqw;overflow:hidden;background:#fff}
+.lp .dmk-switch span{padding:.8cqw 1.8cqw;font-size:1.55cqw;font-weight:750;color:var(--k-ink2)}
+.lp .dmk-switch span+span{border-left:1px solid var(--k-line)}
+.lp .dmk-switch .on{background:var(--k-char);color:#fff}
+.lp .dmk-sum{display:grid;grid-template-columns:1fr 2fr;gap:1.2cqw}
+.lp .dmk-brief{background:var(--k-char);color:#fff;border-radius:1cqw;padding:1.5cqw 1.7cqw;display:grid;align-content:start;gap:.5cqw}
+.lp .dmk-brief small{color:#aeb6b9}
+.lp .dmk-brief b{font-size:2cqw;font-weight:800}
+.lp .dmk-brief ul{list-style:none;margin:.4cqw 0 0;padding:0;display:grid;gap:.6cqw}
+.lp .dmk-brief li{font-size:1.6cqw;color:#dde1e2;padding-left:1.4cqw;position:relative}
+.lp .dmk-brief li::before{content:"";position:absolute;left:0;top:.55cqw;width:.6cqw;height:.6cqw;border-radius:50%;background:var(--k-yel)}
+.lp .dmk-kpis{display:grid;grid-template-columns:repeat(3,1fr);background:#fff;border:1px solid var(--k-line);border-radius:1cqw;overflow:hidden}
+.lp .dmk-kpis>div{padding:1.3cqw 1.6cqw;border-right:1px solid var(--k-line);border-bottom:1px solid var(--k-line)}
+.lp .dmk-kpis>div:nth-child(3n){border-right:0}
+.lp .dmk-kpis>div:nth-child(n+4){border-bottom:0}
+.lp .dmk-kpis b{display:block;font-size:3.5cqw;font-weight:850;letter-spacing:-.045em;line-height:1.15;margin-top:.3cqw}
+.lp .dmk-kpis em{font-style:normal;font-size:1.5cqw;font-weight:700;margin-left:.3cqw}
+.lp .dmk-block{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:.8cqw;border-bottom:2px solid var(--k-char)}
+.lp .dmk-block b{font-size:2.1cqw;font-weight:800}
+.lp .dmk-block span{font-size:1.45cqw;color:var(--k-muted)}
+.lp .dmk-cards{display:grid;grid-template-columns:1fr 1fr 2fr;gap:1.2cqw}
+.lp .dmk-card{background:#fff;border:1px solid var(--k-line);border-radius:1cqw;padding:1.4cqw 1.6cqw;display:grid;align-content:space-between;gap:.8cqw}
+.lp .dmk-card p{font-size:1.45cqw;color:var(--k-muted)}
+.lp .dmk-gauge{width:10cqw;aspect-ratio:1;border-radius:50%;margin:0 auto;display:grid;place-items:center;background:conic-gradient(var(--k-char) 0 75%,var(--k-grid) 75% 100%)}
+.lp .dmk-gauge span{width:72%;aspect-ratio:1;border-radius:50%;background:#fff;display:grid;place-items:center;font-size:2cqw;font-weight:850}
+.lp .dmk-big{font-size:3.6cqw;font-weight:850;letter-spacing:-.045em}
+.lp .dmk-bar{height:1cqw;border-radius:1cqw;background:var(--k-grid);overflow:hidden}
+.lp .dmk-bar i{display:block;width:84%;height:100%;background:var(--k-yel)}
+.lp .dmk-area{position:relative;height:9cqw;border-bottom:1px solid #c3c8c5}
+.lp .dmk-area i,.lp .dmk-area s{position:absolute;inset:0}
+.lp .dmk-area i{background:rgba(253,184,17,.22);clip-path:polygon(0 72%,20% 64%,40% 66%,60% 48%,80% 40%,100% 22%,100% 100%,0 100%)}
+.lp .dmk-area s{background:var(--k-char);clip-path:polygon(0 72%,20% 64%,40% 66%,60% 48%,80% 40%,100% 22%,100% 26%,80% 44%,60% 52%,40% 70%,20% 68%,0 76%)}
+.lp .dmk-axis{display:flex;justify-content:space-between;font-size:1.35cqw;color:var(--k-muted)}
+/* 히어로 간단판 — 항목을 줄인 만큼 글자를 키운다 */
+.lp .dmk.compact{font-size:2.2cqw;gap:2.2cqw;padding:3.2cqw 3.4cqw 3.6cqw}
+.lp .dmk.compact small{font-size:1.9cqw}
+.lp .dmk.compact .dmk-head b{font-size:3.8cqw}
+.lp .dmk.compact .dmk-fresh{font-size:1.9cqw}
+.lp .dmk.compact .dmk-sum{grid-template-columns:1fr 1.6fr}
+.lp .dmk.compact .dmk-brief b{font-size:2.6cqw}
+.lp .dmk.compact .dmk-brief li{font-size:2cqw;padding-left:1.8cqw}
+.lp .dmk.compact .dmk-brief li::before{top:.8cqw;width:.8cqw;height:.8cqw}
+.lp .dmk.compact .dmk-kpis{grid-template-columns:1fr}
+.lp .dmk.compact .dmk-kpis>div{display:flex;justify-content:space-between;align-items:baseline;border-right:0;border-bottom:1px solid var(--k-line);padding:1.3cqw 2cqw}
+.lp .dmk.compact .dmk-kpis>div:last-child{border-bottom:0}
+.lp .dmk.compact .dmk-kpis b{font-size:4.2cqw;margin:0}
+.lp .dmk.compact .dmk-kpis em{font-size:1.9cqw}
+.lp .dmk.compact .dmk-area{height:11cqw}
+.lp .dmk.compact .dmk-axis{font-size:1.7cqw}

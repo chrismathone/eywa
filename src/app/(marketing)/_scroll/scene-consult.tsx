@@ -1,10 +1,11 @@
 import { Fragment } from "react";
+import { ScenePlayer } from "./scene-player";
 import { sv } from "./style";
 
 /** 선언문 — `KEY`는 한 덩어리 낱말로 밑줄 강조(낱말 사이 빈칸은 span 밖에 둬 밑줄이 빈칸까지 늘지 않게). */
 const BEFORE = "원장과 강사가 하루에도 수십 번 여는 화면이라, 에이와는";
-const KEY = "반응 속도를";
-const AFTER = "먼저 맞췄습니다. 시간이 걸리는 작업은 뒤에서 처리하고, 지금 봐야 할 화면부터 먼저 띄웁니다.";
+const KEY = "반응 속도부터";
+const AFTER = "맞췄습니다. 시간이 걸리는 일은 뒤에서 처리하고, 지금 볼 화면을 먼저 띄웁니다.";
 const WORDS: [string, boolean][] = [...BEFORE.split(" ").map((w): [string, boolean] => [w, false]), [KEY, true], ...AFTER.split(" ").map((w): [string, boolean] => [w, false])];
 
 /**
@@ -18,10 +19,18 @@ export function SceneConsult() {
     <>
       <section className="pin state" data-scene="words" data-steps="2" style={sv({"--steps": "2"})} aria-label="반응 속도 원칙">
         <div className="stage">
-          <p className="words" id="words">{WORDS.map(([w, key], i) => <Fragment key={i}><span className={key ? "em-rule" : undefined}>{w}</span>{" "}</Fragment>)}</p>
+          <div className="words-box">
+            <p className="words" id="words">{WORDS.map(([w, key], i) => <Fragment key={i}><span className={key ? "em-rule" : undefined}>{w}</span>{" "}</Fragment>)}</p>
+            {/* 빈 면 활용(원장 11-10 *"공간을 활용할 방안도 모색"*) — 사실 범위 안의 두 줄만(Codex 협의: 인포그래픽·진행 막대는 '항상 즉시'처럼 읽혀 뺐다).
+                근거 = CLAUDE.md 작업 원칙(무거운 작업은 백그라운드 · loading 뼈대 먼저) · 녹음 전사·분석은 웹훅이 응답 뒤에 돌린다. */}
+            <dl className="words-legend">
+              <div><dt>먼저 보이는 화면</dt><dd>화면 틀과 지금 볼 정보</dd></div>
+              <div><dt>뒤에서 처리하는 일</dt><dd>녹음 전사와 AI 분석</dd></div>
+            </dl>
+          </div>
         </div>
       </section>
-      <section className="pin dark" id="scene-consult" data-scene="consult" data-steps="4" style={sv({"--steps": "4"})} aria-labelledby="consult-title">
+      <section className="pin dark" id="scene-consult" data-scene="consult" data-steps="4" data-play="" aria-labelledby="consult-title">
         <div className="ph ph-office" aria-hidden="true"></div>
         <div className="stage">
           <div className="wrap two half">
@@ -35,7 +44,7 @@ export function SceneConsult() {
                 <li data-i="2"><b>상담 카드 자동 입력</b><span>학교·학년·학부모 연락처처럼 비어 있는 칸만 녹음에 나온 값으로 채웁니다. 직접 적은 값은 그대로 둡니다.</span></li>
                 <li data-i="3"><b>필요할 때만 분석</b><span>AI 재분석은 버튼을 눌렀을 때만 실행됩니다. 페이지를 열면 마지막 결과가 그대로 보입니다.</span></li>
               </ol>
-              <div className="dots" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+              <div className="play-ctl"><div className="dots" aria-hidden="true"><i></i><i></i><i></i><i></i></div><ScenePlayer target="scene-consult" /></div>
             </div>
             <div className="canvas">
               <div className="ai-card" id="consult">

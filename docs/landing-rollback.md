@@ -56,8 +56,8 @@ git rm -r -q "src/app/(marketing)" public/landing/flagship
 git checkout $C -- "src/app/(marketing)"
 ```
 
-- (D)가 새로 만든 것 = `_scroll/flagship*.{tsx,css}` · `scene-assistant.tsx` · `strip-cards-c.tsx` · `strip-toggle.tsx` · `public/landing/flagship/**`(위 명령이 지운다). 로그인·`src/data/marketing.ts`는 (D)에서 안 바꿨다.
-- 장면 연출(`landing-motion.tsx`)·옛 장면 CSS(`landing-*.css`)는 (D)에서 고치지 않았다 — (D)는 그 위에 `flagship-scenes.css`로 덮었을 뿐이라 import 한 줄만 빼도 옛 색으로 돌아간다.
+- (D)가 새로 만든 것 = `_scroll/flagship*.{tsx,css}` · `scene-assistant.tsx` · `scene-player.tsx`(자동 재생) · `dash-mock.tsx` · `strip-cards-c.tsx` · `strip-toggle.tsx` · `public/landing/flagship/**`(위 명령이 지운다). 로그인·`src/data/marketing.ts`는 (D)에서 안 바꿨다.
+- 옛 장면 CSS(`landing-*.css`)는 (D)에서 고치지 않았다 — 그 위에 `flagship-scenes.css`로 덮었다. `landing-motion.tsx`는 한 줄(`.pin:not([data-play])` — 자동 재생 장면 제외)만 바꿨다. 위 checkout이 둘 다 (C)로 되돌린다.
 
 ### 스크롤 판(C)이 새로 만든 것 — 되돌릴 때 지우는 것
 

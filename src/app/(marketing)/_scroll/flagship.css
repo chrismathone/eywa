@@ -43,9 +43,16 @@
 /* 고정 쇼룸은 한 화면 높이라 세로로 긴 제품 화면(부원장AI 1380×1140)이 아래가 잘리고 주소 줄까지 밀려났다 → 화면 높이에서 상한 */
 @media (min-width:901px) {
   .lp .flag-slide .flag-screen img { max-height:calc(100vh - 340px); max-height:calc(100svh - 340px); object-fit:cover; object-position:top; }
+  /* 에이와 화면은 이미지가 아니라 HTML 모형(dmk-wrap) — 같은 상한을 걸고 아래를 자른다 */
+  .lp .flag-slide .dmk-wrap { max-height:calc(100vh - 340px); max-height:calc(100svh - 340px); overflow:hidden; }
 }
+/* 부원장AI 캡처는 파란 패널 아래 다음 구역 글자가 걸쳐 보였다 → 패널 바로 아래에서 자르는 비율로 고정(Codex 4차) */
+.lp .flag-slide-1 .flag-screen img { aspect-ratio:1380/975; object-fit:cover; object-position:top; }
 .lp .flag-product-copy > p:first-child { font-size:15px; font-weight:700; }
-.lp .flag-product-copy h2 { font-size:clamp(52px,5vw,90px); line-height:1.15; letter-spacing:-.07em; margin:24px 0; }
+.lp .flag-wm { display:flex; align-items:baseline; font-size:clamp(56px,5.6vw,104px); font-weight:900; line-height:1; letter-spacing:-.075em; margin:24px 0; white-space:nowrap; }
+.lp .wm-aywa i { display:inline-block; width:.2em; height:.2em; margin-left:.07em; background:var(--flag-lime); box-shadow:inset 0 0 0 .035em var(--flag-ink); }
+.lp .wm-deputy span { font-size:.6em; letter-spacing:-.02em; margin-left:.1em; padding:.05em .14em .09em; background:#2c2340; color:#d9d1f4; }
+.lp .wm-srs span { font-weight:300; letter-spacing:.02em; margin-left:.06em; }
 .lp .flag-product-copy > p { font-size:18px; line-height:1.8; max-width:32rem; }
 .lp .flag-tags { display:flex; flex-wrap:wrap; gap:8px; margin:28px 0; }
 .lp .flag-tags span { border:1px solid currentColor; border-radius:999px; padding:7px 12px; font-size:14px; }
@@ -61,22 +68,7 @@
 .lp .flag-compare-copy > p:first-child { font-size:15px; font-weight:700; }
 .lp .flag-compare-copy h2 { font-size:clamp(46px,4vw,72px); font-weight:700; line-height:1.2; letter-spacing:-.06em; margin:26px 0; }
 .lp .flag-compare-copy > p:last-child { color:#69756a; line-height:1.8; }
-.lp .flag-comparison { position:relative; height:420px; overflow:hidden; background:#e5e9e1; border:1px solid #d4dcd0; }
-.lp .flag-compare-before,.lp .flag-compare-after { position:absolute; inset:0; padding:35px; display:flex; flex-direction:column; justify-content:space-between; }
-/* 손잡이가 가운데일 때 양쪽 내용이 다 읽히게 — 왼쪽(대시보드)은 왼쪽 절반, 오른쪽(메뉴마다)은 오른쪽 절반에 둔다 */
-.lp .flag-compare-before { background:#e9ede6; padding-left:calc(50% + 28px); }
-.lp .flag-compare-after > * { max-width:calc(50% - 63px); }
-.lp .flag-compare-after { background:var(--flag-lime); clip-path:inset(0 calc(100% - var(--flag-split)) 0 0); }
-.lp .flag-compare-before > b,.lp .flag-compare-after > b { font-size:14px; }
-.lp .flag-compare-before > div { display:grid; gap:10px; }
-.lp .flag-compare-before > div span { background:white; border:1px solid #d9e0d5; padding:14px 16px; font-weight:700; }
-.lp .flag-compare-after > div { background:#fff; border:1px solid #aaba7e; width:min(100%,480px); padding:35px; display:grid; gap:12px; box-shadow:0 14px 35px rgba(52,64,29,.1); }
-.lp .flag-compare-after strong { font-size:24px; }
-.lp .flag-compare-before > p,.lp .flag-compare-after > p { font-size:14px; }
-.lp .flag-compare-handle { position:absolute; z-index:2; left:var(--flag-split); top:0; bottom:0; transform:translateX(-50%); width:3px; background:#24332c; display:grid; place-items:center; color:#24332c; font-size:26px; }
-.lp .flag-compare-handle::before { content:""; position:absolute; width:48px; height:48px; border-radius:50%; background:white; border:2px solid #24332c; z-index:-1; }
-.lp .flag-comparison input { position:absolute; z-index:3; inset:0; width:100%; height:100%; margin:0; opacity:0; cursor:ew-resize; }
-.lp .flag-comparison:focus-within { outline:3px solid #153e75; outline-offset:4px; }
+/* 비교판 본체(판·손잡이·양쪽 예시)는 flagship-new.css '운영 현황 비교판' */
 .lp .flag-compare-note { margin-top:14px; color:#69756a; font-size:13px; }
 @media (max-width:900px), (prefers-reduced-motion:reduce) {
   .lp .flag-showroom { height:auto; }
@@ -95,15 +87,6 @@
   .lp .flag-slide-main { grid-template-columns:1fr; gap:40px; }
   .lp .flag-story { padding:80px 7%; }
   .lp .flag-compare { grid-template-columns:1fr; padding:80px 7%; }
-  /* 좁은 비교판 — 절반 폭에 맞게 여백·글자를 줄인다(넓은 화면 값이면 왼쪽 카드 글자가 세로로 쌓이고 아래 문장이 잘렸다) */
-  .lp .flag-comparison { height:360px; }
-  .lp .flag-compare-before,.lp .flag-compare-after { padding:20px 14px; }
-  .lp .flag-compare-before { padding-left:calc(50% + 14px); }
-  .lp .flag-compare-after > * { max-width:calc(50% - 28px); }
-  .lp .flag-compare-after > div { padding:14px 12px; gap:6px; }
-  .lp .flag-compare-after strong { font-size:17px; }
-  .lp .flag-compare-before > div span { padding:10px; font-size:14px; }
-  .lp .flag-compare-before > p,.lp .flag-compare-after > p,.lp .flag-compare-before > b,.lp .flag-compare-after > b { font-size:13px; }
 }
 @media (max-width:520px) {
   .lp .flag-hero-content { width:calc(100% - 40px); }

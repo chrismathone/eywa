@@ -11,6 +11,7 @@ import "./_scroll/landing-responsive.css";
 import "./_scroll/flagship.css";
 import "./_scroll/flagship-scenes.css";
 import "./_scroll/flagship-new.css";
+import "./_scroll/flagship-dash.css";
 
 /** 공개 랜딩 = AI원장키트(에이와 · 부원장AI · 인재원SRS) 쇼룸 — 탭 제목만 우산 브랜드로. 공유 미리보기(OG)는 사이트 공통 그대로. */
 export const metadata = { title: LANDING_TITLE, description: AYWA_SITE_DESCRIPTION };

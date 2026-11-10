@@ -19,23 +19,27 @@
 .lp .pin{height:calc((var(--steps) + 1) * 75vh);height:calc((var(--steps) + 1) * 75svh)}
 /* 머리 줄이 90px 불투명이 됐다 — 고정 장면 가운데 정렬이 그 아래에서 일어나게, 메뉴 이동 목적지도 머리 줄 아래로 */
 @media (min-width:901px){.lp .stage{padding-top:90px}}
-/* 세로가 짧은 노트북(보이는 높이 ~650px) — 출석부 장면이 머리 줄 아래 한 화면에 들어오게 표 행을 낮춘다 */
-@media (min-width:901px) and (max-height:720px){.lp .att th,.lp .att td{height:2.5cqw}.lp .stack{gap:16px}}
-/* 고정 장면·쇼룸은 제 안에 머리 줄 여백을 둬서 빼야 한다(넣으면 90px 내려앉아 바닥이 잘린다) */
-.lp main section[id]:not(.pin):not(.flag-showroom){scroll-margin-top:90px}
+/* 자동 재생 장면(`[data-play]` = 상담·학원 비서·출석부 · ScenePlayer)은 고정하지 않는 보통 구역 — 장면 꾸밈(.pin.dark 등)은
+   그대로 쓰고 높이·고정만 푼다. 단계 목록·예시 안내도 전부 보인다(한 화면에 가둘 이유가 없다). */
+.lp .pin[data-play]{height:auto}
+.lp .pin[data-play] .stage{position:relative;height:auto;overflow:visible;padding:clamp(88px,13vh,150px) 0}
+.lp .play-ctl{display:flex;align-items:center;flex-wrap:wrap;gap:12px 18px;margin-top:6px}
+.lp .play-ctl .dots{margin-top:0}
+.lp .light .strip-toggle{border-color:var(--flag-lime);color:var(--flag-lime)}
+.lp .light .strip-toggle[aria-pressed="true"]{background:var(--flag-lime);color:var(--flag-ink)}
+/* 고정 장면·쇼룸은 제 안에 머리 줄 여백을 둬서 빼야 한다(넣으면 90px 내려앉아 바닥이 잘린다) — 자동 재생 장면은 보통 구역이라 넣는다 */
+.lp main section[id]:not(.pin):not(.flag-showroom),.lp main section.pin[data-play]{scroll-margin-top:90px}
 @media (max-width:900px){
-.lp main section[id]:not(.pin):not(.flag-showroom){scroll-margin-top:64px}
-/* 좁은 화면의 고정 장면은 한 화면(svh) 안에 들어와야 한다 — 장면마다의 예시 안내는 빼고(맨 위 선언 · 바닥글이 밝힌다 ·
-   학원 비서의 사용 조건은 카드 머리에도 있다) */
-.lp .pin .demo-caption{display:none}
-/* 단계 목록은 지금 단계 하나만 눈에 보이게(진행은 아래 점이 말한다). display:none이 아니라 '보이지만 않게' — 화면낭독기는
+.lp main section[id]:not(.pin):not(.flag-showroom),.lp main section.pin[data-play]{scroll-margin-top:64px}
+.lp .pin[data-play] .two,.lp .pin[data-play] .two.rev,.lp .pin[data-play] .two.half,.lp .pin[data-play] .stack{padding-top:0;height:auto}
+/* 좁은 화면의 스크롤 고정 장면(창 네 개)은 한 화면(svh) 안에 들어와야 한다 — 그 장면의 예시 안내는 뺀다(맨 위 선언 · 바닥글이 밝힌다) */
+.lp .pin:not([data-play]) .demo-caption{display:none}
+/* 고정 장면 단계 목록은 지금 단계 하나만 눈에 보이게(진행은 아래 점이 말한다). display:none이 아니라 '보이지만 않게' — 화면낭독기는
    단계를 전부 읽는다. 지금 단계가 정해진 뒤(`:has(li.on)`)에만 숨겨 빈 목록이 비치지 않게, 움직임 줄이기는 전부 그대로.
    옛 규칙(landing-responsive `li:not(.on) span{display:none}`)은 낭독기까지 지우고 움직임 줄이기에서도 설명을 숨겨 되살린다. */
 .lp .steps li:not(.on) span{display:inline}
-.lp.js:not(.rm) .steps:has(li.on) li:not(.on)>*{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-.lp .ai-card .bf,.lp .ai-card .ln .warn{display:none}
-.lp .ai-card{padding:14px 14px;gap:7px}
-.lp .two,.lp .two.rev,.lp .two.half{padding-top:68px}
+.lp.js:not(.rm) .pin:not([data-play]) .steps:has(li.on) li:not(.on)>*{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.lp .pin:not([data-play]) .two{padding-top:68px}
 }
 .lp.rm .asst-scene .steps li{color:var(--ink)}
 .lp .h3{font-weight:800;letter-spacing:-.04em}
@@ -76,8 +80,15 @@
 .lp .kb .kc .mic{color:var(--purple)}
 /* 선언문 — 라벤더 면 */
 .lp .pin.state{background:var(--lav)}
+/* 빈 라벤더 면을 쓰게 — 글을 키워 폭을 채우고 아래에 두 줄 설명(먼저 보이는 화면 / 뒤에서 처리하는 일). 아직 안 읽은 낱말도 읽히는 농도로. */
+.lp .words-box{width:min(1240px,100% - var(--wpad) * 2);display:grid;gap:clamp(36px,6vh,64px)}
+.lp .words-box .words{width:auto;font-size:clamp(30px,4.7vw,76px)}
 .lp .words{font-weight:800;letter-spacing:-.06em}
-.lp .words span{color:color-mix(in srgb,var(--ink) calc(var(--w) * 100%),#b3a7dc)}
+.lp .words span{color:color-mix(in srgb,var(--ink) calc(var(--w) * 100%),#75689f)}
+.lp .words-legend{margin:0;display:grid;grid-template-columns:1fr 1fr;gap:28px;border-top:2px solid var(--flag-ink);padding-top:18px}
+.lp .words-legend dt{font-size:14px;font-weight:800}
+.lp .words-legend dd{margin:4px 0 0;font-size:clamp(17px,1.4vw,21px);color:#3a3157}
+@media (max-width:560px){.lp .words-legend{grid-template-columns:1fr;gap:14px}}
 .lp:not(.js) .words span,.lp.rm .words span{color:var(--ink)}
 /* 장면 B — 상담 분석(잉크 면) */
 .lp .pin.dark{background:var(--flag-ink)}
@@ -91,6 +102,9 @@
 .lp .tag.a{background:rgba(244,190,140,.2);color:var(--peach)}
 .lp .tag.r{background:rgba(255,160,140,.2);color:#ffb3a3}
 .lp .ai-card .ln .warn{color:var(--peach)}
+/* 움직임 줄이기·JS 전에는 상담 카드 줄의 흐림까지 푼다(옛 규칙은 opacity·transform만 풀었다 — 재생기가 없는 상태라 CSS가 유일한 길) */
+.lp:not(.js) .ai-card .ln,.lp.rm .ai-card .ln{filter:none}
+.lp .light button:focus-visible{outline-color:var(--flag-lime)}
 /* 메뉴 — 업무별 네 묶음 목록(카드·아이콘 없이). 넷째 묶음(새로 더한 기능)만 라임 면으로 */
 .lp .sec.alt{background:var(--bg2)}
 .lp .menu-cols{display:grid;grid-template-columns:repeat(4,1fr);border-top:2px solid var(--flag-ink)}
