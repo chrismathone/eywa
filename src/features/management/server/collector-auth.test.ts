@@ -2,13 +2,15 @@
 import {beforeEach,expect,it,vi} from "vitest";
 const m=vi.hoisted(()=>({from:vi.fn(),read:vi.fn(),write:vi.fn(),settings:vi.fn()}));
 vi.mock("@/lib/supabase/admin",()=>({createAdminClient:()=>({from:m.from})}));
+const sw=vi.hoisted(()=>({on:true}));
+vi.mock("../collector-switch",()=>({isCollectorDeployed:()=>sw.on}));
 vi.mock("@/features/owner/server/queries",()=>({getTenantSettingsByTenantId:m.settings}));
 vi.mock("@/lib/permissions",async(importOriginal)=>({...await importOriginal<typeof import("@/lib/permissions")>(),canAccess:m.read,canWrite:m.write}));
 import {collectorAccess,newCollectorIdentity,parseCollectorToken,tokenHash} from "./collector-auth";
 const identity=newCollectorIdentity(),tenant="becaa316-e636-42e9-9d09-08b133e0b094",actor="94007db7-12d3-4b5d-97f2-39071446536b";
 let row:Record<string,unknown>,owner:Record<string,unknown>|null,touches:unknown[],queries:{table:string;op:string;args:unknown[]}[],deviceError:unknown,toggle:{collector_enabled:boolean}|null;
 beforeEach(()=>{
-  vi.clearAllMocks();m.read.mockReturnValue(true);m.write.mockReturnValue(true);toggle={collector_enabled:true};m.settings.mockResolvedValue({permissions:{overrides:[],userOverrides:[]},modules:{disabled:[]}});
+  vi.clearAllMocks();sw.on=true;m.read.mockReturnValue(true);m.write.mockReturnValue(true);toggle={collector_enabled:true};m.settings.mockResolvedValue({permissions:{overrides:[],userOverrides:[]},modules:{disabled:[]}});
   row={id:identity.id,tenant_id:tenant,created_by:actor,secret_hash:identity.hash,expires_at:new Date(Date.now()+60_000).toISOString(),revoked_at:null};
   owner={id:actor,tenant_id:tenant,status:"active",system_role:"master"};touches=[{id:identity.id}];queries=[];deviceError=null;
   m.from.mockImplementation((table:string)=>{
@@ -43,4 +45,5 @@ it("rejects a malformed bearer without reading the DB",async()=>{
 it.each([null,{collector_enabled:false}])("🔴 지점 스위치가 꺼져 있으면(%j) 원장 확인 전에 거절한다",async(value)=>{
   toggle=value;await expect(collectorAccess(`Bearer ${identity.token}`)).rejects.toMatchObject({status:403,code:"collector_disabled"});expect(m.from).not.toHaveBeenCalledWith("users");expect(queries.some(q=>q.op==="update")).toBe(false);
 });
+it("🔴 배포 스위치가 꺼져 있으면 토큰이 맞아도 DB를 읽기 전에 거절한다",async()=>{sw.on=false;await expect(collectorAccess(`Bearer ${identity.token}`,true)).rejects.toMatchObject({status:403,code:"collector_disabled"});expect(m.from).not.toHaveBeenCalled();});
 it("설정을 못 읽으면 닫힌 쪽(503)",async()=>{m.settings.mockRejectedValue(Error("x"));await expect(collectorAccess(`Bearer ${identity.token}`)).rejects.toMatchObject({status:503});});

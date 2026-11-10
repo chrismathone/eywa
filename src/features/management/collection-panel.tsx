@@ -10,9 +10,10 @@ const value = (v: number | null, unit: string) => v === null ? "비교 제외" :
 
 /**
  * 자료 수집함 — 파일 선택 → 서버 검증(미리보기 · 저장 없음) → 대조 기록 저장 → 원본 대사·확인 업무.
+ * 학원 PC 수집기 패널은 배포 스위치(collector-switch.ts)가 켜졌을 때만 · ECOUNT 대조는 계정 분류표가 맞는 지점에서만 선다.
  * 저장은 미리보기와 같은 파일을 서버가 다시 계산해 지문이 같을 때만(`/api/management/collection`). 청구·납부 내역은 고치지 않는다.
  */
-export function CollectionPanel({ month }: { month: string }) {
+export function CollectionPanel({ month, collectorAvailable, ecountAllowed }: { month: string; collectorAvailable: boolean; ecountAllowed: boolean }) {
   const router = useRouter();
   const [source, setSource] = useState<"makeedu" | "ecount">("makeedu"), [file, setFile] = useState<File>(), [scope, setScope] = useState(false), [fullScope, setFullScope] = useState(false);
   const [plan, setPlan] = useState<Plan | null>(null), [busy, setBusy] = useState(false), [message, setMessage] = useState("");
@@ -32,8 +33,8 @@ export function CollectionPanel({ month }: { month: string }) {
   }
   return <section id="collection" className={s.panel}><div className={s.sectionTitle}><h2>자료 수집함</h2><span>파일 선택 → 검증 → 이력 저장 → 확인 업무</span></div>
     <p>원본 파일을 직접 올립니다(원본 사이트에서 내려받는 일은 수동입니다). 같은 파일·같은 비교 자료는 중복 저장하지 않으며 청구·납부 내역을 자동으로 고치지 않습니다.</p>
-    <CollectorPanel/>
-    <div className={s.inputs}><label>자료 종류<select disabled={busy} value={source} onChange={e => { setSource(e.target.value as typeof source); setScope(false); setFullScope(false); setFile(undefined); reset(); }}><option value="makeedu">MakeEdu 수납통합내역</option><option value="ecount">ECOUNT 월별손익분석</option></select></label>
+    {collectorAvailable ? <CollectorPanel/> : null}
+    <div className={s.inputs}><label>자료 종류<select disabled={busy} value={source} onChange={e => { setSource(e.target.value as typeof source); setScope(false); setFullScope(false); setFile(undefined); reset(); }}><option value="makeedu">MakeEdu 수납통합내역</option>{ecountAllowed ? <option value="ecount">ECOUNT 월별손익분석</option> : null}</select></label>
       <label>원본 엑셀 파일<input key={source} type="file" accept=".xlsx" disabled={busy} onChange={e => { setFile(e.target.files?.[0]); reset(); }}/></label></div>
     {source === "makeedu" ? <p>청구월 <strong>{month}</strong>로 비교합니다(다른 달은 위 운영 분석 월을 바꿔 주세요). MakeEdu 수납통합내역에서 전체원생·전체수납, 이전달 미납 제외로 출력한 파일이 필요합니다. 파일에 월 정보가 없어 조회 조건 확인이 필요합니다.</p> : <p>엑셀 안의 월별 기간을 사용합니다. 같은 회사·월의 계정별원장이 먼저 저장되어 있어야 합니다. <a href="#accounting">계정별원장 CSV 먼저 가져오기 →</a></p>}
     <label className={s.confirm}><input type="checkbox" disabled={busy} checked={scope} onChange={e => { setScope(e.target.checked); reset(); }}/> 현재 학원의 원본 자료임을 확인했습니다.</label>

@@ -2,11 +2,13 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { accountingSchema, accountingTotals } from "../model";
 import { managementAccess } from "./access";
+import { requireAccountingImport } from "./accounting-scope";
 import { ManagementInputError } from "../errors";
 import { logDbError } from "@/lib/supabase/db-error";
 
 export async function saveAccounting(input:unknown,expectedVersion:number) {
   const user=await managementAccess(true);
+  await requireAccountingImport(user.tenantId);
   const report=accountingSchema.parse(input);
   if(report.complete&&!accountingTotals(report).ready)throw new ManagementInputError("대사가 맞지 않는 자료는 검토 대기 상태로 저장해 주세요");
   const result=await createAdminClient().rpc("save_management_accounting",{

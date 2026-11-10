@@ -16,7 +16,31 @@ export const accountingLineSchema = z.object({
   key: z.string().min(1).max(120), account: z.string().min(1).max(160),
   category: z.enum(accountCategories), amount: z.number().int().min(-1e12).max(1e12),
   sourceCell: z.string().min(1).max(120),
+  // 원장 집계 줄만: 차변·대변 원액과 **원본 계정의 방향**(가져올 때 정해지고 바뀌지 않는다) — 분류를 바꾸면 이 원액에서 금액을 다시 계산한다(`lineAmount`).
+  debit: z.number().int().min(-1e12).max(1e12).optional(), credit: z.number().int().min(-1e12).max(1e12).optional(),
+  normal: z.enum(["debit", "credit"]).optional(),
 }).strict();
+type LedgerSide = { category: AccountCategory; debit?: number; credit?: number; normal?: "debit" | "credit" };
+/** 그 분류에서 금액을 읽는 쪽 — 매출은 대변, 비용(인건비·광고·임차·기타)은 차변. 영업외·집계 제외는 원본 계정의 방향(`normal`) 그대로. */
+export function normalSideOf(line: LedgerSide): "debit" | "credit" {
+  if (line.category === "revenue") return "credit";
+  if (line.category === "nonoperating" || line.category === "exclude") return line.normal ?? "debit";
+  return "debit";
+}
+/** 원액이 있는 줄(원장 집계)의 금액 = 정상잔액 방향의 순액. 원액이 없는 줄(손익계산서)은 null — 적힌 금액을 그대로 쓴다. */
+export function lineAmount(line: LedgerSide): number | null {
+  if (line.debit === undefined || line.credit === undefined) return null;
+  return normalSideOf(line) === "credit" ? line.credit - line.debit : line.debit - line.credit;
+}
+/**
+ * 분류를 바꾼 줄 — 원액이 있으면 새 분류의 방향으로 금액을 다시 계산한다(미분류 대변 매출 100 → 매출로 바꾸면 +100 · 비용이면 −100).
+ * 원본 방향(`normal`)은 건드리지 않는다 — 분류를 여러 번 오가도 같은 분류면 같은 금액이다.
+ */
+export function reclassifyLine<T extends LedgerSide & { amount: number }>(line: T, category: AccountCategory): T {
+  const next = { ...line, category };
+  const amount = lineAmount(next);
+  return amount === null ? next : { ...next, amount };
+}
 export const accountingSchema = z.object({
   company: z.string().trim().min(1).max(160), start: dateSchema, end: dateSchema,
   sourceName: z.string().min(1).max(200), sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
@@ -35,6 +59,7 @@ export const accountingSchema = z.object({
   if (v.start > v.end) ctx.addIssue({ code: "custom", message: "기간 순서를 확인해 주세요" });
   if (new Set(v.lines.map(l => l.key)).size !== v.lines.length) ctx.addIssue({ code: "custom", message: "중복 원본 행이 있습니다" });
   if (v.complete && [v.reportedRevenue, v.reportedOperatingCost, v.reportedOperatingProfit].some(x => x === null)) ctx.addIssue({ code: "custom", message: "완전한 손익 자료에는 원본 매출·영업비용·영업이익 합계가 필요합니다" });
+  if (v.lines.some(l => (l.debit === undefined) !== (l.credit === undefined) || (lineAmount(l) !== null && lineAmount(l) !== l.amount))) ctx.addIssue({ code: "custom", message: "원장 금액이 차변·대변 원액과 맞지 않습니다. 파일을 다시 가져와 주세요" });
   if (v.sourceKind === "ledger" && (!v.ledgerInfo || v.complete)) ctx.addIssue({ code: "custom", message: "원장 집계는 원본 정보와 함께 검토 대기로 저장해야 합니다" });
 });
 export type AccountingLine = z.infer<typeof accountingLineSchema>;
@@ -92,5 +117,8 @@ export type ManagementSnapshot = {
   sources: { name: string; state: string; updatedAt: string | null; note: string }[];
   teachers: { id: string; label: string; students: number; courses: number }[];
   channels: { label: string; inquiries: number; registered: number }[];
-  graph: KnowledgeGraph; reviewBatches: ReviewBatch[];
+  /** 예시 화면(sample-data)만 채운다 — 실제 조회는 그래프를 만들지 않는다. */
+  graph?: KnowledgeGraph; reviewBatches: ReviewBatch[];
 };
+/** 저장된 회계 자료 전 기간의 버전 색인(본문 없이) — 저장할 때 기대 버전을 여기서 찾는다. */
+export type ReportIndexRow = { start: string; end: string; kind: "ledger" | "profit_loss"; version: number };

@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { beforeEach, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ access: vi.fn(), from: vi.fn(), enabled: vi.fn() }));
+const m = vi.hoisted(() => ({ access: vi.fn(), from: vi.fn(), enabled: vi.fn(), log: vi.fn(), deployed: true }));
+vi.mock("@/features/management/collector-switch", () => ({ isCollectorDeployed: () => m.deployed }));
+vi.mock("@/features/audit/server/log", () => ({ logAction: m.log }));
 vi.mock("@/features/management/server/access", () => ({ managementAccess: m.access, ManagementAccessError: class extends Error {} }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: m.from }) }));
 vi.mock("@/features/management/server/collector-auth", async (importOriginal) => ({ ...await importOriginal<typeof import("@/features/management/server/collector-auth")>(), collectorEnabled: m.enabled }));
@@ -9,7 +11,7 @@ import { GET, POST } from "./route";
 let writes: Record<string, unknown>[], calls: { table: string; op: string; args: unknown[] }[];
 const req = (body: unknown, origin = collectorOrigin) => new Request(`${collectorOrigin}/api/management/collector-devices`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify(body) });
 beforeEach(() => {
-  vi.clearAllMocks(); writes = []; calls = [];
+  vi.clearAllMocks(); writes = []; calls = []; m.deployed = true;
   m.access.mockResolvedValue({ id: "owner", tenantId: "verified-tenant" }); m.enabled.mockResolvedValue(true);
   m.from.mockImplementation((table: string) => {
     const q: Record<string, unknown> = {};
@@ -26,6 +28,21 @@ it("🔴 꺼져 있으면(기본) 연결 파일을 발급하지 않는다", asyn
   m.enabled.mockResolvedValue(false);
   expect((await POST(req({ action: "create", name: "PC", scopeConfirmed: true }))).status).toBe(409);
   expect(writes).toHaveLength(0);
+});
+it("🔴 배포 스위치가 꺼져 있으면 켜기·발급을 거절하고 끄기·해제만 받는다", async () => {
+  m.deployed = false;
+  expect((await POST(req({ action: "enable", enabled: true }))).status).toBe(409);
+  expect((await POST(req({ action: "create", name: "PC", scopeConfirmed: true }))).status).toBe(409);
+  expect(writes).toHaveLength(0);
+  expect((await (await GET()).json())).toMatchObject({ available: false, enabled: false });
+  expect((await POST(req({ action: "enable", enabled: false }))).status).toBe(200);
+});
+it("켜기·끄기·발급·해제를 감사로그에 남기고 토큰 원문은 남기지 않는다", async () => {
+  const r = await POST(req({ action: "create", name: "PC", scopeConfirmed: true })), j = await r.json();
+  await POST(req({ action: "enable", enabled: true }));
+  expect(m.log.mock.calls.map((c) => c[0].metadata.summary)).toEqual(["수집 PC 연결 파일 발급", "PC 수집기 켜기"]);
+  expect(JSON.stringify(m.log.mock.calls)).not.toContain(j.token.split(".")[1]);
+  expect(m.log.mock.calls.every((c) => c[0].action === "management_collector_manage")).toBe(true);
 });
 it("다른 출처 · 권한 없는 요청은 막는다", async () => {
   expect((await POST(req({ action: "create", name: "PC", scopeConfirmed: true }, "https://foreign"))).status).toBe(403);

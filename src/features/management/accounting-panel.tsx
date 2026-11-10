@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { accountingTotals, accountCategories, categoryLabels, type AccountingDraft, type AccountingReport, type ManagementSnapshot } from "./model";
+import { accountingTotals, accountCategories, categoryLabels, periodBounds, reclassifyLine, type AccountingDraft, type AccountingReport, type ManagementSnapshot, type ReportIndexRow } from "./model";
 import { ReportedFinancialPanel } from "./reported-financial-panel";
 import { HiringPanel } from "./hiring-panel";
 import s from "./workspace.module.css";
@@ -13,10 +13,14 @@ const won = (n: number | null) => n === null ? "자료 필요" : `${number(n)}�
  * ECOUNT 회계 손익 — 손익계산서 .xlsx / 계정별원장 .csv 미리보기(서버가 읽기만) → 원장이 회사·기간 확인 + 계정 분류 검토 → 저장(같은 기간은 새 버전).
  * 원장 집계는 늘 '검토 대기'로만 저장된다(확정 이익률·채용 계산에 쓰지 않는다).
  */
-export function AccountingPanel({ data }: { data: ManagementSnapshot }) {
+export function AccountingPanel({ data, reportIndex, importAllowed }: { data: ManagementSnapshot; reportIndex: readonly ReportIndexRow[]; importAllowed: boolean }) {
   const router = useRouter();
   const [draft, setDraft] = useState<AccountingDraft | null>(null), [ledgerDrafts, setLedgerDrafts] = useState<AccountingDraft[]>([]), [busy, setBusy] = useState(false), [message, setMessage] = useState("");
-  const [reportId, setReportId] = useState(data.reports.find(r => r.document.start === `${data.month}-01`)?.id ?? data.reports[0]?.id ?? "");
+  // 첫 선택 = 그 달과 기간이 똑같은 자료(손익계산서 먼저 · 조회의 월 손익 판정과 같은 규칙) → 없으면 목록 맨 위(그 달을 품은 연간·누적 보고서 등).
+  const [reportId, setReportId] = useState(() => {
+    const bounds = periodBounds(data.month), exact = data.reports.filter(r => r.document.start === bounds.start && r.document.end === bounds.end);
+    return (exact.find(r => r.document.sourceKind !== "ledger") ?? exact[0] ?? data.reports[0])?.id ?? "";
+  });
   const selected = data.reports.find(r => r.id === reportId) ?? data.reports[0], totals = selected ? accountingTotals(selected.document) : null;
   async function preview(file: File | undefined) {
     if (!file) return;
@@ -33,24 +37,26 @@ export function AccountingPanel({ data }: { data: ManagementSnapshot }) {
     if (!draft?.scopeConfirmed) return;
     setBusy(true); setMessage("");
     const kind = (k?: string) => k === "ledger" ? "ledger" : "profit_loss";
-    const version = data.reports.find(r => r.document.start === draft.start && r.document.end === draft.end && kind(r.document.sourceKind) === kind(draft.sourceKind))?.version ?? 0;
+    // 저장된 전 기간의 버전 색인에서 찾는다(화면에 본문을 실은 최근 자료만 보면 오래된 기간이 '버전 충돌'로 거절된다).
+    const version = reportIndex.find(r => r.start === draft.start && r.end === draft.end && r.kind === kind(draft.sourceKind))?.version ?? 0;
     try {
       const r = await fetch("/api/management/accounting", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ document: draft, expectedVersion: version }) }), json = await r.json().catch(() => ({}));
       if (!r.ok) throw Error(json.error ?? "저장하지 못했습니다");
       setDraft(null); setLedgerDrafts([]); setMessage(json.saved?.unchanged ? "이미 같은 내용이 저장되어 있습니다." : "손익 자료를 저장했습니다."); router.refresh();
     } catch (e) { setMessage(e instanceof Error ? e.message : "저장하지 못했습니다"); } finally { setBusy(false); }
   }
-  return <section id="accounting"><div className={s.sectionTitle}><h2>ECOUNT 회계 손익</h2><label className={s.upload}>{busy ? "처리 중…" : "손익 엑셀·원장 CSV 가져오기"}<input aria-label="ECOUNT 회계 파일" type="file" accept=".xlsx,.csv" disabled={busy} onChange={e => { void preview(e.target.files?.[0]); e.target.value = ""; }}/></label></div>
+  return <section id="accounting"><div className={s.sectionTitle}><h2>ECOUNT 회계 손익</h2>{importAllowed ? <label className={s.upload}>{busy ? "처리 중…" : "손익 엑셀·원장 CSV 가져오기"}<input aria-label="ECOUNT 회계 파일" type="file" accept=".xlsx,.csv" disabled={busy} onChange={e => { void preview(e.target.files?.[0]); e.target.value = ""; }}/></label> : null}</div>
+    {importAllowed ? null : <p className={s.notice}>이 지점은 ECOUNT 회계 자료 가져오기가 꺼져 있습니다(계정 분류표 확인 전) — 사용하려면 운영사에 문의하세요. 청구·수납·수강 지표와 MakeEdu 대조는 그대로 쓸 수 있습니다.</p>}
     <p>원본 회사명과 기간을 그대로 보존합니다. 청구액과 회계 매출은 합산하지 않습니다. 연간·누적 보고서는 월별로 나누지 않습니다.</p>
     {message ? <p role="status" className={s.notice}>{message}</p> : null}
     <ReportedFinancialPanel view={data.reportedFinancials}/>
     {ledgerDrafts.length > 0 ? <label>원장 검토 월 <select aria-label="원장 검토 월" value={draft?.start ?? ""} onChange={e => setDraft(ledgerDrafts.find(d => d.start === e.target.value) ?? null)}><option value="" disabled>검토할 월 선택</option>{ledgerDrafts.map(d => <option key={d.start} value={d.start}>{d.start} ~ {d.end}</option>)}</select> <small>총 {ledgerDrafts.length}개 월 · 고른 월을 검토한 뒤 저장합니다.</small></label> : null}
     {draft ? <article className={s.panel}><h3>가져오기 검토</h3><p>{draft.company} · {draft.start} ~ {draft.end}</p><p>{draft.sourceName} · {draft.lines.length}개 계정 행{draft.sourceKind !== "ledger" ? ` · 원본 영업손익 ${won(draft.reportedOperatingProfit)}` : " · 원장 월별 집계"}</p>
       <Reconciliation report={{ ...draft, scopeConfirmed: true } as AccountingReport}/><p>계정별 비용 분류를 확인해 주세요. 같은 기간은 기존 자료를 새 버전으로 바꾸며 이전 버전은 보관합니다.</p>
-      <div className={s.tableScroll}><table><thead><tr><th>원본 계정</th><th>금액</th><th>경영 분류</th></tr></thead><tbody>{draft.lines.map((line, i) => <tr key={line.key}><td>{line.account}<small>{line.sourceCell}</small></td><td>{won(line.amount)}</td><td><select aria-label={`${line.account} 분류`} value={line.category} onChange={e => setDraft({ ...draft, lines: draft.lines.map((l, j) => i === j ? { ...l, category: e.target.value as typeof l.category } : l) })}>{accountCategories.map(c => <option key={c} value={c}>{categoryLabels[c]}</option>)}</select></td></tr>)}</tbody></table></div>
+      <div className={s.tableScroll}><table><thead><tr><th>원본 계정</th><th>금액</th><th>경영 분류</th></tr></thead><tbody>{draft.lines.map((line, i) => <tr key={line.key}><td>{line.account}<small>{line.sourceCell}</small></td><td>{won(line.amount)}</td><td><select aria-label={`${line.account} 분류`} value={line.category} onChange={e => setDraft({ ...draft, lines: draft.lines.map((l, j) => i === j ? reclassifyLine(l, e.target.value as typeof l.category) : l) })}>{accountCategories.map(c => <option key={c} value={c}>{categoryLabels[c]}</option>)}</select></td></tr>)}</tbody></table></div>
       <label className={s.confirm}><input type="checkbox" checked={draft.scopeConfirmed} onChange={e => setDraft({ ...draft, scopeConfirmed: e.target.checked })}/> 이 회사·기간의 자료가 현재 학원에 해당함을 확인했습니다.</label>
       <button disabled={busy || !draft.scopeConfirmed} onClick={() => void save()}>{draft.complete ? "검토한 자료 저장" : "검토 대기 자료 저장"}</button> <button className={s.secondary} disabled={busy} onClick={() => { setDraft(null); setLedgerDrafts([]); }}>취소</button></article> : null}
-    <details><summary>가져온 원장·보고서의 최초 분류 기록</summary><p>가져오기 당시 분류와 검산 기록입니다. 최신 보고서 기준 손익과 확인 사항은 위에 표시합니다.</p>
+    <details><summary>가져온 원장·보고서의 최초 분류 기록</summary><p>가져오기 당시 분류와 검산 기록입니다. 선택한 달에 걸친 기간과 최근 12개 기간을 보여 줍니다 — 더 오래된 기간은 위 운영 분석 월에서 그 기간의 시작 달을 골라 조회하세요.</p>
       {selected && totals ? <article className={s.panel}><label htmlFor="report-select">보고서 기간 </label><select id="report-select" value={selected.id} onChange={e => setReportId(e.target.value)}>{data.reports.map(r => <option key={r.id} value={r.id}>{r.document.start} ~ {r.document.end} · {r.document.sourceKind === "ledger" ? "원장" : "손익계산서"}</option>)}</select><p>{selected.document.company}</p>
         <div className={s.bridge}><div><span>{selected.document.sourceKind === "ledger" ? "분류된 원장 매출(검토 중)" : "보고서 매출"}</span><strong>{won(selected.document.sourceKind === "ledger" ? totals.revenue : selected.document.reportedRevenue)}</strong></div><div><span>{selected.document.sourceKind === "ledger" ? "분류된 원장 영업비용(검토 중)" : "보고서 영업비용"}</span><strong>{won(selected.document.sourceKind === "ledger" ? totals.cost : selected.document.reportedOperatingCost)}</strong></div><div><span>보고서 영업손익</span><strong>{won(selected.document.reportedOperatingProfit)}</strong></div><div><span>영업이익률</span><strong>{totals.margin === null ? "대사 후 제공" : `${number(totals.margin, 1)}%`}</strong></div><div><span>분류 기준 인건비율</span><strong>{totals.laborRatio === null ? "대사 후 제공" : `${number(totals.laborRatio, 1)}%`}</strong></div></div>
         <Reconciliation report={selected.document}/><p className={s.muted}>{selected.document.sourceKind === "ledger" ? "월별 손익 마감 대기" : `원본 합계 대사 ${totals.reconciled ? "일치" : "불일치"}`} · v{selected.version} · {selected.document.sourceName}</p>

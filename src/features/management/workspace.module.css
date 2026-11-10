@@ -99,6 +99,9 @@
 .upload { display: inline-flex; flex-direction: column; gap: 4px; font-size: 13px; cursor: pointer; }
 .upload input { font-size: 12px; max-width: 230px; border: 0; padding: 0; background: transparent; color: inherit; }
 .upload:has(input:disabled) { background: var(--wash); color: var(--muted); border-color: var(--line); cursor: not-allowed; }
+/* 차트가 한 칸씩 셋뿐일 때(visual-summary.tsx) — 차트 격자가 2열인 폭(analytics.module.css 681~1100px)에서만 마지막 카드를 두 칸으로. */
+.lastChart { display: grid; min-width: 0; }
+@media (min-width: 681px) and (max-width: 1100px) { .lastChart { grid-column: span 2; } }
 .answer { display: grid; gap: 10px; margin-top: 10px; }
 .answer article { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--wash); }
 .answer article p { margin: 4px 0; color: var(--ink-2); }

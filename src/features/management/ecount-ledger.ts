@@ -1,10 +1,12 @@
 import {createHash} from "node:crypto";
 import {ManagementInputError} from "./errors";
-import {dateSchema,periodBounds,type AccountingDraft,type AccountingReport} from "./model";
+import {dateSchema,lineAmount,periodBounds,type AccountingDraft,type AccountingReport} from "./model";
 
 type Category=AccountingReport["lines"][number]["category"];
 type Transaction={record:number;date:string;debit:number;credit:number;balance:number};
-type Section={code:string;name:string;header:number;headerSeen:boolean;openingSeen:boolean;opening:{debit:number;credit:number;balance:number};total:{debit:number;credit:number;balance:number}|null;transactions:Transaction[]};
+type Section={code:string;name:string;header:number;headerSeen:boolean;openingSeen:boolean;opening:{debit:number;credit:number;balance:number};total:{debit:number;credit:number;balance:number}|null;transactions:Transaction[];
+  /** 잔액이 차변으로 늘면 debit · 대변으로 늘면 credit · 잔액으로 가릴 수 없으면 null(전 거래 순액 0 = 어느 쪽이든 금액 0, 또는 잔액 검산 불일치 = unverified). 계정 단위 — 달마다 바뀌지 않는다. */
+  side:"debit"|"credit"|null;unverified:boolean;sums:{debit:number;credit:number}};
 // Explicit account codes from the authorized tenant's chart. Unknown codes remain visible.
 const groups:Record<Category,readonly string[]>={
   revenue:["100030","100233","400010","400012","400020","400031","4019"],
@@ -51,7 +53,7 @@ export function parseEcountLedger(buffer:Buffer,sourceName:string):{documents:Ac
       if(a>b||company&&(company!==match[1]!.trim()||start!==a||end!==b))throw new ManagementInputError("서로 다른 회사 또는 조회기간이 섞여 있습니다");
       if(sections.some(s=>s.code===match[4]))throw new ManagementInputError("중복 계정 구간이 있습니다. 파일을 합치지 않고 원본으로 올려 주세요");
       company=match[1]!.trim();start=a;end=b;
-      current={code:match[4]!,name:match[5]!.trim(),header:record,headerSeen:false,openingSeen:false,opening:{debit:0,credit:0,balance:0},total:null,transactions:[]};sections.push(current);continue;
+      current={code:match[4]!,name:match[5]!.trim(),header:record,headerSeen:false,openingSeen:false,opening:{debit:0,credit:0,balance:0},total:null,transactions:[],side:null,unverified:false,sums:{debit:0,credit:0}};sections.push(current);continue;
     }
     if(!current)throw new ManagementInputError("ECOUNT 계정별원장 CSV 양식이 아닙니다");
     if(row[0]==="일자-No."){
@@ -83,14 +85,27 @@ export function parseEcountLedger(buffer:Buffer,sourceName:string):{documents:Ac
     if(section.total&&(section.total.debit!==debit+section.opening.debit||section.total.credit!==credit+section.opening.credit))controlsMatched=false;
     // Verify the running balance with either debit-normal or credit-normal convention.
     const validBalance=(sign:number)=>{let balance=section.opening.balance;for(const t of section.transactions){balance+=sign*(t.debit-t.credit);if(balance!==t.balance)return false;}return !section.total||section.total.balance===balance;};
-    if(!validBalance(1)&&!validBalance(-1))controlsMatched=false;
+    const debitSide=validBalance(1),creditSide=validBalance(-1);
+    if(!debitSide&&!creditSide)controlsMatched=false;
+    section.side=debitSide===creditSide?null:creditSide?"credit":"debit";section.unverified=!debitSide&&!creditSide;section.sums={debit,credit};
   }
   if(totalDebit!==totalCredit)controlsMatched=false;
   if(!transactionCount)throw new ManagementInputError("거래가 없는 원장입니다");
   const unclassifiedCodes=sections.filter(s=>!mapping.has(s.code)&&s.transactions.length).map(s=>s.code);
   const warnings=["이월잔액·합계·잔액은 월 거래금액에서 제외했습니다. 거래일은 비용 귀속월과 다를 수 있습니다.","원장 내부 합계 일치는 회계 마감 완료 또는 손익계산서 일치를 의미하지 않습니다.","회사 전체 계정입니다. 학원·임대사업 구분과 공통비 배부를 확인해야 합니다."];
   if(!controlsMatched)warnings.push("원장 계정 합계·잔액 또는 차변/대변 검산이 맞지 않습니다.");
-  if(unclassifiedCodes.length)warnings.push(`분류 확인 계정: ${unclassifiedCodes.join(", ")}. 현재 손익 집계에서 제외했습니다.`);
+  if(unclassifiedCodes.length)warnings.push(`분류 확인 계정: ${unclassifiedCodes.join(", ")}. 현재 손익 집계에서 제외했습니다.`.slice(0,300));
+  // 원본 계정의 방향(계정 단위 · 전 기간 공통): 매출·영업외수익 코드 = 대변 → 잔액 검산으로 확인한 쪽 → 분류표에 있는 그 밖의 코드 = 차변 → (분류표에 없고 잔액으로도 못 가리면) 전 기간 거래가 더 실린 쪽.
+  const incomeCodes=["9019","9189","9199","9289"];
+  const normalOf=(section:Section):"debit"|"credit"=>{
+    if(mapping.get(section.code)==="revenue"||incomeCodes.includes(section.code))return "credit";
+    if(section.side)return section.side;
+    if(mapping.has(section.code))return "debit";
+    return section.sums.credit>section.sums.debit?"credit":"debit";
+  };
+  // 분류표에 없고 잔액 검산도 안 맞는 계정은 방향을 짐작한 것이다(합계가 같아도) — 경고에 올린다. 전 거래 순액 0(양쪽 다 맞음)은 금액이 0이라 올리지 않는다.
+  const guessed=sections.filter(s=>s.transactions.length&&!mapping.has(s.code)&&s.unverified).map(s=>s.code);
+  if(guessed.length)warnings.push(`차변·대변 방향을 잔액으로 확인하지 못한 계정: ${guessed.join(", ")}. 거래가 더 실린 쪽으로 표시했으니 분류 전에 부호를 확인하세요.`.slice(0,300));
   const first=new Date(start+"T00:00:00Z"),last=end.slice(0,7),months:string[]=[];
   first.setUTCDate(1);for(;first.toISOString().slice(0,7)<=last;first.setUTCMonth(first.getUTCMonth()+1)){if(months.length>=60)throw new ManagementInputError("조회기간은 60개월 이하로 나눠 주세요");months.push(first.toISOString().slice(0,7));}
   const sourceHash=createHash("sha256").update(buffer).digest("hex");
@@ -101,7 +116,11 @@ export function parseEcountLedger(buffer:Buffer,sourceName:string):{documents:Ac
     if(missingSalary.length)monthWarnings.push(`이 월에 급여 거래가 없는 계정: ${missingSalary.join(", ")}. 누락·지급월 차이를 확인하세요.`);
     const draft:AccountingDraft={company,start:bounds.start<start?start:bounds.start,end:bounds.end>end?end:bounds.end,sourceName,sourceHash,sourceKind:"ledger",reportedRevenue:null,reportedOperatingCost:null,reportedOperatingProfit:null,scopeConfirmed:false,complete:false,
       ledgerInfo:{sourceStart:start,sourceEnd:end,accountCount:sections.length,transactionCount:monthly.reduce((n,s)=>n+s.tx.length,0),totalTransactionCount:transactionCount,controlsMatched,unclassifiedCodes,warnings:monthWarnings},
-      lines:monthly.map(({section,tx})=>{const category=mapping.get(section.code)??"exclude";const creditNormal=category==="revenue"||["9019","9189","9199","9289"].includes(section.code);return {key:`ledger:${month}:${section.code}`,account:`${section.code} ${section.name}${mapping.has(section.code)?"":" (분류 확인)"}`,category,amount:tx.reduce((n,t)=>n+(creditNormal?t.credit-t.debit:t.debit-t.credit),0),sourceCell:`CSV records ${tx[0]!.record}..${tx.at(-1)!.record}; ${tx.length} entries; ${section.code}`};})};
+      lines:monthly.map(({section,tx})=>{const category=mapping.get(section.code)??"exclude";const debit=tx.reduce((n,t)=>n+t.debit,0),credit=tx.reduce((n,t)=>n+t.credit,0);
+        // 차변·대변 원액과 원본 계정의 방향(계정 단위 — normalOf)을 그대로 싣는다. 분류를 바꾸면 화면·서버가 이 원액에서 금액을 다시 계산한다(model.ts lineAmount).
+        // 🔴 금액은 저장 검증과 같은 함수로(lineAmount) — 비용 분류는 계정 방향과 무관하게 차변 순액이다(분류표의 비용 계정이 대변 잔액이어도 저장이 거절되지 않게).
+        const normal=normalOf(section);
+        return {key:`ledger:${month}:${section.code}`,account:`${section.code} ${section.name}${mapping.has(section.code)?"":" (분류 확인)"}`,category,debit,credit,normal,amount:lineAmount({category,debit,credit,normal})!,sourceCell:`CSV records ${tx[0]!.record}..${tx.at(-1)!.record}; ${tx.length} entries; ${section.code}`};})};
     return draft;
   }).filter(d=>d.lines.length);
   return {documents,summary:{accountCount:sections.length,transactionCount,start,end,debit:totalDebit,credit:totalCredit,controlsMatched,warnings}};

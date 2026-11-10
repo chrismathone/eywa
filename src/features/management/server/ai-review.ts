@@ -26,7 +26,7 @@ export async function loadLatestAiReview(tenantId: string, month: string): Promi
  */
 export async function runManagementAiReview(month: string): Promise<AiReview> {
   const user = await managementAccess(true);
-  const data = await loadManagement(month);
+  const { snapshot: data } = await loadManagement(month);
   const facts = { month: data.month, asOf: data.asOf, metrics: data.metrics.map(({ id, label, value, unit, definition }) => ({ id, label, value, unit, definition })), billingChange: data.bridge };
   const prompt = JSON.stringify(facts);
   const generated = await generateJSON<unknown>({

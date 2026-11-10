@@ -4,6 +4,7 @@ import {createAdminClient} from "@/lib/supabase/admin";
 import {fetchAllPaged} from "@/lib/supabase/batch";
 import {kstToday} from "@/lib/date-kst";
 import {managementAccess} from "./access";
+import {requireAccountingImport} from "./accounting-scope";
 import {parseMakeeduExport,compareMakeeduExport,makeeduStudentFields,makeeduInvoiceFields,sha256,type MakeeduStudent,type MakeeduInvoice} from "../makeedu-export";
 import {parseEcountMonthly,compareEcountMonthly} from "../ecount-monthly";
 import {accountingSchema,monthSchema,type StoredReport} from "../model";
@@ -30,6 +31,7 @@ export async function previewCollectionFor(user:{id:string;tenantId:string},sour
     const verified=(proofs.data??[]).flatMap(p=>sourceEvidenceSchema.parse(p.evidence).verifiedIdentities??[]);
     evidence=[compareMakeeduExport(parsed,month,sourceName,students,invoices,verified)];
   }else{
+    await requireAccountingImport(user.tenantId);
     const parsed=await parseEcountMonthly(bytes);
     const result=await db.from("management_accounting_reports").select("id,version,document,updated_at").eq("tenant_id",user.tenantId).in("period_start",parsed.documents.map(d=>`${d.month}-01`));
     if(result.error){logDbError(result.error,"management.collection_ledgers");throw new ManagementInputError("저장된 월별 원장을 읽지 못했습니다");}

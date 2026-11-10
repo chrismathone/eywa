@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { managementAccess } from "@/features/management/server/access";
 import { saveAccounting } from "@/features/management/server/store";
+import { requireAccountingImport } from "@/features/management/server/accounting-scope";
 import { failure, forbidden, noStore, sameOrigin, wrongOrigin } from "@/features/management/server/http";
 import { ManagementInputError } from "@/features/management/errors";
 
@@ -12,9 +13,11 @@ export const maxDuration = 30;
  * JSON = 원장이 검토한 한 기간 저장(버전 비교). 무거운 엑셀 해석은 이 라우트에서만 불러온다(B5).
  */
 export async function POST(request: Request) {
-  try { await managementAccess(true); } catch { return forbidden(); }
+  let user;
+  try { user = await managementAccess(true); } catch { return forbidden(); }
   if (!sameOrigin(request)) return wrongOrigin();
   try {
+    await requireAccountingImport(user.tenantId);
     if (request.headers.get("content-type")?.includes("multipart/form-data")) {
       if (Number(request.headers.get("content-length") ?? 0) > 5_500_000) throw new ManagementInputError("파일 크기는 5MB 이하로 제한됩니다");
       const form = await request.formData(), file = form.get("file");

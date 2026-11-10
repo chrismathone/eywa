@@ -6,6 +6,7 @@ import { resolveMatrix, applyUserOverrides, canAccess, canWrite } from "@/lib/pe
 import { capDisabledModules } from "@/lib/modules";
 import { applyUserMenuBlocks } from "@/lib/auth/user-menu-blocks";
 import type { CollectorResult } from "../collector-contract";
+import { isCollectorDeployed } from "../collector-switch";
 
 /** 기기 요청 오류 — `code`는 PC 프로그램이 읽는 짧은 영문 코드(화면에는 `collectorResultLabel`로만 나간다). */
 export class CollectorError extends Error { constructor(public status: number, public code: string) { super(code); } }
@@ -25,10 +26,11 @@ export async function collectorEnabled(tenantId: string): Promise<boolean> {
 
 /**
  * 기기 요청 인증 — 지점·행위자는 **기기 줄에서만** 정한다(요청 본문의 지점 값을 믿지 않는다).
- * 순서: 토큰 모양 → 기기(만료·해제·비밀 대조) → 지점 스위치 → 만든 원장이 아직 재직 중 원장 + 경영 분석·수납 쓰기·원생·직원 열람 → 마지막 접속 기록.
+ * 순서: 배포 스위치(collector-switch.ts) → 토큰 모양 → 기기(만료·해제·비밀 대조) → 지점 스위치 → 만든 원장이 아직 재직 중 원장 + 경영 분석·수납 쓰기·원생·직원 열람 → 마지막 접속 기록.
  * rateLimit=true면 같은 기기의 2초 안 연속 요청을 429로 돌려보낸다(동시 해제와도 경합하지 않게 조건부 갱신).
  */
 export async function collectorAccess(header: string | null, rateLimit = false) {
+  if (!isCollectorDeployed()) throw new CollectorError(403, "collector_disabled");
   const parsed = parseCollectorToken(header), db = createAdminClient();
   const row = await db.from("management_collection_devices").select("id,tenant_id,created_by,secret_hash,expires_at,revoked_at").eq("id", parsed.id).maybeSingle();
   if (row.error) throw new CollectorError(503, "connection_unavailable");
