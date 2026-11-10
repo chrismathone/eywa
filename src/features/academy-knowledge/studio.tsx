@@ -1,8 +1,8 @@
 "use client";
 import { EmbedLink as Link } from "@/components/embed-link";
 import { useMemo, useState } from "react";
-import { sampleSave } from "@/features/mockup/sample";
-import type { AcademyKnowledgeData } from "./sample-data";
+import { useRouter } from "next/navigation";
+import type { AcademyKnowledgeData } from "./server";
 import { liveHref } from "./routes";
 import { blueprint } from "./blueprint";
 
@@ -16,11 +16,18 @@ import s from "./studio.module.css";
 
 const labels=Object.fromEntries(entities);
 const roleLabels:Record<string,string>={output:"조회·분석",config:"설정",build:"기획·산출",input:"업무 입력",reference:"기준 사전",dictionary:"기준 사전"};
-/** 시안 — 저장 요청을 보내지 않는다. 같은 자리에 안내 문구만 띄우고, 편집 창은 닫지 않는다(false). */
-function useSave() {
-  const [message,setMessage]=useState("");
-  async function save(key:string,version:number,document:StudioDocument) {void [key,version,document];setMessage(await sampleSave());return false;}
-  return {save,busy:false,message};
+/** 항목 정의·점검 기준·참고 연결 저장 — 버전을 하나 올려 쌓는다(s2_0068). 성공하면 true(편집 창을 닫는다). */
+function useSave(data:AcademyKnowledgeData) {
+  const router=useRouter(),[busy,setBusy]=useState(false),[message,setMessage]=useState("");
+  async function save(key:string,version:number,document:StudioDocument) {
+    setBusy(true);setMessage("");
+    try {
+      const response=await fetch("/api/management/model",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key,expectedVersion:version,document,context:{month:data.month,...(data.selectedStudent?{student:data.selectedStudent}:{}),...(data.selectedTeacher?{teacher:data.selectedTeacher}:{})}})});
+      const result=await response.json().catch(()=>({}));if(!response.ok)throw Error(result.error??"저장하지 못했습니다");
+      setMessage(`저장했습니다 · 버전 ${result.version}`);router.refresh();return true;
+    } catch(e) {setMessage(e instanceof Error?e.message:"저장하지 못했습니다");return false;} finally {setBusy(false);}
+  }
+  return {save,busy,message};
 }
 function StoreNotice({data}:{data:AcademyKnowledgeData}) {return data.studio.error?<p role="alert" className={s.warning}>{data.studio.error}</p>:null;}
 
@@ -43,7 +50,7 @@ export function SchemaTab({data}:{data:AcademyKnowledgeData}) {
 }
 function FieldEditor({data,sheet,field,label,row,onClose}:{data:AcademyKnowledgeData;sheet:string;field:string;label:string;row?:StudioRow;onClose:()=>void}) {
   const original=row?.document.kind==="field"?row.document:{kind:"field" as const,sheet,field,label,required:false,note:""};
-  const [doc,setDoc]=useState(original),{save,busy,message}=useSave();
+  const [doc,setDoc]=useState(original),{save,busy,message}=useSave(data);
   return <form className={s.editor} onSubmit={async e=>{e.preventDefault();if(await save(`field:${sheet}:${field}`,row?.version??0,doc))onClose();}}><h3>{label} · 정의 편집</h3><div className={s.formGrid}><label>표시 항목명<input required maxLength={160} value={doc.label} onChange={e=>setDoc({...doc,label:e.target.value})}/></label><label className={s.check}><input type="checkbox" checked={doc.required} onChange={e=>setDoc({...doc,required:e.target.checked})}/>보완 점검에서 우선 확인할 필수 항목</label></div><label>정의·작성 방법<textarea maxLength={1200} value={doc.note} onChange={e=>setDoc({...doc,note:e.target.value})} placeholder="누가, 언제, 어떤 기준으로 기록하는지 작성하세요"/></label><div className={s.actions}><button type="submit" disabled={busy||!data.studio.canWrite}>변경 저장</button><button type="button" onClick={onClose}>닫기</button><span role="status">{message}</span></div></form>;
 }
 
@@ -78,7 +85,7 @@ export function GraphTab({data}:{data:AcademyKnowledgeData}) {
 }
 function LinkEditor({data,from,row,onClose}:{data:AcademyKnowledgeData;from:string;row?:StudioRow;onClose:()=>void}) {
   const [key]=useState(()=>row?.key??`link:${crypto.randomUUID()}`),[doc,setDoc]=useState<Extract<StudioDocument,{kind:"link"}>>(row?.document.kind==="link"?row.document:{kind:"link",from,to:"",label:"참고 관계",basis:"",date:data.today,state:"pending"});
-  const [filter,setFilter]=useState(""),{save,busy,message}=useSave();
+  const [filter,setFilter]=useState(""),{save,busy,message}=useSave(data);
   const options=data.graph.nodes.filter(n=>`${n.label} ${n.id}`.includes(filter)).slice(0,100);
   const selectedNodes=data.graph.nodes.filter(n=>n.id===doc.from||n.id===doc.to),available=[...new Map([...selectedNodes,...options].map(n=>[n.id,n])).values()];
   return <form className={s.editor} onSubmit={async e=>{e.preventDefault();if(await save(key,row?.version??0,doc))onClose();}}><h3>근거 있는 참고 관계</h3><p>기존 수강·담당·수납 기록을 바꾸지 않는 참고 연결입니다. 실제 업무 관계의 수정은 원기록 화면에서 처리하세요.</p><label>연결할 기록 검색<input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="이름 또는 기록 제목"/></label><div className={s.formGrid}>{(["from","to"] as const).map(field=><label key={field}>{field==="from"?"주체 기록":"연결할 대상"}<select required value={doc[field]} onChange={e=>setDoc({...doc,[field]:e.target.value})}><option value="">기록 선택</option>{available.map(n=><option key={n.id} value={n.id}>{n.label} · {labels[n.type]} · {n.id.slice(-6)}</option>)}</select></label>)}<label>관계 이름<input maxLength={160} required value={doc.label} onChange={e=>setDoc({...doc,label:e.target.value})}/></label><label>확인일<input type="date" required max={data.today} value={doc.date} onChange={e=>setDoc({...doc,date:e.target.value})}/></label></div><label>확인 근거·출처<textarea required minLength={5} maxLength={1500} value={doc.basis} onChange={e=>setDoc({...doc,basis:e.target.value})} placeholder="확인한 원기록, 상담 일자, 문서 위치 등"/></label><label>반영 상태<select value={doc.state} onChange={e=>setDoc({...doc,state:e.target.value as typeof doc.state})}><option value="pending">확인 대기 · 점선 표시</option><option value="confirmed">근거 확인 완료 · 실선 반영</option><option value="retired">사용 중지 · 이력 보관</option></select></label><div className={s.actions}><button disabled={busy||!data.studio.canWrite}>관계 저장</button><button type="button" onClick={onClose}>닫기</button><span role="status">{message}</span></div></form>;
@@ -98,6 +105,6 @@ export function QualityTab({data}:{data:AcademyKnowledgeData}) {
   </section>;
 }
 function ExpectationEditor({data,rule,onClose}:{data:AcademyKnowledgeData;rule:Expectation;onClose:()=>void}) {
-  const [doc,setDoc]=useState<Extract<StudioDocument,{kind:"expectation"}>>({kind:"expectation",label:rule.label,subject:rule.subject,target:rule.target,minimum:rule.minimum,active:rule.active}),{save,busy,message}=useSave();
+  const [doc,setDoc]=useState<Extract<StudioDocument,{kind:"expectation"}>>({kind:"expectation",label:rule.label,subject:rule.subject,target:rule.target,minimum:rule.minimum,active:rule.active}),{save,busy,message}=useSave(data);
   return <form className={s.editor} onSubmit={async e=>{e.preventDefault();if(await save(rule.key,rule.version,doc))onClose();}}><div className={s.formGrid}><label>점검 이름<input required maxLength={160} value={doc.label} onChange={e=>setDoc({...doc,label:e.target.value})}/></label>{(["subject","target"] as const).map(key=><label key={key}>{key==="subject"?"주체 유형":"필요한 기록 유형"}<select value={doc[key]} onChange={e=>setDoc({...doc,[key]:e.target.value as typeof doc.subject})}>{entities.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label>)}<label>최소 연결 개수<input required type="number" min={1} max={100} step={1} value={doc.minimum} onChange={e=>setDoc({...doc,minimum:Number(e.target.value)})}/></label><label className={s.check}><input type="checkbox" checked={doc.active} onChange={e=>setDoc({...doc,active:e.target.checked})}/>이 기준으로 점검</label></div><div className={s.actions}><button disabled={busy||!data.studio.canWrite}>기준 저장</button><button type="button" onClick={onClose}>닫기</button><span role="status">{message}</span></div></form>;
 }

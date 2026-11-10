@@ -1,8 +1,7 @@
 "use client";
 import { EmbedHiddenInput, EmbedLink as Link } from "@/components/embed-link";
-import { SampleBanner } from "@/features/mockup/sample";
 import { useState } from "react";
-import type { AcademyKnowledgeData } from "./sample-data";
+import type { AcademyKnowledgeData } from "./server";
 import { liveHref } from "./routes";
 import { domains,entities,metricDictionary,ONTOLOGY_VERSION,relations,workbookCoverage } from "./catalog";
 import { contextualResult } from "./records";
@@ -16,7 +15,7 @@ export function KnowledgeWorkspace({data,months,initialTab="graph"}:{data:Academ
   const [tab,setTab]=useState(initialTab);
   const query=new URLSearchParams({month:data.month,...(data.selectedStudent?{student:data.selectedStudent}:{}),...(data.selectedTeacher?{teacher:data.selectedTeacher}:{})}).toString();
   const openActions=data.records.filter(r=>r.document.kind==="action"&&r.document.state==="open");
-  return <main className={s.page}><SampleBanner/><header className={s.hero}><Link href="/dashboard/management">← 경영 분석</Link><p>에이와 · 연결된 학원</p><h1>스키마·지식그래프</h1><p>학생·강사·수업·상담·홍보·재무의 원기록에서 판단 근거와 후속 업무까지.</p><div className={s.heroLinks}><Link href="/work-records/knowledge">관찰·후속 조치·OKR 작성 ↗</Link><span title="시안 화면에서는 내려받기를 제공하지 않습니다">그래프 JSON 내려받기 · 시안 제외</span></div></header>
+  return <main className={s.page}><header className={s.hero}><Link href="/dashboard/management">← 경영 분석</Link><p>에이와 · 연결된 학원</p><h1>스키마·지식그래프</h1><p>학생·강사·수업·상담·홍보·재무의 원기록에서 판단 근거와 후속 업무까지.</p><div className={s.heroLinks}><Link href="/work-records/knowledge">관찰·후속 조치·OKR 작성 ↗</Link><a href={`/api/management/ontology?${query}`} download>그래프 JSON 내려받기 ↓</a></div></header>
     <div className={s.stats}><article><span>연결된 개체</span><strong>{data.graph.nodes.length.toLocaleString()}</strong><small>조회 범위 내 원기록·분석</small></article><article><span>검증된 관계</span><strong>{uniqueEdges(data.graph).length.toLocaleString()}</strong><small>대상 ID·개체 유형 검사</small></article><article><span>직접 작성한 기록</span><strong>{data.records.length}</strong><small>기준일까지의 최신 버전</small></article><article><span>진행 중 후속 조치</span><strong>{openActions.length}</strong><small>담당자·기한·결과 관리</small></article></div>
     <section className={s.panel}><form className={s.filters}><EmbedHiddenInput/><label>분석 월<select name="month" defaultValue={data.month}>{months.map(m=><option key={m} value={m}>{m}</option>)}</select></label><label>학생 중심 상세<select name="student" defaultValue={data.selectedStudent}><option value="">학원 전체 연결</option>{data.students.map(p=><option key={p.id} value={p.id}>{p.name} · {p.school??""} {p.grade??""}</option>)}</select></label><label>강사 중심 상세<select name="teacher" defaultValue={data.selectedTeacher}><option value="">선택 안 함</option>{data.staff.map(p=><option key={p.id} value={p.id}>{p.display_name}</option>)}</select></label><button className={s.primary}>연결 조회</button></form><p className={s.muted}>기준일 {data.asOf} · 현재 저장 이력으로 재구성합니다. 학생·강사를 선택하면 해당 주체의 상세 원기록을 추가합니다. 조회된 관계는 인과관계 확정이 아닙니다.</p></section>
     <nav className={s.tabs} aria-label="지식그래프 영역">{[["schema","엑셀 뼈대·스키마"],["graph","지식그래프"],["quality","보완 점검"],["rules","검토 규칙·후속 조치"],["context","OKR·운영 보완 자료"],["coverage","초기 설계 반영 이력"],["model","모델·지표 사전"]].map(([id,label])=><button aria-pressed={tab===id} key={id} onClick={()=>setTab(id)}>{label}</button>)}</nav>

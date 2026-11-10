@@ -370,11 +370,12 @@ export const MENU_ACCESS: AccessMatrix = {
   // 🔴 비서는 **지점 자료 전부**(급여·계약·연락처·계좌 포함)를 읽는다 — 다른 역할에 열면 그 사람도 전부를 묻고 본다(권한 표 줄 설명이 같은 말을 한다).
   //    판정 = assistantViewer()(src/features/assistant/server/gate.ts) 한 곳 — 서버 라우트 전부와 셸 레이아웃의 단추·단축키가 같은 함수를 지난다.
   assistant: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
-  // ── 시안 화면(2026-11-09 이식 · 예시 값만 · DB를 읽지 않는다) — 원장 2026-11-10 결정: **원장 '전체' · 나머지 '없음'**(새 권한 규칙 그대로).
+  // ── 시안 화면(2026-11-09 이식) — 원장 2026-11-10 결정: **원장 '전체' · 나머지 '없음'**(새 권한 규칙 그대로).
+  //    2026-11-11부터 조직·OKR · 업무 작성센터 · 지식그래프는 실제 기록(s2_0065~0068 · 서버 문 = src/lib/auth/menu-gate.ts) — 경영 분석·홍보는 아직 예시 값.
   //    다른 역할에게는 원장이 역할·권한 면에서 연다. 메뉴 버튼 · 운영실 핵심 업무 칸(canOpenCore) · 페이지 문이 같은 키를 본다.
   // 경영 분석 · 스키마·지식그래프(features/mockup/access.ts).
   management: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
-  // 조직·OKR(organization-okr/sample-access.ts) · 연간 운영계획·홍보·마케팅(marketing/sample-access.ts).
+  // 조직·OKR(organization-okr/access.ts · 2026-11-11 실제 기록) · 연간 운영계획·홍보·마케팅(marketing/sample-access.ts).
   okr: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   marketing: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // 업무 작성센터(work-records 페이지 둘).

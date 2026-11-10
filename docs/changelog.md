@@ -1,5 +1,11 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-11 — 조직·OKR · 업무 작성센터 · 관찰 기록 · 지식그래프 = 실제 기록(aywa-next 이식)
+
+- 시안(예시 값) 화면 넷을 실제 표에 이었다: `organization_okr`(+revisions) · `academy_work_records`(+events) · `academy_knowledge_records` · `academy_model_versions` (SQL s2_0065~s2_0068 · 서버 전용 · 정책 0개 · 되돌리기 `scripts/_oneoff/revert-s2_006{5..8}-*.sql`).
+- 서버: `organization-okr/server.ts` · `work-records/server.ts` · `academy-knowledge/{server,server-core,server-records,studio-server}.ts` · 라우트 `/api/organization/okr` · `/api/work-records` · `/api/work-records/knowledge` · `/api/management/model` · `/api/management/ontology`(JSON 내려받기). 공용 문 `src/lib/auth/menu-gate.ts` · 같은 출처 JSON 껍데기 `src/lib/http/same-origin-json.ts`.
+- 학생 통합보기 '현장 관찰·후속 조치'가 연결 전 → 실제 기록. 지식그래프 바탕은 수강 관계(경영·홍보 그래프는 main에 조회가 없어 '연결 전'). 결정 = `docs/decisions/staff.md` 끝.
+
 ## 2026-11-10 — 보류 항목 정리(Codex 협의 추천안) — 수정 계획 P4 나머지
 
 - 운영 DB 확인(읽기 전용): DB 함수 문구의 '총괄' **0건**(0332a가 이미 교체 — 고칠 것 없음) · `attendance_records.taught_by` 칸·FK 있음, 값 0/42,166건(입구를 걷은 10-07 결정과 맞음 · 백필 안 함 · 읽는 코드의 호환 분기는 그대로).
