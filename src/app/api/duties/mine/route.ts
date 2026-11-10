@@ -4,6 +4,7 @@ import { classWeekdays, listOwnerDuties, listOwnerMonthDuties, studentWeekdays, 
 import { weekDaysOf } from "@/features/duties/view";
 import { isValidYmd, kstToday } from "@/lib/date-kst";
 import { reportError } from "@/lib/observability/report-error";
+import { flushDuties } from "@/features/duties/server/live-sync";
 
 /**
  * 내 의무(GET) — 강사 홈 '오늘 내 업무'를 펼칠 때 부른다(s2_0043). 사람 확인은 할 일과 같은 문(`getStaffTaskViewer` — '다른 강사 뷰'면 그 강사).
@@ -18,6 +19,7 @@ export async function GET(request: Request) {
   try {
     const viewer = await getStaffTaskViewer();
     if (!viewer) return NextResponse.json({ error: "로그인이 필요합니다" }, { status: 401, headers: NO_STORE });
+    await flushDuties(viewer.user.tenantId); // 방금 저장한 출결·보고서·상담을 먼저 장부에 맞춘다(s2_0051)
     const days = weekDaysOf(date); // 항상 월요일 시작(월~일)
     const [items, week, month] = await Promise.all([
       listOwnerDuties(viewer.user.tenantId, viewer.user.id, date),

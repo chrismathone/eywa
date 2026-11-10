@@ -66,7 +66,8 @@ export async function syncMonthlyDuties(tenantId: string, today: string, setting
   const [students, consults, grades] = await Promise.all([
     fetchInChunks<{ id: string; is_test: boolean | null; status: string | null }>(studentIds, (chunk) => admin.from("students").select("id,is_test,status").eq("tenant_id", tenantId).in("id", chunk)),
     fetchAllPagedInChunks<{ student_id: string; counselor_id: string | null; consulted_at: string }>(studentIds, (chunk, from, to) =>
-      admin.from("student_consultations").select("student_id,counselor_id,consulted_at").eq("tenant_id", tenantId).in("student_id", chunk)
+      // 🔴 녹음을 올려 아직 분석 중인 임시 행은 상담으로 세지 않는다(처리 상태 idle = 손으로 쓴 상담 · completed = 분석이 끝난 녹음 상담 · 2026-11-10).
+      admin.from("student_consultations").select("student_id,counselor_id,consulted_at").eq("tenant_id", tenantId).not("processing_status", "in", "(uploaded,transcribing,analyzing)").in("student_id", chunk)
         .gte("consulted_at", `${monthStart}T00:00:00+09:00`).order("id").range(from, to)),
     fetchAllPaged<{ student_id: string; subject: string; exam_slot: string | null; exam_name: string; taken_on: string; no_exam: boolean | null; created_at: string | null }>((from, to) =>
       admin.from("student_grades").select("student_id,subject,exam_slot,exam_name,taken_on,no_exam,created_at").eq("tenant_id", tenantId).gte("taken_on", prevMonthStart).order("id").range(from, to)),

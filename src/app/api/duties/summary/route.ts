@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getStaffTaskViewer } from "@/features/staff-tasks/server/gate";
 import { loadDutySummary } from "@/features/duties/server/summary";
 import { reportError } from "@/lib/observability/report-error";
+import { flushDuties } from "@/features/duties/server/live-sync";
 
 /**
  * 내 업무 숫자(GET) — 강사 홈 '내 업무' 줄이 **보일 때 60초마다** 다시 받는다(ClassNote 매칭 아이콘과 같은 결 · 셸 자동 호출은 서버 액션 금지 #137).
@@ -14,6 +15,7 @@ export async function GET() {
   try {
     const viewer = await getStaffTaskViewer();
     if (!viewer) return NextResponse.json({ error: "로그인이 필요합니다" }, { status: 401, headers: NO_STORE });
+    await flushDuties(viewer.user.tenantId); // 방금 저장한 것을 먼저 장부에 맞춘다(s2_0051)
     return NextResponse.json(await loadDutySummary(viewer.user.tenantId, viewer.user.id), { headers: NO_STORE });
   } catch (error) {
     reportError(error, { scope: "api.duties.summary" });

@@ -4,6 +4,7 @@ import { getDutyAdminViewer } from "@/features/duties/server/admin-gate";
 import { loadDutyAdmin } from "@/features/duties/server/admin";
 import { adminRange, parseAdminPeriod, periodsOf } from "@/features/duties/view-admin";
 import { reportError } from "@/lib/observability/report-error";
+import { flushDuties } from "@/features/duties/server/live-sync";
 
 /**
  * 업무 완성도 관리자 화면 재료(GET) — 기간을 바꿀 때와 **보일 때 60초마다** 다시 받는다(강사 홈 '내 업무'와 같은 결 · 셸 자동 호출은 서버 액션 금지 #137).
@@ -17,6 +18,7 @@ export async function GET(request: Request) {
   try {
     const viewer = await getDutyAdminViewer();
     if (!viewer) return NextResponse.json({ error: "권한이 없습니다" }, { status: 403, headers: NO_STORE });
+    await flushDuties(viewer.user.tenantId); // 방금 저장한 것을 먼저 장부에 맞춘다(s2_0051)
     const today = kstToday();
     const range = adminRange(period, today);
     const data = await loadDutyAdmin(viewer.user.tenantId, range.from, range.to, viewer.scope, periodsOf(period));

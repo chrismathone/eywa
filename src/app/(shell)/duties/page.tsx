@@ -4,6 +4,7 @@ import { kstToday } from "@/lib/date-kst";
 import { loadDutyAdmin, resolveDutyAdminScope } from "@/features/duties/server/admin";
 import { adminRange, periodsOf } from "@/features/duties/view-admin";
 import { DutyAdmin } from "@/features/duties/components/admin/duty-admin";
+import { flushDuties } from "@/features/duties/server/live-sync";
 
 export const metadata = { title: "업무 완성도 — 에이와" };
 
@@ -13,7 +14,7 @@ export const metadata = { title: "업무 완성도 — 에이와" };
  */
 export default async function DutiesPage() {
   const viewer = await requireAccess("duties");
-  const scope = await resolveDutyAdminScope(viewer);
+  const [scope] = await Promise.all([resolveDutyAdminScope(viewer), flushDuties(viewer.tenantId)]);
   const today = kstToday();
   const range = adminRange("month", today);
   const data = await loadDutyAdmin(viewer.tenantId, range.from, range.to, scope, periodsOf("month"));
