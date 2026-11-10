@@ -17,8 +17,14 @@ const kstDay = (iso: string) => new Date(Date.parse(iso) + 9 * 3_600_000).toISOS
 const md = (ymd: string) => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}`;
 
 /** 상담 줄과 신규생 콜 줄은 **둘 다 원생상담 작성**(그 학생 선택)으로 — 어차피 상담이고, 신규생 콜은 그 화면에서 사람이 "어느 항목인지"를 확정한다(반자동 · 자동 매핑 없음, 결정 로그). */
-export function monthHref(it: Pick<DutyItemView, "kind" | "studentId" | "classId">): string {
-  if (it.kind === "exam_monthly") return "/grades";
+export function monthHref(it: Pick<DutyItemView, "kind" | "studentId" | "classId" | "cycle" | "subject">): string {
+  // 월말평가 = 성적관리 학기 격자 입력(그 해 · 과목 · 반 · 월말평가 칸) — 그 자리에서 바로 점수를 넣는다.
+  if (it.kind === "exam_monthly") {
+    const q = new URLSearchParams({ year: it.cycle.slice(0, 4), slot: "monthly" });
+    if (it.subject) q.set("subject", it.subject);
+    if (it.classId) q.set("class", it.classId);
+    return `/exams/input?${q.toString()}`;
+  }
   return it.studentId ? `/consultations/new?studentId=${encodeURIComponent(it.studentId)}` : "/consultations/new";
 }
 

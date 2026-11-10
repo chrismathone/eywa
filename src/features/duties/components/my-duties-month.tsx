@@ -22,31 +22,30 @@ export function MyDutiesMonth({ items, now, month }: { items: DutyItemView[]; no
       <ToolbarSegmentItem active={tab === "exam"} onClick={() => setTab("exam")}>{mm}월 월말평가 {foldRows(exam).done}/{foldRows(exam).total}</ToolbarSegmentItem>
     </ToolbarSegment>
     {tab === "counsel" ? <>
-      <Section title="월 학부모 상담" count={foldRows(counsel)} hint="의무 학생 = 같은 과목에서 가장 많은 요일을 맡은 담임(영어는 반 담임 전원). 그 달 본인 상담 1건이면 완료 · 기한 말일." rows={counsel} empty="상담 의무 학생이 없습니다(담임 반이 없거나 아직 집계 전)." />
-      <Section title="신규생 정착 콜" count={foldRows(newcomer)} hint="신규생 관리 체크리스트 항목(사전 콜 · 첫 수업 안내 · OJT · 첫 수업 후 콜 · 1·3개월 콜). 누르면 원생상담 작성 — 저장할 때 어느 항목인지 직접 확정하면 완료(자동 매핑 없음)." rows={newcomer} empty="맡은 신규생 항목이 없습니다." hideSingleGroup />
-    </> : <Section title="월말평가 응시" count={foldRows(exam)} hint="담임 반 명단 학생마다 그 달 그 과목 월말평가 기록(성적관리)이 있으면 완료 · 학원이 그 달이나 지난달에 친 과목만 · 기한 말일. 누르면 성적관리로." rows={exam} empty="월말평가를 치는 과목이 없거나 아직 집계 전입니다." />}
+      <Section title="월 학부모 상담" count={foldRows(counsel)} rows={counsel} empty="상담 의무 학생이 없습니다(담임 반이 없거나 아직 집계 전)." />
+      <Section title="신규생 정착 콜" count={foldRows(newcomer)} rows={newcomer} empty="맡은 신규생 항목이 없습니다." hideSingleGroup />
+    </> : <Section title="월말평가 응시" count={foldRows(exam)} rows={exam} empty="월말평가를 치는 과목이 없거나 아직 집계 전입니다." />}
   </div>;
 }
 
 const TONE: Record<DutyState, string> = { done: "bg-green-soft text-green", late: "bg-danger-soft text-danger", open: "bg-amber-soft text-amber", void: "bg-bg-soft text-text-placeholder" };
 const DOT: Record<DutyState, string> = { done: "bg-green", late: "bg-danger", open: "bg-amber", void: "bg-text-placeholder" };
 
-function Section({ title, count, hint, rows, empty, hideSingleGroup }: { title: string; count: { total: number; done: number; late: number }; hint: string; rows: MonthRow[]; empty: string; hideSingleGroup?: boolean }) {
+function Section({ title, count, rows, empty, hideSingleGroup }: { title: string; count: { total: number; done: number; late: number }; rows: MonthRow[]; empty: string; hideSingleGroup?: boolean }) {
   const openWork = useOpenDutyWork();
   const pct = count.total ? Math.round((count.done / count.total) * 100) : 0;
   const groups = groupMonthRows(rows);
-  // 내 과목 하나뿐이면 '수학' 같은 과목 머리를 안 적는다(원장 2026-11-10 *"'수학 선생님'인데 수학이란 말좀 없애"*).
-  const showGroupName = !(hideSingleGroup && groups.length === 1);
+  // 내 과목 하나뿐이면 과목 머리줄 자체를 안 그린다 — 머리의 숫자와 겹친다(원장 2026-11-10 *"수학이란 말 없애" · "아래쪽 기한초과 중복이므로 삭제"*).
+  const showGroupLine = !(hideSingleGroup && groups.length === 1);
   return <section className="border-line-faint rounded-xl border">
     <header className="border-line-faint flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
       <div className="flex items-baseline gap-2"><h4 className="text-sm font-bold">{title}</h4><span className="text-text-dim text-xs tabular-nums">{count.done}/{count.total}{count.late ? <span className="text-danger"> · 기한 초과 {count.late}</span> : null}</span></div>
       <span className="bg-bg-soft h-1.5 w-24 overflow-hidden rounded-full" aria-hidden><span className={`block h-full rounded-full ${pct === 100 ? "bg-green" : "bg-primary"}`} style={{ width: `${pct}%` }} /></span>
     </header>
-    <p className="text-text-dim px-3 pt-2 text-xs">{hint}</p>
     {groups.length ? <div className="grid gap-2 p-2">
       {groups.map((g) => <div key={g.name}>
-        <div className="flex items-baseline justify-between px-1 py-1"><span className="text-xs font-bold">{showGroupName ? g.name : ""}</span>
-          <span className="text-xs font-semibold tabular-nums"><span className={g.done === g.total ? "text-green" : "text-foreground"}>{g.done}/{g.total}</span>{g.late ? <span className="text-danger"> · 기한 초과 {g.late}</span> : null}</span></div>
+        {showGroupLine ? <div className="flex items-baseline justify-between px-1 py-1"><span className="text-xs font-bold">{g.name}</span>
+          <span className="text-xs font-semibold tabular-nums"><span className={g.done === g.total ? "text-green" : "text-foreground"}>{g.done}/{g.total}</span>{g.late ? <span className="text-danger"> · 기한 초과 {g.late}</span> : null}</span></div> : null}
         <ul className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {g.rows.map((r) => <li key={r.id}>
             {r.state === "done" ? <div className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold ${TONE[r.state]}`} title={DUTY_STATE_LABEL[r.state]}>
