@@ -12,6 +12,10 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-11-10 의무 장부: void 까닭 갱신 (s2_0043 · ✅ 운영 적용 2026-11-10 · 직결 · 시험 거래 뒤)
+
+`s2_0043_duty_resolve_void_reason.sql` — `duty_resolve_items`가 void → void로 까닭(source)만 바뀌어도 `void_reason`을 받아 적는다. 결석으로 빠진 보고서 칸을 "결석"으로 적기 위해(생성기가 void('absent') 행을 넘김). 'not_due'로 먼저 묻힌 3행이 'absent'로 바뀌었다.
+
 ## 2026-11-09 의무 장부: 기한 지남 확정은 일간만 (s2_0042 · ✅ 운영 적용 2026-11-09 밤 · 직결 · 시험 거래 뒤 · 되돌림 110행)
 
 `s2_0042_duty_expire_daily_only.sql` — `duty_escalate`의 'due_at + 7일 → void(expired)'에 `period = 'daily'` 조건. 월간(월 상담)·건별(신규생 콜)은 열린 채 늦음으로 남긴다. 첫 생성에서 잘못 확정된 신규생 콜 110행을 다시 열었다. 할 일 링크에 월 상담(`/consultations/new`)·신규생(`/newcomers`) 추가.
