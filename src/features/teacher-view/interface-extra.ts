@@ -84,7 +84,7 @@ export const INTERFACE_EN: Readonly<Record<string, string>> = {
   "전체 상담": "All counseling", "최근 7일": "Last 7 days", "진행 중 후속": "Open follow-ups", "기한 경과 후속": "Overdue follow-ups",
   "결과": "Results", "학생명·요약": "Student or summary", "상담 통계 — 지금 필터 그대로": "Counseling statistics with the current filters",
   "통계 보기": "View statistics", "기간 필터": "Date filter", "카테고리 필터": "Category filter", "후속 조치 필터": "Follow-up filter",
-  "상담사 필터": "Counselor filter", "과목 · 상담사": "Subject · Counselor", "요약": "Summary", "카테고리": "Category", "녹음·AI": "Recording · AI", "시각": "Time", "녹음": "Recording",
+  "상담사 필터": "Counselor filter", "과목 · 상담사": "Subject · Counselor", "요약": "Summary", "카테고리": "Category", "녹음·AI": "Recording · AI", "상담 평점": "Rating", "학교학년": "School · Grade", "상담자": "Counselor", "날짜": "Date", "시각": "Time", "녹음": "Recording",
   "학원 각종 서식을 보관합니다 — 빈 양식을 내려받아 작성하거나, 앱에서 문서를 작성해 두세요.": "Store academy forms here. Download a blank form or create a document in the app.",
   "하위 폴더 문서 포함": "Includes documents in subfolders", "페이지": "Page",
   "문서 목록을 불러오지 못했습니다 — 잠시 후 새로고침해 주세요.": "Could not load documents. Refresh shortly.",
