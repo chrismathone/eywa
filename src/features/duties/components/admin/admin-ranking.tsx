@@ -16,14 +16,15 @@ export function AdminRanking({ tree, onOwner }: { tree: readonly TreeSubject[]; 
   // 이 기간에 실제로 있는 종류만 고르게 한다.
   const kinds = MATRIX_COLUMNS.filter((c) => root.cells[c.kind]?.total);
   const picked = kind && kinds.some((c) => c.kind === kind) ? kind : null;
-  const boards: { key: string; title: string; subject: string | null | undefined; rows: ReturnType<typeof rankOwners> }[] = [
-    { key: "all", title: "전체", subject: undefined, rows: rankOwners(root.owners, picked) },
-    ...tree.map((s) => ({ key: `s:${s.subject ?? ""}`, title: s.label, subject: s.subject as string | null | undefined, rows: rankOwners(s.owners, picked) })),
-  ].filter((b) => b.rows.length);
+  // 어느 항목을 골라도 카드 크기는 같다(원장 2026-11-11) — 판은 '전체' 기준으로 세우고, 고른 항목의 줄이 모자라면 빈 줄로 채운다.
+  const boards: { key: string; title: string; subject: string | null | undefined; rows: ReturnType<typeof rankOwners>; size: number }[] = [
+    { key: "all", title: "전체", subject: undefined, rows: rankOwners(root.owners, picked), size: rankOwners(root.owners).length },
+    ...tree.map((s) => ({ key: `s:${s.subject ?? ""}`, title: s.label, subject: s.subject as string | null | undefined, rows: rankOwners(s.owners, picked), size: rankOwners(s.owners).length })),
+  ].filter((b) => b.size);
   const chip = (on: boolean) => `rounded-full border px-2.5 py-0.5 text-xs font-bold ${on ? "border-primary bg-primary text-primary-foreground" : "border-line text-text-dim hover:text-primary"}`;
   return <section className="border-line bg-card rounded-xl border p-2">
     <div className="flex flex-wrap items-center gap-1.5 px-2 py-1">
-      <h4 className="mr-1 text-sm font-bold">등수 <span className="text-text-dim text-xs font-medium">기한 준수율 순</span></h4>
+      <h4 className="mr-1 text-sm font-bold">등수 <span className="text-text-dim text-xs font-medium">기한 준수율 높은 순</span></h4>
       <button type="button" aria-pressed={picked === null} onClick={() => setKind(null)} className={chip(picked === null)}>전체</button>
       {kinds.map((c) => <button key={c.kind} type="button" aria-pressed={picked === c.kind} onClick={() => setKind(c.kind)} className={chip(picked === c.kind)}>{c.label}</button>)}
     </div>
@@ -39,6 +40,7 @@ export function AdminRanking({ tree, onOwner }: { tree: readonly TreeSubject[]; 
               <span className="w-10 shrink-0 text-right text-xs font-semibold tabular-nums">{r.cell.pct === null || !r.verdict.tier ? "" : `${r.cell.pct}%`}</span>
             </button>
           </li>)}
+          {Array.from({ length: Math.max(b.size - b.rows.length, 0) }, (_, i) => <li key={`pad${i}`} aria-hidden className="invisible flex items-center gap-2 px-2 py-1"><span className="text-sm font-semibold">&nbsp;</span><TierStars tier="1등급" /></li>)}
         </ol>
       </div>)}
     </div>}

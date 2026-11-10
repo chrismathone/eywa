@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDailyDuties, dutySubjectKey, kstDueAt, reportSubjectKey, type DailyInput, type DutySchedule } from "./daily";
+import { buildDailyDuties, dutySubjectKey, kstDueAt, reportSubjectKey, type DailyInput, type DutySchedule, classEndAt } from "./daily";
 
 // 2026-11-09 = 월요일. 수학 반 하나(담임 T1 · 교시 담당 비움 → 담임 폴백) + 영어 ClassNote 반 하나(반 단위 알림장 · 교시 담당 t3).
 const DATE = "2026-11-09";
@@ -62,11 +62,11 @@ describe("buildDailyDuties — 출결 입력", () => {
 });
 
 describe("buildDailyDuties — 보고서 발송(작성 · 발송을 한 업무로)", () => {
-  it("🔴 보고서는 발송까지가 한 업무 — 발송하는 반에는 작성 의무가 따로 없고, 안 썼어도 · 써 놓고 안 보냈어도 발송 의무가 열린 채다(기한 = 다음 날 정오)", () => {
+  it("🔴 보고서는 발송까지가 한 업무 — 발송하는 반에는 작성 의무가 따로 없고, 안 썼어도 · 써 놓고 안 보냈어도 발송 의무가 열린 채다(끝 시각을 모르면 기한 = 다음 날 자정)", () => {
     const rows = buildDailyDuties(base({ reports: [report("s1")] }));
     expect(rows.some((r) => r.kind === "report_write")).toBe(false);
-    expect(pick(rows, "report_send", "s1")).toMatchObject({ status: "open", ownerId: "t1", dueAt: kstDueAt(DATE, 1, 12), doneAt: null });
-    expect(pick(rows, "report_send", "s2")).toMatchObject({ status: "open", dueAt: kstDueAt(DATE, 1, 12), doneAt: null });
+    expect(pick(rows, "report_send", "s1")).toMatchObject({ status: "open", ownerId: "t1", dueAt: kstDueAt(DATE, 2, 0), doneAt: null });
+    expect(pick(rows, "report_send", "s2")).toMatchObject({ status: "open", dueAt: kstDueAt(DATE, 2, 0), doneAt: null });
   });
   it("발송 성공 = done(시각 = classnote_sent_at) · 회수 = void · 🔴 발송 기한 지남(too_old)은 열린 채(미이행으로 확정된다 — 의무에서 빠지지 않는다)", () => {
     const rows = buildDailyDuties(base({ reports: [report("s1", "success"), report("s2", "failed", { recalled: true })] }));
@@ -100,11 +100,20 @@ describe("buildDailyDuties — 보고서 발송(작성 · 발송을 한 업무�
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ subjectKey: reportSubjectKey("s1", math), status: "done", classId: "c-math-b" });
   });
-  it("영어 ClassNote 반은 반 단위 한 행(class:<id>) · 알림장을 올린 것이 곧 발송(완료 시각 = 그날 정오 · 기한 = 그날 자정)", () => {
+  it("영어 ClassNote 반은 반 단위 한 행(class:<id>) · 알림장을 올린 것이 곧 발송(완료 시각 = 그날 정오 · 기한은 발송과 같다)", () => {
     const rows = buildDailyDuties(base({ posts: [{ boardName: "중2 영어A", postedOn: DATE }] }));
-    expect(pick(rows, "report_send", null, "c-eng")).toMatchObject({ status: "done", studentId: null, classId: "c-eng", source: "class_post", doneAt: `${DATE}T12:00:00+09:00`, dueAt: kstDueAt(DATE, 1, 0) });
+    expect(pick(rows, "report_send", null, "c-eng")).toMatchObject({ status: "done", studentId: null, classId: "c-eng", source: "class_post", doneAt: `${DATE}T12:00:00+09:00`, dueAt: kstDueAt(DATE, 2, 0) });
     expect(rows.some((r) => r.kind === "report_write")).toBe(false);
     expect(pick(buildDailyDuties(base({})), "report_send", null, "c-eng")).toMatchObject({ status: "open" });
+  });
+});
+
+describe("기한 = 수업 시각 기준(원장 2026-11-11)", () => {
+  it("🔴 출결 = 그 반 수업이 끝나는 시각 · 보고서 발송 = 수업이 끝난 뒤 24시간(교시가 여럿이면 가장 늦은 끝 시각) · 끝 시각을 모르면 종전 값", () => {
+    const rows = buildDailyDuties(base({ schedules: [slot({ class_id: "c-math", end_time: "19:00:00" }), slot({ class_id: "c-math", start_time: "19:00", end_time: "20:30" }), slot({ class_id: "c-eng" })] }));
+    expect(pick(rows, "attendance", "s1")).toMatchObject({ dueAt: new Date(`${DATE}T20:30:00+09:00`).toISOString() });
+    expect(pick(rows, "report_send", "s1")).toMatchObject({ dueAt: new Date(Date.parse(`${DATE}T20:30:00+09:00`) + 86_400_000).toISOString() });
+    expect(classEndAt(DATE, [], "mon")).toBeNull();
   });
 });
 

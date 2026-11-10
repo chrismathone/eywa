@@ -1,7 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
-import { kstToday } from "@/lib/date-kst";
+import { addDays, kstToday } from "@/lib/date-kst";
 import { isTenantViewWriteBlocked } from "@/lib/auth/tenant-view";
 import { reportError } from "@/lib/observability/report-error";
 import { escalateAndSnapshot, syncDailyDuties } from "./sync";
@@ -53,6 +53,8 @@ export async function flushDuties(tenantId: string): Promise<void> {
     const days = syncDays(got.days, today, got.full ? [today] : []);
     for (const day of days) await syncDailyDuties(tenantId, day, settings);
     if (got.monthly || got.full) await syncMonthlyDuties(tenantId, today, settings);
+    // 달 초 한 주 동안 월간 변경이 있으면 지난 달도 맞춘다(말일의 상담 · 성적을 다음 날 입력한 것 — 변경 기록은 어느 달인지까지는 넘기지 않는다).
+    if (got.monthly && Number(today.slice(8, 10)) <= 7) await syncMonthlyDuties(tenantId, addDays(`${today.slice(0, 7)}-01`, -1), settings, { skipNewcomers: true, resolveOnly: true });
     await escalateAndSnapshot(tenantId, days, settings);
     await finishDutySync(tenantId, got, true, got.full);
     claim = null;

@@ -31,8 +31,8 @@ export function MyDutiesWeek({ week, days: allDays, today, classDays, studentDay
   const dow = (ymd: string) => DOW[new Date(Date.parse(`${ymd}T00:00:00Z`)).getUTCDay()] ?? "";
   // 빈 칸의 글자 — 장부 전 날은 '기록 전', 오늘 뒤 날은 그 반이 **수업하는 요일만** '예정'(원장 2026-11-10), 수업 없는 요일은 빈 칸.
   const empty = (d: string, classId: string | null) => (d < DUTY_LEDGER_START ? "기록 전" : d > today && meets(classId, d) ? "예정" : "");
-  const emptyWhy = (d: string, classId: string | null) => (d < DUTY_LEDGER_START ? "장부가 쌓이기 전" : d > today && meets(classId, d) ? "아직 오지 않은 날" : "그날 수업 없음");
-  if (!groups.length) return <p className="text-text-dim mt-2 text-sm">이번 주 의무가 아직 없습니다.</p>;
+  const emptyWhy = (d: string, classId: string | null) => (d < DUTY_LEDGER_START ? "기록 시작 전" : d > today && meets(classId, d) ? "아직 오지 않은 날" : "그날 수업 없음");
+  if (!groups.length) return <p className="text-text-dim mt-2 text-sm">이번 주 업무 없음</p>;
   return <div>
     <div className="overflow-x-auto">
       <table className="w-full table-fixed text-xs">

@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAllPaged } from "@/lib/supabase/batch";
 import type { DutyItemView, DutyKind, DutyPeriod, DutyStatus } from "../kinds";
 import type { DutyWeekCell } from "../view";
 
@@ -55,7 +56,7 @@ export async function dutyLiveFrom(tenantId: string): Promise<string | null> {
 }
 
 /**
- * 한 사람의 **지금 지연** 수 — 열린 채 기한이 지난 의무 전부(기간 무관 · 이관 제외). 관리자 화면 '현재 지연'과 같은 모집단이다
+ * 한 사람의 **지금 지연** 수 — 열린 채 기한이 지난 의무 전부(기간 무관 · 이관 제외). 관리자 화면 '기한 초과'과 같은 모집단이다
  * (강사 홈 '기한 초과'가 오늘 몫만 세면, 어제 안 보낸 보고서 18건이 관리자에겐 지연인데 본인 화면엔 0으로 보인다 — 리뷰 2026-11-11).
  */
 export async function countOwnerLate(tenantId: string, ownerId: string, liveFrom: string | null): Promise<number> {
@@ -82,9 +83,9 @@ export async function listOwnerMonthDuties(tenantId: string, ownerId: string, mo
 
 /** 최근 며칠의 학생별 완료 비율 재료(학생 × 날 · 전체/완료) — 카드의 '최근 7일' 띠. 한 사람 × 7일이라 작다(상한 5,000행). */
 export async function weekCells(tenantId: string, ownerId: string, from: string, to: string): Promise<DutyWeekCell[]> {
-  const { data, error } = await createAdminClient().from("duty_items").select("cycle,status,student_id,class_id,void_reason,kind,due_at,student:students!duty_items_student_id_fkey(name),class:classes!duty_items_class_id_fkey(class_name)")
-    .eq("tenant_id", tenantId).eq("owner_id", ownerId).eq("period", "daily").gte("cycle", from).lte("cycle", to).or(VISIBLE).limit(5000);
-  if (error) throw new Error(`의무 주간: ${error.message}`);
+  // 🔴 끝까지 페이지로 읽는다(B2) — 학생 100명 × 5일 × 2종이면 1,000행을 넘는다(상한을 적어도 1,000행에서 조용히 잘린다).
+  const data = await fetchAllPaged<unknown>((a, b) => createAdminClient().from("duty_items").select("cycle,status,student_id,class_id,void_reason,kind,due_at,student:students!duty_items_student_id_fkey(name),class:classes!duty_items_class_id_fkey(class_name)")
+    .eq("tenant_id", tenantId).eq("owner_id", ownerId).eq("period", "daily").gte("cycle", from).lte("cycle", to).or(VISIBLE).order("cycle").order("id").range(a, b));
   const out = new Map<string, DutyWeekCell>();
   const now = Date.now();
   type WeekRowRaw = { cycle: string; status: DutyStatus; void_reason: string | null; student_id: string | null; class_id: string | null; kind: string; due_at: string;

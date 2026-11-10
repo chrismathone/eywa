@@ -18,6 +18,14 @@
 
 ## 2026-11-10 의무 장부: 할 일 본문에 업무 종류 (s2_0046 · ✅ 운영 적용 2026-11-10 · 직결 · 시험 거래 뒤)
 
+`s2_0060_duty_due_follow_split.sql` — ✅ 운영 적용(2026-11-11). `duty_upsert_items` — 기한 맞춤을 별도 문장으로(같은 문장에서 이미 고친 행의 기한이 빠지던 것).
+
+`s2_0059_duty_task_wording.sql` — ✅ 운영 적용(2026-11-11). `duty_escalate_up` 할 일 제목의 낱말만('지연' → '기한 초과').
+
+`s2_0058_duty_due_follow.sql` — ✅ 운영 적용(2026-11-11). `duty_upsert_items` — 같은 열쇠의 기한이 달라지면 장부 기한을 맞춘다(기한 규칙 변경: 출결 = 수업 종료 · 발송 = 종료 뒤 24시간).
+
+`s2_0057_duty_resolve_keep_merged.sql` — ✅ 운영 적용(2026-11-11). `duty_resolve_items` — 합쳐서 닫은 행(`merged`)은 다시 열지 않는다.
+
 `s2_0056_duty_review_fixes.sql` — ✅ 운영 적용(2026-11-11). 업무 완성도 종합 리뷰 반영: `mark_dirty`(거래 안 한 번 · 신호는 적었을 때만 · 10분 규칙) + 트리거 6개를 `update of <의무 판정 칸>`으로 · `duty_sync_finish`(실패 뒤 60초 물러서기) · `duty_escalate`(미이행 확정을 월간에도 — s2_0050 본문 + 한 줄) · `duty_note_add`(본인 담당 면제 불가 — s2_0052 본문 + 검사).
 
 `s2_0055_duty_kind_labels.sql` — ✅ 운영 적용(2026-11-10). 업무 완성도 할 일 제목의 종류 이름을 화면과 같게(`duties_private.kind_label`: 학생 상담 · 신규생 관리 · 모르는 종류는 '업무').

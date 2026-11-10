@@ -5,6 +5,7 @@
 -- 고침: period = 'case'면 묶음 열쇠의 회차를 ''로 — 담당자 × 종류에 하나. 본문은 "이름(항목) · 이름(항목)". 일간·월간은 그대로(날짜·달마다 하나).
 --   항목별로 열려 있던 옛 할 일은 늦은 의무가 새 묶음으로 옮겨가며 'cancelled'(duties_moved_or_void)로 닫히고, 새 할 일 하나가 선다(한 번뿐).
 -- 되돌리기: duty_escalate를 s2_0046 본문으로.
+-- 연동 역할 실행권 확인: duties_private 함수는 장부 맞춤(앱 service_role)만 부른다 — 연동 PC 질의·RLS 정책이 지나지 않는다.
 begin;
 
 create or replace function duties_private.cycle_label(p_kind text, p_cycle text) returns text

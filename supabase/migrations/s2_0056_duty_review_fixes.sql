@@ -16,6 +16,7 @@
 --     (s2_0044가 '일간만'으로 좁힌 까닭은 신규생 관리가 곧바로 확정되던 것 — 월간은 그 달이 끝나고 한 주 뒤면 더는 채울 수 없다. 앱 크론이 다음 달 첫 7일 동안 지난 달을 한 번 더 맞춘다.)
 --   · `duty_note_add` — 본인 담당 의무는 면제할 수 없다(확인 · 사유는 된다). 그 밖은 s2_0052 본문 그대로.
 -- 되돌리기: mark_dirty · 트리거 · duty_sync_finish는 s2_0054, duty_escalate는 s2_0050, duty_note_add는 s2_0052 본문으로.
+-- 연동 역할 실행권 확인: mark_dirty는 트리거 함수 자체(보안 정의자) — 트리거 발화는 쓰는 역할의 실행권을 보지 않는다. 운영 확인 2026-11-10: 트리거 설치 뒤 연동 PC 발송 성공 69건.
 begin;
 
 create or replace function duties_private.mark_dirty() returns trigger

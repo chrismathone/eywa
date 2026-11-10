@@ -21,7 +21,7 @@ export async function backfillDutyMonth(tenantId: string, month: string, setting
   const { data: st, error: stError } = await createAdminClient().from("duty_settings").select("live_from").eq("tenant_id", tenantId).maybeSingle();
   if (stError) throw new Error(`장부 설정: ${stError.message}`);
   const liveDay = st?.live_from ? new Date(Date.parse(st.live_from as string) + 9 * 3_600_000).toISOString().slice(0, 10) : null;
-  if (!liveDay || addDays(`${nextMonth(month)}-01`, -1) >= liveDay) return { days: 0, drafts: 0, monthly: 0, closed: 0, skipped: "not_before_live" };
+  if (!liveDay || `${nextMonth(month)}-01` >= liveDay) return { days: 0, drafts: 0, monthly: 0, closed: 0, skipped: "not_before_live" };
   const last = addDays(`${nextMonth(month)}-01`, -1);
   const days: string[] = [];
   for (let d = `${month}-01`; d <= last; d = addDays(d, 1)) days.push(d);

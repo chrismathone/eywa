@@ -17,7 +17,7 @@ const CELL: Record<DutyState, string> = { done: "bg-green text-primary-foregroun
 
 export function MyDutiesPanel({ loaded, defaultClosed = false }: { loaded: { payload: DutyPayload; at: number }; defaultClosed?: boolean }) {
   const { payload, at: now } = loaded;
-  if (!payload.items.length) return <p className="text-text-dim mt-2 text-sm">오늘 수업 의무가 없습니다.</p>;
+  if (!payload.items.length) return <p className="text-text-dim mt-2 text-sm">오늘 수업 업무 없음</p>;
   const groups = groupCardsByClass(buildDutyCards(payload.items, payload.week, payload.days, now), now);
   return <GroupsView groups={groups} now={now} defaultClosed={defaultClosed} />;
 }
@@ -52,14 +52,14 @@ function Row({ card, kinds, now }: { card: DutyCard; kinds: DutyKind[]; now: num
       const label = SHORT[k] ?? dutyKindLabel(k);
       if (!it) {
         const writeOpen = k === "report_send" && card.items.some((i) => i.kind === "report_write" && i.status !== "done");
-        const text = writeOpen ? `${label} · 작성 뒤` : `${label} · 의무 없음`;
-        const why = writeOpen ? "보고서를 쓰면 발송 의무가 생깁니다" : k === "attendance" ? "오늘 이 반 수업 명단에 없습니다" : "휴원 · 미발송 반 · 작성 면제 등으로 오늘은 이 칸의 의무가 없습니다";
+        const text = writeOpen ? `${label} · 작성 후` : `${label} · 해당 없음`;
+        const why = writeOpen ? "보고서 작성 후 발송 대상이 됩니다" : k === "attendance" ? "오늘 이 반 수업 대상 아님" : "휴원 · 미발송 반 · 작성 면제 등으로 오늘은 해당 없음";
         return <td key={k} className="px-1 py-1"><span title={why} className="text-text-placeholder flex h-6 items-center justify-center rounded-md text-xs font-medium">{text}</span></td>;
       }
       const st = dutyState(it.status, it.dueAt, now);
       if (st === "void") {
-        const text = it.voidReason === "absent" ? `${label} · 결석` : `${label} · 의무 없음`;
-        const why = it.voidReason === "absent" ? "결석이라 오늘 보고서 작성 의무가 없습니다(출결에서 정정하면 의무가 다시 생깁니다)" : "오늘은 이 칸의 의무가 없습니다";
+        const text = it.voidReason === "absent" ? `${label} · 결석` : `${label} · 해당 없음`;
+        const why = it.voidReason === "absent" ? "결석 · 보고서 대상 아님(출결을 정정하면 다시 대상)" : "오늘은 해당 없음";
         return <td key={k} className="px-1 py-1"><span title={why} className="text-text-placeholder flex h-6 items-center justify-center rounded-md text-xs font-medium">{text}</span></td>;
       }
       // 일간 칸은 누르지 않는다 — 창을 닫으면 바로 원스크린이라 거기서 처리한다(원장 2026-11-10).

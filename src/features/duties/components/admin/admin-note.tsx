@@ -66,7 +66,7 @@ function NoteDialog({ title, items, history, onClose, onSaved }: { title: string
       <p className="text-text-dim text-xs font-medium">{DUTY_NOTE_HINT[action]}</p>
       <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={NOTE_LIMIT} rows={3} aria-label="사유"
         className="border-line w-full rounded-lg border px-3 py-2 text-sm" placeholder={needNote ? "사유(필수)" : "남길 말(선택)"} />
-      {armed ? <p className="bg-danger-soft text-danger rounded-lg px-3 py-2 text-sm font-semibold" role="alert">업무 {items.length}건을 면제합니다. 집계와 지연에서 빠지고 되돌릴 수 없습니다. 맞으면 한 번 더 눌러 주세요.</p> : null}
+      {armed ? <p className="bg-danger-soft text-danger rounded-lg px-3 py-2 text-sm font-semibold" role="alert">업무 {items.length}건을 면제합니다. 집계와 기한 초과에서 빠지고 되돌릴 수 없습니다. 맞으면 한 번 더 눌러 주세요.</p> : null}
       {error ? <p className="text-danger text-sm font-semibold" role="alert">{error}</p> : null}
       <div className="flex justify-end gap-2">
         <button type="button" onClick={partial ? onSaved : onClose} className="border-line rounded-lg border px-3 py-1.5 text-sm font-semibold">닫기</button>

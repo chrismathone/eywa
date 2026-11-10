@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { AdminPeriod, ClassInfo, RollupStudent, StudentInfo } from "../../view-admin";
+import type { AbsentRow, AdminPeriod, ClassInfo, RollupStudent, StudentInfo } from "../../view-admin";
 
-export type StudentsPayload = { rows: RollupStudent[]; students: StudentInfo; classInfo: ClassInfo };
+export type StudentsPayload = { rows: RollupStudent[]; students: StudentInfo; classInfo: ClassInfo; absent?: AbsentRow[] };
 export type StudentsFilter = { owner?: string | null; /** 담당자 없는 의무만('담당 미정'). */ ownerNone?: boolean; classId?: string | null; subject?: string | null; studentId?: string | null };
 
 /**

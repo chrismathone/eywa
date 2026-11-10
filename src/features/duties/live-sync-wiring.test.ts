@@ -49,7 +49,8 @@ describe("업무 완성도 — 저장 즉시 반영 배선", () => {
     expect(read("src/features/duties/server/monthly-sync.ts")).toContain('.not("processing_status", "in", "(uploaded,transcribing,analyzing)")');
   });
   it("🔴 지난달 다시 만들기는 평가 개시 전에 끝난 달만 · 윗단계 할 일은 '처리됨'으로 단정해 닫지 않는다 · 면제는 맞춤이 되살리지 않는다", () => {
-    expect(read("src/features/duties/server/backfill.ts")).toMatch(/if \(!liveDay \|\| addDays\(`\$\{nextMonth\(month\)\}-01`, -1\) >= liveDay\) return/);
+    expect(read("src/features/duties/server/backfill.ts")).toContain("if (!liveDay || `${nextMonth(month)}-01` >= liveDay) return");
+    expect(readMigration("s2_0057_duty_resolve_keep_merged.sql")).toContain("not in ('waived', 'merged')");
     const sql = readMigration("s2_0052_duty_manage.sql");
     const up = sql.slice(sql.indexOf("function public.duty_escalate_up"), sql.indexOf("function duties_private.rollup_rows"));
     expect(up).toContain("'duties_cleared'");

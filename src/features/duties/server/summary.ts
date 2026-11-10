@@ -8,7 +8,7 @@ export type DutyCountTriple = { total: number; done: number; late: number };
 export type DutySummary = {
   date: string; month: string; today: DutyCountTriple; week: DutyCountTriple;
   byKind: { kind: string; total: number; done: number; late: number }[]; counsel: DutyCountTriple; exam: DutyCountTriple; newcomer: DutyCountTriple;
-  /** 지금 지연(열린 채 기한이 지난 것 전부 · 기간 무관 · 이관 제외) — 관리자 화면 '현재 지연'과 같은 수. */
+  /** 지금 지연(열린 채 기한이 지난 것 전부 · 기간 무관 · 이관 제외) — 관리자 화면 '기한 초과'과 같은 수. */
   overdue: number;
 
 };

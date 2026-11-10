@@ -135,13 +135,12 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null }: 
   const expandOf = (list: "live", all: AttentionRow[], rows: AttentionRow[]) => { const r = rows.find((x) => `${list}:${x.key}` === openKey); return r ? { key: r.key, rows: childrenOf(all, r) } : null; };
   // 선생님 줄에는 이름 옆에 늘 과목 · 반 수 · 학생 수(그 옆 숫자는 지연이 있는 학생 수).
   const metaOf = new Map((subjectNode?.owners ?? []).map((o) => [o.ownerId, ownerMeta(o)]));
-  const attention = fold(attentionAll).map((r) => (r.key.startsWith("owner:") && metaOf.get(r.ownerId ?? NO_OWNER) ? { ...r, sub: [metaOf.get(r.ownerId ?? NO_OWNER), r.sub ? `지연 ${r.sub}` : ""].filter(Boolean).join(" · ") } : r));
+  const attention = fold(attentionAll).map((r) => (r.key.startsWith("owner:") && metaOf.get(r.ownerId ?? NO_OWNER) ? { ...r, sub: [metaOf.get(r.ownerId ?? NO_OWNER), r.sub ? `기한 초과 ${r.sub}` : ""].filter(Boolean).join(" · ") } : r));
   // 관리 기록(확인 · 사유 · 면제) — 전체 권한에게만. 줄이 가리키는 의무 전부에 남긴다.
   const noteFor = (all: LateItem[], r: AttentionRow) => (scope.canNote ? <NoteButton title={[r.teacher, r.className, r.title].filter((x, i, a) => x && a.indexOf(x) === i).join(" · ")} items={attentionItems(all, r)} onSaved={refresh} /> : null);
-  const preLive = !!cur?.data.liveFrom && cur.range.to < new Date(Date.parse(cur.data.liveFrom) + 9 * 3_600_000).toISOString().slice(0, 10);
   const lateSection = <section className="border-line bg-card rounded-xl border p-2">
     <div className="flex items-center gap-2 px-2 py-1">
-      <h4 className="min-w-0 flex-1 text-sm font-bold">현재 지연 <span className="text-text-dim text-xs font-medium">{distinctStudents(liveHere)}명 · {liveHere.length}건 · 기간 무관</span></h4>
+      <h4 className="min-w-0 flex-1 text-sm font-bold">기한 초과 <span className="text-text-dim text-xs font-medium">{distinctStudents(liveHere)}명 · {liveHere.length}건 · 현재 기준</span></h4>
       {ownerNode && ownerNode.ownerId !== NO_OWNER ? <LateRequestButton owner={{ id: ownerNode.ownerId, name: ownerNode.name }} items={liveHere} /> : null}
     </div>
     {/* 처리 요청은 선생님 단위다 — 전체·과목 단계는 줄(선생님)마다, 선생님·반 단계는 위 단추 하나(지금 보이는 범위의 지연). */}
@@ -161,17 +160,19 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null }: 
         relation={period === periodKey(unit, today) ? "current" : "past"} nextDisabled={(periodParts(shiftPeriod(period, 1))?.anchor ?? "") > today}
         onNavigate={(key) => setPeriod(key)} />
       {cur && !stale ? <span className="text-text-dim text-xs font-medium">마지막 반영 {kstStamp(cur.now)}</span> : null}
-      <ToolbarChip active={lateOnly} onClick={() => setLateOnly((v) => !v)} className="ml-auto">지연만</ToolbarChip>
+      <ToolbarChip active={lateOnly} onClick={() => setLateOnly((v) => !v)} className="ml-auto">기한 초과만</ToolbarChip>
     </Toolbar>
-    {stale ? <p className="bg-amber-soft text-amber rounded-lg px-3 py-2 text-sm font-semibold">{synced ? `마지막 전체 반영 ${kstStamp(synced)} · 이후 저장분은 미반영일 수 있음` : "반영 기록 없음 · 수치가 실제와 다를 수 있음"}</p> : null}
-    {preLive ? <p className="border-line bg-card text-text-dim rounded-lg border px-3 py-2 text-sm font-semibold">평가 개시 전 기간 · 기록으로 재구성한 참고 수치(현재 운영 중인 반 · 현재 담임 기준)</p> : null}
+    {stale ? <p className="bg-amber-soft text-amber rounded-lg px-3 py-2 text-sm font-semibold">{synced ? `${kstStamp(synced)} 이후 반영 지연 · 최신 저장분 누락 가능` : "아직 집계 전 · 수치가 실제와 다를 수 있음"}</p> : null}
     {!cur ? <p className="text-text-dim text-sm">{failed[period] ? "조회 실패 · 잠시 후 다시 열어 주세요" : "불러오는 중…"}</p> : null}
 
-    {cur ? <div className="grid gap-3 lg:grid-cols-[300px_minmax(0,1fr)] lg:items-start">
-      <aside className="border-line bg-card min-w-0 overflow-hidden rounded-xl border p-2 lg:sticky lg:top-2">
+    {cur ? <div className="grid gap-3 lg:grid-cols-[300px_minmax(0,1fr)]">
+      {/* 왼쪽 목록 카드의 아래 끝 = 오른쪽 내용의 아래 끝(원장 2026-11-11) — 높이는 오른쪽을 따르고, 목록이 더 길면 카드 안에서 스크롤. */}
+      <aside className="border-line bg-card relative min-w-0 overflow-hidden rounded-xl border lg:min-h-[60vh]">
+        <div className="p-2 lg:absolute lg:inset-0 lg:overflow-y-auto">
         {tree.length ? <AdminTree tree={tree} multi={multi} sel={sel} lateOnly={lateOnly} onSelect={(next) => { setOpenKey(null); setSel(next); }} /> : <p className="text-text-dim px-2 py-4 text-sm">해당 기간 업무 없음</p>}
+        </div>
       </aside>
-      <main className="grid gap-4">
+      <main className="grid content-start gap-4">
         {crumbs.length > 1 || sel.studentId ? <nav className="flex flex-wrap items-center gap-1 text-sm" aria-label="위치">
           {crumbs.map((c, i) => <span key={i} className="flex items-center gap-1">
             {i ? <span className="text-text-placeholder" aria-hidden>›</span> : null}
@@ -184,11 +185,10 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null }: 
         {sel.studentId ? <StudentPane key={`${sel.studentId}|${fetchSubject ?? ""}`} period={period} tick={tick} studentId={sel.studentId} fetchSubject={fetchSubject} late={lateAll.filter((it) => !it.inherited && it.studentId === sel.studentId)} nowMs={nowMs} onWork={openWork} />
           : !subjectNode ? lateSection
           : classNode && ownerNode ? <ClassPane key={`${classNode.classId}|${ownerNode.ownerId}|${fetchSubject ?? ""}`} period={period} tick={tick} classNode={classNode} owner={ownerNode.ownerId} fetchSubject={fetchSubject} teacher={ownerNode.name} kind={sel.kind ?? null}
-              avg={{ pct: ownerNode.cell.pct, label: "선생님" }} onStudent={pickStudent} onWork={openWork} />
-          : ownerNode ? <TeacherLevel owner={ownerNode} avg={subjectAvg} period={period} subject={fetchSubject} tick={tick} kind={sel.kind ?? null} onClearKind={() => go({ ...sel, kind: null })} onClass={(classId) => go({ ...sel, classId, studentId: null })} />
-          : <SubjectLevel node={subjectNode} lateOnly={lateOnly} board={<>{atRoot && managers ? <AdminOwnerBoard tree={tree} late={cur.data.late} managers={managers} labels={scope.labels} nowMs={nowMs} onSubject={(subject) => go({ subject, owner: null, classId: null, studentId: null })} /> : null}{unit === "day" ? <AdminToday owners={subjectNode.owners} onOwner={(owner, kind) => go({ ...sel, owner, kind, classId: null, studentId: null })} /> : atRoot ? <AdminRanking tree={tree} onOwner={(subject, owner, kind) => go({ subject, owner, kind, classId: null, studentId: null })} /> : null}</>} avgLabel={atRoot ? "전체" : "과목"} attention={lateSection} onOwner={(ownerId, kind) => { setOpenKey(null); setSel({ ...sel, owner: ownerId, kind, classId: null, studentId: null }); }} />}
+              avg={{ pct: ownerNode.cell.pct, label: "선생님" }} aside={lateSection} onStudent={pickStudent} onWork={openWork} />
+          : ownerNode ? <TeacherLevel aside={lateSection} owner={ownerNode} avg={subjectAvg} period={period} subject={fetchSubject} tick={tick} kind={sel.kind ?? null} onClearKind={() => go({ ...sel, kind: null })} onClass={(classId) => go({ ...sel, classId, studentId: null })} />
+          : <SubjectLevel node={subjectNode} subjects={atRoot ? tree : null} lateOnly={lateOnly} grade={unit !== "day"} board={<>{atRoot && managers ? <AdminOwnerBoard tree={tree} late={cur.data.late} managers={managers} labels={scope.labels} nowMs={nowMs} onSubject={(subject) => go({ subject, owner: null, classId: null, studentId: null })} /> : null}{unit !== "day" && atRoot ? <AdminRanking tree={tree} onOwner={(subject, owner, kind) => go({ subject, owner, kind, classId: null, studentId: null })} /> : null}</>} side={unit === "day" ? <AdminToday owners={subjectNode.owners} onOwner={(owner, kind) => go({ ...sel, owner, kind, classId: null, studentId: null })} /> : null} avgLabel={atRoot ? "전체" : "과목"} attention={lateSection} onOwner={(ownerId, kind, subject) => go({ ...sel, ...(subject !== undefined ? { subject } : {}), owner: ownerId, kind, classId: null, studentId: null })} />}
 
-        {!sel.studentId && subjectNode && ownerNode ? lateSection : null}
       </main>
     </div> : null}
 

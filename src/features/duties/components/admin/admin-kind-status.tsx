@@ -19,10 +19,10 @@ export function KindStatusStrip({ statuses, only = null }: { statuses: KindStatu
       </div>
       <div className="mt-1 flex flex-wrap gap-x-2 text-xs font-semibold tabular-nums">
         {s.cell.due ? <span className="text-text-dim">준수 {s.cell.ontime}/{s.cell.due}</span> : null}
-        {s.cell.late ? <span className="text-danger">지연 {s.cell.late}</span> : null}
-        {s.cell.lateDone ? <span className="text-amber">지연 완료 {s.cell.lateDone}</span> : null}
+        {s.cell.late ? <span className="text-danger">기한 초과 {s.cell.late}</span> : null}
+        {s.cell.lateDone ? <span className="text-amber">기한 후 완료 {s.cell.lateDone}</span> : null}
         {s.cell.expired ? <span className="text-danger">미이행 확정 {s.cell.expired}</span> : null}
-        {s.upcoming ? <span className="text-text-dim">기한 전 {s.upcoming}</span> : null}
+        {s.upcoming ? <span className="text-text-dim">남음 {s.upcoming}</span> : null}
         {earlyDoneOf(s.cell) ? <span className="text-text-dim">조기 완료 {earlyDoneOf(s.cell)}</span> : null}
       </div>
     </div>)}

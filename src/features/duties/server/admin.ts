@@ -9,8 +9,9 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { subjectLabelRecord } from "@/features/owner/subjects";
 import { programSubjectsOf, subjectGroupOf } from "@/features/students/enrollment/program";
 import type { DutyPeriod, DutyStatus } from "../kinds";
+import { isNativeName } from "./native";
 import { loadLatestNotes } from "./notes";
-import type { ClassInfo, Counts, DutyAdminData, DutyAdminScope, LateItem, OwnerInfo, OwnerLoadRow, RollupClass, RollupOwnerKind, RollupStudent, StudentInfo } from "../view-admin";
+import type { AbsentRow, ClassInfo, Counts, DutyAdminData, DutyAdminScope, LateItem, OwnerInfo, OwnerLoadRow, RollupClass, RollupOwnerKind, RollupStudent, StudentInfo } from "../view-admin";
 
 /**
  * 업무 완성도 관리자 화면의 조회 — 장부는 서버 전용 표(정책 0개)라 관리 키로 읽고, **모든 조회에 지점 조건**. 집계는 DB(s2_0049 · B2).
@@ -69,7 +70,10 @@ export async function loadDutyAdmin(tenantId: string, from: string, to: string, 
   const ownerIds = [...new Set([...ownerKind.map((r) => r.ownerId), ...classes.map((r) => r.ownerId), ...late.map((r) => r.ownerId)].filter((id): id is string => !!id))];
   const classIds = [...new Set(classes.map((r) => r.classId).filter((id): id is string => !!id))];
   const [owners, classInfo] = await Promise.all([loadOwners(tenantId, ownerIds), loadClasses(tenantId, classIds)]);
-  return { ownerKind, classes, late, owners: owners.names, classInfo, syncedAt: settings.syncedAt, liveFrom: settings.liveFrom, ownerLoad, managerIds: owners.managerIds };
+  // 원어민 담당 몫은 집계 · 기한 초과 목록 · 반/학생 수에서 통째로 뺀다 — 줄만 숨기면 과목 합계와 줄의 합이 어긋난다(합계는 남은 줄로 다시 선다).
+  const native = new Set(Object.entries(owners.names).filter(([, name]) => isNativeName(name)).map(([id]) => id));
+  const kept = <T extends { ownerId: string | null }>(rows: T[]): T[] => (native.size ? rows.filter((r) => !r.ownerId || !native.has(r.ownerId)) : rows);
+  return { ownerKind: kept(ownerKind), classes: kept(classes), late: kept(late), owners: owners.names, classInfo, syncedAt: settings.syncedAt, liveFrom: settings.liveFrom, ownerLoad: kept(ownerLoad), managerIds: owners.managerIds };
 }
 
 type LateRow = { id: string; kind: string; period: DutyPeriod; cycle: string; status: DutyStatus; due_at: string; done_at: string | null; void_reason: string | null; owner_id: string | null;
@@ -106,13 +110,26 @@ async function loadClasses(tenantId: string, ids: string[]): Promise<ClassInfo> 
 }
 
 export type StudentFilter = { owner?: string | null; kind?: string | null; classId?: string | null; subject?: string | null; studentId?: string | null; /** 과목 없는 의무만('과목 미정' 줄). */ subjectNone?: boolean; /** 담당자 없는 의무만('담당 미정' 줄). */ ownerNone?: boolean };
-export type DutyStudentsData = { rows: RollupStudent[]; students: StudentInfo; classInfo: ClassInfo };
+export type DutyStudentsData = { rows: RollupStudent[]; students: StudentInfo; classInfo: ClassInfo; absent: AbsentRow[] };
 /** 학생 × 반 × 종류 — 드릴다운(담당자·종류·반 중 아무거나) · '학생별' 보기(필터 없음 · 페이지 넘겨 전건). */
 export async function loadDutyStudents(tenantId: string, from: string, to: string, scope: DutyAdminScope, periods: string[] | null, f: StudentFilter): Promise<DutyStudentsData> {
   const admin = createAdminClient();
   const raw = await fetchAllPaged<CountRow & { student_id: string | null; class_id: string | null; kind: string; last_due: string | null }>((a, b) =>
     admin.rpc("duty_rollup_student", { p_tenant: tenantId, p_from: from, p_to: to, p_subjects: scope.subjects, p_periods: periods, p_owner: scope.ownerId ?? (f.ownerNone ? null : f.owner ?? null), p_kind: f.kind ?? null, p_class: f.classId ?? null, p_subject: f.subject ?? null, p_student: f.studentId ?? null, p_subject_none: f.subjectNone ?? false, p_owner_none: !scope.ownerId && (f.ownerNone ?? false) })
       .order("student_id").order("class_id").order("kind").range(a, b));
+  // 결석으로 빠진 일간 의무(void · absent) — 집계에는 없지만 칸에 '결석'이라고 적으려고 같은 범위로 따로 읽는다(하루 · 한 주 · 한 달 안의 수업일).
+  const absentRaw = await fetchAllPaged<{ student_id: string | null; class_id: string | null; kind: string }>((a, b) => {
+    let q = admin.from("duty_items").select("student_id,class_id,kind").eq("tenant_id", tenantId).eq("period", "daily").eq("status", "void").eq("void_reason", "absent").gte("cycle", from).lte("cycle", to).not("student_id", "is", null);
+    if (scope.subjects) q = q.in("subject", scope.subjects);
+    if (scope.ownerId) q = q.eq("owner_id", scope.ownerId); else if (f.ownerNone) q = q.is("owner_id", null); else if (f.owner) q = q.eq("owner_id", f.owner);
+    if (f.kind) q = q.eq("kind", f.kind);
+    if (f.classId) q = q.eq("class_id", f.classId);
+    if (f.subjectNone) q = q.is("subject", null); else if (f.subject) q = q.eq("subject", f.subject);
+    if (f.studentId) q = q.eq("student_id", f.studentId);
+    return q.order("id").range(a, b);
+  });
+  const absentBy = new Map<string, AbsentRow>();
+  for (const r of absentRaw) { if (!r.student_id) continue; const key = `${r.student_id}|${r.class_id ?? ""}|${r.kind}`; const cur = absentBy.get(key) ?? { studentId: r.student_id, classId: r.class_id, kind: r.kind, count: 0 }; cur.count++; absentBy.set(key, cur); }
   const rows = raw.map((r): RollupStudent => ({ studentId: r.student_id, classId: r.class_id, kind: r.kind, ...counts(r), lastDue: r.last_due }));
   const studentIds = [...new Set(rows.map((r) => r.studentId).filter((id): id is string => !!id))];
   const classIds = [...new Set(rows.map((r) => r.classId).filter((id): id is string => !!id))];
@@ -121,5 +138,5 @@ export async function loadDutyStudents(tenantId: string, from: string, to: strin
       .then((rs): StudentInfo => Object.fromEntries(rs.map((r) => [r.id, { name: r.name ?? "학생", school: r.school, grade: r.grade }]))),
     loadClasses(tenantId, classIds),
   ]);
-  return { rows, students, classInfo };
+  return { rows, students, classInfo, absent: [...absentBy.values()] };
 }

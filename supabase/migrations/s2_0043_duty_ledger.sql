@@ -24,6 +24,7 @@
 -- 🔴 서버 전용(정책 0개 · 0377a와 같은 방식): 앱이 사람을 확인한 뒤 관리 키로 읽는다(담당자 = 내 것 · 원장·관리자 = 범위대로).
 -- 배포 순서: **앱보다 먼저**(#95). 앱은 표가 없어도 강사 홈이 죽지 않게 fail-soft(줄이 안 선다).
 -- 되돌리기: 스키마 duties_private와 표 duty_daily · duty_items를 지운다(순서대로). 할 일 kind 'duty_late' 행은 닫힌 기록이라 그대로 둬도 된다.
+-- 연동 역할 실행권 확인: duties_private는 이 파일이 만든 스키마 — 연동 PC 질의·RLS 정책이 지나는 함수가 없다(앱 service_role만 부른다).
 begin;
 
 create schema if not exists duties_private;

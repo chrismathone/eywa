@@ -13,9 +13,9 @@ export type DutyState = DutyStatus | "late";
 export type DutyKindInfo = { label: string; period: DutyPeriod; doneRule: string };
 
 export const DUTY_KINDS = {
-  attendance: { label: "출결 입력", period: "daily", doneRule: "그 반 그날 그 학생의 출결 기록이 생기면 완료. 기한은 당일 자정." },
-  report_write: { label: "수업보고서 작성", period: "daily", doneRule: "그날 그 학생의 수업보고서(또는 그날을 대신하는 보고서)가 있으면 완료. 결석이면 의무가 사라진다. 기한은 당일 자정." },
-  report_send: { label: "보고서 발송", period: "daily", doneRule: "그날 수업한 학생의 보고서가 학부모에게 실제로 나가면(발송 성공 · 영어는 반 알림장 게시) 완료. 써 놓고 보내지 않은 것은 미완료다. 결석 · 회수면 의무에서 빠진다(발송 기한을 넘겨 못 나간 것은 미이행). 기한은 다음 날 정오(반 알림장은 당일 자정)." },
+  attendance: { label: "출결 입력", period: "daily", doneRule: "그 반 그날 그 학생의 출결 기록이 생기면 완료. 기한은 그날 그 반 수업이 끝나는 시각(넘겨 찍으면 기한 후 완료)." },
+  report_write: { label: "수업보고서 작성", period: "daily", doneRule: "그날 그 학생의 수업보고서(또는 그날을 대신하는 보고서)가 있으면 완료. 결석이면 대상에서 빠진다. 기한은 수업이 끝난 뒤 24시간." },
+  report_send: { label: "보고서 발송", period: "daily", doneRule: "그날 수업한 학생의 보고서가 학부모에게 실제로 나가면(발송 성공 · 영어는 반 알림장 게시) 완료. 써 놓고 보내지 않은 것은 미완료다. 결석 · 회수면 의무에서 빠진다(발송 기한을 넘겨 못 나간 것은 미이행). 기한은 수업이 끝난 뒤 24시간(넘겨 보내면 기한 후 완료)." },
   counsel_monthly: { label: "학생 상담", period: "monthly", doneRule: "상담 의무 학생(같은 과목에서 가장 많은 요일을 맡은 담임 · 영어는 반 담임 전원 — 강사평가·원생상담 통계와 같은 판정)마다 그 달 본인이 상담을 1건 이상 기록하면 완료. 기한은 말일." },
   exam_monthly: { label: "월말평가", period: "monthly", doneRule: "그 달 담임 반 명단 학생마다 그 달 그 과목 월말평가 기록(성적관리 · 응시)이 있으면 완료(강사평가 월말평가 응시율과 같은 판정). 학원이 그 달이나 지난달에 월말평가를 친 과목만. 기한은 말일." },
   newcomer_call: { label: "신규생 관리", period: "case", doneRule: "신규생 관리 체크리스트(사전 콜 · 첫 수업 안내 · OJT · 첫 수업 후 콜 · 1개월 콜 · 3개월 콜)의 항목을 체크하면 완료. 기한은 그 항목의 날(등록일·첫 수업일 기준). 담당 = 그 학생의 상담 의무 담임." },

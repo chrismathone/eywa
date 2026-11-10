@@ -45,6 +45,8 @@ export type NewcomerStudent = { id: string; enrolledOn: string; /** 과목 → �
 export function buildNewcomerDuties(input: {
   today: string; students: readonly NewcomerStudent[]; checks: ChecksBySubject;
   ownerOf: (studentId: string, subject: string | null) => string | null;
+  /** 그 담당의 그 학생 반 — 관리 화면이 신규생 관리를 반 줄 안에서 보인다(모르면 null = 반 없는 줄). */
+  classOf?: (studentId: string, subject: string | null) => string | null;
   items?: readonly OnboardingItemDef[];
 }): DutyDraft[] {
   const items = (input.items ?? ONBOARDING_ITEMS).filter((i) => !i.optional);
@@ -55,12 +57,13 @@ export function buildNewcomerDuties(input: {
       const anchors = { enrolledOn: s.enrolledOn, firstClassOn: subject ? (s.subjects.get(subject) ?? null) : s.earliest };
       const checks = effectiveChecks(input.checks, s.id, subject);
       const ownerId = input.ownerOf(s.id, subject);
+      const classId = input.classOf?.(s.id, subject) ?? null;
       for (const item of items) {
         const doneOn = checks[item.key] ?? null;
         const st = statusOf(item, anchors, doneOn, input.today);
         if (st === "pending" || st === "waived") continue;
         const due = dueDateOf(item, anchors)!;
-        out.push({ kind: "newcomer_call", period: "case", cycle: item.key, subjectKey: `${s.id}|${subject ?? ""}`, studentId: s.id, classId: null, subject,
+        out.push({ kind: "newcomer_call", period: "case", cycle: item.key, subjectKey: `${s.id}|${subject ?? ""}`, studentId: s.id, classId, subject,
           ownerId, ownerSource: ownerId ? "homeroom" : "none", dueAt: kstDueAt(due, 1, 0),
           status: st === "done" ? "done" : "open", source: st === "done" ? "onboarding_check" : null, doneAt: doneOn ? kstDueAt(doneOn, 0, 9) : null });
       }

@@ -83,7 +83,7 @@ export function MyDutiesStripButton({ summary: initial, tenantId = null, classNa
     return () => { alive = false; if (timer) clearTimeout(timer); document.removeEventListener("visibilitychange", onVisible); };
   }, []);
   const pct = (c: Count) => (c.total ? Math.round((c.done / c.total) * 100) : 0);
-  // 기한 초과 = 지금 지연 전부(어제까지 밀린 것 포함 · 관리자 화면 '현재 지연'과 같은 수). 옛 응답(값 없음)이면 칸들의 합.
+  // 기한 초과 = 지금 지연 전부(어제까지 밀린 것 포함 · 관리자 화면 '기한 초과'과 같은 수). 옛 응답(값 없음)이면 칸들의 합.
   const lateAll = summary.overdue ?? today.late + counsel.late + exam.late + newcomer.late;
   const label = lang === "en"
     ? `My duties — today ${today.done}/${today.total}${lateAll ? ` · ${lateAll} overdue` : ""}`

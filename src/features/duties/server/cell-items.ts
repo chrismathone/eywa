@@ -1,3 +1,4 @@
+import { nativeOwnerIds } from "./native";
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
@@ -27,7 +28,7 @@ export async function loadDutyCellItems(tenantId: string, from: string, to: stri
     `and(period.eq.monthly,cycle.gte.${from.slice(0, 7)},cycle.lte.${to.slice(0, 7)})`,
     `and(period.eq.case,due_at.gt.${from}T00:00:00+09:00,due_at.lte.${monthEnd}T00:00:00+09:00)`,
   ].filter((w) => !periods || periods.some((p) => w.includes(`period.eq.${p},`)));
-  const rows = await fetchAllPaged<Row>((a, b) => {
+  const fetched = await fetchAllPaged<Row>((a, b) => {
     let q = admin.from("duty_items").select("id,kind,period,cycle,status,void_reason,due_at,done_at,owner_id,student_id,class_id,subject,class:classes!duty_items_class_id_fkey(class_name)")
       .eq("tenant_id", tenantId).eq("student_id", f.studentId).or("status.neq.void,void_reason.eq.expired").or(window.join(","));
     if (live && !(liveDay && to < liveDay)) q = q.gte("due_at", live);
@@ -38,6 +39,9 @@ export async function loadDutyCellItems(tenantId: string, from: string, to: stri
     if (f.subjectNone) q = q.is("subject", null); else if (f.subject) q = q.eq("subject", f.subject);
     return q.order("due_at").order("id").range(a, b);
   });
+  // 원어민 담당 업무는 목록에서도 뺀다(집계와 같은 규칙).
+  const native = await nativeOwnerIds(tenantId, fetched.flatMap((r) => (r.owner_id ? [r.owner_id] : [])));
+  const rows = native.size ? fetched.filter((r) => !r.owner_id || !native.has(r.owner_id)) : fetched;
   // 끝낸 월 상담 → 그 달 그 담당이 쓴 상담 기록(가장 이른 것 — 의무를 닫은 기록).
   const counsel = rows.filter((r) => r.kind === "counsel_monthly" && r.status === "done" && r.owner_id);
   const consultOf = new Map<string, string>();

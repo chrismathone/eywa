@@ -34,7 +34,7 @@ export function StudentLevel({ studentId, payload, late, nowMs, onWork }: {
     <header className="grid gap-1">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-xl font-bold">{name} {sub ? <span className="text-text-dim text-sm font-medium">{sub}</span> : null}</h3>
-        <span className="text-text-dim text-sm font-medium">전체 업무(담당·반 무관)</span>
+        <span className="text-text-dim text-sm font-medium">이 학생의 전체 업무</span>
         <span className="ml-auto flex gap-1.5">
           <button type="button" onClick={() => onWork({ href: `/students/${studentId}`, title: name })} className={btn}>학생 상세</button>
           <button type="button" onClick={() => onWork({ href: `/consultations/new?studentId=${encodeURIComponent(studentId)}`, title: `${name} · 상담 작성` })} className={btn}>상담 작성</button>
@@ -44,8 +44,8 @@ export function StudentLevel({ studentId, payload, late, nowMs, onWork }: {
     </header>
     {sum ? <KindStatusStrip statuses={kindStatuses(sum.cells)} /> : <p className="text-text-dim text-sm">불러오는 중…</p>}
     <section className="border-line bg-card rounded-xl border p-3">
-      <h4 className="text-sm font-bold">현재 지연 <span className="text-text-dim text-xs font-medium">{items.length}건</span></h4>
-      {!items.length ? <p className="text-green mt-2 text-sm font-semibold">지연 없음</p> : <ul className="mt-2 grid gap-1">
+      <h4 className="text-sm font-bold">기한 초과 <span className="text-text-dim text-xs font-medium">{items.length}건</span></h4>
+      {!items.length ? <p className="text-green mt-2 text-sm font-semibold">기한 초과 없음</p> : <ul className="mt-2 grid gap-1">
         {items.map((it) => <li key={it.id} className="flex flex-wrap items-center gap-2 rounded-lg px-2 py-1 text-sm">
           <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${it.inherited ? "bg-bg-soft text-text-dim" : pill(lateDays(it.dueAt, nowMs))}`}>{it.inherited ? "이관" : lateLabel(lateDays(it.dueAt, nowMs))}</span>
           <span className="font-bold">{dutyKindLabel(it.kind)}{itemLabel(it) ? ` — ${itemLabel(it)}` : ""}</span>

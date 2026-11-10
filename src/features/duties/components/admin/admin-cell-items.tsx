@@ -13,7 +13,7 @@ export type CellPick = { title: string; studentId: string; kind: string | null; 
  * 칸을 눌렀을 때의 목록 창 — 그 칸(학생 × 반 × 종류)이 센 업무를 한 줄씩: 상태 · 무엇(수업일 · 달 · 항목) · 실제 기록 시각 또는 기한.
  * 줄을 누르면 이 창을 닫고 실제 기록이 있는 화면(출석부 · 상담 기록 · 성적 입력)을 간이 창으로 연다(창 둘을 겹쳐 띄우지 않는다). 갈 화면이 없는 줄은 글만 보인다(원장 2026-11-10).
  */
-export function CellItemsDialog({ pick, period, onClose, onWork }: { pick: CellPick; period: AdminPeriod; onClose: () => void; onWork: (w: DutyWork) => void }) {
+export function CellItemsDialog({ pick, period, tick = 0, onClose, onWork }: { pick: CellPick; period: AdminPeriod; /** 화면이 다시 받을 때마다 오르는 수 — 목록도 함께 다시 받는다(열어 둔 사이 저장된 것이 보이게). */ tick?: number; onClose: () => void; onWork: (w: DutyWork) => void }) {
   const [state, setState] = useState<{ items: CellItem[] | null; failed: boolean }>({ items: null, failed: false });
   useEffect(() => {
     let alive = true;
@@ -25,9 +25,9 @@ export function CellItemsDialog({ pick, period, onClose, onWork }: { pick: CellP
     fetch(`/api/duties/admin/items?${q.toString()}`, { cache: "no-store" })
       .then(async (r) => { if (!r.ok) throw new Error(String(r.status)); return (await r.json()) as { items: CellItem[] }; })
       .then((d) => { if (alive) setState({ items: d.items, failed: false }); })
-      .catch(() => { if (alive) setState({ items: null, failed: true }); });
+      .catch(() => { if (alive) setState((cur) => (cur.items ? cur : { items: null, failed: true })); });
     return () => { alive = false; };
-  }, [period, pick.studentId, pick.kind, pick.classId, pick.classNone, pick.owner, pick.ownerNone, pick.subject]);
+  }, [period, tick, pick.studentId, pick.kind, pick.classId, pick.classNone, pick.owner, pick.ownerNone, pick.subject]);
   const { items, failed } = state;
   const body = (it: CellItem) => <>
     <span className={`w-16 shrink-0 rounded-full px-1.5 py-0.5 text-center text-xs font-bold ${TONE[it.state]}`}>{CELL_STATE_LABEL[it.state]}</span>

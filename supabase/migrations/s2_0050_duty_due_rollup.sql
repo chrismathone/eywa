@@ -14,6 +14,7 @@
 --   · `duty_rollup_student`에 p_owner_none(담당자 없는 의무만 — '담당 미정' 줄을 열 때 다른 선생님 몫이 섞이지 않게).
 -- 🔴 집계 본문은 duties_private.rollup_rows 한 곳(SET 절 없는 SQL 함수 = 계획기가 펼친다 · #143). 공개 함수 셋은 묶는 축만 다르다.
 -- service_role 전용(정책 0개 표와 같은 문). 되돌리기: s2_0049와 s2_0048의 함수 본문을 다시 적용하고 duty_settings를 지운다.
+-- 연동 역할 실행권 확인: duty_rollup_* 집계는 관리 화면(앱 service_role)만 부른다 — 연동 PC 질의·RLS 정책이 지나지 않는다.
 begin;
 
 create table if not exists public.duty_settings (

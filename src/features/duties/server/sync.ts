@@ -1,4 +1,5 @@
 import "server-only";
+import { kstToday } from "@/lib/date-kst";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import type { TenantSettings } from "@/features/owner/settings-types";
@@ -9,6 +10,7 @@ import { isTestClass, type WorkEnrollment } from "@/features/dashboard/overview/
 import { buildDailyDuties, type DutyAttendance, type DutyClass, type DutyDraft, type DutyReport, type DutySchedule } from "../model/daily";
 import { DUTY_KIND_KEYS, DUTY_KINDS } from "../kinds";
 import { loadSubjectManagers } from "./managers";
+import { loadOwnerAsOf } from "./owner-as-of";
 
 const DAILY_KINDS = DUTY_KIND_KEYS.filter((k) => DUTY_KINDS[k].period === "daily");
 
@@ -20,15 +22,19 @@ const DAILY_KINDS = DUTY_KIND_KEYS.filter((k) => DUTY_KINDS[k].period === "daily
  */
 export async function syncDailyDuties(tenantId: string, date: string, settings: TenantSettings): Promise<{ drafts: number; inserted: number; done: number; voided: number }> {
   const admin = createAdminClient();
-  const classes = await fetchAllPaged<{ id: string; class_name: string; subject: string; english_track: string | null; teacher_id: string | null; report_optout: boolean | null; closed_at: string | null }>((from, to) =>
-    admin.from("classes").select("id,class_name,subject,english_track,teacher_id,report_optout,closed_at").eq("tenant_id", tenantId).eq("is_active", true)
-      .or(`closed_at.is.null,closed_at.gte.${date}`).order("id").range(from, to));
-  const live = classes.filter((c) => !isTestClass(c.class_name));
+  // 지난 날은 **그날 기준**으로 맞춘다(원장 2026-11-11) — 그날의 담임 · 그날 재직 여부 · 그 뒤에 종강한 반까지. 오늘은 종전 그대로(지금 운영 중인 반 · 지금 담임).
+  const past = date < kstToday();
+  const asOf = await loadOwnerAsOf(tenantId);
+  const classes = await fetchAllPaged<{ id: string; class_name: string; subject: string; english_track: string | null; teacher_id: string | null; report_optout: boolean | null; closed_at: string | null }>((from, to) => {
+    const q = admin.from("classes").select("id,class_name,subject,english_track,teacher_id,report_optout,closed_at").eq("tenant_id", tenantId);
+    return (past ? q.or(`and(is_active.eq.true,closed_at.is.null),closed_at.gte.${date}`) : q.eq("is_active", true).or(`closed_at.is.null,closed_at.gte.${date}`)).order("id").range(from, to);
+  });
+  const live = classes.filter((c) => !isTestClass(c.class_name)).map((c) => (past ? { ...c, teacher_id: asOf.teacherOf(c.id, c.teacher_id, date) } : c));
   const classIds = live.map((c) => c.id);
   if (!classIds.length) return { drafts: 0, inserted: 0, done: 0, voided: 0 };
   const classnoteOn = classnoteModuleOn(settings);
   const schedules = await fetchAllPagedInChunks<DutySchedule & { class_id: string }>(classIds, (chunk, from, to) =>
-    admin.from("class_schedules").select("class_id,day_of_week,start_time,valid_from,valid_to,teacher_id,slot_teacher_label").eq("tenant_id", tenantId).in("class_id", chunk)
+    admin.from("class_schedules").select("class_id,day_of_week,start_time,end_time,valid_from,valid_to,teacher_id,slot_teacher_label").eq("tenant_id", tenantId).in("class_id", chunk)
       .or(`valid_from.is.null,valid_from.lte.${date}`).or(`valid_to.is.null,valid_to.gte.${date}`).order("id").range(from, to));
   // 재직 여부는 담임뿐 아니라 교시 담당까지 본다(교시 담당이 퇴사자면 할 일이 아무에게도 안 간다 — 리뷰 2026-11-09).
   const teacherIds = [...new Set([...live.flatMap((c) => c.teacher_id ? [c.teacher_id] : []), ...schedules.flatMap((s) => s.teacher_id ? [s.teacher_id] : [])])];
@@ -50,7 +56,8 @@ export async function syncDailyDuties(tenantId: string, date: string, settings: 
       admin.from("classnote_class_posts").select("board_name,posted_on").eq("tenant_id", tenantId).eq("posted_on", date).order("board_name").range(from, to)) : Promise.resolve([]),
   ]);
   const names = new Map(teachers.map((t) => [t.id, t.display_name]));
-  const inactive = new Set(teachers.filter((t) => t.status === "inactive").map((t) => t.id));
+  // 퇴사자는 퇴사일 다음 날부터 담당에서 빠진다(그 전의 날은 그 사람 업무로 남는다).
+  const inactive = new Set(teachers.filter((t) => t.status === "inactive" && asOf.retiredOn(t.id, date)).map((t) => t.id));
   const programs = programSubjectsOf(Object.fromEntries(settings.operations.subjects.map((s) => [s.key, s.label])));
   const dutyClasses: DutyClass[] = live.map((c) => {
     const teacherName = c.teacher_id ? names.get(c.teacher_id) ?? "" : "";
@@ -79,10 +86,10 @@ export async function syncDailyDuties(tenantId: string, date: string, settings: 
  * 초안을 장부에 쓴다 — 열기(upsert) → 명단에서 빠진 것 void(종류 × 회차마다 · 보고서·상담처럼 열쇠에 담당이 든 종류는 rekey 정리) → 사실로 닫거나 되살림.
  * `kinds`를 주면 초안이 하나도 없는 종류도 그 회차들을 정리한다(예: 신규생이 0명이 된 날).
  */
-export async function writeDrafts(tenantId: string, drafts: readonly DutyDraft[], options: { rekey: boolean; /** 초안이 비어도 정리할 종류 → 회차. 건별(case) 종류는 회차 목록 대신 열린 회차를 DB에서 찾는다. */ cyclesOf?: Readonly<Record<string, readonly string[]>> } = { rekey: false }): Promise<{ inserted: number; done: number; voided: number }> {
+export async function writeDrafts(tenantId: string, drafts: readonly DutyDraft[], options: { rekey: boolean; /** 초안이 비어도 정리할 종류 → 회차. 건별(case) 종류는 회차 목록 대신 열린 회차를 DB에서 찾는다. */ cyclesOf?: Readonly<Record<string, readonly string[]>>; /** 이미 있는 행의 완료만 맞춘다 — 새로 열지도 · 빼지도 · 담당을 옮기지도 않는다(지난 달 재맞춤). */ resolveOnly?: boolean } = { rekey: false }): Promise<{ inserted: number; done: number; voided: number }> {
   const admin = createAdminClient();
   let inserted = 0, done = 0, voided = 0;
-  for (let i = 0; i < drafts.length; i += 500) {
+  for (let i = 0; !options.resolveOnly && i < drafts.length; i += 500) {
     const chunk = drafts.slice(i, i + 500);
     const { data, error } = await admin.rpc("duty_upsert_items", { p_tenant: tenantId, p_items: chunk.map((d) => ({
       kind: d.kind, period: d.period, cycle: d.cycle, subjectKey: d.subjectKey, studentId: d.studentId, classId: d.classId, subject: d.subject,
@@ -94,7 +101,7 @@ export async function writeDrafts(tenantId: string, drafts: readonly DutyDraft[]
   const cycles = new Map<string, Set<string>>();
   for (const d of drafts) cycles.set(d.kind, (cycles.get(d.kind) ?? new Set()).add(d.cycle));
   for (const kind of Object.keys(options.cyclesOf ?? {})) if (!cycles.has(kind)) cycles.set(kind, new Set());
-  for (const [kind, set] of cycles) {
+  for (const [kind, set] of options.resolveOnly ? [] : cycles) {
     // 🔴 초안이 빈 종류는 **부르는 쪽이 지정한 회차만** 정리한다(휴원일에 그날 초안이 비었다고 지난 날들을 void하면 안 된다).
     //    건별(case) 종류만 회차가 항목 키라 열린 회차를 DB에서 찾는다.
     const targets = set.size ? [...set] : options.cyclesOf?.[kind]?.length ? [...options.cyclesOf[kind]!] : DUTY_KINDS[kind as keyof typeof DUTY_KINDS]?.period === "case" ? await openCyclesOfKind(tenantId, kind) : [];
@@ -105,8 +112,10 @@ export async function writeDrafts(tenantId: string, drafts: readonly DutyDraft[]
       voided += Number(data ?? 0);
     }
   }
-  for (let i = 0; i < drafts.length; i += 500) {
-    const chunk = drafts.slice(i, i + 500);
+  // 완료만 맞추는 길은 끝난 초안만 보낸다 — 열린 초안이 닿으면 이미 빠지거나 미이행으로 확정된 지난 달 행이 다시 열린다(리뷰 2026-11-11).
+  const resolving = options.resolveOnly ? drafts.filter((d) => d.status === "done") : drafts;
+  for (let i = 0; i < resolving.length; i += 500) {
+    const chunk = resolving.slice(i, i + 500);
     const { data, error } = await admin.rpc("duty_resolve_items", { p_tenant: tenantId, p_updates: chunk.map((d) => ({
       kind: d.kind, subjectKey: d.subjectKey, cycle: d.cycle, status: d.status, source: d.source, doneAt: d.doneAt })) });
     if (error) throw new Error(`의무 장부 맞춤: ${error.message}`);

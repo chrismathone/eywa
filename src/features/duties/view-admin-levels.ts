@@ -25,14 +25,14 @@ export function judge(cell: Cell, avg: Avg | null = null): Verdict {
   // 기한이 온 업무가 어떻게 끝났나 — 제때 · 늦게 · 안 함(미이행 확정 + 지금 지연). 화면은 이 넷을 막대 하나로 그린다.
   const mix = cell.due ? { due: cell.due, ontime: cell.ontime, lateDone: cell.lateDone, missed: cell.expired + cell.late, late: cell.late } : null;
   if (cell.pct === null || cell.due < MIN_JUDGE) {
-    const reason = cell.due ? `기한이 된 업무가 ${n(cell.due)}건뿐이라 아직 등급을 매기지 않습니다.` : up ? `아직 기한 전입니다 — ${n(cell.done)}/${n(cell.total)}건 완료.` : "아직 기한 전입니다.";
+    const reason = cell.due ? `기한 지난 업무 ${n(cell.due)}건 · 3건부터 등급 산정` : up ? `진행 중 · ${n(cell.total)}건 중 ${n(cell.done)}건 완료` : "진행 중";
     return { grade: "wait", tier: null, label: VERDICT_LABEL.wait, reason, mix, gap: null };
   }
   const tier = dutyTier(exactPct(cell) ?? cell.pct);
   const missed = cell.expired + cell.late;
   // 결론 한 줄(원장 2026-11-10 *"관리자 입장에서 바로 판단이 가능하게"*) — 잘하고 있나 · 아니면 '늦게 하는' 쪽인가 '안 하는' 쪽인가.
-  const reason = tier <= 2 ? (cell.lateDone + missed ? "대부분 제때 처리합니다." : "전부 제때 처리했습니다.")
-    : `${100 - cell.pct}%를 제때 못 했습니다 — 주로 ${missed > cell.lateDone ? "하지 않은 업무" : "늦게 처리한 업무"}입니다.`;
+  const reason = tier <= 2 ? (cell.lateDone + missed ? "대부분 기한 내 완료" : "업무 완료")
+    : `기한 준수율 ${cell.pct}% · ${missed > cell.lateDone ? "미처리가 많음" : "기한 후 완료가 많음"}`;
   const diff = avg && avg.pct !== null ? cell.pct - avg.pct : null;
   const gap = diff === null || !avg || diff === 0 ? null : { label: avg.label, diff };
   return { grade: tierTone(tier), tier, label: `${tier}등급`, reason, mix, gap };

@@ -82,6 +82,9 @@ export function periodsOf(period: AdminPeriod): string[] | null {
   return periodUnit(period) === "month" ? null : ["daily"];
 }
 
+/** 결석으로 의무에서 빠진 것(학생 × 반 × 종류의 건수) — 칸이 비었을 때 '—' 대신 '결석'이라고 적는다(왜 없는지 보이게 · 집계에는 안 든다). */
+export type AbsentRow = { studentId: string; classId: string | null; kind: string; count: number };
+
 /** 매트릭스 열 = 종류 전부(순서 = DUTY_KINDS). 짧은 머리글. */
 export const MATRIX_COLUMNS: { kind: string; label: string }[] = [
   { kind: "attendance", label: "출결" }, { kind: "report_send", label: "보고서 발송" }, { kind: "report_write", label: "보고서 작성" },
@@ -124,14 +127,25 @@ export function cellTone(c: Cell): CellTone {
   if (c.pct === null || c.due < MIN_JUDGE) return "wait";
   return tierTone(dutyTier(exactPct(c) ?? c.pct));
 }
+/**
+ * 칸 표시(원장 2026-11-11 *"남음이 있는데 100%는 말도 안됨"* · *"전체는 %로"* · *"완료된 건은 초록색으로, 미흡이 하나라도 있는건은 붉은색으로"*):
+ *   · 잘 끝낸 것 = 기한 안에 끝낸 것(기한 전에 미리 끝낸 것 포함). 늦게 끝낸 것 · 아직 안 한 것 · 미이행은 모자란 것이다.
+ *   · '전체' 칸의 % = 잘 끝낸 것 ÷ **전체**(남은 것도 분모에 든다 — 남은 것이 있으면 100%가 아니다).
+ *   · 색은 둘 — 전부 잘 끝냈으면 초록, 하나라도 모자라면 빨강.
+ * 등급(`judge`)은 종전대로 기한이 온 것만으로 매긴다(아직 기한이 안 온 일로 등급을 깎지 않는다).
+ */
+export const wellDoneOf = (c: Counts): number => c.ontime + earlyDoneOf(c);
+export const overallPct = (c: Counts): number | null => (c.total ? Math.floor((wellDoneOf(c) / c.total) * 100) : null);
+export const allWellDone = (c: Counts): boolean => c.total > 0 && wellDoneOf(c) === c.total;
+
 /** 칸 설명(마우스 오버) — 숫자의 뜻을 글로. */
 export function cellTitle(c: Counts): string {
-  const parts = [c.due ? `기한 도래 ${c.due}건 중 준수 ${c.ontime}건` : "기한 도래 없음"];
-  if (c.late) parts.push(`지연 ${c.late}`);
-  if (c.lateDone) parts.push(`지연 완료 ${c.lateDone}`);
-  if (c.expired) parts.push(`미이행 확정 ${c.expired}`);
-  const up = upcomingOf(c); if (up) parts.push(`기한 전 ${up}`);
-  const early = earlyDoneOf(c); if (early) parts.push(`조기 완료 ${early}`);
+  const parts = [c.due ? `기한 지난 업무 ${c.due}건 중 기한 내 완료 ${c.ontime}건` : "기한 지난 업무 없음"];
+  if (c.late) parts.push(`기한 초과 ${c.late}`);
+  if (c.lateDone) parts.push(`기한 후 완료 ${c.lateDone}`);
+  if (c.expired) parts.push(`미처리 확정 ${c.expired}`);
+  const up = upcomingOf(c); if (up) parts.push(`남음 ${up}`);
+  const early = earlyDoneOf(c); if (early) parts.push(`미리 완료 ${early}`);
   return parts.join(" · ");
 }
 /** 과목 거르기 — undefined = 전 과목 · null = 과목 없는 것만('과목 미정') · 글자 = 그 과목. */

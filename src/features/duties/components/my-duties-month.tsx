@@ -22,9 +22,9 @@ export function MyDutiesMonth({ items, now, month }: { items: DutyItemView[]; no
       <ToolbarSegmentItem active={tab === "exam"} onClick={() => setTab("exam")}>{mm}월 월말평가 {foldRows(exam).done}/{foldRows(exam).total}</ToolbarSegmentItem>
     </ToolbarSegment>
     {tab === "counsel" ? <>
-      <Section title="학생 상담" count={foldRows(counsel)} rows={counsel} empty="상담 의무 학생이 없습니다(담임 반이 없거나 아직 집계 전)." />
-      <Section title="신규생 관리" count={foldRows(newcomer)} rows={newcomer} empty="맡은 신규생 항목이 없습니다." hideSingleGroup />
-    </> : <Section title="월말평가 응시" count={foldRows(exam)} rows={exam} empty="월말평가를 치는 과목이 없거나 아직 집계 전입니다." />}
+      <Section title="학생 상담" count={foldRows(counsel)} rows={counsel} empty="상담 대상 학생 없음" />
+      <Section title="신규생 관리" count={foldRows(newcomer)} rows={newcomer} empty="담당 신규생 없음" hideSingleGroup />
+    </> : <Section title="월말평가 응시" count={foldRows(exam)} rows={exam} empty="월말평가 대상 없음" />}
   </div>;
 }
 

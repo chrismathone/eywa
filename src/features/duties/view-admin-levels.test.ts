@@ -10,21 +10,21 @@ const STUDENTS = { s1: { name: "김하준", school: "경명여중", grade: "중1
 
 describe("judge", () => {
   it("로열티와 같은 9등급(전체 % 기준) · 색 묶음 1~2 / 3~4 / 5 이하 · 결론 한 줄(제때인가 · 늦게 하는 쪽인가 · 안 하는 쪽인가) + 결말 구성 + 평균과의 차이", () => {
-    expect(judge(cellOf(c(10, 10, 10, 10)), { pct: 85, label: "과목" })).toMatchObject({ grade: "good", tier: 1, label: "1등급", reason: "전부 제때 처리했습니다.", gap: { label: "과목", diff: 15 }, mix: { due: 10, ontime: 10, lateDone: 0, missed: 0, late: 0 } });
+    expect(judge(cellOf(c(10, 10, 10, 10)), { pct: 85, label: "과목" })).toMatchObject({ grade: "good", tier: 1, label: "1등급", reason: "업무 완료", gap: { label: "과목", diff: 15 }, mix: { due: 10, ontime: 10, lateDone: 0, missed: 0, late: 0 } });
     expect(judge(cellOf(c(10, 8, 10, 8, 2)))).toMatchObject({ grade: "warn", tier: 3, label: "3등급" });
-    expect(judge(cellOf(c(10, 6, 10, 6, 4)))).toMatchObject({ grade: "warn", tier: 4, reason: "40%를 제때 못 했습니다 — 주로 하지 않은 업무입니다.", mix: { due: 10, ontime: 6, lateDone: 0, missed: 4, late: 4 } });
+    expect(judge(cellOf(c(10, 6, 10, 6, 4)))).toMatchObject({ grade: "warn", tier: 4, reason: "기한 준수율 60% · 미처리가 많음", mix: { due: 10, ontime: 6, lateDone: 0, missed: 4, late: 4 } });
     expect(judge(cellOf(c(10, 5, 10, 5, 5)))).toMatchObject({ grade: "bad", tier: 5, label: "5등급" });
     // 늦게라도 한 쪽이 더 많으면 '주로 늦게 처리한 업무'.
-    expect(judge(cellOf(c(10, 10, 10, 3, 0, { lateDone: 6, expired: 1 }))).reason).toBe("70%를 제때 못 했습니다 — 주로 늦게 처리한 업무입니다.");
+    expect(judge(cellOf(c(10, 10, 10, 3, 0, { lateDone: 6, expired: 1 }))).reason).toBe("기한 준수율 30% · 기한 후 완료가 많음");
     expect(judge(cellOf(c(0, 0, 0, 0)))).toMatchObject({ grade: "none", reason: "" });
   });
   it("🔴 기한 전 의무만 있으면 '평가 대기' — 달 초·수업 전에 미흡이 되지 않는다", () => {
-    expect(judge(cellOf(c(30, 3, 0, 0)))).toMatchObject({ grade: "wait", label: "평가 대기", reason: "아직 기한 전입니다 — 3/30건 완료." });
+    expect(judge(cellOf(c(30, 3, 0, 0)))).toMatchObject({ grade: "wait", label: "평가 대기", reason: "진행 중 · 30건 중 3건 완료" });
     // 일간은 다 했는데 월간(말일 기한)이 남은 반 — 일간 실적대로 1등급.
-    expect(judge(cellOf(c(40, 21, 21, 21)))).toMatchObject({ grade: "good", reason: "전부 제때 처리했습니다." });
+    expect(judge(cellOf(c(40, 21, 21, 21)))).toMatchObject({ grade: "good", reason: "업무 완료" });
   });
   it("🔴 기한 온 것이 3건 미만이면 등급 없이 건수만 · 7일 넘은 지연이 있어도 등급을 덮어쓰지 않는다", () => {
-    expect(judge(cellOf(c(2, 0, 2, 0, 2)))).toMatchObject({ grade: "wait", reason: "기한이 된 업무가 2건뿐이라 아직 등급을 매기지 않습니다." });
+    expect(judge(cellOf(c(2, 0, 2, 0, 2)))).toMatchObject({ grade: "wait", reason: "기한 지난 업무 2건 · 3건부터 등급 산정" });
     expect(judge(cellOf(c(20, 19, 20, 19, 1, { over7: 1 }))).grade).toBe("good");
   });
 });

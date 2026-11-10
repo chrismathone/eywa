@@ -5,7 +5,7 @@ const NOW = Date.parse("2026-11-10T03:00:00Z");
 const it0 = (o: object) => ({ status: "done", voidReason: null, dueAt: "2026-11-09T15:00:00Z", doneAt: "2026-11-09T10:00:00Z", ...o });
 
 describe("칸 목록의 한 줄", () => {
-  it("🔴 상태는 집계와 같다 — 기한 안 완료 = 준수 · 넘겨 완료 = 지연 완료 · 기한 전 완료 = 조기 완료(준수 아님) · 열린 것은 기한으로 · 미이행 확정", () => {
+  it("🔴 상태는 집계와 같다 — 기한 안 완료 = 준수 · 넘겨 완료 = 기한 후 완료 · 기한 전 완료 = 조기 완료(준수 아님) · 열린 것은 기한으로 · 미이행 확정", () => {
     expect(cellItemState(it0({}), NOW)).toBe("ontime");
     expect(cellItemState(it0({ doneAt: null }), NOW)).toBe("ontime");
     expect(cellItemState(it0({ doneAt: "2026-11-09T16:00:00Z" }), NOW)).toBe("late_done");

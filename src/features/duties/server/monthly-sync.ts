@@ -12,6 +12,8 @@ import { buildSubjectAnchors, indexChecks } from "@/features/newcomers/subject-r
 import { newcomerWindowStart } from "@/features/newcomers/onboarding-items";
 import { gradeKind } from "@/features/grades/unified/server/normalize";
 import { buildCounselDuties, buildExamDuties, buildNewcomerDuties, type CounselPair } from "../model/monthly";
+import { kstToday } from "@/lib/date-kst";
+import { loadOwnerAsOf } from "./owner-as-of";
 import { writeDrafts } from "./sync";
 
 type ClassRow = SnapshotClass & { math_learning_track: string | null };
@@ -22,13 +24,18 @@ type EnrollRow = Omit<SnapshotEnrollment, "start_date" | "on_hold" | "is_transfe
  * 오늘 기준 의무 쌍(지금 담임)으로 이번 달 분모를 만든다 — 달 중에 담임이 바뀌면 열쇠가 바뀌고 옛 열쇠는 rekey 정리된다(일간과 같은 규칙).
  * 🔴 관리 키라 모든 조회에 tenant_id(#104). 체크 표를 못 읽으면(미적용·실패) 신규생 몫만 건너뛰고 상담은 맞춘다.
  */
-export async function syncMonthlyDuties(tenantId: string, today: string, settings: TenantSettings, opts: { /** 지난 달 다시 만들기(`backfillDutyMonth`) — 신규생 정착은 오늘 기준 한 벌이라 지난 날로 돌리지 않는다. */ skipNewcomers?: boolean } = {}): Promise<{ counsel: number; exam: number; newcomer: number; skipped?: string }> {
+export async function syncMonthlyDuties(tenantId: string, today: string, settings: TenantSettings, opts: { /** 지난 달 다시 만들기(`backfillDutyMonth`) — 신규생 정착은 오늘 기준 한 벌이라 지난 날로 돌리지 않는다. */ skipNewcomers?: boolean; /** 지난 달 재맞춤(달 초 한 주) — 완료만 맞춘다. 지금 명단 · 지금 담임으로 지난 달 의무를 새로 열거나 지우면 이미 선 실적이 바뀐다. */ resolveOnly?: boolean } = {}): Promise<{ counsel: number; exam: number; newcomer: number; skipped?: string }> {
   const admin = createAdminClient();
   const month = today.slice(0, 7);
   const monthStart = `${month}-01`;
-  const classes = await fetchAllPaged<ClassRow>((from, to) =>
-    admin.from("classes").select(`${CLASS_COLUMNS}, math_learning_track`).eq("tenant_id", tenantId).eq("is_active", true)
-      .or(`closed_at.is.null,closed_at.gte.${today}`).order("id").range(from, to));
+  // 지난 달(다시 만들기 · 달 초 재맞춤)은 **그 달 말 기준**으로 본다(원장 2026-11-11) — 그때의 담임 · 그때 재직 여부 · 그 뒤 종강한 반 · 그 뒤 퇴원한 학생.
+  const past = today < kstToday();
+  const asOf = await loadOwnerAsOf(tenantId);
+  const classRows = await fetchAllPaged<ClassRow>((from, to) => {
+    const q = admin.from("classes").select(`${CLASS_COLUMNS}, math_learning_track`).eq("tenant_id", tenantId);
+    return (past ? q.or(`and(is_active.eq.true,closed_at.is.null),closed_at.gte.${today}`) : q.eq("is_active", true).or(`closed_at.is.null,closed_at.gte.${today}`)).order("id").range(from, to);
+  });
+  const classes = past ? classRows.map((c) => ({ ...c, teacher_id: asOf.teacherOf(c.id, c.teacher_id, today) })) : classRows;
   const eligible = classes.filter((c) => isHomeroomConsultClass({ isSpecial: c.is_special ?? null, className: c.class_name, learningTrack: c.math_learning_track }));
   const ids = eligible.map((c) => c.id);
   if (!ids.length) return { counsel: 0, exam: 0, newcomer: 0 };
@@ -72,14 +79,15 @@ export async function syncMonthlyDuties(tenantId: string, today: string, setting
     fetchAllPaged<{ student_id: string; subject: string; exam_slot: string | null; exam_name: string; taken_on: string; no_exam: boolean | null; created_at: string | null }>((from, to) =>
       admin.from("student_grades").select("student_id,subject,exam_slot,exam_name,taken_on,no_exam,created_at").eq("tenant_id", tenantId).gte("taken_on", prevMonthStart).order("id").range(from, to)),
   ]);
-  const counted = new Set(students.filter((s) => !s.is_test && s.status === "enrolled").map((s) => s.id));
-  const inactive = new Set(teachers.filter((t) => t.status === "inactive").map((t) => t.id));
+  // 지난 달은 그 달 명단(수강 기간)이 대상을 정한다 — 그 뒤 퇴원했다고 그 달 업무가 사라지지 않는다.
+  const counted = new Set(students.filter((s) => !s.is_test && (past || s.status === "enrolled")).map((s) => s.id));
+  const inactive = new Set(teachers.filter((t) => t.status === "inactive" && asOf.retiredOn(t.id, today)).map((t) => t.id));
   const counselDrafts = buildCounselDuties({ month, pairs: pairs.filter((p) => counted.has(p.studentId)),
     consults: consults.map((c) => ({ studentId: c.student_id, counselorId: c.counselor_id, consultedAt: c.consulted_at })), inactiveTeacherIds: inactive });
-  await writeDrafts(tenantId, counselDrafts, { rekey: true });
+  await writeDrafts(tenantId, counselDrafts, { rekey: true, resolveOnly: opts.resolveOnly });
   const examDrafts = buildExamDuties({ month, pairs: rosterPairs.filter((p) => counted.has(p.studentId)), inactiveTeacherIds: inactive,
     records: grades.filter((g) => !g.no_exam && gradeKind(g.exam_slot, g.exam_name) === "monthly").map((g) => ({ studentId: g.student_id, subject: g.subject, takenOn: g.taken_on, createdAt: g.created_at })) });
-  await writeDrafts(tenantId, examDrafts, { rekey: true, cyclesOf: { exam_monthly: [month] } });
+  await writeDrafts(tenantId, examDrafts, { rekey: true, cyclesOf: { exam_monthly: [month] }, resolveOnly: opts.resolveOnly });
 
   if (opts.skipNewcomers) return { counsel: counselDrafts.length, exam: examDrafts.length, newcomer: 0, skipped: "newcomers_skipped" };
   // ── 신규생 정착 콜 — 신규생 탭·운영실 신호와 같은 재료(cohort.ts).
@@ -91,9 +99,10 @@ export async function syncMonthlyDuties(tenantId: string, today: string, setting
   const [subjectsOf, checksResult] = await Promise.all([loadEnrollmentSubjects(admin, nIds, scope), loadCheckRows(admin, nIds, scope)]);
   if (!checksResult.ok) return { counsel: counselDrafts.length, exam: examDrafts.length, newcomer: 0, skipped: "checks_unavailable" };
   const { bySubject, earliest } = buildSubjectAnchors(subjectsOf, today);
-  const ownerOf = (studentId: string, subject: string | null) =>
-    pairs.find((p) => p.studentId === studentId && (!subject || p.subject === subject) && !inactive.has(p.teacherId))?.teacherId ?? null;
-  const newcomerDrafts = buildNewcomerDuties({ today, checks: indexChecks(checksResult.rows), ownerOf,
+  const pairOf = (studentId: string, subject: string | null) => pairs.find((p) => p.studentId === studentId && (!subject || p.subject === subject) && !inactive.has(p.teacherId));
+  const ownerOf = (studentId: string, subject: string | null) => pairOf(studentId, subject)?.teacherId ?? null;
+  const newcomerClassOf = (studentId: string, subject: string | null) => pairOf(studentId, subject)?.classId ?? null;
+  const newcomerDrafts = buildNewcomerDuties({ today, checks: indexChecks(checksResult.rows), ownerOf, classOf: newcomerClassOf,
     students: newcomers.filter((s) => nIds.includes(s.id)).map((s) => ({ id: s.id, enrolledOn: String(s.enrolled_at).slice(0, 10), subjects: bySubject.get(s.id) ?? new Map(), earliest: earliest.get(s.id) ?? null })) });
   await writeDrafts(tenantId, newcomerDrafts, { rekey: false, cyclesOf: { newcomer_call: [] } });
   return { counsel: counselDrafts.length, exam: examDrafts.length, newcomer: newcomerDrafts.length };

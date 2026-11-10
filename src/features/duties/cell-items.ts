@@ -8,13 +8,13 @@ export type CellItem = {
   /** 실제 기록으로 가는 주소(출석부 그날 그 반 · 그 상담 기록 · 성적 입력 칸). 갈 화면이 없으면 null — 줄만 보인다. */
   href: string | null;
 };
-export const CELL_STATE_LABEL: Record<CellItemState, string> = { ontime: "준수", early: "조기 완료", late_done: "지연 완료", late: "지연", upcoming: "기한 전", expired: "미이행" };
+export const CELL_STATE_LABEL: Record<CellItemState, string> = { ontime: "기한 내 완료", early: "미리 완료", late_done: "기한 후 완료", late: "기한 초과", upcoming: "남음", expired: "미처리 확정" };
 const kstDay = (iso: string) => new Date(Date.parse(iso) + 9 * 3_600_000).toISOString().slice(0, 10);
 const md = (ymd: string) => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}`;
 const hm = (iso: string) => new Date(Date.parse(iso) + 9 * 3_600_000).toISOString().slice(11, 16);
 
 /**
- * 상태 — 집계(s2_0050 `rollup_rows`)와 같은 판정: 끝낸 것은 기한 안이면 준수 · 넘겼으면 지연 완료, 열린 것은 기한이 지났으면 지연, 미이행 확정은 그대로.
+ * 상태 — 집계(s2_0050 `rollup_rows`)와 같은 판정: 끝낸 것은 기한 안이면 준수 · 넘겼으면 기한 후 완료, 열린 것은 기한이 지났으면 지연, 미이행 확정은 그대로.
  * 🔴 기한이 **아직 안 온** 것을 미리 끝낸 것은 준수가 아니라 조기 완료다 — 집계의 준수(제때/기한 도래)에는 기한이 온 것만 든다(칸 숫자와 목록의 '준수' 수가 같아야 한다).
  */
 export function cellItemState(it: { status: string; voidReason: string | null; dueAt: string; doneAt: string | null }, nowMs: number): CellItemState {

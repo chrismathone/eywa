@@ -23,7 +23,7 @@ export function VerdictLine({ v }: { v: Verdict }) {
       <VerdictBadge v={v} />
       {v.tier ? <TierStars tier={`${v.tier}등급`} /> : null}
       {v.reason ? <span className="text-sm font-semibold">{v.reason}</span> : null}
-      {v.gap ? <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${v.gap.diff > 0 ? "bg-green-soft text-green" : "bg-danger-soft text-danger"}`}>{v.gap.label} 평균보다 {Math.abs(v.gap.diff)}%p {v.gap.diff > 0 ? "높음" : "낮음"}</span> : null}
+      {v.gap ? <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${v.gap.diff > 0 ? "bg-green-soft text-green" : "bg-danger-soft text-danger"}`}>{v.gap.label} 평균보다 {Math.abs(v.gap.diff)}% {v.gap.diff > 0 ? "높음" : "낮음"}</span> : null}
     </div>
     {m && v.tier ? <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
       <span className="bg-bg-soft flex h-2 w-56 max-w-full overflow-hidden rounded-full" aria-hidden>
@@ -31,9 +31,9 @@ export function VerdictLine({ v }: { v: Verdict }) {
         <span className="bg-amber h-full" style={{ width: `${(m.lateDone / m.due) * 100}%` }} />
         <span className="bg-danger h-full" style={{ width: `${(m.missed / m.due) * 100}%` }} />
       </span>
-      <span className="text-xs font-semibold tabular-nums"><span className="text-green">제때 {pctOf(m.ontime, m.due)}%</span> <span className="text-text-dim font-medium">{m.ontime.toLocaleString("ko-KR")}건</span></span>
-      {m.lateDone ? <span className="text-xs font-semibold tabular-nums"><span className="text-amber">늦게 {pctOf(m.lateDone, m.due)}%</span> <span className="text-text-dim font-medium">{m.lateDone.toLocaleString("ko-KR")}건</span></span> : null}
-      {m.missed ? <span className="text-xs font-semibold tabular-nums"><span className="text-danger">안 함 {pctOf(m.missed, m.due)}%</span> <span className="text-text-dim font-medium">{m.missed.toLocaleString("ko-KR")}건{m.late ? ` · 지금 지연 ${m.late.toLocaleString("ko-KR")}건` : ""}</span></span> : null}
+      <span className="text-xs font-semibold tabular-nums"><span className="text-green">{pctOf(m.ontime, m.due)}%</span> <span className="text-text-dim font-medium">{m.ontime.toLocaleString("ko-KR")}건</span></span>
+      {m.lateDone ? <span className="text-xs font-semibold tabular-nums"><span className="text-amber">기한 후 완료 {pctOf(m.lateDone, m.due)}%</span> <span className="text-text-dim font-medium">{m.lateDone.toLocaleString("ko-KR")}건</span></span> : null}
+      {m.missed ? <span className="text-xs font-semibold tabular-nums"><span className="text-danger">미처리 {pctOf(m.missed, m.due)}%</span> <span className="text-text-dim font-medium">{m.missed.toLocaleString("ko-KR")}건</span></span> : null}
     </div> : null}
   </div>;
 }

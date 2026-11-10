@@ -65,8 +65,8 @@ export const TASK_KINDS: Record<string, StaffTaskKindInfo> = {
     doneRule: "그 기록이 생기면 처리됩니다.",
   },
   duty_late_up: {
-    label: "업무 지연 관리",
-    doneRule: "그 지연이 처리되거나 면제되거나 미이행으로 확정되면 닫힙니다.",
+    label: "업무 기한 초과 관리",
+    doneRule: "그 기한 초과가 처리되거나 면제되거나 미이행으로 확정되면 닫힙니다.",
   },
   help_question: {
     label: "도움말 질문",
@@ -135,7 +135,7 @@ const CLOSE_REASON: Record<string, string> = {
   turn_changed: "차례가 바뀜",
   help_answered: "답변이 달림",
   duties_resolved: "업무가 처리됨",
-  duties_cleared: "지연이 정리됨(처리 · 면제 · 미이행 확정)",
+  duties_cleared: "기한 초과가 정리됨(처리 · 면제 · 미이행 확정)",
   duties_expired: "미이행으로 확정됨",
   duties_moved_or_void: "담당이 바뀌거나 해당 없음",
   late_tasks_off: "업무 알림이 꺼짐",
