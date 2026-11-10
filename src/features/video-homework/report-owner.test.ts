@@ -154,7 +154,11 @@ describe("② 원스크린 저장 관문이 이 판정을 쓴다", () => {
 });
 
 describe("① 화면 겹 — 남이 처음 쓴 줄은 잠그고 싣지 않는다", () => {
-  const client = read("src", "features", "onescreen", "components", "onescreen-client.tsx");
+  // 첨부 자동저장은 use-report-attachments.ts로 옮겼다(P3-O) — 화면과 합쳐 읽는다.
+  const client =
+    read("src", "features", "onescreen", "components", "onescreen-client.tsx") +
+    "\n" +
+    read("src", "features", "onescreen", "components", "use-report-attachments.ts");
 
   it("토글이 남이 쓴 줄을 잠근다(두 화면 모두 학생 id를 넘긴다)", () => {
     const toggle = read("src", "features", "video-homework", "components", "video-homework-toggle.tsx");
