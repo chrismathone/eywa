@@ -27,8 +27,8 @@ describe("원스크린 빈 창 덮어쓰기 방지 배선", () => {
   });
 
   it("클라는 baseUpdatedAt을 보내고, skip이면 sessionUpdatedAt을 올리지 않는다", () => {
-    // 세션 입력 조립은 session-input.ts로 옮겼다(P3-O) — 화면과 합쳐 읽는다.
-    const src = read("features/onescreen/components/onescreen-client.tsx") + "\n" + read("features/onescreen/session-input.ts");
+    // 세션 입력 조립은 session-input.ts, 응답 반영은 use-session-autosave.ts로 옮겼다(P3-O) — 응답 반영 훅을 먼저 두고 합쳐 읽는다(순서 단언은 훅 안).
+    const src = read("features/onescreen/components/use-session-autosave.ts") + "\n" + read("features/onescreen/session-input.ts") + "\n" + read("features/onescreen/components/onescreen-client.tsx");
     expect(src).toContain("baseUpdatedAt: s.sessionUpdatedAt");
     expect(src).toContain("applySessionSaveResult");
     const skipped = src.indexOf("if (res.skipped)");

@@ -1,6 +1,5 @@
 "use client";
 
-import { createSessionSaveQueue, type SessionSaveQueue } from "@/features/onescreen/session-save-queue";
 import { registerMakeupEntries } from "../server/makeup-register-actions";
 import { notifyMakeupEffect } from "./makeup-effect-toast";
 import { setMakeupClass } from "../server/makeup-class-actions";
@@ -31,7 +30,6 @@ import {
   revokeShareLink,
   saveAndQueueClassnote,
   saveLessonReport,
-  saveOnescreenSession,
   setMyNoticeMode,
   setMyOnescreenFontSize,
   setMyLastReportTemplate,
@@ -287,7 +285,8 @@ import { noteMakeupAgainstAbsence } from "@/features/attendance/server/makeup-no
 import type { MakeupAbsenceList } from "@/features/attendance/makeup-options";
 import { mergeStatusOf, planMakeupMerge, type MergeCandidate } from "../makeup-merge-plan";
 import { resolveRowFields, seedRowFields } from "../row-fields";
-import { buildSessionInput as buildSessionInputOf, initReports, type ReportsState } from "../session-input";
+import { initReports, type ReportsState } from "../session-input";
+import { useSessionAutosave } from "./use-session-autosave";
 import { detectClassNotices } from "../class-notice";
 import { shortDate } from "../makeup-absence-link";
 import { computeClientMentSource } from "../ment-source";
@@ -529,8 +528,6 @@ export function OneScreenClient({
     () => getClassNarratives(activeDate),
     getServerClassNarratives,
   );
-  // 날짜 이동 전 대기 저장 flush — 저장 로직이 아래에 정의되므로 ref로 노출(effect에서 갱신, render 중 ref 쓰기 금지 규칙).
-  const flushSavesRef = useRef<() => void>(() => {});
   const goToDate = (ymd: string) => {
     if (makeupSaving) return;
     if (!ymd || ymd > todayYmd || ymd === activeDate) return; // 미래·같은 날짜 무시
@@ -670,9 +667,16 @@ export function OneScreenClient({
   useEditPresence(presenceScope, true);
   const sameDateEditors = dedupeEditors(useEditingOthers(presenceScope ?? ""));
 
-  // 자동저장(디바운스) — 최신 state를 타이머 콜백에서 읽기 위한 ref 미러 + 학생별 타이머.
-  const studentsRef = useRef(students);
-  const reportsRef = useRef(reports);
+  // 자동저장(디바운스 800ms) — 학생별 줄·ref 미러·날짜 이동 전 flush는 use-session-autosave.ts(P3-O).
+  const { studentsRef, reportsRef, flushSavesRef, queueSave, applySessionSaveResult } = useSessionAutosave({
+    students,
+    reports,
+    setStudents,
+    date,
+    showDailyTest,
+    showCheckTest,
+    t,
+  });
   /**
    * '학습 추세 미발송'(원장 2026-09-18) — `반:학생` 키. 🔴 저장 조립은 비동기 경로(디바운스·발송)에서도 불리므로
    *    **ref로도** 들고 있는다 — 체크 직후 나간 저장이 옛 closure를 읽으면 끈 추세가 실린다.
@@ -687,8 +691,6 @@ export function OneScreenClient({
   const attPendingRef = useRef(attPending);
   // ref 미러는 render 중이 아니라 effect에서 갱신(react-hooks/refs). 타이머는 800ms 뒤라 항상 최신 반영.
   useEffect(() => {
-    studentsRef.current = students;
-    reportsRef.current = reports;
     attPendingRef.current = attPending;
     englishTemplatesRef.current = englishTemplates;
     templatesLoadedRef.current = templatesLoaded;
@@ -719,77 +721,6 @@ export function OneScreenClient({
       }),
     [activeDate],
   );
-  // 덜 쓴 창 저장을 서버가 건너뛴 학생 — 800ms 자동저장마다 토스트가 쌓이지 않게 1회만.
-  const skippedSaveToast = useRef<Set<string>>(new Set());
-  /**
-   * 학생별 자동저장 줄(`session-save-queue.ts`, 수정 계획 P1-O) — 한 학생에 한 요청만 나가고(응답 역전 없음),
-   * 던진 실패는 다시 보내고, 다 실패하면 알린다. 예전엔 `.catch`가 없어 네트워크 오류가 조용히 사라졌다.
-   * 조립·적용 함수는 렌더마다 바뀌므로(날짜·테스트 표시) 줄은 ref를 거쳐 **보낼 때의** 함수를 부른다.
-   */
-  const saveDepsRef = useRef<{
-    build: typeof buildSessionInput;
-    apply: typeof applySessionSaveResult;
-    failText: string;
-  } | null>(null);
-  const saveQueueRef = useRef<SessionSaveQueue | null>(null);
-  const getSaveQueue = () => {
-    if (!saveQueueRef.current) {
-      saveQueueRef.current = createSessionSaveQueue({
-        send: (sid) => {
-          const s = studentsRef.current.find((x) => x.id === sid);
-          const deps = saveDepsRef.current;
-          if (!s || !deps) return null;
-          return saveOnescreenSession(deps.build(s, reportsRef.current[sid]));
-        },
-        apply: (sid, res) => saveDepsRef.current?.apply(sid, res),
-        onGiveUp: () => toast.error(saveDepsRef.current?.failText ?? t("os.c.autosaveFail")),
-      });
-    }
-    return saveQueueRef.current;
-  };
-  // 언마운트 = 대기 타이머 정리. 🔴 ref도 비운다 — StrictMode 재마운트에서 정리된 줄을 다시 쓰지 않게(다음 호출이 새로 만든다).
-  useEffect(
-    () => () => {
-      saveQueueRef.current?.dispose();
-      saveQueueRef.current = null;
-    },
-    [],
-  );
-  // 대기 중 자동저장을 즉시 커밋(날짜 이동 전 호출) — 디바운스 800ms 안에 이동하면 유실되던 편집 방어.
-  useEffect(() => {
-    saveDepsRef.current = { build: buildSessionInput, apply: applySessionSaveResult, failText: t("os.c.autosaveFail") };
-    flushSavesRef.current = () => getSaveQueue().flush();
-  });
-  function applySessionSaveResult(
-    studentId: string,
-    res: { ok: boolean; error?: string; skipped?: boolean; updatedAt?: string },
-  ) {
-    if (!res.ok) {
-      // 서버가 준 사유가 있으면 그대로(그 문장은 서버 축이라 한국어) — 없을 때만 화면 사전.
-      toast.error(res.error ?? t("os.c.autosaveFail"));
-      return;
-    }
-    if (res.skipped) {
-      if (!skippedSaveToast.current.has(studentId)) {
-        skippedSaveToast.current.add(studentId);
-        toast.message(t("os.c.saveIgnored"));
-      }
-      return;
-    }
-    if (!res.updatedAt) return;
-    skippedSaveToast.current.delete(studentId);
-    studentsRef.current = studentsRef.current.map((s) =>
-      s.id === studentId ? { ...s, sessionUpdatedAt: res.updatedAt } : s,
-    );
-    setStudents((prev) => prev.map((s) => (s.id === studentId ? { ...s, sessionUpdatedAt: res.updatedAt } : s)));
-  }
-  function buildSessionInput(s: OneScreenStudent, r: Record<string, SubjectReport> | undefined) {
-    return buildSessionInputOf(s, r, { date, showDailyTest, showCheckTest });
-  }
-  // 학생별 디바운스 upsert — 편집 800ms 후 저장. 학생별 타이머라 학생 전환에도 유실 없음.
-  function queueSave(studentId: string) {
-    getSaveQueue().queue(studentId, 800);
-  }
 
   // 반 필터 — 특정 반이면 그 반 수강생 전부(tags로 다과목/다반 학생도 양쪽에서 잡음, 누락 방지) + 좌측 그룹 라벨을
   // 필터 반으로 리맵. 표 행은 activeClassFilter로 rowInClass 필터해 타 반 과목 행 혼입을 막는다.
