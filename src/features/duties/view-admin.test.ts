@@ -30,17 +30,18 @@ describe("adminRange", () => {
 
 });
 
-describe("기한 준수율 · 칸 색", () => {
-  it("🔴 준수율 = 기한 도래 것 중 준수 끝낸 비율 — 기한 전 의무는 분모에 안 든다", () => {
-    // 월 상담 30건(말일 기한) 중 3건만 했어도, 기한 도래 것이 없으면 판정하지 않는다.
-    expect(pctOf(c(30, 3, 0, 0))).toBeNull();
-    // 출결 10건이 기한이 왔고 8건 준수 · 1건 기한 후 완료 · 1건 지금 지연 = 80%(늦게 끝낸 것은 분모에만).
-    expect(pctOf(c(40, 12, 10, 8, 1, { lateDone: 1 }))).toBe(80);
+describe("기한 내 완료율 · 칸 색", () => {
+  it("🔴 % = 기한 안에 끝낸 것 ÷ 그 기간의 전체 — 남은 것도 분모다(남은 것이 있으면 100%가 아니다) · 내림", () => {
+    // 월 상담 30건(말일 기한) 중 3건을 했다 — 10%(원장 2026-11-11: 칸 · 전체 · 등급이 같은 숫자).
+    expect(pctOf(c(30, 3, 0, 0))).toBe(10);
+    // 40건 중 제때 8 + 미리 3 = 11건(기한 후 완료 1 · 기한 초과 1 · 남음 27은 분자에 안 든다) = 27.5 → 27%.
+    expect(pctOf(c(40, 12, 10, 8, 1, { lateDone: 1 }))).toBe(27);
+    expect([pctOf(c(1000, 999, 1000, 999, 1)), pctOf(c(0, 0, 0, 0))]).toEqual([99, null]);
   });
-  it("칸 색 — 해당 없음 · 기한 온 것 3건 미만은 중립(평가 대기) · 그 밖은 등급의 색 묶음", () => {
+  it("칸 색 — 해당 없음 · 업무 3건 미만은 중립(평가 대기) · 그 밖은 등급의 색 묶음", () => {
     expect(cellTone(cellOf(c(0, 0, 0, 0)))).toBe("none");
-    expect(cellTone(cellOf(c(30, 3, 0, 0)))).toBe("wait");
-    expect(cellTone(cellOf(c(5, 0, 2, 0, 2)))).toBe("wait");
+    expect(cellTone(cellOf(c(2, 0, 2, 0, 2)))).toBe("wait");
+    expect(cellTone(cellOf(c(30, 3, 0, 0)))).toBe("bad");
     expect(cellTone(cellOf(c(10, 9, 10, 9, 1)))).toBe("good");
     expect(cellTone(cellOf(c(10, 7, 10, 7, 3)))).toBe("warn");
     expect(cellTone(cellOf(c(10, 6, 10, 6, 4)))).toBe("warn");
@@ -52,8 +53,8 @@ describe("기한 준수율 · 칸 색", () => {
   it("기한 전 남은 것 · 칸 설명은 숫자의 뜻을 글로", () => {
     const x = c(40, 12, 10, 8, 1, { lateDone: 1 });
     expect(upcomingOf(x)).toBe(27);
-    expect(cellTitle(x)).toBe("기한 지난 업무 10건 중 기한 내 완료 8건 · 기한 초과 1 · 기한 후 완료 1 · 남음 27 · 미리 완료 3");
-    expect(cellTitle(c(30, 0, 0, 0))).toBe("기한 지난 업무 없음 · 남음 30");
+    expect(cellTitle(x)).toBe("40건 중 기한 내 완료 11건 · 기한 후 완료 1 · 기한 초과 1 · 남음 27");
+    expect(cellTitle(c(30, 0, 0, 0))).toBe("30건 중 기한 내 완료 0건 · 남음 30");
     // 🔴 기한 전에 다 끝낸 종류 — '예정 0'이 아니라 진행 5/5.
     expect([upcomingOf(c(5, 5, 0, 0)), earlyDoneOf(c(5, 5, 0, 0)), progressText(c(5, 5, 0, 0))]).toEqual([0, 5, "5/5"]);
   });

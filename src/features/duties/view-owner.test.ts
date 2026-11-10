@@ -11,7 +11,7 @@ const late = (o: Partial<LateItem>): LateItem => ({ id: "x", kind: "attendance",
 const req = (o: object) => ({ id: "w", source: DUTY_REQUEST_SOURCE, status: "working" as const, createdAt: "2026-11-10T01:00:00Z", dueOn: "2026-11-12", steps: [{ user: { id: "t1" } }], ...o }) as Parameters<typeof ownerRows>[2][number];
 
 describe("ownerRows — 과목 관리자별 현황", () => {
-  const tree = [subject("english", [["e1", {}]]), subject("math", [["t1", { pct: 50, ontime: 5, late: 2 }], ["t2", { pct: 80, ontime: 8 }]], { pct: 70 })];
+  const tree = [subject("english", [["e1", {}]]), subject("math", [["t1", { pct: 50, done: 5, ontime: 5, late: 2 }], ["t2", { pct: 80, done: 8, ontime: 8 }]], { pct: 70 })];
   it("지연은 그 과목 것만 · 이관은 따로 · 3일·7일 이상을 가른다 · 손댈 것이 많은 과목이 먼저", () => {
     const rows = ownerRows(tree, [late({}), late({ ownerId: "t2", dueAt: "2026-11-06T15:00:00Z" }), late({ dueAt: "2026-11-01T15:00:00Z" }), late({ inherited: true, dueAt: "2026-10-01T15:00:00Z" }), late({ subject: "english", ownerId: "e1" })], [], { math: ["김관리"] }, {}, NOW, "2026-11-10");
     expect(rows.map((r) => r.subject)).toEqual(["math", "english"]);
@@ -39,7 +39,7 @@ describe("ownerRows — 과목 관리자별 현황", () => {
     expect(rows.find((r) => r.subject === null)).toMatchObject({ label: "과목 미정", inTree: false });
   });
   it("🔴 요청을 보낸 뒤에 생긴 지연은 '요청함'이 덮지 않는다 · 선생님 등급에서 담당 미정은 뺀다", () => {
-    const rows = ownerRows([subject("math", [["t1", { pct: 50, ontime: 5 }], ["", { pct: 10, ontime: 1 }]])], [late({}), late({ dueAt: "2026-11-10T02:00:00Z" })], [req({})], {}, {}, NOW, "2026-11-10");
+    const rows = ownerRows([subject("math", [["t1", { pct: 50, done: 5, ontime: 5 }], ["", { pct: 10, done: 1, ontime: 1 }]])], [late({}), late({ dueAt: "2026-11-10T02:00:00Z" })], [req({})], {}, {}, NOW, "2026-11-10");
     expect(rows[0]).toMatchObject({ lateTeachers: 1, requested: 0, requestsOpen: 1, bad: 1 });
   });
 });

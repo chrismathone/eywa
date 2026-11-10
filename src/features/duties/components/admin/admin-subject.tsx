@@ -12,7 +12,7 @@ export function AdminKpiRow({ cell }: { cell: Cell }) {
   const pct = cell.pct;
   // 칸에는 이름과 숫자만(원장 2026-11-11 *"아래쪽 보조 멘트 제거"*) — 풀이는 바로 아래 등급 줄의 결론과 막대가 맡는다.
   return <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-    <Kpi label="기한 준수율" value={pct === null ? "—" : `${pct}`} unit={pct === null ? undefined : "%"} pct={pct ?? undefined} tone={pct !== null && tierTone(dutyTier(pct)) === "good" ? "green" : "primary"} />
+    <Kpi label="기한 내 완료율" value={pct === null ? "—" : `${pct}`} unit={pct === null ? undefined : "%"} pct={pct ?? undefined} tone={pct !== null && tierTone(dutyTier(pct)) === "good" ? "green" : "primary"} />
     <Kpi label="기한 초과" value={`${cell.late}`} tone={cell.late ? "danger" : "muted"} />
     <Kpi label="7일 이상 기한 초과" value={`${cell.over7}`} tone={cell.over7 ? "danger" : "muted"} />
     <Kpi label="완료" value={`${cell.done}`} unit={`/ ${cell.total}`} tone="muted" />

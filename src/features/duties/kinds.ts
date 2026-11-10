@@ -53,3 +53,13 @@ export type DutyItemView = {
 export const NEWCOMER_ITEM_LABEL: Record<string, string> = {
   pre_call: "수업 전 사전 콜", first_class_guide: "첫 수업 안내", ojt: "신입생 OJT", after_first_call: "첫 수업 후 콜", month1_call: "1개월 콜", month2_call: "2개월 콜", month3_call: "3개월 콜",
 };
+
+/**
+ * 업무를 세기 시작하는 시각(ms) — 일간 업무는 **그 수업이 끝난 뒤부터** 센다(원장 2026-11-11 *"수업시간이 지났을때 반영할것"*): 출결 기한 = 수업 끝 · 보고서 기한 = 수업 끝 + 24시간.
+ * 월간 · 건별 업무는 그 기간 내내 센다(늘 과거). 집계 SQL(s2_0064 `rollup_rows`)과 같은 규칙이다 — 한쪽만 바꾸지 말 것.
+ */
+export function dutyOpensAt(kind: string, period: string, dueAt: string): number {
+  if (period !== "daily") return Number.NEGATIVE_INFINITY;
+  const due = Date.parse(dueAt);
+  return kind === "report_send" || kind === "report_write" ? due - 24 * 3_600_000 : due;
+}

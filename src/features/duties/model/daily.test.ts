@@ -78,7 +78,7 @@ describe("buildDailyDuties — 보고서 발송(작성 · 발송을 한 업무�
     const rows = buildDailyDuties(base({ classnoteOn: false, reports: [report("s1")] }));
     expect(rows.some((r) => r.kind === "report_send" && r.classId === "c-math")).toBe(false);
     expect(pick(rows, "report_write", "s1")).toMatchObject({ status: "done", source: "lesson_report", doneAt: `${DATE}T09:00:00Z` });
-    expect(pick(rows, "report_write", "s2")).toMatchObject({ status: "open", dueAt: kstDueAt(DATE, 1, 0) });
+    expect(pick(rows, "report_write", "s2")).toMatchObject({ status: "open", dueAt: kstDueAt(DATE, 2, 0) }); // 끝 시각을 모를 때 = 발송과 같은 기한(출결 기한 + 24시간)
   });
   it("결석한 학생은 보고서 의무에서 빠지되 void('absent') 행으로 남는다(출결 의무는 기록이 있으니 done) · 미리 쓴 보고서(covers_date = 오늘)는 그날 의무를 만들지 않는다", () => {
     const rows = buildDailyDuties(base({ attendance: [att("s1", "c-math", "absent")] }));

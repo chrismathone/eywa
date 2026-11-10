@@ -28,8 +28,8 @@ export async function backfillDutyMonth(tenantId: string, month: string, setting
   for (let d = `${month}-01`; d <= last; d = addDays(d, 1)) days.push(d);
   let drafts = 0;
   resetOwnerAsOf(tenantId);
-  for (const day of days) drafts += (await syncDailyDuties(tenantId, day, settings)).drafts;
-  const m = await syncMonthlyDuties(tenantId, last, settings, { skipNewcomers: true });
+  for (const day of days) drafts += (await syncDailyDuties(tenantId, day, settings, { reown: true })).drafts;
+  const m = await syncMonthlyDuties(tenantId, last, settings, { skipNewcomers: true, reown: true });
   let closed = 0;
   {
     const { data, error } = await createAdminClient().from("duty_items").update({ status: "void", void_reason: "expired", updated_at: new Date().toISOString() })

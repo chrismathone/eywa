@@ -2,11 +2,10 @@
 
 import { MATRIX_COLUMNS, type AdminPeriod } from "../../view-admin";
 import { classLines, judge, NO_CLASS, NO_OWNER, ownerMeta, type Avg, type TreeOwner } from "../../view-admin-levels";
-import { CountBox, GridCols, gridStyle } from "./admin-matrix";
+import { CountBox, GridCols, gridStyle, tableBasis, TH } from "./admin-matrix";
 import { VerdictBadge, VerdictLine } from "./admin-verdict";
 import { useStudentsPayload } from "./use-students";
 
-const TH = "text-text-dim px-2 py-1 text-xs font-semibold";
 
 /**
  * 선생님 단계 — "이 선생님이 뭘 안 했는지, 뭘 체크해야 하는지"(원장 2026-11-10). 학생 이름을 늘어놓지 않는다(*"쭉 나열하는거 금지"*):
@@ -22,8 +21,10 @@ export function TeacherLevel({ owner, avg, period, subject, tick, kind, aside, o
   const linesAll = data ? classLines(data.rows, data.classInfo) : [];
   const lines = kind ? linesAll.filter((l) => l.cells[kind]) : linesAll;
   const cols = MATRIX_COLUMNS.filter((c) => (kind ? c.kind === kind : lines.some((l) => l.cells[c.kind])));
+  // 불러오는 동안에도 같은 자리 · 같은 크기 — 열 수는 왼쪽 목록이 이미 아는 이 선생님의 종류로 어림한다.
+  const basis = tableBasis(kind ? 1 : MATRIX_COLUMNS.filter((c) => owner.cells[c.kind]?.total).length + 1, grade);
   const kindLabel = kind ? MATRIX_COLUMNS.find((c) => c.kind === kind)?.label ?? "" : "";
-  return <div className="grid gap-4">
+  return <div className="grid grid-cols-1 gap-4">
     <header className="grid gap-1">
       <h3 className="text-xl font-bold">{owner.name} <span className="text-text-dim text-sm font-medium">{ownerMeta(owner) || `반 ${owner.classes.filter((c) => c.classId !== NO_CLASS).length}`}</span></h3>
       <VerdictLine v={judge(kind ? owner.cells[kind] ?? owner.cell : owner.cell, avg && !kind ? avg : null)} />
@@ -32,9 +33,9 @@ export function TeacherLevel({ owner, avg, period, subject, tick, kind, aside, o
         <button type="button" onClick={onClearKind} className="text-text-dim hover:text-primary text-xs font-semibold underline">전체 항목 보기</button>
       </p> : null}
     </header>
-    {/* 표(칸 수만큼만 넓다) 옆의 빈 자리에 '기한 초과'을 세운다 — 자리가 모자라면 아래로 내려간다(원장 2026-11-11 *"2단으로 해서 공간을 활용"*). */}
+    {/* 표 카드 옆에 '기한 초과'를 세운다(원장 2026-11-11 *"2단으로 해서 공간을 활용"*) — 표가 편하게 서는 폭(`tableBasis`)과 한 줄에 안 들어가면 아래로 내려가고 표가 한 줄을 다 쓴다. */}
     <div className="flex flex-wrap items-stretch gap-4">
-    <section className="border-line bg-card min-h-48 max-w-full min-w-[min(100%,640px)] flex-none rounded-xl border p-3">
+    <section className="border-line bg-card min-h-48 max-w-full min-w-[min(100%,640px)] grow rounded-xl border p-3" style={{ flexBasis: basis }}>
       <h4 className="text-sm font-bold">반별</h4>
       {failed ? <p className="text-text-dim mt-2 text-sm">반별 집계 조회 실패</p>
         : !data ? <p className="text-text-dim mt-2 text-sm">불러오는 중…</p>
@@ -58,7 +59,7 @@ export function TeacherLevel({ owner, avg, period, subject, tick, kind, aside, o
           </table>
         </div>}
     </section>
-    {aside ? <div className="grid min-w-[min(100%,400px)] flex-1">{aside}</div> : null}
+    {aside ? <div className="grid min-w-[min(100%,400px)] [flex:1000_1_400px] grid-cols-1">{aside}</div> : null}
     </div>
   </div>;
 }

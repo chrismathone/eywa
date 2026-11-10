@@ -20,7 +20,7 @@ const DAILY_KINDS = DUTY_KIND_KEYS.filter((k) => DUTY_KINDS[k].period === "daily
  * 🔴 관리 키(RLS 우회)라 모든 조회에 tenant_id(#104). 조회 실패는 throw — 일부만 읽고 void를 돌리면 멀쩡한 의무가 사라진다.
  * 반 범위·보고서 출처 판정은 운영실 `loadTeacherWork`와 같다(미발송 반 제외 · 작성 면제 강사 · 영어 = ClassNote 반 알림장).
  */
-export async function syncDailyDuties(tenantId: string, date: string, settings: TenantSettings): Promise<{ drafts: number; inserted: number; done: number; voided: number }> {
+export async function syncDailyDuties(tenantId: string, date: string, settings: TenantSettings, opts: { /** 지난 달 다시 만들기 — 닫힌 행의 담당도 다시 적는다. */ reown?: boolean } = {}): Promise<{ drafts: number; inserted: number; done: number; voided: number }> {
   const admin = createAdminClient();
   // 지난 날은 **그날 기준**으로 맞춘다(원장 2026-11-11) — 그날의 담임 · 그날 재직 여부 · 그 뒤에 종강하거나 폐지한 반까지(폐지는 수강을 그날로 끝내므로 지난 날 명단은 그대로다 — 지금 운영 여부로 거르면 폐지만으로 지난 미처리가 사라진다). 오늘은 종전 그대로(지금 운영 중인 반 · 지금 담임).
   const past = date < kstToday();
@@ -75,7 +75,7 @@ export async function syncDailyDuties(tenantId: string, date: string, settings: 
     status: r.classnote_status, videoHomework: false, recalled: !!r.revoked_at, createdAt: r.created_at, sentAt: r.classnote_sent_at }));
   const drafts = buildDailyDuties({ date, holidays: new Set(settings.operations.holidays.map((h) => h.date)), classes: dutyClasses, schedules, enrollments, attendance,
     reports: dutyReports, posts: posts.map((p) => ({ boardName: p.board_name, postedOn: p.posted_on })), classnoteOn, inactiveTeacherIds: inactive });
-  const written = await writeDrafts(tenantId, drafts, { rekey: true, cyclesOf: Object.fromEntries(DAILY_KINDS.map((k) => [k, [date]])) });
+  const written = await writeDrafts(tenantId, drafts, { rekey: true, cyclesOf: Object.fromEntries(DAILY_KINDS.map((k) => [k, [date]])), reown: opts.reown });
   // 보고서는 발송까지가 한 업무가 됐다(2026-11-10) — 같은 열쇠의 발송 의무가 선 날에 남은 옛 작성 의무(끝난 것 · 미이행 확정 포함)는 집계에서 뺀다.
   // (맞춤의 회차 정리는 열린 것만 지워서, 이미 끝난 작성 의무가 발송 의무와 함께 두 번 세졌다.)
   const sendKeys = [...new Set(drafts.filter((d) => d.kind === "report_send").map((d) => d.subjectKey))];
@@ -91,7 +91,7 @@ export async function syncDailyDuties(tenantId: string, date: string, settings: 
  * 초안을 장부에 쓴다 — 열기(upsert) → 명단에서 빠진 것 void(종류 × 회차마다 · 보고서·상담처럼 열쇠에 담당이 든 종류는 rekey 정리) → 사실로 닫거나 되살림.
  * `kinds`를 주면 초안이 하나도 없는 종류도 그 회차들을 정리한다(예: 신규생이 0명이 된 날).
  */
-export async function writeDrafts(tenantId: string, drafts: readonly DutyDraft[], options: { rekey: boolean; /** 초안이 비어도 정리할 종류 → 회차. 건별(case) 종류는 회차 목록 대신 열린 회차를 DB에서 찾는다. */ cyclesOf?: Readonly<Record<string, readonly string[]>>; /** 이미 있는 행의 완료만 맞춘다 — 새로 열지도 · 빼지도 · 담당을 옮기지도 않는다(지난 달 재맞춤). */ resolveOnly?: boolean } = { rekey: false }): Promise<{ inserted: number; done: number; voided: number }> {
+export async function writeDrafts(tenantId: string, drafts: readonly DutyDraft[], options: { rekey: boolean; /** 초안이 비어도 정리할 종류 → 회차. 건별(case) 종류는 회차 목록 대신 열린 회차를 DB에서 찾는다. */ cyclesOf?: Readonly<Record<string, readonly string[]>>; /** 이미 있는 행의 완료만 맞춘다 — 새로 열지도 · 빼지도 · 담당을 옮기지도 않는다(지난 달 재맞춤). */ resolveOnly?: boolean; /** 지난 달 다시 만들기 — 닫힌 행의 담당도 초안대로 다시 적는다(평가 개시 전 행만 · s2_0064 `duty_reown_items`). */ reown?: boolean } = { rekey: false }): Promise<{ inserted: number; done: number; voided: number }> {
   const admin = createAdminClient();
   let inserted = 0, done = 0, voided = 0;
   for (let i = 0; !options.resolveOnly && i < drafts.length; i += 500) {
@@ -106,6 +106,11 @@ export async function writeDrafts(tenantId: string, drafts: readonly DutyDraft[]
   const cycles = new Map<string, Set<string>>();
   for (const d of drafts) cycles.set(d.kind, (cycles.get(d.kind) ?? new Set()).add(d.cycle));
   for (const kind of Object.keys(options.cyclesOf ?? {})) if (!cycles.has(kind)) cycles.set(kind, new Set());
+  // 평소에는 끝난 업무의 담당을 옮기지 않는다(실적이 새 담당으로 넘어가지 않게). 지난 달을 다시 만들 때만, 평가 개시 전의 닫힌 행에 한해 그날 기준 담당으로 다시 적는다.
+  for (let i = 0; options.reown && !options.resolveOnly && i < drafts.length; i += 500) {
+    const { error } = await admin.rpc("duty_reown_items", { p_tenant: tenantId, p_items: drafts.slice(i, i + 500).map((d) => ({ kind: d.kind, cycle: d.cycle, subjectKey: d.subjectKey, ownerId: d.ownerId, ownerSource: d.ownerSource })) });
+    if (error) throw new Error(`의무 장부 담당 바로잡기: ${error.message}`);
+  }
   for (const [kind, set] of options.resolveOnly ? [] : cycles) {
     // 🔴 초안이 빈 종류는 **부르는 쪽이 지정한 회차만** 정리한다(휴원일에 그날 초안이 비었다고 지난 날들을 void하면 안 된다).
     //    건별(case) 종류만 회차가 항목 키라 열린 회차를 DB에서 찾는다.

@@ -1,6 +1,6 @@
 "use client";
 
-import { progressText, type Cell } from "../../view-admin";
+import { wellDoneOf, type Cell } from "../../view-admin";
 import { judge, ownerMeta, type TreeSubject } from "../../view-admin-levels";
 import { TierStars } from "@/features/student-contribution/components/relative-score";
 import { VerdictDot } from "./admin-verdict";
@@ -11,12 +11,12 @@ export const ROOT: Sel = { subject: undefined, owner: null, classId: null, stude
 
 /**
  * 줄 오른쪽 표시 — **별**(로열티와 같은 9등급 · 원장 2026-11-10 *"% 말고 이 선생님이 잘하고 있다는걸 확인해야하니까 왼쪽 리스트도 별로"*) + 붉은 지연 수.
- * 등급이 없으면(기한 도래 3건 미만) 진행(완료/전체)만. 정확한 %는 마우스 오버에.
+ * 등급이 없으면(업무 3건 미만) 끝낸 것/전체만(표의 칸과 같은 분자 — 기한 안에 끝낸 것). 정확한 %는 마우스 오버에.
  */
 function Mark({ cell }: { cell: Cell }) {
   const v = judge(cell);
-  return <span className="flex shrink-0 items-center gap-1 text-xs font-semibold tabular-nums" title={v.tier && cell.pct !== null ? `${v.label} · 기한 준수 ${cell.pct}%` : undefined}>
-    {v.tier ? <TierStars tier={`${v.tier}등급`} /> : <span className="text-text-dim font-medium">{progressText(cell)}</span>}
+  return <span className="flex shrink-0 items-center gap-1 text-xs font-semibold tabular-nums" title={v.tier && cell.pct !== null ? `${v.label} · 기한 내 완료율 ${cell.pct}%` : undefined}>
+    {v.tier ? <TierStars tier={`${v.tier}등급`} /> : <span className="text-text-dim font-medium">{wellDoneOf(cell)}/{cell.total}</span>}
     {cell.late ? <span className="text-danger">{cell.late}</span> : null}
   </span>;
 }
@@ -26,7 +26,8 @@ function Mark({ cell }: { cell: Cell }) {
  * 지연만 = 지금 지연이 있는 선생님·반만.
  */
 export function AdminTree({ tree, multi, sel, lateOnly, onSelect }: { tree: TreeSubject[]; multi: boolean; sel: Sel; lateOnly: boolean; onSelect: (sel: Sel) => void }) {
-  const row = "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-bg-soft";
+  // 줄은 낮게 한 줄로(원장 2026-11-11 *"왼쪽 리스트 탭 행높이를 줄이고"*) — 이름 옆에 과목 · 반 · 학생 수를 이어 적고, 자리가 모자라면 그 뒤를 줄인다.
+  const row = "flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left hover:bg-bg-soft";
   const on = "bg-primary-soft";
   return <nav className="grid gap-1" aria-label="과목 · 선생님 · 반">
     {multi ? <button type="button" onClick={() => onSelect(ROOT)} className={`${row} ${sel.subject === undefined ? on : ""}`}>
@@ -47,13 +48,13 @@ export function AdminTree({ tree, multi, sel, lateOnly, onSelect }: { tree: Tree
           return <div key={o.ownerId} className={multi ? "pl-3" : ""}>
             <button type="button" onClick={() => onSelect({ subject: s.subject, owner: o.ownerId, classId: null, studentId: null })} className={`${row} ${ownerOn && !sel.classId ? on : ""}`}>
               <VerdictDot grade={judge(o.cell).grade} />
-              <span className="grid min-w-0 flex-1"><span className="truncate text-sm font-semibold">{o.name}</span>{ownerMeta(o) ? <span className="text-text-dim truncate text-xs font-medium">{ownerMeta(o)}</span> : null}</span>
+              <span className="min-w-0 flex-1 overflow-hidden text-sm font-semibold text-ellipsis whitespace-nowrap" title={ownerMeta(o) ? `${o.name} · ${ownerMeta(o)}` : undefined}>{o.name}{ownerMeta(o) ? <span className="text-text-dim ml-1.5 text-xs font-medium">{ownerMeta(o)}</span> : null}</span>
               <Mark cell={o.cell} />
             </button>
             {ownerOn ? <div className="grid gap-0.5 pl-4">
               {classes.map((c) => <button key={c.classId} type="button" onClick={() => onSelect({ subject: s.subject, owner: o.ownerId, classId: c.classId, studentId: null })} className={`${row} ${sel.classId === c.classId ? on : ""}`}>
                 <span className="min-w-0 flex-1 truncate text-xs font-semibold">{c.name}</span>
-                <span className="flex shrink-0 items-center gap-1 text-xs font-semibold tabular-nums">{c.cell.pct !== null ? <span>{c.cell.pct}%</span> : <span className="text-text-dim font-medium">{progressText(c.cell)}</span>}{c.cell.late ? <span className="text-danger">{c.cell.late}</span> : null}</span>
+                <span className="flex shrink-0 items-center gap-1 text-xs font-semibold tabular-nums"><span>{c.cell.pct ?? 0}%</span>{c.cell.late ? <span className="text-danger">{c.cell.late}</span> : null}</span>
               </button>)}
             </div> : null}
           </div>;

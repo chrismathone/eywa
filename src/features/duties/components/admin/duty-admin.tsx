@@ -89,7 +89,7 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null }: 
   // 볼 수 있는 첫 날 — 한 번 받은 값을 계속 쓴다(불러오는 동안에도 앞쪽 이동을 막는다).
   const viewFrom = cur?.data.viewFrom ?? Object.values(loaded).find((l) => l?.data.viewFrom)?.data.viewFrom ?? null;
   const nowMs = cur ? Date.parse(cur.now) : 0;
-  const tree = cur ? buildTree(cur.data.ownerKind, cur.data.classes, cur.data.owners, cur.data.classInfo, scope.labels, { load: cur.data.ownerLoad, managerIds: cur.data.managerIds }) : [];
+  const tree = cur ? buildTree(cur.data.ownerKind, cur.data.classes, cur.data.owners, cur.data.classInfo, scope.labels, { load: cur.data.ownerLoad, managerIds: cur.data.managerIds, ratings: cur.data.ratings }) : [];
   const multi = tree.length > 1;
   // 고른 자리 바로잡기 — 과목이 하나면 늘 그 과목 · 트리에 없는 과목은 전체 · 없는 선생님·반은 위 단계로. 학생은 단계와 무관하게 연다(지연 목록에서 바로 들어온다).
   const subject0: Sel["subject"] = !multi ? (tree[0]?.subject ?? null) : rawSel.subject !== undefined && !tree.some((s) => s.subject === rawSel.subject) ? undefined : rawSel.subject;
@@ -167,14 +167,15 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null }: 
     {stale ? <p className="bg-amber-soft text-amber rounded-lg px-3 py-2 text-sm font-semibold">{synced ? `${kstStamp(synced)} 이후 반영 지연 · 최신 저장분 누락 가능` : "아직 집계 전 · 수치가 실제와 다를 수 있음"}</p> : null}
     {!cur ? <p className="text-text-dim text-sm">{failed[period] ? "조회 실패 · 잠시 후 다시 열어 주세요" : "불러오는 중…"}</p> : null}
 
-    {cur ? <div className="grid gap-3 lg:grid-cols-[300px_minmax(0,1fr)]">
+    {cur ? <div className="grid gap-3 lg:grid-cols-[328px_minmax(0,1fr)]">
       {/* 왼쪽 목록 카드의 아래 끝 = 오른쪽 내용의 아래 끝(원장 2026-11-11) — 높이는 오른쪽을 따르고, 목록이 더 길면 카드 안에서 스크롤. */}
       <aside className="border-line bg-card relative min-w-0 overflow-hidden rounded-xl border lg:min-h-[60vh]">
         <div className="p-2 lg:absolute lg:inset-0 lg:overflow-y-auto">
         {tree.length ? <AdminTree tree={tree} multi={multi} sel={sel} lateOnly={lateOnly} onSelect={(next) => { setOpenKey(null); setSel(next); }} /> : <p className="text-text-dim px-2 py-4 text-sm">해당 기간 업무 없음</p>}
         </div>
       </aside>
-      <main className="grid content-start gap-4">
+      {/* 🔴 `min-w-0` + `grid-cols-1`(= minmax(0,1fr)) — 없으면 넓은 표 하나가 이 칸을 제 폭으로 밀어 화면 전체에 가로 스크롤이 생긴다(2026-11-11). */}
+      <main className="grid min-w-0 grid-cols-1 content-start gap-4">
         {crumbs.length > 1 || sel.studentId ? <nav className="flex flex-wrap items-center gap-1 text-sm" aria-label="위치">
           {crumbs.map((c, i) => <span key={i} className="flex items-center gap-1">
             {i ? <span className="text-text-placeholder" aria-hidden>›</span> : null}
@@ -187,7 +188,7 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null }: 
         {sel.studentId ? <StudentPane key={`${sel.studentId}|${fetchSubject ?? ""}`} period={period} tick={tick} studentId={sel.studentId} fetchSubject={fetchSubject} late={lateAll.filter((it) => !it.inherited && it.studentId === sel.studentId)} nowMs={nowMs} onWork={openWork} />
           : !subjectNode ? lateSection
           : classNode && ownerNode ? <ClassPane key={`${classNode.classId}|${ownerNode.ownerId}|${fetchSubject ?? ""}`} period={period} tick={tick} classNode={classNode} owner={ownerNode.ownerId} fetchSubject={fetchSubject} teacher={ownerNode.name} kind={sel.kind ?? null}
-              avg={{ pct: ownerNode.cell.pct, label: "선생님" }} aside={lateSection} onStudent={pickStudent} onWork={openWork} />
+              aside={lateSection} onStudent={pickStudent} onWork={openWork} />
           : ownerNode ? <TeacherLevel aside={lateSection} owner={ownerNode} avg={subjectAvg} period={period} subject={fetchSubject} tick={tick} kind={sel.kind ?? null} onClearKind={() => go({ ...sel, kind: null })} onClass={(classId) => go({ ...sel, classId, studentId: null })} />
           : <SubjectLevel node={subjectNode} subjects={atRoot ? tree : null} lateOnly={lateOnly} grade={unit !== "day"} board={<>{atRoot && managers ? <AdminOwnerBoard tree={tree} late={cur.data.late} managers={managers} labels={scope.labels} nowMs={nowMs} onSubject={(subject) => go({ subject, owner: null, classId: null, studentId: null })} /> : null}{unit !== "day" && atRoot ? <AdminRanking tree={tree} onOwner={(subject, owner, kind) => go({ subject, owner, kind, classId: null, studentId: null })} /> : null}</>} side={unit === "day" ? <AdminToday owners={subjectNode.owners} onOwner={(owner, kind) => go({ ...sel, owner, kind, classId: null, studentId: null })} /> : null} avgLabel={atRoot ? "전체" : "과목"} attention={lateSection} onOwner={(ownerId, kind, subject) => go({ ...sel, ...(subject !== undefined ? { subject } : {}), owner: ownerId, kind, classId: null, studentId: null })} />}
 

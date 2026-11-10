@@ -30,7 +30,7 @@ export function StudentLevel({ studentId, payload, late, nowMs, onWork }: {
   const sum = payload ? sumCells(payload.rows, (r) => r.studentId === studentId) : null;
   const items = [...late].sort((a, b) => Number(a.inherited) - Number(b.inherited) || a.dueAt.localeCompare(b.dueAt));
   const btn = "border-line hover:bg-bg-soft h-8 rounded-lg border px-3 text-sm font-semibold";
-  return <div className="grid gap-4">
+  return <div className="grid grid-cols-1 gap-4">
     <header className="grid gap-1">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-xl font-bold">{name} {sub ? <span className="text-text-dim text-sm font-medium">{sub}</span> : null}</h3>

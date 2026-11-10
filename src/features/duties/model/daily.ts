@@ -62,7 +62,7 @@ export function kstDueAt(date: string, plusDays: number, hour: number): string {
 }
 export const DAILY_DUE: Record<"attendance" | "report_write" | "report_send", (date: string) => string> = {
   attendance: (d) => kstDueAt(d, 1, 0),
-  report_write: (d) => kstDueAt(d, 1, 0),
+  report_write: (d) => kstDueAt(d, 2, 0),
   report_send: (d) => kstDueAt(d, 2, 0),
 };
 

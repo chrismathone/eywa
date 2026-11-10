@@ -1,7 +1,7 @@
 "use client";
 
 import { useWork } from "@/app/(shell)/dashboard/_instruments/work/work-context";
-import { upcomingOf, type LateItem } from "../../view-admin";
+import { upcomingOf, wellDoneOf, type LateItem } from "../../view-admin";
 import type { TreeSubject } from "../../view-admin-levels";
 import { ownerRows } from "../../view-owner";
 import { bandStyle } from "./admin-matrix";
@@ -24,7 +24,7 @@ export function AdminOwnerBoard({ tree, late, managers, labels, nowMs, onSubject
       <table className="w-full border-separate border-spacing-1 text-center text-sm whitespace-nowrap [&_th:first-child]:text-left">
         <thead><tr>
           {/* 제목을 열 머리 줄의 첫 칸에 둔다(원장 2026-11-11 *"행 묶어서 행 절약"*) — 제목 줄과 머리 줄이 따로 서지 않는다. */}
-          <th className="px-2 py-1.5 text-left text-sm font-bold" scope="col">과목 관리자별 현황</th><th className={TH}>등급</th><th className={TH}>기한 준수율</th><th className={TH}>기한 후 완료</th><th className={TH}>현재 기한 초과</th><th className={TH}>남음</th>
+          <th className="px-2 py-1.5 text-left text-sm font-bold" scope="col">과목 관리자별 현황</th><th className={TH}>등급</th><th className={TH}>기한 내 완료율</th><th className={TH}>기한 후 완료</th><th className={TH}>현재 기한 초과</th><th className={TH}>남음</th>
           {tracked ? <th className={TH}>처리 요청</th> : null}<th className={TH}>선생님 등급</th>
         </tr></thead>
         <tbody>{rows.map((r) => <tr key={r.subject ?? ""}>
@@ -33,9 +33,9 @@ export function AdminOwnerBoard({ tree, late, managers, labels, nowMs, onSubject
             <span className="text-text-dim ml-2 text-xs font-medium">{r.managers.length ? r.managers.join(" · ") : "과목 관리자 없음"}</span>
           </td>
           <td className="px-1"><VerdictBadge v={r.verdict} /></td>
-          {/* 건수 분수(269/966)는 남은 업무까지 분모라 '기한을 그만큼 어겼다'로 읽힌다(원장 2026-11-11) — 비율은 기한이 온 것만으로, 나머지는 칸을 나눠 건수로. */}
+          {/* 분수(269/966)를 그대로 적으면 '그만큼 어겼다'로 읽힌다(원장 2026-11-11) — 칸에는 표와 같은 %(기한 내 완료율)만 적고 분자/분모는 마우스를 올렸을 때, 나머지는 칸을 나눠 건수로. */}
           <td className="p-0">{r.cell.pct === null ? <span className="text-text-dim text-sm">—</span>
-            : <button type="button" disabled={!r.inTree} onClick={() => onSubject(r.subject)} style={bandStyle(r.cell.pct)} className="block w-full rounded-lg px-1 py-1.5 text-sm font-semibold tabular-nums enabled:hover:brightness-95">{r.cell.pct}<span className="text-xs font-medium">%</span></button>}</td>
+            : <button type="button" disabled={!r.inTree} onClick={() => onSubject(r.subject)} style={bandStyle(r.cell.pct)} className="group block w-full rounded-lg px-1 py-1.5 text-sm font-semibold tabular-nums enabled:hover:brightness-95"><span className="group-hover:hidden">{r.cell.pct}<span className="text-xs font-medium">%</span></span><span className="hidden group-hover:inline">{n(wellDoneOf(r.cell))}/{n(r.cell.total)}</span></button>}</td>
           <td className="px-2 text-sm tabular-nums">{r.cell.lateDone ? `${n(r.cell.lateDone)}건` : <span className="text-text-dim">없음</span>}</td>
           <td className="px-2 text-sm tabular-nums">
             {r.late ? <><span className="text-danger font-bold">{n(r.late)}건</span>

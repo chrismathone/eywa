@@ -24,7 +24,7 @@ type EnrollRow = Omit<SnapshotEnrollment, "start_date" | "on_hold" | "is_transfe
  * 오늘 기준 의무 쌍(지금 담임)으로 이번 달 분모를 만든다 — 달 중에 담임이 바뀌면 열쇠가 바뀌고 옛 열쇠는 rekey 정리된다(일간과 같은 규칙).
  * 🔴 관리 키라 모든 조회에 tenant_id(#104). 체크 표를 못 읽으면(미적용·실패) 신규생 몫만 건너뛰고 상담은 맞춘다.
  */
-export async function syncMonthlyDuties(tenantId: string, today: string, settings: TenantSettings, opts: { /** 지난 달 다시 만들기(`backfillDutyMonth`) — 신규생 정착은 오늘 기준 한 벌이라 지난 날로 돌리지 않는다. */ skipNewcomers?: boolean; /** 지난 달 재맞춤(달 초 한 주) — 완료만 맞춘다. 지금 명단 · 지금 담임으로 지난 달 의무를 새로 열거나 지우면 이미 선 실적이 바뀐다. */ resolveOnly?: boolean } = {}): Promise<{ counsel: number; exam: number; newcomer: number; skipped?: string }> {
+export async function syncMonthlyDuties(tenantId: string, today: string, settings: TenantSettings, opts: { /** 지난 달 다시 만들기(`backfillDutyMonth`) — 신규생 정착은 오늘 기준 한 벌이라 지난 날로 돌리지 않는다. */ skipNewcomers?: boolean; /** 지난 달 재맞춤(달 초 한 주) — 완료만 맞춘다. 지금 명단 · 지금 담임으로 지난 달 의무를 새로 열거나 지우면 이미 선 실적이 바뀐다. */ resolveOnly?: boolean; /** 지난 달 다시 만들기 — 닫힌 행의 담당도 다시 적는다. */ reown?: boolean } = {}): Promise<{ counsel: number; exam: number; newcomer: number; skipped?: string }> {
   const admin = createAdminClient();
   const month = today.slice(0, 7);
   const monthStart = `${month}-01`;
@@ -84,10 +84,10 @@ export async function syncMonthlyDuties(tenantId: string, today: string, setting
   const inactive = new Set(teachers.filter((t) => t.status === "inactive" && asOf.retiredOn(t.id, today)).map((t) => t.id));
   const counselDrafts = buildCounselDuties({ month, pairs: pairs.filter((p) => counted.has(p.studentId)),
     consults: consults.map((c) => ({ studentId: c.student_id, counselorId: c.counselor_id, consultedAt: c.consulted_at })), inactiveTeacherIds: inactive });
-  await writeDrafts(tenantId, counselDrafts, { rekey: true, resolveOnly: opts.resolveOnly });
+  await writeDrafts(tenantId, counselDrafts, { rekey: true, resolveOnly: opts.resolveOnly, reown: opts.reown });
   const examDrafts = buildExamDuties({ month, pairs: rosterPairs.filter((p) => counted.has(p.studentId)), inactiveTeacherIds: inactive,
     records: grades.filter((g) => !g.no_exam && gradeKind(g.exam_slot, g.exam_name) === "monthly").map((g) => ({ studentId: g.student_id, subject: g.subject, takenOn: g.taken_on, createdAt: g.created_at })) });
-  await writeDrafts(tenantId, examDrafts, { rekey: true, cyclesOf: { exam_monthly: [month] }, resolveOnly: opts.resolveOnly });
+  await writeDrafts(tenantId, examDrafts, { rekey: true, cyclesOf: { exam_monthly: [month] }, resolveOnly: opts.resolveOnly, reown: opts.reown });
 
   if (opts.skipNewcomers) return { counsel: counselDrafts.length, exam: examDrafts.length, newcomer: 0, skipped: "newcomers_skipped" };
   // ── 신규생 정착 콜 — 신규생 탭·운영실 신호와 같은 재료(cohort.ts).

@@ -1,4 +1,3 @@
-import { nativeOwnerIds } from "./native";
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
@@ -6,6 +5,8 @@ import { addDays } from "@/lib/date-kst";
 import { cellItemState, type CellItem } from "../cell-items";
 import type { DutyAdminScope } from "../view-admin";
 import { monthHref } from "../view-month";
+import { dutyOpensAt } from "../kinds";
+import { nativeOwnerIds } from "./native";
 
 export type CellFilter = { studentId: string; kind: string | null; classId: string | null; /** 반 없는 의무만(신규생 정착 줄). */ classNone: boolean; owner: string | null; ownerNone: boolean; subject: string | null; subjectNone: boolean };
 type Row = { id: string; kind: string; period: string; cycle: string; status: string; void_reason: string | null; due_at: string; done_at: string | null; owner_id: string | null; student_id: string | null; class_id: string | null; subject: string | null;
@@ -39,9 +40,10 @@ export async function loadDutyCellItems(tenantId: string, from: string, to: stri
     if (f.subjectNone) q = q.is("subject", null); else if (f.subject) q = q.eq("subject", f.subject);
     return q.order("due_at").order("id").range(a, b);
   });
-  // 원어민 담당 업무는 목록에서도 뺀다(집계와 같은 규칙).
+  // 원어민 담당 · 담당 없는 업무 · 아직 수업이 안 끝난 일간 업무는 목록에서도 뺀다(집계와 같은 규칙 — 칸의 분자/분모와 목록의 줄 수가 같아야 한다).
   const native = await nativeOwnerIds(tenantId, fetched.flatMap((r) => (r.owner_id ? [r.owner_id] : [])));
-  const rows = native.size ? fetched.filter((r) => !r.owner_id || !native.has(r.owner_id)) : fetched;
+  const nowAt = Date.now();
+  const rows = fetched.filter((r) => !!r.owner_id && !native.has(r.owner_id) && dutyOpensAt(r.kind, r.period, r.due_at) <= nowAt);
   // 끝낸 월 상담 → 그 달 그 담당이 쓴 상담 기록(가장 이른 것 — 의무를 닫은 기록).
   const counsel = rows.filter((r) => r.kind === "counsel_monthly" && r.status === "done" && r.owner_id);
   const consultOf = new Map<string, string>();

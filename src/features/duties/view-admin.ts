@@ -22,12 +22,12 @@ export type OwnerInfo = Record<string, string>;
 export type ClassInfo = Record<string, { name: string; subject: string | null; teacherId: string | null }>;
 export type StudentInfo = Record<string, { name: string; school: string | null; grade: string | null }>;
 /** 과목 범위 — null = 전 과목(원장). 배열 = 그 과목 키만(과목 관리자 — 비어 있으면 아무것도 안 보인다). labels = 키 → 학원 설정 라벨(raw 키 노출 금지). */
-export type DutyAdminScope = { subjects: string[] | null; labels: Record<string, string>; /** '담당' 권한이면 본인 의무만(null = 전원). */ ownerId: string | null; /** 관리 기록(확인 · 사유 · 면제)을 남길 수 있나 — 전체 권한만. 서버 액션이 같은 판정을 한 번 더 한다. */ canNote?: boolean };
+export type DutyAdminScope = { subjects: string[] | null; labels: Record<string, string>; /** '담당' 권한이면 본인 의무만(null = 전원). */ ownerId: string | null; /** 관리 기록(확인 · 사유 · 면제)을 남길 수 있나 — 전체 권한만. 서버 액션이 같은 판정을 한 번 더 한다. */ canNote?: boolean; /** 수업보고서 평점을 볼 수 있나 — 수업보고서 쓰기 권한(평점 열람과 같은 문 · 0450a). 본인만 보는 사람에게는 없다. */ seeRatings?: boolean };
 /** 열린 채 기한이 지난 의무 한 건. inherited = 평가 시작(live_from) 전 기한 — 집계·판정에 안 들고 '이관된 미확인'으로 따로 묶는다. */
 /** note = 가장 최근 관리 기록(확인 · 사유 — s2_0052). 면제한 의무는 지연에서 빠져 여기 오지 않는다. */
 export type LateItem = DutyItemView & { ownerId: string | null; inherited: boolean; note?: DutyNote | null };
 /** syncedAt = 장부를 마지막으로 맞춘 시각(없으면 null) — 화면의 '기준 시각'. */
-export type DutyAdminData = { ownerKind: RollupOwnerKind[]; classes: RollupClass[]; late: LateItem[]; owners: OwnerInfo; classInfo: ClassInfo; syncedAt: string | null; /** 담당 반 수 · 학생 수(없으면 반 수만 트리에서 센다). */ ownerLoad?: OwnerLoadRow[]; /** 관리자 역할(원장 · 관리자)인 담당자 — 맡은 반이 없으면 선생님 목록·등수에서 뺀다. */ managerIds?: string[]; /** 평가 개시 시각(없으면 null) — 고른 기간이 통째로 그 전이면 화면이 '참고 기록'이라고 밝힌다. */ liveFrom?: string | null; /** 볼 수 있는 첫 날(없으면 제한 없음) — 이보다 앞선 기간으로는 가지 않는다. */ viewFrom?: string | null };
+export type DutyAdminData = { ownerKind: RollupOwnerKind[]; classes: RollupClass[]; late: LateItem[]; owners: OwnerInfo; classInfo: ClassInfo; syncedAt: string | null; /** 담당 반 수 · 학생 수(없으면 반 수만 트리에서 센다). */ ownerLoad?: OwnerLoadRow[]; /** 관리자 역할(원장 · 관리자)인 담당자 — 맡은 반이 없으면 선생님 목록·등수에서 뺀다. */ managerIds?: string[]; /** 평가 개시 시각(없으면 null) — 고른 기간이 통째로 그 전이면 화면이 '참고 기록'이라고 밝힌다. */ liveFrom?: string | null; /** 볼 수 있는 첫 날(없으면 제한 없음) — 이보다 앞선 기간으로는 가지 않는다. */ viewFrom?: string | null; /** 작성자 × 과목의 수업보고서 평점(볼 수 있는 사람에게만 · 없으면 열이 없다). */ ratings?: RatingRow[] };
 
 /**
  * 기간 열쇠 — `d:YYYY-MM-DD`(하루) · `w:YYYY-MM-DD`(그 주의 월요일) · `m:YYYY-MM`(달). 원장 2026-11-11 *"달력 추가해서 날짜 이동 가능하게"* —
@@ -91,28 +91,36 @@ export const MATRIX_COLUMNS: { kind: string; label: string }[] = [
   { kind: "attendance", label: "출결" }, { kind: "report_send", label: "보고서 발송" }, { kind: "report_write", label: "보고서 작성" },
   { kind: "counsel_monthly", label: "학생 상담" }, { kind: "exam_monthly", label: "월말평가" }, { kind: "newcomer_call", label: "신규생 관리" },
 ];
-/** pct = **기한 준수율**(기한이 온 것 중 제때 끝낸 비율). 기한이 온 것이 없으면 null(평가 대기). */
+/**
+ * pct = **기한 내 완료율** — 그 기간에 **때가 된 업무** 가운데 기한 안에 끝낸 비율(내림 — 남은 것이 있으면 100%가 아니다). 업무가 없으면 null.
+ * 때가 된 업무 = 수업이 끝난 일간 업무(출결 · 보고서) + 월간 · 건별 업무 전부. 아직 열리지 않은 수업의 업무는 집계에 들어오지 않는다(s2_0064 —
+ * 원장 2026-11-11 *"수업시간이 지났을때 반영할것 … 수업시간이 되지도 않았는데 벌써부터 0%임"*).
+ * 🔴 칸 · '전체' 칸 · 합계 줄 · 등급 · 등수 · 요약 칸이 **모두 이 숫자 하나**다(원장 *"이렇게 빨간색이 많은데 전체 점수가 이해가 안되는데? … 왜 97%?"* · *"전체 기준으로 등급 다시 매길것"*).
+ *    '기한이 온 것만'으로 따로 계산한 %를 화면에 다시 세우지 말 것 — 종류 칸은 붉은데 전체만 초록이 되어 한 줄이 서로 다른 말을 한다(2026-11-11 저녁 한 번 그랬다가 되돌렸다).
+ */
 export type Cell = Counts & { pct: number | null };
 export type CellTone = "none" | "wait" | "good" | "warn" | "bad";
 export const ZERO: Counts = { total: 0, done: 0, due: 0, ontime: 0, lateDone: 0, late: 0, expired: 0, over7: 0 };
-export const pctOf = (c: Counts): number | null => (c.due ? Math.round((c.ontime / c.due) * 100) : null);
-/** 반올림 전 기한 준수율 — **등급 · 등수는 이 값으로** 매긴다(95.5%가 96으로 올라가 1등급이 되거나 99.7%가 100%와 공동 1위가 되지 않게). 화면에 적는 %만 반올림한다. */
-export const exactPct = (c: Counts): number | null => (c.due ? (c.ontime / c.due) * 100 : null);
+/** 기한이 오기 전에 미리 끝낸 것(기한이 지나면 '제때'로 넘어간다). */
+export const earlyDoneOf = (c: Counts): number => Math.max(c.done - c.ontime - c.lateDone, 0);
+/** 기한 안에 끝낸 것 — 제때 끝낸 것 + 기한 전에 미리 끝낸 것. 늦게 끝낸 것 · 안 한 것은 들지 않는다. */
+export const wellDoneOf = (c: Counts): number => c.ontime + earlyDoneOf(c);
+export const pctOf = (c: Counts): number | null => (c.total ? Math.floor((wellDoneOf(c) / c.total) * 100) : null);
+/** 내림 전 값 — **등급 · 등수는 이 값으로** 매긴다(95.9%가 96으로 올라가 1등급이 되거나 99.7%가 100%와 공동 1위가 되지 않게). */
+export const exactPct = (c: Counts): number | null => (c.total ? (wellDoneOf(c) / c.total) * 100 : null);
 export const EMPTY: Cell = { ...ZERO, pct: null };
 export const add = (a: Counts, b: Counts): Counts => ({ total: a.total + b.total, done: a.done + b.done, due: a.due + b.due, ontime: a.ontime + b.ontime,
   lateDone: a.lateDone + b.lateDone, late: a.late + b.late, expired: a.expired + b.expired, over7: a.over7 + b.over7 });
 export const cellOf = (c: Counts): Cell => ({ total: c.total, done: c.done, due: c.due, ontime: c.ontime, lateDone: c.lateDone, late: c.late, expired: c.expired, over7: c.over7, pct: pctOf(c) });
-/** 기한 전이라 아직 남은 것(예정) — 판정에 안 든다. */
+/** 아직 남은 것 — 때는 됐지만 기한 전이라 안 끝낸 것(보낼 보고서 · 이번 달 상담처럼). 분모에는 든다. */
 export const upcomingOf = (c: Counts): number => Math.max(c.total - c.done - c.late - c.expired, 0);
-/** 기한이 오기 전에 미리 끝낸 것 — 진행에는 들지만 기한이 올 때까지 판정에 안 든다. */
-export const earlyDoneOf = (c: Counts): number => Math.max(c.done - c.ontime - c.lateDone, 0);
 /** 기한이 온 것이 없을 때 칸에 적는 진행(완료/전체) — '예정 0'처럼 끝낸 일을 안 한 것으로 보이게 하지 않는다(리뷰 2026-11-10). */
 export const progressText = (c: Counts): string => `${c.done}/${c.total}`;
 /** 표본이 이보다 적으면 등급을 매기지 않는다(1~2건으로 낮은 등급을 붙이지 않는다). */
 export const MIN_JUDGE = 3;
 /**
  * 등급 = **로열티와 같은 9등급**(원장 2026-11-10 *"미흡 양호 주의 3단계로 하지말고, % 기준으로 로열티와 동일한 등급제로 … 전체%를 기준으로"*).
- * 경계는 로열티의 누적 비율(4 · 11 · 23 · 40 · 60 · 77 · 89 · 96 · 100)을 그대로 쓴다 — 기한 준수율이 100%에서 모자란 폭으로 가른다:
+ * 경계는 로열티의 누적 비율(4 · 11 · 23 · 40 · 60 · 77 · 89 · 96 · 100)을 그대로 쓴다 — 기한 내 완료율(`pct` — 표의 '전체' 칸과 같은 숫자)이 100%에서 모자란 폭으로 가른다:
  * 96%+ 1등급 · 89%+ 2등급 · 77%+ 3등급 · 60%+ 4등급 · 40%+ 5등급 · 23%+ 6등급 · 11%+ 7등급 · 4%+ 8등급 · 그 밑 9등급. 상대 순위가 아니라 그 사람의 % 하나로 정한다.
  */
 export type DutyTier = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
@@ -122,42 +130,33 @@ export function dutyTier(pct: number): DutyTier {
 }
 /** 등급의 색 묶음 — 1~2등급 초록 · 3~4등급 주황 · 5등급 이하 빨강(칸 색 · 점 · 배지가 같은 묶음). */
 export const tierTone = (tier: DutyTier): "good" | "warn" | "bad" => (tier <= 2 ? "good" : tier <= 4 ? "warn" : "bad");
-/** 칸 색 = 판정(`judge`)과 같은 결 — 의무 없음 회색 · 기한 온 것이 3건 미만이면 중립(평가 대기) · 그 밖은 등급의 색 묶음. */
+/** 칸 색 = 판정(`judge`)과 같은 결 — 업무 없음 회색 · 3건 미만이면 중립(평가 대기) · 그 밖은 등급의 색 묶음. */
 export function cellTone(c: Cell): CellTone {
   if (!c.total) return "none";
-  if (c.pct === null || c.due < MIN_JUDGE) return "wait";
+  if (c.pct === null || c.total < MIN_JUDGE) return "wait";
   return tierTone(dutyTier(exactPct(c) ?? c.pct));
 }
-/**
- * 칸 표시(원장 2026-11-11 *"남음이 있는데 100%는 말도 안됨"* · *"전체는 %로"* · *"완료된 건은 초록색으로, 미흡이 하나라도 있는건은 붉은색으로"*):
- *   · 잘 끝낸 것 = 기한 안에 끝낸 것(기한 전에 미리 끝낸 것 포함). 늦게 끝낸 것 · 아직 안 한 것 · 미이행은 모자란 것이다.
- *   · '전체' 칸의 % = **기한 준수율**(기한 안에 끝낸 것 ÷ 기한이 온 것 — 등급과 같은 기준 · `duePct`). 기한이 온 것이 없으면 '—'.
- *     (2026-11-11 저녁 — Claude + Codex 합의를 원장이 그대로 진행하라고 함: 남은 것까지 분모에 넣으면 달 중순에 등급은 좋은데 %만 낮아 서로 다른 말을 했다.)
- *   · 종류 칸에 남은 것이 있으면 끝낸 것/전체로 적는다(그 칸의 색은 그 비율 — `overallPct`).
- *   · 색은 둘 — 전부 잘 끝냈으면 초록, 하나라도 모자라면 빨강.
- * 등급(`judge`)은 종전대로 기한이 온 것만으로 매긴다(아직 기한이 안 온 일로 등급을 깎지 않는다).
- */
-export const wellDoneOf = (c: Counts): number => c.ontime + earlyDoneOf(c);
-export const overallPct = (c: Counts): number | null => (c.total ? Math.floor((wellDoneOf(c) / c.total) * 100) : null);
-/** 기한 준수율 — 기한이 온 것이 없으면 null. 판정 줄 · 종류 칸 · 과목 관리자별 현황과 **같은 반올림**이다(한 줄 안에서 26%와 27%가 같이 서지 않게 · 등급은 반올림 전 값). */
-export const duePct = (c: Counts): number | null => (c.due ? Math.round((c.ontime / c.due) * 100) : null);
-export const allWellDone = (c: Counts): boolean => c.total > 0 && wellDoneOf(c) === c.total;
-
 /** 칸 설명(마우스 오버) — 숫자의 뜻을 글로. */
 export function cellTitle(c: Counts): string {
-  const parts = [c.due ? `기한 지난 업무 ${c.due}건 중 기한 내 완료 ${c.ontime}건` : "기한 지난 업무 없음"];
-  if (c.late) parts.push(`기한 초과 ${c.late}`);
+  const parts = [`${c.total}건 중 기한 내 완료 ${wellDoneOf(c)}건`];
   if (c.lateDone) parts.push(`기한 후 완료 ${c.lateDone}`);
+  if (c.late) parts.push(`기한 초과 ${c.late}`);
   if (c.expired) parts.push(`미처리 확정 ${c.expired}`);
   const up = upcomingOf(c); if (up) parts.push(`남음 ${up}`);
-  const early = earlyDoneOf(c); if (early) parts.push(`미리 완료 ${early}`);
   return parts.join(" · ");
 }
 /** 과목 거르기 — undefined = 전 과목 · null = 과목 없는 것만('과목 미정') · 글자 = 그 과목. */
 export type SubjectFilter = string | null | undefined;
 const inSubject = (subject: string | null, filter: SubjectFilter) => filter === undefined || subject === filter;
 
-export type MatrixRow = { ownerId: string; name: string; /** 이름 옆 글(과목 · 반 수 · 학생 수). */ meta?: string; cells: Record<string, Cell>; all: Cell };
+/** 수업보고서 평점 — 그 기간 평점 수 · 평균(1~5). 준수율 · 등급과 섞지 않는 참고 열이다. */
+export type RatingRow = { ownerId: string; subject: string | null; rated: number; avg: number };
+export type Rating = { rated: number; avg: number };
+/** 평점을 합친다(건수로 가중). */
+export const addRating = (a: Rating | undefined, b: Rating | undefined): Rating | undefined => (!a ? b : !b ? a : { rated: a.rated + b.rated, avg: (a.avg * a.rated + b.avg * b.rated) / (a.rated + b.rated) });
+/** 평점을 매기는 최소 건수 — 그 아래는 등수에서 뺀다. */
+export const MIN_RATED = 5;
+export type MatrixRow = { ownerId: string; name: string; /** 수업보고서 평점(있을 때만). */ rating?: Rating; /** 이름 옆 글(과목 · 반 수 · 학생 수). */ meta?: string; cells: Record<string, Cell>; all: Cell };
 /** 담당자 × 과목의 담당 반 수 · 학생 수(s2_0053 — 고른 기간의 장부에서 겹침 없이). */
 export type OwnerLoadRow = { ownerId: string | null; subject: string | null; classes: number; students: number };
 /** 보이는 줄의 합(전체 줄) — '지연만'으로 거른 뒤에도 그 줄들의 합이다. */

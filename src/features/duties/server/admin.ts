@@ -3,12 +3,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, readonlyViewErasedScope } from "@/lib/auth/perm-matrix";
+import { REPORT_RATING_VISIBLE } from "@/features/report-admin/report-rating";
 import { loadViewerBundle } from "@/features/dashboard/layout/viewer-server";
 import { sliceGroupsOf } from "@/features/dashboard/layout/slices";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { subjectLabelRecord } from "@/features/owner/subjects";
 import { programSubjectsOf, subjectGroupOf } from "@/features/students/enrollment/program";
 import type { DutyPeriod, DutyStatus } from "../kinds";
+import { loadReportRatingRows } from "./ratings";
 import { isNativeName, tenantNativeIds } from "./native";
 import { loadLatestNotes } from "./notes";
 import type { AbsentRow, ClassInfo, Counts, DutyAdminData, DutyAdminScope, LateItem, OwnerInfo, OwnerLoadRow, RollupClass, RollupOwnerKind, RollupStudent, StudentInfo } from "../view-admin";
@@ -25,14 +27,18 @@ export async function resolveDutyAdminScope(viewer: CurrentUser): Promise<DutyAd
   //    담당자는 강사뷰면 그 강사(#154).
   const ownerId = level === "scoped" || erased ? (effective ?? viewer).id : null;
   const canNote = level === "full" && !ownerId;
-  if (!bundle.subjectScoped) return { subjects: null, labels, ownerId, canNote };
+  // 평점은 수업보고서 쓰기 권한자에게만(평점 열람과 같은 문) — 본인 줄만 보는 사람에게는 내려보내지 않는다.
+  //   🔴 '담당' 권한은 안 된다 — 수업보고서 목록에서 담당 권한자는 자기 보고서의 평점만 보는데(RLS), 여기서는 모든 선생님의 평균 · 등수가 나간다(리뷰 2026-11-11).
+  //   표시 스위치(`REPORT_RATING_VISIBLE`)가 꺼지면 권한자에게도 내려보내지 않는다(목록과 같다).
+  const seeRatings = REPORT_RATING_VISIBLE && !ownerId && (await accessLevelTenant(viewer.systemRole, "lesson_reports")) === "full";
+  if (!bundle.subjectScoped) return { subjects: null, labels, ownerId, canNote, seeRatings };
   // 담당 과목은 자유 글자일 수 있다(키·라벨·'EiE'…) — 운영실과 같은 읽기(`sliceGroupsOf`)로 묶음을 읽고, 그 묶음에 드는 설정 과목 키를 전부 허용한다.
   const programs = programSubjectsOf(labels);
   const groupOf = (key: string | null | undefined) => subjectGroupOf(key, programs);
   const groupsOf = sliceGroupsOf(settings.operations.subjects.map((s) => ({ key: s.key, label: s.label })), groupOf);
   const groups = new Set(bundle.subjects.flatMap((s) => groupsOf(s)));
   const subjects = settings.operations.subjects.map((s) => s.key).filter((key) => { const g = groupOf(key); return !!g && groups.has(g); });
-  return { subjects, labels, ownerId, canNote };
+  return { subjects, labels, ownerId, canNote, seeRatings };
 }
 
 const num = (v: unknown) => Number(v ?? 0);
@@ -57,7 +63,7 @@ export async function loadDutyAdmin(tenantId: string, from: string, to: string, 
   const settings = await loadDutySettings(tenantId);
   // 볼 수 있는 첫 날(s2_0061) 전은 세지 않는다 — 에이와에 기록을 적기 전의 달은 수치가 실제 업무를 말하지 않는다(원장 2026-11-11).
   const args = { p_tenant: tenantId, p_from: settings.viewFrom && from < settings.viewFrom ? settings.viewFrom : from, p_to: to, p_subjects: scope.subjects, p_periods: periods, p_owner: scope.ownerId };
-  const [ok, cls, lateRaw, ownerLoad] = await Promise.all([
+  const [ok, cls, lateRaw, ownerLoad, ratings] = await Promise.all([
     fetchAllPaged<CountRow & { owner_id: string | null; subject: string | null; kind: string; period: DutyPeriod }>((a, b) =>
       admin.rpc("duty_rollup_owner_kind", args).order("owner_id").order("subject").order("kind").order("period").range(a, b)),
     fetchAllPaged<CountRow & { class_id: string | null; owner_id: string | null; subject: string | null }>((a, b) =>
@@ -68,6 +74,7 @@ export async function loadDutyAdmin(tenantId: string, from: string, to: string, 
       if (error) { if (error.code === "PGRST202" || error.code === "42883") return []; throw new Error(`담당 반·학생 수: ${error.message}`); }
       return ((data ?? []) as { owner_id: string | null; subject: string | null; classes: number; students: number }[]).map((r) => ({ ownerId: r.owner_id, subject: r.subject, classes: num(r.classes), students: num(r.students) }));
     }),
+    scope.seeRatings ? loadReportRatingRows(tenantId, args.p_from, to, scope.subjects) : Promise.resolve(undefined),
   ]);
   const liveMs = settings.liveFrom ? Date.parse(settings.liveFrom) : null;
   const notes = await loadLatestNotes(tenantId, lateRaw.map((it) => it.id));
@@ -79,8 +86,9 @@ export async function loadDutyAdmin(tenantId: string, from: string, to: string, 
   const [owners, classInfo] = await Promise.all([loadOwners(tenantId, ownerIds), loadClasses(tenantId, classIds)]);
   // 원어민 담당 몫은 집계 · 기한 초과 목록 · 반/학생 수에서 통째로 뺀다 — 줄만 숨기면 과목 합계와 줄의 합이 어긋난다(합계는 남은 줄로 다시 선다).
   const native = new Set(Object.entries(owners.names).filter(([, name]) => isNativeName(name)).map(([id]) => id));
-  const kept = <T extends { ownerId: string | null }>(rows: T[]): T[] => (native.size ? rows.filter((r) => !r.ownerId || !native.has(r.ownerId)) : rows);
-  return { ownerKind: kept(ownerKind), classes: kept(classes), late: kept(late), owners: owners.names, classInfo, syncedAt: settings.syncedAt, liveFrom: settings.liveFrom, viewFrom: settings.viewFrom, ownerLoad: kept(ownerLoad), managerIds: owners.managerIds };
+  // 담당 없는 업무('담당 미정')도 세우지 않는다(원장 2026-11-11 *"담당 미정 … 노출되지 않도록 숨길것 (원어민처럼)"*) — 장부에는 남는다.
+  const kept = <T extends { ownerId: string | null }>(rows: T[]): T[] => rows.filter((r) => !!r.ownerId && !native.has(r.ownerId));
+  return { ownerKind: kept(ownerKind), classes: kept(classes), late: kept(late), owners: owners.names, classInfo, syncedAt: settings.syncedAt, liveFrom: settings.liveFrom, viewFrom: settings.viewFrom, ratings: ratings ? kept(ratings) : undefined, ownerLoad: kept(ownerLoad), managerIds: owners.managerIds };
 }
 
 type LateRow = { id: string; kind: string; period: DutyPeriod; cycle: string; status: DutyStatus; due_at: string; done_at: string | null; void_reason: string | null; owner_id: string | null;
@@ -124,20 +132,21 @@ export async function loadDutyStudents(tenantId: string, from: string, to: strin
   // 원어민 담당 몫은 합치기 전에 뺀다(s2_0062) — 선생님 · 반 집계와 같은 숫자가 되게.
   const native = await tenantNativeIds(tenantId);
   const raw = await fetchAllPaged<CountRow & { student_id: string | null; class_id: string | null; kind: string; last_due: string | null }>((a, b) =>
-    admin.rpc("duty_rollup_student_ex", { p_exclude_owners: native.length ? native : null, p_tenant: tenantId, p_from: from, p_to: to, p_subjects: scope.subjects, p_periods: periods, p_owner: scope.ownerId ?? (f.ownerNone ? null : f.owner ?? null), p_kind: f.kind ?? null, p_class: f.classId ?? null, p_subject: f.subject ?? null, p_student: f.studentId ?? null, p_subject_none: f.subjectNone ?? false, p_owner_none: !scope.ownerId && (f.ownerNone ?? false) })
+    admin.rpc("duty_rollup_student_ex", { p_exclude_owners: native, /* 빈 목록이어도 넘긴다 — 담당 없는 업무를 함께 뺀다(s2_0064) */ p_tenant: tenantId, p_from: from, p_to: to, p_subjects: scope.subjects, p_periods: periods, p_owner: scope.ownerId ?? (f.ownerNone ? null : f.owner ?? null), p_kind: f.kind ?? null, p_class: f.classId ?? null, p_subject: f.subject ?? null, p_student: f.studentId ?? null, p_subject_none: f.subjectNone ?? false, p_owner_none: !scope.ownerId && (f.ownerNone ?? false) })
       .order("student_id").order("class_id").order("kind").range(a, b));
   // 결석으로 빠진 일간 의무(void · absent) — 집계에는 없지만 칸에 '결석'이라고 적으려고 같은 범위로 따로 읽는다(하루 · 한 주 · 한 달 안의 수업일).
-  const absentRaw = await fetchAllPaged<{ student_id: string | null; class_id: string | null; kind: string }>((a, b) => {
-    let q = admin.from("duty_items").select("student_id,class_id,kind").eq("tenant_id", tenantId).eq("period", "daily").eq("status", "void").eq("void_reason", "absent").gte("cycle", from).lte("cycle", to).not("student_id", "is", null);
+  const absentAll = await fetchAllPaged<{ student_id: string | null; class_id: string | null; kind: string; owner_id: string | null }>((a, b) => {
+    let q = admin.from("duty_items").select("student_id,class_id,kind,owner_id").eq("tenant_id", tenantId).eq("period", "daily").eq("status", "void").eq("void_reason", "absent").gte("cycle", from).lte("cycle", to).not("student_id", "is", null).not("owner_id", "is", null);
     if (scope.subjects) q = q.in("subject", scope.subjects);
     if (scope.ownerId) q = q.eq("owner_id", scope.ownerId); else if (f.ownerNone) q = q.is("owner_id", null); else if (f.owner) q = q.eq("owner_id", f.owner);
-    if (native.length) q = q.or(`owner_id.is.null,owner_id.not.in.(${native.join(",")})`);
     if (f.kind) q = q.eq("kind", f.kind);
     if (f.classId) q = q.eq("class_id", f.classId);
     if (f.subjectNone) q = q.is("subject", null); else if (f.subject) q = q.eq("subject", f.subject);
     if (f.studentId) q = q.eq("student_id", f.studentId);
     return q.order("id").range(a, b);
   });
+  // 원어민 담당 몫은 여기서 뺀다(조회 조건을 더 잇지 않는다 — 조건 사슬이 길어지면 타입 계산이 멈춘다).
+  const absentRaw = native.length ? absentAll.filter((r) => !r.owner_id || !native.includes(r.owner_id)) : absentAll;
   const absentBy = new Map<string, AbsentRow>();
   for (const r of absentRaw) { if (!r.student_id) continue; const key = `${r.student_id}|${r.class_id ?? ""}|${r.kind}`; const cur = absentBy.get(key) ?? { studentId: r.student_id, classId: r.class_id, kind: r.kind, count: 0 }; cur.count++; absentBy.set(key, cur); }
   const rows = raw.map((r): RollupStudent => ({ studentId: r.student_id, classId: r.class_id, kind: r.kind, ...counts(r), lastDue: r.last_due }));

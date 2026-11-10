@@ -18,6 +18,10 @@
 
 ## 2026-11-10 의무 장부: 할 일 본문에 업무 종류 (s2_0046 · ✅ 운영 적용 2026-11-10 · 직결 · 시험 거래 뒤)
 
+`s2_0064_duty_class_time_and_reown.sql` — ✅ 운영 적용(2026-11-11). 관리 화면 집계는 **수업이 끝난 일간 업무부터** 센다(`duties_private.rollup_rows` 7칸 겹침 · 6칸은 그것을 부른다 · `duty_rollup_owner_load`만 수업 전 반까지) · `duty_rollup_student_ex` — 뺄 담당을 주면 담당 없는 업무도 뺀다 · `duty_reown_items` — 지난 달 다시 만들기가 평가 개시 전의 닫힌 행 담당을 그날 기준으로 바로잡는다.
+
+`s2_0063_duty_report_rating_rollup.sql` — ✅ 운영 적용(2026-11-11). `duty_report_rating_by_owner` — 작성자 × 과목의 수업보고서 평점 수 · 평균(업무 완성도 참고 열).
+
 `s2_0062_duty_student_exclude_and_lock.sql` — ✅ 운영 적용(2026-11-11). `duty_rollup_student_ex`(학생 집계 + 뺄 담당 — 원어민) · `duty_sync_claim` 잠금 3분 → 6분.
 
 `s2_0061_duty_view_from.sql` — ✅ 운영 적용(2026-11-11 · 침산 값 2026-09-01). `duty_settings.view_from` — 관리 화면에서 볼 수 있는 첫 날(null = 제한 없음).
