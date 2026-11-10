@@ -155,3 +155,17 @@ export function validateMoneyCarry(
   if (!input.classId || !limits.classIds.includes(input.classId)) return { ok: false, error: "받을 반을 다음 달 반 중에서 골라 주세요" };
   return { ok: true };
 }
+
+/**
+ * **이월 재확인이 필요한 줄**(회차 확정 '보기' 필터 · 머리 줄 건수, 원장 2026-11-09 *"계속"* — 경고가 없는 경로까지 한곳에서 보이게).
+ * 표가 줄마다 띄우는 표식과 같은 기준이다(`MoneyCarryTags`):
+ *  · 보낸 이월이 무효('이월 재확인')이거나 받을 반이 없다(`landing: orphan`) — 다음 달 실납에 안 실린다.
+ *  · 받은 이월이 무효이거나 받을 곳이 없다(`orphan`) — 이 달 실납에 안 실린다.
+ * 🔑 어떻게 무효가 됐는지(확정·해제·배분·청구서 수정·환불·합산·메이크에듀 동기화·앞 달 연쇄)와 무관하게 **결과**를 본다 — 경로마다 경고를
+ *    달 수 없는 자동 변경(동기화)까지 이 한 곳에서 잡힌다.
+ */
+export function carryNeedsRecheck(r: CarrySource & { carryOut?: MoneyCarryOut | null }): boolean {
+  const out = r.carryOut;
+  if (out && out.amount > 0 && (!carryOutValid(r, out.amount) || out.landing === "orphan")) return true;
+  return (r.carryIns ?? []).some((c) => !c.valid || !!c.orphan);
+}

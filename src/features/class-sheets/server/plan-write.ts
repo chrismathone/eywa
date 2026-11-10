@@ -25,6 +25,7 @@ import { carrySummary, type CarryPatch } from "../lib/carry-marks";
 import { carrySelfStudyMarks } from "./carry-marks";
 // 타입만 받는다(런타임 의존 0) — DTO 소유자는 계속 서버 액션이다(plan-line.ts와 같은 규약).
 import type { PlanLineDTO } from "./actions";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * 게이트를 통과한 뒤의 쓰기 허가증. **누가 열어 줬는지는 여기 안 담는다** — 밑바닥은 문을 모른다.
@@ -185,7 +186,7 @@ export async function applyPlanPatches(
     update = expected === null ? update.is(p.field, null) : update.eq(p.field, expected);
     const { data: updated, error: upErr } = await update.select("id");
     if (upErr) {
-      results.push({ saveKey: p.saveKey, status: "error", clientRev: p.clientRev, error: upErr.message });
+      results.push({ saveKey: p.saveKey, status: "error", clientRev: p.clientRev, error: explainDbError(upErr, { scope: "class-sheets.plan-write.applyPlanPatches", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message });
       continue;
     }
     if ((updated ?? []).length > 0) {
@@ -221,7 +222,7 @@ async function rpcSlotLines(rpc: string, args: Record<string, unknown>): Promise
   const { data, error } = await admin.rpc(rpc, args);
   if (error) {
     if (error.message.includes("ECS_MAX_LINES")) return { ok: false, error: "한 교시에 담을 수 있는 줄 수(20)를 넘었습니다" };
-    return { ok: false, error: `저장에 실패했습니다: ${error.message}` };
+    return { ok: false, error: explainDbError(error, { scope: "class-sheets.plan-write.rpcSlotLines", fallback: "저장에 실패했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   }
   return { ok: true, lines: ((data ?? []) as Record<string, unknown>[]).map(toLineDTO) };
 }
@@ -393,7 +394,7 @@ export async function copyPlanSlotFromPrevious(
     if (/could not find|does not exist|schema cache/i.test(error.message)) {
       return { ok: false, error: "이 기능은 아직 준비 중입니다(DB 반영 대기)" };
     }
-    return { ok: false, error: `내용 복사에 실패했습니다: ${error.message}` };
+    return { ok: false, error: explainDbError(error, { scope: "class-sheets.plan-write.copyPlanSlotFromPrevious", fallback: "내용 복사에 실패했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   }
   const r = (data ?? {}) as {
     copied?: number;

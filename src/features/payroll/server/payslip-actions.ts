@@ -27,6 +27,7 @@ import { PAYSLIP_MANAGE_DENIED_MSG } from "../payslip-access";
 import { canManagePayslipNow } from "./payslip-gate";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getPayslipData } from "./payslip-queries";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 export type SavePayslipState =
   | {
@@ -124,7 +125,7 @@ export async function savePayslipAdjustments(
     { onConflict: "tenant_id,user_id,period" },
   );
   // 0205a 미적용이면 표가 없다 — 무슨 일인지 분명히 말한다(조용히 성공한 척하지 않는다).
-  if (error) return reject(`저장 실패: ${error.message}`, formData);
+  if (error) return reject(explainDbError(error, { scope: "payroll.payslip-actions.savePayslipAdjustments", fallback: "저장 실패 — 잠시 후 다시 시도해 주세요" }).message, formData);
 
   // 🔴 값은 담지 않는다(파일 머리 주석) — 조정한 **항목 이름**조차 담지 않는다. "인센티브를 고쳤다"만으로도
   //    그 사람 급여에 무슨 일이 있었는지가 읽히기 때문. 남기는 건 "누가 · 누구의 · 어느 달을 · 언제 고쳤나"뿐이다.
@@ -192,7 +193,7 @@ export async function issuePayslip(
     },
     { onConflict: "tenant_id,user_id,period" },
   );
-  if (error) return { error: `발행 실패: ${error.message}` };
+  if (error) return { error: explainDbError(error, { scope: "payroll.payslip-actions.issuePayslip", fallback: "발행 실패 — 잠시 후 다시 시도해 주세요" }).message };
 
   // 발행 = 그 시점 명세서를 **동결**해 서명·지급의 근거로 삼는 행위 → 남는 흔적이 있어야 한다.
   // 🔴 print_payload(=금액 전체)는 물론 netPay 한 줄도 담지 않는다(파일 머리 주석).
@@ -226,7 +227,7 @@ export async function unissuePayslip(
     .eq("tenant_id", user.tenantId)
     .eq("user_id", teacherId)
     .eq("period", period);
-  if (error) return { error: `발행 취소 실패: ${error.message}` };
+  if (error) return { error: explainDbError(error, { scope: "payroll.payslip-actions.unissuePayslip", fallback: "발행 취소 실패 — 잠시 후 다시 시도해 주세요" }).message };
 
   // 🔴 셋 중 **가장 중요한 줄** — 동결을 푸는 행위라, 이미 서명·지급된 명세서의 값이 이 뒤에 바뀔 수 있다.
   //    "왜 지급액과 명세서가 다르지"의 답이 여기서만 나온다.

@@ -59,7 +59,8 @@ describe("기존 설정 호환·실제 배정 직원", () => {
     const a = [{ id: "panel:notices", w: 12, h: 1 }];
     const b = [{ id: "panel:billingMonth", w: 6, h: 1 }];
     const settings = normalizeDashboard({ version: 1, layouts: [{ role: "other", items: a }, { role: "accountant", items: b }], assignments: [assignment] });
-    expect(settings.layouts).toEqual([{ role: "counselor", items: a }, { role: "accountant", items: b }, { role: "viewer", items: a }]);
+    // 옛 배치는 읽을 때 새 대시보드 모양으로 옮겨진다(카드는 그대로 — `board.ts`).
+    expect(settings.layouts.map((l) => [l.role, l.items.filter((i) => i.id.startsWith("panel:")).map((i) => i.id)])).toEqual([["counselor", ["panel:notices"]], ["accountant", ["panel:billingMonth"]], ["viewer", ["panel:notices"]]]);
     expect(settings.assignments).toEqual([assignment]);
     expect(resolveSettings({ dashboard: settings }, { name: "학원" }).dashboard).toEqual(settings);
   });

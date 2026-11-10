@@ -88,8 +88,8 @@ function loveNoteFactsOf(student: OneScreenStudent, subject: Subject): LoveNoteF
     progress: lessons.length ? lessons.join(", ") : (subject.today ?? ""),
     understanding: pilot
       ? understandingRows(subject.today, subject.understanding)
-          .filter((r) => r.stored && !r.off)
-          .map((r) => ({ title: r.title, level: understandingLevelWord(r.score) }))
+          // stored면 점수가 저장된 줄이라 null이 아니다 — 타입만 좁힌다(동작 같음).
+          .flatMap((r) => (r.stored && !r.off && r.score != null ? [{ title: r.title, level: understandingLevelWord(r.score) }] : []))
       : [],
   };
 }

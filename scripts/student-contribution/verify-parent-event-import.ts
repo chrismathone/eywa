@@ -1,21 +1,30 @@
 /** Run with tsx. Tests the actual import code against a local, in-memory PostgreSQL database only. */
 import assert from "node:assert/strict";
 import type { Sql } from "postgres";
-import { PGlite } from "../../work/sql-check/node_modules/@electric-sql/pglite/dist/index.js";
 import { buildEventBundle, type EventSourcePack } from "./parent-events/bundle";
 import { readEventDatabase } from "./parent-events/snapshot";
 import { applyInitialEvents, revokeEventImport } from "./parent-events/import-write";
 import { hash } from "./parent-events/source-values";
 import { readMigration } from "../../src/lib/db/migrations-corpus.mjs";
 const tenant = "11111111-1111-4111-8111-111111111111", student = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", owner = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-const db = new PGlite();
+// PGlite는 저장소 밖 로컬 설치(`work/sql-check`, docs/runbooks/student-parent-events.md)에서 실행 때 불러온다 — 정적 import면 그 설치가 없는
+// 곳(다른 PC·워크트리)의 타입 검사가 늘 실패한다(수정 계획 P0-3). 쓰는 메서드만 타입으로 둔다.
+const PGLITE_PATH = "../../work/sql-check/node_modules/@electric-sql/pglite/dist/index.js";
+type PgLiteDb = {
+  query(sql: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
+  exec(sql: string): Promise<unknown>;
+  transaction<T>(fn: (tx: PgLiteDb) => Promise<T>): Promise<T>;
+  close(): Promise<void>;
+};
+let db: PgLiteDb;
+let sql: Sql;
 type Queryable = { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> };
 function adapter(connection: Queryable): Sql {
   const tagged = async (strings: TemplateStringsArray, ...values: unknown[]) => (await connection.query(strings.reduce((q, s, i) => q + (i ? `$${i}` : "") + s, ""), values.map(v => v instanceof Date ? v.toISOString() : v))).rows;
   return Object.assign(tagged, { unsafe: async (q: string, values: unknown[]) => (await connection.query(q, values)).rows,
     json: JSON.stringify, begin: async (_mode: string, fn: (sql: Sql) => Promise<unknown>) => db.transaction(tx => fn(adapter(tx))) }) as unknown as Sql;
 }
-const sql = adapter(db), header = ["학생", "전화", "취소", "회차"];
+const header = ["학생", "전화", "취소", "회차"];
 const pack: EventSourcePack = { capturedAt: "2026-10-26T00:00:00Z", sources: [{ fileId: "file", title: "설명회", sheet: "신청", gid: 1,
   url: "https://docs.google.com/spreadsheets/d/file/edit", values: [header, ["가학생", "01023456789", "FALSE", "오전"], ["가학생", "01023456789", "FALSE", "오후"]] }], profiles: [{ fileId: "file", sheet: "신청", gid: 1,
   blocks: [{ start: 0, end: 4, firstRow: 1, headerRow: 0, headerHash: hash(header), eventKey: "event", title: "설명회", date: "2025-01-01", tenantId: tenant, eligibleList: true,
@@ -23,7 +32,11 @@ const pack: EventSourcePack = { capturedAt: "2026-10-26T00:00:00Z", sources: [{ 
     issues: [], name: 0, phone: 1, markers: [{ column: 2, kind: "cancellation" }] }] }] };
 let checks = 0;
 async function rejects(fn: () => Promise<unknown>, match: RegExp) { await assert.rejects(fn, match); checks++; }
-async function main() { try {
+async function main() {
+  const { PGlite } = (await import(PGLITE_PATH)) as { PGlite: new () => PgLiteDb };
+  db = new PGlite();
+  sql = adapter(db);
+  try {
   await db.exec("create role anon; create role authenticated; create role service_role bypassrls; create table tenants(id uuid primary key); create table users(id uuid primary key,tenant_id uuid,system_role text,status text,display_name text); create table students(id uuid primary key,tenant_id uuid,name text,parent_name text,parent_phone text,student_phone text,school text,grade text,status text,notes text,is_test boolean,enrolled_at date,withdrawn_at date); create table student_siblings(tenant_id uuid,student_a uuid,student_b uuid,linked boolean); create table audit_logs(tenant_id uuid,actor_id uuid,actor_name text,action text,target_type text,target_label text,metadata jsonb);");
   await db.query("insert into tenants values($1)", [tenant]);
   await db.exec("alter table students add column withdrawal_metadata jsonb; create table enrollments(id uuid,tenant_id uuid,student_id uuid,start_date date,end_date date);");

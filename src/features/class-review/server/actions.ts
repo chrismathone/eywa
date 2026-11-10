@@ -7,7 +7,7 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeObserverLimit } from "../observer-count";
-import { humanizeDbError } from "@/lib/supabase/db-error";
+import { humanizeDbError, explainDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 import { kstToday } from "@/lib/date-kst";
 import { CHECKLIST_AREAS, firstCompletedAt, itemCountOf, normalizeScore, sanitizeAreas } from "../checklist";
@@ -260,7 +260,7 @@ export async function setMyClassReviewFilter(
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
+  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "class-review.actions.setMyClassReviewFilter", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   const raw =
     row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
@@ -283,7 +283,7 @@ export async function setMyClassReviewFilter(
     .update({ ui_prefs: merged })
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "class-review.actions.setMyClassReviewFilter", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }
 

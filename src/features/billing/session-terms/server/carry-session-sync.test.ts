@@ -417,6 +417,9 @@ describe("확정·배분 저장이 보낸 이월을 무효로 만들면 알린�
     // 재확인이 그대로면(아직 배분을 안 맞춤) 다시 말하지 않는다.
     expect(carryOutBreakWarnings(new Map([[T1, s(false, true)]]), new Map([[T1, s(false, true)]])).size).toBe(0);
     expect(carryOutBreakWarnings(new Map([[T1, s(false)]]), new Map([[T1, s(false)]])).size).toBe(0);
+    // 확정 해제 — 고칠 것은 배분·이월이 아니라 다시 확정하는 일이다(배분 재확인이 함께 와도 같은 문구).
+    expect(carryOutBreakWarnings(new Map([[T1, s(true)]]), new Map([[T1, s(false, true)]]), "unconfirm").get(T1))
+      .toBe("9월 홍도연 중등M 개별 JJ3I: 확정을 해제해 10월로 넘긴 24,000원 이월이 다시 확정할 때까지 무효입니다(10월 실납에서 빠짐) — 다시 확정하면 유효해집니다(수납 배분이 재확인으로 남으면 배분도 다시 저장 · 확정액이 커지면 이월을 고쳐야 합니다).");
     expect(carryOutBreakWarnings(new Map([[T1, s(true)]]), new Map([[T1, s(true)]])).size).toBe(0);
     expect(carryOutBreakWarnings(null, new Map([[T1, s(false)]])).size).toBe(0);
     expect(carryOutBreakWarnings(new Map([[T1, s(true)]]), null).size).toBe(0);

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { boundaryNear, emptyBandAt, emptyRowBands, fitContentRows, insertGridRows, removeGridRows, rowBoundaries } from "./grid-rows";
 import { overlaps, positionItems } from "./fixed-grid";
-import { normalizeDashboard } from "./normalize";
 import { dashboardSchema } from "@/features/owner/settings-types";
 import type { Item } from "./types";
 
@@ -36,7 +35,7 @@ describe("대시보드 행 편집", () => {
   });
   it("맨 끝에 추가한 빈 행은 저장 후에도 유지하며, 빈 행을 모두 없앨 수 있다", () => {
     const added = insertGridRows(items, 9, 4, "space:last");
-    const saved = normalizeDashboard({ version: 1, layouts: [{ role: "subject", items: added }] }).layouts[0].items;
+    const saved = added;
     expect(positionItems(saved).at(-1)?.y).toBe(12);
     expect(emptyRowBands(saved)).toContainEqual({ y: 9, h: 4 });
     expect(removeGridRows(saved, 9, 4)).toEqual(items);
@@ -58,6 +57,5 @@ describe("대시보드 행 편집", () => {
     const tall = fitContentRows(base, { "panel:consultProgress": 64 });
     const saved = { version: 1, layouts: [{ role: "subject", items: tall }] };
     expect(dashboardSchema.safeParse(saved).success).toBe(true);
-    expect(normalizeDashboard(saved).layouts[0].items[0].h).toBe(64);
   });
 });

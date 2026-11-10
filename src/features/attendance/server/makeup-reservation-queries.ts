@@ -327,7 +327,7 @@ export async function getStudentUpcomingReservations(
 
 /**
  * 그 (학생·반·날짜)에 **예약이 있나** — 출결 저장 게이트가 "수강생도 아니고 기록도 없는 칸"을 열어 주는 근거
- * (예약된 학생은 그날 그 반에 오기로 한 사람이다 = `allowMakeup`과 같은 뜻, `canWriteAttendanceStudent`).
+ * (예약된 학생은 그날 그 반에 오기로 한 사람이다 = 새 행까지 쓸 근거, `writeEligibility` — write-eligibility.ts).
  * 🔴 admin + 명시 `tenant_id`([[#104]]). 실패·미적용은 false(문을 넓히는 쪽으로 실패하지 않는다).
  */
 export async function hasReservedMakeup(

@@ -131,6 +131,28 @@ describe("금액 이월 배선", () => {
     expect(read("src/app/(shell)/billing/_components/receipt-allocation-dialog.tsx")).toContain("toast.warning(result.warning");
   });
 
+  it("🔴 확정 해제(개별·반 전체)도 보낸 이월이 무효가 되면 알린다 — 해제 전 상태를 먼저 읽고 '다시 확정' 문구로(2026-11-09)", () => {
+    const confirm = read(`${Q}actions.ts`);
+    const single = confirm.slice(confirm.indexOf("export async function unconfirmSessionTerm"));
+    expect(single.indexOf("loadCarryOutStates(supabase, [id])")).toBeLessThan(single.indexOf(".update({"));
+    expect(single).toContain('carryBreaksAfter(supabase, carryBefore, "unconfirm")');
+    const bulk = read(`${Q}class-unconfirm-actions.ts`);
+    expect(bulk.indexOf("loadCarryOutStates(supabase, targets)")).toBeLessThan(bulk.indexOf("const write = "));
+    expect(bulk).toContain('carryBreaksAfter(supabase, carryBefore, "unconfirm")');
+  });
+
+  it("🔴 '보기' 필터 '이월 재확인' — 화면과 엑셀이 같은 한 벌(어떤 경로로 무효가 됐든 결과로 모은다)", () => {
+    const filter = read("src/features/billing/session-terms/term-filter.ts");
+    expect(filter).toContain('TERM_ONLY_KEYS = ["open", "pending", "share", "carry"]');
+    expect(filter).toContain("carryNeedsRecheck(");
+    const face = read("src/app/(shell)/billing/_components/session-terms-face.tsx");
+    expect(face).toContain('carry: "이월 재확인"');
+    expect(face).toContain("filtered.filter(isCarryRecheckRow)");
+    // 금액 이월을 못 읽었으면 0건이 아니라 '확인 못 함'.
+    expect(face).toContain("view.carryFailed");
+    expect(read("src/app/api/exports/session-terms/route.ts")).toContain("filterSessionTermRows(rows, {");
+  });
+
   it("🔴 이 줄이 보낸 이월을 줄이거나 취소하면 이 달 줄을 그 자리에서 다시 판정한다(2026-11-09)", () => {
     const actions = read(`${Q}money-carryover-actions.ts`);
     expect(actions).toContain('syncCarrySessionsAfter(db, { termIds: [c.termId] }, user.id, "carry_out_change")');

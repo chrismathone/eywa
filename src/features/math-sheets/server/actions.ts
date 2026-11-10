@@ -9,6 +9,7 @@ import { MONTH_RE } from "@/features/class-sheets/lib/month";
 import { shiftMonth } from "@/lib/date-kst";
 import { parseMcsFontSize } from "../font-size";
 import { requireMcsClassAccess } from "./access";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * MCS 서버 액션 — **쓰기 경로는 목표 하나뿐**이다. 실제 진도(교재·진도·과제)는 원스크린이
@@ -60,7 +61,7 @@ export async function upsertStudentGoal(input: {
     .eq("class_id", access.classId)
     .eq("student_id", input.studentId)
     .limit(1);
-  if (enrErr) return { ok: false, error: enrErr.message };
+  if (enrErr) return { ok: false, error: explainDbError(enrErr, { scope: "math-sheets.actions.upsertStudentGoal", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   if (!enr || enr.length === 0) return { ok: false, error: "이 반 학생이 아닙니다" };
 
   if (!textbook && !targetProgress) {
@@ -71,7 +72,7 @@ export async function upsertStudentGoal(input: {
       .eq("class_id", access.classId)
       .eq("student_id", input.studentId)
       .eq("period_start", from);
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: explainDbError(error, { scope: "math-sheets.actions.upsertStudentGoal", fallback: "삭제하지 못했습니다 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
   } else {
     const { error } = await admin.from("math_month_goals").upsert(
       {
@@ -85,7 +86,7 @@ export async function upsertStudentGoal(input: {
       },
       { onConflict: "tenant_id,class_id,student_id,period_start" },
     );
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: explainDbError(error, { scope: "math-sheets.actions.upsertStudentGoal", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   }
 
   // 🔑 감사로그는 여기서 남기지 않는다 — 이 저장은 타이핑 디바운스마다 불린다(종전엔 칸 하나에 여러 줄·전후 값
@@ -127,7 +128,7 @@ export async function copyGoalsFromPreviousMonth(input: {
     .select("student_id")
     .eq("tenant_id", access.tenantId)
     .eq("class_id", access.classId);
-  if (enrErr) return { ok: false, error: enrErr.message };
+  if (enrErr) return { ok: false, error: explainDbError(enrErr, { scope: "math-sheets.actions.copyGoalsFromPreviousMonth", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   const inClass = new Set((enr ?? []).map((e) => String(e.student_id)));
   const targets = [...new Set(input.studentIds)].filter((id) => inClass.has(id));
   if (targets.length === 0) return { ok: true, copied: 0, skipped: 0 };
@@ -146,8 +147,8 @@ export async function copyGoalsFromPreviousMonth(input: {
       .eq("class_id", access.classId)
       .eq("period_start", thisStart),
   ]);
-  if (prevRes.error) return { ok: false, error: prevRes.error.message };
-  if (curRes.error) return { ok: false, error: curRes.error.message };
+  if (prevRes.error) return { ok: false, error: explainDbError(prevRes.error, { scope: "math-sheets.actions.copyGoalsFromPreviousMonth", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
+  if (curRes.error) return { ok: false, error: explainDbError(curRes.error, { scope: "math-sheets.actions.copyGoalsFromPreviousMonth", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   const taken = new Set((curRes.data ?? []).map((r) => String(r.student_id)));
   const rows = (prevRes.data ?? [])
@@ -169,7 +170,7 @@ export async function copyGoalsFromPreviousMonth(input: {
     const { error } = await admin
       .from("math_month_goals")
       .upsert(rows, { onConflict: "tenant_id,class_id,student_id,period_start" });
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: explainDbError(error, { scope: "math-sheets.actions.copyGoalsFromPreviousMonth", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
     await logAction({
       action: "mcs_goal_update",
       targetType: "class",
@@ -192,7 +193,7 @@ async function patchMyMcsPrefs(patch: Record<string, unknown>): Promise<{ ok: bo
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
+  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "math-sheets.actions.patchMyMcsPrefs", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   const raw0 =
     row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
@@ -209,7 +210,7 @@ async function patchMyMcsPrefs(patch: Record<string, unknown>): Promise<{ ok: bo
     .update({ ui_prefs: { ...raw0, mcs: ns } })
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "math-sheets.actions.patchMyMcsPrefs", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }
 

@@ -12,6 +12,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { effectiveTeacherId, readonlyTeacherViewError } from "@/lib/auth/view-mode";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClassIds } from "@/features/classes/server/delegation";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -59,6 +60,6 @@ export async function saveStudentOrder(input: {
     },
     { onConflict: "tenant_id,teacher_id,class_id" },
   );
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "onescreen.order-actions.saveStudentOrder", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }

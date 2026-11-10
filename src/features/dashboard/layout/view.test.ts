@@ -13,8 +13,10 @@ const stored = (role: Bundle, items: Item[]) => ({ version: DASHBOARD_VERSION, l
 const ok = <T,>(data: T) => ({ data, at: 1, error: false });
 
 describe("resolveView — 보는 사람의 배치", () => {
-  it("원장은 저장값이 없으면 옛 격자(지금 운영실), 저장값이 있으면 흐름 배치", () => {
-    expect(resolveView({ stored: EMPTY_DASHBOARD, bundle: "owner", menus: ALL }).mode).toBe("classic");
+  it("원장도 배치 목록으로 그린다(새 대시보드 · 옛 격자 없음) — 저장값이 있으면 그 배치", () => {
+    const base = resolveView({ stored: EMPTY_DASHBOARD, bundle: "owner", menus: ALL });
+    expect(base.mode).toBe("grid");
+    expect(base.items?.slice(0, 3).map((i) => i.id)).toEqual(["core:newcomers", "core:management", "core:workRecords"]);
     const v = resolveView({ stored: stored("owner", [{ id: "panel:notices", w: 6, h: 1 }]), bundle: "owner", menus: ALL });
     expect(v.mode).toBe("grid");
     expect(v.items?.map((i) => i.id)).toEqual(["panel:notices"]);
@@ -86,7 +88,8 @@ describe("loadPlan — 서버가 조회할 영역(배치에 없으면 미조회 
 
   it("과목 관리자 기본은 놓인 카드의 영역만", () => {
     // 과목별 수강 → 반복 결석 학생(원장 2026-10-15) — 결석 위험 영역(`absences`)을 읽는다.
-    expect([...plan("subject")].sort()).toEqual(["absences", "absent", "firstClass", "notices", "schedule", "students", "withdrawals"]);
+    expect([...plan("subject")].sort()).toEqual(["absences", "absent", "attendance", "attendanceTrend", "changes", "consultations", "courseTrend", "courses", "enrolledTrend",
+      "firstClass", "holidayAttendance", "homework", "makeup", "newcomers", "notices", "processing", "schedule", "students", "unread", "withdrawals"]);
   });
 
   it("배치에 있어도 메뉴 권한이 없으면 조회하지 않는다", () => {
@@ -163,8 +166,20 @@ describe("previewSnapshot — 편집기 미리보기가 서버와 같은 길을 
     expect(out.view?.scopeLabel).toBe("수학");
   });
 
-  it("원장이 기본 그대로면 미리보기도 옛 격자(지금 운영실)", () => {
-    expect(previewSnapshot(snap, { role: "owner", items: defaultItems("owner"), menus: ALL, subject: null }).view?.mode).toBe("classic");
+  it("원장 기본 미리보기도 새 대시보드 배치(핵심 업무 칸 포함)", () => {
+    const view = previewSnapshot(snap, { role: "owner", items: defaultItems("owner"), menus: ALL, subject: null }).view;
+    expect(view?.mode).toBe("grid");
+    expect(view?.items?.some((i) => i.id === "core:management")).toBe(true);
+  });
+
+  it("핵심 업무 칸은 열 수 있는 사람에게만 — 칸이 데려가는 화면의 권한(경영 분석 management · 업무 작성센터 work_records · 신입생 90일 newcomers)", () => {
+    const core = (b: Bundle, menus = ALL) => resolveView({ stored: EMPTY_DASHBOARD, bundle: b, menus, subjectLabels: ["수학"] }).items?.filter((i) => i.id.startsWith("core:")).map((i) => i.id);
+    // 매니저는 기본값으로 경영 분석 권한이 없다(원장·관리자만 — permissions.ts 임시안).
+    expect(core("manager", without("management"))).toEqual(["core:newcomers", "core:workRecords"]);
+    expect(core("desk", without("newcomers"))).toEqual(["core:management", "core:workRecords"]);
+    // 🔴 역할 묶음이 아니라 권한으로 — 원장 묶음이어도 권한을 닫으면 빠지고, 매니저도 원장이 열면 선다(2026-11-09).
+    expect(core("owner", without("management", "work_records"))).toEqual(["core:newcomers"]);
+    expect(core("manager")).toEqual(["core:newcomers", "core:management", "core:workRecords"]);
   });
 });
 

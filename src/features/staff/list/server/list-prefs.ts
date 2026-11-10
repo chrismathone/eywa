@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { freshSavedFilters } from "@/lib/filter-reset/server";
 import { mergeStaffView, parseStaffListPrefs, pickStaffViewPrefs, type StaffListPrefs, type StaffViewPrefs } from "../list-prefs";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * `users.ui_prefs.staff`만 **필드 단위로** 갱신 — 직원목록 보기 설정(필터·정렬·볼 열·표 글자 크기 — 한 쪽 행 수는 창이 정해 저장하지 않는다).
@@ -31,7 +32,7 @@ export async function saveStaffListPrefs(
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
+  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "staff.list.list-prefs.saveStaffListPrefs", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   const raw =
     row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs) ? (row.ui_prefs as Record<string, unknown>) : {};
   // 클라가 보낸 값을 그대로 믿지 않는다 — 파서를 한 번 태운다.
@@ -43,7 +44,7 @@ export async function saveStaffListPrefs(
     .update({ ui_prefs: { ...raw, staff: merged } })
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "staff.list.list-prefs.saveStaffListPrefs", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true, view: pickStaffViewPrefs(merged) };
 }
 

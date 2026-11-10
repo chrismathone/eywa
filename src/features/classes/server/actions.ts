@@ -808,7 +808,7 @@ export async function archiveClass(
     .update({ is_active: next })
     .eq("id", id);
 
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "classes.actions.archiveClass", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   // 수강 동기화는 classes 갱신이 성공한 뒤 — 실패해도 반 상태와 수강이 어긋나지 않게 순서를 고정.
   const sync = await reopenClassEnrollments(supabase, id, ARCHIVE_REASON);
@@ -967,7 +967,7 @@ export async function scheduleHandover(_prev: HandoverState, formData: FormData)
       pending_teacher_reason: reason,
     })
     .eq("id", classId);
-  if (updErr) return { error: updErr.message };
+  if (updErr) return { error: explainDbError(updErr, { scope: "classes.actions.scheduleHandover", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   await logAction({
     action: "class_handover_schedule",
@@ -1006,7 +1006,7 @@ export async function cancelHandover(_prev: HandoverState, formData: FormData): 
     .from("classes")
     .update({ pending_teacher_id: null, pending_teacher_date: null, pending_teacher_reason: null })
     .eq("id", classId);
-  if (updErr) return { error: updErr.message };
+  if (updErr) return { error: explainDbError(updErr, { scope: "classes.actions.cancelHandover", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   await logAction({ action: "class_handover_cancel", targetType: "class", metadata: { classId } });
   revalidatePath(`/classes/${classId}`);
@@ -1047,7 +1047,7 @@ export async function applyHandover(_prev: HandoverState, formData: FormData): P
       pending_teacher_reason: null,
     })
     .eq("id", classId);
-  if (updErr) return { error: updErr.message };
+  if (updErr) return { error: explainDbError(updErr, { scope: "classes.actions.applyHandover", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   // 담임만 바꾸면 시간표엔 옛 강사가 그대로 남는다 — 이 반의 **유효한 교시 오버라이드**도 함께 옮긴다.
   // (옛 담임을 가리키는 슬롯만. 원래 다른 사람이 맡던 교시는 그대로 두고, 만료 슬롯도 손대지 않는다.)
@@ -1124,7 +1124,7 @@ export async function applyClassroomAssignments(
       .from("classes")
       .update({ classroom_id: roomId })
       .in("id", ids);
-    if (updErr) return { error: updErr.message };
+    if (updErr) return { error: explainDbError(updErr, { scope: "classes.actions.applyClassroomAssignments", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
     applied += ids.length;
   }
 
@@ -1230,7 +1230,7 @@ export async function createClassDelegation(
     reason,
     created_by: user.id,
   });
-  if (insErr) return { error: insErr.message };
+  if (insErr) return { error: explainDbError(insErr, { scope: "classes.actions.createClassDelegation", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   await logAction({
     action: "class_delegate",
@@ -1286,7 +1286,7 @@ export async function revokeClassDelegation(
     .eq("id", delegationId)
     .eq("tenant_id", user.tenantId) // admin = RLS 우회 → 테넌트 필터 필수
     .is("revoked_at", null);
-  if (updErr) return { error: updErr.message };
+  if (updErr) return { error: explainDbError(updErr, { scope: "classes.actions.revokeClassDelegation", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   await logAction({
     action: "class_delegate_revoke",

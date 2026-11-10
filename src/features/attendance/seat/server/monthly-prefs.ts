@@ -3,6 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { parseSeatMonthlyPrefs, type SeatMonthlyPrefs } from "../monthly-prefs";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * `users.ui_prefs.seatMonthly`만 필드 단위로 갱신.
@@ -21,7 +22,7 @@ export async function saveSeatMonthlyCollapsed(
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
+  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "attendance.seat.monthly-prefs.saveSeatMonthlyCollapsed", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   const raw =
     row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
@@ -34,7 +35,7 @@ export async function saveSeatMonthlyCollapsed(
     .update({ ui_prefs: { ...raw, seatMonthly: { ...parseSeatMonthlyPrefs(raw.seatMonthly), ...next } } })
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "attendance.seat.monthly-prefs.saveSeatMonthlyCollapsed", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }
 

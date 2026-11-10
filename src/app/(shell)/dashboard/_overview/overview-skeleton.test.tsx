@@ -57,7 +57,9 @@ describe("운영실 로딩 뼈대 — loading은 머리·KPI 띠까지, 본문�
   });
 
   it("원장 기본(classic) = KPI 띠 + 구역 제목줄(보드 바로 아래 id) + 기본 배치 패널 수", () => {
-    const root = html(<OverviewSkeleton view={viewOf("owner")} design="standard" />);
+    // 2026-11-09부터 어느 역할 기본도 옛 격자가 아니다(새 대시보드) — 옛 격자 뼈대는 classic 배치를 받았을 때만 그린다.
+    const classic: ResolvedView = { ...viewOf("owner"), mode: "classic", classic: DEFAULT_LAYOUT, items: undefined };
+    const root = html(<OverviewSkeleton view={classic} design="standard" />);
     const board = root.querySelector('[data-overview="board"]')!;
     expect([...board.querySelectorAll(":scope > [id]")].map((el) => el.id)).toEqual(DEFAULT_LAYOUT.sections.map((s) => s.id));
     const panels = DEFAULT_LAYOUT.sections.flatMap((s) => s.panels).reduce((n, p) => n + (p === "followup" ? 2 : 1), 0);

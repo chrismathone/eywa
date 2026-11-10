@@ -80,7 +80,7 @@ export function acceptRestyle(original: string, rewrite: string, mustKeep: reado
   if (rLen < oLen * 0.4 || rLen > oLen * 2.5) return false;
   // 숫자 — 원래 숫자는 전부 남고, 없던 숫자는 생기지 않는다.
   const oNums = new Set(o.match(DIGITS) ?? []);
-  const rNums = r.match(DIGITS) ?? [];
+  const rNums: string[] = r.match(DIGITS) ?? [];
   if (![...oNums].every((n) => rNums.includes(n))) return false;
   if (rNums.some((n) => !oNums.has(n))) return false;
   // 날짜·쪽수·퍼센트·따옴표 단원 이름 — 글자 그대로(띄어쓰기만 무시).

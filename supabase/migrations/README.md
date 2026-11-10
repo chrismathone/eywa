@@ -44,6 +44,18 @@
   새 앱 + 옛 DB(순서 위반)면 관문 경로가 처리 함수를 부르지 않는다('DB 적용 전').
 - 되돌리기 = `scripts/_oneoff/revert-s2_0037-withdrawal-refund-decision-gate.sql`(앱 먼저 · 적용 뒤 지문일 때만 · 진행 중 '환불 결정 대기'나 승인이 끝났는데 처리 안 된 묶음이 있으면 멈춤 · 처리 함수 = s2_0030 본문 · 연결·release·데스크 환불 미완료 판정 = s2_0025 본문 · r2 새 함수 여섯·9인자 연결은 지움 · 결정 표·칸은 남김 · 되돌린 뒤 지문 확인).
 
+## 2026-11-09 학원 비서 — 분석용 보기 · 의견 대상 고정·실행 지표 (s2_0039 · s2_0040 · ✅ 운영 적용 2026-11-09 · 원장 승인 · 직결(node · 한 거래) · 시험 거래·되돌리기 시험 뒤 · 사후 확인 통과)
+
+`s2_0039_academy_assistant_analysis_views.sql` — 비서 보기 생성 함수에 분석용 보기 6개(`onto_classes` · `onto_homeroom_history` · `onto_siblings` · `onto_households` · `onto_tuition_months` · `onto_teacher_churn` — 앱 판정과 같은 규칙) · 생성 규칙 판 rules-v2 · `assistant_advice`에 `target_kind`·`target_ids`(대상 명단)·`exec_check`(실행 지표)·`acted_on`(쓰지 않음 — s2_0038 `measure_anchor`로 합침) + 지킴 트리거가 대상 명단·조회문을 못 바꾸게. 같은 날 병렬 작업 s2_0038과 번호가 겹쳐 0039로 옮겼다(내용 같음). 되돌리기 = `scripts/_oneoff/revert-s2_0039-academy-assistant-analysis-views.sql`.
+`s2_0040_academy_assistant_view_safe_casts.sql` — 보기의 `::uuid`·`::date`·`::timestamptz` 캐스트를 `pg_input_is_valid` 뒤로 · 실행 지표 크기 상한 40,000바이트. 되돌리기 = `scripts/_oneoff/revert-s2_0040-academy-assistant-view-safe-casts.sql`.
+설계 = [`docs/features/academy-assistant.md`](../../docs/features/academy-assistant.md) §7-7.
+
+## 2026-11-09 학원 비서 — 비서 의견 결과 재측정 (s2_0038 · ✅ 운영 적용 2026-11-09 20:39 · 원장 승인 · 직결(node · 파일 그대로 한 거래) · 사후 확인 통과)
+
+`s2_0038_academy_assistant_outcomes.sql` — 제안 → 결과 → 학습 2단계. `assistant_advice`에 결과 칸만 더한다(`latest_verdict` · `latest_value`·`latest_sample` · `latest_base`·`latest_base_sample` · `latest_from`·`latest_to` · `latest_delta`·`latest_threshold`·`latest_reason` · `latest_checked_at` · `checks_done` · `fail_count` · `last_error` · `measure_anchor`(재측정 기준일 — 원장이 '완료'한 날) + 판정이 있으면 기간·잰 때 함께). 기존 줄·제약·트리거·권한·비서 보기 제외는 그대로. 쓰는 곳 = 크론 `/api/cron/assistant-outcomes`(매일 05:10 KST). 설계 = [`docs/features/academy-assistant.md`](../../docs/features/academy-assistant.md) §7-6.
+- 순서 = 이 SQL → 앱 배포(새 앱이 결과 칸을 읽고 쓴다 — 앱이 먼저면 대화 열 때 의견 상태 읽기가 실패해 처리 단추가 빠지고, 처리 저장·크론도 실패한다. 의견을 새로 넣는 것은 1단계 칸만 돌려받아 산다).
+- 되돌리기 = `scripts/_oneoff/revert-s2_0038-academy-assistant-outcomes.sql`(앱을 먼저 되돌린 뒤 · 결과 값만 지워진다).
+
 ## 2026-11-09 학원 비서 — 비서 의견 기록 · 원장 처리 · 확인 지표 기준값 (s2_0036 · ✅ 운영 적용 2026-11-09 18:41 · 원장 승인 · 직결(node · 파일 그대로 한 거래) · 사후 확인 통과)
 
 `s2_0036_academy_assistant_advice.sql` — 원장 2026-11-06 *"그 해결책이 어떤 결과를 가져왔는지에 대한 결과 피드백까지 … 지속적인 학습"* 1단계. 새 표 `assistant_advice`(의견 항목마다 한 줄 · 확인 지표 조회문 틀 · 기준값 · 처리 상태) · `assistant_advice_events`(처리 이력 · 새 줄만). 표보다 먼저 비서 보기 제외 목록에 넣는다(같은 거래). RLS 켬 · 정책 0 · anon/authenticated 회수 · service_role만 · 지킴 트리거(지점·답·대화·묻는 사람 일치 · 처리한 사람은 그 지점 직원 · 이름표 칸 못 바꿈). 설계 = [`docs/features/academy-assistant.md`](../../docs/features/academy-assistant.md) §7-5.
@@ -302,6 +314,8 @@
 
 ## 1. 두 갈래
 
+> 📜 아래 표와 설명은 **시즌1 시절** 이야기다. 2026-10-27 시즌2부터 `pnpm db:migrate`는 안내만 내고 종료하고, 운영 DB에는 새 `s2_NNNN` 파일 하나만 원장 승인 뒤 적용한다(`docs/sql-season2.md`).
+
 | 종류 | 파일 | 적용 | 추적 |
 |---|---|---|---|
 | **drizzle 번호본** | `000N_*.sql` (예: `0024_slimy_zombie.sql`) | `pnpm db:migrate`가 **자동** | `meta/_journal.json` |
@@ -312,7 +326,7 @@ SECURITY DEFINER 함수·확장(extension)·GiST EXCLUDE·generated 컬럼·GIN 
 drizzle이 표현 못 하므로 손으로 작성해 `000Na_*` 파일로 둔다. `pnpm db:migrate`는 **번호본만** 적용하고
 alpha는 건드리지 않는다 → alpha는 사람이 직접 돌려야 한다.
 
-> ⚠️ `db:push`(`drizzle-kit push`)는 alpha의 객체(RLS/트리거 등)를 모르고 drift로 **삭제 제안**할 수 있다. 쓰지 말 것. 항상 `db:generate` → `db:migrate` + alpha 수동.
+> ⚠️ `db:push`(`drizzle-kit push`)는 alpha의 객체(RLS/트리거 등)를 모르고 drift로 **삭제 제안**할 수 있다. 쓰지 말 것 — 2026-11-09부터 `pnpm db:push`는 `db:migrate`처럼 안내만 내고 종료한다. 운영 DB에는 새 `s2_NNNN` 파일 하나만 원장 승인 뒤 적용(`docs/sql-season2.md`).
 
 ## 2. 멱등성 — 재실행 안전
 

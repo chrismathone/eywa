@@ -145,6 +145,8 @@ function kpiOf(key: KpiKey, view?: Pick<ResolvedView, "academyWide" | "items">) 
   const id = `kpi:${key}`;
   const label = cardDef(id)?.label ?? key;
   const shape = KPI_SHAPE[key];
+  // 새 대시보드 전용 칸(오늘 입테)은 옛 운영실 뼈대에 없다 — 그리지 않는다.
+  if (!shape) return null;
   // 과목 관리자 화면의 '학원 전체' 꼬리표(`kpi-strip.tsx` noteOf) — 폭이 달라 같이 싣는다.
   const wide = view?.academyWide.includes(id);
   const note = wide ? (shape.note ? `${shape.note} · 학원 전체` : "학원 전체") : shape.note;

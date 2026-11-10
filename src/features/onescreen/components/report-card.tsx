@@ -15,14 +15,12 @@ import { makeupBadgeLabel } from "../makeup-label";
 import {
   effectiveClassnoteStatus,
   isAlreadySent,
-  isAttendanceUnchecked,
   isRowInputEditable,
-  isReportEligible,
   isReportOptoutRow,
   isRowActionable,
 } from "../grid";
 import { resolveRowFields } from "../row-fields";
-import { evaluateSendGate } from "../send-gate";
+import { rowSendGate } from "../row-send-gate";
 import { rowLockNotice } from "../split-rows";
 import { reportOptoutNotice, reportOptoutShort } from "@/features/classes/report-optout";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
@@ -47,18 +45,15 @@ import { VideoSubmitLinkToggle } from "@/features/video-homework/components/vide
 import { ENGLISH_DRAFT_TEXTAREA_ID, REPORT_ATTACHMENT_MAX, isImageAttachment } from "../attachment-utils";
 import { joinLevelsLead, splitLevelsLead } from "../pilot-notes";
 import { LevelsLead } from "./levels-lead";
-import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { splitComment, joinComment } from "../comment-paragraphs";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type ClassnoteBadge } from "../classnote-badge";
 import { attendanceMarkBadgeClass, attendanceMarkLabel } from "../attendance-mark";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
-import { hasPilotOneLine, isMathReportPilot, pilotCanEdit, pilotNeedsAutoWrite } from "../math-report-pilot";
-import { needsAttitudeNote, needsHomeworkMissReason, pilotRowSig, testSkipComplete } from "../math-report-pilot-sections";
+import { isMathReportPilot, pilotCanEdit } from "../math-report-pilot";
 import type { SheetLang } from "@/features/teacher-view/i18n";
 import { ReservedMakeupTag } from "./reserved-makeup-tag";
 import { ReportLockNotice } from "./report-lock-notice";
-import { needsMakeupCheck } from "../reserved-makeup";
 import { MakeupSwitchButton } from "./makeup-switch-button";
 
 // shareToken: 저장 시 발급되는 학부모 공개 링크(/r/[token]) 토큰. 세션 내 저장 후에만 존재.
@@ -342,36 +337,8 @@ export function ReportCard({
   // JJ 수업보고서 글 — 사랑의 한마디는 선택(비우면 그 항목이 빠진다, 원장 2026-10-27).
   const jjOptionalNote = subject.subjectKey === "english" && isJjSheetDraft(rep);
   const progressOptional = isProgressOptionalReport(subject, rep); // SRS 글은 진도 항목이 없다(원장 2026-11-05)
-  const sendGate = evaluateSendGate({
-    lang, // 🔴 판정이 아니라 **글자**만 갈린다(canSend·reasons 불변, send-gate.ts)
-    needsAutoWrite:
-      pilot &&
-      pilotNeedsAutoWrite(rep.draft, rep.autoDraft, {
-        studentName: student.name,
-        today: subject.today,
-        progressMode: subject.progressMode,
-        note: cardEval.note,
-        factsSig: pilotRowSig(student, subject.name),
-        writtenSig: rep?.pilotFactsSig,
-      }),
-    needsOneLine: oneLineRow && !jjOptionalNote && !hasPilotOneLine(cardEval.note), // 사랑의 한마디(옛 강사 한줄 멘트) 필수(원장 2026-10-22)
-    needsTestReason: pilot && !testSkipComplete(subject.dailyTestSkip), // 일일 테스트 '없음'이면 사유 필수(원장 2026-10-22)
-    needsHomeworkReason: pilot && needsHomeworkMissReason(cardEval.homework, subject.homeworkMissReason), // 숙제 미제출이면 사유 필수(원장 2026-10-23)
-    needsAttitudeNote: pilot && needsAttitudeNote(cardEval.attitude, subject.attitudeNote), // 태도 하·중하면 의견 3줄 이상(원장 2026-10-26)
-    needsMakeupCheck: needsMakeupCheck(subject), // 보강 예약이 든 줄은 보강 진행 여부 확인 뒤에(원장 2026-10-27)
-    readonlyView, // 열람 전용 — 사유 라벨까지 게이트가 만든다(표뷰와 동일)
-    recallPending: isRecallInFlight(liveStatus ?? null),
-    // 발송 대기·게시 중 — 워커 결과 전까지 다시 못 누른다(표뷰와 같은 판정, 원장 2026-09-29).
-    sendInFlight: liveStatus === "queued" || liveStatus === "processing",
-    alreadySent,
-    reportOptout: optoutRow, // 미발송 반(0174a) — 표뷰와 같은 단일 소스
-    isAbsent,
-    hasProgress: isReportEligible(subject, progressOptional),
-    // 멘트 = 학부모에게 나갈 글 — 영어 글의 그림·사진 자리 줄뿐이면 서버가 막으니 여기서도 '멘트 없음'(표뷰와 같은 판정).
-    hasDraft: hasTextBesidesMarkers(rep.draft),
-    // 출결 쓰기 권한 없음 = 게이트 해당 없음(P0-3) — 표뷰(grid-row)와 동일 예외.
-    attendanceUnchecked: !attendance?.readOnly && isAttendanceUnchecked(subject),
-  });
+  // 재료 조립은 카드·표 한 벌(row-send-gate.ts, 리뷰 B5) — 판정은 send-gate 단일 소스.
+  const sendGate = rowSendGate({ lang, student, subject, rep, readonlyView, attendanceReadOnly: attendance?.readOnly === true });
   const canQueue = sendGate.canSend; // 열람 전용 포함 — 판정·사유는 send-gate 단일 소스
   // 영어 행 = 템플릿 모드(2026-09-10) — 글이 템플릿으로 조립되므로 2칸 나누기·학습 추세·멘트 불일치 경고를
   // 쓰지 않는다(수학 행은 아래 판정이 그대로다).

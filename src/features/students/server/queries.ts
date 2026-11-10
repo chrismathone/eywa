@@ -1,3 +1,4 @@
+import { memoCategoryLabel } from "@/features/students/detail/memo-category";
 import { getTeacherLabelMap } from "@/features/timetable/server/queries";
 import "server-only";
 import { enrolledSubjectCounts } from "../enrollment/enrolled-composition";
@@ -1928,7 +1929,7 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
     events.push({
       date: timelineKstDay(m.created_at),
       kind: "memo",
-      title: p.title ?? (m.category ? `특이사항 — ${m.category}` : "특이사항"),
+      title: p.title ?? (m.category ? `특이사항 — ${memoCategoryLabel(m.category)}` : "특이사항"),
       description: p.body,
       registrant: p.registrant,
     });

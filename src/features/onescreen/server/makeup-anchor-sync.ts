@@ -33,6 +33,7 @@ import { makeupMemo } from "../makeup-absence-link";
 import { makeupSessionEntries } from "../makeup-session";
 import { logAction } from "@/features/audit/server/log";
 import type { MakeupEffectNotice } from "@/features/makeups/server/adapters/effects";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -224,7 +225,7 @@ export async function changeMakeupAnchor(input: {
       .or("classnote_status.is.null,classnote_status.not.in.(processing,success,recall_requested,recalling)");
     q = r.makeupClassId ? q.eq("makeup_class_id", r.makeupClassId) : q.is("makeup_class_id", null);
     const { data, error } = await q.select("id");
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: explainDbError(error, { scope: "onescreen.makeup-anchor-sync.changeMakeupAnchor", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
     if (!data?.length) return { ok: false, error: "보고서가 그새 바뀌었습니다 — 새로고침 뒤 다시 시도해 주세요" };
   }
   const synced = await syncAnchorCells({

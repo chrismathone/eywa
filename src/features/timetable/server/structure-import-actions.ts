@@ -34,6 +34,7 @@ import type {
   MatchResult,
   SchedulePlanItem,
 } from "@/features/timetable/import/structure/types";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 const SUBJECT = "english"; // 구조 import 지원 과목(현재 영어 전용).
 
@@ -364,7 +365,7 @@ export async function applyStructureImport(
   };
 
   const { data, error } = await supabase.rpc("apply_english_structure", { p_payload: payload, p_today: today });
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "timetable.structure-import-actions.applyStructureImport", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   const res = (data ?? {}) as { snapshotId?: string; closed?: number; inserted?: number; classUpdated?: number };
 
   // 감사로그 — 한 번에 수백 칸의 배치와 담임이 바뀌는 동작이라, 되돌릴 근거(`snapshotId`)와 언제부터인지
@@ -412,7 +413,7 @@ export async function rollbackStructureImport(snapshotId: string): Promise<Rollb
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("rollback_english_structure", { p_snapshot_id: snapshotId });
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "timetable.structure-import-actions.rollbackStructureImport", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   const res = (data ?? {}) as { deleted?: number; restored?: number; classReverted?: number };
 
   // 🔴 되돌리기는 반드시 남긴다 — 적용만 기록하면 "적용은 있는데 지금 시간표엔 없다"가 되어, 되돌린

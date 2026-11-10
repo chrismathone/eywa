@@ -36,7 +36,7 @@ describe("면 목록", () => {
   it("범주별 면(원장 합의 2026-10-06)", () => {
     const byCategory = (category: string) => OWNER_FACES.filter((f) => f.category === category).map((f) => f.label);
     expect(byCategory("학원 정보")).toEqual(["프로필·브랜드"]);
-    expect(byCategory("수업·운영")).toEqual(["운영 체계", "과목 운영", "보강 운영", "강사평가", "원생 기여도"]);
+    expect(byCategory("수업·운영")).toEqual(["운영 체계", "과목 운영", "보강 운영", "강사평가", "원생 로열티"]);
     expect(byCategory("청구·안내")).toEqual(["수납·청구", "알림·약관", "상담 양식"]);
     expect(byCategory("권한·화면")).toEqual(["역할·권한", "탭 및 메뉴 구성", "기능", "대시보드 관리"]);
     expect(byCategory("관리")).toEqual(["팝업 공지", "데이터 정리", "데이터 가져오기", "감사로그", "연동"]);

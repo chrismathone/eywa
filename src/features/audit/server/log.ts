@@ -638,6 +638,7 @@ export const AUDIT_ACTIONS = {
   assistant_thread_delete: "학원 비서 대화 삭제",
   assistant_thread_rename: "학원 비서 대화 이름 변경",
   assistant_advice_update: "학원 비서 의견 처리",
+  assistant_advice_outcomes: "학원 비서 의견 결과 재측정",
 
   // 인재원 학습 프로그램 짝(students.ijw_student_id, 0259a) — 학생 행을 바꾸므로 기록한다.
   student_ijw_link: "인재원 학습 계정 연결",

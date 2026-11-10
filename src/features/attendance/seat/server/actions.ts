@@ -21,7 +21,7 @@ import { applySeatDayChoices, getSeatPeriodChoices } from "./period-choice";
 import { getPublicSeatDay, getSeatDay } from "./queries";
 import { getSeatPlacements } from "./placements";
 import { completeMakeupReservations } from "../../server/makeup-reservation-complete";
-import { logDbError } from "@/lib/supabase/db-error";
+import { logDbError, explainDbError } from "@/lib/supabase/db-error";
 
 export type SeatStatus = "present" | "absent" | "late";
 /** 런타임 검증용 — 자리판이 쓰는 상태 3종(`SeatStatus`와 같은 집합). 타입은 클라가 보낸 값을 막지 못한다. */
@@ -36,11 +36,13 @@ async function seatUpdate(
 ): Promise<string | null> {
   const first = await supabase.from("attendance_records").update(patch).in("id", ids);
   if (!first.error) return null;
-  if (!/recorded_via/i.test(first.error.message)) return first.error.message;
+  // 화면엔 한글(원문은 로그) — 호출부가 이 문자열을 그대로 사용자에게 돌려준다(P1-E).
+  const why = (e: unknown) => explainDbError(e, { scope: "attendance.seat.actions.seatUpdate", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message;
+  if (!/recorded_via/i.test(first.error.message)) return why(first.error);
   const rest = { ...patch };
   delete rest.recorded_via;
   const retry = await supabase.from("attendance_records").update(rest).in("id", ids);
-  return retry.error?.message ?? null;
+  return retry.error ? why(retry.error) : null;
 }
 
 /** 자리 기록 한 칸 저장. `status: null` = 미체크로 되돌리기(그 교시 기록 삭제). */
@@ -444,7 +446,7 @@ async function insertSeatFill(
           )
         ).error
       : first.error;
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "attendance.seat.actions.insertSeatFill", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   // 보강 예약 이행(0264a) — 자리에서 찍은 칸도 그 (학생·반·날짜)의 예약을 다시 판정한다(fail-soft).
   await completeMakeupReservations(
     { tenantId: p.tenantId, observeOnly: true },

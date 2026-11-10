@@ -140,3 +140,36 @@ describe("describeDbError — 코드·제약 이름으로 판정", () => {
     for (const s of samples) expect(describeDbError(s, { fallback: FALLBACK }).message).not.toMatch(/[A-Za-z]{3,}/);
   });
 });
+
+describe("23514 트리거 한글 사유(P1-E 리뷰)", () => {
+  it("제약 이름 없는 23514의 한글 RAISE는 그대로 보인다", () => {
+    const info = describeDbError(
+      { code: "23514", message: "환불완료일자는 날짜(예: 2026-11-09)로 넣어 주세요." },
+      { fallback: "저장 실패" },
+    );
+    expect(info.message).toBe("환불완료일자는 날짜(예: 2026-11-09)로 넣어 주세요.");
+    expect(info.kind).toBe("invalid");
+  });
+  it("영문 원문 23514는 종전 일반 문구", () => {
+    const info = describeDbError({ code: "23514", message: "new row violates check constraint" }, { fallback: "x" });
+    expect(info.message).toContain("허용 범위");
+  });
+});
+
+describe("한글 RAISE 속 짧은 영문 값(P1-E 3단계 리뷰)", () => {
+  const show = (message: string, code = "P0001") => describeDbError({ code, message }, { fallback: "FALLBACK" }).message;
+  it("강의실 번호·영문 약어가 든 한글 문장은 보인다", () => {
+    expect(show("등록되지 않은 강의실입니다: B201. 학원 설정의 강의실 목록에 있는 강의실로 골라 주세요.")).toContain("B201");
+    expect(show("apply_english_structure: JJ 반은 이 방식으로 옮길 수 없습니다")).toBe("JJ 반은 이 방식으로 옮길 수 없습니다");
+  });
+  it("식별자·영문 문장은 여전히 막는다", () => {
+    expect(show("ECS_BAD_TERM")).toBe("FALLBACK");
+    expect(show("invalid_move")).toBe("FALLBACK");
+    expect(show("transfer_source_changed 반 이동 원본이 바뀌었습니다")).toBe("FALLBACK");
+    expect(show("permission denied for table users", "42501")).not.toContain("permission");
+    expect(show("rls 한글")).toBe("FALLBACK"); // 한글이 4자 미만
+    expect(show("Something went wrong 한글 문장입니다")).toBe("FALLBACK"); // 7자 넘는 영문 낱말
+    expect(show("본인 계정에서 직접 바꿀 수 없는 항목입니다: email", "42501")).not.toContain("email"); // 칸 이름
+  });
+});
+

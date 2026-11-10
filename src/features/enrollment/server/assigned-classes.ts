@@ -28,6 +28,7 @@ import { settingsToPeriodsConfig, enumDayToKo, type DayOfWeek } from "@/features
 import { groupSchedule, type ScheduleGroup } from "@/features/classes/schedule-periods";
 import { slotPhase } from "@/features/classes/schedule-summary";
 import { consultClassKeys, type ConsultClassKeys } from "../consult-subject";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -179,7 +180,7 @@ export async function getAssignedClasses(
     `id, on_hold, attendance_days,
      class:class_id!inner ( id, class_name, subject, teacher:teacher_id ( display_name ) )`,
   );
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "enrollment.assigned-classes.getAssignedClasses", fallback: "배정 반을 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   const rows = (data ?? []) as unknown as EnrollmentEmbedRow[];
   const flat = rows

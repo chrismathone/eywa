@@ -2,6 +2,7 @@
  * 학원 비서 DB 지도 전체 = 표 설명(a~l · m~z) + 온톨로지 보기(onto_*). 보기 이름은 SQL(s2_0031)이 정한다 —
  * 설명이 없는 새 표도 비서는 읽는다(시스템 프롬프트의 '설명이 아직 없는 표' 줄). 설명을 빠짐없이 두는 것은 가드 시험 몫.
  */
+import { ONTOLOGY_ANALYSIS_DOCS } from "./ontology-analysis";
 import { TABLES_A } from "./tables-a";
 import { TABLES_B } from "./tables-b";
 import { TABLES_EXTRA } from "./tables-extra";
@@ -13,7 +14,7 @@ export const ONTOLOGY_DOCS: readonly AssistantTableDoc[] = [
     label: "원생(규칙)",
     ko: "원생 한 사람 한 줄 + 세는 규칙(병합·테스트·장부 정리 퇴원 판정)을 칸으로 미리 계산한 보기",
     notes:
-      "원생 수·퇴원 수는 이 보기로 센다. counted=true만 집계(테스트 원생·중복 병합으로 흡수된 원생·수업 기록 없는 장부 정리 퇴원 제외). status_label = 예비·상담완료·재원·휴원·퇴원. exit_kind = real(실제 퇴원) · bookkeeping(장부 정리, 퇴원으로 안 셈 — counted=false) · system_bulk(시스템 일괄 처리 날짜 미상 — 월별 퇴원 추이에서 뺀다) · scheduled(퇴원 예정) · null(퇴원 아님). withdrawn_on = 퇴원일(날짜). 월별 퇴원 추이 = exit_kind='real' and counted로 withdrawn_on을 달로 묶는다.",
+      "원생 수·퇴원 수는 이 보기로 센다. counted=true만 집계(테스트 원생·중복 병합으로 흡수된 원생·수업 기록 없는 장부 정리 퇴원 제외). status_label = 예비·상담완료·재원·휴원·퇴원. exit_kind = real(실제 퇴원) · bookkeeping(장부 정리, 퇴원으로 안 셈·언급 안 함 — counted=false · 끝난 수강이 있어도 출결·수업료 청구가 0이라 표식된 정리 퇴원 포함) · system_bulk(시스템 일괄 처리 날짜 미상 — 월별 퇴원 추이에서 뺀다) · scheduled(퇴원 예정) · null(퇴원 아님). withdrawn_on = 퇴원일(날짜). 월별 퇴원 추이 = exit_kind='real' and counted로 withdrawn_on을 달로 묶는다.",
     columns: {
       counted: "집계에 넣는 원생인가",
       is_merged: "중복 병합으로 다른 원생에 흡수됨",
@@ -45,6 +46,7 @@ export const ONTOLOGY_DOCS: readonly AssistantTableDoc[] = [
     notes:
       "role = homeroom(담임 — 지금 값, 기간 없음) · scheduled(교시 담당 — valid_from~valid_to) · delegated(임시 위임 — 기간). 🔴 배정 목록이지 출결 귀속 계산용이 아니다 — 요일·교시 칸이 없다(귀속은 온톨로지 '출결 귀속' 규칙으로 class_schedules에서). 과거 시점 질문은 그 날짜가 기간 안인 배정만 본다. teacher_id = users.id. class_closed_on = 반 종강일. 폐지(is_active)·보강용 반(is_makeup_pool) 칸이 없으니 '담당 반'은 classes와 class_id로 이어 셋 다로 거른다(묻지 않으면 폐지·보강용 반은 빼고, 종강 반은 지금 목록에서 뺀다).",
   },
+  ...ONTOLOGY_ANALYSIS_DOCS,
 ];
 
 export const ASSISTANT_DOCS: readonly AssistantTableDoc[] = [...ONTOLOGY_DOCS, ...TABLES_A, ...TABLES_B, ...TABLES_EXTRA];

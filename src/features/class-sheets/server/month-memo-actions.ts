@@ -17,6 +17,7 @@
  * ⚠️ 0246a 미적용이면 저장이 실패한다 — 원문 대신 **한글로** 아직 준비 중임을 말한다([[#95]]).
  * ⚠️ 이 파일은 `"use server"`라 **async 함수만 export**할 수 있다([[#119]]).
  */
+import { isMissingRelation } from "@/lib/supabase/db-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireEcsClassAccess } from "./access";
 
@@ -27,10 +28,7 @@ const MONTH_RE = /^\d{4}-\d{2}$/;
 type MemoSaveResult = { ok: true } | { ok: false; error: string };
 
 function isMissingTable(err: { code?: string; message?: string } | null): boolean {
-  if (!err) return false;
-  const code = String(err.code ?? "");
-  if (code === "42P01" || code === "PGRST205") return true;
-  return /does not exist|could not find the table/i.test(err.message ?? "");
+  return isMissingRelation(err, "class_sheet_month_memos"); // 표 이름 + 없음 코드(공용 판정, P1-E)
 }
 
 export async function saveMonthMemo(input: {

@@ -39,7 +39,7 @@ const db = (via: "session" | "admin") => ({
       return q;
     };
     Object.assign(q, {
-      select: rec("select"), eq: rec("eq"), update: rec("update"), delete: rec("delete"), insert: rec("insert"), order: rec("order"),
+      select: rec("select"), eq: rec("eq"), update: rec("update"), delete: rec("delete"), insert: rec("insert"), order: rec("order"), range: rec("range"), // range = 목록이 fetchAllPaged로 읽는다(수정 계획 P1-M 3c)
       maybeSingle: async () => ({ data: m.existing, error: m.existingError }),
       single: async () =>
         via === "session" && op === "insert" && m.sessionInsertError
@@ -110,7 +110,8 @@ describe("saveRefundRequest — 대상 직원 명의 · 세션 먼저", () => {
     m.user.mockResolvedValue(actual);
     m.viewAs.mockResolvedValue(null);
     m.sessionInsertError = { code: "42501", message: "rls" };
-    expect((await saveRefundRequest(undefined, form()))?.error).toContain("저장 실패");
+    // 원문 대신 한글(42501 = 권한, explainDbError — P1-E)
+    expect((await saveRefundRequest(undefined, form()))?.error).toBe("이 작업을 할 권한이 없습니다 — 계정 권한을 확인해 주세요");
     expect(writes().map((c) => c[0])).toEqual(["session"]);
     expect(inserted()).toMatchObject({ uploaded_by: "actual" });
   });
@@ -318,6 +319,13 @@ describe("환불 요청서 조회 — 대상 X의 역할로 restricted를 거른
     await getRefundRequests();
     await getRefundRequestById("doc1");
     expect(m.calls.filter((c) => c[2] === "eq" && c[3] === "restricted").map((c) => c[4])).toEqual([false, false]);
+  });
+
+  it("상세 조회가 실패하면 '없는 요청서'(null)로 돌리지 않고 던진다(수정 계획 P1-M 3c)", async () => {
+    m.user.mockResolvedValue(actual);
+    m.viewAs.mockResolvedValue(null);
+    m.existingError = { message: "db down" };
+    await expect(getRefundRequestById("doc1")).rejects.toThrow("환불 요청서를 불러오지 못했습니다");
   });
 
   it("평소(사무 역할 본인)에는 필터를 더하지 않는다 — DB와 같은 결과", async () => {

@@ -16,14 +16,20 @@ import { hhmm, hhmmToMin, slotPhase, type SlotPhase } from "../signals";
 const DOW_ENUM = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 type Sb = Awaited<ReturnType<typeof createClient>>;
 
-/** 이 사람이 그날 가르치는 반(담임 ∪ 위임 ∪ 부담임 슬롯). */
+/**
+ * 이 사람이 그날 가르치는 반(담임 ∪ 위임 ∪ 부담임 슬롯).
+ * `strict` = 쓰기 판정·입력자 표식 — 조회 실패를 "담당 반 없음"으로 읽지 않고 던진다. 예전엔 시간표 조회 오류를 버려
+ * 담당 강사의 저장이 "담당 반이 아닙니다"로 막히거나 입력자 표식(`recorded_via`)이 데스크로 잘못 찍혔다(수정 계획 P1-A).
+ * 읽기 화면은 기존 동작(빈 명단) 그대로 둔다.
+ */
 export async function userTaughtClassSet(
   supabase: Sb,
   userId: string,
   date: string,
+  strict = false,
 ): Promise<Set<string>> {
   const [teaching, slotRes] = await Promise.all([
-    getTeachingClassIds(supabase, userId, date),
+    getTeachingClassIds(supabase, userId, date, strict),
     supabase
       .from("class_schedules")
       .select("class_id")
@@ -31,6 +37,7 @@ export async function userTaughtClassSet(
       .lte("valid_from", date)
       .or(`valid_to.is.null,valid_to.gte.${date}`),
   ]);
+  if (strict && slotRes.error) throw slotRes.error;
   return new Set([
     ...teaching.all,
     ...((slotRes.data ?? []) as { class_id: string }[]).map((r) => r.class_id),
@@ -43,7 +50,8 @@ export async function userTeachesClass(
   classId: string,
   date: string,
 ): Promise<boolean> {
-  return (await userTaughtClassSet(supabase, userId, date)).has(classId);
+  // 입력자 표식(resolveWriteVia)이 쓴다 — 틀리면 기록에 남으니 strict.
+  return (await userTaughtClassSet(supabase, userId, date, true)).has(classId);
 }
 
 export async function resolveWriteVia(

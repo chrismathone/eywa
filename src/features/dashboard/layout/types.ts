@@ -57,6 +57,10 @@ export type Item = {
   note?: string;
   amounts?: boolean;
   phones?: boolean;
+  /** KPI 칸만 — 새 대시보드 '한눈에 보기' 머리 칸(6칸까지)에 세운다(`board.ts`). */
+  glance?: boolean;
+  /** KPI 칸만 — false면 '오늘 운영'·'경영 현황' KPI 띠에서 뺀다(한눈에 보기 전용 칸). 없으면 보인다. */
+  today?: boolean;
 };
 
 export type RoleLayout = { role: Bundle; subject?: string; items: Item[] };
@@ -70,6 +74,10 @@ export const isHeadingId = (id: string) => id.startsWith("heading:");
 export const isSpaceId = (id: string) => /^space:[a-zA-Z0-9-]+$/.test(id);
 export const isStructuralId = (id: string) => isHeadingId(id) || isSpaceId(id);
 export const isKpiId = (id: string) => id.startsWith("kpi:");
+/** 새 대시보드 맨 위 '핵심 업무' 칸(데이터를 읽지 않는 바로가기) — `core:<이름>`. */
+export const CORE_KEYS = ["newcomers", "management", "workRecords"] as const;
+export type CoreKey = (typeof CORE_KEYS)[number];
+export const isCoreId = (id: string) => id.startsWith("core:") && (CORE_KEYS as readonly string[]).includes(id.slice(5));
 
 /** 격자 위에 놓인 한 칸(흐름이 정한 자리) — x·y·w·h는 24열 격자 기준. */
 export type Placed = { id: string; x: number; y: number; w: number; h: number };

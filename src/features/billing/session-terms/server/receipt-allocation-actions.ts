@@ -19,7 +19,7 @@ import { isTuitionReceipt } from "../tuition-receipt";
 import { unlinkedZeroBlockers } from "../unlinked-zero";
 import { isVirtualTermId } from "../month-roster";
 import { materializeVirtualTerms } from "./term-materialize";
-import { logDbError } from "@/lib/supabase/db-error";
+import { logDbError, explainDbError } from "@/lib/supabase/db-error";
 import { carryBreaksAfter, carrySyncNotice, loadCarryOutStates, syncCarrySessionsAfter } from "./carry-session-sync";
 
 /**
@@ -53,7 +53,7 @@ export async function getReceiptAllocation(invoiceId: string): Promise<{ data?: 
   if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
   const db = await createClient();
   const { data: invoice, error } = await db.from("invoices").select("period, student_id, line_items").eq("id", invoiceId).neq("status", "void").maybeSingle();
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.session-terms.receipt-allocation-actions.getReceiptAllocation", fallback: "청구서를 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   if (!invoice) return { error: "청구서를 찾을 수 없습니다" };
   const range = monthRange(invoice.period);
   if (!range) return { error: "청구월을 확인해 주세요" };
@@ -93,7 +93,7 @@ export async function mergeReceiptItems(invoiceId: string, source: unknown, indi
     || typeof label !== "string" || label.length > 200 || (!removeId && (indices.length < 2 || !label.trim()))) return { error: "합산할 항목과 수납명을 확인해 주세요" };
   const db = await createClient();
   const { error } = await db.rpc("edit_receipt_merge_group", { p_invoice_id: invoiceId, p_expected_lines: source, p_indices: indices, p_label: label, p_remove_id: removeId ?? null });
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.session-terms.receipt-allocation-actions.mergeReceiptItems", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   revalidatePath("/billing");
   try {
     const result = await getReceiptAllocation(invoiceId);
@@ -153,7 +153,7 @@ export async function saveReceiptAllocation(invoiceId: string, source: unknown, 
   // 보낸 이월이 있는 줄의 저장 전 상태 — 이번 배분이 그 이월을 무효로 만들면 알린다(2026-11-09).
   const carryBefore = await loadCarryOutStates(db, rows.map((row) => row.termId));
   const { error } = await db.rpc("save_session_receipt_allocations", { p_invoice_id: invoiceId, p_expected_lines: source, p_rows: rows });
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.session-terms.receipt-allocation-actions.saveReceiptAllocation", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   // 이 저장으로 지난 달 이월이 이 달 줄에 실렸으면 확정 시수를 그만큼 맞춘다(원장 2026-10-07) — 응답 전에 끝내야 화면이 다시 읽을 때 맞는다.
   const notice = carrySyncNotice(await syncCarrySessionsAfter(db, { invoiceId }, user.id, "allocate"));
   const warning = [...(await carryBreaksAfter(db, carryBefore)).values()].join("\n") || undefined;

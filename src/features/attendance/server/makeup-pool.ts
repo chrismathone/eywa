@@ -1,3 +1,4 @@
+import { isMissingColumn } from "@/lib/supabase/db-error";
 import "server-only";
 
 import { cache } from "react";
@@ -79,8 +80,8 @@ export async function resolveMakeupOwner(input: {
 }
 
 /** 0241a 미적용 판별 — PostgREST는 없는 컬럼을 42703(또는 PGRST204)로 돌려준다. */
-function isMissingColumn(e: { code?: string; message?: string } | null | undefined): boolean {
-  return e?.code === "42703" || e?.code === "PGRST204" || /is_makeup_pool/.test(e?.message ?? "");
+function isMissingPoolColumn(e: { code?: string; message?: string } | null | undefined): boolean {
+  return isMissingColumn(e, "is_makeup_pool"); // 칸 이름 + 없음 코드(공용 판정, P1-E) — 이름만 보면 다른 오류도 삼켰다
 }
 
 /**
@@ -106,7 +107,7 @@ export async function ensureMakeupPoolClass(input: {
     .eq("is_makeup_pool", true)
     .maybeSingle();
   if (findErr) {
-    if (isMissingColumn(findErr)) return null; // 0241a 미적용 — 조용히 넘어간다.
+    if (isMissingPoolColumn(findErr)) return null; // 0241a 미적용 — 조용히 넘어간다.
     console.error("[makeup-pool] 보강 반 조회 실패", findErr.message);
     return null;
   }
@@ -138,7 +139,7 @@ export async function ensureMakeupPoolClass(input: {
         .maybeSingle();
       return (again?.id as string | undefined) ?? null;
     }
-    if (isMissingColumn(insErr)) return null;
+    if (isMissingPoolColumn(insErr)) return null;
     console.error("[makeup-pool] 보강 반 생성 실패", insErr.message);
     return null;
   }

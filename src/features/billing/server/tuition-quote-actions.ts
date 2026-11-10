@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { humanizeDbError } from "@/lib/supabase/db-error";
+import { humanizeDbError, explainDbError } from "@/lib/supabase/db-error";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import type { SystemRole } from "@/lib/permissions";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
@@ -122,7 +122,7 @@ export async function deleteTuitionQuote(
 
   const supabase = await createClient();
   const { data: removed, error } = await supabase.from("tuition_quotes").delete().eq("id", id).select("student_name");
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.tuition-quote-actions.deleteTuitionQuote", fallback: "삭제하지 못했습니다 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
 
   if (removed?.length) {
     await logAction({

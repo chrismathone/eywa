@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { ingestReport } from "./ingest";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 type BackfillResult = {
   ok: boolean;
@@ -43,7 +44,7 @@ export async function backfillProgressContainers(opts?: { dryRun?: boolean }): P
       .order("report_date", { ascending: true })
       .order("created_at", { ascending: true })
       .range(from, from + PAGE - 1);
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: explainDbError(error, { scope: "progress.backfill-actions.backfillProgressContainers", fallback: "보고서를 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
     rows.push(...(data ?? []));
     if (!data || data.length < PAGE) break;
   }

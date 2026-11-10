@@ -13,6 +13,7 @@ import {
   type PastMarkRow,
   type TargetMarkRow,
 } from "../lib/carry-marks";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * JJ 폼 이어받기의 **IO 쪽** — 규칙(무엇을 채우나)은 순수 모듈
@@ -118,7 +119,7 @@ export async function carrySelfStudyMarks(args: {
         form,
         patches: [],
         pending: false,
-        error: `듣기 레벨·누적 암기 단어수는 채우지 못했습니다: ${error.message}`,
+        error: explainDbError(error, { scope: "class-sheets.carry-marks.carrySelfStudyMarks", fallback: "듣기 레벨·누적 암기 단어수는 채우지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message,
       };
     }
     return { form, patches, pending: false, error: null };

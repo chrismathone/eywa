@@ -18,6 +18,8 @@ export type ConstraintMessage = {
 };
 
 const DIRECT: Record<string, ConstraintMessage> = {
+  // s2_0042(2026-11-09, 운영 DB 적용 후 pg_constraint로 이름 확인) — 넣을 때 = 다른 지점 학생. 지울 때는 기존 학생 FK 문구·코드 기본 문구.
+  invoices_tenant_student_fk: { message: "이 학원의 학생이 아니라 청구서를 만들 수 없습니다 — 학생을 다시 선택해 주세요", field: "studentId", op: "write" },
   // Declared and verified against the local 0456a migration; enabled with that migration.
   student_parent_event_recognitions_student_id_fkey: { message: "설명회 참석 기록이 있어 학생을 삭제할 수 없습니다", op: "delete" },
   // ── 학생 ──

@@ -258,8 +258,7 @@ export function SeatingCell({
         periodStart: klass.firstStart,
         quiet: true,
         source: "live",
-        // 수업 나누기로 온 학생(0351a) — 이 반 수강행이 없어 강사 게이트가 막는다. 보강 칸과 같은 문을 연다.
-        ...(student.splitMark?.dir === "in" ? { allowMakeup: true } : {}),
+        // 수업 나누기로 온 학생(0351a)은 서버가 나누기 표를 직접 보고 연다(`hasSplitInto`) — 플래그를 싣지 않는다(결정 #5 ②).
       })
         .then((res) => {
           if ("error" in res) {

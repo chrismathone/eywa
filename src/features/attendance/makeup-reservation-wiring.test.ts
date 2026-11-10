@@ -84,12 +84,13 @@ describe("②-2 일괄·범위 저장의 강사 게이트도 예약을 본다(�
 });
 
 describe("② 단건 저장의 강사 게이트 — 예약된 학생은 수강행 없이도 그날 칸을 연다", () => {
-  it("hasReservedMakeup을 canWriteAttendanceStudent의 allowMakeup에 잇는다(수강생·기록이 없을 때만 묻는다)", () => {
+  it("hasReservedMakeup을 학생 자격 판정(writeEligibility)에 잇는다 — 수강생이 아니면 기존 기록이 있어도 묻는다(결정 #5: 기록만이면 정정만)", () => {
     const body = fnBody(ACTIONS, "setAttendanceCell");
     expect(body).toContain("hasReservedMakeup(user.tenantId, { studentId, classId, date: sessionDate })");
-    const gate = body.slice(body.indexOf("canWriteAttendanceStudent({"), body.indexOf("이 반 수강생이 아닙니다"));
-    expect(gate).toContain("(enrolled ?? 0) === 0");
-    expect(gate).toContain("(existing ?? 0) === 0");
+    const gate = body.slice(body.indexOf("const isEnrolled"), body.indexOf("이 반 수강생이 아닙니다"));
+    expect(gate).toContain("if (!isEnrolled && !instantMakeup)");
+    expect(gate).not.toContain("(existing ?? 0) === 0");
+    expect(gate).toContain("writeEligibility({ enrolled: isEnrolled, reserved, splitInto, native, hasRecord })");
   });
 });
 

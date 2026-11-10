@@ -14,6 +14,7 @@
  * ⚠️ 표가 아직 없으면(SQL 미적용) ③과 기록만 건너뛴다([[#95]]).
  * ⚠️ 이 파일은 async 함수만 export한다([[#119]]).
  */
+import { isMissingRelation } from "@/lib/supabase/db-error";
 import { after } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { readonlyTeacherViewError } from "@/lib/auth/view-as";
@@ -52,8 +53,8 @@ const EXAMPLES = 40;
 const RECENT_TO_STUDENT = 5;
 const SUGGESTIONS = 20;
 
-const isMissingTable = (e: { code?: string; message?: string } | null | undefined) =>
-  !!e && (e.code === "42P01" || e.code === "PGRST205" || /love_note_suggestions/.test(e.message ?? ""));
+// 표 이름 + 없음 코드 둘 다(공용 판정, P1-E) — 예전엔 이름만 봐서 권한·유니크 오류도 "표 없음"으로 삼켰다.
+const isMissingTable = (e: unknown) => isMissingRelation(e, "love_note_suggestions");
 
 export async function suggestLoveNote(input: SuggestLoveNoteInput): Promise<{ ok: true; note: string } | { ok: false; error: string }> {
   const user = await getCurrentUser({ teacherView: true });

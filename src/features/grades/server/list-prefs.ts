@@ -3,6 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { GRADE_SORT_DEFAULT, parseGradeSort, type GradeSort } from "../list-prefs";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * `users.ui_prefs.grades`만 **필드 단위로** 갱신 — 성적관리 정렬(원장 2026-08-04 *"뷰 세팅은 계정 귀속"*).
@@ -22,7 +23,7 @@ export async function saveGradeSortPref(next: GradeSort): Promise<{ ok: boolean;
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
+  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "grades.list-prefs.saveGradeSortPref", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   const raw =
     row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
       ? (row.ui_prefs as Record<string, unknown>)
@@ -38,7 +39,7 @@ export async function saveGradeSortPref(next: GradeSort): Promise<{ ok: boolean;
     .update({ ui_prefs: { ...raw, grades: { ...prev, sort } } })
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "grades.list-prefs.saveGradeSortPref", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }
 

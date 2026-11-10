@@ -2,6 +2,7 @@ import "server-only";
 import { kstToday } from "@/lib/date-kst";
 import type { createClient } from "@/lib/supabase/server";
 import { dayBefore } from "../schedule-preserve";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 type Sb = Awaited<ReturnType<typeof createClient>>;
 
@@ -51,7 +52,7 @@ export async function moveLiveSlotTeacher(
       .in("class_id", part)
       .eq("teacher_id", fromTeacherId)
       .or(`valid_to.is.null,valid_to.gte.${today}`);
-    if (readErr) return { moved, error: readErr.message };
+    if (readErr) return { moved, error: explainDbError(readErr, { scope: "classes.handover.moveLiveSlotTeacher", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
     if (!targets || targets.length === 0) continue;
 
     // 오늘 시작한 행은 쪼갤 과거가 없다(마감일이 시작일보다 빨라지는 거꾸로 된 구간 방지).
@@ -74,7 +75,7 @@ export async function moveLiveSlotTeacher(
       }));
       const { error: archErr } = await supabase.from("class_schedules").insert(archives);
       // 마감 사본을 못 남기면 **이력이 조용히 사라진 채 담당만 바뀐다** → 여기서 멈춘다.
-      if (archErr) return { moved, error: archErr.message };
+      if (archErr) return { moved, error: explainDbError(archErr, { scope: "classes.handover.moveLiveSlotTeacher", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
     }
     const splitIds = new Set(splittable.map((t) => t.id as string));
     // 쪼갠 행은 오늘부터, 오늘 만든 행은 시작일 그대로.
@@ -83,7 +84,7 @@ export async function moveLiveSlotTeacher(
       .update({ teacher_id: toTeacherId, valid_from: today })
       .in("id", [...splitIds])
       .select("id");
-    if (error) return { moved, error: error.message };
+    if (error) return { moved, error: explainDbError(error, { scope: "classes.handover.moveLiveSlotTeacher", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
     moved += data?.length ?? 0;
     const rest = targets.filter((t) => !splitIds.has(t.id as string)).map((t) => t.id as string);
     if (rest.length > 0) {
@@ -126,7 +127,7 @@ export async function reassignHomeroom(
       .in("id", part)
       .eq("teacher_id", fromTeacherId)
       .select("id");
-    if (error) return { moved, error: error.message };
+    if (error) return { moved, error: explainDbError(error, { scope: "classes.handover.reassignHomeroom", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
     moved += data?.length ?? 0;
   }
   return { moved };

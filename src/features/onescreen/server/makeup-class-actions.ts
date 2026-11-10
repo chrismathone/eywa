@@ -11,6 +11,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { attendanceWindowApplies } from "@/features/attendance/server/edit-window-gate";
 import { readonlyTeacherViewError } from "@/lib/auth/view-mode";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -44,7 +45,7 @@ export async function setMakeupClass(input: {
   if (!input.studentId || !input.classId || !input.subject || !isValidYmd(input.date)) return { ok: false, error: "잘못된 요청입니다" };
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return { ok: false, error: "출석 입력 권한이 없습니다" };
   const today = kstToday();
-  if (user.systemRole === "teacher" && !isWithinAttendanceEditWindow(input.date, today))
+  if ((await attendanceWindowApplies(user.systemRole)) && !isWithinAttendanceEditWindow(input.date, today))
     return { ok: false, error: attendanceLockMessage(input.date, today) };
   const isAdmin = await canWriteTenant(user.systemRole, "lesson_reports");
   const supabase = await createClient();
