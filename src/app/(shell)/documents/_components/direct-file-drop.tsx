@@ -71,7 +71,7 @@ export function DirectFileDrop({ category, folderLabel, dialogOpen, blocked }: {
 
   const busy = jobs.some((job) => job.status === "queued" || job.status === "uploading");
   return <>
-    {dragging && !dialogOpen ? <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm">
+    {dragging && !dialogOpen ? <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-bg-canvas/80 p-6 backdrop-blur-sm">
       <div className="flex max-w-lg flex-col items-center gap-2 rounded-lg border-2 border-dashed border-primary/60 bg-primary/5 p-8 text-center text-primary">
         <UploadCloud className="size-9" />
         <p className="text-base font-bold">{blocked ? "문서 폴더를 먼저 선택해 주세요" : "여기에 놓으면 바로 업로드합니다"}</p>

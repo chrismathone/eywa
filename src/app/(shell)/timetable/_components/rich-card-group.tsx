@@ -434,7 +434,7 @@ export function ClassColumn({
   });
   // 반 헤더색 — ijw bgColor 우선(인라인), 없으면 과목색 클래스.
   const headerStyle = card.bgColor
-    ? { background: card.bgColor, color: card.textColor ?? "#121212" }
+    ? { background: card.bgColor, color: card.textColor ?? "var(--ink)" }
     : undefined;
 
   return (

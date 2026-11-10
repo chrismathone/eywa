@@ -30,10 +30,10 @@ export function MonthTable({
   if (students.length === 0) return <p className="text-text-dim px-1 py-6 text-sm">이 달 이 반 명단에 학생이 없습니다.</p>;
   return (
     <div className="overflow-x-auto px-1">
-      <table className="w-full border-collapse text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-line-faint">
+      <table className="bg-card w-full border-collapse text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-line-faint">
         <thead>
           <tr className="border-line border-b">
-            <th className="bg-background sticky left-0 z-10 px-2 py-2 text-left font-semibold">이름</th>
+            <th className="bg-card sticky -left-1 z-10 px-2 py-2 text-left font-semibold">이름</th>
             {dates.map((d) => (
               <th key={d} className="px-1 py-2 text-center text-xs font-semibold whitespace-nowrap">
                 <button type="button" className="hover:text-primary underline-offset-2 hover:underline" onClick={() => onPickDate(d)}>
@@ -59,7 +59,7 @@ export function MonthTable({
               .slice(0, 3);
             return (
               <tr key={s.id} className="border-line-faint border-b">
-                <td className="bg-background sticky left-0 z-10 px-2 py-1.5 whitespace-nowrap">
+                <td className="bg-card sticky -left-1 z-10 px-2 py-1.5 whitespace-nowrap">
                   <span className="font-medium">{s.name}</span>
                   <span className="text-text-dim ml-1.5 text-xs">{s.schoolGrade}</span>
                 </td>

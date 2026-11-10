@@ -57,11 +57,14 @@
   .aywa-instruments .ns-filter p { margin-left: 0; }
 }
 
-/* ---------- 전체 페이지 바탕 = 대시보드 종이색 ---------- */
-body:has(.aywa-board) main { background-color: #f1f1ed !important; }
+/* ---------- 전체 페이지 바탕 = 대시보드 종이색 ----------
+ * 의도(색감 통일 2026-11-10): 바탕·사이드바는 다른 화면과 같은 변수(--bg-canvas · --sidebar)를 쓴다 — 테마가 켜진 지금은 종이색 그대로이고,
+ * 테마 import를 걷으면 운영실도 다른 화면과 함께 흰 바탕으로 돌아간다(운영실만 종이색으로 남지 않게). 계기판 카드 자체 색(.aywa-instruments 토큰)은 따로다. */
+body:has(.aywa-board) main { background-color: var(--bg-canvas) !important; }
 body:has(.aywa-board) [data-slot="sidebar-inner"],
-body:has(.aywa-board) [data-slot="sidebar"] { background-color: #f7f7f3 !important; }
-body:has(.aywa-board) header:not(.aywa-instruments header) { background-color: #f7f7f3; }
+body:has(.aywa-board) [data-slot="sidebar"] { background-color: var(--sidebar) !important; }
+/* 메뉴 판·대화 상자(role=dialog) 안의 머리글은 뺀다 — 계기판이 뒤에 깔린 동안 메뉴 판 제목 줄에만 띠가 졌다(원장 2026-11-09 캡처). */
+body:has(.aywa-board) header:not(.aywa-instruments header):not([role="dialog"] header) { background-color: var(--sidebar); }
 .aywa-instruments .ns-brief > .sec { border-radius: 10px; }
 
 /* ---------- 머리 칸: 업무 비서 요약 ↔ KPI 6칸 — 같은 행 높이 ---------- */

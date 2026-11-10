@@ -150,6 +150,14 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-bg-soft: var(--bg-soft);
+  --color-bg-canvas: var(--bg-canvas);
+  --color-cat-blue: var(--cat-blue);
+  --color-cat-purple: var(--cat-purple);
+  --color-cat-green: var(--cat-green);
+  --color-cat-rose: var(--cat-rose);
+  --color-cat-amber: var(--cat-amber);
+  --color-cat-gold: var(--cat-gold);
+  --color-cat-gold-bright: var(--cat-gold-bright);
   --color-surface-hi: var(--surface-hi);
   --color-ink: var(--ink);
   --color-text-dim: var(--text-dim);
@@ -298,6 +306,19 @@
      --bg-soft는 "면"이 아니라 **기능색**(코드 블록·표 머리띠·hover 강조)이라 잔존하되 살짝 조임. */
   --background: #ffffff;
   --bg-soft: #e9edf4;
+  /* 화면 바탕(캔버스) — 화면 바탕 위에 고정되는 띠(도구줄·저장 바·시트 머리)가 바탕과 같은 면을 칠할 때 쓴다(원장 2026-11-10).
+     기본 팔레트는 캔버스가 흰색이라 --background와 같다 · 차콜 테마(instrument-theme.css)가 종이색으로 덮는다. */
+  --bg-canvas: var(--background);
+  /* 범주 색 — 구별 자체가 뜻인 색(수업 전 카드 종류 · 연결 탐색 유형 색). 테마가 의미색(--blue·--purple 등)을
+     회색 단계로 덮어도 제 색을 지킨다(원장 2026-11-10 — '블루카드는 파랑'). 값은 기본 팔레트 의미색과 같지만 따로 둔다:
+     🔴 상태·의미(tone)에는 쓰지 말 것(그건 --blue 등 의미색) — 여기는 '서로 달라 보여야 하는 이름표'에만. */
+  --cat-blue: #2962ce;
+  --cat-purple: #6c50c8;
+  --cat-green: #0d7743;
+  --cat-rose: #b63767;
+  --cat-amber: #995709;
+  --cat-gold: #82621a;
+  --cat-gold-bright: #e2b45f;
   --surface-hi: #ffffff;
 
   /* text — **한 값으로 통일 #121212 = rgb(18,18,18)**(원장 2026-09-08: *"모든 기본 글자색을 rgb값을 18 18 18 로"*

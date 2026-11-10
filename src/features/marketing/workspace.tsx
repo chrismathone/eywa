@@ -32,10 +32,10 @@ export function MarketingWorkspace({data,selectedId}:{data:MarketingData;selecte
     {message?<p className={s.status} role="status">{message} <button onClick={()=>setMessage("")}>닫기</button></p>:null}
     <div className={s.filters}><label>연도 <select aria-label="마케팅 조회 연도" value={data.year} onChange={e=>router.push(`/billing/management/marketing?year=${e.target.value}`)}>{data.yearCoverage.map(y=><option key={y.year} value={y.year}>{y.year}년</option>)}</select></label><label>홍보 채널 <select value={channel} onChange={e=>setChannel(e.target.value)}><option value="all">전체 채널</option>{Object.entries(channels).map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></label><label>상태 <select value={state} onChange={e=>setState(e.target.value)}><option value="all">전체 상태</option>{Object.entries(states).filter(([k])=>k!=="duplicate").map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></label><label>행사 검색 <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="행사명·학교·대상"/></label></div>
     <div className={v.stats}>
-      <StatCard label="홍보·행사 기록" value={visible.length} unit="건" note={`진행 확인 ${visible.filter(c=>c.document.state==="held").length}건 · 중복 제외 전 원본 후보 포함`} accent="#363c41"/>
-      <StatCard label="확인된 집행비" value={verifiedCosts.length?cost:null} unit="원" note={`${verifiedCosts.length}/${visible.length}건 비용 확인 · 취소 지출 포함`} accent="#fdb811"/>
-      <StatCard label="배분된 신규 등록" value={enrollmentCredits} unit="명" note={`${modelLabels[model]} · 등록 전 ${days}일 · 학생 ID 중복 제거`} accent="#7a8388"/>
-      <StatCard label="CPE 계산 가능" value={selectedResults.filter(r=>r.cpe!==null).length} unit="건" note="진행·비용·대사 마감과 관찰기간 충족" accent="#a3abae"/>
+      <StatCard label="홍보·행사 기록" value={visible.length} unit="건" note={`진행 확인 ${visible.filter(c=>c.document.state==="held").length}건 · 중복 제외 전 원본 후보 포함`} accent="var(--primary)"/>
+      <StatCard label="확인된 집행비" value={verifiedCosts.length?cost:null} unit="원" note={`${verifiedCosts.length}/${visible.length}건 비용 확인 · 취소 지출 포함`} accent="var(--gold-bright)"/>
+      <StatCard label="배분된 신규 등록" value={enrollmentCredits} unit="명" note={`${modelLabels[model]} · 등록 전 ${days}일 · 학생 ID 중복 제거`} accent="var(--neutral-fill)"/>
+      <StatCard label="CPE 계산 가능" value={selectedResults.filter(r=>r.cpe!==null).length} unit="건" note="진행·비용·대사 마감과 관찰기간 충족" accent="color-mix(in srgb, var(--ink) 45%, var(--card))"/>
     </div>
     <p className={s.notice}>노션·드라이브·캘린더에서 확인한 원본의 가져오기 시점 자료입니다. 일정은 진행 실적과 구분하며, 같은 행사가 여러 원본에 있으면 대표 행사로 정리해야 합니다. 자동 정기 동기화는 아직 연결되지 않았습니다.</p>
     <section className={s.section} id="annual-map"><div className={s.heading}><div><h2>{data.year} 연간 마케팅 지도</h2><p className={s.muted}>행사 시작 월 기준 · 월만 확인된 일정은 날짜 확정 전 후보입니다. 취소 일정은 취소선으로 표시합니다.</p></div><span className={s.pill}>원본에서 학생까지</span></div>

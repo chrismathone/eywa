@@ -39,10 +39,11 @@ export function CheckTable({
     return <p className="text-text-dim px-1 py-6 text-sm">이날 이 반 명단에 학생이 없습니다.</p>;
   }
   return (
+    // 고정 이름 칸은 `-left-1` — 스크롤 상자의 안쪽 여백(px-1, 4px)만큼 떨어져 붙으면 가로로 밀 때 그 틈으로 밀린 칸이 비쳤다(리뷰 2026-11-10).
     <div className="overflow-x-auto px-1">
       {/* 체크 칸(미흡 10 + 결석)은 폭을 똑같이 나눈다(원장 2026-10-28 *"칸마다 간격 동일하게"*) — 고정 표 + 나머지 열만 폭을 정한다.
           자동 폭이면 머리 글자 길이('본교재 오답' vs '과제')만큼 칸이 들쭉날쭉해진다([[#97]]). */}
-      <table className="w-full min-w-[1100px] table-fixed border-collapse text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-line-faint">
+      <table className="bg-card w-full min-w-[1100px] table-fixed border-collapse text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-line-faint">
         <colgroup>
           <col className="w-44" />
           {BEFORE_CLASS_ITEMS.map((i) => <col key={i.key} />)}
@@ -54,7 +55,7 @@ export function CheckTable({
         </colgroup>
         <thead>
           <tr className="border-line border-b">
-            <th className="bg-background sticky left-0 z-10 px-2 py-2 text-left font-semibold">이름</th>
+            <th className="bg-card sticky -left-1 z-10 px-2 py-2 text-left font-semibold">이름</th>
             {BEFORE_CLASS_ITEMS.map((i) => (
               <th key={i.key} className="px-1 py-2 text-center text-xs font-semibold break-keep" title={i.label}>{i.short}</th>
             ))}
@@ -84,7 +85,7 @@ export function CheckTable({
             };
             return (
               <tr key={s.id} className={`border-line-faint border-b ${check.absent ? "bg-report-accent-soft" : ""}`}>
-                <td className={`sticky left-0 z-10 px-2 py-1.5 ${check.absent ? "bg-report-accent-soft" : "bg-background"}`}>
+                <td className={`sticky -left-1 z-10 px-2 py-1.5 ${check.absent ? "bg-report-accent-soft" : "bg-card"}`}>
                   <div className="flex items-baseline gap-1.5 overflow-hidden whitespace-nowrap">
                     <span className="font-medium">{s.name}</span>
                     <span className="text-text-dim text-xs">{s.schoolGrade}</span>

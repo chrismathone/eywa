@@ -61,12 +61,12 @@ export function WithdrawalTrendChart({
         />
         {kind === "line" ? (
           <>
-            {withTotal ? <Line dataKey="total" name="학원 전체" stroke="#9aa5b4" strokeWidth={2.5} dot={{ r: 3 }} isAnimationActive={false} /> : null}
+            {withTotal ? <Line dataKey="total" name="학원 전체" stroke="color-mix(in srgb, var(--neutral-fill) 70%, var(--card))" strokeWidth={2.5} dot={{ r: 3 }} isAnimationActive={false} /> : null}
             <Line dataKey="count" name={countName} stroke="var(--color-rose)" strokeWidth={2.5} dot={{ r: 3 }} isAnimationActive={false} />
           </>
         ) : (
           <>
-            {withTotal ? <Bar dataKey="total" name="학원 전체" fill="#9aa5b4" radius={[3, 3, 0, 0]} /> : null}
+            {withTotal ? <Bar dataKey="total" name="학원 전체" fill="color-mix(in srgb, var(--neutral-fill) 70%, var(--card))" radius={[3, 3, 0, 0]} /> : null}
             <Bar dataKey="count" name={countName} fill="var(--color-rose)" radius={[3, 3, 0, 0]} />
           </>
         )}

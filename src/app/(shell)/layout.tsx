@@ -354,7 +354,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       <div style={brandStyle} className="bg-background text-foreground flex h-screen flex-col overflow-hidden print:h-auto print:overflow-visible">
         {/* z-[60]: 공지 팝업 레이어(z-55)가 좁은 미니셸에선 헤더 버튼('내 메뉴'·사용자 메뉴)까지 덮어
             클릭이 팝업에 먹혔다(2026-08-04 실측) — 내비 크롬은 공지보다 항상 위. */}
-        <header className="bg-background border-line sticky top-0 z-[60] flex h-12 shrink-0 items-center justify-between border-b px-5 lg:px-7">
+        <header className="bg-sidebar border-line sticky top-0 z-[60] flex h-12 shrink-0 items-center justify-between border-b px-5 lg:px-7">
           <div className="flex items-center gap-2.5">
             {logoSrc ? (
               // eslint-disable-next-line @next/next/no-img-element -- 학원 로고(GCS/외부 이미지), next/image 최적화 불필요
