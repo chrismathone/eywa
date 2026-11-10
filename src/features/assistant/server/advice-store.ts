@@ -2,7 +2,7 @@ import "server-only";
 /**
  * 비서 의견 저장소 — 제안 → 결과 → 학습 1단계(2026-11-09 · SQL s2_0036). 앱의 관리자 연결(service_role)로만 읽고 쓴다
  * (표는 RLS 켬 · 정책 0 — 원장 관문 `assistantViewer`를 지난 뒤에만 부른다).
- * - 지금은 대화를 연 본인(묻는 사람)만 자기 의견을 본다·처리한다 — 대화가 사람별 비공개라서(지점 전체 '지난 의견 결과'는 다음 단계).
+ * - 대화를 연 본인(묻는 사람)만 자기 의견을 본다·처리한다 — 대화가 사람별 비공개라서. 대화를 넘나든 모음('지난 의견' · 2026-11-10)도 본인 것만(`advice-list.ts`).
  * - 처리는 낙관적 잠금(`status_at`) — 다른 탭에서 먼저 바꿨으면 거절하고 다시 열게 한다.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -74,17 +74,28 @@ export async function updateAdvice(
   owner: Owner,
   id: string,
   patch: AdviceUpdate,
-): Promise<{ ok: true; view: AdviceView; from: AdviceStatus } | { ok: false; reason: "missing" | "stale" }> {
+): Promise<{ ok: true; view: AdviceView; from: AdviceStatus } | { ok: false; reason: "missing" | "stale" | "deleted" }> {
   const db = createAdminClient();
   const { data: current, error: readError } = await db
     .from(ADVICE)
-    .select("status, status_at, done_on, check_sql, check_after_days, baseline_to, measure_state, measure_anchor, latest_from")
+    .select("status, status_at, done_on, check_sql, check_after_days, baseline_to, measure_state, measure_anchor, latest_from, thread_id")
     .eq("id", id)
     .eq("tenant_id", owner.tenantId)
     .eq("asked_by", owner.userId)
     .maybeSingle();
   if (readError) throw new Error(readError.message);
   if (!current) return { ok: false, reason: "missing" };
+  // 지운 대화의 의견은 처리하지 않는다 — 다른 탭에서 지웠는데 이 화면엔 남아 있을 수 있다(목록에서도 빠지고 크론도 재지 않는다 · 리뷰 2026-11-10).
+  const { data: thread, error: threadError } = await db
+    .from("assistant_threads")
+    .select("id")
+    .eq("id", current.thread_id as string)
+    .eq("tenant_id", owner.tenantId)
+    .eq("user_id", owner.userId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (threadError) throw new Error(threadError.message);
+  if (!thread) return { ok: false, reason: "deleted" };
   const from = current.status as AdviceStatus;
   const done = patch.status === "done";
   const memo = patch.status === "open" ? null : patch.memo?.trim() || null;

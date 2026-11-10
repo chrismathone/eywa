@@ -20,6 +20,7 @@ import {
   type AdviceView,
 } from "../advice";
 import { VERDICT_LABEL } from "../advice-outcome";
+import { newerAdvice, rememberAdvice, useLatestAdvice } from "./advice-latest";
 import { PlanLine } from "./advice-lines";
 
 const ACTIONS: AdviceStatus[] = ["adopted", "done", "on_hold", "declined"];
@@ -33,23 +34,16 @@ const SAVED_TEXT: Record<AdviceStatus, string> = {
 const MEMO_MAX = 500;
 
 /**
- * 이 화면(문서)에서 마지막으로 저장한 처리 상태 — 다른 대화에 갔다 오면 대화 상태(보고서)는 처음 받은 값이라 '처리 전'이 다시 보이고,
- * 누르면 같은 사람인데 409가 났다(적대 리뷰 2026-11-09). 서버가 더 새 값을 주면(다른 탭에서 처리 · 다시 열기) 그쪽을 쓴다.
- */
-const latest = new Map<string, AdviceView>();
-const newer = (a: AdviceView, b: AdviceView | null | undefined) => (b && b.statusAt > a.statusAt ? b : a);
-
-/**
  * 비서 의견 한 줄의 확인 지표 · 원장 처리(제안 → 결과 → 학습 1단계 · 원장 2026-11-06 *"그 해결책이 어떤 결과를 가져왔는지 … 결과 피드백"*).
  * 채택 · 보류는 바로 저장 · 완료는 한 날·해 본 내용·어땠나 · 안 함은 까닭 · 처리한 것을 다시 누르면 채택·보류는 처리 전으로, 완료·안 함은 고치기.
  * 다시 잴 날에 크론이 같은 조회문으로 다시 재어(2단계 · /api/cron/assistant-outcomes) 결과 줄 — 기준 → 지금 · 판정(개선·변화 없음·악화·판정 보류).
  */
-export function AdviceStatusPanel({ initial }: { initial: AdviceView }) {
+export function AdviceStatusPanel({ initial, onChange }: { initial: AdviceView; onChange?: (view: AdviceView) => void }) {
   const id = useId();
-  // 보이는 값 = 받은 값(서버 — 다른 탭에서 처리했으면 더 새 값)과 이 화면에서 저장한 값 중 더 새 것. 다시 그리지 않고 고르므로
-  // 대화를 조용히 다시 읽어도 열어 둔 창·쓰던 메모가 그대로다(재리뷰 2026-11-09).
-  const [saved, setSaved] = useState<AdviceView | null>(() => latest.get(initial.id) ?? null);
-  const view = newer(initial, saved);
+  // 보이는 값 = 받은 값(서버 — 다른 탭에서 처리했으면 더 새 값)과 이 문서에서 저장한 값(대화 카드·'지난 의견' 공유 — advice-latest) 중 더 새 것.
+  // 다시 그리지 않고 고르므로 대화를 조용히 다시 읽어도 열어 둔 창·쓰던 메모가 그대로다(재리뷰 2026-11-09).
+  const shared = useLatestAdvice(initial.id);
+  const view = newerAdvice(initial, shared);
   const [form, setForm] = useState<null | "done" | "declined">(null);
   const [memo, setMemo] = useState("");
   const [doneOn, setDoneOn] = useState(() => kstToday());
@@ -60,8 +54,8 @@ export function AdviceStatusPanel({ initial }: { initial: AdviceView }) {
   const [announce, setAnnounce] = useState("");
 
   const setView = (next: AdviceView) => {
-    latest.set(next.id, next);
-    setSaved(next);
+    rememberAdvice(next);
+    onChange?.(next);
   };
 
   async function send(status: AdviceStatus, extra: { memo?: string; doneOn?: string; selfRating?: AdviceRating | null } = {}) {
