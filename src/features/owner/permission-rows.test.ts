@@ -211,6 +211,16 @@ describe("메뉴 버튼이 없는 권한은 그 권한을 쓰는 화면 아래�
   it("출석부 ← 랩실·JJ실 출석부 · 출석부 급여 비율 설정", () => {
     expect(after("class", "attendance")).toEqual(["seat_attendance", "attendance_salary_settings"]);
   });
+  it("셔틀 ← 셔틀 관리자 화면 — 학부모 관리 현황 버튼이 학원운영 묶음에 있어도 줄은 셔틀 바로 아래(원장 2026-11-10)", () => {
+    expect(after("operation", "shuttle")).toEqual(["shuttle_admin"]);
+    const rows = group("operation")!.rows;
+    expect(rows.filter((r) => r.menu === "shuttle_admin")).toHaveLength(1);
+    expect(rows.find((r) => r.menu === "shuttle_admin")?.note).toMatch(/셔틀 권한이 있어야/);
+    // 셔틀을 메뉴 구성에서 감추면 함께 빠진다(그 화면 안에서 쓰는 권한).
+    const hidden = editablePermissionRowGroups({ menus: [{ href: "/shuttle", hidden: true }] }).flatMap((g) => g.rows.map((r) => r.menu));
+    expect(hidden).not.toContain("shuttle");
+    expect(hidden).not.toContain("shuttle_admin");
+  });
   it("원생목록 - 영어이름은 원생목록 아래에서 개별 부여할 수 있다", () => {
     expect(after("student", "students")).toContain("student_english_name");
   });

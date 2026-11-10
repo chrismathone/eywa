@@ -53,11 +53,8 @@ describe("시안 화면의 문 = 제 권한 키", () => {
     }
   });
 
-  it("🔴 임시 기본값 = 권한 줄을 만들기 전 코드가 열던 역할 그대로(원장 결정 전 — 지금 쓰는 사람을 잠그지 않는다)", () => {
-    const open = (menu: keyof typeof MENU_ACCESS) => Object.entries(MENU_ACCESS[menu]).filter(([, a]) => a !== "none").map(([r]) => r).sort();
-    expect(open("management")).toEqual(["admin", "master"]);
-    expect(open("okr")).toEqual(["admin", "manager", "master"]);
-    expect(open("marketing")).toEqual(["admin", "manager", "master"]);
-    expect(MENU_ACCESS.work_records).toEqual(MENU_ACCESS.dashboard);
+  it("🔴 기본값 = 원장만(원장 2026-11-10 결정 — 새 권한 규칙 그대로) · 다른 역할은 원장이 역할·권한 면에서 연다", () => {
+    const open = (menu: keyof typeof MENU_ACCESS) => Object.entries(MENU_ACCESS[menu]).filter(([, a]) => a !== "none").map(([r]) => r);
+    for (const menu of ["management", "okr", "marketing", "work_records"] as const) expect(open(menu), menu).toEqual(["master"]);
   });
 });

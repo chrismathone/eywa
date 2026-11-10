@@ -53,9 +53,9 @@ export function UserOverrideEditor({ overrides, roleMatrix, hiddenUserIds, staff
   const staff = staffOptions.filter((s) => !hidden.has(s.id));
   const roleOf = (userId: string) => staffOptions.find((s) => s.id === userId)?.role as SystemRole | undefined;
   const pickedRole = roleOf(pickedUser);
-  // 고를 수 있는 메뉴 — 역할 전용 화면은 빼고(위 표에도 없다 — 여기서 한 번 더 거른다), 강사에게는 대시보드·학원 비서를 줄 수 없다(권한 표의 잠금과 같다).
+  // 고를 수 있는 메뉴 — 역할 전용 화면은 빼고(위 표에도 없다 — 여기서 한 번 더 거른다), 그 사람 역할에서 칸 전체가 잠긴 메뉴(강사의 대시보드·학원 비서 · 원장·관리자가 아닌 사람의 셔틀 관리자 화면 등)는 줄 수 없다(권한 표의 잠금과 같다 — isPermissionLocked).
   const menuGroups = groups
-    .map((group) => ({ ...group, rows: group.rows.filter((row) => !isRoleOnlyMenu(row.menu) && !((row.menu === "dashboard" || row.menu === "assistant") && pickedRole === "teacher")) }))
+    .map((group) => ({ ...group, rows: group.rows.filter((row) => !isRoleOnlyMenu(row.menu) && !(pickedRole && isPermissionLocked(row.menu, pickedRole, "full") && isPermissionLocked(row.menu, pickedRole, "none"))) }))
     .filter((group) => group.rows.length > 0);
   const selectable = menuGroups.flatMap((group) => group.rows.map((row) => row.menu));
   // 직원을 바꿔 골라 둔 메뉴가 목록에서 빠지면(강사 + 대시보드) 화면에 보이는 첫 메뉴로 맞춘다 — 보이는 값과 추가되는 값이 같아야 한다.

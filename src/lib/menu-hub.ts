@@ -14,7 +14,7 @@ import {
   type MenuGroupLayout,
   type MenuLayout,
 } from "@/features/owner/menu-layout";
-import { canManageParentAccountsRole, SHUTTLE_PARENTS_PATH } from "@/features/shuttle/parent-accounts/parent-access";
+import { SHUTTLE_PARENTS_PATH } from "@/features/shuttle/parent-accounts/parent-access";
 import { SEAT_NAME, USABLE_SEAT_KEYS } from "@/features/attendance/seat/seat";
 
 /**
@@ -49,10 +49,11 @@ export type HubDest = {
    */
   genericOnly?: boolean;
   /**
-   * 원장·관리자(+총괄) 전용 목적지(예: 학부모 관리 현황) — 판정은 화면·서버와 같은
-   * `canManageParentAccountsRole` 한 벌이다. 메뉴 권한(menuKey)은 그대로 먼저 본다.
+   * `menuKey` 권한에 **더해** 이 권한도 열려 있어야 선다 — 셔틀 관리자 화면(`shuttle_admin`)은 셔틀 권한 위 조건이다(원장 2026-11-10).
+   * 판정은 서버 문(`canOpenShuttleAdmin`)과 같은 두 권한 — 부모(셔틀)를 못 보는 사람에게 대신 입구로도 서지 않는다(`standInsOf`가 이 판정을 지난다).
+   * (전에는 `adminOnly` — 코드의 원장·관리자 역할 비교였다. 2026-11-10 권한 줄로 바꿨다.)
    */
-  adminOnly?: boolean;
+  alsoNeeds?: MenuKey;
   /** 업체리스트 지정자 전용(학원 설정 '개인별 기능 권한 · 업체리스트') — 판정은 `canViewVendorsNow` 한 벌(레이아웃이 계산해 넘긴다). */
   vendorsOnly?: boolean;
   /** 부차 도구 — 큰 버튼이 아니라 아래 작은 줄로 그린다(자주 쓰는 것과 가끔 쓰는 것을 가른다). */
@@ -222,7 +223,7 @@ export const HUB_GROUPS: HubGroup[] = [
       face("inventory", "/inventory?tab=vendors", "업체리스트", "거래처 연락처", { vendorsOnly: true }),
       // 학부모 관리 현황 — 원장·관리자 전용. 셔틀 탭 줄에는 없고 입구는 여기 하나다(navigation.ts 주석).
       // ⚠️ 아이콘을 따로 안 준다 — 남은 스티커 중 '학부모'에 맞는 그림이 없어 셔틀 그림을 물려받는다.
-      face("shuttle", SHUTTLE_PARENTS_PATH, "학부모 관리 현황", "학부모 계정·연결 원생", { tool: true, adminOnly: true }),
+      face("shuttle", SHUTTLE_PARENTS_PATH, "학부모 관리 현황", "학부모 계정·연결 원생", { tool: true, menuKey: "shuttle_admin", alsoNeeds: "shuttle" }),
     ]),
   },
   // 시안(aywa-next 이식): 조직·OKR · 홍보·마케팅. 권한 = 제 키(okr · marketing — 2026-11-09 권한 줄 정비. 전엔 대시보드 권한으로 메뉴만 세우고
@@ -313,15 +314,16 @@ export const INNER_TABS: { parent: string; items: HubDest[] }[] = [
   {
     parent: "/shuttle",
     items: keep([
-      // 탑승 학생 시간표(2026-10-27) — 노선 편성 바로 뒤 · 🔒 원장·관리자·총괄 전용(화면은 isShuttleAdmin 404).
-      face("shuttle", "/shuttle/classes", "탑승 학생 시간표", undefined, { icon: "layers", adminOnly: true }),
+      // 탑승 학생 시간표(2026-10-27) — 노선 편성 바로 뒤 · 🔒 '셔틀 관리자 화면' 권한(shuttle_admin · 셔틀 권한 위 조건 — 화면은 isShuttleAdmin 404).
+      face("shuttle", "/shuttle/classes", "탑승 학생 시간표", undefined, { icon: "layers", menuKey: "shuttle_admin", alsoNeeds: "shuttle" }),
       face("shuttle", "/shuttle/week", "주간 시간표", undefined, { icon: "calendarClock" }),
       face("shuttle", "/shuttle/today", "오늘 등하원", undefined, { icon: "busStop" }),
       face("shuttle", "/shuttle/parent-rides", "학부모 등하원"),
       face("shuttle", "/shuttle/live", "운행 현황", undefined, { icon: "steering" }),
-      face("shuttle", "/shuttle/track", "실시간 위치", undefined, { icon: "mapPin" }),
-      // 가까운 노선 찾기(2026-10-27) — 학부모 탭 4와 같은 화면 · 🔒 원장·관리자·총괄 전용(화면은 isShuttleAdmin 404).
-      face("shuttle", "/shuttle/nearby", "가까운 노선 찾기", undefined, { icon: "search", adminOnly: true }),
+      // 실시간 위치 — 같은 '셔틀 관리자 화면' 권한(전엔 표식이 없어 검색에 셔틀을 보는 모두에게 섰다가 눌러도 404였다).
+      face("shuttle", "/shuttle/track", "실시간 위치", undefined, { icon: "mapPin", menuKey: "shuttle_admin", alsoNeeds: "shuttle" }),
+      // 가까운 노선 찾기(2026-10-27) — 학부모 탭 4와 같은 화면 · 🔒 '셔틀 관리자 화면' 권한(화면은 isShuttleAdmin 404).
+      face("shuttle", "/shuttle/nearby", "가까운 노선 찾기", undefined, { icon: "search", menuKey: "shuttle_admin", alsoNeeds: "shuttle" }),
     ]),
   },
 ];
@@ -444,8 +446,8 @@ function allowed(dest: HubDest, gate: Gate): boolean {
   if (dest.masterOnly && !gate.isMaster) return false;
   if (dest.genericOnly && !gate.isGenericTenant) return false;
   if (dest.vendorsOnly && !gate.canViewVendors) return false;
-  // isMaster = master ∪ 총괄 — 총괄을 넘기는 자리가 그것뿐이라 그대로 싣는다.
-  if (dest.adminOnly && !canManageParentAccountsRole(gate.systemRole, !!gate.isMaster)) return false;
+  // 셔틀 관리자 화면 = 셔틀 권한 위 조건(서버 canOpenShuttleAdmin과 같은 두 권한).
+  if (dest.alsoNeeds && !canAccess(gate.systemRole, dest.alsoNeeds, gate.permMatrix)) return false;
   // 🔴 권한 **뒤에** 본다 — 순서를 바꿔도 결과는 같지만, "권한이 먼저 거른다"가 이 설정의 정의다.
   if (isMenuHiddenByLayout(dest.href, gate.menuLayout)) return false;
   return true;

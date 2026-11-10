@@ -15,6 +15,7 @@ import {
   resolveMatrix,
   SYSTEM_ROLES,
   roleHome,
+  SHUTTLE_ADMIN_ROLES,
   type MenuKey,
   type UserPermissionOverride,
 } from "./permissions";
@@ -252,24 +253,12 @@ describe("새 권한의 기본값 = 원장 '전체' · 나머지 '없음'(원장
       why: "연결 앱 결정(tenant.md 2026-11-05) — 오늘 수학은 강사 이상(원장·관리자·매니저·강사)에게 열린 채 시작한다",
       access: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
     },
-    // 2026-11-09 추가: docs/decisions/staff.md '권한 줄 정비' — 시안 화면 넷은 권한 줄을 만들기 **전에도** 원장 아닌 역할에게 열려 있었다
-    // (코드의 역할 판정 · 대시보드 권한). 줄을 만들면서 그 사람들을 잠그지 않으려고 옛 문 그대로를 **원장 결정 전 임시안**으로 둔다.
-    // 원장이 기본값을 정하면 그 값으로 바꾸고 여기서 뺀다(원장만 '전체'로 정하면 이 줄을 지운다).
-    management: {
-      why: "임시안(원장 결정 필요) — 옛 문 = 대시보드 권한 + 원장·관리자(features/mockup/access.ts)",
+    // 2026-11-10 추가: docs/decisions/staff.md — 원장 11-10 결정 '기존 동작 유지'. 셔틀 관리자 화면(학부모 관리 현황 · 탑승 학생 시간표 · 가까운 노선 찾기 ·
+    // 실시간 위치)은 권한 줄을 만들기 전 코드가 원장·관리자에게 열었다. 원장·관리자 칸만 바꿀 수 있다(학부모 계정 DB 정책 0320a와 같은 두 역할).
+    // (시안 넷 — management · okr · marketing · work_records — 은 같은 날 원장 결정으로 규칙대로(원장만) 확정돼 여기서 뺐다.)
+    shuttle_admin: {
+      why: "원장 11-10 결정: 기존 동작 유지 — 셔틀 관리자 화면은 원장·관리자 '전체'(셔틀 권한 위 조건 · 학부모 계정 DB 정책 0320a와 같은 두 역할)",
       access: { master: "full", admin: "full", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
-    },
-    okr: {
-      why: "임시안(원장 결정 필요) — 옛 문 = 원장·관리자·매니저(organization-okr/sample-access.ts)",
-      access: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
-    },
-    marketing: {
-      why: "임시안(원장 결정 필요) — 옛 문 = 원장·관리자·매니저(marketing/sample-access.ts)",
-      access: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
-    },
-    work_records: {
-      why: "임시안(원장 결정 필요) — 옛 문 = 대시보드 권한(requireAccess(\"dashboard\")) → 대시보드 기본값 그대로",
-      access: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "scoped", accountant: "scoped", viewer: "readonly", parttime: "none", student: "none" },
     },
   };
   // 새 연결 앱은 원장도 '없음'으로 시작한다(원장 2026-11-05 *"새 연동앱은 전부 꺼짐으로 기본값"*) — 켜는 것은 '연결 앱 권한' 표에서.
@@ -340,7 +329,34 @@ describe("학원 비서 권한(assistant · 원장 2026-11-09 *\"기본 디폴�
 
   it("연결 앱의 전체·없음 규칙은 그대로다(같은 함수로 묶었다)", () => {
     for (const menu of CONNECTED_APP_MENU_KEYS) expect(isOnOffMenu(menu), menu).toBe(true);
-    expect(MENU_KEYS.filter((menu) => isOnOffMenu(menu)).sort()).toEqual([...CONNECTED_APP_MENU_KEYS, "assistant"].sort());
+    expect(MENU_KEYS.filter((menu) => isOnOffMenu(menu)).sort()).toEqual([...CONNECTED_APP_MENU_KEYS, "assistant", "shuttle_admin"].sort());
+  });
+});
+
+describe("시안 화면 넷 = 원장만(원장 2026-11-10 결정) · 셔틀 관리자 화면 = 원장·관리자(기존 동작 유지)", () => {
+  const masterOnly = Object.fromEntries(SYSTEM_ROLES.map((role) => [role, role === "master" ? "full" : "none"]));
+  it("🔴 시안 넷은 새 권한 규칙 그대로 — 원장 '전체' · 나머지 '없음'(관리자·매니저·상담·회계·열람에게 안 열린다)", () => {
+    for (const menu of ["management", "okr", "marketing", "work_records"] as const) {
+      expect(MENU_ACCESS[menu], menu).toEqual(masterOnly);
+      for (const role of ["admin", "manager", "counselor", "accountant", "viewer"] as const) expect(canAccess(role, menu), `${menu}·${role}`).toBe(false);
+    }
+  });
+
+  it("셔틀 관리자 화면 = 원장·관리자 '전체' · 칸은 전체·없음만 · 원장·관리자 칸만 바꿀 수 있다(학부모 계정 DB 정책과 같은 두 역할)", () => {
+    expect(MENU_ACCESS.shuttle_admin.master).toBe("full");
+    expect(MENU_ACCESS.shuttle_admin.admin).toBe("full");
+    expect(SHUTTLE_ADMIN_ROLES).toEqual(["master", "admin"]);
+    for (const role of SYSTEM_ROLES) {
+      expect(isPermissionLocked("shuttle_admin", role, "scoped"), role).toBe(true);
+      expect(isPermissionLocked("shuttle_admin", role, "readonly"), role).toBe(true);
+      const changeable = role === "master" || role === "admin";
+      expect(isPermissionLocked("shuttle_admin", role, "full"), role).toBe(!changeable);
+      if (!changeable) expect(MENU_ACCESS.shuttle_admin[role], role).toBe("none");
+    }
+    // 손으로 넣은 매니저 '전체'는 적용하지 않는다(DB 정책이 학부모 계정을 안 보여 줘 화면만 열리는 일이 없게).
+    expect(resolveMatrix([{ menu: "shuttle_admin", role: "manager", access: "full" }]).shuttle_admin.manager).toBe("none");
+    // 관리자 칸은 원장이 닫을 수 있다.
+    expect(resolveMatrix([{ menu: "shuttle_admin", role: "admin", access: "none" }]).shuttle_admin.admin).toBe("none");
   });
 });
 

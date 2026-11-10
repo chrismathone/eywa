@@ -1345,6 +1345,8 @@ export const MENU_ICON = {
   okr: "target",
   marketing: "barChart",
   work_records: "filePlus",
+  // 셔틀 관리자 화면(2026-11-10 권한 키) — 메뉴 타일이 아니라 셔틀 아래 권한 줄 · 그 화면들은 제 그림(layers·search·mapPin)을 쓴다. 자리 그림(방패+체크).
+  shuttle_admin: "shieldCheck",
   // 연결 앱 권한(메뉴 화면이 아니다) — 사이드바 '연결 앱'의 오늘 수학 줄과 같은 그림(connected-app-rail.tsx).
   app_todays_math: "calculator",
 } as const satisfies Record<MenuKey, AywaIconName>;

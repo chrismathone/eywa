@@ -79,6 +79,7 @@ export const ROW_NOTE: Partial<Record<MenuKey, string>> = {
   okr: SAMPLE_NOTE,
   marketing: SAMPLE_NOTE,
   work_records: SAMPLE_NOTE,
+  shuttle_admin: "학부모 관리 현황 · 탑승 학생 시간표 · 가까운 노선 찾기 · 실시간 위치 — 셔틀 권한이 있어야 열립니다. 학부모 계정(로그인 이메일·연락처)을 다루는 화면이라 원장·관리자 칸만 바꿀 수 있습니다.",
 };
 
 /**
@@ -92,6 +93,9 @@ const INNER_PARENT: Partial<Record<MenuKey, MenuKey>> = {
   integrations: "students", // 원생목록의 '지금 동기화'(콜&상담의 '보내기'도 이 권한)
   student_english_name: "students", // 원생목록 - 영어이름: 영문 이름 한 칸 편집
   teacher_view: "staff",
+  // 셔틀 관리자 화면(원장 2026-11-10) — 학부모 관리 현황(학원운영 도구 버튼) · 탑승 학생 시간표 · 가까운 노선 찾기 · 실시간 위치(셔틀 화면 위 탭).
+  // 버튼이 있어도 셔틀 줄 바로 아래(└)에 세운다 — 셔틀 권한 위 조건이라 셔틀과 함께 읽혀야 한다(아래 `rowsAt`이 버튼 자리에 줄을 세우지 않는다).
+  shuttle_admin: "shuttle",
 };
 
 /** `listed` = '이 권한으로 열리는 메뉴'에 이름을 적는 목적지(원장만 들어가는 면은 적지 않는다 — 감춤 판정에는 센다). */
@@ -144,8 +148,9 @@ export function permissionRowGroups(navigation?: PermissionNavigation, options?:
     primary.set(menu, own && sourceDests.some((d) => d.href === own) ? own : sourceDests.find((d) => d.menuKey === menu)!.href);
   }
   // 한 자리에 두 줄이 서면 그 주소의 주인(메뉴 자신)이 먼저다.
+  // `INNER_PARENT`에 속할 화면을 적은 권한은 메뉴 버튼이 있어도 그 화면 줄 아래에 들여 세운다(셔틀 관리자 화면 — 2026-11-10).
   const rowsAt = (d: HubDest): MenuKey[] =>
-    [...used].filter((menu) => primary.get(menu) === d.href).sort((a, b) => Number(b !== d.menuKey) - Number(a !== d.menuKey));
+    [...used].filter((menu) => primary.get(menu) === d.href && !INNER_PARENT[menu]).sort((a, b) => Number(b !== d.menuKey) - Number(a !== d.menuKey));
 
   const configured = configuredHubGroups(source, menus, navigation?.groups, true);
   const placed = new Map<MenuKey, Placed>();
@@ -181,12 +186,13 @@ export function permissionRowGroups(navigation?: PermissionNavigation, options?:
   };
   const innerOf = new Map<MenuKey, MenuKey[]>();
   for (const menu of MENU_KEYS) {
-    if (placed.has(menu)) continue;
+    if (placed.has(menu) && !INNER_PARENT[menu]) continue;
     const parent = parentOf(menu);
     if (!parent || parent === menu || !placed.has(parent)) continue;
     innerOf.set(parent, [...(innerOf.get(parent) ?? []), menu]);
   }
-  const taken = new Set<MenuKey>([...placed.keys(), ...[...innerOf.values()].flat()]);
+  // 실제로 줄이 선 권한만 — 버튼이 있어도 들여 세우는 권한(INNER_PARENT)은 부모가 없으면 '메뉴에 없는 화면'으로 떨어져 사라지지 않는다.
+  const taken = new Set<MenuKey>([...groups.flatMap((g) => g.keys), ...[...innerOf.values()].flat()]);
 
   const out: PermissionRowGroup[] = groups
     .map((g) => ({

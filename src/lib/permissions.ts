@@ -90,6 +90,7 @@ export const MENU_KEYS = [
   "okr", // 조직·OKR(시안)
   "marketing", // 연간 운영계획 · 홍보·마케팅(시안)
   "work_records", // 업무 작성센터(시안)
+  "shuttle_admin", // 셔틀 관리자 화면(학부모 관리 현황 · 탑승 학생 시간표 · 가까운 노선 찾기 · 실시간 위치) — 셔틀 권한 위 조건
   // 연결 앱(왼쪽 '연결 앱'의 바깥 앱 링크) — 앱마다 한 키. 아래 CONNECTED_APP_MENU_KEYS에도 함께 적는다.
   "app_todays_math",
 ] as const;
@@ -109,14 +110,16 @@ export function isConnectedAppMenu(menu: string): boolean {
 export const CONNECTED_APP_ACCESS_MESSAGE = "연결 앱 권한은 전체·없음 중에서 선택해 주세요";
 
 /**
- * 칸이 **전체·없음만** 뜻이 있는 권한 — 연결 앱(링크를 세우나 마나) · 학원 비서(쓰나 마나).
+ * 칸이 **전체·없음만** 뜻이 있는 권한 — 연결 앱(링크를 세우나 마나) · 학원 비서(쓰나 마나) · 셔틀 관리자 화면(여나 마나 — 2026-11-10).
  * 학원 비서는 지점 자료 전부를 읽는 전용 DB 역할로 조회해(`src/features/assistant/server/executor.ts`) '담당'(본인 반만)·'읽기'로 좁힐 수 없다 —
  * 두 값을 열어 두면 표에는 좁은 값이 적히는데 실제로는 '전체'와 같이 열린다(강사보다 낮은 직급의 '담당' 금지와 같은 까닭).
  * 판정 = `isPermissionLocked`(담당·읽기 잠금) · 칸 순환(`permissionAccessOptions`) · 저장 거절(`onOffAccessMessage`)이 함께 이 함수를 본다.
  */
 export function isOnOffMenu(menu: string): boolean {
-  return isConnectedAppMenu(menu) || menu === "assistant";
+  return isConnectedAppMenu(menu) || menu === "assistant" || menu === "shuttle_admin";
 }
+/** 셔틀 관리자 화면(`shuttle_admin`)을 줄 수 있는 역할 — 학부모 계정 표의 DB 정책(0320a `parent_accounts_tenant_read`)과 같은 두 역할. */
+export const SHUTTLE_ADMIN_ROLES = ["master", "admin"] as const;
 /** 위 권한에 '담당'·'읽기'를 실은 저장 요청의 거절 문구 — 연결 앱은 종전 문구 그대로. */
 export function onOffAccessMessage(menu: MenuKey): string {
   return isConnectedAppMenu(menu) ? CONNECTED_APP_ACCESS_MESSAGE : `${MENU_LABEL[menu]} 권한은 전체·없음 중에서 선택해 주세요`;
@@ -187,6 +190,7 @@ export const MENU_LABEL: Record<MenuKey, string> = {
   okr: "조직·OKR",
   marketing: "홍보·마케팅",
   work_records: "업무 작성센터",
+  shuttle_admin: "셔틀 관리자 화면",
   app_todays_math: "오늘 수학(연결 앱)",
 };
 export type MenuKey = (typeof MENU_KEYS)[number];
@@ -366,15 +370,19 @@ export const MENU_ACCESS: AccessMatrix = {
   // 🔴 비서는 **지점 자료 전부**(급여·계약·연락처·계좌 포함)를 읽는다 — 다른 역할에 열면 그 사람도 전부를 묻고 본다(권한 표 줄 설명이 같은 말을 한다).
   //    판정 = assistantViewer()(src/features/assistant/server/gate.ts) 한 곳 — 서버 라우트 전부와 셸 레이아웃의 단추·단축키가 같은 함수를 지난다.
   assistant: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
-  // ── 시안 화면(2026-11-09 이식 · 예시 값만 · DB를 읽지 않는다) — 🔴 기본값은 **원장 결정 전 임시안**이다(docs/decisions/staff.md 2026-11-09).
-  //    권한 줄을 만들기 전 코드가 열던 역할을 그대로 옮겼다(줄을 만들면서 지금 쓰는 사람을 잠그지 않으려고). 가드 permissions.test.ts가 이 값을 따로 고정한다.
-  // 경영 분석 · 스키마·지식그래프 — 옛 문 = 대시보드 권한 + 원장·관리자(features/mockup/access.ts).
-  management: { master: "full", admin: "full", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
-  // 조직·OKR · 연간 운영계획·홍보·마케팅 — 옛 문 = 원장·관리자·매니저(각 sample-access.ts).
-  okr: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
-  marketing: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
-  // 업무 작성센터 — 옛 문 = 대시보드 권한(requireAccess("dashboard")) → 대시보드 기본값과 같은 값.
-  work_records: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "scoped", accountant: "scoped", viewer: "readonly", parttime: "none", student: "none" },
+  // ── 시안 화면(2026-11-09 이식 · 예시 값만 · DB를 읽지 않는다) — 원장 2026-11-10 결정: **원장 '전체' · 나머지 '없음'**(새 권한 규칙 그대로).
+  //    다른 역할에게는 원장이 역할·권한 면에서 연다. 메뉴 버튼 · 운영실 핵심 업무 칸(canOpenCore) · 페이지 문이 같은 키를 본다.
+  // 경영 분석 · 스키마·지식그래프(features/mockup/access.ts).
+  management: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  // 조직·OKR(organization-okr/sample-access.ts) · 연간 운영계획·홍보·마케팅(marketing/sample-access.ts).
+  okr: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  marketing: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  // 업무 작성센터(work-records 페이지 둘).
+  work_records: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  // 셔틀 관리자 화면(원장 2026-11-10 결정 *"기존 동작 유지"*) — 학부모 관리 현황 · 탑승 학생 시간표 · 가까운 노선 찾기 · 실시간 위치(같은 탭 줄 · 같은 문).
+  // 🔴 셔틀 권한 **위에 덧붙는 조건**이다 — 셔틀 권한이 없으면 못 연다(판정 canOpenShuttleAdmin · features/shuttle/admin-access.ts).
+  // 칸은 전체·없음만(isOnOffMenu) · 원장·관리자 칸만 바꿀 수 있다(SHUTTLE_ADMIN_ROLES — 학부모 계정 표의 DB 정책 0320a가 이 두 역할에게만 읽기를 연다).
+  shuttle_admin: { master: "full", admin: "full", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // 연결 앱 '오늘 수학'(원장 2026-11-05 *"지금 하나 있는 '오늘 수학'은 강사 이상에게 열림"*) — 강사 이상 = 원장·관리자·매니저(실장)·강사(권한 표의 강사 왼쪽 칸 ·
   // 오늘 수학 쪽 로그인 자격 tm_sync_control과 같은 네 역할 — 상담·회계는 링크를 눌러도 로그인되지 않는다). 상담·회계·열람·아르바이트·학생은 없음.
   // 영어만 맡은 선생님은 이 값과 따로 과목 축으로 빠진다(connected-apps/apps.ts). 새 연결 앱은 전부 없음으로 시작한다.
@@ -552,6 +560,9 @@ export function isPermissionLocked(menu: MenuKey, role: SystemRole, access: Acce
   // 학원 비서는 강사에게 열 수 없다 — 강사 화면(미니셸)엔 비서 단추·단축키가 없어 열어도 쓸 곳이 없고(저장만 되는 칸),
   // 비서는 담당 범위 없이 지점 자료 전부를 읽는다(아래 대시보드 강사 잠금과 같은 결).
   if (menu === "assistant" && role === "teacher") return true;
+  // 셔틀 관리자 화면은 원장·관리자 칸만 — 학부모 관리 현황의 학부모 계정(로그인 이메일·연락처)은 DB 정책(0320a)이 이 두 역할에게만 읽기를 연다.
+  // 다른 역할에 열려면 그 정책을 먼저 넓혀야 한다(화면은 열리는데 목록이 비는 일이 없게).
+  if (menu === "shuttle_admin" && !(SHUTTLE_ADMIN_ROLES as readonly SystemRole[]).includes(role)) return true;
   if (ROLE_LOCKED_MENUS.has(menu)) return true;
   // 대시보드 집계는 테넌트 전체 데이터다. 강사 scoped 쿼리가 마련되기 전까지는
   // 강사에게 메뉴를 열면 담당 범위를 넘어 학생·출결 데이터가 노출되므로 override를 막는다.
