@@ -34,8 +34,11 @@ function arc(from: number, to: number): string {
   return `M${x1},${y1} A${R_OUT},${R_OUT} 0 0 1 ${x2},${y2} L${x3},${y3} A${R_IN},${R_IN} 0 0 0 ${x4},${y4} Z`;
 }
 
-/** 값 → 색 — 0%에 가까울수록 빨강, 100%에 가까울수록 파랑(원장 2026-11-10 *"바로바로 티나게"*). 의미색 토큰만 섞는다. */
-const rateColor = (v: number) => `color-mix(in srgb, var(--danger) ${Math.round(100 - v)}%, var(--blue))`;
+/**
+ * 값 → 색 — 0%에 가까울수록 빨강, 100%에 가까울수록 파랑(원장 2026-11-10 *"바로바로 티나게"*). 의미색 토큰만 섞는다.
+ * 파랑은 범주 색 `--cat-blue` — 차콜 테마가 `--blue`를 회색으로 덮어 '빨강 → 회색'이 되던 것(원장 결정 2026-11-10: 구별이 뜻인 색은 테마에서 뺀다).
+ */
+const rateColor = (v: number) => `color-mix(in srgb, var(--danger) ${Math.round(100 - v)}%, var(--cat-blue))`;
 /** 칸 색 = 그 칸 가운데 값의 색 — 빨강 → 파랑 5단. */
 const bandColor = (i: number) => rateColor(((i + 0.5) * 100) / BANDS);
 
