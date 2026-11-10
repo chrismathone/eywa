@@ -1,5 +1,5 @@
 import { schoolGradeLabel } from "@/lib/format/school-grade";
-import { add, cellOf, earlyDoneOf, EMPTY, MATRIX_COLUMNS, MIN_JUDGE, upcomingOf, type AttentionRow, type Cell, type ClassInfo, type OwnerInfo, type RollupClass, type RollupOwnerKind, type RollupStudent, type StudentInfo } from "./view-admin";
+import { add, cellOf, earlyDoneOf, EMPTY, MATRIX_COLUMNS, MIN_JUDGE, upcomingOf, type AttentionRow, type Cell, type ClassInfo, type OwnerInfo, type RollupClass, type RollupOwnerKind, type RollupStudent, type StudentInfo, dutyTier, tierTone, type DutyTier } from "./view-admin";
 
 /**
  * 단계별 보기(과목 → 선생님 → 반 → 학생)의 순수 조립 — 원장 2026-11-10 *"과목별 - 선생님별 - 반별 - 학생별로 디테일 될 수 있게 … 이 선생님이 뭘 안했는지,
@@ -7,27 +7,33 @@ import { add, cellOf, earlyDoneOf, EMPTY, MATRIX_COLUMNS, MIN_JUDGE, upcomingOf,
  */
 
 /**
- * 잘하고 있나 — **기한이 온 의무 중 제때 끝낸 비율**(90/70 경계). 기한 전 의무(말일이 기한인 월 상담 · 아직 수업 전인 오늘)는 판정에 안 든다 —
+ * 잘하고 있나 — **기한이 온 의무 중 제때 끝낸 비율**을 로열티와 같은 9등급으로(`dutyTier` — 96%+ 1등급 … 4% 미만 9등급 · `grade`는 그 등급의 색 묶음). 기한 전 의무(말일이 기한인 월 상담 · 아직 수업 전인 오늘)는 판정에 안 든다 —
  * 그것까지 세면 달 초·수업 전에 전원 '미흡'이 된다(원장 계정 화면 2026-11-10 — 14명 전원 미흡). 기한 온 것이 3건 미만이면 등급 없이 '평가 대기'.
  * 🔴 지연이 오래됐다는 이유로 등급을 덮어쓰지 않는다 — 준수율(실적)과 지금 손댈 것(지연 수)은 다른 숫자다. 근거 한 줄은 숫자로.
  */
-export type Verdict = { grade: "good" | "warn" | "bad" | "wait" | "none"; label: string; reason: string };
-export const VERDICT_LABEL: Record<Verdict["grade"], string> = { good: "양호", warn: "주의", bad: "미흡", wait: "평가 대기", none: "해당 없음" };
+export type Verdict = { grade: "good" | "warn" | "bad" | "wait" | "none"; /** 1~9등급(평가 대기 · 해당 없음은 null). */ tier: DutyTier | null; label: string; reason: string };
+export const VERDICT_LABEL = { wait: "평가 대기", none: "해당 없음" } as const;
 export type Avg = { pct: number | null; label: string };
 export function judge(cell: Cell, avg: Avg | null = null): Verdict {
-  if (!cell.total) return { grade: "none", label: VERDICT_LABEL.none, reason: "" };
-  const up = upcomingOf(cell);
-  const parts: string[] = [];
-  if (cell.due) parts.push(`준수 ${cell.ontime}/${cell.due}${cell.pct === null ? "" : `(${cell.pct}%)`}`);
-  if (cell.late) parts.push(`지연 ${cell.late}`);
-  if (cell.lateDone) parts.push(`지연 완료 ${cell.lateDone}`);
-  if (cell.expired) parts.push(`미이행 확정 ${cell.expired}`);
-  if (up) parts.push(`기한 전 ${up}`);
-  const early = earlyDoneOf(cell); if (early) parts.push(`조기 완료 ${early}`);
-  if (cell.pct === null || cell.due < MIN_JUDGE) return { grade: "wait", label: VERDICT_LABEL.wait, reason: parts.join(" · ") };
-  const grade: Verdict["grade"] = cell.pct >= 90 ? "good" : cell.pct >= 70 ? "warn" : "bad";
-  if (avg && avg.pct !== null && cell.pct !== avg.pct) parts.push(`${avg.label} ${avg.pct}%보다 ${cell.pct > avg.pct ? "높음" : "낮음"}`);
-  return { grade, label: VERDICT_LABEL[grade], reason: parts.join(" · ") };
+  if (!cell.total) return { grade: "none", tier: null, label: VERDICT_LABEL.none, reason: "" };
+  const n = (v: number) => v.toLocaleString("ko-KR");
+  const up = upcomingOf(cell); const early = earlyDoneOf(cell);
+  // 근거는 문장으로(원장 2026-11-10 *"이런 날것말고 정리된 멘트로"*) — ① 기한 내 처리 ② 평균과의 차이 ③ 늦거나 못 한 것 ④ 남은 것.
+  const waiting = [up ? `기한 전 ${n(up)}건` : "", early ? `조기 완료 ${n(early)}건` : ""].filter(Boolean).join(", ");
+  const misses = [cell.lateDone ? `지연 완료 ${n(cell.lateDone)}건` : "", cell.expired ? `미이행 ${n(cell.expired)}건` : "", cell.late ? `현재 지연 ${n(cell.late)}건` : ""].filter(Boolean).join(", ");
+  if (cell.pct === null || cell.due < MIN_JUDGE) {
+    const head = cell.due ? `기한이 도래한 업무가 ${n(cell.due)}건뿐이라 등급을 매기지 않습니다.` : "아직 기한이 도래한 업무가 없습니다.";
+    return { grade: "wait", tier: null, label: VERDICT_LABEL.wait, reason: [head, misses ? `${misses}.` : "", waiting ? `${waiting}.` : ""].filter(Boolean).join(" ") };
+  }
+  const tier = dutyTier(cell.pct);
+  const diff = avg && avg.pct !== null ? cell.pct - avg.pct : null;
+  const sentences = [
+    `기한 도래 ${n(cell.due)}건 중 ${n(cell.ontime)}건을 기한 내 처리했습니다(${cell.pct}%).`,
+    diff === null || !avg ? "" : diff === 0 ? `${avg.label} 평균과 같습니다.` : `${avg.label} 평균 ${avg.pct}%보다 ${Math.abs(diff)}%p ${diff > 0 ? "높습니다" : "낮습니다"}.`,
+    misses ? `${misses}.` : "",
+    waiting ? `${waiting}.` : "",
+  ];
+  return { grade: tierTone(tier), tier, label: `${tier}등급`, reason: sentences.filter(Boolean).join(" ") };
 }
 
 export type TreeClass = { classId: string; name: string; cell: Cell };
@@ -154,4 +160,18 @@ export function foldAttention(rows: readonly AttentionRow[], by: "owner" | "clas
   }
   return [...groups.values()].map(({ kinds, ids, ...g }) => ({ ...g, students: ids.size, sub: ids.size ? `${ids.size}명` : "", summary: [...kinds.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(" · ") }))
     .sort((a, b) => b.days - a.days || b.count - a.count || a.title.localeCompare(b.title, "ko"));
+}
+
+/** 등수 한 줄 — rank null = 등급 전(기한 도래 3건 미만 — 등수를 매기지 않고 맨 뒤에). */
+export type RankRow = { rank: number | null; ownerId: string; name: string; cell: Cell; verdict: Verdict };
+/**
+ * 선생님 등수 — **기한 준수율 높은 순**(원장 2026-11-10 *"전체를 눌렀을때 과목별로 관리 등수 랭킹 … 전체 등수 랭킹도"* · *"항목별 랭킹도"*).
+ * `kind`를 주면 그 업무 종류의 칸으로, 없으면 전체 %로 매긴다(그 종류의 의무가 없는 사람은 뺀다).
+ * 같은 %는 같은 등수(1 · 1 · 3 — 다음 등수는 건너뛴다) · 같은 등수 안에서는 기한 도래가 많은 사람 먼저. 등급이 없는 사람은 등수 없이 뒤에. '담당 미정'은 사람이 아니라 뺀다.
+ */
+export function rankOwners(owners: readonly TreeOwner[], kind: string | null = null): RankRow[] {
+  const rows = owners.filter((o) => o.ownerId !== NO_OWNER).flatMap((o) => { const cell = kind ? o.cells[kind] : o.cell; return cell && cell.total ? [{ ownerId: o.ownerId, name: o.name, cell, verdict: judge(cell) }] : []; });
+  const judged = rows.filter((r) => r.verdict.tier !== null).sort((a, b) => b.cell.pct! - a.cell.pct! || b.cell.due - a.cell.due || a.name.localeCompare(b.name, "ko"));
+  const waiting = rows.filter((r) => r.verdict.tier === null).sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  return [...judged.map((r): RankRow => ({ ...r, rank: judged.findIndex((x) => x.cell.pct === r.cell.pct) + 1 })), ...waiting.map((r): RankRow => ({ ...r, rank: null }))];
 }

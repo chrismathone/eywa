@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adminRange, buildAttention, cellOf, cellTitle, cellTone, distinctStudents, earlyDoneOf, progressText, foldMatrixRows, lateByKind, lateLabel, pctOf, upcomingOf, type Counts, type LateItem, type RollupOwnerKind } from "./view-admin";
+import { adminRange, buildAttention, cellOf, cellTitle, cellTone, distinctStudents, earlyDoneOf, progressText, foldMatrixRows, lateByKind, lateLabel, pctOf, upcomingOf, type Counts, type LateItem, type RollupOwnerKind, dutyTier } from "./view-admin";
 
 /** 셈 한 묶음 — total · done · due(기한 온 것) · ontime(제때) · late(지금 지연). 나머지는 0에서 덮어쓴다. */
 const c = (total: number, done: number, due: number, ontime: number, late = 0, o: Partial<Counts> = {}): Counts => ({ total, done, due, ontime, late, lateDone: 0, expired: 0, over7: 0, ...o });
@@ -24,13 +24,17 @@ describe("기한 준수율 · 칸 색", () => {
     // 출결 10건이 기한이 왔고 8건 준수 · 1건 지연 완료 · 1건 지금 지연 = 80%(늦게 끝낸 것은 분모에만).
     expect(pctOf(c(40, 12, 10, 8, 1, { lateDone: 1 }))).toBe(80);
   });
-  it("칸 색 — 해당 없음 · 기한 온 것 3건 미만은 중립(평가 대기) · 90/70 경계", () => {
+  it("칸 색 — 해당 없음 · 기한 온 것 3건 미만은 중립(평가 대기) · 그 밖은 등급의 색 묶음", () => {
     expect(cellTone(cellOf(c(0, 0, 0, 0)))).toBe("none");
     expect(cellTone(cellOf(c(30, 3, 0, 0)))).toBe("wait");
     expect(cellTone(cellOf(c(5, 0, 2, 0, 2)))).toBe("wait");
     expect(cellTone(cellOf(c(10, 9, 10, 9, 1)))).toBe("good");
     expect(cellTone(cellOf(c(10, 7, 10, 7, 3)))).toBe("warn");
-    expect(cellTone(cellOf(c(10, 6, 10, 6, 4)))).toBe("bad");
+    expect(cellTone(cellOf(c(10, 6, 10, 6, 4)))).toBe("warn");
+    expect(cellTone(cellOf(c(10, 5, 10, 5, 5)))).toBe("bad");
+  });
+  it("등급 경계 — 96 · 89 · 77 · 60 · 40 · 23 · 11 · 4(로열티의 누적 비율과 같은 수)", () => {
+    expect([100, 96, 95, 89, 88, 77, 76, 60, 59, 40, 39, 23, 22, 11, 10, 4, 3, 0].map(dutyTier)).toEqual([1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9]);
   });
   it("기한 전 남은 것 · 칸 설명은 숫자의 뜻을 글로", () => {
     const x = c(40, 12, 10, 8, 1, { lateDone: 1 });

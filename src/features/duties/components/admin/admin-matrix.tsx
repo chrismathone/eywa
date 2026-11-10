@@ -4,7 +4,7 @@ import { cellTitle, cellTone, MATRIX_COLUMNS, progressText, type Cell, type Cell
 import { judge, type Avg } from "../../view-admin-levels";
 import { VerdictBadge } from "./admin-verdict";
 
-/** 칸 색 — 기한 준수율 90%+ 초록 · 70~89 주황 · 70 미만 빨강 · 기한 전(평가 대기)·의무 없음은 중립. */
+/** 칸 색 — 등급의 색 묶음(1~2등급 초록 · 3~4 주황 · 5 이하 빨강 — `cellTone`) · 기한 전(평가 대기)·의무 없음은 중립. */
 export const TONE: Record<CellTone, string> = { good: "bg-green-soft text-green", warn: "bg-amber-soft text-amber", bad: "bg-danger-soft text-danger", wait: "bg-bg-soft text-text-dim", none: "bg-bg-soft text-text-placeholder" };
 const TH = "text-text-dim px-2 py-1.5 text-xs font-semibold";
 
@@ -18,7 +18,7 @@ export function AdminMatrix({ rows, total, avg = null, onCell }: { rows: MatrixR
     <table className="w-full border-separate border-spacing-1 text-center text-sm [&_th:first-child]:text-left">
       <thead><tr>
         <th className={TH}>선생님</th>
-        <th className={TH}>판정</th>
+        <th className={TH}>등급</th>
         {MATRIX_COLUMNS.map((c) => <th key={c.kind} className={TH}>{c.label}</th>)}
         <th className={TH}>전체</th>
       </tr></thead>

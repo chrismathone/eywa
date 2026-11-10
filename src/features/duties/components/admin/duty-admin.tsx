@@ -10,6 +10,7 @@ import { ClassPane, StudentPane, SubjectLevel } from "./admin-panes";
 import { NoteButton } from "./admin-note";
 import { DutyRequestScope, LateRequestButton } from "./admin-late-request";
 import { AdminOwnerBoard } from "./admin-owner-board";
+import { AdminRanking } from "./admin-ranking";
 import { AdminOverlay } from "./admin-overlay";
 import { AdminTree, ROOT, type Sel } from "./admin-tree";
 import { TeacherLevel } from "./admin-level-teacher";
@@ -156,9 +157,9 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
         {sel.studentId ? <StudentPane key={`${sel.studentId}|${fetchSubject ?? ""}`} period={period} tick={tick} studentId={sel.studentId} fetchSubject={fetchSubject} late={lateAll.filter((it) => !it.inherited && it.studentId === sel.studentId)} nowMs={nowMs} onWork={openWork} />
           : !subjectNode ? lateSection
           : classNode && ownerNode ? <ClassPane key={`${classNode.classId}|${ownerNode.ownerId}|${fetchSubject ?? ""}`} period={period} tick={tick} classNode={classNode} owner={ownerNode.ownerId} fetchSubject={fetchSubject} teacher={ownerNode.name} kind={sel.kind ?? null}
-              avg={{ pct: ownerNode.cell.pct, label: "선생님" }} onStudent={pickStudent} />
+              avg={{ pct: ownerNode.cell.pct, label: "선생님" }} onStudent={pickStudent} onWork={openWork} />
           : ownerNode ? <TeacherLevel owner={ownerNode} avg={subjectAvg} period={period} subject={fetchSubject} tick={tick} kind={sel.kind ?? null} onClearKind={() => go({ ...sel, kind: null })} onClass={(classId) => go({ ...sel, classId, studentId: null })} />
-          : <SubjectLevel node={subjectNode} lateOnly={lateOnly} board={atRoot && managers ? <AdminOwnerBoard tree={tree} late={cur.data.late} managers={managers} labels={scope.labels} nowMs={nowMs} onSubject={(subject) => go({ subject, owner: null, classId: null, studentId: null })} /> : null} avgLabel={atRoot ? "전체" : "과목"} lateText={lateByKind(cur.data.ownerKind, subjectKey)} attention={lateSection} onOwner={(ownerId, kind) => { setOpenKey(null); setSel({ ...sel, owner: ownerId, kind, classId: null, studentId: null }); }} />}
+          : <SubjectLevel node={subjectNode} lateOnly={lateOnly} board={atRoot ? <>{managers ? <AdminOwnerBoard tree={tree} late={cur.data.late} managers={managers} labels={scope.labels} nowMs={nowMs} onSubject={(subject) => go({ subject, owner: null, classId: null, studentId: null })} /> : null}<AdminRanking tree={tree} onOwner={(subject, owner, kind) => go({ subject, owner, kind, classId: null, studentId: null })} /></> : null} avgLabel={atRoot ? "전체" : "과목"} lateText={lateByKind(cur.data.ownerKind, subjectKey)} attention={lateSection} onOwner={(ownerId, kind) => { setOpenKey(null); setSel({ ...sel, owner: ownerId, kind, classId: null, studentId: null }); }} />}
 
         {!sel.studentId && subjectNode && ownerNode ? lateSection : null}
       </main>

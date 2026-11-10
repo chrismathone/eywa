@@ -39,7 +39,7 @@ export function TeacherLevel({ owner, avg, period, subject, tick, kind, onClearK
         : !lines.length ? <p className="text-text-dim mt-2 text-sm">해당 기간 업무 없음</p>
         : <div className="mt-2 overflow-x-auto">
           <table className="w-full border-separate border-spacing-1 text-center text-sm [&_th:first-child]:text-left">
-            <thead><tr><th className={TH}>반</th><th className={TH}>판정</th>{cols.map((c) => <th key={c.kind} className={TH}>{c.label}</th>)}{kind ? null : <th className={TH}>전체</th>}</tr></thead>
+            <thead><tr><th className={TH}>반</th><th className={TH}>등급</th>{cols.map((c) => <th key={c.kind} className={TH}>{c.label}</th>)}{kind ? null : <th className={TH}>전체</th>}</tr></thead>
             <tbody>
               {lines.map((l) => <tr key={l.classId}>
                 <td className="px-2 py-0.5 text-left">

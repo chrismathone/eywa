@@ -2,17 +2,27 @@
 
 import { progressText, type Cell } from "../../view-admin";
 import { judge, type TreeSubject } from "../../view-admin-levels";
+import { TierStars } from "@/features/student-contribution/components/relative-score";
 import { VerdictDot } from "./admin-verdict";
 
 /** 고른 자리 — subject가 undefined면 뿌리(전 과목). owner ""는 '담당 미정'. */
 export type Sel = { subject?: string | null; owner: string | null; classId: string | null; studentId: string | null; /** 매트릭스 칸으로 들어왔을 때의 업무 종류(그 종류만 보인다). */ kind?: string | null; /** 빵 부스러기에 적을 이름(고를 때 함께 싣는다). */ studentName?: string };
 export const ROOT: Sel = { subject: undefined, owner: null, classId: null, studentId: null };
 
-/** 기한 준수율 — 기한이 온 것이 없으면 진행(완료/전체). */
-const pctText = (c: Cell) => (c.pct === null ? progressText(c) : `${c.pct}%`);
+/**
+ * 줄 오른쪽 표시 — **별**(로열티와 같은 9등급 · 원장 2026-11-10 *"% 말고 이 선생님이 잘하고 있다는걸 확인해야하니까 왼쪽 리스트도 별로"*) + 붉은 지연 수.
+ * 등급이 없으면(기한 도래 3건 미만) 진행(완료/전체)만. 정확한 %는 마우스 오버에.
+ */
+function Mark({ cell }: { cell: Cell }) {
+  const v = judge(cell);
+  return <span className="flex shrink-0 items-center gap-1 text-xs font-semibold tabular-nums" title={v.tier && cell.pct !== null ? `${v.label} · 기한 준수 ${cell.pct}%` : undefined}>
+    {v.tier ? <TierStars tier={`${v.tier}등급`} /> : <span className="text-text-dim font-medium">{progressText(cell)}</span>}
+    {cell.late ? <span className="text-danger">{cell.late}</span> : null}
+  </span>;
+}
 
 /**
- * 왼쪽 트리 — 과목(둘 이상일 때만 머리) → 선생님 → 반(고른 선생님 아래만 편다). 줄마다 판정 점 · 기한 준수율(기한 전이면 완료/전체) · 이 기간 지연 수.
+ * 왼쪽 트리 — 과목(둘 이상일 때만 머리) → 선생님 → 반(고른 선생님 아래만 편다). 줄마다 등급 점 · 별(등급 전이면 완료/전체) · 이 기간 지연 수.
  * 지연만 = 지금 지연이 있는 선생님·반만.
  */
 export function AdminTree({ tree, multi, sel, lateOnly, onSelect }: { tree: TreeSubject[]; multi: boolean; sel: Sel; lateOnly: boolean; onSelect: (sel: Sel) => void }) {
@@ -29,7 +39,7 @@ export function AdminTree({ tree, multi, sel, lateOnly, onSelect }: { tree: Tree
         {multi ? <button type="button" onClick={() => onSelect({ subject: s.subject, owner: null, classId: null, studentId: null })} className={`${row} ${subjectOn && sel.owner === null ? on : ""}`}>
           <VerdictDot grade={judge(s.cell).grade} />
           <span className="flex-1 text-sm font-bold">{s.label}</span>
-          <span className="text-xs font-semibold tabular-nums">{pctText(s.cell)}{s.cell.late ? <span className="text-danger"> · {s.cell.late}</span> : null}</span>
+          <Mark cell={s.cell} />
         </button> : null}
         {owners.map((o) => {
           const ownerOn = subjectOn && sel.owner === o.ownerId;
@@ -38,13 +48,13 @@ export function AdminTree({ tree, multi, sel, lateOnly, onSelect }: { tree: Tree
             <button type="button" onClick={() => onSelect({ subject: s.subject, owner: o.ownerId, classId: null, studentId: null })} className={`${row} ${ownerOn && !sel.classId ? on : ""}`}>
               <VerdictDot grade={judge(o.cell).grade} />
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">{o.name}</span>
-              <span className="text-xs font-semibold tabular-nums">{pctText(o.cell)}{o.cell.late ? <span className="text-danger"> · {o.cell.late}</span> : null}</span>
+              <Mark cell={o.cell} />
             </button>
             {ownerOn ? <div className="grid gap-0.5 pl-4">
               {classes.map((c) => <button key={c.classId} type="button" onClick={() => onSelect({ subject: s.subject, owner: o.ownerId, classId: c.classId, studentId: null })} className={`${row} ${sel.classId === c.classId ? on : ""}`}>
                 <VerdictDot grade={judge(c.cell).grade} />
                 <span className="min-w-0 flex-1 truncate text-xs font-semibold">{c.name}</span>
-                <span className="text-xs font-medium tabular-nums">{pctText(c.cell)}{c.cell.late ? <span className="text-danger"> · {c.cell.late}</span> : null}</span>
+                <Mark cell={c.cell} />
               </button>)}
             </div> : null}
           </div>;

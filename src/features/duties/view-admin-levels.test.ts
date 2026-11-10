@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildAttention, cellOf, type Counts, type LateItem, type RollupClass, type RollupOwnerKind, type RollupStudent } from "./view-admin";
-import { attentionItems, buildTree, classLines, foldAttention, inClassOf, judge, kindStatuses, NO_CLASS, NO_CLASS_LABEL, NO_OWNER, rootOfTree, studentLines, sumCells } from "./view-admin-levels";
+import { attentionItems, rankOwners, buildTree, classLines, foldAttention, inClassOf, judge, kindStatuses, NO_CLASS, NO_CLASS_LABEL, NO_OWNER, rootOfTree, studentLines, sumCells } from "./view-admin-levels";
 
 const c = (total: number, done: number, due: number, ontime: number, late = 0, o: Partial<Counts> = {}): Counts => ({ total, done, due, ontime, late, lateDone: 0, expired: 0, over7: 0, ...o });
 const ok = (o: Partial<RollupOwnerKind>): RollupOwnerKind => ({ ownerId: "t1", subject: "math", kind: "attendance", period: "daily", ...c(10, 9, 10, 9, 1), ...o });
@@ -9,19 +9,20 @@ const CLASSES = { c1: { name: "중2 A", subject: "math", teacherId: "t1" }, c2: 
 const STUDENTS = { s1: { name: "김하준", school: "경명여중", grade: "중1" }, s2: { name: "이서아", school: null, grade: null } };
 
 describe("judge", () => {
-  it("90%+ 양호 · 70~89 주의 · 70 미만 미흡 · 근거는 숫자 + 평균 비교", () => {
-    expect(judge(cellOf(c(10, 10, 10, 10)), { pct: 85, label: "과목" })).toMatchObject({ grade: "good", label: "양호", reason: "준수 10/10(100%) · 과목 85%보다 높음" });
-    expect(judge(cellOf(c(10, 8, 10, 8, 2))).grade).toBe("warn");
-    expect(judge(cellOf(c(10, 6, 10, 6, 4)))).toMatchObject({ grade: "bad", reason: "준수 6/10(60%) · 지연 4" });
+  it("로열티와 같은 9등급(전체 % 기준) · 색 묶음 1~2 / 3~4 / 5 이하 · 근거는 문장(기한 내 처리 · 평균과의 차이 · 늦거나 못 한 것 · 남은 것)", () => {
+    expect(judge(cellOf(c(10, 10, 10, 10)), { pct: 85, label: "과목" })).toMatchObject({ grade: "good", tier: 1, label: "1등급", reason: "기한 도래 10건 중 10건을 기한 내 처리했습니다(100%). 과목 평균 85%보다 15%p 높습니다." });
+    expect(judge(cellOf(c(10, 8, 10, 8, 2)))).toMatchObject({ grade: "warn", tier: 3, label: "3등급" });
+    expect(judge(cellOf(c(10, 6, 10, 6, 4)))).toMatchObject({ grade: "warn", tier: 4, reason: "기한 도래 10건 중 6건을 기한 내 처리했습니다(60%). 현재 지연 4건." });
+    expect(judge(cellOf(c(10, 5, 10, 5, 5)))).toMatchObject({ grade: "bad", tier: 5, label: "5등급" });
     expect(judge(cellOf(c(0, 0, 0, 0)))).toMatchObject({ grade: "none", reason: "" });
   });
   it("🔴 기한 전 의무만 있으면 '평가 대기' — 달 초·수업 전에 미흡이 되지 않는다", () => {
-    expect(judge(cellOf(c(30, 3, 0, 0)))).toMatchObject({ grade: "wait", label: "평가 대기", reason: "기한 전 27 · 조기 완료 3" });
-    // 일간은 다 했는데 월간(말일 기한)이 남은 반 — 일간 실적대로 '양호'.
-    expect(judge(cellOf(c(40, 21, 21, 21)))).toMatchObject({ grade: "good", reason: "준수 21/21(100%) · 기한 전 19" });
+    expect(judge(cellOf(c(30, 3, 0, 0)))).toMatchObject({ grade: "wait", label: "평가 대기", reason: "아직 기한이 도래한 업무가 없습니다. 기한 전 27건, 조기 완료 3건." });
+    // 일간은 다 했는데 월간(말일 기한)이 남은 반 — 일간 실적대로 1등급.
+    expect(judge(cellOf(c(40, 21, 21, 21)))).toMatchObject({ grade: "good", reason: "기한 도래 21건 중 21건을 기한 내 처리했습니다(100%). 기한 전 19건." });
   });
   it("🔴 기한 온 것이 3건 미만이면 등급 없이 건수만 · 7일 넘은 지연이 있어도 등급을 덮어쓰지 않는다", () => {
-    expect(judge(cellOf(c(2, 0, 2, 0, 2)))).toMatchObject({ grade: "wait", reason: "준수 0/2(0%) · 지연 2" });
+    expect(judge(cellOf(c(2, 0, 2, 0, 2)))).toMatchObject({ grade: "wait", reason: "기한이 도래한 업무가 2건뿐이라 등급을 매기지 않습니다. 현재 지연 2건." });
     expect(judge(cellOf(c(20, 19, 20, 19, 1, { over7: 1 }))).grade).toBe("good");
   });
 });
@@ -103,5 +104,17 @@ describe("attentionItems — 지연 줄이 가리키는 의무", () => {
     expect(attentionItems(all, { key: "owner:t1", ownerId: "t1", classId: null, studentId: null })).toHaveLength(3);
     expect(attentionItems(all, { key: "owner:", ownerId: null, classId: null, studentId: null })).toEqual([all[4]]);
     expect(attentionItems(all.filter((x) => x.ownerId === "t1"), { key: `class:${NO_CLASS}`, ownerId: "t1", classId: NO_CLASS, studentId: null })).toEqual([all[2]]);
+  });
+});
+
+describe("rankOwners — 선생님 등수", () => {
+  const o = (ownerId: string, name: string, cnt: Counts, cells: Record<string, Counts> = {}) => ({ ownerId, name, cell: cellOf(cnt), cells: Object.fromEntries(Object.entries(cells).map(([k, v]) => [k, cellOf(v)])), classes: [] });
+  it("기한 준수율 높은 순 · 같은 %는 같은 등수(다음 등수는 건너뜀) · 등급 전은 등수 없이 뒤 · 담당 미정 제외", () => {
+    const rows = rankOwners([o("a", "가", c(10, 8, 10, 8)), o("b", "나", c(20, 20, 20, 20)), o("c", "다", c(10, 10, 10, 10)), o("d", "라", c(5, 0, 2, 0)), o(NO_OWNER, "담당 미정", c(10, 10, 10, 10))]);
+    expect(rows.map((r) => [r.name, r.rank])).toEqual([["나", 1], ["다", 1], ["가", 3], ["라", null]]);
+  });
+  it("항목별 — 그 종류의 칸으로 매기고, 그 종류가 없는 사람은 뺀다", () => {
+    const rows = rankOwners([o("a", "가", c(10, 10, 10, 10), { attendance: c(10, 5, 10, 5) }), o("b", "나", c(10, 5, 10, 5), { attendance: c(10, 10, 10, 10) }), o("c", "다", c(10, 10, 10, 10))], "attendance");
+    expect(rows.map((r) => [r.name, r.rank])).toEqual([["나", 1], ["가", 2]]);
   });
 });

@@ -1,3 +1,4 @@
+import { CONTRIBUTION_TIERS } from "@/features/student-contribution/model/relative-score";
 import type { DutyNote } from "./notes";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { DUTY_KIND_KEYS, dutyKindLabel, type DutyItemView, type DutyPeriod } from "./kinds";
@@ -72,13 +73,25 @@ export const upcomingOf = (c: Counts): number => Math.max(c.total - c.done - c.l
 export const earlyDoneOf = (c: Counts): number => Math.max(c.done - c.ontime - c.lateDone, 0);
 /** 기한이 온 것이 없을 때 칸에 적는 진행(완료/전체) — '예정 0'처럼 끝낸 일을 안 한 것으로 보이게 하지 않는다(리뷰 2026-11-10). */
 export const progressText = (c: Counts): string => `${c.done}/${c.total}`;
-/** 표본이 이보다 적으면 등급을 매기지 않는다(1~2건으로 '미흡'을 붙이지 않는다). */
+/** 표본이 이보다 적으면 등급을 매기지 않는다(1~2건으로 낮은 등급을 붙이지 않는다). */
 export const MIN_JUDGE = 3;
-/** 칸 색 = 판정(`judge`)과 같은 결 — 의무 없음 회색 · 기한 온 것이 3건 미만이면 중립(평가 대기) · 90%+ 초록 · 70~89 주황 · 70 미만 빨강. */
+/**
+ * 등급 = **로열티와 같은 9등급**(원장 2026-11-10 *"미흡 양호 주의 3단계로 하지말고, % 기준으로 로열티와 동일한 등급제로 … 전체%를 기준으로"*).
+ * 경계는 로열티의 누적 비율(4 · 11 · 23 · 40 · 60 · 77 · 89 · 96 · 100)을 그대로 쓴다 — 기한 준수율이 100%에서 모자란 폭으로 가른다:
+ * 96%+ 1등급 · 89%+ 2등급 · 77%+ 3등급 · 60%+ 4등급 · 40%+ 5등급 · 23%+ 6등급 · 11%+ 7등급 · 4%+ 8등급 · 그 밑 9등급. 상대 순위가 아니라 그 사람의 % 하나로 정한다.
+ */
+export type DutyTier = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+export function dutyTier(pct: number): DutyTier {
+  const i = CONTRIBUTION_TIERS.findIndex((t) => 100 - pct <= t.ceiling);
+  return ((i < 0 ? CONTRIBUTION_TIERS.length - 1 : i) + 1) as DutyTier;
+}
+/** 등급의 색 묶음 — 1~2등급 초록 · 3~4등급 주황 · 5등급 이하 빨강(칸 색 · 점 · 배지가 같은 묶음). */
+export const tierTone = (tier: DutyTier): "good" | "warn" | "bad" => (tier <= 2 ? "good" : tier <= 4 ? "warn" : "bad");
+/** 칸 색 = 판정(`judge`)과 같은 결 — 의무 없음 회색 · 기한 온 것이 3건 미만이면 중립(평가 대기) · 그 밖은 등급의 색 묶음. */
 export function cellTone(c: Cell): CellTone {
   if (!c.total) return "none";
   if (c.pct === null || c.due < MIN_JUDGE) return "wait";
-  return c.pct >= 90 ? "good" : c.pct >= 70 ? "warn" : "bad";
+  return tierTone(dutyTier(c.pct));
 }
 /** 칸 설명(마우스 오버) — 숫자의 뜻을 글로. */
 export function cellTitle(c: Counts): string {

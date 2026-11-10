@@ -1,6 +1,8 @@
 "use client";
 
-import { foldMatrixRows, type AdminPeriod, type LateItem, type MatrixRow } from "../../view-admin";
+import { useState } from "react";
+import { foldMatrixRows, MATRIX_COLUMNS, type AdminPeriod, type LateItem, type MatrixRow } from "../../view-admin";
+import { CellItemsDialog, type CellPick } from "./admin-cell-items";
 import { judge, NO_CLASS, NO_OWNER, type TreeSubject } from "../../view-admin-levels";
 import type { DutyWork } from "../duty-work-context";
 import { AdminKpiRow } from "./admin-subject";
@@ -24,12 +26,18 @@ export function SubjectLevel({ node, lateOnly, avgLabel, lateText, attention, bo
 }
 
 /** 반 단계 — 그 반 · 그 담당의 집계(트리 줄과 같은 수) 한 번. 반 없는 의무(신규생 정착)는 반 조건 없이 그 담당의 집계에서 반 없는 줄만 · '담당 미정'은 담당자 없는 의무만. */
-export function ClassPane({ period, tick, classNode, owner, fetchSubject, teacher, avg, kind, onStudent }: {
-  period: AdminPeriod; tick: number; classNode: { classId: string; name: string; cell: MatrixRow["all"] }; owner: string; fetchSubject: string | null; teacher: string; avg: { pct: number | null; label: string } | null; kind: string | null; onStudent: (studentId: string, name: string) => void;
+export function ClassPane({ period, tick, classNode, owner, fetchSubject, teacher, avg, kind, onStudent, onWork }: {
+  period: AdminPeriod; tick: number; classNode: { classId: string; name: string; cell: MatrixRow["all"] }; owner: string; fetchSubject: string | null; teacher: string; avg: { pct: number | null; label: string } | null; kind: string | null; onStudent: (studentId: string, name: string) => void; onWork: (w: DutyWork) => void;
 }) {
+  const [pick, setPick] = useState<CellPick | null>(null);
   const classId = classNode.classId === NO_CLASS ? null : classNode.classId;
   const { data, failed } = useStudentsPayload(period, owner === NO_OWNER ? { classId, ownerNone: true, subject: fetchSubject } : { classId, owner, subject: fetchSubject }, tick);
-  return <ClassLevel cls={classNode} teacher={teacher} avg={avg} payload={data} failed={failed} kind={kind} onStudent={onStudent} />;
+  const label = (k: string | null) => (k ? MATRIX_COLUMNS.find((c) => c.kind === k)?.label ?? "업무" : "전체");
+  return <>
+    <ClassLevel cls={classNode} teacher={teacher} avg={avg} payload={data} failed={failed} kind={kind} onStudent={onStudent}
+      onCell={(studentId, name, k) => setPick({ title: `${name} · ${label(k)}`, studentId, kind: k, classId, classNone: classId === null, owner: owner === NO_OWNER ? null : owner, ownerNone: owner === NO_OWNER, subject: fetchSubject })} />
+    {pick ? <CellItemsDialog key={`${pick.studentId}|${pick.kind ?? ""}`} pick={pick} period={period} onClose={() => setPick(null)} onWork={onWork} /> : null}
+  </>;
 }
 
 /** 학생 단계 — 그 학생의 집계(반·담당 불문 · 신규생 정착처럼 반 없는 의무도) 한 번. */

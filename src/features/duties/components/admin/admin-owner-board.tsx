@@ -24,8 +24,8 @@ export function AdminOwnerBoard({ tree, late, managers, labels, nowMs, onSubject
     <div className="overflow-x-auto">
       <table className="w-full border-separate border-spacing-1 text-center text-sm [&_th:first-child]:text-left">
         <thead><tr>
-          <th className={TH}>과목 · 과목 관리자</th><th className={TH}>판정</th><th className={TH}>기한 준수</th><th className={TH}>현재 지연</th>
-          {tracked ? <th className={TH}>처리 요청</th> : null}<th className={TH}>선생님 판정</th>
+          <th className={TH}>과목 · 과목 관리자</th><th className={TH}>등급</th><th className={TH}>기한 준수</th><th className={TH}>현재 지연</th>
+          {tracked ? <th className={TH}>처리 요청</th> : null}<th className={TH}>선생님 등급</th>
         </tr></thead>
         <tbody>{rows.map((r) => <tr key={r.subject ?? ""}>
           <td className="px-2 py-1 text-left">
@@ -44,9 +44,9 @@ export function AdminOwnerBoard({ tree, late, managers, labels, nowMs, onSubject
             {r.requestsLate ? <span className="text-danger ml-1.5 text-xs font-bold">요청 기한 지남 {n(r.requestsLate)}</span> : null}
           </td> : null}
           <td className="px-2 text-sm tabular-nums">
-            {r.bad ? <span className="text-danger font-bold">미흡 {n(r.bad)}</span> : null}
-            {r.warn ? <span className="text-amber ml-1.5 font-bold">주의 {n(r.warn)}</span> : null}
-            {!r.bad && !r.warn ? <span className="text-text-dim">{r.inTree ? "모두 양호" : "—"}</span> : null}
+            {r.bad ? <span className="text-danger font-bold">5등급 이하 {n(r.bad)}</span> : null}
+            {r.warn ? <span className="text-amber ml-1.5 font-bold">3~4등급 {n(r.warn)}</span> : null}
+            {!r.bad && !r.warn ? <span className="text-text-dim">{r.good ? `2등급 이상 ${n(r.good)}명` : "—"}</span> : null}
           </td>
         </tr>)}</tbody>
       </table>

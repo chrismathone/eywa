@@ -13,7 +13,7 @@ type Request = Pick<WorkItem, "id" | "source" | "status" | "createdAt" | "dueOn"
 export type OwnerRow = {
   subject: string | null; label: string; /** 이 기간 트리에 있는 과목인가 — 아니면 지연만 있는 줄(내려갈 단계가 없다). */ inTree: boolean; managers: string[]; cell: Cell; verdict: Verdict;
   late: number; late3: number; late7: number; lateTeachers: number; requested: number;
-  requestsOpen: number; requestsLate: number; bad: number; warn: number; inherited: number;
+  requestsOpen: number; requestsLate: number; bad: number; warn: number; /** 1~2등급 선생님 수. */ good: number; inherited: number;
 };
 
 /**
@@ -41,7 +41,7 @@ export function ownerRows(tree: readonly TreeSubject[], late: readonly LateItem[
       late: live.length, late3: days.filter((d) => d >= 3).length, late7: days.filter((d) => d >= 7).length,
       lateTeachers: lateOwners.length, requested: lateOwners.filter((id) => openLateRequest(requests, id, s.subject)).length,
       requestsOpen: open.length, requestsLate: open.filter((r) => isLate(r, today)).length,
-      bad: grades.filter((g) => g === "bad").length, warn: grades.filter((g) => g === "warn").length, inherited: mine.length - live.length,
+      bad: grades.filter((g) => g === "bad").length, warn: grades.filter((g) => g === "warn").length, good: grades.filter((g) => g === "good").length, inherited: mine.length - live.length,
     };
   }).sort((a, b) => b.late7 - a.late7 || b.late - a.late || (a.cell.pct ?? 101) - (b.cell.pct ?? 101) || a.label.localeCompare(b.label, "ko"));
 }
