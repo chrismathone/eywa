@@ -123,7 +123,7 @@ function StatsBody({ days, unit, since }: { days: DayRecord[]; unit: StatUnit; s
 function PeriodTable({ periods }: { periods: PeriodStat[] }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-line-faint">
+      <table className="bg-card w-full border-collapse text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-line-faint">
         <thead>
           <tr className="border-line border-b text-xs">
             <th className="px-2 py-2 text-left font-semibold">기간</th>

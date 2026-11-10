@@ -1,6 +1,6 @@
 import { EmbedLink as Link } from "@/components/embed-link";
 import { SampleBanner } from "@/features/mockup/sample";
-import { requireSampleViewer } from "@/lib/auth/sample-viewer";
+import { requireSampleViewer } from "@/features/marketing/sample-access";
 import { sampleMarketingReview } from "@/features/marketing/sample-data-operations";
 import { MarketingInputReview } from "@/features/marketing/input-review";
 import { MarketingInputBlueprint } from "@/features/marketing/input-blueprint";

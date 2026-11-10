@@ -1,0 +1,155 @@
+/* 2026-11 새로 넣은 장면·카드 — 학원 비서 장면(피치 면) + 화면 스트립 셋째 벌. 그림은 전부 CSS(인라인 SVG 없음). */
+/* 학원 비서 장면 */
+.lp .asst-scene{background:var(--peach)}
+.lp .asst-scene .steps li{color:rgba(24,32,18,.42)}
+.lp .asst-scene .steps li.done{color:rgba(24,32,18,.66)}
+.lp .asst-scene .steps li.on{color:var(--ink)}
+.lp .asst-scene .demo-caption{color:#4d3524}
+.lp .asst{width:min(560px,100%);margin-inline:auto;background:#fff;border:1px solid rgba(24,32,18,.18);padding:24px 26px;display:grid;gap:14px;box-shadow:0 40px 80px -36px rgba(77,53,36,.5)}
+.lp .asst-h{display:flex;align-items:center;gap:10px;font-size:14px}
+.lp .asst-h b{font-size:16px;font-weight:800}
+.lp .asst-h em{font-style:normal;font-size:12px;font-weight:700;padding:1px 7px;border:1px solid rgba(24,32,18,.3)}
+.lp .asst-h span{margin-left:auto;color:var(--ink3);font-size:12px}
+.lp .asst-q{justify-self:end;max-width:88%;background:var(--flag-ink);color:var(--flag-lime);padding:12px 16px;font-size:clamp(15px,1.15vw,17px);font-weight:600;line-height:1.5}
+.lp .asst .ln{display:grid;grid-template-columns:4.4em 1fr;gap:12px;align-items:start;font-size:clamp(14px,1.1vw,16px);line-height:1.5;opacity:.14;filter:blur(2.5px);transform:translateY(8px);transition:opacity .6s var(--ease),transform .6s var(--ease),filter .6s var(--ease)}
+.lp .asst .ln.show,.lp:not(.js) .asst .ln,.lp.rm .asst .ln{opacity:1;filter:none;transform:none}
+.lp .asst .ln b{font-weight:800}
+.lp .asst .ln small{display:block;margin-top:4px;color:var(--ink2);font-size:.86em}
+.lp .asst-tag{justify-self:start;font-size:12px;font-weight:800;padding:2px 8px;margin-top:3px;background:var(--sage);color:var(--ink);white-space:nowrap}
+.lp .asst-tag.op{background:var(--flag-lime)}
+.lp .asst-bars{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin-bottom:8px;padding:12px 12px 8px;background:var(--bg2)}
+.lp .asst-bars>div{position:relative;display:grid;grid-template-columns:1fr 1fr;align-items:end;gap:6px;height:96px;padding-bottom:20px}
+.lp .asst-bars span{height:calc(var(--v) * 72px);background:#c9d0c2;display:flex;justify-content:center;font-size:12px;font-weight:800;padding-top:2px}
+.lp .asst-bars span.up{background:var(--flag-ink);color:var(--flag-lime)}
+.lp .asst-bars em{position:absolute;left:0;right:0;bottom:0;text-align:center;font-style:normal;font-size:12px;color:var(--ink2)}
+.lp .asst-bars p{grid-column:1/-1;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink2)}
+.lp .asst-bars p i{display:inline-block;width:10px;height:10px;background:#c9d0c2}
+.lp .asst-bars p i.up{background:var(--flag-ink);margin-left:8px}
+/* 카드 공용 머리 줄 */
+.lp .todo,.lp .stat,.lp .wdr{padding:3cqw;display:grid;gap:1.8cqw;align-content:space-between}
+.lp .todo-h,.lp .stat-h,.lp .wdr-h{display:flex;justify-content:space-between;align-items:baseline;font-size:2.9cqw}
+.lp .todo-h b,.lp .stat-h b,.lp .wdr-h b{font-weight:900}
+.lp .todo-h span,.lp .stat-h span,.lp .wdr-h span{color:var(--ink2);font-size:2.4cqw}
+/* 내 할 일 */
+.lp .ti{display:grid;grid-template-columns:auto 1fr auto;gap:2cqw;align-items:center;background:#fff;border-radius:.8cqw;padding:2.2cqw 2.4cqw;box-shadow:0 0 0 1px var(--line2);font-size:2.7cqw;font-weight:700}
+.lp .ti em{font-style:normal;font-size:2.2cqw;font-weight:800;padding:.5cqw 1.4cqw;border-radius:999px;white-space:nowrap}
+.lp .ti em.r{background:var(--red-s);color:var(--red)}
+.lp .ti em.a{background:var(--amber-s);color:var(--amber)}
+.lp .ti em.p{background:var(--purple-s);color:var(--purple)}
+.lp .ti em.g{background:var(--green-s);color:var(--green)}
+.lp .ti small{display:flex;align-items:center;gap:.6cqw;color:var(--ink2);font-weight:500;font-size:2.3cqw;white-space:nowrap}
+.lp .ti small .ck{width:2.6cqw;height:2.6cqw;margin:0;color:var(--green)}
+.lp .ti.done{opacity:.62}
+.lp .ti.done span{text-decoration:line-through}
+/* 숙제 영상 */
+.lp .phone.vid{gap:2.2cqw}
+.lp .vid-pick{display:grid;gap:.4cqw;padding:2.2cqw 2.4cqw;border-radius:.8cqw;box-shadow:0 0 0 1px var(--line);font-size:2.5cqw}
+.lp .vid-pick b{font-weight:800}
+.lp .vid-pick small{color:var(--ink2);font-size:2.2cqw}
+.lp .vid-pick.on{box-shadow:0 0 0 .4cqw var(--flag-ink);background:#fbfde9}
+.lp .vid-btn{display:flex;align-items:center;justify-content:center;height:7cqw;border-radius:.8cqw;background:var(--flag-ink);color:var(--flag-lime);font-weight:800;font-size:2.7cqw}
+/* 통계 */
+.lp .stat-k{display:grid;grid-template-columns:repeat(3,1fr);gap:1.4cqw}
+.lp .stat-k div{display:grid;gap:.2cqw;background:#fff;border-radius:.8cqw;box-shadow:0 0 0 1px var(--line2);padding:1.6cqw 2cqw}
+.lp .stat-k small{color:var(--ink2);font-size:2.2cqw}
+.lp .stat-k b{font-size:4.4cqw;font-weight:900;letter-spacing:-.03em}
+.lp .stat-bars{display:grid;grid-template-columns:repeat(6,1fr);gap:2cqw;align-items:end;height:28cqw;padding:2cqw 2cqw 0;background:#fff;border-radius:.8cqw .8cqw 0 0;box-shadow:0 0 0 1px var(--line2)}
+.lp .stat-bars span{height:calc(var(--v) * 24cqw);background:#c9d0c2}
+.lp .stat-bars span.now{background:var(--flag-ink)}
+.lp .stat-x{display:grid;grid-template-columns:repeat(6,1fr);gap:2cqw;margin-top:-1.8cqw;padding:0 2cqw;color:var(--ink2);font-size:2.2cqw;text-align:center}
+.lp .stat-x i{font-style:normal}
+/* 퇴원보고서 */
+.lp .wdr-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:1.4cqw}
+.lp .wdr-steps div{display:grid;gap:.3cqw;background:#fff;border-radius:.8cqw;padding:2cqw 1.6cqw;box-shadow:0 0 0 1px var(--line2);text-align:center;font-size:2.4cqw}
+.lp .wdr-steps b{font-weight:900;font-size:2.6cqw}
+.lp .wdr-steps small{color:var(--ink2);font-size:2.1cqw}
+.lp .wdr-steps .on{background:var(--green-s);box-shadow:none}
+.lp .wdr-steps .on small{color:var(--green)}
+.lp .wdr-steps .now{box-shadow:0 0 0 .4cqw var(--flag-ink)}
+.lp .wdr-b{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:1.4cqw 2cqw;background:#fff;border-radius:.8cqw;padding:2.2cqw 2.4cqw;box-shadow:0 0 0 1px var(--line2);font-size:2.6cqw}
+.lp .wdr-b span{color:var(--ink2)}
+.lp .wdr-b b{font-weight:800}
+.lp .wdr-n{color:var(--ink2);font-size:2.3cqw}
+/* 연결 탐색 */
+.lp .exp{padding:3cqw;display:grid;grid-template-columns:auto 1fr;gap:4cqw;align-items:center}
+.lp .exp-ring{width:44cqw;aspect-ratio:1;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--flag-ink) 0 3%,#fff 3% 4%,#9fc33c 4% 54%,#fff 54% 55%,var(--lav) 55% 61%,#fff 61% 62%,var(--peach) 62% 99%,#fff 99%)}
+.lp .exp-ring>div{width:62%;aspect-ratio:1;border-radius:50%;background:#fff;display:grid;place-content:center;gap:.4cqw;text-align:center;box-shadow:0 0 0 1px var(--line2)}
+.lp .exp-ring b{font-size:3.6cqw;font-weight:900}
+.lp .exp-ring small{color:var(--ink2);font-size:2.2cqw}
+.lp .exp-l{display:grid;gap:1.6cqw;font-size:2.6cqw;font-weight:700}
+.lp .exp-l li{display:flex;align-items:center;gap:1.4cqw;background:#fff;border-radius:.8cqw;padding:1.6cqw 2cqw;box-shadow:0 0 0 1px var(--line2)}
+.lp .exp-l i{width:2.2cqw;height:2.2cqw;border-radius:50%}
+.lp .exp-l .c1{background:var(--flag-ink)}
+.lp .exp-l .c2{background:#9fc33c}
+.lp .exp-l .c3{background:var(--lav)}
+.lp .exp-l .c4{background:var(--peach)}
+@media (max-width:900px){
+.lp .asst{padding:14px 14px;gap:7px}
+.lp .asst .ln{line-height:1.42}
+.lp .asst-q{font-size:14px;padding:10px 12px}
+.lp .asst .ln{font-size:14px;gap:8px}
+}
+/* 운영 현황 비교판 — 왼쪽(라임) = 대시보드 축소판(대표 숫자 둘 + 추이) · 오른쪽(세이지) = 창 셋이 어긋나 겹친 모양.
+   손잡이는 선과 원을 따로 — 원은 선 위 정중앙(translate -50%), 안에 대칭 꺾쇠 둘(CSS 테두리). 장식 움직임 없음(Codex 협의). */
+.lp .flag-comparison{position:relative;height:440px;overflow:hidden;background:#e9ede6;border:1.5px solid var(--flag-ink);box-shadow:8px 8px 0 rgba(24,32,18,.16)}
+.lp .flag-compare-before,.lp .flag-compare-after{position:absolute;inset:0}
+.lp .flag-compare-before{background:#e9ede6}
+.lp .flag-compare-after{background:var(--flag-lime);clip-path:inset(0 calc(100% - var(--flag-split)) 0 0)}
+/* 내용은 각자 보이는 면의 가운데를 따라간다(왼쪽 = 0~손잡이, 오른쪽 = 손잡이~끝) — 폭은 판 절반 기준으로 고정해 글이 눌리지 않게 */
+.lp .cmp-pane{position:absolute;top:32px;bottom:32px;width:calc(50% - 64px);display:flex;flex-direction:column;justify-content:space-between;gap:18px;transform:translateX(-50%)}
+.lp .flag-compare-after .cmp-pane{left:calc(var(--flag-split) / 2)}
+.lp .flag-compare-before .cmp-pane{left:calc((100% + var(--flag-split)) / 2)}
+.lp .cmp-tag{align-self:flex-start;font-size:13px;font-weight:800;padding:4px 10px;background:var(--flag-ink);color:var(--flag-lime)}
+.lp .flag-compare-before .cmp-tag{background:transparent;color:var(--flag-ink);box-shadow:inset 0 0 0 1.5px var(--flag-ink)}
+.lp .cmp-pane>p{font-size:14px;color:#3a4630}
+.lp .cmp-wins{position:relative;height:190px}
+.lp .cmp-win{position:absolute;width:78%;background:#fff;border:1px solid #c9d0c2;box-shadow:0 10px 24px -14px rgba(24,32,18,.45);padding-bottom:12px}
+.lp .cmp-win:nth-child(1){top:0;left:0}
+.lp .cmp-win:nth-child(2){top:56px;left:11%}
+.lp .cmp-win:nth-child(3){top:112px;left:22%}
+.lp .cmp-win i{display:flex;align-items:center;gap:8px;font-style:normal;font-size:14px;font-weight:800;padding:8px 12px;border-bottom:1px solid #e1e3df;background:#f4f4f1}
+.lp .cmp-win i::before{content:"";width:24px;height:6px;flex:none;background:radial-gradient(circle,#c3c8c5 2.6px,transparent 3px) 0 0/8px 6px repeat-x}
+.lp .cmp-win span{display:block;height:7px;margin:10px 12px 0;background:#eceeea}
+.lp .cmp-win span+span{width:58%}
+.lp .cmp-dash{background:#fff;border:1.5px solid var(--flag-ink);padding:20px 22px;display:grid;gap:14px}
+.lp .cmp-dash small{font-size:13px;font-weight:700;color:#646d72}
+.lp .cmp-nums{display:grid;grid-template-columns:1fr 1fr;border:1px solid #e1e3df}
+.lp .cmp-nums>div{padding:12px 14px}
+.lp .cmp-nums>div+div{border-left:1px solid #e1e3df}
+.lp .cmp-nums span{display:block;font-size:12px;color:#646d72}
+.lp .cmp-nums b{font-size:34px;font-weight:850;letter-spacing:-.045em;color:#23282c}
+.lp .cmp-nums em{font-style:normal;font-size:13px;font-weight:700;margin-left:2px}
+.lp .cmp-trend{position:relative;height:56px;border-bottom:1px solid #c3c8c5}
+.lp .cmp-trend i,.lp .cmp-trend s{position:absolute;inset:0}
+.lp .cmp-trend i{background:rgba(253,184,17,.3);clip-path:polygon(0 75%,20% 66%,40% 68%,60% 50%,80% 42%,100% 24%,100% 100%,0 100%)}
+.lp .cmp-trend s{background:#363c41;clip-path:polygon(0 75%,20% 66%,40% 68%,60% 50%,80% 42%,100% 24%,100% 29%,80% 47%,60% 55%,40% 73%,20% 71%,0 80%)}
+.lp .flag-compare-line{position:absolute;z-index:2;top:0;bottom:0;left:var(--flag-split);width:2px;margin-left:-1px;background:var(--flag-ink);pointer-events:none}
+.lp .flag-compare-knob{position:absolute;z-index:2;top:50%;left:var(--flag-split);width:52px;height:52px;transform:translate(-50%,-50%);border-radius:50%;background:var(--flag-ink);box-shadow:0 0 0 4px rgba(221,252,104,.6);pointer-events:none}
+.lp .flag-compare-knob::before,.lp .flag-compare-knob::after{content:"";position:absolute;top:50%;width:9px;height:9px;margin-top:-5px;border:solid var(--flag-lime);border-width:0 0 2.5px 2.5px}
+.lp .flag-compare-knob::before{left:14px;transform:rotate(45deg)}
+.lp .flag-compare-knob::after{right:14px;transform:rotate(-135deg)}
+.lp .flag-comparison input{position:absolute;z-index:3;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:ew-resize}
+.lp .flag-comparison:focus-within{outline:3px solid var(--flag-ink);outline-offset:4px}
+.lp .flag-comparison:focus-within .flag-compare-knob{box-shadow:0 0 0 4px var(--flag-lime),0 0 0 6px var(--flag-ink)}
+/* 화면 폭 901~1199px — 판이 좁아 숫자 두 칸(34px)이 흰 카드 밖으로 밀려났다 */
+@media (min-width:901px) and (max-width:1199px){
+.lp .cmp-nums{grid-template-columns:repeat(2,minmax(0,1fr))}
+.lp .cmp-nums>div{padding:10px}
+.lp .cmp-nums b{font-size:24px}
+.lp .cmp-dash{padding:14px}
+}
+@media (max-width:900px){
+.lp .flag-comparison{height:470px}
+.lp .cmp-trend{height:36px}
+.lp .cmp-pane{top:18px;bottom:18px;width:calc(50% - 30px)}
+.lp .cmp-dash{padding:12px;gap:10px}
+.lp .cmp-nums{grid-template-columns:1fr}
+.lp .cmp-nums>div+div{border-left:0;border-top:1px solid #e1e3df}
+.lp .cmp-nums b{font-size:24px}
+.lp .cmp-wins{height:170px}
+.lp .cmp-win{width:92%}
+.lp .cmp-win:nth-child(2){top:50px;left:4%}
+.lp .cmp-win:nth-child(3){top:100px;left:8%}
+.lp .cmp-win i{font-size:12px;padding:6px 8px}
+.lp .cmp-pane>p{font-size:12px}
+}

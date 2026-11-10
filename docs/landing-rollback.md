@@ -7,7 +7,8 @@
 |---|---|---|
 | **(A) 어제까지 운영하던 판** | 어두운 네이비 히어로·제품 쇼케이스 랜딩 + 사진 패널 로그인 | `4ec22cae9abdc91e0852bcdcbefddb3ffcdf335e` (2026-09-22 16:00, 재설계 직전 main) |
 | **(B) 오늘 낮 판** | 흰 면·초록 톤 '학원 도입' 랜딩 + 두 칸 로그인 | `ee7cc124` (3+5 병합 시점의 origin/main) |
-| **(C) 지금 판** | 애플식 긴 스크롤 랜딩 + 오늘 낮 판 구성·네이비 로그인(무음 영상) | 이 문서를 담은 커밋 |
+| **(C) 스크롤 판** | 애플식 긴 스크롤 랜딩 + 오늘 낮 판 구성·네이비 로그인(무음 영상) | `e63f1ae63` (2026-11-10, (D) 직전 main — 랜딩은 09-28 이후 그대로) |
+| **(D) 지금 판** | AI원장키트 플래그십(라임 히어로 · 세 제품 가로 쇼룸 · 학원 비서 장면 · 업무별 메뉴 목록 · 운영 현황 비교) — (C)의 장면을 같은 팔레트로 다시 칠함 · 로그인은 (C) 그대로 | 이 줄을 담은 커밋 |
 | (참고) 3+5 판 | 모형 속 작업 공간(섞기 3+5) — main에 **올라간 적 없다**(원장이 스크롤 시안으로 바꿈) | `a1277366`(브랜치 커밋, 병합으로 main 이력에 남는다) |
 
 > ⚠️ (B)는 **병합 시점의 origin/main**(2026-09-22 19:45, `ee7cc124`)이다. 그날 낮의 `8247b4a1`과 공개 화면 파일이
@@ -47,7 +48,18 @@ git rm -r -q "src/app/(marketing)" "src/app/(auth)/login" src/components/public-
 git checkout $B -- "src/app/(marketing)" "src/app/(auth)/login" src/components/public-site src/data/marketing.ts
 ```
 
-### 지금 판(C)이 새로 만든 것 — 되돌릴 때 지우는 것
+### (C) 스크롤 판으로 — (D)를 걷을 때
+
+```bash
+C=e63f1ae63   # (D) 직전 main
+git rm -r -q "src/app/(marketing)" public/landing/flagship
+git checkout $C -- "src/app/(marketing)"
+```
+
+- (D)가 새로 만든 것 = `_scroll/flagship*.{tsx,css}` · `scene-assistant.tsx` · `scene-player.tsx`(자동 재생) · `dash-mock.tsx` · `strip-cards-c.tsx` · `strip-toggle.tsx` · `public/landing/flagship/**`(위 명령이 지운다). 로그인·`src/data/marketing.ts`는 (D)에서 안 바꿨다.
+- 옛 장면 CSS(`landing-*.css`)는 (D)에서 고치지 않았다 — 그 위에 `flagship-scenes.css`로 덮었다. `landing-motion.tsx`는 한 줄(`.pin:not([data-play])` — 자동 재생 장면 제외)만 바꿨다. 위 checkout이 둘 다 (C)로 되돌린다.
+
+### 스크롤 판(C)이 새로 만든 것 — 되돌릴 때 지우는 것
 
 - `src/app/(marketing)/_scroll/**` (히어로·대시보드 목업·장면 A~C·메뉴 격자·화면 스트립·문의 띠·연출·CSS)
 - `public/landing/scroll-{hero,office,class,teacher,shuttle}.webp`

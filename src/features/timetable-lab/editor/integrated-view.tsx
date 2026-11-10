@@ -89,7 +89,7 @@ function MiniCell({ cell, data, rowTime }: { cell?: GridCell; data: ViewData; ro
   const { draft, byId, selection, conflicts } = data;
   const items = (cell.sourceIds ?? []).map(id => byId.get(id)).filter((p): p is Lesson => !!p);
   return <div className="mini-cell-items">{items.map(item => {
-    const color = item.kind === 'seat' ? item.teacher === 'LAB' ? { bg: '#e6edfb', text: '#2962ce' } : { bg: '#ede9f8', text: '#6c50c8' } : teacherTone(draft, item.teacher, true);
+    const color = item.kind === 'seat' ? item.teacher === 'LAB' ? { bg: 'var(--blue-soft)', text: 'var(--blue)' } : { bg: 'var(--purple-soft)', text: 'var(--purple)' } : teacherTone(draft, item.teacher, true);
     const offAxis = rowTime && rowTime.split('~')[0] !== timeLabel(item.start);
     const trail = data.focus ? item.students.includes(data.focus) ? 'is-trail' : 'is-dim' : '';
     return <button key={item.id} data-integrated-id={item.id} data-tooltip-disabled={data.readOnly || undefined} title={data.readOnly ? `${item.name} · ${item.day} ${timeLabel(item.start)}~${timeLabel(item.end)} · ${item.teacher} · ${item.room}${item.note ? `\n${item.note}` : ''}` : undefined} className={`${selection.selected.includes(item.id) ? 'is-selected' : ''} ${conflicts.has(item.id) ? 'has-conflict' : ''} ${trail}`}

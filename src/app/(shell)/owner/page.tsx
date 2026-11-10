@@ -12,6 +12,8 @@ import { OWNER_FACES, ownerTabLabel, resolveOwnerTab, type OwnerFaceDef, type Ow
 import { getTenantSettings, getSettingsMeta, getUserDisplayNames, getPermissionStaffOptions, getTenantSettingsForEdit } from "@/features/owner/server/queries";
 import { operationsFaceTokens } from "@/features/owner/server/operations-save";
 import { permissionsToken } from "@/features/owner/server/permissions-save";
+import { retiredPeople } from "@/features/owner/server/retired-lookup";
+import { withoutRetiredPeople, type RetiredPeople } from "@/features/owner/retired-people";
 import { getClassroomsWithUsage } from "@/features/owner/server/classroom-queries";
 import { getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
 import { getPeriodDefsForEditor } from "@/features/periods/server/queries";
@@ -30,7 +32,7 @@ import { ModulesSection } from "./_components/modules-section";
 import { MakeupsSection } from "./_components/makeups-section";
 import { isGenericTenant } from "@/features/owner/preset";
 import { isModuleEnabled } from "@/lib/modules";
-import { canAccess } from "@/lib/permissions";
+import { canAccess, type MenuKey } from "@/lib/permissions";
 import { navigationEditorGates } from "@/features/owner/server/navigation-editor-gates";
 import { DataFace } from "./_components/data-face";
 import { DuplicatesFace } from "./_components/duplicates-face";
@@ -212,9 +214,14 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   // 메뉴 권한뿐 아니라 기능 권한(담당자 · 과목 범위)의 사람도 함께 푼다 — 퇴직해 선택지에서 빠진 사람도 이름으로 보여야 거둘 수 있다.
   const permissionPeople = permissionsSource ? permissionAccountIds(permissionsSource) : [];
   const hiddenSettingKeys: SettingsRoleKey[] = [];
-  if (showsPermissions && !(await isFeatureLicensed(viewer.tenantId, "ai_analysis"))) hiddenSettingKeys.push("ai_ment");
+  // 지점 AI가 꺼져 있으면 AI 멘트 칸과 학원 비서 줄을 세우지 않는다(꺼진 기능은 있었는지조차 모르게 — 판정은 perm-matrix capSettingFeatures와 같은 라이선스).
+  const hiddenMenuKeys: MenuKey[] = [];
+  if (showsPermissions && !(await isFeatureLicensed(viewer.tenantId, "ai_analysis"))) {
+    hiddenSettingKeys.push("ai_ment");
+    hiddenMenuKeys.push("assistant");
+  }
   if (settings.modules.disabled.includes("payroll")) hiddenSettingKeys.push("attendance_salary_settings", "payroll_settings");
-  const [userOverrideNames, permissionStaff, hiddenPermissionIds, connectedApps] = await Promise.all([
+  const [userOverrideNamesRaw, permissionStaff, hiddenPermissionIds, connectedApps, retiredPermissionPeople] = await Promise.all([
     permissionPeople.length > 0 ? getUserDisplayNames(permissionPeople) : {},
     // 개인별 메뉴 권한을 주고 거두는 구획의 직원 선택지 — 어느 학원에서나 선다(원장 2026-10-06).
     permissionsSource ? getPermissionStaffOptions() : [],
@@ -226,7 +233,21 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           return apps.map((a) => ({ permission: a.permission, label: a.label, note: connectedAppNote(a, labelOf) }));
         })
       : [],
+    // 퇴사자(원장 2026-11-09 *"퇴사시 같이 사라지게"*) — **주는 값**(개인별 기능 권한 칩 · 역할보다 더 주는 개인 메뉴 줄)은 초기값에서 빼고
+    // (이 면을 저장하면 저장값에서도 빠진다), 남는 좁히는 값(역할보다 낮은 개인 줄 · 과목 범위)엔 이름 뒤 '(퇴사)'를 붙인다(retired-people.ts 원칙).
+    // 캐시 없이 지금 값으로(편집 폼 규칙). 퇴사가 확인된 사람만(계정이 없는 사람은 모른다 — 리뷰 r1 F3). 조회 실패면 거르지 않는다(종전 화면 그대로).
+    permissionPeople.length > 0
+      ? retiredPeople(permissionPeople).catch((e): RetiredPeople => {
+          console.error("[owner/page] 퇴사자 조회 실패 — 거르지 않는다", e);
+          return new Map();
+        })
+      : (new Map() as RetiredPeople),
   ]);
+  const userOverrideNames: Record<string, string> = Object.fromEntries(
+    Object.entries(userOverrideNamesRaw as Record<string, string>).map(([id, name]) => [id, retiredPermissionPeople.has(id) ? `${name}(퇴사)` : name]),
+  );
+  // 기준 token은 **저장된 값 그대로**(아래 permissionsToken(permissionsSource))로 만든다 — 화면은 거른 값을 들고, 저장하면 거른 값이 저장된다.
+  const permissionsInitial = permissionsSource ? withoutRetiredPeople({ permissions: permissionsSource }, retiredPermissionPeople).permissions : undefined;
   // 탭 및 메뉴 구성 — 편집기가 세우지 않을 메뉴(지점에서 닫힌 메뉴 · 강사 권한) 판정. 그 면을 열 때만 조회한다.
   const navigationGates = tab === "navigation" ? await navigationEditorGates(settings) : null;
   // 세션 기간(과목 운영 안)의 연도. 기본은 KST 올해(세션은 연 단위로 편집한다).
@@ -320,7 +341,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           // 못 읽었으면(permissionsSource 없음) 위의 '불러오지 못했습니다' 안내만 선다.
           permissionsSource ? (
             <PermissionsSection
-              initial={permissionsSource}
+              initial={permissionsInitial ?? permissionsSource}
               // 표의 줄 · 강사 내 메뉴 칸은 학원의 메뉴 구성(왼쪽 탭과 그 내부 메뉴) 차례로 선다.
               navigation={settings.navigation}
               userOverrideNames={userOverrideNames}
@@ -328,6 +349,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
               hiddenUserIds={hiddenPermissionIds}
               generic={isGenericTenant(settings)}
               hiddenSettingKeys={hiddenSettingKeys}
+              hiddenMenuKeys={hiddenMenuKeys}
               connectedApps={connectedApps}
               baselineToken={permissionsToken(permissionsSource)}
               baselineVersion={editable?.versions.permissions}

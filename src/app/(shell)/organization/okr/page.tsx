@@ -1,5 +1,5 @@
 import { SampleBanner } from "@/features/mockup/sample";
-import { requireSampleViewer } from "@/lib/auth/sample-viewer";
+import { requireSampleViewer } from "@/features/organization-okr/sample-access";
 import { sampleOkrWorkspace } from "@/features/organization-okr/sample-data";
 import { OkrWorkspace } from "@/features/organization-okr/workspace";
 

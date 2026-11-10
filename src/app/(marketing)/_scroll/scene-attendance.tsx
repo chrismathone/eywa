@@ -1,16 +1,18 @@
 import { AttendanceTable } from "./attendance-table";
+import { ScenePlayer } from "./scene-player";
 import { sv } from "./style";
 
-/** 고정 장면 C — 스크롤하면 한 달 출석부 칸이 차례로 채워지고 시수 합계가 올라간다. */
+/** 자동 재생 장면 C(`data-play` · `ScenePlayer`, 2026-11-10 — 전엔 스크롤 고정) — 한 달 출석부 칸이 차례로 채워지고 시수 합계가 올라간다. */
 export function SceneAttendance() {
   return (
-    <section className="pin" id="scene-att" data-scene="att" data-steps="4" style={sv({"--steps": "4"})} aria-labelledby="att-title">
+    <section className="pin" id="scene-att" data-scene="att" data-steps="4" data-play="" aria-labelledby="att-title">
       <div className="stage">
         <div className="wrap stack">
           <div className="top">
           <div className="caps">
             <p className="kicker">스프레드시트처럼 쓰는 출석부</p>
-            <h2 className="h2" id="att-title">출결만 체크하면<br />시수와 정산은 따라옵니다.</h2>
+            <h2 className="h2" id="att-title">출결을 체크하면<br />시수는 <mark className="em-mark">저절로</mark> 계산됩니다.</h2>
+            <p className="demo-caption">이름과 기록은 가상 예시입니다.</p>
           </div>
           <div className="caps">
             <ol className="steps">
@@ -19,7 +21,7 @@ export function SceneAttendance() {
               <li data-i="2"><b>보강 예약</b><span>결석 칸에 보강을 예약하면 메모가 자동으로 적히고, 보강일에 출결이 찍히면 이행 처리됩니다.</span></li>
               <li data-i="3"><b>정산까지 연결</b><span>휴일은 회색으로만 표시되고, 출결은 그날도 입력할 수 있습니다. 월 시수 합계는 강사 정산에 바로 쓰입니다.</span></li>
             </ol>
-            <div className="dots" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+            <div className="play-ctl"><div className="dots" aria-hidden="true"><i></i><i></i><i></i><i></i></div><ScenePlayer target="scene-att" /></div>
           </div>
           </div>
           <div className="canvas">

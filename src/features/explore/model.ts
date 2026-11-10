@@ -37,32 +37,34 @@ export const EXPLORE_WINDOW_LABEL = "연결 탐색";
  * 🔴 화면 파일에 hex를 적지 않는다(디자인 lint `shadcn/no-raw-colors`).
  */
 export type ExploreTone = "primary" | "blue" | "green" | "purple" | "rose" | "gold" | "amber";
+/** 영역(유형) 색 = 범주 색(`--cat-*`, globals.css) — 구별 자체가 뜻이라 차콜 테마가 파랑·보라를 회색으로 덮어도 제 색을 지킨다(원장 2026-11-10).
+ *  기본(primary)만 학원 색을 따른다. 네트워크 판의 `--net-t-*`와 같은 색이다. */
 export const TONE_FILL: Record<ExploreTone, string> = {
   primary: "var(--primary-soft)",
-  blue: "var(--blue-soft)",
-  green: "var(--green-soft)",
-  purple: "var(--purple-soft)",
-  rose: "var(--rose-soft)",
-  gold: "var(--gold-soft)",
-  amber: "var(--amber-soft)",
+  blue: "color-mix(in srgb, var(--cat-blue) 12%, transparent)",
+  green: "color-mix(in srgb, var(--cat-green) 12%, transparent)",
+  purple: "color-mix(in srgb, var(--cat-purple) 12%, transparent)",
+  rose: "color-mix(in srgb, var(--cat-rose) 12%, transparent)",
+  gold: "color-mix(in srgb, var(--cat-gold) 13%, transparent)",
+  amber: "color-mix(in srgb, var(--cat-amber) 13%, transparent)",
 };
 export const TONE_INK_CLASS: Record<ExploreTone, string> = {
   primary: "text-primary",
-  blue: "text-blue",
-  green: "text-green",
-  purple: "text-purple",
-  rose: "text-rose",
-  gold: "text-gold",
-  amber: "text-amber",
+  blue: "text-cat-blue",
+  green: "text-cat-green",
+  purple: "text-cat-purple",
+  rose: "text-cat-rose",
+  gold: "text-cat-gold",
+  amber: "text-cat-amber",
 };
 export const TONE_BG_CLASS: Record<ExploreTone, string> = {
   primary: "bg-primary-soft",
-  blue: "bg-blue-soft",
-  green: "bg-green-soft",
-  purple: "bg-purple-soft",
-  rose: "bg-rose-soft",
-  gold: "bg-gold-soft",
-  amber: "bg-amber-soft",
+  blue: "bg-cat-blue/12",
+  green: "bg-cat-green/12",
+  purple: "bg-cat-purple/12",
+  rose: "bg-cat-rose/12",
+  gold: "bg-cat-gold/13",
+  amber: "bg-cat-amber/13",
 };
 
 /** 실제 대상 하나 — 누르면 **그 대상이 새 중심**이 된다. */

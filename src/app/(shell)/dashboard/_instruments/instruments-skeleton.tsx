@@ -47,7 +47,7 @@ export function InstrumentsSkeleton() {
         </div>
         <div className="mb-4 flex items-center gap-4"><span className={`${PULSE} block h-[42px] w-80`} /><span className={`${PULSE} block h-4 w-64`} /></div>
         <div className="mb-3.5 grid grid-cols-[minmax(300px,1fr)_minmax(0,2fr)] gap-3 @max-[1101px]/aywa:grid-cols-1">
-          <div className="min-h-[180px] animate-pulse rounded-[10px] bg-[#363c41]" />
+          <div className="min-h-[180px] animate-pulse rounded-[10px] bg-primary" />
           <div className={`border-line bg-card grid overflow-hidden rounded-[10px] border ${KPI_COLS} [grid-template-rows:1fr_1fr]`}>
             {Array.from({ length: 6 }, (_, i) => (
               <div key={i} className="border-line border-r border-b px-4 py-3"><span className={`${PULSE} block h-5 w-24`} /><span className={`${PULSE} mt-1 block h-[30px] w-20`} /><span className={`${PULSE} mt-1 block h-4 w-36`} /></div>

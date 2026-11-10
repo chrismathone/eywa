@@ -1,5 +1,7 @@
 import { StripCardsA } from "./strip-cards-a";
 import { StripCardsB } from "./strip-cards-b";
+import { StripCardsC } from "./strip-cards-c";
+import { StripToggle } from "./strip-toggle";
 
 /**
  * 강사·데스크 화면 스트립 — 가로 스크롤 없이 저절로 흐르고 마우스를 올리면 멈춘다(원장 2026-09-22).
@@ -10,12 +12,19 @@ export function ScreenStrip() {
   return (
     <section className="sec" aria-label="강사·데스크 화면 예시">
       <div className="wrap">
+        <div className="strip-head">
+          <h2 className="h3">다른 화면도 살펴보세요</h2>
+          <p className="demo-caption">인물과 기록은 가상 예시입니다.</p>
+          <StripToggle />
+        </div>
         <div className="marq" id="marq">
           <div className="strip" id="strip">
             <StripCardsA />
             <StripCardsB />
+            <StripCardsC />
             <StripCardsA dup />
             <StripCardsB dup />
+            <StripCardsC dup />
           </div>
         </div>
       </div>

@@ -172,10 +172,14 @@ describe("previewSnapshot — 편집기 미리보기가 서버와 같은 길을 
     expect(view?.items?.some((i) => i.id === "core:management")).toBe(true);
   });
 
-  it("핵심 업무 칸은 열 수 있는 사람에게만 — 경영 분석은 원장·관리자 · 신입생 90일은 신규생 관리 권한", () => {
+  it("핵심 업무 칸은 열 수 있는 사람에게만 — 칸이 데려가는 화면의 권한(경영 분석 management · 업무 작성센터 work_records · 신입생 90일 newcomers)", () => {
     const core = (b: Bundle, menus = ALL) => resolveView({ stored: EMPTY_DASHBOARD, bundle: b, menus, subjectLabels: ["수학"] }).items?.filter((i) => i.id.startsWith("core:")).map((i) => i.id);
-    expect(core("manager")).toEqual(["core:newcomers", "core:workRecords"]);
+    // 매니저는 기본값으로 경영 분석 권한이 없다(원장만 — 원장 2026-11-10 결정).
+    expect(core("manager", without("management"))).toEqual(["core:newcomers", "core:workRecords"]);
     expect(core("desk", without("newcomers"))).toEqual(["core:management", "core:workRecords"]);
+    // 🔴 역할 묶음이 아니라 권한으로 — 원장 묶음이어도 권한을 닫으면 빠지고, 매니저도 원장이 열면 선다(2026-11-09).
+    expect(core("owner", without("management", "work_records"))).toEqual(["core:newcomers"]);
+    expect(core("manager")).toEqual(["core:newcomers", "core:management", "core:workRecords"]);
   });
 });
 

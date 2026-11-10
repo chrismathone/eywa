@@ -97,7 +97,7 @@ function GoalLine({
         disabled ? "-mx-2.5 bg-slate-200 px-2.5 text-slate-700" : emphasis ? "text-amber" : ""
       }`}
       style={disabled ? {
-        backgroundImage: "repeating-linear-gradient(135deg, transparent 0 7px, rgba(71, 85, 105, 0.24) 7px 9px)",
+        backgroundImage: "repeating-linear-gradient(135deg, transparent 0 7px, var(--line-strong) 7px 9px)",
       } : undefined}
     >
       <b className="w-4 shrink-0">{label}</b>

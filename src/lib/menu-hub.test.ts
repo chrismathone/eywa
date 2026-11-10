@@ -88,6 +88,8 @@ describe("권한 — 업무군은 자식이 하나라도 열릴 때만 선다", 
       meetings: "none",
       approvals: "none",
       documents: "none",
+      // 업무 작성센터(시안)도 문서·결재 묶음의 자식이고 제 권한이다(2026-11-09 권한 줄 정비).
+      work_records: "none",
     };
     const groups = hubGroupsFor(HUB_GROUPS, { systemRole: "master", permMatrix: matrixWith(closed) });
     expect(groups.some((g) => g.id === "document")).toBe(false);

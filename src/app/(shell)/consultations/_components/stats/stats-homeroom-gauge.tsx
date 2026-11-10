@@ -34,8 +34,13 @@ function arc(from: number, to: number): string {
   return `M${x1},${y1} A${R_OUT},${R_OUT} 0 0 1 ${x2},${y2} L${x3},${y3} A${R_IN},${R_IN} 0 0 0 ${x4},${y4} Z`;
 }
 
-/** 칸 색 — 낮은 쪽 초록에서 높은 쪽 파랑으로(원장이 보낸 시안의 계기판). 의미색 토큰만 섞는다. */
-const bandColor = (i: number) => `color-mix(in srgb, var(--green) ${100 - (i * 100) / (BANDS - 1)}%, var(--blue))`;
+/**
+ * 값 → 색 — 0%에 가까울수록 빨강, 100%에 가까울수록 파랑(원장 2026-11-10 *"바로바로 티나게"*). 의미색 토큰만 섞는다.
+ * 파랑은 범주 색 `--cat-blue` — 차콜 테마가 `--blue`를 회색으로 덮어 '빨강 → 회색'이 되던 것(원장 결정 2026-11-10: 구별이 뜻인 색은 테마에서 뺀다).
+ */
+const rateColor = (v: number) => `color-mix(in srgb, var(--danger) ${Math.round(100 - v)}%, var(--cat-blue))`;
+/** 칸 색 = 그 칸 가운데 값의 색 — 빨강 → 파랑 5단. */
+const bandColor = (i: number) => rateColor(((i + 0.5) * 100) / BANDS);
 
 /**
  * 반원 계기판 — 5칸(20%씩)을 바늘이 가리키는 값까지 칠한다. 값이 없으면(그 달 대상 0명) 칸은 회색, 바늘 없음.
@@ -52,7 +57,8 @@ export function RateGauge({ rate, label }: { rate: number | null; label: string 
   return (
     <svg viewBox="0 0 200 110" className="mx-auto block w-full max-w-48" role="img" aria-label={`${label} ${v === null ? "대상 없음" : `${Math.round(v)}%`}`}>
       {bands.map((b) => (
-        <path key={`bg${b.i}`} d={arc(b.from, b.to)} fill="var(--muted)" />
+        // 안 찬 칸도 제 색을 옅게 — 눈금이 어느 쪽이 빨강·파랑인지 늘 보인다. 값이 없으면 회색.
+        <path key={`bg${b.i}`} d={arc(b.from, b.to)} fill={v === null ? "var(--muted)" : `color-mix(in srgb, ${bandColor(b.i)} 18%, var(--muted))`} />
       ))}
       {v !== null
         ? bands
@@ -76,7 +82,9 @@ export function MonthGauge({ ym, m, current }: { ym: string; m: HomeroomMonth; c
     <span className="block min-w-0 flex-1 text-center" title={`담임 상담 ${m.self} · 담임 아닌 직원이 상담 ${m.other} · 미상담 ${m.none}`}>
       <span className="block text-muted-foreground mb-1 text-xs font-medium">{label}</span>
       <RateGauge rate={rate} label={label} />
-      <span className="block num mt-1 text-xl leading-tight font-bold">{rate === null ? "—" : `${Math.round(rate)}%`}</span>
+      <span className="block num mt-1 text-xl leading-tight font-bold" style={rate === null ? undefined : { color: rateColor(Math.max(0, Math.min(100, rate))) }}>
+        {rate === null ? "—" : `${Math.round(rate)}%`}
+      </span>
       <span className="block num text-muted-foreground text-xs">
         {m.self}/{m.target}명
       </span>

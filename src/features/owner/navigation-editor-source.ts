@@ -15,8 +15,9 @@ import { HUB_GROUPS, SUPPORT_GROUPS, type HubGroup } from "@/lib/menu-hub";
 import { isRoleOnlyMenu, type Access, type MenuKey } from "@/lib/permissions";
 import { TEACHER_NAV_GROUPS, TEACHER_SETTINGS_GROUP } from "@/lib/teacher-navigation";
 
+// 함께 열려야 하는 권한(`alsoNeeds` — 셔틀 관리자 화면은 셔틀 권한 위 조건, 2026-11-10)이 닫혀도 뺀다(메뉴 판 `allowed`와 같은 판정).
 const keepItems = (groups: readonly HubGroup[], keep: (menu: MenuKey) => boolean): HubGroup[] =>
-  groups.map((g) => ({ ...g, items: g.items.filter((d) => keep(d.menuKey)) }));
+  groups.map((g) => ({ ...g, items: g.items.filter((d) => keep(d.menuKey) && (!d.alsoNeeds || keep(d.alsoNeeds))) }));
 
 /** 관리자뷰 편집기의 메뉴 — 지점에서 닫힌 메뉴와 역할 전용 화면만 뺀다. 탭(업무군)은 비어도 남긴다(원장이 옮겨 담은 메뉴가 그 탭에 있을 수 있다). */
 export function adminEditorSource(closed: readonly MenuKey[] = []): HubGroup[] {

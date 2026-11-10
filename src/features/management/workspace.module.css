@@ -1,22 +1,20 @@
 /*
  * 경영 분석 시안 — 운영실 '계기판' 토큰(instruments.css)과 같은 값만 쓴다.
- * 차콜 #363c41 · 노랑 #fdb811 · 붉은색 #b44832(경고만) · 글자 #23282c / #646d72 · 선 #e1e3df · 바탕 #f4f4f1 · 화면 #f1f1ed.
+ * 차콜 #363c41 · 노랑 #fdb811 · 붉은색 #b44832(경고만) · 글자 #23282c 한 값(보조 글자도 같은 값 · 원장 2026-11-10) · 선 #e1e3df · 바탕 #f4f4f1 · 화면 #f1f1ed.
  */
 .page {
-  --ink: #23282c;
-  --ink-2: #485055;
-  --muted: #646d72;
-  --line: #e1e3df;
-  --wash: #f4f4f1;
-  --hover: #fdfaf1;
-  --charcoal: #363c41;
-  --yellow: #fdb811;
-  --yellow-ink: #8a6100;
-  --red: #b44832;
+  --ink-2: var(--foreground);
+  --muted: var(--foreground);
+  --wash: var(--bg-soft);
+  --hover: color-mix(in srgb, var(--gold-bright) 6%, var(--card));
+  --charcoal: var(--primary);
+  --yellow: var(--gold-bright);
+  --yellow-ink: var(--gold);
+  --red: var(--danger);
   max-width: 1600px;
   margin: 0 auto;
   padding: 16px 20px 40px;
-  background: #f1f1ed;
+  background: transparent;
   color: var(--ink);
   font-size: 14px;
   line-height: 1.6;
@@ -41,7 +39,7 @@
   font-weight: 650;
   cursor: pointer;
 }
-.page button:hover { background: #2b3034; }
+.page button:hover { background: var(--primary-deep); }
 .page button:disabled { background: var(--wash); border-color: var(--line); color: var(--muted); cursor: not-allowed; }
 .page .secondary { background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; }
 .page .secondary:hover { background: var(--hover); text-decoration: none; }
@@ -69,7 +67,7 @@
 
 .cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .card, .panel { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; transition: box-shadow .15s ease; }
-.card:hover, .panel:hover { box-shadow: 0 2px 10px rgba(35, 40, 44, .06); }
+.card:hover, .panel:hover { box-shadow: 0 2px 10px color-mix(in srgb, var(--ink) 6%, transparent); }
 .card > a { font-size: 14px; font-weight: 700; color: var(--ink-2); }
 .card > strong { display: block; font-size: 24px; font-weight: 800; color: var(--ink); margin: 8px 0; font-variant-numeric: tabular-nums; }
 .card small { font-size: 13px; margin-left: 4px; color: var(--muted); font-weight: 600; }
@@ -96,7 +94,7 @@
 .inputs label { font-size: 13px; color: var(--muted); font-weight: 650; }
 .inputs input, .inputs select { display: block; width: 100%; margin-top: 4px; }
 .confirm { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 14px; }
-.notice { background: var(--hover); border: 1px solid #f3e3b5; color: var(--ink) !important; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
+.notice { background: var(--hover); border: 1px solid color-mix(in srgb, var(--gold-bright) 45%, var(--card)); color: var(--ink) !important; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
 .notice p { color: var(--ink-2); }
 .upload { display: inline-flex; flex-direction: column; gap: 4px; font-size: 13px; background: var(--wash); color: var(--muted); border-color: var(--line); cursor: not-allowed; }
 .upload input { font-size: 12px; max-width: 230px; border: 0; padding: 0; background: transparent; color: var(--muted); }
@@ -109,7 +107,7 @@
 .reviewBatch { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 16px; }
 .reviewIssue { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
 .reviewIssue summary { cursor: pointer; font-size: 14px; }
-.reviewIssue summary span { color: var(--yellow-ink); background: var(--hover); border: 1px solid #f3e3b5; padding: 1px 8px; border-radius: 999px; margin-left: 6px; font-size: 12px; font-weight: 700; }
+.reviewIssue summary span { color: var(--yellow-ink); background: var(--hover); border: 1px solid color-mix(in srgb, var(--gold-bright) 45%, var(--card)); padding: 1px 8px; border-radius: 999px; margin-left: 6px; font-size: 12px; font-weight: 700; }
 .reviewIssue form { margin-top: 10px; }
 .reviewIssue select { display: block; width: 100%; margin-top: 4px; }
 .reviewNote { display: block; font-size: 13px; color: var(--muted); font-weight: 650; margin: 10px 0; }

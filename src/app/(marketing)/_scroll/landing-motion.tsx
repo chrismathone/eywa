@@ -45,7 +45,8 @@ export function LandingMotion() {
     all(root, ".rv").forEach((el) => io.observe(el));
 
     const words = all<HTMLElement>(root, "#words span");
-    const pins: Pin[] = all<HTMLElement>(root, ".pin").map((el) => ({
+    // `[data-play]` 장면(상담·학원 비서·출석부)은 스크롤이 아니라 `ScenePlayer`가 시간으로 재생한다(2026-11-10).
+    const pins: Pin[] = all<HTMLElement>(root, ".pin:not([data-play])").map((el) => ({
       el, steps: Number(el.dataset.steps) || 1, scene: el.dataset.scene ?? "", last: -1,
       li: all<HTMLElement>(el, ".steps li"), dots: all<HTMLElement>(el, ".dots i"),
       wins: all<HTMLElement>(el, ".win"), lns: all<HTMLElement>(el, ".ln"),

@@ -14,7 +14,8 @@ import { OpsHistoryCard } from "../../students/stats/_components/ops-history-car
 export const metadata = { title: "신규생 기록 — 에이와" };
 
 /** 단계 색 — 갓 등록(0–7일)이 가장 진하고 오래될수록 옅게(같은 파랑 계열). */
-const STAGE_COLORS = ["#1e4fa3", "#3f73c4", "#6c96d6", "#9db9e6", "#c9d8f0"];
+// 단계 색 = 기본 색의 진하기 다섯 단계(테마를 따른다 — 2026-11-09 색감 통일).
+const STAGE_COLORS = [100, 78, 58, 40, 24].map((p) => `color-mix(in srgb, var(--primary) ${p}%, var(--card))`);
 
 /**
  * 신규생 **기록 화면**(원장 2026-10-20 *"상세 눌렀을때 추이를 볼 수 없는곳 모두 추가해보자"*) — 운영실 '신규생 단계별 관리'·'신규생 체크 진행'의
