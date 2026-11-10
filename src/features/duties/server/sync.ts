@@ -63,7 +63,16 @@ export async function syncDailyDuties(tenantId: string, date: string, settings: 
     status: r.classnote_status, videoHomework: false, recalled: !!r.revoked_at, createdAt: r.created_at, sentAt: r.classnote_sent_at }));
   const drafts = buildDailyDuties({ date, holidays: new Set(settings.operations.holidays.map((h) => h.date)), classes: dutyClasses, schedules, enrollments, attendance,
     reports: dutyReports, posts: posts.map((p) => ({ boardName: p.board_name, postedOn: p.posted_on })), classnoteOn, inactiveTeacherIds: inactive });
-  return { drafts: drafts.length, ...(await writeDrafts(tenantId, drafts, { rekey: true, cyclesOf: Object.fromEntries(DAILY_KINDS.map((k) => [k, [date]])) })) };
+  const written = await writeDrafts(tenantId, drafts, { rekey: true, cyclesOf: Object.fromEntries(DAILY_KINDS.map((k) => [k, [date]])) });
+  // 보고서는 발송까지가 한 업무가 됐다(2026-11-10) — 같은 열쇠의 발송 의무가 선 날에 남은 옛 작성 의무(끝난 것 · 미이행 확정 포함)는 집계에서 뺀다.
+  // (맞춤의 회차 정리는 열린 것만 지워서, 이미 끝난 작성 의무가 발송 의무와 함께 두 번 세졌다.)
+  const sendKeys = [...new Set(drafts.filter((d) => d.kind === "report_send").map((d) => d.subjectKey))];
+  for (let i = 0; i < sendKeys.length; i += 100) {
+    const { error } = await admin.from("duty_items").update({ status: "void", void_reason: "merged", task_id: null, updated_at: new Date().toISOString() })
+      .eq("tenant_id", tenantId).eq("kind", "report_write").eq("cycle", date).in("subject_key", sendKeys.slice(i, i + 100)).or("status.neq.void,void_reason.eq.expired");
+    if (error) throw new Error(`의무 장부 정리(작성 → 발송): ${error.message}`);
+  }
+  return { drafts: drafts.length, ...written };
 }
 
 /**

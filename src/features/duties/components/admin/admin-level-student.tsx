@@ -43,7 +43,7 @@ export function StudentLevel({ studentId, payload, late, nowMs, onWork }: {
       {sum ? <VerdictLine v={judge(sum.all)} /> : null}
     </header>
     {sum ? <KindStatusStrip statuses={kindStatuses(sum.cells)} /> : <p className="text-text-dim text-sm">불러오는 중…</p>}
-    <section className="border-line-faint rounded-xl border p-3">
+    <section className="border-line bg-card rounded-xl border p-3">
       <h4 className="text-sm font-bold">현재 지연 <span className="text-text-dim text-xs font-medium">{items.length}건</span></h4>
       {!items.length ? <p className="text-green mt-2 text-sm font-semibold">지연 없음</p> : <ul className="mt-2 grid gap-1">
         {items.map((it) => <li key={it.id} className="flex flex-wrap items-center gap-2 rounded-lg px-2 py-1 text-sm">

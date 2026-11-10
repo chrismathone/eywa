@@ -18,6 +18,10 @@
 
 ## 2026-11-10 의무 장부: 할 일 본문에 업무 종류 (s2_0046 · ✅ 운영 적용 2026-11-10 · 직결 · 시험 거래 뒤)
 
+`s2_0054_duty_live_ping.sql` — ✅ 운영 적용(2026-11-10). 업무 완성도 저장 순간 신호: `duties_private.mark_dirty`가 변경 기록을 적으며 `realtime.send`로 지점 채널(`duties:<지점 id>`)에 '바뀌었다'를 보낸다(내용 없음 · 2초에 한 번 · 저장을 막지 않는 블록 안). 그 밖은 s2_0051 본문 그대로.
+
+`s2_0053_duty_owner_load.sql` — ✅ 운영 적용(2026-11-10). 업무 완성도 `duty_rollup_owner_load`(담당자 × 과목의 반 수 · 학생 수 — 이름 옆 '수학 · 반 5 · 학생 27').
+
 `s2_0052_duty_manage.sql` — ✅ 운영 적용(2026-11-10). 업무 완성도 관리 이력 `duty_notes` + `duty_note_add`(확인 · 사유 · 면제 — 면제 = void `waived`) · `duty_resolve_items`(면제는 맞춤이 되살리지 않는다 — s2_0045 본문 + 한 줄) · `duty_escalate_up`(3일 → 과목 관리자 · 7일 → 원장 · 할 일 `duty_late_up` · 늦음 할 일 스위치가 켜져 있을 때만) · `duties_private.rollup_rows`(고른 기간이 통째로 평가 개시 전이면 개시 전 기한도 센다 — s2_0050 본문 + 한 줄).
 
 `s2_0051_duty_live_sync.sql` — ✅ 운영 적용(2026-11-10). 업무 완성도 저장 즉시 반영: 원 표 6개에 바뀐 날만 적는 트리거(`duties_private.mark_dirty` → `duty_dirty` · 저장을 막지 않는다) · `duty_sync_claim`/`duty_sync_finish`(맞춤 잠금 `duty_settings.sync_lock_until` + 증표 `sync_token` · 가져가기는 표식만, 성공한 마무리가 지운다). 같은 날 리뷰 반영으로 다시 적용(첫 판의 5인자 `duty_sync_release`는 원장 확인 뒤 운영에서 지움). 앱 `flushDuties`가 읽기 전에 그날만 맞춘다.

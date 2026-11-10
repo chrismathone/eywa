@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildAttention, cellOf, type Counts, type LateItem, type RollupClass, type RollupOwnerKind, type RollupStudent } from "./view-admin";
-import { attentionItems, rankOwners, buildTree, classLines, foldAttention, inClassOf, judge, kindStatuses, NO_CLASS, NO_CLASS_LABEL, NO_OWNER, rootOfTree, studentLines, sumCells } from "./view-admin-levels";
+import { attentionItems, listedOwner, openRows, ownerMeta, rankOwners, buildTree, classLines, foldAttention, inClassOf, judge, kindStatuses, NO_CLASS, NO_CLASS_LABEL, NO_OWNER, rootOfTree, studentLines, sumCells } from "./view-admin-levels";
 
 const c = (total: number, done: number, due: number, ontime: number, late = 0, o: Partial<Counts> = {}): Counts => ({ total, done, due, ontime, late, lateDone: 0, expired: 0, over7: 0, ...o });
 const ok = (o: Partial<RollupOwnerKind>): RollupOwnerKind => ({ ownerId: "t1", subject: "math", kind: "attendance", period: "daily", ...c(10, 9, 10, 9, 1), ...o });
@@ -9,20 +9,22 @@ const CLASSES = { c1: { name: "중2 A", subject: "math", teacherId: "t1" }, c2: 
 const STUDENTS = { s1: { name: "김하준", school: "경명여중", grade: "중1" }, s2: { name: "이서아", school: null, grade: null } };
 
 describe("judge", () => {
-  it("로열티와 같은 9등급(전체 % 기준) · 색 묶음 1~2 / 3~4 / 5 이하 · 근거는 문장(기한 내 처리 · 평균과의 차이 · 늦거나 못 한 것 · 남은 것)", () => {
-    expect(judge(cellOf(c(10, 10, 10, 10)), { pct: 85, label: "과목" })).toMatchObject({ grade: "good", tier: 1, label: "1등급", reason: "기한 도래 10건 중 10건을 기한 내 처리했습니다(100%). 과목 평균 85%보다 15%p 높습니다." });
+  it("로열티와 같은 9등급(전체 % 기준) · 색 묶음 1~2 / 3~4 / 5 이하 · 결론 한 줄(제때인가 · 늦게 하는 쪽인가 · 안 하는 쪽인가) + 결말 구성 + 평균과의 차이", () => {
+    expect(judge(cellOf(c(10, 10, 10, 10)), { pct: 85, label: "과목" })).toMatchObject({ grade: "good", tier: 1, label: "1등급", reason: "전부 제때 처리했습니다.", gap: { label: "과목", diff: 15 }, mix: { due: 10, ontime: 10, lateDone: 0, missed: 0, late: 0 } });
     expect(judge(cellOf(c(10, 8, 10, 8, 2)))).toMatchObject({ grade: "warn", tier: 3, label: "3등급" });
-    expect(judge(cellOf(c(10, 6, 10, 6, 4)))).toMatchObject({ grade: "warn", tier: 4, reason: "기한 도래 10건 중 6건을 기한 내 처리했습니다(60%). 현재 지연 4건." });
+    expect(judge(cellOf(c(10, 6, 10, 6, 4)))).toMatchObject({ grade: "warn", tier: 4, reason: "40%를 제때 못 했습니다 — 주로 하지 않은 업무입니다.", mix: { due: 10, ontime: 6, lateDone: 0, missed: 4, late: 4 } });
     expect(judge(cellOf(c(10, 5, 10, 5, 5)))).toMatchObject({ grade: "bad", tier: 5, label: "5등급" });
+    // 늦게라도 한 쪽이 더 많으면 '주로 늦게 처리한 업무'.
+    expect(judge(cellOf(c(10, 10, 10, 3, 0, { lateDone: 6, expired: 1 }))).reason).toBe("70%를 제때 못 했습니다 — 주로 늦게 처리한 업무입니다.");
     expect(judge(cellOf(c(0, 0, 0, 0)))).toMatchObject({ grade: "none", reason: "" });
   });
   it("🔴 기한 전 의무만 있으면 '평가 대기' — 달 초·수업 전에 미흡이 되지 않는다", () => {
-    expect(judge(cellOf(c(30, 3, 0, 0)))).toMatchObject({ grade: "wait", label: "평가 대기", reason: "아직 기한이 도래한 업무가 없습니다. 기한 전 27건, 조기 완료 3건." });
+    expect(judge(cellOf(c(30, 3, 0, 0)))).toMatchObject({ grade: "wait", label: "평가 대기", reason: "아직 기한 전입니다 — 3/30건 완료." });
     // 일간은 다 했는데 월간(말일 기한)이 남은 반 — 일간 실적대로 1등급.
-    expect(judge(cellOf(c(40, 21, 21, 21)))).toMatchObject({ grade: "good", reason: "기한 도래 21건 중 21건을 기한 내 처리했습니다(100%). 기한 전 19건." });
+    expect(judge(cellOf(c(40, 21, 21, 21)))).toMatchObject({ grade: "good", reason: "전부 제때 처리했습니다." });
   });
   it("🔴 기한 온 것이 3건 미만이면 등급 없이 건수만 · 7일 넘은 지연이 있어도 등급을 덮어쓰지 않는다", () => {
-    expect(judge(cellOf(c(2, 0, 2, 0, 2)))).toMatchObject({ grade: "wait", reason: "기한이 도래한 업무가 2건뿐이라 등급을 매기지 않습니다. 현재 지연 2건." });
+    expect(judge(cellOf(c(2, 0, 2, 0, 2)))).toMatchObject({ grade: "wait", reason: "기한이 된 업무가 2건뿐이라 아직 등급을 매기지 않습니다." });
     expect(judge(cellOf(c(20, 19, 20, 19, 1, { over7: 1 }))).grade).toBe("good");
   });
 });
@@ -66,7 +68,7 @@ describe("kindStatuses · studentLines · classLines · sumCells", () => {
   ];
   it("종류별 상태 = 의무 있는 종류만 · 기한 전 = 전체 − 완료 − 지금 지연 − 미이행", () => {
     const { cells } = sumCells(rows, inClassOf("c1"));
-    expect(kindStatuses(cells).map((s) => [s.label, s.cell.pct, s.upcoming, s.cell.late])).toEqual([["출결", 100, 0, 0], ["보고서", 67, 2, 3]]);
+    expect(kindStatuses(cells).map((s) => [s.label, s.cell.pct, s.upcoming, s.cell.late])).toEqual([["출결", 100, 0, 0], ["보고서 작성", 67, 2, 3]]);
   });
   it("🔴 반 없는 의무(신규생 정착)의 합과 학생 줄은 같은 비교를 쓴다 — 합만 비지 않는다", () => {
     const none: RollupStudent[] = [{ studentId: "s9", classId: null, kind: "newcomer_call", ...c(4, 0, 3, 0, 3), lastDue: null }];
@@ -116,5 +118,27 @@ describe("rankOwners — 선생님 등수", () => {
   it("항목별 — 그 종류의 칸으로 매기고, 그 종류가 없는 사람은 뺀다", () => {
     const rows = rankOwners([o("a", "가", c(10, 10, 10, 10), { attendance: c(10, 5, 10, 5) }), o("b", "나", c(10, 5, 10, 5), { attendance: c(10, 10, 10, 10) }), o("c", "다", c(10, 10, 10, 10))], "attendance");
     expect(rows.map((r) => [r.name, r.rank])).toEqual([["나", 1], ["가", 2]]);
+  });
+});
+
+describe("openRows — 오늘 미완료", () => {
+  const o = (ownerId: string, name: string, cells: Record<string, Counts>) => { const list = Object.values(cells); const sum = list.reduce((a, b) => c(a.total + b.total, a.done + b.done, 0, 0), c(0, 0, 0, 0)); return { ownerId, name, cell: cellOf(sum), cells: Object.fromEntries(Object.entries(cells).map(([k, v]) => [k, cellOf(v)])), classes: [] }; };
+  it("남은 것이 많은 순 · 종류별 남은 수(많은 것부터) · 다 끝낸 사람은 뒤", () => {
+    const rows = openRows([o("a", "가", { attendance: c(10, 10, 0, 0), report_write: c(10, 10, 0, 0) }), o("b", "나", { attendance: c(10, 7, 0, 0), report_write: c(10, 2, 0, 0) }), o("c", "다", { attendance: c(5, 4, 0, 0) })]);
+    expect(rows.map((r) => [r.name, r.left])).toEqual([["나", 11], ["다", 1], ["가", 0]]);
+    expect(rows[0]!.kinds).toEqual([{ kind: "report_write", label: "보고서 작성", left: 8 }, { kind: "attendance", label: "출결", left: 3 }]);
+  });
+});
+
+describe("이름 옆 글 · 관리자 제외", () => {
+  it("과목 · 반 수 · 학생 수(모르는 값은 뺀다) · 관리자 역할이면서 맡은 반이 없으면 등수·오늘 미완료에서 뺀다(반을 맡았으면 넣는다)", () => {
+    expect(ownerMeta({ load: { subjects: ["수학"], classes: 5, students: 27, manager: false } })).toBe("수학 · 반 5 · 학생 27");
+    expect(ownerMeta({ load: { subjects: ["수학", "영어"], classes: 0, students: 0, manager: false } })).toBe("수학·영어");
+    expect(listedOwner({ load: { subjects: [], classes: 0, students: 3, manager: true } })).toBe(false);
+    expect(listedOwner({ load: { subjects: [], classes: 2, students: 3, manager: true } })).toBe(true);
+    expect(listedOwner({ load: { subjects: [], classes: 0, students: 0, manager: false } })).toBe(true);
+    const mgr = { ownerId: "m", name: "관리", cell: cellOf(c(10, 10, 10, 10)), cells: {}, classes: [], load: { subjects: [], classes: 0, students: 0, manager: true } };
+    expect(rankOwners([mgr])).toEqual([]);
+    expect(openRows([{ ...mgr, cell: cellOf(c(10, 2, 0, 0)) }])).toEqual([]);
   });
 });

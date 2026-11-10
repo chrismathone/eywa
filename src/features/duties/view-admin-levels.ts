@@ -1,5 +1,5 @@
 import { schoolGradeLabel } from "@/lib/format/school-grade";
-import { add, cellOf, earlyDoneOf, EMPTY, MATRIX_COLUMNS, MIN_JUDGE, upcomingOf, type AttentionRow, type Cell, type ClassInfo, type OwnerInfo, type RollupClass, type RollupOwnerKind, type RollupStudent, type StudentInfo, dutyTier, tierTone, type DutyTier } from "./view-admin";
+import { add, cellOf, EMPTY, MATRIX_COLUMNS, MIN_JUDGE, upcomingOf, type AttentionRow, type Cell, type ClassInfo, type OwnerInfo, type RollupClass, type RollupOwnerKind, type RollupStudent, type StudentInfo, dutyTier, tierTone, type DutyTier, type OwnerLoadRow } from "./view-admin";
 
 /**
  * 단계별 보기(과목 → 선생님 → 반 → 학생)의 순수 조립 — 원장 2026-11-10 *"과목별 - 선생님별 - 반별 - 학생별로 디테일 될 수 있게 … 이 선생님이 뭘 안했는지,
@@ -11,33 +11,44 @@ import { add, cellOf, earlyDoneOf, EMPTY, MATRIX_COLUMNS, MIN_JUDGE, upcomingOf,
  * 그것까지 세면 달 초·수업 전에 전원 '미흡'이 된다(원장 계정 화면 2026-11-10 — 14명 전원 미흡). 기한 온 것이 3건 미만이면 등급 없이 '평가 대기'.
  * 🔴 지연이 오래됐다는 이유로 등급을 덮어쓰지 않는다 — 준수율(실적)과 지금 손댈 것(지연 수)은 다른 숫자다. 근거 한 줄은 숫자로.
  */
-export type Verdict = { grade: "good" | "warn" | "bad" | "wait" | "none"; /** 1~9등급(평가 대기 · 해당 없음은 null). */ tier: DutyTier | null; label: string; reason: string };
+/**
+ * reason = 결론 한 줄 · mix = 기한이 온 업무의 결말(제때 · 늦게 · 안 함 — missed = 미이행 확정 + 지금 지연 · late = 그중 지금 지연) · gap = 평균과의 차이(%p).
+ */
+export type Verdict = { grade: "good" | "warn" | "bad" | "wait" | "none"; /** 1~9등급(평가 대기 · 해당 없음은 null). */ tier: DutyTier | null; label: string; reason: string;
+  mix: { due: number; ontime: number; lateDone: number; missed: number; late: number } | null; gap: { label: string; diff: number } | null };
 export const VERDICT_LABEL = { wait: "평가 대기", none: "해당 없음" } as const;
 export type Avg = { pct: number | null; label: string };
 export function judge(cell: Cell, avg: Avg | null = null): Verdict {
-  if (!cell.total) return { grade: "none", tier: null, label: VERDICT_LABEL.none, reason: "" };
+  if (!cell.total) return { grade: "none", tier: null, label: VERDICT_LABEL.none, reason: "", mix: null, gap: null };
   const n = (v: number) => v.toLocaleString("ko-KR");
-  const up = upcomingOf(cell); const early = earlyDoneOf(cell);
-  // 근거는 문장으로(원장 2026-11-10 *"이런 날것말고 정리된 멘트로"*) — ① 기한 내 처리 ② 평균과의 차이 ③ 늦거나 못 한 것 ④ 남은 것.
-  const waiting = [up ? `기한 전 ${n(up)}건` : "", early ? `조기 완료 ${n(early)}건` : ""].filter(Boolean).join(", ");
-  const misses = [cell.lateDone ? `지연 완료 ${n(cell.lateDone)}건` : "", cell.expired ? `미이행 ${n(cell.expired)}건` : "", cell.late ? `현재 지연 ${n(cell.late)}건` : ""].filter(Boolean).join(", ");
+  const up = upcomingOf(cell);
+  // 기한이 온 업무가 어떻게 끝났나 — 제때 · 늦게 · 안 함(미이행 확정 + 지금 지연). 화면은 이 넷을 막대 하나로 그린다.
+  const mix = cell.due ? { due: cell.due, ontime: cell.ontime, lateDone: cell.lateDone, missed: cell.expired + cell.late, late: cell.late } : null;
   if (cell.pct === null || cell.due < MIN_JUDGE) {
-    const head = cell.due ? `기한이 도래한 업무가 ${n(cell.due)}건뿐이라 등급을 매기지 않습니다.` : "아직 기한이 도래한 업무가 없습니다.";
-    return { grade: "wait", tier: null, label: VERDICT_LABEL.wait, reason: [head, misses ? `${misses}.` : "", waiting ? `${waiting}.` : ""].filter(Boolean).join(" ") };
+    const reason = cell.due ? `기한이 된 업무가 ${n(cell.due)}건뿐이라 아직 등급을 매기지 않습니다.` : up ? `아직 기한 전입니다 — ${n(cell.done)}/${n(cell.total)}건 완료.` : "아직 기한 전입니다.";
+    return { grade: "wait", tier: null, label: VERDICT_LABEL.wait, reason, mix, gap: null };
   }
   const tier = dutyTier(cell.pct);
+  const missed = cell.expired + cell.late;
+  // 결론 한 줄(원장 2026-11-10 *"관리자 입장에서 바로 판단이 가능하게"*) — 잘하고 있나 · 아니면 '늦게 하는' 쪽인가 '안 하는' 쪽인가.
+  const reason = tier <= 2 ? (cell.lateDone + missed ? "대부분 제때 처리합니다." : "전부 제때 처리했습니다.")
+    : `${100 - cell.pct}%를 제때 못 했습니다 — 주로 ${missed > cell.lateDone ? "하지 않은 업무" : "늦게 처리한 업무"}입니다.`;
   const diff = avg && avg.pct !== null ? cell.pct - avg.pct : null;
-  const sentences = [
-    `기한 도래 ${n(cell.due)}건 중 ${n(cell.ontime)}건을 기한 내 처리했습니다(${cell.pct}%).`,
-    diff === null || !avg ? "" : diff === 0 ? `${avg.label} 평균과 같습니다.` : `${avg.label} 평균 ${avg.pct}%보다 ${Math.abs(diff)}%p ${diff > 0 ? "높습니다" : "낮습니다"}.`,
-    misses ? `${misses}.` : "",
-    waiting ? `${waiting}.` : "",
-  ];
-  return { grade: tierTone(tier), tier, label: `${tier}등급`, reason: sentences.filter(Boolean).join(" ") };
+  const gap = diff === null || !avg || diff === 0 ? null : { label: avg.label, diff };
+  return { grade: tierTone(tier), tier, label: `${tier}등급`, reason, mix, gap };
 }
 
 export type TreeClass = { classId: string; name: string; cell: Cell };
-export type TreeOwner = { ownerId: string; name: string; cell: Cell; cells: Record<string, Cell>; classes: TreeClass[] };
+/** 이름 옆에 늘 적는 것(원장 2026-11-10) — 과목 · 담당 반 수 · 담당 학생 수. manager = 관리자 역할(맡은 반이 없으면 목록·등수에서 뺀다). */
+export type OwnerLoad = { subjects: string[]; classes: number; students: number; manager: boolean };
+export type TreeOwner = { ownerId: string; name: string; cell: Cell; cells: Record<string, Cell>; classes: TreeClass[]; load?: OwnerLoad };
+/** "수학 · 반 5 · 학생 27" — 모르는 값은 뺀다. */
+export const ownerMeta = (o: Pick<TreeOwner, "load">): string => (o.load ? [o.load.subjects.join("·"), o.load.classes ? `반 ${o.load.classes}` : "", o.load.students ? `학생 ${o.load.students}` : ""].filter(Boolean).join(" · ") : "");
+/**
+ * 등수 · 오늘 미완료에 세울 사람인가 — 관리자 역할이면서 맡은 반이 없으면 뺀다(원장 *"관리자는 제외시킬것 (반을 담당하고 있으면 넣을것)"*).
+ * 🔴 왼쪽 목록 · 매트릭스에서는 빼지 않는다 — 빼면 과목 합계와 줄의 합이 어긋나고 그 사람의 의무를 볼 곳이 없어진다.
+ */
+export const listedOwner = (o: Pick<TreeOwner, "load">): boolean => !(o.load?.manager && !o.load.classes);
 export type TreeSubject = { subject: string | null; label: string; cell: Cell; cells: Record<string, Cell>; owners: TreeOwner[] };
 /** 손댈 것이 많은 순 — 지금 지연 → 기한 준수율 낮은 순(평가 대기는 뒤) → 이름. */
 const byBad = (a: { cell: Cell; name: string }, b: { cell: Cell; name: string }) => b.cell.late - a.cell.late || (a.cell.pct ?? 101) - (b.cell.pct ?? 101) || a.name.localeCompare(b.name, "ko");
@@ -45,7 +56,7 @@ const byBad = (a: { cell: Cell; name: string }, b: { cell: Cell; name: string })
 /** 반 없는 의무(신규생 정착 — 반과 무관한 학생 단위 의무)의 반 열쇠 — 트리·반 단계에서 한 줄로 묶는다. */
 export const NO_CLASS = "none";
 /** 그 줄의 이름 — '반 없음'이라고 쓰면 반 배정이 빠진 것으로 읽힌다(Codex 2026-11-10). */
-export const NO_CLASS_LABEL = "신규생 정착 · 반 공통";
+export const NO_CLASS_LABEL = "신규생 관리 · 반 공통";
 /** 과목 없는 의무('과목 미정')를 학생 집계 GET에 알리는 과목 값 — 서버가 `subject is null`로 읽는다. */
 export const NO_SUBJECT = "none";
 /** 담당자 없는 의무('담당 미정')의 담당 열쇠 — 학생 집계 GET엔 `owner=none`(서버가 `owner_id is null`로 읽는다). */
@@ -53,7 +64,7 @@ export const NO_OWNER = "";
 const classNameOf = (id: string | null, classes: ClassInfo) => (id && id !== NO_CLASS ? classes[id]?.name ?? "반 이름 없음" : NO_CLASS_LABEL);
 
 /** 왼쪽 트리 = 과목 → 선생님 → 반. 과목 없는 집계는 '과목 미정' · 학원 설정에 없는 과목 키는 '기타 과목'(같은 이름 줄이 둘 서지 않게). */
-export function buildTree(ok: readonly RollupOwnerKind[], cls: readonly RollupClass[], owners: OwnerInfo, classes: ClassInfo, labels: Record<string, string>): TreeSubject[] {
+export function buildTree(ok: readonly RollupOwnerKind[], cls: readonly RollupClass[], owners: OwnerInfo, classes: ClassInfo, labels: Record<string, string>, extra: { load?: readonly OwnerLoadRow[]; managerIds?: readonly string[] } = {}): TreeSubject[] {
   const subjects = new Map<string, TreeSubject>();
   const subjectOf = (key: string | null): TreeSubject => {
     const k = key ?? "";
@@ -79,7 +90,12 @@ export function buildTree(ok: readonly RollupOwnerKind[], cls: readonly RollupCl
     if (!c) { c = { classId: id, name: classNameOf(r.classId, classes), cell: EMPTY }; o.classes.push(c); }
     c.cell = cellOf(add(c.cell, r));
   }
-  return [...subjects.values()].map((s) => ({ ...s, owners: s.owners.map((o) => ({ ...o, classes: o.classes.sort(byBad) })).sort(byBad) }))
+  const managers = new Set(extra.managerIds ?? []);
+  const loadOf = (s: TreeSubject, o: TreeOwner): OwnerLoad => {
+    const row = extra.load?.find((l) => (l.ownerId ?? NO_OWNER) === o.ownerId && l.subject === s.subject);
+    return { subjects: s.subject ? [s.label] : [], classes: row ? row.classes : o.classes.filter((c) => c.classId !== NO_CLASS).length, students: row?.students ?? 0, manager: managers.has(o.ownerId) };
+  };
+  return [...subjects.values()].map((s) => ({ ...s, owners: s.owners.map((o) => ({ ...o, load: loadOf(s, o), classes: o.classes.sort(byBad) })).sort(byBad) }))
     .sort((a, b) => (a.subject === null ? 1 : 0) - (b.subject === null ? 1 : 0) || a.label.localeCompare(b.label, "ko"));
 }
 
@@ -91,7 +107,9 @@ export function rootOfTree(tree: readonly TreeSubject[]): TreeSubject {
     for (const k of Object.keys(s.cells)) root.cells[k] = cellOf(add(root.cells[k] ?? EMPTY, s.cells[k]!));
     for (const o of s.owners) {
       let r = root.owners.find((x) => x.ownerId === o.ownerId);
-      if (!r) { r = { ...o, cells: { ...o.cells }, classes: o.classes.map((c) => ({ ...c })) }; root.owners.push(r); continue; }
+      if (!r) { r = { ...o, cells: { ...o.cells }, classes: o.classes.map((c) => ({ ...c })), load: o.load ? { ...o.load, subjects: [...o.load.subjects] } : undefined }; root.owners.push(r); continue; }
+      // 전체에서는 과목별 수를 더한다(같은 학생을 두 과목에서 맡으면 두 번 든다 — 드문 경우라 따로 풀지 않는다).
+      if (r.load && o.load) r.load = { subjects: [...new Set([...r.load.subjects, ...o.load.subjects])], classes: r.load.classes + o.load.classes, students: r.load.students + o.load.students, manager: r.load.manager };
       r.cell = cellOf(add(r.cell, o.cell));
       for (const k of Object.keys(o.cells)) r.cells[k] = cellOf(add(r.cells[k] ?? EMPTY, o.cells[k]!));
       for (const c of o.classes) { const x = r.classes.find((y) => y.classId === c.classId); if (x) x.cell = cellOf(add(x.cell, c.cell)); else r.classes.push({ ...c }); }
@@ -163,15 +181,28 @@ export function foldAttention(rows: readonly AttentionRow[], by: "owner" | "clas
 }
 
 /** 등수 한 줄 — rank null = 등급 전(기한 도래 3건 미만 — 등수를 매기지 않고 맨 뒤에). */
-export type RankRow = { rank: number | null; ownerId: string; name: string; cell: Cell; verdict: Verdict };
+export type RankRow = { rank: number | null; ownerId: string; name: string; meta: string; cell: Cell; verdict: Verdict };
 /**
  * 선생님 등수 — **기한 준수율 높은 순**(원장 2026-11-10 *"전체를 눌렀을때 과목별로 관리 등수 랭킹 … 전체 등수 랭킹도"* · *"항목별 랭킹도"*).
  * `kind`를 주면 그 업무 종류의 칸으로, 없으면 전체 %로 매긴다(그 종류의 의무가 없는 사람은 뺀다).
  * 같은 %는 같은 등수(1 · 1 · 3 — 다음 등수는 건너뛴다) · 같은 등수 안에서는 기한 도래가 많은 사람 먼저. 등급이 없는 사람은 등수 없이 뒤에. '담당 미정'은 사람이 아니라 뺀다.
  */
 export function rankOwners(owners: readonly TreeOwner[], kind: string | null = null): RankRow[] {
-  const rows = owners.filter((o) => o.ownerId !== NO_OWNER).flatMap((o) => { const cell = kind ? o.cells[kind] : o.cell; return cell && cell.total ? [{ ownerId: o.ownerId, name: o.name, cell, verdict: judge(cell) }] : []; });
+  const rows = owners.filter((o) => o.ownerId !== NO_OWNER && listedOwner(o)).flatMap((o) => { const cell = kind ? o.cells[kind] : o.cell; return cell && cell.total ? [{ ownerId: o.ownerId, name: o.name, meta: ownerMeta(o), cell, verdict: judge(cell) }] : []; });
   const judged = rows.filter((r) => r.verdict.tier !== null).sort((a, b) => b.cell.pct! - a.cell.pct! || b.cell.due - a.cell.due || a.name.localeCompare(b.name, "ko"));
   const waiting = rows.filter((r) => r.verdict.tier === null).sort((a, b) => a.name.localeCompare(b.name, "ko"));
   return [...judged.map((r): RankRow => ({ ...r, rank: judged.findIndex((x) => x.cell.pct === r.cell.pct) + 1 })), ...waiting.map((r): RankRow => ({ ...r, rank: null }))];
+}
+
+/** 오늘 미완료 한 줄 — left = 아직 안 끝낸 수(기한 전 포함) · kinds = 종류별 남은 수(많은 것부터). */
+export type OpenRow = { ownerId: string; name: string; meta: string; total: number; done: number; left: number; kinds: { kind: string; label: string; left: number }[] };
+/**
+ * 오늘 업무가 덜 끝난 선생님 — 남은 것이 많은 순(원장 2026-11-10 *"오늘은 랭킹말고 오늘 업무 마무리 안된 선생님을 랭킹으로"* · *"어떤 업무가 안되었는지 파악하기 쉽게"*).
+ * 오늘은 기한(자정 · 발송은 내일 정오)이 아직 안 와서 기한 준수율로는 아무도 가려지지 않는다 — **끝냈나**(완료/전체)로 본다. 다 끝낸 사람은 `left` 0으로 뒤에.
+ */
+export function openRows(owners: readonly TreeOwner[]): OpenRow[] {
+  return owners.filter((o) => o.cell.total && listedOwner(o)).map((o): OpenRow => ({
+    ownerId: o.ownerId, name: o.name, meta: ownerMeta(o), total: o.cell.total, done: o.cell.done, left: o.cell.total - o.cell.done,
+    kinds: MATRIX_COLUMNS.flatMap((c) => { const cell = o.cells[c.kind]; const left = cell ? cell.total - cell.done : 0; return left > 0 ? [{ kind: c.kind, label: c.label, left }] : []; }).sort((a, b) => b.left - a.left),
+  })).sort((a, b) => b.left - a.left || b.total - a.total || a.name.localeCompare(b.name, "ko"));
 }

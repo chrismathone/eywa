@@ -101,40 +101,48 @@ export function buildDailyDuties(input: DailyInput): DutyDraft[] {
     }
   }
 
-  // ── 수업보고서 작성 · 발송 — 운영실 '강사별 업무 현황'과 같은 분모(`reportWorkObligations`).
+  // ── 수업보고서 — 운영실 '강사별 업무 현황'과 같은 분모(`reportWorkObligations`).
+  // 🔴 **보고서는 발송까지가 한 업무다**(원장 2026-11-10 *"보고서 / 발송을 묶어서 발송만 처리하게. 어차피 작성만하고 발송 안하면 의미가 없어"*):
+  //    학부모에게 나가는 보고서(ClassNote 발송 반 · 영어 반 알림장)는 `report_send` 하나만 만든다 — 안 썼어도 · 써 놓고 안 보냈어도 열린 채다.
+  //    발송 길이 없는 곳(ClassNote를 안 쓰는 지점의 수업보고서)만 종전대로 작성(`report_write`)으로 센다.
   const obligations = reportWorkObligations({ classes, schedules: input.schedules, enrollments: input.enrollments, attendance: input.attendance,
     reports: input.reports, posts: input.posts, from: date, to: date, nowMinutes: 24 * 60, holidays: [...input.holidays] });
   const reportOf = new Map(input.reports.map((r) => [`${r.classId}|${r.studentId}|${r.date}`, r]));
+  const sends = (cls: DutyClass | undefined) => input.classnoteOn && cls?.reportSource === "lesson";
   for (const ob of obligations) {
     const cls = byId.get(ob.classId);
     const classPost = ob.studentId === "class-post";
     const owner = ownerOf(ob.classId);
     const report = classPost ? undefined : reportOf.get(`${ob.classId}|${ob.studentId}|${date}`);
     const key = classPost || !cls ? dutySubjectKey(null, ob.classId) : reportSubjectKey(ob.studentId, cls);
-    out.push({ kind: "report_write", period: "daily", cycle: date, subjectKey: key,
-      studentId: classPost ? null : ob.studentId, classId: ob.classId, subject: cls?.subject ?? null, ...owner,
-      dueAt: DAILY_DUE.report_write(date), status: ob.written ? "done" : "open", source: ob.written ? (classPost ? "class_post" : "lesson_report") : null,
-      // 반 알림장은 올린 날(posted_on = 그 수업일)만 남는다 — 완료 시각을 그날 정오로 적는다(비워 두면 장부를 맞춘 시각이 들어가 지난 날을 다시 만들 때 전부 '지연 완료'가 된다).
-      doneAt: ob.written ? (classPost ? `${date}T12:00:00+09:00` : report?.createdAt ?? null) : null });
-    if (classPost || !ob.written || !input.classnoteOn || cls?.reportSource !== "lesson") continue;
-    const recalled = report?.recalled === true;
-    const status: DutyStatus = recalled || ob.status === "too_old" ? "void" : ob.status === "success" ? "done" : "open";
-    out.push({ kind: "report_send", period: "daily", cycle: date, subjectKey: key, studentId: ob.studentId, classId: ob.classId, subject: cls?.subject ?? null,
-      ...owner, dueAt: DAILY_DUE.report_send(date), status, source: status === "void" ? (recalled ? "recalled" : "too_old") : status === "done" ? "classnote_success" : null,
+    const base = { period: "daily" as const, cycle: date, subjectKey: key, studentId: classPost ? null : ob.studentId, classId: ob.classId, subject: cls?.subject ?? null, ...owner };
+    if (classPost) {
+      // 반 알림장은 올린 것이 곧 발송이다. 올린 날(posted_on = 그 수업일)만 남으므로 완료 시각은 그날 정오(비워 두면 장부를 맞춘 시각이 들어가 지난 날이 전부 '지연 완료'가 된다). 기한은 그날 자정.
+      out.push({ ...base, kind: "report_send", dueAt: DAILY_DUE.report_write(date), status: ob.written ? "done" : "open", source: ob.written ? "class_post" : null, doneAt: ob.written ? `${date}T12:00:00+09:00` : null });
+      continue;
+    }
+    if (!sends(cls)) {
+      out.push({ ...base, kind: "report_write", dueAt: DAILY_DUE.report_write(date), status: ob.written ? "done" : "open", source: ob.written ? "lesson_report" : null, doneAt: ob.written ? report?.createdAt ?? null : null });
+      continue;
+    }
+    const recalled = ob.written && report?.recalled === true;
+    const status: DutyStatus = !ob.written ? "open" : recalled || ob.status === "too_old" ? "void" : ob.status === "success" ? "done" : "open";
+    out.push({ ...base, kind: "report_send", dueAt: DAILY_DUE.report_send(date), status, source: status === "void" ? (recalled ? "recalled" : "too_old") : status === "done" ? "classnote_success" : null,
       doneAt: status === "done" ? report?.sentAt ?? null : null });
   }
-  // ── 결석으로 작성 의무가 빠진 학생 — 보고서 받는 반(lesson)의 그날 명단 중 결석 전원(absentClassKeysOf)이고 작성 의무가 없는 학생.
+  // ── 결석으로 보고서 의무가 빠진 학생 — 보고서 받는 반(lesson)의 그날 명단 중 결석 전원(absentClassKeysOf)이고 보고서 의무가 없는 학생.
   const absent = absentClassKeysOf(input.attendance.filter((a) => a.session_date === date));
-  const hasWrite = new Set(out.filter((d) => d.kind === "report_write").map((d) => d.subjectKey));
+  const hasReport = new Set(out.filter((d) => d.kind === "report_write" || d.kind === "report_send").map((d) => d.subjectKey));
   for (const cls of classes) {
     if (cls.reportSource !== "lesson") continue;
+    const kind = sends(cls) ? "report_send" : "report_write";
     for (const d of out) {
       if (d.kind !== "attendance" || d.classId !== cls.id || !d.studentId) continue;
       const key = reportSubjectKey(d.studentId, cls);
-      if (hasWrite.has(key) || !absent.has(`${d.studentId}::${cls.id}`)) continue;
-      hasWrite.add(key);
-      out.push({ kind: "report_write", period: "daily", cycle: date, subjectKey: key, studentId: d.studentId, classId: cls.id, subject: cls.subject,
-        ownerId: d.ownerId, ownerSource: d.ownerSource, dueAt: DAILY_DUE.report_write(date), status: "void", source: "absent", doneAt: null });
+      if (hasReport.has(key) || !absent.has(`${d.studentId}::${cls.id}`)) continue;
+      hasReport.add(key);
+      out.push({ kind, period: "daily", cycle: date, subjectKey: key, studentId: d.studentId, classId: cls.id, subject: cls.subject,
+        ownerId: d.ownerId, ownerSource: d.ownerSource, dueAt: DAILY_DUE[kind](date), status: "void", source: "absent", doneAt: null });
     }
   }
   // 같은 열쇠가 둘이면 DB upsert가 깨진다(21000) — 먼저 온 것(명단 순)만 남긴다. 정상 입력에선 생기지 않는다.

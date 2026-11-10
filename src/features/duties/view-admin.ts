@@ -27,7 +27,7 @@ export type DutyAdminScope = { subjects: string[] | null; labels: Record<string,
 /** note = 가장 최근 관리 기록(확인 · 사유 — s2_0052). 면제한 의무는 지연에서 빠져 여기 오지 않는다. */
 export type LateItem = DutyItemView & { ownerId: string | null; inherited: boolean; note?: DutyNote | null };
 /** syncedAt = 장부를 마지막으로 맞춘 시각(없으면 null) — 화면의 '기준 시각'. */
-export type DutyAdminData = { ownerKind: RollupOwnerKind[]; classes: RollupClass[]; late: LateItem[]; owners: OwnerInfo; classInfo: ClassInfo; syncedAt: string | null; /** 평가 개시 시각(없으면 null) — 고른 기간이 통째로 그 전이면 화면이 '참고 기록'이라고 밝힌다. */ liveFrom?: string | null };
+export type DutyAdminData = { ownerKind: RollupOwnerKind[]; classes: RollupClass[]; late: LateItem[]; owners: OwnerInfo; classInfo: ClassInfo; syncedAt: string | null; /** 담당 반 수 · 학생 수(없으면 반 수만 트리에서 센다). */ ownerLoad?: OwnerLoadRow[]; /** 관리자 역할(원장 · 관리자)인 담당자 — 맡은 반이 없으면 선생님 목록·등수에서 뺀다. */ managerIds?: string[]; /** 평가 개시 시각(없으면 null) — 고른 기간이 통째로 그 전이면 화면이 '참고 기록'이라고 밝힌다. */ liveFrom?: string | null };
 
 export type AdminPeriod = "today" | "week" | "month" | "prevMonth";
 export const ADMIN_PERIODS: { key: AdminPeriod; label: string }[] = [
@@ -55,8 +55,8 @@ export function parseAdminPeriod(raw: unknown): AdminPeriod {
 
 /** 매트릭스 열 = 종류 전부(순서 = DUTY_KINDS). 짧은 머리글. */
 export const MATRIX_COLUMNS: { kind: string; label: string }[] = [
-  { kind: "attendance", label: "출결" }, { kind: "report_write", label: "보고서" }, { kind: "report_send", label: "발송" },
-  { kind: "counsel_monthly", label: "월 상담" }, { kind: "exam_monthly", label: "월말평가" }, { kind: "newcomer_call", label: "신규생 정착" },
+  { kind: "attendance", label: "출결" }, { kind: "report_send", label: "보고서 발송" }, { kind: "report_write", label: "보고서 작성" },
+  { kind: "counsel_monthly", label: "학생 상담" }, { kind: "exam_monthly", label: "월말평가" }, { kind: "newcomer_call", label: "신규생 관리" },
 ];
 /** pct = **기한 준수율**(기한이 온 것 중 제때 끝낸 비율). 기한이 온 것이 없으면 null(평가 대기). */
 export type Cell = Counts & { pct: number | null };
@@ -107,7 +107,9 @@ export function cellTitle(c: Counts): string {
 export type SubjectFilter = string | null | undefined;
 const inSubject = (subject: string | null, filter: SubjectFilter) => filter === undefined || subject === filter;
 
-export type MatrixRow = { ownerId: string; name: string; cells: Record<string, Cell>; all: Cell };
+export type MatrixRow = { ownerId: string; name: string; /** 이름 옆 글(과목 · 반 수 · 학생 수). */ meta?: string; cells: Record<string, Cell>; all: Cell };
+/** 담당자 × 과목의 담당 반 수 · 학생 수(s2_0053 — 고른 기간의 장부에서 겹침 없이). */
+export type OwnerLoadRow = { ownerId: string | null; subject: string | null; classes: number; students: number };
 /** 보이는 줄의 합(전체 줄) — '지연만'으로 거른 뒤에도 그 줄들의 합이다. */
 export function foldMatrixRows(rows: readonly MatrixRow[]): MatrixRow | null {
   if (!rows.length) return null;

@@ -10,7 +10,7 @@ import { subjectLabelRecord } from "@/features/owner/subjects";
 import { programSubjectsOf, subjectGroupOf } from "@/features/students/enrollment/program";
 import type { DutyPeriod, DutyStatus } from "../kinds";
 import { loadLatestNotes } from "./notes";
-import type { ClassInfo, Counts, DutyAdminData, DutyAdminScope, LateItem, OwnerInfo, RollupClass, RollupOwnerKind, RollupStudent, StudentInfo } from "../view-admin";
+import type { ClassInfo, Counts, DutyAdminData, DutyAdminScope, LateItem, OwnerInfo, OwnerLoadRow, RollupClass, RollupOwnerKind, RollupStudent, StudentInfo } from "../view-admin";
 
 /**
  * 업무 완성도 관리자 화면의 조회 — 장부는 서버 전용 표(정책 0개)라 관리 키로 읽고, **모든 조회에 지점 조건**. 집계는 DB(s2_0049 · B2).
@@ -48,13 +48,18 @@ async function loadDutySettings(tenantId: string): Promise<{ liveFrom: string | 
 export async function loadDutyAdmin(tenantId: string, from: string, to: string, scope: DutyAdminScope, periods: string[] | null): Promise<DutyAdminData> {
   const admin = createAdminClient();
   const args = { p_tenant: tenantId, p_from: from, p_to: to, p_subjects: scope.subjects, p_periods: periods, p_owner: scope.ownerId };
-  const [ok, cls, lateRaw, settings] = await Promise.all([
+  const [ok, cls, lateRaw, settings, ownerLoad] = await Promise.all([
     fetchAllPaged<CountRow & { owner_id: string | null; subject: string | null; kind: string; period: DutyPeriod }>((a, b) =>
       admin.rpc("duty_rollup_owner_kind", args).order("owner_id").order("subject").order("kind").order("period").range(a, b)),
     fetchAllPaged<CountRow & { class_id: string | null; owner_id: string | null; subject: string | null }>((a, b) =>
       admin.rpc("duty_rollup_class", args).order("class_id").order("owner_id").order("subject").range(a, b)),
     loadLateItems(tenantId, scope),
     loadDutySettings(tenantId),
+    // 담당 반 수 · 학생 수(s2_0053) — 함수가 아직 없으면(#95) 빈 값(화면은 반 수만 센다).
+    admin.rpc("duty_rollup_owner_load", args).then(({ data, error }): OwnerLoadRow[] => {
+      if (error) { if (error.code === "PGRST202" || error.code === "42883") return []; throw new Error(`담당 반·학생 수: ${error.message}`); }
+      return ((data ?? []) as { owner_id: string | null; subject: string | null; classes: number; students: number }[]).map((r) => ({ ownerId: r.owner_id, subject: r.subject, classes: num(r.classes), students: num(r.students) }));
+    }),
   ]);
   const liveMs = settings.liveFrom ? Date.parse(settings.liveFrom) : null;
   const notes = await loadLatestNotes(tenantId, lateRaw.map((it) => it.id));
@@ -64,7 +69,7 @@ export async function loadDutyAdmin(tenantId: string, from: string, to: string, 
   const ownerIds = [...new Set([...ownerKind.map((r) => r.ownerId), ...classes.map((r) => r.ownerId), ...late.map((r) => r.ownerId)].filter((id): id is string => !!id))];
   const classIds = [...new Set(classes.map((r) => r.classId).filter((id): id is string => !!id))];
   const [owners, classInfo] = await Promise.all([loadOwners(tenantId, ownerIds), loadClasses(tenantId, classIds)]);
-  return { ownerKind, classes, late, owners, classInfo, syncedAt: settings.syncedAt, liveFrom: settings.liveFrom };
+  return { ownerKind, classes, late, owners: owners.names, classInfo, syncedAt: settings.syncedAt, liveFrom: settings.liveFrom, ownerLoad, managerIds: owners.managerIds };
 }
 
 type LateRow = { id: string; kind: string; period: DutyPeriod; cycle: string; status: DutyStatus; due_at: string; done_at: string | null; void_reason: string | null; owner_id: string | null;
@@ -89,9 +94,9 @@ async function loadLateItems(tenantId: string, scope: DutyAdminScope): Promise<O
   });
 }
 
-async function loadOwners(tenantId: string, ids: string[]): Promise<OwnerInfo> {
-  const rows = await fetchInChunks<{ id: string; display_name: string | null }>(ids, (chunk) => createAdminClient().from("users").select("id,display_name").eq("tenant_id", tenantId).in("id", chunk));
-  return Object.fromEntries(rows.map((r) => [r.id, r.display_name ?? "이름 없음"]));
+async function loadOwners(tenantId: string, ids: string[]): Promise<{ names: OwnerInfo; managerIds: string[] }> {
+  const rows = await fetchInChunks<{ id: string; display_name: string | null; system_role: string | null }>(ids, (chunk) => createAdminClient().from("users").select("id,display_name,system_role").eq("tenant_id", tenantId).in("id", chunk));
+  return { names: Object.fromEntries(rows.map((r) => [r.id, r.display_name ?? "이름 없음"])), managerIds: rows.filter((r) => r.system_role === "admin" || r.system_role === "master").map((r) => r.id) };
 }
 async function loadClasses(tenantId: string, ids: string[]): Promise<ClassInfo> {
   const rows = await fetchInChunks<{ id: string; class_name: string | null; subject: string | null; teacher_id: string | null }>(ids, (chunk) => createAdminClient().from("classes").select("id,class_name,subject,teacher_id").eq("tenant_id", tenantId).in("id", chunk));

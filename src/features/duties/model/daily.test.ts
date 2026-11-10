@@ -61,45 +61,50 @@ describe("buildDailyDuties — 출결 입력", () => {
   });
 });
 
-describe("buildDailyDuties — 보고서 작성 · 발송", () => {
-  it("아직 수업 전이어도 하루치 작성 의무가 선다 · 쓴 학생은 done(시각 = created_at) + 발송 의무(미발송 = open)", () => {
+describe("buildDailyDuties — 보고서 발송(작성 · 발송을 한 업무로)", () => {
+  it("🔴 보고서는 발송까지가 한 업무 — 발송하는 반에는 작성 의무가 따로 없고, 안 썼어도 · 써 놓고 안 보냈어도 발송 의무가 열린 채다(기한 = 다음 날 정오)", () => {
     const rows = buildDailyDuties(base({ reports: [report("s1")] }));
-    expect(pick(rows, "report_write", "s1")).toMatchObject({ status: "done", source: "lesson_report", ownerId: "t1", doneAt: `${DATE}T09:00:00Z` });
-    expect(pick(rows, "report_write", "s2")).toMatchObject({ status: "open", dueAt: kstDueAt(DATE, 1, 0) });
-    expect(pick(rows, "report_send", "s1")).toMatchObject({ status: "open", dueAt: kstDueAt(DATE, 1, 12), doneAt: null });
-    expect(pick(rows, "report_send", "s2")).toBeUndefined();
+    expect(rows.some((r) => r.kind === "report_write")).toBe(false);
+    expect(pick(rows, "report_send", "s1")).toMatchObject({ status: "open", ownerId: "t1", dueAt: kstDueAt(DATE, 1, 12), doneAt: null });
+    expect(pick(rows, "report_send", "s2")).toMatchObject({ status: "open", dueAt: kstDueAt(DATE, 1, 12), doneAt: null });
   });
-  it("발송 성공 = done(시각 = classnote_sent_at) · 회수 = void · 기한 지남(too_old) = void · ClassNote 꺼진 지점엔 발송 의무가 없다", () => {
+  it("발송 성공 = done(시각 = classnote_sent_at) · 회수 = void · 기한 지남(too_old) = void", () => {
     const rows = buildDailyDuties(base({ reports: [report("s1", "success"), report("s2", "failed", { recalled: true })] }));
     expect(pick(rows, "report_send", "s1")).toMatchObject({ status: "done", source: "classnote_success", doneAt: `${DATE}T10:00:00Z` });
     expect(pick(rows, "report_send", "s2")).toMatchObject({ status: "void", source: "recalled" });
     expect(pick(buildDailyDuties(base({ reports: [report("s1", "too_old")] })), "report_send", "s1")).toMatchObject({ status: "void", source: "too_old" });
-    expect(buildDailyDuties(base({ classnoteOn: false, reports: [report("s1")] })).some((r) => r.kind === "report_send")).toBe(false);
   });
-  it("결석한 학생은 작성 의무에서 빠지되 void('absent') 행으로 남는다(출결 의무는 기록이 있으니 done) · 미리 쓴 보고서(covers_date = 오늘)는 그날 의무를 끝낸다", () => {
+  it("ClassNote를 안 쓰는 지점(발송 길이 없음)은 종전대로 작성 의무 — 쓰면 done(시각 = created_at) · 발송 의무는 없다", () => {
+    const rows = buildDailyDuties(base({ classnoteOn: false, reports: [report("s1")] }));
+    expect(rows.some((r) => r.kind === "report_send" && r.classId === "c-math")).toBe(false);
+    expect(pick(rows, "report_write", "s1")).toMatchObject({ status: "done", source: "lesson_report", doneAt: `${DATE}T09:00:00Z` });
+    expect(pick(rows, "report_write", "s2")).toMatchObject({ status: "open", dueAt: kstDueAt(DATE, 1, 0) });
+  });
+  it("결석한 학생은 보고서 의무에서 빠지되 void('absent') 행으로 남는다(출결 의무는 기록이 있으니 done) · 미리 쓴 보고서(covers_date = 오늘)는 그날 의무를 만들지 않는다", () => {
     const rows = buildDailyDuties(base({ attendance: [att("s1", "c-math", "absent")] }));
-    expect(pick(rows, "report_write", "s1")).toMatchObject({ status: "void", source: "absent", ownerId: "t1" });
+    expect(pick(rows, "report_send", "s1")).toMatchObject({ status: "void", source: "absent", ownerId: "t1" });
     expect(pick(rows, "attendance", "s1")).toMatchObject({ status: "done" });
     const ahead = buildDailyDuties(base({ reports: [report("s2", null, { date: "2026-11-07", coversDate: DATE })] }));
-    expect(pick(ahead, "report_write", "s2")).toBeUndefined();
+    expect(pick(ahead, "report_send", "s2")).toBeUndefined();
   });
-  it("같은 담당·과목의 두 반을 듣는 학생 — 열쇠는 담당×과목으로 하나 · 보고서를 어느 반으로 썼든 같은 열쇠가 done이 되고 반만 따라간다", () => {
+  it("같은 담당·과목의 두 반을 듣는 학생 — 열쇠는 담당×과목으로 하나 · 보고서를 어느 반으로 썼든 같은 열쇠이고 반만 따라간다", () => {
     const mathB = { ...math, id: "c-math-b", name: "중2 B" };
     const before = buildDailyDuties(base({ classes: [math, mathB, eng], schedules: [slot({ class_id: "c-math" }), slot({ class_id: "c-math-b", start_time: "18:30" })],
       enrollments: [enroll("c-math", "s1"), enroll("c-math-b", "s1")] }));
-    const writes = before.filter((r) => r.kind === "report_write" && r.studentId === "s1");
-    expect(writes).toHaveLength(1);
-    expect(writes[0]).toMatchObject({ subjectKey: reportSubjectKey("s1", math), status: "open" });
+    const sends = before.filter((r) => r.kind === "report_send" && r.studentId === "s1");
+    expect(sends).toHaveLength(1);
+    expect(sends[0]).toMatchObject({ subjectKey: reportSubjectKey("s1", math), status: "open" });
     const after = buildDailyDuties(base({ classes: [math, mathB, eng], schedules: [slot({ class_id: "c-math" }), slot({ class_id: "c-math-b", start_time: "18:30" })],
-      enrollments: [enroll("c-math", "s1"), enroll("c-math-b", "s1")], reports: [report("s1", null, { classId: "c-math-b" })] }));
-    const written = after.filter((r) => r.kind === "report_write" && r.studentId === "s1");
-    expect(written).toHaveLength(1);
-    expect(written[0]).toMatchObject({ subjectKey: reportSubjectKey("s1", math), status: "done", classId: "c-math-b" });
+      enrollments: [enroll("c-math", "s1"), enroll("c-math-b", "s1")], reports: [report("s1", "success", { classId: "c-math-b" })] }));
+    const sent = after.filter((r) => r.kind === "report_send" && r.studentId === "s1");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ subjectKey: reportSubjectKey("s1", math), status: "done", classId: "c-math-b" });
   });
-  it("영어 ClassNote 반은 반 단위 한 행(class:<id>) · 알림장이 올라오면 done · 발송 의무는 따로 없다", () => {
+  it("영어 ClassNote 반은 반 단위 한 행(class:<id>) · 알림장을 올린 것이 곧 발송(완료 시각 = 그날 정오 · 기한 = 그날 자정)", () => {
     const rows = buildDailyDuties(base({ posts: [{ boardName: "중2 영어A", postedOn: DATE }] }));
-    expect(pick(rows, "report_write", null, "c-eng")).toMatchObject({ status: "done", studentId: null, classId: "c-eng", source: "class_post" });
-    expect(rows.some((r) => r.kind === "report_send" && r.classId === "c-eng")).toBe(false);
+    expect(pick(rows, "report_send", null, "c-eng")).toMatchObject({ status: "done", studentId: null, classId: "c-eng", source: "class_post", doneAt: `${DATE}T12:00:00+09:00`, dueAt: kstDueAt(DATE, 1, 0) });
+    expect(rows.some((r) => r.kind === "report_write")).toBe(false);
+    expect(pick(buildDailyDuties(base({})), "report_send", null, "c-eng")).toMatchObject({ status: "open" });
   });
 });
 

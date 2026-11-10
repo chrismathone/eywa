@@ -1,7 +1,7 @@
 "use client";
 
 import { progressText, type Cell } from "../../view-admin";
-import { judge, type TreeSubject } from "../../view-admin-levels";
+import { judge, ownerMeta, type TreeSubject } from "../../view-admin-levels";
 import { TierStars } from "@/features/student-contribution/components/relative-score";
 import { VerdictDot } from "./admin-verdict";
 
@@ -47,7 +47,7 @@ export function AdminTree({ tree, multi, sel, lateOnly, onSelect }: { tree: Tree
           return <div key={o.ownerId} className={multi ? "pl-3" : ""}>
             <button type="button" onClick={() => onSelect({ subject: s.subject, owner: o.ownerId, classId: null, studentId: null })} className={`${row} ${ownerOn && !sel.classId ? on : ""}`}>
               <VerdictDot grade={judge(o.cell).grade} />
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold">{o.name}</span>
+              <span className="grid min-w-0 flex-1"><span className="truncate text-sm font-semibold">{o.name}</span>{ownerMeta(o) ? <span className="text-text-dim truncate text-xs font-medium">{ownerMeta(o)}</span> : null}</span>
               <Mark cell={o.cell} />
             </button>
             {ownerOn ? <div className="grid gap-0.5 pl-4">

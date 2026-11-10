@@ -10,7 +10,7 @@ import { DUTY_LEDGER_START, buildWeekTable, type DutyWeekCell, type DutyWeekKind
  * 주는 **항상 월요일 시작**(월~금 + 의무 있는 토·일 · 원장 2026-11-10). 오늘 뒤 날은 '예정', 장부 전 날은 '기록 전', 수업 없는 날은 빈 칸.
  * 원장 2026-11-10 *"0/2 라고 적지 말고, 출결/보고서 이렇게 막대그래프"*.
  */
-const SHORT: Record<string, string> = { attendance: "출결", report_write: "보고서", report_send: "발송" };
+const SHORT: Record<string, string> = { attendance: "출결", report_write: "보고서", report_send: "보고서 발송" };
 const FILL: Record<DutyWeekKind["state"], string> = { done: "bg-green text-primary-foreground", late: "bg-danger text-primary-foreground", open: "bg-surface-hi text-green" };
 
 const DOW_KEY = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];

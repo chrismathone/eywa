@@ -16,17 +16,17 @@ import { MyDutiesStripButton, type DutyStripSummary } from "./my-duties-strip-bu
  */
 export async function MyDutiesStrip({ className }: { className?: string } = {}) {
   const found = await loadMine();
-  return found ? <MyDutiesStripButton summary={found} className={className} /> : null;
+  return found ? <MyDutiesStripButton summary={found.summary} tenantId={found.tenantId} className={className} /> : null;
 }
 
-async function loadMine(): Promise<DutyStripSummary | null> {
+async function loadMine(): Promise<{ summary: DutyStripSummary; tenantId: string } | null> {
   try {
     const [viewer, readonly, lang] = await Promise.all([getStaffTaskViewer(), isReadonlyTeacherView(), getTeacherViewLang()]);
     if (!viewer || readonly) return null;
     await flushDuties(viewer.user.tenantId); // 방금 저장한 것을 먼저 장부에 맞춘다(s2_0051 · 던지지 않는다)
     const summary = await loadDutySummary(viewer.user.tenantId, viewer.user.id);
     if (!summary.today.total && !summary.counsel.total && !summary.exam.total && !summary.newcomer.total) return null;
-    return { ...summary, lang };
+    return { summary: { ...summary, lang }, tenantId: viewer.user.tenantId };
   } catch (error) {
     reportError(error, { scope: "duties.strip" });
     return null;

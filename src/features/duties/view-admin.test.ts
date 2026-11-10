@@ -66,7 +66,7 @@ describe("buildAttention · lateByKind", () => {
   });
   it("🔴 같은 학생이라도 담당자가 다르면 따로 — 다른 선생님 몫이 한 사람에게 붙지 않는다", () => {
     const rows = buildAttention([late({ ownerId: "t1", subject: "math" }), late({ ownerId: "t2", subject: "english", classId: "e1", className: "LE2", kind: "counsel_monthly" })], OWNERS, undefined, NOW);
-    expect(rows.map((r) => [r.teacher, r.summary]).sort()).toEqual([["문예린", "월 학부모 상담 1"], ["한지우", "수업보고서 작성 1"]].sort());
+    expect(rows.map((r) => [r.teacher, r.summary]).sort()).toEqual([["문예린", "학생 상담 1"], ["한지우", "수업보고서 작성 1"]].sort());
     expect(distinctStudents(rows)).toBe(1);
   });
   it("과목 거르기 — undefined = 전부 · null = 과목 없는 것만 · 글자 = 그 과목", () => {

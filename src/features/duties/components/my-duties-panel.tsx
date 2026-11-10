@@ -11,7 +11,7 @@ import { useCollapse } from "./collapse";
  * 칸을 누르면 창 안에 그 기록 화면(원스크린 그 학생)이 간이 페이지로 뜬다. 완료된 칸은 누를 수 없다. 결석은 "결석".
  */
 const DAILY: DutyKind[] = DUTY_KIND_KEYS.filter((k) => DUTY_KINDS[k].period === "daily");
-const SHORT: Record<string, string> = { attendance: "출결", report_write: "보고서", report_send: "발송" };
+const SHORT: Record<string, string> = { attendance: "출결", report_write: "보고서", report_send: "보고서 발송" };
 // 미완료 = 완료와 같은 초록이되 속은 흰색(채워지지 않은 것처럼) · 글자 초록(원장 2026-11-10). 기한 초과만 빨강.
 const CELL: Record<DutyState, string> = { done: "bg-green text-primary-foreground border border-green", late: "bg-danger text-primary-foreground border border-danger", open: "bg-surface-hi text-green border border-green", void: "bg-bg-soft text-text-placeholder" };
 
@@ -27,7 +27,7 @@ function GroupsView({ groups, now, defaultClosed }: { groups: ReturnType<typeof 
   return <div className="grid gap-3">
     {groups.map((g) => {
       const kinds = DAILY.filter((k) => g.cards.some((c) => c.items.some((i) => i.kind === k)));
-      return <section key={g.classId ?? "none"} className="border-line-faint overflow-hidden rounded-xl border">
+      return <section key={g.classId ?? "none"} className="border-line bg-card overflow-hidden rounded-xl border">
         <header className="bg-bg-soft flex cursor-pointer select-none flex-wrap items-center justify-between gap-2 px-3 py-1.5" onClick={() => collapse.toggle(g.classId ?? "")}>
           <h4 className="text-sm font-bold"><span className="text-text-dim mr-1.5 inline-block w-3">{collapse.isOpen(g.classId ?? "") ? "▾" : "▸"}</span>{g.name}<span className="text-text-dim ml-2 text-xs font-medium">{g.cards.length}명</span></h4>
           <span className="text-xs font-semibold tabular-nums"><span className={g.done === g.total ? "text-green" : "text-foreground"}>{g.done}/{g.total}</span>

@@ -2,7 +2,7 @@
 
 import { MATRIX_COLUMNS } from "../../view-admin";
 import { inClassOf, judge, kindStatuses, studentLines, sumCells, type Avg, type TreeClass } from "../../view-admin-levels";
-import { CountBox } from "./admin-matrix";
+import { CountBox, GridCols, gridStyle } from "./admin-matrix";
 import { KindStatusStrip } from "./admin-kind-status";
 import { VerdictBadge, VerdictLine } from "./admin-verdict";
 import type { StudentsPayload } from "./use-students";
@@ -24,13 +24,14 @@ export function ClassLevel({ cls, teacher, avg, payload, failed, kind, onStudent
       <VerdictLine v={judge(cls.cell, avg)} />
     </header>
     {sum ? <KindStatusStrip statuses={kindStatuses(sum.cells)} only={kind} /> : null}
-    <section className="border-line-faint rounded-xl border p-3">
+    <section className="border-line bg-card rounded-xl border p-3">
       <h4 className="text-sm font-bold">학생</h4>
       {failed ? <p className="text-text-dim mt-2 text-sm">학생 목록 조회 실패</p>
         : !payload ? <p className="text-text-dim mt-2 text-sm">불러오는 중…</p>
         : !lines.length ? <p className="text-text-dim mt-2 text-sm">해당 학생 없음</p>
         : <div className="mt-2 overflow-x-auto">
-          <table className="w-full border-separate border-spacing-1 text-center text-sm [&_th:first-child]:text-left">
+          <table className="table-fixed border-separate border-spacing-1 text-center text-sm [&_th:first-child]:text-left" style={gridStyle(cols.length + (kind ? 0 : 1))}>
+            <GridCols count={cols.length + (kind ? 0 : 1)} />
             <thead><tr><th className={TH}>학생</th><th className={TH}>등급</th>{cols.map((c) => <th key={c.kind} className={TH}>{c.label}</th>)}{kind ? null : <th className={TH}>전체</th>}</tr></thead>
             <tbody>
               {lines.map((l) => <tr key={l.studentId}>

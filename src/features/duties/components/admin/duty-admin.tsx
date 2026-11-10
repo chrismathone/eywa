@@ -3,20 +3,23 @@
 import { useEffect, useRef, useState } from "react";
 import { Toolbar, ToolbarChip, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { ADMIN_PERIODS, buildAttention, distinctStudents, lateByKind, type AdminPeriod, type AttentionRow, type DutyAdminData, type DutyAdminScope, type LateItem, type SubjectFilter } from "../../view-admin";
-import { attentionItems, buildTree, foldAttention, NO_CLASS, NO_OWNER, NO_SUBJECT, rootOfTree, type TreeSubject } from "../../view-admin-levels";
+import { attentionItems, buildTree, foldAttention, ownerMeta, NO_CLASS, NO_OWNER, NO_SUBJECT, rootOfTree, type TreeSubject } from "../../view-admin-levels";
 import type { DutyWork } from "../duty-work-context";
 import { AdminAttention } from "./admin-attention";
 import { ClassPane, StudentPane, SubjectLevel } from "./admin-panes";
 import { NoteButton } from "./admin-note";
+import { useDutyPing } from "../use-duty-ping";
 import { DutyRequestScope, LateRequestButton } from "./admin-late-request";
 import { AdminOwnerBoard } from "./admin-owner-board";
 import { AdminRanking } from "./admin-ranking";
+import { AdminToday } from "./admin-today";
 import { AdminOverlay } from "./admin-overlay";
 import { AdminTree, ROOT, type Sel } from "./admin-tree";
 import { TeacherLevel } from "./admin-level-teacher";
 
 /** now = 서버가 이 재료를 만든 시각(지난 날 수·기준 시각 비교에 쓴다 — 그리는 중에 시계를 읽지 않는다). */
 export type Loaded = { period: AdminPeriod; today: string; now: string; range: { from: string; to: string; label: string }; data: DutyAdminData };
+// 저장 순간의 신호(s2_0054 `useDutyPing`)가 바로 다시 받게 한다 — 이 주기는 실시간 연결이 끊겼을 때의 받침이다.
 const REFRESH_MS = 60_000;
 /** 장부를 맞춘 지 이보다 오래면 '최신이 아님'을 알린다(맞춤은 30분마다 + 화면을 열 때). */
 const STALE_MS = 90 * 60_000;
@@ -30,7 +33,7 @@ const kstStamp = (iso: string) => { const d = new Date(Date.parse(iso) + 9 * 3_6
  * 평가 시작(live_from) 전 기한의 의무(이관)는 **화면에 보이지 않는다**(원장 2026-11-10 *"그런거 표시하지마"* — 판정·지연 수·할 일에도 안 든다 · 장부에는 남는다).
  * 고른 자리(`Sel`)는 **지금 기간의 트리에 맞춰 바로잡는다** — 없는 과목은 전체로, 없는 선생님·반은 그 위 단계로(기간을 바꿔도 화면이 어긋나지 않게).
  */
-export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded; scope: DutyAdminScope; /** 과목 키 → 과목 관리자 이름(학원 전체를 보는 사람에게만 — 원장 첫 화면의 '과목 관리자별 현황'). */ managers?: Record<string, string[]> | null }) {
+export function DutyAdmin({ initial, scope, managers = null, tenantId = null }: { initial: Loaded; scope: DutyAdminScope; /** 저장 순간의 신호를 들을 지점(s2_0054). */ tenantId?: string | null; /** 과목 키 → 과목 관리자 이름(학원 전체를 보는 사람에게만 — 원장 첫 화면의 '과목 관리자별 현황'). */ managers?: Record<string, string[]> | null }) {
   const [period, setPeriod] = useState<AdminPeriod>(initial.period);
   const [loaded, setLoaded] = useState<Partial<Record<AdminPeriod, Loaded>>>({ [initial.period]: initial });
   const [failed, setFailed] = useState<Partial<Record<AdminPeriod, true>>>({});
@@ -39,8 +42,11 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [work, setWork] = useState<{ seq: number; work: DutyWork } | null>(null);
   const [tick, setTick] = useState(0);
-  const [nonce, setNonce] = useState(0); // 관리 기록을 남긴 뒤 지금 기간을 다시 받는다
-  const seen = useRef(0);
+  // 지금 기간을 바로 다시 받기(저장 순간의 신호 · 관리 기록 저장 뒤) — 다른 기간은 다음에 볼 때 새로 받게 비운다. 받는 중이면 끝난 뒤 한 번 더.
+  const reload = useRef<() => void>(() => undefined);
+  const refresh = () => { setLoaded((all) => (all[period] ? { [period]: all[period] } : {})); reload.current(); };
+  // 출결 · 보고서 · 상담이 저장되는 순간 지금 기간을 다시 받는다(다른 기간은 다음에 볼 때 새로 받게 비운다).
+  useDutyPing(tenantId, refresh);
   const periodRef = useRef(period);
   useEffect(() => { periodRef.current = period; }, [period]);
 
@@ -48,14 +54,20 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
   // 세대 번호(gen)로 탭을 숨겼다 다시 볼 때 옛 고리가 한 번 더 예약하지 못하게 한다(고리가 둘로 늘지 않는다).
   useEffect(() => {
     let alive = true; let gen = 0; let timer: ReturnType<typeof setTimeout> | null = null;
-    const load = async (p: AdminPeriod) => {
+    const busy = { on: false, again: false };
+    const load = async (p: AdminPeriod): Promise<void> => {
+      if (busy.on) { busy.again = true; return; }
+      busy.on = true;
       try {
         const r = await fetch(`/api/duties/admin?period=${p}`, { cache: "no-store" });
         if (!r.ok) throw new Error(String(r.status));
         const next = (await r.json()) as Loaded;
         if (alive) { setLoaded((cur) => ({ ...cur, [p]: next })); setFailed((f) => { const rest = { ...f }; delete rest[p]; return rest; }); setTick((t) => t + 1); }
       } catch { if (alive) setFailed((f) => ({ ...f, [p]: true })); }
+      busy.on = false;
+      if (busy.again && alive) { busy.again = false; await load(periodRef.current); }
     };
+    reload.current = () => { if (alive) void load(periodRef.current); };
     const loop = async (myGen: number) => {
       if (document.visibilityState === "visible") await load(periodRef.current);
       if (alive && myGen === gen) timer = setTimeout(() => void loop(myGen), REFRESH_MS);
@@ -63,14 +75,14 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
     timer = setTimeout(() => void loop(gen), REFRESH_MS);
     const onVisible = () => { if (document.visibilityState === "visible") { gen += 1; if (timer) clearTimeout(timer); void loop(gen); } };
     document.addEventListener("visibilitychange", onVisible);
-    if (!loaded[period] || seen.current !== nonce) { seen.current = nonce; void load(period); }
+    if (!loaded[period]) void load(period);
     return () => { alive = false; if (timer) clearTimeout(timer); document.removeEventListener("visibilitychange", onVisible); };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 기간이 바뀔 때만 새로 받는다(받아 둔 기간은 그대로).
-  }, [period, nonce]);
+  }, [period]);
 
   const cur = loaded[period];
   const nowMs = cur ? Date.parse(cur.now) : 0;
-  const tree = cur ? buildTree(cur.data.ownerKind, cur.data.classes, cur.data.owners, cur.data.classInfo, scope.labels) : [];
+  const tree = cur ? buildTree(cur.data.ownerKind, cur.data.classes, cur.data.owners, cur.data.classInfo, scope.labels, { load: cur.data.ownerLoad, managerIds: cur.data.managerIds }) : [];
   const multi = tree.length > 1;
   // 고른 자리 바로잡기 — 과목이 하나면 늘 그 과목 · 트리에 없는 과목은 전체 · 없는 선생님·반은 위 단계로. 학생은 단계와 무관하게 연다(지연 목록에서 바로 들어온다).
   const subject0: Sel["subject"] = !multi ? (tree[0]?.subject ?? null) : rawSel.subject !== undefined && !tree.some((s) => s.subject === rawSel.subject) ? undefined : rawSel.subject;
@@ -113,11 +125,13 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
   };
   const openChild = (r: AttentionRow) => { if (r.studentId) pickStudent(r.studentId, r.title); else if (r.classId) openWork({ href: `/classes/${r.classId}`, title: r.title }); };
   const expandOf = (list: "live", all: AttentionRow[], rows: AttentionRow[]) => { const r = rows.find((x) => `${list}:${x.key}` === openKey); return r ? { key: r.key, rows: childrenOf(all, r) } : null; };
-  const attention = fold(attentionAll);
+  // 선생님 줄에는 이름 옆에 늘 과목 · 반 수 · 학생 수(그 옆 숫자는 지연이 있는 학생 수).
+  const metaOf = new Map((subjectNode?.owners ?? []).map((o) => [o.ownerId, ownerMeta(o)]));
+  const attention = fold(attentionAll).map((r) => (r.key.startsWith("owner:") && metaOf.get(r.ownerId ?? NO_OWNER) ? { ...r, sub: [metaOf.get(r.ownerId ?? NO_OWNER), r.sub ? `지연 ${r.sub}` : ""].filter(Boolean).join(" · ") } : r));
   // 관리 기록(확인 · 사유 · 면제) — 전체 권한에게만. 줄이 가리키는 의무 전부에 남긴다.
-  const noteFor = (all: LateItem[], r: AttentionRow) => (scope.canNote ? <NoteButton title={[r.teacher, r.className, r.title].filter((x, i, a) => x && a.indexOf(x) === i).join(" · ")} items={attentionItems(all, r)} onSaved={() => { setLoaded((all) => (all[period] ? { [period]: all[period] } : {})); setNonce((n) => n + 1); }} /> : null);
+  const noteFor = (all: LateItem[], r: AttentionRow) => (scope.canNote ? <NoteButton title={[r.teacher, r.className, r.title].filter((x, i, a) => x && a.indexOf(x) === i).join(" · ")} items={attentionItems(all, r)} onSaved={refresh} /> : null);
   const preLive = !!cur?.data.liveFrom && cur.range.to < new Date(Date.parse(cur.data.liveFrom) + 9 * 3_600_000).toISOString().slice(0, 10);
-  const lateSection = <section className="border-line-faint rounded-xl border p-2">
+  const lateSection = <section className="border-line bg-card rounded-xl border p-2">
     <div className="flex items-center gap-2 px-2 py-1">
       <h4 className="min-w-0 flex-1 text-sm font-bold">현재 지연 <span className="text-text-dim text-xs font-medium">{distinctStudents(liveHere)}명 · {liveHere.length}건 · 기간 무관</span></h4>
       {ownerNode && ownerNode.ownerId !== NO_OWNER ? <LateRequestButton owner={{ id: ownerNode.ownerId, name: ownerNode.name }} items={liveHere} /> : null}
@@ -133,15 +147,15 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
     <Toolbar>
       <ToolbarSegment>{ADMIN_PERIODS.map((p) => <ToolbarSegmentItem key={p.key} active={period === p.key} onClick={() => setPeriod(p.key)}>{p.label}</ToolbarSegmentItem>)}</ToolbarSegment>
       <span className="text-text-dim text-sm font-semibold">{rangeLabel}</span>
-      {synced && !stale ? <span className="text-text-dim text-xs font-medium">장부 기준 {kstStamp(synced)}</span> : null}
+      {cur && !stale ? <span className="text-text-dim text-xs font-medium">마지막 반영 {kstStamp(cur.now)}</span> : null}
       <ToolbarChip active={lateOnly} onClick={() => setLateOnly((v) => !v)} className="ml-auto">지연만</ToolbarChip>
     </Toolbar>
-    {stale ? <p className="bg-amber-soft text-amber rounded-lg px-3 py-2 text-sm font-semibold">{synced ? `장부 기준 ${kstStamp(synced)} · 이후 저장분은 미반영일 수 있음` : "장부 기준 시각 없음 · 수치가 실제와 다를 수 있음"}</p> : null}
-    {preLive ? <p className="bg-bg-soft text-text-dim rounded-lg px-3 py-2 text-sm font-semibold">평가 개시 전 기간 · 기록으로 재구성한 참고 수치(현재 운영 중인 반 · 현재 담임 기준)</p> : null}
+    {stale ? <p className="bg-amber-soft text-amber rounded-lg px-3 py-2 text-sm font-semibold">{synced ? `마지막 전체 반영 ${kstStamp(synced)} · 이후 저장분은 미반영일 수 있음` : "반영 기록 없음 · 수치가 실제와 다를 수 있음"}</p> : null}
+    {preLive ? <p className="border-line bg-card text-text-dim rounded-lg border px-3 py-2 text-sm font-semibold">평가 개시 전 기간 · 기록으로 재구성한 참고 수치(현재 운영 중인 반 · 현재 담임 기준)</p> : null}
     {!cur ? <p className="text-text-dim text-sm">{failed[period] ? "조회 실패 · 잠시 후 다시 열어 주세요" : "불러오는 중…"}</p> : null}
 
-    {cur ? <div className="grid gap-3 lg:grid-cols-[260px_minmax(0,1fr)] lg:items-start">
-      <aside className="border-line-faint rounded-xl border p-2 lg:sticky lg:top-2">
+    {cur ? <div className="grid gap-3 lg:grid-cols-[300px_minmax(0,1fr)] lg:items-start">
+      <aside className="border-line bg-card min-w-0 overflow-hidden rounded-xl border p-2 lg:sticky lg:top-2">
         {tree.length ? <AdminTree tree={tree} multi={multi} sel={sel} lateOnly={lateOnly} onSelect={(next) => { setOpenKey(null); setSel(next); }} /> : <p className="text-text-dim px-2 py-4 text-sm">해당 기간 업무 없음</p>}
       </aside>
       <main className="grid gap-4">
@@ -159,7 +173,7 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
           : classNode && ownerNode ? <ClassPane key={`${classNode.classId}|${ownerNode.ownerId}|${fetchSubject ?? ""}`} period={period} tick={tick} classNode={classNode} owner={ownerNode.ownerId} fetchSubject={fetchSubject} teacher={ownerNode.name} kind={sel.kind ?? null}
               avg={{ pct: ownerNode.cell.pct, label: "선생님" }} onStudent={pickStudent} onWork={openWork} />
           : ownerNode ? <TeacherLevel owner={ownerNode} avg={subjectAvg} period={period} subject={fetchSubject} tick={tick} kind={sel.kind ?? null} onClearKind={() => go({ ...sel, kind: null })} onClass={(classId) => go({ ...sel, classId, studentId: null })} />
-          : <SubjectLevel node={subjectNode} lateOnly={lateOnly} board={atRoot ? <>{managers ? <AdminOwnerBoard tree={tree} late={cur.data.late} managers={managers} labels={scope.labels} nowMs={nowMs} onSubject={(subject) => go({ subject, owner: null, classId: null, studentId: null })} /> : null}<AdminRanking tree={tree} onOwner={(subject, owner, kind) => go({ subject, owner, kind, classId: null, studentId: null })} /></> : null} avgLabel={atRoot ? "전체" : "과목"} lateText={lateByKind(cur.data.ownerKind, subjectKey)} attention={lateSection} onOwner={(ownerId, kind) => { setOpenKey(null); setSel({ ...sel, owner: ownerId, kind, classId: null, studentId: null }); }} />}
+          : <SubjectLevel node={subjectNode} lateOnly={lateOnly} board={<>{atRoot && managers ? <AdminOwnerBoard tree={tree} late={cur.data.late} managers={managers} labels={scope.labels} nowMs={nowMs} onSubject={(subject) => go({ subject, owner: null, classId: null, studentId: null })} /> : null}{period === "today" ? <AdminToday owners={subjectNode.owners} onOwner={(owner, kind) => go({ ...sel, owner, kind, classId: null, studentId: null })} /> : atRoot ? <AdminRanking tree={tree} onOwner={(subject, owner, kind) => go({ subject, owner, kind, classId: null, studentId: null })} /> : null}</>} avgLabel={atRoot ? "전체" : "과목"} lateText={lateByKind(cur.data.ownerKind, subjectKey)} attention={lateSection} onOwner={(ownerId, kind) => { setOpenKey(null); setSel({ ...sel, owner: ownerId, kind, classId: null, studentId: null }); }} />}
 
         {!sel.studentId && subjectNode && ownerNode ? lateSection : null}
       </main>

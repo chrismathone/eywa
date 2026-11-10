@@ -18,12 +18,12 @@ export function MyDutiesMonth({ items, now, month }: { items: DutyItemView[]; no
   const mm = Number(month.slice(5));
   return <div className="grid gap-3">
     <ToolbarSegment>
-      <ToolbarSegmentItem active={tab === "counsel"} onClick={() => setTab("counsel")}>{mm}월 학부모 상담 {foldRows(counsel).done}/{foldRows(counsel).total}</ToolbarSegmentItem>
+      <ToolbarSegmentItem active={tab === "counsel"} onClick={() => setTab("counsel")}>{mm}월 학생 상담 {foldRows(counsel).done}/{foldRows(counsel).total}</ToolbarSegmentItem>
       <ToolbarSegmentItem active={tab === "exam"} onClick={() => setTab("exam")}>{mm}월 월말평가 {foldRows(exam).done}/{foldRows(exam).total}</ToolbarSegmentItem>
     </ToolbarSegment>
     {tab === "counsel" ? <>
-      <Section title="월 학부모 상담" count={foldRows(counsel)} rows={counsel} empty="상담 의무 학생이 없습니다(담임 반이 없거나 아직 집계 전)." />
-      <Section title="신규생 정착 콜" count={foldRows(newcomer)} rows={newcomer} empty="맡은 신규생 항목이 없습니다." hideSingleGroup />
+      <Section title="학생 상담" count={foldRows(counsel)} rows={counsel} empty="상담 의무 학생이 없습니다(담임 반이 없거나 아직 집계 전)." />
+      <Section title="신규생 관리" count={foldRows(newcomer)} rows={newcomer} empty="맡은 신규생 항목이 없습니다." hideSingleGroup />
     </> : <Section title="월말평가 응시" count={foldRows(exam)} rows={exam} empty="월말평가를 치는 과목이 없거나 아직 집계 전입니다." />}
   </div>;
 }
@@ -37,7 +37,7 @@ function Section({ title, count, rows, empty, hideSingleGroup }: { title: string
   const groups = groupMonthRows(rows);
   // 내 과목 하나뿐이면 과목 머리줄 자체를 안 그린다 — 머리의 숫자와 겹친다(원장 2026-11-10 *"수학이란 말 없애" · "아래쪽 기한초과 중복이므로 삭제"*).
   const showGroupLine = !(hideSingleGroup && groups.length === 1);
-  return <section className="border-line-faint rounded-xl border">
+  return <section className="border-line bg-card rounded-xl border">
     <header className="border-line-faint flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
       <div className="flex items-baseline gap-2"><h4 className="text-sm font-bold">{title}</h4><span className="text-text-dim text-xs tabular-nums">{count.done}/{count.total}{count.late ? <span className="text-danger"> · 기한 초과 {count.late}</span> : null}</span></div>
       <span className="bg-bg-soft h-1.5 w-24 overflow-hidden rounded-full" aria-hidden><span className={`block h-full rounded-full ${pct === 100 ? "bg-green" : "bg-primary"}`} style={{ width: `${pct}%` }} /></span>

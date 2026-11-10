@@ -19,7 +19,7 @@ export function AdminOwnerBoard({ tree, late, managers, labels, nowMs, onSubject
   const rows = ownerRows(tree, late, work.board.items, managers, labels, nowMs, work.today);
   // 처리 요청 칸은 모든 요청을 볼 수 있는 사람에게만 — 자기 요청만 보이는 계정에게 "0명"이라고 적으면 거짓이다.
   const tracked = work.board.enabled && work.board.canMonitor;
-  return <section className="border-line-faint rounded-xl border p-2">
+  return <section className="border-line bg-card rounded-xl border p-2">
     <h4 className="px-2 py-1 text-sm font-bold">과목 관리자별 현황</h4>
     <div className="overflow-x-auto">
       <table className="w-full border-separate border-spacing-1 text-center text-sm [&_th:first-child]:text-left">

@@ -12,7 +12,7 @@ export function KindStatusStrip({ statuses, only = null }: { statuses: KindStatu
   const list = only ? statuses.filter((s) => s.kind === only) : statuses;
   if (!list.length) return <p className="text-text-dim text-sm">해당 기간 업무 없음</p>;
   return <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
-    {list.map((s) => <div key={s.kind} className="border-line-faint rounded-xl border px-3 py-2">
+    {list.map((s) => <div key={s.kind} className="border-line bg-card rounded-xl border px-3 py-2">
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-bold">{s.label}</span>
         <span className={`rounded-md px-1.5 py-0.5 text-sm font-bold tabular-nums ${TONE[cellTone(s.cell)]}`}>{s.cell.pct === null ? progressText(s.cell) : `${s.cell.pct}%`}</span>

@@ -20,9 +20,9 @@ describe("lateRequestPrefill — 지연 의무 → 처리 요청 초안", () => 
       item({ kind: "counsel_monthly", cycle: "2026-10", dueAt: "2026-10-31T14:59:59Z" }),
       item({ kind: "newcomer_call", cycle: "month1_call", dueAt: "2026-11-05T14:59:59Z", classId: null, className: null, studentName: "<b>최" }),
     ], owner, "2026-11-10")!;
-    expect(p.body).toContain("<strong>김하나</strong> — 월 학부모 상담 10월 / 출결 입력 11/7 · 11/8");
+    expect(p.body).toContain("<strong>김하나</strong> — 학생 상담 10월 / 출결 입력 11/7 · 11/8");
     expect(p.body).toContain("<strong>반 공통</strong>");
-    expect(p.body).toContain("&lt;b&gt;최</strong> — 신규생 정착 콜 1개월 콜(기한 11/5)");
+    expect(p.body).toContain("&lt;b&gt;최</strong> — 신규생 관리 1개월 콜(기한 11/5)");
     expect(p.body).not.toMatch(/<h\d/);
   });
   it("지연이 없으면 초안도 없다", () => { expect(lateRequestPrefill([], owner, "2026-11-10")).toBeNull(); });

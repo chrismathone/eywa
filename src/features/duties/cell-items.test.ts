@@ -16,8 +16,8 @@ describe("칸 목록의 한 줄", () => {
   });
   it("무엇 · 언제 — 일간은 수업일 · 월간은 달 · 신규생 정착은 항목 · 건별은 날짜만(시각을 지어내지 않는다) · 기한은 사람 눈의 그날", () => {
     expect(cellItemTitle({ kind: "attendance", period: "daily", cycle: "2026-11-07" })).toBe("11/7 출결 입력");
-    expect(cellItemTitle({ kind: "counsel_monthly", period: "monthly", cycle: "2026-10" })).toBe("10월 월 학부모 상담");
-    expect(cellItemTitle({ kind: "newcomer_call", period: "case", cycle: "month1_call" })).toBe("신규생 정착 콜 — 1개월 콜");
+    expect(cellItemTitle({ kind: "counsel_monthly", period: "monthly", cycle: "2026-10" })).toBe("10월 학생 상담");
+    expect(cellItemTitle({ kind: "newcomer_call", period: "case", cycle: "month1_call" })).toBe("신규생 관리 — 1개월 콜");
     expect(cellItemWhen({ state: "late_done", period: "daily", dueAt: "2026-11-07T15:00:00Z", doneAt: "2026-11-08T09:42:00Z" })).toBe("11/8 18:42 기록");
     expect(cellItemWhen({ state: "ontime", period: "case", dueAt: "2026-11-07T15:00:00Z", doneAt: "2026-10-23T00:00:00Z" })).toBe("10/23 기록");
     expect(cellItemWhen({ state: "late", period: "daily", dueAt: "2026-11-07T15:00:00Z", doneAt: null })).toBe("기한 11/7");

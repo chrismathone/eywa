@@ -56,4 +56,13 @@ describe("업무 완성도 — 저장 즉시 반영 배선", () => {
     expect(up).not.toContain("'duties_resolved'");
     expect(sql).toContain("and d.void_reason is distinct from 'waived'");
   });
+  it("🔴 저장 순간의 신호 — 트리거가 보내는 채널 · 사건 이름이 화면이 듣는 것과 같다 · 신호에 내용을 싣지 않는다 · 저장을 막지 않는 블록 안", () => {
+    const sql = readMigration("s2_0054_duty_live_ping.sql");
+    expect(sql).toContain("perform realtime.send(jsonb_build_object('scope', tg_argv[0]), 'changed', 'duties:' || v_tenant::text, false);");
+    const ping = read("src/features/duties/live-ping.ts");
+    expect(ping).toContain('DUTY_PING_EVENT = "changed"');
+    expect(ping).toContain("`duties:${tenantId}`");
+    expect(sql.indexOf("perform realtime.send")).toBeLessThan(sql.indexOf("exception when others then"));
+    for (const p of ["src/features/duties/components/admin/duty-admin.tsx", "src/features/duties/components/my-duties-strip-button.tsx"]) expect(read(p)).toContain("useDutyPing(tenantId");
+  });
 });

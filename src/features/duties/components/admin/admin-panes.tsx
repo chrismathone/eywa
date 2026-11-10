@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { foldMatrixRows, MATRIX_COLUMNS, type AdminPeriod, type LateItem, type MatrixRow } from "../../view-admin";
 import { CellItemsDialog, type CellPick } from "./admin-cell-items";
-import { judge, NO_CLASS, NO_OWNER, type TreeSubject } from "../../view-admin-levels";
+import { judge, NO_CLASS, NO_OWNER, ownerMeta, type TreeSubject } from "../../view-admin-levels";
 import type { DutyWork } from "../duty-work-context";
 import { AdminKpiRow } from "./admin-subject";
 import { AdminMatrix } from "./admin-matrix";
@@ -14,14 +14,14 @@ import { useStudentsPayload } from "./use-students";
 
 /** 과목(또는 전체) 단계 — 요약 칸 넷 · 판정 · (전체 단계 · 학원 전체를 보는 사람) 과목 관리자별 현황 · 지금 지연(먼저 손댈 것) · 선생님 × 종류 매트릭스(이름 = 그 선생님 · 칸 = 그 선생님의 그 종류). */
 export function SubjectLevel({ node, lateOnly, avgLabel, lateText, attention, board, onOwner }: { node: TreeSubject; lateOnly: boolean; avgLabel: string; lateText: string; attention: React.ReactNode; board: React.ReactNode; onOwner: (ownerId: string, kind: string | null) => void }) {
-  const rowsAll: MatrixRow[] = node.owners.map((o) => ({ ownerId: o.ownerId, name: o.name, cells: o.cells, all: o.cell }));
+  const rowsAll: MatrixRow[] = node.owners.map((o) => ({ ownerId: o.ownerId, name: o.name, meta: ownerMeta(o), cells: o.cells, all: o.cell }));
   const rows = lateOnly ? rowsAll.filter((r) => r.all.late) : rowsAll;
   return <div className="grid gap-4">
     <AdminKpiRow cell={node.cell} lateText={lateText} />
     <VerdictLine v={judge(node.cell)} />
     {board}
     {attention}
-    <section className="border-line-faint rounded-xl border p-2"><AdminMatrix rows={rows} total={foldMatrixRows(rows)} avg={{ pct: node.cell.pct, label: avgLabel }} onCell={onOwner} /></section>
+    <section className="border-line bg-card rounded-xl border p-2"><AdminMatrix rows={rows} total={foldMatrixRows(rows)} avg={{ pct: node.cell.pct, label: avgLabel }} onCell={onOwner} /></section>
   </div>;
 }
 

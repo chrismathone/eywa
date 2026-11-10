@@ -1,8 +1,8 @@
 "use client";
 
 import { MATRIX_COLUMNS, type AdminPeriod } from "../../view-admin";
-import { classLines, judge, kindStatuses, NO_CLASS, NO_OWNER, type Avg, type TreeOwner } from "../../view-admin-levels";
-import { CountBox } from "./admin-matrix";
+import { classLines, judge, kindStatuses, NO_CLASS, NO_OWNER, ownerMeta, type Avg, type TreeOwner } from "../../view-admin-levels";
+import { CountBox, GridCols, gridStyle } from "./admin-matrix";
 import { KindStatusStrip } from "./admin-kind-status";
 import { VerdictBadge, VerdictLine } from "./admin-verdict";
 import { useStudentsPayload } from "./use-students";
@@ -24,7 +24,7 @@ export function TeacherLevel({ owner, avg, period, subject, tick, kind, onClearK
   const kindLabel = kind ? MATRIX_COLUMNS.find((c) => c.kind === kind)?.label ?? "" : "";
   return <div className="grid gap-4">
     <header className="grid gap-1">
-      <h3 className="text-xl font-bold">{owner.name} <span className="text-text-dim text-sm font-medium">반 {owner.classes.filter((c) => c.classId !== NO_CLASS).length}</span></h3>
+      <h3 className="text-xl font-bold">{owner.name} <span className="text-text-dim text-sm font-medium">{ownerMeta(owner) || `반 ${owner.classes.filter((c) => c.classId !== NO_CLASS).length}`}</span></h3>
       <VerdictLine v={judge(kind ? owner.cells[kind] ?? owner.cell : owner.cell, avg && !kind ? avg : null)} />
       {kind ? <p className="flex items-center gap-2 text-sm font-semibold">
         <span className="bg-primary-soft rounded-full px-2 py-0.5">{kindLabel}만 보는 중</span>
@@ -32,13 +32,14 @@ export function TeacherLevel({ owner, avg, period, subject, tick, kind, onClearK
       </p> : null}
     </header>
     <KindStatusStrip statuses={kindStatuses(owner.cells)} only={kind} />
-    <section className="border-line-faint rounded-xl border p-3">
+    <section className="border-line bg-card rounded-xl border p-3">
       <h4 className="text-sm font-bold">반별</h4>
       {failed ? <p className="text-text-dim mt-2 text-sm">반별 집계 조회 실패</p>
         : !data ? <p className="text-text-dim mt-2 text-sm">불러오는 중…</p>
         : !lines.length ? <p className="text-text-dim mt-2 text-sm">해당 기간 업무 없음</p>
         : <div className="mt-2 overflow-x-auto">
-          <table className="w-full border-separate border-spacing-1 text-center text-sm [&_th:first-child]:text-left">
+          <table className="table-fixed border-separate border-spacing-1 text-center text-sm [&_th:first-child]:text-left" style={gridStyle(cols.length + (kind ? 0 : 1))}>
+            <GridCols count={cols.length + (kind ? 0 : 1)} />
             <thead><tr><th className={TH}>반</th><th className={TH}>등급</th>{cols.map((c) => <th key={c.kind} className={TH}>{c.label}</th>)}{kind ? null : <th className={TH}>전체</th>}</tr></thead>
             <tbody>
               {lines.map((l) => <tr key={l.classId}>

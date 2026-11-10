@@ -26,7 +26,7 @@ export default async function DutiesPage() {
   return (
     <div className="space-y-5 compact-chrome:space-y-3">
       <PageHeader title="업무 완성도" description={scopeLabel} />
-      <DutyAdmin initial={{ period: "month", today, now: new Date().toISOString(), range, data }} scope={scope} managers={managers} />
+      <DutyAdmin initial={{ period: "month", today, now: new Date().toISOString(), range, data }} scope={scope} managers={managers} tenantId={viewer.tenantId} />
     </div>
   );
 }

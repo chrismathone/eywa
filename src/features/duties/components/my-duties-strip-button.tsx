@@ -11,6 +11,7 @@ import type { DutyItemView } from "../kinds";
 import type { DutyKindCount, DutyWeekCell } from "../view";
 import { MyDutiesPanel } from "./my-duties-panel";
 import { MyDutiesWeek } from "./my-duties-week";
+import { useDutyPing } from "./use-duty-ping";
 import { MyDutiesMonth } from "./my-duties-month";
 
 type Count = { total: number; done: number; late: number };
@@ -24,7 +25,7 @@ const REFRESH_MS = 60_000;
  * '내 업무' — 머리 한 줄(오늘 완료/전체 · 기한 초과 · 막대) + 완료도 칸 다섯. 칸이나 머리를 누르면 **오버레이 창**(원장 2026-11-09 *"페이지 확장이 아닌 오버레이창"* ·
  * 할 일 창과 같은 Dialog)에 오늘 / 이번 주 / 이번 달 보기. 숫자는 보일 때 60초마다 GET `/api/duties/summary`(셸 자동 호출은 서버 액션 금지 #137).
  */
-export function MyDutiesStripButton({ summary: initial, className = "" }: { summary: DutyStripSummary; className?: string }) {
+export function MyDutiesStripButton({ summary: initial, tenantId = null, className = "" }: { summary: DutyStripSummary; /** 저장 순간의 신호를 들을 지점(s2_0054). */ tenantId?: string | null; className?: string }) {
   const [summary, setSummary] = useState(initial);
   const { date, month, today, counsel, exam, newcomer, lang } = summary;
   // 모두 접기/펼치기 — 패널을 다시 그려(key) 처음 상태를 바꾼다(원장 2026-11-10: 단추는 오늘/이번 주/이번 달 줄 맨 오른쪽).
@@ -47,12 +48,19 @@ export function MyDutiesStripButton({ summary: initial, className = "" }: { summ
     }).catch(() => { if (alive) setFailed(true); });
     return () => { alive = false; };
   }, [view, loaded, date]);
+  // 출결 · 보고서 · 상담을 저장하는 순간 바로 다시 받는다(지점 채널의 신호 — 주기 갱신은 연결이 끊겼을 때의 받침).
+  const refreshNow = useRef<() => void>(() => undefined);
+  useDutyPing(tenantId, () => refreshNow.current(), 10_000); // 강사 화면은 창마다 이 줄이 있다 — 최소 간격을 넉넉히
   // 보일 때 60초마다 숫자를 새로 받는다 — 숨은 창(탭·최소화)은 멈추고, 다시 보이면 바로 한 번. 창이 열려 있으면 목록도 다시 받는다.
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let alive = true;
+    const busy = { on: false, again: false };
     const tick = async () => {
       if (!alive) return;
+      if (busy.on) { busy.again = true; return; } // 받는 중 — 끝난 뒤 한 번 더(고리를 하나 더 만들지 않는다)
+      busy.on = true;
+      if (timer) { clearTimeout(timer); timer = null; }
       if (document.visibilityState === "visible") {
         try {
           const r = await fetch("/api/duties/summary", { cache: "no-store" });
@@ -63,10 +71,14 @@ export function MyDutiesStripButton({ summary: initial, className = "" }: { summ
           }
         } catch { /* 다음 틱에 다시 — 숫자는 마지막 값 그대로 */ }
       }
-      if (alive) timer = setTimeout(tick, REFRESH_MS);
+      busy.on = false;
+      if (!alive) return;
+      if (busy.again) { busy.again = false; void tick(); return; }
+      timer = setTimeout(tick, REFRESH_MS);
     };
     timer = setTimeout(tick, REFRESH_MS);
-    const onVisible = () => { if (document.visibilityState === "visible") { if (timer) clearTimeout(timer); void tick(); } };
+    refreshNow.current = () => void tick();
+    const onVisible = () => { if (document.visibilityState === "visible") void tick(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => { alive = false; if (timer) clearTimeout(timer); document.removeEventListener("visibilitychange", onVisible); };
   }, []);
@@ -76,7 +88,7 @@ export function MyDutiesStripButton({ summary: initial, className = "" }: { summ
     ? `My duties — today ${today.done}/${today.total}${lateAll ? ` · ${lateAll} overdue` : ""}`
     : `내 업무 — 오늘 ${today.done}/${today.total}${lateAll ? ` · 기한 초과 ${lateAll}` : ""}`;
   const mm = Number(month.slice(5, 7));
-  return <section className={`border-line rounded-2xl border ${className}`}>
+  return <section className={`border-line bg-card rounded-2xl border ${className}`}>
     <button type="button" onClick={() => setView("today")} className="hover:bg-bg-soft flex w-full flex-wrap items-center gap-2 rounded-t-2xl px-3 py-2 text-left">
       <EyIcon name="clipboardCheck" size={15} className={`shrink-0 ${lateAll ? "text-danger" : "text-foreground"}`} />
       <span className={`min-w-0 flex-1 text-sm font-bold ${lateAll ? "text-danger" : "text-foreground"}`}>{label}</span>
@@ -86,9 +98,9 @@ export function MyDutiesStripButton({ summary: initial, className = "" }: { summ
     <div className="grid gap-2 px-3 pb-3 sm:grid-cols-3 lg:grid-cols-5">
       <Tile label="오늘 완료도" value={`${today.done}`} unit={`/ ${today.total}`} pct={pct(today)} tone={today.total && pct(today) === 100 ? "green" : "primary"} onClick={() => setView("today")} />
       <Tile label="기한 초과" value={`${lateAll}`} tone={lateAll ? "danger" : "muted"} onClick={() => setView(today.late ? "today" : "month")} />
-      <Tile label={`${mm}월 학부모 상담`} value={`${counsel.done}`} unit={`/ ${counsel.total}`} pct={pct(counsel)} tone={counsel.total && pct(counsel) === 100 ? "green" : counsel.late ? "danger" : "primary"} onClick={() => setView("month")} />
+      <Tile label={`${mm}월 학생 상담`} value={`${counsel.done}`} unit={`/ ${counsel.total}`} pct={pct(counsel)} tone={counsel.total && pct(counsel) === 100 ? "green" : counsel.late ? "danger" : "primary"} onClick={() => setView("month")} />
       <Tile label={`${mm}월 월말평가`} value={`${exam.done}`} unit={`/ ${exam.total}`} pct={pct(exam)} tone={exam.total && pct(exam) === 100 ? "green" : exam.late ? "danger" : "primary"} onClick={() => setView("month")} />
-      <Tile label="신규생 정착 콜" value={`${newcomer.done}`} unit={`/ ${newcomer.total}`} pct={pct(newcomer)} tone={newcomer.late ? "danger" : newcomer.total && pct(newcomer) === 100 ? "green" : "primary"} onClick={() => setView("month")} />
+      <Tile label="신규생 관리" value={`${newcomer.done}`} unit={`/ ${newcomer.total}`} pct={pct(newcomer)} tone={newcomer.late ? "danger" : newcomer.total && pct(newcomer) === 100 ? "green" : "primary"} onClick={() => setView("month")} />
     </div>
     {/* z-[70]: 미니셸 헤더가 z-[60](공지 팝업 위)이라 기본 z-50 창은 헤더에 덮인다(원장 제보 2026-11-09). 창 안엔 셀렉트·팝오버가 없어 올려도 된다. */}
     {view ? <Dialog open onOpenChange={(open) => (!open ? (work ? closeWork() : setView(null)) : undefined)}>
@@ -133,7 +145,7 @@ export function MyDutiesStripButton({ summary: initial, className = "" }: { summ
 function Tile({ label, value, unit, pct, tone, onClick }: { label: string; value: string; unit?: string; pct?: number; tone: "primary" | "green" | "danger" | "muted"; onClick: () => void }) {
   const color = tone === "danger" ? "text-danger" : tone === "green" ? "text-green" : tone === "muted" ? "text-text-dim" : "text-foreground";
   const bar = tone === "danger" ? "bg-danger" : tone === "green" ? "bg-green" : "bg-primary";
-  return <button type="button" onClick={onClick} className="border-line-faint hover:bg-bg-soft rounded-xl border px-3 py-2 text-left">
+  return <button type="button" onClick={onClick} className="border-line bg-card hover:bg-bg-soft rounded-xl border px-3 py-2 text-left">
     <div className="text-text-dim text-xs font-semibold">{label}</div>
     <div className={`text-2xl font-bold leading-tight tabular-nums ${color}`}>{value}{unit ? <span className="text-text-placeholder ml-1 text-sm font-medium">{unit}</span> : null}</div>
     {pct != null ? <div className="bg-bg-soft mt-1 h-1.5 overflow-hidden rounded-full" aria-hidden><div className={`h-full rounded-full ${bar}`} style={{ width: `${pct}%` }} /></div> : null}

@@ -21,20 +21,20 @@ export function AdminRanking({ tree, onOwner }: { tree: readonly TreeSubject[]; 
     ...tree.map((s) => ({ key: `s:${s.subject ?? ""}`, title: s.label, subject: s.subject as string | null | undefined, rows: rankOwners(s.owners, picked) })),
   ].filter((b) => b.rows.length);
   const chip = (on: boolean) => `rounded-full border px-2.5 py-0.5 text-xs font-bold ${on ? "border-primary bg-primary text-primary-foreground" : "border-line text-text-dim hover:text-primary"}`;
-  return <section className="border-line-faint rounded-xl border p-2">
+  return <section className="border-line bg-card rounded-xl border p-2">
     <div className="flex flex-wrap items-center gap-1.5 px-2 py-1">
       <h4 className="mr-1 text-sm font-bold">등수 <span className="text-text-dim text-xs font-medium">기한 준수율 순</span></h4>
       <button type="button" aria-pressed={picked === null} onClick={() => setKind(null)} className={chip(picked === null)}>전체</button>
       {kinds.map((c) => <button key={c.kind} type="button" aria-pressed={picked === c.kind} onClick={() => setKind(c.kind)} className={chip(picked === c.kind)}>{c.label}</button>)}
     </div>
-    {!boards.length ? <p className="text-text-dim px-2 py-3 text-sm">해당 업무 없음</p> : <div className="grid gap-3 lg:grid-cols-3">
+    {!boards.length ? <p className="text-text-dim px-2 py-3 text-sm">해당 업무 없음</p> : <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
       {boards.map((b) => <div key={b.key} className="min-w-0">
         <h5 className="text-text-dim px-2 py-1 text-xs font-bold">{b.title}</h5>
         <ol className="grid gap-0.5">
           {b.rows.map((r) => <li key={r.ownerId}>
             <button type="button" onClick={() => onOwner(b.subject, r.ownerId, picked)} className="hover:bg-bg-soft flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left">
               <span className={`w-6 shrink-0 text-center text-sm font-bold tabular-nums ${r.rank !== null && r.rank <= 3 ? "text-primary" : "text-text-dim"}`}>{r.rank ?? "—"}</span>
-              <span className="min-w-0 flex-1 overflow-hidden text-sm font-semibold text-ellipsis whitespace-nowrap">{r.name}</span>
+              <span className="min-w-0 flex-1 overflow-hidden text-sm font-semibold text-ellipsis whitespace-nowrap">{r.name}{r.meta ? <span className="text-text-dim ml-1.5 text-xs font-medium">{r.meta}</span> : null}</span>
               {r.verdict.tier ? <TierStars tier={`${r.verdict.tier}등급`} /> : <span className="text-text-dim text-xs font-medium">평가 대기</span>}
               <span className="w-10 shrink-0 text-right text-xs font-semibold tabular-nums">{r.cell.pct === null || !r.verdict.tier ? "" : `${r.cell.pct}%`}</span>
             </button>
