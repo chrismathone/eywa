@@ -9,6 +9,8 @@ import { useSheetText } from "@/features/teacher-view/lang-context";
 /**
  * 검색은 **필요할 때만** 나타난다(디자인 지시서 §10 "검색은 필요할 때만 나타나게(단축키 또는 토글)" —
  * 원장 2026-09-03 *"남은 결정사항은 지시서 그대로"*). 상시 검색창 대신 '검색' 글자 하나가 서고, 누르면 SearchForm이 펼쳐진다.
+ * 🔴 **기본값 = 펼침**(원장 2026-11-10 *"검색창 전부 눌러야 열리자나 그거 디폴트값이 열려있도록"*) — 화면을 열면 입력창이 서 있고,
+ *    '닫기'로 접으면 그 화면에 있는 동안만 '검색' 글자로 남는다. 포커스는 '검색'을 **누른 순간에만**(열 때마다 커서를 훔치지 않게).
  * 검색어가 이미 있으면(`defaultValue`) 펼친 채로 시작한다 — 무엇으로 걸러졌는지 보여야 한다.
  * 학생상담·등록상담 목록이 같이 쓴다 — 새 목록 화면의 검색도 이걸로(상시 SearchForm을 새로 놓지 말 것).
  * 🔴 그리는 자리는 화면 머리(PageHeader) 동작 줄 맨 앞이다([`HeaderSearchSlot`](./header-search-slot.tsx), 원장 2026-10-19) —
@@ -31,7 +33,8 @@ export function SearchToggle({
   resetParams?: string[];
 }) {
   const text = useSheetText();
-  const [opened, setOpen] = useState(false);
+  const [opened, setOpen] = useState(true);
+  const [clicked, setClicked] = useState(false);
   // 검색어가 URL에 걸려 있으면 **언제나** 펼친다(뒤로 가기 등 클라 내비로 q가 나중에 생겨도 — 마운트 시점 state만 보면
   // "검색어는 걸려 있는데 입력창은 접힘"이 된다).
   const open = opened || Boolean(defaultValue);
@@ -40,7 +43,10 @@ export function SearchToggle({
       <HeaderSearchSlot>
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            setOpen(true);
+            setClicked(true);
+          }}
           className={`${CONTROL_H} ${CONTROL_LABEL} bg-primary text-primary-foreground hover:bg-primary/90 inline-flex shrink-0 items-center rounded-lg px-2.5 font-bold whitespace-nowrap transition`}
         >
           {text("검색")}
@@ -56,7 +62,7 @@ export function SearchToggle({
         placeholder={placeholder}
         defaultValue={defaultValue}
         resetParams={resetParams}
-        autoFocus
+        autoFocus={clicked}
         className="flex items-center gap-2"
       />
       {/* 검색어가 걸려 있으면 닫지 않는다 — 무엇으로 걸러졌는지 보여야 한다. 빈 채로 열었으면 되돌릴 수 있게. */}
