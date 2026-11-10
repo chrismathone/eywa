@@ -65,4 +65,10 @@ describe("업무 완성도 — 저장 즉시 반영 배선", () => {
     expect(sql.indexOf("perform realtime.send")).toBeLessThan(sql.indexOf("exception when others then"));
     for (const p of ["src/features/duties/components/admin/duty-admin.tsx", "src/features/duties/components/my-duties-strip-button.tsx"]) expect(read(p)).toContain("useDutyPing(tenantId");
   });
+  it("🔴 할 일 제목의 종류 이름(DB `kind_label`)은 화면 이름(`kinds.ts`)과 같은 글자다 · 모르는 종류에 영문 키를 내보내지 않는다", async () => {
+    const sql = readMigration("s2_0055_duty_kind_labels.sql");
+    const { DUTY_KINDS } = await import("./kinds");
+    for (const [kind, info] of Object.entries(DUTY_KINDS)) expect(sql, kind).toMatch(new RegExp(`when '${kind}'\\s+then '${info.label}'`));
+    expect(sql).toContain("else '업무' end");
+  });
 });
