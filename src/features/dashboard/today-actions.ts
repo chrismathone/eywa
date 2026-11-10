@@ -205,7 +205,7 @@ export function labelSubjectCounts(
 /**
  * "어제 출석 미기록 12개 반" — 라벨 + 수치 한 줄.
  * 단위는 신호가 들고 온 것(명/개 반/건)을 쓴다 — 전부 "건"으로 찍어 30명을 30건으로 보고했던 것 교정.
- * 폴백 팀 보고(briefing-team-report)와 브리핑 카드 바로 가기 칩(briefing-links)이 이 한 곳을 공유한다.
+ * 폴백 팀 보고(briefing-team-report)가 쓴다(옛 브리핑 카드 칩 briefing-links는 2026-11-10 삭제).
  */
 export function actionCountLabel(item: Pick<TodayActionItem, "label" | "count" | "unit">): string {
   return item.count != null ? `${item.label} ${item.count}${item.unit ?? "건"}` : item.label;

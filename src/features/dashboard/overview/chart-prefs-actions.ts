@@ -1,7 +1,7 @@
 "use server";
 
 import { patchMyUiPrefs } from "@/lib/ui-prefs/patch";
-import { chartPrefKey, isChartPanel, type ChartKind, type CheckView, type DashboardDesign } from "./chart-prefs";
+import { chartPrefKey, isChartPanel, type ChartKind, type CheckView } from "./chart-prefs";
 
 /**
  * 추이 패널 막대/꺾은선 저장 — 누르는 순간 저장([[#90]]: 닫을 때 저장하면 유실). 본인 표시 취향이라 로그인만 본다.
@@ -11,12 +11,6 @@ export async function saveDashboardChartKind(panel: string, kind: string): Promi
   if (!isChartPanel(panel) || (kind !== "bar" && kind !== "line")) return { ok: false, error: "잘못된 값입니다" };
   const k: ChartKind = kind;
   return patchMyUiPrefs("dashboard", { [chartPrefKey(panel)]: k === "line" ? "line" : undefined });
-}
-
-/** 운영실 화면 저장 — 누르는 순간 저장한다. 기본 화면은 키를 지운다. */
-export async function saveDashboardDesign(design: DashboardDesign): Promise<{ ok: boolean; error?: string }> {
-  if (design !== "standard" && design !== "instruments") return { ok: false, error: "잘못된 값입니다" };
-  return patchMyUiPrefs("dashboard", { design: design === "instruments" ? "instruments" : undefined });
 }
 
 /** 확인할 일 보기(항목별 · 사람별) 저장 — 누르는 순간 저장한다. 기본(항목별)은 키를 지운다. */

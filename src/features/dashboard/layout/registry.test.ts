@@ -7,12 +7,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { KPI_KEYS, type PanelId } from "@/features/dashboard/overview/layout";
 import { AREA_MENUS, CARDS, cardDef, defaultPreset, presetOf } from "./registry";
-import { summaryOf } from "./summary";
-import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
 
 const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 const SERVER = read("src/features/dashboard/overview/server.ts");
-const OVERVIEW = read("src/app/(shell)/dashboard/_overview/overview.tsx");
 const LAYOUT = read("src/features/dashboard/overview/layout.ts");
 
 const PANEL_IDS = [...LAYOUT.matchAll(/^\s+\| "(\w+)";?\r?$/gm)].map((m) => m[1]!).filter((k) => !KPI_KEYS.includes(k as never)) as PanelId[];
@@ -49,51 +46,5 @@ describe("레지스트리 = 운영실 카드 전부", () => {
     for (const c of CARDS) expect(presetOf(c, c.size), c.id).toEqual(defaultPreset(c));
   });
 
-  it("모든 패널 제목이 배치 제목 바꾸기(t)를 지난다 — 이름을 바꿔도 화면이 안 따라오는 카드가 없게", () => {
-    for (const p of PANEL_IDS) expect(OVERVIEW, p).toContain(`t("${p}", `);
-  });
 
-  it("요약형을 지원하는 카드는 데이터가 있으면 값을 내고, 없으면 null('—'로 그린다)", () => {
-    const empty = { today: "2026-10-01", subjects: {}, sections: {} } as unknown as OverviewSnapshot;
-    for (const c of CARDS) expect(summaryOf(c.id, empty), c.id).toBeNull();
-    const ok = <T,>(data: T) => ({ data, at: 1, error: false });
-    const full = {
-      today: "2026-10-01",
-      subjects: { math: "수학" },
-      sections: {
-        students: ok({ enrolled: 3, subjects: [], levels: [], schools: [], concurrent: 0, programs: {}, gradeSplit: { rows: [], neither: 0 } }),
-        changes: ok([{ month: "2026-10", enrolled: 2, withdrawn: 1 }]),
-        earlyExits: ok({ month: "2026-10", months: ["2026-10"], rows: [], history: [] }),
-        enrolledTrend: ok({ monthly: [{ key: "2026-10", count: 3 }], yearly: [], recordsFrom: null }),
-        courses: ok({ total: 5, programs: { eie: 0, injaewon: 0, math: 5 }, perStudent: [] }),
-        courseTrend: ok({ monthly: [{ key: "2026-10", count: 5 }], yearly: [], trustFrom: null, monthlyFrom: null }),
-        withdrawals: ok({ month: "2026-10", rows: [] }),
-        intake: ok([]),
-        enrolledToday: ok([]),
-        firstClass: ok([]),
-        absent: ok({ from: "2026-09-23", to: "2026-09-29", students: [] }),
-        makeup: ok({ rows: [] }),
-        attendance: ok({ total: 1, present: 1, late: 0, absent: 0, excused: 0 }),
-        attendanceTrend: ok([{ date: "2026-10-01", rate: 90, total: 1 }]),
-        billing: ok([{ totalCount: 1, paidCount: 1, partialCount: 0, unpaidCount: 0, outstanding: 0, totalBilled: 1, totalDiscount: 0 }]),
-        expenses: ok({ count: 0 }),
-        absences: ok({ anchor: null, rows: [] }),
-        admissions: ok({ total: 0, enrolled: 0, rate: null }),
-        consultations: ok({ thisMonth: 0, lastWeek: 0, pendingFollowUps: 0, overdueFollowUps: 0 }),
-        newcomers: ok({ total: 0, stages: [], checksAvailable: true, items: [] }),
-        homework: ok({ students: 0 }),
-        schedule: ok([]),
-        staff: ok([]),
-        operations: ok([]),
-        notices: ok([]),
-        calendar: ok([]),
-        consultProgress: ok({ summary: { from: "2026-09-01", counts: { received: 0 }, stalled: [] }, chips: {} }),
-        mathSheet: ok({ period: "", classes: 0, filled: 0, total: 0 }),
-      },
-    } as unknown as OverviewSnapshot;
-    // 오늘 입테는 새 대시보드 전용 칸이라 옛 운영실 요약형(summary.ts)이 없다 — 옛 렌더러는 그리지 않는다.
-    for (const c of CARDS.filter((x) => (x.sizes.some((z) => z.mode === "summary") || x.kind === "kpi") && x.id !== "kpi:todayTests")) {
-      expect(summaryOf(c.id, full), c.id).not.toBeNull();
-    }
-  });
 });

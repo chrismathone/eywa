@@ -13,13 +13,6 @@ export const DEFAULT_CHART_KINDS: ChartKinds = { changes: "bar", billing: "bar",
 /** 저장 키 — 패널마다 따로(형제 키 보존은 patchMyUiPrefs가 한다). */
 export const chartPrefKey = (panel: ChartPanel) => `chart_${panel}`;
 
-/** 운영실 화면 — 기본 화면 / '대시보드 전환' 화면(계기판). 기본은 저장하지 않는다. */
-export type DashboardDesign = "standard" | "instruments";
-export const parseDashboardDesign = (raw: unknown): DashboardDesign => {
-  const o = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
-  return o.design === "instruments" ? "instruments" : "standard";
-};
-
 /** 확인할 일 보기 — 항목별(기본 · 저장 안 함) / 사람별. */
 export type CheckView = "rows" | "people";
 export const parseCheckView = (raw: unknown): CheckView => {

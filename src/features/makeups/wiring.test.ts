@@ -54,7 +54,6 @@ describe("보강 참여 배선", () => {
     expect(read("src/features/makeups/server/adapters/effects.ts")).toContain("participationCommandId(");
     expect(read("src/features/makeups/server/adapters/effects.ts")).toContain("sendParticipation(input.effectKey, input.payload)");
     expect(read("src/features/makeups/server/adapters/effects.ts")).toContain("makeup_projection_evidence");
-    expect(read("src/app/(shell)/dashboard/_overview/kpi-popups-day.tsx")).toContain("rosterOriginLabel(row.origin, \"ko\")");
     expect(read("src/components/scheduled-change-banner.tsx")).toContain("makeupCaseHref(r.makeup.caseId)");
     expect(read("src/features/attendance/server/makeup-reservation-queries.ts")).toContain("caseId: row.caseIds[0] ?? null");
   });

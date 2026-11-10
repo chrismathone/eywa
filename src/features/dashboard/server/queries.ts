@@ -1,5 +1,4 @@
 import "server-only";
-import { loadExitCountDates } from "@/features/withdrawals/server/exit-month";
 import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -7,8 +6,8 @@ import {
   groupOutstandingPeriods,
   type OutstandingPeriodRow,
 } from "@/features/dashboard/outstanding-periods";
-import { fetchInChunks, fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
-import { inclusiveDateWindowStart, kstToday, kstMonthStart, kstMonth } from "@/lib/date-kst";
+import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
+import { inclusiveDateWindowStart, kstToday } from "@/lib/date-kst";
 import {
   countAbsencesBySubject,
   type AbsenceSubjectCounts,
@@ -20,71 +19,20 @@ import {
 } from "@/features/dashboard/absence-reasons";
 import { attendanceRate, attendedCount } from "@/lib/calc/attendance";
 import type { SystemRole } from "@/lib/permissions";
-import { summarizeInvoices } from "@/features/billing/calc";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
-import { isMergedStudent } from "@/features/students/status/merged";
-import { bookkeepingOnlyIds } from "@/features/withdrawals/server/bookkeeping";
-import {
-  buildDashboardTrendPoints,
-  invoicePeriodsForRange,
-  kstDateForTimestamp,
-  type TrendAttendanceRow,
-  type TrendInvoiceRow,
-  type TrendPoint,
-} from "@/features/dashboard/trend-data";
+import { type TrendPoint } from "@/features/dashboard/trend-data";
 import {
   followUpUrgency,
   type FollowUpUrgency,
 } from "@/features/consultations/follow-up-urgency";
-import {
-  getDailyProcessingStatus,
-  type ClassProcessing,
-} from "@/features/attendance/server/queries";
+import { type ClassProcessing } from "@/features/attendance/server/queries";
 import {
   effectiveAttendanceRecords,
   type EffectiveAttendanceRecord,
 } from "@/features/attendance/effective-records";
 import { audiencesForRole } from "@/features/notices/audience";
 
-function toIsoDate(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
-
 export type { TrendPoint };
-
-export async function getEnrolledStudentCount(): Promise<number> {
-  const supabase = await createClient();
-  const { count, error } = await supabase
-    .from("students")
-    .select("*", { count: "exact", head: true })
-    .eq("status", "enrolled");
-  // 조회 실패를 **재원생 0명**이라는 사실 주장으로 바꾸지 않는다 — 히어로 KPI라 숫자 하나가 곧
-  // "학원이 비었다"로 읽힌다. 호출부(dashboardQuery)가 실패 허용을 담당한다(이 파일의 기존 규약).
-  if (error) throw new Error(`재원생 수 조회 실패: ${error.message}`);
-  return count ?? 0;
-}
-
-/**
- * **학년별 재원생** — 대시보드 구성 막대(레퍼런스 `Headcount by Dept`에 대응)의 재료.
- *
- * 🔴 `fetchAllPaged`로 받는다 — 재원생이 1000명을 넘기면 무페이징 select는 **에러 없이 잘려**
- *    그만큼의 학년이 조용히 사라진다(B2). 지금 339명이라 한 장이지만 상한을 두지 않는다.
- * 🔴 `grade` **한 칸만** 받는다 — 이름·학교는 이 막대에 필요 없고, 받으면 payload만 커진다.
- * ⚠️ 라벨은 그대로 쓴다 — 학년 표기는 학원설정이 단일 소스이고 여기서 손대면 두 곳이 갈린다.
- *    빈 값은 순수부(`countByLabel`)가 "미지정"으로 모은다(버리면 합계가 재원생 수와 안 맞는다).
- */
-export async function getGradeComposition(): Promise<(string | null)[]> {
-  const supabase = await createClient();
-  const rows = await fetchAllPaged<{ grade: string | null }>((from, to) =>
-    supabase
-      .from("students")
-      .select("grade")
-      .eq("status", "enrolled")
-      .order("id", { ascending: true })
-      .range(from, to),
-  );
-  return rows.map((r) => r.grade);
-}
 
 export type EnrollmentChangeStudent = {
   id: string;
@@ -100,88 +48,6 @@ export type EnrollmentChanges = {
   withdrawn: EnrollmentChangeStudent[];
 };
 
-const MONTHLY_CHANGE_PREVIEW_LIMIT = 40;
-
-/** 이번 달 증감 조회가 받는 행 — 병합 판정(`notes`)까지 함께 받는다. */
-type MonthlyChangeRecord = {
-  id: string;
-  name: string;
-  grade: string | null;
-  school: string | null;
-  enrolled_at?: string | null;
-  withdrawn_at?: string | null;
-  /** 퇴원 쪽만 — 퇴원월 판정(`loadExitCountDates`)의 지점. */
-  tenant_id?: string;
-  notes: string | null;
-  /** 퇴원 쪽만 — 수업 기록 없는 장부 정리 판정(`bookkeepingOnlyIds`). */
-  withdrawal_metadata?: unknown;
-};
-
-/**
- * 이번 달 신규 등록 + 퇴원 학생. 명단 preview만 보내 RSC payload를 유한하게 유지한다.
- *
- * 🔴 중복 병합으로 흡수된 쪽은 등록에도 퇴원에도 세지 않는다(원장 2026-09-13, `students/merged.ts`).
- *    판정 재료가 `notes` 접두 문자열이라 **행을 받아 JS에서 거른다** — PostgREST의 negative 문자열 필터는
- *    `notes`가 null인 행을 통째로 떨구는 NULL 함정이 있어 조용히 틀리기 쉽다. 이번 달 창이라 행은 수십 건이다.
- * ⚠️ 그래서 `count(exact)`를 버리고 **거른 행의 수**를 센다 — 덤으로 종전의 모집단 불일치도 사라진다
- *    (count는 전체인데 명단은 40건 상한이라 "N명" 옆 명단이 다른 집합이었다, [[#89]] 계열).
- */
-export async function getMonthlyEnrollmentChanges(): Promise<EnrollmentChanges> {
-  const supabase = await createClient();
-  const startIso = kstMonthStart();
-  // 조회 실패를 '이번 달 ±0'으로 위장하지 않는다 — fetchAllPaged가 throw하고, 호출부(dashboardQuery)가 실패 허용을 담당.
-  const [nw, wd] = await Promise.all([
-    fetchAllPaged<MonthlyChangeRecord>((from, to) =>
-      supabase
-        .from("students")
-        .select("id, name, grade, school, enrolled_at, notes")
-        .eq("status", "enrolled")
-        .gte("enrolled_at", startIso)
-        .order("enrolled_at", { ascending: false })
-        // OFFSET 페이지 안정화 — unique tie-break(id) 필수(batch.ts 계약)
-        .order("id", { ascending: false })
-        .range(from, to),
-    ),
-    fetchAllPaged<MonthlyChangeRecord>((from, to) =>
-      supabase
-        .from("students")
-        .select("id, tenant_id, name, grade, school, withdrawn_at, notes, withdrawal_metadata")
-        .eq("status", "withdrawn")
-        .gte("withdrawn_at", startIso)
-        .order("withdrawn_at", { ascending: false })
-        .order("id", { ascending: false })
-        .range(from, to),
-    ),
-  ]);
-  const newStudents = nw.filter((s) => !isMergedStudent(s.notes));
-  // 수업 기록 없는 장부 정리는 퇴원으로 세지 않는다(퇴원관리·운영실과 같은 판정 — `isBookkeepingOnlyExit`).
-  const wdReal = wd.filter((s) => !isMergedStudent(s.notes));
-  // 퇴원월 = 수강료를 낸 마지막 달(원장 2026-10-29) — 이번 달에 처리했어도 지난달까지만 냈으면 지난달 퇴원이라 뺀다.
-  const [bookkeeping, exitDates] = await Promise.all([
-    bookkeepingOnlyIds(supabase, wdReal),
-    loadExitCountDates(wdReal.map((s) => ({ id: s.id, tenantId: s.tenant_id ?? "", withdrawnAt: s.withdrawn_at ?? null }))),
-  ]);
-  const withdrawn = wdReal.filter((s) => !bookkeeping.has(s.id) && (exitDates.get(s.id) ?? s.withdrawn_at ?? "") >= startIso.slice(0, 10));
-  return {
-    newCount: newStudents.length,
-    withdrawnCount: withdrawn.length,
-    newStudents: newStudents.slice(0, MONTHLY_CHANGE_PREVIEW_LIMIT).map((s) => ({
-      id: s.id,
-      name: s.name,
-      grade: s.grade,
-      school: s.school,
-      date: s.enrolled_at ?? null,
-    })),
-    withdrawn: withdrawn.slice(0, MONTHLY_CHANGE_PREVIEW_LIMIT).map((s) => ({
-      id: s.id,
-      name: s.name,
-      grade: s.grade,
-      school: s.school,
-      date: s.withdrawn_at ?? null,
-    })),
-  };
-}
-
 export type SubjectChange = { subject: string; newCount: number; withdrawnCount: number; net: number };
 export type EnrollmentChangeSummary = {
   days: number;
@@ -190,82 +56,6 @@ export type EnrollmentChangeSummary = {
   net: number;
   bySubject: SubjectChange[]; // 순증감 낮은 순(퇴원 많은 과목 먼저)
 };
-
-/**
- * 최근 N일(기본 7) 학생 증감 — 신규 등록/퇴원 수(전체) + 과목별. 대시보드 "최근 7일" 카드.
- * 전체 카운트는 count:exact head:true(행 미수신, B2). 과목별은 창 내 학생 id(7일 창=소량)를 받아 수강 반 과목으로
- * 집계(fetchInChunks, B3) — 한 학생이 2과목이면 각 과목에 계수(과목별 합 ≠ 전체는 정상, 학생 중복 제거는 과목 단위).
- * 신규=활성 수강(end_date null)의 과목, 퇴원=그 학생의 (종료 포함) 수강 과목.
- */
-export async function getEnrollmentChangeLast7d(days = 7): Promise<EnrollmentChangeSummary> {
-  const supabase = await createClient();
-  const since = inclusiveDateWindowStart(kstToday(), days);
-
-  // 🔴 중복 병합으로 흡수된 쪽은 등록에도 퇴원에도 세지 않는다 — 판정 재료가 `notes`라 행을 받아 JS에서
-  //    거르고(위 월간 함수와 같은 이유·같은 규약) **그 수를 센다**. 7일 창이라 행이 소량이다.
-  //    조회 실패를 '최근 7일 변동 없음'이라는 거짓 문장으로 바꾸지 않는다(fetchAllPaged가 throw).
-  const [newRows, wdRows] = await Promise.all([
-    fetchAllPaged<{ id: string; notes: string | null }>((from, to) =>
-      supabase
-        .from("students")
-        .select("id, notes")
-        .eq("status", "enrolled")
-        .gte("enrolled_at", since)
-        .order("id")
-        .range(from, to),
-    ),
-    fetchAllPaged<{ id: string; notes: string | null; withdrawal_metadata: unknown }>((from, to) =>
-      supabase
-        .from("students")
-        .select("id, notes, withdrawal_metadata")
-        .eq("status", "withdrawn")
-        .gte("withdrawn_at", since)
-        .order("id")
-        .range(from, to),
-    ),
-  ]);
-  const newIds = newRows.filter((r) => !isMergedStudent(r.notes)).map((r) => r.id);
-  const wdReal = wdRows.filter((r) => !isMergedStudent(r.notes));
-  const bookkeeping = await bookkeepingOnlyIds(supabase, wdReal);
-  const withdrawnIds = wdReal.filter((r) => !bookkeeping.has(r.id)).map((r) => r.id);
-  const newCount = newIds.length;
-  const withdrawnCount = withdrawnIds.length;
-
-  const subjOf = (row: { class: unknown }): string | null => {
-    const c = (Array.isArray(row.class) ? row.class[0] : row.class) as { subject?: string | null } | undefined;
-    return c?.subject ?? null;
-  };
-  const aggregate = async (ids: string[], activeOnly: boolean): Promise<Map<string, Set<string>>> => {
-    const bySubj = new Map<string, Set<string>>();
-    if (ids.length === 0) return bySubj;
-    const rows = await fetchInChunks<{ student_id: string; class: unknown }>(ids, (chunk) => {
-      let q = supabase.from("enrollments").select("student_id, class:class_id(subject)").in("student_id", chunk);
-      if (activeOnly) q = q.is("end_date", null);
-      return q;
-    });
-    for (const r of rows) {
-      const s = subjOf(r);
-      if (!s) continue;
-      (bySubj.get(s) ?? bySubj.set(s, new Set()).get(s)!).add(r.student_id);
-    }
-    return bySubj;
-  };
-  const [newBySubj, wdBySubj] = await Promise.all([
-    aggregate(newIds, true),
-    aggregate(withdrawnIds, false),
-  ]);
-
-  const subjects = new Set([...newBySubj.keys(), ...wdBySubj.keys()]);
-  const bySubject: SubjectChange[] = [...subjects]
-    .map((subject) => {
-      const nc = newBySubj.get(subject)?.size ?? 0;
-      const wc = wdBySubj.get(subject)?.size ?? 0;
-      return { subject, newCount: nc, withdrawnCount: wc, net: nc - wc };
-    })
-    .sort((a, b) => a.net - b.net); // 순감 큰(퇴원 많은) 과목 먼저
-
-  return { days, newCount, withdrawnCount, net: newCount - withdrawnCount, bySubject };
-}
 
 export type AttendanceSnapshot = {
   date: string;
@@ -334,52 +124,6 @@ export type DashboardAttendanceState = {
   todayProcessingIssue: boolean;
   snapshotProcessingIssue: boolean;
 };
-
-async function collectProcessing(date: string): Promise<{
-  value: ClassProcessing[];
-  issue: boolean;
-}> {
-  try {
-    return { value: await getDailyProcessingStatus(date), issue: false };
-  } catch (error) {
-    console.error(`[dashboard/attendance] ${date} 처리 현황 조회 실패`, error);
-    return { value: [], issue: true };
-  }
-}
-
-async function collectAttendanceSnapshot(): Promise<{
-  value: AttendanceSnapshot | null;
-  issue: boolean;
-}> {
-  try {
-    return { value: await getMostRecentAttendanceSnapshot(), issue: false };
-  } catch (error) {
-    console.error("[dashboard/attendance] 최근 출결 스냅샷 조회 실패", error);
-    return { value: null, issue: true };
-  }
-}
-
-/** 헤더 출석률과 오늘 미처리 배지가 같은 예정학생 대비 처리 현황을 공유한다. */
-export async function getDashboardAttendanceState(): Promise<DashboardAttendanceState> {
-  const today = kstToday();
-  const [snapshotResult, todayCollected] = await Promise.all([
-    collectAttendanceSnapshot(),
-    collectProcessing(today),
-  ]);
-  const snapshot = snapshotResult.value;
-  const snapshotProcessingCollected =
-    snapshot && snapshot.date !== today
-      ? await collectProcessing(snapshot.date)
-      : todayCollected;
-  return {
-    snapshot,
-    todayProcessing: todayCollected.value,
-    snapshotProcessing: snapshotProcessingCollected.value,
-    snapshotIssue: snapshotResult.issue,
-    todayProcessingIssue: todayCollected.issue,
-    snapshotProcessingIssue: snapshotProcessingCollected.issue,
-  };
-}
 
 export type AnnouncementRow = {
   id: string;
@@ -531,39 +275,6 @@ export type DashEnrollmentRow = {
 
 export type DashEnrollmentList = { total: number; rows: DashEnrollmentRow[] };
 
-/**
- * 등록상담 목록(활성 = 대기·예약·상담완료·AI완료) — 최근 순 limit건 + 건수(count exact, 절단 무관).
- * 대시보드는 **최근 30일만** — 전체 기간은 활성 상담이 283건까지 쌓여(대부분 몇 달 전 '상담완료' 잔류)
- * 카드 건수가 "지금 챙길 일"이 아니라 누적 재고를 뜻했다(원장 지적 2026-07-15). 전체는 '전체 →' 링크로.
- * 기준 컬럼은 칸반 월 필터와 동일한 `consulted_at`(정렬 키와도 일치).
- */
-export async function getActiveEnrollmentConsultations(limit = 6, days = 30): Promise<DashEnrollmentList> {
-  const supabase = await createClient();
-  const since = inclusiveDateWindowStart(kstToday(), days);
-  const { data, count, error } = await supabase
-    .from("enrollment_consultations")
-    .select("id, prospect_name, prospect_school, prospect_grade, outcome, consultation_date, consulted_at", {
-      count: "exact",
-    })
-    .in("outcome", ["pending", "scheduled", "consulted", "ai_done"])
-    .gte("consulted_at", `${since}T00:00:00+09:00`)
-    .order("consulted_at", { ascending: false })
-    .limit(limit);
-  // 조회 실패를 '상담 0건'으로 위장하지 않는다 — 호출부(dashboardQuery)가 실패 허용을 담당.
-  if (error) throw new Error(`등록상담 목록 조회 실패: ${error.message}`);
-  const rows: DashEnrollmentRow[] = (data ?? []).map((r) => ({
-    id: r.id as string,
-    name: (r.prospect_name as string | null) ?? "(이름 없음)",
-    meta: schoolGradeLabel(r.prospect_school as string | null, r.prospect_grade as string | null) || null,
-    outcome: r.outcome as DashEnrollmentRow["outcome"],
-    // consulted_at은 timestamptz(UTC ISO) — slice(0,10)은 UTC 날짜라 KST 오전 접수가 전날로 밀린다.
-    date:
-      (r.consultation_date as string | null) ??
-      (typeof r.consulted_at === "string" ? kstDateForTimestamp(r.consulted_at) : null),
-  }));
-  return { total: count ?? 0, rows };
-}
-
 export type UnassignedEnrolled = {
   studentId: string;
   name: string;
@@ -625,139 +336,7 @@ export type PaymentSnapshot = {
   outstanding: number;
 };
 
-export async function getPaymentRateThisMonth(): Promise<PaymentSnapshot | null> {
-  const supabase = await createClient();
-  const period = kstMonth();
-  // B2: 집계용 전건 fetch는 fetchAllPaged(무페이징 select는 1000행 silent 절단).
-  const data = await fetchAllPaged<{
-    id: string;
-    amount_total: number;
-    amount_paid: number;
-    amount_discount: number | null;
-    status: string;
-  }>((from, to) =>
-    supabase
-      .from("invoices")
-      .select("id, amount_total, amount_paid, amount_discount, status")
-      .eq("period", period)
-      // void = makeedu에서 삭제된 청구(동기화 무효 처리) — 분모(청구 총액·수납률)에서도 제외.
-      .neq("status", "void")
-      .order("id", { ascending: true })
-      .range(from, to),
-  );
-  if (data.length === 0) return null;
-
-  // 수납 지표 단일 진실 = billing/calc summarizeInvoices — 수납관리 KPI와 같은 숫자 보장.
-  // (수납률 = 수납/실청구(청구−할인)·100% 상한, 미수 = 행 레벨 clamp·refunded/void/paid 제외)
-  const s = summarizeInvoices(
-    data.map((r) => ({
-      amountTotal: Number(r.amount_total),
-      amountPaid: Number(r.amount_paid),
-      amountDiscount: Number(r.amount_discount ?? 0),
-      status: r.status,
-    })),
-    period,
-  );
-  return {
-    period,
-    totalCount: s.totalCount,
-    paidCount: s.paidCount,
-    unpaidCount: s.unpaidCount + s.partialCount, // 밴드 '미수 N건' = 미수+부분납(기존 의미 유지)
-    partialCount: s.partialCount,
-    fullyUnpaidCount: s.unpaidCount,
-    paymentRate: s.paymentRate,
-    outstanding: s.outstanding,
-  };
-}
-
 export type TrendDataScope = { attendance?: boolean; billing?: boolean };
-
-/**
- * 최근 7일 추세(스파크라인) — **60초 캐시**(B6). 이웃 두 위젯(미수 상위·결석 위험)이 같은 이유로
- * 이미 캐시돼 있다.
- *
- * 왜 캐시인가: 이 한 함수가 **출결 7일 전건 + 겹치는 청구월 invoices 전건**(`line_items` jsonb 포함)을
- * 끌어온다 — 실측 규모로 대략 3,000~4,000행이고 이 페이지에서 바이트가 가장 큰 조회다. 게다가
- * aywa는 **창(iframe)마다 셸+페이지가 다시 도는 구조**라 창 N개면 N배고, 운영실은 5분마다 스스로
- * `router.refresh()`까지 한다(하루 90여 회). 7일 추세선에 초 단위 신선도는 필요 없다.
- *
- * 🔴 **호출 전에 권한을 확인할 것** — 캐시 안에서 admin 클라이언트를 쓰므로 RLS를 타지 않는다
- *    (캐시엔 쿠키가 없다, B6). 그래서 `tenant_id`를 **명시로** 건다. 대시보드 페이지는 이미
- *    `access.read.attendance || access.read.billing`로 갈라 부르고, 어느 축을 실을지도 scope로 넘긴다.
- * 🔴 캐시 키에 **scope 두 축이 들어간다** — 안 넣으면 수납 권한이 없는 사람이 남의 캐시(청구 포함)를
- *    받는다.
- */
-export const getTrendDataLast7Days = (
-  tenantId: string,
-  scope: TrendDataScope = {},
-): Promise<TrendPoint[]> => {
-  const includeAttendance = scope.attendance ?? true;
-  const includeBilling = scope.billing ?? true;
-  if (!includeAttendance && !includeBilling) return Promise.resolve([]);
-  return unstable_cache(
-    async () => loadTrendPoints(tenantId, includeAttendance, includeBilling),
-    ["dashboard-trend-7d", tenantId, String(includeAttendance), String(includeBilling)],
-    { tags: [dashboardWidgetsTag(tenantId)], revalidate: 60 },
-  )();
-};
-
-async function loadTrendPoints(
-  tenantId: string,
-  includeAttendance: boolean,
-  includeBilling: boolean,
-): Promise<TrendPoint[]> {
-  const supabase = createAdminClient();
-  // Window ends yesterday — today is still in progress and shouldn't drag the
-  // line to 0% just because attendance hasn't been recorded yet. KST 날짜 문자열을
-  // UTC 자정 Date로 바꿔 서버 로컬 시간대와 무관하게 같은 7일 창을 만든다.
-  const end = new Date(`${kstToday()}T00:00:00Z`);
-  end.setUTCDate(end.getUTCDate() - 1);
-  const start = new Date(end);
-  start.setUTCDate(end.getUTCDate() - 6);
-  const startIso = toIsoDate(start);
-  const endIso = toIsoDate(end);
-  const invoicePeriods = invoicePeriodsForRange(startIso, endIso);
-
-  // B2: 둘 다 집계용 전건 fetch — fetchAllPaged(출결 7일·겹치는 청구월 invoices 모두 1000행 초과 가능).
-  const [attendanceRows, invRows] = await Promise.all([
-    includeAttendance
-      ? fetchAllPaged<TrendAttendanceRow & EffectiveAttendanceRecord>((from, to) =>
-          supabase
-            .from("attendance_records")
-            .select("id, student_id, class_id, session_date, status, recorded_at")
-            // ⚠️ admin은 RLS를 우회하므로 **tenant 필터가 필수**(캐시 안엔 쿠키가 없다).
-            .eq("tenant_id", tenantId)
-            .gte("session_date", startIso)
-            .lte("session_date", endIso)
-            .order("recorded_at", { ascending: true })
-            .order("id", { ascending: true })
-            .range(from, to),
-        )
-      : Promise.resolve([]),
-    // 7일 창과 겹치는 청구월 invoices — 월 경계에서도 각 월 누적 수납률을 계산한다.
-    includeBilling
-      ? fetchAllPaged<TrendInvoiceRow>((from, to) =>
-          supabase
-            .from("invoices")
-            .select("id, period, amount_total, amount_paid, amount_discount, paid_at, line_items")
-            .eq("tenant_id", tenantId)
-            .in("period", invoicePeriods)
-            .neq("status", "void")
-            .order("id", { ascending: true })
-            .range(from, to),
-        )
-      : Promise.resolve([]),
-  ]);
-
-  return buildDashboardTrendPoints({
-    startIso,
-    endIso,
-    attendanceRows: effectiveAttendanceRecords(attendanceRows),
-    invoiceRows: invRows,
-    includeAttendance,
-    includeBilling,
-  });
-}
 
 // ─────────── 추가 대시보드 위젯 ───────────
 

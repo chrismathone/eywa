@@ -88,7 +88,6 @@ describe("옛 payload 하위 호환", () => {
     // 스포트라이트 payload는 스냅샷이라 2026-08-29 이전 행엔 이 키가 아예 없다.
     for (const src of [
       strip(read("src", "features", "dashboard", "briefing-team-report.ts")),
-      strip(read("src", "app", "(shell)", "dashboard", "_components", "daily-briefing-card.tsx")),
     ]) {
       expect(src).toMatch(/bySubject \?\? \[\]/);
     }

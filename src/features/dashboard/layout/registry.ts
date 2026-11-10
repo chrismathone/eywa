@@ -51,7 +51,6 @@ export const AREA_MENUS: Record<Area, readonly MenuKey[]> = {
 
 export type ThumbKind = "number" | "donut" | "bars" | "columns" | "line" | "list" | "table" | "schedule" | "stack";
 export type CardGroup = "KPI" | "학생·재원" | "출결·수업" | "수납·지출" | "상담·신입" | "학원 운영";
-export const CARD_GROUPS: readonly CardGroup[] = ["KPI", "학생·재원", "출결·수업", "수납·지출", "상담·신입", "학원 운영"];
 
 /** 위젯 크기 — 24열 격자에서 1칸(1×1) = 6열. ½×1(3열)은 요약형(숫자 한 줄)이다. */
 export type SizePreset = { key: string; label: string; hint: string; w: number; h: number; mode?: "summary" };

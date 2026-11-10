@@ -98,8 +98,6 @@ describe("날짜 라벨은 한 곳에서만 만든다", () => {
       ["src", "app", "(shell)", "classes", "[id]", "page.tsx"],
       ["src", "app", "(shell)", "timetable", "_components", "class-cell.tsx"],
       ["src", "features", "timetable", "server", "scheduled-class-change.ts"],
-      // 운영실도 같은 화면에 `9/11 (금)`(KPI)과 `09/11`(패널 주석)을 나란히 띄우고 있었다.
-      ["src", "app", "(shell)", "dashboard", "_overview", "overview.tsx"],
     ]) {
       const src = strip(read(...f));
       expect(src, f.join("/")).not.toContain('slice(5).replace("-", "/")');

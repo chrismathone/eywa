@@ -637,8 +637,8 @@ export type LoadOverviewOptions = {
   full?: boolean;
   subject?: string;
   /**
-   * 배치(`view`)가 정해지는 즉시 한 번 불린다 — 운영실 첫 화면이 무거운 조회를 기다리지 않고 그 배치의 스켈레톤을 먼저 그린다
-   * (`overview-server.tsx`의 Suspense 경계). 알림만 할 뿐 조회·권한·캐시는 그대로다. 받은 `view`를 고치지 말 것(스냅샷에 그대로 실린다).
+   * 배치(`view`)가 정해지는 즉시 한 번 불린다 — 지금 넘기는 곳은 없다(2026-11-10 운영실이 새 대시보드 하나라 뼈대가 배치를 안 본다 ·
+   * 배치별 뼈대를 다시 그릴 때 쓰라고 남김). 알림만 할 뿐 조회·권한·캐시는 그대로다. 받은 `view`를 고치지 말 것(스냅샷에 그대로 실린다).
    */
   onView?: (view: ResolvedView) => void;
 };

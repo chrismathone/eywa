@@ -50,9 +50,6 @@ const withoutPanel = (e: EditBoard, id: string): EditBoard => ({
   ...e, trend: e.trend.filter((i) => i.id !== id), mix: e.mix.filter((i) => i.id !== id), today: e.today.map((s) => ({ ...s, panels: s.panels.filter((i) => i.id !== id) })),
 });
 
-/** 놓인 패널 id 전부(어느 자리든). */
-export const placedPanels = (e: EditBoard): Set<string> => new Set([...e.trend, ...e.mix, ...e.today.flatMap((s) => s.panels)].map((i) => i.id));
-
 export function toggleCore(e: EditBoard, key: CoreKey, on: boolean): EditBoard {
   return { ...e, core: on ? [...new Set([...e.core, key])] : e.core.filter((k) => k !== key) };
 }

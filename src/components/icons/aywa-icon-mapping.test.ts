@@ -55,7 +55,6 @@ const APPROVED_INLINE_SVG = [
   "src/features/explore/components/network/explore-network.tsx",
   // 2026-09-23 통합 성적관리 월별 추이 선(role="img"+aria-label, 선만 SVG·점·라벨은 HTML) — 차트이지 아이콘이 아니다.
   "src/app/(shell)/exams/_components/trend-chart.tsx",
-  "src/app/(shell)/dashboard/_components/sparkline.tsx",
   "src/features/onescreen/components/report-trend-graph.tsx",
   // 2026-09-11 인재원 학습분석지(wide)의 시험 점수 추이 선 — 차트(report-trend-graph와 같은 성격).
   "src/features/ijw/components/jj-study-parts.tsx",

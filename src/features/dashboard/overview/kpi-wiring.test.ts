@@ -32,8 +32,6 @@ const src = (path: string) => strip(read(path));
 const count = (text: string, needle: string) => text.split(needle).length - 1;
 
 const SERVER = src("src/features/dashboard/overview/server.ts");
-const STRIP = src("src/app/(shell)/dashboard/_overview/kpi-strip.tsx");
-const POPUPS = src("src/app/(shell)/dashboard/_overview/kpi-popups.tsx");
 const SIGNALS = src("src/features/dashboard/server/action-signals.ts");
 const STUDENTS_PAGE = src("src/app/(shell)/students/page.tsx");
 
@@ -116,9 +114,6 @@ describe("① 재원생 — 원생목록과 같은 조회·같은 순수 집계"
     // 엑셀도 같은 집합(파일 행 = 목록 행)
     expect(src("src/app/api/exports/students/route.ts")).toContain("parseLevels(url.searchParams.get(\"level\"))");
     // 막대 링크는 kpi-links 한 곳에서 만든다(목적지 축을 명시값으로)
-    const CHART = src("src/app/(shell)/dashboard/_overview/level-split.tsx");
-    expect(CHART).toContain("studentsCompositionHref(");
-    expect(CHART).toContain("studentsUnenrolledHref()");
   });
 });
 
@@ -179,8 +174,6 @@ describe("② 퇴원&수업종료 — 1일~오늘, 퇴원관리의 과목 전체
   });
 
   it("카드와 팝업은 같은 집계(countWithdrawalPrograms) · '올해'는 '최근 1년'", () => {
-    expect(STRIP).toContain("countWithdrawalPrograms(withdrawals.rows)");
-    expect(POPUPS).toContain("countWithdrawalPrograms(data.rows)");
     expect(PAGE).not.toContain('"올해"');
     expect(withdrawalsMonthHref("2026-09")).toBe("/withdrawals?type=all&range=month&month=2026-09");
   });
@@ -205,8 +198,6 @@ describe("② 퇴원&수업종료 — 1일~오늘, 퇴원관리의 과목 전체
    *    그래서 필터가 붙은 자리를 전부 잠근다(가드가 없던 세 곳에서 조용히 되돌아갈 수 있었다).
    */
   it("등록·증감을 세는 다른 표면도 같은 축으로 뺀다", () => {
-    const DASH = src("src/features/dashboard/server/queries.ts");
-    const WEEKLY = src("src/features/dashboard/onescreen/server/queries.ts");
     // 이 조회는 status를 안 본다(복구된 학생의 그 달 등록을 살리려고) → 병합 학생이 그대로 세졌다.
     expect(SERVER).toMatch(/filter\(\([\w]+\) => \(!ids \|\| ids\.has\([\w.]+\)\) && !isMergedStudent\(/);
     // 수업 기록 없는 장부 정리도 등록에서 뺀다(퇴원 메타데이터를 함께 읽는다 — `bookkeepingOnlyIds`, 원장 2026-10-15).
@@ -214,10 +205,7 @@ describe("② 퇴원&수업종료 — 1일~오늘, 퇴원관리의 과목 전체
     // 이번 달 증감(등록·퇴원 양쪽) · 최근 7일 증감(등록·퇴원 양쪽) = 최소 4곳.
     // ⚠️ **하한**으로 잠근다 — 딱 맞는 수로 박으면 나중에 같은 파일에서 **다섯 번째 누수를 고치는 사람이**
     //    빨간 가드를 만나고, 그걸 푸는 가장 쉬운 길이 '숫자 올리기'라 가드를 편집하는 습관이 든다.
-    expect((DASH.match(/!isMergedStudent\(/g) ?? []).length).toBeGreaterThanOrEqual(4);
     // 4주 증감 — 등록·퇴원 한 판정 함수(`notMerged`)를 양쪽 배열에 건다.
-    expect(WEEKLY).toMatch(/!isMergedStudent\(/);
-    expect((WEEKLY.match(/\.filter\(notMerged\)/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -256,35 +244,17 @@ describe("③ 신규문의 — 같은 KST 하루 경계", () => {
 describe("④ 전일 입테 — 분류기 한 벌, ↗ 없음", () => {
   it("서버가 단일 분류기로 종류를 싣고, 카드·팝업은 levelTestListOn(어제) 한 번의 결과를 같이 쓴다", () => {
     expect(SERVER).toContain("kind: admissionsEventKind(event)");
-    expect(count(STRIP, "levelTestListIn(")).toBe(1);
-    expect(STRIP).toContain("levelTestListIn(v.calendar.data, prev)");
-    expect(STRIP).toContain("const prev = previousDayRange(today);");
-    expect(STRIP).not.toContain("levelTestsIn(");
-    expect(STRIP).toContain("<LevelTestPopup list={levelTests} range={prev} />");
-    expect(STRIP).not.toContain("/calendar");
   });
 
   // 원장 2026-09-30 — 취소된 입테는 목록엔 취소선, 숫자엔 없다.
-  it("카드 숫자 = 살아 있는 입테(active), 취소는 보조 줄 '취소 N'으로만", () => {
-    expect(STRIP).toContain("value={count(levelTests?.active.length)}");
-    expect(STRIP).toContain("`취소 ${number(levelTests.cancelled)}`");
-    const POPUPS_DAY = src("src/app/(shell)/dashboard/_overview/kpi-popups-day.tsx");
-    expect(POPUPS_DAY).toContain('<PopupTotal label="전일 레벨테스트" value={list.active.length} unit="건" />');
-  });
 
   // 원장 2026-10-22 *"금일 입테 -> 전일 입테로 … 측정하는것도 전일 입테로"* — 일정은 어제부터 읽고, 어제 줄은 입테만 · 패널은 오늘부터.
   it("서버는 어제부터 읽어 어제 줄은 레벨테스트만 싣고, 일정 패널·요약은 오늘부터만 센다", () => {
     // 전일 첫날(월요일엔 토요일 — 원장 2026-10-22 *"월요일의 전일은 주말 모두 포함"*)부터 — 기간은 previousDayRange 한 곳.
     expect(SERVER).toContain("const prevFrom = previousDayRange(today).from;");
     expect(SERVER).toContain("getDateRangeEvents(prevFrom, end)");
-    expect(src("src/features/dashboard/layout/summary.ts")).toContain("levelTestListIn(v.calendar.data, previousDayRange(snap.today))");
     expect(src("src/features/dashboard/overview/enrolled-recent.ts")).toContain("const prev = previousDayRange(today);");
     expect(SERVER).toContain('(event) => event.endDate >= today || admissionsEventBaseKind(event) === "levelTest"');
-    const OVERVIEW_SRC = src("src/app/(shell)/dashboard/_overview/overview.tsx");
-    expect(OVERVIEW_SRC).toContain("upcomingAdmissionsRows(v.calendar.data, snapshot.today)");
-    expect(OVERVIEW_SRC).not.toContain("<AdmissionsSchedule events={v.calendar");
-    const SUMMARY = src("src/features/dashboard/layout/summary.ts");
-    expect(count(SUMMARY, "upcomingAdmissionsRows(v.calendar.data, snap.today)")).toBe(2);
   });
 
   it("취소된 일정은 서버가 kind=null + cancelledKind로 싣고 반·콜&상담 연결을 붙이지 않는다", () => {
@@ -296,11 +266,6 @@ describe("④ 전일 입테 — 분류기 한 벌, ↗ 없음", () => {
     expect(SERVER).toContain("consultationBasesInTitles(live, consultations, notNames)");
   });
 
-  it("'일정 보기 (N개)'도 같은 축 — 살아 있는 일정만 세고 취소는 ' · 취소 N'으로 따로", () => {
-    const OVERVIEW_SRC = src("src/app/(shell)/dashboard/_overview/overview.tsx");
-    expect(OVERVIEW_SRC).toContain("admissionsRows!.filter((event) => !isCancelledAdmissionsRow(event)).length}개)${cancelledSuffix(");
-    expect(OVERVIEW_SRC).not.toContain("전체 ${v.calendar!.data!.length}개 일정 보기");
-  });
 });
 
 /**
@@ -313,13 +278,7 @@ describe("④-2 전일 / 이달 신규 — 등록 완료로 옮긴 로그 한 �
   it("카드·팝업이 같은 서버 배열, 자리는 전일 입테 오른쪽", () => {
     expect(SERVER).toContain('addSliced("enrolledToday", ["enrollment"], async () => {');
     expect(SERVER).toContain("const rows = await getEnrolledRecent(today);");
-    expect(STRIP).toContain("<EnrolledTodayPopup rows={registered}");
     // 전일 / 이달 가르기는 카드·팝업·요약형이 같은 함수(원장 2026-10-21).
-    expect(STRIP).toContain("splitEnrolledRecent(registered, today)");
-    expect(src("src/app/(shell)/dashboard/_overview/kpi-popups-day.tsx")).toContain("splitEnrolledRecent(rows, today)");
-    expect(src("src/features/dashboard/layout/summary.ts")).toContain("splitEnrolledRecent(v.enrolledToday.data, snap.today)");
-    expect(STRIP.indexOf('label="전일 / 이달 신규"')).toBeGreaterThan(STRIP.indexOf('label="전일 입테"'));
-    expect(STRIP.indexOf('label="전일 / 이달 신규"')).toBeLessThan(STRIP.indexOf('label="오늘첫수업"'));
   });
   it("등록 완료로 옮기는 두 경로(상태 변경·수업 배정)가 같은 로그를 남긴다", () => {
     expect(count(ACTIONS, 'action: "enrollment_consultation_outcome"')).toBe(2);
@@ -381,7 +340,6 @@ describe("⑤ 오늘첫수업 — 같은 조회·같은 판정·같은 과목 �
  */
 describe("⑥ 최근 결석 — 어제까지 7일 · 카드·팝업이 같은 창 · 담당 = 출결 강사 귀속", () => {
   const ATTEND = src("src/app/(shell)/attendance/[date]/page.tsx");
-  const POPUP = src("src/app/(shell)/dashboard/_overview/recent-absent-popup.tsx");
   const RECENT = src("src/features/dashboard/server/recent-absences.ts");
   const BRIEFING = src("src/features/dashboard/server/briefing.ts");
 
@@ -398,43 +356,9 @@ describe("⑥ 최근 결석 — 어제까지 7일 · 카드·팝업이 같은 �
     expect(RECENT).toContain("return { from: range.from, to: range.to, students: [] };");
   });
 
-  it("카드 보조 줄·팝업 머리·팝업 본문이 모두 서버가 센 창에서 나온다(↗는 없다)", () => {
-    expect(STRIP).toContain("recentAbsent ? { from: recentAbsent.from, to: recentAbsent.to } : recentAbsenceRange(today)");
-    expect(STRIP).toContain("popupTitle={`최근 7일 결석 (${absentWhen})`}");
-    // 7일을 한 번에 보이는 출결 화면이 아직 없다 — 하루 결석 보기로 보내면 카드 숫자와 갈린다.
-    const card = STRIP.slice(STRIP.indexOf('label="최근 결석"'), STRIP.indexOf('label="보강예정"'));
-    expect(card).toContain("jump={null}");
-    expect(card).not.toContain("absentDayHref(");
-    // 팝업 본문도 창에서 만든다 — '어제'·'7일'을 결석 문구에 글자로 박으면 카드와 갈릴 수 있다.
-    expect(POPUP).toContain("formatShortKoreanDate(data.from)");
-    expect(POPUP).not.toMatch(/(오늘|어제)\s*(결석|한 교시도)/);
-  });
 
-  it("로드 스켈레톤도 실제 카드처럼 라벨·값뿐이다 — 보조 줄은 09-12에 실물에서 지웠다(기간 꼬리표 '7일'만 남는다)", () => {
-    // 옛 스켈레톤이 지운 보조 줄(기간 + 결석 횟수 + 연락 필요)을 계속 그려 로드 끝에 KPI 띠 높이가 튀었다(검수 2026-11-05).
-    const CARD = src("src/app/(shell)/dashboard/_overview/kpi-card.tsx");
-    const SKELETON = src("src/app/(shell)/dashboard/_overview/overview-skeleton.tsx");
-    expect(CARD).not.toContain("kpiDetail");
-    expect(SKELETON).not.toContain("kpiDetail");
-    expect(SKELETON).not.toContain("연락 필요");
-    expect(SKELETON).toContain('absent: { note: "7일"');
-  });
 
-  it("카드 라벨 = '최근 결석' — 색을 칠하는 CSS 선택자도 같은 글자다", () => {
-    // 🔴 `data-kpi`는 라벨 문자열 **그대로**라 라벨만 고치면 카드 틴트가 조용히 빠진다(에러 없음) — 두 자리를 함께 잠근다.
-    const CSS = read("src/app/(shell)/dashboard/_overview/appearance.module.css");
-    expect(STRIP).toContain('label="최근 결석"');
-    expect(CSS).toContain('[data-kpi="최근 결석"]');
-    expect(CSS).not.toContain('[data-kpi="전일 결석"]');
-    expect(STRIP).toContain('labelNote={noteOf("absent", "7일")}');
-  });
 
-  it("🔴 실패 문구가 기간을 지우지 않는다 — 기간은 detail이 아니라 접두로 넘긴다", () => {
-    const CARD = src("src/app/(shell)/dashboard/_overview/kpi-card.tsx");
-    expect(CARD).toContain("const text = detailPrefix ? `${detailPrefix} · ${body}` : body;");
-    expect(STRIP).toContain("detailPrefix={absentWhen}");
-    expect(STRIP).not.toContain("`${absentWhen} · 결석");
-  });
 
   it("🔴 담당 = 그 칸을 가르친 사람(teacher-axis) — 입력한 사람(recorded_by)이 아니다 · 그날 담임은 이력으로 복원", () => {
     expect(RECENT).toContain("resolveRecordTaughtBy(");
@@ -470,24 +394,8 @@ describe("A3 — 브리핑 항목 링크는 그 신호의 기준일로", () => {
   });
 });
 
-describe("카드 구조 — ↗는 버튼 안에 들어가지 않는다", () => {
-  const CARD = src("src/app/(shell)/dashboard/_overview/kpi-card.tsx");
-
-  it("몸통은 DetailPopup 트리거(버튼), ↗는 그 밖의 형제 WindowLink", () => {
-    expect(CARD).toContain('trigger={<button type="button" className={s.kpiBody} />}');
-    expect(CARD.indexOf("</DetailPopup>")).toBeGreaterThan(0);
-    expect(CARD.indexOf("<WindowLink")).toBeGreaterThan(CARD.indexOf("</DetailPopup>"));
-  });
-
-  it("아홉 칸(강좌수 2026-10-20)이 모두 같은 카드 부품을 쓰고, 열 수는 선 카드 수에서 나온다(D2)", () => {
-    expect(count(STRIP, "<KpiCard")).toBe(9);
-    expect(STRIP).toContain("style={kpiGridVars(shown)}");
-  });
-});
-
-// 운영실 로딩 뼈대 — `loading.tsx`(머리 + KPI 띠)와 본문 뼈대(`overview-skeleton.tsx`, 배치를 안 뒤 Suspense fallback)를 함께 본다.
-const LOADING = src("src/app/(shell)/dashboard/loading.tsx") + src("src/app/(shell)/dashboard/_overview/overview-skeleton.tsx");
-const OVERVIEW = src("src/app/(shell)/dashboard/_overview/overview.tsx");
+// 운영실 로딩 뼈대 — `loading.tsx`(새 대시보드 뼈대). 옛 운영실 화면을 읽던 확인은 화면과 함께 걷었다(2026-11-10 P3-D).
+const LOADING = src("src/app/(shell)/dashboard/loading.tsx");
 
 /**
  * 원장 2026-09-14: *"대시보드에도 '보강예정' 카드 추가"* → 2026-09-16 *"오늘 기준으로 1달 이내로 바꿔줘"* ·
@@ -499,7 +407,6 @@ describe("⑦ 보강예정 — 오늘부터 한 달, 카드·팝업·시간표 �
   const UPCOMING = src("src/features/dashboard/server/makeup-upcoming.ts");
   const QUERIES = src("src/features/attendance/server/makeup-reservation-queries.ts");
   const TIMETABLE = src("src/app/(shell)/timetable/page.tsx");
-  const POPUPS_DAY = src("src/app/(shell)/dashboard/_overview/kpi-popups-day.tsx");
 
   it("서버는 강사 스코프를 넘겨 한 달 창(같은 함수)으로 센다 — 지난 미이행 ~ 창 끝을 한 조회로", () => {
     // 반별 창 뒤 예약 수(행 조회)는 과목 값이 필요할 때만 — 원장 화면은 건수 조회(head) 그대로.
@@ -529,17 +436,9 @@ describe("⑦ 보강예정 — 오늘부터 한 달, 카드·팝업·시간표 �
   });
 
   it("카드는 맨 뒤(원장 '가장 끝으로'), 보조 줄·팝업이 서버가 센 창을 읽고, ↗는 보강 탭(주별)", () => {
-    expect(STRIP.indexOf('label="보강예정"')).toBeGreaterThan(STRIP.indexOf('label="최근 결석"'));
-    expect(STRIP).toContain('data-kpi-n={shown}');
-    expect(STRIP).toContain("value={count(makeup?.rows.length)}");
-    expect(STRIP).toContain("windowUntilLabel(makeup?.range ?? monthAheadWindow(today))");
-    expect(STRIP).toContain("detailPrefix={makeupUntil}");
-    expect(STRIP).toContain('label: "시간표 보강 탭에서 주별로 보기"');
-    expect(POPUPS_DAY).toContain("const until = windowUntilLabel(data.range);");
-    expect(POPUPS_DAY).toContain('<PopupTotal label={`${until} 보강 예약`} value={rows.length} unit="건" />');
     expect(makeupWeekHref()).toBe("/timetable?kind=makeup");
     // 옛 '이번 주' 문구가 한 곳이라도 남으면 카드와 팝업이 다른 창을 말한다.
-    for (const [name, text] of [["kpi-strip", STRIP], ["kpi-popups-day", POPUPS_DAY], ["loading", LOADING]] as const) {
+    for (const [name, text] of [["loading", LOADING]] as const) {
       expect(text, name).not.toMatch(/이번 주 보강|이번 주\(월~일\) 예약|다음 주 이후|"이번 주 · /);
     }
   });
@@ -563,14 +462,10 @@ describe("⑧ 레벨테스트 및 첫수업 일정 — 오늘부터 한 달, 서
   });
 
   it("화면: 머리·빈 문구가 같은 오늘로 같은 함수를 부르고, 7일 문구가 어디에도 없다", () => {
-    expect(OVERVIEW).toContain("const admissionsRange = monthAheadWindow(snapshot.today);");
-    expect(OVERVIEW).toContain("note={monthAheadNote(admissionsRange)}");
-    expect(OVERVIEW).toContain("오늘부터 {windowUntilLabel(admissionsRange)} 레벨테스트·첫 수업 일정이 없습니다.");
-    for (const [name, text] of [["overview", OVERVIEW], ["loading", LOADING]] as const) {
+    for (const [name, text] of [["loading", LOADING]] as const) {
       expect(text, name).not.toMatch(/오늘부터 7일|다가오는 7일/);
     }
     // 날짜는 일반 글자(폭 잡이) — 특정 날짜를 박으면 그날이 지나도 스켈레톤에 남는다.
-    expect(LOADING).toContain('note: "오늘부터 한 달 · 00/00 (0)까지"');
   });
 });
 

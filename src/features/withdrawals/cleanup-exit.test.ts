@@ -56,8 +56,6 @@ describe("퇴원 집계 조회 배선", () => {
   const sources: [string, string][] = [
     ["src/features/withdrawals/server/queries.ts", "isBookkeepingOnlyExit("], // 퇴원관리 목록·분석·등록 후 띠
     ["src/features/withdrawals/server/window.ts", "isBookkeepingOnlyExit("], // 운영실 퇴원 KPI·등록 후 위젯·등록·퇴원 추이·시간표 X
-    ["src/features/dashboard/server/queries.ts", "bookkeepingOnlyIds("], // 원스크린 이번 달 증감
-    ["src/features/dashboard/onescreen/server/queries.ts", "bookkeepingOnlyIds("], // 원스크린 주별 증감(등록·퇴원 양쪽)
     ["src/features/dashboard/overview/server.ts", "bookkeepingOnlyIds("], // 운영실 등록·퇴원 추이의 등록 칸
     ["src/features/dashboard/overview/trend-inputs-server.ts", "isCleanupExit("], // 재원생·강좌수 추이 원본(판정은 enrolled-trend.ts)
     ["src/features/dashboard/overview/enrolled-trend.ts", "if (!ended.has(s.id)) return false;"],
@@ -67,12 +65,9 @@ describe("퇴원 집계 조회 배선", () => {
   });
   // 호출만 남고 거르는 줄이 빠지면 위 검사는 통과한다(재리뷰 2026-10-15) — 거르는 자리 수에 하한을 건다.
   const count = (path: string, needle: string) => readFileSync(join(process.cwd(), path), "utf8").split(needle).length - 1;
-  it("원스크린 주별 증감은 등록·퇴원 양쪽을 거른다", () => {
-    expect(count("src/features/dashboard/onescreen/server/queries.ts", "!bookkeeping.has(")).toBeGreaterThanOrEqual(2);
-  });
-  it("운영실 등록 칸·원스크린 이번 달 퇴원은 거른 목록을 쓴다", () => {
+  // 옛 한 화면 대시보드의 이번 달·주별 증감 조회는 화면과 함께 지웠다(2026-11-10 P3-D).
+  it("운영실 등록 칸은 거른 목록을 쓴다", () => {
     expect(count("src/features/dashboard/overview/server.ts", "!bookkeeping.has(")).toBeGreaterThanOrEqual(1);
-    expect(count("src/features/dashboard/server/queries.ts", "!bookkeeping.has(")).toBeGreaterThanOrEqual(1);
   });
   it("재원생 추이 원본은 장부 정리 판정과 그 학생의 청구를 함께 싣는다(학원 전체·과목별·원생 통계가 한 원본)", () => {
     const server = "src/features/dashboard/overview/enrolled-trend-server.ts";
@@ -103,7 +98,6 @@ describe("추세선 배선 — 장부 정리는 퇴원 칸에서 뺀다", () => 
     ["src/features/dashboard/overview/server.ts", "withdrawn.filter((r) => !r.cleanup)"], // 운영실·원생 통계 '등록·퇴원 추이'
     ["src/features/dashboard/overview/server.ts", "!row.cleanup && row.exitDate < win.from"], // '등록 후 3개월 내 퇴원' 달마다 줄
     ["src/app/(shell)/withdrawals/page.tsx", "!r.systemBulk && !r.cleanup"], // 퇴원관리 '월별 추이'
-    ["src/features/dashboard/onescreen/server/queries.ts", "!isCleanupExit(r.withdrawal_metadata)"], // 원스크린 4주 등록·퇴원
     ["src/features/withdrawals/server/window.ts", "cleanup: isCleanupExit(s.withdrawal_metadata)"], // 추이가 읽는 표식
   ])("%s 는 %s", (path, needle) => {
     expect(readFileSync(join(process.cwd(), path), "utf8")).toContain(needle);

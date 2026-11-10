@@ -40,9 +40,9 @@ describe("데모 재원 드롭다운", () => {
 
   it("드롭다운은 대시보드가 재료를 줄 때만 선다", () => {
     const server = read("src/app/(shell)/dashboard/_overview/overview-server.tsx");
-    const overview = read("src/app/(shell)/dashboard/_overview/overview.tsx");
+    const board = read("src/app/(shell)/dashboard/_instruments/instrument-board.tsx"); // 운영실 = 새 대시보드 하나(P3-D)
     expect(server).toContain("getDemoRosterControl()");
-    expect(overview).toContain("demoRoster ? <DemoRosterSwitch");
+    expect(board).toContain("demoRoster ? <DemoRosterSwitch");
     const sw = read("src/app/(shell)/dashboard/_components/demo-roster-switch.tsx");
     expect(sw).toContain('refetchQueries({ queryKey: ["dashboard-overview"], type: "active" })');
     expect(read("src/features/demo-roster/apply.ts")).toContain("insertDashboardSatellite");

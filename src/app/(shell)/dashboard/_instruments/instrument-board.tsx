@@ -73,7 +73,7 @@ function Sections({ list }: { list: readonly BoardSection[] }) {
 }
 
 export function InstrumentBoard({ initial, chartKinds, checkView, demoRoster, initialExtras, initialWork }: {
-  initial: OverviewSnapshot; chartKinds: ChartKinds; checkView?: CheckView; demoRoster: DemoRosterControl | null; onSwitchDesign: () => void;
+  initial: OverviewSnapshot; chartKinds: ChartKinds; checkView?: CheckView; demoRoster: DemoRosterControl | null;
   /** 개발 화면 전용 — 주면 서버에 묻지 않는다. */
   initialExtras?: InstrumentExtras;
   initialWork?: WorkBoard;

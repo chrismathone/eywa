@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import type { Distribution } from "@/features/dashboard/overview/model";
 import { dashboardDate } from "@/features/dashboard/overview/display";
 import { DetailPopup } from "./detail-popup";
 import s from "./overview.module.css";
@@ -514,35 +513,5 @@ export function AttendanceHistory({
         </div>
       </DetailPopup>
     </>
-  );
-}
-
-export function Stack({
-  data,
-  label,
-}: {
-  data: (Distribution[number] & { color: string })[];
-  label: string;
-}) {
-  const total = data.reduce((sum, item) => sum + item.value, 0);
-  return (
-    <div
-      className={s.stack}
-      role="img"
-      aria-label={`${label}: ${data.map((d) => `${d.label} ${d.value}`).join(", ")}`}
-    >
-      {data
-        .filter((d) => d.value > 0)
-        .map((d) => (
-          <span
-            key={d.label}
-            style={{
-              width: `${(d.value / total) * 100}%`,
-              background: d.color,
-            }}
-            title={`${d.label} ${d.value}`}
-          />
-        ))}
-    </div>
   );
 }

@@ -9,5 +9,5 @@ import { FIXTURE_WORK } from "@/features/work-requests/testing/fixture";
 const InstrumentBoard = dynamic(() => import("@/app/(shell)/dashboard/_instruments/instrument-board").then((m) => m.InstrumentBoard), { ssr: false });
 
 export function Harness() {
-  return <InstrumentBoard initial={FIXTURE_SNAPSHOT} chartKinds={DEFAULT_CHART_KINDS} demoRoster={null} onSwitchDesign={() => undefined} initialExtras={FIXTURE_EXTRAS} initialWork={FIXTURE_WORK} />;
+  return <InstrumentBoard initial={FIXTURE_SNAPSHOT} chartKinds={DEFAULT_CHART_KINDS} demoRoster={null} initialExtras={FIXTURE_EXTRAS} initialWork={FIXTURE_WORK} />;
 }

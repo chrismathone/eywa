@@ -112,8 +112,7 @@ export function validateTeamReport(
 }
 
 /**
- * 신호(menuKey) → 매니저 영역. 폴백 보고의 묶음 축이자 브리핑 카드 '바로 가기' 칩의 배치 축이다
- * (briefing-links.ts) — 둘이 갈리면 같은 신호가 화면에서 두 영역에 나타난다.
+ * 신호(menuKey) → 매니저 영역. 폴백 보고의 묶음 축(옛 브리핑 카드 '바로 가기' 칩 `briefing-links.ts`는 2026-11-10 화면과 함께 삭제).
  */
 export const AREA_BY_MENU: Readonly<Record<string, TeamArea>> = {
   attendance: "수업",
