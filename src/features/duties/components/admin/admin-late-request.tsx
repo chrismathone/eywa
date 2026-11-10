@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 // 업무 요청 창(만들기 · 상세)은 운영실의 것을 그대로 쓴다 — 창이 body에 제 범위(.aywa-instruments)를 씌워 그리므로 그 스타일만 함께 싣는다(범위 밖은 건드리지 않는다).
 import "@/app/(shell)/dashboard/_instruments/instruments.css";
 import { WorkProvider, useWork } from "@/app/(shell)/dashboard/_instruments/work/work-context";
-import { lateRequestPrefill, openLateRequest, requestSubject } from "../../late-request";
+import { coversLate, lateRequestPrefill, openLateRequest, requestSubject } from "../../late-request";
 import type { LateItem } from "../../view-admin";
 
 /** 업무 완성도 화면의 업무 요청 범위 — 요청 목록을 화면이 뜬 뒤 따로 읽는다(GET · 갱신 때 다시). */
@@ -25,7 +25,8 @@ export function LateRequestButton({ owner, items }: { owner: { id: string | null
   const id = owner.id;
   if (!work.board.enabled || !work.board.canCreate || !id || !items.length || !work.board.staff.some((p) => p.id === id)) return null;
   const sent = openLateRequest(work.board.items, id, requestSubject(items));
-  if (sent) return <button type="button" onClick={() => work.open(sent.id)} className="border-line text-text-dim hover:text-primary shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold whitespace-nowrap">요청함 · {md(sent.createdAt)}</button>;
+  // 요청 뒤에 새로 생긴 지연이 있으면 '요청함'으로 덮지 않고 다시 요청할 수 있게 한다.
+  if (sent && coversLate(sent, items)) return <button type="button" onClick={() => work.open(sent.id)} className="border-line text-text-dim hover:text-primary shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold whitespace-nowrap">요청함 · {md(sent.createdAt)}</button>;
   const send = () => { const prefill = lateRequestPrefill(items, { id, name: owner.name }, work.today); if (prefill) work.create(prefill); };
   return <button type="button" onClick={send} className="bg-primary text-primary-foreground shrink-0 rounded-full px-2.5 py-1 text-xs font-bold whitespace-nowrap hover:opacity-90">처리 요청</button>;
 }

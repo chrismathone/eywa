@@ -1,5 +1,5 @@
 import { schoolGradeLabel } from "@/lib/format/school-grade";
-import { add, cellOf, EMPTY, MATRIX_COLUMNS, MIN_JUDGE, upcomingOf, type AttentionRow, type Cell, type ClassInfo, type OwnerInfo, type RollupClass, type RollupOwnerKind, type RollupStudent, type StudentInfo, dutyTier, tierTone, type DutyTier, type OwnerLoadRow } from "./view-admin";
+import { add, cellOf, EMPTY, exactPct, MATRIX_COLUMNS, MIN_JUDGE, upcomingOf, type AttentionRow, type Cell, type ClassInfo, type OwnerInfo, type RollupClass, type RollupOwnerKind, type RollupStudent, type StudentInfo, dutyTier, tierTone, type DutyTier, type OwnerLoadRow } from "./view-admin";
 
 /**
  * 단계별 보기(과목 → 선생님 → 반 → 학생)의 순수 조립 — 원장 2026-11-10 *"과목별 - 선생님별 - 반별 - 학생별로 디테일 될 수 있게 … 이 선생님이 뭘 안했는지,
@@ -28,7 +28,7 @@ export function judge(cell: Cell, avg: Avg | null = null): Verdict {
     const reason = cell.due ? `기한이 된 업무가 ${n(cell.due)}건뿐이라 아직 등급을 매기지 않습니다.` : up ? `아직 기한 전입니다 — ${n(cell.done)}/${n(cell.total)}건 완료.` : "아직 기한 전입니다.";
     return { grade: "wait", tier: null, label: VERDICT_LABEL.wait, reason, mix, gap: null };
   }
-  const tier = dutyTier(cell.pct);
+  const tier = dutyTier(exactPct(cell) ?? cell.pct);
   const missed = cell.expired + cell.late;
   // 결론 한 줄(원장 2026-11-10 *"관리자 입장에서 바로 판단이 가능하게"*) — 잘하고 있나 · 아니면 '늦게 하는' 쪽인가 '안 하는' 쪽인가.
   const reason = tier <= 2 ? (cell.lateDone + missed ? "대부분 제때 처리합니다." : "전부 제때 처리했습니다.")
@@ -189,9 +189,9 @@ export type RankRow = { rank: number | null; ownerId: string; name: string; meta
  */
 export function rankOwners(owners: readonly TreeOwner[], kind: string | null = null): RankRow[] {
   const rows = owners.filter((o) => o.ownerId !== NO_OWNER && listedOwner(o)).flatMap((o) => { const cell = kind ? o.cells[kind] : o.cell; return cell && cell.total ? [{ ownerId: o.ownerId, name: o.name, meta: ownerMeta(o), cell, verdict: judge(cell) }] : []; });
-  const judged = rows.filter((r) => r.verdict.tier !== null).sort((a, b) => b.cell.pct! - a.cell.pct! || b.cell.due - a.cell.due || a.name.localeCompare(b.name, "ko"));
+  const judged = rows.filter((r) => r.verdict.tier !== null).sort((a, b) => exactPct(b.cell)! - exactPct(a.cell)! || b.cell.due - a.cell.due || a.name.localeCompare(b.name, "ko"));
   const waiting = rows.filter((r) => r.verdict.tier === null).sort((a, b) => a.name.localeCompare(b.name, "ko"));
-  return [...judged.map((r): RankRow => ({ ...r, rank: judged.findIndex((x) => x.cell.pct === r.cell.pct) + 1 })), ...waiting.map((r): RankRow => ({ ...r, rank: null }))];
+  return [...judged.map((r): RankRow => ({ ...r, rank: judged.findIndex((x) => exactPct(x.cell) === exactPct(r.cell)) + 1 })), ...waiting.map((r): RankRow => ({ ...r, rank: null }))];
 }
 
 /** 오늘 미완료 한 줄 — left = 아직 안 끝낸 수(기한 전 포함) · kinds = 종류별 남은 수(많은 것부터). */

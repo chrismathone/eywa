@@ -29,28 +29,57 @@ export type LateItem = DutyItemView & { ownerId: string | null; inherited: boole
 /** syncedAt = 장부를 마지막으로 맞춘 시각(없으면 null) — 화면의 '기준 시각'. */
 export type DutyAdminData = { ownerKind: RollupOwnerKind[]; classes: RollupClass[]; late: LateItem[]; owners: OwnerInfo; classInfo: ClassInfo; syncedAt: string | null; /** 담당 반 수 · 학생 수(없으면 반 수만 트리에서 센다). */ ownerLoad?: OwnerLoadRow[]; /** 관리자 역할(원장 · 관리자)인 담당자 — 맡은 반이 없으면 선생님 목록·등수에서 뺀다. */ managerIds?: string[]; /** 평가 개시 시각(없으면 null) — 고른 기간이 통째로 그 전이면 화면이 '참고 기록'이라고 밝힌다. */ liveFrom?: string | null };
 
-export type AdminPeriod = "today" | "week" | "month" | "prevMonth";
-export const ADMIN_PERIODS: { key: AdminPeriod; label: string }[] = [
-  { key: "today", label: "오늘" }, { key: "week", label: "이번 주" }, { key: "month", label: "이번 달" }, { key: "prevMonth", label: "지난 달" },
-];
+/**
+ * 기간 열쇠 — `d:YYYY-MM-DD`(하루) · `w:YYYY-MM-DD`(그 주의 월요일) · `m:YYYY-MM`(달). 원장 2026-11-11 *"달력 추가해서 날짜 이동 가능하게"* —
+ * 오늘 · 이번 주 · 이번 달 · 지난 달은 빠른 단추일 뿐이고, 어느 날 · 어느 주 · 어느 달이든 볼 수 있다(앞날은 없다).
+ */
+export type AdminPeriod = string;
+export type PeriodUnit = "day" | "week" | "month";
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
 const md = (ymd: string) => `${Number(ymd.slice(5, 7))}월 ${Number(ymd.slice(8, 10))}일`;
-/** 기간 → 회차 창(KST 날짜). 월간 의무는 달로 맞으므로 '이번 달'은 1일~오늘이면 된다. */
+const shiftDay = (ymd: string, n: number) => new Date(Date.parse(`${ymd}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+const shiftMonth = (ym: string, n: number) => { const t = Number(ym.slice(0, 4)) * 12 + Number(ym.slice(5, 7)) - 1 + n; return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`; };
+const lastDayOf = (ym: string) => shiftDay(`${shiftMonth(ym, 1)}-01`, -1);
+export const periodKey = (unit: PeriodUnit, anchor: string): AdminPeriod => (unit === "month" ? `m:${anchor.slice(0, 7)}` : unit === "week" ? `w:${weekDaysOf(anchor)[0]}` : `d:${anchor}`);
+/** 열쇠 → 단위와 기준일(주 = 월요일 · 달 = 1일). 모양이 아니면 null. */
+export function periodParts(period: AdminPeriod): { unit: PeriodUnit; anchor: string } | null {
+  const body = period.slice(2);
+  if (period.startsWith("d:") && YMD.test(body)) return { unit: "day", anchor: body };
+  if (period.startsWith("w:") && YMD.test(body)) return { unit: "week", anchor: weekDaysOf(body)[0]! };
+  if (period.startsWith("m:") && /^\d{4}-(0[1-9]|1[0-2])$/.test(body)) return { unit: "month", anchor: `${body}-01` };
+  return null;
+}
+export const periodUnit = (period: AdminPeriod): PeriodUnit => periodParts(period)?.unit ?? "month";
+/** 빠른 단추 — 오늘 · 이번 주 · 이번 달 · 지난 달. */
+export function periodPresets(today: string): { key: AdminPeriod; label: string }[] {
+  return [{ key: periodKey("day", today), label: "오늘" }, { key: periodKey("week", today), label: "이번 주" }, { key: periodKey("month", today), label: "이번 달" }, { key: `m:${shiftMonth(today.slice(0, 7), -1)}`, label: "지난 달" }];
+}
+/** 주소의 값 → 기간 열쇠(믿지 않는다). 모양이 아니거나 앞날이면 이번 달. 옛 값(today · week · month · prevMonth)도 받는다. */
+export function parseAdminPeriod(raw: unknown, today: string): AdminPeriod {
+  const legacy: Record<string, number> = { today: 0, week: 1, month: 2, prevMonth: 3 };
+  if (typeof raw === "string" && raw in legacy) return periodPresets(today)[legacy[raw]!]!.key;
+  const parts = typeof raw === "string" ? periodParts(raw) : null;
+  if (!parts || parts.anchor > today) return periodKey("month", today);
+  return periodKey(parts.unit, parts.anchor);
+}
+/** 앞 · 뒤 기간(하루 · 한 주 · 한 달). */
+export function shiftPeriod(period: AdminPeriod, dir: -1 | 1): AdminPeriod {
+  const parts = periodParts(period);
+  if (!parts) return period;
+  return parts.unit === "month" ? `m:${shiftMonth(parts.anchor.slice(0, 7), dir)}` : periodKey(parts.unit, shiftDay(parts.anchor, parts.unit === "week" ? dir * 7 : dir));
+}
+/** 기간 → 회차 창(KST 날짜)과 화면에 적을 이름. 끝은 오늘을 넘지 않는다(이번 주 · 이번 달은 오늘까지). */
 export function adminRange(period: AdminPeriod, today: string): { from: string; to: string; label: string } {
-  if (period === "today") return { from: today, to: today, label: md(today) };
-  if (period === "week") { const from = weekDaysOf(today)[0]!; return { from, to: today, label: `${md(from)} ~ ${md(today)}` }; }
-  if (period === "month") { const from = `${today.slice(0, 7)}-01`; return { from, to: today, label: `${md(from)} ~ ${md(today)}` }; }
-  const y = Number(today.slice(0, 4)); const m = Number(today.slice(5, 7));
-  const py = m === 1 ? y - 1 : y; const pm = m === 1 ? 12 : m - 1;
-  const last = new Date(Date.UTC(py, pm, 0)).getUTCDate();
-  const from = `${py}-${String(pm).padStart(2, "0")}-01`; const to = `${py}-${String(pm).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
-  return { from, to, label: `${py}년 ${pm}월` };
+  const parts = periodParts(period) ?? { unit: "month" as const, anchor: `${today.slice(0, 7)}-01` };
+  const cap = (ymd: string) => (ymd > today ? today : ymd);
+  if (parts.unit === "day") return { from: parts.anchor, to: parts.anchor, label: md(parts.anchor) };
+  if (parts.unit === "week") { const to = cap(shiftDay(parts.anchor, 6)); return { from: parts.anchor, to, label: `${md(parts.anchor)} ~ ${md(to)}` }; }
+  const ym = parts.anchor.slice(0, 7);
+  return { from: parts.anchor, to: cap(lastDayOf(ym)), label: `${Number(ym.slice(0, 4))}년 ${Number(ym.slice(5, 7))}월` };
 }
-/** 셀 주기 — 오늘·이번 주는 **일간만**(강사 홈 '오늘 내 업무'와 같은 셈) · 달 단위는 전부(월간·건별 포함). */
+/** 셀 주기 — 하루 · 한 주는 **일간만**(강사 홈 '오늘 내 업무'와 같은 셈) · 달 단위는 전부(월간·건별 포함). */
 export function periodsOf(period: AdminPeriod): string[] | null {
-  return period === "today" || period === "week" ? ["daily"] : null;
-}
-export function parseAdminPeriod(raw: unknown): AdminPeriod {
-  return raw === "today" || raw === "week" || raw === "prevMonth" ? raw : "month";
+  return periodUnit(period) === "month" ? null : ["daily"];
 }
 
 /** 매트릭스 열 = 종류 전부(순서 = DUTY_KINDS). 짧은 머리글. */
@@ -63,6 +92,8 @@ export type Cell = Counts & { pct: number | null };
 export type CellTone = "none" | "wait" | "good" | "warn" | "bad";
 export const ZERO: Counts = { total: 0, done: 0, due: 0, ontime: 0, lateDone: 0, late: 0, expired: 0, over7: 0 };
 export const pctOf = (c: Counts): number | null => (c.due ? Math.round((c.ontime / c.due) * 100) : null);
+/** 반올림 전 기한 준수율 — **등급 · 등수는 이 값으로** 매긴다(95.5%가 96으로 올라가 1등급이 되거나 99.7%가 100%와 공동 1위가 되지 않게). 화면에 적는 %만 반올림한다. */
+export const exactPct = (c: Counts): number | null => (c.due ? (c.ontime / c.due) * 100 : null);
 export const EMPTY: Cell = { ...ZERO, pct: null };
 export const add = (a: Counts, b: Counts): Counts => ({ total: a.total + b.total, done: a.done + b.done, due: a.due + b.due, ontime: a.ontime + b.ontime,
   lateDone: a.lateDone + b.lateDone, late: a.late + b.late, expired: a.expired + b.expired, over7: a.over7 + b.over7 });
@@ -91,7 +122,7 @@ export const tierTone = (tier: DutyTier): "good" | "warn" | "bad" => (tier <= 2 
 export function cellTone(c: Cell): CellTone {
   if (!c.total) return "none";
   if (c.pct === null || c.due < MIN_JUDGE) return "wait";
-  return tierTone(dutyTier(c.pct));
+  return tierTone(dutyTier(exactPct(c) ?? c.pct));
 }
 /** 칸 설명(마우스 오버) — 숫자의 뜻을 글로. */
 export function cellTitle(c: Counts): string {

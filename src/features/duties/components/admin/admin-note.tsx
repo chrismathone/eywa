@@ -32,9 +32,13 @@ function NoteDialog({ title, items, history, onClose, onSaved }: { title: string
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [armed, setArmed] = useState(false);
+  const [partial, setPartial] = useState(false);
   const needNote = action !== "ack";
   const submit = async () => {
     if (needNote && !note.trim()) { setError("사유를 적어 주세요"); return; }
+    // 면제는 되돌릴 수 없다 — 건수를 보여 주고 한 번 더 누르게 한다.
+    if (action === "waive" && !armed) { setArmed(true); return; }
     setBusy(true); setError(null);
     // 한 번에 500건까지라(서버 · DB 함수) 큰 묶음은 나눠 보낸다. 중간에 막히면 거기서 멈추고, 앞서 남긴 것은 화면을 다시 받아 보여 준다.
     const ids = items.map((it) => it.id);
@@ -45,25 +49,28 @@ function NoteDialog({ title, items, history, onClose, onSaved }: { title: string
     }
     setBusy(false);
     if (failed && !saved) { setError(failed); return; }
+    // 일부만 저장됐으면 창을 닫지 않고 알린다(닫으면 전부 된 줄 안다) — 닫을 때 화면을 다시 받는다.
+    if (failed) { setPartial(true); setError(`${ids.length}건 중 ${saved}건만 저장됐습니다. ${failed}`); return; }
     onSaved();
   };
-  return <Dialog open onOpenChange={(o) => (!o ? onClose() : undefined)}>
+  return <Dialog open onOpenChange={(o) => (!o ? (partial ? onSaved() : onClose()) : undefined)}>
     <DialogContent className="grid w-[min(94vw,520px)] gap-3 sm:max-w-[520px]">
       <DialogHeader><DialogTitle>{title} <span className="text-text-dim text-sm font-medium">· 업무 {items.length}건</span></DialogTitle></DialogHeader>
       {history.length ? <ul className="bg-bg-soft grid gap-1 rounded-lg px-3 py-2 text-sm">
         {history.slice(0, 5).map((h) => <li key={`${h.at}|${h.action}`} className="break-keep"><span className="font-bold">{DUTY_NOTE_LABEL[h.action]}</span> <span className="text-text-dim text-xs">{md(h.at)}{h.by ? ` · ${h.by}` : ""}</span>{h.note ? <span className="ml-1.5">{h.note}</span> : null}</li>)}
       </ul> : null}
       <div className="grid grid-cols-3 gap-1" role="group" aria-label="처리">
-        {DUTY_NOTE_ACTIONS.map((a) => <button key={a} type="button" aria-pressed={action === a} onClick={() => { setAction(a); setError(null); }}
+        {DUTY_NOTE_ACTIONS.map((a) => <button key={a} type="button" aria-pressed={action === a} onClick={() => { setAction(a); setError(null); setArmed(false); }}
           className={`rounded-lg border px-2 py-1.5 text-sm font-bold ${action === a ? (a === "waive" ? "border-danger bg-danger-soft text-danger" : "border-primary bg-primary text-primary-foreground") : "border-line"}`}>{DUTY_NOTE_LABEL[a]}</button>)}
       </div>
       <p className="text-text-dim text-xs font-medium">{DUTY_NOTE_HINT[action]}</p>
       <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={NOTE_LIMIT} rows={3} aria-label="사유"
         className="border-line w-full rounded-lg border px-3 py-2 text-sm" placeholder={needNote ? "사유(필수)" : "남길 말(선택)"} />
+      {armed ? <p className="bg-danger-soft text-danger rounded-lg px-3 py-2 text-sm font-semibold" role="alert">업무 {items.length}건을 면제합니다. 집계와 지연에서 빠지고 되돌릴 수 없습니다. 맞으면 한 번 더 눌러 주세요.</p> : null}
       {error ? <p className="text-danger text-sm font-semibold" role="alert">{error}</p> : null}
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onClose} className="border-line rounded-lg border px-3 py-1.5 text-sm font-semibold">닫기</button>
-        <button type="button" onClick={() => void submit()} disabled={busy} className={`rounded-lg px-3 py-1.5 text-sm font-bold text-white disabled:opacity-60 ${action === "waive" ? "bg-danger" : "bg-primary"}`}>{busy ? "저장 중…" : `${items.length}건 ${DUTY_NOTE_LABEL[action]}`}</button>
+        <button type="button" onClick={partial ? onSaved : onClose} className="border-line rounded-lg border px-3 py-1.5 text-sm font-semibold">닫기</button>
+        <button type="button" onClick={() => void submit()} disabled={busy} className={`rounded-lg px-3 py-1.5 text-sm font-bold text-white disabled:opacity-60 ${action === "waive" ? "bg-danger" : "bg-primary"}`}>{busy ? "저장 중…" : armed ? `${items.length}건 면제 확정` : `${items.length}건 ${DUTY_NOTE_LABEL[action]}`}</button>
       </div>
     </DialogContent>
   </Dialog>;

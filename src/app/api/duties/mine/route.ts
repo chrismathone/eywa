@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getStaffTaskViewer } from "@/features/staff-tasks/server/gate";
-import { classWeekdays, listOwnerDuties, listOwnerMonthDuties, studentWeekdays, weekCells } from "@/features/duties/server/queries";
+import { classWeekdays, dutyLiveFrom, listOwnerDuties, listOwnerMonthDuties, studentWeekdays, weekCells } from "@/features/duties/server/queries";
 import { weekDaysOf } from "@/features/duties/view";
 import { isValidYmd, kstToday } from "@/lib/date-kst";
 import { reportError } from "@/lib/observability/report-error";
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     const [items, week, month] = await Promise.all([
       listOwnerDuties(viewer.user.tenantId, viewer.user.id, date),
       weekCells(viewer.user.tenantId, viewer.user.id, days[0]!, days[6]!),
-      listOwnerMonthDuties(viewer.user.tenantId, viewer.user.id, date.slice(0, 7)),
+      dutyLiveFrom(viewer.user.tenantId).then((liveFrom) => listOwnerMonthDuties(viewer.user.tenantId, viewer.user.id, date.slice(0, 7), liveFrom)),
     ]);
     const classIds = [...new Set([...items, ...week].flatMap((x) => (x.classId ? [x.classId] : [])))];
     const classDays = await classWeekdays(viewer.user.tenantId, classIds, days[0]!, days[6]!);

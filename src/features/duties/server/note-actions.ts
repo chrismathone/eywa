@@ -33,6 +33,6 @@ export async function addDutyNote(input: { ids: string[]; action: DutyNoteAction
   if (d.action !== "ack" && !d.note.trim()) return { ok: false, error: "사유를 적어 주세요" };
   const { data, error } = await createAdminClient().rpc("duty_note_add", { p_tenant: viewer.user.tenantId, p_ids: d.ids, p_action: d.action, p_note: d.note, p_actor: viewer.user.id, p_subjects: viewer.scope.subjects });
   if (error) return { ok: false, error: explainDbError(error, { scope: "duties.note", fallback: "저장하지 못했습니다. 잠시 뒤 다시 해 주세요." }).message };
-  await logAction({ action: "duty_note_add", targetType: "duty_item", targetLabel: `업무 ${DUTY_NOTE_LABEL[d.action]} ${Number(data ?? 0)}건`, metadata: { step: d.action, count: Number(data ?? 0), note: d.note.trim().slice(0, 200) } });
+  await logAction({ action: "duty_note_add", targetType: "duty_item", targetLabel: `업무 ${DUTY_NOTE_LABEL[d.action]} ${Number(data ?? 0)}건`, metadata: { step: d.action, count: Number(data ?? 0), note: d.note.trim().slice(0, 200), ids: d.ids.slice(0, 50) } });
   return { ok: true, count: Number(data ?? 0) };
 }

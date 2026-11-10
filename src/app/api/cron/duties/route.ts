@@ -50,6 +50,8 @@ export async function GET(req: Request) {
       const days = syncDays(got.days, today, [...(await openPastCycles(tenantId)), ...(kstHour < 3 ? [yesterday] : []), today]);
       for (const day of days) drafts += (await syncDailyDuties(tenantId, day, settings)).drafts;
       if (monthlyTurn || got.monthly) { const m = await syncMonthlyDuties(tenantId, today, settings); drafts += m.counsel + m.exam + m.newcomer; }
+      // 달 초 한 주 동안은 지난 달 월간(학생 상담 · 월말평가)도 한 번 더 맞춘다 — 말일의 일을 다음 날 입력한 것이 닫히게. 그 뒤엔 사다리가 열린 것을 미이행으로 확정한다(s2_0056).
+      if (monthlyTurn && Number(today.slice(8, 10)) <= 7) { const m = await syncMonthlyDuties(tenantId, addDays(`${today.slice(0, 7)}-01`, -1), settings, { skipNewcomers: true }); drafts += m.counsel + m.exam; }
       const r = await escalateAndSnapshot(tenantId, days, settings);
       taskOpened += r.taskOpened;
       taskClosed += r.taskClosed;

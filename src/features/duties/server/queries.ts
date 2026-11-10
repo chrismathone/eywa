@@ -47,13 +47,33 @@ export async function listOwnerDuties(tenantId: string, ownerId: string, cycle: 
   return ((data ?? []) as unknown as ItemRow[]).map(toView);
 }
 
-/** 한 사람의 이번 달 의무(월간 회차 = 그 달) + 건별 의무(신규생 콜 — 열린 것과 이번 달에 끝난 것). */
-export async function listOwnerMonthDuties(tenantId: string, ownerId: string, month: string): Promise<DutyItemView[]> {
+/** 지점의 평가 개시 시각(없으면 null) — 그 전에 기한이 지난 의무(이관)는 강사 홈에서도 세지 않고 보이지 않는다(관리자 화면과 같은 규칙). */
+export async function dutyLiveFrom(tenantId: string): Promise<string | null> {
+  const { data, error } = await createAdminClient().from("duty_settings").select("live_from").eq("tenant_id", tenantId).maybeSingle();
+  if (error) return null; // 표가 없거나 못 읽으면 종전대로(가르지 않는다)
+  return (data?.live_from as string | null) ?? null;
+}
+
+/**
+ * 한 사람의 **지금 지연** 수 — 열린 채 기한이 지난 의무 전부(기간 무관 · 이관 제외). 관리자 화면 '현재 지연'과 같은 모집단이다
+ * (강사 홈 '기한 초과'가 오늘 몫만 세면, 어제 안 보낸 보고서 18건이 관리자에겐 지연인데 본인 화면엔 0으로 보인다 — 리뷰 2026-11-11).
+ */
+export async function countOwnerLate(tenantId: string, ownerId: string, liveFrom: string | null): Promise<number> {
+  let q = createAdminClient().from("duty_items").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("owner_id", ownerId).eq("status", "open").lt("due_at", new Date().toISOString());
+  if (liveFrom) q = q.gte("due_at", liveFrom);
+  const { count, error } = await q;
+  if (error) throw new Error(`지연 수: ${error.message}`);
+  return count ?? 0;
+}
+
+/** 한 사람의 이번 달 의무(월간 회차 = 그 달) + 건별 의무(신규생 관리 — 열린 것과 이번 달에 끝난 것 · 평가 개시 전에 기한이 지난 것은 뺀다). */
+export async function listOwnerMonthDuties(tenantId: string, ownerId: string, month: string, liveFrom: string | null = null): Promise<DutyItemView[]> {
   const admin = createAdminClient();
+  const caseQuery = admin.from("duty_items").select(COLS).eq("tenant_id", tenantId).eq("owner_id", ownerId).eq("period", "case").or(VISIBLE)
+    .or(`status.eq.open,done_at.gte.${month}-01T00:00:00+09:00`);
   const [monthly, cases] = await Promise.all([
     admin.from("duty_items").select(COLS).eq("tenant_id", tenantId).eq("owner_id", ownerId).eq("period", "monthly").eq("cycle", month).or(VISIBLE).order("kind").limit(1000),
-    admin.from("duty_items").select(COLS).eq("tenant_id", tenantId).eq("owner_id", ownerId).eq("period", "case").or(VISIBLE)
-      .or(`status.eq.open,done_at.gte.${month}-01T00:00:00+09:00`).order("due_at").limit(1000),
+    (liveFrom ? caseQuery.gte("due_at", liveFrom) : caseQuery).order("due_at").limit(1000),
   ]);
   if (monthly.error) throw new Error(`이번 달 의무: ${monthly.error.message}`);
   if (cases.error) throw new Error(`건별 의무: ${cases.error.message}`);

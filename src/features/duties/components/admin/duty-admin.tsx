@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Toolbar, ToolbarChip, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
-import { ADMIN_PERIODS, buildAttention, distinctStudents, lateByKind, type AdminPeriod, type AttentionRow, type DutyAdminData, type DutyAdminScope, type LateItem, type SubjectFilter } from "../../view-admin";
+import { PeriodNav } from "@/components/period-nav";
+import { DatePickerButton } from "@/components/date-picker-button";
+import { adminRange, buildAttention, periodKey, periodParts, periodPresets, periodUnit, shiftPeriod, distinctStudents, type AdminPeriod, type AttentionRow, type DutyAdminData, type DutyAdminScope, type LateItem, type SubjectFilter } from "../../view-admin";
 import { attentionItems, buildTree, foldAttention, ownerMeta, NO_CLASS, NO_OWNER, NO_SUBJECT, rootOfTree, type TreeSubject } from "../../view-admin-levels";
 import type { DutyWork } from "../duty-work-context";
 import { AdminAttention } from "./admin-attention";
@@ -42,9 +44,10 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null }: 
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [work, setWork] = useState<{ seq: number; work: DutyWork } | null>(null);
   const [tick, setTick] = useState(0);
-  // 지금 기간을 바로 다시 받기(저장 순간의 신호 · 관리 기록 저장 뒤) — 다른 기간은 다음에 볼 때 새로 받게 비운다. 받는 중이면 끝난 뒤 한 번 더.
+  // 지금 기간을 바로 다시 받기(저장 순간의 신호 · 관리 기록 저장 뒤). 받는 중이면 끝난 뒤 한 번 더.
   const reload = useRef<() => void>(() => undefined);
-  const refresh = () => { setLoaded((all) => (all[period] ? { [period]: all[period] } : {})); reload.current(); };
+  const first = useRef(true);
+  const refresh = () => reload.current();
   // 출결 · 보고서 · 상담이 저장되는 순간 지금 기간을 다시 받는다(다른 기간은 다음에 볼 때 새로 받게 비운다).
   useDutyPing(tenantId, refresh);
   const periodRef = useRef(period);
@@ -75,7 +78,9 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null }: 
     timer = setTimeout(() => void loop(gen), REFRESH_MS);
     const onVisible = () => { if (document.visibilityState === "visible") { gen += 1; if (timer) clearTimeout(timer); void loop(gen); } };
     document.addEventListener("visibilitychange", onVisible);
-    if (!loaded[period]) void load(period);
+    // 받아 둔 기간이면 그것을 먼저 보이고 곧바로 새로 받는다(다른 기간을 보는 사이 바뀌었을 수 있다) · 첫 그리기는 서버가 준 값 그대로.
+    if (!loaded[period] || !first.current) void load(period);
+    first.current = false;
     return () => { alive = false; if (timer) clearTimeout(timer); document.removeEventListener("visibilitychange", onVisible); };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 기간이 바뀔 때만 새로 받는다(받아 둔 기간은 그대로).
   }, [period]);
@@ -103,7 +108,10 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null }: 
   const fold = (rows: AttentionRow[]) => (classNode ? rows : foldAttention(rows, ownerNode ? "class" : "owner"));
   const attentionAll = cur ? buildAttention(liveHere, cur.data.owners, undefined, nowMs) : [];
   const childrenOf = (all: AttentionRow[], r: AttentionRow) => (ownerNode ? all.filter((c) => (c.classId ?? NO_CLASS) === r.classId) : all.filter((c) => (c.ownerId ?? NO_OWNER) === (r.ownerId ?? NO_OWNER)));
-  const rangeLabel = cur?.range.label ?? "";
+  // 기간 이름 · 기준일은 받기 전에도 바로 바뀌게 화면에서 계산한다(서버와 같은 함수).
+  const today = cur?.today ?? initial.today;
+  const unit = periodUnit(period); const anchor = periodParts(period)?.anchor ?? today;
+  const rangeLabel = adminRange(period, today).label;
   const crumbs: { label: string; sel: Sel }[] = [];
   if (multi) crumbs.push({ label: "전체", sel: ROOT });
   if (subjectNode && !atRoot) crumbs.push({ label: subjectNode.label, sel: { subject: subjectNode.subject, owner: null, classId: null, studentId: null } });
@@ -143,10 +151,15 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null }: 
   const synced = cur?.data.syncedAt ?? null;
   const stale = !!cur && (!synced || nowMs - Date.parse(synced) > STALE_MS);
 
-  return <DutyRequestScope today={cur?.today ?? initial.today} tick={tick}><div className="space-y-4">
+  return <DutyRequestScope today={today} tick={tick}><div className="space-y-4">
     <Toolbar>
-      <ToolbarSegment>{ADMIN_PERIODS.map((p) => <ToolbarSegmentItem key={p.key} active={period === p.key} onClick={() => setPeriod(p.key)}>{p.label}</ToolbarSegmentItem>)}</ToolbarSegment>
-      <span className="text-text-dim text-sm font-semibold">{rangeLabel}</span>
+      <ToolbarSegment>{periodPresets(today).map((p) => <ToolbarSegmentItem key={p.key} active={period === p.key} onClick={() => setPeriod(p.key)}>{p.label}</ToolbarSegmentItem>)}</ToolbarSegment>
+      {/* 날짜 이동 — 앱 공용 기간 네비(‹ 라벨 ›) + 달력. 고른 단위(하루 · 한 주 · 한 달)로 앞뒤로 옮기고, 달력에서 고른 날이 든 기간으로 간다. 앞날은 없다. */}
+      <PeriodNav label={rangeLabel} labelWidth={unit === "week" ? 190 : 130}
+        labelControl={<DatePickerButton label={rangeLabel} value={anchor} max={today} onChange={(ymd) => setPeriod(periodKey(unit, ymd))} />}
+        prevHref={shiftPeriod(period, -1)} nextHref={shiftPeriod(period, 1)} currentHref={periodKey(unit, today)}
+        relation={period === periodKey(unit, today) ? "current" : "past"} nextDisabled={(periodParts(shiftPeriod(period, 1))?.anchor ?? "") > today}
+        onNavigate={(key) => setPeriod(key)} />
       {cur && !stale ? <span className="text-text-dim text-xs font-medium">마지막 반영 {kstStamp(cur.now)}</span> : null}
       <ToolbarChip active={lateOnly} onClick={() => setLateOnly((v) => !v)} className="ml-auto">지연만</ToolbarChip>
     </Toolbar>
@@ -173,7 +186,7 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null }: 
           : classNode && ownerNode ? <ClassPane key={`${classNode.classId}|${ownerNode.ownerId}|${fetchSubject ?? ""}`} period={period} tick={tick} classNode={classNode} owner={ownerNode.ownerId} fetchSubject={fetchSubject} teacher={ownerNode.name} kind={sel.kind ?? null}
               avg={{ pct: ownerNode.cell.pct, label: "선생님" }} onStudent={pickStudent} onWork={openWork} />
           : ownerNode ? <TeacherLevel owner={ownerNode} avg={subjectAvg} period={period} subject={fetchSubject} tick={tick} kind={sel.kind ?? null} onClearKind={() => go({ ...sel, kind: null })} onClass={(classId) => go({ ...sel, classId, studentId: null })} />
-          : <SubjectLevel node={subjectNode} lateOnly={lateOnly} board={<>{atRoot && managers ? <AdminOwnerBoard tree={tree} late={cur.data.late} managers={managers} labels={scope.labels} nowMs={nowMs} onSubject={(subject) => go({ subject, owner: null, classId: null, studentId: null })} /> : null}{period === "today" ? <AdminToday owners={subjectNode.owners} onOwner={(owner, kind) => go({ ...sel, owner, kind, classId: null, studentId: null })} /> : atRoot ? <AdminRanking tree={tree} onOwner={(subject, owner, kind) => go({ subject, owner, kind, classId: null, studentId: null })} /> : null}</>} avgLabel={atRoot ? "전체" : "과목"} lateText={lateByKind(cur.data.ownerKind, subjectKey)} attention={lateSection} onOwner={(ownerId, kind) => { setOpenKey(null); setSel({ ...sel, owner: ownerId, kind, classId: null, studentId: null }); }} />}
+          : <SubjectLevel node={subjectNode} lateOnly={lateOnly} board={<>{atRoot && managers ? <AdminOwnerBoard tree={tree} late={cur.data.late} managers={managers} labels={scope.labels} nowMs={nowMs} onSubject={(subject) => go({ subject, owner: null, classId: null, studentId: null })} /> : null}{unit === "day" ? <AdminToday owners={subjectNode.owners} onOwner={(owner, kind) => go({ ...sel, owner, kind, classId: null, studentId: null })} /> : atRoot ? <AdminRanking tree={tree} onOwner={(subject, owner, kind) => go({ subject, owner, kind, classId: null, studentId: null })} /> : null}</>} avgLabel={atRoot ? "전체" : "과목"} attention={lateSection} onOwner={(ownerId, kind) => { setOpenKey(null); setSel({ ...sel, owner: ownerId, kind, classId: null, studentId: null }); }} />}
 
         {!sel.studentId && subjectNode && ownerNode ? lateSection : null}
       </main>

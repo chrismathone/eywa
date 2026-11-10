@@ -14,12 +14,12 @@ export const dynamic = "force-dynamic";
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 
 export async function GET(request: Request) {
-  const period = parseAdminPeriod(new URL(request.url).searchParams.get("period"));
+  const today = kstToday();
+  const period = parseAdminPeriod(new URL(request.url).searchParams.get("period"), today);
   try {
     const viewer = await getDutyAdminViewer();
     if (!viewer) return NextResponse.json({ error: "권한이 없습니다" }, { status: 403, headers: NO_STORE });
     await flushDuties(viewer.user.tenantId); // 방금 저장한 것을 먼저 장부에 맞춘다(s2_0051)
-    const today = kstToday();
     const range = adminRange(period, today);
     const data = await loadDutyAdmin(viewer.user.tenantId, range.from, range.to, viewer.scope, periodsOf(period));
     return NextResponse.json({ period, today, now: new Date().toISOString(), range, data }, { headers: NO_STORE });

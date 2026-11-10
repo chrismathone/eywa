@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adminRange, buildAttention, cellOf, cellTitle, cellTone, distinctStudents, earlyDoneOf, progressText, foldMatrixRows, lateByKind, lateLabel, pctOf, upcomingOf, type Counts, type LateItem, type RollupOwnerKind, dutyTier } from "./view-admin";
+import { adminRange, buildAttention, cellOf, cellTitle, cellTone, distinctStudents, earlyDoneOf, progressText, foldMatrixRows, lateByKind, lateLabel, pctOf, upcomingOf, type Counts, type LateItem, type RollupOwnerKind, dutyTier, periodPresets, shiftPeriod, periodKey, parseAdminPeriod, periodsOf } from "./view-admin";
 
 /** 셈 한 묶음 — total · done · due(기한 온 것) · ontime(제때) · late(지금 지연). 나머지는 0에서 덮어쓴다. */
 const c = (total: number, done: number, due: number, ontime: number, late = 0, o: Partial<Counts> = {}): Counts => ({ total, done, due, ontime, late, lateDone: 0, expired: 0, over7: 0, ...o });
@@ -8,13 +8,26 @@ const OWNERS = { t1: "한지우", t2: "문예린" };
 const NOW = Date.parse("2026-11-10T09:00:00.000Z");
 
 describe("adminRange", () => {
-  it("오늘 · 이번 주(월요일 시작) · 이번 달(1일~오늘) · 지난 달(1일~말일)", () => {
-    expect(adminRange("today", "2026-11-10")).toMatchObject({ from: "2026-11-10", to: "2026-11-10" });
-    expect(adminRange("week", "2026-11-10")).toMatchObject({ from: "2026-11-09", to: "2026-11-10" });
-    expect(adminRange("month", "2026-11-10")).toMatchObject({ from: "2026-11-01", to: "2026-11-10" });
-    expect(adminRange("prevMonth", "2026-11-10")).toMatchObject({ from: "2026-10-01", to: "2026-10-31", label: "2026년 10월" });
-    expect(adminRange("prevMonth", "2026-01-05")).toMatchObject({ from: "2025-12-01", to: "2025-12-31" });
+  it("기간 열쇠 — 하루 · 한 주(월요일 시작) · 한 달 · 끝은 오늘을 넘지 않는다 · 빠른 단추 넷 · 앞뒤 이동", () => {
+    const T = "2026-11-10";
+    const [day, week, month, prev] = periodPresets(T).map((p) => p.key);
+    expect([day, week, month, prev]).toEqual(["d:2026-11-10", "w:2026-11-09", "m:2026-11", "m:2026-10"]);
+    expect(adminRange(day!, T)).toMatchObject({ from: "2026-11-10", to: "2026-11-10" });
+    expect(adminRange(week!, T)).toMatchObject({ from: "2026-11-09", to: "2026-11-10" });
+    expect(adminRange(month!, T)).toMatchObject({ from: "2026-11-01", to: "2026-11-10" });
+    expect(adminRange(prev!, T)).toMatchObject({ from: "2026-10-01", to: "2026-10-31", label: "2026년 10월" });
+    expect(adminRange("w:2026-10-26", T)).toMatchObject({ from: "2026-10-26", to: "2026-11-01" });
+    expect(periodPresets("2026-01-05")[3]!.key).toBe("m:2025-12");
+    expect([shiftPeriod("d:2026-11-01", -1), shiftPeriod("w:2026-11-09", -1), shiftPeriod("m:2026-01", -1), shiftPeriod("m:2026-12", 1)]).toEqual(["d:2026-10-31", "w:2026-11-02", "m:2025-12", "m:2027-01"]);
+    expect(periodKey("week", "2026-11-12")).toBe("w:2026-11-09");
   });
+  it("🔴 주소의 기간 값은 믿지 않는다 — 모양이 아니거나 앞날이면 이번 달 · 옛 값도 받는다 · 하루/한 주는 일간만", () => {
+    const T = "2026-11-10";
+    expect(["zzz", "d:2026-13-40", "d:2026-11-11", "m:2026-12", null].map((v) => parseAdminPeriod(v, T))).toEqual(Array(5).fill("m:2026-11"));
+    expect(["today", "week", "month", "prevMonth", "d:2026-10-03"].map((v) => parseAdminPeriod(v, T))).toEqual(["d:2026-11-10", "w:2026-11-09", "m:2026-11", "m:2026-10", "d:2026-10-03"]);
+    expect([periodsOf("d:2026-11-10"), periodsOf("w:2026-11-09"), periodsOf("m:2026-11")]).toEqual([["daily"], ["daily"], null]);
+  });
+
 });
 
 describe("기한 준수율 · 칸 색", () => {

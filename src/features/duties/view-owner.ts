@@ -1,7 +1,7 @@
 import { isLate, type WorkItem } from "@/features/work-requests/model";
-import { coversSubject, openLateRequest } from "./late-request";
+import { coversLate, coversSubject, openLateRequest } from "./late-request";
 import { lateDays, type Cell, type LateItem } from "./view-admin";
-import { judge, type TreeSubject, type Verdict } from "./view-admin-levels";
+import { judge, listedOwner, NO_OWNER, type TreeSubject, type Verdict } from "./view-admin-levels";
 
 const NO_CELL: Cell = { total: 0, done: 0, due: 0, ontime: 0, lateDone: 0, late: 0, expired: 0, over7: 0, pct: null };
 type Request = Pick<WorkItem, "id" | "source" | "status" | "createdAt" | "dueOn" | "steps">;
@@ -35,11 +35,11 @@ export function ownerRows(tree: readonly TreeSubject[], late: readonly LateItem[
     const lateOwners = [...new Set(live.flatMap((it) => (it.ownerId ? [it.ownerId] : [])))];
     const owners = new Set([...s.owners.map((o) => o.ownerId), ...lateOwners]);
     const open = requests.filter((r) => coversSubject(r.source, s.subject) && (r.status === "working" || r.status === "review") && r.steps.some((st) => owners.has(st.user.id)));
-    const grades = s.owners.map((o) => judge(o.cell, { pct: s.cell.pct, label: "과목" }).grade);
+    const grades = s.owners.filter((o) => o.ownerId !== NO_OWNER && listedOwner(o)).map((o) => judge(o.cell, { pct: s.cell.pct, label: "과목" }).grade);
     return {
       subject: s.subject, label: s.label, inTree: known.has(s.subject), managers: s.subject ? managers[s.subject] ?? [] : [], cell: s.cell, verdict: judge(s.cell),
       late: live.length, late3: days.filter((d) => d >= 3).length, late7: days.filter((d) => d >= 7).length,
-      lateTeachers: lateOwners.length, requested: lateOwners.filter((id) => openLateRequest(requests, id, s.subject)).length,
+      lateTeachers: lateOwners.length, requested: lateOwners.filter((id) => coversLate(openLateRequest(requests, id, s.subject), live.filter((it) => it.ownerId === id))).length,
       requestsOpen: open.length, requestsLate: open.filter((r) => isLate(r, today)).length,
       bad: grades.filter((g) => g === "bad").length, warn: grades.filter((g) => g === "warn").length, good: grades.filter((g) => g === "good").length, inherited: mine.length - live.length,
     };

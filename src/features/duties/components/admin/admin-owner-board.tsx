@@ -20,11 +20,11 @@ export function AdminOwnerBoard({ tree, late, managers, labels, nowMs, onSubject
   // 처리 요청 칸은 모든 요청을 볼 수 있는 사람에게만 — 자기 요청만 보이는 계정에게 "0명"이라고 적으면 거짓이다.
   const tracked = work.board.enabled && work.board.canMonitor;
   return <section className="border-line bg-card rounded-xl border p-2">
-    <h4 className="px-2 py-1 text-sm font-bold">과목 관리자별 현황</h4>
     <div className="overflow-x-auto">
       <table className="w-full border-separate border-spacing-1 text-center text-sm [&_th:first-child]:text-left">
         <thead><tr>
-          <th className={TH}>과목 · 과목 관리자</th><th className={TH}>등급</th><th className={TH}>기한 준수</th><th className={TH}>현재 지연</th>
+          {/* 제목을 열 머리 줄의 첫 칸에 둔다(원장 2026-11-11 *"행 묶어서 행 절약"*) — 제목 줄과 머리 줄이 따로 서지 않는다. */}
+          <th className="px-2 py-1.5 text-left text-sm font-bold" scope="col">과목 관리자별 현황</th><th className={TH}>등급</th><th className={TH}>기한 준수</th><th className={TH}>현재 지연</th>
           {tracked ? <th className={TH}>처리 요청</th> : null}<th className={TH}>선생님 등급</th>
         </tr></thead>
         <tbody>{rows.map((r) => <tr key={r.subject ?? ""}>

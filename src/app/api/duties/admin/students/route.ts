@@ -17,13 +17,14 @@ const uuidOrNull = (v: string | null) => (v && UUID.test(v) ? v : null);
 
 export async function GET(request: Request) {
   const q = new URL(request.url).searchParams;
-  const period = parseAdminPeriod(q.get("period"));
+  const today = kstToday();
+  const period = parseAdminPeriod(q.get("period"), today);
   const kindRaw = q.get("kind");
   const kind = kindRaw && (DUTY_KIND_KEYS as readonly string[]).includes(kindRaw) ? kindRaw : null;
   try {
     const viewer = await getDutyAdminViewer();
     if (!viewer) return NextResponse.json({ error: "권한이 없습니다" }, { status: 403, headers: NO_STORE });
-    const range = adminRange(period, kstToday());
+    const range = adminRange(period, today);
     // 과목 칩 = 학원 설정에 있는 과목 키만(아무 글자나 과목 조건으로 넘기지 않는다).
     const subjectRaw = q.get("subject");
     // 🔴 설정에 없는 키('기타 과목' 줄)도 그 과목으로 좁힌다 — 조건을 떼면 그 담당의 전 과목이 섞인다(리뷰 2026-11-10). 값은 과목 키 모양만 받고, 범위는 RPC의 p_subjects가 다시 건다.

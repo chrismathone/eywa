@@ -69,3 +69,11 @@ export function openLateRequest(items: readonly Pick<WorkItem, "id" | "source" |
   const mine = items.filter((i) => coversSubject(i.source, subject) && (i.status === "working" || i.status === "review") && i.steps.some((s) => s.user.id === ownerId));
   return mine.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
 }
+
+/**
+ * 그 요청이 지금의 지연을 덮나 — 요청을 보낸 **뒤에** 기한이 지난 지연이 하나라도 있으면 덮지 않는다(리뷰 2026-11-11:
+ * 11/10 요청이 열려 있다는 이유로 11/14에 새로 생긴 지연까지 '요청함'으로 보이면, 아무도 손대지 않은 것이 손댄 것처럼 보인다).
+ */
+export function coversLate(sent: { createdAt: string } | null, items: readonly { dueAt: string }[]): boolean {
+  return !!sent && !items.some((it) => it.dueAt > sent.createdAt);
+}

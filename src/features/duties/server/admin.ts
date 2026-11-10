@@ -48,13 +48,13 @@ async function loadDutySettings(tenantId: string): Promise<{ liveFrom: string | 
 export async function loadDutyAdmin(tenantId: string, from: string, to: string, scope: DutyAdminScope, periods: string[] | null): Promise<DutyAdminData> {
   const admin = createAdminClient();
   const args = { p_tenant: tenantId, p_from: from, p_to: to, p_subjects: scope.subjects, p_periods: periods, p_owner: scope.ownerId };
-  const [ok, cls, lateRaw, settings, ownerLoad] = await Promise.all([
+  const settings = await loadDutySettings(tenantId);
+  const [ok, cls, lateRaw, ownerLoad] = await Promise.all([
     fetchAllPaged<CountRow & { owner_id: string | null; subject: string | null; kind: string; period: DutyPeriod }>((a, b) =>
       admin.rpc("duty_rollup_owner_kind", args).order("owner_id").order("subject").order("kind").order("period").range(a, b)),
     fetchAllPaged<CountRow & { class_id: string | null; owner_id: string | null; subject: string | null }>((a, b) =>
       admin.rpc("duty_rollup_class", args).order("class_id").order("owner_id").order("subject").range(a, b)),
-    loadLateItems(tenantId, scope),
-    loadDutySettings(tenantId),
+    loadLateItems(tenantId, scope, settings.liveFrom),
     // 담당 반 수 · 학생 수(s2_0053) — 함수가 아직 없으면(#95) 빈 값(화면은 반 수만 센다).
     admin.rpc("duty_rollup_owner_load", args).then(({ data, error }): OwnerLoadRow[] => {
       if (error) { if (error.code === "PGRST202" || error.code === "42883") return []; throw new Error(`담당 반·학생 수: ${error.message}`); }
@@ -78,11 +78,13 @@ type LateRow = { id: string; kind: string; period: DutyPeriod; cycle: string; st
   class: { class_name: string | null } | { class_name: string | null }[] | null };
 const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? v[0] ?? null : v);
 /** 열린 채 기한이 지난 의무 전부(일간은 7일 뒤 확정돼 빠진다 · 월간·건별은 닫힐 때까지 남는다 — 페이지를 넘겨 전건) — 단계 높은 것부터. 임베드는 FK 이름 명시(#94). */
-async function loadLateItems(tenantId: string, scope: DutyAdminScope): Promise<Omit<LateItem, "inherited">[]> {
+async function loadLateItems(tenantId: string, scope: DutyAdminScope, liveFrom: string | null): Promise<Omit<LateItem, "inherited">[]> {
   const admin = createAdminClient();
   const rows = await fetchAllPaged<LateRow>((a, b) => {
     let q = admin.from("duty_items").select("id,kind,period,cycle,status,due_at,done_at,void_reason,owner_id,student_id,class_id,subject,escalation,student:students!duty_items_student_id_fkey(name,school,grade),class:classes!duty_items_class_id_fkey(class_name)")
       .eq("tenant_id", tenantId).eq("status", "open").lt("due_at", new Date().toISOString());
+    // 평가 개시 전에 기한이 지난 것(이관)은 화면에 보이지 않는다 — 받지도 않는다(닫힐 때까지 쌓이는 목록이라 갱신마다 헛되이 실린다).
+    if (liveFrom) q = q.gte("due_at", liveFrom);
     if (scope.subjects) q = q.in("subject", scope.subjects);
     if (scope.ownerId) q = q.eq("owner_id", scope.ownerId);
     return q.order("escalation", { ascending: false }).order("due_at").order("id").range(a, b);

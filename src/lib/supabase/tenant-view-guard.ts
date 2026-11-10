@@ -37,6 +37,7 @@ export const TENANT_VIEW_READ_RPCS: ReadonlySet<string> = new Set([
   "duty_rollup_owner_kind",
   "duty_rollup_class",
   "duty_rollup_student",
+  "duty_rollup_owner_load",
   // 출결 통계 등원율 추이(0387a) — 읽기 전용 group-by.
   "attendance_rate_buckets",
   // 원생 기여도 학생별 합계(0443a) — 읽기 전용 집계(stable). 지점 보기에서도 기여도 화면이 같은 값을 읽게.

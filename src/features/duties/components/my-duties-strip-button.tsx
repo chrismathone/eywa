@@ -15,7 +15,7 @@ import { useDutyPing } from "./use-duty-ping";
 import { MyDutiesMonth } from "./my-duties-month";
 
 type Count = { total: number; done: number; late: number };
-export type DutyStripSummary = { date: string; month: string; today: Count; week: Count; byKind: DutyKindCount[]; counsel: Count; exam: Count; newcomer: Count; lang: "ko" | "en" };
+export type DutyStripSummary = { overdue?: number; date: string; month: string; today: Count; week: Count; byKind: DutyKindCount[]; counsel: Count; exam: Count; newcomer: Count; lang: "ko" | "en" };
 export type DutyPayload = { date: string; days: string[]; items: DutyItemView[]; week: DutyWeekCell[]; month: DutyItemView[]; /** 반 → 수업 요일(mon…sun) */ classDays?: Record<string, string[]>; /** `<학생>|<반>` → 등원 요일 */ studentDays?: Record<string, string[]> };
 type View = "today" | "week" | "month";
 const VIEWS: { key: View; label: string }[] = [{ key: "today", label: "오늘" }, { key: "week", label: "이번 주" }, { key: "month", label: "이번 달" }];
@@ -83,7 +83,8 @@ export function MyDutiesStripButton({ summary: initial, tenantId = null, classNa
     return () => { alive = false; if (timer) clearTimeout(timer); document.removeEventListener("visibilitychange", onVisible); };
   }, []);
   const pct = (c: Count) => (c.total ? Math.round((c.done / c.total) * 100) : 0);
-  const lateAll = today.late + counsel.late + exam.late + newcomer.late;
+  // 기한 초과 = 지금 지연 전부(어제까지 밀린 것 포함 · 관리자 화면 '현재 지연'과 같은 수). 옛 응답(값 없음)이면 칸들의 합.
+  const lateAll = summary.overdue ?? today.late + counsel.late + exam.late + newcomer.late;
   const label = lang === "en"
     ? `My duties — today ${today.done}/${today.total}${lateAll ? ` · ${lateAll} overdue` : ""}`
     : `내 업무 — 오늘 ${today.done}/${today.total}${lateAll ? ` · 기한 초과 ${lateAll}` : ""}`;

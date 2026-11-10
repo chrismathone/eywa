@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { kstToday } from "@/lib/date-kst";
+import { isTenantViewWriteBlocked } from "@/lib/auth/tenant-view";
 import { reportError } from "@/lib/observability/report-error";
 import { escalateAndSnapshot, syncDailyDuties } from "./sync";
 import { syncDays } from "../model/sync-window";
@@ -42,6 +43,8 @@ export async function finishDutySync(tenantId: string, claim: Pick<DutyClaim, "t
 export async function flushDuties(tenantId: string): Promise<void> {
   let claim: DutyClaim | null = null;
   try {
+    // 지점 보기(읽기 전용) 중에는 맞춤을 시도하지 않는다 — 쓰기가 막혀 있어 요청마다 실패 기록만 쌓인다(크론이 맞춘다).
+    if (await isTenantViewWriteBlocked()) return;
     const got = await claimDutySync(tenantId);
     if (!got.locked) return;
     claim = got;

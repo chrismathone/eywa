@@ -32,7 +32,7 @@ export function AdminRanking({ tree, onOwner }: { tree: readonly TreeSubject[]; 
         <h5 className="text-text-dim px-2 py-1 text-xs font-bold">{b.title}</h5>
         <ol className="grid gap-0.5">
           {b.rows.map((r) => <li key={r.ownerId}>
-            <button type="button" onClick={() => onOwner(b.subject, r.ownerId, picked)} className="hover:bg-bg-soft flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left">
+            <button type="button" onClick={() => onOwner(b.subject === undefined ? tree.find((s) => s.owners.some((o) => o.ownerId === r.ownerId))?.subject : b.subject, r.ownerId, picked)} className="hover:bg-bg-soft flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left">
               <span className={`w-6 shrink-0 text-center text-sm font-bold tabular-nums ${r.rank !== null && r.rank <= 3 ? "text-primary" : "text-text-dim"}`}>{r.rank ?? "—"}</span>
               <span className="min-w-0 flex-1 overflow-hidden text-sm font-semibold text-ellipsis whitespace-nowrap">{r.name}{r.meta ? <span className="text-text-dim ml-1.5 text-xs font-medium">{r.meta}</span> : null}</span>
               {r.verdict.tier ? <TierStars tier={`${r.verdict.tier}등급`} /> : <span className="text-text-dim text-xs font-medium">평가 대기</span>}

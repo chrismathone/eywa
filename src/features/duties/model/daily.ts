@@ -126,8 +126,10 @@ export function buildDailyDuties(input: DailyInput): DutyDraft[] {
       continue;
     }
     const recalled = ob.written && report?.recalled === true;
-    const status: DutyStatus = !ob.written ? "open" : recalled || ob.status === "too_old" ? "void" : ob.status === "success" ? "done" : "open";
-    out.push({ ...base, kind: "report_send", dueAt: DAILY_DUE.report_send(date), status, source: status === "void" ? (recalled ? "recalled" : "too_old") : status === "done" ? "classnote_success" : null,
+    // 🔴 발송 기한(수업 뒤 7일)을 넘겨 못 나간 보고서(too_old)는 **열린 채** 둔다 — 의무에서 빼면 "안 보내고 버티면 사라진다"가 된다(리뷰 2026-11-11).
+    //    열린 채면 사다리가 미이행으로 확정한다. 회수한 보고서만 의무에서 뺀다(잘못 나간 글을 거둔 것).
+    const status: DutyStatus = !ob.written ? "open" : recalled ? "void" : ob.status === "success" ? "done" : "open";
+    out.push({ ...base, kind: "report_send", dueAt: DAILY_DUE.report_send(date), status, source: status === "void" ? "recalled" : status === "done" ? "classnote_success" : null,
       doneAt: status === "done" ? report?.sentAt ?? null : null });
   }
   // ── 결석으로 보고서 의무가 빠진 학생 — 보고서 받는 반(lesson)의 그날 명단 중 결석 전원(absentClassKeysOf)이고 보고서 의무가 없는 학생.

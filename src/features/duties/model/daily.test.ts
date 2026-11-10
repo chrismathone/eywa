@@ -68,11 +68,11 @@ describe("buildDailyDuties — 보고서 발송(작성 · 발송을 한 업무�
     expect(pick(rows, "report_send", "s1")).toMatchObject({ status: "open", ownerId: "t1", dueAt: kstDueAt(DATE, 1, 12), doneAt: null });
     expect(pick(rows, "report_send", "s2")).toMatchObject({ status: "open", dueAt: kstDueAt(DATE, 1, 12), doneAt: null });
   });
-  it("발송 성공 = done(시각 = classnote_sent_at) · 회수 = void · 기한 지남(too_old) = void", () => {
+  it("발송 성공 = done(시각 = classnote_sent_at) · 회수 = void · 🔴 발송 기한 지남(too_old)은 열린 채(미이행으로 확정된다 — 의무에서 빠지지 않는다)", () => {
     const rows = buildDailyDuties(base({ reports: [report("s1", "success"), report("s2", "failed", { recalled: true })] }));
     expect(pick(rows, "report_send", "s1")).toMatchObject({ status: "done", source: "classnote_success", doneAt: `${DATE}T10:00:00Z` });
     expect(pick(rows, "report_send", "s2")).toMatchObject({ status: "void", source: "recalled" });
-    expect(pick(buildDailyDuties(base({ reports: [report("s1", "too_old")] })), "report_send", "s1")).toMatchObject({ status: "void", source: "too_old" });
+    expect(pick(buildDailyDuties(base({ reports: [report("s1", "too_old")] })), "report_send", "s1")).toMatchObject({ status: "open", source: null });
   });
   it("ClassNote를 안 쓰는 지점(발송 길이 없음)은 종전대로 작성 의무 — 쓰면 done(시각 = created_at) · 발송 의무는 없다", () => {
     const rows = buildDailyDuties(base({ classnoteOn: false, reports: [report("s1")] }));

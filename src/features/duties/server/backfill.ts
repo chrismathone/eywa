@@ -15,7 +15,7 @@ import { syncMonthlyDuties } from "./monthly-sync";
 export async function backfillDutyMonth(tenantId: string, month: string, settings: TenantSettings): Promise<{ days: number; drafts: number; monthly: number; closed: number; skipped?: string }> {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error("달은 YYYY-MM 꼴이어야 합니다");
   const today = kstToday();
-  if (month > today.slice(0, 7)) throw new Error("앞날의 달은 만들 수 없습니다");
+  if (month >= today.slice(0, 7)) throw new Error("끝난 달만 다시 만들 수 있습니다");
   // 🔴 **평가 개시 전에 끝난 달만** 만든다 — 개시 뒤의 날을 지금 담임 · 지금 반으로 다시 맞추면 이미 평가된 실적이 새 담당으로 옮겨 가고(rekey는 끝난 의무까지 옮긴다),
   //    지난 달 월간을 미이행으로 확정하는 것도 평소 규칙(열린 채 지연)과 달라진다. 개시일이 없는 지점은 '개시 전'이 없으므로 만들지 않는다.
   const { data: st, error: stError } = await createAdminClient().from("duty_settings").select("live_from").eq("tenant_id", tenantId).maybeSingle();

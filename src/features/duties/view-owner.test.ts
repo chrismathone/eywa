@@ -8,7 +8,7 @@ const NOW = Date.parse("2026-11-10T03:00:00Z");
 const cell = (o: Partial<Cell>): Cell => ({ total: 10, done: 9, due: 10, ontime: 9, lateDone: 0, late: 0, expired: 0, over7: 0, pct: 90, ...o });
 const subject = (key: string, owners: [string, Partial<Cell>][], c: Partial<Cell> = {}): TreeSubject => ({ subject: key, label: key === "math" ? "수학" : "영어", cell: cell(c), cells: {}, owners: owners.map(([id, oc]) => ({ ownerId: id, name: id, cell: cell(oc), cells: {}, classes: [] })) });
 const late = (o: Partial<LateItem>): LateItem => ({ id: "x", kind: "attendance", period: "daily", cycle: "2026-11-09", status: "open", dueAt: "2026-11-09T15:00:00Z", doneAt: null, voidReason: null, studentId: "s", studentName: "학생", school: null, grade: null, classId: "c", className: "반", subject: "math", escalation: 0, ownerId: "t1", inherited: false, ...o });
-const req = (o: object) => ({ id: "w", source: DUTY_REQUEST_SOURCE, status: "working" as const, createdAt: "2026-11-09T00:00:00Z", dueOn: "2026-11-12", steps: [{ user: { id: "t1" } }], ...o }) as Parameters<typeof ownerRows>[2][number];
+const req = (o: object) => ({ id: "w", source: DUTY_REQUEST_SOURCE, status: "working" as const, createdAt: "2026-11-10T01:00:00Z", dueOn: "2026-11-12", steps: [{ user: { id: "t1" } }], ...o }) as Parameters<typeof ownerRows>[2][number];
 
 describe("ownerRows — 과목 관리자별 현황", () => {
   const tree = [subject("english", [["e1", {}]]), subject("math", [["t1", { pct: 50, ontime: 5, late: 2 }], ["t2", { pct: 80, ontime: 8 }]], { pct: 70 })];
@@ -37,5 +37,9 @@ describe("ownerRows — 과목 관리자별 현황", () => {
     expect(rows.reduce((n, r) => n + r.late, 0)).toBe(3);
     expect(rows.find((r) => r.subject === "science")).toMatchObject({ label: "과학", inTree: false, late: 1 });
     expect(rows.find((r) => r.subject === null)).toMatchObject({ label: "과목 미정", inTree: false });
+  });
+  it("🔴 요청을 보낸 뒤에 생긴 지연은 '요청함'이 덮지 않는다 · 선생님 등급에서 담당 미정은 뺀다", () => {
+    const rows = ownerRows([subject("math", [["t1", { pct: 50, ontime: 5 }], ["", { pct: 10, ontime: 1 }]])], [late({}), late({ dueAt: "2026-11-10T02:00:00Z" })], [req({})], {}, {}, NOW, "2026-11-10");
+    expect(rows[0]).toMatchObject({ lateTeachers: 1, requested: 0, requestsOpen: 1, bad: 1 });
   });
 });

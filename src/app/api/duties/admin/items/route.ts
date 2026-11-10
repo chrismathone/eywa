@@ -16,7 +16,8 @@ const uuidOrNull = (v: string | null) => (v && UUID.test(v) ? v : null);
 
 export async function GET(request: Request) {
   const q = new URL(request.url).searchParams;
-  const period = parseAdminPeriod(q.get("period"));
+  const today = kstToday();
+  const period = parseAdminPeriod(q.get("period"), today);
   const studentId = uuidOrNull(q.get("student"));
   if (!studentId) return NextResponse.json({ error: "학생을 알 수 없습니다" }, { status: 400, headers: NO_STORE });
   const kindRaw = q.get("kind");
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
   try {
     const viewer = await getDutyAdminViewer();
     if (!viewer) return NextResponse.json({ error: "권한이 없습니다" }, { status: 403, headers: NO_STORE });
-    const range = adminRange(period, kstToday());
+    const range = adminRange(period, today);
     const items = await loadDutyCellItems(viewer.user.tenantId, range.from, range.to, viewer.scope, periodsOf(period), {
       studentId, kind: kindRaw && (DUTY_KIND_KEYS as readonly string[]).includes(kindRaw) ? kindRaw : null,
       classId: uuidOrNull(q.get("class")), classNone: q.get("class") === "none", owner: uuidOrNull(q.get("owner")), ownerNone: q.get("owner") === "none",

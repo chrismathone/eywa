@@ -12,7 +12,8 @@ const TH = "text-text-dim px-2 py-1.5 text-xs font-semibold";
  * (칸이 둘뿐인데 화면 끝까지 늘어나 숫자가 흩어지지 않게 · 좁으면 100%에서 멈춘다).
  */
 const NAME_W = 260, GRADE_W = 88, CELL_W = 132;
-export const gridStyle = (cells: number) => ({ width: `min(100%, ${NAME_W + GRADE_W + cells * CELL_W}px)` });
+const CELL_MIN = 76;
+export const gridStyle = (cells: number) => ({ width: `min(100%, ${NAME_W + GRADE_W + cells * CELL_W}px)`, minWidth: NAME_W + GRADE_W + cells * CELL_MIN });
 export function GridCols({ count }: { count: number }) {
   return <colgroup><col style={{ width: NAME_W }} /><col style={{ width: GRADE_W }} />{Array.from({ length: count }, (_, i) => <col key={i} />)}</colgroup>;
 }
