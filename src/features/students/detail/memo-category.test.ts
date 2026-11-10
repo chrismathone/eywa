@@ -11,11 +11,11 @@ describe("memoCategoryLabel", () => {
   });
 
   it("🔴 모르는 값·빈 값도 영문이 그대로 새지 않는다", () => {
-    expect(memoCategoryLabel("general")).toBe("일반");
+    expect(memoCategoryLabel("general")).toBe("중점사안");
     expect(memoCategoryLabel("weird_value")).toBe("기타");
-    expect(memoCategoryLabel(null)).toBe("일반");
-    expect(memoCategoryLabel(undefined)).toBe("일반");
-    expect(memoCategoryLabel("")).toBe("일반");
+    expect(memoCategoryLabel(null)).toBe("중점사안");
+    expect(memoCategoryLabel(undefined)).toBe("중점사안");
+    expect(memoCategoryLabel("")).toBe("중점사안");
   });
 
   it("특별반이 목록에 있다(원장 2026-09-08)", () => {

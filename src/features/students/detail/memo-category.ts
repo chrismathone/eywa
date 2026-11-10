@@ -8,7 +8,8 @@
  * ⚠️ 값은 **DB에 남는 문자열**이라 한 번 쓴 값을 바꾸지 말 것(옛 행이 라벨을 잃는다). 라벨만 바꾼다.
  */
 export const MEMO_CATEGORIES = [
-  { value: "general", label: "일반" },
+  // 원장 2026-11-10 *"일반 -> 중점사안 으로 이름 변경"* — 라벨만(값 general 그대로).
+  { value: "general", label: "중점사안" },
   { value: "homework", label: "숙제/과제" },
   { value: "behavior", label: "행동" },
   { value: "parent", label: "학부모" },
