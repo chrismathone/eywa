@@ -167,7 +167,6 @@
 .links { display: flex; gap: 14px; border-top: 1px solid var(--line); padding-top: 14px; margin-top: 18px; font-size: var(--text-xs); flex-wrap: wrap; }
 .links a { color: var(--ink); font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
 .empty { color: var(--foreground); text-align: center; padding: 28px; font-size: var(--text-sm); line-height: 1.7; }
-.realNote { margin: 0 0 8px; font-size: var(--text-xs); color: var(--foreground); }
 
 @media (max-width: 1400px) { .nav > span { display: none; } .calls button { width: 72px; padding: 6px; } .rowAction { display: block; } .rowAction .overdue { display: block; margin-top: 4px !important; } }
 @media (max-width: 1150px) { .visualGrid { grid-template-columns: 1fr 1fr; } .visualGrid > article:last-child { grid-column: 1 / -1; } }

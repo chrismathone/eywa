@@ -1,5 +1,6 @@
 "use server";
 
+import { countJourneyRecords } from "@/features/enrollment/journey/merge-move";
 import { seatBlockReason } from "@/lib/license/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -786,6 +787,9 @@ export async function deleteEnrollmentConsultation(
     await removeObject(p, { bucket: "consultation-recordings" }).catch(() => {});
   }
 
+  // 전화·방문·등록 기록(s2_0062)도 상담과 함께 지워진다 — 몇 건이 사라졌는지 감사로그에 남긴다.
+  const journeyRecords = await countJourneyRecords(user.tenantId, id);
+
   // 2) row 삭제(RLS). consultation_ai_analysis·consultation_recordings는 FK cascade.
   const { error } = await supabase.from("enrollment_consultations").delete().eq("id", id);
   if (error) return { error: dbWhy(error, "enrollment.delete", "상담을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
@@ -801,6 +805,8 @@ export async function deleteEnrollmentConsultation(
       consultationId: id,
       studentId: c.student_id ?? null,
       hadRecording: !!(c as { audio_path?: string | null }).audio_path || (recRows?.length ?? 0) > 0,
+      // 함께 지워진 전화·방문·등록 기록 수 — 못 셌으면 null(0건과 구분한다).
+      journeyRecordsDeleted: journeyRecords,
     },
   });
 

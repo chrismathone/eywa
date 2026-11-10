@@ -12,6 +12,7 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
 import { moveCareToMergeWinner, revertCareMerge } from "@/features/student-care/server/merge-move";
+import { moveJourneyToMergeWinner, revertJourneyMerge } from "@/features/enrollment/journey/merge-move";
 import { COLUMN_LABEL } from "@/features/enrollment/merge-policy";
 import { buildMergePatch, planMerge, type ConsultRow, type MergePlan } from "@/features/enrollment/merge-plan";
 import { explainDbError } from "@/lib/supabase/db-error";
@@ -172,6 +173,12 @@ export async function mergeConsultations(
     finalStudentId: finalStudent ? String(finalStudent) : null, loserIds: targetLoserIds,
   });
   if (!care.ok) return { error: "상담 약속을 옮기지 못해 병합을 멈췄습니다. 잠시 뒤 다시 시도해 주세요. 바뀐 상담은 없습니다." };
+  // 전화·방문·등록 기록(s2_0062)도 이긴 쪽 상담으로 — 진 쪽이 지워지면 기록이 함께 지워진다. 못 옮기면 약속도 되돌리고 멈춘다.
+  const journey = await moveJourneyToMergeWinner(gate.user.tenantId, winnerId, targetLoserIds);
+  if (!journey.ok) {
+    await revertCareMerge(gate.user.tenantId, gate.user.id, care.moved);
+    return { error: "전화·방문 기록을 옮기지 못해 병합을 멈췄습니다. 잠시 뒤 다시 시도해 주세요. 바뀐 상담은 없습니다." };
+  }
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("merge_enrollment_consultations", {
@@ -182,6 +189,7 @@ export async function mergeConsultations(
   if (error) {
     // 병합이 안 됐으면 옮긴 약속도 되돌린다(진 쪽 상담이 그대로 남아 있다).
     await revertCareMerge(gate.user.tenantId, gate.user.id, care.moved);
+    await revertJourneyMerge(gate.user.tenantId, journey.moved);
     return { error: explainDbError(error, { scope: "enrollment.merge-actions.mergeConsultations", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   }
 
@@ -190,7 +198,7 @@ export async function mergeConsultations(
     targetType: "enrollment_consultations",
     targetLabel: String(winner.prospect_name ?? ""),
     // 🔴 "무엇을 버렸나"가 되돌릴 유일한 근거다. 전사·브리프 같은 큰 본문은 빼고 버린 값만 남긴다.
-    metadata: { winnerId, loserIds: targetLoserIds, discarded, result: data, ...(care.moved.length ? { careMoved: care.moved.map((m) => m.id) } : {}) },
+    metadata: { winnerId, loserIds: targetLoserIds, discarded, result: data, ...(care.moved.length ? { careMoved: care.moved.map((m) => m.id) } : {}), ...(journey.moved.length ? { journeyMoved: journey.moved.map((m) => m.id) } : {}) },
   });
 
   revalidatePath("/enrollment");

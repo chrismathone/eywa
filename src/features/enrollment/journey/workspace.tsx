@@ -5,16 +5,18 @@ import { EmbedLink as Link } from "@/components/embed-link";
 import { ChartCard, DonutChart, SeriesChart, StatCard, RankBars } from "@/components/analytics/charts";
 import { palette } from "@/components/analytics/chart-math";
 import a from "@/components/analytics/analytics.module.css";
-import { SampleBanner, SAMPLE_SAVE_MESSAGE } from "@/features/mockup/sample";
 import { kinds, statuses, purposes, allowedStatuses, eventDay, saveJourneySchema, validateJourneyDates, type JourneyDocument, type JourneyRecord } from "./model";
-import { sampleJourneyHistory, type JourneyData, type JourneyRevision } from "./sample-data";
+import type { JourneyData } from "./server";
 import baseline from "./historical-baseline.json";
 import s from "./workspace.module.css";
 
 /**
- * 전화·방문·등록 기록 — aywa-next(375d27df4) `enrollment/journey/workspace.tsx`의 화면을 옮긴 시안.
- * 🔴 기록 표(`enrollment_journey_records`)가 이 DB에 없어 예시 값만 그린다. 저장·이력 조회는 네트워크 요청 없이 안내 문구만.
+ * 전화·방문·등록 기록 — aywa-next(375d27df4) `enrollment/journey/workspace.tsx` 이식(실제 기록 · s2_0062).
+ * 저장·이력 = `/api/enrollment/journey`(서버가 상담 열람 범위·쓰기 권한·날짜를 다시 본다). 예정과 실적을 섞지 않는다.
  */
+type JourneyRevision = { version: number; document: JourneyDocument; voided: boolean; reason: string; recorded_at: string; actor_id: string };
+/** 화면엔 한글 사유만 — 검증 도구의 영문 기본 문구는 일반 안내로 바꾼다. */
+const korean = (message: string | undefined, fallback: string) => message && /[가-힣]/.test(message) ? message : fallback;
 const dateLabel = (v: string | null) => v ?? "미확인";
 type Editing = { id: string; consultationId: string; expectedVersion: number; voided: boolean; document: JourneyDocument };
 
@@ -22,7 +24,7 @@ export function JourneyWorkspace({ data, compact = false }: { data: JourneyData;
   const router = useRouter();
   const [tab, setTab] = useState<"records" | "quality" | "history">("records"), [query, setQuery] = useState(""), [onlyOpen, setOnlyOpen] = useState(false);
   const [editing, setEditing] = useState<Editing | null>(null);
-  const [reason, setReason] = useState(""), [error, setError] = useState(""), [saved, setSaved] = useState("");
+  const [reason, setReason] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState(""), [saved, setSaved] = useState("");
   const [history, setHistory] = useState<{ id: string; rows: JourneyRevision[] } | null>(null);
   const summary = data.summary, names = new Map(data.choices.map((c) => [c.id, c])), staff = new Map(data.staff.map((p) => [p.id, p.display_name]));
   function start(kind: JourneyDocument["kind"], consultationId = data.consultationId ?? "") {
@@ -31,17 +33,31 @@ export function JourneyWorkspace({ data, compact = false }: { data: JourneyData;
   }
   function edit(r: JourneyRecord) { setEditing({ id: r.id, consultationId: r.consultation_id, expectedVersion: r.version, voided: r.voided, document: { ...r.document } }); setReason(""); setError(""); setSaved(""); setHistory(null); }
   function patch(p: Partial<JourneyDocument>) { setEditing((e) => e ? { ...e, document: { ...e.document, ...p } } : e); }
-  function submit(e: FormEvent) {
-    e.preventDefault(); if (!editing) return;
+  async function submit(e: FormEvent) {
+    e.preventDefault(); if (!editing || busy) return;
     setError(""); setSaved("");
     const input = saveJourneySchema.safeParse({ ...editing, reason });
-    if (!input.success) { setError(input.error.issues[0]?.message ?? "입력값을 확인해 주세요"); return; }
+    if (!input.success) { setError(korean(input.error.issues[0]?.message, "입력값을 확인해 주세요")); return; }
     const invalid = validateJourneyDates(input.data.document, data.today); if (invalid) { setError(invalid); return; }
-    // 시안: 입력 검증까지만 같은 규칙으로 돌리고 저장은 하지 않는다.
-    setSaved(SAMPLE_SAVE_MESSAGE);
+    setBusy(true);
+    try {
+      const response = await fetch("/api/enrollment/journey", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input.data) });
+      const body = await response.json().catch(() => ({})) as { version?: number; error?: string };
+      if (!response.ok) throw Error(korean(body.error, "저장하지 못했습니다"));
+      setEditing(null); setSaved(`기록을 저장했습니다. 변경 이력 v${body.version}에 남았습니다.`); router.refresh();
+    } catch (err) { setError(korean(err instanceof Error ? err.message : undefined, "저장하지 못했습니다")); }
+    finally { setBusy(false); }
   }
-  function showHistory(r: JourneyRecord) { setError(""); setHistory({ id: r.id, rows: sampleJourneyHistory(r) }); }
-  const name = (id: string, fallback: string) => data.sample ? <b>{fallback}</b> : <Link href={`/enrollment/${id}#journey`}>{fallback}</Link>;
+  async function showHistory(r: JourneyRecord) {
+    setError("");
+    try {
+      const response = await fetch(`/api/enrollment/journey?id=${encodeURIComponent(r.id)}`);
+      const body = await response.json().catch(() => ({})) as { history?: JourneyRevision[]; error?: string };
+      if (!response.ok || !body.history) throw Error(korean(body.error, "이력을 불러오지 못했습니다"));
+      setHistory({ id: r.id, rows: body.history });
+    } catch (err) { setError(korean(err instanceof Error ? err.message : undefined, "이력을 불러오지 못했습니다")); }
+  }
+  const name = (id: string, fallback: string) => <Link href={`/enrollment/${id}#journey`}>{fallback}</Link>;
   const list = data.records.filter((r) => {
     if (!compact && !eventDay(r).startsWith(String(data.year))) return false;
     if (onlyOpen && (r.voided || (!r.document.nextDue || r.document.nextDoneOn))) return false;
@@ -51,7 +67,6 @@ export function JourneyWorkspace({ data, compact = false }: { data: JourneyData;
   const historical = baseline.monthly.filter((m) => m.month.startsWith(String(data.year)));
   const visitRecords = summary.selected.filter((r) => r.document.kind === "visit");
   return <div id="journey" className={`${s.root} ${a.dashboard} ${compact ? s.compact : ""}`}>
-    {data.sample ? <SampleBanner /> : null}
     {!compact && <>
       <header className={s.hero}><div><div className={s.eyebrow}>신규 콜&상담 · 방문·등록 점검</div><h1>전화부터 방문, 등록까지</h1><p>예정과 실적을 구분하고, 확인 근거와 담당자의 다음 액션을 함께 기록합니다.</p></div><Link href="/enrollment">신규 콜&상담으로 돌아가기 →</Link></header>
       <div className={s.toolbar}><label>조회 연도 <select aria-label="조회 연도" value={data.year} onChange={(e) => router.push(`/enrollment/visits?year=${e.target.value}`)}>{Array.from({ length: Number(data.today.slice(0, 4)) - 2020 }, (_, i) => 2021 + i).reverse().map((y) => <option key={y}>{y}</option>)}</select></label><span className={s.muted}>{data.through}까지 · 기록의 현재 확인 상태 기준</span></div>
@@ -87,14 +102,14 @@ export function JourneyWorkspace({ data, compact = false }: { data: JourneyData;
         <label>후속 업무 기한<input type="date" value={editing.document.nextDue ?? ""} onChange={(e) => patch({ nextDue: e.target.value || null })} /></label>
         {!!editing.document.nextAction && <label>후속 업무 완료일 (완료했을 때만)<input type="date" max={data.today} value={editing.document.nextDoneOn ?? ""} onChange={(e) => patch({ nextDoneOn: e.target.value || null })} /></label>}
         {editing.expectedVersion > 0 && <><label className={s.full}>수정·제외 사유<input required value={reason} onChange={(e) => setReason(e.target.value)} maxLength={1000} /></label><label className={`${s.check} ${s.full}`}><input type="checkbox" checked={editing.voided} onChange={(e) => setEditing({ ...editing, voided: e.target.checked })} />잘못 입력한 기록을 집계에서 제외 (이력 보존)</label></>}
-        <div className={`${s.actions} ${s.full}`}><button type="submit">확인 기록 저장</button><button type="button" className={s.secondary} onClick={() => setEditing(null)}>닫기</button></div>
+        <div className={`${s.actions} ${s.full}`}><button type="submit" disabled={busy}>{busy ? "저장 중…" : "확인 기록 저장"}</button><button type="button" className={s.secondary} onClick={() => setEditing(null)}>닫기</button></div>
       </form>}
       {!compact && <label className={`${s.check} ${s.note}`}><input type="checkbox" checked={onlyOpen} onChange={(e) => setOnlyOpen(e.target.checked)} /> 미완료 후속 업무만 보기</label>}
       <div className={s.scroll}><table className={s.table}><thead><tr><th>학생·일자</th><th>기록·결과</th><th>담당자·후속 업무</th><th>확인 근거</th><th>처리</th></tr></thead><tbody>{list.map((r) => <tr key={r.id}><td>{name(r.consultation_id, names.get(r.consultation_id)?.name ?? "상담")}<span className={s.muted}>{eventDay(r)}<br />{purposes[r.document.purpose]}</span></td><td><b>{kinds[r.document.kind]}</b><span className={`${s.badge} ${r.document.status === "completed" || r.document.status === "confirmed" ? s.done : ""}`}>{r.voided ? "집계 제외" : statuses[r.document.status]}</span>{r.document.scheduledOn && <div className={s.muted}>예정 {r.document.scheduledOn}</div>}</td><td><b>{staff.get(r.document.ownerId) ?? "담당자 확인"}</b>{r.document.nextAction || "후속 업무 없음"}{r.document.nextDue && <div className={`${s.badge} ${r.document.nextDoneOn ? s.done : r.document.nextDue < data.today ? s.late : ""}`}>{r.document.nextDoneOn ? `${r.document.nextDoneOn} 완료` : `${r.document.nextDue}까지`}</div>}</td><td><span>{r.document.evidence}</span>{r.document.sourceUrl && <><br /><a href={r.document.sourceUrl} target="_blank" rel="noreferrer">원본 확인 ↗</a></>}</td><td>{data.canWrite && <button type="button" onClick={() => edit(r)}>결과·수정</button>}<button type="button" onClick={() => showHistory(r)}>이력 v{r.version}</button></td></tr>)}</tbody></table></div>
       {!list.length && <p className={s.empty}>확인 기록이 아직 없습니다.<br />상담별 예약·실제 방문·등록 근거를 기록하면 통계와 학생 지식그래프에 연결됩니다.</p>}
       {history && <div className={s.history}><div className={s.toolbar}><b>변경 이력</b><button type="button" onClick={() => setHistory(null)}>닫기</button></div>{history.rows.map((r) => <div key={r.version}><b>v{r.version} · {staff.get(r.actor_id) ?? "기록 담당자"} · {new Date(r.recorded_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</b><p>{r.voided ? "집계 제외" : statuses[r.document.status]} · 실제 {dateLabel(r.document.happenedOn)} · 예정 {dateLabel(r.document.scheduledOn)}</p><p>{r.document.evidence}</p><p>사유: {r.reason || "최초 기록"}</p></div>)}</div>}
     </section>}
-    {!compact && tab === "quality" && <section className={s.panel}><h2>확인하고 보완할 상담</h2><p className={s.note}>접수일 기준, 접수일이 없으면 기존 정렬일로 찾은 후보입니다. 미확인을 미등록·노쇼로 바꾸지 않습니다. 이름을 눌러 기존 상담을 확인하고 실제 근거가 있을 때 기록하세요.</p><div className={s.scroll}><table className={s.table}><thead><tr><th>학생</th><th>접수·기록일</th><th>보완 항목</th><th>다음 액션</th></tr></thead><tbody>{issues.slice(0, 150).map((r) => <tr key={r.id}><td>{name(r.id, r.name)}<div className={s.muted}>{r.school} {r.grade}</div></td><td>{r.date}</td><td>{r.reasons.map((x) => <span key={x} className={`${s.badge} ${s.late}`}>{x}</span>)}</td><td>{data.sample ? <span className={s.muted}>상담 확인·보완</span> : <Link href={`/enrollment/${r.id}#journey`}>상담 확인·보완 →</Link>}</td></tr>)}</tbody></table></div><p className={s.note}>{issues.length}건 중 {Math.min(150, issues.length)}건 표시 · 검색으로 좁힐 수 있습니다.</p></section>}
+    {!compact && tab === "quality" && <section className={s.panel}><h2>확인하고 보완할 상담</h2><p className={s.note}>접수일 기준, 접수일이 없으면 기존 정렬일로 찾은 후보입니다. 미확인을 미등록·노쇼로 바꾸지 않습니다. 이름을 눌러 기존 상담을 확인하고 실제 근거가 있을 때 기록하세요.</p><div className={s.scroll}><table className={s.table}><thead><tr><th>학생</th><th>접수·기록일</th><th>보완 항목</th><th>다음 액션</th></tr></thead><tbody>{issues.slice(0, 150).map((r) => <tr key={r.id}><td>{name(r.id, r.name)}<div className={s.muted}>{r.school} {r.grade}</div></td><td>{r.date}</td><td>{r.reasons.map((x) => <span key={x} className={`${s.badge} ${s.late}`}>{x}</span>)}</td><td><Link href={`/enrollment/${r.id}#journey`}>상담 확인·보완 →</Link></td></tr>)}</tbody></table></div><p className={s.note}>{issues.length}건 중 {Math.min(150, issues.length)}건 표시 · 검색으로 좁힐 수 있습니다.</p></section>}
     {!compact && tab === "history" && <>
       <section className={s.panel}><h2>첨부 분석과 현재 기록을 구분해서 보기</h2><p className={s.note}>{baseline.asOf}에 검증한 70개월 스냅샷입니다. 에이와 현재 기록에 중복 가산하지 않습니다. 월 방문자 합계는 연간 고유 학생 수가 아니며, 미확인은 방문 0명이 아닙니다.</p><div className={s.charts}><ChartCard title={`${data.year}년 과거 관측 방문·예약`} note="방문은 명·월, 예약은 횟수로 단위가 다릅니다."><SeriesChart unit="" points={historical.map((m) => ({ label: m.month.slice(5) + "월", values: [m.visitors, m.reservations], partial: m.month === "2026-10" }))} series={[{ label: "방문 관측(명·월)", color: palette[1] }, { label: "예약 기록(회)", color: palette[0] }]} /></ChartCard><ChartCard title="2023–2025 월별 평균 예약" note="예약 수요의 계절성 참고치입니다. 실제 방문·매출 효과로 단정하지 않습니다."><RankBars unit="회" data={baseline.seasonality.map((m) => ({ label: m.month, value: Math.round(m.average * 10) / 10, color: palette[0] }))} /></ChartCard></div></section>
       <section className={s.panel}><h2>{data.year}년 원본 검증표</h2><div className={s.scroll}><table className={s.table}><thead><tr><th>월</th><th>방문(명·월)</th><th>문의 사례</th><th>등록 근거 사례</th><th>결과 미확인</th><th>실제 등록일 확인(명)</th><th>자료 상태</th></tr></thead><tbody>{historical.map((m) => <tr key={m.month}><td>{m.month}</td><td>{m.visitors ?? "미확인"}</td><td>{m.cases ?? "미확인"}</td><td>{m.registeredEvidence ?? "미확인"}</td><td>{m.unknownResults ?? "미확인"}</td><td>{m.datedRegistrations ?? "미확인"}</td><td>{m.note}</td></tr>)}</tbody></table></div><p className={s.note}>출처: {baseline.source} · {baseline.range}. 상담 원문과 개인정보는 이 비교표에 복사하지 않았습니다.</p></section>

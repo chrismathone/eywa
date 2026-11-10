@@ -26,7 +26,7 @@ export const journeyDocumentSchema = z.object({
   if (d.nextDoneOn && !d.nextAction) fail("완료할 후속 업무가 없습니다");
 });
 export type JourneyDocument = z.infer<typeof journeyDocumentSchema>;
-export const saveJourneySchema = z.strictObject({id:z.uuid(),consultationId:z.uuid(),expectedVersion:z.number().int().min(0),voided:z.boolean().default(false),reason:z.string().trim().max(1000),document:journeyDocumentSchema}).superRefine((v,ctx)=>{if(v.expectedVersion>0&&!v.reason)ctx.addIssue({code:"custom",message:"수정·제외 사유를 적어 주세요"});});
+export const saveJourneySchema = z.strictObject({id:z.uuid(),consultationId:z.uuid(),expectedVersion:z.number().int().min(0),voided:z.boolean().default(false),reason:z.string().trim().max(1000),document:journeyDocumentSchema}).superRefine((v,ctx)=>{if(v.expectedVersion>0&&!v.reason)ctx.addIssue({code:"custom",message:"수정·제외 사유를 적어 주세요"});if(v.expectedVersion===0&&v.voided)ctx.addIssue({code:"custom",message:"새 기록은 집계 제외로 저장할 수 없습니다"});});
 export type JourneyRecord = { id:string; consultation_id:string; version:number; document:JourneyDocument; voided:boolean; updated_at:string; actor_id:string };
 export type JourneyConsultation = PersonRow & { prospect_name:string; consulted_at:string; received_date:string|null; consultation_date:string|null; consultation_path:string|null; outcome:string; counselor:string|null; consultant_id:string|null; legacy_source:string|null };
 export function validateJourneyDates(d: JourneyDocument, today: string) {
@@ -45,6 +45,10 @@ export function journeyPersonGroups(rows:JourneyConsultation[]) {
 export function summarizeJourney(rows:JourneyConsultation[], records:JourneyRecord[], from:string, through:string) {
   const groups=journeyPersonGroups(rows), byId=new Map(rows.map(r=>[r.id,r]));
   const valid=records.filter(r=>!r.voided&&byId.has(r.consultation_id));
+  // 상담별 기록 묶음 — 달·상담마다 전체 기록을 다시 훑지 않는다(상담 수 × 기록 수로 커지지 않게).
+  const byConsult=new Map<string,JourneyRecord[]>();
+  for(const r of valid){const l=byConsult.get(r.consultation_id);if(l)l.push(r);else byConsult.set(r.consultation_id,[r]);}
+  const hasVisit=(id:string)=>!!byConsult.get(id)?.some(e=>e.document.kind==="visit");
   const selected=valid.filter(r=>isIntake(r.document)&&eventDay(r)>=from&&eventDay(r)<=through);
   const visits=selected.filter(r=>r.document.kind==="visit"&&r.document.status==="completed");
   const person=(r:JourneyRecord)=>groups.get(r.consultation_id)!;
@@ -60,12 +64,12 @@ export function summarizeJourney(rows:JourneyConsultation[], records:JourneyReco
   for(let y=Number(from.slice(0,4)),m=Number(from.slice(5,7));`${y}-${String(m).padStart(2,"0")}`<=through.slice(0,7);) {
     const key=`${y}-${String(m).padStart(2,"0")}`, vm=visits.filter(r=>eventDay(r).startsWith(key));
     const related=rows.filter(r=>inquiryDay(r).startsWith(key));
-    monthly.push({month:key,visits:vm.length,people:new Set(vm.map(person)).size,unverified:related.filter(r=>!valid.some(e=>e.consultation_id===r.id&&e.document.kind==="visit")).length});
+    monthly.push({month:key,visits:vm.length,people:new Set(vm.map(person)).size,unverified:related.filter(r=>!hasVisit(r.id)).length});
     m++;if(m>12){m=1;y++;}
   }
   const dated=rows.filter(r=>{const day=inquiryDay(r);return day>=from&&day<=through;});
   const issues=dated.map(r=>{
-    const events=valid.filter(e=>e.consultation_id===r.id), reasons:string[]=[];
+    const events=byConsult.get(r.id)??[], reasons:string[]=[];
     if(!events.some(e=>e.document.kind==="visit"))reasons.push("방문 여부 미확인");
     if(r.outcome==="enrolled"&&!events.some(e=>e.document.kind==="registration"&&e.document.status==="confirmed"))reasons.push("등록 확정일 미확인");
     if(!r.student_id&&!phoneKeyOf(r.parent_phone))reasons.push("학생 식별정보 부족");

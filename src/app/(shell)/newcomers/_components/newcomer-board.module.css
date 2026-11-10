@@ -75,7 +75,9 @@ button.metric:hover:not(:disabled) { background: var(--bg-soft); }
 .table .stickySubject { position: sticky; left: 262px; z-index: 2; text-align: center; box-shadow: 1px 0 0 var(--line); }
 .table th.stickyName, .table th.stickySchool, .table th.stickySubject { z-index: 4; }
 .table .divider { border-right: 1px solid var(--line); }
-.nameCell { display: flex; align-items: center; gap: 4px; }
+.nameCell { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
+.careLink { color: var(--primary); font-size: var(--text-xs); white-space: nowrap; }
+.careLink:hover { text-decoration: underline; }
 .studentName { color: var(--foreground); font-size: var(--nc-font-size); font-weight: var(--font-weight-bold); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .studentName:hover { text-decoration: underline; }
 .ellipsis { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -110,8 +112,6 @@ button.metric:hover:not(:disabled) { background: var(--bg-soft); }
 .taskDetail dl { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 12px 8px; margin: 18px 0; font-size: var(--nc-font-size); }
 .taskDetail dt { color: var(--nc-muted); }
 .taskDetail dd { color: var(--nc-ink); font-weight: 500; }
-.primaryButton { width: 100%; padding: 9px 12px; color: #fff; background: var(--nc-blue); border: 1px solid var(--nc-blue); border-radius: 6px; font-size: var(--nc-font-size); font-weight: 600; margin-top: 14px; }
-.primaryButton:disabled { opacity: .5; }
 .progressDetail { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin: 20px 0; color: var(--nc-ink); }
 .progressDetail progress { width: 100%; height: 6px; grid-column: 1 / -1; accent-color: var(--green); border-radius: 5px; overflow: hidden; }
 .progressDetail progress::-webkit-progress-bar { background: var(--bg-soft); }

@@ -1,5 +1,6 @@
 "use server";
 
+import { careRecordsByStaff } from "@/features/newcomers/server/staff-refs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SystemRole } from "@/lib/permissions";
@@ -370,6 +371,13 @@ export async function deleteStaff(
       error: "출결 기록이 있어 완전 삭제할 수 없습니다. '퇴사(비활성)' 처리를 권장합니다.",
     };
   }
+
+  // ①-2 신규생 정착 관리·콜&상담 여정 기록(s2_0060~s2_0062)도 직원 칸이 지움을 막는다 — 같은 까닭으로 미리 막는다.
+  const careRefs = await careRecordsByStaff(id);
+  if (careRefs === "refs") {
+    return { error: "신규생 관리·상담 방문 기록이 있어 완전 삭제할 수 없습니다. '퇴사(비활성)' 처리를 권장합니다." };
+  }
+  if (careRefs === "error") return { error: "남은 기록을 확인하지 못해 삭제하지 않았습니다. 잠시 후 다시 시도해 주세요." };
 
   // ② auth.users 먼저 — 실패해도 public.users가 남아 직원 정보·로그인이 보존된다.
   //    단, 임포트/시드된 "데이터 전용" 직원은 auth.users가 없어 "User not found"(404)가 난다(#31).

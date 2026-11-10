@@ -1,5 +1,13 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-11 — 신규생 90일 정착 관리 · 신규 콜&상담 여정 = 시안 → 실제 기록 (aywa-next 인계 이식 · SQL s2_0060~s2_0062)
+
+- 신규생 관리: 학생별 정착 관리·담당자별 점검 탭이 실제 기록을 읽고 쓴다 — 과목별 관리 담당 배정(`student_onboarding_subject_assignments` · 기본 담당 표 `student_onboarding_manager_defaults`는 읽기만 · 설정 화면 없음) · 담임 적응 피드백 → 관리자 확인/보완 요청 → 보완 보고 → 후속 조치 처리(`student_onboarding_feedback` + 변경 이력). 담당만(scoped) 권한 = 자기 담임 학생·과목만 보고 · 관리 콜 완료·담당 배정은 관리자만(`followup-query.ts` · `followup-actions.ts`). 끝나지 않은 피드백이 있는 학생은 90일이 지나도 남고 `?student=`로 다시 연다.
+- 체크 완료 = '실행한 액션 + 처리 결과'(메모) 필수 · 미래 수행일 거절 · 체크표 칸을 누르면 바로 바뀌지 않고 상세에서 기록한다 · 표는 학생 한 칸(rowSpan) + '약속·인계' 링크.
+- 신규 콜&상담 여정: 방문·등록 점검(`/enrollment/visits`) + 상담 상세의 '전화·방문·등록 기록' 칸(Suspense)이 `enrollment_journey_records`·이력을 읽고 `/api/enrollment/journey`로 저장(`save_enrollment_journey` · version 비교). 상담 병합은 진 쪽 기록을 이긴 쪽으로 먼저 옮긴다(`journey/merge-move.ts`).
+- 학생 통합 기록(student-hub)의 '신입생 적응·담임 피드백' · '전화·방문·등록 확인 기록' 칸이 '연결 전' 대신 실제 기록을 싣는다.
+- 옮기지 않음: 강사 기본 권한(newcomers teacher none → scoped)·강사 메뉴 줄(원장 결정 대기) · 학생 단위 옛 담당 표 · 메이크에듀 수강 연결 스크립트 · 상담 상세 상담일 표기 변경 · 클론 전용 설정.
+
 ## 2026-11-10 — 보류 항목 정리(Codex 협의 추천안) — 수정 계획 P4 나머지
 
 - 운영 DB 확인(읽기 전용): DB 함수 문구의 '총괄' **0건**(0332a가 이미 교체 — 고칠 것 없음) · `attendance_records.taught_by` 칸·FK 있음, 값 0/42,166건(입구를 걷은 10-07 결정과 맞음 · 백필 안 함 · 읽는 코드의 호환 분기는 그대로).
