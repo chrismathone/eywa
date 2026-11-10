@@ -24,12 +24,12 @@ export function AdminOwnerBoard({ tree, late, managers, labels, nowMs, onSubject
     <div className="overflow-x-auto">
       <table className="w-full border-separate border-spacing-1 text-center text-sm [&_th:first-child]:text-left">
         <thead><tr>
-          <th className={TH}>과목 · 과목 관리자</th><th className={TH}>판정</th><th className={TH}>기한 준수</th><th className={TH}>지금 열린 지연</th>
+          <th className={TH}>과목 · 과목 관리자</th><th className={TH}>판정</th><th className={TH}>기한 준수</th><th className={TH}>현재 지연</th>
           {tracked ? <th className={TH}>처리 요청</th> : null}<th className={TH}>선생님 판정</th>
         </tr></thead>
         <tbody>{rows.map((r) => <tr key={r.subject ?? ""}>
           <td className="px-2 py-1 text-left">
-            {r.inTree ? <button type="button" onClick={() => onSubject(r.subject)} className="hover:text-primary text-sm font-bold">{r.label}</button> : <span className="text-sm font-bold" title="이 기간에는 이 과목의 의무가 없습니다">{r.label}</span>}
+            {r.inTree ? <button type="button" onClick={() => onSubject(r.subject)} className="hover:text-primary text-sm font-bold">{r.label}</button> : <span className="text-sm font-bold" title="해당 기간 업무 없음">{r.label}</span>}
             <span className="text-text-dim ml-2 text-xs font-medium">{r.managers.length ? r.managers.join(" · ") : "과목 관리자 없음"}</span>
           </td>
           <td className="px-1"><VerdictBadge v={r.verdict} /></td>
@@ -40,7 +40,7 @@ export function AdminOwnerBoard({ tree, late, managers, labels, nowMs, onSubject
               {r.late7 ? <span className="text-danger ml-1.5 text-xs font-bold">7일 이상 {n(r.late7)}</span> : null}</> : <span className="text-text-dim">없음</span>}
           </td>
           {tracked ? <td className="px-2 text-sm tabular-nums">
-            {r.lateTeachers ? <span className={r.requested < r.lateTeachers ? "font-bold" : "text-text-dim font-semibold"}>지연 선생님 {n(r.lateTeachers)}명 중 {n(r.requested)}명</span> : <span className="text-text-dim">—</span>}
+            {r.lateTeachers ? <span className={r.requested < r.lateTeachers ? "font-bold" : "text-text-dim font-semibold"}>지연 {n(r.lateTeachers)}명 중 요청 {n(r.requested)}명</span> : <span className="text-text-dim">—</span>}
             {r.requestsLate ? <span className="text-danger ml-1.5 text-xs font-bold">요청 기한 지남 {n(r.requestsLate)}</span> : null}
           </td> : null}
           <td className="px-2 text-sm tabular-nums">
@@ -51,6 +51,6 @@ export function AdminOwnerBoard({ tree, late, managers, labels, nowMs, onSubject
         </tr>)}</tbody>
       </table>
     </div>
-    <p className="text-text-dim px-2 pt-1 text-xs font-medium">{tracked ? "처리 요청 = 지연이 있는 선생님 가운데 과목 관리자가 처리 요청을 보내 아직 진행 중인 선생님 수 · " : ""}지연은 고른 기간과 무관하게 지금 열려 있는 것 · 이관된 미확인은 넣지 않습니다</p>
+    <p className="text-text-dim px-2 pt-1 text-xs font-medium">{tracked ? "처리 요청 = 지연 담당자 중 요청 진행 인원 · " : ""}현재 지연은 기간 무관 · 이관 제외</p>
   </section>;
 }

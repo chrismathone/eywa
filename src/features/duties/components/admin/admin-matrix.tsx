@@ -13,7 +13,7 @@ const TH = "text-text-dim px-2 py-1.5 text-xs font-semibold";
  * 이름을 누르면 그 선생님 · 칸을 누르면 그 선생님의 **그 종류만**. 둘째 열 = 판정(`judge`). 마지막 줄 = 전체(누르지 않는다).
  */
 export function AdminMatrix({ rows, total, avg = null, onCell }: { rows: MatrixRow[]; total: MatrixRow | null; avg?: Avg | null; onCell: (ownerId: string, kind: string | null) => void }) {
-  if (!rows.length) return <p className="text-text-dim px-3 py-6 text-center text-sm">이 기간의 의무가 없습니다.</p>;
+  if (!rows.length) return <p className="text-text-dim px-3 py-6 text-center text-sm">해당 기간 업무 없음</p>;
   return <div className="overflow-x-auto">
     <table className="w-full border-separate border-spacing-1 text-center text-sm [&_th:first-child]:text-left">
       <thead><tr>
@@ -37,7 +37,7 @@ export function AdminMatrix({ rows, total, avg = null, onCell }: { rows: MatrixR
         </tr> : null}
       </tbody>
     </table>
-    <p className="text-text-dim px-2 pt-1 text-xs font-medium">칸 = 기한이 온 것 중 제때 끝낸 비율 · <span className="text-danger font-bold">지연 n</span> = 이 기간 의무 중 기한이 지난 채 열린 것 · 회색 3/10 = 아직 기한 전(완료/전체)</p>
+    <p className="text-text-dim px-2 pt-1 text-xs font-medium">칸 = 기한 준수율 · <span className="text-danger font-bold">지연 n</span> = 기간 내 미처리 · 회색 3/10 = 기한 전(완료/전체)</p>
   </div>;
 }
 

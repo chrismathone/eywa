@@ -11,9 +11,9 @@ import { Kpi } from "./admin-kpi";
 export function AdminKpiRow({ cell, lateText }: { cell: Cell; lateText: string }) {
   const pct = cell.pct; const up = upcomingOf(cell);
   return <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-    <Kpi label="기한 준수" value={pct === null ? "—" : `${pct}`} unit={pct === null ? undefined : "%"} note={cell.due ? `기한이 온 ${cell.due}건 중 제때 ${cell.ontime}건` : "기한이 온 의무가 아직 없습니다"} pct={pct ?? undefined} tone={pct !== null && pct >= 90 ? "green" : "primary"} />
-    <Kpi label="이 기간 지연" value={`${cell.late}`} note={lateText} tone={cell.late ? "danger" : "muted"} />
-    <Kpi label="그중 7일 이상" value={`${cell.over7}`} note={cell.expired ? `미이행 확정 ${cell.expired}건` : ""} tone={cell.over7 ? "danger" : "muted"} />
+    <Kpi label="기한 준수" value={pct === null ? "—" : `${pct}`} unit={pct === null ? undefined : "%"} note={cell.due ? `기한 도래 ${cell.due}건 중 준수 ${cell.ontime}건` : "기한 도래 없음"} pct={pct ?? undefined} tone={pct !== null && pct >= 90 ? "green" : "primary"} />
+    <Kpi label="기간 내 지연" value={`${cell.late}`} note={lateText} tone={cell.late ? "danger" : "muted"} />
+    <Kpi label="7일 이상 지연" value={`${cell.over7}`} note={cell.expired ? `미이행 확정 ${cell.expired}건` : ""} tone={cell.over7 ? "danger" : "muted"} />
     <Kpi label="진행" value={`${cell.done}`} unit={`/ ${cell.total}`} note={up ? `기한 전 ${up}건` : ""} tone="muted" />
   </div>;
 }

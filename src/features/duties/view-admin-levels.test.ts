@@ -9,19 +9,19 @@ const CLASSES = { c1: { name: "중2 A", subject: "math", teacherId: "t1" }, c2: 
 const STUDENTS = { s1: { name: "김하준", school: "경명여중", grade: "중1" }, s2: { name: "이서아", school: null, grade: null } };
 
 describe("judge", () => {
-  it("90%+ 잘하고 있음 · 70~89 주의 · 70 미만 미흡 · 근거는 숫자 + 평균 비교", () => {
-    expect(judge(cellOf(c(10, 10, 10, 10)), { pct: 85, label: "과목" })).toMatchObject({ grade: "good", label: "잘하고 있음", reason: "제때 10/10(100%) · 과목 85%보다 높음" });
+  it("90%+ 양호 · 70~89 주의 · 70 미만 미흡 · 근거는 숫자 + 평균 비교", () => {
+    expect(judge(cellOf(c(10, 10, 10, 10)), { pct: 85, label: "과목" })).toMatchObject({ grade: "good", label: "양호", reason: "준수 10/10(100%) · 과목 85%보다 높음" });
     expect(judge(cellOf(c(10, 8, 10, 8, 2))).grade).toBe("warn");
-    expect(judge(cellOf(c(10, 6, 10, 6, 4)))).toMatchObject({ grade: "bad", reason: "제때 6/10(60%) · 지연 4" });
+    expect(judge(cellOf(c(10, 6, 10, 6, 4)))).toMatchObject({ grade: "bad", reason: "준수 6/10(60%) · 지연 4" });
     expect(judge(cellOf(c(0, 0, 0, 0)))).toMatchObject({ grade: "none", reason: "" });
   });
   it("🔴 기한 전 의무만 있으면 '평가 대기' — 달 초·수업 전에 미흡이 되지 않는다", () => {
-    expect(judge(cellOf(c(30, 3, 0, 0)))).toMatchObject({ grade: "wait", label: "평가 대기", reason: "기한 전 27 · 미리 끝냄 3" });
-    // 일간은 다 했는데 월간(말일 기한)이 남은 반 — 일간 실적대로 '잘하고 있음'.
-    expect(judge(cellOf(c(40, 21, 21, 21)))).toMatchObject({ grade: "good", reason: "제때 21/21(100%) · 기한 전 19" });
+    expect(judge(cellOf(c(30, 3, 0, 0)))).toMatchObject({ grade: "wait", label: "평가 대기", reason: "기한 전 27 · 조기 완료 3" });
+    // 일간은 다 했는데 월간(말일 기한)이 남은 반 — 일간 실적대로 '양호'.
+    expect(judge(cellOf(c(40, 21, 21, 21)))).toMatchObject({ grade: "good", reason: "준수 21/21(100%) · 기한 전 19" });
   });
   it("🔴 기한 온 것이 3건 미만이면 등급 없이 건수만 · 7일 넘은 지연이 있어도 등급을 덮어쓰지 않는다", () => {
-    expect(judge(cellOf(c(2, 0, 2, 0, 2)))).toMatchObject({ grade: "wait", reason: "제때 0/2(0%) · 지연 2" });
+    expect(judge(cellOf(c(2, 0, 2, 0, 2)))).toMatchObject({ grade: "wait", reason: "준수 0/2(0%) · 지연 2" });
     expect(judge(cellOf(c(20, 19, 20, 19, 1, { over7: 1 }))).grade).toBe("good");
   });
 });

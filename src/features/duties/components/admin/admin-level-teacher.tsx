@@ -34,9 +34,9 @@ export function TeacherLevel({ owner, avg, period, subject, tick, kind, onClearK
     <KindStatusStrip statuses={kindStatuses(owner.cells)} only={kind} />
     <section className="border-line-faint rounded-xl border p-3">
       <h4 className="text-sm font-bold">반별</h4>
-      {failed ? <p className="text-text-dim mt-2 text-sm">반별 집계를 불러오지 못했습니다.</p>
+      {failed ? <p className="text-text-dim mt-2 text-sm">반별 집계 조회 실패</p>
         : !data ? <p className="text-text-dim mt-2 text-sm">불러오는 중…</p>
-        : !lines.length ? <p className="text-text-dim mt-2 text-sm">이 기간의 의무가 없습니다.</p>
+        : !lines.length ? <p className="text-text-dim mt-2 text-sm">해당 기간 업무 없음</p>
         : <div className="mt-2 overflow-x-auto">
           <table className="w-full border-separate border-spacing-1 text-center text-sm [&_th:first-child]:text-left">
             <thead><tr><th className={TH}>반</th><th className={TH}>판정</th>{cols.map((c) => <th key={c.kind} className={TH}>{c.label}</th>)}{kind ? null : <th className={TH}>전체</th>}</tr></thead>

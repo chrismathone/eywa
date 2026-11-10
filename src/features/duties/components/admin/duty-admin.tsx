@@ -119,7 +119,7 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
   const attention = fold(attentionAll); const inheritedRows = fold(inheritedAll);
   const lateSection = <section className="border-line-faint rounded-xl border p-2">
     <div className="flex items-center gap-2 px-2 py-1">
-      <h4 className="min-w-0 flex-1 text-sm font-bold">지금 열린 지연 <span className="text-text-dim text-xs font-medium">{distinctStudents(liveHere)}명 · {liveHere.length}건 · 고른 기간과 무관(위 숫자는 고른 기간의 것)</span></h4>
+      <h4 className="min-w-0 flex-1 text-sm font-bold">현재 지연 <span className="text-text-dim text-xs font-medium">{distinctStudents(liveHere)}명 · {liveHere.length}건 · 기간 무관</span></h4>
       {ownerNode && ownerNode.ownerId !== NO_OWNER ? <LateRequestButton owner={{ id: ownerNode.ownerId, name: ownerNode.name }} items={liveHere} /> : null}
     </div>
     {/* 처리 요청은 선생님 단위다 — 전체·과목 단계는 줄(선생님)마다, 선생님·반 단계는 위 단추 하나(지금 보이는 범위의 지연). */}
@@ -136,12 +136,12 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
       {synced && !stale ? <span className="text-text-dim text-xs font-medium">장부 기준 {kstStamp(synced)}</span> : null}
       <ToolbarChip active={lateOnly} onClick={() => setLateOnly((v) => !v)} className="ml-auto">지연만</ToolbarChip>
     </Toolbar>
-    {stale ? <p className="bg-amber-soft text-amber rounded-lg px-3 py-2 text-sm font-semibold">{synced ? `장부를 마지막으로 맞춘 때가 ${kstStamp(synced)}입니다. 그 뒤에 저장된 출결·보고서·상담은 아직 반영되지 않았을 수 있습니다.` : "장부를 맞춘 기록이 없습니다. 아래 숫자가 실제와 다를 수 있습니다."}</p> : null}
-    {!cur ? <p className="text-text-dim text-sm">{failed[period] ? "업무 완성도를 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요." : "불러오는 중…"}</p> : null}
+    {stale ? <p className="bg-amber-soft text-amber rounded-lg px-3 py-2 text-sm font-semibold">{synced ? `장부 기준 ${kstStamp(synced)} · 이후 저장분은 미반영일 수 있음` : "장부 기준 시각 없음 · 수치가 실제와 다를 수 있음"}</p> : null}
+    {!cur ? <p className="text-text-dim text-sm">{failed[period] ? "조회 실패 · 잠시 후 다시 열어 주세요" : "불러오는 중…"}</p> : null}
 
     {cur ? <div className="grid gap-3 lg:grid-cols-[260px_minmax(0,1fr)] lg:items-start">
       <aside className="border-line-faint rounded-xl border p-2 lg:sticky lg:top-2">
-        {tree.length ? <AdminTree tree={tree} multi={multi} sel={sel} lateOnly={lateOnly} onSelect={(next) => { setOpenKey(null); setSel(next); }} /> : <p className="text-text-dim px-2 py-4 text-sm">이 기간의 의무가 없습니다.</p>}
+        {tree.length ? <AdminTree tree={tree} multi={multi} sel={sel} lateOnly={lateOnly} onSelect={(next) => { setOpenKey(null); setSel(next); }} /> : <p className="text-text-dim px-2 py-4 text-sm">해당 기간 업무 없음</p>}
       </aside>
       <main className="grid gap-4">
         {crumbs.length > 1 || sel.studentId ? <nav className="flex flex-wrap items-center gap-1 text-sm" aria-label="위치">
@@ -162,7 +162,7 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
 
         {!sel.studentId && subjectNode && ownerNode ? lateSection : null}
         {!sel.studentId && inheritedHere.length ? <section className="border-line-faint rounded-xl border p-2">
-          <h4 className="px-2 py-1 text-sm font-bold">이관된 미확인 <span className="text-text-dim text-xs font-medium">{distinctStudents(inheritedHere)}명 · {inheritedHere.length}건 · 평가를 시작하기 전에 기한이 지난 의무 — 판정과 지연 수에 넣지 않습니다</span></h4>
+          <h4 className="px-2 py-1 text-sm font-bold">이관 <span className="text-text-dim text-xs font-medium">{distinctStudents(inheritedHere)}명 · {inheritedHere.length}건 · 평가 개시 전 기한 경과 · 평가 제외</span></h4>
           <AdminAttention rows={inheritedRows} onOpen={(r) => (r.studentId || classNode ? openChild(r) : toggle("inh", r.key))} expand={expandOf("inh", inheritedAll, inheritedRows)} onOpenChild={openChild} muted />
         </section> : null}
       </main>

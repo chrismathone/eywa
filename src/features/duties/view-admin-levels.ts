@@ -12,18 +12,18 @@ import { add, cellOf, earlyDoneOf, EMPTY, MATRIX_COLUMNS, MIN_JUDGE, upcomingOf,
  * 🔴 지연이 오래됐다는 이유로 등급을 덮어쓰지 않는다 — 준수율(실적)과 지금 손댈 것(지연 수)은 다른 숫자다. 근거 한 줄은 숫자로.
  */
 export type Verdict = { grade: "good" | "warn" | "bad" | "wait" | "none"; label: string; reason: string };
-export const VERDICT_LABEL: Record<Verdict["grade"], string> = { good: "잘하고 있음", warn: "주의", bad: "미흡", wait: "평가 대기", none: "의무 없음" };
+export const VERDICT_LABEL: Record<Verdict["grade"], string> = { good: "양호", warn: "주의", bad: "미흡", wait: "평가 대기", none: "해당 없음" };
 export type Avg = { pct: number | null; label: string };
 export function judge(cell: Cell, avg: Avg | null = null): Verdict {
   if (!cell.total) return { grade: "none", label: VERDICT_LABEL.none, reason: "" };
   const up = upcomingOf(cell);
   const parts: string[] = [];
-  if (cell.due) parts.push(`제때 ${cell.ontime}/${cell.due}${cell.pct === null ? "" : `(${cell.pct}%)`}`);
+  if (cell.due) parts.push(`준수 ${cell.ontime}/${cell.due}${cell.pct === null ? "" : `(${cell.pct}%)`}`);
   if (cell.late) parts.push(`지연 ${cell.late}`);
-  if (cell.lateDone) parts.push(`늦게 끝냄 ${cell.lateDone}`);
+  if (cell.lateDone) parts.push(`지연 완료 ${cell.lateDone}`);
   if (cell.expired) parts.push(`미이행 확정 ${cell.expired}`);
   if (up) parts.push(`기한 전 ${up}`);
-  const early = earlyDoneOf(cell); if (early) parts.push(`미리 끝냄 ${early}`);
+  const early = earlyDoneOf(cell); if (early) parts.push(`조기 완료 ${early}`);
   if (cell.pct === null || cell.due < MIN_JUDGE) return { grade: "wait", label: VERDICT_LABEL.wait, reason: parts.join(" · ") };
   const grade: Verdict["grade"] = cell.pct >= 90 ? "good" : cell.pct >= 70 ? "warn" : "bad";
   if (avg && avg.pct !== null && cell.pct !== avg.pct) parts.push(`${avg.label} ${avg.pct}%보다 ${cell.pct > avg.pct ? "높음" : "낮음"}`);

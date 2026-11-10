@@ -80,12 +80,12 @@ export function cellTone(c: Cell): CellTone {
 }
 /** 칸 설명(마우스 오버) — 숫자의 뜻을 글로. */
 export function cellTitle(c: Counts): string {
-  const parts = [c.due ? `기한이 온 ${c.due}건 중 제때 ${c.ontime}건` : "기한이 온 의무 없음"];
+  const parts = [c.due ? `기한 도래 ${c.due}건 중 준수 ${c.ontime}건` : "기한 도래 없음"];
   if (c.late) parts.push(`지연 ${c.late}`);
-  if (c.lateDone) parts.push(`늦게 끝냄 ${c.lateDone}`);
+  if (c.lateDone) parts.push(`지연 완료 ${c.lateDone}`);
   if (c.expired) parts.push(`미이행 확정 ${c.expired}`);
   const up = upcomingOf(c); if (up) parts.push(`기한 전 ${up}`);
-  const early = earlyDoneOf(c); if (early) parts.push(`미리 끝냄 ${early}`);
+  const early = earlyDoneOf(c); if (early) parts.push(`조기 완료 ${early}`);
   return parts.join(" · ");
 }
 /** 과목 거르기 — undefined = 전 과목 · null = 과목 없는 것만('과목 미정') · 글자 = 그 과목. */
