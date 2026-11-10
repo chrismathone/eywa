@@ -244,6 +244,9 @@ describe("배선", () => {
         .map(read)
         .join("\n"),
     ).toMatch(/dailyTestSkip: su\.dailyTestSkip/);
+    // 합쳐 읽으면 세션 입력 한 곳만 남아도 통과한다 — 두 경로를 따로 본다(적대 리뷰 2026-11-11).
+    expect(read("./session-input.ts")).toMatch(/dailyTestSkip: su\.dailyTestSkip/);
+    expect(read("./components/use-report-draft-generation.ts")).toMatch(/\{ dailyTestSkip: su\.dailyTestSkip, dailyTest: "" \}/);
     expect(read("./components/onescreen-client.tsx")).toMatch(/dailyTestSkip: skip, \.\.\.\(skip \? \{ dailyScore: null \} : \{\}\)/);
     expect(read("./server/roster.ts")).toMatch(/su\.dailyTestSkip = readTestSkip\(entry\.dailyTestSkip\)/);
   });

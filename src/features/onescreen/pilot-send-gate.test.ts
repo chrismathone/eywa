@@ -54,6 +54,12 @@ describe("배선", () => {
     ]) {
       expect(read(`./${f}`), f).toMatch(/pilotSendBlocks\(/);
     }
+    // 판정이 순수 모듈(bulk-send-preview)로 옮겨 간 뒤에는 **발송 훅이 그 판정을 실제로 거치는지**를 따로 본다(적대 리뷰 2026-11-11) —
+    // 거르지 않고 보내도 위 단언은 순수 모듈 덕에 그대로 통과한다.
+    const bulkSend = read("./components/use-bulk-send.ts");
+    expect(bulkSend).toMatch(/\}\s*=\s*planBulkSendExclusions\(\{/);
+    expect(bulkSend).toMatch(/rows = sendable;/);
+    expect(bulkSend.indexOf("rows = sendable;")).toBeLessThan(bulkSend.indexOf("await queueOne("));
     expect(client).toMatch(/pilotCheck: \{ factsCurrent:/);
     expect(client).toMatch(/isPilotGateError\(res\.error\)/);
     const server = read("./server/actions.ts");

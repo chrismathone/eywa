@@ -380,5 +380,9 @@ describe("배선 — 두 발송 경로와 화면", () => {
     expect(CLIENT).toContain("if (isBoardWaitStatus(res.status)) boardWait++;");
     expect(CLIENT).toContain('else if (res.status === "no_class" || isBoardBlockedStatus(res.status)) noClass++;');
     expect(CLIENT).toContain('tf("os.c.bulkBoardWait", { n: boardWait })');
+    // 집계가 순수 모듈(bulk-send-result)로 옮겨 간 뒤에는 **발송 훅이 결과마다 그 집계를 쓰는지**를 따로 본다(적대 리뷰 2026-11-11).
+    const bulkSend = readFileSync(join(process.cwd(), "src/features/onescreen/components/use-bulk-send.ts"), "utf8");
+    expect(bulkSend).toMatch(/const res = await queueOne\([^)]*\);\s*tally\.add\(res\);/);
+    expect(bulkSend).toMatch(/toast\.success\(tally\.message\(/);
   });
 });
