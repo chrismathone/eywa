@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { reportWarning } from "@/lib/observability/report-error";
 import { isMentStyleTableMissingError, parseMentStyleProfile, type MentStyleProfile } from "../ment-style";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * 강사별 말투 프로파일(0262a) — **읽기**의 서버 헬퍼(빌드는 ./ment-style-build.ts). 규칙은 전부 ../ment-style.ts(순수)에서 온다.
@@ -52,7 +53,7 @@ export async function listTeacherMentStyles(
     .order("built_at", { ascending: false });
   if (error) {
     if (isMentStyleTableMissingError(error)) return { rows: [], tableMissing: true };
-    return { rows: [], tableMissing: false, error: error.message };
+    return { rows: [], tableMissing: false, error: explainDbError(error, { scope: "onescreen.ment-style-db.listTeacherMentStyles", fallback: "말투 목록을 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   }
   const ids = [...new Set((data ?? []).map((r) => r.teacher_id as string))];
   const users = await fetchInChunks(ids, (chunk) => admin.from("users").select("id, display_name").eq("tenant_id", tenantId).in("id", chunk));

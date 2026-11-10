@@ -19,6 +19,7 @@ import { normalizeApprovalChecks } from "./expense-queries";
 import { expenseWriteScope } from "./expense-scope";
 import { expenseVisibleToActor } from "./expense-visibility";
 import { DEFAULT_CURRENCY, isValidCurrency, roundMoney } from "../currencies";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 const RECEIPTS_BUCKET = "expense-receipts";
 const RECEIPT_TYPES = new Set([
@@ -203,7 +204,7 @@ export async function createExpense(_prev: ExpenseState, formData: FormData): Pr
     })
     .select("id")
     .maybeSingle());
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.expense-actions.createExpense", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   await logAction({
     action: "expense_create",
@@ -269,7 +270,7 @@ export async function updateExpense(_prev: ExpenseState, formData: FormData): Pr
       updated_at: new Date().toISOString(),
     })
     .eq("tenant_id", user.tenantId).eq("id", id).select("id"));
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.expense-actions.updateExpense", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   await logAction({
     action: "expense_update",
@@ -324,7 +325,7 @@ export async function deleteExpense(_prev: ExpenseState, formData: FormData): Pr
   // `.select("id")` = 실제로 지워진 행 확인. RLS에 막히면 PostgREST가 **에러 없이 0행**을 지운다 —
   // 그때 로그를 남기면 감사로그가 일어나지 않은 삭제를 사실로 적는다(안 지워졌으면 기록도 안 남긴다).
   const { data: gone, error } = await writeSessionFirst("mutate", (db) => db.from("expenses").delete().eq("tenant_id", user.tenantId).eq("id", id).select("id"));
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.expense-actions.deleteExpense", fallback: "삭제하지 못했습니다 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
 
   if (gone?.length) {
     await logAction({
@@ -369,7 +370,7 @@ export async function toggleExpenseApproval(
     .select("approval_checks, title") // title = 감사로그 '대상' 라벨(같은 왕복에서 함께 읽는다)
     .eq("tenant_id", user.tenantId).eq("id", id)
     .maybeSingle();
-  if (readErr) return { error: readErr.message };
+  if (readErr) return { error: explainDbError(readErr, { scope: "billing.expense-actions.toggleExpenseApproval", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   if (!row) return { error: "지출을 찾을 수 없습니다" };
   const title = row.title as string | null;
 
@@ -382,7 +383,7 @@ export async function toggleExpenseApproval(
     .from("expenses")
     .update({ approval_checks: base, approval_status: approvalStatus, updated_at: new Date().toISOString() })
     .eq("tenant_id", user.tenantId).eq("id", id).select("id"));
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.expense-actions.toggleExpenseApproval", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   // 🔴 **방향을 반드시 남긴다** — "누가 결재를 눌렀나"만큼 "누가 해제했나"가 중요하다(해제는 이미 승인된
   //    지출을 되돌리는 행위라, 방향 없이 "결재 변경"만 남기면 역검수에서 둘을 구분할 수 없다).
@@ -421,7 +422,7 @@ export async function duplicateExpense(_prev: ExpenseState, formData: FormData):
     )
     .eq("tenant_id", user.tenantId).eq("id", id)
     .maybeSingle();
-  if (readErr) return { error: readErr.message };
+  if (readErr) return { error: explainDbError(readErr, { scope: "billing.expense-actions.duplicateExpense", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   if (!src) return { error: "원본 지출을 찾을 수 없습니다" };
   // 강사(own)는 본인이 작성한 결의서만 복제 가능(타인 결의서 열람·복제 차단).
   if (scope === "own" && src.created_by !== user.id) {
@@ -452,7 +453,7 @@ export async function duplicateExpense(_prev: ExpenseState, formData: FormData):
     })
     .select("id")
     .maybeSingle());
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.expense-actions.duplicateExpense", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   // 복제는 **같은 금액의 지출이 하나 더 생기는** 일이라 create와 갈라 둔다 — 중복 지출을 되짚을 때
   // "새로 쓴 것"과 "복제한 것"이 구분돼야 하고, 원본 id(sourceId)가 그 대조의 유일한 실마리다.
@@ -497,7 +498,7 @@ export async function setExpenseReceiptType(
     .from("expenses")
     .update({ receipt_type: type || null, updated_at: new Date().toISOString() })
     .eq("tenant_id", user.tenantId).eq("id", id).select("id"));
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.expense-actions.setExpenseReceiptType", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   await logAction({
     action: "expense_receipt_type",
@@ -592,7 +593,7 @@ export async function addExpenseReceipt(
     .eq("tenant_id", user.tenantId).eq("id", id).select("id"));
   if (error) {
     await removeObject(path, { bucket: RECEIPTS_BUCKET }).catch(() => {});
-    return { error: error.message };
+    return { error: explainDbError(error, { scope: "billing.expense-actions.addExpenseReceipt", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   }
 
   await logAction({
@@ -636,7 +637,7 @@ export async function removeExpenseReceipt(
     .from("expenses")
     .update({ receipt_urls: list, updated_at: new Date().toISOString() })
     .eq("tenant_id", user.tenantId).eq("id", id).select("id"));
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.expense-actions.removeExpenseReceipt", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   if (!isLegacy) await removeObject(path, { bucket: RECEIPTS_BUCKET }).catch(() => {});
 

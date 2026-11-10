@@ -6,7 +6,7 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { viewAsTeacher } from "@/lib/auth/view-as";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { humanizeDbError } from "@/lib/supabase/db-error";
+import { humanizeDbError, explainDbError } from "@/lib/supabase/db-error";
 import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
 import { notifyUsers } from "@/features/notifications/server/notify";
@@ -662,7 +662,7 @@ export async function decideDocument(
       .in("id", ids)
       .eq("decision", "pending") // 동시 결재 방어
       .select("id");
-    if (deferErr) return { error: `후결 처리 실패 — ${deferErr.message}` };
+    if (deferErr) return { error: explainDbError(deferErr, { scope: "approvals.actions.decideDocument", fallback: "후결 처리 실패 — 잠시 후 다시 시도해 주세요" }).message };
     if ((marked ?? []).length !== ids.length) {
       // 일부가 그 사이 처리됐다 — 방금 표시한 것만 되돌리고 사용자에게 다시 보게 한다.
       await admin
@@ -681,7 +681,7 @@ export async function decideDocument(
     .eq("id", target.id)
     .eq("decision", "pending") // 동시 클릭 방어 — 이미 처리된 칸은 안 덮는다
     .select("id");
-  if (stepErr) return { error: `결재 저장 실패 — ${stepErr.message}` };
+  if (stepErr) return { error: explainDbError(stepErr, { scope: "approvals.actions.decideDocument", fallback: "결재 저장 실패 — 잠시 후 다시 시도해 주세요" }).message };
   if ((written ?? []).length === 0) {
     return { error: "이미 결재된 칸입니다 — 새로고침 후 확인해 주세요" };
   }
@@ -697,7 +697,7 @@ export async function decideDocument(
       .gt("step_no", target.step_no)
       .eq("decision", "pending")
       .select("id");
-    if (skipErr) return { error: `전결 처리 실패 — ${skipErr.message}` };
+    if (skipErr) return { error: explainDbError(skipErr, { scope: "approvals.actions.decideDocument", fallback: "전결 처리 실패 — 잠시 후 다시 시도해 주세요" }).message };
     skippedIds = (skipped ?? []).map((r) => r.id as string);
   }
 
@@ -884,7 +884,7 @@ export async function confirmDeferredStep(
     .eq("decision", "deferred")
     .select("id")
     .maybeSingle();
-  if (error) return { error: `후결 확인 실패 — ${error.message}` };
+  if (error) return { error: explainDbError(error, { scope: "approvals.actions.confirmDeferredStep", fallback: "후결 확인 실패 — 잠시 후 다시 시도해 주세요" }).message };
   if (!updated) return { error: "후결 확인할 칸이 없습니다" };
 
   await logAction({
@@ -933,7 +933,7 @@ export async function withdrawDocument(
     .eq("status", "pending")
     .select("id, title, current_step")
     .maybeSingle();
-  if (error) return { error: `회수 실패 — ${error.message}` };
+  if (error) return { error: explainDbError(error, { scope: "approvals.actions.withdrawDocument", fallback: "회수 실패 — 잠시 후 다시 시도해 주세요" }).message };
   if (!updated) return { error: "진행중인 본인 기안만 회수할 수 있습니다" };
 
   // 결재 요청을 받은 사람(현재 차례)에게 회수 사실을 알린다(N13) — 알림을 누르면 '회수됨'이 보인다.
@@ -1067,7 +1067,7 @@ export async function deleteApprovalComment(
     .eq("author_id", user.id) // 남의 댓글은 못 지운다
     .select("document_id")
     .maybeSingle();
-  if (error) return { error: `댓글 삭제 실패 — ${error.message}` };
+  if (error) return { error: explainDbError(error, { scope: "approvals.actions.deleteApprovalComment", fallback: "댓글 삭제 실패 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
   if (!data) return { error: "본인이 쓴 댓글만 삭제할 수 있습니다" };
 
   // 감사로그 대상은 사람이 읽는 라벨(문서 제목) — raw UUID를 화면에 내보내지 않는다(작업 선호).
@@ -1163,7 +1163,7 @@ export async function deleteLineTemplate(
     .eq("owner_id", user.id) // 남의 템플릿은 못 지운다
     .select("id")
     .maybeSingle();
-  if (error) return { error: `삭제 실패 — ${error.message}` };
+  if (error) return { error: explainDbError(error, { scope: "approvals.actions.deleteLineTemplate", fallback: "삭제 실패 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
   if (!data) return { error: "본인이 저장한 결재선만 삭제할 수 있습니다" };
   revalidatePath("/approvals/new");
   return { ok: true, notice: "저장된 결재선을 삭제했습니다" };

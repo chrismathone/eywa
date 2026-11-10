@@ -6,6 +6,7 @@ import { DEFAULT_CURRENCY, roundMoney } from "@/features/billing/currencies";
 import { IMPORT_META } from "../kinds";
 import { parseOption, type ColumnSpec, type ImportPreviewRow, type SheetSpec } from "../spec";
 import type { ImporterDef } from "../server/types";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * 지출 가져오기 — 체크리스트 21번 "비용·지출"(과거 지출 내역을 옮길 때). 행 모양은 **사무실 직접 작성(`createExpense`)과 같다**
@@ -214,7 +215,7 @@ const def: ImporterDef<Plan> = {
     }
     for (const u of plan.updates) {
       const { error } = await db.from("expenses").update(u.patch).eq("id", u.id).eq("tenant_id", ctx.tenantId);
-      if (error) return { error: `지출 고치기 중 멈췄습니다 — ${error.message} (새 지출 ${inserted}건은 들어갔습니다)` };
+      if (error) return { error: `${explainDbError(error, { scope: "excel-import.expenses", fallback: "지출 고치기 중 멈췄습니다 — 잠시 후 다시 시도해 주세요" }).message} (새 지출 ${inserted}건은 들어갔습니다)` };
     }
     return {};
   },

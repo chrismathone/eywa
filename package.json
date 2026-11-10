@@ -7,7 +7,8 @@
     "build": "vitest run src/features/students/server/past-class-teachers.test.ts src/features/students/lib/past-class-teacher.test.ts && next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "node --max-old-space-size=6144 node_modules/typescript/bin/tsc --noEmit",
+    "verify": "node scripts/verify-changed.mjs",
+    "typecheck": "node --max-old-space-size=8192 node_modules/typescript/bin/tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
@@ -18,7 +19,7 @@
     "manual:build": "node --env-file=.env.local scripts/_manual/build.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node -e \"console.error('db:migrate는 2026-10-27 SQL 시즌2부터 쓰지 않습니다 — 새(빈) DB 셋업은 pnpm db:alphas · 운영 DB에는 새 s2_NNNN 파일 하나만 원장 승인 뒤 적용'); process.exit(1)\"",
-    "db:push": "drizzle-kit push",
+    "db:push": "node -e \"console.error('db:push는 쓰지 않습니다 — drizzle-kit push는 시즌1 SQL의 RLS·트리거·함수를 몰라 삭제를 제안할 수 있고, 운영 DB에 바로 씁니다. 운영 DB에는 새 s2_NNNN 파일 하나만 원장 승인 뒤 적용 · 새(빈) DB 셋업은 pnpm db:alphas'); process.exit(1)\"",
     "db:studio": "drizzle-kit studio",
     "db:alphas": "tsx scripts/apply-all-alphas.ts",
     "test:rls": "vitest run --config vitest.integration.config.ts"

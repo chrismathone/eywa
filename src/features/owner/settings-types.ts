@@ -628,10 +628,14 @@ const specialAccessSchema = z.object({
   // 여기 지정한 사람이 승인 담당인 과목은 그 사람들만 관리자 승인 후보, 지정한 사람이 없는 과목은 종전대로 그 과목 관리자 전원.
   // 없음 = 빈 명단 = 종전 그대로. 소비처 = `reportStaff`(withdrawal-reports/server/queries.ts) → `narrowApprovalSubjects`.
   withdrawalApproverIds: z.array(z.string().uuid()).max(80).optional(),
+  // 퇴원보고서 데스크 담당자(원장 2026-11-06 *"데스크 담당자는 학원 설정에서 지정"*) — 퇴원보고서에서 원장이 환불을 승인할 때 고르는 데스크 담당은
+  // 여기 지정한 사람(그중 수납 쓰기 권한이 있는 사람 — `billingWriters`)만. 없음 = 빈 명단 = 환불 승인을 막는다(원장 등으로 대신하지 않는다).
+  // 소비처 = `loadDeskStaff`(withdrawal-reports/server/refund.ts) · DB `attach_withdrawal_report_refund`(s2_0037 — 같은 칸을 읽는다).
+  withdrawalDeskIds: z.array(z.string().uuid()).max(80).optional(),
   staffSubjectScopes: z.array(staffSubjectScopeSchema).max(80).default([]),
 });
 /** 사람 id 목록인 칸(과목 범위는 줄 모양이 달라 따로 다룬다). */
-export const SPECIAL_ACCESS_ID_LISTS = ["payslipViewerIds", "payslipManagerIds", "leaveAdjusterIds", "classSplitterIds", "enrollmentDateEditorIds", "studentStatusManagerIds", "staffTaskMonitorIds", "vendorViewerIds", "jjReportManagerIds", "beforeClassReportIds", "withdrawalApproverIds"] as const;
+export const SPECIAL_ACCESS_ID_LISTS = ["payslipViewerIds", "payslipManagerIds", "leaveAdjusterIds", "classSplitterIds", "enrollmentDateEditorIds", "studentStatusManagerIds", "staffTaskMonitorIds", "vendorViewerIds", "jjReportManagerIds", "beforeClassReportIds", "withdrawalApproverIds", "withdrawalDeskIds"] as const;
 export const permissionsSchema = z
   .object({
     overrides: z.array(permissionOverrideSchema).max(MENU_KEYS.length * SYSTEM_ROLES.length),
@@ -802,6 +806,9 @@ export const dashboardItemSchema = z.object({
   note: z.string().trim().max(80).optional(),
   amounts: z.boolean().optional(),
   phones: z.boolean().optional(),
+  /** KPI 칸 — 새 대시보드 '한눈에 보기' 머리 칸 · 오늘 운영 띠에서 뺌(`features/dashboard/layout/board.ts`). */
+  glance: z.boolean().optional(),
+  today: z.boolean().optional(),
 });
 export const dashboardRoleLayoutSchema = z.object({
   role: z.enum(BUNDLES),

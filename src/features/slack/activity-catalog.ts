@@ -180,6 +180,7 @@ const FORBID_KEYS = new Set([
   "assistant_thread_delete",
   "assistant_thread_rename",
   "assistant_advice_update",
+  "assistant_advice_outcomes",
 ]);
 /** 대상 문구 없이 — 돈 계열(금액·계좌가 대상 라벨에 섞일 수 있다) + 연차. */
 const OPAQUE_CATEGORIES = new Set(["billing"]);

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { maskName, maskText, pseudonym } from "@/features/consultations/export-masking";
 import { visibleConsultationSummary } from "@/features/consultations/internal-link";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 // 상담 텍스트 외부 AI 반출 API — 원장의 외부 챗봇("AI 사무실")이 읽는 읽기 전용 엔드포인트.
 // 인증: Authorization: Bearer <CONSULT_EXPORT_TOKEN>(env). 미설정 시 503(기능 꺼짐), 불일치 401.
@@ -84,7 +85,7 @@ export async function GET(req: Request) {
       .range(offset, offset + limit - 1);
     if (since) q = q.gte("consulted_at", since);
     const { data, error, count } = await q;
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return NextResponse.json({ error: explainDbError(error, { scope: "api.exports.consultations", fallback: "상담 기록을 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message }, { status: 500 });
     const rows = (data ?? []) as unknown as StudentRow[];
 
     // 이름 마스킹 재료 — 관련 학생의 이름·학부모명 + 전 직원 이름. B4: 독립 조회 병렬.
@@ -95,7 +96,7 @@ export async function GET(req: Request) {
         : Promise.resolve({ data: [], error: null }),
       loadStaffNames(admin, tenantId),
     ]);
-    if (studRes.error) return NextResponse.json({ error: studRes.error.message }, { status: 500 });
+    if (studRes.error) return NextResponse.json({ error: explainDbError(studRes.error, { scope: "api.exports.consultations", fallback: "상담 기록을 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message }, { status: 500 });
     const nameMap = new Map<string, { name: string | null; parent: string | null }>();
     for (const s of studRes.data ?? []) nameMap.set(s.id as string, { name: s.name, parent: s.parent_name });
 
@@ -130,7 +131,7 @@ export async function GET(req: Request) {
       .range(offset, offset + limit - 1);
     if (since) q = q.gte("created_at", since);
     const { data, error, count } = await q;
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return NextResponse.json({ error: explainDbError(error, { scope: "api.exports.consultations", fallback: "상담 기록을 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message }, { status: 500 });
     const rows = (data ?? []) as unknown as EnrollmentRow[];
     const staffNames = await loadStaffNames(admin, tenantId); // 기록자 이름 마스킹(재원생 상담과 동일 이유)
 

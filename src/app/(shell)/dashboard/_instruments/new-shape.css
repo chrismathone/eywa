@@ -5,6 +5,8 @@
 
 /* ---------- 핵심 업무 3칸 ---------- */
 .aywa-instruments .ns-core { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0 0 18px; }
+.aywa-instruments .ns-core[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.aywa-instruments .ns-core[data-count="1"] { grid-template-columns: minmax(0, 1fr); }
 .aywa-instruments .ns-core-item {
   display: grid; gap: 4px; min-width: 0; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
   transition: border-color .12s, box-shadow .12s, background .12s;

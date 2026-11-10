@@ -13,6 +13,7 @@ import { logAction } from "@/features/audit/server/log";
 import { normalizeNoticeAudience } from "@/features/notices/audience";
 import { generateDailyBriefing } from "./briefing";
 import { DAILY_BRIEFING_DISABLED_MESSAGE, DAILY_BRIEFING_ENABLED } from "../briefing-status";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 export type AnnouncementActionState = { error?: string; ok?: boolean } | undefined;
 
@@ -61,7 +62,7 @@ export async function createAnnouncement(
     pinned: input.pinned,
     author_id: user.id,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "dashboard.actions.createAnnouncement", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   // 직원 공지는 전 직원이 보는 글이라 "누가 이 문구를 올렸나"가 역검수 대상이다(원장 2026-09-09).
   // ⚠️ 본문(content)은 싣지 않는다 — 감사로그는 '누가·언제·무엇을'이지 글 보관소가 아니다(제목으로 찾는다).
@@ -102,7 +103,7 @@ export async function updateAnnouncement(
       updated_at: new Date().toISOString(),
     })
     .eq("id", input.id);
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "dashboard.actions.updateAnnouncement", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   await logAction({
     action: "announcement_update",
@@ -138,7 +139,7 @@ export async function deleteAnnouncement(
     .maybeSingle();
 
   const { error } = await supabase.from("announcements").delete().eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "dashboard.actions.deleteAnnouncement", fallback: "삭제하지 못했습니다 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
 
   await logAction({
     action: "announcement_delete",
@@ -261,7 +262,7 @@ export async function toggleAnnouncementPin(
     .from("announcements")
     .update({ pinned, updated_at: new Date().toISOString() })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "dashboard.actions.toggleAnnouncementPin", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   await logAction({
     action: "announcement_pin",

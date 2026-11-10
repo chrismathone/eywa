@@ -13,7 +13,8 @@ import { flagsFromMode, isShellMode } from "@/lib/license/shell-mode";
 import { SYSTEM_ROLES } from "@/lib/permissions";
 import { SEAT_FEATURES, TOGGLE_FEATURES, WINDOW_KEEPALIVE_KEY } from "../labels";
 import { logSuperAdminAction } from "./audit";
-import { logDbError } from "@/lib/supabase/db-error";
+import { logDbError, explainDbError } from "@/lib/supabase/db-error";
+import { authPasswordErrorMessage } from "@/lib/auth/auth-password-error";
 
 export type CreateTenantState =
   | { error?: string; fieldErrors?: Record<string, string> }
@@ -69,7 +70,7 @@ export async function createTenantWithMaster(
     if (tenantErr.code === "23505") {
       return { fieldErrors: { slug: "이미 사용 중인 slug 입니다" } };
     }
-    return { error: `tenant 생성 실패: ${tenantErr.message}` };
+    return { error: explainDbError(tenantErr, { scope: "super-admin.actions.createTenantWithMaster", fallback: "학원 생성 실패 — 잠시 후 다시 시도해 주세요" }).message };
   }
   const tenantId = tenantRow.id as string;
 
@@ -83,7 +84,7 @@ export async function createTenantWithMaster(
   if (settingsErr) {
     await admin.from("tenants").delete().eq("id", tenantId);
     updateTag(PUBLIC_BRANDING_TENANTS_TAG);
-    return { error: `학원 설정 생성 실패: ${settingsErr.message}` };
+    return { error: explainDbError(settingsErr, { scope: "super-admin.actions.createTenantWithMaster", fallback: "학원 설정 생성 실패 — 잠시 후 다시 시도해 주세요" }).message };
   }
 
   // 2) auth.users 생성
@@ -99,7 +100,7 @@ export async function createTenantWithMaster(
     await admin.from("tenants").delete().eq("id", tenantId);
     updateTag(PUBLIC_BRANDING_TENANTS_TAG);
     if (isEmailTakenAuthError(authErr)) return { error: `master 계정 생성 실패 — ${EMAIL_TAKEN_MESSAGE}` };
-    return { error: `master 계정 생성 실패: ${authErr.message}` };
+    return { error: authPasswordErrorMessage(authErr) ?? explainDbError(authErr, { scope: "super-admin.actions.createTenantWithMaster", fallback: "원장 계정 생성 실패 — 잠시 후 다시 시도해 주세요" }).message };
   }
 
   // public.users에 display_name 보강 (트리거가 raw_user_meta_data.full_name을 우선이라 보장 차원)
@@ -146,7 +147,7 @@ export async function updateTenant(
 
   const admin = createAdminClient();
   const { error } = await admin.from("tenants").update({ name, plan }).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "super-admin.actions.updateTenant", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   await logSuperAdminAction({
     actorId: sa.id,
@@ -227,7 +228,7 @@ export async function changeUserRole(
   const { error: authErr } = await admin.auth.admin.updateUserById(userId, {
     app_metadata: { system_role: role, tenant_id: tenantId },
   });
-  if (authErr) return { error: authErr.message };
+  if (authErr) return { error: explainDbError(authErr, { scope: "super-admin.actions.changeUserRole", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   // public.users 즉시 반영 (트리거가 처리하지만 명시)
   await admin.from("users").update({ system_role: role }).eq("id", userId).eq("tenant_id", tenantId);
 
@@ -268,7 +269,7 @@ export async function resetUserPassword(
     .join("");
 
   const { error } = await admin.auth.admin.updateUserById(userId, { password: tempPassword });
-  if (error) return { error: error.message };
+  if (error) return { error: authPasswordErrorMessage(error) ?? explainDbError(error, { scope: "super-admin.actions.resetUserPassword", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   await logSuperAdminAction({
     actorId: sa.id,
@@ -314,7 +315,7 @@ export async function setUserActive(
   const { error: authErr } = await admin.auth.admin.updateUserById(userId, {
     ban_duration: active ? "none" : "876000h",
   });
-  if (authErr) return { error: authErr.message };
+  if (authErr) return { error: explainDbError(authErr, { scope: "super-admin.actions.setUserActive", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   await admin.from("users").update({ status: active ? "active" : "inactive" }).eq("id", userId).eq("tenant_id", tenantId);
 
   await logSuperAdminAction({
@@ -355,7 +356,7 @@ export async function upsertTenantLicense(
       { tenant_id: tenantId, feature, max_seats: maxSeats, is_active: true },
       { onConflict: "tenant_id,feature" },
     );
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "super-admin.actions.upsertTenantLicense", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   await logSuperAdminAction({
     actorId: sa.id,
@@ -393,7 +394,7 @@ export async function setTenantWindowMode(_prev: LicenseState, formData: FormDat
     ],
     { onConflict: "tenant_id,feature" },
   );
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "super-admin.actions.setTenantWindowMode", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   await logSuperAdminAction({
     actorId: sa.id,
@@ -431,7 +432,7 @@ export async function toggleTenantLicense(
         : { tenant_id: tenantId, feature, is_active: false },
       { onConflict: "tenant_id,feature" },
     );
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "super-admin.actions.toggleTenantLicense", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   await logSuperAdminAction({
     actorId: sa.id,

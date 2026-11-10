@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { freshSavedFilters } from "@/lib/filter-reset/server";
 import { parseSchoolStatsPrefs, type SchoolStatsPrefs } from "../school-view-prefs";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * 학교별 점유율 보기 설정을 **본인 계정**에 저장 — `users.ui_prefs.enrollmentStats`.
@@ -33,7 +34,7 @@ export async function saveSchoolStatsPrefs(
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
+  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "enrollment.school-prefs-actions.saveSchoolStatsPrefs", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   const raw =
     row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
@@ -45,7 +46,7 @@ export async function saveSchoolStatsPrefs(
     .update({ ui_prefs: { ...raw, enrollmentStats: safe } })
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "enrollment.school-prefs-actions.saveSchoolStatsPrefs", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }
 

@@ -4,6 +4,7 @@ import { useId, useRef, useState } from "react";
 import { TOOLBAR_SEG_BOX, TOOLBAR_SEG_ITEM, TOOLBAR_SEG_OFF, TOOLBAR_SEG_ON_PRIMARY } from "@/components/toolbar-controls";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TONE_SOFT } from "@/lib/design/semantic-color";
 import { addDays, kstToday } from "@/lib/date-kst";
 import {
   ADVICE_RATING_LABEL,
@@ -18,6 +19,8 @@ import {
   type AdviceStatus,
   type AdviceView,
 } from "../advice";
+import { VERDICT_LABEL } from "../advice-outcome";
+import { PlanLine } from "./advice-lines";
 
 const ACTIONS: AdviceStatus[] = ["adopted", "done", "on_hold", "declined"];
 const SAVED_TEXT: Record<AdviceStatus, string> = {
@@ -39,7 +42,7 @@ const newer = (a: AdviceView, b: AdviceView | null | undefined) => (b && b.statu
 /**
  * 비서 의견 한 줄의 확인 지표 · 원장 처리(제안 → 결과 → 학습 1단계 · 원장 2026-11-06 *"그 해결책이 어떤 결과를 가져왔는지 … 결과 피드백"*).
  * 채택 · 보류는 바로 저장 · 완료는 한 날·해 본 내용·어땠나 · 안 함은 까닭 · 처리한 것을 다시 누르면 채택·보류는 처리 전으로, 완료·안 함은 고치기.
- * 다시 재어 효과를 판정하는 것은 다음 단계 — 여기서는 기준값만 보인다(재지 않는 날짜를 약속하지 않는다).
+ * 다시 잴 날에 크론이 같은 조회문으로 다시 재어(2단계 · /api/cron/assistant-outcomes) 결과 줄 — 기준 → 지금 · 판정(개선·변화 없음·악화·판정 보류).
  */
 export function AdviceStatusPanel({ initial }: { initial: AdviceView }) {
   const id = useId();
@@ -118,6 +121,7 @@ export function AdviceStatusPanel({ initial }: { initial: AdviceView }) {
         {announce}
       </span>
       <CheckLine view={view} />
+      <PlanLine view={view} />
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
         <span id={`${id}-label`} className="text-sm font-bold">
           처리
@@ -159,7 +163,7 @@ export function AdviceStatusPanel({ initial }: { initial: AdviceView }) {
           {form === "done" ? (
             <label className="flex flex-wrap items-center gap-2 text-sm font-bold">
               한 날
-              <Input type="date" required max={kstToday()} value={doneOn} onChange={(e) => setDoneOn(e.target.value)} className="w-auto" />
+              <Input type="date" required min={view.askedOn ?? undefined} max={kstToday()} value={doneOn} onChange={(e) => setDoneOn(e.target.value)} className="w-auto" />
             </label>
           ) : null}
           <label className="block space-y-1 text-sm font-bold">
@@ -213,7 +217,15 @@ export function AdviceStatusPanel({ initial }: { initial: AdviceView }) {
   );
 }
 
-/** 확인 지표 한 줄 — 기준값과 그 기간 · 좋아지는 쪽. 잴 수 없는 의견은 까닭. */
+/** 판정 칩 — 의미색 캐논(좋음 · 나쁨 · 그 밖은 비활성). 원인을 말하지 않는다(같은 시기에 함께 일어난 변화). */
+const VERDICT_TONE: Record<NonNullable<AdviceView["result"]>["verdict"], string> = {
+  improved: TONE_SOFT.positive,
+  worse: TONE_SOFT.critical,
+  flat: TONE_SOFT.inert,
+  unknown: TONE_SOFT.inert,
+};
+
+/** 확인 지표 한 줄 — 기준값과 그 기간 · 좋아지는 쪽 · 다시 잴 날 또는 결과. 잴 수 없는 의견은 까닭. */
 function CheckLine({ view }: { view: AdviceView }) {
   const c = view.check;
   if (!c) {
@@ -222,21 +234,50 @@ function CheckLine({ view }: { view: AdviceView }) {
     return <p className="text-sm break-words">{server ? `확인 지표 없음 — ${view.noCheck}` : `숫자로 다시 재기 어려운 의견입니다 — ${view.noCheck}`}</p>;
   }
   const b = c.baseline;
+  const r = view.result;
+  const period = (from: string, to: string) => `${monthDayLabel(from)}~${monthDayLabel(addDays(to, -1))}`;
+  // 다시 잴 날이 지났는데 아직 기다림(크론이 그 지점을 건너뛴 날 · 실패해 다음 날로)이면 날짜를 약속하지 않는다.
+  const waiting = view.measureState === "waiting" && c.nextCheckOn ? (c.nextCheckOn >= kstToday() ? `${monthDayLabel(c.nextCheckOn)}에 다시 잽니다` : "다시 재기를 기다리는 중") : null;
   return (
-    <p className="text-sm break-words">
-      <span className="font-bold">확인 지표</span> · {c.label}
-      {b ? (
+    <div className="space-y-1">
+      <p className="text-sm break-words">
+        <span className="font-bold">확인 지표</span> · {c.label}
+        {b ? (
+          <>
+            {" · 기준값 "}
+            <span className="num font-bold">{formatCheckValue(b.value, c.unit)}</span>
+            {c.unit === "percent" && b.sample !== null ? ` (${formatCheckValue(b.sample, "number")} 중)` : ""}
+            {` · ${period(b.from, b.to)}`}
+          </>
+        ) : (
+          " · 기준값을 재지 못했습니다"
+        )}
+        {` · ${c.better === "up" ? "오르면 좋음" : "내리면 좋음"}`}
+        {waiting ? ` · ${waiting}` : ""}
+      </p>
+      {r ? (
         <>
-          {" · 기준값 "}
-          <span className="num font-bold">{formatCheckValue(b.value, c.unit)}</span>
-          {c.unit === "percent" && b.sample !== null ? ` (${formatCheckValue(b.sample, "number")} 중)` : ""}
-          {` · ${monthDayLabel(b.from)}~${monthDayLabel(addDays(b.to, -1))}`}
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm break-words">
+            <span className="font-bold">다시 잰 값</span>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-bold whitespace-nowrap ${VERDICT_TONE[r.verdict]}`}>{VERDICT_LABEL[r.verdict]}</span>
+            <span>
+              {"기준값 "}
+              <span className="num font-bold">{formatCheckValue(r.base, c.unit)}</span>
+              {" → 재측정 "}
+              <span className="num font-bold">{formatCheckValue(r.value, c.unit)}</span>
+              {r.verdict === "flat" && r.threshold !== null ? ` (차이가 ±${formatCheckValue(r.threshold, c.unit === "percent" ? "number" : c.unit)}${c.unit === "percent" ? "%p" : ""} 안)` : ""}
+              {` · ${period(r.from, r.to)} · ${r.basis === "done" ? (view.status === "done" ? `완료(${monthDayLabel(r.anchor)}) 뒤` : `${monthDayLabel(r.anchor)}부터`) : "의견을 낸 뒤"} · ${monthDayLabel(kstToday(new Date(r.checkedAt)))}에 잼`}
+              {r.reason ? ` — ${r.reason}` : ""}
+            </span>
+          </p>
+          <p className="text-text-dim text-sm break-words">같은 시기에 함께 일어난 변화입니다 — 이 의견 때문이라고 단정하지 않습니다.</p>
         </>
-      ) : (
-        " · 기준값을 재지 못했습니다"
-      )}
-      {` · ${c.better === "up" ? "오르면 좋음" : "내리면 좋음"}`}
-    </p>
+      ) : view.measureState === "broken" ? (
+        <p className="text-sm break-words">다시 잰 값 — 여러 번 다시 재지 못해 판정하지 않습니다</p>
+      ) : view.measureState === "stopped" ? (
+        <p className="text-sm break-words">다시 잰 값 — 다시 재지 않습니다</p>
+      ) : null}
+    </div>
   );
 }
 

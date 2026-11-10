@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { freshSavedFilters } from "@/lib/filter-reset/server";
 import { parseInventoryPrefs, type InventoryPrefs } from "../prefs";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * `users.ui_prefs.inventory`만 **필드 단위로** 갱신 — 재고관리 화면의 보기 설정(폐기 숨김 등).
@@ -23,7 +24,7 @@ export async function saveInventoryPrefs(next: Partial<InventoryPrefs>): Promise
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
+  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "inventory.prefs.saveInventoryPrefs", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   const raw =
     row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs) ? (row.ui_prefs as Record<string, unknown>) : {};
   // 클라가 보낸 값을 그대로 믿지 않는다 — 파서를 한 번 태운다.
@@ -33,7 +34,7 @@ export async function saveInventoryPrefs(next: Partial<InventoryPrefs>): Promise
     .update({ ui_prefs: { ...raw, inventory: merged } })
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "inventory.prefs.saveInventoryPrefs", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }
 

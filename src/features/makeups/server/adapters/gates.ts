@@ -15,15 +15,44 @@ const UNCONFIRMED = "보강 연결을 확인하지 못해 예약을 바꾸지 �
 const LOOKUP_BLOCK = "정규 출결을 확인하지 못해 보강 보고서를 저장하지 않았습니다";
 const SLOT_CONFLICT = "같은 날 정규 수업의 담당이 서로 달라 보강 보고서를 저장하지 않았습니다";
 
+/**
+ * 여러 칸(학생·반·날짜)의 native 쓰기 근거를 **한 번에** — 칸마다 `nativeWriteAllowance`를 부르면 큰 범위 저장에서 수백 번
+ * 왕복한다(수정 계획 P1-A 4-2 리뷰). 기간(첫~끝 날짜)으로 한 번 읽어 메모리에서 대조한다. 키 = `학생::반::날짜`.
+ * 꺼짐·표 없음 = 근거 없음(문을 넓히지 않는다) · 실패·잘림 = error(빈 목록으로 숨기지 않는다).
+ */
+export async function nativeWriteKeys(
+  cells: readonly { studentId: string; classId: string; sessionDate: string }[],
+): Promise<{ keys: Set<string>; error: string | null }> {
+  if (cells.length === 0) return { keys: new Set(), error: null };
+  const dates = cells.map((c) => c.sessionDate).sort();
+  const classIds = [...new Set(cells.map((c) => c.classId))];
+  // sharedRead — 보강관리 권한이 없는 강사는 RPC가 늘 권한 거절이다. 이 판정은 쓰기를 **여는** 근거를 찾는 것이라 거절 = 근거 없음으로
+  // 읽는다(문이 좁아지는 쪽 · 4-2 재리뷰: 실패로 읽으면 그 강사의 일괄·범위 저장이 통째로 막혔다).
+  const found = await loadNativeParticipants({
+    date_from: dates[0], date_to: dates[dates.length - 1], ...(classIds.length === 1 ? { class_id: classIds[0] } : {}), limit: 500,
+  }, { sharedRead: true });
+  if (found.status === "off" || found.status === "schema_missing") return { keys: new Set(), error: null };
+  if (found.status === "failed") return { keys: new Set(), error: found.error };
+  if (found.value.truncated) return { keys: new Set(), error: "보강 참여 목록이 잘렸습니다" };
+  const wanted = new Set(cells.map((c) => `${c.studentId}::${c.classId}::${c.sessionDate}`));
+  const keys = new Set<string>();
+  for (const row of found.value.participants) {
+    const k = `${row.studentId}::${row.classId}::${row.sessionDate}`;
+    if (row.status !== "cancelled" && wanted.has(k)) keys.add(k);
+  }
+  return { keys, error: null };
+}
+
 /** 조회 실패는 수강 거절 문구로 바꾸지 않는다. 표가 없으면 문을 넓히지 않는다. */
 export async function nativeWriteAllowance(key: {
   studentId: string;
   classId: string;
   sessionDate: string;
 }): Promise<{ allow: boolean; error: string | null }> {
+  // sharedRead — 권한 거절 = 근거 없음(쓰기를 여는 근거라 좁아지는 쪽 · nativeWriteKeys와 같은 판정).
   const found = await loadNativeParticipants({
     student_id: key.studentId, class_id: key.classId, session_date: key.sessionDate, limit: 20,
-  });
+  }, { sharedRead: true });
   if (found.status === "off" || found.status === "schema_missing") return { allow: false, error: null };
   if (found.status === "failed") return { allow: false, error: found.error };
   const allow = found.value.participants.some((row) => (

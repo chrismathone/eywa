@@ -12,6 +12,50 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-11-06 퇴원보고서: 원장 환불 결정 전에는 처리하지 않는다 · 데스크 지정 · 완료 입력 제한 (s2_0037 · ⏳ 미적용 · 🔴 s2_0030 적용 뒤에만 · 앱보다 먼저 · 가지 번호 s2_0031 → s2_0033 → s2_0036 → 병합 때 s2_0037(main의 s2_0031 = 학원 비서 · s2_0033 = 금액 이월 연쇄 · s2_0034 = 학원 비서 마무리 · s2_0035 = 원생 충성도 · s2_0036 = 학원 비서 의견))
+
+`s2_0037_withdrawal_refund_decision_gate.sql` — 원장 2026-11-06 결정 셋(머리 주석에 원문 · [결정](../../docs/decisions/withdrawal-reports.md)).
+- 🔑 불변식: 처리하는 모든 길은 ⅰ 데스크 환불 미완료 ⅱ 결정 안 된 환불 가능 줄 ⅲ **그 요청이 함께 넘긴 환불 확인 값 없음** 중 하나라도 있으면 처리하지 않는다. 환불 가능 줄은 앱(`loadLaterInvoices`)만 계산하므로 처리 요청마다 앱이 확인 값(`refundCheck` · 묶음의 줄 키 → 보이는 보고서)을 넘기고 DB가 저장된 결정으로 센다(`withdrawal_report_refund_note`). 확인 값이 없으면 null(모름) → 처리하지 않는다.
+- 무엇: 묶음 칸 넷(`refund_hold` 등) · 결정 표 `withdrawal_report_refund_decisions`(RLS · service_role) · 처리 함수 = s2_0030 본문에서 일곱 자리만(전원 승인 · apply · release · 선언 · 끝난 묶음 표시 내림 · 요청 취소 사유 · 자식 이력 — 취소 사유는 'cancel'에 comment가 오면 1~500자 검사 뒤 묶음 모든 보고서 이력에 · 없으면 종전) · `_v1` 받는 처리 한 줄 치환(작성·제출·반려·취소만) · 할 일 동기화 세 줄 치환(원장 '환불 결정' 차례 `refund:<원장 id>`) · `attach_withdrawal_report_refund` 6→9인자(원장급만 · 학원 설정 `withdrawalDeskIds` 명단 안 · null 거절 · 고른 줄 '환불' · 고르지 않은 줄 '환불하지 않음' · r2 대체한 옛 요청서 `p_supersedes`) · `decide_withdrawal_report_refund`(원장 '환불 없음' · 원장급만) · `release_withdrawal_report_refunds` 3→4인자(확인 값 없으면 빈 결과) · `academy_documents` BEFORE INSERT OR UPDATE OR DELETE 트리거(이어진 요청서 완료일자 = 데스크 담당·원장만 · r2 고치기 = 담당 데스크·원장 · 비우기 = 원장 · 완료된 것 삭제 금지 · 상한 · 오류코드 23514 · 이어진 요청서의 번호·지점·서식·표식 변경과 같은 번호로 다시 넣기는 누구도 못 함 — 검토 2026-11-06의 우회 막기).
+- 기준·지문: s2_0030 적용 뒤 정의(운영은 2026-11-06 저녁 읽기 전용 확인 때 **s2_0030 적용 뒤** — 다섯 함수 지문이 아래 검사 값과 같음). 여섯 함수 지문이 적용 전 값(처리 a105bba8… · _v1 5a11f3fc… · 연결 846a34cb… · release b03844a4… · 동기화 a8a0fb1a… · r2 데스크 환불 미완료 판정 e0eab20d… = s2_0025 본문)이 아니면 멈춘다(운영 2026-11-09 읽기 전용 확인 = 여섯 다 같음 · 학원 비서 의견 s2_0036 적용(18:41) 뒤 다시 확인 = 할 일 닫기·취소 알림까지 여덟 다 같음 · 연결 표 0건).
+- 옛 앱이 도는 동안(적용 ~ 새 앱 배포): 옛 앱은 확인 값을 넘기지 않으니 처리는 닫힌다 — 승인은 기록되고 처리는 기다림 · 처리일 apply 미룸 · 수납 저장의 release 빈 결과 · 바로 처리는 처리 예약으로 남음 · 옛 앱의 환불 승인은 데스크 명단(처음엔 빔)에 걸려 거절. 새 앱 배포 뒤 처리일 cron(00:05)이 다시 계산해 처리하거나 원장 결정을 요청한다(배포 직후 `/api/cron/apply-due-withdrawals`를 한 번 부르면 바로).
+- 확인: 로컬 PGlite 0.3.16(PG 17.5)에 운영 표 구조·운영 함수 정의를 올려(지문이 운영과 같음을 먼저 확인) s2_0030 → s2_0037 → 경로별 41개 사례(묶음 경계 · 리뷰 수리 · C.3 ①~⑤ 포함) · 역할 시험 3개(운영 실행권을 옮긴 PGlite) · 되돌리기 왕복 · 다시 적용 · CRLF/LF 통과. 시험 `refund-decision-gate-sql.test.ts`(지문·치환 횟수·불변식 글자) · 변이 시험(처리 경로 막기를 지우면 잡힘).
+- 학원 비서(s2_0031)와 함께: 새 함수는 모두 public·anon·authenticated 실행을 걷어 비서의 PUBLIC 회수 정책과 맞다. 비서 보기(`assistant.*`)는 질문마다 `assistant_refresh_views_if_stale()`가 public 표·칸 지문을 보고 다시 만든다 — **적용 뒤 따로 할 일 없음**(새 결정 표·묶음 칸 넷이 다음 질문부터 보인다 · 결정 표 설명 = `src/features/assistant/catalog/tables-extra.ts` · 가드 `catalog.test.ts`). 이 파일·되돌리기는 칸을 지우거나 이름을 바꾸지 않는다(비서 보기가 칸에 묶여 있어 그런 변경은 막힌다 — 되돌리기도 표·칸은 남긴다).
+- 리뷰 수리 r1: 확인 값 = refundable[{key, report, paid}] · claimed[{key, doc}] · asOf · scope(처리 범위) — DB가 처리 순간 다시 본다(요청서 삭제 경합 · 낡은 확인 값 · 범위 전환은 보류) ·
+  결정은 묶음 단위(대표 아닌 보고서 화면도) · 결정 때 낸 돈(paid_net) · 원장 C.3(새 요청서가 있으면 옛 요청서 완료 막기 · 학생 단위 거래 잠금 · attach 반대쪽 거절) ·
+  데스크 본인·운영자 계정·퇴사 막음 · 취소 사유 공백·줄바꿈·탭만 거절 · 사후 확인(함정 #155 — service_role만 · anon·authenticated 못 부름 · 트리거 있음).
+- 리뷰 수리 r2(2026-11-09 · 아직 미적용이라 이 파일을 고쳤다 · 같은 날 병합 때 번호 s2_0033 → s2_0036 · 다시 s2_0037): 줄 키 겹침 규칙 한 벌 `withdrawal_refund_keys_overlap`(앱 `keysOverlap`과 같은 사례표 `refund-keys-overlap.cases.json`) · 결정 표 칸 `paid_seen`(결정 뒤 낸 돈 증가 → '환불' 결정도 다시 대기) · `supersedes`(대체한 옛 요청서 id → C.3을 문서 id로) ·
+  미배분 과목 몫 키 `청구#unalloc:<과목>` · `unalloc:~<과목들>`(줄 키 검사식 확장) · asOf = 퇴원월 뒤 청구 내용 지문 `withdrawal_refund_later_fingerprint`(늦은 커밋) · 빈칸 규칙 `withdrawal_refund_blank`(앱 trim과 같은 글자 · `withdrawal_report_refund_pending`도) ·
+  금액 숫자 `withdrawal_refund_won` · '환불하지 않음' 기록 `withdrawal_refund_record_none` · 관문 표식 `withdrawal_refund_gate_ready`(되돌리기가 지운다 → 새 앱 + 되돌린 DB는 닫힌 쪽) · 완료된 요청서 잇기 거절 ·
+  결정 표 service_role 지우기·비우기 회수(Supabase 기본 권한) · 사후 확인에 새 함수 여섯·트리거 사건 셋·결정 표 권한 · 옛 8인자 연결 없음.
+  확인: PGlite r2 시나리오 21건(겹침 사례표 양방향 · D-1·D-2·D-4·D-6·D-11·D-12 · 삭제·고치기·비우기 = 담당 데스크/원장/비담당/관리 키 × 미완료/완료 · 폴더 분류·고정·직원 삭제 연쇄 · 지점 삭제 연쇄 · 되돌리기 왕복) + 지난 리뷰 사례 30건 회귀 0.
+- 리뷰 수리 r3(2026-11-09 · 아직 미적용이라 이 파일을 고쳤다): R-1 같은 묶음 같은 키 중복 연결 거절 · R-2 금액 엄격 꼴(`withdrawal_refund_won` · 결제내역 금액 표기도 읽어 상한) · R-4 대체 옛 요청서 같은 청구 확인 ·
+  R-5 claimed 판정에 결정 행 요청서 생존 · R-6 연결 표 service_role update·delete·truncate·references·trigger 회수 + anon·authenticated 회수(사후 확인) · R-9 완료일자 꼴(빈칸 또는 YYYY-MM-DD · 23514) +
+  `staff_tasks_private.tg_refund_task`·`withdrawal_report_refunds_on_cancel` 빈칸 규칙 = `withdrawal_refund_blank`(적용 전 지문 7ba5b00c…·9e3981d9… · 치환 정확히 한 번) ·
+  원장 결정 '늘어난 몫은 수납에서 따로 처리': 결정 표 칸 `separate_amount`·`separate_at`·`separate_by`·`refunded_total`·`refunded_docs` · `decide_withdrawal_report_refund` 6인자(`p_separate` · 옛 5인자 지움) ·
+  트리거가 완료 때 환불 완료 기록 · attach 다시 승인 상한 = 낸 돈 − 따로 − 완료 기록. 되돌리기는 두 함수 btrim 복원 · 연결 표 권한 복원 · 6인자 지움(칸은 남김).
+  확인: PGlite r3 시나리오 13건(R-1 ×2 · R-2 ×3 · R-4 · R-5 · R-6 · R-9 ×2 · 따로 환불 ×3) + r2 21건 회귀 0 + 지난 리뷰 사례 회귀 0 · 되돌리기 왕복.
+  리뷰 수리 r4(2026-11-09): R3-1 attach가 요청서의 첫 총액도 상한과 맞댄다(상한 모름·못 읽음·넘음 = 23514 — 옛 6인자 호출은 상한 모름이라 거절) · R3-2 머리말 적용 확인 줄 6인자 decide.
+  확인: PGlite r4 4건(첫 승인 300만 원 거절 · 다시 승인 상한 0에 35만 원 거절 · 옛 6인자 거절 · 적용 확인 줄 true) + r2 21 · r3 13 · 지난 30 회귀 0.
+  DB가 스스로 못 막는 길(앱이 막거나 설계상 둔다) = [결정 문서 r3](../../docs/decisions/withdrawal-reports.md)의 ①~⑩(관리 키의 '누가' · 앱 확인 값 · R-3 수납명 변경 대체 · 같은 묶음 형제 겹침 · TRUNCATE · 결제내역 '원' 없는 숫자 · R-4 같은 청구 다른 줄 · R-9 날짜 꼴만 · D-9 · 따로 환불 실제 지급 · 완료 기록 = 상한).
+- 연동 역할(eywa_sync_agent) 실행권: 이 파일이 다시 만드는 attach·release는 s2_0025부터 service_role만 — 연동 역할 실행권 없음 · RLS·다른 함수·연동 앱이 부르지 않음(운영 읽기 전용 2026-11-09) → 확인 줄 `-- 연동 역할 실행권 확인:`(가드 `sync-agent-execute-grants.test.ts`). 적용 뒤 연동 PC 워커 신호·42501을 본다.
+- 🔴 적용 직전 확인(화면 리뷰 m16): `select count(*) from public.withdrawal_report_refunds;` 가 **0**이어야 한다(2026-11-09 운영 0). s2_0037 전에 이어진 요청서는 결정 행이 없어 C.3·같은 돈 두 번 막기(DB) 밖이다(앱 `reapprovable`만 막는다) — 0이 아니면 적용 전에 원장에게 알린다.
+- 🔴 적용 안내: ① 이 SQL → ② 새 앱 배포 → ③ 배포가 **끝난 뒤** 학원 설정 '데스크 담당자' 지정(옛 앱은 '역할·권한'을 저장할 때 그 칸을 버린다) → ④ /api/cron/apply-due-withdrawals 한 번.
+  새 앱 + 옛 DB(순서 위반)면 관문 경로가 처리 함수를 부르지 않는다('DB 적용 전').
+- 되돌리기 = `scripts/_oneoff/revert-s2_0037-withdrawal-refund-decision-gate.sql`(앱 먼저 · 적용 뒤 지문일 때만 · 진행 중 '환불 결정 대기'나 승인이 끝났는데 처리 안 된 묶음이 있으면 멈춤 · 처리 함수 = s2_0030 본문 · 연결·release·데스크 환불 미완료 판정 = s2_0025 본문 · r2 새 함수 여섯·9인자 연결은 지움 · 결정 표·칸은 남김 · 되돌린 뒤 지문 확인).
+
+## 2026-11-09 학원 비서 — 분석용 보기 · 의견 대상 고정·실행 지표 (s2_0039 · s2_0040 · ✅ 운영 적용 2026-11-09 · 원장 승인 · 직결(node · 한 거래) · 시험 거래·되돌리기 시험 뒤 · 사후 확인 통과)
+
+`s2_0039_academy_assistant_analysis_views.sql` — 비서 보기 생성 함수에 분석용 보기 6개(`onto_classes` · `onto_homeroom_history` · `onto_siblings` · `onto_households` · `onto_tuition_months` · `onto_teacher_churn` — 앱 판정과 같은 규칙) · 생성 규칙 판 rules-v2 · `assistant_advice`에 `target_kind`·`target_ids`(대상 명단)·`exec_check`(실행 지표)·`acted_on`(쓰지 않음 — s2_0038 `measure_anchor`로 합침) + 지킴 트리거가 대상 명단·조회문을 못 바꾸게. 같은 날 병렬 작업 s2_0038과 번호가 겹쳐 0039로 옮겼다(내용 같음). 되돌리기 = `scripts/_oneoff/revert-s2_0039-academy-assistant-analysis-views.sql`.
+`s2_0040_academy_assistant_view_safe_casts.sql` — 보기의 `::uuid`·`::date`·`::timestamptz` 캐스트를 `pg_input_is_valid` 뒤로 · 실행 지표 크기 상한 40,000바이트. 되돌리기 = `scripts/_oneoff/revert-s2_0040-academy-assistant-view-safe-casts.sql`.
+설계 = [`docs/features/academy-assistant.md`](../../docs/features/academy-assistant.md) §7-7.
+
+## 2026-11-09 학원 비서 — 비서 의견 결과 재측정 (s2_0038 · ✅ 운영 적용 2026-11-09 20:39 · 원장 승인 · 직결(node · 파일 그대로 한 거래) · 사후 확인 통과)
+
+`s2_0038_academy_assistant_outcomes.sql` — 제안 → 결과 → 학습 2단계. `assistant_advice`에 결과 칸만 더한다(`latest_verdict` · `latest_value`·`latest_sample` · `latest_base`·`latest_base_sample` · `latest_from`·`latest_to` · `latest_delta`·`latest_threshold`·`latest_reason` · `latest_checked_at` · `checks_done` · `fail_count` · `last_error` · `measure_anchor`(재측정 기준일 — 원장이 '완료'한 날) + 판정이 있으면 기간·잰 때 함께). 기존 줄·제약·트리거·권한·비서 보기 제외는 그대로. 쓰는 곳 = 크론 `/api/cron/assistant-outcomes`(매일 05:10 KST). 설계 = [`docs/features/academy-assistant.md`](../../docs/features/academy-assistant.md) §7-6.
+- 순서 = 이 SQL → 앱 배포(새 앱이 결과 칸을 읽고 쓴다 — 앱이 먼저면 대화 열 때 의견 상태 읽기가 실패해 처리 단추가 빠지고, 처리 저장·크론도 실패한다. 의견을 새로 넣는 것은 1단계 칸만 돌려받아 산다).
+- 되돌리기 = `scripts/_oneoff/revert-s2_0038-academy-assistant-outcomes.sql`(앱을 먼저 되돌린 뒤 · 결과 값만 지워진다).
+
 ## 2026-11-09 학원 비서 — 비서 의견 기록 · 원장 처리 · 확인 지표 기준값 (s2_0036 · ✅ 운영 적용 2026-11-09 18:41 · 원장 승인 · 직결(node · 파일 그대로 한 거래) · 사후 확인 통과)
 
 `s2_0036_academy_assistant_advice.sql` — 원장 2026-11-06 *"그 해결책이 어떤 결과를 가져왔는지에 대한 결과 피드백까지 … 지속적인 학습"* 1단계. 새 표 `assistant_advice`(의견 항목마다 한 줄 · 확인 지표 조회문 틀 · 기준값 · 처리 상태) · `assistant_advice_events`(처리 이력 · 새 줄만). 표보다 먼저 비서 보기 제외 목록에 넣는다(같은 거래). RLS 켬 · 정책 0 · anon/authenticated 회수 · service_role만 · 지킴 트리거(지점·답·대화·묻는 사람 일치 · 처리한 사람은 그 지점 직원 · 이름표 칸 못 바꿈). 설계 = [`docs/features/academy-assistant.md`](../../docs/features/academy-assistant.md) §7-5.
@@ -270,6 +314,8 @@
 
 ## 1. 두 갈래
 
+> 📜 아래 표와 설명은 **시즌1 시절** 이야기다. 2026-10-27 시즌2부터 `pnpm db:migrate`는 안내만 내고 종료하고, 운영 DB에는 새 `s2_NNNN` 파일 하나만 원장 승인 뒤 적용한다(`docs/sql-season2.md`).
+
 | 종류 | 파일 | 적용 | 추적 |
 |---|---|---|---|
 | **drizzle 번호본** | `000N_*.sql` (예: `0024_slimy_zombie.sql`) | `pnpm db:migrate`가 **자동** | `meta/_journal.json` |
@@ -280,7 +326,7 @@ SECURITY DEFINER 함수·확장(extension)·GiST EXCLUDE·generated 컬럼·GIN 
 drizzle이 표현 못 하므로 손으로 작성해 `000Na_*` 파일로 둔다. `pnpm db:migrate`는 **번호본만** 적용하고
 alpha는 건드리지 않는다 → alpha는 사람이 직접 돌려야 한다.
 
-> ⚠️ `db:push`(`drizzle-kit push`)는 alpha의 객체(RLS/트리거 등)를 모르고 drift로 **삭제 제안**할 수 있다. 쓰지 말 것. 항상 `db:generate` → `db:migrate` + alpha 수동.
+> ⚠️ `db:push`(`drizzle-kit push`)는 alpha의 객체(RLS/트리거 등)를 모르고 drift로 **삭제 제안**할 수 있다. 쓰지 말 것 — 2026-11-09부터 `pnpm db:push`는 `db:migrate`처럼 안내만 내고 종료한다. 운영 DB에는 새 `s2_NNNN` 파일 하나만 원장 승인 뒤 적용(`docs/sql-season2.md`).
 
 ## 2. 멱등성 — 재실행 안전
 

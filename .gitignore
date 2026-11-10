@@ -67,3 +67,6 @@ data/ijw-firebase-backup/
 
 # drizzle-kit generate 생성물(2026-10-27 시즌2 — 필요한 문장만 s2_NNNN 파일로 옮겨 쓴다)
 /supabase/drizzle-out/
+
+# 로컬 게이트(scripts/verify-changed.mjs) 임시 tsconfig·결과 기록
+/.verify/

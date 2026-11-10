@@ -23,9 +23,10 @@ export const V: {
   spark: Draw;
   miniColumns: Draw;
   miniSteps: Draw;
-  paint: (el: HTMLElement, draw: (w: number, h: number) => string, force?: boolean) => void;
-  update: (el: HTMLElement, draw: (w: number, h: number) => string) => void;
+  paint: (el: HTMLElement, draw: (w: number, h: number) => string, force?: boolean, size?: readonly [number, number]) => void;
+  update: (el: HTMLElement, draw: (w: number, h: number) => string, size?: readonly [number, number]) => void;
   enter: (el: HTMLElement) => void;
   fontsReady: () => Promise<unknown>;
+  fontFamily: () => string;
   attachTips: () => () => void;
 };

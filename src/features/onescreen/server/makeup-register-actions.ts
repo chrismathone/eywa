@@ -14,6 +14,7 @@ import { classRouteActive, SEND_CLASS_SUBJECTS } from "../send-class";
 import { loadMakeupAnchorCandidates, syncAnchorCells } from "./makeup-anchor-sync";
 import { makeupMemo } from "../makeup-absence-link";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { attendanceWindowApplies } from "@/features/attendance/server/edit-window-gate";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
 import { logAction } from "@/features/audit/server/log";
 import { mergeEffectNotice, type MakeupEffectNotice } from "@/features/makeups/server/adapters/effects";
@@ -93,7 +94,7 @@ export async function registerMakeupEntries(input: {
   if (!saved.ok || cellWanted.size === 0) return saved;
   // 칸 쓰기 게이트 — 출결 쓰기 권한 · 강사는 출결 수정 기간(옛 즉시 쓰기 `setAttendanceCell`과 같은 선). 막히면 칸은 보고서 저장 훅이 세운다.
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return saved;
-  if (user.systemRole === "teacher" && !isWithinAttendanceEditWindow(input.date, kstToday())) return saved;
+  if ((await attendanceWindowApplies(user.systemRole)) && !isWithinAttendanceEditWindow(input.date, kstToday())) return saved;
   const errors: string[] = [];
   // 칸은 섰지만 보강 기록 반영이 남은 경우 — 명단 등록도 출결도 되돌리지 않고 알리기만 한다.
   let makeupEffect: MakeupEffectNotice | null = null;

@@ -125,9 +125,11 @@ html body :where(button, a, input, select, textarea, summary, [tabindex]):focus-
  *    '박/소/선'처럼 낱말 중간이 갈라졌다. break-word는 넘칠 때만 끊어 최소 폭을 지킨다(긴 주소는 여전히 칸 안에서 끊긴다).
  * ③ Tailwind `break-all`(25곳)도 한글을 글자마다 끊으므로 같은 규칙으로 되돌린다.
  * ④ 제목·라벨은 줄 길이를 고르게(balance), 문단은 마지막 줄에 한 글자만 남지 않게(pretty).
- * ⑤ 숫자+단위·날짜는 붙여 둔다. */
+ * ⑤ 숫자+단위·날짜는 붙여 둔다.
+ * 🔴 ④는 `text-wrap-style`(모양만)로 — 단축 `text-wrap`은 줄바꿈 여부(text-wrap-mode)까지 wrap으로 되돌려, 층 밖 규칙이라
+ *    Tailwind `truncate`·`whitespace-nowrap`(층 안)을 이기고 한 줄 말줄임 칸이 여러 줄로 터져 옆 줄과 겹쳤다(원생상담 목록 요약, 2026-11-09). */
 html body { overflow-wrap: break-word; }
 html body .break-all { word-break: keep-all !important; overflow-wrap: break-word !important; }
-html body :where(h1, h2, h3, h4, h5, h6, th, legend, summary, [role="tab"], [data-slot="card-title"]) { text-wrap: balance; }
-html body :where(p, li, dd, blockquote, figcaption, [data-tip]) { text-wrap: pretty; }
+html body :where(h1, h2, h3, h4, h5, h6, th, legend, summary, [role="tab"], [data-slot="card-title"]) { text-wrap-style: balance; }
+html body :where(p, li, dd, blockquote, figcaption, [data-tip]) { text-wrap-style: pretty; }
 html body :where(time) { white-space: nowrap; }

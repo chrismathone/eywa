@@ -35,21 +35,37 @@ export type PayrollCalcResult = {
   classCount: number;
 };
 
-/** 강사의 월별 자동 정산 계산 (attendance × hourly_rate + monthly_base). */
+/**
+ * 자동 정산 재료(단가·담당 반·시간표·출결)를 읽지 못했다 — 0원으로 계산하지 않고 이걸 던진다.
+ * 예전엔 조회 오류를 버려 단가 0·반 0개·시간 0으로 계산했고, 자동 계산 저장이 그 값을 그대로 급여 기록에 썼다(수정 계획 P1-M).
+ */
+export class PayrollInputError extends Error {
+  /** 진단용 원문(오류 코드·DB 메시지) — 화면에 내지 않는다(raw 원문 노출 금지). 로그로만. */
+  readonly detail: string | undefined;
+  /** @param what 조사까지 붙인 대상(예: "직원 단가를") */
+  constructor(what: string, detail?: string) {
+    super(`급여 자동 계산에 필요한 ${what} 읽지 못했습니다`);
+    this.name = "PayrollInputError";
+    this.detail = detail;
+  }
+}
+
+/** 강사의 월별 자동 정산 계산 (attendance × hourly_rate + monthly_base). 재료를 못 읽으면 `PayrollInputError`. */
 export async function calculateMonthlyPayroll(
   userId: string,
   period: string, // 'YYYY-MM'
 ): Promise<PayrollCalcResult> {
   const supabase = await createClient();
 
-  const { data: user } = await supabase
+  const { data: user, error: userError } = await supabase
     .from("users")
     .select("hourly_rate, monthly_base")
     .eq("id", userId)
-    .single();
+    .maybeSingle();
+  if (userError || !user) throw new PayrollInputError("직원 단가를", userError?.code ?? "직원 없음");
 
-  const hourlyRate = Number(user?.hourly_rate ?? 0);
-  const monthlyBase = Number(user?.monthly_base ?? 0);
+  const hourlyRate = Number(user.hourly_rate ?? 0);
+  const monthlyBase = Number(user.monthly_base ?? 0);
 
   // 강사가 담임인 반들의 출석 기록 (해당 월)
   const start = `${period}-01`;
@@ -57,10 +73,11 @@ export async function calculateMonthlyPayroll(
   const [y, m] = period.split("-").map(Number);
   const nextMonth = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
 
-  const { data: classes } = await supabase
+  const { data: classes, error: classesError } = await supabase
     .from("classes")
     .select("id")
     .eq("teacher_id", userId);
+  if (classesError) throw new PayrollInputError("담당 반을", classesError.code);
 
   const classIds = (classes ?? []).map((c) => c.id);
   if (classIds.length === 0) {
@@ -76,28 +93,31 @@ export async function calculateMonthlyPayroll(
   // 해당 월 attendance_records 중 강사 담당 반 + present/late만 시간 합산.
   // fetchAllPaged — 활동 많은 강사(반 5+개)는 월 출석이 1000행을 넘을 수 있어 전건 fetch면 잘리고(#54),
   // 잘린 채 시간 합산하면 급여가 과소 지급된다(돈 정확성). range 페이지네이션으로 전건 확보.
-  const attendances = await fetchAllPaged<{
-    session_date: string;
-    status: string;
-    class: { id?: string } | { id?: string }[] | null;
-  }>((from, to) =>
-    supabase
-      .from("attendance_records")
-      .select(
-        `session_date, status, class:class_id ( id ), schedule:class_id ( class_schedules ( start_time, end_time ) )`,
-      )
-      .in("class_id", classIds)
-      .gte("session_date", start)
-      .lt("session_date", nextMonth)
-      .in("status", ["present", "late"])
-      .range(from, to),
-  );
+  type AttendanceRow = { session_date: string; status: string; class: { id?: string } | { id?: string }[] | null };
+  let attendances: AttendanceRow[];
+  try {
+    attendances = await fetchAllPaged<AttendanceRow>((from, to) =>
+      supabase
+        .from("attendance_records")
+        .select(`session_date, status, class:class_id ( id )`)
+        .in("class_id", classIds)
+        .gte("session_date", start)
+        .lt("session_date", nextMonth)
+        .in("status", ["present", "late"])
+        // 페이지를 넘길 때 행이 겹치거나 빠지지 않게 고정 순서(batch.ts 규약) — 빠지면 그만큼 급여가 적게 나온다.
+        .order("id")
+        .range(from, to),
+    );
+  } catch (err) {
+    throw new PayrollInputError("출결 기록을", err instanceof Error ? err.message : String(err));
+  }
 
   // schedule 시간 → 반별 평균 세션 시간 → 고유 출석 세션 합 → 금액. 계산은 전부 순수 calc(#Q1).
-  const { data: schedules } = await supabase
+  const { data: schedules, error: schedulesError } = await supabase
     .from("class_schedules")
     .select("class_id, start_time, end_time")
     .in("class_id", classIds);
+  if (schedulesError) throw new PayrollInputError("수업 시간표를", schedulesError.code);
 
   const classHours = aggregateClassHours(
     (schedules ?? []).map((s) => ({
@@ -192,18 +212,20 @@ export type PayrollOverview = {
 };
 
 /**
- * 한 달 전 직원 급여를 한 표로. 저장된 payroll_records는 그대로, 미작성 직원만 calculateMonthlyPayroll로
- * 자동 추정(병렬). 데모 규모(직원 ~수십)라 per-staff 계산 허용(최적화는 후속).
+ * 한 달 전 직원 급여를 한 표로. 저장된 payroll_records는 그대로, 미작성 직원은 월 기본급만 표기한다
+ * (출결 기반 시간 정산은 개별 화면 /staff/[id]/payroll에서 — 전 직원 동시 계산은 반응속도 원칙상 하지 않는다).
  */
 export async function getMonthlyPayrollOverview(period: string): Promise<PayrollOverview> {
   const supabase = await createClient();
 
-  const { data: staff } = await supabase
+  const { data: staff, error: staffError } = await supabase
     .from("users")
     .select("id, display_name, system_role, monthly_base")
     .neq("status", "inactive")
     .order("system_role", { ascending: true })
     .order("display_name", { ascending: true });
+  // 조회 실패를 빈 목록으로 삼키면 "직원 0명" 표가 된다 — 아래 급여 기록 조회와 같이 던진다.
+  if (staffError) throw new Error("직원 목록을 불러오지 못했습니다");
   const staffList = staff ?? [];
 
   const scope = await payrollReadScope();

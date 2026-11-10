@@ -45,11 +45,14 @@ const LEGACY_VISIBLE_GLYPHS = [
   "🌳",
 ] as const;
 const APPROVED_INLINE_SVG = [
+  // 2026-11-10 차트 셋(P0-3b 정리) — 원생상담 담임 게이지(role="img"+aria-label) · 과목 성적 추이 선(aria-hidden, 점·라벨은 HTML) ·
+  // 공용 분석 차트(도넛·추이, role="img"+aria-label — 숫자 카드 머리 아이콘은 EyIcon). 데이터 그림이지 아이콘 대용이 아니다.
+  "src/app/(shell)/consultations/_components/stats/stats-homeroom-gauge.tsx",
+  "src/app/(shell)/exams/_components/subject-trend-chart.tsx",
+  "src/components/analytics/charts.tsx",
   // 2026-11-05 연결 탐색 도넛(조각 경로·글자)과 네트워크 판(점·선을 엔진이 그린다) — 데이터 그림이지 아이콘 대용이 아니다.
   "src/features/explore/components/donut.tsx",
   "src/features/explore/components/network/explore-network.tsx",
-  // 대시보드 편집기의 위젯 미리보기: 실제 아이콘 대신 쓰는 그림이 아니라 도넛·추이·표의 장식 축소도다.
-  "src/app/(shell)/owner/_components/dashboard/widget-thumb.tsx",
   // 2026-09-23 통합 성적관리 월별 추이 선(role="img"+aria-label, 선만 SVG·점·라벨은 HTML) — 차트이지 아이콘이 아니다.
   "src/app/(shell)/exams/_components/trend-chart.tsx",
   "src/app/(shell)/dashboard/_components/sparkline.tsx",

@@ -9,6 +9,7 @@ import { IMPORT_META } from "../kinds";
 import { duplicateKeyIssues, parseOption, type ColumnSpec, type ImportPreviewRow, type SheetSpec } from "../spec";
 import { StudentIndex } from "../server/lookups";
 import type { ImporterDef } from "../server/types";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * 수납 가져오기 — 체크리스트 9번 "전환일 수납 현황"(원생별 청구월·청구액·납부액). 청구서 모양은 **수동 청구(`createInvoice`)와 같다**
@@ -353,7 +354,7 @@ const def: ImporterDef<Plan> = {
         .eq("tenant_id", ctx.tenantId)
         .not("status", "in", "(void,refunded)")
         .select("id, line_items");
-      if (error) return { error: `청구서 고치기 중 멈췄습니다 — ${error.message} (새 청구서 ${inserted}건 · 고친 ${updated}건은 반영됐습니다)` };
+      if (error) return { error: `${explainDbError(error, { scope: "excel-import.invoices", fallback: "청구서 고치기 중 멈췄습니다 — 잠시 후 다시 시도해 주세요" }).message} (새 청구서 ${inserted}건 · 고친 ${updated}건은 반영됐습니다)` };
       if ((data ?? []).length) updated += 1;
     }
     const missed = plan.updates.length - updated;

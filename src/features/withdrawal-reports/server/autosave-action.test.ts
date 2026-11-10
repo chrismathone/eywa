@@ -145,13 +145,13 @@ describe("changeWithdrawalReport 취소", () => {
     m.rpc.mockImplementation(async () => ({ data: { ...baseReport, status: "canceled", revision: 10 }, error: null }));
   });
   it("화면이 본 상태 그대로면 서버가 방금 읽은 revision으로 취소한다", async () => {
-    expect(await changeWithdrawalReport(REPORT_ID, "cancel", 3, { seenStatus: "requested" })).toEqual({ ok: true, id: REPORT_ID });
-    expect(m.rpc).toHaveBeenCalledWith("transition_withdrawal_report", expect.objectContaining({ p_action: "cancel", p_payload: { revision: 9 } }));
+    expect(await changeWithdrawalReport(REPORT_ID, "cancel", 3, { seenStatus: "requested", reason: "다시 다님" })).toEqual({ ok: true, id: REPORT_ID });
+    expect(m.rpc).toHaveBeenCalledWith("transition_withdrawal_report", expect.objectContaining({ p_action: "cancel", p_payload: { revision: 9, comment: "다시 다님" } }));
   });
   it("그사이 상태가 바뀌었으면(제출 등) 화면의 revision 그대로 — DB가 거절해 새로 보게 한다", async () => {
     m.record = { report: { ...baseReport, status: "manager_pending", revision: 9, requested_by: "requester" }, consultations: [] };
-    await changeWithdrawalReport(REPORT_ID, "cancel", 3, { seenStatus: "requested" });
-    expect(m.rpc).toHaveBeenCalledWith("transition_withdrawal_report", expect.objectContaining({ p_payload: { revision: 3 } }));
+    await changeWithdrawalReport(REPORT_ID, "cancel", 3, { seenStatus: "requested", reason: "다시 다님" });
+    expect(m.rpc).toHaveBeenCalledWith("transition_withdrawal_report", expect.objectContaining({ p_payload: { revision: 3, comment: "다시 다님" } }));
   });
   it("취소가 아닌 처리는 늘 화면의 revision", async () => {
     m.viewer = { writable: true, user: { id: "teacher", tenantId: "t1" } };

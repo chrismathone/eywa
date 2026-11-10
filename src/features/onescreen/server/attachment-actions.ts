@@ -19,6 +19,7 @@ import { logAction } from "@/features/audit/server/log";
 import { teacherOwnsStudent } from "./scope";
 import { hasVideoAttachment, isReportVideoCT, isVideoAttachment, REPORT_FILE_MAX_BYTES, REPORT_VIDEO_MAX_BYTES, videoExtOf, withVideoExt } from "../report-video";
 import { reportVideoWorkerGate } from "./report-video-gate";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 // 수업 보고서 학생 사진 첨부(P2b) — documents 2단계 티켓 업로드 패턴(issue→클라 uploadToTicket→register).
 // ⚠️ 첨부는 **저장된 보고서 행에만**(유령 row 금지). 변경 시 ClassNote 상태 리셋(옛 스샷 死링크 방지).
@@ -256,7 +257,7 @@ export async function registerReportAttachment(
     .select("id");
   if (error) {
     await removeObject(input.path, { bucket: BUCKET }).catch(() => {});
-    return { ok: false, error: `등록 실패: ${error.message}` };
+    return { ok: false, error: explainDbError(error, { scope: "onescreen.attachment-actions.registerReportAttachment", fallback: "등록 실패 — 잠시 후 다시 시도해 주세요" }).message };
   }
   if (!resetRows?.length) {
     await removeObject(input.path, { bucket: BUCKET }).catch(() => {});
@@ -302,7 +303,7 @@ export async function removeReportAttachment(
     .eq("id", row.id)
     .or(RESET_OK)
     .select("id");
-  if (error) return { ok: false, error: `삭제 실패: ${error.message}` };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "onescreen.attachment-actions.removeReportAttachment", fallback: "삭제 실패 — 잠시 후 다시 시도해 주세요" }).message };
   if (!resetRows?.length) return { ok: false, error: await resetBlockedError(g.supabase, row.id) };
   await removeObject(input.path, { bucket: BUCKET }).catch(() => {});
   // 🔴 파일은 스토리지에서 **실제로 지워진다** — 되돌릴 수 없으니 누가 지웠는지가 유일한 근거다.

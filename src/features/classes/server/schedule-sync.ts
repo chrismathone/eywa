@@ -2,6 +2,7 @@ import "server-only";
 import type { createClient } from "@/lib/supabase/server";
 import { isCurrentSlot, type PriorSlot } from "../schedule-preserve";
 import { lookupLabSeparateIds } from "./lab-separate";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 type Db = Awaited<ReturnType<typeof createClient>>;
 
@@ -93,5 +94,5 @@ export async function deleteCurrentSlots(
     .delete()
     .eq("class_id", classId)
     .or(currentFilter(today));
-  return error ? { error: `스케줄 저장 실패: ${error.message}` } : {};
+  return error ? { error: explainDbError(error, { scope: "classes.schedule-sync.deleteCurrentSlots", fallback: "스케줄 저장 실패 — 잠시 후 다시 시도해 주세요", op: "delete" }).message } : {};
 }

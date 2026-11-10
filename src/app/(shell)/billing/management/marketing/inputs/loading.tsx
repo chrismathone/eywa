@@ -1,7 +1,10 @@
-/** 마케팅 입력·검토(시안) 뼈대 — 머리 판 · 숫자 카드 줄 · 본문 판(같은 시안 화면들의 뼈대와 같은 모양). 부모 스켈레톤을 받지 않게 둔다(skeleton-pairs ②). */
+/** 마케팅 입력 검토 첫 로드 뼈대 — 부모 화면의 스켈레톤을 물려받지 않게 자기 것(skeleton-pairs 가드 ②). */
 export default function Loading() {
-  return <div className="space-y-3 p-5" aria-busy="true" aria-label="마케팅 입력·검토 불러오는 중">
-    <div className="h-28 animate-pulse rounded-xl border border-line bg-card" />
-    <div className="h-72 animate-pulse rounded-xl border border-line bg-card" />
-  </div>;
+  return (
+    <div className="space-y-3" aria-busy="true" aria-label="마케팅 입력 검토 불러오는 중">
+      <div className="border-line bg-card h-20 animate-pulse rounded-2xl border" />
+      <div className="border-line bg-card h-64 animate-pulse rounded-2xl border" />
+      <div className="border-line bg-card h-48 animate-pulse rounded-2xl border" />
+    </div>
+  );
 }

@@ -13,6 +13,7 @@ import { explainDbError } from "@/lib/supabase/db-error";
 // ui_prefs 부분 병합은 **단일 구현**(화면마다 복붙하면 형제 키를 날린다 — CLAUDE.md).
 import { patchMyUiPrefs } from "@/lib/ui-prefs/patch";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { attendanceWindowApplies } from "@/features/attendance/server/edit-window-gate";
 import { autoUnitsKey } from "@/features/attendance/auto-units";
 import { resolveAutoUnits } from "@/features/attendance/server/auto-units";
 import { kstToday } from "@/lib/date-kst";
@@ -153,7 +154,7 @@ export async function copyWeekFromPrevious(input: {
     p_from_monday: from,
     p_to_monday: to,
   });
-  if (error) return { ok: false, error: `지난주 복사에 실패했습니다: ${error.message}` };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "class-sheets.actions.copyWeekFromPrevious", fallback: "지난주 복사에 실패했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   const r = (data ?? {}) as { copied?: number; goalsCopied?: number; skippedSlots?: string[]; unmapped?: string[] };
   // 감사로그 — admin RPC라 행에 남는 흔적이 없다. 한 번 누름 = 한 줄 요약(교시 복사 `ecs_plan_copy`와 같은 결),
   // 실제로 채운 것이 있을 때만(아무것도 안 옮겨졌으면 변동이 아니다).
@@ -245,7 +246,7 @@ export async function upsertGoal(input: {
       .eq("period_start", periodStart)
       .eq("role", input.role)
       .eq("skill_area", input.skillArea);
-    if (error) return { ok: false, error: `저장에 실패했습니다: ${error.message}` };
+    if (error) return { ok: false, error: explainDbError(error, { scope: "class-sheets.actions.upsertGoal", fallback: "저장에 실패했습니다 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
     return { ok: true };
   }
   const { error } = await admin.from("class_sheet_goals").upsert(
@@ -263,7 +264,7 @@ export async function upsertGoal(input: {
     },
     { onConflict: "tenant_id,class_id,scope,period_start,role,skill_area" },
   );
-  if (error) return { ok: false, error: `저장에 실패했습니다: ${error.message}` };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "class-sheets.actions.upsertGoal", fallback: "저장에 실패했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }
 
@@ -390,7 +391,7 @@ export async function upsertStudentMark(input: {
       .from("class_sheet_student_marks")
       .upsert({ ...base, ...Object.fromEntries(cols.map((c) => [c, text[c]])) }, { onConflict }),
   );
-  if (error) return { ok: false, error: `저장에 실패했습니다: ${error.message}` };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "class-sheets.actions.upsertStudentMark", fallback: "저장에 실패했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   // 🔴 마이그레이션 미적용 — 그 칸만 못 담을 뿐 태도·특이사항은 예전처럼 저장된다(#95). 대신 값을 실제로
   //    **입력한 경우엔 조용히 버리지 않고** 아직 준비 전임을 그대로 말한다(화면은 롤백된다).
   const lostKey = (Object.keys(MARK_TEXT_COLUMNS) as MarkTextKey[]).find(
@@ -457,7 +458,7 @@ export async function saveMemo(input: {
       .eq("class_id", input.classId)
       .eq("week_start", weekStart)
       .eq("memo_key", input.memoKey);
-    if (error) return { ok: false, error: `저장에 실패했습니다: ${error.message}` };
+    if (error) return { ok: false, error: explainDbError(error, { scope: "class-sheets.actions.saveMemo", fallback: "저장에 실패했습니다 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
     return { ok: true };
   }
   const { error } = await admin.from("class_sheet_memos").upsert(
@@ -472,7 +473,7 @@ export async function saveMemo(input: {
     },
     { onConflict: "tenant_id,class_id,week_start,memo_key" },
   );
-  if (error) return { ok: false, error: `저장에 실패했습니다: ${error.message}` };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "class-sheets.actions.saveMemo", fallback: "저장에 실패했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }
 
@@ -590,7 +591,7 @@ async function checkStudentEligibleOn(
     .eq("tenant_id", tenantId)
     .eq("class_id", classId)
     .eq("student_id", studentId);
-  if (error) return { ok: false, error: `수강 확인에 실패했습니다: ${error.message}` };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "class-sheets.actions.checkStudentEligibleOn", fallback: "수강 확인에 실패했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   const dow = dowKeyOf(date);
   const eligible = (enrs ?? []).some((e) => {
     const withdrawnAt = (e.students as unknown as { withdrawn_at: string | null } | null)?.withdrawn_at ?? null;
@@ -619,7 +620,7 @@ async function checkStudentEligibleOn(
     .eq("class_id", classId)
     .eq("student_id", studentId)
     .eq("session_date", date);
-  if (attErr) return { ok: false, error: `수강 확인에 실패했습니다: ${attErr.message}` };
+  if (attErr) return { ok: false, error: explainDbError(attErr, { scope: "class-sheets.actions.checkStudentEligibleOn", fallback: "수강 확인에 실패했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   if ((count ?? 0) > 0) return { ok: true };
   // 보강 **예약**(0264a)된 학생 — 출결이 아직 없어도 그날 이 반에 오기로 한 사람(오늘 보드가 미리 세운다). 출결 게이트와 같은 문.
   if (await hasReservedMakeup(tenantId, { studentId, classId, date })) return { ok: true };
@@ -648,7 +649,7 @@ export async function removeMakeupAttendee(input: {
   if (!(await canWriteTenant(user.systemRole, "attendance"))) {
     return { ok: false, error: "출석 입력 권한이 없습니다" };
   }
-  if (user.systemRole === "teacher" && !isWithinAttendanceEditWindow(input.date, kstToday())) {
+  if ((await attendanceWindowApplies(user.systemRole)) && !isWithinAttendanceEditWindow(input.date, kstToday())) {
     return { ok: false, error: attendanceLockMessage(input.date, kstToday()) };
   }
 
@@ -659,7 +660,7 @@ export async function removeMakeupAttendee(input: {
     .eq("tenant_id", tenantId)
     .eq("class_id", input.classId)
     .eq("student_id", input.studentId);
-  if (enrErr) return { ok: false, error: `수강 확인에 실패했습니다: ${enrErr.message}` };
+  if (enrErr) return { ok: false, error: explainDbError(enrErr, { scope: "class-sheets.actions.removeMakeupAttendee", fallback: "수강 확인에 실패했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   const dow = dowKeyOf(input.date);
   const enrolled = (enrs ?? []).some((e) => {
     const withdrawnAt = (e.students as unknown as { withdrawn_at: string | null } | null)?.withdrawn_at ?? null;
@@ -690,7 +691,7 @@ export async function removeMakeupAttendee(input: {
     .eq("class_id", input.classId)
     .eq("student_id", input.studentId)
     .eq("session_date", input.date);
-  if (attErr) return { ok: false, error: `출결 확인에 실패했습니다: ${attErr.message}` };
+  if (attErr) return { ok: false, error: explainDbError(attErr, { scope: "class-sheets.actions.removeMakeupAttendee", fallback: "출결 확인에 실패했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   if ((count ?? 0) === 0) return { ok: false, error: "보강 출결 기록이 없습니다" };
   // 🔴 보강 보고서가 가리키는 반(앵커)의 칸은 여기서 빼지 않는다(원장 2026-09-30 *"보고서 반 = 출석부 반"*) — 원스크린 '보강 빼기'가
   //    보고서와 칸을 함께 지운다. 여기서 칸만 지우면 보고서는 이 반을 가리키는데 출석부엔 칸이 없다.
@@ -764,7 +765,7 @@ export async function markPresentIfAbsent(input: {
     return { ok: false, error: "출석 입력 권한이 없습니다" };
   }
   const today = kstToday();
-  if (user.systemRole === "teacher" && !isWithinAttendanceEditWindow(input.date, today)) {
+  if ((await attendanceWindowApplies(user.systemRole)) && !isWithinAttendanceEditWindow(input.date, today)) {
     return { ok: false, error: attendanceLockMessage(input.date, today) };
   }
   const admin = createAdminClient();
@@ -789,7 +790,7 @@ export async function markPresentIfAbsent(input: {
     p_student: input.studentId,
     p_date: input.date,
   });
-  if (error) return { ok: false, error: `출석 저장에 실패했습니다: ${error.message}` };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "class-sheets.actions.markPresentIfAbsent", fallback: "출석 저장에 실패했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   const rows = (data ?? []) as { status: string; recorded_at: string; id: string; recorded_by?: string | null }[];
   // 감사로그 — DB 트리거(0084a)는 service_role 호출이라 actor가 비어 있다. "누가 찍었는지"는 여기서 남긴다.
   // RPC는 기록이 없을 때만 넣으므로(있으면 no-op) **이번에 새로 만든 때만**: 부르기 전엔 0행 → 지금 내 것 하나.
@@ -847,7 +848,7 @@ export async function clearPresentAttendance(input: {
     return { ok: false, error: "출석 입력 권한이 없습니다" };
   }
   const today = kstToday();
-  if (user.systemRole === "teacher" && !isWithinAttendanceEditWindow(input.date, today)) {
+  if ((await attendanceWindowApplies(user.systemRole)) && !isWithinAttendanceEditWindow(input.date, today)) {
     return { ok: false, error: attendanceLockMessage(input.date, today) };
   }
   const admin = createAdminClient();
@@ -871,7 +872,7 @@ export async function clearPresentAttendance(input: {
   if (error && /PGRST202|Could not find the function|does not exist/i.test(error.message ?? "")) {
     ({ data, error } = await admin.rpc("ecs_clear_present", base));
   }
-  if (error) return { ok: false, error: `출석 취소에 실패했습니다: ${error.message}` };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "class-sheets.actions.clearPresentAttendance", fallback: "출석 취소에 실패했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   const res = (data ?? {}) as { cleared?: number; blocked?: string | null };
   if (res.blocked === "rich") {
     return {
@@ -1094,6 +1095,6 @@ export async function setMyEcsMonthDisplay(
     .update({ ui_prefs: merged })
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "class-sheets.actions.setMyEcsMonthDisplay", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }

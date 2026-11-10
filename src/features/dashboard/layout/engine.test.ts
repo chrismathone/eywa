@@ -3,7 +3,7 @@ import { dropEmptyHeadings, insertAt, moveTo, newItem, patchItem, removeItem, re
 import { cardDef } from "./registry";
 
 describe("sanitizeItems — 읽을 때·저장할 때 거른다", () => {
-  it("모르는 카드 id·중복·제목 없는 머리줄을 버린다", () => {
+  it("모르는 카드 id·중복은 버리고, 제목 없는 머리줄은 '이름 없는 구역'으로 남긴다(2026-11-09 — 버리면 그 아래 카드가 앞 구역으로 붙는다)", () => {
     const out = sanitizeItems([
       { id: "panel:notices", w: 6, h: 1 },
       { id: "panel:없는카드", w: 6, h: 1 },
@@ -13,7 +13,8 @@ describe("sanitizeItems — 읽을 때·저장할 때 거른다", () => {
       null,
       "문자열",
     ]);
-    expect(out.map((i) => i.id)).toEqual(["panel:notices", "heading:y"]);
+    expect(out.map((i) => i.id)).toEqual(["panel:notices", "heading:x", "heading:y"]);
+    expect(out.find((i) => i.id === "heading:x")?.title).toBe("이름 없는 구역");
   });
 
   it("크기는 그 카드의 허용 프리셋으로 맞춘다(깨진 값 = 가장 가까운 것)", () => {

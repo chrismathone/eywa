@@ -30,7 +30,7 @@ it("저장·복원은 쓰기 권한 검사 후 원자적 RPC를 사용한다",as
   ]);
 });
 it("DB 저장 실패를 성공으로 알리거나 변경 감사로그를 남기지 않는다",async()=>{
-  m.rpc.mockResolvedValue({error:{message:"권한이 회수되었습니다"}});
+  m.rpc.mockResolvedValue({error:{code:"P0001",message:"권한이 회수되었습니다"}}); // DB 함수 RAISE = P0001(한글 사유는 그대로 보인다)
   expect(await savePrompt("comment","{{facts}}")).toEqual({ok:false,error:"권한이 회수되었습니다"});
   expect(m.audit).not.toHaveBeenCalled();
 });

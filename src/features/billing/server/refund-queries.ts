@@ -3,6 +3,7 @@ import { receiptHistoryLines } from "../invoice-line-items";
 import { createClient } from "@/lib/supabase/server";
 import { hideRestrictedDocuments } from "@/features/documents/server/restricted";
 import { fetchAllPaged } from "@/lib/supabase/batch";
+import { logDbError } from "@/lib/supabase/db-error";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { getStudentEnrollments } from "@/features/students/server/queries";
 import { studentStatusLabel } from "@/features/students/status/status-labels";
@@ -24,24 +25,32 @@ export type RefundListRow = {
   authorName: string | null; // 작성자 — 목록에선 '담당자' 헤더로 표시(⚠️ 데이터 유지·헤더만 리네임)
 };
 
+type RefundRow = { id: string; form_data: unknown; created_at: string; updated_at: string; uploader: unknown };
+
 // PostgREST to-one 임베딩을 supabase-js가 배열로 타이핑하는 경우 대비.
 function authorNameOf(u: unknown): string | null {
   const o = Array.isArray(u) ? u[0] : u;
   return (o as { display_name?: string } | null | undefined)?.display_name ?? null;
 }
 
-/** 환불 요청서 전건(최신순) — 건수가 작아 소량, 페이지네이션은 호출부 메모리 슬라이스(이력서 패턴). */
+/**
+ * 환불 요청서 전건(최신순) — 화면 쪽 페이지네이션은 호출부 메모리 슬라이스(이력서 패턴).
+ * 쌓이는 문서라 `fetchAllPaged`(1000행에서 조용히 잘리지 않게, B2) · 조회 실패는 던진다 — 빈 목록이면 "요청서 없음"으로 보인다(수정 계획 P1-M 3c).
+ */
 export async function getRefundRequests(): Promise<RefundListRow[]> {
   // 🔴 요청서는 restricted(계좌·환불금액) — DB는 로그인 계정 역할로만 거른다. '다른 강사 뷰'면 대상 X의 역할로 한 번 더(자료실과 같은 판정,
   //    documents/server/restricted.ts). 평소 사용자에게는 DB와 같은 결과다(같은 역할 목록).
   const [supabase, hideRestricted] = await Promise.all([createClient(), hideRestrictedDocuments()]);
-  let qb = supabase
-    .from("academy_documents")
-    .select("id, form_data, created_at, updated_at, uploader:uploaded_by(display_name)")
-    .eq("form_type", REFUND_FORM_TYPE);
-  if (hideRestricted) qb = qb.eq("restricted", false);
-  const { data } = await qb.order("created_at", { ascending: false });
-  return (data ?? []).map((r) => {
+  const data = await fetchAllPaged<RefundRow>((from, to) => {
+    let qb = supabase
+      .from("academy_documents")
+      .select("id, form_data, created_at, updated_at, uploader:uploaded_by(display_name)")
+      .eq("form_type", REFUND_FORM_TYPE);
+    if (hideRestricted) qb = qb.eq("restricted", false);
+    // 페이지 경계에서 겹치거나 빠지지 않게 같은 시각이면 id로 순서를 고정한다.
+    return qb.order("created_at", { ascending: false }).order("id").range(from, to);
+  });
+  return data.map((r) => {
     const d = normalizeRefund(r.form_data);
     return {
       id: r.id,
@@ -178,7 +187,12 @@ export async function getRefundRequestById(id: string): Promise<RefundDetail | n
     .eq("id", id)
     .eq("form_type", REFUND_FORM_TYPE);
   if (hideRestricted) qb = qb.eq("restricted", false);
-  const { data } = await qb.maybeSingle();
+  const { data, error } = await qb.maybeSingle();
+  // 조회 실패를 null로 돌리면 "없는 요청서"(404)로 보인다 — 없음과 실패를 가른다.
+  if (error) {
+    logDbError(error, "billing.refund.detail", { id });
+    throw new Error("환불 요청서를 불러오지 못했습니다");
+  }
   if (!data) return null;
   return {
     id: data.id,

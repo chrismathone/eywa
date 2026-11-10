@@ -7,6 +7,9 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { canSeeRestrictedDocuments } from "@/features/documents/server/restricted";
 import { teacherViewReadDb, writeSessionFirst } from "./teacher-view-db";
 import { releaseWithdrawalRefunds } from "@/features/withdrawal-reports/server/release";
+import { loadRefundLink } from "@/features/withdrawal-reports/server/refund-steps";
+import { COMPLETION_DATE_FORMAT, completionDateOk, linkedCapError, linkedCompletionLock, linkedDeleteLock, linkedEditLock } from "@/features/withdrawal-reports/refund-decision";
+import { viewAsTeacher } from "@/lib/auth/view-as";
 import {
   normalizeRefund,
   parseRefundForm,
@@ -25,6 +28,7 @@ import {
   getRefundStudentOptions,
   type RefundStudentOption,
 } from "./refund-queries";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 // 환불 요청서(웹 작성 폼) 변경 액션 — 게이트는 canWriteTenant("billing")(수납 쓰기 = master/admin/accountant).
 // 저장소는 academy_documents(kind='form', restricted=true) — 데이터베이스 탐색기에도 같은 행이 보인다.
@@ -90,14 +94,20 @@ export async function saveRefundRequest(
 
   if (id) {
     // 완료 처리자 자동 기록엔 직전 저장분이 필요(이미 기록된 완료자를 보존하려고).
-    const { data: existing } = await supabase
+    const { data: existing, error: existingError } = await supabase
       .from("academy_documents")
       .select("form_data")
       .eq("tenant_id", tenantId)
       .eq("id", id)
       .eq("form_type", REFUND_FORM_TYPE)
       .maybeSingle();
+    // 직전 값을 못 읽으면 저장하지 않는다(리뷰 r2 D-8 · #16) — 완료 처리자가 이번 저장자로 바뀌고 '처음 완료'로 잘못 보던 길.
+    if (existingError) return { error: "요청서를 다시 불러오지 못해 저장하지 않았습니다. 잠시 후 다시 시도해 주세요." };
     const prev = existing ? normalizeRefund(existing.form_data) : null;
+    // 퇴원보고서에 이어진 요청서(원장 2026-11-06·11-09) — 고치는 것(모든 칸)·환불완료일자는 그 요청서의 데스크 담당(재직)과 원장급만 · 비우기는 원장만 ·
+    // 총 환불금액은 원장 승인 줄의 낸 돈 합(상한)을 넘지 않는다. 완료일자가 기다리던 퇴원·수강종료 처리를 푼다(release). DB 트리거(s2_0037)도 같은 규칙으로 막는다.
+    const denied = await linkedSaveDenied(gate.user, id, parsed, prev);
+    if (denied) return { error: denied };
     const data = stampCompletion(parsed, prev, gate.user);
     // 세션 먼저(행위자 A) · 강사뷰에서 RLS에 막히면 관리 클라이언트로 같은 문장(teacher-view-db.ts).
     // select 없으면 RLS에 막혀 0행을 고쳐도 성공으로 보고된다(삭제와 같은 규약) — 0행은 아래에서 "저장되지 않았습니다".
@@ -108,7 +118,7 @@ export async function saveRefundRequest(
       .eq("id", id)
       .eq("form_type", REFUND_FORM_TYPE)
       .select("id"));
-    if (error) return { error: `저장 실패: ${error.message}` };
+    if (error) return { error: explainDbError(error, { scope: "billing.refund-actions.saveRefundRequest", fallback: "저장 실패 — 잠시 후 다시 시도해 주세요" }).message };
     if (!updated?.length) return { error: "저장되지 않았습니다 — 이 요청서를 고칠 권한이 없거나 이미 지워졌습니다." };
     await logAction({ action: "refund_request_update", ...refundAuditFields(id, data, prev) });
     // 퇴원보고서 데스크 환불 단계(원장 2026-11-03) — 환불완료일자를 처음 넣으면 이 요청서를 기다리던 퇴원보고서를 이어서 처리한다
@@ -135,10 +145,59 @@ export async function saveRefundRequest(
     })
     .select("id")
     .single());
-  if (error || !row) return { error: `저장 실패: ${error?.message ?? "unknown"}` };
+  if (error || !row) return { error: explainDbError(error, { scope: "billing.refund-actions.saveRefundRequest", fallback: "저장 실패 — 잠시 후 다시 시도해 주세요" }).message };
   await logAction({ action: "refund_request_create", ...refundAuditFields(row.id, data, null) });
   revalidateRefund(row.id);
   return { ok: true, id: row.id, nonce: Date.now(), redirectTo: `/billing/refunds/${row.id}` };
+}
+
+/** 화면 행위자(강사뷰면 대상 직원 — 원장 몫으로 치지 않는다)와 실제 로그인 계정(DB 트리거가 보는 계정)의 원장급 여부. */
+async function linkedActors(user: { id: string; systemRole: string }) {
+  const account = (await getCurrentUser()) ?? user;
+  return { actor: { id: user.id, directorLevel: user.systemRole === "master" && !(await viewAsTeacher()) }, account: { id: account.id, directorLevel: account.systemRole === "master" }, viaTeacherView: account.id !== user.id };
+}
+
+/**
+ * 이어진 요청서 저장을 막을 까닭(원장 결정 2026-11-06·11-09 · 리뷰 r2 I6·B1) — 이어지지 않았으면 null. 행위자·실제 계정 **둘 다** 본다(`linked-request.ts`):
+ * 🔴 강사뷰 쓰기(`writeSessionFirst`)는 세션이 RLS에 막히면 관리 키로 다시 써 트리거를 지나 버린다 — 앱이 같은 기준으로 먼저 막는다(DB는 관리 키 쓰기의 행위자를 모른다).
+ * ① 고치기(모든 칸) = 재직 중인 담당 데스크·원장급 ② 환불완료일자 비우기 = 원장급만 ③ 넣기·바꾸기 = 담당 데스크·원장급 · C.3 대체된 요청서는 누구도 ④ 상한(원장 승인 줄의 낸 돈 합 —
+ * 모르면 금액 칸을 바꾸는 저장만 거절). 연결을 못 읽으면 막는다. 거절은 감사로그(`refund_request_complete_denied` · `refund_request_linked_denied`).
+ */
+async function linkedSaveDenied(user: { id: string; tenantId: string; systemRole: string }, id: string, next: RefundRequestData, prev: RefundRequestData | null): Promise<string | null> {
+  let link: Awaited<ReturnType<typeof loadRefundLink>>;
+  try { link = await loadRefundLink(user.tenantId, id); }
+  catch { return "퇴원보고서 연결을 확인하지 못해 저장하지 않았습니다. 잠시 후 다시 시도해 주세요."; }
+  if (!link) return null;
+  const { actor, account, viaTeacherView } = await linkedActors(user);
+  const base = { documentId: id, studentName: next.student.name || null, deskName: link.deskName, ...(viaTeacherView ? { viaTeacherView: true } : {}) };
+  const edit = linkedEditLock(link, actor, account);
+  if (edit) {
+    await logAction({ action: "refund_request_linked_denied", targetType: "refund_request", targetLabel: refundTitle(next), metadata: { ...base, attempted: "요청서 수정", reason: "담당 데스크·원장만" } });
+    return edit;
+  }
+  const before = (prev?.result.completedDate ?? "").trim();
+  const after = next.result.completedDate.trim();
+  // 완료일자 꼴 = 빈칸 또는 YYYY-MM-DD(리뷰 r3 R-9 · DB 트리거와 같다 — '확인 중' 같은 글이 완료로 읽혀 데스크 대기가 풀렸다).
+  if (before !== after && !completionDateOk(next.result.completedDate)) {
+    await logAction({ action: "refund_request_linked_denied", targetType: "refund_request", targetLabel: refundTitle(next),
+      metadata: { ...base, attempted: `환불완료일자 ${after}`, reason: "날짜 꼴 아님" } });
+    return COMPLETION_DATE_FORMAT;
+  }
+  if (before !== after) {
+    const reason = linkedCompletionLock(link, actor, account, !!before && !after);
+    if (reason) {
+      await logAction({ action: "refund_request_complete_denied", targetType: "refund_request", targetLabel: refundTitle(next),
+        metadata: { ...base, attempted: after ? `환불완료일자 ${after} 입력` : "환불완료일자 지움" } });
+      return reason;
+    }
+  }
+  const cap = linkedCapError(link.cap, prev ? { totalAmount: prev.refund.totalAmount, paymentDetails: prev.refund.paymentDetails } : null, { totalAmount: next.refund.totalAmount, paymentDetails: next.refund.paymentDetails });
+  if (cap) {
+    await logAction({ action: "refund_request_linked_denied", targetType: "refund_request", targetLabel: refundTitle(next),
+      metadata: { ...base, attempted: `총 환불금액 ${next.refund.totalAmount || "(빈칸)"}`, reason: link.cap === null ? "상한 모름" : `상한 ${link.cap.toLocaleString("ko-KR")}원` } });
+    return cap;
+  }
+  return null;
 }
 
 /**
@@ -212,13 +271,29 @@ export async function deleteRefundRequest(id: string): Promise<{ ok?: boolean; e
 
   const { db: supabase, tenantId } = await refundDb(gate.user.tenantId);
   // 지운 뒤엔 되짚을 행이 없다 — 학생·금액을 **삭제 전에** 읽어 둔다(expense_delete와 같은 규약).
-  const { data: before } = await supabase
+  const { data: before, error: beforeError } = await supabase
     .from("academy_documents")
     .select("title, form_data")
     .eq("tenant_id", tenantId)
     .eq("id", id)
     .eq("form_type", REFUND_FORM_TYPE)
     .maybeSingle();
+  if (beforeError) return { error: "요청서를 다시 불러오지 못해 지우지 않았습니다. 잠시 후 다시 시도해 주세요." };
+  // 퇴원보고서에 이어진 요청서(원장 결정 2026-11-09 · 리뷰 r2 B1) — 완료된 것은 지우지 않는다(DB도 막는다 · 원장이 먼저 완료일자를 비운다) ·
+  // 미완료는 재직 중인 담당 데스크·원장급만(행위자·실제 계정 둘 다 — 강사뷰 관리 키 재시도가 DB를 지나기 전에).
+  const prevData = before ? normalizeRefund(before.form_data) : null;
+  let link: Awaited<ReturnType<typeof loadRefundLink>>;
+  try { link = await loadRefundLink(gate.user.tenantId, id); }
+  catch { return { error: "퇴원보고서 연결을 확인하지 못해 지우지 않았습니다. 잠시 후 다시 시도해 주세요." }; }
+  if (link) {
+    const { actor, account, viaTeacherView } = await linkedActors(gate.user);
+    const denied = linkedDeleteLock(link, !!prevData?.result.completedDate.trim(), actor, account);
+    if (denied) {
+      await logAction({ action: "refund_request_linked_denied", targetType: "refund_request", targetLabel: (before?.title as string | null) ?? null,
+        metadata: { documentId: id, studentName: prevData?.student.name || null, deskName: link.deskName, attempted: "요청서 삭제", reason: prevData?.result.completedDate.trim() ? "환불완료일자 있음" : "담당 데스크·원장만", ...(viaTeacherView ? { viaTeacherView: true } : {}) } });
+      return { error: denied };
+    }
+  }
   const { data: gone, error } = await writeSessionFirst("mutate", (db) => db
     .from("academy_documents")
     .delete()
@@ -226,25 +301,23 @@ export async function deleteRefundRequest(id: string): Promise<{ ok?: boolean; e
     .eq("id", id)
     .eq("form_type", REFUND_FORM_TYPE)
     .select("id"));
-  if (error) return { error: `삭제 실패: ${error.message}` };
+  if (error) return { error: explainDbError(error, { scope: "billing.refund-actions.deleteRefundRequest", fallback: "삭제 실패 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
+  // RLS에 막히면 PostgREST가 에러 없이 0행을 지운다 — 성공으로 보고하지 않는다(리뷰 r2 B1 — 안 지워진 요청서를 지운 것으로 알고 다시 승인하지 않게).
+  if (!gone?.length) return { error: "지워지지 않았습니다 — 이 요청서를 지울 권한이 없거나 이미 지워졌습니다." };
 
-  // RLS에 막히면 PostgREST가 에러 없이 0행을 지운다 — 안 지워진 삭제를 감사로그가 사실로 적지 않게 한다.
-  if (gone?.length) {
-    const d = before ? normalizeRefund(before.form_data) : null;
-    await logAction({
-      action: "refund_request_delete",
-      targetType: "refund_request",
-      targetLabel: (before?.title as string | null) ?? null,
-      metadata: {
-        documentId: id,
-        studentName: d?.student.name || null,
-        totalAmount: d?.refund.totalAmount || null,
-        completedDate: d?.result.completedDate || null,
-      },
-    });
-    // 지운 요청서는 퇴원보고서 데스크 환불 단계에서 빠진다(원장 2026-11-03) — 그 요청서만 기다리던 보고서는 이어서 처리한다.
-    await releaseWithdrawalRefunds({ tenantId: gate.user.tenantId, documentId: id, actorId: gate.user.id });
-  }
+  await logAction({
+    action: "refund_request_delete",
+    targetType: "refund_request",
+    targetLabel: (before?.title as string | null) ?? null,
+    metadata: {
+      documentId: id,
+      studentName: prevData?.student.name || null,
+      totalAmount: prevData?.refund.totalAmount || null,
+      completedDate: prevData?.result.completedDate || null,
+    },
+  });
+  // 지운 요청서는 퇴원보고서 데스크 환불 단계에서 빠진다(원장 2026-11-03) — 그 요청서만 기다리던 보고서는 이어서 처리한다(이어진 요청서면 그 줄은 원장 환불 결정 대기로).
+  await releaseWithdrawalRefunds({ tenantId: gate.user.tenantId, documentId: id, actorId: gate.user.id });
   revalidateRefund(id);
   return { ok: true };
 }

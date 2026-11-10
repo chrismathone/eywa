@@ -10,7 +10,7 @@ export const ONTOLOGY_MAP = `## 온톨로지 — 이 학원의 자료를 읽는 
 모든 자료는 원생을 중심으로 이어지고, 원생 → 반 → 강사 → 과목 → 학원 순서로 올려 본다. 이 순서는 보는 관점일 뿐 한 부모만 갖는 나무가 아니다(한 원생이 여러 반, 한 강사가 여러 과목, 공동 담당이 있다).
 
 ### 개체
-- 원생 = students(보호자는 같은 줄의 parent_* · parent2_* 칸) · 형제 = student_siblings(student_a · student_b · linked)
+- 원생 = students(보호자는 같은 줄의 parent_* · parent2_* 칸) · 형제 = onto_siblings(앱 판정 그대로 — student_siblings는 직원이 손으로 지정·해제한 짝만)
 - 반 = classes(subject = 과목 · teacher_id = 지금 담임 · closed_at = 종강일 · is_active=false = 폐지 · is_makeup_pool = 보강용 반). 운영 중인 반 = is_active and (closed_at is null or closed_at ≥ 오늘)
 - 강사·직원 = users · 학원 = 이 지점(보기가 이미 이 지점만 보여 준다)
 
@@ -26,9 +26,8 @@ export const ONTOLOGY_MAP = `## 온톨로지 — 이 학원의 자료를 읽는 
   taught_by가 비어 있는 것은 '원래 담당이 수업했다'는 뜻이다 — "수업 기록이 없다"·"입력 누락"으로 읽지 않는다. onto_class_teachers는 배정 목록이라 귀속 계산에 쓰지 않는다(요일·교시 칸이 없다).
   강사별 수업 수·시수·급여의 정답은 앱 화면(출석부 정산·강사 보기)이다 — 비서 숫자는 근사라고 밝히고, 강사 비교는 반 단위 지표(그 강사가 맡은 반들의 출석률 등)로 보되 개인 성과로 단정하지 않는다.
 - 담임(classes.teacher_id)은 지금 값이다. 기간을 담임 기준으로 셀 때 그 사이 담임이 바뀐 반은 바뀐 날 이전을 새 담임 몫으로 세지 않는다.
-  담임 전이 = audit_logs 중 action 'class_handover_apply'·'class_update'이면서 metadata->>'newTeacherId'가 있는 줄만(class_update는 강의실 수정 등도 섞여 있다).
-  반 = metadata->>'classId'(2026년 9월 하순부터 남긴 로그), 없으면 target_label(반 이름)이 이 지점에서 하나뿐일 때만(종강하면 반 이름이 바뀌어 이름으로는 어긋날 수 있다). 날짜 = metadata->>'effectiveDate', 없으면 created_at.
-  이렇게 가리지 못하는 반은 빼고 요약에 밝힌다.
+  그때의 담임은 onto_homeroom_history로 본다(앱과 같은 규칙 — 감사 기록의 담임 전이로 만든 구간 · valid_from 포함 ~ valid_to 미포함 · source가 'no_record'면
+  바뀐 기록이 없는 반이라 지금 담임을 그대로 둔 것 — 과거에도 같았는지는 모른다). 감사 기록(audit_logs) 원문을 직접 읽어 담임을 되짚지 않는다(원문 키를 잘못 읽기 쉽다).
 - 과거 시점을 물으면 그때 유효했던 관계(수강 기간·교시 담당 기간)로 본다.
 
 ### 묻지 않으면 빼는 것(뺐다고 밝힐 필요 없다)
@@ -56,9 +55,12 @@ export const ONTOLOGY_MAP = `## 온톨로지 — 이 학원의 자료를 읽는 
 
 ### 세는 규칙 — onto_* 보기에 미리 계산돼 있다(원생·출결·수강 수는 이 보기로 센다)
 - onto_students: 원생 한 사람 한 줄. counted = 집계에 넣는 원생(테스트 원생 is_test · 중복 병합으로 흡수된 원생 · 수업 기록 없는 장부 정리 퇴원을 뺀다). status_label = 예비·상담완료·재원·휴원·퇴원.
-  exit_kind = real(실제 퇴원) · bookkeeping(장부 정리 — 퇴원으로 세지 않는다) · system_bulk(시스템 일괄 처리 날짜 미상 — 월별 퇴원 추이에서 뺀다) · null(퇴원 아님). withdrawn_on = 한국 날짜 퇴원일.
+  exit_kind = real(실제 퇴원) · bookkeeping(장부 정리 — 퇴원으로 세지 않고 말하지도 않는다 · 끝난 수강이 없거나, 있어도 출결·수업료 청구가 한 번도 없다고 표식된 정리 퇴원) · system_bulk(시스템 일괄 처리 날짜 미상 — 월별 퇴원 추이에서 뺀다) · null(퇴원 아님). withdrawn_on = 한국 날짜 퇴원일.
 - 한 원생은 여러 반·과목을 들어도 학원 인원에서는 한 명이다(count(distinct)).
 - onto_attendance: 유효 출결만 — 정정은 새 줄로 쌓이니 학생·반·수업일·교시마다 가장 늦게 기록한 한 줄.
 - onto_enrollments: 수강 + 반 과목 + 오늘 명단(on_roster_today, 휴원 포함 · 반이동은 이동일부터 빠짐) · 오늘 수업 대상(active_today, 휴원 제외).
+- onto_classes: 반 상태(운영 중 · 종강 · 종강 예정 · 폐지)와 프로그램(수학 · 인재원 영어 · EiE · 그 밖의 과목). onto_homeroom_history: 그때의 담임.
+- onto_siblings · onto_households: 형제(앱과 같은 자동 판정 + 직원 지정) · 가구(형제로 이어진 묶음). student_siblings 표는 직원이 손으로 지정·해제한 짝뿐이다 — 그 표가 비었다고 형제가 없는 것이 아니다.
+- onto_tuition_months: 학생·청구 달 한 줄(그 달 수업료 청구가 살아 있는 학생). onto_teacher_churn: 강사별 퇴원율(앱 강사평가 값 그대로).
 - 금액은 청구 근거 한 번만 센다. 여러 과목·반·강사에게 금액을 복제하거나 나눠 붙이지 않고, 반·강사 합계를 더해 학원 합계로 쓰지 않는다.
 - 자료 없음은 0이 아니다. 기록이 없으면 "기록 없음"이라고 쓴다.`;

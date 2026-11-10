@@ -125,7 +125,7 @@ const VIDEO_HW_CANCELLED_ERROR = "이 영상 숙제는 영상 제출 현황에�
 import { classBoardLiveForStudent, explainBoardMissing, resolveMakeupSendClass } from "./send-class";
 import { captureReportJj } from "./jj-capture";
 import type { OneScreenStudent, PrevReport } from "../types";
-import { humanizeDbError, logDbError } from "@/lib/supabase/db-error";
+import { humanizeDbError, logDbError, explainDbError } from "@/lib/supabase/db-error";
 
 
 /**
@@ -2074,7 +2074,7 @@ export async function setMyOnescreenFontSize(
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
+  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "onescreen.actions.setMyOnescreenFontSize", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   const raw =
     row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
@@ -2124,7 +2124,7 @@ export async function setMyLastReportTemplate(
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
+  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "onescreen.actions.setMyLastReportTemplate", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   const raw =
     row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
       ? (row.ui_prefs as Record<string, unknown>)

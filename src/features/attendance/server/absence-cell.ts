@@ -17,6 +17,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { effectiveAttendanceRecords } from "../effective-records";
 import { hasMemoLine } from "@/features/onescreen/makeup-absence-link";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 type Sb = Awaited<ReturnType<typeof createClient>>;
 
@@ -51,7 +52,7 @@ export async function fetchAbsenceCells(
     // 🔴 조용히 빈 목록으로 두지 않는다 — 그러면 "그날 결석 기록이 없다"는 **거짓 결론**이 나오고,
     //    이 기능이 고치려던 바로 그 증상(연결이 안 됐는데 이유를 모름)으로 돌아간다.
     console.error("[absence-cell] 결석 칸 조회 실패", error.message);
-    return { ok: false, error: `결석 기록을 읽지 못했습니다 — ${error.message}` };
+    return { ok: false, error: explainDbError(error, { scope: "attendance.absence-cell.fetchAbsenceCells", fallback: "결석 기록을 읽지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   }
   const rows = (data ?? []) as {
     id: string;

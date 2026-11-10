@@ -1,5 +1,6 @@
 "use client";
 
+import { createSessionSaveQueue, type SessionSaveQueue } from "@/features/onescreen/session-save-queue";
 import { registerMakeupEntries } from "../server/makeup-register-actions";
 import { notifyMakeupEffect } from "./makeup-effect-toast";
 import { setMakeupClass } from "../server/makeup-class-actions";
@@ -762,28 +763,46 @@ export function OneScreenClient({
       }),
     [activeDate],
   );
-  const saveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   // 덜 쓴 창 저장을 서버가 건너뛴 학생 — 800ms 자동저장마다 토스트가 쌓이지 않게 1회만.
   const skippedSaveToast = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    const timers = saveTimers.current;
-    return () => {
-      for (const t of timers.values()) clearTimeout(t);
-    };
-  }, []);
+  /**
+   * 학생별 자동저장 줄(`session-save-queue.ts`, 수정 계획 P1-O) — 한 학생에 한 요청만 나가고(응답 역전 없음),
+   * 던진 실패는 다시 보내고, 다 실패하면 알린다. 예전엔 `.catch`가 없어 네트워크 오류가 조용히 사라졌다.
+   * 조립·적용 함수는 렌더마다 바뀌므로(날짜·테스트 표시) 줄은 ref를 거쳐 **보낼 때의** 함수를 부른다.
+   */
+  const saveDepsRef = useRef<{
+    build: typeof buildSessionInput;
+    apply: typeof applySessionSaveResult;
+    failText: string;
+  } | null>(null);
+  const saveQueueRef = useRef<SessionSaveQueue | null>(null);
+  const getSaveQueue = () => {
+    if (!saveQueueRef.current) {
+      saveQueueRef.current = createSessionSaveQueue({
+        send: (sid) => {
+          const s = studentsRef.current.find((x) => x.id === sid);
+          const deps = saveDepsRef.current;
+          if (!s || !deps) return null;
+          return saveOnescreenSession(deps.build(s, reportsRef.current[sid]));
+        },
+        apply: (sid, res) => saveDepsRef.current?.apply(sid, res),
+        onGiveUp: () => toast.error(saveDepsRef.current?.failText ?? t("os.c.autosaveFail")),
+      });
+    }
+    return saveQueueRef.current;
+  };
+  // 언마운트 = 대기 타이머 정리. 🔴 ref도 비운다 — StrictMode 재마운트에서 정리된 줄을 다시 쓰지 않게(다음 호출이 새로 만든다).
+  useEffect(
+    () => () => {
+      saveQueueRef.current?.dispose();
+      saveQueueRef.current = null;
+    },
+    [],
+  );
   // 대기 중 자동저장을 즉시 커밋(날짜 이동 전 호출) — 디바운스 800ms 안에 이동하면 유실되던 편집 방어.
   useEffect(() => {
-    flushSavesRef.current = () => {
-      for (const [sid, timer] of saveTimers.current) {
-        clearTimeout(timer);
-        const s = studentsRef.current.find((x) => x.id === sid);
-        if (!s) continue;
-        void saveOnescreenSession(buildSessionInput(s, reportsRef.current[sid])).then((res) => {
-          applySessionSaveResult(sid, res);
-        });
-      }
-      saveTimers.current.clear();
-    };
+    saveDepsRef.current = { build: buildSessionInput, apply: applySessionSaveResult, failText: t("os.c.autosaveFail") };
+    flushSavesRef.current = () => getSaveQueue().flush();
   });
   function applySessionSaveResult(
     studentId: string,
@@ -912,19 +931,7 @@ export function OneScreenClient({
   }
   // 학생별 디바운스 upsert — 편집 800ms 후 저장. 학생별 타이머라 학생 전환에도 유실 없음.
   function queueSave(studentId: string) {
-    const prev = saveTimers.current.get(studentId);
-    if (prev) clearTimeout(prev);
-    saveTimers.current.set(
-      studentId,
-      setTimeout(() => {
-        saveTimers.current.delete(studentId);
-        const s = studentsRef.current.find((x) => x.id === studentId);
-        if (!s) return;
-        void saveOnescreenSession(buildSessionInput(s, reportsRef.current[studentId])).then((res) => {
-          applySessionSaveResult(studentId, res);
-        });
-      }, 800),
-    );
+    getSaveQueue().queue(studentId, 800);
   }
 
   // 반 필터 — 특정 반이면 그 반 수강생 전부(tags로 다과목/다반 학생도 양쪽에서 잡음, 누락 방지) + 좌측 그룹 라벨을
@@ -2085,8 +2092,7 @@ export function OneScreenClient({
         //    화면에 상태가 보이는 행의 변경(정정)은 종전대로 덮는다 — 그건 보고 하는 편집이다.
         //    보강 흐름은 opts.overwrite로 이 보호를 끈다(위 opts 주석 — 성공 안내와 기록이 갈리는 것 방지).
         onlyIfEmpty: status !== null && prev.raw === null && !opts?.overwrite,
-        // 수업 나누기로 온 학생(0351a)은 이 반 수강행이 없다 — 보강 추가와 같은 문으로 연다(받는 반 = 출결 몫).
-        ...(row?.splitIn ? { allowMakeup: true } : {}),
+        // 수업 나누기로 온 학생(0351a)은 서버가 나누기 표를 직접 보고 연다(`hasSplitInto` · 받는 반 = 출결 몫) — 플래그 없음(결정 #5 ②).
       });
       if ("error" in res) {
         rollbackAttendance(studentId, classId, prev);

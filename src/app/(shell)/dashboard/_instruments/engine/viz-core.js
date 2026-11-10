@@ -108,9 +108,10 @@ const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 /* 그릴 때마다 바뀌는 내부 id는 비교에서 뺀다. 값이 같으면 다시 그리지도 움직이지도 않는다. */
 const signature = (html) => html.replace(/\b(?:gauge|thin)-\d+/g, '');
 
-V.paint = (el, draw, force) => {
-  const w = Math.floor(el.clientWidth);
-  const h = Math.floor(el.clientHeight);
+/* size = [w, h]를 미리 재 왔으면 그 값을 쓴다(VizSlot이 여러 칸을 한 번에 재고 한 번에 그린다 — 칸마다 재면 그릴 때마다 레이아웃을 다시 한다). */
+V.paint = (el, draw, force, size) => {
+  const w = Math.floor(size ? size[0] : el.clientWidth);
+  const h = Math.floor(size ? size[1] : el.clientHeight);
   if (!w || !h || (!force && el._w === w && el._h === h)) return;
   el._w = w;
   el._h = h;
@@ -150,9 +151,9 @@ function morph(el, before) {
 }
 
 /* 버튼으로 값이 바뀌었을 때 부른다. 폭이 바뀌어 다시 그릴 때(V.paint)는 움직이지 않는다. */
-V.update = (el, draw) => {
-  const w = Math.floor(el.clientWidth);
-  const h = Math.floor(el.clientHeight);
+V.update = (el, draw, size) => {
+  const w = Math.floor(size ? size[0] : el.clientWidth);
+  const h = Math.floor(size ? size[1] : el.clientHeight);
   if (!w || !h) return;
   const html = draw(w, h);
   const sig = signature(html);

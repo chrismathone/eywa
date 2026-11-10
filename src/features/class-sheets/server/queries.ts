@@ -74,6 +74,7 @@ import { goalAreasFor } from "../lib/goal-areas";
 import { normalizeSlotTime, weekDatesOf, YMD_RE, type DowKey } from "../lib/week";
 import { ecsDelegatedClassIds, ecsVisibleClassFilter, requireEcsClassAccess } from "./access";
 import { loadViewerUiPrefs } from "./viewer-prefs";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * ECS 주간 시트 로더 — 게이트(requireEcsClassAccess) 통과 후 admin client(service_role)로만 읽는다
@@ -337,7 +338,7 @@ export async function getClassSheetWeek(
   ]);
 
   for (const r of [schedulesRes, enrollmentsRes, planLinesRes, weekGoalsRes, monthGoalsRes, marksRes, attendanceRes, memosRes]) {
-    if (r.error) return { ok: false, error: `시트 데이터를 불러오지 못했습니다: ${r.error.message}` };
+    if (r.error) return { ok: false, error: explainDbError(r.error, { scope: "class-sheets.queries.getClassSheetWeek", fallback: "시트 데이터를 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   }
 
   type EnrollmentRow = {
@@ -894,7 +895,7 @@ export async function getSheetLanding(
     // 표시 취향은 보는 사람(실제 계정) 것 — 쓰기(patchMyUiPrefs)와 같은 행(viewer-prefs.ts). 반 순서만 아래에서 화면 주인 것을 읽는다.
     loadViewerUiPrefs(),
   ]);
-  if (classError) return { ok: false, error: `반 목록을 불러오지 못했습니다: ${classError.message}` };
+  if (classError) return { ok: false, error: explainDbError(classError, { scope: "class-sheets.queries.getSheetLanding", fallback: "반 목록을 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   /**
    * 🔴 **'다른 강사 뷰'는 그 사람이 보는 화면 그대로**여야 한다(원장 2026-09-05 *"다른 사람 강사뷰는
    *    그 사람 뷰와 동일하게 해줘"*) — 순서도 **그 강사가 저장한 값**을 읽는다. 보는 사람(관리자) 값을

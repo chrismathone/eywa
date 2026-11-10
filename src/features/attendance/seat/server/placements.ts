@@ -1,3 +1,4 @@
+import { isMissingRelation } from "@/lib/supabase/db-error";
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hhmm, type SeatKey } from "../seat";
@@ -26,7 +27,7 @@ const NOT_READY = (reason: string): SeatPlacementLoad => ({ rows: [], ready: fal
 
 /** 표가 아직 없다(SQL 미적용)와 그냥 실패를 가른다 — 원인을 단정하지 않기 위해서다. */
 function missingTable(err: { code?: string; message?: string }): boolean {
-  return err.code === "42P01" || err.code === "PGRST205" || /seat_placements/i.test(err.message ?? "");
+  return isMissingRelation(err, "seat_placements"); // 이름 + 없음 코드(공용 판정, P1-E)
 }
 
 /**

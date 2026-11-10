@@ -11,7 +11,7 @@ import { normalizeNoticeAudience, POPUP_POSITIONS } from "../audience";
 import { noticePopupsTag } from "./queries";
 // 영문 번역(0249a) — 저장 시점 백그라운드 · [영문 만들기] 버튼. 🔴 페이지 로드에서 부르지 말 것.
 import { buildNoticeTranslation } from "./translate";
-import { humanizeDbError } from "@/lib/supabase/db-error";
+import { humanizeDbError, explainDbError } from "@/lib/supabase/db-error";
 import { kstLocalToIso } from "@/lib/date-kst";
 
 export type NoticePopupActionState = { error?: string; ok?: boolean } | undefined;
@@ -149,7 +149,7 @@ export async function regenerateNoticeTranslation(
     .eq("id", id)
     .eq("tenant_id", g.user.tenantId)
     .maybeSingle();
-  if (readErr) return { error: readErr.message };
+  if (readErr) return { error: explainDbError(readErr, { scope: "notices.actions.regenerateNoticeTranslation", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   if (!data) return { error: "팝업을 찾을 수 없습니다" };
 
   const r = await buildNoticeTranslation(

@@ -26,6 +26,8 @@ import { startStudentConsultationFromAudio } from "@/features/consultations/serv
 import type { StudentOption } from "@/features/consultations/server/queries";
 
 const KIND = "student-consultation" as const;
+/** 떠나기가 이만큼 지나도 끝나지 않으면 상담으로 가는 길을 직접 보인다(회의록 폼과 같은 값). */
+const LEAVE_FALLBACK_MS = 5000;
 
 /**
  * 녹음/음성 파일로 재원생 상담 생성 → 전사·AI 자동 분석(startStudentConsultationFromAudio).
@@ -49,6 +51,10 @@ function AudioConsultationFormInner({ students, recordingOwner, initialStudentId
   const [error, setError] = useState<string | null>(null);
   const [pending, startBusy] = useTransition();
   const [leaving, setLeaving] = useState(false);
+  /** 저장 뒤 갈 곳 — 커밋 뒤 효과에서 문서 이동을 건다(아래). */
+  const [leaveHref, setLeaveHref] = useState<string | null>(null);
+  /** 이동이 끝나지 않았을 때 보일 상담 링크(LEAVE_FALLBACK_MS 뒤에만). */
+  const [stalledHref, setStalledHref] = useState<string | null>(null);
   const busy = pending || leaving;
   const inFrame = useInFrame();
   const [recoveryId, setRecoveryId] = useState<string | null>(null);
@@ -62,6 +68,32 @@ function AudioConsultationFormInner({ students, recordingOwner, initialStudentId
   useEffect(() => {
     if (recording && detailsRef.current) detailsRef.current.open = true;
   }, [recording]);
+
+  // 저장 뒤 상세로 — 🔴 액션 콜백 안에서 바로 `location.assign`을 걸면, 곧이어 커밋되는 액션 응답(재검증)이 주소를 다시 적으면서
+  //    그 이동이 취소될 수 있다 — 상담은 만들어졌는데 '분석 시작'이 영영 돌고, 이전 화면 유지 방식에선 다시 열어도 그 화면이 그대로였다
+  //    (2026-11-09 같은 녹음으로 세 번 저장됨). 그래서 커밋 뒤에 걸고, 그래도 안 넘어가면 잠시 뒤 상담 링크와 '새로 작성'을 보인다.
+  //    버튼은 다시 열지 않는다 — 다시 누르면 같은 상담이 하나 더 생긴다(전사·분석 비용도 두 번).
+  useEffect(() => {
+    if (!leaveHref) return;
+    // leaveHref는 이미 창이면 embed가 실린 값이다 — withEmbed는 멱등이라 한 번 더 거쳐도 같고, 가드가 이 자리에서 확인한다.
+    window.location.assign(inFrame ? withEmbed(leaveHref) : leaveHref);
+    let timer: number | null = window.setTimeout(() => setStalledHref(leaveHref), LEAVE_FALLBACK_MS);
+    const onHide = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = null;
+    };
+    // 뒤로가기로 이 화면이 되살아났다(bfcache) — 이동은 끝났다. 바로 링크를 보인다(안 그러면 다시 돌기만 한다).
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setStalledHref(leaveHref);
+    };
+    window.addEventListener("pagehide", onHide);
+    window.addEventListener("pageshow", onShow);
+    return () => {
+      onHide();
+      window.removeEventListener("pagehide", onHide);
+      window.removeEventListener("pageshow", onShow);
+    };
+  }, [leaveHref, inFrame]);
 
   async function startRec() {
     setError(null);
@@ -112,7 +144,7 @@ function AudioConsultationFormInner({ students, recordingOwner, initialStudentId
       const dest = inFrame ? withEmbed(path) : path;
       // 이 문서에 다른 녹음이 살아 있으면 떠나지 않는다 — 문서가 내려가면 그 녹음이 끝난다(단일 화면에서 여러 녹음).
       if (documentHasLiveRecording()) setStayHref(dest);
-      else window.location.assign(dest);
+      else setLeaveHref(dest);
     });
   }
 
@@ -185,9 +217,17 @@ function AudioConsultationFormInner({ students, recordingOwner, initialStudentId
         {(error || recorded.error) ? <p className="text-danger text-xs">{error || recorded.error}</p> : null}
 
         <Button type="button" size="sm" onClick={submit} disabled={busy || recording}>
-          {busy ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
-          분석 시작
+          {busy && !stalledHref && !stayHref ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+          {stalledHref || stayHref ? "저장됨" : "분석 시작"}
         </Button>
+        {stalledHref ? (
+          <p role="status" className="border-border bg-muted/30 text-foreground rounded-md border px-3 py-2 text-sm">
+            상담을 저장했습니다. 화면이 넘어가지 않으면{" "}
+            <a href={stalledHref} className="font-medium underline underline-offset-2">상담 열기</a>
+            {" · "}
+            <button type="button" onClick={() => window.location.reload()} className="font-medium underline underline-offset-2">새로 작성</button>
+          </p>
+        ) : null}
       </div>
     </details>
     {stayHref ? <SavedStayNotice href={stayHref} saved="상담을 저장했습니다." /> : null}

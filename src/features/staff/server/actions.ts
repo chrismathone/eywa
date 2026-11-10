@@ -520,7 +520,7 @@ export async function changeStaffRole(
   if (authErr) {
     // 롤백: public.users 원래 역할로 복귀
     await admin.from("users").update({ system_role: currentRole }).eq("id", id);
-    return { error: `Auth metadata 동기화 실패: ${authErr.message}` };
+    return { error: explainDbError(authErr, { scope: "staff.actions.changeStaffRole", fallback: "로그인 권한 정보를 맞추지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   }
 
   await logAction({

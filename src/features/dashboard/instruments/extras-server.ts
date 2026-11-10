@@ -106,10 +106,12 @@ export async function loadInstrumentExtras({ checksOnly = false }: { checksOnly?
 
   const needed = loadPlan(view, new Set(allowed));
 
-  // 🔴 기본 배치 밖 카드는 원장 화면에만 더한다. 다른 역할은 학원 설정 '대시보드 관리'에 놓인 카드만 본다(배치 밖 값을 내려보내지 않는다).
-  const wantsEarly = viewer.bundle === "owner" && allowed.includes("withdrawals") && !needed.has("earlyExits");
-  // 지난 달 명단은 카드가 배치에 있어도 싣는다 — 스냅샷엔 이번 달 명단뿐이라 상세의 '6개월 합계'와 명단의 범위가 갈렸다.
-  const wantsEarlyNames = allowed.includes("withdrawals") && (wantsEarly || placed.has("panel:earlyExits"));
+  // 🔴 등록 후 3개월 내 퇴원은 이제 배치 카드다 — 배치에 놓였을 때만 읽는다(원장이 빼면 읽지 않는다 · 리뷰 2026-11-09).
+  //    월별 값은 스냅샷 영역이 이미 싣는 경우(`needed`)엔 다시 읽지 않는다. 지난 달 명단은 카드가 있으면 싣는다
+  //    (스냅샷엔 이번 달 명단뿐이라 상세의 '6개월 합계'와 명단의 범위가 갈렸다).
+  const earlyPlaced = allowed.includes("withdrawals") && placed.has("panel:earlyExits");
+  const wantsEarly = earlyPlaced && !needed.has("earlyExits");
+  const wantsEarlyNames = earlyPlaced;
   const longWindow = full && needed.has("changes");
   const withdrawals = wantsEarlyNames || longWindow ? getWithdrawalsInWindow(`${(longWindow ? longMonths : months)[0]}-01`, today) : null;
   const billingOn = full && needed.has("billing") && view.amounts && placed.has("panel:billing6");

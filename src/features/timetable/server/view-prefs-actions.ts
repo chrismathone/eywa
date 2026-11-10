@@ -10,6 +10,7 @@ import {
   serializeViewPrefs,
   type TimetableViewPrefs,
 } from "../lib/view-prefs";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * 시간표 '뷰 설정'을 **본인 계정**에 저장한다(0146a users.ui_prefs).
@@ -40,7 +41,7 @@ export async function saveTimetableViewPrefs(
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
+  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "timetable.view-prefs-actions.saveTimetableViewPrefs", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   const raw =
     row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
@@ -69,6 +70,6 @@ export async function saveTimetableViewPrefs(
     .update({ ui_prefs: merged })
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "timetable.view-prefs-actions.saveTimetableViewPrefs", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }

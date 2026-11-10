@@ -178,7 +178,7 @@ export function PilotSheetHead(p: PilotSheetHeadProps) {
               ) : null}
             </td>
             {/* 제목 = "학생이름 수학 보고서"(원장 2026-10-23) — 이름은 흰색, 보고서 제목은 노랑. */}
-            <td rowSpan={3} className={`${CELL} bg-primary px-2 py-3 text-white`}>
+            <td rowSpan={3} className={`${CELL} bg-[var(--sheet-band,var(--primary))] px-2 py-3 text-white`}>
               {/* 학교·학년은 이름 위(원장 2026-10-28 *"학생이름 위로 학교이름 위치 변경"*). */}
               {p.schoolGrade ? <p className="mb-1.5 text-xs font-medium text-white/80">{p.schoolGrade}</p> : null}
               <p className="text-xl leading-snug font-black break-keep">

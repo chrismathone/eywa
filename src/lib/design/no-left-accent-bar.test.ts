@@ -28,6 +28,27 @@ const SKIP_DIRS = ["(marketing)", "(print)"];
  * 이유를 못 적겠으면 넣지 말고 띠를 뺄 것. 각 항목은 **실제로 한 줄 이상에 걸려야** 한다(죽은 항목 금지).
  */
 const ALLOWED: { file: string; line: RegExp; reason: string }[] = [
+  // ── 2026-11-10 P0-3b 정리 — 띠가 아닌 네 줄(강사 허브 갈래 줄기선은 같은 날 색감 통일에서 선 자체를 뺐다 — 세 칸 가로 줄 옆 세로선이 왼쪽 띠로 읽혔다) ──
+  {
+    file: "app/(shell)/dashboard/_instruments/instruments.css",
+    line: /\.tree-toggle::before \{ content: ''; display: block; width: 0; height: 0;/,
+    reason: "폴더 펼침 삼각형 — 폭·높이 0인 요소의 테두리로 그리는 도형이지 띠가 아니다",
+  },
+  {
+    file: "app/(shell)/dashboard/_instruments/work/work.css",
+    line: /\.picker-group summary::before \{ content: ''; width: 0; height: 0;/,
+    reason: "묶음 펼침 삼각형 — 폭·높이 0인 요소의 테두리로 그리는 도형이지 띠가 아니다",
+  },
+  {
+    file: "features/onescreen/components/monthly-report-sheet.module.css",
+    line: /^\s*border-left: 14px solid var\(--eie-red\);/,
+    reason: "EiE 월간 보고서 지면의 양쪽 테두리(오른쪽도 같은 굵기) — 시트를 본뜬 종이 틀이지 카드의 왼쪽 강조 띠가 아니다",
+  },
+  {
+    file: "features/student-contribution/components/loyalty-ranking.module.css",
+    line: /\.dropTarget\{box-shadow:inset 3px 0 0 /,
+    reason: "열을 끌어 옮길 때 '여기에 끼워진다'는 삽입 위치 표시 — 끄는 동안에만 선다(teacher-head-cell과 같은 성격)",
+  },
   {
     file: "app/(shell)/timetable/_components/weekday-group-tables.tsx",
     line: /GROUP_DIVIDER = "border-l-2/,
@@ -72,26 +93,6 @@ const ALLOWED: { file: string; line: RegExp; reason: string }[] = [
     file: "app/globals.css",
     line: /border-left: 3px solid var\(--line\)/,
     reason: "`.rich-content blockquote` — 사용자가 쓴 글의 인용문 서식(화면 장식이 아니라 글의 구조)",
-  },
-  {
-    file: "app/(shell)/dashboard/_instruments/instruments.css",
-    line: /\.tree-toggle::before \{ content: ''; display: block; width: 0; height: 0;.*border-left: 6px solid currentColor; border-top: 5px solid transparent; border-bottom: 5px solid transparent/,
-    reason: "운영실 상세 표의 접기 삼각형(▶) — 위·아래 투명 테두리와 함께 그리는 도형이지 띠가 아니다(결정 design.md의 '모서리 삼각형'과 같은 성격)",
-  },
-  {
-    file: "app/(shell)/dashboard/_instruments/work/work.css",
-    line: /\.picker-group summary::before \{ content: ''; width: 0; height: 0; border-left: 6px solid var\(--muted\); border-top: 5px solid transparent/,
-    reason: "업무 요청 담당자 고르기 묶음의 접기 삼각형(▶) — 도형이지 띠가 아니다(결정 design.md의 '모서리 삼각형'과 같은 성격)",
-  },
-  {
-    file: "features/student-contribution/components/loyalty-ranking.module.css",
-    line: /^\.dropTarget\{box-shadow:inset 3px 0 0 /,
-    reason: "로열티 순위 표에서 점수 칸을 끌어 순서를 바꿀 때 '여기에 끼워진다'는 삽입 위치 표시 — 끄는 동안에만 선다(teacher-head-cell과 같은 성격)",
-  },
-  {
-    file: "features/onescreen/components/monthly-report-sheet.module.css",
-    line: /^  border-left: 14px solid var\(--eie-red\);/,
-    reason: "EiE 월간 보고서 = 시트(Monthly Evaluation Report)를 옮긴 학부모 종이 서식 — 바로 아래 줄의 오른쪽과 같은 두께의 좌우 대칭 틀이지 카드 강조 띠가 아니다",
   },
 ];
 

@@ -5,9 +5,9 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { humanizeDbError } from "@/lib/supabase/db-error";
+import { humanizeDbError, explainDbError } from "@/lib/supabase/db-error";
 import { payrollTotal } from "../calc";
-import { calculateMonthlyPayroll } from "./queries";
+import { calculateMonthlyPayroll, PayrollInputError } from "./queries";
 import { logAction } from "@/features/audit/server/log";
 import { canManageStaff } from "@/lib/auth/role-hierarchy";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
@@ -157,7 +157,17 @@ export async function autoComputePayroll(
   if (!userId || !period) return { error: "강사·정산 기간이 필요합니다" };
   if (!(await assertStaffInTenant(user.tenantId, userId))) return { error: "직원을 찾을 수 없습니다" };
 
-  const calc = await calculateMonthlyPayroll(userId, period);
+  // 재료(단가·담당 반·시간표·출결)를 못 읽으면 저장하지 않는다 — 예전엔 0원으로 계산한 값을 그대로 저장했다(수정 계획 P1-M).
+  let calc: Awaited<ReturnType<typeof calculateMonthlyPayroll>>;
+  try {
+    calc = await calculateMonthlyPayroll(userId, period);
+  } catch (err) {
+    if (err instanceof PayrollInputError) {
+      console.error("[payroll] 자동 계산 재료 조회 실패 — 저장 안 함:", err.message, err.detail);
+      return { error: `${err.message}. 저장하지 않았습니다 — 잠시 뒤 다시 시도해 주세요.` };
+    }
+    throw err;
+  }
 
   const supabase = createAdminClient();
   const total = payrollTotal({ baseAmount: calc.baseAmount, hourlyAmount: calc.hourlyAmount });
@@ -229,7 +239,7 @@ export async function requestLeave(
     reason,
   });
 
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "payroll.actions.requestLeave", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   // 사유(자유 글)는 담지 않는다 — 누구의 어떤 휴가를 언제로 넣었는지만.
   await logAction({
@@ -265,7 +275,7 @@ export async function approveLeave(
     .eq("id", id)
     .select("user_id, leave_type, starts_on, ends_on"); // 감사로그 대상(폼의 userId는 클라 값이라 믿지 않는다)
 
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "payroll.actions.approveLeave", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   const row = approved?.[0];
   if (row) {
@@ -310,7 +320,7 @@ export async function deleteLeave(
     .eq("id", id)
     .select("user_id, leave_type, starts_on, ends_on"); // 지운 뒤엔 되짚을 원본이 없다 — 누구의 언제 휴가였는지 남긴다.
 
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "payroll.actions.deleteLeave", fallback: "삭제하지 못했습니다 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
 
   const row = removed?.[0];
   if (row) {

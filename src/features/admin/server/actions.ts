@@ -11,7 +11,10 @@ import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
 import { mergeNoteFor } from "@/features/students/status/merged";
 import { CLEANUP_WITHDRAWAL_MEMO } from "@/features/withdrawals/system-bulk";
-import { canRequestReport, missingReportSchema } from "@/features/withdrawal-reports/model";
+import { markNoClassRecord } from "@/features/withdrawals/server/no-class-record";
+import { canRequestReport, missingReportSchema, type WithdrawalReport } from "@/features/withdrawal-reports/model";
+import { applyDirectNow } from "@/features/withdrawal-reports/server/direct-apply";
+import { REFUND_GATE_NOT_READY, refundGateReady } from "@/features/withdrawal-reports/server/refund-check";
 import { explainDbError, logDbError } from "@/lib/supabase/db-error";
 import { MERGE_TABLES } from "../merge-scope";
 import { planMakeeduCarry } from "../makeedu-carry";
@@ -453,9 +456,14 @@ export async function bulkWithdrawStudents(
   // 🔴 중간에 멈춰도 **이미 퇴원된 만큼은** 기록한다(무기록 창 방지, 적대 리뷰 F6) — 로그 id는 실제로 처리된 학생.
   const done: string[] = [];
   const reportIds: string[] = [];
+  /** 기록은 했지만 아직 처리되지 않은 학생(원장 환불 결정 대기 · 확인 실패 — 처리일 cron이 다시 본다). */
+  const waiting: string[] = [];
   let failed = 0;
   let firstFailure: string | null = null;
   let notReady = false;
+  // 새 앱 + 옛 DB(s2_0037 전)면 바로 처리 함수를 부르지 않는다(리뷰 #5 — 안에서 부르는 처리가 확인 값을 모른다).
+  try { if (!(await refundGateReady())) return { error: REFUND_GATE_NOT_READY }; }
+  catch { return { error: "퇴원보고서 환불 관문을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." }; }
   for (const id of ids) {
     const { data, error } = await admin.rpc("direct_withdrawal_report", {
       p_tenant: user.tenantId,
@@ -475,12 +483,29 @@ export async function bulkWithdrawStudents(
     }
     done.push(id);
     reportIds.push(String(data));
+    // 처리일이 오늘이라도 DB 안의 처리는 환불 확인 값이 없어 미룬다(s2_0037) — 같은 요청에서 확인 값과 처리(원장 환불 결정 전이면 처리 예약으로 남는다).
+    const { data: report } = await admin.from("withdrawal_reports").select("*").eq("tenant_id", user.tenantId).eq("id", String(data)).maybeSingle();
+    if (report) {
+      const applied = await applyDirectNow(report as WithdrawalReport, user.id);
+      if (applied.report.status !== "completed") waiting.push(id);
+    } else waiting.push(id);
+  }
+  // 출결·수업료 청구가 한 번도 없는 학생은 '수업 흔적 없음' 표식 — 끝난 수강 줄이 남아 있어도 어디서나 장부 정리로 조용히 빠진다(원장 2026-11-09).
+  //  실패해도 정리는 그대로(기록만) — 최악이면 종전처럼 퇴원으로 보인다.
+  let noClassRecord: string[] = [];
+  const finished = done.filter((id) => !waiting.includes(id));
+  if (finished.length > 0) {
+    try { noClassRecord = await markNoClassRecord(admin, user.tenantId, finished); }
+    catch (error) { logDbError(error, "admin.bulkWithdraw.noClassRecord"); }
   }
   if (done.length > 0) {
     await logAction({
       action: "student_bulk_withdraw",
       targetType: "student",
-      metadata: { count: done.length, studentIds: done, reportIds, ...(failed > 0 ? { failed } : {}) },
+      metadata: {
+        count: done.length, studentIds: done, reportIds, ...(failed > 0 ? { failed } : {}), ...(waiting.length ? { refundWait: waiting.length } : {}),
+        ...(noClassRecord.length ? { noClassRecord } : {}),
+      },
     });
   }
   if (done.length === 0) {
@@ -524,7 +549,7 @@ export async function bulkDeleteStudents(
   const withInvoice = new Set<string>();
   for (const part of chunkIds(ids)) {
     const { data, error } = await supabase.from("invoices").select("student_id").in("student_id", part);
-    if (error) return { error: error.message };
+    if (error) return { error: explainDbError(error, { scope: "admin.actions.bulkDeleteStudents", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
     (data ?? []).forEach((r) => withInvoice.add(r.student_id as string));
   }
 
@@ -554,7 +579,7 @@ export async function bulkDeleteStudents(
       .select("id");
     if (error) {
       await writeBulkLog();
-      return { error: error.message };
+      return { error: explainDbError(error, { scope: "admin.actions.bulkDeleteStudents", fallback: "삭제하지 못했습니다 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
     }
     done.push(...(deleted ?? []).map((r) => r.id as string));
   }

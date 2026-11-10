@@ -96,6 +96,8 @@ async function fetchActiveDelegations(supabase: ServerClient, date: string, stri
     .gte("to_date", date)
     .limit(500);
   if (strict && error) throw error;
+  // strict면 상한에 닿은 것도 실패로 — 잘린 명단으로 담당을 판정하지 않는다(같은 파일의 다른 strict 조회와 같은 규칙).
+  if (strict && (data?.length ?? 0) >= 500) throw new Error("위임 명단이 500건 상한에 닿았습니다 — 잘린 명단으로 판정하지 않습니다");
   return ((data ?? []) as DelegationRow[]).filter((r) =>
     isDelegationActiveOn({ fromDate: r.from_date, toDate: r.to_date, revokedAt: r.revoked_at }, date),
   );
@@ -108,9 +110,9 @@ async function fetchActiveDelegations(supabase: ServerClient, date: string, stri
  *    받아 그날 수업이 없어도 세우고 등원 요일(분리등원)로 거르지 않는다(roster.ts).
  * 담당 명단은 학원설정 개인별 기능 권한(`specialAccess.jjReportManagerIds`)이고, 명단에 없으면 조회 없이 [].
  * 🔴 시간표 JJ 칸에 담당을 채우는 방식은 쓰지 않는다 — `isSeatSlot`(담당 없음 + 자리 라벨)이 깨져 자리 출석·시수·포트폴리오가 갈린다.
- * ⚠️ 설정·조회 실패는 [](이 갈래만 닫힌다 — 담임·위임 판정은 그대로). 자리 판정은 출결 축과 **같은 함수**(teacher-axis).
+ * ⚠️ 설정·조회 실패는 [](이 갈래만 닫힌다 — 담임·위임 판정은 그대로). 단 `strict`(쓰기 판정)면 던진다. 자리 판정은 출결 축과 **같은 함수**(teacher-axis).
  */
-async function fetchJjManagedClassIds(supabase: ServerClient, userId: string, date: string): Promise<string[]> {
+async function fetchJjManagedClassIds(supabase: ServerClient, userId: string, date: string, strict = false): Promise<string[]> {
   try {
     if (!(await isJjReportManager(userId))) return [];
     const rows = await fetchAllPaged<{ class_id: string; teacher_id: string | null; slot_teacher_label: string | null; valid_from: string; valid_to: string | null }>(
@@ -130,7 +132,9 @@ async function fetchJjManagedClassIds(supabase: ServerClient, userId: string, da
       })
       .map((r) => r.class_id);
     return [...new Set(ids)];
-  } catch {
+  } catch (err) {
+    // strict(쓰기 판정·입력자 표식)면 던진다 — 닫힌 갈래로 판정하면 JJ 담당 입력이 데스크로 찍힌다(4-1 재리뷰).
+    if (strict) throw err;
     return [];
   }
 }
@@ -212,12 +216,15 @@ export async function getTeachingClassIds(
   supabase: ServerClient,
   userId: string,
   date: string = kstToday(),
+  /** 쓰기 판정·입력자 표식처럼 틀리면 안 되는 소비처 — 담임·위임 조회 실패를 빈 명단으로 받지 않고 던진다(기존 호출부 동작은 유지). */
+  strict = false,
 ): Promise<TeachingClassIds> {
   const [ownRes, active, jj] = await Promise.all([
     supabase.from("classes").select("id").eq("teacher_id", userId),
-    fetchActiveDelegations(supabase, date),
-    fetchJjManagedClassIds(supabase, userId, date),
+    fetchActiveDelegations(supabase, date, strict),
+    fetchJjManagedClassIds(supabase, userId, date, strict),
   ]);
+  if (strict && ownRes.error) throw ownRes.error;
   const own = (ownRes.data ?? []).map((c) => c.id as string);
   const ownSet = new Set(own);
   // JJ 보고서 담당 반은 위임 반과 같은 갈래로 싣는다(남의 반을 그날만 맡는다는 점이 같다).
@@ -246,7 +253,7 @@ export async function getTeachingClasses(
       ? fetchAllPaged((from, to) => ownQuery().order("id").range(from, to)).then((data) => ({ data }))
       : ownQuery(),
     fetchActiveDelegations(supabase, date, strict),
-    fetchJjManagedClassIds(supabase, userId, date),
+    fetchJjManagedClassIds(supabase, userId, date, strict),
   ]);
   const ownRows = ownRes.data ?? [];
   const ownSet = new Set(ownRows.map((c) => c.id as string));

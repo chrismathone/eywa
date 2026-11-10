@@ -14,7 +14,7 @@ import { FaceNote } from "./face-note";
 import Link from "next/link";
 import { SessionTermsState, SessionTermsConfirmedCount } from "./session-terms-state";
 import { NO_LESSON_LABEL } from "@/features/billing/session-terms/month-roster";
-import { confirmableTermRow, filterSessionTermRows, shareClassIdsOf, type TermOnlyKey } from "@/features/billing/session-terms/term-filter";
+import { confirmableTermRow, filterSessionTermRows, isCarryRecheckRow, shareClassIdsOf, type TermOnlyKey } from "@/features/billing/session-terms/term-filter";
 import { SessionVerificationFace } from "./session-verification-face";
 import { SessionPanels } from "./session-panels";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -25,7 +25,7 @@ const PAGE_SIZE = 25; // 반(그룹) 단위 페이지
 
 const confirmableRow = confirmableTermRow;
 /** 보기 필터의 이름 — 드롭다운 항목과 '맞는 줄 없음' 안내가 같은 말을 쓴다. */
-const ONLY_LABEL: Record<TermOnlyKey, string> = { open: "미확정", pending: "미배분", share: "몫 조정한 반" };
+const ONLY_LABEL: Record<TermOnlyKey, string> = { open: "미확정", pending: "미배분", share: "몫 조정한 반", carry: "이월 재확인" };
 
 /**
  * 회차 확정 면 — 청구=N회 키스톤(docs/per-session-billing-plan.md).
@@ -75,7 +75,7 @@ export async function SessionTermsFace({
   const allRows = view.rows.map((r) => ({ ...r, subjectLabel: subjects.labelOf(r.subject) }));
   // 과목·검색·보기 필터(미확정·미배분·몫 조정한 반) = 엑셀과 같은 한 벌(filterSessionTermRows, 감사 N2). 페이저는 검색 결과 기준.
   // '몫' 필터의 재료는 자리 몫 줄과 같은 조회다 — 줄이 안 서는 화면(권한 없음)에는 그 항목도 안 선다.
-  const { presentSubjects, activeSubject, query, pendingOnly, openOnly, pendingCount, openCount, shareCount, only: onlyKeys, filtered } =
+  const { presentSubjects, activeSubject, query, pendingOnly, openOnly, pendingCount, openCount, shareCount, carryCount, only: onlyKeys, filtered } =
     filterSessionTermRows(allRows, { subject, q, only, allocation, confirmation, shareClassIds: shareClassIdsOf(seatShare) });
   // 머리 줄 카운트(원장 2026-09-18) — 확정 분모는 확정 가능한 줄, 그 뒤에 줄 상태별 수(0이면 생략).
   const confirmableCount = filtered.filter(confirmableRow).length;
@@ -85,6 +85,8 @@ export async function SessionTermsFace({
   const noLessonCount = filtered.filter((r) => r.noLesson).length;
   // 같은 학생·반이 이 달 살아 있는 청구서 여러 장에 있어 줄이 여럿인 행(`duplicateInvoice`) — 출석부(1줄)와 줄 수가 다른 이유를 밝힌다.
   const duplicateCount = filtered.filter((r) => r.duplicateInvoice).length;
+  // 실납에 안 실리는 금액 이월이 걸린 줄(2026-11-09) — 어떻게 무효가 됐든(해제·청구서 수정·환불·합산·동기화·앞 달 연쇄) 결과를 센다.
+  const carryRecheckCount = filtered.filter(isCarryRecheckRow).length;
 
   // 반 단위 그룹핑 — 반별 일괄 확정(원장 지시). 학생명 정렬 유지된 채 반으로 묶고, 반 안은 학년·이름 순.
   const groupMap = new Map<string, ClassGroup>();
@@ -162,6 +164,11 @@ export async function SessionTermsFace({
             { value: "open", label: `${ONLY_LABEL.open} (${openCount})` },
             { value: "pending", label: `${ONLY_LABEL.pending} (${pendingCount})` },
             ...(seatShare ? [{ value: "share", label: `${ONLY_LABEL.share} (${shareCount})` }] : []),
+            // 이월 재확인 — 걸린 줄이 있거나 이미 켜 둔 때만 선다(대부분의 달은 0건이라 목록을 늘리지 않는다).
+            // 🔴 금액 이월을 못 읽었으면 0건이 아니라 '확인 못 함'이다(조용히 사라지면 무효 이월을 놓친다 — 적대 리뷰 2026-11-09).
+            ...(view.carryFailed
+              ? [{ value: "carry", label: `${ONLY_LABEL.carry} (확인 못 함)` }]
+              : carryCount > 0 || onlyKeys.includes("carry") ? [{ value: "carry", label: `${ONLY_LABEL.carry} (${carryCount})` }] : []),
           ]}
           clearParams={["confirmation", "allocation"]}
           axisLabel="보기"
@@ -178,6 +185,9 @@ export async function SessionTermsFace({
           {voidInvoiceCount > 0 ? ` · 청구서 취소 ${voidInvoiceCount}` : null}
           {noLessonCount > 0 ? ` · ${NO_LESSON_LABEL.label} ${noLessonCount}` : null}
           {duplicateCount > 0 ? ` · 청구서 중복 ${duplicateCount}` : null}
+          {view.carryFailed
+            ? <span className="text-amber"> · 이월 확인 실패</span>
+            : carryRecheckCount > 0 ? <span className="text-amber"> · 이월 재확인 {carryRecheckCount}</span> : null}
         </span>
         {canWrite ? (
           <div className="ml-auto flex items-center gap-1">

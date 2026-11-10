@@ -29,6 +29,7 @@ import { adjustmentDaysFor, reservedLeaveDays } from "./admin";
 import { isMissingRelation } from "@/features/approvals/server/queries";
 import type { LeaveActionState } from "../action-state";
 import { isLeaveEligibleRole } from "../eligibility";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * 연차 조정 쓰기 — 이월·특별휴가 부여와 정산 차감(원장 2026-09-08).
@@ -87,7 +88,7 @@ async function loadTarget(tenantId: string, userId: string) {
     .eq("id", userId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
-  if (error) return { error: `직원 조회 실패 — ${error.message}` };
+  if (error) return { error: explainDbError(error, { scope: "leave.actions.loadTarget", fallback: "직원 조회 실패 — 잠시 후 다시 시도해 주세요" }).message };
   if (!data) return { error: "대상 직원을 찾을 수 없습니다" };
   if (data.status === "inactive") return { error: "퇴사한 직원의 연차는 조정할 수 없습니다" };
   if (data.system_role === "student") return { error: "학생 계정은 연차 대상이 아닙니다" };
@@ -248,7 +249,7 @@ export async function addLeaveAdjustment(
     if (!reason && /leave_adjustments_reason_present/.test(error.message ?? "")) {
       return { error: REASON_REQUIRED_MSG };
     }
-    return { error: `저장 실패 — ${error.message}` };
+    return { error: explainDbError(error, { scope: "leave.actions.addLeaveAdjustment", fallback: "저장 실패 — 잠시 후 다시 시도해 주세요" }).message };
   }
 
   await logAction({
@@ -353,7 +354,7 @@ export async function deleteLeaveAdjustment(
     .delete()
     .eq("id", id)
     .eq("tenant_id", user.tenantId);
-  if (error) return { error: `삭제 실패 — ${error.message}` };
+  if (error) return { error: explainDbError(error, { scope: "leave.actions.deleteLeaveAdjustment", fallback: "삭제 실패 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
 
   await logAction({
     action: "leave_adjust_delete",

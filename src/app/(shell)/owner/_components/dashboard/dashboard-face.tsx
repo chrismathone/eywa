@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { reportError } from "@/lib/observability/report-error";
 import type { TenantSettings } from "@/features/owner/settings-types";
-import { loadOverview } from "@/features/dashboard/overview/server";
 import { dashboardMembers, type DashboardMembers, type MemberRow } from "@/features/dashboard/layout/members";
 import { subjectChoices } from "@/features/dashboard/layout/preview";
 import { bundleMenus } from "@/features/dashboard/layout/role-menus";
@@ -26,14 +25,10 @@ async function assignedMembers(settings: TenantSettings, tenantId: string): Prom
 
 /**
  * 학원 설정 '대시보드 관리' 면(서버) — 🔴 호출부(`owner/page.tsx`)가 **원장·총괄만** 이 면을 그린다(그 밖은 안내 문구).
- * 실데이터 미리보기 원본(원장 시점 전체 스냅샷)은 **기다리지 않고 흘려 보낸다**(B7 — 운영실 조회는 수 초가 걸린다). 실패하면 null.
+ * 미리보기는 역할이 보는 칸 모양만 그린다(값 없음) — 옛 실데이터 미리보기 원본(원장 시점 전체 운영실 조회)은 더 읽지 않는다.
  */
 export async function DashboardFace({ settings, readOnly = false }: { settings: TenantSettings; readOnly?: boolean }) {
   const user = await getCurrentUser();
-  const preview = loadOverview({ full: true }).catch((error) => {
-    reportError(error, { scope: "owner.dashboard-face.preview" });
-    return null;
-  });
   const members = user ? await assignedMembers(settings, user.tenantId) : { people: [], failed: true };
   return (
     <DashboardEditorLazy
@@ -41,7 +36,6 @@ export async function DashboardFace({ settings, readOnly = false }: { settings: 
       roleMenus={bundleMenus(settings)}
       subjects={subjectChoices(Object.fromEntries(settings.operations.subjects.map((s) => [s.key, s.label])))}
       members={members}
-      preview={preview}
       readOnly={readOnly}
     />
   );
