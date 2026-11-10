@@ -1,3 +1,4 @@
+import { isMissingRelation } from "@/lib/supabase/db-error";
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -10,7 +11,7 @@ export const SALARY_SHEET_VIEW_TABLE = "attendance_salary_teacher_view";
 
 /** 표가 없다는 오류인가(PostgREST 스키마 캐시에 없음 · Postgres 표 없음). */
 function isMissingTable(error: { code?: string | null; message?: string | null }): boolean {
-  return error.code === "PGRST205" || error.code === "42P01" || /Could not find the table|does not exist/i.test(error.message ?? "");
+  return isMissingRelation(error, SALARY_SHEET_VIEW_TABLE); // 표 이름 + 없음 코드(공용 판정, P1-E)
 }
 
 /** 스위치의 달 — 출석부가 보는 달(`YYYY-MM`). */

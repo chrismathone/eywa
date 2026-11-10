@@ -1,3 +1,4 @@
+import { isMissingColumn } from "@/lib/supabase/db-error";
 import "server-only";
 import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -37,7 +38,7 @@ export const getShuttleDuty = cache(async (userId: string, tenantId: string): Pr
       .maybeSingle();
     if (!error) return data?.shuttle_duty === true;
     // 42703 = undefined_column(0227a 미적용). 다른 에러(권한·네트워크)는 조용히 넘기지 않는다.
-    if (!isMissingColumn(error)) reportError(error, { scope: "shuttle.duty" });
+    if (!isMissingDutyColumn(error)) reportError(error, { scope: "shuttle.duty" });
     return false;
   } catch (e) {
     reportError(e, { scope: "shuttle.duty" });
@@ -64,7 +65,7 @@ export const hasShuttleRecordDuty = cache(
         .eq("tenant_id", tenantId)
         .maybeSingle();
       if (!error) return data?.shuttle_duty === true;
-      if (!isMissingColumn(error)) {
+      if (!isMissingDutyColumn(error)) {
         reportError(error, { scope: "shuttle.duty.record" });
         return false;
       }
@@ -87,6 +88,7 @@ export const hasShuttleRecordDuty = cache(
   },
 );
 
-function isMissingColumn(error: { code?: string; message?: string }): boolean {
-  return error.code === "42703" || /shuttle_duty/i.test(error.message ?? "");
+function isMissingDutyColumn(error: { code?: string; message?: string }): boolean {
+  // 칸 이름 + 없음 코드(공용 판정, P1-E) — 예전엔 42703이면 어느 칸이든, 아니면 이름만 봤다.
+  return isMissingColumn(error, ["shuttle_duty", "attendance_alert_optin"]);
 }

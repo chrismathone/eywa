@@ -1,3 +1,4 @@
+import { isMissingRelation } from "@/lib/supabase/db-error";
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DOW_KEYS } from "@/features/attendance/calendar";
@@ -37,11 +38,7 @@ export function seatDowKey(date: string): string {
 
 /** 표가 아직 없다(SQL 미적용)와 그냥 실패를 가른다 — 원인을 단정하지 않기 위해서다. */
 function missingTable(err: { code?: string; message?: string }): boolean {
-  return (
-    err.code === "42P01" ||
-    err.code === "PGRST205" ||
-    /seat_period_(moves|pins)/i.test(err.message ?? "")
-  );
+  return isMissingRelation(err, ["seat_period_moves", "seat_period_pins"]); // 이름 + 없음 코드(공용 판정, P1-E)
 }
 
 const NOT_READY = "자리 교시 선택 기능이 아직 켜지지 않았습니다 — 관리자에게 문의하세요(0255a 미적용).";

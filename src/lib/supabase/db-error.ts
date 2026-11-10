@@ -194,3 +194,36 @@ export function explainDbError(
 export function logDbError(error: unknown, scope: string, context?: Record<string, unknown>): void {
   explainDbError(error, { scope, fallback: "", context });
 }
+
+// ───────────────────────── "아직 없음"(SQL 미적용) 판정 — 공용(수정 계획 P1-E · 리뷰 E2) ─────────────────────────
+// #95(앱이 SQL보다 먼저 나간다) 때문에 "표·칸·함수가 아직 없으면 조용히 비켜 가는" 방어가 33곳에 손으로 있었는데 범위가 제각각이었다:
+//  · 표 **이름만** 보는 곳 — 권한 거부·유니크 위반처럼 메시지에 표 이름이 들어가는 다른 오류도 "표 없음"으로 삼켰다(#138).
+//  · `does not exist`**만** 보는 곳 — 다른 표·칸·함수가 없어도 이 기능을 꺼 버렸다(형제 연결이 칸 하나 때문에 숨음).
+// 규칙(둘 다 필요): ① 원문에 **대상 식별자**가 있다 ② 코드가 그 "없음" 코드다 — 코드가 비어 있을 때(문자열로 감싼 오류)만 문구로 본다.
+// 🔴 다른 코드(42501 권한·23505 유니크 등)가 붙어 있으면 문구가 뭐라든 "없음"이 아니다(코드가 이긴다).
+
+function missingProbe(error: unknown): { code: string; text: string } {
+  if (typeof error === "string") return { code: "", text: error };
+  if (error instanceof Error && !str(error, "code")) return { code: "", text: error.message };
+  return { code: str(error, "code"), text: [str(error, "message"), str(error, "details"), str(error, "hint")].join(" ") };
+}
+function mentions(text: string, idents: string | readonly string[]): boolean {
+  const lower = text.toLowerCase();
+  return (typeof idents === "string" ? [idents] : idents).some((id) => id && lower.includes(id.toLowerCase()));
+}
+function missingOf(codes: readonly string[], words: RegExp) {
+  return (error: unknown, idents: string | readonly string[]): boolean => {
+    if (!error) return false;
+    const { code, text } = missingProbe(error);
+    if (!mentions(text, idents)) return false;
+    if (code) return codes.includes(code);
+    return words.test(text);
+  };
+}
+
+/** 표가 아직 없다(42P01 · PGRST205) — `table`(또는 후보 여럿)이 원문에 있어야 참. */
+export const isMissingRelation = missingOf(["42P01", "PGRST205"], /does not exist|could not find the table|schema cache/i);
+/** 칸이 아직 없다(42703 · PGRST204) — `column`이 원문에 있어야 참. */
+export const isMissingColumn = missingOf(["42703", "PGRST204"], /does not exist|could not find the .*column|schema cache/i);
+/** 함수(RPC)가 아직 없다(42883 · PGRST202) — `fn`이 원문에 있어야 참. */
+export const isMissingFunction = missingOf(["42883", "PGRST202"], /does not exist|could not find the function|schema cache/i);

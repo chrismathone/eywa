@@ -201,10 +201,10 @@ describe("⑧ 표가 아직 없어도 화면은 산다([[#95]])", () => {
     expect(QUERY).not.toContain("throw");
   });
   it("표 없음과 그냥 실패를 다른 문구로 가른다 — 원인을 단정하지 않는다", () => {
-    for (const src of [QUERY, ACTIONS]) {
-      expect(src).toContain("42P01");
-      expect(src).toContain("PGRST205");
-    }
+    // 조회는 공용 판정(isMissingRelation — 42P01·PGRST205 + 표 이름, P1-E), 저장은 코드를 직접 본다.
+    expect(QUERY).toContain('isMissingRelation(err, "seat_placements")');
+    expect(ACTIONS).toContain("42P01");
+    expect(ACTIONS).toContain("PGRST205");
   });
   it("배치 조회는 admin + 명시 tenant 필터다([[#104]] — 정책 0개 표)", () => {
     expect(QUERY).toContain("createAdminClient()");
