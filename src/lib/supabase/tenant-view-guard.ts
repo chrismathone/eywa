@@ -25,6 +25,11 @@ import { TENANT_VIEW_READONLY_MESSAGE } from "@/lib/auth/tenant-view-shared";
  *    그런 화면은 보기에서 닫는다(권한 캡 — perm-matrix.ts `TENANT_VIEW_CLOSED_MENUS`).
  */
 export const TENANT_VIEW_READ_RPCS: ReadonlySet<string> = new Set([
+  // 설명회·형제 인정 스냅숏(s1 student_parent_event_snapshot) — 읽기 전용 · 실행권은 service_role만 · 지점 = 서버가 넘기는 인자(사용자 tenantId).
+  "student_parent_event_snapshot",
+  // 퇴원보고서 환불 판정 준비 여부(s2_0037, 상수 true) · 이후 청구 지문(s2_0037, stable 읽기 · service_role 전용 · 지점 = 서버 인자) — 지점 보기에서도 같은 판정.
+  "withdrawal_refund_gate_ready",
+  "withdrawal_refund_later_fingerprint",
   // 오늘 수학 성적표가 걸린 날(0373a) — cron이 admin으로 부르는 읽기지만 목록 규약상 여기 둔다.
   "todays_math_exam_report_dates",
   // 사람별 열린 할 일(0377a) — 서버가 관리 키로 부르는 읽기(보기 중엔 할 일 화면이 비어 부르지 않는다). 목록 규약상 여기 둔다.

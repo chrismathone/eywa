@@ -83,7 +83,7 @@ export async function getFactorWorkspace(studentId:string,requestedMonth?:string
     }),
   ]);
   if(student.enrolled_at&&student.enrolled_at<=asOf){
-    const end=student.withdrawn_at&&student.withdrawn_at<asOf?student.withdrawn_at:asOf;
+    const end = student.withdrawn_at && student.withdrawn_at < asOf ? student.withdrawn_at : asOf; // 읽기(삼항) — 퇴원 가드가 `칸: 값` 쓰기로 오인하지 않게 띄어 쓴다
     if(end>=student.enrolled_at)put("F06",Math.round((Date.parse(end)-Date.parse(student.enrolled_at))/86400000/30.4375*10)/10,`${student.enrolled_at}~${end}, 1개월=365.25/12일. 휴원 차감 전 경과 기간.`,"students",[studentId]);
   }
   if(student.school&&month===c.today.slice(0,7))put("F42",`${student.school} ${student.grade??""}`.trim(),"현재 학생 기본정보의 학교·학년. 생활권·학군 수요는 별도 기록.","students",[studentId]);
