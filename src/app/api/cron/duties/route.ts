@@ -36,7 +36,7 @@ export async function GET(req: Request) {
       const settings = await getTenantSettingsByTenantId(tenantId, { failOnReadError: true });
       const days = [...new Set([...(await openPastCycles(tenantId)), ...(kstHour < 3 ? [yesterday] : []), today])].sort();
       for (const day of days) drafts += (await syncDailyDuties(tenantId, day, settings)).drafts;
-      if (monthlyTurn) { const m = await syncMonthlyDuties(tenantId, today, settings); drafts += m.counsel + m.newcomer; }
+      if (monthlyTurn) { const m = await syncMonthlyDuties(tenantId, today, settings); drafts += m.counsel + m.exam + m.newcomer; }
       const r = await escalateAndSnapshot(tenantId, days);
       taskOpened += r.taskOpened;
       taskClosed += r.taskClosed;

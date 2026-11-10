@@ -12,6 +12,10 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-11-10 의무 장부: 할 일 본문에 업무 종류 (s2_0044 · ✅ 운영 적용 2026-11-10 · 직결 · 시험 거래 뒤)
+
+`s2_0044_duty_task_detail.sql` — `duty_escalate`가 여는 할 일(`duty_late`)의 detail = "<종류> 기한 초과 N건 · MM/DD — 이름 · 이름"(할 일 창의 굵은 줄이 detail을 쓴다). 월말평가 링크 `/grades`.
+
 ## 2026-11-10 의무 장부: void 까닭 갱신 (s2_0043 · ✅ 운영 적용 2026-11-10 · 직결 · 시험 거래 뒤)
 
 `s2_0043_duty_resolve_void_reason.sql` — `duty_resolve_items`가 void → void로 까닭(source)만 바뀌어도 `void_reason`을 받아 적는다. 결석으로 빠진 보고서 칸을 "결석"으로 적기 위해(생성기가 void('absent') 행을 넘김). 'not_due'로 먼저 묻힌 3행이 'absent'로 바뀌었다.

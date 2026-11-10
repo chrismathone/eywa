@@ -68,3 +68,35 @@ export function buildNewcomerDuties(input: {
   }
   return out;
 }
+
+export type ExamRecord = { studentId: string; subject: string; takenOn: string; createdAt: string | null };
+/**
+ * 월말평가 응시 의무 — 담임 × 학생 × 과목(담임 반 명단 · `pairs`는 반 담임 기준). 완료 = 그 달 그 과목 월말평가 기록(가장 이른 입력 시각이 done_at).
+ * 학원이 **그 달이나 지난달에** 월말평가를 친 과목만 의무를 만든다(포트폴리오 '그 달 기록 있는 과목만'을 달 초에도 보이게 한 달 넓힘).
+ */
+export function buildExamDuties(input: { month: string; pairs: readonly CounselPair[]; records: readonly ExamRecord[]; inactiveTeacherIds?: ReadonlySet<string> }): DutyDraft[] {
+  const { month } = input;
+  const prev = `${month.slice(0, 4)}-${String(Number(month.slice(5, 7)) - 1).padStart(2, "0")}`;
+  const prevMonth = Number(month.slice(5, 7)) === 1 ? `${Number(month.slice(0, 4)) - 1}-12` : prev;
+  const subjects = new Set(input.records.filter((r) => r.takenOn.slice(0, 7) === month || r.takenOn.slice(0, 7) === prevMonth).map((r) => r.subject));
+  const first = new Map<string, string | null>();
+  for (const r of input.records) {
+    if (r.takenOn.slice(0, 7) !== month) continue;
+    const key = `${r.studentId}|${r.subject}`;
+    const prevAt = first.get(key);
+    if (prevAt === undefined || (r.createdAt && (!prevAt || r.createdAt < prevAt))) first.set(key, r.createdAt);
+  }
+  const dueAt = kstDueAt(lastDayOf(month), 1, 0);
+  const out = new Map<string, DutyDraft>();
+  for (const p of input.pairs) {
+    if (!subjects.has(p.subject)) continue;
+    const key = `${p.studentId}|${p.teacherId}:${p.subject}`;
+    if (out.has(key)) continue;
+    const retired = input.inactiveTeacherIds?.has(p.teacherId) === true;
+    const done = first.has(`${p.studentId}|${p.subject}`);
+    out.set(key, { kind: "exam_monthly", period: "monthly", cycle: month, subjectKey: key, studentId: p.studentId, classId: p.classId, subject: p.subject,
+      ownerId: retired ? null : p.teacherId, ownerSource: retired ? "retired" : "homeroom", dueAt,
+      status: done ? "done" : "open", source: done ? "student_grade" : null, doneAt: done ? first.get(`${p.studentId}|${p.subject}`) ?? null : null });
+  }
+  return [...out.values()];
+}

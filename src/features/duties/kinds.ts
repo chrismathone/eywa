@@ -17,6 +17,7 @@ export const DUTY_KINDS = {
   report_write: { label: "수업보고서 작성", period: "daily", doneRule: "그날 그 학생의 수업보고서(또는 그날을 대신하는 보고서)가 있으면 완료. 결석이면 의무가 사라진다. 기한은 당일 자정." },
   report_send: { label: "보고서 발송", period: "daily", doneRule: "쓴 보고서가 학부모에게 실제로 나가면(발송 성공) 완료. 회수·발송 기한 지남이면 의무에서 빠진다. 기한은 다음 날 정오." },
   counsel_monthly: { label: "월 학부모 상담", period: "monthly", doneRule: "상담 의무 학생(같은 과목에서 가장 많은 요일을 맡은 담임 · 영어는 반 담임 전원 — 강사평가·원생상담 통계와 같은 판정)마다 그 달 본인이 상담을 1건 이상 기록하면 완료. 기한은 말일." },
+  exam_monthly: { label: "월말평가", period: "monthly", doneRule: "그 달 담임 반 명단 학생마다 그 달 그 과목 월말평가 기록(성적관리 · 응시)이 있으면 완료(강사평가 월말평가 응시율과 같은 판정). 학원이 그 달이나 지난달에 월말평가를 친 과목만. 기한은 말일." },
   newcomer_call: { label: "신규생 정착 콜", period: "case", doneRule: "신규생 관리 체크리스트(사전 콜 · 첫 수업 안내 · OJT · 첫 수업 후 콜 · 1개월 콜 · 3개월 콜)의 항목을 체크하면 완료. 기한은 그 항목의 날(등록일·첫 수업일 기준). 담당 = 그 학생의 상담 의무 담임." },
 } as const satisfies Record<string, DutyKindInfo>;
 

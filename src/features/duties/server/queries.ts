@@ -82,3 +82,15 @@ export async function weekCells(tenantId: string, ownerId: string, from: string,
   }
   return [...out.values()];
 }
+
+/** 반이 수업하는 요일(그 주에 살아 있는 배치) — 주간 표의 '예정'을 수업 있는 요일에만 적는다(원장 2026-11-10). */
+export async function classWeekdays(tenantId: string, classIds: readonly string[], weekStart: string, weekEnd: string): Promise<Record<string, string[]>> {
+  if (!classIds.length) return {};
+  const { fetchInChunks } = await import("@/lib/supabase/batch");
+  const rows = await fetchInChunks<{ class_id: string; day_of_week: string }>([...new Set(classIds)], (chunk) =>
+    createAdminClient().from("class_schedules").select("class_id,day_of_week").eq("tenant_id", tenantId).in("class_id", chunk)
+      .or(`valid_from.is.null,valid_from.lte.${weekEnd}`).or(`valid_to.is.null,valid_to.gte.${weekStart}`));
+  const out: Record<string, Set<string>> = {};
+  for (const r of rows) (out[r.class_id] ??= new Set()).add(r.day_of_week);
+  return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [...v]]));
+}

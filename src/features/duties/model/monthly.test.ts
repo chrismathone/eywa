@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCounselDuties, buildNewcomerDuties } from "./monthly";
+import { buildCounselDuties, buildExamDuties, buildNewcomerDuties } from "./monthly";
 import { indexChecks } from "@/features/newcomers/subject-rows";
 import { kstDueAt } from "./daily";
 
@@ -34,5 +34,22 @@ describe("buildNewcomerDuties", () => {
     // n2: 첫 수업일 없음 → firstClass 기준 항목(사전 콜·첫 수업 안내·첫 수업 후 콜)은 없고 등록일 기준(OJT·1·3개월)만.
     expect(rows.filter((r) => r.studentId === "n2").map((r) => r.cycle)).toEqual(["ojt", "month1_call", "month3_call"]);
     expect(rows.find((r) => r.studentId === "n2")).toMatchObject({ ownerId: null, subject: null, subjectKey: "n2|" });
+  });
+});
+
+describe("buildExamDuties", () => {
+  const pairs = [{ teacherId: "t1", studentId: "s1", classId: "c1", subject: "math" }, { teacherId: "t1", studentId: "s2", classId: "c1", subject: "math" }, { teacherId: "t2", studentId: "s3", classId: "c9", subject: "english" }];
+  it("그 달·지난달에 월말평가 기록이 있는 과목만 의무 · 그 달 기록이 있는 학생은 done(가장 이른 입력) · 영어처럼 안 치는 과목은 없음", () => {
+    const rows = buildExamDuties({ month: "2026-11", pairs, records: [
+      { studentId: "s1", subject: "math", takenOn: "2026-11-05", createdAt: "2026-11-06T01:00:00Z" }, { studentId: "s1", subject: "math", takenOn: "2026-11-05", createdAt: "2026-11-05T09:00:00Z" },
+      { studentId: "s9", subject: "math", takenOn: "2026-10-28", createdAt: "2026-10-28T09:00:00Z" },
+    ] });
+    expect(rows.map((r) => r.subjectKey).sort()).toEqual(["s1|t1:math", "s2|t1:math"]);
+    expect(rows.find((r) => r.subjectKey === "s1|t1:math")).toMatchObject({ status: "done", doneAt: "2026-11-05T09:00:00Z", kind: "exam_monthly", cycle: "2026-11" });
+    expect(rows.find((r) => r.subjectKey === "s2|t1:math")).toMatchObject({ status: "open" });
+  });
+  it("지난달에만 친 과목도 이달 의무가 선다(달 초에 보이게) · 두 달 다 없으면 안 선다", () => {
+    expect(buildExamDuties({ month: "2026-11", pairs, records: [{ studentId: "x", subject: "math", takenOn: "2026-10-30", createdAt: null }] })).toHaveLength(2);
+    expect(buildExamDuties({ month: "2026-11", pairs, records: [{ studentId: "x", subject: "math", takenOn: "2026-09-30", createdAt: null }] })).toHaveLength(0);
   });
 });

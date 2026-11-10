@@ -14,8 +14,8 @@ import { MyDutiesWeek } from "./my-duties-week";
 import { MyDutiesMonth } from "./my-duties-month";
 
 type Count = { total: number; done: number; late: number };
-export type DutyStripSummary = { date: string; month: string; today: Count; week: Count; byKind: DutyKindCount[]; counsel: Count; newcomer: Count; lang: "ko" | "en" };
-export type DutyPayload = { date: string; days: string[]; items: DutyItemView[]; week: DutyWeekCell[]; month: DutyItemView[] };
+export type DutyStripSummary = { date: string; month: string; today: Count; week: Count; byKind: DutyKindCount[]; counsel: Count; exam: Count; newcomer: Count; lang: "ko" | "en" };
+export type DutyPayload = { date: string; days: string[]; items: DutyItemView[]; week: DutyWeekCell[]; month: DutyItemView[]; /** 반 → 수업 요일(mon…sun) */ classDays?: Record<string, string[]> };
 type View = "today" | "week" | "month";
 const VIEWS: { key: View; label: string }[] = [{ key: "today", label: "오늘" }, { key: "week", label: "이번 주" }, { key: "month", label: "이번 달" }];
 const REFRESH_MS = 60_000;
@@ -26,7 +26,7 @@ const REFRESH_MS = 60_000;
  */
 export function MyDutiesStripButton({ summary: initial, className = "" }: { summary: DutyStripSummary; className?: string }) {
   const [summary, setSummary] = useState(initial);
-  const { date, month, today, week, byKind, counsel, newcomer, lang } = summary;
+  const { date, month, today, byKind, counsel, exam, newcomer, lang } = summary;
   const [view, setView] = useState<View | null>(null);
   const [loaded, setLoaded] = useState<{ payload: DutyPayload; at: number } | null>(null);
   const [failed, setFailed] = useState(false);
@@ -69,12 +69,12 @@ export function MyDutiesStripButton({ summary: initial, className = "" }: { summ
     return () => { alive = false; if (timer) clearTimeout(timer); document.removeEventListener("visibilitychange", onVisible); };
   }, []);
   const pct = (c: Count) => (c.total ? Math.round((c.done / c.total) * 100) : 0);
-  const lateAll = today.late + counsel.late + newcomer.late;
+  const lateAll = today.late + counsel.late + exam.late + newcomer.late;
   const label = lang === "en"
     ? `My duties — today ${today.done}/${today.total}${lateAll ? ` · ${lateAll} overdue` : ""}`
     : `내 업무 — 오늘 ${today.done}/${today.total}${lateAll ? ` · 기한 초과 ${lateAll}` : ""}`;
   const breakdown = byKind.map((c) => `${dutyKindLabel(c.kind)} ${c.done}/${c.total}`).join(" · ") || "오늘 수업 의무 없음";
-  const lateBreakdown = [...byKind.filter((c) => c.late).map((c) => `${dutyKindLabel(c.kind)} ${c.late}`), counsel.late ? `월 상담 ${counsel.late}` : "", newcomer.late ? `신규생 콜 ${newcomer.late}` : ""].filter(Boolean).join(" · ");
+  const lateBreakdown = [...byKind.filter((c) => c.late).map((c) => `${dutyKindLabel(c.kind)} ${c.late}`), counsel.late ? `월 상담 ${counsel.late}` : "", exam.late ? `월말평가 ${exam.late}` : "", newcomer.late ? `신규생 콜 ${newcomer.late}` : ""].filter(Boolean).join(" · ");
   const mm = Number(month.slice(5, 7));
   return <section className={`border-line rounded-2xl border ${className}`}>
     <button type="button" onClick={() => setView("today")} className="hover:bg-bg-soft flex w-full flex-wrap items-center gap-2 rounded-t-2xl px-3 py-2 text-left">
@@ -86,13 +86,13 @@ export function MyDutiesStripButton({ summary: initial, className = "" }: { summ
     <div className="grid gap-2 px-3 pb-3 sm:grid-cols-3 lg:grid-cols-5">
       <Tile label="오늘 완료도" value={`${today.done}`} unit={`/ ${today.total}`} pct={pct(today)} tone={today.total && pct(today) === 100 ? "green" : "primary"} note={breakdown} onClick={() => setView("today")} />
       <Tile label="기한 초과" value={`${lateAll}`} tone={lateAll ? "danger" : "muted"} note={lateAll ? lateBreakdown : "없음 — 출결·보고서 당일 자정 · 발송 다음 날 정오 · 상담 말일"} onClick={() => setView(today.late ? "today" : "month")} />
-      <Tile label="이번 주(월~오늘)" value={`${week.done}`} unit={`/ ${week.total}`} pct={pct(week)} tone="primary" note={week.late ? `기한 초과 ${week.late}건 남음` : "밀린 것 없음"} onClick={() => setView("week")} />
       <Tile label={`${mm}월 학부모 상담`} value={`${counsel.done}`} unit={`/ ${counsel.total}`} pct={pct(counsel)} tone={counsel.total && pct(counsel) === 100 ? "green" : counsel.late ? "danger" : "primary"} note={counsel.total ? `의무 학생 ${counsel.total}명 · 말일까지` : "상담 의무 학생 없음"} onClick={() => setView("month")} />
+      <Tile label={`${mm}월 월말평가`} value={`${exam.done}`} unit={`/ ${exam.total}`} pct={pct(exam)} tone={exam.total && pct(exam) === 100 ? "green" : exam.late ? "danger" : "primary"} note={exam.total ? `담임 반 ${exam.total}명 · 말일까지 응시 기록` : "월말평가 치는 과목 없음"} onClick={() => setView("month")} />
       <Tile label="신규생 정착 콜" value={`${newcomer.done}`} unit={`/ ${newcomer.total}`} pct={pct(newcomer)} tone={newcomer.late ? "danger" : newcomer.total && pct(newcomer) === 100 ? "green" : "primary"} note={newcomer.total ? (newcomer.late ? `기한 지난 항목 ${newcomer.late}` : "항목마다 기한 안") : "맡은 신규생 없음"} onClick={() => setView("month")} />
     </div>
     {/* z-[70]: 미니셸 헤더가 z-[60](공지 팝업 위)이라 기본 z-50 창은 헤더에 덮인다(원장 제보 2026-11-09). 창 안엔 셀렉트·팝오버가 없어 올려도 된다. */}
     {view ? <Dialog open onOpenChange={(open) => (!open ? (work ? closeWork() : setView(null)) : undefined)}>
-      <DialogContent className="z-[70] flex h-[min(820px,92dvh)] flex-col gap-3 sm:max-w-6xl">
+      <DialogContent className="z-[70] flex h-[min(900px,94dvh)] w-[min(96vw,1480px)] flex-col gap-3 sm:max-w-[min(96vw,1480px)]">
         {work ? <>
           <DialogHeader>
             <div className="flex flex-wrap items-center gap-2">
@@ -116,7 +116,7 @@ export function MyDutiesStripButton({ summary: initial, className = "" }: { summ
               {failed ? <p className="text-text-dim mt-2 text-sm">업무를 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요.</p>
                 : !loaded ? <p className="text-text-dim mt-2 text-sm">불러오는 중…</p>
                 : view === "today" ? <MyDutiesPanel loaded={loaded} />
-                : view === "week" ? <MyDutiesWeek items={loaded.payload.items} week={loaded.payload.week} days={loaded.payload.days} now={loaded.at} today={date} />
+                : view === "week" ? <MyDutiesWeek week={loaded.payload.week} days={loaded.payload.days} today={date} classDays={loaded.payload.classDays ?? {}} />
                 : <MyDutiesMonth items={loaded.payload.month} now={loaded.at} month={month} />}
             </div>
           </DutyWorkContext.Provider>
