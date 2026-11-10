@@ -6,18 +6,6 @@
  */
 import type { OneScreenStudent } from "./types";
 
-/** 상단 날짜 라벨 — 데모 고정값(셀프투어 결정성 보장) */
-export const TODAY = "2026년 6월 1일 (월)";
-
-// 수업 태도 선택지는 [attitude.ts](./attitude.ts)가 단일 소스(문장 조각과 같은 자리에 둔다).
-
-// 과제 수행률은 선택지가 없다 — 강사가 직접 치는 퍼센트(homework-rate.ts·HomeworkRateInput, 원장 2026-08-03).
-
-/** 학년 필터 칩 (수학 강사가 맡는 학년) */
-export const CLASS_TAGS = ["전체", "초3", "초4", "초5", "초6", "중1", "중2", "중3"] as const;
-
-// 과목 색은 학원설정 단일 소스다 — `useSubjectMaps().colorOf` / 서버 `buildSubjectMaps` + `subjectColorOfRow`(owner/subjects.ts).
-
 // ───────── 데모 학생 9명 — 초3~중3 분산, 수학 단일 과목, 진도=커리큘럼 차시 ─────────
 
 export const DEMO_ONESCREEN: OneScreenStudent[] = [

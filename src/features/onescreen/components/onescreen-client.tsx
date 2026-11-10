@@ -10,7 +10,6 @@ import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { kstToday } from "@/lib/date-kst";
 import { usePrintWindow } from "@/components/workspace/print-window";
-import { CLASS_TAGS, TODAY } from "../data";
 import { ATTITUDE } from "../attitude";
 import type { OneScreenView } from "../view";
 // 저장·미리보기 공용 필드 조립(단일 소스) — 미리보기가 발송본과 갈라지지 않게.
@@ -191,15 +190,15 @@ function reportCell(map: Record<string, SubjectReport> | undefined, subjectCount
 //    학생 값을 넘기면 보강·특강 행 추세에 정규 행 점수가 실렸다. 호출부가 rowEval.tests를 직접 넘긴다.
 
 /**
- * 선생님 원스크린 메인 — 상태는 전부 클라이언트 state(새로고침 시 초기화).
- * 데모 충실 이식: DB 영속화/네트워크 없음. 보고서는 **과목별** 템플릿(buildSubjectReport),
- * 발송은 sonner 토스트 목업. 진도(today)는 과목별로 직접 입력.
+ * 선생님 원스크린 메인 — 화면 state는 클라이언트에 있고, 편집은 세션(onescreen_daily_sessions)으로 자동저장된다
+ * (use-session-autosave.ts). 보고서는 **과목(반) 행별로** 저장·발송한다(use-send-core.ts · use-report-send.ts).
+ * 진도(today)는 과목별로 직접 입력.
  */
 export function OneScreenClient({
   initial,
-  today = TODAY,
+  today,
   date = "",
-  classTags = CLASS_TAGS,
+  classTags,
   todayClasses = [],
   allowTeacherTestMax = false,
   showDailyTest = true,
@@ -234,9 +233,9 @@ export function OneScreenClient({
   classnoteMatch,
 }: {
   initial: OneScreenStudent[];
-  today?: string;
+  today: string;
   date?: string; // 조회 대상 날짜(YYYY-MM-DD) — 저장/발송이 이 날짜로 report_date를 씀(빈값=서버가 오늘으로)
-  classTags?: readonly string[];
+  classTags: readonly string[];
   todayClasses?: TodayClass[];
   allowTeacherTestMax?: boolean; // 강사가 테스트 문항수(/N) 직접 변경 허용(학원 설정)
   showDailyTest?: boolean; // 일일테스트 사용(보고서 '표시 항목' 설정 재사용) — off면 입력칸 숨김
