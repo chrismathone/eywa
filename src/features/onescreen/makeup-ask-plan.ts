@@ -49,8 +49,6 @@ export function candidateAnchorClassId(candidates: readonly MergeCandidate[]): s
   return keys.size === 1 ? (candidates[0]?.classId ?? null) : null;
 }
 
-/** 화면의 출결 함수 — 보강 합침·추가가 그 반 칸을 고친다(알약과 같은 함수). */
-
 /**
  * 이 카드에 **더할 보강 행**(이름 붙이기 전) — `addSeparateMakeupRows`와 창을 열기/등록하기 전 멈춤이 같은 판정을 쓴다.
  * 비어 있으면 같은 과목 보강 행이 이미 있다는 뜻이다.
