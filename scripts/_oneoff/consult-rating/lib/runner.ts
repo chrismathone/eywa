@@ -43,6 +43,8 @@ export type CallInput = {
   feature: string; tenantId: string; cacheDir: string; concurrency?: number;
   /** 같은 입력을 다시 판정(흔들림 측정) — 1 이상이면 캐시 열쇠에만 들어간다(프롬프트는 같다). */
   rep?: number;
+  /** 캐시만 쓴다 — 아직 안 매긴 건은 부르지 않고 '캐시 없음'으로 돌려준다(다른 실행이 매기는 중일 때 중간 결과만 뽑으려고). */
+  cacheOnly?: boolean;
 };
 export type CallResult<T> = { ok: true; data: T; model: string; actualModels: string[]; ms: number; cached: boolean } | { ok: false; error: string; ms: number; cached: false };
 
@@ -57,6 +59,7 @@ export async function callModel<T>(c: CallInput): Promise<CallResult<T>> {
     ledger({ ...c, requested, hash, cached: true, ok: true, ms: 0, actualModels: hit.actualModels });
     return { ok: true, data: hit.data as T, model: hit.model, actualModels: hit.actualModels, ms: hit.ms, cached: true };
   }
+  if (c.cacheOnly) return { ok: false, error: "캐시 없음(아직 안 매김)", ms: 0, cached: false };
   return slot(Math.min(c.concurrency ?? 3, 4), async () => {
     let lastErr = "";
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -91,8 +94,10 @@ export async function callModel<T>(c: CallInput): Promise<CallResult<T>> {
 }
 
 function ledger(x: Record<string, unknown> & { prompt?: string; system?: string; cacheDir?: string }): void {
-  const { prompt: _p, system: _s, cacheDir: _d, trace, ...rest } = x;
-  const t = (trace ?? {}) as Partial<DevCliTrace>;
+  // 원장부에는 프롬프트·지침·캐시 경로를 남기지 않는다(원문은 캐시 파일에만).
+  const rest: Record<string, unknown> = { ...x };
+  for (const k of ["prompt", "system", "cacheDir", "trace"]) delete rest[k];
+  const t = (x.trace ?? {}) as Partial<DevCliTrace>;
   mkdirSync(join(RESULT_ROOT, "02-harness"), { recursive: true });
   appendFileSync(USAGE_LEDGER, JSON.stringify({
     at: new Date().toISOString(), ...rest,

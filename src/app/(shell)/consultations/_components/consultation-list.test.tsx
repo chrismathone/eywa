@@ -19,15 +19,22 @@ const row = (over: Partial<StudentConsultationRow> = {}): StudentConsultationRow
 });
 const rating: ConsultationRating = { points: 4, reason: "이유", evidence: "", kinds: [], missing: [], rule: null, basis: "memo", ratedOn: "2026-11-11" };
 
-describe("원생상담 목록 열 구성(2026-11-11 — 후속·녹음·AI 열을 걷고 상담 평점 열을 둔다)", () => {
-  it("머리글: 평점이 있으면 카테고리 | 상담 평점 | 시각, 후속·녹음·AI는 없다", () => {
+describe("원생상담 목록 열 구성(2026-11-11 — 후속·녹음·AI 열을 걷고 상담 평점 열 · 원장 열 순서)", () => {
+  it("머리글 = 과목 | 학생 | 학교학년 | 반 이름 | 상담자 | 날짜 | 카테고리 | 상담 평점 — 후속·녹음·AI는 없다", () => {
     const { container } = render(<ConsultationList items={[row()]} size={30} pageSizeKey="t" classOn ratings={new Map([["c1", rating]])} />);
-    const header = container.querySelector("[data-list-header]")!.textContent!;
-    expect(header).toContain("상담 평점");
-    expect(header).not.toContain("후속");
-    expect(header).not.toContain("녹음");
-    expect(header.indexOf("카테고리")).toBeLessThan(header.indexOf("상담 평점"));
-    expect(header.indexOf("상담 평점")).toBeLessThan(header.indexOf("시각"));
+    const header = container.querySelector("[data-list-header] > div")!; // 첫 벌(두 번째 벌은 2단용 사본)
+    const labels = [...header.querySelectorAll("span")].map((s) => s.textContent).filter((t) => t && t !== "요약");
+    expect(labels).toEqual(["과목", "학생", "학교학년", "반 이름", "상담자", "날짜", "카테고리", "상담 평점"]);
+    expect(header.textContent).not.toMatch(/후속|녹음/);
+  });
+
+  it("학교학년 칸 = 학교+학년 압축('경명여중1') · 학교가 없으면 학년만 · 학생 칸엔 이름만", () => {
+    const { container, rerender } = render(<ConsultationList items={[row({ studentSchool: "경명여중", studentGrade: "중1" })]} size={30} pageSizeKey="t" classOn ratings={null} />);
+    const cells = () => [...container.querySelectorAll("li a > p")].map((p) => p.textContent);
+    expect(cells()).toContain("경명여중1");
+    rerender(<ConsultationList items={[row({ studentSchool: null, studentGrade: "중2" })]} size={30} pageSizeKey="t" classOn ratings={null} />);
+    expect(cells()).toContain("중2");
+    expect(cells()[0]).toBe("수학"); // 첫 열 = 과목
   });
 
   it("평점 열이 꺼지면(ratings=null) 열을 통째로 뺀다 — '—'만 늘어선 열을 남기지 않는다", () => {
@@ -56,7 +63,7 @@ describe("원생상담 목록 열 구성(2026-11-11 — 후속·녹음·AI 열�
       expect(head.children.length, `머리 ${ratingOn}/${classOn}`).toBe(ratingOn ? 3 : 2);
       expect(body.children.length, `행 ${ratingOn}/${classOn}`).toBe(ratingOn ? 3 : 2);
       const vars = (container.querySelector("ul") as HTMLElement).style;
-      expect(vars.getPropertyValue("--right")).toBe(ratingOn ? "3.25rem 4rem 6.25rem" : "3.25rem 6.25rem");
+      expect(vars.getPropertyValue("--right")).toBe(ratingOn ? "6.25rem 3.25rem 4rem" : "6.25rem 3.25rem"); // 날짜 · 카테고리 · 상담 평점
       unmount();
     }
   });

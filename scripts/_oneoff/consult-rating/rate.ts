@@ -28,6 +28,7 @@ export function toInput(r: Row, copies: Map<string, number>): ConsultationRating
 
 async function main() {
   const set = arg("set", "all")!, model = arg("model", "haiku") as ModelKey, limit = Number(arg("limit", "0")), rep = Number(arg("rep", "0")), conc = Number(arg("conc", "3"));
+  const cacheOnly = process.argv.includes("--cache-only"); // 다른 실행이 매기는 중 — 이미 매긴 것만 뽑는다(새 호출 없음)
   assertEvalEnv();
   const rows: Row[] = readFileSync(join(RESULT_ROOT, "cs-all.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
   const copies = copyStudentCounts(rows);
@@ -46,7 +47,7 @@ async function main() {
     else {
       const req = ratingRequest("cs-local", c);
       const m = await callModel<unknown>({ task: "ratings", version: "c1", item: r.id.slice(0, 8), model, system: req.system, prompt: req.prompt, maxTokens: req.maxTokens!,
-        effort: req.reasoningEffort as "medium", feature: "student_consultation_rating", tenantId: "cs-local", cacheDir: join(RESULT_ROOT, "04-ratings", "cache"), rep, concurrency: conc });
+        effort: req.reasoningEffort as "medium", feature: "student_consultation_rating", tenantId: "cs-local", cacheDir: join(RESULT_ROOT, "04-ratings", "cache"), rep, concurrency: conc, cacheOnly });
       if (!m.ok) res = { ...base, ok: false, error: m.error };
       else {
         const parsed = parseConsultationResult(m.data, bodyOf(c));
@@ -58,7 +59,7 @@ async function main() {
   }));
   const dir = join(RESULT_ROOT, "04-ratings", "runs");
   mkdirSync(dir, { recursive: true });
-  const file = join(dir, `${set}-${model}${rep ? `-rep${rep}` : ""}.jsonl`);
+  const file = join(dir, `${set}-${model}${rep ? `-rep${rep}` : ""}${cacheOnly ? "-cached" : ""}.jsonl`);
   writeFileSync(file, out.map((x) => JSON.stringify(x)).join("\n") + "\n");
   const dist: Record<string, number> = {};
   for (const x of out) if (x.ok && "row" in x && x.row) dist[x.row.points] = (dist[x.row.points] ?? 0) + 1;

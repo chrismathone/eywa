@@ -12,13 +12,13 @@ import { HomeroomBand } from "./homeroom-band";
 /**
  * 띠 상자 — 실표면·스켈레톤·오류 모두 **같은 한 줄 높이**(h-9). 띠는 목록보다 늦게 흘러오므로(B7) 도착해서 높이가 바뀌면
  * 목록이 밀리고, 창 높이로 행 수를 잰 AutoPageSize가 그만큼 어긋나 페이지에 스크롤이 생긴다(원장 *"스크롤이 따로 놀게"* 의 재발).
- * 그래서 줄을 바꾸지 않는다 — 좁은 폭에선 아래 SHOW_FROM 순서대로 지표를 덜 싣고, 기간·범위 문구는 말줄임(날짜 범위까지 전문은 마우스 오버).
- * '검색어 제외'만은 말줄임 밖 제자리에 따로 선다 — 목록 '결과 N건'과 띠 건수가 다른 이유라 잘리면 안 된다(적대 리뷰 2026-10-01).
+ * 그래서 줄을 바꾸지 않는다 — 좁은 폭에선 아래 SHOW_FROM 순서대로 지표를 덜 싣는다.
+ * 기간·범위·'검색어 제외' 문구는 띠에 적지 않고 마우스 오버로만 둔다(원장 2026-11-11 *"보조멘트 제거"* — 그 전엔 띠 맨 앞 작은 글씨였다).
  */
 const BAND = "@container/band bg-bg-soft flex h-9 items-center gap-4 overflow-hidden rounded-lg px-3";
 
 /**
- * 띠 폭(`@container/band`)에 따라 싣는 지표 — 앞 지표의 폭 합 + 기간·범위 최소 13rem이 들어가는 경계(Pretendard 16px 실측 근사:
+ * 띠 폭(`@container/band`)에 따라 싣는 지표 — 앞 지표의 폭 합이 들어가는 경계(2026-11-11 기간·범위 문구 13rem이 빠져 12rem씩 당김 · Pretendard 16px 실측 근사:
  * 최근 4주 ≈160 · 담임 상담 이번 달+[담임별] ≈220 · 후속 ≈132 · 녹음·AI ≈186 · 동기화 ≈132 · 반 없는 상담 ≈116px, 간격 16px).
  * 숨긴 지표는 '통계 보기'에 다 있다.
  * 🔴 누적 '상담 N건'·'1인당 상담'은 띠에서 뺐다(원장 2026-10-30 *"전체 건수는 숨기고 담임별 상담 건수 등 최근 추세에 대해서"*) —
@@ -27,12 +27,12 @@ const BAND = "@container/band bg-bg-soft flex h-9 items-center gap-4 overflow-hi
 const SHOW_FROM: Record<StatsMetric, string> = {
   count: "flex",
   perStudent: "hidden",
-  follow: "hidden @min-[50rem]/band:flex",
-  media: "hidden @min-[63rem]/band:flex",
-  sync: "hidden @min-[72rem]/band:flex",
-  class: "hidden @min-[80rem]/band:flex",
+  follow: "hidden @min-[38rem]/band:flex",
+  media: "hidden @min-[51rem]/band:flex",
+  sync: "hidden @min-[60rem]/band:flex",
+  class: "hidden @min-[68rem]/band:flex",
 };
-const HOMEROOM_FROM = "hidden @min-[41rem]/band:flex";
+const HOMEROOM_FROM = "hidden @min-[29rem]/band:flex";
 
 /** 요약 띠 자리 — 집계가 흘러오기 전에 같은 높이의 빈 띠를 먼저 세운다(B7 · 높이 = 실표면이라 도착해도 목록이 안 밀린다). */
 export function StatsSummarySkeleton() {
@@ -77,7 +77,7 @@ export async function ConsultationStatsSummary({
   }
   const [stats, settings] = loaded;
   const subjects = buildSubjectMaps(settings.operations.subjects);
-  const { period, rangeText, scope, searchExcluded } = statsScopeText(stats, listParams, {
+  const { period, scope, searchExcluded } = statsScopeText(stats, listParams, {
     teacherScoped,
     whoLabel,
     subjectLabel: listParams.subject ? subjects.labelOf(listParams.subject) : null,
@@ -89,19 +89,12 @@ export async function ConsultationStatsSummary({
   const trend = stats.full ? recentWeekTrend(stats.buckets.week, stats.today) : null;
   const change = trend ? changeText(trend.changePct) : null;
   return (
-    <section aria-label="상담 통계 요약" className={BAND}>
-      {/* 기간 이름 + 범위(좁으면 말줄임) — 날짜 범위까지 전문은 마우스 오버. */}
-      <p className="text-muted-foreground min-w-0 truncate text-xs" title={`${period} · ${scope}`}>
-        {rangeText} · {scope}
-      </p>
-      {searchExcluded ? (
-        <span
-          className="text-foreground -ml-2 shrink-0 text-xs font-medium whitespace-nowrap"
-          title="검색어는 통계에 걸지 않습니다 — 위 '결과'와 건수가 다를 수 있습니다"
-        >
-          · 검색어 제외
-        </span>
-      ) : null}
+    // 기간·범위 문구('전체 기간 · 학원 전체')는 띠에 적지 않는다(원장 2026-11-11 *"보조멘트 제거"*) — 마우스 오버로만(검색어를 통계에 안 건다는 것도 여기).
+    <section
+      aria-label="상담 통계 요약"
+      className={BAND}
+      title={`${period} · ${scope}${searchExcluded ? " · 검색어는 통계에 걸지 않습니다(위 '결과'와 건수가 다를 수 있습니다)" : ""}`}
+    >
       <ul className="flex shrink-0 items-baseline gap-4">
         {trend ? (
           <li

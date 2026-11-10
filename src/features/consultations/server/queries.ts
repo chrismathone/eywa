@@ -52,6 +52,8 @@ export type StudentConsultationRow = {
   studentId: string;
   studentName: string;
   studentGrade: string | null;
+  /** 학교(목록 '학교학년' 칸 — `schoolGradeLabel`로 "경명여중1"처럼 압축). 옛 호출부와의 호환으로 선택 칸. */
+  studentSchool?: string | null;
   counselorName: string | null;
   consultedAt: string;
   category: StudentConsultationCategory | null;
@@ -93,7 +95,7 @@ export type StudentConsultationDetail = StudentConsultationRow & {
 const SELECT_COLUMNS = `id, consulted_at, summary, follow_up_action,
   follow_up_date, follow_up_done, category, subject, audience, counselor_id,
   processing_status, audio_path, ai_summary, sync_added_at,
-  student:student_id ( id, name, grade ),
+  student:student_id ( id, name, grade, school ),
   counselor:counselor_id ( display_name )`;
 
 /**
@@ -131,7 +133,7 @@ function mapRow(r: {
   counselor: unknown;
 }): StudentConsultationRow {
   const student = (Array.isArray(r.student) ? r.student[0] : r.student) as
-    | { id: string; name: string; grade: string | null }
+    | { id: string; name: string; grade: string | null; school?: string | null }
     | undefined;
   const counselor = (Array.isArray(r.counselor) ? r.counselor[0] : r.counselor) as
     | { display_name?: string }
@@ -143,6 +145,7 @@ function mapRow(r: {
     studentId: student?.id ?? "",
     studentName: student?.name ?? "?",
     studentGrade: student?.grade ?? null,
+    studentSchool: student?.school ?? null,
     counselorName: counselor?.display_name ?? null,
     consultedAt: r.consulted_at,
     category: r.category as StudentConsultationCategory | null,
