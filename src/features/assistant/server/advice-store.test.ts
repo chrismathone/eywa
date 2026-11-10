@@ -2,13 +2,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type Row = Record<string, unknown>;
-const state: { current: Row | null; patches: Row[] } = { current: null, patches: [] };
+const state: { current: Row | null; patches: Row[]; threadAlive: boolean } = { current: null, patches: [], threadAlive: true };
 
 function builder(table: string) {
   let patch: Row | null = null;
   let insert = false;
   const api: Record<string, unknown> = {};
-  for (const m of ["select", "eq", "order", "limit", "returns", "in"]) api[m] = () => api;
+  for (const m of ["select", "eq", "order", "limit", "returns", "in", "is"]) api[m] = () => api;
   api.update = (p: Row) => {
     patch = p;
     return api;
@@ -19,6 +19,7 @@ function builder(table: string) {
   };
   const answer = () => {
     if (table === "assistant_advice_events" || insert) return { data: null, error: null };
+    if (table === "assistant_threads") return { data: state.threadAlive ? { id: "t1" } : null, error: null };
     if (patch) {
       state.patches.push(patch);
       return { data: { id: "a1", message_id: "m1", item_no: 0, status: patch.status, status_at: "2026-11-20T01:00:00+00:00", measure_state: patch.measure_state ?? "waiting" }, error: null };
@@ -42,6 +43,16 @@ const base = { status: "open", status_at: "2026-11-09T06:00:00+00:00", done_on: 
 beforeEach(() => {
   state.current = null;
   state.patches = [];
+  state.threadAlive = true;
+});
+
+describe("updateAdvice — 지운 대화", () => {
+  it("대화를 지웠으면(다른 탭에서) 처리하지 않는다 — 까닭 '지운 대화'", async () => {
+    state.current = { ...base, thread_id: "t1" };
+    state.threadAlive = false;
+    expect(await updateAdvice(owner, "a1", { status: "adopted", statusAt: base.status_at })).toEqual({ ok: false, reason: "deleted" });
+    expect(state.patches).toEqual([]);
+  });
 });
 
 describe("updateAdvice — 완료하면 재측정 기준일을 다시 잡는다", () => {
