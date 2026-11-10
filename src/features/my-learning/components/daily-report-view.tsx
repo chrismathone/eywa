@@ -1,5 +1,5 @@
 import { buildReport } from "@/features/onescreen/report";
-import { subjectTone, toneSolidClass, toneTextClass } from "@/features/onescreen/data";
+import { SUBJECT_SOLID, SUBJECT_TEXT, subjectColorOfRow, type SubjectMaps } from "@/features/owner/subjects";
 import { Pill } from "@/components/atoms/pill";
 import { DeltaChip } from "@/features/onescreen/components/delta-chip";
 import { EyIcon } from "@/components/icons/aywa-icons";
@@ -48,7 +48,8 @@ function TestBlock({ kicker, sub, test }: { kicker: string; sub: string; test: T
 }
 
 /** 학생 데일리 리포트 — 그날 진도·테스트·선생님 한마디(읽기 전용). */
-export function DailyReportView({ base, session }: { base: OneScreenStudent; session: Session }) {
+/** @param subjectMaps 과목 색 = 학원설정(운영 enum 하드코딩 금지) — 서버 페이지가 buildSubjectMaps로 만들어 넘긴다. */
+export function DailyReportView({ base, session, subjectMaps }: { base: OneScreenStudent; session: Session; subjectMaps: SubjectMaps }) {
   const view = sessionToStudent(base, session);
   const isLatest = session.date === "6/1";
   const isAbsent = view.attendance === "결석";
@@ -77,15 +78,15 @@ export function DailyReportView({ base, session }: { base: OneScreenStudent; ses
         <h2 className="text-foreground text-base font-bold">오늘 배운 내용</h2>
         <div className="mt-3 space-y-2.5">
           {view.subjects.map((su, i) => {
-            const { tone } = subjectTone(su.name);
+            const tone = subjectColorOfRow(subjectMaps, su);
             return (
               <div key={i} className="flex items-start gap-3">
-                <span className={`mt-0.5 h-9 w-1 rounded-pill ${toneSolidClass(tone)}`} aria-hidden />
+                <span className={`mt-0.5 h-9 w-1 rounded-pill ${SUBJECT_SOLID[tone]}`} aria-hidden />
                 <div>
-                  <p className={`text-sm font-bold ${toneTextClass(tone)}`}>{su.name}</p>
+                  <p className={`text-sm font-bold ${SUBJECT_TEXT[tone]}`}>{su.name}</p>
                   <p className="mt-0.5 flex items-center gap-1.5 text-xs">
                     <span className="text-text-faint">{su.prev}</span>
-                    <EyIcon name="arrowRight" size={13} className={toneTextClass(tone)} />
+                    <EyIcon name="arrowRight" size={13} className={SUBJECT_TEXT[tone]} />
                     <span className="text-foreground font-bold">{su.today}</span>
                   </p>
                 </div>

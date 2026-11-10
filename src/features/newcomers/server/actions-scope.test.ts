@@ -1,0 +1,12 @@
+import {beforeEach,it,expect,vi} from "vitest";
+import {setOnboardingCheck} from "./actions";
+const m=vi.hoisted(()=>({user:vi.fn(),level:vi.fn(),write:vi.fn(),admin:vi.fn()}));
+vi.mock("@/lib/auth/current-user",()=>({getCurrentUser:m.user}));
+vi.mock("@/lib/auth/perm-matrix",()=>({canWriteTenant:m.write,accessLevelTenant:m.level}));
+vi.mock("@/lib/supabase/admin",()=>({createAdminClient:m.admin}));
+vi.mock("@/features/audit/server/log",()=>({logAction:vi.fn()}));
+vi.mock("./consult-link",()=>({studentTakesSubject:vi.fn()}));
+vi.mock("next/cache",()=>({revalidatePath:vi.fn()}));
+beforeEach(()=>{Object.values(m).forEach(f=>f.mockReset());m.write.mockResolvedValue(true);m.level.mockResolvedValue("scoped");m.user.mockResolvedValue({id:"teacher",systemRole:"teacher",tenantId:"tenant"});});
+it("새 강사 메뉴가 열려도 기존 전체 콜 수정 액션은 통과하지 않는다",async()=>{const r=await setOnboardingCheck({studentId:"other-student",subject:"math",itemKey:"month1_call",done:false});expect(r.ok).toBe(false);expect(r.error).toContain("관리자");expect(m.admin).not.toHaveBeenCalled();});
+it("담당 범위로 제한된 관리 역할도 다른 학생 콜을 완료하지 못한다",async()=>{m.user.mockResolvedValue({id:"manager",systemRole:"manager",tenantId:"tenant"});const r=await setOnboardingCheck({studentId:"other-student",itemKey:"month1_call",done:false});expect(r.ok).toBe(false);expect(m.admin).not.toHaveBeenCalled();});

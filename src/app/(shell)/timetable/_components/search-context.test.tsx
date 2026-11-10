@@ -107,20 +107,17 @@ function Board({ enabled = true }: { enabled?: boolean }) {
   );
 }
 
-/** 입력칸은 토글(§10 "검색은 필요할 때만") 뒤에 있다 — 접혀 있으면 '검색'을 눌러 펼친 뒤 친다. */
+/** 입력칸은 늘 펼쳐져 있다(원장 2026-11-11 '닫기' 제거). */
 const type = (v: string) => {
-  if (!screen.queryByLabelText("학생 검색")) fireEvent.click(screen.getByRole("button", { name: "검색" }));
   fireEvent.change(screen.getByLabelText("학생 검색"), { target: { value: v } });
 };
 
-describe("검색 토글(§10) — 기본은 펼침, 검색어가 걸려 있으면 언제나 펼친 채", () => {
-  it("펼침 → 닫기 → '검색' → 입력칸 · 검색어가 있으면 닫기 대신 결과 칩", () => {
+describe("검색칸 — 늘 펼친 입력칸 · '닫기' 없음 · 검색어가 걸리면 결과 칩", () => {
+  it("처음부터 입력칸이 서 있고 접는 단추('닫기')·펼치는 단추('검색')가 없다 · 검색어가 있으면 결과 칩", () => {
     render(<Board />);
     expect(screen.getByLabelText("학생 검색")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "닫기" }));
-    expect(screen.queryByLabelText("학생 검색")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "검색" }));
-    expect(screen.getByLabelText("학생 검색")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "닫기" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "검색" })).toBeNull();
     type("김하늘");
     expect(screen.queryByRole("button", { name: "닫기" })).toBeNull();
     expect(screen.getByText(/2\/3/)).toBeTruthy(); // 걸린 반 2/전체 3

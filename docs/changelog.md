@@ -1,5 +1,19 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-11 — 원생상담 '상담 평점' 열(후속·녹음·AI 열 대체) · 구독 CLI 일괄 평점 + 배치 구조 · Codex 협의
+
+- 원장 *"후속 열 하고 녹음/AI 열 제거 → 상담 평점 열 추가 … 보고서와 같은 잣대 … 지금 올라온 상담은 내부 요금제로 · 이후엔 배치로"* + *"웹·유튜브 조사"* + *"코덱스와 같이 협의"*. 결정 본문 = [`decisions/students.md`](decisions/students.md) 2026-11-11 절.
+- 코드: `src/features/consultation-rating/`(하네스 `harness/` 순수 · 서버 `server/` 대기열·재료·배치·정기 처리·읽기) · cron `/api/cron/consultation-ratings` · 지점 스위치 `consult_rating`(`rule.ts`·`labels.ts`) · 키 그룹 CONSULTATIONS(`models.ts`·`model-features.ts`·key-groups 가드) · 목록 열 교체(`consultation-list.tsx`) · 상세 읽기 전용 패널 · 도움말·번역 사전. SQL `s2_0044`(표 2개 · 정책 0개) — 운영 DB 적용 끝(드라이런 롤백 검증 뒤).
+- 일괄 평점 도구 `scripts/_oneoff/consult-rating/`: extract(운영 DB 읽기 전용 → `~/eywa-data`) · sample · rate(구독 CLI · 응답 모델 검증 · 캐시) · codex-brief · deliver(운영 DB 쓰기 · 기본 롤백 시험 · `--commit`) · owner-sheet(원장 점수표 40건 xlsx).
+- Codex 협의 1차 반영(제 초안의 길이·자리표시 점수 규칙 폐기 · 4점 문안 정렬 · 인용 검증 등)과 교정 수치는 결정 본문에. 침산 상담 2,124건: 빈 양식·복사 200건(47묶음)·녹음 44건(summary가 '(녹음 분석 중)'로 남음) 확인.
+
+## 2026-11-11 — 원스크린 화면 분리(수정 계획 P3-O)
+
+- `onescreen-client.tsx` 5,890 → 2,290줄 — 동작은 그대로 두고 훅·부품으로 옮겼다: `session-input.ts`(순수) · `useSessionAutosave` · `useRosterView` · `useReportAttachments` · `useAutoWrite` · `useBulkOps`/`useBulkSend` · `useEnglishTemplateMode` · `useMakeupFlow`/`useMakeupPrev` · `useSendCore`/`useReportSend` · `<OneScreenCardColumn>`. 한 단계 = 한 커밋 · 단계마다 적대적 리뷰(결함 0).
+- `ReportCard` props 43 → 8(`fields`·`rowActions`·`slots` 묶음 · 본문 그대로).
+- 🔴 보이는 변경 하나: 원스크린 행·진도 카드·학생 목록·내 학습의 과목 색이 코드 고정(`subjectTone`)에서 **학원 설정 과목 색**(`subjectColorOfRow` → `colorOf`, 미등록 키는 `LEGACY_COLORS`)으로 — 설정과 다르던 색이 설정대로 바뀐다.
+- 원스크린 화면 원문을 읽는 가드는 `readOnescreenScreen()`(화면 + 옮겨 낸 파일을 한 덩어리로) — 새로 옮겨 낸 파일은 그 목록에 한 줄. 발송 판정 배선 가드는 파일별로도 본다.
+
 ## 2026-11-10 — 경영 분석·강사 배정 상한을 시안에서 실제 기능으로(aywa-next 이식 · SQL s2_0070~0074 운영 적용)
 
 - 경영 분석(`/dashboard/management`, 원장 전용): 예시 값·시안 띠를 걷고 이 지점 DB를 읽는다(청구·수강·상담 집계 + 회계 자료 + 원본 대조 기록). ECOUNT 손익계산서 .xlsx / 계정별원장 .csv 가져오기(검토 후 저장 · 버전) · 자료 수집함(MakeEdu 수납통합내역 · ECOUNT 월별손익분석 — 미리보기 지문이 같을 때만 대조 기록 저장 · 이름만으로 학생을 잇지 않음) · 확인 업무(상태·담당·기한·메모 버전) · 보고서 기준 손익(마감 월만 비율) · 'AI 검토'(버튼만 · 집계 지표만 · Claude 전용 · 결과 DB 보관 · 모델 라벨) · 학원 PC 수집기(🔴 기본 꺼짐 · 원장이 켬 · 90일 연결 · 설치 묶음 `public/downloads/aywa-collection-pc-1.1.0.zip` ← `apps/collection-agent`).

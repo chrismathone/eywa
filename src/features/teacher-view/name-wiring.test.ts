@@ -79,6 +79,8 @@ import {
   describeAttendanceSkips,
   planBulkAttendance,
 } from "@/features/onescreen/bulk-attendance";
+// 원스크린 화면 + 옮겨 낸 훅(P3-O)을 한 덩어리로 읽는다 — 화면에서 코드를 옮겨도 같은 단언이 선다.
+import { readOnescreenScreen } from "../onescreen/components/onescreen-screen-source.test-util";
 
 const read = (...p: string[]) => readFileSync(join(process.cwd(), "src", ...p), "utf8");
 
@@ -1143,7 +1145,8 @@ describe("🔴 회수 버튼·막힌 사유도 사전만 본다 — ko 기본값
  *    저장값(보강 행 이름·출결 배지값)이 언어를 안 타는지까지 함께 본다.
  */
 describe("🔴 원스크린 화면 껍데기·공지 작성도 사전만 본다 — 한글 리터럴 0", () => {
-  it.each(["onescreen-client.tsx", "notice-composer.tsx", "notice-attachment-picker.tsx"])(
+  // 화면에서 옮겨 낸 훅(P3-O)도 같은 규칙이다.
+  it.each(["onescreen-client.tsx", "use-session-autosave.ts", "use-roster-view.ts", "use-report-attachments.ts", "use-auto-write.ts", "use-bulk-ops.ts", "bulk-ops-types.ts", "../bulk-apply-plan.ts", "use-bulk-apply.ts", "use-bulk-copy.ts", "use-prev-import.ts", "use-bulk-send.ts", "use-english-template-mode.ts", "english-template-types.ts", "../english-row-facts.ts", "use-english-templates.ts", "use-english-output.ts", "use-english-generate.ts", "use-makeup-flow.ts", "makeup-flow-types.ts", "../makeup-ask-plan.ts", "use-makeup-ask.ts", "use-makeup-apply.ts", "use-makeup-resolve.ts", "use-makeup-row.ts", "use-makeup-prev.ts", "use-send-core.ts", "use-report-send.ts", "onescreen-card-column.tsx", "notice-composer.tsx", "notice-attachment-picker.tsx"])(
     "%s",
     (f) => {
       const code = codeOnly(read("features", "onescreen", "components", f));
@@ -1162,7 +1165,7 @@ describe("🔴 원스크린 화면 껍데기·공지 작성도 사전만 본다 
     expect(makeupRowName("수학", 2)).toBe("수학 (보강 2)");
     expect(makeupRowName("수학", 1)).toBe("수학 (보강)"); // 1은 번호를 안 붙인다(옛 동작)
     // 화면 어디에도 이 문자열을 손으로 짓지 않는다.
-    const client = codeOnly(read("features", "onescreen", "components", "onescreen-client.tsx"));
+    const client = codeOnly(readOnescreenScreen());
     expect(client).toContain("makeupRowName(su.name)");
   });
 

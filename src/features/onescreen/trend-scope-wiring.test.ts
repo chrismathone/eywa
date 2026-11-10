@@ -39,7 +39,8 @@ describe("학습 추세 — 생성 경로", () => {
     expect(compose).toContain("res.trendDropped");
   });
   it("원스크린은 버린 추세를 화면에서도 비운다(예전 초안이 그대로 나가지 않게)", () => {
-    const client = read("features", "onescreen", "components", "onescreen-client.tsx");
+    // 자동작성은 use-auto-write.ts로 옮겼다(P3-O) — 화면과 합쳐 읽는다.
+    const client = read("features", "onescreen", "components", "onescreen-client.tsx") + "\n" + read("features", "onescreen", "components", "use-auto-write.ts");
     // 2026-10-16: 자동작성 추세 스냅샷(trendAutoDraft)도 함께 비운다 — '달라진 것 없음'이면 칸이 스냅샷 그대로일 때만 비우는 데 쓴다.
     expect(client).toMatch(/res\.ok && res\.trendDropped\s*\?\s*\{ trendDraft: "", trendAutoDraft: "" \}/);
   });

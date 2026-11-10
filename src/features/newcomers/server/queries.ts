@@ -65,6 +65,7 @@ export type NewcomerRow = {
   bucket: NewcomerBucket;
   /** 항목 키 → 완료일(YYYY-MM-DD). 없으면 미완료. */
   checks: Record<string, string | null>;
+  checkDetails?:Record<string,{memo:string|null;consultationId:string|null}>;
   progress: NewcomerProgress;
 };
 
@@ -81,6 +82,7 @@ export type NewcomersView = {
   subjectChecks: boolean;
   /** 0251a가 적용돼 체크를 저장할 수 있나. false면 화면이 배너로 밝히고 체크를 잠근다. */
   checksAvailable: boolean;
+  followupError?: string;
   /** 체크 조회가 표 부재가 아닌 이유로 실패했을 때의 한글 사유(원문은 툴팁). */
   checksError: { summary: string; raw: string } | null;
 };
@@ -105,8 +107,10 @@ export async function loadNewcomers(
   supabase: Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdminClient>,
   today: string,
   tenantId?: string,
+  includeStudentIds: string[] = [],
 ): Promise<NewcomersView> {
   const since = newcomerWindowStart(today);
+  const included = includeStudentIds.filter(id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
   const scope: ScopeFn = tenantId ? <T,>(q: T): T => (q as unknown as { eq(c: string, v: string): T }).eq("tenant_id", tenantId) : (q) => q;
 
   // 대상 = 등록일이 창 안인 재원생. ⚠️ 휴원(on_hold)도 남긴다 — 신입이 초반에 흔들려 쉬는 경우가 정확히
@@ -117,18 +121,12 @@ export async function loadNewcomers(
     school: string | null;
     grade: string | null;
     enrolled_at: string | null;
-  }>((from, to) =>
-    scope(
-      supabase
-        .from("students")
-        .select("id, name, school, grade, enrolled_at")
-        .in("status", ["enrolled", "on_hold"])
-        .gte("enrolled_at", since),
-    )
-      .order("enrolled_at", { ascending: false })
-      .order("id", { ascending: true })
-      .range(from, to),
-  );
+  }>((from, to) => {
+    let query = supabase.from("students").select("id, name, school, grade, enrolled_at").in("status", ["enrolled", "on_hold"]);
+    query = included.length ? query.or(`enrolled_at.gte.${since},id.in.(${included.join(",")})`) : query.gte("enrolled_at", since);
+    return scope(query).order("enrolled_at", { ascending: false }).order("id", { ascending: true }).range(from, to);
+  });
+
   const ids = students.map((s) => s.id);
   if (ids.length === 0)
     return { today, rows: [], subjectRows: [], checksAvailable: true, checksError: null, subjectChecks: true };
@@ -195,6 +193,7 @@ export async function loadNewcomers(
         rowKey: `${s.id}|${subject ?? ""}`,
         firstClassOn,
         checks,
+        checkDetails:Object.fromEntries((checksResult.ok?checksResult.rows:[]).filter(r=>r.studentId===s.id&&(!(r.subject??"")||r.subject===subject)).sort((a,b)=>Number(!!a.subject)-Number(!!b.subject)).map(r=>[r.itemKey,{memo:r.memo??null,consultationId:r.consultationId??null}])),
         progress: progressOf({ enrolledOn, firstClassOn }, checks, today, ONBOARDING_ITEMS),
       };
     });

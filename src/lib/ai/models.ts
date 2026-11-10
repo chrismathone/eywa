@@ -68,6 +68,8 @@ export const FEATURE_KEY_GROUP: Readonly<Record<string, AiKeyGroup>> = {
   love_note_draft: "ment",
   // 수업보고서 평점 정기 처리(2026-10-26 · 밤 배치 · 지점 스위치 report_rating) — 멘트를 읽어 매기는 일이라 같은 그룹
   lesson_report_rating: "ment",
+  // 원생상담 평점 정기 처리(2026-11-11 · 배치 · 지점 스위치 consult_rating) — 상담 기록을 읽는 일이라 재원생 상담 분석과 같은 그룹
+  student_consultation_rating: "consultations",
   // 회의록 녹음 분석
   meeting_analysis: "meeting",
   // 콜&상담 — 녹음 분석 · 폼 자동입력 · 상담 준비 브리프

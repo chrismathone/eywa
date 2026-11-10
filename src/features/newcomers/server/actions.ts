@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canWriteTenant, accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { logAction } from "@/features/audit/server/log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { kstToday } from "@/lib/date-kst";
@@ -11,6 +11,8 @@ import { ONBOARDING_ITEM_KEYS } from "../onboarding-items";
 import { ANY_SUBJECT, isSubjectKey } from "../subject-rows";
 import { isMissingSubjectColumn } from "./cohort";
 import { studentTakesSubject } from "./consult-link";
+import { completionMemo,type Completion } from "../completion";
+import { z } from "zod";
 
 /**
  * 신규생 체크리스트 한 칸 — 완료/해제(0251a `student_onboarding_checks`).
@@ -40,9 +42,13 @@ export async function setOnboardingCheck(input: {
   done: boolean;
   /** 완료일(YYYY-MM-DD). 없으면 오늘 — 뒤늦게 기록할 때 실제 날짜를 넣을 수 있다. */
   doneOn?: string;
+  completion?: Completion;
 }): Promise<{ ok: boolean; error?: string; doneOn?: string | null }> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({teacherView:true});
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if(user.tenantView)return {ok:false,error:"현재 보기에서는 완료 기록을 변경할 수 없습니다"};
+  if (user.systemRole === "teacher" || await accessLevelTenant(user.systemRole, "newcomers") === "scoped")
+    return { ok: false, error: "관리 콜 완료는 관리자가 처리합니다. 담당 학생의 적응 피드백을 남겨 주세요." };
   if (!(await canWriteTenant(user.systemRole, "newcomers")))
     return { ok: false, error: "신규생 관리 쓰기 권한이 없습니다" };
   if (!input.studentId) return { ok: false, error: "학생 정보가 없습니다" };
@@ -50,7 +56,10 @@ export async function setOnboardingCheck(input: {
   const subject = (input.subject ?? ANY_SUBJECT).trim();
   if (subject !== ANY_SUBJECT && !isSubjectKey(subject)) return { ok: false, error: "알 수 없는 과목입니다" };
 
-  const doneOn = input.done ? (/^\d{4}-\d{2}-\d{2}$/.test(input.doneOn ?? "") ? input.doneOn! : kstToday()) : null;
+  let memo:string|undefined;
+  if(input.done){try{memo=completionMemo(input.completion);}catch{return {ok:false,error:"실행한 액션과 처리 결과를 입력해 주세요"};}}
+  const doneOn=input.done?(input.doneOn??kstToday()):null;
+  if(doneOn&&(!z.iso.date().safeParse(doneOn).success||doneOn>kstToday()))return {ok:false,error:"실제 수행일을 확인해 주세요. 미래 일자는 완료 처리할 수 없습니다"};
   const admin = createAdminClient();
   // admin은 RLS 우회 — 이 학생이 **이 학원 학생인지**가 유일한 격리선이다.
   const { data: student } = await admin
@@ -74,6 +83,7 @@ export async function setOnboardingCheck(input: {
     item_key: input.itemKey,
     done_on: doneOn,
     done_by: input.done ? user.id : null,
+    ...(memo?{memo}:{}),
   };
   // 일반 유니크라 이 축으로 추론이 된다 — 부분 유니크였으면 42P10으로 전건 실패한다([[#113]]).
   let { error } = await admin

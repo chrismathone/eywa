@@ -92,18 +92,20 @@ export async function loadCheckRows(
       item_key: string;
       done_on: string | null;
       subject: string | null;
+      memo: string|null;
+      consultation_id: string|null;
     }>([...studentIds], (chunk, from, to) =>
       scope(
         supabase
           .from("student_onboarding_checks")
-          .select("student_id, item_key, done_on, subject")
+          .select("student_id, item_key, done_on, subject, memo, consultation_id")
           .in("student_id", chunk),
       ).order("id").range(from, to),
     );
     return {
       ok: true,
       subjectAware: true,
-      rows: rows.map((r) => ({ studentId: r.student_id, itemKey: r.item_key, doneOn: r.done_on, subject: r.subject })),
+      rows: rows.map((r) => ({ studentId: r.student_id, itemKey: r.item_key, doneOn: r.done_on, subject: r.subject,memo:r.memo,consultationId:r.consultation_id })),
     };
   } catch (e) {
     if (!isMissingSubjectColumn(e)) return { ok: false, error: e };
