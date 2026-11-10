@@ -4,7 +4,8 @@ import { join, relative, sep } from "node:path";
 
 /**
  * 퇴사자 권한 정리 — 서버 쪽(쓰기 · 감사로그 · 캐시) + 퇴사 경로 배선(원장 2026-11-09 *"퇴사시 같이 사라지게"*).
- * 상태를 가진 모의 DB로 학원 설정 쓰기 규칙을 본다: 방금 읽은 값 위에 그 사람 줄만 · updated_at 비교(겹치면 다시 읽기) · permissions.rev + 1.
+ * 상태를 가진 모의 DB로 학원 설정 쓰기 규칙을 본다: 방금 읽은 값 위에 그 사람의 주는 값만 · updated_at 비교(겹치면 다시 읽기) · permissions.rev + 1.
+ * 🔴 좁히는 값(역할보다 낮은 개인 메뉴 줄)은 남긴다(리뷰 r1 F1) · 정리 실패도 감사로그(F8).
  */
 const A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -15,6 +16,8 @@ const m = vi.hoisted(() => ({
   raceWrites: 0,
   writes: [] as { data: unknown; updated_at: string }[],
   logs: [] as unknown[],
+  /** 설정 표 조회가 던진다(네트워크 예외 흉내). */
+  throwOnFrom: false,
   tags: [] as string[],
   readError: null as null | { message: string },
 }));
@@ -28,6 +31,7 @@ function fakeDb() {
   return {
     from: (table: string) => {
       expect(table).toBe("tenant_settings");
+      if (m.throwOnFrom) throw new Error("synthetic network");
       const state: { patch?: { data: unknown; updated_at: string }; at?: string } = {};
       const q = {
         select: () => q,
@@ -63,7 +67,13 @@ beforeEach(() => {
   m.row = {
     updated_at: "2026-11-09T10:00:00.000Z",
     data: {
-      permissions: { rev: 7, overrides: [], userOverrides: [{ userId: A, menu: "approvals", access: "full" }], specialAccess: { payslipViewerIds: [A, B], withdrawalApproverIds: [A] } },
+      permissions: {
+        rev: 7,
+        overrides: [{ menu: "staff", role: "admin", access: "full" }],
+        // 전자결재 전체 = 관리자 역할 칸(없음)보다 더 준다 → 지운다 · 직원관리 없음 = 역할 칸(전체)을 좁힌다 → 남긴다.
+        userOverrides: [{ userId: A, menu: "approvals", access: "full" }, { userId: A, menu: "staff", access: "none" }],
+        specialAccess: { payslipViewerIds: [A, B], withdrawalApproverIds: [A] },
+      },
       operations: { rev: 3, holidays: [] },
     },
   };
@@ -72,52 +82,59 @@ beforeEach(() => {
   m.logs = [];
   m.tags = [];
   m.readError = null;
+  m.throwOnFrom = false;
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 type Stored = { permissions: { rev: number; userOverrides: unknown[]; specialAccess: Record<string, string[]> }; operations: unknown };
 
 describe("dropPersonFromSettings — 학원 설정 쓰기 규칙", () => {
-  it("그 사람 줄만 빼고 · 역할·권한 순번을 올리고 · updated_at을 앞으로 민다 — 다른 사람·다른 섹션은 그대로", async () => {
-    const r = await dropPersonFromSettings("t-1", A, fakeDb() as never);
+  it("그 사람의 주는 값만 빼고 · 역할·권한 순번을 올리고 · updated_at을 앞으로 민다 — 좁히는 줄·다른 사람·다른 섹션은 그대로", async () => {
+    const r = await dropPersonFromSettings("t-1", A, "admin", fakeDb() as never);
     expect(r).toEqual({ ok: true, removed: ["payslipViewerIds", "userOverrides"], kept: ["withdrawalApproverIds"] });
     expect(m.writes).toHaveLength(1);
     const d = m.row!.data as Stored;
     expect(d.permissions.specialAccess.payslipViewerIds).toEqual([B]);
     expect(d.permissions.specialAccess.withdrawalApproverIds).toEqual([A]);
-    expect(d.permissions.userOverrides).toEqual([]);
+    expect(d.permissions.userOverrides).toEqual([{ userId: A, menu: "staff", access: "none" }]);
     expect(d.permissions.rev).toBe(8);
     expect(d.operations).toEqual({ rev: 3, holidays: [] });
     expect(Date.parse(m.row!.updated_at)).toBeGreaterThan(Date.parse("2026-11-09T10:00:00.000Z"));
   });
 
+  it("역할을 모르면 개인 메뉴 줄은 지우지 않는다(명단 칸만)", async () => {
+    const r = await dropPersonFromSettings("t-1", A, null, fakeDb() as never);
+    expect(r).toEqual({ ok: true, removed: ["payslipViewerIds"], kept: ["withdrawalApproverIds"] });
+    expect((m.row!.data as Stored).permissions.userOverrides).toHaveLength(2);
+  });
+
   it("🔴 그사이 다른 저장이 먼저 썼으면 다시 읽어 그 값 위에서 뺀다(덮어쓰지 않는다)", async () => {
     m.raceWrites = 1;
-    const r = await dropPersonFromSettings("t-1", A, fakeDb() as never);
+    const r = await dropPersonFromSettings("t-1", A, "admin", fakeDb() as never);
     expect(r.ok).toBe(true);
     expect(m.writes).toHaveLength(1);
   });
 
   it("세 번 내리 겹치면 쓰지 않고 실패로 돌려준다(퇴사는 그대로 · 읽는 쪽이 거른다)", async () => {
     m.raceWrites = 3;
-    expect(await dropPersonFromSettings("t-1", A, fakeDb() as never)).toEqual({ ok: false, reason: "conflict" });
+    expect(await dropPersonFromSettings("t-1", A, "admin", fakeDb() as never)).toEqual({ ok: false, reason: "conflict" });
     expect(m.writes).toHaveLength(0);
   });
 
   it("그 사람이 없으면 쓰지 않는다 · 못 읽으면 쓰지 않는다", async () => {
-    expect(await dropPersonFromSettings("t-1", "cccccccc-cccc-4ccc-8ccc-cccccccccccc", fakeDb() as never)).toEqual({ ok: true, removed: [], kept: [] });
+    expect(await dropPersonFromSettings("t-1", "cccccccc-cccc-4ccc-8ccc-cccccccccccc", "admin", fakeDb() as never)).toEqual({ ok: true, removed: [], kept: [] });
     m.readError = { message: "synthetic" };
-    expect(await dropPersonFromSettings("t-1", A, fakeDb() as never)).toEqual({ ok: false, reason: "read" });
+    expect(await dropPersonFromSettings("t-1", A, "admin", fakeDb() as never)).toEqual({ ok: false, reason: "read" });
     expect(m.writes).toHaveLength(0);
   });
 });
 
-describe("cleanupPersonSettings — 감사로그(뺀 칸 · 남긴 칸) + 설정 캐시 비우기", () => {
+describe("cleanupPersonSettings — 감사로그(뺀 칸 · 남긴 칸 · 실패) + 설정 캐시 비우기", () => {
   it("뺀 칸을 감사로그에 남기고 설정 캐시를 비운다", async () => {
     vi.doMock("@/lib/supabase/admin", () => ({ createAdminClient: () => fakeDb() }));
     vi.resetModules();
     const mod = await import("./retired-people");
-    await mod.cleanupPersonSettings({ tenantId: "t-1", userId: A, targetLabel: "합성 직원", reason: "retire" });
+    await mod.cleanupPersonSettings({ tenantId: "t-1", userId: A, role: "admin", targetLabel: "합성 직원", reason: "retire" });
     expect(m.logs).toEqual([{ action: "staff_permission_cleanup", targetType: "staff", targetLabel: "합성 직원", metadata: { userId: A, reason: "retire", removed: ["payslipViewerIds", "userOverrides"], kept: ["withdrawalApproverIds"] } }]);
     expect(m.tags).toEqual(["tenant-settings:t-1"]);
     vi.doUnmock("@/lib/supabase/admin");
@@ -127,9 +144,26 @@ describe("cleanupPersonSettings — 감사로그(뺀 칸 · 남긴 칸) + 설정
     vi.doMock("@/lib/supabase/admin", () => ({ createAdminClient: () => fakeDb() }));
     vi.resetModules();
     const mod = await import("./retired-people");
-    await mod.cleanupPersonSettings({ tenantId: "t-1", userId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", targetLabel: null, reason: "reactivate" });
+    await mod.cleanupPersonSettings({ tenantId: "t-1", userId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", role: "admin", targetLabel: null, reason: "reactivate" });
     expect(m.logs).toEqual([]);
     expect(m.tags).toEqual(["tenant-settings:t-1"]);
+    vi.doUnmock("@/lib/supabase/admin");
+  });
+
+  it("🔴 정리에 실패해도(못 읽음 · 던짐) 감사로그에 '실패'를 남기고 캐시를 비운다 — 던지지 않는다(리뷰 r1 F8)", async () => {
+    vi.doMock("@/lib/supabase/admin", () => ({ createAdminClient: () => fakeDb() }));
+    vi.resetModules();
+    const mod = await import("./retired-people");
+    m.readError = { message: "synthetic" };
+    expect(await mod.cleanupPersonSettings({ tenantId: "t-1", userId: A, role: "admin", targetLabel: "합성 직원", reason: "retire" })).toEqual({ ok: false, reason: "read" });
+    m.readError = null;
+    m.throwOnFrom = true;
+    expect(await mod.cleanupPersonSettings({ tenantId: "t-1", userId: A, role: "admin", targetLabel: "합성 직원", reason: "delete" })).toEqual({ ok: false, reason: "write" });
+    expect(m.logs).toEqual([
+      { action: "staff_permission_cleanup", targetType: "staff", targetLabel: "합성 직원", metadata: { userId: A, reason: "retire", failed: "read" } },
+      { action: "staff_permission_cleanup", targetType: "staff", targetLabel: "합성 직원", metadata: { userId: A, reason: "delete", failed: "write" } },
+    ]);
+    expect(m.tags).toEqual(["tenant-settings:t-1", "tenant-settings:t-1"]);
     vi.doUnmock("@/lib/supabase/admin");
   });
 });
@@ -145,16 +179,20 @@ describe("🔴 퇴사 경로 배선 — 직원을 퇴사·재입사·삭제하�
 
   it("직원관리 퇴사(재입사 포함) · 인계 후 퇴사 · 완전 삭제", () => {
     const staff = read("src/features/staff/server/actions.ts");
-    expect(body(staff, "deactivateStaff")).toMatch(/if \(next === "inactive" \|\| target\.status === "inactive"\) \{\s*await cleanupPersonSettings\(/);
-    expect(body(staff, "handoverAndDeactivate")).toMatch(/await cleanupPersonSettings\(\{[^}]*reason: "retire" \}\)/);
-    expect(body(read("src/features/staff/server/account-actions.ts"), "deleteStaff")).toMatch(/await cleanupPersonSettings\(\{[^}]*reason: "delete" \}\)/);
+    expect(body(staff, "deactivateStaff")).toMatch(/if \(next === "inactive" \|\| target\.status === "inactive"\) \{\s*await cleanupPersonSettings\(\{[^}]*role: target\.role,/);
+    expect(body(staff, "handoverAndDeactivate")).toMatch(/await cleanupPersonSettings\(\{[^}]*role: target\.role,[^}]*reason: "retire" \}\)/);
+    expect(body(read("src/features/staff/server/account-actions.ts"), "deleteStaff")).toMatch(/await cleanupPersonSettings\(\{[^}]*role: target\.role,[^}]*reason: "delete" \}\)/);
   });
 
   it("운영 콘솔의 계정 비활성·재활성", () => {
     const sa = body(read("src/features/super-admin/server/actions.ts"), "setUserActive");
-    expect(sa).toMatch(/const cleans = !active \|\| account\.status === "inactive";/);
-    expect(sa).toMatch(/dropPersonFromSettings\(tenantId, userId, admin\)/);
+    // 🔴 재직 상태가 실제로 저장된 뒤에만 정리하고(0행·오류면 안 한다) · 정리가 던져도 운영 감사는 남는다(리뷰 r1 F5).
+    expect(sa).toMatch(/\.update\(\{ status: active \? "active" : "inactive" \}\)\.eq\("id", userId\)\.eq\("tenant_id", tenantId\)\.select\("id"\)/);
+    expect(sa).toMatch(/const statusSaved = !statusErr && \(statusRows\?\.length \?\? 0\) > 0;/);
+    expect(sa).toMatch(/const cleans = statusSaved && \(!active \|\| account\.status === "inactive"\);/);
+    expect(sa).toMatch(/try \{[^}]*dropPersonFromSettings\(tenantId, userId, role as SystemRole \| null, admin\);\s*\} catch/);
     expect(sa).toMatch(/updateTag\(tenantSettingsTag\(tenantId\)\)/);
+    expect(sa.search(/await logSuperAdminAction\(\{\s*actorId: sa\.id,\s*actorEmail: sa\.email,\s*action: "set_user_active"/)).toBeGreaterThan(sa.indexOf("const cleans"));
   });
 
   it("🔴 직원의 재직 상태(users.status)를 바꾸는 앱 코드 = 아는 곳뿐이다 — 새 퇴사·재입사 경로는 정리를 함께 부르고 여기에 올린다", () => {
@@ -182,8 +220,11 @@ describe("🔴 퇴사 경로 배선 — 직원을 퇴사·재입사·삭제하�
 
   it("읽는 쪽 — 설정 읽기 둘과 역할·권한 편집기가 퇴사자를 거른다(편집기의 기준 token은 저장값 그대로)", () => {
     const q = read("src/features/owner/server/queries.ts");
-    expect(q).toMatch(/return withoutRetiredPeople\(settings, await retiredIn\(user\.tenantId, raw\.data\)\);/);
+    expect(q).toMatch(/return withoutRetiredPeople\(settings, await retiredIn\(user\.tenantId, raw\.data, raw\.retired\)\);/);
     expect(q).toMatch(/return withoutRetiredPeople\(resolveSettings\(stored, \{ name: tenantRes\.data\?\.name \?\? "" \}\), await retiredIn\(tenantId, stored\)\);/);
+    // 🔴 퇴사자 집합은 설정 캐시 항목 **안에서** 함께 계산한다(창마다 왕복이 늘지 않게 — 리뷰 r1 F7 · B6). 키를 올려 옛 항목과 섞지 않는다.
+    expect(q).toMatch(/retired = await retiredPeopleEntries\(ids, admin\);/);
+    expect(q).toMatch(/\["tenant-settings-v4", tenantId\]/);
     const page = read("src/app/(shell)/owner/page.tsx");
     expect(page).toMatch(/initial=\{permissionsInitial \?\? permissionsSource\}/);
     expect(page).toMatch(/baselineToken=\{permissionsToken\(permissionsSource\)\}/);

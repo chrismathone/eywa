@@ -133,7 +133,8 @@ export function PermissionsSection({
   const changes = [...shownMenus, ...MENU_KEYS.filter((menu) => !shownMenus.includes(menu) && !isConnectedAppMenu(menu))].flatMap((menu) => SYSTEM_ROLES.flatMap((role) =>
     matrix[menu][role] === savedMatrix[menu][role] ? [] : [{ menu, role, before: savedMatrix[menu][role], after: matrix[menu][role] }],
   ));
-  const staffName = (id: string) => staffOptions.find((s) => s.id === id)?.name || userOverrideNames[id] || `${id.slice(0, 8)}…`;
+  // 이름을 못 찾는 사람 = 직원 표에 없는 계정(완전 삭제된 직원 등) — 내부 번호 대신 '(삭제된 직원)'으로 적는다(리뷰 r1 F4 · raw 코드 노출 금지).
+  const staffName = (id: string) => staffOptions.find((s) => s.id === id)?.name || userOverrideNames[id] || "(삭제된 직원)";
 
   // 강사보다 낮은 직급(열람·아르바이트) 칸에서 '담당'을 건너뛰었으면 그 칸과 까닭을 알린다 — 말없이 건너뛰지 않는다
   // (원장 2026-11-05 *"무조건적으로 안되게하지말고 알림메시지도 배선"*). 다른 칸을 누르거나 닫기·저장하면 사라진다.

@@ -1544,3 +1544,13 @@ describe("auditDetail — 학습 추세 미발송 설정(2026-10-23)", () => {
     expect(auditDetail("onescreen_trend_optout", { studentId: SID, classId: C1, on: false, cleared: 0 }, names)).toBe("김학생 · M1A · 미발송 끔");
   });
 });
+
+describe("auditDetail — 퇴사자 권한 정리(2026-11-09 · 리뷰 r1 F8)", () => {
+  it("뺀 칸 · 남긴 칸 · 정리 실패를 한글로 — 칸 키·실패 코드는 안 보인다", () => {
+    expect(auditDetail("staff_permission_cleanup", { reason: "retire", removed: ["payslipViewerIds", "userOverrides"], kept: ["withdrawalApproverIds"] }, ctx()))
+      .toBe("퇴사 — 급여명세서 열람 · 개인별 메뉴 권한에서 뺌 / 퇴원보고서 승인자는 마지막 지정자라 남김");
+    const failed = auditDetail("staff_permission_cleanup", { reason: "delete", failed: "conflict" }, ctx());
+    expect(failed).toBe("완전 삭제 — 권한 정리를 하지 못함(역할·권한 면을 열어 확인한 뒤 한 번 저장하면 정리됩니다)");
+    expect(failed).not.toContain("conflict");
+  });
+});

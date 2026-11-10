@@ -966,11 +966,12 @@ export function auditDetail(
       return join(r ? `삭제 당시 역할: ${r}` : null, docs ? `문서 ${docs}건 함께 삭제` : null);
     }
     case "staff_permission_cleanup": {
-      // 퇴사자 권한 정리 — 뺀 칸 · 마지막 한 명이라 남긴 칸(퇴원보고서 승인자 — 비우면 '지정 없음'으로 넓어진다).
+      // 퇴사자 권한 정리 — 뺀 칸(주는 값) · 마지막 한 명이라 남긴 칸(퇴원보고서 승인자 — 비우면 '지정 없음'으로 넓어진다) · 정리 실패(리뷰 r1 F8).
       const names = (v: unknown) => arr(v).flatMap((k) => (typeof k === "string" && k in PERSON_FIELD_LABEL ? [PERSON_FIELD_LABEL[k as PersonFieldKey]] : []));
       const removed = names(m.removed);
       const kept = names(m.kept);
       const why = m.reason === "reactivate" ? "다시 재직으로 돌림" : m.reason === "delete" ? "완전 삭제" : "퇴사";
+      if (m.failed) return `${why} — 권한 정리를 하지 못함(역할·권한 면을 열어 확인한 뒤 한 번 저장하면 정리됩니다)`;
       const parts = [removed.length ? `${removed.join(" · ")}에서 뺌` : null, kept.length ? `${kept.join(" · ")}는 마지막 지정자라 남김` : null].filter(Boolean);
       return parts.length ? `${why} — ${parts.join(" / ")}` : null;
     }

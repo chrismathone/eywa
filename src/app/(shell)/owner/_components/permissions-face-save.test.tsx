@@ -338,7 +338,7 @@ describe("배선", () => {
     expect(page).toContain('const showsPermissions = tab === "permissions" && isMaster;');
     expect(page).toContain("const permissionsSource = showsPermissions ? editable?.settings.permissions : undefined;");
     // 폼의 값 = 방금 읽은 값에서 퇴사자만 거른 것(2026-11-09) · 기준 token = 방금 읽은 저장값 그대로(거른 값을 저장하면 저장값에서도 빠진다).
-    expect(page).toContain("const permissionsInitial = permissionsSource ? withoutRetiredPeople({ permissions: permissionsSource }, retiredPermissionIds).permissions : undefined;");
+    expect(page).toContain("const permissionsInitial = permissionsSource ? withoutRetiredPeople({ permissions: permissionsSource }, retiredPermissionPeople).permissions : undefined;");
     expect(page).toContain("initial={permissionsInitial ?? permissionsSource}");
     expect(page).toContain("baselineToken={permissionsToken(permissionsSource)}");
     expect(page).toContain("baselineVersion={editable?.versions.permissions}");

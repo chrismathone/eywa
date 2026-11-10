@@ -12,8 +12,8 @@ import { OWNER_FACES, ownerTabLabel, resolveOwnerTab, type OwnerFaceDef, type Ow
 import { getTenantSettings, getSettingsMeta, getUserDisplayNames, getPermissionStaffOptions, getTenantSettingsForEdit } from "@/features/owner/server/queries";
 import { operationsFaceTokens } from "@/features/owner/server/operations-save";
 import { permissionsToken } from "@/features/owner/server/permissions-save";
-import { retiredPersonIds } from "@/features/owner/server/retired-lookup";
-import { withoutRetiredPeople } from "@/features/owner/retired-people";
+import { retiredPeople } from "@/features/owner/server/retired-lookup";
+import { withoutRetiredPeople, type RetiredPeople } from "@/features/owner/retired-people";
 import { getClassroomsWithUsage } from "@/features/owner/server/classroom-queries";
 import { getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
 import { getPeriodDefsForEditor } from "@/features/periods/server/queries";
@@ -221,7 +221,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
     hiddenMenuKeys.push("assistant");
   }
   if (settings.modules.disabled.includes("payroll")) hiddenSettingKeys.push("attendance_salary_settings", "payroll_settings");
-  const [userOverrideNamesRaw, permissionStaff, hiddenPermissionIds, connectedApps, retiredPermissionIds] = await Promise.all([
+  const [userOverrideNamesRaw, permissionStaff, hiddenPermissionIds, connectedApps, retiredPermissionPeople] = await Promise.all([
     permissionPeople.length > 0 ? getUserDisplayNames(permissionPeople) : {},
     // 개인별 메뉴 권한을 주고 거두는 구획의 직원 선택지 — 어느 학원에서나 선다(원장 2026-10-06).
     permissionsSource ? getPermissionStaffOptions() : [],
@@ -233,20 +233,21 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           return apps.map((a) => ({ permission: a.permission, label: a.label, note: connectedAppNote(a, labelOf) }));
         })
       : [],
-    // 퇴사자(원장 2026-11-09 *"퇴사시 같이 사라지게"*) — 개인별 기능 권한 칩에서 빼고(이 면을 저장하면 저장값에서도 빠진다), 남는 줄(개인별 메뉴 권한)엔 '(퇴사)'를 붙인다.
-    // 캐시 없이 지금 값으로(편집 폼 규칙). 조회 실패면 거르지 않는다(종전 화면 그대로).
+    // 퇴사자(원장 2026-11-09 *"퇴사시 같이 사라지게"*) — **주는 값**(개인별 기능 권한 칩 · 역할보다 더 주는 개인 메뉴 줄)은 초기값에서 빼고
+    // (이 면을 저장하면 저장값에서도 빠진다), 남는 좁히는 값(역할보다 낮은 개인 줄 · 과목 범위)엔 이름 뒤 '(퇴사)'를 붙인다(retired-people.ts 원칙).
+    // 캐시 없이 지금 값으로(편집 폼 규칙). 퇴사가 확인된 사람만(계정이 없는 사람은 모른다 — 리뷰 r1 F3). 조회 실패면 거르지 않는다(종전 화면 그대로).
     permissionPeople.length > 0
-      ? retiredPersonIds(permissionPeople).catch((e) => {
+      ? retiredPeople(permissionPeople).catch((e): RetiredPeople => {
           console.error("[owner/page] 퇴사자 조회 실패 — 거르지 않는다", e);
-          return new Set<string>();
+          return new Map();
         })
-      : new Set<string>(),
+      : (new Map() as RetiredPeople),
   ]);
   const userOverrideNames: Record<string, string> = Object.fromEntries(
-    Object.entries(userOverrideNamesRaw as Record<string, string>).map(([id, name]) => [id, retiredPermissionIds.has(id) ? `${name}(퇴사)` : name]),
+    Object.entries(userOverrideNamesRaw as Record<string, string>).map(([id, name]) => [id, retiredPermissionPeople.has(id) ? `${name}(퇴사)` : name]),
   );
   // 기준 token은 **저장된 값 그대로**(아래 permissionsToken(permissionsSource))로 만든다 — 화면은 거른 값을 들고, 저장하면 거른 값이 저장된다.
-  const permissionsInitial = permissionsSource ? withoutRetiredPeople({ permissions: permissionsSource }, retiredPermissionIds).permissions : undefined;
+  const permissionsInitial = permissionsSource ? withoutRetiredPeople({ permissions: permissionsSource }, retiredPermissionPeople).permissions : undefined;
   // 탭 및 메뉴 구성 — 편집기가 세우지 않을 메뉴(지점에서 닫힌 메뉴 · 강사 권한) 판정. 그 면을 열 때만 조회한다.
   const navigationGates = tab === "navigation" ? await navigationEditorGates(settings) : null;
   // 세션 기간(과목 운영 안)의 연도. 기본은 KST 올해(세션은 연 단위로 편집한다).
