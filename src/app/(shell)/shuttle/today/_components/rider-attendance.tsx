@@ -2,6 +2,7 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 import { riderAttendanceText, type RiderAttendance } from "@/features/shuttle/today/rider-attendance";
+import { EyIcon } from "@/components/icons/aywa-icons";
 
 /**
  * 하원 줄 이름·학교 **아래** "출석함 · 박소선 선생님 · 중등 수학 A반 16:00~17:50 · 본원302"(사용자 2026-10-30 — 관리자 뷰).
@@ -21,7 +22,7 @@ export function RiderAttendanceLine({ studentId }: { studentId: string }) {
     <span className="basis-full">
       {list.map((a, i) => (
         <span key={i} className={a.late ? "text-amber block text-xs font-bold break-keep" : "text-green block text-xs font-bold break-keep"}>
-          ✓ {riderAttendanceText(a)}
+          <EyIcon name="check" size={12} className="mr-0.5 inline align-text-bottom" />{riderAttendanceText(a)}
         </span>
       ))}
     </span>

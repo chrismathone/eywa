@@ -406,7 +406,7 @@ function Coverage({ coverage }: { coverage: NonNullable<SettledReport["coverage"
                     </span>
                   )}
                   {!t.failed ? (
-                    <span className={`ml-auto text-xs font-bold whitespace-nowrap ${t.examined ? "text-green" : "text-text-faint"}`}>{t.examined ? "✓ 자세히 봄" : "건수만 셈"}</span>
+                    <span className={`ml-auto text-xs font-bold whitespace-nowrap ${t.examined ? "text-green" : "text-text-faint"}`}>{t.examined ? <span className="inline-flex items-center gap-0.5"><EyIcon name="check" size={12} />자세히 봄</span> : "건수만 셈"}</span>
                   ) : null}
                 </li>
               ))}

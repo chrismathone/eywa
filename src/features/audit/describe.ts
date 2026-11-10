@@ -870,6 +870,12 @@ export function auditDetail(
         unavailable: "요약 조건 미충족", input_limit: "입력량 제한", source_changed: "원본 변경으로 저장 중단" } as Record<string, string>)[str(m.outcome) ?? ""] ?? "결과 확인 필요";
       return join(outcome, m.providerRequested === true ? "AI 요청함" : "AI 요청 전", num(m.itemCount) === null ? null : `발췌 ${num(m.itemCount)}건`, str(m.model) || null);
     }
+    case "student_contribution_factor_save": {
+      // 원생 기여 요인 기록(P0-3b) — 달·상태·판. 근거 글은 싣지 않는다(이력 표에 있다). 모르는 상태 값은 싣지 않는다.
+      const state = ({ measured: "값 기록", na: "해당 없음", reset: "되돌림" } as Record<string, string>)[str(m.state) ?? ""] ?? null;
+      const version = num(m.version);
+      return join(str(m.month), state, version === null ? null : `v${version}`);
+    }
     case "student_contribution_signal_cancel":
     case "student_contribution_signal_rejudge":
       return typeof m.reason === "string" ? m.reason : null;

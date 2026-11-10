@@ -36,7 +36,7 @@ function MoverRows() {
           </span>
           <span className="flex shrink-0 flex-col items-end gap-1">
             <span className={`num whitespace-nowrap ${BAR}`}>00점 / 100점</span>
-            <span className="bg-bg-soft inline-flex animate-pulse items-center rounded-full px-2 py-0.5 text-xs font-bold text-transparent">▲00점</span>
+            <span className="bg-bg-soft inline-flex animate-pulse items-center rounded-full px-2 py-0.5 text-xs font-bold text-transparent">000점</span>
           </span>
         </div>
       ))}

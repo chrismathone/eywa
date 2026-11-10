@@ -15,7 +15,7 @@ export function LevelsLead({ lead, compact = false }: { lead: string; compact?: 
   const rows = parseLevelRows(lead.split("\n").slice(1).join("\n"));
   return (
     <div
-      className={`border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border ${compact ? "px-2 py-1 text-[11px]" : "px-3 py-1.5 text-xs"}`}
+      className={`border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border ${compact ? "px-2 py-1 text-xs" : "px-3 py-1.5 text-xs"}`}
       title={t("os.lead.hint")}
     >
       <span className="text-text-faint font-bold">{t("os.lead.title")}</span>

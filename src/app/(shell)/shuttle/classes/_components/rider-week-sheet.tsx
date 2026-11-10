@@ -737,7 +737,7 @@ function AlertHead({ alerts }: { alerts: string[] }) {
   if (alerts.length === 0) return null;
   return (
     <div className="text-danger mb-0.5 text-xs motion-safe:animate-pulse">
-      <p className="font-bold">⚠ 수정된 내용이 있습니다</p>
+      <p className="inline-flex items-center gap-1 font-bold"><EyIcon name="alert" size={12} />수정된 내용이 있습니다</p>
       {alerts.map((a) => (
         <p key={a} className="break-keep">
           {a}

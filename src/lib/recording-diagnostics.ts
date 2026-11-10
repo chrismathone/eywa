@@ -2,7 +2,6 @@
  * 녹음 중단 진단 — 브라우저 쪽(보내기 · 다음 접속 때 남은 녹음 찾기). 판정은 `recording-diagnostics-core.ts`.
  * 모든 일은 best-effort다 — 실패해도 녹음·백업·화면에는 아무 영향이 없다.
  */
-import { reportRecordingInterruption } from "@/features/media/server/recording-report-actions";
 import { targetLockName } from "./browser-recording-channel";
 import { classifyLeftover, browserFamily, INTERRUPT_REASONS, type InterruptReason } from "./recording-diagnostics-core";
 import { getRecordingOwner } from "./browser-recording";
@@ -55,6 +54,19 @@ function ownerOfMeta(meta: RecordingMeta): { tenantId: string; userId: string } 
   }
 }
 
+async function postInterruption(report: Record<string, unknown>): Promise<boolean> {
+  const res = await fetch("/api/recordings/interruption", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(report),
+    credentials: "same-origin",
+    keepalive: true,
+  });
+  if (!res.ok) return false;
+  const data = (await res.json().catch(() => null)) as { ok?: unknown } | null;
+  return data?.ok === true;
+}
+
 async function send(meta: RecordingMeta, reason: InterruptReason, late: boolean, extra: { errorCode?: string | null; seconds?: number | null; endedAt?: number | null } = {}): Promise<void> {
   const owner = ownerOfMeta(meta);
   if (!owner) return;
@@ -63,7 +75,8 @@ async function send(meta: RecordingMeta, reason: InterruptReason, late: boolean,
   if (current && (current.tenantId !== owner.tenantId || current.userId !== owner.userId)) return;
   try {
     const live = !late && typeof document !== "undefined";
-    const { ok } = await reportRecordingInterruption({
+    // 🔴 서버 액션이 아니라 fetch — 셸이 마운트하자마자 부르는 자리다(gotchas #137). keepalive = 페이지를 닫는 중에도 보낸다.
+    const ok = await postInterruption({
       sessionId: meta.id, ownerTenantId: owner.tenantId, ownerUserId: owner.userId, kind: meta.kind, reason,
       errorCode: extra.errorCode ?? meta.errorCode ?? null,
       seconds: extra.seconds ?? meta.seconds ?? null,

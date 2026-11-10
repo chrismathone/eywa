@@ -28,6 +28,32 @@ const SKIP_DIRS = ["(marketing)", "(print)"];
  * 이유를 못 적겠으면 넣지 말고 띠를 뺄 것. 각 항목은 **실제로 한 줄 이상에 걸려야** 한다(죽은 항목 금지).
  */
 const ALLOWED: { file: string; line: RegExp; reason: string }[] = [
+  // ── 2026-11-10 P0-3b 정리 — 띠가 아닌 다섯 줄 ──
+  {
+    file: "app/(shell)/dashboard/_instruments/instruments.css",
+    line: /\.tree-toggle::before \{ content: ''; display: block; width: 0; height: 0;/,
+    reason: "폴더 펼침 삼각형 — 폭·높이 0인 요소의 테두리로 그리는 도형이지 띠가 아니다",
+  },
+  {
+    file: "app/(shell)/dashboard/_instruments/work/work.css",
+    line: /\.picker-group summary::before \{ content: ''; width: 0; height: 0;/,
+    reason: "묶음 펼침 삼각형 — 폭·높이 0인 요소의 테두리로 그리는 도형이지 띠가 아니다",
+  },
+  {
+    file: "features/onescreen/components/monthly-report-sheet.module.css",
+    line: /^\s*border-left: 14px solid var\(--eie-red\);/,
+    reason: "EiE 월간 보고서 지면의 양쪽 테두리(오른쪽도 같은 굵기) — 시트를 본뜬 종이 틀이지 카드의 왼쪽 강조 띠가 아니다",
+  },
+  {
+    file: "features/student-contribution/components/loyalty-ranking.module.css",
+    line: /\.dropTarget\{box-shadow:inset 3px 0 0 #fdb811\}/,
+    reason: "열을 끌어 옮길 때 '여기에 끼워진다'는 삽입 위치 표시 — 끄는 동안에만 선다(teacher-head-cell과 같은 성격)",
+  },
+  {
+    file: "features/teacher-hub/workspace.module.css",
+    line: /\.branches \{ display: grid;.*border-left: 2px solid #c3c8c5; padding-left: 20px;/,
+    reason: "강사 허브 갈래 묶음의 줄기선 — 위 갈래와 아래 가지를 잇는 나무 구조선이지 카드 강조 띠가 아니다",
+  },
   {
     file: "app/(shell)/timetable/_components/weekday-group-tables.tsx",
     line: /GROUP_DIVIDER = "border-l-2/,

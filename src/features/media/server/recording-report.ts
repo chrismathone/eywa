@@ -1,4 +1,4 @@
-"use server";
+import "server-only";
 
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
@@ -15,10 +15,12 @@ const DAILY_CAP = 50;
 
 /**
  * 녹음 중단 진단 한 줄(`recording_interrupted`) — 녹음(백업 id) 하나에 한 번만.
+ * 🔴 서버 액션이 아니다 — 셸의 녹음 런타임이 마운트하자마자(남은 녹음 훑기) 부르므로 `POST /api/recordings/interruption`
+ *    라우트로만 닿는다(gotchas #137: 셸에서 저절로 부르는 서버 액션은 라우터 작업 큐와 엉켜 Next 기본 오류 화면을 띄운다).
  * 돌려주는 ok=true면 브라우저가 '보고함'을 찍는다(이미 있었어도 true — 다시 보내지 않게). 실패면 다음 접속 때 다시 보낸다.
  * 🔴 행위자 = 로그인한 본인(브라우저가 준 소유자를 믿지 않는다). 운영 콘솔 '지점 보기' 중이면 남기지 않는다(그 지점 사람의 일이 아니다).
  */
-export async function reportRecordingInterruption(input: unknown): Promise<{ ok: boolean }> {
+export async function recordRecordingInterruption(input: unknown): Promise<{ ok: boolean }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false };
   if (user.tenantView) return { ok: true };

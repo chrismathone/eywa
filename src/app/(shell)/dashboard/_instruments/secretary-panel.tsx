@@ -127,7 +127,7 @@ export function SecretaryPanel({ brief, today, clock, numbers, canAsk, onAct, va
           <span className="sec-mark" aria-hidden><EyIcon name="sparkle" size={15} /></span>
           <span className="sec-compact-title">오늘의 브리핑</span>
           <span className="sec-source">{source}</span>
-          <span className="sec-compact-open" aria-hidden><svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M6.5 3.5h-3v9h9v-3" /></svg></span>
+          <span className="sec-compact-open" aria-hidden><EyIcon name="externalLink" size={16} /></span>
         </span>
         <span className="sec-compact-headline">{plan.headline}</span>
         <ol className="sec-compact-steps">
