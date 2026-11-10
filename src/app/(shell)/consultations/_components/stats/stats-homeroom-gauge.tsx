@@ -35,15 +35,15 @@ function arc(from: number, to: number): string {
 }
 
 /**
- * 값 → 색 — 0%에 가까울수록 빨강, 100%에 가까울수록 파랑(원장 2026-11-10 *"바로바로 티나게"*). 의미색 토큰만 섞는다.
- * 파랑은 범주 색 `--cat-blue` — 차콜 테마가 `--blue`를 회색으로 덮어 '빨강 → 회색'이 되던 것(원장 결정 2026-11-10: 구별이 뜻인 색은 테마에서 뺀다).
+ * 값 → 색 — 0%에 가까울수록 빨강, 100%에 가까울수록 초록(원장 2026-11-10 *"0에 가까울수록 더더욱 빨강 · 100퍼가 될수록 초록"* —
+ * 빨강→파랑은 가운데 보라가 애매해 뒤집었다). oklch로 섞어 가운데가 주황·올리브로 또렷하고(srgb는 갈색으로 탁해진다),
+ * 초록 몫을 1.6제곱으로 늦춰 낮은 값일수록 더 빨갛다. 초록은 범주 색 `--cat-green` — 차콜 테마가 의미색을 회색으로 덮어도 제 색을 지킨다.
  */
-const rateColor = (v: number) => `color-mix(in srgb, var(--danger) ${Math.round(100 - v)}%, var(--cat-blue))`;
-/** 칸 색 = 그 칸 가운데 값의 색 — 빨강 → 파랑 5단. */
-const bandColor = (i: number) => rateColor(((i + 0.5) * 100) / BANDS);
+const rateColor = (v: number) => `color-mix(in oklch, var(--danger) ${Math.round(100 - 100 * (v / 100) ** 1.6)}%, var(--cat-green))`;
 
 /**
- * 반원 계기판 — 5칸(20%씩)을 바늘이 가리키는 값까지 칠한다. 값이 없으면(그 달 대상 0명) 칸은 회색, 바늘 없음.
+ * 반원 계기판 — 5칸(20%씩)을 바늘이 가리키는 값까지 칠한다. 찬 칸은 **전부 값 하나의 색**(원장 2026-11-10 *"찰수록 색이 변하고
+ * 덜찰수록 아예 다 변하는"*) — 낮으면 계기판 통째로 빨강, 높으면 통째로 파랑. 안 찬 칸·값 없음(그 달 대상 0명)은 회색, 값 없으면 바늘 없음.
  * 글자는 SVG 밖 HTML로 둔다(Pretendard 부분 글꼴이 SVG 글자를 못 잡는다, gotchas #3).
  */
 export function RateGauge({ rate, label }: { rate: number | null; label: string }) {
@@ -57,13 +57,12 @@ export function RateGauge({ rate, label }: { rate: number | null; label: string 
   return (
     <svg viewBox="0 0 200 110" className="mx-auto block w-full max-w-48" role="img" aria-label={`${label} ${v === null ? "대상 없음" : `${Math.round(v)}%`}`}>
       {bands.map((b) => (
-        // 안 찬 칸도 제 색을 옅게 — 눈금이 어느 쪽이 빨강·파랑인지 늘 보인다. 값이 없으면 회색.
-        <path key={`bg${b.i}`} d={arc(b.from, b.to)} fill={v === null ? "var(--muted)" : `color-mix(in srgb, ${bandColor(b.i)} 18%, var(--muted))`} />
+        <path key={`bg${b.i}`} d={arc(b.from, b.to)} fill="var(--muted)" />
       ))}
       {v !== null
         ? bands
             .filter((b) => v > b.from)
-            .map((b) => <path key={`on${b.i}`} d={arc(b.from, Math.min(b.to, v))} fill={bandColor(b.i)} />)
+            .map((b) => <path key={`on${b.i}`} d={arc(b.from, Math.min(b.to, v))} fill={rateColor(v)} />)
         : null}
       {tip ? (
         <>
