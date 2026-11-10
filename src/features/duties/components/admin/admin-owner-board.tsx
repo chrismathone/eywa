@@ -51,6 +51,6 @@ export function AdminOwnerBoard({ tree, late, managers, labels, nowMs, onSubject
         </tr>)}</tbody>
       </table>
     </div>
-    <p className="text-text-dim px-2 pt-1 text-xs font-medium">{tracked ? "처리 요청 = 지연 담당자 중 요청 진행 인원 · " : ""}현재 지연은 기간 무관 · 이관 제외</p>
+    <p className="text-text-dim px-2 pt-1 text-xs font-medium">{tracked ? "처리 요청 = 지연 담당자 중 요청 진행 인원 · " : ""}현재 지연은 기간 무관</p>
   </section>;
 }

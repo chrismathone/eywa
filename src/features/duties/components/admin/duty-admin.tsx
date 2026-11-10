@@ -26,7 +26,7 @@ const kstStamp = (iso: string) => { const d = new Date(Date.parse(iso) + 9 * 3_6
  * 왼쪽 트리(과목·선생님·반 · 판정 점) | 오른쪽 그 단계의 상세. 판정 = 기한이 온 것 중 제때 끝낸 비율(`judge`). 기간은 바꿀 때 GET · 보일 때 60초 갱신.
  * 오늘·이번 주는 일간만(강사 홈과 같은 셈) · 이번 달·지난 달은 월간·신규생 정착까지. 누르면 열리는 간이 페이지(학생 상세·상담)는 오버레이.
  * **'지금 지연'은 고른 기간과 무관하다**(지금 열려 있는 지연 전부) — 그래서 그 줄의 선생님·반이 이 기간 트리에 없으면 이동하지 않고 제자리에서 펼친다.
- * 평가 시작(live_from) 전 기한의 의무는 '이관된 미확인'으로 따로 묶는다(판정·지연 수에 안 든다).
+ * 평가 시작(live_from) 전 기한의 의무(이관)는 **화면에 보이지 않는다**(원장 2026-11-10 *"그런거 표시하지마"* — 판정·지연 수·할 일에도 안 든다 · 장부에는 남는다).
  * 고른 자리(`Sel`)는 **지금 기간의 트리에 맞춰 바로잡는다** — 없는 과목은 전체로, 없는 선생님·반은 그 위 단계로(기간을 바꿔도 화면이 어긋나지 않게).
  */
 export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded; scope: DutyAdminScope; /** 과목 키 → 과목 관리자 이름(학원 전체를 보는 사람에게만 — 원장 첫 화면의 '과목 관리자별 현황'). */ managers?: Record<string, string[]> | null }) {
@@ -87,10 +87,8 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
   const here = (it: LateItem) => (ownerNode ? (ownerNode.ownerId === NO_OWNER ? it.ownerId === null : it.ownerId === ownerNode.ownerId) : true)
     && (!classNode || (classNode.classId === NO_CLASS ? it.classId === null : it.classId === classNode.classId));
   const liveHere = lateAll.filter((it) => !it.inherited && here(it));
-  const inheritedHere = lateAll.filter((it) => it.inherited && here(it));
   const fold = (rows: AttentionRow[]) => (classNode ? rows : foldAttention(rows, ownerNode ? "class" : "owner"));
   const attentionAll = cur ? buildAttention(liveHere, cur.data.owners, undefined, nowMs) : [];
-  const inheritedAll = cur ? buildAttention(inheritedHere, cur.data.owners, undefined, nowMs) : [];
   const childrenOf = (all: AttentionRow[], r: AttentionRow) => (ownerNode ? all.filter((c) => (c.classId ?? NO_CLASS) === r.classId) : all.filter((c) => (c.ownerId ?? NO_OWNER) === (r.ownerId ?? NO_OWNER)));
   const rangeLabel = cur?.range.label ?? "";
   const crumbs: { label: string; sel: Sel }[] = [];
@@ -102,7 +100,7 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
   const subjectAvg = subjectNode ? { pct: subjectNode.cell.pct, label: atRoot ? "전체" : "과목" } : null;
   // 자리를 옮길 때마다 펼침을 지운다(다른 단계로 갔다 오면 옛 펼침이 되살아나지 않게).
   const go = (next: Sel) => { setOpenKey(null); setSel(next); };
-  const toggle = (list: "live" | "inh", key: string) => setOpenKey((k) => (k === `${list}:${key}` ? null : `${list}:${key}`));
+  const toggle = (list: "live", key: string) => setOpenKey((k) => (k === `${list}:${key}` ? null : `${list}:${key}`));
   const pickStudent = (studentId: string, studentName: string) => go({ ...sel, studentId, studentName });
   // 지연 줄을 눌렀을 때 — 학생이면 그 학생 · 이 기간 트리에 있는 선생님·반이면 그 단계로 · 없으면 제자리에서 펼친다(눌렀는데 아무 일도 없는 줄을 만들지 않는다).
   const openRow = (r: AttentionRow) => {
@@ -113,8 +111,8 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
     if (subjectNode?.owners.some((o) => o.ownerId === id)) go({ ...sel, owner: id, kind: null, classId: null, studentId: null }); else toggle("live", r.key);
   };
   const openChild = (r: AttentionRow) => { if (r.studentId) pickStudent(r.studentId, r.title); else if (r.classId) openWork({ href: `/classes/${r.classId}`, title: r.title }); };
-  const expandOf = (list: "live" | "inh", all: AttentionRow[], rows: AttentionRow[]) => { const r = rows.find((x) => `${list}:${x.key}` === openKey); return r ? { key: r.key, rows: childrenOf(all, r) } : null; };
-  const attention = fold(attentionAll); const inheritedRows = fold(inheritedAll);
+  const expandOf = (list: "live", all: AttentionRow[], rows: AttentionRow[]) => { const r = rows.find((x) => `${list}:${x.key}` === openKey); return r ? { key: r.key, rows: childrenOf(all, r) } : null; };
+  const attention = fold(attentionAll);
   // 관리 기록(확인 · 사유 · 면제) — 전체 권한에게만. 줄이 가리키는 의무 전부에 남긴다.
   const noteFor = (all: LateItem[], r: AttentionRow) => (scope.canNote ? <NoteButton title={[r.teacher, r.className, r.title].filter((x, i, a) => x && a.indexOf(x) === i).join(" · ")} items={attentionItems(all, r)} onSaved={() => { setLoaded((all) => (all[period] ? { [period]: all[period] } : {})); setNonce((n) => n + 1); }} /> : null);
   const preLive = !!cur?.data.liveFrom && cur.range.to < new Date(Date.parse(cur.data.liveFrom) + 9 * 3_600_000).toISOString().slice(0, 10);
@@ -155,7 +153,7 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
             <button type="button" onClick={() => go({ ...sel, studentId: null })} className="text-text-dim hover:text-primary ml-1 text-xs font-semibold underline">닫기</button></span> : null}
         </nav> : null}
 
-        {sel.studentId ? <StudentPane key={`${sel.studentId}|${fetchSubject ?? ""}`} period={period} tick={tick} studentId={sel.studentId} fetchSubject={fetchSubject} late={lateAll.filter((it) => it.studentId === sel.studentId)} nowMs={nowMs} onWork={openWork} />
+        {sel.studentId ? <StudentPane key={`${sel.studentId}|${fetchSubject ?? ""}`} period={period} tick={tick} studentId={sel.studentId} fetchSubject={fetchSubject} late={lateAll.filter((it) => !it.inherited && it.studentId === sel.studentId)} nowMs={nowMs} onWork={openWork} />
           : !subjectNode ? lateSection
           : classNode && ownerNode ? <ClassPane key={`${classNode.classId}|${ownerNode.ownerId}|${fetchSubject ?? ""}`} period={period} tick={tick} classNode={classNode} owner={ownerNode.ownerId} fetchSubject={fetchSubject} teacher={ownerNode.name} kind={sel.kind ?? null}
               avg={{ pct: ownerNode.cell.pct, label: "선생님" }} onStudent={pickStudent} />
@@ -163,10 +161,6 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
           : <SubjectLevel node={subjectNode} lateOnly={lateOnly} board={atRoot && managers ? <AdminOwnerBoard tree={tree} late={cur.data.late} managers={managers} labels={scope.labels} nowMs={nowMs} onSubject={(subject) => go({ subject, owner: null, classId: null, studentId: null })} /> : null} avgLabel={atRoot ? "전체" : "과목"} lateText={lateByKind(cur.data.ownerKind, subjectKey)} attention={lateSection} onOwner={(ownerId, kind) => { setOpenKey(null); setSel({ ...sel, owner: ownerId, kind, classId: null, studentId: null }); }} />}
 
         {!sel.studentId && subjectNode && ownerNode ? lateSection : null}
-        {!sel.studentId && inheritedHere.length ? <section className="border-line-faint rounded-xl border p-2">
-          <h4 className="px-2 py-1 text-sm font-bold">이관 <span className="text-text-dim text-xs font-medium">{distinctStudents(inheritedHere)}명 · {inheritedHere.length}건 · 평가 개시 전 기한 경과 · 평가 제외</span></h4>
-          <AdminAttention rows={inheritedRows} onOpen={(r) => (r.studentId || classNode ? openChild(r) : toggle("inh", r.key))} expand={expandOf("inh", inheritedAll, inheritedRows)} onOpenChild={openChild} muted action={(r) => noteFor(inheritedHere, r)} />
-        </section> : null}
       </main>
     </div> : null}
 
