@@ -7,8 +7,10 @@
   --charcoal: #363c41;
   --charcoal-deep: #2b3034;
   --ink: #23282c;
-  --ink-2: #485055;
-  --muted: #646d72;
+  /* 보조 글자도 본문 한 값(결정 design.md '글자색은 한 값' · 원장 2026-11-10) — 옛 #485055·#646d72 회색 글자. 어두운 판(.on-dark)은 따로 정한다. */
+  --ink-2: var(--ink);
+  --muted: var(--ink);
+  --cross: #485055; /* 십자선 = 글자가 아닌 선 — 옛 --ink-2 색 그대로 */
   --yellow: #fdb811;
   --yellow-ink: #8a6100;
   --red: #b44832;
@@ -40,6 +42,7 @@
   --ink: #fff;
   --ink-2: #dde1e2;
   --muted: #aeb6b9;
+  --cross: #dde1e2;
   --grid: #475055;
   --axis: #5b6469;
   --area: rgba(253, 184, 17, .16);
@@ -296,7 +299,7 @@
 .aywa-instruments .hit-area, .aywa-instruments .hit-box { fill: transparent; }
 .aywa-instruments .hit, .aywa-instruments .hit-box, .aywa-instruments [data-tip] { cursor: default; }
 .aywa-instruments .cross, .aywa-instruments .cross-dot { opacity: 0; transition: opacity .12s; pointer-events: none; }
-.aywa-instruments .cross { stroke: var(--ink-2); stroke-width: 1; }
+.aywa-instruments .cross { stroke: var(--cross); stroke-width: 1; }
 .aywa-instruments .cross-dot { fill: none; stroke: var(--ink); stroke-width: 1.5; }
 .aywa-instruments .hit:hover .cross, .aywa-instruments .hit:hover .cross-dot, .aywa-instruments .hit:focus .cross, .aywa-instruments .hit:focus .cross-dot { opacity: 1; }
 .aywa-instruments .hit:focus { outline: none; }

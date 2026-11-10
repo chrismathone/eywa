@@ -3,12 +3,12 @@
 .identity { font-size: var(--text-base); color: var(--ink); }
 .summary { color: var(--ink); background: var(--bg-soft); border: 1px solid var(--line); border-radius: 6px; font-weight: 700; padding: 3px 8px; font-size: var(--text-sm); }
 .summary[data-unavailable] { color: var(--danger); }
-.asOf { margin-left: auto; font-size: var(--text-sm); color: color-mix(in srgb, var(--ink) 72%, var(--card)); }
+.asOf { margin-left: auto; font-size: var(--text-sm); color: var(--foreground); }
 .subjects { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; }
 .subject { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; font-size: var(--text-sm); line-height: 1.7; }
 .subjectName { color: var(--primary); }
 .teacher strong { font-weight: 650; }
-.first, .muted, .note { color: color-mix(in srgb, var(--ink) 72%, var(--card)); }
+.first, .muted, .note { color: var(--foreground); }
 .first { font-size: var(--text-sm); }
 .note { margin: 5px 0 0; font-size: var(--text-xs); line-height: 1.5; }
 .notice { margin: 0; font-size: var(--text-sm); color: var(--danger); }

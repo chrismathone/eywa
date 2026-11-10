@@ -73,6 +73,26 @@ const ALLOWED: { file: string; line: RegExp; reason: string }[] = [
     line: /border-left: 3px solid var\(--line\)/,
     reason: "`.rich-content blockquote` — 사용자가 쓴 글의 인용문 서식(화면 장식이 아니라 글의 구조)",
   },
+  {
+    file: "app/(shell)/dashboard/_instruments/instruments.css",
+    line: /\.tree-toggle::before \{ content: ''; display: block; width: 0; height: 0;.*border-left: 6px solid currentColor; border-top: 5px solid transparent; border-bottom: 5px solid transparent/,
+    reason: "운영실 상세 표의 접기 삼각형(▶) — 위·아래 투명 테두리와 함께 그리는 도형이지 띠가 아니다(결정 design.md의 '모서리 삼각형'과 같은 성격)",
+  },
+  {
+    file: "app/(shell)/dashboard/_instruments/work/work.css",
+    line: /\.picker-group summary::before \{ content: ''; width: 0; height: 0; border-left: 6px solid var\(--muted\); border-top: 5px solid transparent/,
+    reason: "업무 요청 담당자 고르기 묶음의 접기 삼각형(▶) — 도형이지 띠가 아니다(결정 design.md의 '모서리 삼각형'과 같은 성격)",
+  },
+  {
+    file: "features/student-contribution/components/loyalty-ranking.module.css",
+    line: /^\.dropTarget\{box-shadow:inset 3px 0 0 /,
+    reason: "로열티 순위 표에서 점수 칸을 끌어 순서를 바꿀 때 '여기에 끼워진다'는 삽입 위치 표시 — 끄는 동안에만 선다(teacher-head-cell과 같은 성격)",
+  },
+  {
+    file: "features/onescreen/components/monthly-report-sheet.module.css",
+    line: /^  border-left: 14px solid var\(--eie-red\);/,
+    reason: "EiE 월간 보고서 = 시트(Monthly Evaluation Report)를 옮긴 학부모 종이 서식 — 바로 아래 줄의 오른쪽과 같은 두께의 좌우 대칭 틀이지 카드 강조 띠가 아니다",
+  },
 ];
 
 /** 길이 문자열이 '굵은' 선인가 — 1px 구조선은 통과. 모르는 단위(색·var)는 판정하지 않는다. */

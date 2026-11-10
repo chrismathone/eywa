@@ -3,7 +3,7 @@
 .draft-library form { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .draft-library form label { flex: 1; min-width: 240px; }
 .draft-library input { flex: 1; max-width: none; min-width: 0; }
-.draft-library small { display: block; color: color-mix(in srgb, var(--ink) 72%, var(--card)); margin-top: 7px; }
+.draft-library small { display: block; color: var(--foreground); margin-top: 7px; }
 .draft-list { padding: 0; list-style: none; max-height: 280px; overflow: auto; }
 .draft-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .draft-list li > div { min-width: 0; overflow-wrap: anywhere; }
@@ -21,11 +21,11 @@
 .comparison-dialog[open] { display: flex; flex-direction: column; }
 .comparison-dialog header { flex-shrink: 0; margin-bottom: 8px; }
 .comparison-summary { display: flex; gap: 20px; flex-wrap: wrap; padding-bottom: 12px; }
-.comparison-summary span { color: color-mix(in srgb, var(--ink) 72%, var(--card)); }
+.comparison-summary span { color: var(--foreground); }
 .comparison-panes { flex: 1; min-height: 180px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
 .comparison-panes > section { min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--line-strong); }
 .comparison-panes h3 { margin: 0; padding: 8px; background: var(--bg-soft); }
-.comparison-panes > section > h3 small { display: block; color: color-mix(in srgb, var(--ink) 72%, var(--card)); font-weight: 400; margin-top: 3px; }
+.comparison-panes > section > h3 small { display: block; color: var(--foreground); font-weight: 400; margin-top: 3px; }
 .comparison-dialog .view-switch button[aria-pressed=true] { background: var(--primary-soft); color: var(--primary); font-weight: 700; }
 .comparison-panes .lesson-block, .comparison-panes .student-drag { cursor: default; touch-action: auto; }
 .comparison-details { max-height: 28vh; overflow: auto; margin-top: 10px; flex-shrink: 0; }

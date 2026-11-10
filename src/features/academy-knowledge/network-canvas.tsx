@@ -76,10 +76,10 @@ export function GraphCanvas({nodes,edges,selected,onSelect,summary=false}:{nodes
         const w=ctx.measureText(text).width+8,y=p.y+Math.max(3,radius(n)*Math.sqrt(view.k))+7,x=p.x-w/2;
         if(!chosen&&boxes.some(b=>x<b.x+b.w&&x+w>b.x&&y<b.y+b.h&&y+17>b.y))continue;
         boxes.push({x,y,w,h:17});ctx.fillStyle="rgba(255,255,255,.88)";ctx.fillRect(x,y,w,17);
-        ctx.fillStyle=chosen?"#23282c":"#485055";ctx.textAlign="center";ctx.textBaseline="top";ctx.fillText(text,p.x,y+2);
+        ctx.fillStyle="#23282c";ctx.textAlign="center";ctx.textBaseline="top";ctx.fillText(text,p.x,y+2);
         if(boxes.length>250)break;
       }
-      if(!nodes.length){ctx.fillStyle="#646d72";ctx.font="14px system-ui";ctx.textAlign="center";ctx.fillText("현재 보기에서 표시할 기록이 없습니다",width/2,height/2);}
+      if(!nodes.length){ctx.fillStyle="#23282c";ctx.font="14px system-ui";ctx.textAlign="center";ctx.fillText("현재 보기에서 표시할 기록이 없습니다",width/2,height/2);}
     }
     const draw=()=>{if(!frame)frame=requestAnimationFrame(paint);};
     const report=()=>{setZoom(Math.round(view.k*100));draw();};

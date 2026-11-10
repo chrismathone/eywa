@@ -12,6 +12,8 @@
   --ring: #fdb811 !important;
 
   --bg-soft: #f4f4f1 !important;
+  /* 원장 2026-11-10 결정 — 화면 바탕(종이색) 변수. 고정 띠(도구줄·저장 바·ECS 머리·셔틀 차 머리·콜&상담 연도 칩)가 바탕과 같은 면을 칠한다. */
+  --bg-canvas: #f1f1ed !important;
   --secondary: #f4f4f1 !important;
   --secondary-foreground: #23282c !important;
   --muted: #f4f4f1 !important;

@@ -1,10 +1,10 @@
 /*
  * 경영 분석 시안 — 운영실 '계기판' 토큰(instruments.css)과 같은 값만 쓴다.
- * 차콜 #363c41 · 노랑 #fdb811 · 붉은색 #b44832(경고만) · 글자 #23282c / #646d72 · 선 #e1e3df · 바탕 #f4f4f1 · 화면 #f1f1ed.
+ * 차콜 #363c41 · 노랑 #fdb811 · 붉은색 #b44832(경고만) · 글자 #23282c 한 값(보조 글자도 같은 값 · 원장 2026-11-10) · 선 #e1e3df · 바탕 #f4f4f1 · 화면 #f1f1ed.
  */
 .page {
-  --ink-2: color-mix(in srgb, var(--ink) 86%, var(--card));
-  --muted: color-mix(in srgb, var(--ink) 72%, var(--card));
+  --ink-2: var(--foreground);
+  --muted: var(--foreground);
   --wash: var(--bg-soft);
   --hover: color-mix(in srgb, var(--gold-bright) 6%, var(--card));
   --charcoal: var(--primary);

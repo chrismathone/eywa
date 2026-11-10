@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
  * 어디서든 같은 자리.
  *
  * 사용: 폼의 마지막 자식으로 `<FormActionBar><Button type="submit">저장</Button></FormActionBar>`.
- * 버튼은 우측 정렬(주 액션이 가장 오른쪽). 배경은 **완전 불투명(bg-background)** — 반투명+blur는
+ * 버튼은 우측 정렬(주 액션이 가장 오른쪽). 배경은 **완전 불투명(bg-bg-canvas = 화면 바탕)** — 반투명+blur는
  * 스크롤되는 본문(칩·카드)이 바 뒤로 비쳐 지저분하다(2026-07-10 사용자 피드백). 페이지 배경과 같은
  * 색이라 평소엔 안 보이고, 스크롤 중엔 상단 헤어라인+그림자만 바를 표시한다.
  *
@@ -30,7 +30,7 @@ export function FormActionBar({
 }) {
   return (
     <div
-      className={`sticky-save-bar border-line bg-background sticky bottom-0 z-20 flex items-center justify-end gap-2 border-t px-0.5 py-3 shadow-[0_-4px_10px_-6px_rgba(29,29,31,0.12)] ${className}`}
+      className={`sticky-save-bar border-line bg-bg-canvas sticky bottom-0 z-20 flex items-center justify-end gap-2 border-t px-0.5 py-3 shadow-[0_-4px_10px_-6px_rgba(29,29,31,0.12)] ${className}`}
     >
       {children}
     </div>

@@ -3,7 +3,7 @@
 .cell { position: relative; height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
 .cell i { position: absolute; inset: 0 auto 0 0; width: var(--fill); border-radius: inherit; background: var(--primary); transition: width .3s ease-out; }
 .cell[data-state="now"] i { background: var(--gold-bright); }
-.names { margin-top: 3px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; text-align: center; font-size: 12px; white-space: nowrap; color: color-mix(in srgb, var(--ink) 45%, var(--card)); }
-.names [data-state="done"] { color: color-mix(in srgb, var(--ink) 86%, var(--card)); }
+.names { margin-top: 3px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; text-align: center; font-size: 12px; white-space: nowrap; color: var(--foreground); }
+.names [data-state="done"] { color: var(--foreground); }
 .names [data-state="now"] { color: var(--ink); font-weight: 800; }
 @media (prefers-reduced-motion: reduce) { .cell i { transition: none; } }

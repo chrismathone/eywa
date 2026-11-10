@@ -50,12 +50,12 @@ button.week-teacher-heading[data-column-drag] { cursor: grabbing; }
 /* 우클릭 메뉴 */
 .lab-menu { position: fixed; z-index: 200; min-width: 220px; max-width: 340px; max-height: 80vh; overflow: auto; padding: 5px; border: 1px solid var(--line-strong); border-radius: 8px; background: #fff;
   box-shadow: 0 12px 34px color-mix(in srgb, var(--ink) 22%, transparent); display: grid; gap: 1px; }
-.lab-menu-title { padding: 5px 9px 6px; font-size: 13px; color: color-mix(in srgb, var(--ink) 72%, var(--card)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lab-menu-title { padding: 5px 9px 6px; font-size: 13px; color: var(--foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lab-menu button { display: flex; align-items: center; justify-content: space-between; gap: 18px; width: 100%; border: 0; border-radius: 5px; padding: 7px 9px; text-align: left; background: transparent; color: var(--primary); }
 .lab-menu button:hover:not(:disabled), .lab-menu button:focus-visible { background: var(--primary-soft); outline: 0; }
 .lab-menu button.danger { background: transparent; color: var(--danger); }
 .lab-menu button.danger:hover:not(:disabled) { background: var(--danger-soft); }
-.lab-menu kbd { font: inherit; font-size: 12px; color: color-mix(in srgb, var(--ink) 72%, var(--card)); white-space: nowrap; }
+.lab-menu kbd { font: inherit; font-size: 12px; color: var(--foreground); white-space: nowrap; }
 .lab-menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; width: 100%; }
 
 /* 고른 수업 도구줄 · 학생 동선 */
@@ -72,7 +72,7 @@ button.week-teacher-heading[data-column-drag] { cursor: grabbing; }
 .add-kinds button[aria-checked=true], .add-kinds button[aria-selected=true] { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 700; }
 .add-dialog form { display: grid; gap: 10px; margin-top: 12px; }
 .add-dialog form select, .add-dialog form input:not([type=checkbox]) { min-width: 190px; max-width: 62%; border: 1px solid var(--input); border-radius: 4px; padding: 6px 8px; background: #fff; }
-.add-dialog small { color: color-mix(in srgb, var(--ink) 72%, var(--card)); }
+.add-dialog small { color: var(--foreground); }
 .search-picker { display: grid; grid-template-columns: minmax(72px, 1fr) minmax(0, 62%); gap: 4px 10px; align-items: center; }
 .search-picker label { grid-column: 1; grid-row: 1 / 3; }
 .add-dialog form .search-picker input, .add-dialog form .search-picker select, .lab-inspector .search-picker input, .lab-inspector .search-picker select { grid-column: 2; width: 100%; max-width: none; min-width: 0; }
@@ -83,7 +83,7 @@ button.week-teacher-heading[data-column-drag] { cursor: grabbing; }
 .lesson-tooltip { position: fixed; margin: 0; z-index: 100; pointer-events: none; box-sizing: border-box; border: 1px solid var(--input); border-radius: 8px; padding: 12px; background: #fff; color: var(--primary); box-shadow: 0 6px 24px color-mix(in srgb, var(--ink) 20%, transparent); font-size: 13px; max-height: calc(100dvh - 16px); overflow: hidden; }
 .lesson-tooltip > strong { font-size: 15px; }
 .lesson-tooltip dl { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 5px 8px; margin: 10px 0; }
-.lesson-tooltip dt { color: color-mix(in srgb, var(--ink) 72%, var(--card)); }
+.lesson-tooltip dt { color: var(--foreground); }
 .lesson-tooltip dd { margin: 0; overflow-wrap: anywhere; }
 .lesson-tooltip p { margin: 6px 0 0; line-height: 1.5; overflow-wrap: anywhere; }
 .tooltip-note { border-top: 1px solid var(--line); padding-top: 6px; white-space: pre-wrap; }
@@ -93,7 +93,7 @@ button.week-teacher-heading[data-column-drag] { cursor: grabbing; }
 .apply-time-fields label { flex-direction: column; align-items: stretch; gap: 6px; }
 .apply-time-fields input, .apply-time-fields select { min-width: 0; padding: 7px; border: 1px solid var(--input); border-radius: 4px; }
 .apply-summary { padding: 8px; background: var(--bg-soft); border-radius: 5px; }
-.apply-notices { padding-left: 22px; font-size: 13px; line-height: 1.7; color: color-mix(in srgb, var(--ink) 86%, var(--card)); }
+.apply-notices { padding-left: 22px; font-size: 13px; line-height: 1.7; color: var(--foreground); }
 .apply-changes, .apply-dialog details ul, .apply-skipped ul { max-height: 220px; overflow: auto; padding-left: 22px; font-size: 13px; line-height: 1.7; }
 .apply-dialog .apply-ack { justify-content: flex-start; gap: 6px; margin-block: 10px; }
 .apply-dialog footer { position: sticky; bottom: -24px; background: #fff; padding-top: 12px; border-top: 1px solid var(--line); }
@@ -109,13 +109,13 @@ button.week-teacher-heading[data-column-drag] { cursor: grabbing; }
 .manage-row form { display: flex; gap: 6px; align-items: center; }
 .manage-row input { width: 150px; max-width: none; }
 .manage-row > b { min-width: 150px; }
-.manage-meta { color: color-mix(in srgb, var(--ink) 72%, var(--card)); flex: 1; min-width: 150px; }
+.manage-meta { color: var(--foreground); flex: 1; min-width: 150px; }
 .manage-buttons { display: flex; flex-wrap: wrap; gap: 5px; margin-left: auto; }
 .manage-buttons select, .manage-search { border: 1px solid var(--input); border-radius: 4px; padding: 6px 8px; background: #fff; }
 .manage-search { width: 240px; }
 .manage-chips { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; min-width: 150px; }
 .manage-chips span { display: inline-flex; align-items: center; gap: 4px; background: var(--bg-soft); border-radius: 4px; padding: 2px 4px 2px 8px; }
-.manage-chips i { color: color-mix(in srgb, var(--ink) 72%, var(--card)); font-style: normal; }
+.manage-chips i { color: var(--foreground); font-style: normal; }
 
 /* 확인 패널: 명단 편집 · 잠금 · 메모 · 지우기 확인 */
 .class-roster { border-top: 1px solid var(--line); margin-top: 14px; }
@@ -128,7 +128,7 @@ button.week-teacher-heading[data-column-drag] { cursor: grabbing; }
 .roster-scroll th, .roster-scroll td { padding: 3px 2px; text-align: center; white-space: nowrap; font-weight: 400; background: #fff; border-bottom: 1px solid var(--line-faint); }
 .roster-scroll thead th { position: sticky; top: 0; z-index: 2; background: var(--bg-soft); border-bottom-color: var(--line-strong); }
 .roster-scroll tfoot th, .roster-scroll tfoot td { position: sticky; bottom: 0; z-index: 2; background: var(--bg-soft); border-top: 1px solid var(--line-strong); border-bottom: 0; }
-.roster-scroll th:first-child { position: sticky; left: 0; z-index: 1; padding-inline: 8px; text-align: left; color: color-mix(in srgb, var(--ink) 86%, var(--card)); font-size: 13px; background: var(--bg-soft); border-right: 1px solid var(--line); }
+.roster-scroll th:first-child { position: sticky; left: 0; z-index: 1; padding-inline: 8px; text-align: left; color: var(--foreground); font-size: 13px; background: var(--bg-soft); border-right: 1px solid var(--line); }
 .roster-scroll thead th:first-child, .roster-scroll tfoot th:first-child { z-index: 3; background: var(--bg-soft); }
 .roster-scroll th small { font-size: 12px; font-variant-numeric: tabular-nums; }
 .roster-scroll tr.day-start > * { border-top: 1px solid var(--line-strong); }
@@ -138,7 +138,7 @@ button.week-teacher-heading[data-column-drag] { cursor: grabbing; }
 .roster-list li:last-child { border-bottom: 0; }
 .roster-name { border: 0; background: transparent; padding: 3px; text-align: left; color: var(--primary); white-space: nowrap; }
 .roster-name:hover { background: var(--primary-soft); }
-.class-roster > small { display: block; margin-top: 6px; color: color-mix(in srgb, var(--ink) 72%, var(--card)); }
+.class-roster > small { display: block; margin-top: 6px; color: var(--foreground); }
 .class-roster form { margin-top: 10px; }
 /* 학생 넣기 — 이름으로 찾아 누르면 들어간다. 결과도 제 상자 안에서 스크롤한다. */
 .student-picker label { gap: 10px; }
@@ -148,12 +148,12 @@ button.week-teacher-heading[data-column-drag] { cursor: grabbing; }
 .student-picker li button { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; width: 100%; border: 0; border-radius: 0; padding: 6px 9px; text-align: left; background: transparent; }
 .student-picker li button:hover, .student-picker li button:focus-visible { background: var(--primary-soft); outline-offset: -2px; }
 .student-picker li b { font-weight: 400; white-space: nowrap; }
-.student-picker li small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: color-mix(in srgb, var(--ink) 72%, var(--card)); font-size: 13px; }
+.student-picker li small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--foreground); font-size: 13px; }
 .student-picker li.subtle { padding: 6px 9px; }
 .lab-inspector select { max-width: 180px; }
 .lab-inspector textarea { width: 100%; max-width: 180px; border: 1px solid var(--input); border-radius: 4px; padding: 6px 8px; font: inherit; resize: vertical; }
 .lock-row { align-items: flex-start; flex-direction: column; gap: 2px; }
-.lock-row small { color: color-mix(in srgb, var(--ink) 72%, var(--card)); }
+.lock-row small { color: var(--foreground); }
 .note-row { align-items: flex-start; }
 .confirm-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 9px; margin-top: 8px; background: var(--danger-soft); border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--card)); border-radius: 5px; }
 .confirm-row span { flex: 1 1 100%; }
@@ -164,10 +164,10 @@ button.week-teacher-heading[data-column-drag] { cursor: grabbing; }
 .stats-bars li { display: grid; grid-template-columns: 84px 1fr; gap: 2px 8px; align-items: center; }
 .stats-bars li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stats-bars li i { height: 9px; min-width: 2px; background: var(--primary); border-radius: 2px; }
-.stats-bars li b { grid-column: 1 / -1; font-weight: 400; color: color-mix(in srgb, var(--ink) 72%, var(--card)); font-size: 13px; }
+.stats-bars li b { grid-column: 1 / -1; font-weight: 400; color: var(--foreground); font-size: 13px; }
 .stats-classes li { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .stats-classes button { border: 0; background: transparent; padding: 2px 4px; color: var(--primary); text-align: left; }
 .stats-classes button:hover { background: var(--bg-soft); }
-.stats-classes b { font-weight: 400; color: color-mix(in srgb, var(--ink) 72%, var(--card)); white-space: nowrap; }
+.stats-classes b { font-weight: 400; color: var(--foreground); white-space: nowrap; }
 .lab-empty .sample-button + .sample-button { margin-top: 0; }
 }

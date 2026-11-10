@@ -1,7 +1,7 @@
 /* 업무 작성센터 시안 — 운영실 '계기판' 토큰과 같은 값(차콜·노랑·회색). 색 띠·그라데이션·짙은 그림자 없음. */
 .page {
-  --ink-2: color-mix(in srgb, var(--ink) 86%, var(--card));
-  --muted: color-mix(in srgb, var(--ink) 72%, var(--card));
+  --ink-2: var(--foreground);
+  --muted: var(--foreground);
   --wash: var(--bg-soft);
   --hover: color-mix(in srgb, var(--gold-bright) 6%, var(--card));
   --charcoal: var(--primary);

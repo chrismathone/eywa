@@ -16,8 +16,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .primary:hover { background: var(--primary-deep); }
 .lab-topbar { min-height: 40px; flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 4px 8px; border-bottom: 1px solid var(--line); }
 .lab-topbar h1 { font-size: 18px; margin: 0; white-space: nowrap; letter-spacing: -.5px; }
-.lab-topbar h1 span { font-weight: 400; color: color-mix(in srgb, var(--ink) 72%, var(--card)); font-size: 14px; margin-left: 5px; }
-.source-name { color: color-mix(in srgb, var(--ink) 72%, var(--card)); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lab-topbar h1 span { font-weight: 400; color: var(--foreground); font-size: 14px; margin-left: 5px; }
+.source-name { color: var(--foreground); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lab-controls { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-bottom: 1px solid var(--line-strong); background: var(--bg-soft); overflow: auto; scrollbar-width: thin; }
 .view-switch, .week-tabs, .history-buttons { display: flex; align-items: center; flex-shrink: 0; gap: 3px; }
 .view-switch button { border: 0; background: transparent; white-space: nowrap; }
@@ -29,7 +29,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .schedule-search { min-width: 125px; max-width: 240px; flex: 1; border: 1px solid var(--line); border-radius: 5px; background: #fff; padding: 7px 9px; }
 .history-buttons { margin-left: auto; }
 .history-buttons button { font-size: 19px; line-height: 16px; width: 34px; }
-.zoom-label { display: flex; gap: 7px; align-items: center; white-space: nowrap; font-size: 14px; color: color-mix(in srgb, var(--ink) 72%, var(--card)); }
+.zoom-label { display: flex; gap: 7px; align-items: center; white-space: nowrap; font-size: 14px; color: var(--foreground); }
 .zoom-label select { border: 1px solid var(--line); border-radius: 5px; padding: 6px; background: #fff; color: var(--ink); }
 .check-toggle { white-space: nowrap; }
 .check-toggle.warning { border-color: var(--gold-bright); color: var(--amber); background: var(--amber-soft); }
@@ -41,10 +41,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .lab-workarea > .schedule-scroll { align-self: flex-start; max-height: 100%; }
 .schedule-grid { display: grid; min-width: 100%; width: max-content; isolation: isolate; }
 .teacher-heading { position: sticky; top: 0; z-index: 6; height: 45px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 12px; background: var(--bg-soft); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line-strong); font-weight: 700; }
-.teacher-heading small { font-weight: 400; font-size: 14px; color: color-mix(in srgb, var(--ink) 72%, var(--card)); }
+.teacher-heading small { font-weight: 400; font-size: 14px; color: var(--foreground); }
 .time-heading { position: sticky; top: 0; left: 0; z-index: 8; background: var(--bg-soft); border-bottom: 1px solid var(--line-strong); text-align: center; padding-top: 15px; font-size: 14px; }
 .time-axis { position: sticky; left: 0; z-index: 5; border-right: 1px solid var(--line-strong); background: var(--bg-soft); }
-.time-axis span { position: absolute; right: 9px; font-variant-numeric: tabular-nums; font-size: 14px; color: color-mix(in srgb, var(--ink) 72%, var(--card)); }
+.time-axis span { position: absolute; right: 9px; font-variant-numeric: tabular-nums; font-size: 14px; color: var(--foreground); }
 .schedule-lane { position: relative; border-right: 1px solid var(--line); background-image: linear-gradient(to bottom, var(--bg-soft) 1px, transparent 1px); }
 .lesson-block { position: absolute; border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--card)); background: var(--primary-soft); color: var(--primary); padding: 6px 8px; text-align: left; overflow: hidden; display: flex; flex-direction: column; gap: 4px; user-select: none; touch-action: none; border-radius: 4px; cursor: grab; }
 .lesson-block strong { display: flex; align-items: center; justify-content: space-between; gap: 5px; font-size: 14px; }
@@ -53,19 +53,19 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .lesson-block:hover { background: color-mix(in srgb, var(--primary) 16%, transparent); }
 .lesson-block.is-selected { box-shadow: 0 0 0 2px var(--primary); z-index: 3; }
 .lesson-block.has-conflict { border-color: var(--gold-bright); background: var(--amber-soft); color: var(--amber); }
-.lesson-block.nonlesson { background: var(--bg-soft); color: color-mix(in srgb, var(--ink) 86%, var(--card)); border-color: var(--line-strong); }
+.lesson-block.nonlesson { background: var(--bg-soft); color: var(--foreground); border-color: var(--line-strong); }
 .conflict-dot { border-radius: 50%; background: var(--gold-bright); color: #fff; width: 15px; height: 15px; text-align: center; flex-shrink: 0; }
 .slot-cursor { position: absolute; inset-inline: 0; border: 1px solid var(--primary); background: color-mix(in srgb, var(--primary-soft) 33%, transparent); pointer-events: none; }
 .slot-cursor span { font-size: 14px; color: var(--primary); padding-left: 5px; }
 .drag-preview { position: absolute; inset-inline: 3px; z-index: 10; pointer-events: none; background: color-mix(in srgb, var(--primary-soft) 73%, transparent); border: 2px dashed var(--primary); color: var(--primary); padding: 7px; font-weight: 700; }
-.lab-status { min-height: 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 3px 6px; border-top: 1px solid var(--line-strong); color: color-mix(in srgb, var(--ink) 72%, var(--card)); font-size: 12px; flex-shrink: 0; background: var(--bg-soft); }
+.lab-status { min-height: 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 3px 6px; border-top: 1px solid var(--line-strong); color: var(--foreground); font-size: 12px; flex-shrink: 0; background: var(--bg-soft); }
 .lab-status b { color: var(--green); font-weight: 400; white-space: nowrap; }
-.lab-status [role=status] { color: color-mix(in srgb, var(--ink) 86%, var(--card)); }
+.lab-status [role=status] { color: var(--foreground); }
 .lab-inspector { width: 320px; flex: 0 0 320px; padding: 16px; border-left: 1px solid var(--line-strong); overflow: auto; background: #fff; }
 .lab-inspector header, .lab-modal header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
 h2 { font-size: 17px; margin: 0; }
 h3 { font-size: 14px; margin: 24px 0 10px; }
-h3 span { color: color-mix(in srgb, var(--ink) 72%, var(--card)); font-weight: 400; margin-left: 6px; }
+h3 span { color: var(--foreground); font-weight: 400; margin-left: 6px; }
 p { line-height: 1.7; }
 .lab-inspector form { display: grid; gap: 8px; }
 .lab-inspector label, .lab-modal label { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
@@ -74,16 +74,16 @@ p { line-height: 1.7; }
 .student-chips span { background: var(--bg-soft); border-radius: 4px; padding: 4px 7px; font-size: 14px; }
 .lab-conflict, .load-error { color: var(--amber); background: var(--amber-soft); padding: 10px; border: 1px solid color-mix(in srgb, var(--gold-bright) 45%, var(--card)); border-radius: 5px; font-size: 14px; }
 .clear-check { color: var(--green); }
-.subtle { color: color-mix(in srgb, var(--ink) 72%, var(--card)); font-size: 14px; }
+.subtle { color: var(--foreground); font-size: 14px; }
 .lab-candidate { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 14px; }
 .lab-candidate strong, .lab-candidate p { font-size: 14px; }
 .lab-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 8px; background: #fbfcfe; }
-.lab-empty p { color: color-mix(in srgb, var(--ink) 72%, var(--card)); }
+.lab-empty p { color: var(--foreground); }
 .empty-schedule { width: 140px; height: 95px; border: 1px solid var(--line-strong); border-radius: 6px; background: repeating-linear-gradient(0deg, transparent 0 22px, var(--line) 23px 24px); display: flex; gap: 8px; padding: 10px; margin-bottom: 10px; }
 .empty-schedule i { width: 34px; height: 37px; background: var(--primary-soft); border-radius: 3px; }
 .empty-schedule i:nth-child(2) { margin-top: 24px; background: var(--line); }
 .empty-schedule i:nth-child(3) { margin-top: 10px; background: var(--amber-soft); }
-.sample-button { border: 0; color: color-mix(in srgb, var(--ink) 72%, var(--card)); background: transparent; margin-top: 6px; }
+.sample-button { border: 0; color: var(--foreground); background: transparent; margin-top: 6px; }
 .lab-modal-backdrop { position: fixed; inset: 0; z-index: 100; background: color-mix(in srgb, var(--primary) 40%, transparent); display: grid; place-items: center; padding: 20px; }
 .lab-modal { border: 1px solid var(--input); color: inherit; background: #fff; border-radius: 10px; width: min(480px, 100%); padding: 24px; box-shadow: 0 20px 70px color-mix(in srgb, var(--ink) 20%, transparent); }
 .lab-modal::backdrop { background: color-mix(in srgb, var(--primary) 40%, transparent); }

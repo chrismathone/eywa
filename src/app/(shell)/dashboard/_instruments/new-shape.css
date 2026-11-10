@@ -56,7 +56,7 @@
 }
 
 /* ---------- 전체 페이지 바탕 = 대시보드 종이색 ---------- */
-body:has(.aywa-board) main { background-color: #f1f1ed !important; }
+body:has(.aywa-board) main { background-color: var(--bg-canvas) !important; }
 body:has(.aywa-board) [data-slot="sidebar-inner"],
 body:has(.aywa-board) [data-slot="sidebar"] { background-color: var(--sidebar) !important; }
 /* 메뉴 판·대화 상자(role=dialog) 안의 머리글은 뺀다 — 계기판이 뒤에 깔린 동안 메뉴 판 제목 줄에만 띠가 졌다(원장 2026-11-09 캡처). */

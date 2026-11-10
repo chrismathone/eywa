@@ -1,13 +1,13 @@
 /*
  * 통합 지식그래프 탭(설계 사전 · 지식그래프 · 보완 점검) — 계기판 토큰 값만 쓴다.
- * 차콜 #363c41 · 노랑 #fdb811 · 붉은색 #b44832(경고만) · 글자 #23282c / #485055 / #646d72 · 선 #e1e3df · 바탕 #f4f4f1 · 덮개 #fdfaf1.
+ * 차콜 #363c41 · 노랑 #fdb811 · 붉은색 #b44832(경고만) · 글자 #23282c 한 값(보조 글자도 같은 값 · 원장 2026-11-10) · 선 #e1e3df · 바탕 #f4f4f1 · 덮개 #fdfaf1.
  */
 .studio { color: var(--ink); min-width: 0; }
 .heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin: 4px 0 14px; }
 .heading h2 { font-size: 18px; font-weight: 800; letter-spacing: -.02em; margin: 2px 0 4px; }
 .heading h3 { font-size: 15px; font-weight: 750; margin: 0; }
-.heading p, .paper > p { color: color-mix(in srgb, var(--ink) 86%, var(--card)); font-size: 14px; line-height: 1.6; margin: 0; }
-.eyebrow { color: color-mix(in srgb, var(--ink) 72%, var(--card)) !important; font-size: 12px !important; font-weight: 700; }
+.heading p, .paper > p { color: var(--foreground); font-size: 14px; line-height: 1.6; margin: 0; }
+.eyebrow { color: var(--foreground) !important; font-size: 12px !important; font-weight: 700; }
 
 .studio button, .button {
   border: 1px solid var(--line);
@@ -22,7 +22,7 @@
   color: var(--ink);
 }
 .studio button:hover, .button:hover { background: color-mix(in srgb, var(--gold-bright) 6%, var(--card)); border-color: color-mix(in srgb, var(--gold-bright) 45%, var(--card)); }
-.studio button:disabled { color: color-mix(in srgb, var(--ink) 72%, var(--card)); background: var(--bg-soft); cursor: not-allowed; }
+.studio button:disabled { color: var(--foreground); background: var(--bg-soft); cursor: not-allowed; }
 .studio :is(button, a, input, select, textarea):focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
 .studio input, .studio select, .studio textarea { font: inherit; font-size: 14px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; background: #fff; color: var(--ink); min-width: 0; width: 100%; }
 .studio textarea { min-height: 80px; resize: vertical; }
@@ -31,29 +31,29 @@
 
 .schemaLayout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 12px; }
 .directory { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0; }
-.directory label, .editor label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 650; color: color-mix(in srgb, var(--ink) 72%, var(--card)); margin-bottom: 10px; }
+.directory label, .editor label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 650; color: var(--foreground); margin-bottom: 10px; }
 .list { display: flex; flex-direction: column; gap: 2px; max-height: 620px; overflow: auto; margin: 10px -4px; padding: 0 4px; }
 .list button { text-align: left; display: flex; flex-direction: column; border-color: transparent; padding: 8px 10px; gap: 2px; }
 .list button[aria-pressed="true"] { background: color-mix(in srgb, var(--gold-bright) 6%, var(--card)); border-color: color-mix(in srgb, var(--gold-bright) 45%, var(--card)); font-weight: 700; }
-.list small { font-size: 12px; color: color-mix(in srgb, var(--ink) 72%, var(--card)); }
+.list small { font-size: 12px; color: var(--foreground); }
 .paper { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 14px 16px; min-width: 0; }
 .paper h3 { font-size: 15px; font-weight: 750; margin: 0 0 8px; }
-.note { font-size: 13px; line-height: 1.6; color: color-mix(in srgb, var(--ink) 86%, var(--card)); margin: 10px 0; padding: 8px 10px; background: var(--bg-soft); border-radius: 8px; }
+.note { font-size: 13px; line-height: 1.6; color: var(--foreground); margin: 10px 0; padding: 8px 10px; background: var(--bg-soft); border-radius: 8px; }
 .tableWrap { overflow: auto; max-height: 660px; }
 .studio table { border-collapse: collapse; width: 100%; font-size: 13px; line-height: 1.6; }
-.studio th { background: var(--bg-soft); padding: 8px 10px; text-align: left; color: color-mix(in srgb, var(--ink) 86%, var(--card)); font-weight: 700; position: sticky; top: 0; z-index: 1; }
+.studio th { background: var(--bg-soft); padding: 8px 10px; text-align: left; color: var(--foreground); font-weight: 700; position: sticky; top: 0; z-index: 1; }
 .studio td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; min-width: 95px; }
 .studio tbody tr:hover td { background: color-mix(in srgb, var(--gold-bright) 6%, var(--card)); }
-.studio td small { display: block; color: color-mix(in srgb, var(--ink) 72%, var(--card)); font-size: 12px; margin-top: 3px; }
+.studio td small { display: block; color: var(--foreground); font-size: 12px; margin-top: 3px; }
 .studio td details a { display: block; color: var(--ink); font-weight: 600; margin-top: 6px; }
 .pill, .orange, .green { border-radius: 999px; padding: 2px 8px; font-size: 12px; font-weight: 700; display: inline-block; white-space: nowrap; }
-.pill { background: var(--bg-soft); color: color-mix(in srgb, var(--ink) 86%, var(--card)); }
+.pill { background: var(--bg-soft); color: var(--foreground); }
 .orange { background: color-mix(in srgb, var(--gold-bright) 6%, var(--card)); color: var(--gold); border: 1px solid color-mix(in srgb, var(--gold-bright) 45%, var(--card)); }
 .green { background: var(--primary); color: #fff; }
 
 .editor { padding: 14px 16px; background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px; margin: 14px 0; }
 .editor h3 { font-size: 15px; font-weight: 750; margin: 0 0 10px; }
-.editor p { font-size: 13px; color: color-mix(in srgb, var(--ink) 86%, var(--card)); line-height: 1.6; margin: 0 0 10px; }
+.editor p { font-size: 13px; color: var(--foreground); line-height: 1.6; margin: 0 0 10px; }
 .formGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; }
 .check { flex-direction: row !important; align-items: center; }
 .check input { width: 16px !important; height: 16px; }
@@ -65,7 +65,7 @@
 .history summary { font-weight: 700; }
 .history p { margin: 8px 0; overflow-wrap: anywhere; }
 
-.networkToolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font-size: 13px; color: color-mix(in srgb, var(--ink) 72%, var(--card)); }
+.networkToolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font-size: 13px; color: var(--foreground); }
 .networkToolbar > div { display: flex; gap: 4px; }
 .networkToolbar button[aria-pressed="true"] { background: var(--primary); color: #fff; border-color: var(--primary); }
 .networkToolbar label, .networkLegend label { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
@@ -75,16 +75,16 @@
 .canvasStage { position: relative; height: clamp(480px, 68vh, 860px); min-width: 0; background: #fff; }
 .canvas { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
 .canvas:active { cursor: grabbing; }
-.graphTools { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; color: color-mix(in srgb, var(--ink) 72%, var(--card)); font-size: 13px; border-bottom: 1px solid var(--line); }
+.graphTools { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; color: var(--foreground); font-size: 13px; border-bottom: 1px solid var(--line); }
 .graphTools > div { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
 .graphTools button { padding: 4px 9px; font-size: 13px; }
 .graphTools output { min-width: 40px; text-align: center; font-size: 13px; }
-.networkLegend { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 12px; border-top: 1px solid var(--line); color: color-mix(in srgb, var(--ink) 72%, var(--card)); font-size: 12px; line-height: 1.7; }
-.networkLegend > div { display: flex; gap: 14px; color: color-mix(in srgb, var(--ink) 86%, var(--card)); font-size: 13px; }
+.networkLegend { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 12px; border-top: 1px solid var(--line); color: var(--foreground); font-size: 12px; line-height: 1.7; }
+.networkLegend > div { display: flex; gap: 14px; color: var(--foreground); font-size: 13px; }
 .networkLegend small { margin-left: auto; }
 .hoverCard { position: absolute; bottom: 14px; left: 14px; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; pointer-events: none; max-width: calc(100% - 28px); }
 .hoverCard strong { font-size: 14px; color: var(--ink); overflow-wrap: anywhere; }
-.hoverCard span { font-size: 12px; color: color-mix(in srgb, var(--ink) 72%, var(--card)); }
+.hoverCard span { font-size: 12px; color: var(--foreground); }
 .canvasExpanded { position: fixed; inset: 12px; z-index: 1000; display: flex; flex-direction: column; box-shadow: 0 0 0 24px rgba(241, 241, 237, .9); }
 .canvasExpanded .canvasStage { height: auto; min-height: 0; flex: 1; }
 .canvasExpanded .graphTools, .canvasExpanded .networkLegend { flex-shrink: 0; }
@@ -92,7 +92,7 @@
 .inspector { grid-column: 1 / -1; padding: 14px 16px; border: 1px solid var(--line); background: #fff; border-radius: 10px; min-width: 0; }
 .inspector h3 { font-size: 18px; font-weight: 800; margin: 10px 0; }
 .inspector h4 { font-size: 14px; font-weight: 750; margin: 14px 0 4px; }
-.inspector > p, .inspector > small { color: color-mix(in srgb, var(--ink) 86%, var(--card)); font-size: 13px; overflow-wrap: anywhere; line-height: 1.6; }
+.inspector > p, .inspector > small { color: var(--foreground); font-size: 13px; overflow-wrap: anywhere; line-height: 1.6; }
 .inspector .button { margin: 8px 8px 0 0; text-align: center; }
 .gap { display: flex !important; justify-content: space-between; align-items: center; width: 100%; max-width: 460px; gap: 6px; margin-top: 4px; padding: 6px 8px !important; border: 0 !important; text-align: left; }
 .gap span { font-size: 13px; }
@@ -103,11 +103,11 @@
 .qualityCards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
 .qualityCards article { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
 .qualityCards strong { font-size: 26px; font-weight: 800; }
-.qualityCards span { font-size: 14px; font-weight: 700; color: color-mix(in srgb, var(--ink) 86%, var(--card)); }
-.qualityCards small { font-size: 12px; color: color-mix(in srgb, var(--ink) 72%, var(--card)); }
+.qualityCards span { font-size: 14px; font-weight: 700; color: var(--foreground); }
+.qualityCards small { font-size: 12px; color: var(--foreground); }
 .twoColumns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
 .record { padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 13px; line-height: 1.7; }
-.record p { margin: 4px 0; color: color-mix(in srgb, var(--ink) 86%, var(--card)); }
+.record p { margin: 4px 0; color: var(--foreground); }
 .record button { margin: 6px 0; }
 .inlineLink { display: inline-block; color: var(--ink); background: var(--bg-soft); padding: 3px 9px; margin: 4px; border-radius: 999px; font-weight: 600; }
 .inlineLink:hover { background: color-mix(in srgb, var(--gold-bright) 6%, var(--card)); }

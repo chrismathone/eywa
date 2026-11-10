@@ -9,7 +9,7 @@
 .wrap {
   --net-edge: color-mix(in srgb, var(--neutral-fill) 80%, var(--card));
   --net-edge-hi: var(--primary);
-  --net-edge-cross: var(--purple);
+  --net-edge-cross: var(--cat-purple);
   --net-node: var(--neutral-fill);
   --net-node-near: color-mix(in srgb, var(--purple) 70%, var(--neutral-fill));
   --net-chosen: var(--primary);
@@ -20,12 +20,13 @@
   --net-text: var(--foreground);
   --net-halo: var(--card);
   --net-t-primary: var(--primary);
-  --net-t-blue: var(--blue);
-  --net-t-green: var(--green);
-  --net-t-purple: var(--purple);
-  --net-t-rose: var(--rose);
-  --net-t-gold: var(--gold);
-  --net-t-amber: var(--amber);
+  /* 유형 색 = 범주 색(--cat-*) — 구별 자체가 뜻이라 테마가 파랑·보라를 회색으로 덮어도 제 색을 지킨다(원장 2026-11-10). */
+  --net-t-blue: var(--cat-blue);
+  --net-t-green: var(--cat-green);
+  --net-t-purple: var(--cat-purple);
+  --net-t-rose: var(--cat-rose);
+  --net-t-gold: var(--cat-gold);
+  --net-t-amber: var(--cat-amber);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -42,7 +43,7 @@
 .summary {
   --net-edge: color-mix(in srgb, var(--primary-foreground) 40%, var(--primary));
   --net-edge-hi: var(--gold-bright);
-  --net-edge-cross: color-mix(in srgb, var(--purple) 55%, white);
+  --net-edge-cross: color-mix(in srgb, var(--cat-purple) 55%, white);
   --net-node: color-mix(in srgb, var(--primary-foreground) 65%, var(--primary));
   --net-node-near: color-mix(in srgb, var(--primary-foreground) 82%, var(--primary));
   --net-chosen: #ffffff;
@@ -53,12 +54,12 @@
   --net-text: color-mix(in srgb, var(--primary-foreground) 92%, var(--primary));
   --net-halo: color-mix(in srgb, var(--primary) 55%, black);
   --net-t-primary: color-mix(in srgb, var(--primary) 35%, white);
-  --net-t-blue: color-mix(in srgb, var(--blue) 50%, white);
-  --net-t-green: color-mix(in srgb, var(--green) 55%, white);
-  --net-t-purple: color-mix(in srgb, var(--purple) 50%, white);
-  --net-t-rose: color-mix(in srgb, var(--rose) 50%, white);
-  --net-t-gold: var(--gold-bright);
-  --net-t-amber: color-mix(in srgb, var(--gold-bright) 80%, white);
+  --net-t-blue: color-mix(in srgb, var(--cat-blue) 50%, white);
+  --net-t-green: color-mix(in srgb, var(--cat-green) 55%, white);
+  --net-t-purple: color-mix(in srgb, var(--cat-purple) 50%, white);
+  --net-t-rose: color-mix(in srgb, var(--cat-rose) 50%, white);
+  --net-t-gold: var(--cat-gold-bright);
+  --net-t-amber: color-mix(in srgb, var(--cat-amber) 55%, white);
 }
 
 .enter {

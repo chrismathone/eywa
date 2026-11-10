@@ -43,7 +43,7 @@
 .moved-mini-cell { position: absolute; inset-inline: 0; z-index: 2; background: #fff; }
 .integrated-roster { padding: 3px 0; }
 .integrated-roster button, .student-out { display: flex; align-items: center; justify-content: space-between; gap: 6px; text-align: left; min-height: 22px; line-height: 18px; padding: 2px 6px; font-size: 14px; color: var(--ink); border: 0; border-radius: 0; width: 100%; }
-.integrated-roster small { color: color-mix(in srgb, var(--ink) 72%, var(--card)); font-size: 11px; line-height: 16px; text-align: right; }
+.integrated-roster small { color: var(--foreground); font-size: 11px; line-height: 16px; text-align: right; }
 .roster-transfers:has(button), .roster-transfers:has(.student-out) { border-top: 1px solid color-mix(in srgb, var(--purple) 30%, var(--card)); margin-top: 5px; padding-top: 3px; }
 .roster-transfers h3 { margin: 0; padding: 2px 6px; font-size: 11px; color: var(--purple); }
 .transfer-tag { font-size: 10px; }

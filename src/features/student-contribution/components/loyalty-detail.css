@@ -8,5 +8,5 @@
 .loyalty-detail [class*="bg-gradient"] { background-image: none !important; }
 .loyalty-detail [class*="border-l-4"], .loyalty-detail [class*="border-t-4"], .loyalty-detail [class*="border-t-2"] { border-left-width: 1px !important; border-top-width: 1px !important; }
 .loyalty-detail details[class*="border"] > summary:hover { background: color-mix(in srgb, var(--gold-bright) 6%, var(--card)); }
-.loyalty-detail table th { background: var(--bg-soft); color: color-mix(in srgb, var(--ink) 86%, var(--card)); }
+.loyalty-detail table th { background: var(--bg-soft); color: var(--foreground); }
 .loyalty-detail tbody tr:hover > td { background: color-mix(in srgb, var(--gold-bright) 6%, var(--card)); }

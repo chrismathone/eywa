@@ -1,7 +1,7 @@
 .root { display: grid; gap: 10px; font-size: var(--text-sm); color: var(--ink); }
 .memo { white-space: pre-wrap; border-radius: 8px; background: var(--bg-soft); border: 1px solid var(--line); padding: 10px 12px; line-height: 1.6; }
 .link { color: var(--ink); font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
-.muted { color: color-mix(in srgb, var(--ink) 72%, var(--card)); font-size: var(--text-xs); }
+.muted { color: var(--foreground); font-size: var(--text-xs); }
 .form { display: grid; gap: 10px; border: 0; padding: 0; margin: 0; min-width: 0; }
 .primary { justify-self: start; border-radius: 8px; background: var(--primary); color: #fff; border: 1px solid var(--primary); padding: 8px 14px; font-weight: 650; }
 .primary:hover { background: var(--primary-deep); }

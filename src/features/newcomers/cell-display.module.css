@@ -3,8 +3,8 @@
 .overdue { color: var(--danger); background: var(--bg-soft); }
 .due { color: var(--amber); background: var(--amber-soft); }
 .today { color: var(--amber); background: var(--amber-soft); border-color: color-mix(in srgb, var(--gold-bright) 45%, var(--card)); }
-.neutral { color: color-mix(in srgb, var(--ink) 72%, var(--card)); background: var(--bg-soft); font-weight: 500; }
-.waived { color: color-mix(in srgb, var(--ink) 72%, var(--card)); background: transparent; font-weight: 400; }
+.neutral { color: var(--foreground); background: var(--bg-soft); font-weight: 500; }
+.waived { color: var(--foreground); background: transparent; font-weight: 400; }
 button.badge:not(:disabled):hover { filter: brightness(.96); border-color: currentColor; }
 button.badge:focus-visible { outline: 2px solid color-mix(in srgb, var(--ink) 86%, var(--card)); outline-offset: 2px; }
 button.badge:disabled { cursor: default; }

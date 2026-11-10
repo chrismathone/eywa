@@ -90,7 +90,7 @@ export function MonthRail({
   );
 
   return (
-    <div className="border-line overflow-x-auto rounded-xl border">
+    <div className="bg-card border-line overflow-x-auto rounded-xl border">
       <table className="w-max min-w-full border-separate border-spacing-0 text-xs">
         <thead>
           <tr>
@@ -153,7 +153,7 @@ export function MonthRail({
             const goal = goals[area.key] ?? { textbook: null, targetProgress: null };
             return (
               <tr key={area.key}>
-                <th className="border-line-faint sticky left-0 z-[3] min-w-[236px] border-r border-b bg-white px-2 py-1.5 text-left align-top font-normal shadow-[1px_0_0_var(--line)]">
+                <th className="border-line-faint sticky left-0 z-[3] min-w-[236px] border-r border-b bg-card px-2 py-1.5 text-left align-top font-normal shadow-[1px_0_0_var(--line)]">
                   <div className="flex flex-col gap-1">
                     <span
                       className={`${SHEET_BOX_FRAME} inline-flex h-5 w-[74px] items-center justify-center px-1 text-xs font-bold ${
@@ -233,7 +233,7 @@ export function MonthRail({
         </tbody>
         <tfoot>
           <tr>
-            <th className="border-line-strong sticky left-0 z-[3] border-t border-r bg-white px-2 py-1.5 text-left text-xs font-normal shadow-[1px_0_0_var(--line)]">
+            <th className="border-line-strong sticky left-0 z-[3] border-t border-r bg-card px-2 py-1.5 text-left text-xs font-normal shadow-[1px_0_0_var(--line)]">
               {t("month.rail.footer")}
             </th>
             {days.map((date) => {

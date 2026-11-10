@@ -1,8 +1,8 @@
 /*
  * 학생 통합보기 — aywa-next(375d27df4) 화면을 운영실 '계기판' 토큰으로 다시 칠했다.
- * 차콜 #363c41 · 노랑 #fdb811 · 붉은색 #b44832(경고만) · 글자 #23282c / #646d72 · 선 #e1e3df · 바탕 #f4f4f1 · 화면 #f1f1ed.
+ * 차콜 #363c41 · 노랑 #fdb811 · 붉은색 #b44832(경고만) · 글자 #23282c 한 값(보조 글자도 같은 값 · 원장 2026-11-10) · 선 #e1e3df · 바탕 #f4f4f1 · 화면 #f1f1ed.
  */
-.page { --ink-2: color-mix(in srgb, var(--ink) 86%, var(--card)); --muted: color-mix(in srgb, var(--ink) 72%, var(--card)); --wash: var(--bg-soft); --hover: color-mix(in srgb, var(--gold-bright) 6%, var(--card)); --charcoal: var(--primary); --yellow: var(--gold-bright); --red: var(--danger);
+.page { --ink-2: var(--foreground); --muted: var(--foreground); --wash: var(--bg-soft); --hover: color-mix(in srgb, var(--gold-bright) 6%, var(--card)); --charcoal: var(--primary); --yellow: var(--gold-bright); --red: var(--danger);
   display: grid; gap: 14px; padding: 16px 20px 32px; background: transparent; color: var(--ink); font-size: var(--text-sm); line-height: 1.6; min-width: 0; }
 .page :is(a, button, input, select, textarea):focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
 .hero { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }

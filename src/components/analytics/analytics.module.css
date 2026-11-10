@@ -1,12 +1,12 @@
 /*
  * 경영 분석·지식그래프 시안의 공용 차트 표면 — 운영실 '계기판' 토큰(instruments.css)과 같은 값.
- * 차콜 #363c41 · 노랑 #fdb811 · 붉은색 #b44832(경고만) · 글자 #23282c / #646d72 · 선 #e1e3df · 바탕 #f4f4f1.
+ * 차콜 #363c41 · 노랑 #fdb811 · 붉은색 #b44832(경고만) · 글자 #23282c 한 값(보조 글자도 같은 값 · 원장 2026-11-10) · 선 #e1e3df · 바탕 #f4f4f1.
  * 카드 = 흰 면 + 1px 선 + 10px 라운드. 색 띠·짙은 그림자·파랑/보라 그라데이션은 쓰지 않는다.
  */
 .dashboard {
   --av-ink: var(--ink);
-  --av-ink-2: color-mix(in srgb, var(--ink) 86%, var(--card));
-  --av-muted: color-mix(in srgb, var(--ink) 72%, var(--card));
+  --av-ink-2: var(--foreground);
+  --av-muted: var(--foreground);
   --av-line: var(--line);
   --av-wash: var(--bg-soft);
   --av-hover: color-mix(in srgb, var(--gold-bright) 6%, var(--card));

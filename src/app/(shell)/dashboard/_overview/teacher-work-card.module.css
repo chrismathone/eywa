@@ -5,9 +5,9 @@
 .table thead th { background: var(--bg-soft); font-weight: 700; }
 .table th:first-child { text-align: left; position: sticky; left: 0; z-index: 1; background: #fff; }
 .table thead th:first-child { background: var(--bg-soft); }
-.table tbody th { color: color-mix(in srgb, var(--ink) 86%, var(--card)); font-weight: 500; }
+.table tbody th { color: var(--foreground); font-weight: 500; }
 .table thead b { display: block; font-size: var(--text-base, 15px); }
-.table small { display: block; margin-top: 4px; font-weight: 400; font-size: var(--text-xs, 11px); color: color-mix(in srgb, var(--ink) 72%, var(--card)); }
+.table small { display: block; margin-top: 4px; font-weight: 400; font-size: var(--text-xs, 11px); color: var(--foreground); }
 .table td { font-weight: 600; }
 .table td[data-tone="good"] { color: var(--green); }
 .table td[data-tone="alert"] { color: var(--danger); }
@@ -15,11 +15,11 @@
 .table tr[data-video] > * { border-top: 2px solid var(--line); }
 .table a { text-underline-offset: 4px; }
 .table a:hover { text-decoration: underline; }
-.note { margin: 14px 0 0; color: color-mix(in srgb, var(--ink) 72%, var(--card)); font-size: var(--text-xs, 11px); line-height: 1.6; }
+.note { margin: 14px 0 0; color: var(--foreground); font-size: var(--text-xs, 11px); line-height: 1.6; }
 .note + .note { margin-top: 3px; }
-.empty { padding: 24px 0; color: color-mix(in srgb, var(--ink) 72%, var(--card)); }
+.empty { padding: 24px 0; color: var(--foreground); }
 @container dashboard (max-width: 580px) { .table th, .table td { padding: 11px 6px; } }
-.tasksLink { display: block; margin: 0 0 10px auto; padding: 4px 2px; color: color-mix(in srgb, var(--ink) 86%, var(--card)); font-size: var(--text-sm, 13px); font-weight: 600; }
+.tasksLink { display: block; margin: 0 0 10px auto; padding: 4px 2px; color: var(--foreground); font-size: var(--text-sm, 13px); font-weight: 600; }
 .tasksLink:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 4px; }
 .tasksLink b { color: var(--danger); }
 .cellButton { font: inherit; color: inherit; }

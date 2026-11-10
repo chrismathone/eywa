@@ -35,7 +35,7 @@ import { CONTROL_H, CONTROL_ICON, CONTROL_LABEL } from "./ui/control-scale";
  *
  * 🔴 **카드 껍데기(`bg-card`·`shadow-card`·`rounded-2xl`·`border`)를 두지 않는다** — 컨트롤이
  *    저마다 테두리를 갖고 있어 줄은 그대로 읽히고, 아래 목록·칸도 테두리를 가지면 선이 겹친다.
- * ⚠️ `sticky`면 배경은 남긴다(`bg-background`) — 스크롤 내용이 비친다. 그 경우 `sticky` prop을
+ * ⚠️ `sticky`면 배경은 남긴다(`bg-bg-canvas` = 화면 바탕) — 스크롤 내용이 비친다. 그 경우 `sticky` prop을
  *    쓸 것(직접 `bg-*`를 적으면 가드가 못 보고, 붙였다 뗐다 하며 갈린다).
  * ⚠️ 모바일 가로 레일(`.toolbar-rail`)은 기본으로 붙는다 — 폰에서 4줄로 감기는 것을 막는다.
  *    줄이 길어 레일 하나로 부족하면 `<ToolbarRow>`로 쪼갠다(데스크톱은 `display:contents`라 무영향).
@@ -66,7 +66,7 @@ export function Toolbar({
       data-toolbar=""
       className={`flex shrink-0 flex-wrap items-center px-1 py-1 compact-chrome:px-0.5 compact-chrome:py-0.5 ${gap} ${
         rail ? "toolbar-rail" : ""
-      } ${sticky ? "bg-background sticky top-0 z-10" : ""} ${className}`}
+      } ${sticky ? "bg-bg-canvas sticky top-0 z-10" : ""} ${className}`}
     >
       {children}
     </div>
