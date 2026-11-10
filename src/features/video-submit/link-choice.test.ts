@@ -74,7 +74,8 @@ describe("핫패스 가드 — 로스터는 video_submit_link를 모른다", () 
 
 describe("배선 — 화면에서 고른 값이 저장되고, 발송 직전 판정이 그 값을 읽는다", () => {
   it("🔴 손대지 않은 행은 보내지 않는다 — 값이 있고 그 행에서 고를 수 있을 때만", () => {
-    const code = stripComments(read("src", "features", "onescreen", "components", "onescreen-client.tsx"));
+    // 세션 입력 조립은 session-input.ts로 옮겼다(P3-O) — 금지 패턴은 두 파일 모두에서 본다.
+    const code = stripComments(read("src", "features", "onescreen", "components", "onescreen-client.tsx") + "\n" + read("src", "features", "onescreen", "session-input.ts"));
     // 다른 선생님이 처음 쓴 줄도 싣지 않는다(2026-10-03, video-homework/report-owner.ts).
     expect(code).toMatch(/videoHwSaveOk && typeof su\?\.videoSubmitLink === "boolean" && !videoHwByOther\(student\.id, su\?\.classId\) &&\s*submitLinkChoosable\(/);
     expect(code).not.toMatch(/videoSubmitLink: !!su\.videoSubmitLink/);

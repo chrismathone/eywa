@@ -1143,7 +1143,8 @@ describe("🔴 회수 버튼·막힌 사유도 사전만 본다 — ko 기본값
  *    저장값(보강 행 이름·출결 배지값)이 언어를 안 타는지까지 함께 본다.
  */
 describe("🔴 원스크린 화면 껍데기·공지 작성도 사전만 본다 — 한글 리터럴 0", () => {
-  it.each(["onescreen-client.tsx", "notice-composer.tsx", "notice-attachment-picker.tsx"])(
+  // 화면에서 옮겨 낸 훅(P3-O)도 같은 규칙이다.
+  it.each(["onescreen-client.tsx", "use-session-autosave.ts", "use-roster-view.ts", "notice-composer.tsx", "notice-attachment-picker.tsx"])(
     "%s",
     (f) => {
       const code = codeOnly(read("features", "onescreen", "components", f));

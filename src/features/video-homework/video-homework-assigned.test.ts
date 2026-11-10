@@ -50,7 +50,8 @@ describe("핫패스 가드 — 로스터는 video_homework를 모른다", () => 
     expect(code).toContain("assignmentsKnown={loadedAssignments !== null}");
   });
   it("🔴 손대지 않은 행은 false로 보내지 않는다 — 값이 있을 때만 · 못 읽은 세션은 아예 안 보낸다", () => {
-    const code = stripComments(read("src", "features", "onescreen", "components", "onescreen-client.tsx"));
+    // 세션 입력 조립은 session-input.ts로 옮겼다(P3-O) — 금지 패턴은 두 파일 모두에서 본다.
+    const code = stripComments(read("src", "features", "onescreen", "components", "onescreen-client.tsx") + "\n" + read("src", "features", "onescreen", "session-input.ts"));
     expect(code).toMatch(/videoHwSaveOk && typeof su\?\.videoHomework === "boolean"/);
     expect(code).not.toMatch(/videoHomework: !!su\.videoHomework/);
   });
