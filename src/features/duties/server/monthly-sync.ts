@@ -33,7 +33,7 @@ export async function syncMonthlyDuties(tenantId: string, today: string, setting
   const asOf = await loadOwnerAsOf(tenantId);
   const classRows = await fetchAllPaged<ClassRow>((from, to) => {
     const q = admin.from("classes").select(`${CLASS_COLUMNS}, math_learning_track`).eq("tenant_id", tenantId);
-    return (past ? q.or(`and(is_active.eq.true,closed_at.is.null),closed_at.gte.${today}`) : q.eq("is_active", true).or(`closed_at.is.null,closed_at.gte.${today}`)).order("id").range(from, to);
+    return (past ? q : q.eq("is_active", true)).or(`closed_at.is.null,closed_at.gte.${today}`).order("id").range(from, to);
   });
   const classes = past ? classRows.map((c) => ({ ...c, teacher_id: asOf.teacherOf(c.id, c.teacher_id, today) })) : classRows;
   const eligible = classes.filter((c) => isHomeroomConsultClass({ isSpecial: c.is_special ?? null, className: c.class_name, learningTrack: c.math_learning_track }));

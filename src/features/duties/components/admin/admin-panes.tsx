@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { foldMatrixRows, MATRIX_COLUMNS, periodUnit, type AdminPeriod, type LateItem, type MatrixRow } from "../../view-admin";
+import { foldMatrixRows, MATRIX_COLUMNS, type AdminPeriod, type LateItem, type MatrixRow } from "../../view-admin";
 import { CellItemsDialog, type CellPick } from "./admin-cell-items";
 import { judge, NO_CLASS, NO_OWNER, ownerMeta, type TreeSubject } from "../../view-admin-levels";
 import type { DutyWork } from "../duty-work-context";
@@ -68,7 +68,7 @@ export function ClassPane({ period, tick, classNode, owner, fetchSubject, teache
   const { data, failed } = useStudentsPayload(period, owner === NO_OWNER ? { classId, ownerNone: true, subject: fetchSubject } : { classId, owner, subject: fetchSubject }, tick);
   const label = (k: string | null) => (k ? MATRIX_COLUMNS.find((c) => c.kind === k)?.label ?? "업무" : "전체");
   return <>
-    <ClassLevel cls={classNode} teacher={teacher} avg={avg} payload={data} failed={failed} kind={kind} grade={periodUnit(period) !== "day"} aside={aside} onStudent={onStudent}
+    <ClassLevel cls={classNode} teacher={teacher} avg={avg} payload={data} failed={failed} kind={kind} grade={false} aside={aside} onStudent={onStudent}
       onCell={(studentId, name, k) => setPick({ title: `${name} · ${label(k)}`, studentId, kind: k, classId, classNone: classId === null, owner: owner === NO_OWNER ? null : owner, ownerNone: owner === NO_OWNER, subject: fetchSubject })} />
     {pick ? <CellItemsDialog key={`${pick.studentId}|${pick.kind ?? ""}`} pick={pick} period={period} tick={tick} onClose={() => setPick(null)} onWork={onWork} /> : null}
   </>;

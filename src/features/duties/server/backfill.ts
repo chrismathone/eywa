@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { TenantSettings } from "@/features/owner/settings-types";
 import { addDays, kstToday } from "@/lib/date-kst";
+import { resetOwnerAsOf } from "./owner-as-of";
 import { escalateAndSnapshot, syncDailyDuties } from "./sync";
 import { syncMonthlyDuties } from "./monthly-sync";
 
@@ -26,6 +27,7 @@ export async function backfillDutyMonth(tenantId: string, month: string, setting
   const days: string[] = [];
   for (let d = `${month}-01`; d <= last; d = addDays(d, 1)) days.push(d);
   let drafts = 0;
+  resetOwnerAsOf(tenantId);
   for (const day of days) drafts += (await syncDailyDuties(tenantId, day, settings)).drafts;
   const m = await syncMonthlyDuties(tenantId, last, settings, { skipNewcomers: true });
   let closed = 0;

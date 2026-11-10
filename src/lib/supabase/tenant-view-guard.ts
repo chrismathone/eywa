@@ -37,6 +37,7 @@ export const TENANT_VIEW_READ_RPCS: ReadonlySet<string> = new Set([
   "duty_rollup_owner_kind",
   "duty_rollup_class",
   "duty_rollup_student",
+  "duty_rollup_student_ex",
   "duty_rollup_owner_load",
   // 출결 통계 등원율 추이(0387a) — 읽기 전용 group-by.
   "attendance_rate_buckets",

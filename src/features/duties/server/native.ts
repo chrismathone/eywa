@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { isKoreanTeacherName } from "@/features/timetable/lib/teacher-label";
 
 /**
@@ -14,4 +14,10 @@ export async function nativeOwnerIds(tenantId: string, ids: readonly string[]): 
   if (!uniq.length) return new Set();
   const rows = await fetchInChunks<{ id: string; display_name: string | null }>(uniq, (chunk) => createAdminClient().from("users").select("id,display_name").eq("tenant_id", tenantId).in("id", chunk));
   return new Set(rows.filter((r) => isNativeName(r.display_name)).map((r) => r.id));
+}
+
+/** 그 지점의 원어민 계정 전부 — 학생 집계가 합치기 전에 뺀다. 역할을 가리지 않는다(선생님 · 반 집계와 같은 판정). 직원 수만큼만 읽는다. */
+export async function tenantNativeIds(tenantId: string): Promise<string[]> {
+  const rows = await fetchAllPaged<{ id: string; display_name: string | null }>((a, b) => createAdminClient().from("users").select("id,display_name").eq("tenant_id", tenantId).order("id").range(a, b));
+  return rows.filter((r) => isNativeName(r.display_name)).map((r) => r.id);
 }

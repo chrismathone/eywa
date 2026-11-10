@@ -113,7 +113,7 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null }: 
   // 기간 이름 · 기준일은 받기 전에도 바로 바뀌게 화면에서 계산한다(서버와 같은 함수).
   const today = cur?.today ?? initial.today;
   const unit = periodUnit(period); const anchor = periodParts(period)?.anchor ?? today;
-  const rangeLabel = adminRange(period, today).label;
+  const rangeLabel = adminRange(period, today, viewFrom).label;
   const crumbs: { label: string; sel: Sel }[] = [];
   if (multi) crumbs.push({ label: "전체", sel: ROOT });
   if (subjectNode && !atRoot) crumbs.push({ label: subjectNode.label, sel: { subject: subjectNode.subject, owner: null, classId: null, studentId: null } });

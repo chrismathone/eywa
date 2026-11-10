@@ -1,6 +1,6 @@
 "use client";
 
-import { MATRIX_COLUMNS, periodUnit, type AdminPeriod } from "../../view-admin";
+import { MATRIX_COLUMNS, type AdminPeriod } from "../../view-admin";
 import { classLines, judge, NO_CLASS, NO_OWNER, ownerMeta, type Avg, type TreeOwner } from "../../view-admin-levels";
 import { CountBox, GridCols, gridStyle } from "./admin-matrix";
 import { VerdictBadge, VerdictLine } from "./admin-verdict";
@@ -17,7 +17,7 @@ export function TeacherLevel({ owner, avg, period, subject, tick, kind, aside, o
   /** 표 옆(자리가 모자라면 아래)에 세울 것 — 기한 초과. */ aside?: React.ReactNode;
   owner: TreeOwner; avg: Avg | null; period: AdminPeriod; subject: string | null; tick: number; kind: string | null; onClearKind: () => void; onClass: (classId: string) => void;
 }) {
-  const grade = periodUnit(period) !== "day"; // 하루 보기에는 등급 열이 없다
+  const grade = false; // 반 줄에는 등급이 없다(등급은 선생님 · 과목 줄에만 — 2026-11-11)
   const { data, failed } = useStudentsPayload(period, owner.ownerId === NO_OWNER ? { ownerNone: true, subject } : { owner: owner.ownerId, subject }, tick);
   const linesAll = data ? classLines(data.rows, data.classInfo) : [];
   const lines = kind ? linesAll.filter((l) => l.cells[kind]) : linesAll;

@@ -82,9 +82,10 @@ export function bandStyle(pct: number): { background: string; color: string } {
  */
 export function CountBox({ cell, onClick, plain, frac, overall }: { cell: Cell | null; onClick?: () => void; plain?: boolean; frac?: boolean; overall?: boolean; }) {
   if (!cell || !cell.total) return <span className={`block rounded-lg px-1 py-1.5 text-sm font-semibold tabular-nums ${plain ? "text-text-placeholder" : TONE.none}`}>—</span>;
-  const band = plain ? undefined : bandStyle(overallPct(cell) ?? 0);
   const tone = plain ? "font-bold" : "font-semibold";
   const pending = cell.pct === null || upcomingOf(cell) > 0;
+  // 색은 **칸에 적힌 숫자**의 구간이다 — 글자(기한이 온 것 기준 %)와 색(전체 기준)이 다른 비율을 말하지 않게(Claude · Codex 합의 2026-11-11).
+  const band = plain ? undefined : bandStyle(overall || pending ? overallPct(cell) ?? 0 : frac ? (cell.due ? (cell.ontime / cell.due) * 100 : 0) : cell.pct ?? 0);
   // 기한 초과 수는 종류 칸에만 적는다(전체 칸은 %만 — 원장 *"전체에서는 기한 초과 멘트 제거"*). 색 바탕 위라 글자색은 칸 색을 따른다.
   const late = cell.late ? <span className="ml-1 text-xs font-bold">기한 초과 {cell.late}</span> : null;
   const body = overall

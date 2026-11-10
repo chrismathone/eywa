@@ -7,6 +7,7 @@ import { addDays, kstToday } from "@/lib/date-kst";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { escalateAndSnapshot, openPastCycles, syncDailyDuties } from "@/features/duties/server/sync";
 import { syncMonthlyDuties } from "@/features/duties/server/monthly-sync";
+import { resetOwnerAsOf } from "@/features/duties/server/owner-as-of";
 import { claimDutySync, finishDutySync, type DutyClaim } from "@/features/duties/server/live-sync";
 import { syncDays } from "@/features/duties/model/sync-window";
 import { backfillDutyMonth } from "@/features/duties/server/backfill";
@@ -48,6 +49,7 @@ export async function GET(req: Request) {
       if (got.locked) claim = got;
       const settings = await getTenantSettingsByTenantId(tenantId, { failOnReadError: true });
       const days = syncDays(got.days, today, [...(await openPastCycles(tenantId)), ...(kstHour < 3 ? [yesterday] : []), today]);
+      resetOwnerAsOf(tenantId);
       for (const day of days) drafts += (await syncDailyDuties(tenantId, day, settings)).drafts;
       if (monthlyTurn || got.monthly) { const m = await syncMonthlyDuties(tenantId, today, settings); drafts += m.counsel + m.exam + m.newcomer; }
       // 달 초 한 주 동안은 지난 달 월간(학생 상담 · 월말평가)도 한 번 더 맞춘다 — 말일의 일을 다음 날 입력한 것이 닫히게. 그 뒤엔 사다리가 열린 것을 미이행으로 확정한다(s2_0056).

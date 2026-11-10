@@ -16,12 +16,12 @@ const pctOf = (part: number, due: number) => Math.round((part / due) * 100);
  * 배지 + 별 + **결론 한 줄**, 그 아래 막대 하나 — 기한이 온 업무가 어떻게 끝났나(제때 초록 · 늦게 주황 · 안 함 빨강)와 건수.
  * 관리자가 숫자를 해석하지 않고 바로 읽게: 잘하고 있나 → 문제면 '늦게 하는' 쪽인가 '안 하는' 쪽인가 → 평균보다 얼마나.
  */
-export function VerdictLine({ v }: { v: Verdict }) {
+export function VerdictLine({ v, plain }: { v: Verdict; /** 등급 · 별 없이(반 · 학생 — 표본이 작아 등급이 한 건에 크게 흔들리고, 학생 옆 등급은 학생 평가로 읽힌다). */ plain?: boolean }) {
   const m = v.mix;
   return <div className="grid gap-1.5">
     <div className="flex flex-wrap items-center gap-2">
-      <VerdictBadge v={v} />
-      {v.tier ? <TierStars tier={`${v.tier}등급`} /> : null}
+      {plain ? null : <VerdictBadge v={v} />}
+      {v.tier && !plain ? <TierStars tier={`${v.tier}등급`} /> : null}
       {v.reason ? <span className="text-sm font-semibold">{v.reason}</span> : null}
       {v.gap ? <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${v.gap.diff > 0 ? "bg-green-soft text-green" : "bg-danger-soft text-danger"}`}>{v.gap.label} 평균보다 {Math.abs(v.gap.diff)}% {v.gap.diff > 0 ? "높음" : "낮음"}</span> : null}
     </div>

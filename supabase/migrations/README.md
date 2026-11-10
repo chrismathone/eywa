@@ -18,7 +18,9 @@
 
 ## 2026-11-10 의무 장부: 할 일 본문에 업무 종류 (s2_0046 · ✅ 운영 적용 2026-11-10 · 직결 · 시험 거래 뒤)
 
-`s2_0061_duty_view_from.sql` — ✅ 운영 적용(2026-11-11 · 침산 값 2026-08-01). `duty_settings.view_from` — 관리 화면에서 볼 수 있는 첫 날(null = 제한 없음).
+`s2_0062_duty_student_exclude_and_lock.sql` — ✅ 운영 적용(2026-11-11). `duty_rollup_student_ex`(학생 집계 + 뺄 담당 — 원어민) · `duty_sync_claim` 잠금 3분 → 6분.
+
+`s2_0061_duty_view_from.sql` — ✅ 운영 적용(2026-11-11 · 침산 값 2026-09-01). `duty_settings.view_from` — 관리 화면에서 볼 수 있는 첫 날(null = 제한 없음).
 
 `s2_0060_duty_due_follow_split.sql` — ✅ 운영 적용(2026-11-11). `duty_upsert_items` — 기한 맞춤을 별도 문장으로(같은 문장에서 이미 고친 행의 기한이 빠지던 것).
 

@@ -69,11 +69,12 @@ export function shiftPeriod(period: AdminPeriod, dir: -1 | 1): AdminPeriod {
   return parts.unit === "month" ? `m:${shiftMonth(parts.anchor.slice(0, 7), dir)}` : periodKey(parts.unit, shiftDay(parts.anchor, parts.unit === "week" ? dir * 7 : dir));
 }
 /** 기간 → 회차 창(KST 날짜)과 화면에 적을 이름. 끝은 오늘을 넘지 않는다(이번 주 · 이번 달은 오늘까지). */
-export function adminRange(period: AdminPeriod, today: string): { from: string; to: string; label: string } {
+export function adminRange(period: AdminPeriod, today: string, viewFrom: string | null = null): { from: string; to: string; label: string } {
   const parts = periodParts(period) ?? { unit: "month" as const, anchor: `${today.slice(0, 7)}-01` };
   const cap = (ymd: string) => (ymd > today ? today : ymd);
   if (parts.unit === "day") return { from: parts.anchor, to: parts.anchor, label: md(parts.anchor) };
-  if (parts.unit === "week") { const to = cap(shiftDay(parts.anchor, 6)); return { from: parts.anchor, to, label: `${md(parts.anchor)} ~ ${md(to)}` }; }
+  // 볼 수 있는 첫 날이 그 주 안에 있으면 이름도 그날부터 적는다(세는 범위와 같게).
+  if (parts.unit === "week") { const to = cap(shiftDay(parts.anchor, 6)); const from = viewFrom && parts.anchor < viewFrom && viewFrom <= to ? viewFrom : parts.anchor; return { from: parts.anchor, to, label: `${md(from)} ~ ${md(to)}` }; }
   const ym = parts.anchor.slice(0, 7);
   return { from: parts.anchor, to: cap(lastDayOf(ym)), label: `${Number(ym.slice(0, 4))}년 ${Number(ym.slice(5, 7))}월` };
 }

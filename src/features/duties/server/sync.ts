@@ -22,14 +22,19 @@ const DAILY_KINDS = DUTY_KIND_KEYS.filter((k) => DUTY_KINDS[k].period === "daily
  */
 export async function syncDailyDuties(tenantId: string, date: string, settings: TenantSettings): Promise<{ drafts: number; inserted: number; done: number; voided: number }> {
   const admin = createAdminClient();
-  // 지난 날은 **그날 기준**으로 맞춘다(원장 2026-11-11) — 그날의 담임 · 그날 재직 여부 · 그 뒤에 종강한 반까지. 오늘은 종전 그대로(지금 운영 중인 반 · 지금 담임).
+  // 지난 날은 **그날 기준**으로 맞춘다(원장 2026-11-11) — 그날의 담임 · 그날 재직 여부 · 그 뒤에 종강하거나 폐지한 반까지(폐지는 수강을 그날로 끝내므로 지난 날 명단은 그대로다 — 지금 운영 여부로 거르면 폐지만으로 지난 미처리가 사라진다). 오늘은 종전 그대로(지금 운영 중인 반 · 지금 담임).
   const past = date < kstToday();
   const asOf = await loadOwnerAsOf(tenantId);
-  const classes = await fetchAllPaged<{ id: string; class_name: string; subject: string; english_track: string | null; teacher_id: string | null; report_optout: boolean | null; closed_at: string | null }>((from, to) => {
-    const q = admin.from("classes").select("id,class_name,subject,english_track,teacher_id,report_optout,closed_at").eq("tenant_id", tenantId);
-    return (past ? q.or(`and(is_active.eq.true,closed_at.is.null),closed_at.gte.${date}`) : q.eq("is_active", true).or(`closed_at.is.null,closed_at.gte.${date}`)).order("id").range(from, to);
+  const classes = await fetchAllPaged<{ id: string; class_name: string; subject: string; english_track: string | null; teacher_id: string | null; report_optout: boolean | null; closed_at: string | null; is_active: boolean | null }>((from, to) => {
+    const q = admin.from("classes").select("id,class_name,subject,english_track,teacher_id,report_optout,closed_at,is_active").eq("tenant_id", tenantId);
+    return q.or(`closed_at.is.null,closed_at.gte.${date}`).order("id").range(from, to);
   });
-  const live = classes.filter((c) => !isTestClass(c.class_name)).map((c) => (past ? { ...c, teacher_id: asOf.teacherOf(c.id, c.teacher_id, date) } : c));
+  // 폐지한 반(운영 안 함 · 종강일 없음)은 **그날 장부에 이미 업무가 있을 때만** 넣는다 — 빼면 폐지만으로 그날의 미처리가 사라지고(오늘도 · 지난 날도),
+  // 무조건 넣으면 폐지 뒤의 날에 없던 업무가 새로 생긴다(폐지는 시간표를 닫지 않는다 · 리뷰 2026-11-11).
+  const archived = classes.filter((c) => !c.is_active && !c.closed_at).map((c) => c.id);
+  const kept = new Set((await fetchAllPagedInChunks<{ class_id: string }>(archived, (chunk, from, to) =>
+    admin.from("duty_items").select("class_id").eq("tenant_id", tenantId).eq("period", "daily").eq("cycle", date).in("class_id", chunk).order("id").range(from, to))).map((r) => r.class_id));
+  const live = classes.filter((c) => !isTestClass(c.class_name) && (c.is_active || !!c.closed_at || kept.has(c.id))).map((c) => (past ? { ...c, teacher_id: asOf.teacherOf(c.id, c.teacher_id, date) } : c));
   const classIds = live.map((c) => c.id);
   if (!classIds.length) return { drafts: 0, inserted: 0, done: 0, voided: 0 };
   const classnoteOn = classnoteModuleOn(settings);

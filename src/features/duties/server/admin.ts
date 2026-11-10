@@ -9,7 +9,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { subjectLabelRecord } from "@/features/owner/subjects";
 import { programSubjectsOf, subjectGroupOf } from "@/features/students/enrollment/program";
 import type { DutyPeriod, DutyStatus } from "../kinds";
-import { isNativeName } from "./native";
+import { isNativeName, tenantNativeIds } from "./native";
 import { loadLatestNotes } from "./notes";
 import type { AbsentRow, ClassInfo, Counts, DutyAdminData, DutyAdminScope, LateItem, OwnerInfo, OwnerLoadRow, RollupClass, RollupOwnerKind, RollupStudent, StudentInfo } from "../view-admin";
 
@@ -121,14 +121,17 @@ export type DutyStudentsData = { rows: RollupStudent[]; students: StudentInfo; c
 /** 학생 × 반 × 종류 — 드릴다운(담당자·종류·반 중 아무거나) · '학생별' 보기(필터 없음 · 페이지 넘겨 전건). */
 export async function loadDutyStudents(tenantId: string, from: string, to: string, scope: DutyAdminScope, periods: string[] | null, f: StudentFilter): Promise<DutyStudentsData> {
   const admin = createAdminClient();
+  // 원어민 담당 몫은 합치기 전에 뺀다(s2_0062) — 선생님 · 반 집계와 같은 숫자가 되게.
+  const native = await tenantNativeIds(tenantId);
   const raw = await fetchAllPaged<CountRow & { student_id: string | null; class_id: string | null; kind: string; last_due: string | null }>((a, b) =>
-    admin.rpc("duty_rollup_student", { p_tenant: tenantId, p_from: from, p_to: to, p_subjects: scope.subjects, p_periods: periods, p_owner: scope.ownerId ?? (f.ownerNone ? null : f.owner ?? null), p_kind: f.kind ?? null, p_class: f.classId ?? null, p_subject: f.subject ?? null, p_student: f.studentId ?? null, p_subject_none: f.subjectNone ?? false, p_owner_none: !scope.ownerId && (f.ownerNone ?? false) })
+    admin.rpc("duty_rollup_student_ex", { p_exclude_owners: native.length ? native : null, p_tenant: tenantId, p_from: from, p_to: to, p_subjects: scope.subjects, p_periods: periods, p_owner: scope.ownerId ?? (f.ownerNone ? null : f.owner ?? null), p_kind: f.kind ?? null, p_class: f.classId ?? null, p_subject: f.subject ?? null, p_student: f.studentId ?? null, p_subject_none: f.subjectNone ?? false, p_owner_none: !scope.ownerId && (f.ownerNone ?? false) })
       .order("student_id").order("class_id").order("kind").range(a, b));
   // 결석으로 빠진 일간 의무(void · absent) — 집계에는 없지만 칸에 '결석'이라고 적으려고 같은 범위로 따로 읽는다(하루 · 한 주 · 한 달 안의 수업일).
   const absentRaw = await fetchAllPaged<{ student_id: string | null; class_id: string | null; kind: string }>((a, b) => {
     let q = admin.from("duty_items").select("student_id,class_id,kind").eq("tenant_id", tenantId).eq("period", "daily").eq("status", "void").eq("void_reason", "absent").gte("cycle", from).lte("cycle", to).not("student_id", "is", null);
     if (scope.subjects) q = q.in("subject", scope.subjects);
     if (scope.ownerId) q = q.eq("owner_id", scope.ownerId); else if (f.ownerNone) q = q.is("owner_id", null); else if (f.owner) q = q.eq("owner_id", f.owner);
+    if (native.length) q = q.or(`owner_id.is.null,owner_id.not.in.(${native.join(",")})`);
     if (f.kind) q = q.eq("kind", f.kind);
     if (f.classId) q = q.eq("class_id", f.classId);
     if (f.subjectNone) q = q.is("subject", null); else if (f.subject) q = q.eq("subject", f.subject);

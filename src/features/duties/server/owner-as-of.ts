@@ -25,7 +25,10 @@ export type OwnerAsOf = {
 const kstDay = (iso: string) => new Date(Date.parse(iso) + 9 * 3_600_000).toISOString().slice(0, 10);
 const memo = new Map<string, { at: number; value: Promise<OwnerAsOf> }>();
 
-/** 한 번 맞춤(여러 날)에서 되풀이해 부른다 — 지점마다 1분 동안 같은 값을 쓴다. */
+/** 맞춤을 시작할 때 부른다 — 앞선 맞춤이 읽어 둔 이력을 버린다(담임을 바꾼 직후의 맞춤이 옛 이력으로 끝난 업무를 새 담임에게 굳히지 않게). */
+export const resetOwnerAsOf = (tenantId: string): void => { memo.delete(tenantId); };
+
+/** 한 번의 맞춤(여러 날) 안에서 되풀이해 부른다 — 같은 값을 쓴다(1분이 넘으면 다시 읽는다). */
 export function loadOwnerAsOf(tenantId: string): Promise<OwnerAsOf> {
   const hit = memo.get(tenantId);
   if (hit && Date.now() - hit.at < 60_000) return hit.value;

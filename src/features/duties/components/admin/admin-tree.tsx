@@ -52,9 +52,8 @@ export function AdminTree({ tree, multi, sel, lateOnly, onSelect }: { tree: Tree
             </button>
             {ownerOn ? <div className="grid gap-0.5 pl-4">
               {classes.map((c) => <button key={c.classId} type="button" onClick={() => onSelect({ subject: s.subject, owner: o.ownerId, classId: c.classId, studentId: null })} className={`${row} ${sel.classId === c.classId ? on : ""}`}>
-                <VerdictDot grade={judge(c.cell).grade} />
                 <span className="min-w-0 flex-1 truncate text-xs font-semibold">{c.name}</span>
-                <Mark cell={c.cell} />
+                <span className="flex shrink-0 items-center gap-1 text-xs font-semibold tabular-nums">{c.cell.pct !== null ? <span>{c.cell.pct}%</span> : <span className="text-text-dim font-medium">{progressText(c.cell)}</span>}{c.cell.late ? <span className="text-danger">{c.cell.late}</span> : null}</span>
               </button>)}
             </div> : null}
           </div>;

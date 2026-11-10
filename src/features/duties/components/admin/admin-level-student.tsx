@@ -40,7 +40,7 @@ export function StudentLevel({ studentId, payload, late, nowMs, onWork }: {
           <button type="button" onClick={() => onWork({ href: `/consultations/new?studentId=${encodeURIComponent(studentId)}`, title: `${name} · 상담 작성` })} className={btn}>상담 작성</button>
         </span>
       </div>
-      {sum ? <VerdictLine v={judge(sum.all)} /> : null}
+      {sum ? <VerdictLine plain v={judge(sum.all)} /> : null}
     </header>
     {sum ? <KindStatusStrip statuses={kindStatuses(sum.cells)} /> : <p className="text-text-dim text-sm">불러오는 중…</p>}
     <section className="border-line bg-card rounded-xl border p-3">
