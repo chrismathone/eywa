@@ -115,4 +115,26 @@ export const TABLES_EXTRA: readonly AssistantTableDoc[] = [
     ko: "원생상담 평점 정기 처리 대기열",
     internal: true,
   },
+  // 경영 분석(원장 전용 · s2_0070~0072 · aywa-next 이식 2026-11-10) · 강사 배정 상한(s2_0073)
+  {
+    name: "management_accounting_reports",
+    label: "회계 자료",
+    ko: "원장이 검토해 저장한 ECOUNT 손익계산서·계정별원장 월 집계(기간마다 한 줄)",
+    notes:
+      "period_start~period_end = 회계 기간 · document = 회사명·원본 파일명·해시·계정별 금액(lines[] = account·category·amount·sourceCell) · document.sourceKind: profit_loss=손익계산서 · ledger=계정별원장 집계(늘 검토 대기, complete=false) · document.complete=true + 합계 대사 일치일 때만 확정 이익률을 계산한다. category: revenue=매출 · labor=인건비 · marketing=광고·행사비 · rent=임차료 · operating=기타 영업비용 · nonoperating=영업외 · exclude=집계 제외. 금액 단위 원. 회사 전체 계정이라 임대 등 다른 사업이 섞일 수 있다. 수납 청구(invoices)와 다른 숫자다.",
+  },
+  { name: "management_accounting_versions", label: "회계 자료 이력", ko: "회계 자료를 저장할 때마다 남는 버전 이력(바뀌지 않음)", notes: "report_id = management_accounting_reports.id · version = 그때 버전 · actor_id = 저장한 원장.", internal: true },
+  {
+    name: "management_source_batches",
+    label: "원본 대조 기록",
+    ko: "MakeEdu 수납통합내역·ECOUNT 월별손익분석과 에이와 집계를 대조한 결과(바뀌지 않는 기록)",
+    notes:
+      "source: makeedu=수납 대조 · ecount=월별 손익 대조. month = 'YYYY-MM' · evidence.facts = 항목별 원본값(sourceValue)·에이와값(aywaValue) · evidence.issues = 확인할 항목(key·title·detail). 같은 원본·같은 비교 자료는 한 번만 저장된다. 같은 종류·달은 created_at이 가장 늦은 것이 현재 기록이고 나머지는 지난 기록이다. 대조 기록은 청구를 고치거나 회계 마감을 확정하지 않는다.",
+  },
+  { name: "management_review_events", label: "대조 확인 이력", ko: "원본 대조 확인 항목마다 원장이 덧붙인 상태·담당·기한·메모(버전)", notes: "batch_id = management_source_batches.id · issue_key = evidence.issues[].key · status: open=미확인 · reviewing=확인 중 · waiting=자료 대기 · recheck=조치 후 다시 대조 필요. 같은 항목은 version이 가장 큰 줄이 현재 상태. '해결됨' 상태는 없다." },
+  { name: "management_collection_devices", label: "수집 PC", ko: "경영 분석 자료를 보내는 학원 PC 연결(90일 만료 · 해제 가능)", notes: "revoked_at = 해제 시각 · expires_at = 만료 · last_seen_at = 마지막 접속 · last_success_at = 마지막 전송 성공 · last_result = 마지막 처리 결과(code: saved=저장).", internal: true },
+  { name: "management_collection_settings", label: "수집기 스위치", ko: "지점별 학원 PC 수집기 사용 여부(줄이 없으면 꺼짐)", internal: true },
+  { name: "management_ai_reviews", label: "경영 AI 검토", ko: "경영 분석 'AI 검토' 버튼 결과 보관(그 달 집계 지표만 보낸 결과)", notes: "month = 'YYYY-MM' · answer = summary·findings[]·missingData[] · model = 쓴 모델 · 같은 달은 created_at이 가장 늦은 것이 화면에 보이는 결과.", internal: true },
+  { name: "teacher_capacity_plans", label: "배정 상한", ko: "원장이 정한 강사별 이번 달 적정 담당 학생 수와 근거", notes: "month = 'YYYY-MM' · max_students = 적정 담당 학생 수(0 = 추가 배정 중지) · basis = 근거. 계획 한도이지 성과 점수가 아니다." },
+  { name: "teacher_capacity_events", label: "배정 상한 이력", ko: "배정 상한 저장 요청 이력(요청 번호마다 한 줄)", internal: true },
 ];

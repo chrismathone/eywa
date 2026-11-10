@@ -80,6 +80,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   class: "반",
   classroom: "강의실",
   tenant_settings: "학원 설정",
+  management_collection_devices: "경영 분석 PC 수집기",
   staff_resume: "직원 이력서",
   intake_token: "QR 접수 링크",
   notice_popup: "팝업 공지",
@@ -695,6 +696,8 @@ export function auditDetail(
     }
     case "sync_agent_manage":
       return str(m.summary) ?? "연동 PC 설정 변경";
+    case "management_collector_manage":
+      return [str(m.summary) ?? "PC 수집기 설정 변경", str(m.name)].filter(Boolean).join(" · ");
     case "integration_sync_toggle":
     case "integration_sheets_toggle":
       return m.enabled === true ? "켜기" : m.enabled === false ? "끄기" : null;

@@ -1,7 +1,7 @@
 "use client";
 import { EmbedLink as Link,EmbedHiddenInput } from "@/components/embed-link";
 import { useState } from "react";
-import { SAMPLE_SAVE_MESSAGE } from "@/features/mockup/sample";
+import { useRouter } from "next/navigation";
 import { capacityRemaining,type TeacherHub,type RecordKind } from "./model";
 import a from "@/components/analytics/analytics.module.css";
 import s from "./workspace.module.css";
@@ -49,14 +49,22 @@ export function TeacherHubWorkspace({data}:{data:TeacherHub}){
       <div className={s.kpis}>{data.grades.distribution.map(bin=><div key={bin.label}><span>{bin.label}</span><strong>{bin.count}명</strong></div>)}</div><p>전월과 같은 학생·시험 종류의 관측 {data.grades.pairs.length}쌍 · 평균 변화 {data.grades.averageChange===null?"비교 자료 없음":`${number(data.grades.averageChange)}%p`}</p>
       <details><summary>비교 학생·시험 종류 확인</summary><div className={s.scroll}><table><thead><tr><th>학생</th><th>시험 종류</th><th>전월</th><th>선택 월</th><th>변화</th></tr></thead><tbody>{data.grades.pairs.map(p=><tr key={`${p.studentId}:${p.kind}`}><td><Link href={`/students/${p.studentId}/hub`}>{names.get(p.studentId)??"학생"}</Link></td><td>{({check:"확인테스트",school:"내신",other:"기타"})[p.kind]??p.kind}</td><td>{number(p.before)}%</td><td>{number(p.after)}%</td><td>{number(p.change)}%p</td></tr>)}</tbody></table></div></details>
     </section>
-    <section id="capacity" className={s.panel}><h2>현재 학생 배정 여력</h2><p className={s.sampleNote}>시안 · 배정 상한 표가 연결되기 전이라 입력은 저장되지 않습니다.</p><p>관리자가 {data.today.slice(0,7)}의 적정 담당 학생 수를 정하면, 현재 중복 제거 담당 학생 수와 비교합니다. 시간표·수준·업무 부담을 검토한 근거를 함께 남겨 주세요.</p><CapacityForm key={`${data.teacher.id}:${data.capacity?.version??0}`} data={data} students={currentStudents.length}/></section>
+    <section id="capacity" className={s.panel}><h2>현재 학생 배정 여력</h2><p>관리자가 {data.today.slice(0,7)}의 적정 담당 학생 수를 정하면, 현재 중복 제거 담당 학생 수와 비교합니다. 시간표·수준·업무 부담을 검토한 근거를 함께 남겨 주세요.</p><CapacityForm key={`${data.teacher.id}:${data.capacity?.version??0}`} data={data} students={currentStudents.length}/></section>
     <section className={s.panel}><h2>연결 범위와 최신성</h2><div className={s.scroll}><table><thead><tr><th>자료</th><th>상태</th><th>건수</th><th>범위</th></tr></thead><tbody>{data.coverage.map(c=><tr key={c.key}><td>{c.label}</td><td>{c.state==="ready"?"조회 연결됨":c.state==="forbidden"?"열람 권한 필요":"조회 확인 필요"}</td><td>{c.count??"미확인"}</td><td>{c.note}</td></tr>)}</tbody></table></div><p className={s.note}>행사 입력자는 기록을 작성한 사람입니다. 참석·등록이 해당 강사의 단독 성과라는 뜻은 아닙니다. 모든 기간의 원본이 이 그래프에 들어온 것은 아닙니다.</p></section>
   </main>;
 }
 
 function CapacityForm({data,students}:{data:TeacherHub;students:number}){
-  const [max,setMax]=useState(data.capacity?String(data.capacity.max_students):""),[basis,setBasis]=useState(data.capacity?.basis??""),[message,setMessage]=useState("");
-  function save(event:React.FormEvent){event.preventDefault();setMessage(SAMPLE_SAVE_MESSAGE);}
+  const router=useRouter(),[max,setMax]=useState(data.capacity?String(data.capacity.max_students):""),[basis,setBasis]=useState(data.capacity?.basis??""),[busy,setBusy]=useState(false),[message,setMessage]=useState("");
+  async function save(event:React.FormEvent){
+    event.preventDefault();setBusy(true);setMessage("");
+    try{
+      const res=await fetch("/api/teachers/capacity",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({teacherId:data.teacher.id,month:data.today.slice(0,7),version:data.capacity?.version??0,requestId:crypto.randomUUID(),maxStudents:max===""?null:Number(max),basis})});
+      const body=await res.json().catch(()=>({}));if(!res.ok)throw Error(body.error??"저장하지 못했습니다");
+      setMessage("배정 기준과 변경 이력을 저장했습니다.");router.refresh();
+    }catch(e){setMessage(e instanceof Error?e.message:"저장하지 못했습니다");}finally{setBusy(false);}
+  }
+  const locked=!data.canWrite||!data.capacityReady||busy;
   const remaining=capacityRemaining(data.capacity,students);
-  return <form onSubmit={save} className={s.capacity}><div className={s.kpis}><div><span>현재 담당</span><strong>{students}명</strong></div><div><span>저장된 상한</span><strong>{data.capacity?`${data.capacity.max_students}명`:"입력 전"}</strong></div><div><span>상한 대비 여력</span><strong>{remaining===null?"기준 입력 후":`${remaining}명`}</strong></div></div><label>적정 담당 학생 수 (0명은 추가 배정 중지)<input type="number" min="0" max="2000" step="1" required value={max} onChange={e=>setMax(e.target.value)} disabled={!data.canWrite}/></label><label>판단 근거·적용 조건<textarea required minLength={2} maxLength={1500} value={basis} onChange={e=>setBasis(e.target.value)} placeholder="과목·학년·반 정원·상담 부담·시간표를 고려한 근거" disabled={!data.canWrite}/></label><button disabled={!data.canWrite}>배정 기준 저장</button><p role="status">{message}</p>{data.capacity?<small>v{data.capacity.version} · {new Date(data.capacity.updated_at).toLocaleString("ko-KR",{timeZone:"Asia/Seoul"})} 저장</small>:null}</form>;
+  return <form onSubmit={save} className={s.capacity}><div className={s.kpis}><div><span>현재 담당</span><strong>{students}명</strong></div><div><span>저장된 상한</span><strong>{data.capacity?`${data.capacity.max_students}명`:"입력 전"}</strong></div><div><span>상한 대비 여력</span><strong>{remaining===null?"기준 입력 후":`${remaining}명`}</strong></div></div><label>적정 담당 학생 수 (0명은 추가 배정 중지)<input type="number" min="0" max="2000" step="1" required value={max} onChange={e=>setMax(e.target.value)} disabled={locked}/></label><label>판단 근거·적용 조건<textarea required minLength={2} maxLength={1500} value={basis} onChange={e=>setBasis(e.target.value)} placeholder="과목·학년·반 정원·상담 부담·시간표를 고려한 근거" disabled={locked}/></label><button disabled={locked}>{busy?"저장 중…":"배정 기준 저장"}</button><p role="status">{message}</p>{data.capacity?<small>v{data.capacity.version} · {new Date(data.capacity.updated_at).toLocaleString("ko-KR",{timeZone:"Asia/Seoul"})} 저장</small>:null}</form>;
 }

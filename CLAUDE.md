@@ -163,6 +163,7 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 | `STAFF` | staff_contract_pdf · staff_contract_pdf_ocr | Claude(OCR은 **Claude 전용**) |
 | `VIDEO` | video_review_judge · video_review_verify | Claude(판정 Haiku · 확인 Sonnet · 밤 배치) |
 | `ASSISTANT` | academy_assistant(학원 비서 — 원장 자연어 질의 · 자체 도구 루프라 `recordUsage`로 센다, 2026-11-06) | Claude 전용(강도 적음 Haiku · 보통 Sonnet · 강함 Opus 5.5) |
+| `MANAGEMENT` | management_analysis(경영 분석 'AI 검토' — 원장 전용 · 명시 버튼 · 선택 월 집계 지표만 · 결과는 `management_ai_reviews`에 보관, 2026-11-10) | Claude 전용(Sonnet 5.5 · 폴백 없음) |
 
 - **키 고르는 순서 = 그룹 키 → 옛 버킷 키(`_CONSULTATIONS`) → 기본 키**(`resolveKeyEnv`). 그룹 키가 아직 없어도
   기본 키로 돌아 **멈추는 기능이 없다**(키를 하나씩 넣는 동안의 안전장치).
