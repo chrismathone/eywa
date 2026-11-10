@@ -8,6 +8,7 @@ import { TEXTAREA_AUTOSIZE } from "@/lib/ui/textarea";
 import { TextbookMentField } from "@/features/billing/textbook-ment";
 import type { StudentOption } from "@/features/billing/server/textbook-queries";
 import type { CatalogOption } from "@/features/billing/server/catalog-queries";
+import { Field } from "@/components/form-field";
 
 export type TextbookDraft = {
   studentId: string;
@@ -144,12 +145,3 @@ export function TextbookFields({
   );
 }
 
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <span className="text-foreground block text-sm font-medium">{label}</span>
-      {children}
-      {error ? <p className="text-danger text-xs">{error}</p> : null}
-    </div>
-  );
-}

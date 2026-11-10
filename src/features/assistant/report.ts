@@ -12,6 +12,7 @@ import { labelCodeColumns } from "./code-labels";
 import { plainRich } from "./rich-text";
 import { ADVICE_METHODS, ADVICE_TOPICS, AdviceCheckSchema, CHECK_FAILED, checkTemplateProblem, type AdviceView } from "./advice";
 import { AdviceTargetsSchema, checkIntegrityProblem } from "./advice-targets";
+import { isRecord } from "@/lib/guards";
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 /**
@@ -282,7 +283,6 @@ function looseAdvice(input: unknown): unknown {
   };
 }
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /**
  * 제목·이름 칸(보고서·차트·표 제목 · 계열·칸 이름 · KPI 이름·값·단위 · 목록 제목 · 담당)은 강조 표시를 벗긴다 —

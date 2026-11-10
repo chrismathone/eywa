@@ -1043,16 +1043,6 @@ export async function getWeeklyScheduleWithStudents(
   });
 }
 
-const DOW_INDEX: Record<string, number> = {
-  sun: 0,
-  mon: 1,
-  tue: 2,
-  wed: 3,
-  thu: 4,
-  fri: 5,
-  sat: 6,
-};
-
 export type TodaySlot = ScheduleSlot & { status: "done" | "ongoing" | "upcoming"; studentIds?: string[] };
 
 export async function getTodaySchedule(options?: { includeStudentIds?: boolean }): Promise<TodaySlot[]> {
@@ -1197,10 +1187,6 @@ export async function getTodaySchedule(options?: { includeStudentIds?: boolean }
       else if (nowMins >= start) status = "ongoing";
       return { ...s, status };
     });
-}
-
-export function dayOfWeekIndex(key: string): number {
-  return DOW_INDEX[key] ?? 7;
 }
 
 /** 퇴사자 표기 — 실패하면 빈 집합(걸러 내지 않고 종전대로 그린다 · 시간표 핫패스 fail-soft). */

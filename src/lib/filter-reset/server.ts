@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { patchMyUiPrefs } from "@/lib/ui-prefs/patch";
 import { FILTER_SEEN_COOKIE, isFilterSeenFresh, parseFilterSeen, SAVED_FILTER_KEYS } from "./rules";
+import { isRecord } from "@/lib/guards";
 
 /**
  * 필터 10분 초기화의 서버 쪽 — 규칙은 [`rules.ts`](./rules.ts).
@@ -97,6 +98,3 @@ async function savedFilterKeysLeft(ns: string, keys: readonly string[]): Promise
   return isRecord(scope) && keys.some((key) => key in scope);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}

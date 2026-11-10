@@ -1,3 +1,4 @@
+import { isRecord } from "@/lib/guards";
 /**
  * 화면 최대화(원장 2026-10-01) — 계정 귀속 보기 설정 `users.ui_prefs.shell.maximized`.
  *
@@ -11,8 +12,6 @@
 export const PAGE_MAXIMIZE_NS = "shell";
 export const PAGE_MAXIMIZE_KEY = "maximized";
 
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  !!v && typeof v === "object" && !Array.isArray(v);
 
 /** `users.ui_prefs` 원본 → 최대화 여부. 모양이 다르면(없거나 깨졌으면) 꺼짐. */
 export function readPageMaximized(uiPrefs: unknown): boolean {

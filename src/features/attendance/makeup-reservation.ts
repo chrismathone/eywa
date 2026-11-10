@@ -32,7 +32,7 @@ import {
 } from "@/features/timetable/lib/periods";
 import { rosterOriginLabel } from "@/features/makeups/roster-merge";
 import { isAutoUnitsSubject, unitsFromMinutes } from "./auto-units";
-import { daysBetween } from "./edit-window";
+import { diffDays } from "@/lib/date-kst";
 import { COUNTABLE_STATUSES } from "./session-units";
 
 export type MakeupReservationStatus = "reserved" | "done";
@@ -282,7 +282,7 @@ export function validateReservationDates(input: {
       ok: false,
       error: "지난 날짜엔 예약할 수 없습니다 — 이미 한 보강은 그날 칸에 '보강'으로 찍으세요",
     };
-  const ahead = daysBetween(input.makeupDate, input.today);
+  const ahead = diffDays(input.today, input.makeupDate);
   if (Number.isFinite(ahead) && ahead > RESERVATION_MAX_AHEAD_DAYS)
     return { ok: false, error: `보강일은 오늘부터 ${RESERVATION_MAX_AHEAD_DAYS}일 안으로 잡으세요` };
   return { ok: true };

@@ -12,7 +12,6 @@
 //    (createEnrollment는 status를 안 만짐) 배정하고도 학생목록(기본 필터=재원)에서 사라진다.
 //  · 과목 이탈(퇴원관리 '수강종료') 판정은 기존 getEndedSubjects를 그대로 태운다 — 그 과목에 활성
 //    수강이 남아있으면 이탈 아님, 하나도 없으면 그 과목 이탈이 맞다(원장 확정). 별도 제외 장치 없음.
-import { fetchAllPaged } from "@/lib/supabase/batch";
 import type { createClient } from "@/lib/supabase/server";
 import { explainDbError } from "@/lib/supabase/db-error";
 
@@ -40,54 +39,6 @@ function toKorean(error: { message?: string; code?: string }, step: string): str
     scope: `classes.enrollmentLifecycle.${step}`,
     fallback: "수강 정보를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.",
   }).message;
-}
-
-/**
- * 반의 활성(end_date NULL) 수강을 date로 종료하고 reason을 남긴다.
- *
- * ⚠️ 미래 시작(start_date > date) 수강에 end_date=date를 넣으면 daterange가 lower>upper라 throw
- * ("range lower bound must be less than or equal to range upper bound") → 그 건만 end_date=start_date
- * (zero-length = 미활성 = 사실상 배정 취소)로 클램프한다. students의 closeActiveEnrollmentsClamped와 동일 원리.
- *
- * @returns studentIds = 종료 영향을 받은 학생(호출부 로그·후속 안내용). 반 하나라 100행 미만이지만
- *   whitelist로 쓰므로 B2 규칙대로 fetchAllPaged(무페이징 select 금지).
- */
-export async function closeClassEnrollments(
-  db: Db,
-  classId: string,
-  date: string,
-  reason: string,
-): Promise<{ error?: string; studentIds: string[] }> {
-  const open = await fetchAllPaged<{ id: string; student_id: string; start_date: string }>(
-    (from, to) =>
-      db
-        .from("enrollments")
-        .select("id, student_id, start_date")
-        .eq("class_id", classId)
-        .is("end_date", null)
-        .range(from, to),
-  );
-  if (open.length === 0) return { studentIds: [] };
-
-  // 정상(시작일 ≤ date) = 일괄 종료.
-  const { error: bulkErr } = await db
-    .from("enrollments")
-    .update({ end_date: date, withdrawal_reason: reason })
-    .eq("class_id", classId)
-    .is("end_date", null)
-    .lte("start_date", date);
-  if (bulkErr) return { error: toKorean(bulkErr, "close"), studentIds: [] };
-
-  // 미래 시작(배정 예정) = 행마다 start_date가 달라 개별 종료.
-  for (const row of open.filter((r) => r.start_date > date)) {
-    const { error } = await db
-      .from("enrollments")
-      .update({ end_date: row.start_date, withdrawal_reason: reason })
-      .eq("id", row.id);
-    if (error) return { error: toKorean(error, "close.future"), studentIds: [] };
-  }
-
-  return { studentIds: [...new Set(open.map((r) => r.student_id))] };
 }
 
 /**

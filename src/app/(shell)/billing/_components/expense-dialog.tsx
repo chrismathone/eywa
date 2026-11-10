@@ -15,6 +15,7 @@ import {
 import type { ExpenseRow } from "@/features/billing/server/expense-queries";
 import { DEFAULT_CURRENCY, formatMoney, roundMoney } from "@/features/billing/currencies";
 import { ExpenseLineItems, lineTotal, type ExpenseItemRow } from "./expense-line-items";
+import { Field } from "@/components/form-field";
 
 const CATEGORIES = ["인건비", "운영비", "매입", "마케팅", "기타"];
 const PAYMENTS = ["카드결제", "현금", "계좌이체", "법인카드"];
@@ -232,12 +233,3 @@ export function ExpenseDialog({
 const inputCls =
   "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <span className="text-foreground block text-sm font-medium">{label}</span>
-      {children}
-      {error ? <p className="text-danger text-xs">{error}</p> : null}
-    </div>
-  );
-}

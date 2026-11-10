@@ -6,8 +6,8 @@
  */
 import { isManualId, type EvaluationConfig, type MetricSetting } from "./config";
 import { missingPoints, pointsFor } from "./scoring";
+import { round1 } from "@/lib/guards";
 
-const round1 = (n: number) => Math.round(n * 10) / 10;
 
 export type PreviewScore = { total: number; max: number; points: Record<string, number | null> };
 /** 원래 수치 표에서 '설정 규칙과 상관없이 합계에서 뺐다'는 표식의 키(값 1) — 지표 id와 겹치지 않는다. */

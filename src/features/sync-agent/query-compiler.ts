@@ -1,9 +1,9 @@
+import { isRecord } from "@/lib/guards";
 type Parameter = { kind: string; ids?: string[]; columns?: string[] };
 export type QueryDefinition = { parts: string[]; modules: string[]; parameters: Parameter[]; replacement?:string };
 export type QueryCatalog = Record<string, QueryDefinition>;
 export class InvalidAgentQuery extends Error {}
 type Fragment = { id: string; parameters: unknown[] };
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const bad = (): never => { throw new InvalidAgentQuery("허용되지 않는 작업입니다."); };
 
 /** All SQL tokens come from a checked-in build catalog. Parameter values never become SQL. */

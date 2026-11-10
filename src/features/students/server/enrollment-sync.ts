@@ -98,7 +98,7 @@ export async function clearOnHoldForActiveEnrollments(
  * ⚠️ 미래 시작(배정 예정) 수강을 date로 종료하면 daterange(start_date, date)가 lower>upper라 throw
  * ("range lower bound must be less than or equal to range upper bound") → end_date=max(start_date, date)로
  * 클램프(미래 시작 건은 start_date로 종료 = zero-length = 사실상 배정 취소).
- * students의 closeActiveEnrollmentsClamped·classes의 closeClassEnrollments와 동일 원리.
+ * students의 closeActiveEnrollmentsClamped와 동일 원리.
  */
 export async function endEnrollmentById(
   supabase: Supabase,

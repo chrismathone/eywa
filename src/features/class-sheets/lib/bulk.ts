@@ -7,12 +7,6 @@
 //    전부 빠져 항상 0건이 되는 사고가 원스크린에서 실제로 났다(grid.ts 교훈).
 //  · 읽기 전용 행(기록만 남은 historical·수강 대상 아님)은 제외 — 편집 자체가 막힌 행이다.
 
-/**
- * 상태 제안 칩 — 개별 셀(StatusCell)과 일괄 입력(RosterBulk)이 **같은 어휘**를 제안해야 해서 단일 소스.
- * enum이 아니다(자유 입력 허용 — 운영 어휘 진화). 과목/학년 같은 운영 enum 규칙 대상도 아님.
- */
-export const STATUS_CHIPS = ["완", "결석", "안침"] as const;
-
 export type BulkRosterRow = {
   studentId: string;
   /** 이 교시의 수강 대상인가(아니면 입력 불가) */

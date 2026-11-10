@@ -1,5 +1,6 @@
 import { attendanceRate } from "@/lib/calc/attendance";
 import type { StatsPeriod } from "@/features/stats/period";
+import { round1 } from "@/lib/guards";
 
 /**
  * **등원율 추이**(원장 2026-10-20 *"상세 눌렀을때 추이를 볼 수 없는곳 모두 추가해보자"*) — RPC `attendance_rate_buckets`(0387a)가 준
@@ -15,7 +16,6 @@ export type RateTrend = {
   groups: { group: string; rate: (number | null)[]; total: number[] }[];
 };
 
-const round1 = (n: number) => Math.round(n * 10) / 10;
 
 export function rateTrend(input: {
   rows: readonly RateBucketRow[];

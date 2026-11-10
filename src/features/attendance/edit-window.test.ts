@@ -2,21 +2,21 @@ import { describe, expect, it } from "vitest";
 import {
   ATTENDANCE_EDIT_WINDOW_DAYS,
   attendanceLockMessage,
-  daysBetween,
   isWithinAttendanceEditWindow,
 } from "./edit-window";
+import { diffDays } from "@/lib/date-kst";
 
 const TODAY = "2026-07-21";
 
-describe("daysBetween", () => {
+describe("diffDays(lib/date-kst) — 7일 잠금이 쓰는 일수 차", () => {
   it("일수 차를 정확히 센다(달·월 경계 포함)", () => {
-    expect(daysBetween("2026-07-21", "2026-07-21")).toBe(0);
-    expect(daysBetween("2026-07-21", "2026-07-14")).toBe(7);
-    expect(daysBetween("2026-07-01", "2026-06-30")).toBe(1);
-    expect(daysBetween("2026-03-01", "2026-02-28")).toBe(1); // 2026는 평년
+    expect(diffDays("2026-07-21", "2026-07-21")).toBe(0);
+    expect(diffDays("2026-07-14", "2026-07-21")).toBe(7);
+    expect(diffDays("2026-06-30", "2026-07-01")).toBe(1);
+    expect(diffDays("2026-02-28", "2026-03-01")).toBe(1); // 2026는 평년
   });
   it("이상한 날짜는 NaN", () => {
-    expect(Number.isNaN(daysBetween("2026-13-99", TODAY))).toBe(true);
+    expect(Number.isNaN(diffDays(TODAY, "2026-13-99"))).toBe(true);
   });
 });
 

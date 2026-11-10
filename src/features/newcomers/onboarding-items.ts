@@ -12,6 +12,8 @@
  *    (필수처럼 세면 매달 전원이 빨갛게 된다). 체크는 그대로 할 수 있다.
  */
 
+import { diffDays } from "@/lib/date-kst";
+
 export const ONBOARDING_ANCHORS = ["enrolled", "firstClass"] as const;
 export type OnboardingAnchor = (typeof ONBOARDING_ANCHORS)[number];
 
@@ -64,9 +66,9 @@ export function shiftDate(date: string, days: number): string {
   return new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
-/** 두 날짜의 달력일 차이(뒤 − 앞). */
+/** 달력일 차(to − from) — 공용 `diffDays`(lib/date-kst) 그대로. 이 이름으로 쓰는 곳이 많아 별칭으로 남긴다. */
 export function daysBetween(from: string, to: string): number {
-  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+  return diffDays(from, to);
 }
 
 export type OnboardingItemStatus =

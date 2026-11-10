@@ -1,8 +1,7 @@
 import { z } from "zod";
+import { isRecord } from "@/lib/guards";
 
 export const payslipManagerIdsSchema = z.array(z.string().uuid()).max(80);
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** Inspect RAW presence before default merging. Explicit invalid values deny; only absence inherits. */
 export function effectivePayslipManagerIds(specialAccess: unknown): string[] {

@@ -3,7 +3,7 @@ import { cache } from "react";
 
 import { createClient } from "@/lib/supabase/server";
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { kstToday } from "@/lib/date-kst";
+import { kstToday, diffDays } from "@/lib/date-kst";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import {
   NEWCOMER_WINDOW_DAYS,
@@ -95,10 +95,6 @@ function ymd(value: unknown): string | null {
   return s.length >= 10 ? s.slice(0, 10) : null;
 }
 
-function daysBetween(from: string, to: string): number {
-  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
-}
-
 export const getNewcomers = cache(async (): Promise<NewcomersView> => loadNewcomers(await createClient(), kstToday()));
 
 /**
@@ -181,7 +177,7 @@ export async function loadNewcomers(
       school: s.school,
       grade: s.grade,
       enrolledOn,
-      elapsedDays: daysBetween(enrolledOn, today),
+      elapsedDays: diffDays(enrolledOn, today),
       bucket: bucketOf(enrolledOn, today),
     };
     const subjMap = bySubject.get(s.id);

@@ -22,6 +22,7 @@ import {
   type TuitionCatalogRow,
 } from "@/features/billing/tuition-catalog";
 import { writeLockedPlaceholder } from "@/lib/write-lock";
+import { Field } from "@/components/form-field";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const inputCls =
@@ -34,15 +35,6 @@ function SubmitBtn({ label }: { label: string }) {
       {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
       {label}
     </Button>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <span className="text-foreground block text-sm font-medium">{label}</span>
-      {children}
-    </div>
   );
 }
 

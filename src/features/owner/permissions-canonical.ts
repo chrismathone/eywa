@@ -3,6 +3,7 @@ import { sortKeysDeep } from "@/lib/stable-json";
 import type { PermissionsSettings } from "./settings-types";
 import { effectivePayslipManagerIds } from "./payslip-permissions";
 import { studentStatusManagerIds } from "./student-status-permissions";
+import { isRecord } from "@/lib/guards";
 
 /**
  * 역할·권한 설정의 표준 문자열 — "같은 저장값인가"를 가리는 기준(기준 token의 재료). 순수 함수.
@@ -40,8 +41,6 @@ export function permissionsCanonical(permissions: PermissionsSettings): string {
   });
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 const text = (value: unknown): string => (typeof value === "string" ? value : JSON.stringify(value ?? null));
 
 /** 줄을 칸 순으로 놓는다 — 같은 칸의 줄끼리는 저장된 차례 그대로(차례가 곧 "어느 줄이 적용되나"다). */

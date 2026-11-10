@@ -12,6 +12,7 @@
  *   NEW는 묶음이 바뀐 그날에만 보이고, 고정 문장에는 붙지 않는다(적대 리뷰 2026-11-09). 본 것은 브라우저에 둔다(기기를 바꾸면 처음부터 — 편의 표시라 계정에 두지 않았다).
  */
 import { ASSISTANT_SUGGESTIONS } from "./protocol";
+import { diffDays } from "@/lib/date-kst";
 
 export type AssistantSuggestion = {
   /** 누르면 그대로 묻는 질문. */
@@ -84,10 +85,6 @@ function md(ymd: string): string {
   const [, m, d] = ymd.split("-").map(Number);
   return `${m}월 ${d}일`;
 }
-function daysBetween(from: string, to: string): number {
-  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
-}
-
 /** 신호 → 점수 매긴 질문들(심하지 않은 신호는 내지 않는다). */
 export function scoreSignals(s: SuggestionSignals, today: string): Scored[] {
   const out: Scored[] = [];
@@ -166,7 +163,7 @@ export function scoreSignals(s: SuggestionSignals, today: string): Scored[] {
   }
   const e = s.exams;
   if (e && e.schools > 0 && e.earliest) {
-    const dday = daysBetween(today, e.earliest);
+    const dday = diffDays(today, e.earliest);
     out.push({
       key: "exams",
       score: 45 + (dday <= 7 ? 20 : 0),

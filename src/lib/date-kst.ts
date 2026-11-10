@@ -176,6 +176,17 @@ export function weekdayIndexOf(ymd: string): number {
   return new Date(Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1)).getUTCDay();
 }
 
+/**
+ * 두 날짜(YYYY-MM-DD)의 일수 차 = **to − from**(같은 날 0 · to가 뒤면 양수). 날짜가 이상하면 NaN.
+ * UTC 산술이라 DST·TZ 무관. 🔴 인자 순서는 "어디서 → 어디까지" — 옛 `daysBetween(a, b)`(출결 7일 잠금 = a − b)와 반대다.
+ */
+export function diffDays(from: string, to: string): number {
+  const a = Date.parse(`${from}T00:00:00Z`);
+  const b = Date.parse(`${to}T00:00:00Z`);
+  if (Number.isNaN(a) || Number.isNaN(b)) return Number.NaN;
+  return Math.round((b - a) / 86_400_000);
+}
+
 /** YYYY-MM-DD에 n일 더한 날짜(YYYY-MM-DD). UTC 산술이라 DST·TZ 영향 없음. n 음수=이전. */
 export function addDays(ymd: string, n: number): string {
   const [y, m, d] = ymd.split("-").map(Number);

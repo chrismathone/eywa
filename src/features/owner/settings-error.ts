@@ -1,4 +1,5 @@
 import { settingFieldLabel } from "./settings-diff";
+import { isRecord } from "@/lib/guards";
 
 /**
  * 학원 설정 저장의 **화면용 오류 문구** — 순수(Vitest). 일반 지점 화면에 내부 식별자를 내보내지 않는다.
@@ -90,7 +91,6 @@ const NESTED_LABELS: Record<string, string> = {
   number: "계좌번호",
 };
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /**
  * 이름 표에서 **제 속성인 문자열만** 꺼낸다 — 키는 사용자가 보낸 경로에서 온다. `constructor`·`toString` 같은 키로

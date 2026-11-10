@@ -19,6 +19,7 @@
  */
 
 import { makeupStudentIds } from "@/features/attendance/input-roster";
+import { round1 } from "@/lib/guards";
 
 /** 이 쌍이 줄로 서는 근거. 하나 이상이다. */
 export type MonthRosterSource = "enrolled" | "recorded" | "reserved";
@@ -139,7 +140,6 @@ export function monthRosterPairs(input: {
   return [...out.values()].sort((a, b) => a.classId.localeCompare(b.classId) || a.studentId.localeCompare(b.studentId));
 }
 
-const round1 = (n: number) => Math.round(n * 10) / 10;
 
 /**
  * 회차 행이 아직 없는 줄의 **화면용 id** — 표·초안·선택이 전부 `row.id`를 키로 쓰므로 유일하고 안정적인 값이 필요하다.
