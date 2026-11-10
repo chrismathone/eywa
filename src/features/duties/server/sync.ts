@@ -8,6 +8,7 @@ import { isReportTrackedSubject } from "@/features/dashboard/report-subjects";
 import { isTestClass, type WorkEnrollment } from "@/features/dashboard/overview/work-targets";
 import { buildDailyDuties, type DutyAttendance, type DutyClass, type DutyDraft, type DutyReport, type DutySchedule } from "../model/daily";
 import { DUTY_KIND_KEYS, DUTY_KINDS } from "../kinds";
+import { loadSubjectManagers } from "./managers";
 
 const DAILY_KINDS = DUTY_KIND_KEYS.filter((k) => DUTY_KINDS[k].period === "daily");
 
@@ -120,11 +121,17 @@ export async function openPastCycles(tenantId: string): Promise<string[]> {
   return ((data ?? []) as string[]).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
 }
 
-/** 늦음 사다리(할 일 열기·닫기 · escalation 단계) + 일별 스냅숏. 맞춤 뒤에 부른다. */
-export async function escalateAndSnapshot(tenantId: string, days: readonly string[]): Promise<{ taskOpened: number; taskClosed: number }> {
+/**
+ * 늦음 사다리(할 일 열기·닫기 · escalation 단계) + 윗단계 배정(3일 → 과목 관리자 · 7일 → 원장 · s2_0052 `duty_escalate_up`) + 일별 스냅숏. 맞춤 뒤에 부른다.
+ * 과목 관리자 명단은 앱의 판정(운영실 배정)이라 여기서 읽어 넘긴다. 윗단계 함수가 아직 없으면(#95) 그 몫만 건너뛴다.
+ */
+export async function escalateAndSnapshot(tenantId: string, days: readonly string[], settings: TenantSettings): Promise<{ taskOpened: number; taskClosed: number }> {
   const admin = createAdminClient();
   const { data, error } = await admin.rpc("duty_escalate", { p_tenant: tenantId });
   if (error) throw new Error(`의무 늦음 사다리: ${error.message}`);
+  const managers = await loadSubjectManagers(tenantId, settings);
+  const up = await admin.rpc("duty_escalate_up", { p_tenant: tenantId, p_subjects: Object.fromEntries(Object.entries(managers).map(([key, m]) => [key, { label: m.label, managers: m.ids }])) });
+  if (up.error && up.error.code !== "PGRST202" && up.error.code !== "42883") throw new Error(`의무 윗단계 배정: ${up.error.message}`);
   for (const day of days) {
     const snap = await admin.rpc("duty_snapshot", { p_tenant: tenantId, p_day: day });
     if (snap.error) throw new Error(`의무 스냅숏(${day}): ${snap.error.message}`);

@@ -249,6 +249,7 @@ export const AUDIT_ACTIONS = {
   approval_comment_delete: "전자결재 댓글 삭제",
   work_request_create: "업무 요청",
   work_request_act: "업무 요청 처리",
+  duty_note_add: "업무 완성도 관리 기록",
   // 연차 조정(0252a) — 결재 문서가 아니라 **자격(부여 일수)** 을 바꾸는 행위라 별도 키다.
   // 남의 연차를 늘리고 줄이는 일이라 누가·언제·왜가 반드시 남아야 한다.
   leave_adjust: "연차 조정",

@@ -2,21 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Toolbar, ToolbarChip, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
-import { ADMIN_PERIODS, buildAttention, distinctStudents, foldMatrixRows, lateByKind, type AdminPeriod, type AttentionRow, type DutyAdminData, type DutyAdminScope, type LateItem, type MatrixRow, type SubjectFilter } from "../../view-admin";
-import { buildTree, foldAttention, judge, NO_CLASS, NO_OWNER, NO_SUBJECT, rootOfTree, type TreeSubject } from "../../view-admin-levels";
+import { ADMIN_PERIODS, buildAttention, distinctStudents, lateByKind, type AdminPeriod, type AttentionRow, type DutyAdminData, type DutyAdminScope, type LateItem, type SubjectFilter } from "../../view-admin";
+import { attentionItems, buildTree, foldAttention, NO_CLASS, NO_OWNER, NO_SUBJECT, rootOfTree, type TreeSubject } from "../../view-admin-levels";
 import type { DutyWork } from "../duty-work-context";
 import { AdminAttention } from "./admin-attention";
-import { AdminKpiRow } from "./admin-subject";
+import { ClassPane, StudentPane, SubjectLevel } from "./admin-panes";
+import { NoteButton } from "./admin-note";
 import { DutyRequestScope, LateRequestButton } from "./admin-late-request";
 import { AdminOwnerBoard } from "./admin-owner-board";
-import { AdminMatrix } from "./admin-matrix";
 import { AdminOverlay } from "./admin-overlay";
 import { AdminTree, ROOT, type Sel } from "./admin-tree";
-import { VerdictLine } from "./admin-verdict";
 import { TeacherLevel } from "./admin-level-teacher";
-import { ClassLevel } from "./admin-level-class";
-import { StudentLevel } from "./admin-level-student";
-import { useStudentsPayload } from "./use-students";
 
 /** now = 서버가 이 재료를 만든 시각(지난 날 수·기준 시각 비교에 쓴다 — 그리는 중에 시계를 읽지 않는다). */
 export type Loaded = { period: AdminPeriod; today: string; now: string; range: { from: string; to: string; label: string }; data: DutyAdminData };
@@ -42,6 +38,8 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [work, setWork] = useState<{ seq: number; work: DutyWork } | null>(null);
   const [tick, setTick] = useState(0);
+  const [nonce, setNonce] = useState(0); // 관리 기록을 남긴 뒤 지금 기간을 다시 받는다
+  const seen = useRef(0);
   const periodRef = useRef(period);
   useEffect(() => { periodRef.current = period; }, [period]);
 
@@ -64,10 +62,10 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
     timer = setTimeout(() => void loop(gen), REFRESH_MS);
     const onVisible = () => { if (document.visibilityState === "visible") { gen += 1; if (timer) clearTimeout(timer); void loop(gen); } };
     document.addEventListener("visibilitychange", onVisible);
-    if (!loaded[period]) void load(period);
+    if (!loaded[period] || seen.current !== nonce) { seen.current = nonce; void load(period); }
     return () => { alive = false; if (timer) clearTimeout(timer); document.removeEventListener("visibilitychange", onVisible); };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 기간이 바뀔 때만 새로 받는다(받아 둔 기간은 그대로).
-  }, [period]);
+  }, [period, nonce]);
 
   const cur = loaded[period];
   const nowMs = cur ? Date.parse(cur.now) : 0;
@@ -117,6 +115,9 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
   const openChild = (r: AttentionRow) => { if (r.studentId) pickStudent(r.studentId, r.title); else if (r.classId) openWork({ href: `/classes/${r.classId}`, title: r.title }); };
   const expandOf = (list: "live" | "inh", all: AttentionRow[], rows: AttentionRow[]) => { const r = rows.find((x) => `${list}:${x.key}` === openKey); return r ? { key: r.key, rows: childrenOf(all, r) } : null; };
   const attention = fold(attentionAll); const inheritedRows = fold(inheritedAll);
+  // 관리 기록(확인 · 사유 · 면제) — 전체 권한에게만. 줄이 가리키는 의무 전부에 남긴다.
+  const noteFor = (all: LateItem[], r: AttentionRow) => (scope.canNote ? <NoteButton title={[r.teacher, r.className, r.title].filter((x, i, a) => x && a.indexOf(x) === i).join(" · ")} items={attentionItems(all, r)} onSaved={() => { setLoaded((all) => (all[period] ? { [period]: all[period] } : {})); setNonce((n) => n + 1); }} /> : null);
+  const preLive = !!cur?.data.liveFrom && cur.range.to < new Date(Date.parse(cur.data.liveFrom) + 9 * 3_600_000).toISOString().slice(0, 10);
   const lateSection = <section className="border-line-faint rounded-xl border p-2">
     <div className="flex items-center gap-2 px-2 py-1">
       <h4 className="min-w-0 flex-1 text-sm font-bold">현재 지연 <span className="text-text-dim text-xs font-medium">{distinctStudents(liveHere)}명 · {liveHere.length}건 · 기간 무관</span></h4>
@@ -124,7 +125,7 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
     </div>
     {/* 처리 요청은 선생님 단위다 — 전체·과목 단계는 줄(선생님)마다, 선생님·반 단계는 위 단추 하나(지금 보이는 범위의 지연). */}
     <AdminAttention rows={attention} onOpen={openRow} expand={expandOf("live", attentionAll, attention)} onOpenChild={openChild}
-      action={ownerNode ? undefined : (r) => <LateRequestButton owner={{ id: r.ownerId, name: r.title }} items={liveHere.filter((it) => it.ownerId === r.ownerId)} />} />
+      action={(r) => <>{ownerNode ? null : <LateRequestButton owner={{ id: r.ownerId, name: r.title }} items={liveHere.filter((it) => it.ownerId === r.ownerId)} />}{noteFor(liveHere, r)}</>} />
   </section>;
   const synced = cur?.data.syncedAt ?? null;
   const stale = !!cur && (!synced || nowMs - Date.parse(synced) > STALE_MS);
@@ -137,6 +138,7 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
       <ToolbarChip active={lateOnly} onClick={() => setLateOnly((v) => !v)} className="ml-auto">지연만</ToolbarChip>
     </Toolbar>
     {stale ? <p className="bg-amber-soft text-amber rounded-lg px-3 py-2 text-sm font-semibold">{synced ? `장부 기준 ${kstStamp(synced)} · 이후 저장분은 미반영일 수 있음` : "장부 기준 시각 없음 · 수치가 실제와 다를 수 있음"}</p> : null}
+    {preLive ? <p className="bg-bg-soft text-text-dim rounded-lg px-3 py-2 text-sm font-semibold">평가 개시 전 기간 · 기록으로 재구성한 참고 수치(현재 운영 중인 반 · 현재 담임 기준)</p> : null}
     {!cur ? <p className="text-text-dim text-sm">{failed[period] ? "조회 실패 · 잠시 후 다시 열어 주세요" : "불러오는 중…"}</p> : null}
 
     {cur ? <div className="grid gap-3 lg:grid-cols-[260px_minmax(0,1fr)] lg:items-start">
@@ -163,41 +165,11 @@ export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded
         {!sel.studentId && subjectNode && ownerNode ? lateSection : null}
         {!sel.studentId && inheritedHere.length ? <section className="border-line-faint rounded-xl border p-2">
           <h4 className="px-2 py-1 text-sm font-bold">이관 <span className="text-text-dim text-xs font-medium">{distinctStudents(inheritedHere)}명 · {inheritedHere.length}건 · 평가 개시 전 기한 경과 · 평가 제외</span></h4>
-          <AdminAttention rows={inheritedRows} onOpen={(r) => (r.studentId || classNode ? openChild(r) : toggle("inh", r.key))} expand={expandOf("inh", inheritedAll, inheritedRows)} onOpenChild={openChild} muted />
+          <AdminAttention rows={inheritedRows} onOpen={(r) => (r.studentId || classNode ? openChild(r) : toggle("inh", r.key))} expand={expandOf("inh", inheritedAll, inheritedRows)} onOpenChild={openChild} muted action={(r) => noteFor(inheritedHere, r)} />
         </section> : null}
       </main>
     </div> : null}
 
     {work ? <AdminOverlay key={work.seq} work={work.work} onClose={() => setWork(null)} /> : null}
   </div></DutyRequestScope>;
-}
-
-/** 과목(또는 전체) 단계 — 요약 칸 넷 · 판정 · (전체 단계 · 학원 전체를 보는 사람) 과목 관리자별 현황 · 지금 지연(먼저 손댈 것) · 선생님 × 종류 매트릭스(이름 = 그 선생님 · 칸 = 그 선생님의 그 종류). */
-function SubjectLevel({ node, lateOnly, avgLabel, lateText, attention, board, onOwner }: { node: TreeSubject; lateOnly: boolean; avgLabel: string; lateText: string; attention: React.ReactNode; board: React.ReactNode; onOwner: (ownerId: string, kind: string | null) => void }) {
-  const rowsAll: MatrixRow[] = node.owners.map((o) => ({ ownerId: o.ownerId, name: o.name, cells: o.cells, all: o.cell }));
-  const rows = lateOnly ? rowsAll.filter((r) => r.all.late) : rowsAll;
-  return <div className="grid gap-4">
-    <AdminKpiRow cell={node.cell} lateText={lateText} />
-    <VerdictLine v={judge(node.cell)} />
-    {board}
-    {attention}
-    <section className="border-line-faint rounded-xl border p-2"><AdminMatrix rows={rows} total={foldMatrixRows(rows)} avg={{ pct: node.cell.pct, label: avgLabel }} onCell={onOwner} /></section>
-  </div>;
-}
-
-/** 반 단계 — 그 반 · 그 담당의 집계(트리 줄과 같은 수) 한 번. 반 없는 의무(신규생 정착)는 반 조건 없이 그 담당의 집계에서 반 없는 줄만 · '담당 미정'은 담당자 없는 의무만. */
-function ClassPane({ period, tick, classNode, owner, fetchSubject, teacher, avg, kind, onStudent }: {
-  period: AdminPeriod; tick: number; classNode: { classId: string; name: string; cell: MatrixRow["all"] }; owner: string; fetchSubject: string | null; teacher: string; avg: { pct: number | null; label: string } | null; kind: string | null; onStudent: (studentId: string, name: string) => void;
-}) {
-  const classId = classNode.classId === NO_CLASS ? null : classNode.classId;
-  const { data, failed } = useStudentsPayload(period, owner === NO_OWNER ? { classId, ownerNone: true, subject: fetchSubject } : { classId, owner, subject: fetchSubject }, tick);
-  return <ClassLevel cls={classNode} teacher={teacher} avg={avg} payload={data} failed={failed} kind={kind} onStudent={onStudent} />;
-}
-
-/** 학생 단계 — 그 학생의 집계(반·담당 불문 · 신규생 정착처럼 반 없는 의무도) 한 번. */
-function StudentPane({ period, tick, studentId, fetchSubject, late, nowMs, onWork }: {
-  period: AdminPeriod; tick: number; studentId: string; fetchSubject: string | null; late: LateItem[]; nowMs: number; onWork: (w: DutyWork) => void;
-}) {
-  const { data } = useStudentsPayload(period, { studentId, subject: fetchSubject }, tick);
-  return <StudentLevel studentId={studentId} payload={data} late={late} nowMs={nowMs} onWork={onWork} />;
 }

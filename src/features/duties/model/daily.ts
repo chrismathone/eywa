@@ -114,7 +114,8 @@ export function buildDailyDuties(input: DailyInput): DutyDraft[] {
     out.push({ kind: "report_write", period: "daily", cycle: date, subjectKey: key,
       studentId: classPost ? null : ob.studentId, classId: ob.classId, subject: cls?.subject ?? null, ...owner,
       dueAt: DAILY_DUE.report_write(date), status: ob.written ? "done" : "open", source: ob.written ? (classPost ? "class_post" : "lesson_report") : null,
-      doneAt: ob.written ? report?.createdAt ?? null : null });
+      // 반 알림장은 올린 날(posted_on = 그 수업일)만 남는다 — 완료 시각을 그날 정오로 적는다(비워 두면 장부를 맞춘 시각이 들어가 지난 날을 다시 만들 때 전부 '지연 완료'가 된다).
+      doneAt: ob.written ? (classPost ? `${date}T12:00:00+09:00` : report?.createdAt ?? null) : null });
     if (classPost || !ob.written || !input.classnoteOn || cls?.reportSource !== "lesson") continue;
     const recalled = report?.recalled === true;
     const status: DutyStatus = recalled || ob.status === "too_old" ? "void" : ob.status === "success" ? "done" : "open";

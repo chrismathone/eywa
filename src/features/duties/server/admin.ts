@@ -9,6 +9,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { subjectLabelRecord } from "@/features/owner/subjects";
 import { programSubjectsOf, subjectGroupOf } from "@/features/students/enrollment/program";
 import type { DutyPeriod, DutyStatus } from "../kinds";
+import { loadLatestNotes } from "./notes";
 import type { ClassInfo, Counts, DutyAdminData, DutyAdminScope, LateItem, OwnerInfo, RollupClass, RollupOwnerKind, RollupStudent, StudentInfo } from "../view-admin";
 
 /**
@@ -22,14 +23,15 @@ export async function resolveDutyAdminScope(viewer: CurrentUser): Promise<DutyAd
   // 🔴 읽기 강사뷰는 scoped를 readonly로 캡해 '담당'이 사라진다 — `readonlyViewErasedScope`가 캡 이전 값이 scoped였는지 알려 준다(perm-matrix 규약 · 재리뷰 2026-11-10).
   //    담당자는 강사뷰면 그 강사(#154).
   const ownerId = level === "scoped" || erased ? (effective ?? viewer).id : null;
-  if (!bundle.subjectScoped) return { subjects: null, labels, ownerId };
+  const canNote = level === "full" && !ownerId;
+  if (!bundle.subjectScoped) return { subjects: null, labels, ownerId, canNote };
   // 담당 과목은 자유 글자일 수 있다(키·라벨·'EiE'…) — 운영실과 같은 읽기(`sliceGroupsOf`)로 묶음을 읽고, 그 묶음에 드는 설정 과목 키를 전부 허용한다.
   const programs = programSubjectsOf(labels);
   const groupOf = (key: string | null | undefined) => subjectGroupOf(key, programs);
   const groupsOf = sliceGroupsOf(settings.operations.subjects.map((s) => ({ key: s.key, label: s.label })), groupOf);
   const groups = new Set(bundle.subjects.flatMap((s) => groupsOf(s)));
   const subjects = settings.operations.subjects.map((s) => s.key).filter((key) => { const g = groupOf(key); return !!g && groups.has(g); });
-  return { subjects, labels, ownerId };
+  return { subjects, labels, ownerId, canNote };
 }
 
 const num = (v: unknown) => Number(v ?? 0);
@@ -55,13 +57,14 @@ export async function loadDutyAdmin(tenantId: string, from: string, to: string, 
     loadDutySettings(tenantId),
   ]);
   const liveMs = settings.liveFrom ? Date.parse(settings.liveFrom) : null;
-  const late = lateRaw.map((it): LateItem => ({ ...it, inherited: liveMs !== null && Date.parse(it.dueAt) < liveMs }));
+  const notes = await loadLatestNotes(tenantId, lateRaw.map((it) => it.id));
+  const late = lateRaw.map((it): LateItem => ({ ...it, inherited: liveMs !== null && Date.parse(it.dueAt) < liveMs, note: notes[it.id] ?? null }));
   const ownerKind = ok.map((r): RollupOwnerKind => ({ ownerId: r.owner_id, subject: r.subject, kind: r.kind, period: r.period, ...counts(r) }));
   const classes = cls.map((r): RollupClass => ({ classId: r.class_id, ownerId: r.owner_id, subject: r.subject, ...counts(r) }));
   const ownerIds = [...new Set([...ownerKind.map((r) => r.ownerId), ...classes.map((r) => r.ownerId), ...late.map((r) => r.ownerId)].filter((id): id is string => !!id))];
   const classIds = [...new Set(classes.map((r) => r.classId).filter((id): id is string => !!id))];
   const [owners, classInfo] = await Promise.all([loadOwners(tenantId, ownerIds), loadClasses(tenantId, classIds)]);
-  return { ownerKind, classes, late, owners, classInfo, syncedAt: settings.syncedAt };
+  return { ownerKind, classes, late, owners, classInfo, syncedAt: settings.syncedAt, liveFrom: settings.liveFrom };
 }
 
 type LateRow = { id: string; kind: string; period: DutyPeriod; cycle: string; status: DutyStatus; due_at: string; done_at: string | null; void_reason: string | null; owner_id: string | null;

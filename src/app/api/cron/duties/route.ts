@@ -9,6 +9,7 @@ import { escalateAndSnapshot, openPastCycles, syncDailyDuties } from "@/features
 import { syncMonthlyDuties } from "@/features/duties/server/monthly-sync";
 import { claimDutySync, finishDutySync, type DutyClaim } from "@/features/duties/server/live-sync";
 import { syncDays } from "@/features/duties/model/sync-window";
+import { backfillDutyMonth } from "@/features/duties/server/backfill";
 
 /**
  * 의무 장부 30분 맞춤(s2_0043) — 지점마다 **오늘**의 일간 의무를 만들고(시간표·명단 · AI 없음) 원 표의 사실로 닫는다.
@@ -31,6 +32,9 @@ export async function GET(req: Request) {
   // 월간·건별(상담 · 신규생 콜)은 한 시간에 한 번(:05 실행)이면 충분하다 — 상담 의무 판정이 반·수강·시간표를 다 읽는다.
   const monthlyTurn = new Date().getUTCMinutes() < 30 || req.headers.get("x-duties-monthly") === "1";
   const yesterday = addDays(today, -1);
+  // 한 달 치 다시 만들기(`?month=YYYY-MM` — 같은 비밀값 · 사람이 부른다): 평소 맞춤 대신 그 달만 만든다. 화면의 맞춤과 같은 잠금.
+  const month = new URL(req.url).searchParams.get("month");
+  if (month) return backfill(month, [...new Set(users.map((u) => u.tenant_id))]);
   let drafts = 0, taskOpened = 0, taskClosed = 0, failed = 0, skipped = 0;
   const synced: Record<string, number> = {};
   for (const tenantId of new Set(users.map((u) => u.tenant_id))) {
@@ -46,7 +50,7 @@ export async function GET(req: Request) {
       const days = syncDays(got.days, today, [...(await openPastCycles(tenantId)), ...(kstHour < 3 ? [yesterday] : []), today]);
       for (const day of days) drafts += (await syncDailyDuties(tenantId, day, settings)).drafts;
       if (monthlyTurn || got.monthly) { const m = await syncMonthlyDuties(tenantId, today, settings); drafts += m.counsel + m.exam + m.newcomer; }
-      const r = await escalateAndSnapshot(tenantId, days);
+      const r = await escalateAndSnapshot(tenantId, days, settings);
       taskOpened += r.taskOpened;
       taskClosed += r.taskClosed;
       synced[tenantId] = days.length;
@@ -63,4 +67,25 @@ export async function GET(req: Request) {
     }
   }
   return NextResponse.json({ ok: failed === 0, today, synced, drafts, taskOpened, taskClosed, failed, skipped }, { status: failed ? 500 : 200 });
+}
+
+async function backfill(month: string, tenants: string[]) {
+  const out: Record<string, unknown> = {};
+  let failed = 0;
+  for (const tenantId of tenants) {
+    let claim: DutyClaim | null = null;
+    try {
+      const got = await claimDutySync(tenantId, true);
+      if (!got.locked) { out[tenantId] = "busy"; failed++; continue; }
+      claim = got;
+      out[tenantId] = await backfillDutyMonth(tenantId, month, await getTenantSettingsByTenantId(tenantId, { failOnReadError: true }));
+      // 변경 기록은 지우지 않는다(실패로 마무리 = 줄을 그대로 둔다) — 이 길은 그 달만 만들었지 적힌 날을 맞춘 것이 아니다.
+      await finishDutySync(tenantId, claim, false); claim = null;
+    } catch (error) {
+      if (claim) await finishDutySync(tenantId, claim, false).catch(() => undefined);
+      failed++; out[tenantId] = "failed";
+      reportError(error, { scope: "cron.duties.backfill", tenantId });
+    }
+  }
+  return NextResponse.json({ ok: failed === 0, month, out }, { status: failed ? 500 : 200 });
 }

@@ -1,3 +1,4 @@
+import type { DutyNote } from "./notes";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { DUTY_KIND_KEYS, dutyKindLabel, type DutyItemView, type DutyPeriod } from "./kinds";
 import { weekDaysOf } from "./view";
@@ -20,11 +21,12 @@ export type OwnerInfo = Record<string, string>;
 export type ClassInfo = Record<string, { name: string; subject: string | null; teacherId: string | null }>;
 export type StudentInfo = Record<string, { name: string; school: string | null; grade: string | null }>;
 /** 과목 범위 — null = 전 과목(원장). 배열 = 그 과목 키만(과목 관리자 — 비어 있으면 아무것도 안 보인다). labels = 키 → 학원 설정 라벨(raw 키 노출 금지). */
-export type DutyAdminScope = { subjects: string[] | null; labels: Record<string, string>; /** '담당' 권한이면 본인 의무만(null = 전원). */ ownerId: string | null };
+export type DutyAdminScope = { subjects: string[] | null; labels: Record<string, string>; /** '담당' 권한이면 본인 의무만(null = 전원). */ ownerId: string | null; /** 관리 기록(확인 · 사유 · 면제)을 남길 수 있나 — 전체 권한만. 서버 액션이 같은 판정을 한 번 더 한다. */ canNote?: boolean };
 /** 열린 채 기한이 지난 의무 한 건. inherited = 평가 시작(live_from) 전 기한 — 집계·판정에 안 들고 '이관된 미확인'으로 따로 묶는다. */
-export type LateItem = DutyItemView & { ownerId: string | null; inherited: boolean };
+/** note = 가장 최근 관리 기록(확인 · 사유 — s2_0052). 면제한 의무는 지연에서 빠져 여기 오지 않는다. */
+export type LateItem = DutyItemView & { ownerId: string | null; inherited: boolean; note?: DutyNote | null };
 /** syncedAt = 장부를 마지막으로 맞춘 시각(없으면 null) — 화면의 '기준 시각'. */
-export type DutyAdminData = { ownerKind: RollupOwnerKind[]; classes: RollupClass[]; late: LateItem[]; owners: OwnerInfo; classInfo: ClassInfo; syncedAt: string | null };
+export type DutyAdminData = { ownerKind: RollupOwnerKind[]; classes: RollupClass[]; late: LateItem[]; owners: OwnerInfo; classInfo: ClassInfo; syncedAt: string | null; /** 평가 개시 시각(없으면 null) — 고른 기간이 통째로 그 전이면 화면이 '참고 기록'이라고 밝힌다. */ liveFrom?: string | null };
 
 export type AdminPeriod = "today" | "week" | "month" | "prevMonth";
 export const ADMIN_PERIODS: { key: AdminPeriod; label: string }[] = [

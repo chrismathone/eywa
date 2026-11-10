@@ -50,7 +50,7 @@ export async function flushDuties(tenantId: string): Promise<void> {
     const days = syncDays(got.days, today, got.full ? [today] : []);
     for (const day of days) await syncDailyDuties(tenantId, day, settings);
     if (got.monthly || got.full) await syncMonthlyDuties(tenantId, today, settings);
-    await escalateAndSnapshot(tenantId, days);
+    await escalateAndSnapshot(tenantId, days, settings);
     await finishDutySync(tenantId, got, true, got.full);
     claim = null;
   } catch (error) {

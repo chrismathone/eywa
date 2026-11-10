@@ -48,4 +48,12 @@ describe("업무 완성도 — 저장 즉시 반영 배선", () => {
   it("월 상담은 분석 중인 임시 행만 뺀다(전사에 실패한 녹음 상담도 한 상담이다)", () => {
     expect(read("src/features/duties/server/monthly-sync.ts")).toContain('.not("processing_status", "in", "(uploaded,transcribing,analyzing)")');
   });
+  it("🔴 지난달 다시 만들기는 평가 개시 전에 끝난 달만 · 윗단계 할 일은 '처리됨'으로 단정해 닫지 않는다 · 면제는 맞춤이 되살리지 않는다", () => {
+    expect(read("src/features/duties/server/backfill.ts")).toMatch(/if \(!liveDay \|\| addDays\(`\$\{nextMonth\(month\)\}-01`, -1\) >= liveDay\) return/);
+    const sql = readMigration("s2_0052_duty_manage.sql");
+    const up = sql.slice(sql.indexOf("function public.duty_escalate_up"), sql.indexOf("function duties_private.rollup_rows"));
+    expect(up).toContain("'duties_cleared'");
+    expect(up).not.toContain("'duties_resolved'");
+    expect(sql).toContain("and d.void_reason is distinct from 'waived'");
+  });
 });

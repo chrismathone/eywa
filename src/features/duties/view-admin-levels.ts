@@ -134,6 +134,12 @@ export function classLines(rows: readonly RollupStudent[], classes: ClassInfo): 
 }
 
 /** '지금 지연'을 선생님(과목 단계)·반(선생님 단계) 단위로 접는다 — 이름 나열 금지(원장 2026-11-10). 접힌 줄 = 몇 명 · 종류별 지연 수 · 가장 오래된 날 수. */
+/** 지연 목록의 한 줄이 가리키는 의무들 — 접은 줄(선생님 · 반)은 그 묶음 전부, 그 밖은 담당자 × 반 × 학생 한 묶음. `all` = 그 목록의 재료. */
+export function attentionItems<T extends { ownerId: string | null; classId: string | null; studentId: string | null }>(all: readonly T[], r: Pick<AttentionRow, "key" | "ownerId" | "classId" | "studentId">): T[] {
+  if (r.key.startsWith("owner:")) return all.filter((it) => it.ownerId === r.ownerId);
+  if (r.key.startsWith("class:")) return all.filter((it) => (it.classId ?? NO_CLASS) === r.classId);
+  return all.filter((it) => it.ownerId === r.ownerId && it.classId === r.classId && it.studentId === r.studentId);
+}
 export function foldAttention(rows: readonly AttentionRow[], by: "owner" | "class"): AttentionRow[] {
   const groups = new Map<string, AttentionRow & { kinds: Map<string, number>; ids: Set<string> }>();
   for (const r of rows) {

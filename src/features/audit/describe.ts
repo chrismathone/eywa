@@ -45,6 +45,7 @@ import { EVENT_LABEL, OUTCOME_LABEL, STATUS_LABEL, WORK_OUTCOMES, type WorkOutco
 /** 대상 유형(target_type) → 한글 — 감사로그 '대상' 열 접두. 미등록 유형은 원문 폴백. */
 export const AUDIT_TYPE_LABEL: Record<string, string> = {
   work_request: "업무 요청",
+  duty_item: "업무 완성도",
   dashboard_secretary: "업무 비서",
   assistant: "학원 비서",
   // 오늘 수학 사용 메뉴(2026-10-19) — 에이와 · 오늘 수학 어느 쪽에서 바꿔도 같은 대상.
@@ -2267,6 +2268,9 @@ export function auditDetail(
       const students = num(m.students);
       return join(assignees ? `담당 ${assignees}명` : null, students ? `학생 ${students}명` : null);
     }
+    // 업무 완성도 관리 기록(s2_0052) — 대상 열이 "업무 면제 3건". 사유 글만 덧붙인다.
+    case "duty_note_add":
+      return str(m.note) || null;
     case "work_request_act": {
       const STEP_EVENT: Record<string, keyof typeof EVENT_LABEL> = { ack: "acked", report: "reported", approve: "approved", return: "returned", cancel: "cancelled" };
       const step = str(m.step);

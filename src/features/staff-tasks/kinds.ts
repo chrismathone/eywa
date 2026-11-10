@@ -64,6 +64,10 @@ export const TASK_KINDS: Record<string, StaffTaskKindInfo> = {
     // 원장 2026-11-10 *"쓸데없는 멘트 제거"* — 한 줄만(가드: 모든 종류는 처리 기준을 가진다).
     doneRule: "그 기록이 생기면 처리됩니다.",
   },
+  duty_late_up: {
+    label: "업무 지연 관리",
+    doneRule: "그 지연이 처리되거나 면제되거나 미이행으로 확정되면 닫힙니다.",
+  },
   help_question: {
     label: "도움말 질문",
     doneRule: "질문에 답변이 달리거나 답변 완료·닫힘이 되면 처리됩니다. 질문이 지워지면 취소됩니다. 다음 날까지 답하지 않으면 늦음입니다.",
@@ -130,6 +134,11 @@ const CLOSE_REASON: Record<string, string> = {
   refund_settled: "원장 환불 결정이 끝남(또는 결정할 청구가 없어짐)",
   turn_changed: "차례가 바뀜",
   help_answered: "답변이 달림",
+  duties_resolved: "업무가 처리됨",
+  duties_cleared: "지연이 정리됨(처리 · 면제 · 미이행 확정)",
+  duties_expired: "미이행으로 확정됨",
+  duties_moved_or_void: "담당이 바뀌거나 해당 없음",
+  late_tasks_off: "업무 알림이 꺼짐",
 };
 export function closeReasonLabel(reason: string | null): string | null {
   return reason ? (CLOSE_REASON[reason] ?? null) : null;

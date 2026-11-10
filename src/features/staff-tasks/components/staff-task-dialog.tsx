@@ -79,7 +79,7 @@ function TaskList({ scope, filter, showPeople, onPick }: { scope: TaskScope; fil
               <button type="button" onClick={() => onPick(t.id)} className="hover:bg-bg-soft flex w-full items-start gap-3 px-1 py-2.5 text-left">
                 <TaskStateChip state={state} />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-bold break-keep">{t.kind === "duty_late" ? t.title : (t.detail ?? t.title)}</span>
+                  <span className="block text-sm font-bold break-keep">{t.kind.startsWith("duty_late") ? t.title : (t.detail ?? t.title)}</span>
                   <span className="text-text-dim block text-xs break-keep">
                     {taskKindLabel(t.kind)} · {shortDate(t.openedAt)}
                     {showPeople && t.assignees.length ? ` · ${t.assignees.map((a) => a.name).join(", ")}` : ""}

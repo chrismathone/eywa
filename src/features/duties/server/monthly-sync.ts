@@ -22,7 +22,7 @@ type EnrollRow = Omit<SnapshotEnrollment, "start_date" | "on_hold" | "is_transfe
  * 오늘 기준 의무 쌍(지금 담임)으로 이번 달 분모를 만든다 — 달 중에 담임이 바뀌면 열쇠가 바뀌고 옛 열쇠는 rekey 정리된다(일간과 같은 규칙).
  * 🔴 관리 키라 모든 조회에 tenant_id(#104). 체크 표를 못 읽으면(미적용·실패) 신규생 몫만 건너뛰고 상담은 맞춘다.
  */
-export async function syncMonthlyDuties(tenantId: string, today: string, settings: TenantSettings): Promise<{ counsel: number; exam: number; newcomer: number; skipped?: string }> {
+export async function syncMonthlyDuties(tenantId: string, today: string, settings: TenantSettings, opts: { /** 지난 달 다시 만들기(`backfillDutyMonth`) — 신규생 정착은 오늘 기준 한 벌이라 지난 날로 돌리지 않는다. */ skipNewcomers?: boolean } = {}): Promise<{ counsel: number; exam: number; newcomer: number; skipped?: string }> {
   const admin = createAdminClient();
   const month = today.slice(0, 7);
   const monthStart = `${month}-01`;
@@ -81,6 +81,7 @@ export async function syncMonthlyDuties(tenantId: string, today: string, setting
     records: grades.filter((g) => !g.no_exam && gradeKind(g.exam_slot, g.exam_name) === "monthly").map((g) => ({ studentId: g.student_id, subject: g.subject, takenOn: g.taken_on, createdAt: g.created_at })) });
   await writeDrafts(tenantId, examDrafts, { rekey: true, cyclesOf: { exam_monthly: [month] } });
 
+  if (opts.skipNewcomers) return { counsel: counselDrafts.length, exam: examDrafts.length, newcomer: 0, skipped: "newcomers_skipped" };
   // ── 신규생 정착 콜 — 신규생 탭·운영실 신호와 같은 재료(cohort.ts).
   const scope = <T,>(q: T): T => (q as unknown as { eq(c: string, v: string): T }).eq("tenant_id", tenantId);
   const newcomers = await fetchAllPaged<{ id: string; enrolled_at: string | null; is_test: boolean | null }>((from, to) =>

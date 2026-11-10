@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildAttention, cellOf, type Counts, type LateItem, type RollupClass, type RollupOwnerKind, type RollupStudent } from "./view-admin";
-import { buildTree, classLines, foldAttention, inClassOf, judge, kindStatuses, NO_CLASS, NO_CLASS_LABEL, NO_OWNER, rootOfTree, studentLines, sumCells } from "./view-admin-levels";
+import { attentionItems, buildTree, classLines, foldAttention, inClassOf, judge, kindStatuses, NO_CLASS, NO_CLASS_LABEL, NO_OWNER, rootOfTree, studentLines, sumCells } from "./view-admin-levels";
 
 const c = (total: number, done: number, due: number, ontime: number, late = 0, o: Partial<Counts> = {}): Counts => ({ total, done, due, ontime, late, lateDone: 0, expired: 0, over7: 0, ...o });
 const ok = (o: Partial<RollupOwnerKind>): RollupOwnerKind => ({ ownerId: "t1", subject: "math", kind: "attendance", period: "daily", ...c(10, 9, 10, 9, 1), ...o });
@@ -92,5 +92,16 @@ describe("foldAttention", () => {
     const folded = foldAttention(rows, "owner");
     expect(folded.map((r) => [r.title, r.sub, r.count, r.days, r.summary])).toEqual([["문예린", "1명", 1, 10, "수업보고서 작성 1"], ["한지우", "2명", 3, 3, "수업보고서 작성 2 · 출결 입력 1"]]);
     expect(foldAttention(rows.filter((r) => r.ownerId === "t1"), "class").map((r) => [r.title, r.classId, r.sub])).toEqual([["중2 A", "c1", "1명"], ["중2 B", "c2", "1명"]]);
+  });
+});
+
+describe("attentionItems — 지연 줄이 가리키는 의무", () => {
+  const it0 = (ownerId: string | null, classId: string | null, studentId: string | null) => ({ ownerId, classId, studentId });
+  const all = [it0("t1", "c1", "s1"), it0("t1", "c1", "s2"), it0("t1", null, "s3"), it0("t2", "c1", "s1"), it0(null, "c2", null)];
+  it("잎 줄 = 담당자 × 반 × 학생 한 묶음 · 접은 줄 = 그 선생님(담당 미정 포함) · 그 반(반 없는 의무 포함) 전부", () => {
+    expect(attentionItems(all, { key: "t1|c1|s1", ownerId: "t1", classId: "c1", studentId: "s1" })).toEqual([all[0]]);
+    expect(attentionItems(all, { key: "owner:t1", ownerId: "t1", classId: null, studentId: null })).toHaveLength(3);
+    expect(attentionItems(all, { key: "owner:", ownerId: null, classId: null, studentId: null })).toEqual([all[4]]);
+    expect(attentionItems(all.filter((x) => x.ownerId === "t1"), { key: `class:${NO_CLASS}`, ownerId: "t1", classId: NO_CLASS, studentId: null })).toEqual([all[2]]);
   });
 });

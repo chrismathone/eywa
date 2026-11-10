@@ -6,6 +6,7 @@ import { adminRange, periodsOf } from "@/features/duties/view-admin";
 import { DutyAdmin } from "@/features/duties/components/admin/duty-admin";
 import { flushDuties } from "@/features/duties/server/live-sync";
 import { loadSubjectManagers } from "@/features/duties/server/managers";
+import { getTenantSettings } from "@/features/owner/server/queries";
 
 export const metadata = { title: "업무 완성도 — 에이와" };
 
@@ -19,7 +20,7 @@ export default async function DutiesPage() {
   const today = kstToday();
   const range = adminRange("month", today);
   // 과목 관리자별 현황은 학원 전체를 보는 사람에게만(과목 관리자 · '담당' 권한에게는 없다).
-  const [data, managers] = await Promise.all([loadDutyAdmin(viewer.tenantId, range.from, range.to, scope, periodsOf("month")), scope.subjects === null && !scope.ownerId ? loadSubjectManagers(viewer.tenantId) : null]);
+  const [data, managers] = await Promise.all([loadDutyAdmin(viewer.tenantId, range.from, range.to, scope, periodsOf("month")), scope.subjects === null && !scope.ownerId ? getTenantSettings().then((settings) => loadSubjectManagers(viewer.tenantId, settings)).then((m) => Object.fromEntries(Object.entries(m).map(([key, v]) => [key, v.names]))) : null]);
   const subjectLabel = scope.subjects === null ? "학원 전체" : scope.subjects.map((k) => scope.labels[k]).filter(Boolean).join(" · ") || "담당 과목 없음";
   const scopeLabel = scope.ownerId ? `내 업무만 · ${subjectLabel}` : subjectLabel;
   return (

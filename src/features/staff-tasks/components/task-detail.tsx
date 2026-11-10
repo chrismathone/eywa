@@ -30,8 +30,8 @@ export function TaskDetail({ taskId, onBack, onNavigate }: { taskId: string; onB
               <TaskStateChip state={taskState(data.item.status, data.item.dueAt)} />
               <span className="text-text-dim text-sm">{taskKindLabel(data.item.kind)}</span>
             </div>
-            <p className="text-base font-bold break-keep">{data.item.kind === "duty_late" ? data.item.title : (data.item.detail ?? data.item.title)}</p>
-            {data.item.kind === "duty_late" && data.item.detail ? <p className="text-sm break-keep whitespace-pre-line">{data.item.detail}</p> : null}
+            <p className="text-base font-bold break-keep">{data.item.kind.startsWith("duty_late") ? data.item.title : (data.item.detail ?? data.item.title)}</p>
+            {data.item.kind.startsWith("duty_late") && data.item.detail ? <p className="text-sm break-keep whitespace-pre-line">{data.item.detail}</p> : null}
             {TASK_KINDS[data.item.kind]?.doneRule ? <p className="text-text-dim text-sm break-keep">{TASK_KINDS[data.item.kind]?.doneRule}</p> : null}
           </div>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
