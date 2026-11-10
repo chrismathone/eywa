@@ -1,6 +1,6 @@
 .badge { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 52px; min-height: 25px; padding: 2px 8px; border: 1px solid transparent; border-radius: 6px; font-size: var(--nc-badge-font-size, var(--nc-font-size, var(--text-sm))); line-height: var(--nc-badge-line-height, 1.25); font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .done { color: var(--green); background: var(--green-soft); }
-.overdue { color: var(--danger); background: var(--bg-soft); }
+.overdue { color: var(--danger); background: var(--danger-soft); }
 .due { color: var(--amber); background: var(--amber-soft); }
 .today { color: var(--amber); background: var(--amber-soft); border-color: color-mix(in srgb, var(--gold-bright) 45%, var(--card)); }
 .neutral { color: var(--foreground); background: var(--bg-soft); font-weight: 500; }

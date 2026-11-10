@@ -43,7 +43,7 @@
 .page button:disabled { cursor: not-allowed; }
 .primary { display: inline-block !important; background: var(--primary); color: #fff !important; border: 1px solid var(--primary); border-radius: 8px; padding: 7px 14px; text-decoration: none !important; font-weight: 700; font-size: 14px; }
 .primary:hover { background: var(--primary-deep); }
-.primary:disabled { background: var(--bg-soft); border-color: var(--line); color: var(--foreground) !important; }
+.primary:disabled { background: var(--bg-soft); border-color: var(--line); color: var(--foreground) !important; opacity: .55; }
 .linkButton { border: 0; background: none; padding: 0; color: var(--ink); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; text-align: left; }
 
 .tabs { display: flex; flex-wrap: wrap; gap: 6px; }

@@ -18,7 +18,7 @@
 .star{position:relative;display:inline-block;font-size:var(--text-xs);color:var(--input)}
 .star::after{content:"★";position:absolute;inset:0;width:var(--fill);overflow:hidden;color:var(--gold-bright)}
 .starsLg .star{font-size:var(--text-xl)}
-.platinum{color:var(--ink);background:var(--amber-soft)}.gold{color:var(--ink);background:color-mix(in srgb, var(--gold-bright) 10%, var(--card))}.silver{color:var(--ink);background:var(--bg-soft)}.bronze{color:var(--foreground);background:var(--bg-soft)}.iron{color:var(--foreground);background:var(--bg-soft)}
+.platinum{color:var(--ink);background:var(--amber-soft)}.gold{color:var(--ink);background:color-mix(in srgb, var(--gold-bright) 10%, var(--card))}.silver{color:var(--ink);background:var(--bg-soft)}.bronze{color:var(--foreground);background:color-mix(in srgb, var(--amber) 12%, var(--card))}.iron{color:var(--foreground);background:var(--card);box-shadow:inset 0 0 0 1px var(--line-strong)}
 .panel{background:#fff;border-color:var(--line);border-radius:10px;color:var(--ink)}.eyebrow{color:var(--gold)}.positionHeading>span{color:var(--gold)}
 .fill{background:linear-gradient(90deg,var(--line-strong),var(--primary))}.marker b,.marker i{background:var(--primary)}.track{background:var(--line)}
 .tiers{grid-template-columns:repeat(9,minmax(0,1fr))}

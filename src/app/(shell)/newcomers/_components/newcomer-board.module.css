@@ -68,7 +68,8 @@ button.metric:hover:not(:disabled) { background: var(--bg-soft); }
 .table th { position: sticky; top: 0; z-index: 3; height: 36px; padding: 6px 9px; background: var(--bg-soft); border-top: 1px solid var(--nc-line); border-bottom: 1px solid var(--line); text-align: center; color: var(--foreground); font-size: var(--nc-font-size); font-weight: 650; white-space: nowrap; }
 .table td { height: 36px; padding: 4px 9px; border-bottom: 1px solid var(--line-faint); border-right: 1px solid var(--line-faint); background: #fff; vertical-align: middle; }
 .table tr:hover td { background: var(--bg-soft); }
-.table tr[data-selected] td { background: var(--bg-soft); }
+/* 선택 줄 = 기본 색 10%를 흰 면에 섞은 불투명 면 — 마우스 올림·머리 행(--bg-soft)과 갈리고, 고정 칸(td)도 비치지 않는다([[#74]]). */
+.table tr[data-selected] td { background: color-mix(in srgb, var(--primary) 10%, var(--card)); }
 .table .stickyName { position: sticky; left: 0; z-index: 2; text-align: left; padding-left: 14px; }
 .table .stickySchool { position: sticky; left: 148px; z-index: 2; text-align: left; }
 .table .stickySubject { position: sticky; left: 262px; z-index: 2; text-align: center; box-shadow: 1px 0 0 var(--line); }
@@ -92,7 +93,7 @@ button.metric:hover:not(:disabled) { background: var(--bg-soft); }
 .muted { color: var(--nc-muted); font-size: var(--nc-font-size); }
 .warning, .failure { display: flex; gap: 8px; align-items: center; padding: 7px 10px; border-radius: 6px; flex: none; font-size: var(--nc-font-size); }
 .warning { background: var(--amber-soft); color: var(--amber); border: 1px solid color-mix(in srgb, var(--gold-bright) 45%, var(--card)); }
-.failure { background: var(--bg-soft); color: var(--danger); border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--card)); }
+.failure { background: var(--danger-soft); color: var(--danger); border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--card)); }
 .warning button, .failure button { font-weight: 650; text-decoration: underline; margin-left: auto; white-space: nowrap; }
 .empty { height: 100%; min-height: 140px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--nc-muted); }
 .empty strong { color: var(--nc-ink); font-size: var(--nc-font-size); }

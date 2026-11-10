@@ -22,7 +22,7 @@
   color: var(--ink);
 }
 .studio button:hover, .button:hover { background: color-mix(in srgb, var(--gold-bright) 6%, var(--card)); border-color: color-mix(in srgb, var(--gold-bright) 45%, var(--card)); }
-.studio button:disabled { color: var(--foreground); background: var(--bg-soft); cursor: not-allowed; }
+.studio button:disabled { color: var(--foreground); background: var(--bg-soft); cursor: not-allowed; opacity: .55; }
 .studio :is(button, a, input, select, textarea):focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
 .studio input, .studio select, .studio textarea { font: inherit; font-size: 14px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; background: #fff; color: var(--ink); min-width: 0; width: 100%; }
 .studio textarea { min-height: 80px; resize: vertical; }
