@@ -1,0 +1,12 @@
+.root{--year-2023:#6c57d5;--year-2024:#2b9e98;--year-2025:#d79d36}
+.caption,.note{color:#6c7890;font-size:12px;margin:7px 0 12px}
+.legend{display:flex;flex-wrap:wrap;gap:10px 20px;margin:12px 0 5px;font-size:13px}
+.legend span{display:flex;align-items:center;gap:7px}
+.legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+.legend b{color:#53627b;font-size:12px;font-weight:500}
+.scroll{width:100%;overflow-x:auto}
+.chart{display:block;width:100%;min-width:580px;height:auto}
+.grid{stroke:#e4e9f2;stroke-dasharray:3 4}
+.axis{fill:#6b7890;font:12px 'Malgun Gothic',sans-serif}
+.value{fill:#34435f;font:600 11px 'Malgun Gothic',sans-serif}
+.note{margin:4px 0 0}
