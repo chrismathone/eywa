@@ -12,7 +12,7 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
-## 2026-11-11 운영 로그 정리 — 반 필터 함수 · 녹음 원본 경로 (s2_0045 · s2_0046 · 운영 적용은 앱보다 먼저)
+## 2026-11-11 운영 로그 정리 — 반 필터 함수 · 녹음 원본 경로 (s2_0045 · s2_0046 · ✅ 운영 적용 2026-11-11 — 앱보다 먼저 · 직결(node · 파일 그대로 한 거래) · 사후 확인: PostgREST가 함수를 알아봄 · anon 거절 42501 · audio_path NULL 허용)
 
 - `s2_0045_restore_lesson_report_class_options.sql` — 수업보고서 목록 '반' 필터 함수. 시즌1 0147a에 정의만 있고 운영에 적용된 적이 없어 PGRST202(반 드롭다운이 비어 있었다). 본문 그대로 + 실행권 명시(PUBLIC·anon 회수 · authenticated·service_role). 시험 거래: 강사 계정으로 반 85개.
 - `s2_0046_consultation_recording_audio_nullable.sql` — `consultation_recordings.audio_path` NOT NULL 해제. 녹음 보존기간(90일) cron이 원본을 지운 뒤 경로를 비우다 23502로 매일 실패(만료 13건 — 원본은 이미 없음 · 전사는 남김). 같은 묶음의 앱 cron: 상담 행 미러가 녹음 원본을 지우지 않게 · 녹음 원본을 지우면 상담 행 미러도 비움.
