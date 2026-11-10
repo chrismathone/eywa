@@ -39,7 +39,8 @@ describe("새 보고서 발송 조건(원장 2026-10-26 — 일괄 발송도 같
 describe("배선", () => {
   const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
   it("일괄 발송·저장 입력·일괄 자동작성이 같은 판정을 쓰고, 서버는 pilotCheck가 없으면 거절한다", () => {
-    const client = read("./components/onescreen-client.tsx");
+    // 일괄 자동작성은 use-auto-write.ts로 옮겼다(P3-O) — 화면과 합쳐 읽는다.
+    const client = read("./components/onescreen-client.tsx") + "\n" + read("./components/use-auto-write.ts");
     expect(client.match(/pilotSendBlocks\(/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
     expect(client).toMatch(/pilotCheck: \{ factsCurrent:/);
     expect(client).toMatch(/isPilotGateError\(res\.error\)/);

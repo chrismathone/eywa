@@ -62,8 +62,13 @@ describe("자동작성 원문(0370a) — 저장이 남기고 빌드가 읽는다
     expect(src).toContain("after(() => recordMentAiDraft(");
   });
   it("'달라진 것 없음'이라도 손으로 쓴 추세는 지우지 않는다 — 칸이 지난 자동작성 글 그대로일 때만 비운다(원스크린·사무실 작성)", () => {
-    // 세션 입력 조립은 session-input.ts로 옮겼다(P3-O) — 화면과 합쳐 읽는다.
-    const os = read("src/features/onescreen/components/onescreen-client.tsx") + "\n" + read("src/features/onescreen/session-input.ts");
+    // 세션 입력 조립은 session-input.ts, 자동작성은 use-auto-write.ts로 옮겼다(P3-O) — 화면과 합쳐 읽는다.
+    const os =
+      read("src/features/onescreen/components/onescreen-client.tsx") +
+      "\n" +
+      read("src/features/onescreen/session-input.ts") +
+      "\n" +
+      read("src/features/onescreen/components/use-auto-write.ts");
     expect(os).toContain('res.ok && res.trendQuiet && (r.trendDraft ?? "") === (r.trendAutoDraft ?? "")');
     const cf = read("src/app/(shell)/lesson-reports/_components/compose-face.tsx");
     expect(cf).toContain("res.trendQuiet && trend === autoTrend");
@@ -73,8 +78,13 @@ describe("자동작성 원문(0370a) — 저장이 남기고 빌드가 읽는다
     expect(cf).toContain('setAutoTrend(d.autoTrend ?? "")');
   });
   it("AI 원문이 아닌 글(폴백 템플릿·지난 회차 복사)은 원문으로 싣지 않는다 — 표시는 세션을 넘는다", () => {
-    // 세션 입력 조립은 session-input.ts로 옮겼다(P3-O) — 화면과 합쳐 읽는다.
-    const os = read("src/features/onescreen/components/onescreen-client.tsx") + "\n" + read("src/features/onescreen/session-input.ts");
+    // 세션 입력 조립은 session-input.ts, 자동작성은 use-auto-write.ts로 옮겼다(P3-O) — 화면과 합쳐 읽는다.
+    const os =
+      read("src/features/onescreen/components/onescreen-client.tsx") +
+      "\n" +
+      read("src/features/onescreen/session-input.ts") +
+      "\n" +
+      read("src/features/onescreen/components/use-auto-write.ts");
     expect(os).toContain("autoDraft: p.comment, autoDraftTemplate: true");
     expect(os).toContain("...(r?.[su.name]?.autoDraftTemplate ? { autoDraftTemplate: true } : {})");
     expect(read("src/features/onescreen/server/roster.ts")).toContain("if (entry?.autoDraftTemplate === true) su.autoDraftTemplate = true;");

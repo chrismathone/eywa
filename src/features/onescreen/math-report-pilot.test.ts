@@ -295,7 +295,8 @@ describe("배선", () => {
     expect(gate).toMatch(/writtenSig: rep\?\.pilotFactsSig/);
     expect(gate).toMatch(/needsTestReason: pilot && !testSkipComplete\(subject\.dailyTestSkip\)/);
     for (const src of [card, grid]) expect(src).toContain("rowSendGate({");
-    expect(read("./components/onescreen-client.tsx")).toMatch(/pilotRowSig\(student, subjectName\)/);
+    // 자동작성은 use-auto-write.ts로 옮겼다(P3-O) — 화면과 합쳐 읽는다.
+    expect(read("./components/onescreen-client.tsx") + "\n" + read("./components/use-auto-write.ts")).toMatch(/pilotRowSig\(student, subjectName\)/);
   });
   it("한줄 멘트를 바꾸면 그 자리에서 글 끝을 바꾸고, 발송 경로가 한줄 멘트를 싣는다", () => {
     const client = read("./components/onescreen-client.tsx");
