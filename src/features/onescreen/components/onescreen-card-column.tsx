@@ -86,17 +86,17 @@ export type CardColumnRow = {
 
 /** 카드(선택 학생) 래퍼 — 화면이 selected를 감싸 둔 세터들. */
 export type CardColumnCardActions = {
-  setAttitude: CardProps["onAttitude"];
-  setHomework: CardProps["onHomework"];
-  setTextbook: CardProps["onTextbook"];
-  setHomeworkToday: CardProps["onHomeworkToday"];
-  toggleMakeup: CardProps["onMakeup"];
-  toggleVideoHomework: CardProps["onVideoHomework"];
-  toggleVideoSubmitLink: CardProps["onVideoSubmitLink"];
-  setVideoHomeworkDue: CardProps["onVideoHomeworkDue"];
-  setSubjectDraft: CardProps["onSubjectDraft"];
-  setSubjectTrend: CardProps["onSubjectTrend"];
-  setNote: CardProps["onNote"];
+  setAttitude: CardProps["rowActions"]["onAttitude"];
+  setHomework: CardProps["rowActions"]["onHomework"];
+  setTextbook: CardProps["rowActions"]["onTextbook"];
+  setHomeworkToday: CardProps["rowActions"]["onHomeworkToday"];
+  toggleMakeup: CardProps["rowActions"]["onMakeup"];
+  toggleVideoHomework: CardProps["rowActions"]["onVideoHomework"];
+  toggleVideoSubmitLink: CardProps["rowActions"]["onVideoSubmitLink"];
+  setVideoHomeworkDue: CardProps["rowActions"]["onVideoHomeworkDue"];
+  setSubjectDraft: CardProps["rowActions"]["onSubjectDraft"];
+  setSubjectTrend: CardProps["rowActions"]["onSubjectTrend"];
+  setNote: CardProps["rowActions"]["onNote"];
   autoWriteSubject: Ret<typeof useAutoWrite>["autoWriteSubject"];
   sendSubject: Ret<typeof useReportSend>["sendSubject"];
   queueClassnote: Ret<typeof useReportSend>["queueClassnote"];
@@ -295,230 +295,236 @@ selected ? (
               </header>
               <ReportCard
                 key={selected.id}
-                readonlyView={readonlyView}
-                // 숙제 미제출 사유(수학 보고서 시범) — 숙제 완성도가 미제출·0%일 때만, 그 칸 바로 아래에.
-                homeworkExtra={
-                  previewSubject &&
-                  isMathReportPilot(selected.id, previewSubject.subjectKey) &&
-                  isHomeworkMissed(resolveRowFields(selected, previewSubject).homework) ? (
-                    <HomeworkMissReasonInput
-                      value={previewSubject.homeworkMissReason ?? ""}
-                      disabled={readonlyView || !isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))}
-                      onChange={(r) => setHomeworkMissReasonFor(selected.id, previewSubject.name, r)}
-                    />
-                  ) : null
-                }
-                // 수업 태도 의견(새 수학 보고서, 2026-10-26) — 태도가 하·중하일 때만, 태도 칸 바로 아래에. 3줄 이상(90자) 필수.
-                attitudeExtra={
-                  previewSubject &&
-                  isMathReportPilot(selected.id, previewSubject.subjectKey) &&
-                  attitudeNeedsNote(resolveRowFields(selected, previewSubject).attitude) ? (
-                    <ReasonNoteInput
-                      multiline
-                      value={previewSubject.attitudeNote ?? ""}
-                      done={!needsAttitudeNote(resolveRowFields(selected, previewSubject).attitude, previewSubject.attitudeNote)}
-                      disabled={readonlyView || !isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))}
-                      labelKey="os.card.attNote.label"
-                      placeholderKey="os.card.attNote.ph"
-                      onChange={(v) => setAttitudeNoteFor(selected.id, previewSubject.name, v)}
-                    />
-                  ) : null
-                }
-                // 보강 사유(2026-10-26) — 보강 줄인데 결석 날짜를 예약에서 못 찾을 때만(예약된 보강은 날짜·시간이 자동으로 들어간다).
-                makeupExtra={(() => {
-                  if (!previewSubject) return null;
-                  const mk = rowMakeupFacts(selected, previewSubject);
-                  if (!mk?.row || hasMakeupAbsenceDate(mk)) return null;
-                  return (
-                    <ReasonNoteInput
-                      value={previewSubject.makeupReason ?? ""}
-                      done={(previewSubject.makeupReason ?? "").trim() !== ""}
-                      disabled={readonlyView || !isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))}
-                      labelKey="os.card.mkReason.label"
-                      placeholderKey="os.card.mkReason.ph"
-                      onChange={(v) => setMakeupReasonFor(selected.id, previewSubject.name, v)}
-                    />
-                  );
-                })()}
                 student={selected}
                 reports={reports[selected.id] ?? {}}
-                attitudes={ATTITUDE}
-                onAttitude={setAttitude}
-                onHomework={setHomework}
-                onTextbook={setTextbook}
-                onHomeworkToday={setHomeworkToday}
-                onMakeup={toggleMakeup}
-                onVideoHomework={toggleVideoHomework}
-                onVideoSubmitLink={toggleVideoSubmitLink}
-                onVideoHomeworkDue={setVideoHomeworkDue}
-                onRemoveMakeup={(subjectName) => void removeMakeupRow(selected, subjectName)}
-                onJoinMakeup={(subjectName) => void joinMakeupRow(selected, subjectName)}
-                onSplitMakeup={(subjectName) => void splitMakeupRow(selected, subjectName)}
-                onPickMakeupClass={(subjectName) => void pickMakeupClass(selected, subjectName)}
-                onCheckMakeup={(subjectName, outcome) => void checkMakeup(selected, subjectName, outcome)}
-                canRemoveMakeup={(subjectName) =>
-                  canRemoveMakeupRow(reports[selected.id]?.[subjectName]?.classnoteStatus ?? null)
-                }
-                onSubjectDraft={setSubjectDraft}
-                onSubjectTrend={setSubjectTrend}
                 trendOptOut={{
                   hidden: (subjectName) => isTrendHiddenFor(selected.id, subjectName),
                   toggle: (subjectName) => toggleTrendHiddenFor(selected.id, subjectName),
                 }}
-                onNote={setNote}
-                onAutoWrite={autoWriteSubject}
-                generatingSubject={genSubject}
-                onSend={sendSubject}
-                onQueueClassnote={queueClassnote}
-                onRevoke={revokeShare}
-                onReissue={reissueShare}
-                onAddFiles={addAttachments}
-                onRemoveAttachment={removeAttachment}
-                attachmentUrls={attUrls}
-                uploadingSubject={
-                  selected && uploadingAttKey?.startsWith(`${selected.id}::`)
-                    ? uploadingAttKey.slice(selected.id.length + 2)
-                    : null
-                }
-                attachmentsHidden={!showAttachments}
                 attendance={{
                   readOnly: !canEditAttendance,
                   pendingKeys: attPending,
                   onSet: (classId, s, extra) => setAttendanceFor(selected.id, classId, s, extra),
                 }}
-                // 실효 모드 = 강사 오버라이드 ?? 학원 기본 — 상단 토글이 하단 보고서 입력 구성을 실제로 바꾼다.
-                noticeMode={noticeMode ?? academyNoticeMode}
-                // 과목 칩 선택을 부모가 들고 있다 — 옆 열 미리보기가 "지금 보는 과목"을 그려야 하기 때문.
-                subjectIndex={subjectIdx}
-                onSubjectIndex={(i) => setCardSubject({ id: selected.id, idx: i })}
-                // 오늘 진도·테스트 = 이제 보고서 카드의 첫 열(2026-08-05 통합). 배선은 여기 그대로 두고
-                // 카드엔 **노드만** 넘긴다(카드가 콜백 7개를 더 받으면 props 규칙이 무너진다).
-                todayInputs={
-                  <>
-                    {/* 이 값들이 **어디서 왔는지**를 입력 바로 위에서 밝힌다(ECS 시트 초안). */}
-                    {previewSubject ? (
-                      <SheetSourceCard
-                        subject={previewSubject}
-                        onApply={() => applySheetDraft(subjectIdx)}
-                      />
-                    ) : null}
-                    {previewSubject ? <PreviousContent subject={previewSubject}
-                      onImport={!readonlyView && !bulkGen && isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))
-                        ? () => importPrevFor(selected, previewSubject.name) : undefined} /> : null}
-                    <ProgressCard
-                      embedded
-                      student={selected}
-                      lockedSubjects={selected.subjects.filter(su => !isRowInputEditable(su, effectiveClassnoteStatus(reports[selected.id]?.[su.name]?.classnoteStatus, su.classnoteStatus))).map(su => su.name)}
-                      onConfirm={confirmProgress}
-                      onProgress={setProgress}
-                      onProgressMode={setProgressMode}
-                      onStudyGrade={setStudyGrade}
-                      onLoadPrev={
-                        selected.isMakeup && !prevLoaded.has(selected.id)
-                          ? () => loadMakeupPrev(selected.id)
-                          : undefined
-                      }
-                    />
-                    {previewSubject && isMathReportPilot(selected.id, previewSubject.subjectKey) && showDailyTest ? (
-                      <DailyTestSkipPanel
-                        skip={previewSubject.dailyTestSkip ?? null}
+                fields={{
+                  readonlyView: readonlyView,
+                  attitudes: ATTITUDE,
+                  generatingSubject: genSubject,
+                  attachmentUrls: attUrls,
+                  uploadingSubject: 
+                    selected && uploadingAttKey?.startsWith(`${selected.id}::`)
+                      ? uploadingAttKey.slice(selected.id.length + 2)
+                      : null
+                ,
+                  attachmentsHidden: !showAttachments,
+                  // 실효 모드 = 강사 오버라이드 ?? 학원 기본 — 상단 토글이 하단 보고서 입력 구성을 실제로 바꾼다.
+                  noticeMode: noticeMode ?? academyNoticeMode,
+                  // 과목 칩 선택을 부모가 들고 있다 — 옆 열 미리보기가 "지금 보는 과목"을 그려야 하기 때문.
+                  subjectIndex: subjectIdx,
+                  // 영어 행 — 학부모 링크 복사도 발송·복사와 같은 확인을 거친다(링크는 저장된 글을 그대로 보여 준다).
+                  shareCopyWarning: 
+                    previewSubject?.subjectKey === "english" &&
+                    englishRowFlags(selected, previewSubject, previewReport).outdated
+                      ? t("os.tpl.outdatedLink")
+                      : null
+                ,
+                }}
+                rowActions={{
+                  onAttitude: setAttitude,
+                  onHomework: setHomework,
+                  onTextbook: setTextbook,
+                  onHomeworkToday: setHomeworkToday,
+                  onMakeup: toggleMakeup,
+                  onVideoHomework: toggleVideoHomework,
+                  onVideoSubmitLink: toggleVideoSubmitLink,
+                  onVideoHomeworkDue: setVideoHomeworkDue,
+                  onRemoveMakeup: (subjectName) => void removeMakeupRow(selected, subjectName),
+                  onJoinMakeup: (subjectName) => void joinMakeupRow(selected, subjectName),
+                  onSplitMakeup: (subjectName) => void splitMakeupRow(selected, subjectName),
+                  onPickMakeupClass: (subjectName) => void pickMakeupClass(selected, subjectName),
+                  onCheckMakeup: (subjectName, outcome) => void checkMakeup(selected, subjectName, outcome),
+                  canRemoveMakeup: (subjectName) =>
+                    canRemoveMakeupRow(reports[selected.id]?.[subjectName]?.classnoteStatus ?? null)
+                ,
+                  onSubjectDraft: setSubjectDraft,
+                  onSubjectTrend: setSubjectTrend,
+                  onNote: setNote,
+                  onAutoWrite: autoWriteSubject,
+                  onSend: sendSubject,
+                  onQueueClassnote: queueClassnote,
+                  onRevoke: revokeShare,
+                  onReissue: reissueShare,
+                  onAddFiles: addAttachments,
+                  onRemoveAttachment: removeAttachment,
+                  onSubjectIndex: (i) => setCardSubject({ id: selected.id, idx: i }),
+                }}
+                slots={{
+                  // 숙제 미제출 사유(수학 보고서 시범) — 숙제 완성도가 미제출·0%일 때만, 그 칸 바로 아래에.
+                  homeworkExtra: 
+                    previewSubject &&
+                    isMathReportPilot(selected.id, previewSubject.subjectKey) &&
+                    isHomeworkMissed(resolveRowFields(selected, previewSubject).homework) ? (
+                      <HomeworkMissReasonInput
+                        value={previewSubject.homeworkMissReason ?? ""}
                         disabled={readonlyView || !isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))}
-                        onChange={(skip) => setTestSkipFor(selected.id, previewSubject.name, skip)}
+                        onChange={(r) => setHomeworkMissReasonFor(selected.id, previewSubject.name, r)}
                       />
-                    ) : null}
-                    <TestCard
-                      embedded
-                      student={{ ...selected, subjects: previewSubject ? [previewSubject] : [] }}
-                      // 선택된 행의 점수를 보여준다 — 쓰기(setScore)도 그 행에 간다(row-fields.ts).
-                      tests={resolveRowFields(selected, previewSubject).tests}
-                      onScore={setScore}
-                      allowMax={allowTeacherTestMax}
-                      onMax={setMax}
-                      // 수학 보고서 시범에서 '시험 없음'을 고르면 점수 칸을 감춘다(사유 칸이 그 자리를 대신한다).
-                      dailyEnabled={showDailyTest && !(previewSubject && isMathReportPilot(selected.id, previewSubject.subjectKey) && previewSubject.dailyTestSkip)}
-                      checkEnabled={showCheckTest}
-                    />
-                    {/* 소단원별 이해도(수학 보고서 시범, 테스트 학생 한정) — 자동작성 재료. */}
-                    {previewSubject && isMathReportPilot(selected.id, previewSubject.subjectKey) ? (
-                      <UnderstandingPanel
-                        rows={understandingRows(previewSubject.today, previewSubject.understanding)}
+                    ) : null
+                ,
+                  // 수업 태도 의견(새 수학 보고서, 2026-10-26) — 태도가 하·중하일 때만, 태도 칸 바로 아래에. 3줄 이상(90자) 필수.
+                  attitudeExtra: 
+                    previewSubject &&
+                    isMathReportPilot(selected.id, previewSubject.subjectKey) &&
+                    attitudeNeedsNote(resolveRowFields(selected, previewSubject).attitude) ? (
+                      <ReasonNoteInput
+                        multiline
+                        value={previewSubject.attitudeNote ?? ""}
+                        done={!needsAttitudeNote(resolveRowFields(selected, previewSubject).attitude, previewSubject.attitudeNote)}
                         disabled={readonlyView || !isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))}
-                        onScore={(lesson, score) => setUnderstandingScoreFor(selected.id, previewSubject.name, lesson, score)}
-                        onToggle={(lesson, off) => toggleUnderstandingFor(selected.id, previewSubject.name, lesson, off)}
-                        onAll={(score) => setAllUnderstandingFor(selected.id, previewSubject.name, score)}
+                        labelKey="os.card.attNote.label"
+                        placeholderKey="os.card.attNote.ph"
+                        onChange={(v) => setAttitudeNoteFor(selected.id, previewSubject.name, v)}
                       />
-                    ) : null}
-                    {/* '오늘의 수업' 메모(원장 2026-10-28) — 그날 한 일을 적으면 AI가 '오늘의 수업'에 녹여 쓴다. 표와 같은 칸. */}
-                    {previewSubject && isMathReportPilot(selected.id, previewSubject.subjectKey) ? (
-                      <LessonMemoInput
-                        value={previewSubject.lessonMemo ?? ""}
+                    ) : null
+                ,
+                  // 보강 사유(2026-10-26) — 보강 줄인데 결석 날짜를 예약에서 못 찾을 때만(예약된 보강은 날짜·시간이 자동으로 들어간다).
+                  makeupExtra: (() => {
+                    if (!previewSubject) return null;
+                    const mk = rowMakeupFacts(selected, previewSubject);
+                    if (!mk?.row || hasMakeupAbsenceDate(mk)) return null;
+                    return (
+                      <ReasonNoteInput
+                        value={previewSubject.makeupReason ?? ""}
+                        done={(previewSubject.makeupReason ?? "").trim() !== ""}
                         disabled={readonlyView || !isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))}
-                        ariaLabel={tf("os.memo.aria", { name: selected.name })}
-                        onChange={(v) => setLessonMemoFor(selected.id, previewSubject.name, v)}
+                        labelKey="os.card.mkReason.label"
+                        placeholderKey="os.card.mkReason.ph"
+                        onChange={(v) => setMakeupReasonFor(selected.id, previewSubject.name, v)}
                       />
-                    ) : null}
-                  </>
-                }
-                // 영어 행 — 학부모 링크 복사도 발송·복사와 같은 확인을 거친다(링크는 저장된 글을 그대로 보여 준다).
-                shareCopyWarning={
-                  previewSubject?.subjectKey === "english" &&
-                  englishRowFlags(selected, previewSubject, previewReport).outdated
-                    ? t("os.tpl.outdatedLink")
-                    : null
-                }
-                // 영어 행 템플릿 칸(2026-09-10) — 영어 행에서만 그린다(카드도 영어 행일 때만 이 자리를 쓴다).
-                templatePanel={
-                  previewSubject?.subjectKey === "english" ? (
-                    <EnglishTemplatePanel
-                      templates={englishTemplates}
-                      state={{
-                        // 고른 선택이 대기 중이면 그걸 보여 준다('AI 글 없음' 칩이 자동작성을 권한다).
-                        templateId:
-                          previewReport?.pendingTemplateId ?? previewReport?.templateId ?? DEFAULT_ENGLISH_TEMPLATE.id,
-                        // 지금 글을 실제로 만든 템플릿 — 대기 중이면 칩이 그 이름을 함께 적는다(드롭다운과 글이 다를 때).
-                        appliedTemplateId: previewReport?.templateId ?? DEFAULT_ENGLISH_TEMPLATE.id,
-                        nextTest: previewReport?.nextTest ?? "",
-                        wordFeedback: previewReport?.wordFeedback ?? "",
-                        wordRetest: previewReport?.wordRetest === true,
-                        // 단어 테스트 칸을 쓰는 템플릿(EiE 일일 보고서)일 때만 피드백·재시험 칸을 연다.
-                        wordFields: usesWordTokens(
-                          findTemplate(previewReport?.pendingTemplateId ?? previewReport?.templateId) ?? DEFAULT_ENGLISH_TEMPLATE,
-                        ),
-                        // 경고 셋은 저장값이 아니라 **지금 글·칸** 기준(english-draft.ts) — 새로고침·일괄 작성 뒤에도 맞다.
-                        ...englishRowFlags(selected, previewSubject, previewReport),
-                        jj: englishJjStatusOf(selected.id),
-                        jjPick: englishJjPickOf(selected.id),
-                        canLinkJj: canLinkIjw,
-                        media: {
-                          busy: uploadingAttKey === rowKey(selected.id, previewSubject.name),
-                          full: (previewReport?.attachments?.length ?? 0) >= REPORT_ATTACHMENT_MAX,
-                          hasVideo: hasVideoAttachment(previewReport?.attachments),
-                        },
-                      }}
-                      notice={templateNotice ?? (templateListFailed ? t("os.tpl.listFailed") : null)}
-                      handlers={{
-                        onTemplate: (id) => setEnglishTemplateFor(selected, previewSubject.name, id),
-                        onNextTest: (v) => setNextTestFor(selected.id, previewSubject.name, v),
-                        onWordFeedback: (v) => setWordFeedbackFor(selected.id, previewSubject.name, v),
-                        onWordRetest: (on) => setWordRetestFor(selected.id, previewSubject.name, on),
-                        onRefill: () => void refillEnglishFor(selected, previewSubject.name),
-                        onCopy: () => void copyEnglishText(selected, previewSubject.name),
-                        onManage: () => setTemplateManagerOpen(true),
-                        onJjRetry: () =>
-                          void jj.ensure(selected.id, {
-                            outOfClass: rowOutOfClass(selected, previewSubject),
-                            force: true,
-                            manual: true, // 사람이 누른 것 — 멈춤 차단기도 무시한다
-                          }),
-                        onJjPick: (pick) =>
-                          void jj.choose(selected.id, pick, { outOfClass: rowOutOfClass(selected, previewSubject) }),
-                        onInsertFile: (file) => void insertEnglishMediaFor(selected, previewSubject.name, file),
-                        // 영상(2026-11-06) — 사진·PDF와 같은 올리기 함수(저장 보장·게이트 동일) · 글 속 자리 줄은 넣지 않는다.
-                        onVideoFile: (file) => void addAttachmentsFor(selected, previewSubject.name, [file]),
-                      }}
-                    />
-                  ) : null
-                }
+                    );
+                  })(),
+                  // 오늘 진도·테스트 = 이제 보고서 카드의 첫 열(2026-08-05 통합). 배선은 여기 그대로 두고
+                  // 카드엔 **노드만** 넘긴다(카드가 콜백 7개를 더 받으면 props 규칙이 무너진다).
+                  todayInputs: 
+                    <>
+                      {/* 이 값들이 **어디서 왔는지**를 입력 바로 위에서 밝힌다(ECS 시트 초안). */}
+                      {previewSubject ? (
+                        <SheetSourceCard
+                          subject={previewSubject}
+                          onApply={() => applySheetDraft(subjectIdx)}
+                        />
+                      ) : null}
+                      {previewSubject ? <PreviousContent subject={previewSubject}
+                        onImport={!readonlyView && !bulkGen && isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))
+                          ? () => importPrevFor(selected, previewSubject.name) : undefined} /> : null}
+                      <ProgressCard
+                        embedded
+                        student={selected}
+                        lockedSubjects={selected.subjects.filter(su => !isRowInputEditable(su, effectiveClassnoteStatus(reports[selected.id]?.[su.name]?.classnoteStatus, su.classnoteStatus))).map(su => su.name)}
+                        onConfirm={confirmProgress}
+                        onProgress={setProgress}
+                        onProgressMode={setProgressMode}
+                        onStudyGrade={setStudyGrade}
+                        onLoadPrev={
+                          selected.isMakeup && !prevLoaded.has(selected.id)
+                            ? () => loadMakeupPrev(selected.id)
+                            : undefined
+                        }
+                      />
+                      {previewSubject && isMathReportPilot(selected.id, previewSubject.subjectKey) && showDailyTest ? (
+                        <DailyTestSkipPanel
+                          skip={previewSubject.dailyTestSkip ?? null}
+                          disabled={readonlyView || !isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))}
+                          onChange={(skip) => setTestSkipFor(selected.id, previewSubject.name, skip)}
+                        />
+                      ) : null}
+                      <TestCard
+                        embedded
+                        student={{ ...selected, subjects: previewSubject ? [previewSubject] : [] }}
+                        // 선택된 행의 점수를 보여준다 — 쓰기(setScore)도 그 행에 간다(row-fields.ts).
+                        tests={resolveRowFields(selected, previewSubject).tests}
+                        onScore={setScore}
+                        allowMax={allowTeacherTestMax}
+                        onMax={setMax}
+                        // 수학 보고서 시범에서 '시험 없음'을 고르면 점수 칸을 감춘다(사유 칸이 그 자리를 대신한다).
+                        dailyEnabled={showDailyTest && !(previewSubject && isMathReportPilot(selected.id, previewSubject.subjectKey) && previewSubject.dailyTestSkip)}
+                        checkEnabled={showCheckTest}
+                      />
+                      {/* 소단원별 이해도(수학 보고서 시범, 테스트 학생 한정) — 자동작성 재료. */}
+                      {previewSubject && isMathReportPilot(selected.id, previewSubject.subjectKey) ? (
+                        <UnderstandingPanel
+                          rows={understandingRows(previewSubject.today, previewSubject.understanding)}
+                          disabled={readonlyView || !isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))}
+                          onScore={(lesson, score) => setUnderstandingScoreFor(selected.id, previewSubject.name, lesson, score)}
+                          onToggle={(lesson, off) => toggleUnderstandingFor(selected.id, previewSubject.name, lesson, off)}
+                          onAll={(score) => setAllUnderstandingFor(selected.id, previewSubject.name, score)}
+                        />
+                      ) : null}
+                      {/* '오늘의 수업' 메모(원장 2026-10-28) — 그날 한 일을 적으면 AI가 '오늘의 수업'에 녹여 쓴다. 표와 같은 칸. */}
+                      {previewSubject && isMathReportPilot(selected.id, previewSubject.subjectKey) ? (
+                        <LessonMemoInput
+                          value={previewSubject.lessonMemo ?? ""}
+                          disabled={readonlyView || !isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))}
+                          ariaLabel={tf("os.memo.aria", { name: selected.name })}
+                          onChange={(v) => setLessonMemoFor(selected.id, previewSubject.name, v)}
+                        />
+                      ) : null}
+                    </>
+                ,
+                  // 영어 행 템플릿 칸(2026-09-10) — 영어 행에서만 그린다(카드도 영어 행일 때만 이 자리를 쓴다).
+                  templatePanel: 
+                    previewSubject?.subjectKey === "english" ? (
+                      <EnglishTemplatePanel
+                        templates={englishTemplates}
+                        state={{
+                          // 고른 선택이 대기 중이면 그걸 보여 준다('AI 글 없음' 칩이 자동작성을 권한다).
+                          templateId:
+                            previewReport?.pendingTemplateId ?? previewReport?.templateId ?? DEFAULT_ENGLISH_TEMPLATE.id,
+                          // 지금 글을 실제로 만든 템플릿 — 대기 중이면 칩이 그 이름을 함께 적는다(드롭다운과 글이 다를 때).
+                          appliedTemplateId: previewReport?.templateId ?? DEFAULT_ENGLISH_TEMPLATE.id,
+                          nextTest: previewReport?.nextTest ?? "",
+                          wordFeedback: previewReport?.wordFeedback ?? "",
+                          wordRetest: previewReport?.wordRetest === true,
+                          // 단어 테스트 칸을 쓰는 템플릿(EiE 일일 보고서)일 때만 피드백·재시험 칸을 연다.
+                          wordFields: usesWordTokens(
+                            findTemplate(previewReport?.pendingTemplateId ?? previewReport?.templateId) ?? DEFAULT_ENGLISH_TEMPLATE,
+                          ),
+                          // 경고 셋은 저장값이 아니라 **지금 글·칸** 기준(english-draft.ts) — 새로고침·일괄 작성 뒤에도 맞다.
+                          ...englishRowFlags(selected, previewSubject, previewReport),
+                          jj: englishJjStatusOf(selected.id),
+                          jjPick: englishJjPickOf(selected.id),
+                          canLinkJj: canLinkIjw,
+                          media: {
+                            busy: uploadingAttKey === rowKey(selected.id, previewSubject.name),
+                            full: (previewReport?.attachments?.length ?? 0) >= REPORT_ATTACHMENT_MAX,
+                            hasVideo: hasVideoAttachment(previewReport?.attachments),
+                          },
+                        }}
+                        notice={templateNotice ?? (templateListFailed ? t("os.tpl.listFailed") : null)}
+                        handlers={{
+                          onTemplate: (id) => setEnglishTemplateFor(selected, previewSubject.name, id),
+                          onNextTest: (v) => setNextTestFor(selected.id, previewSubject.name, v),
+                          onWordFeedback: (v) => setWordFeedbackFor(selected.id, previewSubject.name, v),
+                          onWordRetest: (on) => setWordRetestFor(selected.id, previewSubject.name, on),
+                          onRefill: () => void refillEnglishFor(selected, previewSubject.name),
+                          onCopy: () => void copyEnglishText(selected, previewSubject.name),
+                          onManage: () => setTemplateManagerOpen(true),
+                          onJjRetry: () =>
+                            void jj.ensure(selected.id, {
+                              outOfClass: rowOutOfClass(selected, previewSubject),
+                              force: true,
+                              manual: true, // 사람이 누른 것 — 멈춤 차단기도 무시한다
+                            }),
+                          onJjPick: (pick) =>
+                            void jj.choose(selected.id, pick, { outOfClass: rowOutOfClass(selected, previewSubject) }),
+                          onInsertFile: (file) => void insertEnglishMediaFor(selected, previewSubject.name, file),
+                          // 영상(2026-11-06) — 사진·PDF와 같은 올리기 함수(저장 보장·게이트 동일) · 글 속 자리 줄은 넣지 않는다.
+                          onVideoFile: (file) => void addAttachmentsFor(selected, previewSubject.name, [file]),
+                        }}
+                      />
+                    ) : null
+                ,
+                }}
               />
               {templateManagerOpen ? (
                 <TemplateManager
