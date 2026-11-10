@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { MENT_STYLE_DIRECTIVE_HEAD } from "./ment-style-prompt";
+// 원스크린 화면 + 옮겨 낸 훅(P3-O)을 한 덩어리로 읽는다 — 화면에서 코드를 옮겨도 같은 단언이 선다.
+import { readOnescreenScreen } from "./components/onescreen-screen-source.test-util";
 
 /**
  * 강사 말투 프로파일(0262a) **배선 가드** — 코퍼스(0214a)는 3주째 쌓였는데 읽는 곳이 0이었다(2026-09-12 점검).
@@ -50,7 +52,7 @@ describe("자동작성이 강사 말투를 읽는다", () => {
 // 2026-10-16 원장 "한계를 수정할 수 있을까" — 무엇을 고쳤는지 배우려면 자동작성 원문이 남아야 한다(0370a).
 describe("자동작성 원문(0370a) — 저장이 남기고 빌드가 읽는다", () => {
   it("화면은 '자동작성 후 수정'일 때만 원문을 싣는다(영어 제외)", () => {
-    const src = read("src/features/onescreen/components/onescreen-client.tsx");
+    const src = readOnescreenScreen();
     expect(src).toMatch(/mentSource === "auto_edited" && su\?\.subjectKey !== "english" && autoSnap && !existing\?\.autoDraftTemplate \? \{ mentAutoDraft: autoSnap \}/);
     // AI 실패 폴백 템플릿은 원문이 아니다 — 표시가 붙는다
     expect(src).toContain("autoDraftTemplate: true");
@@ -62,13 +64,7 @@ describe("자동작성 원문(0370a) — 저장이 남기고 빌드가 읽는다
     expect(src).toContain("after(() => recordMentAiDraft(");
   });
   it("'달라진 것 없음'이라도 손으로 쓴 추세는 지우지 않는다 — 칸이 지난 자동작성 글 그대로일 때만 비운다(원스크린·사무실 작성)", () => {
-    // 세션 입력 조립은 session-input.ts, 자동작성은 use-auto-write.ts로 옮겼다(P3-O) — 화면과 합쳐 읽는다.
-    const os =
-      read("src/features/onescreen/components/onescreen-client.tsx") +
-      "\n" +
-      read("src/features/onescreen/session-input.ts") +
-      "\n" +
-      read("src/features/onescreen/components/use-auto-write.ts");
+    const os = readOnescreenScreen();
     expect(os).toContain('res.ok && res.trendQuiet && (r.trendDraft ?? "") === (r.trendAutoDraft ?? "")');
     const cf = read("src/app/(shell)/lesson-reports/_components/compose-face.tsx");
     expect(cf).toContain("res.trendQuiet && trend === autoTrend");
@@ -78,13 +74,7 @@ describe("자동작성 원문(0370a) — 저장이 남기고 빌드가 읽는다
     expect(cf).toContain('setAutoTrend(d.autoTrend ?? "")');
   });
   it("AI 원문이 아닌 글(폴백 템플릿·지난 회차 복사)은 원문으로 싣지 않는다 — 표시는 세션을 넘는다", () => {
-    // 세션 입력 조립은 session-input.ts, 자동작성은 use-auto-write.ts로 옮겼다(P3-O) — 화면과 합쳐 읽는다.
-    const os =
-      read("src/features/onescreen/components/onescreen-client.tsx") +
-      "\n" +
-      read("src/features/onescreen/session-input.ts") +
-      "\n" +
-      read("src/features/onescreen/components/use-auto-write.ts");
+    const os = readOnescreenScreen();
     expect(os).toContain("autoDraft: p.comment, autoDraftTemplate: true");
     expect(os).toContain("...(r?.[su.name]?.autoDraftTemplate ? { autoDraftTemplate: true } : {})");
     expect(read("src/features/onescreen/server/roster.ts")).toContain("if (entry?.autoDraftTemplate === true) su.autoDraftTemplate = true;");

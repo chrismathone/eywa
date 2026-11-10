@@ -5,7 +5,7 @@ import { notifyMakeupEffect } from "./makeup-effect-toast";
 import { setMakeupClass } from "../server/makeup-class-actions";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { beginWriteOrigin, markWrite, queueWriteTiming, withWriteOrigin } from "../write-timing-store";
+import { markWrite, queueWriteTiming, withWriteOrigin } from "../write-timing-store";
 import type { SendMode, WriteField, WriteView } from "../write-timing";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -34,7 +34,6 @@ import {
   setMyTrendOptOut,
 } from "../server/actions";
 import { DisplayOptionsProvider, useDisplayOptionsState } from "./display-options-context";
-import { orderReportRows } from "../report-row-order";
 import type { DisplayOptions } from "../display-options";
 import { PreviousContent } from "./previous-content";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -53,10 +52,8 @@ import { isTrendOptedOut, trendOptOutKey } from "../trend-optout";
 import { removeMakeupEntry } from "../server/makeup-remove-actions";
 import { checkMakeupReservation, moveReservationToRegular, setReservationReportMode } from "@/features/attendance/server/makeup-reservation-actions";
 import { joinMakeupContent, joinText, planJoinMakeup, planSplitMakeup, type MakeupSwitchBlock } from "../makeup-switch";
-import { logOnescreenBulkApply } from "../server/bulk-log-actions";
 import { canRemoveMakeupRow, makeupRemoveBlockReason } from "../makeup-remove-plan";
 import { makeupRowName } from "../makeup-label";
-import { isBoardBlockedStatus, isBoardWaitStatus } from "../send-class";
 import { MakeupAdder } from "./makeup-adder";
 import { SendWindowNotice } from "./send-window-notice";
 import { EmbedAnchor } from "@/components/embed-link";
@@ -79,16 +76,12 @@ import {
   EMPTY_UNDERSTANDING,
   isMathReportPilot,
   isPilotAutoWritten,
-  isPilotGateError,
   pilotRecomposeNote,
   setAllUnderstanding,
-  hasStoredUnderstanding,
   understandingRows,
   type UnderstandingState,
 } from "../math-report-pilot";
 import { isHomeworkMissed, type DailyTestSkip } from "../math-report-pilot-sections";
-import { needsMakeupCheck } from "../reserved-makeup";
-import { MAKEUP_CHECK_REQUIRED_ERROR } from "@/features/attendance/makeup-check-error";
 import { REASON_BLOCKS, pilotSendBlocks } from "../pilot-send-gate";
 import { ReasonNoteInput } from "./reason-note-input";
 import { attitudeNeedsNote, needsAttitudeNote } from "../math-report-pilot-sections";
@@ -200,29 +193,11 @@ import {
   rowKey,
   effectiveClassnoteStatus,
   isAlreadySent,
-  isAttendanceUnchecked,
-  isCopyTargetRow,
   isReportOptoutRow,
   isRowInputEditable,
   isRowActionable,
-  planBulkApply,
-  planPrevFill,
-  isReportEligible,
-  planBulkPrevFill,
-  planPrevComments,
-  planCopyFirstRow,
-  rowClassName,
   rowInClass,
-  summarizeSendGaps,
-  type BulkPatch,
-  type PrevCommentPlan,
-  type RowAction,
 } from "../grid";
-import {
-  describeAttendanceSkips,
-  planBulkAttendance,
-  type BulkAttendanceStatus,
-} from "../bulk-attendance";
 import { planQuickPresent } from "../quick-attendance";
 import {
   DEFAULT_ONESCREEN_FONT_SIZE,
@@ -264,6 +239,8 @@ import { useSessionAutosave } from "./use-session-autosave";
 import { useRosterView } from "./use-roster-view";
 import { useReportAttachments } from "./use-report-attachments";
 import { useAutoWrite } from "./use-auto-write";
+import { useBulkOps } from "./use-bulk-ops";
+import { useBulkSend } from "./use-bulk-send";
 import { detectClassNotices } from "../class-notice";
 import { shortDate } from "../makeup-absence-link";
 import { computeClientMentSource } from "../ment-source";
@@ -272,10 +249,8 @@ import { SendClassDialog, type SendClassAsk } from "./send-class-dialog";
 import { ClassnoteOnProvider } from "./classnote-on-context";
 import { useSubmitLinkMode, useVideoHomeworkDueReady, useVideoHomeworkOthersReport, useVideoHomeworkPolicy, useVideoHomeworkSaveOk, useVideoHomeworkStore } from "@/features/video-homework/components/video-homework-provider";
 import { submitLinkChoosable } from "@/features/video-submit/link-choice";
-import { planBulkVideoCheck } from "@/features/video-homework/bulk-check";
 import { expectedVideoDue, videoDueTextMismatch } from "@/features/video-homework/due-text-check";
 import { setMyVideoDueDefault } from "../server/video-due-pref-actions";
-import type { VideoHomeworkStatus } from "@/features/video-homework/types";
 import { isVideoHomeworkEnabled } from "@/features/video-homework/policy";
 
 /** 아직 안 불러왔을 때의 빈 결석 후보 한 벌 — 확인창은 이걸 받아 '직접 입력'만 보여 준다. */
@@ -503,8 +478,6 @@ export function OneScreenClient({
   };
   // 공지 컴포저 진입 시 초기 선택 학생(카드=1명, 표=선택/표시). null=진입 안 함.
   const [noticeSeed, setNoticeSeed] = useState<string[] | null>(null);
-  // '이전값 일괄 가져오기' 뒤 멘트 확인 대기 계획(null=다이얼로그 닫힘) — 확인해야만 학부모 문구를 채운다.
-  const [prevCommentPlan, setPrevCommentPlan] = useState<PrevCommentPlan[] | null>(null);
   /**
    * 보강 추가 시 "정규 보고서에 합칠까 / 따로 낼까" 확인 대기(null=다이얼로그 닫힘).
    * 🔴 합침은 **여기서 확인해야만** 일어난다 — 자동 합치기는 강사가 결과를 예측 못 해 혼란을 낳았다(08-06).
@@ -2942,501 +2915,52 @@ export function OneScreenClient({
       refs: { reportsRef, studentsRef },
       i18n: { t, tf },
       bulkBusy,
-      rows: { selectRows, latestRow, latestStudent },
+      // selectRows는 아래 useBulkOps가 낸다 — 이 훅이 먼저 불리므로 부를 때(이벤트) 그 렌더의 함수를 찾아 쓴다(값은 같다).
+      rows: { selectRows: (action, keys) => selectRows(action, keys), latestRow, latestStudent },
       actions: { readonlyBlocked, patchReport },
       english: { generateEnglishDraftFor, refillEnglishInner },
     });
-  // 이 행의 **최신** ClassNote 상태 — 화면 state(방금 보낸 결과·워커 폴링 반영)가 로스터 스냅샷을 이긴다.
-  // ⚠️ 로스터 값만 보면 "방금 보낸 건"을 모른 채 일괄 발송이 그 행을 다시 집는다(중복 게시).
-  function liveClassnoteStatus(studentId: string, subjectName: string): string | null | undefined {
-    return reportsRef.current[studentId]?.[subjectName]?.classnoteStatus;
-  }
-  // 표 일괄 작업 대상 — keys(체크된 행) 있으면 그 교집합, 없으면 표시 행 전체. 진도 필수 공통.
-  // ⚠️ action별 판정(2-3, isRowActionable): save=결석 포함(기록 보존), send/autowrite=결석 제외(발송·AI 무의미).
-  //    send는 **이미 발송된 행도 제외**(중복 게시 차단, 2026-07-22) — 최신 상태를 override로 넘긴다.
-  function selectRows(action: RowAction, keys?: string[]) {
-    const all = orderReportRows(buildGridRows(visible), displaySettings.options.sort, classTags.filter(tag => tag !== CLASS_TAG_ALL))
-      .filter((r) => rowInClass(r.subject, activeClassFilter)) // 특정 반이면 그 반 행만(타 반 혼입 차단)
-      .filter((r) =>
-        isRowActionable(
-          r.subject,
-          action,
-          effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus),
-          {
-            attendanceReadOnly: !canEditAttendance, // 출결 쓰기 권한 없음 = 미체크 게이트 해당 없음(P0-3)
-            progressOptional: isProgressOptionalReport(r.subject, reportsRef.current[r.student.id]?.[r.subject.name]), // SRS 글은 진도 불필요
-          },
-        ),
-      );
-    if (!keys || keys.length === 0) return all;
-    const set = new Set(keys);
-    return all.filter((r) => set.has(r.key));
-  }
-  // 값 일괄 적용(1-2) — 선택(없으면 표시 전체) 행에 채워진 필드만 반영. 빈 필드=미적용(지우기 아님).
-  // 대상은 진도 필터 없는 raw 행(발송가능 selectRows와 별개 경로) — 값 채우기는 진도와 무관.
-  //
-  // ⚠️ **출결만 즉시 서버에 쓴다**(2026-07-30). 나머지 칸은 화면 state를 고치고 자동저장 큐에 실리지만
-  // 출결의 원장은 출석부(attendance_records)라, 여기서 화면만 바꾸면 출석부와 갈라진다. 그래서 셀 액션이
-  // 아니라 **배치 액션 1회**(setAttendanceBulk)로 보낸다 — 30~40행을 셀 단위로 부르면 왕복이 그만큼 늘어
-  // 반응속도(1순위)를 깎는다. 게이트(담당 반·수강생·수정 기간)는 그 액션이 집합 단위로 강제한다(#77).
-  async function bulkApplyValues(
-    keys: string[],
-    patchFields: BulkPatch,
-    onlyEmpty: boolean,
-    progressSubjectKey: string,
-    attendance: BulkAttendanceStatus | null = null,
-    attendanceUnits = "", // 수업타임(시수) — 새로 만드는 출결 행에만(서버 setAttendanceBulk 규약)
-    videoCheck: VideoHomeworkStatus | null = null, // 지난 영상 숙제 검사 — 출결처럼 즉시 기록(검사 칸이 있는 행만)
-  ) {
-    const all = orderReportRows(buildGridRows(visible), displaySettings.options.sort, classTags.filter(tag => tag !== CLASS_TAG_ALL)).filter((r) => rowInClass(r.subject, activeClassFilter));
-    const keySet = new Set(keys);
-    const rows = keys.length ? all.filter((r) => keySet.has(r.key)) : all;
-    const plan = planBulkApply(
-      rows.map((r) => {
-        // 2026-10-02 추가 칸의 현재값은 **행 값**(row-fields.ts) — 표가 그리는 값과 같은 층을 본다.
-        const rowEval = resolveRowFields(r.student, r.subject);
-        return {
-        studentId: r.student.id,
-        subjectName: r.subject.name,
-        subjectIndex: r.subjectIndex,
-        subjectKey: r.subject.subjectKey ?? "math",
-        today: r.subject.today ?? "",
-        progressMode: r.subject.progressMode ?? null,
-        // 이해도 단계(원장 2026-10-26) — 새 수학 보고서 행에만 넣는다 · '빈 칸만'은 아직 직접 매긴 점수가 없는 행에만.
-        understandingOk: isMathReportPilot(r.student.id, r.subject.subjectKey),
-        understandingStored: hasStoredUnderstanding(r.subject.today, r.subject.understanding),
-        attitude: rowEval.attitude,
-        attitudeNote: r.subject.attitudeNote ?? "",
-        attitudeNoteOk: isMathReportPilot(r.student.id, r.subject.subjectKey),
-        homeworkMissReason: r.subject.homeworkMissReason ?? "",
-        dailyTestSkip: r.subject.dailyTestSkip ?? null,
-        homework: rowEval.homework,
-        textbook: r.subject.textbook ?? "",
-        homeworkToday: r.subject.homeworkToday ?? "",
-        note: rowEval.note,
-        dailyScore: rowEval.tests.daily.score,
-        dailyMax: rowEval.tests.daily.max,
-        checkScore: rowEval.tests.check.score,
-        checkMax: rowEval.tests.check.max,
-        videoHomework: r.subject.videoHomework,
-        videoSubmitLink: r.subject.videoSubmitLink,
-        videoHomeworkDue: r.subject.videoHomeworkDue,
-        // 행의 토글이 그려지는 조건과 같다(VideoHomeworkToggle · VideoSubmitLinkToggle) — 토글 없는 행엔 값을 넣지 않는다.
-        // 다른 선생님이 처음 쓴 줄은 토글이 잠겨 있다 — 일괄 적용도 값을 넣지 않는다.
-        videoOk:
-          videoHwSaveOk && !!videoHwPolicy && !!r.subject.classId && !videoHwByOther(r.student.id, r.subject.classId) &&
-          isVideoHomeworkEnabled(videoHwPolicy, { classId: r.subject.classId, subjectKey: r.subject.subjectKey ?? "math", grade: r.student.grade }),
-        // 마감 — 행의 마감 토글과 같은 조건(영상 과제 토글이 있는 행 + 마감 칸 준비됨).
-        dueOk:
-          videoDueReady && videoHwSaveOk && !!videoHwPolicy && !!r.subject.classId && !videoHwByOther(r.student.id, r.subject.classId) &&
-          isVideoHomeworkEnabled(videoHwPolicy, { classId: r.subject.classId, subjectKey: r.subject.subjectKey ?? "math", grade: r.student.grade }),
-        linkOk:
-          videoHwSaveOk && !videoHwByOther(r.student.id, r.subject.classId) &&
-          submitLinkChoosable(submitLinkMode, videoHwPolicy, {
-            classId: r.subject.classId, subjectKey: r.subject.subjectKey, grade: r.student.grade, studentName: r.student.name }),
-        // 잠긴 행(발송 완료·결석)엔 값을 밀어 넣지 않는다 — 넣으면 강사가 **지울 수 없는 값**이 남는다.
-        // ⚠️ 행 목록(rows)에서 빼지는 않는다: 아래 출결 일괄 적용이 같은 목록을 쓰는데 거기서 빠지면
-        //    잘못 찍은 결석을 일괄로 되돌릴 수 없다(잠금의 유일한 탈출구를 막는 꼴).
-        locked:
-          readonlyView ||
-          !isRowInputEditable(
-            r.subject,
-            effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus),
-          ),
-        };
-      }),
-      patchFields,
-      onlyEmpty,
-      progressSubjectKey,
-    );
-    // 값 칸은 먼저 즉시 반영(출결 왕복을 기다리게 하지 않는다). 작성 시간 기록엔 '일괄'로 센다(write-timing-store).
-    const endBulkOrigin = beginWriteOrigin("bulk");
-    try {
-    for (const p of plan) {
-      // 🔴 일괄 적용은 **보강 행에도** 적용한다(원장 2026-08-13) — "일괄 적용됐는데 보강만 적용 안 된다는건
-      //    일괄 적용이 아님". 이후 강사가 행별로 고치는 건 강사 몫이다.
-      if (p.set.attitude !== undefined) setAttitudeValue(p.studentId, p.subjectName, p.set.attitude);
-      if (p.set.attitudeNote !== undefined) setAttitudeNoteFor(p.studentId, p.subjectName, p.set.attitudeNote);
-      if (p.set.homework !== undefined) setHomeworkValue(p.studentId, p.subjectName, p.set.homework);
-      if (p.set.homeworkMissReason !== undefined) setHomeworkMissReasonFor(p.studentId, p.subjectName, p.set.homeworkMissReason);
-      if (p.set.textbook !== undefined) setTextbookFor(p.studentId, p.subjectName, p.set.textbook);
-      if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
-      if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
-      if (p.set.progressMode !== undefined) setProgressModeFor(p.studentId, p.subjectIndex, p.set.progressMode);
-      // 이해도 — 진도 **다음에** 넣는다(같은 차례에 바꾼 진도의 소단원에 채워지게, setAllUnderstandingFor는 patch 안의 행 값을 읽는다).
-      if (p.set.understanding !== undefined) setAllUnderstandingFor(p.studentId, p.subjectName, p.set.understanding);
-      // 뺄 소단원(원장 2026-10-27) — 계획이 그 행 진도에 있는 것만 골라 왔다.
-      for (const lesson of p.set.understandingOff ?? []) toggleUnderstandingFor(p.studentId, p.subjectName, lesson, true);
-      // 2026-10-02 추가 칸 — 전부 **그 행에만**(행 값). 문항수를 먼저 바꾸고 점수를 넣는다(문항수 변경이 점수를 깎으므로).
-      if (p.set.note !== undefined) setNoteFor(p.studentId, p.subjectName, p.set.note);
-      if (p.set.dailyMax !== undefined) setMaxFor(p.studentId, p.subjectName, "daily", p.set.dailyMax);
-      if (p.set.dailyScore !== undefined) setScoreFor(p.studentId, p.subjectName, "daily", p.set.dailyScore);
-      if (p.set.checkMax !== undefined) setMaxFor(p.studentId, p.subjectName, "check", p.set.checkMax);
-      if (p.set.checkScore !== undefined) setScoreFor(p.studentId, p.subjectName, "check", p.set.checkScore);
-      // 일일 테스트 '안 봄'(원장 2026-10-27) — null이면 '봄'으로(이번에 점수를 넣은 행, grid.ts planBulkApply).
-      if (p.set.dailyTestSkip !== undefined) setTestSkipFor(p.studentId, p.subjectName, p.set.dailyTestSkip);
-      const { videoHomework: bulkVideoHw, videoSubmitLink: bulkVideoLink, videoHomeworkDue: bulkVideoDue } = p.set;
-      if (bulkVideoDue !== undefined) rememberVideoDue(bulkVideoDue);
-      if (bulkVideoHw !== undefined || bulkVideoLink !== undefined || bulkVideoDue !== undefined)
-        patch(p.studentId, (s) => ({
-          ...s,
-          subjects: s.subjects.map((su) => (su.name === p.subjectName
-            ? { ...su, ...(bulkVideoHw !== undefined ? { videoHomework: bulkVideoHw } : {}), ...(bulkVideoLink !== undefined ? { videoSubmitLink: bulkVideoLink } : {}),
-              ...(bulkVideoDue !== undefined ? { videoHomeworkDue: bulkVideoDue } : {}),
-              // 일괄로 영상 과제를 끈 행은 마감도 7일로(행 토글과 같은 규칙)
-              ...(bulkVideoHw === false && su.videoHomeworkDue ? { videoHomeworkDue: "week" as const, videoHomeworkDueDate: undefined } : {}) }
-            : su)),
-        }));
-    }
-    } finally {
-      endBulkOrigin();
-    }
-    const done: string[] = [];
-    if (plan.length) {
-      done.push(tf("os.c.doneRows", { n: plan.length }));
-      // 감사로그 한 줄 — 값 칸만(출결·영상 검사는 그 저장 액션이 따로 남긴다). 글 내용은 안 싣는다.
-      const planned = new Set(plan.map((p) => `${p.studentId}::${p.subjectName}`));
-      void logOnescreenBulkApply({
-        mode: "input",
-        date: activeDate,
-        rows: plan.length,
-        classIds: rows.filter((r) => planned.has(`${r.student.id}::${r.subject.name}`)).map((r) => r.subject.classId),
-        fields: [...new Set(plan.flatMap((p) => Object.keys(p.set)))],
-      }).catch(() => {});
-    }
-
-    if (attendance) {
-      // 팝오버가 미리보기에 쓴 것과 **같은 순수 계획**(같은 행·같은 규칙) — 화면 숫자와 실제가 어긋나지 않게.
-      const attPlan = planBulkAttendance(
-        rows.map((r) => ({
-          studentId: r.student.id,
-          classId: r.subject.classId,
-          isMakeup: r.student.isMakeup,
-          raw: r.subject.attendanceRaw,
-        })),
-        attendance,
-        { onlyEmpty },
-      );
-      const why = describeAttendanceSkips(attPlan, lang);
-      if (attPlan.cells.length === 0) {
-        done.push(t("os.c.doneAttNone") + (why ? tf("os.c.doneAttSkip", { why }) : ""));
-      } else {
-        const attKeys = attPlan.cells.map((c) => `${c.studentId}::${c.classId}`);
-        setAttPending((p) => {
-          const n = new Set(p);
-          attKeys.forEach((k) => n.add(k));
-          return n;
-        });
-        try {
-          const res = await setAttendanceBulk({
-            sessionDate: activeDate,
-            status: attendance,
-            cells: attPlan.cells,
-            // 수업타임(시수) — 결석엔 무의미(팝오버가 이미 안 보냄), 새로 만드는 행에만 적용된다.
-            ...(attendanceUnits ? { units: attendanceUnits } : {}),
-          });
-          if ("error" in res) {
-            toast.error(res.error);
-          } else {
-            // 서버가 실제로 기록한 셀만 화면에 반영 — 게이트에 걸려 빠진 셀을 '됐다'고 칠하지 않는다.
-            // 시수는 **새로 만들어진(created) 행에만** 되그린다 — 갱신된 행은 기존 시수가 보존됐으므로
-            // 입력값을 칠하면 화면과 DB가 갈린다(setAttendanceFor optimisticUnits와 같은 정규화: 1=null).
-            const echoUnits = attendanceUnits
-              ? (() => {
-                  const n = Number(attendanceUnits.replace(",", "."));
-                  return !Number.isFinite(n) || n === 1 ? null : n;
-                })()
-              : undefined;
-            for (const c of res.applied)
-              applyAttendanceLocal(
-                c.studentId,
-                c.classId,
-                attendance,
-                // 시수를 안 고른 일괄의 새 칸 = 서버가 넣은 수학 자동 시수(없으면 null=1, auto-units.ts).
-                c.created ? { units: echoUnits !== undefined ? echoUnits : (c.autoUnits ?? null) } : undefined,
-              );
-            done.push(
-              tf("os.c.doneAtt", { n: res.applied.length }) +
-                (res.blocked ? tf("os.c.doneAttBlocked", { n: res.blocked }) : "") +
-                (why ? tf("os.c.doneAttWhy", { why }) : ""),
-            );
-          }
-        } catch {
-          toast.error(t("os.c.attFail"));
-        } finally {
-          setAttPending((p) => {
-            const n = new Set(p);
-            attKeys.forEach((k) => n.delete(k));
-            return n;
-          });
-        }
-      }
-    }
-    // 지난 영상 숙제 검사 — 출결과 같은 성질(화면 state가 아니라 **즉시 기록**). 검사 칸이 보이는 행만(planBulkVideoCheck —
-    // 팝오버가 그 줄을 그리는 조건과 같은 함수), 여러 칸을 한 왕복으로. 열람 전용 화면에선 하지 않는다(서버도 거절한다).
-    if (videoCheck && videoHwStore && !readonlyView) {
-      const targets = planBulkVideoCheck(
-        rows.map((r) => ({
-          classId: r.subject.classId, studentId: r.student.id, subjectKey: r.subject.subjectKey,
-          grade: r.student.grade, homeworkDate: r.subject.prevReport?.date,
-        })),
-        videoHwStore,
-        { status: videoCheck, onlyEmpty },
-      );
-      if (targets.length) {
-        const res = await videoHwStore.changeMany(targets, videoCheck);
-        done.push(tf("os.c.doneVideoCheck", { n: res.applied }) + (res.failed ? tf("os.c.doneVideoCheckFail", { n: res.failed }) : ""));
-      }
-    }
-    if (done.length === 0) {
-      toast.message(t("os.c.applyNone"));
-      return;
-    }
-    toast.success(tf("os.c.applyDone", { list: done.join(" · ") }));
-  }
-  /**
-   * 맨 위 행의 **수업 내용**(진도·교재·오늘 과제)을 아래 행 전부에 복사.
-   * 대상 = 선택 행이 있으면 그 행들, 없으면 표시 전체(반 필터 반영) — 다른 일괄 작업과 같은 규약.
-   * ⚠️ 점수·태도·과제 수행·학부모 문구는 **복사하지 않는다**(학생마다 다른 개별 사실 — grid.ts 주석 참조).
-   */
-  function copyFirstRowDown(keys: string[], overwrite: boolean) {
-    return withWriteOrigin("bulk", () => copyFirstRowDownInner(keys, overwrite));
-  }
-  function copyFirstRowDownInner(keys: string[], overwrite: boolean) {
-    if (readonlyBlocked()) return; // #103 세 뒷문 중 하나 — 잠긴 화면에 값을 밀어 넣는 경로
-    const all = orderReportRows(buildGridRows(visible), displaySettings.options.sort, classTags.filter(tag => tag !== CLASS_TAG_ALL)).filter((r) => rowInClass(r.subject, activeClassFilter));
-    const keySet = new Set(keys);
-    const rows = keys.length ? all.filter((r) => keySet.has(r.key)) : all;
-    const [first, ...rest] = rows;
-    if (!first || rest.length === 0) {
-      toast.message(t("os.c.copyNoRow"));
-      return;
-    }
-    // 같은 반 판정의 열쇠 = 반 필터와 같은 반 이름(보강 행은 앵커 반). 반을 고른 보기에선 보이는 행이 전부 그 반이라
-    // 모르는 행도 그 반으로 본다(종전과 같다) — '전체' 보기에서만 반이 다르거나 모르는 행을 건너뛴다.
-    const classKeyOf = (r: (typeof rows)[number]) => rowClassName(r.subject) ?? activeClassFilter;
-    const res = planCopyFirstRow(
-      {
-        subjectKey: first.subject.subjectKey ?? "math",
-        // 같은 반 행에만 복사한다(원장 2026-10-15 — '전체' 보기에서 다른 반 빈 칸까지 채우던 것).
-        classKey: classKeyOf(first),
-        today: first.subject.today ?? "",
-        progressMode: first.subject.progressMode ?? null,
-        textbook: first.subject.textbook ?? "",
-        homeworkToday: first.subject.homeworkToday ?? "",
-      },
-      rest.map((r) => ({
-        studentId: r.student.id,
-        subjectName: r.subject.name,
-        subjectIndex: r.subjectIndex,
-        subjectKey: r.subject.subjectKey ?? "math",
-        classKey: classKeyOf(r),
-        today: r.subject.today ?? "",
-        progressMode: r.subject.progressMode ?? null,
-        textbook: r.subject.textbook ?? "",
-        homeworkToday: r.subject.homeworkToday ?? "",
-        // 🔴 여기서 `isRowActionable(…,"save")`를 쓰면 안 된다(2026-07-23 원장 제보로 발견).
-        //    그 판정은 **진도가 있어야 통과**(isReportEligible)라, 복사가 필요한 바로 그 행
-        //    (진도가 빈 행)을 전부 대상에서 빼 버려 기능이 사실상 항상 0건이었다.
-        //    게다가 제외 사유를 전부 "발송 완료"로 세어, 보고서가 한 건도 없는 반에서도
-        //    "복사할 칸이 없습니다 — 발송 완료 6행"이라는 **거짓 문구**가 떴다.
-        //    복사가 실제로 막혀야 하는 유일한 조건은 **이미 학부모에게 나간 행**이다.
-        //    (세션 중 방금 보낸 건은 로스터 스냅샷이 모르므로 live 상태를 덮어 읽는다.)
-        actionable: isCopyTargetRow(
-          r.subject,
-          effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus),
-        ),
-      })),
-      { overwrite },
-    );
-    if (res.plan.length === 0) {
-      // 왜 아무 일도 안 일어났는지 말해준다 — "눌렀는데 무반응"이 되지 않게.
-      const why = [
-        // ⚠️ 이 카운터엔 결석 행(2026-08-07)과 '수업보고서 미발송' 반 행(2026-08-19)도 들어온다 —
-        //    사유를 하나로 단정하면 거짓말이 된다. 판정 자체가 `isRowInputEditable`(입력 잠김)이라
-        //    **잠김**이 셋 다 참인 유일한 이름이다.
-        res.skippedSent ? tf("os.c.copyWhyLocked", { n: res.skippedSent }) : "",
-        res.skippedSubject ? tf("os.c.copyWhySubject", { n: res.skippedSubject }) : "",
-        res.skippedClass ? tf("os.c.copyWhyClass", { n: res.skippedClass }) : "",
-        res.skippedNoClass ? tf("os.c.copyWhyNoClass", { n: res.skippedNoClass }) : "",
-        res.skippedFilled ? tf("os.c.copyWhyFilled", { n: res.skippedFilled }) : "",
-      ].filter(Boolean);
-      toast.message(
-        why.length ? tf("os.c.copyNoneWhy", { why: why.join(" · ") }) : t("os.c.copyNeedFirst"),
-      );
-      return;
-    }
-    for (const p of res.plan) {
-      if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
-      // 복습·문제풀이도 진도와 함께(원장 2026-10-27) — 진도 문장이 이 값으로 갈린다.
-      if (p.set.progressMode !== undefined) setProgressModeFor(p.studentId, p.subjectIndex, p.set.progressMode);
-      if (p.set.textbook !== undefined) setTextbookFor(p.studentId, p.subjectName, p.set.textbook);
-      if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
-    }
-    // 감사로그 한 줄(칸 저장은 건마다 남기지 않는다 — bulk-log-actions.ts). 글 내용은 안 싣는다.
-    void logOnescreenBulkApply({
-      mode: "copy",
-      date: activeDate,
-      rows: res.plan.length,
-      // 보강 행은 반 대신 앵커 반(보강을 넣은 수업)으로 적는다.
-      classIds: [first, ...rest.filter((r) => res.plan.some((p) => p.studentId === r.student.id && p.subjectName === r.subject.name))]
-        .map((r) => r.subject.classId ?? r.subject.makeupClassId ?? null),
-      fields: [...new Set(res.plan.flatMap((p) => Object.keys(p.set)))],
-    }).catch(() => {});
-    const skipped = res.skippedSent + res.skippedSubject + res.skippedClass + res.skippedNoClass + res.skippedFilled;
-    toast.success(
-      tf("os.c.copyDone", { name: first.student.name, n: res.plan.length }) +
-        (skipped
-          ? tf("os.c.copySkipped", {
-              n: skipped,
-              why: [
-                res.skippedSent ? tf("os.c.copySkipLocked", { n: res.skippedSent }) : "",
-                res.skippedSubject ? tf("os.c.copySkipSubject", { n: res.skippedSubject }) : "",
-                res.skippedClass ? tf("os.c.copySkipClass", { n: res.skippedClass }) : "",
-                res.skippedNoClass ? tf("os.c.copySkipNoClass", { n: res.skippedNoClass }) : "",
-                res.skippedFilled ? tf("os.c.copySkipFilled", { n: res.skippedFilled }) : "",
-              ]
-                .filter(Boolean)
-                .join(", "),
-            })
-          : ""),
-    );
-  }
-  // 이전 회차 가져오기(1-3) — 그 행의 **빈 칸만** 채움(진도·태도·과제·오늘 과제).
-  // ⚠️ 특이사항은 채우지 않음 — prevReport.note는 학부모 발송 본문(notes)이라 특이사항이 아니다.
-  function importPrevFor(student: OneScreenStudent, subjectName: string) {
-    return withWriteOrigin("prev", () => importPrevForInner(student, subjectName));
-  }
-  function importPrevForInner(student: OneScreenStudent, subjectName: string) {
-    if (readonlyBlocked()) return; // 참고행 '가져오기' — LOCK_FS 밖 버튼이라 여기서 끊는다
-    const idx = student.subjects.findIndex((su) => su.name === subjectName);
-    const su = student.subjects[idx];
-    if (!su || bulkGen || bulkBusy || !isRowInputEditable(su, effectiveClassnoteStatus(liveClassnoteStatus(student.id, subjectName), su.classnoteStatus))) return;
-    const rowEval = resolveRowFields(student, su);
-    const fill = planPrevFill({
-      prev: su.prevReport,
-      current: {
-        today: su.today,
-        attitude: rowEval.attitude,
-        homework: rowEval.homework,
-        homeworkToday: su.homeworkToday ?? "",
-      },
-      attitudes: ATTITUDE,
-    });
-    const count = Object.keys(fill).length;
-    if (!count) {
-      toast.message(t("os.c.prevFillNone"));
-      return;
-    }
-    if (fill.today !== undefined) setProgressFor(student.id, idx, fill.today);
-    if (fill.attitude !== undefined) setAttitudeValue(student.id, subjectName, fill.attitude);
-    if (fill.homework !== undefined) setHomeworkValue(student.id, subjectName, fill.homework);
-    if (fill.homeworkToday !== undefined) setHomeworkTodayFor(student.id, subjectName, fill.homeworkToday);
-    toast.success(tf("os.c.prevFillOne", { n: count }));
-  }
-  // 이전 회차 **일괄** 가져오기(G5 얕은판) — 표시(또는 선택) 전 행에 planPrevFill을 돌려 빈 칸만 채운다.
-  // bulkApplyValues 대칭(대상 선정 규약 동일: keys 미선택=표시 전체, rowInClass 필터). 행별 importPrevFor와
-  // 같은 순수 계획 함수를 쓰므로 특이사항·교재 제외(발송 본문 오염 방지·roster 자동 승계) 결정이 자동 준수된다.
-  // "평소와 같음" 기본값의 얕은 구현 — 강사는 일괄로 깔고 달라진 학생만 손댄다(깊은판 provenance는 G4에서).
-  // ⚠️ 멘트(학부모 문구)만 예외로 **확인 다이얼로그**를 거친다 — 나머지 칸은 강사가 오늘 값을 고르는 입력이지만
-  // 멘트는 직전에 이미 학부모에게 나간 문장이라, 오늘 진도·점수와 어긋난 채 그대로 발송될 위험이 있다(원장 지시 07-21).
-  function bulkImportPrev(keys?: string[]) {
-    return withWriteOrigin("prev", () => bulkImportPrevInner(keys));
-  }
-  function bulkImportPrevInner(keys?: string[]) {
-    if (readonlyBlocked() || bulkGen || bulkBusy) return;
-    const all = orderReportRows(buildGridRows(visible), displaySettings.options.sort, classTags.filter(tag => tag !== CLASS_TAG_ALL)).filter((r) => rowInClass(r.subject, activeClassFilter));
-    const keySet = new Set(keys ?? []);
-    const rows = keySet.size ? all.filter((r) => keySet.has(r.key)) : all;
-    // 선택된 수업 행별 현재값으로 계획한다. 다른 반·보강 행과 평가값을 공유하지 않는다.
-    const plan = planBulkPrevFill(
-      rows.flatMap((r) => {
-        const subjectIndex = r.student.subjects.findIndex((su) => su.name === r.subject.name);
-        const su = r.student.subjects[subjectIndex];
-        if (!su) return [];
-        return [
-          {
-            studentId: r.student.id,
-            subjectName: r.subject.name,
-            subjectIndex,
-            prev: su.prevReport,
-            current: {
-              today: su.today,
-              attitude: resolveRowFields(r.student, su).attitude,
-              homework: resolveRowFields(r.student, su).homework,
-              homeworkToday: su.homeworkToday ?? "",
-            },
-            // 잠긴 행(발송 완료·결석)은 채우지 않는다(위 일괄 적용과 같은 이유).
-            locked:
-              readonlyView ||
-              !isRowInputEditable(
-                su,
-                effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), su.classnoteStatus),
-              ),
-          },
-        ];
-      }),
-      ATTITUDE,
-    );
-    // 멘트는 별도 계획 — 초안이 빈 행 중 직전 멘트가 있는 것만. 적용은 아래 확인 다이얼로그 뒤에.
-    // 🔴 영어 행은 뺀다 — 영어 글은 템플릿이 **지난 회차 진도·점수**까지 담은 전문이라, 가져오면 오늘 기록과 다른 글이
-    //    그대로 나간다(적대 재리뷰 2026-09-10). 영어는 자동작성·다시 채우기로 새로 만든다.
-    const commentPlan = planPrevComments(
-      rows.filter((r) => r.subject.subjectKey !== "english" && isRowInputEditable(r.subject, effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus))).map((r) => ({
-        studentId: r.student.id,
-        subjectName: r.subject.name,
-        prevNote: r.student.subjects.find((su) => su.name === r.subject.name)?.prevReport?.note,
-        // ⚠️ 초안은 ref에서 — 진행 중이던 자동작성이 방금 채운 멘트를 클릭 시점 스냅샷이 못 봐 덮어쓰는 것 방지(#10).
-        currentDraft: reportsRef.current[r.student.id]?.[r.subject.name]?.draft ?? "",
-      })),
-    );
-    // 보강 학생은 이전 회차를 따로 불러와야 채워진다 — 안 불러온 학생이 대상에 있으면 알리고 그 자리에서 불러오게 한다(원장 2026-10-27).
-    const makeupPending = [...new Set(rows.filter((r) => r.student.isMakeup && !prevLoaded.has(r.student.id)).map((r) => r.student.id))];
-    if (makeupPending.length) {
-      toast.message(tf("os.c.makeupPrevPending", { n: makeupPending.length }), {
-        action: { label: t("os.c.makeupPrevLoadNow"), onClick: () => void loadMakeupPrevAll(makeupPending) },
-      });
-    }
-    if (!plan.length && !commentPlan.length) {
-      if (!makeupPending.length) toast.message(t("os.c.prevFillNone"));
-      return;
-    }
-    let filledCells = 0;
-    for (const p of plan) {
-      if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
-      // 🔴 일괄 적용은 **보강 행에도** 적용한다(원장 2026-08-13) — "일괄 적용됐는데 보강만 적용 안 된다는건
-      //    일괄 적용이 아님". 이후 강사가 행별로 고치는 건 강사 몫이다.
-      if (p.set.attitude !== undefined) setAttitudeValue(p.studentId, p.subjectName, p.set.attitude);
-      if (p.set.homework !== undefined) setHomeworkValue(p.studentId, p.subjectName, p.set.homework);
-      if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
-      filledCells += Object.keys(p.set).length;
-    }
-    if (plan.length) {
-      toast.success(tf("os.c.prevFillMany", { rows: plan.length, cells: filledCells }));
-    }
-    if (commentPlan.length) setPrevCommentPlan(commentPlan); // → 확인 다이얼로그
-  }
-  /** 확인 다이얼로그 '멘트도 가져오기' — 계획대로 초안만 채운다(다른 칸은 위에서 이미 처리됨). */
-  function applyPrevComments() {
-    return withWriteOrigin("prev", () => applyPrevCommentsInner());
-  }
-  function applyPrevCommentsInner() {
-    const plan = prevCommentPlan ?? [];
-    setPrevCommentPlan(null);
-    if (!plan.length) return;
-    // 🔴 복사 삽입도 autoDraft 스냅샷을 함께 남긴다(0214a, 적대 리뷰 확정) — 직전 회차 문구는 AI 유래일 수
-    //    있고 아니어도 "지금 직접 쓴" 문장이 아니다. setDraftFor(초안만)로 넣으면 그대로 저장 시 manual로
-    //    오표기돼 말투 코퍼스가 오염된다(중복 유입 포함). 스냅샷을 남기면 그대로=auto, 고치면=auto_edited.
-    for (const p of plan) {
-      const su = studentsRef.current.find(s => s.id === p.studentId)?.subjects.find(s => s.name === p.subjectName);
-      if (!su || !isRowInputEditable(su, effectiveClassnoteStatus(liveClassnoteStatus(p.studentId, p.subjectName), su.classnoteStatus))) continue;
-      // 수학 보고서 시범 — 지난 글을 옮겨 넣으면 '자동작성 글'로 잡혀 발송 게이트를 지난다. 시범 대상은 자동작성만.
-      if (isMathReportPilot(p.studentId, su.subjectKey)) continue;
-      // 지난 회차 글은 AI 원문이 아니다(선생님이 직접 쓴 글일 수 있다) — 자동작성 원문(0370a)으로 싣지 않게 표시.
-      patchReport(p.studentId, p.subjectName, r => r.draft.trim() ? r : ({ ...r, draft: p.comment, autoDraft: p.comment, autoDraftTemplate: true }));
-    }
-    toast.success(tf("os.c.prevComments", { n: plan.length }));
-  }
+  // 표 일괄 작업(대상 행 고르기·값 일괄 적용·맨 위 행 복사·이전 회차 가져오기) — use-bulk-ops.ts(P3-O).
+  const {
+    prevCommentPlan,
+    setPrevCommentPlan,
+    liveClassnoteStatus,
+    selectRows,
+    bulkApplyValues,
+    copyFirstRowDown,
+    importPrevFor,
+    bulkImportPrev,
+    applyPrevComments,
+  } = useBulkOps({
+    view: { visible, activeClassFilter, classTags, displaySettings },
+    ctx: { canEditAttendance, readonlyView, activeDate, lang },
+    i18n: { t, tf },
+    refs: { reportsRef, studentsRef },
+    bulk: { bulkBusy, bulkGen },
+    video: { videoHwSaveOk, videoHwPolicy, videoHwByOther, videoDueReady, submitLinkMode, videoHwStore },
+    attendance: { setAttPending, applyAttendanceLocal },
+    makeupPrev: { prevLoaded, loadMakeupPrevAll },
+    setters: {
+      setAttitudeValue,
+      setAttitudeNoteFor,
+      setHomeworkValue,
+      setHomeworkMissReasonFor,
+      setTextbookFor,
+      setHomeworkTodayFor,
+      setProgressFor,
+      setProgressModeFor,
+      setAllUnderstandingFor,
+      toggleUnderstandingFor,
+      setNoteFor,
+      setMaxFor,
+      setScoreFor,
+      setTestSkipFor,
+      rememberVideoDue,
+      patch,
+      patchReport,
+    },
+    readonlyBlocked,
+  });
   // 학생 순서 저장(3-2) — (강사×반) 영구 저장 + 성공 시 클라 state에도 즉시 반영(다음 로드는 roster가 적용).
   async function saveOrderForClass(classId: string, studentIds: string[]): Promise<boolean> {
     if (readonlyView) return false; // 조용히 — 드래그마다 토스트가 쌓이면 짜증(순서는 그 강사의 개인 설정이다)
@@ -3992,310 +3516,18 @@ export function OneScreenClient({
     if (!student || !student.subjects.some((su) => su.name === subjectName)) return null;
     return student;
   }
-  async function saveAllVisible(keys?: string[]) {
-    if (readonlyBlocked()) return;
-    if (bulkBusy || bulkGen) return; // 재진입·중첩 방지(#10)
-    const rows = selectRows("save", keys);
-    const skipped = keys?.length ? keys.length - rows.length : 0; // 미선택=전체=0(음수 방지 #11)
-    if (rows.length === 0) {
-      // 발송 완료건은 수정 금지라 저장 대상에서도 빠진다 — "왜 아무것도 저장이 안 되지"의 답을 준다.
-      toast.message(
-        sentRowCount
-          ? tf("os.c.saveNoneSent", { n: sentRowCount })
-          : t("os.c.saveNone"),
-      );
-      return;
-    }
-    // 영어 행 중 AI 인사말·코멘트가 옛 값 기준인 행 — 저장하면 학부모 링크·인쇄에 그대로 보이니 **누구인지** 적고 묻는다.
-    // 영어 행의 템플릿 목록이 아직 오는 중이면 잠깐 미룬다(곧 다시 짤 수 있게 된다 — 지금 '그대로'를 권하지 않는다).
-    if (
-      rows.some(
-        (r) =>
-          r.subject.subjectKey === "english" &&
-          englishTemplateNotReady(reportsRef.current[r.student.id]?.[r.subject.name]),
-      )
-    ) {
-      toast.message(t("os.tpl.loading"));
-      return;
-    }
-    // 🔴 일괄 확인은 '확인됨'으로 적지 않는다 — 이름이 5명까지만 적히는 창 하나로 이후 행별 복사·발송 확인까지 꺼지면 안 된다.
-    const outdatedRows = outdatedEnglishRows(rows);
-    const aiStaleNames = [...new Set(outdatedRows.map((r) => r.student.name))];
-    if (
-      aiStaleNames.length &&
-      !window.confirm(
-        tf("os.tpl.bulkSaveOutdated", {
-          n: aiStaleNames.length,
-          names: aiStaleNames.slice(0, 5).join(", "),
-          more: aiStaleNames.length > 5 ? tf("os.c.lineMore", { n: aiStaleNames.length - 5 }) : "",
-        }),
-      )
-    )
-      return;
-    setBulkBusy("save");
-    let ok = 0;
-    let fail = 0;
-    let jjWarn = 0; // 영어 그림 자료를 못 묶은 저장(저장은 성공) — 행마다 토스트를 쌓지 않고 한 줄로 센다
-    try {
-      for (const r of rows) {
-        const student = latestRow(r.student.id, r.subject.name) ?? r.student;
-        const res = await saveRecord(student, r.subject.name, "bulk");
-        if (res.ok) ok++;
-        else fail++;
-        if (res.ok && res.warning) jjWarn++;
-      }
-    } finally {
-      setBulkBusy(null);
-    }
-    toast.success(
-      tf("os.c.saveDone", { n: ok }) +
-        (fail ? tf("os.c.saveFailN", { n: fail }) : "") +
-        (skipped ? tf("os.c.saveSkipped", { n: skipped }) : "") +
-        (jjWarn ? tf("os.tpl.jjWarnBulk", { n: jjWarn }) : ""),
-    );
-  }
-  async function sendAllVisible(keys?: string[]) {
-    if (readonlyBlocked()) return;
-    if (bulkBusy || bulkGen) return; // 재진입·중첩 방지(#10)
-    let rows = selectRows("send", keys); // ⚠️ let — 아래 빈 멘트 절대 가드가 대상을 좁힌다
-
-    const preSkipped = keys?.length ? keys.length - rows.length : 0; // 미선택=전체=0(음수 방지 #11)
-    // 발송 후보 중 **이미 발송된 행** — 아래 안내에 쓰고, rows에는 이미 빠져 있다.
-    // ⚠️ 이 수치는 "일괄 발송을 다시 눌러도 안 나가는 이유"라 반드시 보여준다(무언 제외 = 사고 은폐).
-    // ⚠️ `selectRows`로 세면 **항상 0**이 된다 — 발송 완료건은 save 게이트에서도 이미 빠지기 때문
-    //    (2026-07-22 '수정도 금지'로 강화된 뒤의 함정). 그래서 게이트 이전의 원본 행에서 센다.
-    const allRows = orderReportRows(buildGridRows(visible), displaySettings.options.sort, classTags.filter(tag => tag !== CLASS_TAG_ALL)).filter((r) => rowInClass(r.subject, activeClassFilter));
-    const keySet = keys?.length ? new Set(keys) : null;
-    const alreadySentRows = allRows.filter(
-      (r) =>
-        (!keySet || keySet.has(r.key)) &&
-        r.subject.attendanceRaw !== "absent" &&
-        isAlreadySent(effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus)),
-    ).length;
-    if (rows.length === 0) {
-      toast.message(
-        alreadySentRows
-          ? tf("os.c.sendNoneSent", { n: alreadySentRows })
-          : t("os.c.sendNone"),
-      );
-      return;
-    }
-    // 발송 전 누락 안내(2-4) — 차단 아님("누락=생략" 철학 유지). 누락은 고유 학생 수 기준.
-    // ⚠️ 결석 제외는 **행(과목) 단위 건수** — 다과목 학생은 결석 반 과목만 빠지고 다른 과목은 발송되므로
-    //    "N명 제외"로 쓰면 오안내(리뷰 확정). 발송 단위=행(lesson_reports 1건)이라 "건"이 정확.
-    const absentRows = allRows.filter(
-      (r) => (!keySet || keySet.has(r.key)) && r.subject.attendanceRaw === "absent",
-    ).length;
-    // 진도 미입력 제외(2026-07-28 김민찬 사례) — 멘트까지 다 써놓고 진도만 빠진 행이 **소리 없이** 빠지면
-    // 강사는 발송된 줄 알고, 학부모는 못 받는다. 제외라는 사실 + **누구인지**를 confirm에서 알린다.
-    const noProgressRows = allRows.filter(
-      (r) =>
-        (!keySet || keySet.has(r.key)) &&
-        r.subject.attendanceRaw !== "absent" &&
-        !isAlreadySent(effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus)) &&
-        !isReportEligible(r.subject, isProgressOptionalReport(r.subject, reportsRef.current[r.student.id]?.[r.subject.name])),
-    );
-    const noProgressNames = [...new Set(noProgressRows.map((r) => r.student.name))];
-    const progressLine = noProgressRows.length
-      ? tf("os.c.lineProgress", {
-          n: noProgressRows.length,
-          names: noProgressNames.slice(0, 5).join(", "),
-          more:
-            noProgressNames.length > 5
-              ? tf("os.c.lineMore", { n: noProgressNames.length - 5 })
-              : "",
-        })
-      : "";
-    // 출결 미체크 제외(2026-08-17 원장 지시) — 진도·멘트와 같은 규약: 소리 없는 제외 금지, 누구인지 명시.
-    // "미체크만 아니면 발송됐을 행" = autowrite 판정(진도 있음·미발송·결석 아님)과 정확히 같은 집합이라
-    // 게이트 함수를 재사용한다(조건 체인을 손으로 복제하면 게이트가 바뀔 때 이 카운트만 조용히 어긋난다, #89류).
-    // 진도 미입력 행은 위 progressLine이 이미 셌으므로 여기 안 겹친다(한 행 중복 계수 방지).
-    const uncheckedRows = allRows.filter(
-      (r) =>
-        canEditAttendance && // 출결 쓰기 권한 없음 = 게이트 해당 없음(P0-3) — 제외 안내도 하지 않는다
-        (!keySet || keySet.has(r.key)) &&
-        isRowActionable(r.subject, "autowrite", effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus), {
-          progressOptional: isProgressOptionalReport(r.subject, reportsRef.current[r.student.id]?.[r.subject.name]),
-        }) &&
-        isAttendanceUnchecked(r.subject),
-    );
-    const uncheckedNames = [...new Set(uncheckedRows.map((r) => r.student.name))];
-    const uncheckedLine = uncheckedRows.length
-      ? tf("os.c.lineUnchecked", {
-          n: uncheckedRows.length,
-          names: uncheckedNames.slice(0, 5).join(", "),
-          more:
-            uncheckedNames.length > 5
-              ? tf("os.c.lineMore", { n: uncheckedNames.length - 5 })
-              : "",
-        })
-      : "";
-    const gaps = summarizeSendGaps(rows, { dailyEnabled: showDailyTest, checkEnabled: showCheckTest });
-    const gapLine =
-      gaps.missingAttitude || gaps.missingTest
-        ? tf("os.c.lineGap", { attitude: gaps.missingAttitude, test: gaps.missingTest })
-        : "";
-    // 🔴 빈 멘트 절대 가드(원장 지시 2026-07-28) — 멘트 없는 행은 **발송 대상에서 제외**한다(워커
-    // 최종 관문도 무조건 차단 — 이날 빈 보고서 22건이 학부모에게 노출된 사고). confirm에 누구인지 명시.
-    // 영어 글의 그림·사진 자리 줄뿐인 행도 빈 멘트다(서버 isSlotOnlyEnglishNotes와 같은 판정 — hasTextBesidesMarkers).
-    const emptyMentRows = rows.filter((r) => !hasTextBesidesMarkers(reports[r.student.id]?.[r.subject.name]?.draft));
-    rows = rows.filter((r) => hasTextBesidesMarkers(reports[r.student.id]?.[r.subject.name]?.draft));
-    const emptyMentNames = [...new Set(emptyMentRows.map((r) => r.student.name))];
-    const emptyMentLine = emptyMentRows.length
-      ? tf("os.c.lineMent", {
-          n: emptyMentRows.length,
-          names: emptyMentNames.slice(0, 5).join(", "),
-          more:
-            emptyMentNames.length > 5
-              ? tf("os.c.lineMore", { n: emptyMentNames.length - 5 })
-              : "",
-        })
-      : "";
-    // 새 보고서 조건(자동작성 다시 · 사랑의 한마디 · 시험 없음/숙제 미제출 사유) — 행별 발송 버튼과 **같은 판정**(pilot-send-gate.ts).
-    // 원장 2026-10-26 *"표로 일괄입력할 때 문제"* — 일괄 발송만 이 조건을 안 봐서 사유 없는 글·옛 출결이 적힌 글이 나갔다. 제외 + 누구인지.
-    const pilotBlockedRows = rows.filter((r) => pilotSendBlocks(latestRow(r.student.id, r.subject.name) ?? r.student, r.subject.name, reportsRef.current[r.student.id]?.[r.subject.name]).length > 0);
-    if (pilotBlockedRows.length) {
-      const blockedKeys = new Set(pilotBlockedRows.map((r) => r.key));
-      rows = rows.filter((r) => !blockedKeys.has(r.key));
-    }
-    // 보강 진행 여부 확인 전 줄 — 행별 발송 버튼은 막는데(send-gate `mkcheck`) 일괄 발송만 안 걸러 서버 거절이 '실패'로 섞였다
-    //   (2026-10-27 표 일괄 점검). 버튼과 **같은 판정**(needsMakeupCheck)으로 미리 빼고 누구인지 알린다.
-    const makeupBlockedRows = rows.filter((r) => {
-      const st = latestRow(r.student.id, r.subject.name) ?? r.student;
-      return needsMakeupCheck(st.subjects.find((s) => s.name === r.subject.name) ?? r.subject);
-    });
-    if (makeupBlockedRows.length) {
-      const blockedKeys = new Set(makeupBlockedRows.map((r) => r.key));
-      rows = rows.filter((r) => !blockedKeys.has(r.key));
-    }
-    const makeupBlockedNames = [...new Set(makeupBlockedRows.map((r) => r.student.name))];
-    const makeupLine = makeupBlockedRows.length
-      ? tf("os.c.lineMakeupCheck", {
-          n: makeupBlockedRows.length,
-          names: makeupBlockedNames.slice(0, 5).join(", "),
-          more: makeupBlockedNames.length > 5 ? tf("os.c.lineMore", { n: makeupBlockedNames.length - 5 }) : "",
-        })
-      : "";
-    const pilotBlockedNames = [...new Set(pilotBlockedRows.map((r) => r.student.name))];
-    const pilotLine = pilotBlockedRows.length
-      ? tf("os.c.linePilot", {
-          n: pilotBlockedRows.length,
-          names: pilotBlockedNames.slice(0, 5).join(", "),
-          more: pilotBlockedNames.length > 5 ? tf("os.c.lineMore", { n: pilotBlockedNames.length - 5 }) : "",
-        })
-      : "";
-    if (rows.length === 0) {
-      if (pilotBlockedRows.length || makeupBlockedRows.length) toast.message(`${t("os.c.sendNone")}${pilotLine}${makeupLine}`);
-      else toast.message(tf("os.c.sendNoneMent", { n: emptyMentRows.length }));
-      return;
-    }
-    // 영어 행 중 AI 코멘트가 고치기 전 값으로 쓰인 행 — 막지 않고 **누구인지** 알린다(위 줄들과 같은 규약).
-    // 저장 직전 재조립은 사실 줄만 새로 쓰므로, 여기서 안 알리면 점수와 코멘트가 서로 다른 글이 나간다.
-    // 영어 행의 템플릿 목록이 아직 오는 중이면 잠깐 미룬다(곧 다시 짤 수 있게 된다 — 지금 '그대로'를 권하지 않는다).
-    if (
-      rows.some(
-        (r) =>
-          r.subject.subjectKey === "english" &&
-          englishTemplateNotReady(reportsRef.current[r.student.id]?.[r.subject.name]),
-      )
-    ) {
-      toast.message(t("os.tpl.loading"));
-      return;
-    }
-    // 🔴 일괄 확인은 '확인됨'으로 적지 않는다 — 이름이 5명까지만 적히는 창 하나로 이후 행별 복사·발송 확인까지 꺼지면 안 된다.
-    const outdatedRows = outdatedEnglishRows(rows);
-    const aiStaleNames = [...new Set(outdatedRows.map((r) => r.student.name))];
-    const aiStaleLine = aiStaleNames.length
-      ? tf("os.tpl.lineOutdated", {
-          n: aiStaleNames.length,
-          names: aiStaleNames.slice(0, 5).join(", "),
-          more: aiStaleNames.length > 5 ? tf("os.c.lineMore", { n: aiStaleNames.length - 5 }) : "",
-        })
-      : "";
-    const absentLine = absentRows ? tf("os.c.lineAbsent", { n: absentRows }) : "";
-    const sentLine = alreadySentRows
-      ? tf("os.c.lineSent", { n: alreadySentRows })
-      : "";
-    if (
-      !window.confirm(
-        tf("os.c.sendConfirm", {
-          n: rows.length,
-          lines: `${emptyMentLine}${pilotLine}${makeupLine}${progressLine}${uncheckedLine}${gapLine}${aiStaleLine}${absentLine}${sentLine}`,
-        }),
-      )
-    )
-      return;
-    setBulkBusy("send");
-    let queued = 0;
-    let blocked = 0;
-    let skipped = 0;
-    let subjectOff = 0; // 발송 대상 과목 아님(저장만) — '발송 대기'로 뭉뚱그리지 않고 명시(#2 확정)
-    let absentSkip = 0; // 서버 결석 게이트에 걸린 행(클라 사전 필터의 사각 — 반 모호 행 등)
-    let uncheckedSkip = 0; // 서버 출결 미체크 게이트에 걸린 행(stale 화면 등 클라 게이트 사각)
-    let optoutSkip = 0; // 서버 '수업보고서 미발송' 반 게이트에 걸린 행(2026-08-19)
-    let sentSkip = 0; // 서버 중복 게시 가드에 걸린 행(다른 창에서 먼저 보낸 경우 등)
-    let dry = 0;
-    let fail = 0;
-    let noClass = 0; // 반별 발송인데 보낼 반이 없어 막힌 행(원장 2026-09-30 — 담당 반이 없으면 발송 불가)
-    let boardWait = 0; // 반 보드 배정·재확인을 기다리는 행(방금 배정된 신입 등 — 배정된 뒤 다시 보내면 된다, 2026-10-03)
-    let jjWarn = 0; // 영어 그림 자료를 못 묶은 행(저장은 성공)
-    let makeupSkip = 0; // 보강 진행 여부 확인 전이라 서버가 거절한 행(저장은 됐다)
-    let pilotSkip = 0; // 새 보고서 조건(자동작성·사랑의 한마디·사유)에 걸려 서버가 거절한 행 — 화면 판정 뒤에 값이 바뀐 경우
-    let windowHint = ""; // 발송 허용 시간창 밖 큐잉 — 마지막 응답의 창 라벨(테넌트 단일 설정이라 동일)
-    try {
-      for (const r of rows) {
-        const student = latestRow(r.student.id, r.subject.name) ?? r.student;
-        const res = await queueOne(student, r.subject.name, "bulk");
-        if (res.ok && res.warning) jjWarn++;
-        if (!res.ok) {
-          // 반 보드에 배정되는 중이면 '실패'가 아니라 '기다림'으로 센다. 보류·반을 떠난 학생은 보낼 반이 없는 것이다.
-          if (isBoardWaitStatus(res.status)) boardWait++;
-          else if (res.status === "no_class" || isBoardBlockedStatus(res.status)) noClass++;
-          // 새 보고서 조건에 걸려 서버가 거절(저장은 됐다) — '실패'로 뭉치지 않고 이유를 따로 센다(원장 2026-10-26).
-          else if (isPilotGateError(res.error)) pilotSkip++;
-          // 보강 진행 여부 확인 전(화면 판정 뒤에 예약이 생긴 경우 등) — 서버가 거절, 저장은 됐다.
-          else if (res.error === MAKEUP_CHECK_REQUIRED_ERROR) makeupSkip++;
-          else fail++;
-        } else if (res.status === "queued") {
-          queued++;
-          if (res.sendWindowHint) windowHint = res.sendWindowHint;
-        } else if (res.status === "dry_run") dry++;
-        else if (res.status === "subject_off") subjectOff++;
-        else if (res.status === "name_conflict" || res.status === "revoked" || res.status === "recall_pending") blocked++;
-        else if (res.status === "absent") absentSkip++; // 서버 결석 게이트(클라 사전 필터를 지난 반 모호 행 등)
-        else if (res.status === "no_attendance") uncheckedSkip++; // 서버 출결 미체크 게이트(stale 화면 등)
-        else if (res.status === "report_optout") optoutSkip++; // 서버 미발송 반 게이트(2026-08-19)
-        else if (res.status === "already_sent") sentSkip++; // 서버 중복 게시 가드(클라 게이트를 지난 stale 행)
-        else skipped++; // processing/too_old
-      }
-    } finally {
-      setBulkBusy(null);
-    }
-    toast.success(
-      (dry ? (classnoteOn ? tf("os.c.bulkDry", { n: dry }) : tf("os.c.bulkSavedOnly", { n: dry })) : "") +
-        (!classnoteOn && queued === 0
-          ? ""
-          : windowHint
-            ? tf("os.c.bulkQueuedWindow", { n: queued, hint: windowHint })
-            : tf("os.c.bulkQueued", { n: queued })) +
-        (subjectOff ? tf("os.c.bulkSubjectOff", { n: subjectOff }) : "") +
-        (absentSkip ? tf("os.c.bulkAbsent", { n: absentSkip }) : "") +
-        (uncheckedSkip ? tf("os.c.bulkUnchecked", { n: uncheckedSkip }) : "") +
-        (optoutSkip ? tf("os.c.bulkOptout", { n: optoutSkip }) : "") +
-        (alreadySentRows || sentSkip
-          ? tf("os.c.bulkSent", { n: alreadySentRows + sentSkip })
-          : "") +
-        (blocked ? tf("os.c.bulkBlocked", { n: blocked }) : "") +
-        (skipped ? tf("os.c.bulkSkipped", { n: skipped }) : "") +
-        (preSkipped ? tf("os.c.bulkPreSkipped", { n: preSkipped }) : "") +
-        (jjWarn ? tf("os.tpl.jjWarnBulk", { n: jjWarn }) : "") +
-        (boardWait ? tf("os.c.bulkBoardWait", { n: boardWait }) : "") +
-        (noClass ? tf("os.c.bulkNoClass", { n: noClass }) : "") +
-        (pilotSkip ? tf("os.c.bulkPilot", { n: pilotSkip }) : "") +
-        (makeupSkip ? tf("os.c.bulkMakeupCheck", { n: makeupSkip }) : "") +
-        (fail ? tf("os.c.bulkFail", { n: fail }) : ""),
-    );
-  }
+  // 표 일괄 저장·발송 — use-bulk-send.ts(P3-O).
+  const { saveAllVisible, sendAllVisible } = useBulkSend({
+    view: { visible, activeClassFilter, classTags, displaySettings },
+    ctx: { canEditAttendance, classnoteOn, showDailyTest, showCheckTest, sentRowCount },
+    i18n: { t, tf },
+    state: { reports, reportsRef },
+    bulk: { bulkBusy, bulkGen, setBulkBusy },
+    rows: { selectRows, liveClassnoteStatus, latestRow },
+    english: { englishTemplateNotReady, outdatedEnglishRows },
+    core: { saveRecord, queueOne },
+    readonlyBlocked,
+  });
 
   // 공유링크 취소(revoke) — 학부모 열람 즉시 차단. 대상은 그 과목의 현재 shareToken.
   async function revokeShare(subjectName: string) {

@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { planBulkApply, type BulkTarget } from "./grid";
 import { bulkUnderstandingLessons } from "./math-report-pilot";
+// 원스크린 화면 + 옮겨 낸 훅(P3-O)을 한 덩어리로 읽는다 — 화면에서 코드를 옮겨도 같은 단언이 선다.
+import { readOnescreenScreen } from "./components/onescreen-screen-source.test-util";
 
 // 원장 2026-10-27 *"이해도를 상세에서 몇개 선택 빼기 하고 학생별 상세에서 각각 변하게"* · *"보강학생 … 안내하고 버튼도"*.
 const row = (over: Partial<BulkTarget> = {}): BulkTarget =>
@@ -47,14 +49,14 @@ describe("일괄 입력 — 이해도에서 뺄 소단원", () => {
 describe("배선", () => {
   const read = (...p: string[]) => readFileSync(resolve(__dirname, ...p), "utf8");
   it("표 행의 '소단원별' 창 = 카드와 같은 setter · 일괄 적용이 뺄 소단원을 넣는다", () => {
-    const client = read("components", "onescreen-client.tsx");
+    const client = readOnescreenScreen();
     expect(client).toContain("onUnderstandingScore: setUnderstandingScoreFor");
     expect(client).toContain("onUnderstandingToggle: toggleUnderstandingFor");
     expect(client).toContain("p.set.understandingOff ?? []");
     expect(read("components", "grid-row.tsx")).toContain("<UnderstandingPopover");
   });
   it("보강 학생 이전 진도 — 표 위 버튼 + 일괄 가져오기 안내", () => {
-    const client = read("components", "onescreen-client.tsx");
+    const client = readOnescreenScreen();
     expect(client).toContain("makeupPrev: (() =>");
     expect(client).toContain('tf("os.c.makeupPrevPending"');
     expect(read("components", "grid-toolbar.tsx")).toContain("actions.makeupPrev.onLoad");

@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { BUILTIN_JJ_SHEET_TEMPLATE_ID } from "@/features/report-templates/defaults";
 import { pilotSendBlocks } from "./pilot-send-gate";
 import type { OneScreenStudent } from "./types";
+// 원스크린 화면 + 옮겨 낸 훅(P3-O)을 한 덩어리로 읽는다 — 화면에서 코드를 옮겨도 같은 단언이 선다.
+import { readOnescreenScreen } from "./components/onescreen-screen-source.test-util";
 
 const student = (sub: Record<string, unknown>, note = ""): OneScreenStudent =>
   ({
@@ -40,7 +42,7 @@ describe("배선", () => {
   const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
   it("일괄 발송·저장 입력·일괄 자동작성이 같은 판정을 쓰고, 서버는 pilotCheck가 없으면 거절한다", () => {
     // 일괄 자동작성은 use-auto-write.ts로 옮겼다(P3-O) — 화면과 합쳐 읽는다.
-    const client = read("./components/onescreen-client.tsx") + "\n" + read("./components/use-auto-write.ts");
+    const client = readOnescreenScreen();
     expect(client.match(/pilotSendBlocks\(/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
     expect(client).toMatch(/pilotCheck: \{ factsCurrent:/);
     expect(client).toMatch(/isPilotGateError\(res\.error\)/);
