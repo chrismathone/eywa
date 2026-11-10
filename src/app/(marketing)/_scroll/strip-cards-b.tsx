@@ -43,12 +43,12 @@ export function StripCardsB({ dup = false }: { dup?: boolean }) {
         <div className="shot"><div className="grd">
           <div className="grd-h"><b>2026 · 2학기 · 수학 · 중2 수학 A</b><span>중간고사</span></div>
           <table><tbody><tr><th>이름</th><th>학교</th><th>점수</th><th>1차</th><th>2차</th><th>성적확인</th></tr>
-            <tr><td>김하늘</td><td>경명여중</td><td className="sc">92</td><td><Ck /></td><td></td><td><Ck /></td></tr>
-            <tr><td>이준서</td><td>대구일중</td><td className="sc">85</td><td><Ck /></td><td><Ck /></td><td></td></tr>
-            <tr><td>박서윤</td><td>경명여중</td><td className="sc ed">—</td><td><Ck /></td><td></td><td></td></tr>
-            <tr><td>최도윤</td><td>대구일중</td><td className="sc">78</td><td><Ck /></td><td><Ck /></td><td><Ck /></td></tr>
-            <tr><td>정하린</td><td>경명여중</td><td className="sc">96</td><td><Ck /></td><td></td><td><Ck /></td></tr>
-            <tr><td>한지안</td><td>대구일중</td><td className="sc">88</td><td></td><td></td><td></td></tr>
+            <tr><td>김하늘</td><td>예시중 A</td><td className="sc">92</td><td><Ck /></td><td></td><td><Ck /></td></tr>
+            <tr><td>이준서</td><td>예시중 B</td><td className="sc">85</td><td><Ck /></td><td><Ck /></td><td></td></tr>
+            <tr><td>박서윤</td><td>예시중 A</td><td className="sc ed">—</td><td><Ck /></td><td></td><td></td></tr>
+            <tr><td>최도윤</td><td>예시중 B</td><td className="sc">78</td><td><Ck /></td><td><Ck /></td><td><Ck /></td></tr>
+            <tr><td>정하린</td><td>예시중 A</td><td className="sc">96</td><td><Ck /></td><td></td><td><Ck /></td></tr>
+            <tr><td>한지안</td><td>예시중 B</td><td className="sc">88</td><td></td><td></td><td></td></tr>
           </tbody></table>
         </div></div>
       </div>

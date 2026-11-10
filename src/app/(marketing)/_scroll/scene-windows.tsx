@@ -8,12 +8,13 @@ export function SceneWindows() {
         <div className="wrap two">
           <div className="caps">
             <p className="kicker">여러 화면을 나란히</p>
-            <h2 className="h2" id="win-title">시간표 옆에 출석부,<br />그 옆에 상담과 수납.</h2>
+            <h2 className="h2" id="win-title">시간표 <mark className="em-mark">옆에</mark> 출석부,<br />그 옆에 상담과 수납.</h2>
+            <p className="demo-caption">이름과 숫자는 가상 예시입니다.</p>
             <ol className="steps">
               <li data-i="0"><b>출석부</b><span>한 달 표에 출결을 체크하면 시수는 수업 길이에 맞춰 자동으로 계산됩니다.</span></li>
               <li data-i="1"><b>시간표</b><span>반이나 학생을 드래그하면 학생·강사·강의실이 겹치는 자리는 빗금으로 미리 막아 둡니다. 저장을 눌러야 반영됩니다.</span></li>
-              <li data-i="2"><b>콜&amp;상담</b><span>상담 전 › 상담 완료 › 미등록 › 등록 완료. 카드를 옮기면 상태가 바뀌고, 녹음은 전사를 거쳐 AI 요약까지 나옵니다.</span></li>
-              <li data-i="3"><b>수납관리</b><span>청구서부터 수납, 회차 확정, 강사 정산까지 차례로 이어집니다. 강사 정산액은 출석부 시수와 단가로 급여명세서와 같게 계산됩니다.</span></li>
+              <li data-i="2"><b>콜&amp;상담</b><span>상담 전 › 상담 완료 › 미등록 › 등록 완료. 상담을 마치면 후속 조치를 남기고, 다음 상담일이 다가오면 알림이 옵니다.</span></li>
+              <li data-i="3"><b>수납관리</b><span>청구서부터 수납, 회차 확정, 강사 정산까지 차례로 이어집니다. 정산의 수업료는 급여명세서와 같은 방식으로 계산됩니다.</span></li>
             </ol>
             <div className="dots" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
           </div>

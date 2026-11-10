@@ -7,7 +7,7 @@ export function StripCardsA({ dup = false }: { dup?: boolean }) {
   return (
     <>
       <div className="scard" {...dupProps(dup)}>
-        <div className="cap"><b>원스크린</b><p>수학 수업보고서 화면입니다. 진도, 과제, 테스트만 적으면 학부모 멘트가 강사 말투로 자동 작성됩니다.</p></div>
+        <div className="cap"><b>원스크린</b><p>수학 수업보고서 화면입니다. 진도, 과제, 테스트만 적으면 학부모 멘트가 자동 작성되고, 선생님이 고쳐 보낸 글에서 말투를 배웁니다.</p></div>
         <div className="shot"><div className="os">
           <div className="row"><small>학생</small><div className="fld">최도윤 · 중2 수학 A · 9/22(화)</div></div>
           <div className="row"><small>진도</small><div className="fld">이차방정식 — 근의 공식 ②, 유형 12~17</div></div>
@@ -40,7 +40,7 @@ export function StripCardsA({ dup = false }: { dup?: boolean }) {
       </div>
       <div className="scard" {...dupProps(dup)}>
         <div className="cap"><b>셔틀 · 오늘 등하원</b><p>정류장별 명단에서 승차를 체크합니다. 미탑승으로 표시해도 수업 출결은 바뀌지 않습니다.</p></div>
-        <div className="shot photo ph-shuttle"><div className="ov"><b>1호차 · 하원 18:20 · 3정류장</b><div><span>정하린 · 북구청역</span><span className="chk"><Ck /></span></div><div><span>한지안 · 북구청역</span><span className="chk"><Ck /></span></div><div><span>이준서 · 칠성시장</span><span className="chk no"><Ck /></span></div></div></div>
+        <div className="shot photo ph-shuttle"><div className="ov"><b>1호차 · 하원 18:20 · 3정류장</b><div><span>정하린 · 예시 정류장 A</span><span className="chk"><Ck /></span></div><div><span>한지안 · 예시 정류장 A</span><span className="chk"><Ck /></span></div><div><span>이준서 · 예시 정류장 B</span><span className="chk no"><Ck /></span></div></div></div>
       </div>
     </>
   );

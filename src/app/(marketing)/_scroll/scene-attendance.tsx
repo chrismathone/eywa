@@ -10,7 +10,8 @@ export function SceneAttendance() {
           <div className="top">
           <div className="caps">
             <p className="kicker">스프레드시트처럼 쓰는 출석부</p>
-            <h2 className="h2" id="att-title">출결만 체크하면<br />시수와 정산은 따라옵니다.</h2>
+            <h2 className="h2" id="att-title">출결을 체크하면<br />시수는 <mark className="em-mark">저절로</mark> 계산됩니다.</h2>
+            <p className="demo-caption">이름과 기록은 가상 예시입니다.</p>
           </div>
           <div className="caps">
             <ol className="steps">

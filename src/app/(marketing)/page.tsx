@@ -3,9 +3,11 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { landingPath } from "@/lib/auth/teacher-home";
 import { LandingClosing } from "./_scroll/closing";
-import { LandingHero } from "./_scroll/landing-hero";
+import { FlagshipHero, FlagshipShowroom } from "./_scroll/flagship";
+import { FlagshipCompare } from "./_scroll/flagship-compare";
 import { LandingMotion } from "./_scroll/landing-motion";
 import { MenuGrid } from "./_scroll/menu-grid";
+import { SceneAssistant } from "./_scroll/scene-assistant";
 import { SceneAttendance } from "./_scroll/scene-attendance";
 import { SceneConsult } from "./_scroll/scene-consult";
 import { SceneWindows } from "./_scroll/scene-windows";
@@ -28,11 +30,14 @@ export default async function LandingPage() {
 
   return (
     <>
-      <LandingHero />
+      <FlagshipHero />
+      <FlagshipShowroom />
       <SceneWindows />
       <SceneConsult />
+      <SceneAssistant />
       <MenuGrid />
       <SceneAttendance />
+      <FlagshipCompare />
       <LandingClosing />
       <LandingMotion />
     </>
