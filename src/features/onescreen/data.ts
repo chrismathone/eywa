@@ -1,10 +1,10 @@
 /**
- * 선생님 원스크린 — 데모 데이터 + 과목 색.
+ * 선생님 원스크린 — 데모 데이터.
  * 한 수학 강사가 보습식으로 초3~중3을 지도하는 설정. 학생 9명을 학년에 분산하고,
  * 진도(prev/today)는 각 학생 학년의 커리큘럼(curriculum.ts) 차시 문자열을 그대로 쓴다.
  * 데모 충실 이식이므로 정적 스냅샷(DB·AI 없음). tag=학년 → 반 필터가 학년 필터로 동작.
  */
-import type { OneScreenStudent, SubjectTone } from "./types";
+import type { OneScreenStudent } from "./types";
 
 /** 상단 날짜 라벨 — 데모 고정값(셀프투어 결정성 보장) */
 export const TODAY = "2026년 6월 1일 (월)";
@@ -16,71 +16,7 @@ export const TODAY = "2026년 6월 1일 (월)";
 /** 학년 필터 칩 (수학 강사가 맡는 학년) */
 export const CLASS_TAGS = ["전체", "초3", "초4", "초5", "초6", "중1", "중2", "중3"] as const;
 
-// ───────────────────────── 과목 색 (aywa 토큰 매핑) ─────────────────────────
-//   수학=primary(forest) · 영어=blue · 국어=rose · 과학=purple · 사회=gold · 기타=neutral
-
-export function subjectTone(name: string): { key: string; tone: SubjectTone } {
-  if (name.includes("수학")) return { key: "수학", tone: "primary" };
-  if (name.includes("영어")) return { key: "영어", tone: "blue" };
-  if (name.includes("과학")) return { key: "과학", tone: "purple" };
-  if (name.includes("국어")) return { key: "국어", tone: "rose" };
-  if (name.includes("사회")) return { key: "사회", tone: "gold" };
-  return { key: "기타", tone: "neutral" };
-}
-
-/** soft 배경 + 같은 색 텍스트 (칩) */
-export function toneSoftClass(tone: SubjectTone): string {
-  switch (tone) {
-    case "primary":
-      return "bg-primary-soft text-primary";
-    case "blue":
-      return "bg-blue-soft text-blue";
-    case "rose":
-      return "bg-rose-soft text-rose";
-    case "purple":
-      return "bg-purple-soft text-purple";
-    case "gold":
-      return "bg-gold-soft text-gold";
-    default:
-      return "bg-bg-soft text-text-dim";
-  }
-}
-
-/** 솔리드 배경 (진도 바 / 과목 점) */
-export function toneSolidClass(tone: SubjectTone): string {
-  switch (tone) {
-    case "primary":
-      return "bg-primary";
-    case "blue":
-      return "bg-blue";
-    case "rose":
-      return "bg-rose";
-    case "purple":
-      return "bg-purple";
-    case "gold":
-      return "bg-gold";
-    default:
-      return "bg-ink/30";
-  }
-}
-
-/** 텍스트 색 (과목명 / 화살표) */
-export function toneTextClass(tone: SubjectTone): string {
-  switch (tone) {
-    case "primary":
-      return "text-primary";
-    case "blue":
-      return "text-blue";
-    case "rose":
-      return "text-rose";
-    case "purple":
-      return "text-purple";
-    case "gold":
-      return "text-gold";
-    default:
-      return "text-text-dim";
-  }
-}
+// 과목 색은 학원설정 단일 소스다 — `useSubjectMaps().colorOf` / 서버 `buildSubjectMaps` + `subjectColorOfRow`(owner/subjects.ts).
 
 // ───────── 데모 학생 9명 — 초3~중3 분산, 수학 단일 과목, 진도=커리큘럼 차시 ─────────
 

@@ -6,9 +6,6 @@
 import type { MonthlyEval } from "@/features/report-templates/monthly-eval";
 import type { MonthlyActivity } from "@/features/report-templates/monthly-activity";
 
-/** 과목 톤 — aywa 디자인 토큰(globals.css)에 매핑된 색 키 */
-export type SubjectTone = "primary" | "blue" | "rose" | "purple" | "gold" | "neutral";
-
 /** 직전 회차(이전 작성) 스냅샷 — 표뷰 '이전 회차 참고행'에 읽기전용 렌더. lesson_reports 한 행에서 추출. */
 export type PrevReport = {
   date: string; // 직전 회차 날짜 YYYY-MM-DD
