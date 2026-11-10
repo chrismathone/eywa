@@ -112,7 +112,7 @@ export function MyDutiesStripButton({ summary: initial, className = "" }: { summ
             {VIEWS.map((v) => <ToolbarSegmentItem key={v.key} active={v.key === view} onClick={() => setView(v.key)}>{v.label}</ToolbarSegmentItem>)}
           </ToolbarSegment>
           <DutyWorkContext.Provider value={setWork}>
-            <div className="min-h-0 flex-1 overflow-y-auto px-1">
+            <div className="min-h-0 flex-1 overflow-y-auto">
               {failed ? <p className="text-text-dim mt-2 text-sm">업무를 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요.</p>
                 : !loaded ? <p className="text-text-dim mt-2 text-sm">불러오는 중…</p>
                 : view === "today" ? <MyDutiesPanel loaded={loaded} />
