@@ -106,6 +106,9 @@ export const TOGGLE_FEATURES = [
   // 수업보고서 평점 정기 처리 — 켠 지점만 새로 발송된 보고서를 밤 배치(Haiku 5.5)로 매겨 목록 '평점' 열에 싣는다(2026-10-26 크레딧 MVP).
   // 보고서 글이 AI로 나가고 비용이 들어 기본 꺼짐. 읽는 곳 = features/report-rating/server/queue.ts(cron이 부른다 · 0455a 필요).
   { key: "report_rating", label: "수업보고서 평점 정기 처리", defaultOn: false },
+  // 원생상담 평점 정기 처리 — 켠 지점만 새·고친 상담을 배치(Haiku 5.5)로 매겨 원생상담 목록 '상담 평점' 열에 싣는다(원장 2026-11-11).
+  // 상담 글이 AI로 나가고 비용이 들어 기본 꺼짐. 읽는 곳 = features/consultation-rating/server/queue.ts(cron이 부른다 · s2_0044 필요) + 원생상담 목록 열.
+  { key: "consult_rating", label: "원생상담 평점 정기 처리", defaultOn: false },
 ] as const;
 
 /**

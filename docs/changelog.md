@@ -1,5 +1,12 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-11 — 원생상담 '상담 평점' 열(후속·녹음·AI 열 대체) · 구독 CLI 일괄 평점 + 배치 구조 · Codex 협의
+
+- 원장 *"후속 열 하고 녹음/AI 열 제거 → 상담 평점 열 추가 … 보고서와 같은 잣대 … 지금 올라온 상담은 내부 요금제로 · 이후엔 배치로"* + *"웹·유튜브 조사"* + *"코덱스와 같이 협의"*. 결정 본문 = [`decisions/students.md`](decisions/students.md) 2026-11-11 절.
+- 코드: `src/features/consultation-rating/`(하네스 `harness/` 순수 · 서버 `server/` 대기열·재료·배치·정기 처리·읽기) · cron `/api/cron/consultation-ratings` · 지점 스위치 `consult_rating`(`rule.ts`·`labels.ts`) · 키 그룹 CONSULTATIONS(`models.ts`·`model-features.ts`·key-groups 가드) · 목록 열 교체(`consultation-list.tsx`) · 상세 읽기 전용 패널 · 도움말·번역 사전. SQL `s2_0044`(표 2개 · 정책 0개) — 운영 DB 적용 끝(드라이런 롤백 검증 뒤).
+- 일괄 평점 도구 `scripts/_oneoff/consult-rating/`: extract(운영 DB 읽기 전용 → `~/eywa-data`) · sample · rate(구독 CLI · 응답 모델 검증 · 캐시) · codex-brief · deliver(운영 DB 쓰기 · 기본 롤백 시험 · `--commit`) · owner-sheet(원장 점수표 40건 xlsx).
+- Codex 협의 1차 반영(제 초안의 길이·자리표시 점수 규칙 폐기 · 4점 문안 정렬 · 인용 검증 등)과 교정 수치는 결정 본문에. 침산 상담 2,124건: 빈 양식·복사 200건(47묶음)·녹음 44건(summary가 '(녹음 분석 중)'로 남음) 확인.
+
 ## 2026-11-10 — 보류 항목 정리(Codex 협의 추천안) — 수정 계획 P4 나머지
 
 - 운영 DB 확인(읽기 전용): DB 함수 문구의 '총괄' **0건**(0332a가 이미 교체 — 고칠 것 없음) · `attendance_records.taught_by` 칸·FK 있음, 값 0/42,166건(입구를 걷은 10-07 결정과 맞음 · 백필 안 함 · 읽는 코드의 호환 분기는 그대로).

@@ -155,7 +155,7 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 | `MENT` | classnote_ment · english_ment · ment_prompt_preview · ment_style_profile · love_note_draft(사랑의 한마디 초안 버튼) · lesson_report_rating(평점 정기 처리 · 기본 꺼짐) | Claude(Haiku·Sonnet) |
 | `MEETING` | meeting_analysis | Claude(Sonnet 5.5) |
 | `ENROLLMENT` | enrollment_analysis · enrollment_form_extract · enrollment_prep_brief | Claude(Sonnet 5.5) |
-| `CONSULTATIONS` | consultation_analysis · student_care · student_flow_consultations · student_flow_timeline(원생 흐름 분석 — 상담 저장 뒤 합산 · 타임라인 밤 배치 · 연결 탐색 카드, 2026-11-03) | Claude(분석 Sonnet 5.5 · 케어 · 흐름 Sonnet 5.5) |
+| `CONSULTATIONS` | consultation_analysis · student_care · student_consultation_rating(원생상담 평점 — 배치 · 구독 CLI 백필, 2026-11-11) · student_flow_consultations · student_flow_timeline(원생 흐름 분석 — 상담 저장 뒤 합산 · 타임라인 밤 배치 · 연결 탐색 카드, 2026-11-03) | Claude(분석 Sonnet 5.5 · 케어 · 흐름 Sonnet 5.5) |
 | `BRIEFING` | daily_briefing · dashboard_secretary(업무 비서 'AI로 정리' · 누를 때 + 예약 01:00 · 13:00 — 화면이 남긴 후보만) | Claude |
 | `ATTENDANCE` | attendance_recap · parent_attendance_intent · parent_attendance_jev_shadow · parent_satisfaction | Claude(요약·결석 판별 Sonnet 5.5 · 만족도 Haiku 5.5) · TypeSafe(비교 전용) |
 | `STUDENT_ONTOLOGY` | student_positive_signal · student_ontology_summary | 긍정 신호 밤 판정 / 명시 버튼의 최근 기록 발췌 요약 · Claude 전용 키 · fast/low · 다른 회사 폴백 없음 |
@@ -437,6 +437,8 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - 운영실 = "학원 매니저 팀" (2026-07-16 원장 방향)
 
 ### 원생·콜&상담·신규생·학교 표기 → [`docs/decisions/students.md`](docs/decisions/students.md)
+
+- 원생상담 '상담 평점' = 보고서와 같은 잣대(기록의 정성·구체성) · 글자 수·자리표시로 점수 정하지 않는다 · 지금 있는 상담은 구독 CLI 일괄, 이후 배치 · 순위·평균·빨간 숫자 금지(2026-11-11)
 
 - 연결 탐색 = 원장 시안(:3978) 구조(세 열 · 도넛/네트워크 계정 귀속 · 분석·판단은 오른쪽 아래 · 강의실 중심은 수업 전체 열람만 · 출처 표시·통합 메모는 시안 전용, 2026-11-05)
 - 연결 탐색 네트워크 '개별 기록' = 연도 → 월 → 일자 묶음(처음엔 월까지 · 범위는 패널과 같게) · 같은 기록 한 번 · hover 날짜 연도까지(2026-11-06)
