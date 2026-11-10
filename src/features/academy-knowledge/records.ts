@@ -14,7 +14,9 @@ export const recordKinds = {observation:"현장 관찰",action:"후속 조치",o
 export type RecordKind = keyof typeof recordKinds;
 const base = {title:z.string().trim().min(2).max(160),date,evidence:text};
 const observation = z.object({...base,kind:z.literal("observation"),studentId:z.uuid(),role:z.enum(Object.keys(observerRoles) as [keyof typeof observerRoles,...(keyof typeof observerRoles)[]]),signal:z.enum(Object.keys(signals) as [Signal,...Signal[]]),
-  from:date,through:date,value:amount.nullable(),fact:text,interpretation:z.string().trim().max(2000),severity:z.number().int().min(1).max(3),state:z.enum(["submitted","confirmed","withdrawn"])});
+  from:date,through:date,value:amount.nullable(),fact:text,interpretation:z.string().trim().max(2000),severity:z.number().int().min(1).max(3),state:z.enum(["submitted","confirmed","withdrawn"]),
+  // 검토 의견 — 검토자(작성자가 아닌 사람)만 적는다(2026-11-11 · s2_0081). 없던 옛 기록은 빈 값으로 본다.
+  reviewNote:z.string().trim().max(1500).optional()});
 const action = z.object({...base,kind:z.literal("action"),studentId:z.uuid().nullable(),ownerId:z.uuid(),due:date,originId:z.uuid().nullable(),ruleId:z.string().regex(/^R(10|[1-9])$/).nullable(),plan:text,result:z.string().trim().max(2000),state:z.enum(["open","done","cancelled"])});
 const okr = z.object({...base,kind:z.literal("okr"),ownerId:z.uuid(),from:date,through:date,objective:text,keyResult:text,baseline:z.number().finite(),target:z.number().finite(),actual:z.number().finite().nullable(),direction:z.enum(["higher","lower"]),unit:z.string().trim().min(1).max(20),metricId:z.string().max(80),state:z.enum(["active","closed","cancelled"])});
 const population = z.object({...base,kind:z.literal("population"),school:z.string().trim().min(1).max(100),grade:z.string().trim().min(1).max(30),total:z.number().int().positive().max(100000)});
@@ -43,6 +45,18 @@ export function validateTransition(old:KnowledgeRecord|undefined,next:KnowledgeD
   if(old&&old.document.kind!==next.kind)throw Error("기록 유형은 변경할 수 없습니다");
   if(old&&old.author_id!==actor&&!reviewer)throw Error("본인 기록만 수정할 수 있습니다");
   if(next.kind==="observation"&&next.state==="confirmed"&&!reviewer)throw Error("확인된 관찰로 처리할 권한이 없습니다");
+  // 관찰의 확인은 다른 사람이 한다(원장 승인 2026-11-11 · s2_0081 트리거와 같은 규칙 — 업무 문서·조직 OKR과 같다. 원장 역할 예외 없음).
+  if(next.kind==="observation"){
+    const prev=old?.document.kind==="observation"?old.document:undefined,own=(old?.author_id??actor)===actor;
+    if(own){
+      if(next.state==="confirmed")throw Error("본인 관찰은 다른 검토자가 확인합니다. 검토 요청으로 저장해 주세요");
+      if((next.reviewNote??"")!==(prev?.reviewNote??""))throw Error("검토 의견은 검토자가 작성합니다");
+    }else{
+      // 검토자는 남의 관찰 본문을 못 고친다 — 상태와 검토 의견만.
+      const body=(d:typeof next)=>{const {state:_s,reviewNote:_n,...rest}=d;void _s;void _n;return JSON.stringify(Object.entries(rest).sort(([a],[b])=>a.localeCompare(b)));};
+      if(!prev||body(prev)!==body(next))throw Error("검토자는 관찰 내용을 고칠 수 없습니다. 상태와 검토 의견만 남겨 주세요");
+    }
+  }
   if(!reviewer&&old?.document.kind==="observation"&&old.document.state==="confirmed"&&next.kind==="observation"&&next.state!=="submitted")throw Error("확인된 관찰 변경은 다시 검토 요청해 주세요");
   if(next.kind!=="observation"&&!reviewer)throw Error("경영 기록을 작성할 권한이 없습니다");
   if(next.kind==="observation"&&old?.document.kind==="observation"&&old.document.studentId!==next.studentId)throw Error("대상 학생은 변경할 수 없습니다");
@@ -58,6 +72,6 @@ export function contextualResult(d:KnowledgeDocument,students?:{school:string|nu
   if(d.kind==="population"){if(!students)return `${d.school} ${d.grade} 전체 ${d.total}명 · 재원생 대비 비율은 통합 그래프의 운영 보완 자료에서 확인`;const n=students.filter(s=>s.school===d.school&&s.grade===d.grade).length;return `기준일 수강 ${n}명 / 학교 전체 ${d.total}명 · ${(100*n/d.total).toFixed(1)}% (현재 학적과 비교; 기준일 차이 확인)`;}
   if(d.kind==="staffing"){const n=d.requiredHours/d.productiveHours;return `필요 ${n.toFixed(2)}인분 · 정수 배치 ${Math.ceil(n)}명 · 현재 ${d.currentPeople}명 (시간대·자격 별도 검토)`;}
   if(d.kind==="content")return `조회 ${d.views??"미측정"} · 유입 ${d.visits??"미측정"} · 문의 ${d.inquiries??"미측정"} · 등록 ${d.registrations??"미측정"} (제출 집계, 캠페인 실적에 자동 합산하지 않음)`;
-  if(d.kind==="observation")return `${signals[d.signal]} · ${d.value??"사실 메모"} · ${d.state==="confirmed"?"확인됨":d.state==="withdrawn"?"철회":"검토 요청"}`;
+  if(d.kind==="observation")return `${signals[d.signal]} · ${d.value??"사실 메모"} · ${d.state==="confirmed"?"확인됨":d.state==="withdrawn"?"철회":"검토 요청"}${d.reviewNote?` · 검토 의견: ${d.reviewNote}`:""}`;
   return d.state==="done"?`완료 · ${d.result}`:d.state==="cancelled"?"취소":`기한 ${d.due} · ${d.plan}`;
 }

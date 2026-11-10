@@ -5,6 +5,7 @@
 - 시안(예시 값) 화면 넷을 실제 표에 이었다: `organization_okr`(+revisions) · `academy_work_records`(+events) · `academy_knowledge_records` · `academy_model_versions` (SQL s2_0065~s2_0068 · 서버 전용 · 정책 0개 · 되돌리기 `scripts/_oneoff/revert-s2_006{5..8}-*.sql`).
 - 서버: `organization-okr/server.ts` · `work-records/server.ts` · `academy-knowledge/{server,server-core,server-records,studio-server}.ts` · 라우트 `/api/organization/okr` · `/api/work-records` · `/api/work-records/knowledge` · `/api/management/model` · `/api/management/ontology`(JSON 내려받기). 공용 문 `src/lib/auth/menu-gate.ts` · 같은 출처 JSON 껍데기 `src/lib/http/same-origin-json.ts`.
 - 학생 통합보기 '현장 관찰·후속 조치'가 연결 전 → 실제 기록. 지식그래프 바탕은 수강 관계(경영·홍보 그래프는 main에 조회가 없어 '연결 전'). 결정 = `docs/decisions/staff.md` 끝.
+- 후속(Claude·Codex 검토 반영 · s2_0080~s2_0082): 직원 완전 삭제를 한 거래로(잠금 → 삭제 차단 FK 전부 검사 → 직원 행 → 로그인 계정 · 막히면 아무것도 안 지움 — 로그인만 사라지거나 미러 트리거로 직원 행이 되살아나는 중간 상태 없음) · 관찰 자기 확인 금지·검토자는 상태·검토 의견만 · 지식그래프 학생·직원·반에 원본 화면 권한(수업목록과 같은 강사 범위 · 직원관리 과목 범위 · 다른 출처의 직원 이름과 글 속 이름도 마지막에 가림) · OKR 이력에도 근거 필터 · 관찰 목록은 최신 버전만·이력은 펼칠 때(버전마다 학생 범위 재확인) · 원본 빈값 점검은 버튼 · 학원 비서 DB 지도에 새 표 설명(이 브랜치 6개 + 원생상담 평점 2개).
 
 ## 2026-11-11 — 원생상담 '상담 평점' 열(후속·녹음·AI 열 대체) · 구독 CLI 일괄 평점 + 배치 구조 · Codex 협의
 

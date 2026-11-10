@@ -1,4 +1,5 @@
 -- s2_0068_academy_model_studio.sql — 스키마 스튜디오: 항목 정의·연결 점검 기준·근거 있는 참고 연결의 버전 기록 · 2026-11-11
+-- ✅ 운영 적용 2026-11-11(거래 안 ROLLBACK 시험 뒤 적용 · 표·정책 0개·트리거 확인).
 --
 -- aywa-next(20261103070829_academy_model_studio.sql)에서 옮겼다. 화면 = /dashboard/management/knowledge('엑셀 뼈대·스키마' · '지식그래프' · '보완 점검').
 -- 쌓기만 한다(수정·삭제 = 트리거가 거절). 🔴 읽기·쓰기 정책을 두지 않는다 — 서버(service_role)만 읽고 쓴다.

@@ -54,7 +54,10 @@ describe("배선 — 보호 계정은 앱 어느 경로로도 역할·재직·�
     const account = read("features/staff/server/account-actions.ts");
     const del = fnBody(account, "deleteStaff");
     expect(del.indexOf('refuseIfProtectedStaff(id, "delete"')).toBeGreaterThan(-1);
-    expect(del.indexOf('refuseIfProtectedStaff(id, "delete"')).toBeLessThan(del.indexOf("deleteUser(id)"));
+    // 삭제는 한 거래로 하는 DB 함수 호출 하나다(2026-11-11 — 전엔 auth.admin.deleteUser) · 보호 문은 그 앞에.
+    const wipe = del.indexOf("deleteStaffAccount(actor.tenantId, id)");
+    expect(wipe, "deleteStaff의 삭제 호출을 찾지 못함").toBeGreaterThan(-1);
+    expect(del.indexOf('refuseIfProtectedStaff(id, "delete"')).toBeLessThan(wipe);
   });
   it("총괄 콘솔: 역할 변경·활성/비활성도 보호 계정이면 거절한다", () => {
     const sa = read("features/super-admin/server/actions.ts");

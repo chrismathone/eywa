@@ -26,17 +26,28 @@ export async function okrAccess() {
 }
 type Gate = Awaited<ReturnType<typeof okrAccess>>;
 
-export async function loadOkrWorkspace() {
-  const gate = await okrAccess(), db = createAdminClient(), tenant = gate.user.tenantId;
-  const [loaded, sharedRaw, seeWork, seeLessons] = await Promise.all([
-    fetchAllPaged<OkrRecord>((a, b) => { let q = db.from("organization_okr").select(fields).eq("tenant_id", tenant); if (!gate.seeAll) q = q.eq("owner_id", gate.user.id); return q.order("updated_at", { ascending: false }).order("id").range(a, b); }),
-    // 직원에게 공유하는 것은 '실행 중' 조직·팀 목표의 요약뿐 — 개인 근거·피드백은 담당자와 관리자에게만.
-    fetchAllPaged<OkrRecord>((a, b) => db.from("organization_okr").select(fields).eq("tenant_id", tenant).eq("document->>state", "active").in("document->>scope", ["organization", "team"]).order("id").range(a, b)),
+/**
+ * 남의 목표에 굳어 있는 근거(업무 문서 제목 · 수업보고서)는 그 원본을 열 권한이 있을 때만 싣는다(#77 — 건수 문장은 남는다). 본인 목표는 그대로.
+ * 🔴 목록·이력 응답이 **같은 함수**를 지난다 — 한쪽만 거르면 다른 쪽으로 샌다(Codex 검토: 이력 GET이 저장된 document를 그대로 돌려줬다).
+ */
+async function refVisibility(gate: Gate) {
+  const [seeWork, seeLessons] = await Promise.all([
     workAccess().then(g => g.seeReview, () => false),
     Promise.all([canAccessTenant(gate.user.systemRole, "lesson_reports"), canAccessTenant(gate.user.systemRole, "teacher_onescreen")]).then(v => v.some(Boolean)),
   ]);
-  // 남의 목표에 굳어 있는 근거(업무 문서 제목 · 수업보고서)는 그 원본을 열 권한이 있을 때만 싣는다(#77 — 건수 문장은 남는다). 본인 목표는 그대로.
-  const rows = loaded.map(r => r.owner_id === gate.user.id || (seeWork && seeLessons) ? r : { ...r, document: { ...r.document, krs: r.document.krs.map(k => ({ ...k, refs: k.refs.filter(e => e.kind === "work" ? seeWork : seeLessons) })) } });
+  return <D extends Pick<OkrDocument, "krs">>(ownerId: string, d: D): D =>
+    ownerId === gate.user.id || (seeWork && seeLessons) ? d : { ...d, krs: (d.krs ?? []).map(k => ({ ...k, refs: (k.refs ?? []).filter(e => e.kind === "work" ? seeWork : seeLessons) })) };
+}
+
+export async function loadOkrWorkspace() {
+  const gate = await okrAccess(), db = createAdminClient(), tenant = gate.user.tenantId;
+  const [loaded, sharedRaw, visible] = await Promise.all([
+    fetchAllPaged<OkrRecord>((a, b) => { let q = db.from("organization_okr").select(fields).eq("tenant_id", tenant); if (!gate.seeAll) q = q.eq("owner_id", gate.user.id); return q.order("updated_at", { ascending: false }).order("id").range(a, b); }),
+    // 직원에게 공유하는 것은 '실행 중' 조직·팀 목표의 요약뿐 — 개인 근거·피드백은 담당자와 관리자에게만.
+    fetchAllPaged<OkrRecord>((a, b) => db.from("organization_okr").select(fields).eq("tenant_id", tenant).eq("document->>state", "active").in("document->>scope", ["organization", "team"]).order("id").range(a, b)),
+    refVisibility(gate),
+  ]);
+  const rows = loaded.map(r => ({ ...r, document: visible(r.owner_id, r.document) }));
   const shared = sharedRaw.map(r => ({ id: r.id, ownerId: r.owner_id, title: r.document.title, scope: r.document.scope, from: r.document.from, through: r.document.through, team: r.document.team, parentId: r.document.parentId, krs: r.document.krs.map(k => ({ title: k.title, actual: k.actual, target: k.target, unit: k.unit, measuredOn: k.measuredOn })) }));
   const ids = [...new Set([gate.user.id, ...rows.map(r => r.owner_id), ...rows.flatMap(r => r.review ? [r.review.reviewerId] : []), ...shared.map(r => r.ownerId)])];
   const users = await fetchInChunks<{ id: string; display_name: string }>(ids, (chunk) => db.from("users").select("id,display_name").eq("tenant_id", tenant).in("id", chunk));
@@ -62,10 +73,11 @@ async function accessibleRecord(id: string, gate: Gate) {
 }
 export async function okrHistory(id: string) {
   const gate = await okrAccess();
-  await accessibleRecord(id, gate);
+  const [record, visible] = await Promise.all([accessibleRecord(id, gate), refVisibility(gate)]);
   const { data, error } = await createAdminClient().from("organization_okr_revisions").select("version,action,document,review,recorded_at,actor_id").eq("tenant_id", gate.user.tenantId).eq("record_id", id).order("version", { ascending: false }).limit(50);
   if (error) throw Error("이력을 불러오지 못했습니다");
-  return data;
+  // 검토(review) 이력의 document는 null일 수 있다 — 있는 것만 거른다.
+  return (data ?? []).map(h => h.document ? { ...h, document: visible(record.owner_id, h.document as OkrDocument) } : h);
 }
 
 /** 핵심결과의 '업무 문서'·'수업보고서' 근거 — 담당자 ID로 센다(이름으로 잇지 않는다). 그 원본을 열 권한이 있어야 한다. */

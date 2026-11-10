@@ -54,4 +54,65 @@ export const TABLES_EXTRA: readonly AssistantTableDoc[] = [
       separate_amount: "늘어난 몫을 수납에서 따로 환불하기로 한 금액(누계)", separate_at: "따로 환불로 정한 시각", separate_by: "따로 환불로 정한 원장",
       refunded_total: "이어진 요청서 환불 완료 기록(누계 · 완료일자를 비워도 남음)", refunded_docs: "환불 완료 기록을 남긴 요청서" },
   },
+  // ── 2026-11-11 실제 기록으로 이은 화면(aywa-next 이식 · s2_0065~0068) — 업무 작성센터 · 관찰 기록 · 조직·OKR · 스키마 스튜디오.
+  {
+    name: "academy_work_records",
+    label: "업무 문서",
+    ko: "업무 작성센터에서 직원이 쓴 업무 문서(주간 보고·기획안·연수·인수인계·개선 제안) — 문서마다 최신 한 줄",
+    notes:
+      "author_id = 작성 직원(users.id) · version = 고친 횟수 · document(jsonb): template(weekly 주간 업무보고 · proposal 기획안 · training 교육·연수 · handover 인수인계 · improvement 개선 제안 · free 일반) · title · date(기록 날짜) · plan · action · result · next · state(draft 작성 중 · submitted 검토 요청 · reviewed 확인 완료 · cancelled 취소) · reviewNote(검토자 확인 의견). 제출된 문서 = document->>'state' in ('submitted','reviewed'). 변경 이력은 academy_work_record_events.",
+    columns: { author_id: "작성 직원", document: "문서 내용·상태(jsonb)", version: "버전" },
+  },
+  {
+    name: "academy_work_record_events",
+    label: "업무 문서 이력",
+    ko: "업무 문서를 저장·검토할 때마다 남는 변경 기록(버전별 문서 사본)",
+    notes: "record_id = academy_work_records.id · actor_id = 그 버전을 저장한 직원(작성자 또는 검토자) · version · document = 그 시점 문서 · request = 저장 요청 원문(재시도 판정용). 지금 상태는 academy_work_records를 본다.",
+    internal: true,
+  },
+  {
+    name: "academy_knowledge_records",
+    label: "관찰 기록",
+    ko: "현장 관찰·후속 조치·운영 목표·운영 보완 자료 — 고칠 때마다 새 버전이 쌓인다(수정·삭제 없음)",
+    notes:
+      "🔴 같은 기록(record_id)의 **가장 큰 version 한 줄**이 지금 값이다(지난 버전은 이력). author_id = 처음 쓴 직원 · actor_id = 그 버전을 저장한 직원. document->>'kind': observation(학생 관찰 — studentId · signal 관찰 항목 · value 수치 · fact 사실 · interpretation 해석 · severity 1~3 · state submitted 검토 요청/confirmed 확인됨/withdrawn 철회 · reviewNote 검토 의견) · action(후속 조치 — ownerId 담당 직원 · due 기한 · plan · result · state open/done/cancelled · originId 원인 관찰) · okr(운영 목표 — baseline·target·actual) · population(학교·학년 전체 학생 수) · balance(재무상태) · content(콘텐츠 성과) · staffing(업무 시간·인원). 확인된 관찰만 규칙 판정에 쓴다(본인 관찰은 다른 검토자가 확인한다). 조직·OKR 화면의 목표는 organization_okr(다른 표).",
+    columns: { record_id: "기록 번호(버전끼리 같다)", version: "버전(가장 큰 값이 최신)", author_id: "처음 쓴 직원", actor_id: "이 버전을 저장한 직원", document: "기록 내용(jsonb · kind로 종류 구분)" },
+  },
+  {
+    name: "organization_okr",
+    label: "조직 OKR",
+    ko: "조직·OKR 화면의 목표 — 담당자 본인이 쓰는 목표·핵심결과·실행 과제·주간 점검과 관리자 피드백(목표마다 최신 한 줄)",
+    notes:
+      "owner_id = 담당 직원(users.id) · parent_id = 상위 목표 · document(jsonb): scope(organization 조직 · team 팀 · individual 개인) · state(draft 기획 · active 실행 중 · closed 마감 · archived 보관) · title · from~through(기간) · krs[](핵심결과 — title · baseline · target · actual 실적(null=미측정) · unit · measuredOn · source: manual 직접 입력/tasks 과제 완료율/work 업무 문서 건수/lessons 수업보고서 건수) · tasks[](실행 과제 · status) · checkin(주간 점검 — date · result · confidence: blocked=지원 요청). review(jsonb) = 관리자의 마지막 피드백(note · verdict acknowledged 확인/revise 보완/support 지원 · reviewerId). 실적은 저장할 때 다시 센 값이다(실시간 아님). 변경 이력은 organization_okr_revisions.",
+    columns: { owner_id: "담당 직원", parent_id: "상위 목표", document: "목표 내용(jsonb)", review: "관리자 피드백(jsonb)" },
+  },
+  {
+    name: "organization_okr_revisions",
+    label: "OKR 이력",
+    ko: "조직·OKR 목표를 저장하거나 피드백할 때마다 남는 버전 기록",
+    notes: "record_id = organization_okr.id · action: save=담당자 저장 · review=관리자 피드백 · actor_id = 저장한 직원 · document/review = 그 시점 사본. 지금 값은 organization_okr를 본다.",
+    internal: true,
+  },
+  {
+    name: "academy_model_versions",
+    label: "모델 정의",
+    ko: "스키마 스튜디오에서 고친 항목 정의·연결 점검 기준·근거 있는 참고 연결(버전이 쌓인다)",
+    notes: "key별 가장 큰 version이 지금 값. document->>'kind': field(시트 항목의 이름·필수 여부·설명) · expectation(주체 유형마다 있어야 할 기록의 최소 개수) · link(두 기록 사이 참고 연결 — from · to · basis 근거 · date 확인일 · state). 학원 운영 수치가 아니라 지식그래프의 설정이다.",
+    internal: true,
+  },
+  // ── 원생상담 평점(s2_0044 · 2026-11-11) — 병합 뒤 가드가 설명 없는 표로 잡아서 채웠다(같은 모양의 수업보고서 평점 표 설명을 따랐다).
+  {
+    name: "student_consultation_ratings",
+    label: "상담 평점",
+    ko: "원생상담 기록의 AI 평점(참고용, 1~5) — 상담 1:1 · 평점 스위치를 켠 지점만",
+    notes:
+      "consultation_id → student_consultations. points 1~5(기록의 정성·구체성 — 행이 없으면 평점 없음) · reason·evidence = 근거 글 · kinds = 상담 사유 태그 배열 · checks = 사유·맥락·대응·다음 단계 칸의 상태(present · not_recorded = 기록에 없음(실제로 없었다는 뜻 아님) · not_applicable · unclear) · rule: empty = 빈 양식 1점 · copied = 같은 글 여러 학생 3점까지(코드 규칙이 정한 점수) · basis: memo = 상담자가 쓴 기록 · recording = 녹음 전사문 · source: cli = 일괄 평점 · batch = 정기 처리 · rated_on = 평가일.",
+    columns: { points: "평점 1~5", rule: "코드 규칙이 점수를 정했을 때의 규칙", basis: "평가한 자료(memo·recording)", source: "매긴 방식(cli·batch)" },
+  },
+  {
+    name: "student_consultation_rating_queue",
+    label: "상담평점 대기열",
+    ko: "원생상담 평점 정기 처리 대기열",
+    internal: true,
+  },
 ];
