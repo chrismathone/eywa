@@ -1,5 +1,9 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-09 — 일별 출결 폼 학생 자격·기존 기록 서버 재조회 — 수정 계획 P1-A(4-4), 결정 #5 ③
+
+- `saveAttendance`: 폼의 `existing:` id를 믿지 않고 서버가 그날 유효 기록을 다시 고른다(`day-record-ids.ts` — 화면과 같은 규칙 · 오래된 화면이 겹쳐 새 행을 만들지 않는다). 반·폼 학생이 이 지점에 있는지 확인(역할 무관). 강사는 행마다 `writeEligibility`(수강·예약·나누기·native·기존 기록) — 근거 없는 학생은 '보강' 상태로만 새 행. 예전엔 담당 반만 봤다.
+
 ## 2026-11-09 — 즉석 보강(`allowMakeup`) 서버 검증 — 수정 계획 P1-A(4-3), 결정 #5 ②
 
 - `setAttendanceCell`은 `allowMakeup`을 상태가 `makeup`인 저장에서만 듣는다(그 밖은 무시 → 서버 판정) · 켜지면 학생·반이 이 지점에 있는지 확인(`instantMakeupTargetsOk`, 강사 조회와 병렬). 수업 나누기 칸(좌석표·원스크린 알약)이 `present`에 실어 보내던 플래그를 걷었다 — 서버가 `hasSplitInto`로 연다. 보내는 화면 = `makeup-add-flow.tsx` 하나(가드).

@@ -525,7 +525,12 @@ export function AttendanceInputForm({
                     </span>
                   ) : (
                   <div className="inline-flex flex-wrap items-center justify-end gap-1">
-                    {STATUS_DEFS.map((s) => {
+                    {/* 이번 화면에서 '+ 보강 추가'로 넣은 학생(수강·예약·나눔·기록 없음)은 '보강'으로만 저장된다(결정 #5 ② · 서버도 같은 판정) —
+                        다른 단추를 보여 주면 눌렀다가 반 전체 저장이 거절된다. */}
+                    {(r.isMakeup && r.recordIds.length === 0 && !r.reserved && !r.split
+                      ? STATUS_DEFS.filter((d) => d.value === "makeup")
+                      : STATUS_DEFS
+                    ).map((s) => {
                       const Icon = s.icon;
                       const active = cell.status === s.value;
                       return (

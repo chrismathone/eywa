@@ -28,6 +28,18 @@ describe("출결 쓰기 학생 자격 — 세 경로가 판정 한 벌을 부른
     expect(body).not.toContain("nativeWriteAllowance(");
   });
 
+  it("일별 폼(saveAttendance)도 같은 판정 — 고칠 행은 서버가 다시 고르고 폼의 existing: 값은 오래된 화면 판별에만(결정 #5 ③)", () => {
+    const body = fnBody("saveAttendance");
+    expect(body).toContain("writeEligibility(");
+    expect(body).toContain("blockedByCorrectOnly(");
+    expect(body).toContain("dayRecordIdsByStudent(");
+    // 폼 값은 formSeen(비교용)으로만 — 쓰기 대상 existingIds는 빈 배열에서 시작해 서버 값으로만 채운다
+    expect(body).toContain("const existingIds: string[] = [];");
+    expect(body).toContain("const formSeen = String(formData.get(`existing:${studentId}`)");
+    expect(body.match(/formData\.get\(`existing:/g)?.length).toBe(1);
+    expect(body).toContain("r.existingIds = shared.recordIds.get(r.studentId) ?? [];");
+  });
+
   it("범위는 수업 나누기도 본다(예전엔 범위만 빠져 있었다)", () => {
     expect(fnBody("setAttendanceRange")).toContain("splitIntoKeys(");
   });

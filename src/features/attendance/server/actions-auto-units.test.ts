@@ -25,9 +25,15 @@ const h = vi.hoisted(() => {
   const client = {
     from(table: string) {
       const b: Record<string, unknown> = {};
-      for (const m of ["select", "eq", "in", "or", "order", "range", "lte", "gte", "limit", "maybeSingle", "delete"]) {
+      /** `.in(…, ids)`로 넘긴 id — 학생 지점 확인(saveAttendance)이 그 학생들을 "이 지점에 있다"로 받게. */
+      let inIds: unknown[] = [];
+      for (const m of ["select", "eq", "or", "order", "range", "lte", "gte", "limit", "maybeSingle", "delete"]) {
         b[m] = () => b;
       }
+      b.in = (_col: string, ids: unknown[]) => {
+        inIds = ids;
+        return b;
+      };
       b.insert = (payload: unknown) => {
         for (const r of Array.isArray(payload) ? payload : [payload]) state.inserts.push(r as Record<string, unknown>);
         return b;
@@ -37,7 +43,11 @@ const h = vi.hoisted(() => {
         return b;
       };
       b.then = (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) =>
-        Promise.resolve({ data: table === "attendance_records" ? state.existing : [], error: null, count: 0 }).then(
+        Promise.resolve({
+          data: table === "attendance_records" ? state.existing : table === "students" ? inIds.map((id) => ({ id })) : [],
+          error: null,
+          count: table === "classes" ? 1 : 0,
+        }).then(
           resolve,
           reject,
         );
@@ -223,5 +233,26 @@ describe("saveAttendance — 일별 입력 폼", () => {
     await form("1");
     await form("2");
     expect(unitsOf()).toEqual([1.5, null, 2]);
+  });
+
+  it("🔴 화면을 연 뒤 기록이 생겼으면 저장하지 않는다 — 폼의 시수 칸(연 때 값)으로 그 행을 덮지 않게(4-4)", async () => {
+    h.state.existing = [{ id: "r9", student_id: S1, slot_start: null }];
+    const res = await form("");
+    expect(res).toMatchObject({ error: expect.stringContaining("새로 고친 뒤") });
+    expect(h.state.inserts).toHaveLength(0);
+    expect(h.state.updates).toHaveLength(0);
+  });
+
+  it("폼이 본 기록과 서버 기록이 같으면 서버 id로 고친다", async () => {
+    h.state.existing = [{ id: "r9", student_id: S1, slot_start: null }];
+    const fd = new FormData();
+    fd.set("classId", h.MATH);
+    fd.set("date", D);
+    fd.set(`status:${S1}`, "late");
+    fd.set(`existing:${S1}`, "r9");
+    fd.set(`units:${S1}`, "");
+    await saveAttendance(undefined, fd);
+    expect(h.state.inserts).toHaveLength(0);
+    expect(h.state.updates[0]).toMatchObject({ status: "late" });
   });
 });
