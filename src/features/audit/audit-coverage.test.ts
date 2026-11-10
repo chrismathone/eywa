@@ -85,6 +85,11 @@ const EXEMPT: Record<string, string> = {
   "src/features/onescreen/server/love-note-actions.ts#suggestLoveNote": AI_CACHE,
   "src/features/enrollment/server/prep-actions.ts#generatePrepBrief": AI_CACHE,
   // 자체 기록
+  // 90일 관리: 운영 DB의 audit_onboarding_followup 트리거가 같은 트랜잭션에서
+  // 학생·과목·변경된 값·updated_by를 student_onboarding_followup_events에 남긴다.
+  "src/features/newcomers/server/followup-actions.ts#assignNewcomerManager": `${OWN_LOG} (onboarding_subject_audit 트리거)`,
+  "src/features/newcomers/server/followup-actions.ts#submitNewcomerFeedback": `${OWN_LOG} (onboarding_feedback_audit 트리거)`,
+  "src/features/newcomers/server/followup-actions.ts#reviewNewcomerFeedback": `${OWN_LOG} (onboarding_feedback_audit 트리거)`,
   "src/features/billing/session-terms/server/receipt-allocation-actions.ts#mergeReceiptItems": `${OWN_LOG} (edit_receipt_merge_group이 audit_logs에 쓴다)`,
   "src/features/enrollments/server/actions.ts#deleteEnrollment": `${OWN_LOG} (delete_enrollment_history가 audit_logs에 쓴다)`,
   "src/features/shuttle/parent/server/parent-departure-actions.ts#ackParentNotice": `${OWN_LOG} (확인 행 자체가 누가·언제)`,

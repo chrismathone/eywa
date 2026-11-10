@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+// 원스크린 화면 + 옮겨 낸 훅(P3-O)을 한 덩어리로 읽는다 — 화면에서 코드를 옮겨도 같은 단언이 선다.
+import { readOnescreenScreen } from "../onescreen/components/onescreen-screen-source.test-util";
 
 /**
  * 🔴 영상 숙제 취소 배선 가드(원장 2026-10-16 *"미확인이나 미제출인 숙제에 한해서 숙제 취소할 수 있게"* · *"약점은 수정해"*).
@@ -20,7 +22,7 @@ describe("영상 숙제 취소 — 원스크린이 취소한 숙제를 되살리
     expect(read("src/features/video-homework/components/video-homework-provider.tsx")).toContain("const [mountedSeenAt] = useState(cancelInfo.readAt);");
   });
   it("저장: 화면은 맞춘 시각을 함께 보내고, 관문은 모른 채 보낸 '있음'을 지키며, 그 줄은 보내지 않는다", () => {
-    const client = read("src/features/onescreen/components/onescreen-client.tsx");
+    const client = readOnescreenScreen();
     expect(client).toContain("videoHomeworkSeenAt: videoHwStore?.seenAtOf(student.id, su.classId) ?? null");
     expect(client).toContain("videoHwStore?.markSeen(studentId, keptClassId, res.videoHomeworkSeenAt)");
     const actions = read("src/features/onescreen/server/actions.ts");

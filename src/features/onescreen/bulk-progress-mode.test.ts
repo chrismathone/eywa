@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { planBulkApply, type BulkTarget } from "./grid";
+// 원스크린 화면 + 옮겨 낸 훅(P3-O)을 한 덩어리로 읽는다 — 화면에서 코드를 옮겨도 같은 단언이 선다.
+import { readOnescreenScreen } from "./components/onescreen-screen-source.test-util";
 
 const row = (over: Partial<BulkTarget> = {}): BulkTarget =>
   ({
@@ -31,7 +33,7 @@ describe("일괄 입력의 수업 성격(복습·문제풀이, 원장 2026-10-26
     const panel = readFileSync(resolve(process.cwd(), "src/features/onescreen/components/bulk-apply.tsx"), "utf8");
     expect(panel).toMatch(/onMode=\{setLessonMode\}/);
     expect(panel).toMatch(/progressMode: lessonMode/);
-    const client = readFileSync(resolve(process.cwd(), "src/features/onescreen/components/onescreen-client.tsx"), "utf8");
+    const client = readOnescreenScreen();
     expect(client).toMatch(/p\.set\.progressMode !== undefined\) setProgressModeFor/);
   });
 });

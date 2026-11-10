@@ -1,4 +1,4 @@
-.root{--year-2023:#6c57d5;--year-2024:#2b9e98;--year-2025:#d79d36}
+.root{--year-2023:#6c57d5;--year-2024:#2b9e98;--year-2025:#d79d36;--year-2026:#d75d88}
 .caption,.note{color:#6c7890;font-size:12px;margin:7px 0 12px}
 .legend{display:flex;flex-wrap:wrap;gap:10px 20px;margin:12px 0 5px;font-size:13px}
 .legend span{display:flex;align-items:center;gap:7px}

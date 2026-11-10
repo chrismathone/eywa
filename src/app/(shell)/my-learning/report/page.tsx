@@ -4,6 +4,8 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { DEMO_STUDENT } from "@/features/my-learning/data";
 import { findSession } from "@/features/my-learning/history";
 import { DailyReportView } from "@/features/my-learning/components/daily-report-view";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 
 export const metadata = { title: "데일리 리포트 — 에이와" };
 
@@ -17,7 +19,9 @@ export default async function DailyReportPage({
   searchParams: Promise<{ date?: string }>;
 }) {
   await requireAccess("my_learning");
-  const { date } = await searchParams;
+  // 과목 색 = 학원설정(운영 enum 하드코딩 금지). 설정과 쿼리 문자열은 서로 기다리지 않는다(B4).
+  const [settings, { date }] = await Promise.all([getTenantSettings(), searchParams]);
+  const subjectMaps = buildSubjectMaps(settings.operations.subjects);
   const { student, history } = DEMO_STUDENT;
   const session = findSession(history, date ?? null);
 
@@ -30,7 +34,7 @@ export default async function DailyReportPage({
         <EyIcon name="arrowLeft" size={14} />
         누적 현황
       </Link>
-      <DailyReportView base={student} session={session} />
+      <DailyReportView base={student} session={session} subjectMaps={subjectMaps} />
     </div>
   );
 }

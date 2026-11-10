@@ -16,12 +16,14 @@ import { STATUS_STYLE } from "@/features/newcomers/cell-display";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { NewcomerTable, TaskBadge } from "./newcomer-table";
 import styles from "./newcomer-board.module.css";
+import { CompletionForm } from "@/features/newcomers/completion-form";
+import type { Completion } from "@/features/newcomers/completion";
 
 const STATUS_TABS: { key: BoardStatus; label: string }[] = [
   { key: "all", label: "전체" }, { key: "overdue", label: "기한 경과" }, { key: "due", label: "3일 내" }, { key: "open", label: "미완료" },
 ];
 type Selection = { rowKey: string; itemKey: string };
-type SaveFailure = { rowKey: string; itemKey: string; done: boolean; message: string };
+type SaveFailure = { rowKey: string; itemKey: string; done: boolean; message: string; completion?:Completion;doneOn?:string };
 const RATE_HELP = "기존 필수 업무 완료율: 완료 기록 ÷ (완료 + 기한 경과 + 오늘부터 3일 뒤까지 기한인 업무). 선택 업무·날짜 미정·기준일 이전 미기록은 제외합니다. 집계 대상 업무가 없으면 100%입니다.";
 
 export function NewcomerBoard({ view, canWrite, initialFilters = EMPTY_FILTERS }: {
@@ -103,7 +105,7 @@ export function NewcomerBoard({ view, canWrite, initialFilters = EMPTY_FILTERS }
     setDetailOpen(true);
   }
 
-  async function saveCheck(row: NewcomerRow, item: OnboardingItemDef, done = !row.checks[item.key]) {
+  async function saveCheck(row: NewcomerRow, item: OnboardingItemDef, done = !row.checks[item.key],completion?:Completion,doneOn?:string) {
     if (!writable) return;
     const affected = view.subjectChecks ? [row] : rows.filter(candidate => candidate.studentId === row.studentId);
     const keys = affected.map(candidate => `${candidate.rowKey}|${item.key}`);
@@ -114,7 +116,7 @@ export function NewcomerBoard({ view, canWrite, initialFilters = EMPTY_FILTERS }
     setFailure(null);
     setPatches(current => ({ ...current, ...Object.fromEntries(keys.map(key => [key, done ? view.today : null])) }));
     try {
-      const result = await setOnboardingCheck({ studentId: row.studentId, subject: row.subject, itemKey: item.key, done });
+      const result = await setOnboardingCheck({ studentId: row.studentId, subject: row.subject, itemKey: item.key, done,completion,doneOn });
       if (!result.ok) throw new Error(result.error || "저장하지 못했습니다. 다시 시도해 주세요.");
       if (result.doneOn !== undefined) {
         setPatches(current => ({ ...current, ...Object.fromEntries(keys.map(key => [key, result.doneOn ?? null])) }));
@@ -128,7 +130,7 @@ export function NewcomerBoard({ view, canWrite, initialFilters = EMPTY_FILTERS }
         return next;
       });
       setNotice("");
-      setFailure({ rowKey: row.rowKey, itemKey: item.key, done, message: error instanceof Error ? error.message : "저장하지 못했습니다. 다시 시도해 주세요." });
+      setFailure({ rowKey: row.rowKey, itemKey: item.key, done,completion,doneOn, message: error instanceof Error ? error.message : "저장하지 못했습니다. 다시 시도해 주세요." });
     } finally {
       for (const key of keys) inFlight.current.delete(key);
       setBusy(new Set(inFlight.current));
@@ -138,7 +140,7 @@ export function NewcomerBoard({ view, canWrite, initialFilters = EMPTY_FILTERS }
   const statusCount = (status: BoardStatus) => status === "all" ? stats.students : status === "open" ? stats.openStudents : studentsIn(rows.filter(row => status === "overdue" ? row.progress.overdue > 0 : row.progress.dueSoon > 0));
   const retry = () => {
     const row = rows.find(row => row.rowKey === failure?.rowKey), item = ONBOARDING_ITEMS.find(item => item.key === failure?.itemKey);
-    if (row && item && failure) void saveCheck(row, item, failure.done);
+    if (row && item && failure) void saveCheck(row, item, failure.done,failure.completion,failure.doneOn);
   };
 
   return <div ref={root} className={`${styles.board} ${previousFonts ? styles.previousFonts : ""} edge-to-edge`}>
@@ -148,10 +150,15 @@ export function NewcomerBoard({ view, canWrite, initialFilters = EMPTY_FILTERS }
         <button type="button" aria-pressed={previousFonts} onClick={() => setPreviousFonts(true)} title="이름 13px · 항목별 크기를 사용하던 서식">작은 글자</button>
         <button type="button" aria-pressed={!previousFonts} onClick={() => setPreviousFonts(false)} title="이름과 본문을 16px로 통일한 서식">큰 글자</button>
       </div>
-      <div className="compact-chrome:hidden"><h1><EyIcon name="graduationCap" size={28} />신규생 90일 관리</h1><p>첫 수업부터 90일까지, 놓치지 않는 학생 관리.</p></div>
+      <div className="compact-chrome:hidden"><h1><EyIcon name="graduationCap" size={28} />신입생 90일 집중관리</h1><p>최초 상담의 약속부터 단계별 액션·결과, 장기재원 인계까지.</p></div>
       <div className={styles.headerMeta}><EyIcon name="calendar" size={17} /><span>기준 날짜 <strong>{view.today.replaceAll("-", ". ")}</strong></span></div>
     </header>
 
+    <nav aria-label="신입생 관리 단계" className="flex shrink-0 flex-wrap gap-2 rounded-xl border border-line bg-report-tint p-3 text-xs text-primary">
+      <WindowLink href="/enrollment" className="rounded-lg bg-white px-3 py-2">① 입학상담 · 요구·약속</WindowLink><WindowLink href="/students/care" className="rounded-lg bg-white px-3 py-2">② 담당 인수 · 이행 증거</WindowLink>
+      {(["d7","d30","d60","d90"] as const).map((bucket,i)=><button key={bucket} type="button" className="rounded-lg border border-line bg-white px-3 py-2" aria-pressed={filters.bucket===bucket} onClick={()=>changeFilters({...filters,bucket:filters.bucket===bucket?null:bucket})}>{i+3}. {({d7:"0~7일 · 첫 적응",d30:"8~30일 · 만족도",d60:"31~60일 · 필요시 점검",d90:"61~90일 · 최종 점검"})[bucket]}</button>)}
+      <WindowLink href="/students/care" className="rounded-lg bg-white px-3 py-2">⑦ 장기재원 · 미완료 약속 계속 관리</WindowLink>
+    </nav>
     <section aria-label="전체 관리 대상 현황" className={styles.metrics}>
       <Metric icon="users" label="전체 관리 대상" value={stats.students.toLocaleString("ko-KR")} unit="명" note={`${stats.rows}개 학생·과목 행 · 최근 90일 등록`} tone="navy" />
       <Metric icon="clipboardList" label="미완료 학생" value={stat(stats.openStudents)} unit="명" note="기한 경과 · 3일 내 기한 업무가 있는 학생" active={filters.status === "open"} disabled={!known} onClick={() => changeFilters({ ...filters, status: filters.status === "open" ? "all" : "open" })} />
@@ -162,7 +169,7 @@ export function NewcomerBoard({ view, canWrite, initialFilters = EMPTY_FILTERS }
 
     {!view.checksAvailable && <div className={styles.warning} role="status"><EyIcon name="alert" size={16} />{view.checksError ? view.checksError.summary : "체크 기록 기능이 아직 준비되지 않아 목록 조회만 가능합니다."}<button type="button" onClick={() => router.refresh()}>다시 불러오기</button></div>}
     {view.checksAvailable && !view.subjectChecks && <div className={styles.warning}>과목별 체크가 아직 켜지지 않았습니다. 지금은 같은 학생의 모든 과목에 완료 기록이 함께 적용됩니다.</div>}
-    {failure && <div className={styles.failure} role="alert"><EyIcon name="error" size={16} /><span>{failure.message} 변경 사항을 되돌렸습니다.</span><button type="button" onClick={retry}>다시 시도</button></div>}
+    {failure && !detailOpen && <div className={styles.failure} role="alert"><EyIcon name="error" size={16} /><span>{failure.message} 변경 사항을 되돌렸습니다.</span><button type="button" onClick={retry}>다시 시도</button></div>}
 
     <section className={styles.priority} aria-label="우선 처리 업무">
       <button type="button" className={styles.priorityHeading} aria-expanded={priorityOpen} onClick={() => setPriorityOpen(!priorityOpen)}><EyIcon name="clipboardList" size={16} />우선 처리 <span>{known ? `${tasks.length}건` : "확인 필요"}</span><EyIcon name={priorityOpen ? "chevronUp" : "chevronDown"} size={12} /></button>
@@ -200,9 +207,9 @@ export function NewcomerBoard({ view, canWrite, initialFilters = EMPTY_FILTERS }
         <span className={styles.activeFilters}>{filters.item && <button type="button" onClick={() => changeFilters({ ...filters, item: null })}>{parseCareCellParam(filters.item)?.label} <EyIcon name="close" size={12} /></button>}{filterActive && <button type="button" onClick={() => changeFilters({ ...EMPTY_FILTERS })}>필터 초기화</button>}</span>
       </div>
       <div ref={scroller} className={styles.tableScroll} tabIndex={0} role="region" aria-label="학생 관리 표 · 가로와 세로 스크롤">
-        {filtered.length > 0 ? <NewcomerTable rows={filtered} today={view.today} canWrite={writable} checksKnown={known} busy={busy} selected={selection?.rowKey ?? null} onToggle={(row, item) => { void saveCheck(row, item); }} compact={compact} /> : <div className={styles.empty}><EyIcon name="search" size={28} /><strong>{rows.length ? "조건에 맞는 학생이 없습니다" : "최근 90일 내 등록된 관리 대상이 없습니다"}</strong><p>{rows.length ? "검색어나 필터를 변경해 보세요." : "대상 학생이 등록되면 관리 일정이 이곳에 표시됩니다."}</p>{filterActive && <button type="button" onClick={() => changeFilters({ ...EMPTY_FILTERS })}>필터 초기화</button>}</div>}
+        {filtered.length > 0 ? <NewcomerTable rows={filtered} today={view.today} canWrite={writable} checksKnown={known} busy={busy} selected={selection?.rowKey ?? null} onToggle={(row, item) => openDetails(row, item)} compact={compact} /> : <div className={styles.empty}><EyIcon name="search" size={28} /><strong>{rows.length ? "조건에 맞는 학생이 없습니다" : "최근 90일 내 등록된 관리 대상이 없습니다"}</strong><p>{rows.length ? "검색어나 필터를 변경해 보세요." : "대상 학생이 등록되면 관리 일정이 이곳에 표시됩니다."}</p>{filterActive && <button type="button" onClick={() => changeFilters({ ...EMPTY_FILTERS })}>필터 초기화</button>}</div>}
       </div>
-      <footer className={styles.footer}><span><strong>{studentsIn(filtered)}명 · {filtered.length}행</strong> 표시 / 전체 {stats.students}명 · {stats.rows}행</span><span className={styles.notice} role="status" aria-live="polite">{notice || (writable ? "업무 클릭: 완료 / 취소 · 이름 클릭: 학생 상세" : "조회 전용 · 완료 기록을 변경할 수 없습니다")}</span></footer>
+      <footer className={styles.footer}><span><strong>{studentsIn(filtered)}명 · {filtered.length}행</strong> 표시 / 전체 {stats.students}명 · {stats.rows}행</span><span className={styles.notice} role="status" aria-live="polite">{notice || (writable ? "업무 클릭: 액션·결과 기록 / 완료 확인 · 이름 클릭: 학생 상세" : "조회 전용 · 완료 기록을 변경할 수 없습니다")}</span></footer>
     </section>
 
     <Sheet open={detailOpen && !!selectedRow} onOpenChange={setDetailOpen}>
@@ -214,12 +221,13 @@ export function NewcomerBoard({ view, canWrite, initialFilters = EMPTY_FILTERS }
             <div className={styles.taskDetail}><h2>{selectedItem.label}</h2>{known ? <TaskBadge row={selectedRow} item={selectedItem} today={view.today} /> : <span>기록 확인 불가</span>}
               <dl><dt>예정일</dt><dd>{dueDateOf(selectedItem, selectedRow) ?? "날짜 미정"}</dd><dt>계산 기준</dt><dd>{selectedItem.anchor === "enrolled" ? "등록일" : "첫 수업일"} {selectedItem.offsetDays < 0 ? `${Math.abs(selectedItem.offsetDays)}일 전` : `${selectedItem.offsetDays}일 후`}</dd><dt>현재 상태</dt><dd>{known ? STATUS_STYLE[statusOf(selectedItem, selectedRow, selectedRow.checks[selectedItem.key], view.today)].label : "확인 불가"}{known && statusOf(selectedItem, selectedRow, selectedRow.checks[selectedItem.key], view.today) === "overdue" && ` · ${Math.abs(daysLeftOf(selectedItem, selectedRow, view.today) ?? 0)}일 지남`}</dd><dt>완료일</dt><dd>{known ? selectedRow.checks[selectedItem.key] ?? "완료 기록 없음" : "확인 불가"}</dd></dl>
               {selectedItem.optional && <p className={styles.muted}>선택 업무입니다. 기한 경과 · 3일 내 기한 및 필수 완료율 집계에 포함하지 않습니다.</p>}
-              <button type="button" className={styles.primaryButton} disabled={!writable || busy.has(`${selectedRow.rowKey}|${selectedItem.key}`)} onClick={() => { void saveCheck(selectedRow, selectedItem); }}>{busy.has(`${selectedRow.rowKey}|${selectedItem.key}`) ? "저장 중…" : selectedRow.checks[selectedItem.key] ? "완료 취소" : "완료로 기록"}</button>
+              <CompletionForm key={`${selectedRow.rowKey}:${selectedItem.key}:${selectedRow.checks[selectedItem.key]??"open"}`} done={!!selectedRow.checks[selectedItem.key]} canWrite={writable} busy={busy.has(`${selectedRow.rowKey}|${selectedItem.key}`)} today={view.today} memo={selectedRow.checkDetails?.[selectedItem.key]?.memo} consultationId={selectedRow.checkDetails?.[selectedItem.key]?.consultationId} onSave={(done,completion,doneOn)=>void saveCheck(selectedRow,selectedItem,done,completion,doneOn)}/>
               {!writable && <p className={styles.muted}>현재 권한 또는 기록 조회 상태로는 변경할 수 없습니다.</p>}
               {failure?.rowKey === selectedRow.rowKey && <div className={styles.failure} role="alert"><span>{failure.message} 변경 사항을 되돌렸습니다.</span><button type="button" onClick={retry}>다시 시도</button></div>}
             </div>
             <div className={styles.progressDetail} title={RATE_HELP}><span>필수 업무 완료율</span><strong>{stat(selectedRow.progress.rate)}%</strong><progress max="100" value={known ? selectedRow.progress.rate : 0} aria-label="필수 업무 완료율" /><small>{known ? `${selectedRow.progress.doneCount} / ${selectedRow.progress.dueTotal}건 완료` : "체크 기록 확인 필요"}</small></div>
             <WindowLink className={styles.studentDetailLink} href={`/students/${selectedRow.studentId}?back=/newcomers`}>학생 상세 보기<EyIcon name="arrowRight" size={15} /></WindowLink>
+            <WindowLink className={styles.studentDetailLink} href={`/students/${selectedRow.studentId}/care`}>입학 약속·담당 인수·이행 결과 보기 ↗</WindowLink>
           </div>
         </>}
       </SheetContent>

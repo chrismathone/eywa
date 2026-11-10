@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+// 원스크린 화면 + 옮겨 낸 훅(P3-O)을 한 덩어리로 읽는다 — 화면에서 코드를 옮겨도 같은 단언이 선다.
+import { readOnescreenScreen } from "./components/onescreen-screen-source.test-util";
 
 /**
  * 🔴 **보고서 반 = 출석부 반 = 발송 반** 배선 가드(원장 2026-09-30 — *"모든 기록에 동일한 반이 매핑되어야함"*).
@@ -14,7 +16,7 @@ const ONESCREEN = strip(read("src/features/onescreen/server/actions.ts"));
 const COMPOSE = strip(read("src/features/report-admin/server/compose-actions.ts"));
 const SYNC = strip(read("src/features/onescreen/server/makeup-anchor-sync.ts"));
 const ACTION = strip(read("src/features/onescreen/server/makeup-class-actions.ts"));
-const CLIENT = strip(read("src/features/onescreen/components/onescreen-client.tsx"));
+const CLIENT = strip(readOnescreenScreen());
 
 describe("경로 ① 원스크린 저장(saveLessonReport)", () => {
   it("저장 전 앵커 확정 → 저장 → 같은 앵커로 칸 맞추기 — 칸이 실패하면 저장 오류(발송도 멈춘다)", () => {
