@@ -215,6 +215,7 @@ export const HUB_GROUPS: HubGroup[] = [
     kind: "hub",
     note: "직원·차량·비품을 관리합니다.",
     items: keep([
+      face("dashboard", "/dashboard/marketing", "홍보·마케팅", "행사 기획·집행·성과·회고·연간 비교", { adminOnly: true, icon: "megaphone" }),
       fromMenu("staff", "명부·급여·연차·휴가"),
       fromMenu("shuttle", "노선 편성·등하원 기록"),
       fromMenu("inventory", "자산·대여·실사·소모품"),
