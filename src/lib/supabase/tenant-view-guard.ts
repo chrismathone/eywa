@@ -33,6 +33,10 @@ export const TENANT_VIEW_READ_RPCS: ReadonlySet<string> = new Set([
   "duty_counts",
   // 기한 지났는데 열린 의무가 남은 지난 날들(s2_0043) — cron이 관리 키로 부르는 읽기. 목록 규약상 여기 둔다.
   "duty_open_cycles",
+  // 업무 완성도 관리자 화면의 집계 셋(s2_0049) — 서버가 관리 키로 부르는 읽기 전용 group-by.
+  "duty_rollup_owner_kind",
+  "duty_rollup_class",
+  "duty_rollup_student",
   // 출결 통계 등원율 추이(0387a) — 읽기 전용 group-by.
   "attendance_rate_buckets",
   // 원생 기여도 학생별 합계(0443a) — 읽기 전용 집계(stable). 지점 보기에서도 기여도 화면이 같은 값을 읽게.

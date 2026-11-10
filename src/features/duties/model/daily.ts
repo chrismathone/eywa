@@ -48,7 +48,7 @@ export function kstDueAt(date: string, plusDays: number, hour: number): string {
   const base = Date.parse(`${date}T00:00:00+09:00`);
   return new Date(base + plusDays * 86_400_000 + hour * 3_600_000).toISOString();
 }
-export const DAILY_DUE: Record<DutyKind, (date: string) => string> = {
+export const DAILY_DUE: Record<"attendance" | "report_write" | "report_send", (date: string) => string> = {
   attendance: (d) => kstDueAt(d, 1, 0),
   report_write: (d) => kstDueAt(d, 1, 0),
   report_send: (d) => kstDueAt(d, 1, 12),

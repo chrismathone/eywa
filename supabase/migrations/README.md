@@ -18,6 +18,8 @@
 
 ## 2026-11-10 의무 장부: 할 일 본문에 업무 종류 (s2_0046 · ✅ 운영 적용 2026-11-10 · 직결 · 시험 거래 뒤)
 
+`s2_0050_duty_due_rollup.sql` — ✅ 운영 적용(2026-11-10). 업무 완성도 판정 = 기한 준수율: 집계 3종의 열(total · done · due · ontime · late_done · open_late · expired · over7 · 본문 `duties_private.rollup_rows`) · 건별 의무의 창 = 원래 기한일의 달 · `p_owner_none` · 새 표 `duty_settings`(live_from · late_tasks_on · last_sync_at) · `duty_escalate`는 스위치 켜진 지점만 할 일 생성(이관 의무 제외). s2_0049의 함수 서명을 지우고 다시 만든다.
+`s2_0049_duty_admin_rollup.sql` — ✅ 운영 적용(2026-11-10). 업무 완성도 관리자 화면 집계 3종(`duty_rollup_owner_kind` · `duty_rollup_class` · `duty_rollup_student` · `p_subjects`로 과목 범위 · service_role 전용).
 `s2_0048_duty_task_detail.sql` — `duty_escalate`가 여는 할 일(`duty_late`)의 detail = "<종류> 기한 초과 N건 · MM/DD — 이름 · 이름"(할 일 창의 굵은 줄이 detail을 쓴다). 월말평가 링크 `/grades`.
 
 ## 2026-11-10 의무 장부: void 까닭 갱신 (s2_0045 · ✅ 운영 적용 2026-11-10 · 직결 · 시험 거래 뒤)

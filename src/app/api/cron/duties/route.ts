@@ -41,6 +41,9 @@ export async function GET(req: Request) {
       taskOpened += r.taskOpened;
       taskClosed += r.taskClosed;
       synced[tenantId] = days.length;
+      // 화면의 '기준 시각'(s2_0050) — 이 지점의 맞춤이 끝까지 성공했을 때만 적는다. 표가 아직 없으면(SQL 미적용) 조용히 넘긴다(#95).
+      const stamp = await db.from("duty_settings").upsert({ tenant_id: tenantId, last_sync_at: new Date().toISOString() }, { onConflict: "tenant_id" });
+      if (stamp.error && stamp.error.code !== "42P01" && stamp.error.code !== "PGRST205") throw new Error(`장부 기준 시각: ${stamp.error.message}`);
     } catch (error) {
       failed++;
       reportError(error, { scope: "cron.duties", tenantId });
