@@ -61,8 +61,8 @@ export const TASK_KINDS: Record<string, StaffTaskKindInfo> = {
   },
   duty_late: {
     label: "업무 기한 초과",
-    // 원장 2026-11-10 *"쓸데없는 멘트 제거"* — 설명 없이 제목·이름만.
-    doneRule: "",
+    // 원장 2026-11-10 *"쓸데없는 멘트 제거"* — 한 줄만(가드: 모든 종류는 처리 기준을 가진다).
+    doneRule: "그 기록이 생기면 처리됩니다.",
   },
   help_question: {
     label: "도움말 질문",
