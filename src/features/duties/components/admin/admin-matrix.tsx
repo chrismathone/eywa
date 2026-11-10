@@ -1,6 +1,6 @@
 "use client";
 
-import { cellTitle, MATRIX_COLUMNS, type Cell, type CellTone, type MatrixRow, upcomingOf, overallPct, wellDoneOf } from "../../view-admin";
+import { cellTitle, MATRIX_COLUMNS, type Cell, type CellTone, type MatrixRow, upcomingOf, overallPct, duePct, wellDoneOf } from "../../view-admin";
 import { judge, type Avg } from "../../view-admin-levels";
 import { VerdictBadge } from "./admin-verdict";
 
@@ -78,18 +78,23 @@ export function bandStyle(pct: number): { background: string; color: string } {
 /**
  * 한 칸 — 선생님 · 반 · 학생 표가 같은 부품을 쓴다. 색은 기한 안에 끝낸 비율의 구간(`bandStyle` — 빨강 → 초록).
  *   · 종류 칸 = 잘 끝낸 것/전체(frac) 또는 기한 준수율(전부 기한이 됐을 때) · 아직 남은 것이 있으면 완료/전체.
- *   · '전체' 칸(`overall`) = 늘 % — 잘 끝낸 것 ÷ 전체(남은 것이 있으면 100%가 아니다).
+ *   · '전체' 칸(`overall`) = 기한 준수율 %(기한 안에 끝낸 것 ÷ 기한이 온 것 · 등급과 같은 기준) — 기한이 온 것이 없으면 '—'.
  */
 export function CountBox({ cell, onClick, plain, frac, overall }: { cell: Cell | null; onClick?: () => void; plain?: boolean; frac?: boolean; overall?: boolean; }) {
+  if (cell && cell.total && overall && duePct(cell) === null) {
+    // 기한이 온 것이 없어도 눌러서 업무 목록은 볼 수 있다.
+    const dash = `block w-full rounded-lg px-1 py-1.5 text-sm font-semibold tabular-nums ${plain ? "text-text-placeholder" : TONE.none}`;
+    return onClick ? <button type="button" onClick={onClick} className={`${dash} hover:brightness-95`} title={cellTitle(cell)}>—</button> : <span className={dash} title={cellTitle(cell)}>—</span>;
+  }
   if (!cell || !cell.total) return <span className={`block rounded-lg px-1 py-1.5 text-sm font-semibold tabular-nums ${plain ? "text-text-placeholder" : TONE.none}`}>—</span>;
   const tone = plain ? "font-bold" : "font-semibold";
   const pending = cell.pct === null || upcomingOf(cell) > 0;
   // 색은 **칸에 적힌 숫자**의 구간이다 — 글자(기한이 온 것 기준 %)와 색(전체 기준)이 다른 비율을 말하지 않게(Claude · Codex 합의 2026-11-11).
-  const band = plain ? undefined : bandStyle(overall || pending ? overallPct(cell) ?? 0 : frac ? (cell.due ? (cell.ontime / cell.due) * 100 : 0) : cell.pct ?? 0);
+  const band = plain ? undefined : bandStyle(overall ? duePct(cell) ?? 0 : pending ? overallPct(cell) ?? 0 : frac ? (cell.due ? (cell.ontime / cell.due) * 100 : 0) : cell.pct ?? 0);
   // 기한 초과 수는 종류 칸에만 적는다(전체 칸은 %만 — 원장 *"전체에서는 기한 초과 멘트 제거"*). 색 바탕 위라 글자색은 칸 색을 따른다.
   const late = cell.late ? <span className="ml-1 text-xs font-bold">기한 초과 {cell.late}</span> : null;
   const body = overall
-    ? <span>{overallPct(cell)}<span className="text-xs font-medium">%</span></span>
+    ? <span>{duePct(cell)}<span className="text-xs font-medium">%</span></span>
     : pending || frac
       ? <><span>{frac && !pending ? `${cell.ontime}/${cell.due}` : `${wellDoneOf(cell)}/${cell.total}`}</span>{late}</>
       : <><span>{cell.pct}<span className="text-xs font-medium">%</span></span>{late}</>;

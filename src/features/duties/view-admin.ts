@@ -131,12 +131,16 @@ export function cellTone(c: Cell): CellTone {
 /**
  * 칸 표시(원장 2026-11-11 *"남음이 있는데 100%는 말도 안됨"* · *"전체는 %로"* · *"완료된 건은 초록색으로, 미흡이 하나라도 있는건은 붉은색으로"*):
  *   · 잘 끝낸 것 = 기한 안에 끝낸 것(기한 전에 미리 끝낸 것 포함). 늦게 끝낸 것 · 아직 안 한 것 · 미이행은 모자란 것이다.
- *   · '전체' 칸의 % = 잘 끝낸 것 ÷ **전체**(남은 것도 분모에 든다 — 남은 것이 있으면 100%가 아니다).
+ *   · '전체' 칸의 % = **기한 준수율**(기한 안에 끝낸 것 ÷ 기한이 온 것 — 등급과 같은 기준 · `duePct`). 기한이 온 것이 없으면 '—'.
+ *     (2026-11-11 저녁 — Claude + Codex 합의를 원장이 그대로 진행하라고 함: 남은 것까지 분모에 넣으면 달 중순에 등급은 좋은데 %만 낮아 서로 다른 말을 했다.)
+ *   · 종류 칸에 남은 것이 있으면 끝낸 것/전체로 적는다(그 칸의 색은 그 비율 — `overallPct`).
  *   · 색은 둘 — 전부 잘 끝냈으면 초록, 하나라도 모자라면 빨강.
  * 등급(`judge`)은 종전대로 기한이 온 것만으로 매긴다(아직 기한이 안 온 일로 등급을 깎지 않는다).
  */
 export const wellDoneOf = (c: Counts): number => c.ontime + earlyDoneOf(c);
 export const overallPct = (c: Counts): number | null => (c.total ? Math.floor((wellDoneOf(c) / c.total) * 100) : null);
+/** 기한 준수율 — 기한이 온 것이 없으면 null. 판정 줄 · 종류 칸 · 과목 관리자별 현황과 **같은 반올림**이다(한 줄 안에서 26%와 27%가 같이 서지 않게 · 등급은 반올림 전 값). */
+export const duePct = (c: Counts): number | null => (c.due ? Math.round((c.ontime / c.due) * 100) : null);
 export const allWellDone = (c: Counts): boolean => c.total > 0 && wellDoneOf(c) === c.total;
 
 /** 칸 설명(마우스 오버) — 숫자의 뜻을 글로. */

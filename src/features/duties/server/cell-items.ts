@@ -30,7 +30,7 @@ export async function loadDutyCellItems(tenantId: string, from: string, to: stri
   ].filter((w) => !periods || periods.some((p) => w.includes(`period.eq.${p},`)));
   const fetched = await fetchAllPaged<Row>((a, b) => {
     let q = admin.from("duty_items").select("id,kind,period,cycle,status,void_reason,due_at,done_at,owner_id,student_id,class_id,subject,class:classes!duty_items_class_id_fkey(class_name)")
-      .eq("tenant_id", tenantId).eq("student_id", f.studentId).or("status.neq.void,void_reason.eq.expired").or(window.join(","));
+      .eq("tenant_id", tenantId).eq("student_id", f.studentId).or("status.neq.void,void_reason.in.(expired,waived)").or(window.join(","));
     if (live && !(liveDay && to < liveDay)) q = q.gte("due_at", live);
     if (scope.subjects) q = q.in("subject", scope.subjects);
     if (scope.ownerId) q = q.eq("owner_id", scope.ownerId); else if (f.ownerNone) q = q.is("owner_id", null); else if (f.owner) q = q.eq("owner_id", f.owner);

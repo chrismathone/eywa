@@ -23,3 +23,11 @@ describe("칸 목록의 한 줄", () => {
     expect(cellItemWhen({ state: "late", period: "daily", dueAt: "2026-11-07T15:00:00Z", doneAt: null })).toBe("기한 11/7");
   });
 });
+
+describe("면제한 업무", () => {
+  it("목록에는 '면제'로 보인다(미처리 확정과 가른다)", () => {
+    const base = { dueAt: "2026-11-09T15:00:00Z", doneAt: null };
+    expect(cellItemState({ ...base, status: "void", voidReason: "waived" }, Date.parse("2026-11-10T03:00:00Z"))).toBe("waived");
+    expect(cellItemState({ ...base, status: "void", voidReason: "expired" }, Date.parse("2026-11-10T03:00:00Z"))).toBe("expired");
+  });
+});

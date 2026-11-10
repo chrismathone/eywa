@@ -1,14 +1,14 @@
 import { DUTY_KINDS, NEWCOMER_ITEM_LABEL } from "./kinds";
 
 /** 칸을 눌렀을 때 보이는 한 줄 — 장부의 의무 하나와 그 실제 기록. 클라·서버 공용(순수). */
-export type CellItemState = "ontime" | "early" | "late_done" | "late" | "upcoming" | "expired";
+export type CellItemState = "ontime" | "early" | "late_done" | "late" | "upcoming" | "expired" | "waived";
 export type CellItem = {
   id: string; kind: string; period: string; cycle: string; state: CellItemState; dueAt: string; doneAt: string | null;
   className: string | null;
   /** 실제 기록으로 가는 주소(출석부 그날 그 반 · 그 상담 기록 · 성적 입력 칸). 갈 화면이 없으면 null — 줄만 보인다. */
   href: string | null;
 };
-export const CELL_STATE_LABEL: Record<CellItemState, string> = { ontime: "기한 내 완료", early: "미리 완료", late_done: "기한 후 완료", late: "기한 초과", upcoming: "남음", expired: "미처리 확정" };
+export const CELL_STATE_LABEL: Record<CellItemState, string> = { ontime: "기한 내 완료", early: "미리 완료", late_done: "기한 후 완료", late: "기한 초과", upcoming: "남음", expired: "미처리 확정", waived: "면제" };
 const kstDay = (iso: string) => new Date(Date.parse(iso) + 9 * 3_600_000).toISOString().slice(0, 10);
 const md = (ymd: string) => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}`;
 const hm = (iso: string) => new Date(Date.parse(iso) + 9 * 3_600_000).toISOString().slice(11, 16);
@@ -18,7 +18,8 @@ const hm = (iso: string) => new Date(Date.parse(iso) + 9 * 3_600_000).toISOStrin
  * 🔴 기한이 **아직 안 온** 것을 미리 끝낸 것은 준수가 아니라 조기 완료다 — 집계의 준수(제때/기한 도래)에는 기한이 온 것만 든다(칸 숫자와 목록의 '준수' 수가 같아야 한다).
  */
 export function cellItemState(it: { status: string; voidReason: string | null; dueAt: string; doneAt: string | null }, nowMs: number): CellItemState {
-  if (it.status === "void") return "expired";
+  // 면제한 것은 집계에서 빠지지만 목록에는 보인다 — 높은 %가 면제로 만든 것인지 알 수 있게(Claude + Codex 합의 2026-11-11).
+  if (it.status === "void") return it.voidReason === "waived" ? "waived" : "expired";
   if (it.status === "done") return Date.parse(it.dueAt) > nowMs ? "early" : it.doneAt && Date.parse(it.doneAt) > Date.parse(it.dueAt) ? "late_done" : "ontime";
   return Date.parse(it.dueAt) <= nowMs ? "late" : "upcoming";
 }
