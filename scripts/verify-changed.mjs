@@ -94,7 +94,8 @@ if (fullTypes) {
     extends: "../tsconfig.json",
     compilerOptions: { incremental: false, plugins: [] },
     include: [],
-    files: ["next-env.d.ts", ...dts.map((f) => `../${f}`), ...targets.map((f) => `../${f}`)],
+    // vitest.setup.ts = 전역 매처 타입(jest-dom의 toBeDisabled 등)을 싣는다 — 빠지면 시험 파일이 가짜 타입 실패를 낸다(전체 tsc는 include로 잡는다).
+    files: ["next-env.d.ts", ...dts.map((f) => `../${f}`), ...(existsSync("vitest.setup.ts") ? ["../vitest.setup.ts"] : []), ...targets.map((f) => `../${f}`)],
   }, null, 2));
   console.log(`\n━━ 타입(바뀐 TS ${ts.length} · 역의존 ${reverse.size} + import) ━━`);
   const r = spawnSync(process.execPath, ["--max-old-space-size=8192", tscJs, "-p", scoped, "--noEmit", "--pretty", "false"], { encoding: "utf8" });

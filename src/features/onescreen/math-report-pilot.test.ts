@@ -289,11 +289,12 @@ describe("배선", () => {
     expect(grid).toMatch(/readOnly=\{rowLocked \|\| pilotLocked\}/);
     expect(card).not.toMatch(/readOnly=\{pilot\}/);
     // 사실 서명은 카드·표·자동작성이 같은 함수(pilotRowSig)로 만든다 — 갈리면 값이 그대로인데도 게이트가 안 풀린다.
-    for (const src of [card, grid]) {
-      expect(src).toMatch(/factsSig: pilotRowSig\(student, subject\.name\)/);
-      expect(src).toMatch(/writtenSig: rep\?\.pilotFactsSig/);
-      expect(src).toMatch(/needsTestReason: pilot && !testSkipComplete\(subject\.dailyTestSkip\)/);
-    }
+    // 카드·표의 게이트 재료는 한 벌(row-send-gate.ts, P1-O)이라 그 파일을 본다(두 화면이 그것을 부르는지는 row-send-gate-wiring).
+    const gate = read("./row-send-gate.ts");
+    expect(gate).toMatch(/factsSig: pilotRowSig\(student, subject\.name\)/);
+    expect(gate).toMatch(/writtenSig: rep\?\.pilotFactsSig/);
+    expect(gate).toMatch(/needsTestReason: pilot && !testSkipComplete\(subject\.dailyTestSkip\)/);
+    for (const src of [card, grid]) expect(src).toContain("rowSendGate({");
     expect(read("./components/onescreen-client.tsx")).toMatch(/pilotRowSig\(student, subjectName\)/);
   });
   it("한줄 멘트를 바꾸면 그 자리에서 글 끝을 바꾸고, 발송 경로가 한줄 멘트를 싣는다", () => {
@@ -302,8 +303,9 @@ describe("배선", () => {
     expect(client).toMatch(/pilotOneLine: rowEval\.note/);
     // 영어 행도 '사랑의 한마디' 필수(원장 2026-10-26) — 판정은 oneLineRow = pilot || 영어.
     // JJ 수업보고서 글만 한마디가 선택(원장 2026-10-27) — 나머지 영어·수학 행은 그대로 필수.
-    expect(read("./components/report-card.tsx")).toMatch(/needsOneLine: oneLineRow && !jjOptionalNote && !hasPilotOneLine\(cardEval\.note\)/);
-    expect(read("./components/grid-row.tsx")).toMatch(/needsOneLine: oneLineRow && !jjOptionalNote && !hasPilotOneLine\(rowEval\.note\)/);
+    const gate = read("./row-send-gate.ts");
+    expect(gate).toMatch(/needsOneLine: oneLineRow && !jjOptionalNote && !hasPilotOneLine\(fields\.note\)/);
+    expect(gate).toMatch(/const oneLineRow = pilot \|\| subject\.subjectKey === "english"/);
     expect(read("./components/report-card.tsx")).toMatch(/const oneLineRow = pilot \|\| subject\.subjectKey === "english"/);
   });
 });

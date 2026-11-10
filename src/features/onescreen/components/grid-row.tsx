@@ -10,19 +10,17 @@ import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
 import {
   effectiveClassnoteStatus,
   isAlreadySent,
-  isAttendanceUnchecked,
-  isReportEligible,
   isReportOptoutRow,
   isRowInputEditable,
   isRowActionable,
   type GridRow,
 } from "../grid";
-import { evaluateSendGate } from "../send-gate";
-import { hasPilotOneLine, isMathReportPilot, pilotCanEdit, pilotNeedsAutoWrite, understandingPresetOf, understandingRows } from "../math-report-pilot";
+import { rowSendGate } from "../row-send-gate";
+import { isMathReportPilot, pilotCanEdit, understandingPresetOf, understandingRows } from "../math-report-pilot";
 import { UnderstandingPresetButtons } from "./understanding-presets";
 import { UnderstandingPopover } from "./understanding-popover";
 import { LessonMemoInput } from "./lesson-memo-input";
-import { attitudeNeedsNote, isHomeworkMissed, needsAttitudeNote, needsHomeworkMissReason, pilotRowSig, testSkipComplete, type DailyTestSkip } from "../math-report-pilot-sections";
+import { attitudeNeedsNote, isHomeworkMissed, needsAttitudeNote, type DailyTestSkip } from "../math-report-pilot-sections";
 import { hasMakeupAbsenceDate } from "../attendance-sentence";
 import { DailyTestSkipSelect } from "./daily-test-skip-select";
 import { HomeworkMissReasonInput } from "./homework-miss-reason";
@@ -69,7 +67,6 @@ import { TodaysMathMark } from "./todays-math-mark";
 import { todaysMathMarked } from "../todays-math-fill-rules";
 import { MakeupClassTag } from "./makeup-class-tag";
 import { ReservedMakeupTag } from "./reserved-makeup-tag";
-import { needsMakeupCheck } from "../reserved-makeup";
 import { MakeupSwitchButton } from "./makeup-switch-button";
 import { isMathBookRow, useMathBookListId } from "./math-book-list";
 import { JjBookPicker } from "./jj-book-picker";
@@ -344,34 +341,8 @@ export function GridBodyRow({
   // JJ 수업보고서 글 — 사랑의 한마디는 선택(비우면 그 항목이 빠진다, 원장 2026-10-27).
   const jjOptionalNote = subject.subjectKey === "english" && isJjSheetDraft(rep);
   const progressOptional = isProgressOptionalReport(subject, rep); // SRS 글은 진도 항목이 없다(원장 2026-11-05)
-  const sendGate = evaluateSendGate({
-    lang,
-    needsAutoWrite:
-      pilot &&
-      pilotNeedsAutoWrite(rep?.draft, rep?.autoDraft, {
-        studentName: student.name,
-        today: subject.today,
-        progressMode: subject.progressMode,
-        note: rowEval.note,
-        factsSig: pilotRowSig(student, subject.name),
-        writtenSig: rep?.pilotFactsSig,
-      }),
-    needsOneLine: oneLineRow && !jjOptionalNote && !hasPilotOneLine(rowEval.note), // 사랑의 한마디(옛 강사 한줄 멘트) 필수(원장 2026-10-22)
-    needsTestReason: pilot && !testSkipComplete(subject.dailyTestSkip), // 일일 테스트 '없음'이면 사유 필수(원장 2026-10-22)
-    needsHomeworkReason: pilot && needsHomeworkMissReason(rowEval.homework, subject.homeworkMissReason), // 숙제 미제출이면 사유 필수(원장 2026-10-23)
-    needsAttitudeNote: pilot && needsAttitudeNote(rowEval.attitude, subject.attitudeNote), // 태도 하·중하면 의견 3줄 이상(원장 2026-10-26)
-    needsMakeupCheck: needsMakeupCheck(subject), // 보강 예약이 든 줄은 보강 진행 여부 확인 뒤에(원장 2026-10-27)
-    readonlyView: gen.readonlyView, // 열람 전용 — 사유 라벨("열람 전용")까지 게이트가 만든다
-    // 발송 대기·게시 중 — 워커 결과 전까지 다시 못 누른다(카드뷰와 같은 판정, 원장 2026-09-29).
-    sendInFlight: liveStatus === "queued" || liveStatus === "processing",
-    alreadySent,
-    reportOptout: isReportOptoutRow(subject), // 미발송 반(0174a) — 카드뷰와 같은 단일 소스
-    isAbsent: subject.attendanceRaw === "absent",
-    hasProgress: isReportEligible(subject, progressOptional),
-    hasDraft,
-    // 출결 쓰기 권한 없음 = 게이트 해당 없음(P0-3) — 알약도 없는데 "출결을 기록하라"는 거짓 안내 방지.
-    attendanceUnchecked: !gen.attReadOnly && isAttendanceUnchecked(subject),
-  });
+  // 재료 조립은 카드·표 한 벌(row-send-gate.ts, 리뷰 B5) — 판정은 send-gate 단일 소스.
+  const sendGate = rowSendGate({ lang, student, subject, rep, readonlyView: gen.readonlyView === true, attendanceReadOnly: gen.attReadOnly === true });
   const canSend = sendGate.canSend; // 열람 전용 포함 — 판정·사유는 send-gate 단일 소스
   // 멘트와 기록 칸이 서로 다른 말을 하는지(시험날 진도·멘트에만 있는 점수) — **막지 않고 알린다**.
   // 학부모 카드엔 멘트와 기록이 나란히 보이므로 어긋나면 학부모가 두 사실을 동시에 받는다(2026-07-30 감사).
