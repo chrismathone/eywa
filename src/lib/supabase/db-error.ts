@@ -70,8 +70,14 @@ export function dbConstraintName(error: unknown): string | null {
  */
 function displayableRaise(message: string): string | null {
   const m = message.trim().replace(/^[a-z_][a-z0-9_]*:\s*/i, "").replace(/\s*\([A-Za-z_][\w.]*\)/g, "").trim();
-  if (!m || /[A-Za-z]{2,}/.test(m)) return null;
-  return (m.match(/[가-힣]/g) ?? []).length >= 4 ? m : null;
+  if (!m) return null;
+  // 식별자 꼴(밑줄 · 낙타 표기 · 7자 넘는 영문 낱말)이 남으면 원문으로 본다(`invalid_move`·`ECS_BAD_TERM`·`violates`).
+  // 짧은 대문자 약어·강의실 번호(JJ · LAB · B201)는 사람에게 보일 한글 문장 속 값이라 둔다(P1-E 리뷰 — '등록되지 않은 강의실입니다: B201').
+  // 🔴 소문자로 시작하는 영문 낱말은 칸·표 이름일 수 있어 막는다('바꿀 수 없는 항목입니다: email').
+  if (/[A-Za-z0-9]_|_[A-Za-z]/.test(m) || /[A-Za-z]{7,}/.test(m) || /[a-z][A-Z]/.test(m) || /\b[a-z]{2,}/.test(m)) return null;
+  const latin = (m.match(/[A-Za-z]/g) ?? []).length;
+  const hangul = (m.match(/[가-힣]/g) ?? []).length;
+  return hangul >= 4 && hangul >= latin * 3 ? m : null;
 }
 
 const SCHEMA_CODES = new Set(["PGRST200", "PGRST201", "PGRST202", "PGRST204", "PGRST205", "42P01", "42703", "42883"]);

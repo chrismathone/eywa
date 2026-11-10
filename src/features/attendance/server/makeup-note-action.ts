@@ -33,6 +33,7 @@ import {
   hasMemoLine,
   makeupMemo,
 } from "@/features/onescreen/makeup-absence-link";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 export type MakeupNoteResult =
   | { ok: true; absenceNoted: boolean; alreadyLinked: boolean }
@@ -128,7 +129,7 @@ export async function noteMakeupAgainstAbsence(input: {
   }
   const results = await Promise.all(writes);
   const failed = results.find((r) => r.error);
-  if (failed?.error) return { error: failed.error.message };
+  if (failed?.error) return { error: explainDbError(failed.error, { scope: "attendance.makeup-note-action.noteMakeupAgainstAbsence", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   // 시수까지 고치는 연결(`linkMakeupToAbsence`)과 같은 키 — 이쪽은 메모만 붙였다(`memoOnly`). 붙인 칸이 없으면 남기지 않는다.
   if (writes.length > 0) {

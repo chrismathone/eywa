@@ -14,6 +14,7 @@ import { planMakeupCellMove, substituteTaughtBy, type MoveCellRow, type MoveCell
 import { completeMakeupReservations, effectGapsOf, type CompletionCell } from "./makeup-reservation-complete";
 import { effectNoticeOf, type MakeupEffectNotice } from "@/features/makeups/server/adapters/effects";
 import { taughtByColumnReady } from "./taught-by-db";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -115,7 +116,7 @@ export async function ensureMakeupAnchorCell(input: {
     ...(input.note ? { note: input.note } : {}),
     ...(withTaughtBy ? { taught_by: input.taughtBy } : {}),
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "attendance.makeup-anchor-cells.ensureMakeupAnchorCell", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   // 그 반·그날 **보강 예약**이 있으면 이행한다(예약이 영영 reserved로 남지 않게 — 종전 예약 반 분기와 같은 호출).
   const makeupEffect = await completeAnchorCell(input.tenantId, {
     studentId: input.studentId, classId: input.classId, date: input.date, status: "makeup", unitsExplicit: input.units != null, created: true,
@@ -169,7 +170,7 @@ export async function applyAnchorMove(input: {
     .eq("class_id", input.fromClassId)
     .in("id", [...input.ids])
     .select("id");
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "attendance.makeup-anchor-cells.applyAnchorMove", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   if ((data ?? []).length !== input.ids.length) {
     /**
      * 🔴 **일부만 옮겨졌다**(계획을 세운 뒤 그 사이 누가 한 행을 고쳤다) — 한 문장이라도 맞은 행은 이미 새 반에 있다.

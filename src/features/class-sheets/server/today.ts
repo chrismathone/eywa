@@ -49,6 +49,7 @@ import { getReservationsOn } from "@/features/attendance/server/makeup-reservati
 // 수업 나누기(0351a) — 그날 이 반으로 오는/나가는 학생(fail-soft).
 import { getSplitsOnDate } from "@/features/class-splits/server/queries";
 import { applySplitsToCard, splitIncomingIds } from "../lib/split-card";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * **오늘 ECS** — 영어 강사의 원스크린(원장 지시 2026-08-07 "영어 강사는 ECS를 기반으로 한 원스크린").
@@ -267,7 +268,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
     // 예약된 개명 — 위 둘과 독립이라 같은 묶음(B4). 요청 캐시라 다른 뷰가 또 물어도 왕복 0.
     getClassNameAsOfIndex(),
   ]);
-  if (classError) return { ok: false, error: `반 목록을 불러오지 못했습니다: ${classError.message}` };
+  if (classError) return { ok: false, error: explainDbError(classError, { scope: "class-sheets.today.getEcsToday", fallback: "반 목록을 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   // 강사 스코프는 JS 교집합(스코프 id를 .in에 넣지 않는다 — 대량 .in 회피, B3). 게이트와 같은 세 갈래.
   // 위임 배지도 게이트와 **같은 소스**(ecsDelegatedClassIds, react cache라 추가 왕복 0 — 주간 랜딩과 동일).

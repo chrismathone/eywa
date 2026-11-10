@@ -156,3 +156,20 @@ describe("23514 트리거 한글 사유(P1-E 리뷰)", () => {
   });
 });
 
+describe("한글 RAISE 속 짧은 영문 값(P1-E 3단계 리뷰)", () => {
+  const show = (message: string, code = "P0001") => describeDbError({ code, message }, { fallback: "FALLBACK" }).message;
+  it("강의실 번호·영문 약어가 든 한글 문장은 보인다", () => {
+    expect(show("등록되지 않은 강의실입니다: B201. 학원 설정의 강의실 목록에 있는 강의실로 골라 주세요.")).toContain("B201");
+    expect(show("apply_english_structure: JJ 반은 이 방식으로 옮길 수 없습니다")).toBe("JJ 반은 이 방식으로 옮길 수 없습니다");
+  });
+  it("식별자·영문 문장은 여전히 막는다", () => {
+    expect(show("ECS_BAD_TERM")).toBe("FALLBACK");
+    expect(show("invalid_move")).toBe("FALLBACK");
+    expect(show("transfer_source_changed 반 이동 원본이 바뀌었습니다")).toBe("FALLBACK");
+    expect(show("permission denied for table users", "42501")).not.toContain("permission");
+    expect(show("rls 한글")).toBe("FALLBACK"); // 한글이 4자 미만
+    expect(show("Something went wrong 한글 문장입니다")).toBe("FALLBACK"); // 7자 넘는 영문 낱말
+    expect(show("본인 계정에서 직접 바꿀 수 없는 항목입니다: email", "42501")).not.toContain("email"); // 칸 이름
+  });
+});
+

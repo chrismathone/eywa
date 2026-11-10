@@ -31,6 +31,7 @@ import { freshRawUiPrefs } from "@/lib/filter-reset/server";
 import { ecsVisibleClassFilter } from "./access";
 import { loadViewerUiPrefs } from "./viewer-prefs";
 import type { MonthSlot } from "../lib/month-assemble";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * **반 계획 보기**(/ecs/goals) — 인재원 영어 반 × 영역, 그 달 월간 목표 ↔ 그 주 주간 목표(원장 2026-09-23 C안).
@@ -109,7 +110,7 @@ export async function getGoalsBoard(dateParam?: string | null): Promise<GoalsBoa
     loadViewerUiPrefs(),
     ecsVisibleClassFilter(weekMonday),
   ]);
-  if (classesRes.error) return { ok: false, error: `반 목록을 불러오지 못했습니다: ${classesRes.error.message}` };
+  if (classesRes.error) return { ok: false, error: explainDbError(classesRes.error, { scope: "class-sheets.goals-board.getGoalsBoard", fallback: "반 목록을 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   const english = settings.operations.subjects.find((s) => s.key === "english");
   const areas = resolveSkillAreas(english);
   // 담임/부담임 필터는 10분 넘게 안 본 영어 시트면 기본값(원장 2026-10-15 — src/lib/filter-reset/rules.ts). 보기 방식은 그대로.
