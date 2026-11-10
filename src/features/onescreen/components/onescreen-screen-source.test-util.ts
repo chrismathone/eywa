@@ -20,6 +20,8 @@ export const ONESCREEN_SCREEN_FILES = [
   "components/use-bulk-ops.ts",
   "components/use-bulk-send.ts",
   "components/use-english-template-mode.ts",
+  "components/use-makeup-flow.ts",
+  "components/use-makeup-prev.ts",
 ] as const;
 
 export function readOnescreenScreen(): string {

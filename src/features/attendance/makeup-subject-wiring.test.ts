@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+// 원스크린 화면 + 옮겨 낸 훅(P3-O)을 한 덩어리로 읽는다 — 화면에서 코드를 옮겨도 같은 단언이 선다.
+import { readOnescreenScreen } from "../onescreen/components/onescreen-screen-source.test-util";
 
 /**
  * 구조 가드 — **보강 후보는 그 반 과목으로 좁힌다**(원장 제보 2026-08-19: 수학 반에서 보강을 추가하는데
@@ -36,7 +38,7 @@ describe("보강 후보 조회는 **앵커 반 id**를 함께 넘긴다 — 세 
   });
 
   it("강사 원스크린 — 반 필터 앵커를 **모든** 갈래에서 넘긴다", () => {
-    const client = code(read("features/onescreen/components/onescreen-client.tsx"));
+    const client = code(readOnescreenScreen());
     expect(client).toContain("fetchMakeupAbsences(studentId, activeDate, anchorClassId)");
     // 🔴 '목록에 없던 학생 · 합칠 후보 있음 · 후보 없음' 세 갈래가 **모두** 앵커를 넘겨야 한다.
     //    ⚠️ 개수만 세면 나중에 생긴 네 번째 갈래가 `loadAbsences(studentId, null)`로 통과한다 —
@@ -50,7 +52,7 @@ describe("보강 후보 조회는 **앵커 반 id**를 함께 넘긴다 — 세 
   it("🔴 반 필터가 '전체'여도 **합칠 후보가 있으면** 그 반으로 좁힌다 — 이 경로는 결석분을 실제로 쓴다", () => {
     // linkMakeupAbsence는 앵커 없이도 choice.absentClassId 칸에 메모를 붙인다 → 안 좁히면 수학 보강이
     // 영어 결석 칸에 메모를 남긴다(고치려던 사고 그대로).
-    const client = code(read("features/onescreen/components/onescreen-client.tsx"));
+    const client = code(readOnescreenScreen());
     expect(client).toContain("anchorId ?? candidateAnchorClassId(plan.candidates)");
     // ⚠️ 후보가 두 과목이면 안 좁힌다(겸직 강사에서 다른 과목 결석이 통째로 사라진다).
     expect(client).toContain("return keys.size === 1 ? (candidates[0]?.classId ?? null) : null;");
@@ -59,7 +61,7 @@ describe("보강 후보 조회는 **앵커 반 id**를 함께 넘긴다 — 세 
   it("🔴 응답 순서 가드가 있다 — 같은 학생을 **다른 앵커**로 다시 열면 옛 응답이 새 창을 덮는다", () => {
     // 과목 필터 전엔 두 응답이 같아서 안 보이던 레이스다(학생 id 비교만으론 못 거른다).
     // 늦게 온 수학 목록이 영어 창을 덮으면 화면이 '수학 과목 …'이라고 **틀린 라벨로 단언**한다.
-    const client = code(read("features/onescreen/components/onescreen-client.tsx"));
+    const client = code(readOnescreenScreen());
     expect(client).toContain("const mine = ++absenceSeq.current;");
     expect(client).toContain("if (mine !== absenceSeq.current) return;");
   });

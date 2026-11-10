@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+// 원스크린 화면 + 옮겨 낸 훅(P3-O)을 한 덩어리로 읽는다 — 화면에서 코드를 옮겨도 같은 단언이 선다.
+import { readOnescreenScreen } from "../onescreen/components/onescreen-screen-source.test-util";
 
 /**
  * 구조 가드 — **모든 보강 추가가 확인창을 거친다**(원장 2026-08-19: *"이름 검색하고 누르면 그냥 추가되고
@@ -20,7 +22,7 @@ const code = (src: string) =>
     .join("\n");
 
 describe("원스크린 보강 추가는 항상 묻는다", () => {
-  const client = read("features/onescreen/components/onescreen-client.tsx");
+  const client = readOnescreenScreen();
   const fn = client.slice(
     client.indexOf("async function addMakeupStudent"),
     client.indexOf("async function loadAbsences"),
@@ -64,7 +66,7 @@ describe("영어(ECS)도 같은 확인창을 쓴다", () => {
   it("🔴 시수를 두 번 더하지 않는다 — 합산 액션(linkMakeupToAbsence)을 이 흐름에서 쓰지 않는다", () => {
     // 칸을 열며 units를 적어 놓고 합산 액션을 부르면 그 액션이 자기 값을 current로 읽어 1.5→3.0이 된다.
     expect(code(flow)).not.toContain("linkMakeupToAbsence");
-    expect(code(read("features/onescreen/components/onescreen-client.tsx"))).toContain(
+    expect(code(readOnescreenScreen())).toContain(
       "noteMakeupAgainstAbsence(",
     );
   });
@@ -199,7 +201,7 @@ describe("영어(ECS)는 **어느 교시**인지도 묻는다", () => {
   });
 
   it("교시 축이 **없는** 화면(원스크린·반별 출석부)은 묻지 않는다 — 없는 질문을 만들지 않는다", () => {
-    expect(code(read("features/onescreen/components/onescreen-client.tsx"))).not.toContain("slotOptions=");
+    expect(code(readOnescreenScreen())).not.toContain("slotOptions=");
     expect(code(read("app/(shell)/attendance/[date]/[classId]/input-form.tsx"))).not.toContain("slotOptions=");
   });
 });

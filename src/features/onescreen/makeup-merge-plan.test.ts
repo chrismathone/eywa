@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import { studentMarkFromRows } from "./attendance-mark";
 import type { Subject } from "./types";
 import { makeupBaseUnitsOf, mergeStatusOf, mergedUnits, planMakeupMerge, type PlanSubject } from "./makeup-merge-plan";
+// 원스크린 화면 + 옮겨 낸 훅(P3-O)을 한 덩어리로 읽는다 — 화면에서 코드를 옮겨도 같은 단언이 선다.
+import { readOnescreenScreen } from "./components/onescreen-screen-source.test-util";
 
 const MINE = new Set(["math"]);
 const row = (over: Partial<PlanSubject> = {}): PlanSubject => ({
@@ -115,7 +117,7 @@ describe("조퇴 칸 합침 배선 — 조퇴가 출석으로 되쓰이지 않�
   const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
 
   it("합침·추가 보강은 `mergeStatusOf(…attendanceRaw)`로 쓰고, 쓰기 함수가 조퇴를 받는다(메모는 안 보내 사유가 남는다)", () => {
-    const client = read("src/features/onescreen/components/onescreen-client.tsx");
+    const client = readOnescreenScreen();
     expect(client).toContain("mergeStatusOf(merge.attendanceRaw)");
     expect(client).toContain("mergeStatusOf(target.attendanceRaw)");
     // 2026-10-02 출결 취소(null)를 같은 저장 경로로 받으며 타입 이름이 AttendanceSelection으로 바뀌었다 —
@@ -152,7 +154,7 @@ describe("조퇴 쓰기와 학생 배지(원장 2026-09-30 — 조퇴는 조퇴)
   });
 
   it("원스크린 쓰기·롤백·결석분 연결이 배지를 행에서 다시 계산한다(따로 든 배지 없음)", () => {
-    const client = readFileSync(join(process.cwd(), "src/features/onescreen/components/onescreen-client.tsx"), "utf8");
+    const client = readOnescreenScreen();
     expect(client).toContain("attendance: studentMarkFromRows(s)");
     const local = client.slice(client.indexOf("function applyAttendanceLocal("), client.indexOf("async function setAttendanceFor("));
     expect(local.match(/patch\(studentId, \(s\) => withMark\(/g)?.length).toBe(2); // 낙관 반영 + 롤백
