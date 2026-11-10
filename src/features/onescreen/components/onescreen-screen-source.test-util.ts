@@ -55,6 +55,10 @@ export const ONESCREEN_SCREEN_FILES = [
   "components/use-report-share-links.ts",
   "components/report-send-notices.ts",
   "components/onescreen-card-column.tsx",
+  "components/onescreen-card-types.ts",
+  "components/onescreen-card-today-inputs.tsx",
+  "components/onescreen-card-reasons.tsx",
+  "components/onescreen-card-english.tsx",
 ] as const;
 
 export function readOnescreenScreen(): string {
