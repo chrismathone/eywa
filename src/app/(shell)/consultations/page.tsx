@@ -210,7 +210,14 @@ export default async function ConsultationsPage({
           </div>
         ) : (
           <>
-            <ConsultationList items={items} size={size} pageSizeKey={PAGE_SIZE_KEY} classOn={classSupported} ratings={ratings} />
+            {/* 과목 칸은 키(`math`)와 한글 라벨이 섞여 저장된다 — 학원 설정 이름으로 바꿔 넘긴다(상세 화면과 같은 labelOf · 원문 코드 노출 금지). */}
+            <ConsultationList
+              items={items.map((c) => (c.subject ? { ...c, subject: subjects.labelOf(c.subject) } : c))}
+              size={size}
+              pageSizeKey={PAGE_SIZE_KEY}
+              classOn={classSupported}
+              ratings={ratings}
+            />
             <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
           </>
         )}

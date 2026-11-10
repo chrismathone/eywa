@@ -517,7 +517,7 @@ export const TABLES_A: readonly AssistantTableDoc[] = [
     label: "상담 녹음",
     ko: "등록상담 녹음 파일과 전사(상담 1건에 여러 개)",
     notes:
-      "consultation_id → enrollment_consultations. processing_status: idle=대기 · uploaded=업로드됨 · transcribing=전사중 · analyzing=분석중 · completed=완료 · failed=실패. audio_duration_sec=길이(초), recorded_by=녹음한 직원.",
+      "consultation_id → enrollment_consultations. processing_status: idle=대기 · uploaded=업로드됨 · transcribing=전사중 · analyzing=분석중 · completed=완료 · failed=실패. audio_duration_sec=길이(초), recorded_by=녹음한 직원. audio_path가 비었으면 보존기간(90일)이 지나 원본만 지운 것 — 녹음 행·전사·분석은 남는다.",
   },
   {
     name: "daily_briefings",

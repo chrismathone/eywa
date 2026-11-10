@@ -2,7 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateJSON } from "@/lib/ai/generate";
 import { modelDisplayLabel } from "@/lib/ai/model-label";
-import { reportError } from "@/lib/observability/report-error";
+import { reportError, reportWarning } from "@/lib/observability/report-error";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { kstDateOf, kstToday } from "@/lib/date-kst";
 import {
@@ -140,7 +140,10 @@ export async function refreshFlowInsight(args: { tenantId: string; studentId: st
       kind === "consultations"
         ? await generateJSON({ ...base, keyName: "consultations", meta: { feature: "student_flow_consultations", tenantId } })
         : await generateJSON({ ...base, keyName: "consultations", meta: { feature: "student_flow_timeline", tenantId } });
-    const parsed = parseFlowInsight(data);
+    // 넘친 길이·개수는 다듬어 저장한다(2026-11-11 · 주제 60자 초과로 갱신이 통째로 실패하던 것) — 어느 칸을 손댔는지만 남긴다(학생 글 없음).
+    const parsed = parseFlowInsight(data, (fields) =>
+      reportWarning("흐름 분석 응답 길이 다듬음", { scope: "explore.flow.normalize", kind, studentId, fields: fields.join(",") }),
+    );
     const summary = { ...parsed, direction: settleDirection(parsed.direction, { stale: !!flowRecency(latest, today)?.stale, withdrawn: student.status === "withdrawn", recent }) };
     const { error } = await admin.from("student_flow_insights").upsert(
       {

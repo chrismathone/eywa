@@ -45,8 +45,21 @@ describe("응답 검증 — 모양이 틀리면 저장하지 않는다", () => {
   it("정상 응답은 그대로, 방향 값이 어긋나거나 항목이 넘치면 거절", () => {
     expect(parseFlowInsight(prior)).toEqual(prior);
     expect(() => parseFlowInsight({ ...prior, direction: "great" })).toThrow();
-    expect(() => parseFlowInsight({ ...prior, themes: Array(7).fill("x") })).toThrow();
     expect(() => parseFlowInsight({ ...prior, headline: "" })).toThrow();
+    expect(() => parseFlowInsight({ ...prior, themes: "숙제" })).toThrow();
+    expect(() => parseFlowInsight({ ...prior, watch: [3] })).toThrow();
+    expect(() => parseFlowInsight(null)).toThrow();
+  });
+  it("넘친 길이·개수는 다듬어 받는다(2026-11-11 운영 — 주제 60자 초과로 갱신이 통째로 실패) · 손댄 칸 이름만 알린다", () => {
+    const long = "가".repeat(61);
+    const seen: string[][] = [];
+    const out = parseFlowInsight({ ...prior, themes: [...Array(7).fill("주제"), long], watch: ["", "  상담 이어 보기  "] }, (f) => seen.push(f));
+    expect(out.themes).toEqual(Array(6).fill("주제"));
+    expect(out.watch).toEqual(["상담 이어 보기"]);
+    expect(seen).toEqual([["themes", "watch"]]);
+    const quiet: string[][] = [];
+    expect(parseFlowInsight(prior, (f) => quiet.push(f))).toEqual(prior);
+    expect(quiet).toEqual([]);
   });
 });
 
