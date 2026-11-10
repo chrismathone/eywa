@@ -10,8 +10,9 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    # 코드베이스가 커지며 tsc(typecheck)가 러너 기본 힙(~2GB)을 초과해 OOM(exit 134)으로 실패.
-    # 잡 전역으로 Node 힙을 4GB로 올려 typecheck/lint/test 전부 안전하게(러너 RAM ~7GB).
+    # ⚠️ 이 워크플로는 2026-10-21부터 GitHub에서 꺼져 있다(disabled_manually · 결제) — 지금 게이트는 로컬 `pnpm verify`.
+    # 잡 전역 힙 4GB는 lint/test용이다. `pnpm typecheck`는 스크립트가 힙을 직접 8GB로 준다(이 값을 덮는다) — 전체 tsc는
+    # 6GB에서 메모리 부족으로 죽고 8GB에서 최대 RSS 약 7.5GB(2026-11-10 실측, docs/setup-and-ops.md). 다시 켤 땐 메모리 16GB급 러너로.
     env:
       NODE_OPTIONS: --max-old-space-size=4096
     steps:

@@ -3,9 +3,13 @@ import { useId, useState, type CSSProperties, type ReactNode } from "react";
 import { EmbedLink as Link } from "@/components/embed-link";
 import { chartNumber, chartScale, composition, palette, type ChartDatum } from "./chart-math";
 import s from "./analytics.module.css";
+import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
+
+/** 숫자 카드 머리 아이콘 — 손그림 SVG 대신 공용 아이콘(P0-3b 리뷰). */
+const STAT_ICON: Record<"chart" | "people" | "record" | "money", AywaIconName> = { chart: "chart", people: "users", record: "report", money: "wallet" };
 
 export function StatCard({ label, value, unit, note, accent = palette[0], href, icon = "chart" }: { label: string; value: number | null; unit: string; note?: string; accent?: string; href?: string; icon?: "chart" | "people" | "record" | "money" }) {
-  return <article className={s.stat} style={{ "--stat-accent": accent } as CSSProperties}><div className={s.statTop}><span className={s.statLabel}>{href ? <Link href={href}>{label} ↗</Link> : label}</span><span className={s.statIcon}><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{icon === "people" ? <><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 15a5 5 0 0 1 3 5"/></> : icon === "money" ? <><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M15 15h2"/></> : icon === "record" ? <><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></> : <><path d="M4 4v16h16M8 15l4-5 4 2 5-7"/></>}</svg></span></div><div className={s.statValue}>{value === null ? "—" : chartNumber(value, unit)}<span className={s.statUnit}>{value === null ? "확인 필요" : unit}</span></div><div className={s.statFoot}>{note ?? "현재 확인된 자료 기준"}</div></article>;
+  return <article className={s.stat} style={{ "--stat-accent": accent } as CSSProperties}><div className={s.statTop}><span className={s.statLabel}>{href ? <Link href={href}>{label} ↗</Link> : label}</span><span className={s.statIcon}><EyIcon name={STAT_ICON[icon]} size={17} /></span></div><div className={s.statValue}>{value === null ? "—" : chartNumber(value, unit)}<span className={s.statUnit}>{value === null ? "확인 필요" : unit}</span></div><div className={s.statFoot}>{note ?? "현재 확인된 자료 기준"}</div></article>;
 }
 export function ChartCard({ title, kicker, tag, note, href, wide, children }: { title: string; kicker?: string; tag?: string; note?: string; href?: string; wide?: boolean; children: ReactNode }) {
   return <article className={`${s.chartCard} ${wide ? s.wide : ""}`}><header className={s.chartHeader}><div>{kicker && <div className={s.chartKicker}>{kicker}</div>}<h3>{title}</h3></div>{tag && <span className={s.tag}>{tag}</span>}</header>{children}{note && <p className={s.chartNote}>{note}</p>}{href && <div className={s.chartFoot}><span>기록과 계산 근거</span><Link href={href}>자세히 보기 ↗</Link></div>}</article>;

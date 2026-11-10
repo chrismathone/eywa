@@ -1,5 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { logAction } from "@/features/audit/server/log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireContributionWrite } from "./access";
 import { getLiveContext } from "./live-context";
@@ -20,6 +21,9 @@ export async function saveContributionFactor(input:{studentId:string;month:strin
     value:input.state==="measured"?input.value:null,state:input.state,evidence:input.evidence.trim(),version:input.version+1,actor_id:gate.userId,model_version:FACTOR_MODEL,
   });
   if(error)return {ok:false,message:error.code==="23505"||error.code==="P0001"?"다른 기록이 먼저 저장되었거나 학생 상태가 변경되었습니다. 새로고침 후 다시 확인해 주세요.":"저장하지 못했습니다. 입력 내용은 유지됩니다. 잠시 후 다시 시도해 주세요."};
+  // 감사로그 — 값 자체는 이력 표(student_contribution_factor_records)에 남고, 여기엔 누가·무엇을(근거 글은 싣지 않는다).
+  await logAction({ action: "student_contribution_factor_save", targetType: "student_contribution", targetLabel: factor.name,
+    metadata: { studentId: input.studentId, month: input.month, factorId: factor.id, state: input.state, version: input.version + 1 } });
   revalidatePath(`/student-contribution/${input.studentId}/factors`);
   return {ok:true,message:"확인 근거와 변경 이력을 저장했습니다."};
 }

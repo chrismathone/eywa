@@ -144,7 +144,9 @@ describe("직원목록 배선", () => {
     expect(page).toContain("<AutoPageSize");
     expect(page).toContain("subject === sp.subject ? subjectRaw : prefs.subject");
     expect(page.match(/await Promise\.all\(/g)?.length).toBe(1);
-    expect(page).not.toContain("getCurrentUser");
+    // 계정 조회는 강사뷰 대상 확인 한 번뿐(a380f9347 — 연차·급여 버튼의 신원) · requireAccess가 이미 부른 캐시라 왕복이 늘지 않는다.
+    expect(page.match(/getCurrentUser\(/g)?.length ?? 0).toBeLessThanOrEqual(1);
+    if (page.includes("getCurrentUser(")) expect(page).toContain("getCurrentUser({ teacherView: true })");
   });
 
   it("표 보기 3키는 zustand persist(localStorage)에 없다 — SSR과 첫 클라 렌더가 갈리지 않게(#75 계열)", () => {
