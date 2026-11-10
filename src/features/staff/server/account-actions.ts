@@ -16,6 +16,7 @@ import { isLoginEmailTakenElsewhere } from "./login-email-taken";
 import { logAction } from "@/features/audit/server/log";
 import { isProtectedSuperAdminTarget, SUPER_ADMIN_TARGET_DENIED_MSG } from "@/lib/auth/super-admin";
 import { refuseIfProtectedStaff } from "./protected-guard";
+import { authPasswordErrorMessage } from "@/lib/auth/auth-password-error";
 
 export type AccountActionState =
   | { error?: string; ok?: boolean; tempPassword?: string }
@@ -107,7 +108,10 @@ export async function resetStaffPassword(
     if (isMissingAuthUser(error)) {
       return { error: "이 직원은 로그인 계정이 없어 비밀번호를 설정할 수 없습니다. 먼저 로그인 계정을 만들어 주세요." };
     }
-    return { error: `비밀번호 재설정 실패 — ${error.message}` };
+    // 약한 비밀번호 등 사람이 고칠 수 있는 원인 — 원문 대신 무엇을 하면 되는지(P1-E).
+    const why = authPasswordErrorMessage(error);
+    if (why) return { error: why };
+    return { error: explainDbError(error, { scope: "staff.account-actions.resetStaffPassword", fallback: "비밀번호 재설정 실패 — 잠시 후 다시 시도해 주세요" }).message };
   }
 
   // ⚠️ 남의 계정 비밀번호를 여는 행위 = 감사로그의 존재 이유. 본인 변경(self_password_change)은 남기는데
@@ -192,7 +196,7 @@ export async function applyStaffEmailChange(
     // Auth가 코드로 "이미 있는 이메일"이라 답해 준 경우만(지금 GoTrue의 변경 경로는 500이라 여기 안 온다 — 본문은 앞의 사전 조회다).
     // users는 바로 위에서 원래 값으로 되돌렸다.
     if (isEmailTakenAuthError(authErr)) return { error: EMAIL_TAKEN_MESSAGE };
-    return { error: `로그인 계정 이메일 변경 실패 — ${authErr.message}` };
+    return { error: explainDbError(authErr, { scope: "staff.account-actions.applyStaffEmailChange", fallback: "로그인 계정 이메일 변경 실패 — 잠시 후 다시 시도해 주세요" }).message };
   }
 
   // 로그인 아이디가 바뀌는 변경 — 비밀번호 재설정과 같은 이유로 남긴다(본인 변경은 self_email_change).
@@ -371,7 +375,7 @@ export async function deleteStaff(
   //    이건 정상 케이스(지울 로그인 계정이 애초에 없음)이므로 건너뛰고 ③ public 삭제로 진행한다.
   const { error: authErr } = await admin.auth.admin.deleteUser(id);
   if (authErr && authErr.status !== 404 && !/user not found/i.test(authErr.message)) {
-    return { error: `로그인 계정 삭제 실패: ${authErr.message}` };
+    return { error: explainDbError(authErr, { scope: "staff.account-actions.deleteStaff", fallback: "로그인 계정 삭제 실패 — 잠시 후 다시 시도해 주세요" }).message };
   }
 
   // ③ public.users — payroll/leaves cascade, classes/students 담임은 set null로 자동 처리.

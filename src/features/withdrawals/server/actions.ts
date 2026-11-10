@@ -18,7 +18,7 @@ import {
   type WithdrawalMetadata,
   type WithdrawalReason,
 } from "../types";
-import { logDbError } from "@/lib/supabase/db-error";
+import { logDbError, explainDbError } from "@/lib/supabase/db-error";
 import { canManageStudentStatusNow } from "@/features/students/server/status-access";
 import { STUDENT_STATUS_DENIED } from "@/features/students/status-access";
 import { checkReasonInput } from "../reason-detail";
@@ -99,7 +99,7 @@ export async function updateWithdrawalReason(
     .update({ withdrawal_metadata: next })
     .eq("id", studentId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "withdrawals.actions.updateWithdrawalReason", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   await logAction({
     action: "withdrawal_update",

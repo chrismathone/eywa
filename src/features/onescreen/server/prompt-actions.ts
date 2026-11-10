@@ -15,6 +15,7 @@ import {
 } from "../prompt-defaults";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { runMentPreview } from "./ment-preview";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 export type PromptRow = {
   type: PromptType;
@@ -105,7 +106,7 @@ export async function savePrompt(type: string, text: string): Promise<{ ok: bool
   if (isSameAsDefault(type, trimmed)) return switchToDefaultPrompt(supabase, gate.user.tenantId, type);
   // 버전 교체를 한 트랜잭션으로 실행한다. 저장 실패나 권한 회수 중에도 기존 활성 버전이 사라지지 않는다.
   const { error } = await supabase.rpc("save_ai_prompt_setting", { p_type: type, p_text: trimmed });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "onescreen.prompt-actions.savePrompt", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   // 🔴 프롬프트는 **AI 산출물의 내용을 바꾸는 설정**이라 누가 언제 바꿨는지가 남아야 한다
   //    (본문은 남기지 않는다 — 이력은 ai_prompt_overrides 버전 목록이 들고 있다).
   await logAction({
@@ -139,7 +140,7 @@ async function switchToDefaultPrompt(
   if (readError) return { ok: false, error: "지금 저장된 프롬프트를 확인하지 못했습니다" };
   if (!active?.length) return { ok: true, usedDefault: true };
   const { error } = await supabase.rpc("save_ai_prompt_setting", { p_type: type, p_text: null });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "onescreen.prompt-actions.switchToDefaultPrompt", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   await logAction({
     action: "ai_prompt_reset",
     targetType: "ai_prompt",
@@ -156,7 +157,7 @@ export async function resetPrompt(type: string): Promise<{ ok: boolean; error?: 
   if (!isPromptType(type)) return { ok: false, error: "알 수 없는 프롬프트 유형" };
   const supabase = await createClient();
   const { error } = await supabase.rpc("save_ai_prompt_setting", { p_type: type, p_text: null });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "onescreen.prompt-actions.resetPrompt", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   // ⚠️ 복원은 행을 **비활성화만** 하므로 DB엔 "누가 껐는지"가 남지 않는다 — 그 사실이 여기에만 남는다.
   await logAction({
     action: "ai_prompt_reset",

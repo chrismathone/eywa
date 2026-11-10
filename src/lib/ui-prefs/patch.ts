@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * `users.ui_prefs.<ns>`의 키 몇 개를 **본인 계정**에 부분 저장하는 **단일 구현**.
@@ -31,7 +32,7 @@ export async function patchMyUiPrefs(
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
+  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "ui-prefs.patch", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   const raw =
     row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
@@ -55,6 +56,6 @@ export async function patchMyUiPrefs(
     .update({ ui_prefs: merged })
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "ui-prefs.patch", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }

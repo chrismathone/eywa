@@ -12,6 +12,7 @@ import { IMPORT_META } from "../kinds";
 import { duplicateKeyIssues, type ColumnSpec, type ImportPreviewRow, type SheetSpec } from "../spec";
 import { StaffIndex } from "../server/lookups";
 import type { ImporterDef } from "../server/types";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * 콜&상담(등록상담) 가져오기 — 체크리스트 10번 "신규 문의·등록상담". 과거 상담 기록을 옮기는 용도라 서식은 빈 칸.
@@ -240,12 +241,12 @@ const def: ImporterDef<Plan> = {
     for (let i = 0; i < plan.inserts.length; i += 200) {
       const chunk = plan.inserts.slice(i, i + 200);
       const { error } = await db.from("enrollment_consultations").insert(chunk);
-      if (error) return { error: `상담을 넣지 못했습니다 — ${error.message}${inserted ? ` · 그 앞 ${inserted}건은 들어갔습니다` : ""}` };
+      if (error) return { error: `${explainDbError(error, { scope: "excel-import.enrollment-consultations", fallback: "상담을 넣지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message}${inserted ? ` · 그 앞 ${inserted}건은 들어갔습니다` : ""}` };
       inserted += chunk.length;
     }
     for (const u of plan.updates) {
       const { error } = await db.from("enrollment_consultations").update(u.patch).eq("id", u.id).eq("tenant_id", ctx.tenantId);
-      if (error) return { error: `상담 갱신 중 멈췄습니다 — ${error.message} (새 상담 ${inserted}건은 들어갔습니다)` };
+      if (error) return { error: `${explainDbError(error, { scope: "excel-import.enrollment-consultations", fallback: "상담 갱신 중 멈췄습니다 — 잠시 후 다시 시도해 주세요" }).message} (새 상담 ${inserted}건은 들어갔습니다)` };
     }
     return {};
   },

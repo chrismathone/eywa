@@ -18,6 +18,7 @@ import { checkReasonInput } from "@/features/withdrawals/reason-detail";
 import { IMPORT_META } from "../kinds";
 import { duplicateKeyIssues, type ColumnSpec, type ImportPreviewRow, type SheetSpec } from "../spec";
 import type { ImporterDef } from "../server/types";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * 원생 가져오기 — 옛 '학생 엑셀 일괄등록'(7칸 · 추가만)을 대신한다. 체크리스트 4번 "원생 명단"의 칸 전부.
@@ -355,7 +356,7 @@ const def: ImporterDef<Plan> = {
     }
     for (const u of plan.updates) {
       const { error } = await db.from("students").update(u.patch).eq("id", u.id).eq("tenant_id", ctx.tenantId);
-      if (error) return { error: `원생 갱신 중 멈췄습니다 — ${error.message} (새 원생 ${inserted}명은 들어갔습니다)` };
+      if (error) return { error: `${explainDbError(error, { scope: "excel-import.students", fallback: "원생 갱신 중 멈췄습니다 — 잠시 후 다시 시도해 주세요" }).message} (새 원생 ${inserted}명은 들어갔습니다)` };
     }
     return {};
   },

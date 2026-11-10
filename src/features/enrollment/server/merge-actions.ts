@@ -14,6 +14,7 @@ import { logAction } from "@/features/audit/server/log";
 import { moveCareToMergeWinner, revertCareMerge } from "@/features/student-care/server/merge-move";
 import { COLUMN_LABEL } from "@/features/enrollment/merge-policy";
 import { buildMergePatch, planMerge, type ConsultRow, type MergePlan } from "@/features/enrollment/merge-plan";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 const DEFAULT_GAP_DAYS = 7;
 /** 한 번에 합칠 수 있는 최대 건수 — `.in()`이 URL 길이로 죽는 것(B3)과, 사람이 검수 못 할 규모를 동시에 막는다. */
@@ -181,7 +182,7 @@ export async function mergeConsultations(
   if (error) {
     // 병합이 안 됐으면 옮긴 약속도 되돌린다(진 쪽 상담이 그대로 남아 있다).
     await revertCareMerge(gate.user.tenantId, gate.user.id, care.moved);
-    return { error: error.message };
+    return { error: explainDbError(error, { scope: "enrollment.merge-actions.mergeConsultations", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   }
 
   await logAction({

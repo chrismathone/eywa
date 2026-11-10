@@ -5,6 +5,7 @@ import { EVENT_COLOR_LABEL, EVENT_COLORS } from "@/features/calendar/types";
 import { IMPORT_META } from "../kinds";
 import { blankToNull, duplicateKeyIssues, parseDate, type ColumnSpec, type ImportPreviewRow, type SheetSpec } from "../spec";
 import type { ImporterDef } from "../server/types";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * 일정 가져오기 — 캘린더(0218a `calendar_events` + 0224a `calendar_tags`). 연간 일정·휴원·행사를 옮길 때.
@@ -270,7 +271,7 @@ const def: ImporterDef<Plan> = {
         .update({ ...rest, ...(tagName ? { tag_id: tagIdOf(tagName) } : {}) })
         .eq("tenant_id", ctx.tenantId)
         .eq("id", u.id);
-      if (error) return { error: `일정 갱신 중 멈췄습니다 — ${error.message} (새 일정 ${inserted}건은 들어갔습니다)` };
+      if (error) return { error: `${explainDbError(error, { scope: "excel-import.calendar", fallback: "일정 갱신 중 멈췄습니다 — 잠시 후 다시 시도해 주세요" }).message} (새 일정 ${inserted}건은 들어갔습니다)` };
     }
     return {};
   },

@@ -13,6 +13,7 @@ import { findExtraIssue } from "./extra-issues";
 import { keepMarkOnlyRound } from "./keep-round";
 import { ledgerRoundWriteError, loadVideoHomeworkTarget, videoHomeworkWriteError, writeVideoHomeworkMark, type MarkWriteResult } from "./mark-write";
 import { nativeWriteAllowance } from "@/features/makeups/server/adapters/gates";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 type Db = ReturnType<typeof createAdminClient>;
 type CheckCell = { classId: string; studentId: string; checkDate: string; homeworkDate: string | null;
@@ -69,7 +70,7 @@ async function writeCheckedMark(db: Db, user: { tenantId: string; userId: string
     .eq("student_id", input.studentId)
     .or(`start_date.is.null,start_date.lte.${input.checkDate}`)
     .or(`end_date.is.null,end_date.gte.${input.checkDate}`);
-  if (enrollmentError) return { ok: false, error: enrollmentError.message };
+  if (enrollmentError) return { ok: false, error: explainDbError(enrollmentError, { scope: "video-homework.actions.writeCheckedMark", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   const enrolledOnDate = (enrollments ?? []).some((row) => isEnrollmentActiveOn({
     startDate: row.start_date ?? "", endDate: row.end_date,
     onHold: row.on_hold === true, isTransferred: row.is_transferred === true,
@@ -192,12 +193,12 @@ export async function setVideoHomeworkRound(input: {
   const marks = db.from("video_homework_marks").select("id")
     .eq("tenant_id", user.tenantId).eq("class_id", input.classId).eq("student_id", input.studentId);
   const recorded = await (homeworkDate ? marks.eq("homework_date", homeworkDate) : marks.eq("check_date", date).is("homework_date", null)).limit(1);
-  if (recorded.error) return { ok: false, error: recorded.error.message };
+  if (recorded.error) return { ok: false, error: explainDbError(recorded.error, { scope: "video-homework.actions.setVideoHomeworkRound", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   if (!recorded.data?.length) {
     const assigned = homeworkDate && (await videoHomeworkColumnReady(db)) ? await db.from("lesson_reports").select("id")
       .eq("tenant_id", user.tenantId).eq("class_id", input.classId).eq("student_id", input.studentId)
       .eq("report_date", homeworkDate).eq("video_homework", true).limit(1) : null;
-    if (assigned?.error) return { ok: false, error: assigned.error.message };
+    if (assigned?.error) return { ok: false, error: explainDbError(assigned.error, { scope: "video-homework.actions.setVideoHomeworkRound", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
     // 보고서 없이 따로 낸 숙제(extra-issues.ts)도 같은 숙제다.
     const extra = homeworkDate && !assigned?.data?.length
       ? await findExtraIssue(db, user.tenantId, { classId: input.classId, studentId: input.studentId, date: homeworkDate }).catch(() => undefined) : null;
