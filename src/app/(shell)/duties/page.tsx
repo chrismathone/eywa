@@ -5,6 +5,7 @@ import { loadDutyAdmin, resolveDutyAdminScope } from "@/features/duties/server/a
 import { adminRange, periodsOf } from "@/features/duties/view-admin";
 import { DutyAdmin } from "@/features/duties/components/admin/duty-admin";
 import { flushDuties } from "@/features/duties/server/live-sync";
+import { loadSubjectManagers } from "@/features/duties/server/managers";
 
 export const metadata = { title: "업무 완성도 — 에이와" };
 
@@ -17,13 +18,14 @@ export default async function DutiesPage() {
   const [scope] = await Promise.all([resolveDutyAdminScope(viewer), flushDuties(viewer.tenantId)]);
   const today = kstToday();
   const range = adminRange("month", today);
-  const data = await loadDutyAdmin(viewer.tenantId, range.from, range.to, scope, periodsOf("month"));
+  // 과목 관리자별 현황은 학원 전체를 보는 사람에게만(과목 관리자 · '담당' 권한에게는 없다).
+  const [data, managers] = await Promise.all([loadDutyAdmin(viewer.tenantId, range.from, range.to, scope, periodsOf("month")), scope.subjects === null && !scope.ownerId ? loadSubjectManagers(viewer.tenantId) : null]);
   const subjectLabel = scope.subjects === null ? "학원 전체" : scope.subjects.map((k) => scope.labels[k]).filter(Boolean).join(" · ") || "담당 과목 없음";
   const scopeLabel = scope.ownerId ? `내 업무만 · ${subjectLabel}` : subjectLabel;
   return (
     <div className="space-y-5 compact-chrome:space-y-3">
       <PageHeader title="업무 완성도" description={scopeLabel} />
-      <DutyAdmin initial={{ period: "month", today, now: new Date().toISOString(), range, data }} scope={scope} />
+      <DutyAdmin initial={{ period: "month", today, now: new Date().toISOString(), range, data }} scope={scope} managers={managers} />
     </div>
   );
 }

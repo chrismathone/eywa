@@ -7,6 +7,8 @@ import { buildTree, foldAttention, judge, NO_CLASS, NO_OWNER, NO_SUBJECT, rootOf
 import type { DutyWork } from "../duty-work-context";
 import { AdminAttention } from "./admin-attention";
 import { AdminKpiRow } from "./admin-subject";
+import { DutyRequestScope, LateRequestButton } from "./admin-late-request";
+import { AdminOwnerBoard } from "./admin-owner-board";
 import { AdminMatrix } from "./admin-matrix";
 import { AdminOverlay } from "./admin-overlay";
 import { AdminTree, ROOT, type Sel } from "./admin-tree";
@@ -31,7 +33,7 @@ const kstStamp = (iso: string) => { const d = new Date(Date.parse(iso) + 9 * 3_6
  * 평가 시작(live_from) 전 기한의 의무는 '이관된 미확인'으로 따로 묶는다(판정·지연 수에 안 든다).
  * 고른 자리(`Sel`)는 **지금 기간의 트리에 맞춰 바로잡는다** — 없는 과목은 전체로, 없는 선생님·반은 그 위 단계로(기간을 바꿔도 화면이 어긋나지 않게).
  */
-export function DutyAdmin({ initial, scope }: { initial: Loaded; scope: DutyAdminScope }) {
+export function DutyAdmin({ initial, scope, managers = null }: { initial: Loaded; scope: DutyAdminScope; /** 과목 키 → 과목 관리자 이름(학원 전체를 보는 사람에게만 — 원장 첫 화면의 '과목 관리자별 현황'). */ managers?: Record<string, string[]> | null }) {
   const [period, setPeriod] = useState<AdminPeriod>(initial.period);
   const [loaded, setLoaded] = useState<Partial<Record<AdminPeriod, Loaded>>>({ [initial.period]: initial });
   const [failed, setFailed] = useState<Partial<Record<AdminPeriod, true>>>({});
@@ -116,13 +118,18 @@ export function DutyAdmin({ initial, scope }: { initial: Loaded; scope: DutyAdmi
   const expandOf = (list: "live" | "inh", all: AttentionRow[], rows: AttentionRow[]) => { const r = rows.find((x) => `${list}:${x.key}` === openKey); return r ? { key: r.key, rows: childrenOf(all, r) } : null; };
   const attention = fold(attentionAll); const inheritedRows = fold(inheritedAll);
   const lateSection = <section className="border-line-faint rounded-xl border p-2">
-    <h4 className="px-2 py-1 text-sm font-bold">지금 열린 지연 <span className="text-text-dim text-xs font-medium">{distinctStudents(liveHere)}명 · {liveHere.length}건 · 고른 기간과 무관(위 숫자는 고른 기간의 것)</span></h4>
-    <AdminAttention rows={attention} onOpen={openRow} expand={expandOf("live", attentionAll, attention)} onOpenChild={openChild} />
+    <div className="flex items-center gap-2 px-2 py-1">
+      <h4 className="min-w-0 flex-1 text-sm font-bold">지금 열린 지연 <span className="text-text-dim text-xs font-medium">{distinctStudents(liveHere)}명 · {liveHere.length}건 · 고른 기간과 무관(위 숫자는 고른 기간의 것)</span></h4>
+      {ownerNode && ownerNode.ownerId !== NO_OWNER ? <LateRequestButton owner={{ id: ownerNode.ownerId, name: ownerNode.name }} items={liveHere} /> : null}
+    </div>
+    {/* 처리 요청은 선생님 단위다 — 전체·과목 단계는 줄(선생님)마다, 선생님·반 단계는 위 단추 하나(지금 보이는 범위의 지연). */}
+    <AdminAttention rows={attention} onOpen={openRow} expand={expandOf("live", attentionAll, attention)} onOpenChild={openChild}
+      action={ownerNode ? undefined : (r) => <LateRequestButton owner={{ id: r.ownerId, name: r.title }} items={liveHere.filter((it) => it.ownerId === r.ownerId)} />} />
   </section>;
   const synced = cur?.data.syncedAt ?? null;
   const stale = !!cur && (!synced || nowMs - Date.parse(synced) > STALE_MS);
 
-  return <div className="space-y-4">
+  return <DutyRequestScope today={cur?.today ?? initial.today} tick={tick}><div className="space-y-4">
     <Toolbar>
       <ToolbarSegment>{ADMIN_PERIODS.map((p) => <ToolbarSegmentItem key={p.key} active={period === p.key} onClick={() => setPeriod(p.key)}>{p.label}</ToolbarSegmentItem>)}</ToolbarSegment>
       <span className="text-text-dim text-sm font-semibold">{rangeLabel}</span>
@@ -151,7 +158,7 @@ export function DutyAdmin({ initial, scope }: { initial: Loaded; scope: DutyAdmi
           : classNode && ownerNode ? <ClassPane key={`${classNode.classId}|${ownerNode.ownerId}|${fetchSubject ?? ""}`} period={period} tick={tick} classNode={classNode} owner={ownerNode.ownerId} fetchSubject={fetchSubject} teacher={ownerNode.name} kind={sel.kind ?? null}
               avg={{ pct: ownerNode.cell.pct, label: "선생님" }} onStudent={pickStudent} />
           : ownerNode ? <TeacherLevel owner={ownerNode} avg={subjectAvg} period={period} subject={fetchSubject} tick={tick} kind={sel.kind ?? null} onClearKind={() => go({ ...sel, kind: null })} onClass={(classId) => go({ ...sel, classId, studentId: null })} />
-          : <SubjectLevel node={subjectNode} lateOnly={lateOnly} avgLabel={atRoot ? "전체" : "과목"} lateText={lateByKind(cur.data.ownerKind, subjectKey)} attention={lateSection} onOwner={(ownerId, kind) => { setOpenKey(null); setSel({ ...sel, owner: ownerId, kind, classId: null, studentId: null }); }} />}
+          : <SubjectLevel node={subjectNode} lateOnly={lateOnly} board={atRoot && managers ? <AdminOwnerBoard tree={tree} late={cur.data.late} managers={managers} labels={scope.labels} nowMs={nowMs} onSubject={(subject) => go({ subject, owner: null, classId: null, studentId: null })} /> : null} avgLabel={atRoot ? "전체" : "과목"} lateText={lateByKind(cur.data.ownerKind, subjectKey)} attention={lateSection} onOwner={(ownerId, kind) => { setOpenKey(null); setSel({ ...sel, owner: ownerId, kind, classId: null, studentId: null }); }} />}
 
         {!sel.studentId && subjectNode && ownerNode ? lateSection : null}
         {!sel.studentId && inheritedHere.length ? <section className="border-line-faint rounded-xl border p-2">
@@ -162,16 +169,17 @@ export function DutyAdmin({ initial, scope }: { initial: Loaded; scope: DutyAdmi
     </div> : null}
 
     {work ? <AdminOverlay key={work.seq} work={work.work} onClose={() => setWork(null)} /> : null}
-  </div>;
+  </div></DutyRequestScope>;
 }
 
-/** 과목(또는 전체) 단계 — 요약 칸 넷 · 판정 · 지금 지연(먼저 손댈 것) · 선생님 × 종류 매트릭스(이름 = 그 선생님 · 칸 = 그 선생님의 그 종류). */
-function SubjectLevel({ node, lateOnly, avgLabel, lateText, attention, onOwner }: { node: TreeSubject; lateOnly: boolean; avgLabel: string; lateText: string; attention: React.ReactNode; onOwner: (ownerId: string, kind: string | null) => void }) {
+/** 과목(또는 전체) 단계 — 요약 칸 넷 · 판정 · (전체 단계 · 학원 전체를 보는 사람) 과목 관리자별 현황 · 지금 지연(먼저 손댈 것) · 선생님 × 종류 매트릭스(이름 = 그 선생님 · 칸 = 그 선생님의 그 종류). */
+function SubjectLevel({ node, lateOnly, avgLabel, lateText, attention, board, onOwner }: { node: TreeSubject; lateOnly: boolean; avgLabel: string; lateText: string; attention: React.ReactNode; board: React.ReactNode; onOwner: (ownerId: string, kind: string | null) => void }) {
   const rowsAll: MatrixRow[] = node.owners.map((o) => ({ ownerId: o.ownerId, name: o.name, cells: o.cells, all: o.cell }));
   const rows = lateOnly ? rowsAll.filter((r) => r.all.late) : rowsAll;
   return <div className="grid gap-4">
     <AdminKpiRow cell={node.cell} lateText={lateText} />
     <VerdictLine v={judge(node.cell)} />
+    {board}
     {attention}
     <section className="border-line-faint rounded-xl border p-2"><AdminMatrix rows={rows} total={foldMatrixRows(rows)} avg={{ pct: node.cell.pct, label: avgLabel }} onCell={onOwner} /></section>
   </div>;
