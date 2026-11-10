@@ -61,7 +61,8 @@ export const TASK_KINDS: Record<string, StaffTaskKindInfo> = {
   },
   duty_late: {
     label: "업무 기한 초과",
-    doneRule: "의무 장부(출결 입력·수업보고서 작성·보고서 발송)에서 기한이 지난 일을 담당자·종류·날짜별로 묶은 것입니다. 그 기록(출결·보고서·발송)이 실제로 생기면 해당 건이 빠지고, 늦은 건이 하나도 안 남으면 처리됩니다. 제목의 건수는 30분마다 다시 맞춰집니다.",
+    // 원장 2026-11-10 *"쓸데없는 멘트 제거"* — 설명 없이 제목·이름만.
+    doneRule: "",
   },
   help_question: {
     label: "도움말 질문",

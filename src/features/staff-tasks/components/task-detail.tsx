@@ -31,7 +31,7 @@ export function TaskDetail({ taskId, onBack, onNavigate }: { taskId: string; onB
               <span className="text-text-dim text-sm">{taskKindLabel(data.item.kind)}</span>
             </div>
             <p className="text-base font-bold break-keep">{data.item.detail ?? data.item.title}</p>
-            <p className="text-text-dim text-sm break-keep">{TASK_KINDS[data.item.kind]?.doneRule}</p>
+            {TASK_KINDS[data.item.kind]?.doneRule ? <p className="text-text-dim text-sm break-keep">{TASK_KINDS[data.item.kind]?.doneRule}</p> : null}
           </div>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
             <dt className="text-text-dim">맡은 사람</dt><dd>{data.item.assignees.map((a) => a.name).join(", ") || "—"}</dd>
