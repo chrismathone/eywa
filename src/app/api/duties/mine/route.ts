@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getStaffTaskViewer } from "@/features/staff-tasks/server/gate";
 import { listOwnerDuties, listOwnerMonthDuties, weekCells } from "@/features/duties/server/queries";
-import { lastDays } from "@/features/duties/view";
+import { weekDaysOf } from "@/features/duties/view";
 import { isValidYmd, kstToday } from "@/lib/date-kst";
 import { reportError } from "@/lib/observability/report-error";
 
@@ -18,10 +18,10 @@ export async function GET(request: Request) {
   try {
     const viewer = await getStaffTaskViewer();
     if (!viewer) return NextResponse.json({ error: "로그인이 필요합니다" }, { status: 401, headers: NO_STORE });
-    const days = lastDays(date, 7);
+    const days = weekDaysOf(date); // 항상 월요일 시작(월~일)
     const [items, week, month] = await Promise.all([
       listOwnerDuties(viewer.user.tenantId, viewer.user.id, date),
-      weekCells(viewer.user.tenantId, viewer.user.id, days[0]!, date),
+      weekCells(viewer.user.tenantId, viewer.user.id, days[0]!, days[6]!),
       listOwnerMonthDuties(viewer.user.tenantId, viewer.user.id, date.slice(0, 7)),
     ]);
     return NextResponse.json({ date, days, items, week, month }, { headers: NO_STORE });

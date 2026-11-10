@@ -1,5 +1,6 @@
 import "server-only";
-import { addDays, kstToday } from "@/lib/date-kst";
+import { kstToday } from "@/lib/date-kst";
+import { weekDaysOf } from "../view";
 import { countDuties, foldCounts, listOwnerMonthDuties } from "./queries";
 import { buildMonthRows, foldRows } from "../view-month";
 
@@ -15,7 +16,8 @@ export async function loadDutySummary(tenantId: string, ownerId: string): Promis
   const month = date.slice(0, 7);
   const [todayRows, weekRows, monthItems] = await Promise.all([
     countDuties(tenantId, ownerId, date, date),
-    countDuties(tenantId, ownerId, addDays(date, -6), date),
+    // 이번 주 = 월요일부터 오늘까지(주는 항상 월요일 시작).
+    countDuties(tenantId, ownerId, weekDaysOf(date)[0]!, date),
     listOwnerMonthDuties(tenantId, ownerId, month),
   ]);
   const todayDaily = todayRows.filter((c) => c.period === "daily");

@@ -86,7 +86,7 @@ export function MyDutiesStripButton({ summary: initial, className = "" }: { summ
     <div className="grid gap-2 px-3 pb-3 sm:grid-cols-3 lg:grid-cols-5">
       <Tile label="오늘 완료도" value={`${today.done}`} unit={`/ ${today.total}`} pct={pct(today)} tone={today.total && pct(today) === 100 ? "green" : "primary"} note={breakdown} onClick={() => setView("today")} />
       <Tile label="기한 초과" value={`${lateAll}`} tone={lateAll ? "danger" : "muted"} note={lateAll ? lateBreakdown : "없음 — 출결·보고서 당일 자정 · 발송 다음 날 정오 · 상담 말일"} onClick={() => setView(today.late ? "today" : "month")} />
-      <Tile label="이번 주(7일)" value={`${week.done}`} unit={`/ ${week.total}`} pct={pct(week)} tone="primary" note={week.late ? `기한 초과 ${week.late}건 남음` : "밀린 것 없음"} onClick={() => setView("week")} />
+      <Tile label="이번 주(월~오늘)" value={`${week.done}`} unit={`/ ${week.total}`} pct={pct(week)} tone="primary" note={week.late ? `기한 초과 ${week.late}건 남음` : "밀린 것 없음"} onClick={() => setView("week")} />
       <Tile label={`${mm}월 학부모 상담`} value={`${counsel.done}`} unit={`/ ${counsel.total}`} pct={pct(counsel)} tone={counsel.total && pct(counsel) === 100 ? "green" : counsel.late ? "danger" : "primary"} note={counsel.total ? `의무 학생 ${counsel.total}명 · 말일까지` : "상담 의무 학생 없음"} onClick={() => setView("month")} />
       <Tile label="신규생 정착 콜" value={`${newcomer.done}`} unit={`/ ${newcomer.total}`} pct={pct(newcomer)} tone={newcomer.late ? "danger" : newcomer.total && pct(newcomer) === 100 ? "green" : "primary"} note={newcomer.total ? (newcomer.late ? `기한 지난 항목 ${newcomer.late}` : "항목마다 기한 안") : "맡은 신규생 없음"} onClick={() => setView("month")} />
     </div>
@@ -116,7 +116,7 @@ export function MyDutiesStripButton({ summary: initial, className = "" }: { summ
               {failed ? <p className="text-text-dim mt-2 text-sm">업무를 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요.</p>
                 : !loaded ? <p className="text-text-dim mt-2 text-sm">불러오는 중…</p>
                 : view === "today" ? <MyDutiesPanel loaded={loaded} />
-                : view === "week" ? <MyDutiesWeek items={loaded.payload.items} week={loaded.payload.week} days={loaded.payload.days} now={loaded.at} />
+                : view === "week" ? <MyDutiesWeek items={loaded.payload.items} week={loaded.payload.week} days={loaded.payload.days} now={loaded.at} today={date} />
                 : <MyDutiesMonth items={loaded.payload.month} now={loaded.at} month={month} />}
             </div>
           </DutyWorkContext.Provider>

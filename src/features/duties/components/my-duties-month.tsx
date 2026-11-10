@@ -38,11 +38,16 @@ function Section({ title, count, hint, rows, empty }: { title: string; count: { 
           <span className="text-xs font-semibold tabular-nums"><span className={g.done === g.total ? "text-green" : "text-foreground"}>{g.done}/{g.total}</span>{g.late ? <span className="text-danger"> · 기한 초과 {g.late}</span> : null}</span></div>
         <ul className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
           {g.rows.map((r) => <li key={r.id}>
-            <button type="button" onClick={() => openWork({ href: r.href, title: `${r.title} · ${title}` })} className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold hover:brightness-95 ${TONE[r.state]}`} title={`${DUTY_STATE_LABEL[r.state]} — 누르면 창 안에서 바로 처리`}>
+            {/* 완료된 줄은 누를 일이 없다(원장 2026-11-10) — 버튼이 아니라 글자. */}
+            {r.state === "done" ? <div className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold ${TONE[r.state]}`} title={DUTY_STATE_LABEL[r.state]}>
               <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${DOT[r.state]}`} aria-hidden />
               <span className="min-w-0 flex-1 truncate"><span className="text-foreground font-bold">{r.title}</span>{r.sub ? <span className="text-text-dim font-medium"> · {r.sub}</span> : null}</span>
               <span className="shrink-0 tabular-nums">{r.dateLabel}</span>
-            </button>
+            </div> : <button type="button" onClick={() => openWork({ href: r.href, title: `${r.title} · ${title}` })} className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold hover:brightness-95 ${TONE[r.state]}`} title={`${DUTY_STATE_LABEL[r.state]} — 누르면 창 안에서 바로 처리`}>
+              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${DOT[r.state]}`} aria-hidden />
+              <span className="min-w-0 flex-1 truncate"><span className="text-foreground font-bold">{r.title}</span>{r.sub ? <span className="text-text-dim font-medium"> · {r.sub}</span> : null}</span>
+              <span className="shrink-0 tabular-nums">{r.dateLabel}</span>
+            </button>}
           </li>)}
         </ul>
       </div>)}

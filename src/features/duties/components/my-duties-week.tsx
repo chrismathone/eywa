@@ -1,29 +1,36 @@
 "use client";
 
-import type { DutyItemView } from "../kinds";
-import { DUTY_LEDGER_START, buildDutyCards, groupCardsByClass, type DutyWeekCell } from "../view";
+import { DUTY_KIND_KEYS, dutyKindLabel, type DutyItemView } from "../kinds";
+import { DUTY_LEDGER_START, buildDutyCards, groupCardsByClass, type DutyWeekCell, type DutyWeekKind } from "../view";
 
 /**
- * '이번 주' 보기 — 반별 표: 줄 = 학생, 칸 = 그날 그 학생 의무(출결·보고서·발송) 중 **완료한 건수/전체**. 일간을 7일로 접은 창이다(주 단위 의무는 없다 — 결정 2026-11-09).
- * 수업이 없던 날·장부가 쌓이기 전 날은 빈 칸으로 두고 까닭을 적는다(원장 2026-11-09 *"왜 100%인지 뭘 원하는지"* — 비율 하나로는 안 읽힌다).
+ * '이번 주' 보기 — 반별 표: 줄 = 학생, 칸 = 그날 그 학생 의무를 **종류별 막대**(출결 · 보고서 · 발송, 색 = 상태)로. 일간을 한 주로 접은 창(주 단위 의무는 없다 — 결정 2026-11-09).
+ * 주는 **항상 월요일 시작**(월~금 + 의무 있는 토·일 · 원장 2026-11-10). 오늘 뒤 날은 '예정', 장부 전 날은 '기록 전', 수업 없는 날은 빈 칸.
+ * 원장 2026-11-10 *"0/2 라고 적지 말고, 출결/보고서 이렇게 막대그래프"*.
  */
-export function MyDutiesWeek({ items, week, days, now }: { items: DutyItemView[]; week: DutyWeekCell[]; days: string[]; now: number }) {
+const SHORT: Record<string, string> = { attendance: "출결", report_write: "보고서", report_send: "발송" };
+const FILL: Record<DutyWeekKind["state"], string> = { done: "bg-green text-primary-foreground", late: "bg-danger text-primary-foreground", open: "bg-amber-soft text-amber" };
+
+export function MyDutiesWeek({ items, week, days: allDays, now, today }: { items: DutyItemView[]; week: DutyWeekCell[]; days: string[]; now: number; today: string }) {
+  const hasAny = (d: string) => week.some((w) => w.day === d && w.total > 0);
+  const days = allDays.filter((d, i) => i < 5 || hasAny(d));
   const groups = groupCardsByClass(buildDutyCards(items, week, days, now), now);
+  const cellOf = new Map(week.map((w) => [`${w.studentKey}|${w.day}`, w]));
   const totals = days.map((d) => week.filter((w) => w.day === d).reduce((a, w) => ({ total: a.total + w.total, done: a.done + w.done }), { total: 0, done: 0 }));
   const md = (ymd: string) => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}`;
   const DOW = ["일", "월", "화", "수", "목", "금", "토"];
   const dow = (ymd: string) => DOW[new Date(Date.parse(`${ymd}T00:00:00Z`)).getUTCDay()] ?? "";
-  const beforeLedger = days.filter((d) => d < DUTY_LEDGER_START).length;
+  const empty = (d: string) => (d < DUTY_LEDGER_START ? "기록 전" : d > today ? "예정" : "");
+  const emptyWhy = (d: string) => (d < DUTY_LEDGER_START ? "장부가 쌓이기 전" : d > today ? "아직 오지 않은 날" : "그날 수업 없음");
   if (!groups.length) return <p className="text-text-dim mt-2 text-sm">오늘 의무가 있는 학생이 없어 주간 표를 그릴 수 없습니다.</p>;
   return <div>
-    <p className="text-text-dim mb-2 text-xs">칸 = 그날 그 학생의 할 일(출결 · 보고서 · 발송) 중 끝낸 수 / 전체. 초록 = 다 함 · 주황 = 일부 · 빨강 = 하나도 안 함 · 빈 칸 = 그날 수업 없음.
-      {beforeLedger ? ` 장부는 ${md(DUTY_LEDGER_START)}부터 쌓여 그 전 날은 '기록 전'입니다.` : ""}</p>
+    <p className="text-text-dim mb-2 text-xs">칸 = 그날 그 학생의 할 일을 종류별 막대로(출결 · 보고서 · 발송). 초록 = 완료 · 주황 = 미완료 · 빨강 = 기한 초과. 빈 칸 = 그날 수업 없음 · 장부는 {md(DUTY_LEDGER_START)}부터.</p>
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[560px] text-xs">
+      <table className="w-full min-w-[640px] text-xs">
         <thead>
           <tr className="text-text-dim">
             <th className="px-2 py-1.5 text-left font-semibold">학생</th>
-            {days.map((d, i) => <th key={d} className={`px-1 py-1.5 text-center font-semibold whitespace-nowrap ${i === days.length - 1 ? "text-foreground" : ""}`}>{md(d)} <span className="font-medium">{dow(d)}</span></th>)}
+            {days.map((d) => <th key={d} className={`px-1 py-1.5 text-center font-semibold whitespace-nowrap ${d === today ? "text-primary" : ""}`}>{md(d)} <span className="font-medium">{dow(d)}</span>{d === today ? " · 오늘" : ""}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -33,14 +40,19 @@ export function MyDutiesWeek({ items, week, days, now }: { items: DutyItemView[]
             </tr>,
             ...g.cards.map((c) => <tr key={c.key} className="border-line-faint border-t">
               <td className="px-2 py-1 pl-4 font-bold whitespace-nowrap">{c.title}</td>
-              {c.weekCounts.map((r, i) => <td key={i} className="px-1 py-1 text-center">
-                {r ? <span className={`inline-block min-w-11 rounded-md px-1.5 py-0.5 font-semibold tabular-nums whitespace-nowrap ${r.done >= r.total ? "bg-green-soft text-green" : r.done > 0 ? "bg-amber-soft text-amber" : "bg-danger-soft text-danger"}`}>{r.done}/{r.total}</span>
-                  : <span className="text-text-placeholder" title={days[i]! < DUTY_LEDGER_START ? "장부가 쌓이기 전" : "그날 수업 없음"}>{days[i]! < DUTY_LEDGER_START ? "기록 전" : ""}</span>}
-              </td>)}
+              {days.map((d) => {
+                const cell = cellOf.get(`${c.key}|${d}`);
+                const kinds = (cell?.kinds ?? []).slice().sort((a, b) => DUTY_KIND_KEYS.indexOf(a.kind as never) - DUTY_KIND_KEYS.indexOf(b.kind as never));
+                return <td key={d} className="px-1 py-1">
+                  {kinds.length ? <div className="flex h-5 w-full overflow-hidden rounded-md" title={kinds.map((k) => `${dutyKindLabel(k.kind)} ${k.state === "done" ? "완료" : k.state === "late" ? "기한 초과" : "미완료"}`).join(" · ")}>
+                    {kinds.map((k, i) => <span key={i} className={`flex flex-1 items-center justify-center overflow-hidden text-[length:inherit] font-semibold whitespace-nowrap ${FILL[k.state]} ${i ? "border-l border-white/60" : ""}`}>{SHORT[k.kind] ?? dutyKindLabel(k.kind)}</span>)}
+                  </div> : <span className="text-text-placeholder block text-center" title={emptyWhy(d)}>{empty(d)}</span>}
+                </td>;
+              })}
             </tr>)])}
           <tr className="border-line-faint border-t font-semibold">
             <td className="px-2 py-1.5">하루 합계</td>
-            {totals.map((t, i) => <td key={i} className="px-1 py-1.5 text-center tabular-nums whitespace-nowrap">{t.total ? `${t.done}/${t.total}` : days[i]! < DUTY_LEDGER_START ? "기록 전" : ""}</td>)}
+            {totals.map((t, i) => <td key={i} className="px-1 py-1.5 text-center tabular-nums whitespace-nowrap">{t.total ? `${t.done}/${t.total}` : empty(days[i]!)}</td>)}
           </tr>
         </tbody>
       </table>

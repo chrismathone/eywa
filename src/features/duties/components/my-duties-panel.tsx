@@ -30,7 +30,7 @@ export function MyDutiesPanel({ loaded }: { loaded: { payload: DutyPayload; at: 
           <thead><tr className="text-text-dim">
             <th className="px-3 py-1 text-left font-semibold">학생</th>
             {kinds.map((k) => <th key={k} className="w-24 px-1 py-1 text-center font-semibold">{SHORT[k] ?? dutyKindLabel(k)}</th>)}
-            <th className="w-28 px-2 py-1 text-right font-semibold">최근 7일</th>
+            <th className="w-28 px-2 py-1 text-right font-semibold">이번 주</th>
           </tr></thead>
           <tbody>{g.cards.map((c) => <Row key={c.key} card={c} kinds={kinds} now={now} />)}</tbody>
         </table>
@@ -62,6 +62,7 @@ function Row({ card, kinds, now }: { card: DutyCard; kinds: DutyKind[]; now: num
         const why = it.voidReason === "absent" ? "결석이라 오늘 보고서 작성 의무가 없습니다(출결에서 정정하면 의무가 다시 생깁니다)" : "오늘은 이 칸의 의무가 없습니다";
         return <td key={k} className="px-1 py-1 text-center"><span title={why} className="text-text-placeholder inline-flex h-6 w-20 items-center justify-center rounded-md text-xs font-medium">{text}</span></td>;
       }
+      if (st === "done") return <td key={k} className="px-1 py-1 text-center"><span title={`${dutyKindLabel(k)} · 완료`} className={`inline-flex h-6 w-20 items-center justify-center rounded-md font-semibold ${CELL[st]}`}>{DUTY_STATE_LABEL[st]}</span></td>;
       return <td key={k} className="px-1 py-1 text-center">
         <button type="button" onClick={() => openWork({ href: dutyHref(it), title: `${card.title} · ${it.className ?? ""} · ${dutyKindLabel(k)}` })}
           title={`${dutyKindLabel(k)} · ${DUTY_STATE_LABEL[st]} — 누르면 창 안에서 바로 처리`}
@@ -69,7 +70,7 @@ function Row({ card, kinds, now }: { card: DutyCard; kinds: DutyKind[]; now: num
       </td>;
     })}
     <td className="px-2 py-1">
-      <span className="flex justify-end gap-0.5" aria-label="최근 7일 완료 비율">
+      <span className="flex justify-end gap-0.5" aria-label="이번 주(월~일) 완료 비율">
         {card.week.map((r, i) => <span key={i} className={`h-3 w-3 rounded-sm ${r == null ? "bg-bg-soft" : r >= 1 ? "bg-primary" : r > 0 ? "bg-primary-soft" : "bg-danger-soft"}`} title={r == null ? "의무 없음" : `${Math.round(r * 100)}%`} />)}
       </span>
     </td>
