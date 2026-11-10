@@ -9,6 +9,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { assignmentKey, assignmentOf, hidesNextCheck } from "./assignment";
+// 원스크린 화면 + 옮겨 낸 훅(P3-O)을 한 덩어리로 읽는다 — 화면에서 코드를 옮겨도 같은 단언이 선다.
+import { readOnescreenScreen } from "../onescreen/components/onescreen-screen-source.test-util";
 
 const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), "utf8");
 const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
@@ -50,8 +52,7 @@ describe("핫패스 가드 — 로스터는 video_homework를 모른다", () => 
     expect(code).toContain("assignmentsKnown={loadedAssignments !== null}");
   });
   it("🔴 손대지 않은 행은 false로 보내지 않는다 — 값이 있을 때만 · 못 읽은 세션은 아예 안 보낸다", () => {
-    // 세션 입력 조립은 session-input.ts로 옮겼다(P3-O) — 금지 패턴은 두 파일 모두에서 본다.
-    const code = stripComments(read("src", "features", "onescreen", "components", "onescreen-client.tsx") + "\n" + read("src", "features", "onescreen", "session-input.ts"));
+    const code = stripComments(readOnescreenScreen());
     expect(code).toMatch(/videoHwSaveOk && typeof su\?\.videoHomework === "boolean"/);
     expect(code).not.toMatch(/videoHomework: !!su\.videoHomework/);
   });

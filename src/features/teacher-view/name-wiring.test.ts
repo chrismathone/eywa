@@ -1146,7 +1146,7 @@ describe("🔴 회수 버튼·막힌 사유도 사전만 본다 — ko 기본값
  */
 describe("🔴 원스크린 화면 껍데기·공지 작성도 사전만 본다 — 한글 리터럴 0", () => {
   // 화면에서 옮겨 낸 훅(P3-O)도 같은 규칙이다.
-  it.each(["onescreen-client.tsx", "use-session-autosave.ts", "use-roster-view.ts", "use-report-attachments.ts", "use-auto-write.ts", "use-bulk-ops.ts", "use-bulk-send.ts", "use-english-template-mode.ts", "use-makeup-flow.ts", "use-makeup-prev.ts", "notice-composer.tsx", "notice-attachment-picker.tsx"])(
+  it.each(["onescreen-client.tsx", "use-session-autosave.ts", "use-roster-view.ts", "use-report-attachments.ts", "use-auto-write.ts", "use-bulk-ops.ts", "use-bulk-send.ts", "use-english-template-mode.ts", "use-makeup-flow.ts", "use-makeup-prev.ts", "use-send-core.ts", "use-report-send.ts", "notice-composer.tsx", "notice-attachment-picker.tsx"])(
     "%s",
     (f) => {
       const code = codeOnly(read("features", "onescreen", "components", f));

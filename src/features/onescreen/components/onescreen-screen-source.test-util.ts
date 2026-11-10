@@ -22,6 +22,8 @@ export const ONESCREEN_SCREEN_FILES = [
   "components/use-english-template-mode.ts",
   "components/use-makeup-flow.ts",
   "components/use-makeup-prev.ts",
+  "components/use-send-core.ts",
+  "components/use-report-send.ts",
 ] as const;
 
 export function readOnescreenScreen(): string {
