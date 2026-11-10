@@ -24,6 +24,7 @@ export const ONESCREEN_SCREEN_FILES = [
   "components/use-makeup-prev.ts",
   "components/use-send-core.ts",
   "components/use-report-send.ts",
+  "components/onescreen-card-column.tsx",
 ] as const;
 
 export function readOnescreenScreen(): string {
