@@ -3,21 +3,43 @@ import type { ReviewBatch } from "./reviews";
 import type { reportedFinancialView } from "./reported-financials";
 
 /**
- * 경영 분석 시안의 순수 모델 — aywa-next(375d27df4) `features/management/model.ts`에서 화면이 쓰는 부분만.
- * 청구 원장 집계(invoiceMetrics)·DB 저장 스키마 검증은 옮기지 않았다(시안은 예시 값만 그린다).
+ * 경영 분석의 순수 모델 — aywa-next(375d27df4) `features/management/model.ts`. 서버(저장 검증)·화면이 같이 쓴다.
+ * 회계 자료 스키마는 DB 저장 함수(s2_0070 save_management_accounting)의 검사와 짝이다.
  */
 export const monthSchema = z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])$/);
+export const dateSchema = z.iso.date();
 export const accountCategories = ["revenue", "labor", "marketing", "rent", "operating", "nonoperating", "exclude"] as const;
 export type AccountCategory = typeof accountCategories[number];
 export const categoryLabels: Record<AccountCategory, string> = { revenue: "매출", labor: "인건비", marketing: "광고·행사비", rent: "임차료", operating: "기타 영업비용", nonoperating: "영업외·법인세", exclude: "집계 제외" };
 
-export type AccountingLine = { key: string; account: string; category: AccountCategory; amount: number; sourceCell: string };
-export type AccountingReport = {
-  company: string; start: string; end: string; sourceName: string; sourceHash: string; lines: AccountingLine[];
-  reportedRevenue: number | null; reportedOperatingCost: number | null; reportedOperatingProfit: number | null;
-  scopeConfirmed: true; complete: boolean; sourceKind?: "profit_loss" | "ledger";
-  ledgerInfo?: { sourceStart: string; sourceEnd: string; accountCount: number; transactionCount: number; totalTransactionCount: number; controlsMatched: boolean; unclassifiedCodes: string[]; warnings: string[] };
-};
+export const accountingLineSchema = z.object({
+  key: z.string().min(1).max(120), account: z.string().min(1).max(160),
+  category: z.enum(accountCategories), amount: z.number().int().min(-1e12).max(1e12),
+  sourceCell: z.string().min(1).max(120),
+}).strict();
+export const accountingSchema = z.object({
+  company: z.string().trim().min(1).max(160), start: dateSchema, end: dateSchema,
+  sourceName: z.string().min(1).max(200), sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+  lines: z.array(accountingLineSchema).min(1).max(2000),
+  reportedRevenue: z.number().int().nullable(), reportedOperatingCost: z.number().int().nullable(),
+  reportedOperatingProfit: z.number().int().nullable(),
+  scopeConfirmed: z.literal(true), complete: z.boolean(),
+  sourceKind: z.enum(["profit_loss", "ledger"]).optional(),
+  ledgerInfo: z.object({
+    sourceStart: dateSchema, sourceEnd: dateSchema, accountCount: z.number().int().nonnegative(),
+    transactionCount: z.number().int().nonnegative(), totalTransactionCount: z.number().int().nonnegative(),
+    controlsMatched: z.boolean(), unclassifiedCodes: z.array(z.string().max(20)).max(500),
+    warnings: z.array(z.string().max(300)).max(20),
+  }).strict().optional(),
+}).strict().superRefine((v, ctx) => {
+  if (v.start > v.end) ctx.addIssue({ code: "custom", message: "기간 순서를 확인해 주세요" });
+  if (new Set(v.lines.map(l => l.key)).size !== v.lines.length) ctx.addIssue({ code: "custom", message: "중복 원본 행이 있습니다" });
+  if (v.complete && [v.reportedRevenue, v.reportedOperatingCost, v.reportedOperatingProfit].some(x => x === null)) ctx.addIssue({ code: "custom", message: "완전한 손익 자료에는 원본 매출·영업비용·영업이익 합계가 필요합니다" });
+  if (v.sourceKind === "ledger" && (!v.ledgerInfo || v.complete)) ctx.addIssue({ code: "custom", message: "원장 집계는 원본 정보와 함께 검토 대기로 저장해야 합니다" });
+});
+export type AccountingLine = z.infer<typeof accountingLineSchema>;
+export type AccountingReport = z.infer<typeof accountingSchema>;
+export type AccountingDraft = Omit<AccountingReport, "scopeConfirmed"> & { scopeConfirmed: boolean };
 export type StoredReport = { id: string; version: number; document: AccountingReport; updated_at: string };
 export type Metric = { id: string; label: string; value: number | null; unit: "원" | "명" | "건" | "%"; definition: string; source: string; href: string };
 export type InvoiceSummary = { count: number; gross: number; discount: number; net: number; collected: number; outstanding: number; students: number; perStudent: number | null };

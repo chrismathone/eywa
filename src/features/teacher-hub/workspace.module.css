@@ -31,7 +31,6 @@
 .heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
 .heading h2, .panel h2, .insights h2 { font-size: var(--text-lg); font-weight: 750; margin: 0 0 6px; }
 .heading > span, .note { font-size: var(--text-xs); color: var(--muted); line-height: 1.8; }
-.sampleNote { font-size: var(--text-xs); color: var(--muted) !important; background: var(--wash); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; display: inline-block; margin: 0 0 8px; }
 
 .graph { display: grid; grid-template-columns: 220px 1fr; align-items: center; gap: 40px; padding: 8px 0 16px; }
 .root { background: var(--charcoal); padding: 24px 18px; border-radius: 10px; color: #fff; display: grid; gap: 10px; text-align: center; position: relative; }

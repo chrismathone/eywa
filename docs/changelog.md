@@ -1,5 +1,11 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-10 — 경영 분석·강사 배정 상한을 시안에서 실제 기능으로(aywa-next 이식 · SQL s2_0070~0074 운영 적용)
+
+- 경영 분석(`/dashboard/management`, 원장 전용): 예시 값·시안 띠를 걷고 이 지점 DB를 읽는다(청구·수강·상담 집계 + 회계 자료 + 원본 대조 기록). ECOUNT 손익계산서 .xlsx / 계정별원장 .csv 가져오기(검토 후 저장 · 버전) · 자료 수집함(MakeEdu 수납통합내역 · ECOUNT 월별손익분석 — 미리보기 지문이 같을 때만 대조 기록 저장 · 이름만으로 학생을 잇지 않음) · 확인 업무(상태·담당·기한·메모 버전) · 보고서 기준 손익(마감 월만 비율) · 'AI 검토'(버튼만 · 집계 지표만 · Claude 전용 · 결과 DB 보관 · 모델 라벨) · 학원 PC 수집기(🔴 기본 꺼짐 · 원장이 켬 · 90일 연결 · 설치 묶음 `public/downloads/aywa-collection-pc-1.1.0.zip` ← `apps/collection-agent`).
+- 강사 통합 기록(`/class-review/knowledge`): '현재 학생 배정 여력' 저장이 실제로 된다(`/api/teachers/capacity` · 이번 달만).
+- 통합 지식그래프(`/dashboard/management/knowledge`)는 아직 시안 그대로(다른 작업 범위 — `sample-data.ts`도 그 화면이 쓴다).
+
 ## 2026-11-10 — 보류 항목 정리(Codex 협의 추천안) — 수정 계획 P4 나머지
 
 - 운영 DB 확인(읽기 전용): DB 함수 문구의 '총괄' **0건**(0332a가 이미 교체 — 고칠 것 없음) · `attendance_records.taught_by` 칸·FK 있음, 값 0/42,166건(입구를 걷은 10-07 결정과 맞음 · 백필 안 함 · 읽는 코드의 호환 분기는 그대로).

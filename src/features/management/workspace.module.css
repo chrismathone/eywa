@@ -96,8 +96,12 @@
 .confirm { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 14px; }
 .notice { background: var(--hover); border: 1px solid color-mix(in srgb, var(--gold-bright) 45%, var(--card)); color: var(--ink) !important; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
 .notice p { color: var(--ink-2); }
-.upload { display: inline-flex; flex-direction: column; gap: 4px; font-size: 13px; background: var(--wash); color: var(--muted); border-color: var(--line); cursor: not-allowed; }
-.upload input { font-size: 12px; max-width: 230px; border: 0; padding: 0; background: transparent; color: var(--muted); }
+.upload { display: inline-flex; flex-direction: column; gap: 4px; font-size: 13px; cursor: pointer; }
+.upload input { font-size: 12px; max-width: 230px; border: 0; padding: 0; background: transparent; color: inherit; }
+.upload:has(input:disabled) { background: var(--wash); color: var(--muted); border-color: var(--line); cursor: not-allowed; }
+.answer { display: grid; gap: 10px; margin-top: 10px; }
+.answer article { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--wash); }
+.answer article p { margin: 4px 0; color: var(--ink-2); }
 .hash { word-break: break-all; font-size: var(--text-xs) !important; color: var(--muted) !important; }
 
 .graph { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px; padding: 20px 12px; background: var(--wash); border-radius: 8px; margin: 8px 0; }
