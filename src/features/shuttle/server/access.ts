@@ -6,7 +6,7 @@ import { landingPath } from "@/lib/auth/teacher-home";
 import { canAccess } from "@/lib/permissions";
 import { getShuttleDuty } from "./duty";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
-import { canManageParentAccountsRole } from "../parent-accounts/parent-access";
+import { canOpenShuttleAdmin } from "../admin-access";
 
 /**
  * 셔틀 화면 **열람** 게이트 — 메뉴 권한(`shuttle`) **또는** 직원 '셔틀 담당' 토글(0227a).
@@ -30,12 +30,14 @@ export async function requireShuttleView(): Promise<CurrentUser> {
 }
 
 /**
- * 셔틀 **관리자** 면(실시간 위치)을 볼 수 있나 — 원장(master)·관리자(admin)·총괄(super_admin)(사용자 2026-10-08 "관리자 계정들만").
- * 🔑 판정은 학부모 관리 현황과 같은 `canManageParentAccountsRole` — 메뉴판 `adminOnly`도 같은 함수를 지난다(입구·화면이 갈리지 않게).
- * 🔑 역할은 **화면 주인**의 것 — 강사뷰로 강사 X를 열었으면 X의 역할(강사)이라 관리자 면이 닫힌다(실제 계정 역할로 열리던 구멍).
+ * 셔틀 **관리자 화면**(실시간 위치 · 탑승 학생 시간표 · 가까운 노선 찾기 — 학부모 관리 현황은 `parentAccountsActor`)을 볼 수 있나.
+ * 판정 = `canOpenShuttleAdmin`(운영 계정 · 또는 셔틀 권한 + '셔틀 관리자 화면' 권한 — 원장 2026-11-10 결정 · 기본 원장·관리자).
+ * 전에는 코드의 역할 비교(원장·관리자·총괄 — 사용자 2026-10-08 "관리자 계정들만")였다. 메뉴판 입구도 같은 함수를 지난다(입구·화면이 갈리지 않게).
+ * 🔑 역할·표는 **화면 주인**의 것 — 강사뷰로 강사 X를 열었으면 X의 역할(강사)이라 관리자 화면이 닫힌다(실제 계정 역할로 열리던 구멍).
  */
 export async function isShuttleAdmin(): Promise<boolean> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return false;
-  return canManageParentAccountsRole(user.systemRole, await isCurrentUserSuperAdmin());
+  const [matrix, isSuperAdmin] = await Promise.all([getUserPermMatrix(), isCurrentUserSuperAdmin()]);
+  return canOpenShuttleAdmin(user.systemRole, matrix, isSuperAdmin);
 }

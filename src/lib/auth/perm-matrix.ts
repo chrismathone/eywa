@@ -39,8 +39,10 @@ async function capLaboratory(matrix: AccessMatrix, tenantId: string): Promise<Ac
 }
 
 async function capSettingFeatures(matrix: AccessMatrix, tenantId: string, role: SystemRole): Promise<AccessMatrix> {
-  if (matrix.ai_ment[role] === "none" || await isFeatureLicensed(tenantId, "ai_analysis")) return matrix;
-  return { ...matrix, ai_ment: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" } };
+  // 지점 AI 라이선스가 꺼지면 AI 멘트 · 학원 비서(2026-11-09)를 닫는다 — 꺼진 기능은 있었는지조차 모르게(문 assistantViewer도 이 표를 본다).
+  if ((matrix.ai_ment[role] === "none" && matrix.assistant[role] === "none") || await isFeatureLicensed(tenantId, "ai_analysis")) return matrix;
+  const closed = { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" } as const;
+  return { ...matrix, ai_ment: closed, assistant: closed };
 }
 
 /**

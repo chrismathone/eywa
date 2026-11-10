@@ -84,7 +84,8 @@ export const MODULES: Readonly<Record<ModuleId, ModuleDef>> = {
     id: "shuttle",
     label: "셔틀",
     description: "차량·노선 편성과 오늘 등하원 기록",
-    menuKeys: ["shuttle"],
+    // 셔틀 관리자 화면(2026-11-10 권한 키)도 함께 꺼진다 — 셔틀 권한 위 조건이라 셔틀 없이는 뜻이 없다.
+    menuKeys: ["shuttle", "shuttle_admin"],
   },
   inventory: {
     id: "inventory",

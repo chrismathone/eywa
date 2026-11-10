@@ -59,6 +59,7 @@ import { EmbedMainMarker } from "@/components/workspace/embed-main-marker";
 import { PaletteHotkeyForward } from "@/components/workspace/palette-hotkey-forward";
 import { AssistantLauncher } from "@/features/assistant/components/assistant-launcher";
 import { AssistantHotkeyForward } from "@/features/assistant/components/assistant-hotkey-forward";
+import { assistantViewer, isGateFailure } from "@/features/assistant/server/gate";
 import { EmbedFocusSignal } from "@/components/workspace/embed-focus-signal";
 import { EmbedRefreshListener } from "@/components/workspace/embed-refresh-listener";
 import { EmbedUrlKeeper } from "@/components/workspace/embed-url-keeper";
@@ -138,12 +139,10 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   const embed = (await headers()).get("x-embed") === "1";
   if (embed) {
     const teacherEmbed = (await getShellView()) === "teacher";
-    // 창 안 Ctrl/⌘+J → 부모의 학원 비서(원장·슈퍼관리자만 · 강사뷰·지점 보기 아님 · 지점 AI 켜짐 — 부모 셸의 canUseAssistant와 같은 축).
+    // 창 안 Ctrl/⌘+J → 부모의 학원 비서 — 서버 라우트와 같은 문(assistantViewer: '학원 비서' 권한 · 강사뷰·지점 보기 아님) + 지점 AI 켜짐(부모 셸의 canUseAssistant와 같은 축).
     const embedAssistant =
       !teacherEmbed &&
-      !viewAs &&
-      !user.tenantView &&
-      (user.systemRole === "master" || (await isCurrentUserSuperAdmin())) &&
+      !isGateFailure(await assistantViewer()) &&
       (await licensesPromise).ai_analysis !== false;
     // 이전 화면 유지 방식이면 이 창 문서는 **한 화면**이다 — 단일 화면과 같은 모양(머리글 한 줄·여백)으로 그린다(keepalive-frame.ts).
     // 🔴 판정은 **부모 셸이 이 문서에서 쓰는 방식**(쿠키 `SHELL_MODE_COOKIE` — 셸 공급자가 적는다)을 먼저 따른다. 부모는 문서를 연 순간의
@@ -456,9 +455,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // (총괄은 역할이 아니라 별도 표라 users.system_role이 'admin'인 사람이 실제로 있다).
   // 요청 캐시라 master가 아닐 때만 PK 조회 1회.
   const isSuperAdmin = await isCurrentUserSuperAdmin();
-  // 학원 비서(원장 2026-11-06 *"원장이상급"*) — 풀셸(여기까지 오면 강사 미니셸이 아니다) · 원장·슈퍼관리자 · 강사뷰·지점 보기 아님 · 지점 AI 켜짐. 서버 라우트(gate.ts)도 같은 축으로 다시 막는다.
-  const canUseAssistant =
-    !viewAs && !user.tenantView && (user.systemRole === "master" || isSuperAdmin) && (await licensesPromise).ai_analysis !== false;
+  // 학원 비서 — 풀셸(여기까지 오면 강사 미니셸이 아니다) · 서버 라우트와 **같은 함수**(assistantViewer: 학원 설정 → 역할·권한의 '학원 비서' 권한 —
+  // 기본 원장만(원장 2026-11-09) · 운영 계정 · 강사뷰·지점 보기 아님) + 지점 AI 켜짐. 화면에 단추가 서면 서버도 받는다(#77).
+  const canUseAssistant = !isGateFailure(await assistantViewer()) && (await licensesPromise).ai_analysis !== false;
   // 창 모드(플로팅 창 = 메뉴마다 iframe) — **지점 설정**(원장 2026-09-25 *"iframe 모드를 켜고 끌수 잇게 … 모드를 켜면
   // 일반적인 웹앱처럼 단일창으로"* · *"지점별 세팅"* · *"admin에서 토글가능하게"*). 슈퍼관리자 학원 상세 라이선스 카드의
   // `window_mode`를 읽는다 — 행이 없으면 켜짐(지금까지와 같다). 끄면 아래 WorkspaceEnabledProvider가 false라 캔버스가

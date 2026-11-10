@@ -19,6 +19,8 @@ const WRITERS = [
   "features/demo-roster/dashboard-apply.ts",
   "features/demo-roster/demo-weekday.ts",
   "features/owner/server/actions.ts",
+  // 퇴사자 권한 정리(2026-11-09) — 그 사람 줄만 빼고 updated_at 비교 · permissions.rev + 1.
+  "features/owner/server/retired-people.ts",
   "features/owner/server/scheduled-groups.ts",
   "features/owner/server/setting-role-actions.ts",
   "features/timetable/server/master-sheet-store.ts",
@@ -75,6 +77,9 @@ describe("tenant_settings writer는 수정 표식을 갱신한다", () => {
     expect(code("features/owner/server/scheduled-groups.ts")).toMatch(
       /const nextData = \{\s*\.\.\.\(data \?\? \{\}\),\s*operations: \{ \.\.\.storedOperations, rev: settingsRevOf\(storedOperations\) \+ 1, subjects: nextSubjects \},\s*\};/,
     );
+    // 퇴사자 권한 정리: 역할·권한 섹션 안의 순번을 올리고, 읽은 그대로일 때만 쓴다(0행 = 다시 읽기).
+    expect(code("features/owner/server/retired-people.ts")).toMatch(/permissions: \{ \.\.\.\(next\.permissions as Record<string, unknown>\), rev: settingsRevOf\(/);
+    expect(code("features/owner/server/retired-people.ts")).toMatch(/\.eq\("tenant_id", tenantId\)\.eq\("updated_at", row\.updated_at\)\.select\("tenant_id"\)/);
     // '역할 설정' 대화상자: 역할·권한 섹션을 다시 쓰므로 그 섹션 안의 순번을 올린다(문서 최상위가 아니다).
     expect(code("features/owner/server/setting-role-actions.ts")).toMatch(
       /const next = \{ \.\.\.row\.data, permissions: \{ \.\.\.row\.data\.permissions, overrides, rev: settingsRevOf\(row\.data\.permissions\) \+ 1 \} \};/,

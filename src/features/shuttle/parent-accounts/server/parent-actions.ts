@@ -22,7 +22,7 @@ export async function createParentAccount(
   // 🔴 읽기 강사뷰(·지점 보기)는 맨 앞에서 거절한다 — 이 액션은 canWriteTenant를 지나지 않고, 로그인 계정을 만드는 외부 효과가 있다.
   const readonly = await readonlyTeacherViewError();
   if (readonly) return { error: readonly };
-  // 원장·관리자만 — 화면 입구와 같은 판정(canManageParentAccountsRole)을 서버가 다시 본다(#77).
+  // '셔틀 관리자 화면' 권한(기본 원장·관리자 — 이 두 역할 칸만 열 수 있다) — 화면 입구와 같은 판정(canOpenShuttleAdmin)을 서버가 다시 본다(#77).
   const actor = await parentAccountsActor();
   if (!actor) return { error: "학부모 계정은 원장·관리자만 발급할 수 있습니다" };
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyUserOverrides, CONNECTED_APP_ACCESS_MESSAGE, isScopedForbiddenRole, MENU_ACCESS, resolveMatrix, SCOPED_FORBIDDEN_MESSAGE } from "@/lib/permissions";
+import { applyUserOverrides, CONNECTED_APP_ACCESS_MESSAGE, isScopedForbiddenRole, MENU_ACCESS, onOffAccessMessage, resolveMatrix, SCOPED_FORBIDDEN_MESSAGE } from "@/lib/permissions";
 import { sparseRoleOverrides } from "../permission-edit";
 import { resolveSettings } from "../resolve";
 import { applySettingRoles, settingRoleSelection } from "../setting-roles";
@@ -771,5 +771,40 @@ describe("연결 앱 권한 — 전체·없음만(원장 2026-11-05) · 저장�
     expect(stored().overrides.some((o) => o.menu === "app_todays_math")).toBe(false);
     expect(stored().userOverrides).toEqual([{ userId: STAFF_A, menu: "app_todays_math", access: "readonly" }]);
     expect(applyUserOverrides(resolveMatrix(stored().overrides), STAFF_A, "admin", stored().userOverrides).app_todays_math.admin).toBe(MENU_ACCESS.app_todays_math.admin);
+  });
+});
+
+describe("학원 비서 권한 — 전체·없음만 · 강사 칸 잠금(2026-11-09)", () => {
+  const asForm = (p: PermissionsSettings) => ({ overrides: sparseRoleOverrides(resolveMatrix(p.overrides)), userOverrides: p.userOverrides, specialAccess: p.specialAccess });
+
+  it.each(["chinsan", "generic"] as const)("🔴 %s: 요청에 실린 학원 비서 '담당'·'읽기'는 학원 비서 문구로 거절(역할 칸 · 새 개인 줄)", async (preset) => {
+    seed(preset, { overrides: [], userOverrides: [] });
+    const w = openWindow();
+    for (const access of ["scoped", "readonly"] as const) {
+      expect((await w.save({ ...asForm(w.draft), overrides: [{ menu: "assistant", role: "admin", access }] }))?.error, access).toBe(onOffAccessMessage("assistant"));
+      expect((await w.save({ ...asForm(w.draft), userOverrides: [{ userId: STAFF_A, menu: "assistant", access }] }))?.error, access).toBe(onOffAccessMessage("assistant"));
+    }
+    expect(onOffAccessMessage("assistant")).toBe("학원 비서 권한은 전체·없음 중에서 선택해 주세요");
+    expect(m.writes).toBe(0);
+    // 전체·없음은 된다(역할 칸 · 개인 줄).
+    const res = await w.save({ ...asForm(w.draft), overrides: [{ menu: "assistant", role: "admin", access: "full" }], userOverrides: [{ userId: STAFF_A, menu: "assistant", access: "full" }] });
+    expect(res?.ok, JSON.stringify(res)).toBe(true);
+  });
+
+  it.each(["chinsan", "generic"] as const)("🔴 %s: 강사에게 새로 주는 개인 줄은 잠금 문구로 거절 — 강사 화면엔 비서 단추가 없다", async (preset) => {
+    seed(preset, { overrides: [], userOverrides: [] });
+    m.staff = [{ id: STAFF_A, system_role: "teacher", status: "active" }];
+    const w = openWindow();
+    expect((await w.save({ ...asForm(w.draft), userOverrides: [{ userId: STAFF_A, menu: "assistant", access: "full" }] }))?.error).toBe("이 역할에서 잠긴 메뉴 권한은 변경할 수 없습니다");
+    expect(m.writes).toBe(0);
+  });
+
+  it.each(["chinsan", "generic"] as const)("%s: 그 뒤 강사가 된 사람의 저장된 학원 비서 줄이 있어도 이 면은 저장된다 — 그 줄은 적용하지 않는다", async (preset) => {
+    seed(preset, { overrides: [], userOverrides: [{ userId: STAFF_A, menu: "assistant", access: "full" }] });
+    m.staff = [{ id: STAFF_A, system_role: "teacher", status: "active" }];
+    const w = openWindow();
+    const res = await w.save(asForm(w.draft));
+    expect(res?.ok, JSON.stringify(res)).toBe(true);
+    expect(applyUserOverrides(resolveMatrix(stored().overrides), STAFF_A, "teacher", stored().userOverrides).assistant.teacher).toBe("none");
   });
 });

@@ -8,9 +8,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
 import { PUBLIC_BRANDING_TENANTS_TAG } from "@/features/owner/server/public-branding";
 import { tenantSettingsTag } from "@/features/owner/server/queries";
+import { dropPersonFromSettings } from "@/features/owner/server/retired-people";
 import { licenseFlagsTag } from "@/lib/license/server";
 import { flagsFromMode, isShellMode } from "@/lib/license/shell-mode";
-import { SYSTEM_ROLES } from "@/lib/permissions";
+import { SYSTEM_ROLES, type SystemRole } from "@/lib/permissions";
 import { SEAT_FEATURES, TOGGLE_FEATURES, WINDOW_KEEPALIVE_KEY } from "../labels";
 import { logSuperAdminAction } from "./audit";
 import { logDbError, explainDbError } from "@/lib/supabase/db-error";
@@ -296,7 +297,7 @@ export async function setUserActive(
 
   const admin = createAdminClient();
   const { data: account, error: accountError } = await admin.from("users")
-    .select("id").eq("id", userId).eq("tenant_id", tenantId).maybeSingle();
+    .select("id, status, system_role").eq("id", userId).eq("tenant_id", tenantId).maybeSingle();
   if (accountError || !account) {
     logDbError(accountError, "super-admin.setUserActive");
     return { error: "해당 지점의 계정을 찾을 수 없습니다" };
@@ -316,7 +317,31 @@ export async function setUserActive(
     ban_duration: active ? "none" : "876000h",
   });
   if (authErr) return { error: explainDbError(authErr, { scope: "super-admin.actions.setUserActive", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
-  await admin.from("users").update({ status: active ? "active" : "inactive" }).eq("id", userId).eq("tenant_id", tenantId);
+  // `.select` — 0행이면 저장되지 않은 것이다(리뷰 r1 F5: 저장 결과를 보지 않고 정리·'성공'을 내던 것을 고침).
+  const { data: statusRows, error: statusErr } = await admin.from("users")
+    .update({ status: active ? "active" : "inactive" }).eq("id", userId).eq("tenant_id", tenantId).select("id");
+  const statusSaved = !statusErr && (statusRows?.length ?? 0) > 0;
+  if (statusErr) logDbError(statusErr, "super-admin.setUserActive.status");
+  else if (!statusSaved) console.error("[super-admin/setUserActive] 재직 상태 저장 0행", { tenantId, userId });
+  // 퇴사자 권한 정리(원장 2026-11-09 *"퇴사시 같이 사라지게"*) — 직원관리의 퇴사·재입사와 같은 함수(그 지점 학원 설정에서 그 사람에게 **주는** 값만 뺀다).
+  // 퇴사 상태에서 다시 활성으로 돌릴 때도 뺀다(옛 값이 되살아나지 않게). 이미 활성인 계정을 다시 '활성'으로 누른 것은 건드리지 않는다.
+  // 🔴 재직 상태가 실제로 저장된 뒤에만 한다. 정리가 던져도 아래 운영 감사는 남긴다(결과는 그 줄에 싣는다).
+  const cleans = statusSaved && (!active || account.status === "inactive");
+  let permissionCleanup: Awaited<ReturnType<typeof dropPersonFromSettings>> | null = null;
+  if (cleans) {
+    try {
+      const role = SYSTEM_ROLES.find((r) => r === account.system_role) ?? null;
+      permissionCleanup = await dropPersonFromSettings(tenantId, userId, role as SystemRole | null, admin);
+    } catch (e) {
+      console.error("[super-admin/setUserActive] 퇴사자 권한 정리 실패", e);
+      permissionCleanup = { ok: false, reason: "write" };
+    }
+  }
+  try {
+    updateTag(tenantSettingsTag(tenantId));
+  } catch (e) {
+    console.error("[super-admin/setUserActive] 설정 캐시 비우기 실패", e);
+  }
 
   await logSuperAdminAction({
     actorId: sa.id,
@@ -324,9 +349,15 @@ export async function setUserActive(
     action: "set_user_active",
     targetTenantId: tenantId || null,
     targetLabel: tenantName || null,
-    metadata: { userId, active },
+    metadata: {
+      userId,
+      active,
+      ...(statusSaved ? {} : { statusSaved: false }),
+      ...(permissionCleanup ? { permissionCleanup: permissionCleanup.ok ? { removed: permissionCleanup.removed, kept: permissionCleanup.kept } : { failed: permissionCleanup.reason } } : {}),
+    },
   });
   revalidatePath(`/super-admin/tenants/${tenantId}`);
+  if (!statusSaved) return { error: "로그인 차단은 바뀌었지만 재직 상태를 저장하지 못했습니다 — 다시 시도해 주세요" };
   return { ok: true };
 }
 

@@ -5,6 +5,7 @@ import {
   canAccess,
   CONNECTED_APP_MENU_KEYS,
   isConnectedAppMenu,
+  isOnOffMenu,
   isPermissionLocked,
   MENU_ACCESS,
   MENU_KEYS,
@@ -14,6 +15,7 @@ import {
   resolveMatrix,
   SYSTEM_ROLES,
   roleHome,
+  SHUTTLE_ADMIN_ROLES,
   type MenuKey,
   type UserPermissionOverride,
 } from "./permissions";
@@ -251,6 +253,13 @@ describe("새 권한의 기본값 = 원장 '전체' · 나머지 '없음'(원장
       why: "연결 앱 결정(tenant.md 2026-11-05) — 오늘 수학은 강사 이상(원장·관리자·매니저·강사)에게 열린 채 시작한다",
       access: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
     },
+    // 2026-11-10 추가: docs/decisions/staff.md — 원장 11-10 결정 '기존 동작 유지'. 셔틀 관리자 화면(학부모 관리 현황 · 탑승 학생 시간표 · 가까운 노선 찾기 ·
+    // 실시간 위치)은 권한 줄을 만들기 전 코드가 원장·관리자에게 열었다. 원장·관리자 칸만 바꿀 수 있다(학부모 계정 DB 정책 0320a와 같은 두 역할).
+    // (시안 넷 — management · okr · marketing · work_records — 은 같은 날 원장 결정으로 규칙대로(원장만) 확정돼 여기서 뺐다.)
+    shuttle_admin: {
+      why: "원장 11-10 결정: 기존 동작 유지 — 셔틀 관리자 화면은 원장·관리자 '전체'(셔틀 권한 위 조건 · 학부모 계정 DB 정책 0320a와 같은 두 역할)",
+      access: { master: "full", admin: "full", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+    },
   };
   // 새 연결 앱은 원장도 '없음'으로 시작한다(원장 2026-11-05 *"새 연동앱은 전부 꺼짐으로 기본값"*) — 켜는 것은 '연결 앱 권한' 표에서.
   const allNone = Object.fromEntries(SYSTEM_ROLES.map((role) => [role, "none"]));
@@ -287,6 +296,67 @@ describe("새 권한의 기본값 = 원장 '전체' · 나머지 '없음'(원장
       expect(access, menu).not.toEqual(expected);
       expect(why.trim().length, `${menu} 근거`).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("학원 비서 권한(assistant · 원장 2026-11-09 *\"기본 디폴트로 원장하고 나머지 비활성화\"*)", () => {
+  it("기본값 = 원장 '전체' · 나머지 '없음'(새 키 규칙 그대로 — 위 가드의 면제 목록에 없다)", () => {
+    expect(MENU_ACCESS.assistant).toEqual(Object.fromEntries(SYSTEM_ROLES.map((role) => [role, role === "master" ? "full" : "none"])));
+  });
+
+  it("🔴 칸은 전체·없음만 — 비서는 지점 자료 전부를 읽어 '담당'·'읽기'로 좁힐 수 없다(좁은 값이 적혀도 실제는 '전체'로 열린다)", () => {
+    expect(isOnOffMenu("assistant")).toBe(true);
+    for (const role of SYSTEM_ROLES) {
+      expect(isPermissionLocked("assistant", role, "scoped"), role).toBe(true);
+      expect(isPermissionLocked("assistant", role, "readonly"), role).toBe(true);
+    }
+    // 손으로 넣은 '읽기'·'담당'은 적용하지 않는다(기본값 그대로 — 넓어지지 않는다).
+    expect(resolveMatrix([{ menu: "assistant", role: "admin", access: "readonly" }, { menu: "assistant", role: "viewer", access: "scoped" }]).assistant).toEqual(MENU_ACCESS.assistant);
+    expect(applyUserOverrides(MENU_ACCESS, "u-1", "manager", [{ userId: "u-1", menu: "assistant", access: "readonly" }]).assistant.manager).toBe("none");
+  });
+
+  it("🔴 강사 칸은 잠근다 — 강사 화면엔 비서 단추가 없다(열어도 쓸 곳이 없는 칸) · 원장 아닌 사무실 역할은 원장이 연다", () => {
+    for (const access of ["full", "none"] as const) expect(isPermissionLocked("assistant", "teacher", access), access).toBe(true);
+    expect(resolveMatrix([{ menu: "assistant", role: "teacher", access: "full" }]).assistant.teacher).toBe("none");
+    expect(applyUserOverrides(MENU_ACCESS, "t-1", "teacher", [{ userId: "t-1", menu: "assistant", access: "full" }]).assistant.teacher).toBe("none");
+    for (const role of ["admin", "manager", "counselor", "accountant", "viewer", "parttime"] as const) {
+      expect(isPermissionLocked("assistant", role, "full"), role).toBe(false);
+      expect(resolveMatrix([{ menu: "assistant", role, access: "full" }]).assistant[role], role).toBe("full");
+    }
+    // 원장이 스스로 끌 수도 있다(설정·대시보드처럼 잠근 칸이 아니다 — 학원 설정은 계속 열려 다시 켤 수 있다).
+    expect(isPermissionLocked("assistant", "master", "none")).toBe(false);
+  });
+
+  it("연결 앱의 전체·없음 규칙은 그대로다(같은 함수로 묶었다)", () => {
+    for (const menu of CONNECTED_APP_MENU_KEYS) expect(isOnOffMenu(menu), menu).toBe(true);
+    expect(MENU_KEYS.filter((menu) => isOnOffMenu(menu)).sort()).toEqual([...CONNECTED_APP_MENU_KEYS, "assistant", "shuttle_admin"].sort());
+  });
+});
+
+describe("시안 화면 넷 = 원장만(원장 2026-11-10 결정) · 셔틀 관리자 화면 = 원장·관리자(기존 동작 유지)", () => {
+  const masterOnly = Object.fromEntries(SYSTEM_ROLES.map((role) => [role, role === "master" ? "full" : "none"]));
+  it("🔴 시안 넷은 새 권한 규칙 그대로 — 원장 '전체' · 나머지 '없음'(관리자·매니저·상담·회계·열람에게 안 열린다)", () => {
+    for (const menu of ["management", "okr", "marketing", "work_records"] as const) {
+      expect(MENU_ACCESS[menu], menu).toEqual(masterOnly);
+      for (const role of ["admin", "manager", "counselor", "accountant", "viewer"] as const) expect(canAccess(role, menu), `${menu}·${role}`).toBe(false);
+    }
+  });
+
+  it("셔틀 관리자 화면 = 원장·관리자 '전체' · 칸은 전체·없음만 · 원장·관리자 칸만 바꿀 수 있다(학부모 계정 DB 정책과 같은 두 역할)", () => {
+    expect(MENU_ACCESS.shuttle_admin.master).toBe("full");
+    expect(MENU_ACCESS.shuttle_admin.admin).toBe("full");
+    expect(SHUTTLE_ADMIN_ROLES).toEqual(["master", "admin"]);
+    for (const role of SYSTEM_ROLES) {
+      expect(isPermissionLocked("shuttle_admin", role, "scoped"), role).toBe(true);
+      expect(isPermissionLocked("shuttle_admin", role, "readonly"), role).toBe(true);
+      const changeable = role === "master" || role === "admin";
+      expect(isPermissionLocked("shuttle_admin", role, "full"), role).toBe(!changeable);
+      if (!changeable) expect(MENU_ACCESS.shuttle_admin[role], role).toBe("none");
+    }
+    // 손으로 넣은 매니저 '전체'는 적용하지 않는다(DB 정책이 학부모 계정을 안 보여 줘 화면만 열리는 일이 없게).
+    expect(resolveMatrix([{ menu: "shuttle_admin", role: "manager", access: "full" }]).shuttle_admin.manager).toBe("none");
+    // 관리자 칸은 원장이 닫을 수 있다.
+    expect(resolveMatrix([{ menu: "shuttle_admin", role: "admin", access: "none" }]).shuttle_admin.admin).toBe("none");
   });
 });
 

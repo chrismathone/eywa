@@ -80,6 +80,8 @@ export function RoleMatrixTable({ groups, matrix, savedMatrix, onCycle, rowHeade
           // 메뉴 구성에서 이름을 바꾼 화면의 바뀐 이름(그 밖엔 비어 있다 — 줄은 탭 이름 한 줄 · 원장 2026-11-05). 자르지 않고 접어 적는다.
           <span className="text-text-dim block leading-snug">{item.covers.join(" · ")}</span>
         ) : null}
+        {/* 다른 역할에 열기 전에 알아야 할 것(학원 비서가 읽는 범위 · 시안 화면 — permission-rows ROW_NOTE). 자르지 않고 접어 적는다. */}
+        {item.note ? <span className="text-text-dim mt-0.5 block leading-snug font-normal">{item.note}</span> : null}
       </td>
       {SYSTEM_ROLES.map((role) => {
         const access = matrix[item.menu][role];
