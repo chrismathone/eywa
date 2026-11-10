@@ -19,6 +19,7 @@ export const ONESCREEN_SCREEN_FILES = [
   "components/use-auto-write.ts",
   "components/use-bulk-ops.ts",
   "components/use-bulk-send.ts",
+  "components/use-english-template-mode.ts",
 ] as const;
 
 export function readOnescreenScreen(): string {
