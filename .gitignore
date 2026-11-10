@@ -74,3 +74,8 @@ data/ijw-firebase-backup/
 # 시험 산출물
 test-results/
 playwright-report/
+# 디자인 핸드오프 단독 HTML 4개(각 약 23MB) — 추적 중단(2026-11-10 · 복구법은 각 폴더 README · 이력에 남는다)
+/data/원스크린_패키지/학생 데일리 리포트 (standalone).html
+/data/원스크린_패키지/내 학습 현황 (standalone).html
+/data/원스크린_패키지/선생님 원스크린 (standalone).html
+/data/원스크린_전달/선생님 원스크린 (standalone).html

@@ -1,0 +1,28 @@
+#!/bin/sh
+# 선택 설치 pre-push — 로컬 게이트(`pnpm verify`)를 push 직전에 한 번 돌린다(수정 계획 P4 · CI는 꺼져 있다).
+# 설치: `cp scripts/git-hooks/pre-push "$(git rev-parse --git-common-dir)/hooks/pre-push" && chmod +x …`(워크트리는 hooks를 공유한다)
+# 건너뛰기: `AYWA_SKIP_VERIFY=1 git push …` · 검사만 한다(파일을 고치지 않는다).
+# ⚠️ 시험은 기준선과 비교해 새 실패만 막지만, 린트·타입은 바뀐 파일·그 import의 **원래 있던 오류**로도 멈출 수 있다 — 그땐 확인 뒤 건너뛰기.
+#
+# 🔴 게이트는 **이 작업 폴더의 HEAD + 아직 커밋 안 한 변경**을 origin/main과의 merge-base 기준으로 본다. 그래서
+#    push 대상이 HEAD가 아니면(다른 브랜치·sha를 push) 그 커밋을 검사한 게 아니다 → 통과로 치지 않고 멈춘다.
+#    커밋 안 한 변경이 있으면 검사 대상이 push 내용과 다르다 → 알리고 멈춘다(stash하거나 AYWA_SKIP_VERIFY=1).
+[ "${AYWA_SKIP_VERIFY:-}" = "1" ] && { echo "[pre-push] AYWA_SKIP_VERIFY=1 — 게이트를 건너뜁니다"; exit 0; }
+head=$(git rev-parse HEAD)
+z=0000000000000000000000000000000000000000
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$z" ] && continue   # 원격 브랜치 삭제는 검사할 것이 없다
+  case "$local_ref" in refs/tags/*) continue ;; esac   # 태그(주석 태그 sha는 HEAD와 다르다) — 코드 검사 대상 아님
+  if [ "$local_sha" != "$head" ]; then
+    echo "[pre-push] push 대상($local_sha)이 지금 HEAD($head)가 아닙니다 — 게이트가 그 커밋을 검사할 수 없어 멈춥니다."
+    echo "           그 커밋을 체크아웃해 pnpm verify를 돌리거나, 확인했으면 AYWA_SKIP_VERIFY=1로 push하세요."
+    exit 1
+  fi
+done
+if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then  # 새 파일도 — 게이트(verify-changed)는 추적 안 된 새 파일까지 본다
+  echo "[pre-push] 커밋 안 한 변경이 있어 게이트가 push 내용과 다른 것을 검사합니다 — 커밋/stash 뒤 다시 push하세요(또는 AYWA_SKIP_VERIFY=1)."
+  exit 1
+fi
+git fetch -q origin main 2>/dev/null || echo "[pre-push] origin을 받지 못했습니다 — 마지막으로 받은 origin/main 기준으로 검사합니다"
+echo "[pre-push] pnpm verify …"
+exec pnpm verify

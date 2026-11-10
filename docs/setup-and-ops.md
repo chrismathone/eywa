@@ -146,6 +146,7 @@ pnpm verify      # 기본 — 바뀐 파일과 그 영향만(보통 1분 안팎 
   - 한계: 메시지가 값을 담지 않는 단언(`expected false to be true`)은 같은 테스트 안의 새 원인을 기존 실패와 구별하지 못한다. 그런 테스트가 기존 실패 목록에 있으면 그 기능을 만질 때 직접 확인할 것.
 - 외장 SSD(exFAT)의 `._*` 메타 파일은 실행 전에 지운다(테스트·가드가 소스로 읽어 거짓 실패를 낸다).
 - 기준은 `origin/main`과의 merge-base(`pnpm verify <기준>`), 결과 한 줄은 `.verify/log.txt`에 커밋 sha와 함께 남는다.
+- **선택: push 직전 자동 실행**(2026-11-10, [`scripts/git-hooks/pre-push`](../scripts/git-hooks/pre-push)) — 설치 `cp scripts/git-hooks/pre-push "$(git rev-parse --git-common-dir)/hooks/pre-push" && chmod +x "$(git rev-parse --git-common-dir)/hooks/pre-push"`(워크트리는 hooks를 공유하니 한 번이면 된다). push 대상이 HEAD가 아니거나 커밋 안 한 변경(새 파일 포함)이 있으면 **멈춘다**(태그 push는 건너뜀 · 린트·타입은 원래 있던 오류로도 멈출 수 있다)(게이트가 push 내용을 검사한 게 아니므로 통과로 치지 않는다). 건너뛰기 `AYWA_SKIP_VERIFY=1 git push …`. 중앙 게이트가 아니다 — 설치하지 않은 PC·세션은 그대로 push된다.
 ⚠️ 지금은 이게 **유일한 게이트**다 — CI(`.github/workflows/ci.yml`)는 2026-10-21부터 꺼져 있고(GitHub 결제), 켜져 있어도 배포를 막지 않는다
 (`next.config.ts` `ignoreBuildErrors` · `main` 브랜치 보호 없음 · Vercel은 push마다 배포).
 

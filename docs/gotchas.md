@@ -1073,6 +1073,21 @@ origin/main 기준으로 0161a를 채번했는데 작업 중 다른 세션이 `0
 
 ---
 
+## #95 🔴🔴 마이그레이션보다 앱을 먼저 배포하면 그 화면이 통째로 죽는다 (2026-08-03)
+
+(2026-11-10 CLAUDE.md 색인에서 옮김 — 이 번호의 본문이 이 파일에 없어 색인 문구를 그대로 옮겼다.)
+
+aywa는 SQL을 **원장이 손으로** 실행하므로 push와 적용 사이에 **항상 간격**이 있다.
+2026-08-03 실사고: `classnote_notice_id`(0174a)를 `.select()`에 넣고 앱만 먼저 배포 → 컬럼 부재로 PostgREST 400 →
+`fetchInChunks`가 (규약대로) throw → **강사 전원의 원스크린이 먹통**.
+
+- ⚠️ **모든 배포는 옛 스키마·새 스키마 둘 다에서 돌아야 한다**(expand/contract) — 새 컬럼을 읽는 코드는
+  ① SQL 적용을 **확인한 뒤** 푸시하거나 ② 컬럼이 없어도 안 죽게 짠다.
+- 🔑 특히 **전원이 매일 쓰는 경로**(원스크린 로스터·시간표)엔 새 컬럼을 **넣지 말 것** — 사무실 화면 하나가
+  에러 나는 것과 급이 다르다(가드: `textbook-onescreen-hotpath.test.ts`).
+
+---
+
 ## #96 지원 안 하는 모델을 요청에 넣어도 **에러가 안 난다** — 조용히 폴백하고 주석만 거짓이 된다 (2026-08-06)
 
 원장 질문(*"assembly api도 상위모델이 나왔는지 체크해봐"*)에서 드러났다. [`assemblyai.ts`](src/lib/ai/assemblyai.ts)는
@@ -1673,6 +1688,7 @@ IJW 1교시(16:20) 칸에 가 있었다. 함께 제보된 두 번째 증상 — 
   Anthropic=400 + `credit balance` / DeepSeek=**402** `Insufficient Balance` / OpenAI 호환=429 `insufficient_quota`
   → **상태코드와 문구를 둘 다** 본다. 오탐의 대가는 "다음 provider 한 번 더 시도"뿐이라 넉넉히 잡는다.
 - 사다리를 **anthropic → deepseek → upstage(Solar)** 로 명시(`FALLBACK_LADDER`, 원장 2026-08-28).
+  → 지금 사다리 = **anthropic → deepseek**(Solar는 2026-10-19 뺐다) (2026-11-10 CLAUDE.md 색인에서 옮김)
 - 마지막 후보까지 막히면 `rethrowAi`가 **한글로** "AI 잔액 소진 … 크레딧을 충전해야 합니다"(429의 "잠시 후
   다시"와 섞으면 관리자가 기다리기만 한다).
 - 폴백 템플릿이 특이사항을 **원문 그대로**(줄 단위, `flatten` 금지 — 나열형이라 ", "로 이으면 뭉개진다) 싣고
@@ -2231,6 +2247,7 @@ iframe `load`에서 덮개를 걷었는데, `load`는 HTML 스트림 끝 + 이�
 "하드 이동 + 진행 중인 라우터 작업(서버 액션)"을 먼저 의심할 것. ⚠️ loading.tsx 아래에서 redirect하는 페이지는 아직 여럿 있다(`/exams`·
 `/attendance/seat`·`/dashboard/briefing`·`/lesson-reports?tab=video_homework` 등 10곳 + 각 페이지의 `requireAccess` 거부) — ①로 경합 원인은
 사라졌지만, 새 권한 게이트는 가능하면 loading 앞(레이아웃)에 둘 것. ⚠️ 재현은 **문서 로드**로 할 것(클라 이동은 meta가 없어 안 터진다).
+- "처음으로"는 권한을 본 홈 — 클라 컴포넌트는 `useShellHome`으로 읽는다(2026-11-10 CLAUDE.md 색인에서 옮김).
 
 ## #138 **DB 오류를 일반 문구로 삼키면 원인이 사라진다** — 화면엔 "저장에 실패했습니다", 로그엔 0줄 (2026-10-01)
 
@@ -2274,6 +2291,7 @@ iframe `load`에서 덮개를 걷었는데, `load`는 HTML 스트림 끝 + 이�
 - ⚠️ 번호가 뒤로 가도 되는지는 **같은 객체를 다시 정의하는 파일이 그 사이에 있는지**로 판단한다(있으면 "마지막 정의" 판정이 뒤집힌다).
 - 📌 **2026-10-22 일괄 개명**: 10-07~10-22 여러 세션이 Supabase CLI로 넣은 타임스탬프 이름 **48개**(`20261007171329_mcs_atomic_goal_reset.sql` ~ `20261022201000_student_contribution_functions.sql`)를 **`0396a`~`0443a`로 개명**했다(원장 *"얼마 안 걸리면 지금해"*). 타임스탬프 이름이 원래 모든 `NNNNa_` 뒤로 정렬됐으므로 **이름 순서 그대로 번호를 매겨 정렬 순서(= `pnpm db:alphas` 적용 순서)는 개명 전과 같다**. 저장소 안 참조(경로·숫자만 적은 표기 58파일)도 함께 바꿨다. 운영 DB는 alpha 파일 이름을 남기지 않아 다시 적용할 일이 없다 — 예외로 `supabase_migrations.schema_migrations`에 `20261011170545`(laboratory_menus → `0408a`) 한 줄이 남아 있는데, 이 저장소는 `supabase db push`를 쓰지 않으므로 무해하다. 가드(`session-consumption-wiring.test.ts`)는 다시 "규약 밖 파일 0개"로 엄격하다 — **새 파일도 `NNNNa_`**(CLI로 만들었으면 다음 빈 번호로 바꿔서 커밋). 이 개명 전에 갈라진 브랜치가 옛 이름 파일을 고치면 git이 대개 개명을 따라가지만, 그 브랜치가 **새로 만든 타임스탬프 파일**은 가드에 걸린다.
 - 📌 10-23에 또 2개(업체리스트)가 들어와 0448a·0449a로 개명(`20261022140000_inventory_vendors.sql` → `0448a_inventory_vendors.sql` · `20261023120000_inventory_vendors_private.sql` → `0449a_inventory_vendors_private.sql`).
+- 시즌1 합본의 범위 = 0000~0458a(568개) · 옛 `NNNNa_`·CLI 타임스탬프 이름(`20261027…_x.sql`)은 폴더 규칙 가드가 실패시킨다 — 바꿔서 커밋(2026-11-10 CLAUDE.md 색인에서 옮김).
 
 ## #140 `all: revert`는 **`hidden` 속성의 숨김까지 지운다** — 감춰 둔 요소가 화면에 나타난다 (2026-10-03)
 
@@ -2431,6 +2449,7 @@ ECS 월간 날짜 칸의 button 안에 미루기·당기기 button이 들어 있
 - 원인 ④(재리뷰): 대상 확인 조회가 실패해 `viewAsTeacher()`가 null이 되면 그 요청은 **A 본인**으로 처리된다(쿠키는 남아 있다) — '실패 = 막음'이 읽기 강사뷰에서는 '쓰기 열림'이 된다. 🔑 확인 못 한 요청은 읽기 전용(`isReadonlyTeacherView() = true`)으로 닫는다. 진입·매 요청·피커는 **한 함수**(`loadViewAsTarget`)와 같은 역할 조건을 써야 쿠키 위조가 통하지 않는다.
 - 가드: `view-as-wiring.test.ts`(명시 가드 목록) · `view-as-target-rank.test.ts`(위계 · 확인 실패 · 강사 역할 쿠키) · `readonly-view-erased-scope.test.ts`(실제 perm-matrix · view-as로 반 · 학생 상세) · `teacher-view-db.test.ts`(세션 먼저).
 - 2026-11-06 후속(연결 탐색 · 약속·인계 — main 병합 때 남긴 빈틈 · 원장 승인): 수업·강의실·검색·강사·원생 중심의 `=== "scoped"` 읽기 판정 → `isScopedRead`(explore/server/shared.ts) · 강사 중심 '본인'과 검색 라우트 신원 → teacherView · 원생 중심 흐름 분석은 원생상담 담당(읽기 강사뷰 포함)에게 닫음 · 약속·인계 `careAccess` 신원 → teacherView(배정 약속·담당자 본인·저장 명의 — 감사는 logAction이 실제 계정) · 저장은 `readonlyTeacherViewError` 먼저 · 🔑 **본인 확인(인수 확인)은 신원을 X로 바꾸면 대신 할 수 있게 된다** → `actor.proxy`로 강사뷰에서 막음(전자결재 서명과 같은 결) · `visibleCareStudents`도 지워진 범위를 본다. 가드 `explore/server/teacher-view-scope.test.ts` · `view-as-wiring.test.ts` 목록.
+- ⚠️ 연결 탐색·약속 폴더는 `teacher-view-scope.test.ts`가 자동으로 훑는다 — 다른 기능의 새 '담당만' 읽기는 그 시험의 폴더 목록에, 대상 명의 쓰기 액션은 `view-as-wiring.test.ts` 가드 목록에 한 줄 · 확인 못 한 강사뷰는 읽기 전용 · 본인 확인(결재·인수 확인)은 강사뷰에서 대신 안 함(2026-11-10 CLAUDE.md 색인에서 옮김).
 
 ## #155 PUBLIC 실행권을 거두면 **앱 밖 역할**이 막힌다 — 학원 비서 SQL(s2_0031)이 연동 PC의 ClassNote 발송을 1시간 40분 세웠다 (2026-11-06)
 - 증상: 원장 *"지금 클래스노트 발송이 워커에서 제대로 되고 있는지 체크"* — 17:37부터 연동 PC 신호(`classnote_workers.last_seen`)가 멈추고 발송 대기가 쌓였다(19:07 기준 38건 · 마지막 발송 16:15). 화면은 '워커 오프라인'뿐이라 PC 문제로 읽기 쉽다 — PC · 연동 앱(1.0.16)은 멀쩡했고 장치 임대도 갱신되고 있었다.
