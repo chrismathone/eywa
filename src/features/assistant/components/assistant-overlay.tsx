@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { Dialog } from "@base-ui/react/dialog";
 import { tipProps } from "@/components/hover-tip/tip";
 import { EyIcon } from "@/components/icons/aywa-icons";
@@ -10,6 +11,7 @@ import type { AssistantLevel } from "@/features/assistant/levels";
 import { ASSISTANT_MAX_RUNNING } from "@/features/assistant/protocol";
 import { monthDayLabel } from "@/lib/date-kst";
 import { isConversationRunningElsewhere, liveTurnOf, runningThreadKeys, type Conversation, type Turn } from "./assistant-state";
+import { AdviceList } from "./advice-list";
 import { AssistantComposer } from "./assistant-composer";
 import { AssistantThreadList } from "./assistant-thread-list";
 import { AssistantTurn } from "./assistant-turn";
@@ -84,6 +86,10 @@ export function AssistantOverlay({
   const [renaming, setRenaming] = useState<string | null>(null);
   /** 이름을 저장하는 중인 대화 — 그 대화의 편집 칸은 Esc로 닫지 않는다(결과·실패 이유를 기다린다 · 재리뷰 2026-11-09). 다른 대화의 편집 칸은 막지 않는다. */
   const renameSavingFor = useRef<string | null>(null);
+  /** 가운데에 '지난 의견'(대화를 넘나든 의견 모음 · 3단계 2026-11-10)을 보이는 중 — 대화는 감춰 둔 채 그대로(스크롤·입력 유지). */
+  const [showAdvice, setShowAdvice] = useState(false);
+  /** 이 판에서 지운 대화 — '지난 의견'이 다시 읽기를 기다리지 않고 그 대화의 의견을 바로 뺀다(다시 읽기가 실패해도 남지 않게 · 재리뷰 2026-11-10). */
+  const [deletedThreads, setDeletedThreads] = useState<ReadonlySet<string>>(() => new Set());
 
   /**
    * 서버가 자리 없음으로 받지 않은 질문의 안내 — 그 대화에서만, 목록을 다시 읽기 전까지만 보인다(받지 않으면 목록을 다시 읽는다 — 그 뒤엔
@@ -167,6 +173,7 @@ export function AssistantOverlay({
   };
 
   const startNew = () => {
+    setShowAdvice(false);
     assistant.newConversation();
     setConfirmDelete(null);
     setRenaming(null);
@@ -182,6 +189,7 @@ export function AssistantOverlay({
     setDeleting(false);
     setDeleteError(error);
     if (!error) {
+      setDeletedThreads((s) => new Set(s).add(threadId));
       setConfirmDelete(null);
       if (renaming === threadId) setRenaming(null);
       // 지운 행이 사라지며 초점이 body로 빠지지 않게 '새 질문'으로.
@@ -240,7 +248,8 @@ export function AssistantOverlay({
         <Dialog.Popup
           // 셸 크롬 층 — 이용 분석이 판 안의 입력을 바탕 화면의 활동으로 세지 않게(검색 팰릿과 같은 표식).
           data-usage-chrome=""
-          initialFocus={(type) => (type === "touch" ? false : inputRef.current)}
+          // '지난 의견'을 보이는 중이면 입력칸이 감춰져 있다 — 첫 초점은 판의 기본 자리로.
+          initialFocus={(type) => (type === "touch" ? false : showAdvice ? true : inputRef.current)}
           finalFocus={finalFocus}
           className={`bg-background text-foreground shadow-modal fixed inset-y-0 right-0 z-[80] flex w-full flex-col outline-none transition-[translate,width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] data-ending-style:translate-x-full data-starting-style:translate-x-full motion-reduce:transition-none ${expanded ? "" : "md:border-line md:w-[min(1120px,94vw)] md:border-l"}`}
         >
@@ -264,6 +273,12 @@ export function AssistantOverlay({
             </div>
             <Dialog.Description className="sr-only">학원 자료를 물어보면 표와 차트로 정리한 보고서로 답합니다.</Dialog.Description>
             <div className="ml-auto flex shrink-0 items-center gap-1">
+              {state.enabled === false ? null : (
+                <Button type="button" variant="ghost" aria-pressed={showAdvice} onClick={() => setShowAdvice(!showAdvice)}>
+                  <EyIcon name="listChecks" />
+                  지난 의견
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="ghost"
@@ -306,6 +321,7 @@ export function AssistantOverlay({
                 runningThreadIds={running}
                 today={today}
                 onSelect={(id) => {
+                  setShowAdvice(false);
                   setConfirmDelete(null);
                   setRenaming(null);
                   assistant.selectThread(id);
@@ -327,7 +343,29 @@ export function AssistantOverlay({
               />
             </aside>
 
-            <section aria-label="대화" className="flex min-w-0 flex-1 flex-col">
+            {showAdvice ? (
+              <section aria-label="지난 의견" className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
+                <div className="mx-auto w-full max-w-[80rem] px-4 pt-5 pb-12 sm:px-6">
+                  <AdviceList
+                    active={open}
+                    hiddenThreads={deletedThreads}
+                    onOpenThread={(id) => {
+                      // 누른 단추가 사라진다 — 대화를 먼저 보이게 확정하고 바로 입력칸에 초점(폰은 자판이 뜨지 않게 그대로 둔다).
+                      // 다음 프레임으로 미루면 판(Base UI)이 사라진 초점을 판 루트로 되돌리는 것과 순서를 다툰다(재리뷰 2026-11-10).
+                      flushSync(() => {
+                        setShowAdvice(false);
+                        setConfirmDelete(null);
+                        setRenaming(null);
+                      });
+                      if (!isPhone()) inputRef.current?.focus();
+                      assistant.selectThread(id);
+                      closeListOnPhone();
+                    }}
+                  />
+                </div>
+              </section>
+            ) : null}
+            <section aria-label="대화" className={`${showAdvice ? "hidden" : "flex"} min-w-0 flex-1 flex-col`}>
               <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
                 <div className="mx-auto flex min-h-full w-full max-w-[80rem] flex-col px-4 pt-5 pb-12 sm:px-6">
                   <ConversationBody

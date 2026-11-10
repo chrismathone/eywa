@@ -152,10 +152,23 @@ pnpm verify      # 기본 — 바뀐 파일과 그 영향만(보통 1분 안팎 
 전체 검사는 **공통 타입·공용 기반·빌드 설정을 바꿨을 때만**:
 
 ```bash
-pnpm verify --all-types   # 전체 tsc(힙 12GB — 기본 6GB `pnpm typecheck`는 지금 메모리 부족으로 죽을 수 있다)
+pnpm verify --all-types   # 전체 tsc(힙 12GB) · `pnpm typecheck`는 힙 8GB(2026-11-10 — 6GB는 메모리 부족으로 죽는다)
 pnpm test                 # vitest 전체
 pnpm build                # next build (Turbopack)
 ```
+**전체 tsc 메모리 실측(2026-11-10, 수정 계획 P0-2 · macOS `/usr/bin/time -l` 최대 RSS · 증분 캐시 없이):**
+
+| 조건 | 결과 | 최대 RSS | 시간 |
+|---|---|---|---|
+| 힙 12GB | 통과 | 6.8GB | 45초 |
+| 힙 8GB | 통과 | 7.5GB | 47초 |
+| 힙 6GB | **메모리 부족으로 죽음**(exit 134) | 6.6GB | 31초 |
+| 힙 12GB · 테스트 파일 제외 | 통과 | 7.9GB | 37초 |
+| 힙 12GB · 증분 캐시 있음 | 통과 | 3.7GB | 9초 |
+
+(각 1회 측정 — 최대 RSS는 GC 시점에 따라 1GB 안팎 흔들린다.)
+→ 테스트 파일을 따로 검사해도 최고 메모리는 줄지 않는다(분리 tsconfig는 이득 없음). CI 워크플로(`.github/workflows/ci.yml`)는 GitHub에서 꺼져 있다(disabled_manually, 2026-10-21~). 다시 켤 때 러너는 **메모리 8GB 이상 여유**(힙 8GB + 노드 오버헤드 — 실측 최대 7.5GB)가 필요하다 — 비공개 저장소 기본 Linux 러너(2코어·약 7GB, 켤 때 사양 확인)로는 모자라 16GB급이 필요하다. 증분 캐시(`tsconfig.tsbuildinfo`)를 캐시하면 크게 준다.
+
 
 Vercel은 push 후 자동 빌드.
 마지막 커밋·푸시 전 적대적 리뷰는 이 게이트와 별도 필수 — `CLAUDE.md` 작업 선호.
