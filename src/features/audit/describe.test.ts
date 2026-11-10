@@ -1549,8 +1549,13 @@ describe("auditDetail — 퇴사자 권한 정리(2026-11-09 · 리뷰 r1 F8)", 
   it("뺀 칸 · 남긴 칸 · 정리 실패를 한글로 — 칸 키·실패 코드는 안 보인다", () => {
     expect(auditDetail("staff_permission_cleanup", { reason: "retire", removed: ["payslipViewerIds", "userOverrides"], kept: ["withdrawalApproverIds"] }, ctx()))
       .toBe("퇴사 — 급여명세서 열람 · 개인별 메뉴 권한에서 뺌 / 퇴원보고서 승인자는 마지막 지정자라 남김");
+    // 실패 안내는 경우마다(리뷰 r2 N-a) — 퇴사 = 저장하면 정리 · 완전 삭제 = '(삭제된 직원)' 항목을 지움 · 다시 재직 = 직접 확인.
+    expect(auditDetail("staff_permission_cleanup", { reason: "retire", failed: "read" }, ctx()))
+      .toBe("퇴사 — 권한 정리를 하지 못함(역할·권한 면을 열어 확인한 뒤 한 번 저장하면 정리됩니다)");
     const failed = auditDetail("staff_permission_cleanup", { reason: "delete", failed: "conflict" }, ctx());
-    expect(failed).toBe("완전 삭제 — 권한 정리를 하지 못함(역할·권한 면을 열어 확인한 뒤 한 번 저장하면 정리됩니다)");
+    expect(failed).toBe("완전 삭제 — 권한 정리를 하지 못함(역할·권한 면에서 '(삭제된 직원)' 항목을 지워 주세요)");
     expect(failed).not.toContain("conflict");
+    expect(auditDetail("staff_permission_cleanup", { reason: "reactivate", failed: "write" }, ctx()))
+      .toBe("다시 재직으로 돌림 — 권한 정리를 하지 못함(역할·권한 면에서 이 직원의 개인별 권한을 확인해 지워 주세요)");
   });
 });

@@ -971,7 +971,16 @@ export function auditDetail(
       const removed = names(m.removed);
       const kept = names(m.kept);
       const why = m.reason === "reactivate" ? "다시 재직으로 돌림" : m.reason === "delete" ? "완전 삭제" : "퇴사";
-      if (m.failed) return `${why} — 권한 정리를 하지 못함(역할·권한 면을 열어 확인한 뒤 한 번 저장하면 정리됩니다)`;
+      // 실패 안내는 경우마다 다르다(리뷰 r2 N-a): 퇴사자는 면이 거른 값으로 열려 저장하면 빠지지만, 완전 삭제는 계정이 없어 거르지 않고
+      // ('(삭제된 직원)'으로 남는다) 다시 재직은 퇴사자가 아니라 걸러지지 않는다 — 둘은 손으로 지워야 한다.
+      if (m.failed) {
+        const fix = m.reason === "delete"
+          ? "역할·권한 면에서 '(삭제된 직원)' 항목을 지워 주세요"
+          : m.reason === "reactivate"
+            ? "역할·권한 면에서 이 직원의 개인별 권한을 확인해 지워 주세요"
+            : "역할·권한 면을 열어 확인한 뒤 한 번 저장하면 정리됩니다";
+        return `${why} — 권한 정리를 하지 못함(${fix})`;
+      }
       const parts = [removed.length ? `${removed.join(" · ")}에서 뺌` : null, kept.length ? `${kept.join(" · ")}는 마지막 지정자라 남김` : null].filter(Boolean);
       return parts.length ? `${why} — ${parts.join(" / ")}` : null;
     }
