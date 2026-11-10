@@ -31,6 +31,8 @@ export type CheckRowInput = {
   itemKey: string;
   doneOn: string | null;
   subject?: string | null;
+  memo?: string|null;
+  consultationId?: string|null;
 };
 
 /**
