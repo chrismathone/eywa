@@ -7,6 +7,7 @@ import type { SystemRole } from "@/lib/permissions";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { normalizePricingMode, type PricingMode } from "@/features/billing/tuition-catalog";
 import { logAction } from "@/features/audit/server/log";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 export type TuitionCatalogActionState = { error?: string; ok?: boolean } | undefined;
 
@@ -53,7 +54,7 @@ export async function createTuitionItem(
     pricing_mode: f.pricingMode,
     note: f.note,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.tuition-catalog-actions.createTuitionItem", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   // 🔴 단가(price)·비고(note)는 담지 않는다 — 감사로그의 일은 "누가 무엇을 바꿨나"다.
   await logAction({
@@ -85,7 +86,7 @@ export async function updateTuitionItem(
     .update({ category: f.category, name: f.name, price: f.price, pricing_mode: f.pricingMode, note: f.note })
     .eq("id", id)
     .select("id"); // 0행(이미 지워진 항목)이면 감사로그를 남기지 않는다.
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.tuition-catalog-actions.updateTuitionItem", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   if (updated?.length) {
     await logAction({
@@ -112,7 +113,7 @@ export async function deleteTuitionItem(
 
   const supabase = await createClient();
   const { data: removed, error } = await supabase.from("tuition_catalog").delete().eq("id", id).select("name");
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.tuition-catalog-actions.deleteTuitionItem", fallback: "삭제하지 못했습니다 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
 
   if (removed?.length) {
     await logAction({
@@ -154,7 +155,7 @@ export async function setTuitionPricingMode(
     .update({ pricing_mode: pricingMode })
     .eq("id", id)
     .select("name");
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.tuition-catalog-actions.setTuitionPricingMode", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   if (changed?.length) {
     await logAction({
@@ -186,7 +187,7 @@ export async function toggleTuitionActive(
     .update({ is_active: next })
     .eq("id", id)
     .select("name");
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.tuition-catalog-actions.toggleTuitionActive", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   if (toggled?.length) {
     await logAction({

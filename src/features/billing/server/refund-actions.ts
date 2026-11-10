@@ -28,6 +28,7 @@ import {
   getRefundStudentOptions,
   type RefundStudentOption,
 } from "./refund-queries";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 // 환불 요청서(웹 작성 폼) 변경 액션 — 게이트는 canWriteTenant("billing")(수납 쓰기 = master/admin/accountant).
 // 저장소는 academy_documents(kind='form', restricted=true) — 데이터베이스 탐색기에도 같은 행이 보인다.
@@ -117,7 +118,7 @@ export async function saveRefundRequest(
       .eq("id", id)
       .eq("form_type", REFUND_FORM_TYPE)
       .select("id"));
-    if (error) return { error: `저장 실패: ${error.message}` };
+    if (error) return { error: explainDbError(error, { scope: "billing.refund-actions.saveRefundRequest", fallback: "저장 실패 — 잠시 후 다시 시도해 주세요" }).message };
     if (!updated?.length) return { error: "저장되지 않았습니다 — 이 요청서를 고칠 권한이 없거나 이미 지워졌습니다." };
     await logAction({ action: "refund_request_update", ...refundAuditFields(id, data, prev) });
     // 퇴원보고서 데스크 환불 단계(원장 2026-11-03) — 환불완료일자를 처음 넣으면 이 요청서를 기다리던 퇴원보고서를 이어서 처리한다
@@ -144,7 +145,7 @@ export async function saveRefundRequest(
     })
     .select("id")
     .single());
-  if (error || !row) return { error: `저장 실패: ${error?.message ?? "unknown"}` };
+  if (error || !row) return { error: explainDbError(error, { scope: "billing.refund-actions.saveRefundRequest", fallback: "저장 실패 — 잠시 후 다시 시도해 주세요" }).message };
   await logAction({ action: "refund_request_create", ...refundAuditFields(row.id, data, null) });
   revalidateRefund(row.id);
   return { ok: true, id: row.id, nonce: Date.now(), redirectTo: `/billing/refunds/${row.id}` };
@@ -300,7 +301,7 @@ export async function deleteRefundRequest(id: string): Promise<{ ok?: boolean; e
     .eq("id", id)
     .eq("form_type", REFUND_FORM_TYPE)
     .select("id"));
-  if (error) return { error: `삭제 실패: ${error.message}` };
+  if (error) return { error: explainDbError(error, { scope: "billing.refund-actions.deleteRefundRequest", fallback: "삭제 실패 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
   // RLS에 막히면 PostgREST가 에러 없이 0행을 지운다 — 성공으로 보고하지 않는다(리뷰 r2 B1 — 안 지워진 요청서를 지운 것으로 알고 다시 승인하지 않게).
   if (!gone?.length) return { error: "지워지지 않았습니다 — 이 요청서를 지울 권한이 없거나 이미 지워졌습니다." };
 

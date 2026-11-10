@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import type { SystemRole } from "@/lib/permissions";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { logAction } from "@/features/audit/server/log";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 export type CatalogActionState = { error?: string; ok?: boolean } | undefined;
 
@@ -55,7 +56,7 @@ export async function createCatalogItem(
     publisher: f.publisher,
     price: f.price,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.catalog-actions.createCatalogItem", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   // 🔴 단가(price)는 담지 않는다 — 감사로그의 일은 "누가 무엇을 바꿨나"다.
   await logAction({
@@ -93,7 +94,7 @@ export async function updateCatalogItem(
     })
     .eq("id", id)
     .select("id"); // 0행(이미 지워진 항목)이면 감사로그를 남기지 않는다.
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.catalog-actions.updateCatalogItem", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   if (updated?.length) {
     await logAction({
@@ -120,7 +121,7 @@ export async function deleteCatalogItem(
 
   const supabase = await createClient();
   const { data: removed, error } = await supabase.from("textbook_catalog").delete().eq("id", id).select("title");
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.catalog-actions.deleteCatalogItem", fallback: "삭제하지 못했습니다 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
 
   if (removed?.length) {
     await logAction({
@@ -152,7 +153,7 @@ export async function toggleCatalogActive(
     .update({ is_active: next })
     .eq("id", id)
     .select("title");
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.catalog-actions.toggleCatalogActive", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   if (toggled?.length) {
     await logAction({

@@ -140,3 +140,19 @@ describe("describeDbError — 코드·제약 이름으로 판정", () => {
     for (const s of samples) expect(describeDbError(s, { fallback: FALLBACK }).message).not.toMatch(/[A-Za-z]{3,}/);
   });
 });
+
+describe("23514 트리거 한글 사유(P1-E 리뷰)", () => {
+  it("제약 이름 없는 23514의 한글 RAISE는 그대로 보인다", () => {
+    const info = describeDbError(
+      { code: "23514", message: "환불완료일자는 날짜(예: 2026-11-09)로 넣어 주세요." },
+      { fallback: "저장 실패" },
+    );
+    expect(info.message).toBe("환불완료일자는 날짜(예: 2026-11-09)로 넣어 주세요.");
+    expect(info.kind).toBe("invalid");
+  });
+  it("영문 원문 23514는 종전 일반 문구", () => {
+    const info = describeDbError({ code: "23514", message: "new row violates check constraint" }, { fallback: "x" });
+    expect(info.message).toContain("허용 범위");
+  });
+});
+

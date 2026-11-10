@@ -115,7 +115,8 @@ describe("지출결의서 — 강사뷰 신원 · 세션 먼저", () => {
     m.user.mockResolvedValue(A);
     m.canWrite.mockResolvedValue(true);
     m.sessionInsertError = { code: "42501", message: "rls" };
-    expect((await createExpense(undefined, expenseForm()))?.error).toBe("rls");
+    // 화면엔 원문이 아니라 한글(explainDbError — 42501 = 권한, P1-E). 원문은 로그에만.
+    expect((await createExpense(undefined, expenseForm()))?.error).toBe("이 작업을 할 권한이 없습니다 — 계정 권한을 확인해 주세요");
     expect(m.calls.filter((c) => c.op === "insert").map((c) => c.client)).toEqual(["session"]);
   });
 
