@@ -16,10 +16,10 @@ const RANK: Record<DutyState, number> = { late: 0, open: 1, done: 2, void: 3 };
 const kstDay = (iso: string) => new Date(Date.parse(iso) + 9 * 3_600_000).toISOString().slice(0, 10);
 const md = (ymd: string) => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}`;
 
+/** 상담 줄과 신규생 콜 줄은 **둘 다 원생상담 작성**(그 학생 선택)으로 — 어차피 상담이고, 신규생 콜은 그 화면에서 사람이 "어느 항목인지"를 확정한다(반자동 · 자동 매핑 없음, 결정 로그). */
 export function monthHref(it: Pick<DutyItemView, "kind" | "studentId" | "classId">): string {
-  if (it.kind === "counsel_monthly") return it.studentId ? `/consultations/new?studentId=${encodeURIComponent(it.studentId)}` : "/consultations/new";
   if (it.kind === "exam_monthly") return "/grades";
-  return "/newcomers";
+  return it.studentId ? `/consultations/new?studentId=${encodeURIComponent(it.studentId)}` : "/consultations/new";
 }
 
 export function buildMonthRows(items: readonly DutyItemView[], now: number): { counsel: MonthRow[]; exam: MonthRow[]; newcomer: MonthRow[] } {
@@ -32,7 +32,7 @@ export function buildMonthRows(items: readonly DutyItemView[], now: number): { c
     // 이름 옆엔 **항상 학교학년**(원장 2026-11-10 *"수학이란걸 표시해줄 필요는 없고 이름 옆에 항상 학교학년"*) — 과목은 내 과목이라 적지 않는다.
     const who = schoolGradeLabel(it.school, it.grade);
     if (it.kind === "counsel_monthly" || it.kind === "exam_monthly") return { ...base, group: it.className ?? "반 없음", title: it.studentName ?? "학생", sub: who };
-    return { ...base, group: it.subject ? `${subjectLabel(it.subject) || "과목"} 신규생` : "과목 미정 신규생", title: it.studentName ?? "학생", sub: `${who} · ${NEWCOMER_ITEM_LABEL[it.cycle] ?? it.cycle}` };
+    return { ...base, group: it.subject ? (subjectLabel(it.subject) || "과목") : "과목 미정", title: it.studentName ?? "학생", sub: `${who} · ${NEWCOMER_ITEM_LABEL[it.cycle] ?? it.cycle}` };
   });
   const sort = (a: MonthRow, b: MonthRow) => RANK[a.state] - RANK[b.state] || a.dueAt.localeCompare(b.dueAt) || a.title.localeCompare(b.title, "ko");
   return { counsel: rows.filter((r) => r.kind === "counsel_monthly").sort(sort), exam: rows.filter((r) => r.kind === "exam_monthly").sort(sort), newcomer: rows.filter((r) => r.kind === "newcomer_call").sort(sort) };
