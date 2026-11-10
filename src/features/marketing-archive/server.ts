@@ -5,13 +5,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { z } from "zod";
+import type { MenuKey } from "@/lib/permissions";
 import { ARCHIVE_TENANT, eventSchema, linkSchema, validateEvent, type EventRow, type SourceRow, type LinkRow } from "./model";
 
 export async function archiveGate(write = false) {
   const user = await getCurrentUser({ teacherView: true });
-  if (!user || user.tenantId !== ARCHIVE_TENANT || !["master", "admin"].includes(user.systemRole)) throw Error("행사 자료 접근 권한을 확인해 주세요");
+  if (!user || user.tenantId !== ARCHIVE_TENANT || (write && !["master", "admin"].includes(user.systemRole))) throw Error("행사 자료 접근 권한을 확인해 주세요");
   const check = write ? canWriteTenant : canAccessTenant;
-  const allowed = await Promise.all([check(user.systemRole, "dashboard"), check(user.systemRole, "billing")]);
+  const allowed = await Promise.all([check(user.systemRole, "marketing" as MenuKey), check(user.systemRole, "billing")]);
   if (allowed.some(a => !a)) throw Error("행사 자료 접근 권한을 확인해 주세요");
   return user;
 }
@@ -24,10 +25,10 @@ export async function loadArchive() {
     fetchAllPaged<{event_id:string;source_id:string}>((a,b) => db.from("marketing_archive_sources").select("event_id,source_id").eq("tenant_id",tenant).order("event_id").order("source_id").range(a,b)),
     fetchAllPaged<LinkRow>((a,b) => db.from("marketing_archive_students").select("id,version,event_id,student_id,document").eq("tenant_id",tenant).order("id").range(a,b)),
     db.from("users").select("id,display_name").eq("tenant_id",tenant).eq("status","active").order("display_name"),
-    canWriteTenant(user.systemRole,"dashboard"),
+    canWriteTenant(user.systemRole,"marketing" as MenuKey),
   ]);
   if (staff.error) throw Error("담당자 목록을 확인하지 못했습니다");
-  return { events: events.map(e=>({...e,document:eventSchema.parse(e.document)})), sources, edges, links, staff:staff.data??[], canWrite:canWrite && await canWriteTenant(user.systemRole,"billing"), today:kstToday() };
+  return { events: events.map(e=>({...e,document:eventSchema.parse(e.document)})), sources, edges, links, staff:staff.data??[], canWrite:canWrite && ["master","admin"].includes(user.systemRole) && await canWriteTenant(user.systemRole,"billing"), today:kstToday() };
 }
 export const requestSchema = z.discriminatedUnion("kind", [
   z.object({kind:z.literal("event"),id:z.uuid().nullable(),version:z.number().int().min(0),document:eventSchema}).strict(),

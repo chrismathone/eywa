@@ -215,7 +215,6 @@ export const HUB_GROUPS: HubGroup[] = [
     kind: "hub",
     note: "직원·차량·비품을 관리합니다.",
     items: keep([
-      face("dashboard", "/dashboard/marketing", "홍보·마케팅", "행사 기획·집행·성과·회고·연간 비교", { adminOnly: true, icon: "megaphone" }),
       fromMenu("staff", "명부·급여·연차·휴가"),
       fromMenu("shuttle", "노선 편성·등하원 기록"),
       fromMenu("inventory", "자산·대여·실사·소모품"),
@@ -237,8 +236,8 @@ export const HUB_GROUPS: HubGroup[] = [
     id: "marketing", label: "홍보·마케팅", icon: SAMPLE_GROUP_ICON.marketing, kind: "hub",
     note: "연간 홍보·행사 기록부터 채널 성과와 학생 유입까지 연결합니다.",
     items: keep([
-      face("dashboard", "/marketing", "연간 운영계획", "행사 기획·준비 일정·담당 업무·초대와 참석·회고", { icon: "send", menuKey: "marketing" }),
-      face("dashboard", "/billing/management/marketing", "홍보·마케팅", "연간 마케팅 지도·행사 기록·채널별 성과", { icon: MENU_ICON.marketing, menuKey: "marketing" }),
+      face("dashboard", "/marketing?view=annual", "3개년 비교·신년 기획", "과거 기록 비교·행사 기획·준비 업무", { icon: "send", menuKey: "marketing" }),
+      face("dashboard", "/marketing", "홍보·마케팅 통합 관리", "행사 히스토리·채널 집행·원생 연결·비용·회고", { icon: MENU_ICON.marketing, menuKey: "marketing" }),
     ]),
   },
   // 🔴 **회의록은 업무군에 넣지 않고 왼쪽 탭 한 줄로 세운다** (원장 2026-09-10:

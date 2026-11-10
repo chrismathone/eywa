@@ -15,8 +15,8 @@ const rootLinks=[
 function href(url:unknown){try{const u=new URL(String(url));return u.protocol==="https:"&&!u.username&&!u.password?u.href:null;}catch{return null;}}
 async function post(input:unknown){const r=await fetch("/api/marketing-archive",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(input)});const d=await r.json();if(!r.ok)throw Error(d.error??"저장하지 못했습니다");return d.record;}
 
-export function ArchiveWorkspace({data}:{data:ArchiveData}){
- const router=useRouter();const [tab,setTab]=useState("history"),[year,setYear]=useState("all"),[query,setQuery]=useState(""),[provider,setProvider]=useState(""),[page,setPage]=useState(0),[selected,setSelected]=useState<EventRow|null>(null),[creating,setCreating]=useState<EventDocument|null>(null),[source,setSource]=useState<SourceRow|null>(null),[message,setMessage]=useState(""),[busy,setBusy]=useState(false),[planYear,setPlanYear]=useState(Number(data.today.slice(0,4))+1);
+export function ArchiveWorkspace({data,initialView="history"}:{data:ArchiveData;initialView?:string}){
+ const router=useRouter();const [tab,setTab]=useState(["history","annual","sources","gaps"].includes(initialView)?initialView:"history"),[year,setYear]=useState("all"),[query,setQuery]=useState(""),[provider,setProvider]=useState(""),[page,setPage]=useState(0),[selected,setSelected]=useState<EventRow|null>(null),[creating,setCreating]=useState<EventDocument|null>(null),[source,setSource]=useState<SourceRow|null>(null),[message,setMessage]=useState(""),[busy,setBusy]=useState(false),[planYear,setPlanYear]=useState(Number(data.today.slice(0,4))+1);
  const counts=summary(data.events,data.links);
  const allYears=[...new Set(data.events.flatMap(e=>(e.document.date??e.document.period)?[(e.document.date??e.document.period)!.slice(0,4)]:[]))].sort().reverse();
  const events=useMemo(()=>data.events.filter(e=>(year==="all"||(e.document.date??e.document.period)?.startsWith(year))&&`${e.document.title} ${e.document.location} ${e.document.speakers}`.toLowerCase().includes(query.toLowerCase())).sort((a,b)=>(b.document.date??"").localeCompare(a.document.date??"")),[data.events,query,year]);
