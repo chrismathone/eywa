@@ -61,7 +61,8 @@ describe("보강 기록 수업 선택 배선", () => {
 
   it("🔴 합칠 후보가 있는 보강은 보던 반에 보강 칸을 따로 적지 않는다 — 한 번의 보강이 두 반에 잡혔다(2026-08-29·09-17 실측)", () => {
     const client = readOnescreenScreen();
-    const fn = client.slice(client.indexOf("async function resolveMakeupAsk("), client.indexOf("async function linkMakeupToAbsenceCell("));
+    // 확인 함수 본문 — use-makeup-resolve.ts(P3-O batch C)에서 그 훅의 반환 줄까지(예전엔 같은 파일의 다음 함수 앞까지).
+    const fn = client.slice(client.indexOf("async function resolveMakeupAsk("), client.indexOf("return { resolveMakeupAsk };"));
     const code = fn.replace(/\/\/.*$/gm, "");
     // 부르는 곳은 두 갈래뿐 — 목록에 없던 학생(isNew)·합칠 후보 없는 보강. 후보가 있는 갈래(분리·합침)엔 없어야 한다.
     const noCandidate = code.indexOf("if (!choice.candidate) {");
@@ -83,7 +84,8 @@ describe("보강 기록 수업 선택 배선", () => {
 
   it("🔴 확인하는 순간 합칠 후보를 다시 본다 — 창이 열린 사이 결석이 되면 옛 상태로 되써 출석으로 뒤집혔다", () => {
     const client = readOnescreenScreen();
-    const fn = client.slice(client.indexOf("async function resolveMakeupAsk("), client.indexOf("async function linkMakeupToAbsenceCell("));
+    // 확인 함수 본문 — use-makeup-resolve.ts(P3-O batch C)에서 그 훅의 반환 줄까지(예전엔 같은 파일의 다음 함수 앞까지).
+    const fn = client.slice(client.indexOf("async function resolveMakeupAsk("), client.indexOf("return { resolveMakeupAsk };"));
     const code = fn.replace(/\/\/.*$/gm, "");
     expect(code).toMatch(/planMakeupMerge\(card\.subjects, new Set\(\[was\.subjectKey\]\)\)/);
     const swap = "choice = { ...picked, candidate: fresh };";

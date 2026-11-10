@@ -124,7 +124,8 @@ describe("조퇴 칸 합침 배선 — 조퇴가 출석으로 되쓰이지 않�
     // 잠그는 것은 이름이 아니라 **쓰기 함수가 조퇴를 받는다**는 사실이다.
     expect(client).toMatch(/status: (?:BasicAttendance|AttendanceSelection) \| "early_leave"/);
     // 합침 쓰기는 시수만 보낸다 — note 키를 싣는 순간 조퇴 사유 메모가 지워진다.
-    const merge = client.slice(client.indexOf("function mergeMakeupIntoRegular("), client.indexOf("function pendingMakeupRows("));
+    // 합침 함수 본문 — use-makeup-apply.ts(P3-O batch C)에서 다음 함수(분리 행 만들기) 앞까지. pendingMakeupRows는 순수 모듈로 갔다.
+    const merge = client.slice(client.indexOf("function mergeMakeupIntoRegular("), client.indexOf("function addSeparateMakeupRows("));
     expect(merge).toContain("{ units: String(units) }");
     expect(merge).not.toMatch(/note:/);
   });

@@ -23,10 +23,13 @@ const code = (src: string) =>
 
 describe("원스크린 보강 추가는 항상 묻는다", () => {
   const client = readOnescreenScreen();
-  const fn = client.slice(
-    client.indexOf("async function addMakeupStudent"),
-    client.indexOf("async function loadAbsences"),
-  );
+  // P3-O batch C: 예전 창(보강 추가 → 결석 조회 앞)은 한 파일에서 수업 후보 판정·수업 바꾸기 본문까지 덮었다 — 나뉜 세 조각을 이어 같은 범위를 본다.
+  const hostStart = client.indexOf("export function hostChoicesOfAsk(");
+  const fn = [
+    client.slice(client.indexOf("async function addMakeupStudent"), client.indexOf("async function loadAbsences")),
+    client.slice(hostStart, client.indexOf("\n}\n", hostStart)),
+    client.slice(client.indexOf("async function pickMakeupClass"), client.indexOf("async function removeMakeupRow")),
+  ].join("\n");
 
   it("세 갈래(목록에 없음 · 합칠 후보 있음 · 후보 없음)가 전부 확인창으로 간다", () => {
     expect(fn).toContain("setMakeupAsk(");
