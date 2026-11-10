@@ -12,6 +12,19 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-11-11 조직·OKR · 업무 작성센터 · 관찰 기록 · 스키마 스튜디오 · 직원 완전 삭제 (s2_0065~s2_0068 · s2_0080~s2_0082 · ✅ 운영 적용 2026-11-11 — 앱보다 먼저 · 직결(node · 한 거래) · 시험 거래(ROLLBACK) 뒤 · 사후 확인 통과)
+
+aywa-next(태그 `archive/aywa-next-375d27d`)의 실제 기능을 옮기며 만든 SQL — 전부 **새 표·새 함수만**(기존 표는 고치지 않는다). 🔴 번호는 병렬 작업에 예약해 둔 값(0065~0069 · 0080~0084)이라 main의 다음 빈 번호와 떨어져 있다 — 병합 때 번호를 맞추면 코드 주석·문서·가드(`delete-blockers.test.ts`가 파일 경로를 읽는다)의 번호도 함께 바꿀 것. 결정 = [`docs/decisions/staff.md`](../../docs/decisions/staff.md) 끝.
+
+- `s2_0065_work_records.sql` — `academy_work_records` · `academy_work_record_events` · `save_academy_work_record`(작성자 본인·검토 규칙·버전·같은 요청 재시도). aywa-next 대비: 확인 완료 문서는 작성자가 못 고침 · 본인 문서 본인 확인 금지 · 한도 64,000바이트.
+- `s2_0066_academy_knowledge_records.sql` — `academy_knowledge_records`(쌓기만 · 수정·삭제는 트리거가 거절).
+- `s2_0067_organization_okr.sql` — `organization_okr` · `organization_okr_revisions` · `save_organization_okr`.
+- `s2_0068_academy_model_studio.sql` — `academy_model_versions`(쌓기만). aywa-next 대비: 쓰는 사람을 DB가 원장 역할로 묶지 않는다(앱 게이트 = '경영 분석·지식그래프' 전체).
+- `s2_0080_staff_delete_blockers.sql` — `staff_delete_blockers(p_user)`: 직원 행·로그인 계정을 가리켜 삭제를 막는 FK(NO ACTION · RESTRICT · NOT NULL 칸의 SET NULL)를 **카탈로그에서 전부** 찾아 센다 + 관찰 기록 문서 속 담당자. 읽기만.
+- `s2_0081_knowledge_review_rules.sql` — s2_0066의 트리거 함수 다시 정의(본인 관찰 자기 확인 금지 · 검토자는 상태·검토 의견만 · 검토 의견은 검토자만) + `academy_knowledge_latest(p_tenant, p_author, p_student)`(기록마다 최신 버전).
+- `s2_0082_delete_staff_account.sql` — `delete_staff_account(p_tenant, p_user)`: 직원 완전 삭제를 한 거래로(로그인 계정 → 직원 행 잠금 → s2_0080 검사 → 직원 행 → 로그인 계정). 🔴 `auth.users` 행을 이 함수가 직접 지운다(Auth 서버 API를 따로 부르지 않는다 — 두 번에 나누면 로그인만 사라지거나 미러 트리거가 직원 행을 되살린다).
+- 표 6개 = 정책 0개(서버 전용 · admin + `tenant_id` 필터) · 함수는 service_role만 실행. 시험 거래: 저장 함수·트리거 규칙, 그리고 데모 지점에서 삭제 다섯 갈래(차단 · 삭제 · 다른 지점 · 로그인 계정 없는 직원 · 보호 계정)와 신규생 기본 담당 3줄이 차단으로 잡히는 것을 확인. 되돌리기 = `scripts/_oneoff/revert-s2_0065-…` ~ `revert-s2_0068-…` · `revert-s2_0080-…` ~ `revert-s2_0082-…`(앱을 먼저 되돌린 뒤 · 0082 → 0081 → 0080 순).
+
 ## 2026-11-11 운영 로그 정리 — 반 필터 함수 · 녹음 원본 경로 (s2_0045 · s2_0046 · ✅ 운영 적용 2026-11-11 — 앱보다 먼저 · 직결(node · 파일 그대로 한 거래) · 사후 확인: PostgREST가 함수를 알아봄 · anon 거절 42501 · audio_path NULL 허용)
 
 - `s2_0045_restore_lesson_report_class_options.sql` — 수업보고서 목록 '반' 필터 함수. 시즌1 0147a에 정의만 있고 운영에 적용된 적이 없어 PGRST202(반 드롭다운이 비어 있었다). 본문 그대로 + 실행권 명시(PUBLIC·anon 회수 · authenticated·service_role). 시험 거래: 강사 계정으로 반 85개.
