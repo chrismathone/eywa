@@ -16,7 +16,7 @@ import { isSearchActive } from "../student-search";
 import { HeaderSearchSlot } from "@/components/header-search-slot";
 
 /**
- * **클라 상태 검색의 토글** — 평소엔 '검색' 글자 하나, 누르면 위 입력칸(+걸린 필터 표기)이 펼쳐진다.
+ * **클라 상태 검색의 토글** — 기본은 입력칸(+걸린 필터 표기)이 펼쳐진 채(2026-11-10), '닫기'로 접으면 '검색' 글자 하나.
  *
  * 지시서 §10 "검색은 필요할 때만 나타나게(단축키 또는 토글)". 공용 [`SearchToggle`](@/components/search-toggle)은 URL(`?q=`)
  * 검색용이라, 서버 왕복 0의 클라 필터(시간표·월별 출석부·오늘 출결·좌석표)는 이 토글을 쓴다. 규약은 같다:
@@ -43,7 +43,8 @@ export function StudentSearchToggle({
   ariaLabel?: string;
 }) {
   const lang = useSheetLang();
-  const [opened, setOpened] = useState(false);
+  // 기본값 = 펼침(원장 2026-11-10 — 공용 SearchToggle과 같다). '닫기'로 접으면 그 화면에 있는 동안만 '검색' 글자.
+  const [opened, setOpened] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
   const active = isSearchActive(value);
   const open = opened || active;

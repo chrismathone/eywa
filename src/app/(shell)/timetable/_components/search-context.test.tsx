@@ -113,14 +113,14 @@ const type = (v: string) => {
   fireEvent.change(screen.getByLabelText("학생 검색"), { target: { value: v } });
 };
 
-describe("검색 토글(§10) — 평소엔 '검색' 글자 하나, 검색어가 걸려 있으면 언제나 펼친 채", () => {
-  it("접힘 → 검색 → 입력칸 · 빈 채로는 닫기 · 검색어가 있으면 닫기 대신 결과 칩", () => {
+describe("검색 토글(§10) — 기본은 펼침, 검색어가 걸려 있으면 언제나 펼친 채", () => {
+  it("펼침 → 닫기 → '검색' → 입력칸 · 검색어가 있으면 닫기 대신 결과 칩", () => {
     render(<Board />);
-    expect(screen.queryByLabelText("학생 검색")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "검색" }));
     expect(screen.getByLabelText("학생 검색")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "닫기" }));
     expect(screen.queryByLabelText("학생 검색")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "검색" }));
+    expect(screen.getByLabelText("학생 검색")).toBeTruthy();
     type("김하늘");
     expect(screen.queryByRole("button", { name: "닫기" })).toBeNull();
     expect(screen.getByText(/2\/3/)).toBeTruthy(); // 걸린 반 2/전체 3
