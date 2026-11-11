@@ -1,4 +1,6 @@
 /* 업무 흐름 — 대시보드 전환 화면 안에서만(.aywa-instruments). 표는 '확인할 일'과 같은 모양(.check-card). */
+/* 강사 홈의 업무 창은 셸 머리글(미니셸 z-60 · '내 업무' 창 z-70과 같은 층) 위에 — 겉 껍데기 하나가 층을 잡는다(work-panel.tsx · 운영실은 종전 층). */
+.aywa-instruments.work-layer { position: relative; z-index: 70; }
 .aywa-instruments .work-card .card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
 .aywa-instruments .work-counts { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; flex: 1 1 auto; justify-content: flex-end; }
 .aywa-instruments .work-counts div { display: flex; align-items: baseline; gap: 5px; }

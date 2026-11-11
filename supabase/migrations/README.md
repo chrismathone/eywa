@@ -18,6 +18,8 @@
 
 ## 2026-11-10 의무 장부: 할 일 본문에 업무 종류 (s2_0046 · ✅ 운영 적용 2026-11-10 · 직결 · 시험 거래 뒤)
 
+`s2_0067_duty_withdrawal_write_turns.sql` — ✅ 운영 적용(2026-11-11 · 롤백 시험 뒤 직결). 업무 완성도의 '퇴원보고서 작성' 참고 열: 작성 차례 기록 표 `withdrawal_write_turns`(서버 전용 · 정책 0개) + `staff_tasks` 트리거(작성 차례 할 일이 열리면 새 줄 · 닫히면 마지막 줄을 닫는다 — 보완 요청으로 다시 열려도 앞 차례가 남는다) + 집계 `duty_withdrawal_write_rollup` · 목록 `duty_withdrawal_write_items`(service_role만). 기존 27건은 첫 차례로 그대로 옮겼다(다시 열린 적 0건). 되돌리기 `scripts/_oneoff/revert-s2_0067-duty-withdrawal-write-turns.sql`(모인 기록은 지우지 않는다). ⚠️ main에도 s2_0067이 생길 수 있다 — 병합 때 업무 완성도 SQL 묶음과 함께 번호를 다시 매긴다.
+
 `s2_0066_duty_wording_unify.sql` — ✅ 운영 적용(2026-11-11). 할 일 제목의 낱말을 화면과 같게: `kind_label`('출결 입력' → '출결' · '수업보고서 작성' → '보고서 작성') · `duty_escalate` · `duty_escalate_up`의 제목('기한 초과' · '미이행' → '미처리' · '미처리 확정'). 본문은 운영 DB의 정의 그대로이고 작은따옴표 안의 글자 5줄만 다르다(실행권 · 동작 그대로 · 늦음 할 일 스위치가 꺼져 있어 열린 할 일 0건).
 
 `s2_0065_duty_judged_when_due.sql` — ✅ 운영 적용(2026-11-11). `rollup_rows`의 두 표식(`f_due` · `f_ontime`)을 '때가 된 업무' 기준으로 — 일간 = 수업 끝 · 월간/건별 = 기한. 집계의 `due` = 등급 · %의 분모, `ontime` = 분자(기한 전의 월간 · 건별은 `total − due`로 남아 진행만 보인다).

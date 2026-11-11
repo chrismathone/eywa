@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, readonlyViewErasedScope } from "@/lib/auth/perm-matrix";
+import { isReadonlyTeacherView, viewAsTeacher } from "@/lib/auth/view-as";
 import { REPORT_RATING_VISIBLE } from "@/features/report-admin/report-rating";
 import { loadViewerBundle } from "@/features/dashboard/layout/viewer-server";
 import { sliceGroupsOf } from "@/features/dashboard/layout/slices";
@@ -11,6 +12,7 @@ import { subjectLabelRecord } from "@/features/owner/subjects";
 import { programSubjectsOf, subjectGroupOf } from "@/features/students/enrollment/program";
 import type { DutyPeriod, DutyStatus } from "../kinds";
 import { loadReportRatingRows } from "./ratings";
+import { loadWithdrawalWriteRows } from "./withdrawal-write";
 import { isNativeName, tenantNativeIds } from "./native";
 import { loadLatestNotes } from "./notes";
 import type { AbsentRow, ClassInfo, Counts, DutyAdminData, DutyAdminScope, LateItem, OwnerInfo, OwnerLoadRow, RollupClass, RollupOwnerKind, RollupStudent, StudentInfo } from "../view-admin";
@@ -20,12 +22,14 @@ import type { AbsentRow, ClassInfo, Counts, DutyAdminData, DutyAdminScope, LateI
  * 과목 범위 = 운영실과 같은 판정(`loadViewerBundle` — 원장·총괄 = 전체 · 과목 관리자 = 담당 과목 묶음). 담당 과목을 못 읽으면 넓히지 않고 빈 범위.
  */
 export async function resolveDutyAdminScope(viewer: CurrentUser): Promise<DutyAdminScope> {
-  const [bundle, settings, level, erased, effective] = await Promise.all([loadViewerBundle(viewer), getTenantSettings(), accessLevelTenant(viewer.systemRole, "duties"), readonlyViewErasedScope("duties"), getCurrentUser({ teacherView: true })]);
+  const [bundle, settings, level, erased, effective, unverified] = await Promise.all([loadViewerBundle(viewer), getTenantSettings(), accessLevelTenant(viewer.systemRole, "duties"), readonlyViewErasedScope("duties"), getCurrentUser({ teacherView: true }),
+    Promise.all([isReadonlyTeacherView(), viewAsTeacher()]).then(([ro, as]) => ro && !as)]);
   const labels = subjectLabelRecord(settings.operations.subjects);
   // '담당'(scoped) 권한 = 본인 의무만 — 역할 표에서 선생님·매니저에게 '담당'으로 열면 자기 줄만 본다(전체는 학원 전체).
   // 🔴 읽기 강사뷰는 scoped를 readonly로 캡해 '담당'이 사라진다 — `readonlyViewErasedScope`가 캡 이전 값이 scoped였는지 알려 준다(perm-matrix 규약 · 재리뷰 2026-11-10).
   //    담당자는 강사뷰면 그 강사(#154).
-  const ownerId = level === "scoped" || erased ? (effective ?? viewer).id : null;
+  // 강사뷰 대상을 확인하지 못한 요청(읽기 전용인데 대상이 없다)은 권한이 '읽기'로 낮춰져 '담당'이 사라져 보인다 — 본인 것만으로 좁힌다(재리뷰 2026-11-11).
+  const ownerId = level === "scoped" || erased || unverified ? (effective ?? viewer).id : null;
   const canNote = level === "full" && !ownerId;
   // 평점은 수업보고서 쓰기 권한자에게만(평점 열람과 같은 문) — 본인 줄만 보는 사람에게는 내려보내지 않는다.
   //   🔴 '담당' 권한은 안 된다 — 수업보고서 목록에서 담당 권한자는 자기 보고서의 평점만 보는데(RLS), 여기서는 모든 선생님의 평균 · 등수가 나간다(리뷰 2026-11-11).
@@ -63,7 +67,7 @@ export async function loadDutyAdmin(tenantId: string, from: string, to: string, 
   const settings = await loadDutySettings(tenantId);
   // 볼 수 있는 첫 날(s2_0061) 전은 세지 않는다 — 에이와에 기록을 적기 전의 달은 수치가 실제 업무를 말하지 않는다(원장 2026-11-11).
   const args = { p_tenant: tenantId, p_from: settings.viewFrom && from < settings.viewFrom ? settings.viewFrom : from, p_to: to, p_subjects: scope.subjects, p_periods: periods, p_owner: scope.ownerId };
-  const [ok, cls, lateRaw, ownerLoad, ratings] = await Promise.all([
+  const [ok, cls, lateRaw, ownerLoad, ratings, withdrawal] = await Promise.all([
     fetchAllPaged<CountRow & { owner_id: string | null; subject: string | null; kind: string; period: DutyPeriod }>((a, b) =>
       admin.rpc("duty_rollup_owner_kind", args).order("owner_id").order("subject").order("kind").order("period").range(a, b)),
     fetchAllPaged<CountRow & { class_id: string | null; owner_id: string | null; subject: string | null }>((a, b) =>
@@ -75,6 +79,8 @@ export async function loadDutyAdmin(tenantId: string, from: string, to: string, 
       return ((data ?? []) as { owner_id: string | null; subject: string | null; classes: number; students: number }[]).map((r) => ({ ownerId: r.owner_id, subject: r.subject, classes: num(r.classes), students: num(r.students) }));
     }),
     scope.seeRatings ? loadReportRatingRows(tenantId, args.p_from, to, scope.subjects) : Promise.resolve(undefined),
+    // 퇴원보고서 작성(참고 열) — 달 보기에서만(하루 · 한 주 표는 일간 업무만 다룬다).
+    periods === null ? loadWithdrawalWriteRows(tenantId, args.p_from, to, scope) : Promise.resolve(undefined),
   ]);
   const liveMs = settings.liveFrom ? Date.parse(settings.liveFrom) : null;
   const notes = await loadLatestNotes(tenantId, lateRaw.map((it) => it.id));
@@ -88,7 +94,7 @@ export async function loadDutyAdmin(tenantId: string, from: string, to: string, 
   const native = new Set(Object.entries(owners.names).filter(([, name]) => isNativeName(name)).map(([id]) => id));
   // 담당 없는 업무('담당 미정')도 세우지 않는다(원장 2026-11-11 *"담당 미정 … 노출되지 않도록 숨길것 (원어민처럼)"*) — 장부에는 남는다.
   const kept = <T extends { ownerId: string | null }>(rows: T[]): T[] => rows.filter((r) => !!r.ownerId && !native.has(r.ownerId));
-  return { ownerKind: kept(ownerKind), classes: kept(classes), late: kept(late), owners: owners.names, classInfo, syncedAt: settings.syncedAt, liveFrom: settings.liveFrom, viewFrom: settings.viewFrom, ratings: ratings ? kept(ratings) : undefined, ownerLoad: kept(ownerLoad), managerIds: owners.managerIds };
+  return { ownerKind: kept(ownerKind), classes: kept(classes), late: kept(late), owners: owners.names, classInfo, syncedAt: settings.syncedAt, liveFrom: settings.liveFrom, viewFrom: settings.viewFrom, ratings: ratings ? kept(ratings) : undefined, withdrawal: withdrawal ? kept(withdrawal) : undefined, ownerLoad: kept(ownerLoad), managerIds: owners.managerIds };
 }
 
 type LateRow = { id: string; kind: string; period: DutyPeriod; cycle: string; status: DutyStatus; due_at: string; done_at: string | null; void_reason: string | null; owner_id: string | null;

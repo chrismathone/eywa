@@ -1,5 +1,5 @@
 import { schoolGradeLabel } from "@/lib/format/school-grade";
-import { add, cellOf, EMPTY, exactPct, MATRIX_COLUMNS, MIN_JUDGE, upcomingOf, type AttentionRow, type Cell, type ClassInfo, type OwnerInfo, type RollupClass, type RollupOwnerKind, type RollupStudent, type StudentInfo, dutyTier, tierTone, type DutyTier, type OwnerLoadRow, addRating, MIN_RATED, type Rating, type RatingRow, leftOf, earlyDoneOf, pendingOf, missPctOf, missedOf } from "./view-admin";
+import { add, cellOf, EMPTY, exactPct, MATRIX_COLUMNS, MIN_JUDGE, upcomingOf, type AttentionRow, type Cell, type ClassInfo, type OwnerInfo, type RollupClass, type RollupOwnerKind, type RollupStudent, type StudentInfo, dutyTier, tierTone, type DutyTier, type OwnerLoadRow, addRating, MIN_RATED, type Rating, type RatingRow, type WithdrawalRow, leftOf, earlyDoneOf, pendingOf, missPctOf, missedOf } from "./view-admin";
 
 /**
  * 단계별 보기(과목 → 선생님 → 반 → 학생)의 순수 조립 — 원장 2026-11-10 *"과목별 - 선생님별 - 반별 - 학생별로 디테일 될 수 있게 … 이 선생님이 뭘 안했는지,
@@ -52,7 +52,8 @@ export function judge(cell: Cell, avg: Avg | null = null): Verdict {
 export type TreeClass = { classId: string; name: string; cell: Cell };
 /** 이름 옆에 늘 적는 것(원장 2026-11-10) — 과목 · 담당 반 수 · 담당 학생 수. manager = 관리자 역할(맡은 반이 없으면 목록·등수에서 뺀다). */
 export type OwnerLoad = { subjects: string[]; classes: number; students: number; manager: boolean };
-export type TreeOwner = { ownerId: string; name: string; cell: Cell; cells: Record<string, Cell>; classes: TreeClass[]; load?: OwnerLoad; /** 수업보고서 평점(볼 수 있는 사람에게만). */ rating?: Rating };
+export type TreeOwner = { ownerId: string; name: string; cell: Cell; cells: Record<string, Cell>; classes: TreeClass[]; load?: OwnerLoad; /** 수업보고서 평점(볼 수 있는 사람에게만). */ rating?: Rating;
+  /** 퇴원보고서 작성(참고) — 이 과목 몫 · `withdrawalAll` = 이 선생님 전체(전체 단계에서 쓴다 — 과목 몫을 더하지 않는다). */ withdrawal?: Cell; withdrawalAll?: Cell };
 /** "수학 · 반 5 · 학생 27" — 모르는 값은 뺀다. */
 export const ownerMeta = (o: Pick<TreeOwner, "load">): string => (o.load ? [o.load.subjects.join("·"), o.load.classes ? `반 ${o.load.classes}` : "", o.load.students ? `학생 ${o.load.students}` : ""].filter(Boolean).join(" · ") : "");
 /**
@@ -75,7 +76,7 @@ export const NO_OWNER = "";
 const classNameOf = (id: string | null, classes: ClassInfo) => (id && id !== NO_CLASS ? classes[id]?.name ?? "반 이름 없음" : NO_CLASS_LABEL);
 
 /** 왼쪽 트리 = 과목 → 선생님 → 반. 과목 없는 집계는 '과목 미정' · 학원 설정에 없는 과목 키는 '기타 과목'(같은 이름 줄이 둘 서지 않게). */
-export function buildTree(ok: readonly RollupOwnerKind[], cls: readonly RollupClass[], owners: OwnerInfo, classes: ClassInfo, labels: Record<string, string>, extra: { load?: readonly OwnerLoadRow[]; managerIds?: readonly string[]; ratings?: readonly RatingRow[] } = {}): TreeSubject[] {
+export function buildTree(ok: readonly RollupOwnerKind[], cls: readonly RollupClass[], owners: OwnerInfo, classes: ClassInfo, labels: Record<string, string>, extra: { load?: readonly OwnerLoadRow[]; managerIds?: readonly string[]; ratings?: readonly RatingRow[]; withdrawal?: readonly WithdrawalRow[] } = {}): TreeSubject[] {
   const subjects = new Map<string, TreeSubject>();
   const subjectOf = (key: string | null): TreeSubject => {
     const k = key ?? "";
@@ -107,7 +108,9 @@ export function buildTree(ok: readonly RollupOwnerKind[], cls: readonly RollupCl
     return { subjects: s.subject ? [s.label] : [], classes: row ? row.classes : o.classes.filter((c) => c.classId !== NO_CLASS).length, students: row?.students ?? 0, manager: managers.has(o.ownerId) };
   };
   const ratingOf = (s: TreeSubject, o: TreeOwner): Rating | undefined => { const r = extra.ratings?.find((x) => x.ownerId === o.ownerId && x.subject === s.subject); return r && r.rated ? { rated: r.rated, avg: r.avg } : undefined; };
-  return [...subjects.values()].map((s) => ({ ...s, owners: s.owners.map((o) => ({ ...o, load: loadOf(s, o), rating: ratingOf(s, o), classes: o.classes.sort(byBad) })).sort(byBad) }))
+  // 퇴원보고서 작성(참고) — 업무가 있는 선생님 줄에만 붙인다(트리의 줄 · 숫자는 그대로).
+  const wOf = (ownerId: string, subject: string | null): Cell | undefined => { const r = extra.withdrawal?.find((x) => x.ownerId === ownerId && x.subject === subject); return r && r.total ? cellOf(r) : undefined; };
+  return [...subjects.values()].map((s) => ({ ...s, owners: s.owners.map((o) => ({ ...o, load: loadOf(s, o), rating: ratingOf(s, o), withdrawal: s.subject ? wOf(o.ownerId, s.subject) : undefined, withdrawalAll: wOf(o.ownerId, null), classes: o.classes.sort(byBad) })).sort(byBad) }))
     .sort((a, b) => (a.subject === null ? 1 : 0) - (b.subject === null ? 1 : 0) || a.label.localeCompare(b.label, "ko"));
 }
 
@@ -119,7 +122,8 @@ export function rootOfTree(tree: readonly TreeSubject[]): TreeSubject {
     for (const k of Object.keys(s.cells)) root.cells[k] = cellOf(add(root.cells[k] ?? EMPTY, s.cells[k]!));
     for (const o of s.owners) {
       let r = root.owners.find((x) => x.ownerId === o.ownerId);
-      if (!r) { r = { ...o, cells: { ...o.cells }, classes: o.classes.map((c) => ({ ...c })), load: o.load ? { ...o.load, subjects: [...o.load.subjects] } : undefined }; root.owners.push(r); continue; }
+      // 전체 단계의 퇴원보고서 = 그 선생님 전체 줄(과목 몫을 더하면 두 과목 보고서가 두 번 든다).
+      if (!r) { r = { ...o, withdrawal: o.withdrawalAll, cells: { ...o.cells }, classes: o.classes.map((c) => ({ ...c })), load: o.load ? { ...o.load, subjects: [...o.load.subjects] } : undefined }; root.owners.push(r); continue; }
       // 전체에서는 과목별 수를 더한다(같은 학생을 두 과목에서 맡으면 두 번 든다 — 드문 경우라 따로 풀지 않는다).
       if (r.load && o.load) r.load = { subjects: [...new Set([...r.load.subjects, ...o.load.subjects])], classes: r.load.classes + o.load.classes, students: r.load.students + o.load.students, manager: r.load.manager };
       r.rating = addRating(r.rating, o.rating);

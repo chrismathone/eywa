@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { explainDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 import { getStaffTaskViewer, type StaffTaskViewer } from "@/features/staff-tasks/server/gate";
-import { readonlyTeacherViewError } from "@/lib/auth/view-as";
+import { readonlyTeacherViewError, viewAsTeacher } from "@/lib/auth/view-as";
 import { WORK_CATEGORIES, WORK_OUTCOMES, effectiveStudents, type WorkAction, type WorkDraft, type WorkOutcome, type WorkStatus } from "../model";
 import { BODY_LIMIT, looksLikeHtml, richBodyText, trimRichBody } from "../rich-body";
 import { canCreateWork } from "./board";
@@ -41,6 +41,8 @@ async function gate(): Promise<{ ok: true; viewer: StaffTaskViewer } | { ok: fal
   // 사람이 '다른 강사 뷰'의 대상 강사일 수 있다(gate.ts) — '읽기' 강사뷰는 그 강사 명의로 쓰지 않는다.
   const readonly = await readonlyTeacherViewError();
   if (readonly) return { ok: false, error: readonly };
+  // '다른 강사 뷰'는 권한이 '전체'여도 그 강사 대신 확인 · 보고하지 않는다 — 사건 기록에 그 강사 이름으로 남는다(#154 '본인 확인은 강사뷰에서 대신 안 함' · 전자결재와 같다).
+  if (await viewAsTeacher()) return { ok: false, error: "강사뷰에서는 업무 요청을 처리할 수 없습니다. 강사뷰를 끝내고 본인 화면에서 처리해 주세요." };
   return { ok: true, viewer };
 }
 

@@ -189,3 +189,22 @@ describe("mixPercents — 판정 줄의 %", () => {
     expect(mixPercents(judge(b).mix!).missed).toBe(barTextOf(b)!.missPct);
   });
 });
+
+describe("퇴원보고서 작성(참고 열 · s2_0067)", () => {
+  it("🔴 과목 단계 = 그 과목 몫 · 전체 단계 = 선생님 전체 줄(두 과목 보고서를 두 번 세지 않는다) · 선생님 줄 '전체' 칸 · 등급에는 안 든다", () => {
+    const rows = [ok({ ownerId: "t2", subject: "math" }), ok({ ownerId: "t2", subject: "english" })];
+    const w = [
+      { ownerId: "t2", subject: "math", ...c(1, 1, 1, 1) }, { ownerId: "t2", subject: "english", ...c(1, 1, 1, 1) }, // 두 과목 보고서 한 건
+      { ownerId: "t2", subject: null, ...c(1, 1, 1, 1) },
+      { ownerId: "t9", subject: null, ...c(2, 0, 2, 0, 2) }, // 업무가 없는 사람 — 줄을 새로 세우지 않는다
+    ];
+    const tree = buildTree(rows, [], OWNERS, CLASSES, { math: "수학", english: "영어" }, { withdrawal: w });
+    const math = tree.find((s) => s.subject === "math")!.owners[0]!;
+    expect(math.withdrawal?.total).toBe(1);
+    expect(math.cell.total).toBe(10); // 업무 칸은 그대로
+    const root = rootOfTree(tree);
+    expect(root.owners.find((o) => o.ownerId === "t2")!.withdrawal?.total).toBe(1);
+    expect(root.owners.some((o) => o.ownerId === "t9")).toBe(false);
+    expect(root.cell.total).toBe(20);
+  });
+});

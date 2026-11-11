@@ -9,6 +9,7 @@ import { attentionItems, buildTree, foldAttention, ownerMeta, NO_CLASS, NO_OWNER
 import type { DutyWork } from "../duty-work-context";
 import { AdminAttention } from "./admin-attention";
 import { ClassPane, StudentPane, SubjectLevel } from "./admin-panes";
+import { WithdrawalItemsDialog, type WithdrawalPick } from "./admin-withdrawal-items";
 import { NoteButton } from "./admin-note";
 import { useDutyPing } from "../use-duty-ping";
 import { DutyRequestScope, LateRequestButton } from "./admin-late-request";
@@ -49,6 +50,7 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null, on
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [work, setWork] = useState<{ seq: number; work: DutyWork } | null>(null);
   const [tick, setTick] = useState(0);
+  const [wpick, setWpick] = useState<WithdrawalPick | null>(null);
   // 지금 기간을 바로 다시 받기(저장 순간의 신호 · 관리 기록 저장 뒤). 받는 중이면 끝난 뒤 한 번 더.
   const reload = useRef<() => void>(() => undefined);
   const first = useRef(true);
@@ -94,7 +96,7 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null, on
   // 볼 수 있는 첫 날 — 한 번 받은 값을 계속 쓴다(불러오는 동안에도 앞쪽 이동을 막는다).
   const viewFrom = cur?.data.viewFrom ?? Object.values(loaded).find((l) => l?.data.viewFrom)?.data.viewFrom ?? null;
   const nowMs = cur ? Date.parse(cur.now) : 0;
-  const tree = cur ? buildTree(cur.data.ownerKind, cur.data.classes, cur.data.owners, cur.data.classInfo, scope.labels, { load: cur.data.ownerLoad, managerIds: cur.data.managerIds, ratings: cur.data.ratings }) : [];
+  const tree = cur ? buildTree(cur.data.ownerKind, cur.data.classes, cur.data.owners, cur.data.classInfo, scope.labels, { load: cur.data.ownerLoad, managerIds: cur.data.managerIds, ratings: cur.data.ratings, withdrawal: cur.data.withdrawal }) : [];
   const multi = tree.length > 1;
   // 고른 자리 바로잡기 — 과목이 하나면 늘 그 과목 · 트리에 없는 과목은 전체 · 없는 선생님·반은 위 단계로. 학생은 단계와 무관하게 연다(지연 목록에서 바로 들어온다).
   const subject0: Sel["subject"] = !multi ? (tree[0]?.subject ?? null) : rawSel.subject !== undefined && !tree.some((s) => s.subject === rawSel.subject) ? undefined : rawSel.subject;
@@ -196,11 +198,12 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null, on
           : classNode && ownerNode ? <ClassPane key={`${classNode.classId}|${ownerNode.ownerId}|${fetchSubject ?? ""}`} period={period} tick={tick} classNode={classNode} owner={ownerNode.ownerId} fetchSubject={fetchSubject} teacher={ownerNode.name} kind={sel.kind ?? null}
               aside={lateSection} onStudent={pickStudent} onWork={openWork} />
           : ownerNode ? <TeacherLevel aside={lateSection} owner={ownerNode} avg={subjectAvg} period={period} subject={fetchSubject} tick={tick} kind={sel.kind ?? null} onClearKind={() => go({ ...sel, kind: null })} onClass={(classId) => go({ ...sel, classId, studentId: null })} />
-          : <SubjectLevel node={subjectNode} subjects={atRoot ? tree : null} lateOnly={lateOnly} grade={unit !== "day"} board={<>{atRoot && managers ? <AdminOwnerBoard tree={tree} late={cur.data.late} managers={managers} labels={scope.labels} nowMs={nowMs} onSubject={(subject) => go({ subject, owner: null, classId: null, studentId: null })} /> : null}{unit !== "day" && atRoot ? <AdminRanking tree={tree} onOwner={(subject, owner, kind) => go({ subject, owner, kind, classId: null, studentId: null })} /> : null}</>} side={unit === "day" ? <AdminToday owners={subjectNode.owners} onOwner={(owner, kind) => go({ ...sel, owner, kind, classId: null, studentId: null })} /> : null} avgLabel={atRoot ? "전체" : "과목"} attention={lateSection} onOwner={(ownerId, kind, subject) => go({ ...sel, ...(subject !== undefined ? { subject } : {}), owner: ownerId, kind, classId: null, studentId: null })} />}
+          : <SubjectLevel node={subjectNode} subjects={atRoot ? tree : null} lateOnly={lateOnly} grade={unit !== "day"} board={<>{atRoot && managers ? <AdminOwnerBoard tree={tree} late={cur.data.late} managers={managers} labels={scope.labels} nowMs={nowMs} onSubject={(subject) => go({ subject, owner: null, classId: null, studentId: null })} /> : null}{unit !== "day" && atRoot ? <AdminRanking tree={tree} onOwner={(subject, owner, kind) => go({ subject, owner, kind, classId: null, studentId: null })} /> : null}</>} side={unit === "day" ? <AdminToday owners={subjectNode.owners} onOwner={(owner, kind) => go({ ...sel, owner, kind, classId: null, studentId: null })} /> : null} avgLabel={atRoot ? "전체" : "과목"} attention={lateSection} onWithdrawal={setWpick} onOwner={(ownerId, kind, subject) => go({ ...sel, ...(subject !== undefined ? { subject } : {}), owner: ownerId, kind, classId: null, studentId: null })} />}
 
       </main>
     </div> : null}
 
     {work ? <AdminOverlay key={work.seq} work={work.work} onClose={() => setWork(null)} /> : null}
+    {wpick ? <WithdrawalItemsDialog pick={wpick} period={period} tick={tick} onClose={() => setWpick(null)} onWork={openWork} /> : null}
   </div></OntimeOnlyProvider></DutyRequestScope>;
 }
