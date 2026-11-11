@@ -7,6 +7,7 @@ const m=vi.hoisted(()=>({assign:vi.fn(),report:vi.fn(),review:vi.fn(),check:vi.f
 vi.mock("next/navigation",()=>({useRouter:()=>({refresh:m.refresh})}));
 vi.mock("./server/followup-actions",()=>({assignNewcomerManager:m.assign,submitNewcomerFeedback:m.report,reviewNewcomerFeedback:m.review}));
 vi.mock("./server/actions",()=>({setOnboardingCheck:m.check}));
+vi.mock("./server/manager-defaults-actions",()=>({saveNewcomerDefaultManager:vi.fn()}));
 vi.mock("@/features/owner/operations-context",()=>({useSubjectMaps:()=>({labelOf:(s:string)=>s==="math"?"수학":"영어"})}));
 vi.mock("@/components/embed-link",()=>({EmbedLink:({children,...props}:React.AnchorHTMLAttributes<HTMLAnchorElement>)=><a {...props}>{children}</a>}));
 beforeEach(()=>{Object.values(m).forEach(f=>f.mockReset());m.assign.mockResolvedValue({ok:true});m.report.mockResolvedValue({ok:true});m.review.mockResolvedValue({ok:true});});

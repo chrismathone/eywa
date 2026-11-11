@@ -22,6 +22,7 @@ import { isConnectedAppMenu, isRoleOnlyMenu, MENU_KEYS, MENU_LABEL, type MenuKey
 import { SETTINGS_ROLE_HREF, SETTINGS_ROLE_KEYS, type SettingsRoleKey } from "@/lib/settings-role-catalog";
 import { teacherNavigationSource } from "@/lib/teacher-navigation";
 import { isMenuHiddenByLayout, type MenuGroupLayout, type MenuLayout } from "./menu-layout";
+import { ROW_NOTE } from "./permission-row-notes";
 
 /** 권한 표가 읽는 메뉴 구성 — 학원 설정 '탭 및 메뉴 구성'의 저장 값(관리자뷰 · 강사뷰). */
 export type PermissionNavigation = {
@@ -41,7 +42,7 @@ export type PermissionRow = {
   hiddenInMenu: boolean;
   /** 메뉴 버튼 없이 다른 화면 **안에서** 쓰는 권한 — 그 화면의 줄 바로 아래에 들여 세운다. */
   inner: boolean;
-  /** 다른 역할에 열기 전에 알아야 할 것 — 줄 아래 작은 글(`ROW_NOTE`). 없으면 비운다. */
+  /** 다른 역할에 열기 전에 알아야 할 것 — 줄 아래 작은 글([`ROW_NOTE`](./permission-row-notes.ts)). 없으면 비운다. */
   note?: string;
 };
 
@@ -67,20 +68,6 @@ export const CONNECTED_APP_GROUP = { id: "connected-apps", label: "연결 앱" }
  */
 export const SIDEBAR_TOOL_KEYS = ["assistant"] as const satisfies readonly MenuKey[];
 export const SIDEBAR_TOOL_GROUP_PREFIX = "sidebar-tool:";
-
-/**
- * 다른 역할에 열 때 알아야 할 위험·까닭 — 권한 표의 그 줄 아래 작은 글. 화면 문구라 내부 역할 이름은 쓰지 않는다(AGENTS.md).
- * 시안 화면은 예시 값만 보여 준다는 것을 적는다 — 열어도 실제 자료가 나가지 않는다.
- */
-const SAMPLE_NOTE = "시안 화면 — 예시 값만 보여 주고 실제 자료를 읽거나 저장하지 않습니다";
-export const ROW_NOTE: Partial<Record<MenuKey, string>> = {
-  assistant: "지점 자료 전부(급여·계약·연락처·계좌 포함)를 조회해 답합니다 — 다른 역할에 열면 그 사람도 모두 묻고 볼 수 있습니다. 전체·없음만 쓰고, 강사 화면에는 비서가 없어 강사 칸은 고정입니다.",
-  management: SAMPLE_NOTE,
-  okr: SAMPLE_NOTE,
-  marketing: SAMPLE_NOTE,
-  work_records: SAMPLE_NOTE,
-  shuttle_admin: "학부모 관리 현황 · 탑승 학생 시간표 · 가까운 노선 찾기 · 실시간 위치 — 셔틀 권한이 있어야 열립니다. 학부모 계정(로그인 이메일·연락처)을 다루는 화면이라 원장·관리자 칸만 바꿀 수 있습니다. 관리자 칸을 닫아도 학부모 계정 자료 읽기는 관리자 역할 기준으로 남습니다.",
-};
 
 /**
  * 메뉴 버튼이 없는 권한이 속한 화면 — **다른 화면 안의 버튼·드롭다운으로만 닿는 것**만 손으로 적는다. 설정 권한은 그 설정의

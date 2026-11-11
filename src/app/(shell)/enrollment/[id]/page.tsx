@@ -9,7 +9,8 @@ import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { PrintWindowButton } from "@/components/workspace/print-window";
 import { requireAccess } from "@/lib/auth/require-access";
-import { canAccessTenant, canWriteTenant, readonlyViewErasedScope } from "@/lib/auth/perm-matrix";
+import { canWriteTenant, readonlyViewErasedScope } from "@/lib/auth/perm-matrix";
+import { readsAllNewcomers } from "@/features/newcomers/server/scope";
 import { BackLink } from "@/components/back-link";
 import { JourneyPanel, JourneyPanelSkeleton } from "@/features/enrollment/journey/panel";
 import { formatCreatedAt } from "@/lib/utils";
@@ -101,8 +102,8 @@ export default async function EnrollmentDetailPage({
     canWriteTenant(user.systemRole, "textbook_requests"),
     // 소개한 사람(0362a) — 기본 조회와 따로·실패해도 되게(#95).
     createClient().then((db) => loadConsultationReferrer(db as unknown as SupabaseClient, id)),
-    // 상담 약속·인계(2026-11-05 AX 이식) 입구 — 약속 전체를 보는 신규생 관리 권한.
-    canAccessTenant(user.systemRole, "newcomers"),
+    // 상담 약속·인계(2026-11-05 AX 이식) 입구 — 약속 전체를 보는 신규생 관리 권한('전체' · '읽기' — 담당 범위 계정에게는 세우지 않는다 · 판정 한 곳 = scope.ts).
+    readsAllNewcomers(),
   ]);
   if (!consult) {
     // 🔴 병합으로 사라진 상담이면 **404 대신 남은 쪽으로 보낸다**(원장 2026-09-01 제보) — 병합

@@ -17,6 +17,7 @@ import type { ReactElement, ReactNode } from "react";
 import { cleanup, render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { NAV_GROUPS, navItemByKey, teacherMenuKeysFor } from "@/lib/navigation";
+import { teacherNavigationFor } from "@/lib/teacher-navigation";
 import {
   canAccess,
   menuKeyForPath,
@@ -26,6 +27,7 @@ import {
   type SystemRole,
 } from "@/lib/permissions";
 import { TeacherMenu } from "./teacher-menu";
+import { TEACHER_MENU_LINKS } from "@/lib/teacher-menu-links";
 import { capMakeupMode } from "@/features/makeups/config";
 
 // 드롭다운은 평평하게 — base-ui 팝업은 열려야 그려지는데, 여기서 보려는 건 '무엇이 서는가'뿐이다.
@@ -148,6 +150,94 @@ describe("강사 '내 메뉴' — 누르면 튕기는 항목이 없다", () => {
   it("보강 운영이 꺼져 있으면 기존 강사 메뉴 순서를 유지한다", () => {
     expect(menuHrefs("teacher", capMakeupMode(DEFAULTS, "off")))
       .toEqual(menuHrefs("teacher", DEFAULTS).filter(href => href !== "/makeups"));
+  });
+});
+
+/**
+ * 신규생 관리 · 업무 작성센터 · 조직·OKR 입구(2026-11-11 — Claude·Codex 합의안 · 원장 위임).
+ * 세 메뉴의 코드 기본값은 강사 '없음' 그대로다 — 입구(항목 표)만 미리 두고, 원장이 역할·권한에서 연 학원에서만 선다.
+ * 침산이 배포 뒤 저장할 값 = 신규생 관리 × 강사 '담당' · 조직·OKR·업무 작성센터 × 관리자·매니저 '전체'(강사에게는 아직 안 연다).
+ */
+describe("신규생 관리 · 업무 작성센터 · 조직·OKR 입구 — 권한이 없으면 서지 않는다(2026-11-11)", () => {
+  const NEW = ["/newcomers", "/work-records", "/organization/okr"] as const;
+  const NEW_KEYS = ["newcomers", "work_records", "okr"] as const;
+  const CHINSAN = resolveMatrix([
+    { menu: "newcomers", role: "teacher", access: "scoped" },
+    ...(["okr", "work_records"] as const).flatMap((menu) => (["admin", "manager"] as const).map((role) => ({ menu, role, access: "full" as const }))),
+  ]);
+
+  it("🔴 코드 기본값은 그대로 강사 '없음' — 어느 역할로 강사뷰를 봐도 세 줄은 서지 않는다", () => {
+    for (const menu of NEW_KEYS) expect(DEFAULTS[menu].teacher, menu).toBe("none");
+    for (const role of [...FULL_SHELL, "teacher" as const]) {
+      const hrefs = menuHrefs(role, DEFAULTS);
+      for (const h of NEW) expect(hrefs, `${role} · ${h}`).not.toContain(h);
+    }
+  });
+
+  it("침산이 저장할 값 — 강사에겐 신규생 관리만 서고(상담 다음 자리), 조직·OKR·업무 작성센터는 강사뷰에 서지 않는다", () => {
+    const teacher = menuHrefs("teacher", CHINSAN);
+    expect(teacher).toContain("/newcomers");
+    expect(teacher.indexOf("/newcomers")).toBe(teacher.indexOf("/consultations") + 1);
+    expect(teacher).not.toContain("/work-records");
+    expect(teacher).not.toContain("/organization/okr");
+    // 겸직(관리자 + 담당 반)의 강사뷰 — 신규생 관리는 강사 행 ∧ 실제 역할이 열려 서고, 두 화면은 강사 행이 닫혀 안 선다(관리자뷰에서 연다).
+    for (const role of ["admin", "manager"] as const) {
+      const hrefs = menuHrefs(role, CHINSAN);
+      expect(hrefs, role).toContain("/newcomers");
+      expect(hrefs, role).not.toContain("/work-records");
+      expect(hrefs, role).not.toContain("/organization/okr");
+    }
+    // 세운 항목은 실제로 열린다(강사 홈으로 튕기지 않는다).
+    for (const role of ["teacher", "admin", "manager"] as const) expect(menuHrefs(role, CHINSAN).filter((h) => !opens(role, CHINSAN, h)), role).toEqual([]);
+  });
+
+  /**
+   * 세 줄이 **자기 권한 키로** 열리는가 — 위 `opens()`는 경로 → 권한 표(`menuKeyForPath`)로 키를 찾는데 `/work-records` · `/organization`은
+   * 그 표에 없어 늘 '열린다'로 지나간다(적대 리뷰 2026-11-11). 줄에 적힌 키(`TEACHER_MENU_LINKS[].menu` — 아래 시험이 페이지 문의 키와 맞춘다)로 직접 본다.
+   */
+  const opensByOwnKey = (role: (typeof FULL_SHELL)[number] | "teacher", matrix: ReturnType<typeof resolveMatrix>, href: string) => {
+    const link = TEACHER_MENU_LINKS.find((l) => l.href === href);
+    return !!link && canAccess(role, link.menu, matrix);
+  };
+
+  it("원장이 강사에게 두 화면을 열면('담당') 그때 선다 — 전자결재 다음 · 직원 평가 앞", () => {
+    const m = resolveMatrix((["okr", "work_records"] as const).map((menu) => ({ menu, role: "teacher" as const, access: "scoped" as const })));
+    const hrefs = menuHrefs("teacher", m);
+    expect(hrefs).toContain("/work-records");
+    expect(hrefs.indexOf("/organization/okr")).toBe(hrefs.indexOf("/work-records") + 1);
+    // 🔴 선 줄은 그 사람의 실제 역할로 열린다 · 서지 않은 줄은 안 열리는 줄이다(어느 역할로 강사뷰를 봐도 — 겸직 포함).
+    const both = resolveMatrix((["okr", "work_records", "newcomers"] as const).flatMap((menu) => (["teacher", "admin"] as const).map((role) => ({ menu, role, access: "scoped" as const }))));
+    for (const matrix of [m, both, CHINSAN, DEFAULTS]) {
+      for (const role of [...FULL_SHELL, "teacher" as const]) {
+        const shown = menuHrefs(role, matrix);
+        for (const h of NEW) {
+          if (shown.includes(h)) expect(opensByOwnKey(role, matrix, h), `${role} · ${h} 섰는데 안 열림`).toBe(true);
+          // 강사 행이 열렸는데도 서지 않았다면 그 사람의 실제 역할이 못 여는 줄이다(거짓 항목을 세우지 않는다).
+          else if (opensByOwnKey("teacher", matrix, h)) expect(opensByOwnKey(role, matrix, h), `${role} · ${h} 열리는데 안 섬`).toBe(false);
+        }
+      }
+    }
+    // 강사 행만 열고 관리자 행은 닫힌 학원 — 겸직 관리자에겐 안 선다(눌러도 페이지 문이 실제 역할로 막는다).
+    expect(menuHrefs("admin", m)).not.toContain("/work-records");
+    expect(menuHrefs("admin", m)).not.toContain("/organization/okr");
+  });
+
+  it("세 줄의 권한 키는 강사 메뉴 키 목록에 있고, 페이지 문과 같은 키다", () => {
+    const read = (...p: string[]) => readFileSync(join(process.cwd(), "src", "app", "(shell)", ...p), "utf8");
+    for (const menu of NEW_KEYS) expect(TEACHER_MENU_KEYS as readonly string[], menu).toContain(menu);
+    expect(read("newcomers", "page.tsx")).toContain('requireAccess("newcomers")');
+    expect(read("work-records", "page.tsx")).toContain('requireAccess("work_records")');
+    expect(read("organization", "okr", "page.tsx")).toContain("requireOkrViewer()");
+    expect(readFileSync(join(process.cwd(), "src", "features", "organization-okr", "access.ts"), "utf8")).toContain('requireAccess("okr")');
+  });
+
+  it("영어 화면에는 세우지 않는다 — 세 화면 모두 문구가 한국어뿐이다", () => {
+    const menus = teacherMenuKeysFor("teacher", resolveMatrix(NEW_KEYS.map((menu) => ({ menu, role: "teacher" as const, access: "scoped" as const }))));
+    const hrefsIn = (lang: "ko" | "en") => teacherNavigationFor({ menus, lang }).groups.flatMap((g) => g.items.map((d) => d.href));
+    for (const h of NEW) {
+      expect(hrefsIn("ko"), h).toContain(h);
+      expect(hrefsIn("en"), h).not.toContain(h);
+    }
   });
 });
 

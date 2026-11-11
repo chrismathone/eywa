@@ -74,7 +74,8 @@ export const TABLES_EXTRA: readonly AssistantTableDoc[] = [
     name: "student_onboarding_manager_defaults",
     label: "신규생 기본담당",
     ko: "신규생 관리 콜의 과목별 기본 관리 담당자(과목마다 한 명)",
-    notes: "subject = 과목 키 · manager_id = 기본 담당 직원(users.id). 학생·과목마다 따로 정한 것은 student_onboarding_subject_assignments(직접 지정이 이긴다).",
+    notes:
+      "subject = 과목 키 · manager_id = 기본 담당 직원(users.id) · updated_by · updated_at = 마지막으로 바꾼 직원·시각(바꾼 이력은 audit_logs의 action = 'newcomer_default_manager_update' — metadata에 과목 키 · 그때의 과목 이름 · 이전·새 담당자). 학생·과목마다 따로 정한 것은 student_onboarding_subject_assignments(직접 지정이 이긴다). 학생에게 적용되는 줄은 그 학생이 다니는 반의 과목(classes.subject)과 같은 키의 줄뿐이다 — 'eie' 줄과 지금 과목 목록에 없는 키의 줄은 어느 학생에게도 적용되지 않는다(EiE 반 학생은 english 줄).",
   },
   {
     name: "student_onboarding_subject_assignments",
