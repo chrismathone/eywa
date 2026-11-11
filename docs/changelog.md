@@ -1,5 +1,9 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-11 — 퇴원관리 '강사별 퇴원율 추이' 표 | 차트 전환(원장 *"차트로 전환도 가능하게 표/차트"*)
+
+- 카드 도구줄 끝 '표 | 차트'(계정 귀속 `ui_prefs.withdrawals.churn_view` · 기본 표는 저장 안 함). 차트 = 강사마다 작은 선 차트 격자(`teacher-churn-chart.tsx`) — 과목·기간·퇴사자 숨김·정렬은 표와 같은 줄 · 모든 칸 같은 세로 눈금 · 마감한 달만 점 · 담당 10명 미만은 속 빈 점 · 재직 밖 바탕 = 표 칸 색. 순수 `teacher-churn-view.ts`(Vitest) · 표·차트 공용 마우스 오버 카드 `teacher-churn-tip.ts`(재입사 전 옛 퇴사일로 표 칸을 '퇴사 뒤'로 칠하던 것도 같은 판정으로 바로잡힘). 결정 = [`decisions/students.md`](decisions/students.md) 2026-11-11.
+
 ## 2026-11-11 — 퇴원관리 '강사별 퇴원율 추이' = 따로 권한 줄(원장 *"퇴원표를 역할 따로 빼서 볼 수 있게. 추가 권한으로 해볼것"*)
 
 - 새 권한 키 `withdrawals_churn`('강사별 퇴원율') — 역할·권한 표 퇴원관리 줄 아래(└) · 전체·없음만 · 기본 원장 '전체' · 나머지 '없음'. 퇴원관리 권한 위에 덧붙는 조건(`getTeacherChurnGate` — 페이지·조회가 같은 함수). 종전 문(`getPortfolioGate` = 원장 역할만)을 갈아 끼웠다 · 이름 옆 ↗(직원 포트폴리오)는 그 화면을 열 수 있는 사람에게만. 아이콘 `trendingDown`(선화 · 스티커 없음). SQL 없음. 결정 = [`decisions/students.md`](decisions/students.md) · [`decisions/staff.md`](decisions/staff.md) 2026-11-11.

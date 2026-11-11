@@ -93,6 +93,9 @@ const APPROVED_INLINE_SVG = [
   "src/features/timetable-memo/ui/border-picker.tsx",
   "src/features/timetable-memo/ui/grid-base.tsx",
   "src/features/timetable-memo/ui/grid-overlay.tsx",
+  // 2026-11-11 퇴원관리 강사별 퇴원율 **차트 보기**(강사마다 작은 선 · aria-hidden, 점·눈금·값은 HTML · 칸은 role="group"+aria-label · 고른 달은 글로) —
+  // 차트이지 아이콘이 아니다(trend-chart와 같은 성격).
+  "src/app/(shell)/withdrawals/_components/teacher-churn-chart.tsx",
 ] as const;
 
 // 이 파일의 검사 3개가 각각 src/ 전체를 훑는다 — 디렉터리 워크는 파일 목록이 같으므로 한 번만 한다

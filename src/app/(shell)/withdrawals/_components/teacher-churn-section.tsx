@@ -1,6 +1,7 @@
 import { reportWarning } from "@/lib/observability/report-error";
 import { loadTeacherChurn } from "@/features/withdrawals/server/teacher-churn";
 import type { ChurnSort } from "@/features/withdrawals/teacher-churn";
+import type { ChurnView } from "@/features/withdrawals/teacher-churn-view";
 import { TeacherChurnCard } from "./teacher-churn-card";
 
 const CARD = "bg-card shadow-card rounded-2xl p-5";
@@ -9,7 +10,7 @@ const CARD = "bg-card shadow-card rounded-2xl p-5";
  * '강사별 퇴원율 추이' 자리(서버) — 페이지가 문(`getTeacherChurnGate`)을 확인한 뒤 Suspense 안에서만 부른다(첫 페인트를 막지 않게).
  * 조회 함수도 같은 문을 다시 지난다(#77 — 화면 조건은 게이트가 아니다). 실패는 빈 표로 위장하지 않고 그렇다고 말한다.
  */
-export async function TeacherChurnSection({ initialSort }: { initialSort: ChurnSort }) {
+export async function TeacherChurnSection({ initialSort, initialView }: { initialSort: ChurnSort; initialView: ChurnView }) {
   let data: Awaited<ReturnType<typeof loadTeacherChurn>>;
   try {
     data = await loadTeacherChurn();
@@ -19,7 +20,7 @@ export async function TeacherChurnSection({ initialSort }: { initialSort: ChurnS
   }
   if (!data) return null;
   if (!data.teachers.length) return <Notice text="아직 강사평가 집계가 없습니다. 직원 평가 → 직원 포트폴리오에서 집계되면 여기에 달마다 나옵니다." />;
-  return <TeacherChurnCard data={data} initialSort={initialSort} />;
+  return <TeacherChurnCard data={data} initialSort={initialSort} initialView={initialView} />;
 }
 
 function Notice({ text }: { text: string }) {

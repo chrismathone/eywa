@@ -944,7 +944,7 @@ export default async function WithdrawalsPage({
       {/* 강사별 퇴원율 추이 — 위 필터와 따로 세는 강사평가 값(카드 머리에 기준을 적는다). 권한 '강사별 퇴원율'이 열린 사람만. */}
       {churnGate ? (
         <Suspense fallback={<TeacherChurnSkeleton />}>
-          <TeacherChurnSection initialSort={trendPrefs.churnSort} />
+          <TeacherChurnSection initialSort={trendPrefs.churnSort} initialView={trendPrefs.churnView} />
         </Suspense>
       ) : null}
 
