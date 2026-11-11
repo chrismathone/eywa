@@ -1,6 +1,6 @@
 import { entities, type Entity } from "./catalog";
 import { degrees, relationLabel } from "./kg-net-rules";
-import { categoryTree, kgCategorized, type KgCategoryAt, type KgCategoryCtx } from "./kg-net-groups";
+import { categoryTree, kgCategorized, studentStatusBuckets, type KgCategoryAt, type KgCategoryCtx } from "./kg-net-groups";
 import type { Graph, Node } from "./graph";
 import { nodeHealth } from "./studio-model";
 import { recordYmd, timeTree } from "@/features/explore/components/network/time-tree";
@@ -22,7 +22,7 @@ import type { ExploreTone } from "@/features/explore/model";
  *    날짜를 지어내지 않는다. 날짜 있는 기록은 영역 아래 연도 → 월 → (같은 날 여럿이면) 일자 묶음(`timeTree`), 없는 기록은 영역 둘레.
  *  · 선 = 판 뼈대(가운데 → 영역 → 묶음 → 기록) + 판에 선 두 기록 사이의 **실제 관계**(같은 두 기록이면 한 선 · 이름은 관계 이름을 모아서).
  *    데이터에 없는 관계는 긋지 않는다.
- * 점 id = 지식그래프 점 id 그대로(가운데도) — 더블클릭한 기록 점이 그대로 새 가운데가 되어 보간이 이어진다. 영역 `hub:<유형>` · 날짜 묶음 `grp:<유형>:<기간>` · 분류 묶음 `grp:<유형>:cat:<단계…>`(`kg-net-groups.ts`) · `grp:<유형>:more`·`none`.
+ * 점 id = 지식그래프 점 id 그대로(가운데도) — 더블클릭한 기록 점이 그대로 새 가운데가 되어 보간이 이어진다. 영역 `hub:<유형>` · 날짜 묶음 `grp:<유형>:<기간>` · 분류 묶음 `grp:<유형>:cat:<단계…>`(`kg-net-groups.ts`) · `grp:<유형>:status:<상태>`·`none`.
  */
 
 export { isolatedCount, kgDetailParam, relationLabel } from "./kg-net-rules";
@@ -39,13 +39,12 @@ const TONE: Record<Entity, ExploreTone> = {
   Competitor: "amber", Observation: "primary", Action: "green", Objective: "green", Assessment: "purple", Metric: "gold", Evidence: "primary",
 };
 
-/**
- * 날짜 없는 기록을 영역 둘레에 바로 세우는 수 — 학교·원생·직원·반은 수와 관계없이 분류 묶음(초·중·고 → 학년 / 과목 · 기타 — `kg-net-groups.ts` ·
- * 이 수 이하면 묶음을 펼쳐 둔다 · '관계 없음' 묶음 안도 같은 분류), 그 밖의 유형은 관계가 많은 순으로 이만큼만 세우고 나머지는 '나머지 N건' 묶음(원장 *"외~로 표현하니까 좀 그렇긴하네"*) · 관계 없는 기록은 '관계 없음 N건'
- * 묶음으로 접는다(원장 2026-11-11 *"너무 쓸데없이 모든 점을 노출하지 않는지"* — 연결 탐색이 날짜 기록을 연도·월로 접는 것과 같은 방향).
- * 묶음 더블클릭 = 펼치기(그 아래 기록 전부) · 목록·관계 표에서 고르면 그 묶음이 펼쳐진다. 기록은 빠지지 않는다(도구줄 수 = 전부).
+/*
+ * 날짜 없는 기록 — 학교·원생·직원·반은 분류 묶음(초·중·고 → 학년 / 과목 · 기타 — `kg-net-groups.ts`) · 선이 없는 원생은 지금 상태 묶음(휴원·예비·퇴원) 안에서 같은 분류 ·
+ * 선이 하나도 없는 기록은 '관계 없음'(직원 = '반·기록 연결 없음') 묶음 안에서 같은 분류 · 그 밖의 유형은 영역 둘레에 바로.
+ * 개별 기록 판은 묶음을 모두 펼친다(원장 2026-11-11 *"개별기록에서는 가지를 극한으로 계속 뻗어 마지막 요소가 나올때까지"* — 옛 '앞 12건 + 나머지 N건' 접기 폐지 ·
+ * 덩어리로 줄여 보는 것은 '주체별 요약'). 묶음 더블클릭 = 접기·펼치기. 기록은 빠지지 않는다(도구줄 수 = 전부).
  */
-export const KG_UNDATED_SHOWN = 12;
 
 export type KgBoard = NetPrebuiltInput & {
   /** 학원 전체 판인가(아니면 기록이 가운데인 판). */
@@ -121,8 +120,7 @@ export function kgNetBoard(graph: Graph, centerId?: string | null, cats?: KgCate
     const list = byType.get(type);
     if (!list?.length) continue;
     const hubId = `hub:${type}`;
-    const lonely = list.filter((n) => !related.has(n.id)).length;
-    const hub: NetNode = { id: hubId, title: label, kind: "hub", tone: TONE[type], sectorKey: type, zoomKey: type, summary: [`기록 ${list.length.toLocaleString()}건`, lonely > 0 && `다른 기록과 관계 없음 ${lonely.toLocaleString()}건`].filter(Boolean).join(" · ") };
+    const hub: NetNode = { id: hubId, title: label, kind: "hub", tone: TONE[type], sectorKey: type, zoomKey: type, summary: `기록 ${list.length.toLocaleString()}건` }; // 묶음 수는 아래에서 덧붙인다(묶음 이름과 같은 말로)
     nodes.push(hub);
     link(rootId, hubId, label);
     const dated: NetNode[] = [];
@@ -135,40 +133,41 @@ export function kgNetBoard(graph: Graph, centerId?: string | null, cats?: KgCate
       if (date) dated.push(rec);
       else loose.push(rec);
     }
-    // 날짜 없는 기록 — 학교·원생·직원·반은 분류 묶음(kg-net-groups.ts) · 그 밖은 관계 많은 순 앞 몇 건만 영역 둘레, 나머지는 접힌 묶음(한 건뿐이면 묶지 않는다).
-    const fold = (gid: string, title: string, short: string, recs: NetNode[], inside?: boolean) => {
-      if (recs.length < 2) return recs.forEach((r) => link(hubId, r.id, label));
-      const g: NetNode = { id: `grp:${type}:${gid}`, title, label: `${short} · ${recs.length.toLocaleString()}건`, kind: "group", level: "month", tone: TONE[type], hub: hubId, parent: hubId, sectorKey: type, date: null, tally: recs.length };
-      groups.push(g);
-      link(hubId, g.id, "묶음");
-      if (inside) return tree(recs, { parent: g.id, prefix: `${gid}/`, title, openLeaves: false });
-      for (const r of recs) {
-        r.parent = g.id;
-        link(g.id, r.id, "기록");
-      }
-    };
+    // 날짜 없는 기록 — 위 주석 그대로. 묶음 하나 = `grp:<유형>:<gid>`(상태 `status:<상태>` · 관계 없음 `none`) · 안은 분류(있으면) 또는 기록.
+    const byCategory = !!cats && kgCategorized(type);
     const tree = (recs: NetNode[], at: KgCategoryAt) => {
       const t = categoryTree(hub, type, recs, byId, cats!, at);
       groups.push(...t.groups);
       for (const e of t.edges) link(e.from, e.to, e.rel);
     };
-    const byCategory = !!cats && kgCategorized(type);
-    const withRel = loose.filter((r) => related.has(r.id)).sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0));
-    const many = withRel.length > KG_UNDATED_SHOWN + 1;
-    if (byCategory && withRel.length > 1) tree(withRel, { parent: hubId, prefix: "", title: label, openLeaves: !many });
-    else {
-      const rest = many ? withRel.slice(KG_UNDATED_SHOWN) : [];
-      for (const r of withRel.slice(0, withRel.length - rest.length)) link(hubId, r.id, label);
-      fold("more", `${label} · 나머지 ${rest.length.toLocaleString()}건`, "나머지", rest);
-    }
-    const none = loose.filter((r) => !related.has(r.id));
-    fold("none", `${label} · 다른 기록과 관계 없음`, "관계 없음", none, byCategory);
+    const bucket = (gid: string, short: string, recs: NetNode[], always: boolean, note = "") => {
+      if (recs.length > 0) hub.summary += ` · ${short} ${recs.length.toLocaleString()}건`;
+      if (recs.length === 0 || (!always && recs.length < 2)) return recs.forEach((r) => link(hubId, r.id, label));
+      const title = `${label} · ${short}${note}`;
+      const g: NetNode = { id: `grp:${type}:${gid}`, title, label: `${short} · ${recs.length.toLocaleString()}건`, kind: "group", level: "month", tone: TONE[type], hub: hubId, parent: hubId, sectorKey: type, date: null, tally: recs.length };
+      groups.push(g);
+      link(hubId, g.id, "묶음");
+      if (byCategory) return tree(recs, { parent: g.id, prefix: `${gid}/`, title });
+      for (const r of recs) {
+        r.parent = g.id;
+        link(g.id, r.id, "기록");
+      }
+    };
+    const withRel = loose.filter((r) => related.has(r.id));
+    if (byCategory && withRel.length > 1) tree(withRel, { parent: hubId, prefix: "", title: label });
+    else for (const r of withRel) link(hubId, r.id, label);
+    // 선이 하나도 없는 기록만 — 원생은 지금 상태로(휴원·예비·퇴원 · 지난 달 판에서도 그 달 연결이 있으면 본 분류에 선다), 나머지는 '관계 없음'(직원 = '반·기록 연결 없음').
+    const lone = loose.filter((r) => !related.has(r.id));
+    const { rest: none, buckets } = type === "Student" && byCategory ? studentStatusBuckets(lone, byId) : { rest: lone, buckets: [] };
+    for (const b of buckets) bucket(`status:${b.key}`, b.label, b.recs, true, " — 지금 상태 · 이 판에 연결 없음");
+    bucket("none", type === "Staff" ? "반·기록 연결 없음" : "관계 없음", none, false);
     if (dated.length > 0) {
       const t = timeTree(hub, dated);
       groups.push(...t.groups);
       for (const e of t.edges) link(e.from, e.to, e.rel);
     }
   }
+  for (const g of groups) g.expanded = true; // 개별 기록 = 가지를 끝까지(날짜 묶음 포함 · 더블클릭으로 접는다)
   nodes.push(...groups);
 
   // 실제 관계 — 판에 선 두 기록 사이만(학원 점과의 관계는 긋지 않는다). 같은 두 기록은 한 선 · 이름은 모아서.

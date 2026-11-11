@@ -39,6 +39,8 @@ export type NetNode = {
   level?: NetGroupLevel;
   /** 날짜가 아닌 분류 묶음의 단위 이름(지식그래프 '학교급' · '학년' · '과목') — 없으면 `level`의 '연도' · '월' · '일자'. */
   unit?: string;
+  /** 처음부터 펼쳐 둘 묶음(지식그래프 '개별 기록' — 가지를 끝까지) — 없으면 `level`의 기본(`GROUP_OPEN_DEFAULT`). 더블클릭은 그대로 뒤집는다. */
+  expanded?: boolean;
   open?: NetHubOpen;
   /** `open = "center"`일 때 중심이 될 대상 이름(과목 조각은 첫 반). */
   openTo?: string;

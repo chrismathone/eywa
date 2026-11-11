@@ -12,7 +12,7 @@ import { netCenterOf, type NetBoard, type NetCam, type NetGraph, type NetGroupLe
 
 /** 처음 펼쳐 둘 묶음 단계 — 연도는 펼침(월이 보인다) · 월·일자는 접힘. */
 export const GROUP_OPEN_DEFAULT: Record<NetGroupLevel, boolean> = { year: true, month: false, day: false };
-export const isGroupOpen = (n: NetNode, toggled?: ReadonlySet<string>): boolean => GROUP_OPEN_DEFAULT[n.level ?? "month"] !== !!toggled?.has(n.id);
+export const isGroupOpen = (n: NetNode, toggled?: ReadonlySet<string>): boolean => (n.expanded ?? GROUP_OPEN_DEFAULT[n.level ?? "month"]) !== !!toggled?.has(n.id);
 
 /** 보이는 점·선만 — 위 묶음 중 하나라도 접혀 있으면 그 아래는 뺀다. */
 export function visibleGraph(g: NetGraph, toggled?: ReadonlySet<string>): NetGraph {
