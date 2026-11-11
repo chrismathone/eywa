@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type M
 import { toast } from "sonner";
 import { centerOnSelection, fitAnimated, resizeBoard, zoomAt } from "./camera";
 import { NetEngine } from "./engine";
-import { fullGraphOf, netHeadOf, netRootId, type ExploreNetworkProps, type NetBoard, type NetCallbacks, type NetHead, type NetInput, type NetViewMode } from "./graph";
+import { fullGraphOf, netCenterOf, netHeadOf, type ExploreNetworkProps, type NetBoard, type NetCallbacks, type NetHead, type NetInput, type NetViewMode } from "./graph";
 import { netLayout } from "./layout";
 import { consumePendingNet, copyBoard, peekPendingNet, registerLiveNet, savedNetFor } from "./handoff";
 import { attachPointer } from "./interact";
@@ -12,7 +12,7 @@ import { NetLegend, NetToolbar } from "./net-chrome";
 import { lastOpened, sectorOfSelection } from "./node-actions";
 import styles from "./network.module.css";
 
-export type { ExploreNetworkProps, NetAnalysis, NetFact, NetInput, NetRecordInfo, NetNeighbor } from "./graph";
+export type { ExploreNetworkProps, NetAnalysis, NetFact, NetInput, NetModelInput, NetPrebuiltInput, NetRecordInfo, NetNeighbor } from "./graph";
 export { netNeighbors, netHubId, netRootId, netTargetId } from "./graph";
 export { prepareNetworkLeave } from "./handoff";
 
@@ -26,11 +26,24 @@ const sameHead = (a: NetHead, b: NetHead) => a.mode === b.mode && a.nodes === b.
  * ([`handoff.ts`](./handoff.ts)).
  */
 export function ExploreNetwork(props: ExploreNetworkProps): JSX.Element {
-  const { model, analyses, facts, selected, record, view, wide, instant, colored, labels } = props;
-  const input = useMemo<NetInput>(() => ({ model, analyses, facts }), [model, analyses, facts]);
-  const centerId = netRootId(model.center);
+  const { selected, record, view, wide, instant, colored, labels } = props;
+  // 입력 = 화면 모델(연결 탐색) 또는 이미 짠 판(지식그래프) — 판 하나 동안 같은 객체여야 엔진이 다시 짜지 않는다(값으로 묶는다).
+  const modeled = "model" in props ? props : null;
+  const prebuilt = "graph" in props ? props : null;
+  const model = modeled?.model;
+  const analyses = modeled?.analyses;
+  const facts = modeled?.facts;
+  const graph = prebuilt?.graph;
+  const builtId = prebuilt?.center.id;
+  const builtName = prebuilt?.center.name;
+  const input = useMemo<NetInput>(
+    () => (graph && builtId != null ? { graph, center: { id: builtId, name: builtName ?? "" } } : { model: model!, analyses, facts }),
+    [model, analyses, facts, graph, builtId, builtName],
+  );
+  const center = netCenterOf(input);
+  const centerId = center.id;
   const [pending] = useState(() => peekPendingNet(centerId));
-  const [head, setHead] = useState<NetHead>(() => pending?.head ?? netHeadOf(netLayout(input, view), model.center.name, fullGraphOf(input)));
+  const [head, setHead] = useState<NetHead>(() => pending?.head ?? netHeadOf(netLayout(input, view), center.name, fullGraphOf(input)));
   const svgRef = useRef<SVGSVGElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef<HTMLOutputElement>(null);
@@ -59,7 +72,7 @@ export function ExploreNetwork(props: ExploreNetworkProps): JSX.Element {
       onCenterZoom: () => propsRef.current.onCenterZoom(),
     };
     const settle = (b: NetBoard) => {
-      const next = netHeadOf(b, propsRef.current.model.center.name, fullGraphOf(inputRef.current));
+      const next = netHeadOf(b, netCenterOf(inputRef.current).name, fullGraphOf(inputRef.current));
       if (!sameHead(next, headRef.current)) {
         headRef.current = next;
         setHead(next);
