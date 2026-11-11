@@ -6,6 +6,8 @@
 --   콜&상담 여정 기록(s2_0063)도 담당 직원을 **문서 안**(document->>'ownerId' · FK 없음)에 적는데 이 칸은 못 봤다 —
 --   여정 기록의 담당자로만 남은 직원은 완전 삭제가 통과하고, 그 기록은 없는 사람을 담당자로 가리키게 된다.
 -- 고침: 같은 함수를 다시 정의한다(본문은 s2_0058 그대로 + 여정 기록 문서 속 담당자 한 갈래). 읽기만 한다 · 표가 없는 DB에서는 건너뛴다.
+-- 아직 안 세는 문서 속 담당자: 홍보 행사(marketing_archive_events.document.ownerId · s2_0047) — 그 기능은 담당자가 재직 중이 아니면 저장을
+--   막는 규칙이라 퇴사 처리만으로도 담당자를 다시 지정해야 한다(삭제만의 문제가 아니다). 저장 규칙이 정해지면 다음 재정의 때 더한다.
 -- 쓰는 곳 = s2_0060 delete_staff_account(그대로). 실행권(service_role만)은 다시 정의해도 유지되지만 같은 문장을 한 번 더 적어 둔다.
 -- 되돌리기 = scripts/_oneoff/revert-s2_0065-staff-delete-blockers-journey-owner.sql (s2_0058의 정의로 되돌린다)
 create or replace function public.staff_delete_blockers(p_user uuid)
