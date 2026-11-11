@@ -126,6 +126,35 @@ export const SUBJECT_ICON_BG: Record<PillColor, string> = {
   neutral: "bg-bg-soft text-text-dim",
 };
 
+export const SUBJECT_TEXT: Record<PillColor, string> = {
+  primary: "text-primary",
+  green: "text-green",
+  gold: "text-gold",
+  blue: "text-blue",
+  purple: "text-purple",
+  rose: "text-rose",
+  amber: "text-amber",
+  danger: "text-danger",
+  neutral: "text-text-dim",
+};
+
+/**
+ * 화면 이름만 있는 과목(예: "수학 (상)" · 데모 데이터)의 **설정 키** — 설정 라벨이 그 이름에 들어 있으면 그 과목(긴 라벨 먼저).
+ * 모르면 "" — `colorOf("")`는 neutral이다. 과목 키가 있는 행은 이 함수를 거치지 않는다(`subjectColorOfRow`).
+ */
+export function subjectKeyOfName(name: string, options: readonly { value: string; label: string }[]): string {
+  const hit = [...options].sort((a, b) => b.label.length - a.label.length).find((o) => o.label && name.includes(o.label));
+  return hit?.value ?? "";
+}
+
+/** 과목 행의 색(설정 단일 소스) — 행에 과목 키가 있으면 그 키, 없으면(옛 행·데모) 이름으로 찾은 키. */
+export function subjectColorOfRow(
+  maps: Pick<SubjectMaps, "colorOf" | "options">,
+  row: { subjectKey?: string | null; name: string },
+): PillColor {
+  return maps.colorOf(row.subjectKey || subjectKeyOfName(row.name, maps.options));
+}
+
 /**
  * 원생상담 의무를 반의 **수업 담당**(반에 '담당'으로 세팅된 선생님)에게 주는 과목인가(원장 2026-10-19).
  * 저장값이 있으면 그대로, 없으면 영어(표준 키 english)만 수업 담당 — 영어는 원어민이 교시를 많이 맡아 '요일 많은 선생님' 규칙이 담당을 비켜 간다.

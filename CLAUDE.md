@@ -155,7 +155,7 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 | `MENT` | classnote_ment · english_ment · ment_prompt_preview · ment_style_profile · love_note_draft(사랑의 한마디 초안 버튼) · lesson_report_rating(평점 정기 처리 · 기본 꺼짐) | Claude(Haiku·Sonnet) |
 | `MEETING` | meeting_analysis | Claude(Sonnet 5.5) |
 | `ENROLLMENT` | enrollment_analysis · enrollment_form_extract · enrollment_prep_brief | Claude(Sonnet 5.5) |
-| `CONSULTATIONS` | consultation_analysis · student_care · student_flow_consultations · student_flow_timeline(원생 흐름 분석 — 상담 저장 뒤 합산 · 타임라인 밤 배치 · 연결 탐색 카드, 2026-11-03) | Claude(분석 Sonnet 5.5 · 케어 · 흐름 Sonnet 5.5) |
+| `CONSULTATIONS` | consultation_analysis · student_care · student_consultation_rating(원생상담 평점 — 배치 · 구독 CLI 백필, 2026-11-11) · student_flow_consultations · student_flow_timeline(원생 흐름 분석 — 상담 저장 뒤 합산 · 타임라인 밤 배치 · 연결 탐색 카드, 2026-11-03) | Claude(분석 Sonnet 5.5 · 케어 · 흐름 Sonnet 5.5) |
 | `BRIEFING` | daily_briefing · dashboard_secretary(업무 비서 'AI로 정리' · 누를 때 + 예약 01:00 · 13:00 — 화면이 남긴 후보만) | Claude |
 | `ATTENDANCE` | attendance_recap · parent_attendance_intent · parent_attendance_jev_shadow · parent_satisfaction | Claude(요약·결석 판별 Sonnet 5.5 · 만족도 Haiku 5.5) · TypeSafe(비교 전용) |
 | `STUDENT_ONTOLOGY` | student_positive_signal · student_ontology_summary | 긍정 신호 밤 판정 / 명시 버튼의 최근 기록 발췌 요약 · Claude 전용 키 · fast/low · 다른 회사 폴백 없음 |
@@ -395,6 +395,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - JJ 자리 출석부의 '진도'(수업계획) = 영어 시트와 같은 기록·같은 기계·같은 게이트
 
 ### 디자인·팔레트·툴바·아이콘 → [`docs/decisions/design.md`](docs/decisions/design.md)
+- 검색칸 = 늘 펼친 입력칸 · '닫기' 없음(2026-11-11 · `SearchToggle`·`StudentSearchToggle` 두 부품)
 - 페이지 헤더 = 한 줄(`eyebrow - 제목 - 설명`) · 오른쪽 끝 '화면 최대화' · 스켈레톤은 `PageHeaderSkeleton` 한 벌 · 3행으로 되돌리지 않는다 · eyebrow = 사이드바 그룹 이름 자동(손으로 적은 값은 폴백)
 - 슈퍼관리자 화면 = 앱과 같은 디자인 체계 · 폰은 상단 한 줄 바 · 영역 가드
 - 왼쪽 색 띠 금지 — 카드·타일·알림에 굵은 왼쪽 띠를 두르지 않는다
@@ -438,9 +439,12 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 
 ### 원생·콜&상담·신규생·학교 표기 → [`docs/decisions/students.md`](docs/decisions/students.md)
 
+- 원생상담 '상담 평점' = 보고서와 같은 잣대(기록의 정성·구체성) · 글자 수·자리표시로 점수 정하지 않는다 · 지금 있는 상담은 구독 CLI 일괄, 이후 배치 · 순위·평균·빨간 숫자 금지(2026-11-11)
+
 - 연결 탐색 = 원장 시안(:3978) 구조(세 열 · 도넛/네트워크 계정 귀속 · 분석·판단은 오른쪽 아래 · 강의실 중심은 수업 전체 열람만 · 출처 표시·통합 메모는 시안 전용, 2026-11-05)
 - 연결 탐색 네트워크 '개별 기록' = 연도 → 월 → 일자 묶음(처음엔 월까지 · 범위는 패널과 같게) · 같은 기록 한 번 · hover 날짜 연도까지(2026-11-06)
 - 원생 흐름 분석 = 오늘 기준(90일 넘은 기록뿐이면 판단 보류 — 걱정은 '그때 판단'으로만 · 퇴원·휴원은 원생 상태 배지 · 예정 수강은 기록 아님 · 분석 뒤 상담은 '아직 반영 전'(없다는 단정 금지) · 판정 `flow-recency.ts` 한 곳, 2026-11-06)
+- 콜&상담 여정(전화·방문·등록 기록) = 기록 있는 상담은 삭제 불가 · 병합은 서버 전용 함수 한 거래 · 신규생 정착 관리 보정 → [`enrollment-journey.md`](docs/decisions/enrollment-journey.md) · 운영판 [`newcomer-live-restoration.md`](docs/decisions/newcomer-live-restoration.md)
 - 학생 온톨로지·기여도 → [`student-ontology.md`](docs/decisions/student-ontology.md) · 설명회 신청·형제 인정과 최초 연결(2026-10-26, 기본 비활성) → [`student-parent-events.md`](docs/decisions/student-parent-events.md)
 - 퇴원 상세 = 퇴원보고서(새 보고서·원본)·콜&상담 카드(카드마다 목적지 메뉴 권한 · 학생 id로 좁혀 읽기 · 실패는 카드만) · 작성 입구 없음 · 퇴원일 옆 '퇴원보고서 종료일'은 같은 사건 후보만(정보 · 퇴원일 안 고침 · `report-date-link.ts`) · 보고서 상세 → '퇴원 상세' 링크(2026-10-23)
 - 퇴원월 = 수강료를 낸 마지막 달(2026-10-29 · 수업 순액 > 0 · 운영실·퇴원관리·퇴원생 시트 · 시간표 X·수강종료는 날짜 그대로 · `exit-month.ts` 한 벌)

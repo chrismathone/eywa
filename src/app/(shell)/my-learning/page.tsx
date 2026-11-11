@@ -1,7 +1,8 @@
 import { requireAccess } from "@/lib/auth/require-access";
 import { Pill } from "@/components/atoms/pill";
 import { DEMO_STUDENT } from "@/features/my-learning/data";
-import { subjectTone } from "@/features/onescreen/data";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps, subjectKeyOfName } from "@/features/owner/subjects";
 import { KpiGrid } from "@/features/my-learning/components/kpi-grid";
 import { ScoreTrendChart } from "@/features/my-learning/components/score-trend-chart";
 import { CurriculumProgress } from "@/features/my-learning/components/curriculum-progress";
@@ -16,9 +17,18 @@ export const metadata = { title: "내 학습 현황 — 에이와" };
  */
 export default async function MyLearningPage() {
   await requireAccess("my_learning");
+  // 과목 라벨·색 = 학원설정(운영 enum 하드코딩 금지) — 셸 레이아웃과 같은 캐시된 읽기다.
+  const subjectMaps = buildSubjectMaps((await getTenantSettings()).operations.subjects);
   const { student, history, curriculum, stat } = DEMO_STUDENT;
   const subjectNames = student.subjects.map((s) => s.name);
-  const subjectKeys = [...new Set(student.subjects.map((s) => subjectTone(s.name).key))];
+  const subjectKeys = [
+    ...new Set(
+      student.subjects.map((s) => {
+        const key = subjectKeyOfName(s.name, subjectMaps.options);
+        return key ? subjectMaps.labelOf(key) : s.name;
+      }),
+    ),
+  ];
   const att = student.attendance;
   const attColor = att === "지각" ? "amber" : att === "조퇴" ? "blue" : att === "결석" ? "danger" : "primary";
 
@@ -43,7 +53,7 @@ export default async function MyLearningPage() {
 
       <KpiGrid stat={stat} />
       <ScoreTrendChart history={history} subjects={subjectNames} />
-      <CurriculumProgress curriculum={curriculum} />
+      <CurriculumProgress curriculum={curriculum} subjectMaps={subjectMaps} />
       <AttendanceCalendar history={history} />
       <RecentRecords history={history} />
     </div>

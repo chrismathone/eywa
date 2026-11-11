@@ -19,7 +19,7 @@ import { CONDITIONS, FOLLOWUP_STAGES, resolveSubjectManager, type ManagerAssignm
  */
 export async function followupAccess() {
   const user = await getCurrentUser({ teacherView: true });
-  if (!user || !await canAccessTenant(user.systemRole, "newcomers")) throw Error("신규생 관리 권한이 없습니다");
+  if (!user || !await canAccessTenant(user.systemRole, "newcomers")) throw Error("신입생 관리 권한이 없습니다");
   const level = await accessLevelTenant(user.systemRole, "newcomers");
   const scoped = user.systemRole === "teacher" || level === "scoped" || (level === "readonly" && await readonlyViewErasedScope("newcomers"));
   const canReport = !user.tenantView && await canWriteTenant(user.systemRole, "newcomers");
@@ -37,7 +37,11 @@ export async function getFollowupSource(studentId?: string) {
       .or("review_state.neq.confirmed,and(next_due.not.is.null,followup_at.is.null)").order("id").range(a, b));
     const ids = [...new Set([...open.map(r => r.student_id), ...(z.uuid().safeParse(studentId).success ? [studentId!] : [])])];
     return await loadNewcomers(await createClient(), kstToday(), user.tenantId, ids, true);
-  } catch { return { ...await getNewcomers(), followupError: "90일 이후 후속 관리 자료를 불러오지 못했습니다." }; }
+  } catch {
+    // 창 밖 후속 관리 학생은 못 읽어도 창 안 학생은 완료 메모·연결 상담까지 그대로 보인다 — 그것마저 실패하면 운영실과 같은 기본 조회(메모 없음).
+    const view = await loadNewcomers(await createClient(), kstToday(), user.tenantId, [], true).catch(() => getNewcomers());
+    return { ...view, followupError: "90일 이후 후속 관리 자료를 불러오지 못했습니다." };
+  }
 }
 
 /** 실제 담당 반과 기간으로 연결한다. 종료된 반이나 보강 대기 반은 담당자로 세지 않는다. */
@@ -97,7 +101,8 @@ export async function getFollowupView(source: NewcomersView): Promise<{ data: Fo
   const ids = rows.map(s => s.studentId), visible = new Set(ids);
   const legacy = { ...source, rows, subjectRows: source.subjectRows.filter(s => visible.has(s.studentId) && (!scopeRooms || scopeRooms.get(s.studentId)?.some(t => t.id === user.id && t.subject === s.subject))) };
   let homerooms = scopeRooms ?? new Map<string, Homeroom[]>();
-  const base: FollowupView = { today: source.today, actorId: user.id, canManage, canReport,
+  // 체크표 쓰기는 따로 둔다 — 아래 조회가 실패해 canManage를 꺼도 종전 '전체 완료 체크표'는 잠그지 않는다.
+  const base: FollowupView = { today: source.today, actorId: user.id, canManage, canReport, canWriteChecks: canManage,
     checksKnown: source.checksAvailable && !source.checksError, staff: [], students: [], error: null };
   try {
     if (source.followupError) throw Error(source.followupError);

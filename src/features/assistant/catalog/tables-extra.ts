@@ -54,4 +54,49 @@ export const TABLES_EXTRA: readonly AssistantTableDoc[] = [
       separate_amount: "늘어난 몫을 수납에서 따로 환불하기로 한 금액(누계)", separate_at: "따로 환불로 정한 시각", separate_by: "따로 환불로 정한 원장",
       refunded_total: "이어진 요청서 환불 완료 기록(누계 · 완료일자를 비워도 남음)", refunded_docs: "환불 완료 기록을 남긴 요청서" },
   },
+  // ── 신규생 90일 정착 관리 · 신규 콜&상담 여정(aywa-next 이식 · s2_0060~s2_0062 — 2026-11-11).
+  {
+    name: "student_onboarding_feedback",
+    label: "신규생 피드백",
+    ko: "신규생 90일 정착 관리 — 담임이 단계(첫 적응·30·60·90일)마다 남긴 적응 피드백과 관리자 확인·후속 조치",
+    notes:
+      "student_id = 학생 · subject = 과목 키('general' = 생활·종합) · stage: d7 첫 적응 · d30 · d60 · d90 · author_id = 쓴 사람(담임 또는 관리자) · condition: good 잘 적응 중 · watch 관찰 필요 · help 지원 필요 · summary = 관찰 내용 · next_action/next_due = 다음 조치와 기한(함께 있거나 함께 없다). review_state: pending 확인 대기 · confirmed 확인 완료 · revision 보완 요청(reviewed_by · reviewed_at · review_note) · response = 보완 요청에 대한 작성자의 보완 보고. followup_result/followup_at/followup_by = 후속 조치 처리 결과(followup_at이 비어 있으면 아직). 끝나지 않은 후속 조치 = next_action <> '' and followup_at is null · 기한이 지난 것 = 거기에 next_due < 오늘. 콜 완료 여부는 student_onboarding_checks.",
+    columns: { stage: "d7·d30·d60·d90", condition: "good·watch·help", review_state: "pending·confirmed·revision", response: "보완 보고", next_due: "다음 조치 기한", followup_at: "후속 조치를 끝낸 시각", version: "고친 횟수" },
+  },
+  {
+    name: "student_onboarding_followup_events",
+    label: "신규생 이력",
+    ko: "신규생 적응 피드백·담당 배정을 넣거나 고칠 때마다 남는 변경 이력",
+    notes: "scope = 바뀐 표 이름(student_onboarding_feedback · student_onboarding_subject_assignments) · entity_id = 바뀐 기록(피드백 id · 배정은 학생 id) · document = 그때의 사본 · actor_id = 저장한 직원. 지금 값은 원래 표를 본다.",
+    internal: true,
+  },
+  {
+    name: "student_onboarding_manager_defaults",
+    label: "신규생 기본담당",
+    ko: "신규생 관리 콜의 과목별 기본 관리 담당자(과목마다 한 명)",
+    notes: "subject = 과목 키 · manager_id = 기본 담당 직원(users.id). 학생·과목마다 따로 정한 것은 student_onboarding_subject_assignments(직접 지정이 이긴다).",
+  },
+  {
+    name: "student_onboarding_subject_assignments",
+    label: "신규생 담당",
+    ko: "신규생마다 과목별 관리 담당 지정(과목 기본 담당을 따르거나 직접 지정)",
+    notes:
+      "student_id × subject 한 줄 · mode: default = 과목 기본 담당을 따름(manager_id 없음 — 담당자는 student_onboarding_manager_defaults에서 찾는다) · manual = 직접 지정(manager_id = 담당 직원 · 비어 있으면 '미지정'으로 정한 것). 줄이 없는 학생·과목은 과목 기본 담당이 있으면 그 사람, 없으면 미지정.",
+    columns: { mode: "default=기본 담당 따름 · manual=직접 지정", manager_id: "직접 지정한 담당 직원", version: "고친 횟수" },
+  },
+  {
+    name: "enrollment_journey_records",
+    label: "상담 여정",
+    ko: "신규 콜&상담의 전화·방문·등록 확인 기록 — 확인 근거가 있는 것만(상담 하나에 여러 줄)",
+    notes:
+      "consultation_id = 신규 콜&상담(enrollment_consultations). document(jsonb): kind = call 전화·온라인 상담 · visit 방문 예약·결과 · registration 등록 확정 / status = connected 상담 완료 · unanswered 연결 안 됨 · scheduled 방문 예약 · completed 실제 방문 완료 · no_show 노쇼 · cancelled 취소 · confirmed 등록 확정 / purpose = new 신규 입학 · returning 재입학 · existing 기존 재원 상담 · unknown 대상 확인 필요 / happenedOn = 실제 일자 · scheduledOn = 예정일 · ownerId = 담당 직원(users.id) · evidence = 확인 근거 · nextAction·nextDue·nextDoneOn = 후속 업무·기한·완료일. voided = true면 잘못 넣은 기록(집계 제외). 실제 방문 = document->>'kind'='visit' and document->>'status'='completed' and document->>'purpose' in ('new','returning') and voided = false · 날짜 = document->>'happenedOn'(없으면 scheduledOn). 변경 이력은 enrollment_journey_revisions.",
+    columns: { consultation_id: "신규 콜&상담", document: "기록 내용(jsonb)", voided: "집계 제외 여부", version: "고친 횟수", actor_id: "마지막으로 저장한 직원" },
+  },
+  {
+    name: "enrollment_journey_revisions",
+    label: "여정 이력",
+    ko: "콜&상담 여정 기록을 저장할 때마다 남는 버전 기록(수정 사유 포함)",
+    notes: "record_id = enrollment_journey_records.id · version · document·voided = 그 버전의 내용 · reason = 수정·제외 사유(첫 저장은 빈 값) · actor_id = 저장한 직원. 지금 값은 enrollment_journey_records를 본다.",
+    internal: true,
+  },
 ];

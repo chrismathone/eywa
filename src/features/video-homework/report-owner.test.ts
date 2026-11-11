@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import { videoHomeworkKept } from "./report-owner";
 
 import { readMigration } from "@/lib/db/migrations-corpus.mjs";
+// 원스크린 화면 + 옮겨 낸 훅(P3-O)을 한 덩어리로 읽는다 — 화면에서 코드를 옮겨도 같은 단언이 선다.
+import { readOnescreenScreen } from "../onescreen/components/onescreen-screen-source.test-util";
 const A = "teacher-a";
 const B = "teacher-b";
 const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), "utf8");
@@ -154,7 +156,7 @@ describe("② 원스크린 저장 관문이 이 판정을 쓴다", () => {
 });
 
 describe("① 화면 겹 — 남이 처음 쓴 줄은 잠그고 싣지 않는다", () => {
-  const client = read("src", "features", "onescreen", "components", "onescreen-client.tsx");
+  const client = readOnescreenScreen();
 
   it("토글이 남이 쓴 줄을 잠근다(두 화면 모두 학생 id를 넘긴다)", () => {
     const toggle = read("src", "features", "video-homework", "components", "video-homework-toggle.tsx");

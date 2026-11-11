@@ -118,6 +118,7 @@ export async function loadJourney(consultationId?: string, year?: number) {
   return { today, year: selectedYear, through, summary, records: safe, choices, staff: staff.data, currentUser: user.id, canWrite, consultationId: consultationId ?? null, history };
 }
 export type JourneyData = Awaited<ReturnType<typeof loadJourney>>;
+type JourneyRevisionRow = { version: number; document: JourneyRecord["document"]; voided: boolean; actor_id: string; reason: string; recorded_at: string };
 
 export async function saveJourney(raw: unknown) {
   const input = saveJourneySchema.parse(raw), user = await journeyAccess(true), db = await createClient();
@@ -144,20 +145,23 @@ export async function journeyHistory(id: string) {
   // 상담 열람 범위(RLS)를 다시 본다 — 기록 id만 알아도 이력이 열리지 않게.
   const check = await (await createClient()).from("enrollment_consultations").select("id").eq("tenant_id", user.tenantId).eq("id", r.data.consultation_id).maybeSingle();
   if (check.error || !check.data) throw Error("기록 열람 권한을 확인해 주세요");
-  const history = await admin.from("enrollment_journey_revisions").select("version,document,voided,actor_id,reason,recorded_at")
-    .eq("tenant_id", user.tenantId).eq("record_id", id).order("version", { ascending: false });
-  if (history.error) throw Error("변경 이력을 불러오지 못했습니다");
-  return history.data;
+  try {
+    return await fetchAllPaged<JourneyRevisionRow>((a, b) => admin.from("enrollment_journey_revisions").select("version,document,voided,actor_id,reason,recorded_at")
+      .eq("tenant_id", user.tenantId).eq("record_id", id).order("version", { ascending: false }).range(a, b));
+  } catch { throw Error("변경 이력을 불러오지 못했습니다"); }
 }
 
-/** 학생 통합 기록의 '전화·방문·등록 확인 기록' 칸 — 그 학생에게 이어진 상담의 기록(집계 제외 기록은 뺀다). */
+/**
+ * 학생 통합 기록의 '전화·방문·등록 확인 기록' 칸 — 그 학생에게 이어진 상담의 기록(집계 제외 기록은 뺀다).
+ * 열람 권한이 없으면 **null**(호출부가 '권한 없음'으로 보인다 — 조회 실패와 섞지 않는다).
+ */
 export async function studentJourneySection(studentId: string) {
-  const user = await journeyAccess();
-  if (!await canSeeStudentEnrollment(user.systemRole, studentId)) throw Error("학생 입학상담 열람 권한이 필요합니다");
+  const user = await getCurrentUser({ teacherView: true });
+  if (!user || !await canAccessTenant(user.systemRole, "enrollment") || !await canSeeStudentEnrollment(user.systemRole, studentId)) return null;
   const db = await createClient(), admin = createAdminClient();
-  const c = await db.from("enrollment_consultations").select("id").eq("tenant_id", user.tenantId).eq("student_id", studentId);
-  if (c.error) throw Error("연결 상담을 확인하지 못했습니다");
-  const ids = (c.data ?? []).map((r) => r.id);
+  const linked = await fetchAllPaged<{ id: string }>((a, b) => db.from("enrollment_consultations").select("id")
+    .eq("tenant_id", user.tenantId).eq("student_id", studentId).order("id").range(a, b));
+  const ids = linked.map((r) => r.id);
   const records = await fetchAllPagedInChunks<JourneyRecord>(ids, (chunk, a, b) => admin.from("enrollment_journey_records").select(recordColumns)
     .eq("tenant_id", user.tenantId).in("consultation_id", chunk).eq("voided", false).order("id").range(a, b));
   return sectionResult("admissionJourney", "전화·방문·등록 확인 기록", "/enrollment/visits", records.map((r) => ({

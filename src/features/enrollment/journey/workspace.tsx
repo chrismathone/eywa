@@ -57,8 +57,11 @@ export function JourneyWorkspace({ data, compact = false }: { data: JourneyData;
     } catch (err) { setError(korean(err instanceof Error ? err.message : undefined, "이력을 불러오지 못했습니다")); }
   }
   const name = (id: string, fallback: string) => <Link href={`/enrollment/${id}#journey`}>{fallback}</Link>;
+  // 그 해 기록 + **그 해 전부터 끝나지 않은 일**(후속 업무 미완료 · 결과 확인 전 예약) — 요약의 '결과 확인 전 예약'·'후속 기한 경과'가 세는 줄이 목록에도 보여야 한다.
+  const carried = (r: JourneyRecord) => !r.voided && eventDay(r) <= data.through
+    && ((!!r.document.nextDue && !r.document.nextDoneOn) || (r.document.kind === "visit" && r.document.status === "scheduled"));
   const list = data.records.filter((r) => {
-    if (!compact && !eventDay(r).startsWith(String(data.year))) return false;
+    if (!compact && !eventDay(r).startsWith(String(data.year)) && !carried(r)) return false;
     if (onlyOpen && (r.voided || (!r.document.nextDue || r.document.nextDoneOn))) return false;
     return !query || `${names.get(r.consultation_id)?.label ?? ""} ${r.document.evidence} ${staff.get(r.document.ownerId) ?? ""}`.includes(query);
   }).sort((x, y) => eventDay(y).localeCompare(eventDay(x)) || y.updated_at.localeCompare(x.updated_at));

@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { SHEET_DICT } from "@/features/teacher-view/i18n";
+// 원스크린 화면 + 옮겨 낸 훅(P3-O)을 한 덩어리로 읽는다 — 화면에서 코드를 옮겨도 같은 단언이 선다.
+import { readOnescreenScreen } from "./components/onescreen-screen-source.test-util";
 
 /**
  * 구조 가드 — 보강 빼기의 **치명 사고 3종**은 순수 로직이 아니라 배선에 있었다(적대 리뷰 2026-08-18).
@@ -68,7 +70,7 @@ describe("보강 빼기 서버 액션 배선", () => {
 });
 
 describe("보강 빼기 화면 배선", () => {
-  const client = read("features/onescreen/components/onescreen-client.tsx");
+  const client = readOnescreenScreen();
   const grid = read("features/onescreen/components/grid-row.tsx");
   const card = read("features/onescreen/components/report-card.tsx");
 

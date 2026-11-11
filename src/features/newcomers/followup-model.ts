@@ -37,6 +37,8 @@ export type FollowupView = {
   today: string; students: FollowupStudent[]; staff: Person[]; actorId: string;
   defaults?: {subject:string;manager:Person|null}[];
   canManage: boolean; canReport: boolean; error: string | null; checksKnown: boolean;
+  /** '전체 완료 체크표' 쓰기 — 정착 관리 자료 조회가 실패해도(canManage가 꺼져도) 종전 체크표는 잠그지 않는다. */
+  canWriteChecks: boolean;
 };
 export const reportSchema = z.object({
   id: z.uuid(), studentId: z.uuid(), subject: z.string().trim().min(1).max(60), stage: z.enum(["d7", "d30", "d60", "d90"]),

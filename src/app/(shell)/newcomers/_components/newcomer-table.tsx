@@ -23,13 +23,7 @@ export function NewcomerTable({ rows, today, canWrite, checksKnown, busy, select
   compact: boolean;
 }) {
   const { labelOf } = useSubjectMaps();
-  // 학생 한 명 = 이름·학교 칸 하나 — 과목 줄은 그 학생이 처음 나온 자리에 모아 rowSpan으로 묶는다(aywa-next 인계).
-  const byStudent = new Map<string, NewcomerRow[]>();
-  for (const row of rows) {
-    const group = byStudent.get(row.studentId);
-    if (group) group.push(row); else byStudent.set(row.studentId, [row]);
-  }
-  const groups = [...byStudent.values()];
+  const groups = [...new Set(rows.map(r=>r.studentId))].map(id=>rows.filter(r=>r.studentId===id));
   return <table className={`${styles.table} ${compact ? styles.compact : ""}`}>
     <caption className="sr-only">학생·과목별 신규생 90일 관리. 업무 칸을 누르면 액션·결과와 완료 상태를 확인합니다.</caption>
     <colgroup><col style={{ width: 148 }} /><col style={{ width: 114 }} /><col style={{ width: 64 }} /><col style={{ width: 104 }} /><col style={{ width: 170 }} />{ONBOARDING_ITEMS.map(item => <col key={item.key} style={item.optional ? { width: 124 } : undefined} />)}</colgroup>
@@ -42,14 +36,14 @@ export function NewcomerTable({ rows, today, canWrite, checksKnown, busy, select
         {item.shortLabel}{item.optional && <small className={styles.optional}>선택</small>}
       </th>)}
     </tr></thead>
-    <tbody>{groups.flatMap(group => group.map((row, index) => <tr key={row.rowKey} data-row-key={row.rowKey} data-selected={selected === row.rowKey || undefined}>
-      {index === 0 ? <td className={styles.stickyName} rowSpan={group.length}>
-        <div className={styles.nameCell}>
+    <tbody>{groups.flatMap(group=>group.map((row,index) => <tr key={row.rowKey} data-row-key={row.rowKey} data-selected={selected === row.rowKey || undefined}>
+      {index===0?<td className={styles.stickyName} rowSpan={group.length}>
+        <div className={`${styles.nameCell} flex-wrap`}>
           <WindowLink href={`/students/${row.studentId}?back=/newcomers`} className={styles.studentName} title={row.name}>{row.name}</WindowLink>
-          <WindowLink href={`/students/${row.studentId}/care`} className={styles.careLink} title={`${row.name} 상담 약속·담당자 인계`}>약속·인계</WindowLink>
+          <WindowLink href={`/students/${row.studentId}/care`} className="text-primary text-xs underline" title={`${row.name} 상담 약속·담당자 인계`}>약속·인계</WindowLink>
         </div>
-      </td> : null}
-      {index === 0 ? <td rowSpan={group.length} className={styles.stickySchool} title={schoolGradeLabel(row.school, row.grade)}><span className={styles.ellipsis}>{schoolGradeLabel(row.school, row.grade)}</span></td> : null}
+      </td>:null}
+      {index===0?<td rowSpan={group.length} className={styles.stickySchool} title={schoolGradeLabel(row.school, row.grade)}><span className={styles.ellipsis}>{schoolGradeLabel(row.school, row.grade)}</span></td>:null}
       <td className={styles.stickySubject}><span className={styles.subject} title={row.subject ? labelOf(row.subject) : "과목 미정"}>{row.subject ? labelOf(row.subject) : "미정"}</span></td>
       <td className={styles.date}>{shortDate(row.enrolledOn)}</td>
       {/* 첫 수업 = 날짜·D+n 격자(블록)라 칸 가운데 정렬을 안 따른다 — 행마다 같은 폭(14ch)으로 가운데에 세워 머리('첫 수업',

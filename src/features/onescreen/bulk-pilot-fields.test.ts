@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { planBulkApply, planCopyFirstRow, type BulkTarget, type CopyRowTarget } from "./grid";
+// 원스크린 화면 + 옮겨 낸 훅(P3-O)을 한 덩어리로 읽는다 — 화면에서 코드를 옮겨도 같은 단언이 선다.
+import { readOnescreenScreen } from "./components/onescreen-screen-source.test-util";
 
 // 원장 2026-10-27 *"표모드에서 일괄입력 및 작성 — 카드에선 들어가고 표에선 안 된다거나 불편한 부분"* 점검에서 나온 셋.
 const row = (over: Partial<BulkTarget> = {}): BulkTarget =>
@@ -77,7 +79,7 @@ describe("맨 위 행 복사 — 복습·문제풀이도 진도와 함께", () =
 describe("배선", () => {
   const read = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8");
   it("화면이 새 값을 행에 쓴다", () => {
-    const client = read("src/features/onescreen/components/onescreen-client.tsx");
+    const client = readOnescreenScreen();
     expect(client).toMatch(/p\.set\.dailyTestSkip !== undefined\) setTestSkipFor/);
     expect(client).toMatch(/p\.set\.homeworkMissReason !== undefined\) setHomeworkMissReasonFor/);
     expect(client).toMatch(/progressMode: first\.subject\.progressMode/);

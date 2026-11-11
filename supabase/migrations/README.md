@@ -12,6 +12,18 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-11-11 신규생 90일 정착 관리 · 신규 콜&상담 여정 (s2_0060 · s2_0061 · s2_0062 · s2_0063 · ✅ 운영 적용 2026-11-11 · CLI 직결(node · 파일마다 한 거래) · 시험 거래(ROLLBACK) 뒤 · 사후 확인 통과 · 🔴 번호는 병합 때 확정 — 바뀌면 이 줄도 · 본문은 적용한 그대로)
+
+aywa-next 인계본(태그 `archive/aywa-next-375d27d`)의 표를 옮겼다 — 전부 **추가만**(기존 표의 데이터는 건드리지 않는다) · 서버 전용 표(RLS 켜짐 · 정책 0개 · anon/authenticated 권한 없음 — s2_0028과 같은 규약). 결정 본문 = [`docs/decisions/enrollment-journey.md`](../../docs/decisions/enrollment-journey.md).
+
+- `s2_0060_newcomer_followup.sql` — `student_onboarding_feedback`(담임 적응 피드백 · 관리자 확인 · 후속 조치) + `student_onboarding_followup_events`(변경 이력) + 검증·이력 트리거. 인계본의 두 파일(followup · feedback_response)을 하나로. 학생 단위 옛 담당 표는 옮기지 않았다.
+- `s2_0061_newcomer_subject_managers.sql` — `student_onboarding_subject_assignments`(학생·과목별 담당) + `student_onboarding_manager_defaults`(과목 기본 담당 — 고치는 화면이 아직 없다 · 운영 DB의 3행은 2026-11-11 신입생 90일 관리 복구 때 직접 넣은 것).
+- `s2_0062_enrollment_journey.sql` — `enrollment_journey_records` + `enrollment_journey_revisions` + `save_enrollment_journey`(서버 전용 · version 비교).
+- `s2_0063_enrollment_journey_delete_guard.sql` — 상담 행 BEFORE DELETE 트리거(집계 제외가 아닌 여정 기록이 걸린 상담은 삭제 불가) + 서버 전용 `merge_enrollment_consultations_with_journey`(상담 잠금 → 기록 이동 → 종전 병합 함수). 🔴 **앱보다 먼저** — 새 앱의 상담 병합은 이 함수만 부른다(없으면 병합이 '준비하는 중' 안내로 멈춘다 · #95). 적용 뒤 확인: 트리거 1 · 함수 2(화면 계정 실행권 없음) · 적용본을 거래 안에서 다시 시험(삭제 차단 · 옛 병합 함수 차단 · 병합 시 기록 이동·이력 보존·활동 기록의 요청자) 후 ROLLBACK · 여정 기록 0건 · 상담 2,427건 그대로.
+- 적용 순서 0060 → 0061 → 0062 → 0063. main의 신입생 90일 관리(052112f21)는 0060·0061의 표를 이미 읽고 쓴다.
+- 되돌리기 = `scripts/_oneoff/revert-s2_0060-…` ~ `revert-s2_0063-…`(앱을 먼저 되돌린 뒤 · 0063 → 0062 · 0061 → 0060 순서 · 적힌 기록이 함께 사라진다).
+- ⚠️ 번호: s2_0045~0059는 같은 인계 이식의 다른 작업 몫으로 비워 두었다 — 그 파일들이 들어오기 전에는 폴더 가드의 '빈틈 없이'가 실패한다. 통합할 때 번호를 다시 매기면 이 줄에 "옛 이름 s2_0060~0063으로 적용됨"을 적는다(다시 돌리지 않는다).
+
 ## 2026-11-06 퇴원보고서: 원장 환불 결정 전에는 처리하지 않는다 · 데스크 지정 · 완료 입력 제한 (s2_0037 · ⏳ 미적용 · 🔴 s2_0030 적용 뒤에만 · 앱보다 먼저 · 가지 번호 s2_0031 → s2_0033 → s2_0036 → 병합 때 s2_0037(main의 s2_0031 = 학원 비서 · s2_0033 = 금액 이월 연쇄 · s2_0034 = 학원 비서 마무리 · s2_0035 = 원생 충성도 · s2_0036 = 학원 비서 의견))
 
 `s2_0037_withdrawal_refund_decision_gate.sql` — 원장 2026-11-06 결정 셋(머리 주석에 원문 · [결정](../../docs/decisions/withdrawal-reports.md)).

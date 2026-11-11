@@ -1,9 +1,4 @@
 "use server";
-/**
- * 신규생 90일 정착 관리 쓰기(aywa-next 인계본 이식 · s2_0060 · s2_0061) — 과목별 관리 담당 배정 · 담임 적응 피드백 · 관리자 확인·후속 처리.
- * 🔴 게이트는 서버가 다시 본다(#77): 담당 반(담임)·수강 과목·같은 지점 직원·version 비교. 표는 서버 전용이라 admin + tenant_id로 쓴다.
- * 작성자 칸은 판정에 쓴 사람(강사뷰면 그 강사) · `updated_by`(감사)는 실제 로그인한 사람이다.
- */
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -13,9 +8,8 @@ import { assignmentSchema, reportSchema, reviewSchema } from "../followup-model"
 import { followupAccess, loadHomerooms } from "./followup-query";
 import { studentTakesSubject } from "./consult-link";
 
-/** 화면이 받는 결과 — 성공 / 한글 사유. */
-type SaveResult = { ok: boolean; error?: string };
 const conflict = "다른 담당자가 먼저 수정했습니다. 새로고침한 뒤 다시 확인해 주세요.";
+type SaveResult = { ok: true; error?: never } | { ok: false; error: string };
 async function writeAccess(studentId: string) {
   const access = await followupAccess();
   if (!access.canReport) throw Error("피드백 작성 권한이 없습니다");

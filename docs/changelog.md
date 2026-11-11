@@ -1,12 +1,32 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
-## 2026-11-11 — 신규생 90일 정착 관리 · 신규 콜&상담 여정 = 시안 → 실제 기록 (aywa-next 인계 이식 · SQL s2_0060~s2_0062)
+## 2026-11-11 — 신규 콜&상담 여정(전화·방문·등록 기록) 실제 기록으로 · 신규생 정착 관리 보정 (aywa-next 인계 이식 · Claude·Codex 검토 합의 · SQL s2_0060~s2_0063)
 
-- 신규생 관리: 학생별 정착 관리·담당자별 점검 탭이 실제 기록을 읽고 쓴다 — 과목별 관리 담당 배정(`student_onboarding_subject_assignments` · 기본 담당 표 `student_onboarding_manager_defaults`는 읽기만 · 설정 화면 없음) · 담임 적응 피드백 → 관리자 확인/보완 요청 → 보완 보고 → 후속 조치 처리(`student_onboarding_feedback` + 변경 이력). 담당만(scoped) 권한 = 자기 담임 학생·과목만 보고 · 관리 콜 완료·담당 배정은 관리자만(`followup-query.ts` · `followup-actions.ts`). 끝나지 않은 피드백이 있는 학생은 90일이 지나도 남고 `?student=`로 다시 연다.
-- 체크 완료 = '실행한 액션 + 처리 결과'(메모) 필수 · 미래 수행일 거절 · 체크표 칸을 누르면 바로 바뀌지 않고 상세에서 기록한다 · 표는 학생 한 칸(rowSpan) + '약속·인계' 링크.
-- 신규 콜&상담 여정: 방문·등록 점검(`/enrollment/visits`) + 상담 상세의 '전화·방문·등록 기록' 칸(Suspense)이 `enrollment_journey_records`·이력을 읽고 `/api/enrollment/journey`로 저장(`save_enrollment_journey` · version 비교). 상담 병합은 진 쪽 기록을 이긴 쪽으로 먼저 옮긴다(`journey/merge-move.ts`).
-- 학생 통합 기록(student-hub)의 '신입생 적응·담임 피드백' · '전화·방문·등록 확인 기록' 칸이 '연결 전' 대신 실제 기록을 싣는다.
-- 옮기지 않음: 강사 기본 권한(newcomers teacher none → scoped)·강사 메뉴 줄(원장 결정 대기) · 학생 단위 옛 담당 표 · 메이크에듀 수강 연결 스크립트 · 상담 상세 상담일 표기 변경 · 클론 전용 설정.
+- 결정 본문 = [`decisions/enrollment-journey.md`](decisions/enrollment-journey.md). 신규생 정착 관리 화면은 같은 날 다른 세션이 main에 올린 운영판(`052112f21` · [`decisions/newcomer-live-restoration.md`](decisions/newcomer-live-restoration.md))을 바탕으로 두고 그 위에 보정만 얹었다(병합).
+- **콜&상담 여정**: 방문·등록 점검(`/enrollment/visits`)과 상담 상세의 '전화·방문·등록 기록' 칸(Suspense)이 예시 값 대신 `enrollment_journey_records`·이력을 읽고 `/api/enrollment/journey`로 저장한다(`save_enrollment_journey` · version 비교). 예시 데이터(`journey/sample-data.ts`)·시안 띠 삭제.
+  - 기록이 걸린 상담은 삭제 불가(앱 사전 확인 + s2_0063 트리거) · 삭제는 상담 행 먼저 → 녹음 파일.
+  - 병합 = 서버 전용 함수 한 거래(`merge_enrollment_consultations_with_journey` — 상담 잠금 → 기록 이동 → 종전 병합 함수) · 감사로그에 옮긴 기록 id · 읽기 전용 보기는 앱 게이트가 거절.
+  - 점검 화면은 고른 연도만 읽는다(상담 본문·기록) · 같은 사람 판정은 지점 전체의 열쇠 칸 넷 · 선택지 = 그 해 + 앞 해 · 목록에 지난 해의 끝나지 않은 일(후속 업무 미완료·결과 확인 전 예약)도 · 침산 70개월 검증 자료는 침산에만.
+  - 학생 통합 기록의 '전화·방문·등록 확인 기록' 칸이 '연결 전' 대신 실제 기록을 싣는다.
+- **신규생 정착 관리 보정**(main판 위): '전체 완료 체크표' 쓰기를 `canWriteChecks`로 분리(자료 조회 실패가 종전 체크표를 잠그지 않게) · '과목 기본 담당' 선택지는 기본 담당이 있는 과목에만 · 완료 메모는 이 화면에서만 읽기(`withDetails` — 운영실 신호 경로 제외) · 창 밖 후속 관리 학생은 청크 조회(B3) · 담임 조회 병렬(B4) · 담당만 학생 줄 다시 세기 · 읽기 강사뷰의 지워진 담당 범위(#154) · 저장 오류는 한글 사유만 · 완료 취소된 메모에 라벨. 안 쓰는 `newcomers/sample-data.ts` 삭제.
+- 학원 비서 DB 지도에 새 표 6개 설명(`assistant/catalog/tables-extra.ts`).
+- **과목 흡수·삭제**: 신규생 관리 기록(완료 체크·담당 배정·적응 피드백)이 있는 과목은 거절 — 흡수 첫머리 · 사용 현황(삭제 창) · 과목 행을 지우는 마지막 저장. 직원 완전 삭제는 새 표 참조를 먼저 본다(`newcomers/server/staff-refs.ts`).
+- SQL(전부 추가만 · 서버 전용 표 · 정책 0개 · 되돌리기 `scripts/_oneoff/revert-s2_006x-*.sql`): `s2_0060` 적응 피드백·변경 이력 · `s2_0061` 과목별 담당·기본 담당 · `s2_0062` 여정 기록·이력·저장 함수 · `s2_0063` 상담 삭제 차단 트리거·병합 함수.
+- 안 한 것: 강사 기본 권한 열기(원장이 역할·권한에서 '담당만'으로) · 과목 기본 담당 설정 화면 · 메이크에듀 수강 연결 자동화 · 약속·인계 옮기기를 병합과 같은 거래로.
+
+## 2026-11-11 — 원생상담 '상담 평점' 열(후속·녹음·AI 열 대체) · 구독 CLI 일괄 평점 + 배치 구조 · Codex 협의
+
+- 원장 *"후속 열 하고 녹음/AI 열 제거 → 상담 평점 열 추가 … 보고서와 같은 잣대 … 지금 올라온 상담은 내부 요금제로 · 이후엔 배치로"* + *"웹·유튜브 조사"* + *"코덱스와 같이 협의"*. 결정 본문 = [`decisions/students.md`](decisions/students.md) 2026-11-11 절.
+- 코드: `src/features/consultation-rating/`(하네스 `harness/` 순수 · 서버 `server/` 대기열·재료·배치·정기 처리·읽기) · cron `/api/cron/consultation-ratings` · 지점 스위치 `consult_rating`(`rule.ts`·`labels.ts`) · 키 그룹 CONSULTATIONS(`models.ts`·`model-features.ts`·key-groups 가드) · 목록 열 교체(`consultation-list.tsx`) · 상세 읽기 전용 패널 · 도움말·번역 사전. SQL `s2_0044`(표 2개 · 정책 0개) — 운영 DB 적용 끝(드라이런 롤백 검증 뒤).
+- 일괄 평점 도구 `scripts/_oneoff/consult-rating/`: extract(운영 DB 읽기 전용 → `~/eywa-data`) · sample · rate(구독 CLI · 응답 모델 검증 · 캐시) · codex-brief · deliver(운영 DB 쓰기 · 기본 롤백 시험 · `--commit`) · owner-sheet(원장 점수표 40건 xlsx).
+- Codex 협의 1차 반영(제 초안의 길이·자리표시 점수 규칙 폐기 · 4점 문안 정렬 · 인용 검증 등)과 교정 수치는 결정 본문에. 침산 상담 2,124건: 빈 양식·복사 200건(47묶음)·녹음 44건(summary가 '(녹음 분석 중)'로 남음) 확인.
+
+## 2026-11-11 — 원스크린 화면 분리(수정 계획 P3-O)
+
+- `onescreen-client.tsx` 5,890 → 2,290줄 — 동작은 그대로 두고 훅·부품으로 옮겼다: `session-input.ts`(순수) · `useSessionAutosave` · `useRosterView` · `useReportAttachments` · `useAutoWrite` · `useBulkOps`/`useBulkSend` · `useEnglishTemplateMode` · `useMakeupFlow`/`useMakeupPrev` · `useSendCore`/`useReportSend` · `<OneScreenCardColumn>`. 한 단계 = 한 커밋 · 단계마다 적대적 리뷰(결함 0).
+- `ReportCard` props 43 → 8(`fields`·`rowActions`·`slots` 묶음 · 본문 그대로).
+- 🔴 보이는 변경 하나: 원스크린 행·진도 카드·학생 목록·내 학습의 과목 색이 코드 고정(`subjectTone`)에서 **학원 설정 과목 색**(`subjectColorOfRow` → `colorOf`, 미등록 키는 `LEGACY_COLORS`)으로 — 설정과 다르던 색이 설정대로 바뀐다.
+- 원스크린 화면 원문을 읽는 가드는 `readOnescreenScreen()`(화면 + 옮겨 낸 파일을 한 덩어리로) — 새로 옮겨 낸 파일은 그 목록에 한 줄. 발송 판정 배선 가드는 파일별로도 본다.
 
 ## 2026-11-10 — 보류 항목 정리(Codex 협의 추천안) — 수정 계획 P4 나머지
 

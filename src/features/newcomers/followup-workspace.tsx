@@ -1,9 +1,9 @@
 "use client";
 import { Fragment, useState, useTransition } from "react";
 import { StageBar } from "./stage-bar";
+import a from "@/components/analytics/analytics.module.css";
 import { useRouter } from "next/navigation";
 import { kstDateOf } from "@/lib/date-kst";
-import a from "@/components/analytics/analytics.module.css";
 import { EmbedLink as Link } from "@/components/embed-link";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { useSubjectMaps } from "@/features/owner/operations-context";
@@ -19,11 +19,9 @@ import css from "./followup-workspace.module.css";
 import { FollowupVisuals } from "./followup-visuals";
 import { EnrollmentSyncNote, type EnrollmentSyncInfo } from "./enrollment-sync-note";
 
-/**
- * 신규생 90일 정착 관리 — aywa-next(375d27df4) `followup-workspace.tsx` 이식(실제 기록 · s2_0060·s2_0061).
- * 학생별 정착 관리·담당자별 점검 = 과목별 관리 담당 · 담임 적응 피드백 · 관리자 확인·후속 조치. '전체 완료 체크표' = 종전 NewcomerBoard.
- * 권한은 서버(followup-query·followup-actions)가 다시 본다 — 이 화면의 버튼 숨김은 게이트가 아니다(#77).
- */
+// '과목 기본 담당' 선택지는 그 과목에 기본 담당이 정해져 있을 때만 낸다(누구인지 이름과 함께) — 없는 기본값을 고르게 하지 않는다.
+// 이미 기본 담당을 따르던 학생인데 그 기본 담당이 없어졌으면 '따름 · 지금 기본 담당 없음'으로 보인다(그대로 저장해도 '미지정'으로 굳지 않게).
+// '전체 완료 체크표' 쓰기는 `canWriteChecks`를 본다 — 정착 관리 자료 조회가 실패해도(canManage가 꺼져도) 종전 체크표는 잠그지 않는다.
 const CALLS = [{ key: "month1_call", label: "30일 콜" }, { key: "month2_call", label: "60일 콜", optional: true }, { key: "month3_call", label: "90일 콜" }];
 const short = (date: string | null) => kstDateOf(date)?.slice(5,10).replace("-", ".") ?? "미정";
 const reviewLabel = { pending: "확인 대기", confirmed: "확인 완료", revision: "보완 요청" };
@@ -32,7 +30,6 @@ type SaveResult = { ok: boolean; error?: string };
 export function FollowupWorkspace({ data, legacy, initialFilters, initialStudent, syncInfo }: { data: FollowupView; legacy: NewcomersView; initialFilters: BoardFilters; initialStudent?: string; syncInfo?: EnrollmentSyncInfo }) {
   const { labelOf } = useSubjectMaps();
   const router = useRouter();
-  // 첫 화면 = 학생별 정착 관리 · 체크표 필터가 주소에 실려 오면(운영실 링크) 체크표.
   const [tab, setTab] = useState<"students" | "owners" | "checks">(initialFilters.item || initialFilters.bucket || initialFilters.status !== "all" || initialFilters.subject !== "all" ? "checks" : "students");
   const [query, setQuery] = useState(initialFilters.query);
   const [filter, setFilter] = useState("all"), [person, setPerson] = useState("all");
@@ -65,7 +62,6 @@ export function FollowupWorkspace({ data, legacy, initialFilters, initialStudent
   });
   const people = [...new Map(data.students.flatMap(s => [...managersOf(s), ...s.homerooms]).map(p => [p.id, p])).values()].sort((a, b) => a.name.localeCompare(b.name, "ko"));
 
-  /** 저장 → 성공이면 최신 기록으로 다시 그린다(새로고침만 트랜지션 · 서버 액션은 밖에서 — #102). */
   async function run(action: () => Promise<SaveResult>) {
     if (saving) return;
     setBusy(true); setError(""); setNotice("");
@@ -84,17 +80,17 @@ export function FollowupWorkspace({ data, legacy, initialFilters, initialStudent
 
   return <div className={`${css.root} ${a.dashboard}`}>
     <header className={css.hero}>
-      <div><p className={css.eyebrow}>신규생 관리 · 90일 정착</p><h1>신입생이 자리 잡을 때까지</h1><p>관리자는 연락을 챙기고, 담임은 적응을 살피고, 피드백은 다음 행동으로 이어집니다.</p></div>
+      <div><p className={css.eyebrow}>신입생 90일 관리 · 정착 지원</p><h1>신입생이 자리 잡을 때까지</h1><p>관리자는 연락을 챙기고, 담임은 적응을 살피고, 피드백은 다음 행동으로 이어집니다.</p></div>
       <div className={css.heroDate}><span>오늘의 관리 기준</span><strong>{data.today.replaceAll("-", ".")}</strong><Link href="/students/care">입학 약속·이행 보기 ↗</Link></div>
     </header>
     <nav className={css.nav} aria-label="신입생 관리 보기">
       {([['students','학생별 정착 관리'],['owners','담당자별 점검'],['checks','전체 완료 체크표']] as const).map(([key,label]) => <button key={key} type="button" aria-pressed={tab === key} onClick={() => setTab(key)}>{label}</button>)}
       <span>등록 → 첫 적응 → 30일 → 60일 → 90일 → 장기재원</span>
     </nav>
-    {tab !== "checks" && data.defaults?.length?<aside className={css.defaultRules} aria-label="과목별 기본 관리자"><b>기본 관리 담당</b>{data.defaults.map(d=><span key={d.subject}>{d.subject==="eie"?"EiE":labelOf(d.subject)} · {d.manager?.name??"재지정 필요"}</span>)}<small>기존 개별 배정은 유지 · 동시 수강은 각 과목별 기록</small></aside>:null}
+    {data.defaults?.length?<aside className={css.defaultRules} aria-label="과목별 기본 관리자"><b>기본 관리 담당</b>{data.defaults.map(d=><span key={d.subject}>{d.subject==="eie"?"EiE":labelOf(d.subject)} · {d.manager?.name??"재지정 필요"}</span>)}<small>기존 개별 배정은 유지 · 동시 수강은 각 과목별 기록</small></aside>:null}
     {data.error ? <p role="alert" className={css.error}>{data.error} <button type="button" onClick={() => router.refresh()}>다시 조회</button></p> : null}
     <EnrollmentSyncNote info={syncInfo} editing={!!selected || saving}/>
-    {tab === "checks" ? <NewcomerBoard view={legacy} canWrite={data.canManage} initialFilters={initialFilters} /> : <>
+    {tab === "checks" ? <NewcomerBoard view={legacy} canWrite={data.canWriteChecks} initialFilters={initialFilters} /> : <>
       <section className={css.metrics} aria-label="신입생 관리 요약">
         <button type="button" onClick={() => setFilter("all")}><span>집중 관리 학생</span><strong>{data.students.length}<small>명</small></strong><em>학생 한 명 기준으로 관리</em></button>
         <button type="button" onClick={() => setFilter(unlinked > 0 ? "unlinked" : "unassigned")}><span>담당·수강 연결 확인</span><strong data-alert={unassigned + unlinked > 0}>{known ? unassigned + unlinked : "—"}<small>명</small></strong><em>{known ? `담당 미지정 ${unassigned}명 · 수강 연결 필요 ${unlinked}명` : "조회 확인 필요"}</em></button>
@@ -137,7 +133,7 @@ export function FollowupWorkspace({ data, legacy, initialFilters, initialStudent
         <div className={css.drawerBody}>
           <div className={css.subjectTabs} role="group" aria-label="학생 과목 선택">{current.subjects.map(row=><button type="button" key={row.rowKey} aria-pressed={subject!=="general"&&(activeSubject?.subject??"")===(row.subject??"")} onClick={()=>{setSubject(row.subject??"");setError("");setNotice("");}}>{row.subject?labelOf(row.subject):"과목 미정"}</button>)}{(data.canManage||current.reports.some(r=>r.subject==="general"))&&current.subjects.some(r=>r.subject)?<button type="button" aria-pressed={subject==="general"} onClick={()=>{setSubject("general");setPanel("reports");}}>생활·종합</button>:null}</div>
           {subject!=="general"?<section className={css.assignment}><h3>{activeSubject?.subject?labelOf(activeSubject.subject):"과목 미정"} 관리 담당자</h3>{data.canManage?<form key={`${selected}:${activeSubject?.subject}:${activeManager?.version??0}`} onSubmit={e=>{e.preventDefault();const value=String(new FormData(e.currentTarget).get("manager")??"");void run(()=>assignNewcomerManager({studentId:selected,subject:activeSubject?.subject??"",mode:value==="default"?"default":"manual",managerId:value==="default"?null:value||null,version:activeManager?.version??0}));}}>
-            <select name="manager" aria-label="30·60·90일 콜 관리 담당자" defaultValue={activeManager?.source==="default"?"default":activeManager?.manager?.id??""} disabled={saving}><option value="default">과목 기본 담당 · {activeManager?.defaultManager?.name??"설정 없음"}</option><option value="">미지정</option>{data.staff.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><button type="submit" disabled={saving}>담당 저장</button>
+            <select name="manager" aria-label="30·60·90일 콜 관리 담당자" defaultValue={activeManager?.source==="default"?"default":activeManager?.manager?.id??""} disabled={saving}>{activeManager?.defaultManager?<option value="default">과목 기본 담당 · {activeManager.defaultManager.name}</option>:activeManager?.source==="default"?<option value="default">과목 기본 담당 따름 · 지금 기본 담당 없음</option>:null}<option value="">미지정</option>{data.staff.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><button type="submit" disabled={saving}>담당 저장</button>
           </form>:<strong>{known?activeManager?.manager?.name??"관리 담당자 미지정":"조회 확인 필요"}</strong>}<p>이 과목만 변경됩니다. 다른 과목의 담당자와 기록은 유지됩니다.</p><p>{current.homerooms.filter(t=>t.subject===activeSubject?.subject).map(t=>`담임 ${t.name}`).join(" · ")||"담임 배정을 확인해 주세요"}</p></section>:null}
           <div className={css.panelTabs} role="group" aria-label="학생 관리 기록 종류"><button type="button" aria-pressed={panel === "calls"} onClick={() => {setPanel("calls");if(subject==="general")setSubject(activeSubject?.subject??"");}}>관리 콜·첫 적응</button><button type="button" aria-pressed={panel === "reports"} onClick={() => setPanel("reports")}>담임 피드백·후속 조치</button></div>
           {error ? <p role="alert" className={css.error}>{error}</p> : null}<p role="status" className={css.notice}>{notice}</p>
@@ -155,7 +151,7 @@ export function FollowupWorkspace({ data, legacy, initialFilters, initialStudent
             {!activeReports.length ? <p className={css.empty}>아직 적응 보고가 없습니다. 미등록을 ‘문제 없음’으로 해석하지 않습니다.</p> : null}
             {activeReports.map(report => <ReportCard key={`${report.id}:${report.version}`} report={report} data={data} busy={saving} onSave={v => run(() => reviewNewcomerFeedback(v))} />)}
           </> : null}
-          <div className={css.links}><Link href={`/students/${current.row.studentId}/care`}>입학 약속·인수·이행 증거 ↗</Link><Link href={`/students/${current.row.studentId}`}>학생 상세 ↗</Link></div>
+          <div className={css.links}><Link href={`/students/${current.row.studentId}/care`}>입학 약속·인수·이행 증거 ↗</Link><Link href={`/students/${current.row.studentId}`}>학생 통합정보·지식그래프 ↗</Link></div>
         </div>
       </> : null}
     </SheetContent></Sheet>
