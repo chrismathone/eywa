@@ -85,7 +85,8 @@ export function GraphInspector({ data, focus, group, gaps, gapKey, onGap, onPick
       <span className={s.pill}>{labels[focus.type]}</span>
       <h3>{focus.label}</h3>
       {health && <span className={s.orange}>{health}</span>}
-      <p>{focus.source}</p>
+      {/* 출처 글의 영문 표·열 이름(students · factors)은 화면에 내지 않는다 */}
+      <p>{focus.source.split(" · ").filter((part) => !/^[\x00-\x7F]+$/.test(part)).join(" · ")}</p>
       {focus.period && <small>{focus.period}</small>}
       {focus.href && (
         <Link className={s.button} href={focus.href}>
