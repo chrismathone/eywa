@@ -307,11 +307,11 @@ export function surveyForModel(
 
 /**
  * 전수 조회 한 번의 기록 — `examined`는 **이 전수 조회 뒤에** 성공한 조회가 읽은 보기(agent가 채운다).
- * 대상 id를 찾던 앞 조회(`select id from classes where …`)가 '자세히 봄'으로 세지지 않게(적대 리뷰 2026-11-09).
+ * 대상 id를 찾던 앞 조회(`select id from classes where …`)가 '내용 조회'으로 세지지 않게(적대 리뷰 2026-11-09).
  */
 export type SurveyRecord = { target: SurveyTarget; id: string; name: string; from: string; to: string; rows: SurveyRow[]; examined: Set<string> };
 
-/** 온톨로지 보기로 본 것은 그 원본 표도 본 것으로(onto_attendance로 출결을 봤으면 attendance_records도 '자세히 봄'). */
+/** 온톨로지 보기로 본 것은 그 원본 표도 본 것으로(onto_attendance로 출결을 봤으면 attendance_records도 '내용 조회'). */
 const VIEW_SOURCES: Record<string, readonly string[]> = {
   onto_attendance: ["attendance_records"],
   onto_enrollments: ["enrollments", "classes"],
@@ -320,7 +320,7 @@ const VIEW_SOURCES: Record<string, readonly string[]> = {
 };
 /**
  * 원본을 직접 봤으면 그 보기도 본 것 — 보기가 **원본 하나를 거른 것**일 때만(onto_attendance ← attendance_records 등).
- * 🔴 onto_class_teachers는 여러 원본을 합친 보기라 classes를 봤다고(반 id 찾기) '반 담당 자세히 봄'이 되지 않는다(적대 리뷰 2026-11-09).
+ * 🔴 onto_class_teachers는 여러 원본을 합친 보기라 classes를 봤다고(반 id 찾기) '반 담당 내용 조회'이 되지 않는다(적대 리뷰 2026-11-09).
  */
 const VIEW_PRIMARY: Record<string, string> = { onto_attendance: "attendance_records", onto_enrollments: "enrollments", onto_students: "students" };
 

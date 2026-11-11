@@ -23,7 +23,13 @@ export type NetPlan = { frame: (u: number) => NetFrame; end: NetBoard };
 const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
 const lerpP = (a: NetPoint, b: NetPoint, u: number): NetPoint => ({ x: lerp(a.x, b.x, u), y: lerp(a.y, b.y, u) });
 const lerpCam = (a: NetCam, b: NetCam, u: number): NetCam => ({ k: lerp(a.k, b.k, u), x: lerp(a.x, b.x, u), y: lerp(a.y, b.y, u) });
-const sameEdge = (a: NetEdge, b: NetEdge) => a.from === b.from && a.to === b.to;
+/** 선 열쇠(from → to) — 대조는 Set·Map으로(선이 수천 개인 판에서 `some`/`find` 겹 반복은 전환마다 수십~수백 ms 멈춘다 · 지식그래프 전부 펼친 판). */
+const edgeKey = (e: NetEdge) => `${e.from}\u0000${e.to}`;
+const firstByKey = (edges: NetEdge[]) => {
+  const m = new Map<string, NetEdge>();
+  for (const e of edges) if (!m.has(edgeKey(e))) m.set(edgeKey(e), e);
+  return m;
+};
 
 type Item =
   | { n: NetNode; gone: true; pos: NetPoint; hub: string | null; off: NetPoint | null; op0: number; s0: number }
@@ -60,9 +66,11 @@ export function planMorphTo(old: NetBoard, g2: NetBoard, pivotOld: string | null
     const p = { x: old.pos[n.id].x + shift.x, y: old.pos[n.id].y + shift.y };
     items.push({ n, gone: true, pos: p, hub, off: hub ? { x: p.x - (old.pos[hub].x + shift.x), y: p.y - (old.pos[hub].y + shift.y) } : null, op0: n.op ?? 1, s0: n.rScale ?? 1 });
   }
-  const oldE = old.edges.filter((e) => !g2.edges.some((f) => sameEdge(e, f))).map((e) => ({ e, s: e.op ?? 1 }));
+  const g2Keys = new Set(g2.edges.map(edgeKey));
+  const oldByKey = firstByKey(old.edges);
+  const oldE = old.edges.filter((e) => !g2Keys.has(edgeKey(e))).map((e) => ({ e, s: e.op ?? 1 }));
   const g2E = g2.edges.map((e) => {
-    const f = old.edges.find((x) => sameEdge(x, e));
+    const f = oldByKey.get(edgeKey(e));
     return { e, s: f ? (f.op ?? 1) : 0 };
   });
   const frame = (u: number): NetFrame => {
@@ -121,7 +129,8 @@ export function planMorphBack(cur: NetBoard, A: NetBoard, pivotA: string | null,
     const p = { ...cur.pos[n.id] };
     items.push({ n, gone: true, from: p, to: null, hub, off: hub ? { x: p.x - cur.pos[hub].x, y: p.y - cur.pos[hub].y } : null, r0: 1, sink: hub ? null : { ...pb } });
   }
-  const curEdges = cur.edges.filter((e) => !A.edges.some((f) => sameEdge(e, f)));
+  const aKeys = new Set(A.edges.map(edgeKey));
+  const curEdges = cur.edges.filter((e) => !aKeys.has(edgeKey(e)));
   const frame = (u: number): NetFrame => {
     const pos: Record<string, NetPoint> = {};
     const nodes: NetNode[] = [];

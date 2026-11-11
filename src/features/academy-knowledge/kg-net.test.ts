@@ -4,7 +4,7 @@ import { netLayout } from "@/features/explore/components/network/layout";
 import { hoverText } from "@/features/explore/components/network/node-actions";
 import { entities } from "./catalog";
 import type { Edge, Graph, Node } from "./graph";
-import { ACADEMY_TITLE, academyNodeId, isolatedCount, KG_UNDATED_SHOWN, kgDetailParam, kgNetBoard, relationLabel } from "./kg-net";
+import { ACADEMY_TITLE, academyNodeId, isolatedCount, kgDetailParam, kgNetBoard, relationLabel } from "./kg-net";
 import { visibleGraph } from "@/features/explore/components/network/layout";
 
 /** 지식그래프 → 네트워크 판 — 가상 값(실제 학생·직원 아님). 모양은 운영 그래프(`loadAcademyKnowledge`)와 같다. */
@@ -69,7 +69,7 @@ describe("학원 전체 판", () => {
     expect(hubs.map((h) => h.sectorKey)).toEqual(["Student", "Staff", "Course", "School", "Consultation", "LearningRecord", "Observation", "Evidence"].sort((x, y) => order.indexOf(x as never) - order.indexOf(y as never)));
     expect(hubs.find((h) => h.sectorKey === "Course")?.title).toBe("반·강좌");
     expect(b.graph.nodes.find((n) => n.id === id("student:s1"))?.hub).toBe("hub:Student");
-    expect(hubs.find((h) => h.sectorKey === "Student")?.summary).toBe("기록 4건 · 다른 기록과 관계 없음 1건");
+    expect(hubs.find((h) => h.sectorKey === "Student")?.summary).toBe("기록 4건 · 관계 없음 1건");
   });
   it("관계 = 데이터에 있는 것만 · 같은 두 기록은 한 선(이름은 모아서) · 학원 점과의 소속 관계는 긋지 않는다(영역 선이 말한다)", () => {
     const rel = b.graph.edges.filter((e) => !SKELETON(e.from, e.to));
@@ -128,21 +128,40 @@ describe("기록이 가운데인 판", () => {
   });
 });
 
-describe("점 압축 — 날짜 없는 기록이 많으면 접는다(펼치면 전부)", () => {
-  it("관계 많은 순 앞 몇 건만 영역 둘레 · 나머지 '나머지 N건'(분류 재료가 없을 때) · 관계 없는 기록 '관계 없음 N건' — 처음엔 접혀 있고 펼치면 다 보인다", () => {
-    const many: Node[] = [node("academy", "Academy", "학원"), node("course:c1", "Course", "반"), node("course:c2", "Course", "반2"), ...Array.from({ length: 30 }, (_, i) => node(`student:m${i}`, "Student", `학생${i}`)), ...Array.from({ length: 5 }, (_, i) => node(`student:z${i}`, "Student", `혼자${i}`))];
+describe("개별 기록 = 가지를 끝까지(원장 2026-11-11) — 묶음은 모두 펼쳐 있고 더블클릭으로 접는다", () => {
+  it("분류 재료가 없으면 기록은 영역 둘레에 바로(옛 '앞 12건 + 나머지' 없음) · 관계 없는 기록 '관계 없음 N건' 묶음도 펼쳐 있다 · 날짜 묶음도 끝까지", () => {
+    const many: Node[] = [node("academy", "Academy", "학원"), node("course:c1", "Course", "반"), ...Array.from({ length: 30 }, (_, i) => node(`student:m${i}`, "Student", `학생${i}`)), ...Array.from({ length: 5 }, (_, i) => node(`student:z${i}`, "Student", `혼자${i}`))];
     const rel: Edge[] = Array.from({ length: 30 }, (_, i) => edge(`student:m${i}`, "course:c1", "ENROLLED_IN", "enrolled_in"));
-    rel.push(edge("student:m29", "course:c1", "RELATED_RECORD", "extra"), edge("student:m29", "course:c2", "ENROLLED_IN", "enrolled_in")); // 같은 두 기록은 한 번만 센다 · m29는 다른 반이 하나 더 → 앞에 선다
     const b = kgNetBoard({ ...G, nodes: many, edges: rel }, null);
-    const more = b.graph.nodes.find((n) => n.id === "grp:Student:more")!;
-    const none = b.graph.nodes.find((n) => n.id === "grp:Student:none")!;
-    expect([more.tally, more.label, none.tally, none.label]).toEqual([30 - KG_UNDATED_SHOWN, `나머지 · ${30 - KG_UNDATED_SHOWN}건`, 5, "관계 없음 · 5건"]);
-    expect(b.graph.nodes.find((n) => n.id === id("student:m29"))?.parent).toBeUndefined();
-    const shown = visibleGraph(b.graph);
-    expect(shown.nodes.filter((n) => n.kind === "record")).toHaveLength(KG_UNDATED_SHOWN + 2); // 학생 12 + 반 2
-    expect(b.shown).toBe(37); // 도구줄 수 = 접힌 것까지 전부
-    const opened = visibleGraph(b.graph, new Set([more.id, none.id]));
-    expect(opened.nodes.filter((n) => n.kind === "record")).toHaveLength(37);
+    expect(b.graph.nodes.some((n) => n.id === "grp:Student:more")).toBe(false);
+    expect(b.graph.nodes.find((n) => n.id === "grp:Student:none")?.label).toBe("관계 없음 · 5건");
+    expect(b.graph.nodes.filter((n) => n.kind === "group").every((n) => n.expanded)).toBe(true);
+    expect(visibleGraph(b.graph).nodes.filter((n) => n.kind === "record")).toHaveLength(36);
+    expect(visibleGraph(b.graph, new Set(["grp:Student:none"])).nodes.filter((n) => n.kind === "record")).toHaveLength(31); // 더블클릭 = 접기
+    const dated = kgNetBoard(G, null);
+    expect(visibleGraph(dated.graph).nodes.filter((n) => n.kind === "record")).toHaveLength(dated.shown); // 연도 → 월 → 일자 묶음 아래 기록까지 전부
+  });
+});
+
+describe("관계선 = 강조할 때만(원장 2026-11-11 '선도 너무 많아서 정신없는데')", () => {
+  it("두 기록 사이 실제 관계선은 focusOnly · 뼈대(가운데 → 영역 → 묶음 → 기록)는 늘 그린다 · 이웃 판정엔 그대로 든다", () => {
+    const b = kgNetBoard(G, null);
+    const tree = (x: string) => x.startsWith("hub:") || x.startsWith("grp:") || x === b.center.id;
+    const rel = b.graph.edges.filter((e) => !tree(e.from) && !tree(e.to));
+    expect(rel.length).toBeGreaterThan(0);
+    expect(rel.every((e) => e.focusOnly)).toBe(true);
+    expect(b.graph.edges.filter((e) => tree(e.from) || tree(e.to)).some((e) => e.focusOnly)).toBe(false);
+    const L = netLayout(b, "records");
+    expect(L.adjacency.get(id("student:s1"))?.has(id("course:c1"))).toBe(true);
+  });
+  it("기록이 가운데인 판 = 가운데의 직접 관계선은 늘 그린다(가운데는 고른 점이 될 수 없다) · 다른 기록 사이 관계선만 focusOnly", () => {
+    const b = kgNetBoard(G, id("student:s1"));
+    const center = b.center.id;
+    const skeleton = (x: string) => x.startsWith("hub:") || x.startsWith("grp:");
+    const direct = b.graph.edges.filter((e) => (e.from === center || e.to === center) && !skeleton(e.from) && !skeleton(e.to));
+    expect(direct.length).toBeGreaterThan(0);
+    expect(direct.some((e) => e.focusOnly)).toBe(false);
+    expect(b.graph.edges.filter((e) => e.focusOnly).every((e) => e.from !== center && e.to !== center)).toBe(true);
   });
 });
 

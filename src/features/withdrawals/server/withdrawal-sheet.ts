@@ -48,13 +48,13 @@ const TIMEOUT_MS = 25_000;
 /** 원장이 준 '퇴원생 관리 차트'(2026-10-07) — 비밀이 아니라 주소다. */
 const DEFAULT_SPREADSHEET_ID = "1BvFQiUawZuyrhfJi14CK_AA_NpL7b-wbqaFVNZxoobU";
 
-function spreadsheetIdOf(): string | null {
+export function spreadsheetIdOf(): string | null {
   const v = process.env.WITHDRAWAL_SHEET_SPREADSHEET_ID?.trim();
   if (v?.toLowerCase() === "off") return null;
   return v || DEFAULT_SPREADSHEET_ID;
 }
 
-async function isSheetTenant(tenantId: string): Promise<boolean> {
+export async function isSheetTenant(tenantId: string): Promise<boolean> {
   const pinned = (process.env.WITHDRAWAL_SHEET_TENANT_ID ?? process.env.HR_ROSTER_TENANT_ID)?.trim();
   if (pinned) return pinned === tenantId;
   const { data, error } = await createAdminClient().from("tenants").select("id").limit(2);

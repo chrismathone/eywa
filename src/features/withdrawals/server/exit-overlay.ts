@@ -88,7 +88,10 @@ export async function getExitOverlay(subject: string, anchor: string, tenantId: 
 
   // 보이는 담당 = 그만둘 때 다니던 반의 그날 담임(퇴원관리와 같은 `homeroomOf` · 퇴원생 관리 차트 기준 — 원장 2026-11-11).
   // 퇴원율이 센 선생님(`teachersOf`)은 '수강종료는 세지 않음' 판정(`counted`)에만 쓴다.
-  const rowTeacherIds = exits.map((e) => judge.homeroomOf(e.studentId, subject, e.row.date));
+  // 지난 달(퇴원생 관리 차트가 있는 달)은 시트의 담당선생님이 이긴다 — 퇴원관리와 같은 순서(`attributeTeachers`).
+  const rowTeacherIds = exits.map(
+    (e) => judge.sheetTeachersOf(e.row.name, subject, [e.row.date.slice(0, 7)]) ?? judge.homeroomOf(e.studentId, subject, e.row.date),
+  );
   const countedIds = exits.map((e) => judge.teachersOf(e.studentId, subject, e.endMonth));
   const zeroIds = monthKeys.map((m) => judge.zeroIdsOf(subject, m));
   const subjectClasses = source.classes

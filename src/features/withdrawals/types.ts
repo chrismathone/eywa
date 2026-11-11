@@ -89,7 +89,7 @@ export const REASON_LABEL_EN: Record<WithdrawalReason, string> = {
  * 마이그레이션/외부 데이터의 사유 코드 표기 흔들림을 표준 enum으로 흡수.
  * (예: ijw 데이터는 "dissatisfied"를 쓰는데 우리 enum은 "dissatisfaction".)
  */
-const REASON_ALIAS: Record<string, WithdrawalReason> = {
+export const REASON_ALIAS: Readonly<Record<string, WithdrawalReason>> = {
   dissatisfied: "dissatisfaction",
   unsatisfied: "dissatisfaction",
   moved: "relocation",
