@@ -20,15 +20,18 @@ const TAB_OFF = "text-text-dim hover:text-foreground hover:bg-bg-soft font-mediu
  * 원생 로열티 머리 — 단독 화면은 앱 머리글(`PageHeader` 한 줄 · 원장 2026-11-11 디자인 통일), 학생 상세 안(로열티 범위)은
  * 그 화면이 이미 머리글을 가지므로 제목·설명 한 줄만. 아래 면 탭은 둘 다 앱 면 탭과 같은 모양.
  */
-export function ContributionHeader({ title, description, active, canConfigure, actions }: {
-  title: string; description: string; active: typeof tabs[number]["key"]; canConfigure?: boolean; actions?: ReactNode;
+export function ContributionHeader({ title, description, embedLabel, active, canConfigure, actions }: {
+  title: string; description: string;
+  /** 창·모바일 접힌 머리글 라벨 — 제목에만 든 정보(학생 이름)가 접힌 머리글에서 사라지지 않게(PageHeader `embedLabel`). */
+  embedLabel?: string;
+  active: typeof tabs[number]["key"]; canConfigure?: boolean; actions?: ReactNode;
 }) {
   const embedded = useStudentContributionScope() !== null;
   return <div className="space-y-4">
     {embedded ? <div className="flex flex-wrap items-start justify-between gap-4">
       <div className="space-y-1"><h2 className="text-xl font-bold">{title}</h2><p className="text-sm">{description}</p></div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
-    </div> : <PageHeader title={title} description={description} actions={actions} />}
+    </div> : <PageHeader title={title} description={description} embedLabel={embedLabel} actions={actions} />}
     <nav aria-label="원생 로열티 메뉴" className={`${FACE_TABS_NAV} ${FACE_TABS_NAV_LEVEL.primary}`}>
       {tabs.filter((tab) => canConfigure || tab.key === "ranking" || tab.key === "students" || tab.key === "ontology").map((tab) => <Link key={tab.key} href={tab.href}
         aria-current={active === tab.key ? "page" : undefined}

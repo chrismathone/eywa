@@ -14,7 +14,7 @@ import { BackLink } from "@/components/back-link";
 import { PeriodNav } from "@/components/period-nav";
 import { FilterSelect } from "@/components/filter-select";
 import { Toolbar } from "@/components/toolbar";
-import { kstMonth, monthLabel } from "@/lib/date-kst";
+import { monthLabel } from "@/lib/date-kst";
 
 const number = (n: number | null, digits = 0) => n === null ? "자료 필요" : n.toLocaleString("ko-KR", { maximumFractionDigits: digits });
 const won = (n: number | null) => n === null ? "자료 필요" : `${number(n)}원`;
@@ -26,7 +26,9 @@ const won = (n: number | null) => n === null ? "자료 필요" : `${number(n)}�
 export function ManagementWorkspace({ data, reportIndex, months, aiReview, aiEnabled, accountingImport, collectorAvailable }: { data: ManagementSnapshot; reportIndex: readonly ReportIndexRow[]; months: readonly string[]; aiReview: AiReview | null; aiEnabled: boolean; accountingImport: boolean; collectorAvailable: boolean }) {
   // 운영 분석 월 = 수납 월 이동과 같은 모양(PeriodNav + 라벨 자리 월 드롭다운). 목록 = 페이지가 넘긴 선택지(오름차순) · 끝에서 화살표 잠금.
   // 파라미터가 없으면 이번 달(page.tsx 기본값)이라 드롭다운의 '기본 달' = 이번 달.
-  const at = months.indexOf(data.month), nowMonth = kstMonth(), monthHref = (m: string) => `?month=${m}`;
+  // 이번 달 = **서버가 준 목록의 끝**(page.tsx: 최근 36개월이 늘 들어가고 미래 월은 빠진다 → 끝 = 서버 기준 이번 달).
+  // 클라 렌더에서 kstMonth()를 다시 부르면 월말 자정 무렵 서버와 값이 갈려 하이드레이션이 깨진다(React #418).
+  const at = months.indexOf(data.month), nowMonth = months.at(-1) ?? data.month, monthHref = (m: string) => `?month=${m}`;
   return <div className="space-y-5">
     <PageHeader title="경영 분석" description="운영 현황부터 수익 구조까지. 지표를 살펴보고 근거와 다음 할 일을 연결하세요."/>
     <Toolbar>

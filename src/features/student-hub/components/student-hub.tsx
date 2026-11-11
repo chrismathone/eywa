@@ -25,11 +25,15 @@ export async function StudentHub({ studentId, month }: { studentId: string; mont
   const readable = data.sections.filter((s) => s.state === "ready" || s.state === "partial");
   const analysisKinds = { rule: "기록 기반 계산", ai: "저장된 AI 분석" };
   return <div className={`${a.dashboard} ${s.page}`} aria-label="학생 통합보기">
-    <PageHeader title={`${data.student.name} 학생 통합보기`} description={`입학 때의 요구부터 수업·소통·수납·분석과 후속 업무까지, 이 학생에게 연결된 자료를 함께 확인합니다 · ${kstShortStamp(data.checkedAt)} 조회 · ${readable.length}개 자료 영역 · 분석 ${data.analyses.length}건`}
+    {/* 접힌 머리글(창·모바일)은 제목을 접는다 — 학생 이름이 사라지지 않게 짧은 라벨(embedLabel). 조회 시각·건수는 설명에 두면 화면 최대화 중 숨어 구역 줄 끝으로. */}
+    <PageHeader title={`${data.student.name} 학생 통합보기`} description="입학 때의 요구부터 수업·소통·수납·분석과 후속 업무까지, 이 학생에게 연결된 자료를 함께 확인합니다." embedLabel={`${data.student.name} · 학생 통합보기`}
       actions={<><Button variant="outline" render={<Link href={base}/>}>학생 상세로</Button><Button variant="outline" render={<Link href={`${base}/care`}/>}>약속·이행 관리 ↗</Button></>}/>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
       <nav aria-label="학생 통합보기 구역" className={s.sourceNav}>
         {[{ id: "analysis", label: "분석·판단" }, ...groups, { id: "coverage", label: "자료 연결 상태" }].filter((g) => g.id !== "billing" || data.billingAllowed).map((g) => <a key={g.id} href={`#student-hub-${g.id}`} >{g.label}</a>)}
       </nav>
+      <span className="ml-auto text-xs"><span className="num">{kstShortStamp(data.checkedAt)}</span> 조회 · {readable.length}개 자료 영역 · 분석 {data.analyses.length}건</span>
+      </div>
       <details className={s.profile}><summary>학생·보호자 기본정보</summary><dl>
         {[["학교·학년", [data.student.school, data.student.grade].filter(Boolean).join(" · ")], ["원생번호", data.student.studentCode], ["영문명", data.student.englishName], ["클래스노트 이름", data.student.classnoteName], ["학생 연락처", data.student.studentPhone], ["보호자", data.student.parentName], ["보호자 연락처", data.student.parentPhone], ["입학일", data.student.enrolledAt], ["퇴원일", data.student.withdrawnAt]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || "기록 없음"}</dd></div>)}
       </dl><Link href={`${base}?tab=overview`} className={s.link}>프로필·기존 요약 전체 보기</Link></details>

@@ -90,8 +90,9 @@ export function JourneyWorkspace({ data, compact = false }: { data: JourneyData;
         <ChartCard title="월별 확인된 방문" note="실제 방문 완료 기록만 집계합니다. 입력이 없는 달은 미확인입니다. 같은 사람은 한 달에 1대상, 다른 달 재방문은 각 달에 포함됩니다."><SeriesChart unit="건" points={summary.monthly.map((m) => ({ label: m.month.slice(5) + "월", values: [m.visits || null, m.people || null], partial: m.unverified > 0 }))} series={[{ label: "방문 횟수", color: palette[0] }, { label: "중복 제외 대상", color: palette[1] }]} /></ChartCard>
         <ChartCard title="방문 기록의 처리 상태" note="신규·재입학만 포함. 전화상담·기존 재원 상담·대상 미확인은 방문 통계에서 제외합니다."><DonutChart label="방문 기록" unit="건" data={(["completed", "scheduled", "no_show", "cancelled"] as const).map((k, i) => ({ label: statuses[k], value: visitRecords.filter((r) => r.document.status === k).length, color: [palette[1], palette[0], palette[2], palette[4]][i] }))} /></ChartCard>
       </div>
-      <Toolbar><ToolbarSegment><ToolbarSegmentItem active={tab === "records"} onClick={() => setTab("records")}>기록·후속 업무</ToolbarSegmentItem><ToolbarSegmentItem active={tab === "quality"} onClick={() => setTab("quality")}>보완 대상 {summary.issues.length}</ToolbarSegmentItem>{baseline ? <ToolbarSegmentItem active={tab === "history"} onClick={() => setTab("history")}>2021–2026 검증 자료</ToolbarSegmentItem> : null}</ToolbarSegment></Toolbar>
-      <StudentSearchToggle ariaLabel="방문 기록 검색" placeholder="학생·담당자·보완 항목" inputWidth="w-56" value={query} onChange={setQuery}/>
+      <Toolbar><ToolbarSegment><ToolbarSegmentItem active={tab === "records"} onClick={() => setTab("records")}>기록·후속 업무</ToolbarSegmentItem><ToolbarSegmentItem active={tab === "quality"} onClick={() => setTab("quality")}>보완 대상 {summary.issues.length}</ToolbarSegmentItem>{baseline ? <ToolbarSegmentItem active={tab === "history"} onClick={() => setTab("history")}>2021–2026 검증 자료</ToolbarSegmentItem> : null}</ToolbarSegment>
+        {/* 검색은 머리글 동작 줄로 옮겨 그린다(HeaderSearchSlot) — 첫 그림(하이드레이션 전) 자리도 이 툴바 줄 안이라 옮겨 갈 때 본문이 튀지 않는다. */}
+        <StudentSearchToggle ariaLabel="방문 기록 검색" placeholder="학생·담당자·보완 항목" inputWidth="w-56" value={query} onChange={setQuery}/></Toolbar>
     </>}
     {(compact || tab === "records") && <section className={s.panel}>
       <div className={s.toolbar}><h2>전화·방문·등록 기록</h2>{compact && <Link href="/enrollment/visits">전체 점검 →</Link>}</div>

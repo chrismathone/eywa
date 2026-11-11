@@ -32,6 +32,38 @@ export function ContributionHeaderSkeleton({ actions }: { title: string; descrip
 }
 
 /**
+ * 학생 상세(`/student-contribution/[id]`) 머리 자리 — 실물 `ContributionHeader`(머리글 한 줄 · 동작 셋: 42팩터 정밀분석 · 최근 기록 요약 ·
+ * 전체 로열티 목록) + 면 탭. 상세 패널(student-ontology-panel.tsx)의 머리 Suspense 폴백과 `[id]/loading.tsx`가 같은 것을 쓴다.
+ */
+export function ContributionDetailHeadingSkeleton() {
+  return <ContributionHeaderSkeleton title="" description="" actions={DETAIL_ACTIONS} />;
+}
+
+/** 실물 `StudentDetailActions` 단추 셋 자리 — 실물이 `px-3 py-2 text-sm`(16px × 1.5 + 16 = 40px)라 `h-10`(CONTROL_H 아님). */
+const DETAIL_ACTION = <div className="bg-bg-soft h-10 w-28 animate-pulse rounded-lg" />;
+const DETAIL_ACTIONS = <div className="flex flex-wrap gap-2">{DETAIL_ACTION}{DETAIL_ACTION}{DETAIL_ACTION}</div>;
+
+/**
+ * 원생 상세 안(로열티 범위) 머리 자리 — 그 화면은 이미 앱 머리글이 있어 실물 `ContributionHeader`가 머리글이 아니라
+ * 제목(h2)·설명(p) 한 덩어리 + 면 탭(셋)으로 선다(contribution-shell.tsx `embedded`). 여기서 머리글 스켈레톤을 그리면
+ * 화면 한가운데 두 번째 머리글(구분선·최대화 단추)이 깜빡인다 — 실물과 같은 클래스의 투명 글자로.
+ */
+export function ContributionEmbeddedHeadingSkeleton() {
+  return (
+    <div aria-hidden className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="space-y-1">
+          <div className="text-xl font-bold"><Bar>학생 이름의 로열티와 기록</Bar></div>
+          <p className="text-sm"><Bar>월별 점수와 계산 근거를 확인하세요.</Bar></p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">{DETAIL_ACTIONS}</div>
+      </div>
+      <FaceTabsSkeleton labels={TABS.slice(0, 3)} />
+    </div>
+  );
+}
+
+/**
  * `ScoreBreakdown` 자리 — 항목 줄(이름·점수 / 막대 / 계산식) × rows + 아래 합계 줄.
  * `contained` = 목록 오른쪽 상자 안(테두리 없이 남은 높이를 채움) · 아니면 제 테두리 상자(배점 설정 오른쪽).
  * 항목 수는 0점이 아닌 지표만 서므로 데이터마다 다르다 — 학원 전체 기준 흔한 10개(지표 11개 중 승인 전 설명회 제외).

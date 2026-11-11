@@ -15,12 +15,12 @@ export async function StudentContributionView({ studentId, params }: { studentId
   const denied = (section === "referrals" || section === "settings") && !gate.canConfigure;
   return <StudentContributionScope studentId={studentId} back={params.back}>
     <Suspense fallback={<ConnectionSkeleton label="로열티와 기록" />}>
-      {denied ? <><p role="status" className="mb-4 text-sm">이 메뉴를 열람할 권한이 없어 학생의 로열티를 표시합니다.</p><StudentOntologyPanel studentId={studentId} month={params.month} /></>
+      {denied ? <><p role="status" className="mb-4 text-sm">이 메뉴를 열람할 권한이 없어 학생의 로열티를 표시합니다.</p><StudentOntologyPanel studentId={studentId} month={params.month} embedded /></>
         : section === "ontology" ? <OntologyView searchParams={Promise.resolve(params)} />
         : section === "referrals" ? <ReferralView />
         : section === "settings" ? <SettingsView />
         : section === "list" ? <ListView />
-        : <StudentOntologyPanel studentId={studentId} month={params.month} />}
+        : <StudentOntologyPanel studentId={studentId} month={params.month} embedded />}
     </Suspense>
   </StudentContributionScope>;
 }

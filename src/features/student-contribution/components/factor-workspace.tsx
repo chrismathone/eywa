@@ -25,11 +25,12 @@ export function FactorWorkspace({data}:{data:Data}) {
     const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`student-factors-${data.student.id}-${data.month}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
   return <div className="space-y-5" aria-busy={pending}>
-    <PageHeader title={`${data.student.name}의 로열티 정밀분석`} description="수익부터 관계·지원까지, 기록의 근거를 따라 학생을 이해합니다."/>
+    {/* 창·모바일 접힌 머리글은 설명만 남기고 제목을 접는다 — 학생 이름이 거기서 사라지지 않게 짧은 라벨을 따로 준다. */}
+    <PageHeader title={`${data.student.name}의 로열티 정밀분석`} description="수익부터 관계·지원까지, 기록의 근거를 따라 학생을 이해합니다." embedLabel={`${data.student.name} · 로열티 정밀분석`}/>
     <Toolbar>
       <Link href={`/student-contribution/${data.student.id}`} className="inline-flex items-center gap-1.5 text-sm hover:underline">← 로열티 점수·상위 %</Link>
       <form className="flex flex-wrap items-center gap-2" onSubmit={e=>{e.preventDefault();start(()=>router.push(`?month=${month}${typeof window!=="undefined"&&new URLSearchParams(window.location.search).has("embed")?"&embed=1":""}`));}}>
-        <label htmlFor="factor-month" className="text-sm font-medium">분석 월</label><input id="factor-month" type="month" required min="2000-01" max={data.today.slice(0,7)} value={month} onChange={e=>setMonth(e.target.value)} className={`border-border bg-card rounded-md border px-2.5 ${CONTROL_H} ${CONTROL_LABEL}`} /><Button type="submit" variant="outline" disabled={pending}>조회</Button>
+        <label htmlFor="factor-month" className="text-sm font-medium">분석 월</label><input id="factor-month" type="month" required min="2000-01" max={data.today.slice(0,7)} value={month} onChange={e=>setMonth(e.target.value)} className={`border-border bg-card rounded-lg border px-2.5 ${CONTROL_H} ${CONTROL_LABEL}`} /><Button type="submit" variant="outline" disabled={pending}>조회</Button>
         <span className="text-xs">기준일 {data.asOf} · {data.month===data.today.slice(0,7)?"진행 중인 월":"현재 확인된 기록으로 재구성"}</span>
       </form>
     </Toolbar>

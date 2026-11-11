@@ -10,7 +10,7 @@ import { uniqueEdges } from "./studio-model";
 import { GraphTab, SchemaTab, QualityTab } from "./studio";
 import s from "./workspace.module.css";
 import { PageHeader } from "@/components/page-header";
-import { BackLink } from "@/components/back-link";
+import { ArrowLeft } from "@/components/icons/aywa-icon-compat";
 import { Toolbar, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { Button } from "@/components/ui/button";
 import { BigStat } from "@/components/atoms/big-stat";
@@ -24,7 +24,9 @@ export function KnowledgeWorkspace({data,months,initialTab="graph"}:{data:Academ
   const query=new URLSearchParams({month:data.month,...(data.selectedStudent?{student:data.selectedStudent}:{}),...(data.selectedTeacher?{teacher:data.selectedTeacher}:{})}).toString();
   const openActions=data.records.filter(r=>r.document.kind==="action"&&r.document.state==="open");
   return <div className="space-y-5"><PageHeader title="스키마·지식그래프" description="학생·강사·수업·상담·홍보·재무의 원기록에서 판단 근거와 후속 업무까지." actions={<><Button variant="outline" render={<Link href="/work-records/knowledge"/>}>관찰·후속 조치·OKR 작성 ↗</Button><Button variant="outline" render={<a href={`/api/management/ontology?${query}`} download/>}>그래프 JSON 내려받기 ↓</Button></>}/>
-    <BackLink href="/dashboard/management" label="경영 분석"/>
+    {/* 메뉴에서 바로 여는 화면이라 창의 첫 화면이다 — 창 크롬 ←가 없어 창 안에서 숨는 BackLink로는 경영 분석으로 갈 길이 없다.
+        옛 머리 판의 늘 보이던 '← 경영 분석'을 BackLink와 같은 모양의 창 링크(EmbedLink)로 둔다. */}
+    <Link href="/dashboard/management" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition"><ArrowLeft className="size-3.5"/>경영 분석</Link>
     <div className="grid grid-cols-2 gap-3 xl:grid-cols-4"><BigStat label="연결된 개체" value={data.graph.nodes.length.toLocaleString()} sub="조회 범위 내 원기록·분석"/><BigStat label="검증된 관계" value={uniqueEdges(data.graph).length.toLocaleString()} sub="대상 ID·개체 유형 검사"/><BigStat label="직접 작성한 기록" value={data.records.length} sub="기준일까지의 최신 버전"/><BigStat label="진행 중 후속 조치" value={openActions.length} sub="담당자·기한·결과 관리"/></div>
     <div className={s.page}>
     <section className={s.panel}><form className={s.filters}><EmbedHiddenInput/><label>분석 월<select name="month" defaultValue={data.month}>{months.map(m=><option key={m} value={m}>{m}</option>)}</select></label><label>학생 중심 상세<select name="student" defaultValue={data.selectedStudent}><option value="">학원 전체 연결</option>{data.students.map(p=><option key={p.id} value={p.id}>{p.name} · {p.school??""} {p.grade??""}</option>)}</select></label><label>강사 중심 상세<select name="teacher" defaultValue={data.selectedTeacher}><option value="">선택 안 함</option>{data.staff.map(p=><option key={p.id} value={p.id}>{p.display_name}</option>)}</select></label><Button type="submit">연결 조회</Button></form><p className={s.muted}>기준일 {data.asOf} · 현재 저장 이력으로 재구성합니다. 학생·강사를 선택하면 해당 주체의 상세 원기록을 추가합니다. 조회된 관계는 인과관계 확정이 아닙니다.</p></section>
