@@ -1,5 +1,6 @@
 import { entities, type Entity } from "./catalog";
 import { degrees, relationLabel } from "./kg-net-rules";
+import { categoryTree, kgCategorized, type KgCategoryAt, type KgCategoryCtx } from "./kg-net-groups";
 import type { Graph, Node } from "./graph";
 import { nodeHealth } from "./studio-model";
 import { recordYmd, timeTree } from "@/features/explore/components/network/time-tree";
@@ -21,10 +22,11 @@ import type { ExploreTone } from "@/features/explore/model";
  *    날짜를 지어내지 않는다. 날짜 있는 기록은 영역 아래 연도 → 월 → (같은 날 여럿이면) 일자 묶음(`timeTree`), 없는 기록은 영역 둘레.
  *  · 선 = 판 뼈대(가운데 → 영역 → 묶음 → 기록) + 판에 선 두 기록 사이의 **실제 관계**(같은 두 기록이면 한 선 · 이름은 관계 이름을 모아서).
  *    데이터에 없는 관계는 긋지 않는다.
- * 점 id = 지식그래프 점 id 그대로(가운데도) — 더블클릭한 기록 점이 그대로 새 가운데가 되어 보간이 이어진다. 영역 `hub:<유형>` · 묶음 `grp:<유형>:<기간>`.
+ * 점 id = 지식그래프 점 id 그대로(가운데도) — 더블클릭한 기록 점이 그대로 새 가운데가 되어 보간이 이어진다. 영역 `hub:<유형>` · 날짜 묶음 `grp:<유형>:<기간>` · 분류 묶음 `grp:<유형>:cat:<단계…>`(`kg-net-groups.ts`) · `grp:<유형>:more`·`none`.
  */
 
 export { isolatedCount, kgDetailParam, relationLabel } from "./kg-net-rules";
+export type { KgCategoryCtx } from "./kg-net-groups";
 
 export const ACADEMY_TITLE = "학원 전체";
 export const academyNodeId = (tenant: string) => `${tenant}:academy`;
@@ -38,7 +40,8 @@ const TONE: Record<Entity, ExploreTone> = {
 };
 
 /**
- * 날짜 없는 기록을 영역 둘레에 바로 세우는 수 — 관계가 많은 순으로 이만큼만 세우고, 나머지는 '외 N건' 묶음 · 관계 없는 기록은 '관계 없음 N건'
+ * 날짜 없는 기록을 영역 둘레에 바로 세우는 수 — 학교·원생·직원·반은 수와 관계없이 분류 묶음(초·중·고 → 학년 / 과목 · 기타 — `kg-net-groups.ts` ·
+ * 이 수 이하면 묶음을 펼쳐 둔다 · '관계 없음' 묶음 안도 같은 분류), 그 밖의 유형은 관계가 많은 순으로 이만큼만 세우고 나머지는 '나머지 N건' 묶음(원장 *"외~로 표현하니까 좀 그렇긴하네"*) · 관계 없는 기록은 '관계 없음 N건'
  * 묶음으로 접는다(원장 2026-11-11 *"너무 쓸데없이 모든 점을 노출하지 않는지"* — 연결 탐색이 날짜 기록을 연도·월로 접는 것과 같은 방향).
  * 묶음 더블클릭 = 펼치기(그 아래 기록 전부) · 목록·관계 표에서 고르면 그 묶음이 펼쳐진다. 기록은 빠지지 않는다(도구줄 수 = 전부).
  */
@@ -71,7 +74,7 @@ const dateOf = (n: Node): string | null => {
 };
 
 /** 지식그래프 + 가운데(점 id · 없으면 학원 전체) → 네트워크 판. */
-export function kgNetBoard(graph: Graph, centerId?: string | null): KgBoard {
+export function kgNetBoard(graph: Graph, centerId?: string | null, cats?: KgCategoryCtx): KgBoard {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const isAcademy = (id: string) => byId.get(id)?.type === "Academy";
   const pick = centerId ? byId.get(centerId) : undefined;
@@ -132,23 +135,34 @@ export function kgNetBoard(graph: Graph, centerId?: string | null): KgBoard {
       if (date) dated.push(rec);
       else loose.push(rec);
     }
-    // 날짜 없는 기록 — 관계 많은 순 앞 몇 건만 영역 둘레에, 나머지는 접힌 묶음(한 건뿐이면 묶지 않는다).
-    const fold = (gid: string, title: string, short: string, recs: NetNode[]) => {
+    // 날짜 없는 기록 — 학교·원생·직원·반은 분류 묶음(kg-net-groups.ts) · 그 밖은 관계 많은 순 앞 몇 건만 영역 둘레, 나머지는 접힌 묶음(한 건뿐이면 묶지 않는다).
+    const fold = (gid: string, title: string, short: string, recs: NetNode[], inside?: boolean) => {
       if (recs.length < 2) return recs.forEach((r) => link(hubId, r.id, label));
       const g: NetNode = { id: `grp:${type}:${gid}`, title, label: `${short} · ${recs.length.toLocaleString()}건`, kind: "group", level: "month", tone: TONE[type], hub: hubId, parent: hubId, sectorKey: type, date: null, tally: recs.length };
       groups.push(g);
       link(hubId, g.id, "묶음");
+      if (inside) return tree(recs, { parent: g.id, prefix: `${gid}/`, title, openLeaves: false });
       for (const r of recs) {
         r.parent = g.id;
         link(g.id, r.id, "기록");
       }
     };
+    const tree = (recs: NetNode[], at: KgCategoryAt) => {
+      const t = categoryTree(hub, type, recs, byId, cats!, at);
+      groups.push(...t.groups);
+      for (const e of t.edges) link(e.from, e.to, e.rel);
+    };
+    const byCategory = !!cats && kgCategorized(type);
     const withRel = loose.filter((r) => related.has(r.id)).sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0));
-    const rest = withRel.length > KG_UNDATED_SHOWN + 1 ? withRel.slice(KG_UNDATED_SHOWN) : [];
-    for (const r of withRel.slice(0, withRel.length - rest.length)) link(hubId, r.id, label);
-    fold("more", `${label} 외 ${rest.length.toLocaleString()}건`, "외", rest);
+    const many = withRel.length > KG_UNDATED_SHOWN + 1;
+    if (byCategory && withRel.length > 1) tree(withRel, { parent: hubId, prefix: "", title: label, openLeaves: !many });
+    else {
+      const rest = many ? withRel.slice(KG_UNDATED_SHOWN) : [];
+      for (const r of withRel.slice(0, withRel.length - rest.length)) link(hubId, r.id, label);
+      fold("more", `${label} · 나머지 ${rest.length.toLocaleString()}건`, "나머지", rest);
+    }
     const none = loose.filter((r) => !related.has(r.id));
-    fold("none", `${label} · 다른 기록과 관계 없음`, "관계 없음", none);
+    fold("none", `${label} · 다른 기록과 관계 없음`, "관계 없음", none, byCategory);
     if (dated.length > 0) {
       const t = timeTree(hub, dated);
       groups.push(...t.groups);

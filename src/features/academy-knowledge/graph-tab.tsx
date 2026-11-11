@@ -3,6 +3,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
+import { useGradeLevels, useSubjectMaps } from "@/features/owner/operations-context";
 import { ExploreNetwork, netNeighbors, prepareNetworkLeave, type NetRecordInfo } from "@/features/explore/components/network/explore-network";
 import { entities } from "./catalog";
 import { GraphDirectory } from "./graph-directory";
@@ -42,7 +43,11 @@ export function GraphTab({ data, prefs }: { data: AcademyKnowledgeData; prefs: K
   const [editor, setEditor] = useState(false);
   const [chosenLink, setChosenLink] = useState<StudioRow | undefined>();
   const [linkFrom, setLinkFrom] = useState(""); // 편집기를 연 순간의 기록 — 그 뒤 판에서 묶음·영역을 골라도 편집기는 그대로
-  const board = useMemo(() => kgNetBoard(data.graph, center), [data.graph, center]);
+  const subjects = useSubjectMaps();
+  const gradeOrder = useGradeLevels();
+  // 분류 묶음의 과목·학년 이름과 순서 = 학원 설정(kg-net-groups.ts)
+  const cats = useMemo(() => ({ subjectLabel: subjects.labelOf, subjectOrder: subjects.options.map((o) => o.value), gradeOrder }), [subjects, gradeOrder]);
+  const board = useMemo(() => kgNetBoard(data.graph, center, cats), [data.graph, center, cats]);
   const here = board.center.id;
   const onBoard = useMemo(() => new Set(board.graph.nodes.map((n) => n.id)), [board]);
   const isolated = useMemo(() => isolatedCount(data.graph), [data.graph]);
