@@ -1,5 +1,7 @@
 /*
  * 경영 분석 시안 — 운영실 '계기판' 토큰(instruments.css)과 같은 값만 쓴다.
+ * 머리글·월 이동·뒤로 링크는 앱 부품(PageHeader·PeriodNav·BackLink)이 그린다(원장 2026-11-11 디자인 통일). `.page` = 본문 상자.
+ * 원시 단추 규칙은 `[data-slot]`(공용 Button)·`[aria-pressed]`(보기 전환 칸)를 뺀다 — 특이도는 그대로, 층 밖 규칙이 Tailwind 유틸을 덮지 않게.
  * 차콜 #363c41 · 노랑 #fdb811 · 붉은색 #b44832(경고만) · 글자 #23282c 한 값(보조 글자도 같은 값 · 원장 2026-11-10) · 선 #e1e3df · 바탕 #f4f4f1 · 화면 #f1f1ed.
  */
 .page {
@@ -11,93 +13,77 @@
   --yellow: var(--gold-bright);
   --yellow-ink: var(--gold);
   --red: var(--danger);
-  max-width: 1600px;
-  margin: 0 auto;
-  padding: 16px 20px 40px;
-  background: transparent;
   color: var(--ink);
-  font-size: 14px;
+  font-size: var(--text-xs);
   line-height: 1.6;
   min-width: 0;
 }
-.page a { color: var(--ink); text-decoration: none; font-weight: 600; }
+.page a { color: var(--ink); text-decoration: none; font-weight: 500; }
 .page a:hover { text-decoration: underline; }
 .page p { color: var(--ink-2); margin: 6px 0; }
-.page h2 { font-size: 18px; font-weight: 750; margin: 0 0 6px; }
-.page h3 { font-size: 15px; font-weight: 750; margin: 0 0 8px; }
+.page h2 { font-size: var(--text-base); font-weight: 700; margin: 0 0 6px; }
+.page h3 { font-size: var(--text-sm); font-weight: 700; margin: 0 0 8px; }
 .page section { scroll-margin-top: 20px; min-width: 0; }
 .page :is(a, button, input, select, textarea):focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
 
-.page button, .upload {
+.page button:where(:not([data-slot], [aria-pressed])), .upload {
   background: var(--charcoal);
-  color: #fff;
+  color: var(--primary-foreground);
   border: 1px solid var(--charcoal);
-  border-radius: 8px;
-  padding: 7px 14px;
+  border-radius: var(--radius-lg);
+  min-height: var(--control-h-sm);
+  padding: 0 10px;
   font: inherit;
-  font-size: 14px;
-  font-weight: 650;
+  font-size: var(--text-sm);
+  font-weight: 500;
   cursor: pointer;
 }
-.page button:hover { background: var(--primary-deep); }
-.page button:disabled { background: var(--wash); border-color: var(--line); color: var(--muted); cursor: not-allowed; }
-.page .secondary { background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; }
+.page button:where(:not([data-slot], [aria-pressed])):hover { background: var(--primary-deep); }
+.page button:where(:not([data-slot], [aria-pressed])):disabled { background: var(--wash); border-color: var(--line); color: var(--muted); cursor: not-allowed; }
+.page .secondary { background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; }
 .page .secondary:hover { background: var(--hover); text-decoration: none; }
-.page input, .page select, .page textarea { border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; background: #fff; color: var(--ink); font: inherit; font-size: 14px; }
+.page input, .page select, .page textarea { border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; background: var(--card); color: var(--ink); font: inherit; font-size: var(--text-xs); }
 
-.header {
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 14px 16px;
-  margin-bottom: 12px;
-}
-.header h1 { font-size: 22px; font-weight: 800; letter-spacing: -.02em; margin: 2px 0 4px; }
-.back { font-size: 13px; color: var(--muted) !important; }
-.eyebrow { font-size: 12px; font-weight: 700; color: var(--muted) !important; margin: 8px 0 0 !important; }
-.month { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.month label { width: 100%; font-size: 13px; font-weight: 650; color: var(--muted); }
 
 .sectionTitle { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 20px 0 10px; flex-wrap: wrap; }
 .sectionTitle h2, .sectionTitle h3 { margin: 0; }
-.sectionTitle span { font-size: 13px; color: var(--muted); }
-.subheading { font-size: 14px !important; color: var(--muted); margin: 20px 0 10px !important; }
-.muted { color: var(--muted) !important; font-size: 13px; }
+.sectionTitle span { font-size: var(--text-xs); color: var(--muted); }
+.subheading { font-size: var(--text-xs) !important; color: var(--muted); margin: 20px 0 10px !important; }
+.muted { color: var(--muted) !important; font-size: var(--text-xs); }
 .warnText { color: var(--red) !important; }
 
 .cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-.card, .panel { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; transition: box-shadow .15s ease; }
-.card:hover, .panel:hover { box-shadow: 0 2px 10px color-mix(in srgb, var(--ink) 6%, transparent); }
-.card > a { font-size: 14px; font-weight: 700; color: var(--ink-2); }
-.card > strong { display: block; font-size: 24px; font-weight: 800; color: var(--ink); margin: 8px 0; font-variant-numeric: tabular-nums; }
-.card small { font-size: 13px; margin-left: 4px; color: var(--muted); font-weight: 600; }
-.card details { font-size: 13px; color: var(--muted); }
+.card, .panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; transition: box-shadow .15s ease; }
+.card > a { font-size: var(--text-xs); font-weight: 700; color: var(--ink-2); }
+.card > strong { display: block; font-size: var(--text-xl); font-weight: 700; color: var(--ink); margin: 8px 0; font-variant-numeric: tabular-nums; }
+.card small { font-size: var(--text-xs); margin-left: 4px; color: var(--muted); font-weight: 500; }
+.card details { font-size: var(--text-xs); color: var(--muted); }
 .card details summary { cursor: pointer; }
 .panel { margin: 12px 0; }
 .columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 
 .bridge { display: flex; flex-wrap: wrap; gap: 24px; padding: 10px 0; }
 .bridge > div { min-width: 150px; }
-.bridge span { display: block; font-size: 13px; color: var(--muted); }
-.bridge strong { display: block; margin-top: 4px; font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.bridge span { display: block; font-size: var(--text-xs); color: var(--muted); }
+.bridge strong { display: block; margin-top: 4px; font-size: var(--text-lg); font-weight: 700; font-variant-numeric: tabular-nums; }
 
-.page table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.page th { text-align: left; background: var(--wash); color: var(--ink-2); font-weight: 700; font-size: 13px; }
+.page table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
+.page th { text-align: left; background: var(--wash); color: var(--ink-2); font-weight: 700; font-size: var(--text-xs); }
 .page td, .page th { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .page tbody tr:hover td { background: var(--hover); }
-.page td small { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.page td small { display: block; font-size: var(--text-xs); color: var(--muted); margin-top: 2px; }
 .tableScroll { overflow: auto; max-height: 360px; }
 .tableScroll table { min-width: 440px; }
 .tableScroll th { position: sticky; top: 0; }
 
 .inputs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 8px 0; }
-.inputs label { font-size: 13px; color: var(--muted); font-weight: 650; }
+.inputs label { font-size: var(--text-xs); color: var(--muted); font-weight: 500; }
 .inputs input, .inputs select { display: block; width: 100%; margin-top: 4px; }
-.confirm { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 14px; }
-.notice { background: var(--hover); border: 1px solid color-mix(in srgb, var(--gold-bright) 45%, var(--card)); color: var(--ink) !important; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
+.confirm { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: var(--text-xs); }
+.notice { background: var(--hover); border: 1px solid color-mix(in srgb, var(--gold-bright) 45%, var(--card)); color: var(--ink) !important; padding: 10px 12px; border-radius: 8px; font-size: var(--text-xs); }
 .notice p { color: var(--ink-2); }
-.upload { display: inline-flex; flex-direction: column; gap: 4px; font-size: 13px; cursor: pointer; }
-.upload input { font-size: 12px; max-width: 230px; border: 0; padding: 0; background: transparent; color: inherit; }
+.upload { display: inline-flex; flex-direction: column; gap: 4px; font-size: var(--text-xs); cursor: pointer; }
+.upload input { font-size: var(--text-xs); max-width: 230px; border: 0; padding: 0; background: transparent; color: inherit; }
 .upload:has(input:disabled) { background: var(--wash); color: var(--muted); border-color: var(--line); cursor: not-allowed; }
 /* 차트가 한 칸씩 셋뿐일 때(visual-summary.tsx) — 차트 격자가 2열인 폭(analytics.module.css 681~1100px)에서만 마지막 카드를 두 칸으로. */
 .lastChart { display: grid; min-width: 0; }
@@ -108,16 +94,16 @@
 .hash { word-break: break-all; font-size: var(--text-xs) !important; color: var(--muted) !important; }
 
 .graph { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px; padding: 20px 12px; background: var(--wash); border-radius: 8px; margin: 8px 0; }
-.graph span { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 13px; font-weight: 650; color: var(--ink-2); }
+.graph span { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); font-size: var(--text-xs); font-weight: 500; color: var(--ink-2); }
 .graph b { color: var(--muted); }
 
 .reviewBatch { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 16px; }
 .reviewIssue { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
-.reviewIssue summary { cursor: pointer; font-size: 14px; }
-.reviewIssue summary span { color: var(--yellow-ink); background: var(--hover); border: 1px solid color-mix(in srgb, var(--gold-bright) 45%, var(--card)); padding: 1px 8px; border-radius: 999px; margin-left: 6px; font-size: 12px; font-weight: 700; }
+.reviewIssue summary { cursor: pointer; font-size: var(--text-xs); }
+.reviewIssue summary span { color: var(--yellow-ink); background: var(--hover); border: 1px solid color-mix(in srgb, var(--gold-bright) 45%, var(--card)); padding: 1px 8px; border-radius: 999px; margin-left: 6px; font-size: var(--text-xs); font-weight: 700; }
 .reviewIssue form { margin-top: 10px; }
 .reviewIssue select { display: block; width: 100%; margin-top: 4px; }
-.reviewNote { display: block; font-size: 13px; color: var(--muted); font-weight: 650; margin: 10px 0; }
+.reviewNote { display: block; font-size: var(--text-xs); color: var(--muted); font-weight: 500; margin: 10px 0; }
 .reviewNote textarea { display: block; box-sizing: border-box; width: 100%; min-height: 72px; margin-top: 4px; }
 .reviewHistory { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 10px; }
 .reviewHistory p { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -128,6 +114,5 @@
   .inputs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
-  .page { padding: 12px; }
   .cards, .inputs { grid-template-columns: minmax(0, 1fr); }
 }

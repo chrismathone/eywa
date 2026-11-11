@@ -13,6 +13,10 @@
 - SQL `s2_0066_newcomer_default_manager_audit.sql`(새 함수·새 트리거만 · 되돌리기 `scripts/_oneoff/revert-s2_0066-newcomer-default-manager-audit.sql`) — 적용 기록은 `supabase/migrations/README.md`.
 - 안 한 것: 강사·상담에게 조직·OKR · 업무 작성센터 열기(원장이 화면에서) · 신규생 기록이 있는 과목의 흡수·삭제 규칙(계속 막는다) · EiE 줄을 학생에게 적용하는 것(과목 축 결정이 먼저).
 
+## 2026-11-11 — 새 탭 디자인 통일(원장 "새로 추가된 탭들 중 디자인 스타일이 기존 우리 것과 다른 탭들 검사 후 디자인 통일화" · Codex 협의)
+
+- 11-08 이후 새 화면 13개(홍보·마케팅 통합 · 조직·OKR · 업무 작성센터 · 스키마·지식그래프 · 관찰·후속 조치 · 경영 분석 · 방문·등록 점검 · 신규생 90일 · 학생 통합보기 · 강사 지식그래프 · 원생 로열티(공용 머리) · 42팩터 · 마케팅 입력·검토)의 자체 머리 판(보라 그라데이션·차콜·흰 카드)·영문 머리말·숫자 카드 위 색 띠·자체 탭 단추를 `PageHeader`·`BigStat`·`Toolbar`/`ToolbarSegment`·`PeriodNav`·`BackLink`·공용 `Button`으로 바꿨다(기능·링크·데이터 그대로 · 헤더 정보 보존). 모듈 CSS는 글자 토큰·굵기 500/700·자간 없음·카드 토큰으로, 원시 단추 규칙은 `button:where(:not([data-slot],[aria-pressed]))`(특이도 그대로 · 공용 부품을 안 덮게). 차트 연도·유형 색 = 범주 색 `--cat-*`. 로딩 뼈대 7개를 실물 순서로. 🔴 모듈 CSS의 층 밖 `.x button{…}` 규칙은 Tailwind 유틸(층 안)을 이긴다 — 새 화면에 공용 부품을 넣을 땐 이 제외를 함께.
+
 ## 2026-11-11 — 신규 콜&상담 여정(전화·방문·등록 기록) 실제 기록으로 · 신규생 정착 관리 보정 (aywa-next 인계 이식 · Claude·Codex 검토 합의 · SQL s2_0061~s2_0064)
 
 - 결정 본문 = [`decisions/enrollment-journey.md`](decisions/enrollment-journey.md). 신규생 정착 관리 화면은 같은 날 다른 세션이 main에 올린 운영판(`052112f21` · [`decisions/newcomer-live-restoration.md`](decisions/newcomer-live-restoration.md))을 바탕으로 두고 그 위에 보정만 얹었다(병합).

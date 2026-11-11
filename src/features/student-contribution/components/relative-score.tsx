@@ -29,7 +29,7 @@ export function RelativeScore({ options, refreshedAt, periodLabel, error }: {
   const result = options.find(r => r.scope === scope && r.metric === metric);
   return <section className={styles.panel} aria-label="로열티 상대 위치">
     <header className={styles.header}>
-      <div><p className={styles.eyebrow}>RELATIVE LOYALTY</p><h2>이 점수, 어느 정도인가요?</h2><p>같은 기준으로 계산한 재원생 안에서의 상대 위치입니다.</p></div>
+      <div><p className={styles.eyebrow}>상대 위치</p><h2>이 점수, 어느 정도인가요?</h2><p>같은 기준으로 계산한 재원생 안에서의 상대 위치입니다.</p></div>
       <div className={styles.controls}>
         <label>점수 기준<select aria-label="상대평가 점수 기준" value={metric} onChange={e => setMetric(e.target.value as RelativeMetric)}><option value="total">로열티 점수</option><option value="recent">최근 12개월 활동 (가족 가점 제외)</option></select></label>
         <label>비교 대상<select aria-label="상대평가 비교 대상" value={scope} onChange={e => setScope(e.target.value as RelativeScope)}><option value="all">전체 재원생</option><option value="grade">같은 학년</option><option value="tenure">비슷한 재원기간</option></select></label>

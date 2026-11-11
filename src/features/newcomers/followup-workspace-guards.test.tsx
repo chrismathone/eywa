@@ -7,7 +7,7 @@ import { EMPTY_FILTERS } from "./board-model";
 
 // 병합 보정(2026-11-11) 가드 — ① '과목 기본 담당' 선택지는 그 과목에 기본 담당이 있을 때만(없는 기본값을 고르게 하지 않는다)
 // ② 정착 관리 자료 조회가 실패해도 종전 '전체 완료 체크표'의 쓰기는 잠기지 않는다(`canWriteChecks`).
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }), usePathname: () => "/newcomers", useSearchParams: () => new URLSearchParams() }));
 vi.mock("./server/followup-actions", () => ({ assignNewcomerManager: vi.fn(), submitNewcomerFeedback: vi.fn(), reviewNewcomerFeedback: vi.fn() }));
 vi.mock("./server/actions", () => ({ setOnboardingCheck: vi.fn() }));
 vi.mock("./server/manager-defaults-actions", () => ({ saveNewcomerDefaultManager: vi.fn() }));

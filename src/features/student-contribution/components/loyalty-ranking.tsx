@@ -82,11 +82,7 @@ export function LoyaltyRanking({ data }: { data: LoyaltyRankingData }) {
   return <div className={styles.root}>
     <ContributionHeader title="학생 로열티 기록실" description="학생 한 명의 기록을 여섯 가지 관점으로. 종합 순위와 항목별 기록을 함께 비교하세요."
       active="ranking" canConfigure={data.canConfigure} actions={data.canWrite && <Button disabled={busy || !!data.refreshedTodayAt} title={data.refreshedTodayAt ? "최신 기록 집계는 하루 1회입니다" : undefined} onClick={refresh}>{busy ? "기록 집계 중…" : data.refreshedTodayAt ? `오늘 ${data.refreshedTodayAt} 집계함` : "최신 기록 집계"}</Button>} />
-    <section className={styles.hero} aria-label="로열티 랭킹 개요">
-      <div className={styles.heroLine}><h2>꾸준한 선택이 만드는 <em>우리 학원의 로열티</em></h2><p>기간 · 납부 · 가족 · 참여 · 출결 · 성적</p></div>
-      <div className={styles.heroStats}><div><strong>{cohort.length}<small>명</small></strong><span>{filtering ? `필터 기준 · 전체 ${data.rows.length}명 중` : data.scoped ? "열람 범위 내 재원생" : "전체 재원생"}</span></div></div>
-    </section>
-    <div className={styles.status} role="status"><span>조회 기준 {data.today} · 마지막 집계 {data.refreshedAt ? new Date(data.refreshedAt).toLocaleString("ko-KR",{timeZone:"Asia/Seoul"}) : "집계 전"}</span><span>{message || (data.missing ? `${data.missing}명 새 기록 집계 필요` : "누적 수강·납부 / 2026년부터 출결·성적 / 연결된 설명회 명단")}</span></div>
+    <div className={styles.status}><span className={styles.cohort}><b>{cohort.length}명</b> {filtering ? `필터 기준 · 전체 ${data.rows.length}명 중` : data.scoped ? "열람 범위 내 재원생" : "전체 재원생"} · 기간 · 납부 · 가족 · 참여 · 출결 · 성적</span><span>조회 기준 {data.today} · 마지막 집계 {data.refreshedAt ? new Date(data.refreshedAt).toLocaleString("ko-KR",{timeZone:"Asia/Seoul"}) : "집계 전"}</span><span role="status">{message || (data.missing ? `${data.missing}명 새 기록 집계 필요` : "누적 수강·납부 / 2026년부터 출결·성적 / 연결된 설명회 명단")}</span></div>
     {data.scoped && <p className={styles.notice}>본인이 열람할 수 있는 학생끼리 비교합니다. 전체 학원 순위와 다르며, 가족 정보는 담당 범위 보호를 위해 표시하지 않습니다.</p>}
     {topFive.length ? <section className={styles.topFive} aria-label="종합 순위 1~5등">
       <h3 className={`${styles.sectionTitle} ${styles.topTitle}`}>종합 순위 <small>1~5등</small></h3>

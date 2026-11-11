@@ -1,6 +1,6 @@
 import { beforeEach,describe,it,expect,vi } from "vitest";
 import { render,screen,fireEvent,waitFor,cleanup } from "@testing-library/react";
-const refresh=vi.hoisted(()=>vi.fn());vi.mock("next/navigation",()=>({useRouter:()=>({refresh})}));
+const refresh=vi.hoisted(()=>vi.fn());vi.mock("next/navigation",()=>({useRouter:()=>({refresh}),usePathname:()=>"/marketing",useSearchParams:()=>new URLSearchParams()}));
 import { ArchiveWorkspace } from "./workspace";
 import {blankEvent} from "./model";
 import type {ArchiveData} from "./server";

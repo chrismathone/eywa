@@ -16,6 +16,10 @@ import { assignNewcomerManager, submitNewcomerFeedback, reviewNewcomerFeedback }
 import { setOnboardingCheck } from "./server/actions";
 import { CompletionForm } from "./completion-form";
 import css from "./followup-workspace.module.css";
+import { PageHeader } from "@/components/page-header";
+import { BigStat } from "@/components/atoms/big-stat";
+import { Toolbar, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
+import { Button } from "@/components/ui/button";
 import { FollowupVisuals } from "./followup-visuals";
 import { EnrollmentSyncNote, type EnrollmentSyncInfo } from "./enrollment-sync-note";
 import { managerDefaultSubjectLabel } from "./manager-defaults";
@@ -83,23 +87,21 @@ export function FollowupWorkspace({ data, legacy, initialFilters, initialStudent
   }
 
   return <div className={`${css.root} ${a.dashboard}`}>
-    <header className={css.hero}>
-      <div><p className={css.eyebrow}>신입생 90일 관리 · 정착 지원</p><h1>신입생이 자리 잡을 때까지</h1><p>관리자는 연락을 챙기고, 담임은 적응을 살피고, 피드백은 다음 행동으로 이어집니다.</p></div>
-      <div className={css.heroDate}><span>오늘의 관리 기준</span><strong>{data.today.replaceAll("-", ".")}</strong><Link href="/students/care">입학 약속·이행 보기 ↗</Link></div>
-    </header>
-    <nav className={css.nav} aria-label="신입생 관리 보기">
-      {([['students','학생별 정착 관리'],['owners','담당자별 점검'],['checks','전체 완료 체크표']] as const).map(([key,label]) => <button key={key} type="button" aria-pressed={tab === key} onClick={() => setTab(key)}>{label}</button>)}
-      <span>등록 → 첫 적응 → 30일 → 60일 → 90일 → 장기재원</span>
-    </nav>
+    <PageHeader title="신규생 관리" description="신입생이 자리 잡을 때까지 — 관리자는 연락을 챙기고, 담임은 적응을 살피고, 피드백은 다음 행동으로 이어집니다." actions={<Button variant="outline" render={<Link href="/students/care"/>}>입학 약속·이행 보기 ↗</Button>}/>
+    <Toolbar className="mt-4 mb-3">
+      <ToolbarSegment>{([['students','학생별 정착 관리'],['owners','담당자별 점검'],['checks','전체 완료 체크표']] as const).map(([key,label]) => <ToolbarSegmentItem key={key} active={tab === key} onClick={() => setTab(key)}>{label}</ToolbarSegmentItem>)}</ToolbarSegment>
+      <span className={css.stages}>등록 → 첫 적응 → 30일 → 60일 → 90일 → 장기재원</span>
+      <span className={css.asOf}>관리 기준 <b>{data.today.replaceAll("-", ".")}</b></span>
+    </Toolbar>
     {data.defaults?.length||data.canManage?<aside className={css.defaultRules} aria-label="과목별 기본 관리자"><b>기본 관리 담당</b>{data.defaults?.length?data.defaults.map(d=><span key={d.subject}>{managerDefaultSubjectLabel(d.subject,labelOf)} · {d.manager?.name??"재지정 필요"}</span>):<span>아직 지정 없음</span>}<small>기존 개별 배정은 유지 · 동시 수강은 각 과목별 기록</small>{data.canManage?<ManagerDefaultsButton defaults={data.defaults??[]} staff={data.staff} className={css.defaultEdit}/>:null}</aside>:null}
     {data.error ? <p role="alert" className={css.error}>{data.error} <button type="button" onClick={() => router.refresh()}>다시 조회</button></p> : null}
     <EnrollmentSyncNote info={syncInfo} editing={!!selected || saving}/>
     {tab === "checks" ? <NewcomerBoard view={legacy} canWrite={data.canWriteChecks} initialFilters={initialFilters} /> : <>
-      <section className={css.metrics} aria-label="신입생 관리 요약">
-        <button type="button" onClick={() => setFilter("all")}><span>집중 관리 학생</span><strong>{data.students.length}<small>명</small></strong><em>학생 한 명 기준으로 관리</em></button>
-        <button type="button" onClick={() => setFilter(unlinked > 0 ? "unlinked" : "unassigned")}><span>담당·수강 연결 확인</span><strong data-alert={unassigned + unlinked > 0}>{known ? unassigned + unlinked : "—"}<small>명</small></strong><em>{known ? `담당 미지정 ${unassigned}명 · 수강 연결 필요 ${unlinked}명` : "조회 확인 필요"}</em></button>
-        <button type="button" onClick={() => setFilter("reports")}><span>확인할 피드백</span><strong data-alert={unseen > 0}>{known ? unseen : "—"}<small>건</small></strong><em>확인 대기·보완 요청</em></button>
-        <button type="button" onClick={() => setFilter("attention")}><span>기한 지난 후속 조치</span><strong data-alert={lateFollowups > 0}>{known ? lateFollowups : "—"}<small>건</small></strong><em>처리 결과까지 남겨야 종료</em></button>
+      <section className="mb-3 grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="신입생 관리 요약">
+        <BigStat label="집중 관리 학생" value={data.students.length} unit="명" sub="학생 한 명 기준으로 관리" onClick={() => setFilter("all")}/>
+        <BigStat label="담당·수강 연결 확인" value={known ? unassigned + unlinked : "—"} unit="명" valueClass={unassigned + unlinked > 0 ? "text-danger" : undefined} sub={known ? `담당 미지정 ${unassigned}명 · 수강 연결 필요 ${unlinked}명` : "조회 확인 필요"} onClick={() => setFilter(unlinked > 0 ? "unlinked" : "unassigned")}/>
+        <BigStat label="확인할 피드백" value={known ? unseen : "—"} unit="건" valueClass={unseen > 0 ? "text-danger" : undefined} sub="확인 대기·보완 요청" onClick={() => setFilter("reports")}/>
+        <BigStat label="기한 지난 후속 조치" value={known ? lateFollowups : "—"} unit="건" valueClass={lateFollowups > 0 ? "text-danger" : undefined} sub="처리 결과까지 남겨야 종료" onClick={() => setFilter("attention")}/>
       </section>
       <FollowupVisuals data={data}/>
       {tab === "owners" ? <section className={css.ownerGrid} aria-label="담당자별 이행 점검">

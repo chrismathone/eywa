@@ -1,5 +1,5 @@
 "use client";
-import { EmbedHiddenInput, EmbedLink as Link } from "@/components/embed-link";
+import { EmbedLink as Link } from "@/components/embed-link";
 import v from "@/components/analytics/analytics.module.css";
 import type { ManagementSnapshot, ReportIndexRow } from "./model";
 import type { AiReview } from "./ai-answer";
@@ -9,6 +9,12 @@ import { AccountingPanel } from "./accounting-panel";
 import { AiReviewPanel } from "./ai-panel";
 import { ManagementVisualSummary, featuredMetricIds } from "./visual-summary";
 import s from "./workspace.module.css";
+import { PageHeader } from "@/components/page-header";
+import { BackLink } from "@/components/back-link";
+import { PeriodNav } from "@/components/period-nav";
+import { FilterSelect } from "@/components/filter-select";
+import { Toolbar } from "@/components/toolbar";
+import { monthLabel } from "@/lib/date-kst";
 
 const number = (n: number | null, digits = 0) => n === null ? "자료 필요" : n.toLocaleString("ko-KR", { maximumFractionDigits: digits });
 const won = (n: number | null) => n === null ? "자료 필요" : `${number(n)}원`;
@@ -18,9 +24,23 @@ const won = (n: number | null) => n === null ? "자료 필요" : `${number(n)}�
  * 파일 가져오기·대조·확인 기록·AI 검토는 각 패널이 `/api/management/*`로 보낸다. 그래프 JSON 내려받기는 통합 지식그래프 쪽 일이다.
  */
 export function ManagementWorkspace({ data, reportIndex, months, aiReview, aiEnabled, accountingImport, collectorAvailable }: { data: ManagementSnapshot; reportIndex: readonly ReportIndexRow[]; months: readonly string[]; aiReview: AiReview | null; aiEnabled: boolean; accountingImport: boolean; collectorAvailable: boolean }) {
-  return <main className={`${s.page} ${v.dashboard}`}>
-    <header className={`${s.header} ${v.hero}`}><div><Link href="/dashboard" className={s.back}>← 대시보드</Link><p className={s.eyebrow}>에이와 · 경영 분석</p><h1>우리 학원의 오늘, 숫자로 한눈에</h1><p>운영 현황부터 수익 구조까지. 지표를 살펴보고 근거와 다음 할 일을 연결하세요.</p></div>
-      <form className={s.month}><EmbedHiddenInput/><label htmlFor="management-month">운영 분석 월</label><select id="management-month" name="month" defaultValue={data.month}>{months.map(m => <option key={m} value={m}>{m}</option>)}</select><button>조회</button></form></header>
+  // 운영 분석 월 = 수납 월 이동과 같은 모양(PeriodNav + 라벨 자리 월 드롭다운). 목록 = 페이지가 넘긴 선택지(오름차순) · 끝에서 화살표 잠금.
+  // 파라미터가 없으면 이번 달(page.tsx 기본값)이라 드롭다운의 '기본 달' = 이번 달.
+  // 이번 달 = **서버가 준 목록의 끝**(page.tsx: 최근 36개월이 늘 들어가고 미래 월은 빠진다 → 끝 = 서버 기준 이번 달).
+  // 클라 렌더에서 kstMonth()를 다시 부르면 월말 자정 무렵 서버와 값이 갈려 하이드레이션이 깨진다(React #418).
+  const at = months.indexOf(data.month), nowMonth = months.at(-1) ?? data.month, monthHref = (m: string) => `?month=${m}`;
+  return <div className="space-y-5">
+    <PageHeader title="경영 분석" description="운영 현황부터 수익 구조까지. 지표를 살펴보고 근거와 다음 할 일을 연결하세요."/>
+    <Toolbar>
+      <BackLink href="/dashboard" label="대시보드"/>
+      <PeriodNav label={monthLabel(data.month)} prevHref={monthHref(months[Math.max(0, at - 1)] ?? data.month)} nextHref={monthHref(months[Math.min(months.length - 1, at + 1)] ?? data.month)}
+        currentHref={monthHref(nowMonth)} prevDisabled={at <= 0} nextDisabled={at < 0 || at >= months.length - 1} currentTitle="눌러서 이번 달로"
+        relation={data.month < nowMonth ? "past" : data.month > nowMonth ? "future" : "current"} prevAriaLabel="이전 달" nextAriaLabel="다음 달" labelWidth={132}
+        labelControl={<FilterSelect paramName="month" value={data.month} allValue={nowMonth} allLabel={monthLabel(nowMonth)} ariaLabel="운영 분석 월" cap={200} className="h-full w-full"
+          options={[...months].reverse().filter(m => m !== nowMonth).map(m => ({ value: m, label: monthLabel(m) }))}
+          triggerClassName="num flex h-full w-full items-center justify-center gap-1 px-1 text-(length:--control-label) leading-none font-bold whitespace-nowrap hover:bg-bg-soft focus-visible:outline-2 focus-visible:outline-primary"/>}/>
+    </Toolbar>
+    <div className={`${s.page} ${v.dashboard}`}>
     <nav className={v.sourceNav} aria-label="경영 분석 영역"><a href="#operations">운영·매출</a><a href="#collection">자료 수집함</a><a href="#reviews">원본 대사·확인 업무</a><a href="#accounting">회계·채용</a><a href="#people">강사·상담 경로</a><Link href={`/dashboard/management/knowledge?month=${data.month}`}>통합 지식그래프 ↗</Link>{aiEnabled ? <a href="#knowledge">AI 검토</a> : null}<a href="#sources">데이터 연결</a></nav>
     <section id="operations"><div className={s.sectionTitle}><h2>{data.month} 운영 지표</h2><span>기준일 {data.asOf} · 과거 기록은 현재 저장 상태 기준</span></div>
       <ManagementVisualSummary data={data}/>
@@ -37,6 +57,7 @@ export function ManagementWorkspace({ data, reportIndex, months, aiReview, aiEna
       {aiEnabled ? <AiReviewPanel key={`ai:${data.month}`} month={data.month} metrics={data.metrics} initial={aiReview}/> : null}
     </section>
     <section id="sources" className={s.panel}><h2>데이터 연결 상태</h2><table><thead><tr><th>소스</th><th>상태</th><th>확인 사항</th></tr></thead><tbody>{data.sources.map(x => <tr key={x.name}><td>{x.name}</td><td>{x.state}{x.updatedAt ? <small>{new Date(x.updatedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</small> : null}</td><td>{x.note}</td></tr>)}</tbody></table></section>
-  </main>;
+    </div>
+  </div>;
 }
 

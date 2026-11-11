@@ -280,6 +280,17 @@ const CANON_SURFACES = [
   "src/app/(shell)/billing/_components/tuition-prices-panel.tsx",
   // 캘린더(2026-09-04, 15단계) — 보기·태그 드롭다운 + PeriodNav.
   "src/app/(shell)/calendar/page.tsx",
+  // 새 탭 디자인 통일(2026-11-11) — 자체 머리 판·자체 탭 단추를 걷고 Toolbar·ToolbarSegment·PeriodNav로.
+  "src/features/marketing-archive/workspace.tsx",
+  "src/features/organization-okr/workspace.tsx",
+  "src/features/work-records/workspace.tsx",
+  "src/features/academy-knowledge/workspace.tsx",
+  "src/features/academy-knowledge/record-workspace.tsx",
+  "src/features/management/workspace.tsx",
+  "src/features/enrollment/journey/workspace.tsx",
+  "src/features/newcomers/followup-workspace.tsx",
+  "src/features/teacher-hub/workspace.tsx",
+  "src/features/student-contribution/components/factor-workspace.tsx",
 ];
 
 describe("툴바 규약 — 옮긴 표면은 되돌아가지 않는다", () => {
