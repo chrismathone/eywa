@@ -92,6 +92,8 @@ async function readChurn(tenantId: string, to: string): Promise<RawChurn> {
   const users = await fetchInChunks<{ id: string; display_name: string | null; hire_date: string | null; status: string | null }>(ids, (chunk) =>
     admin.from("users").select("id, display_name, hire_date, status").eq("tenant_id", tenantId).in("id", chunk));
   const resignOf = await loadResignDates(admin, tenantId, users.filter((u) => u.status !== "active").map((u) => u.id));
+  // 퇴사자 = 직원 상태 inactive(대기 pending은 퇴사가 아니다) — '퇴사자 숨김' 토글이 본다.
+  const inactive = new Set(users.filter((u) => u.status === "inactive").map((u) => u.id));
   const itemOf = new Map<string, unknown>(heads.map((r) => [keyOf(r), isChurn(r.item) ? r.item : found.get(keyOf(r))]));
   const nameOf = new Map(users.map((u) => [u.id, u.display_name?.trim() || "이름 없음"]));
   const hireOf = new Map(users.map((u) => [u.id, u.hire_date ?? null]));
@@ -111,7 +113,7 @@ async function readChurn(tenantId: string, to: string): Promise<RawChurn> {
   const teachers = ids.filter((id) => kept.some((r) => r.teacher_id === id)).map((id) => {
     const mine = kept.filter((r) => r.teacher_id === id);
     return {
-      id, name: nameOf.get(id)!, hireDate: hireOf.get(id) ?? null, resignDate: resignOf.get(id) ?? null,
+      id, name: nameOf.get(id)!, hireDate: hireOf.get(id) ?? null, resignDate: resignOf.get(id) ?? null, resigned: inactive.has(id),
       // 줄 머리 과목 = 가장 최근 달에 가르친 과목(그 달 수업이 없으면 그 앞 달) · 과목 필터 = 보이는 달들에 가르친 과목 전부.
       latestKeys: [...mine].reverse().find((r) => (r.subjects ?? []).length)?.subjects ?? [],
       subjectsByMonth: Object.fromEntries(mine.map((r) => [r.month, r.subjects ?? []])),
@@ -133,7 +135,7 @@ export async function loadTeacherChurn(now: Date = new Date()): Promise<TeacherC
     .order("computed_at", { ascending: false }).limit(1).maybeSingle();
   const version = (latest as { computed_at?: string } | null)?.computed_at ?? "none";
   const [raw, settings] = await Promise.all([
-    unstable_cache(() => readChurn(gate.tenantId, to), ["withdrawals-teacher-churn-v4", gate.tenantId, to, version],
+    unstable_cache(() => readChurn(gate.tenantId, to), ["withdrawals-teacher-churn-v5", gate.tenantId, to, version],
       { revalidate: 300, tags: [teacherChurnTag(gate.tenantId)] })(),
     getTenantSettings(),
   ]);
