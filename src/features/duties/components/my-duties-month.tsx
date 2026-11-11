@@ -39,13 +39,13 @@ function Section({ title, count, rows, empty, hideSingleGroup }: { title: string
   const showGroupLine = !(hideSingleGroup && groups.length === 1);
   return <section className="border-line bg-card rounded-xl border">
     <header className="border-line-faint flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
-      <div className="flex items-baseline gap-2"><h4 className="text-sm font-bold">{title}</h4><span className="text-text-dim text-xs tabular-nums">{count.done}/{count.total}{count.late ? <span className="text-danger"> · 기한 초과 {count.late}</span> : null}</span></div>
+      <div className="flex items-baseline gap-2"><h4 className="text-sm font-bold">{title}</h4><span className="text-text-dim text-xs tabular-nums">{count.done}/{count.total}{count.late ? <span className="text-danger"> · 미처리 {count.late}</span> : null}</span></div>
       <span className="bg-bg-soft h-1.5 w-24 overflow-hidden rounded-full" aria-hidden><span className={`block h-full rounded-full ${pct === 100 ? "bg-green" : "bg-primary"}`} style={{ width: `${pct}%` }} /></span>
     </header>
     {groups.length ? <div className="grid gap-2 p-2">
       {groups.map((g) => <div key={g.name}>
         {showGroupLine ? <div className="flex items-baseline justify-between px-1 py-1"><span className="text-xs font-bold">{g.name}</span>
-          <span className="text-xs font-semibold tabular-nums"><span className={g.done === g.total ? "text-green" : "text-foreground"}>{g.done}/{g.total}</span>{g.late ? <span className="text-danger"> · 기한 초과 {g.late}</span> : null}</span></div> : null}
+          <span className="text-xs font-semibold tabular-nums"><span className={g.done === g.total ? "text-green" : "text-foreground"}>{g.done}/{g.total}</span>{g.late ? <span className="text-danger"> · 미처리 {g.late}</span> : null}</span></div> : null}
         <ul className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {g.rows.map((r) => <li key={r.id}>
             {r.state === "done" ? <div className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold ${TONE[r.state]}`} title={DUTY_STATE_LABEL[r.state]}>

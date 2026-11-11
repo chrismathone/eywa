@@ -2,7 +2,8 @@ import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
 import { kstToday } from "@/lib/date-kst";
 import { loadDutyAdmin, resolveDutyAdminScope } from "@/features/duties/server/admin";
-import { adminRange, periodKey, periodsOf } from "@/features/duties/view-admin";
+import { adminRange, periodKey, periodsOf, readDutyOntimeOnly } from "@/features/duties/view-admin";
+import { readMyUiPrefs } from "@/lib/ui-prefs/read";
 import { DutyAdmin } from "@/features/duties/components/admin/duty-admin";
 import { flushDuties } from "@/features/duties/server/live-sync";
 import { loadSubjectManagers } from "@/features/duties/server/managers";
@@ -21,13 +22,13 @@ export default async function DutiesPage() {
   const period = periodKey("month", today);
   const range = adminRange(period, today);
   // 과목 관리자별 현황은 학원 전체를 보는 사람에게만(과목 관리자 · '담당' 권한에게는 없다).
-  const [data, managers] = await Promise.all([loadDutyAdmin(viewer.tenantId, range.from, range.to, scope, periodsOf(period)), scope.subjects === null && !scope.ownerId ? getTenantSettings().then((settings) => loadSubjectManagers(viewer.tenantId, settings)).then((m) => Object.fromEntries(Object.entries(m).map(([key, v]) => [key, v.names]))) : null]);
+  const [data, uiPrefs, managers] = await Promise.all([loadDutyAdmin(viewer.tenantId, range.from, range.to, scope, periodsOf(period)), readMyUiPrefs(), scope.subjects === null && !scope.ownerId ? getTenantSettings().then((settings) => loadSubjectManagers(viewer.tenantId, settings)).then((m) => Object.fromEntries(Object.entries(m).map(([key, v]) => [key, v.names]))) : null]);
   const subjectLabel = scope.subjects === null ? "학원 전체" : scope.subjects.map((k) => scope.labels[k]).filter(Boolean).join(" · ") || "담당 과목 없음";
   const scopeLabel = scope.ownerId ? `내 업무만 · ${subjectLabel}` : subjectLabel;
   return (
     <div className="space-y-5 compact-chrome:space-y-3">
       <PageHeader title="업무 완성도" description={scopeLabel} />
-      <DutyAdmin initial={{ period, today, now: new Date().toISOString(), range, data }} scope={scope} managers={managers} tenantId={viewer.tenantId} />
+      <DutyAdmin initial={{ period, today, now: new Date().toISOString(), range, data }} scope={scope} managers={managers} tenantId={viewer.tenantId} ontimeOnly={readDutyOntimeOnly(uiPrefs)} />
     </div>
   );
 }

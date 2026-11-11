@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { foldMatrixRows, MATRIX_COLUMNS, type AdminPeriod, type LateItem, type MatrixRow } from "../../view-admin";
+import { foldMatrixRows, MATRIX_COLUMNS, missedOf, type AdminPeriod, type LateItem, type MatrixRow } from "../../view-admin";
 import { CellItemsDialog, type CellPick } from "./admin-cell-items";
 import { judge, NO_CLASS, NO_OWNER, ownerMeta, type TreeSubject } from "../../view-admin-levels";
 import type { DutyWork } from "../duty-work-context";
 import { AdminKpiRow } from "./admin-subject";
 import { AdminMatrix, tableBasis } from "./admin-matrix";
+import { MixLegend } from "./admin-mix";
 import { VerdictLine } from "./admin-verdict";
 import { ClassLevel } from "./admin-level-class";
 import { StudentLevel } from "./admin-level-student";
@@ -21,7 +22,7 @@ export function SubjectLevel({ node, subjects = null, lateOnly, avgLabel, grade 
   // 선생님 표의 필터 둘(원장 2026-11-11 *"필터를 2개로. 항목 / 과목"*) — 항목 = 한 종류만 · 과목 = 그 과목 선생님만. 과목을 안 고르면 과목마다 표를 나란히 세운다(*"과목별로 2단 분리"*).
   const [kind, setKind] = useState<string | null>(null);
   const [subjectKey, setSubjectKey] = useState<string | null | undefined>(undefined);
-  const rowsOf = (s: TreeSubject): MatrixRow[] => { const all = s.owners.map((o): MatrixRow => ({ ownerId: o.ownerId, name: o.name, meta: ownerMeta(o), cells: o.cells, all: o.cell, rating: o.rating })); return lateOnly ? all.filter((r) => r.all.late) : all; };
+  const rowsOf = (s: TreeSubject): MatrixRow[] => { const all = s.owners.map((o): MatrixRow => ({ ownerId: o.ownerId, name: o.name, meta: ownerMeta(o), cells: o.cells, all: o.cell, rating: o.rating })); return lateOnly ? all.filter((r) => missedOf(r.all)) : all; };
   const groups = subjects && subjects.length > 1 ? subjects : [node];
   const pickedSubject = subjects?.some((s) => s.subject === subjectKey) ? subjectKey : undefined;
   const hidden = (s: TreeSubject) => subjects !== null && subjects.length > 1 && pickedSubject !== undefined && s.subject !== pickedSubject; // 과목 필터도 자리는 그대로 두고 감추기만 한다
@@ -47,6 +48,7 @@ export function SubjectLevel({ node, subjects = null, lateOnly, avgLabel, grade 
             <button type="button" aria-pressed={pickedSubject === undefined} onClick={() => setSubjectKey(undefined)} className={chip(pickedSubject === undefined)}>전체</button>
             {subjects.map((s) => <button key={s.subject ?? ""} type="button" aria-pressed={pickedSubject === s.subject} onClick={() => setSubjectKey(s.subject)} className={chip(pickedSubject === s.subject)}>{s.label}</button>)}
           </span> : null}
+          <MixLegend className="ml-auto" />
         </div>
         {groups.map((s) => { const rows = rowsOf(s); return <div key={s.subject ?? ""} className={hidden(s) ? "invisible" : undefined} aria-hidden={hidden(s) || undefined}>
           <AdminMatrix rows={rows} total={foldMatrixRows(rows)} avg={{ pct: s.cell.pct, label: groups.length > 1 || subjects ? "과목" : avgLabel }} grade={grade} kind={picked} columns={kinds} rated={rated}

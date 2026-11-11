@@ -31,7 +31,7 @@ export async function loadDutyCellItems(tenantId: string, from: string, to: stri
   ].filter((w) => !periods || periods.some((p) => w.includes(`period.eq.${p},`)));
   const fetched = await fetchAllPaged<Row>((a, b) => {
     let q = admin.from("duty_items").select("id,kind,period,cycle,status,void_reason,due_at,done_at,owner_id,student_id,class_id,subject,class:classes!duty_items_class_id_fkey(class_name)")
-      .eq("tenant_id", tenantId).eq("student_id", f.studentId).or("status.neq.void,void_reason.in.(expired,waived)").or(window.join(","));
+      .eq("tenant_id", tenantId).eq("student_id", f.studentId).or("status.neq.void,void_reason.in.(expired,waived,absent)").or(window.join(","));
     if (live && !(liveDay && to < liveDay)) q = q.gte("due_at", live);
     if (scope.subjects) q = q.in("subject", scope.subjects);
     if (scope.ownerId) q = q.eq("owner_id", scope.ownerId); else if (f.ownerNone) q = q.is("owner_id", null); else if (f.owner) q = q.eq("owner_id", f.owner);
@@ -67,8 +67,8 @@ export async function loadDutyCellItems(tenantId: string, from: string, to: stri
       : r.kind === "exam_monthly" ? monthHref({ kind: r.kind, studentId: r.student_id, classId: r.class_id, cycle: r.cycle, subject: r.subject })
       : null;
     const it = { kind: r.kind, period: r.period, status: r.status, voidReason: r.void_reason, dueAt: r.due_at, doneAt: r.done_at };
-    // 미이행 확정은 늘 때가 된 업무다(기한 뒤에만 확정된다).
-    return { id: r.id, kind: r.kind, period: r.period, cycle: r.cycle, state: cellItemState(it, now), judged: r.status === "void" || isJudgedItem(it, now),
+    // 미처리 확정은 늘 때가 된 업무다(기한 뒤에만 확정된다). 결석으로 빠진 것은 업무가 아니라 칸의 수에 들지 않는다.
+    return { id: r.id, kind: r.kind, period: r.period, cycle: r.cycle, state: cellItemState(it, now), judged: r.void_reason === "absent" ? false : r.status === "void" || isJudgedItem(it, now),
       dueAt: r.due_at, doneAt: r.done_at, className: cls?.class_name ?? null, href };
   });
 }

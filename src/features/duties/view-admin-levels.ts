@@ -1,5 +1,5 @@
 import { schoolGradeLabel } from "@/lib/format/school-grade";
-import { add, cellOf, EMPTY, exactPct, MATRIX_COLUMNS, MIN_JUDGE, upcomingOf, type AttentionRow, type Cell, type ClassInfo, type OwnerInfo, type RollupClass, type RollupOwnerKind, type RollupStudent, type StudentInfo, dutyTier, tierTone, type DutyTier, type OwnerLoadRow, addRating, MIN_RATED, type Rating, type RatingRow, leftOf, earlyDoneOf, pendingOf } from "./view-admin";
+import { add, cellOf, EMPTY, exactPct, MATRIX_COLUMNS, MIN_JUDGE, upcomingOf, type AttentionRow, type Cell, type ClassInfo, type OwnerInfo, type RollupClass, type RollupOwnerKind, type RollupStudent, type StudentInfo, dutyTier, tierTone, type DutyTier, type OwnerLoadRow, addRating, MIN_RATED, type Rating, type RatingRow, leftOf, earlyDoneOf, pendingOf, missPctOf, missedOf } from "./view-admin";
 
 /**
  * 단계별 보기(과목 → 선생님 → 반 → 학생)의 순수 조립 — 원장 2026-11-10 *"과목별 - 선생님별 - 반별 - 학생별로 디테일 될 수 있게 … 이 선생님이 뭘 안했는지,
@@ -7,8 +7,8 @@ import { add, cellOf, EMPTY, exactPct, MATRIX_COLUMNS, MIN_JUDGE, upcomingOf, ty
  */
 
 /**
- * 잘하고 있나 — **기한 내 완료율**(`pct` — 표의 '전체' 칸과 같은 숫자)을 로열티와 같은 9등급으로(`dutyTier` — 96%+ 1등급 … 4% 미만 9등급 · `grade`는 그 등급의 색 묶음).
- * 원장 2026-11-11 *"전체 기준으로 등급 다시 매길것"* — 칸 · 전체 · 등급이 같은 분모(때가 된 업무 `due`) · 같은 분자(기한 안에 끝낸 것 `ontime`)를 쓴다.
+ * 잘하고 있나 — **기한 내 완료율**(`pct` — 막대의 기한 내 몫 · '기한 내만 보기'일 때 '전체' 칸의 숫자)을 로열티와 같은 9등급으로(`dutyTier` — 96%+ 1등급 … 4% 미만 9등급 · `grade`는 그 등급의 색 묶음).
+ * 원장 2026-11-11 *"전체 기준으로 등급 다시 매길것"* — 분모 = 때가 된 업무(`due`) · 분자 = 기한 안에 끝낸 것(`ontime`). 표의 칸에 적는 완료율(기한 후 완료 포함 · `cellTextOf`)로 등급을 매기지 않는다.
  * 때가 안 된 업무(아직 열리지 않은 수업 · 기한 전의 학생 상담 · 월말평가 · 신규생 관리)는 등급에 들지 않는다 — 수업 전 · 달 초에 등급이 깎이지 않는다.
  * 때가 된 업무가 3건 미만이면 등급 없이 '평가 대기'. 🔴 기한 초과가 오래됐다는 이유로 등급을 덮어쓰지 않는다 — 실적(%)과 지금 손댈 것(기한 초과 수)은 다른 숫자다.
  */
@@ -18,6 +18,15 @@ import { add, cellOf, EMPTY, exactPct, MATRIX_COLUMNS, MIN_JUDGE, upcomingOf, ty
 export type Verdict = { grade: "good" | "warn" | "bad" | "wait" | "none"; /** 1~9등급(평가 대기 · 해당 없음은 null). */ tier: DutyTier | null; label: string; reason: string;
   mix: { total: number; good: number; lateDone: number; missed: number; left: number } | null; gap: { label: string; diff: number } | null };
 export const VERDICT_LABEL = { wait: "평가 대기", none: "해당 없음" } as const;
+/**
+ * 판정 줄 막대의 몫(%) — 표의 칸과 **같은 셈**이다: 기한 내 = 내림(등급을 매긴 숫자) · 미처리 = 올림(`missPctOf` — 칸의 '미처리 n%'와 같다) ·
+ * 기한 후 완료 · 남음 = 반올림하되 한 건이라도 있으면 1% 이상('0% 1건'이라고 적지 않는다 — 리뷰 2026-11-11).
+ * ⚠️ 네 수의 합은 100이 아닐 수 있다(1,000건 중 한 건씩이면 99 + 1 + 1 + 1) — 몫마다 '있다/없다'를 정직하게 적는 쪽을 골랐다. 정확한 값은 옆의 건수다.
+ */
+export function mixPercents(m: NonNullable<Verdict["mix"]>): { ontime: number; lateDone: number; missed: number; left: number } {
+  const some = (v: number) => (v > 0 && m.total > 0 ? Math.max(1, Math.round((v / m.total) * 100)) : 0);
+  return { ontime: m.total > 0 ? Math.floor((m.good / m.total) * 100) : 0, lateDone: some(m.lateDone), missed: missPctOf(m.missed, m.total), left: some(m.left) };
+}
 export type Avg = { pct: number | null; label: string };
 export function judge(cell: Cell, avg: Avg | null = null): Verdict {
   if (!cell.total) return { grade: "none", tier: null, label: VERDICT_LABEL.none, reason: "", mix: null, gap: null };
@@ -52,8 +61,8 @@ export const ownerMeta = (o: Pick<TreeOwner, "load">): string => (o.load ? [o.lo
  */
 export const listedOwner = (o: Pick<TreeOwner, "load">): boolean => !(o.load?.manager && !o.load.classes);
 export type TreeSubject = { subject: string | null; label: string; cell: Cell; cells: Record<string, Cell>; owners: TreeOwner[] };
-/** 손댈 것이 많은 순 — 지금 지연 → 기한 준수율 낮은 순(평가 대기는 뒤) → 이름. */
-const byBad = (a: { cell: Cell; name: string }, b: { cell: Cell; name: string }) => b.cell.late - a.cell.late || (a.cell.pct ?? 101) - (b.cell.pct ?? 101) || a.name.localeCompare(b.name, "ko");
+/** 손댈 것이 많은 순 — 미처리(줄에 적힌 붉은 수 · `missedOf`) → 기한 내 완료율 낮은 순(평가 대기는 뒤) → 이름. */
+const byBad = (a: { cell: Cell; name: string }, b: { cell: Cell; name: string }) => missedOf(b.cell) - missedOf(a.cell) || (a.cell.pct ?? 101) - (b.cell.pct ?? 101) || a.name.localeCompare(b.name, "ko");
 
 /** 반 없는 의무(신규생 정착 — 반과 무관한 학생 단위 의무)의 반 열쇠 — 트리·반 단계에서 한 줄로 묶는다. */
 export const NO_CLASS = "none";
@@ -149,7 +158,7 @@ export function studentLines(rows: readonly RollupStudent[], students: StudentIn
   const ids = [...new Set(rows.filter((r) => inClass(r) && r.studentId).map((r) => r.studentId!))];
   return ids.map((id) => { const st = students[id]; const { cells, all } = sumCells(rows, (r) => inClass(r) && r.studentId === id);
     return { studentId: id, name: st?.name ?? "학생", sub: st ? schoolGradeLabel(st.school, st.grade) : "", cells, all }; })
-    .sort((a, b) => b.all.late - a.all.late || (a.all.pct ?? 101) - (b.all.pct ?? 101) || a.name.localeCompare(b.name, "ko"));
+    .sort((a, b) => missedOf(b.all) - missedOf(a.all) || (a.all.pct ?? 101) - (b.all.pct ?? 101) || a.name.localeCompare(b.name, "ko"));
 }
 
 export type ClassLine = { classId: string; name: string; cells: Record<string, Cell>; all: Cell; students: number };
@@ -158,7 +167,7 @@ export function classLines(rows: readonly RollupStudent[], classes: ClassInfo): 
   const ids = [...new Set(rows.map((r) => r.classId ?? NO_CLASS))];
   return ids.map((id) => { const inClass = inClassOf(id); const { cells, all } = sumCells(rows, inClass);
     return { classId: id, name: classNameOf(id, classes), cells, all, students: new Set(rows.filter((r) => inClass(r) && r.studentId).map((r) => r.studentId)).size }; })
-    .sort((a, b) => b.all.late - a.all.late || (a.all.pct ?? 101) - (b.all.pct ?? 101) || a.name.localeCompare(b.name, "ko"));
+    .sort((a, b) => missedOf(b.all) - missedOf(a.all) || (a.all.pct ?? 101) - (b.all.pct ?? 101) || a.name.localeCompare(b.name, "ko"));
 }
 
 /** '지금 지연'을 선생님(과목 단계)·반(선생님 단계) 단위로 접는다 — 이름 나열 금지(원장 2026-11-10). 접힌 줄 = 몇 명 · 종류별 지연 수 · 가장 오래된 날 수. */

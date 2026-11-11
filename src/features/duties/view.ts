@@ -15,10 +15,38 @@ export type DutyCard = {
 /** 장부가 쌓이기 시작한 날(s2_0043 운영 적용) — 그 전 날짜 칸은 "기록 전"이지 "0%"가 아니다. */
 export const DUTY_LEDGER_START = "2026-11-09";
 /** 학생 × 날 한 칸 — 전체/완료 + 종류별 상태(막대그래프용). */
-export type DutyWeekKind = { kind: string; state: "done" | "late" | "open" };
+/** 한 날의 종류 하나 — 'absent' = 결석이라 그날 보고서 업무가 없다(완료 · 전체 수에 들지 않는다 — 칸에 '결석'이라고만 적는다). */
+export type DutyWeekKind = { kind: string; state: "done" | "late" | "open" | "absent" };
 export type DutyWeekCell = { day: string; studentKey: string; total: number; done: number; kinds?: DutyWeekKind[];
   /** 주간 표의 줄을 세우는 재료 — 학생·반 이름(주간 표는 그 주에 의무가 있던 학생 전원을 줄로 세운다 · 원장 2026-11-10). */
   studentName?: string | null; classId?: string | null; className?: string | null };
+/** 주간 칸의 재료 한 줄(장부 행) — `weekCells`가 읽어 온 그대로. */
+export type DutyWeekRow = { cycle: string; status: string; voidReason: string | null; studentId: string | null; classId: string | null; kind: string; dueAt: string; studentName: string | null; className: string | null };
+/**
+ * 장부 행 → 학생 × 반 × 날 칸. 칸 = 전체/완료 수 + 종류별 상태.
+ *   · void는 빼되 미처리 확정(`expired`)은 미처리로 센다.
+ *   · 🔴 결석으로 빠진 보고서 업무(void · `absent`)는 **수에 넣지 않고 '결석' 조각으로만** 싣는다 — 출결만 있고 보고서가 없는 날이 결석 때문인지 겉으로 보이게
+ *     (원장 2026-11-11 *"출결만 하고 (결석한 학생) 보고서를 미발송해도 통과하는 학생이 있는데, 결석해서 미발송했는지 겉으로 판단이 어려움"*).
+ */
+export function foldWeekRows(rows: readonly DutyWeekRow[], now: number): DutyWeekCell[] {
+  const out = new Map<string, DutyWeekCell>();
+  for (const r of rows) {
+    const absent = r.status === "void" && r.voidReason === "absent";
+    if (r.status === "void" && r.voidReason !== "expired" && !absent) continue;
+    const studentKey = r.studentId ?? `class:${r.classId}`;
+    // 칸 = 학생 × 반 × 날(같은 학생이 두 반을 들으면 반마다 줄).
+    const key = `${studentKey}|${r.classId ?? ""}|${r.cycle}`;
+    const c = out.get(key) ?? { day: r.cycle, studentKey, total: 0, done: 0, kinds: [], studentName: r.studentName, classId: r.classId, className: r.className };
+    if (absent) c.kinds!.push({ kind: r.kind, state: "absent" });
+    else {
+      c.total++;
+      if (r.status === "done") c.done++;
+      c.kinds!.push({ kind: r.kind, state: r.status === "done" ? "done" : Date.parse(r.dueAt) < now ? "late" : "open" });
+    }
+    out.set(key, c);
+  }
+  return [...out.values()];
+}
 export type DutyKindCount = { kind: string; total: number; done: number; late: number };
 
 const RANK: Record<DutyState, number> = { late: 0, open: 1, done: 2, void: 3 };

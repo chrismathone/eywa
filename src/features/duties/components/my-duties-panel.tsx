@@ -31,7 +31,7 @@ function GroupsView({ groups, now, defaultClosed }: { groups: ReturnType<typeof 
         <header className="bg-bg-soft flex cursor-pointer select-none flex-wrap items-center justify-between gap-2 px-3 py-1.5" onClick={() => collapse.toggle(g.classId ?? "")}>
           <h4 className="text-sm font-bold"><span className="text-text-dim mr-1.5 inline-block w-3">{collapse.isOpen(g.classId ?? "") ? "▾" : "▸"}</span>{g.name}<span className="text-text-dim ml-2 text-xs font-medium">{g.cards.length}명</span></h4>
           <span className="text-xs font-semibold tabular-nums"><span className={g.done === g.total ? "text-green" : "text-foreground"}>{g.done}/{g.total}</span>
-            {g.late ? <span className="text-danger"> · 기한 초과 {g.late}</span> : g.open ? <span className="text-amber"> · 미완료 {g.open}</span> : null}</span>
+            {g.late ? <span className="text-danger"> · 미처리 {g.late}</span> : g.open ? <span className="text-amber"> · 남음 {g.open}</span> : null}</span>
         </header>
         {collapse.isOpen(g.classId ?? "") ? <table className="w-full table-fixed text-xs">
           <colgroup><col className="w-44" />{kinds.map((k) => <col key={k} />)}</colgroup>

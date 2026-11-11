@@ -44,8 +44,8 @@ export function StudentLevel({ studentId, payload, late, nowMs, onWork }: {
     </header>
     {sum ? <KindStatusStrip statuses={kindStatuses(sum.cells)} /> : <p className="text-text-dim text-sm">불러오는 중…</p>}
     <section className="border-line bg-card rounded-xl border p-3">
-      <h4 className="text-sm font-bold">기한 초과 <span className="text-text-dim text-xs font-medium">{items.length}건</span></h4>
-      {!items.length ? <p className="text-green mt-2 text-sm font-semibold">기한 초과 없음</p> : <ul className="mt-2 grid gap-1">
+      <h4 className="text-sm font-bold">미처리 <span className="text-text-dim text-xs font-medium">{items.length}건</span></h4>
+      {!items.length ? <p className="text-green mt-2 text-sm font-semibold">미처리 없음</p> : <ul className="mt-2 grid gap-1">
         {items.map((it) => <li key={it.id} className="flex flex-wrap items-center gap-2 rounded-lg px-2 py-1 text-sm">
           <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${it.inherited ? "bg-bg-soft text-text-dim" : pill(lateDays(it.dueAt, nowMs))}`}>{it.inherited ? "이관" : lateLabel(lateDays(it.dueAt, nowMs))}</span>
           <span className="font-bold">{dutyKindLabel(it.kind)}{itemLabel(it) ? ` — ${itemLabel(it)}` : ""}</span>

@@ -11,13 +11,15 @@ import { DUTY_LEDGER_START, buildWeekTable, type DutyWeekCell, type DutyWeekKind
  * 원장 2026-11-10 *"0/2 라고 적지 말고, 출결/보고서 이렇게 막대그래프"*.
  */
 const SHORT: Record<string, string> = { attendance: "출결", report_write: "보고서", report_send: "보고서 발송" };
-const FILL: Record<DutyWeekKind["state"], string> = { done: "bg-green text-primary-foreground", late: "bg-danger text-primary-foreground", open: "bg-surface-hi text-green" };
+const FILL: Record<DutyWeekKind["state"], string> = { done: "bg-green text-primary-foreground", late: "bg-danger text-primary-foreground", open: "bg-surface-hi text-green", absent: "bg-bg-soft text-text-dim" };
+const STATE_LABEL: Record<DutyWeekKind["state"], string> = { done: "완료", late: "미처리", open: "남음", absent: "결석(업무 없음)" };
 
 const DOW_KEY = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
 const DOW_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 export function MyDutiesWeek({ week, days: allDays, today, classDays, studentDays = {}, defaultClosed = false }: { week: DutyWeekCell[]; days: string[]; today: string; classDays: Record<string, string[]>; studentDays?: Record<string, string[]>; defaultClosed?: boolean }) {
-  const hasAny = (d: string) => week.some((w) => w.day === d && w.total > 0);
+  // 결석만 있는 날(업무 0건)도 열을 세운다 — '결석' 조각이 주말이라고 사라지지 않게.
+  const hasAny = (d: string) => week.some((w) => w.day === d && (w.total > 0 || (w.kinds?.length ?? 0) > 0));
   const days = allDays.filter((d, i) => i < 5 || hasAny(d));
   const groups = buildWeekTable(week);
   const collapse = useCollapse(groups.map((g) => g.classId ?? ""), defaultClosed);
@@ -47,17 +49,19 @@ export function MyDutiesWeek({ week, days: allDays, today, classDays, studentDay
         <tbody>
           {groups.flatMap((g) => [
             <tr key={`g-${g.classId ?? "none"}`} className="bg-bg-soft cursor-pointer select-none" onClick={() => collapse.toggle(g.classId ?? "")}>
-              <td colSpan={days.length + 2} className="px-2 py-1 text-xs font-bold"><span className="text-text-dim mr-1.5 inline-block w-3">{collapse.isOpen(g.classId ?? "") ? "▾" : "▸"}</span>{g.name}<span className="text-text-dim ml-2 font-medium tabular-nums">{g.rows.length}명 · 이번 주 {g.done}/{g.total}{g.late ? <span className="text-danger"> · 기한 초과 {g.late}</span> : g.open ? <span className="text-amber"> · 미완료 {g.open}</span> : null}</span></td>
+              <td colSpan={days.length + 2} className="px-2 py-1 text-xs font-bold"><span className="text-text-dim mr-1.5 inline-block w-3">{collapse.isOpen(g.classId ?? "") ? "▾" : "▸"}</span>{g.name}<span className="text-text-dim ml-2 font-medium tabular-nums">{g.rows.length}명 · 이번 주 {g.done}/{g.total}{g.late ? <span className="text-danger"> · 미처리 {g.late}</span> : g.open ? <span className="text-amber"> · 남음 {g.open}</span> : null}</span></td>
             </tr>,
             ...(collapse.isOpen(g.classId ?? "") ? g.rows : []).map((c) => <tr key={c.key} className="border-line-faint border-t">
               <td className="overflow-hidden px-2 py-1 pl-4 font-bold whitespace-nowrap">{c.title}</td>
               <td className="text-text-dim px-1 py-1 text-center whitespace-nowrap">{dowOf(c.key, g.classId)}</td>
               {days.map((d) => {
                 const cell = c.cells.get(d);
-                const kinds = (cell?.kinds ?? []).slice().sort((a, b) => DUTY_KIND_KEYS.indexOf(a.kind as never) - DUTY_KIND_KEYS.indexOf(b.kind as never));
+                const sorted = (cell?.kinds ?? []).slice().sort((a, b) => DUTY_KIND_KEYS.indexOf(a.kind as never) - DUTY_KIND_KEYS.indexOf(b.kind as never));
+                // 결석으로 빠진 보고서 업무는 종류가 둘(작성 · 발송)이어도 '결석' 조각 하나로 적는다.
+                const kinds = sorted.filter((k, i) => k.state !== "absent" || sorted.findIndex((x) => x.state === "absent") === i);
                 return <td key={d} className="px-1 py-1">
-                  {kinds.length ? <div className="border-green flex h-5 w-full overflow-hidden rounded-md border" title={kinds.map((k) => `${dutyKindLabel(k.kind)} ${k.state === "done" ? "완료" : k.state === "late" ? "기한 초과" : "미완료"}`).join(" · ")}>
-                    {kinds.map((k, i) => <span key={i} className={`flex flex-1 items-center justify-center overflow-hidden text-[length:inherit] font-semibold whitespace-nowrap ${FILL[k.state]} ${i ? "border-green border-l" : ""}`}>{SHORT[k.kind] ?? dutyKindLabel(k.kind)}</span>)}
+                  {kinds.length ? <div className="border-green flex h-5 w-full overflow-hidden rounded-md border" title={sorted.map((k) => `${dutyKindLabel(k.kind)} ${STATE_LABEL[k.state]}`).join(" · ")}>
+                    {kinds.map((k, i) => <span key={i} className={`flex flex-1 items-center justify-center overflow-hidden text-[length:inherit] font-semibold whitespace-nowrap ${FILL[k.state]} ${i ? "border-green border-l" : ""}`}>{k.state === "absent" ? "결석" : SHORT[k.kind] ?? dutyKindLabel(k.kind)}</span>)}
                   </div> : <span className="text-text-placeholder block text-center" title={emptyWhy(d, g.classId)}>{empty(d, g.classId)}</span>}
                 </td>;
               })}

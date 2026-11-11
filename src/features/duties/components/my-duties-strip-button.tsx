@@ -87,7 +87,7 @@ export function MyDutiesStripButton({ summary: initial, tenantId = null, classNa
   const lateAll = summary.overdue ?? today.late + counsel.late + exam.late + newcomer.late;
   const label = lang === "en"
     ? `My duties — today ${today.done}/${today.total}${lateAll ? ` · ${lateAll} overdue` : ""}`
-    : `내 업무 — 오늘 ${today.done}/${today.total}${lateAll ? ` · 기한 초과 ${lateAll}` : ""}`;
+    : `내 업무 — 오늘 ${today.done}/${today.total}${lateAll ? ` · 미처리 ${lateAll}` : ""}`;
   const mm = Number(month.slice(5, 7));
   return <section className={`border-line bg-card rounded-2xl border ${className}`}>
     <button type="button" onClick={() => setView("today")} className="hover:bg-bg-soft flex w-full flex-wrap items-center gap-2 rounded-t-2xl px-3 py-2 text-left">
@@ -98,7 +98,7 @@ export function MyDutiesStripButton({ summary: initial, tenantId = null, classNa
     </button>
     <div className="grid gap-2 px-3 pb-3 sm:grid-cols-3 lg:grid-cols-5">
       <Tile label="오늘 완료도" value={`${today.done}`} unit={`/ ${today.total}`} pct={pct(today)} tone={today.total && pct(today) === 100 ? "green" : "primary"} onClick={() => setView("today")} />
-      <Tile label="기한 초과" value={`${lateAll}`} tone={lateAll ? "danger" : "muted"} onClick={() => setView(today.late ? "today" : "month")} />
+      <Tile label="미처리" value={`${lateAll}`} tone={lateAll ? "danger" : "muted"} onClick={() => setView(today.late ? "today" : "month")} />
       <Tile label={`${mm}월 학생 상담`} value={`${counsel.done}`} unit={`/ ${counsel.total}`} pct={pct(counsel)} tone={counsel.total && pct(counsel) === 100 ? "green" : counsel.late ? "danger" : "primary"} onClick={() => setView("month")} />
       <Tile label={`${mm}월 월말평가`} value={`${exam.done}`} unit={`/ ${exam.total}`} pct={pct(exam)} tone={exam.total && pct(exam) === 100 ? "green" : exam.late ? "danger" : "primary"} onClick={() => setView("month")} />
       <Tile label="신규생 관리" value={`${newcomer.done}`} unit={`/ ${newcomer.total}`} pct={pct(newcomer)} tone={newcomer.late ? "danger" : newcomer.total && pct(newcomer) === 100 ? "green" : "primary"} onClick={() => setView("month")} />

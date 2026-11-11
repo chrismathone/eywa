@@ -1,7 +1,9 @@
 "use client";
 
 import { TierStars } from "@/features/student-contribution/components/relative-score";
-import type { Verdict } from "../../view-admin-levels";
+import { mixPercents, type Verdict } from "../../view-admin-levels";
+import type { MixKey } from "../../view-admin";
+import { MIX_COLOR, MIX_LABEL } from "./admin-mix";
 
 const TONE: Record<Verdict["grade"], string> = { good: "bg-green-soft text-green", warn: "bg-amber-soft text-amber", bad: "bg-danger-soft text-danger", wait: "bg-bg-soft text-text-dim", none: "bg-bg-soft text-text-dim" };
 const DOT: Record<Verdict["grade"], string> = { good: "bg-green", warn: "bg-amber", bad: "bg-danger", wait: "bg-text-placeholder", none: "bg-text-placeholder" };
@@ -11,14 +13,20 @@ export function VerdictBadge({ v, className = "" }: { v: Verdict; className?: st
   return <span className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-bold ${TONE[v.grade]} ${className}`}>{v.label}</span>;
 }
 
-const share = (part: number, total: number) => Math.round((part / total) * 100);
 const n = (v: number) => v.toLocaleString("ko-KR");
+/** 막대의 한 몫 — 색 네모 · 이름 · % · 건수. */
+function Part({ k, pct, count }: { k: MixKey; pct: number; count: number }) {
+  return <span className="flex items-center gap-1 text-xs font-semibold whitespace-nowrap tabular-nums">
+    <span aria-hidden className="h-2.5 w-2.5 rounded-sm" style={{ background: MIX_COLOR[k] }} />{MIX_LABEL[k]} {pct}% <span className="text-text-dim font-medium">{n(count)}건</span>
+  </span>;
+}
 /**
- * 배지 + 별 + **결론 한 줄**, 그 아래 막대 하나 — 그 기간 업무가 어떻게 끝났나(기한 안에 초록 · 기한 뒤에 주황 · 안 함 빨강 · 남은 것은 빈 칸)와 건수.
- * 첫 숫자(초록)가 곧 등급을 매긴 숫자다(표의 '전체' 칸과 같다 — 내림). 관리자가 숫자를 해석하지 않고 바로 읽게: 다 했나 → 모자라면 안 한 쪽인가 늦은 쪽인가 남은 쪽인가.
+ * 배지 + 별 + **결론 한 줄**, 그 아래 막대 하나 — 그 기간 업무가 어떻게 끝났나(기한 내 노랑 · 기한 후 완료 회색 · 미처리 차콜 · 남은 것은 빈 바탕)와 건수.
+ * 첫 숫자(기한 내)가 곧 등급을 매긴 숫자다(내림). 관리자가 숫자를 해석하지 않고 바로 읽게: 다 했나 → 모자라면 안 한 쪽인가 늦은 쪽인가 남은 쪽인가.
  */
 export function VerdictLine({ v, plain }: { v: Verdict; /** 등급 · 별 없이(반 · 학생 — 표본이 작아 등급이 한 건에 크게 흔들리고, 학생 옆 등급은 학생 평가로 읽힌다). */ plain?: boolean }) {
   const m = v.mix;
+  const pc = m ? mixPercents(m) : null;
   return <div className="grid gap-1.5">
     <div className="flex flex-wrap items-center gap-2">
       {plain ? null : <VerdictBadge v={v} />}
@@ -27,15 +35,17 @@ export function VerdictLine({ v, plain }: { v: Verdict; /** 등급 · 별 없이
       {v.gap ? <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${v.gap.diff > 0 ? "bg-green-soft text-green" : "bg-danger-soft text-danger"}`}>{v.gap.label} 평균보다 {Math.abs(v.gap.diff)}% {v.gap.diff > 0 ? "높음" : "낮음"}</span> : null}
     </div>
     {m && v.tier ? <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <span className="bg-bg-soft flex h-2 w-56 max-w-full overflow-hidden rounded-full" aria-hidden>
-        <span className="bg-green h-full" style={{ width: `${(m.good / m.total) * 100}%` }} />
-        <span className="bg-amber h-full" style={{ width: `${(m.lateDone / m.total) * 100}%` }} />
-        <span className="bg-danger h-full" style={{ width: `${(m.missed / m.total) * 100}%` }} />
+      {/* 색은 표의 칸(가로 막대 하나를 몫대로)과 같다 — 이 줄의 색 네모와 이름이 곧 그 색의 풀이다. */}
+      <span className="flex h-2.5 w-56 max-w-full overflow-hidden rounded-full" style={{ background: MIX_COLOR.left }} aria-hidden>
+        <span className="h-full" style={{ width: `${(m.good / m.total) * 100}%`, background: MIX_COLOR.ontime }} />
+        <span className="h-full" style={{ width: `${(m.lateDone / m.total) * 100}%`, background: MIX_COLOR.lateDone }} />
+        <span className="h-full" style={{ width: `${(m.missed / m.total) * 100}%`, background: MIX_COLOR.missed }} />
       </span>
-      <span className="text-xs font-semibold tabular-nums"><span className="text-green">{Math.floor((m.good / m.total) * 100)}%</span> <span className="text-text-dim font-medium">{n(m.good)}건</span></span>
-      {m.lateDone ? <span className="text-xs font-semibold tabular-nums"><span className="text-amber">기한 후 완료 {share(m.lateDone, m.total)}%</span> <span className="text-text-dim font-medium">{n(m.lateDone)}건</span></span> : null}
-      {m.missed ? <span className="text-xs font-semibold tabular-nums"><span className="text-danger">미처리 {share(m.missed, m.total)}%</span> <span className="text-text-dim font-medium">{n(m.missed)}건</span></span> : null}
-      {m.left ? <span className="text-text-dim text-xs font-semibold tabular-nums">남음 {share(m.left, m.total)}% <span className="font-medium">{n(m.left)}건</span></span> : null}
+      {/* 첫 숫자(기한 내)가 곧 등급을 매긴 숫자다. %는 표의 칸과 같은 셈이다(`mixPercents` — 미처리는 올림). */}
+      <Part k="ontime" pct={pc!.ontime} count={m.good} />
+      {m.lateDone ? <Part k="lateDone" pct={pc!.lateDone} count={m.lateDone} /> : null}
+      {m.missed ? <Part k="missed" pct={pc!.missed} count={m.missed} /> : null}
+      {m.left ? <Part k="left" pct={pc!.left} count={m.left} /> : null}
     </div> : null}
   </div>;
 }

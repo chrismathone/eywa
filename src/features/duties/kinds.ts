@@ -13,9 +13,9 @@ export type DutyState = DutyStatus | "late";
 export type DutyKindInfo = { label: string; period: DutyPeriod; doneRule: string };
 
 export const DUTY_KINDS = {
-  attendance: { label: "출결 입력", period: "daily", doneRule: "그 반 그날 그 학생의 출결 기록이 생기면 완료. 기한은 그날 그 반 수업이 끝나는 시각(넘겨 찍으면 기한 후 완료)." },
-  report_write: { label: "수업보고서 작성", period: "daily", doneRule: "그날 그 학생의 수업보고서(또는 그날을 대신하는 보고서)가 있으면 완료. 결석이면 대상에서 빠진다. 기한은 수업이 끝난 뒤 24시간." },
-  report_send: { label: "보고서 발송", period: "daily", doneRule: "그날 수업한 학생의 보고서가 학부모에게 실제로 나가면(발송 성공 · 영어는 반 알림장 게시) 완료. 써 놓고 보내지 않은 것은 미완료다. 결석 · 회수면 의무에서 빠진다(발송 기한을 넘겨 못 나간 것은 미이행). 기한은 수업이 끝난 뒤 24시간(넘겨 보내면 기한 후 완료)." },
+  attendance: { label: "출결", period: "daily", doneRule: "그 반 그날 그 학생의 출결 기록이 생기면 완료. 기한은 그날 그 반 수업이 끝나는 시각(넘겨 찍으면 기한 후 완료)." },
+  report_write: { label: "보고서 작성", period: "daily", doneRule: "그날 그 학생의 수업보고서(또는 그날을 대신하는 보고서)가 있으면 완료. 결석이면 대상에서 빠진다. 기한은 수업이 끝난 뒤 24시간." },
+  report_send: { label: "보고서 발송", period: "daily", doneRule: "그날 수업한 학생의 보고서가 학부모에게 실제로 나가면(발송 성공 · 영어는 반 알림장 게시) 완료. 써 놓고 보내지 않은 것은 완료가 아니다. 결석 · 회수면 의무에서 빠진다(발송 기한을 넘겨 못 나간 것은 미처리 확정). 기한은 수업이 끝난 뒤 24시간(넘겨 보내면 기한 후 완료)." },
   counsel_monthly: { label: "학생 상담", period: "monthly", doneRule: "상담 의무 학생(같은 과목에서 가장 많은 요일을 맡은 담임 · 영어는 반 담임 전원 — 강사평가·원생상담 통계와 같은 판정)마다 그 달 본인이 상담을 1건 이상 기록하면 완료. 기한은 말일." },
   exam_monthly: { label: "월말평가", period: "monthly", doneRule: "그 달 담임 반 명단 학생마다 그 달 그 과목 월말평가 기록(성적관리 · 응시)이 있으면 완료(강사평가 월말평가 응시율과 같은 판정). 학원이 그 달이나 지난달에 월말평가를 친 과목만. 기한은 말일." },
   newcomer_call: { label: "신규생 관리", period: "case", doneRule: "신규생 관리 체크리스트(사전 콜 · 첫 수업 안내 · OJT · 첫 수업 후 콜 · 1개월 콜 · 3개월 콜)의 항목을 체크하면 완료. 기한은 그 항목의 날(등록일·첫 수업일 기준). 담당 = 그 학생의 상담 의무 담임." },
@@ -34,7 +34,12 @@ export function dutyState(status: DutyStatus, dueAt: string, now: number = Date.
 }
 
 /** 화면 이름 — 원장 2026-11-09 *"아직 → 미완료"*. */
-export const DUTY_STATE_LABEL: Record<DutyState, string> = { open: "미완료", late: "기한 초과", done: "완료", void: "해당 없음" };
+/**
+ * 상태 이름 — 관리자 화면(업무 완성도)과 강사 화면(내 업무)이 같은 낱말을 쓴다(원장 2026-11-11 *"용어 통일 … 미처리로 통일"* · *"같은 내용인데 문구 다른곳 전부 통일"*):
+ *   완료(기한 내 완료 · 기한 후 완료) · **미처리**(기한이 지났는데 끝내지 않은 것 — 다시 할 수 없게 닫힌 것은 '미처리 확정') · **남음**(아직 기한 전) · 진행(때가 안 된 월간 · 건별) · 면제 · 해당 없음.
+ *   '미완료'는 남음 + 미처리를 한데 부를 때만(하루 보기의 미완료 순위). 🔴 '기한 초과' · '지연' · '미이행'을 화면에 다시 쓰지 말 것.
+ */
+export const DUTY_STATE_LABEL: Record<DutyState, string> = { open: "남음", late: "미처리", done: "완료", void: "해당 없음" };
 
 /** 할 일(staff_tasks) 종류 — 늦은 의무 묶음(담당자 × 종류 × 회차)마다 하나(`duty_escalate`). */
 export const DUTY_LATE_TASK_KIND = "duty_late";

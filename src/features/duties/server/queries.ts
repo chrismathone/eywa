@@ -2,7 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import type { DutyItemView, DutyKind, DutyPeriod, DutyStatus } from "../kinds";
-import type { DutyWeekCell } from "../view";
+import { foldWeekRows, type DutyWeekCell } from "../view";
 
 /**
  * 의무 장부 조회 — 표는 서버 전용(s2_0043 정책 0개)이라 관리 키로 읽는다. 🔴 모든 조회에 지점(tenant_id) 조건 —
@@ -63,7 +63,7 @@ export async function countOwnerLate(tenantId: string, ownerId: string, liveFrom
   let q = createAdminClient().from("duty_items").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("owner_id", ownerId).eq("status", "open").lt("due_at", new Date().toISOString());
   if (liveFrom) q = q.gte("due_at", liveFrom);
   const { count, error } = await q;
-  if (error) throw new Error(`지연 수: ${error.message}`);
+  if (error) throw new Error(`미처리 수: ${error.message}`);
   return count ?? 0;
 }
 
@@ -86,22 +86,11 @@ export async function weekCells(tenantId: string, ownerId: string, from: string,
   // 🔴 끝까지 페이지로 읽는다(B2) — 학생 100명 × 5일 × 2종이면 1,000행을 넘는다(상한을 적어도 1,000행에서 조용히 잘린다).
   const data = await fetchAllPaged<unknown>((a, b) => createAdminClient().from("duty_items").select("cycle,status,student_id,class_id,void_reason,kind,due_at,student:students!duty_items_student_id_fkey(name),class:classes!duty_items_class_id_fkey(class_name)")
     .eq("tenant_id", tenantId).eq("owner_id", ownerId).eq("period", "daily").gte("cycle", from).lte("cycle", to).or(VISIBLE).order("cycle").order("id").range(a, b));
-  const out = new Map<string, DutyWeekCell>();
-  const now = Date.now();
   type WeekRowRaw = { cycle: string; status: DutyStatus; void_reason: string | null; student_id: string | null; class_id: string | null; kind: string; due_at: string;
     student: { name: string | null } | { name: string | null }[] | null; class: { class_name: string | null } | { class_name: string | null }[] | null };
-  for (const r of (data ?? []) as unknown as WeekRowRaw[]) {
-    if (r.status === "void" && r.void_reason !== "expired") continue;
-    const studentKey = r.student_id ?? `class:${r.class_id}`;
-    // 칸 = 학생 × 반 × 날(같은 학생이 두 반을 들으면 반마다 줄).
-    const key = `${studentKey}|${r.class_id ?? ""}|${r.cycle}`;
-    const c = out.get(key) ?? { day: r.cycle, studentKey, total: 0, done: 0, kinds: [], studentName: one(r.student)?.name ?? null, classId: r.class_id, className: one(r.class)?.class_name ?? null };
-    c.total++;
-    if (r.status === "done") c.done++;
-    c.kinds!.push({ kind: r.kind, state: r.status === "done" ? "done" : Date.parse(r.due_at) < now ? "late" : "open" });
-    out.set(key, c);
-  }
-  return [...out.values()];
+  // 접는 규칙(결석은 수에 넣지 않고 '결석' 조각으로)은 순수 함수 한 곳 — `foldWeekRows`.
+  return foldWeekRows(((data ?? []) as unknown as WeekRowRaw[]).map((r) => ({ cycle: r.cycle, status: r.status, voidReason: r.void_reason, studentId: r.student_id, classId: r.class_id, kind: r.kind, dueAt: r.due_at,
+    studentName: one(r.student)?.name ?? null, className: one(r.class)?.class_name ?? null })), Date.now());
 }
 
 /** 반이 수업하는 요일(그 주에 살아 있는 배치) — 주간 표의 '예정'을 수업 있는 요일에만 적는다(원장 2026-11-10). */

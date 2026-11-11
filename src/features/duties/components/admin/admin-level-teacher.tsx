@@ -2,7 +2,8 @@
 
 import { MATRIX_COLUMNS, type AdminPeriod } from "../../view-admin";
 import { classLines, judge, NO_CLASS, NO_OWNER, ownerMeta, type Avg, type TreeOwner } from "../../view-admin-levels";
-import { CountBox, GridCols, gridStyle, tableBasis, TH } from "./admin-matrix";
+import { CountBox, GridTable, GridWrap, NAME_LONG, NameCell, tableBasis, TD, TH } from "./admin-matrix";
+import { MixLegend } from "./admin-mix";
 import { VerdictBadge, VerdictLine } from "./admin-verdict";
 import { useStudentsPayload } from "./use-students";
 
@@ -21,8 +22,10 @@ export function TeacherLevel({ owner, avg, period, subject, tick, kind, aside, o
   const linesAll = data ? classLines(data.rows, data.classInfo) : [];
   const lines = kind ? linesAll.filter((l) => l.cells[kind]) : linesAll;
   const cols = MATRIX_COLUMNS.filter((c) => (kind ? c.kind === kind : lines.some((l) => l.cells[c.kind])));
+  // 결석으로 빠진 업무 수(반 × 종류) — 그 반의 출결 건수보다 보고서 건수가 적은 까닭을 칸에 적는다.
+  const absentOf = (classId: string, k: string) => (data?.absent ?? []).filter((a) => a.kind === k && (a.classId ?? NO_CLASS) === classId).reduce((sum, a) => sum + a.count, 0);
   // 불러오는 동안에도 같은 자리 · 같은 크기 — 열 수는 왼쪽 목록이 이미 아는 이 선생님의 종류로 어림한다.
-  const basis = tableBasis(kind ? 1 : MATRIX_COLUMNS.filter((c) => owner.cells[c.kind]?.total).length + 1, grade);
+  const basis = tableBasis(kind ? 1 : MATRIX_COLUMNS.filter((c) => owner.cells[c.kind]?.total).length + 1, grade, NAME_LONG);
   const kindLabel = kind ? MATRIX_COLUMNS.find((c) => c.kind === kind)?.label ?? "" : "";
   return <div className="grid grid-cols-1 gap-4">
     <header className="grid gap-1">
@@ -36,28 +39,24 @@ export function TeacherLevel({ owner, avg, period, subject, tick, kind, aside, o
     {/* 표 카드 옆에 '기한 초과'를 세운다(원장 2026-11-11 *"2단으로 해서 공간을 활용"*) — 표가 편하게 서는 폭(`tableBasis`)과 한 줄에 안 들어가면 아래로 내려가고 표가 한 줄을 다 쓴다. */}
     <div className="flex flex-wrap items-stretch gap-4">
     <section className="border-line bg-card min-h-48 max-w-full min-w-[min(100%,640px)] grow rounded-xl border p-3" style={{ flexBasis: basis }}>
-      <h4 className="text-sm font-bold">반별</h4>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1"><h4 className="text-sm font-bold">반별</h4><MixLegend className="ml-auto" /></div>
       {failed ? <p className="text-text-dim mt-2 text-sm">반별 집계 조회 실패</p>
         : !data ? <p className="text-text-dim mt-2 text-sm">불러오는 중…</p>
         : !lines.length ? <p className="text-text-dim mt-2 text-sm">해당 기간 업무 없음</p>
-        : <div className="mt-2 overflow-x-auto">
-          <table className="table-fixed border-separate border-spacing-1 text-center text-sm [&_th:first-child]:text-left" style={gridStyle(cols.length + (kind ? 0 : 1), grade)}>
-            <GridCols count={cols.length + (kind ? 0 : 1)} grade={grade} />
+        : <GridWrap className="mt-2">
+          <GridTable count={cols.length + (kind ? 0 : 1)} grade={grade} name={NAME_LONG}>
             <thead><tr><th className={TH}>반</th>{grade ? <th className={TH}>등급</th> : null}{cols.map((c) => <th key={c.kind} className={TH}>{c.label}</th>)}{kind ? null : <th className={TH}>전체</th>}</tr></thead>
             <tbody>
               {lines.map((l) => <tr key={l.classId}>
-                <td className="px-2 py-0.5 text-left">
-                  <button type="button" onClick={() => onClass(l.classId)} className="hover:text-primary text-sm font-bold">{l.name}</button>
-                  <span className="text-text-dim ml-1 text-xs font-medium">{l.students}명</span>
-                  {l.cells.newcomer_call ? <span className="bg-primary text-primary-foreground ml-1.5 rounded px-1 py-px align-middle text-xs font-bold" title="신규생 있음">NEW</span> : null}
-                </td>
+                <NameCell name={l.name} meta={`${l.students}명`} onClick={() => onClass(l.classId)}
+                  badge={l.cells.newcomer_call ? <span className="bg-primary text-primary-foreground shrink-0 rounded px-1 py-px text-xs leading-tight font-bold" title="신규생 있음">NEW</span> : null} />
                 {grade ? <td className="px-1"><VerdictBadge v={judge(kind ? l.cells[kind] ?? l.all : l.all)} /></td> : null}
-                {cols.map((c) => <td key={c.kind} className="p-0"><CountBox cell={l.cells[c.kind] ?? null} /></td>)}
-                {kind ? null : <td className="p-0"><CountBox cell={l.all} overall /></td>}
+                {cols.map((c) => <td key={c.kind} className={TD}><CountBox cell={l.cells[c.kind] ?? null} absent={absentOf(l.classId, c.kind)} /></td>)}
+                {kind ? null : <td className={TD}><CountBox cell={l.all} /></td>}
               </tr>)}
             </tbody>
-          </table>
-        </div>}
+          </GridTable>
+        </GridWrap>}
     </section>
     {aside ? <div className="grid min-w-[min(100%,400px)] [flex:1000_1_400px] grid-cols-1">{aside}</div> : null}
     </div>

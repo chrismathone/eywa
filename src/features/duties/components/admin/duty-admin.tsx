@@ -18,6 +18,8 @@ import { AdminToday } from "./admin-today";
 import { AdminOverlay } from "./admin-overlay";
 import { AdminTree, ROOT, type Sel } from "./admin-tree";
 import { TeacherLevel } from "./admin-level-teacher";
+import { OntimeOnlyProvider } from "./admin-mix";
+import { saveDutyOntimeOnly } from "../../server/prefs-actions";
 
 /** now = 서버가 이 재료를 만든 시각(지난 날 수·기준 시각 비교에 쓴다 — 그리는 중에 시계를 읽지 않는다). */
 export type Loaded = { period: AdminPeriod; today: string; now: string; range: { from: string; to: string; label: string }; data: DutyAdminData };
@@ -35,11 +37,14 @@ const kstStamp = (iso: string) => { const d = new Date(Date.parse(iso) + 9 * 3_6
  * 평가 시작(live_from) 전 기한의 의무(이관)는 **화면에 보이지 않는다**(원장 2026-11-10 *"그런거 표시하지마"* — 판정·지연 수·할 일에도 안 든다 · 장부에는 남는다).
  * 고른 자리(`Sel`)는 **지금 기간의 트리에 맞춰 바로잡는다** — 없는 과목은 전체로, 없는 선생님·반은 그 위 단계로(기간을 바꿔도 화면이 어긋나지 않게).
  */
-export function DutyAdmin({ initial, scope, managers = null, tenantId = null }: { initial: Loaded; scope: DutyAdminScope; /** 저장 순간의 신호를 들을 지점(s2_0054). */ tenantId?: string | null; /** 과목 키 → 과목 관리자 이름(학원 전체를 보는 사람에게만 — 원장 첫 화면의 '과목 관리자별 현황'). */ managers?: Record<string, string[]> | null }) {
+export function DutyAdmin({ initial, scope, managers = null, tenantId = null, ontimeOnly: ontimeOnly0 = false }: { initial: Loaded; scope: DutyAdminScope; /** '기한 내만 보기'의 저장값(계정 귀속). */ ontimeOnly?: boolean; /** 저장 순간의 신호를 들을 지점(s2_0054). */ tenantId?: string | null; /** 과목 키 → 과목 관리자 이름(학원 전체를 보는 사람에게만 — 원장 첫 화면의 '과목 관리자별 현황'). */ managers?: Record<string, string[]> | null }) {
   const [period, setPeriod] = useState<AdminPeriod>(initial.period);
   const [loaded, setLoaded] = useState<Partial<Record<AdminPeriod, Loaded>>>({ [initial.period]: initial });
   const [failed, setFailed] = useState<Partial<Record<AdminPeriod, true>>>({});
   const [lateOnly, setLateOnly] = useState(false);
+  // 기한 내만 보기 — 칸의 숫자와 막대를 기한 내 몫만으로(선생님끼리 '기한 안에 한 것'을 견준다). 바꾸는 순간 계정에 저장한다(실패해도 화면은 그대로 — 내 보기 취향).
+  const [ontimeOnly, setOntimeOnly] = useState(ontimeOnly0);
+  const toggleOntimeOnly = () => { const on = !ontimeOnly; setOntimeOnly(on); void saveDutyOntimeOnly({ on }).catch(() => undefined); };
   const [rawSel, setSel] = useState<Sel>(ROOT);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [work, setWork] = useState<{ seq: number; work: DutyWork } | null>(null);
@@ -137,12 +142,12 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null }: 
   const expandOf = (list: "live", all: AttentionRow[], rows: AttentionRow[]) => { const r = rows.find((x) => `${list}:${x.key}` === openKey); return r ? { key: r.key, rows: childrenOf(all, r) } : null; };
   // 선생님 줄에는 이름 옆에 늘 과목 · 반 수 · 학생 수(그 옆 숫자는 지연이 있는 학생 수).
   const metaOf = new Map((subjectNode?.owners ?? []).map((o) => [o.ownerId, ownerMeta(o)]));
-  const attention = fold(attentionAll).map((r) => (r.key.startsWith("owner:") && metaOf.get(r.ownerId ?? NO_OWNER) ? { ...r, sub: [metaOf.get(r.ownerId ?? NO_OWNER), r.sub ? `기한 초과 ${r.sub}` : ""].filter(Boolean).join(" · ") } : r));
+  const attention = fold(attentionAll).map((r) => (r.key.startsWith("owner:") && metaOf.get(r.ownerId ?? NO_OWNER) ? { ...r, sub: [metaOf.get(r.ownerId ?? NO_OWNER), r.sub ? `미처리 ${r.sub}` : ""].filter(Boolean).join(" · ") } : r));
   // 관리 기록(확인 · 사유 · 면제) — 전체 권한에게만. 줄이 가리키는 의무 전부에 남긴다.
   const noteFor = (all: LateItem[], r: AttentionRow) => (scope.canNote ? <NoteButton title={[r.teacher, r.className, r.title].filter((x, i, a) => x && a.indexOf(x) === i).join(" · ")} items={attentionItems(all, r)} onSaved={refresh} /> : null);
   const lateSection = <section className="border-line bg-card rounded-xl border p-2">
     <div className="flex items-center gap-2 px-2 py-1">
-      <h4 className="min-w-0 flex-1 text-sm font-bold">기한 초과 <span className="text-text-dim text-xs font-medium">{distinctStudents(liveHere)}명 · {liveHere.length}건 · 현재 기준</span></h4>
+      <h4 className="min-w-0 flex-1 text-sm font-bold">미처리 <span className="text-text-dim text-xs font-medium">{distinctStudents(liveHere)}명 · {liveHere.length}건 · 현재 기준</span></h4>
       {ownerNode && ownerNode.ownerId !== NO_OWNER ? <LateRequestButton owner={{ id: ownerNode.ownerId, name: ownerNode.name }} items={liveHere} /> : null}
     </div>
     {/* 처리 요청은 선생님 단위다 — 전체·과목 단계는 줄(선생님)마다, 선생님·반 단계는 위 단추 하나(지금 보이는 범위의 지연). */}
@@ -152,7 +157,7 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null }: 
   const synced = cur?.data.syncedAt ?? null;
   const stale = !!cur && (!synced || nowMs - Date.parse(synced) > STALE_MS);
 
-  return <DutyRequestScope today={today} tick={tick}><div className="space-y-4">
+  return <DutyRequestScope today={today} tick={tick}><OntimeOnlyProvider value={ontimeOnly}><div className="space-y-4">
     <Toolbar>
       <ToolbarSegment>{periodPresets(today).map((p) => <ToolbarSegmentItem key={p.key} active={period === p.key} onClick={() => setPeriod(p.key)}>{p.label}</ToolbarSegmentItem>)}</ToolbarSegment>
       {/* 날짜 이동 — 앱 공용 기간 네비(‹ 라벨 ›) + 달력. 고른 단위(하루 · 한 주 · 한 달)로 앞뒤로 옮기고, 달력에서 고른 날이 든 기간으로 간다. 앞날은 없다. */}
@@ -162,7 +167,8 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null }: 
         relation={period === periodKey(unit, today) ? "current" : "past"} nextDisabled={(periodParts(shiftPeriod(period, 1))?.anchor ?? "") > today} prevDisabled={!!viewFrom && adminRange(shiftPeriod(period, -1), today).to < viewFrom}
         onNavigate={(key) => setPeriod(key)} />
       {cur && !stale ? <span className="text-text-dim text-xs font-medium">마지막 반영 {kstStamp(cur.now)}</span> : null}
-      <ToolbarChip active={lateOnly} onClick={() => setLateOnly((v) => !v)} className="ml-auto">기한 초과만</ToolbarChip>
+      <ToolbarChip active={ontimeOnly} onClick={toggleOntimeOnly} className="ml-auto">기한 내만 보기</ToolbarChip>
+      <ToolbarChip active={lateOnly} onClick={() => setLateOnly((v) => !v)}>미처리만</ToolbarChip>
     </Toolbar>
     {stale ? <p className="bg-amber-soft text-amber rounded-lg px-3 py-2 text-sm font-semibold">{synced ? `${kstStamp(synced)} 이후 반영 지연 · 최신 저장분 누락 가능` : "아직 집계 전 · 수치가 실제와 다를 수 있음"}</p> : null}
     {!cur ? <p className="text-text-dim text-sm">{failed[period] ? "조회 실패 · 잠시 후 다시 열어 주세요" : "불러오는 중…"}</p> : null}
@@ -196,5 +202,5 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null }: 
     </div> : null}
 
     {work ? <AdminOverlay key={work.seq} work={work.work} onClose={() => setWork(null)} /> : null}
-  </div></DutyRequestScope>;
+  </div></OntimeOnlyProvider></DutyRequestScope>;
 }

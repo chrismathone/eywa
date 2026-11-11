@@ -9,7 +9,7 @@ describe("lateRequestPrefill — 지연 의무 → 처리 요청 초안", () => 
     const p = lateRequestPrefill([item({}), item({ kind: "report_send", cycle: "2026-11-08" }), item({ studentId: "s2", studentName: "박둘" }), item({ studentId: null, studentName: null, kind: "report_send" })], owner, "2026-11-10")!;
     expect(p.assigneeIds).toEqual(["t1"]);
     expect(p.students).toEqual([{ id: "s1", name: "김하나", assigneeId: "t1" }, { id: "s2", name: "박둘", assigneeId: "t1" }]);
-    expect(p.title).toBe("이선생 선생님 — 기한 지난 업무 4건 처리");
+    expect(p.title).toBe("이선생 선생님 — 미처리 업무 4건 처리");
     expect(p.source).toBe("duty:late:math");
     expect(lateRequestPrefill([item({}), item({ subject: "english" })], owner, "2026-11-10")!.source).toBe(DUTY_REQUEST_SOURCE);
     expect(p.dueOn).toBe("2026-11-12");
@@ -20,7 +20,7 @@ describe("lateRequestPrefill — 지연 의무 → 처리 요청 초안", () => 
       item({ kind: "counsel_monthly", cycle: "2026-10", dueAt: "2026-10-31T14:59:59Z" }),
       item({ kind: "newcomer_call", cycle: "month1_call", dueAt: "2026-11-05T14:59:59Z", classId: null, className: null, studentName: "<b>최" }),
     ], owner, "2026-11-10")!;
-    expect(p.body).toContain("<strong>김하나</strong> — 학생 상담 10월 / 출결 입력 11/7 · 11/8");
+    expect(p.body).toContain("<strong>김하나</strong> — 학생 상담 10월 / 출결 11/7 · 11/8");
     expect(p.body).toContain("<strong>반 공통</strong>");
     expect(p.body).toContain("&lt;b&gt;최</strong> — 신규생 관리 1개월 콜(기한 11/5)");
     expect(p.body).not.toMatch(/<h\d/);

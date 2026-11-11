@@ -130,12 +130,18 @@ export type DutyStudentsData = { rows: RollupStudent[]; students: StudentInfo; c
 export async function loadDutyStudents(tenantId: string, from: string, to: string, scope: DutyAdminScope, periods: string[] | null, f: StudentFilter): Promise<DutyStudentsData> {
   const admin = createAdminClient();
   // 원어민 담당 몫은 합치기 전에 뺀다(s2_0062) — 선생님 · 반 집계와 같은 숫자가 되게.
-  const native = await tenantNativeIds(tenantId);
+  // 평가 개시일은 결석 조회의 범위에 쓴다(집계 · 칸 목록과 같은 조건) — 원어민 목록과 서로 무관하니 함께 읽는다(B4).
+  // 🔴 개시일을 못 읽으면 결석 수를 세지 않는다(범위를 모르는 채 세면 개시 전 날까지 넓게 센다 — 칸 목록은 같은 실패에서 오류를 던진다 · 3차 리뷰).
+  const [native, liveRow] = await Promise.all([tenantNativeIds(tenantId), admin.from("duty_settings").select("live_from").eq("tenant_id", tenantId).maybeSingle()]);
+  const liveKnown = !liveRow.error;
+  const live = (liveRow.data?.live_from as string | null) ?? null;
   const raw = await fetchAllPaged<CountRow & { student_id: string | null; class_id: string | null; kind: string; last_due: string | null }>((a, b) =>
     admin.rpc("duty_rollup_student_ex", { p_exclude_owners: native, /* 빈 목록이어도 넘긴다 — 담당 없는 업무를 함께 뺀다(s2_0064) */ p_tenant: tenantId, p_from: from, p_to: to, p_subjects: scope.subjects, p_periods: periods, p_owner: scope.ownerId ?? (f.ownerNone ? null : f.owner ?? null), p_kind: f.kind ?? null, p_class: f.classId ?? null, p_subject: f.subject ?? null, p_student: f.studentId ?? null, p_subject_none: f.subjectNone ?? false, p_owner_none: !scope.ownerId && (f.ownerNone ?? false) })
       .order("student_id").order("class_id").order("kind").range(a, b));
   // 결석으로 빠진 일간 의무(void · absent) — 집계에는 없지만 칸에 '결석'이라고 적으려고 같은 범위로 따로 읽는다(하루 · 한 주 · 한 달 안의 수업일).
-  const absentAll = await fetchAllPaged<{ student_id: string | null; class_id: string | null; kind: string; owner_id: string | null }>((a, b) => {
+  // 🔴 평가 개시일 조건도 집계 · 칸 목록과 같게 건다 — 안 걸면 칸은 '결석 5'인데 눌러 연 목록은 '결석 2건'이 된다(2차 리뷰 2026-11-11).
+  const liveDay = live ? new Date(Date.parse(live) + 9 * 3_600_000).toISOString().slice(0, 10) : null;
+  const absentAll = !liveKnown ? [] : await fetchAllPaged<{ student_id: string | null; class_id: string | null; kind: string; owner_id: string | null }>((a, b) => {
     let q = admin.from("duty_items").select("student_id,class_id,kind,owner_id").eq("tenant_id", tenantId).eq("period", "daily").eq("status", "void").eq("void_reason", "absent").gte("cycle", from).lte("cycle", to).not("student_id", "is", null).not("owner_id", "is", null);
     if (scope.subjects) q = q.in("subject", scope.subjects);
     if (scope.ownerId) q = q.eq("owner_id", scope.ownerId); else if (f.ownerNone) q = q.is("owner_id", null); else if (f.owner) q = q.eq("owner_id", f.owner);
@@ -143,6 +149,7 @@ export async function loadDutyStudents(tenantId: string, from: string, to: strin
     if (f.classId) q = q.eq("class_id", f.classId);
     if (f.subjectNone) q = q.is("subject", null); else if (f.subject) q = q.eq("subject", f.subject);
     if (f.studentId) q = q.eq("student_id", f.studentId);
+    if (live && !(liveDay && to < liveDay)) q = q.gte("due_at", live);
     return q.order("id").range(a, b);
   });
   // 원어민 담당 몫은 여기서 뺀다(조회 조건을 더 잇지 않는다 — 조건 사슬이 길어지면 타입 계산이 멈춘다).

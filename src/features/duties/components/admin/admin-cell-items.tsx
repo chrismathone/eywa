@@ -6,7 +6,7 @@ import { CELL_STATE_LABEL, cellItemCounts, cellItemTitle, cellItemWhen, type Cel
 import type { AdminPeriod } from "../../view-admin";
 import type { DutyWork } from "../duty-work-context";
 
-const TONE: Record<CellItemState, string> = { ontime: "bg-green-soft text-green", early: "bg-green-soft text-green", late_done: "bg-amber-soft text-amber", late: "bg-danger-soft text-danger", expired: "bg-danger-soft text-danger", upcoming: "bg-bg-soft text-text-dim", waived: "bg-bg-soft text-text-dim" };
+const TONE: Record<CellItemState, string> = { ontime: "bg-green-soft text-green", early: "bg-green-soft text-green", late_done: "bg-amber-soft text-amber", late: "bg-danger-soft text-danger", expired: "bg-danger-soft text-danger", upcoming: "bg-bg-soft text-text-dim", waived: "bg-bg-soft text-text-dim", absent: "bg-bg-soft text-text-dim" };
 export type CellPick = { title: string; studentId: string; kind: string | null; classId: string | null; classNone?: boolean; owner?: string | null; ownerNone?: boolean; subject?: string | null };
 
 /**

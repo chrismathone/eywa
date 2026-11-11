@@ -1,7 +1,7 @@
 import { CONTRIBUTION_TIERS } from "@/features/student-contribution/model/relative-score";
 import type { DutyNote } from "./notes";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
-import { DUTY_KIND_KEYS, dutyKindLabel, type DutyItemView, type DutyPeriod } from "./kinds";
+import { DUTY_KIND_KEYS, dutyKindLabel, type DutyItemView, type DutyPeriod, DUTY_KINDS } from "./kinds";
 import { weekDaysOf } from "./view";
 
 /**
@@ -88,8 +88,8 @@ export type AbsentRow = { studentId: string; classId: string | null; kind: strin
 
 /** 매트릭스 열 = 종류 전부(순서 = DUTY_KINDS). 짧은 머리글. */
 export const MATRIX_COLUMNS: { kind: string; label: string }[] = [
-  { kind: "attendance", label: "출결" }, { kind: "report_send", label: "보고서 발송" }, { kind: "report_write", label: "보고서 작성" },
-  { kind: "counsel_monthly", label: "학생 상담" }, { kind: "exam_monthly", label: "월말평가" }, { kind: "newcomer_call", label: "신규생 관리" },
+  // 이름은 종류 이름 한 곳(`DUTY_KINDS`)에서 — 표 머리 · 칩 · 미처리 목록 · 강사 화면이 같은 낱말을 쓴다.
+  ...(["attendance", "report_send", "report_write", "counsel_monthly", "exam_monthly", "newcomer_call"] as const).map((kind) => ({ kind, label: DUTY_KINDS[kind].label })),
 ];
 /**
  * pct = **기한 내 완료율** — **때가 된 업무**(`due`) 가운데 기한 안에 끝낸 것(`ontime`)의 비율(내림 — 남은 것이 있으면 100%가 아니다). 때가 된 업무가 없으면 null.
@@ -98,8 +98,9 @@ export const MATRIX_COLUMNS: { kind: string; label: string }[] = [
  *     보고서는 수업이 끝나면 들어와 기한(+24시간) 전까지 '남음'으로 분모에 든다(*"남음이 있는데 100%는 말도 안됨"*).
  *   · 월간(학생 상담 · 월말평가) · 건별(신규생 관리) = **그 기한이 지난 뒤부터**(원장 *"추천으로 진행"* — 달 초부터 분모에 넣으면 잘하는 선생님도 달 내내 5~7등급이었다).
  *     그 전에는 `total − due`로 남아 **진행만** 색 없이 보인다(`shownOf` — 등급 · 전체에 들지 않는다).
- * 🔴 칸 · '전체' 칸 · 합계 줄 · 등급 · 등수 · 요약 칸이 **모두 이 숫자 하나**다(원장 *"이렇게 빨간색이 많은데 전체 점수가 이해가 안되는데? … 왜 97%?"* · *"전체 기준으로 등급 다시 매길것"*).
- *    한 줄 안에서 칸과 전체가 서로 다른 분모를 쓰지 말 것 — 종류 칸은 붉은데 전체만 초록이 되어 서로 다른 말을 한다(2026-11-11 저녁 한 번 그랬다).
+ * 🔴 등급 · 등수 · 요약 칸 · 과목 관리자별 현황 · 왼쪽 목록의 별이 **모두 이 숫자 하나**다(원장 *"이렇게 빨간색이 많은데 전체 점수가 이해가 안되는데? … 왜 97%?"* · *"전체 기준으로 등급 다시 매길것"*).
+ *    표의 칸에 적는 글자는 따로다 — 완료율과 미처리 몫(`cellTextOf` · 같은 날 저녁 원장 *"텍스트는 98%라고 적고 98%아래에 미처리 2%"*). '기한 내만 보기'를 켜면 칸도 이 숫자다.
+ *    한 줄 안에서 칸과 '전체' 칸이 서로 다른 분모를 쓰지 말 것(둘 다 `cellTextOf`) — 종류 칸은 붉은데 전체만 초록이 되어 서로 다른 말을 한다(2026-11-11 저녁 한 번 그랬다).
  */
 export type Cell = Counts & { pct: number | null };
 export type CellTone = "none" | "wait" | "good" | "warn" | "bad";
@@ -111,6 +112,8 @@ export const exactPct = (c: Counts): number | null => (c.due ? (c.ontime / c.due
 export const earlyDoneOf = (c: Counts): number => Math.max(c.done - c.ontime - c.lateDone, 0);
 /** 아직 때가 안 된 업무(기한 전의 월간 · 건별) — 등급 · %에 들지 않고 진행만 보인다. */
 export const pendingOf = (c: Counts): number => Math.max(c.total - c.due, 0);
+/** 미처리 — 기한이 지났는데 끝내지 않은 것(지금 열려 있는 것 + 다시 할 수 없게 닫힌 '미처리 확정'). 막대의 미처리 몫 · 요약 칸 · 왼쪽 목록의 붉은 수 · '미처리만'이 모두 이 수다. */
+export const missedOf = (c: Counts): number => c.late + c.expired;
 /** 남음 — 때는 됐지만 기한 전이라 아직 안 끝낸 것(수업은 끝났고 보낼 보고서처럼). 분모에 든다. */
 export const leftOf = (c: Counts): number => Math.max(c.due - c.ontime - c.lateDone - c.late - c.expired, 0);
 /**
@@ -123,6 +126,56 @@ export function shownOf(c: Counts): Shown | null {
   if (c.due) return { judged: true, pct: Math.floor((c.ontime / c.due) * 100), num: c.ontime, den: c.due };
   const done = earlyDoneOf(c);
   return { judged: false, pct: Math.floor((done / c.total) * 100), num: done, den: c.total };
+}
+/**
+ * 칸에 적는 글자 — **표의 칸 · 왼쪽 목록의 반 줄 · 학생 단계 종류 카드가 같은 규칙**을 쓴다(같은 반이 목록에서는 42%, 표에서는 71%로 보이지 않게):
+ *   · 때가 된 업무가 있으면(`judged`) 완료율과 미처리 몫(`barTextOf`) — '기한 내만 보기'면 기한 내 완료율(미처리는 적지 않는다).
+ *   · 없으면 진행(끝낸 것 ÷ 전체 · `shownOf`). 업무가 없으면 null.
+ */
+export type CellText = { judged: boolean; pct: number; num: number; den: number; missPct: number; missed: number };
+export function cellTextOf(c: Counts, ontimeOnly: boolean): CellText | null {
+  const shown = shownOf(c);
+  if (!shown) return null;
+  const bar = barTextOf(c);
+  return bar && !ontimeOnly ? { judged: true, ...bar } : { ...shown, missPct: 0, missed: 0 };
+}
+/** '기한 내만 보기'(계정에 저장한 보기 설정 `users.ui_prefs.duties.ontimeOnly`) — 저장값이 true일 때만 켠다(없거나 모양이 다르면 끔). */
+export function readDutyOntimeOnly(uiPrefs: unknown): boolean {
+  const ns = uiPrefs && typeof uiPrefs === "object" && !Array.isArray(uiPrefs) ? (uiPrefs as Record<string, unknown>).duties : null;
+  return !!ns && typeof ns === "object" && !Array.isArray(ns) && (ns as Record<string, unknown>).ontimeOnly === true;
+}
+/**
+ * 한 막대를 나눈 몫 — 때가 된 업무가 어떻게 끝났나: 기한 내(`ontime`) · 기한 후 완료(`lateDone`) · 미처리(`missed` = 지금 기한 초과 + 미처리 확정) · 남음(`left` — 때는 됐고 기한 전).
+ * 칸 하나가 곧 가로 막대다(원장 2026-11-11 *"가로 막대로 3등분 … 28%가 기한내, 70%가 기한외, 2%가 미처리면 가로로 28%/70%/2%를 그리는거야"*).
+ * 몫은 **건수 비율 그대로**다(작은 몫을 키워 그리지 않는다 — 막대로 안 보이는 작은 몫은 막대 위 글자 '미처리 n%'가 말한다 · `barTextOf`).
+ * 때가 된 업무가 없으면 빈 배열 — 진행만 있는 칸에는 막대를 그리지 않는다.
+ */
+export type MixKey = "ontime" | "lateDone" | "missed" | "left";
+export type MixPart = { key: MixKey; count: number; share: number };
+export function mixParts(c: Counts): MixPart[] {
+  if (!c.due) return [];
+  const raw = ([["ontime", c.ontime], ["lateDone", c.lateDone], ["missed", c.late + c.expired], ["left", leftOf(c)]] as [MixKey, number][]).filter(([, v]) => v > 0);
+  const base = mixBase(c);
+  return base ? raw.map(([key, count]) => ({ key, count, share: count / base })) : [];
+}
+/**
+ * 막대와 그 위 글자의 분모 — 때가 된 업무 수(`due`). 집계가 어긋나 끝낸 것 + 미처리가 `due`를 넘으면 그 합을 쓴다
+ * (막대는 몫의 합이 1이어야 하고, 글자도 같은 분모여야 '80% · 미처리 50%'처럼 서로 다른 말을 하지 않는다 — 리뷰 2026-11-11).
+ */
+const mixBase = (c: Counts): number => Math.max(c.due, c.ontime + c.lateDone + c.late + c.expired);
+/**
+ * 막대 위에 적는 숫자(원장 *"그 위에 텍스트는 98%라고 적고 98%아래에 미처리 2% 적으면 될듯"*) — 때가 된 업무 가운데:
+ *   · `pct` = **완료율**(기한 내 + 기한 후 완료 · 내림 — 남은 것이 있으면 100%가 아니다) · `num`/`den` = 마우스를 올렸을 때의 분자/분모.
+ *   · `missPct` = **미처리 몫**(올림 — 한 건이라도 있으면 1% 이상 · 남은 것이 없으면 완료율과 더해 100) · `missed` = 그 건수.
+ * 🔴 등급 · 등수 · 요약 칸의 숫자는 이것이 아니라 **기한 내 완료율**(`pctOf` — 막대의 초록 몫)이다. 때가 된 업무가 없으면 null.
+ */
+export type BarText = { pct: number; num: number; den: number; missPct: number; missed: number };
+/** 미처리 몫(%) — 올림. 한 건이라도 있으면 0%라고 적지 않는다(칸 · 판정 줄이 같은 셈을 쓴다). */
+export const missPctOf = (missed: number, den: number): number => (missed > 0 && den > 0 ? Math.min(Math.ceil((missed / den) * 100), 100) : 0);
+export function barTextOf(c: Counts): BarText | null {
+  if (!c.due) return null;
+  const den = mixBase(c), done = c.ontime + c.lateDone, missed = c.late + c.expired;
+  return { pct: Math.floor((done / den) * 100), num: done, den, missPct: missPctOf(missed, den), missed };
 }
 export const EMPTY: Cell = { ...ZERO, pct: null };
 export const add = (a: Counts, b: Counts): Counts => ({ total: a.total + b.total, done: a.done + b.done, due: a.due + b.due, ontime: a.ontime + b.ontime,
@@ -157,8 +210,7 @@ export function cellTitle(c: Counts): string {
   const parts: string[] = [];
   if (c.due) parts.push(`${c.due}건 중 기한 내 완료 ${c.ontime}건`);
   if (c.lateDone) parts.push(`기한 후 완료 ${c.lateDone}`);
-  if (c.late) parts.push(`기한 초과 ${c.late}`);
-  if (c.expired) parts.push(`미처리 확정 ${c.expired}`);
+  if (missedOf(c)) parts.push(`미처리 ${missedOf(c)}${c.expired ? `(확정 ${c.expired})` : ""}`);
   const left = leftOf(c); if (left) parts.push(`남음 ${left}`);
   const pending = pendingOf(c); if (pending) parts.push(`진행 중 ${pending}건 중 ${earlyDoneOf(c)}건 완료`);
   return parts.join(" · ");

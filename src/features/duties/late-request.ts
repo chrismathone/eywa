@@ -39,7 +39,7 @@ export function lateRequestPrefill(items: readonly Late[], owner: { id: string; 
     row.kinds.set(it.kind, [...(row.kinds.get(it.kind) ?? []), when(it)]);
     cls.rows.set(it.studentId ?? "", row); classes.set(it.classId ?? "", cls);
   }
-  const intro = para(esc("기한이 지났는데 아직 열려 있는 업무입니다. 항목마다 처리해 주시고, 처리하지 못하는 항목은 사유를 보고에 적어 주세요."));
+  const intro = para(esc("기한이 지났는데 아직 끝내지 않은 미처리 업무입니다. 항목마다 처리해 주시고, 처리하지 못하는 항목은 사유를 보고에 적어 주세요."));
   let body = ""; let left = 0;
   for (const cls of [...classes.values()].sort((a, b) => a.name.localeCompare(b.name, "ko"))) {
     const lines = [...cls.rows.values()].map((r) => `${strong(r.name)} — ${esc([...r.kinds.entries()].map(([k, days]) => `${kindLabel(k)} ${[...new Set(days)].join(" · ")}`).join(" / "))}`);
@@ -49,7 +49,7 @@ export function lateRequestPrefill(items: readonly Late[], owner: { id: string; 
   }
   const students: DraftStudent[] = [...new Map(items.flatMap((it) => (it.studentId ? [[it.studentId, { id: it.studentId, name: it.studentName ?? "학생", assigneeId: owner.id }] as const] : []))).values()];
   return {
-    title: `${owner.name} 선생님 — 기한 지난 업무 ${items.length.toLocaleString("ko-KR")}건 처리`, dueOn: shift(today, 2),
+    title: `${owner.name} 선생님 — 미처리 업무 ${items.length.toLocaleString("ko-KR")}건 처리`, dueOn: shift(today, 2),
     source: ((subject) => (subject ? `${DUTY_REQUEST_SOURCE}:${subject}` : DUTY_REQUEST_SOURCE))(requestSubject(items)),
     body: intro + (left ? para(esc(`내용이 길어 일부 반(${left}줄)은 적지 못했습니다. 전체는 '내 업무'에서 확인해 주세요.`)) : "") + body,
     criteria: "항목을 원래 화면(출결 · 수업보고서 · 원생상담 · 신규생 관리)에서 처리하면 '내 업무'에서 저절로 완료된다. 처리하지 못한 항목은 사유와 계획을 보고에 적는다",

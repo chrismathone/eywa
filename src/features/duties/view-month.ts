@@ -33,7 +33,7 @@ export function buildMonthRows(items: readonly DutyItemView[], now: number): { c
     const state = dutyState(it.status, it.dueAt, now);
     // 기한은 '다음 날 0시'로 저장돼 있다 — 사람에게는 그 전날(말일 · 항목 날)로 보인다.
     const dueDay = kstDay(new Date(Date.parse(it.dueAt) - 1).toISOString());
-    const dateLabel = state === "done" && it.doneAt ? `${md(kstDay(it.doneAt))} 완료` : state === "late" ? `${md(dueDay)} 기한 지남` : `${md(dueDay)}까지`;
+    const dateLabel = state === "done" && it.doneAt ? `${md(kstDay(it.doneAt))} 완료` : state === "late" ? `기한 ${md(dueDay)} · 미처리` : `${md(dueDay)}까지`;
     const base = { id: it.id, kind: it.kind, state, dateLabel, href: monthHref(it), dueAt: it.dueAt, doneAt: it.doneAt };
     // 이름 옆엔 **항상 학교학년**(원장 2026-11-10 *"수학이란걸 표시해줄 필요는 없고 이름 옆에 항상 학교학년"*) — 과목은 내 과목이라 적지 않는다.
     const who = schoolGradeLabel(it.school, it.grade);

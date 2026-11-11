@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { addRating, buildAttention, cellOf, type Counts, type LateItem, type RollupClass, type RollupOwnerKind, type RollupStudent } from "./view-admin";
-import { attentionItems, listedOwner, openRows, ownerMeta, rankByRating, rankOwners, buildTree, classLines, foldAttention, inClassOf, judge, kindStatuses, NO_CLASS, NO_CLASS_LABEL, NO_OWNER, rootOfTree, studentLines, sumCells } from "./view-admin-levels";
+import { addRating, buildAttention, cellOf, type Counts, type LateItem, type RollupClass, type RollupOwnerKind, type RollupStudent, barTextOf } from "./view-admin";
+import { attentionItems, listedOwner, openRows, ownerMeta, rankByRating, rankOwners, buildTree, classLines, foldAttention, inClassOf, judge, kindStatuses, NO_CLASS, NO_CLASS_LABEL, NO_OWNER, rootOfTree, studentLines, sumCells, mixPercents } from "./view-admin-levels";
 
 const c = (total: number, done: number, due: number, ontime: number, late = 0, o: Partial<Counts> = {}): Counts => ({ total, done, due, ontime, late, lateDone: 0, expired: 0, over7: 0, ...o });
 const ok = (o: Partial<RollupOwnerKind>): RollupOwnerKind => ({ ownerId: "t1", subject: "math", kind: "attendance", period: "daily", ...c(10, 9, 10, 9, 1), ...o });
@@ -30,7 +30,7 @@ describe("judge", () => {
     // '업무 완료'는 전부 기한 안에 끝냈을 때만 — 99.9%는 1등급이어도 '대부분 기한 내 완료'라고 적는다.
     expect(judge(cellOf(c(1000, 999, 1000, 999, 1)))).toMatchObject({ tier: 1, reason: "대부분 기한 내 완료" });
   });
-  it("🔴 때가 된 업무가 3건 미만이면 등급 없이 건수만 · 7일 넘은 기한 초과가 있어도 등급을 덮어쓰지 않는다", () => {
+  it("🔴 때가 된 업무가 3건 미만이면 등급 없이 건수만 · 7일 넘은 미처리가 있어도 등급을 덮어쓰지 않는다", () => {
     expect(judge(cellOf(c(2, 0, 2, 0, 2)))).toMatchObject({ grade: "wait", reason: "지금 2건 · 3건부터 등급 산정" });
     // 🔴 세는 것은 전체가 아니라 **때가 된 업무**다 — 전체 40건이어도 때가 된 것이 2건이면 평가 대기.
     expect(judge(cellOf(c(40, 3, 2, 2)))).toMatchObject({ grade: "wait", tier: null, reason: "지금 2건 · 3건부터 등급 산정" });
@@ -75,7 +75,7 @@ describe("kindStatuses · studentLines · classLines · sumCells", () => {
     { studentId: "s2", classId: "c1", kind: "report_write", ...c(5, 4, 4, 4), lastDue: null },
     { studentId: null, classId: "c1", kind: "report_write", ...c(1, 0, 1, 0, 1), lastDue: null },
   ];
-  it("종류별 상태 = 업무 있는 종류만 · % = 때가 된 업무 가운데 기한 안에 끝낸 비율 · 안 끝낸 것 = 전체 − 완료 − 지금 기한 초과 − 미이행", () => {
+  it("종류별 상태 = 업무 있는 종류만 · % = 때가 된 업무 가운데 기한 안에 끝낸 비율 · 안 끝낸 것 = 전체 − 완료 − 미처리(지금 열린 것 + 확정)", () => {
     const { cells } = sumCells(rows, inClassOf("c1"));
     expect(kindStatuses(cells).map((s) => [s.label, s.cell.pct, s.upcoming, s.cell.late])).toEqual([["출결", 100, 0, 0], ["보고서 작성", 66, 2, 3]]); // 6/9 = 66.6 → 내림
   });
@@ -102,7 +102,7 @@ describe("foldAttention", () => {
     const rows = buildAttention([late({}), late({ kind: "attendance" }), late({ studentId: "s2", studentName: "이서아", classId: "c2", className: "중2 B" }),
       late({ ownerId: "t2", subject: "english", classId: "e1", className: "LE2", dueAt: "2026-11-02T15:00:00.000Z" })], OWNERS, undefined, NOW);
     const folded = foldAttention(rows, "owner");
-    expect(folded.map((r) => [r.title, r.sub, r.count, r.days, r.summary])).toEqual([["문예린", "1명", 1, 10, "수업보고서 작성 1"], ["한지우", "2명", 3, 3, "수업보고서 작성 2 · 출결 입력 1"]]);
+    expect(folded.map((r) => [r.title, r.sub, r.count, r.days, r.summary])).toEqual([["문예린", "1명", 1, 10, "보고서 작성 1"], ["한지우", "2명", 3, 3, "보고서 작성 2 · 출결 1"]]);
     expect(foldAttention(rows.filter((r) => r.ownerId === "t1"), "class").map((r) => [r.title, r.classId, r.sub])).toEqual([["중2 A", "c1", "1명"], ["중2 B", "c2", "1명"]]);
   });
 });
@@ -172,5 +172,20 @@ describe("수업보고서 평점 — 합치기 · 등수", () => {
   it("평균 높은 순 · 같은 점수는 같은 등수 · 5건 미만은 등수 없이 뒤 · 평점 없는 사람 · 담당 미정은 뺀다", () => {
     const rows = rankByRating([o("a", "가", { rated: 20, avg: 3.2 }), o("b", "나", { rated: 9, avg: 4.1 }), o("c", "다", { rated: 50, avg: 3.2 }), o("d", "라", { rated: 4, avg: 5 }), o("e", "마"), o(NO_OWNER, "담당 미정", { rated: 9, avg: 5 })]);
     expect(rows.map((r) => [r.name, r.rank])).toEqual([["나", 1], ["다", 2], ["가", 2], ["라", null]]);
+  });
+});
+
+describe("mixPercents — 판정 줄의 %", () => {
+  it("🔴 표의 칸과 같은 셈 — 기한 내 = 내림 · 미처리 = 올림(칸의 '미처리 n%'와 같다) · 한 건이라도 있으면 0%라고 적지 않는다", () => {
+    // 300건 중 미처리 7건 — 예전엔 판정 줄이 반올림(2%), 합계 칸은 올림(3%)이라 같은 수가 다르게 적혔다.
+    const a = cellOf(c(300, 293, 300, 280, 7, { lateDone: 13 }));
+    const va = judge(a);
+    expect(mixPercents(va.mix!)).toEqual({ ontime: 93, lateDone: 4, missed: 3, left: 0 });
+    expect(mixPercents(va.mix!).missed).toBe(barTextOf(a)!.missPct);
+    expect(mixPercents(va.mix!).ontime).toBe(a.pct);
+    // 300건 중 1건 — '미처리 0% 1건'이 아니라 1%. 기한 후 완료 · 남음도 한 건이면 1%.
+    const b = cellOf(c(300, 298, 300, 297, 1, { lateDone: 1 }));
+    expect(mixPercents(judge(b).mix!)).toEqual({ ontime: 99, lateDone: 1, missed: 1, left: 1 });
+    expect(mixPercents(judge(b).mix!).missed).toBe(barTextOf(b)!.missPct);
   });
 });

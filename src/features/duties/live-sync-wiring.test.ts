@@ -67,9 +67,15 @@ describe("업무 완성도 — 저장 즉시 반영 배선", () => {
     for (const p of ["src/features/duties/components/admin/duty-admin.tsx", "src/features/duties/components/my-duties-strip-button.tsx"]) expect(read(p)).toContain("useDutyPing(tenantId");
   });
   it("🔴 할 일 제목의 종류 이름(DB `kind_label`)은 화면 이름(`kinds.ts`)과 같은 글자다 · 모르는 종류에 영문 키를 내보내지 않는다", async () => {
-    const sql = readMigration("s2_0055_duty_kind_labels.sql");
+    const sql = readMigration("s2_0066_duty_wording_unify.sql"); // 가장 늦은 정의(s2_0055 → s2_0066 — 화면 낱말을 줄일 때 함께 바꿨다)
     const { DUTY_KINDS } = await import("./kinds");
     for (const [kind, info] of Object.entries(DUTY_KINDS)) expect(sql, kind).toMatch(new RegExp(`when '${kind}'\\s+then '${info.label}'`));
     expect(sql).toContain("else '업무' end");
+    // 🔴 할 일 제목도 화면과 같은 낱말이다 — '미처리'(원장 2026-11-11 *"미처리로 통일"*). '기한 초과' · '미이행'을 제목에 다시 쓰지 않는다.
+    const code = sql.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
+    expect(code).toContain("|| ' 미처리 ' || g.n || '건'");
+    expect(code).toContain("' 선생님 — 미처리 3일 이상 '");
+    expect(code).toContain("' — 미처리 7일 이상 · 미처리 확정 '");
+    expect(code).not.toMatch(/'[^'\n]*(기한 초과|미이행)[^'\n]*'/);
   });
 });
