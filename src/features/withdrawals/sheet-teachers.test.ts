@@ -41,3 +41,10 @@ describe("시트 글 나누기", () => {
     expect([nameKey("김 도연c"), nameKey("권민서A", true), nameKey("JAKE", true)]).toEqual(["김도연C", "권민서", "JAKE"]);
   });
 });
+
+describe("시트 선생님 별칭", () => {
+  it("원장이 확인한 같은 사람 — 시트 '김정은' = 계정 '김은정'", async () => {
+    const { sheetTeacherName } = await import("./sheet-teachers");
+    expect([sheetTeacherName("김정은"), sheetTeacherName(" 김은정 "), sheetTeacherName("김화영")]).toEqual(["김은정", "김은정", "김화영"]);
+  });
+});

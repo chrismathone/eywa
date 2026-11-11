@@ -45,6 +45,8 @@ export function PrepBriefSection({
   record,
   status,
   errorText,
+  stalled = false,
+  jobAt = null,
   canWrite,
   past = false,
   pinned = false,
@@ -54,6 +56,10 @@ export function PrepBriefSection({
   /** 0153b 생성 상태 — generating이면 진행바, failed면 실패 안내 + 재시도. */
   status: "generating" | "failed" | null;
   errorText: string | null;
+  /** 240초 넘게 '생성 중'(s2_0068 작업 시각 기준) — 멈춘 작업이라 '다시 작성'을 보인다(검수 2026-11-11). */
+  stalled?: boolean;
+  /** 생성 작업 시작 시각 — 진행바가 화면을 연 때가 아니라 이 시각부터 센다. */
+  jobAt?: string | null;
   canWrite: boolean;
   /**
    * 칸반 '상담 전'을 지난 건인가(`stageOfCard(card) !== "before"`).
@@ -68,7 +74,8 @@ export function PrepBriefSection({
   // 🔴 '다시 작성'은 상담 전에만. 안 보이는 것을 다시 만들 수는 없어야 하고, 지난 기록을 새 사실로
   //    덮어쓰면 "그때 이 자료로 상담했다"는 스냅샷 성질이 깨진다(AI 호출은 명시 버튼일 때만 — 감춰도
   //    페이지 로드가 호출을 만들지 않으므로 캐싱 규약은 그대로다).
-  const showRegenerate = canWrite && !generating && !past;
+  // 생성 중이어도 멈춘 작업(240초 넘음)이면 다시 작성할 길을 연다 — 예전엔 진행바가 '다시 작성을 눌러 주세요'라 하는데 단추가 없었다.
+  const showRegenerate = canWrite && !past && (!generating || stalled);
   const failedLine =
     status === "failed" ? (
       <p className="text-destructive inline-flex items-center gap-1 text-xs">
@@ -78,7 +85,8 @@ export function PrepBriefSection({
     ) : null;
   const savedOnlyNote = pinned && showRegenerate ? <SavedOnlyNote /> : null;
   // 수정 화면의 실패 = 다시 작성 단추를 실패 안내 곁(접혀도 보이는 자리)에 하나만 — 머리글에도 세우면 펼쳤을 때 둘이 된다.
-  const regenerateInNotice = pinned && status === "failed";
+  // 멈춘 작업(240초)도 같은 자리에 — 수정 화면은 머리가 접혀 있어 단추가 숨는다(적대 리뷰 2026-11-11).
+  const regenerateInNotice = pinned && (status === "failed" || stalled);
 
   if (!record) {
     return (
@@ -91,11 +99,11 @@ export function PrepBriefSection({
             </h2>
             {generating ? (
               <div className="pt-1">
-                <PrepBriefProgress consultationId={consultationId} />
+                <PrepBriefProgress consultationId={consultationId} jobAt={jobAt} />
               </div>
             ) : (
               <p className="text-text-dim text-xs break-keep">
-                학부모가 접수 폼에 답한 내용과 학원 데이터(개설 반·잔여석·시간·수강료·형제 재원 여부)를 모아
+                학부모가 접수 폼에 답한 내용과 학원 데이터(개설 반·현원·시간·수강료·형제 재원 여부)를 모아
                 상담 직전에 읽을 준비 문서를 만듭니다.
               </p>
             )}
@@ -176,7 +184,7 @@ export function PrepBriefSection({
       <>
         {generating ? (
           <div className="border-border bg-card rounded-lg border p-3">
-            <PrepBriefProgress consultationId={consultationId} />
+            <PrepBriefProgress consultationId={consultationId} jobAt={jobAt} />
           </div>
         ) : null}
         {/* 수정 화면은 머리(다시 작성 단추)가 접혀 있을 수 있다 — 실패 안내 곁에 같은 단추를 함께 둔다. */}

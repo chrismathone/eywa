@@ -152,3 +152,12 @@ export function sheetTeachersFor(index: SheetTeacherIndex, input: { name: string
 
 /** 시트 이름을 에이와 계정으로 못 이었을 때의 표시 전용 id — 이름 그대로 보인다(`teacherNames`). */
 export const SHEET_TEACHER_PREFIX = "sheet:";
+
+/**
+ * 시트의 선생님 이름 → 에이와 계정 이름(같은 사람인데 다르게 적힌 것). 원장 2026-11-11 *"김은정 … 김정은 선생님 … 동일인물임"* —
+ * 시트는 '김정은'으로, 에이와 계정은 '김은정'으로 적혀 한 선생님의 퇴원이 두 칸으로 갈렸다. 원장이 확인한 것만 적는다.
+ */
+export const SHEET_TEACHER_ALIASES: Readonly<Record<string, string>> = { 김정은: "김은정" };
+
+/** 시트 선생님 이름을 계정 이름으로(별칭이 없으면 그대로). */
+export const sheetTeacherName = (name: string) => SHEET_TEACHER_ALIASES[name.trim()] ?? name.trim();

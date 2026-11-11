@@ -3,11 +3,11 @@
  *
  * 상세 화면의 카드와 수정 화면의 고정 패널(`PrepBriefSection pinned`)이 **같은 이 부품**을 그린다 —
  * 두 화면이 각자 본문을 적으면 한쪽만 고쳐져 같은 브리프가 화면마다 다르게 읽힌다.
- * ⚠️ 반·잔여석·금액은 생성 시점 스냅샷(`record.facts`) 그대로다 — 여기서 DB를 다시 읽지 않는다
+ * ⚠️ 반·현원·금액은 생성 시점 스냅샷(`record.facts`) 그대로다(정원·잔여석은 싣지 않는다 — 강의실 수용 인원이라 반 정원이 아니다) — 여기서 DB를 다시 읽지 않는다
  *    (prep-brief-section 머리 주석 · 인쇄물 동결과 같은 정책).
  */
 import { AlertTriangle, ClipboardCheck, HelpCircle, MessageSquare, ShieldCheck } from "@/components/icons/aywa-icon-compat";
-import { classLine, type PrepBriefRecord } from "@/features/enrollment/prep-brief";
+import { classLine, dueDayLabel, type PrepBriefRecord } from "@/features/enrollment/prep-brief";
 
 export function PrepBriefBody({ record }: { record: PrepBriefRecord }) {
   const b = record.brief;
@@ -101,12 +101,13 @@ export function PrepBriefBody({ record }: { record: PrepBriefRecord }) {
       {/* 상담 자리에서 자주 묻는 사실 — 스냅샷에서 바로. LLM 문장을 거치지 않는다. */}
       <dl className="border-border grid grid-cols-2 gap-x-4 gap-y-1.5 border-t pt-3 sm:grid-cols-4">
         <Fact label="전체 재원생" value={`${f.peers.total}명`} />
-        {f.student.school ? <Fact label={`${f.student.school} 재원`} value={`${f.peers.sameSchool}명`} /> : null}
-        {f.student.grade ? <Fact label={`${f.student.grade} 재원`} value={`${f.peers.sameGrade}명`} /> : null}
+        {/* 0명은 숨긴다 — 학교·학년 표기가 갈려 실제로는 있는데 0으로 나올 수 있다(검수 2026-11-11). */}
+        {f.student.school && f.peers.sameSchool > 0 ? <Fact label={`${f.student.school} 재원`} value={`${f.peers.sameSchool}명`} /> : null}
+        {f.student.grade && f.peers.sameGrade > 0 ? <Fact label={`${f.student.grade} 재원`} value={`${f.peers.sameGrade}명`} /> : null}
         {f.siblings.length > 0 ? (
           <Fact label="형제 재원 추정" value={f.siblings.map((s) => s.name).join(", ")} />
         ) : null}
-        {f.policy.dueDay != null ? <Fact label="납부일" value={`매월 ${f.policy.dueDay}일`} /> : null}
+        {f.policy.dueDay != null ? <Fact label="납부일" value={dueDayLabel(f.policy.dueDay)} /> : null}
       </dl>
     </>
   );
