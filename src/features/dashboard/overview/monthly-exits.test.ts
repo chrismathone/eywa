@@ -25,6 +25,12 @@ it("퇴원과 종료에 겹친 학생은 퇴원 과목만 센다", () => {
   expect(result).toHaveLength(2);
   expect(result.map(row => row.kind)).toEqual(["withdrawn", "withdrawn"]);
 });
+it("🔴 영어로 퇴원한 학생이 같은 달 먼저 끊은 수학은 수강종료로 센다 — 학생이 아니라 학생·과목 단위로만 겹침을 뺀다(퇴원관리와 같은 숫자)", () => {
+  const result = includeSubjectEnds([
+    { id: "s", eventKey: "s|english", subject: "english", name: "s", schoolGrade: null, withdrawnAt: "2026-10-02", program: "injaewon" },
+  ], [{ ...student("s", [detail("math"), detail("english")]), status: "withdrawn" }], win, [], () => null);
+  expect(result.map((row) => [row.kind, row.subject])).toEqual([["withdrawn", "english"], ["subject-ended", "math"]]);
+});
 it("그 과목 수업료를 앞 달까지만 냈으면 이번 달에 세지 않는다(달 판정 = countAt · 원장 2026-10-29)", () => {
   expect(merge([student("sept", [detail("math", "2026-10-01", false, "2026-09-30")]), student("oct")]).map(r => r.id)).toEqual(["oct"]);
 });

@@ -4,6 +4,7 @@
 
 - 원장 *"강사별 퇴원 건수가 아예 매칭이 잘못"* → 퇴원생 관리 차트 '담당선생님'과 대조(7~10월 90줄 · 맞음 32 → 75). 결정 본문 = [`decisions/students.md`](decisions/students.md) '2026-11-11 퇴원 담당'.
 - [`exit-homeroom.ts`](../src/features/withdrawals/exit-homeroom.ts)(순수 · Vitest 7) · `loadExitTeacherJudge().homeroomOf`(직원 이름 조회 하나 추가 — 한국인 판정) · `attributeTeachers`·`getExitOverlay`가 이 판정을 쓴다. 퇴원율 판정(`teachersOf`)은 X의 '세지 않음'·'퇴원 0'에만. 강사평가 점수 불변.
+- 먼저 끊은 과목 = 그 달 수강종료(퇴원생도 읽는다 · 퇴원 무렵 과목은 퇴원 줄이 센다) — `getSubjectEndedStudents`(퇴원생은 세는 창보다 늦게 퇴원한 학생만 읽는다). 시트 대조로 되살아난 줄 12. 데이터 수정 없음.
 
 ## 2026-11-11 — 미뤄 둔 결정 넷 구현: 조직·OKR·업무 작성센터 개방 준비 · 강사 신규생 관리 입구 · 과목 기본 담당 설정 (Claude·Codex 합의안 · SQL s2_0066)
 
