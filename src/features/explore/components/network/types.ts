@@ -5,7 +5,14 @@ import type { ExploreCenter, ExploreModel, ExploreTarget, ExploreTone, SectorSta
 export type NetAnalysis = { id: string; title: string; detail: string; evidence: string[]; kind?: "ai" | "rule" };
 /** 온톨로지 사실 — `target`이 있으면(형제 원생) 더블클릭·패널 '중심으로 보기'가 그 대상을 중심으로 연다. */
 export type NetFact = { id: string; title: string; detail: string; target?: ExploreTarget | null };
-export type NetInput = { model: ExploreModel; analyses?: NetAnalysis[]; facts?: NetFact[] };
+/** 연결 탐색의 입력 = 화면 모델(서버 조회가 채운 조각) — 판은 `buildNetGraph`가 짠다. */
+export type NetModelInput = { model: ExploreModel; analyses?: NetAnalysis[]; facts?: NetFact[] };
+/**
+ * 이미 짠 판(점·선)과 가운데 — 다른 화면(지식그래프 · `academy-knowledge/kg-net.ts`)이 같은 판 기계를 쓴다. 점 id 규약은 같다:
+ * 가운데 점 id = `center.id` · 영역 `hub:<key>` · 날짜 묶음 `grp:<key>:<기간>`(time-tree.ts). 판을 그대로 쓴다(다시 짜지 않는다).
+ */
+export type NetPrebuiltInput = { graph: NetGraph; center: { id: string; name: string } };
+export type NetInput = NetModelInput | NetPrebuiltInput;
 export type NetViewMode = "records" | "summary";
 export type NetPoint = { x: number; y: number };
 /** 보기 = 배율(k)과 이동(x·y) — 화면 px = 판 좌표 × k + (x, y). */
@@ -79,6 +86,9 @@ export const ONTOLOGY_HUB = "hub:ontology";
 export const netRootId = (c: Pick<ExploreCenter, "kind" | "id" | "group">) => (c.group ? `${c.kind}:${c.id}:${c.group}` : `${c.kind}:${c.id}`);
 export const netTargetId = (t: Pick<ExploreTarget, "kind" | "id">) => `${t.kind}:${t.id}`;
 export const netHubId = (sectorKey: string) => `hub:${sectorKey}`;
+/** 판의 가운데(점 id · 이름) — 모델 입력이면 `netRootId(model.center)` · 이미 짠 판이면 그 가운데. 가운데를 읽는 곳은 전부 이것을 거친다. */
+export const netCenterOf = (input: NetInput): { id: string; name: string } =>
+  "graph" in input ? input.center : { id: netRootId(input.model.center), name: input.model.center.name };
 /** 고른·연 점의 정보(패널·상세가 읽는다) — `id` = 점 id(그대로 `record` prop으로 돌려주면 그 점이 강조된다). */
 export type NetRecordInfo = {
   id: string;

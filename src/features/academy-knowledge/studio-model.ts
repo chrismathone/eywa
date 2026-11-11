@@ -89,38 +89,3 @@ export function nodeGaps(graph: Graph, node: Node, rules: Expectation[], detaile
     return { key: r.key, label: r.label, subject: node.id, target: r.target, actual, minimum: r.minimum, state: actual >= r.minimum ? "connected" : unloaded ? "unloaded" : "missing", href: destinations[r.target] ?? "/work-records/knowledge" };
   });
 }
-export type VisualNode = { id: string; label: string; type: Entity; count: number; missing?: boolean; unloaded?: boolean; pending?: boolean; incomplete?:string };
-export type VisualEdge = { from: string; to: string; count: number; pending?: boolean; missing?: boolean; unloaded?: boolean };
-export function overviewGraph(graph: Graph): { nodes: VisualNode[]; edges: VisualEdge[] } {
-  const byId = new Map(graph.nodes.map(n => [n.id,n]));
-  const counts = new Map<Entity,number>();
-  for (const n of graph.nodes) counts.set(n.type, (counts.get(n.type) ?? 0) + 1);
-  const edges = new Map<string,VisualEdge>();
-  for (const e of uniqueEdges(graph)) {
-    const a = byId.get(e.from)?.type, b = byId.get(e.to)?.type; if (!a || !b) continue;
-    const [from,to] = [a,b].sort(), key = `${from}:${to}`, old = edges.get(key);
-    edges.set(key, { from, to, count: (old?.count ?? 0) + 1 });
-  }
-  return { nodes: entities.map(([type,label]) => ({id:type,label,type,count:counts.get(type) ?? 0,missing:!counts.has(type)})), edges:[...edges.values()] };
-}
-export function focusGraph(graph: Graph, selected: string, gaps: Gap[], rows: StudioRow[]) {
-  const focus = graph.nodes.find(n => n.id === selected);
-  if (!focus) return { nodes: [] as VisualNode[], edges: [] as VisualEdge[], total: 0 };
-  const pairs = new Map<string,VisualEdge>();
-  for (const e of uniqueEdges(graph).filter(e => e.from === selected || e.to === selected)) {
-    const other = e.from === selected ? e.to : e.from;
-    pairs.set(other,{from:selected,to:other,count:(pairs.get(other)?.count ?? 0)+1});
-  }
-  // A bounded, deterministic neighborhood; hidden records stay available in the search/list.
-  const byType = new Map<Entity,Node[]>();
-  for (const n of graph.nodes.filter(n => pairs.has(n.id) && n.id !== selected)) { const list = byType.get(n.type) ?? [];list.push(n);byType.set(n.type,list); }
-  const shown:Node[]=[];
-  for (let round=0;shown.length<Math.min(60,pairs.size);round++) {
-    let added=false;for (const list of byType.values()) if (list[round] && shown.length<60) {shown.push(list[round]);added=true;}if(!added)break;
-  }
-  const nodes:VisualNode[]=[focus,...shown].map(n=>({id:n.id,label:n.label,type:n.type,count:n.id===selected?pairs.size:pairs.get(n.id)?.count??0,incomplete:nodeHealth(n)}));
-  const edges=shown.map(n=>pairs.get(n.id)!);
-  for(const gap of gaps.filter(g=>g.state!=="connected")) {const id=`gap:${gap.key}`;nodes.push({id,label:gap.label,type:gap.target,count:0,missing:true,unloaded:gap.state==="unloaded"});edges.push({from:selected,to:id,count:0,missing:true,unloaded:gap.state==="unloaded"});}
-  for(const r of latestStudio(rows)){const d=r.document;if(d.kind!=="link"||d.state!=="pending"||d.from!==selected&&d.to!==selected)continue;const other=d.from===selected?d.to:d.from,n=graph.nodes.find(n=>n.id===other);if(!n)continue;if(!nodes.some(x=>x.id===other))nodes.push({id:other,label:n.label,type:n.type,count:0,pending:true});edges.push({from:selected,to:other,count:0,pending:true});}
-  return {nodes,edges,total:pairs.size};
-}
