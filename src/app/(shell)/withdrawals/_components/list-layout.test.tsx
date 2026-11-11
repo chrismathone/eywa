@@ -95,6 +95,23 @@ describe("창 높이에 맞춘 명단 행 수", () => {
     expect(new URL(navigation.replace.mock.calls[0][0], "https://aywa.test").searchParams.get("size")).toBe("8");
   });
 
+  it("🔴 명단이 첫 화면 아래쪽에서 시작하면(위에 강사별 퇴원율 카드) 한 화면 높이로 잰다 — 5행으로 줄지 않는다(원장 2026-11-11)", () => {
+    // 명단 묶음이 문서 900에서 시작(창 1000의 절반 아래) · 행 영역은 그 100 아래(카드 머리).
+    // beforeEach의 가짜 자(같은 spy) 위에 덮는다 — 그 구현을 먼저 꺼내 둬야 자기 자신을 부르지 않는다.
+    const spy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
+    const base = spy.getMockImplementation()!;
+    spy.mockImplementation(function (this: HTMLElement) {
+      if (this.parentElement === main && this.tagName === "DIV") return { top: 900, bottom: 1600, height: 700 } as DOMRect;
+      if (this.hasAttribute("data-withdrawal-rows")) return { top: 1000, bottom: 1044, height: 44 } as DOMRect;
+      return base.call(this);
+    });
+    const { container } = render(<WithdrawalListLayout size={5} total={99}>{fixture}</WithdrawalListLayout>, { container: main });
+    // 창 1000 − (카드 머리 100 + 위 여백 16) − (쪽 넘김 65 + 바닥 40) − 4 = 775 → 행 45px → 17행.
+    expect(new URL(navigation.replace.mock.calls[0][0], "https://aywa.test").searchParams.get("size")).toBe("17");
+    // 하한에 걸린 것이 아니라 두 카드 높이를 맞춘다(옆 '사유 분석'이 혼자 길게 늘어나지 않게).
+    expect((container.firstChild as HTMLElement).style.getPropertyValue("--withdrawal-list-height")).not.toBe("");
+  });
+
   it("🔴 최소 창에서도 하한(5행) 아래로 떨어지지 않는다 — 1행 목록은 쪽 넘김을 무의미하게 만든다", () => {
     // 창이 목록 위 높이(300)보다 조금 큰 정도 = 남는 자리가 한 행도 안 된다.
     Object.defineProperty(main, "clientHeight", { value: 420, configurable: true });

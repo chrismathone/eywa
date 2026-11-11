@@ -71,7 +71,8 @@ describe("🔴 명단 행 수의 자 = 창(스크롤러)", () => {
 
   it("하한을 적용한다 — 최소 창에서 1행 목록이 되지 않게", () => {
     expect(src).toContain("const windowFit = fitWithdrawalRows(avail, 0, rowHeight);");
-    expect(src).toContain("Math.max(WITHDRAWAL_PAGE_MIN, windowFit)");
+    // 남는 자리로 하한이 안 나오면 한 화면 높이(screenFit)로 재되, 그때도 하한 아래로는 안 내려간다(원장 2026-11-11).
+    expect(src).toContain("windowFit >= WITHDRAWAL_PAGE_MIN ? windowFit : Math.max(WITHDRAWAL_PAGE_MIN, screenFit)");
   });
 
   it("창(iframe) 크기 변화도 듣는다 — 내용 높이가 그대로면 ResizeObserver가 안 깨어난다", () => {
