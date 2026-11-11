@@ -28,6 +28,10 @@ const GUARDED_ACTION_FILES: { file: string[]; what: string }[] = [
     what: "신규생 적응 피드백·확인·담당 배정(작성자 = 대상 · 관리 클라이언트 · 2026-11-11)",
   },
   {
+    file: ["src", "features", "newcomers", "server", "manager-defaults-actions.ts"],
+    what: "신규생 과목 기본 담당 지정·교체(권한 판정 = 대상 · 관리 클라이언트 · 2026-11-11)",
+  },
+  {
     file: ["src", "features", "enrollment", "journey", "server.ts"],
     what: "전화·방문·등록 확인 기록 저장(기록 명의 = 대상 · 관리 클라이언트 RPC · 2026-11-11)",
   },

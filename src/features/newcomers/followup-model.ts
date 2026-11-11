@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ONBOARDING_ITEMS, dueDateOf, statusOf } from "./onboarding-items";
 import type { NewcomerRow } from "./server/queries";
+import type { ManagerDefaultView } from "./manager-defaults";
 
 export const FOLLOWUP_STAGES = { d7: "첫 적응", d30: "30일", d60: "60일", d90: "90일" } as const;
 export const CONDITIONS = { good: "잘 적응 중", watch: "관찰 필요", help: "지원 필요" } as const;
@@ -35,7 +36,8 @@ export type FollowupStudent = {
 };
 export type FollowupView = {
   today: string; students: FollowupStudent[]; staff: Person[]; actorId: string;
-  defaults?: {subject:string;manager:Person|null}[];
+  /** 과목 기본 담당 — 지금 과목 + EiE 줄만(지운 과목의 줄은 싣지 않는다 · manager-defaults.ts). `updatedAt` = 저장할 때의 기준 값. */
+  defaults?: ManagerDefaultView[];
   canManage: boolean; canReport: boolean; error: string | null; checksKnown: boolean;
   /** '전체 완료 체크표' 쓰기 — 정착 관리 자료 조회가 실패해도(canManage가 꺼져도) 종전 체크표는 잠그지 않는다. */
   canWriteChecks: boolean;

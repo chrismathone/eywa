@@ -10,6 +10,7 @@ import { formatPoints } from "@/features/report-admin/report-rating";
 export function ConsultationRatingPanel({ rating }: { rating: ConsultationRating }) {
   const card = consultationRatingTip(rating);
   const rows = (card.rows ?? []).filter((r): r is readonly [string, string] => Array.isArray(r) && r[1] !== "");
+  const note = (card.lines ?? []).filter(Boolean).join("\n");
   return (
     <section className="bg-card border-line rounded-2xl border p-4">
       <h2 className="text-primary mb-3 flex items-center gap-1.5 text-sm font-bold">
@@ -29,7 +30,7 @@ export function ConsultationRatingPanel({ rating }: { rating: ConsultationRating
           </div>
         ))}
       </dl>
-      <p className="text-text-faint mt-3 text-sm whitespace-pre-line">{(card.lines ?? []).filter(Boolean).join("\n")}</p>
+      {note ? <p className="text-text-faint mt-3 text-sm whitespace-pre-line">{note}</p> : null}
     </section>
   );
 }

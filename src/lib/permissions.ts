@@ -86,10 +86,10 @@ export const MENU_KEYS = [
   "kiosk_settings",
   // 2026-11-09 권한 줄 정비(원장 *"항상 새로운 메뉴가 추가되거나 신설되면 권한 배정을 잘 해놓도록"*) — 코드에 역할로 박혀 있던 문을 권한으로 옮겼다.
   "assistant", // 학원 비서(사이드바 아래 줄 · 폰 위쪽 줄 단추 · Ctrl+J) — 메뉴가 아니라 어디서나 여는 도구
-  "management", // 경영 분석 · 스키마·지식그래프(시안)
-  "okr", // 조직·OKR(시안)
-  "marketing", // 연간 운영계획 · 홍보·마케팅(시안)
-  "work_records", // 업무 작성센터(시안)
+  "management", // 경영 분석(원장 계정 전용 · 실제 재무 자료) · 통합 지식그래프·스키마 스튜디오(실제 기록)
+  "okr", // 조직·OKR(실제 기록 — s2_0050)
+  "marketing", // 홍보·마케팅 통합 관리(행사 기록 — 실제 기록 s2_0047) · 마케팅 입력·검토 화면만 아직 예시 값
+  "work_records", // 업무 작성센터 · 관찰 기록(실제 기록 — s2_0048 · s2_0049)
   "shuttle_admin", // 셔틀 관리자 화면(학부모 관리 현황 · 탑승 학생 시간표 · 가까운 노선 찾기 · 실시간 위치) — 셔틀 권한 위 조건
   // 연결 앱(왼쪽 '연결 앱'의 바깥 앱 링크) — 앱마다 한 키. 아래 CONNECTED_APP_MENU_KEYS에도 함께 적는다.
   "app_todays_math",
@@ -211,9 +211,15 @@ export const TEACHER_MENU_KEYS = [
   "timetable",
   "exams",
   "consultations",
+  // 신규생 관리 — 기본 none(원장이 역할·권한에서 강사를 '담당'으로 연 학원에서만 선다 · 2026-11-11). 강사는 늘 담당 범위다:
+  // 자기가 담임인 학생·과목만 보고 적응 피드백만 남긴다(관리 콜 완료·담당 배정·확인은 못 한다 — newcomers/server/followup-query.ts).
+  "newcomers",
   "textbook_requests",
   "expense_requests", // 지출결의서 — 강사가 본인 지출을 작성·제출(사무실은 /billing 지출 면에서 결재)
   "approvals", // 전자결재 — 기본 none(역할 표나 개인별 메뉴 권한으로 연 계정에만 보인다). 문서 스코프는 결재선·RLS.
+  // 업무 작성센터 · 조직·OKR — 기본 none(강사에게 열었을 때 길이 없지 않게 입구만 둔다 · 2026-11-11). 강사 '담당' = 본인 문서·본인 목표만.
+  "work_records",
+  "okr",
   "calendar", // 캘린더 — 학원 공용 일정(강사 readonly 열람)
   // 수업 평가 — 강사에겐 **자기 평가 전용**(본인 평가지의 본인 채점만, self-only.ts). 기본값 none이라
   // 학원설정에서 열어야 보인다. 남의 평가지·평가자 점수는 조회 초크포인트에서 잘려 나간다.
@@ -370,15 +376,18 @@ export const MENU_ACCESS: AccessMatrix = {
   // 🔴 비서는 **지점 자료 전부**(급여·계약·연락처·계좌 포함)를 읽는다 — 다른 역할에 열면 그 사람도 전부를 묻고 본다(권한 표 줄 설명이 같은 말을 한다).
   //    판정 = assistantViewer()(src/features/assistant/server/gate.ts) 한 곳 — 서버 라우트 전부와 셸 레이아웃의 단추·단축키가 같은 함수를 지난다.
   assistant: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
-  // ── 시안 화면(2026-11-09 이식) — 원장 2026-11-10 결정: **원장 '전체' · 나머지 '없음'**(새 권한 규칙 그대로).
-  //    2026-11-11부터 조직·OKR · 업무 작성센터 · 지식그래프는 실제 기록(s2_0048~0051 · 서버 문 = src/lib/auth/menu-gate.ts) — 경영 분석·홍보는 아직 예시 값.
+  // ── 2026-11-09 시안으로 이식한 화면 넷 — 원장 2026-11-10 결정: **원장 '전체' · 나머지 '없음'**(새 권한 규칙 그대로).
+  //    🔴 지금은 넷 다 **실제 기록을 읽고 쓴다**(2026-11-11 · 홍보 s2_0047 · 업무·관찰·OKR·스튜디오 s2_0048~0051 · 경영 분석 s2_0052~ · 서버 문 = src/lib/auth/menu-gate.ts 등) — 예시 값만 남은 곳은
+  //    마케팅 입력·검토 화면(/billing/management/marketing/inputs) 하나다. 권한 표의 줄 설명(features/owner/permission-row-notes.ts `ROW_NOTE`)이 무엇이 열리는지 적는다.
   //    다른 역할에게는 원장이 역할·권한 면에서 연다. 메뉴 버튼 · 운영실 핵심 업무 칸(canOpenCore) · 페이지 문이 같은 키를 본다.
-  // 경영 분석 · 스키마·지식그래프(features/mockup/access.ts).
+  // 통합 지식그래프·스키마 스튜디오(features/mockup/access.ts · academy-knowledge/studio-server.ts) · 관찰 기록의 확인·후속 조치(academy-knowledge/server-records.ts).
+  // 경영 분석 화면은 이 권한에 더해 **원장 역할**이어야 열린다(features/management/server/access.ts — 다른 역할에 열어도 그 화면은 안 열린다).
   management: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
-  // 조직·OKR(organization-okr/access.ts · 2026-11-11 실제 기록) · 연간 운영계획·홍보·마케팅(marketing/sample-access.ts).
+  // 조직·OKR(organization-okr/access.ts · server.ts — 직원 역할 여섯만 · 열람·아르바이트 칸은 잠근다 `isStaffRecordLocked`).
   okr: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  // 홍보·마케팅 통합 관리(marketing-archive/server.ts — 행사 자료를 옮겨 둔 학원 한 곳만 · 수납관리 권한도 함께 본다 · 저장은 원장·관리자 역할 + 두 권한 쓰기) · 마케팅 입력·검토(marketing/sample-access.ts — 예시 값).
   marketing: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
-  // 업무 작성센터(work-records 페이지 둘).
+  // 업무 작성센터 · 관찰 기록(work-records/server.ts · academy-knowledge/server-records.ts — 직원 역할 여섯만 · 열람·아르바이트 칸은 잠근다).
   work_records: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // 셔틀 관리자 화면(원장 2026-11-10 결정 *"기존 동작 유지"*) — 학부모 관리 현황 · 탑승 학생 시간표 · 가까운 노선 찾기 · 실시간 위치(같은 탭 줄 · 같은 문).
   // 🔴 셔틀 권한 **위에 덧붙는 조건**이다 — 셔틀 권한이 없으면 못 연다(판정 canOpenShuttleAdmin · features/shuttle/admin-access.ts).
@@ -553,9 +562,24 @@ export function storedScopedAccess(menu: MenuKey, role: SystemRole, access: Acce
   return fallback === "none" ? "none" : "readonly";
 }
 
+/**
+ * **직원 역할 여섯만 쓰는 화면** — 조직·OKR · 업무 작성센터(관찰 기록 포함). 서버가 원장·관리자·매니저·강사·상담·회계만 받는다
+ * (`organization-okr/server.ts` · `work-records/server.ts` · `academy-knowledge/server-records.ts`의 `STAFF_ROLES` — 가드 시험이 이 목록과 맞춘다).
+ * 열람·아르바이트 칸을 열면 메뉴는 서는데 화면이 "불러오지 못했습니다"로 멈춘다(저장만 되는 칸) — 그래서 그 칸은 잠근다
+ * (원장 2026-11-11 위임 결정 · 학생 칸은 컬럼 전체가 이미 잠겨 있다). 🔴 서버의 역할 목록을 넓히면 이 목록도 함께.
+ */
+export const STAFF_RECORD_MENUS = ["okr", "work_records"] as const satisfies readonly MenuKey[];
+export const STAFF_RECORD_ROLES = ["master", "admin", "manager", "teacher", "counselor", "accountant"] as const satisfies readonly SystemRole[];
+/** 위 화면의 칸인데 직원 역할 여섯이 아니다(열람·아르바이트·학생) — 어느 값으로도 바꿀 수 없다. */
+export function isStaffRecordLocked(menu: MenuKey, role: SystemRole): boolean {
+  return (STAFF_RECORD_MENUS as readonly MenuKey[]).includes(menu) && !(STAFF_RECORD_ROLES as readonly SystemRole[]).includes(role);
+}
+
 export function isPermissionLocked(menu: MenuKey, role: SystemRole, access: Access): boolean {
   if (menu === "teacher_view" && access === "scoped") return true;
   if (access === "scoped" && isScopedForbiddenRole(role)) return true;
+  // 조직·OKR · 업무 작성센터는 직원 역할 여섯만 — 열람·아르바이트 칸은 열어도 서버가 거절한다(isStaffRecordLocked).
+  if (isStaffRecordLocked(menu, role)) return true;
   // 연결 앱은 링크를 세우나 마나뿐이다 — 담당·읽기는 뜻이 없다(전체 = 보임 · 없음 = 안 보임). 학원 비서도 같다(isOnOffMenu).
   if (isOnOffMenu(menu) && (access === "scoped" || access === "readonly")) return true;
   // 학원 비서는 강사에게 열 수 없다 — 강사 화면(미니셸)엔 비서 단추·단축키가 없어 열어도 쓸 곳이 없고(저장만 되는 칸),

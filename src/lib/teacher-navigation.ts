@@ -10,8 +10,8 @@ import { isMenuHiddenByLayout, type MenuGroupLayout, type MenuLayout } from "@/f
 export const TEACHER_DEFAULT_GROUP = "teacher-main";
 /** '설정' 폴더 — 설정 권한을 맡은 선생님에게만 선다. 학원 설정 등의 내부 탭이라 '탭 및 메뉴 구성' 편집기에는 세우지 않는다(원장 2026-10-14). */
 export const TEACHER_SETTINGS_GROUP = "teacher-settings";
-/** 화면 문구가 한국어뿐인 강사 메뉴 — 영어 화면에선 감춘다. */
-const KOREAN_ONLY_HREFS: ReadonlySet<string> = new Set(["/onescreen/video-homework", "/makeups"]);
+/** 화면 문구가 한국어뿐인 강사 메뉴 — 영어 화면에선 감춘다(신규생 관리 · 업무 작성센터 · 조직·OKR은 2026-11-11 입구를 세울 때부터). */
+const KOREAN_ONLY_HREFS: ReadonlySet<string> = new Set(["/onescreen/video-homework", "/makeups", "/newcomers", "/work-records", "/organization/okr"]);
 
 /** 강사 스코프가 있는 원본 목적지만 제공한다. 기본 라벨은 기존 한/영 사전을 따른다. */
 export function teacherNavigationSource(lang: SheetLang = "ko"): HubGroup[] {

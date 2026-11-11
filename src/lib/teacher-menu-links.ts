@@ -42,6 +42,10 @@ export const TEACHER_MENU_LINKS: readonly TeacherMenuLink[] = [
   { href: "/timetable", labelKey: "menu.item.timetable", icon: MENU_ICON.timetable, menu: "timetable" },
   { href: "/exams", labelKey: "menu.item.exams", icon: MENU_ICON.exams, menu: "exams" },
   { href: "/consultations", labelKey: "menu.item.consultations", icon: MENU_ICON.consultations, menu: "consultations" },
+  // 신규생 관리 — 기본 teacher=none이라 원장이 역할·권한에서 강사를 '담당'으로 연 학원에서만 선다(2026-11-11). 강사는 늘 담당 범위:
+  // 자기가 담임인 학생·과목만 보고 적응 피드백만 남긴다(서버가 다시 좁힌다 — newcomers/server/followup-query.ts `followupAccess`).
+  // 학원 전체 집계(/newcomers/stats)는 담당 범위 계정을 이 화면으로 돌려보낸다.
+  { href: "/newcomers", labelKey: "menu.item.newcomers", icon: MENU_ICON.newcomers, menu: "newcomers" },
   // 교재 요청 — 강사 스코프(본인 담당 학생) 요청 + 진행상태. 사무실은 /billing 교재 면에서 처리.
   { href: "/textbook-requests", labelKey: "menu.item.textbook_requests", icon: MENU_ICON.textbook_requests, menu: "textbook_requests" },
   // 지출결의서 — 강사가 본인 지출을 작성·제출 + 결재 진행상태 조회. 사무실은 /billing 지출 면에서 결재.
@@ -53,6 +57,11 @@ export const TEACHER_MENU_LINKS: readonly TeacherMenuLink[] = [
   // 전자결재 — 기본 teacher=none이라 학원 설정에서 강사에게(또는 그 사람에게) 연 경우에만 보인다. 문서 스코프는
   // 결재선·RLS가 정하므로(본인 관련 문서만) 미스코프 누수 없음.
   { href: "/approvals", labelKey: "menu.item.approvals", icon: MENU_ICON.approvals, menu: "approvals" },
+  // 업무 작성센터 · 조직·OKR — 기본 teacher=none(원장이 강사에게 열었을 때 길이 없지 않게 입구만 둔다 · 2026-11-11).
+  // 강사 '담당' = 본인 문서·본인 목표만 쓰고 본다(검토·피드백은 원장·관리자·매니저의 '전체' — 서버가 가른다, 각 server.ts).
+  // 관찰 기록(/work-records/knowledge)은 업무 작성센터 안의 링크로 간다(같은 권한 · 줄을 따로 세우지 않는다).
+  { href: "/work-records", labelKey: "menu.item.work_records", icon: MENU_ICON.work_records, menu: "work_records" },
+  { href: "/organization/okr", labelKey: "menu.item.okr", icon: MENU_ICON.okr, menu: "okr" },
   // 수업 평가 — 강사는 **자기 평가 전용**(본인 평가지의 본인 채점만 보이고 쓸 수 있다, 원장 2026-08-19).
   // 기본 teacher=none이라 학원설정에서 연 학원에서만 보인다.
   { href: "/class-review", labelKey: "menu.item.class_review", icon: MENU_ICON.class_review, menu: "class_review" },
