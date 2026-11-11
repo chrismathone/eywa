@@ -25,11 +25,11 @@ export type ChurnMonth = { month: string; partial: boolean; ends: string[] };
 /** 지점의 강사별 퇴원율 캐시 열쇠 — 강사평가를 [지금 집계]하면 비운다. */
 export const teacherChurnTag = (tenantId: string) => `withdrawals-teacher-churn:${tenantId}`;
 /**
- * `subjects` = 가장 최근 달에 가르친 과목 라벨(줄 머리) · `subjectKeys` = 보이는 달들에 가르친 과목 키 전부(과목 필터).
+ * `subjects` = 가장 최근 달에 가르친 과목 라벨(줄 머리) · `subjectsByMonth` = 달마다 가르친 과목 키(가르친 과목 필터 — 고른 기간 안의 달만 본다).
  * `hireDate` = 직원 정보의 입사일 · `resignDate` = 퇴사한 강사의 퇴사일(재직 중이면 null) — 재직 밖 달 칸은 싣지 않는다(`inTenure`).
  */
 export type ChurnTeacherRow = {
-  id: string; name: string; subjects: string[]; subjectKeys: string[]; hireDate: string | null; resignDate: string | null;
+  id: string; name: string; subjects: string[]; subjectsByMonth: Record<string, string[]>; hireDate: string | null; resignDate: string | null;
   cells: Record<string, ChurnCell>;
 };
 export type TeacherChurnData = { months: ChurnMonth[]; teachers: ChurnTeacherRow[] };
@@ -105,6 +105,18 @@ export function comparePair(months: readonly ChurnMonth[]): [string, string] | n
   if (!last) return null;
   const before = prevMonth(last);
   return months.some((m) => m.month === before) ? [before, last] : null;
+}
+
+/**
+ * 가르친 과목 필터 — 고른 기간(`months`) 안에 그 과목을 가르친 달이 있는 강사(Codex 리뷰 2026-11-11: 기간 밖 과목 이력으로 고르지 않는다).
+ * ⚠️ 칸의 퇴원율은 과목별 값이 아니라 그 강사의 퇴원율이다(강사평가와 같은 값) — 그래서 필터 이름이 '가르친 과목'이다.
+ */
+export function taughtIn(row: ChurnTeacherRow, months: readonly ChurnMonth[], subject: string): boolean {
+  return subject === "all" || months.some((m) => (row.subjectsByMonth[m.month] ?? []).includes(subject));
+}
+/** 고른 기간에 누군가 가르친 과목 키. */
+export function subjectsTaught(rows: readonly ChurnTeacherRow[], months: readonly ChurnMonth[]): Set<string> {
+  return new Set(rows.flatMap((r) => months.flatMap((m) => r.subjectsByMonth[m.month] ?? [])));
 }
 
 export type ChurnDelta = { kind: "value"; delta: number } | { kind: "open" } | { kind: "none" };

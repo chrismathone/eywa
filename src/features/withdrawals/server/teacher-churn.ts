@@ -21,7 +21,7 @@ import { loadResignDates } from "./teacher-tenure";
  *    늘 두 번째(`items->1`)라 그 자리부터 받고(침산 12개월 143줄 58ms), id가 다른 줄(설정에서 항목 순서를 바꾼 달)만 항목 id를
  *    훑어 자리를 찾는다(모든 줄을 32자리 훑으면 같은 줄이 600~850ms — jsonb를 자리마다 다시 푼다, 2026-11-11 실측).
  * 🔑 퇴원관리는 필터를 자주 바꾸는 화면이라 이동마다 다시 읽지 않게 지점·달별 5분 캐시(B6) — 강사평가 집계는 하루 한 번이고,
- *    [지금 집계](`refreshTeacherPortfolioNow`)는 저장 뒤 이 캐시를 비운다(`updateTag(teacherChurnTag)` — 두 화면 숫자가 갈리지 않게).
+ *    캐시 열쇠에 마지막 집계 시각을 실어 어느 경로로 재집계해도 바로 새 값이다(+ [지금 집계]는 `updateTag(teacherChurnTag)`로도 비운다).
  */
 /** 한 번에 받는 달 수 — 기간은 카드 안에서 고른다(받은 달 안에서 바로 바뀐다 · 줄은 강사 × 달이라 가볍다). */
 export const CHURN_MONTHS = 36;
@@ -114,7 +114,7 @@ async function readChurn(tenantId: string, to: string): Promise<RawChurn> {
       id, name: nameOf.get(id)!, hireDate: hireOf.get(id) ?? null, resignDate: resignOf.get(id) ?? null,
       // 줄 머리 과목 = 가장 최근 달에 가르친 과목(그 달 수업이 없으면 그 앞 달) · 과목 필터 = 보이는 달들에 가르친 과목 전부.
       latestKeys: [...mine].reverse().find((r) => (r.subjects ?? []).length)?.subjects ?? [],
-      subjectKeys: [...new Set(mine.flatMap((r) => r.subjects ?? []))],
+      subjectsByMonth: Object.fromEntries(mine.map((r) => [r.month, r.subjects ?? []])),
       // 저장 줄이 있는 달만 칸이 선다 — 항목을 못 읽은 줄은 '확인 불가'(빈 칸·0%로 위장하지 않는다).
       cells: Object.fromEntries(mine.map((r) => [r.month, churnCellOf(itemOf.get(keyOf(r)), Boolean(r.closed_at), r.end ?? "")])),
     };
@@ -127,8 +127,14 @@ export async function loadTeacherChurn(now: Date = new Date()): Promise<TeacherC
   const gate = await getPortfolioGate();
   if (!gate) return null;
   const to = kstMonth(now);
+  // 캐시 열쇠에 저장된 집계의 마지막 시각을 싣는다 — 매일 cron·[지금 집계]·설정 저장 뒤 재집계 어느 경로든 새 저장이 생기면 바로 새 값
+  // (직원 포트폴리오와 숫자가 갈리지 않게 · Codex 리뷰 2026-11-11). 시각 한 칸만 읽는 가벼운 조회다.
+  const { data: latest } = await createAdminClient().from(TABLE).select("computed_at").eq("tenant_id", gate.tenantId)
+    .order("computed_at", { ascending: false }).limit(1).maybeSingle();
+  const version = (latest as { computed_at?: string } | null)?.computed_at ?? "none";
   const [raw, settings] = await Promise.all([
-    unstable_cache(() => readChurn(gate.tenantId, to), ["withdrawals-teacher-churn-v3", gate.tenantId, to], { revalidate: 300, tags: [teacherChurnTag(gate.tenantId)] })(),
+    unstable_cache(() => readChurn(gate.tenantId, to), ["withdrawals-teacher-churn-v4", gate.tenantId, to, version],
+      { revalidate: 300, tags: [teacherChurnTag(gate.tenantId)] })(),
     getTenantSettings(),
   ]);
   const subjects = buildSubjectMaps(settings.operations.subjects);

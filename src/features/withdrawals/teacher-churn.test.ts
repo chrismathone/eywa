@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  churnCellOf, comparePair, countsFrom, deltaOf, deltaText, inTenure, heatMix, monthSpan, parseChurnSort, rateText, sortTeachers, yyMm,
+  churnCellOf, comparePair, countsFrom, deltaOf, deltaText, inTenure, subjectsTaught, taughtIn, heatMix, monthSpan, parseChurnSort, rateText, sortTeachers, yyMm,
   type ChurnCell, type ChurnMonth, type ChurnTeacherRow,
 } from "./teacher-churn";
 
 const ok = (rate: number, base = 40, counted = 2, closed = true): ChurnCell => ({ state: "ok", rate, base, counted, closed, end: "" });
 const row = (id: string, name: string, cells: Record<string, ChurnCell>): ChurnTeacherRow =>
-  ({ id, name, subjects: [], subjectKeys: [], hireDate: null, resignDate: null, cells });
+  ({ id, name, subjects: [], subjectsByMonth: {}, hireDate: null, resignDate: null, cells });
 const months = (list: [string, boolean][]): ChurnMonth[] => list.map(([month, partial]) => ({ month, partial, ends: [`${month}-28`] }));
 
 describe("churnCellOf — 저장된 퇴원율 항목 그대로", () => {
@@ -100,6 +100,17 @@ describe("inTenure — 입사 다음 달부터 퇴사한 달까지", () => {
   it("모르는 쪽은 자르지 않는다", () => {
     expect(inTenure("2020-01", null, null)).toBe(true);
     expect(inTenure("2030-01", "2026-01-01", null)).toBe(true);
+  });
+});
+
+describe("taughtIn · subjectsTaught — 고른 기간 안에 가르친 과목만", () => {
+  const ms = months([["2026-09", false], ["2026-10", false]]);
+  const a = { ...row("a", "가", {}), subjectsByMonth: { "2026-04": ["english"], "2026-09": ["math"], "2026-10": ["math"] } };
+  it("기간 밖 과목 이력으로 고르지 않는다", () => {
+    expect(taughtIn(a, ms, "math")).toBe(true);
+    expect(taughtIn(a, ms, "english")).toBe(false);
+    expect(taughtIn(a, ms, "all")).toBe(true);
+    expect([...subjectsTaught([a], ms)]).toEqual(["math"]);
   });
 });
 
