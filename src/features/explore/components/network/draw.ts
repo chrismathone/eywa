@@ -102,6 +102,7 @@ export function drawBoard(svg: SVGSVGElement, B: NetBoard, o: DrawOpts): string 
       b = { x: mx + (b.x - mx) * ext, y: my + (b.y - my) * ext };
     }
     const hi = !!active && (e.from === active || e.to === active);
+    if (e.focusOnly && !hi) continue; // 강조할 때만 그리는 선(그리지 않은 선은 이 프레임 끝에 DOM에서 빠진다)
     // 교차 선(점선) = 영역·날짜 묶음·가운데를 거치지 않는 선(분석 근거 등) — 묶음 아래 기록 선은 자리 선이다.
     const cross = !tree(e.from) && !tree(e.to) && e.from !== B.centerId && e.to !== B.centerId;
     const so = (active ? (hi ? 0.85 : 0.06) : cross ? 0.5 : o.dark ? 0.55 : 0.28) * Math.sqrt(ext);

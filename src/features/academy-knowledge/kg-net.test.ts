@@ -143,6 +143,28 @@ describe("개별 기록 = 가지를 끝까지(원장 2026-11-11) — 묶음은 �
   });
 });
 
+describe("관계선 = 강조할 때만(원장 2026-11-11 '선도 너무 많아서 정신없는데')", () => {
+  it("두 기록 사이 실제 관계선은 focusOnly · 뼈대(가운데 → 영역 → 묶음 → 기록)는 늘 그린다 · 이웃 판정엔 그대로 든다", () => {
+    const b = kgNetBoard(G, null);
+    const tree = (x: string) => x.startsWith("hub:") || x.startsWith("grp:") || x === b.center.id;
+    const rel = b.graph.edges.filter((e) => !tree(e.from) && !tree(e.to));
+    expect(rel.length).toBeGreaterThan(0);
+    expect(rel.every((e) => e.focusOnly)).toBe(true);
+    expect(b.graph.edges.filter((e) => tree(e.from) || tree(e.to)).some((e) => e.focusOnly)).toBe(false);
+    const L = netLayout(b, "records");
+    expect(L.adjacency.get(id("student:s1"))?.has(id("course:c1"))).toBe(true);
+  });
+  it("기록이 가운데인 판 = 가운데의 직접 관계선은 늘 그린다(가운데는 고른 점이 될 수 없다) · 다른 기록 사이 관계선만 focusOnly", () => {
+    const b = kgNetBoard(G, id("student:s1"));
+    const center = b.center.id;
+    const skeleton = (x: string) => x.startsWith("hub:") || x.startsWith("grp:");
+    const direct = b.graph.edges.filter((e) => (e.from === center || e.to === center) && !skeleton(e.from) && !skeleton(e.to));
+    expect(direct.length).toBeGreaterThan(0);
+    expect(direct.some((e) => e.focusOnly)).toBe(false);
+    expect(b.graph.edges.filter((e) => e.focusOnly).every((e) => e.from !== center && e.to !== center)).toBe(true);
+  });
+});
+
 describe("도우미", () => {
   it("관계 이름 · 연결 없는 기록 수(학원 점 제외) · 상세 자료 주소", () => {
     expect(relationLabel({ relation: "TEACHES", sourceRelation: "currently_taught_by" })).toBe("담당한다");

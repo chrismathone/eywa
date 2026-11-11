@@ -20,7 +20,7 @@ import type { ExploreTone } from "@/features/explore/model";
  *  · 영역(큰 점) = 주체 유형(`catalog.ts` `entities` 순서 · 이름 = 그 한글 이름) · 색 = 연결 탐색 영역 색(`ExploreTone`) 하나씩.
  *  · 날짜 = `attributes.date`(날짜 또는 시각 — `recordYmd`, KST)뿐. `attributes.date`가 없으면 사건 유형(`PERIOD_IS_EVENT_DATE`)의 단일 날짜 `period`만 · 🔴 학교·평가·근거의 `period`는 날짜로 쓰지 않는다(기준일·범위·스냅숏) ·
  *    날짜를 지어내지 않는다. 날짜 있는 기록은 영역 아래 연도 → 월 → (같은 날 여럿이면) 일자 묶음(`timeTree`), 없는 기록은 영역 둘레.
- *  · 선 = 판 뼈대(가운데 → 영역 → 묶음 → 기록) + 판에 선 두 기록 사이의 **실제 관계**(같은 두 기록이면 한 선 · 이름은 관계 이름을 모아서).
+ *  · 선 = 판 뼈대(가운데 → 영역 → 묶음 → 기록) + 판에 선 두 기록 사이의 **실제 관계**(같은 두 기록이면 한 선 · 이름은 관계 이름을 모아서 · 그 점을 강조할 때만 그린다).
  *    데이터에 없는 관계는 긋지 않는다.
  * 점 id = 지식그래프 점 id 그대로(가운데도) — 더블클릭한 기록 점이 그대로 새 가운데가 되어 보간이 이어진다. 영역 `hub:<유형>` · 날짜 묶음 `grp:<유형>:<기간>` · 분류 묶음 `grp:<유형>:cat:<단계…>`(`kg-net-groups.ts`) · `grp:<유형>:status:<상태>`·`none`.
  */
@@ -102,10 +102,10 @@ export function kgNetBoard(graph: Graph, centerId?: string | null, cats?: KgCate
   const groups: NetNode[] = [];
   const edges: NetEdge[] = [];
   const linked = new Set<string>();
-  const link = (a: string, b: string, rel: string) => {
+  const link = (a: string, b: string, rel: string, focusOnly?: boolean) => {
     if (a === b || linked.has(`${a}|${b}`) || linked.has(`${b}|${a}`)) return;
     linked.add(`${a}|${b}`);
-    edges.push({ from: a, to: b, rel });
+    edges.push(focusOnly ? { from: a, to: b, rel, focusOnly } : { from: a, to: b, rel });
   };
   const degree = degrees(graph);
   const related = new Set(degree.keys());
@@ -184,7 +184,10 @@ export function kgNetBoard(graph: Graph, centerId?: string | null, cats?: KgCate
     p.rels.add(relationLabel(e));
     pairs.set(key, p);
   }
-  for (const p of pairs.values()) link(p.from, p.to, [...p.rels].join(" · "));
+  // 🔴 기록 사이 관계선은 그 점을 강조할 때만(마우스를 올리거나 고른 점 — `focusOnly`) — 늘 그리면 학원 전체 판에 1,000개가 넘어 정신없고 렉이 난다(원장 2026-11-11).
+  //    처음 판은 뼈대(가운데 → 영역 → 묶음 → 기록) + **가운데 기록의 직접 관계선**(기록이 가운데인 판에서 1단계·2단계를 가르는 선 — 가운데는 고른 점이 될 수 없어 늘 그린다).
+  //    이웃 강조·요약 판 집계는 그대로 이 선을 쓴다.
+  for (const p of pairs.values()) link(p.from, p.to, [...p.rels].join(" · "), p.from !== rootId && p.to !== rootId);
 
   return { graph: { nodes, edges }, center: { id: rootId, name: focus ? focus.label : ACADEMY_TITLE }, academy: !focus, shown: nodes.filter((n) => n.kind === "record").length, total };
 }
