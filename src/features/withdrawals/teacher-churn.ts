@@ -27,9 +27,11 @@ export const teacherChurnTag = (tenantId: string) => `withdrawals-teacher-churn:
 /**
  * `subjects` = 가장 최근 달에 가르친 과목 라벨(줄 머리) · `subjectsByMonth` = 달마다 가르친 과목 키(가르친 과목 필터 — 고른 기간 안의 달만 본다).
  * `hireDate` = 직원 정보의 입사일 · `resignDate` = 퇴사한 강사의 퇴사일(재직 중이면 null) — 재직 밖 달 칸은 싣지 않는다(`inTenure`).
+ * `resigned` = 지금 퇴사 상태(직원 상태 inactive — 퇴사일을 못 찾아도 퇴사자다).
  */
 export type ChurnTeacherRow = {
   id: string; name: string; subjects: string[]; subjectsByMonth: Record<string, string[]>; hireDate: string | null; resignDate: string | null;
+  resigned: boolean;
   cells: Record<string, ChurnCell>;
 };
 export type TeacherChurnData = { months: ChurnMonth[]; teachers: ChurnTeacherRow[] };
@@ -117,6 +119,17 @@ export function taughtIn(row: ChurnTeacherRow, months: readonly ChurnMonth[], su
 /** 고른 기간에 누군가 가르친 과목 키. */
 export function subjectsTaught(rows: readonly ChurnTeacherRow[], months: readonly ChurnMonth[]): Set<string> {
   return new Set(rows.flatMap((r) => months.flatMap((m) => r.subjectsByMonth[m.month] ?? [])));
+}
+
+/**
+ * 표에 세울 강사(원장 2026-11-11 *"기간 선택에 따라 퇴사자를 보여주거나 숨기거나 스마트하게하고. '퇴사자 숨김' 토글도 따로"*):
+ * 고른 과목을 그 기간에 가르쳤고(`taughtIn`) **그 기간에 근무한 달이 하나라도 있는** 강사 — 퇴사자도 그 기간에 근무했으면 서고,
+ * 기간 전체가 입사 전·퇴사 뒤면 줄째 없다(재직 밖 달은 칸이 없다 — `inTenure`). `hideResigned`면 퇴사자는 기간과 상관없이 뺀다.
+ */
+export function visibleTeachers(
+  rows: readonly ChurnTeacherRow[], months: readonly ChurnMonth[], subject: string, hideResigned: boolean,
+): ChurnTeacherRow[] {
+  return rows.filter((t) => !(hideResigned && t.resigned) && taughtIn(t, months, subject) && months.some((m) => t.cells[m.month]));
 }
 
 export type ChurnDelta = { kind: "value"; delta: number } | { kind: "open" } | { kind: "none" };

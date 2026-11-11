@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  churnCellOf, comparePair, countsFrom, deltaOf, deltaText, inTenure, subjectsTaught, taughtIn, heatMix, monthSpan, parseChurnSort, rateText, sortTeachers, yyMm,
+  churnCellOf, comparePair, countsFrom, deltaOf, deltaText, inTenure, subjectsTaught, taughtIn, visibleTeachers, heatMix, monthSpan, parseChurnSort, rateText, sortTeachers, yyMm,
   type ChurnCell, type ChurnMonth, type ChurnTeacherRow,
 } from "./teacher-churn";
 
 const ok = (rate: number, base = 40, counted = 2, closed = true): ChurnCell => ({ state: "ok", rate, base, counted, closed, end: "" });
 const row = (id: string, name: string, cells: Record<string, ChurnCell>): ChurnTeacherRow =>
-  ({ id, name, subjects: [], subjectsByMonth: {}, hireDate: null, resignDate: null, cells });
+  ({ id, name, subjects: [], subjectsByMonth: {}, hireDate: null, resignDate: null, resigned: false, cells });
 const months = (list: [string, boolean][]): ChurnMonth[] => list.map(([month, partial]) => ({ month, partial, ends: [`${month}-28`] }));
 
 describe("churnCellOf — 저장된 퇴원율 항목 그대로", () => {
@@ -111,6 +111,20 @@ describe("taughtIn · subjectsTaught — 고른 기간 안에 가르친 과목�
     expect(taughtIn(a, ms, "english")).toBe(false);
     expect(taughtIn(a, ms, "all")).toBe(true);
     expect([...subjectsTaught([a], ms)]).toEqual(["math"]);
+  });
+});
+
+describe("visibleTeachers — 기간에 근무한 강사만 · 퇴사자 숨김", () => {
+  const sepOct = months([["2026-09", false], ["2026-10", false]]);
+  const nov = months([["2026-11", true]]);
+  const left = { ...row("a", "퇴사자", { "2026-09": ok(2), "2026-10": ok(3) }), resigned: true, resignDate: "2026-10-31" };
+  const stay = row("b", "재직자", { "2026-09": ok(1), "2026-10": ok(1), "2026-11": ok(0, 30, 0, false) });
+  it("퇴사자도 고른 기간에 근무했으면 선다 · 기간 전체가 퇴사 뒤면 줄째 없다", () => {
+    expect(visibleTeachers([left, stay], sepOct, "all", false).map((t) => t.id)).toEqual(["a", "b"]);
+    expect(visibleTeachers([left, stay], nov, "all", false).map((t) => t.id)).toEqual(["b"]);
+  });
+  it("퇴사자 숨김은 기간과 상관없이 퇴사자를 뺀다", () => {
+    expect(visibleTeachers([left, stay], sepOct, "all", true).map((t) => t.id)).toEqual(["b"]);
   });
 });
 

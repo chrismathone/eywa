@@ -7,7 +7,7 @@ import { HrefSelect } from "@/components/href-select";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { saveWithdrawalTrendPrefs } from "@/features/withdrawals/server/trend-prefs-actions";
 import {
-  HEAT_CAP, SMALL_BASE, comparePair, sortTeachers, subjectsTaught, taughtIn, yyMm, type ChurnSort, type TeacherChurnData,
+  HEAT_CAP, SMALL_BASE, comparePair, sortTeachers, subjectsTaught, visibleTeachers, yyMm, type ChurnSort, type TeacherChurnData,
 } from "@/features/withdrawals/teacher-churn";
 import { AFTER_RESIGN_BG, BEFORE_HIRE_BG, TeacherChurnTable } from "./teacher-churn-table";
 
@@ -44,6 +44,7 @@ export function TeacherChurnCard({ data, initialSort }: { data: TeacherChurnData
   const [sort, setSort] = useState(initialSort);
   const [picked, setPicked] = useState<string[]>([]);
   const [subject, setSubject] = useState("all");
+  const [hideResigned, setHideResigned] = useState(false);
   const [from, setFrom] = useState(all[Math.max(0, all.length - DEFAULT_SPAN)]?.month ?? "");
   const [to, setTo] = useState(all.at(-1)?.month ?? "");
 
@@ -51,8 +52,9 @@ export function TeacherChurnCard({ data, initialSort }: { data: TeacherChurnData
   // 가르친 과목 = 학원 설정 차례 · 고른 기간에 가르친 강사가 있는 과목만(퇴원율은 과목별 값이 아니라 그 강사의 값 — `taughtIn`).
   const taught = subjectsTaught(data.teachers, months);
   const subjectOptions = [{ value: "all", label: "전체" }, ...subjectMaps.options.filter((o) => taught.has(o.value) || o.value === subject)];
-  // 고른 과목을 그 기간에 가르친 강사 · 보이는 달에 칸이 하나라도 있는 강사만(재직 밖 달뿐인 줄은 세우지 않는다).
-  const teachers = data.teachers.filter((t) => taughtIn(t, months, subject) && months.some((m) => t.cells[m.month]));
+  // 고른 과목을 그 기간에 가르치고 그 기간에 근무한 강사만 — 기간 전체가 퇴사 뒤인 퇴사자는 저절로 빠진다 · 토글은 퇴사자를 모두 뺀다.
+  const resignedInView = visibleTeachers(data.teachers, months, subject, false).filter((t) => t.resigned).length;
+  const teachers = visibleTeachers(data.teachers, months, subject, hideResigned);
   const pair = comparePair(months);
   const rows = sortTeachers(teachers, pair, sort);
   const pickedRows = picked.map((id) => teachers.find((t) => t.id === id)).filter((t) => t !== undefined);
@@ -93,6 +95,11 @@ export function TeacherChurnCard({ data, initialSort }: { data: TeacherChurnData
             options={all.filter((m) => m.month <= to).map(monthOption)} />
           <HrefSelect axisLabel="끝" ariaLabel="끝 달" value={to} onSelect={setTo}
             options={all.filter((m) => m.month >= from).map(monthOption)} />
+          {/* 퇴사자 숨김 — 퇴원관리의 다른 필터처럼 저장하지 않는다(새로 열면 꺼짐 · 고른 기간에 근무한 퇴사자는 그대로 선다). */}
+          <button type="button" aria-pressed={hideResigned} onClick={() => setHideResigned((v) => !v)}
+            className={`${SEG} border-border shrink-0 rounded-md border ${hideResigned ? ON : OFF}`}>
+            퇴사자 숨김{resignedInView ? ` · ${resignedInView}명` : ""}
+          </button>
           <div role="group" aria-label="강사 정렬" className="border-border inline-flex shrink-0 overflow-hidden rounded-md border">
             {SORTS.map((s, i) => (
               <button key={s.key} type="button" aria-pressed={sort === s.key} onClick={() => choose(s.key)}
