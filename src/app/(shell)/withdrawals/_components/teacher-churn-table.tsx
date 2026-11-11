@@ -14,6 +14,14 @@ const heat = (c: ChurnCell, open: boolean): CSSProperties | undefined => {
   return mix ? { background: `color-mix(in srgb, var(--gold-bright) ${mix}%, var(--card))` } : undefined;
 };
 
+/**
+ * 재직 밖 달의 칸 색(원장 2026-11-11 *"입사 퇴사 적지말고 … 표에 셀 색상을 퇴사입사에 맞춰서 표현"*) — 이름 칸에 날짜를 적지 않고
+ * 칸 색으로 가른다. 입사 전 = 옅은 빗금(직원 포트폴리오 '자료 없음' 막대와 같은 무늬) · 퇴사 뒤 = 회색 칠(진행 중 칸의 옅은 회색보다 짙게).
+ * 정확한 날짜는 칸에 마우스를 올리면 나온다. 범례가 같은 값을 쓴다.
+ */
+export const BEFORE_HIRE_BG = "repeating-linear-gradient(135deg, var(--color-bg-soft) 0 4px, var(--color-card) 4px 8px)";
+export const AFTER_RESIGN_BG = "color-mix(in srgb, var(--foreground) 14%, var(--card))";
+
 /** 강사 칸 폭 · 달·증감 칸의 가장 좁은 폭(이보다 좁은 창에선 가로 스크롤). */
 const NAME_COL = "9.5rem";
 const MIN_COL = "5.75rem";
@@ -29,12 +37,17 @@ function Cell({ c, month, partial, row }: { c: ChurnCell | undefined; month: Chu
   if (!c) {
     // 재직 밖 달은 빈칸(0%·담당 없음으로 적지 않는다 — 원장 2026-11-11 "실제 선생님이 입사한 날부터. 0%하지말고").
     const from = countsFrom(row.hireDate);
-    const why = from !== null && month.month < from
+    const before = from !== null && month.month < from;
+    const after = !before && !!row.resignDate && month.month > row.resignDate.slice(0, 7);
+    const why = before
       ? `입사 ${row.hireDate!.slice(0, 10)} — 퇴원율은 지난달 담당 학생 기준이라 입사 다음 달부터 셉니다`
-      : row.resignDate && month.month > row.resignDate.slice(0, 7)
-        ? `퇴사 ${row.resignDate.slice(0, 10)} — 근무한 달까지만 셉니다`
+      : after
+        ? `퇴사 ${row.resignDate!.slice(0, 10)} — 근무한 달까지만 셉니다`
         : "그 달은 강사평가 대상이 아니었습니다(담당 반 없음 등)";
-    return <td className="text-center" {...tipProps({ title: label, lines: [why] })} />;
+    return (
+      <td className="text-center" style={before ? { background: BEFORE_HIRE_BG } : after ? { background: AFTER_RESIGN_BG } : undefined}
+        aria-label={before ? "입사 전" : after ? "퇴사 뒤" : undefined} {...tipProps({ title: label, lines: [why] })} />
+    );
   }
   // 아직 바뀌는 값 — 진행 중인 달이거나, 그 강사의 그 달이 마감 대기다.
   const open = partial || !c.closed;
@@ -130,13 +143,8 @@ export function TeacherChurnTable({ rows, months, pair, picked, colorOf, onPick 
                     <WindowLink href={`/class-review?tab=portfolio&teacher=${encodeURIComponent(r.id)}`} title={`${r.name} 직원 포트폴리오`}
                       className="hover:text-primary shrink-0 text-xs" ariaLabel={`${r.name} 직원 포트폴리오 열기`}>↗</WindowLink>
                   </span>
-                  {r.subjects.length || r.hireDate || r.resignDate ? (
-                    // 고정 폭 칸이라 넘치면 어절로 접는다(#116 — nowrap은 옆 칸으로 흘러넘친다).
-                    <span className="block text-xs font-medium break-keep">
-                      {[r.subjects.join(" · "), r.hireDate ? `입사 ${yyMm(r.hireDate.slice(0, 7))}` : "", r.resignDate ? `퇴사 ${yyMm(r.resignDate.slice(0, 7))}` : ""]
-                        .filter(Boolean).join(" · ")}
-                    </span>
-                  ) : null}
+                  {/* 입사·퇴사는 이름 칸에 적지 않는다 — 칸 색이 말한다(원장 2026-11-11). 고정 폭이라 넘치면 어절로 접는다(#116). */}
+                  {r.subjects.length ? <span className="block text-xs font-medium break-keep">{r.subjects.join(" · ")}</span> : null}
                 </th>
                 {months.map((m) => <Cell key={m.month} c={r.cells[m.month]} month={m} partial={m.partial} row={r} />)}
                 <td className="num px-1.5 py-1.5 text-center text-sm whitespace-nowrap">

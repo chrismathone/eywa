@@ -7,7 +7,7 @@ import { HrefSelect } from "@/components/href-select";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { saveWithdrawalTrendPrefs } from "@/features/withdrawals/server/trend-prefs-actions";
 import { HEAT_CAP, SMALL_BASE, comparePair, sortTeachers, yyMm, type ChurnSort, type TeacherChurnData } from "@/features/withdrawals/teacher-churn";
-import { TeacherChurnTable } from "./teacher-churn-table";
+import { AFTER_RESIGN_BG, BEFORE_HIRE_BG, TeacherChurnTable } from "./teacher-churn-table";
 
 const SEG = "text-xs px-2 py-0.5 transition";
 const ON = "bg-primary text-primary-foreground font-semibold";
@@ -115,6 +115,12 @@ export function TeacherChurnCard({ data, initialSort }: { data: TeacherChurnData
           <i aria-hidden className="border-line inline-block h-2.5 w-20 rounded-full border"
             style={{ background: "linear-gradient(to right, var(--card), color-mix(in srgb, var(--gold-bright) 80%, var(--card)))" }} />
           {HEAT_CAP}% 이상 (마감한 값만 색칠)
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <i aria-hidden className="border-line inline-block size-3 rounded-sm border" style={{ background: BEFORE_HIRE_BG }} />입사 전
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <i aria-hidden className="border-line inline-block size-3 rounded-sm border" style={{ background: AFTER_RESIGN_BG }} />퇴사 뒤
         </span>
         <span>＊ 담당 {SMALL_BASE}명 미만 — 한 명이 그만둬도 10%p 넘게 오릅니다</span>
         <span>칸 = 퇴원율 · 그만둔 학생/지난달 담당</span>
