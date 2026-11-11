@@ -14,7 +14,7 @@ export const TABLES_A: readonly AssistantTableDoc[] = [
       "kind: file=업로드 파일 · text=본문 글 · form=웹 서식(form_type·form_data) · link=외부 링크(link_url). category = document_categories.key(기본 enrollment·billing·consultation·hr·class·other + 학원이 만든 분류). form_type 예: refund_request=환불요청서 · staff_resume=직원 이력서(staff_user_id로 직원 연결). restricted=true는 문서함 화면의 접근 구분이다. 언제 = created_at.",
     columns: {
       pinned: "목록 상단 고정",
-      form_data: "웹 서식 내용(jsonb) — 이력서 등 · 🔴 통째로 select하지 말고 질문에 필요한 키만 조회한다",
+      form_data: "웹 서식 내용(jsonb) — 이력서 등 · 🔴 통째로 select하지 말고 질문에 필요한 키만 조회한다 · 주민번호는 앞 6자리 + 뒷자리 첫 자리만 보인다(나머지는 가려져 있다 — 그대로 옮긴다)",
       staff_user_id: "이력서가 가리키는 직원(users.id)",
       uploaded_by: "올린 사람(users.id)",
     },

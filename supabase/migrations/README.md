@@ -12,6 +12,10 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-11-11 학원 비서 — 주민번호 가림 (`s2_0067_assistant_mask_resident_no.sql` · ✅ 운영 적용 2026-11-11 · CLI 직결(node · 한 거래) · 시험 거래(ROLLBACK) 뒤 · 사후 확인 통과)
+
+원장 *"주민번호 앞자리 6개 및 뒷자리 1개만 보내. 나머진 됐고"* — s2_0031 가림 칸 표(`assistant_private.masked_columns`)에 두 줄: `academy_documents.form_data`(이력서 `personal.residentId` + 서식 어디든 `######-#######` 꼴) · `payslips.print_payload`(`teacher.residentRegNo` + 같은 꼴) → `891003-1******`. 보기를 바로 다시 만든다. 가림식은 pg_catalog 함수만(실행 계획 검사). 운영 전수 확인: 주민번호 꼴 = 이력서 47건뿐(다른 표의 13자리 일치는 해시·id · 명세서 지표의 긴 소수). 시험 거래: 보기로 본 이력서 = `######-#******` · 남은 꼴 0 · 실행 계획 속 다른 스키마 함수 = `bound_tenant`뿐. 되돌리기 = `scripts/_oneoff/revert-s2_0067-assistant-mask-resident-no.sql`(원장 승인 없이 돌리지 말 것).
+
 ## 2026-11-11 이름 맞춤 — `s2_0047_marketing_archive_sources.sql` (옛 이름 `20261110125726_marketing_archive_sources.sql` · ✅ 운영 적용돼 있음 — 다시 돌리지 않는다)
 
 홍보·마케팅 기록 보관(`marketing_archive_events` · `marketing_source_inbox` · `marketing_archive_sources` · `marketing_archive_students` · `marketing_archive_audit` + 저장 함수)의 SQL이 CLI 타임스탬프 이름으로 들어와 폴더 규칙 가드와 SQL을 읽는 가드 전부가 멈춰 있었다(`규칙 밖 SQL 파일이 있습니다`). **이름만** 시즌2 다음 빈 번호로 바꿨다(내용 한 글자도 그대로 · [`docs/sql-season2.md`](../../docs/sql-season2.md) §3-A). 운영 DB에는 2026-11-10에 옛 이름으로 이미 적용돼 있다(2026-11-11 표 5개 존재 확인).

@@ -14,7 +14,7 @@
 | 항목 | 결정 |
 |---|---|
 | 쓰는 사람 | 원장(`master`) + 슈퍼관리자. 강사뷰 · 운영 콘솔 '지점 보기' 중에는 막는다. |
-| 읽는 범위 | *"원장 자료니까 db를 하나도 빠짐없이 해당 지점 db를 조회하고 답변할 수 있어야함"* → **그 지점 표 전부**(급여·인사·연락처·계좌 포함). 빼는 것은 **시스템 비밀값 칸**뿐(봇 토큰·기기/링크 토큰·푸시 키·해시·잠금 토큰 · 자리 PIN — 학원 자료가 아니라 열쇠). |
+| 읽는 범위 | *"원장 자료니까 db를 하나도 빠짐없이 해당 지점 db를 조회하고 답변할 수 있어야함"* → **그 지점 표 전부**(급여·인사·연락처·계좌 포함). 빼는 것은 **시스템 비밀값 칸**뿐(봇 토큰·기기/링크 토큰·푸시 키·해시·잠금 토큰 · 자리 PIN — 학원 자료가 아니라 열쇠). 🔴 **주민번호는 앞 6자리 + 뒷자리 첫 자리만**(원장 2026-11-11 *"주민번호 앞자리 6개 및 뒷자리 1개만 보내. 나머진 됐고"* — 멘트 시험에서 이력서 서식 통째 조회로 13자리가 AI 입력에 들어갔다 · 가림 = s2_0067). |
 | 추론 강도 | *"적음(하이쿠)/보통(소넷)/강함(오퍼스) … 모델명은 숨기고"* → 대화창에서 고른다(Haiku 5.5 low · Sonnet 5.5 medium · Opus 5.5 high). |
 | 화면 | *"어디서나 오버레이로 열 수 있게 다른 화면 위에"* — 위쪽 바 버튼 · 단축키 · 오버레이(전체 화면으로 키움). |
 | 출력 | 보고서 블록 + **비서 의견**(할 일 · 근거 · 언제 · 누가) — 보고서마다 하나 꼭. |
@@ -39,7 +39,7 @@ SQL = `supabase/migrations/s2_0031_academy_assistant.sql`(번호는 병합 때 �
 
 - **로그인 역할 `aywa_assistant`** — `LOGIN NOINHERIT`, 어떤 역할의 구성원도 아니다(`set role`로 올라갈 곳이 없다) · 쓰기 함수·쓰기 권한 0 · 8초 · 연결 12개(s2_0034 — 동시 질문(사람당 3 · 여러 지점·사람 합계)과 정리 중인 질문의 조회 거래가 겹쳐 4개에서 올림 · 조회는 앱이 늘 읽기 전용 거래로 연다 — 역할 기본값으로 걸지 않는다: 마이그레이션의 읽기 전용 설정은 지점 보기 가드가 막는다). 🔴 그래도 모든 역할은 PUBLIC의 구성원이다(적대 리뷰 1번) — 그래서 아래 'PUBLIC 실행권 회수'와 사후 확인을 둔다. env `ASSISTANT_DATABASE_URL`(거래 방식 풀러 6543 · 비밀번호는 저장소 밖).
 - **보기 `assistant.<표>`** — `refresh_views()`가 public의 지점 칸 있는 표마다 만든다(소유자 postgres · `security_barrier` · `where tenant_id = (select bound_tenant())` — initplan이라 한 번만 계산). 지점 칸 없는 셋은 부모로(`consultation_ai_analysis` · `notice_popup_translations` · `tenants` 내 줄). 나머지 지점 칸 없는 표(슈퍼관리자 · 연동 PC 배포 등)는 학원 자료가 아니라 없다.
-  - 비밀 칸 = 이름 패턴(`token|secret|password|passwd|p256dh|api_key|signature`, `_hash`, `auth`) + 명시 목록(`push_subscriptions.endpoint`) · 가림 = `tenant_settings.data`의 `operations.seatPins` · 제외 표 = 비서 대화 · 옛 대화형 비서 대화 · 운영 콘솔 보기 기록.
+  - 비밀 칸 = 이름 패턴(`token|secret|password|passwd|p256dh|api_key|signature`, `_hash`, `auth`) + 명시 목록(`push_subscriptions.endpoint`) · 가림 = `tenant_settings.data`의 `operations.seatPins` · 주민번호 뒷자리 6개(1차 DB 보기 = `academy_documents.form_data` 이력서 `personal.residentId` · `payslips.print_payload` `teacher.residentRegNo` + 두 칸의 `######-#######` 꼴 → `891003-1******` · s2_0067 · 🔴 가림식은 pg_catalog 함수만 — 실행 계획 검사가 다른 스키마 함수를 거절한다 / 2차 = 조회 결과가 AI로 가기 전 모든 글자 칸 `pii-mask.ts`(executor `cell`) — 줄표 없이·띄어·긴 줄표·전각, 생년월일 꼴 앞자리일 때만) · 직원 등록 QR 공유키(`staff_intake_token` 서식의 `token`) · 제외 표 = 비서 대화 · 옛 대화형 비서 대화 · 운영 콘솔 보기 기록.
   - 🔴 **빠짐없이** = 질문마다 `assistant_refresh_views_if_stale()` — public 표·칸(타입)·정책 표의 지문이 바뀌었으면 다시 만든다(새 표 · 새 칸이 다음 질문부터 보인다).
 - **지점 묶기 = DB가 서명한 증표**(적대 리뷰 2번 반영 — 처음 설계는 같은 역할이 bind를 부르는 방식이라 읽기 전용 한 겹에 달려 있었다):
   - 앱 서버가 서버 키로 `public.assistant_issue_binding(지점)`(service_role만 실행) → 증표 `<지점>.<만료 epoch>.<HMAC-SHA256>`(5분 · 서명 키는 `assistant_private.signing_key` — 누구에게도 권한 없음).
