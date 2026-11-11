@@ -232,9 +232,15 @@ export function reasonFacetLabel(value: string): string | null {
 export type TeacherJudge = {
   /** 그만둘 때 다니던 반의 그날 담임(`exit-homeroom.ts` — 퇴원생 관리 차트의 '담당선생님'과 같은 기준). */
   homeroomOf(studentId: string, subject: string, date: string): string[];
+  /** 퇴원생 관리 차트의 담당(과거 달) — 있으면 이것이 이긴다(`sheet-teachers.ts`). */
+  sheetTeachersOf?(name: string, subject: string, months: readonly string[]): string[] | null;
 };
 
-type JudgeRow = { key: string; studentId: string; date: string | null; subjects: readonly string[]; systemBulk: boolean; cleanup: boolean };
+type JudgeRow = {
+  key: string; studentId: string; date: string | null; subjects: readonly string[]; systemBulk: boolean; cleanup: boolean;
+  /** 시트 줄 찾기 재료 — 이름과 센 달(퇴원월). 없으면 시트를 보지 않는다. */
+  name?: string; countDate?: string | null;
+};
 
 /** 줄 하나의 판정 — 과목 → 그 과목 퇴원을 퇴원율에 센 선생님 id(빈 배열 = 그 과목은 담당 미반영). */
 export type RowTeachers = ReadonlyMap<string, readonly string[]>;
@@ -243,7 +249,8 @@ export type RowTeachers = ReadonlyMap<string, readonly string[]>;
  * 줄 → 과목마다 그 과목을 그만둘 때 다니던 반의 그날 담임 id(시간표 X와 같은 판정 `homeroomOf`). 🔴 강사평가 퇴원율이 센 선생님이
  * 아니다(원장 2026-11-11 — 퇴원율은 지난달 담당·교시 담당까지 붙어 퇴원생 관리 차트와 어긋났다). 🔑 줄의 **모든 과목**을 판정해 둔다 — 걸린 과목 필터는 읽는 쪽이
  * 고른다(`teacherFacetsIn` — 과목 카드가 과목마다 다시 물어도 같은 판정이라 칸 숫자 = 눌러 거른 명단 수).
- * - 장부 정리 · 날짜 미상(시스템 정리) · 날짜 없는 줄 = 모든 과목 빈 배열('담당 미반영' — X도 이 줄을 세지 않는다)
+ * - 날짜 미상(시스템 정리) · 날짜 없는 줄 = 모든 과목 빈 배열('담당 미반영')
+ * - 장부 정리(일괄 퇴원 메모)도 판정한다(원장 2026-11-11 — 퇴원생 관리 차트는 그 학생들을 담임 앞으로 적는다 · 사유 통계에서만 뺀다)
  * - `from`(가장 이른 날)보다 앞 · 오늘 뒤 줄 = 판정하지 않는다(결과에 없음 — 화면이 '강사를 가리지 않은 줄'로 따로 센다)
  */
 export function attributeTeachers<R extends JudgeRow>(
@@ -253,13 +260,15 @@ export function attributeTeachers<R extends JudgeRow>(
 ): Map<string, RowTeachers> {
   const out = new Map<string, RowTeachers>();
   for (const r of rows) {
-    if (r.cleanup || r.systemBulk || !r.date) {
+    if (r.systemBulk || !r.date) {
       out.set(r.key, new Map(r.subjects.map((s) => [s, []])));
       continue;
     }
     if (r.date < opts.from || r.date > opts.today) continue;
     const date = r.date;
-    out.set(r.key, new Map(r.subjects.map((s) => [s, judge.homeroomOf(r.studentId, s, date)])));
+    const months = [...new Set([r.countDate, date].filter((d): d is string => !!d).map((d) => d.slice(0, 7)))];
+    const sheetOf = (s: string) => (r.name && judge.sheetTeachersOf ? judge.sheetTeachersOf(r.name, s, months) : null);
+    out.set(r.key, new Map(r.subjects.map((s) => [s, sheetOf(s) ?? judge.homeroomOf(r.studentId, s, date)])));
   }
   return out;
 }

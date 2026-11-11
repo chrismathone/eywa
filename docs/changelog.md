@@ -1,5 +1,12 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-11 — 퇴원 담당: 2026-10까지는 퇴원생 관리 차트가 정답(원장 "시트가 지금 정확한 데이터니까")
+
+- [`sheet-teachers.ts`](../src/features/withdrawals/sheet-teachers.ts)(순수 · Vitest) + `server/sheet-teachers.ts`(시트 읽기 · 10분 캐시 · 8초 · 실패 = 에이와 판정) · `loadExitTeacherJudge().sheetTeachersOf` → `attributeTeachers`·`getExitOverlay`가 먼저 본다. 못 이은 시트 이름은 `sheet:이름`(`teacherNames`가 이름 그대로).
+- 운영실(대시보드) 퇴원 줄도 같은 규칙(`withSheetWithdrawals` · '등록·퇴원 추이'·'3개월 내 퇴원'·KPI 앞 달 줄 · 학생 단위) · 잇기 한 벌 `sheet-match.ts`.
+- 퇴원관리 명단·통계 2026-01~10 = 시트 줄 그대로(`mergeSheetExits` · 이어지면 에이와 줄 · 시트에만 = 시트 글 줄 · 에이와에만 = 뺌) — 달×과목·선생님별·줄 담당 100% 일치(실측).
+- 에이와 판정 보완: 담임 이력이 빈 반 = 보고서 30일 최다 작성자(`reportWriterOn`) · 장부 정리 퇴원도 판정. 결정 본문 = [`decisions/students.md`](decisions/students.md). 시트 263줄 대조: 줄 있는 208줄 중 담당 일치 55.3% → 99.5%.
+
 ## 2026-11-11 — 학원 비서 멘트 시험 반영(숫자 범위 · 기록 없음 · 사람 평가 · 묻는 사람 · 비교 답 · 날값 · 열 폭)
 
 - 결정 본문 = [`features/academy-assistant.md`](features/academy-assistant.md) §7-9. 운영과 같은 조건 28회 시험 → Claude·Codex 따로 채점·토론 → 고칠 곳 11개 → 같은 28문항 재시험(v2) → 원장 화면 피드백 반영(v3) · 보고서·원자료는 저장소 밖(`~/eywa-data/assistant-ment-eval-2026-11-11/`).

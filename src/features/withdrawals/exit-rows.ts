@@ -66,6 +66,8 @@ export type ExitRow = {
   activeSubjects?: string[];
   /** 수강종료 줄 — 학생이 휴원 중. */
   onHold?: boolean;
+  /** 퇴원생 관리 차트에만 있는 줄(에이와 학생 연결 없음 — `sheet-exit-rows.ts`). */
+  fromSheet?: boolean;
 };
 
 export type RangeKey = "all" | "month" | "30d" | "90d" | "year" | "custom";
