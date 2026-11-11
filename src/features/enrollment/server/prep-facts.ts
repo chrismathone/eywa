@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 
 /** 세션 client와 admin client 어느 쪽이든 받는다(공개 접수 자동 생성 경로용). */
 type SupabaseLike = Awaited<ReturnType<typeof createClient>>;
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { getTenantSettings, getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { GENDER_OPTIONS } from "@/features/enrollment/form-config";
@@ -23,12 +23,14 @@ import {
   normalizeSchool,
   phoneVariants,
   rankPrepClasses,
+  tuitionFitsLevel,
   type PrepClassFact,
   type PrepFacts,
 } from "@/features/enrollment/prep-brief";
 import type { IntakeChecklist } from "@/features/enrollment/intake-checklist";
 import { settingsToPeriodsConfig, weekdayFullPeriodMinutes } from "@/features/timetable/lib/periods";
 import { kstToday } from "@/lib/date-kst";
+import { timeToMin } from "@/features/timetable/lib/ten-minute-grid";
 
 /**
  * 사전 브리프의 **사실 스냅샷 수집** — 상담 1건 기준으로 aywa DB에서 상담자가 알아야 할 것을 전부 모은다.
@@ -38,7 +40,7 @@ import { kstToday } from "@/lib/date-kst";
  * 성능 규칙 준수:
  * - 서로 독립인 조회는 전부 `Promise.all` (B4).
  * - 인원 집계는 `count: exact, head: true`로 행을 안 받는다 (B2 — 전건 fetch는 1000행에서 조용히 잘린다).
- * - 반 id 다건 조회는 `fetchInChunks` (B3 — 큰 `.in()`은 414 + error 삼킴).
+ * - 반 id 다건 조회는 `fetchAllPagedInChunks` (B3 — 큰 `.in()`은 414 + error 삼킴 · 청크 안에서도 1000행 절단 — B2).
  *
  * ⚠️ 개인정보: 학부모 전화번호·주소·학생 연락처는 **facts에 담지 않는다**(브리프는 AI 프롬프트로 나가고
  *   인쇄물로 출력된다). 형제자매 후보는 연락처 매칭으로 *찾되* 결과는 이름·학년·학교만 싣는다.
@@ -63,7 +65,8 @@ export async function collectPrepFacts(
     )
     .eq("id", consultationId);
   if (opts.tenantId) head = head.eq("tenant_id", opts.tenantId);
-  const { data: c } = await head.maybeSingle();
+  const { data: c, error: headError } = await head.maybeSingle();
+  if (headError) throw new Error(`상담을 읽지 못했습니다: ${headError.message}`);
   if (!c) return null;
 
   // 이후 모든 조회의 격리 키 — 세션 경로에선 RLS와 이중 방어, admin 경로에선 유일한 방어선이다.
@@ -79,8 +82,11 @@ export async function collectPrepFacts(
   // 형제 후보 조회는 하이픈/무하이픈 두 포맷을 함께 던진다(본인은 아래에서 제외).
   const phoneCandidates = phoneVariants(c.parent_phone);
   // 같은 학교 재원생 집계 — "칠성초등학교"(QR) ↔ "칠성초"(학생 DB) 분열 때문에 정규화 변형을 함께 본다.
+  // 양방향 — QR이 축약형('칠성초')이고 학생 DB가 전체형('칠성초등학교')인 경우도 있다(검수 2026-11-11 · Codex).
+  const short = normalizeSchool(school);
+  const full = short?.replace(/초$/, "초등학교").replace(/중$/, "중학교").replace(/고$/, "고등학교") ?? null;
   const schoolCandidates = school
-    ? [...new Set([school, normalizeSchool(school)].filter((v): v is string => !!v))]
+    ? [...new Set([school, short, full].filter((v): v is string => !!v))]
     : [];
 
   // 전부 서로 독립 → 한 번에(B4). 각 쿼리는 자기 안에서 count/head 또는 좁은 필터를 쓴다.
@@ -97,7 +103,7 @@ export async function collectPrepFacts(
     supabase
       .from("classes")
       .select(
-        `id, class_name, subject, notes, classroom:classroom_id ( capacity ),
+        `id, class_name, subject, notes, english_track,
          teacher:teacher_id ( display_name )`,
       )
       .eq("tenant_id", tenantId)
@@ -175,18 +181,31 @@ export async function collectPrepFacts(
     findSamePersonConsultations(supabase, c, { tenantId, limit: 5 }).then((data) => ({ data })),
   ]);
 
-  // 현원 — 표시 후보가 될 반만 청크 조회(B3). 전건 enrollments fetch는 절단 위험(B2).
+  // 🔴 조회 실패를 '반 없음'·'0명'으로 삼키지 않는다 — 거짓 사실이 브리프에 동결됐다(검수 2026-11-11 · #138). 실패면 던져
+  //    생성이 실패로 끝나고 직전 브리프가 남는다.
+  for (const [what, r] of [["개설 반", classRows], ["수강료 단가표", tuitionRows], ["교재", textbookRows], ["재원생 수", totalCount], ["같은 학교 재원생 수", sameSchoolCount], ["같은 학년 재원생 수", sameGradeCount]] as const) {
+    const error = (r as { error?: { message?: string } | null }).error;
+    if (error) throw new Error(`브리프 자료(${what})를 읽지 못했습니다: ${error.message ?? ""}`);
+  }
+
+  // 현원 — 표시 후보가 될 반만 청크 + 페이지 조회(B3 · 청크 안에서도 1000행이 넘으면 잘린다 — fetchAllPagedInChunks).
+  // 🔴 지금 다니는 수강만 센다: 시작일 ≤ 오늘 · (끝 없음 또는 끝 ≥ 오늘) — 예전엔 끝 없음만 세서 시작 전 예정 수강이 들어가고
+  //    끝날 날이 정해진 지금 수강은 빠졌다(검수 2026-11-11 · Codex).
+  const today = kstToday();
   const classes = classRows.data ?? [];
   const classIds = classes.map((row) => row.id);
   const enrolledByClass = new Map<string, number>();
   if (classIds.length > 0) {
-    const enrollments = await fetchInChunks<{ class_id: string }>(classIds, (chunk) =>
+    const enrollments = await fetchAllPagedInChunks<{ class_id: string }>(classIds, (chunk, from, to) =>
       supabase
         .from("enrollments")
-        .select("class_id")
+        .select("id, class_id")
         .eq("tenant_id", tenantId)
-        .is("end_date", null)
-        .in("class_id", chunk),
+        .lte("start_date", today)
+        .or(`end_date.is.null,end_date.gte.${today}`)
+        .in("class_id", chunk)
+        .order("id")
+        .range(from, to),
     );
     for (const e of enrollments) enrolledByClass.set(e.class_id, (enrolledByClass.get(e.class_id) ?? 0) + 1);
   }
@@ -195,41 +214,9 @@ export async function collectPrepFacts(
   // ⚠️ `class_schedules`는 **운영 이력을 함께 담는다**([[#88]] 실측 1,068행 중 480행 만료) → 끝난 배치를
   //    같이 읽으면 상담지에 **지금 안 하는 요일·시각**이 찍힌다. 살아 있는 행만 본다.
   // ⚠️ end_time도 받는다 — 반교시 판정(교시 하나를 통째로 채우는 날이 있는가)이 길이를 봐야 한다.
-  const today = kstToday();
-  const slotsByClass = new Map<string, { day: string; start: string | null; end: string | null }[]>();
-  if (classIds.length > 0) {
-    const scheds = await fetchInChunks<{
-      class_id: string;
-      day_of_week: string;
-      start_time: string | null;
-      end_time: string | null;
-    }>(classIds, (chunk) =>
-      supabase
-        .from("class_schedules")
-        .select("class_id, day_of_week, start_time, end_time")
-        .eq("tenant_id", tenantId)
-        .in("class_id", chunk)
-        .or(`valid_to.is.null,valid_to.gte.${today}`),
-    );
-    for (const s of scheds) {
-      (slotsByClass.get(s.class_id) ?? slotsByClass.set(s.class_id, []).get(s.class_id)!).push({
-        day: s.day_of_week,
-        start: s.start_time,
-        end: s.end_time,
-      });
-    }
-  }
-  /** 라벨용 = 요일별 **가장 이른 시각** 1건. ⚠️ 같은 요일에 연속 교시 슬롯이 여러 개다(실측 106반 중 102반) —
-   *  "첫 행 승자"로 두면 PostgREST 반환 순서에 따라 등원 시각이 17:15로 찍힌다. */
-  const scheduleOf = (classId: string): { day: string; start: string | null }[] => {
-    const out: { day: string; start: string | null }[] = [];
-    for (const s of slotsByClass.get(classId) ?? []) {
-      const prev = out.find((x) => x.day === s.day);
-      if (!prev) out.push({ day: s.day, start: s.start });
-      else if (s.start && (!prev.start || s.start < prev.start)) prev.start = s.start;
-    }
-    return out;
-  };
+  // 🔴 지금 유효한 배치(valid_from ≤ 오늘)와 앞으로 시작하는 배치를 가른다(#88 · 검수 2026-11-11) — 예전엔 끝나지 않은 행을
+  //    모두 모아 시간표 가져오기로 요일을 바꿔 둔 반이 적용일 전까지 '월·화·목·금'처럼 없는 주 4회로 찍혔다.
+  const slotsByClass = await loadClassSlots(supabase, tenantId, classIds, today);
   // 완교시 기준(분)은 **과목별**로 다르다(영어는 그룹이 없어 null=판정 안 함) — 한 번만 계산해 재사용.
   const fullPeriodCache = new Map<string, number | null>();
   const fullPeriodMinOf = (subject: string): number | null => {
@@ -240,26 +227,27 @@ export async function collectPrepFacts(
     return v;
   };
 
-  const candidates: (Omit<PrepClassFact, "gradeMatched"> & { halfPeriod: boolean; closedOut: boolean })[] = classes.map((row) => {
+  const candidates: (Omit<PrepClassFact, "gradeMatched"> & { halfPeriod: boolean; closedOut: boolean; eie: boolean })[] = classes.map((row) => {
     const teacher = (Array.isArray(row.teacher) ? row.teacher[0] : row.teacher) as
       | { display_name?: string }
       | undefined;
-    const room = (Array.isArray(row.classroom) ? row.classroom[0] : row.classroom) as
-      | { capacity?: number | null }
-      | undefined;
+    const slots = slotsByClass.get(row.id);
     return {
       id: row.id,
       className: row.class_name,
       subjectLabel: subjectMaps.labelOf(row.subject),
       teacherName: teacher?.display_name ?? null,
-      scheduleLabel: formatSchedule(scheduleOf(row.id)),
-      seats: room?.capacity ?? null,
+      scheduleLabel: slots?.label ?? null,
+      // 🔴 정원은 싣지 않는다 — 강의실 수용 인원은 반 모집 정원이 아니다(운영 후보 354개 중 319개가 10 · 검수 2026-11-11).
+      seats: null,
       enrolled: enrolledByClass.get(row.id) ?? 0,
       notes: row.notes ?? null,
       // 반교시 반은 제안 후보에서 뺀다(원장 2026-08-04) — 판정 근거는 시간 길이뿐, 반 이름이 아니다.
-      halfPeriod: isHalfPeriodClass(slotsByClass.get(row.id) ?? [], fullPeriodMinOf(row.subject)),
-      // 배치가 모두 끝났고 지금 다니는 학생도 없는 반(끝난 특강 등)은 후보에서 뺀다 — `slotsByClass`는 위에서 살아 있는 행만 담았다.
-      closedOut: isClosedOutClass(slotsByClass.get(row.id)?.length ?? 0, enrolledByClass.get(row.id) ?? 0),
+      halfPeriod: isHalfPeriodClass(slots?.slots ?? [], fullPeriodMinOf(row.subject)),
+      // 배치가 모두 끝났고(지금·앞으로 둘 다 없음) 지금 다니는 학생도 없는 반(끝난 특강 등)은 후보에서 뺀다.
+      closedOut: isClosedOutClass(slots?.liveCount ?? 0, enrolledByClass.get(row.id) ?? 0),
+      // EiE(초등 영어 프로그램)는 중·고 학생 후보에서 뺀다(rankPrepClasses).
+      eie: (row as { english_track?: string | null }).english_track === "eie",
     };
   });
 
@@ -268,27 +256,45 @@ export async function collectPrepFacts(
   // ⚠️ 본인 제외 — 연락처 정규화를 고치면 이미 재원 중인 **상담 당사자 본인**이 자기 "형제자매 후보"로
   //    뜬다(QR 기존재원생 접수는 흔하다). 연결된 학생 id로 걸러낸다.
   // 상담 당사자가 이미 재원생이면 그 사실과 현재 수강 반을 사실로 싣는다(감사 #9d).
-  let enrolledNow: { classNames: string[] } | null = null;
+  let enrolledNow: { classNames: string[]; classLines?: string[] } | null = null;
+  // 재원생 본인의 지금 반 · 그 수업 시간 — 후보에서 그 반과 시간이 겹치는 반을 뺀다(합의 8 · 적대 리뷰 2026-11-11).
+  const ownClassIds = new Set<string>();
+  const ownBusy: { day: string; start: string | null; end: string | null }[] = [];
   if (linkedStudentId) {
-    const { data: selfRow } = await supabase
+    const { data: selfRow, error: selfError } = await supabase
       .from("students")
-      .select("id, status, enrollments:enrollments ( end_date, class:class_id ( class_name ) )")
+      .select("id, status, enrollments:enrollments ( start_date, end_date, class_id, class:class_id ( class_name, subject ) )")
       .eq("tenant_id", tenantId)
       .eq("id", linkedStudentId)
       .maybeSingle();
+    if (selfError) throw new Error(`브리프 자료(재원생 본인)를 읽지 못했습니다: ${selfError.message}`);
     if (selfRow?.status === "enrolled") {
       const rows = (selfRow.enrollments ?? []) as {
+        start_date: string | null;
         end_date: string | null;
-        class: { class_name?: string } | { class_name?: string }[] | null;
+        class_id: string | null;
+        class: { class_name?: string; subject?: string } | { class_name?: string; subject?: string }[] | null;
       }[];
-      const names = rows
-        .filter((r) => r.end_date == null)
-        .map((r) => {
-          const cl = (Array.isArray(r.class) ? r.class[0] : r.class) as { class_name?: string } | null;
-          return cl?.class_name ?? null;
-        })
-        .filter((n): n is string => !!n);
-      enrolledNow = { classNames: [...new Set(names)] };
+      // 지금 다니는 수강(현원과 같은 기준)
+      const current = rows.filter((r) => (!r.start_date || r.start_date <= today) && (r.end_date == null || r.end_date >= today));
+      const byClass = new Map<string, string>();
+      const otherSubject = new Set<string>(); // 상담 과목과 다른 과목 반 — 시간 겹침은 이 반들만 본다(같은 과목 반 변경 상담이면 같은 시간대 수준별 반도 후보다 · 재리뷰)
+      for (const r of current) {
+        const cl = (Array.isArray(r.class) ? r.class[0] : r.class) as { class_name?: string; subject?: string } | null;
+        if (r.class_id && cl?.class_name) byClass.set(r.class_id, cl.class_name);
+        if (r.class_id && cl?.subject && cl.subject !== c.subject) otherSubject.add(r.class_id);
+      }
+      // 지금 수업의 요일·시각 — 겹치는 반을 제안하지 않게(검수 2026-11-11 · B11).
+      const ownSlots = await loadClassSlots(supabase, tenantId, [...byClass.keys()], today);
+      for (const id of byClass.keys()) ownClassIds.add(id);
+      for (const [id, v] of ownSlots) if (otherSubject.has(id)) ownBusy.push(...v.slots);
+      enrolledNow = {
+        classNames: [...new Set(byClass.values())],
+        classLines: [...byClass].map(([id, name]) => {
+          const label = ownSlots.get(id)?.label;
+          return label ? `${name} ${label}` : name;
+        }),
+      };
     }
   }
 
@@ -297,14 +303,18 @@ export async function collectPrepFacts(
   }[]).filter((s) => s.id !== linkedStudentId);
   const siblingClasses = new Map<string, string[]>();
   if (siblingStudents.length > 0) {
-    const rows = await fetchInChunks<{ student_id: string; class: { class_name?: string } | { class_name?: string }[] | null }>(
+    const rows = await fetchAllPagedInChunks<{ student_id: string; class: { class_name?: string } | { class_name?: string }[] | null }>(
       siblingStudents.map((s) => s.id),
-      (chunk) =>
+      (chunk, from, to) =>
         supabase
           .from("enrollments")
-          .select("student_id, class:class_id ( class_name )")
-          .is("end_date", null)
-          .in("student_id", chunk),
+          .select("id, student_id, class:class_id ( class_name )")
+          .eq("tenant_id", tenantId)
+          .lte("start_date", today)
+          .or(`end_date.is.null,end_date.gte.${today}`)
+          .in("student_id", chunk)
+          .order("id")
+          .range(from, to),
     );
     for (const row of rows) {
       const cls = (Array.isArray(row.class) ? row.class[0] : row.class) as { class_name?: string } | null;
@@ -335,7 +345,8 @@ export async function collectPrepFacts(
       enrolledNow,
     },
     parent: { name: c.parent_name?.trim() || null, relation: c.parent_relation?.trim() || null },
-    checklist: checklist ? checklistToPairs(checklist) : [],
+    // 학부모가 '기타'에 직접 쓴 글은 선택지와 따로 — 사실 블록에서 학부모 글 묶음으로 간다(검수 2026-11-11 · Codex).
+    checklist: checklist ? checklistToPairs(checklist, { separateEtc: true }) : [],
     habits: checklist ? checklistHabits(checklist) : [],
     priorConsults: (priorRows.data ?? []).map((p) => ({
       date: (p.consultation_date as string | null) ?? kstDate(p.consulted_at as string),
@@ -348,9 +359,15 @@ export async function collectPrepFacts(
       grade: s.grade ?? null,
       classNames: siblingClasses.get(s.id) ?? [],
     })),
-    classes: rankPrepClasses(candidates, { subjectKeyLabel: subjectLabel, grade }),
+    classes: rankPrepClasses(
+      candidates.filter((c) => !ownClassIds.has(c.id) && !overlapsBusy(slotsByClass.get(c.id)?.slots ?? [], ownBusy)),
+      { subjectKeyLabel: subjectLabel, grade },
+    ),
+    // 🔴 과목·학교급을 먼저 거른 뒤 12행 — 예전엔 과목만 거르고 정렬 앞 12행을 잘라 초등 수학 상담에 중·고 단가만, 중등 영어에
+    //    EIE(초등 프로그램) 단가만 실렸다(검수 2026-11-11 · #84). 다른 학교급을 이름에 적은 단가는 빼고, EIE는 초등·미취학에만.
     tuition: (tuitionRows.data ?? [])
       .filter((t) => !subjectLabel || matchesSubjectCategory(t.category as string, subjectLabel))
+      .filter((t) => tuitionFitsLevel(`${t.category} ${t.name}`, gradeToken(grade)))
       .slice(0, 12)
       .map((t) => ({
         category: t.category as string,
@@ -396,4 +413,73 @@ export async function collectPrepFacts(
 function kstDate(iso: string | null): string | null {
   if (!iso) return null;
   return new Date(iso).toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+}
+
+type SlotRow = { class_id: string; day_of_week: string; start_time: string | null; end_time: string | null; valid_from: string | null; valid_to: string | null };
+
+/**
+ * 반별 시간표 — 지금 유효한 배치(valid_from ≤ 오늘 ≤ valid_to)만 라벨·반교시 판정에 쓴다. 지금 배치가 없으면 가장 이른 앞으로의
+ * 배치를 'M월 D일부터 …'로(배치 적용일 — 개강일·등원 시작일이 아니다). `liveCount` = 지금 + 앞으로 배치 수(끝난 반 판정).
+ * 청크 × 페이지 조회(이력 표라 청크 하나가 1000행을 넘는다 — CLAUDE.md B2).
+ */
+async function loadClassSlots(
+  supabase: SupabaseLike,
+  tenantId: string,
+  classIds: string[],
+  today: string,
+): Promise<Map<string, { label: string | null; slots: { day: string; start: string | null; end: string | null }[]; liveCount: number }>> {
+  const out = new Map<string, { label: string | null; slots: { day: string; start: string | null; end: string | null }[]; liveCount: number }>();
+  if (classIds.length === 0) return out;
+  const rows = await fetchAllPagedInChunks<SlotRow>(classIds, (chunk, from, to) =>
+    supabase
+      .from("class_schedules")
+      .select("id, class_id, day_of_week, start_time, end_time, valid_from, valid_to")
+      .eq("tenant_id", tenantId)
+      .in("class_id", chunk)
+      .or(`valid_to.is.null,valid_to.gte.${today}`)
+      .order("id")
+      .range(from, to),
+  );
+  const byClass = new Map<string, SlotRow[]>();
+  for (const r of rows) (byClass.get(r.class_id) ?? byClass.set(r.class_id, []).get(r.class_id)!).push(r);
+  for (const [id, list] of byClass) {
+    const current = list.filter((r) => !r.valid_from || r.valid_from.slice(0, 10) <= today);
+    const upcoming = list.filter((r) => r.valid_from && r.valid_from.slice(0, 10) > today);
+    let use = current;
+    let prefix = "";
+    if (current.length === 0 && upcoming.length > 0) {
+      const first = upcoming.map((r) => r.valid_from!.slice(0, 10)).sort()[0]!;
+      use = upcoming.filter((r) => r.valid_from!.slice(0, 10) === first);
+      prefix = `${Number(first.slice(5, 7))}월 ${Number(first.slice(8, 10))}일부터(예정) `;
+    }
+    const slots = use.map((r) => ({ day: r.day_of_week, start: r.start_time, end: r.end_time }));
+    // 라벨용 = 요일별 **가장 이른 시각** 1건(같은 요일에 연속 교시 슬롯이 여러 개다 — 실측 106반 중 102반).
+    const firsts: { day: string; start: string | null }[] = [];
+    for (const s of slots) {
+      const prev = firsts.find((x) => x.day === s.day);
+      if (!prev) firsts.push({ day: s.day, start: s.start });
+      else if (s.start && (!prev.start || s.start < prev.start)) prev.start = s.start;
+    }
+    const label = formatSchedule(firsts);
+    out.set(id, { label: label ? `${prefix}${label}` : null, slots, liveCount: current.length + upcoming.length });
+  }
+  return out;
+}
+
+/** 두 시간표가 같은 요일에 시간이 겹치는가(지금 다니는 수업과 겹치는 반은 제안하지 않는다). 시각을 모르면 겹치지 않는 것으로 본다. */
+function overlapsBusy(
+  slots: readonly { day: string; start: string | null; end: string | null }[],
+  busy: readonly { day: string; start: string | null; end: string | null }[],
+): boolean {
+  for (const a of slots) {
+    const as = timeToMin(a.start ?? ""), ae = timeToMin(a.end ?? "");
+    if (as == null || ae == null) continue;
+    for (const b of busy) {
+      if (a.day !== b.day) continue;
+      const bs = timeToMin(b.start ?? ""), be = timeToMin(b.end ?? "");
+      if (bs == null || be == null) continue;
+      if (as < be && bs < ae) return true;
+    }
+  }
+  return false;
 }

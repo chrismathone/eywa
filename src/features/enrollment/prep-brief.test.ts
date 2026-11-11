@@ -16,6 +16,8 @@ import {
   rankPrepClasses,
   seatsLeft,
   validatePrepBrief,
+  tuitionFitsLevel,
+  checklistToPairs,
   type PrepBrief,
   type PrepFacts,
 } from "./prep-brief";
@@ -78,12 +80,19 @@ const brief = (over: Record<string, unknown> = {}) => ({
       response: "현재 진도를 먼저 진단한 뒤 어디를 채울지 설명한다.",
     },
   ],
-  proposal: "중1 수학 A 반을 제안한다. 월·수·금 16:30 수업이고 잔여 3석이다.",
+  proposal: "중1 수학 A 반을 후보로 제안한다. 월·수·금 16:30 수업이고 현원 9명이다.",
   objections: [{ objection: "비교해 보고 결정하겠다", answer: "필요한 자료를 정리해 드린다." }],
   closing: "다음 단계로 레벨테스트 일정을 잡고 마무리한다.",
   cautions: ["학습 행동 자가평가가 낮으니 아이를 탓하는 표현을 피할 것"],
   ...over,
 });
+
+// 통과 = 고친 곳 없이 원문 그대로(적대 리뷰 2026-11-11 — `ok`만 보면 칸이 기본 문장으로 바뀌어도 통과했다).
+const intact = (over: Record<string, unknown>, f = facts()) => {
+  const r = validatePrepBrief(brief(over), f);
+  expect(r.ok && r.repairs).toEqual([]);
+  return r.ok ? r.value : null;
+};
 
 describe("gradeToken", () => {
   it("학제+숫자를 축약 토큰으로", () => {
@@ -205,7 +214,9 @@ describe("formatSchedule", () => {
 describe("seatsLeft / classLine", () => {
   it("정원 미지정은 null — 0석으로 단정하지 않는다", () => {
     expect(seatsLeft({ seats: null, enrolled: 5 })).toBeNull();
-    expect(classLine({ ...facts().classes[0]!, seats: null, enrolled: 5 })).toContain("정원 미지정");
+    // 정원·잔여석은 줄에 싣지 않는다(강의실 수용 인원이라 반 정원이 아니다 — 검수 2026-11-11) — 옛 스냅숏의 seats가 있어도 현원만.
+    expect(classLine({ ...facts().classes[0]!, seats: null, enrolled: 5 })).toContain("현원 5명");
+    expect(classLine({ ...facts().classes[0]!, seats: 10, enrolled: 5 })).not.toMatch(/정원|잔여/);
   });
   it("잔여석은 음수로 내려가지 않는다", () => {
     expect(seatsLeft({ seats: 10, enrolled: 13 })).toBe(0);
@@ -213,55 +224,56 @@ describe("seatsLeft / classLine", () => {
 });
 
 describe("validatePrepBrief — grounding", () => {
-  it("사실에 근거한 브리프는 통과", () => {
-    const r = validatePrepBrief(brief(), facts());
-    expect(r.ok).toBe(true);
+  it("사실에 근거한 브리프는 고친 곳 없이 그대로", () => {
+    const v = intact({});
+    expect(v?.proposal).toContain("현원 9명");
   });
 
-  it("사실에 없는 금액을 지어내면 탈락", () => {
+  // 🔴 걸린 곳만 고친다(검수 2026-11-11) — 단일 칸은 기본 문장으로, 목록 항목은 뺀다. 전체 폴백은 최소 개수 아래일 때만.
+  it("사실에 없는 금액을 지어내면 그 칸을 기본 문장으로", () => {
     const r = validatePrepBrief(
       brief({ proposal: "중1 수학 A 반은 월 150000원입니다." }),
       facts(),
     );
-    expect(r.ok).toBe(false);
-    expect(r.ok === false && r.reason).toContain("근거 없는 숫자");
+    expect(r.ok).toBe(true);
+    expect(r.ok && r.value.proposal).not.toContain("150000");
+    expect(r.ok && r.repairs.join()).toContain("근거 없는 금액");
   });
 
-  it("사실에 없는 인원수를 지어내면 탈락", () => {
+  it("사실에 없는 인원수를 지어내면 그 칸을 기본 문장으로", () => {
     const r = validatePrepBrief(brief({ closing: "같은 학교 학생이 87명 다니고 있습니다." }), facts());
-    expect(r.ok).toBe(false);
+    expect(r.ok && r.value.closing).not.toContain("87명");
   });
 
-  it("사실에 있는 숫자는 그대로 쓸 수 있다", () => {
-    const r = validatePrepBrief(brief({ closing: "같은 학교 재원생이 14명 있습니다." }), facts());
-    expect(r.ok).toBe(true);
+  it("사실에 있는 숫자는 그대로 쓸 수 있다 — 사실에 없는 인원(15명)은 고친다", () => {
+    expect(intact({ closing: "같은 학교 재원생이 14명 있습니다." })?.closing).toContain("14명");
+    const r = validatePrepBrief(brief({ closing: "같은 학교 재원생이 15명 있습니다." }), facts());
+    expect(r.ok && r.value.closing).not.toContain("15명");
   });
 
-  it("천 단위 구분 기호가 붙은 단가표 금액도 통과", () => {
-    const r = validatePrepBrief(brief({ proposal: "주3회 280,000원 기준으로 안내한다." }), facts());
-    expect(r.ok).toBe(true);
+  it("천 단위 구분 기호가 붙은 단가표 금액도 그대로", () => {
+    expect(intact({ proposal: "주3회 280,000원 기준으로 안내한다." })?.proposal).toContain("280,000원");
   });
 
-  it("한 자리 숫자는 일반 표현이라 허용", () => {
-    const r = validatePrepBrief(brief({ closing: "다음 단계를 2가지로 정리해 마무리한다." }), facts());
-    expect(r.ok).toBe(true);
+  it("한 자리 숫자는 일반 표현이라 그대로", () => {
+    expect(intact({ closing: "다음 단계를 2가지로 정리해 마무리한다." })?.closing).toContain("2가지");
   });
 
-  it("사실에 없는 영문 토큰(raw 코드·환각 반명)은 탈락", () => {
+  it("사실에 없는 영문 토큰(raw 코드·환각 반명)은 그 칸을 기본 문장으로", () => {
     const r = validatePrepBrief(brief({ headline: "중1 math 진도 지연 상담" }), facts());
-    expect(r.ok).toBe(false);
-    expect(r.ok === false && r.reason).toContain("근거 없는 영문");
+    expect(r.ok && r.value.headline).not.toContain("math");
+    expect(r.ok && r.repairs.join()).toContain("근거 없는 영문");
   });
 
-  it("사실 블록에 등장한 영문(반 이름 등)은 허용", () => {
+  it("사실 블록에 등장한 영문(반 이름 등)은 그대로", () => {
     const f = facts();
     f.classes[0]!.className = "EIE M3";
-    const r = validatePrepBrief(brief({ proposal: "EIE M3 반을 제안한다." }), f);
-    expect(r.ok).toBe(true);
+    expect(intact({ proposal: "EIE M3 반을 제안한다." }, f)?.proposal).toContain("EIE M3");
   });
 
-  it("필수 항목이 비면 탈락", () => {
-    expect(validatePrepBrief(brief({ headline: "" }), facts()).ok).toBe(false);
+  it("목록이 최소 개수 아래면 탈락 · 단일 칸이 비면 기본 문장", () => {
+    const h = validatePrepBrief(brief({ headline: "" }), facts());
+    expect(h.ok && h.value.headline.length).toBeGreaterThan(0);
     expect(validatePrepBrief(brief({ questions: [] }), facts()).ok).toBe(false);
     expect(validatePrepBrief(brief({ playbook: [] }), facts()).ok).toBe(false);
   });
@@ -322,7 +334,8 @@ describe("buildFactsBlock", () => {
       policy: { ...facts().policy, shuttleEnabled: true, shuttleFee: "월 20,000원", shuttleRoutes: ["1호차 주요 노선"] },
     });
     const block = buildFactsBlock(f);
-    expect(block).toContain("셔틀버스: 접수서에서 신청함");
+    // 신청 = 이용 확정이 아니다(검수 2026-11-11) — 희망으로 싣고 운행과 맞는지는 상담에서 확인.
+    expect(block).toContain("셔틀버스: 접수서에서 이용을 희망함");
     expect(block).toContain("월 20,000원");
     expect(block).toContain("1호차 주요 노선");
   });
@@ -417,7 +430,7 @@ describe("buildFallbackPrepBrief", () => {
     expect(buildFallbackPrepBrief(facts()).questions.join(" ")).toContain("형제자매 재원 여부");
     // 신청한 경우엔 '이용하시나요'가 아니라 노선 확정만.
     const applied = buildFallbackPrepBrief(facts({ student: { ...facts().student, shuttleRequest: true } }));
-    expect(applied.questions.join(" ")).toContain("셔틀 탑승 위치와 이용 노선 확정");
+    expect(applied.questions.join(" ")).toContain("셔틀 희망 위치·시간이 운행 구간과 수업 시간에 맞는지 확인");
   });
 });
 
@@ -524,3 +537,168 @@ describe("isHalfPeriodClass — 반교시 반은 상담지에서 추천하지 �
     expect(out.map((c) => c.id)).toEqual(["full"]);
   });
 });
+
+describe("적대적 검수 2026-11-11 — 사실 수집·검증 회귀(Claude·Codex 합의)", () => {
+  it("미취학('7세'·'유치')은 학제 '유' — 초·중·고 표기 반은 모두 배제 · '17세'는 미취학이 아니다", () => {
+    expect(gradeToken("7세")).toBe("유");
+    expect(gradeToken("유치부")).toBe("유");
+    expect(gradeToken("17세")).not.toBe("유");
+    expect(conflictsSchoolLevel("중등M 중2 PS2S", "유")).toBe(true);
+    expect(conflictsSchoolLevel("EiE Dr.Phonics", "유")).toBe(false);
+  });
+  it("부서 접두사 역누수 — '중등M 초6 …'은 초6 학생 반이지 중1 반이 아니다", () => {
+    expect(conflictsSchoolLevel("중등M 초6 MS2A", "초6")).toBe(false);
+    expect(conflictsSchoolLevel("중등M 초6 MS2A", "중1")).toBe(true);
+    expect(conflictsSchoolLevel("고등E_중3 최상위", "고1")).toBe(true);
+  });
+  it("후보 반 — 테스트 반 · 중·고 학생의 EiE 반은 뺀다", () => {
+    const base = facts().classes[0]!;
+    const all = [
+      { ...base, id: "a", className: "EiE 월간보고서 테스트", subjectLabel: "영어" },
+      { ...base, id: "b", className: "KW3", subjectLabel: "영어", eie: true },
+      { ...base, id: "c", className: "중1 영어 A", subjectLabel: "영어" },
+    ];
+    const got = rankPrepClasses(all, { subjectKeyLabel: "영어", grade: "중1" }).map((c) => c.id);
+    expect(got).toEqual(["c"]);
+    expect(rankPrepClasses(all, { subjectKeyLabel: "영어", grade: "초3" }).map((c) => c.id)).toContain("b");
+  });
+  it("단가 학교급 — 다른 학교급 단가 · 중·고 학생의 EIE 단가는 싣지 않는다", () => {
+    expect(tuitionFitsLevel("수학 고등 수능반", "중1")).toBe(false);
+    expect(tuitionFitsLevel("수학 중등 정규", "중1")).toBe(true);
+    expect(tuitionFitsLevel("EIE Pre Junior", "중1")).toBe(false);
+    expect(tuitionFitsLevel("EIE Pre Junior", "초3")).toBe(true);
+    expect(tuitionFitsLevel("수학 주3회", null)).toBe(true);
+  });
+  it("금액 — 쉼표 조각으로 지어낸 금액('22,000원' — 22는 인원)은 막고 '28만 원'(=280,000원)은 통과 · 회당 단가를 월로 말하면 막는다", () => {
+    const f = facts();
+    const bad = validatePrepBrief(brief({ closing: "회당 22,000원으로 시작하시면 됩니다." }), f);
+    expect(bad.ok && bad.value.closing).not.toContain("22,000원");
+    expect(validatePrepBrief(brief({ closing: "주3회 단가는 28만 원입니다. 안내드리겠습니다." }), f).ok && true).toBe(true);
+    const r = validatePrepBrief(brief({ closing: "주3회 단가는 28만 원입니다. 안내드리겠습니다." }), f);
+    expect(r.ok && r.value.closing).toContain("28만 원");
+    const monthly = validatePrepBrief(brief({ closing: "수강료는 월 280,000원입니다. 다음 단계를 정하겠습니다." }), f);
+    expect(monthly.ok && monthly.repairs.join()).toContain("회당 단가를 월 금액으로");
+  });
+  it("요일·시각 · 강사 · 자리 · 인원 — 사실과 다르면 그 항목만 뺀다", () => {
+    const f = facts();
+    const r = validatePrepBrief(
+      brief({
+        questions: ["화·박·금 16:30 수업이 괜찮으신지 확인", "김지훈 선생님 반을 원하시는지 확인", "잔여 2석이라 서두르셔야 하는지 확인", "같은 반 9명 중 몇 명이 친구인지", "가능한 등원 요일 확인", "지금 다니는 학원이 있는지 확인"],
+      }),
+      f,
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.questions).toEqual(["같은 반 9명 중 몇 명이 친구인지", "가능한 등원 요일 확인", "지금 다니는 학원이 있는지 확인"]);
+      expect(r.repairs.join(" ")).toMatch(/요일 표기 오류[\s\S]*사실에 없는 강사[\s\S]*자리 수 언급/);
+    }
+    // 사실에 없는 인원(한 자리도)은 뺀다 — 이 반 현원은 9명뿐.
+    const n = validatePrepBrief(brief({ questions: ["같은 반 7명이 함께 다니는지 확인", "가능한 등원 요일 확인", "지금 공부 방식 확인"] }), f);
+    expect(n.ok && n.value.questions).not.toContain("같은 반 7명이 함께 다니는지 확인");
+  });
+  it("약속 — 결과·서비스·기간 약속은 빼고, 부정('보장해 드릴 수는 없습니다')과 상담사 주의는 그대로", () => {
+    const f = facts();
+    const r = validatePrepBrief(
+      brief({
+        playbook: [
+          { concern: "성적", evidence: "체크리스트", response: "매주 결과를 정리해 보내 드리겠습니다." },
+          { concern: "선행", evidence: "체크리스트", response: "3개월 안에 따라잡도록 하겠습니다." },
+          { concern: "자신감", evidence: "체크리스트", response: "성적을 보장해 드릴 수는 없지만 막히는 곳부터 함께 찾아보겠습니다." },
+        ],
+        cautions: ["성적 향상을 보장하는 표현은 쓰지 마세요."],
+      }),
+      f,
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.playbook.map((p) => p.concern)).toEqual(["자신감"]);
+      expect(r.value.cautions).toEqual(["성적 향상을 보장하는 표현은 쓰지 마세요."]);
+    }
+  });
+  it("'vs' 같은 비교어 한 단어로 문서를 버리지 않는다(B26)", () => {
+    expect(validatePrepBrief(brief({ closing: "4점 vs 2점이라 차이를 함께 보겠습니다." }), facts()).ok).toBe(true);
+  });
+  it("학부모가 '기타'에 쓴 글은 선택지와 따로(브리프 사실용) — 화면용은 합친 그대로", () => {
+    const c = { goals: [], goalsEtc: "월 50만원 이하 반만", worries: [], worriesEtc: null, worryOutcome: null, levelBasis: [], levelBasisEtc: null, math: null, english: null, priorStatus: null, priorReason: null, priorNoneReason: null, advancedStatus: null, advancedReason: null, advancedNoneReason: null, changes: [], changesEtc: null, wants: [], wantsEtc: null, strengths: null, extra: null, habits: {} } as unknown as Parameters<typeof checklistToPairs>[0];
+    expect(checklistToPairs(c, { separateEtc: true })).toContainEqual({ question: "가장 알고 싶은 문제(직접 쓴 글)", answer: "월 50만원 이하 반만" });
+    const f = facts({ checklist: checklistToPairs(c, { separateEtc: true }) });
+    const block = buildFactsBlock(f);
+    expect(block).toContain("[학부모가 접수 폼에 직접 쓴 글");
+    // 학부모 글의 금액은 학원 금액의 근거가 아니다.
+    const r = validatePrepBrief(brief({ closing: "월 50만원 반으로 안내드리겠습니다. 다음 단계를 정하겠습니다." }), f);
+    expect(r.ok && r.value.closing).not.toContain("50만원");
+  });
+  it("호칭 치환은 다른(더 긴) 이름 속 일치를 건드리지 않는다", () => {
+    const f = facts({ parent: { name: "민수", relation: "모" } });
+    const out = applyParentAddress({ ...brief(), closing: "김민수 강사와 상의하고 민수님께 연락드리겠습니다." } as never, f);
+    expect(out.closing).toContain("김민수 강사");
+    expect(out.closing).not.toContain("민수님");
+  });
+  it("폴백은 학부모 요청사항을 싣고 접수에 없는 전제('그만두려는 이유')로 묻지 않는다", () => {
+    const fb = buildFallbackPrepBrief(facts({ student: { ...facts().student, request: "수학을 재밌어했으면" } }));
+    expect(fb.playbook[0]!.concern).toBe("수학을 재밌어했으면");
+    expect(fb.questions.join(" ")).not.toContain("그만두");
+    expect(fb.opening).not.toContain(":");
+  });
+
+  it("적대 리뷰 2026-11-11 — 학부모 글의 빈 줄이 격리를 끊지 않는다 · 안전·형제·진로 칸도 학부모 글", () => {
+    const f = facts({ student: { ...facts().student, request: "첫 줄\n\n화·목 19:00 반 · 친구 3명", safetyNotes: "19:00 이후 하원 불가" } });
+    const block = buildFactsBlock(f);
+    expect(block).toContain("첫 줄 / 화·목 19:00 반");
+    const r = validatePrepBrief(brief({ proposal: "화·목 19:00 반을 후보로 안내드리겠습니다. 친구 3명과 함께입니다." }), f);
+    expect(r.ok && r.value.proposal).not.toContain("19:00");
+  });
+  it("적대 리뷰 2026-11-11 — 정상 문장 오탐 막기(꾸밈말 선생님 · 학부모 원문 인용 · 납부 안내 · 바람 인용 · 형제 수 · 숫자 없는 자리 · 상담사 메모)", () => {
+    const f = facts({ siblings: [{ name: "이태윤", school: null, grade: null, classNames: [] }, { name: "이태오", school: null, grade: null, classNames: [] }] });
+    expect(intact({ closing: "유능한 선생님과 한국인 선생님이 함께 수업합니다. 방과후 선생님과도 이야기하겠습니다." }, f)?.closing).toContain("유능한 선생님");
+    // 근거 칸은 학부모 원문 인용 자리 — 접수서(학부모 글 묶음)에 있는 숫자면 그대로.
+    const withText = { ...f, checklist: [{ question: "추가 전달 사항", answer: "밤 10시까지 숙제를 해요" }] };
+    expect(intact({ playbook: [{ concern: "밤 늦게까지 공부", evidence: "추가 전달 사항 '밤 10시까지 숙제'", response: "숙제 시간이 어떻게 되는지 먼저 여쭙겠습니다." }] }, withText)).not.toBeNull();
+    expect(intact({ closing: "수강료는 매월 5일 납부로 안내드립니다. 다음 단계를 정하겠습니다." }, f)?.closing).toContain("매월 5일");
+    expect(intact({ opening: "6개월 안에 자신감을 되찾길 바라신다고 적어 주셨습니다. 그 부분부터 이야기 나누겠습니다." }, f)?.opening).toContain("6개월 안에");
+    expect(intact({ closing: "형제 2명이 함께 다니게 되면 동선을 맞춰 보겠습니다." }, f)?.closing).toContain("형제 2명");
+    expect(intact({ closing: "남은 자리는 상담에서 확인해 안내드리겠습니다." }, f)?.closing).toContain("남은 자리");
+    expect(intact({ cautions: ["잔여 1석이라며 결정을 재촉하지 마세요."] }, f)?.cautions[0]).toContain("잔여 1석");
+  });
+  it("적대 리뷰 2026-11-11 — 미탐 막기(부정어 섞인 서비스 약속 · 석 달 · 요일 하나 · '요일' 표기 · 회당 단가를 월로)", () => {
+    const f = facts();
+    const bad = (over: Record<string, unknown>) => {
+      const r = validatePrepBrief(brief(over), f);
+      return r.ok ? r.repairs.length : 99;
+    };
+    expect(bad({ closing: "뒤처지지 않도록 매주 리포트를 보내 드리겠습니다." })).toBeGreaterThan(0);
+    expect(bad({ closing: "석 달 안에 따라잡을 수 있게 해 드리겠습니다." })).toBeGreaterThan(0);
+    expect(bad({ closing: "토 16:30 수업으로 안내드리겠습니다. 다음 단계를 정하겠습니다." })).toBeGreaterThan(0);
+    expect(bad({ closing: "화요일·목요일 16:30 수업입니다. 다음 단계를 정하겠습니다." })).toBeGreaterThan(0);
+    expect(bad({ closing: "월 수강료는 주3회 기준 280,000원입니다. 다음 단계를 정하겠습니다." })).toBeGreaterThan(0);
+    expect(bad({ closing: "보강은 언제든 무료로 해 드리겠습니다." })).toBeGreaterThan(0);
+  });
+  it("적대 리뷰 2026-11-11 — 폴백은 '기타'에만 쓴 걱정도 읽는다", () => {
+    const fb = buildFallbackPrepBrief(facts({ checklist: [{ question: "가장 걱정되는 것(직접 쓴 글)", answer: "숙제를 미룬다" }] }));
+    expect(fb.playbook.map((p) => p.concern).join()).toContain("숙제를 미룬다");
+    expect(fb.questions.join(" ")).not.toContain("가장 걱정되는 부분 확인");
+  });
+  it("재리뷰 2026-11-11 — 예외 낱말이 약속을 통과시키지 않는다(약속 동사로 가른다)", () => {
+    const f = facts();
+    const bad = (closing: string) => {
+      const r = validatePrepBrief(brief({ closing }), f);
+      return r.ok ? r.repairs.length : 99;
+    };
+    expect(bad("매주 숙제를 확인해서 결과를 문자로 보내 드리겠습니다.")).toBeGreaterThan(0);
+    expect(bad("3개월 안에 목표 점수까지 올려 드리겠습니다.")).toBeGreaterThan(0);
+    expect(bad("6개월 안에 원하시는 성적을 만들어 드리겠습니다.")).toBeGreaterThan(0);
+    expect(bad("형제 할인은 확인 후 바로 적용해 드리겠습니다.")).toBeGreaterThan(0);
+    expect(bad("수강료는 매월 5일 납부인데 매주 학습 리포트를 보내 드리겠습니다.")).toBeGreaterThan(0);
+    expect(bad("매주 아이의 진도를 알려 드리겠습니다.")).toBeGreaterThan(0);
+    expect(bad("매 수업 후 오늘 배운 내용을 말씀드리겠습니다.")).toBeGreaterThan(0);
+    expect(bad("석 달 안에 진도를 따라잡을 수 있습니다.")).toBeGreaterThan(0);
+    expect(bad("빠짐없이 관리해서 성적 향상을 보장합니다.")).toBeGreaterThan(0);
+    expect(bad("매주 진도를 확인해 말씀드리겠습니다.")).toBeGreaterThan(0);
+    expect(bad("결과 보장은 없지만, 막히는 곳부터 함께 찾겠습니다.")).toBe(0);
+    expect(bad("성적을 보장하는 것은 아니지만, 막히는 곳부터 함께 찾겠습니다.")).toBe(0);
+    // 알려 드리는 말은 그대로
+    expect(bad("월별 기록 방식은 확인해서 안내드리겠습니다. 다음 단계를 정하겠습니다.")).toBe(0);
+    expect(bad("보강이 가능한지는 확인해 말씀드리겠습니다. 다음 단계를 정하겠습니다.")).toBe(0);
+  });
+});
+

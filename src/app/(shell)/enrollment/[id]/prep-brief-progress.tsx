@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, Loader2 } from "@/components/icons/aywa-icon-compat";
 import { createClient } from "@/lib/supabase/client";
+import { PREP_BRIEF_STALL_MS } from "@/features/enrollment/prep-stall";
 
 /**
  * 브리프 생성 진행 UI — 진행바 + 단계 문구 + 자동 새로고침 watcher.
@@ -18,21 +19,29 @@ const EXPECTED_SEC = 75;
  * 배포 교체로 죽으면 status가 'generating'에 남아 **진행바가 영원히 돈다** — 사람이 빠져나갈 수
  * 있어야 한다(끝나지 않는 스피너는 고장과 구분이 안 된다).
  */
-const STALL_SEC = 240;
+const STALL_SEC = PREP_BRIEF_STALL_MS / 1000;
+// 단계 문구는 시간 근사다 — 실제 작업 단계를 아는 것처럼 '검증하고 있습니다'라 하지 않는다(검수 2026-11-11 · Codex).
 const STAGES: [number, string][] = [
   [0, "접수 정보와 학원 데이터를 정리하고 있습니다"],
   [8, "AI가 상담 스크립트를 작성하고 있습니다"],
-  [30, "작성한 내용을 사실과 대조해 검증하고 있습니다"],
+  [30, "작성한 내용을 마무리하고 있습니다"],
 ];
 
-export function PrepBriefProgress({ consultationId }: { consultationId: string }) {
+export function PrepBriefProgress({ consultationId, jobAt = null }: { consultationId: string; jobAt?: string | null }) {
   const router = useRouter();
   const [elapsed, setElapsed] = useState(0);
 
+  // 작업 시작 시각(서버 기록)부터 센다 — 화면을 다시 열어도 경과가 처음부터 시작하지 않게(s2_0068). 없으면 연 때부터.
   useEffect(() => {
-    const t = window.setInterval(() => setElapsed((s) => s + 1), 1000);
-    return () => window.clearInterval(t);
-  }, []);
+    const started = jobAt ? Date.parse(jobAt) : Date.now();
+    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - started) / 1000)));
+    const first = window.setTimeout(tick, 0);
+    const t = window.setInterval(tick, 1000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(t);
+    };
+  }, [jobAt]);
 
   useEffect(() => {
     const supabase = createClient();

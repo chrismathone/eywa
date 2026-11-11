@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { isFeatureLicensed } from "@/lib/license/server";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
@@ -28,17 +29,19 @@ export default async function EditEnrollmentPage({
   const { id } = await params;
   const db = (await createClient()) as unknown as SupabaseClient;
   // 읽기 권한이면 칸을 잠그고 저장·녹음 단추를 그리지 않는다 — 저장 액션 게이트와 같은 함수·같은 키(원장 2026-11-05 · write-lock.ts).
-  const [c, ref, canWrite] = await Promise.all([
+  const [c, ref, canWrite, aiOn] = await Promise.all([
     getEnrollmentConsultationById(id),
     loadConsultationReferrer(db, id),
     canWriteTenant(viewer.systemRole, "enrollment"),
+    // 브리프 자리는 AI 라이선스가 켜진 지점만(꺼지면 흔적 없이 · 검수 2026-11-11).
+    isFeatureLicensed(viewer.tenantId, "ai_analysis"),
   ]);
   if (!c) notFound();
   const f = c.fields;
   // 브리프 = 상세와 같은 판정·같은 부품(원장 2026-11-11 *"브리프를 보면서 수정(입력)할 수 있게"*) — 저장해 둔 것만 보이고
   // 페이지 로드가 AI를 부르지 않는다. 없으면 상세와 같은 안내 카드(상담 전) 또는 아무것도 없음(지난 건).
   const { pastBrief } = detailPanelsFor({ outcome: c.outcome, assignedClassCount: c.assignedClassCount });
-  const showBrief = showBriefCard({ hasBrief: !!c.prepBrief, status: c.prepBriefStatus, past: pastBrief });
+  const showBrief = showBriefCard({ hasBrief: !!c.prepBrief, status: c.prepBriefStatus, past: pastBrief, aiOn });
   // 아직 잇지 않은 소개 — 글에 이름이 그대로 나온 원생·직원을 후보로(소개 흔적이 있을 때만 목록을 읽는다).
   const candidates = ref.ready && !ref.referrer
     ? await referrerCandidatesFor(db, viewer.tenantId, { referrerName: ref.referrerName, path: f.consultationPath, texts: [c.parentRequest, f.safetyNotes, f.siblingsDetails] })
@@ -62,6 +65,8 @@ export default async function EditEnrollmentPage({
           record={c.prepBrief}
           status={c.prepBriefStatus}
           errorText={c.prepBriefError}
+          stalled={c.prepBriefStalled}
+          jobAt={c.prepBriefJobAt}
           canWrite={canWrite}
           past={pastBrief}
         />
