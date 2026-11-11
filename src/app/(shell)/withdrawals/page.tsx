@@ -72,6 +72,8 @@ import {
   teacherItems,
 } from "@/features/withdrawals/breakdown";
 import { loadExitTeacherJudge, type ExitTeacherJudge } from "@/features/withdrawals/server/exit-teacher-judge";
+import { mergeSheetExits } from "@/features/withdrawals/sheet-exit-rows";
+import { loadSheetExits, loadStudentNames } from "@/features/withdrawals/server/sheet-teachers";
 import { teacherNames } from "@/features/withdrawals/server/exit-overlay-loaders";
 import { createClient } from "@/lib/supabase/server";
 import { reportWarning } from "@/lib/observability/report-error";
@@ -98,7 +100,7 @@ import { EarlyExitBand } from "./_components/early-exit-band";
 import { WithdrawalBreakdownCard, type BreakdownRow, type BreakdownView } from "./_components/breakdown-card";
 import { ReasonAnalysisCard } from "./_components/reason-analysis-card";
 import { TeacherChurnSection, TeacherChurnSkeleton } from "./_components/teacher-churn-section";
-import { getPortfolioGate } from "@/features/teacher-portfolio/server/queries";
+import { getTeacherChurnGate } from "@/features/withdrawals/server/teacher-churn";
 import { REASON_DETAILS, reasonDetailOf } from "@/features/withdrawals/reason-detail";
 import type { BreakdownAxis } from "@/features/withdrawals/breakdown";
 
@@ -287,22 +289,41 @@ export default async function WithdrawalsPage({
   });
   // 🔑 화면이 판정을 **기다리는 것은 강사 칸 필터가 걸렸을 때뿐**이다(명단이 판정으로 걸러진다). 강사 축만 볼 때는 강사 카드만
   //    나중에 흘려보내고(Suspense) 나머지를 먼저 그린다 — 강사 축을 저장해 둔 계정의 모든 이동이 판정을 기다리지 않게.
-  // 강사별 퇴원율 추이(원장 2026-11-11) = 직원 포트폴리오와 같은 문(원장 역할만) — 문만 여기서 보고(가볍다) 표는 아래 Suspense가 흘려받는다.
+  // 강사별 퇴원율 추이(원장 2026-11-11) = 권한 '강사별 퇴원율'(퇴원관리 줄 아래 · 기본 원장만) — 문만 여기서 보고(가볍다) 표는 아래 Suspense가 흘려받는다.
   //   문을 먼저 봐야 볼 수 없는 사람에게 대기 카드가 번쩍이지 않는다. 문 판정이 실패하면 카드만 없다(화면은 산다).
-  const [withdrawnRaw, subjectEndedRaw, settings, trendPrefs, blockingJudge, churnGate] = await Promise.all([
+  // 2026-10까지는 퇴원생 관리 차트의 줄을 그대로 통계로 쓴다(원장 2026-11-11 — `sheet-exit-rows.ts`). 시트를 못 읽으면 null(에이와 줄 그대로).
+  // 🔴 '퇴원만' 보기도 수강종료를 읽는다 — 시트는 퇴원·수강종료를 가르지 않아, 에이와 수강종료 줄과 이어야 그 줄을 퇴원으로 잘못 세지 않는다.
+  const sheetExitsP = loadSheetExits(user.tenantId);
+  // 시트에만 있는 줄이 과목만 끊은 것인지 가리는 학생 이름 — 실패하면 시트를 입히지 않는다(과목만 끊은 줄을 퇴원으로 부풀리지 않게).
+  const studentNamesP = sheetExitsP.then((s) =>
+    s
+      ? loadStudentNames(user.tenantId).catch((e: unknown) => {
+          reportWarning("퇴원관리 시트 맞춤 실패", { scope: "withdrawals.sheetNames", message: e instanceof Error ? e.message : String(e) });
+          return null;
+        })
+      : null,
+  );
+  const [withdrawnRaw, subjectEndedRaw, settings, trendPrefs, blockingJudge, churnGate, sheetExits, studentNames] = await Promise.all([
     getWithdrawnStudents(),
-    withSubjectEnded ? getSubjectEndedStudents({ withNotes: true }) : Promise.resolve([]),
+    // 시트를 쓰지 않는 지점의 '퇴원만' 보기는 종전처럼 수강종료를 읽지 않는다(가장 무거운 조회).
+    withSubjectEnded ? getSubjectEndedStudents({ withNotes: true }) : sheetExitsP.then((s) => (s ? getSubjectEndedStudents({ withNotes: true }) : [])),
     getTenantSettings(),
     prefsP,
     teacherF ? judgeP : Promise.resolve(undefined),
-    getPortfolioGate().catch(() => null),
+    getTeacherChurnGate().catch(() => null),
+    sheetExitsP,
+    studentNamesP,
   ]);
   const axis = axisParam ?? trendPrefs.axis;
   // 과목 라벨은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
-  const all = sortExitRows(toExitRows(withdrawnRaw, subjectEndedRaw));
-  const withdrawnTotal = withdrawnRaw.length;
-  const subjectEndedTotal = all.length - withdrawnTotal;
+  const merged = sortExitRows(mergeSheetExits(toExitRows(withdrawnRaw, subjectEndedRaw), studentNames ? sheetExits : null, today, studentNames ?? undefined));
+  // '퇴원만'이면 수강종료 줄은 명단에서 뺀다(읽은 까닭은 시트 줄과 잇기 위해서뿐).
+  const all = withSubjectEnded ? merged : merged.filter((r) => r.kind === "withdrawn");
+  // 머리글은 '명'이다 — 시트 줄은 과목마다라 같은 학생이 두 줄일 수 있어 사람으로 센다(학생 id · 시트에만 있으면 이름+달).
+  const personOf = (r: ExitRow) => r.studentId || `${r.name}|${(r.countDate ?? "").slice(0, 7)}`;
+  const withdrawnTotal = new Set(merged.filter((r) => r.kind === "withdrawn").map(personOf)).size;
+  const subjectEndedTotal = merged.filter((r) => r.kind !== "withdrawn").length;
   /**
    * 필터를 **축별 술어**로 쪼갠다 — 카드마다 "자기 축만 빼고" 나머지를 적용하기 위해서다(패싯).
    *
@@ -400,7 +421,8 @@ export default async function WithdrawalsPage({
   const schoolRows = all.filter((r) => passes(r, "school")); // 학교 제외
   const teacherRows = all.filter((r) => passes(r, "teacher")); // 강사 제외
   // 상담 카드는 퇴원만 — 수강종료에는 사후상담이 없다. 사유 카드는 둘 다(유형 필터를 따른다).
-  const consultRows = all.filter((r) => r.kind === "withdrawn" && passes(r, "consult")); // 상담 제외
+  // 상담 제외 · 시트에만 있는 줄(학생 연결 없음 — 상담을 적을 수 없다)은 상담률에 넣지 않는다(`byConsult`와 같은 모집단).
+  const consultRows = all.filter((r) => r.kind === "withdrawn" && r.consulted !== null && passes(r, "consult"));
   const reasonRows = all.filter((r) => passes(r, "reason")); // 사유 제외
   // 등록 후 띠는 퇴원만 — 등록 후 축 제외(고른 칸에 갇혀 나머지 칸이 0이 되지 않게).
   const earlyRows = all.filter((r) => r.kind === "withdrawn" && passes(r, "early"));
@@ -919,7 +941,7 @@ export default async function WithdrawalsPage({
         </div>
       ) : null}
 
-      {/* 강사별 퇴원율 추이 — 위 필터와 따로 세는 강사평가 값(카드 머리에 기준을 적는다). 원장 역할만. */}
+      {/* 강사별 퇴원율 추이 — 위 필터와 따로 세는 강사평가 값(카드 머리에 기준을 적는다). 권한 '강사별 퇴원율'이 열린 사람만. */}
       {churnGate ? (
         <Suspense fallback={<TeacherChurnSkeleton />}>
           <TeacherChurnSection initialSort={trendPrefs.churnSort} />
@@ -1027,8 +1049,9 @@ function ExitRowItem({ row: r, labelOf, today, teacher }: {
   return (
     <li className="hover:bg-bg-soft/50 transition">
       <WindowLink
-        href={ended ? `/students/${r.studentId}` : `/withdrawals/${r.studentId}`}
-        title={r.name}
+        // 퇴원생 관리 차트에만 있는 줄은 에이와 학생이 없다 — 이 목록 자리에 머문다.
+        href={r.fromSheet || !r.studentId ? "/withdrawals" : ended ? `/students/${r.studentId}` : `/withdrawals/${r.studentId}`}
+        title={r.fromSheet ? `${r.name} — 퇴원생 관리 차트 기록` : r.name}
         className="grid h-11 grid-cols-[auto_minmax(0,1fr)_6.5rem] items-center gap-3 px-5 sm:grid-cols-[4.75rem_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1fr)_6.5rem_5rem] xl:grid-cols-[4.75rem_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,0.55fr)_minmax(0,1fr)_6.5rem_5rem]"
       >
         <span className="whitespace-nowrap">

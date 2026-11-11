@@ -6,7 +6,7 @@ import { TeacherChurnCard } from "./teacher-churn-card";
 const CARD = "bg-card shadow-card rounded-2xl p-5";
 
 /**
- * '강사별 퇴원율 추이' 자리(서버) — 페이지가 문(`getPortfolioGate`)을 확인한 뒤 Suspense 안에서만 부른다(첫 페인트를 막지 않게).
+ * '강사별 퇴원율 추이' 자리(서버) — 페이지가 문(`getTeacherChurnGate`)을 확인한 뒤 Suspense 안에서만 부른다(첫 페인트를 막지 않게).
  * 조회 함수도 같은 문을 다시 지난다(#77 — 화면 조건은 게이트가 아니다). 실패는 빈 표로 위장하지 않고 그렇다고 말한다.
  */
 export async function TeacherChurnSection({ initialSort }: { initialSort: ChurnSort }) {

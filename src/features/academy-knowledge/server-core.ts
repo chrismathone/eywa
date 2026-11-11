@@ -15,7 +15,7 @@ const STAFF_ROLES = ["master", "admin", "manager", "teacher", "counselor", "acco
  * 노드 id 규약은 aywa-next 경영 그래프와 같다(`student:` · `class:` · `teacher:` · `work-record:`) — unifyGraphs가 지점 접두를 붙인다.
  */
 type EnrollmentRow = { id: string; student_id: string; class_id: string; start_date: string; end_date: string | null; on_hold: boolean | null; is_transferred: boolean | null };
-type ClassRow = { id: string; class_name: string; teacher_id: string | null };
+type ClassRow = { id: string; class_name: string; teacher_id: string | null; subject: string | null };
 type StaffRow = Staff & { subjects: string[] | null; status: string; system_role: string };
 type WorkRow = { id: string; author_id: string; version: number; updated_at: string; document: { title: string; date: string; state: string; plan: string; action: string; result: string; next: string } };
 
@@ -36,8 +36,8 @@ export async function loadCoreGraph(tenant: string, asOf: string, studentIds: Se
       : classIds ? fetchAllPagedInChunks<EnrollmentRow>(classIds, (chunk, a, b) => db.from("enrollments").select(enrollmentCols).eq("tenant_id", tenant).in("class_id", chunk).lte("start_date", asOf).or(`end_date.is.null,end_date.gte.${asOf}`).order("id").range(a, b))
       : fetchAllPaged<EnrollmentRow>((a, b) => db.from("enrollments").select(enrollmentCols).eq("tenant_id", tenant).lte("start_date", asOf).or(`end_date.is.null,end_date.gte.${asOf}`).order("id").range(a, b)),
     scope.classes === "none" ? Promise.resolve<ClassRow[]>([])
-      : classIds ? fetchAllPagedInChunks<ClassRow>(classIds, (chunk, a, b) => db.from("classes").select("id,class_name,teacher_id").eq("tenant_id", tenant).in("id", chunk).order("id").range(a, b))
-      : fetchAllPaged<ClassRow>((a, b) => db.from("classes").select("id,class_name,teacher_id").eq("tenant_id", tenant).order("id").range(a, b)),
+      : classIds ? fetchAllPagedInChunks<ClassRow>(classIds, (chunk, a, b) => db.from("classes").select("id,class_name,teacher_id,subject").eq("tenant_id", tenant).in("id", chunk).order("id").range(a, b))
+      : fetchAllPaged<ClassRow>((a, b) => db.from("classes").select("id,class_name,teacher_id,subject").eq("tenant_id", tenant).order("id").range(a, b)),
     // 직원 이름은 전부 읽되(퇴사자 포함 — 글 속 이름을 가리려면 볼 수 없는 직원의 이름을 알아야 한다) 화면에는 볼 수 있는 직원만 내보낸다.
     !scope.staff && !scope.includeNames ? Promise.resolve<StaffRow[]>([]) : fetchAllPaged<StaffRow>((a, b) => db.from("users").select("id,display_name,subjects,status,system_role").eq("tenant_id", tenant).neq("system_role", "student").order("id").range(a, b)),
     // 남의 업무 문서 본문은 업무 작성센터 검토함을 읽을 수 있을 때만 싣는다(그 화면과 같은 문 — #77).
@@ -57,7 +57,7 @@ export async function loadCoreGraph(tenant: string, asOf: string, studentIds: Se
   for (const e of active) {
     const c = classMap.get(e.class_id)!;
     node({ id: `student:${e.student_id}`, type: "Student", label: e.student_id, source: "에이와 원생", href: `/students/${e.student_id}` });
-    node({ id: `class:${c.id}`, type: "Class", label: c.class_name, source: "에이와 반", href: "/classes" });
+    node({ id: `class:${c.id}`, type: "Class", label: c.class_name, source: "에이와 반", href: "/classes", attributes: c.subject ? { subject: c.subject } : undefined }); // 과목 = 판의 과목 묶음(kg-net-groups.ts)
     edges.push({ from: `student:${e.student_id}`, relation: "enrolled_in", to: `class:${c.id}`, basis: `enrollments:${e.id}; ${e.start_date}~${e.end_date ?? "진행"}; 기준 ${asOf}` });
   }
   for (const c of classMap.values()) {
@@ -71,5 +71,7 @@ export async function loadCoreGraph(tenant: string, asOf: string, studentIds: Se
     node({ id, type: "WorkRecord", label: r.document.title, source: "에이와 직접 작성", href: `/work-records?record=${r.id}`, state: r.document.state, period: r.document.date, detail: `계획: ${r.document.plan}\n실행: ${r.document.action}\n결과: ${r.document.result}\n후속: ${r.document.next}` });
     edges.push({ from: author, relation: "authored", to: id, basis: `작성 버전 ${r.version}; 검토 요청·확인된 문서만 포함` });
   }
-  return { graph: { nodes, edges } as SourceGraph, activeStudents: new Set(active.map(e => e.student_id)), staff, hiddenStaffNames, activeEnrollments: active.length, workRecords: work.length };
+  // 화면에 내보내는 직원의 담당 과목 키(판의 과목 묶음 — kg-net-groups.ts). 볼 수 없는 직원은 싣지 않는다.
+  const staffSubjects: Record<string, string[]> = Object.fromEntries(staffRows.filter(u => staff.some(v => v.id === u.id)).map(u => [u.id, u.subjects ?? []]));
+  return { graph: { nodes, edges } as SourceGraph, staffSubjects, activeStudents: new Set(active.map(e => e.student_id)), staff, hiddenStaffNames, activeEnrollments: active.length, workRecords: work.length };
 }

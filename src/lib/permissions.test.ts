@@ -333,7 +333,7 @@ describe("학원 비서 권한(assistant · 원장 2026-11-09 *\"기본 디폴�
 
   it("연결 앱의 전체·없음 규칙은 그대로다(같은 함수로 묶었다)", () => {
     for (const menu of CONNECTED_APP_MENU_KEYS) expect(isOnOffMenu(menu), menu).toBe(true);
-    expect(MENU_KEYS.filter((menu) => isOnOffMenu(menu)).sort()).toEqual([...CONNECTED_APP_MENU_KEYS, "assistant", "shuttle_admin"].sort());
+    expect(MENU_KEYS.filter((menu) => isOnOffMenu(menu)).sort()).toEqual([...CONNECTED_APP_MENU_KEYS, "assistant", "shuttle_admin", "withdrawals_churn"].sort());
   });
 });
 

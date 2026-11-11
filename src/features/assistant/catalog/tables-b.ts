@@ -132,14 +132,14 @@ export const TABLES_B: readonly AssistantTableDoc[] = [
     name: "makeup_reservations", label: "보강 예약",
     ko: "보강 예약 — 결석한 학생의 보강 날짜·교시(지금 실제로 쓰는 보강 표)",
     notes:
-      "absence_date=결석일(결석난 반 = absence_class_id, null이면 class_id) · makeup_date=보강일 · slot_start~slot_end=교시 시각 · class_id=보강을 기록할 반. status: reserved=예약(아직 안 함) · done=보강일 출결이 찍혀 이행(attendance_record_id·done_at). '이번 달 보강 실적' = status='done'을 makeup_date로 센다. checked_at=선생님이 '보강 했음' 확인한 시각(null이면 그 보강이 든 보고서는 발송 안 함). report_mode: merge=정규 보고서에 합침 · separate=따로 · null=묻지 않음. 출결 행이 아니라 시수·출석률에 닿지 않는다.",
+      "absence_date=결석일(결석난 반 = absence_class_id, null이면 class_id) · makeup_date=보강일 · slot_start~slot_end=교시 시각 · class_id=보강을 기록할 반. status: reserved=예약(아직 안 함) · done=보강일 출결이 찍혀 이행(attendance_record_id·done_at). '이번 달 보강 실적' = status='done'을 makeup_date로 센다. checked_at=선생님이 '보강 했음' 확인한 시각(null이면 그 보강이 든 보고서는 발송 안 함). report_mode: merge=정규 보고서에 합침 · separate=따로 · null=묻지 않음. 출결 행이 아니라 시수·출석률에 닿지 않는다. 🔴 담당 강사 칸은 따로 없다 — 보강을 맡는 사람은 class_id(보강을 기록할 반)의 그날 담당(onto_class_teachers — 담임·교시 담당·위임)이다. 보강 회차(makeup_sessions)는 기본 꺼진 기능이라 비어 있는 게 정상 — 회차가 없다고 '담당 미정'이 아니다(멘트 시험 2026-11-11).",
     columns: { period_label: "예약 당시 교시 이름(표시용)", note: "메모" },
   },
   {
     name: "makeup_sessions", label: "보강 회차",
     ko: "보강 원장 — 보강 회차(날짜·교시·강사·강의실)",
     notes:
-      "state: confirmed=확정 · finished=끝남(전원 노쇼면 finish_reason='all_no_show') · cancelled=취소(cancel_cause: student · academy · reschedule) · rescheduled=일정 변경(replaced_by_session_id = 새 회차). class_id = 합류한 정규 반(null이면 독립 회차). 출결 행이 아니다. 참여 학생은 makeup_participants.",
+      "state: confirmed=확정 · finished=끝남(전원 노쇼면 finish_reason='all_no_show') · cancelled=취소(cancel_cause: student · academy · reschedule) · rescheduled=일정 변경(replaced_by_session_id = 새 회차). class_id = 합류한 정규 반(null이면 독립 회차). 출결 행이 아니다. 참여 학생은 makeup_participants. 기본 꺼진 기능(보강 원장)이라 비어 있는 게 정상 — 지금 쓰는 보강은 makeup_reservations(회차를 만들라고 권하지 않는다).",
   },
   {
     name: "math_book_targets", label: "수학 목표교재",
@@ -236,13 +236,13 @@ export const TABLES_B: readonly AssistantTableDoc[] = [
     name: "payroll_records", label: "급여",
     ko: "직원 급여 정산 기록(기본급·시급제) — 직원×기간",
     notes:
-      "period = 'YYYY-MM'. 금액 칸은 모두 원: base_amount 기본급 · hours_worked 근무 시간 · hourly_amount 시급 정산액 · bonus 상여 · deduction 공제 · total = 기본급+시급 정산+상여−공제. paid_at = 지급 시각(null = 미지급). 프리랜서 강의용역 명세서는 payslips가 따로 다룬다. 원장·관리자 전용 민감 정보.",
+      "period = 'YYYY-MM'. 금액 칸은 모두 원: base_amount 기본급 · hours_worked 근무 시간 · hourly_amount 시급 정산액 · bonus 상여 · deduction 공제 · total = 기본급+시급 정산+상여−공제. paid_at = 지급 시각(null = 미지급). 프리랜서 강의용역 명세서는 payslips가 따로 다룬다. 🔴 이 표가 0건이어도 같은 직원·근무월의 payslips 발행분(status='issued')을 확인한다 — 발행 금액은 print_payload->'amounts'의 grossPay(지급총액)·netPay(실수령액). 발행 사실만으로 실제 지급을 단정하지 않는다. 민감한 급여 정보 — 비서 보기로 제공된 칸은 질문 범위에서 조회할 수 있다.",
   },
   {
     name: "payslips", label: "급여명세서",
     ko: "프리랜서 강사 급여명세서 — 직원×월, 월별 조정값 + 발행 스냅샷",
     notes:
-      "period = 'YYYY-MM'(근무월). status: draft=작성 중(금액은 화면이 매번 계산하고 표엔 없다) · issued=발행(issued_at, print_payload에 금액·지표 동결). 표에 있는 금액은 조정값뿐: incentive 인센티브(원) · other_deduction 기타공제(원, 소득세 3.3% 계산 전 과세표준에서 뺀다) · rate_penalty_points 그 달만 배분율 차감(%p). 급여 한 줄 = floor1(단가×시수×0.911×비율) — salary_tiers 참고. 원장 전용.",
+      "period = 'YYYY-MM'(근무월). status: draft=작성 중(금액은 화면이 매번 계산하고 표엔 없다) · issued=발행(issued_at, print_payload에 금액·지표 동결). 표에 있는 금액은 조정값뿐: incentive 인센티브(원) · other_deduction 기타공제(원, 소득세 3.3% 계산 전 과세표준에서 뺀다) · rate_penalty_points 그 달만 배분율 차감(%p). 급여 한 줄 = floor1(단가×시수×0.911×비율) — salary_tiers 참고. 발행 금액 = print_payload->'amounts'의 grossPay(지급총액)·netPay(실수령액). 민감한 급여 정보 — 비서 보기로 제공된 칸은 질문 범위에서 조회할 수 있다.",
     columns: { blog_written_on: "명세서 '내신분석' 칸 = 블로그 작성일(자유 글, 빈 값 = 미작성)" },
   },
   {
@@ -300,9 +300,9 @@ export const TABLES_B: readonly AssistantTableDoc[] = [
   { name: "seat_placements", label: "자리 배치", ko: "랩실·JJ실 출석부 카드 배치(출결 아님)", internal: true },
   {
     name: "share_link_views", label: "보고서 열람",
-    ko: "학부모 공개 수업보고서 링크(/r) 열람 기록 — 열 때마다 한 줄",
+    ko: "공개 수업보고서 링크(/r) 열람 기록 — 열 때마다 한 줄(연 사람은 모른다)",
     notes:
-      "'학부모가 보고서를 열어 봤나·몇 번' = lesson_report_id별 count. viewed_at = 열람 시각(UTC). ip_hash는 원본 IP가 아닌 해시라 같은 사람 판정은 근사치다.",
+      "공개 링크를 연 횟수(lesson_report_id별 count)이며 누가 열었는지는 알 수 없다 — 발송 전 열람은 내부 미리보기일 수 있고, ip_hash로 사람을 확정할 수 없다. 학부모 앱 읽음은 lesson_reports.classnote_read_at으로 따로 확인한다. viewed_at = 열람 시각(UTC).",
   },
   {
     name: "shuttle_boardings", label: "셔틀 탑승",
@@ -333,7 +333,7 @@ export const TABLES_B: readonly AssistantTableDoc[] = [
     name: "shuttle_riders", label: "셔틀 배정",
     ko: "셔틀 정기 배정 — 학생이 어느 회차·정류장에서 어느 요일에 타나",
     notes:
-      "run_stop_id → shuttle_run_stops(회차×정류장). io_kind: in=승차(등원) · out=하차(하원). weekdays = 타는 요일 배열(mon~sun, 비어 있을 수 없음). '셔틀 이용 학생 수' = 이 표의 distinct student_id. 그날만 변경은 shuttle_ride_exceptions, 실제 탑승은 shuttle_boardings.",
+      "run_stop_id → shuttle_run_stops(회차×정류장). io_kind: in=승차(등원) · out=하차(하원). weekdays = 타는 요일 배열(mon~sun, 비어 있을 수 없음). '셔틀 이용 학생 수' = 이 표의 distinct student_id. 오늘 배정은 shuttle_run_stops를 거쳐 shuttle_runs.season과 해당 요일로 거르고 당일 예외를 반영한다 — 시즌을 확인하지 못하면 학기중·방학중을 합치지 말고 나눠 밝힌다. 그날만 변경은 shuttle_ride_exceptions, 실제 탑승은 shuttle_boardings.",
   },
   {
     name: "shuttle_run_stops", label: "셔틀 노선",
@@ -434,7 +434,7 @@ export const TABLES_B: readonly AssistantTableDoc[] = [
     name: "student_grades", label: "성적",
     ko: "학생 성적 — 학교 시험·월말평가 점수와 성적표 받기 단계",
     notes:
-      "subject = 과목 키(math · english 등). exam_slot: midterm=중간고사 · final=기말고사 · listening=듣기평가 · monthly=월말평가(exam_month 1~12, 다른 시험은 0) · school=내신(옛 행만). school_year·term(1|2) = 학년도·학기. 점수 비교는 score/max_score(만점이 다를 수 있다). no_exam=true면 시험 없음(no_exam_reason). ask1_at=1차상담 · ask2_at=2차상담 · received_at=성적확인 시각. area_scores = 영어 Monthly Test 영역 점수(score는 그 합). exam_name = 시험 표시 이름.",
+      "subject = 과목 키(math · english 등). exam_slot: midterm=중간고사 · final=기말고사 · listening=듣기평가 · monthly=월말평가(exam_month 1~12, 다른 시험은 0) · school=내신(옛 행만). school_year·term(1|2) = 학년도·학기. 점수 비교는 score/max_score(만점이 다를 수 있다). no_exam=true면 시험 없음(no_exam_reason). ask1_at=1차상담 · ask2_at=2차상담 · received_at=학원이 성적표를 받아 확인했다고 표시한 시각(학부모에게 전달한 시각이 아니다). area_scores = 영어 Monthly Test 영역 점수(score는 그 합). exam_name = 시험 표시 이름.",
     columns: { taken_on: "응시일", exam_id: "학원 시험(exams) 연결", class_id: "성적이 걸린 반" },
   },
   {
@@ -643,7 +643,7 @@ export const TABLES_B: readonly AssistantTableDoc[] = [
     name: "users", label: "직원",
     ko: "직원 계정 — 이름·역할·재직 상태·담당 과목·급여 설정",
     notes:
-      "system_role: master=원장 · admin=관리자 · manager=매니저 · teacher=강사 · counselor=상담사 · accountant=회계 · viewer=참관 · parttime=아르바이트 · student=학생 계정(직원이 아니다 — 직원 질문에서 뺀다). status: active=재직 · inactive=퇴사 · pending=대기. subjects = 담당 과목 키 배열, hire_date = 입사일(퇴사일 칸은 없다 — 퇴사 메모 줄은 staff_contracts의 kind='note' · terms에 '퇴사'가 들어간 줄 · start_date = 퇴사일 · 퇴사 처리 기록은 audit_logs·activity_log). 금액 칸(hourly_rate·monthly_base)은 원. salary_type: commission=비율제 · fixed=급여제 · hybrid=혼합 · null=미설정. 급여 칸은 원장 전용 민감 정보.",
+      "system_role: master=원장 · admin=관리자 · manager=매니저 · teacher=강사 · counselor=상담사 · accountant=회계 · viewer=참관 · parttime=아르바이트 · student=학생 계정(직원이 아니다 — 직원 질문에서 뺀다). status: active=재직 · inactive=퇴사 · pending=대기. subjects = 담당 과목 키 배열, hire_date = 입사일(퇴사일 칸은 없다 — 퇴사 메모 줄은 staff_contracts의 kind='note' · terms에 '퇴사'가 들어간 줄 · start_date = 퇴사일 · 퇴사 처리 기록은 audit_logs·activity_log). 금액 칸(hourly_rate·monthly_base)은 원. salary_type: commission=비율제 · fixed=급여제 · hybrid=혼합 · null=미설정. 급여 칸은 민감한 급여 정보 — 비서 보기로 제공된 칸은 질문 범위에서 조회할 수 있다. 🔴 JJ·LAB·보조T 등 자리·업무용으로 확인된 라벨이나 계정은 실명 강사로 세지 않는다(실제 담당자는 직원·배정 기록으로 확인한다).",
     columns: {
       display_name: "실명(표시 이름)",
       report_display_name: "수업보고서 발송용 이름(null = 실명)",
@@ -664,7 +664,7 @@ export const TABLES_B: readonly AssistantTableDoc[] = [
     name: "video_homework_auto_outcomes", label: "영상숙제 판정",
     ko: "영상 숙제 자동 판정 — 반×학생×숙제일",
     notes:
-      "status: submitted=영상 받음 · missing=기한이 지나도 없음(미제출) · unchecked=아직 기한 전. video_id → student_homework_videos. observed_at = 판정 시각. 강사가 손으로 찍은 검사(video_homework_marks)와 별개. 취소된 숙제의 줄도 남아 있어 지금 있는 숙제 기준으로 걸러야 한다.",
+      "status: submitted=영상 받음 · missing=기한이 지나도 없음(미제출) · unchecked=판정 당시 아직 마감 전(검사 미완료·판정 지연이 아니다). 🔴 숙제일은 마감일이 아니다 — 제출 마감은 유효한 lesson_reports.video_homework_due, 없으면 숙제일+7일이며 한국 날짜로 마감 당일까지 받는다. video_id → student_homework_videos — submitted일 때만 연결되므로 null만으로 영상이 없다고 판단하지 않는다. 영상과 판정이 다르면 homework_video_assignments·student_homework_videos를 학생·반·숙제일로 대조하고 제외·취소 여부와 observed_at을 확인한다. observed_at = 판정 시각. 강사가 손으로 찍은 검사(video_homework_marks)와 별개. 취소된 숙제의 줄도 남아 있어 지금 있는 숙제 기준으로 걸러야 한다.",
   },
   { name: "video_homework_automation_config", label: "영상숙제 설정", ko: "영상 숙제 자동 판정 시작 시각(전역 1행)", internal: true },
   {

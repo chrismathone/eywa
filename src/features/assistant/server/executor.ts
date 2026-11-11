@@ -13,6 +13,7 @@ import { reportWarning } from "@/lib/observability/report-error";
 import { clipText } from "../text";
 import { AssistantError, AssistantQueryError, type AssistantDb, type Row } from "./agent";
 import { wrapAssistantSql } from "./sql-gate";
+import { maskResidentNo } from "../pii-mask";
 
 /** 저장·화면용 행 상한(+1을 읽어 잘렸는지 안다). */
 export const ASSISTANT_ROW_LIMIT = 2000;
@@ -59,7 +60,8 @@ export function queryError(error: unknown): AssistantQueryError {
   const code = e?.code ?? "";
   const sqlState = /^[0-9A-Z]{5}$/.test(code) ? code : null;
   const connection = !sqlState || /^(08|57P|25P)/.test(sqlState) || sqlState === "53300";
-  return new AssistantQueryError(ko[code] ?? "조회하지 못했습니다", clipText(raw, 500), connection ? "connection" : "query");
+  // 오류 원문에도 값이 실린다(예: 글 칸을 ::int로 바꾸다 난 오류) — AI로 가기 전에 주민번호를 가린다(재리뷰 2026-11-11).
+  return new AssistantQueryError(ko[code] ?? "조회하지 못했습니다", clipText(maskResidentNo(raw), 500), connection ? "connection" : "query");
 }
 
 // postgres.js 타입 oid → 화면에 옮길 값(셀은 문자·숫자·참거짓·null만).
@@ -93,9 +95,10 @@ export function cell(value: unknown, type: number): string | number | boolean | 
       const n = Number(value);
       if (Number.isFinite(n) && (type === NUMERIC || Number.isSafeInteger(n))) return n;
     }
-    return value;
+    return maskResidentNo(value);
   }
-  return JSON.stringify(value);
+  // 주민번호는 앞 6자리 + 뒷자리 첫 자리만(원장 2026-11-11 · DB 보기 가림 s2_0067의 2차 — 다른 칸·다른 꼴로 적힌 것까지).
+  return maskResidentNo(JSON.stringify(value));
 }
 
 function planCost(plan: unknown): number {

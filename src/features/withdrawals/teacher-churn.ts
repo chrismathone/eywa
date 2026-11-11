@@ -34,7 +34,11 @@ export type ChurnTeacherRow = {
   resigned: boolean;
   cells: Record<string, ChurnCell>;
 };
-export type TeacherChurnData = { months: ChurnMonth[]; teachers: ChurnTeacherRow[] };
+/**
+ * `portfolioLink` = 이름 옆 ↗(그 강사 직원 포트폴리오)를 세우나 — 보는 사람이 직원 포트폴리오를 열 수 있을 때만(`getPortfolioGate`).
+ * 이 표는 권한 '강사별 퇴원율'로 다른 역할에도 열 수 있어, 못 여는 화면으로 가는 링크를 세우지 않는다(#77 계열 · 2026-11-11).
+ */
+export type TeacherChurnData = { months: ChurnMonth[]; teachers: ChurnTeacherRow[]; portfolioLink: boolean };
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
@@ -68,7 +72,9 @@ export function countsFrom(hireDate: string | null): string | null {
 export function inTenure(month: string, hireDate: string | null, resignDate: string | null): boolean {
   const from = countsFrom(hireDate);
   if (from && month < from) return false;
-  return !resignDate || month <= resignDate.slice(0, 7);
+  // 입사일보다 앞선 퇴사일은 옛 재직의 것(재입사) — 지금 재직을 자르지 않는다.
+  if (!resignDate || (hireDate && resignDate.slice(0, 10) < hireDate.slice(0, 10))) return true;
+  return month <= resignDate.slice(0, 7);
 }
 
 /** "YYYY-MM"부터 "YYYY-MM"까지 빠짐없이(오름차순). */

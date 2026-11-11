@@ -7,6 +7,8 @@ import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getPortfolioGate } from "@/features/teacher-portfolio/server/queries";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { isPortfolioTableMissing } from "@/features/teacher-portfolio/server/store";
 import { churnCellOf, inTenure, monthSpan, teacherChurnTag, type ChurnMonth, type ChurnTeacherRow, type TeacherChurnData } from "../teacher-churn";
 import { loadResignDates } from "./teacher-tenure";
@@ -14,8 +16,9 @@ import { loadResignDates } from "./teacher-tenure";
 /**
  * 퇴원관리 '강사별 퇴원율 추이' 조회 — 강사평가가 저장한 달(`teacher_portfolio_months`)에서 퇴원율 항목만 읽는다.
  *
- * 🔴 문은 직원 포트폴리오와 같은 `getPortfolioGate()`(원장 역할만) — 강사 한 사람 한 사람의 평가 수치라 퇴원관리를 여는
- *    다른 역할에겐 카드째 없다(null). 값은 저장된 그대로(다시 계산하지 않는다).
+ * 🔴 문 = 권한 '강사별 퇴원율'(`withdrawals_churn` · 역할·권한 면의 퇴원관리 줄 아래 — 원장 2026-11-11 *"퇴원표를 역할 따로 빼서 볼 수 있게.
+ *    추가 권한으로 해볼것"*) + 퇴원관리 권한(`getTeacherChurnGate` 한 곳 — 페이지와 이 조회가 같이 부른다 · #77). 기본은 원장만(새 권한 규칙).
+ *    닫힌 사람에겐 카드째 없다(null). 값은 저장된 그대로(다시 계산하지 않는다).
  * 🔴 표의 정책이 0개라 admin으로 읽는다 → 모든 조회에 tenant_id(#104). 캐시 안엔 쿠키가 없다(문은 캐시 밖에서 먼저).
  * 🔑 근거(`payload.items`)는 행마다 수십~100KB다. 항목 배열에서 **퇴원율 항목 하나만** 받는다 — 지금 저장 모양에서 퇴원율은
  *    늘 두 번째(`items->1`)라 그 자리부터 받고(침산 12개월 143줄 58ms), id가 다른 줄(설정에서 항목 순서를 바꾼 달)만 항목 id를
@@ -91,7 +94,10 @@ async function readChurn(tenantId: string, to: string): Promise<RawChurn> {
   }
   const users = await fetchInChunks<{ id: string; display_name: string | null; hire_date: string | null; status: string | null }>(ids, (chunk) =>
     admin.from("users").select("id, display_name, hire_date, status").eq("tenant_id", tenantId).in("id", chunk));
-  const resignOf = await loadResignDates(admin, tenantId, users.filter((u) => u.status !== "active").map((u) => u.id));
+  const rawResign = await loadResignDates(admin, tenantId, users.filter((u) => u.status !== "active").map((u) => u.id));
+  // 입사일보다 앞선 퇴사 기록은 옛 재직의 것(재입사 — 실측: 2026-01 입사 · 2023-02 퇴사 메모) — 지금 재직을 자르지 않는다.
+  const hireById = new Map(users.map((u) => [u.id, u.hire_date?.slice(0, 10) ?? null]));
+  const resignOf = new Map([...rawResign].filter(([id, d]) => { const h = hireById.get(id); return !(h && d < h); }));
   // 퇴사자 = 직원 상태 inactive(대기 pending은 퇴사가 아니다) — '퇴사자 숨김' 토글이 본다.
   const inactive = new Set(users.filter((u) => u.status === "inactive").map((u) => u.id));
   const itemOf = new Map<string, unknown>(heads.map((r) => [keyOf(r), isChurn(r.item) ? r.item : found.get(keyOf(r))]));
@@ -125,8 +131,19 @@ async function readChurn(tenantId: string, to: string): Promise<RawChurn> {
 }
 
 /** 원장 역할이 아니면 null. 표가 없거나 집계 전이면 빈 표. 조회가 실패하면 던진다(카드가 '불러오지 못함'으로 말한다). */
+/**
+ * '강사별 퇴원율 추이'를 볼 수 있나 — 퇴원관리 권한 **과** '강사별 퇴원율' 권한이 둘 다 열려야 한다(카드는 퇴원관리 화면 안에만 있다).
+ * 개인별 메뉴 권한·운영 계정은 `canAccessTenant`(지점 권한 표)가 함께 본다. 열리면 지점 id.
+ */
+export async function getTeacherChurnGate(): Promise<{ tenantId: string } | null> {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  const [base, churn] = await Promise.all([canAccessTenant(user.systemRole, "withdrawals"), canAccessTenant(user.systemRole, "withdrawals_churn")]);
+  return base && churn ? { tenantId: user.tenantId } : null;
+}
+
 export async function loadTeacherChurn(now: Date = new Date()): Promise<TeacherChurnData | null> {
-  const gate = await getPortfolioGate();
+  const gate = await getTeacherChurnGate();
   if (!gate) return null;
   const to = kstMonth(now);
   // 캐시 열쇠에 저장된 집계의 마지막 시각을 싣는다 — 매일 cron·[지금 집계]·설정 저장 뒤 재집계 어느 경로든 새 저장이 생기면 바로 새 값
@@ -134,10 +151,12 @@ export async function loadTeacherChurn(now: Date = new Date()): Promise<TeacherC
   const { data: latest } = await createAdminClient().from(TABLE).select("computed_at").eq("tenant_id", gate.tenantId)
     .order("computed_at", { ascending: false }).limit(1).maybeSingle();
   const version = (latest as { computed_at?: string } | null)?.computed_at ?? "none";
-  const [raw, settings] = await Promise.all([
+  const [raw, settings, portfolio] = await Promise.all([
     unstable_cache(() => readChurn(gate.tenantId, to), ["withdrawals-teacher-churn-v5", gate.tenantId, to, version],
       { revalidate: 300, tags: [teacherChurnTag(gate.tenantId)] })(),
     getTenantSettings(),
+    // 이름 옆 ↗(직원 포트폴리오)는 그 화면을 열 수 있는 사람에게만 — 이 표를 원장 밖 역할에 열어도 못 여는 링크가 서지 않게.
+    getPortfolioGate().catch(() => null),
   ]);
   const subjects = buildSubjectMaps(settings.operations.subjects);
   // 라벨을 못 찾는 과목 키(설정에서 지운 과목 등)는 키 원문을 내보내지 않고 뺀다 — 화면에 raw 코드 금지.
@@ -145,5 +164,6 @@ export async function loadTeacherChurn(now: Date = new Date()): Promise<TeacherC
   return {
     months: raw.months,
     teachers: raw.teachers.map(({ latestKeys, ...t }) => ({ ...t, subjects: labelsOf(latestKeys) })),
+    portfolioLink: !!portfolio,
   };
 }

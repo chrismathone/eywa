@@ -4,6 +4,7 @@ import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { isMergedStudent } from "@/features/students/status/merged";
 import type { OverlayHoldInput } from "../exit-overlay-model";
+import { SHEET_TEACHER_PREFIX } from "../sheet-teachers";
 
 /** 시간표 X 겹침의 조회(`exit-overlay.ts`가 조립한다 — 담당 선생님 재료는 강사평가의 `loadChurnSource`). */
 type Supabase = Awaited<ReturnType<typeof createClient>>;
@@ -48,9 +49,15 @@ export async function loadCurrentHolds(supabase: Supabase, today: string): Promi
 }
 
 /** 선생님 이름 — 직원관리에 있는 사람만(학생 계정 제외 · 퇴사자 포함, `getStaffList`와 같은 범위). */
-export async function teacherNames(supabase: Supabase, ids: string[]): Promise<Map<string, string>> {
+export async function teacherNames(supabase: Supabase, allIds: string[]): Promise<Map<string, string>> {
+  // 퇴원생 관리 차트 이름을 계정으로 못 이은 id(`sheet:이름`)는 이름 그대로 — 조회에 넣지 않는다.
+  const sheet = allIds.filter((id) => id.startsWith(SHEET_TEACHER_PREFIX));
+  const ids = allIds.filter((id) => !id.startsWith(SHEET_TEACHER_PREFIX));
   const rows = await fetchInChunks<{ id: string; display_name: string | null }>(ids, (chunk) =>
     supabase.from("users").select("id, display_name").in("id", chunk).neq("system_role", "student"),
   );
-  return new Map(rows.flatMap((r) => (r.display_name ? [[r.id, r.display_name] as [string, string]] : [])));
+  return new Map([
+    ...rows.flatMap((r) => (r.display_name ? [[r.id, r.display_name] as [string, string]] : [])),
+    ...sheet.map((id) => [id, id.slice(SHEET_TEACHER_PREFIX.length)] as [string, string]),
+  ]);
 }

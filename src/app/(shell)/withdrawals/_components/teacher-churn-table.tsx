@@ -91,13 +91,15 @@ function Cell({ c, month, partial, row }: { c: ChurnCell | undefined; month: Chu
  * 강사 × 달 히트맵 표 — 칸 = 퇴원율(크게) + 그만둠/담당(작게), 배경 노랑 = 퇴원율(마감한 값만).
  * 첫 열·머리 줄은 고정(가로·세로 스크롤 — 카드 안에서만, 아래 명단을 밀지 않게). 이름을 누르면 아래 차트에서 견준다.
  */
-export function TeacherChurnTable({ rows, months, pair, picked, colorOf, onPick }: {
+export function TeacherChurnTable({ rows, months, pair, picked, colorOf, onPick, portfolioLink }: {
   rows: readonly ChurnTeacherRow[];
   months: readonly ChurnMonth[];
   pair: readonly [string, string] | null;
   picked: readonly string[];
   colorOf: (id: string) => string | null;
   onPick: (id: string) => void;
+  /** 이름 옆 ↗(직원 포트폴리오) — 보는 사람이 그 화면을 열 수 있을 때만. */
+  portfolioLink: boolean;
 }) {
   const head = "bg-card sticky top-0 border-line border-b px-1.5 py-2 text-xs font-bold";
   return (
@@ -140,8 +142,10 @@ export function TeacherChurnTable({ rows, months, pair, picked, colorOf, onPick 
                       {color ? <i aria-hidden className="mr-1 inline-block size-2.5 rounded-full align-middle" style={{ background: color }} /> : null}
                       {r.name}
                     </button>
-                    <WindowLink href={`/class-review?tab=portfolio&teacher=${encodeURIComponent(r.id)}`} title={`${r.name} 직원 포트폴리오`}
-                      className="hover:text-primary shrink-0 text-xs" ariaLabel={`${r.name} 직원 포트폴리오 열기`}>↗</WindowLink>
+                    {portfolioLink ? (
+                      <WindowLink href={`/class-review?tab=portfolio&teacher=${encodeURIComponent(r.id)}`} title={`${r.name} 직원 포트폴리오`}
+                        className="hover:text-primary shrink-0 text-xs" ariaLabel={`${r.name} 직원 포트폴리오 열기`}>↗</WindowLink>
+                    ) : null}
                   </span>
                   {/* 입사·퇴사는 이름 칸에 적지 않는다 — 칸 색이 말한다(원장 2026-11-11). 고정 폭이라 넘치면 어절로 접는다(#116). */}
                   {r.subjects.length ? <span className="block text-xs font-medium break-keep">{r.subjects.join(" · ")}</span> : null}

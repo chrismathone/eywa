@@ -28,6 +28,7 @@ import {
   summarizePrograms,
 } from "@/features/students/enrollment/enrolled-composition";
 import { getWithdrawalsInWindow, type WindowWithdrawal } from "@/features/withdrawals/server/window";
+import { withSheetWithdrawals } from "@/features/withdrawals/server/sheet-withdrawals";
 import { getSubjectEndedStudents } from "@/features/withdrawals/server/queries";
 import { monthWithdrawalRows } from "./monthly-exits";
 import { tenureDays } from "@/features/withdrawals/early-exit";
@@ -716,7 +717,11 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   const withdrawalRows =
     (allowed.includes("withdrawals") || allowed.includes("students")) && needs("withdrawals", "changes", "earlyExits")
       // KPI가 보여 줄 달에 퇴원했지만 앞 달로 센 학생은 6개월보다 앞 달로 셌어도 싣는다(KPI 팝업 '앞 달로 센' — 원장 2026-11-03). 세 소비처는 `exitDate`로 다시 거른다.
-      ? getWithdrawalsInWindow(`${monthKeys(today)[0]}-01`, today, { keepProcessedFrom: `${exitReportMonth(today)}-01` })
+      // 2026-10까지는 퇴원생 관리 차트의 줄로 센다(퇴원관리와 같은 규칙 · 원장 2026-11-11 `withSheetWithdrawals`).
+      ? withSheetWithdrawals(
+          getWithdrawalsInWindow(`${monthKeys(today)[0]}-01`, today, { keepProcessedFrom: `${exitReportMonth(today)}-01` }),
+          user.tenantId, today, `${monthKeys(today)[0]}-01`,
+        )
       : Promise.resolve([] as WindowWithdrawal[]);
   // 최근 60일 콜&상담 — 일정 카드(일정↔상담 연결)와 '상담 진행' 카드가 **같은 한 번의 조회**를 쓴다(두 카드가 같은 상담 집합을
   // 보고, 30초 갱신마다 같은 표를 두 번 읽지 않게). 실패 처리는 영역마다 다르다: 일정 카드는 링크만 빼고 살고, 상담 진행은 실패를 알린다.

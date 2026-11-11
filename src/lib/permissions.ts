@@ -91,6 +91,7 @@ export const MENU_KEYS = [
   "marketing", // 홍보·마케팅 통합 관리(행사 기록 — 실제 기록 s2_0047) · 마케팅 입력·검토 화면만 아직 예시 값
   "work_records", // 업무 작성센터 · 관찰 기록(실제 기록 — s2_0048 · s2_0049)
   "shuttle_admin", // 셔틀 관리자 화면(학부모 관리 현황 · 탑승 학생 시간표 · 가까운 노선 찾기 · 실시간 위치) — 셔틀 권한 위 조건
+  "withdrawals_churn", // 퇴원관리 안 '강사별 퇴원율 추이' 표(2026-11-11) — 퇴원관리 권한 위 조건 · 모든 강사의 평가 수치
   // 연결 앱(왼쪽 '연결 앱'의 바깥 앱 링크) — 앱마다 한 키. 아래 CONNECTED_APP_MENU_KEYS에도 함께 적는다.
   "app_todays_math",
 ] as const;
@@ -116,7 +117,7 @@ export const CONNECTED_APP_ACCESS_MESSAGE = "연결 앱 권한은 전체·없음
  * 판정 = `isPermissionLocked`(담당·읽기 잠금) · 칸 순환(`permissionAccessOptions`) · 저장 거절(`onOffAccessMessage`)이 함께 이 함수를 본다.
  */
 export function isOnOffMenu(menu: string): boolean {
-  return isConnectedAppMenu(menu) || menu === "assistant" || menu === "shuttle_admin";
+  return isConnectedAppMenu(menu) || menu === "assistant" || menu === "shuttle_admin" || menu === "withdrawals_churn";
 }
 /** 셔틀 관리자 화면(`shuttle_admin`)을 줄 수 있는 역할 — 학부모 계정 표의 DB 정책(0320a `parent_accounts_tenant_read`)과 같은 두 역할. */
 export const SHUTTLE_ADMIN_ROLES = ["master", "admin"] as const;
@@ -191,6 +192,7 @@ export const MENU_LABEL: Record<MenuKey, string> = {
   marketing: "홍보·마케팅",
   work_records: "업무 작성센터",
   shuttle_admin: "셔틀 관리자 화면",
+  withdrawals_churn: "강사별 퇴원율",
   app_todays_math: "오늘 수학(연결 앱)",
 };
 export type MenuKey = (typeof MENU_KEYS)[number];
@@ -393,6 +395,10 @@ export const MENU_ACCESS: AccessMatrix = {
   // 🔴 셔틀 권한 **위에 덧붙는 조건**이다 — 셔틀 권한이 없으면 못 연다(판정 canOpenShuttleAdmin · features/shuttle/admin-access.ts).
   // 칸은 전체·없음만(isOnOffMenu) · 원장·관리자 칸만 바꿀 수 있다(SHUTTLE_ADMIN_ROLES — 학부모 계정 표의 DB 정책 0320a가 이 두 역할에게만 읽기를 연다).
   shuttle_admin: { master: "full", admin: "full", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  // 퇴원관리 '강사별 퇴원율 추이' 표(원장 2026-11-11 *"퇴원표를 역할 따로 빼서 볼 수 있게. 추가 권한으로 해볼것"*) — 새 권한 규칙대로 원장 '전체' · 나머지 '없음'.
+  // 🔴 퇴원관리 권한 **위에 덧붙는 조건**이다(카드는 퇴원관리 화면 안에만 있다). 칸은 전체·없음만(isOnOffMenu) — 모든 강사의 강사평가 수치를 한 표에
+  //    보여 주므로 '담당'·'읽기'로 좁힐 수 없다. 판정 = 화면(퇴원관리 page)과 조회(loadTeacherChurn)가 같은 키를 본다.
+  withdrawals_churn: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // 연결 앱 '오늘 수학'(원장 2026-11-05 *"지금 하나 있는 '오늘 수학'은 강사 이상에게 열림"*) — 강사 이상 = 원장·관리자·매니저(실장)·강사(권한 표의 강사 왼쪽 칸 ·
   // 오늘 수학 쪽 로그인 자격 tm_sync_control과 같은 네 역할 — 상담·회계는 링크를 눌러도 로그인되지 않는다). 상담·회계·열람·아르바이트·학생은 없음.
   // 영어만 맡은 선생님은 이 값과 따로 과목 축으로 빠진다(connected-apps/apps.ts). 새 연결 앱은 전부 없음으로 시작한다.
