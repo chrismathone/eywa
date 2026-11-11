@@ -13,6 +13,12 @@
 - **과목 흡수·삭제**: 신규생 관리 기록(완료 체크·담당 배정·적응 피드백)이 있는 과목은 거절 — 흡수 첫머리 · 사용 현황(삭제 창) · 과목 행을 지우는 마지막 저장. 직원 완전 삭제는 새 표 참조를 먼저 본다(`newcomers/server/staff-refs.ts`).
 - SQL(전부 추가만 · 서버 전용 표 · 정책 0개 · 되돌리기 `scripts/_oneoff/revert-s2_006x-*.sql`): `s2_0061` 적응 피드백·변경 이력 · `s2_0062` 과목별 담당·기본 담당 · `s2_0063` 여정 기록·이력·저장 함수 · `s2_0064` 상담 삭제 차단 트리거·병합 함수.
 - 안 한 것: 강사 기본 권한 열기(원장이 역할·권한에서 '담당만'으로) · 과목 기본 담당 설정 화면 · 메이크에듀 수강 연결 자동화 · 약속·인계 옮기기를 병합과 같은 거래로.
+## 2026-11-11 — 조직·OKR · 업무 작성센터 · 관찰 기록 · 지식그래프 = 실제 기록(aywa-next 이식)
+
+- 시안(예시 값) 화면 넷을 실제 표에 이었다: `organization_okr`(+revisions) · `academy_work_records`(+events) · `academy_knowledge_records` · `academy_model_versions` (SQL s2_0048~s2_0051 · 서버 전용 · 정책 0개 · 되돌리기 `scripts/_oneoff/revert-s2_00{48..51}-*.sql`).
+- 서버: `organization-okr/server.ts` · `work-records/server.ts` · `academy-knowledge/{server,server-core,server-records,studio-server}.ts` · 라우트 `/api/organization/okr` · `/api/work-records` · `/api/work-records/knowledge` · `/api/management/model` · `/api/management/ontology`(JSON 내려받기). 공용 문 `src/lib/auth/menu-gate.ts` · 같은 출처 JSON 껍데기 `src/lib/http/same-origin-json.ts`.
+- 학생 통합보기 '현장 관찰·후속 조치'가 연결 전 → 실제 기록. 지식그래프 바탕은 수강 관계(경영·홍보 그래프는 main에 조회가 없어 '연결 전'). 결정 = `docs/decisions/staff.md` 끝.
+- 후속(Claude·Codex 검토 반영 · s2_0058~s2_0060): 직원 완전 삭제를 한 거래로(잠금 → 삭제 차단 FK 전부 검사 → 직원 행 → 로그인 계정 · 막히면 아무것도 안 지움 — 로그인만 사라지거나 미러 트리거로 직원 행이 되살아나는 중간 상태 없음) · 관찰 자기 확인 금지·검토자는 상태·검토 의견만 · 지식그래프 학생·직원·반에 원본 화면 권한(수업목록과 같은 강사 범위 · 직원관리 과목 범위 · 다른 출처의 직원 이름과 글 속 이름도 마지막에 가림) · OKR 이력에도 근거 필터 · 관찰 목록은 최신 버전만·이력은 펼칠 때(버전마다 학생 범위 재확인) · 원본 빈값 점검은 버튼 · 학원 비서 DB 지도에 새 표 설명(이 브랜치 6개 + 원생상담 평점 2개).
 
 ## 2026-11-11 — 운영 로그 오류 3건(전체 점검에서 발견 · Codex 협의)
 
@@ -35,6 +41,13 @@
 - `ReportCard` props 43 → 8(`fields`·`rowActions`·`slots` 묶음 · 본문 그대로).
 - 🔴 보이는 변경 하나: 원스크린 행·진도 카드·학생 목록·내 학습의 과목 색이 코드 고정(`subjectTone`)에서 **학원 설정 과목 색**(`subjectColorOfRow` → `colorOf`, 미등록 키는 `LEGACY_COLORS`)으로 — 설정과 다르던 색이 설정대로 바뀐다.
 - 원스크린 화면 원문을 읽는 가드는 `readOnescreenScreen()`(화면 + 옮겨 낸 파일을 한 덩어리로) — 새로 옮겨 낸 파일은 그 목록에 한 줄. 발송 판정 배선 가드는 파일별로도 본다.
+
+## 2026-11-10 — 경영 분석·강사 배정 상한을 시안에서 실제 기능으로(aywa-next 이식 · SQL s2_0052~0057 운영 적용)
+
+- 경영 분석(`/dashboard/management`, 원장 전용): 예시 값·시안 띠를 걷고 이 지점 DB를 읽는다(청구·수강·상담 집계 + 회계 자료 + 원본 대조 기록). ECOUNT 손익계산서 .xlsx / 계정별원장 .csv 가져오기(검토 후 저장 · 버전) · 자료 수집함(MakeEdu 수납통합내역 · ECOUNT 월별손익분석 — 미리보기 지문이 같을 때만 대조 기록 저장 · 이름만으로 학생을 잇지 않음) · 확인 업무(상태·담당·기한·메모 버전) · 보고서 기준 손익(마감 월만 비율) · 'AI 검토'(버튼만 · 집계 지표만 · Claude 전용 · 결과 DB 보관 · 모델 라벨) · 학원 PC 수집기(서버·PC 프로그램 `apps/collection-agent`까지 옮겼지만 🔴 이번 배포에서는 배포 스위치로 막아 둠 — 아래 후속).
+- 후속(2026-11-11 · Claude·Codex 검토 합의): 원장 계정 금액을 차변·대변 원액에서 다시 계산(분류를 바꾸면 부호도 맞게) · 퇴원 수·퇴원율·AI 입력 = 퇴원관리와 같은 판정(`getWithdrawalsInWindow` — 침산 2026-07: 36명 · 옛 계산 98명) · 🔴 PC 수집기는 배포 스위치(`collector-switch.ts`)로 서버에서 막고 설치 화면·ZIP은 뺐다(Windows 실측 뒤 그 값만 켠다) · 수집기 켜기·끄기·발급·해제 감사로그 · 회계 자료 올리기는 운영 콘솔 지점 스위치 `ecount_accounting`을 켠 지점만(기본 꺼짐 · 첫 학원은 SQL s2_0057가 켜 둠 — 계정 분류표가 첫 학원 것 하나라서) · 원장 계정 방향은 계정 단위(잔액 검산)로 정해 달마다 바뀌지 않음 · 값 없는 손익 카드·인건비 구성 숨김(빈 칸 없이 다시 배치) · 조회는 그 달 집계만(그래프 생성 제거 · 회계 자료 본문은 그 달에 걸친 기간 + 최근 12개) · 퇴원 조회만 실패하면 퇴원 지표만 '자료 필요' · 동시수강 라벨은 학원설정 과목 이름.
+- 강사 통합 기록(`/class-review/knowledge`): '현재 학생 배정 여력' 저장이 실제로 된다(`/api/teachers/capacity` · 이번 달만).
+- 통합 지식그래프(`/dashboard/management/knowledge`)는 아직 시안 그대로(다른 작업 범위 — `sample-data.ts`도 그 화면이 쓴다).
 
 ## 2026-11-10 — 보류 항목 정리(Codex 협의 추천안) — 수정 계획 P4 나머지
 

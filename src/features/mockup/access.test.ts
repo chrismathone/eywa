@@ -22,7 +22,7 @@ vi.mock("next/navigation", () => ({ redirect: (to: string) => { throw new Error(
 
 const { requireManagementSample } = await import("./access");
 const marketing = await import("@/features/marketing/sample-access");
-const okr = await import("@/features/organization-okr/sample-access");
+const okr = await import("@/features/organization-okr/access");
 
 beforeEach(() => {
   m.superAdmin = false;
@@ -33,7 +33,7 @@ describe("시안 화면의 문 = 제 권한 키", () => {
   it("경영 분석·지식그래프 → management · 홍보·마케팅 → marketing · 조직·OKR → okr", async () => {
     await requireManagementSample();
     await marketing.requireSampleViewer();
-    await okr.requireSampleViewer();
+    await okr.requireOkrViewer();
     expect(m.required).toEqual(["management", "marketing", "okr"]);
   });
 
@@ -41,7 +41,7 @@ describe("시안 화면의 문 = 제 권한 키", () => {
     m.superAdmin = true;
     await requireManagementSample();
     await marketing.requireSampleViewer();
-    await okr.requireSampleViewer();
+    await okr.requireOkrViewer();
     expect(m.required).toEqual([]);
   });
 

@@ -132,6 +132,7 @@ const RULES: readonly [string, string][] = [
   ["ment_style_", "settings"],
   ["sheets_sync_now", "settings"],
   ["sync_agent_", "settings"],
+  ["management_collector_", "settings"],
   ["ijw_", "settings"],
   // 원스크린 일괄 입력(맨 위 행 복사 · 직접 입력) — 보고서 칸을 채우는 동작.
   ["onescreen_", "reports"],
@@ -157,6 +158,8 @@ const FORBID_KEYS = new Set([
   "staff_email_change",
   "kakao_channel_save",
   "kiosk_device_register",
+  // 경영 분석 PC 수집기(원장 전용 재무 화면의 기기 연결) — 채널로 흘리지 않는다.
+  "management_collector_manage",
   "staff_roster_import",
   "staff_roster_import_revert",
   // 누가 어떤 파일을 받았는지는 개인정보 접속기록이라 채널로 흘리지 않는다(보안 감사 2026-09-29).

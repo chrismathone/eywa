@@ -33,6 +33,8 @@ export const TENANT_VIEW_READ_RPCS: ReadonlySet<string> = new Set([
   // 원생상담 검색·보고서 열람 수(s2_0043) — security invoker 읽기(RLS = auth_tenant_id()) · 지점 보기에서도 같은 목록·같은 수.
   "search_student_consultations",
   "share_link_view_counts",
+  // 관찰 기록 최신 버전 목록(s2_0059) — stable 읽기 · service_role 전용 · 지점 = 서버 인자. 지점 보기에서도 같은 목록.
+  "academy_knowledge_latest",
   // 오늘 수학 성적표가 걸린 날(0373a) — cron이 admin으로 부르는 읽기지만 목록 규약상 여기 둔다.
   "todays_math_exam_report_dates",
   // 사람별 열린 할 일(0377a) — 서버가 관리 키로 부르는 읽기(보기 중엔 할 일 화면이 비어 부르지 않는다). 목록 규약상 여기 둔다.

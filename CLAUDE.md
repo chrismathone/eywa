@@ -163,6 +163,7 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 | `STAFF` | staff_contract_pdf · staff_contract_pdf_ocr | Claude(OCR은 **Claude 전용**) |
 | `VIDEO` | video_review_judge · video_review_verify | Claude(판정 Haiku · 확인 Sonnet · 밤 배치) |
 | `ASSISTANT` | academy_assistant(학원 비서 — 원장 자연어 질의 · 자체 도구 루프라 `recordUsage`로 센다, 2026-11-06) | Claude 전용(강도 적음 Haiku · 보통 Sonnet · 강함 Opus 5.5) |
+| `MANAGEMENT` | management_analysis(경영 분석 'AI 검토' — 원장 전용 · 명시 버튼 · 선택 월 집계 지표만 · 결과는 `management_ai_reviews`에 보관, 2026-11-10) | Claude 전용(Sonnet 5.5 · 폴백 없음) |
 
 - **키 고르는 순서 = 그룹 키 → 옛 버킷 키(`_CONSULTATIONS`) → 기본 키**(`resolveKeyEnv`). 그룹 키가 아직 없어도
   기본 키로 돌아 **멈추는 기능이 없다**(키를 하나씩 넣는 동안의 안전장치).
@@ -560,6 +561,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - 급여명세서 열람 = 원장 역할 + 학원 설정에서 지정한 사람(코드 명단 없음 · 원장이 아닌 사람은 지정돼야 본다)
 
 ### 직원·권한·전자결재·연차 → [`docs/decisions/staff.md`](docs/decisions/staff.md)
+- 조직·OKR · 업무 작성센터 · 관찰 기록 · 스키마 스튜디오 = 실제 기록(2026-11-11 · s2_0048~0051) · 권한 줄은 okr · work_records · management 그대로(기본 원장만) · 담당자 본인만 자기 목표·문서를 쓴다 · 지식그래프 바탕은 수강 관계(경영·홍보 그래프는 연결 전)
 - 학원 비서 권한 = 키 `assistant`(원장 전체·나머지 없음 · 전체·없음만) · 🔴 새 메뉴·단추는 제 권한 키(다른 메뉴 권한 빌리기·페이지 역할 비교 금지) · 셔틀 관리자 화면 = `shuttle_admin`(2026-11-09·11-10)
 - 퇴사 = 권한을 **주는** 값만 학원 설정에서 빠진다 · 좁히는 값은 남긴다(판정 `userOverrideGrants` 한 곳) · 재입사해도 되살리지 않는다(2026-11-09·11-10)
 - 역할 '아르바이트'(`parttime`, 2026-11-05) = 열람 아래 · 🔴 열람보다 넓게 두지 않는다 · 🔴 읽기 권한 화면 = 쓰기 단추 안 그림 + 입력칸 비활성(`write-lock.ts` · page.tsx에서 서버 게이트와 같은 함수)
