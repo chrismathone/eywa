@@ -98,10 +98,9 @@ export function parseConsultationRating(row: ConsultationRatingDbRow): Consultat
 
 export const ruleLabel = (rule: string | null): string | null => (rule ? (RULE_LABEL[rule] ?? null) : null);
 
-export const CONSULTATION_RATING_BASIS_LINE = "기준: 수업보고서 평점과 같은 잣대 — 기록에 상담자의 정성과 이 아이에 대한 구체적인 이야기가 담겼는가(상담 자체의 옳고 그름이 아니다)";
-
 /**
- * 마우스 오버 근거 카드 — 이유 · 기록 인용 · 상담 사유 · 기록에 없는 내용 · (코드 규칙이 정했으면) 그 까닭, 아래에 기준. 근거가 여러 줄이라 넓은 카드.
+ * 마우스 오버 근거 카드 — 이유 · 기록 인용 · 상담 사유 · 기록에 없는 내용 · (코드 규칙이 정했으면) 그 까닭. 근거가 여러 줄이라 넓은 카드.
+ * 카드 아래의 'AI가 …에 매긴 참고 값 · 기준: …' 줄은 원장 지시로 뺐다(2026-11-11) — 제목의 '참고용'이 같은 뜻을 이미 말한다.
  * '기록에 없는 내용'은 기록을 보완할 곳을 알리는 줄이다 — 실제로 하지 않았다는 뜻이 아니다(문구에 그대로 적는다).
  */
 export function consultationRatingTip(r: ConsultationRating): TipCard {
@@ -118,7 +117,6 @@ export function consultationRatingTip(r: ConsultationRating): TipCard {
     ],
     lines: [
       r.basis === "recording" ? "녹음 전사 기준 — 상담자가 직접 쓴 기록이 아니라 수기 기록 평점과 눈금이 다를 수 있습니다." : null,
-      `AI가 ${r.ratedOn ? `${r.ratedOn}에 ` : ""}매긴 참고 값 · ${CONSULTATION_RATING_BASIS_LINE}`,
     ],
     wide: true,
   };
