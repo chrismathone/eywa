@@ -1,5 +1,5 @@
 import { buildGroupModel, type ExploreModel, type ExploreRow, type ExploreSector, type ExploreTarget } from "../../../model";
-import type { NetAnalysis, NetFact, NetInput } from "../graph";
+import type { NetAnalysis, NetFact, NetModelInput } from "../graph";
 import { AS_OF, CONSULTS, classAttendanceRows, studentAttendance, studentAttendanceRows } from "./fixture-records";
 
 /**
@@ -127,7 +127,7 @@ export const ROOM: ExploreModel = {
 };
 
 /** 시험 화면의 중심들 — 열쇠 = 판의 가운데 점 id(`kind:id[:영역]`). */
-export const CENTERS: Record<string, NetInput> = {
+export const CENTERS: Record<string, NetModelInput> = {
   "student:s1": { model: STUDENT, analyses: ANALYSES, facts: FACTS },
   "class:c1": { model: CLASS },
   "teacher:t1": { model: TEACHER },

@@ -7,7 +7,9 @@ import { domains,entities,metricDictionary,ONTOLOGY_VERSION,relations,workbookCo
 import { contextualResult } from "./records";
 import { rules } from "./rules";
 import { uniqueEdges } from "./studio-model";
-import { GraphTab, SchemaTab, QualityTab } from "./studio";
+import { SchemaTab, QualityTab } from "./studio";
+import { GraphTab } from "./graph-tab";
+import { DEFAULT_KG_GRAPH_PREFS, type KgGraphPrefs } from "./graph-prefs";
 import s from "./workspace.module.css";
 import { PageHeader } from "@/components/page-header";
 import { ArrowLeft } from "@/components/icons/aywa-icon-compat";
@@ -16,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { BigStat } from "@/components/atoms/big-stat";
 const labels=Object.fromEntries(entities);
 const stateLabels={triggered:"확인 필요",clear:"조건 미충족",insufficient:"자료 부족"};
-export function KnowledgeWorkspace({data,months,initialTab="graph"}:{data:AcademyKnowledgeData;months:readonly string[];initialTab?:string}){
+export function KnowledgeWorkspace({data,months,initialTab="graph",graphPrefs=DEFAULT_KG_GRAPH_PREFS}:{data:AcademyKnowledgeData;months:readonly string[];initialTab?:string;graphPrefs?:KgGraphPrefs}){
   const [tab,setTab]=useState(initialTab),[audit,setAudit]=useState<AcademyKnowledgeData["studio"]["audit"]|null>(null),[auditBusy,setAuditBusy]=useState(false),[auditError,setAuditError]=useState("");
   // 원본 빈값 점검은 버튼을 누를 때만 읽는다(학생·강좌·직원 원본 전수 조회 — 화면을 열 때마다 돌지 않게).
   async function runAudit(){setAuditBusy(true);setAuditError("");try{const res=await fetch("/api/management/model");const result=await res.json().catch(()=>({}));if(!res.ok)throw Error(result.error??"점검하지 못했습니다");setAudit(result);}catch(e){setAuditError(e instanceof Error?e.message:"점검하지 못했습니다");}finally{setAuditBusy(false);}}
@@ -33,7 +35,7 @@ export function KnowledgeWorkspace({data,months,initialTab="graph"}:{data:Academ
     <Toolbar><ToolbarSegment wrap>{[["schema","엑셀 뼈대·스키마"],["graph","지식그래프"],["quality","보완 점검"],["rules","검토 규칙·후속 조치"],["context","OKR·운영 보완 자료"],["coverage","초기 설계 반영 이력"],["model","모델·지표 사전"]].map(([id,label])=><ToolbarSegmentItem active={tab===id} key={id} onClick={()=>setTab(id)}>{label}</ToolbarSegmentItem>)}</ToolbarSegment></Toolbar>
     {(tab==="schema"||tab==="quality")&&<p role="status" className={s.notice}>{view.studio.audit.ran?`원본 빈값 점검 · 기준일 ${view.studio.audit.asOf}`:"원본 빈값 점검은 아직 실행하지 않았습니다 — 아래 미입력 건수는 점검을 실행한 뒤에 채워집니다."} <button type="button" className={s.linkButton} disabled={auditBusy} onClick={()=>void runAudit()}>{auditBusy?"점검 중…":view.studio.audit.ran?"다시 점검":"점검 실행"}</button>{auditError&&<span> · {auditError}</span>}</p>}
     {tab==="schema"&&<SchemaTab data={view}/>}
-    {tab==="graph"&&<GraphTab key={query} data={data}/>}
+    {tab==="graph"&&<GraphTab key={query} data={data} prefs={graphPrefs}/>}
     {tab==="quality"&&<QualityTab data={view}/>}
     {tab==="rules"&&<section id="rules" className={s.panel}><h2>확인할 상황과 다음 행동</h2><p>{data.from} ~ {data.asOf}, 최근 30일 관찰 기준. 임계값은 검토용 운영 가정이며 퇴원 확률이 아닙니다. 역할·사실을 확인한 관찰만 사용하고, 서로 다른 기간의 값은 섞지 않습니다.</p>{!data.ruleResults.length&&<p className={s.notice}>위에서 학생 또는 강사를 선택하면 해당 주체의 조건과 누락 자료를 확인할 수 있습니다.</p>}<div className={s.ruleGrid}>{(data.ruleResults.length?data.ruleResults:rules.map(r=>({...r,state:"insufficient" as const,evidence:[],missing:[]}))).map(r=><article key={r.id} className={s.rule}><span className={r.state==="triggered"?s.alert:s.badge}>{stateLabels[r.state]}</span><h3>{r.id} · {r.title}</h3><p>{r.action}</p>{r.missing.length>0&&<small>필요 자료: {r.missing.map(k=>({attendance:"예정 수업 기준 출석률",calls:"연결 상담 수",events:"확인된 행사 참석",referrals:"추천 등록",shuttle:"통학 시간",study:"자습 이용",competitor:"경쟁 학원 언급",mismatch:"등하원 불일치",focus:"집중 저하",retest:"재시험",complaint:"수업 불편",identity:"동일인 검토",roles:"복수 작성자의 관찰",highRevenue:"비교 집단의 매출 기준",highChurn:"동일 담당 집단의 퇴원율 기준"}[k]??k)).join(" · ")}</small>}{r.evidence.length>0&&<p>확인 근거 {r.evidence.length}개 · 아래 원기록에서 확인</p>}{data.selectedStudent&&<Link href={`/work-records/knowledge?kind=action&student=${data.selectedStudent}&rule=${r.id}`}>담당자·기한을 정해 후속 조치 작성 →</Link>}</article>)}</div><h3>학생에게 연결된 관찰과 조치</h3>{data.records.filter(r=>"studentId" in r.document&&r.document.studentId===data.selectedStudent).map(r=><article className={s.result} key={r.record_id}><Link href={`/work-records/knowledge?record=${r.record_id}`}>{r.document.title} ↗</Link><p>{contextualResult(r.document)}</p><small>{r.document.evidence}</small></article>)}<p>통화·발송·학생 병합·강사 배정은 자동 실행하지 않습니다. 담당자가 확인하고 결과를 기록합니다.</p></section>}
     {tab==="context"&&<section className={s.panel}><h2>조직 목표와 운영 판단에 필요한 자료</h2><p>학교 전체 학생 수, 재무상태, 콘텐츠 성과, 실제 업무시간을 기록하면 분모와 근거가 있는 분석으로 연결됩니다.</p><Link href="/work-records/knowledge?kind=okr" className={s.primary}>운영 자료·OKR 작성</Link>{data.records.filter(r=>!["observation","action"].includes(r.document.kind)).map(r=><article key={r.record_id} className={s.result}><Link href={`/work-records/knowledge?record=${r.record_id}`}>{r.document.title} ↗</Link><p>{contextualResult(r.document,data.activeProfiles)}</p><small>{r.document.date} · {r.document.evidence}</small></article>)}{!data.records.some(r=>!["observation","action"].includes(r.document.kind))&&<p className={s.notice}>아직 입력된 운영 보완 자료가 없습니다. 예시 숫자를 실제 실적으로 채우지 않았습니다.</p>}<Link href="/dashboard/management#accounting">회계 손익·채용 시나리오 →</Link></section>}

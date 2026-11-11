@@ -23,6 +23,9 @@ import styles from "./list-layout.module.css";
  * ⚠️ 한 열로 접히는 폭(<1024)에선 종전 그대로 고정 8행이다 — 거기선 목록 **아래에 '사유 분석' 카드가
  *    오므로**, 창에 맞춰 늘리면 그 카드를 화면 밖으로 밀어낸다.
  */
+/** 창에 남는 자리가 모자란 명단을 한 화면 높이로 잴 때 카드 위에 남길 여백(px). */
+const LOW_TOP_GAP = 16;
+
 export function WithdrawalListLayout({ size, total, children }: {
   size: number;
   total: number;
@@ -69,10 +72,19 @@ export function WithdrawalListLayout({ size, total, children }: {
       // chrome은 위 좌표에 이미 빠져 있다(행 영역에서 쟀다) → 두 번 빼지 않게 0으로 넘긴다.
       // 하한(WITHDRAWAL_PAGE_MIN)은 최소 창에서 1행 목록이 되는 것을 막는다(상수 주석 참조).
       const windowFit = fitWithdrawalRows(avail, 0, rowHeight);
-      const fit = sideBySide ? Math.max(WITHDRAWAL_PAGE_MIN, windowFit) : WITHDRAWAL_PAGE_SIZE;
-      // 하한에 걸린 좁은 창(기본 창 1040×720 등)에선 두 카드 높이를 걸지 않는다 — 5행 높이로 사유 카드를 자르면 막대 몇 개만 남고
+      /**
+       * 🔴 창에 남는 자리로는 하한도 안 나오면(명단이 첫 화면 **아래**에서 시작 — 위에 '강사별 퇴원율 추이' 카드가 서는 원장 화면 · 작은 창)
+       *    종전엔 5행으로 줄이고 두 카드 높이 맞춤도 꺼서, 옆 '사유 분석'만 길게 늘어났다(원장 2026-11-11 캡처 *"학생 명단 리스트는
+       *    카드크기가 혼자 저렇게 작아"*). 그때는 **명단 카드가 창 꼭대기에 왔을 때 한 화면을 채우는 높이**로 잰다(카드 머리 + 위 여백만 뺀다 ·
+       *    문서상 위치라 스크롤해도 같은 값). 남는 자리로 하한이 나오는 화면(종전 그대로)은 건드리지 않는다.
+       */
+      const layoutTop = root.getBoundingClientRect().top - scrollerRect.top + scroller.scrollTop;
+      const screenFit = fitWithdrawalRows(scroller.clientHeight - (topInScroller - layoutTop + LOW_TOP_GAP) - below - 4, 0, rowHeight);
+      const fit = !sideBySide ? WITHDRAWAL_PAGE_SIZE
+        : windowFit >= WITHDRAWAL_PAGE_MIN ? windowFit : Math.max(WITHDRAWAL_PAGE_MIN, screenFit);
+      // 한 화면 높이로도 하한이 안 나오는 아주 작은 창에선 두 카드 높이를 걸지 않는다 — 5행 높이로 사유 카드를 자르면 막대 몇 개만 남고
       // 페이지 안에 스크롤이 하나 더 생긴다(리뷰 2026-10-15). 그 창은 원래 페이지가 스크롤된다.
-      const cramped = sideBySide && windowFit < WITHDRAWAL_PAGE_MIN;
+      const cramped = sideBySide && windowFit < WITHDRAWAL_PAGE_MIN && screenFit < WITHDRAWAL_PAGE_MIN;
       /**
        * 두 열일 때 두 카드의 높이 = **창에 맞춘 명단 높이**(머리 + 행 × 창 행 수 + 쪽 넘김). 명단은 행이 모자라도 이 높이까지 서고,
        * 옆 '사유 분석'은 이 높이를 넘으면 **카드 안에서 스크롤**한다(`list-layout.module.css`).
@@ -99,6 +111,8 @@ export function WithdrawalListLayout({ size, total, children }: {
     const observer = new ResizeObserver(schedule);
     // 옆 카드 높이는 재지 않는다(위 🔴) — 그 카드가 길어져도 명단 행 수·높이는 그대로다.
     for (const element of [root, header, footer, row]) observer.observe(element);
+    // 위에 늦게 흘러 들어오는 카드(강사별 퇴원율 추이 — Suspense)가 명단을 밀어내도 다시 잰다(크기는 그대로라 위 관찰로는 안 깨어난다).
+    if (root.parentElement) observer.observe(root.parentElement);
     // 🔴 창(iframe)이 커져도 내용 높이는 그대로일 수 있어 ResizeObserver가 안 깨어난다 — 창 자체를 함께 듣는다.
     window.addEventListener("resize", schedule);
     measure();

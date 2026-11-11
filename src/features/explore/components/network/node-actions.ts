@@ -70,7 +70,8 @@ export function hoverText(n: NetNode, B: NetBoard): string {
   if (n.kind === "analysis") return n.detail ?? "";
   const evidence = B.edges.filter((e) => e.rel === "근거" && (e.from === n.id || e.to === n.id)).length;
   const hubs = n.kind === "target" ? B.edges.filter((e) => e.to === n.id && e.from.startsWith("hub:")).length : 0;
-  return line([netDateText(n.date), n.detail, evidence > 0 && `분석 근거 ${evidence}건`, hubs > 1 && `영역 ${hubs}곳에 연결`, `더블클릭 = ${n.kind === "target" ? "이것이 중심" : "자세히"}`]);
+  // 기록에 `open = "center"`(지식그래프 — 어느 기록이든 그 기록이 중심)면 대상처럼 '이것이 중심'.
+  return line([netDateText(n.date), n.detail, evidence > 0 && `분석 근거 ${evidence}건`, hubs > 1 && `영역 ${hubs}곳에 연결`, `더블클릭 = ${n.kind === "target" || n.open === "center" ? "이것이 중심" : "자세히"}`]);
 }
 
 /** 한 번 클릭 = 고르기(시안 `netSelect`). */

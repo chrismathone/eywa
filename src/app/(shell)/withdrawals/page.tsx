@@ -80,7 +80,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { WithdrawalTrendChart, type WithdrawalMonthPoint } from "./_components/trend-chart";
 import { scopeText, spanText } from "@/features/withdrawals/scope-text";
-import { EXIT_BASIS_TAG, countedEarlierByMonth, countedEarlierTitle, exitBasisRule } from "@/features/withdrawals/exit-basis";
+import { EXIT_BASIS_TAG, countedEarlierByMonth, countedEarlierTitle } from "@/features/withdrawals/exit-basis";
 import { loadWithdrawalTrendPrefs } from "@/features/withdrawals/server/trend-prefs";
 import { WithdrawalListLayout } from "./_components/list-layout";
 import { CustomRange } from "./_components/custom-range";
@@ -97,6 +97,8 @@ import {
 import { EarlyExitBand } from "./_components/early-exit-band";
 import { WithdrawalBreakdownCard, type BreakdownRow, type BreakdownView } from "./_components/breakdown-card";
 import { ReasonAnalysisCard } from "./_components/reason-analysis-card";
+import { TeacherChurnSection, TeacherChurnSkeleton } from "./_components/teacher-churn-section";
+import { getPortfolioGate } from "@/features/teacher-portfolio/server/queries";
 import { REASON_DETAILS, reasonDetailOf } from "@/features/withdrawals/reason-detail";
 import type { BreakdownAxis } from "@/features/withdrawals/breakdown";
 
@@ -285,12 +287,15 @@ export default async function WithdrawalsPage({
   });
   // 🔑 화면이 판정을 **기다리는 것은 강사 칸 필터가 걸렸을 때뿐**이다(명단이 판정으로 걸러진다). 강사 축만 볼 때는 강사 카드만
   //    나중에 흘려보내고(Suspense) 나머지를 먼저 그린다 — 강사 축을 저장해 둔 계정의 모든 이동이 판정을 기다리지 않게.
-  const [withdrawnRaw, subjectEndedRaw, settings, trendPrefs, blockingJudge] = await Promise.all([
+  // 강사별 퇴원율 추이(원장 2026-11-11) = 직원 포트폴리오와 같은 문(원장 역할만) — 문만 여기서 보고(가볍다) 표는 아래 Suspense가 흘려받는다.
+  //   문을 먼저 봐야 볼 수 없는 사람에게 대기 카드가 번쩍이지 않는다. 문 판정이 실패하면 카드만 없다(화면은 산다).
+  const [withdrawnRaw, subjectEndedRaw, settings, trendPrefs, blockingJudge, churnGate] = await Promise.all([
     getWithdrawnStudents(),
     withSubjectEnded ? getSubjectEndedStudents({ withNotes: true }) : Promise.resolve([]),
     getTenantSettings(),
     prefsP,
     teacherF ? judgeP : Promise.resolve(undefined),
+    getPortfolioGate().catch(() => null),
   ]);
   const axis = axisParam ?? trendPrefs.axis;
   // 과목 라벨은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
@@ -651,10 +656,8 @@ export default async function WithdrawalsPage({
         teacherF,
         (v) => hrefWith({ teacher: v }),
       ),
+      // 강사·'담당 미반영' 정의 문장은 원장 지시로 뺐다(2026-11-11 *"이 멘트 제거"*) — 걸린 범위·옛 줄 안내만 남긴다.
       note: [
-        "강사 = 그만둘 때 다니던 반의 담임(퇴원생 관리 차트·시간표 X와 같은 기준) · 수학 JJ반은 빼고 · 영어는 그때 수업을 가장 많이 맡은 한국인 선생님 · 정규 반을 둘 다녔으면 각각 셉니다.",
-        "담당 미반영 = 그만둘 때 다니던 정규 반을 찾지 못한 과목이 있는 줄(장부 정리 · 퇴원일 미상 · 수강 기록 없음).",
-        "강사평가 퇴원율 점수와는 기준이 다릅니다(점수는 지난달 담당 기준).",
         programGroup || subject !== "all" ? "걸린 과목·프로그램의 담당만 셉니다." : "",
         outside ? `${judgeFromMonth.replace("-", "년 ")}월 전 ${outside}건은 강사를 가리지 않았습니다.` : "",
         offScope ? `걸린 프로그램 밖 과목만 끊은 ${offScope}건은 세지 않았습니다.` : "",
@@ -759,12 +762,11 @@ export default async function WithdrawalsPage({
         <BigStat label="필터 결과" value={rows.length} unit="건" tone="blue" icon={<Filter size={16} strokeWidth={1.8} />} />
       </StatStrip>
 
-      {/* 세는 달 = 수업료를 낸 마지막 달(원장 2026-10-29) — 처리한 날로 읽으면 '이번 달'이 비어 보여 오류처럼 읽혔다(원장 2026-11-03). */}
-      <p className="text-text-dim px-1 text-sm">
-        {exitBasisRule()} 넓은 화면 명단에는 센 달이 마지막 수업일의 달과 다르면 ‘10월 퇴원’·‘10월 종료’처럼 적습니다.
-        {carriedTotal > 0 ? (
+      {/* 세는 달 = 수업료를 낸 마지막 달(원장 2026-10-29). 규칙 설명 문장은 원장 지시로 뺐다(2026-11-11 *"이 멘트도 제거"*) —
+          앞 달 명단에 들어간 건수 안내만 남긴다(그때만 선다). */}
+      {carriedTotal > 0 ? (
+        <p className="text-text-dim px-1 text-sm">
           <>
-            {" "}
             <span className="text-foreground font-semibold">{countedEarlierTitle(monthKey, carriedTotal, "건")}</span>{" — "}
             {carriedGroups.map(([m, n], i) => (
               <Fragment key={m}>
@@ -775,8 +777,8 @@ export default async function WithdrawalsPage({
               </Fragment>
             ))}
           </>
-        ) : null}
-      </p>
+        </p>
+      ) : null}
 
       {/* 툴바 — 지시서 §10: 축마다 라벨 하나(`유형: 전체` · `기간: 최근 30일` · 사유 · 과목 · 상담), 검색은 눌러야 나온다. */}
       <div className="flex flex-wrap items-center gap-2 px-1">
@@ -915,6 +917,13 @@ export default async function WithdrawalsPage({
             <WithdrawalBreakdownCard views={{ ...breakdownViews, teacher: teacherNow.view }} initialAxis={axis} teacherError={teacherNow.error} />
           )}
         </div>
+      ) : null}
+
+      {/* 강사별 퇴원율 추이 — 위 필터와 따로 세는 강사평가 값(카드 머리에 기준을 적는다). 원장 역할만. */}
+      {churnGate ? (
+        <Suspense fallback={<TeacherChurnSkeleton />}>
+          <TeacherChurnSection initialSort={trendPrefs.churnSort} />
+        </Suspense>
       ) : null}
 
       {rows.length === 0 ? (
