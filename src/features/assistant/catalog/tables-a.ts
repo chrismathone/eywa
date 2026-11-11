@@ -11,10 +11,10 @@ export const TABLES_A: readonly AssistantTableDoc[] = [
     label: "학원 문서",
     ko: "학원 문서함 — 업로드 파일·글·웹 서식·링크 문서 1건",
     notes:
-      "kind: file=업로드 파일 · text=본문 글 · form=웹 서식(form_type·form_data) · link=외부 링크(link_url). category = document_categories.key(기본 enrollment·billing·consultation·hr·class·other + 학원이 만든 분류). form_type 예: refund_request=환불요청서 · staff_resume=직원 이력서(staff_user_id로 직원 연결). restricted=true는 사무실 전용 민감 문서. 언제 = created_at.",
+      "kind: file=업로드 파일 · text=본문 글 · form=웹 서식(form_type·form_data) · link=외부 링크(link_url). category = document_categories.key(기본 enrollment·billing·consultation·hr·class·other + 학원이 만든 분류). form_type 예: refund_request=환불요청서 · staff_resume=직원 이력서(staff_user_id로 직원 연결). restricted=true는 문서함 화면의 접근 구분이다. 언제 = created_at.",
     columns: {
       pinned: "목록 상단 고정",
-      form_data: "웹 서식 내용(jsonb)",
+      form_data: "웹 서식 내용(jsonb) — 이력서 등 · 🔴 통째로 select하지 말고 질문에 필요한 키만 조회한다",
       staff_user_id: "이력서가 가리키는 직원(users.id)",
       uploaded_by: "올린 사람(users.id)",
     },
@@ -417,7 +417,8 @@ export const TABLES_A: readonly AssistantTableDoc[] = [
     name: "classnote_english_class_boards",
     label: "영어 반 보드",
     ko: "영어 반 ↔ ClassNote 영어 반 방 연결(사람이 확인한 것만)",
-    internal: true,
+    notes:
+      "class_id = 에이와 반, board_id = 확인된 ClassNote 반 방. 반별 알림장 작성일(classnote_class_posts)은 연결된 board_name과 대조한다 — board_name은 연결 당시 이름이므로 이름 변경·연결 누락을 미작성으로 단정하지 않는다.",
   },
   {
     name: "classnote_feed_state",
@@ -873,7 +874,7 @@ export const TABLES_A: readonly AssistantTableDoc[] = [
     label: "수업보고서",
     ko: "수업보고서(학부모 리포트) — 학생×수업일×반(또는 과목) 1건",
     notes:
-      "🔴 '언제' = coalesce(covers_date, report_date)(실제 수업일 귀속 — 작성률 기준). 작성 강사 = teacher_name(users.display_name과 같은 글자), 처음 저장한 계정 = created_by. 학부모 발송 = classnote_status='success'(classnote_sent_at). source='edutrix_import'는 옛 이관분(subject null). 영어는 ClassNote에 직접 써서 여기 거의 없다 — 영어 작성률은 classnote_class_posts. 작성률은 students.is_test 학생과 classes.report_optout 반을 뺀다.",
+      "🔴 '언제' = coalesce(covers_date, report_date)(실제 수업일 귀속 — 작성률 기준). 작성 강사 = teacher_name(users.display_name과 같은 글자), 처음 저장한 계정 = created_by. 학부모 발송 = classnote_status='success'(classnote_sent_at). source='edutrix_import'는 옛 이관분(subject null). 영어는 ClassNote에 직접 써서 여기 거의 없다 — 영어 작성률은 classnote_class_posts. 작성률은 students.is_test 학생과 classes.report_optout 반을 뺀다. 직원별 미발송·실패를 비교하기 전에 테스트·발송 제외 대상을 구분하고 classnote_status·classnote_error·발송 이력으로 사유를 나눈다 — 미요청·처리 대기·시스템 실패를 같은 직원 미이행으로 합치지 않는다.",
     columns: {
       subject: "과목 키(math 등). 옛 이관분은 null",
       class_id: "보고서가 속한 반(같은 날 정규·특강 구분). 보강·이관분은 null 가능",

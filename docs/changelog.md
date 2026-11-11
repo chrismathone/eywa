@@ -1,5 +1,11 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-11 — 학원 비서 멘트 시험 반영(숫자 범위 · 기록 없음 · 사람 평가 · 묻는 사람 · 비교 답 · 날값 · 열 폭)
+
+- 결정 본문 = [`features/academy-assistant.md`](features/academy-assistant.md) §7-9. 운영과 같은 조건 28회 시험 → Claude·Codex 따로 채점·토론 → 고칠 곳 11개 → 같은 28문항 재시험(v2) → 원장 화면 피드백 반영(v3) · 보고서·원자료는 저장소 밖(`~/eywa-data/assistant-ment-eval-2026-11-11/`).
+- 프롬프트(prompt.ts · prompt-analysis.ts) · 질문 메시지에 '묻는 사람' · 서버 검사(`report-checks.ts` — KPI 달·글자 칸 · 코드 값 · 단위 · 칸 이름 코드표 · 마무리 중 느슨하게) · 코드 안전망 묶음(퇴원 사유·요일·재직·출처·참거짓) · 표 열 폭(머리 두 줄) · '내용 조회' · 적음 안내. SQL 없음.
+- v3.2(같은 날) — 이어 묻기·특이·비교 121문항 확장 시험(Claude·Codex 채점 · 판결 · 토론) → Codex와 고칠 곳 17개 합의(표 설명 위주 · 이어 묻기 규칙 · 차트 가로축 중복 검사) → 실패·영향 60문항 재시험. 최종 리뷰 결함(정상 답의 '일찍 끝낸 답' 띠 · 두 줄 머리 폭 · 코드표 순서·범위 · 마무리 중 블록 빼기) 함께.
+
 ## 2026-11-11 — 신규 콜&상담 여정(전화·방문·등록 기록) 실제 기록으로 · 신규생 정착 관리 보정 (aywa-next 인계 이식 · Claude·Codex 검토 합의 · SQL s2_0061~s2_0064)
 
 - 결정 본문 = [`decisions/enrollment-journey.md`](decisions/enrollment-journey.md). 신규생 정착 관리 화면은 같은 날 다른 세션이 main에 올린 운영판(`052112f21` · [`decisions/newcomer-live-restoration.md`](decisions/newcomer-live-restoration.md))을 바탕으로 두고 그 위에 보정만 얹었다(병합).
