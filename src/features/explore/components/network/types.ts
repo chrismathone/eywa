@@ -73,7 +73,8 @@ export type NetNode = {
   op?: number;
   rScale?: number;
 };
-export type NetEdge = { from: string; to: string; rel: string; w?: number; op?: number };
+/** `focusOnly` = 그 선의 한쪽 점이 강조될 때(마우스를 올리거나 고른 점)만 그린다 — 지식그래프 기록 사이 관계선(원장 2026-11-11 *"선도 너무 많아서 정신없는데"*). 이웃 판정(`adjacency`)·요약 판 집계에는 그대로 든다. */
+export type NetEdge = { from: string; to: string; rel: string; w?: number; op?: number; focusOnly?: boolean };
 export type NetGraph = { nodes: NetNode[]; edges: NetEdge[] };
 export type NetBoard = NetGraph & {
   centerId: string;

@@ -164,7 +164,7 @@ export function GraphTab({ data, prefs }: { data: AcademyKnowledgeData; prefs: K
             {board.academy
               ? `조회된 기록 ${board.total.toLocaleString()}개 전부 · 가운데 = 학원 전체`
               : `판에 ${board.shown.toLocaleString()}개 기록 · 조회된 ${board.total.toLocaleString()}개 중 중심과 바로 이어진 기록과 한 단계 더 이어진 기록(중심과 같은 유형 제외)`}
-            . 선은 확인된 기록 관계이며, 배치·점 크기는 평가 점수나 인과관계가 아닙니다. 조회된 자료 범위만 표시하며, 연결 없음은 미입력 확정이 아닙니다.
+            . 기록 사이 관계선은 그 점에 마우스를 올리거나 점을 고르면 나타납니다(가운데 기록의 관계선은 늘 보입니다). 선은 확인된 기록 관계이며, 배치·점 크기는 평가 점수나 인과관계가 아닙니다. 조회된 자료 범위만 표시하며, 연결 없음은 미입력 확정이 아닙니다.
           </p>
         </div>
         <GraphInspector
