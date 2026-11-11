@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exitHomeroomIds, slotHomeroom, type HomeroomClass, type HomeroomRow, type HomeroomSlot } from "./exit-homeroom";
+import { exitHomeroomIds, reportWriterOn, slotHomeroom, type HomeroomClass, type HomeroomRow, type HomeroomSlot } from "./exit-homeroom";
 
 const classes: Record<string, HomeroomClass> = {
   bs: { name: "중등M 중2 BS3B", regular: true, closedAt: null },
@@ -59,5 +59,36 @@ describe("slotHomeroom", () => {
     ];
     expect(slotHomeroom(s, "2026-10-01", () => true)).toBeNull();
     expect(slotHomeroom([], "2026-10-01", () => true)).toBeNull();
+  });
+});
+
+describe("reportWriterOn — 담임 이력이 빈 반만", () => {
+  it("앞 30일 동안 가장 많이 쓴 선생님 · 동률·없음은 null", () => {
+    const r = [
+      { teacherId: "kim", date: "2026-06-20" }, { teacherId: "kim", date: "2026-06-25" },
+      { teacherId: "lee", date: "2026-07-03" }, { teacherId: "lee", date: "2026-05-01" },
+    ];
+    expect(reportWriterOn(r, "2026-07-07")).toBe("kim");
+    expect(reportWriterOn([{ teacherId: "a", date: "2026-07-01" }, { teacherId: "b", date: "2026-07-02" }], "2026-07-07")).toBeNull();
+    expect(reportWriterOn([], "2026-07-07")).toBeNull();
+  });
+  it("🔴 담임 이력이 있으면 이력이 이긴다 — 보고서는 이력이 비었을 때만", () => {
+    const out = exitHomeroomIds({
+      rows: [{ classId: "bs", startDate: "2026-03-01", endDate: "2026-07-08", transferred: false }],
+      date: "2026-07-08", lookbackDays: 120,
+      classOf: () => ({ name: "중등M 중2 PS2S", regular: true, closedAt: null }),
+      slotsOf: () => [],
+      owner: () => null,
+      isKorean: () => true,
+      reportsOf: () => [{ teacherId: "hwa", date: "2026-06-30" }],
+    });
+    expect(out).toEqual(["hwa"]);
+    expect(exitHomeroomIds({
+      rows: [{ classId: "bs", startDate: "2026-03-01", endDate: "2026-07-08", transferred: false }],
+      date: "2026-07-08", lookbackDays: 120,
+      classOf: () => ({ name: "중등M 중2 PS2S", regular: true, closedAt: null }),
+      slotsOf: () => [], owner: () => "lee", isKorean: () => true,
+      reportsOf: () => [{ teacherId: "hwa", date: "2026-06-30" }],
+    })).toEqual(["lee"]);
   });
 });

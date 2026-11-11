@@ -24,6 +24,7 @@ import { loadRecordCoverage } from "@/features/dashboard/overview/record-coverag
 import { loadTeacherWork } from "@/features/dashboard/overview/teacher-work-server";
 import { withStaffTasks } from "@/features/staff-tasks/server/teacher-work";
 import { getWithdrawalsInWindow } from "@/features/withdrawals/server/window";
+import { withSheetWithdrawals } from "@/features/withdrawals/server/sheet-withdrawals";
 import { programSubjectsOf } from "@/features/students/enrollment/program";
 import { loadAttendanceBySubject } from "./attendance-server";
 import { loadAbsenceLines, loadTaskBoard } from "./check-server";
@@ -113,7 +114,9 @@ export async function loadInstrumentExtras({ checksOnly = false }: { checksOnly?
   const wantsEarly = earlyPlaced && !needed.has("earlyExits");
   const wantsEarlyNames = earlyPlaced;
   const longWindow = full && needed.has("changes");
-  const withdrawals = wantsEarlyNames || longWindow ? getWithdrawalsInWindow(`${(longWindow ? longMonths : months)[0]}-01`, today) : null;
+  // 운영실과 같은 퇴원 줄(2026-10까지는 퇴원생 관리 차트 · `withSheetWithdrawals`).
+  const withdrawalsFrom = `${(longWindow ? longMonths : months)[0]}-01`;
+  const withdrawals = wantsEarlyNames || longWindow ? withSheetWithdrawals(getWithdrawalsInWindow(withdrawalsFrom, today), user.tenantId, today, withdrawalsFrom) : null;
   const billingOn = full && needed.has("billing") && view.amounts && placed.has("panel:billing6");
   void withdrawals?.catch(() => undefined); // 실패는 아래 `part`가 받는다
   const [enrolledDetail, courseDetail, changeRows, billingRows, longBillingRows, eieClasses, earlyExits, earlyNames, composition, teacherWork, roster, consult, report, admissions, attendance, absenceLines, taskBoard] = await Promise.all([
