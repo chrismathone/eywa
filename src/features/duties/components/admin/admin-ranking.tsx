@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { TierStars } from "@/features/student-contribution/components/relative-score";
-import { MATRIX_COLUMNS, wellDoneOf } from "../../view-admin";
+import { MATRIX_COLUMNS } from "../../view-admin";
 import { rankOwners, rootOfTree, type TreeSubject, rankByRating } from "../../view-admin-levels";
 
 /**
  * 등수(전체 단계) — 전체 등수 + 과목마다 등수. 한 줄 = 등수 · 선생님 · 별(등급) · 기한 내 완료율(올리면 분자/분모). 누르면 그 선생님(과목 등수는 그 과목 안에서).
  * 위 단추로 기준을 고른다: 전체(전체 %) 또는 업무 종류 하나(출결 · 보고서 · 발송 · 월 상담 · 월말평가 · 신규생 정착 — 그 종류의 칸으로).
- * 순서는 기한 내 완료율 높은 순이고 같은 %는 같은 등수다(`rankOwners`). 등급 전(업무 3건 미만)은 등수 없이 뒤에.
+ * 순서는 기한 내 완료율 높은 순이고 같은 %는 같은 등수다(`rankOwners`). 등급 전(때가 된 업무 3건 미만)은 등수 없이 뒤에.
  */
 export function AdminRanking({ tree, onOwner }: { tree: readonly TreeSubject[]; onOwner: (subject: string | null | undefined, ownerId: string, kind: string | null) => void }) {
   const [kind, setKind] = useState<string | null>(null);
@@ -48,7 +48,7 @@ export function AdminRanking({ tree, onOwner }: { tree: readonly TreeSubject[]; 
               <span className={`w-6 shrink-0 text-center text-sm font-bold tabular-nums ${r.rank !== null && r.rank <= 3 ? "text-primary" : "text-text-dim"}`}>{r.rank ?? "—"}</span>
               <span className="min-w-0 flex-1 overflow-hidden text-sm font-semibold text-ellipsis whitespace-nowrap">{r.name}{r.meta ? <span className="text-text-dim ml-1.5 text-xs font-medium">{r.meta}</span> : null}</span>
               {r.verdict.tier ? <TierStars tier={`${r.verdict.tier}등급`} /> : <span className="text-text-dim text-xs font-medium">평가 대기</span>}
-              <span className="w-16 shrink-0 text-right text-xs font-semibold tabular-nums whitespace-nowrap">{r.cell.pct === null || !r.verdict.tier ? "" : <><span className="group-hover:hidden">{r.cell.pct}%</span><span className="hidden group-hover:inline">{wellDoneOf(r.cell).toLocaleString("ko-KR")}/{r.cell.total.toLocaleString("ko-KR")}</span></>}</span>
+              <span className="w-16 shrink-0 text-right text-xs font-semibold tabular-nums whitespace-nowrap">{r.cell.pct === null || !r.verdict.tier ? "" : <><span className="group-hover:hidden">{r.cell.pct}%</span><span className="hidden group-hover:inline">{r.cell.ontime.toLocaleString("ko-KR")}/{r.cell.due.toLocaleString("ko-KR")}</span></>}</span>
             </button>
           </li>)}
           {Array.from({ length: Math.max(b.size - (rating ? ratingBoards.find((x) => x.key === b.key)?.rows.length ?? 0 : b.rows.length), 0) }, (_, i) => <li key={`pad${i}`} aria-hidden className="invisible flex items-center gap-2 px-2 py-1"><span className="text-sm font-semibold">&nbsp;</span><TierStars tier="1등급" /></li>)}

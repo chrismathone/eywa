@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CELL_STATE_LABEL, cellItemTitle, cellItemWhen, type CellItem, type CellItemState } from "../../cell-items";
+import { CELL_STATE_LABEL, cellItemCounts, cellItemTitle, cellItemWhen, type CellItem, type CellItemState } from "../../cell-items";
 import type { AdminPeriod } from "../../view-admin";
 import type { DutyWork } from "../duty-work-context";
 
@@ -37,7 +37,7 @@ export function CellItemsDialog({ pick, period, tick = 0, onClose, onWork }: { p
   </>;
   return <Dialog open onOpenChange={(o) => (!o ? onClose() : undefined)}>
     <DialogContent className="flex max-h-[min(720px,90dvh)] w-[min(94vw,560px)] flex-col gap-3 sm:max-w-[560px]">
-      <DialogHeader><DialogTitle>{pick.title}{items ? <span className="text-text-dim ml-1.5 text-sm font-medium">{items.filter((it) => it.state !== "waived").length}건{items.some((it) => it.state === "waived") ? ` · 면제 ${items.filter((it) => it.state === "waived").length}건` : ""}</span> : null}</DialogTitle></DialogHeader>
+      <DialogHeader><DialogTitle>{pick.title}{items ? <span className="text-text-dim ml-1.5 text-sm font-medium">{cellItemCounts(items)}</span> : null}</DialogTitle></DialogHeader>
       {failed ? <p className="text-text-dim text-sm">목록 조회 실패</p> : !items ? <p className="text-text-dim text-sm">불러오는 중…</p> : !items.length ? <p className="text-text-dim text-sm">해당 업무 없음</p>
         : <ul className="-mx-1 grid min-h-0 gap-0.5 overflow-y-auto px-1">
           {items.map((it) => <li key={it.id}>

@@ -92,27 +92,43 @@ export const MATRIX_COLUMNS: { kind: string; label: string }[] = [
   { kind: "counsel_monthly", label: "학생 상담" }, { kind: "exam_monthly", label: "월말평가" }, { kind: "newcomer_call", label: "신규생 관리" },
 ];
 /**
- * pct = **기한 내 완료율** — 그 기간에 **때가 된 업무** 가운데 기한 안에 끝낸 비율(내림 — 남은 것이 있으면 100%가 아니다). 업무가 없으면 null.
- * 때가 된 업무 = 수업이 끝난 일간 업무(출결 · 보고서) + 월간 · 건별 업무 전부. 아직 열리지 않은 수업의 업무는 집계에 들어오지 않는다(s2_0064 —
- * 원장 2026-11-11 *"수업시간이 지났을때 반영할것 … 수업시간이 되지도 않았는데 벌써부터 0%임"*).
+ * pct = **기한 내 완료율** — **때가 된 업무**(`due`) 가운데 기한 안에 끝낸 것(`ontime`)의 비율(내림 — 남은 것이 있으면 100%가 아니다). 때가 된 업무가 없으면 null.
+ * '때'는 집계 SQL이 가른다(s2_0064 · s2_0065 — 앱에서는 `kinds.ts`의 `dutyOpensAt`(보이기 시작) · `dutyJudgedAt`(등급에 들기 시작)이 같은 규칙):
+ *   · 일간(출결 · 보고서) = **그 수업이 끝난 뒤부터**(원장 2026-11-11 *"수업시간이 지났을때 반영할것 … 수업시간이 되지도 않았는데 벌써부터 0%임"*). 아직 열리지 않은 수업의 업무는 집계에 없다.
+ *     보고서는 수업이 끝나면 들어와 기한(+24시간) 전까지 '남음'으로 분모에 든다(*"남음이 있는데 100%는 말도 안됨"*).
+ *   · 월간(학생 상담 · 월말평가) · 건별(신규생 관리) = **그 기한이 지난 뒤부터**(원장 *"추천으로 진행"* — 달 초부터 분모에 넣으면 잘하는 선생님도 달 내내 5~7등급이었다).
+ *     그 전에는 `total − due`로 남아 **진행만** 색 없이 보인다(`shownOf` — 등급 · 전체에 들지 않는다).
  * 🔴 칸 · '전체' 칸 · 합계 줄 · 등급 · 등수 · 요약 칸이 **모두 이 숫자 하나**다(원장 *"이렇게 빨간색이 많은데 전체 점수가 이해가 안되는데? … 왜 97%?"* · *"전체 기준으로 등급 다시 매길것"*).
- *    '기한이 온 것만'으로 따로 계산한 %를 화면에 다시 세우지 말 것 — 종류 칸은 붉은데 전체만 초록이 되어 한 줄이 서로 다른 말을 한다(2026-11-11 저녁 한 번 그랬다가 되돌렸다).
+ *    한 줄 안에서 칸과 전체가 서로 다른 분모를 쓰지 말 것 — 종류 칸은 붉은데 전체만 초록이 되어 서로 다른 말을 한다(2026-11-11 저녁 한 번 그랬다).
  */
 export type Cell = Counts & { pct: number | null };
 export type CellTone = "none" | "wait" | "good" | "warn" | "bad";
 export const ZERO: Counts = { total: 0, done: 0, due: 0, ontime: 0, lateDone: 0, late: 0, expired: 0, over7: 0 };
-/** 기한이 오기 전에 미리 끝낸 것(기한이 지나면 '제때'로 넘어간다). */
-export const earlyDoneOf = (c: Counts): number => Math.max(c.done - c.ontime - c.lateDone, 0);
-/** 기한 안에 끝낸 것 — 제때 끝낸 것 + 기한 전에 미리 끝낸 것. 늦게 끝낸 것 · 안 한 것은 들지 않는다. */
-export const wellDoneOf = (c: Counts): number => c.ontime + earlyDoneOf(c);
-export const pctOf = (c: Counts): number | null => (c.total ? Math.floor((wellDoneOf(c) / c.total) * 100) : null);
+export const pctOf = (c: Counts): number | null => (c.due ? Math.floor((c.ontime / c.due) * 100) : null);
 /** 내림 전 값 — **등급 · 등수는 이 값으로** 매긴다(95.9%가 96으로 올라가 1등급이 되거나 99.7%가 100%와 공동 1위가 되지 않게). */
-export const exactPct = (c: Counts): number | null => (c.total ? (wellDoneOf(c) / c.total) * 100 : null);
+export const exactPct = (c: Counts): number | null => (c.due ? (c.ontime / c.due) * 100 : null);
+/** 때가 되기 전에 미리 끝낸 것(기한 전의 월간 · 건별 가운데 벌써 끝낸 것) — 때가 되면 '기한 안에 끝낸 것'으로 넘어간다. */
+export const earlyDoneOf = (c: Counts): number => Math.max(c.done - c.ontime - c.lateDone, 0);
+/** 아직 때가 안 된 업무(기한 전의 월간 · 건별) — 등급 · %에 들지 않고 진행만 보인다. */
+export const pendingOf = (c: Counts): number => Math.max(c.total - c.due, 0);
+/** 남음 — 때는 됐지만 기한 전이라 아직 안 끝낸 것(수업은 끝났고 보낼 보고서처럼). 분모에 든다. */
+export const leftOf = (c: Counts): number => Math.max(c.due - c.ontime - c.lateDone - c.late - c.expired, 0);
+/**
+ * 칸에 적을 숫자 — 때가 된 업무가 있으면 그 가운데 기한 안에 끝낸 비율(`judged` · 색을 칠한다), 없으면(기한 전의 월간 · 건별뿐) **진행**(끝낸 것 ÷ 전체 · 색 없이).
+ * num/den = 마우스를 올렸을 때의 분자/분모. 업무가 없으면 null.
+ */
+export type Shown = { judged: boolean; pct: number; num: number; den: number };
+export function shownOf(c: Counts): Shown | null {
+  if (!c.total) return null;
+  if (c.due) return { judged: true, pct: Math.floor((c.ontime / c.due) * 100), num: c.ontime, den: c.due };
+  const done = earlyDoneOf(c);
+  return { judged: false, pct: Math.floor((done / c.total) * 100), num: done, den: c.total };
+}
 export const EMPTY: Cell = { ...ZERO, pct: null };
 export const add = (a: Counts, b: Counts): Counts => ({ total: a.total + b.total, done: a.done + b.done, due: a.due + b.due, ontime: a.ontime + b.ontime,
   lateDone: a.lateDone + b.lateDone, late: a.late + b.late, expired: a.expired + b.expired, over7: a.over7 + b.over7 });
 export const cellOf = (c: Counts): Cell => ({ total: c.total, done: c.done, due: c.due, ontime: c.ontime, lateDone: c.lateDone, late: c.late, expired: c.expired, over7: c.over7, pct: pctOf(c) });
-/** 아직 남은 것 — 때는 됐지만 기한 전이라 안 끝낸 것(보낼 보고서 · 이번 달 상담처럼). 분모에는 든다. */
+/** 아직 안 끝낸 것 전부(기한 초과 제외) — 남음(`leftOf`) + 기한 전의 월간 · 건별 가운데 안 끝낸 것. 과목 관리자별 현황의 '남음' 건수. */
 export const upcomingOf = (c: Counts): number => Math.max(c.total - c.done - c.late - c.expired, 0);
 /** 기한이 온 것이 없을 때 칸에 적는 진행(완료/전체) — '예정 0'처럼 끝낸 일을 안 한 것으로 보이게 하지 않는다(리뷰 2026-11-10). */
 export const progressText = (c: Counts): string => `${c.done}/${c.total}`;
@@ -130,19 +146,21 @@ export function dutyTier(pct: number): DutyTier {
 }
 /** 등급의 색 묶음 — 1~2등급 초록 · 3~4등급 주황 · 5등급 이하 빨강(칸 색 · 점 · 배지가 같은 묶음). */
 export const tierTone = (tier: DutyTier): "good" | "warn" | "bad" => (tier <= 2 ? "good" : tier <= 4 ? "warn" : "bad");
-/** 칸 색 = 판정(`judge`)과 같은 결 — 업무 없음 회색 · 3건 미만이면 중립(평가 대기) · 그 밖은 등급의 색 묶음. */
+/** 칸 색 = 판정(`judge`)과 같은 결 — 업무 없음 회색 · 때가 된 업무가 3건 미만이면 중립(평가 대기) · 그 밖은 등급의 색 묶음. */
 export function cellTone(c: Cell): CellTone {
   if (!c.total) return "none";
-  if (c.pct === null || c.total < MIN_JUDGE) return "wait";
+  if (c.pct === null || c.due < MIN_JUDGE) return "wait";
   return tierTone(dutyTier(exactPct(c) ?? c.pct));
 }
-/** 칸 설명(마우스 오버) — 숫자의 뜻을 글로. */
+/** 칸 설명(마우스 오버) — 숫자의 뜻을 글로. 때가 된 업무의 결말 + (있으면) 기한 전 업무의 진행. */
 export function cellTitle(c: Counts): string {
-  const parts = [`${c.total}건 중 기한 내 완료 ${wellDoneOf(c)}건`];
+  const parts: string[] = [];
+  if (c.due) parts.push(`${c.due}건 중 기한 내 완료 ${c.ontime}건`);
   if (c.lateDone) parts.push(`기한 후 완료 ${c.lateDone}`);
   if (c.late) parts.push(`기한 초과 ${c.late}`);
   if (c.expired) parts.push(`미처리 확정 ${c.expired}`);
-  const up = upcomingOf(c); if (up) parts.push(`남음 ${up}`);
+  const left = leftOf(c); if (left) parts.push(`남음 ${left}`);
+  const pending = pendingOf(c); if (pending) parts.push(`진행 중 ${pending}건 중 ${earlyDoneOf(c)}건 완료`);
   return parts.join(" · ");
 }
 /** 과목 거르기 — undefined = 전 과목 · null = 과목 없는 것만('과목 미정') · 글자 = 그 과목. */

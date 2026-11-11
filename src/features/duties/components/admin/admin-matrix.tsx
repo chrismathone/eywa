@@ -1,6 +1,6 @@
 "use client";
 
-import { cellTitle, MATRIX_COLUMNS, type Cell, type CellTone, type MatrixRow, wellDoneOf, addRating, MIN_RATED, type Rating } from "../../view-admin";
+import { cellTitle, MATRIX_COLUMNS, shownOf, type Cell, type CellTone, type MatrixRow, addRating, MIN_RATED, type Rating } from "../../view-admin";
 import { judge, type Avg } from "../../view-admin-levels";
 import { VerdictBadge } from "./admin-verdict";
 
@@ -106,24 +106,25 @@ export function bandStyle(pct: number): { background: string; color: string } {
 
 /**
  * 한 칸 — 선생님 · 반 · 학생 표가 같은 부품을 쓴다(원장 2026-11-11 *"전부다 %로 바꾸고, 마우스 올렸을때 분자/분모 형태로. 기한초과1은 %랑 분자/분모 밑에 작은 글씨로"*).
- *   · 숫자 = **기한 내 완료율**(`cell.pct` — 그 기간에 때가 된 업무 가운데 기한 안에 끝낸 비율 · 남은 것도 분모라 남은 것이 있으면 100%가 아니다).
+ *   · 숫자 = **기한 내 완료율**(`shownOf` — 때가 된 업무 가운데 기한 안에 끝낸 비율 · 남은 것도 분모라 남은 것이 있으면 100%가 아니다).
  *     종류 칸도 · '전체' 칸도 · 합계 줄도 · 등급도 같은 숫자다(한 줄 안의 숫자가 서로 다른 것을 말하지 않게 — 종류 칸은 붉은데 전체만 97%이던 것).
- *   · 마우스를 올리면(초점이 가도) 그 자리에 분자/분모(끝낸 것/전체).
+ *   · 때가 된 업무가 없는 칸(기한 전의 학생 상담 · 월말평가 · 신규생 관리)은 **진행**만 색 없이 적는다 — 등급 · 전체에 들지 않는다(기한이 지나면 색이 붙는다).
+ *   · 마우스를 올리면(초점이 가도) 그 자리에 분자/분모.
  *   · 지금 열린 '기한 초과 n'은 숫자 아래 작은 글씨 — 칸 높이는 그대로다. '전체' 칸에는 적지 않는다.
  *   · 색 = 적힌 숫자의 구간(`bandStyle`).
  */
 export function CountBox({ cell, onClick, plain, overall }: { cell: Cell | null; onClick?: () => void; plain?: boolean; overall?: boolean }) {
-  if (!cell || !cell.total) return <span className={`${BOX} font-semibold ${plain ? "text-text-placeholder" : TONE.none}`}>—</span>;
-  const pct = cell.pct ?? 0;
+  const shown = cell ? shownOf(cell) : null;
+  if (!cell || !shown) return <span className={`${BOX} font-semibold ${plain ? "text-text-placeholder" : TONE.none}`}>—</span>;
   const body = <>
     <span className="whitespace-nowrap">
-      <span className="group-hover:hidden group-focus-visible:hidden">{pct}<span className="text-xs leading-none font-medium">%</span></span>
-      <span className="hidden group-hover:inline group-focus-visible:inline">{n(wellDoneOf(cell))}/{n(cell.total)}</span>
+      <span className="group-hover:hidden group-focus-visible:hidden">{shown.pct}<span className="text-xs leading-none font-medium">%</span></span>
+      <span className="hidden group-hover:inline group-focus-visible:inline">{n(shown.num)}/{n(shown.den)}</span>
     </span>
     {!overall && cell.late ? <span className="text-xs leading-none font-bold whitespace-nowrap">기한 초과 {n(cell.late)}</span> : null}
   </>;
-  const cls = `group ${BOX} ${plain ? "font-bold" : "font-semibold"}`;
-  const band = plain ? undefined : bandStyle(pct);
+  const cls = `group ${BOX} ${plain ? "font-bold" : "font-semibold"} ${shown.judged || plain ? "" : TONE.wait}`;
+  const band = plain || !shown.judged ? undefined : bandStyle(shown.pct);
   const title = cellTitle(cell);
   return onClick ? <button type="button" onClick={onClick} className={`${cls} hover:brightness-95`} style={band} title={title}>{body}</button> : <span className={cls} style={band} title={title}>{body}</span>;
 }

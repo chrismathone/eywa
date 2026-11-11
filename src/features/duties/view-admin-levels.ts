@@ -1,5 +1,5 @@
 import { schoolGradeLabel } from "@/lib/format/school-grade";
-import { add, cellOf, EMPTY, exactPct, MATRIX_COLUMNS, MIN_JUDGE, upcomingOf, type AttentionRow, type Cell, type ClassInfo, type OwnerInfo, type RollupClass, type RollupOwnerKind, type RollupStudent, type StudentInfo, dutyTier, tierTone, type DutyTier, type OwnerLoadRow, addRating, MIN_RATED, type Rating, type RatingRow, wellDoneOf } from "./view-admin";
+import { add, cellOf, EMPTY, exactPct, MATRIX_COLUMNS, MIN_JUDGE, upcomingOf, type AttentionRow, type Cell, type ClassInfo, type OwnerInfo, type RollupClass, type RollupOwnerKind, type RollupStudent, type StudentInfo, dutyTier, tierTone, type DutyTier, type OwnerLoadRow, addRating, MIN_RATED, type Rating, type RatingRow, leftOf, earlyDoneOf, pendingOf } from "./view-admin";
 
 /**
  * 단계별 보기(과목 → 선생님 → 반 → 학생)의 순수 조립 — 원장 2026-11-10 *"과목별 - 선생님별 - 반별 - 학생별로 디테일 될 수 있게 … 이 선생님이 뭘 안했는지,
@@ -8,12 +8,12 @@ import { add, cellOf, EMPTY, exactPct, MATRIX_COLUMNS, MIN_JUDGE, upcomingOf, ty
 
 /**
  * 잘하고 있나 — **기한 내 완료율**(`pct` — 표의 '전체' 칸과 같은 숫자)을 로열티와 같은 9등급으로(`dutyTier` — 96%+ 1등급 … 4% 미만 9등급 · `grade`는 그 등급의 색 묶음).
- * 원장 2026-11-11 *"전체 기준으로 등급 다시 매길것"* — 그 전에는 '기한이 온 것만'으로 매겨, 종류 칸은 붉고 전체는 43%인데 등급만 1등급이었다.
- * 아직 열리지 않은 수업의 업무는 집계에 없으므로(s2_0064) 수업 전에 등급이 깎이지 않는다. 이번 달 상담처럼 기한 전이라 남은 것은 분모에 들어 '남음'으로 보인다.
- * 업무가 3건 미만이면 등급 없이 '평가 대기'. 🔴 기한 초과가 오래됐다는 이유로 등급을 덮어쓰지 않는다 — 실적(%)과 지금 손댈 것(기한 초과 수)은 다른 숫자다.
+ * 원장 2026-11-11 *"전체 기준으로 등급 다시 매길것"* — 칸 · 전체 · 등급이 같은 분모(때가 된 업무 `due`) · 같은 분자(기한 안에 끝낸 것 `ontime`)를 쓴다.
+ * 때가 안 된 업무(아직 열리지 않은 수업 · 기한 전의 학생 상담 · 월말평가 · 신규생 관리)는 등급에 들지 않는다 — 수업 전 · 달 초에 등급이 깎이지 않는다.
+ * 때가 된 업무가 3건 미만이면 등급 없이 '평가 대기'. 🔴 기한 초과가 오래됐다는 이유로 등급을 덮어쓰지 않는다 — 실적(%)과 지금 손댈 것(기한 초과 수)은 다른 숫자다.
  */
 /**
- * reason = 결론 한 줄 · mix = 그 기간 업무의 결말(good 기한 안에 끝냄 · lateDone 기한 후 완료 · missed 미처리 = 미이행 확정 + 지금 기한 초과 · left 남음) · gap = 평균과의 차이.
+ * reason = 결론 한 줄 · mix = 때가 된 업무의 결말(good 기한 안에 끝냄 · lateDone 기한 후 완료 · missed 미처리 = 미이행 확정 + 지금 기한 초과 · left 남음) · gap = 평균과의 차이.
  */
 export type Verdict = { grade: "good" | "warn" | "bad" | "wait" | "none"; /** 1~9등급(평가 대기 · 해당 없음은 null). */ tier: DutyTier | null; label: string; reason: string;
   mix: { total: number; good: number; lateDone: number; missed: number; left: number } | null; gap: { label: string; diff: number } | null };
@@ -22,14 +22,19 @@ export type Avg = { pct: number | null; label: string };
 export function judge(cell: Cell, avg: Avg | null = null): Verdict {
   if (!cell.total) return { grade: "none", tier: null, label: VERDICT_LABEL.none, reason: "", mix: null, gap: null };
   const n = (v: number) => v.toLocaleString("ko-KR");
-  const good = wellDoneOf(cell), missed = cell.expired + cell.late, left = upcomingOf(cell);
-  // 그 기간 업무가 어떻게 끝났나 — 기한 안에 · 기한 뒤에 · 안 함(미이행 확정 + 지금 기한 초과) · 아직 남음. 화면은 이 넷을 막대 하나로 그린다.
-  const mix = { total: cell.total, good, lateDone: cell.lateDone, missed, left };
-  if (cell.pct === null || cell.total < MIN_JUDGE) return { grade: "wait", tier: null, label: VERDICT_LABEL.wait, reason: `업무 ${n(cell.total)}건 · ${MIN_JUDGE}건부터 등급 산정`, mix, gap: null };
+  const missed = cell.expired + cell.late, left = leftOf(cell);
+  // 때가 된 업무가 어떻게 끝났나 — 기한 안에 · 기한 뒤에 · 안 함(미이행 확정 + 지금 기한 초과) · 아직 남음. 화면은 이 넷을 막대 하나로 그린다.
+  const mix = cell.due ? { total: cell.due, good: cell.ontime, lateDone: cell.lateDone, missed, left } : null;
+  if (cell.pct === null || cell.due < MIN_JUDGE) {
+    const reason = cell.due ? `지금 ${n(cell.due)}건 · ${MIN_JUDGE}건부터 등급 산정` : `진행 중 · ${n(cell.total)}건 중 ${n(earlyDoneOf(cell))}건 완료`;
+    return { grade: "wait", tier: null, label: VERDICT_LABEL.wait, reason, mix, gap: null };
+  }
   const tier = dutyTier(exactPct(cell) ?? cell.pct);
   // 결론 한 줄(원장 2026-11-10 *"관리자 입장에서 바로 판단이 가능하게"*) — 다 했나 · 아니면 모자란 까닭이 '안 한' 쪽인가 '늦게 한' 쪽인가 '아직 남은' 쪽인가(많은 것 하나).
   const why = ([["미처리가 많음", missed], ["기한 후 완료가 많음", cell.lateDone], ["남은 업무가 많음", left]] as const).reduce((a, b) => (b[1] > a[1] ? b : a))[0];
-  const reason = good === cell.total ? "업무 완료" : tier <= 2 ? "대부분 기한 내 완료" : `기한 내 완료율 ${cell.pct}% · ${why}`;
+  // '업무 완료'는 남은 것이 하나도 없을 때만 — 때가 된 것은 다 했어도 기한 전 업무(이번 달 상담 등)가 남았으면 그 건수를 함께 적는다(리뷰 2026-11-11).
+  const ahead = pendingOf(cell) - earlyDoneOf(cell);
+  const reason = cell.ontime === cell.due ? (ahead > 0 ? `기한 내 완료 · 진행 중 ${n(ahead)}건` : "업무 완료") : tier <= 2 ? "대부분 기한 내 완료" : `기한 내 완료율 ${cell.pct}% · ${why}`;
   const diff = avg && avg.pct !== null ? cell.pct - avg.pct : null;
   const gap = diff === null || !avg || diff === 0 ? null : { label: avg.label, diff };
   return { grade: tierTone(tier), tier, label: `${tier}등급`, reason, mix, gap };
@@ -188,7 +193,7 @@ export type RankRow = { rank: number | null; ownerId: string; name: string; meta
  */
 export function rankOwners(owners: readonly TreeOwner[], kind: string | null = null): RankRow[] {
   const rows = owners.filter((o) => o.ownerId !== NO_OWNER && listedOwner(o)).flatMap((o) => { const cell = kind ? o.cells[kind] : o.cell; return cell && cell.total ? [{ ownerId: o.ownerId, name: o.name, meta: ownerMeta(o), cell, verdict: judge(cell) }] : []; });
-  const judged = rows.filter((r) => r.verdict.tier !== null).sort((a, b) => exactPct(b.cell)! - exactPct(a.cell)! || b.cell.total - a.cell.total || a.name.localeCompare(b.name, "ko"));
+  const judged = rows.filter((r) => r.verdict.tier !== null).sort((a, b) => exactPct(b.cell)! - exactPct(a.cell)! || b.cell.due - a.cell.due || a.name.localeCompare(b.name, "ko"));
   const waiting = rows.filter((r) => r.verdict.tier === null).sort((a, b) => a.name.localeCompare(b.name, "ko"));
   return [...judged.map((r): RankRow => ({ ...r, rank: judged.findIndex((x) => exactPct(x.cell) === exactPct(r.cell)) + 1 })), ...waiting.map((r): RankRow => ({ ...r, rank: null }))];
 }

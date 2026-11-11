@@ -1,6 +1,6 @@
 "use client";
 
-import { wellDoneOf, type Cell } from "../../view-admin";
+import { shownOf, type Cell } from "../../view-admin";
 import { judge, ownerMeta, type TreeSubject } from "../../view-admin-levels";
 import { TierStars } from "@/features/student-contribution/components/relative-score";
 import { VerdictDot } from "./admin-verdict";
@@ -11,12 +11,12 @@ export const ROOT: Sel = { subject: undefined, owner: null, classId: null, stude
 
 /**
  * 줄 오른쪽 표시 — **별**(로열티와 같은 9등급 · 원장 2026-11-10 *"% 말고 이 선생님이 잘하고 있다는걸 확인해야하니까 왼쪽 리스트도 별로"*) + 붉은 지연 수.
- * 등급이 없으면(업무 3건 미만) 끝낸 것/전체만(표의 칸과 같은 분자 — 기한 안에 끝낸 것). 정확한 %는 마우스 오버에.
+ * 등급이 없으면(때가 된 업무 3건 미만) 표의 칸과 같은 분자/분모만. 정확한 %는 마우스 오버에.
  */
 function Mark({ cell }: { cell: Cell }) {
   const v = judge(cell);
   return <span className="flex shrink-0 items-center gap-1 text-xs font-semibold tabular-nums" title={v.tier && cell.pct !== null ? `${v.label} · 기한 내 완료율 ${cell.pct}%` : undefined}>
-    {v.tier ? <TierStars tier={`${v.tier}등급`} /> : <span className="text-text-dim font-medium">{wellDoneOf(cell)}/{cell.total}</span>}
+    {v.tier ? <TierStars tier={`${v.tier}등급`} /> : <span className="text-text-dim font-medium">{shownOf(cell)?.num ?? 0}/{shownOf(cell)?.den ?? 0}</span>}
     {cell.late ? <span className="text-danger">{cell.late}</span> : null}
   </span>;
 }
@@ -54,7 +54,7 @@ export function AdminTree({ tree, multi, sel, lateOnly, onSelect }: { tree: Tree
             {ownerOn ? <div className="grid gap-0.5 pl-4">
               {classes.map((c) => <button key={c.classId} type="button" onClick={() => onSelect({ subject: s.subject, owner: o.ownerId, classId: c.classId, studentId: null })} className={`${row} ${sel.classId === c.classId ? on : ""}`}>
                 <span className="min-w-0 flex-1 truncate text-xs font-semibold">{c.name}</span>
-                <span className="flex shrink-0 items-center gap-1 text-xs font-semibold tabular-nums"><span>{c.cell.pct ?? 0}%</span>{c.cell.late ? <span className="text-danger">{c.cell.late}</span> : null}</span>
+                <span className="flex shrink-0 items-center gap-1 text-xs font-semibold tabular-nums"><span>{shownOf(c.cell)?.judged ? `${shownOf(c.cell)!.pct}%` : `${shownOf(c.cell)?.num ?? 0}/${shownOf(c.cell)?.den ?? 0}`}</span>{c.cell.late ? <span className="text-danger">{c.cell.late}</span> : null}</span>
               </button>)}
             </div> : null}
           </div>;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useWork } from "@/app/(shell)/dashboard/_instruments/work/work-context";
-import { upcomingOf, wellDoneOf, type LateItem } from "../../view-admin";
+import { leftOf, type LateItem } from "../../view-admin";
 import type { TreeSubject } from "../../view-admin-levels";
 import { ownerRows } from "../../view-owner";
 import { bandStyle } from "./admin-matrix";
@@ -35,14 +35,14 @@ export function AdminOwnerBoard({ tree, late, managers, labels, nowMs, onSubject
           <td className="px-1"><VerdictBadge v={r.verdict} /></td>
           {/* 분수(269/966)를 그대로 적으면 '그만큼 어겼다'로 읽힌다(원장 2026-11-11) — 칸에는 표와 같은 %(기한 내 완료율)만 적고 분자/분모는 마우스를 올렸을 때, 나머지는 칸을 나눠 건수로. */}
           <td className="p-0">{r.cell.pct === null ? <span className="text-text-dim text-sm">—</span>
-            : <button type="button" disabled={!r.inTree} onClick={() => onSubject(r.subject)} style={bandStyle(r.cell.pct)} className="group block w-full rounded-lg px-1 py-1.5 text-sm font-semibold tabular-nums enabled:hover:brightness-95"><span className="group-hover:hidden">{r.cell.pct}<span className="text-xs font-medium">%</span></span><span className="hidden group-hover:inline">{n(wellDoneOf(r.cell))}/{n(r.cell.total)}</span></button>}</td>
+            : <button type="button" disabled={!r.inTree} onClick={() => onSubject(r.subject)} style={bandStyle(r.cell.pct)} className="group block w-full rounded-lg px-1 py-1.5 text-sm font-semibold tabular-nums enabled:hover:brightness-95"><span className="group-hover:hidden">{r.cell.pct}<span className="text-xs font-medium">%</span></span><span className="hidden group-hover:inline">{n(r.cell.ontime)}/{n(r.cell.due)}</span></button>}</td>
           <td className="px-2 text-sm tabular-nums">{r.cell.lateDone ? `${n(r.cell.lateDone)}건` : <span className="text-text-dim">없음</span>}</td>
           <td className="px-2 text-sm tabular-nums">
             {r.late ? <><span className="text-danger font-bold">{n(r.late)}건</span>
               {r.late3 ? <span className="text-text-dim ml-1.5 text-xs font-medium">3일 이상 {n(r.late3)}</span> : null}
               {r.late7 ? <span className="text-danger ml-1.5 text-xs font-bold">7일 이상 {n(r.late7)}</span> : null}</> : <span className="text-text-dim">없음</span>}
           </td>
-          <td className="text-text-dim px-2 text-sm tabular-nums">{upcomingOf(r.cell) ? `${n(upcomingOf(r.cell))}건` : "없음"}</td>
+          <td className="text-text-dim px-2 text-sm tabular-nums">{leftOf(r.cell) ? `${n(leftOf(r.cell))}건` : "없음"}</td>
           {tracked ? <td className="px-2 text-sm tabular-nums">
             {r.lateTeachers ? <span className={r.requested < r.lateTeachers ? "font-bold" : "text-text-dim font-semibold"}>대상 선생님 {n(r.lateTeachers)}명, 요청 {n(r.requested)}명</span> : <span className="text-text-dim">—</span>}
             {r.requestsLate ? <span className="text-danger text-xs font-bold">, 요청 기한 지남 {n(r.requestsLate)}건</span> : null}

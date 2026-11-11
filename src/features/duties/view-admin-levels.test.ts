@@ -9,7 +9,7 @@ const CLASSES = { c1: { name: "중2 A", subject: "math", teacherId: "t1" }, c2: 
 const STUDENTS = { s1: { name: "김하준", school: "경명여중", grade: "중1" }, s2: { name: "이서아", school: null, grade: null } };
 
 describe("judge", () => {
-  it("로열티와 같은 9등급(표의 '전체' 칸과 같은 숫자) · 색 묶음 1~2 / 3~4 / 5 이하 · 결론 한 줄(다 했나 · 안 한 쪽인가 · 늦은 쪽인가 · 남은 쪽인가) + 결말 구성 + 평균과의 차이", () => {
+  it("로열티와 같은 9등급(표의 '전체' 칸과 같은 숫자 = 때가 된 업무 가운데 기한 안에 끝낸 비율) · 색 묶음 1~2 / 3~4 / 5 이하 · 결론 한 줄(다 했나 · 안 한 쪽인가 · 늦은 쪽인가 · 남은 쪽인가) + 결말 구성 + 평균과의 차이", () => {
     expect(judge(cellOf(c(10, 10, 10, 10)), { pct: 85, label: "과목" })).toMatchObject({ grade: "good", tier: 1, label: "1등급", reason: "업무 완료", gap: { label: "과목", diff: 15 }, mix: { total: 10, good: 10, lateDone: 0, missed: 0, left: 0 } });
     expect(judge(cellOf(c(10, 8, 10, 8, 2)))).toMatchObject({ grade: "warn", tier: 3, label: "3등급" });
     expect(judge(cellOf(c(10, 6, 10, 6, 4)))).toMatchObject({ grade: "warn", tier: 4, reason: "기한 내 완료율 60% · 미처리가 많음", mix: { total: 10, good: 6, lateDone: 0, missed: 4, left: 0 } });
@@ -18,16 +18,22 @@ describe("judge", () => {
     expect(judge(cellOf(c(10, 9, 10, 3, 0, { lateDone: 6, expired: 1 }))).reason).toBe("기한 내 완료율 30% · 기한 후 완료가 많음");
     expect(judge(cellOf(c(0, 0, 0, 0)))).toMatchObject({ grade: "none", reason: "" });
   });
-  it("🔴 등급은 '전체' 칸과 같은 숫자다 — 남은 업무(이번 달 상담처럼 기한 전)도 분모라 '남은 업무가 많음'으로 적는다(아직 열리지 않은 수업은 집계에 들어오지 않는다 · s2_0064)", () => {
-    // 월 상담 30건 중 3건만 한 선생님 — 10%(8등급). 원장 2026-11-11 "전체 기준으로 등급 다시 매길것".
-    expect(judge(cellOf(c(30, 3, 0, 0)))).toMatchObject({ grade: "bad", tier: 8, reason: "기한 내 완료율 10% · 남은 업무가 많음", mix: { total: 30, good: 3, left: 27 } });
-    // 일간은 다 했는데 월간(말일 기한)이 남은 반 — 전체 52%(5등급).
-    expect(judge(cellOf(c(40, 21, 21, 21)))).toMatchObject({ grade: "bad", tier: 5, reason: "기한 내 완료율 52% · 남은 업무가 많음" });
-    // 🔴 '업무 완료'는 전부 기한 안에 끝냈을 때만 — 99.9%는 1등급이어도 '대부분 기한 내 완료'라고 적는다.
+  it("🔴 때가 안 된 업무는 등급에 들지 않는다 — 기한 전의 월간 · 건별만 있으면 '평가 대기'(진행만 적는다) · 수업이 끝난 뒤 남은 것은 분모에 든다", () => {
+    // 월 상담 30건(말일 기한) 중 3건을 했다 — 아직 때가 아니라 등급 없이 진행만(원장 2026-11-11 "추천으로 진행" — 달 초에 등급이 깎이지 않는다).
+    expect(judge(cellOf(c(30, 3, 0, 0)))).toMatchObject({ grade: "wait", label: "평가 대기", reason: "진행 중 · 30건 중 3건 완료", mix: null });
+    // 일간 21건은 다 했고 월간 19건(말일 기한)이 남은 반 — 일간 실적대로 1등급.
+    //   🔴 그래도 '업무 완료'라고 적지 않는다 — 기한 전 업무가 남았으면 그 건수를 함께 적는다.
+    expect(judge(cellOf(c(40, 21, 21, 21)))).toMatchObject({ grade: "good", tier: 1, reason: "기한 내 완료 · 진행 중 19건", mix: { total: 21, good: 21, left: 0 } });
+    expect(judge(cellOf(c(40, 40, 21, 21))).reason).toBe("업무 완료"); // 기한 전 19건도 미리 끝냈다
+    // 🔴 수업은 끝났고 아직 안 보낸 보고서(기한 전)는 '남음'으로 분모에 든다 — 남은 것이 있으면 100%가 아니다("남음이 있는데 100%는 말도 안됨").
+    expect(judge(cellOf(c(10, 6, 10, 6)))).toMatchObject({ grade: "warn", tier: 4, reason: "기한 내 완료율 60% · 남은 업무가 많음", mix: { total: 10, good: 6, left: 4 } });
+    // '업무 완료'는 전부 기한 안에 끝냈을 때만 — 99.9%는 1등급이어도 '대부분 기한 내 완료'라고 적는다.
     expect(judge(cellOf(c(1000, 999, 1000, 999, 1)))).toMatchObject({ tier: 1, reason: "대부분 기한 내 완료" });
   });
-  it("🔴 업무가 3건 미만이면 등급 없이 건수만 · 7일 넘은 기한 초과가 있어도 등급을 덮어쓰지 않는다", () => {
-    expect(judge(cellOf(c(2, 0, 2, 0, 2)))).toMatchObject({ grade: "wait", reason: "업무 2건 · 3건부터 등급 산정" });
+  it("🔴 때가 된 업무가 3건 미만이면 등급 없이 건수만 · 7일 넘은 기한 초과가 있어도 등급을 덮어쓰지 않는다", () => {
+    expect(judge(cellOf(c(2, 0, 2, 0, 2)))).toMatchObject({ grade: "wait", reason: "지금 2건 · 3건부터 등급 산정" });
+    // 🔴 세는 것은 전체가 아니라 **때가 된 업무**다 — 전체 40건이어도 때가 된 것이 2건이면 평가 대기.
+    expect(judge(cellOf(c(40, 3, 2, 2)))).toMatchObject({ grade: "wait", tier: null, reason: "지금 2건 · 3건부터 등급 산정" });
     expect(judge(cellOf(c(20, 19, 20, 19, 1, { over7: 1 }))).grade).toBe("good");
   });
 });
@@ -69,9 +75,9 @@ describe("kindStatuses · studentLines · classLines · sumCells", () => {
     { studentId: "s2", classId: "c1", kind: "report_write", ...c(5, 4, 4, 4), lastDue: null },
     { studentId: null, classId: "c1", kind: "report_write", ...c(1, 0, 1, 0, 1), lastDue: null },
   ];
-  it("종류별 상태 = 업무 있는 종류만 · % = 기한 안에 끝낸 것 ÷ 전체 · 남음 = 전체 − 완료 − 지금 기한 초과 − 미이행", () => {
+  it("종류별 상태 = 업무 있는 종류만 · % = 때가 된 업무 가운데 기한 안에 끝낸 비율 · 안 끝낸 것 = 전체 − 완료 − 지금 기한 초과 − 미이행", () => {
     const { cells } = sumCells(rows, inClassOf("c1"));
-    expect(kindStatuses(cells).map((s) => [s.label, s.cell.pct, s.upcoming, s.cell.late])).toEqual([["출결", 100, 0, 0], ["보고서 작성", 54, 2, 3]]);
+    expect(kindStatuses(cells).map((s) => [s.label, s.cell.pct, s.upcoming, s.cell.late])).toEqual([["출결", 100, 0, 0], ["보고서 작성", 66, 2, 3]]); // 6/9 = 66.6 → 내림
   });
   it("🔴 반 없는 의무(신규생 정착)의 합과 학생 줄은 같은 비교를 쓴다 — 합만 비지 않는다", () => {
     const none: RollupStudent[] = [{ studentId: "s9", classId: null, kind: "newcomer_call", ...c(4, 0, 3, 0, 3), lastDue: null }];
@@ -114,7 +120,7 @@ describe("attentionItems — 지연 줄이 가리키는 의무", () => {
 
 describe("rankOwners — 선생님 등수", () => {
   const o = (ownerId: string, name: string, cnt: Counts, cells: Record<string, Counts> = {}) => ({ ownerId, name, cell: cellOf(cnt), cells: Object.fromEntries(Object.entries(cells).map(([k, v]) => [k, cellOf(v)])), classes: [] });
-  it("기한 내 완료율 높은 순 · 같은 %는 같은 등수(다음 등수는 건너뜀) · 등급 전(업무 3건 미만)은 등수 없이 뒤 · 담당 미정 제외", () => {
+  it("기한 내 완료율 높은 순 · 같은 %는 같은 등수(다음 등수는 건너뜀) · 등급 전(때가 된 업무 3건 미만)은 등수 없이 뒤 · 담당 미정 제외", () => {
     const rows = rankOwners([o("a", "가", c(10, 8, 10, 8)), o("b", "나", c(20, 20, 20, 20)), o("c", "다", c(10, 10, 10, 10)), o("d", "라", c(2, 0, 2, 0)), o(NO_OWNER, "담당 미정", c(10, 10, 10, 10))]);
     expect(rows.map((r) => [r.name, r.rank])).toEqual([["나", 1], ["다", 1], ["가", 3], ["라", null]]);
   });

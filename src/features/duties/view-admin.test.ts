@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adminRange, buildAttention, cellOf, cellTitle, cellTone, distinctStudents, earlyDoneOf, progressText, foldMatrixRows, lateByKind, lateLabel, pctOf, upcomingOf, type Counts, type LateItem, type RollupOwnerKind, dutyTier, periodPresets, shiftPeriod, periodKey, parseAdminPeriod, periodsOf } from "./view-admin";
+import { adminRange, buildAttention, cellOf, cellTitle, cellTone, distinctStudents, earlyDoneOf, progressText, foldMatrixRows, lateByKind, lateLabel, pctOf, upcomingOf, type Counts, type LateItem, type RollupOwnerKind, dutyTier, periodPresets, shiftPeriod, periodKey, parseAdminPeriod, periodsOf, shownOf, leftOf, pendingOf } from "./view-admin";
 
 /** 셈 한 묶음 — total · done · due(기한 온 것) · ontime(제때) · late(지금 지연). 나머지는 0에서 덮어쓴다. */
 const c = (total: number, done: number, due: number, ontime: number, late = 0, o: Partial<Counts> = {}): Counts => ({ total, done, due, ontime, late, lateDone: 0, expired: 0, over7: 0, ...o });
@@ -31,17 +31,23 @@ describe("adminRange", () => {
 });
 
 describe("기한 내 완료율 · 칸 색", () => {
-  it("🔴 % = 기한 안에 끝낸 것 ÷ 그 기간의 전체 — 남은 것도 분모다(남은 것이 있으면 100%가 아니다) · 내림", () => {
-    // 월 상담 30건(말일 기한) 중 3건을 했다 — 10%(원장 2026-11-11: 칸 · 전체 · 등급이 같은 숫자).
-    expect(pctOf(c(30, 3, 0, 0))).toBe(10);
-    // 40건 중 제때 8 + 미리 3 = 11건(기한 후 완료 1 · 기한 초과 1 · 남음 27은 분자에 안 든다) = 27.5 → 27%.
-    expect(pctOf(c(40, 12, 10, 8, 1, { lateDone: 1 }))).toBe(27);
-    expect([pctOf(c(1000, 999, 1000, 999, 1)), pctOf(c(0, 0, 0, 0))]).toEqual([99, null]);
+  it("🔴 % = 때가 된 업무 가운데 기한 안에 끝낸 비율(내림) — 때가 안 된 업무(기한 전의 월간 · 건별)는 분모에 안 들고 진행만 따로 · 수업이 끝난 뒤 남은 것은 분모에 든다", () => {
+    // 월 상담 30건(말일 기한) 중 3건만 했어도, 때가 된 것이 없으면 %를 매기지 않는다 — 칸에는 진행(3/30)만 색 없이.
+    expect(pctOf(c(30, 3, 0, 0))).toBeNull();
+    expect(shownOf(c(30, 3, 0, 0))).toEqual({ judged: false, pct: 10, num: 3, den: 30 });
+    // 때가 된 10건 가운데 8건을 기한 안에 · 1건 기한 후 완료 · 1건 기한 초과 = 80%(기한 전 30건과 그중 미리 끝낸 3건은 안 든다).
+    const x = c(40, 12, 10, 8, 1, { lateDone: 1 });
+    expect(pctOf(x)).toBe(80);
+    expect(shownOf(x)).toEqual({ judged: true, pct: 80, num: 8, den: 10 });
+    expect([pendingOf(x), earlyDoneOf(x), leftOf(x)]).toEqual([30, 3, 0]);
+    // 🔴 수업은 끝났고 아직 안 보낸 보고서(남음)는 분모에 든다 — 9/10 = 90%(100%가 아니다) · 999/1000은 내림해 99%.
+    expect([pctOf(c(10, 9, 10, 9)), leftOf(c(10, 9, 10, 9)), pctOf(c(1000, 999, 1000, 999, 1)), pctOf(c(0, 0, 0, 0)), shownOf(c(0, 0, 0, 0))]).toEqual([90, 1, 99, null, null]);
   });
-  it("칸 색 — 해당 없음 · 업무 3건 미만은 중립(평가 대기) · 그 밖은 등급의 색 묶음", () => {
+  it("칸 색 — 해당 없음 · 때가 된 업무 3건 미만은 중립(평가 대기) · 그 밖은 등급의 색 묶음", () => {
     expect(cellTone(cellOf(c(0, 0, 0, 0)))).toBe("none");
     expect(cellTone(cellOf(c(2, 0, 2, 0, 2)))).toBe("wait");
-    expect(cellTone(cellOf(c(30, 3, 0, 0)))).toBe("bad");
+    expect(cellTone(cellOf(c(30, 3, 0, 0)))).toBe("wait");
+    expect(cellTone(cellOf(c(40, 3, 2, 2)))).toBe("wait"); // 전체가 많아도 때가 된 것이 3건 미만이면 중립
     expect(cellTone(cellOf(c(10, 9, 10, 9, 1)))).toBe("good");
     expect(cellTone(cellOf(c(10, 7, 10, 7, 3)))).toBe("warn");
     expect(cellTone(cellOf(c(10, 6, 10, 6, 4)))).toBe("warn");
@@ -53,8 +59,9 @@ describe("기한 내 완료율 · 칸 색", () => {
   it("기한 전 남은 것 · 칸 설명은 숫자의 뜻을 글로", () => {
     const x = c(40, 12, 10, 8, 1, { lateDone: 1 });
     expect(upcomingOf(x)).toBe(27);
-    expect(cellTitle(x)).toBe("40건 중 기한 내 완료 11건 · 기한 후 완료 1 · 기한 초과 1 · 남음 27");
-    expect(cellTitle(c(30, 0, 0, 0))).toBe("30건 중 기한 내 완료 0건 · 남음 30");
+    expect(cellTitle(x)).toBe("10건 중 기한 내 완료 8건 · 기한 후 완료 1 · 기한 초과 1 · 진행 중 30건 중 3건 완료");
+    expect(cellTitle(c(30, 0, 0, 0))).toBe("진행 중 30건 중 0건 완료");
+    expect(cellTitle(c(10, 9, 10, 9))).toBe("10건 중 기한 내 완료 9건 · 남음 1");
     // 🔴 기한 전에 다 끝낸 종류 — '예정 0'이 아니라 진행 5/5.
     expect([upcomingOf(c(5, 5, 0, 0)), earlyDoneOf(c(5, 5, 0, 0)), progressText(c(5, 5, 0, 0))]).toEqual([0, 5, "5/5"]);
   });

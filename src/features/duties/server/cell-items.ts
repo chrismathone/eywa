@@ -2,7 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { addDays } from "@/lib/date-kst";
-import { cellItemState, type CellItem } from "../cell-items";
+import { cellItemState, isJudgedItem, type CellItem } from "../cell-items";
 import type { DutyAdminScope } from "../view-admin";
 import { monthHref } from "../view-month";
 import { dutyOpensAt } from "../kinds";
@@ -66,7 +66,9 @@ export async function loadDutyCellItems(tenantId: string, from: string, to: stri
       : consult ? `/consultations/${consult}`
       : r.kind === "exam_monthly" ? monthHref({ kind: r.kind, studentId: r.student_id, classId: r.class_id, cycle: r.cycle, subject: r.subject })
       : null;
-    return { id: r.id, kind: r.kind, period: r.period, cycle: r.cycle, state: cellItemState({ status: r.status, voidReason: r.void_reason, dueAt: r.due_at, doneAt: r.done_at }, now),
+    const it = { kind: r.kind, period: r.period, status: r.status, voidReason: r.void_reason, dueAt: r.due_at, doneAt: r.done_at };
+    // 미이행 확정은 늘 때가 된 업무다(기한 뒤에만 확정된다).
+    return { id: r.id, kind: r.kind, period: r.period, cycle: r.cycle, state: cellItemState(it, now), judged: r.status === "void" || isJudgedItem(it, now),
       dueAt: r.due_at, doneAt: r.done_at, className: cls?.class_name ?? null, href };
   });
 }
