@@ -68,7 +68,9 @@ export function countsFrom(hireDate: string | null): string | null {
 export function inTenure(month: string, hireDate: string | null, resignDate: string | null): boolean {
   const from = countsFrom(hireDate);
   if (from && month < from) return false;
-  return !resignDate || month <= resignDate.slice(0, 7);
+  // 입사일보다 앞선 퇴사일은 옛 재직의 것(재입사) — 지금 재직을 자르지 않는다.
+  if (!resignDate || (hireDate && resignDate.slice(0, 10) < hireDate.slice(0, 10))) return true;
+  return month <= resignDate.slice(0, 7);
 }
 
 /** "YYYY-MM"부터 "YYYY-MM"까지 빠짐없이(오름차순). */

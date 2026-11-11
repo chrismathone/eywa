@@ -137,7 +137,7 @@ export function buildPortfolio(d: PortfolioSnapshot, opts: {
   const churnOptions = config.metrics.churn.churn ?? DEFAULT_CHURN_OPTIONS;
   // 학생 배정·유지도 강사 탓이 아닌 사유(퇴원율 세는 법의 사유 목록)로 그만둔 것은 감점하지 않는다(원장 2026-10-14 "사유 규칙 적용").
   const students = buildStudentTracking({
-    from: d.from, end: d.end, classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, owner: ctx.owner,
+    from: d.from, end: d.end, classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, owner: ctx.owner, employed: ctx.employed,
     reasons: { studentReasons: d.studentReasons, excludeReasons: churnOptions.excludeReasons, futureEnrollments: d.futureEnrollments },
   });
   // 퇴원율 — 시간표 X 겹침도 이 계산기를 같은 모양으로 부른다(withdrawals/server/exit-overlay.ts · 가드 exit-overlay-wiring.test).

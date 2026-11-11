@@ -9,7 +9,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getPortfolioGate } from "@/features/teacher-portfolio/server/queries";
 import { isPortfolioTableMissing } from "@/features/teacher-portfolio/server/store";
 import { churnCellOf, inTenure, monthSpan, teacherChurnTag, type ChurnMonth, type ChurnTeacherRow, type TeacherChurnData } from "../teacher-churn";
-import { loadResignDates } from "./teacher-tenure";
+import { loadTenure } from "@/features/teacher-portfolio/server/tenure";
 
 /**
  * 퇴원관리 '강사별 퇴원율 추이' 조회 — 강사평가가 저장한 달(`teacher_portfolio_months`)에서 퇴원율 항목만 읽는다.
@@ -91,7 +91,9 @@ async function readChurn(tenantId: string, to: string): Promise<RawChurn> {
   }
   const users = await fetchInChunks<{ id: string; display_name: string | null; hire_date: string | null; status: string | null }>(ids, (chunk) =>
     admin.from("users").select("id, display_name, hire_date, status").eq("tenant_id", tenantId).in("id", chunk));
-  const resignOf = await loadResignDates(admin, tenantId, users.filter((u) => u.status !== "active").map((u) => u.id));
+  // 재직 기간 = 강사평가 담당 판정과 같은 함수(`loadTenure` — 입사일 · 퇴사일(재입사 전 옛 퇴사는 버림)).
+  const tenure = await loadTenure(admin, tenantId);
+  const resignOf = new Map([...tenure].flatMap(([id, t]) => (t.resignDate ? [[id, t.resignDate] as const] : [])));
   // 퇴사자 = 직원 상태 inactive(대기 pending은 퇴사가 아니다) — '퇴사자 숨김' 토글이 본다.
   const inactive = new Set(users.filter((u) => u.status === "inactive").map((u) => u.id));
   const itemOf = new Map<string, unknown>(heads.map((r) => [keyOf(r), isChurn(r.item) ? r.item : found.get(keyOf(r))]));

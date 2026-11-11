@@ -36,6 +36,10 @@ export type PortfolioSnapshot = {
   consultations: SnapshotConsultation[];
   reviews: SnapshotReview[];
   transitions: SnapshotTransition[];
+  /** activity_log의 담임 변경(2026-11-11) — 감사로그 전이와 합쳐 담임 이력을 만든다(`buildHomeroomOwner`). 옛 스냅숏엔 없다. */
+  teacherChanges?: import("./homeroom-history").ActivityTeacherChange[];
+  /** 지운 옛 계정 id → 지금 계정 id(같은 사람 — `loadTeacherAliases`). 옛 스냅숏엔 없다. */
+  teacherAliases?: Record<string, string>;
   delegations: SnapshotDelegation[];
   invoices: SnapshotInvoice[];
   terms: SnapshotTerm[];
