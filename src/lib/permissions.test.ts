@@ -16,6 +16,10 @@ import {
   SYSTEM_ROLES,
   roleHome,
   SHUTTLE_ADMIN_ROLES,
+  isStaffRecordLocked,
+  STAFF_RECORD_MENUS,
+  STAFF_RECORD_ROLES,
+  TEACHER_MENU_KEYS,
   type MenuKey,
   type UserPermissionOverride,
 } from "./permissions";
@@ -333,9 +337,9 @@ describe("학원 비서 권한(assistant · 원장 2026-11-09 *\"기본 디폴�
   });
 });
 
-describe("시안 화면 넷 = 원장만(원장 2026-11-10 결정) · 셔틀 관리자 화면 = 원장·관리자(기존 동작 유지)", () => {
+describe("2026-11-09에 들어온 화면 넷(경영 분석·지식그래프 · 조직·OKR · 홍보·마케팅 · 업무 작성센터) = 원장만(원장 2026-11-10 결정) · 셔틀 관리자 화면 = 원장·관리자(기존 동작 유지)", () => {
   const masterOnly = Object.fromEntries(SYSTEM_ROLES.map((role) => [role, role === "master" ? "full" : "none"]));
-  it("🔴 시안 넷은 새 권한 규칙 그대로 — 원장 '전체' · 나머지 '없음'(관리자·매니저·상담·회계·열람에게 안 열린다)", () => {
+  it("🔴 넷은 새 권한 규칙 그대로 — 원장 '전체' · 나머지 '없음'(관리자·매니저·상담·회계·열람에게 코드 기본값으로 안 열린다 · 지점이 여는 것은 역할·권한 면에서)", () => {
     for (const menu of ["management", "okr", "marketing", "work_records"] as const) {
       expect(MENU_ACCESS[menu], menu).toEqual(masterOnly);
       for (const role of ["admin", "manager", "counselor", "accountant", "viewer"] as const) expect(canAccess(role, menu), `${menu}·${role}`).toBe(false);
@@ -357,6 +361,88 @@ describe("시안 화면 넷 = 원장만(원장 2026-11-10 결정) · 셔틀 관�
     expect(resolveMatrix([{ menu: "shuttle_admin", role: "manager", access: "full" }]).shuttle_admin.manager).toBe("none");
     // 관리자 칸은 원장이 닫을 수 있다.
     expect(resolveMatrix([{ menu: "shuttle_admin", role: "admin", access: "none" }]).shuttle_admin.admin).toBe("none");
+  });
+});
+
+/**
+ * 조직·OKR · 업무 작성센터 — 열람·아르바이트 칸 잠금(2026-11-11 · Claude·Codex 합의안 · 원장 위임).
+ * 서버(organization-okr/server.ts · work-records/server.ts · academy-knowledge/server-records.ts)는 직원 역할 여섯만 받는다 — 그 밖의 칸을 열면
+ * 메뉴는 서는데 화면이 "불러오지 못했습니다"로 멈춘다(저장만 되는 칸). 서버 목록과의 일치는 permission-rows.test.ts가 소스로 잠근다.
+ */
+describe("조직·OKR · 업무 작성센터 — 직원 역할 여섯만(열람·아르바이트·학생 칸 잠금 · 2026-11-11)", () => {
+  const OUTSIDE = SYSTEM_ROLES.filter((role) => !(STAFF_RECORD_ROLES as readonly string[]).includes(role));
+
+  it("잠그는 것은 두 메뉴의 열람·아르바이트·학생 칸뿐이다", () => {
+    expect([...STAFF_RECORD_MENUS]).toEqual(["okr", "work_records"]);
+    expect([...STAFF_RECORD_ROLES]).toEqual(["master", "admin", "manager", "teacher", "counselor", "accountant"]);
+    expect(OUTSIDE).toEqual(["viewer", "parttime", "student"]);
+    for (const menu of MENU_KEYS) for (const role of SYSTEM_ROLES) {
+      expect(isStaffRecordLocked(menu, role), `${menu}·${role}`).toBe((STAFF_RECORD_MENUS as readonly string[]).includes(menu) && OUTSIDE.includes(role));
+    }
+  });
+
+  it("🔴 잠긴 칸은 어느 값으로도 못 연다 — 손으로 넣은 역할 칸 · 개인 줄 모두 적용하지 않는다(넓어지지 않는다)", () => {
+    for (const menu of STAFF_RECORD_MENUS) for (const role of OUTSIDE) {
+      for (const access of ["full", "scoped", "readonly", "none"] as const) expect(isPermissionLocked(menu, role, access), `${menu}·${role}·${access}`).toBe(true);
+      expect(MENU_ACCESS[menu][role], `${menu}·${role}`).toBe("none");
+      for (const access of ["full", "readonly"] as const) {
+        expect(resolveMatrix([{ menu, role, access }])[menu][role], `${menu}·${role}·${access}`).toBe("none");
+        expect(applyUserOverrides(MENU_ACCESS, "u-1", role, [{ userId: "u-1", menu, access }])[menu][role], `${menu}·${role}·${access}`).toBe("none");
+      }
+    }
+  });
+
+  it("직원 역할 여섯의 칸은 원장이 연다 — 침산이 여는 값(관리자·매니저 '전체')과 강사·상담의 '담당'이 그대로 적용된다", () => {
+    const opened = resolveMatrix([
+      ...STAFF_RECORD_MENUS.flatMap((menu) => (["admin", "manager"] as const).map((role) => ({ menu, role, access: "full" as const }))),
+      { menu: "okr", role: "teacher", access: "scoped" }, { menu: "work_records", role: "counselor", access: "scoped" }, { menu: "work_records", role: "accountant", access: "readonly" },
+    ]);
+    for (const menu of STAFF_RECORD_MENUS) {
+      expect(opened[menu].master, menu).toBe("full");
+      expect(opened[menu].admin, menu).toBe("full");
+      expect(opened[menu].manager, menu).toBe("full");
+      for (const role of OUTSIDE) expect(opened[menu][role], `${menu}·${role}`).toBe("none");
+    }
+    expect(opened.okr.teacher).toBe("scoped");
+    expect(opened.work_records.counselor).toBe("scoped");
+    expect(opened.work_records.accountant).toBe("readonly");
+    // 원장이 자기 칸을 닫을 수도 있다(잠근 칸이 아니다).
+    for (const menu of STAFF_RECORD_MENUS) expect(isPermissionLocked(menu, "master", "none"), menu).toBe(false);
+  });
+
+  it("🔴 이미 저장된 설정을 막지 않는다 — 잠긴 칸이 섞여 있어도 던지지 않고, 다른 칸은 그대로 적용된다", () => {
+    const stored = [
+      { menu: "okr", role: "viewer", access: "readonly" }, { menu: "work_records", role: "parttime", access: "full" },
+      { menu: "okr", role: "admin", access: "full" }, { menu: "newcomers", role: "teacher", access: "scoped" }, { menu: "documents", role: "teacher", access: "none" },
+    ] as const;
+    const matrix = resolveMatrix(stored);
+    expect(matrix.okr.viewer).toBe("none");
+    expect(matrix.work_records.parttime).toBe("none");
+    expect(matrix.okr.admin).toBe("full");
+    expect(matrix.newcomers.teacher).toBe("scoped");
+    expect(matrix.documents.teacher).toBe("none");
+    // 그 밖의 메뉴의 열람·아르바이트 칸은 종전대로 열린다.
+    expect(resolveMatrix([{ menu: "documents", role: "parttime", access: "readonly" }]).documents.parttime).toBe("readonly");
+  });
+});
+
+describe("강사 '내 메뉴' 키 — 신규생 관리 · 업무 작성센터 · 조직·OKR(2026-11-11 입구)", () => {
+  it("입구만 둔다 — 세 권한의 코드 기본값은 바꾸지 않았다(강사 '없음' · 새 권한 규칙 그대로)", () => {
+    for (const menu of ["newcomers", "work_records", "okr"] as const) {
+      expect(TEACHER_MENU_KEYS as readonly string[], menu).toContain(menu);
+      expect(MENU_ACCESS[menu].teacher, menu).toBe("none");
+    }
+    expect(MENU_ACCESS.newcomers).toEqual({ master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "none", viewer: "readonly", parttime: "none", student: "none" });
+  });
+
+  it("겸직의 본인 강사뷰 — 개인별로 받은 세 메뉴가 강사 행에도 열린다(강사 메뉴 키라서 · 올리기만)", () => {
+    const grants: UserPermissionOverride[] = [{ userId: "manager-1", menu: "okr", access: "scoped" }, { userId: "manager-1", menu: "work_records", access: "full" }];
+    const actor = applyUserOverrides(MENU_ACCESS, "manager-1", "manager", grants);
+    const m = openOwnGrantsInTeacherView(actor, "manager-1", "manager", grants);
+    expect(m.okr.teacher).toBe("scoped");
+    expect(m.work_records.teacher).toBe("full");
+    expect(m.newcomers.teacher).toBe("none"); // 개인 줄이 없는 메뉴는 그대로
+    expect(openOwnGrantsInTeacherView(actor, "manager-2", "manager", grants)).toBe(actor);
   });
 });
 

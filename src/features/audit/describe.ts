@@ -10,6 +10,7 @@ import { formatLeaveDays } from "@/features/leave/request-days";
 import { STUDENT_STATUS_LABEL } from "@/features/students/status/status-labels";
 import { STATUS_TEXT } from "@/features/attendance/cell-display";
 import { ONBOARDING_ITEMS } from "@/features/newcomers/onboarding-items";
+import { managerDefaultSubjectLabel } from "@/features/newcomers/manager-defaults";
 import { reasonDisplay } from "@/features/withdrawals/types";
 import { reasonDetailOf } from "@/features/withdrawals/reason-detail";
 import {
@@ -69,6 +70,8 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   user: "직원",
   users: "직원",
   student: "학생",
+  // 신규생 과목 기본 담당(s2_0066 트리거가 남긴다 — 2026-11-11) · '대상' 이름 = 과목(과목 키를 과목 이름으로 접는다 — auditTargetLabel).
+  newcomer_default_manager: "신규생 기본 담당",
   academy_documents: "서식 문서",
   invoice: "청구서",
   textbook_order: "교재 신청",
@@ -396,6 +399,8 @@ export function auditTargetLabel(
   const label = str(targetLabel);
   if (!label) return null;
   if (UUID_RE.test(label)) return null;
+  // 신규생 과목 기본 담당(DB 트리거 s2_0066) — 대상 칸은 그때의 과목 이름이다. 이름을 못 찾아 과목 키로 남은 줄만 과목 이름으로 접는다(EiE는 과목 목록에 없는 프로그램 이름).
+  if (targetType === "newcomer_default_manager") return managerDefaultSubjectLabel(label, ctx.subjectLabel);
   if (targetType !== "tenant_settings") return label;
   const section = (SECTION_LABELS as Record<string, string>)[label];
   if (section) return section;
@@ -1373,6 +1378,17 @@ export function auditDetail(
         str(m.processedOn) ? `처리일 ${str(m.processedOn)}` : null,
         future && future > 0 ? `시작 전 수강 ${future}건은 시작일로 종료` : null,
         m.uncertain === true ? "응답을 받지 못함(적용 여부 미확인)" : m.partial === true ? "중간에 멈춤" : null,
+      );
+    }
+    case "newcomer_default_manager_update": {
+      // DB 트리거(s2_0066)가 남긴 줄 — 과목 키 · 그때의 과목 이름 · 이전/새 담당자(id + 그때의 이름). 새 줄이면 이전 담당이 없다.
+      // 과목 이름은 그때 남긴 이름이 먼저다(과목을 지운 뒤에도 읽힌다) — 없으면(과목 목록을 저장한 적 없는 학원) 키를 지금 과목 이름으로 접는다.
+      const subject = str(m.subject);
+      const to = str(m.toName) ?? ctx.nameOf(m.toManagerId);
+      const from = str(m.fromName) ?? ctx.nameOf(m.fromManagerId);
+      return join(
+        str(m.subjectLabel) ?? (subject ? managerDefaultSubjectLabel(subject, ctx.subjectLabel) : null),
+        `${from ?? (m.fromManagerId ? "이전 담당" : "지정 없음")} → ${to ?? "새 담당"}`,
       );
     }
     case "newcomer_check":

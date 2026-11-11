@@ -22,10 +22,14 @@ import { Toolbar, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolba
 import { Button } from "@/components/ui/button";
 import { FollowupVisuals } from "./followup-visuals";
 import { EnrollmentSyncNote, type EnrollmentSyncInfo } from "./enrollment-sync-note";
+import { managerDefaultSubjectLabel } from "./manager-defaults";
+import { ManagerDefaultsButton } from "./manager-defaults-dialog";
 
 // '과목 기본 담당' 선택지는 그 과목에 기본 담당이 정해져 있을 때만 낸다(누구인지 이름과 함께) — 없는 기본값을 고르게 하지 않는다.
 // 이미 기본 담당을 따르던 학생인데 그 기본 담당이 없어졌으면 '따름 · 지금 기본 담당 없음'으로 보인다(그대로 저장해도 '미지정'으로 굳지 않게).
 // '전체 완료 체크표' 쓰기는 `canWriteChecks`를 본다 — 정착 관리 자료 조회가 실패해도(canManage가 꺼져도) 종전 체크표는 잠그지 않는다.
+// '기본 관리 담당' 띠 = 지금 과목 + EiE 줄(서버가 거른 값 · manager-defaults.ts). 고치는 단추('기본 담당 설정')는 `canManage`일 때만 선다 —
+// 기본 담당이 아직 없는 학원에서도 지정할 수 있게 그때는 띠를 세운다(2026-11-11). 대화상자는 manager-defaults-dialog.tsx.
 const CALLS = [{ key: "month1_call", label: "30일 콜" }, { key: "month2_call", label: "60일 콜", optional: true }, { key: "month3_call", label: "90일 콜" }];
 const short = (date: string | null) => kstDateOf(date)?.slice(5,10).replace("-", ".") ?? "미정";
 const reviewLabel = { pending: "확인 대기", confirmed: "확인 완료", revision: "보완 요청" };
@@ -89,7 +93,7 @@ export function FollowupWorkspace({ data, legacy, initialFilters, initialStudent
       <span className={css.stages}>등록 → 첫 적응 → 30일 → 60일 → 90일 → 장기재원</span>
       <span className={css.asOf}>관리 기준 <b>{data.today.replaceAll("-", ".")}</b></span>
     </Toolbar>
-    {data.defaults?.length?<aside className={css.defaultRules} aria-label="과목별 기본 관리자"><b>기본 관리 담당</b>{data.defaults.map(d=><span key={d.subject}>{d.subject==="eie"?"EiE":labelOf(d.subject)} · {d.manager?.name??"재지정 필요"}</span>)}<small>기존 개별 배정은 유지 · 동시 수강은 각 과목별 기록</small></aside>:null}
+    {data.defaults?.length||data.canManage?<aside className={css.defaultRules} aria-label="과목별 기본 관리자"><b>기본 관리 담당</b>{data.defaults?.length?data.defaults.map(d=><span key={d.subject}>{managerDefaultSubjectLabel(d.subject,labelOf)} · {d.manager?.name??"재지정 필요"}</span>):<span>아직 지정 없음</span>}<small>기존 개별 배정은 유지 · 동시 수강은 각 과목별 기록</small>{data.canManage?<ManagerDefaultsButton defaults={data.defaults??[]} staff={data.staff} className={css.defaultEdit}/>:null}</aside>:null}
     {data.error ? <p role="alert" className={css.error}>{data.error} <button type="button" onClick={() => router.refresh()}>다시 조회</button></p> : null}
     <EnrollmentSyncNote info={syncInfo} editing={!!selected || saving}/>
     {tab === "checks" ? <NewcomerBoard view={legacy} canWrite={data.canWriteChecks} initialFilters={initialFilters} /> : <>
