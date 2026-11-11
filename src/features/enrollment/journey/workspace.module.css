@@ -38,6 +38,8 @@
 .table td { padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.65; }
 .table tbody tr:hover td { background: var(--hover); }
 .table td b { display: block; }
+/* 학생 이름(링크) 아래 날짜·구분 줄 — 인라인 span이라 '이름2026-11-14'로 붙던 것(툴바의 muted는 그대로 한 줄 안). */
+.table td > span.muted { display: block; }
 .table a { color: var(--ink); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
 .table button { color: var(--ink); font-weight: 500; margin-right: 10px; white-space: nowrap; text-decoration: underline; text-underline-offset: 3px; }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; background: var(--wash); border: 1px solid var(--line); color: var(--ink-2); font-size: var(--text-xs); margin: 2px 4px 2px 0; }
