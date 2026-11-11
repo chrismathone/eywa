@@ -64,6 +64,11 @@ export function exitHomeroomIds(input: {
   isKorean: (teacherId: string) => boolean;
   /** 담임 이력이 빈 반의 보고서(없으면 빈 배열) — `reportWriterOn`. */
   reportsOf?: (classId: string) => readonly HomeroomReport[];
+  /**
+   * 그날 재직 중인가(2026-11-11) — 칸 다수·보고서 작성자 후보도 재직 밖이면 뺀다(담임 이력 `owner`는 이미 거른다 · 강사평가와 같은 판정).
+   * 시간표 이관이 교시 담당 시작일을 입사 전으로 적은 줄이 입사 전 퇴원을 그 선생님에게 붙이지 않게. 없으면 자르지 않는다.
+   */
+  employed?: (teacherId: string, day: string) => boolean;
 }): string[] {
   const { classOf } = input;
   const ended = endedWithExit(input.rows, input.date, classOf, input.lookbackDays).filter((r) => classOf(r.classId)?.regular);
@@ -76,10 +81,11 @@ export function exitHomeroomIds(input: {
     if (!exit) continue;
     const start = r.startDate?.slice(0, 10);
     const day = start && prevDay(exit) < start ? exit : prevDay(exit);
+    const working = (id: string) => input.employed?.(id, day) ?? true;
     const id =
-      slotHomeroom(input.slotsOf(r.classId), day, input.isKorean) ??
+      slotHomeroom(input.slotsOf(r.classId), day, (t) => input.isKorean(t) && working(t)) ??
       input.owner(r.classId, day) ??
-      reportWriterOn(input.reportsOf?.(r.classId) ?? [], day);
+      reportWriterOn((input.reportsOf?.(r.classId) ?? []).filter((x) => working(x.teacherId)), day);
     if (id) ids.add(id);
   }
   return [...ids];

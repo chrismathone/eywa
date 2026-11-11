@@ -32,7 +32,8 @@ export function indexEntries(rows: readonly ManualEntryRow[]): (teacherId: strin
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
-function scoreItem<M extends Metric>(m: M, s: MetricSetting): M {
+/** 한 항목에 설정 하나를 얹는다(점수·만점·이름·끔) — 마감 달 정정(`revision.ts`)도 그 달 저장 설정으로 이 함수를 부른다. */
+export function scoreItem<M extends Metric>(m: M, s: MetricSetting): M {
   m.label = s.label;
   m.max = s.max;
   m.off = !s.enabled || undefined;

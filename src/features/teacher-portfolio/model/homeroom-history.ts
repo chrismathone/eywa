@@ -31,27 +31,46 @@ export const PAIR_WINDOW_DAYS = 3;
 /**
  * 감사로그 전이 + activity_log 담임 변경 → 한 벌. 같은 반 · 같은 새 담임 · 날짜 차 3일 안이면 **가장 가까운 짝 하나**와 묶어 감사로그 쪽(적용일)을
  * 쓴다(한 감사로그는 한 activity하고만 — A→B→A→B처럼 오간 변경이 서로 먹지 않게). 짝이 없는 activity는 처리일(한국 날짜)로 넣는다.
+ * 🔴 짝지은 감사로그에 **이전 담임이 비어 있으면 activity의 옛 값으로 채운다** — 인계 기록이 이전 담임을 안 남긴 반(실데이터: 8/3 '초등M 초4 EL2S'
+ *    인계 = 이전 담임 없음 · activity = 허은진→남정화)은 그 앞이 '모름'이 되어 4~7월 담임이 사라졌다(4~7월 보고서는 허은진이 썼다).
  * old=new · 둘 다 빈 줄은 변경이 아니라 버린다.
  * 🔴 **비어 있던 담임 칸을 채운 변경(old=null)은 교체가 아니다** — 반을 만들며 담임을 넣은 줄, 이관 정리에서 끝난 반(7/2 종강)에 7/22 담임을
  *    채운 줄처럼 '원래 그 사람'을 적은 정정이다(실데이터: 2025년 입사 김태건의 끝난 반 LT1·PL5). 교체로 읽으면 채운 날 전이 '모름'이 되어
  *    실제 담당이 사라진다 → 버리고, 그 반의 그 앞은 다음 기록(또는 지금 담임)이 정한다.
  */
 export function mergeHomeroomChanges(audit: readonly AuditChange[], activity: readonly ActivityTeacherChange[]): HomeroomChange[] {
-  const used = new Set<number>();
-  const out: HomeroomChange[] = [...audit];
-  for (const a of activity) {
-    if (a.oldTeacherId === a.newTeacherId || !a.oldTeacherId) continue;
-    const date = kstDay(a.at);
-    if (!date) continue;
-    let best = -1, bestGap = Infinity;
-    audit.forEach((t, i) => {
-      if (used.has(i) || t.classId !== a.classId || t.teacherId !== a.newTeacherId) return;
-      const gap = Math.abs(dayNumber(t.date) - dayNumber(date));
-      if (gap <= PAIR_WINDOW_DAYS && gap < bestGap) { best = i; bestGap = gap; }
+  const out: HomeroomChange[] = audit.map((t) => ({ ...t }));
+  const dates = activity.map((a) => kstDay(a.at));
+  // 짝 후보 = 같은 반 · 같은 새 담임 · 3일 안. **가까운 짝부터**(같은 날 → 하루 차 …, 같으면 먼저 처리된 activity) 하나씩 —
+  // 반을 비웠다 같은 사람을 다시 넣은 날(A→B · B→없음 · 없음→B)에 먼 A→B가 그날 인계를 가로채 이력을 잃지 않게(Codex 리뷰 2026-11-11).
+  // 빈 칸 채우기(old=null) activity도 짝으로는 쓴다(짝이 없으면 버린다 — 교체가 아니다).
+  const pairs: { act: number; aud: number; gap: number }[] = [];
+  activity.forEach((a, ai) => {
+    if (a.oldTeacherId === a.newTeacherId || !dates[ai]) return;
+    audit.forEach((t, ti) => {
+      if (t.classId !== a.classId || t.teacherId !== a.newTeacherId) return;
+      const gap = Math.abs(dayNumber(t.date) - dayNumber(dates[ai]!));
+      if (gap <= PAIR_WINDOW_DAYS) pairs.push({ act: ai, aud: ti, gap });
     });
-    if (best >= 0) { used.add(best); continue; }
-    out.push({ classId: a.classId, date, teacherId: a.newTeacherId, previousTeacherId: a.oldTeacherId });
+  });
+  pairs.sort((x, y) => x.gap - y.gap || x.act - y.act || x.aud - y.aud);
+  const pairedAct = new Map<number, number>();
+  const usedAud = new Set<number>();
+  for (const p of pairs) {
+    if (pairedAct.has(p.act) || usedAud.has(p.aud)) continue;
+    pairedAct.set(p.act, p.aud);
+    usedAud.add(p.aud);
   }
+  activity.forEach((a, ai) => {
+    const aud = pairedAct.get(ai);
+    if (aud !== undefined) {
+      // 감사로그가 이전 담임을 안 남겼으면 DB가 남긴 옛 값으로 채운다.
+      if (!out[aud]!.previousTeacherId && a.oldTeacherId) out[aud]!.previousTeacherId = a.oldTeacherId;
+      return;
+    }
+    if (a.oldTeacherId === a.newTeacherId || !a.oldTeacherId || !dates[ai]) return;
+    out.push({ classId: a.classId, date: dates[ai]!, teacherId: a.newTeacherId, previousTeacherId: a.oldTeacherId });
+  });
   return out;
 }
 

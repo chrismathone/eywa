@@ -15,9 +15,28 @@ describe("mergeHomeroomChanges — 감사로그 + activity_log", () => {
       { classId: "JJ2B", date: "2026-09-01", teacherId: "허주연", previousTeacherId: "허은진" },
     ]);
   });
-  it("같은 반·같은 새 담임·3일 안이면 감사로그(적용일) 하나와만 짝짓고 activity는 버린다", () => {
-    const merged = mergeHomeroomChanges([audit("A", "2026-10-01", "B")], [act("A", "2026-09-29T03:00:00Z", "X", "B")]);
-    expect(merged).toEqual([audit("A", "2026-10-01", "B")]);
+  it("같은 반·같은 새 담임·3일 안이면 감사로그(적용일) 하나와만 짝짓고 activity는 버린다 — 감사로그에 적힌 이전 담임은 그대로", () => {
+    const merged = mergeHomeroomChanges([audit("A", "2026-10-01", "B", "Y")], [act("A", "2026-09-29T03:00:00Z", "X", "B")]);
+    expect(merged).toEqual([audit("A", "2026-10-01", "B", "Y")]);
+  });
+  it("🔴 짝지은 감사로그에 이전 담임이 비었으면 activity의 옛 값으로 채운다 — 그 앞이 '모름'이 되지 않게(실데이터: 8/3 초등M 초4 EL2S)", () => {
+    const input = [audit("EL2S", "2026-08-03", "남정화")];
+    const merged = mergeHomeroomChanges(input, [act("EL2S", "2026-08-02T19:59:00Z", "허은진", "남정화")]);
+    expect(merged).toEqual([audit("EL2S", "2026-08-03", "남정화", "허은진")]);
+    expect(input[0]!.previousTeacherId).toBeNull(); // 넘긴 감사로그를 바꾸지 않는다
+    const history = buildEvalHomeroomHistory(merged).get("EL2S");
+    expect(evalHomeroomOnDate(history, "남정화", "2026-04-15")).toBe("허은진");
+    expect(evalHomeroomOnDate(history, "남정화", "2026-08-03")).toBe("남정화");
+  });
+  it("🔴 비웠다가 같은 사람을 다시 넣은 날 — 가까운 짝(같은 날 빈 칸 채우기)이 인계를 차지하고, 먼 A→B는 제 날짜로 남는다", () => {
+    const merged = mergeHomeroomChanges([audit("K", "2026-08-03", "B")], [
+      act("K", "2026-07-31T15:30:00Z", "A", "B"), act("K", "2026-08-01T15:30:00Z", "B", null), act("K", "2026-08-02T15:30:00Z", null, "B"),
+    ]);
+    const history = buildEvalHomeroomHistory(merged).get("K");
+    expect(evalHomeroomOnDate(history, "B", "2026-07-20")).toBe("A");
+    expect(evalHomeroomOnDate(history, "B", "2026-08-01")).toBe("B");
+    expect(evalHomeroomOnDate(history, "B", "2026-08-02")).toBeNull();
+    expect(evalHomeroomOnDate(history, "B", "2026-08-03")).toBe("B");
   });
   it("오간 변경(A→B→A→B)은 짝을 하나씩만 — 서로 먹지 않는다", () => {
     const merged = mergeHomeroomChanges([audit("C", "2026-09-01", "B")], [act("C", "2026-09-01T01:00:00Z", "A", "B"), act("C", "2026-09-02T01:00:00Z", "B", "A"), act("C", "2026-09-03T01:00:00Z", "A", "B")]);

@@ -157,6 +157,7 @@ export async function loadExitTeacherJudge(
         },
         isKorean: (id) => korean.has(id),
         reportsOf: (id) => reports.get(id) ?? [],
+        employed,
       }),
     teachersOf: (studentId, subject, month) => churnTeachersOf(view, studentId, subject, month),
     zeroIdsOf: (subject, month) => churnZeroIds(view, subject, month),
