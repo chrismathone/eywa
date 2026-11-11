@@ -1041,7 +1041,7 @@ export const consultationRecordings = pgTable(
     consultationId: uuid("consultation_id")
       .notNull()
       .references(() => enrollmentConsultations.id, { onDelete: "cascade" }),
-    audioPath: text("audio_path").notNull(),
+    audioPath: text("audio_path"), // s2_0046: 보존기간(90일)이 지나 원본을 지우면 NULL — 전사·화자·분석은 그대로 남는다
     audioSizeBytes: integer("audio_size_bytes"),
     audioDurationSec: integer("audio_duration_sec"),
     transcription: text("transcription"),
