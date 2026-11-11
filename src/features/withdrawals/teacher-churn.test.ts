@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  churnCellOf, comparePair, deltaOf, deltaSummary, deltaText, heatMix, monthSpan, parseChurnSort, rateText, shortMonthLabel, sortTeachers,
+  churnCellOf, comparePair, countsFrom, deltaOf, deltaText, inTenure, heatMix, monthSpan, parseChurnSort, rateText, sortTeachers, yyMm,
   type ChurnCell, type ChurnMonth, type ChurnTeacherRow,
 } from "./teacher-churn";
 
 const ok = (rate: number, base = 40, counted = 2, closed = true): ChurnCell => ({ state: "ok", rate, base, counted, closed, end: "" });
-const row = (id: string, name: string, cells: Record<string, ChurnCell>): ChurnTeacherRow => ({ id, name, subjects: [], cells });
+const row = (id: string, name: string, cells: Record<string, ChurnCell>): ChurnTeacherRow =>
+  ({ id, name, subjects: [], subjectKeys: [], hireDate: null, resignDate: null, cells });
 const months = (list: [string, boolean][]): ChurnMonth[] => list.map(([month, partial]) => ({ month, partial, ends: [`${month}-28`] }));
 
 describe("churnCellOf — 저장된 퇴원율 항목 그대로", () => {
@@ -53,15 +54,6 @@ describe("deltaOf — 두 칸 다 마감·퇴원율이 있을 때만", () => {
     expect(deltaOf(row("a", "가", { "2026-09": none, "2026-10": ok(6.1) }), pair)).toEqual({ kind: "none" });
     expect(deltaOf(row("a", "가", { "2026-09": ok(1), "2026-10": ok(2) }), null)).toEqual({ kind: "none" });
   });
-  it("요약은 증감이 나온 강사만 센다", () => {
-    const rows = [
-      row("a", "가", { "2026-09": ok(1), "2026-10": ok(2) }),
-      row("b", "나", { "2026-09": ok(5), "2026-10": ok(2) }),
-      row("c", "다", { "2026-09": ok(2), "2026-10": ok(2) }),
-      row("d", "라", { "2026-09": ok(2), "2026-10": ok(9, 40, 3, false) }),
-    ];
-    expect(deltaSummary(rows, pair)).toEqual({ up: 1, down: 1, same: 1 });
-  });
 });
 
 describe("sortTeachers", () => {
@@ -87,6 +79,30 @@ describe("sortTeachers", () => {
   });
 });
 
+describe("countsFrom — 입사 다음 달부터(입사한 달 값도 입사 전 기록으로 셈한 것)", () => {
+  it("월초·월중 입사 모두 다음 달 · 해 넘김 · 입사일 없으면 자르지 않음", () => {
+    expect(countsFrom("2026-09-01")).toBe("2026-10");
+    expect(countsFrom("2026-07-07")).toBe("2026-08");
+    expect(countsFrom("2025-12-15")).toBe("2026-01");
+    expect(countsFrom(null)).toBeNull();
+    expect(countsFrom("")).toBeNull();
+  });
+});
+
+describe("inTenure — 입사 다음 달부터 퇴사한 달까지", () => {
+  it("입사·퇴사 둘 다", () => {
+    expect(inTenure("2026-07", "2025-07-07", "2026-10-31")).toBe(true);
+    expect(inTenure("2026-10", "2025-07-07", "2026-10-31")).toBe(true);
+    expect(inTenure("2026-11", "2025-07-07", "2026-10-31")).toBe(false);
+    expect(inTenure("2026-09", "2026-09-01", null)).toBe(false);
+    expect(inTenure("2026-10", "2026-09-01", null)).toBe(true);
+  });
+  it("모르는 쪽은 자르지 않는다", () => {
+    expect(inTenure("2020-01", null, null)).toBe(true);
+    expect(inTenure("2030-01", "2026-01-01", null)).toBe(true);
+  });
+});
+
 describe("monthSpan — 축은 빠짐없이", () => {
   it("해를 넘겨도 한 달씩", () => {
     expect(monthSpan("2026-11", "2027-02")).toEqual(["2026-11", "2026-12", "2027-01", "2027-02"]);
@@ -109,8 +125,8 @@ describe("표시", () => {
     expect(deltaText(2.2)).toBe("+2.2%p");
     expect(deltaText(-1)).toBe("−1%p");
     expect(deltaText(0)).toBe("0%p");
-    expect(shortMonthLabel("2026-04", null)).toBe("26년 4월");
-    expect(shortMonthLabel("2026-05", "2026-04")).toBe("5월");
-    expect(shortMonthLabel("2027-01", "2026-12")).toBe("27년 1월");
+    expect(yyMm("2026-04")).toBe("26.04");
+    expect(yyMm("2026-11")).toBe("26.11");
+    expect(yyMm("2027-01")).toBe("27.01");
   });
 });

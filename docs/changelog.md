@@ -3,7 +3,8 @@
 ## 2026-11-11 — 퇴원관리 '강사별 퇴원율 추이'(원장 "퇴원관리에 그 기능이 있으면 되겠다. 계기판이나 다른 디자인 활용해서 비교가능하게" · Codex 협의)
 
 - 퇴원관리 통계 줄 아래 폭 전체 카드 — 강사평가가 저장한 퇴원율을 강사 × 달 히트맵(칸 = 퇴원율 + 그만둠/지난달 담당)으로, 끝에 같은 두 달의 증감 열, 이름을 누른 강사(셋까지)는 선 차트로. 원장 역할만(직원 포트폴리오와 같은 문). 결정 본문 = [`decisions/students.md`](decisions/students.md) 2026-11-11.
-- 파일: `features/withdrawals/teacher-churn.ts`(순수 · 테스트) · `server/teacher-churn.ts`(퇴원율 항목만 읽기 · 5분 캐시) · `withdrawals/_components/teacher-churn-{section,card,table}.tsx` · 정렬 계정 저장 `ui_prefs.withdrawals.churn_sort`.
+- 파일: `features/withdrawals/teacher-churn.ts`(순수 · 테스트) · `server/teacher-churn.ts`(퇴원율 항목만 읽기 · 5분 캐시) · `server/teacher-tenure.ts`(퇴사일) · `withdrawals/_components/teacher-churn-{section,card,table}.tsx` · 정렬 계정 저장 `ui_prefs.withdrawals.churn_sort`.
+- 원장 화면 확인 후 같은 날: 열 너비 같게 · 달 `26.04` · 과목·기간(시작~끝) 선택 · 입사 다음 달~퇴사한 달만(밖은 빈칸) · 요약 줄·안내 문장 삭제 · 퇴원관리 설명 문장 둘(강사 축 정의 · 세는 달 규칙) 삭제.
 
 ## 2026-11-11 — 새 탭 디자인 통일(원장 "새로 추가된 탭들 중 디자인 스타일이 기존 우리 것과 다른 탭들 검사 후 디자인 통일화" · Codex 협의)
 

@@ -8,7 +8,8 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getPortfolioGate } from "@/features/teacher-portfolio/server/queries";
 import { isPortfolioTableMissing } from "@/features/teacher-portfolio/server/store";
-import { churnCellOf, monthSpan, teacherChurnTag, type ChurnMonth, type ChurnTeacherRow, type TeacherChurnData } from "../teacher-churn";
+import { churnCellOf, inTenure, monthSpan, teacherChurnTag, type ChurnMonth, type ChurnTeacherRow, type TeacherChurnData } from "../teacher-churn";
+import { loadResignDates } from "./teacher-tenure";
 
 /**
  * 퇴원관리 '강사별 퇴원율 추이' 조회 — 강사평가가 저장한 달(`teacher_portfolio_months`)에서 퇴원율 항목만 읽는다.
@@ -22,7 +23,8 @@ import { churnCellOf, monthSpan, teacherChurnTag, type ChurnMonth, type ChurnTea
  * 🔑 퇴원관리는 필터를 자주 바꾸는 화면이라 이동마다 다시 읽지 않게 지점·달별 5분 캐시(B6) — 강사평가 집계는 하루 한 번이고,
  *    [지금 집계](`refreshTeacherPortfolioNow`)는 저장 뒤 이 캐시를 비운다(`updateTag(teacherChurnTag)` — 두 화면 숫자가 갈리지 않게).
  */
-export const CHURN_MONTHS = 12;
+/** 한 번에 받는 달 수 — 기간은 카드 안에서 고른다(받은 달 안에서 바로 바뀐다 · 줄은 강사 × 달이라 가볍다). */
+export const CHURN_MONTHS = 36;
 /** 항목 id를 확인할 자리 수 — 기본 지표 14 + 직접 만드는 지표 최대 20(`evaluation/config.ts`) = 34 · 여유를 둔다. 넘으면 '확인 불가'. */
 const MAX_ITEMS = 40;
 const TABLE = "teacher_portfolio_months";
@@ -30,8 +32,8 @@ const TABLE = "teacher_portfolio_months";
 type HeadRow = { teacher_id: string; month: string; closed_at: string | null; subjects: string[] | null; partial: boolean | null; end: string | null; item: unknown };
 type ItemRow = { teacher_id: string; month: string; item: unknown };
 type Res<T> = PromiseLike<{ data: T[] | null; error: { message: string } | null }>;
-/** 캐시에 담는 모양 — 과목은 키(라벨은 캐시 밖에서 학원 설정으로). */
-type RawChurn = { months: ChurnMonth[]; teachers: (Omit<ChurnTeacherRow, "subjects"> & { subjectKeys: string[] })[] };
+/** 캐시에 담는 모양 — 과목은 키(라벨은 캐시 밖에서 학원 설정으로). `latestKeys` = 가장 최근 달의 과목. */
+type RawChurn = { months: ChurnMonth[]; teachers: (Omit<ChurnTeacherRow, "subjects"> & { latestKeys: string[] })[] };
 
 /** 지금 저장 모양에서 퇴원율 항목의 자리. */
 const USUAL = 1;
@@ -87,24 +89,32 @@ async function readChurn(tenantId: string, to: string): Promise<RawChurn> {
       .order("teacher_id").order("month").range(a, b) as unknown as Res<ItemRow>)).filter((r) => keys.has(keyOf(r)))));
     for (const r of again.flat()) found.set(keyOf(r), r.item);
   }
-  const users = await fetchInChunks<{ id: string; display_name: string | null }>(ids, (chunk) =>
-    admin.from("users").select("id, display_name").eq("tenant_id", tenantId).in("id", chunk));
+  const users = await fetchInChunks<{ id: string; display_name: string | null; hire_date: string | null; status: string | null }>(ids, (chunk) =>
+    admin.from("users").select("id, display_name, hire_date, status").eq("tenant_id", tenantId).in("id", chunk));
+  const resignOf = await loadResignDates(admin, tenantId, users.filter((u) => u.status !== "active").map((u) => u.id));
   const itemOf = new Map<string, unknown>(heads.map((r) => [keyOf(r), isChurn(r.item) ? r.item : found.get(keyOf(r))]));
   const nameOf = new Map(users.map((u) => [u.id, u.display_name?.trim() || "이름 없음"]));
+  const hireOf = new Map(users.map((u) => [u.id, u.hire_date ?? null]));
+  // 재직 밖 달의 줄은 싣지 않는다 — 입사 다음 달 전(입사 전 기록으로 셈한 값) · 퇴사한 달 뒤(그 강사가 없던 동안).
+  const kept = heads.filter((r) => nameOf.has(r.teacher_id)
+    && inTenure(r.month, hireOf.get(r.teacher_id) ?? null, resignOf.get(r.teacher_id) ?? null));
+  if (!kept.length) return { months: [], teachers: [] };
 
   // 축 = 저장 줄이 있는 첫 달부터 마지막 달까지 빠짐없이 — 줄이 하나도 없는 달도 세워 선이 그 달을 건너뛰어 잇지 않게.
-  const have = [...new Set(heads.map((r) => r.month))].sort();
+  const have = [...new Set(kept.map((r) => r.month))].sort();
   const months: ChurnMonth[] = monthSpan(have[0]!, have.at(-1)!).map((month) => {
-    const rows = heads.filter((r) => r.month === month);
+    const rows = kept.filter((r) => r.month === month);
     // 진행 중 = 그 달 줄이 진행 중 표시를 달고 있다 · 반영 끝 날짜는 저장된 집계의 것(오늘로 짐작하지 않는다 · 강사마다 다르면 모두).
     return { month, partial: rows.some((r) => r.partial === true), ends: [...new Set(rows.map((r) => r.end ?? "").filter(Boolean))].sort() };
   });
-  const teachers = ids.filter((id) => nameOf.has(id)).map((id) => {
-    const mine = heads.filter((r) => r.teacher_id === id);
+  // 입사 전 달만 있던 강사(이번 달 입사 등)는 줄째 없다.
+  const teachers = ids.filter((id) => kept.some((r) => r.teacher_id === id)).map((id) => {
+    const mine = kept.filter((r) => r.teacher_id === id);
     return {
-      id, name: nameOf.get(id)!,
-      // 과목 = 가장 최근 달에 가르친 과목(그 달 수업이 없으면 그 앞 달).
-      subjectKeys: [...mine].reverse().find((r) => (r.subjects ?? []).length)?.subjects ?? [],
+      id, name: nameOf.get(id)!, hireDate: hireOf.get(id) ?? null, resignDate: resignOf.get(id) ?? null,
+      // 줄 머리 과목 = 가장 최근 달에 가르친 과목(그 달 수업이 없으면 그 앞 달) · 과목 필터 = 보이는 달들에 가르친 과목 전부.
+      latestKeys: [...mine].reverse().find((r) => (r.subjects ?? []).length)?.subjects ?? [],
+      subjectKeys: [...new Set(mine.flatMap((r) => r.subjects ?? []))],
       // 저장 줄이 있는 달만 칸이 선다 — 항목을 못 읽은 줄은 '확인 불가'(빈 칸·0%로 위장하지 않는다).
       cells: Object.fromEntries(mine.map((r) => [r.month, churnCellOf(itemOf.get(keyOf(r)), Boolean(r.closed_at), r.end ?? "")])),
     };
@@ -118,7 +128,7 @@ export async function loadTeacherChurn(now: Date = new Date()): Promise<TeacherC
   if (!gate) return null;
   const to = kstMonth(now);
   const [raw, settings] = await Promise.all([
-    unstable_cache(() => readChurn(gate.tenantId, to), ["withdrawals-teacher-churn-v1", gate.tenantId, to], { revalidate: 300, tags: [teacherChurnTag(gate.tenantId)] })(),
+    unstable_cache(() => readChurn(gate.tenantId, to), ["withdrawals-teacher-churn-v3", gate.tenantId, to], { revalidate: 300, tags: [teacherChurnTag(gate.tenantId)] })(),
     getTenantSettings(),
   ]);
   const subjects = buildSubjectMaps(settings.operations.subjects);
@@ -126,6 +136,6 @@ export async function loadTeacherChurn(now: Date = new Date()): Promise<TeacherC
   const labelsOf = (keys: string[]) => keys.flatMap((k) => { const l = subjects.labelOf(k); return l && l !== k ? [l] : []; });
   return {
     months: raw.months,
-    teachers: raw.teachers.map(({ subjectKeys, ...t }) => ({ ...t, subjects: labelsOf(subjectKeys) })),
+    teachers: raw.teachers.map(({ latestKeys, ...t }) => ({ ...t, subjects: labelsOf(latestKeys) })),
   };
 }

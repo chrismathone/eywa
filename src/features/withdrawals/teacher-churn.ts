@@ -24,7 +24,14 @@ export type ChurnMonth = { month: string; partial: boolean; ends: string[] };
 
 /** 지점의 강사별 퇴원율 캐시 열쇠 — 강사평가를 [지금 집계]하면 비운다. */
 export const teacherChurnTag = (tenantId: string) => `withdrawals-teacher-churn:${tenantId}`;
-export type ChurnTeacherRow = { id: string; name: string; subjects: string[]; cells: Record<string, ChurnCell> };
+/**
+ * `subjects` = 가장 최근 달에 가르친 과목 라벨(줄 머리) · `subjectKeys` = 보이는 달들에 가르친 과목 키 전부(과목 필터).
+ * `hireDate` = 직원 정보의 입사일 · `resignDate` = 퇴사한 강사의 퇴사일(재직 중이면 null) — 재직 밖 달 칸은 싣지 않는다(`inTenure`).
+ */
+export type ChurnTeacherRow = {
+  id: string; name: string; subjects: string[]; subjectKeys: string[]; hireDate: string | null; resignDate: string | null;
+  cells: Record<string, ChurnCell>;
+};
 export type TeacherChurnData = { months: ChurnMonth[]; teachers: ChurnTeacherRow[] };
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -40,6 +47,26 @@ export function churnCellOf(item: unknown, closed: boolean, end = ""): ChurnCell
   if (base === 0 && raw === null) return { state: "noBase", rate: null, base, counted, closed, end };
   if (base <= 0 || raw === null) return bad;
   return { state: "ok", rate: raw, base, counted, closed, end };
+}
+
+/**
+ * 퇴원율을 보이기 시작하는 달 — 입사한 **다음 달**부터(원장 2026-11-11 *"실제 선생님이 입사한 날부터. 0%하지말고"*).
+ * 퇴원율은 '지난달 담당 학생' 기준이라 입사한 달의 값도 입사 전 달의 기록으로 셈한 것이다(실데이터: 9/1 입사 강사에게 4~9월 값이
+ * 저장돼 있었다). 입사일이 없으면 null(자르지 않는다).
+ */
+export function countsFrom(hireDate: string | null): string | null {
+  if (!hireDate || !/^\d{4}-\d{2}/.test(hireDate)) return null;
+  return nextMonth(hireDate.slice(0, 7));
+}
+
+/**
+ * 그 달 퇴원율을 보일지 — 입사 다음 달부터(`countsFrom`) 퇴사한 달까지(원장 2026-11-11 *"퇴사한 선생님도 근무한 달까지 보이게"*).
+ * 퇴사 뒤 달의 값은 그 강사가 없는 동안의 그만둠이라 싣지 않는다.
+ */
+export function inTenure(month: string, hireDate: string | null, resignDate: string | null): boolean {
+  const from = countsFrom(hireDate);
+  if (from && month < from) return false;
+  return !resignDate || month <= resignDate.slice(0, 7);
 }
 
 /** "YYYY-MM"부터 "YYYY-MM"까지 빠짐없이(오름차순). */
@@ -91,19 +118,6 @@ export function deltaOf(row: ChurnTeacherRow, pair: readonly [string, string] | 
   return { kind: "value", delta: Math.round((b.rate - a.rate) * 10) / 10 };
 }
 
-/** 오른 · 내린 · 같은 강사 수 — 증감이 나온 강사만. */
-export function deltaSummary(rows: readonly ChurnTeacherRow[], pair: readonly [string, string] | null) {
-  const out = { up: 0, down: 0, same: 0 };
-  for (const r of rows) {
-    const d = deltaOf(r, pair);
-    if (d.kind !== "value") continue;
-    if (d.delta > 0) out.up++;
-    else if (d.delta < 0) out.down++;
-    else out.same++;
-  }
-  return out;
-}
-
 export type ChurnSort = "recent" | "name";
 export const DEFAULT_CHURN_SORT: ChurnSort = "recent";
 export function parseChurnSort(raw: unknown): ChurnSort {
@@ -127,10 +141,9 @@ export function sortTeachers(rows: readonly ChurnTeacherRow[], pair: readonly [s
   });
 }
 
-/** "2026-11" → "11월" — 맨 앞 달과 해가 바뀐 달은 "26년 1월"처럼 해를 붙인다. */
-export function shortMonthLabel(month: string, prev: string | null): string {
-  const [y, m] = month.split("-").map(Number);
-  return !prev || prev.slice(0, 4) !== month.slice(0, 4) ? `${String(y).slice(2)}년 ${m}월` : `${m}월`;
+/** "2026-04" → "26.04" — 이 카드의 달 표기는 모두 yy.mm(원장 2026-11-11). */
+export function yyMm(month: string): string {
+  return `${month.slice(2, 4)}.${month.slice(5, 7)}`;
 }
 
 /** 퇴원율 글자 — 소수 한 자리(정수면 그대로). */

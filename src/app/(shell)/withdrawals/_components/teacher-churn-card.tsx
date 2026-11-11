@@ -3,17 +3,18 @@
 import { useState } from "react";
 import { SeriesChart } from "@/components/analytics/charts";
 import { palette } from "@/components/analytics/chart-math";
+import { HrefSelect } from "@/components/href-select";
+import { useSubjectMaps } from "@/features/owner/operations-context";
 import { saveWithdrawalTrendPrefs } from "@/features/withdrawals/server/trend-prefs-actions";
-import {
-  HEAT_CAP, SMALL_BASE, comparePair, deltaSummary, shortMonthLabel, sortTeachers,
-  type ChurnSort, type TeacherChurnData,
-} from "@/features/withdrawals/teacher-churn";
+import { HEAT_CAP, SMALL_BASE, comparePair, sortTeachers, yyMm, type ChurnSort, type TeacherChurnData } from "@/features/withdrawals/teacher-churn";
 import { TeacherChurnTable } from "./teacher-churn-table";
 
 const SEG = "text-xs px-2 py-0.5 transition";
 const ON = "bg-primary text-primary-foreground font-semibold";
 const OFF = "bg-card text-text-dim hover:text-foreground";
 const SORTS: readonly { key: ChurnSort; label: string }[] = [{ key: "recent", label: "퇴원율 높은 순" }, { key: "name", label: "이름순" }];
+/** 처음 보이는 기간 — 받은 달 중 최근 12개월. */
+const DEFAULT_SPAN = 12;
 /** 차트에 함께 그릴 강사 수 — 계기판 색(차콜·노랑·회색) 셋까지. 넷째를 고르면 가장 먼저 고른 강사가 빠진다. */
 const MAX_PICK = 3;
 const LINE_COLORS = [palette[0]!, palette[1]!, palette[2]!];
@@ -32,35 +33,48 @@ function seriesLabel(rows: readonly { name: string }[], i: number): string {
 /**
  * 퇴원관리 **강사별 퇴원율 추이** 카드(원장 2026-11-11) — 모든 강사를 달마다 한 표(히트맵)로 견주고, 이름을 누른 강사(셋까지)는
  * 아래 차트에서 선으로 견준다. 값은 강사평가가 저장한 퇴원율 그대로(`teacher-churn.ts`) · 원장 역할만(서버가 문을 지난 뒤에만 그린다).
- * 정렬은 누르는 순간 계정에 저장(`ui_prefs.withdrawals.churn_sort`). 고른 강사는 저장하지 않는다(그때그때 견주는 동작).
+ * 과목·기간은 카드 안에서 바로 거른다(받은 달 안 · 퇴원관리의 다른 필터처럼 저장하지 않는다 — 새로 열면 전체 과목 · 최근 12개월).
+ * 정렬은 누르는 순간 계정에 저장(`ui_prefs.withdrawals.churn_sort`).
  */
 export function TeacherChurnCard({ data, initialSort }: { data: TeacherChurnData; initialSort: ChurnSort }) {
+  const subjectMaps = useSubjectMaps();
+  const all = data.months;
   const [sort, setSort] = useState(initialSort);
   const [picked, setPicked] = useState<string[]>([]);
-  const pair = comparePair(data.months);
-  const rows = sortTeachers(data.teachers, pair, sort);
-  const sum = deltaSummary(data.teachers, pair);
+  const [subject, setSubject] = useState("all");
+  const [from, setFrom] = useState(all[Math.max(0, all.length - DEFAULT_SPAN)]?.month ?? "");
+  const [to, setTo] = useState(all.at(-1)?.month ?? "");
+
+  // 과목 = 학원 설정 차례 · 이 표에 가르친 강사가 있는 과목만.
+  const taught = new Set(data.teachers.flatMap((t) => t.subjectKeys));
+  const subjectOptions = [{ value: "all", label: "전체" }, ...subjectMaps.options.filter((o) => taught.has(o.value))];
+  const months = all.filter((m) => m.month >= from && m.month <= to);
+  // 고른 과목을 가르친 강사 · 보이는 달에 칸이 하나라도 있는 강사만(재직 밖 달뿐인 줄은 세우지 않는다).
+  const teachers = data.teachers.filter((t) =>
+    (subject === "all" || t.subjectKeys.includes(subject)) && months.some((m) => t.cells[m.month]));
+  const pair = comparePair(months);
+  const rows = sortTeachers(teachers, pair, sort);
+  const pickedRows = picked.map((id) => teachers.find((t) => t.id === id)).filter((t) => t !== undefined);
   const colorOf = (id: string) => {
-    const i = picked.indexOf(id);
+    const i = pickedRows.findIndex((t) => t.id === id);
     return i < 0 ? null : LINE_COLORS[i]!;
   };
   const pick = (id: string) =>
-    setPicked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id].slice(-MAX_PICK)));
+    setPicked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev.filter((x) => teachers.some((t) => t.id === x)), id].slice(-MAX_PICK)));
   const choose = (next: ChurnSort) => {
     if (next === sort) return;
     setSort(next);
     saveSort(next);
   };
   // 차트 = 마감한 달만(진행 중인 달은 월초에 늘 낮아 선이 꺾여 보인다) · 그 강사의 그 달이 마감 전이면 점을 찍지 않는다.
-  const closedMonths = data.months.filter((m) => !m.partial);
-  const pickedRows = picked.map((id) => data.teachers.find((t) => t.id === id)).filter((t) => t !== undefined);
-  const points = closedMonths.map((m, i) => ({
-    label: shortMonthLabel(m.month, closedMonths[i - 1]?.month ?? null),
+  const points = months.filter((m) => !m.partial).map((m) => ({
+    label: yyMm(m.month),
     values: pickedRows.map((t) => {
       const c = t.cells[m.month];
       return c && c.closed && c.state === "ok" ? c.rate : null;
     }),
   }));
+  const monthOption = (m: { month: string }) => ({ value: m.month, label: yyMm(m.month) });
 
   return (
     <section className="bg-card shadow-card rounded-2xl p-5" aria-label="강사별 퇴원율 추이">
@@ -68,31 +82,32 @@ export function TeacherChurnCard({ data, initialSort }: { data: TeacherChurnData
         <div className="min-w-0">
           <h2 className="text-foreground text-base font-bold">강사별 퇴원율 추이</h2>
           {/* 세는 기준을 숫자 옆에 — 위 퇴원 수·필터와 다른 잣대라 같은 화면에서 숫자가 갈려 보일 수 있다. */}
-          <p className="text-text-faint mt-0.5 text-xs leading-relaxed">
-            강사평가 퇴원율 그대로 · 지난달 그 강사가 절반 이상 맡은 학생 중 그 달 그 강사의 반·가르친 과목을 그만둔 학생의 비율 · 실제 그만둔
-            날 기준. 수강종료를 셀지와 빼는 사유(이사·졸업 등)는 강사평가 설정을 따르고, 반 이동·같은 과목 다른 반을 계속 다니는 경우는 늘 빠집니다(마감한
-            달은 그때 설정으로 굳은 값). 위 필터를 따르지 않고, 위 퇴원 수(수강료를 낸 마지막 달 기준)와는 따로 셉니다.
+          <p className="text-text-faint mt-0.5 text-xs">
+            강사평가 퇴원율 · 지난달 절반 이상 맡은 학생 중 그 달 그만둔 비율 · 입사 다음 달부터 퇴사한 달까지 · 위 필터·퇴원 수와 따로 셉니다
           </p>
         </div>
-        <div role="group" aria-label="강사 정렬" className="border-border inline-flex shrink-0 overflow-hidden rounded-md border">
-          {SORTS.map((s, i) => (
-            <button key={s.key} type="button" aria-pressed={sort === s.key} onClick={() => choose(s.key)}
-              className={`${SEG} ${i > 0 ? "border-border border-l" : ""} ${sort === s.key ? ON : OFF}`}>
-              {s.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <HrefSelect axisLabel="과목" ariaLabel="과목 선택" value={subject} onSelect={setSubject} options={subjectOptions} />
+          <HrefSelect axisLabel="시작" ariaLabel="시작 달" value={from} onSelect={setFrom}
+            options={all.filter((m) => m.month <= to).map(monthOption)} />
+          <HrefSelect axisLabel="끝" ariaLabel="끝 달" value={to} onSelect={setTo}
+            options={all.filter((m) => m.month >= from).map(monthOption)} />
+          <div role="group" aria-label="강사 정렬" className="border-border inline-flex shrink-0 overflow-hidden rounded-md border">
+            {SORTS.map((s, i) => (
+              <button key={s.key} type="button" aria-pressed={sort === s.key} onClick={() => choose(s.key)}
+                className={`${SEG} ${i > 0 ? "border-border border-l" : ""} ${sort === s.key ? ON : OFF}`}>
+                {s.label}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
-      {pair ? (
-        <p className="mb-2 text-sm">
-          <b>{Number(pair[0].slice(5, 7))}월 → {Number(pair[1].slice(5, 7))}월</b>{" "}
-          오른 강사 <b className="num">{sum.up}</b>명 · 내린 강사 <b className="num">{sum.down}</b>명 · 같은 강사 <b className="num">{sum.same}</b>명
-          <span className="text-text-faint text-xs"> (두 달 모두 마감하고 퇴원율이 있는 강사만{sort === "recent" ? ` · 정렬은 ${Number(pair[1].slice(5, 7))}월 퇴원율` : ""})</span>
-        </p>
-      ) : null}
-
-      <TeacherChurnTable rows={rows} months={data.months} pair={pair} picked={picked} colorOf={colorOf} onPick={pick} />
+      {rows.length ? (
+        <TeacherChurnTable rows={rows} months={months} pair={pair} picked={pickedRows.map((t) => t.id)} colorOf={colorOf} onPick={pick} />
+      ) : (
+        <p className="bg-bg-soft rounded-lg px-4 py-3 text-sm" role="status">고른 과목·기간에 퇴원율이 있는 강사가 없습니다.</p>
+      )}
 
       <div className="text-text-faint mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
         <span className="inline-flex items-center gap-1.5">
@@ -105,15 +120,11 @@ export function TeacherChurnCard({ data, initialSort }: { data: TeacherChurnData
         <span>칸 = 퇴원율 · 그만둔 학생/지난달 담당</span>
       </div>
 
-      <div className="mt-4">
-        {pickedRows.length ? (
+      {pickedRows.length ? (
+        <div className="mt-4">
           <SeriesChart points={points} unit="%" series={pickedRows.map((t, i) => ({ label: seriesLabel(pickedRows, i), color: LINE_COLORS[i]! }))} />
-        ) : (
-          <p className="bg-bg-soft rounded-lg px-4 py-3 text-sm">
-            강사 이름을 누르면 여기서 달마다 선으로 견줍니다(최대 {MAX_PICK}명 · 마감한 달만).
-          </p>
-        )}
-      </div>
+        </div>
+      ) : null}
     </section>
   );
 }

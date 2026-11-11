@@ -80,7 +80,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { WithdrawalTrendChart, type WithdrawalMonthPoint } from "./_components/trend-chart";
 import { scopeText, spanText } from "@/features/withdrawals/scope-text";
-import { EXIT_BASIS_TAG, countedEarlierByMonth, countedEarlierTitle, exitBasisRule } from "@/features/withdrawals/exit-basis";
+import { EXIT_BASIS_TAG, countedEarlierByMonth, countedEarlierTitle } from "@/features/withdrawals/exit-basis";
 import { loadWithdrawalTrendPrefs } from "@/features/withdrawals/server/trend-prefs";
 import { WithdrawalListLayout } from "./_components/list-layout";
 import { CustomRange } from "./_components/custom-range";
@@ -640,17 +640,13 @@ export default async function WithdrawalsPage({
       rows: toRows(schoolItems(schoolRows), schoolF, (v) => hrefWith({ school: v })),
     },
   } satisfies Record<string, BreakdownView>;
-  /** 강사 칸 — 판정 폭 밖의 옛 줄은 세지 않고 따로 적는다. 담당 미반영 = 퇴원율로 세지 않는 줄(사유 설정을 그대로 적는다). */
-  function teacherView(map: ReadonlyMap<string, RowTeachers>, rules: ExitTeacherJudge["source"]["options"], names: ReadonlyMap<string, string>): BreakdownView {
+  /** 강사 칸 — 판정 폭 밖의 옛 줄은 세지 않고 따로 적는다. 담당 미반영 = 퇴원율로 세지 않는 줄. */
+  function teacherView(map: ReadonlyMap<string, RowTeachers>, names: ReadonlyMap<string, string>): BreakdownView {
     const judged = teacherRows.filter((r) => map.has(r.key));
     const outside = teacherRows.length - judged.length;
     const facetsOf = (r: ExitRow) => teacherFacetsOf(map, r, currentSubject);
     // 걸린 과목이 프로그램 밖인 줄(예: 수학 프로그램에서 영어 과목을 고름) — 어느 칸에도 세지 않는다.
     const offScope = judged.filter((r) => facetsOf(r) === null).length;
-    const excluded = [
-      ...(Object.keys(REASON_LABEL) as WithdrawalReason[]).filter((k) => rules.excludeReasons.includes(k)).map((k) => REASON_LABEL[k]),
-      ...(rules.countEnded ? [] : ["과목만 끊은 수강종료"]),
-    ];
     return {
       caption: caption(judged.length - offScope, "teacher", !!teacherF, "강사"),
       total: judged.length - offScope,
@@ -660,9 +656,8 @@ export default async function WithdrawalsPage({
         teacherF,
         (v) => hrefWith({ teacher: v }),
       ),
+      // 강사·'담당 미반영' 정의 문장은 원장 지시로 뺐다(2026-11-11 *"이 멘트 제거"*) — 걸린 범위·옛 줄 안내만 남긴다.
       note: [
-        "강사 = 그 학생을 지난달 절반 이상 맡은 담임·교시 담당(시간표 X와 같은 판정) · 함께 맡았으면 각각 셉니다.",
-        `담당 미반영 = 퇴원율로 세지 않은 과목이 있는 줄(두 과목 중 한쪽만 셌으면 그 선생님과 함께 섭니다) — 장부 정리 · 반 이동 · 같은 과목 다른 반을 계속 다님 · 수업이 끝남(반 폐지·종강·운영 기간 종료·폐강) · 끝난 특강 · 지난달 절반 미만 담당${excluded.length ? ` · ${excluded.join(" · ")}` : ""}.`,
         programGroup || subject !== "all" ? "걸린 과목·프로그램의 담당만 셉니다." : "",
         outside ? `${judgeFromMonth.replace("-", "년 ")}월 전 ${outside}건은 강사를 가리지 않았습니다.` : "",
         offScope ? `걸린 프로그램 밖 과목만 끊은 ${offScope}건은 세지 않았습니다.` : "",
@@ -673,7 +668,7 @@ export default async function WithdrawalsPage({
   }
   // 강사 카드 — 판정을 기다렸으면 지금 그리고, 아니면(강사 축만 볼 때) 따로 흘려보낸다. 판정·이름·집계 어디서 실패해도 카드만 '못 불러옴'.
   const teacherNow: { view: BreakdownView | null; error: boolean } = teacherMap && blockingJudge
-    ? { view: teacherView(teacherMap, blockingJudge.source.options, names), error: false }
+    ? { view: teacherView(teacherMap, names), error: false }
     : { view: null, error: teacherFailed };
   // 강사 칸 필터가 없으면 강사 카드는 늘 흘려받는다 — 판정은 명단 담당 칸 때문에 매 방문 계산하므로, 강사 축을 누를 때 다시 부르지 않게.
   const teacherLater =
@@ -681,7 +676,7 @@ export default async function WithdrawalsPage({
       ? Promise.all([judgeP, teacherInfoP]).then(([judge, info]) => {
           if (!judge || !info) return { view: null, error: true };
           try {
-            return { view: teacherView(info.map, judge.source.options, info.names), error: false };
+            return { view: teacherView(info.map, info.names), error: false };
           } catch (e) {
             reportWarning("퇴원관리 강사별 판정 실패", { scope: "withdrawals.teacherAttribution", message: e instanceof Error ? e.message : String(e) });
             return { view: null, error: true };
@@ -767,12 +762,11 @@ export default async function WithdrawalsPage({
         <BigStat label="필터 결과" value={rows.length} unit="건" tone="blue" icon={<Filter size={16} strokeWidth={1.8} />} />
       </StatStrip>
 
-      {/* 세는 달 = 수업료를 낸 마지막 달(원장 2026-10-29) — 처리한 날로 읽으면 '이번 달'이 비어 보여 오류처럼 읽혔다(원장 2026-11-03). */}
-      <p className="text-text-dim px-1 text-sm">
-        {exitBasisRule()} 넓은 화면 명단에는 센 달이 마지막 수업일의 달과 다르면 ‘10월 퇴원’·‘10월 종료’처럼 적습니다.
-        {carriedTotal > 0 ? (
+      {/* 세는 달 = 수업료를 낸 마지막 달(원장 2026-10-29). 규칙 설명 문장은 원장 지시로 뺐다(2026-11-11 *"이 멘트도 제거"*) —
+          앞 달 명단에 들어간 건수 안내만 남긴다(그때만 선다). */}
+      {carriedTotal > 0 ? (
+        <p className="text-text-dim px-1 text-sm">
           <>
-            {" "}
             <span className="text-foreground font-semibold">{countedEarlierTitle(monthKey, carriedTotal, "건")}</span>{" — "}
             {carriedGroups.map(([m, n], i) => (
               <Fragment key={m}>
@@ -783,8 +777,8 @@ export default async function WithdrawalsPage({
               </Fragment>
             ))}
           </>
-        ) : null}
-      </p>
+        </p>
+      ) : null}
 
       {/* 툴바 — 지시서 §10: 축마다 라벨 하나(`유형: 전체` · `기간: 최근 30일` · 사유 · 과목 · 상담), 검색은 눌러야 나온다. */}
       <div className="flex flex-wrap items-center gap-2 px-1">
