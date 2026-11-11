@@ -1,4 +1,4 @@
--- s2_0063 — 신규 콜&상담 여정 기록을 상담 삭제·병합에서 지킨다 (Claude·Codex 검토 합의 2026-11-11 · s2_0062 뒤에 적용)
+-- s2_0064 — 신규 콜&상담 여정 기록을 상담 삭제·병합에서 지킨다 (Claude·Codex 검토 합의 2026-11-11 · s2_0063 뒤에 적용)
 -- ✅ 운영 적용 2026-11-11(시험 거래 ROLLBACK 뒤 적용 · 트리거·함수·실행권 확인 · 적용본을 거래 안에서 다시 시험 후 ROLLBACK).
 --
 -- ① 삭제 차단: 집계 제외(voided)가 아닌 전화·방문·등록 기록이 걸린 상담은 지울 수 없다 — 확인 근거와 변경 이력이 함께 사라지고
@@ -19,7 +19,7 @@
 --    ⚠️ 옛 함수와 새 함수가 같은 상담 쌍을 동시에 병합하면 잠금 순서가 달라 한쪽이 교착으로 실패할 수 있다(40P01 · 다시 시도) —
 --       앱이 새 함수만 부르게 된 뒤에는 생기지 않는다.
 -- 지점(tenants) 삭제로 상담이 함께 지워질 때는 막지 않는다(기록도 같은 cascade로 지워진다).
--- 되돌리기: scripts/_oneoff/revert-s2_0063-enrollment-journey-delete-guard.sql (앱을 먼저 되돌린 뒤)
+-- 되돌리기: scripts/_oneoff/revert-s2_0064-enrollment-journey-delete-guard.sql (앱을 먼저 되돌린 뒤)
 begin;
 set local statement_timeout = '60s';
 

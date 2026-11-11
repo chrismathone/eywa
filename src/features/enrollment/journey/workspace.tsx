@@ -10,7 +10,7 @@ import type { JourneyData } from "./server";
 import s from "./workspace.module.css";
 
 /**
- * 전화·방문·등록 기록 — aywa-next(375d27df4) `enrollment/journey/workspace.tsx` 이식(실제 기록 · s2_0062).
+ * 전화·방문·등록 기록 — aywa-next(375d27df4) `enrollment/journey/workspace.tsx` 이식(실제 기록 · s2_0063).
  * 저장·이력 = `/api/enrollment/journey`(서버가 상담 열람 범위·쓰기 권한·날짜를 다시 본다). 예정과 실적을 섞지 않는다.
  */
 type JourneyRevision = { version: number; document: JourneyDocument; voided: boolean; reason: string; recorded_at: string; actor_id: string };

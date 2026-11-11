@@ -13,7 +13,7 @@ import { ONBOARDING_ITEMS, progressOf } from "../onboarding-items";
 import { CONDITIONS, FOLLOWUP_STAGES, resolveSubjectManager, type ManagerAssignment, type ManagerDefault, type FollowupReport, type FollowupView, type Homeroom, type CheckEvidence } from "../followup-model";
 
 /**
- * 신규생 90일 정착 관리(aywa-next 인계본 이식) — 담당 배정·적응 피드백·후속 조치는 서버 전용 표(s2_0060 · s2_0061 · 정책 0개)라
+ * 신규생 90일 정착 관리(aywa-next 인계본 이식) — 담당 배정·적응 피드백·후속 조치는 서버 전용 표(s2_0061 · s2_0062 · 정책 0개)라
  * admin + tenant_id로 읽는다. 강사·담당만(scoped) 권한 = 자기가 담임인 학생·과목만 보고 보고만 남긴다. 관리 콜 완료·담당 배정은 관리자만.
  * '다른 강사 뷰'면 그 강사로 판정한다(#154) — 읽기 강사뷰가 지운 담당 범위도 담당만으로 본다.
  */

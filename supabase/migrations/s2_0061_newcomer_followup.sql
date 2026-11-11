@@ -1,13 +1,13 @@
--- s2_0060 — 신규생 90일 정착 관리: 담임 적응 피드백 · 관리자 확인 · 후속 조치 기록 (aywa-next 인계본 이식)
+-- s2_0061 — 신규생 90일 정착 관리: 담임 적응 피드백 · 관리자 확인 · 후속 조치 기록 (aywa-next 인계본 이식)
 -- ✅ 운영 적용 2026-11-11(트랜잭션 ROLLBACK 검증 뒤 적용 · 표·정책 0개·함수·트리거 확인).
 -- 인계본 원래 이름 20261102142519_newcomer_followup.sql + 20261102143744_newcomer_feedback_response.sql(response 칸)을 한 파일로.
--- 인계본의 학생 단위 담당 표(student_onboarding_assignments)는 옮기지 않는다 — 인계본이 과목별 담당 표(s2_0061)로 옮겨 간 옛 표이고 이 DB엔 옮길 기록이 없다.
+-- 인계본의 학생 단위 담당 표(student_onboarding_assignments)는 옮기지 않는다 — 인계본이 과목별 담당 표(s2_0062)로 옮겨 간 옛 표이고 이 DB엔 옮길 기록이 없다.
 --
 -- 서버 전용: 브라우저 읽기/쓰기 정책 0개는 의도적이다(s2_0028과 같은 규약 — admin 클라이언트 + tenant_id 필터).
 --   메뉴(신규생 관리)·담당 반·과목 범위는 앱(`src/features/newcomers/server/followup-query.ts` · `followup-actions.ts`)이 가른다.
 -- 학생이 지워지면(테스트 학생 정리) 기록도 함께 지운다(on delete cascade — s2_0028과 같다). 병합은 소프트 퇴원이라 기록이 남는다.
 -- 🔴 한 번만 실행(create에 if not exists가 없다 — 다시 실행하면 오류로 멈춘다 · 트랜잭션이라 데이터는 안전).
--- 되돌리기: scripts/_oneoff/revert-s2_0060-newcomer-followup.sql (s2_0061을 먼저 되돌린 뒤)
+-- 되돌리기: scripts/_oneoff/revert-s2_0061-newcomer-followup.sql (s2_0062을 먼저 되돌린 뒤)
 begin;
 set local statement_timeout = '60s';
 

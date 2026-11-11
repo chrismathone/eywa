@@ -15,7 +15,7 @@ import { canSeeStudentEnrollment } from "@/features/students/server/enrollment-g
 import { saveJourneySchema, validateJourneyDates, summarizeJourney, kinds, statuses, eventDay, inquiryDay, type JourneyConsultation, type JourneyIdentity, type JourneyRecord } from "./model";
 
 /**
- * 신규 콜&상담 여정 — 전화·방문·등록 확인 기록(aywa-next 인계 이식 · s2_0062 · 서버 전용 표).
+ * 신규 콜&상담 여정 — 전화·방문·등록 확인 기록(aywa-next 인계 이식 · s2_0063 · 서버 전용 표).
  * 🔴 상담은 **사용자 클라이언트(RLS)** 로 먼저 읽어 열람 범위를 정하고, 기록 표는 admin + tenant_id로 읽되 그 상담에 걸린 것만 남긴다.
  * 쓰기는 `save_enrollment_journey` 한 함수(기록 + 이력 한 트랜잭션 · version 비교).
  * '다른 강사 뷰'면 그 강사로 판정하고 기록 명의도 그 강사다(#154 — 신규생 관리와 같은 규칙).

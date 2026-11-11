@@ -773,8 +773,8 @@ export async function deleteEnrollmentConsultation(
     .single();
   if (!c) return { error: "상담을 찾을 수 없습니다" };
 
-  // 전화·방문·등록 기록(s2_0062)이 걸린 상담은 지우지 않는다(원장 2026-11-11 — 확인 근거·변경 이력이 함께 사라지고 전환 집계가 소급해서 바뀐다).
-  // 집계 제외 기록만 남았으면 지운다. 🔴 여기는 안내 — 확인 뒤에 들어온 기록은 DB 트리거(s2_0063)가 막는다(아래 삭제 오류 분기).
+  // 전화·방문·등록 기록(s2_0063)이 걸린 상담은 지우지 않는다(원장 2026-11-11 — 확인 근거·변경 이력이 함께 사라지고 전환 집계가 소급해서 바뀐다).
+  // 집계 제외 기록만 남았으면 지운다. 🔴 여기는 안내 — 확인 뒤에 들어온 기록은 DB 트리거(s2_0064)가 막는다(아래 삭제 오류 분기).
   const journeyRecords = await countJourneyRecords(user.tenantId, id);
   if (journeyRecords && journeyRecords.active > 0) return { error: JOURNEY_DELETE_BLOCKED };
 

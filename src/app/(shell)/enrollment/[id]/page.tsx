@@ -331,7 +331,7 @@ export default async function EnrollmentDetailPage({
         </section>
       ) : null}
 
-      {/* 전화·방문·등록 확인 기록(s2_0062) — 이 상담의 예약·실제 방문·등록 근거 · 첫 페인트를 막지 않게 따로 스트리밍(B7). */}
+      {/* 전화·방문·등록 확인 기록(s2_0063) — 이 상담의 예약·실제 방문·등록 근거 · 첫 페인트를 막지 않게 따로 스트리밍(B7). */}
       <Suspense fallback={<JourneyPanelSkeleton />}><JourneyPanel id={consult.id} /></Suspense>
 
       {consult.processingStatus === "failed" ? (

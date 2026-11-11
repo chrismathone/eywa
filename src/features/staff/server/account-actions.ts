@@ -372,7 +372,7 @@ export async function deleteStaff(
     };
   }
 
-  // ①-2 신규생 정착 관리·콜&상담 여정 기록(s2_0060~s2_0062)도 직원 칸이 지움을 막는다 — 같은 까닭으로 미리 막는다.
+  // ①-2 신규생 정착 관리·콜&상담 여정 기록(s2_0061~s2_0063)도 직원 칸이 지움을 막는다 — 같은 까닭으로 미리 막는다.
   const careRefs = await careRecordsByStaff(id);
   if (careRefs === "refs") {
     return { error: "신규생 관리·상담 방문 기록이 있어 완전 삭제할 수 없습니다. '퇴사(비활성)' 처리를 권장합니다." };

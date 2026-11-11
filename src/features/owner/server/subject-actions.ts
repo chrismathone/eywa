@@ -10,7 +10,7 @@
 //   배열 1:   users.subjects[] (강사 담당 과목)                               (RPC absorb_subject_key)
 //   jsonb 2:  enrollment_consultations.subject_details · onescreen_daily_sessions.subject_progress (RPC)
 //   설정 1:   tenant_settings.data.operations.subjects (행 제거)
-//   옮기지 않고 **막는** 표 3: 신규생 관리(과목별 완료 체크 0256a · 과목별 담당 배정 · 적응 피드백 — s2_0060·s2_0061). 옮기는 규칙이 없는 관리 기록이라
+//   옮기지 않고 **막는** 표 3: 신규생 관리(과목별 완료 체크 0256a · 과목별 담당 배정 · 적응 피드백 — s2_0061·s2_0062). 옮기는 규칙이 없는 관리 기록이라
 //             기록이 있는 과목은 흡수·삭제를 거절한다(countNewcomerSubjectRecords · 사용 현황에도 센다 · 과목 행을 지우는 마지막 저장도 다시 본다 — actions.ts).
 //   옮기지 않는 설정 1: permissions.specialAccess.staffSubjectScopes(직원관리 과목 범위) — 역할·권한은 원장만 저장하는 섹션이라
 //             여기서 대신 고치지 않는다. 없어진 키는 아무와도 안 맞아 **좁은 쪽**으로 남고, 역할·권한 면이 '(없어진 과목)'으로 보여 준다.

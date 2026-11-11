@@ -85,7 +85,7 @@ export const getStudentHub = cache(async (studentId: string, requestedMonth?: st
   // 아직 연결되지 않은 다른 원본은 빈 결과로 위장하지 않는다.
   for (const [key, label] of [["field-observations", "현장 관찰·후속 조치"], ["marketing", "유입 경로·홍보·행사 참여"]] as const)
     coverage.push({ key, label, state: "schema_missing", note: "이 기록 표가 아직 연결되지 않았습니다(시안). 0건으로 해석하지 않습니다." });
-  // 전화·방문·등록 확인 기록(s2_0062) — 그 학생에게 이어진 상담의 기록만. 권한은 그 기능의 게이트가 본다(없으면 null → '권한 없음').
+  // 전화·방문·등록 확인 기록(s2_0063) — 그 학생에게 이어진 상담의 기록만. 권한은 그 기능의 게이트가 본다(없으면 null → '권한 없음').
   const admissionJourney = readSection("admissionJourney", "전화·방문·등록 확인 기록", "/enrollment/visits", async () =>
     await studentJourneySection(studentId) ?? unavailableSection("admissionJourney", "전화·방문·등록 확인 기록", "/enrollment/visits", "forbidden"));
   sections.push(...await Promise.all([billing, intake, onboarding, admissionJourney]));

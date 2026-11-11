@@ -1,9 +1,9 @@
--- s2_0061 — 신규생 관리 담당자(30·60·90일 콜 책임자)를 학생·과목마다 (aywa-next 인계본 이식)
+-- s2_0062 — 신규생 관리 담당자(30·60·90일 콜 책임자)를 학생·과목마다 (aywa-next 인계본 이식)
 -- ✅ 운영 적용 2026-11-11(트랜잭션 ROLLBACK 검증 뒤 적용 · 표·정책 0개·함수·트리거 확인).
--- 인계본 원래 이름 20261103054427_newcomer_subject_managers.sql. s2_0060 뒤에 적용(그 파일의 검증·이력 트리거 함수를 쓴다).
--- 서버 전용(정책 0개 · admin + tenant_id 필터 — s2_0060과 같은 규약). 학생이 지워지면 배정도 함께 지운다.
+-- 인계본 원래 이름 20261103054427_newcomer_subject_managers.sql. s2_0061 뒤에 적용(그 파일의 검증·이력 트리거 함수를 쓴다).
+-- 서버 전용(정책 0개 · admin + tenant_id 필터 — s2_0061과 같은 규약). 학생이 지워지면 배정도 함께 지운다.
 -- 과목별 기본 담당(student_onboarding_manager_defaults)은 화면이 읽기만 한다 — 비어 있으면 '설정 없음'으로 보인다.
--- 🔴 한 번만 실행. 되돌리기: scripts/_oneoff/revert-s2_0061-newcomer-subject-managers.sql
+-- 🔴 한 번만 실행. 되돌리기: scripts/_oneoff/revert-s2_0062-newcomer-subject-managers.sql
 begin;
 set local statement_timeout = '60s';
 

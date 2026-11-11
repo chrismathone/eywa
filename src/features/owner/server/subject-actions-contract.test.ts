@@ -40,7 +40,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 vi.mock("./dashboard-assignments", () => ({ validateDashboardAssignments: vi.fn() }));
 vi.mock("@/lib/storage/media-storage", () => ({ createUploadTicket: vi.fn(), MEDIA_KIND: {} }));
-// 신규생 관리 기록(서버 전용 표 · s2_0060·s2_0061) — 기본 0건. 있으면 흡수를 막는다(맨 아래 시험).
+// 신규생 관리 기록(서버 전용 표 · s2_0061·s2_0062) — 기본 0건. 있으면 흡수를 막는다(맨 아래 시험).
 vi.mock("@/features/newcomers/server/subject-refs", () => ({
   countNewcomerSubjectRecords: async () => m.newcomerRecords,
   // 과목 행을 지우는 마지막 저장의 확인 — 그사이 들어온 기록(`lateNewcomerRecords`)이 있으면 그 과목을 돌려준다.

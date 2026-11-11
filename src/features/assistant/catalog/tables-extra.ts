@@ -54,7 +54,7 @@ export const TABLES_EXTRA: readonly AssistantTableDoc[] = [
       separate_amount: "늘어난 몫을 수납에서 따로 환불하기로 한 금액(누계)", separate_at: "따로 환불로 정한 시각", separate_by: "따로 환불로 정한 원장",
       refunded_total: "이어진 요청서 환불 완료 기록(누계 · 완료일자를 비워도 남음)", refunded_docs: "환불 완료 기록을 남긴 요청서" },
   },
-  // ── 신규생 90일 정착 관리 · 신규 콜&상담 여정(aywa-next 이식 · s2_0060~s2_0062 — 2026-11-11).
+  // ── 신규생 90일 정착 관리 · 신규 콜&상담 여정(aywa-next 이식 · s2_0061~s2_0063 — 2026-11-11).
   {
     name: "student_onboarding_feedback",
     label: "신규생 피드백",

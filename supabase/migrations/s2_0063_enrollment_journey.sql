@@ -1,10 +1,10 @@
--- s2_0062 — 신규 콜&상담 여정: 전화·방문·등록 확인 기록 + 변경 이력 (aywa-next 인계본 이식)
+-- s2_0063 — 신규 콜&상담 여정: 전화·방문·등록 확인 기록 + 변경 이력 (aywa-next 인계본 이식)
 -- ✅ 운영 적용 2026-11-11(트랜잭션 ROLLBACK 검증 뒤 적용 · 표·정책 0개·함수·트리거 확인).
 -- 인계본 원래 이름 20261103010359_enrollment_journey.sql.
 -- 추정 날짜를 만들지 않고 옛 상담 행(enrollment_consultations)도 고치지 않는다 — 확인 근거가 있는 기록만 새 표에 쌓는다.
 -- 서버 전용(정책 0개 · admin + tenant_id 필터 — s2_0028과 같은 규약). 상담 열람 범위는 앱이 사용자 클라이언트(RLS)로 먼저 확인한다.
 -- 상담을 지우면(신규 콜&상담 삭제) 그 상담의 기록·이력도 함께 지운다(녹음·AI 분석과 같다). 병합은 앱이 지우기 전에 이긴 쪽 상담으로 옮긴다.
--- 🔴 한 번만 실행. 되돌리기: scripts/_oneoff/revert-s2_0062-enrollment-journey.sql
+-- 🔴 한 번만 실행. 되돌리기: scripts/_oneoff/revert-s2_0063-enrollment-journey.sql
 begin;
 set local statement_timeout = '60s';
 

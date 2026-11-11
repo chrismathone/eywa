@@ -178,7 +178,7 @@ export async function mergeConsultations(
   });
   if (!care.ok) return { error: "상담 약속을 옮기지 못해 병합을 멈췄습니다. 잠시 뒤 다시 시도해 주세요. 바뀐 상담은 없습니다." };
 
-  // 전화·방문·등록 기록(s2_0062)은 **병합과 같은 DB 거래**에서 이긴 쪽 상담으로 옮긴다(s2_0063):
+  // 전화·방문·등록 기록(s2_0063)은 **병합과 같은 DB 거래**에서 이긴 쪽 상담으로 옮긴다(s2_0064):
   // 상담 행 잠금 → 기록 옮김 → 종전 병합 함수. 따로 옮기던 때의 '옮긴 뒤 저장된 기록이 진 쪽과 함께 지워지는' 틈이 없다.
   // 🔴 서버 전용 함수다(기록 표가 서버 전용) — 병합 권한은 위 `requireMergeWrite`가 봤고, 지점·요청자는 로그인 세션에서 정해 넘긴다.
   //    함수가 요청자의 지점 소속과 대상 상담의 지점을 다시 확인한다. 활동 기록의 '누가'는 종전처럼 로그인한 사람이다.
@@ -192,7 +192,7 @@ export async function mergeConsultations(
   if (error) {
     // 병합이 안 됐으면 옮긴 약속도 되돌린다(진 쪽 상담이 그대로 남아 있다).
     await revertCareMerge(gate.user.tenantId, gate.user.id, care.moved);
-    // 병합 함수(s2_0063)가 아직 없는 DB — 옛 함수로 돌아가지 않는다(여정 기록이 진 쪽과 함께 지워질 수 있다). 까닭을 그대로 알린다(#95).
+    // 병합 함수(s2_0064)가 아직 없는 DB — 옛 함수로 돌아가지 않는다(여정 기록이 진 쪽과 함께 지워질 수 있다). 까닭을 그대로 알린다(#95).
     if (error.code === "PGRST202" || error.code === "42883") {
       logDbError(error, "enrollment.merge-actions.mergeConsultations.missingFunction");
       return { error: "상담 병합 기능을 준비하는 중입니다. 잠시 뒤 다시 시도해 주세요. 바뀐 상담은 없습니다." };

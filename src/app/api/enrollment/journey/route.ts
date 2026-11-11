@@ -3,7 +3,7 @@ import { z } from "zod";
 import { saveJourney, journeyHistory } from "@/features/enrollment/journey/server";
 
 /**
- * 전화·방문·등록 확인 기록 저장(POST) · 변경 이력(GET) — aywa-next 인계 이식(s2_0062).
+ * 전화·방문·등록 확인 기록 저장(POST) · 변경 이력(GET) — aywa-next 인계 이식(s2_0063).
  * 권한·상담 열람 범위·날짜 판정은 `journey/server.ts`가 다시 본다. 화면엔 한글 사유만 돌려준다(영문 원문은 로그로).
  */
 const headers = { "Cache-Control": "private, no-store" };
