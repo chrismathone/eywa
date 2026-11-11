@@ -44,7 +44,7 @@ import { ConsultationManageButtons, ConsultationDeleteButton } from "./_componen
 import { ChecklistView } from "../_components/checklist-view";
 import { PrepBriefSection } from "./prep-brief-section";
 import { AssignedClassesSection } from "./assigned-classes-section";
-import { detailPanelsFor } from "@/features/enrollment/detail-panels";
+import { detailPanelsFor, showBriefCard } from "@/features/enrollment/detail-panels";
 import { getAssignedClasses } from "@/features/enrollment/server/assigned-classes";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { canViewClassDetail } from "@/features/classes/server/class-scope";
@@ -161,14 +161,10 @@ export default async function EnrollmentDetailPage({
 
   /**
    * 브리프 카드 — **한 벌만 만들고 자리만 바꾼다**(위/아래에 각각 쓰면 props가 갈린다).
-   * 아직 안 만든 건은 '상담 전'에만 권유하고, 만들어 둔 건·생성 중인 건은 어느 칸에서든 남는다.
-   *
-   * ⚠️ 지난 건의 **실패 상태만 남은 카드는 안 그린다**(`failed` + 브리프 없음 + pastBrief) — 다시
-   *    만들 수 없는 문서의 실패 안내와 "만들어 드립니다" 소개문만 남아, 할 수 없는 일을 권하는 꼴이 된다.
-   *    생성 중(`generating`)은 곧 결과가 생기므로 그대로 그린다.
+   * 그릴지는 수정 화면과 같은 판정(`showBriefCard` — 지난 건의 실패만 남은 카드는 안 그린다).
    */
   const briefNode =
-    consult.prepBrief || consult.prepBriefStatus === "generating" || !pastBrief ? (
+    showBriefCard({ hasBrief: !!consult.prepBrief, status: consult.prepBriefStatus, past: pastBrief }) ? (
       <PrepBriefSection
         consultationId={id}
         record={consult.prepBrief}

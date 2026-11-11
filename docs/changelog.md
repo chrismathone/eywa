@@ -6,6 +6,10 @@
 - 파일: `features/withdrawals/teacher-churn.ts`(순수 · 테스트) · `server/teacher-churn.ts`(퇴원율 항목만 읽기 · 5분 캐시) · `server/teacher-tenure.ts`(퇴사일) · `withdrawals/_components/teacher-churn-{section,card,table}.tsx` · 정렬 계정 저장 `ui_prefs.withdrawals.churn_sort`.
 - 원장 화면 확인 후 같은 날: 열 너비 같게 · 달 `26.04` · 과목·기간(시작~끝) 선택 · 입사 다음 달~퇴사한 달만(밖은 빈칸) · 요약 줄·안내 문장 삭제 · 퇴원관리 설명 문장 둘(강사 축 정의 · 세는 달 규칙) 삭제.
 
+## 2026-11-11 — 신규 콜&상담 수정 화면에도 '브리프 펼치기'(원장 "브리프를 보면서 수정(입력)할 수 있게")
+
+- 수정 화면 이름 아래 = 상세와 같은 판정(`showBriefCard` · `detailPanelsFor`)·같은 본문(`prep-brief-body.tsx` 한 벌)의 펼치기 줄(`PrepBriefSection pinned`) · 펼치면 화면 높이 40% 판이 따로 스크롤되며 스크롤 영역 맨 위에 붙는다(sticky · 좁은 창·넓은 화면 같은 방식) · 폼 밖이라 초안·미저장 가드·바꾼 칸 저장 무관 · 브리프 없으면 상세와 같은 안내 카드(페이지 로드 AI 호출 없음) · 단추가 이 화면에도 있어 `maxDuration=300` · 수정 화면의 인쇄는 새 탭(창 안 이동으로 폼이 사라지지 않게) · 만들기·다시 작성 곁에 '저장된 내용으로 작성' 안내 · 펼치면 스크롤 영역 `scroll-padding-top`으로 초점이 판 밑에 숨지 않게.
+
 ## 2026-11-11 — 미뤄 둔 결정 넷 구현: 조직·OKR·업무 작성센터 개방 준비 · 강사 신규생 관리 입구 · 과목 기본 담당 설정 (Claude·Codex 합의안 · SQL s2_0066)
 
 - 원장 위임(*"정해야하는건 코덱스 합의해서 추천으로 정할것"*). 결정 본문 = [`decisions/staff.md`](decisions/staff.md) 끝 · [`decisions/enrollment-journey.md`](decisions/enrollment-journey.md) '2026-11-11 결정'.
