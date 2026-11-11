@@ -112,7 +112,7 @@ export function TeacherChurnCard({ data, initialSort }: { data: TeacherChurnData
       </header>
 
       {rows.length ? (
-        <TeacherChurnTable rows={rows} months={months} pair={pair} picked={pickedRows.map((t) => t.id)} colorOf={colorOf} onPick={pick} />
+        <TeacherChurnTable rows={rows} months={months} pair={pair} picked={pickedRows.map((t) => t.id)} colorOf={colorOf} onPick={pick} portfolioLink={data.portfolioLink} />
       ) : (
         <p className="bg-bg-soft rounded-lg px-4 py-3 text-sm" role="status">고른 과목·기간에 퇴원율이 있는 강사가 없습니다.</p>
       )}

@@ -98,7 +98,7 @@ import { EarlyExitBand } from "./_components/early-exit-band";
 import { WithdrawalBreakdownCard, type BreakdownRow, type BreakdownView } from "./_components/breakdown-card";
 import { ReasonAnalysisCard } from "./_components/reason-analysis-card";
 import { TeacherChurnSection, TeacherChurnSkeleton } from "./_components/teacher-churn-section";
-import { getPortfolioGate } from "@/features/teacher-portfolio/server/queries";
+import { getTeacherChurnGate } from "@/features/withdrawals/server/teacher-churn";
 import { REASON_DETAILS, reasonDetailOf } from "@/features/withdrawals/reason-detail";
 import type { BreakdownAxis } from "@/features/withdrawals/breakdown";
 
@@ -287,7 +287,7 @@ export default async function WithdrawalsPage({
   });
   // 🔑 화면이 판정을 **기다리는 것은 강사 칸 필터가 걸렸을 때뿐**이다(명단이 판정으로 걸러진다). 강사 축만 볼 때는 강사 카드만
   //    나중에 흘려보내고(Suspense) 나머지를 먼저 그린다 — 강사 축을 저장해 둔 계정의 모든 이동이 판정을 기다리지 않게.
-  // 강사별 퇴원율 추이(원장 2026-11-11) = 직원 포트폴리오와 같은 문(원장 역할만) — 문만 여기서 보고(가볍다) 표는 아래 Suspense가 흘려받는다.
+  // 강사별 퇴원율 추이(원장 2026-11-11) = 권한 '강사별 퇴원율'(퇴원관리 줄 아래 · 기본 원장만) — 문만 여기서 보고(가볍다) 표는 아래 Suspense가 흘려받는다.
   //   문을 먼저 봐야 볼 수 없는 사람에게 대기 카드가 번쩍이지 않는다. 문 판정이 실패하면 카드만 없다(화면은 산다).
   const [withdrawnRaw, subjectEndedRaw, settings, trendPrefs, blockingJudge, churnGate] = await Promise.all([
     getWithdrawnStudents(),
@@ -295,7 +295,7 @@ export default async function WithdrawalsPage({
     getTenantSettings(),
     prefsP,
     teacherF ? judgeP : Promise.resolve(undefined),
-    getPortfolioGate().catch(() => null),
+    getTeacherChurnGate().catch(() => null),
   ]);
   const axis = axisParam ?? trendPrefs.axis;
   // 과목 라벨은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
@@ -919,7 +919,7 @@ export default async function WithdrawalsPage({
         </div>
       ) : null}
 
-      {/* 강사별 퇴원율 추이 — 위 필터와 따로 세는 강사평가 값(카드 머리에 기준을 적는다). 원장 역할만. */}
+      {/* 강사별 퇴원율 추이 — 위 필터와 따로 세는 강사평가 값(카드 머리에 기준을 적는다). 권한 '강사별 퇴원율'이 열린 사람만. */}
       {churnGate ? (
         <Suspense fallback={<TeacherChurnSkeleton />}>
           <TeacherChurnSection initialSort={trendPrefs.churnSort} />

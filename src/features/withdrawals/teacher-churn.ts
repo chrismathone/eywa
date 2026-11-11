@@ -34,7 +34,11 @@ export type ChurnTeacherRow = {
   resigned: boolean;
   cells: Record<string, ChurnCell>;
 };
-export type TeacherChurnData = { months: ChurnMonth[]; teachers: ChurnTeacherRow[] };
+/**
+ * `portfolioLink` = 이름 옆 ↗(그 강사 직원 포트폴리오)를 세우나 — 보는 사람이 직원 포트폴리오를 열 수 있을 때만(`getPortfolioGate`).
+ * 이 표는 권한 '강사별 퇴원율'로 다른 역할에도 열 수 있어, 못 여는 화면으로 가는 링크를 세우지 않는다(#77 계열 · 2026-11-11).
+ */
+export type TeacherChurnData = { months: ChurnMonth[]; teachers: ChurnTeacherRow[]; portfolioLink: boolean };
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
