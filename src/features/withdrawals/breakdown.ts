@@ -228,10 +228,10 @@ export function reasonFacetLabel(value: string): string | null {
 
 // ─────────────────────────────── 강사 가리기 ───────────────────────────────
 
-/** 판정 한 벌(`server/exit-teacher-judge.ts`)에서 쓰는 두 가지 — 순수 함수로 시험할 수 있게 모양만 받는다. */
+/** 판정 한 벌(`server/exit-teacher-judge.ts`)에서 쓰는 것 — 순수 함수로 시험할 수 있게 모양만 받는다. */
 export type TeacherJudge = {
-  endedOf(studentId: string, subject: string, date: string): { endMonth: string };
-  teachersOf(studentId: string, subject: string, month: string): string[];
+  /** 그만둘 때 다니던 반의 그날 담임(`exit-homeroom.ts` — 퇴원생 관리 차트의 '담당선생님'과 같은 기준). */
+  homeroomOf(studentId: string, subject: string, date: string): string[];
 };
 
 type JudgeRow = { key: string; studentId: string; date: string | null; subjects: readonly string[]; systemBulk: boolean; cleanup: boolean };
@@ -240,8 +240,8 @@ type JudgeRow = { key: string; studentId: string; date: string | null; subjects:
 export type RowTeachers = ReadonlyMap<string, readonly string[]>;
 
 /**
- * 줄 → 과목마다 그 퇴원을 퇴원율에 센 선생님 id. 시간표 X와 같은 순서다: 과목마다 퇴원율이 센 달(`endedOf`)을 찾고 그 달 퇴원율에서
- * 이 학생·과목을 넣은 선생님(`teachersOf`)을 모은다. 🔑 줄의 **모든 과목**을 판정해 둔다 — 걸린 과목 필터는 읽는 쪽이
+ * 줄 → 과목마다 그 과목을 그만둘 때 다니던 반의 그날 담임 id(시간표 X와 같은 판정 `homeroomOf`). 🔴 강사평가 퇴원율이 센 선생님이
+ * 아니다(원장 2026-11-11 — 퇴원율은 지난달 담당·교시 담당까지 붙어 퇴원생 관리 차트와 어긋났다). 🔑 줄의 **모든 과목**을 판정해 둔다 — 걸린 과목 필터는 읽는 쪽이
  * 고른다(`teacherFacetsIn` — 과목 카드가 과목마다 다시 물어도 같은 판정이라 칸 숫자 = 눌러 거른 명단 수).
  * - 장부 정리 · 날짜 미상(시스템 정리) · 날짜 없는 줄 = 모든 과목 빈 배열('담당 미반영' — X도 이 줄을 세지 않는다)
  * - `from`(가장 이른 날)보다 앞 · 오늘 뒤 줄 = 판정하지 않는다(결과에 없음 — 화면이 '강사를 가리지 않은 줄'로 따로 센다)
@@ -259,7 +259,7 @@ export function attributeTeachers<R extends JudgeRow>(
     }
     if (r.date < opts.from || r.date > opts.today) continue;
     const date = r.date;
-    out.set(r.key, new Map(r.subjects.map((s) => [s, judge.teachersOf(r.studentId, s, judge.endedOf(r.studentId, s, date).endMonth)])));
+    out.set(r.key, new Map(r.subjects.map((s) => [s, judge.homeroomOf(r.studentId, s, date)])));
   }
   return out;
 }

@@ -5,7 +5,10 @@ import { buildChurnModel } from "@/features/teacher-portfolio/model/churn-model"
 import { buildHomeroomOwner } from "@/features/teacher-portfolio/model/context";
 import { buildStudentTracking } from "@/features/teacher-portfolio/model/students";
 import { loadChurnSource } from "@/features/teacher-portfolio/server/churn-source";
-import { endedWithExit, type EndedRowRef } from "../reason-key";
+import { isKoreanTeacherName } from "@/features/timetable/lib/teacher-label";
+import { fetchAllPaged } from "@/lib/supabase/batch";
+import { endedWithExit } from "../reason-key";
+import { exitHomeroomIds, type HomeroomRow, type HomeroomSlot } from "../exit-homeroom";
 import { withdrawalMonthWindow } from "../window";
 import { OVERLAY_LOOKBACK_DAYS, churnMonthOf, churnTeachersOf, churnZeroIds, type ChurnMonth, type ChurnView } from "../exit-overlay-teachers";
 
@@ -28,7 +31,9 @@ export type ExitTeacherJudge = {
   irregular: ReadonlySet<string>;
   /** 이 학생이 `date`에 이 과목을 그만둔 것 — 퇴원율이 센 달과 그 퇴원과 함께 끝난 수강의 종료 사유. */
   endedOf(studentId: string, subject: string, date: string): { endMonth: string; endReasons: (string | null)[] };
-  /** 그 그만둠을 `month` 퇴원율에 넣은 선생님 id(없으면 빈 배열 = 선생님 미반영). */
+  /** 화면의 담당 = 그만둘 때 다니던 반의 그날 담임(`exit-homeroom.ts` — 퇴원생 관리 차트와 같은 기준). 없으면 빈 배열. */
+  homeroomOf(studentId: string, subject: string, date: string): string[];
+  /** 그 그만둠을 `month` 퇴원율에 넣은 선생님 id(없으면 빈 배열 = 선생님 미반영) — 점수 판정용(시간표 X의 '세지 않음' 판정). */
   teachersOf(studentId: string, subject: string, month: string): string[];
   /** 그 달 이 과목 퇴원율이 0인 선생님 id. */
   zeroIdsOf(subject: string, month: string): string[];
@@ -39,7 +44,13 @@ export async function loadExitTeacherJudge(
   range: { from: string; end: string },
   clock: { today: string; thisMonth: string },
 ): Promise<ExitTeacherJudge> {
-  const source = await loadChurnSource(createAdminClient(), tenantId, range);
+  const admin = createAdminClient();
+  const [source, staff] = await Promise.all([
+    loadChurnSource(admin, tenantId, range),
+    fetchAllPaged<{ id: string; display_name: string | null }>((a, b) =>
+      admin.from("users").select("id, display_name").eq("tenant_id", tenantId).neq("system_role", "student").order("id").range(a, b)),
+  ]);
+  const korean = new Set(staff.filter((u) => isKoreanTeacherName(u.display_name)).map((u) => u.id));
   const owner = buildHomeroomOwner(source.classes, source.transitions);
   const tracking = buildStudentTracking({ from: source.from, end: source.end, classes: source.classes, schedules: source.schedules, enrollments: source.enrollments, owner });
   const churn = buildChurnModel({ source: tracking.churnSource, classes: source.classes, options: source.options, futureEnrollments: source.futureEnrollments, studentReasons: source.studentReasons });
@@ -66,16 +77,23 @@ export async function loadExitTeacherJudge(
   const irregular = new Set(
     source.classes.filter((c) => c.is_makeup_pool || isSpecialLecture({ isSpecial: c.is_special, className: c.class_name })).map((c) => c.id),
   );
-  const classRefs = new Map(source.classes.map((c) => [c.id, { closedAt: c.closed_at, regular: !irregular.has(c.id), subject: c.subject }]));
+  const classRefs = new Map(source.classes.map((c) => [c.id, { closedAt: c.closed_at, regular: !irregular.has(c.id), subject: c.subject, name: c.class_name, src: c }]));
   const classOf = (id: string) => classRefs.get(id);
   // 과목 → 학생 → 끝난 수강.
-  const endedRows = new Map<string, Map<string, (EndedRowRef & { reason: string | null })[]>>();
+  type Ended = HomeroomRow & { reason: string | null };
+  const endedRows = new Map<string, Map<string, Ended[]>>();
   for (const e of source.enrollments) {
     const subject = classOf(e.class_id)?.subject;
     if (!e.end_date || !subject) continue;
-    const bySubject = endedRows.get(subject) ?? new Map<string, (EndedRowRef & { reason: string | null })[]>();
+    const bySubject = endedRows.get(subject) ?? new Map<string, Ended[]>();
     endedRows.set(subject, bySubject);
-    bySubject.set(e.student_id, [...(bySubject.get(e.student_id) ?? []), { classId: e.class_id, startDate: e.start_date, endDate: e.end_date, reason: e.withdrawal_reason ?? null }]);
+    bySubject.set(e.student_id, [...(bySubject.get(e.student_id) ?? []), { classId: e.class_id, startDate: e.start_date, endDate: e.end_date, transferred: !!e.is_transferred, reason: e.withdrawal_reason ?? null }]);
+  }
+
+  const slots = new Map<string, HomeroomSlot[]>();
+  for (const s of source.schedules) {
+    const list = slots.get(s.class_id) ?? slots.set(s.class_id, []).get(s.class_id)!;
+    list.push({ teacherId: s.teacher_id, validFrom: s.valid_from, validTo: s.valid_to });
   }
 
   return {
@@ -86,6 +104,24 @@ export async function loadExitTeacherJudge(
       const ended = endedWithExit(endedRows.get(subject)?.get(studentId) ?? [], date, classOf, OVERLAY_LOOKBACK_DAYS);
       return { endMonth: churnMonthOf(ended, date, classOf), endReasons: ended.map((r) => r.reason) };
     },
+    homeroomOf: (studentId, subject, date) =>
+      exitHomeroomIds({
+        rows: endedRows.get(subject)?.get(studentId) ?? [],
+        date,
+        lookbackDays: OVERLAY_LOOKBACK_DAYS,
+        classOf,
+        // 칸 다수 판정은 영어 반만(시트 가져오기가 칸으로 담임을 정한다) — 수학은 담임 이력 그대로(시트도 반 담임을 적는다).
+        slotsOf: (id) => {
+          const c = classRefs.get(id)?.src;
+          // 영어 반 = 프로그램 구분이 있거나 표준 과목 키가 영어(미분류 영어 반도 칸으로 담임을 정한다).
+          return c && (c.english_track || c.subject === "english") ? (slots.get(id) ?? []) : [];
+        },
+        owner: (id, day) => {
+          const c = classRefs.get(id)?.src;
+          return c ? owner(c, day) : null;
+        },
+        isKorean: (id) => korean.has(id),
+      }),
     teachersOf: (studentId, subject, month) => churnTeachersOf(view, studentId, subject, month),
     zeroIdsOf: (subject, month) => churnZeroIds(view, subject, month),
   };

@@ -262,7 +262,7 @@ export default async function WithdrawalsPage({
   //    에선 아예 안 부른다(그 보기엔 수강종료 줄이 한 줄도 안 선다). `loading.tsx`는 두지 않는다 — 필터를 자주 바꾸는
   //    화면이라 바꿀 때마다 스켈레톤이 번쩍인다(CLAUDE.md B7 트레이드오프).
   const withSubjectEnded = type !== "withdrawn";
-  // 강사별 = 강사평가 퇴원율이 그 퇴원을 센 선생님(시간표 X와 같은 판정 한 벌). 명단의 '담당강사' 열·담당강사 필터·강사 카드가 이 판정
+  // 강사별 = 그만둘 때 다니던 반의 그날 담임(퇴원생 관리 차트 기준 · 시간표 X와 같은 판정 `homeroomOf` — 원장 2026-11-11). 명단의 '담당강사' 열·담당강사 필터·강사 카드가 이 판정
   // 하나를 같이 쓴다(원장 2026-10-15 *"모든 곳에서 담당이 일치하게 보이도록 같은 배선"*) — 무거워서 화면은 기다리지 않고 흘려받는다(아래).
   // 판정할 줄의 폭 = 기간 필터 창과 월별 추이(최근 12개월)를 덮는다 · '전체 기간'은 26개월 전 1일부터(시간표 X의 가장 오래된
   // 석 달 묶음 — 기준 달 24개월 전의 맨 왼쪽 열 — 과 같은 폭). '직접 지정'도 그보다 넓히지 않는다(재료가 무거워지고 '전체 기간'보다 숫자가 커진다).
@@ -332,7 +332,7 @@ export default async function WithdrawalsPage({
   const byEarly = (r: ExitRow) => !early || (r.kind === "withdrawn" && isEarlyWithin(r.tenureDays, early));
   const byGrade = (r: ExitRow) => !gradeF || gradeOf(r) === gradeF;
   const bySchool = (r: ExitRow) => !schoolF || schoolOf(r) === schoolF;
-  // 강사 — 그 줄을 퇴원율에 센 선생님. 판정은 줄 × 과목으로 해 두고(`attributeTeachers`), 읽을 때 **걸린 과목·프로그램에 드는
+  // 강사 — 그 과목을 그만둘 때 다니던 반의 그날 담임(`homeroomOf`). 판정은 줄 × 과목으로 해 두고(`attributeTeachers`), 읽을 때 **걸린 과목·프로그램에 드는
   // 과목만** 고른다(수학만 보는데 함께 끊은 영어 선생님이 서지 않게 — `judgeSubjects`). 판정 폭 밖의 옛 줄은 결과에 없다(강사 칸을 고르면 빠진다).
   // 🔴 과목 카드도 과목마다 같은 함수로 묻는다(`teacherMatches(r, 과목)`) — 칸 숫자 = 그 과목을 눌러 거른 명단 수.
   const programGroup = program ? (program === "math" ? "math" : "english") : null;
@@ -635,17 +635,13 @@ export default async function WithdrawalsPage({
       rows: toRows(schoolItems(schoolRows), schoolF, (v) => hrefWith({ school: v })),
     },
   } satisfies Record<string, BreakdownView>;
-  /** 강사 칸 — 판정 폭 밖의 옛 줄은 세지 않고 따로 적는다. 담당 미반영 = 퇴원율로 세지 않는 줄(사유 설정을 그대로 적는다). */
-  function teacherView(map: ReadonlyMap<string, RowTeachers>, rules: ExitTeacherJudge["source"]["options"], names: ReadonlyMap<string, string>): BreakdownView {
+  /** 강사 칸 — 판정 폭 밖의 옛 줄은 세지 않고 따로 적는다. 담당 미반영 = 그만둘 때 다니던 정규 반을 찾지 못한 줄(장부 정리 포함). */
+  function teacherView(map: ReadonlyMap<string, RowTeachers>, names: ReadonlyMap<string, string>): BreakdownView {
     const judged = teacherRows.filter((r) => map.has(r.key));
     const outside = teacherRows.length - judged.length;
     const facetsOf = (r: ExitRow) => teacherFacetsOf(map, r, currentSubject);
     // 걸린 과목이 프로그램 밖인 줄(예: 수학 프로그램에서 영어 과목을 고름) — 어느 칸에도 세지 않는다.
     const offScope = judged.filter((r) => facetsOf(r) === null).length;
-    const excluded = [
-      ...(Object.keys(REASON_LABEL) as WithdrawalReason[]).filter((k) => rules.excludeReasons.includes(k)).map((k) => REASON_LABEL[k]),
-      ...(rules.countEnded ? [] : ["과목만 끊은 수강종료"]),
-    ];
     return {
       caption: caption(judged.length - offScope, "teacher", !!teacherF, "강사"),
       total: judged.length - offScope,
@@ -656,8 +652,9 @@ export default async function WithdrawalsPage({
         (v) => hrefWith({ teacher: v }),
       ),
       note: [
-        "강사 = 그 학생을 지난달 절반 이상 맡은 담임·교시 담당(시간표 X와 같은 판정) · 함께 맡았으면 각각 셉니다.",
-        `담당 미반영 = 퇴원율로 세지 않은 과목이 있는 줄(두 과목 중 한쪽만 셌으면 그 선생님과 함께 섭니다) — 장부 정리 · 반 이동 · 같은 과목 다른 반을 계속 다님 · 수업이 끝남(반 폐지·종강·운영 기간 종료·폐강) · 끝난 특강 · 지난달 절반 미만 담당${excluded.length ? ` · ${excluded.join(" · ")}` : ""}.`,
+        "강사 = 그만둘 때 다니던 반의 담임(퇴원생 관리 차트·시간표 X와 같은 기준) · 수학 JJ반은 빼고 · 영어는 그때 수업을 가장 많이 맡은 한국인 선생님 · 정규 반을 둘 다녔으면 각각 셉니다.",
+        "담당 미반영 = 그만둘 때 다니던 정규 반을 찾지 못한 과목이 있는 줄(장부 정리 · 퇴원일 미상 · 수강 기록 없음).",
+        "강사평가 퇴원율 점수와는 기준이 다릅니다(점수는 지난달 담당 기준).",
         programGroup || subject !== "all" ? "걸린 과목·프로그램의 담당만 셉니다." : "",
         outside ? `${judgeFromMonth.replace("-", "년 ")}월 전 ${outside}건은 강사를 가리지 않았습니다.` : "",
         offScope ? `걸린 프로그램 밖 과목만 끊은 ${offScope}건은 세지 않았습니다.` : "",
@@ -668,7 +665,7 @@ export default async function WithdrawalsPage({
   }
   // 강사 카드 — 판정을 기다렸으면 지금 그리고, 아니면(강사 축만 볼 때) 따로 흘려보낸다. 판정·이름·집계 어디서 실패해도 카드만 '못 불러옴'.
   const teacherNow: { view: BreakdownView | null; error: boolean } = teacherMap && blockingJudge
-    ? { view: teacherView(teacherMap, blockingJudge.source.options, names), error: false }
+    ? { view: teacherView(teacherMap, names), error: false }
     : { view: null, error: teacherFailed };
   // 강사 칸 필터가 없으면 강사 카드는 늘 흘려받는다 — 판정은 명단 담당 칸 때문에 매 방문 계산하므로, 강사 축을 누를 때 다시 부르지 않게.
   const teacherLater =
@@ -676,7 +673,7 @@ export default async function WithdrawalsPage({
       ? Promise.all([judgeP, teacherInfoP]).then(([judge, info]) => {
           if (!judge || !info) return { view: null, error: true };
           try {
-            return { view: teacherView(info.map, judge.source.options, info.names), error: false };
+            return { view: teacherView(info.map, info.names), error: false };
           } catch (e) {
             reportWarning("퇴원관리 강사별 판정 실패", { scope: "withdrawals.teacherAttribution", message: e instanceof Error ? e.message : String(e) });
             return { view: null, error: true };
