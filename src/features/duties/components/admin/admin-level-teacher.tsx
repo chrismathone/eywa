@@ -1,6 +1,6 @@
 "use client";
 
-import { MATRIX_COLUMNS, type AdminPeriod } from "../../view-admin";
+import { hasProgressCell, MATRIX_COLUMNS, type AdminPeriod } from "../../view-admin";
 import { classLines, judge, NO_CLASS, NO_OWNER, ownerMeta, type Avg, type TreeOwner } from "../../view-admin-levels";
 import { CountBox, GridTable, GridWrap, NAME_LONG, NameCell, tableBasis, TD, TH } from "./admin-matrix";
 import { MixLegend } from "./admin-mix";
@@ -39,7 +39,7 @@ export function TeacherLevel({ owner, avg, period, subject, tick, kind, aside, o
     {/* 표 카드 옆에 '기한 초과'를 세운다(원장 2026-11-11 *"2단으로 해서 공간을 활용"*) — 표가 편하게 서는 폭(`tableBasis`)과 한 줄에 안 들어가면 아래로 내려가고 표가 한 줄을 다 쓴다. */}
     <div className="flex flex-wrap items-stretch gap-4">
     <section className="border-line bg-card min-h-48 max-w-full min-w-[min(100%,640px)] grow rounded-xl border p-3" style={{ flexBasis: basis }}>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1"><h4 className="text-sm font-bold">반별</h4><MixLegend className="ml-auto" /></div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1"><h4 className="text-sm font-bold">반별</h4><MixLegend className="ml-auto" progress={hasProgressCell(lines.flatMap((l) => cols.map((c) => l.cells[c.kind])))} /></div>
       {failed ? <p className="text-text-dim mt-2 text-sm">반별 집계 조회 실패</p>
         : !data ? <p className="text-text-dim mt-2 text-sm">불러오는 중…</p>
         : !lines.length ? <p className="text-text-dim mt-2 text-sm">해당 기간 업무 없음</p>

@@ -169,6 +169,13 @@ const mixBase = (c: Counts): number => Math.max(c.due, c.ontime + c.lateDone + c
  *   · `missPct` = **미처리 몫**(올림 — 한 건이라도 있으면 1% 이상 · 남은 것이 없으면 완료율과 더해 100) · `missed` = 그 건수.
  * 🔴 등급 · 등수 · 요약 칸의 숫자는 이것이 아니라 **기한 내 완료율**(`pctOf` — 막대의 초록 몫)이다. 때가 된 업무가 없으면 null.
  */
+/**
+ * 진행 막대의 몫(0~1) — **때가 된 업무가 없는 칸**(기한 전의 학생 상담 · 월말평가 · 신규생 관리)에서 벌써 끝낸 것 ÷ 전체.
+ * 그 칸에 적는 숫자(`shownOf`의 진행 %)와 같은 재료다. 때가 된 업무가 하나라도 있으면 null(그 칸은 `mixParts`가 그린다 — 두 막대를 섞지 않는다).
+ */
+export const progressShareOf = (c: Counts): number | null => (c.total > 0 && !c.due ? Math.min(earlyDoneOf(c) / c.total, 1) : null);
+/** 이 표에 진행 막대가 하나라도 서는가 — 풀이에 '진행'을 적을지 정한다(일간 업무뿐인 하루 · 한 주 표에는 그 색이 없다). */
+export const hasProgressCell = (cells: Iterable<Counts | null | undefined>): boolean => { for (const c of cells) if (c && progressShareOf(c) !== null) return true; return false; };
 export type BarText = { pct: number; num: number; den: number; missPct: number; missed: number };
 /** 미처리 몫(%) — 올림. 한 건이라도 있으면 0%라고 적지 않는다(칸 · 판정 줄이 같은 셈을 쓴다). */
 export const missPctOf = (missed: number, den: number): number => (missed > 0 && den > 0 ? Math.min(Math.ceil((missed / den) * 100), 100) : 0);

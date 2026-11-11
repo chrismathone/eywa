@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { foldMatrixRows, MATRIX_COLUMNS, missedOf, type AdminPeriod, type LateItem, type MatrixRow } from "../../view-admin";
+import { foldMatrixRows, hasProgressCell, MATRIX_COLUMNS, missedOf, type AdminPeriod, type LateItem, type MatrixRow } from "../../view-admin";
 import { CellItemsDialog, type CellPick } from "./admin-cell-items";
 import { judge, NO_CLASS, NO_OWNER, ownerMeta, type TreeSubject } from "../../view-admin-levels";
 import type { DutyWork } from "../duty-work-context";
@@ -48,7 +48,7 @@ export function SubjectLevel({ node, subjects = null, lateOnly, avgLabel, grade 
             <button type="button" aria-pressed={pickedSubject === undefined} onClick={() => setSubjectKey(undefined)} className={chip(pickedSubject === undefined)}>전체</button>
             {subjects.map((s) => <button key={s.subject ?? ""} type="button" aria-pressed={pickedSubject === s.subject} onClick={() => setSubjectKey(s.subject)} className={chip(pickedSubject === s.subject)}>{s.label}</button>)}
           </span> : null}
-          <MixLegend className="ml-auto" />
+          <MixLegend className="ml-auto" progress={hasProgressCell(groups.filter((s) => !hidden(s)).flatMap((s) => rowsOf(s)).flatMap((r) => (picked ? [picked] : kinds.map((c) => c.kind)).map((k) => r.cells[k])))} />
         </div>
         {groups.map((s) => { const rows = rowsOf(s); return <div key={s.subject ?? ""} className={hidden(s) ? "invisible" : undefined} aria-hidden={hidden(s) || undefined}>
           <AdminMatrix rows={rows} total={foldMatrixRows(rows)} avg={{ pct: s.cell.pct, label: groups.length > 1 || subjects ? "과목" : avgLabel }} grade={grade} kind={picked} columns={kinds} rated={rated}

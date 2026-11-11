@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adminRange, buildAttention, cellOf, cellTitle, cellTone, distinctStudents, earlyDoneOf, progressText, foldMatrixRows, lateByKind, lateLabel, pctOf, upcomingOf, type Counts, type LateItem, type RollupOwnerKind, dutyTier, periodPresets, shiftPeriod, periodKey, parseAdminPeriod, periodsOf, shownOf, leftOf, pendingOf, barTextOf, mixParts, missedOf, readDutyOntimeOnly, MATRIX_COLUMNS, cellTextOf, missPctOf } from "./view-admin";
+import { adminRange, buildAttention, cellOf, cellTitle, cellTone, distinctStudents, earlyDoneOf, progressText, foldMatrixRows, lateByKind, lateLabel, pctOf, upcomingOf, type Counts, type LateItem, type RollupOwnerKind, dutyTier, periodPresets, shiftPeriod, periodKey, parseAdminPeriod, periodsOf, shownOf, leftOf, pendingOf, barTextOf, mixParts, missedOf, readDutyOntimeOnly, MATRIX_COLUMNS, cellTextOf, missPctOf, progressShareOf, hasProgressCell } from "./view-admin";
 
 /** 셈 한 묶음 — total · done · due(기한 온 것) · ontime(제때) · late(지금 지연). 나머지는 0에서 덮어쓴다. */
 const c = (total: number, done: number, due: number, ontime: number, late = 0, o: Partial<Counts> = {}): Counts => ({ total, done, due, ontime, late, lateDone: 0, expired: 0, over7: 0, ...o });
@@ -156,6 +156,14 @@ describe("가로 막대 — 몫 · 막대 위 숫자 · 미처리", () => {
     expect(Math.floor(parts.find((p) => p.key === "ontime")!.share * 100)).toBe(b.pct);
     // 미처리 몫의 셈은 한 곳 — 한 건이라도 있으면 1% 이상 · 없으면 0 · 분모가 0이어도 터지지 않는다.
     expect([missPctOf(1, 300), missPctOf(7, 300), missPctOf(0, 300), missPctOf(3, 0), missPctOf(5, 5)]).toEqual([1, 3, 0, 0, 100]);
+  });
+  it("진행 막대의 몫 — 때가 된 업무가 없는 칸만(끝낸 것 ÷ 전체 · 칸의 진행 %와 같은 재료) / 때가 된 업무가 있으면 null(두 막대를 섞지 않는다)", () => {
+    expect(progressShareOf(c(19, 9, 0, 0))).toBeCloseTo(9 / 19, 9);
+    expect(Math.floor(progressShareOf(c(19, 9, 0, 0))! * 100)).toBe(shownOf(c(19, 9, 0, 0))!.pct);
+    expect([progressShareOf(c(30, 0, 0, 0)), progressShareOf(c(30, 30, 0, 0))]).toEqual([0, 1]);
+    expect([progressShareOf(c(40, 12, 10, 8, 1, { lateDone: 1 })), progressShareOf(c(0, 0, 0, 0))]).toEqual([null, null]);
+    // 표에 진행 막대가 하나라도 서는가(풀이에 '진행'을 적을지) — 일간 업무뿐이면 없다.
+    expect([hasProgressCell([c(10, 9, 10, 9), c(19, 9, 0, 0)]), hasProgressCell([c(10, 9, 10, 9), null, undefined, c(0, 0, 0, 0)]), hasProgressCell([])]).toEqual([true, false, false]);
   });
   it("미처리 = 지금 열려 있는 것 + 확정 — 요약 칸 · 왼쪽 목록의 붉은 수 · '미처리만'이 같은 수를 쓴다", () => {
     expect([missedOf(c(10, 6, 10, 6, 1, { expired: 3 })), missedOf(c(10, 10, 10, 10)), missedOf(c(30, 3, 0, 0))]).toEqual([4, 0, 0]);

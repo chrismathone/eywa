@@ -153,7 +153,8 @@ export function RatingBox({ rating, plain }: { rating: Rating | undefined; plain
  *     마우스를 올리면(초점이 가도) 그 자리에 건수(분자/분모 · 미처리 n건). 글자는 **칸에 들어갈 때만** 보인다 — 둘째 줄도, 올렸을 때의 건수도 잰 폭으로 접는다(`stepOf` · 잘라 보이지 않는다).
  *   · **기한 내만 보기**(화면 오른쪽 위 토글 · `useOntimeOnly`)면 숫자 = 기한 내 완료율 · 막대 = 기한 내 몫만. `mode="ontime"`은 토글과 무관하게 늘 그렇게 그린다(과목 관리자별 현황의 '기한 내 완료율' 칸).
  *     🔴 등급 · 등수 · 요약 칸의 숫자는 완료율이 아니라 늘 **기한 내 완료율**(막대의 노랑 몫)이다 — 칸의 글자를 등급 계산에 쓰지 말 것.
- *   · 때가 된 업무가 없는 칸(기한 전의 학생 상담 · 월말평가 · 신규생 관리)은 **진행**만 흐리게 적고 막대를 그리지 않는다 — 등급 · 전체에 들지 않는다(기한이 지나면 막대가 선다).
+ *   · 때가 된 업무가 없는 칸(기한 전의 학생 상담 · 월말평가 · 신규생 관리)은 **진행**을 흐린 숫자와 **옅은 노랑 막대**로 그린다(원장 2026-11-11 *"학생 상담이나 월말평가도 막대바로 표현하는게 어때?"*)
+ *     — 등급 · 전체에 들지 않는다는 것이 색으로 갈린다(기한이 지나면 진한 막대가 선다).
  *   · **결석 n**(`absent`) — 결석이라 보고서 업무가 빠진 수. 출결은 했는데 보고서 건수가 적은 것이 결석 때문인지 겉으로 보이게 적는다(원장 2026-11-11 *"결석해서 미발송했는지 겉으로 판단이 어려움"*).
  *     업무가 그것뿐이면 칸에 '결석'만 적는다. 집계(% · 막대 · 등급)에는 들지 않는다.
  */
@@ -202,7 +203,7 @@ export function CountBox({ cell, onClick, mode, absent = 0 }: { cell: Cell | nul
         {absent ? <span className={text.missed ? `hidden ${INLINE_AT[stepOf(both)]}` : undefined}>{text.missed ? " · " : ""}결석 {n(absent)}</span> : null}
       </span> : null}
     </span>
-    {text.judged ? <MixBar cell={cell} ontimeOnly={ontimeOnly} /> : <span className="h-1.5 shrink-0" aria-hidden />}
+    <MixBar cell={cell} ontimeOnly={ontimeOnly} />
   </>;
   const cls = `group ${BOX}`;
   const title = absent ? `${cellTitle(cell)} · 결석 ${n(absent)}건(업무 없음)` : cellTitle(cell);

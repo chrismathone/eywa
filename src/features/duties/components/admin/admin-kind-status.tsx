@@ -16,10 +16,10 @@ export function KindStatusStrip({ statuses, only = null }: { statuses: KindStatu
     {list.map((s) => <div key={s.kind} className="border-line bg-card rounded-xl border px-3 py-2">
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-bold">{s.label}</span>
-        {/* 때가 된 업무가 있으면 완료율 · 없으면 진행만(흐리게 · 막대 없이) — 표의 칸과 같은 규칙(`cellTextOf`). */}
+        {/* 때가 된 업무가 있으면 완료율 · 없으면 진행(흐린 숫자 · 옅은 막대) — 표의 칸과 같은 규칙(`cellTextOf` · `MixBar`). */}
         <span className={`text-sm font-bold tabular-nums ${cellTextOf(s.cell, ontimeOnly)?.judged ? "" : "opacity-60"}`}>{cellTextOf(s.cell, ontimeOnly)?.judged ? <span className="mr-1 text-xs font-medium">{ontimeOnly ? "기한 내" : "완료율"}</span> : null}{cellTextOf(s.cell, ontimeOnly)?.pct ?? 0}%</span>
       </div>
-      {s.cell.due ? <MixBar cell={s.cell} ontimeOnly={ontimeOnly} className="mt-1 h-1.5" /> : null}
+      <MixBar cell={s.cell} ontimeOnly={ontimeOnly} className="mt-1 h-1.5" />
       <div className="mt-1 flex flex-wrap gap-x-2 text-xs font-semibold tabular-nums">
         {s.cell.due ? <span className="text-text-dim">기한 내 완료 {s.cell.ontime}/{s.cell.due}</span> : null}
         {s.cell.lateDone ? <span>기한 후 완료 {s.cell.lateDone}</span> : null}

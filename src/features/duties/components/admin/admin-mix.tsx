@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import { mixParts, type Counts, type MixKey } from "../../view-admin";
+import { mixParts, progressShareOf, type Counts, type MixKey } from "../../view-admin";
 
 /**
  * 막대 색 — 운영실 대시보드의 색(인재원 로고의 노랑 · 회색 · 차콜)을 그대로 쓴다(원장 2026-11-11 *"색상을 우리 스타일로 변경하자. 기한내 - 주황, 기한외 - 회색, 미처리 - 검정 계열. 대시보드에 썼던 색상 스타일"*).
@@ -11,6 +11,12 @@ import { mixParts, type Counts, type MixKey } from "../../view-admin";
  */
 export const MIX_COLOR: Record<MixKey, string> = { ontime: "#fdb811", lateDone: "#a3abae", missed: "#363c41", left: "#e7e9e6" };
 export const MIX_LABEL: Record<MixKey, string> = { ontime: "기한 내", lateDone: "기한 후 완료", missed: "미처리", left: "남음" };
+/**
+ * 진행 막대의 색 — 아직 기한 전인 업무(학생 상담 · 월말평가 · 신규생 관리)를 벌써 끝낸 몫. 기한 내 노랑보다 **한 단계 옅은 노랑**(대시보드 `--h2`)이다:
+ * 기한이 지나면 그대로 '기한 내'가 될 몫이지만, 아직 등급 · 전체에 들지 않는다는 것이 색으로도 갈려야 한다(같은 노랑이면 '상담 16%인데 전체는 100%'가 어긋나 보인다).
+ */
+export const PROGRESS_COLOR = "#fbd76f";
+export const PROGRESS_LABEL = "진행";
 
 /**
  * '기한 내만 보기'(화면 오른쪽 위 토글 — 원장 2026-11-11 *"전체 비율말고 기한내 제출한 사람들을 비교하기 좋을듯"*).
@@ -23,25 +29,33 @@ export const useOntimeOnly = () => useContext(OntimeOnlyContext);
 /**
  * 가로 막대 하나 — 때가 된 업무가 어떻게 끝났나를 **건수 비율 그대로** 나눈다(원장 *"가로 막대로 3등분 … 28%가 기한내, 70%가 기한외, 2%가 미처리면 가로로 28%/70%/2%를 그리는거야"*).
  * 왼쪽부터 기한 내 · 기한 후 완료 · 미처리, 남은 것은 빈 바탕. 가늘게 그린다(*"두껍고 너비가 넓지않으니까 못생겨보임"* — 줄 높이를 다 채우던 막대를 물렸다).
- * `ontimeOnly`면 기한 내 몫만 칠한다. 때가 된 업무가 없으면 빈 바탕만 남는다.
+ * `ontimeOnly`면 기한 내 몫만 칠한다.
+ * **때가 된 업무가 없는 칸도 막대로 그린다**(원장 2026-11-11 *"학생 상담이나 월말평가도 막대바로 표현하는게 어때?"*) — 벌써 끝낸 몫을 옅은 노랑(`PROGRESS_COLOR`)으로, 나머지는 빈 바탕.
+ * 업무가 하나도 없으면 빈 바탕만 남는다.
  */
 export function MixBar({ cell, ontimeOnly = false, className = "h-1.5" }: { cell: Counts; ontimeOnly?: boolean; className?: string }) {
+  const progress = progressShareOf(cell);
   const parts = mixParts(cell).filter((p) => (ontimeOnly ? p.key === "ontime" : p.key !== "left"));
   return <span aria-hidden className={`flex w-full shrink-0 overflow-hidden rounded-full ${className}`} style={{ background: MIX_COLOR.left }}>
     {/* 한 건이라도 있으면 실금으로라도 보이게 최소 2px(나머지가 그만큼 줄어든다 — 합은 막대 폭을 넘지 않는다). */}
-    {parts.map((p) => <span key={p.key} className="h-full" style={{ width: `${p.share * 100}%`, minWidth: 2, background: MIX_COLOR[p.key] }} />)}
+    {progress !== null
+      ? (progress > 0 ? <span className="h-full" style={{ width: `${progress * 100}%`, minWidth: 2, background: PROGRESS_COLOR }} /> : null)
+      : parts.map((p) => <span key={p.key} className="h-full" style={{ width: `${p.share * 100}%`, minWidth: 2, background: MIX_COLOR[p.key] }} />)}
   </span>;
 }
 
 /**
- * 표 머리의 풀이 — 칸의 숫자가 무엇인지(완료율 · '기한 내만 보기'면 기한 내 완료율)와 막대 색의 뜻.
+ * 표 머리의 풀이 — 칸의 숫자가 무엇인지(완료율 · '기한 내만 보기'면 기한 내 완료율)와 막대 색의 뜻(기한 전 업무의 옅은 노랑 '진행' 포함).
+ * '남음' = 막대의 빈 바탕, 곧 **아직 안 한 것**이다(때가 된 칸에서는 기한 전이라 남은 것 · 진행 칸에서는 아직 안 끝낸 것 — 둘 다 같은 바탕색이라 한 이름으로 부른다).
  * 막대 색(노랑 · 회색 · 차콜)은 뜻을 스스로 말하지 않고, 칸의 100% 옆에 5등급이 서면(늦게 다 한 선생님) 숫자가 무엇인지 적혀 있어야 한다 — 등급은 늘 기한 내 완료율로 매긴다.
  */
-export function MixLegend({ className = "" }: { className?: string }) {
+export function MixLegend({ className = "", progress = false }: { className?: string; /** 이 표에 진행 막대(기한 전 업무)가 있는가 — 있을 때만 '진행'을 적는다. */ progress?: boolean }) {
   const ontimeOnly = useOntimeOnly();
   const keys: MixKey[] = ontimeOnly ? ["ontime"] : ["ontime", "lateDone", "missed", "left"];
   return <span className={`flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold whitespace-nowrap ${className}`}>
     <span>숫자 = {ontimeOnly ? "기한 내 완료율" : "완료율"}</span>
     {keys.map((k) => <span key={k} className="flex items-center gap-1"><span aria-hidden className="h-2.5 w-2.5 rounded-sm" style={{ background: MIX_COLOR[k] }} />{MIX_LABEL[k]}</span>)}
+    {/* 진행 = 아직 기한 전인 업무를 벌써 끝낸 몫(등급 · 전체에는 기한이 지난 뒤에 든다). 그 막대가 이 표에 있을 때만 적는다. */}
+    {progress ? <span className="flex items-center gap-1"><span aria-hidden className="h-2.5 w-2.5 rounded-sm" style={{ background: PROGRESS_COLOR }} />{PROGRESS_LABEL}</span> : null}
   </span>;
 }
