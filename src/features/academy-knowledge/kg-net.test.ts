@@ -129,14 +129,14 @@ describe("기록이 가운데인 판", () => {
 });
 
 describe("점 압축 — 날짜 없는 기록이 많으면 접는다(펼치면 전부)", () => {
-  it("관계 많은 순 앞 몇 건만 영역 둘레 · 나머지 '외 N건' · 관계 없는 기록 '관계 없음 N건' — 처음엔 접혀 있고 펼치면 다 보인다", () => {
+  it("관계 많은 순 앞 몇 건만 영역 둘레 · 나머지 '나머지 N건'(분류 재료가 없을 때) · 관계 없는 기록 '관계 없음 N건' — 처음엔 접혀 있고 펼치면 다 보인다", () => {
     const many: Node[] = [node("academy", "Academy", "학원"), node("course:c1", "Course", "반"), node("course:c2", "Course", "반2"), ...Array.from({ length: 30 }, (_, i) => node(`student:m${i}`, "Student", `학생${i}`)), ...Array.from({ length: 5 }, (_, i) => node(`student:z${i}`, "Student", `혼자${i}`))];
     const rel: Edge[] = Array.from({ length: 30 }, (_, i) => edge(`student:m${i}`, "course:c1", "ENROLLED_IN", "enrolled_in"));
     rel.push(edge("student:m29", "course:c1", "RELATED_RECORD", "extra"), edge("student:m29", "course:c2", "ENROLLED_IN", "enrolled_in")); // 같은 두 기록은 한 번만 센다 · m29는 다른 반이 하나 더 → 앞에 선다
     const b = kgNetBoard({ ...G, nodes: many, edges: rel }, null);
     const more = b.graph.nodes.find((n) => n.id === "grp:Student:more")!;
     const none = b.graph.nodes.find((n) => n.id === "grp:Student:none")!;
-    expect([more.tally, more.label, none.tally, none.label]).toEqual([30 - KG_UNDATED_SHOWN, `외 · ${30 - KG_UNDATED_SHOWN}건`, 5, "관계 없음 · 5건"]);
+    expect([more.tally, more.label, none.tally, none.label]).toEqual([30 - KG_UNDATED_SHOWN, `나머지 · ${30 - KG_UNDATED_SHOWN}건`, 5, "관계 없음 · 5건"]);
     expect(b.graph.nodes.find((n) => n.id === id("student:m29"))?.parent).toBeUndefined();
     const shown = visibleGraph(b.graph);
     expect(shown.nodes.filter((n) => n.kind === "record")).toHaveLength(KG_UNDATED_SHOWN + 2); // 학생 12 + 반 2

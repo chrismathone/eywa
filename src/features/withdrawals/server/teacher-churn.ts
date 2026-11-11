@@ -91,7 +91,10 @@ async function readChurn(tenantId: string, to: string): Promise<RawChurn> {
   }
   const users = await fetchInChunks<{ id: string; display_name: string | null; hire_date: string | null; status: string | null }>(ids, (chunk) =>
     admin.from("users").select("id, display_name, hire_date, status").eq("tenant_id", tenantId).in("id", chunk));
-  const resignOf = await loadResignDates(admin, tenantId, users.filter((u) => u.status !== "active").map((u) => u.id));
+  const rawResign = await loadResignDates(admin, tenantId, users.filter((u) => u.status !== "active").map((u) => u.id));
+  // 입사일보다 앞선 퇴사 기록은 옛 재직의 것(재입사 — 실측: 2026-01 입사 · 2023-02 퇴사 메모) — 지금 재직을 자르지 않는다.
+  const hireById = new Map(users.map((u) => [u.id, u.hire_date?.slice(0, 10) ?? null]));
+  const resignOf = new Map([...rawResign].filter(([id, d]) => { const h = hireById.get(id); return !(h && d < h); }));
   // 퇴사자 = 직원 상태 inactive(대기 pending은 퇴사가 아니다) — '퇴사자 숨김' 토글이 본다.
   const inactive = new Set(users.filter((u) => u.status === "inactive").map((u) => u.id));
   const itemOf = new Map<string, unknown>(heads.map((r) => [keyOf(r), isChurn(r.item) ? r.item : found.get(keyOf(r))]));

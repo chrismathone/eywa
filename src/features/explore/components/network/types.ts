@@ -37,6 +37,8 @@ export type NetNode = {
   label?: string;
   /** 날짜 묶음의 단계 · 영역 점을 더블클릭했을 때 할 일 · 영역의 한 줄 요약(도넛 조각과 같은 글). */
   level?: NetGroupLevel;
+  /** 날짜가 아닌 분류 묶음의 단위 이름(지식그래프 '학교급' · '학년' · '과목') — 없으면 `level`의 '연도' · '월' · '일자'. */
+  unit?: string;
   open?: NetHubOpen;
   /** `open = "center"`일 때 중심이 될 대상 이름(과목 조각은 첫 반). */
   openTo?: string;

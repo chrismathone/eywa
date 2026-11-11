@@ -82,13 +82,17 @@ export async function loadAcademyKnowledge(input: { month?: string; student?: st
   graph = addNativeGraph(graph, records, students, core.staff, ruleResults, input.student);
   for (const p of students.filter(p => core.activeStudents.has(p.id) && p.school)) {
     const sid = `${tenant}:school:${p.school}:${p.grade ?? "미기재"}`;
-    if (!graph.nodes.some(n => n.id === sid)) graph.nodes.push({ id: sid, type: "School", label: `${p.school} ${p.grade ?? ""}`.trim(), source: "현재 학생 기본정보", period: today });
+    if (!graph.nodes.some(n => n.id === sid)) graph.nodes.push({ id: sid, type: "School", label: `${p.school} ${p.grade ?? ""}`.trim(), source: "현재 학생 기본정보", period: today, attributes: { school: p.school, grade: p.grade } });
     graph.edges.push({ from: `${tenant}:student:${p.id}`, to: sid, relation: "STUDIES_AT", sourceRelation: "school,grade", basis: "현재 학적 정보 · 과거 학적 복원 아님", evidence: [], asOf: today });
   }
   status.push(recordData
     ? { name: "직접 입력", state: "연결", detail: `기준일까지 ${records.length}개 최신 기록 · 모든 변경 버전 보관` }
     : { name: "직접 입력", state: "조회 또는 권한 확인 필요", detail: "관찰·후속 조치 기록은 업무 작성센터 권한이 있어야 함께 보입니다" });
   status.push({ name: "Drive·Notion·Calendar·Slack·ClassNote", state: "상시 수집 미완료", detail: "이미 가져온 근거와 향후 자동 수집은 구분합니다. 동일 학생 ID 확인 없이 병합하지 않습니다." });
+  // 판의 분류 묶음 재료(kg-net-groups.ts) — 원생 = 학년(학생 기본정보) · 직원 = 담당 과목 키. 사람을 잇거나 바꾸지 않고 칸만 더한다.
+  const grades = new Map(students.map(s => [`${tenant}:student:${s.id}`, s.grade])), subjectsOf = new Map(Object.entries(core.staffSubjects).map(([id, v]) => [`${tenant}:staff:${id}`, v]));
+  graph.nodes = graph.nodes.map(n => n.type === "Student" && grades.has(n.id) ? { ...n, attributes: { ...n.attributes, grade: grades.get(n.id) ?? null } }
+    : n.type === "Staff" && subjectsOf.has(n.id) ? { ...n, attributes: { ...n.attributes, subjects: subjectsOf.get(n.id) } } : n);
   graph = applyStudioLinks(graph, studioResult.value.rows, asOf);
   // 🔴 직원 이름은 마지막에 한 번 더 거른다(staff-mask.ts) — 다른 출처(조직·OKR · 학생/강사 통합 · 직접 기록)가 실어 온 직원 노드와
   //    시스템이 제목·상세에 붙인 이름("작성 ○○○ · …")에도 실명이 있다. 볼 수 없는 직원의 이름 목록은 서버 안에서만 쓴다.

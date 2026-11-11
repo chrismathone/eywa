@@ -160,7 +160,7 @@ export function netNeighbors(input: NetInput, id: string): NetNeighbor[] {
       .filter((e) => e.from === id)
       .map((e) => byId.get(e.to)!)
       .filter(Boolean)
-      .map((n) => ({ id: n.id, title: n.label ?? n.title, rel: n.kind === "group" ? "" : (n.detail?.split(" · ")[0] ?? ""), tone: n.tone, date: n.date ?? null, ...(n.level ? { unit: UNIT[n.level] } : {}) }));
+      .map((n) => ({ id: n.id, title: n.label ?? n.title, rel: n.kind === "group" ? "" : (n.detail?.split(" · ")[0] ?? ""), tone: n.tone, date: n.date ?? null, ...(n.level ? { unit: n.unit ?? UNIT[n.level] } : {}) }));
   const out: NetNeighbor[] = [];
   for (const e of g.edges) {
     const other = e.from === id ? e.to : e.to === id ? e.from : null;

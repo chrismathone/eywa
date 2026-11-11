@@ -97,6 +97,9 @@ describe("inTenure — 입사 다음 달부터 퇴사한 달까지", () => {
     expect(inTenure("2026-09", "2026-09-01", null)).toBe(false);
     expect(inTenure("2026-10", "2026-09-01", null)).toBe(true);
   });
+  it("재입사 — 입사일보다 앞선 옛 퇴사일은 지금 재직을 자르지 않는다", () => {
+    expect(inTenure("2026-05", "2026-01-16", "2023-02-28")).toBe(true);
+  });
   it("모르는 쪽은 자르지 않는다", () => {
     expect(inTenure("2020-01", null, null)).toBe(true);
     expect(inTenure("2030-01", "2026-01-01", null)).toBe(true);
