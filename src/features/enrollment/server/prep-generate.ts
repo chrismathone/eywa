@@ -77,7 +77,8 @@ export async function runPrepBriefGeneration(
     const checked = validatePrepBrief(data, facts);
     // 호칭 후처리는 검증 **뒤**에 — 한글 이름을 호칭으로 바꾸는 치환이라 grounding(숫자·영문)에 영향 없다.
     record = checked.ok
-      ? { ...base, source: "ai", model, brief: applyParentAddress(checked.value, facts), ...(checked.repairs.length ? { repairs: checked.repairs } : {}) }
+      ? { ...base, source: "ai", model, brief: applyParentAddress(checked.value, facts), ...(checked.repairs.length ? { repairs: checked.repairs } : {}),
+          ...(checked.observations.length ? { observations: checked.observations } : {}) }
       : {
           ...base,
           source: "fallback",
@@ -87,6 +88,7 @@ export async function runPrepBriefGeneration(
         };
     if (!checked.ok) console.warn("[prep-brief] 검증 탈락 → 폴백", checked.reason);
     else if (checked.repairs.length) console.warn("[prep-brief] 검증이 고친 곳", checked.repairs.join(" | "));
+    if (checked.ok && checked.observations.length) console.info("[prep-brief] 말투 관찰(고치지 않음)", checked.observations.join(" | "));
   } catch (e) {
     // 원문은 서버 로그로만(UI에 기술 원문 노출 금지) — 화면엔 폴백 브리프 + '기본 브리프' 표시.
     console.error("[prep-brief] AI 생성 실패", e);

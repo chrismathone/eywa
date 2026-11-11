@@ -16,6 +16,7 @@ import {
   rankPrepClasses,
   seatsLeft,
   validatePrepBrief,
+  observeSpoken,
   tuitionFitsLevel,
   checklistToPairs,
   type PrepBrief,
@@ -694,11 +695,77 @@ describe("적대적 검수 2026-11-11 — 사실 수집·검증 회귀(Claude·C
     expect(bad("석 달 안에 진도를 따라잡을 수 있습니다.")).toBeGreaterThan(0);
     expect(bad("빠짐없이 관리해서 성적 향상을 보장합니다.")).toBeGreaterThan(0);
     expect(bad("매주 진도를 확인해 말씀드리겠습니다.")).toBeGreaterThan(0);
+    expect(bad("매주 정기 보고를 하겠습니다.")).toBeGreaterThan(0);
+    expect(bad("월별 리포트를 보내 드리겠습니다.")).toBeGreaterThan(0);
+    expect(bad("월별 기록은 제가 지금 설명드리겠습니다. 다음 단계를 정하겠습니다.")).toBe(0);
     expect(bad("결과 보장은 없지만, 막히는 곳부터 함께 찾겠습니다.")).toBe(0);
     expect(bad("성적을 보장하는 것은 아니지만, 막히는 곳부터 함께 찾겠습니다.")).toBe(0);
     // 알려 드리는 말은 그대로
     expect(bad("월별 기록 방식은 확인해서 안내드리겠습니다. 다음 단계를 정하겠습니다.")).toBe(0);
     expect(bad("보강이 가능한지는 확인해 말씀드리겠습니다. 다음 단계를 정하겠습니다.")).toBe(0);
+  });
+  it("2차 합의 2026-11-11 — 상담사에게 넘기는 말은 약속이 아니다 · 놓치던 정기 보고는 막는다", () => {
+    const f = facts();
+    const bad = (closing: string) => {
+      const r = validatePrepBrief(brief({ closing }), f);
+      return r.ok ? r.repairs.length : 99;
+    };
+    // 재생성 59건에서 오탐으로 빠진 문장들
+    expect(bad("그 외 할인이나 세부 조건은 제가 지금 설명드리겠습니다.")).toBe(0);
+    expect(bad("수업 방식과 숙제양, 보강은 제가 지금 설명드리겠습니다.")).toBe(0);
+    expect(bad("오답과 과제 관리, 정기 보고, 이상 신호 때 상담 방식은 제가 지금 이 자리에서 설명드리겠습니다.")).toBe(0);
+    expect(bad("접수서에 '성적 또는 실력 변화에 대한 정기 보고'를 바라신다고 적어 주셨는데, 그 부분은 제가 지금 설명드리겠습니다.")).toBe(0);
+    expect(bad("월별 기록은 제가 지금 설명하겠습니다. 다음 단계를 정하겠습니다.")).toBe(0);
+    expect(bad("보강 방식은 제가 설명해 드리겠습니다. 다음 단계를 정하겠습니다.")).toBe(0);
+    expect(bad("매주 진도 점검 방식은 제가 지금 설명하겠습니다.")).toBe(0);
+    expect(bad("중1 수학 A 반은 매주 월·수·금 16:30 수업이며, 수준을 본 뒤 정할 후보로 말씀드립니다.")).toBe(0);
+    expect(bad("주3회 수업 시간을 안내드립니다. 다음 단계를 정하겠습니다.")).toBe(0);
+    expect(bad("매주 리포트를 보내 드리지는 않습니다. 대신 지금 수준부터 함께 보겠습니다.")).toBe(0);
+    expect(bad("정기 보고를 바라신다고 하셨는데, 다음 단계를 정하겠습니다.")).toBe(0);
+    expect(bad("성적 변화는 정기 보고를 하겠습니다.")).toBeGreaterThan(0);
+    expect(bad("월별로 기록을 관리하겠습니다.")).toBeGreaterThan(0);
+    // 그대로 막는 약속
+    expect(bad("정기 보고로 공유드리겠습니다.")).toBeGreaterThan(0);
+    expect(bad("월별 리포트로 안내드리겠습니다.")).toBeGreaterThan(0);
+    expect(bad("월별로 학습 상황을 말씀드리겠습니다.")).toBeGreaterThan(0);
+    expect(bad("주 1회 학습 리포트를 보내 드리겠습니다.")).toBeGreaterThan(0);
+    expect(bad("격주로 진도표를 보내 드리겠습니다.")).toBeGreaterThan(0);
+    expect(bad("매일 숙제 결과를 알려 드리겠습니다.")).toBeGreaterThan(0);
+    expect(bad("한 달에 한 번 상담 결과를 정리해 드리겠습니다.")).toBeGreaterThan(0);
+    expect(bad("매주 월·수 수업 후 리포트를 보내 드리겠습니다.")).toBeGreaterThan(0);
+    expect(bad("뒤처지지 않도록 매주 리포트를 보내 드리겠습니다.")).toBeGreaterThan(0);
+    expect(bad("보강은 무료로 해 드리겠습니다.")).toBeGreaterThan(0);
+    expect(bad("형제 할인은 설명드린 뒤 바로 적용해 드리겠습니다.")).toBeGreaterThan(0);
+  });
+  it("2차 합의 2026-11-11 — '반마다·반이나'는 강사 이름이 아니다 · 지어낸 이름은 그대로 막는다", () => {
+    expect(intact({ closing: "후보 반마다 강사가 다르니 그 점을 함께 비교해 보겠습니다." })?.closing).toContain("반마다");
+    expect(intact({ cautions: ["영어 반이나 강사를 약속하지 말 것"] })?.cautions[0]).toContain("반이나");
+    expect(intact({ closing: "지금은 선생님 설명으로 판단하고 계시니 근거부터 함께 보겠습니다." })?.closing).toContain("지금은");
+    expect(intact({ closing: "심화반 선생님과도 수준을 함께 맞춰 보겠습니다." })?.closing).toContain("심화반");
+    const r = validatePrepBrief(brief({ closing: "김이나 강사님 반으로 안내드리겠습니다. 다음 단계를 정하겠습니다." }), facts());
+    expect(r.ok && r.repairs.join()).toContain("사실에 없는 강사");
+  });
+  it("2차 합의 2026-11-11 — 말투 관찰은 수리와 따로(미루기 4 · 넘김 3)", () => {
+    const defer = "그 부분은 상담에서 확인해 안내드리겠습니다.";
+    const r = validatePrepBrief(
+      brief({
+        opening: `접수 폼을 먼저 읽고 왔습니다. ${defer}`,
+        closing: `다음 단계를 정하겠습니다. ${defer}`,
+        playbook: [{ concern: "진도", evidence: "접수 폼 걱정 항목", response: `현재 진도를 먼저 보겠습니다. ${defer}` }],
+        objections: [{ objection: "비교해 보겠다", answer: `충분히 비교해 보세요. ${defer}` }],
+      }),
+      facts(),
+    );
+    expect(r.ok && r.repairs).toEqual([]);
+    expect(r.ok && r.observations).toEqual(["미루기 과다(4문장)"]);
+    expect(observeSpoken(["이 자리에서 확인해 말씀드리겠습니다.", "지금 확인해 안내드리겠습니다."])).toEqual([]);
+    expect(observeSpoken(["보강은 제가 지금 설명드리겠습니다.", "과제는 제가 설명드리겠습니다.", "보고는 지금 설명하겠습니다."])).toEqual(["넘김 되풀이(3문장)"]);
+  });
+  it("2차 합의 2026-11-11 — '수능' 단가는 고등만 · 고등도 다른 학년 표기는 뺀다", () => {
+    expect(tuitionFitsLevel("수능 대비", "고2")).toBe(true);
+    expect(tuitionFitsLevel("수능 대비", "중2")).toBe(false);
+    expect(tuitionFitsLevel("수능 대비", null)).toBe(false);
+    expect(tuitionFitsLevel("수학 고등M 중3 수능 기초", "고1")).toBe(false);
   });
 });
 
