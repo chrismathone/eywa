@@ -1,5 +1,10 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-11 — 퇴원관리 '강사별 퇴원율 추이'(원장 "퇴원관리에 그 기능이 있으면 되겠다. 계기판이나 다른 디자인 활용해서 비교가능하게" · Codex 협의)
+
+- 퇴원관리 통계 줄 아래 폭 전체 카드 — 강사평가가 저장한 퇴원율을 강사 × 달 히트맵(칸 = 퇴원율 + 그만둠/지난달 담당)으로, 끝에 같은 두 달의 증감 열, 이름을 누른 강사(셋까지)는 선 차트로. 원장 역할만(직원 포트폴리오와 같은 문). 결정 본문 = [`decisions/students.md`](decisions/students.md) 2026-11-11.
+- 파일: `features/withdrawals/teacher-churn.ts`(순수 · 테스트) · `server/teacher-churn.ts`(퇴원율 항목만 읽기 · 5분 캐시) · `withdrawals/_components/teacher-churn-{section,card,table}.tsx` · 정렬 계정 저장 `ui_prefs.withdrawals.churn_sort`.
+
 ## 2026-11-11 — 새 탭 디자인 통일(원장 "새로 추가된 탭들 중 디자인 스타일이 기존 우리 것과 다른 탭들 검사 후 디자인 통일화" · Codex 협의)
 
 - 11-08 이후 새 화면 13개(홍보·마케팅 통합 · 조직·OKR · 업무 작성센터 · 스키마·지식그래프 · 관찰·후속 조치 · 경영 분석 · 방문·등록 점검 · 신규생 90일 · 학생 통합보기 · 강사 지식그래프 · 원생 로열티(공용 머리) · 42팩터 · 마케팅 입력·검토)의 자체 머리 판(보라 그라데이션·차콜·흰 카드)·영문 머리말·숫자 카드 위 색 띠·자체 탭 단추를 `PageHeader`·`BigStat`·`Toolbar`/`ToolbarSegment`·`PeriodNav`·`BackLink`·공용 `Button`으로 바꿨다(기능·링크·데이터 그대로 · 헤더 정보 보존). 모듈 CSS는 글자 토큰·굵기 500/700·자간 없음·카드 토큰으로, 원시 단추 규칙은 `button:where(:not([data-slot],[aria-pressed]))`(특이도 그대로 · 공용 부품을 안 덮게). 차트 연도·유형 색 = 범주 색 `--cat-*`. 로딩 뼈대 7개를 실물 순서로. 🔴 모듈 CSS의 층 밖 `.x button{…}` 규칙은 Tailwind 유틸(층 안)을 이긴다 — 새 화면에 공용 부품을 넣을 땐 이 제외를 함께.

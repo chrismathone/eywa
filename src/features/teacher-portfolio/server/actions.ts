@@ -2,7 +2,8 @@
 
 // 직원 포트폴리오 [지금 집계] — 매일 cron을 기다리지 않고 이 지점의 점수를 다시 집계한다.
 // 계산은 cron과 같은 함수(refresh.ts)다. 마감한 달은 다시 쓰지 않는다.
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
+import { teacherChurnTag } from "@/features/withdrawals/teacher-churn";
 import { logAction } from "@/features/audit/server/log";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -36,6 +37,8 @@ export async function refreshTeacherPortfolioNow(): Promise<PortfolioRefreshStat
     metadata: { trigger: "manual", periodEnd: summary.periodEnd, teachers: summary.teachers, written: summary.written, closedMonths: summary.closedMonths },
   });
   revalidatePath("/class-review");
+  // 퇴원관리 '강사별 퇴원율 추이'는 같은 저장값을 5분 캐시로 읽는다 — 방금 집계한 값이 그쪽에도 바로 서게 비운다.
+  updateTag(teacherChurnTag(gate.tenantId));
   return {
     ok: true,
     notice: summary.closedMonths.length
