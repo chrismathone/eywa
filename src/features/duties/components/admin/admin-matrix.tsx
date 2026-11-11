@@ -49,16 +49,17 @@ export function AdminMatrix({ rows, total, avg = null, grade = true, title = "�
         <th className={TH}>{title}</th>
         {grade ? <th className={TH}>등급</th> : null}
         {cols.map((c) => <th key={c.kind} className={TH + off(c.kind)}>{c.label}</th>)}
+        {/* 평균평점은 종류 열 바로 뒤 · '전체'가 맨 오른쪽(원장 2026-11-11). 이름이 길어 좁은 칸에서는 두 줄로 접힌다(한 줄을 고집하면 칸 밖으로 나가 표가 옆으로 밀린다). */}
+        {rated ? <th className="text-text-dim px-1 py-1.5 text-xs leading-tight font-semibold break-keep">보고서 평균평점</th> : null}
         <th className={TH}>전체</th>
-        {rated ? <th className={TH}>보고서 평점</th> : null}
       </tr></thead>
       <tbody>
         {rows.map((r) => <tr key={r.ownerId}>
           <td className="px-2 py-0.5 text-left"><button type="button" onClick={() => onCell(r.ownerId, null)} className="hover:text-primary text-sm font-bold">{r.name}</button>{r.meta ? <span className="text-text-dim ml-1.5 text-xs font-medium whitespace-nowrap">{r.meta}</span> : null}</td>
           {grade ? <td className="px-1"><VerdictBadge v={judge(r.all, avg)} /></td> : null}
           {cols.map((c) => <td key={c.kind} className={`p-0${off(c.kind)}`}><CountBox cell={r.cells[c.kind] ?? null} onClick={r.cells[c.kind] ? () => onCell(r.ownerId, c.kind) : undefined} /></td>)}
-          <td className="p-0"><CountBox cell={r.all} overall onClick={() => onCell(r.ownerId, null)} /></td>
           {rated ? <td className="p-0"><RatingBox rating={r.rating} /></td> : null}
+          <td className="p-0"><CountBox cell={r.all} overall onClick={() => onCell(r.ownerId, null)} /></td>
         </tr>)}
         {/* 합계 줄 — 배경 없이 윗줄 하나로 가른다(원장 2026-11-11). */}
         {total ? <tr aria-hidden><td colSpan={count + (grade ? 2 : 1)} className="p-0"><div className="border-line mt-1 border-t" /></td></tr> : null}
@@ -66,8 +67,8 @@ export function AdminMatrix({ rows, total, avg = null, grade = true, title = "�
           <td className="px-2 py-1 text-left text-sm font-bold">{total.name}</td>
           {grade ? <td /> : null}
           {cols.map((c) => <td key={c.kind} className={`p-0${off(c.kind)}`}><CountBox cell={total.cells[c.kind] ?? null} plain /></td>)}
-          <td className="p-0"><CountBox cell={total.all} plain overall /></td>
           {rated ? <td className="p-0"><RatingBox rating={rows.reduce<Rating | undefined>((acc, r) => addRating(acc, r.rating), undefined)} plain /></td> : null}
+          <td className="p-0"><CountBox cell={total.all} plain overall /></td>
         </tr> : null}
       </tbody>
     </table>

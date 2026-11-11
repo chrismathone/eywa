@@ -31,7 +31,7 @@ export function AdminRanking({ tree, onOwner }: { tree: readonly TreeSubject[]; 
       <h4 className="mr-1 text-sm font-bold">등수 <span className="text-text-dim text-xs font-medium">{rating ? "평점 평균 높은 순" : "기한 내 완료율 높은 순"}</span></h4>
       <button type="button" aria-pressed={!rating && picked === null} onClick={() => { setByRating(false); setKind(null); }} className={chip(!rating && picked === null)}>전체</button>
       {kinds.map((c) => <button key={c.kind} type="button" aria-pressed={!rating && picked === c.kind} onClick={() => { setByRating(false); setKind(c.kind); }} className={chip(!rating && picked === c.kind)}>{c.label}</button>)}
-      {hasRating ? <button type="button" aria-pressed={rating} onClick={() => setByRating(true)} className={chip(rating)}>보고서 평점</button> : null}
+      {hasRating ? <button type="button" aria-pressed={rating} onClick={() => setByRating(true)} className={chip(rating)}>보고서 평균평점</button> : null}
     </div>
     {!boards.length ? <p className="text-text-dim px-2 py-3 text-sm">해당 업무 없음</p> : <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]">
       {boards.map((b) => <div key={b.key} className="min-w-0">
