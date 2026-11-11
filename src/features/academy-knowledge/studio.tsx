@@ -1,6 +1,6 @@
 "use client";
 import { EmbedLink as Link } from "@/components/embed-link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AcademyKnowledgeData } from "./server";
 import { liveHref } from "./routes";
@@ -9,9 +9,7 @@ import { blueprint } from "./blueprint";
 /** 처음 여는 시트 — 위치 번호가 아니라 id로(리뷰 C11 — 사전에 시트가 끼면 엉뚱한 시트가 열렸다). */
 const DEFAULT_SHEET_ID = "10_학생";
 import { entities } from "./catalog";
-import { expectations, focusGraph, nodeGaps, nodeHealth, overviewGraph, uniqueEdges, type StudioDocument, type StudioRow, type Expectation } from "./studio-model";
-import { GraphCanvas } from "./network-canvas";
-import { recordNetwork } from "./network-model";
+import { expectations, type StudioDocument, type StudioRow, type Expectation } from "./studio-model";
 import s from "./studio.module.css";
 
 const labels=Object.fromEntries(entities);
@@ -29,7 +27,7 @@ function useSave(data:AcademyKnowledgeData) {
   }
   return {save,busy,message};
 }
-function StoreNotice({data}:{data:AcademyKnowledgeData}) {return data.studio.error?<p role="alert" className={s.warning}>{data.studio.error}</p>:null;}
+export function StoreNotice({data}:{data:AcademyKnowledgeData}) {return data.studio.error?<p role="alert" className={s.warning}>{data.studio.error}</p>:null;}
 
 export function SchemaTab({data}:{data:AcademyKnowledgeData}) {
   const [sheetId,setSheetId]=useState<string>(DEFAULT_SHEET_ID),[search,setSearch]=useState(""),[editing,setEditing]=useState<string|null>(null);
@@ -54,36 +52,8 @@ function FieldEditor({data,sheet,field,label,row,onClose}:{data:AcademyKnowledge
   return <form className={s.editor} onSubmit={async e=>{e.preventDefault();if(await save(`field:${sheet}:${field}`,row?.version??0,doc))onClose();}}><h3>{label} · 정의 편집</h3><div className={s.formGrid}><label>표시 항목명<input required maxLength={160} value={doc.label} onChange={e=>setDoc({...doc,label:e.target.value})}/></label><label className={s.check}><input type="checkbox" checked={doc.required} onChange={e=>setDoc({...doc,required:e.target.checked})}/>보완 점검에서 우선 확인할 필수 항목</label></div><label>정의·작성 방법<textarea maxLength={1200} value={doc.note} onChange={e=>setDoc({...doc,note:e.target.value})} placeholder="누가, 언제, 어떤 기준으로 기록하는지 작성하세요"/></label><div className={s.actions}><button type="submit" disabled={busy||!data.studio.canWrite}>변경 저장</button><button type="button" onClick={onClose}>닫기</button><span role="status">{message}</span></div></form>;
 }
 
-export function GraphTab({data}:{data:AcademyKnowledgeData}) {
-  const initial=data.selectedStudent?`${data.graph.tenant}:student:${data.selectedStudent}`:data.selectedTeacher?`${data.graph.tenant}:staff:${data.selectedTeacher}`:"";
-  const [selected,setSelected]=useState(initial),[type,setType]=useState<string>(data.selectedTeacher?"Staff":"Student"),[search,setSearch]=useState(""),[editor,setEditor]=useState(false),[chosenLink,setChosenLink]=useState<StudioRow|undefined>();
-  const [gapKey,setGapKey]=useState<string|null>(null);
-  const [mode,setMode]=useState<"records"|"summary"|"focus">("records"),[isolated,setIsolated]=useState(false);
-  const network=useMemo(()=>recordNetwork(data.graph),[data.graph]);
-  const rules=useMemo(()=>expectations(data.studio.rows),[data.studio.rows]);
-  const focus=data.graph.nodes.find(n=>n.id===selected);
-  const gaps=useMemo(()=>focus?nodeGaps(data.graph,focus,rules,data.status.some(x=>x.name==="학생 통합"&&x.state==="연결")?data.selectedStudent:"",data.selectedTeacher):[],[data.graph,focus,rules,data.selectedStudent,data.selectedTeacher,data.status]);
-  const map=useMemo(()=>mode==="summary"?overviewGraph(data.graph):mode==="focus"&&selected?focusGraph(data.graph,selected,gaps,data.studio.rows):isolated?{nodes:network.nodes.filter(n=>n.count===0),edges:[]}:network,[data.graph,selected,gaps,data.studio.rows,mode,network,isolated]);
-  const matches=data.graph.nodes.filter(n=>n.type===type&&`${n.label} ${n.id}`.toLowerCase().includes(search.toLowerCase()));
-  const links=uniqueEdges(data.graph).filter(e=>e.from===selected||e.to===selected),pending=data.studio.rows.filter(r=>r.document.kind==="link"&&r.document.state==="pending");
-  const chosenGap=gaps.find(g=>g.key===gapKey);
-  function selectNode(id:string){if(id.startsWith("gap:")){setGapKey(id.slice(4));return;}if(mode==="summary"){setType(id);setSearch("");return;}const node=data.graph.nodes.find(n=>n.id===id);if(node)setType(node.type);setSelected(id);setGapKey(null);}
-  function detailHref(kind:"student"|"teacher",id:string){return `/dashboard/management/knowledge?${new URLSearchParams({month:data.month,tab:"graph",[kind]:id}).toString()}`;}
-  return <section className={s.studio}><StoreNotice data={data}/><div className={s.heading}><div><p className={s.eyebrow}>지식 네트워크</p><h2>기록이 모이고, 관계가 보이는 학원</h2><p>작은 점 하나가 실제 기록입니다. 연결이 많은 기록을 중심으로 모이며, 점을 선택하면 이름과 근거가 드러납니다.</p></div><button className={s.button} onClick={()=>{setSelected("");setGapKey(null);setMode("records");setIsolated(false);}}>전체 기록으로</button></div>
-    <div className={s.networkToolbar}><div role="group" aria-label="그래프 보기"><button aria-pressed={mode==="records"} onClick={()=>setMode("records")}>전체 기록</button><button aria-pressed={mode==="summary"} onClick={()=>{setMode("summary");setSelected("");}}>주체별 요약</button><button aria-pressed={mode==="focus"} disabled={!selected} onClick={()=>{setMode("focus");setIsolated(false);}}>선택한 기록 주변</button></div><label><input type="checkbox" checked={isolated} disabled={mode!=="records"} onChange={e=>{setIsolated(e.target.checked);setSelected("");}}/>연결 없는 기록만 · {network.nodes.filter(n=>n.count===0).length}개</label><span>조회된 {network.nodes.length.toLocaleString()}개 기록 · 중복 관계는 합쳐 표시</span></div>
-    <div className={s.graphLayout}><aside className={s.directory}><label>주체<select value={type} onChange={e=>setType(e.target.value)}>{entities.map(([id,label])=><option key={id} value={id}>{label} ({data.graph.nodes.filter(n=>n.type===id).length})</option>)}</select></label><label>이름·기록 검색<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="학생·강사·행사·목표"/></label><div className={s.list}>{matches.slice(0,80).map(n=><button aria-pressed={selected===n.id} key={n.id} onClick={()=>{setSelected(n.id);setGapKey(null);if(mode==="summary")setMode("records");}}><strong>{n.label}</strong><small>{labels[n.type]}</small></button>)}</div><small>{Math.min(80,matches.length)} / {matches.length}개 · 검색으로 좁혀 보세요</small></aside>
-    <div><GraphCanvas key={`${mode}:${mode==="focus"?selected:"all"}:${data.graph.observedAt}`} nodes={map.nodes} edges={map.edges} selected={mode==="summary"?undefined:selected} onSelect={selectNode} summary={mode==="summary"}/><p className={s.note}>선은 확인된 기록 관계이며, 배치·점 크기는 평가 점수나 인과관계가 아닙니다. 조회된 자료 범위만 표시하며, 연결 없음은 미입력 확정이 아닙니다. {mode==="focus"&&selected&&`주변 기록은 최대 60개 표시 · 관계 ${links.length}개는 아래 목록에서 확인`}</p></div>
-    <aside className={s.inspector}>{focus?<><span className={s.pill}>{labels[focus.type]}</span><h3>{focus.label}</h3>{nodeHealth(focus)&&<span className={s.orange}>{nodeHealth(focus)}</span>}<p>{focus.source}</p>{focus.period&&<small>{focus.period}</small>}{focus.href&&<Link className={s.button} href={focus.href}>{focus.type==="Student"?"이 학생의 관찰·조치 보기 ↗":"실제 기록·값 수정 ↗"}</Link>}{focus.type==="Student"&&focus.id!==`${data.graph.tenant}:student:${data.selectedStudent}`&&<Link className={s.button} href={detailHref("student",focus.id.split(":").at(-1)!)}>학생 상세 자료 불러오기</Link>}{focus.type==="Staff"&&focus.id!==`${data.graph.tenant}:staff:${data.selectedTeacher}`&&<Link className={s.button} href={detailHref("teacher",focus.id.split(":").at(-1)!)}>강사 상세 자료 불러오기</Link>}
-      <h4>연결 항목 점검</h4><p className={s.note}>직접 연결과 관찰·수강을 통한 2단계 연결을 확인합니다. 미측정·부분 자료·분석 정의만 있는 항목은 충족으로 세지 않습니다. 업무 완료율과는 다릅니다.</p>{gaps.map(g=><button className={s.gap} key={g.key} onClick={()=>setGapKey(g.key)}><span>{g.label}</span><strong className={g.state==="connected"?s.green:g.state==="unloaded"?s.pill:s.orange}>{g.state==="connected"?`${g.actual}개 연결`:g.state==="unloaded"?"상세 조회 필요":"연결 확인 필요"}</strong></button>)}{!gaps.length&&<p>등록된 점검 기준이 없습니다. 보완 점검 탭에서 추가할 수 있습니다.</p>}
-      {chosenGap&&<div className={s.callout}><strong>{chosenGap.label}</strong><p>확인된 연결 {chosenGap.actual}개 / 점검 기준 {chosenGap.minimum}개. {chosenGap.state==="unloaded"?"상세 자료를 불러온 후 판단해 주세요.":"관계가 없거나 이 조회 범위에 포함되지 않았을 수 있습니다."}</p>{liveHref(chosenGap.href)&&<Link href={liveHref(chosenGap.href)!}>입력·연결 확인하러 가기 →</Link>}</div>}
-      <button disabled={!data.studio.canWrite} onClick={()=>{setChosenLink(undefined);setEditor(true);}}>근거를 남기고 참고 관계 추가</button>{focus.detail&&<details><summary>기록 설명</summary><p className={s.break}>{focus.detail}</p></details>}
-    </>:<><h3>지도 읽는 법</h3><p>전체 기록: 점 하나가 원기록 하나 · 점 크기는 연결된 이웃 수</p><p>주체별 요약: 유형별 기록 수를 큰 점으로 묶어 표시</p><p>실선: 실제 관계 · 같은 두 기록의 관계가 많을수록 굵고 진하게</p><p>연결 없는 기록: 바깥 원으로 표시 · 미입력 확정이 아닙니다</p><p>선택한 기록 주변: 보완할 관계는 붉은 점선 · 상세 조회 필요는 회색 점선</p><div className={s.callout}>확인 대기 {pending.length}건<br/>미반영 관계 {data.graph.issues.reduce((n,i)=>n+i.count,0)}건</div><p>군집은 실제 연결을 읽기 위한 배치입니다. 같은 군집이라는 이유로 업무 관계를 추가하지 않습니다.</p></>}</aside></div>
-    {editor&&<LinkEditor key={chosenLink?`${chosenLink.key}:${chosenLink.version}`:selected} data={data} from={selected} row={chosenLink} onClose={()=>setEditor(false)}/>}
-    {selected&&<details className={s.history}><summary>실제 관계와 근거 {links.length}개</summary><div className={s.tableWrap}><table><thead><tr><th>대상</th><th>관계</th><th>근거</th></tr></thead><tbody>{links.slice(0,200).map((e,i)=>{const other=e.from===selected?e.to:e.from;return <tr key={i}><td><button onClick={()=>setSelected(other)}>{data.graph.nodes.find(n=>n.id===other)?.label}</button></td><td>{e.sourceRelation.startsWith("manual-reference:")?"직접 확인한 참고 연결":e.sourceRelation}</td><td>{e.basis}</td></tr>;})}</tbody></table></div>{links.length>200&&<p>200건 표시 · 전체는 JSON 내보내기에서 확인</p>}</details>}
-    <details className={s.history}><summary>직접 연결한 관계 · 확인·수정 이력 {data.studio.rows.filter(r=>r.document.kind==="link").length}건</summary>{data.studio.rows.filter(r=>r.document.kind==="link").map(r=><article className={s.record} key={r.key}><strong>{r.document.label}</strong>{r.document.kind==="link"&&<p>{r.document.state==="pending"?"확인 대기":r.document.state==="retired"?"사용 중지":"확인 완료"} · {r.document.basis}</p>}<small>v{r.version} · {new Date(r.recorded_at).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })}</small><button disabled={!data.studio.canWrite} onClick={()=>{setChosenLink(r);setEditor(true);}}>관계 확인·수정</button><details><summary>이전 버전</summary>{data.studio.history.filter(h=>h.key===r.key).map(h=><p key={h.version}>v{h.version} · {h.document.kind==="link"?h.document.state:""} · {h.document.kind==="link"?h.document.basis:""} · {data.staff.find(p=>p.id===h.actor_id)?.display_name??"기록 담당자"}</p>)}</details></article>)}</details>
-  </section>;
-}
-function LinkEditor({data,from,row,onClose}:{data:AcademyKnowledgeData;from:string;row?:StudioRow;onClose:()=>void}) {
+/** 근거 있는 참고 관계 편집 — 지식그래프 탭(graph-tab.tsx)이 연다. */
+export function LinkEditor({data,from,row,onClose}:{data:AcademyKnowledgeData;from:string;row?:StudioRow;onClose:()=>void}) {
   const [key]=useState(()=>row?.key??`link:${crypto.randomUUID()}`),[doc,setDoc]=useState<Extract<StudioDocument,{kind:"link"}>>(row?.document.kind==="link"?row.document:{kind:"link",from,to:"",label:"참고 관계",basis:"",date:data.today,state:"pending"});
   const [filter,setFilter]=useState(""),{save,busy,message}=useSave(data);
   const options=data.graph.nodes.filter(n=>`${n.label} ${n.id}`.includes(filter)).slice(0,100);

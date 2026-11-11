@@ -187,6 +187,11 @@ export const SHEET_DICT = {
   "menu.item.timetable": { ko: "시간표", en: "Timetable" },
   "menu.item.exams": { ko: "성적관리", en: "Grades" },
   "menu.item.consultations": { ko: "학생상담", en: "Student counseling" },
+  // 신규생 관리 · 업무 작성센터 · 조직·OKR(2026-11-11 입구) — 화면이 한국어뿐이라 영어 화면의 '내 메뉴'에는 서지 않는다
+  // (`teacher-navigation.ts` KOREAN_ONLY_HREFS). 한국어 이름은 권한 표·관리자 메뉴와 같은 말이다.
+  "menu.item.newcomers": { ko: "신규생 관리", en: "New student care" },
+  "menu.item.work_records": { ko: "업무 작성센터", en: "Work records" },
+  "menu.item.okr": { ko: "조직·OKR", en: "Organization & OKR" },
   "menu.item.textbook_requests": { ko: "교재 요청", en: "Textbook requests" },
   "menu.item.expense_requests": { ko: "지출결의서", en: "Expense request" },
   // 🔴 ECS 월간 보기의 `달력`(face.cal)과 **다른 것**이다 — 이쪽은 학원 공용 일정 탭이라 영어도 갈라 적는다.

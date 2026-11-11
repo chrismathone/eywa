@@ -6,6 +6,10 @@ import { AXES, FACTORS, FACTOR_MODEL, analyzeFactors, factorGraph, factorScore, 
 import type { FactorWorkspace as Data } from "../server/factor-query";
 import { saveContributionFactor } from "../server/factor-actions";
 import styles from "./factor-workspace.module.css";
+import { PageHeader } from "@/components/page-header";
+import { Toolbar } from "@/components/toolbar";
+import { Button } from "@/components/ui/button";
+import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 
 const number=(n:number)=>n.toLocaleString("ko-KR",{maximumFractionDigits:1});
 const stateName={measured:"확인됨",partial:"확인 필요",missing:"미측정",na:"해당 없음"};
@@ -20,16 +24,17 @@ export function FactorWorkspace({data}:{data:Data}) {
     const blob=new Blob([JSON.stringify(factorGraph(data.student.id,data.month,data.observations),null,2)],{type:"application/json"});
     const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`student-factors-${data.student.id}-${data.month}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
-  return <main className={styles.root} aria-busy={pending}>
-    <header className={styles.hero}>
-      <div><Link href={`/student-contribution/${data.student.id}`} className={styles.back}>← 로열티 점수·상위 %</Link>
-        <p className={styles.eyebrow}>STUDENT INSIGHT · 42 FACTORS</p><h1>{data.student.name}의 로열티 정밀분석</h1>
-        <p>수익부터 관계·지원까지, 기록의 근거를 따라 학생을 이해합니다.</p></div>
-      <form onSubmit={e=>{e.preventDefault();start(()=>router.push(`?month=${month}${typeof window!=="undefined"&&new URLSearchParams(window.location.search).has("embed")?"&embed=1":""}`));}}>
-        <label htmlFor="factor-month">분석 월</label><div><input id="factor-month" type="month" required min="2000-01" max={data.today.slice(0,7)} value={month} onChange={e=>setMonth(e.target.value)} /><button disabled={pending}>조회</button></div>
-        <small>기준일 {data.asOf} · {data.month===data.today.slice(0,7)?"진행 중인 월":"현재 확인된 기록으로 재구성"}</small>
+  return <div className="space-y-5" aria-busy={pending}>
+    {/* 창·모바일 접힌 머리글은 설명만 남기고 제목을 접는다 — 학생 이름이 거기서 사라지지 않게 짧은 라벨을 따로 준다. */}
+    <PageHeader title={`${data.student.name}의 로열티 정밀분석`} description="수익부터 관계·지원까지, 기록의 근거를 따라 학생을 이해합니다." embedLabel={`${data.student.name} · 로열티 정밀분석`}/>
+    <Toolbar>
+      <Link href={`/student-contribution/${data.student.id}`} className="inline-flex items-center gap-1.5 text-sm hover:underline">← 로열티 점수·상위 %</Link>
+      <form className="flex flex-wrap items-center gap-2" onSubmit={e=>{e.preventDefault();start(()=>router.push(`?month=${month}${typeof window!=="undefined"&&new URLSearchParams(window.location.search).has("embed")?"&embed=1":""}`));}}>
+        <label htmlFor="factor-month" className="text-sm font-medium">분석 월</label><input id="factor-month" type="month" required min="2000-01" max={data.today.slice(0,7)} value={month} onChange={e=>setMonth(e.target.value)} className={`border-border bg-card rounded-lg border px-2.5 ${CONTROL_H} ${CONTROL_LABEL}`} /><Button type="submit" variant="outline" disabled={pending}>조회</Button>
+        <span className="text-xs">기준일 {data.asOf} · {data.month===data.today.slice(0,7)?"진행 중인 월":"현재 확인된 기록으로 재구성"}</span>
       </form>
-    </header>
+    </Toolbar>
+    <div className={styles.root}>
     {data.warnings.map(w=><p key={w} role="alert" className={styles.warning}>{w}</p>)}
     {message&&<p role="status" className={styles.notice}>{message}</p>}
     <section className={styles.summary} aria-label="정밀분석 요약">
@@ -76,7 +81,8 @@ export function FactorWorkspace({data}:{data:Data}) {
         </article>;
       })}
     </section>
-  </main>;
+    </div>
+  </div>;
 }
 
 function FactorEditor({factor:f,observation:o,data,onSaved}:{factor:Factor;observation:Observation;data:Data;onSaved:(message:string)=>void}) {

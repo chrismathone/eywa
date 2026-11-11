@@ -35,16 +35,16 @@ export function StudentVisuals({ data }: { data: Hub }) {
       <StatCard label="상담 기록" value={total("consultations")} unit="건" note="연결된 상담 이력" accent={palette[3]} icon="record" href={section("consultations")?.href}/>
     </div>
     <div className={s.chartGrid}>
-      <ChartCard wide title="학생의 활동 흐름" kicker="MONTHLY ACTIVITY" tag="최근 12개월" note="선택 월까지의 기록을 현재 배점으로 계산했습니다. 빈 구간은 미확인 자료이며, 점수는 퇴원 확률을 뜻하지 않습니다." href={`${base}?tab=contribution&month=${data.month}`}>
+      <ChartCard wide title="학생의 활동 흐름" tag="최근 12개월" note="선택 월까지의 기록을 현재 배점으로 계산했습니다. 빈 구간은 미확인 자료이며, 점수는 퇴원 확률을 뜻하지 않습니다." href={`${base}?tab=contribution&month=${data.month}`}>
         <SeriesChart points={points} series={[{ label: "운영 기여", color: palette[0] }, { label: "학습·참여", color: palette[1] }]}/>
       </ChartCard>
-      <ChartCard title="활동 점수 구성" kicker="ACTIVITY MIX" tag={data.month} note={current?.partial ? "확인된 일부 실적의 점수 비중입니다." : "운영 기여·학습 참여 점수의 구성입니다."}>
+      <ChartCard title="활동 점수 구성" tag={data.month} note={current?.partial ? "확인된 일부 실적의 점수 비중입니다." : "운영 기여·학습 참여 점수의 구성입니다."}>
         <DonutChart data={current ? [{ label: "운영 기여", value: current.operations }, { label: "학습·참여", value: current.participation }] : []} unit="점" label="활동 점수"/>
       </ChartCard>
-      <ChartCard wide title="학생에게 연결된 기록" kicker="STUDENT RECORDS" tag="원본별 건수" note="각 원본의 조회 범위가 다릅니다. 월간 실적 비교가 아닌, 학생에게 연결된 기록의 규모입니다.">
+      <ChartCard wide title="학생에게 연결된 기록" tag="원본별 건수" note="각 원본의 조회 범위가 다릅니다. 월간 실적 비교가 아닌, 학생에게 연결된 기록의 규모입니다.">
         <RankBars data={records}/>
       </ChartCard>
-      <ChartCard title="자료 연결 현황" kicker="DATA COVERAGE" note="자료 영역의 연결 상태입니다. 학생의 성취도나 위험도를 나타내는 비율이 아닙니다." href="#student-hub-coverage">
+      <ChartCard title="자료 연결 현황" note="자료 영역의 연결 상태입니다. 학생의 성취도나 위험도를 나타내는 비율이 아닙니다." href="#student-hub-coverage">
         <DonutChart data={coverage} unit="개" label="자료 영역"/>
       </ChartCard>
     </div>

@@ -1,5 +1,5 @@
 import { drawBoard, type DrawClasses } from "./draw";
-import { netRootId, type NetBoard, type NetCallbacks, type NetCam, type NetInput, type NetSize, type NetViewMode } from "./graph";
+import { netCenterOf, type NetBoard, type NetCallbacks, type NetCam, type NetInput, type NetSize, type NetViewMode } from "./graph";
 import { netFitView, netLayout } from "./layout";
 import { drawFocus, revealRecord } from "./node-actions";
 import { animateView, keepInView } from "./camera";
@@ -48,7 +48,7 @@ export class NetEngine {
   }
 
   get centerId(): string {
-    return netRootId(this.p.input.model.center);
+    return netCenterOf(this.p.input).id;
   }
   measure = (): NetSize => ({ w: this.dom.svg.clientWidth, h: this.dom.svg.clientHeight });
   frozen = (): boolean => performance.now() < this.frozenUntil;
@@ -157,7 +157,7 @@ export class NetEngine {
     const prev = this.p;
     this.p = next;
     if (this.built !== next.input && this.board && !this.morph) {
-      if (netRootId(prev.input.model.center) !== this.centerId) return this.start(null);
+      if (netCenterOf(prev.input).id !== this.centerId) return this.start(null);
       this.rebuild();
     }
     if (next.view !== this.view) this.setView(next.view);

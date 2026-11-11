@@ -16,6 +16,16 @@
 
 원장 *"주민번호 앞자리 6개 및 뒷자리 1개만 보내. 나머진 됐고"* — s2_0031 가림 칸 표(`assistant_private.masked_columns`)에 두 줄: `academy_documents.form_data`(이력서 `personal.residentId` + 서식 어디든 `######-#######` 꼴) · `payslips.print_payload`(`teacher.residentRegNo` + 같은 꼴) → `891003-1******`. 보기를 바로 다시 만든다. 가림식은 pg_catalog 함수만(실행 계획 검사). 운영 전수 확인: 주민번호 꼴 = 이력서 47건뿐(다른 표의 13자리 일치는 해시·id · 명세서 지표의 긴 소수). 시험 거래: 보기로 본 이력서 = `######-#******` · 남은 꼴 0 · 실행 계획 속 다른 스키마 함수 = `bound_tenant`뿐. 되돌리기 = `scripts/_oneoff/revert-s2_0067-assistant-mask-resident-no.sql`(원장 승인 없이 돌리지 말 것).
 
+## 2026-11-11 신규생 과목 기본 담당 편집 — 변경 감사 트리거 (s2_0066 · ✅ 운영 적용 2026-11-11 — 앱보다 먼저 · 직결(node · 한 거래) · 시험 거래(ROLLBACK) 뒤 · 사후 확인 통과)
+
+신규생 관리 화면에 '기본 담당 설정' 대화상자를 만들면서(결정 = [`docs/decisions/enrollment-journey.md`](../../docs/decisions/enrollment-journey.md) '2026-11-11 결정'), 과목 기본 담당 표의 변경이 기록 없이 일어나지 않게 **표 전용 감사 트리거**를 더했다. 추가만(새 함수 하나 · 새 트리거 하나) — 표의 값은 건드리지 않는다.
+
+- `s2_0066_newcomer_default_manager_audit.sql` — `audit_onboarding_default_manager()` + `student_onboarding_manager_defaults`의 AFTER INSERT OR UPDATE 트리거 `onboarding_default_manager_audit`. 담당자가 실제로 바뀐 쓰기(새 줄 · `manager_id`가 달라진 고침)마다 같은 거래에서 `audit_logs`에 한 줄(`newcomer_default_manager_update` · 실행자 = `updated_by` · 대상 = 그때의 과목 이름(학원 설정의 과목 목록에서 읽는다 · 못 찾으면 과목 키) · 상세 = 과목 키 · 그때의 과목 이름 · 이전/새 담당자의 id와 그때의 이름). 담당자가 그대로인 고침은 남기지 않는다 · 지우기는 보지 않는다(앱에 지우는 길이 없다). 대상 칸에 이름을 남기는 까닭 = 그 칸이 슬랙 알림에 그대로 나가고, 과목을 지운 뒤에는 화면이 이름을 되찾지 못한다.
+- 호출자 권한(security definer 아님 — 이 표에 쓰는 service_role·운영 직결은 `users`·`tenant_settings`를 읽고 `audit_logs`에 쓸 수 있다) · `search_path = ''` · PUBLIC·anon·authenticated 실행권 없음(새 함수라 기존 호출자가 없다). `create or replace` + `drop trigger if exists`라 다시 실행해도 같다.
+- 🔴 **앱보다 먼저**(#95) — 앱의 저장 액션은 따로 `logAction`을 부르지 않는다(기록은 이 트리거 하나). 먼저 적용해도 옛 앱에는 이 표를 쓰는 화면이 없어 달라지는 것이 없다.
+- 되돌리기 = `scripts/_oneoff/revert-s2_0066-newcomer-default-manager-audit.sql`(트리거·함수만 지운다 — 남은 감사로그와 표의 값은 그대로 · 되돌린 동안의 변경은 기록되지 않는다).
+- **적용 기록(2026-11-11)**: ① 시험 거래(파일 적용 + 기능 시험 → ROLLBACK) — service_role로 수학 줄 교체 → 감사 줄 1(실행자 = 저장한 직원 · 대상 '수학' · 이전 → 새 담당) · 담당자가 그대로인 고침 → 줄 없음 · 버릴 과목 키로 새 줄 → 줄 1(대상 = 키 그대로 · 이전 담당 없음) · 검증 트리거가 막는 담당자(강사) → 23514 거절 · 줄 없음 · 운영 직결로 EiE 줄 고침 → 줄 1(대상 'EiE') · 과목 목록을 저장한 적 없는 다른 지점의 새 줄 → 줄 1(대상 = 키) · 슬랙 인박스 0건. 되돌린 뒤 기본 담당 세 줄(행 md5)·감사 줄 0건·트리거·함수 없음 확인. ② 적용(한 거래) — 트리거 `onboarding_default_manager_audit`(AFTER INSERT OR UPDATE · 켜짐) · 함수는 호출자 권한·`search_path=""` · 실행권 anon ✗ · authenticated ✗ · service_role ✓ · 연동 역할 ✗. ③ 적용된 트리거로 같은 기능 시험을 한 번 더(ROLLBACK) — 결과 같음. 끝 상태: 기본 담당 세 줄은 작업 전 그대로(수학 · 영어 · EiE — 행 md5 같음) · 이 액션의 감사 줄 0건.
+
 ## 2026-11-11 이름 맞춤 — `s2_0047_marketing_archive_sources.sql` (옛 이름 `20261110125726_marketing_archive_sources.sql` · ✅ 운영 적용돼 있음 — 다시 돌리지 않는다)
 
 홍보·마케팅 기록 보관(`marketing_archive_events` · `marketing_source_inbox` · `marketing_archive_sources` · `marketing_archive_students` · `marketing_archive_audit` + 저장 함수)의 SQL이 CLI 타임스탬프 이름으로 들어와 폴더 규칙 가드와 SQL을 읽는 가드 전부가 멈춰 있었다(`규칙 밖 SQL 파일이 있습니다`). **이름만** 시즌2 다음 빈 번호로 바꿨다(내용 한 글자도 그대로 · [`docs/sql-season2.md`](../../docs/sql-season2.md) §3-A). 운영 DB에는 2026-11-10에 옛 이름으로 이미 적용돼 있다(2026-11-11 표 5개 존재 확인).
@@ -37,7 +47,7 @@ aywa-next(태그 `archive/aywa-next-375d27d`)의 실제 기능을 옮기며 만�
 aywa-next 인계본(태그 `archive/aywa-next-375d27d`)의 표를 옮겼다 — 전부 **추가만**(기존 표의 데이터는 건드리지 않는다) · 서버 전용 표(RLS 켜짐 · 정책 0개 · anon/authenticated 권한 없음 — s2_0028과 같은 규약). 결정 본문 = [`docs/decisions/enrollment-journey.md`](../../docs/decisions/enrollment-journey.md).
 
 - `s2_0061_newcomer_followup.sql` — `student_onboarding_feedback`(담임 적응 피드백 · 관리자 확인 · 후속 조치) + `student_onboarding_followup_events`(변경 이력) + 검증·이력 트리거. 인계본의 두 파일(followup · feedback_response)을 하나로. 학생 단위 옛 담당 표는 옮기지 않았다.
-- `s2_0062_newcomer_subject_managers.sql` — `student_onboarding_subject_assignments`(학생·과목별 담당) + `student_onboarding_manager_defaults`(과목 기본 담당 — 고치는 화면이 아직 없다 · 운영 DB의 3행은 2026-11-11 신입생 90일 관리 복구 때 직접 넣은 것).
+- `s2_0062_newcomer_subject_managers.sql` — `student_onboarding_subject_assignments`(학생·과목별 담당) + `student_onboarding_manager_defaults`(과목 기본 담당 — 운영 DB의 3행은 2026-11-11 신입생 90일 관리 복구 때 직접 넣은 것 · 같은 날 고치는 화면과 감사 트리거 s2_0066이 생겼다).
 - `s2_0063_enrollment_journey.sql` — `enrollment_journey_records` + `enrollment_journey_revisions` + `save_enrollment_journey`(서버 전용 · version 비교).
 - `s2_0064_enrollment_journey_delete_guard.sql` — 상담 행 BEFORE DELETE 트리거(집계 제외가 아닌 여정 기록이 걸린 상담은 삭제 불가) + 서버 전용 `merge_enrollment_consultations_with_journey`(상담 잠금 → 기록 이동 → 종전 병합 함수). 🔴 **앱보다 먼저** — 새 앱의 상담 병합은 이 함수만 부른다(없으면 병합이 '준비하는 중' 안내로 멈춘다 · #95). 적용 뒤 확인: 트리거 1 · 함수 2(화면 계정 실행권 없음) · 적용본을 거래 안에서 다시 시험(삭제 차단 · 옛 병합 함수 차단 · 병합 시 기록 이동·이력 보존·활동 기록의 요청자) 후 ROLLBACK · 여정 기록 0건 · 상담 2,427건 그대로.
 - `s2_0065_staff_delete_blockers_journey_owner.sql` — 직원 삭제 차단 검사(`staff_delete_blockers` · s2_0058)를 다시 정의: 콜&상담 여정 기록의 담당자(문서 속 `ownerId` · FK 없음)도 센다(✅ 운영 적용 2026-11-11 · 시험 거래 뒤 · 본문은 s2_0058 그대로 + 한 갈래 · 읽기만). 아직 안 세는 문서 속 담당자 = 홍보 행사(`marketing_archive_events.document.ownerId`) — 그 기능의 저장 규칙이 정해지면 다음 재정의 때 가드 목록과 함께 더한다. 되돌리기 = `scripts/_oneoff/revert-s2_0065-…`(s2_0058의 정의로 다시 정의).

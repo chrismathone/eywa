@@ -1,7 +1,6 @@
 import "server-only";
-import { getCurrentUser } from "@/lib/auth/current-user";
-import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { getNewcomers } from "@/features/newcomers/server/queries";
+import { readsAllNewcomers } from "@/features/newcomers/server/scope";
 import { ONBOARDING_ITEMS, daysLeftOf, dueDateOf, newcomerWindowStart, statusOf, type OnboardingItemStatus } from "@/features/newcomers/onboarding-items";
 import { createClient } from "@/lib/supabase/server";
 import { isModuleEnabled } from "@/lib/modules";
@@ -19,10 +18,11 @@ const SEVERITY: Record<OnboardingItemStatus, number> = { overdue: 5, due: 4, upc
 const md = (ymd: string) => `${ymd.slice(5, 7)}.${ymd.slice(8, 10)}`;
 
 export async function loadCareChecks(studentId: string, today: string): Promise<ExploreCareChecks> {
-  const user = await getCurrentUser();
   // 신규생 관리가 꺼진 지점이면 점검 칸 자체가 없다(권한 없음 문장도 내지 않는다 — 기능 스위치 규약).
   if (!isModuleEnabled((await getTenantSettings()).modules.disabled, "newcomers")) return { state: "off", enrolledOn: null, items: [] };
-  if (!user || !(await canAccessTenant(user.systemRole, "newcomers"))) return { state: "denied", enrolledOn: null, items: [] };
+  // 🔴 지점 전체로 읽는 계정만('전체' · '읽기') — 이 점검은 그 원생의 **모든 과목 줄**을 접어 보인다. 담당 범위(강사 '담당')는 신규생 관리 화면에서
+  //    자기가 담임인 과목 줄만 보므로 여기서 열면 다른 과목의 점검 상태까지 보인다(판정 한 곳 = newcomers/server/scope.ts · 2026-11-11).
+  if (!(await readsAllNewcomers())) return { state: "denied", enrolledOn: null, items: [] };
   // 신규생 관리 대상 = 등록일이 창(90일) 안인 원생(`loadNewcomers`와 같은 경계) — 창 밖이면 지점 전체 신규생 조회를 건너뛴다(전환마다 읽던 비용).
   const self = await (await createClient()).from("students").select("enrolled_at").eq("id", studentId).maybeSingle();
   const enrolledAt = self.data?.enrolled_at ? String(self.data.enrolled_at).slice(0, 10) : null;

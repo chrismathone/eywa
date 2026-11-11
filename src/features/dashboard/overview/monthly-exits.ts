@@ -7,6 +7,15 @@ import type { ProgramSubject } from "@/features/students/enrollment/program";
 
 type Detail = SubjectEndedRow["endedDetail"][number];
 
+/**
+ * 이미 퇴원 줄로 선 것 — `학생|과목`(그 과목만 건너뛴다) 또는 학생 id(과목을 모르는 퇴원 줄 — 그 학생 전부를 건너뛴다).
+ * 🔴 학생 단위로 건너뛰면, 수학을 먼저 끊고(수강종료) 같은 달에 영어까지 퇴원한 학생의 수학 줄이 운영실에서만 사라진다(퇴원관리와 숫자가
+ *    갈린다 — 2026-11-11 퇴원생의 먼저 끊은 과목을 수강종료로 세면서 드러남).
+ */
+export function withdrawnKeysOf(rows: readonly { id: string; subject?: string | null }[]): Set<string> {
+  return new Set(rows.map((r) => (r.subject ? `${r.id}|${r.subject}` : r.id)));
+}
+
 /** 수강종료 줄들을 KPI 줄로 — 숫자 쪽(`includeSubjectEnds`)과 '앞 달로 센' 쪽(`carriedSubjectEnds`)이 같은 모양으로 만든다. */
 function subjectEndRows(
   subjectEnded: readonly SubjectEndedRow[],
@@ -18,7 +27,7 @@ function subjectEndRows(
   const out: { row: WithdrawalKpiRow; countAt: string | null }[] = [];
   for (const s of subjectEnded) {
     if (skipIds.has(s.id)) continue;
-    const ended = s.endedDetail.filter(d => !d.isTransferred && pick(d))
+    const ended = s.endedDetail.filter(d => !d.isTransferred && !skipIds.has(`${s.id}|${d.subject}`) && pick(d))
       .sort((a, b) => (b.endedAt ?? "").localeCompare(a.endedAt ?? "") || a.subject.localeCompare(b.subject));
     for (const detail of ended) {
       if (!detail.endedAt) continue;
@@ -35,7 +44,7 @@ function subjectEndRows(
 const byDateDesc = <T extends WithdrawalKpiRow>(a: T, b: T) =>
   b.withdrawnAt.localeCompare(a.withdrawnAt) || a.name.localeCompare(b.name, "ko") || (a.eventKey ?? a.id).localeCompare(b.eventKey ?? b.id);
 
-/** 과목 전체 종료만 더하며 반이동은 제외한다. 퇴원한 학생의 수강종료는 별도로 중복 계산하지 않는다. */
+/** 과목 전체 종료만 더하며 반이동은 제외한다. 퇴원 줄이 이미 센 학생·과목은 다시 세지 않는다(다른 과목은 센다). */
 export function includeSubjectEnds(
   withdrawn: OverviewData["withdrawals"]["rows"],
   subjectEnded: readonly SubjectEndedRow[],
@@ -43,7 +52,7 @@ export function includeSubjectEnds(
   subjects: readonly ProgramSubject[],
   schoolGrade: (school: string | null, grade: string | null) => string | null,
 ): OverviewData["withdrawals"]["rows"] {
-  const withdrawnIds = new Set(withdrawn.map(row => row.id));
+  const withdrawnIds = withdrawnKeysOf(withdrawn);
   // 달 판정 = 그 과목 수업료를 낸 마지막 달(`countAt`, 원장 2026-10-29) · 보이는 날짜는 종료일 그대로.
   const extra = subjectEndRows(subjectEnded, withdrawnIds,
     d => inWithdrawalWindow({ withdrawnAt: d.countAt ?? d.endedAt, systemBulk: false }, window.from, window.to), subjects, schoolGrade)
@@ -53,7 +62,7 @@ export function includeSubjectEnds(
 
 /**
  * 창 안에 **처리**했지만 앞 달로 센 수강종료(원장 2026-11-03 — 숫자엔 들지 않고 팝업이 따로 밝힌다). 판정은 `countedEarlier`(퇴원관리와 같은 함수).
- * `withdrawnIds` = 퇴원 쪽(센 줄·앞 달로 센 줄 모두)에 이미 선 학생 — 숫자 쪽과 같은 규칙으로 겹쳐 세지 않는다.
+ * `withdrawnIds` = 퇴원 쪽(센 줄·앞 달로 센 줄 모두)에 이미 선 `학생|과목`(또는 과목 모르는 학생 id — `withdrawnKeysOf`) — 숫자 쪽과 같은 규칙으로 겹쳐 세지 않는다.
  */
 export function carriedSubjectEnds(
   withdrawnIds: ReadonlySet<string>,
@@ -99,7 +108,7 @@ export function monthWithdrawalRows(
     inWithdrawalWindow({ withdrawnAt: row.exitDate, systemBulk: false }, win.from, win.to),
   );
   const carriedWithdrawn = withdrawn.filter((row) => countedEarlier({ date: row.withdrawnAt, countDate: row.exitDate }, win.from, win.to));
-  const withdrawnIds = new Set([...counted, ...carriedWithdrawn].map((row) => row.id));
+  const withdrawnIds = withdrawnKeysOf([...counted, ...carriedWithdrawn].flatMap(toRows));
   return {
     rows: includeSubjectEnds(counted.flatMap(toRows), subjectEnded, win, subjects, schoolGrade),
     carried: [

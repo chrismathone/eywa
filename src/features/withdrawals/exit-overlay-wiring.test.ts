@@ -34,9 +34,10 @@ describe("시간표 X 겹침 배선", () => {
     expect(SERVER).toContain("withdrawalMonthWindow(m, today)");
   });
 
-  it("🔴 담당 선생님 = 강사평가 퇴원율과 같은 재료 · 같은 담임 판정 · 같은 계산(새로 판정하지 않는다)", () => {
+  it("🔴 재료 = 강사평가 퇴원율과 같은 조회 · 보이는 담당 = 그만둘 때 다니던 반의 그날 담임(퇴원생 관리 차트 기준 2026-11-11)", () => {
     // 재료 — 강사평가 스냅샷과 같은 조회 정의(churn-source.ts 한 곳을 두 쪽이 쓴다).
-    expect(JUDGE).toContain("loadChurnSource(createAdminClient(), tenantId, range)");
+    expect(JUDGE).toContain("loadChurnSource(admin, tenantId, range)");
+    expect(SERVER).toContain("judge.homeroomOf(e.studentId, subject, e.row.date)");
     expect(SERVER).toContain("loadExitTeacherJudge(tenantId, { from: monthRange(shiftMonth(anchor, -7)).from, end: monthRange(thisMonth).to }, { today, thisMonth })");
     expect(CHURN_SOURCE).toContain("export async function loadChurnSource(");
     for (const src of [SNAPSHOT, CHURN_SOURCE]) {
@@ -95,7 +96,8 @@ describe("시간표 X 겹침 배선", () => {
     // 긋는 사유·수강종료 셈 = 강사평가와 같은 원장 설정 · 퇴원율이 셌는지는 선생님 id로.
     expect(SERVER).toContain("rules: source.options,");
     expect(SERVER).toContain("rulesNote: exclusionNote(source.options),");
-    expect(SERVER).toContain("counted: rowTeacherIds[i]!.length > 0");
+    // '수강종료는 세지 않음'은 퇴원율이 셌는지로(보이는 담당과 따로).
+    expect(SERVER).toContain("counted: countedIds[i]!.length > 0");
   });
 
   it("🔴 '데이터 정리 일괄 퇴원'은 줄에서 뺀다 — 일괄 퇴원 액션이 적는 글과 판정이 한 상수", () => {

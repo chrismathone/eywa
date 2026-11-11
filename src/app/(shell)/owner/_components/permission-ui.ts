@@ -1,5 +1,5 @@
 import { DASHBOARD_ROLE_LABELS } from "@/features/dashboard/layout/roles";
-import { SHUTTLE_ADMIN_ROLES, type Access, type MenuKey, type SystemRole } from "@/lib/permissions";
+import { isStaffRecordLocked, SHUTTLE_ADMIN_ROLES, type Access, type MenuKey, type SystemRole } from "@/lib/permissions";
 
 /** 역할·권한 면의 세 구획(역할 표 · 강사 내 메뉴 · 개인별 권한)이 함께 쓰는 이름과 색. */
 export const ROLE_LABEL: Record<SystemRole, string> = DASHBOARD_ROLE_LABELS;
@@ -23,6 +23,8 @@ export function isCellLocked(menu: MenuKey, role: SystemRole): boolean {
   if (menu === "assistant" && role === "teacher") return true;
   // 셔틀 관리자 화면 — 원장·관리자 칸만(학부모 계정 DB 정책 0320a와 같은 두 역할 · isPermissionLocked와 같은 규칙).
   if (menu === "shuttle_admin" && !(SHUTTLE_ADMIN_ROLES as readonly SystemRole[]).includes(role)) return true;
+  // 조직·OKR · 업무 작성센터 — 직원 역할 여섯만 쓰는 화면이라 열람·아르바이트 칸은 고정(isPermissionLocked와 같은 함수).
+  if (isStaffRecordLocked(menu, role)) return true;
   if (role === "master" && (menu === "owner" || menu === "admin" || menu === "dashboard")) return true;
   return false;
 }

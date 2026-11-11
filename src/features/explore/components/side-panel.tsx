@@ -243,7 +243,7 @@ function CareBlocks({ care }: { care: ExploreCarePanel }) {
             {checks.state === "notNewcomer"
               ? "등록 90일이 지났거나 신규생 명단에 없는 원생입니다."
               : checks.state === "denied"
-                ? "신규생 관리 권한이 있어야 점검을 볼 수 있습니다."
+                ? "신규생 관리를 지점 전체로 보는 계정에게만 보이는 점검입니다."
                 : checks.state === "unavailable"
                   ? "점검 기록 표가 아직 연결되지 않았습니다."
                   : "점검을 불러오지 못했습니다."}

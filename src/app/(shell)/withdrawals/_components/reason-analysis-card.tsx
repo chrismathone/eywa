@@ -24,7 +24,8 @@ export function ReasonAnalysisCard({ noun, base, unspecified, bars, cleanup, det
 }) {
   const max = Math.max(1, ...bars.map((b) => b.count));
   return (
-    <section data-withdrawal-reasons className="bg-card shadow-card overflow-hidden rounded-2xl">
+    // 세로 묶음 — 명단과 같은 높이로 늘어나면 '자동 요약'이 바닥에 붙는다(list-layout.module.css · 원장 2026-11-11 "좌우 높이 맞춰").
+    <section data-withdrawal-reasons className="bg-card shadow-card flex flex-col overflow-hidden rounded-2xl">
       <header className="border-line border-b px-5 py-4">
         <p className="micro text-amber">사유 분석</p>
         <h2 className="text-foreground mt-1 text-base font-bold">상위 {noun} 사유</h2>
@@ -55,7 +56,7 @@ export function ReasonAnalysisCard({ noun, base, unspecified, bars, cleanup, det
         ) : null}
       </div>
       {/* 규칙 기반 자동 요약 (LLM 아님) — sparkle(AI 마커) 대신 pulse로 라이브 AI와 구분 */}
-      <div className="border-line bg-amber-soft border-t px-5 py-4">
+      <div className="border-line bg-amber-soft mt-auto border-t px-5 py-4">
         <div className="flex items-start gap-2.5">
           <span className="bg-amber/15 text-amber flex size-7 shrink-0 items-center justify-center rounded-md">
             <AlertCircle size={13} strokeWidth={1.8} />

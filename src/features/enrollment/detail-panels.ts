@@ -33,6 +33,22 @@ export function detailPanelsFor(card: StageInput): DetailPanels {
 }
 
 /**
+ * 브리프 카드(또는 수정 화면의 펼치기 줄)를 **그리는가** — 상세 화면과 수정 화면이 같은 이 판정을 쓴다.
+ * 만들어 둔 것·만드는 중인 것은 어느 칸에서든 남고, 아직 안 만든 건은 '상담 전'에만 권유한다.
+ * ⚠️ 지난 건의 **실패 상태만 남은 카드는 안 그린다**(`failed` + 브리프 없음 + past) — 다시 만들 수 없는
+ *    문서의 실패 안내와 "만들어 드립니다" 소개문만 남아, 할 수 없는 일을 권하는 꼴이 된다.
+ *    생성 중(`generating`)은 곧 결과가 생기므로 그대로 그린다.
+ */
+export function showBriefCard(input: {
+  hasBrief: boolean;
+  status: "generating" | "failed" | null;
+  /** `detailPanelsFor(...).pastBrief` */
+  past: boolean;
+}): boolean {
+  return input.hasBrief || input.status === "generating" || !input.past;
+}
+
+/**
  * '배정된 반' 카드가 그릴 네 갈래.
  *
  * 🔴 **`error`와 `empty`는 절대 뭉치지 않는다**(원장 지시 *"조회 실패와 '배정 없음'을 구분"*).

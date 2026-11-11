@@ -12,8 +12,9 @@ import { netFitView } from "./layout";
  * 모듈 변수 — 문서를 새로 열면 없다(SSR·첫 로드와 어긋나지 않는다). 클라이언트에서만 부른다.
  */
 
-export type NetLeaveTarget = { kind: ExploreKind; id: string; sector?: string };
-export const leaveKey = (n: NetLeaveTarget) => (n.sector ? `${n.kind}:${n.id}:${n.sector}` : `${n.kind}:${n.id}`);
+/** 다음 중심 — 연결 탐색 대상(`kind:id[:영역]`) 또는 이미 짠 판의 가운데 점 id 그대로(지식그래프 · `NetPrebuiltInput`). */
+export type NetLeaveTarget = { kind: ExploreKind; id: string; sector?: string } | { centerId: string };
+export const leaveKey = (n: NetLeaveTarget) => ("centerId" in n ? n.centerId : n.sector ? `${n.kind}:${n.id}:${n.sector}` : `${n.kind}:${n.id}`);
 
 /** 지금 떠 있는 판(하나) — 떠날 때 모습을 꺼내 준다. */
 export type LiveNet = {
@@ -69,8 +70,8 @@ export function prepareNetworkLeave(next: NetLeaveTarget, opts: { dir: "in" | "o
   const size = l.size();
   let pivot: string | null = null;
   if (opts.dir === "in") {
-    const base = `${next.kind}:${next.id}`;
-    const own = next.sector && (l.centerId === base || l.centerId.startsWith(`${base}:`)) ? `hub:${next.sector}` : null;
+    const base = "centerId" in next ? null : `${next.kind}:${next.id}`;
+    const own = base && "sector" in next && next.sector && (l.centerId === base || l.centerId.startsWith(`${base}:`)) ? `hub:${next.sector}` : null;
     pivot = [opts.pivotId, l.lastOpened(), to, own].find((id): id is string => !!id && !!board.pos[id]) ?? null;
     saved.delete(l.centerId);
     saved.set(l.centerId, { board: copyBoard(board), pivotA: pivot, pivotB: to, size, toggled: l.toggled() });

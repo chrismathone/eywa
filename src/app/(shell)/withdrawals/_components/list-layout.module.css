@@ -17,7 +17,12 @@
 
 @media (min-width: 1024px) {
   .layout { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
-  /* 옆 '사유 분석'은 명단 높이(창에 맞춘 높이)에서 멈추고 카드 안에서 스크롤한다 — 길어진 사유 카드가 명단을 늘려 아래가 비지 않게
-     (원장 2026-10-15). 한 열(<1024)에선 사유 카드가 명단 아래라 자르지 않는다. */
-  .layout > [data-withdrawal-reasons] { max-height: var(--withdrawal-list-height, none); overflow-y: auto; }
+  /* 옆 '사유 분석'은 명단 높이(창에 맞춘 높이)와 **같은 높이**다 — 길면 카드 안에서 스크롤하고(원장 2026-10-15 · 길어진 사유 카드가
+     명단을 늘려 아래가 비지 않게), 짧으면 명단 높이까지 늘어나 '자동 요약'이 바닥에 붙는다(원장 2026-11-11 *"좌우 높이 맞춰"*).
+     높이를 못 정한 화면(아주 작은 창 — 변수 없음)은 내용 높이 그대로. 한 열(<1024)에선 사유 카드가 명단 아래라 자르지 않는다. */
+  .layout > [data-withdrawal-reasons] {
+    height: var(--withdrawal-list-height, auto);
+    max-height: var(--withdrawal-list-height, none);
+    overflow-y: auto;
+  }
 }

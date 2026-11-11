@@ -9,7 +9,8 @@
 .heading p, .paper > p { color: var(--foreground); font-size: 14px; line-height: 1.6; margin: 0; }
 .eyebrow { color: var(--foreground) !important; font-size: 12px !important; font-weight: 700; }
 
-.studio button, .button {
+/* 🔑 지식그래프 판(연결 탐색 네트워크)의 도구줄·범례(`[data-net-chrome]`)는 그 판의 모양 그대로 — 아래 버튼·입력 규칙을 받지 않는다(`:where`라 명시도는 그대로). */
+.studio button:where(:not([data-net-chrome] *)), .button {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
@@ -21,13 +22,13 @@
   display: inline-block;
   color: var(--ink);
 }
-.studio button:hover, .button:hover { background: color-mix(in srgb, var(--gold-bright) 6%, var(--card)); border-color: color-mix(in srgb, var(--gold-bright) 45%, var(--card)); }
-.studio button:disabled { color: var(--foreground); background: var(--bg-soft); cursor: not-allowed; opacity: .55; }
-.studio :is(button, a, input, select, textarea):focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
-.studio input, .studio select, .studio textarea { font: inherit; font-size: 14px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; background: #fff; color: var(--ink); min-width: 0; width: 100%; }
+.studio button:where(:not([data-net-chrome] *)):hover, .button:hover { background: color-mix(in srgb, var(--gold-bright) 6%, var(--card)); border-color: color-mix(in srgb, var(--gold-bright) 45%, var(--card)); }
+.studio button:where(:not([data-net-chrome] *)):disabled { color: var(--foreground); background: var(--bg-soft); cursor: not-allowed; opacity: .55; }
+.studio :is(button, a, input, select, textarea):where(:not([data-net-chrome] *)):focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+.studio input:where(:not([data-net-chrome] *)), .studio select, .studio textarea { font: inherit; font-size: 14px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; background: #fff; color: var(--ink); min-width: 0; width: 100%; }
 .studio textarea { min-height: 80px; resize: vertical; }
 .studio summary { cursor: pointer; }
-.studio small { line-height: 1.6; }
+.studio small:where(:not([data-net-chrome] *)) { line-height: 1.6; }
 
 .schemaLayout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 12px; }
 .directory { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0; }
@@ -65,29 +66,17 @@
 .history summary { font-weight: 700; }
 .history p { margin: 8px 0; overflow-wrap: anywhere; }
 
-.networkToolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font-size: 13px; color: var(--foreground); }
-.networkToolbar > div { display: flex; gap: 4px; }
-.networkToolbar button[aria-pressed="true"] { background: var(--primary); color: #fff; border-color: var(--primary); }
-.networkToolbar label, .networkLegend label { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-.networkToolbar input, .networkLegend input { width: 15px; height: 15px; accent-color: var(--primary); padding: 0; }
-.graphLayout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 12px; }
-.canvasWrap { background: #fff; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-.canvasStage { position: relative; height: clamp(480px, 68vh, 860px); min-width: 0; background: #fff; }
-.canvas { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
-.canvas:active { cursor: grabbing; }
-.graphTools { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; color: var(--foreground); font-size: 13px; border-bottom: 1px solid var(--line); }
-.graphTools > div { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
-.graphTools button { padding: 4px 9px; font-size: 13px; }
-.graphTools output { min-width: 40px; text-align: center; font-size: 13px; }
-.networkLegend { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 12px; border-top: 1px solid var(--line); color: var(--foreground); font-size: 12px; line-height: 1.7; }
-.networkLegend > div { display: flex; gap: 14px; color: var(--foreground); font-size: 13px; }
-.networkLegend small { margin-left: auto; }
-.hoverCard { position: absolute; bottom: 14px; left: 14px; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; pointer-events: none; max-width: calc(100% - 28px); }
-.hoverCard strong { font-size: 14px; color: var(--ink); overflow-wrap: anywhere; }
-.hoverCard span { font-size: 12px; color: var(--foreground); }
-.canvasExpanded { position: fixed; inset: 12px; z-index: 1000; display: flex; flex-direction: column; box-shadow: 0 0 0 24px rgba(241, 241, 237, .9); }
-.canvasExpanded .canvasStage { height: auto; min-height: 0; flex: 1; }
-.canvasExpanded .graphTools, .canvasExpanded .networkLegend { flex-shrink: 0; }
+/* 지식그래프 = [목록 | 판] + 오른쪽 칸(넓은 창) 또는 아래 칸. 판 높이 `--net-h`는 판(연결 탐색 `.wrap`)과 오른쪽 칸이 함께 읽는다. 넓게 보기 = 목록을 접고 판을 키운다. */
+.graphLayout { --net-h: clamp(520px, calc(68vh + 6rem), 960px); display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 12px; align-items: start; }
+.graphLayout[data-wide="true"] { --net-h: max(560px, calc(100dvh - 8rem)); grid-template-columns: minmax(0, 1fr); }
+.graphLayout[data-wide="true"] > .directory { display: none; }
+.netHost { min-width: 0; }
+.netHost > .note { margin-bottom: 0; }
+@media (min-width: 1500px) {
+  .graphLayout { grid-template-columns: 220px minmax(0, 1fr) 360px; }
+  .graphLayout[data-wide="true"] { grid-template-columns: minmax(0, 1fr) 360px; }
+  .graphLayout > .inspector { grid-column: auto; max-height: var(--net-h); overflow-y: auto; }
+}
 
 .inspector { grid-column: 1 / -1; padding: 14px 16px; border: 1px solid var(--line); background: #fff; border-radius: 10px; min-width: 0; }
 .inspector h3 { font-size: 18px; font-weight: 800; margin: 10px 0; }
@@ -119,7 +108,4 @@
   .schemaLayout, .graphLayout, .twoColumns, .formGrid { grid-template-columns: minmax(0, 1fr); }
   .directory .list { max-height: 190px; }
   .heading { align-items: flex-start; flex-direction: column; }
-  .canvasStage { height: 480px; }
-  .canvasExpanded { inset: 5px; }
-  .networkLegend small { margin-left: 0; }
 }

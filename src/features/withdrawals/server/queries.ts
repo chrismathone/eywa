@@ -245,7 +245,7 @@ export type SubjectEndedRow = {
   name: string;
   school: string | null;
   grade: string | null;
-  status: string; // enrolled | on_hold
+  status: string; // enrolled | on_hold | withdrawn(퇴원 전에 먼저 끊은 과목 — 2026-11-11)
   endedSubjects: string[]; // 종료된 과목 코드
   activeSubjects: string[]; // 아직 수강 중인 과목 코드
   lastEndedAt: string | null; // 종료 과목 중 가장 최근 end_date
@@ -279,7 +279,17 @@ export type SubjectEndedRow = {
 };
 
 type ClassBits = { subject?: string; class_name?: string | null; english_track?: string | null; is_special?: boolean | null };
-type StudentBits = { id: string; tenant_id: string; name: string; school: string | null; grade: string | null; status: string };
+type StudentBits = {
+  id: string; tenant_id: string; name: string; school: string | null; grade: string | null; status: string;
+  withdrawn_at?: string | null; notes?: string | null; withdrawal_metadata?: unknown;
+};
+/**
+ * 🔴 퇴원한 학생도 읽는다(원장 2026-11-11 *"과목 수강종료도 결국 수학과 퇴원이라는거잖아"*) — 한 과목을 먼저 끊고 나중에 전체 퇴원하면
+ * 먼저 끊은 과목이 퇴원 줄(그 무렵 끝난 과목만 — `withdrawalSubjects`)에도 수강종료 줄에도 없어 지난달 숫자가 나중에 줄었다
+ * (퇴원생 관리 차트 대조 2026-11-11 · 추이수 4/24 수학 종료 → 9/16 퇴원 등 11건).
+ */
+const STUDENT_COLUMNS = "id, tenant_id, name, school, grade, status, withdrawn_at, notes, withdrawal_metadata";
+const ENDED_STATUSES = ["enrolled", "on_hold", "withdrawn"];
 
 /**
  * `endedWithin`을 주면 **그 기간에 끝난 수강이 있는 학생만** 후보로 읽는다(시간표 X 겹침 — 석 달 창).
@@ -306,16 +316,15 @@ export async function getSubjectEndedStudents(opts?: {
 }): Promise<SubjectEndedRow[]> {
   const supabase = await createClient();
   const within = opts?.endedWithin;
+  // 퇴원생은 세는 창보다 늦게 퇴원한 학생만 — 먼저 끊은 과목은 퇴원일보다 앞이라, 창 전에 퇴원했으면 그 줄도 창 밖이다.
+  const withdrawnFloor = within?.from ?? opts?.countFrom ?? null;
   const students: StudentBits[] = within
     ? await loadEndedWithinStudents(supabase, within)
-    : // 재원/휴원 학생 전수 — .range() 페이지네이션으로 1000행 절단 방지(#54).
-      await fetchAllPaged<StudentBits>((from, to) =>
-        supabase
-          .from("students")
-          .select("id, tenant_id, name, school, grade, status")
-          .in("status", ["enrolled", "on_hold"])
-          .range(from, to),
-      );
+    : // 재원/휴원(+퇴원) 학생 전수 — .range() 페이지네이션으로 1000행 절단 방지(#54).
+      await fetchAllPaged<StudentBits>((from, to) => {
+        const q = supabase.from("students").select(STUDENT_COLUMNS).in("status", ENDED_STATUSES);
+        return (withdrawnFloor ? q.or(`status.neq.withdrawn,withdrawn_at.gte.${withdrawnFloor}`) : q).order("id").range(from, to);
+      });
   if (students.length === 0) return [];
 
   const ids = students.map((s) => s.id);
@@ -384,7 +393,19 @@ export async function getSubjectEndedStudents(opts?: {
     const enr = all.filter((e) => countsForSubjectExit(e, today));
     const lastEndOf = (subject: string) =>
       all.reduce<string | null>((m, e) => (e.subject === subject && e.endDate && (!m || e.endDate > m) ? e.endDate : m), null);
-    const { ended, active } = getEndedSubjects(enr, today);
+    const split = getEndedSubjects(enr, today);
+    let { ended, active } = split;
+    if (s.status === "withdrawn") {
+      // 퇴원생 = 퇴원 무렵 함께 끝난 과목(퇴원 줄이 센다 — 같은 함수 `withdrawalSubjects`)을 빼고, 퇴원일 전에 먼저 끊은 과목만.
+      // 병합으로 흡수된 학생은 퇴원 줄과 같이 뺀다. 그때 계속 다니던 과목은 지금 다니는 과목이 아니라서 비운다('수강중' 표시 금지).
+      const withdrawnOn = s.withdrawn_at ? kstDateOf(s.withdrawn_at) : null;
+      if (!withdrawnOn || isMergedStudent(s.notes ?? null)) continue;
+      // 퇴원 줄을 숨기는 장부 정리(수업 흔적 없음 표식 포함)는 먼저 끊은 과목도 숨긴다 — 퇴원 줄과 같은 판정(`isBookkeepingOnlyExit`).
+      if (isBookkeepingOnlyExit({ withdrawalMetadata: s.withdrawal_metadata, hasEnrollmentHistory: all.some((e) => e.endDate) })) continue;
+      const atExit = new Set(withdrawalSubjects(all.filter((e) => e.endDate).map((e) => ({ endDate: e.endDate, subject: e.subject }))));
+      ended = ended.filter((subject) => !atExit.has(subject) && (lastEndOf(subject) ?? "") <= withdrawnOn);
+      active = [];
+    }
     if (ended.length === 0) continue; // 수강종료 과목이 없으면 제외
     let lastEndedAt: string | null = null;
     for (const subject of ended) {
@@ -475,7 +496,7 @@ async function attachEndedNotes(supabase: Awaited<ReturnType<typeof createClient
   }
 }
 
-/** 기간 안에 끝난 수강이 있는 재원·휴원 학생(수강종료 후보) — `getSubjectEndedStudents({ endedWithin })` 전용. */
+/** 기간 안에 끝난 수강이 있는 재원·휴원·(창 뒤에 퇴원한) 퇴원 학생(수강종료 후보) — `getSubjectEndedStudents({ endedWithin })` 전용. */
 async function loadEndedWithinStudents(
   supabase: Awaited<ReturnType<typeof createClient>>,
   within: { from: string; to: string },
@@ -494,9 +515,10 @@ async function loadEndedWithinStudents(
   return fetchAllPagedInChunks<StudentBits>(ids, (chunk, from, to) =>
     supabase
       .from("students")
-      .select("id, tenant_id, name, school, grade, status")
+      .select(STUDENT_COLUMNS)
       .in("id", chunk)
-      .in("status", ["enrolled", "on_hold"])
+      .in("status", ENDED_STATUSES)
+      .or(`status.neq.withdrawn,withdrawn_at.gte.${within.from}`)
       .order("id")
       .range(from, to),
   );

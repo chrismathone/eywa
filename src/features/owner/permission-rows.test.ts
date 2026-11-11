@@ -7,13 +7,17 @@
  *  · 차례·묶음·이름은 사이드바와 같은 해석에서 나온다 — 원장이 탭을 옮기면 표도 따라 바뀐다.
  *  · 메뉴 버튼이 없는 권한은 그 권한을 쓰는 화면 아래에 선다.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { DASHBOARD_ROLE_LABELS as ROLE } from "@/features/dashboard/layout/roles";
 import { configuredHubGroups, HUB_GROUPS, SUPPORT_GROUPS } from "@/lib/menu-hub";
 import { teacherMenuKeysFor } from "@/lib/navigation";
-import { CONNECTED_APP_MENU_KEYS, MENU_KEYS, MENU_LABEL, resolveMatrix, TEACHER_MENU_KEYS, type MenuKey } from "@/lib/permissions";
+import { CONNECTED_APP_MENU_KEYS, isPermissionLocked, isStaffRecordLocked, MENU_KEYS, MENU_LABEL, resolveMatrix, STAFF_RECORD_MENUS, STAFF_RECORD_ROLES, SYSTEM_ROLES, TEACHER_MENU_KEYS, type MenuKey } from "@/lib/permissions";
 import { SETTINGS_ROLE_HREF } from "@/lib/settings-role-catalog";
 import { teacherNavigationSource } from "@/lib/teacher-navigation";
 import { TEACHER_MENU_LINKS } from "@/lib/teacher-menu-links";
+import { ROW_NOTE } from "./permission-row-notes";
 import { CONNECTED_APP_GROUP, editablePermissionRowGroups, NO_MENU_GROUP, permissionRowGroups, SIDEBAR_TOOL_GROUP_PREFIX, SIDEBAR_TOOL_KEYS, TEACHER_ONLY_GROUP, type PermissionNavigation } from "./permission-rows";
 import { TEACHER_TOGGLE_KEYS, teacherToggleOnAccess, teacherToggleRows } from "./teacher-toggle-rows";
 
@@ -123,7 +127,7 @@ describe("모든 권한 키가 정확히 한 번 선다", () => {
 describe("차례 = 왼쪽 탭 → 그 탭의 내부 메뉴", () => {
   it("묶음의 차례와 이름이 사이드바의 탭 그대로다", () => {
     const groups = permissionRowGroups();
-    // 시안 탭(스키마·지식그래프 · 조직·OKR · 홍보·마케팅)도 제 권한 줄이 있어 모든 탭이 묶음으로 선다(2026-11-09 권한 줄 정비).
+    // 2026-11-09에 들어온 탭(스키마·지식그래프 · 조직·OKR · 홍보·마케팅)도 제 권한 줄이 있어 모든 탭이 묶음으로 선다(2026-11-09 권한 줄 정비).
     const tabs = configuredHubGroups([...HUB_GROUPS, ...SUPPORT_GROUPS], undefined, undefined, true);
     expect(groups.slice(0, tabs.length).map((g) => [g.id, g.label])).toEqual(tabs.map((g) => [g.id, g.label]));
     // 탭 뒤 = 사이드바 맨 아래 줄 단추(학원 비서) → 강사 '내 메뉴' 전용 → 메뉴에 없는 화면 → 연결 앱.
@@ -132,18 +136,105 @@ describe("차례 = 왼쪽 탭 → 그 탭의 내부 메뉴", () => {
     ]);
   });
 
-  it("🔴 시안 탭의 줄은 제 권한이다 — 대시보드·데이터베이스 권한을 빌리지 않는다(2026-11-09 · 페이지 문과 같은 키)", () => {
+  it("🔴 2026-11-09에 들어온 탭 넷의 줄은 제 권한이다 — 대시보드·데이터베이스 권한을 빌리지 않는다(페이지 문과 같은 키)", () => {
     expect(menusOf("knowledge-model")).toEqual(["management"]);
     expect(menusOf("organization")).toEqual(["okr"]);
     expect(menusOf("marketing")).toEqual(["marketing"]);
     // 업무 작성센터는 문서·결재 탭 안 그 버튼 자리(전자결재와 데이터베이스 사이).
     expect(menusOf("document")).toEqual(["approvals", "work_records", "documents"]);
-    for (const [g, menu] of [["knowledge-model", "management"], ["organization", "okr"], ["marketing", "marketing"], ["document", "work_records"]] as const) {
-      expect(group(g)!.rows.find((r) => r.menu === menu)?.note, menu).toMatch(/시안 화면/);
-    }
     // 화면에 세우는 표에도 선다(감추지 않은 기본 구성).
     const shown = editablePermissionRowGroups().flatMap((g) => g.rows.map((r) => r.menu));
     for (const menu of ["management", "okr", "marketing", "work_records"] as const) expect(shown, menu).toContain(menu);
+  });
+
+  /**
+   * 🔴 줄 아래 글은 **그 화면의 서버 문이 실제로 하는 일**을 적는다(2026-11-11) — 넷은 2026-11-09 시안으로 들어왔다가 11-11 이식으로 전부 실제 기록을
+   *    읽고 쓰게 됐는데, 글은 "시안 화면 — 예시 값만 보여 주고 실제 자료를 읽거나 저장하지 않습니다"로 남아 있었다. 원장이 그 글을 믿고 다른 역할에
+   *    열면 실제 자료(모든 직원의 목표 · 검토 요청된 업무 문서 · 지식그래프)가 나간다. 글과 문의 핵심 조건을 함께 잠근다 — 문을 바꾸면 글도 고친다.
+   */
+  it("🔴 실제 기록을 다루는 화면의 줄은 '시안'이라고 적지 않는다 — 전체·담당이 무엇을 여는지 · 잠긴 칸의 까닭을 적는다", () => {
+    const note = (g: string, menu: MenuKey) => group(g)!.rows.find((r) => r.menu === menu)?.note ?? "";
+    const notes = { management: note("knowledge-model", "management"), okr: note("organization", "okr"), marketing: note("marketing", "marketing"), work_records: note("document", "work_records") };
+    for (const [menu, text] of Object.entries(notes)) {
+      expect(text.length, menu).toBeGreaterThan(40);
+      expect(text, menu).not.toMatch(/시안/);
+      expect(text, menu).not.toMatch(/실제 자료를 읽거나 저장하지 않습니다/);
+      expect(text, menu).toMatch(/실제/);
+    }
+    // 어느 줄에도 옛 글이 남지 않는다(표에 서지 않는 줄 포함).
+    for (const text of Object.values(ROW_NOTE)) expect(text).not.toMatch(/시안 화면|예시 값만 보여 주고/);
+    // 조직·OKR · 업무 작성센터 — 전체와 담당의 차이 · 열람·아르바이트 칸이 고정인 까닭.
+    for (const menu of ["okr", "work_records"] as const) {
+      expect(notes[menu], menu).toMatch(/‘담당’ = 본인/);
+      // 역할 이름은 권한 표의 머리 줄과 같은 말이다(매니저 역할은 표에 '실장'으로 선다 — 다른 이름을 쓰면 어느 칸인지 못 찾는다).
+      expect(notes[menu], menu).toContain(`‘전체’ = ${ROLE.master}·${ROLE.admin}·${ROLE.manager}은`);
+      expect(notes[menu], menu).toContain(`${ROLE.viewer}·${ROLE.parttime} 칸은 고정`);
+      expect(notes[menu], menu).not.toMatch(/매니저|참관|상담사/);
+    }
+    expect(notes.okr).toContain(`직원 역할(${STAFF_RECORD_ROLES.map((role) => ROLE[role]).join("·")})만`);
+    // 관찰 기록 — 모든 직원 것을 읽는 것과 확인·후속 조치에 더 필요한 권한. 두 줄이 같은 말을 한다
+    // (문의 실제 판정은 permission-row-notes.test.ts가 knowledgeAccess를 돌려 맞춘다).
+    expect(notes.work_records).toContain(`모든 직원의 관찰 기록 열람과 확인·후속 조치는 ‘${MENU_LABEL.management}’ ‘전체’가 함께`);
+    expect(notes.work_records).toContain("관찰 기록은 이 권한만으로는 본인 것만");
+    expect(notes.management).toContain(`${MENU_LABEL.work_records}가 열려 있으면 그 화면의 관찰 기록도 모든 직원 것을 읽고(학생에 대한 기록은 ${MENU_LABEL.students} 권한 범위의 학생 것만)`);
+    expect(notes.management).toContain("확인·후속 조치까지 합니다");
+    // 경영 분석 화면은 이 권한만으로 열리지 않는다(원장 계정).
+    expect(notes.management).toContain(`${ROLE.master} 계정에서만`);
+    // 홍보·마케팅 — 행사 자료를 옮겨 둔 학원에서만 · 보기 = 수납관리 권한도 함께 · 저장 = 원장·관리자 + 두 권한 모두 쓰기
+    // (문의 실제 판정은 permission-row-notes.test.ts가 문 함수를 돌려 맞춘다).
+    expect(notes.marketing).toMatch(/행사 자료를 옮겨 둔 학원에서만 열리고, 그 밖의 학원에서는 이 칸을 열어도 화면이 열리지 않습니다/);
+    expect(notes.marketing).toContain(`보려면 ${MENU_LABEL.billing} 권한이 함께`);
+    expect(notes.marketing).toContain(`저장은 ${ROLE.master}·${ROLE.admin}가 두 권한 모두 ‘전체’나 ‘담당’일 때만`);
+    expect(notes.marketing).toContain("‘읽기’면 보기만");
+  });
+
+  it("🔴 줄 글이 말하는 조건이 서버 문에 그대로 있다 — 문이 바뀌면 이 시험이 글을 다시 보게 한다", () => {
+    const read = (...p: string[]) => readFileSync(join(process.cwd(), "src", ...p), "utf8");
+    /** `const NAME = ["a", "b"]`의 값들 — 줄바꿈·끝 쉼표가 달라져도 같은 목록으로 읽는다. */
+    const rolesIn = (src: string, name: string) => (new RegExp(`${name}\\s*=\\s*\\[([^\\]]*)\\]`).exec(src)?.[1] ?? "").split(",").map((s) => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+    const okr = read("features", "organization-okr", "server.ts"), work = read("features", "work-records", "server.ts"), records = read("features", "academy-knowledge", "server-records.ts");
+    // 조직·OKR · 업무 작성센터 · 관찰 기록 = 직원 역할 여섯만 받는다 → 그 밖의 칸(열람·아르바이트·학생)은 권한 표에서 잠근다.
+    for (const [name, src] of [["조직·OKR", okr], ["업무 작성센터", work], ["관찰 기록", records]] as const) {
+      expect(rolesIn(src, "STAFF_ROLES"), name).toEqual([...STAFF_RECORD_ROLES]);
+      expect(src, name).toMatch(/!STAFF_ROLES\.includes\(gate\.user\.systemRole\)/);
+    }
+    for (const menu of STAFF_RECORD_MENUS) {
+      for (const role of SYSTEM_ROLES) {
+        const staff = (STAFF_RECORD_ROLES as readonly string[]).includes(role);
+        expect(isStaffRecordLocked(menu, role), `${menu}·${role}`).toBe(!staff);
+        for (const access of ["full", "scoped", "readonly", "none"] as const) {
+          if (!staff) expect(isPermissionLocked(menu, role, access), `${menu}·${role}·${access}`).toBe(true);
+        }
+      }
+      // 직원 역할 칸은 원장이 연다 — 이 잠금이 막지 않는다(강사 '담당' · 관리자·매니저 '전체').
+      expect(isPermissionLocked(menu, "teacher", "scoped"), menu).toBe(false);
+      for (const role of ["admin", "manager", "counselor", "accountant"] as const) expect(isPermissionLocked(menu, role, "full"), `${menu}·${role}`).toBe(false);
+    }
+    // 다른 메뉴의 열람·아르바이트 칸은 건드리지 않는다.
+    expect(MENU_KEYS.filter((menu) => isStaffRecordLocked(menu, "viewer")).sort()).toEqual([...STAFF_RECORD_MENUS].sort());
+    // 검토·피드백 = 원장·관리자·매니저 + 그 권한 '전체'.
+    expect(rolesIn(okr, "MANAGER_ROLES")).toEqual(["master", "admin", "manager"]);
+    expect(okr).toMatch(/manager:\s*gate\.manage\s*&&\s*role\b/);
+    expect(okr).toMatch(/seeAll:\s*gate\.readAll\s*&&\s*role\b/);
+    expect(rolesIn(work, "REVIEW_ROLES")).toEqual(["master", "admin", "manager"]);
+    expect(work).toMatch(/canReview:\s*gate\.manage\s*&&\s*reviewRole\b/);
+    expect(work).toMatch(/seeReview:\s*gate\.readAll\s*&&\s*reviewRole\b/);
+    // 관찰 기록의 확인 = 업무 작성센터 쓰기 + 경영 분석·지식그래프 '전체'.
+    expect(records).toMatch(/reviewer:\s*gate\.write\s*&&\s*!!management\?\.manage/);
+    expect(records).toMatch(/seeAll:\s*!!management\?\.readAll/);
+    // 전체 열람이어도 학생에 대한 기록은 읽는 사람의 원생 범위 안만(줄 글의 '원생목록 권한 범위의 학생 것만').
+    expect(records).toMatch(/const records = latest\.filter\(r => visibleStudent\(r, allowed\)\);/);
+    expect(records).toMatch(/readableFactStudents\(\)/);
+    // 경영 분석 화면 = 원장 역할만 · 홍보·마케팅 = 수납관리 권한도 함께, 저장은 원장·관리자 역할.
+    expect(read("features", "management", "server", "access.ts")).toMatch(/user\.systemRole\s*!==\s*"master"/);
+    const archive = read("features", "marketing-archive", "server.ts");
+    expect(archive).toMatch(/user\.tenantId\s*!==\s*ARCHIVE_TENANT/);
+    expect(archive).toMatch(/const check = write \? canWriteTenant : canAccessTenant;/);
+    expect(archive).toMatch(/check\(user\.systemRole,\s*"marketing"(?:\s+as\s+MenuKey)?\)/);
+    expect(archive).toMatch(/check\(user\.systemRole,\s*"billing"\)/);
+    expect(archive).toMatch(/write\s*&&\s*!\["master",\s*"admin"\]\.includes\(user\.systemRole\)/);
+    // 예시 값만 남은 화면은 마케팅 입력·검토 하나(그 화면이 실제 기록을 읽게 되면 홍보·마케팅 줄의 마지막 문장을 지운다).
+    expect(read("app", "(shell)", "billing", "management", "marketing", "inputs", "page.tsx")).toMatch(/<SampleBanner\s*\/>/);
   });
 
   it("🔴 학원 비서 = 탭 묶음 맨 뒤(도움말 다음) 제 줄 · 다른 역할에 열 때의 위험을 줄 아래에 적는다(원장 2026-11-09)", () => {

@@ -8,6 +8,7 @@ import { EyIcon } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant, canAccessTenant, canManageTenant, canWriteTenant, readonlyViewErasedScope } from "@/lib/auth/perm-matrix";
+import { readsAllNewcomers } from "@/features/newcomers/server/scope";
 import { getEnrollmentDateAccess } from "@/features/enrollments/server/date-access";
 import { canSeeStudentEnrollment } from "@/features/students/server/enrollment-gate";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
@@ -222,8 +223,9 @@ export default async function StudentDetailPage({
     reportable ? studentReportEntry(student.id).catch(() => null) : Promise.resolve(null),
     canWriteTenant(user.systemRole, "students"),
     tab === "consultations" ? canWriteTenant(user.systemRole, "consultations") : Promise.resolve(false),
-    // 상담 약속·인계(2026-11-05 AX 이식) 입구 — 약속 전체를 보는 신규생 관리 권한. 담당으로 배정된 강사는 연결 탐색·미완료 약속에서 연다.
-    canAccessTenant(user.systemRole, "newcomers"),
+    // 상담 약속·인계(2026-11-05 AX 이식) 입구 — 약속 전체를 보는 신규생 관리 권한('전체' · '읽기'). 담당으로 배정된 강사는 연결 탐색·미완료 약속에서 연다.
+    // 🔴 권한이 있다는 것만으로 세우지 않는다 — 강사 '담당'은 자기에게 배정된 약속만 읽으므로(careAccess) 여기 세우면 눌러도 권한 화면으로 튕긴다(판정 한 곳 = scope.ts).
+    readsAllNewcomers(),
   ]);
   // 진행 중인 보고서를 열 수 없는 사람에게는 '진행 중' 글을 원생 상태를 다루는 사람에게만 보인다(참여자가 아닌 강사에게 새지 않게).
   const reportEntry: ReportEntry | null = reportInfo?.pending
