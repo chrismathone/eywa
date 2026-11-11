@@ -91,7 +91,7 @@ describe("분석 축", () => {
     expect(items).toEqual([
       { value: "math", label: "수학", count: 2 },
       { value: "english", label: "영어", count: 1 },
-      { value: FACET_NONE, label: "과목 미상", count: 1 },
+      { value: FACET_NONE, label: "과목 미상(메이크에듀)", count: 1 },
     ]);
   });
 

@@ -29,6 +29,8 @@ export function parseBreakdownAxis(raw: unknown): BreakdownAxis {
 
 /** 값이 없는 줄(학년·학교 미기재 · 담당 미반영)을 고르는 주소 값. */
 export const FACET_NONE = "none";
+/** 과목을 모르는 퇴원 칸의 이름 — 출처(메이크에듀 이관분)를 함께 밝힌다. */
+export const UNKNOWN_SUBJECT_LABEL = "과목 미상(메이크에듀)";
 
 /** 주소 값 정리 — 빈 값은 필터 없음. 지나치게 긴 값은 버린다(주소를 손으로 고친 것 — 사유 글은 길 수 있어 넉넉히). */
 export function parseFacet(raw: unknown): string | null {
@@ -50,7 +52,9 @@ export function subjectItems(rows: readonly Pick<Row, "subjects">[], labelOf: (k
   const counts = new Map<string, number>();
   for (const r of rows) for (const s of r.subjects.length ? r.subjects : [FACET_NONE]) counts.set(s, (counts.get(s) ?? 0) + 1);
   return [...counts]
-    .map(([value, count]) => ({ value, label: value === FACET_NONE ? "과목 미상" : labelOf(value), count }))
+    // 과목 미상 = 에이와에 수강 기록이 없는 퇴원(2025년 메이크에듀에서 이름·퇴원일만 넘어온 학생 — 2026-01~10은 퇴원생 관리 차트가 과목을 준다)
+    // · 원장 2026-11-11 *"과목미상(메이크에듀)로 해주고"*.
+    .map(([value, count]) => ({ value, label: value === FACET_NONE ? UNKNOWN_SUBJECT_LABEL : labelOf(value), count }))
     .sort((a, b) => Number(a.value === FACET_NONE) - Number(b.value === FACET_NONE) || byCount(a, b));
 }
 
