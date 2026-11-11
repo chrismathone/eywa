@@ -10,6 +10,9 @@
 --   막는 규칙이라 퇴사 처리만으로도 담당자를 다시 지정해야 한다(삭제만의 문제가 아니다). 저장 규칙이 정해지면 다음 재정의 때 더한다.
 -- 쓰는 곳 = s2_0060 delete_staff_account(그대로). 실행권(service_role만)은 다시 정의해도 유지되지만 같은 문장을 한 번 더 적어 둔다.
 -- 되돌리기 = scripts/_oneoff/revert-s2_0065-staff-delete-blockers-journey-owner.sql (s2_0058의 정의로 되돌린다)
+-- 연동 역할 실행권 확인: staff_delete_blockers는 s2_0058에서 만들 때 이미 PUBLIC·anon·authenticated 실행권을 거뒀다(service_role 전용) — 여기서 다시 거둬도
+--   달라지는 것이 없다. RLS 정책·연동 PC 질의는 이 함수를 지나지 않는다(delete_staff_account 안에서만 부른다 · 2026-11-11 운영 DB 확인: 정책 0개 ·
+--   eywa_sync_agent 실행권 없음 그대로 · 다른 호출 함수 0개).
 create or replace function public.staff_delete_blockers(p_user uuid)
 returns table(table_name text, column_name text, ref_count bigint)
 language plpgsql stable security definer set search_path = '' as $$
