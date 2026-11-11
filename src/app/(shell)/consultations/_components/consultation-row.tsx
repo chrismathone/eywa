@@ -8,7 +8,7 @@ import type { StudentConsultationRow } from "@/features/consultations/server/que
 import type { ConsultationRating } from "@/features/consultation-rating/rating";
 import { followUpUrgency } from "@/features/consultations/follow-up-urgency";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
-import { relativeTimeKo } from "@/lib/relative-time";
+import { consultDateFull, consultDateLabel } from "@/features/consultations/list-date";
 import { CATEGORY_META, URGENCY_META } from "./consultation-meta";
 import { ConsultationRatingCell } from "./consultation-rating-cell";
 import { ROW_GRID } from "./consultation-grid";
@@ -26,9 +26,11 @@ function hoverTextOf(c: StudentConsultationRow, classOn: boolean): string | unde
     c.followUpAction || c.followUpDate
       ? `후속 조치: ${c.followUpAction ?? "—"}${c.followUpDate ? ` · 기한 ${c.followUpDate}` : ""}${c.followUpDone ? " · 완료" : ""}`
       : null;
+  const date = consultDateFull(c.consultedAt);
   return (
     [
       `${c.studentName}${sg ? ` (${sg})` : ""}`,
+      date ? `상담일 ${date}` : null,
       who || null,
       classOn ? `반: ${c.className ?? "없음"}${c.classSource === "manual" ? "(직접 고름)" : ""}` : null,
       c.summary?.trim() || null,
@@ -86,7 +88,7 @@ export function ConsultationRow({ c, classOn, ratingOn, rating }: { c: StudentCo
         <div
           className={`-col-end-1 grid grid-cols-(--right) items-center justify-items-center gap-1 phone:col-start-1 ${ratingOn ? "phone:grid-cols-[auto_auto_minmax(0,1fr)]!" : "phone:grid-cols-[auto_minmax(0,1fr)]!"} phone:justify-items-start phone:gap-2`}
         >
-          <span className="num text-text-dim text-sm whitespace-nowrap">{relativeTimeKo(c.consultedAt)}</span>
+          <span className="num text-text-dim text-sm whitespace-nowrap">{consultDateLabel(c.consultedAt)}</span>
           <span>{catMeta ? <Pill color={catMeta.color}>{catMeta.label}</Pill> : null}</span>
           {ratingOn ? <ConsultationRatingCell rating={rating} /> : null}
         </div>
