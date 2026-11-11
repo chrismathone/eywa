@@ -17,6 +17,34 @@ describe("코드값 → 한국어 이름(원장 2026-11-06 '과목도 한글화'
     expect(codeMapFor(["enrolled", "on_hold", "withdrawn"])).toEqual({ enrolled: "재원", on_hold: "휴원", withdrawn: "퇴원" });
   });
 
+  it("퇴원 사유 · 요일(멘트 시험 2026-11-11) — 흔한 낱말(other·schedule…)만 있는 칸은 그대로", () => {
+    expect(codeMapFor(["graduated", "dissatisfaction", "other"], "퇴원사유")).toEqual({ graduated: "졸업", dissatisfaction: "수업·강사", other: "기타" });
+    // 칸 이름이 사유면 흔한 낱말(other·schedule)만 있어도 바꾼다 · 옛 자료 표기(dissatisfied·moved)도 같은 이름
+    expect(codeMapFor(["other"], "사유")).toEqual({ other: "기타" });
+    expect(codeMapFor(["schedule"], "사유")).toEqual({ schedule: "시간/일정" });
+    expect(codeMapFor(["graduated", "dissatisfied", "moved"], "퇴원사유")).toEqual({ graduated: "졸업", dissatisfied: "수업·강사", moved: "이사" });
+    expect(codeMapFor(["grades", "other"], "사유코드")).toEqual({ grades: "성적", other: "기타" });
+    expect(codeMapFor(["relocation"], "withdrawal_reason")).toEqual({ relocation: "이사" });
+    expect(codeMapFor(["mon", "tue", "sun"], "요일")).toEqual({ mon: "월", tue: "화", sun: "일" });
+    expect(codeMapFor(["Mon", "FRI"], "day_of_week")).toEqual({ Mon: "월", FRI: "금" });
+  });
+
+  it("직원 재직 상태 · 자료 출처 · 글로 바뀐 참·거짓(원장 2026-11-11 '날것이 출력 — active 이런거')", () => {
+    expect(codeMapFor(["active", "inactive"], "재직 상태")).toEqual({ active: "재직", inactive: "퇴사" });
+    expect(codeMapFor(["active", "inactive"], "상태")).toBeNull(); // 반·수강의 active는 뜻이 다르다
+    expect(codeMapFor(["aywa", "makeedu"], "출처")).toEqual({ aywa: "에이와", makeedu: "메이크에듀" });
+    expect(codeMapFor(["true", "false"], "집계 포함")).toEqual({ true: "예", false: "아니오" });
+    expect(codeMapFor(["f"], "성별")).toBeNull();
+  });
+
+  it("🔴 퇴원 사유·요일 묶음은 칸 이름이 맞을 때만(Codex 리뷰 2026-11-11) — 다른 뜻의 같은 낱말을 바꾸지 않는다", () => {
+    // 지식 기록의 competitor = 경쟁 학원 '언급'(이동이 아니다) · 시험 이름 SAT · 사람 이름 Sun
+    expect(codeMapFor(["competitor"], "신호")).toBeNull();
+    expect(codeMapFor(["graduated", "relocation"])).toBeNull();
+    const rows = [{ 시험: "SAT", 학생명: "Sun", 요일: "sat" }];
+    expect(labelCodeColumns(["시험", "학생명", "요일"], rows)).toEqual([{ 시험: "SAT", 학생명: "Sun", 요일: "토" }]);
+  });
+
   it("다른 글자가 섞인 칸 · 흔한 낱말 · 숫자 칸은 그대로 — 엉뚱한 이름보다 원문", () => {
     const rows = [{ 반: "math 심화", 과목: "math", 메모: "active" }, { 반: "초등M", 과목: "social", 메모: "manual" }];
     // 과목 칸에 묶음 밖 키(social)가 있으면 그 칸 전체를 두고, 반 이름·흔한 낱말 칸도 그대로

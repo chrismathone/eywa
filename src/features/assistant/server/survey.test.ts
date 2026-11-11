@@ -212,7 +212,7 @@ describe("전수 조회 실행 — 그 표 탓일 수 있는 오류만 쪼갠다
 
 describe("확인한 자료 범위", () => {
   const row = (table: string, total: number, inPeriod: number): SurveyRow => ({ key: table, table, label: table, links: ["class_id"], total, inPeriod, latest: "2026-11-01" });
-  it("자료 있는 표만 · 온톨로지 보기로 본 것은 원본도 '자세히 봄' · 원본 하나를 거른 보기는 원본을 봐도", () => {
+  it("자료 있는 표만 · 온톨로지 보기로 본 것은 원본도 '내용 조회' · 원본 하나를 거른 보기는 원본을 봐도", () => {
     const cov = coverageOf([
       {
         target: "class",
@@ -232,7 +232,7 @@ describe("확인한 자료 범위", () => {
     ]);
   });
 
-  it("🔴 여러 원본을 합친 보기(반 담당)는 classes를 봤다고(반 id 찾기) '자세히 봄'이 되지 않는다 · 전수 조회마다 그 뒤 조회만", () => {
+  it("🔴 여러 원본을 합친 보기(반 담당)는 classes를 봤다고(반 id 찾기) '내용 조회'이 되지 않는다 · 전수 조회마다 그 뒤 조회만", () => {
     const cov = coverageOf([
       { target: "class", id: ID, name: "A", from: "2026-05-01", to: "2026-11-06", rows: [row("onto_class_teachers", 3, 3), row("classes", 1, 1)], examined: new Set(["classes"]) },
       { target: "class", id: ID, name: "B", from: "2026-05-01", to: "2026-11-06", rows: [row("classes", 1, 1)], examined: new Set() },

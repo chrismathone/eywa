@@ -7,6 +7,12 @@ import { TABLES_A } from "./tables-a";
 import { TABLES_B } from "./tables-b";
 import { TABLES_EXTRA } from "./tables-extra";
 import type { AssistantTableDoc } from "./types";
+import { REASON_ALIAS, REASON_LABEL } from "@/features/withdrawals/types";
+
+/** 퇴원 사유 코드 → 이름(퇴원관리와 같은 단일 소스) — 화면에 낼 때 CASE로 쓰라고 칸 설명에 싣는다(멘트 시험 2026-11-11: graduated가 표에 나갔다). */
+const REASON_CODES = `퇴원 사유 코드 — ${Object.entries(REASON_LABEL).map(([code, name]) => `${code}=${name}`).join(" · ")} · 옛 자료 표기 ${Object.entries(REASON_ALIAS).map(([code, key]) => `${code}=${REASON_LABEL[key]}`).join(" · ")} (화면·글에는 CASE로 이 이름을 낸다)`;
+/** 수강 종료 사유 — 코드는 같지만 반 이동·종강 같은 글 값도 있고 수강 종료는 퇴원이 아니다(재리뷰 2026-11-11). */
+const END_REASON = `수강 종료 사유(코드는 퇴원 사유와 같음 · '반 이동'·'종강' 같은 글 값도 있음 — 수강 종료는 퇴원이 아니다. 퇴원 사유별 인원은 onto_students로 센다). ${REASON_CODES}`;
 
 export const ONTOLOGY_DOCS: readonly AssistantTableDoc[] = [
   {
@@ -14,7 +20,7 @@ export const ONTOLOGY_DOCS: readonly AssistantTableDoc[] = [
     label: "원생(규칙)",
     ko: "원생 한 사람 한 줄 + 세는 규칙(병합·테스트·장부 정리 퇴원 판정)을 칸으로 미리 계산한 보기",
     notes:
-      "원생 수·퇴원 수는 이 보기로 센다. counted=true만 집계(테스트 원생·중복 병합으로 흡수된 원생·수업 기록 없는 장부 정리 퇴원 제외). status_label = 예비·상담완료·재원·휴원·퇴원. exit_kind = real(실제 퇴원) · bookkeeping(장부 정리, 퇴원으로 안 셈·언급 안 함 — counted=false · 끝난 수강이 있어도 출결·수업료 청구가 0이라 표식된 정리 퇴원 포함) · system_bulk(시스템 일괄 처리 날짜 미상 — 월별 퇴원 추이에서 뺀다) · scheduled(퇴원 예정) · null(퇴원 아님). withdrawn_on = 퇴원일(날짜). 월별 퇴원 추이 = exit_kind='real' and counted로 withdrawn_on을 달로 묶는다.",
+      "원생 수·퇴원 수는 이 보기로 센다. 🔴 현재 재원생 = counted=true이면서 status_label='재원'(둘 다 — 휴원생까지 넣으면 그 사실을 밝힌다). counted=true만 집계(테스트 원생·중복 병합으로 흡수된 원생·수업 기록 없는 장부 정리 퇴원 제외). status_label = 예비·상담완료·재원·휴원·퇴원. exit_kind = real(실제 퇴원) · bookkeeping(장부 정리, 퇴원으로 안 셈·언급 안 함 — counted=false · 끝난 수강이 있어도 출결·수업료 청구가 0이라 표식된 정리 퇴원 포함) · system_bulk(시스템 일괄 처리 날짜 미상 — 월별 퇴원 추이에서 뺀다) · scheduled(퇴원 예정) · null(퇴원 아님). withdrawn_on = 퇴원일(날짜). 월별 퇴원 추이 = exit_kind='real' and counted로 withdrawn_on을 달로 묶는다.",
     columns: {
       counted: "집계에 넣는 원생인가",
       is_merged: "중복 병합으로 다른 원생에 흡수됨",
@@ -22,6 +28,7 @@ export const ONTOLOGY_DOCS: readonly AssistantTableDoc[] = [
       has_ended_enrollment: "끝난 수강이 한 번이라도 있음(수업 기록이 있었는가)",
       exit_kind: "퇴원 종류(real·bookkeeping·system_bulk·scheduled)",
       withdrawn_on: "퇴원일",
+      withdrawal_reason: REASON_CODES,
     },
   },
   {
@@ -30,7 +37,7 @@ export const ONTOLOGY_DOCS: readonly AssistantTableDoc[] = [
     ko: "수강(원생→반) + 반 이름·과목·지금 담임 + 오늘 명단·수업 대상 여부",
     notes:
       "반별·과목별 인원은 이 보기로 센다. on_roster_today = 오늘(한국 날짜) 반 명단에 있음(휴원 포함 · 반이동으로 끝난 수강은 이동일부터 빠짐 · 일반 종료는 종료일까지) · active_today = 오늘 수업 대상(명단 − 휴원). 한 원생이 여러 반을 들으니 학원 인원은 count(distinct student_id). makeup_pool_class = 보강용 반(정규 인원에서 빼는 것이 보통). 원생 규칙(counted)과 함께 쓰려면 onto_students와 student_id로 잇는다. 과거 날짜 D의 명단은 enrollments에서 같은 규칙(start_date ≤ D · 반이동이면 end_date > D · 아니면 end_date ≥ D)으로.",
-    columns: { on_roster_today: "오늘 명단(휴원 포함)", active_today: "오늘 수업 대상(휴원 제외)", homeroom_teacher_id: "반의 지금 담임(users.id)", makeup_pool_class: "보강용 반" },
+    columns: { on_roster_today: "오늘 명단(휴원 포함)", active_today: "오늘 수업 대상(휴원 제외)", homeroom_teacher_id: "반의 지금 담임(users.id)", makeup_pool_class: "보강용 반", withdrawal_reason: END_REASON },
   },
   {
     name: "onto_attendance",

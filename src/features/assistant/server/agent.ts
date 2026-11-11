@@ -99,6 +99,8 @@ export type AgentInput = {
   db: AssistantDb;
   docs: readonly AssistantTableDoc[];
   question: string;
+  /** 묻는 사람의 화면 표시 역할(원장 · 관리자 …) — 질문 메시지에 붙인다(prompt.ts questionMessage · 멘트 시험 2026-11-11). */
+  asker?: string;
   history: readonly PastTurn[];
   emit: (event: AgentEvent) => void;
   onUsage: (entry: AgentUsage) => Promise<void> | void;
@@ -118,7 +120,7 @@ export type AgentInput = {
 type WrapReason = "user" | "time" | "context";
 /** 마무리 부탁(AI에게) — 못 본 자료는 보고서에 밝히게 한다. */
 const WRAP_TEXT: Record<WrapReason, string> = {
-  user: "원장님이 '여기서 끝내고 결과 보기'를 누르셨습니다. 더 조회하지 말고 지금까지 조회한 결과만으로 바로 render_report를 호출하세요. 요약(summary) 첫머리에 '조회를 여기서 끝내고 정리한 답'임을 밝히고, 확인하지 못한 자료는 callout info '이번에 깊이 보지 않은 자료'에 적으세요.",
+  user: "질문한 분이 '여기서 끝내고 결과 보기'를 눌렀습니다. 더 조회하지 말고 지금까지 조회한 결과만으로 바로 render_report를 호출하세요. 요약(summary) 첫머리에 '조회를 여기서 끝내고 정리한 답'임을 밝히고, 확인하지 못한 자료는 callout info '이번에 깊이 보지 않은 자료'에 적으세요.",
   time: "시간이 다 됐습니다. 더 조회하지 말고 지금까지의 결과로 render_report를 호출하세요. 못 본 자료는 callout info '이번에 깊이 보지 않은 자료'에 적으세요.",
   context: "읽은 자료가 많아 이제 정리할 때입니다. 더 조회하지 말고 지금까지의 결과로 render_report를 호출하세요. 못 본 자료는 callout info '이번에 깊이 보지 않은 자료'에 적으세요.",
 };
@@ -315,7 +317,7 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
   for (const turn of input.history) {
     messages.push({ role: "user", content: turn.question }, { role: "assistant", content: pastAnswerText(turn) });
   }
-  messages.push({ role: "user", content: questionMessage(input.question, new Date(now())) });
+  messages.push({ role: "user", content: questionMessage(input.question, new Date(now()), input.asker) });
 
   const queries: QueryResult[] = [];
   const byId = new Map<string, QueryResult>();
@@ -342,8 +344,8 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
   };
   /** 원장이 누른 마무리는 진행 줄에 한 번 알린다(그 뒤 '보고서를 쓰는 중'이 이어진다). */
   const noteUserWrap = () =>
-    close(open("analyze", "원장님 요청으로 여기서 조회를 끝냈습니다 — 지금까지 조회한 내용으로 정리합니다"), { detail: `조회 ${queries.length}번까지` });
-  /** 전수 조회 기록 — 그 뒤 성공한 조회가 읽은 보기를 각 기록의 `examined`에 쌓는다(확인한 자료 범위의 '자세히 봄'). */
+    close(open("analyze", "요청에 따라 여기서 조회를 끝냈습니다 — 지금까지 조회한 내용으로 정리합니다"), { detail: `조회 ${queries.length}번까지` });
+  /** 전수 조회 기록 — 그 뒤 성공한 조회가 읽은 보기를 각 기록의 `examined`에 쌓는다(확인한 자료 범위의 '내용 조회'). */
   const surveys: SurveyRecord[] = [];
   const askedOn = kstYmd(started);
   const finish = (report: SettledReport, checks: AdviceCheckResult[] = []): AgentResult => ({
@@ -567,7 +569,9 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
       results.push(await runTool(call, stepFor[i]!));
     }
     for (const { call, stepId } of reportCalls) {
-      const settled = settleReport(call.input, byId);
+      // 마무리 중(조회가 막힘)이면 돌려보내는 검사를 끈다 — 고칠 길이 없어 답을 잃는다(report-checks.ts · 재리뷰 2026-11-11).
+      // 🔴 wrapReason()을 부르지 않는다 — 그 함수는 마무리 상태를 정해 버려 스스로 끝낸 답에 '일찍 끝낸 답' 띠가 붙는다(최종 리뷰 2026-11-11).
+      const settled = settleReport(call.input, byId, { lenient: wrapping !== null });
       if (settled.ok) {
         close(stepId, { label: "보고서 · 비서 의견 작성", detail: `블록 ${settled.report.blocks.length}개` });
         return finish(settled.report, await measureChecks(settled.report));

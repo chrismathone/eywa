@@ -30,6 +30,11 @@ const MORE_ROWS = 50;
 
 const ALIGN_TEXT: Record<Align, string> = { left: "text-left", center: "text-center", right: "text-right" };
 const ALIGN_FLEX: Record<Align, string> = { left: "justify-start", center: "justify-center", right: "justify-end" };
+/**
+ * 두 줄 머리의 정렬 단추 — 열 제목 글이지 툴바 컨트롤이 아니다(control-scale의 '한 줄' 규칙 밖 · 세로 패딩 없이 칸 높이를 따른다).
+ * 값보다 훨씬 긴 열 제목만 어절 단위로 두 줄에 접는다(report-columns `twoLineWidth` — 원장 2026-11-11 *"열너비도 스마트하게"*).
+ */
+const HEAD_TWO_LINE = "min-h-(--control-h-sm) leading-tight";
 
 /**
  * 보고서 표 — 열 머리 고정(스크롤해도 남는다) · 머리를 눌러 정렬(오름 → 내림 → 원래 순서) · 숫자·원·%·날짜(KST) 서식 ·
@@ -122,8 +127,10 @@ export function ReportTable({
           </colgroup>
           <thead className="sticky top-0 z-[1]">
             <tr>
-              {cols.map((c) => {
+              {cols.map((c, ci) => {
                 const current = sort && sort.column === c.column ? sort.dir : null;
+                // 머리가 값보다 훨씬 긴 열은 머리를 두 줄로 접는다(report-columns fitColumn — 열 폭은 값이 정한다).
+                const wrap = !!fits[ci]?.wrapHead;
                 // 화살표: 정렬 중이면 지금 방향(진하게), 아니면 누르면 걸릴 방향(흐리게) — 공용 SortArrow와 같은 꼴.
                 const dir = current ?? firstSortDir(c.format);
                 return (
@@ -131,15 +138,21 @@ export function ReportTable({
                     key={c.column}
                     scope="col"
                     aria-sort={current === "asc" ? "ascending" : current === "desc" ? "descending" : "none"}
-                    className={`bg-bg-soft border-line h-10 overflow-hidden border-b px-2 font-bold whitespace-nowrap ${ALIGN_TEXT[c.align]}`}
+                    className={`bg-bg-soft border-line h-10 overflow-hidden border-b px-2 font-bold ${wrap ? "py-1" : "whitespace-nowrap"} ${ALIGN_TEXT[c.align]}`}
                   >
                     {/* 버튼 이름 = 열 이름 그대로(숨김 글자를 섞으면 칸마다 열 제목이 길게 읽힌다) — 상태는 aria-sort가 말한다. */}
                     <button
                       type="button"
                       onClick={() => toggleSort(c.column, c.format)}
-                      className={`${CONTROL_H_SM} hover:bg-muted inline-flex w-full cursor-pointer items-center gap-1 rounded-md px-1 ${ALIGN_FLEX[c.align]} ${current ? "text-primary" : ""}`}
+                      className={`${wrap ? HEAD_TWO_LINE : CONTROL_H_SM} hover:bg-muted inline-flex w-full cursor-pointer items-center gap-1 rounded-md px-1 ${ALIGN_FLEX[c.align]} ${current ? "text-primary" : ""}`}
                     >
-                      <span className="min-w-0 truncate">{c.label}</span>
+                      {wrap ? (
+                        <span title={c.label} className="line-clamp-2 min-w-0 break-keep [overflow-wrap:anywhere]">
+                          {c.label}
+                        </span>
+                      ) : (
+                        <span className="min-w-0 truncate">{c.label}</span>
+                      )}
                       <EyIcon name={dir === "desc" ? "arrowDown" : "arrowUp"} size={14} strokeWidth={current ? 2.6 : 1.6} className={`shrink-0 ${current ? "" : "opacity-40"}`} />
                     </button>
                   </th>
