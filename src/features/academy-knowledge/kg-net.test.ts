@@ -82,7 +82,7 @@ describe("학원 전체 판", () => {
     expect(rel).toHaveLength(pairs.size);
     expect(pairs.size).toBe(edges.length - 3); // s1–c1 두 관계가 한 선 · 학원 관계 둘 제외
   });
-  it("날짜 = attributes.date만(시각은 KST) — 연도 → 월 → 같은 날 둘이면 일자 · period는 날짜가 아니다", () => {
+  it("날짜 = attributes.date(시각은 KST) · 없으면 사건 유형의 단일 날짜 period — 연도 → 월 → 같은 날 둘이면 일자 · 학교·평가·근거·비워 둔 날짜 칸은 날짜가 아니다", () => {
     const g = b.graph.nodes;
     expect(g.find((n) => n.id === id("student_consultation:q1"))?.parent).toBe("grp:Consultation:2026-10-29");
     expect(g.find((n) => n.id === "grp:Consultation:2026-10-29")?.tally).toBe(2);
@@ -159,5 +159,29 @@ describe("도우미", () => {
     expect(kgDetailParam(nodes[8], T, students, staff)).toEqual({ teacher: "k1" });
     expect(kgDetailParam(nodes[8], T, students, [])).toBeNull();
     expect(kgDetailParam(nodes[6], T, students, staff)).toBeNull();
+  });
+});
+
+describe("강사 보기 날짜 — 강사 통합 기록·OKR은 날짜를 period에만 싣는다", () => {
+  it("사건 유형의 단일 날짜 period만 날짜 · 평가·근거 스냅숏·학교 기준일·비워 둔 날짜 칸·OKR 할 일 마감일은 아니다", () => {
+    const mini: Graph = {
+      ...G,
+      nodes: [
+        node("academy", "Academy", "학원"),
+        node("class_sheet_student_marks:m1", "LearningRecord", "강사 시트 기록", { period: "2026-11-05" }),
+        node("objective:o1", "Objective", "목표", { period: "2026-10-01" }),
+        node("rule:a1", "Assessment", "규칙 검토", { period: "2026-11-05" }),
+        node("source:teacher:portfolio:p1", "Evidence", "포트폴리오", { period: "2026-11-10T15:10:11.132+00:00" }),
+        node("school:학교:중2", "School", "학교 중2", { period: "2026-11-11" }),
+        node("attendance_records:r1", "LearningRecord", "출석", { period: "2026-11-01", attributes: { date: null } }),
+        node("source:okr:okr_task:t1", "Action", "OKR 할 일", { period: "2026-12-31" }),
+      ],
+      edges: [],
+    };
+    const g = kgNetBoard(mini).graph.nodes;
+    const dateOfId = (k: string) => g.find((n) => n.id === id(k))?.date ?? null;
+    expect(dateOfId("class_sheet_student_marks:m1")).toBe("2026-11-05");
+    expect(dateOfId("objective:o1")).toBe("2026-10-01");
+    for (const k of ["rule:a1", "source:teacher:portfolio:p1", "school:학교:중2", "attendance_records:r1", "source:okr:okr_task:t1"]) expect(dateOfId(k)).toBeNull();
   });
 });

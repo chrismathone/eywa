@@ -17,7 +17,7 @@ import type { ExploreTone } from "@/features/explore/model";
  *    **가운데와 유형이 다른 것**(2단계) — 강사의 원생·원생의 강사는 서고, 같은 반 친구·같이 가르치는 강사는 번지지 않는다.
  *    학원 점은 이 이웃 계산에 넣지 않는다(학원은 모든 기록과 이어져 두 단계가 곧 전부가 된다).
  *  · 영역(큰 점) = 주체 유형(`catalog.ts` `entities` 순서 · 이름 = 그 한글 이름) · 색 = 연결 탐색 영역 색(`ExploreTone`) 하나씩.
- *  · 날짜 = `attributes.date`(날짜 또는 시각 — `recordYmd`, KST)뿐. 🔴 `node.period`는 날짜로 쓰지 않는다(학교 점은 거기에 기준일을 싣는다) ·
+ *  · 날짜 = `attributes.date`(날짜 또는 시각 — `recordYmd`, KST)뿐. `attributes.date`가 없으면 사건 유형(`PERIOD_IS_EVENT_DATE`)의 단일 날짜 `period`만 · 🔴 학교·평가·근거의 `period`는 날짜로 쓰지 않는다(기준일·범위·스냅숏) ·
  *    날짜를 지어내지 않는다. 날짜 있는 기록은 영역 아래 연도 → 월 → (같은 날 여럿이면) 일자 묶음(`timeTree`), 없는 기록은 영역 둘레.
  *  · 선 = 판 뼈대(가운데 → 영역 → 묶음 → 기록) + 판에 선 두 기록 사이의 **실제 관계**(같은 두 기록이면 한 선 · 이름은 관계 이름을 모아서).
  *    데이터에 없는 관계는 긋지 않는다.
@@ -57,9 +57,17 @@ const firstLine = (v: unknown): string | null => {
   const line = v.split(/\r?\n/).map((s) => s.trim()).find(Boolean);
   return line ? (line.length > 60 ? `${line.slice(0, 60)}…` : line) : null;
 };
+/** `period`에 그 기록이 일어난 날을 싣는 사건 유형 — 강사 통합 기록·OKR은 날짜를 여기에만 싣는다(2026-11-11 원장 승인).
+ *  🔴 학교(기준일)·평가(기간 범위)·근거(스냅숏 시각)는 넣지 않는다 — 사건 날짜가 아니다. */
+const PERIOD_IS_EVENT_DATE = new Set<Node["type"]>(["Consultation", "LearningRecord", "Observation", "Action", "Objective", "Invoice", "Enrollment"]);
+const SINGLE_DATE = /^\d{4}-\d{2}-\d{2}(T[\d:.+\-Z]*)?$/;
 const dateOf = (n: Node): string | null => {
   const raw = n.attributes?.date;
-  return typeof raw === "string" && recordYmd(raw) ? raw : null;
+  if (typeof raw === "string" && recordYmd(raw)) return raw;
+  if (n.attributes && "date" in n.attributes) return null; // 원본이 날짜 칸을 두고 비워 둔 것 = 모름(period로 메우지 않는다)
+  const p = n.period;
+  if (n.id.includes(":okr_task:")) return null; // OKR 할 일의 period = 마감 예정일(계획) — 일어난 날이 아니다(미래 달에 꽂힌다)
+  return PERIOD_IS_EVENT_DATE.has(n.type) && typeof p === "string" && SINGLE_DATE.test(p) && recordYmd(p) ? p : null;
 };
 
 /** 지식그래프 + 가운데(점 id · 없으면 학원 전체) → 네트워크 판. */
