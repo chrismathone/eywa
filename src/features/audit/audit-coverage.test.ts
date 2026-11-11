@@ -90,6 +90,9 @@ const EXEMPT: Record<string, string> = {
   "src/features/newcomers/server/followup-actions.ts#assignNewcomerManager": `${OWN_LOG} (onboarding_subject_audit 트리거)`,
   "src/features/newcomers/server/followup-actions.ts#submitNewcomerFeedback": `${OWN_LOG} (onboarding_feedback_audit 트리거)`,
   "src/features/newcomers/server/followup-actions.ts#reviewNewcomerFeedback": `${OWN_LOG} (onboarding_feedback_audit 트리거)`,
+  // 과목 기본 담당(2026-11-11): s2_0066 onboarding_default_manager_audit 트리거가 같은 거래에서 audit_logs에
+  // 실행자(updated_by)·과목·이전/새 담당자를 남긴다(newcomer_default_manager_update) — logAction은 실패를 삼킨다.
+  "src/features/newcomers/server/manager-defaults-actions.ts#saveNewcomerDefaultManager": `${OWN_LOG} (onboarding_default_manager_audit 트리거가 audit_logs에 쓴다)`,
   "src/features/billing/session-terms/server/receipt-allocation-actions.ts#mergeReceiptItems": `${OWN_LOG} (edit_receipt_merge_group이 audit_logs에 쓴다)`,
   "src/features/enrollments/server/actions.ts#deleteEnrollment": `${OWN_LOG} (delete_enrollment_history가 audit_logs에 쓴다)`,
   "src/features/shuttle/parent/server/parent-departure-actions.ts#ackParentNotice": `${OWN_LOG} (확인 행 자체가 누가·언제)`,

@@ -2,26 +2,32 @@ import "server-only";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canAccessTenant, canWriteTenant, accessLevelTenant, readonlyViewErasedScope } from "@/lib/auth/perm-matrix";
+import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday, kstDateOf } from "@/lib/date-kst";
 import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 import { sectionResult } from "@/features/students/ontology/live-contract";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
+import { foldedReason } from "@/lib/folded-read";
 import { getNewcomers, loadNewcomers, type NewcomersView } from "./queries";
 import { ONBOARDING_ITEMS, progressOf } from "../onboarding-items";
 import { CONDITIONS, FOLLOWUP_STAGES, resolveSubjectManager, type ManagerAssignment, type ManagerDefault, type FollowupReport, type FollowupView, type Homeroom, type CheckEvidence } from "../followup-model";
+import { managerDefaultSubjects } from "../manager-defaults";
+import { newcomerScopeOf } from "./scope";
 
 /**
  * 신규생 90일 정착 관리(aywa-next 인계본 이식) — 담당 배정·적응 피드백·후속 조치는 서버 전용 표(s2_0061 · s2_0062 · 정책 0개)라
  * admin + tenant_id로 읽는다. 강사·담당만(scoped) 권한 = 자기가 담임인 학생·과목만 보고 보고만 남긴다. 관리 콜 완료·담당 배정은 관리자만.
  * '다른 강사 뷰'면 그 강사로 판정한다(#154) — 읽기 강사뷰가 지운 담당 범위도 담당만으로 본다.
+ * 과목 기본 담당을 고치는 자격도 `canManage`다(2026-11-11 — 학생별 담당 배정과 같은 자격 · 저장은 manager-defaults-actions.ts).
  */
 export async function followupAccess() {
   const user = await getCurrentUser({ teacherView: true });
   if (!user || !await canAccessTenant(user.systemRole, "newcomers")) throw Error("신입생 관리 권한이 없습니다");
-  const level = await accessLevelTenant(user.systemRole, "newcomers");
-  const scoped = user.systemRole === "teacher" || level === "scoped" || (level === "readonly" && await readonlyViewErasedScope("newcomers"));
+  // 담당 범위 판정은 한 곳(scope.ts) — 약속·인계 · 원생 상세의 입구 · 연결 탐색이 같은 함수를 쓴다.
+  const scoped = (await newcomerScopeOf(user.systemRole)) === "scoped";
   const canReport = !user.tenantView && await canWriteTenant(user.systemRole, "newcomers");
   const canManage = !scoped && canReport;
   return { user, canManage, canReport, scoped };
@@ -106,7 +112,7 @@ export async function getFollowupView(source: NewcomersView): Promise<{ data: Fo
     checksKnown: source.checksAvailable && !source.checksError, staff: [], students: [], error: null };
   try {
     if (source.followupError) throw Error(source.followupError);
-    const [rooms, reports, staff, checks, promises, subjectAssignments, defaults] = await Promise.all([
+    const [rooms, reports, staff, checks, promises, subjectAssignments, defaults, subjectScope] = await Promise.all([
       homeroomsLoad,
       loadFollowupReports(tenant, ids),
       fetchAllPaged<{ id: string; display_name: string; status: string; system_role: string }>((a, b) => db.from("users").select("id,display_name,status,system_role").eq("tenant_id", tenant).order("id").range(a, b)),
@@ -114,13 +120,17 @@ export async function getFollowupView(source: NewcomersView): Promise<{ data: Fo
         (chunk, a, b) => db.from("student_onboarding_checks").select("student_id,subject,item_key,done_by,memo,consultation_id").eq("tenant_id", tenant).in("student_id", chunk).order("id").range(a, b)),
       fetchAllPagedInChunks<{ student_id: string; owner_id: string }>(ids, (chunk, a, b) => db.from("student_care_commitments").select("student_id,owner_id").eq("tenant_id", tenant).in("student_id", chunk).eq("state", "open").order("id").range(a, b)),
       fetchAllPagedInChunks<ManagerAssignment>(ids, (chunk, a, b) => db.from("student_onboarding_subject_assignments").select("student_id,subject,manager_id,mode,version").eq("tenant_id",tenant).in("student_id",chunk).order("student_id").order("subject").range(a, b)),
-      fetchAllPaged<ManagerDefault>((a,b)=>db.from("student_onboarding_manager_defaults").select("subject,manager_id").eq("tenant_id",tenant).order("subject").range(a,b)),
+      fetchAllPaged<ManagerDefault & { updated_at: string }>((a,b)=>db.from("student_onboarding_manager_defaults").select("subject,manager_id,updated_at").eq("tenant_id",tenant).order("subject").range(a,b)),
+      // 기본 담당 줄을 세울 과목 = 지금 과목 + EiE(manager-defaults.ts). 요청 캐시된 학원 설정이라 추가 조회가 없다 — 설정을 못 읽었으면(기본값으로 접힘) 거르지 않는다.
+      getTenantSettings().then(st => foldedReason(st) ? null : { keys: st.operations.subjects.map(x => x.key), eieOn: isModuleEnabled(st.modules.disabled, "eie") }, () => null),
     ]);
     homerooms = rooms;
     const names = new Map(staff.map(p => [p.id, p.display_name]));
     const managers = staff.filter(p => p.status === "active" && ["master", "admin", "manager", "counselor"].includes(p.system_role)).map(p => ({ id: p.id, name: p.display_name })).sort((a, b) => a.name.localeCompare(b.name, "ko"));
     base.staff = canManage ? managers : [];
-    base.defaults=defaults.map(d=>({subject:d.subject,manager:managers.find(p=>p.id===d.manager_id)??null}));
+    // 화면에 싣는 기본 담당 = 지금 과목(학원 설정 차례) + EiE 줄만 — 지운 과목의 줄은 표에 남아도 싣지 않는다. 담당 판정(아래 resolveSubjectManager)은 전체 줄 그대로다.
+    const shown = subjectScope ? managerDefaultSubjects(subjectScope.keys, defaults.map(d => d.subject), subjectScope.eieOn) : defaults.map(d => d.subject);
+    base.defaults = shown.flatMap(subject => defaults.filter(d => d.subject === subject).map(d => ({ subject, manager: managers.find(p => p.id === d.manager_id) ?? null, updatedAt: d.updated_at })));
     base.students = rows.map(row => {
       const subjects = legacy.subjectRows.filter(s => s.studentId === row.studentId);
       const evidence: Record<string, CheckEvidence> = {};

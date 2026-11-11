@@ -1,3 +1,5 @@
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
 import { kstToday } from "@/lib/date-kst";
 import { readMyUiPrefs } from "@/lib/ui-prefs/read";
@@ -7,6 +9,7 @@ import { NEWCOMER_KEYS } from "@/features/students/stats/ops-keys";
 import { firstRecorded, opsSeries } from "@/features/students/stats/ops-series";
 import { loadOpsHistory } from "@/features/students/stats/server/ops-history";
 import { saveNewcomerStatsMode } from "@/features/newcomers/server/stats-prefs-actions";
+import { followupAccess } from "@/features/newcomers/server/followup-query";
 import { BackToListButton } from "../../consultations/_components/back-to-list-button";
 import { StatCard } from "../../students/stats/_components/stat-card";
 import { OpsHistoryCard } from "../../students/stats/_components/ops-history-card";
@@ -22,9 +25,13 @@ const STAGE_COLORS = [100, 78, 58, 40, 24].map((p) => `color-mix(in srgb, var(--
  * '상세'가 여기로 온다. 신규생 단계·체크 지연은 **지금 상태만** 남는 값이라 과거를 되살릴 수 없어 2026-10-21부터 매일 밤 그날 값을 쌓는다
  * (`student_daily_stats.data.ops.newcomers` — 운영실 카드와 같은 계산 `buildCareSummary`). 학원 전체 값이다(과목 관리자 카드와 다를 수 있다).
  * 권한 = 신규생 관리와 같은 `newcomers` 게이트(기록 표는 서버 전용 — 게이트를 지난 뒤 관리 키 + 지점으로 읽는다).
+ * 🔴 **담당 범위 계정은 이 화면을 보지 않는다**(2026-11-11 — 강사에게 신규생 관리를 '담당'으로 여는 결정과 함께): 여기는 학원 전체 신규생 수·기한 경과라
+ *    자기 담임 학생만 보는 계정에게는 범위 밖이다(#77). 판정은 신규생 관리 화면과 같은 `followupAccess().scoped`(강사 · '담당' · 읽기 강사뷰가 지운 담당) —
+ *    페이지에서 역할을 비교하지 않는다. 창(embed) 안이면 `embed=1`을 달아 보낸다(안 달면 창 안에 전체 셸이 뜬다 — #133).
  */
 export default async function NewcomerStatsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const user = await requireAccess("newcomers");
+  if ((await followupAccess()).scoped) redirect((await headers()).get("x-embed") === "1" ? "/newcomers?embed=1" : "/newcomers");
   const today = kstToday();
   const [sp, prefs] = await Promise.all([searchParams, readMyUiPrefs()]);
   const params = readPeriodParams(sp, NEWCOMER_KEYS);

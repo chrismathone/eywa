@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { viewAsTeacher } from "@/lib/auth/view-as";
 import { visibleCareStudents } from "./student-scope";
+import { newcomerScopeOf } from "@/features/newcomers/server/scope";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CareAccessError, isCareStorageMissing } from "./errors";
 
@@ -10,15 +11,19 @@ import { CareAccessError, isCareStorageMissing } from "./errors";
  * 약속 열람·처리 문 — 실패는 `CareAccessError`(까닭: 권한 · 준비 안 됨 · 조회 실패)로 던진다(errors.ts).
  * 🔴 신원 = 보는 강사(`teacherView`) — '배정된 약속'·담당자 본인 판정과 저장 명의가 강사뷰에서 열람자 본인으로 새지 않게(#154 ①).
  *    감사로그는 `logAction`이 실제 계정으로 남긴다. `actor.proxy` = '다른 강사 뷰' 중 — 본인 확인(인수 확인)은 대신 하지 않는다(model.ts).
+ * 🔴 `readAll`(남이 맡은 약속까지 읽는다) = 신규생 관리를 **지점 전체로** 읽는 계정만(`newcomerScopeOf` === "all" — '전체' · '읽기').
+ *    담당 범위(강사 · '담당' · 읽기 강사뷰가 지운 담당)는 자기에게 배정된 약속만 읽는다 — 권한이 있다는 것만으로 전체 열람으로 다루면
+ *    강사에게 신규생 관리 '담당'을 연 학원에서 강사가 다른 직원의 약속·인계까지 읽는다(2026-11-11 적대 리뷰).
  */
 export async function careAccess(studentId?: string) {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) throw new CareAccessError("로그인이 필요합니다", "denied");
-  const [readAll, studentAccess, canManage, newcomerWrite, consultationWrite, viewing] = await Promise.all([
-    canAccessTenant(user.systemRole, "newcomers"), canAccessTenant(user.systemRole, "students"),
+  const [scope, studentAccess, canManage, newcomerWrite, consultationWrite, viewing] = await Promise.all([
+    newcomerScopeOf(user.systemRole), canAccessTenant(user.systemRole, "students"),
     canManageTenant(user.systemRole, "newcomers"), canWriteTenant(user.systemRole, "newcomers"),
     canWriteTenant(user.systemRole, "consultations"), viewAsTeacher(),
   ]);
+  const readAll = scope === "all";
   if (!readAll && !studentAccess) throw new CareAccessError("약속을 열람할 권한이 없습니다", "denied");
   if (studentId && readAll && !(await visibleCareStudents([studentId])).has(studentId)) throw new CareAccessError("학생을 열람할 권한이 없습니다", "denied");
   if (studentId && !readAll) {

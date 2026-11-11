@@ -10,6 +10,7 @@ import { EMPTY_FILTERS } from "./board-model";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }), usePathname: () => "/newcomers", useSearchParams: () => new URLSearchParams() }));
 vi.mock("./server/followup-actions", () => ({ assignNewcomerManager: vi.fn(), submitNewcomerFeedback: vi.fn(), reviewNewcomerFeedback: vi.fn() }));
 vi.mock("./server/actions", () => ({ setOnboardingCheck: vi.fn() }));
+vi.mock("./server/manager-defaults-actions", () => ({ saveNewcomerDefaultManager: vi.fn() }));
 vi.mock("@/features/owner/operations-context", () => ({ useSubjectMaps: () => ({ labelOf: (s: string) => (s === "math" ? "수학" : "영어") }) }));
 vi.mock("@/components/embed-link", () => ({ EmbedLink: ({ children, ...props }: AnchorHTMLAttributes<HTMLAnchorElement>) => <a {...props}>{children}</a> }));
 // 체크표 본체는 여기서 그리지 않는다 — 넘겨받는 쓰기 여부만 본다.
@@ -75,4 +76,40 @@ it("체크표 쓰기 권한이 없으면 체크표는 조회 전용으로 넘긴
   render(<FollowupWorkspace {...f} initialFilters={EMPTY_FILTERS} />);
   fireEvent.click(screen.getByRole("button", { name: "전체 완료 체크표" }));
   expect(screen.getByTestId("board")).toHaveAttribute("data-can-write", "false");
+});
+
+// 과목 기본 담당 설정(2026-11-11) — '기본 관리 담당' 띠와 고치는 단추. 단추는 canManage(신규생 관리 '전체')일 때만 선다(서버 액션이 같은 판정을 다시 본다).
+const STAMP = "2026-11-10T16:46:59.510883+00:00";
+const band = () => screen.queryByRole("complementary", { name: "과목별 기본 관리자" });
+
+it("기본 담당 띠 — 과목 이름으로 적고(EiE는 프로그램 이름) 관리 권한이 있으면 '기본 담당 설정' 단추가 선다", () => {
+  const f = fixture();
+  f.data.defaults = [{ subject: "math", manager: { id: managerId, name: "박관리" }, updatedAt: STAMP }, { subject: "eie", manager: null, updatedAt: STAMP }];
+  render(<FollowupWorkspace {...f} initialFilters={EMPTY_FILTERS} />);
+  expect(band()).toHaveTextContent("수학 · 박관리");
+  // 이 시험의 과목 이름 흉내는 수학이 아니면 전부 '영어'다 — EiE 줄은 과목 목록에 같은 키가 없을 때만 'EiE'로 적는다(manager-defaults.test.ts).
+  expect(band()).toHaveTextContent("재지정 필요");
+  expect(within(band()!).getByRole("button", { name: "기본 담당 설정" })).toBeInTheDocument();
+});
+
+it("🔴 담당 범위 계정(강사)에게는 띠만 보이고 고치는 단추는 서지 않는다", () => {
+  const f = fixture();
+  f.data.canManage = false; f.data.staff = [];
+  f.data.defaults = [{ subject: "math", manager: { id: managerId, name: "박관리" }, updatedAt: STAMP }];
+  render(<FollowupWorkspace {...f} initialFilters={EMPTY_FILTERS} />);
+  expect(band()).toHaveTextContent("수학 · 박관리");
+  expect(screen.queryByRole("button", { name: "기본 담당 설정" })).not.toBeInTheDocument();
+});
+
+it("기본 담당이 아직 없는 학원 — 관리 권한이 있으면 띠를 세워 지정할 수 있게 하고, 없으면 띠를 세우지 않는다", () => {
+  const f = fixture();
+  f.data.defaults = [];
+  const { unmount } = render(<FollowupWorkspace {...f} initialFilters={EMPTY_FILTERS} />);
+  expect(band()).toHaveTextContent("아직 지정 없음");
+  expect(screen.getByRole("button", { name: "기본 담당 설정" })).toBeInTheDocument();
+  unmount();
+  const g = fixture();
+  g.data.canManage = false; g.data.defaults = [];
+  render(<FollowupWorkspace {...g} initialFilters={EMPTY_FILTERS} />);
+  expect(band()).not.toBeInTheDocument();
 });

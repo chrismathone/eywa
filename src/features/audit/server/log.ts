@@ -292,6 +292,9 @@ export const AUDIT_ACTIONS = {
   // "안 왔다는데 콜은 했다고 돼 있네"를 되짚을 수 있어야 한다. 해제도 함께 남긴다(그쪽이 더 중요한 흔적).
   newcomer_check: "신규생 체크 완료",
   newcomer_uncheck: "신규생 체크 해제",
+  // 신규생 '과목 기본 담당' 지정·교체(2026-11-11) — 앱이 아니라 **DB 트리거**(s2_0066 `onboarding_default_manager_audit`)가 같은 거래에 남긴다
+  // (직접 지정하지 않은 학생 전체의 관리 담당이 한 줄로 바뀐다 · logAction은 실패를 삼켜서). 상세 = describe.ts.
+  newcomer_default_manager_update: "신규생 과목 기본 담당 변경",
   // 2차 확장(2026-08-18 원장 "모든 행동에 기록이 남도록 범인 찾기 가능하게") — 수강을 바꾸는 나머지 경로.
   enrollment_assign: "반 배정",
   enrollment_move: "반 이동",
