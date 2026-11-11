@@ -28,7 +28,7 @@ aywa-next(태그 `archive/aywa-next-375d27d`)의 실제 기능을 옮기며 만�
 - `s2_0059_knowledge_review_rules.sql` — s2_0049의 트리거 함수 다시 정의(본인 관찰 자기 확인 금지 · 검토자는 상태·검토 의견만 · 검토 의견은 검토자만) + `academy_knowledge_latest(p_tenant, p_author, p_student)`(기록마다 최신 버전).
 - `s2_0060_delete_staff_account.sql` — `delete_staff_account(p_tenant, p_user)`: 직원 완전 삭제를 한 거래로(로그인 계정 → 직원 행 잠금 → s2_0058 검사 → 직원 행 → 로그인 계정). 🔴 `auth.users` 행을 이 함수가 직접 지운다(Auth 서버 API를 따로 부르지 않는다 — 두 번에 나누면 로그인만 사라지거나 미러 트리거가 직원 행을 되살린다).
 - 표 6개 = 정책 0개(서버 전용 · admin + `tenant_id` 필터) · 함수는 service_role만 실행. 시험 거래: 저장 함수·트리거 규칙, 그리고 데모 지점에서 삭제 다섯 갈래(차단 · 삭제 · 다른 지점 · 로그인 계정 없는 직원 · 보호 계정)와 신규생 기본 담당 3줄이 차단으로 잡히는 것을 확인. 되돌리기 = `scripts/_oneoff/revert-s2_0048-…` ~ `revert-s2_0051-…` · `revert-s2_0058-…` ~ `revert-s2_0060-…`(앱을 먼저 되돌린 뒤 · 0060 → 0059 → 0058 순).
-## 2026-11-11 신규생 90일 정착 관리 · 신규 콜&상담 여정 (s2_0061 · s2_0062 · s2_0063 · s2_0064 · ✅ 운영 적용 2026-11-11 · CLI 직결(node · 파일마다 한 거래) · 시험 거래(ROLLBACK) 뒤 · 사후 확인 통과 · 본문은 적용한 그대로)
+## 2026-11-11 신규생 90일 정착 관리 · 신규 콜&상담 여정 (s2_0061 · s2_0062 · s2_0063 · s2_0064 · s2_0065 · ✅ 운영 적용 2026-11-11 · CLI 직결(node · 파일마다 한 거래) · 시험 거래(ROLLBACK) 뒤 · 사후 확인 통과 · 본문은 적용한 그대로)
 
 aywa-next 인계본(태그 `archive/aywa-next-375d27d`)의 표를 옮겼다 — 전부 **추가만**(기존 표의 데이터는 건드리지 않는다) · 서버 전용 표(RLS 켜짐 · 정책 0개 · anon/authenticated 권한 없음 — s2_0028과 같은 규약). 결정 본문 = [`docs/decisions/enrollment-journey.md`](../../docs/decisions/enrollment-journey.md).
 
@@ -36,6 +36,7 @@ aywa-next 인계본(태그 `archive/aywa-next-375d27d`)의 표를 옮겼다 — 
 - `s2_0062_newcomer_subject_managers.sql` — `student_onboarding_subject_assignments`(학생·과목별 담당) + `student_onboarding_manager_defaults`(과목 기본 담당 — 고치는 화면이 아직 없다 · 운영 DB의 3행은 2026-11-11 신입생 90일 관리 복구 때 직접 넣은 것).
 - `s2_0063_enrollment_journey.sql` — `enrollment_journey_records` + `enrollment_journey_revisions` + `save_enrollment_journey`(서버 전용 · version 비교).
 - `s2_0064_enrollment_journey_delete_guard.sql` — 상담 행 BEFORE DELETE 트리거(집계 제외가 아닌 여정 기록이 걸린 상담은 삭제 불가) + 서버 전용 `merge_enrollment_consultations_with_journey`(상담 잠금 → 기록 이동 → 종전 병합 함수). 🔴 **앱보다 먼저** — 새 앱의 상담 병합은 이 함수만 부른다(없으면 병합이 '준비하는 중' 안내로 멈춘다 · #95). 적용 뒤 확인: 트리거 1 · 함수 2(화면 계정 실행권 없음) · 적용본을 거래 안에서 다시 시험(삭제 차단 · 옛 병합 함수 차단 · 병합 시 기록 이동·이력 보존·활동 기록의 요청자) 후 ROLLBACK · 여정 기록 0건 · 상담 2,427건 그대로.
+- `s2_0065_staff_delete_blockers_journey_owner.sql` — 직원 삭제 차단 검사(`staff_delete_blockers` · s2_0058)를 다시 정의: 콜&상담 여정 기록의 담당자(문서 속 `ownerId` · FK 없음)도 센다(✅ 운영 적용 2026-11-11 · 시험 거래 뒤 · 본문은 s2_0058 그대로 + 한 갈래 · 읽기만). 되돌리기 = `scripts/_oneoff/revert-s2_0065-…`(s2_0058의 정의로 다시 정의).
 - 적용 순서 0061 → 0062 → 0063 → 0064. main의 신입생 90일 관리(052112f21)는 0061·0062의 표를 이미 읽고 쓴다.
 - 되돌리기 = `scripts/_oneoff/revert-s2_0061-…` ~ `revert-s2_0064-…`(앱을 먼저 되돌린 뒤 · 0064 → 0063 · 0062 → 0061 순서 · 적힌 기록이 함께 사라진다).
 - 🔴 번호: 운영에는 병렬 작업용 예약 번호 이름으로 적용했고(옛 이름 `s2_0060_newcomer_followup` · `s2_0061_newcomer_subject_managers` · `s2_0062_enrollment_journey` · `s2_0063_enrollment_journey_delete_guard`), main에 합치며 다음 빈 번호로 **이름만** 한 칸씩 뒤로 옮겼다(내용 그대로 — 다시 돌리지 않는다 · [`docs/sql-season2.md`](../../docs/sql-season2.md) §3-A). 지금의 `s2_0060`은 다른 파일(직원 완전 삭제)이다.

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { migrationFiles } from "@/lib/db/migrations-corpus.mjs";
 const m = vi.hoisted(() => ({ rpc: vi.fn(), explain: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: m.rpc }) }));
 vi.mock("@/lib/supabase/db-error", () => ({ explainDbError: m.explain }));
@@ -65,5 +66,14 @@ describe("직원 완전 삭제 — 한 거래로(막히면 아무것도 지워�
     const check = at("public.staff_delete_blockers(p_user)"), delRow = at("delete from public.users"), delLogin = at("delete from auth.users");
     expect(lockLogin).toBeLessThan(lockRow); expect(lockRow).toBeLessThan(check); expect(check).toBeLessThan(delRow); expect(delRow).toBeLessThan(delLogin);
     expect(sql).toMatch(/revoke all on function public\.delete_staff_account\(uuid, uuid\) from public, anon, authenticated/);
+  });
+  it("🔴 삭제 차단 검사의 마지막 정의는 FK 없는 문서 속 담당자 둘(관찰 기록 · 콜&상담 여정 기록)을 모두 센다 — 다시 정의할 때 한 갈래를 빠뜨리지 않게", () => {
+    const defs = (migrationFiles() as Array<{ name: string; sql: string }>).filter((f) => /create (or replace )?function public\.staff_delete_blockers\(/.test(f.sql.replace(/--[^\n]*/g, "")));
+    expect(defs.length).toBeGreaterThan(0);
+    const last = defs.at(-1)!.sql.replace(/--[^\n]*/g, "");
+    for (const table of ["academy_knowledge_records", "enrollment_journey_records"]) {
+      expect(last, table).toContain(`from public.${table} where document->>''ownerId'' = $1`);
+    }
+    expect(last).toMatch(/revoke all on function public\.staff_delete_blockers\(uuid\) from public, anon, authenticated/);
   });
 });
