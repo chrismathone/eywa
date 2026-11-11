@@ -325,7 +325,7 @@ describe("runAssistantAgent", () => {
     };
     const report = () => msg([tool("r", "render_report", { title: "t", blocks: [{ type: "summary", text: "s" }, { type: "advice", items: [{ action: "a", why: "b" }] }] })]);
 
-    it("강사 — DB 이름으로 · 맡은 반을 거친 표(영상 숙제 검사)도 센다 · 그 뒤 조회만 '자세히 봄'", async () => {
+    it("강사 — DB 이름으로 · 맡은 반을 거친 표(영상 숙제 검사)도 센다 · 그 뒤 조회만 '내용 조회'", async () => {
       const { sdb, sqls } = surveyDb({ self: [{ 이름: "김윤하", 같은이름: 1 }], classes: [C] });
       const { client, calls } = fakeClient([
         msg([tool("s1", "survey_entity", { target: "teacher", id: T, name: "김 선생" })]),
@@ -392,10 +392,10 @@ describe("runAssistantAgent", () => {
     expect(r.report.cutShort).toBe("user");
     const sent = calls[1]!.messages.at(-1)!.content as Array<Anthropic.ToolResultBlockParam | Anthropic.TextBlockParam>;
     expect(sent[1]).toMatchObject({ type: "tool_result", tool_use_id: "b", is_error: true });
-    expect(JSON.stringify(sent)).toMatch(/원장님이 '여기서 끝내고 결과 보기'를 누르셨습니다/);
+    expect(JSON.stringify(sent)).toMatch(/질문한 분이 '여기서 끝내고 결과 보기'를 눌렀습니다/);
     const last = [...new Map(events.map((e) => [e.step.id, e.step])).values()];
     expect(last.find((st) => st.cause === "user")).toMatchObject({ state: "error", detail: "여기서 조회를 끝냈습니다" });
-    expect(last.some((st) => st.label.startsWith("원장님 요청으로 여기서 조회를 끝냈습니다"))).toBe(true);
+    expect(last.some((st) => st.label.startsWith("요청에 따라 여기서 조회를 끝냈습니다"))).toBe(true);
     expect(last.some((st) => st.label === "지금까지 조회한 내용으로 보고서를 쓰는 중")).toBe(true);
   });
 
@@ -432,7 +432,7 @@ describe("runAssistantAgent", () => {
     const before = calls[1]!.messages.at(-1)!.content as Anthropic.ContentBlockParam[];
     const after = calls[2]!.messages.at(-1)!.content as Anthropic.ContentBlockParam[];
     expect(after.slice(0, before.length)).toEqual(before);
-    expect((after.at(-1) as Anthropic.TextBlockParam).text).toMatch(/원장님이 '여기서 끝내고 결과 보기'를 누르셨습니다/);
+    expect((after.at(-1) as Anthropic.TextBlockParam).text).toMatch(/질문한 분이 '여기서 끝내고 결과 보기'를 눌렀습니다/);
   });
 
   it("'바로 결과 보기'를 자료를 읽기 전에 누르면 끊지 않고 첫 자료를 읽은 뒤에 든다(근거 없는 보고서 금지 · 재리뷰 2026-11-09)", async () => {
@@ -446,8 +446,8 @@ describe("runAssistantAgent", () => {
     run.mockClear();
     const r = await runAssistantAgent({ ...base(client), wrapSignal: wrap.signal });
     expect(run).toHaveBeenCalledTimes(1); // 첫 조회는 돌았다
-    expect(JSON.stringify(calls[0]!.messages)).not.toMatch(/원장님이 '여기서 끝내고/); // 첫 요청엔 부탁이 없다
-    expect(JSON.stringify(calls[1]!.messages.at(-1)!.content)).toMatch(/원장님이 '여기서 끝내고 결과 보기'를 누르셨습니다/);
+    expect(JSON.stringify(calls[0]!.messages)).not.toMatch(/질문한 분이 '여기서 끝내고/); // 첫 요청엔 부탁이 없다
+    expect(JSON.stringify(calls[1]!.messages.at(-1)!.content)).toMatch(/질문한 분이 '여기서 끝내고 결과 보기'를 눌렀습니다/);
     expect(r.report.cutShort).toBe("user");
   });
 

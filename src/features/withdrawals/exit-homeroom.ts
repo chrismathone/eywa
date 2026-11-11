@@ -9,6 +9,7 @@
  * - 수학 JJ(자습실) 반은 뺀다 — 시트도 JJ 반은 적지 않는다(`isSelfStudyClassName`). JJ 반만 남으면 그 반으로.
  * - 그날 담임 = (영어 반) 그날 유효한 시간표 칸에서 **가장 많이 들어가는 한국인 선생님**(영어 시트 가져오기가 담임을 정하는 규칙과 같다 —
  *   영어는 달마다 칸 선생님이 바뀌는데 담임 변경 기록이 안 남는다). 칸이 비었거나 동률이면 · 수학 반은 늘 담임 이력(`owner` — 호출부가 칸을 넘기지 않는다).
+ * - 담임 이력이 비었으면(인계 기록에 이전 담임 없음 · 담임 칸 빈 채 닫힌 반) 그 반 보고서를 30일간 가장 많이 쓴 선생님(`reportWriterOn`).
  * - 날 = 마지막으로 다닌 날(종료일 하루 앞 — 종료일이 1일이면 그 전달 선생님이 가르쳤다).
  */
 import { exitDayOf, endedWithExit, type EndedRowRef, type ExitClassRef } from "./reason-key";
@@ -17,6 +18,26 @@ import { isSelfStudyClassName } from "./withdrawal-sheet-model";
 export type HomeroomRow = EndedRowRef & { transferred: boolean };
 export type HomeroomClass = ExitClassRef & { name: string };
 export type HomeroomSlot = { teacherId: string | null; validFrom: string | null; validTo: string | null };
+/** 그 반 수업보고서 한 줄 — 담임 이력이 비었을 때만 쓰는 추정 근거(`reportWriterOn`). */
+export type HomeroomReport = { teacherId: string; date: string };
+
+/** 보고서로 보는 폭 — 마지막으로 다닌 날 앞 30일. */
+export const REPORT_WINDOW_DAYS = 30;
+
+/**
+ * 그날 앞 30일 동안 그 반 보고서를 가장 많이 쓴 선생님 — 동률이거나 없으면 null.
+ * 🔴 담임 이력(`owner`)이 **비었을 때만** 쓴다(인계 기록에 이전 담임이 없다 · 담임 칸이 빈 채 닫힌 반). 이력이 있으면 이력이 이긴다 —
+ *    작성자는 담임이 아닐 수 있다(대리 작성 [[#93]]). 침산 실측: 중2 PS2S는 7/9 인계 기록에 이전 담임이 없어 6월까지 쓴 김화영
+ *    선생님 대신 아무도 안 붙었다(원장 2026-11-11 *"김화영 7월만 봐도 10명 가까이 되는데"*).
+ */
+export function reportWriterOn(reports: readonly HomeroomReport[], day: string): string | null {
+  const from = new Date(Date.parse(`${day}T00:00:00Z`) - REPORT_WINDOW_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const counts = new Map<string, number>();
+  for (const r of reports) if (r.date >= from && r.date <= day) counts.set(r.teacherId, (counts.get(r.teacherId) ?? 0) + 1);
+  const ranked = [...counts].sort((a, b) => b[1] - a[1]);
+  if (!ranked.length || (ranked[1] && ranked[1][1] === ranked[0]![1])) return null;
+  return ranked[0]![0];
+}
 
 const prevDay = (ymd: string) => new Date(Date.parse(`${ymd}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
 
@@ -41,6 +62,8 @@ export function exitHomeroomIds(input: {
   slotsOf: (classId: string) => readonly HomeroomSlot[];
   owner: (classId: string, day: string) => string | null;
   isKorean: (teacherId: string) => boolean;
+  /** 담임 이력이 빈 반의 보고서(없으면 빈 배열) — `reportWriterOn`. */
+  reportsOf?: (classId: string) => readonly HomeroomReport[];
 }): string[] {
   const { classOf } = input;
   const ended = endedWithExit(input.rows, input.date, classOf, input.lookbackDays).filter((r) => classOf(r.classId)?.regular);
@@ -53,7 +76,10 @@ export function exitHomeroomIds(input: {
     if (!exit) continue;
     const start = r.startDate?.slice(0, 10);
     const day = start && prevDay(exit) < start ? exit : prevDay(exit);
-    const id = slotHomeroom(input.slotsOf(r.classId), day, input.isKorean) ?? input.owner(r.classId, day);
+    const id =
+      slotHomeroom(input.slotsOf(r.classId), day, input.isKorean) ??
+      input.owner(r.classId, day) ??
+      reportWriterOn(input.reportsOf?.(r.classId) ?? [], day);
     if (id) ids.add(id);
   }
   return [...ids];

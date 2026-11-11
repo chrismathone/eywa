@@ -34,8 +34,8 @@ export async function knowledgeAccess(write = false) {
 /** 지점의 실제 학생(검증용·병합 제외) — 담당 범위가 있으면 그 안만. */
 export const loadKnowledgeStudents = cache(async (tenant: string, readable: Set<string> | null): Promise<Person[]> => {
   const db = createAdminClient();
-  const raw = await fetchAllPaged<{ id: string; name: string; school: string | null; grade: string | null; is_test: boolean | null; notes: string | null }>((a, b) => db.from("students").select("id,name,school,grade,is_test,notes").eq("tenant_id", tenant).order("id").range(a, b));
-  return raw.filter(s => !s.is_test && !isMergedStudent(s.notes) && (readable === null || readable.has(s.id))).map(({ id, name, school, grade }) => ({ id, name, school, grade }));
+  const raw = await fetchAllPaged<{ id: string; name: string; school: string | null; grade: string | null; status: string | null; is_test: boolean | null; notes: string | null }>((a, b) => db.from("students").select("id,name,school,grade,status,is_test,notes").eq("tenant_id", tenant).order("id").range(a, b));
+  return raw.filter(s => !s.is_test && !isMergedStudent(s.notes) && (readable === null || readable.has(s.id))).map(({ id, name, school, grade, status }) => ({ id, name, school, grade, status }));
 });
 
 export async function loadKnowledgeRecords() {

@@ -7,7 +7,8 @@ export type AssistantLevel = (typeof ASSISTANT_LEVELS)[number];
 
 export const ASSISTANT_LEVEL_LABEL: Readonly<Record<AssistantLevel, string>> = { low: "적음", normal: "보통", high: "강함" };
 export const ASSISTANT_LEVEL_HINT: Readonly<Record<AssistantLevel, string>> = {
-  low: "빠르고 가볍게 — 숫자 하나·명단 하나",
+  // 멘트 시험 2026-11-11 — 적음은 원인·순위·사람 평가 질문에서 근거보다 세게 말했다(핵심 사실 오류 10회 중 5회). 보조 안내일 뿐(보통 이상이 늘 안전하다는 뜻은 아니다).
+  low: "빠르고 가볍게 — 숫자 하나·명단 하나 · 원인·순위·사람 평가에는 맞지 않습니다",
   normal: "대부분의 질문",
   high: "여러 자료를 엮는 분석 — 느리고 비쌉니다",
 };

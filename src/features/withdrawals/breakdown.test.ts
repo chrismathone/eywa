@@ -205,11 +205,11 @@ describe("강사 가리기 — 시간표 X와 같은 판정(과목마다 그만�
     expect(teacherFacetsIn(per, ["math"])).toEqual(["kim"]);
     expect(teacherFacetsIn(per, ["english"])).toEqual([FACET_NONE]);
   });
-  it("🔴 장부 정리 · 날짜 미상 · 날짜 없는 줄 = 모든 과목 담당 미반영 — 판정하지 않는다", () => {
+  it("🔴 날짜 미상 · 날짜 없는 줄 = 모든 과목 담당 미반영 — 판정하지 않는다 · 장부 정리는 판정한다(퇴원생 관리 차트와 같이)", () => {
     calls.length = 0;
     const out = attributeTeachers([row("c", { cleanup: true }), row("b", { systemBulk: true }), row("n", { date: null })], judge, opts);
-    expect(["c", "b", "n"].map((k) => teacherFacetsIn(out.get(k)!, ["math"]))).toEqual([[FACET_NONE], [FACET_NONE], [FACET_NONE]]);
-    expect(calls).toEqual([]);
+    expect(["c", "b", "n"].map((k) => teacherFacetsIn(out.get(k)!, ["math"]))).toEqual([["kim"], [FACET_NONE], [FACET_NONE]]);
+    expect(calls).toEqual(["s-c|math|2026-09-10"]);
   });
   it("판정 폭 밖(가장 이른 날 앞 · 오늘 뒤) 줄은 결과에 없다 — 화면이 '가리지 않은 줄'로 따로 센다", () => {
     const out = attributeTeachers([row("old", { date: "2024-01-05" }), row("future", { date: "2026-11-01" })], judge, opts);
