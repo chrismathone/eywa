@@ -1,7 +1,7 @@
 /*
  * 경영 분석 시안 — 운영실 '계기판' 토큰(instruments.css)과 같은 값만 쓴다.
  * 머리글·월 이동·뒤로 링크는 앱 부품(PageHeader·PeriodNav·BackLink)이 그린다(원장 2026-11-11 디자인 통일). `.page` = 본문 상자.
- * 원시 단추 규칙은 `[data-slot]`(공용 Button)·`[aria-pressed]`(보기 전환 칸)를 뺀다 — 층 밖 규칙이 Tailwind 유틸을 이긴다.
+ * 원시 단추 규칙은 `[data-slot]`(공용 Button)·`[aria-pressed]`(보기 전환 칸)를 뺀다 — 특이도는 그대로, 층 밖 규칙이 Tailwind 유틸을 덮지 않게.
  * 차콜 #363c41 · 노랑 #fdb811 · 붉은색 #b44832(경고만) · 글자 #23282c 한 값(보조 글자도 같은 값 · 원장 2026-11-10) · 선 #e1e3df · 바탕 #f4f4f1 · 화면 #f1f1ed.
  */
 .page {
@@ -82,8 +82,15 @@
 .confirm { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: var(--text-xs); }
 .notice { background: var(--hover); border: 1px solid color-mix(in srgb, var(--gold-bright) 45%, var(--card)); color: var(--ink) !important; padding: 10px 12px; border-radius: 8px; font-size: var(--text-xs); }
 .notice p { color: var(--ink-2); }
-.upload { display: inline-flex; flex-direction: column; gap: 4px; font-size: var(--text-xs); background: var(--wash); color: var(--muted); border-color: var(--line); cursor: not-allowed; }
-.upload input { font-size: var(--text-xs); max-width: 230px; border: 0; padding: 0; background: transparent; color: var(--muted); }
+.upload { display: inline-flex; flex-direction: column; gap: 4px; font-size: var(--text-xs); cursor: pointer; }
+.upload input { font-size: var(--text-xs); max-width: 230px; border: 0; padding: 0; background: transparent; color: inherit; }
+.upload:has(input:disabled) { background: var(--wash); color: var(--muted); border-color: var(--line); cursor: not-allowed; }
+/* 차트가 한 칸씩 셋뿐일 때(visual-summary.tsx) — 차트 격자가 2열인 폭(analytics.module.css 681~1100px)에서만 마지막 카드를 두 칸으로. */
+.lastChart { display: grid; min-width: 0; }
+@media (min-width: 681px) and (max-width: 1100px) { .lastChart { grid-column: span 2; } }
+.answer { display: grid; gap: 10px; margin-top: 10px; }
+.answer article { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--wash); }
+.answer article p { margin: 4px 0; color: var(--ink-2); }
 .hash { word-break: break-all; font-size: var(--text-xs) !important; color: var(--muted) !important; }
 
 .graph { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px; padding: 20px 12px; background: var(--wash); border-radius: 8px; margin: 8px 0; }

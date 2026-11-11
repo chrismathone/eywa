@@ -24,6 +24,14 @@ const GUARDED_ACTION_FILES: { file: string[]; what: string }[] = [
     what: "상담 약속·인계 저장(대상 명의 · 관리 클라이언트 · 2026-11-06)",
   },
   {
+    file: ["src", "features", "newcomers", "server", "followup-actions.ts"],
+    what: "신규생 적응 피드백·확인·담당 배정(작성자 = 대상 · 관리 클라이언트 · 2026-11-11)",
+  },
+  {
+    file: ["src", "features", "enrollment", "journey", "server.ts"],
+    what: "전화·방문·등록 확인 기록 저장(기록 명의 = 대상 · 관리 클라이언트 RPC · 2026-11-11)",
+  },
+  {
     file: ["src", "features", "onescreen", "server", "actions.ts"],
     what: "보고서 저장·발송·공유링크·AI 멘트·개인 설정",
   },

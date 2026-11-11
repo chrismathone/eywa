@@ -64,15 +64,17 @@ export async function loadTeacherHub(opts:{teacherId?:string;month?:string}={}):
   }
   const permissions=await Promise.all((["lesson_reports","consultations","documents","enrollment","ecs","mcs","newcomers"] as const).map(k=>canAccessTenant(user.systemRole,k)));
   const proofPermissions={lesson_report:permissions[0],consultation:permissions[1],english_sheet:permissions[4],math_sheet:permissions[5]};
-  const [periods,rawEnrollments,reports,consults,careRows,sheetRows]=await Promise.all([
+  const [periods,rawEnrollments,reports,consults,careRows,sheetRows,capacityResult]=await Promise.all([
     loadTeacherPeriods(db,tenant,teacher.id,[month,shiftMonth(month,-1)]),
     fetchAllPagedInChunks<{id:string;student_id:string;class_id:string;start_date:string;end_date:string|null;on_hold:boolean;is_transferred:boolean}>(classes.map(c=>c.id),(ids,a,b)=>db.from("enrollments").select("id,student_id,class_id,start_date,end_date,on_hold,is_transferred").eq("tenant_id",tenant).in("class_id",ids).lte("start_date",today).or(`end_date.is.null,end_date.gte.${today}`).order("id").range(a,b)),
     optional("report","직접 작성 수업보고",permissions[0],()=>fetchAllPaged<{id:string;student_id:string;report_date:string;class_id:string|null}>((a,b)=>db.from("lesson_reports").select("id,student_id,report_date,class_id").eq("tenant_id",tenant).eq("created_by",teacher.id).is("revoked_at",null).gte("report_date",range.from).lte("report_date",end).order("id").range(a,b)),`${month} 수업일 기준 · 직접 작성 기록; 작성률은 저장 집계와 구분`),
     optional("consultation","직접 상담 기록",permissions[1],()=>fetchAllPaged<{id:string;student_id:string;consulted_at:string;follow_up_done:boolean|null}>((a,b)=>db.from("student_consultations").select("id,student_id,consulted_at,follow_up_done").eq("tenant_id",tenant).eq("counselor_id",teacher.id).gte("consulted_at",`${range.from}T00:00:00+09:00`).lte("consulted_at",`${end}T23:59:59.999+09:00`).order("id").range(a,b)),`${month} 상담일 기준 · 상담자ID 연결`),
     optional("promise","담당 약속",permissions[6],()=>fetchAllPaged<{id:string;student_id:string|null;due_on:string;state:string;document:unknown}>((a,b)=>db.from("student_care_commitments").select("id,student_id,due_on,state,document").eq("tenant_id",tenant).eq("owner_id",teacher.id).neq("state","cancelled").order("id").range(a,b)),"현재 담당 약속 전체 · 선택 월과 별도"),
     optional("sheet","마지막 수정한 영어 개별 시트",permissions[4],()=>fetchAllPaged<{id:string;class_id:string;student_id:string;mark_date:string;progress_note:string|null;score:string|null}>((a,b)=>db.from("class_sheet_student_marks").select("id,class_id,student_id,mark_date,progress_note,score").eq("tenant_id",tenant).eq("updated_by",teacher.id).gte("mark_date",range.from).lte("mark_date",end).order("id").range(a,b)),`${month} 기록일 기준 · 마지막 수정자 연결; 최초 작성자·당시 담당자와 다를 수 있음`),
+    // 배정 상한(s2_0055) — 이번 달 것만. 표가 없거나 못 읽으면 '조회 확인 필요'로(0건으로 위장하지 않는다).
+    db.from("teacher_capacity_plans").select("teacher_id,month,version,max_students,basis,updated_at").eq("tenant_id",tenant).eq("teacher_id",teacher.id).eq("month",today.slice(0,7)).maybeSingle(),
   ]);
-  // 🔴 시안: 행사 접점(marketing_input_records)·업무문서(academy_work_records)·배정 상한(teacher_capacity_plans) 표가 이 DB에 없다.
+  // 🔴 시안: 행사 접점(marketing_input_records)·업무문서(academy_work_records) 표가 이 DB에 없다.
   //    조회하지 않고 '연결 전'으로 밝힌다(0건으로 위장하지 않는다). 강사 이름에 예시 값을 붙이지도 않는다.
   coverage.push({key:"marketing",label:"작성한 행사 접점 근거",state:"unavailable",count:null,note:"행사 접점 기록 표가 연결되기 전입니다 · 0건으로 해석하지 않습니다"});
   coverage.push({key:"work",label:"제출·검토 업무문서",state:"unavailable",count:null,note:"업무문서 표가 연결되기 전입니다 · 0건으로 해석하지 않습니다"});
@@ -90,19 +92,30 @@ export async function loadTeacherHub(opts:{teacherId?:string;month?:string}={}):
     ...careRows.flatMap(r=>{const parsed=careDocumentSchema.safeParse(r.document);if(!parsed.success||!r.student_id||!names.has(r.student_id))return [];const doc=parsed.data;return [{id:r.id,kind:"promise" as const,label:doc.content.promise,date:r.due_on,href:`/students/${r.student_id}/care`,source:"student_care_commitments",studentId:r.student_id,state:promiseStatus(r.state,!!doc.acknowledged,r.due_on,today),note:doc.content.criterion,evidence:doc.evidence.filter(e=>e.revision===doc.revision&&proofPermissions[e.kind]).map(e=>({source:e.kind,id:e.recordId,href:evidenceHref(e.kind,e.recordId)}))}];}),
   ];
   records.sort((a,b)=>(b.date??"").localeCompare(a.date??"")||a.id.localeCompare(b.id));
-  const capacity=null as CapacityPlan|null;
-  coverage.push({key:"capacity",label:"현재 월 배정 상한",state:"unavailable",count:null,note:"배정 상한 표가 연결되기 전입니다(시안) · 입력·저장하지 않습니다"});
+  if(capacityResult.error)console.error("[teacher-hub] 배정 상한 조회 실패",capacityResult.error);
+  const capacity=capacityResult.error?null:capacityResult.data as CapacityPlan|null;
+  coverage.push({key:"capacity",label:"현재 월 배정 상한",state:capacityResult.error?"unavailable":"ready",count:capacity?1:0,note:capacityResult.error?"배정 상한을 불러오지 못했습니다 · 0건으로 해석하지 않습니다":capacity?`${capacity.month} 관리자가 입력한 기준 · 성과 자동 판정 아님`:"관리자가 적정 담당 학생 수와 근거를 입력하면 배정 여력을 계산합니다"});
   coverage.push({key:"portfolio",label:"월별 성과 집계",state:period?"ready":"unavailable",count:period?.items.length??null,note:period?`${period.closing.computedAt} 집계 · 지표별 근거는 최대 120행씩 그래프에 연결`:`${month} 집계가 없습니다. 직원 포트폴리오에서 지금 집계를 실행해 주세요.`});
   for(const c of coverage)if(["report","sheet","consultation","promise"].includes(c.key)&&c.state==="ready")c.count=records.filter(r=>r.kind===c.key).length;
   const invalidCare=careRows.filter(r=>!careDocumentSchema.safeParse(r.document).success).length;
   if(invalidCare)coverage.push({key:"invalid-care",label:"약속 문서 형식 확인",state:"unavailable",count:invalidCare,note:"형식이 맞지 않아 연결에서 제외된 원본 약속입니다. 원본 보정이 필요합니다."});
   const metrics=(period?.items??[]).filter(m=>!m.off).map(m=>metricView(m,month));
   const graph=buildTeacherGraph({tenant,teacher,month,today,observedAt,classes,students,enrollments,records,period,capacity,coverage});
-  return {teacher,teachers,month,months,today,computedAt:period?.closing.computedAt??null,closing:period?.closing.closedAt?"마감 저장":"진행 중 / 집계 전",classes,students,enrollments,records,metrics,coverage,capacity,capacityReady:false,canWrite:await canWriteTenant(user.systemRole,"class_review"),graph,grades:compareGrades(period,previous,new Set(names.keys())),insights:teacherInsights(metrics,records.filter(r=>r.kind==="promise"&&r.state?.startsWith("기한 경과")).length,capacity,new Set(enrollments.map(e=>e.studentId)).size)};
+  return {teacher,teachers,month,months,today,computedAt:period?.closing.computedAt??null,closing:period?.closing.closedAt?"마감 저장":"진행 중 / 집계 전",classes,students,enrollments,records,metrics,coverage,capacity,capacityReady:!capacityResult.error,canWrite:await canWriteTenant(user.systemRole,"class_review"),graph,grades:compareGrades(period,previous,new Set(names.keys())),insights:teacherInsights(metrics,records.filter(r=>r.kind==="promise"&&r.state?.startsWith("기한 경과")).length,capacity,new Set(enrollments.map(e=>e.studentId)).size)};
 }
 
-/** 시안: 배정 상한 표(teacher_capacity_plans)·저장 RPC가 이 DB에 없다 — 권한만 확인하고 저장하지 않는다. */
+/** 이번 달 배정 상한 저장(s2_0055 save_teacher_capacity_plan — 원장 · 같은 요청 번호는 한 번만 · 버전 비교). 성과 판정·자동 배정이 아니다. */
 export async function saveTeacherCapacity(raw:unknown){
-  capacityRequestSchema.parse(raw);await teacherHubAccess(true);
-  throw new TeacherHubError("시안 화면입니다 — 저장되지 않습니다",409);
+  const input=capacityRequestSchema.parse(raw),user=await teacherHubAccess(true);
+  if(input.month!==kstToday().slice(0,7))throw new TeacherHubError("현재 월의 배정 기준만 변경할 수 있습니다");
+  const db=createAdminClient();
+  const {data:person,error}=await db.from("users").select("id").eq("tenant_id",user.tenantId).eq("id",input.teacherId).maybeSingle();
+  if(error||!person)throw new TeacherHubError("담당 강사를 확인해 주세요",404);
+  const {data,error:saveError}=await db.rpc("save_teacher_capacity_plan",{p_tenant:user.tenantId,p_actor:user.id,p_teacher:input.teacherId,p_month:input.month,p_expected:input.version,p_request:input.requestId,p_max:input.maxStudents,p_basis:input.basis});
+  if(saveError){
+    const conflict=saveError.message.includes("version_conflict")||saveError.message.includes("request_conflict");
+    if(!conflict)console.error("[teacher-hub] 배정 기준 저장 실패",saveError);
+    throw new TeacherHubError(conflict?"다른 변경이 있습니다. 새로고침 후 확인해 주세요.":"배정 기준을 저장하지 못했습니다",conflict?409:400);
+  }
+  return data as {version:number;month:string};
 }

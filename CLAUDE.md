@@ -163,6 +163,7 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 | `STAFF` | staff_contract_pdf · staff_contract_pdf_ocr | Claude(OCR은 **Claude 전용**) |
 | `VIDEO` | video_review_judge · video_review_verify | Claude(판정 Haiku · 확인 Sonnet · 밤 배치) |
 | `ASSISTANT` | academy_assistant(학원 비서 — 원장 자연어 질의 · 자체 도구 루프라 `recordUsage`로 센다, 2026-11-06) | Claude 전용(강도 적음 Haiku · 보통 Sonnet · 강함 Opus 5.5) |
+| `MANAGEMENT` | management_analysis(경영 분석 'AI 검토' — 원장 전용 · 명시 버튼 · 선택 월 집계 지표만 · 결과는 `management_ai_reviews`에 보관, 2026-11-10) | Claude 전용(Sonnet 5.5 · 폴백 없음) |
 
 - **키 고르는 순서 = 그룹 키 → 옛 버킷 키(`_CONSULTATIONS`) → 기본 키**(`resolveKeyEnv`). 그룹 키가 아직 없어도
   기본 키로 돌아 **멈추는 기능이 없다**(키를 하나씩 넣는 동안의 안전장치).
@@ -444,6 +445,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - 연결 탐색 = 원장 시안(:3978) 구조(세 열 · 도넛/네트워크 계정 귀속 · 분석·판단은 오른쪽 아래 · 강의실 중심은 수업 전체 열람만 · 출처 표시·통합 메모는 시안 전용, 2026-11-05)
 - 연결 탐색 네트워크 '개별 기록' = 연도 → 월 → 일자 묶음(처음엔 월까지 · 범위는 패널과 같게) · 같은 기록 한 번 · hover 날짜 연도까지(2026-11-06)
 - 원생 흐름 분석 = 오늘 기준(90일 넘은 기록뿐이면 판단 보류 — 걱정은 '그때 판단'으로만 · 퇴원·휴원은 원생 상태 배지 · 예정 수강은 기록 아님 · 분석 뒤 상담은 '아직 반영 전'(없다는 단정 금지) · 판정 `flow-recency.ts` 한 곳, 2026-11-06)
+- 콜&상담 여정(전화·방문·등록 기록) = 기록 있는 상담은 삭제 불가 · 병합은 서버 전용 함수 한 거래 · 신규생 정착 관리 보정 → [`enrollment-journey.md`](docs/decisions/enrollment-journey.md) · 운영판 [`newcomer-live-restoration.md`](docs/decisions/newcomer-live-restoration.md)
 - 학생 온톨로지·기여도 → [`student-ontology.md`](docs/decisions/student-ontology.md) · 설명회 신청·형제 인정과 최초 연결(2026-10-26, 기본 비활성) → [`student-parent-events.md`](docs/decisions/student-parent-events.md)
 - 퇴원 상세 = 퇴원보고서(새 보고서·원본)·콜&상담 카드(카드마다 목적지 메뉴 권한 · 학생 id로 좁혀 읽기 · 실패는 카드만) · 작성 입구 없음 · 퇴원일 옆 '퇴원보고서 종료일'은 같은 사건 후보만(정보 · 퇴원일 안 고침 · `report-date-link.ts`) · 보고서 상세 → '퇴원 상세' 링크(2026-10-23)
 - 퇴원월 = 수강료를 낸 마지막 달(2026-10-29 · 수업 순액 > 0 · 운영실·퇴원관리·퇴원생 시트 · 시간표 X·수강종료는 날짜 그대로 · `exit-month.ts` 한 벌)
@@ -559,6 +561,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - 급여명세서 열람 = 원장 역할 + 학원 설정에서 지정한 사람(코드 명단 없음 · 원장이 아닌 사람은 지정돼야 본다)
 
 ### 직원·권한·전자결재·연차 → [`docs/decisions/staff.md`](docs/decisions/staff.md)
+- 조직·OKR · 업무 작성센터 · 관찰 기록 · 스키마 스튜디오 = 실제 기록(2026-11-11 · s2_0048~0051) · 권한 줄은 okr · work_records · management 그대로(기본 원장만) · 담당자 본인만 자기 목표·문서를 쓴다 · 지식그래프 바탕은 수강 관계(경영·홍보 그래프는 연결 전)
 - 학원 비서 권한 = 키 `assistant`(원장 전체·나머지 없음 · 전체·없음만) · 🔴 새 메뉴·단추는 제 권한 키(다른 메뉴 권한 빌리기·페이지 역할 비교 금지) · 셔틀 관리자 화면 = `shuttle_admin`(2026-11-09·11-10)
 - 퇴사 = 권한을 **주는** 값만 학원 설정에서 빠진다 · 좁히는 값은 남긴다(판정 `userOverrideGrants` 한 곳) · 재입사해도 되살리지 않는다(2026-11-09·11-10)
 - 역할 '아르바이트'(`parttime`, 2026-11-05) = 열람 아래 · 🔴 열람보다 넓게 두지 않는다 · 🔴 읽기 권한 화면 = 쓰기 단추 안 그림 + 입력칸 비활성(`write-lock.ts` · page.tsx에서 서버 게이트와 같은 함수)

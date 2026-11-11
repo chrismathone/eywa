@@ -15,10 +15,12 @@ export type WorkRecord={id:string;author_id:string;version:number;document:WorkD
 export const workRequestSchema=z.object({id:z.uuid(),requestId:z.uuid(),version:z.number().int().min(0),action:z.enum(["save","review"]),document:workDocumentSchema}).strict();
 export function validateWorkTransition(old:WorkRecord|null,next:WorkDocument,actor:string,canReview:boolean,action:"save"|"review"){
   if(action==="review"){
+    if(old&&old.author_id===actor)throw Error("본인 문서는 다른 검토자가 확인합니다");
     if(!canReview||!old||old.document.state!=="submitted"||!["reviewed","draft"].includes(next.state)||!next.reviewNote)throw Error("검토 요청된 문서에 확인 의견을 남겨 주세요");
     for(const key of ["template","title","date","plan","action","result","next"] as const)if(next[key]!==old.document[key])throw Error("검토자는 작성 내용을 변경할 수 없습니다");
   }else{
     if(old&&old.author_id!==actor)throw Error("본인이 작성한 문서만 수정할 수 있습니다");
+    if(old?.document.state==="reviewed")throw Error("확인 완료된 문서는 고칠 수 없습니다. 이어지는 내용은 새 문서로 작성해 주세요");
     if(next.state==="reviewed"||next.reviewNote!==(old?.document.reviewNote??""))throw Error("작성자가 확인 완료 상태를 지정할 수 없습니다");
     if(next.state==="submitted"&&(!next.plan||!next.action||!next.result))throw Error("목적·내용·결과 또는 검토 근거를 채워 주세요");
     if(old&&old.document.template!==next.template)throw Error("저장한 문서의 서식은 유지해 주세요");

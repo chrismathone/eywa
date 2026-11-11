@@ -50,11 +50,13 @@ it("자료 조회 실패를 미지정·0건으로 확정하지 않고 저장을 
   m.failed = "student_onboarding_subject_assignments";
   const { data } = await getFollowupView(fixture().legacy);
   expect(data.error).toBeTruthy(); expect(data.canManage).toBe(false); expect(data.canReport).toBe(false);
+  // 종전 '전체 완료 체크표'의 쓰기는 이 실패로 잠기지 않는다(따로 판정).
+  expect(data.canWriteChecks).toBe(true);
 });
 it("90일 이후 미해결 피드백 학생도 계속 관리하고 메뉴 권한 없이 조회하지 않는다", async () => {
   m.tables.student_onboarding_feedback = [{ student_id: studentId }];
   await getFollowupSource();
-  expect(m.load).toHaveBeenCalledWith(expect.anything(), "2026-11-11", "tenant-a", [studentId]);
+  expect(m.load).toHaveBeenCalledWith(expect.anything(), "2026-11-11", "tenant-a", [studentId], true);
   m.access.mockResolvedValue(false);
   await expect(followupAccess()).rejects.toThrow("권한");
 });

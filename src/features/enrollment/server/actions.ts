@@ -1,5 +1,6 @@
 "use server";
 
+import { countJourneyRecords, isJourneyDeleteBlocked, JOURNEY_DELETE_BLOCKED } from "@/features/enrollment/journey/consultation-guard";
 import { seatBlockReason } from "@/lib/license/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -772,7 +773,12 @@ export async function deleteEnrollmentConsultation(
     .single();
   if (!c) return { error: "상담을 찾을 수 없습니다" };
 
-  // 1) 첨부 음성(테넌트 경로) Storage 제거 — 녹음 행 전체 + 레거시 단일 컬럼(미러) 합쳐 dedupe.
+  // 전화·방문·등록 기록(s2_0063)이 걸린 상담은 지우지 않는다(원장 2026-11-11 — 확인 근거·변경 이력이 함께 사라지고 전환 집계가 소급해서 바뀐다).
+  // 집계 제외 기록만 남았으면 지운다. 🔴 여기는 안내 — 확인 뒤에 들어온 기록은 DB 트리거(s2_0064)가 막는다(아래 삭제 오류 분기).
+  const journeyRecords = await countJourneyRecords(user.tenantId, id);
+  if (journeyRecords && journeyRecords.active > 0) return { error: JOURNEY_DELETE_BLOCKED };
+
+  // 1) 지울 녹음 경로를 **먼저 모아만 둔다** — 녹음 행 전체 + 레거시 단일 컬럼(미러) 합쳐 dedupe.
   //    레거시/공유 경로는 isTenantAudioPath로 걸러 미삭제. 행 자체는 FK cascade로 함께 삭제된다.
   const { data: recRows } = await supabase
     .from("consultation_recordings")
@@ -782,13 +788,19 @@ export async function deleteEnrollmentConsultation(
     [(c as { audio_path?: string | null }).audio_path, ...(recRows ?? []).map((r) => r.audio_path)]
       .filter((p): p is string => !!p && isTenantAudioPath(p, user.tenantId)),
   );
+
+  // 2) row 삭제(RLS). consultation_ai_analysis·consultation_recordings는 FK cascade.
+  //    🔴 녹음 파일보다 **먼저** 지운다(2026-11-11 Codex 검토) — 삭제가 거절되면(위 확인 뒤에 들어온 기록 · 그 밖의 DB 오류)
+  //    상담은 남는데 녹음 파일만 사라지던 순서였다. 실제로 지워진 줄을 확인한 뒤에만 파일을 정리한다.
+  const { data: deleted, error } = await supabase.from("enrollment_consultations").delete().eq("id", id).select("id");
+  if (isJourneyDeleteBlocked(error)) return { error: JOURNEY_DELETE_BLOCKED };
+  if (error) return { error: dbWhy(error, "enrollment.delete", "상담을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
+  if ((deleted ?? []).length === 0) return { error: "상담을 찾을 수 없습니다. 이미 삭제되었을 수 있습니다." };
+
+  // 3) 첨부 음성(테넌트 경로) Storage 제거 — 상담이 지워진 뒤라 실패해도 남는 것은 주인 없는 파일뿐이다(되살릴 상담이 없다).
   for (const p of paths) {
     await removeObject(p, { bucket: "consultation-recordings" }).catch(() => {});
   }
-
-  // 2) row 삭제(RLS). consultation_ai_analysis·consultation_recordings는 FK cascade.
-  const { error } = await supabase.from("enrollment_consultations").delete().eq("id", id);
-  if (error) return { error: dbWhy(error, "enrollment.delete", "상담을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
 
   // 감사로그(2026-09-10) — 삭제는 녹음·전사·AI 분석이 통째로 사라지는 일이라 누가 지웠는지가 유일한 근거다.
   await logAction({
@@ -801,6 +813,8 @@ export async function deleteEnrollmentConsultation(
       consultationId: id,
       studentId: c.student_id ?? null,
       hadRecording: !!(c as { audio_path?: string | null }).audio_path || (recRows?.length ?? 0) > 0,
+      // 함께 지워진 집계 제외 기록 수 — 못 셌으면 null(0건과 구분한다).
+      journeyVoidedRecordsDeleted: journeyRecords ? journeyRecords.voided : null,
     },
   });
 

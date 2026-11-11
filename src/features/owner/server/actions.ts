@@ -24,6 +24,7 @@ import { platformSettingsError } from "./platform-settings";
 import { OWNER_SECTION_MENU } from "@/lib/settings-role-catalog";
 import { configureMakeupSettings } from "@/features/makeups/server/settings";
 import { resolveSettings } from "../resolve";
+import { subjectsWithNewcomerRecords } from "@/features/newcomers/server/subject-refs";
 import { nextSettingsStamp, settingsRevOf, withoutSettingsRev } from "../settings-stamp";
 import type { OperationsSettings } from "../settings-types";
 import {
@@ -306,6 +307,17 @@ export async function saveOwnerSection(
     // 이미 없는 과목의 삭제 — 쓰지 않고 지금 상태를 돌려준다(화면이 그 값으로 맞춘다).
     if ("unchanged" in built) {
       return { ok: true, nonce: Date.now(), operations: operationsReply(fresh, operationsRequest), version: settingsRevOf(base.operations) };
+    }
+    // 과목 행이 사라지는 저장(흡수·미사용 삭제의 마지막 단계 · 과목 면에서 줄을 뺀 저장)이면 그 과목의 신규생 관리 기록을 마지막으로 다시 본다 —
+    // 옮기는 규칙이 없는 기록이라 과목이 사라지면 옛 키에 남는다(newcomers/server/subject-refs.ts). 못 세면 지우지 않는다.
+    const removedSubjects = fresh.subjects.filter((s) => !built.parsed.subjects.some((n) => n.key === s.key));
+    if (removedSubjects.length > 0) {
+      const held = await subjectsWithNewcomerRecords(actor.tenantId, removedSubjects.map((s) => s.key));
+      if (held === null) return { error: "과목 사용 현황을 확인하지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
+      if (held.length > 0) {
+        const names = removedSubjects.filter((s) => held.includes(s.key)).map((s) => s.label || s.key).join(", ");
+        return { error: `'${names}' 과목에 신규생 관리 기록(완료 체크·담당 배정·적응 피드백)이 있어 과목을 지울 수 없습니다.` };
+      }
     }
     // 새 칸 둘(periodStyle·schoolSaveAliases)은 어느 요청도 맡지 않아 값이 늘 fresh에서 온다 — 침산은 지우고 일반판은 그대로 둔다.
     sectionData = prepareSectionForSave(preset, section, built.raw, built.parsed, base[section]);

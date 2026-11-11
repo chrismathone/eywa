@@ -4,13 +4,14 @@ import {
   AlertCircle, ClipboardCheck, ClipboardList, ExternalLink, Loader2, Mic, Pencil, Printer, Sparkles,
   type LucideIcon,
 } from "@/components/icons/aywa-icon-compat";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { PrintWindowButton } from "@/components/workspace/print-window";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canAccessTenant, canWriteTenant, readonlyViewErasedScope } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
+import { JourneyPanel, JourneyPanelSkeleton } from "@/features/enrollment/journey/panel";
 import { formatCreatedAt } from "@/lib/utils";
 import {
   findMergeSuccessor,
@@ -329,6 +330,9 @@ export default async function EnrollmentDetailPage({
           </ul>
         </section>
       ) : null}
+
+      {/* 전화·방문·등록 확인 기록(s2_0063) — 이 상담의 예약·실제 방문·등록 근거 · 첫 페인트를 막지 않게 따로 스트리밍(B7). */}
+      <Suspense fallback={<JourneyPanelSkeleton />}><JourneyPanel id={consult.id} /></Suspense>
 
       {consult.processingStatus === "failed" ? (
         <section className="border-chart-4/40 bg-chart-4/5 rounded-2xl border p-4">

@@ -25,7 +25,13 @@ async function writeAccess(studentId: string) {
   return { ...access, db, subjects, homerooms, actorId: actor.id };
 }
 function refreshed(studentId: string) { revalidatePath("/newcomers"); revalidatePath(`/students/${studentId}`); }
-const errorResult = (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : "저장하지 못했습니다. 다시 시도해 주세요." });
+/** 화면엔 이 파일이 던진 한글 사유만 — 조회 도우미(fetchInChunks 등)의 영문 원문은 일반 문구로 바꾸고 로그에 남긴다. */
+const errorResult = (e: unknown) => {
+  const message = e instanceof Error ? e.message : "";
+  if (/[가-힣]/.test(message)) return { ok: false as const, error: message };
+  console.error("[newcomers.followup]", e);
+  return { ok: false as const, error: "저장하지 못했습니다. 다시 시도해 주세요." };
+};
 
 export async function assignNewcomerManager(input: unknown): Promise<SaveResult> {
   const parsed = assignmentSchema.safeParse(input);

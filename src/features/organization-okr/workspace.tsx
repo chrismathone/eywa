@@ -1,15 +1,15 @@
 "use client";
 import { EmbedLink as Link } from "@/components/embed-link";
-import { SampleBanner, SAMPLE_SAVE_MESSAGE } from "@/features/mockup/sample";
 import { useState } from "react";
-import type { sampleOkrWorkspace } from "./sample-data";
+import { useRouter } from "next/navigation";
+import type { OkrWorkspaceData } from "./server";
 import { attention,blankGoal,confidenceLabels,okrGraph,progress,scopes,sources,states,templates,type KR,type OkrDocument,type OkrRecord } from "./model";
 import s from "./workspace.module.css";
 import { PageHeader } from "@/components/page-header";
 import { BigStat } from "@/components/atoms/big-stat";
 import { Toolbar, ToolbarChip, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { Button } from "@/components/ui/button";
-type Data=ReturnType<typeof sampleOkrWorkspace>;
+type Data=OkrWorkspaceData;
 const num=(v:string)=>v===""?null:Number(v);
 export function OkrWorkspace({data,selectedId}:{data:Data;selectedId?:string}){
  const [tab,setTab]=useState("mine"),[selected,setSelected]=useState(selectedId??""),[draft,setDraft]=useState<OkrDocument|null>(null),[archived,setArchived]=useState(false),[onlyNeeds,setOnlyNeeds]=useState(true);
@@ -19,7 +19,6 @@ export function OkrWorkspace({data,selectedId}:{data:Data;selectedId?:string}){
  const chosen=data.rows.find(r=>r.id===selected);
  return <div className="space-y-5">
   <PageHeader title="조직·OKR" description={`${data.names[data.actorId]??"내 업무"} · ${data.today} 기준 · 학원의 목표를 나의 실행으로, 결과와 근거를 함께 쌓습니다.`} actions={<Button variant="outline" render={<Link href="/work-records"/>}>업무 작성센터 ↗</Button>}/>
-  <SampleBanner/>
   <section className="grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="표시 범위 목표 현황">
    <BigStat label={`${tab==="mine"?"내":"열람 가능한"} 실행 중 목표`} value={active.length} unit="개" sub="기획·보관 제외"/>
    <BigStat label="결과 측정" value={measured} unit={`/ ${krs.length} KR`} sub={`미측정 ${krs.length-measured}개`}/>
@@ -41,13 +40,15 @@ export function OkrWorkspace({data,selectedId}:{data:Data;selectedId?:string}){
  </div>;
 }
 function Editor({data,row,initial,onClose,onSaved}:{data:Data;row?:OkrRecord;initial:OkrDocument;onClose:()=>void;onSaved:(id:string)=>void}){
- const [id]=useState(()=>row?.id??crypto.randomUUID()),[doc,setDoc]=useState(initial),[section,setSection]=useState("goal"),[busy]=useState(false),[message,setMessage]=useState(""),[note,setNote]=useState(""),[history,setHistory]=useState<{version:number;action:string;recorded_at:string;document:OkrDocument;review:OkrRecord["review"]}[]|null>(null);
+ const router=useRouter(),[id]=useState(()=>row?.id??crypto.randomUUID()),[doc,setDoc]=useState(initial),[section,setSection]=useState("goal"),[busy,setBusy]=useState(false),[message,setMessage]=useState(""),[note,setNote]=useState(""),[history,setHistory]=useState<{version:number;action:string;recorded_at:string;document:OkrDocument;review:OkrRecord["review"]}[]|null>(null);
  const own=(!row||row.owner_id===data.actorId)&&data.writable,patch=(p:Partial<OkrDocument>)=>setDoc({...doc,...p});
  const updateKr=(id:string,p:Partial<KR>)=>patch({krs:doc.krs.map(k=>k.id===id?{...k,...p}:k)});
  async function save(action:"save"|"review",verdict?:"acknowledged"|"revise"|"support"){
-   if(busy)return;void action;void verdict;void onSaved;setMessage(SAMPLE_SAVE_MESSAGE);
+   if(busy)return;setBusy(true);setMessage("");
+   try{const res=await fetch("/api/organization/okr",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,version:row?.version??0,action,...(action==="save"?{document:doc}:{note,verdict})})});const result=await res.json().catch(()=>({}));if(!res.ok)throw Error(result.error??"저장하지 못했습니다");setMessage(`v${result.version} 저장 완료 · 불러오는 중`);router.refresh();onSaved(id);}
+   catch(e){setMessage(e instanceof Error?e.message:"저장하지 못했습니다");}finally{setBusy(false);}
  }
- function showHistory(){setHistory(row?[{version:row.version,action:row.review?"review":"save",recorded_at:row.updated_at,document:row.document,review:row.review}]:[]);}
+ async function showHistory(){if(!row){setHistory([]);return;}try{const res=await fetch(`/api/organization/okr?id=${encodeURIComponent(row.id)}`);const result=await res.json().catch(()=>({}));if(!res.ok)throw Error(result.error??"이력을 불러오지 못했습니다");setHistory(result.history);}catch(e){setMessage(e instanceof Error?e.message:"이력을 불러오지 못했습니다");}}
  const parentOptions=data.shared.filter(g=>g.id!==id&&(doc.scope==="team"?g.scope==="organization":doc.scope==="individual"));
  return <section className={`${s.panel} ${s.editor}`} aria-label="목표 작성"><div className={s.heading}><div><span className={s.eyebrow}>{row?`저장된 목표 · v${row.version}`:"새 목표 기획"}</span><h2>{data.names[doc.ownerId]}의 목표와 실행</h2></div><button disabled={busy} onClick={onClose}>닫기</button></div>
   <Toolbar className={s.editorTabs}><ToolbarSegment wrap>{[["goal","1. 목표 합의"],["kr","2. 핵심결과·근거"],["tasks","3. 실행 과제"],["checkin","4. 주간 점검"]].map(([key,label])=><ToolbarSegmentItem key={key} active={section===key} onClick={()=>setSection(key)}>{label}</ToolbarSegmentItem>)}</ToolbarSegment></Toolbar>

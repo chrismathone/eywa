@@ -13,7 +13,7 @@ export const sourceEvidenceSchema=z.object({
   reportedFinancials:reportedFinancialsSchema.optional(),
   verifiedIdentities:z.array(sourceIdentitySchema).max(500).optional(),
   facts:z.array(z.object({label:z.string().max(120),sourceValue:z.number().finite().nullable(),aywaValue:z.number().finite().nullable(),unit:z.enum(["원","명","건"]),reference:z.string().max(200)}).strict()).max(30),
-  issues:z.array(z.object({key:z.string().regex(/^[a-z0-9_-]{1,80}$/),title:z.string().min(1).max(120),detail:z.string().min(1).max(1000),nextAction:z.string().min(1).max(600),href:z.string().regex(/^\/(?:students\/[a-f0-9-]{36}|billing(?:\/stats)?(?:\?period=20\d{2}-\d{2})?|billing\/management#accounting)$/).optional()}).strict()).max(30),
+  issues:z.array(z.object({key:z.string().regex(/^[a-z0-9_-]{1,80}$/),title:z.string().min(1).max(120),detail:z.string().min(1).max(1000),nextAction:z.string().min(1).max(600),href:z.string().regex(/^\/(?:students\/[a-f0-9-]{36}|billing(?:\/stats)?(?:\?period=20\d{2}-\d{2})?|dashboard\/management#accounting)$/).optional()}).strict()).max(30),
 }).strict().refine(v=>new Set(v.issues.map(i=>i.key)).size===v.issues.length,"중복 확인 항목").refine(v=>!v.reportedFinancials||v.source==="ecount","회계 근거는 ECOUNT 자료에만 저장합니다").refine(v=>!v.verifiedIdentities||v.source==="makeedu","학생 식별 근거의 소스를 확인해 주세요");
 export type SourceEvidence=z.infer<typeof sourceEvidenceSchema>;
 export const reviewUpdateSchema=z.object({batchId:z.uuid(),issueKey:z.string().regex(/^[a-z0-9_-]{1,80}$/),expectedVersion:z.number().int().nonnegative(),status:z.enum(reviewStatuses),owner:z.string().trim().max(80),dueDate:z.iso.date().nullable(),note:z.string().trim().min(1).max(2000)}).strict();

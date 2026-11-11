@@ -227,7 +227,7 @@ export const HUB_GROUPS: HubGroup[] = [
     ]),
   },
   // 시안(aywa-next 이식): 조직·OKR · 홍보·마케팅. 권한 = 제 키(okr · marketing — 2026-11-09 권한 줄 정비. 전엔 대시보드 권한으로 메뉴만 세우고
-  // 페이지는 코드의 원장·관리자·매니저 판정이라 상담·회계·열람은 메뉴를 눌러도 대시보드로 돌아갔다). 페이지도 같은 권한(각 sample-access.ts).
+  // 페이지는 코드의 원장·관리자·매니저 판정이라 상담·회계·열람은 메뉴를 눌러도 대시보드로 돌아갔다). 페이지도 같은 권한(organization-okr/access.ts · marketing/sample-access.ts).
   {
     id: "organization", label: "조직·OKR", icon: SAMPLE_GROUP_ICON.organization, kind: "direct",
     items: keep([face("dashboard", "/organization/okr", "조직·OKR", "조직 목표·내 핵심결과·실행·주간 점검·피드백", { icon: MENU_ICON.okr, menuKey: "okr" })]),

@@ -545,6 +545,18 @@ function AbsorbDialog({
         <p className="text-text-dim mt-3 text-sm">
           이 과목을 쓰는 데이터가 없습니다. 삭제하면 즉시 적용됩니다.
         </p>
+      ) : usage.blocked ? (
+        // 흡수로도 옮기지 못하는 기록이 걸린 과목 — 흡수 버튼을 내지 않고 까닭을 보인다(눌러도 거절되는 버튼을 두지 않는다).
+        <div className="mt-3 space-y-3">
+          <p className="text-foreground text-sm">{usage.blocked}</p>
+          <ul className="text-text-dim flex flex-wrap gap-x-3 gap-y-1 text-xs">
+            {usage.items.map((it) => (
+              <li key={it.label} className="whitespace-nowrap">
+                {it.label} <b className="text-foreground">{it.count}</b>
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : (
         <div className="mt-3 space-y-3">
           <p className="text-text-dim text-sm">
@@ -575,9 +587,9 @@ function AbsorbDialog({
 
       <div className="mt-5 flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
-          취소
+          {usage?.blocked ? "닫기" : "취소"}
         </Button>
-        {usage && usage.total === 0 ? (
+        {usage?.blocked ? null : usage && usage.total === 0 ? (
           <Button type="button" onClick={() => void run(() => removeUnusedSubject(from.key))} disabled={busy}>
             {busy ? "삭제 중…" : "삭제"}
           </Button>

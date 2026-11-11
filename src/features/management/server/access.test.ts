@@ -1,0 +1,10 @@
+import {beforeEach,it,expect,vi} from "vitest";
+const mocks=vi.hoisted(()=>({user:vi.fn(),read:vi.fn(),write:vi.fn()}));
+vi.mock("@/lib/auth/current-user",()=>({getCurrentUser:mocks.user}));
+vi.mock("@/lib/auth/perm-matrix",()=>({canAccessTenant:mocks.read,canWriteTenant:mocks.write}));
+import {managementAccess} from "./access";
+beforeEach(()=>{vi.clearAllMocks();mocks.user.mockResolvedValue({id:"a",tenantId:"t",systemRole:"master"});mocks.read.mockResolvedValue(true);mocks.write.mockResolvedValue(true);});
+it("allows an authorized owner to inspect and import",async()=>{await expect(managementAccess(true)).resolves.toMatchObject({tenantId:"t"});expect(mocks.user).toHaveBeenCalledWith({teacherView:true});});
+const blocked=[null,{systemRole:"counselor"},{systemRole:"master",tenantView:{tenantId:"other"}}];
+it.each(blocked)("blocks anonymous, non-owner and tenant-view reads before data access",async(user)=>{mocks.user.mockResolvedValue(user);await expect(managementAccess()).rejects.toThrow("권한");});
+it("requires the management menu and honors write denial",async()=>{mocks.read.mockImplementation(async(_r:string,k:string)=>k!=="management");await expect(managementAccess()).rejects.toThrow();mocks.read.mockResolvedValue(true);mocks.write.mockResolvedValue(false);await expect(managementAccess(true)).rejects.toThrow();});
