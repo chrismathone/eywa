@@ -12,6 +12,8 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+> 🔴 **`s2_0061`~`s2_0065`는 쓰지 말 것**(2026-11-11) — 신규생 정착 관리·콜&상담 여정 SQL(aywa-next 이식 ②단계)이 그 번호로 운영에 이미 적용돼 있고, 파일은 바로 다음 배포로 들어온다. 그 전에 새 SQL을 넣는 세션은 `s2_0066`부터.
+
 ## 2026-11-11 이름 맞춤 — `s2_0047_marketing_archive_sources.sql` (옛 이름 `20261110125726_marketing_archive_sources.sql` · ✅ 운영 적용돼 있음 — 다시 돌리지 않는다)
 
 홍보·마케팅 기록 보관(`marketing_archive_events` · `marketing_source_inbox` · `marketing_archive_sources` · `marketing_archive_students` · `marketing_archive_audit` + 저장 함수)의 SQL이 CLI 타임스탬프 이름으로 들어와 폴더 규칙 가드와 SQL을 읽는 가드 전부가 멈춰 있었다(`규칙 밖 SQL 파일이 있습니다`). **이름만** 시즌2 다음 빈 번호로 바꿨다(내용 한 글자도 그대로 · [`docs/sql-season2.md`](../../docs/sql-season2.md) §3-A). 운영 DB에는 2026-11-10에 옛 이름으로 이미 적용돼 있다(2026-11-11 표 5개 존재 확인).

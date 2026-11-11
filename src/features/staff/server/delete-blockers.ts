@@ -26,6 +26,7 @@ const LABELS: Record<string, string> = {
   management_review_events: "경영 검토 기록", management_ai_reviews: "경영 검토 기록",
   management_collection_devices: "자료 수집 PC 설정", management_collection_settings: "자료 수집 PC 설정",
   teacher_capacity_plans: "강사 배정 상한", teacher_capacity_events: "강사 배정 상한",
+  marketing_archive_events: "홍보·마케팅 기록", marketing_archive_students: "홍보·마케팅 기록", marketing_archive_audit: "홍보·마케팅 기록",
   withdrawal_reports: "퇴원보고서", withdrawal_report_groups: "퇴원보고서", withdrawal_report_events: "퇴원보고서", withdrawal_report_archive_mappings: "퇴원보고서",
   help_posts: "도움말 글", help_answers: "도움말 글", support_requests: "고객센터 문의",
   student_care_commitments: "상담 약속", lesson_reports: "수업보고서", invoice_session_terms: "회차 확정 기록",

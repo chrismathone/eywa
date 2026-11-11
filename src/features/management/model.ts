@@ -117,8 +117,7 @@ export type ManagementSnapshot = {
   sources: { name: string; state: string; updatedAt: string | null; note: string }[];
   teachers: { id: string; label: string; students: number; courses: number }[];
   channels: { label: string; inquiries: number; registered: number }[];
-  /** 예시 화면(sample-data)만 채운다 — 실제 조회는 그래프를 만들지 않는다. */
-  graph?: KnowledgeGraph; reviewBatches: ReviewBatch[];
+  reviewBatches: ReviewBatch[];
 };
 /** 저장된 회계 자료 전 기간의 버전 색인(본문 없이) — 저장할 때 기대 버전을 여기서 찾는다. */
 export type ReportIndexRow = { start: string; end: string; kind: "ledger" | "profit_loss"; version: number };
