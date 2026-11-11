@@ -4,7 +4,7 @@ import type { reportedFinancialView } from "./reported-financials";
 
 /**
  * 경영 분석의 순수 모델 — aywa-next(375d27df4) `features/management/model.ts`. 서버(저장 검증)·화면이 같이 쓴다.
- * 회계 자료 스키마는 DB 저장 함수(s2_0070 save_management_accounting)의 검사와 짝이다.
+ * 회계 자료 스키마는 DB 저장 함수(s2_0052 save_management_accounting)의 검사와 짝이다.
  */
 export const monthSchema = z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])$/);
 export const dateSchema = z.iso.date();

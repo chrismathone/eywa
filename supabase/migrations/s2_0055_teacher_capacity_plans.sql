@@ -1,9 +1,9 @@
--- s2_0073 — 강사 통합 기록: 이번 달 적정 담당 학생 수(배정 상한)와 근거
--- 출처: aywa-next s2_0016_teacher_hub_capacity.sql(복제본 전용 번호) → main 예약 번호 s2_0073.
+-- s2_0055 — 강사 통합 기록: 이번 달 적정 담당 학생 수(배정 상한)와 근거
+-- 출처: aywa-next s2_0016_teacher_hub_capacity.sql(복제본 전용 번호) → main 예약 번호 s2_0055.
 -- 원장이 정하는 '계획 한도'이지 성과 점수가 아니다. 학생을 자동으로 배정하지 않는다.
 -- 이번 달(한국 날짜) 것만 저장한다 — 지난 달 기준을 고치지 않는다. 같은 요청 번호로 다시 보내면 처음 결과를 돌려준다(두 번 저장 없음).
 -- 서버 전용: 브라우저 정책 0개는 의도적이다(`src/features/teacher-hub/server.ts` — 원장 역할 + 원생·직원 열람 + 수업 평가 쓰기 권한).
--- 🔴 한 번만 실행. 되돌리기 = scripts/_oneoff/revert-s2_0073-teacher-capacity-plans.sql.
+-- 🔴 한 번만 실행. 되돌리기 = scripts/_oneoff/revert-s2_0055-teacher-capacity-plans.sql.
 begin;
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';

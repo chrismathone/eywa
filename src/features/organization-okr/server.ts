@@ -9,7 +9,7 @@ import { kstToday } from "@/lib/date-kst";
 import { requestSchema, validateGoal, assertSave, okrGraph, type OkrRecord, type OkrDocument, type Evidence } from "./model";
 
 /**
- * 조직·OKR 서버 — aywa-next(3038c5875 · b9cd3c244)를 옮겼다(2026-11-11 · 표 s2_0067).
+ * 조직·OKR 서버 — aywa-next(3038c5875 · b9cd3c244)를 옮겼다(2026-11-11 · 표 s2_0050).
  * 문 = 역할·권한 '조직·OKR'(okr). 작성 = 그 권한 쓰기 · 관리자(남의 목표 열람·피드백 · 조직/팀 목표) = 원장·관리자·매니저 + 그 권한 '전체'.
  * 담당자 본인만 자기 목표를 쓴다(관리자도 대신 쓰지 않는다) · 개인 목표의 상세·피드백은 담당자와 관리자만 · 공유는 '실행 중' 조직·팀 목표의 요약뿐.
  */

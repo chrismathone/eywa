@@ -4,7 +4,7 @@ import { saveTeacherCapacity, TeacherHubError } from "@/features/teacher-hub/ser
 
 const reply = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
-/** 강사 통합 기록의 '현재 학생 배정 여력' 저장 — 원장 · 이번 달만(s2_0073). 쿠키 인증 변경이라 이 앱에서 온 요청만 받는다. */
+/** 강사 통합 기록의 '현재 학생 배정 여력' 저장 — 원장 · 이번 달만(s2_0055). 쿠키 인증 변경이라 이 앱에서 온 요청만 받는다. */
 export async function POST(request: Request) {
   if (request.headers.get("origin") !== new URL(request.url).origin) return reply({ error: "요청 출처를 확인해 주세요" }, 403);
   try {

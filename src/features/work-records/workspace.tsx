@@ -7,7 +7,7 @@ import type { WorkRecordsData } from "./server";
 import s from "./workspace.module.css";
 
 /**
- * 업무 작성센터 — aywa-next(375d27df4) 화면을 계기판 토큰으로 옮겼다. 2026-11-11부터 실제 기록(academy_work_records · s2_0065)을 읽고 쓴다.
+ * 업무 작성센터 — aywa-next(375d27df4) 화면을 계기판 토큰으로 옮겼다. 2026-11-11부터 실제 기록(academy_work_records · s2_0048)을 읽고 쓴다.
  * 바로가기 카드는 각 화면의 문과 같은 권한으로 세운다(연간 행사 기획은 다른 작업에서 다시 만드는 중이라 뺐다).
  */
 const destinations = [

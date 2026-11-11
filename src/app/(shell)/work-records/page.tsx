@@ -4,7 +4,7 @@ import { WorkRecordsWorkspace } from "@/features/work-records/workspace";
 
 export const metadata = { title: "업무 작성센터 — 에이와" };
 
-/** 업무 작성센터 — 문 = '업무 작성센터' 권한(work_records · 기본값 원장만 · 원장 2026-11-10). 기록 = academy_work_records(s2_0065). */
+/** 업무 작성센터 — 문 = '업무 작성센터' 권한(work_records · 기본값 원장만 · 원장 2026-11-10). 기록 = academy_work_records(s2_0048). */
 export default async function Page({ searchParams }: { searchParams: Promise<{ record?: string }> }) {
   await requireAccess("work_records");
   const [data, params] = await Promise.all([loadWorkRecords().catch((e) => { console.error("[work-records] load", e); return null; }), searchParams]);

@@ -1,12 +1,12 @@
--- s2_0071 — 경영 분석: 학원 PC 파일 수집기(기본 꺼짐) · 기기 연결(90일 만료 · 해제 가능)
+-- s2_0053 — 경영 분석: 학원 PC 파일 수집기(기본 꺼짐) · 기기 연결(90일 만료 · 해제 가능)
 -- 출처: aywa-next 20261101153401 · 20261101155010. 복제본 전용 가정(복제본 주소 고정 · Vercel 보호 우회 키)은 뺐다.
 --
 -- 🔴 기본 꺼짐: `management_collection_settings`에 줄이 없거나 collector_enabled=false면 수집기 API는 모든 기기 요청을 거절하고
 --   연결 파일도 발급하지 않는다. 원장이 경영 분석 → 자료 수집함에서 켠다(`src/features/management/server/collector-auth.ts`).
--- 기기가 하는 일은 원본 엑셀을 보내 '대조 기록'(s2_0070 management_source_batches)을 남기는 것뿐 — 청구·학생·회계 자료를 고치지 않고,
+-- 기기가 하는 일은 원본 엑셀을 보내 '대조 기록'(s2_0052 management_source_batches)을 남기는 것뿐 — 청구·학생·회계 자료를 고치지 않고,
 --   다른 업무 표 권한이 없다. 기기 비밀은 해시(sha256)만 저장한다.
 -- 서버 전용: 브라우저 정책 0개는 의도적이다(admin 클라이언트 + tenant_id 필터).
--- 🔴 s2_0070 뒤에 적용 · 한 번만 실행. 되돌리기 = scripts/_oneoff/revert-s2_0071-management-collection-devices.sql.
+-- 🔴 s2_0052 뒤에 적용 · 한 번만 실행. 되돌리기 = scripts/_oneoff/revert-s2_0053-management-collection-devices.sql.
 begin;
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';

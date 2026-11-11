@@ -359,7 +359,7 @@ export async function deleteStaff(
   const protectedMsg = await refuseIfProtectedStaff(id, "delete", target.displayName);
   if (protectedMsg) return { error: protectedMsg };
 
-  // 직원 행과 로그인 계정을 **한 거래로** 지운다(DB 함수 delete_staff_account · s2_0082 — delete-blockers.ts).
+  // 직원 행과 로그인 계정을 **한 거래로** 지운다(DB 함수 delete_staff_account · s2_0060 — delete-blockers.ts).
   //   잠금 → 이 직원을 가리켜 삭제를 막는 기록 검사(출결 기록자 · 업무 문서 · OKR · 관찰 · 신규생·여정 · 회계 … 카탈로그의 FK 전부)
   //   → 직원 행(payroll/leaves cascade · 담임 set null) → 로그인 계정. 막히면 아무것도 지워지지 않고 '퇴사(비활성)'를 안내한다.
   //   임포트/시드된 "데이터 전용" 직원(#31)은 로그인 계정이 없다 — 직원 행만 지운다.

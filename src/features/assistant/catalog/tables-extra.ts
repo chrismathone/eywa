@@ -54,7 +54,7 @@ export const TABLES_EXTRA: readonly AssistantTableDoc[] = [
       separate_amount: "늘어난 몫을 수납에서 따로 환불하기로 한 금액(누계)", separate_at: "따로 환불로 정한 시각", separate_by: "따로 환불로 정한 원장",
       refunded_total: "이어진 요청서 환불 완료 기록(누계 · 완료일자를 비워도 남음)", refunded_docs: "환불 완료 기록을 남긴 요청서" },
   },
-  // ── 2026-11-11 실제 기록으로 이은 화면(aywa-next 이식 · s2_0065~0068) — 업무 작성센터 · 관찰 기록 · 조직·OKR · 스키마 스튜디오.
+  // ── 2026-11-11 실제 기록으로 이은 화면(aywa-next 이식 · s2_0048~0051) — 업무 작성센터 · 관찰 기록 · 조직·OKR · 스키마 스튜디오.
   {
     name: "academy_work_records",
     label: "업무 문서",
@@ -115,7 +115,7 @@ export const TABLES_EXTRA: readonly AssistantTableDoc[] = [
     ko: "원생상담 평점 정기 처리 대기열",
     internal: true,
   },
-  // 경영 분석(원장 전용 · s2_0070~0072 · aywa-next 이식 2026-11-10) · 강사 배정 상한(s2_0073)
+  // 경영 분석(원장 전용 · s2_0052~0054 · aywa-next 이식 2026-11-10) · 강사 배정 상한(s2_0055)
   {
     name: "management_accounting_reports",
     label: "회계 자료",
@@ -137,4 +137,30 @@ export const TABLES_EXTRA: readonly AssistantTableDoc[] = [
   { name: "management_ai_reviews", label: "경영 AI 검토", ko: "경영 분석 'AI 검토' 버튼 결과 보관(그 달 집계 지표만 보낸 결과)", notes: "month = 'YYYY-MM' · answer = summary·findings[]·missingData[] · model = 쓴 모델 · 같은 달은 created_at이 가장 늦은 것이 화면에 보이는 결과.", internal: true },
   { name: "teacher_capacity_plans", label: "배정 상한", ko: "원장이 정한 강사별 이번 달 적정 담당 학생 수와 근거", notes: "month = 'YYYY-MM' · max_students = 적정 담당 학생 수(0 = 추가 배정 중지) · basis = 근거. 계획 한도이지 성과 점수가 아니다." },
   { name: "teacher_capacity_events", label: "배정 상한 이력", ko: "배정 상한 저장 요청 이력(요청 번호마다 한 줄)", internal: true },
+  // ── 홍보·마케팅 기록 보관(s2_0047 — 옛 이름 20261110125726_marketing_archive_sources.sql · 이름을 시즌2 번호로 맞추자 가드가 설명 없는 표로 잡아서 채웠다).
+  {
+    name: "marketing_archive_events",
+    label: "홍보 행사",
+    ko: "홍보·마케팅 행사 기록(설명회·학원행사·전단배부·특수마케팅 등) — 행사마다 최신 한 줄",
+    notes:
+      "document(jsonb): title · type(설명회·학원행사·전단배부·특수마케팅·기타) · date(진행일) · period('YYYY-MM') · state(review 확인 필요 · planned 예정 · held 진행 확인 · cancelled 취소) · objective(acquisition 신규 모집 · retention 재원 관계·유지 · cross_subject 영수 동시수강 확대 · brand 인지도) · reservations·attendees(예약·참석 인원 — null=정확한 수를 모름, 원문은 reservationRaw·attendanceRaw) · budget·actualCost(원 · actualCost가 있으면 costReference=지급·배부 근거) · enrollmentGoal(등록 목표) · executions[](채널별 집행 — channel 전단·현수막·문자·블로그·SNS 등 · plannedQuantity·actualQuantity · budget·actualCost) · work[](준비 업무 — state todo·doing·done) · referenceEventId(참고한 지난 행사) · raw(가져온 원본 값). 진행된 행사 = document->>'state' = 'held'. 총비용은 executions에 비용이 있으면 그 합, 없으면 actualCost. version = 고친 횟수. 변경 이력은 marketing_archive_audit.",
+    columns: { source_key: "가져온 원본 열쇠(직접 만든 행사는 비어 있다)", document: "행사 내용(jsonb)", version: "버전", updated_by: "마지막으로 고친 직원" },
+  },
+  {
+    name: "marketing_archive_students",
+    label: "행사 참여 학생",
+    ko: "홍보 행사에 초대·예약·참석·상담한 원생 기록(행사 × 원생 × 종류 × 날짜마다 한 줄)",
+    notes:
+      "event_id → marketing_archive_events · student_id → students. document->>'kind': invited 초대 · reserved 참석 예약 · attended 참석 · no_show 불참 · test_reserved 입학테스트 예약 · consulted 상담 완료 · date(그 일이 있던 날) · reference(근거) · result · nextAction. 행사가 등록으로 이어졌는지는 참석(attended)·상담 완료(consulted) 기록과 그 원생의 등록일을 함께 봐야 한다(기록만으로 등록을 단정하지 않는다).",
+    columns: { document: "참여 내용(jsonb · kind로 종류 구분)", version: "버전", updated_by: "마지막으로 고친 직원" },
+  },
+  {
+    name: "marketing_source_inbox",
+    label: "홍보 원본함",
+    ko: "밖에서 가져온 홍보·마케팅 원본 자료(글·문서) — 행사에 잇기 전에 검토한다",
+    notes: "document(jsonb): provider(가져온 곳) · title · url · date · dateKind · type · status. review_status: review 확인 필요 · reference 참고 자료 · excluded 실적 제외 · linked 행사 연결. review_note = 검토 메모. 행사와의 연결은 marketing_archive_sources.",
+    columns: { source_key: "원본 열쇠(같은 원본은 한 번만 들어온다)", review_status: "검토 상태", ingested_at: "가져온 시각" },
+  },
+  { name: "marketing_archive_sources", label: "행사 원본 연결", ko: "홍보 행사와 원본 자료의 연결(행사 하나에 원본 여럿)", notes: "event_id → marketing_archive_events.id · source_id → marketing_source_inbox.id.", internal: true },
+  { name: "marketing_archive_audit", label: "홍보 기록 이력", ko: "홍보 행사·참여 학생·원본 검토를 저장할 때마다 남는 변경 기록", notes: "kind: event=행사 · student=참여 학생 · source=원본 검토 · entity_id = 그 기록의 id · actor_id = 저장한 직원 · document = 그 시점 사본 · version. 지금 값은 각 표를 본다.", internal: true },
 ];

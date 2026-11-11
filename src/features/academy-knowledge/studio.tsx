@@ -16,7 +16,7 @@ import s from "./studio.module.css";
 
 const labels=Object.fromEntries(entities);
 const roleLabels:Record<string,string>={output:"조회·분석",config:"설정",build:"기획·산출",input:"업무 입력",reference:"기준 사전",dictionary:"기준 사전"};
-/** 항목 정의·점검 기준·참고 연결 저장 — 버전을 하나 올려 쌓는다(s2_0068). 성공하면 true(편집 창을 닫는다). */
+/** 항목 정의·점검 기준·참고 연결 저장 — 버전을 하나 올려 쌓는다(s2_0051). 성공하면 true(편집 창을 닫는다). */
 function useSave(data:AcademyKnowledgeData) {
   const router=useRouter(),[busy,setBusy]=useState(false),[message,setMessage]=useState("");
   async function save(key:string,version:number,document:StudioDocument) {

@@ -30,7 +30,7 @@ function monthOptions(recent: readonly string[], stored: readonly string[], mont
 
 /**
  * 경영 분석 — 🔴 원장 전용 재무 화면. 문 = '경영 분석·지식그래프' 메뉴 권한(requireAccess) + 원장 역할·수납·원생·직원 권한(managementAccess).
- * 이 지점 DB를 읽는다(청구·수강·상담 + s2_0070 회계·대조 기록 + s2_0072 AI 검토 보관). AI는 화면을 열 때 부르지 않는다.
+ * 이 지점 DB를 읽는다(청구·수강·상담 + s2_0052 회계·대조 기록 + s2_0054 AI 검토 보관). AI는 화면을 열 때 부르지 않는다.
  */
 export default async function Page({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   await requireAccess("management");

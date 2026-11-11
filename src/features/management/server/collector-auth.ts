@@ -18,7 +18,7 @@ export function parseCollectorToken(header: string | null) {
   return { id: m[1]!, hash: tokenHash(m[2]!) };
 }
 
-/** 지점 스위치(s2_0071 management_collection_settings) — 줄이 없거나 꺼져 있으면 false. 조회 실패는 꺼진 것으로(닫힌 쪽). */
+/** 지점 스위치(s2_0053 management_collection_settings) — 줄이 없거나 꺼져 있으면 false. 조회 실패는 꺼진 것으로(닫힌 쪽). */
 export async function collectorEnabled(tenantId: string): Promise<boolean> {
   const r = await createAdminClient().from("management_collection_settings").select("collector_enabled").eq("tenant_id", tenantId).maybeSingle();
   return !r.error && r.data?.collector_enabled === true;

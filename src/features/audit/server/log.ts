@@ -23,7 +23,7 @@ export const AUDIT_ACTIONS = {
   //    통째로 무기록이었다. 특히 연동은 user_integrations에 updated_by조차 없어 흔적이 0이었다.
   integration_sync_toggle: "makeedu 자동 동기화 토글",
   sync_agent_manage: "연동 PC 관리",
-  // 경영 분석 학원 PC 수집기(s2_0071) — 켜기·끄기·연결 파일 발급·연결 해제. 토큰 원문은 남기지 않는다.
+  // 경영 분석 학원 PC 수집기(s2_0053) — 켜기·끄기·연결 파일 발급·연결 해제. 토큰 원문은 남기지 않는다.
   management_collector_manage: "경영 분석 PC 수집기 관리",
   integration_sheets_toggle: "구글 시트 내보내기 토글",
   integration_sheet_target: "구글 시트 대상 지정",

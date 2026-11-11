@@ -1,5 +1,5 @@
--- s2_0081 되돌리기 — 관찰 기록 트리거 함수를 s2_0066 원래 모양으로 돌리고(자기 확인·검토자 본문 수정 제한이 풀린다) 최신 버전 조회 함수를 뺀다.
--- 🔴 적용 SQL이 아니다. 앱을 s2_0081 이전 판으로 되돌린 **뒤에만**(새 앱은 academy_knowledge_latest를 부른다), 원장 승인 뒤 손으로 실행한다.
+-- s2_0059 되돌리기 — 관찰 기록 트리거 함수를 s2_0049 원래 모양으로 돌리고(자기 확인·검토자 본문 수정 제한이 풀린다) 최신 버전 조회 함수를 뺀다.
+-- 🔴 적용 SQL이 아니다. 앱을 s2_0059 이전 판으로 되돌린 **뒤에만**(새 앱은 academy_knowledge_latest를 부른다), 원장 승인 뒤 손으로 실행한다.
 begin;
 create or replace function public.guard_academy_knowledge_record() returns trigger language plpgsql set search_path=public,pg_temp as $$
 declare prior public.academy_knowledge_records; sid uuid; uid uuid;

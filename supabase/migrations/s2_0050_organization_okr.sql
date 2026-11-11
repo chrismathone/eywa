@@ -1,10 +1,10 @@
--- s2_0067_organization_okr.sql — 조직·OKR: 담당자 본인이 쓰는 목표·핵심결과·실행·날짜 있는 점검, 관리자의 피드백 · 2026-11-11
+-- s2_0050_organization_okr.sql — 조직·OKR: 담당자 본인이 쓰는 목표·핵심결과·실행·날짜 있는 점검, 관리자의 피드백 · 2026-11-11
 -- ✅ 운영 적용 2026-11-11(거래 안 ROLLBACK 시험 뒤 적용 · 표·정책 0개·함수 실행권 확인).
 --
 -- aywa-next(20261103042753_organization_okr.sql)에서 옮겼다. 화면 = /organization/okr(전엔 시안 · 예시 값).
 -- 🔴 읽기·쓰기 정책을 두지 않는다 — 서버(service_role)만 읽고 쓴다. 권한(역할·권한 '조직·OKR' okr)은 앱이 가르고,
 --    저장 함수가 담당자 본인·범위(조직·팀은 원장·관리자·매니저)·상위 목표 기간·버전을 한 번 더 지킨다. 모든 변경은 revisions에 남는다.
--- 되돌리기 = scripts/_oneoff/revert-s2_0067-organization-okr.sql
+-- 되돌리기 = scripts/_oneoff/revert-s2_0050-organization-okr.sql
 
 create table public.organization_okr (
  id uuid primary key, tenant_id uuid not null references public.tenants(id),

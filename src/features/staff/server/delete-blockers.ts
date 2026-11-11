@@ -3,13 +3,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
- * 직원 완전 삭제 — **한 거래로**(DB 함수 `delete_staff_account` · s2_0082) · 2026-11-11 Claude·Codex 검토 H1.
+ * 직원 완전 삭제 — **한 거래로**(DB 함수 `delete_staff_account` · s2_0060) · 2026-11-11 Claude·Codex 검토 H1.
  *
  * 전에는 로그인 계정(auth)을 지운 뒤 직원 행(public.users)을 지웠다. 직원 행 삭제가 FK에 막히면 로그인 계정만 사라졌다(되돌릴 수 없다).
  * 순서만 뒤집으면(직원 행 → 로그인 계정) 로그인 계정 삭제가 실패했을 때 계정이 남고, auth → public 미러 트리거가 그 계정의 다음 갱신
  * (로그인만 해도 일어난다) 때 직원 행을 원래 역할로 되살린다. 그래서 둘을 같은 거래에서 지운다 — 막히면 아무것도 지워지지 않는다.
  *
- * 함수가 하는 일: 로그인 계정·직원 행 잠금 → 이 직원을 가리켜 삭제를 막는 기록 검사(`staff_delete_blockers` · s2_0080 —
+ * 함수가 하는 일: 로그인 계정·직원 행 잠금 → 이 직원을 가리켜 삭제를 막는 기록 검사(`staff_delete_blockers` · s2_0058 —
  * 표 이름을 코드에 적지 않고 DB 카탈로그의 FK를 전부 본다. 새 표가 생겨도 빠지지 않고, 아직 없는 표 때문에 죽지 않는다) → 직원 행 → 로그인 계정.
  * 🔴 검사에 실패해도(함수 없음 포함) 지우지 않는다 — 모르는 채로 지우지 않는다. 기록이 있으면 '퇴사(비활성)'를 안내한다.
  * 🔴 삭제 경로에서 Auth 서버(`auth.admin.deleteUser`)를 따로 부르지 말 것 — 두 번에 나눠 지우면 위의 중간 상태가 다시 생긴다(가드 delete-blockers.test.ts).

@@ -1,4 +1,4 @@
--- s2_0070 — 경영 분석: ECOUNT 회계 자료 · 원본 대사(대조) 기록 · 확인 이력
+-- s2_0052 — 경영 분석: ECOUNT 회계 자료 · 원본 대사(대조) 기록 · 확인 이력
 -- 출처: aywa-next 복제본(archive/aywa-next-375d27d) 20261101122124 · 20261101122539 · 20261101133830 · 20261101135011 을 한 파일로.
 --   복제본 전용이던 것(크론·복제본 배포 가정)은 없다. 기존 표·함수는 건드리지 않는다(새 표 4개 · 새 함수 2개만).
 --
@@ -10,7 +10,7 @@
 --   저장 함수가 한 번 더 '그 지점의 재직 중 원장'인지 본다.
 -- 기록·이력 표는 덧붙이기만 한다(service_role에도 update·delete 없음 — Supabase 기본 권한을 먼저 걷는다).
 -- 🔴 한 번만 실행(create table·function에 if not exists가 없다 — 다시 실행하면 오류로 멈춘다 · 트랜잭션이라 데이터는 안전).
--- 되돌리기 = scripts/_oneoff/revert-s2_0070-management-accounting.sql(앱을 먼저 되돌린 뒤 · 저장한 회계 자료·대조 기록이 함께 사라진다).
+-- 되돌리기 = scripts/_oneoff/revert-s2_0052-management-accounting.sql(앱을 먼저 되돌린 뒤 · 저장한 회계 자료·대조 기록이 함께 사라진다).
 begin;
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';

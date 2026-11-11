@@ -82,7 +82,7 @@ export const getStudentHub = cache(async (studentId: string, requestedMonth?: st
     if (!await canAccessTenant(user.systemRole, "newcomers")) return unavailableSection("onboardingFeedback", "신입생 적응·담임 피드백", base, "forbidden");
     return studentOnboardingSection(studentId);
   });
-  // 현장 관찰·후속 조치 = academy_knowledge_records(s2_0066 · 2026-11-11) — 업무 작성센터 권한·담당 학생 범위 안에서만(권한 없으면 '열람 제한').
+  // 현장 관찰·후속 조치 = academy_knowledge_records(s2_0049 · 2026-11-11) — 업무 작성센터 권한·담당 학생 범위 안에서만(권한 없으면 '열람 제한').
   const fieldObservations = readSection("field-observations", "현장 관찰·후속 조치", `/work-records/knowledge?student=${studentId}`, () => studentKnowledgeSection(studentId));
   // 아직 연결되지 않은 다른 원본은 빈 결과로 위장하지 않는다.
   for (const [key, label] of [["marketing", "유입 경로·홍보·행사 참여"], ["admissionJourney", "전화·방문·등록 확인 기록"]] as const)

@@ -71,7 +71,7 @@ export async function loadTeacherHub(opts:{teacherId?:string;month?:string}={}):
     optional("consultation","직접 상담 기록",permissions[1],()=>fetchAllPaged<{id:string;student_id:string;consulted_at:string;follow_up_done:boolean|null}>((a,b)=>db.from("student_consultations").select("id,student_id,consulted_at,follow_up_done").eq("tenant_id",tenant).eq("counselor_id",teacher.id).gte("consulted_at",`${range.from}T00:00:00+09:00`).lte("consulted_at",`${end}T23:59:59.999+09:00`).order("id").range(a,b)),`${month} 상담일 기준 · 상담자ID 연결`),
     optional("promise","담당 약속",permissions[6],()=>fetchAllPaged<{id:string;student_id:string|null;due_on:string;state:string;document:unknown}>((a,b)=>db.from("student_care_commitments").select("id,student_id,due_on,state,document").eq("tenant_id",tenant).eq("owner_id",teacher.id).neq("state","cancelled").order("id").range(a,b)),"현재 담당 약속 전체 · 선택 월과 별도"),
     optional("sheet","마지막 수정한 영어 개별 시트",permissions[4],()=>fetchAllPaged<{id:string;class_id:string;student_id:string;mark_date:string;progress_note:string|null;score:string|null}>((a,b)=>db.from("class_sheet_student_marks").select("id,class_id,student_id,mark_date,progress_note,score").eq("tenant_id",tenant).eq("updated_by",teacher.id).gte("mark_date",range.from).lte("mark_date",end).order("id").range(a,b)),`${month} 기록일 기준 · 마지막 수정자 연결; 최초 작성자·당시 담당자와 다를 수 있음`),
-    // 배정 상한(s2_0073) — 이번 달 것만. 표가 없거나 못 읽으면 '조회 확인 필요'로(0건으로 위장하지 않는다).
+    // 배정 상한(s2_0055) — 이번 달 것만. 표가 없거나 못 읽으면 '조회 확인 필요'로(0건으로 위장하지 않는다).
     db.from("teacher_capacity_plans").select("teacher_id,month,version,max_students,basis,updated_at").eq("tenant_id",tenant).eq("teacher_id",teacher.id).eq("month",today.slice(0,7)).maybeSingle(),
   ]);
   // 🔴 시안: 행사 접점(marketing_input_records)·업무문서(academy_work_records) 표가 이 DB에 없다.
@@ -104,7 +104,7 @@ export async function loadTeacherHub(opts:{teacherId?:string;month?:string}={}):
   return {teacher,teachers,month,months,today,computedAt:period?.closing.computedAt??null,closing:period?.closing.closedAt?"마감 저장":"진행 중 / 집계 전",classes,students,enrollments,records,metrics,coverage,capacity,capacityReady:!capacityResult.error,canWrite:await canWriteTenant(user.systemRole,"class_review"),graph,grades:compareGrades(period,previous,new Set(names.keys())),insights:teacherInsights(metrics,records.filter(r=>r.kind==="promise"&&r.state?.startsWith("기한 경과")).length,capacity,new Set(enrollments.map(e=>e.studentId)).size)};
 }
 
-/** 이번 달 배정 상한 저장(s2_0073 save_teacher_capacity_plan — 원장 · 같은 요청 번호는 한 번만 · 버전 비교). 성과 판정·자동 배정이 아니다. */
+/** 이번 달 배정 상한 저장(s2_0055 save_teacher_capacity_plan — 원장 · 같은 요청 번호는 한 번만 · 버전 비교). 성과 판정·자동 배정이 아니다. */
 export async function saveTeacherCapacity(raw:unknown){
   const input=capacityRequestSchema.parse(raw),user=await teacherHubAccess(true);
   if(input.month!==kstToday().slice(0,7))throw new TeacherHubError("현재 월의 배정 기준만 변경할 수 있습니다");

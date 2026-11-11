@@ -45,7 +45,7 @@ export function KnowledgeRecordsWorkspace({data,params}:{data:Data;params:{kind?
 }
 function RecordEditor({data,kind,record,student,rule,onSaved}:{data:Data;kind:RecordKind;record?:KnowledgeRecord;student:string;rule?:string;onSaved:(id:string)=>void}){
   const router=useRouter(),[id]=useState(()=>record?.record_id??crypto.randomUUID()),[values,setValues]=useState(()=>initialValues(kind,data.today,student,rule,record,!record||record.author_id===data.actorId)),[busy,setBusy]=useState(false),[message,setMessage]=useState(""),[history,setHistory]=useState<HistoryRow[]|null>(null),[historyTruncated,setHistoryTruncated]=useState(false),[historyError,setHistoryError]=useState("");
-  // 관찰은 쓴 사람과 확인하는 사람이 다르다 — 남의 관찰을 연 검토자는 상태·검토 의견만 바꾼다(s2_0081).
+  // 관찰은 쓴 사람과 확인하는 사람이 다르다 — 남의 관찰을 연 검토자는 상태·검토 의견만 바꾼다(s2_0059).
   const own=!record||record.author_id===data.actorId,reviewing=kind==="observation"&&!own&&data.canReview;
   // 남의 기록을 열람만 하는 사람(전체 열람은 있지만 검토 권한은 없다)에게는 칸을 열지 않는다 — 열어 두면 저장에서 거절된다.
   const readOnly=!!record&&!own&&!data.canReview,locked=(key:string)=>readOnly||(kind==="observation"&&(own?key==="reviewNote":key!=="state"&&key!=="reviewNote"));

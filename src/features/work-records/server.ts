@@ -8,7 +8,7 @@ import { fetchAllPaged } from "@/lib/supabase/batch";
 import { workRequestSchema, validateWorkTransition, type WorkRecord } from "./model";
 
 /**
- * 업무 작성센터 서버 — aywa-next(c694e027d)의 업무 서식 저장을 옮겼다(2026-11-11 · 표 s2_0065).
+ * 업무 작성센터 서버 — aywa-next(c694e027d)의 업무 서식 저장을 옮겼다(2026-11-11 · 표 s2_0048).
  * 문 = 역할·권한 '업무 작성센터'(work_records). 작성 = 그 권한 쓰기(전체·담당) · 검토 = 원장·관리자·매니저 + 그 권한 '전체'.
  * 작성 중 문서는 본인에게만 · 검토자는 검토 요청·확인된 문서만 받는다(남의 초안은 안 본다).
  */

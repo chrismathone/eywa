@@ -4,7 +4,7 @@ import { OkrWorkspace } from "@/features/organization-okr/workspace";
 
 export const metadata = { title: "조직·OKR — 에이와" };
 
-/** 조직·OKR — 문 = '조직·OKR' 권한(okr · 기본값 원장만). 기록 = organization_okr(s2_0067) · 저장은 /api/organization/okr. */
+/** 조직·OKR — 문 = '조직·OKR' 권한(okr · 기본값 원장만). 기록 = organization_okr(s2_0050) · 저장은 /api/organization/okr. */
 export default async function Page({ searchParams }: { searchParams: Promise<{ goal?: string }> }) {
   await requireOkrViewer();
   const [data, params] = await Promise.all([loadOkrWorkspace().catch((e) => { console.error("[organization-okr] load", e); return null; }), searchParams]);

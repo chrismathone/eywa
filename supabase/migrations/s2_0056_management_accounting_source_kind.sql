@@ -1,9 +1,9 @@
--- s2_0074 — 경영 분석 회계 자료: 같은 달의 손익계산서와 계정별원장을 따로 보관한다
--- 까닭(커밋 전 리뷰 2026-11-11): s2_0070의 유일 조건이 (지점 · 기간)뿐이라 10월 손익계산서를 저장하면 10월 원장이 새 버전으로 덮였다 —
+-- s2_0056 — 경영 분석 회계 자료: 같은 달의 손익계산서와 계정별원장을 따로 보관한다
+-- 까닭(커밋 전 리뷰 2026-11-11): s2_0052의 유일 조건이 (지점 · 기간)뿐이라 10월 손익계산서를 저장하면 10월 원장이 새 버전으로 덮였다 —
 --   그 뒤 ECOUNT 월별 대조는 원장을 못 찾아 막히고, 반대 순서면 확정 손익이 원장으로 바뀐다.
 -- 무엇: 칸 `source_kind`(profit_loss | ledger · 문서의 sourceKind에서 계산 — 없으면 profit_loss) + 유일 조건을 (지점 · 기간 · 종류)로 +
---   저장 함수가 같은 종류의 줄만 찾는다. s2_0070을 적용한 직후라 표는 비어 있다(줄이 있어도 칸은 문서에서 저절로 채워진다).
--- 🔴 s2_0070 뒤 · 앱보다 먼저. 되돌리기 = scripts/_oneoff/revert-s2_0074-management-accounting-source-kind.sql.
+--   저장 함수가 같은 종류의 줄만 찾는다. s2_0052을 적용한 직후라 표는 비어 있다(줄이 있어도 칸은 문서에서 저절로 채워진다).
+-- 🔴 s2_0052 뒤 · 앱보다 먼저. 되돌리기 = scripts/_oneoff/revert-s2_0056-management-accounting-source-kind.sql.
 begin;
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';
@@ -48,6 +48,6 @@ begin
     values (current_row.id, current_row.version, p_tenant, p_document, p_actor);
   return jsonb_build_object('id', current_row.id, 'version', current_row.version, 'unchanged', false);
 end $$;
--- 실행 권한은 s2_0070 그대로다(create or replace는 권한을 바꾸지 않는다 — service_role만).
+-- 실행 권한은 s2_0052 그대로다(create or replace는 권한을 바꾸지 않는다 — service_role만).
 
 commit;

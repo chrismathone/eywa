@@ -15,7 +15,7 @@ import { auditSources, auditFieldKey } from "./studio-audit";
 import type { FieldAudit } from "./types";
 
 /**
- * 스키마 스튜디오 — aywa-next(28708817f · 310eb9379)를 옮겼다(2026-11-11 · 표 s2_0068).
+ * 스키마 스튜디오 — aywa-next(28708817f · 310eb9379)를 옮겼다(2026-11-11 · 표 s2_0051).
  * 문 = '경영 분석·지식그래프'(management). 읽기 = 그 권한 · 고치기(항목 정의·점검 기준·참고 연결) = 그 권한 '전체'.
  */
 export async function knowledgeGate(write = false) {

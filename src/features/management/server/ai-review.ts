@@ -22,7 +22,7 @@ export async function loadLatestAiReview(tenantId: string, month: string): Promi
 
 /**
  * 원장이 'AI 검토'를 누를 때만 부른다(페이지 로드에서 부르지 않는다). AI에 보내는 것 = 선택 월의 집계 지표·산식·청구 증감 분해뿐 —
- * 학생·직원 이름, 상담 원문, 개인별 급여, 확인 메모는 보내지 않는다. 결과는 s2_0072 표에 남긴다.
+ * 학생·직원 이름, 상담 원문, 개인별 급여, 확인 메모는 보내지 않는다. 결과는 s2_0054 표에 남긴다.
  */
 export async function runManagementAiReview(month: string): Promise<AiReview> {
   const user = await managementAccess(true);

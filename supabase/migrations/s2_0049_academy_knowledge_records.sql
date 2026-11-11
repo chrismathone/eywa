@@ -1,10 +1,10 @@
--- s2_0066_academy_knowledge_records.sql — 현장 관찰·후속 조치·OKR·운영 보완 자료(학교 학생 수·재무상태·콘텐츠 성과·업무 시간) · 2026-11-11
--- ✅ 운영 적용 2026-11-11(거래 안 ROLLBACK 시험 뒤 적용 · 표·정책 0개·트리거 확인). 트리거 함수는 s2_0081이 다시 정의한다.
+-- s2_0049_academy_knowledge_records.sql — 현장 관찰·후속 조치·OKR·운영 보완 자료(학교 학생 수·재무상태·콘텐츠 성과·업무 시간) · 2026-11-11
+-- ✅ 운영 적용 2026-11-11(거래 안 ROLLBACK 시험 뒤 적용 · 표·정책 0개·트리거 확인). 트리거 함수는 s2_0059이 다시 정의한다.
 --
 -- aywa-next(20261102170801_academy_ontology_records.sql)에서 옮겼다. 화면 = /work-records/knowledge · 통합 지식그래프.
 -- 기록은 버전을 쌓기만 한다(수정·삭제 = 트리거가 거절 · 보완은 새 버전). 작성자·유형은 처음 값에서 바뀌지 않는다.
 -- 🔴 읽기·쓰기 정책을 두지 않는다 — 서버(service_role)만 읽고 쓴다. 권한은 앱(업무 작성센터 권한 · 검토 = 경영 분석·지식그래프 권한 '전체').
--- 되돌리기 = scripts/_oneoff/revert-s2_0066-academy-knowledge-records.sql
+-- 되돌리기 = scripts/_oneoff/revert-s2_0049-academy-knowledge-records.sql
 create table public.academy_knowledge_records (
   id uuid primary key default gen_random_uuid(),
   tenant_id uuid not null references public.tenants(id),

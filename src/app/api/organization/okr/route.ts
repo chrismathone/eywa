@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { saveOkr, okrHistory } from "@/features/organization-okr/server";
 import { sameOriginJsonPost } from "@/lib/http/same-origin-json";
 
-/** 조직·OKR 저장·이력 — 권한·본인 판정은 organization-okr/server.ts · 표 organization_okr(s2_0067). */
+/** 조직·OKR 저장·이력 — 권한·본인 판정은 organization-okr/server.ts · 표 organization_okr(s2_0050). */
 export async function POST(request: Request) {
   return sameOriginJsonPost(request, 200000, "organization-okr", async (body) => ({ version: await saveOkr(body) }));
 }

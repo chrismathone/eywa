@@ -14,7 +14,7 @@ import { contextualResult, knowledgeDocument, saveRequest, validateTransition, t
 import type { Person, Staff } from "./types";
 
 /**
- * 현장 관찰·후속 조치·OKR·운영 보완 자료 — aywa-next(4cd839b5e)를 옮겼다(2026-11-11 · 표 s2_0066).
+ * 현장 관찰·후속 조치·OKR·운영 보완 자료 — aywa-next(4cd839b5e)를 옮겼다(2026-11-11 · 표 s2_0049).
  * 문 = '업무 작성센터' 권한(work_records — 화면 /work-records/knowledge와 같은 문). 작성 = 그 권한 쓰기(본인 관찰만 · 검토 요청까지).
  * 검토(관찰 확인 · 후속 조치·OKR·운영 자료 작성 · 학원 전체 기록 열람) = 그 권한 쓰기 + '경영 분석·지식그래프'(management) '전체'.
  * 학생은 담당 범위(readableFactStudents) 안에서만 — 범위 밖 학생의 기록은 목록에서도 뺀다.
@@ -41,7 +41,7 @@ export const loadKnowledgeStudents = cache(async (tenant: string, readable: Set<
 export async function loadKnowledgeRecords() {
   const gate = await knowledgeAccess(), db = createAdminClient(), tenant = gate.user.tenantId;
   const [latest, students, users] = await Promise.all([
-    // 기록마다 최신 버전 한 줄만(s2_0081 academy_knowledge_latest) — 지난 버전은 화면에서 이력을 펼칠 때 그 기록 것만 읽는다(knowledgeHistory).
+    // 기록마다 최신 버전 한 줄만(s2_0059 academy_knowledge_latest) — 지난 버전은 화면에서 이력을 펼칠 때 그 기록 것만 읽는다(knowledgeHistory).
     fetchAllPaged<KnowledgeRecord>((a, b) => db.rpc("academy_knowledge_latest", { p_tenant: tenant, p_author: gate.seeAll ? null : gate.user.id, p_student: null }).select(columns).order("record_id").range(a, b).then(r => ({ data: r.data as KnowledgeRecord[] | null, error: r.error }))),
     loadKnowledgeStudents(tenant, gate.readable),
     gate.seeAll ? fetchAllPaged<Staff>((a, b) => db.from("users").select("id,display_name").eq("tenant_id", tenant).eq("status", "active").in("system_role", STAFF_ROLES).order("id").range(a, b)) : Promise.resolve<Staff[]>([{ id: gate.user.id, display_name: gate.user.displayName || "나" }]),
@@ -109,7 +109,7 @@ export async function studentKnowledgeSection(studentId: string) {
   const readable = await readableFactStudents();
   if (readable !== null && !readable.has(studentId)) return unavailableSection("field-observations", "현장 관찰·후속 조치", href, "forbidden");
   const db = createAdminClient(), user = gate.user;
-  // 기록마다 **최신 버전**이 이 학생의 것일 때만(s2_0081 academy_knowledge_latest) — 버전 전체에서 학생으로 걸러 최신을 고르면,
+  // 기록마다 **최신 버전**이 이 학생의 것일 때만(s2_0059 academy_knowledge_latest) — 버전 전체에서 학생으로 걸러 최신을 고르면,
   // 대상 학생을 다른 학생으로 바꾼 후속 조치의 옛 버전이 이 학생의 지금 기록처럼 남는다.
   // p_student = 이 학생이 한 번이라도 대상이던 기록만 훑게(지점 전체를 매번 훑지 않는다) · 뒤의 eq = 그 기록의 최신 버전이 아직 이 학생의 것인지.
   const latest = await fetchAllPaged<KnowledgeRecord>((a, b) => db.rpc("academy_knowledge_latest", { p_tenant: user.tenantId, p_author: null, p_student: studentId }).select(columns).eq("document->>studentId", studentId).order("record_id").range(a, b).then(r => ({ data: r.data as KnowledgeRecord[] | null, error: r.error })));

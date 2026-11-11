@@ -1,4 +1,4 @@
--- s2_0065_work_records.sql — 업무 작성센터: 내 계정으로 쓰는 업무 서식(주간 업무보고·기획안·연수·인수인계·개선 제안·일반) · 2026-11-11
+-- s2_0048_work_records.sql — 업무 작성센터: 내 계정으로 쓰는 업무 서식(주간 업무보고·기획안·연수·인수인계·개선 제안·일반) · 2026-11-11
 -- ✅ 운영 적용 2026-11-11(거래 안 ROLLBACK 시험 뒤 적용 · 표·정책 0개·함수 실행권 확인).
 --
 -- aywa-next(20261102083644_native_work_records.sql)에서 옮겼다. 화면 = /work-records(전엔 시안 · 예시 값).
@@ -7,7 +7,7 @@
 --    저장 함수가 작성자 본인·검토 규칙·버전·같은 요청 재시도를 한 번 더 지킨다.
 -- 바꾼 점(aywa-next 대비): ① 확인 완료 문서는 작성자가 다시 고치지 못한다(검토자가 본 적 없는 본문에 확인 의견이 남지 않게)
 --    ② 본인 문서는 본인이 확인하지 못한다(조직·OKR과 같은 규칙) ③ 문서 크기 한도 40,000 → 64,000바이트(한글 3바이트 — 앱 한도 15,700자가 다 들어가게).
--- 되돌리기 = scripts/_oneoff/revert-s2_0065-work-records.sql
+-- 되돌리기 = scripts/_oneoff/revert-s2_0048-work-records.sql
 create table public.academy_work_records (
   id uuid primary key,tenant_id uuid not null references public.tenants(id),author_id uuid not null references public.users(id),
   version integer not null default 1,document jsonb not null,updated_at timestamptz not null default now(),created_at timestamptz not null default now(),

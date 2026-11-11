@@ -8,7 +8,7 @@ import s from "./workspace.module.css";
 const when = (iso: string) => new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
 
 /**
- * AI 경영 검토 — 🔴 버튼을 누를 때만 부른다. 마지막 결과는 DB(s2_0072)에 남아 '다시 검토'를 누르기 전까지 그대로 보인다.
+ * AI 경영 검토 — 🔴 버튼을 누를 때만 부른다. 마지막 결과는 DB(s2_0054)에 남아 '다시 검토'를 누르기 전까지 그대로 보인다.
  * AI에 보내는 것 = 그 달 집계 지표·산식뿐(이름·상담 원문·개인별 급여 없음).
  */
 export function AiReviewPanel({ month, metrics, initial }: { month: string; metrics: Metric[]; initial: AiReview | null }) {

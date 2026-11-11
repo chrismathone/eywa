@@ -59,7 +59,7 @@ describe("직원 완전 삭제 — 한 거래로(막히면 아무것도 지워�
     expect(fn).not.toMatch(/\.from\("users"\)\s*\.delete\(\)/);
   });
   it("🔴 DB 함수는 로그인 계정 → 직원 행 순서로 잠그고, 검사 → 직원 행 → 로그인 계정 순서로 지운다", () => {
-    const sql = readFileSync(join(process.cwd(), "supabase/migrations/s2_0082_delete_staff_account.sql"), "utf8").replace(/--[^\n]*/g, "");
+    const sql = readFileSync(join(process.cwd(), "supabase/migrations/s2_0060_delete_staff_account.sql"), "utf8").replace(/--[^\n]*/g, "");
     const at = (needle: string) => { const i = sql.indexOf(needle); expect(i, needle).toBeGreaterThan(-1); return i; };
     const lockLogin = at("from auth.users u where u.id = p_user for update"), lockRow = at("from public.users u where u.id = p_user and u.tenant_id = p_tenant for update");
     const check = at("public.staff_delete_blockers(p_user)"), delRow = at("delete from public.users"), delLogin = at("delete from auth.users");

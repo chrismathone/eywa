@@ -4,7 +4,7 @@ import { KnowledgeRecordsWorkspace } from "@/features/academy-knowledge/record-w
 
 export const metadata = { title: "관찰·후속 조치·OKR — 에이와" };
 
-/** 관찰·후속 조치·OKR — 문 = 업무 작성센터와 같은 '업무 작성센터' 권한(work_records). 기록 = academy_knowledge_records(s2_0066). */
+/** 관찰·후속 조치·OKR — 문 = 업무 작성센터와 같은 '업무 작성센터' 권한(work_records). 기록 = academy_knowledge_records(s2_0049). */
 export default async function Page({ searchParams }: { searchParams: Promise<{ kind?: string; record?: string; student?: string; rule?: string }> }) {
   await requireAccess("work_records");
   const [data, params] = await Promise.all([loadKnowledgeRecords().catch((e) => { console.error("[academy-knowledge] records", e); return null; }), searchParams]);

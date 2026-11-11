@@ -15,7 +15,7 @@ export type RecordKind = keyof typeof recordKinds;
 const base = {title:z.string().trim().min(2).max(160),date,evidence:text};
 const observation = z.object({...base,kind:z.literal("observation"),studentId:z.uuid(),role:z.enum(Object.keys(observerRoles) as [keyof typeof observerRoles,...(keyof typeof observerRoles)[]]),signal:z.enum(Object.keys(signals) as [Signal,...Signal[]]),
   from:date,through:date,value:amount.nullable(),fact:text,interpretation:z.string().trim().max(2000),severity:z.number().int().min(1).max(3),state:z.enum(["submitted","confirmed","withdrawn"]),
-  // 검토 의견 — 검토자(작성자가 아닌 사람)만 적는다(2026-11-11 · s2_0081). 없던 옛 기록은 빈 값으로 본다.
+  // 검토 의견 — 검토자(작성자가 아닌 사람)만 적는다(2026-11-11 · s2_0059). 없던 옛 기록은 빈 값으로 본다.
   reviewNote:z.string().trim().max(1500).optional()});
 const action = z.object({...base,kind:z.literal("action"),studentId:z.uuid().nullable(),ownerId:z.uuid(),due:date,originId:z.uuid().nullable(),ruleId:z.string().regex(/^R(10|[1-9])$/).nullable(),plan:text,result:z.string().trim().max(2000),state:z.enum(["open","done","cancelled"])});
 const okr = z.object({...base,kind:z.literal("okr"),ownerId:z.uuid(),from:date,through:date,objective:text,keyResult:text,baseline:z.number().finite(),target:z.number().finite(),actual:z.number().finite().nullable(),direction:z.enum(["higher","lower"]),unit:z.string().trim().min(1).max(20),metricId:z.string().max(80),state:z.enum(["active","closed","cancelled"])});
@@ -45,7 +45,7 @@ export function validateTransition(old:KnowledgeRecord|undefined,next:KnowledgeD
   if(old&&old.document.kind!==next.kind)throw Error("기록 유형은 변경할 수 없습니다");
   if(old&&old.author_id!==actor&&!reviewer)throw Error("본인 기록만 수정할 수 있습니다");
   if(next.kind==="observation"&&next.state==="confirmed"&&!reviewer)throw Error("확인된 관찰로 처리할 권한이 없습니다");
-  // 관찰의 확인은 다른 사람이 한다(원장 승인 2026-11-11 · s2_0081 트리거와 같은 규칙 — 업무 문서·조직 OKR과 같다. 원장 역할 예외 없음).
+  // 관찰의 확인은 다른 사람이 한다(원장 승인 2026-11-11 · s2_0059 트리거와 같은 규칙 — 업무 문서·조직 OKR과 같다. 원장 역할 예외 없음).
   if(next.kind==="observation"){
     const prev=old?.document.kind==="observation"?old.document:undefined,own=(old?.author_id??actor)===actor;
     if(own){
