@@ -111,6 +111,7 @@
 - **notifications `printHeader`(인쇄물 머리글)** 의 소비처는 등록 상담지 · 상담 준비 서류 인쇄 둘이다(`(print)/enrollment/[id]/print|prep`). 화면 안내도 그렇게 적는다(전에는 "청구서·성적표 상단"이라고 적혀 있었다 — 그 두 인쇄물은 이 값을 읽지 않는다).
 - **`subjects[].monthPlan`(월간 계획서 인쇄 문구)** 은 영어 과목의 값만 읽힌다(`MONTH_PLAN_SUBJECT_KEY` — 인쇄물과 계획(MP) 화면). 편집 칸도 그 과목에만, 영어 강사 시트 기능이 켜져 있을 때만 선다. 다른 과목에 이미 저장된 값은 지우지 않는다.
 - **데이터 가져오기** 는 이 학원에서 끈 기능의 줄을 세우지 않는다(켜져 있고 권한만 없는 줄은 선다).
+- **consultations `briefFacts`(상담 준비 브리프 — 학원 운영 안내 · 2026-11-12)** = 상담 양식 면의 주제별 글 6칸(보고·학부모 상담 주기 · 과제·오답 관리 · 보강 · 레벨테스트·반 배정·첫 수업 · 체험 수업 · 할인, 각 200자 · 기본 빈칸 · 전 과목 공통). 주제 목록은 [`brief-facts.ts`](../../src/features/enrollment/brief-facts.ts) 한 곳. 소비처 = `collectPrepFacts` → 브리프 사실 스냅샷 `policy.operations` → 브리프 화면 '학원 운영 안내' · `/prep` 인쇄 · 프롬프트(원문을 바꿔 약속하지 말 것). 🔴 같은 섹션의 양식 편집기와 한 state로 저장한다(섹션 통째 저장 — 따로 두면 서로를 지운다) · 요청에 `briefFacts`가 없으면(배포 전에 연 옛 폼) 저장값 유지(`prepareSectionForSave`). 저장 권한은 `consultation_settings` 그대로. AI 라이선스(ai_analysis)가 꺼진 지점엔 카드를 세우지 않는다(값은 보존). ⚠️ 두 창에서 같은 면을 고치면 나중 저장이 이긴다(다른 섹션과 같다).
 
 ---
 

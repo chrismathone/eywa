@@ -69,6 +69,13 @@ const VALIDATION_ONLY_LABELS: Record<string, Record<string, string>> = {
 
 /** 칸 안쪽의 이름 — 어느 섹션에서든 같은 뜻으로 쓰이는 키만(허용 목록). 없는 키는 문구에 싣지 않는다. */
 const NESTED_LABELS: Record<string, string> = {
+  // 상담 준비 브리프 운영 안내(2026-11-12) — 주제 라벨은 brief-facts.ts와 같다.
+  reportCycle: "보고·학부모 상담 주기",
+  homework: "과제·오답 관리",
+  makeup: "보강",
+  placement: "레벨테스트·반 배정·첫 수업",
+  trial: "체험 수업",
+  discount: "할인",
   label: "이름",
   name: "이름",
   title: "제목",

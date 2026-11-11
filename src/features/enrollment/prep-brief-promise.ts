@@ -1,3 +1,5 @@
+import { BRIEF_FACT_TOPICS } from "@/features/enrollment/brief-facts";
+
 /**
  * 상담 준비 브리프 — 학부모에게 하는 말 속 **운영 약속** 판정과 **말투 관찰**(검수 2026-11-11 · Claude·Codex 합의 3회 · 적대 리뷰 6회).
  *
@@ -23,11 +25,19 @@ const serviceFreqRe = new RegExp(`(${SERVICE_FREQ})[^.!?]{0,40}(${PROMISE})`);
 const behaviorFreqRe = new RegExp(`(${BEHAVIOR_FREQ})[^.!?]{0,40}(${DELIVER})`);
 const opsRe = new RegExp(
   "(할인|보강|체험 ?수업|무료 ?수업)[^.!?]{0,30}" +
-    "(해 ?드리|드리겠|드릴게|드립니다|가능(?:합니다|하니|하고|해요|해서|하며)|되니|됩니다|돼요|무료(?:입니다|예요)|(?:적용|진행|제공)되(?:고|며|지만|니)|(?:적용|진행|제공|잡아|잡고|마련)[^.!?]{0,10}(?:하겠|해 ?드리|드리|할게|합니다|됩니다))",
+    "(해 ?드리|드리겠|드릴게|드립니다|가능(?:합니다|하니|하고|해요|해서|하며)|되니|됩니다|돼요|무료(?:입니다|예요|이고|이며|이니|라서)|무료(?:로)?(?=\\s*(?:,|$))|(?:적용|진행|제공)되(?:고|며|지만|니)|(?:적용|진행|제공|잡아|잡고|마련)[^.!?]{0,10}(?:하겠|해 ?드리|드리|할게|합니다|됩니다))",
 );
 /** 순수한 넘김 절 — 'X은/는/도 (제가·지금·이 자리에서·직접…) 설명/말씀/안내드리겠습니다'. 주제와 넘김 사이에 다른 서술이 없을 때만. */
-const HANDOFF_TAIL = /(?:(?:제가|지금|이 자리에서|바로|직접|이어서|자세히)\s+)*(?:설명|말씀|안내)\s*(?:해\s*)?(?:드리겠습니다|드릴게요|드립니다|하겠습니다)[.!?]?$/;
-const PURE_HANDOFF = new RegExp(`^[^.!?]*?(?:은|는|도)\\s+${HANDOFF_TAIL.source}`);
+const HANDOFF_ADV = "(?:제가|지금|이 자리에서|바로|직접|이어서|자세히)";
+/** 학원 설정의 운영 안내 원문을 가리키는 말('안내 문구 그대로 읽어 드리겠습니다' · 2026-11-12 운영 안내 시험에서 할인 약속으로 잘못 막혔다). */
+// 🔴 원문·안내 문구·화면의 안내를 **분명히** 가리킬 때만 — '그대로'·'보며'만 있는 꼴('매주 진도는 그대로 말씀드리겠습니다')은 아니다(재리뷰 높음).
+const GUIDE =
+  "(?:지금\\s*)?(?:화면(?:에 실린|의)\\s*)?(?:(?:학원\\s*)?(?:운영\\s*)?안내(?:\\s*(?:문구|내용))?|원문)(?:를|을)?\\s*(?:(?:원문\\s*)?그대로|보시면서|보며|함께 보며)";
+const TAIL_END = "\\s*(?:해\\s*)?(?:드리겠습니다|드릴게요|드립니다|하겠습니다)[.!?]?$";
+const HANDOFF_TAIL = new RegExp(`(?:${HANDOFF_ADV}\\s+)*(?:설명|말씀|안내)${TAIL_END}`);
+/** 원문 가리키기 꼬리 — 학원 설정에 운영 안내가 있을 때만 넘김으로 본다(없는데 '안내 문구 그대로 읽어 드리겠습니다'는 화면에 없는 글이다 · 적대 리뷰). */
+const GUIDE_TAIL = new RegExp(`(?:${HANDOFF_ADV}\\s+)*${GUIDE}\\s*(?:${HANDOFF_ADV}\\s+)*(?:읽어|설명|말씀|안내)${TAIL_END}`);
+const pureHandoff = (c: string, tail: RegExp) => new RegExp(`^[^.!?]*?(?:은|는|도)\\s+${tail.source}`).test(c);
 
 /** 하겠다는 동사 — '설명해 드리'의 '해'는 떼되 '확인해 드리겠습니다'는 확인을 대신 해 주겠다는 약속이라 '확인해'로 남긴다(7차 리뷰). */
 const verbsOf = (t: string) =>
@@ -40,7 +50,17 @@ const informOnly = (t: string) => {
 const asksAbout = (t: string) => /(방식|가능한지|있는지|어떻게|여부|어떤|맞는지|되는지|맞을지)/.test(t);
 
 /** 한 문장이 운영 약속이면 그 까닭, 아니면 null. 결과·기간 약속은 `problemOf`가 따로 본다. */
-export function operationalPromise(sentence: string): string | null {
+/**
+ * 원문 가리키기 넘김을 인정할 주제인가 — 문장이 말하는 운영 주제가 하나 이상이고 **전부** 학원 설정에 적힌 주제일 때만
+ * (할인 한 칸만 적은 지점에서 '매주 진도는 원문 그대로…'가 풀리지 않게 · 재리뷰).
+ */
+function guideCovers(s: string, guideTopics: readonly string[]): boolean {
+  if (guideTopics.length === 0) return false;
+  const mentioned = BRIEF_FACT_TOPICS.filter((t) => new RegExp(t.words).test(s));
+  return mentioned.length > 0 && mentioned.every((t) => guideTopics.includes(t.label));
+}
+
+export function operationalPromise(sentence: string, opts: { guideTopics?: readonly string[] } = {}): string | null {
   // 전달 동사에 바로 붙은 부정('보내 드리지는 않습니다' · '드리진 않지만')은 약속이 아니다 — 그 말만 지운다(Codex 2차 합의).
   // 이중부정('…드리지 못하는 일은·적이·경우는 없습니다')은 약속이라 그대로 둔다.
   const s = sentence.replace(/[가-힣]+\s*(?:해\s*)?드리(?:지|진)(?:는|도|만)?\s*(?:않|못)(?![가-힣]*\s*(?:일|적|경우)(?:은|이|는|가)?\s*없)[가-힣]*/g, " ");
@@ -49,11 +69,15 @@ export function operationalPromise(sentence: string): string | null {
   // 문장에 서비스 주기('매주 진도는' · '매 수업이 끝나면,')나 조건('결석하시면,')이 있으면 넘김이 아니라 그때 하겠다는 약속이다 —
   // 그 조각만이 아니라 문장 전체로 본다(7·8차 리뷰 · '따로'도 나중 약속이라 넘김 부사에서 뺐다).
   const timed = new RegExp(`(${SERVICE_FREQ}|매일|매번)|(?:하|시|으|나)면[\\s,]`).test(s);
+  const guide = guideCovers(s, opts.guideTopics ?? []);
   const t = s
     .split(/,\s*/)
     .map((c) => {
-      if (timed || !PURE_HANDOFF.test(c.trim())) return c;
-      const topic = c.replace(HANDOFF_TAIL, " ");
+      // 원문 가리키기도 때 말이 있으면 넘김이 아니다 — '매주 숙제를 어떤 방식으로 챙겨 드리는지는 원문 그대로…'처럼 원문의 주기·조건을
+      // 바꾼 전제가 풀렸다(재리뷰 3차 높음). '수업 후 안내가 어떻게 돌아가는지는 화면의 원문 그대로…'(실데이터)는 감수하고 막는다.
+      const tail = timed ? null : guide && pureHandoff(c.trim(), GUIDE_TAIL) ? GUIDE_TAIL : pureHandoff(c.trim(), HANDOFF_TAIL) ? HANDOFF_TAIL : null;
+      if (!tail) return c;
+      const topic = c.replace(tail, " ");
       topics.push(topic);
       return topic;
     })
@@ -108,7 +132,8 @@ export function observeSpoken(fields: string[]): string[] {
     (x) =>
       /(제가|지금|이 자리에서|상담사가|직접)[^.!?]{0,20}(?:설명|말씀)\s*(?:해\s*)?(?:드리겠|드릴게|하겠)/.test(x) ||
       /(상담사가|직접)[^.!?]{0,10}설명(?:드립니다|합니다)/.test(x) ||
-      /^[^.!?]{0,25}(?:은|는)\s*(?:설명|말씀)\s*(?:해\s*)?드리겠습니다/.test(x),
+      /^[^.!?]{0,25}(?:은|는)\s*(?:설명|말씀)\s*(?:해\s*)?드리겠습니다/.test(x) ||
+      /그대로\s*(?:이어서\s*)?(?:읽어|설명|말씀|안내)\s*(?:해\s*)?드리겠/.test(x),
   ).length;
   const out: string[] = [];
   if (deferrals >= 4) out.push(`미루기 과다(${deferrals}문장)`);

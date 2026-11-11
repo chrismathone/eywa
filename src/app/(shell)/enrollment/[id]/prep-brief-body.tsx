@@ -44,6 +44,21 @@ export function PrepBriefBody({ record }: { record: PrepBriefRecord }) {
         </Block>
       ) : null}
 
+      {/* 학원 운영 안내 — 학원 설정에 적힌 원문 그대로(스냅샷 · LLM 문장을 거치지 않는다). 학부모 바람(보고·과제·보강…)에
+          상담사가 이 원문을 읽어 안내한다 — AI는 이 내용을 바꿔 약속하지 않는다(2026-11-12 Codex 합의). 옛 브리프엔 없다. */}
+      {f.policy.operations && f.policy.operations.length > 0 ? (
+        <Block icon={ClipboardCheck} title="학원 운영 안내 (브리프 작성 때의 학원 설정 원문)">
+          <dl className="space-y-1.5">
+            {f.policy.operations.map((o) => (
+              <div key={o.label}>
+                <dt className="text-text-dim text-xs">{o.label}</dt>
+                <dd className="text-foreground text-sm leading-relaxed break-keep whitespace-pre-line">{o.text}</dd>
+              </div>
+            ))}
+          </dl>
+        </Block>
+      ) : null}
+
       {/* 반 제안 — LLM 문장 + **스냅샷 사실 표**를 함께 보여준다. 문장만 두면 상담 자리에서
           "그 반 자리 있나요?"에 즉답할 근거가 사라진다(사실은 코드가, 말은 LLM이). */}
       {b.proposal || f.classes.length > 0 ? (

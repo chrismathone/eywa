@@ -107,6 +107,20 @@ export default async function EnrollmentPrepPrintPage({
         </Section>
       ) : null}
 
+      {/* 학원 설정에 적힌 운영 안내 원문(스냅샷 · 화면 본문과 같은 값 · 2026-11-12). 옛 브리프엔 없다. */}
+      {f.policy.operations && f.policy.operations.length > 0 ? (
+        <Section title="학원 운영 안내 (브리프 작성 때의 학원 설정 원문)">
+          <dl className="space-y-1.5 text-sm">
+            {f.policy.operations.map((o) => (
+              <div key={o.label} className="grid grid-cols-[9rem_1fr] gap-3">
+                <dt className="font-bold">{o.label}</dt>
+                <dd className="leading-relaxed whitespace-pre-line">{o.text}</dd>
+              </div>
+            ))}
+          </dl>
+        </Section>
+      ) : null}
+
       <Section title="반 제안 (현재 개설 반)">
         {b.proposal ? <p className="mb-2 text-sm leading-relaxed whitespace-pre-line">{b.proposal}</p> : null}
         {f.classes.length > 0 ? (

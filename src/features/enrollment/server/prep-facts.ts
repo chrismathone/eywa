@@ -30,6 +30,7 @@ import {
 import type { IntakeChecklist } from "@/features/enrollment/intake-checklist";
 import { settingsToPeriodsConfig, weekdayFullPeriodMinutes } from "@/features/timetable/lib/periods";
 import { kstToday } from "@/lib/date-kst";
+import { briefFactLines } from "@/features/enrollment/brief-facts";
 import { timeToMin } from "@/features/timetable/lib/ten-minute-grid";
 
 /**
@@ -405,6 +406,8 @@ export async function collectPrepFacts(
       shuttleEnabled: !!settings.operations.shuttle?.enabled && isModuleEnabled(settings.modules.disabled, "shuttle"),
       shuttleFee: settings.operations.shuttle?.fee?.trim() || null,
       shuttleRoutes: (settings.operations.shuttle?.routes ?? []).map((r) => r.label).filter(Boolean),
+      // 학원 설정 → 상담 양식 '학원 운영 안내' 원문(빈칸 제외 · 2026-11-12). 브리프 화면·인쇄가 이 스냅샷을 그대로 싣는다.
+      operations: briefFactLines(settings.consultations.briefFacts),
     },
   };
 }

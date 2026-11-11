@@ -18,6 +18,7 @@ import { BUNDLES, DASHBOARD_VERSION, GRID_COLS, MAX_ITEMS, MAX_ROW_SPAN, MAX_GRI
 import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
 import { DEFAULT_VIDEO_HOMEWORK_POLICY } from "@/features/video-homework/policy";
 import { parseWeekdayPartition, weekdayPartitionKey } from "@/features/timetable/lib/weekday-partition";
+import { BRIEF_FACT_MAX, EMPTY_BRIEF_FACTS } from "@/features/enrollment/brief-facts";
 
 const HHMM = /^\d{2}:\d{2}$/;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -457,8 +458,23 @@ export const consultationTemplateSchema = z.object({
 });
 export type ConsultationTemplate = z.infer<typeof consultationTemplateSchema>;
 
+// 신규 상담 브리프에 원문 그대로 싣는 학원 운영 안내(2026-11-12 · 소비처 = enrollment/server/prep-facts.ts → 브리프 화면·인쇄).
+// 주제 목록·라벨은 enrollment/brief-facts.ts 한 곳. 빈칸 = 등록된 안내 없음. 옛 설정에는 키가 없어 빈칸으로 시작한다.
+const briefFactText = z.string().trim().max(BRIEF_FACT_MAX, `${BRIEF_FACT_MAX}자 안으로 적어 주세요`).default("");
+export const briefFactsSchema = z.object({
+  reportCycle: briefFactText,
+  homework: briefFactText,
+  makeup: briefFactText,
+  placement: briefFactText,
+  trial: briefFactText,
+  discount: briefFactText,
+});
+
 export const consultationsSchema = z
-  .object({ templates: z.array(consultationTemplateSchema).max(30) })
+  .object({
+    templates: z.array(consultationTemplateSchema).max(30),
+    briefFacts: briefFactsSchema.default(() => ({ ...EMPTY_BRIEF_FACTS })),
+  })
   .superRefine((v, ctx) => {
     // 양식 ID(key) 중복 금지 + 기본양식은 최대 1개(라디오 UI와 이중 방어).
     const keys = new Set<string>();
