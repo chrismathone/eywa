@@ -4,6 +4,8 @@ import { LiveSectionView } from "@/features/student-contribution/components/live
 import { kstShortStamp } from "@/lib/date-kst";
 import a from "@/components/analytics/analytics.module.css";
 import s from "./student-hub.module.css";
+import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
 import { StudentVisuals } from "./student-visuals";
 
 const groups = [
@@ -23,14 +25,8 @@ export async function StudentHub({ studentId, month }: { studentId: string; mont
   const readable = data.sections.filter((s) => s.state === "ready" || s.state === "partial");
   const analysisKinds = { rule: "기록 기반 계산", ai: "저장된 AI 분석" };
   return <div className={`${a.dashboard} ${s.page}`} aria-label="학생 통합보기">
-    <section className={s.hero}>
-      <div className={s.heroTop}>
-        <div><div className={s.eyebrow}>원생 · 학생 통합보기</div><h2>{data.student.name} 학생 통합보기</h2>
-          <p>입학 때의 요구부터 수업·소통·수납·분석과 후속 업무까지, 이 학생에게 연결된 자료를 함께 확인합니다.</p>
-          <div className={s.stamp}>{kstShortStamp(data.checkedAt)} 조회 · {readable.length}개 자료 영역 · 분석 {data.analyses.length}건</div></div>
-        <div className={s.heroLinks}><Link href={base} className={s.heroAction}>학생 상세로</Link><Link href={`${base}/care`} className={s.heroAction}>약속·이행 관리 ↗</Link></div>
-      </div>
-    </section>
+    <PageHeader title={`${data.student.name} 학생 통합보기`} description={`입학 때의 요구부터 수업·소통·수납·분석과 후속 업무까지, 이 학생에게 연결된 자료를 함께 확인합니다 · ${kstShortStamp(data.checkedAt)} 조회 · ${readable.length}개 자료 영역 · 분석 ${data.analyses.length}건`}
+      actions={<><Button variant="outline" render={<Link href={base}/>}>학생 상세로</Button><Button variant="outline" render={<Link href={`${base}/care`}/>}>약속·이행 관리 ↗</Button></>}/>
       <nav aria-label="학생 통합보기 구역" className={s.sourceNav}>
         {[{ id: "analysis", label: "분석·판단" }, ...groups, { id: "coverage", label: "자료 연결 상태" }].filter((g) => g.id !== "billing" || data.billingAllowed).map((g) => <a key={g.id} href={`#student-hub-${g.id}`} >{g.label}</a>)}
       </nav>

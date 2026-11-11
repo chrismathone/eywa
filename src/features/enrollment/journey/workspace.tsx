@@ -1,6 +1,5 @@
 "use client";
 import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import { EmbedLink as Link } from "@/components/embed-link";
 import { ChartCard, DonutChart, SeriesChart, StatCard, RankBars } from "@/components/analytics/charts";
 import { palette } from "@/components/analytics/chart-math";
@@ -10,6 +9,11 @@ import { kinds, statuses, purposes, allowedStatuses, eventDay, saveJourneySchema
 import { sampleJourneyHistory, type JourneyData, type JourneyRevision } from "./sample-data";
 import baseline from "./historical-baseline.json";
 import s from "./workspace.module.css";
+import { PageHeader } from "@/components/page-header";
+import { BackLink } from "@/components/back-link";
+import { PeriodNav } from "@/components/period-nav";
+import { Toolbar, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
+import { StudentSearchToggle } from "@/features/attendance/components/student-search-box";
 
 /**
  * 전화·방문·등록 기록 — aywa-next(375d27df4) `enrollment/journey/workspace.tsx`의 화면을 옮긴 시안.
@@ -19,7 +23,6 @@ const dateLabel = (v: string | null) => v ?? "미확인";
 type Editing = { id: string; consultationId: string; expectedVersion: number; voided: boolean; document: JourneyDocument };
 
 export function JourneyWorkspace({ data, compact = false }: { data: JourneyData; compact?: boolean }) {
-  const router = useRouter();
   const [tab, setTab] = useState<"records" | "quality" | "history">("records"), [query, setQuery] = useState(""), [onlyOpen, setOnlyOpen] = useState(false);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [reason, setReason] = useState(""), [error, setError] = useState(""), [saved, setSaved] = useState("");
@@ -50,11 +53,13 @@ export function JourneyWorkspace({ data, compact = false }: { data: JourneyData;
   const issues = summary.issues.filter((r) => !query || `${r.name} ${r.school} ${r.reasons.join(" ")}`.includes(query));
   const historical = baseline.monthly.filter((m) => m.month.startsWith(String(data.year)));
   const visitRecords = summary.selected.filter((r) => r.document.kind === "visit");
+  const thisYear = Number(data.today.slice(0, 4)), yearHref = (y: number) => `/enrollment/visits?year=${y}`;
   return <div id="journey" className={`${s.root} ${a.dashboard} ${compact ? s.compact : ""}`}>
-    {data.sample ? <SampleBanner /> : null}
+    {compact && data.sample ? <SampleBanner /> : null}
     {!compact && <>
-      <header className={s.hero}><div><div className={s.eyebrow}>신규 콜&상담 · 방문·등록 점검</div><h1>전화부터 방문, 등록까지</h1><p>예정과 실적을 구분하고, 확인 근거와 담당자의 다음 액션을 함께 기록합니다.</p></div><Link href="/enrollment">신규 콜&상담으로 돌아가기 →</Link></header>
-      <div className={s.toolbar}><label>조회 연도 <select aria-label="조회 연도" value={data.year} onChange={(e) => router.push(`/enrollment/visits?year=${e.target.value}`)}>{Array.from({ length: Number(data.today.slice(0, 4)) - 2020 }, (_, i) => 2021 + i).reverse().map((y) => <option key={y}>{y}</option>)}</select></label><span className={s.muted}>{data.through}까지 · 기록의 현재 확인 상태 기준</span></div>
+      <PageHeader title="방문·등록 점검" description="전화부터 방문, 등록까지 — 예정과 실적을 구분하고, 확인 근거와 담당자의 다음 액션을 함께 기록합니다."/>
+      {data.sample ? <SampleBanner /> : null}
+      <Toolbar><BackLink href="/enrollment" label="신규 콜&상담"/><PeriodNav label={`${data.year}년`} prevHref={yearHref(data.year - 1)} nextHref={yearHref(data.year + 1)} currentHref={yearHref(thisYear)} prevDisabled={data.year <= 2021} nextDisabled={data.year >= thisYear} relation={data.year < thisYear ? "past" : data.year > thisYear ? "future" : "current"} prevAriaLabel="이전 해" nextAriaLabel="다음 해"/><span className={s.muted}>{data.through}까지 · 기록의 현재 확인 상태 기준</span></Toolbar>
       <div className={s.metrics}>
         <StatCard label="확인된 실제 방문" value={summary.visits || null} unit="회" note={summary.visits ? `중복 제외 방문 대상 ${summary.people} · 동일 월 재방문은 아래 표에서 구분` : "방문 실적 미입력 · 방문 0명을 의미하지 않습니다"} icon="people" />
         <StatCard label="방문 후 등록 근거" value={summary.people ? summary.registered : null} unit="대상" accent={palette[1]} note={summary.conversion === null ? "방문·등록 확정일 확인 후 계산" : `${summary.registered} / ${summary.people} · 관측 비율 ${summary.conversion}%`} />
@@ -66,7 +71,8 @@ export function JourneyWorkspace({ data, compact = false }: { data: JourneyData;
         <ChartCard title="월별 확인된 방문" note="실제 방문 완료 기록만 집계합니다. 입력이 없는 달은 미확인입니다. 같은 사람은 한 달에 1대상, 다른 달 재방문은 각 달에 포함됩니다."><SeriesChart unit="건" points={summary.monthly.map((m) => ({ label: m.month.slice(5) + "월", values: [m.visits || null, m.people || null], partial: m.unverified > 0 }))} series={[{ label: "방문 횟수", color: palette[0] }, { label: "중복 제외 대상", color: palette[1] }]} /></ChartCard>
         <ChartCard title="방문 기록의 처리 상태" note="신규·재입학만 포함. 전화상담·기존 재원 상담·대상 미확인은 방문 통계에서 제외합니다."><DonutChart label="방문 기록" unit="건" data={(["completed", "scheduled", "no_show", "cancelled"] as const).map((k, i) => ({ label: statuses[k], value: visitRecords.filter((r) => r.document.status === k).length, color: [palette[1], palette[0], palette[2], palette[4]][i] }))} /></ChartCard>
       </div>
-      <nav className={s.toolbar} aria-label="방문 점검 보기"><button type="button" aria-pressed={tab === "records"} onClick={() => setTab("records")}>기록·후속 업무</button><button type="button" aria-pressed={tab === "quality"} onClick={() => setTab("quality")}>보완 대상 {summary.issues.length}</button><button type="button" aria-pressed={tab === "history"} onClick={() => setTab("history")}>2021–2026 검증 자료</button><input className={s.search} aria-label="방문 기록 검색" placeholder="학생·담당자·보완 항목 검색" value={query} onChange={(e) => setQuery(e.target.value)} /></nav>
+      <Toolbar><ToolbarSegment><ToolbarSegmentItem active={tab === "records"} onClick={() => setTab("records")}>기록·후속 업무</ToolbarSegmentItem><ToolbarSegmentItem active={tab === "quality"} onClick={() => setTab("quality")}>보완 대상 {summary.issues.length}</ToolbarSegmentItem><ToolbarSegmentItem active={tab === "history"} onClick={() => setTab("history")}>2021–2026 검증 자료</ToolbarSegmentItem></ToolbarSegment></Toolbar>
+      <StudentSearchToggle ariaLabel="방문 기록 검색" placeholder="학생·담당자·보완 항목" inputWidth="w-56" value={query} onChange={setQuery}/>
     </>}
     {(compact || tab === "records") && <section className={s.panel}>
       <div className={s.toolbar}><h2>전화·방문·등록 기록</h2>{compact && <Link href="/enrollment/visits">전체 점검 →</Link>}</div>

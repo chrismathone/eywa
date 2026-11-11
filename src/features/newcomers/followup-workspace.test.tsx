@@ -4,7 +4,7 @@ import {FollowupWorkspace} from "./followup-workspace";
 import {fixture,managerId,teacherId} from "./followup-fixtures.test-support";
 import {EMPTY_FILTERS} from "./board-model";
 const m=vi.hoisted(()=>({assign:vi.fn(),report:vi.fn(),review:vi.fn(),check:vi.fn(),refresh:vi.fn()}));
-vi.mock("next/navigation",()=>({useRouter:()=>({refresh:m.refresh})}));
+vi.mock("next/navigation",()=>({useRouter:()=>({refresh:m.refresh}),usePathname:()=>"/newcomers",useSearchParams:()=>new URLSearchParams()}));
 vi.mock("./server/followup-actions",()=>({assignNewcomerManager:m.assign,submitNewcomerFeedback:m.report,reviewNewcomerFeedback:m.review}));
 vi.mock("./server/actions",()=>({setOnboardingCheck:m.check}));
 vi.mock("@/features/owner/operations-context",()=>({useSubjectMaps:()=>({labelOf:(s:string)=>s==="math"?"수학":"영어"})}));

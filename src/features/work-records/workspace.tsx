@@ -5,6 +5,9 @@ import { SampleBanner, sampleSave } from "@/features/mockup/sample";
 import { workTemplates, workStates, type WorkTemplate, type WorkDocument, type WorkRecord } from "./model";
 import type { WorkRecordsData } from "./sample-data";
 import s from "./workspace.module.css";
+import { PageHeader } from "@/components/page-header";
+import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
+import { Button } from "@/components/ui/button";
 
 /**
  * 업무 작성센터 — aywa-next(375d27df4) 화면을 계기판 토큰으로 옮긴 시안.
@@ -28,14 +31,16 @@ const destinations = [
 export function WorkRecordsWorkspace({ data, selectedId }: { data: WorkRecordsData; selectedId?: string }) {
   const [creating, setCreating] = useState<WorkTemplate | null>(null), [selected, setSelected] = useState(selectedId ?? null), [filter, setFilter] = useState("mine");
   const record = data.rows.find(r => r.id === selected), rows = data.rows.filter(r => filter === "review" ? r.document.state === "submitted" : r.author_id === data.actorId);
-  return <main className={s.page}>
+  return <div className="space-y-5">
+    <PageHeader title="업무 작성센터" description="내 계정으로 작성하고, 실행과 결과를 같은 기록에 남깁니다."/>
     <SampleBanner/>
-    <header className={s.hero}><span>에이와 · 한 번 쓰고 함께 일하기</span><h1>업무 작성센터</h1><p>내 계정으로 작성하고, 실행과 결과를 같은 기록에 남깁니다.</p></header>
+    <div className={s.page}>
     <section className={s.section}><h2>학생·수업·행사 기록</h2><p>학생별 사실은 아래 업무 화면에 한 번 기록하세요. 상담·수업·행사 ID를 통해 학생 기록과 분석에 이어집니다.</p><div className={s.shortcuts}>{destinations.filter(d => data.access.some(a => a.key === d.key && a.read)).map(d => <Link key={d.href} href={d.href}><strong>{d.label} ↗</strong><span>{d.desc}</span></Link>)}</div></section>
     <section className={s.section}><h2>에이와에서 바로 작성하는 서식</h2><p>작성 중인 문서는 본인에게만 보입니다. 검토를 요청하면 문서 관리 담당자가 확인할 수 있습니다.</p><div className={s.templates}>{Object.entries(workTemplates).map(([key, t]) => <button key={key} onClick={() => { setCreating(key as WorkTemplate); setSelected(null); }}><strong>{t.label} ＋</strong><span>{t.description}</span></button>)}</div></section>
     {(creating || record) && <Editor key={creating ? `new:${creating}` : `${record!.id}:${record!.version}`} data={data} record={record} template={creating ?? record!.document.template} onClose={() => { setCreating(null); setSelected(null); }}/>}
-    <section className={s.section}><div className={s.heading}><h2>작성·확인 현황</h2><nav><button aria-pressed={filter === "mine"} onClick={() => setFilter("mine")}>내 문서</button>{data.canReview && <button aria-pressed={filter === "review"} onClick={() => setFilter("review")}>검토 요청 {data.rows.filter(r => r.document.state === "submitted").length}</button>}</nav></div><div className={s.list}>{rows.map(r => <button key={r.id} aria-current={r.id === selected || undefined} onClick={() => { setSelected(r.id); setCreating(null); }}><span>{r.document.date} · {workTemplates[r.document.template].label}</span><strong>{r.document.title}</strong><small className={r.document.state === "submitted" ? s.stateWait : undefined}>{workStates[r.document.state]} · v{r.version}</small></button>)}{!rows.length && <p>아직 문서가 없습니다. 위 서식을 선택해 첫 기록을 작성하세요.</p>}</div></section>
-  </main>;
+    <section className={s.section}><div className={s.heading}><h2>작성·확인 현황</h2><ToolbarSegment><ToolbarSegmentItem active={filter === "mine"} onClick={() => setFilter("mine")}>내 문서</ToolbarSegmentItem>{data.canReview && <ToolbarSegmentItem active={filter === "review"} onClick={() => setFilter("review")}>검토 요청 {data.rows.filter(r => r.document.state === "submitted").length}</ToolbarSegmentItem>}</ToolbarSegment></div><div className={s.list}>{rows.map(r => <button key={r.id} aria-current={r.id === selected || undefined} onClick={() => { setSelected(r.id); setCreating(null); }}><span>{r.document.date} · {workTemplates[r.document.template].label}</span><strong>{r.document.title}</strong><small className={r.document.state === "submitted" ? s.stateWait : undefined}>{workStates[r.document.state]} · v{r.version}</small></button>)}{!rows.length && <p>아직 문서가 없습니다. 위 서식을 선택해 첫 기록을 작성하세요.</p>}</div></section>
+    </div>
+  </div>;
 }
 
 function Editor({ data, record, template, onClose }: { data: WorkRecordsData; record?: WorkRecord; template: WorkTemplate; onClose: () => void }) {
@@ -43,7 +48,7 @@ function Editor({ data, record, template, onClose }: { data: WorkRecordsData; re
   const own = !record || record.author_id === data.actorId, t = workTemplates[template];
   const save = async () => setMessage(await sampleSave());
   return <section className={s.editor}><div className={s.heading}><h2>{t.label}</h2><button onClick={onClose}>닫기</button></div><form onSubmit={e => { e.preventDefault(); void save(); }}><fieldset disabled={!own}><div className={s.pair}><label>문서 제목<input minLength={2} maxLength={200} value={doc.title} onChange={e => setDoc({ ...doc, title: e.target.value })}/></label><label>기록 날짜<input type="date" value={doc.date} onChange={e => setDoc({ ...doc, date: e.target.value })}/></label></div>{(["plan", "action", "result", "next"] as const).map(k => <label key={k}>{t[k]}<textarea maxLength={k === "next" ? 2000 : 4000} value={doc[k]} onChange={e => setDoc({ ...doc, [k]: e.target.value })}/></label>)}</fieldset>
-    {own && <div className={s.actions}><button type="submit">작성 중 저장</button><button className={s.primary} type="button" onClick={() => void save()}>검토 요청</button>{record && <button type="button" onClick={() => void save()}>문서 취소</button>}</div>}
+    {own && <div className={s.actions}><button type="submit">작성 중 저장</button><Button type="button" onClick={() => void save()}>검토 요청</Button>{record && <button type="button" onClick={() => void save()}>문서 취소</button>}</div>}
     {record?.document.reviewNote && <p className={s.feedback}>확인 의견: {record.document.reviewNote}</p>}
     {data.canReview && record?.document.state === "submitted" && <div className={s.review}><label>확인 의견<textarea maxLength={1500} value={doc.reviewNote} onChange={e => setDoc({ ...doc, reviewNote: e.target.value })}/></label><button type="button" onClick={() => void save()}>확인 완료</button><button type="button" onClick={() => void save()}>보완 요청</button></div>}
     <p role="status" className={message ? s.status : undefined}>{message}</p><small>기록자와 변경 버전이 함께 저장됩니다. 공식 결재가 필요한 문서는 전자결재에서 처리하세요.</small></form></section>;

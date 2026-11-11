@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { PageHeaderSkeleton } from "@/components/page-header";
+import { FaceTabsSkeleton } from "@/components/face-tabs-skeleton";
 
 /**
  * 원생 로열티 화면들의 스켈레톤 부품 — 다섯 화면이 같은 머리(`ContributionHeader`)와 같은 점수 구성 상자(`ScoreBreakdown`)를 쓴다.
@@ -13,34 +15,19 @@ export function Bar({ children, className = "" }: { children: ReactNode; classNa
   return <span className={`${TEXT_BAR} ${className}`}>{children}</span>;
 }
 
-const TABS = ["원생 로열티", "학생 기록 연결", "지난 소개 확인", "배점 설정"];
+/** 실물 탭 이름(contribution-shell.tsx `tabs`) — 설정 권한이 있으면 다섯 · 없으면 셋이지만 높이는 같다 — 다섯으로 그린다. */
+const TABS = ["로열티 랭킹", "누적 활동기록", "학생 기록 연결", "지난 소개 확인", "배점 설정"];
 
 /**
- * `ContributionHeader` 자리 — 제목·설명(실물과 같은 글을 넘겨 줄바꿈까지 같게) + 오른쪽 동작 + 아래 탭 줄(`border-b`, 링크 `pb-3`).
- * 탭은 설정 권한이 있으면 넷 · 없으면 둘이지만 높이는 같다 — 넷으로 그린다.
+ * `ContributionHeader` 자리 — 단독 화면의 실물은 앱 머리글(PageHeader 한 줄) + 면 탭(FaceTabs 1차 모양)이라 같은 공용 스켈레톤 둘
+ * (2026-11-11 디자인 통일). 제목·설명은 머리글 스켈레톤이 막대로 그린다.
  */
-export function ContributionHeaderSkeleton({ title, description, actions }: { title: string; description: string; actions?: ReactNode }) {
+export function ContributionHeaderSkeleton({ actions }: { title: string; description: string; actions?: ReactNode }) {
   return (
-    <header aria-hidden className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-2">
-          <h1 className="text-xl font-bold tracking-tight">
-            <Bar>{title}</Bar>
-          </h1>
-          <p className="max-w-3xl text-sm leading-relaxed">
-            <Bar>{description}</Bar>
-          </p>
-        </div>
-        {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
-      </div>
-      <div className="border-line flex gap-5 overflow-x-auto border-b">
-        {TABS.map((label) => (
-          <span key={label} className="shrink-0 border-b-2 border-transparent px-1 pb-3 text-sm">
-            <Bar>{label}</Bar>
-          </span>
-        ))}
-      </div>
-    </header>
+    <div aria-hidden className="space-y-4">
+      <PageHeaderSkeleton actions={actions} />
+      <FaceTabsSkeleton labels={TABS} />
+    </div>
   );
 }
 

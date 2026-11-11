@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { EmbedHiddenInput, EmbedLink as Link } from "@/components/embed-link";
+import { EmbedLink as Link } from "@/components/embed-link";
 import v from "@/components/analytics/analytics.module.css";
 import { SampleBanner, sampleSave } from "@/features/mockup/sample";
 import { accountingTotals, categoryLabels, hiringScenario, type AccountingReport, type ManagementSnapshot } from "./model";
@@ -9,6 +9,11 @@ import { ReportedFinancialPanel } from "./reported-financial-panel";
 import { CollectionPanel } from "./collection-panel";
 import { ManagementVisualSummary, featuredMetricIds } from "./visual-summary";
 import s from "./workspace.module.css";
+import { PageHeader } from "@/components/page-header";
+import { BackLink } from "@/components/back-link";
+import { PeriodNav } from "@/components/period-nav";
+import { Toolbar } from "@/components/toolbar";
+import { kstMonth, monthLabel } from "@/lib/date-kst";
 
 const number = (n: number | null, digits = 0) => n === null ? "자료 필요" : n.toLocaleString("ko-KR", { maximumFractionDigits: digits });
 const won = (n: number | null) => n === null ? "자료 필요" : `${number(n)}원`;
@@ -20,10 +25,19 @@ const won = (n: number | null) => n === null ? "자료 필요" : `${number(n)}�
 export function ManagementWorkspace({ data, months }: { data: ManagementSnapshot; months: readonly string[] }) {
   const [reportId, setReportId] = useState(data.reports[0]?.id ?? ""), [aiMessage, setAiMessage] = useState("");
   const selected = data.reports.find(r => r.id === reportId) ?? data.reports[0], totals = selected ? accountingTotals(selected.document) : null;
-  return <main className={`${s.page} ${v.dashboard}`}>
+  // 운영 분석 월 = 예시 달 목록 안에서만 앞뒤로(끝에선 화살표 잠금). '지금 달' 판정은 오늘(KST) 기준.
+  const at = months.indexOf(data.month), nowMonth = kstMonth(), monthHref = (m: string) => `?month=${m}`;
+  const currentMonth = months.includes(nowMonth) ? nowMonth : months[months.length - 1];
+  return <div className="space-y-5">
+    <PageHeader title="경영 분석" description="운영 현황부터 수익 구조까지. 지표를 살펴보고 근거와 다음 할 일을 연결하세요."/>
     <SampleBanner/>
-    <header className={`${s.header} ${v.hero}`}><div><Link href="/dashboard" className={s.back}>← 대시보드</Link><p className={s.eyebrow}>에이와 · 경영 분석</p><h1>우리 학원의 오늘, 숫자로 한눈에</h1><p>운영 현황부터 수익 구조까지. 지표를 살펴보고 근거와 다음 할 일을 연결하세요.</p></div>
-      <form className={s.month}><EmbedHiddenInput/><label htmlFor="management-month">운영 분석 월</label><select id="management-month" name="month" defaultValue={data.month}>{months.map(m => <option key={m} value={m}>{m}</option>)}</select><button>조회</button></form></header>
+    <Toolbar>
+      <BackLink href="/dashboard" label="대시보드"/>
+      <PeriodNav label={monthLabel(data.month)} prevHref={monthHref(months[Math.max(0, at - 1)])} nextHref={monthHref(months[Math.min(months.length - 1, at + 1)])}
+        currentHref={monthHref(currentMonth)} prevDisabled={at <= 0} nextDisabled={at < 0 || at >= months.length - 1}
+        relation={data.month < nowMonth ? "past" : data.month > nowMonth ? "future" : "current"} prevAriaLabel="이전 달" nextAriaLabel="다음 달"/>
+    </Toolbar>
+    <div className={`${s.page} ${v.dashboard}`}>
     <nav className={v.sourceNav} aria-label="경영 분석 영역"><a href="#operations">운영·매출</a><a href="#collection">자료 수집함</a><a href="#reviews">원본 대사·확인 업무</a><a href="#accounting">회계·채용</a><a href="#people">강사·상담 경로</a><Link href={`/dashboard/management/knowledge?month=${data.month}`}>통합 지식그래프 ↗</Link><a href="#knowledge">AI 검토</a><a href="#sources">데이터 연결</a></nav>
     <section id="operations"><div className={s.sectionTitle}><h2>{data.month} 운영 지표</h2><span>기준일 {data.asOf} · 과거 기록은 현재 저장 상태 기준</span></div>
       <ManagementVisualSummary data={data}/>
@@ -51,7 +65,8 @@ export function ManagementWorkspace({ data, months }: { data: ManagementSnapshot
       <h3>AI 경영 검토</h3><p>버튼을 누르면 개인별 이름·상담 원문 없이 집계 지표와 산식만 AI에 전달합니다. AI의 설명은 검토용이며, 실제 업무 변경은 담당자가 결정합니다.</p><button onClick={async () => setAiMessage(await sampleSave())}>현재 지표로 AI 검토</button>{aiMessage ? <p role="status" className={s.notice}>{aiMessage} · AI는 호출하지 않았습니다.</p> : null}
     </section>
     <section id="sources" className={s.panel}><h2>데이터 연결 상태</h2><table><thead><tr><th>소스</th><th>상태</th><th>확인 사항</th></tr></thead><tbody>{data.sources.map(x => <tr key={x.name}><td>{x.name}</td><td>{x.state}{x.updatedAt ? <small>{new Date(x.updatedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</small> : null}</td><td>{x.note}</td></tr>)}</tbody></table></section>
-  </main>;
+    </div>
+  </div>;
 }
 
 function Reconciliation({ report }: { report: AccountingReport }) {
