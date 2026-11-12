@@ -158,7 +158,8 @@ export function useAssistant({ open }: { open: boolean }) {
     if (!quiet) dispatch({ type: "conv/loading", key });
     try {
       const res = await fetch(`${API}/threads/${encodeURIComponent(threadId)}`, { cache: "no-store" });
-      if (!res.ok) return dispatch({ type: "conv/failed", key, error: await errorText(res, "대화를 불러오지 못했습니다"), gone: res.status === 404 });
+      // 403 = 학원 비서를 쓸 권한이 없어졌다 — 보던 대화 내용을 화면에서 비운다(권한이 줄어든 뒤 옛 답이 남지 않게 · s2_0096).
+      if (!res.ok) return dispatch({ type: "conv/failed", key, error: await errorText(res, "대화를 불러오지 못했습니다"), gone: res.status === 404, denied: res.status === 403 });
       const detail = (await res.json()) as ThreadDetailResponse;
       if (!detail?.thread || !Array.isArray(detail.messages)) return dispatch({ type: "conv/failed", key, error: "대화를 읽지 못했습니다." });
       dispatch({ type: "conv/loaded", key, detail });

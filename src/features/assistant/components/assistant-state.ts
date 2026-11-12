@@ -107,7 +107,7 @@ export type AssistantAction =
   | { type: "conv/loading"; key: string }
   | { type: "conv/loaded"; key: string; detail: ThreadDetailResponse }
   /** `gone` = 대화가 없다(다른 곳에서 지웠다) — 도는 표시를 풀고 목록에서 뺀다. */
-  | { type: "conv/failed"; key: string; error: string; gone?: boolean }
+  | { type: "conv/failed"; key: string; error: string; gone?: boolean; denied?: boolean }
   | { type: "ask/start"; convKey: string; turn: Turn }
   | { type: "ask/event"; turnKey: string; event: AskEvent; now: string }
   | { type: "ask/broken"; turnKey: string }
@@ -288,7 +288,8 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
       );
       return {
         ...state,
-        conversations: { ...state.conversations, [action.key]: { ...conv, turns, load: "error", loadError: action.error } },
+        // 권한이 없어졌으면(denied) 차례를 비운다 — 옛 답·표가 화면에 남지 않게.
+        conversations: { ...state.conversations, [action.key]: { ...conv, turns: action.denied ? [] : turns, load: "error", loadError: action.error } },
         ...(action.gone && conv.threadId ? { threads: state.threads.filter((t) => t.id !== conv.threadId) } : {}),
       };
     }

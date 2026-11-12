@@ -167,11 +167,6 @@ export async function saveOwnerSection(
   // 화면이 기본값으로 읽어(resolveMatrix가 잠긴 값을 건너뛴다) 다시 싣지 않는다. 개인 줄은 아래 잠금 검사가 같은 문구로 본다.
   // 아래 '담당' 금지보다 먼저 본다 — 열람·아르바이트의 연결 앱 '담당'에 그 안내('읽기'를 고르라)를 내면 다시 보낸 '읽기'도 거절된다(재리뷰 2026-11-06).
   // 학원 비서도 전체·없음만이다(isOnOffMenu — 2026-11-09). 연결 앱 칸은 종전 문구 그대로(onOffAccessMessage).
-  // 학원 비서는 지금 원장만(2026-11-12 임시) — 원장 아닌 역할 칸의 '전체'도 잠금 문구로 거절한다(배포 전에 열어 둔 옛 화면이 '저장만 되는 칸'을
-  // 남기지 않게 · 적대 리뷰). 요청 값만 본다(저장돼 있던 칸은 resolveMatrix가 건너뛴다) · 전체·없음 안내보다 먼저('전체'로 다시 보내도 막히므로).
-  if (section === "permissions" && result && (result.data as PermissionsSettings).overrides.some((r) => r.menu === "assistant" && r.role !== "master" && r.access !== "none")) {
-    return { error: LOCKED_CELL_MESSAGE };
-  }
   const onOffCell = section === "permissions" && result
     ? (result.data as PermissionsSettings).overrides.find((r) => isOnOffMenu(r.menu) && r.access !== "full" && r.access !== "none")
     : undefined;
@@ -277,8 +272,7 @@ export async function saveOwnerSection(
       });
       if (locked) {
         // 전체·없음만인 칸(연결 앱 · 학원 비서)에 담당·읽기면 그렇다고 알린다(먼저 — 위 역할 칸 검사와 같은 차례) · 강사보다 낮은 직급의 '담당'이면 까닭을 알린다(원장 2026-11-05 "알림메시지도 배선" — 권한 표·개인별 권한 화면과 같은 문구).
-        // 학원 비서 개인 줄은 지금 원장 밖에 잠겨 있다 — '전체·없음을 고르라'는 안내를 내지 않는다(다시 보낸 '전체'도 거절된다 · 2026-11-12).
-        const onOffValue = isOnOffMenu(locked.menu) && locked.menu !== "assistant" && locked.access !== "full" && locked.access !== "none";
+        const onOffValue = isOnOffMenu(locked.menu) && locked.access !== "full" && locked.access !== "none";
         // 조직·OKR · 업무 작성센터 줄은 어느 값이든 잠긴 칸이다 — '담당'이어도 '읽기를 고르라'는 안내를 내지 않는다(다시 보낸 '읽기'도 거절된다).
         const lockedRole = roles.get(locked.userId)!;
         const scopedOnly = !isStaffRecordLocked(locked.menu, lockedRole) && locked.access === "scoped" && isScopedForbiddenRole(lockedRole);

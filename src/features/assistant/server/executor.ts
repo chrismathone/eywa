@@ -14,6 +14,7 @@ import { clipText } from "../text";
 import { AssistantError, AssistantQueryError, type AssistantDb, type Row } from "./agent";
 import { wrapAssistantSql } from "./sql-gate";
 import { maskResidentNo } from "../pii-mask";
+import { deniedMessage, hasScope, viewAllowed, viewKeys, type ScopeMap } from "../scope";
 
 /** 저장·화면용 행 상한(+1을 읽어 잘렸는지 안다). */
 export const ASSISTANT_ROW_LIMIT = 2000;
@@ -27,6 +28,7 @@ const STATEMENT_TIMEOUT = "8s";
 const EXTENDED = { simple: false } as unknown as postgres.UnsafeQueryOptions;
 
 type Sql = ReturnType<typeof postgres>;
+const EMPTY: ReadonlySet<string> = new Set();
 class Rollback<T> extends Error {
   constructor(readonly value: T) {
     super("rollback");
@@ -135,26 +137,60 @@ export function planProblem(plan: unknown): string | null {
   return null;
 }
 
-/** 지점 증표 — service_role만 발급한다(DB가 서명 · 5분). 비서 역할은 만들 수 없다. */
-async function issueBinding(tenantId: string): Promise<string> {
-  const { data, error } = await createAdminClient().rpc("assistant_issue_binding", { p_tenant: tenantId });
+/** 묻는 사람의 권한 범위 — 증표에 싣는 사람과 허용 묶음 키(scope.ts · s2_0096). 원장·운영 계정 = ['master']. */
+export type AssistantScope = { userId: string | null; keys: readonly string[] };
+
+/**
+ * 범위 증표 — service_role만 발급한다(DB 서명 · 5분 · 지점 + 사람 + 묶음 키). 비서 역할은 만들 수 없다.
+ * DB 보기는 이 키로 행·칸을 거르고(s2_0096 bound_tenant(키)), 앱은 같은 대응표로 보기 목록·표 구조를 거른다.
+ */
+async function issueBinding(tenantId: string, scope: AssistantScope): Promise<string> {
+  const { data, error } = await createAdminClient().rpc("assistant_issue_scoped_binding", { p_tenant: tenantId, p_user: scope.userId, p_keys: [...scope.keys] });
   if (error || typeof data !== "string") throw new AssistantError("지점 확인 증표를 받지 못했습니다. 잠시 뒤 다시 물어봐 주세요");
   return data;
 }
 
-export async function openAssistantDb(tenantId: string): Promise<AssistantDb & { close(): Promise<void> }> {
+/** DB 대응표(public.assistant_scope_map) — 🔴 못 읽으면 기본값으로 돌아가지 않고 멈춘다(Codex 합의 9 · 닫는 쪽). */
+export async function loadScopeMap(): Promise<ScopeMap> {
+  const { data, error } = await createAdminClient().rpc("assistant_scope_map");
+  const raw = data as { tables?: Record<string, unknown>; columns?: unknown } | null;
+  if (error || !raw || typeof raw.tables !== "object" || raw.tables === null || !Array.isArray(raw.columns)) {
+    throw new AssistantError("권한 범위를 확인하지 못했습니다. 잠시 뒤 다시 물어봐 주세요");
+  }
+  const tables = new Map<string, string>();
+  for (const [t, k] of Object.entries(raw.tables)) if (typeof k === "string") tables.set(t, k);
+  const columns: Array<{ table: string; column: string; key: string }> = [];
+  for (const c of raw.columns as Array<Record<string, unknown>>) {
+    if (typeof c?.table === "string" && typeof c.column === "string" && typeof c.key === "string") columns.push({ table: c.table, column: c.column, key: c.key });
+  }
+  return { tables, columns };
+}
+
+export async function openAssistantDb(tenantId: string, scope: AssistantScope): Promise<AssistantDb & { close(): Promise<void> }> {
   const url = process.env.ASSISTANT_DATABASE_URL;
   if (!url) throw new AssistantError("학원 비서 DB 연결이 아직 설정되지 않았습니다. 관리자에게 알려 주세요");
+  if (scope.keys.length === 0) throw new AssistantError("학원 비서로 볼 수 있는 자료가 없습니다. 원장에게 권한을 확인해 주세요");
   await refreshViewsIfStale(tenantId);
+  const map = await loadScopeMap();
   const sql: Sql = postgres(url, { max: 1, prepare: false, connect_timeout: 10, idle_timeout: 20, max_lifetime: 600, onnotice: () => undefined });
   let viewSet: ReadonlySet<string> | null = null;
+  let deniedSet: ReadonlyMap<string, string> | null = null;
+  let columnSet: ReadonlyMap<string, ReadonlySet<string>> | null = null;
+  /** 표 → 이 사람에게 가린 칸(값은 DB가 null로 · 표 구조에서도 숨긴다). */
+  const hidden = new Map<string, Set<string>>();
+  for (const c of map.columns) {
+    if (hasScope(scope.keys, c.key)) continue;
+    const set = hidden.get(c.table) ?? new Set<string>();
+    set.add(c.column);
+    hidden.set(c.table, set);
+  }
 
   /**
    * 지점 증표를 단 읽기 전용 거래에서 `fn`을 돌리고 늘 되돌린다(rollback — 거래 안에서 바뀐 설정도 함께 사라진다).
    * 끝에 `pg_advisory_unlock_all()` — 세션 잠금은 rollback으로도 안 풀리고 풀러를 따라 다음 요청으로 넘어간다(적대 리뷰 3번).
    */
   async function inTenant<T>(fn: (tx: postgres.TransactionSql) => Promise<T>): Promise<T> {
-    const token = await issueBinding(tenantId);
+    const token = await issueBinding(tenantId, scope);
     try {
       await sql.begin("read only", async (tx) => {
         // 시간대 = 한국 — `::date`·`date_trunc`·`::timestamp`가 한국 날짜·벽시계로 묶이고, 시간대 없는 결과(timestamp)에 붙이는 +09:00이 맞는다(재리뷰 2026-11-06).
@@ -182,14 +218,48 @@ export async function openAssistantDb(tenantId: string): Promise<AssistantDb & {
     throw new Error("unreachable");
   }
 
+  const listViews = async (): Promise<ReadonlySet<string>> => {
+    if (viewSet) return viewSet;
+    const rows = await sql<{ name: string }[]>`
+      select c.relname as name from pg_class c join pg_namespace n on n.oid = c.relnamespace
+       where n.nspname = 'assistant' and c.relkind = 'v' order by 1`;
+    // 이 사람의 범위 밖 보기는 목록에서 뺀다(DB도 같은 대응표로 0행 · 앱은 '○○ 권한 필요'로 돌려보낸다 — 0건으로 답하지 않게).
+    const allowed = new Set<string>();
+    const denied = new Map<string, string>();
+    for (const { name } of rows) {
+      if (viewAllowed(name, scope.keys, map)) allowed.add(name);
+      else denied.set(name, deniedMessage(viewKeys(name, map).filter((k) => !hasScope(scope.keys, k))));
+    }
+    viewSet = allowed;
+    deniedSet = denied;
+    return viewSet;
+  };
+
   return {
-    async views() {
-      if (viewSet) return viewSet;
-      const rows = await sql<{ name: string }[]>`
-        select c.relname as name from pg_class c join pg_namespace n on n.oid = c.relnamespace
-         where n.nspname = 'assistant' and c.relkind = 'v' order by 1`;
-      viewSet = new Set(rows.map((r) => r.name));
-      return viewSet;
+    views: listViews,
+    async denied() {
+      if (!deniedSet) await listViews();
+      return deniedSet ?? new Map();
+    },
+    hiddenColumns(table) {
+      return hidden.get(table) ?? EMPTY;
+    },
+    async viewColumns() {
+      if (columnSet) return columnSet;
+      const allowed = await listViews();
+      const rows = await sql<{ view: string; col: string }[]>`
+        select c.relname as view, a.attname as col from pg_attribute a
+          join pg_class c on c.oid = a.attrelid join pg_namespace n on n.oid = c.relnamespace
+         where n.nspname = 'assistant' and c.relkind = 'v' and a.attnum > 0 and not a.attisdropped`;
+      const out = new Map<string, Set<string>>();
+      for (const r of rows) {
+        if (!allowed.has(r.view)) continue;
+        const set = out.get(r.view) ?? new Set<string>();
+        set.add(r.col);
+        out.set(r.view, set);
+      }
+      columnSet = out;
+      return columnSet;
     },
     async describe(tables) {
       if (!tables.length) return [];
@@ -197,9 +267,10 @@ export async function openAssistantDb(tenantId: string): Promise<AssistantDb & {
         select table_name, column_name, data_type from information_schema.columns
          where table_schema = 'assistant' and table_name = any(${tables}::text[])
          order by table_name, ordinal_position`;
+      // 범위 밖 칸은 표 구조에서도 숨긴다(값은 DB가 null로 — Codex 합의 3).
       return tables.map((table) => ({
         table,
-        columns: rows.filter((r) => r.table_name === table).map((r) => ({ name: r.column_name, type: r.data_type })),
+        columns: rows.filter((r) => r.table_name === table && !hidden.get(table)?.has(r.column_name)).map((r) => ({ name: r.column_name, type: r.data_type })),
       }));
     },
     async run(gated) {

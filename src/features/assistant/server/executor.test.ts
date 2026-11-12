@@ -62,7 +62,7 @@ describe("openAssistantDb", () => {
   it("연결 문자열이 없으면 한국어 안내로 멈춘다", async () => {
     const before = process.env.ASSISTANT_DATABASE_URL;
     delete process.env.ASSISTANT_DATABASE_URL;
-    await expect(openAssistantDb("t")).rejects.toThrow(/설정되지 않았습니다/);
+    await expect(openAssistantDb("t", { userId: null, keys: ["master"] })).rejects.toThrow(/설정되지 않았습니다/);
     if (before !== undefined) process.env.ASSISTANT_DATABASE_URL = before;
   });
 });

@@ -56,7 +56,7 @@ describe("listAdvice", () => {
       { id: "t1", title: "학생 감소 원인" },
       { id: "t2", title: "  " },
     ];
-    const items = await listAdvice(owner);
+    const items = await listAdvice(owner, ["master"]);
     expect(items.map((i) => [i.view.id, i.threadTitle, i.action])).toEqual([
       ["a1", "학생 감소 원인", "의견 a1"],
       ["a3", "제목 없는 대화", "의견 a3"],
@@ -72,7 +72,7 @@ describe("listAdvice", () => {
   it("1,000줄을 넘어도 끝까지 읽는다(침묵 절단 없음)", async () => {
     state.threads = [{ id: "t1", title: "긴 대화" }];
     state.advice = Array.from({ length: 1_203 }, (_, i) => row(`a${i}`, "t1"));
-    expect(await listAdvice(owner)).toHaveLength(1_203);
+    expect(await listAdvice(owner, ["master"])).toHaveLength(1_203);
     expect(state.calls.filter((c) => c.table === "assistant_advice").length).toBeGreaterThan(1);
   });
 });

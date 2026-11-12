@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { logActionAs } from "@/features/audit/server/log";
 import { runAdviceOutcomes, type OutcomeTally } from "@/features/assistant/server/advice-outcomes";
 import { openAssistantDb } from "@/features/assistant/server/executor";
+import { userScopeKeys } from "@/features/assistant/server/scope";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { kstToday } from "@/lib/date-kst";
 import { bearerMatches } from "@/lib/http/secret-compare";
@@ -44,7 +45,16 @@ export async function GET(req: Request) {
       try {
         const settings = await getTenantSettingsByTenantId(t.id);
         const holidays = new Set((settings.operations.holidays ?? []).map((h) => h.date));
-        const tally = await runAdviceOutcomes({ tenantId: t.id, today, limit: PER_TENANT, deadline: started + BUDGET_MS, holidays, openDb: () => openAssistantDb(t.id) });
+        // 의견을 만든 사람의 지금 권한 범위로 잰다(s2_0096 · Codex 합의 6 — 권한이 줄었거나 퇴사했으면 재지 않는다).
+        const tally = await runAdviceOutcomes({
+          tenantId: t.id,
+          today,
+          limit: PER_TENANT,
+          deadline: started + BUDGET_MS,
+          holidays,
+          openDb: (scope) => openAssistantDb(t.id, scope),
+          scopeOf: (userId) => userScopeKeys(t.id, userId),
+        });
         summary[t.id] = tally;
         if (tally.paused) reportWarning("학원 비서 의견 재측정이 일시 문제로 멈춤", { where: "assistant-outcomes", tenantId: t.id, error: tally.paused, left: tally.left });
         if (tally.measured + tally.broken + tally.stopped > 0) {

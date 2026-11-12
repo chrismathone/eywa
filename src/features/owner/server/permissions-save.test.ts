@@ -781,16 +781,14 @@ describe("학원 비서 권한 — 전체·없음만 · 강사 칸 잠금(2026-1
     seed(preset, { overrides: [], userOverrides: [] });
     const w = openWindow();
     for (const access of ["scoped", "readonly"] as const) {
-      // 지금은 원장 밖에 잠겨 있어 잠금 문구가 먼저다(2026-11-12 임시 · '전체'로 다시 보내도 막히므로 '전체·없음을 고르라'고 하지 않는다).
-      expect((await w.save({ ...asForm(w.draft), overrides: [{ menu: "assistant", role: "admin", access }] }))?.error, access).toBe("이 역할에서 잠긴 메뉴 권한은 변경할 수 없습니다");
-      expect((await w.save({ ...asForm(w.draft), userOverrides: [{ userId: STAFF_A, menu: "assistant", access }] }))?.error, access).toBe("이 역할에서 잠긴 메뉴 권한은 변경할 수 없습니다");
+      expect((await w.save({ ...asForm(w.draft), overrides: [{ menu: "assistant", role: "admin", access }] }))?.error, access).toBe(onOffAccessMessage("assistant"));
+      expect((await w.save({ ...asForm(w.draft), userOverrides: [{ userId: STAFF_A, menu: "assistant", access }] }))?.error, access).toBe(onOffAccessMessage("assistant"));
     }
     expect(onOffAccessMessage("assistant")).toBe("학원 비서 권한은 전체·없음 중에서 선택해 주세요");
     expect(m.writes).toBe(0);
-    // 지금은 원장만(2026-11-12 임시) — 원장 아닌 역할 칸의 '전체'도 잠금 문구로 거절(옛 화면이 '저장만 되는 칸'을 남기지 않게).
-    expect((await w.save({ ...asForm(w.draft), overrides: [{ menu: "assistant", role: "admin", access: "full" }] }))?.error).toBe("이 역할에서 잠긴 메뉴 권한은 변경할 수 없습니다");
-    expect((await w.save({ ...asForm(w.draft), userOverrides: [{ userId: STAFF_A, menu: "assistant", access: "full" }] }))?.error).toBe("이 역할에서 잠긴 메뉴 권한은 변경할 수 없습니다");
-    expect(m.writes).toBe(0);
+    // 전체·없음은 된다(역할 칸 · 개인 줄).
+    const res = await w.save({ ...asForm(w.draft), overrides: [{ menu: "assistant", role: "admin", access: "full" }], userOverrides: [{ userId: STAFF_A, menu: "assistant", access: "full" }] });
+    expect(res?.ok, JSON.stringify(res)).toBe(true);
   });
 
   it.each(["chinsan", "generic"] as const)("🔴 %s: 강사에게 새로 주는 개인 줄은 잠금 문구로 거절 — 강사 화면엔 비서 단추가 없다", async (preset) => {

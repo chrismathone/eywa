@@ -9,7 +9,7 @@ import { isHelpHotkey } from "@/features/help/overlay-hotkey";
 import { kstToday } from "@/lib/date-kst";
 import { isPaletteHotkey } from "@/lib/palette-hotkey";
 import { AssistantBadge } from "./assistant-badge";
-import { ASSISTANT_OPEN_EVENT, ASSISTANT_TOGGLE_MESSAGE, assistantHotkeyLabel, isAssistantHotkey, setAssistantBusy } from "./assistant-hotkey";
+import { ASSISTANT_OPEN_EVENT, ASSISTANT_OPENED_EVENT, ASSISTANT_TOGGLE_MESSAGE, assistantHotkeyLabel, isAssistantHotkey, setAssistantBusy } from "./assistant-hotkey";
 import { runningThreadKeys } from "./assistant-state";
 import { useAssistant } from "./use-assistant";
 
@@ -50,6 +50,11 @@ export function AssistantLauncher({ trigger = true, className }: { trigger?: boo
   const [today, setToday] = useState("");
   const assistant = useAssistant({ open });
   const { loadThreads } = assistant;
+  /** 여는 순간의 대화 상태(콜백이 매번 바뀌지 않게 참조로). */
+  const assistantRef = useRef(assistant);
+  useEffect(() => {
+    assistantRef.current = assistant;
+  }, [assistant]);
   const hotkeyLabel = useHotkeyLabel();
   const triggerRef = useRef<HTMLButtonElement>(null);
   /** 다음 닫힘에서 초점을 돌려주지 않는다(검색 팰릿으로 넘어갈 때 — 팰릿 입력의 초점을 빼앗지 않게). */
@@ -67,6 +72,13 @@ export function AssistantLauncher({ trigger = true, className }: { trigger?: boo
     }
     setOpen(true);
     void loadThreads();
+    // 🔴 판을 닫아 둔 사이 권한이 줄었을 수 있다(s2_0096) — 보던 대화는 서버 저장본으로 조용히 다시 읽고(지금 권한으로 볼 수 없는 답은 서버가 안내로 바꾼다),
+    //    추천 질문은 범위가 그대로인지 다시 묻는다. 답을 받는 중인 대화는 다시 읽지 않는다(로컬이 더 새롭다).
+    const { current } = assistantRef.current;
+    if (current.threadId && current.load === "ready" && !current.turns.some((t) => t.status === "running" || t.status === "recovering")) {
+      void assistantRef.current.loadConversation(current.threadId, { quiet: true });
+    }
+    window.dispatchEvent(new Event(ASSISTANT_OPENED_EVENT));
   }, [loadThreads]);
 
   const toggle = useCallback(() => {

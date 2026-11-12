@@ -19,7 +19,8 @@ const REVIEWERS = `${ROLE.master}·${ROLE.admin}·${ROLE.manager}${pickJosa(ROLE
 const STAFF_SIX = STAFF_RECORD_ROLES.map((role) => ROLE[role]).join("·");
 const NOT_STAFF = `${ROLE.viewer}·${ROLE.parttime}`;
 export const ROW_NOTE: Partial<Record<MenuKey, string>> = {
-  assistant: "지점 자료 전부(급여·계약·연락처·계좌 포함)를 조회해 답합니다. 묻는 사람의 권한 범위 안에서만 조회하도록 바꾸는 동안은 원장만 씁니다 — 다른 역할 칸은 잠겨 있습니다(개인별 권한도 적용되지 않음).",
+  // 문구 = Codex 합의 8(2026-11-12 · 권한 범위 조회 s2_0096).
+  assistant: "질문한 사람의 현재 조회 권한 안에서만 답합니다. 담당 범위만 허용된 자료는 아직 조회하지 않습니다. 전체·없음만 쓰고, 강사 화면에는 비서가 없어 강사 칸은 고정입니다.",
   management: `통합 지식그래프·스키마 스튜디오가 열립니다 — 수강·목표·관찰 등 실제 기록을 읽고(학생·직원·반 이름은 ${MENU_LABEL.students}·${MENU_LABEL.staff}·${MENU_LABEL.classes} 권한 범위 안에서만), ‘전체’면 항목 정의·점검 기준을 고칩니다. ‘전체’인 사람은 ${MENU_LABEL.work_records}가 열려 있으면 그 화면의 관찰 기록도 모든 직원 것을 읽고(학생에 대한 기록은 ${MENU_LABEL.students} 권한 범위의 학생 것만), 그 화면에 쓸 수 있으면 확인·후속 조치까지 합니다 — 강사·상담에게 줘도 같습니다. 경영 분석 화면(학원 재무 자료)은 이 권한을 열어도 ${ROLE.master} 계정에서만 열립니다.`,
   okr: `직원이 자기 목표·핵심결과를 실제로 기록합니다. ‘담당’ = 본인 목표만 쓰고 봅니다(실행 중인 조직·팀 목표는 요약만). ‘전체’ = ${REVIEWERS} 모든 직원의 목표를 보고 피드백하며 조직·팀 목표를 만듭니다(그 밖의 역할은 ‘담당’과 같습니다). ${NOT_STAFF} 칸은 고정입니다 — 직원 역할(${STAFF_SIX})만 쓸 수 있는 화면입니다.`,
   marketing: `행사·홍보 기록(기획 · 채널 집행 · 참석·비용 · 원생 연결)을 실제로 읽고 저장합니다 — 행사 자료를 옮겨 둔 학원에서만 열리고, 그 밖의 학원에서는 이 칸을 열어도 화면이 열리지 않습니다. 보려면 ${MENU_LABEL.billing} 권한이 함께 있어야 하고, 저장은 ${ROLE.master}·${ROLE.admin}${pickJosa(ROLE.admin, "이")} 두 권한 모두 ‘전체’나 ‘담당’일 때만 합니다(‘읽기’면 보기만). 마케팅 입력·검토 화면만 아직 예시 값입니다.`,

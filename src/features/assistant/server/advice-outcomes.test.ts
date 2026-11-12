@@ -61,6 +61,8 @@ const due = (over: Row = {}): Row => ({
   next_check_on: "2026-12-08",
   checks_done: 0,
   fail_count: 0,
+  asked_by: "u1",
+  scope_keys: null,
   ...over,
 });
 const fakeDb = (run: AssistantDb["run"]) => ({ views: async () => new Set(["students"]), describe: async () => [], run: vi.fn(run), close: vi.fn(async () => undefined) });
@@ -72,6 +74,7 @@ const input = (db: ReturnType<typeof fakeDb>, over: Partial<Parameters<typeof ru
   deadline: Date.parse("2026-12-09T00:00:00Z") + 60_000,
   holidays: new Set<string>(),
   openDb: vi.fn(async () => db),
+  scopeOf: vi.fn(async () => ["master"]),
   now: () => Date.parse("2026-12-09T00:00:00Z"),
   ...over,
 });
@@ -208,4 +211,38 @@ describe("runAdviceOutcomes", () => {
     expect(updates()).toEqual([]);
     expect(db.run).not.toHaveBeenCalled();
   });
+
+  it("🔴 만든 사람의 지금 권한으로 잰다 — 증표 = 의견에 저장된 묶음 · 권한을 잃었거나 줄었으면 멈춤 · 권한을 못 읽으면 오늘은 건너뜀", async () => {
+    state.due = [
+      due({ id: "a1", asked_by: "u1", scope_keys: ["students"] }),
+      due({ id: "a2", asked_by: "u2", scope_keys: ["billing"] }),
+      due({ id: "a3", asked_by: "u3", scope_keys: ["students"] }),
+      due({ id: "a4", asked_by: "u4", scope_keys: ["students"] }),
+      due({ id: "a5", asked_by: "u5", scope_keys: null }),
+    ];
+    const db = fakeDb(async (sql) => ok(sql.includes("'2026-11-23'") ? 30 : 10));
+    const scopeOf = vi.fn(async (u: string) => {
+      if (u === "u1") return ["students", "classes"];
+      if (u === "u2") return ["students"]; // 수납 권한이 줄었다
+      if (u === "u3") return []; // 퇴사 · 비서 권한 없음
+      if (u === "u5") return ["students"]; // 표지 없는 옛 의견 — 원장만
+      throw new Error("설정 조회 실패");
+    });
+    const run = input(db, { scopeOf });
+    const tally = await runAdviceOutcomes(run);
+    expect(run.openDb).toHaveBeenCalledTimes(1);
+    // 증표 = 만든 사람의 지금 범위(의견 표지를 다 덮을 때만)
+    expect(run.openDb).toHaveBeenCalledWith({ userId: "u1", keys: ["students", "classes"] });
+    expect(tally).toMatchObject({ measured: 1, stopped: 3, left: 1 });
+    const stopped = updates().filter((u) => u.patch?.measure_state === "stopped").map((u) => u.patch?.last_error);
+    expect(stopped).toEqual(expect.arrayContaining(["만든 사람의 지금 권한 밖 자료라 재지 않습니다", "만든 사람이 학원 비서를 쓸 수 없어 재지 않습니다"]));
+  });
+
+  it("표지 없는 옛 의견은 만든 사람이 지금 원장이면 원장 증표로 잰다", async () => {
+    state.due = [due({ scope_keys: null })];
+    const run = input(fakeDb(async (sql) => ok(sql.includes("'2026-11-23'") ? 30 : 10)));
+    await runAdviceOutcomes(run);
+    expect(run.openDb).toHaveBeenCalledWith({ userId: "u1", keys: ["master"] });
+  });
 });
+

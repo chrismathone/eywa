@@ -308,7 +308,7 @@ describe("학원 비서 권한(assistant · 원장 2026-11-09 *\"기본 디폴�
     expect(MENU_ACCESS.assistant).toEqual(Object.fromEntries(SYSTEM_ROLES.map((role) => [role, role === "master" ? "full" : "none"])));
   });
 
-  it("🔴 칸은 전체·없음만 — 비서는 지점 자료 전부를 읽어 '담당'·'읽기'로 좁힐 수 없다(좁은 값이 적혀도 실제는 '전체'로 열린다)", () => {
+  it("🔴 칸은 전체·없음만 — 비서 칸은 쓰나 마나다(읽는 자료는 묻는 사람의 권한 범위 · 좁은 값이 적혀도 실제는 '전체'로 열린다)", () => {
     expect(isOnOffMenu("assistant")).toBe(true);
     for (const role of SYSTEM_ROLES) {
       expect(isPermissionLocked("assistant", role, "scoped"), role).toBe(true);
@@ -319,14 +319,13 @@ describe("학원 비서 권한(assistant · 원장 2026-11-09 *\"기본 디폴�
     expect(applyUserOverrides(MENU_ACCESS, "u-1", "manager", [{ userId: "u-1", menu: "assistant", access: "readonly" }]).assistant.manager).toBe("none");
   });
 
-  it("🔴 지금은 원장만(2026-11-12 임시 — 권한 범위 조회가 끝날 때까지) · 다른 역할 칸·개인 줄은 적용되지 않는다", () => {
+  it("🔴 강사 칸은 잠근다 — 강사 화면엔 비서 단추가 없다(열어도 쓸 곳이 없는 칸) · 원장 아닌 사무실 역할은 원장이 연다", () => {
     for (const access of ["full", "none"] as const) expect(isPermissionLocked("assistant", "teacher", access), access).toBe(true);
     expect(resolveMatrix([{ menu: "assistant", role: "teacher", access: "full" }]).assistant.teacher).toBe("none");
     expect(applyUserOverrides(MENU_ACCESS, "t-1", "teacher", [{ userId: "t-1", menu: "assistant", access: "full" }]).assistant.teacher).toBe("none");
     for (const role of ["admin", "manager", "counselor", "accountant", "viewer", "parttime"] as const) {
-      expect(isPermissionLocked("assistant", role, "full"), role).toBe(true);
-      expect(resolveMatrix([{ menu: "assistant", role, access: "full" }]).assistant[role], role).toBe("none");
-      expect(applyUserOverrides(MENU_ACCESS, "u-1", role, [{ userId: "u-1", menu: "assistant", access: "full" }]).assistant[role], role).toBe("none");
+      expect(isPermissionLocked("assistant", role, "full"), role).toBe(false);
+      expect(resolveMatrix([{ menu: "assistant", role, access: "full" }]).assistant[role], role).toBe("full");
     }
     // 원장이 스스로 끌 수도 있다(설정·대시보드처럼 잠근 칸이 아니다 — 학원 설정은 계속 열려 다시 켤 수 있다).
     expect(isPermissionLocked("assistant", "master", "none")).toBe(false);

@@ -104,15 +104,21 @@ export function signalFromRow(name: SignalName, row: Row | undefined): Suggestio
   }
 }
 
-/** 열린 비서 DB로 신호를 모두 센다 — 실패한 신호 이름은 `failed`. */
-export async function countSignals(db: Pick<AssistantDb, "views" | "run">): Promise<{ signals: SuggestionSignals; failed: SignalName[] }> {
+/**
+ * 열린 비서 DB로 신호를 모두 센다 — 실패한 신호 이름은 `failed`.
+ * 묻는 사람의 권한 범위 밖 보기를 읽는 신호는 세지 않고 건너뛴다(실패가 아니다 — s2_0096 · 범위 밖 숫자가 추천 질문으로 새지 않게).
+ */
+export async function countSignals(db: Pick<AssistantDb, "views" | "run" | "denied">): Promise<{ signals: SuggestionSignals; failed: SignalName[] }> {
   const views = await db.views();
+  const denied = (await db.denied?.()) ?? new Map<string, string>();
+  const known = denied.size ? new Set([...views, ...denied.keys()]) : views;
   const signals: SuggestionSignals = {};
   const failed: SignalName[] = [];
   for (const name of Object.keys(SIGNAL_SQL) as SignalName[]) {
     try {
-      const gate = await checkAssistantSql(SIGNAL_SQL[name], views);
+      const gate = await checkAssistantSql(SIGNAL_SQL[name], known);
       if (!gate.ok) throw new Error(gate.reason);
+      if (gate.tables.some((t) => !views.has(t))) continue;
       const r = await db.run(gate.sql);
       const value = signalFromRow(name, r.rows[0]);
       if (value) (signals as Record<SignalName, unknown>)[name] = value;

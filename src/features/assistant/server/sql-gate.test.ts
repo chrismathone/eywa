@@ -110,3 +110,118 @@ describe("거절 — 운영 DB에 큰 부담", () => {
   it("너무 긴 SQL", async () => reject(`select ${"1 + ".repeat(3000)}1`, /너무 깁니다/));
   it("문법 오류는 이유를 돌려준다", async () => reject("select from where", /문법 오류/));
 });
+
+describe("권한 범위(s2_0096) — 범위 밖 보기는 '없는 표'가 아니라 권한 안내 · 칸 이름을 모은다", () => {
+  const denied = new Map([["invoices", "'수납관리' 권한이 있어야 볼 수 있는 자료입니다"]]);
+  it("범위 밖 보기 = 필요한 권한만 알린다(0건으로 쓰지 말라고)", async () => {
+    const r = await checkAssistantSql("select count(*) from invoices", VIEWS, denied);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.reason).toMatch(/'수납관리' 권한이 있어야 볼 수 있는 자료입니다/);
+      expect(r.reason).toMatch(/0건·없음으로 쓰지 말 것/);
+    }
+  });
+  it("범위 밖 보기와 이름이 같은 CTE는 막는다(이름만으로는 CTE인지 보기인지 가를 수 없다 — 다른 이름을 쓰게)", async () => {
+    const r = await checkAssistantSql("with invoices as (select 1 as n) select n from invoices", VIEWS, denied);
+    expect(r.ok === false && r.reason).toMatch(/CTE 이름/);
+  });
+  it("모르는 표는 종전대로 '없는 표'", async () => {
+    const r = await checkAssistantSql("select 1 from nothing_here", VIEWS, denied);
+    expect(r.ok === false && r.reason).toMatch(/없는 표입니다/);
+  });
+  it("조회문에 나온 칸 이름(마지막 이름 · *)을 돌려준다", async () => {
+    await expect(checkAssistantSql("select s.name, s.parent_phone, count(*) from students s group by 1, 2", VIEWS)).resolves.toMatchObject({ ok: true, columns: ["name", "parent_phone"] });
+    await expect(checkAssistantSql("select * from students", VIEWS)).resolves.toMatchObject({ ok: true, columns: ["*"] });
+  });
+});
+
+describe("권한 범위 — CTE 이름으로 범위 밖 보기를 지나가지 못한다(적대 리뷰 2026-11-12)", () => {
+  const denied = new Map([["invoices", "'수납관리' 권한이 있어야 볼 수 있는 자료입니다"]]);
+  it("CTE 본문 안의 같은 이름은 실제 보기 — 범위 밖이면 막는다", async () => {
+    const r = await checkAssistantSql("with invoices as (select * from invoices) select count(*) from invoices", VIEWS, denied);
+    expect(r.ok === false && r.reason).toMatch(/권한이 있어야 볼 수 있는 자료입니다.*CTE 이름/);
+  });
+  it("스키마를 붙인 이름은 CTE가 아니다 — 범위 밖 보기면 막고, 없는 보기면 '없는 표'", async () => {
+    const r1 = await checkAssistantSql("with x as (select 1) select * from assistant.invoices", VIEWS, denied);
+    expect(r1.ok === false && r1.reason).toMatch(/권한이 있어야/);
+    const r2 = await checkAssistantSql("with nope as (select 1) select * from assistant.nope", VIEWS, denied);
+    expect(r2.ok === false && r2.reason).toMatch(/없는 표입니다/);
+  });
+  it("볼 수 있는 보기와 이름이 같은 CTE도 읽은 표로 센다(저장 표지가 빠지지 않게)", async () => {
+    await expect(checkAssistantSql("with students as (select * from students) select count(*) from students", VIEWS, denied)).resolves.toMatchObject({ ok: true, tables: ["students"] });
+  });
+});
+
+describe("칸 이름 모으기 — 행 통째 참조·간접 참조·USING도 센다(재리뷰 2026-11-12)", () => {
+  const cols = async (sql: string) => {
+    const r = await checkAssistantSql(sql, VIEWS);
+    if (!r.ok) throw new Error(r.reason);
+    return r.columns;
+  };
+  it("row_to_json(별칭) · json_agg(표 이름) · to_jsonb(별칭)->>'칸' = '*'", async () => {
+    expect(await cols("select row_to_json(e) from enrollments e")).toContain("*");
+    expect(await cols("select json_agg(enrollments) from enrollments")).toContain("*");
+    expect(await cols("select to_jsonb(a)->>'note' from attendance_records a")).toContain("*");
+    // 서브쿼리·CTE·함수 별칭은 '*'로 부풀리지 않는다(그 안에서 고른 칸을 이미 셌다)
+    expect(await cols("select row_to_json(x) from (select id from students) x")).not.toContain("*");
+    expect(await cols("with m as (select name from students) select row_to_json(m) from m")).not.toContain("*");
+    expect(await cols("select d::date from generate_series('2026-01-01'::date, '2026-01-31'::date, interval '1 day') d")).not.toContain("*");
+    // JOIN 별칭 · 별칭 칸 목록은 '*'
+    expect(await cols("select to_jsonb(j) from (students s join enrollments e on e.student_id = s.id) as j")).toContain("*");
+    expect(await cols("select c3 from students s(c1, c2, c3)")).toContain("*");
+  });
+  it("(별칭).칸 · join … using (칸)", async () => {
+    expect(await cols("select (s).name from students s")).toEqual(expect.arrayContaining(["name", "*"]));
+    expect(await cols("select count(*) from enrollments join classes using (class_id)")).toContain("class_id");
+  });
+  it("칸 목록이 없을 때(대비책) 별칭.함수 꼴(u.to_jsonb · s.json_agg)은 막는다", async () => {
+    for (const sql of ["select s.to_jsonb from students s", "select s.json_agg from students s", "select students.row_to_json from students"]) {
+      const r = await checkAssistantSql(sql, VIEWS);
+      expect(r.ok === false && r.reason, sql).toMatch(/없는 칸입니다/);
+    }
+  });
+  it("보기 칸 목록이 있으면 '별칭.이름'이 진짜 칸인지 정확히 가른다(함수 이름 목록과 상관없이)", async () => {
+    const vc = new Map([["students", new Set(["id", "name", "attendance_code"])], ["enrollments", new Set(["id", "student_id", "salary_tier"])]]);
+    const run = (sql: string) => checkAssistantSql(sql, VIEWS, new Map(), vc);
+    await expect(run("select s.name, s.attendance_code from students s")).resolves.toMatchObject({ ok: true });
+    for (const sql of ["select s.json_agg from students s", "select s.concat from students s", "select assistant.students.to_jsonb from students", "select (s).any_value from students s", "select j.json_agg from (students s join enrollments e on e.student_id = s.id) j"]) {
+      const r = await run(sql);
+      expect(r.ok === false && r.reason, sql).toMatch(/없는 칸입니다/);
+    }
+    // 별칭을 붙인 보기의 원래 이름은 별칭이 아니다 — 같은 이름의 출력 칸을 '*'로 부풀리지 않는다
+    await expect(run("select s.name, count(*) as students from students s group by 1 order by students desc")).resolves.toMatchObject({ ok: true, columns: ["name", "students"] });
+    // CTE·서브쿼리 별칭의 칸은 따로 셌으니 가르지 않는다
+    await expect(run("with m as (select name from students) select m.name from m")).resolves.toMatchObject({ ok: true });
+  });
+  it("같은 별칭을 CTE·UNION·서브쿼리마다 다른 대상에 써도 정상 조회는 통과한다(재리뷰 2026-11-12 오탐)", async () => {
+    const vc = new Map([
+      ["students", new Set(["id", "name"])],
+      ["enrollments", new Set(["id", "student_id", "class_id"])],
+      ["classes", new Set(["id", "class_name"])],
+      ["attendance_records", new Set(["id", "student_id", "session_date"])],
+      ["payments", new Set(["id", "amount"])],
+    ]);
+    const ok = [
+      "with a as (select s.id, s.name from students s), b as (select s.student_id from enrollments s) select a.name from a join b on b.student_id = a.id",
+      "select c.class_name from classes c union all select c.amount::text from payments c",
+      "select t.cnt from (select count(*) as cnt from students t) t",
+      "select e.n from (select e.class_id, count(*) n from enrollments e group by 1) e",
+      "select d.d from generate_series('2026-01-01'::date, '2026-01-31'::date, interval '1 day') d where exists (select 1 from attendance_records d2 where d2.session_date = d.d::date)",
+      "with enrollments as (select student_id, count(*) n from enrollments group by 1) select e.n from enrollments e",
+      "select s.c3 from students s(c1, c2, c3)",
+      "select t.max from (select max(id) as max from students) t",
+    ];
+    for (const sql of ok) await expect(checkAssistantSql(sql, VIEWS, new Map(), vc), sql).resolves.toMatchObject({ ok: true });
+    // 섞인 별칭이어도 행을 받는 함수 이름은 막는다
+    const r = await checkAssistantSql("select t.to_jsonb from (select id from students) t", VIEWS, new Map(), vc);
+    expect(r.ok === false && r.reason).toMatch(/없는 칸입니다/);
+    const r2 = await checkAssistantSql("select (s.*).json_agg from students s", VIEWS, new Map(), vc);
+    expect(r2.ok === false && r2.reason).toMatch(/칸처럼 부르는 꼴/);
+  });
+  it("s.name은 진짜 칸이라 그대로 통과", async () => {
+    await expect(checkAssistantSql("select s.name from students s", VIEWS)).resolves.toMatchObject({ ok: true, columns: ["name"] });
+  });
+  it("보통 칸 참조는 '*'로 부풀리지 않는다", async () => {
+    expect(await cols("select s.name, count(*) from students s group by 1")).toEqual(["name"]);
+  });
+});

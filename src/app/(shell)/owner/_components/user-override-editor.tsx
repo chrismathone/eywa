@@ -172,8 +172,7 @@ export function UserOverrideEditor({ overrides, roleMatrix, hiddenUserIds, staff
             // 까닭은 보이는 글로 적고 고르기 칸과 묶는다(title만 두면 터치·키보드·화면낭독기에서 안 보인다 — 리뷰 2026-11-05).
             // 연결 앱·학원 비서 칸은 전체·없음만 쓴다(isOnOffMenu) — 손으로 넣은 '읽기'·'담당' 줄은 적용 단계가 건너뛴다(역할 표 값 그대로 · applyUserOverrides).
             // 그 값 그대로 보이고 까닭을 적는다('담당 → 읽기로 적용' 안내는 붙이지 않는다 — 연결 앱은 '읽기'도 잠겨 있다 · 재리뷰 2026-11-06).
-            // 잠긴 칸(학원 비서는 지금 원장만 · 2026-11-12)의 줄도 적용되지 않는다 — '전체'로 보여도 그렇다고 적는다.
-            const inertApp = (isOnOffMenu(row.menu) && row.access !== "full" && row.access !== "none") || (row.menu === "assistant" && !!role && role !== "master" && row.access !== "none");
+            const inertApp = isOnOffMenu(row.menu) && row.access !== "full" && row.access !== "none";
             const demoted = !inertApp && !!role && row.access === "scoped" && row.menu !== "teacher_view" && isScopedForbiddenRole(role);
             const applied = demoted ? storedScopedAccess(row.menu, role!, row.access, roleMatrix[row.menu][role!]) : row.access;
             const noteId = `${idPrefix}-${row.userId}-${row.menu}`;
@@ -205,9 +204,7 @@ export function UserOverrideEditor({ overrides, roleMatrix, hiddenUserIds, staff
                 ) : null}
                 {inertApp ? (
                   <span id={noteId} className="text-danger mt-1 block text-xs leading-relaxed">
-                    {row.menu === "assistant" && role !== "master"
-                      ? "적용되지 않습니다 — 학원 비서는 지금 원장만 씁니다(묻는 사람의 권한 범위로 조회하도록 바꾸는 중). 이 줄은 지워 주세요."
-                      : <>적용되지 않습니다(역할 표의 이 칸 값이 그대로 적용) — {isConnectedAppMenu(row.menu) ? "연결 앱은" : "이 권한은"} ‘전체’·‘없음’만 씁니다. 다른 수준을 고르세요.</>}
+                    적용되지 않습니다(역할 표의 이 칸 값이 그대로 적용) — {isConnectedAppMenu(row.menu) ? "연결 앱은" : "이 권한은"} ‘전체’·‘없음’만 씁니다. 다른 수준을 고르세요.
                   </span>
                 ) : null}
                 </td>

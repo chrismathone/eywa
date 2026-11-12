@@ -436,17 +436,21 @@ describe("개인별 메뉴 권한 — 역할 표 아래에서 주고 거둔다(�
   it("🔴 학원 비서 줄 — 위험 안내는 마우스를 올리면 카드로(줄 아래에 펼치지 않음 · 2026-11-12) · 칸은 전체·없음만 · 강사 칸은 고정", () => {
     render(<PermissionsSection initial={EMPTY} staffOptions={staff} />);
     const info = screen.getByRole("button", { name: `‘${MENU_LABEL.assistant}’ 설명 보기` });
-    expect(info.closest("[data-tip]")?.getAttribute("data-tip")).toContain("지점 자료 전부(급여·계약·연락처·계좌 포함)");
-    expect(screen.queryAllByText(/지점 자료 전부/)).toHaveLength(0); // 줄 아래 글자로는 펼쳐 두지 않는다
+    expect(info.closest("[data-tip]")?.getAttribute("data-tip")).toContain("질문한 사람의 현재 조회 권한 안에서만 답합니다");
+    expect(screen.queryAllByText(/현재 조회 권한 안에서만/)).toHaveLength(0); // 줄 아래 글자로는 펼쳐 두지 않는다
     fireEvent.click(info); // 터치·키보드는 눌러서 그 줄 아래에 펼친다
-    expect(screen.getByText(/지점 자료 전부\(급여·계약·연락처·계좌 포함\)/)).toBeInTheDocument();
+    expect(screen.getByText(/질문한 사람의 현재 조회 권한 안에서만 답합니다/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: `‘${MENU_LABEL.assistant}’ 설명 접기` }));
-    expect(screen.queryAllByText(/지점 자료 전부/)).toHaveLength(0);
+    expect(screen.queryAllByText(/현재 조회 권한 안에서만/)).toHaveLength(0);
     const cell = (role: keyof typeof ROLE_LABEL) => screen.getByRole("button", { name: new RegExp(`^${MENU_LABEL.assistant} · ${ROLE_LABEL[role]}:`) });
     expect(cell("teacher")).toBeDisabled();
-    // 지금은 원장만(2026-11-12 임시) — 관리자 칸도 잠겨 있다.
-    expect(cell("admin")).toBeDisabled();
-    expect(cell("admin")).toHaveTextContent("없음");
+    // 관리자 칸: 없음 → 전체 → (담당·읽기를 건너뛰고) 없음.
+    const admin = () => cell("admin");
+    expect(admin()).toHaveTextContent("없음");
+    fireEvent.click(admin());
+    expect(admin()).toHaveTextContent("전체");
+    fireEvent.click(admin());
+    expect(admin()).toHaveTextContent("없음");
   });
 
   it("연동된 권한 — '강사별 퇴원율'을 열 때 '퇴원관리'가 없음이면 묻고, 승인하면 함께 연다 · 거절하면 누른 칸만(2026-11-12)", () => {

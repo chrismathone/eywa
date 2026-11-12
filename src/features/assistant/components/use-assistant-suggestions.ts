@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ASSISTANT_OPENED_EVENT } from "./assistant-hotkey";
 import { kstToday } from "@/lib/date-kst";
 import {
   FALLBACK_SUGGESTIONS,
@@ -34,6 +35,14 @@ function readCache(): SuggestionCache | null {
     return null;
   }
 }
+function clearCache() {
+  try {
+    window.localStorage.removeItem(SUGGESTION_CACHE_KEY);
+  } catch {
+    // 저장소를 못 쓰는 브라우저 — 지울 것도 없다.
+  }
+}
+
 function writeCache(cache: SuggestionCache) {
   try {
     window.localStorage.setItem(SUGGESTION_CACHE_KEY, JSON.stringify(cache));
@@ -71,6 +80,11 @@ export function useAssistantSuggestions(enabled: boolean, today: string): Sugges
     return { status: "loading", items: [], fresh: EMPTY, day: null };
   });
   const [refreshing, setRefreshing] = useState(false);
+  /** 새로 고침이 도는 중인가(이벤트 처리기에서 읽는다). */
+  const refreshingRef = useRef(false);
+  useEffect(() => {
+    refreshingRef.current = refreshing;
+  }, [refreshing]);
   /** 판을 열 때 정한 오늘 — 세지 못했을 때 지킬 묶음은 오늘 것뿐(어제 숫자·어제 NEW가 남지 않게 · 재리뷰 2026-11-09). */
   const todayRef = useRef(today);
   useEffect(() => {
@@ -85,7 +99,11 @@ export function useAssistantSuggestions(enabled: boolean, today: string): Sugges
     };
   }, []);
 
+  /** 요청 순번 — 늦게 온 앞 요청의 응답(권한이 줄기 전 숫자)이 뒤 요청의 결과(비움)를 덮지 않게 마지막 요청만 쓴다(재리뷰 2026-11-12). */
+  const seqRef = useRef(0);
   const load = useCallback(async (refresh: boolean) => {
+    const mine = ++seqRef.current;
+    const stale = () => mine !== seqRef.current;
     const cache = readCache();
     const params = new URLSearchParams();
     if (refresh) params.set("refresh", "1");
@@ -95,15 +113,28 @@ export function useAssistantSuggestions(enabled: boolean, today: string): Sugges
     try {
       const query = params.toString();
       const res = await fetch(query ? `${API}?${query}` : API, { cache: "no-store", signal: timeout.signal });
-      if (!res.ok) throw new Error(String(res.status));
+      if (stale()) return;
+      if (!res.ok) {
+        // 권한이 없어졌거나(403) 권한을 확인하지 못했다(503) — 보던 묶음(옛 숫자)을 남기지 않고 고정 문장으로(s2_0096).
+        if (res.status === 403 || res.status === 503) {
+          // 이 페이지의 확인 표와 브라우저 묶음도 비운다 — 훅이 다시 그려질 때 옛 숫자를 꺼내 쓰지 않게(재리뷰 2026-11-12).
+          confirmedScope = null;
+          clearCache();
+          if (alive.current) setState({ status: "ready", items: FALLBACK_SUGGESTIONS, fresh: EMPTY, day: null });
+          return;
+        }
+        throw new Error(String(res.status));
+      }
       const body = (await res.json()) as SuggestionsResponse;
+      if (stale()) return;
       if (typeof body?.scope !== "string" || typeof body.day !== "string") throw new Error("shape");
       confirmedScope = body.scope;
       let next: SuggestionCache | null = null;
       if (Array.isArray(body.items) && body.items.length) {
         if (body.fallback) {
-          // 세지 못했다 — 보던 좋은 묶음(오늘 것)은 그대로 둔다.
-          if (alive.current) setState((s) => (s.status === "ready" && s.day === todayRef.current ? s : { status: "ready", items: body.items!, fresh: EMPTY, day: null }));
+          // 세지 못했다 — 보던 좋은 묶음(오늘 것)은 그대로 둔다. 단 권한 범위가 바뀌었으면(사람·범위 표가 다르다) 옛 숫자를 남기지 않는다(s2_0096).
+          const sameScope = !cache || cache.scope === body.scope;
+          if (alive.current) setState((s) => (sameScope && s.status === "ready" && s.day === todayRef.current ? s : { status: "ready", items: body.items!, fresh: EMPTY, day: null }));
           return;
         }
         next = nextSuggestionCache(cache, body.scope, body.day, body.items);
@@ -115,6 +146,7 @@ export function useAssistantSuggestions(enabled: boolean, today: string): Sugges
       if (!next) throw new Error("empty");
       if (alive.current) setState({ status: "ready", items: next.items, fresh: newSuggestionTexts(next, body.day), day: next.day });
     } catch {
+      if (stale()) return;
       if (alive.current)
         setState((s) => (s.status === "ready" && s.items.length && (s.day === null || s.day === todayRef.current) ? s : { status: "ready", items: FALLBACK_SUGGESTIONS, fresh: EMPTY, day: null }));
     } finally {
@@ -129,6 +161,18 @@ export function useAssistantSuggestions(enabled: boolean, today: string): Sugges
     shownDay.current = today;
     void load(false);
   }, [enabled, today, load]);
+
+  // 판을 다시 열 때마다 서버에 '이 묶음 그대로인가'를 묻는다(세지 않고 표만 견준다) — 그 사이 권한이 바뀌었으면 서버가 새 범위로 다시 센다
+  // (판은 한 번 열면 붙어 있어 처음 한 번만 묻던 것 · 적대 리뷰 2026-11-12). 런처가 열 때 알린다(ASSISTANT_OPENED_EVENT).
+  useEffect(() => {
+    if (!enabled) return;
+    const onOpened = () => {
+      // '새로 고침'이 도는 중이면 묻지 않는다 — 더 나중 순번이 새로 고침 결과를 버리게 된다(재리뷰 2026-11-12).
+      if (shownDay.current && !refreshingRef.current) void load(false);
+    };
+    window.addEventListener(ASSISTANT_OPENED_EVENT, onOpened);
+    return () => window.removeEventListener(ASSISTANT_OPENED_EVENT, onOpened);
+  }, [enabled, load]);
 
   const refresh = useCallback(() => {
     if (refreshing || cooling) return;

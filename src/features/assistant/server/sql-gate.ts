@@ -13,11 +13,23 @@
  */
 import { loadModule, parseSync } from "libpg-query";
 
-export type SqlGateResult = { ok: true; sql: string; tables: string[] } | { ok: false; reason: string };
+/** `columns` = 조회문에 이름으로 나온 칸(마지막 이름 · `*`는 '*') — 권한 밖 칸 알림(agent hiddenColumnNote)에 쓴다. */
+export type SqlGateResult = { ok: true; sql: string; tables: string[]; columns: string[] } | { ok: false; reason: string };
 
 /** 비서 SQL 한 편의 최대 길이 — 이보다 길면 질문을 나누라고 돌려보낸다. */
 export const ASSISTANT_SQL_MAX_CHARS = 8000;
 const MAX_NODES = 20000;
+/**
+ * `별칭.이름`이 칸이 아니라 행을 통째로 받는 함수로 풀리는 이름(Postgres 함수 표기 `x.f` = `f(x)` — 칸을 먼저 찾고 없으면 함수) — 보기 별칭에 붙으면 막는다
+ * (행 전체를 읽으면서 칸 이름이 안 보여 권한 밖 칸 판정을 지나간다 · 함수 허용 목록 검사도 지나간다 · 재리뷰 2026-11-12).
+ * 🔑 보기 칸 목록(`viewColumns`)을 받으면 그것으로 정확히 가른다(그 보기의 칸이 아니면 막는다) — 이 목록은 칸 목록이 없을 때의 대비책이다.
+ * 'name'은 넣지 않는다 — 표 20개에 진짜 칸 이름이다(운영 확인 2026-11-12).
+ */
+const ROW_FUNCTION_NAMES: ReadonlySet<string> = new Set([
+  "to_json", "to_jsonb", "row_to_json", "json_strip_nulls", "jsonb_strip_nulls", "num_nulls", "num_nonnulls", "pg_column_size", "pg_typeof",
+  "json_agg", "jsonb_agg", "json_agg_strict", "jsonb_agg_strict", "array_agg", "any_value", "concat", "concat_ws", "quote_literal", "quote_nullable",
+  "record_send", "record_out", "hash_record", "hash_record_extended", "array_to_json", "json_build_array", "jsonb_build_array", "hstore",
+]);
 
 const ALLOWED_NODES = new Set([
   "SelectStmt", "ResTarget", "FuncCall", "String", "Integer", "Float", "Boolean", "A_Const", "ColumnRef", "A_Star",
@@ -163,7 +175,33 @@ function collectCteNames(node: unknown, into: Set<string>): void {
   }
 }
 
-type WalkCtx = { views: ReadonlySet<string>; ctes: ReadonlySet<string>; tables: Set<string>; nodes: number };
+type WalkCtx = {
+  views: ReadonlySet<string>;
+  /** 권한 범위 밖 보기 → 안내(s2_0096) — '없는 표' 대신 이 안내로 돌려보낸다. */
+  denied: ReadonlyMap<string, string>;
+  ctes: ReadonlySet<string>;
+  tables: Set<string>;
+  columns: Set<string>;
+  /** 이름 하나짜리 칸 참조(`u` · `e`) — 끝에서 보기 별칭과 같으면 행 통째(`row_to_json(u)` · `json_agg(e)`)로 보고 '*'로 센다. */
+  singles: Set<string>;
+  /**
+   * 별칭(없으면 이름) → 묶인 대상. 같은 글자를 CTE·서브쿼리·UNION 가지마다 다른 대상에 쓰므로(범위를 따로 쌓지 않는다) 대상을 모두 모은다:
+   * `views` = 보기 · `other` = CTE·서브쿼리·함수·JOIN 별칭이나 칸 목록이 붙은 별칭(칸을 알 수 없는 대상)이 섞였다(재리뷰 2026-11-12).
+   */
+  binds: Map<string, { views: Set<string>; other: boolean; join: boolean }>;
+  /** `한정자.이름` 칸 참조(`u.hourly_rate` · `(u).x` · `assistant.users.x`) — 끝에서 한정자가 보기 별칭이면 그 보기의 칸인지 본다. */
+  qualified: Array<[string, string]>;
+  nodes: number;
+};
+
+/** 별칭에 대상을 더한다(`view` = 보기 이름 · `other` = 칸을 알 수 없는 대상 · `join` = JOIN 별칭). */
+function bind(ctx: WalkCtx, name: string, view: string | null, other: boolean, join = false): void {
+  const b = ctx.binds.get(name) ?? { views: new Set<string>(), other: false, join: false };
+  if (view) b.views.add(view);
+  if (other) b.other = true;
+  if (join) b.join = true;
+  ctx.binds.set(name, b);
+}
 
 function walk(node: unknown, ctx: WalkCtx): void {
   if (Array.isArray(node)) {
@@ -187,8 +225,57 @@ function walk(node: unknown, ctx: WalkCtx): void {
           throw new Reject(`${String(value.schemaname)}.${rel} — assistant 보기만 조회할 수 있습니다`);
         }
         if (rel.startsWith("pg_")) throw new Reject(`${rel} — 시스템 표는 조회할 수 없습니다`);
-        if (!ctx.views.has(rel) && !ctx.ctes.has(rel)) throw new Reject(`없는 표입니다: ${rel} — describe_table로 표 이름을 확인해 주세요`);
+        // 권한 범위 밖 보기 — 같은 이름의 CTE가 있어도 막는다: CTE 이름은 쿼리 전체에서 모으므로(중첩 · CTE 본문 안의 같은 이름은 실제 보기를 가리킨다)
+        // 이름만 보고 CTE로 치면 범위 밖 보기가 0행으로 지나가 '0건'으로 답하게 된다(적대 리뷰 2026-11-12). 0건으로 답하지 않게 필요한 권한을 알린다
+        // (Codex 합의 7 · 숨긴 표의 내용·건수는 말하지 않는다).
+        const blocked = ctx.denied.get(rel);
+        if (blocked) {
+          const cte = ctx.ctes.has(rel) ? ` (CTE 이름이 이 보기와 같다면 다른 이름으로 바꾸세요)` : "";
+          throw new Reject(`${blocked} — 묻는 분의 권한 밖이라 조회할 수 없습니다${cte}. 이 자료 없이 답할 수 있는 만큼만 답하고, 보지 못한 부분은 이 권한이 필요하다고 밝히세요(0건·없음으로 쓰지 말 것)`);
+        }
+        // 볼 수 있는 보기 이름이면 CTE와 이름이 같아도 읽은 표로 센다(넉넉하게 — 저장 표지·가린 칸 알림이 빠지지 않게).
+        // 스키마를 붙인 이름(assistant.x)은 CTE가 아니다 — 보기여야 한다.
         if (ctx.views.has(rel)) ctx.tables.add(rel);
+        else if (value.schemaname === "assistant" || !ctx.ctes.has(rel)) throw new Reject(`없는 표입니다: ${rel} — describe_table로 표 이름을 확인해 주세요`);
+        // 실제 보기의 별칭(없으면 이름) — 행 통째 참조(row_to_json(e))와 `별칭.이름`을 가르는 데 쓴다. CTE·서브쿼리·함수 별칭은 넣지 않는다 —
+        // 그 안에서 고른 칸은 이미 셌다(넣으면 쓰지도 않은 가린 칸이 걸린 것으로 판정된다 · 재리뷰 2026-11-12).
+        {
+          const alias = isObj(value.alias) && typeof value.alias.aliasname === "string" ? value.alias.aliasname : null;
+          const renamed = !!alias && isObj(value.alias) && Array.isArray(value.alias.colnames) && value.alias.colnames.length > 0;
+          // users u(c1, …, pay) — 별칭 칸 목록으로 이름을 바꿔 읽으면 원래 칸 이름이 안 보인다 → 그 표의 칸 전부로 센다.
+          if (renamed && ctx.views.has(rel)) ctx.columns.add("*");
+          // 보기와 같은 이름의 CTE는 둘 중 무엇인지 모른다 → 칸을 알 수 없는 대상으로도 센다.
+          bind(ctx, alias ?? rel, ctx.views.has(rel) ? rel : null, !ctx.views.has(rel) || ctx.ctes.has(rel) || renamed);
+        }
+      } else if (key === "ColumnRef") {
+        const fields = Array.isArray(value.fields) ? value.fields : [];
+        const last = fields[fields.length - 1];
+        if (isObj(last) && isObj(last.String) && typeof last.String.sval === "string") {
+          ctx.columns.add(last.String.sval);
+          if (fields.length === 1) ctx.singles.add(last.String.sval);
+          // 한정자 = 끝에서 두 번째 이름(`u.x` · `assistant.users.x`) — u.to_jsonb = to_jsonb(u)처럼 함수로 풀릴 수 있다(끝에서 가른다).
+          const qual = fields[fields.length - 2];
+          if (isObj(qual) && isObj(qual.String) && typeof qual.String.sval === "string") ctx.qualified.push([qual.String.sval, last.String.sval]);
+        } else if (isObj(last) && "A_Star" in last) ctx.columns.add("*");
+      } else if (key === "A_Indirection") {
+        // (u).hourly_rate — 칸 이름은 indirection 쪽에 있다. (u).json_agg도 함수로 풀린다 — 한정자 u로 함께 가른다.
+        // 한정자가 이름 하나가 아니면((s.*).json_agg · (row(s.*)).to_jsonb) 행을 받는 함수 이름만 막는다.
+        const arg = isObj(value.arg) && isObj(value.arg.ColumnRef) && Array.isArray(value.arg.ColumnRef.fields) ? value.arg.ColumnRef.fields : [];
+        const base = arg.length === 1 && isObj(arg[0]) && isObj(arg[0].String) && typeof arg[0].String.sval === "string" ? arg[0].String.sval : null;
+        for (const ind of Array.isArray(value.indirection) ? value.indirection : []) {
+          if (isObj(ind) && isObj(ind.String) && typeof ind.String.sval === "string") {
+            ctx.columns.add(ind.String.sval);
+            if (base) ctx.qualified.push([base, ind.String.sval]);
+            else if (ROW_FUNCTION_NAMES.has(ind.String.sval.toLowerCase())) throw new Reject(`${ind.String.sval} — 함수를 칸처럼 부르는 꼴은 쓸 수 없습니다. 필요한 칸을 이름으로 고르세요`);
+          } else if (isObj(ind) && "A_Star" in ind) ctx.columns.add("*");
+        }
+      } else if (key === "JoinExpr") {
+        // (a join b) as j — j는 두 보기의 행 통째다.
+        if (isObj(value.alias) && typeof value.alias.aliasname === "string") bind(ctx, value.alias.aliasname, null, true, true);
+        // join … using (칸) — 칸 이름이 String 목록으로 온다.
+        for (const u of Array.isArray(value.usingClause) ? value.usingClause : []) {
+          if (isObj(u) && isObj(u.String) && typeof u.String.sval === "string") ctx.columns.add(u.String.sval);
+        }
       } else if (key === "FuncCall") {
         checkFunction(value);
       } else if (key === "SQLValueFunction") {
@@ -202,6 +289,9 @@ function walk(node: unknown, ctx: WalkCtx): void {
       } else if (key === "RangeFunction") {
         const fns = hasOnlySetReturning(value.functions);
         if (!fns) throw new Reject("FROM 자리 함수는 unnest·jsonb_array_elements 같은 펼치기 함수와 날짜 generate_series만 됩니다");
+        if (isObj(value.alias) && typeof value.alias.aliasname === "string") bind(ctx, value.alias.aliasname, null, true);
+      } else if (key === "RangeSubselect") {
+        if (isObj(value.alias) && typeof value.alias.aliasname === "string") bind(ctx, value.alias.aliasname, null, true);
       }
     }
     walk(value, ctx);
@@ -228,9 +318,15 @@ function parse(sql: string): { stmts?: Array<{ stmt?: Obj }> } {
 
 /**
  * AI가 쓴 SQL을 검사한다. 통과하면 정리한 SQL(끝 세미콜론 제거)과 읽는 보기 이름을, 아니면 AI에게 돌려줄 한국어 이유를 준다.
- * `views` = 이 지점 비서가 읽을 수 있는 `assistant` 보기 이름(카탈로그).
+ * `views` = 묻는 사람이 읽을 수 있는 `assistant` 보기 이름(이 지점 · 권한 범위 안). `denied` = 범위 밖 보기 → 안내.
  */
-export async function checkAssistantSql(input: string, views: ReadonlySet<string>): Promise<SqlGateResult> {
+export async function checkAssistantSql(
+  input: string,
+  views: ReadonlySet<string>,
+  denied: ReadonlyMap<string, string> = new Map(),
+  /** 보기 → 칸 이름(가린 칸 포함) — 있으면 `별칭.이름`이 그 보기의 칸인지 정확히 가른다(없으면 ROW_FUNCTION_NAMES 대비책). */
+  viewColumns?: ReadonlyMap<string, ReadonlySet<string>>,
+): Promise<SqlGateResult> {
   const sql = normalizeAssistantSql(input);
   if (!sql) return { ok: false, reason: "SQL이 비어 있습니다" };
   if (sql.length > ASSISTANT_SQL_MAX_CHARS) return { ok: false, reason: `SQL이 너무 깁니다(${ASSISTANT_SQL_MAX_CHARS}자까지) — 나눠서 조회해 주세요` };
@@ -249,7 +345,7 @@ export async function checkAssistantSql(input: string, views: ReadonlySet<string
   }
   const ctes = new Set<string>();
   collectCteNames(stmt, ctes);
-  const ctx: WalkCtx = { views, ctes, tables: new Set(), nodes: 0 };
+  const ctx: WalkCtx = { views, denied, ctes, tables: new Set(), columns: new Set(), singles: new Set(), binds: new Map(), qualified: [], nodes: 0 };
   try {
     walk(stmt, ctx);
     checkWrapped(wrapAssistantSql(sql, 1));
@@ -257,7 +353,24 @@ export async function checkAssistantSql(input: string, views: ReadonlySet<string
     if (error instanceof Reject) return { ok: false, reason: error.message };
     throw error;
   }
-  return { ok: true, sql, tables: [...ctx.tables].sort() };
+  // 행 통째 참조(`row_to_json(u)` · `to_jsonb(a)->>'칸'` · JOIN 별칭)는 그 표의 칸 전부를 읽는다 — '*'로 센다(재리뷰 2026-11-12).
+  // 보기나 JOIN에 묶인 이름만(CTE·서브쿼리·함수만인 이름은 그 안에서 고른 칸을 이미 셌다). 섞였으면 넉넉하게 '*'.
+  for (const s of ctx.singles) {
+    const b = ctx.binds.get(s);
+    if (b && (b.views.size > 0 || b.join)) ctx.columns.add("*");
+  }
+  // `별칭.이름` — 이름이 칸이 아니면 Postgres는 함수로 푼다(u.to_jsonb = to_jsonb(u)): 행 통째를 읽고 함수 검사도 지나간다 → 막는다.
+  // 보기에만 묶인 별칭은 칸 목록으로 정확히 · 칸을 알 수 없는 대상이 섞였거나 칸 목록이 없으면 행을 받는 함수 이름만 막는다(오탐 없이).
+  for (const [qual, name] of ctx.qualified) {
+    const b = ctx.binds.get(qual);
+    const cols = b && viewColumns ? new Set([...b.views].flatMap((v) => [...(viewColumns.get(v) ?? [])])) : null;
+    if (cols?.has(name)) continue;
+    const exact = !!b && !b.other && b.views.size > 0 && !!viewColumns;
+    if (exact || ROW_FUNCTION_NAMES.has(name.toLowerCase())) {
+      return { ok: false, reason: `${qual}.${name} — 이 보기에 없는 칸입니다(함수를 칸처럼 부르는 꼴도 쓸 수 없습니다). describe_table로 칸 이름을 확인해 주세요` };
+    }
+  }
+  return { ok: true, sql, tables: [...ctx.tables].sort(), columns: [...ctx.columns].sort() };
 }
 
 /** 감싼 실행 SQL이 '서브쿼리 하나를 읽는 SELECT 한 문장'인지 — 감싸기로 문장이 쪼개지거나 바뀌지 않았는지 다시 본다. */

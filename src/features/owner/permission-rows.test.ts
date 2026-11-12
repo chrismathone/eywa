@@ -246,8 +246,8 @@ describe("차례 = 왼쪽 탭 → 그 탭의 내부 메뉴", () => {
     expect(row.map((r) => r.menu)).toEqual(["assistant"]);
     // 묶음 이름 = 줄 이름이라 권한 표가 '대시보드'·'도움말'처럼 한 줄로 그린다.
     expect(shown[at]!.label).toBe(MENU_LABEL.assistant);
-    expect(row[0]!.note).toMatch(/지점 자료 전부/);
-    expect(row[0]!.note).toMatch(/급여/);
+    expect(row[0]!.note).toMatch(/현재 조회 권한 안에서만/);
+    expect(row[0]!.note).toMatch(/담당 범위만 허용된 자료는 아직 조회하지 않습니다/);
     // 일반 화면 문구 — 내부 역할 이름을 쓰지 않는다(AGENTS.md).
     for (const r of shown.flatMap((g) => g.rows)) expect(r.note ?? "", r.menu).not.toMatch(/슈퍼|super_admin|총괄/);
     // 메뉴 구성을 바꿔도(탭 감춤 · 옮김) 그대로 선다 — 메뉴가 아니라 단추다.

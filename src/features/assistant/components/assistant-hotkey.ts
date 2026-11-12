@@ -52,3 +52,6 @@ export function isAssistantHotkey(e: KeyLike): boolean {
 export function assistantHotkeyLabel(platform: string | undefined): string {
   return platform && /mac|iphone|ipad|ipod/i.test(platform) ? "⌘J" : "Ctrl+J";
 }
+
+/** 런처가 판을 열 때 보내는 신호(창 이벤트) — 추천 질문이 권한 범위가 그대로인지 서버에 다시 묻는다(s2_0096 · use-assistant-suggestions). */
+export const ASSISTANT_OPENED_EVENT = "aywa:assistant-opened";

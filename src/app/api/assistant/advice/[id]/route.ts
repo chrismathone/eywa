@@ -3,7 +3,7 @@ import { z } from "zod";
 import { logAction } from "@/features/audit/server/log";
 import { ADVICE_RATINGS, ADVICE_STATUSES, ADVICE_STATUS_LABEL } from "@/features/assistant/advice";
 import { updateAdvice } from "@/features/assistant/server/advice-store";
-import { assistantViewer, isGateFailure } from "@/features/assistant/server/gate";
+import { isGateFailure, scopedViewer } from "@/features/assistant/server/gate";
 import { kstToday } from "@/lib/date-kst";
 import { reportError } from "@/lib/observability/report-error";
 
@@ -35,13 +35,13 @@ const Body = z.object({
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const id = Id.safeParse((await params).id);
   if (!id.success) return NextResponse.json({ error: "의견을 찾지 못했습니다" }, { status: 404 });
-  const viewer = await assistantViewer();
+  const viewer = await scopedViewer();
   if (isGateFailure(viewer)) return NextResponse.json({ error: viewer.error }, { status: viewer.status });
   const body = Body.safeParse(await request.json().catch(() => null));
   if (!body.success) return NextResponse.json({ error: body.error.issues[0]?.message ?? "처리 내용을 읽지 못했습니다" }, { status: 400 });
   if (body.data.doneOn && body.data.doneOn > kstToday()) return NextResponse.json({ error: "한 날은 오늘보다 뒤일 수 없습니다" }, { status: 400 });
   try {
-    const out = await updateAdvice(viewer.owner, id.data, body.data);
+    const out = await updateAdvice(viewer.owner, id.data, body.data, viewer.scope);
     if (!out.ok) {
       return out.reason === "missing"
         ? NextResponse.json({ error: "의견을 찾지 못했습니다" }, { status: 404 })
