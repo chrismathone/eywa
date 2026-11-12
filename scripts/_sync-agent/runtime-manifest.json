@@ -172,8 +172,10 @@
     "scripts/_makeedu/sync-prospects.cjs",
     "scripts/_makeedu/watch-sync-requests.cjs",
     "scripts/_makeedu/weekly-push.cjs",
+    "scripts/_shared/module-state.mjs",
     "scripts/_sync-agent/managed-worker.cjs",
-    "scripts/_sync-agent/remote-db.cjs"
+    "scripts/_sync-agent/remote-db.cjs",
+    "src/lib/module-state.mjs"
   ],
   "externals": [
     "@playwright/test",
