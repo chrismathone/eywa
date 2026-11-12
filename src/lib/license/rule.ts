@@ -34,19 +34,26 @@ export function licenseExplicitlyOn(row: LicenseRow, now: Date = new Date()): bo
   return row !== null && licenseAllows(row, now);
 }
 
+/** 사용자에게 그대로 보여 주고 재시도 횟수에서도 빼는 AI 라이선스 거절 표식. */
+export const AI_FEATURE_DISABLED_PREFIX = "AI 기능 꺼짐:";
+
+export function isAiFeatureDisabledMessage(message: string): boolean {
+  return message.startsWith(AI_FEATURE_DISABLED_PREFIX);
+}
+
 /** 막혔을 때 사용자에게 보이는 한 줄(한글) — 어디서 막혔는지 + 누구에게 물을지. */
 export const LICENSE_BLOCKED_MESSAGE: Record<LicensedFeature, string> = {
   meeting_recording: "이 지점은 회의 녹음·전사 기능이 꺼져 있습니다 — 사용하려면 운영사에 문의하세요",
   google_sheets: "이 지점은 구글 시트 연동이 꺼져 있습니다 — 사용하려면 운영사에 문의하세요",
   // "AI 기능 꺼짐:" 머리는 `aiUserMessage`가 알아보고 화면까지 그대로 통과시키는 표식이다(일반 실패 문구로 덮이면
-  // 강사가 계속 다시 누른다) — 머리를 바꾸면 user-message.ts의 정규식도 함께.
+  // 강사가 계속 다시 누른다) — 표식 판정은 위 상수·함수가 단일 소스다.
   // 창 모드는 막는 기능이 아니라 화면 방식이라 이 문구가 화면에 뜰 일은 없다(셸이 조용히 단일창으로 연다).
   window_mode: "이 지점은 창 모드가 꺼져 있습니다",
-  ai_analysis: "AI 기능 꺼짐: 이 지점은 AI 분석 기능이 꺼져 있습니다 — 사용하려면 운영사에 문의하세요",
+  ai_analysis: `${AI_FEATURE_DISABLED_PREFIX} 이 지점은 AI 분석 기능이 꺼져 있습니다 — 사용하려면 운영사에 문의하세요`,
 };
 
 /** AI 호출에 지점이 없을 때 — 라이선스를 판정할 수 없으니 부르지 않는다(generateJSON). "AI 기능 꺼짐:" 머리라 화면까지 그대로 간다. */
-export const AI_TENANT_MISSING_MESSAGE = "AI 기능 꺼짐: 어느 지점의 요청인지 알 수 없어 AI를 호출하지 않았습니다 — 새로고침 후 다시 시도하세요";
+export const AI_TENANT_MISSING_MESSAGE = `${AI_FEATURE_DISABLED_PREFIX} 어느 지점의 요청인지 알 수 없어 AI를 호출하지 않았습니다 — 새로고침 후 다시 시도하세요`;
 
 /**
  * 재원생 좌석 — 좌석 라이선스 행의 `max_seats`가 **숫자로 정해졌고 켜져 있을 때만** 한도가 있다

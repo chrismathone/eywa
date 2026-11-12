@@ -1,5 +1,6 @@
 import "server-only";
 import { collectJSONBatch, submitJSONBatch, type BatchItem } from "@/lib/ai/generate-batch";
+import { isAiFeatureDisabledMessage } from "@/lib/license/rule";
 import { reportWarning } from "@/lib/observability/report-error";
 import { claimsFrom, verifyTargets } from "../harness/result";
 import { parseVerdict, type VerifyVerdict } from "../harness/prompt-verify";
@@ -34,6 +35,11 @@ async function release(
   );
 }
 
+/** 제출 순간 라이선스가 꺼졌거나 관문이 그 사유로 거절한 경우만 횟수 없이 되돌린다. */
+async function aiSubmissionDisabled(tenantId: string, message: string): Promise<boolean> {
+  return isAiFeatureDisabledMessage(message) || !(await aiAnalysisEnabled(tenantId));
+}
+
 export async function submitJudgeBatch(tenantId: string): Promise<number> {
   if (!(await aiAnalysisEnabled(tenantId))) return 0;
   const { token, rows } = await claimRows(tenantId, "judge", "judging", CLAIM_LIMIT);
@@ -56,13 +62,21 @@ export async function submitJudgeBatch(tenantId: string): Promise<number> {
   if (!items.length) return 0;
   let sent;
   try { sent = await submitJSONBatch(items); }
-  catch (e) { await release(loaded, "judging", "judge", token, `판정 배치 보내기 실패: ${errorText(e)}`); return 0; }
+  catch (e) {
+    const reason = errorText(e);
+    const message = `판정 배치 보내기 실패: ${reason}`;
+    if (await aiSubmissionDisabled(tenantId, reason)) await release(loaded, "judging", "judge", token, message);
+    else for (const row of loaded) await failOrRetry(row, "judge", message, 3, { lock_token: token });
+    return 0;
+  }
   const rejected = new Map((sent?.rejected ?? []).map((r) => [r.customId, r.error]));
   let n = 0;
   for (const row of loaded) {
     const id = `j_${hex(row.id)}`;
     if (!sent?.batchId || rejected.has(id) || !sent.models[id]) {
-      await release([row], "judging", "judge", token, rejected.get(id) ?? "판정 배치에 싣지 못했습니다");
+      const message = rejected.get(id) ?? "판정 배치에 싣지 못했습니다";
+      if (await aiSubmissionDisabled(tenantId, message)) await release([row], "judging", "judge", token, message);
+      else await failOrRetry(row, "judge", message, 3, { lock_token: token });
       continue;
     }
     if (await moveStage(row, "judging", { judge_batch: sent.batchId, lock_token: null, locked_at: null, models: { ...row.models, judge: sent.models[id] } }, { lock_token: token })) n++;
@@ -134,12 +148,20 @@ export async function submitVerifyBatch(tenantId: string): Promise<number> {
   if (!items.length) return 0;
   let sent;
   try { sent = await submitJSONBatch(items); }
-  catch (e) { await release(loaded, "verifying", "verify", token, `확인 배치 보내기 실패: ${errorText(e)}`); return 0; }
+  catch (e) {
+    const reason = errorText(e);
+    const message = `확인 배치 보내기 실패: ${reason}`;
+    if (await aiSubmissionDisabled(tenantId, reason)) await release(loaded, "verifying", "verify", token, message);
+    else for (const row of loaded) await failOrRetry(row, "verify", message, 3, { lock_token: token });
+    return 0;
+  }
   if (!sent?.batchId) {
     const rejected = new Map((sent?.rejected ?? []).map((r) => [r.customId, r.error]));
     for (const row of loaded) {
-      const firstId = `v_${hex(row.id)}_0`;
-      await release([row], "verifying", "verify", token, rejected.get(firstId) ?? "확인 배치에 싣지 못했습니다");
+      const idPrefix = `v_${hex(row.id)}_`;
+      const message = [...rejected].find(([id]) => id.startsWith(idPrefix))?.[1] ?? "확인 배치에 싣지 못했습니다";
+      if (await aiSubmissionDisabled(tenantId, message)) await release([row], "verifying", "verify", token, message);
+      else await failOrRetry(row, "verify", message, 3, { lock_token: token });
     }
     return 0;
   }
