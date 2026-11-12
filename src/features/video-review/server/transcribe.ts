@@ -3,7 +3,7 @@ import { getTranscript, submitTranscript, type AssemblyTranscript } from "@/lib/
 import { getAssemblyaiWebhookUrl } from "@/lib/config/app-url";
 import { reportWarning } from "@/lib/observability/report-error";
 import { REVIEW_BUCKET } from "../storage-paths";
-import { REVIEW_COLUMNS, claimRows, db, errorText, failOrRetry, moveStage, type ReviewRow } from "./rows";
+import { REVIEW_COLUMNS, aiAnalysisEnabled, claimRows, db, errorText, failOrRetry, moveStage, type ReviewRow } from "./rows";
 
 /** 말한 단어가 이보다 적으면 판정할 말이 없는 영상(업로드 화면만 찍은 영상 등)으로 본다. */
 const MIN_WORDS = 5;
@@ -14,6 +14,7 @@ const SIGNED_URL_TTL_SEC = 6 * 3600;
  * 🔴 보내기 전에 transcribing으로 선점한다(cron이 겹쳐도 한 번만 낸다). 선점 뒤 전사 번호가 없으면 안전망이 되돌린다.
  */
 export async function submitTranscriptions(tenantId: string, limit = 20): Promise<number> {
+  if (!(await aiAnalysisEnabled(tenantId))) return 0;
   const { token, rows } = await claimRows(tenantId, "transcribe", "transcribing", limit);
   let sent = 0;
   for (const row of rows) {
