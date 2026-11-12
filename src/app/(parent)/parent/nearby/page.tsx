@@ -1,11 +1,15 @@
 import { redirect } from "next/navigation";
 
 import { getParentViewer } from "@/features/shuttle/parent/server/parent-viewer";
-import { loadNearbyNetwork } from "@/features/shuttle/parent/server/nearby-data";
+import { parentPortalAvailable } from "@/features/shuttle/parent/server/parent-availability";
+import { loadParentNearbyNetwork } from "@/features/shuttle/parent/server/nearby-data";
 import { ACADEMY_LOCATION } from "@/features/shuttle/map/academy-location";
 import { NearbyView } from "./_components/nearby-view";
 
-export const metadata = { title: "가까운 노선 찾기" };
+export async function generateMetadata() {
+  const viewer = await getParentViewer();
+  return { title: viewer && (await parentPortalAvailable(viewer)) ? "가까운 노선 찾기" : "학부모" };
+}
 
 /** 빌드에 박히는 값 — 키가 없으면 지도 대신 목록만 그린다. */
 const KAKAO_MAP_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY ?? "";
@@ -17,7 +21,8 @@ const KAKAO_MAP_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY ?? "";
 export default async function ParentNearbyPage() {
   const viewer = await getParentViewer();
   if (!viewer) redirect("/home");
-  const { stops, runs } = await loadNearbyNetwork(viewer.tenantId);
+  if (!(await parentPortalAvailable(viewer))) return null;
+  const { stops, runs } = await loadParentNearbyNetwork(viewer);
   return (
     <>
       <h1 className="text-lg font-bold">가까운 노선 찾기</h1>

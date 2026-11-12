@@ -7,6 +7,8 @@ import { buildHolidayMap } from "@/features/attendance/calendar";
 import { shiftMonth } from "@/lib/month-grid";
 import type { MonthBoarding, MonthException, MonthRegular } from "../parent-month";
 import { isBoardingStatus, isDirection, type DayCode } from "../../types";
+import { parentPortalAvailable } from "./parent-availability";
+import type { ParentViewer } from "./parent-viewer";
 
 /**
  * 학부모 '월별' 달력 재료 — **아이 한 명 · 한 달**(사용자 2026-10-01).
@@ -28,9 +30,10 @@ export type ParentMonthData = {
 
 const EMPTY: ParentMonthData = { regular: [], exceptions: [], boardings: [], holidays: {}, earliestMonth: null };
 
-export async function loadParentMonth(tenantId: string, studentId: string, month: string): Promise<ParentMonthData> {
+export async function loadParentMonth(viewer: ParentViewer, studentId: string, month: string): Promise<ParentMonthData> {
+  if (!viewer.children.some((child) => child.id === studentId) || !(await parentPortalAvailable(viewer))) return EMPTY;
   try {
-    return await load(tenantId, studentId, month);
+    return await load(viewer.tenantId, studentId, month);
   } catch (e) {
     reportError(e, { scope: "shuttle.parentMonth", month });
     return EMPTY;

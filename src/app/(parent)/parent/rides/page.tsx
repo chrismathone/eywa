@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 
 import { formatKoreanDate, kstMinutesOfDay, kstToday } from "@/lib/date-kst";
+import { parentPortalAvailable } from "@/features/shuttle/parent/server/parent-availability";
 import { getParentViewer } from "@/features/shuttle/parent/server/parent-viewer";
-import { loadRideLegsFor } from "@/features/shuttle/parent/server/parent-ride-data";
+import { loadParentRideLegsFor } from "@/features/shuttle/parent/server/parent-ride-data";
 import { AbsentButton } from "@/features/shuttle/parent/components/absent-button";
 import { KstClock } from "@/features/shuttle/components/kst-clock";
 import { ParentRideCard } from "@/features/shuttle/parent/components/parent-ride-card";
@@ -13,7 +14,10 @@ import { loadAcademyHolidays, restDayName } from "@/features/shuttle/parent/serv
 import { ParentMonthView } from "./_components/month-view";
 
 const TITLE = "등하원 시간 변경·확인";
-export const metadata = { title: TITLE };
+export async function generateMetadata() {
+  const viewer = await getParentViewer();
+  return { title: viewer && (await parentPortalAvailable(viewer)) ? TITLE : "학부모" };
+}
 
 const PATH = "/parent/rides";
 
@@ -37,6 +41,7 @@ export default async function ParentRidesPage({
 }) {
   const viewer = await getParentViewer();
   if (!viewer) redirect("/home");
+  if (!(await parentPortalAvailable(viewer))) return null;
   const { day, view, edit, month, kid, date, dates, fixed } = await searchParams;
   const wantEdit = edit === "1";
 
@@ -67,7 +72,7 @@ export default async function ParentRidesPage({
 
   // 수정 모드일 때만 학원의 모든 호차 노선도 읽는다('수정하기' 모달 재료). 변경 내역은 직원 전용이라 읽지 않는다.
   const [{ legs, fleet, regular }, academyHolidays] = await Promise.all([
-    loadRideLegsFor(viewer.tenantId, viewer.children.map((c) => c.id), picked.ymd, "term", withRecords, editing),
+    loadParentRideLegsFor(viewer, viewer.children.map((c) => c.id), picked.ymd, "term", withRecords, editing),
     loadAcademyHolidays(viewer.tenantId),
   ]);
   // 다른 요일도 **그 날짜**의 일정이다 — 학부모가 미리 바꾼 변경이 반영돼 있다(2026-09-29).
