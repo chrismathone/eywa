@@ -1,5 +1,12 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-12 — 강사평가 담임 판정 정정(감사로그 + activity_log) · 마감 4~10월 정정 적용 · 첫 달 퇴원율 합계 제외
+
+- 원장 *"모든 곳에서 일치하는 데이터가 출력되어야해"* → *"추천방식으로 시작"* → 적용 · 첫 달 퇴원율 '합계에서 제외'. 결정 본문 = [`decisions/staff.md`](decisions/staff.md) 2026-11-12.
+- 코드(main 75bc16ce4): `teacher-portfolio/model/homeroom-history.ts`(감사로그 + activity_log · 짝지은 인계의 이전 담임 채우기 · 지운 계정 잇기 · 재직 밖 제외) · `server/tenure.ts` · 판정 배선(context·students·snapshot·churn-source·exit-teacher-judge) · 퇴원 담당 후보 재직(`exit-homeroom.ts`) · 매출 교시 재직 · 평가 달 = 재직 기간 · 퇴원율 newcomer.
+- 데이터: `scripts/_oneoff/portfolio-revision/` 적용(2026-11-12 13:16 KST · 고침 79 · 지움 25 · 감사로그 `teacher_portfolio_homeroom_fix`) · 다시 계산한 값 = 저장값 69/69 일치 확인.
+- 남은 것: 출석부 강사 축·급여 조립 담임 이력(`classes/teacher-as-of.ts`) · 원생상담 담임 담당은 옛 규칙 — 원장 결정 대기.
+
 
 ## 2026-11-12 — 상담 준비 브리프: 학원 운영 안내 설정(원장 "운영 사실 설정은 코덱스와 협의해서 추천대로 진행해")
 
