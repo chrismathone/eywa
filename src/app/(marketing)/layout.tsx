@@ -4,7 +4,6 @@ import { AYWA_SITE_DESCRIPTION } from "@/lib/config/site-metadata";
 
 const LANDING_TITLE = "AI원장키트 | 학원 운영부터 학습까지";
 import "./_scroll/landing-base.css";
-import "./_scroll/landing-dash.css";
 import "./_scroll/landing-scenes.css";
 import "./_scroll/landing-cards.css";
 import "./_scroll/landing-responsive.css";

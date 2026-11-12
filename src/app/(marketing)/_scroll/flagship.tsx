@@ -45,7 +45,7 @@ function Wordmark({ index }: { index: number }) {
 
 export function FlagshipHero() {
   return <section className="flag-hero" aria-labelledby="flag-title">
-    <Image className="flag-hero-art" src="/landing/flagship/flagship-product.webp" alt="" fill fetchPriority="high" loading="eager" sizes="100vw" />
+    <Image className="flag-hero-art" src="/landing/flagship/flagship-product-yellow.webp" alt="" fill fetchPriority="high" loading="eager" sizes="100vw" />
     <div className="flag-hero-shade" />
     <div className="flag-hero-content">
       <p className="flag-overline">원장을 위한 세 가지 제품</p>

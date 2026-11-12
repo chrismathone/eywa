@@ -20,6 +20,13 @@
 
 - 11-11의 강사별 작은 차트 격자를 한 차트로 바꿨다(`teacher-churn-chart.tsx` + 오른쪽 목록 `teacher-churn-chart-list.tsx` · 선 색 한 곳 `teacher-churn-colors.ts`). 나머지 강사 = 옅은 회색 · 강조 셋 = 고른 강사(표와 같은 고르기·같은 색) 또는 마지막 달 퇴원율 높은 3명 · 선 끝 이름 · 달마다 연한 세로 점선 · 마우스 = 그 달 + 가장 가까운 선 · 오른쪽 목록 = 고른 달의 모든 강사 값. 순수 함수 `autoEmphasis`·`nearestAt`·`spreadLabels`·`dupName`(`teacher-churn-view.ts`, Vitest). 값·판정은 그대로(표 칸과 같은 값). 결정 = [`decisions/students.md`](decisions/students.md) 2026-11-11 '모양'. SQL 없음.
 
+## 2026-11-12 — 공개 랜딩 색감: 초록 계열 → 노랑 #ffd25b(원장 "초록계열을 이 색감으로 바꿔주고 … 가독성맞춰서 대비색깔도 맞춰줘" · Codex 협의)
+
+- 강조 라임 #ddfc68 → #ffd25b(`--flag-lime` → `--flag-accent`) · 초록빛 검정 #182012 → 따뜻한 검정 #1f1b14 · 세이지·올리브 회색 → 따뜻한 회색. 노랑은 글자로 밝은 바탕에 쓰지 않는다(1.4:1) — 검정 판·어두운 사진 위에서만.
+- 상태색: 출석·완료 칸 #ffe8a0(글자 검정 14:1) · 완료 체크 원 = 검정(주의 '!' 호박색과 갈리게) · 지각 #fdd4b8/#8c4f0e(대비 4.3→4.7, 출석 노랑·결석 분홍과 색상 고르게) · '파랑' 분류 = 슬레이트 #3c5670 · 흐린 글자 #7a7263(2.6→4.8:1).
+- 히어로 사진 = 초록 색조만 노랑으로 옮긴 새 파일 `flagship-product-yellow.webp`(옛 파일은 되돌리기용으로 남김) · 옛 기반 `landing-scenes.css`의 '놓을 수 있는 칸' 초록은 장면 파일에서 덮음.
+- 옛 파일 정리(원장 "쓰지않는 옛 파일들 정리해" · 라우트 진입점에서 안 닿는 것만): 랜딩 `landing-hero.tsx`·`dashboard-mock.tsx`·`landing-dash.css`·옛 히어로 사진 · 홍보·마케팅 옛 화면 `features/marketing/{annual-planning,operations-workspace,workspace}.tsx` + CSS 모듈 3. `calc.ts`는 살아 있는 모델 시험이 써서 남김. 아이콘 가드 허용 목록에서 지운 파일을 빼고, 빨갛던 홍보·마케팅 차트 2곳(0913cd02c·1257474f6)을 올렸다.
+
 ## 2026-11-12 — 상담 준비 브리프: 학원 운영 안내 설정(원장 "운영 사실 설정은 코덱스와 협의해서 추천대로 진행해")
 
 - 학원 설정 → 상담 양식에 '상담 준비 브리프 — 학원 운영 안내' 카드(보고·학부모 상담 주기 · 과제·오답 관리 · 보강 · 레벨테스트·반 배정·첫 수업 · 체험 수업 · 할인, 각 200자 · 기본 빈칸). 적은 원문이 브리프 화면·`/prep` 인쇄에 그대로 실린다(`policy.operations` 스냅샷 · 다시 작성부터). AI 검증은 풀지 않고 원문은 검증 근거(숫자·시각·인원)에서도 뺀다(조건 빠진 약속 방지) · 원문 가리키기 넘김은 그 주제가 설정된 지점에서만 · AI 라이선스 꺼진 지점엔 카드 없음 · 옛 폼·부분 저장이 원문을 지우지 않음 · 감사로그 주제별 전후 · Codex 합의 9개 · 적대 리뷰 4회 · 시험(가상 안내 20건) 폴백 0. 결정 = [`decisions/students.md`](decisions/students.md) · 배선 = [`decisions/settings-wiring.md`](decisions/settings-wiring.md). SQL 없음.
