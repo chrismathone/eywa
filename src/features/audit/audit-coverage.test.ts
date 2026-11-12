@@ -83,8 +83,15 @@ const EXEMPT: Record<string, string> = {
   "src/features/attendance/recap/server/actions.ts#generateRecapSummary": AI_CACHE,
   // 사랑의 한마디 초안 기록(다음 초안이 고친 방식을 배우는 재료) — 강사가 실제로 저장한 보고서는 그쪽에서 남는다(원장 2026-10-29 점검).
   "src/features/onescreen/server/love-note-actions.ts#suggestLoveNote": AI_CACHE,
-  "src/features/enrollment/server/prep-actions.ts#generatePrepBrief": AI_CACHE,
   // 자체 기록
+  // 90일 관리: 운영 DB의 audit_onboarding_followup 트리거가 같은 트랜잭션에서
+  // 학생·과목·변경된 값·updated_by를 student_onboarding_followup_events에 남긴다.
+  "src/features/newcomers/server/followup-actions.ts#assignNewcomerManager": `${OWN_LOG} (onboarding_subject_audit 트리거)`,
+  "src/features/newcomers/server/followup-actions.ts#submitNewcomerFeedback": `${OWN_LOG} (onboarding_feedback_audit 트리거)`,
+  "src/features/newcomers/server/followup-actions.ts#reviewNewcomerFeedback": `${OWN_LOG} (onboarding_feedback_audit 트리거)`,
+  // 과목 기본 담당(2026-11-11): s2_0066 onboarding_default_manager_audit 트리거가 같은 거래에서 audit_logs에
+  // 실행자(updated_by)·과목·이전/새 담당자를 남긴다(newcomer_default_manager_update) — logAction은 실패를 삼킨다.
+  "src/features/newcomers/server/manager-defaults-actions.ts#saveNewcomerDefaultManager": `${OWN_LOG} (onboarding_default_manager_audit 트리거가 audit_logs에 쓴다)`,
   "src/features/billing/session-terms/server/receipt-allocation-actions.ts#mergeReceiptItems": `${OWN_LOG} (edit_receipt_merge_group이 audit_logs에 쓴다)`,
   "src/features/enrollments/server/actions.ts#deleteEnrollment": `${OWN_LOG} (delete_enrollment_history가 audit_logs에 쓴다)`,
   "src/features/shuttle/parent/server/parent-departure-actions.ts#ackParentNotice": `${OWN_LOG} (확인 행 자체가 누가·언제)`,
@@ -174,8 +181,8 @@ const BASE = ["logAction", "logActionAs", "logActionAtDoor", "logSuperAdminActio
 const baseRe = new RegExp(`\\b(${BASE.join("|")})\\s*\\(`);
 /** `audit_logs`에 **넣는** 것만 기록이다(읽는 조회는 아니다). */
 const AUDIT_INSERT = /from\(\s*["'`]audit_logs["'`]\s*\)\s*\.insert\s*\(|insert\s+into\s+(?:public\.)?audit_logs\b/i;
-/** DB 쓰기 — supabase 빌더 · RPC · postgres.js 템플릿 SQL(`insert into` · `update … set` · `delete from`). */
-const WRITE = /\.(insert|update|upsert|delete)\s*\(|\.rpc\(\s*["'`]|\binsert\s+into\s|\bupdate\s+[\w."]+\s+set\s|\bdelete\s+from\s/i;
+/** DB 쓰기 — supabase 빌더 · RPC · postgres.js 템플릿 SQL(`insert into` · `update … set` · `delete from`) · ui_prefs 쓰기 도우미(`writeUiPrefsNs`). */
+const WRITE = /\.(insert|update|upsert|delete)\s*\(|\.rpc\(\s*["'`]|\bwriteUiPrefsNs\s*\(|\binsert\s+into\s|\bupdate\s+[\w."]+\s+set\s|\bdelete\s+from\s/i;
 
 type SrcFile = { rel: string; chunks: Chunk[]; local: Set<string>; imports: Map<string, string>; useServer: boolean };
 const files: SrcFile[] = walk(SRC).map((f) => {

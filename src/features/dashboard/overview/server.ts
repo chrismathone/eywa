@@ -28,6 +28,7 @@ import {
   summarizePrograms,
 } from "@/features/students/enrollment/enrolled-composition";
 import { getWithdrawalsInWindow, type WindowWithdrawal } from "@/features/withdrawals/server/window";
+import { withSheetWithdrawals } from "@/features/withdrawals/server/sheet-withdrawals";
 import { getSubjectEndedStudents } from "@/features/withdrawals/server/queries";
 import { monthWithdrawalRows } from "./monthly-exits";
 import { tenureDays } from "@/features/withdrawals/early-exit";
@@ -637,8 +638,8 @@ export type LoadOverviewOptions = {
   full?: boolean;
   subject?: string;
   /**
-   * 배치(`view`)가 정해지는 즉시 한 번 불린다 — 운영실 첫 화면이 무거운 조회를 기다리지 않고 그 배치의 스켈레톤을 먼저 그린다
-   * (`overview-server.tsx`의 Suspense 경계). 알림만 할 뿐 조회·권한·캐시는 그대로다. 받은 `view`를 고치지 말 것(스냅샷에 그대로 실린다).
+   * 배치(`view`)가 정해지는 즉시 한 번 불린다 — 지금 넘기는 곳은 없다(2026-11-10 운영실이 새 대시보드 하나라 뼈대가 배치를 안 본다 ·
+   * 배치별 뼈대를 다시 그릴 때 쓰라고 남김). 알림만 할 뿐 조회·권한·캐시는 그대로다. 받은 `view`를 고치지 말 것(스냅샷에 그대로 실린다).
    */
   onView?: (view: ResolvedView) => void;
 };
@@ -716,7 +717,11 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   const withdrawalRows =
     (allowed.includes("withdrawals") || allowed.includes("students")) && needs("withdrawals", "changes", "earlyExits")
       // KPI가 보여 줄 달에 퇴원했지만 앞 달로 센 학생은 6개월보다 앞 달로 셌어도 싣는다(KPI 팝업 '앞 달로 센' — 원장 2026-11-03). 세 소비처는 `exitDate`로 다시 거른다.
-      ? getWithdrawalsInWindow(`${monthKeys(today)[0]}-01`, today, { keepProcessedFrom: `${exitReportMonth(today)}-01` })
+      // 2026-10까지는 퇴원생 관리 차트의 줄로 센다(퇴원관리와 같은 규칙 · 원장 2026-11-11 `withSheetWithdrawals`).
+      ? withSheetWithdrawals(
+          getWithdrawalsInWindow(`${monthKeys(today)[0]}-01`, today, { keepProcessedFrom: `${exitReportMonth(today)}-01` }),
+          user.tenantId, today, `${monthKeys(today)[0]}-01`,
+        )
       : Promise.resolve([] as WindowWithdrawal[]);
   // 최근 60일 콜&상담 — 일정 카드(일정↔상담 연결)와 '상담 진행' 카드가 **같은 한 번의 조회**를 쓴다(두 카드가 같은 상담 집합을
   // 보고, 30초 갱신마다 같은 표를 두 번 읽지 않게). 실패 처리는 영역마다 다르다: 일정 카드는 링크만 빼고 살고, 상담 진행은 실패를 알린다.

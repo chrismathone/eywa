@@ -34,11 +34,19 @@ function arc(from: number, to: number): string {
   return `M${x1},${y1} A${R_OUT},${R_OUT} 0 0 1 ${x2},${y2} L${x3},${y3} A${R_IN},${R_IN} 0 0 0 ${x4},${y4} Z`;
 }
 
-/** 칸 색 — 낮은 쪽 초록에서 높은 쪽 파랑으로(원장이 보낸 시안의 계기판). 의미색 토큰만 섞는다. */
-const bandColor = (i: number) => `color-mix(in srgb, var(--green) ${100 - (i * 100) / (BANDS - 1)}%, var(--blue))`;
+/**
+ * 값 → 색 — 0%에 가까울수록 빨강, 100%에 가까울수록 초록(원장 2026-11-10 *"0에 가까울수록 더더욱 빨강 · 100퍼가 될수록 초록"* —
+ * 빨강→파랑은 가운데 보라가 애매해 뒤집었다). oklch로 섞어 가운데가 주황·올리브로 또렷하고(srgb는 갈색으로 탁해진다),
+ * 초록 몫을 1.6제곱으로 늦춰 낮은 값일수록 더 빨갛다. 양 끝은 의미색 토큰보다 채도를 올린 이 계기판 전용 값 —
+ * 원장 *"더욱 진하고 쨍하게"*(같은 날). 테마와 무관하게 고정(구별 자체가 뜻이라 차콜 테마에도 회색이 되면 안 된다).
+ */
+const GAUGE_RED = "oklch(0.6 0.26 25)";
+const GAUGE_GREEN = "oklch(0.66 0.22 145)";
+const rateColor = (v: number) => `color-mix(in oklch, ${GAUGE_RED} ${Math.round(100 - 100 * (v / 100) ** 1.6)}%, ${GAUGE_GREEN})`;
 
 /**
- * 반원 계기판 — 5칸(20%씩)을 바늘이 가리키는 값까지 칠한다. 값이 없으면(그 달 대상 0명) 칸은 회색, 바늘 없음.
+ * 반원 계기판 — 5칸(20%씩)을 바늘이 가리키는 값까지 칠한다. 찬 칸은 **전부 값 하나의 색**(원장 2026-11-10 *"찰수록 색이 변하고
+ * 덜찰수록 아예 다 변하는"*) — 낮으면 계기판 통째로 빨강, 높으면 통째로 파랑. 안 찬 칸·값 없음(그 달 대상 0명)은 회색, 값 없으면 바늘 없음.
  * 글자는 SVG 밖 HTML로 둔다(Pretendard 부분 글꼴이 SVG 글자를 못 잡는다, gotchas #3).
  */
 export function RateGauge({ rate, label }: { rate: number | null; label: string }) {
@@ -57,7 +65,7 @@ export function RateGauge({ rate, label }: { rate: number | null; label: string 
       {v !== null
         ? bands
             .filter((b) => v > b.from)
-            .map((b) => <path key={`on${b.i}`} d={arc(b.from, Math.min(b.to, v))} fill={bandColor(b.i)} />)
+            .map((b) => <path key={`on${b.i}`} d={arc(b.from, Math.min(b.to, v))} fill={rateColor(v)} />)
         : null}
       {tip ? (
         <>
@@ -76,7 +84,9 @@ export function MonthGauge({ ym, m, current }: { ym: string; m: HomeroomMonth; c
     <span className="block min-w-0 flex-1 text-center" title={`담임 상담 ${m.self} · 담임 아닌 직원이 상담 ${m.other} · 미상담 ${m.none}`}>
       <span className="block text-muted-foreground mb-1 text-xs font-medium">{label}</span>
       <RateGauge rate={rate} label={label} />
-      <span className="block num mt-1 text-xl leading-tight font-bold">{rate === null ? "—" : `${Math.round(rate)}%`}</span>
+      <span className="block num mt-1 text-xl leading-tight font-bold" style={rate === null ? undefined : { color: rateColor(Math.max(0, Math.min(100, rate))) }}>
+        {rate === null ? "—" : `${Math.round(rate)}%`}
+      </span>
       <span className="block num text-muted-foreground text-xs">
         {m.self}/{m.target}명
       </span>

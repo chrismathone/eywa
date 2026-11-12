@@ -6,7 +6,8 @@ import { TEXTAREA_AUTOSIZE, TEXTAREA_AUTOSIZE_RESIZABLE } from "@/lib/ui/textare
 import { joinComment, splitComment } from "../comment-paragraphs";
 import { normalizeHomeworkPages } from "../homework-pages";
 import { resolveStudyGrade } from "../curriculum";
-import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
+import { SUBJECT_SOFT, SUBJECT_SOLID, subjectColorOfRow } from "@/features/owner/subjects";
+import { useSubjectMaps } from "@/features/owner/operations-context";
 import {
   effectiveClassnoteStatus,
   isAlreadySent,
@@ -304,10 +305,11 @@ export function GridBodyRow({
   const aiOn = useLicenseOn("ai_analysis"); // 꺼진 지점엔 '자동 작성' 버튼이 없다(2026-09-30)
   const tf = useSheetTf();
   const mathBookList = useMathBookListId(); // 교재명 칸 제안(수학 행만, math-book-list.ts)
+  const subjectMaps = useSubjectMaps(); // 과목 색 = 학원설정(운영 enum 하드코딩 금지)
   // 이 행에 적용되는 평가값(태도·점수·과제 수행률) — 행 값이 없으면 학생 값 폴백(row-fields.ts).
   const rowEval = resolveRowFields(student, subject);
   const td = groupStart ? TD_GROUP : TD; // 학생 구분선(묶음 첫 행만 굵게)
-  const { tone } = subjectTone(subject.name);
+  const tone = subjectColorOfRow(subjectMaps, subject);
   const badge = classnoteBadge(rep?.classnoteStatus, lang);
   // 로스터 신호(G2·G3) — 판정은 순수 함수(roster-signals.ts). 진도 배지는 수학 파이프라인 데이터라 math 행에만
   // (subjectKey 미지정=math 간주는 진도 입력 분기와 동일 규약, types.ts:26-29).
@@ -444,7 +446,7 @@ export function GridBodyRow({
             이름을 `shrink-0 whitespace-nowrap`으로 잠그고 컨테이너를 `flex-wrap`으로 바꿔
             **배지가 다음 줄로 내려가게** 한다(이름은 항상 한 덩이). */}
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-          <span className={`size-1.5 shrink-0 rounded-full ${toneSolidClass(tone)}`} aria-hidden />
+          <span className={`size-1.5 shrink-0 rounded-full ${SUBJECT_SOLID[tone]}`} aria-hidden />
           <span className="text-foreground shrink-0 font-bold whitespace-nowrap">{student.name}</span>
           {/* ClassNote 반 보드 매칭(원장 2026-09-29) — 카드 모드와 같은 부품·같은 판정. 수학 반 행만 · 미발송 줄은 없음(2026-11-04). */}
           <CnBadge
@@ -500,7 +502,7 @@ export function GridBodyRow({
             파란 배경"). `subject.name`은 같은 과목 두 반일 때 로스터가 반 이름을 이어 붙인 **유일화 라벨**이라
             그대로 칠하면 알약이 반 이름까지 삼켜 행마다 폭·모양이 달라진다. 반 이름은 학년 태그와 같은 톤으로 밖에. */}
         <div className="mt-0.5 flex flex-wrap items-center gap-1">
-          <span className={`rounded-pill px-1.5 py-px text-xs font-bold ${toneSoftClass(tone)}`}>
+          <span className={`rounded-pill px-1.5 py-px text-xs font-bold ${SUBJECT_SOFT[tone]}`}>
             {subject.subjectLabel || subject.name}
           </span>
           {/* 보강 줄의 보강 반(= 발송 반 = 출석부 칸의 반) — 반 미정이면 눌러서 고른다(원장 2026-09-30). */}

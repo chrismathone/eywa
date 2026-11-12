@@ -664,6 +664,8 @@ export const enrollmentConsultations = pgTable(
     // 생성 백그라운드화(0153b): NULL=대기/완료 · generating · failed. 진행바·watcher 근거.
     prepBriefStatus: text("prep_brief_status"),
     prepBriefError: text("prep_brief_error"),
+    // 생성 작업 시작 시각 — 끝날 때 같은 값일 때만 결과를 쓴다(s2_0068).
+    prepBriefJobAt: timestamp("prep_brief_job_at", { withTimezone: true }),
     // QR 공개접수 출처(0047a)
     fromPublicIntake: boolean("from_public_intake").notNull().default(false),
     intakeTokenId: uuid("intake_token_id").references(() => intakeTokens.id, { onDelete: "set null" }),
@@ -1041,7 +1043,7 @@ export const consultationRecordings = pgTable(
     consultationId: uuid("consultation_id")
       .notNull()
       .references(() => enrollmentConsultations.id, { onDelete: "cascade" }),
-    audioPath: text("audio_path").notNull(),
+    audioPath: text("audio_path"), // s2_0046: 보존기간(90일)이 지나 원본을 지우면 NULL — 전사·화자·분석은 그대로 남는다
     audioSizeBytes: integer("audio_size_bytes"),
     audioDurationSec: integer("audio_duration_sec"),
     transcription: text("transcription"),

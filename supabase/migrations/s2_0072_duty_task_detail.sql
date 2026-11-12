@@ -1,6 +1,6 @@
 -- s2_0072 — 의무 장부 → 할 일(duty_late)의 본문에 **무슨 업무인지**를 적는다 (2026-11-10)
 --
--- 왜: 할 일 창은 굵은 줄에 `detail ?? title`을 쓴다(staff-task-dialog.tsx). s2_0069~0043의 duty_escalate는 detail에 학생 이름만 넣어
+-- 왜: 할 일 창은 굵은 줄에 `detail ?? title`을 쓴다(staff-task-dialog.tsx). s2_0069의 duty_escalate는 detail에 학생 이름만 넣어
 --   "김지유A · 전유슬 / 할 일 · 26.11.09 22:12"처럼 **어떤 업무가 기한을 넘겼는지가 안 보였다**(원장 2026-11-10 *"어떤 업무를 기한 초과 했는지 하나도 알 수가 없음"*).
 -- 고침: detail = "<종류> 기한 초과 N건 · 11/09 — 이름 · 이름"(title + 이름). title은 그대로. 열린 할 일은 open_task가 글만 새로 맞춘다.
 -- 되돌리기: duty_escalate를 s2_0070 본문으로.

@@ -9,6 +9,7 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { canSeeStaffMember, STAFF_SCOPE_DENIED_MSG } from "../department/server/subject-scope";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { explainDbError, logDbError } from "@/lib/supabase/db-error";
+import { deleteStaffAccount } from "./delete-blockers";
 import { sanitizeWorkSchedule } from "@/features/staff/work-schedule";
 import { EMAIL_RE } from "@/features/staff/email";
 import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
@@ -16,6 +17,8 @@ import { isLoginEmailTakenElsewhere } from "./login-email-taken";
 import { logAction } from "@/features/audit/server/log";
 import { isProtectedSuperAdminTarget, SUPER_ADMIN_TARGET_DENIED_MSG } from "@/lib/auth/super-admin";
 import { refuseIfProtectedStaff } from "./protected-guard";
+import { cleanupPersonSettings } from "@/features/owner/server/retired-people";
+import { authPasswordErrorMessage } from "@/lib/auth/auth-password-error";
 
 export type AccountActionState =
   | { error?: string; ok?: boolean; tempPassword?: string }
@@ -25,7 +28,7 @@ type TargetInfo = { role: SystemRole; email: string; tenantId: string; displayNa
 
 /**
  * Supabase Auth의 "그 사용자 없음"(404) 판별 — 임포트/시드된 "데이터 전용" 직원은 auth.users가 없다(#31).
- * deleteStaff는 이걸 "지울 로그인 계정이 애초에 없음"으로 보고 건너뛰지만, 비밀번호·이메일은 auth가 있어야만
+ * 완전 삭제는 로그인 계정이 없어도 직원 행만 지우면 되지만(delete_staff_account), 비밀번호·이메일은 auth가 있어야만
  * 가능하다. 그대로 두면 Supabase의 영문 "User not found"가 화면에 노출되므로 한글 안내로 바꾼다.
  */
 function isMissingAuthUser(err: { status?: number; message: string }): boolean {
@@ -107,7 +110,10 @@ export async function resetStaffPassword(
     if (isMissingAuthUser(error)) {
       return { error: "이 직원은 로그인 계정이 없어 비밀번호를 설정할 수 없습니다. 먼저 로그인 계정을 만들어 주세요." };
     }
-    return { error: `비밀번호 재설정 실패 — ${error.message}` };
+    // 약한 비밀번호 등 사람이 고칠 수 있는 원인 — 원문 대신 무엇을 하면 되는지(P1-E).
+    const why = authPasswordErrorMessage(error);
+    if (why) return { error: why };
+    return { error: explainDbError(error, { scope: "staff.account-actions.resetStaffPassword", fallback: "비밀번호 재설정 실패 — 잠시 후 다시 시도해 주세요" }).message };
   }
 
   // ⚠️ 남의 계정 비밀번호를 여는 행위 = 감사로그의 존재 이유. 본인 변경(self_password_change)은 남기는데
@@ -192,7 +198,7 @@ export async function applyStaffEmailChange(
     // Auth가 코드로 "이미 있는 이메일"이라 답해 준 경우만(지금 GoTrue의 변경 경로는 500이라 여기 안 온다 — 본문은 앞의 사전 조회다).
     // users는 바로 위에서 원래 값으로 되돌렸다.
     if (isEmailTakenAuthError(authErr)) return { error: EMAIL_TAKEN_MESSAGE };
-    return { error: `로그인 계정 이메일 변경 실패 — ${authErr.message}` };
+    return { error: explainDbError(authErr, { scope: "staff.account-actions.applyStaffEmailChange", fallback: "로그인 계정 이메일 변경 실패 — 잠시 후 다시 시도해 주세요" }).message };
   }
 
   // 로그인 아이디가 바뀌는 변경 — 비밀번호 재설정과 같은 이유로 남긴다(본인 변경은 self_email_change).
@@ -330,7 +336,8 @@ export async function changeStaffEmail(
 /**
  * 직원 완전 삭제 — auth.users + public.users 제거. **본인·상위 계정은 불가**(동급은 가능 —
  * canManageStaffMember가 '자신 권한 이하 전부'라, 2026-08-11부터 매니저도 동급 매니저를 지울 수 있다).
- * 순서: ① 출결 기록자(restrict FK)면 사전 차단 → ② auth 먼저(실패 시 public 보존) → ③ public.
+ * 삭제는 한 거래(DB 함수 delete_staff_account): 삭제를 막는 기록이 있으면 아무것도 지우지 않고 '퇴사(비활성)'를 안내한다.
+ * 🔴 Auth 서버 호출과 직원 행 삭제를 다시 둘로 나누지 말 것(2026-11-11 · 가드 delete-blockers.test.ts).
  */
 export async function deleteStaff(
   _prev: AccountActionState,
@@ -352,50 +359,23 @@ export async function deleteStaff(
   const protectedMsg = await refuseIfProtectedStaff(id, "delete", target.displayName);
   if (protectedMsg) return { error: protectedMsg };
 
-  const admin = createAdminClient();
-
-  // ① attendance_records.recorded_by 는 ON DELETE restrict — 기록자면 하드 삭제 불가.
-  //    미리 막아 auth/public 중 하나만 지워지는 상태를 원천 차단(+ '퇴사' 권장).
-  const { count } = await admin
-    .from("attendance_records")
-    .select("id", { count: "exact", head: true })
-    .eq("recorded_by", id);
-  if (count && count > 0) {
-    return {
-      error: "출결 기록이 있어 완전 삭제할 수 없습니다. '퇴사(비활성)' 처리를 권장합니다.",
-    };
-  }
-
-  // ② auth.users 먼저 — 실패해도 public.users가 남아 직원 정보·로그인이 보존된다.
-  //    단, 임포트/시드된 "데이터 전용" 직원은 auth.users가 없어 "User not found"(404)가 난다(#31).
-  //    이건 정상 케이스(지울 로그인 계정이 애초에 없음)이므로 건너뛰고 ③ public 삭제로 진행한다.
-  const { error: authErr } = await admin.auth.admin.deleteUser(id);
-  if (authErr && authErr.status !== 404 && !/user not found/i.test(authErr.message)) {
-    return { error: `로그인 계정 삭제 실패: ${authErr.message}` };
-  }
-
-  // ③ public.users — payroll/leaves cascade, classes/students 담임은 set null로 자동 처리.
-  const { error: dbErr } = await admin
-    .from("users")
-    .delete()
-    .eq("id", id)
-    .eq("tenant_id", actor.tenantId);
-  if (dbErr) {
-    // 여기 도달은 드묾(restrict FK는 ①에서 차단). 도달 시 auth는 이미 삭제 → 치명적 불일치라 로깅.
-    // 로그인 계정은 이미 지워졌다 = 치명적 불일치 — 23503(입력 원인)이라도 에러 등급으로 남긴다([[#138]] 리뷰).
-    const why = explainDbError(dbErr, { scope: "staff.delete.users", op: "delete", level: "error", fallback: "직원 기록을 지우지 못했습니다. 관리자에게 문의하세요.", context: { staffId: id } });
-    if (dbErr.code === "23503") {
-      return { error: `${why.message} — 로그인 계정은 이미 지워졌습니다. 관리자에게 문의하세요.` };
-    }
-    return { error: why.message };
-  }
+  // 직원 행과 로그인 계정을 **한 거래로** 지운다(DB 함수 delete_staff_account · s2_0060 — delete-blockers.ts).
+  //   잠금 → 이 직원을 가리켜 삭제를 막는 기록 검사(출결 기록자 · 업무 문서 · OKR · 관찰 · 신규생·여정 · 회계 … 카탈로그의 FK 전부)
+  //   → 직원 행(payroll/leaves cascade · 담임 set null) → 로그인 계정. 막히면 아무것도 지워지지 않고 '퇴사(비활성)'를 안내한다.
+  //   임포트/시드된 "데이터 전용" 직원(#31)은 로그인 계정이 없다 — 직원 행만 지운다.
+  // 🔴 Auth 서버를 따로 불러 두 번에 나눠 지우지 말 것 — 로그인 계정 먼저면 직원 행이 막혔을 때 로그인만 사라지고,
+  //    직원 행 먼저면 남은 로그인 계정이 미러 트리거로 직원 행을 되살린다(Claude·Codex 검토 2026-11-11).
+  const deleted = await deleteStaffAccount(actor.tenantId, id);
+  if (!deleted.ok) return { error: deleted.error };
 
   await logAction({
     action: "staff_delete",
     targetType: "staff",
     targetLabel: target.email,
-    metadata: { role: target.role },
+    metadata: { role: target.role, loginAccount: deleted.loginDeleted ? "deleted" : "none" },
   });
+  // 지운 계정의 주는 값도 학원 설정에서 뺀다(원장 2026-11-09 — 퇴사와 같은 함수). 읽는 쪽은 계정이 없는 사람을 거르지 않으므로(모르는 사람 — 리뷰 r1 F3) 여기서 지운다.
+  await cleanupPersonSettings({ tenantId: actor.tenantId, userId: id, role: target.role, targetLabel: target.displayName ?? target.email, reason: "delete" });
   revalidatePath("/staff");
   redirect("/staff");
 }

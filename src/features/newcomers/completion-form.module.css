@@ -1,9 +1,9 @@
-.root { display: grid; gap: 10px; font-size: var(--text-sm); color: #23282c; }
-.memo { white-space: pre-wrap; border-radius: 8px; background: #f4f4f1; border: 1px solid #e1e3df; padding: 10px 12px; line-height: 1.6; }
-.link { color: #23282c; font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
-.muted { color: #646d72; font-size: var(--text-xs); }
+.root { display: grid; gap: 10px; font-size: var(--text-sm); color: var(--ink); }
+.memo { white-space: pre-wrap; border-radius: 8px; background: var(--bg-soft); border: 1px solid var(--line); padding: 10px 12px; line-height: 1.6; }
+.link { color: var(--ink); font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
+.muted { color: var(--foreground); font-size: var(--text-xs); }
 .form { display: grid; gap: 10px; border: 0; padding: 0; margin: 0; min-width: 0; }
-.primary { justify-self: start; border-radius: 8px; background: #363c41; color: #fff; border: 1px solid #363c41; padding: 8px 14px; font-weight: 650; }
-.primary:hover { background: #2b3034; }
-.secondary { justify-self: start; border-radius: 8px; background: #fff; color: #23282c; border: 1px solid #e1e3df; padding: 7px 12px; font-weight: 650; }
-.secondary:hover { background: #fdfaf1; }
+.primary { justify-self: start; border-radius: 8px; background: var(--primary); color: #fff; border: 1px solid var(--primary); padding: 8px 14px; font-weight: 650; }
+.primary:hover { background: var(--primary-deep); }
+.secondary { justify-self: start; border-radius: 8px; background: #fff; color: var(--ink); border: 1px solid var(--line); padding: 7px 12px; font-weight: 650; }
+.secondary:hover { background: color-mix(in srgb, var(--gold-bright) 6%, var(--card)); }

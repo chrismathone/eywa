@@ -1,0 +1,174 @@
+/*
+ * 플래그십(AI원장키트) 결로 아래 장면·예시 화면을 다시 칠한다 — 라임·잉크·세이지·라벤더·피치, 모서리는 각지게.
+ * 기존 장면 CSS(landing-*.css)는 그대로 두고 여기서 덮는다. 되돌리기 = layout.tsx의 이 파일 import 한 줄.
+ * 예시 화면 속 상태색(출석·지각·결석·보강)은 뜻을 지키되 같은 팔레트 안의 톤으로 바꾼다.
+ */
+.lp{--bg:#ffffff;--bg2:#f6f7f2;--ink:#182012;--ink2:#5b6553;--ink3:#9aa292;--line:rgba(24,32,18,.16);--line2:rgba(24,32,18,.09);
+--navy:#182012;--navy2:#000;--dark:#182012;--dark2:#222b1a;
+--green:#3f7d17;--green-s:#e9f7c4;--amber:#9a5d12;--amber-s:#fbe3c9;--red:#b4382f;--red-s:#f9ddd7;
+--blue:#2f5a4a;--blue-s:#dfe9df;--purple:#5a4690;--purple-s:#e7e1f8;
+--sage:#e9ede6;--sage-line:#d4dcd0;--lav:#d9d1f4;--peach:#f4be8c}
+/* 글자 · 버튼 — 제목 기본은 700, 강조한 한 구절만 900/형광펜/밑줄(섹션마다 하나 · Codex 검수와 합의한 강조 체계) */
+.lp .kicker{font-size:15px;font-weight:700;letter-spacing:.02em;color:var(--ink)}
+.lp .h2{font-weight:700;letter-spacing:-.055em;line-height:1.14}
+.lp .em-key{font-weight:900}
+.lp .em-mark{color:inherit;font-weight:900;background:linear-gradient(transparent 58%,var(--flag-lime) 58%);padding:0 .05em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.lp .em-rule{font-weight:900;text-decoration:underline;text-decoration-thickness:.075em;text-underline-offset:.15em}
+.lp .light .em-rule,.lp .band .em-rule{text-decoration-color:var(--flag-lime)}
+/* 고정 장면은 한 단계에 화면 높이의 75%만 — 4단계 장면이 화면 5장 길이라 읽기 전에 지쳤다 */
+.lp .pin{height:calc((var(--steps) + 1) * 75vh);height:calc((var(--steps) + 1) * 75svh)}
+/* 머리 줄이 90px 불투명이 됐다 — 고정 장면 가운데 정렬이 그 아래에서 일어나게, 메뉴 이동 목적지도 머리 줄 아래로 */
+@media (min-width:901px){.lp .stage{padding-top:90px}}
+/* 자동 재생 장면(`[data-play]` = 상담·학원 비서·출석부 · ScenePlayer)은 고정하지 않는 보통 구역 — 장면 꾸밈(.pin.dark 등)은
+   그대로 쓰고 높이·고정만 푼다. 단계 목록·예시 안내도 전부 보인다(한 화면에 가둘 이유가 없다). */
+.lp .pin[data-play]{height:auto}
+.lp .pin[data-play] .stage{position:relative;height:auto;overflow:visible;padding:clamp(88px,13vh,150px) 0}
+.lp .play-ctl{display:flex;align-items:center;flex-wrap:wrap;gap:12px 18px;margin-top:6px}
+.lp .play-ctl .dots{margin-top:0}
+.lp .light .strip-toggle{border-color:var(--flag-lime);color:var(--flag-lime)}
+.lp .light .strip-toggle[aria-pressed="true"]{background:var(--flag-lime);color:var(--flag-ink)}
+/* 고정 장면·쇼룸은 제 안에 머리 줄 여백을 둬서 빼야 한다(넣으면 90px 내려앉아 바닥이 잘린다) — 자동 재생 장면은 보통 구역이라 넣는다 */
+.lp main section[id]:not(.pin):not(.flag-showroom),.lp main section.pin[data-play]{scroll-margin-top:90px}
+@media (max-width:900px){
+.lp main section[id]:not(.pin):not(.flag-showroom),.lp main section.pin[data-play]{scroll-margin-top:64px}
+.lp .pin[data-play] .two,.lp .pin[data-play] .two.rev,.lp .pin[data-play] .two.half,.lp .pin[data-play] .stack{padding-top:0;height:auto}
+/* 좁은 화면의 스크롤 고정 장면(창 네 개)은 한 화면(svh) 안에 들어와야 한다 — 그 장면의 예시 안내는 뺀다(맨 위 선언 · 바닥글이 밝힌다) */
+.lp .pin:not([data-play]) .demo-caption{display:none}
+/* 고정 장면 단계 목록은 지금 단계 하나만 눈에 보이게(진행은 아래 점이 말한다). display:none이 아니라 '보이지만 않게' — 화면낭독기는
+   단계를 전부 읽는다. 지금 단계가 정해진 뒤(`:has(li.on)`)에만 숨겨 빈 목록이 비치지 않게, 움직임 줄이기는 전부 그대로.
+   옛 규칙(landing-responsive `li:not(.on) span{display:none}`)은 낭독기까지 지우고 움직임 줄이기에서도 설명을 숨겨 되살린다. */
+.lp .steps li:not(.on) span{display:inline}
+.lp.js:not(.rm) .pin:not([data-play]) .steps:has(li.on) li:not(.on)>*{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.lp .pin:not([data-play]) .two{padding-top:68px}
+}
+.lp.rm .asst-scene .steps li{color:var(--ink)}
+.lp .h3{font-weight:800;letter-spacing:-.04em}
+.lp .lead{color:var(--ink2)}
+.lp .btn,.lp a.btn{border-radius:0;background:var(--flag-ink);color:var(--flag-lime)}
+.lp .btn:hover{background:#000}
+.lp .btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--ink)}
+.lp .btn:focus-visible,.lp a:focus-visible,.lp button:focus-visible{outline-color:var(--flag-ink)}
+.lp .nav.scrolled{border-bottom-color:rgba(24,32,18,.16)}
+/* 고정 장면의 단계 목록 — 지금 단계는 작은 라임 네모로(제목 강조인 형광펜·밑줄과 역할을 가른다 · Codex 합의 5).
+   네모 자리는 모든 단계에 두고 색만 바꾼다 — 지금 단계에만 붙이면 max-content 열 폭이 단계마다 흔들린다. 왼쪽 띠 금지(결정 기록) */
+.lp .steps li b::before{content:"";display:inline-block;width:.46em;height:.46em;margin-right:.42em;vertical-align:.12em;border:1.5px solid currentColor;transition:background .3s,border-color .3s}
+.lp .steps li.on b{color:var(--ink)}
+.lp .steps li.on b::before{background:var(--flag-lime);border-color:var(--flag-ink)}
+.lp .light .kicker{color:var(--flag-lime)}
+.lp .light .steps li.on b{color:var(--flag-lime)}
+.lp .light .steps li.on b::before{border-color:var(--flag-lime)}
+.lp .dots i{border-radius:0;background:rgba(24,32,18,.14)}
+.lp .dots i.on{background:var(--flag-ink)}
+.lp .light .dots i{background:rgba(255,255,255,.2)}
+.lp .light .dots i.on{background:var(--flag-lime)}
+/* 장면 A — 창 네 개 */
+.lp #scene-win{background:var(--bg2)}
+.lp .desk{border-radius:0;background:var(--sage);box-shadow:inset 0 0 0 1px var(--sage-line)}
+.lp .desk::before{background-image:radial-gradient(rgba(24,32,18,.14) 1px,transparent 1.2px)}
+.lp .win{border-radius:.5cqw;box-shadow:0 0 0 1px rgba(24,32,18,.12),0 30px 60px -28px rgba(24,32,18,.45)}
+.lp .win.top{box-shadow:0 0 0 1.5px var(--flag-ink),0 40px 80px -28px rgba(24,32,18,.5)}
+.lp .tb{background:#eef1ea}
+.lp .tb i.d{background:#c9d0c2}
+.lp table.mini th,.lp .att th,.lp .sheet th,.lp .grd th{background:var(--bg2)}
+.lp .tt .cell{background:#f3f5ef;border-radius:.3cqw}
+.lp .tt .blk,.lp .tt .ghost,.lp .tt .cell.ok::after,.lp .tt .cell.no::after{border-radius:.3cqw}
+.lp .tt .m{background:#e4f6b4;color:#33500f}
+.lp .tt .e{background:#fbe0c6;color:#8a5212}
+.lp .tt .ghost{border-color:var(--flag-ink);background:rgba(221,252,104,.35);color:var(--flag-ink)}
+.lp .kb .col{background:var(--sage);border-radius:.3cqw}
+.lp .kb .kc{border-radius:.3cqw}
+.lp .kb .kc .mic{color:var(--purple)}
+/* 선언문 — 라벤더 면 */
+.lp .pin.state{background:var(--lav)}
+/* 빈 라벤더 면을 쓰게 — 글을 키워 폭을 채우고 아래에 두 줄 설명(먼저 보이는 화면 / 뒤에서 처리하는 일). 아직 안 읽은 낱말도 읽히는 농도로. */
+.lp .words-box{width:min(1240px,100% - var(--wpad) * 2);display:grid;gap:clamp(36px,6vh,64px)}
+.lp .words-box .words{width:auto;font-size:clamp(30px,4.7vw,76px)}
+.lp .words{font-weight:800;letter-spacing:-.06em}
+/* 자모 타이핑(typing-words.tsx) — 스크롤 진해짐은 걷었다. 아직 안 친 글자는 투명하게 깔아 줄바꿈 자리를 미리 잡는다. 커서 = 잉크 막대(폭 0이라 글이 안 밀린다). */
+.lp .words span{color:inherit}
+.lp .words.typing{position:relative}
+.lp .words .ty-rest{color:transparent;text-decoration-color:transparent}
+.lp .ty-caret{display:inline;position:relative}
+.lp .ty-caret::after{content:"";position:absolute;left:.03em;top:0;bottom:0;width:.07em;background:var(--flag-ink);animation:ty-blink 1s steps(1) infinite}
+.lp .words[data-state="typing"] .ty-caret::after{animation:none}
+.lp .words[data-caret="off"] .ty-caret{display:none}
+@keyframes ty-blink{50%{opacity:0}}
+/* 아래 두 줄은 다 친 뒤에 떠오른다(치는 도중 장면을 벗어나면 바로 완성 → 같이 보인다) */
+.lp .words-legend{transition:opacity .6s var(--ease),transform .6s var(--ease)}
+.lp .words-box:has(.typing[data-state="armed"]) .words-legend{opacity:0;transform:translateY(10px)}
+.lp .words-box:has(.typing[data-state="typing"]) .words-legend{opacity:0;transform:translateY(10px)}
+@media print{.lp .words .ty-rest{color:inherit;text-decoration-color:currentColor}.lp .ty-caret{display:none}.lp .words-box .words-legend{opacity:1!important;transform:none!important}}
+.lp .words-legend{margin:0;display:grid;grid-template-columns:1fr 1fr;gap:28px;border-top:2px solid var(--flag-ink);padding-top:18px}
+.lp .words-legend dt{font-size:14px;font-weight:800}
+.lp .words-legend dd{margin:4px 0 0;font-size:clamp(17px,1.4vw,21px);color:#3a3157}
+@media (max-width:560px){.lp .words-legend{grid-template-columns:1fr;gap:14px}}
+/* 장면 B — 상담 분석(잉크 면) */
+.lp .pin.dark{background:var(--flag-ink)}
+.lp .pin.dark .ph::after{background:linear-gradient(90deg,rgba(24,32,18,.94) 0,rgba(24,32,18,.7) 42%,rgba(24,32,18,.28) 100%)}
+.lp .ai-card{border-radius:4px;background:rgba(34,43,26,.8);border-color:rgba(221,252,104,.22)}
+.lp .ai-card .bh{color:var(--flag-lime)}
+.lp .ai-card .bf .btn{border-radius:0;background:rgba(221,252,104,.14);color:var(--flag-lime)}
+.lp .tag.g{background:rgba(221,252,104,.18);color:var(--flag-lime)}
+.lp .tag.b{background:rgba(233,237,230,.16);color:#e9ede6}
+.lp .tag.p{background:rgba(217,209,244,.2);color:var(--lav)}
+.lp .tag.a{background:rgba(244,190,140,.2);color:var(--peach)}
+.lp .tag.r{background:rgba(255,160,140,.2);color:#ffb3a3}
+.lp .ai-card .ln .warn{color:var(--peach)}
+/* 움직임 줄이기·JS 전에는 상담 카드 줄의 흐림까지 푼다(옛 규칙은 opacity·transform만 풀었다 — 재생기가 없는 상태라 CSS가 유일한 길) */
+.lp:not(.js) .ai-card .ln,.lp.rm .ai-card .ln{filter:none}
+.lp .light button:focus-visible{outline-color:var(--flag-lime)}
+/* 메뉴 — 업무별 네 묶음 목록(카드·아이콘 없이). 넷째 묶음(새로 더한 기능)만 라임 면으로 */
+.lp .sec.alt{background:var(--bg2)}
+.lp .menu-cols{display:grid;grid-template-columns:repeat(4,1fr);border-top:2px solid var(--flag-ink)}
+.lp .menu-col{padding:22px 22px 10px 0}
+.lp .menu-col+.menu-col{padding-left:22px;border-left:1px solid var(--sage-line)}
+.lp .menu-col h3{display:flex;align-items:baseline;gap:10px;margin:0 0 12px;font-size:19px;font-weight:800;letter-spacing:-.03em}
+.lp .menu-col h3 .num{font-size:13px;font-weight:700;color:var(--ink3)}
+.lp .menu-col li{display:grid;gap:4px;padding:14px 0;border-top:1px solid var(--sage-line)}
+.lp .menu-col li b{font-size:17px;font-weight:800;letter-spacing:-.02em}
+.lp .menu-col li p{font-size:15px;line-height:1.5;color:var(--ink2)}
+.lp .menu-col.fresh{background:var(--flag-lime);padding-right:22px}
+.lp .menu-col.fresh h3 .num{color:var(--flag-ink)}
+.lp .menu-col.fresh li{border-top-color:rgba(24,32,18,.18)}
+.lp .menu-col.fresh li p{color:#3a4630}
+@media (max-width:900px){
+.lp .menu-cols{grid-template-columns:1fr 1fr}
+.lp .menu-col:nth-child(3){border-left:0;padding-left:0}
+}
+@media (max-width:560px){
+.lp .menu-cols{grid-template-columns:1fr}
+.lp .menu-col+.menu-col{border-left:0;padding-left:0}
+.lp .menu-col.fresh{padding-left:16px;padding-right:16px}
+}
+/* 사진 띠 */
+.lp .band .ph::after{background:linear-gradient(180deg,rgba(24,32,18,0) 30%,rgba(24,32,18,.74) 100%)}
+.lp .band .kicker{color:var(--flag-lime)}
+/* 장면 C — 출석부 */
+.lp .att{border-radius:0;box-shadow:0 0 0 1px var(--sage-line),0 40px 80px -36px rgba(24,32,18,.35)}
+.lp .att.final td.sum{background:var(--flag-ink);color:var(--flag-lime)}
+/* 화면 스트립 — 각진 카드, 예시 바탕은 한 가지 면(한 벌이 13장이라 n번째 돌려 칠하기는 복제 벌과 색이 어긋나 이음매가 튄다) */
+.lp .scard{border-radius:0;box-shadow:none;border:1px solid var(--sage-line)}
+.lp .scard .shot{border-radius:0;background-color:var(--bg2);box-shadow:inset 0 0 0 1px var(--line2)}
+.lp .scard .shot.photo .ov{border-radius:4px}
+.lp .os .fld,.lp .ci,.lp .apr-body div,.lp .apr-line div,.lp .cal-g b{border-radius:.8cqw}
+.lp .os .ai .btn{border-radius:.8cqw}
+.lp .phone{box-shadow:0 0 0 1.5px var(--flag-ink),0 20px 40px -20px rgba(24,32,18,.4)}
+.lp .phone .ment{background:var(--bg2)}
+.lp .sheet td.ed,.lp .grd td.ed{background:#fbfde9;box-shadow:inset 0 0 0 1.5px var(--flag-ink)}
+/* 운영 원칙 · 문의 · 바닥글 */
+.lp .trio-sec{background:var(--sage)}
+.lp .trio p{color:var(--ink2)}
+.lp .ask{background:var(--flag-lime);color:var(--flag-ink)}
+.lp .ask .h2{color:var(--flag-ink)}
+.lp .ask .lead{color:#3a4630}
+.lp .ask .btn{background:var(--flag-ink);color:var(--flag-lime);height:56px;padding:0 28px}
+.lp .ask .btn:hover{background:#000}
+.lp footer.ft{border-top:1px solid rgba(24,32,18,.12);color:var(--ink2)}
+.lp footer.ft .wm{color:var(--flag-ink)}
+/* 화면 스트립 머리 — 소제목 · 예시 안내 · 멈춤 단추 */
+.lp .strip-head{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px 18px;margin-bottom:22px}
+.lp .strip-head .demo-caption{flex:1}
+.lp .strip-toggle{font:inherit;font-size:14px;font-weight:700;height:36px;padding:0 14px;border:1.5px solid var(--flag-ink);background:transparent;color:var(--flag-ink);cursor:pointer}
+.lp .strip-toggle[aria-pressed="true"]{background:var(--flag-ink);color:var(--flag-lime)}
+.lp .marq.paused .strip{animation-play-state:paused}
+.lp:not(.js) .strip-toggle,.lp.rm .strip-toggle{display:none}

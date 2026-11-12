@@ -25,9 +25,10 @@ type Exit = { row: Omit<OverlayExitInput, "teachers">; studentId: string; endMon
  * 시간표 X 겹침 — 한 과목의 석 달 퇴원(수강종료 포함, 원장 2026-10-14). 줄은 퇴원관리와 **같은 조회·같은 판정**에서 온다:
  * 퇴원 = 운영실 '퇴원생'의 기간 조회(`getWithdrawalsInWindow` — 병합·시스템 정리·퇴원 예약 제외, 여기서 '데이터 정리 일괄 퇴원'도 뺀다),
  * 수강종료 = 퇴원관리의 수강종료 판정(`getSubjectEndedStudents`, 후보만 석 달로 좁힘).
- * 🔴 담당 선생님은 **강사평가 퇴원율이 낸 값**이다 — 판정 한 벌 [`loadExitTeacherJudge`](./exit-teacher-judge.ts)(퇴원관리 '강사별'도 같은
- *    함수) · 겹침이 따로 판정하면 같은 퇴원이 화면마다 다른 선생님에게 붙는다(원장 *"모든 데이터가 일치해야함"*).
- *    퇴원율은 수강이 끝난 달로 센다 — 퇴원일(줄의 달)과 어긋날 수 있어 판정이 그 달을 물어볼 때 계산한다.
+ * 🔴 담당 선생님 = **그만둘 때 다니던 반의 그날 담임**(퇴원생 관리 차트의 '담당선생님'과 같은 기준, 원장 2026-11-11) — 판정 한 벌
+ *    [`loadExitTeacherJudge`](./exit-teacher-judge.ts)의 `homeroomOf`(퇴원관리 '강사별'·명단 '담당강사'도 같은 함수). 그 전(10-14~11-11)엔
+ *    강사평가 퇴원율이 센 선생님이었는데, 지난달 담당·교시 담당·JJ 담임까지 붙어 시트와 7~10월 90줄 중 32줄만 맞았다.
+ *    퇴원율 판정(`teachersOf`)은 '수강종료는 세지 않음'(`counted`)과 '퇴원 0' 선생님에만 쓴다.
  */
 export async function getExitOverlay(subject: string, anchor: string, tenantId: string): Promise<ExitOverlayData> {
   const today = kstToday();
@@ -85,7 +86,13 @@ export async function getExitOverlay(subject: string, anchor: string, tenantId: 
     }
   }
 
-  const rowTeacherIds = exits.map((e) => judge.teachersOf(e.studentId, subject, e.endMonth));
+  // 보이는 담당 = 그만둘 때 다니던 반의 그날 담임(퇴원관리와 같은 `homeroomOf` · 퇴원생 관리 차트 기준 — 원장 2026-11-11).
+  // 퇴원율이 센 선생님(`teachersOf`)은 '수강종료는 세지 않음' 판정(`counted`)에만 쓴다.
+  // 지난 달(퇴원생 관리 차트가 있는 달)은 시트의 담당선생님이 이긴다 — 퇴원관리와 같은 순서(`attributeTeachers`).
+  const rowTeacherIds = exits.map(
+    (e) => judge.sheetTeachersOf(e.row.name, subject, [e.row.date.slice(0, 7)]) ?? judge.homeroomOf(e.studentId, subject, e.row.date),
+  );
+  const countedIds = exits.map((e) => judge.teachersOf(e.studentId, subject, e.endMonth));
   const zeroIds = monthKeys.map((m) => judge.zeroIdsOf(subject, m));
   const subjectClasses = source.classes
     .filter((c) => c.subject === subject)
@@ -96,7 +103,7 @@ export async function getExitOverlay(subject: string, anchor: string, tenantId: 
     ...new Set([...rowTeacherIds.flat(), ...zeroIds.flat(), ...currentIds, ...holdsHere.flatMap((h) => (h.teacherId ? [h.teacherId] : []))]),
   ]);
   const nameOf = (id: string | null) => (id ? (names.get(id) ?? null) : null);
-  const withTeacher: OverlayExitInput[] = exits.map((e, i) => ({ ...e.row, teachers: rowTeacherIds[i]!.flatMap((id) => nameOf(id) ?? []), counted: rowTeacherIds[i]!.length > 0 }));
+  const withTeacher: OverlayExitInput[] = exits.map((e, i) => ({ ...e.row, teachers: rowTeacherIds[i]!.flatMap((id) => nameOf(id) ?? []), counted: countedIds[i]!.length > 0 }));
   const holds: OverlayHoldInput[] = holdsHere.map((h) => ({ ...h, teacher: nameOf(h.teacherId) }));
 
   const months = monthKeys.map((month, i) =>

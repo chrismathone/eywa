@@ -19,6 +19,8 @@ import {
   type PeriodMode,
 } from "../view-prefs";
 import { parseAttendanceSortKey, type AttendanceSortKey } from "../sort-rows";
+import { explainDbError } from "@/lib/supabase/db-error";
+import { writeUiPrefsNs } from "@/lib/ui-prefs/write";
 
 /**
  * 접힌 반 목록만 저장 — 정렬 기준은 **건드리지 않는다**.
@@ -81,19 +83,15 @@ async function mergeAttendancePrefs(
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
+  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "attendance.prefs-actions.mergeAttendancePrefs", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   const raw =
     row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
       ? (row.ui_prefs as Record<string, unknown>)
       : {};
 
-  const { error } = await admin
-    .from("users")
-    .update({ ui_prefs: { ...raw, attendance: update(parseAttendanceViewPrefs(raw.attendance)) } })
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId);
-  if (error) return { ok: false, error: error.message };
+  const { error } = await writeUiPrefsNs(admin, { userId: user.id, tenantId: user.tenantId }, "attendance", { replace: update(parseAttendanceViewPrefs(raw.attendance)) });
+  if (error) return { ok: false, error: explainDbError(error, { scope: "attendance.prefs-actions.mergeAttendancePrefs", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }
 

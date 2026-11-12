@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
+import { isFeatureLicensed } from "@/lib/license/server";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getEnrollmentConsultationById } from "@/features/enrollment/server/queries";
-import { seatsLeft } from "@/features/enrollment/prep-brief";
 import { PrintActions } from "../print/print-actions";
 
 export const metadata = { title: "상담 준비 브리프 — 에이와" };
@@ -20,14 +20,16 @@ export default async function EnrollmentPrepPrintPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAccess("enrollment");
+  const viewer = await requireAccess("enrollment");
   const { id } = await params;
   const embedded = (await headers()).get("x-embed") === "1";
-  const [consult, settings] = await Promise.all([
+  const [consult, settings, aiOn] = await Promise.all([
     getEnrollmentConsultationById(id),
     getTenantSettings(),
+    // AI 라이선스가 꺼진 지점엔 브리프가 없다(꺼지면 흔적 없이 · 적대 리뷰 2026-11-11 — 인쇄 주소로 직접 열 수 있었다).
+    isFeatureLicensed(viewer.tenantId, "ai_analysis"),
   ]);
-  if (!consult?.prepBrief) notFound();
+  if (!aiOn || !consult?.prepBrief) notFound();
 
   const record = consult.prepBrief;
   const b = record.brief;
@@ -105,6 +107,20 @@ export default async function EnrollmentPrepPrintPage({
         </Section>
       ) : null}
 
+      {/* 학원 설정에 적힌 운영 안내 원문(스냅샷 · 화면 본문과 같은 값 · 2026-11-12). 옛 브리프엔 없다. */}
+      {f.policy.operations && f.policy.operations.length > 0 ? (
+        <Section title="학원 운영 안내 (브리프 작성 때의 학원 설정 원문)">
+          <dl className="space-y-1.5 text-sm">
+            {f.policy.operations.map((o) => (
+              <div key={o.label} className="grid grid-cols-[9rem_1fr] gap-3">
+                <dt className="font-bold">{o.label}</dt>
+                <dd className="leading-relaxed whitespace-pre-line">{o.text}</dd>
+              </div>
+            ))}
+          </dl>
+        </Section>
+      ) : null}
+
       <Section title="반 제안 (현재 개설 반)">
         {b.proposal ? <p className="mb-2 text-sm leading-relaxed whitespace-pre-line">{b.proposal}</p> : null}
         {f.classes.length > 0 ? (
@@ -114,23 +130,19 @@ export default async function EnrollmentPrepPrintPage({
                 <th className="py-1 pr-2 font-semibold">반</th>
                 <th className="py-1 pr-2 font-semibold">강사</th>
                 <th className="py-1 pr-2 font-semibold">시간</th>
-                <th className="py-1 font-semibold">정원 / 현원</th>
+                <th className="py-1 font-semibold">현원</th>
               </tr>
             </thead>
             <tbody>
-              {f.classes.map((c) => {
-                const left = seatsLeft(c);
-                return (
-                  <tr key={c.id} className="border-b border-black/10">
-                    <td className="py-1 pr-2">{c.className}</td>
-                    <td className="py-1 pr-2">{c.teacherName ?? "—"}</td>
-                    <td className="py-1 pr-2">{c.scheduleLabel ?? "—"}</td>
-                    <td className="num py-1">
-                      {c.seats == null ? `현원 ${c.enrolled}명` : `${c.seats} / ${c.enrolled} (잔여 ${left})`}
-                    </td>
-                  </tr>
-                );
-              })}
+              {/* 정원·잔여석은 싣지 않는다 — 강의실 수용 인원이라 반 정원이 아니다(검수 2026-11-11 · 옛 스냅숏도 현원만). */}
+              {f.classes.map((c) => (
+                <tr key={c.id} className="border-b border-black/10">
+                  <td className="py-1 pr-2">{c.className}</td>
+                  <td className="py-1 pr-2">{c.teacherName ?? "—"}</td>
+                  <td className="py-1 pr-2">{c.scheduleLabel ?? "—"}</td>
+                  <td className="num py-1">{`${c.enrolled}명`}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         ) : (
@@ -219,11 +231,11 @@ export default async function EnrollmentPrepPrintPage({
       <footer className="mt-8 border-t border-black/20 pt-3 text-[10px] text-black/60">
         <p>
           {f.policy.academyName} · 전체 재원생 {f.peers.total}명
-          {f.student.school ? ` · ${f.student.school} 재원 ${f.peers.sameSchool}명` : ""}
+          {f.student.school && f.peers.sameSchool > 0 ? ` · ${f.student.school} 재원 ${f.peers.sameSchool}명` : ""}
           {f.siblings.length > 0 ? ` · 형제 재원 추정: ${f.siblings.map((s) => s.name).join(", ")}` : ""}
         </p>
         <p className="mt-1">
-          이 문서는 상담 준비용 내부 자료입니다. 기재된 반·잔여석·금액은 생성 시점 기준이며 상담 전 최신 시간표로 확인하세요.
+          이 문서는 상담 준비용 내부 자료입니다. 기재된 반·현원·금액은 생성 시점 기준이며 자리는 상담에서 확인합니다. 상담 전 최신 시간표로 다시 확인하세요.
         </p>
       </footer>
     </div>

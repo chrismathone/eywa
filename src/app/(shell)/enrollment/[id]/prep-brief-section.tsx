@@ -18,12 +18,21 @@
  *  · **'인쇄'는 남긴다** — 이미 만들어 둔 문서를 여는 것이라 새 호출이 없고, 상담 뒤에 원본을
  *    다시 뽑아야 하는 일(학부모 재문의·인수인계)이 실제로 있다
  * 🔴 데이터(`prep_brief` 스냅샷)는 **한 줄도 지우지 않는다** — 표시·이름·자리만 바뀐다.
+ *
+ * ── `pinned`(수정 화면, 원장 2026-11-11 *"상담 수정을 눌러도 이름 아래쪽에 '브리프 펼치기'를 두고,
+ * 브리프를 보면서 수정(입력)할 수 있게"*) ─────────────────────────────────────────
+ * 카드 대신 **펼치기 줄 하나**만 이름 아래에 둔다. 펼치면 머리(제목·헤드라인·생성시각·인쇄/다시 작성)와
+ * 본문이 높이 상한 안에서 따로 스크롤되고, 그 판이 수정 화면 맨 위에 붙어(sticky) 폼을 내려가며 입력해도
+ * 계속 보인다(`PrepBriefCollapse pinned`). 본문·머리·버튼 판정은 상세 카드와 **같은 코드**다.
+ * 브리프가 없는 건은 상세와 똑같은 안내 카드(아래 `!record` 분기)를 그린다 — 페이지 로드가 AI를 부르지 않는다.
  */
-import { AlertCircle, AlertTriangle, ClipboardCheck, HelpCircle, MessageSquare, Printer, ShieldCheck } from "@/components/icons/aywa-icon-compat";
+import { AlertCircle, ClipboardCheck, Printer } from "@/components/icons/aywa-icon-compat";
 import { PrintWindowButton } from "@/components/workspace/print-window";
 import { modelDisplayLabel } from "@/lib/ai/model-label";
-import { classLine, type PrepBriefRecord } from "@/features/enrollment/prep-brief";
+import type { PrepBriefRecord } from "@/features/enrollment/prep-brief";
+import { PrepBriefBody } from "./prep-brief-body";
 import { PrepBriefButton } from "./prep-brief-button";
+import { PinnedPrintLink, SavedOnlyNote } from "./prep-brief-pinned-parts";
 import { PrepBriefCollapse } from "./prep-brief-collapse";
 import { PrepBriefProgress } from "./prep-brief-progress";
 
@@ -36,27 +45,37 @@ export function PrepBriefSection({
   record,
   status,
   errorText,
+  stalled = false,
+  jobAt = null,
   canWrite,
   past = false,
+  pinned = false,
 }: {
   consultationId: string;
   record: PrepBriefRecord | null;
   /** 0153b 생성 상태 — generating이면 진행바, failed면 실패 안내 + 재시도. */
   status: "generating" | "failed" | null;
   errorText: string | null;
+  /** 240초 넘게 '생성 중'(s2_0068 작업 시각 기준) — 멈춘 작업이라 '다시 작성'을 보인다(검수 2026-11-11). */
+  stalled?: boolean;
+  /** 생성 작업 시작 시각 — 진행바가 화면을 연 때가 아니라 이 시각부터 센다. */
+  jobAt?: string | null;
   canWrite: boolean;
   /**
    * 칸반 '상담 전'을 지난 건인가(`stageOfCard(card) !== "before"`).
    * 🔴 판정은 호출부가 **board-stages 단일 소스**로 한다 — 여기서 outcome 문자열을 비교하지 말 것.
    */
   past?: boolean;
+  /** 수정 화면 — 카드 없이 펼치기 줄만, 펼치면 화면 위에 붙는 판(위 머리 주석 `pinned`). */
+  pinned?: boolean;
 }) {
   const generating = status === "generating";
   const title = past ? TITLE_PAST : TITLE_NOW;
   // 🔴 '다시 작성'은 상담 전에만. 안 보이는 것을 다시 만들 수는 없어야 하고, 지난 기록을 새 사실로
   //    덮어쓰면 "그때 이 자료로 상담했다"는 스냅샷 성질이 깨진다(AI 호출은 명시 버튼일 때만 — 감춰도
   //    페이지 로드가 호출을 만들지 않으므로 캐싱 규약은 그대로다).
-  const showRegenerate = canWrite && !generating && !past;
+  // 생성 중이어도 멈춘 작업(240초 넘음)이면 다시 작성할 길을 연다 — 예전엔 진행바가 '다시 작성을 눌러 주세요'라 하는데 단추가 없었다.
+  const showRegenerate = canWrite && !past && (!generating || stalled);
   const failedLine =
     status === "failed" ? (
       <p className="text-destructive inline-flex items-center gap-1 text-xs">
@@ -64,6 +83,10 @@ export function PrepBriefSection({
         {errorText ?? "브리프 생성에 실패했습니다"} — 다시 시도해 주세요
       </p>
     ) : null;
+  const savedOnlyNote = pinned && showRegenerate ? <SavedOnlyNote /> : null;
+  // 수정 화면의 실패 = 다시 작성 단추를 실패 안내 곁(접혀도 보이는 자리)에 하나만 — 머리글에도 세우면 펼쳤을 때 둘이 된다.
+  // 멈춘 작업(240초)도 같은 자리에 — 수정 화면은 머리가 접혀 있어 단추가 숨는다(적대 리뷰 2026-11-11).
+  const regenerateInNotice = pinned && (status === "failed" || stalled);
 
   if (!record) {
     return (
@@ -76,15 +99,16 @@ export function PrepBriefSection({
             </h2>
             {generating ? (
               <div className="pt-1">
-                <PrepBriefProgress consultationId={consultationId} />
+                <PrepBriefProgress consultationId={consultationId} jobAt={jobAt} />
               </div>
             ) : (
               <p className="text-text-dim text-xs break-keep">
-                학부모가 접수 폼에 답한 내용과 학원 데이터(개설 반·잔여석·시간·수강료·형제 재원 여부)를 모아
+                학부모가 접수 폼에 답한 내용과 학원 데이터(개설 반·현원·시간·수강료·형제 재원 여부)를 모아
                 상담 직전에 읽을 준비 문서를 만듭니다.
               </p>
             )}
             {failedLine}
+            {savedOnlyNote}
           </div>
           {showRegenerate ? <PrepBriefButton consultationId={consultationId} exists={false} /> : null}
         </div>
@@ -93,198 +117,104 @@ export function PrepBriefSection({
   }
 
   const b = record.brief;
-  const f = record.facts;
   const modelLabel = record.source === "ai" ? modelDisplayLabel(record.model) : null;
   const generated = new Date(record.generatedAt).toLocaleString("ko-KR", {
     timeZone: "Asia/Seoul",
     dateStyle: "medium",
     timeStyle: "short",
   });
+  const collapseLabel = past ? TITLE_PAST : "브리프";
+  // past = 무채색(격을 내린 자리) / 상담 전 = 브랜드 틴트(지금 읽어야 하는 문서).
+  const tone = past ? "border-line bg-bg-soft/40" : "border-primary/20 bg-primary-soft/20";
 
-  return (
-    // past = 무채색(격을 내린 자리) / 상담 전 = 브랜드 틴트(지금 읽어야 하는 문서).
-    <section
-      className={`space-y-4 rounded-2xl border p-5 ${
-        past ? "border-line bg-bg-soft/40" : "border-primary/20 bg-primary-soft/20"
-      }`}
-    >
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-1">
-          <h2 className="text-foreground inline-flex items-center gap-2 text-sm font-bold">
-            <ClipboardCheck className={`size-4 ${past ? "text-text-dim" : "text-primary"}`} />
-            {title}
-            {record.source === "fallback" ? (
-              // 폴백을 AI 결과처럼 보이게 두면 상담사가 "AI가 검토했다"고 오해한다 — 정직하게 구분.
-              <span className="border-border text-text-dim rounded-md border px-1.5 py-0.5 text-xs font-medium">
-                접수 정보 기반 기본 브리프
-              </span>
-            ) : modelLabel ? (
-              <span className="border-border text-text-dim rounded-md border px-1.5 py-0.5 text-xs font-medium">
-                {modelLabel}
-              </span>
-            ) : null}
-          </h2>
-          <p className="text-foreground text-lg font-semibold break-keep">{b.headline}</p>
-          <p className="text-text-dim text-xs">
-            <span className="num">{generated}</span> 기준 학원 데이터로 작성 ·{" "}
-            {past ? "상담 전에 만든 문서(기록 보관용)" : "상담 전 확인용"}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {/* 🔴 '인쇄'는 past에서도 남긴다 — **이미 만들어 둔 스냅샷을 여는 것**이라 AI 호출이 없고,
-              상담이 끝난 뒤에 원본을 다시 뽑아야 하는 일(학부모 재문의·인수인계)이 실제로 있다.
-              반대로 '다시 작성'은 호출이 돈이고 지난 기록을 덮으므로 past에선 감춘다(showRegenerate). */}
-          {/* ⚠️ 창 제목은 **문서 이름 그대로**다(카드 제목을 따라가지 않는다) — 인쇄물 자체는 언제나
-              '상담 준비 브리프'라는 이름의 동결 스냅샷이라, 창만 '지난…'으로 부르면 열어 본 종이와
-              어긋난다(`(print)/enrollment/[id]/prep`의 metadata.title과 같은 문자열). */}
-          <PrintWindowButton
-            id={`print/enrollment-prep/${consultationId}`}
-            href={`/enrollment/${consultationId}/prep`}
-            title={TITLE_NOW}
-            variant="outline"
-          >
-            <Printer className="size-4" />
-            인쇄
-          </PrintWindowButton>
-          {showRegenerate ? <PrepBriefButton consultationId={consultationId} exists /> : null}
-        </div>
-      </header>
+  const header = (
+    <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0 space-y-1">
+        <h2 className="text-foreground inline-flex items-center gap-2 text-sm font-bold">
+          <ClipboardCheck className={`size-4 ${past ? "text-text-dim" : "text-primary"}`} />
+          {title}
+          {record.source === "fallback" ? (
+            // 폴백을 AI 결과처럼 보이게 두면 상담사가 "AI가 검토했다"고 오해한다 — 정직하게 구분.
+            <span className="border-border text-text-dim rounded-md border px-1.5 py-0.5 text-xs font-medium">
+              접수 정보 기반 기본 브리프
+            </span>
+          ) : modelLabel ? (
+            <span className="border-border text-text-dim rounded-md border px-1.5 py-0.5 text-xs font-medium">
+              {modelLabel}
+            </span>
+          ) : null}
+        </h2>
+        <p className="text-foreground text-lg font-semibold break-keep">{b.headline}</p>
+        <p className="text-text-dim text-xs">
+          <span className="num">{generated}</span> 기준 학원 데이터로 작성 ·{" "}
+          {past ? "상담 전에 만든 문서(기록 보관용)" : "상담 전 확인용"}
+        </p>
+        {savedOnlyNote}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {/* 🔴 '인쇄'는 past에서도 남긴다 — **이미 만들어 둔 스냅샷을 여는 것**이라 AI 호출이 없고,
+            상담이 끝난 뒤에 원본을 다시 뽑아야 하는 일(학부모 재문의·인수인계)이 실제로 있다.
+            반대로 '다시 작성'은 호출이 돈이고 지난 기록을 덮으므로 past에선 감춘다(showRegenerate). */}
+        {/* ⚠️ 창 제목은 **문서 이름 그대로**다(카드 제목을 따라가지 않는다) — 인쇄물 자체는 언제나
+            '상담 준비 브리프'라는 이름의 동결 스냅샷이라, 창만 '지난…'으로 부르면 열어 본 종이와
+            어긋난다(`(print)/enrollment/[id]/prep`의 metadata.title과 같은 문자열). */}
+        {/* 수정 화면은 새 탭(PinnedPrintLink 주석 — 창 안 이동이면 입력 중인 폼이 사라진다). */}
+        {pinned ? (
+          <PinnedPrintLink consultationId={consultationId} />
+        ) : (
+        <PrintWindowButton
+          id={`print/enrollment-prep/${consultationId}`}
+          href={`/enrollment/${consultationId}/prep`}
+          title={TITLE_NOW}
+          variant="outline"
+        >
+          <Printer className="size-4" />
+          인쇄
+        </PrintWindowButton>
+        )}
+        {showRegenerate && !regenerateInNotice ? <PrepBriefButton consultationId={consultationId} exists /> : null}
+      </div>
+    </header>
+  );
 
-      {/* 재생성 중 — 직전 브리프는 그대로 두고 위에 진행바만 얹는다(실패해도 직전 브리프 보존). */}
-      {generating ? (
-        <div className="border-border bg-card rounded-lg border p-3">
-          <PrepBriefProgress consultationId={consultationId} />
-        </div>
-      ) : null}
-      {failedLine}
-
-      <PrepBriefCollapse label={past ? TITLE_PAST : "브리프"} muted={past}>
-        <Block icon={MessageSquare} title="오프닝 멘트">
-          <p className="text-foreground text-sm leading-relaxed break-keep whitespace-pre-line">{b.opening}</p>
-        </Block>
-
-        {b.questions.length > 0 ? (
-          <Block icon={HelpCircle} title="반드시 확인할 질문">
-            <ul className="space-y-1">
-              {b.questions.map((q) => (
-                <li key={q} className="text-foreground text-sm leading-relaxed break-keep">
-                  · {q}
-                </li>
-              ))}
-            </ul>
-          </Block>
-        ) : null}
-
-        {b.playbook.length > 0 ? (
-          <Block icon={ShieldCheck} title="걱정 → 대응 화법">
-            <div className="space-y-2.5">
-              {b.playbook.map((p) => (
-                <div key={p.concern} className="border-border bg-card rounded-lg border p-3">
-                  <p className="text-foreground text-sm font-semibold break-keep">{p.concern}</p>
-                  <p className="text-text-dim mt-0.5 text-xs break-keep">근거: {p.evidence}</p>
-                  <p className="text-foreground mt-1.5 text-sm leading-relaxed break-keep">{p.response}</p>
-                </div>
-              ))}
-            </div>
-          </Block>
-        ) : null}
-
-        {/* 반 제안 — LLM 문장 + **스냅샷 사실 표**를 함께 보여준다. 문장만 두면 상담 자리에서
-            "그 반 자리 있나요?"에 즉답할 근거가 사라진다(사실은 코드가, 말은 LLM이). */}
-        {b.proposal || f.classes.length > 0 ? (
-          <Block icon={ClipboardCheck} title="반 제안">
-            {b.proposal ? (
-              <p className="text-foreground text-sm leading-relaxed break-keep whitespace-pre-line">
-                {b.proposal}
-              </p>
-            ) : null}
-            {f.classes.length > 0 ? (
-              <ul className="mt-2 space-y-1">
-                {f.classes.map((c) => (
-                  <li key={c.id} className="text-text-dim text-xs break-keep">
-                    · {classLine(c)}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-text-dim text-xs">조건에 맞는 개설 반이 없습니다 — 시간표를 먼저 확인하세요.</p>
-            )}
-          </Block>
-        ) : null}
-
-        {b.objections.length > 0 ? (
-          <Block icon={MessageSquare} title="예상 반론과 답변">
-            <div className="space-y-2">
-              {b.objections.map((o) => (
-                <div key={o.objection}>
-                  <p className="text-foreground text-sm font-semibold break-keep">“{o.objection}”</p>
-                  <p className="text-foreground text-sm leading-relaxed break-keep">→ {o.answer}</p>
-                </div>
-              ))}
-            </div>
-          </Block>
-        ) : null}
-
-        <Block icon={MessageSquare} title="클로징">
-          <p className="text-foreground text-sm leading-relaxed break-keep whitespace-pre-line">{b.closing}</p>
-        </Block>
-
-        {b.cautions.length > 0 ? (
-          <div className="border-amber/30 bg-amber-soft/30 rounded-lg border p-3">
-            <p className="text-foreground inline-flex items-center gap-1.5 text-xs font-bold">
-              <AlertTriangle className="text-amber size-3.5" />
-              주의
-            </p>
-            <ul className="mt-1.5 space-y-1">
-              {b.cautions.map((c) => (
-                <li key={c} className="text-foreground text-sm leading-relaxed break-keep">
-                  · {c}
-                </li>
-              ))}
-            </ul>
+  // 재생성 중 — 직전 브리프는 그대로 두고 위에 진행바만 얹는다(실패해도 직전 브리프 보존).
+  // 수정 화면에선 접혀 있어도 보이게 펼치기 줄 바로 아래에 둔다(진행바가 새로고침을 맡는다 — 접어 두면 끝나도 안 바뀐다).
+  const notice =
+    generating || failedLine ? (
+      <>
+        {generating ? (
+          <div className="border-border bg-card rounded-lg border p-3">
+            <PrepBriefProgress consultationId={consultationId} jobAt={jobAt} />
           </div>
         ) : null}
+        {/* 수정 화면은 머리(다시 작성 단추)가 접혀 있을 수 있다 — 실패 안내 곁에 같은 단추를 함께 둔다. */}
+        {regenerateInNotice ? (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {failedLine}
+            {showRegenerate ? <PrepBriefButton consultationId={consultationId} exists /> : null}
+          </div>
+        ) : (
+          failedLine
+        )}
+      </>
+    ) : null;
 
-        {/* 상담 자리에서 자주 묻는 사실 — 스냅샷에서 바로. LLM 문장을 거치지 않는다. */}
-        <dl className="border-border grid grid-cols-2 gap-x-4 gap-y-1.5 border-t pt-3 sm:grid-cols-4">
-          <Fact label="전체 재원생" value={`${f.peers.total}명`} />
-          {f.student.school ? <Fact label={`${f.student.school} 재원`} value={`${f.peers.sameSchool}명`} /> : null}
-          {f.student.grade ? <Fact label={`${f.student.grade} 재원`} value={`${f.peers.sameGrade}명`} /> : null}
-          {f.siblings.length > 0 ? (
-            <Fact label="형제 재원 추정" value={f.siblings.map((s) => s.name).join(", ")} />
-          ) : null}
-          {f.policy.dueDay != null ? <Fact label="납부일" value={`매월 ${f.policy.dueDay}일`} /> : null}
-        </dl>
+  if (pinned) {
+    return (
+      <PrepBriefCollapse label={collapseLabel} muted={past} pinned={{ tone, notice }}>
+        {header}
+        <PrepBriefBody record={record} />
+      </PrepBriefCollapse>
+    );
+  }
+
+  return (
+    <section className={`space-y-4 rounded-2xl border p-5 ${tone}`}>
+      {header}
+      {notice}
+      <PrepBriefCollapse label={collapseLabel} muted={past}>
+        <PrepBriefBody record={record} />
       </PrepBriefCollapse>
     </section>
-  );
-}
-
-function Block({
-  icon: Icon,
-  title,
-  children,
-}: {
-  icon: typeof ClipboardCheck;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <h3 className="text-text-dim inline-flex items-center gap-1.5 text-xs font-bold tracking-wide">
-        <Icon className="size-3.5" />
-        {title}
-      </h3>
-      {children}
-    </div>
-  );
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-text-dim text-xs">{label}</dt>
-      <dd className="text-foreground num text-sm font-semibold break-keep">{value}</dd>
-    </div>
   );
 }

@@ -88,7 +88,7 @@ export async function saveAttendanceSalaryRates(input: { teacherId: string; mont
     loadClassAxisRows(from, to),
     db.from("attendance_salary_rates").select("rates").eq("tenant_id", user.tenantId).eq("teacher_id", input.teacherId).maybeSingle(),
   ]);
-  if (old.error) return { ok: false, error: old.error.message };
+  if (old.error) return { ok: false, error: explainDbError(old.error, { scope: "attendance.salary-rates-actions.saveAttendanceSalaryRates", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   const existing = parseAttendanceRates(old.data?.rates);
   // 근로 요일을 싣지 않은 요청(배포 전에 열어 둔 창 등)은 저장된 근로 요일을 그대로 둔다 — 비율만 고쳤는데 근로 요일이 지워지지 않게.
   // 지우려면 빈 목록을 보낸다(`parseAttendanceRates`가 빈 목록은 저장하지 않는다).
@@ -100,7 +100,7 @@ export async function saveAttendanceSalaryRates(input: { teacherId: string; mont
   const { error } = await db.from("attendance_salary_rates").upsert({
     tenant_id: user.tenantId, teacher_id: input.teacherId, rates, updated_at: new Date().toISOString(), updated_by: user.id,
   }, { onConflict: "tenant_id,teacher_id" });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "attendance.salary-rates-actions.saveAttendanceSalaryRates", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   // 대상 학년이 바뀌었을 때만 남긴다 — 누구의 명세서가 어느 학년까지인지가 달라지는 결정이다(비율 숫자는 남기지 않는다).
   const before = existing?.levels ?? [];
   const after = rates.levels ?? [];

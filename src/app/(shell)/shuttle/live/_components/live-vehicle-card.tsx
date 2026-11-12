@@ -43,8 +43,8 @@ export function LiveVehicleCard({
   return (
     <section className="flex flex-col gap-2">
       {/* 차 머리 — 스크롤 중에도 붙어 있다(오늘 화면 VehicleHeader와 같은 결).
-          ⚠️ 토큰 이름은 `--background`다(`bg-bg`는 정의가 없어 아무 색도 안 칠해진다 — 죽은 색 클래스). */}
-      <div className="bg-background/95 border-line sticky top-0 z-10 flex flex-wrap items-center gap-x-2 gap-y-1 border-b py-1.5 backdrop-blur">
+          ⚠️ 토큰 이름은 `--bg-canvas`(화면 바탕)다(`bg-bg`는 정의가 없어 아무 색도 안 칠해진다 — 죽은 색 클래스). */}
+      <div className="bg-bg-canvas/95 border-line sticky top-0 z-10 flex flex-wrap items-center gap-x-2 gap-y-1 border-b py-1.5 backdrop-blur">
         <h2 className="text-foreground text-base font-bold">{vehicle.vehicleName}</h2>
         {vehicle.driverName && (
           <span className="text-text-dim text-xs">

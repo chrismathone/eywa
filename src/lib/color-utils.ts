@@ -107,10 +107,13 @@ export function hexToRgba(hex: string, alpha: number): string {
 }
 
 /**
- * 브랜드 색에서 셸에 주입할 CSS 변수 묶음을 만든다. 유효하지 않거나 기본색이면 null(주입 생략).
- * --primary와 그 파생(soft/softer)·동일 hex를 쓰는 토큰(ring, chart-2, sidebar-primary 등)을 함께 덮는다.
- * --primary-foreground / --sidebar-primary-foreground(흰색)는 대비 위해 유지(자동 대비 가드는 후속).
+ * 학원 브랜드색이 지금 화면에 반영되는가 — 앱 전체 색 테마(`src/app/instrument-theme.css`, 루트 레이아웃이 늘 싣는다)가
+ * `--primary`를 `!important`로 덮어 `brandColorVars` 주입이 효과가 없다(리뷰 C5). 반영되지 않는 동안 학원 설정의 '브랜드 색상'
+ * 입력칸은 숨긴다(소비처 없는 설정은 노출하지 않는다 — CLAUDE.md). 저장된 값은 지우지 않는다. 테마를 걷거나 브랜드색을 따르게
+ * 바꾸는 날 이 값을 false로.
  */
+export const BRAND_COLOR_OVERRIDDEN_BY_THEME = true;
+
 /**
  * 저장된 브랜드색이 **실제로 화면에 주입되는가**. false면 globals.css 기본 팔레트(v3 네이비)가 그대로
  * 쓰인다 — 값이 비었거나·형식이 틀렸거나·현/과거 기본색(LEGACY_DEFAULT_BRAND_COLORS)일 때.
@@ -122,6 +125,11 @@ export function isBrandColorApplied(brandColor: string | undefined | null): bool
   return brandColorVars(brandColor) !== null;
 }
 
+/**
+ * 브랜드 색에서 셸에 주입할 CSS 변수 묶음을 만든다. 유효하지 않거나 기본색이면 null(주입 생략).
+ * --primary와 그 파생(soft/softer)·동일 hex를 쓰는 토큰(ring, chart-2, sidebar-primary 등)을 함께 덮는다.
+ * --primary-foreground / --sidebar-primary-foreground(흰색)는 대비 위해 유지(자동 대비 가드는 후속).
+ */
 export function brandColorVars(brandColor: string | undefined | null): CSSProperties | null {
   if (!brandColor) return null;
   const hex = brandColor.trim();

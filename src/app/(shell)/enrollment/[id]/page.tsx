@@ -1,16 +1,19 @@
 import Link from "next/link";
+import { isFeatureLicensed } from "@/lib/license/server";
 import { notFound, redirect } from "next/navigation";
 import {
   AlertCircle, ClipboardCheck, ClipboardList, ExternalLink, Loader2, Mic, Pencil, Printer, Sparkles,
   type LucideIcon,
 } from "@/components/icons/aywa-icon-compat";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { PrintWindowButton } from "@/components/workspace/print-window";
 import { requireAccess } from "@/lib/auth/require-access";
-import { canAccessTenant, canWriteTenant, readonlyViewErasedScope } from "@/lib/auth/perm-matrix";
+import { canWriteTenant, readonlyViewErasedScope } from "@/lib/auth/perm-matrix";
+import { readsAllNewcomers } from "@/features/newcomers/server/scope";
 import { BackLink } from "@/components/back-link";
+import { JourneyPanel, JourneyPanelSkeleton } from "@/features/enrollment/journey/panel";
 import { formatCreatedAt } from "@/lib/utils";
 import {
   findMergeSuccessor,
@@ -42,7 +45,7 @@ import { ConsultationManageButtons, ConsultationDeleteButton } from "./_componen
 import { ChecklistView } from "../_components/checklist-view";
 import { PrepBriefSection } from "./prep-brief-section";
 import { AssignedClassesSection } from "./assigned-classes-section";
-import { detailPanelsFor } from "@/features/enrollment/detail-panels";
+import { detailPanelsFor, showBriefCard } from "@/features/enrollment/detail-panels";
 import { getAssignedClasses } from "@/features/enrollment/server/assigned-classes";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { canViewClassDetail } from "@/features/classes/server/class-scope";
@@ -87,7 +90,7 @@ export default async function EnrollmentDetailPage({
 }) {
   const user = await requireAccess("enrollment");
   const { id } = await params;
-  const [consult, allClasses, settings, siblings, canWrite, canRequestTextbook, referrer, canReadCare] = await Promise.all([
+  const [consult, allClasses, settings, siblings, canWrite, canRequestTextbook, referrer, canReadCare, aiOn] = await Promise.all([
     getEnrollmentConsultationById(id),
     getClassesList({ active: "active" }),
     getTenantSettings(),
@@ -100,8 +103,10 @@ export default async function EnrollmentDetailPage({
     canWriteTenant(user.systemRole, "textbook_requests"),
     // 소개한 사람(0362a) — 기본 조회와 따로·실패해도 되게(#95).
     createClient().then((db) => loadConsultationReferrer(db as unknown as SupabaseClient, id)),
-    // 상담 약속·인계(2026-11-05 AX 이식) 입구 — 약속 전체를 보는 신규생 관리 권한.
-    canAccessTenant(user.systemRole, "newcomers"),
+    // 상담 약속·인계(2026-11-05 AX 이식) 입구 — 약속 전체를 보는 신규생 관리 권한('전체' · '읽기' — 담당 범위 계정에게는 세우지 않는다 · 판정 한 곳 = scope.ts).
+    readsAllNewcomers(),
+    // 브리프 카드는 AI 라이선스가 켜진 지점만(꺼지면 흔적 없이 · 검수 2026-11-11).
+    isFeatureLicensed(user.tenantId, "ai_analysis"),
   ]);
   if (!consult) {
     // 🔴 병합으로 사라진 상담이면 **404 대신 남은 쪽으로 보낸다**(원장 2026-09-01 제보) — 병합
@@ -159,19 +164,17 @@ export default async function EnrollmentDetailPage({
 
   /**
    * 브리프 카드 — **한 벌만 만들고 자리만 바꾼다**(위/아래에 각각 쓰면 props가 갈린다).
-   * 아직 안 만든 건은 '상담 전'에만 권유하고, 만들어 둔 건·생성 중인 건은 어느 칸에서든 남는다.
-   *
-   * ⚠️ 지난 건의 **실패 상태만 남은 카드는 안 그린다**(`failed` + 브리프 없음 + pastBrief) — 다시
-   *    만들 수 없는 문서의 실패 안내와 "만들어 드립니다" 소개문만 남아, 할 수 없는 일을 권하는 꼴이 된다.
-   *    생성 중(`generating`)은 곧 결과가 생기므로 그대로 그린다.
+   * 그릴지는 수정 화면과 같은 판정(`showBriefCard` — 지난 건의 실패만 남은 카드는 안 그린다).
    */
   const briefNode =
-    consult.prepBrief || consult.prepBriefStatus === "generating" || !pastBrief ? (
+    showBriefCard({ hasBrief: !!consult.prepBrief, status: consult.prepBriefStatus, past: pastBrief, aiOn }) ? (
       <PrepBriefSection
         consultationId={id}
         record={consult.prepBrief}
         status={consult.prepBriefStatus}
         errorText={consult.prepBriefError}
+        stalled={consult.prepBriefStalled}
+        jobAt={consult.prepBriefJobAt}
         canWrite={canWrite}
         past={pastBrief}
       />
@@ -329,6 +332,9 @@ export default async function EnrollmentDetailPage({
           </ul>
         </section>
       ) : null}
+
+      {/* 전화·방문·등록 확인 기록(s2_0063) — 이 상담의 예약·실제 방문·등록 근거 · 첫 페인트를 막지 않게 따로 스트리밍(B7). */}
+      <Suspense fallback={<JourneyPanelSkeleton />}><JourneyPanel id={consult.id} /></Suspense>
 
       {consult.processingStatus === "failed" ? (
         <section className="border-chart-4/40 bg-chart-4/5 rounded-2xl border p-4">

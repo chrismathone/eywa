@@ -35,14 +35,7 @@ export function DialogShell({
   );
 }
 
-export function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <span className="text-foreground block text-sm font-medium">{label}</span>
-      {children}
-    </div>
-  );
-}
+export { Field } from "@/components/form-field";
 
 export function ErrorNote({ msg }: { msg: string | null }) {
   if (!msg) return null;

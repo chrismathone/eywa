@@ -90,7 +90,7 @@ export function CourseBoard({
   const rest = totalValues.map((t, i) => (t === null ? null : Math.max(0, t - lines.slice(1).reduce((n, l) => n + (l.values[i] ?? 0), 0))));
   const drawnLines = [
     ...(stacked ? lines : lines.filter((l) => l.key === "total" || !l.values.every((v, i) => v === null || v === totalValues[i]))),
-    ...(stacked && rest.some((v) => v !== null && v > 0) ? [{ key: "subject:_rest", label: "그 밖의 과목", color: "#9aa3ad", values: rest, strong: false }] : []),
+    ...(stacked && rest.some((v) => v !== null && v > 0) ? [{ key: "subject:_rest", label: "그 밖의 과목", color: "color-mix(in srgb, var(--neutral-fill) 70%, var(--card))", values: rest, strong: false }] : []),
   ];
   // '그 밖의 과목'은 쌓을 때만 생기는 칸이라 '켜 둔 선이 남았나'·'마지막 하나는 못 끈다'를 볼 때 빼고 센다 — 꺾은선에서 과목을 다 끄고
   // 막대로 오면 회색 칸만 남던 것(재리뷰 2026-10-21 · 재원생 추이처럼 전부 켬으로 돌아간다).

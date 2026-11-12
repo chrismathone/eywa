@@ -10,6 +10,8 @@ import {
   serializeViewPrefs,
   type TimetableViewPrefs,
 } from "../lib/view-prefs";
+import { explainDbError } from "@/lib/supabase/db-error";
+import { writeUiPrefsNs } from "@/lib/ui-prefs/write";
 
 /**
  * 시간표 '뷰 설정'을 **본인 계정**에 저장한다(0146a users.ui_prefs).
@@ -40,7 +42,7 @@ export async function saveTimetableViewPrefs(
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
+  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "timetable.view-prefs-actions.saveTimetableViewPrefs", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   const raw =
     row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
@@ -59,16 +61,8 @@ export async function saveTimetableViewPrefs(
   }
 
   const timetable = serializeViewPrefs(next);
-  const merged = { ...raw };
-  // 설정이 전부 기본값이면 키 자체를 지운다(빈 객체가 쌓이지 않게).
-  if (Object.keys(timetable).length === 0) delete merged.timetable;
-  else merged.timetable = timetable;
-
-  const { error } = await admin
-    .from("users")
-    .update({ ui_prefs: merged })
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId);
-  if (error) return { ok: false, error: error.message };
+  // 설정이 전부 기본값이면 키 자체를 지운다(빈 객체가 쌓이지 않게 — 빈 객체 replace = 네임스페이스 삭제).
+  const { error } = await writeUiPrefsNs(admin, { userId: user.id, tenantId: user.tenantId }, "timetable", { replace: timetable });
+  if (error) return { ok: false, error: explainDbError(error, { scope: "timetable.view-prefs-actions.saveTimetableViewPrefs", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }

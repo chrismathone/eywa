@@ -18,7 +18,8 @@ describe("원스크린 발송 게이트 — 카드·표가 같은 조립을 부�
     expect(read("row-send-gate.ts")).toContain("recallPending: isRecallInFlight(liveStatus ?? null)");
   });
   it("자동저장은 줄(session-save-queue)을 거친다 — 맨 saveOnescreenSession(...).then 금지(실패가 조용히 사라진다)", () => {
-    const src = read("components/onescreen-client.tsx");
+    // 자동저장 줄은 use-session-autosave.ts로 옮겼다(P3-O) — 화면과 합쳐 읽는다.
+    const src = read("components/onescreen-client.tsx") + "\n" + read("components/use-session-autosave.ts");
     expect(src).toContain("createSessionSaveQueue({");
     expect(src).not.toMatch(/void saveOnescreenSession\(/);
   });

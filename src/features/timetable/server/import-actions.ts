@@ -32,6 +32,7 @@ import type {
   ImportDiff,
   StudentRef,
 } from "@/features/timetable/import/types";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 type Ctx = {
   current: EnrollmentSnapshotRow[];
@@ -441,7 +442,7 @@ async function applyDiff(
         attendanceDays: daysByEnrollment.get(m.enrollmentId) ?? [],
       })),
     });
-    if (error) return { error: error.message, snapshotId };
+    if (error) return { error: explainDbError(error, { scope: "timetable.import-actions.applyDiff", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message, snapshotId };
     const results = (data ?? []) as { enrollmentId: string; newEnrollmentId?: string; ok: boolean }[];
     failed += results.filter((r) => !r.ok).length;
     // 🔑 RPC(0235a)가 준 **새 수강 id**를 diff에 적어 둔다 — 아래에서 스냅샷 payload를 갱신하면

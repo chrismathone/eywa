@@ -1340,6 +1340,17 @@ export const MENU_ICON = {
   teacher_onescreen: "screen",
   my_learning: "graduationCap",
   kiosk_settings: "tablet",
+  // 학원 비서(2026-11-09 권한 키) — 메뉴 타일이 아니라 사이드바 아래 줄 단추(금색 원 + 별 표식 `AssistantBadge`)로 그린다. 여기 값은 권한 키의 자리 그림(말풍선).
+  assistant: "message",
+  // 시안 이식 메뉴(2026-11-09 권한 키) — 메뉴 판의 그 면이 쓰던 그림 그대로(menu-hub가 `MENU_ICON.<키>`로 받는다).
+  management: "merge",
+  okr: "target",
+  marketing: "barChart",
+  work_records: "filePlus",
+  // 셔틀 관리자 화면(2026-11-10 권한 키) — 메뉴 타일이 아니라 셔틀 아래 권한 줄 · 그 화면들은 제 그림(layers·search·mapPin)을 쓴다. 자리 그림(방패+체크).
+  shuttle_admin: "shieldCheck",
+  // 퇴원관리 '강사별 퇴원율'(2026-11-11 권한 키) — 메뉴 타일이 아니라 퇴원관리 아래 권한 줄. 자리 그림(내려가는 선 — 퇴원율 · 스티커 없음 = 선화).
+  withdrawals_churn: "trendingDown",
   // 연결 앱 권한(메뉴 화면이 아니다) — 사이드바 '연결 앱'의 오늘 수학 줄과 같은 그림(connected-app-rail.tsx).
   app_todays_math: "calculator",
 } as const satisfies Record<MenuKey, AywaIconName>;

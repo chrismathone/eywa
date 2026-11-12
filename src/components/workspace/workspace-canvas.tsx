@@ -245,7 +245,7 @@ export function WorkspaceCanvas({ owner, homeHref = "/dashboard" }: { owner: str
   if (keepalive) {
     return (
       <div className="pointer-events-none fixed inset-0 z-40 print:hidden" data-usage-chrome="">
-        {!isDesktopSurface ? <div className="pointer-events-auto bg-background absolute inset-0 z-0" aria-hidden="true" /> : null}
+        {!isDesktopSurface ? <div className="pointer-events-auto bg-bg-canvas absolute inset-0 z-0" aria-hidden="true" /> : null}
         <KeepaliveStage />
       </div>
     );
@@ -271,13 +271,13 @@ export function WorkspaceCanvas({ owner, homeHref = "/dashboard" }: { owner: str
     >
       {/* 직접 연 업무 페이지는 창에 표시한다. 마지막 창을 닫으면 대시보드로 이동한다. */}
       {!isDesktopSurface ? (
-        <div className="pointer-events-auto bg-background absolute inset-0 z-0" aria-hidden="true" />
+        <div className="pointer-events-auto bg-bg-canvas absolute inset-0 z-0" aria-hidden="true" />
       ) : null}
       {/* 앨범(스포트라이트) 딤 — 뒤 바탕을 흐려 앨범에 집중되게. 창들(z>=1) 뒤(z-0).
           빈 딤 영역 클릭 = 앨범 나가기(클릭 아웃). 캔버스는 pointer-events-none이라 이 막만 클릭 흡수. */}
       {spotlight ? (
         <div
-          className="animate-in fade-in-0 pointer-events-auto absolute inset-0 z-0 bg-background/70 backdrop-blur-[2px] duration-200"
+          className="animate-in fade-in-0 pointer-events-auto absolute inset-0 z-0 bg-bg-canvas/70 backdrop-blur-[2px] duration-200"
           onClick={() => exitSpotlight()}
           aria-hidden="true"
         />

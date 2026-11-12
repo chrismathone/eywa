@@ -25,6 +25,7 @@ import { PLAN_PATCH_FIELDS, SKILL_AREA_SLUG_RE, type PlanPatchField } from "./pl
 import { MONTH_RE } from "./month";
 import { MP_ALL_COLUMNS, MP_COLUMN_LABEL } from "./month-plan";
 import { ROSTER_FIXED_LABEL, ROSTER_TEXT_COLS } from "./roster-form";
+import { isRecord } from "@/lib/guards";
 
 /** 한 번에 기록할 칸 수 상한 — 한 번 떠날 때 모이는 칸은 보통 1~2개다(넉넉히, 무한은 아니게). */
 export const SHEET_EDIT_BATCH_MAX = 20;
@@ -135,9 +136,6 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /** 계획 줄 id — 모양만 좁힌다(소유·범위는 서버가 행을 읽어 다시 본다). */
 const LINE_ID_RE = /^[0-9A-Za-z_-]{1,64}$/;
 
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
 
 function oneOf<T extends string>(list: readonly T[], v: unknown): v is T {
   return typeof v === "string" && (list as readonly string[]).includes(v);

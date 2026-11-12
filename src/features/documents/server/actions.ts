@@ -14,7 +14,7 @@ import {
   verifyUploadedObject,
 } from "@/lib/storage/media-storage";
 import { isTenantDocumentPath } from "@/lib/storage/legacy-audio-path";
-import { humanizeDbError, logDbError } from "@/lib/supabase/db-error";
+import { humanizeDbError, logDbError, explainDbError } from "@/lib/supabase/db-error";
 import type { UploadTicket } from "@/lib/storage/types";
 import { RESUME_FORM_TYPE } from "@/features/staff/resume/resume";
 import { canViewResume, RESUME_LOCKED_MSG } from "@/features/staff/resume/server/resume-access";
@@ -305,7 +305,7 @@ export async function updateDocument(
   // ⚠️ select 없이 로그를 남기면 0행 갱신(없는 id·이력서 id)도 "고쳤다"고 적힌다 — 감사로그가
   //    실제로 없었던 변경을 주장하면 역검수가 오히려 틀린 곳을 가리킨다. 바뀐 행이 있을 때만 남긴다.
   const { data: updated, error } = await updateQuery.select("id");
-  if (error) return { error: `수정 실패: ${error.message}` };
+  if (error) return { error: explainDbError(error, { scope: "documents.actions.updateDocument", fallback: "수정 실패 — 잠시 후 다시 시도해 주세요" }).message };
   if (updated?.length) {
     await logAction({
       action: "document_update",
@@ -458,7 +458,7 @@ export async function toggleDocumentPin(
     .is("staff_user_id", null);
   if (hideRestricted) pinQuery = pinQuery.eq("restricted", false);
   const { data: updated, error } = await pinQuery.select("id, title"); // 제목은 로그 라벨용 — 같은 왕복에서 받아 온다(추가 조회 0).
-  if (error) return { error: `고정 변경 실패: ${error.message}` };
+  if (error) return { error: explainDbError(error, { scope: "documents.actions.toggleDocumentPin", fallback: "고정 변경 실패 — 잠시 후 다시 시도해 주세요" }).message };
   if (updated?.length) {
     await logAction({
       action: "document_pin",

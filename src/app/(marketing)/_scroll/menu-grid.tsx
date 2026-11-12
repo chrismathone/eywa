@@ -1,36 +1,64 @@
 import { sv } from "./style";
 
-/** 매일 쓰는 메뉴 12칸 + 교실 사진 띠. `.rv`는 화면에 들어올 때 떠오른다. */
+/**
+ * 에이와 메뉴 — 같은 모양 카드 20장(그림 아이콘 · '새 기능' 배지) 대신 업무별 네 묶음 목록(2026-11 AI원장키트 개편,
+ * Codex 검수와 합의: 반복 카드·배지 남발이 템플릿처럼 보인다). 넷째 묶음 = 2026-09-28(랜딩 마지막 갱신) 뒤로 들어온 기능.
+ * 꺼 둔 기능·실험실 메뉴는 넣지 않는다(없는 기능 소개 금지). `.rv`는 화면에 들어올 때 떠오른다.
+ */
+const GROUPS: { title: string; fresh?: boolean; items: [string, string][] }[] = [
+  { title: "수업과 출결", items: [
+    ["시간표", "반과 학생을 드래그로 옮기고 저장을 눌러 반영합니다. 교시표는 지점 설정을 따릅니다."],
+    ["출석부", "한 달을 표 하나에 놓고 스프레드시트처럼 입력합니다. 강사에게는 자기 수업 날만 보입니다."],
+    ["수업목록", "반 이름, 담임, 요일, 과목을 한 표에서 봅니다. 열 제목을 누르면 그 자리에서 필터가 열립니다."],
+    ["강사 시트", "반마다 계획과 진도, 과제를 적습니다. 영어는 월간 계획과 실제 진도를 대조합니다."],
+    ["수업보고서", "수업 내용과 과제를 기록해 학부모에게 보냅니다. 영어는 템플릿을 골라 씁니다."],
+  ] },
+  { title: "원생과 상담", items: [
+    ["원생목록", "재원·휴원·퇴원 상태와 수강 과목을 관리합니다. 엑셀로 내보내고 가져올 수 있습니다."],
+    ["콜&상담", "신규 상담을 네 단계 칸반으로 봅니다. 녹음하면 전사와 AI 요약이 붙습니다."],
+    ["원생상담", "재원생 상담과 후속 조치를 적어 둡니다. 기한이 되면 알림이 옵니다."],
+    ["퇴원관리", "한 과목만 그만두는 경우도 처리합니다. 사유와 시점이 기록으로 남습니다."],
+    ["퇴원보고서", "담임 선생님이 쓰고 관리자가 승인합니다. 환불을 요청했다면 환불까지 마친 뒤 퇴원이 처리됩니다."],
+  ] },
+  { title: "운영과 관리", items: [
+    ["대시보드", "재원·출결·수납 현황을 보고, 같은 숫자를 계기판 화면으로 바꿔 봅니다."],
+    ["수납관리", "청구와 수납, 회차 확정을 거쳐 강사 정산까지 이어집니다."],
+    ["직원관리", "이력서와 근무 설정, 계정을 함께 관리합니다. 권한은 역할별로, 필요하면 사람별로 정합니다."],
+    ["회의록", "회의를 녹음하면 안건과 결정 사항, 할 일로 정리됩니다."],
+    ["업무 요청", "운영실에서 일을 맡기고, 담당자의 처리 보고와 검토를 확인합니다."],
+  ] },
+  { title: "새로 더한 기능", fresh: true, items: [
+    ["학원 비서", "원장이 궁금한 것을 물으면 학원 기록을 찾아 표·차트 보고서와 의견으로 답합니다."],
+    ["연결 탐색", "원생·수업·강사·강의실 하나를 가운데 두고 이어진 기록을 둘러봅니다."],
+    ["내 할 일", "발송 실패, 상담 후속 조치, 결재 차례가 알림 벨에 모이고 처리하면 닫힙니다."],
+    ["통계", "원생·출결·수납·상담·보고서 추이를 달마다 이어 봅니다."],
+    ["숙제 영상", "학생이 올린 숙제 영상을 숙제마다 모아 회차별로 확인합니다."],
+  ] },
+];
+
 export function MenuGrid() {
   return (
     <>
       <section className="sec alt" id="menus" aria-labelledby="menus-title">
         <div className="wrap">
           <div className="head">
-            <p className="kicker rv">학원에서 매일 쓰는 메뉴</p>
-            <h2 className="h2 rv" id="menus-title" style={sv({"--d": ".06s"})}>필요한 것만<br />골라 담았습니다.</h2>
-            <p className="lead rv" style={sv({"--d": ".12s"})}>마케팅·자료실·학부모 포털은 넣지 않았습니다. 대신 출석부와 시간표처럼 늘 쓰는 화면을 계속 다듬고 있습니다.</p>
+            <p className="kicker rv">에이와 메뉴</p>
+            <h2 className="h2 rv" id="menus-title" style={sv({"--d": ".06s"})}>매일 여는 메뉴부터<br />새로 더한 기능까지.</h2>
           </div>
-          <div className="grid">
-            <div className="tile rv" style={sv({"--d": "0s"})}><i className="stk i-layoutGrid"></i><b>대시보드</b><p>지표 7개와 재원·출결·수납 현황, 진행 중 수업, 상담 진행 단계를 한 화면에서 봅니다.</p></div>
-            <div className="tile rv" style={sv({"--d": ".05s"})}><i className="stk i-weekGrid"></i><b>시간표</b><p>반과 학생을 드래그로 옮긴 뒤 저장을 눌러 반영합니다. 교시표는 지점 설정을 따릅니다.</p></div>
-            <div className="tile rv" style={sv({"--d": ".1s"})}><i className="stk i-clipboardCheck"></i><b>출석부</b><p>한 달을 표 하나에 놓고 스프레드시트처럼 입력합니다. 강사에게는 자기 수업이 있는 날만 보입니다.</p></div>
-            <div className="tile rv" style={sv({"--d": ".15s"})}><i className="stk i-book"></i><b>수업목록</b><p>반 이름, 담임, 요일, 과목이 한 표에 나옵니다. 열 제목을 누르면 그 자리에서 필터가 열립니다.</p></div>
-            <div className="tile rv" style={sv({"--d": "0s"})}><i className="stk i-users"></i><b>원생목록</b><p>재원·휴원·퇴원 상태와 수강 과목을 관리하고, 엑셀로 내보내거나 가져올 수 있습니다.</p></div>
-            <div className="tile rv" style={sv({"--d": ".05s"})}><i className="stk i-messages"></i><b>콜&amp;상담</b><p>상담 전부터 등록 완료까지 4단계 칸반으로 봅니다. 녹음하면 전사와 AI 요약이 따라옵니다.</p></div>
-            <div className="tile rv" style={sv({"--d": ".1s"})}><i className="stk i-userCheck"></i><b>원생상담</b><p>재원생 상담 내용과 후속 조치를 적어 둡니다. 기한이 되면 알림으로 알려 줍니다.</p></div>
-            <div className="tile rv" style={sv({"--d": ".15s"})}><i className="stk i-userMinus"></i><b>퇴원관리</b><p>한 과목만 그만두는 경우도 처리할 수 있습니다. 퇴원 사유와 시점이 기록으로 남습니다.</p></div>
-            <div className="tile rv" style={sv({"--d": "0s"})}><i className="stk i-userSettings"></i><b>직원관리</b><p>이력서, 근무 설정, 계정을 함께 챙깁니다. 권한은 역할별로 정하고 필요하면 개인별로 조정합니다.</p></div>
-            <div className="tile rv" style={sv({"--d": ".05s"})}><i className="stk i-wallet"></i><b>수납관리</b><p>청구·수납·회차 확정을 거쳐 강사 정산까지 이어집니다.</p></div>
-            <div className="tile rv" style={sv({"--d": ".1s"})}><i className="stk i-note"></i><b>회의록</b><p>회의를 녹음하면 전사한 뒤 안건, 결정 사항, 할 일로 정리됩니다. 발언자를 직원과 연결합니다.</p></div>
-            <div className="tile rv" style={sv({"--d": ".15s"})}><i className="stk i-sheetColumns"></i><b>강사 시트</b><p>영어·수학 반마다 계획과 진도, 과제를 기록합니다. 영어는 월간 계획을 가져와 실제 나간 진도와 대조합니다.</p></div>
+          <div className="menu-cols">
+            {GROUPS.map((g, gi) => (
+              <div className={`menu-col rv${g.fresh ? " fresh" : ""}`} key={g.title} style={sv({"--d": `${gi * 0.06}s`})}>
+                <h3><span className="num">0{gi + 1}</span>{g.title}</h3>
+                <ul>{g.items.map(([name, desc]) => <li key={name}><b>{name}</b><p>{desc}</p></li>)}</ul>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
       <section className="band rv" aria-label="수업 전 교실">
         <div className="ph ph-class" aria-hidden="true"></div>
-        <div className="wrap"><p className="kicker" style={sv({"color": "#9ec0ff"})}>수업 시작 10분 전</p><h2 className="h2">먼저 출석부를 엽니다.</h2><p className="lead">오늘 수업이 있는 반만 보이고, 날짜 칸에서 바로 출석을 체크합니다.</p></div>
+        <div className="wrap"><p className="kicker">수업 시작 10분 전</p><h2 className="h2">먼저 <span className="em-rule">출석부</span>를 엽니다.</h2><p className="lead">오늘 수업이 있는 반만 보이고, 날짜 칸에서 바로 출석을 체크합니다.</p></div>
       </section>
     </>
   );

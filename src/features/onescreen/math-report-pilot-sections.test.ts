@@ -238,7 +238,15 @@ describe("배선", () => {
     expect(src).toMatch(/extraDirective: \[pilotAiDirective\(input\.studentName, \{ habits, memo: lessonMemo \}\), prevPhrasingHint\(prevNotes\)\]/);
   });
   it("세션이 '시험 없음' 사유를 싣고 로스터가 되읽는다 · '없음'이면 점수를 비운다", () => {
-    expect(read("./components/onescreen-client.tsx")).toMatch(/dailyTestSkip: su\.dailyTestSkip/);
+    // 세션 입력 조립은 session-input.ts, 자동작성은 use-auto-write.ts(한 행 코어는 batch D에서 use-report-draft-generation.ts)로 옮겼다(P3-O) — 화면과 합쳐 읽는다.
+    expect(
+      ["./components/onescreen-client.tsx", "./session-input.ts", "./components/use-auto-write.ts", "./components/use-report-draft-generation.ts"]
+        .map(read)
+        .join("\n"),
+    ).toMatch(/dailyTestSkip: su\.dailyTestSkip/);
+    // 합쳐 읽으면 세션 입력 한 곳만 남아도 통과한다 — 두 경로를 따로 본다(적대 리뷰 2026-11-11).
+    expect(read("./session-input.ts")).toMatch(/dailyTestSkip: su\.dailyTestSkip/);
+    expect(read("./components/use-report-draft-generation.ts")).toMatch(/\{ dailyTestSkip: su\.dailyTestSkip, dailyTest: "" \}/);
     expect(read("./components/onescreen-client.tsx")).toMatch(/dailyTestSkip: skip, \.\.\.\(skip \? \{ dailyScore: null \} : \{\}\)/);
     expect(read("./server/roster.ts")).toMatch(/su\.dailyTestSkip = readTestSkip\(entry\.dailyTestSkip\)/);
   });

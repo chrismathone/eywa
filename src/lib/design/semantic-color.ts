@@ -49,7 +49,7 @@ import type { PillColor } from "@/components/atoms/pill";
  *
  * 🔑 이 배정은 **새로 지어낸 게 아니라 이미 잘 쓰던 화면에서 뽑아 굳힌 것**이다 — 출석부 팔레트
  * (`--att-*`: 출석 민트 · 지각 주황 · 결석 빨강 · 조퇴 파랑 · 보강 보라)와 ECS 상태 톤
- * ([`status-tone.ts`](src/features/class-sheets/lib/status-tone.ts): done=green · warn=amber ·
+ * (옛 `class-sheets/lib/status-tone.ts` — 2026-11-10 미사용으로 삭제: done=green · warn=amber ·
  * absent=danger)이 이미 이 색조합을 쓰고 있었다. 나머지 화면을 여기에 맞추는 것이 이 캐논의 일이다.
  * ⚠️ 출석부의 `--att-*`는 31칸 격자 전용의 **쨍한 원색**이라 값이 다르다(같은 뜻·다른 채도) —
  *    다른 화면에 `--att-*`를 쓰지 말고, 여기 tone(-soft 틴트)을 쓸 것.

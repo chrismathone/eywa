@@ -1,8 +1,4 @@
-/**
- * '대시보드 전환' 화면의 글자 규칙 — 그림 엔진과 표가 같은 표기를 쓴다.
- * 금액은 억·만(원장 2026-11-02 *"113 백만원은 단위가 이상함"* — 억은 소수 둘째 자리, 만은 정수) · 추이 가로축은 `yy.mm`(운영실 표시 규칙 ③).
- */
-import { ENGLISH_TRACK_LABEL } from "@/features/classes/english-track";
+
 import { programLabel, programOf, subjectGroupOf, type Program, type ProgramSubject } from "@/features/students/enrollment/program";
 
 export const num = (n: number) => n.toLocaleString("ko-KR");
@@ -46,7 +42,5 @@ const REST = [
 export function subjectStyle(key: string, index = 0) {
   return TONES[key] ?? REST[index % REST.length]!;
 }
-
-export const ENGLISH_NAMES = ENGLISH_TRACK_LABEL;
 export const MIX_TONES = ["m-char", "m-l2", "m-yellow"];
 export const MIX_SERIES = ["영어만", "동시수강", "수학만"];

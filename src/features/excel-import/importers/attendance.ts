@@ -13,6 +13,7 @@ import { IMPORT_META } from "../kinds";
 import { duplicateKeyIssues, type ColumnSpec, type ImportPreviewRow, type SheetSpec } from "../spec";
 import { ClassIndex, StudentIndex } from "../server/lookups";
 import type { ImporterDef } from "../server/types";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * 출결 가져오기 — 체크리스트 12번 "출결·보강"(과거 출결을 옮길 때). 쓰기 모양은 **월별 출석부 반별 입력**(`saveAttendance`)과 같다:
@@ -318,7 +319,7 @@ const def: ImporterDef<Plan> = {
         .eq("class_id", u.classId)
         .eq("student_id", u.studentId)
         .eq("session_date", u.date);
-      if (error) return { error: `출결 고치기 중 멈췄습니다 — ${error.message} (새 칸 ${inserted}건 · 고친 칸 ${updated}건은 반영됐습니다)` };
+      if (error) return { error: `${explainDbError(error, { scope: "excel-import.attendance", fallback: "출결 고치기 중 멈췄습니다 — 잠시 후 다시 시도해 주세요" }).message} (새 칸 ${inserted}건 · 고친 칸 ${updated}건은 반영됐습니다)` };
       updated += 1;
     }
 

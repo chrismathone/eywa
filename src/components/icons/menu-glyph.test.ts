@@ -41,7 +41,7 @@ describe("탭 아이콘 그림 파일", () => {
  *   겹쳤고, 남은 그림(alert·trash)은 뜻이 다르다. 스티커가 생기면 이 줄을 지운다.
  */
 // edit = 원생목록의 영어이름 편집 권한. 독립 메뉴 없이 이름 칸 안에서만 쓰는 조작이다.
-const PENDING_GLYPH = new Set<string>(["bookText", "calendarClock", "checkbox", "edit", "eye", "pieChart", "search", "layers", "target", "merge", "filePlus", "send", "barChart", "percentBadge"]); // percentBadge = 업무 완성도(2026-11-10 · 완료율 배지 — gauge는 평가 면이 쓴다) // target·merge·filePlus·send·barChart = 시안 이식 메뉴(조직·OKR · 지식그래프 · 업무 작성센터 · 홍보·마케팅, 2026-11-09) // search = 셔틀 가까운 노선 찾기(2026-10-26) · checkbox = 비포클래스체크리스트(초안, 2026-10-28) · layers = 셔틀 탑승 학생 시간표(2026-10-29) — 스티커 생성 전 선화 폴백
+const PENDING_GLYPH = new Set<string>(["bookText", "calendarClock", "checkbox", "edit", "eye", "pieChart", "search", "layers", "target", "merge", "filePlus", "send", "barChart", "message", "shieldCheck", "trendingDown", "percentBadge"]); // target·merge·filePlus·send·barChart = 시안 이식 메뉴(조직·OKR · 지식그래프 · 업무 작성센터 · 홍보·마케팅, 2026-11-09) · message = 학원 비서 권한 키(2026-11-09 — 메뉴 타일이 아니라 단추로 그린다) · shieldCheck = 셔틀 관리자 화면 권한 키(2026-11-10 — 메뉴 타일 아님) · trendingDown = 퇴원관리 강사별 퇴원율 권한 키(2026-11-11 — 메뉴 타일 아님) // search = 셔틀 가까운 노선 찾기(2026-10-26) · checkbox = 비포클래스체크리스트(초안, 2026-10-28) · layers = 셔틀 탑승 학생 시간표(2026-10-29) — 스티커 생성 전 선화 폴백 // percentBadge = 업무 완성도(2026-11-10 · 완료율 배지 — gauge는 평가 면이 쓴다)
 
   it("메뉴가 쓰는 아이콘 이름은 전부 그림이 있다 — MENU_ICON + 허브 면 override", () => {
     const icons = readFileSync(join(SRC, "components", "icons", "aywa-icons.tsx"), "utf8");

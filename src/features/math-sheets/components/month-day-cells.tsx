@@ -19,7 +19,7 @@ import type { MathSheetMonthData, MathStudentRow } from "../server/month-queries
 const CELL_TONE: Record<MathCellState, string> = {
   written: "",
   unwritten:
-    "bg-[repeating-linear-gradient(135deg,transparent,transparent_5px,rgba(188,56,56,.07)_5px,rgba(188,56,56,.07)_10px)]",
+    "bg-[repeating-linear-gradient(135deg,transparent,transparent_5px,color-mix(in_srgb,var(--danger)_7%,transparent)_5px,color-mix(in_srgb,var(--danger)_7%,transparent)_10px)]",
   absent: "bg-bg-soft/60",
   // 🔴 **지난 칸의 무기록**만 회색으로 채운다 — 아직 안 지난 칸은 **빈 칸**이다(원장 2026-09-01:
   //    9월을 열면 전 칸이 회색 "출결도 기록도 없음"이라 아무도 잘못 안 했는데 다 틀린 것처럼 보였다).

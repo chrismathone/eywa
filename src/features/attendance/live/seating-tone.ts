@@ -56,7 +56,7 @@ export function seatingCardClass(tone: SeatingTone): string {
  */
 export function seatingHeaderClass(tone: SeatingTone): string {
   if (tone === "now") return "bg-primary text-white";
-  if (tone === "upcoming") return "bg-att-weekend text-text";
+  if (tone === "upcoming") return "bg-att-weekend text-foreground";
   if (tone === "past_pending") return "bg-amber-soft text-amber";
   return "bg-card text-text-dim border-line border-b";
 }

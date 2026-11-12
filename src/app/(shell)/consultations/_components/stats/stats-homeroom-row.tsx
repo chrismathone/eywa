@@ -5,6 +5,7 @@ import { Pill } from "@/components/atoms/pill";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import type { HomeroomTeacher } from "@/features/consultations/homeroom-model";
 import { pct } from "@/features/consultations/stats-model";
+import { EyIcon } from "@/components/icons/aywa-icons";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 const rateText = (v: number | null) => (v === null ? "—" : `${Math.round(v)}%`);
@@ -26,7 +27,7 @@ export function SortHead({ label, active, dir, onClick }: { label: ReactNode; ac
     <th className="px-2 py-1.5 text-center font-medium whitespace-nowrap" aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}>
       <button type="button" onClick={onClick} className={`hover:text-foreground inline-flex items-center gap-0.5 ${active ? "text-foreground font-bold" : ""}`}>
         {label}
-        <span aria-hidden="true" className={active ? "" : "opacity-30"}>{active ? (dir === "asc" ? "▲" : "▼") : "↕"}</span>
+        <span aria-hidden="true" className={active ? "inline-flex" : "opacity-30"}>{active ? <EyIcon name={dir === "asc" ? "chevronUp" : "chevronDown"} size={12} /> : "↕"}</span>
       </button>
     </th>
   );

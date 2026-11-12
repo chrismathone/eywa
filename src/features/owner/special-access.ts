@@ -1,10 +1,9 @@
 import { SPECIAL_ACCESS_ID_LISTS, type PermissionsSettings } from "./settings-types";
 import { effectivePayslipManagerIds } from "./payslip-permissions";
+import { isRecord } from "@/lib/guards";
 
 type SpecialAccess = PermissionsSettings["specialAccess"];
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []);
 const scopeKey = (userId: string, subjects: readonly string[]) => `${userId}:${[...subjects].sort().join("|")}`;
 

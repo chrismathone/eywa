@@ -100,10 +100,6 @@ async function countLaterByClass(supabase: Sb, after: string, classIds: readonly
   return out;
 }
 
-export async function getUpcomingMakeupOverview(today: string, teacherId: string | null): Promise<UpcomingMakeupOverview> {
-  return (await loadUpcomingMakeup(today, teacherId)).overview;
-}
-
 /**
  * 보강예정 카드 원본 + 과목으로 다시 가를 재료(반 → 과목 · 반별 창 뒤 예약 수). 운영실은 이것을 받아 과목 관리자 값을 만든다.
  * 재료는 스냅샷에 싣지 않는다(반 id별 숫자는 화면에 필요 없다).

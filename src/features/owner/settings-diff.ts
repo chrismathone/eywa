@@ -14,6 +14,7 @@
  *  · 비밀·긴 문자열(발신키·시트ID·약관 본문)은 **값 대신 "변경됨"** — 감사로그가 자격증명 사본이 되면 안 된다.
  *  · 최대 `MAX_CHANGES`개까지만 담고 나머지는 `others`로 — metadata가 무한정 커지지 않게.
  */
+import { BRIEF_FACT_TOPICS } from "@/features/enrollment/brief-facts";
 import { MENU_LABEL } from "@/lib/permissions";
 import { TEACHER_NAV_GROUPS } from "@/lib/teacher-navigation";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
@@ -22,6 +23,7 @@ import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
 import { HUB_GROUPS, SUPPORT_GROUPS } from "@/lib/menu-hub";
 import { BUNDLES, BUNDLE_LABELS } from "@/features/dashboard/layout/types";
 import { effectivePayslipManagerIds } from "./payslip-permissions";
+import { SPECIAL_ACCESS_LABEL } from "./retired-people";
 
 export type SettingChange = { label: string; from?: string; to?: string; note?: string };
 export type SettingsDiff = { changes: SettingChange[]; others: number };
@@ -83,6 +85,7 @@ const FIELD_LABELS: Record<string, Record<string, string>> = {
   },
   consultations: {
     templates: "상담 양식",
+    briefFacts: "상담 준비 브리프 운영 안내",
   },
   navigation: {
     // 기본 메뉴 표로 이름을 복원한다. 주소·그룹 식별자를 감사로그 표시 문구에 그대로 싣지 않는다.
@@ -201,6 +204,8 @@ function isFirstSaveOfNewDefault(section: string, key: string, after: unknown): 
   if (section === "operations" && key === "periodStyle") return after === "chinsan" || after === "plain";
   // 학부모 글 답글·공감(2026-10-01) — 옛 행엔 칸이 없다. 다른 칸을 고쳐 저장하며 기본값(끔)이 처음 실리는 것은 변경이 아니다.
   if (section === "report" && key === "classnoteParentReplyMode") return after === "off";
+  // 상담 준비 브리프 운영 안내(2026-11-12) — 옛 행엔 칸이 없다. 양식만 고쳐 저장하며 빈칸 기본값이 처음 실리는 것은 변경이 아니다.
+  if (section === "consultations" && key === "briefFacts") return isObj(after) && Object.values(after).every((v) => v === "");
   return false;
 }
 
@@ -264,20 +269,8 @@ function diffPermissions(before: unknown, after: unknown): SettingsDiff {
       if (v.specialAccess.studentStatusManagerIds !== undefined) {
         out.set("special:studentStatusMode", { label: "원생 상태 변경 · 담당자 지정 방식", access: "full" });
       }
-      for (const [key, label] of [
-        ["payslipViewerIds", "급여명세서 열람"],
-        ["payslipManagerIds", "급여명세서 관리"],
-        ["leaveAdjusterIds", "연차 조정"],
-        ["classSplitterIds", "수업 나누기"],
-        ["enrollmentDateEditorIds", "수강 날짜 수정"],
-        ["studentStatusManagerIds", "원생 상태 변경"],
-        ["staffTaskMonitorIds", "업무 처리 현황"],
-        ["vendorViewerIds", "업체리스트"],
-        ["jjReportManagerIds", "JJ 보고서 담당"],
-        ["beforeClassReportIds", "비포클래스 보고서 표"],
-        ["withdrawalApproverIds", "퇴원보고서 승인자"],
-        ["withdrawalDeskIds", "데스크 담당자"],
-      ] as const) {
+      // 칸 이름은 한 곳(`SPECIAL_ACCESS_LABEL` — 퇴사자 권한 정리·감사로그와 같은 말)에서 가져온다.
+      for (const [key, label] of Object.entries(SPECIAL_ACCESS_LABEL) as [keyof typeof SPECIAL_ACCESS_LABEL, string][]) {
         const ids = key === "payslipManagerIds" ? effectivePayslipManagerIds(v.specialAccess) : v.specialAccess[key];
         for (const id of Array.isArray(ids) ? ids : []) {
           if (typeof id !== "string") continue;
@@ -391,6 +384,18 @@ export function diffSettingsSection(section: string, before: unknown, after: unk
         continue;
       }
       changes.push(diffArray(label, b, a));
+      continue;
+    }
+    // 운영 안내는 학부모에게 읽어 주는 원문이라 주제별로 전후를 남긴다(누가 무엇을 무엇으로 바꿨는지 · 적대 리뷰).
+    if (section === "consultations" && key === "briefFacts" && (isObj(a) || isObj(b))) {
+      const before = isObj(b) ? b : {};
+      const after = isObj(a) ? a : {};
+      for (const t of BRIEF_FACT_TOPICS) {
+        if ((before[t.key] ?? "") === (after[t.key] ?? "") || changes.length >= MAX_CHANGES) continue;
+        // 학부모에게 읽어 주는 원문이라 40자로 자르지 않는다(칸 상한 200자 그대로 · 재리뷰).
+        const full = (v: unknown) => (typeof v === "string" && v ? v : "없음");
+        changes.push({ label: `${label} · ${t.label}`, from: full(before[t.key]), to: full(after[t.key]) });
+      }
       continue;
     }
     if (OPAQUE_FIELDS.has(key) || isObj(a) || isObj(b)) {

@@ -31,6 +31,8 @@ import {
 } from "./math-report-pilot";
 import { evaluateSendGate } from "./send-gate";
 import { buildFactBlock, type ReportCommentInput } from "./report-comment";
+// 원스크린 화면 + 옮겨 낸 훅(P3-O)을 한 덩어리로 읽는다 — 화면에서 코드를 옮겨도 같은 단언이 선다.
+import { readOnescreenScreen } from "./components/onescreen-screen-source.test-util";
 
 const PILOT = "67a53999-fb62-4753-a938-9a5ce4af9e61";
 
@@ -295,10 +297,10 @@ describe("배선", () => {
     expect(gate).toMatch(/writtenSig: rep\?\.pilotFactsSig/);
     expect(gate).toMatch(/needsTestReason: pilot && !testSkipComplete\(subject\.dailyTestSkip\)/);
     for (const src of [card, grid]) expect(src).toContain("rowSendGate({");
-    expect(read("./components/onescreen-client.tsx")).toMatch(/pilotRowSig\(student, subjectName\)/);
+    expect(readOnescreenScreen()).toMatch(/pilotRowSig\(student, subjectName\)/);
   });
   it("한줄 멘트를 바꾸면 그 자리에서 글 끝을 바꾸고, 발송 경로가 한줄 멘트를 싣는다", () => {
-    const client = read("./components/onescreen-client.tsx");
+    const client = readOnescreenScreen();
     expect(client).toMatch(/pilotRecomposeNote\(r\.draft, r\.autoDraft, pilotPrevNote, text\)/);
     expect(client).toMatch(/pilotOneLine: rowEval\.note/);
     // 영어 행도 '사랑의 한마디' 필수(원장 2026-10-26) — 판정은 oneLineRow = pilot || 영어.

@@ -10,7 +10,7 @@
 - 읽기 — 테스트·스크립트는 원래 이름으로 `readMigration("0349a_….sql")`, 적용 순서 전체는 `migrationFiles()`([`src/lib/db/migrations-corpus.mjs`](../../src/lib/db/migrations-corpus.mjs)). 문서의 옛 경로는 `s1_season1.sql#0349a_….sql`로 바꿨다. 아래 기록의 번호(0447a 등) = 합본의 그 구역.
 - 새 DB = `pnpm db:alphas` — 시즌1 구역을 하나씩 → 시즌2 파일. 🔴 **빈 DB 전용**(`public.tenants`가 있으면 멈춘다). `pnpm db:migrate`는 안내만 하고 멈춘다. 운영 DB는 새 시즌2 파일 하나만 원장 승인 뒤 적용한다.
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
-- 🔴 **업무 완성도 SQL 25개 = 병합 때 이름만 바꿈(2026-11-12)** — 가지에서 `s2_0043`~`s2_0067`로 운영에 적용했고, main의 같은 번호(다른 기능)와 겹쳐 `s2_0069`~`s2_0093`(번호 +26 · 순서 그대로)으로 옮겼다. 본문은 적용한 그대로 — **다시 돌리지 않는다**. 아래 기록과 코드 주석의 번호는 새 번호다.
+- 🔴 **업무 완성도 SQL 25개 = 병합 때 이름만 바꿈(2026-11-12)** — 가지에서 `s2_0043`~`s2_0067`로 운영에 적용했고, main의 같은 번호(다른 기능)와 겹쳐 `s2_0069`~`s2_0093`(번호 +26 · 순서 그대로)으로 옮겼다. 본문은 적용한 그대로 — **다시 돌리지 않는다**. 아래 기록과 코드 주석의 번호는 새 번호다. ⚠️ 아래 aywa-next 기록의 '운영에 옛 이름 s2_0070~0075 · s2_0080~0082로 적용'은 그쪽 파일들의 옛 이름이다 — 지금 그 번호를 가진 업무 완성도 파일과는 다른 SQL(운영 기록은 번호가 아니라 파일 전체 이름으로 대조).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
 ## 2026-11-10 의무 장부: 건별 의무의 늦음 할 일은 담당자 × 종류에 하나 (s2_0073 · ✅ 운영 적용 2026-11-10 · 직결 · 시험 거래 뒤)
@@ -70,6 +70,73 @@
 - 확인(2026-11-09): 로컬 PGlite 0.3.16(PG17)에 스텁 표 + 0377a 함수 원문 + 이 파일을 올려 RPC 여섯 개 한 바퀴(열기 멱등 · 담당 갱신 · done/void/되살림 · 지점 격리 · 늦음 → 할 일 열고 닫기 · 스냅숏 · 집계) 통과(`work/pglite-smoke/smoke.mjs`, gitignore).
 - 적용 뒤 확인: `select count(*) from duty_items` (cron `/api/cron/duties`가 5·35분에 돌면 그날 행이 생긴다) · 강사 홈에 '오늘 내 업무' 줄.
 - 되돌리기: 스키마 `duties_private`와 표 `duty_daily` · `duty_items`를 지운다. 할 일 `duty_late` 행은 닫힌 기록이라 그대로 둬도 된다.
+
+## 2026-11-11 상담 준비 브리프 — 생성 작업 시각 (`s2_0068_prep_brief_job_at.sql` · ✅ 운영 적용 2026-11-11 · 앱보다 먼저 · CLI 직결(node · 한 거래) · 시험 거래(ROLLBACK) 뒤)
+
+브리프 적대적 검수(Claude·Codex 합의)의 운영 결함 둘 — '생성 중'에 멈추면 빠져나갈 길이 없음 · 늦게 끝난 옛 작업이 새 결과를 덮음. `enrollment_consultations.prep_brief_job_at timestamptz` 칸 하나(추가만 · 기존 행 null). 작업을 열 때 시각을 적고 끝날 때 같은 시각일 때만 결과·상태를 쓴다 · 240초가 지나면 새 작업 허용(`prep-stall.ts`). 결정 = [`docs/decisions/students.md`](../../docs/decisions/students.md) 끝. 되돌리기 = `scripts/_oneoff/revert-s2_0068-prep-brief-job-at.sql`(앱을 먼저 되돌린 뒤).
+
+## 2026-11-11 학원 비서 — 주민번호 가림 (`s2_0067_assistant_mask_resident_no.sql` · ✅ 운영 적용 2026-11-11 · CLI 직결(node · 한 거래) · 시험 거래(ROLLBACK) 뒤 · 사후 확인 통과)
+
+원장 *"주민번호 앞자리 6개 및 뒷자리 1개만 보내. 나머진 됐고"* — s2_0031 가림 칸 표(`assistant_private.masked_columns`)에 두 줄: `academy_documents.form_data`(이력서 `personal.residentId` + 서식 어디든 `######-#######` 꼴) · `payslips.print_payload`(`teacher.residentRegNo` + 같은 꼴) → `891003-1******`. 보기를 바로 다시 만든다. 가림식은 pg_catalog 함수만(실행 계획 검사). 운영 전수 확인: 주민번호 꼴 = 이력서 47건뿐(다른 표의 13자리 일치는 해시·id · 명세서 지표의 긴 소수). 시험 거래: 보기로 본 이력서 = `######-#******` · 남은 꼴 0 · 실행 계획 속 다른 스키마 함수 = `bound_tenant`뿐. 되돌리기 = `scripts/_oneoff/revert-s2_0067-assistant-mask-resident-no.sql`(원장 승인 없이 돌리지 말 것).
+
+## 2026-11-11 신규생 과목 기본 담당 편집 — 변경 감사 트리거 (s2_0066 · ✅ 운영 적용 2026-11-11 — 앱보다 먼저 · 직결(node · 한 거래) · 시험 거래(ROLLBACK) 뒤 · 사후 확인 통과)
+
+신규생 관리 화면에 '기본 담당 설정' 대화상자를 만들면서(결정 = [`docs/decisions/enrollment-journey.md`](../../docs/decisions/enrollment-journey.md) '2026-11-11 결정'), 과목 기본 담당 표의 변경이 기록 없이 일어나지 않게 **표 전용 감사 트리거**를 더했다. 추가만(새 함수 하나 · 새 트리거 하나) — 표의 값은 건드리지 않는다.
+
+- `s2_0066_newcomer_default_manager_audit.sql` — `audit_onboarding_default_manager()` + `student_onboarding_manager_defaults`의 AFTER INSERT OR UPDATE 트리거 `onboarding_default_manager_audit`. 담당자가 실제로 바뀐 쓰기(새 줄 · `manager_id`가 달라진 고침)마다 같은 거래에서 `audit_logs`에 한 줄(`newcomer_default_manager_update` · 실행자 = `updated_by` · 대상 = 그때의 과목 이름(학원 설정의 과목 목록에서 읽는다 · 못 찾으면 과목 키) · 상세 = 과목 키 · 그때의 과목 이름 · 이전/새 담당자의 id와 그때의 이름). 담당자가 그대로인 고침은 남기지 않는다 · 지우기는 보지 않는다(앱에 지우는 길이 없다). 대상 칸에 이름을 남기는 까닭 = 그 칸이 슬랙 알림에 그대로 나가고, 과목을 지운 뒤에는 화면이 이름을 되찾지 못한다.
+- 호출자 권한(security definer 아님 — 이 표에 쓰는 service_role·운영 직결은 `users`·`tenant_settings`를 읽고 `audit_logs`에 쓸 수 있다) · `search_path = ''` · PUBLIC·anon·authenticated 실행권 없음(새 함수라 기존 호출자가 없다). `create or replace` + `drop trigger if exists`라 다시 실행해도 같다.
+- 🔴 **앱보다 먼저**(#95) — 앱의 저장 액션은 따로 `logAction`을 부르지 않는다(기록은 이 트리거 하나). 먼저 적용해도 옛 앱에는 이 표를 쓰는 화면이 없어 달라지는 것이 없다.
+- 되돌리기 = `scripts/_oneoff/revert-s2_0066-newcomer-default-manager-audit.sql`(트리거·함수만 지운다 — 남은 감사로그와 표의 값은 그대로 · 되돌린 동안의 변경은 기록되지 않는다).
+- **적용 기록(2026-11-11)**: ① 시험 거래(파일 적용 + 기능 시험 → ROLLBACK) — service_role로 수학 줄 교체 → 감사 줄 1(실행자 = 저장한 직원 · 대상 '수학' · 이전 → 새 담당) · 담당자가 그대로인 고침 → 줄 없음 · 버릴 과목 키로 새 줄 → 줄 1(대상 = 키 그대로 · 이전 담당 없음) · 검증 트리거가 막는 담당자(강사) → 23514 거절 · 줄 없음 · 운영 직결로 EiE 줄 고침 → 줄 1(대상 'EiE') · 과목 목록을 저장한 적 없는 다른 지점의 새 줄 → 줄 1(대상 = 키) · 슬랙 인박스 0건. 되돌린 뒤 기본 담당 세 줄(행 md5)·감사 줄 0건·트리거·함수 없음 확인. ② 적용(한 거래) — 트리거 `onboarding_default_manager_audit`(AFTER INSERT OR UPDATE · 켜짐) · 함수는 호출자 권한·`search_path=""` · 실행권 anon ✗ · authenticated ✗ · service_role ✓ · 연동 역할 ✗. ③ 적용된 트리거로 같은 기능 시험을 한 번 더(ROLLBACK) — 결과 같음. 끝 상태: 기본 담당 세 줄은 작업 전 그대로(수학 · 영어 · EiE — 행 md5 같음) · 이 액션의 감사 줄 0건.
+
+## 2026-11-11 이름 맞춤 — `s2_0047_marketing_archive_sources.sql` (옛 이름 `20261110125726_marketing_archive_sources.sql` · ✅ 운영 적용돼 있음 — 다시 돌리지 않는다)
+
+홍보·마케팅 기록 보관(`marketing_archive_events` · `marketing_source_inbox` · `marketing_archive_sources` · `marketing_archive_students` · `marketing_archive_audit` + 저장 함수)의 SQL이 CLI 타임스탬프 이름으로 들어와 폴더 규칙 가드와 SQL을 읽는 가드 전부가 멈춰 있었다(`규칙 밖 SQL 파일이 있습니다`). **이름만** 시즌2 다음 빈 번호로 바꿨다(내용 한 글자도 그대로 · [`docs/sql-season2.md`](../../docs/sql-season2.md) §3-A). 운영 DB에는 2026-11-10에 옛 이름으로 이미 적용돼 있다(2026-11-11 표 5개 존재 확인).
+
+## 2026-11-11 조직·OKR · 업무 작성센터 · 관찰 기록 · 스키마 스튜디오 · 직원 완전 삭제 (s2_0048~s2_0051 · s2_0058~s2_0060 · ✅ 운영 적용 2026-11-11 — 앱보다 먼저 · 직결(node · 한 거래) · 시험 거래(ROLLBACK) 뒤 · 사후 확인 통과)
+
+aywa-next(태그 `archive/aywa-next-375d27d`)의 실제 기능을 옮기며 만든 SQL — 전부 **새 표·새 함수만**(기존 표는 고치지 않는다). 🔴 운영에는 병렬 작업용 예약 번호 이름으로 적용했고(옛 이름 `s2_0065`~`s2_0068` · `s2_0080`~`s2_0082`), main에 합치며 다음 빈 번호로 **이름만** 바꿨다(내용 그대로 — 다시 돌리지 않는다 · [`docs/sql-season2.md`](../../docs/sql-season2.md) §3-A): 0065→0048 · 0066→0049 · 0067→0050 · 0068→0051 · 0080→0058 · 0081→0059 · 0082→0060. 결정 = [`docs/decisions/staff.md`](../../docs/decisions/staff.md) 끝.
+
+- `s2_0048_work_records.sql` — `academy_work_records` · `academy_work_record_events` · `save_academy_work_record`(작성자 본인·검토 규칙·버전·같은 요청 재시도). aywa-next 대비: 확인 완료 문서는 작성자가 못 고침 · 본인 문서 본인 확인 금지 · 한도 64,000바이트.
+- `s2_0049_academy_knowledge_records.sql` — `academy_knowledge_records`(쌓기만 · 수정·삭제는 트리거가 거절).
+- `s2_0050_organization_okr.sql` — `organization_okr` · `organization_okr_revisions` · `save_organization_okr`.
+- `s2_0051_academy_model_studio.sql` — `academy_model_versions`(쌓기만). aywa-next 대비: 쓰는 사람을 DB가 원장 역할로 묶지 않는다(앱 게이트 = '경영 분석·지식그래프' 전체).
+- `s2_0058_staff_delete_blockers.sql` — `staff_delete_blockers(p_user)`: 직원 행·로그인 계정을 가리켜 삭제를 막는 FK(NO ACTION · RESTRICT · NOT NULL 칸의 SET NULL)를 **카탈로그에서 전부** 찾아 센다 + 관찰 기록 문서 속 담당자. 읽기만.
+- `s2_0059_knowledge_review_rules.sql` — s2_0049의 트리거 함수 다시 정의(본인 관찰 자기 확인 금지 · 검토자는 상태·검토 의견만 · 검토 의견은 검토자만) + `academy_knowledge_latest(p_tenant, p_author, p_student)`(기록마다 최신 버전).
+- `s2_0060_delete_staff_account.sql` — `delete_staff_account(p_tenant, p_user)`: 직원 완전 삭제를 한 거래로(로그인 계정 → 직원 행 잠금 → s2_0058 검사 → 직원 행 → 로그인 계정). 🔴 `auth.users` 행을 이 함수가 직접 지운다(Auth 서버 API를 따로 부르지 않는다 — 두 번에 나누면 로그인만 사라지거나 미러 트리거가 직원 행을 되살린다).
+- 표 6개 = 정책 0개(서버 전용 · admin + `tenant_id` 필터) · 함수는 service_role만 실행. 시험 거래: 저장 함수·트리거 규칙, 그리고 데모 지점에서 삭제 다섯 갈래(차단 · 삭제 · 다른 지점 · 로그인 계정 없는 직원 · 보호 계정)와 신규생 기본 담당 3줄이 차단으로 잡히는 것을 확인. 되돌리기 = `scripts/_oneoff/revert-s2_0048-…` ~ `revert-s2_0051-…` · `revert-s2_0058-…` ~ `revert-s2_0060-…`(앱을 먼저 되돌린 뒤 · 0060 → 0059 → 0058 순).
+## 2026-11-11 신규생 90일 정착 관리 · 신규 콜&상담 여정 (s2_0061 · s2_0062 · s2_0063 · s2_0064 · s2_0065 · ✅ 운영 적용 2026-11-11 · CLI 직결(node · 파일마다 한 거래) · 시험 거래(ROLLBACK) 뒤 · 사후 확인 통과 · 본문은 적용한 그대로)
+
+aywa-next 인계본(태그 `archive/aywa-next-375d27d`)의 표를 옮겼다 — 전부 **추가만**(기존 표의 데이터는 건드리지 않는다) · 서버 전용 표(RLS 켜짐 · 정책 0개 · anon/authenticated 권한 없음 — s2_0028과 같은 규약). 결정 본문 = [`docs/decisions/enrollment-journey.md`](../../docs/decisions/enrollment-journey.md).
+
+- `s2_0061_newcomer_followup.sql` — `student_onboarding_feedback`(담임 적응 피드백 · 관리자 확인 · 후속 조치) + `student_onboarding_followup_events`(변경 이력) + 검증·이력 트리거. 인계본의 두 파일(followup · feedback_response)을 하나로. 학생 단위 옛 담당 표는 옮기지 않았다.
+- `s2_0062_newcomer_subject_managers.sql` — `student_onboarding_subject_assignments`(학생·과목별 담당) + `student_onboarding_manager_defaults`(과목 기본 담당 — 운영 DB의 3행은 2026-11-11 신입생 90일 관리 복구 때 직접 넣은 것 · 같은 날 고치는 화면과 감사 트리거 s2_0066이 생겼다).
+- `s2_0063_enrollment_journey.sql` — `enrollment_journey_records` + `enrollment_journey_revisions` + `save_enrollment_journey`(서버 전용 · version 비교).
+- `s2_0064_enrollment_journey_delete_guard.sql` — 상담 행 BEFORE DELETE 트리거(집계 제외가 아닌 여정 기록이 걸린 상담은 삭제 불가) + 서버 전용 `merge_enrollment_consultations_with_journey`(상담 잠금 → 기록 이동 → 종전 병합 함수). 🔴 **앱보다 먼저** — 새 앱의 상담 병합은 이 함수만 부른다(없으면 병합이 '준비하는 중' 안내로 멈춘다 · #95). 적용 뒤 확인: 트리거 1 · 함수 2(화면 계정 실행권 없음) · 적용본을 거래 안에서 다시 시험(삭제 차단 · 옛 병합 함수 차단 · 병합 시 기록 이동·이력 보존·활동 기록의 요청자) 후 ROLLBACK · 여정 기록 0건 · 상담 2,427건 그대로.
+- `s2_0065_staff_delete_blockers_journey_owner.sql` — 직원 삭제 차단 검사(`staff_delete_blockers` · s2_0058)를 다시 정의: 콜&상담 여정 기록의 담당자(문서 속 `ownerId` · FK 없음)도 센다(✅ 운영 적용 2026-11-11 · 시험 거래 뒤 · 본문은 s2_0058 그대로 + 한 갈래 · 읽기만). 아직 안 세는 문서 속 담당자 = 홍보 행사(`marketing_archive_events.document.ownerId`) — 그 기능의 저장 규칙이 정해지면 다음 재정의 때 가드 목록과 함께 더한다. 되돌리기 = `scripts/_oneoff/revert-s2_0065-…`(s2_0058의 정의로 다시 정의).
+- 적용 순서 0061 → 0062 → 0063 → 0064. main의 신입생 90일 관리(052112f21)는 0061·0062의 표를 이미 읽고 쓴다.
+- 되돌리기 = `scripts/_oneoff/revert-s2_0061-…` ~ `revert-s2_0064-…`(앱을 먼저 되돌린 뒤 · 0064 → 0063 · 0062 → 0061 순서 · 적힌 기록이 함께 사라진다).
+- 🔴 번호: 운영에는 병렬 작업용 예약 번호 이름으로 적용했고(옛 이름 `s2_0060_newcomer_followup` · `s2_0061_newcomer_subject_managers` · `s2_0062_enrollment_journey` · `s2_0063_enrollment_journey_delete_guard`), main에 합치며 다음 빈 번호로 **이름만** 한 칸씩 뒤로 옮겼다(내용 그대로 — 다시 돌리지 않는다 · [`docs/sql-season2.md`](../../docs/sql-season2.md) §3-A). 지금의 `s2_0060`은 다른 파일(직원 완전 삭제)이다.
+
+## 2026-11-11 운영 로그 정리 — 반 필터 함수 · 녹음 원본 경로 (s2_0045 · s2_0046 · ✅ 운영 적용 2026-11-11 — 앱보다 먼저 · 직결(node · 파일 그대로 한 거래) · 사후 확인: PostgREST가 함수를 알아봄 · anon 거절 42501 · audio_path NULL 허용)
+
+- `s2_0045_restore_lesson_report_class_options.sql` — 수업보고서 목록 '반' 필터 함수. 시즌1 0147a에 정의만 있고 운영에 적용된 적이 없어 PGRST202(반 드롭다운이 비어 있었다). 본문 그대로 + 실행권 명시(PUBLIC·anon 회수 · authenticated·service_role). 시험 거래: 강사 계정으로 반 85개.
+- `s2_0046_consultation_recording_audio_nullable.sql` — `consultation_recordings.audio_path` NOT NULL 해제. 녹음 보존기간(90일) cron이 원본을 지운 뒤 경로를 비우다 23502로 매일 실패(만료 13건 — 원본은 이미 없음 · 전사는 남김). 같은 묶음의 앱 cron: 상담 행 미러가 녹음 원본을 지우지 않게 · 녹음 원본을 지우면 상담 행 미러도 비움.
+
+## 2026-11-10 경영 분석 실제 기능 · 강사 배정 상한 (s2_0052~s2_0057 · ✅ 운영 적용 2026-11-11 · 직결(node · 한 거래) · 시험 거래(ROLLBACK) 뒤 · 사후 확인 통과)
+
+aywa-next 복제본(archive/aywa-next-375d27d)의 경영 분석·강사 배정 상한 SQL 여섯 개를 옮겼다. 🔴 운영에는 병렬 작업용 예약 번호 이름(옛 이름 `s2_0070`~`s2_0075`)으로 적용했고, main에 합치며 다음 빈 번호로 **이름만** 바꿨다(내용 그대로 — 다시 돌리지 않는다): 0070→0052 · 0071→0053 · 0072→0054 · 0073→0055 · 0074→0056 · 0075→0057. 🔴 새 표 9개·새 함수 3개만 — 기존 표·함수는 건드리지 않는다.
+- `s2_0052_management_accounting.sql` — 회계 자료(`management_accounting_reports` + 버전 이력) · 원본 대조 기록(`management_source_batches`, 바뀌지 않음) · 확인 이력(`management_review_events`, 버전) · 저장 함수 `save_management_accounting` · `append_management_review`(그 지점의 재직 중 원장만 · 버전 비교).
+- `s2_0056_management_accounting_source_kind.sql` — 같은 달 손익계산서와 계정별원장을 따로 보관(칸 `source_kind` = 문서에서 계산 · 유일 조건 (지점·기간·종류) · 저장 함수가 같은 종류만 찾는다). 커밋 전 리뷰에서 나온 덮어쓰기 결함 수정 — s2_0052 직후 빈 표에 적용(✅ 2026-11-11).
+- `s2_0057_ecount_accounting_switch_seed.sql` — ECOUNT 회계 자료 가져오기 지점 스위치(`tenant_licenses.feature = 'ecount_accounting'` · 줄 없으면 꺼짐 · 읽는 곳 `features/management/server/accounting-scope.ts`)를 첫 학원(설정 preset이 'generic'이 아닌 지점)에만 켜 둔다 — 줄 추가뿐 · 다시 실행해도 같다(✅ 운영 적용 2026-11-11 — 시험 거래 뒤 적용 · 침산 한 줄 · 트리거 오류·감사 줄 없음 · 사후 확인: 켜진 줄 = 침산뿐). 다른 지점은 계정 분류표를 확인한 뒤 운영 콘솔에서 켠다.
+- `s2_0053_management_collection_devices.sql` — 학원 PC 수집기 기기 연결 + 지점 스위치 `management_collection_settings`(🔴 줄이 없으면 꺼짐).
+- `s2_0054_management_ai_reviews.sql` — 'AI 검토' 버튼 결과 보관(복제본엔 없던 표 · AI 결과는 DB에 남긴다는 작업 원칙).
+- `s2_0055_teacher_capacity_plans.sql` — 강사별 이번 달 배정 상한 + 요청 이력 · `save_teacher_capacity_plan`(같은 요청 번호 = 한 번만).
+- 모두 서버 전용(RLS 켬 · 정책 0개 · anon·authenticated 권한 없음 · service_role도 기록·이력 표엔 select·insert만 — Supabase 기본 권한을 먼저 걷는다). 함수는 security invoker · service_role만 실행.
+- 학원 비서 보기: 새 표는 다음 질문 때 저절로 보기가 생긴다(시험 거래에서 `assistant_refresh_views_if_stale()` 295개 보기 · 기기 표의 `secret_hash`는 비밀 칸 규칙으로 빠짐 확인). 설명 = `src/features/assistant/catalog/tables-extra.ts`.
+- 확인(적용 뒤): 9개 표 RLS true · 정책 0 · anon/authenticated select false · service_role delete false · 3개 함수 service_role만 실행. 시험 거래에서 저장·같은 내용·버전 충돌·다른 지점 원장 거절·대조 중복 무시·확인 항목 없음 거절·대조 기록 update 거절·배정 상한 재요청 같은 결과를 확인했다.
+- 🔴 학원 PC 수집기(s2_0053의 표)는 배포 스위치 `features/management/collector-switch.ts`가 꺼져 있어 서버가 켜기·발급·수신을 전부 거절한다(Windows 실측 뒤 그 값만 켠다).
+- 되돌리기 = `scripts/_oneoff/revert-s2_0052-…` ~ `revert-s2_0057-…`(앱을 먼저 되돌린 뒤 · 0057 → 0056 → 0055 → 0054 → 0053 → 0052 순).
 
 ## 2026-11-06 퇴원보고서: 원장 환불 결정 전에는 처리하지 않는다 · 데스크 지정 · 완료 입력 제한 (s2_0037 · ⏳ 미적용 · 🔴 s2_0030 적용 뒤에만 · 앱보다 먼저 · 가지 번호 s2_0031 → s2_0033 → s2_0036 → 병합 때 s2_0037(main의 s2_0031 = 학원 비서 · s2_0033 = 금액 이월 연쇄 · s2_0034 = 학원 비서 마무리 · s2_0035 = 원생 충성도 · s2_0036 = 학원 비서 의견))
 
@@ -417,7 +484,7 @@ alpha 파일은 멱등 구문으로 작성: `create extension if not exists`, `c
 
 `0081a`~`0088a`(8) · `0111a` · `0113a` · `0116a` · `0117a`(파일 3개) · `0118a` · `0134a` · `0147a`~`0149a`(3) · `0152a` ·
 `0209a` · `0210a` · `0212a` · `0224a` · `0227a` · `0266a` — 번호 하나에 파일이 둘(또는 셋)씩 있다.
-전부 DB에 적용된 것들이고(가장 최근 `0266a` 둘도 확인), 이 번호들은 CLAUDE.md·docs·코드 주석에 **번호로** 530번 넘게 인용돼 있어 이름을 옮기면 그 인용이 전부 틀린 곳을 가리킨다.
+DB에 적용된 것들이고(가장 최근 `0266a` 둘도 확인) — ⚠️ **2026-11-11 전수 대조로 바로잡음**: 이 목록 뒤에 `0285a`(`class_bulk_transfer` · `student_grades_no_exam`)도 겹쳐 지금은 번호 25개 · 구역 51개다. 51구역이 만드는 함수·표·칸을 운영과 맞춰 보니 빠진 것은 **`0147a_lesson_report_class_options.sql`의 함수 하나**(운영에 적용된 적 없음 → `s2_0045`로 다시 만든다). `0210a_leave_requests`의 두 표는 `0213a_approval_hiworks_parity.sql`이 0행 확인 뒤 일부러 지웠다(`0212a_approval_documents.sql`은 머리에 '0213a가 대체 — 실행하지 말 것'이라 운영에서 돌지 않았고, 만드는 객체는 0213a가 대신 만들어 다 있다). 이 번호들은 CLAUDE.md·docs·코드 주석에 **번호로** 530번 넘게 인용돼 있어 이름을 옮기면 그 인용이 전부 틀린 곳을 가리킨다.
 
 - `pnpm db:alphas`는 파일 이름을 기록하지 않고 **사전순으로 전부 다시 돌린다**(멱등) — 겹친 번호 안에서는 이름 뒷부분 사전순으로 돈다.
 - 이 번호들을 글로 가리킬 땐 **파일 이름까지** 적는다(`0209a`만 쓰면 자리 담당인지 ECS 복사인지 모른다).

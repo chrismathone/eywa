@@ -6,6 +6,7 @@
 
 import { COUNTABLE_STATUSES } from "../session-units";
 import { attendedCount } from "@/lib/calc/attendance";
+import { round1 } from "@/lib/guards";
 
 /** 한 칸의 값 — 격자 저장소의 `GridValue`와 같은 모양. 순수 모듈이라 **구조로만** 받는다(순환 import 방지). */
 export type CountedCell = { s: string; u: number | null; g?: true } | null;
@@ -24,9 +25,6 @@ export type Counted = {
 export const EMPTY_COUNT: Counted = { recorded: 0, present: 0, absent: 0, late: 0, makeup: 0, units: 0 };
 
 /** 0.1 단위 반올림 — 1.5를 여러 번 더할 때 생기는 부동소수 꼬리를 자른다. */
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
-}
 
 export function countCells(values: Iterable<CountedCell>): Counted {
   let recorded = 0;

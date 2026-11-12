@@ -103,6 +103,7 @@ export function TextAreaField({
   onChange,
   placeholder,
   rows = 4,
+  maxLength,
 }: {
   label: string;
   hint?: string;
@@ -110,6 +111,7 @@ export function TextAreaField({
   onChange: (v: string) => void;
   placeholder?: string;
   rows?: number;
+  maxLength?: number;
 }) {
   const ph = useLockedPlaceholder();
   return (
@@ -117,6 +119,7 @@ export function TextAreaField({
       <textarea
         className={inputCls}
         rows={rows}
+        maxLength={maxLength}
         value={value}
         placeholder={ph(placeholder)}
         onChange={(e) => onChange(e.target.value)}

@@ -1,5 +1,10 @@
 # 선생님 원스크린 — 전달 패키지
 
+> ⚠️ **standalone HTML(파일당 약 23MB)은 2026-11-10부터 git에서 추적하지 않는다**(수정 계획 P4 · 저장소 무게). 받는 법:
+> - 이력에서: `git show 32c7bb619df8:"<이 폴더 경로>/<파일 이름>" > "<파일 이름>"` (예: `git show 32c7bb619df8:"data/원스크린_전달/선생님 원스크린 (standalone).html" > "선생님 원스크린 (standalone).html"`)
+> - 통째로: `git archive -o handoff.zip 32c7bb619df8 data/원스크린_패키지 data/원스크린_전달`
+> - 맥 백업 사본: `~/eywa-data/design-handoff-html-backup-2026-11-10/`
+
 수업 마감을 한 화면에서: ① 진도 확인 ② 일일/확인 테스트 점수 ③ today 보고서 작성·발송
 
 ## 들어 있는 파일

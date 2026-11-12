@@ -10,6 +10,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { isVideoHomeworkEnabled } from "../policy";
 import { isOwnVideoHomework } from "./own-homework";
 import type { VideoHomeworkStatus } from "../types";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 type Db = ReturnType<typeof createAdminClient>;
 export type MarkWriteResult = { ok: boolean; error?: string;
@@ -83,7 +84,7 @@ export async function writeVideoHomeworkMark(db: Db, input: {
   const scoped = () => db.from("video_homework_marks").select("id")
     .eq("tenant_id", input.tenantId).eq("class_id", input.classId).eq("student_id", input.studentId);
   const same = input.homeworkDate ? await scoped().eq("homework_date", input.homeworkDate) : null;
-  if (same?.error) return { ok: false, error: same.error.message };
+  if (same?.error) return { ok: false, error: explainDbError(same.error, { scope: "video-homework.mark-write.writeVideoHomeworkMark", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   const sameIds = (same?.data ?? []).map((row) => row.id as string);
 
   if (input.status === null) {
@@ -91,11 +92,11 @@ export async function writeVideoHomeworkMark(db: Db, input: {
     const slot = input.homeworkDate && !input.slotIsMine
       ? await scoped().eq("check_date", input.slotDate).or(`homework_date.is.null,homework_date.eq.${input.homeworkDate}`)
       : await scoped().eq("check_date", input.slotDate);
-    if (slot.error) return { ok: false, error: slot.error.message };
+    if (slot.error) return { ok: false, error: explainDbError(slot.error, { scope: "video-homework.mark-write.writeVideoHomeworkMark", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
     const ids = [...new Set([...sameIds, ...(slot.data ?? []).map((row) => row.id as string)])];
     if (!ids.length) return { ok: true };
     const { error } = await db.from("video_homework_marks").delete().eq("tenant_id", input.tenantId).in("id", ids);
-    return error ? { ok: false, error: error.message } : { ok: true };
+    return error ? { ok: false, error: explainDbError(error, { scope: "video-homework.mark-write.writeVideoHomeworkMark", fallback: "삭제하지 못했습니다 — 잠시 후 다시 시도해 주세요", op: "delete" }).message } : { ok: true };
   }
 
   const values = {
@@ -107,7 +108,7 @@ export async function writeVideoHomeworkMark(db: Db, input: {
   };
   if (sameIds.length) {
     const { error } = await db.from("video_homework_marks").update(values).eq("tenant_id", input.tenantId).in("id", sameIds);
-    return error ? { ok: false, error: error.message } : { ok: true };
+    return error ? { ok: false, error: explainDbError(error, { scope: "video-homework.mark-write.writeVideoHomeworkMark", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message } : { ok: true };
   }
   const { error } = await db.from("video_homework_marks").upsert({
     tenant_id: input.tenantId,
@@ -117,5 +118,5 @@ export async function writeVideoHomeworkMark(db: Db, input: {
     homework_date: input.homeworkDate,
     ...values,
   }, { onConflict: "tenant_id,class_id,student_id,check_date" });
-  return error ? { ok: false, error: error.message } : { ok: true };
+  return error ? { ok: false, error: explainDbError(error, { scope: "video-homework.mark-write.writeVideoHomeworkMark", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message } : { ok: true };
 }

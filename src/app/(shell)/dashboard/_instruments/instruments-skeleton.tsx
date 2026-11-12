@@ -1,6 +1,6 @@
 /**
- * '계기판' 화면(`instrument-board.tsx`) 로딩 뼈대 — 운영실 Suspense fallback(`overview-skeleton.tsx`)과 계기판 동적 로드의
- * `loading`(`dashboard-design-switch.tsx`)이 **같은 이것**을 그린다. 계기판은 브라우저에서만 그려져(ssr:false) 서버 HTML이 곧
+ * '계기판' 화면(`instrument-board.tsx`) 로딩 뼈대 — `loading.tsx` · 운영실 Suspense fallback(`overview-server.tsx`) · 계기판 동적 로드의
+ * `loading`(`dashboard-board.tsx`)이 **같은 이것**을 그린다. 계기판은 브라우저에서만 그려져(ssr:false) 서버 HTML이 곧
  * `loading`이라, 둘이 같아야 fallback → 서버 HTML → 계기판 사이에 빈 화면이나 다른 모양이 끼지 않는다.
  * ⚠️ instruments.css는 고른 사람만 받는 묶음이라(B5) 여기서 불러오지 않는다 — 치수는 그 파일의 셸(.body·.head)·KPI 격자·
  *    구역(.block 26px)·카드 격자(틈 12px) 값을 옮겨 적은 **근삿값**이다. 계기판 머리·격자를 바꾸면 여기도 같이 본다.
@@ -47,7 +47,7 @@ export function InstrumentsSkeleton() {
         </div>
         <div className="mb-4 flex items-center gap-4"><span className={`${PULSE} block h-[42px] w-80`} /><span className={`${PULSE} block h-4 w-64`} /></div>
         <div className="mb-3.5 grid grid-cols-[minmax(300px,1fr)_minmax(0,2fr)] gap-3 @max-[1101px]/aywa:grid-cols-1">
-          <div className="min-h-[180px] animate-pulse rounded-[10px] bg-[#363c41]" />
+          <div className="min-h-[180px] animate-pulse rounded-[10px] bg-primary" />
           <div className={`border-line bg-card grid overflow-hidden rounded-[10px] border ${KPI_COLS} [grid-template-rows:1fr_1fr]`}>
             {Array.from({ length: 6 }, (_, i) => (
               <div key={i} className="border-line border-r border-b px-4 py-3"><span className={`${PULSE} block h-5 w-24`} /><span className={`${PULSE} mt-1 block h-[30px] w-20`} /><span className={`${PULSE} mt-1 block h-4 w-36`} /></div>

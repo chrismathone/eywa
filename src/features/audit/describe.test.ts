@@ -1172,6 +1172,39 @@ describe("🔴 회의록·학생상담 상세는 빈 칸이 아니다(실호출 
   }
 });
 
+describe("신규생 과목 기본 담당 변경(DB 트리거 s2_0066 · 2026-11-11)", () => {
+  const M1 = "11111111-aaaa-4bbb-8ccc-000000000001", M2 = "11111111-aaaa-4bbb-8ccc-000000000002";
+  it("과목 · 이전 → 새 담당 — 트리거가 남긴 그때의 이름으로 적는다(영문 키·id를 내지 않는다)", () => {
+    const line = auditDetail("newcomer_default_manager_update", { subject: "math", fromManagerId: M1, fromName: "허은진", toManagerId: M2, toName: "김그린" }, ctx());
+    expect(line).toBe("수학 · 허은진 → 김그린");
+    for (const bad of ["math", "subject", "fromManagerId", "toName", M1, M2]) expect(line).not.toContain(bad);
+  });
+  it("새 줄(이전 담당 없음) · EiE 줄 · 이름이 없는 옛 줄도 한글로 읽힌다", () => {
+    expect(auditDetail("newcomer_default_manager_update", { subject: "english", toManagerId: M2, toName: "정유진" }, ctx())).toBe("영어 · 지정 없음 → 정유진");
+    expect(auditDetail("newcomer_default_manager_update", { subject: "eie", fromManagerId: M1, fromName: "정유진", toManagerId: M2, toName: "김그린" }, ctx())).toBe("EiE · 정유진 → 김그린");
+    expect(auditDetail("newcomer_default_manager_update", { subject: "math", fromManagerId: M1, toManagerId: M2 }, ctx())).toBe("수학 · 이전 담당 → 새 담당");
+  });
+  it("🔴 그때 남긴 과목 이름이 먼저다 — 과목을 지운 뒤에도 키(subject_7)가 아니라 이름으로 읽힌다", () => {
+    const gone = { subject: "subject_7", subjectLabel: "논술", fromManagerId: M1, fromName: "허은진", toManagerId: M2, toName: "김그린" };
+    const line = auditDetail("newcomer_default_manager_update", gone, ctx());
+    expect(line).toBe("논술 · 허은진 → 김그린");
+    expect(line).not.toContain("subject_7");
+    // 과목 이름을 바꾼 뒤에도 그때의 이름 그대로(담당자 이름과 같은 규칙 — 기록 때의 값).
+    expect(auditDetail("newcomer_default_manager_update", { subject: "math", subjectLabel: "수학(옛 이름)", toManagerId: M2, toName: "김그린" }, ctx())).toBe("수학(옛 이름) · 지정 없음 → 김그린");
+  });
+  it("'대상' 칸 = 유형 '신규생 기본 담당' + 과목 이름(과목 키를 그대로 내지 않는다)", () => {
+    const tctx = { subjectLabel: (key: string) => ({ math: "수학", english: "영어" })[key] ?? key };
+    expect(AUDIT_TYPE_LABEL.newcomer_default_manager).toBe("신규생 기본 담당");
+    // 트리거가 대상 칸에 그때의 과목 이름을 적는다 — 이름은 그대로 둔다(지운 과목의 이름도).
+    expect(auditTargetLabel("newcomer_default_manager", "수학", tctx)).toBe("수학");
+    expect(auditTargetLabel("newcomer_default_manager", "논술", tctx)).toBe("논술");
+    expect(auditTargetLabel("newcomer_default_manager", "EiE", tctx)).toBe("EiE");
+    // 이름을 못 찾아 과목 키로 남은 줄(과목 목록을 저장한 적 없는 학원)만 과목 이름으로 접는다.
+    expect(auditTargetLabel("newcomer_default_manager", "math", tctx)).toBe("수학");
+    expect(auditTargetLabel("newcomer_default_manager", "eie", tctx)).toBe("EiE");
+  });
+});
+
 describe("auditTargetLabel — '대상' 열 한글화", () => {
   const tctx = { subjectLabel: (key: string) => ({ math: "수학", english: "영어" })[key] ?? key };
 
@@ -1542,5 +1575,20 @@ describe("auditDetail — 학습 추세 미발송 설정(2026-10-23)", () => {
     const names = ctx({ [SID]: "김학생", [C1]: "M1A" });
     expect(auditDetail("onescreen_trend_optout", { studentId: SID, classId: C1, on: true, cleared: 2 }, names)).toBe("김학생 · M1A · 미발송 켬 · 안 나간 보고서 2건 추세 비움");
     expect(auditDetail("onescreen_trend_optout", { studentId: SID, classId: C1, on: false, cleared: 0 }, names)).toBe("김학생 · M1A · 미발송 끔");
+  });
+});
+
+describe("auditDetail — 퇴사자 권한 정리(2026-11-09 · 리뷰 r1 F8)", () => {
+  it("뺀 칸 · 남긴 칸 · 정리 실패를 한글로 — 칸 키·실패 코드는 안 보인다", () => {
+    expect(auditDetail("staff_permission_cleanup", { reason: "retire", removed: ["payslipViewerIds", "userOverrides"], kept: ["withdrawalApproverIds"] }, ctx()))
+      .toBe("퇴사 — 급여명세서 열람 · 개인별 메뉴 권한에서 뺌 / 퇴원보고서 승인자는 마지막 지정자라 남김");
+    // 실패 안내는 경우마다(리뷰 r2 N-a) — 퇴사 = 저장하면 정리 · 완전 삭제 = '(삭제된 직원)' 항목을 지움 · 다시 재직 = 직접 확인.
+    expect(auditDetail("staff_permission_cleanup", { reason: "retire", failed: "read" }, ctx()))
+      .toBe("퇴사 — 권한 정리를 하지 못함(역할·권한 면을 열어 확인한 뒤 한 번 저장하면 정리됩니다)");
+    const failed = auditDetail("staff_permission_cleanup", { reason: "delete", failed: "conflict" }, ctx());
+    expect(failed).toBe("완전 삭제 — 권한 정리를 하지 못함(역할·권한 면에서 '(삭제된 직원)' 항목을 지워 주세요)");
+    expect(failed).not.toContain("conflict");
+    expect(auditDetail("staff_permission_cleanup", { reason: "reactivate", failed: "write" }, ctx()))
+      .toBe("다시 재직으로 돌림 — 권한 정리를 하지 못함(역할·권한 면에서 이 직원의 개인별 권한을 확인해 지워 주세요)");
   });
 });

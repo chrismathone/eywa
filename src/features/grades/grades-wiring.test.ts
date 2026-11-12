@@ -221,9 +221,10 @@ describe("정렬은 계정에 남지만 주소는 안 바꾼다", () => {
     expect(grid).toContain("saveSort");
     expect(grid).not.toContain("useRouter");
     expect(grid).not.toContain("router.push");
-    // 계정 저장은 ui_prefs의 형제 키를 보존한다(통째로 덮으면 남의 화면 설정이 날아간다).
+    // 계정 저장은 ui_prefs의 형제 키를 보존한다(통째로 덮으면 남의 화면 설정이 날아간다) — grades.sort 키만 DB가 고친다.
     const prefs = read("src/features/grades/server/list-prefs.ts");
-    expect(prefs).toMatch(/\.\.\.raw, grades/);
+    expect(prefs).toMatch(/writeUiPrefsNs\([\s\S]*"grades", \{ set: \{ sort \} \}/);
+    expect(prefs).not.toMatch(/\.update\(\{ ui_prefs/);
   });
 });
 

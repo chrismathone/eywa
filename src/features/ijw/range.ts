@@ -6,7 +6,7 @@
  * 🔑 날짜 기준이 둘이다(설명서 ①) — 시험 = KST 달력 날짜, 학습 = 학습일(KST 03:00에 날이 바뀐다).
  *    자정~03시엔 달력 '오늘'이 아직 시작 안 한 학습일이라, 학습 쪽 기본 끝날은 `ijwStudyDay()`로 잡는다.
  */
-import { addDays, kstToday } from "@/lib/date-kst";
+import { addDays, kstToday, diffDays } from "@/lib/date-kst";
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -81,13 +81,10 @@ export function resolveJjRange(
     if (from > to) from = addDays(to, -(opts.defaultDays - 1));
   }
   let clamped = false;
-  if (opts.maxDays && daysBetween(from, to) + 1 > opts.maxDays) {
+  if (opts.maxDays && diffDays(from, to) + 1 > opts.maxDays) {
     from = addDays(to, -(opts.maxDays - 1));
     clamped = true;
   }
   return { from, to, isDefault: !hasFrom && !hasTo, endCapped, clamped, ...(swapped ? { swapped: true } : {}) };
 }
 
-function daysBetween(a: string, b: string): number {
-  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
-}

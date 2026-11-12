@@ -6,7 +6,7 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { CONNECTED_APP_ACCESS_MESSAGE, isConnectedAppMenu, isPermissionLocked, isScopedForbiddenRole, SCOPED_FORBIDDEN_MESSAGE, type SystemRole } from "@/lib/permissions";
+import { isOnOffMenu, isPermissionLocked, isScopedForbiddenRole, isStaffRecordLocked, onOffAccessMessage, SCOPED_FORBIDDEN_MESSAGE, type SystemRole } from "@/lib/permissions";
 import { createUploadTicket, MEDIA_KIND } from "@/lib/storage/media-storage";
 import { isTenantBrandingPath } from "@/lib/storage/legacy-audio-path";
 import type { UploadTicket } from "@/lib/storage/types";
@@ -24,6 +24,7 @@ import { platformSettingsError } from "./platform-settings";
 import { OWNER_SECTION_MENU } from "@/lib/settings-role-catalog";
 import { configureMakeupSettings } from "@/features/makeups/server/settings";
 import { resolveSettings } from "../resolve";
+import { subjectsWithNewcomerRecords } from "@/features/newcomers/server/subject-refs";
 import { nextSettingsStamp, settingsRevOf, withoutSettingsRev } from "../settings-stamp";
 import type { OperationsSettings } from "../settings-types";
 import {
@@ -66,6 +67,8 @@ export type IssueBrandingTicketState = { ticket?: UploadTicket; error?: string }
 // reportLogo=보고서 전용 로고(report.logoUrl) — 보고서 설정을 고치는 사람이 올리므로 report_settings 게이트.
 const BRANDING_SLOTS = new Set(["logo", "seal", "popup", "reportLogo"]);
 const BRANDING_SLOT_MENU = { popup: "popup_settings", reportLogo: "report_settings" } as const;
+/** 잠긴 칸(역할 칸 · 개인 줄)을 새로 주거나 바꾸는 요청에 내는 문구. */
+const LOCKED_CELL_MESSAGE = "이 역할에서 잠긴 메뉴 권한은 변경할 수 없습니다";
 export async function issueBrandingUploadTicket(
   _prev: IssueBrandingTicketState,
   formData: FormData,
@@ -163,8 +166,16 @@ export async function saveOwnerSection(
   // 연결 앱 칸은 전체·없음만(원장 2026-11-05 — 링크를 세우나 마나) — 같은 까닭으로 여기서 **요청 값만** 본다. 저장돼 있던 그런 칸은
   // 화면이 기본값으로 읽어(resolveMatrix가 잠긴 값을 건너뛴다) 다시 싣지 않는다. 개인 줄은 아래 잠금 검사가 같은 문구로 본다.
   // 아래 '담당' 금지보다 먼저 본다 — 열람·아르바이트의 연결 앱 '담당'에 그 안내('읽기'를 고르라)를 내면 다시 보낸 '읽기'도 거절된다(재리뷰 2026-11-06).
-  if (section === "permissions" && result && (result.data as PermissionsSettings).overrides.some((r) => isConnectedAppMenu(r.menu) && r.access !== "full" && r.access !== "none")) {
-    return { error: CONNECTED_APP_ACCESS_MESSAGE };
+  // 학원 비서도 전체·없음만이다(isOnOffMenu — 2026-11-09). 연결 앱 칸은 종전 문구 그대로(onOffAccessMessage).
+  const onOffCell = section === "permissions" && result
+    ? (result.data as PermissionsSettings).overrides.find((r) => isOnOffMenu(r.menu) && r.access !== "full" && r.access !== "none")
+    : undefined;
+  if (onOffCell) return { error: onOffAccessMessage(onOffCell.menu) };
+  // 조직·OKR · 업무 작성센터의 열람·아르바이트 칸(직원 역할 여섯만 쓰는 화면 — isStaffRecordLocked · 2026-11-11)도 같은 까닭으로 **요청 값만** 본다.
+  // 화면은 그 칸을 '고정'으로 세워 정상 요청에는 실리지 않는다 · 저장돼 있던 그런 칸은 화면이 기본값으로 읽어(resolveMatrix가 건너뛴다) 다시 싣지 않으니 그 저장으로 정리된다.
+  // 아래 '담당' 금지보다 먼저 본다 — 그 칸의 '담당'에 '읽기를 고르라'는 안내를 내면 다시 보낸 '읽기'도 거절된다(연결 앱 칸과 같은 차례).
+  if (section === "permissions" && result && (result.data as PermissionsSettings).overrides.some((r) => isStaffRecordLocked(r.menu, r.role))) {
+    return { error: LOCKED_CELL_MESSAGE };
   }
   // 강사보다 낮은 직급(열람·아르바이트)의 '담당'(원장 2026-11-05) — 같은 까닭으로 스키마가 아니라 여기서 **요청 값만** 본다.
   // 화면은 저장돼 있던 그런 칸을 '읽기'(그 칸 기본값이 '없음'이면 '없음')로 내려(resolveMatrix) 보내므로, 저장값에 남아 있어도 이 면의 저장은 막히지 않는다.
@@ -255,11 +266,17 @@ export async function saveOwnerSection(
         const role = roles.get(r.userId)!;
         if (!isPermissionLocked(r.menu, role, r.access)) return false;
         // 저장돼 있던 연결 앱의 담당·읽기 줄(손으로 넣은 값)도 그대로 둘 수 있다 — 적용 단계가 건너뛴다(applyUserOverrides · 위 옛 '담당' 줄과 같은 까닭).
-        return !(((r.access === "scoped" && isScopedForbiddenRole(role)) || isConnectedAppMenu(r.menu)) && storedKeys.has(rowKey(r)));
+        // 학원 비서 줄도 같다(isOnOffMenu) — 그 사람이 뒤에 강사가 됐으면(강사 칸 잠금) 적용 단계가 건너뛰므로 남아 있어도 이 면의 저장을 막지 않는다.
+        // 조직·OKR · 업무 작성센터 줄도 같다(isStaffRecordLocked · 2026-11-11) — 준 뒤에 그 사람이 열람·아르바이트가 됐으면 적용 단계가 건너뛴다.
+        return !(((r.access === "scoped" && isScopedForbiddenRole(role)) || isOnOffMenu(r.menu) || isStaffRecordLocked(r.menu, role)) && storedKeys.has(rowKey(r)));
       });
       if (locked) {
-        // 연결 앱 칸이면 전체·없음만이라고 알린다(먼저 — 위 역할 칸 검사와 같은 차례) · 강사보다 낮은 직급의 '담당'이면 까닭을 알린다(원장 2026-11-05 "알림메시지도 배선" — 권한 표·개인별 권한 화면과 같은 문구).
-        return { error: isConnectedAppMenu(locked.menu) ? CONNECTED_APP_ACCESS_MESSAGE : locked.access === "scoped" && isScopedForbiddenRole(roles.get(locked.userId)!) ? SCOPED_FORBIDDEN_MESSAGE : "이 역할에서 잠긴 메뉴 권한은 변경할 수 없습니다" };
+        // 전체·없음만인 칸(연결 앱 · 학원 비서)에 담당·읽기면 그렇다고 알린다(먼저 — 위 역할 칸 검사와 같은 차례) · 강사보다 낮은 직급의 '담당'이면 까닭을 알린다(원장 2026-11-05 "알림메시지도 배선" — 권한 표·개인별 권한 화면과 같은 문구).
+        const onOffValue = isOnOffMenu(locked.menu) && locked.access !== "full" && locked.access !== "none";
+        // 조직·OKR · 업무 작성센터 줄은 어느 값이든 잠긴 칸이다 — '담당'이어도 '읽기를 고르라'는 안내를 내지 않는다(다시 보낸 '읽기'도 거절된다).
+        const lockedRole = roles.get(locked.userId)!;
+        const scopedOnly = !isStaffRecordLocked(locked.menu, lockedRole) && locked.access === "scoped" && isScopedForbiddenRole(lockedRole);
+        return { error: onOffValue ? onOffAccessMessage(locked.menu) : scopedOnly ? SCOPED_FORBIDDEN_MESSAGE : LOCKED_CELL_MESSAGE };
       }
     }
   }
@@ -302,6 +319,17 @@ export async function saveOwnerSection(
     // 이미 없는 과목의 삭제 — 쓰지 않고 지금 상태를 돌려준다(화면이 그 값으로 맞춘다).
     if ("unchanged" in built) {
       return { ok: true, nonce: Date.now(), operations: operationsReply(fresh, operationsRequest), version: settingsRevOf(base.operations) };
+    }
+    // 과목 행이 사라지는 저장(흡수·미사용 삭제의 마지막 단계 · 과목 면에서 줄을 뺀 저장)이면 그 과목의 신규생 관리 기록을 마지막으로 다시 본다 —
+    // 옮기는 규칙이 없는 기록이라 과목이 사라지면 옛 키에 남는다(newcomers/server/subject-refs.ts). 못 세면 지우지 않는다.
+    const removedSubjects = fresh.subjects.filter((s) => !built.parsed.subjects.some((n) => n.key === s.key));
+    if (removedSubjects.length > 0) {
+      const held = await subjectsWithNewcomerRecords(actor.tenantId, removedSubjects.map((s) => s.key));
+      if (held === null) return { error: "과목 사용 현황을 확인하지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
+      if (held.length > 0) {
+        const names = removedSubjects.filter((s) => held.includes(s.key)).map((s) => s.label || s.key).join(", ");
+        return { error: `'${names}' 과목에 신규생 관리 기록(완료 체크·담당 배정·적응 피드백)이 있어 과목을 지울 수 없습니다.` };
+      }
     }
     // 새 칸 둘(periodStyle·schoolSaveAliases)은 어느 요청도 맡지 않아 값이 늘 fresh에서 온다 — 침산은 지우고 일반판은 그대로 둔다.
     sectionData = prepareSectionForSave(preset, section, built.raw, built.parsed, base[section]);

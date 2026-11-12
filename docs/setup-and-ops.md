@@ -91,12 +91,12 @@ supabase/migrations/            # 2026-10-27 SQL 시즌2 — 이 셋만 둔다(�
    ```
    origin/main에 내가 모르는 커밋이 있으면 **먼저 그 위로 맞춘 뒤** 작업.
 
-2. **push 전 반드시 최신에 merge/rebase**:
+2. **push 전 반드시 최신을 merge로 통합**(원장 2026-07-16 — 병렬 커밋 보존 · rebase 아님 · 절차 단일 소스 = CLAUDE.md '작업 격리 정책'):
    ```bash
-   git pull --rebase origin main   # 원격 최신을 내 커밋 아래로 당겨와 충돌 없이 쌓기
-   git push origin main
+   git fetch origin && git merge origin/main   # 충돌은 내 파일만 해결, 남의 hunk는 보존
+   git push origin HEAD:main
    ```
-   바로 `git push`로 reject되면(`non-fast-forward`) 위 rebase 후 재시도. **force push 금지.**
+   reject되면(`non-fast-forward`) fetch/merge 후 재시도. **force push 금지.**
 
 3. **working tree가 clean인데 "ahead of origin by N commits"** = 다른 세션이 만든 로컬 커밋이 push 안 된 상태일 수 있음. push 전 그 N개가 무엇인지 `git log origin/main..HEAD`로 확인하고, 의도된 것이면 함께 push.
 
@@ -106,7 +106,7 @@ supabase/migrations/            # 2026-10-27 SQL 시즌2 — 이 셋만 둔다(�
 
 **핵심 원칙: 두 세션이 같은 것을 동시에 *쓰면* 충돌, 다른 것을 쓰면 안전.** 여기서 "같은 것" = 파일 · `.next` · 같은 포트의 dev 서버 · Supabase DB · main 브랜치.
 
-⚠️ **이 repo는 세션들이 단일 작업 트리(`D:/eywa_refactoring`)를 공유**한다 (`git worktree list` 하면 워크트리 1개뿐). 그래서 격리 없는 동시 *쓰기*는 위험:
+⚠️ **공유 작업 트리에서 직접 편집하지 말 것** — 2026-07-15부터 작업은 항상 **격리 git 워크트리**(origin/main 기반)에서 한다(CLAUDE.md '작업 격리 정책'). 공유 트리에서 격리 없이 동시에 *쓰면* 위험했던 이유(옛 기록):
 - **같은 파일 동시 편집** → 나중 쓴 쪽이 덮어씀, 상대 세션의 화면은 stale
 - **둘 다 `pnpm dev`** → `.next` 락 충돌·생성파일 손상 (#17/#23 — `routes.d.ts` 깨짐 → `.next` nuke 후 재빌드해야 복구)
 - **둘 다 마이그레이션** → 같은 Supabase(운영 DB)에 동시 적용
@@ -140,20 +140,36 @@ pnpm verify      # 기본 — 바뀐 파일과 그 영향만(보통 1분 안팎 
 **기본은 `pnpm verify` 하나**(2026-11-09, `scripts/verify-changed.mjs` · `verify-deps.mjs` · `verify-baseline.mjs` · `verify-vitest.config.mts`). AGENTS.md "검증 범위 원칙"대로 바뀐 파일과 그 영향만 본다.
 - 린트 = 바뀐 JS/TS · 타입 = 바뀐 TS + 그 import + **역의존**(바뀌거나 지우거나 옮긴 TS 파일을 import하는 쪽, 재수출을 한 단계 더 — 60개를 넘으면 전체 tsc로 올린다). 지금 main의 타입 오류 11건(수정 계획 P0-3)이 import 경로에 걸리면 '그 밖' 실패로 나온다.
 - 테스트 = `vitest related` + 바뀐 파일 이름을 글자로 적은 테스트(SQL·CSS·JSON 포함) + **폴더 전체를 훑는 가드**(늘)
+- 커버리지 = `vitest.config.ts` `coverage.thresholds`에 적힌 계산 파일(돈 계산 — 정산 티어·금액 이월·이월 시수 등)이 바뀌었을 때만, 관련 테스트로 재서 임계값을 강제(2026-11-10, 수정 계획 P0-5). 새 돈 계산 파일은 그 표에 한 줄.
+- 린트 **경고**는 막지 않는다(오류만) — 2026-11-10 의도적 실패 주입으로 타입 오류·실패 테스트가 막히는 것을 확인(P0-6).
 - **기준선 비교** — main에는 이미 빨간 테스트가 있다(2026-11-09 실측 9건, 수정 계획 P0-3b). 실패한 파일만 혼자 다시 돌려(흔들림 제거), 기준 커밋의 사본(내장 디스크 임시 폴더 · **사본 자신의** vitest 설정과 `@` 별칭)에서도 **스택을 뺀 메시지 전체가 같게** 실패하면 "기존 실패"로 따로 보이고 나머지만 막는다. 값을 줄여 쓰지 않는 설정으로 돌리므로 위반 목록이 메시지에 그대로 들어간다 — 개수가 늘거나, 개수가 같아도 내용이 바뀌면 새 실패다.
   - 한계: 메시지가 값을 담지 않는 단언(`expected false to be true`)은 같은 테스트 안의 새 원인을 기존 실패와 구별하지 못한다. 그런 테스트가 기존 실패 목록에 있으면 그 기능을 만질 때 직접 확인할 것.
 - 외장 SSD(exFAT)의 `._*` 메타 파일은 실행 전에 지운다(테스트·가드가 소스로 읽어 거짓 실패를 낸다).
 - 기준은 `origin/main`과의 merge-base(`pnpm verify <기준>`), 결과 한 줄은 `.verify/log.txt`에 커밋 sha와 함께 남는다.
+- **선택: push 직전 자동 실행**(2026-11-10, [`scripts/git-hooks/pre-push`](../scripts/git-hooks/pre-push)) — 설치 `cp scripts/git-hooks/pre-push "$(git rev-parse --git-common-dir)/hooks/pre-push" && chmod +x "$(git rev-parse --git-common-dir)/hooks/pre-push"`(워크트리는 hooks를 공유하니 한 번이면 된다). push 대상이 HEAD가 아니거나 커밋 안 한 변경(새 파일 포함)이 있으면 **멈춘다**(태그 push는 건너뜀 · 린트·타입은 원래 있던 오류로도 멈출 수 있다)(게이트가 push 내용을 검사한 게 아니므로 통과로 치지 않는다). 건너뛰기 `AYWA_SKIP_VERIFY=1 git push …`. 중앙 게이트가 아니다 — 설치하지 않은 PC·세션은 그대로 push된다.
 ⚠️ 지금은 이게 **유일한 게이트**다 — CI(`.github/workflows/ci.yml`)는 2026-10-21부터 꺼져 있고(GitHub 결제), 켜져 있어도 배포를 막지 않는다
 (`next.config.ts` `ignoreBuildErrors` · `main` 브랜치 보호 없음 · Vercel은 push마다 배포).
 
 전체 검사는 **공통 타입·공용 기반·빌드 설정을 바꿨을 때만**:
 
 ```bash
-pnpm verify --all-types   # 전체 tsc(힙 12GB — 기본 6GB `pnpm typecheck`는 지금 메모리 부족으로 죽을 수 있다)
+pnpm verify --all-types   # 전체 tsc(힙 12GB) · `pnpm typecheck`는 힙 8GB(2026-11-10 — 6GB는 메모리 부족으로 죽는다)
 pnpm test                 # vitest 전체
 pnpm build                # next build (Turbopack)
 ```
+**전체 tsc 메모리 실측(2026-11-10, 수정 계획 P0-2 · macOS `/usr/bin/time -l` 최대 RSS · 증분 캐시 없이):**
+
+| 조건 | 결과 | 최대 RSS | 시간 |
+|---|---|---|---|
+| 힙 12GB | 통과 | 6.8GB | 45초 |
+| 힙 8GB | 통과 | 7.5GB | 47초 |
+| 힙 6GB | **메모리 부족으로 죽음**(exit 134) | 6.6GB | 31초 |
+| 힙 12GB · 테스트 파일 제외 | 통과 | 7.9GB | 37초 |
+| 힙 12GB · 증분 캐시 있음 | 통과 | 3.7GB | 9초 |
+
+(각 1회 측정 — 최대 RSS는 GC 시점에 따라 1GB 안팎 흔들린다.)
+→ 테스트 파일을 따로 검사해도 최고 메모리는 줄지 않는다(분리 tsconfig는 이득 없음). CI 워크플로(`.github/workflows/ci.yml`)는 GitHub에서 꺼져 있다(disabled_manually, 2026-10-21~). 다시 켤 때 러너는 **메모리 8GB 이상 여유**(힙 8GB + 노드 오버헤드 — 실측 최대 7.5GB)가 필요하다 — 비공개 저장소 기본 Linux 러너(2코어·약 7GB, 켤 때 사양 확인)로는 모자라 16GB급이 필요하다. 증분 캐시(`tsconfig.tsbuildinfo`)를 캐시하면 크게 준다.
+
 
 Vercel은 push 후 자동 빌드.
 마지막 커밋·푸시 전 적대적 리뷰는 이 게이트와 별도 필수 — `CLAUDE.md` 작업 선호.

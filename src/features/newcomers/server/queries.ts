@@ -3,8 +3,8 @@ import { cache } from "react";
 
 import { createClient } from "@/lib/supabase/server";
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { kstToday } from "@/lib/date-kst";
-import { fetchAllPaged } from "@/lib/supabase/batch";
+import { kstToday, diffDays } from "@/lib/date-kst";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import {
   NEWCOMER_WINDOW_DAYS,
   ONBOARDING_ITEMS,
@@ -14,7 +14,7 @@ import {
   type NewcomerBucket,
   type NewcomerProgress,
 } from "../onboarding-items";
-import { buildSubjectAnchors, collapseChecks, effectiveChecks, indexChecks } from "../subject-rows";
+import { buildSubjectAnchors, collapseChecks, effectiveChecks, indexChecks, checkDetailsOf, type CheckRowInput } from "../subject-rows";
 import { loadCheckRows, loadEnrollmentSubjects, type ScopeFn } from "./cohort";
 
 export { NEWCOMER_WINDOW_DAYS };
@@ -65,6 +65,8 @@ export type NewcomerRow = {
   bucket: NewcomerBucket;
   /** 항목 키 → 완료일(YYYY-MM-DD). 없으면 미완료. */
   checks: Record<string, string | null>;
+  /** 항목 키 → 완료 메모·연결 상담(과목 행 · 체크 칸 상세에서 '실행한 액션·결과'를 보인다). */
+  checkDetails?: Record<string, { memo: string | null; consultationId: string | null }>;
   progress: NewcomerProgress;
 };
 
@@ -81,6 +83,8 @@ export type NewcomersView = {
   subjectChecks: boolean;
   /** 0251a가 적용돼 체크를 저장할 수 있나. false면 화면이 배너로 밝히고 체크를 잠근다. */
   checksAvailable: boolean;
+  /** 90일 뒤 후속 관리 대상을 못 읽었을 때의 한글 사유(신규생 관리 화면만). */
+  followupError?: string;
   /** 체크 조회가 표 부재가 아닌 이유로 실패했을 때의 한글 사유(원문은 툴팁). */
   checksError: { summary: string; raw: string } | null;
 };
@@ -95,9 +99,7 @@ function ymd(value: unknown): string | null {
   return s.length >= 10 ? s.slice(0, 10) : null;
 }
 
-function daysBetween(from: string, to: string): number {
-  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
-}
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const getNewcomers = cache(async (): Promise<NewcomersView> => loadNewcomers(await createClient(), kstToday()));
 
@@ -109,6 +111,10 @@ export async function loadNewcomers(
   supabase: Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdminClient>,
   today: string,
   tenantId?: string,
+  /** 창(90일) 밖이어도 함께 세울 학생 — 아직 끝나지 않은 적응 피드백·후속 조치가 있는 학생(신규생 관리 화면만). */
+  includeStudentIds: string[] = [],
+  /** 완료 메모·연결 상담까지 읽나 — 신규생 관리 화면만(운영실·매일 기록은 날짜만 쓴다). */
+  withDetails = false,
 ): Promise<NewcomersView> {
   const since = newcomerWindowStart(today);
   const scope: ScopeFn = tenantId ? <T,>(q: T): T => (q as unknown as { eq(c: string, v: string): T }).eq("tenant_id", tenantId) : (q) => q;
@@ -133,6 +139,14 @@ export async function loadNewcomers(
       .order("id", { ascending: true })
       .range(from, to),
   );
+  // 창 밖 후속 관리 학생 — id 목록이 길 수 있어 청크로 읽는다(B3). 창 안 학생과 겹치면 건너뛴다.
+  const inWindow = new Set(students.map((s) => s.id));
+  const extra = [...new Set(includeStudentIds)].filter((id) => UUID_RE.test(id) && !inWindow.has(id));
+  if (extra.length > 0) {
+    const more = await fetchInChunks<(typeof students)[number]>(extra, (chunk) =>
+      scope(supabase.from("students").select("id, name, school, grade, enrolled_at").in("status", ["enrolled", "on_hold"]).in("id", chunk)));
+    students.push(...more.sort((a, b) => String(b.enrolled_at ?? "").localeCompare(String(a.enrolled_at ?? "")) || a.id.localeCompare(b.id)));
+  }
   const ids = students.map((s) => s.id);
   if (ids.length === 0)
     return { today, rows: [], subjectRows: [], checksAvailable: true, checksError: null, subjectChecks: true };
@@ -143,7 +157,7 @@ export async function loadNewcomers(
   //    알면 같은 학생을 두 화면이 다르게 말한다.
   const [enrollments, checksResult] = await Promise.all([
     loadEnrollmentSubjects(supabase, ids, scope),
-    loadCheckRows(supabase, ids, scope),
+    loadCheckRows(supabase, ids, scope, withDetails),
   ]);
   // 🔴 `today`를 넘긴다 — 끝난 과목(그만둔 과목)은 줄을 세우지 않는다(아래 순수 함수 주석).
   const { bySubject, earliest } = buildSubjectAnchors(enrollments, today);
@@ -169,6 +183,11 @@ export async function loadNewcomers(
   }
 
   const itemKeys = ONBOARDING_ITEMS.map((item) => item.key);
+  const detailRows = new Map<string, CheckRowInput[]>();
+  for (const r of checksResult.ok ? checksResult.rows : []) {
+    const list = detailRows.get(r.studentId);
+    if (list) list.push(r); else detailRows.set(r.studentId, [r]);
+  }
   const rows: NewcomerRow[] = [];
   const subjectRows: NewcomerRow[] = [];
   for (const s of students) {
@@ -181,7 +200,7 @@ export async function loadNewcomers(
       school: s.school,
       grade: s.grade,
       enrolledOn,
-      elapsedDays: daysBetween(enrolledOn, today),
+      elapsedDays: diffDays(enrolledOn, today),
       bucket: bucketOf(enrolledOn, today),
     };
     const subjMap = bySubject.get(s.id);
@@ -199,6 +218,7 @@ export async function loadNewcomers(
         rowKey: `${s.id}|${subject ?? ""}`,
         firstClassOn,
         checks,
+        checkDetails: checkDetailsOf(detailRows.get(s.id) ?? [], s.id, subject),
         progress: progressOf({ enrolledOn, firstClassOn }, checks, today, ONBOARDING_ITEMS),
       };
     });

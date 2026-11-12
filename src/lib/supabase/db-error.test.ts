@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { humanizeDbError } from "./db-error";
+import { humanizeDbError, isMissingColumn as missCol, isMissingFunction as missFn, isMissingRelation as missRel } from "./db-error";
 
 describe("humanizeDbError", () => {
   it("RLS 위반 원문을 한글 권한 안내로 바꾼다(영문 원문 미노출)", () => {
@@ -52,5 +52,33 @@ describe("humanizeDbError", () => {
     expect(humanizeDbError(null)).toContain("저장하지 못했습니다");
     expect(humanizeDbError(undefined, "삭제")).toContain("삭제하지 못했습니다");
     expect(humanizeDbError("")).toContain("저장하지 못했습니다");
+  });
+});
+
+
+describe("'아직 없음' 판정 — 대상 식별자 + 없음 코드(P1-E · E2)", () => {
+  it("표: 코드와 이름이 둘 다 맞아야", () => {
+    expect(missRel({ code: "42P01", message: 'relation "public.love_note_suggestions" does not exist' }, "love_note_suggestions")).toBe(true);
+    expect(missRel({ code: "PGRST205", message: "Could not find the table 'public.seat_placements' in the schema cache" }, "seat_placements")).toBe(true);
+    // 다른 표가 없음 — 이 기능은 끄지 않는다
+    expect(missRel({ code: "42P01", message: 'relation "public.other" does not exist' }, "love_note_suggestions")).toBe(false);
+  });
+  it("🔴 표 이름이 들어간 다른 오류(권한·유니크)는 없음이 아니다 — 코드가 이긴다", () => {
+    expect(missRel({ code: "42501", message: 'permission denied for table love_note_suggestions' }, "love_note_suggestions")).toBe(false);
+    expect(missRel({ code: "23505", message: 'duplicate key value violates unique constraint "love_note_suggestions_pkey"' }, "love_note_suggestions")).toBe(false);
+  });
+  it("코드 없는 문자열 오류(fetchAllPaged 감싼 것)는 문구 + 이름으로", () => {
+    expect(missRel(new Error("fetchAllPaged: relation \"public.student_siblings\" does not exist"), "student_siblings")).toBe(true);
+    expect(missRel("Could not find the table 'public.x' in the schema cache", "student_siblings")).toBe(false);
+  });
+  it("후보 여럿 중 하나", () => {
+    expect(missRel({ code: "PGRST205", message: "Could not find the table 'public.seat_period_pins'" }, ["seat_period_moves", "seat_period_pins"])).toBe(true);
+  });
+  it("칸·함수", () => {
+    expect(missCol({ code: "42703", message: "column users.shuttle_duty does not exist" }, "shuttle_duty")).toBe(true);
+    expect(missCol({ code: "PGRST204", message: "Could not find the 'is_makeup_pool' column of 'classes' in the schema cache" }, "is_makeup_pool")).toBe(true);
+    expect(missCol({ code: "42703", message: "column users.other does not exist" }, "shuttle_duty")).toBe(false);
+    expect(missFn({ code: "PGRST202", message: "Could not find the function public.absorb_subject_key" }, "absorb_subject_key")).toBe(true);
+    expect(missFn(null, "x")).toBe(false);
   });
 });

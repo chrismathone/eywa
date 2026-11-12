@@ -8,6 +8,7 @@ import css from "./completion-form.module.css";
 export function CompletionForm({ done, canWrite, busy, today, memo, consultationId, onSave }: { done: boolean; canWrite: boolean; busy: boolean; today: string; memo?: string | null; consultationId?: string | null; onSave: (done: boolean, completion?: Completion, doneOn?: string) => void }) {
   const [action, setAction] = useState(""), [result, setResult] = useState(""), [next, setNext] = useState(""), [date, setDate] = useState(today);
   return <div className={css.root}>
+    {memo && !done && <p className={css.muted}>완료가 취소된 이전 기록입니다.</p>}
     {memo && <p className={css.memo}>{memo}</p>}
     {consultationId && <Link className={css.link} href={`/consultations/${consultationId}`}>연결된 상담 결과 보기 ↗</Link>}
     {done && !memo && !consultationId && <p className={css.muted}>이전 완료 기록입니다. 상세 결과 메모는 없습니다.</p>}

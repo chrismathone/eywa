@@ -110,7 +110,8 @@ describe("saveRefundRequest — 대상 직원 명의 · 세션 먼저", () => {
     m.user.mockResolvedValue(actual);
     m.viewAs.mockResolvedValue(null);
     m.sessionInsertError = { code: "42501", message: "rls" };
-    expect((await saveRefundRequest(undefined, form()))?.error).toContain("저장 실패");
+    // 원문 대신 한글(42501 = 권한, explainDbError — P1-E)
+    expect((await saveRefundRequest(undefined, form()))?.error).toBe("이 작업을 할 권한이 없습니다 — 계정 권한을 확인해 주세요");
     expect(writes().map((c) => c[0])).toEqual(["session"]);
     expect(inserted()).toMatchObject({ uploaded_by: "actual" });
   });

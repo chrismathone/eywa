@@ -23,6 +23,8 @@ export const AUDIT_ACTIONS = {
   //    통째로 무기록이었다. 특히 연동은 user_integrations에 updated_by조차 없어 흔적이 0이었다.
   integration_sync_toggle: "makeedu 자동 동기화 토글",
   sync_agent_manage: "연동 PC 관리",
+  // 경영 분석 학원 PC 수집기(s2_0053) — 켜기·끄기·연결 파일 발급·연결 해제. 토큰 원문은 남기지 않는다.
+  management_collector_manage: "경영 분석 PC 수집기 관리",
   integration_sheets_toggle: "구글 시트 내보내기 토글",
   integration_sheet_target: "구글 시트 대상 지정",
   integration_video_drive_setting: "숙제영상 저장 폴더 지정",
@@ -64,6 +66,7 @@ export const AUDIT_ACTIONS = {
   student_contribution_refresh: "원생 로열티 집계·마감",
   student_contribution_settings_save: "원생 로열티 배점 저장",
   student_contribution_signal_cancel: "원생 긍정 신호 판정 취소",
+  student_contribution_factor_save: "원생 기여 요인 기록",
   student_contribution_signal_rejudge: "원생 긍정 신호 재판정 요청",
   student_contribution_referral_backfill: "지난 원생 소개 연결",
   // 운영 스크립트(원장 지시 · 2026-10-29 "오늘 작업건에 대해선 전부 감사로그 배정여부 체크하고 넣을것") — 행위자 = system:<스크립트>.
@@ -77,6 +80,8 @@ export const AUDIT_ACTIONS = {
   teacher_portfolio_rule_patch: "직원 포트폴리오 마감 달 규칙 반영",
   // 지난달을 지금 구성으로 처음부터 다시 집계(원장 지시 때만 · 운영 스크립트) — 2026-10-14 "이전 월들도 전부 10월 기준으로".
   teacher_portfolio_recompute: "직원 포트폴리오 지난달 다시 집계",
+  // 마감한 달의 담임 판정 정정(원장 지시 때만 · 운영 스크립트) — 2026-11-11 담임 이력에 activity_log를 합친 뒤 판정이 바뀐 자리만 고치고 입사 전·퇴사 뒤 달은 지움.
+  teacher_portfolio_homeroom_fix: "직원 포트폴리오 마감 달 담임 판정 정정",
   // 강사평가 학부모 만족도 — 확인 대기 글 반영·무시 · 반영 취소 · 클레임·칭찬 넣기·취소(원장).
   teacher_evaluation_satisfaction: "학부모 만족도 판정·클레임",
   // 강사평가 설정(0359a) — 지표 켜고 끄기·만점·점수 규칙. 원장만 바꾼다.
@@ -118,6 +123,8 @@ export const AUDIT_ACTIONS = {
   staff_delete: "직원 삭제",
   // 재직 상태 변경(퇴사·복구·대기) — 2026-09-23 전수 점검 S1 전엔 기록이 한 줄도 안 남았다.
   staff_status_change: "직원 재직 상태 변경",
+  // 퇴사·재입사·완전 삭제 때 학원 설정의 사람 칸(개인별 기능·메뉴 권한 · 과목 범위 · 대시보드 배정)에서 그 사람을 뺐다(원장 2026-11-09 *"퇴사시 같이 사라지게"*).
+  staff_permission_cleanup: "퇴사자 권한 정리",
   // 보호 계정(super_admins 명단) 역할·재직·삭제 시도 — 🔴 화면 문구엔 슈퍼관리자라 쓰지 않는다(위장, displayRoleFor) — 거절됐지만 누가 시도했는지 남긴다(원장 2026-09-30 "강력 가드").
   staff_protected_refused: "보호 계정 변경 거절",
   staff_password_reset: "직원 비밀번호 재설정",
@@ -288,6 +295,9 @@ export const AUDIT_ACTIONS = {
   // "안 왔다는데 콜은 했다고 돼 있네"를 되짚을 수 있어야 한다. 해제도 함께 남긴다(그쪽이 더 중요한 흔적).
   newcomer_check: "신규생 체크 완료",
   newcomer_uncheck: "신규생 체크 해제",
+  // 신규생 '과목 기본 담당' 지정·교체(2026-11-11) — 앱이 아니라 **DB 트리거**(s2_0066 `onboarding_default_manager_audit`)가 같은 거래에 남긴다
+  // (직접 지정하지 않은 학생 전체의 관리 담당이 한 줄로 바뀐다 · logAction은 실패를 삼켜서). 상세 = describe.ts.
+  newcomer_default_manager_update: "신규생 과목 기본 담당 변경",
   // 2차 확장(2026-08-18 원장 "모든 행동에 기록이 남도록 범인 찾기 가능하게") — 수강을 바꾸는 나머지 경로.
   enrollment_assign: "반 배정",
   enrollment_move: "반 이동",

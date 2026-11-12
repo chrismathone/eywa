@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { freshSavedFilters } from "@/lib/filter-reset/server";
 import { parseShuttleTodayPrefs, type ShuttleTodayPrefs } from "../today-prefs";
+import { explainDbError } from "@/lib/supabase/db-error";
+import { writeUiPrefsNs } from "@/lib/ui-prefs/write";
 
 /**
  * `users.ui_prefs.shuttleToday`만 **필드 단위로** 갱신 — 오늘 등하원 화면의 보기 설정.
@@ -26,7 +28,7 @@ export async function saveShuttleTodayPrefs(
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
+  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "shuttle.today.today-prefs.saveShuttleTodayPrefs", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   const raw =
     row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
@@ -35,12 +37,8 @@ export async function saveShuttleTodayPrefs(
   // 클라가 보낸 값을 그대로 믿지 않는다 — 파서를 한 번 태운다(모르는 값은 기본값으로 접힌다).
   const merged = parseShuttleTodayPrefs({ ...parseShuttleTodayPrefs(raw.shuttleToday), ...next });
 
-  const { error } = await admin
-    .from("users")
-    .update({ ui_prefs: { ...raw, shuttleToday: merged } })
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId);
-  if (error) return { ok: false, error: error.message };
+  const { error } = await writeUiPrefsNs(admin, { userId: user.id, tenantId: user.tenantId }, "shuttleToday", { replace: merged });
+  if (error) return { ok: false, error: explainDbError(error, { scope: "shuttle.today.today-prefs.saveShuttleTodayPrefs", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }
 

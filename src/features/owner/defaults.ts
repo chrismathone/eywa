@@ -9,6 +9,7 @@ import { DEFAULT_TEACHER_VIEW_LINES } from "@/features/timetable/lib/ten-minute-
 import { DEFAULT_MONTH_PLAN_TEXTS } from "./month-plan-texts";
 import type { TenantSettings } from "./settings-types";
 import { DEFAULT_MAKEUP_SETTINGS } from "@/features/makeups/config";
+import { EMPTY_BRIEF_FACTS } from "@/features/enrollment/brief-facts";
 import { DEFAULT_EIE_MONTHLY_PRICE, DEFAULT_SESSION_PRICES } from "@/features/billing/session-pricing";
 import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
 
@@ -210,7 +211,8 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     serviceTerms: DEFAULT_SERVICE_TERMS,
   },
   // 학생상담 양식(템플릿) — 기본 4종 프리셋(신입생 관리 시나리오 + 일반 상담일지). 원장이 학원설정에서 편집.
-  consultations: { templates: DEFAULT_CONSULTATION_TEMPLATES },
+  // 브리프 운영 안내는 빈칸으로 시작한다(운영 사실을 지어 기본값으로 두지 않는다 · 2026-11-12 Codex 합의).
+  consultations: { templates: DEFAULT_CONSULTATION_TEMPLATES, briefFacts: { ...EMPTY_BRIEF_FACTS } },
   // 학부모 보고서(/r)·ClassNote 게시 이미지 표시 — 기본은 전부 표시(기존 동작 유지). 로고 중복은 원장이 학원명 off로.
   report: {
     title: "수업 보고서",

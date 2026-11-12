@@ -1,0 +1,20 @@
+import { beforeEach, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
+const m = vi.hoisted(() => ({ gate: vi.fn(), read: vi.fn(), db: vi.fn() }));
+vi.mock("@/lib/auth/menu-gate", () => ({ menuGate: m.gate }));
+vi.mock("@/lib/auth/perm-matrix", () => ({ canAccessTenant: m.read }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: m.db }));
+import { okrAccess, saveOkr } from "./server";
+import { blankGoal } from "./model";
+const id = "0f56bacd-dd58-4249-9240-a5a45cd5a69e";
+const gate = (systemRole: string, write: boolean, manage: boolean, superAdmin = false) => ({ user: { id, tenantId: "tenant", systemRole }, superAdmin, write, manage, readAll: manage });
+beforeEach(() => { vi.resetAllMocks(); m.gate.mockResolvedValue(gate("teacher", true, false)); m.read.mockResolvedValue(true); });
+it("'조직·OKR' 권한을 본다", async () => { const g = await okrAccess(); expect(g.writable).toBe(true); expect(g.manager).toBe(false); expect(m.gate).toHaveBeenCalledWith("okr"); });
+it("권한이 없으면 DB 전에 거절", async () => { m.gate.mockResolvedValue(null); await expect(okrAccess()).rejects.toThrow(); expect(m.db).not.toHaveBeenCalled(); });
+it("읽기 권한·열람 보기는 저장 전에 막는다", async () => { m.gate.mockResolvedValue(gate("teacher", false, false)); await expect(saveOkr({ id: crypto.randomUUID(), version: 0, action: "save", document: blankGoal(id, "2026-11-03") })).rejects.toThrow("열람 전용"); expect(m.db).not.toHaveBeenCalled(); });
+it("학생·열람 역할은 거절", async () => { m.gate.mockResolvedValue(gate("student", true, true)); await expect(okrAccess()).rejects.toThrow(); m.gate.mockResolvedValue(gate("viewer", true, true)); await expect(okrAccess()).rejects.toThrow(); });
+it("'전체' 권한 강사는 관리자가 아니다 · 매니저는 관리자(저장 함수와 같은 역할 판정)", async () => {
+  m.gate.mockResolvedValue(gate("teacher", true, true)); expect((await okrAccess()).manager).toBe(false);
+  m.gate.mockResolvedValue(gate("manager", true, true)); expect((await okrAccess()).manager).toBe(true);
+  m.gate.mockResolvedValue(gate("counselor", true, true, true)); expect((await okrAccess()).manager).toBe(false);
+});

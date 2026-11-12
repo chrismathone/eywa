@@ -20,8 +20,9 @@ export * from "./types";
  *  · 분석 = `an:<id>` · 온톨로지 사실 = `fact:<id>`(영역 `hub:ontology` 아래).
  */
 
-/** 모델 → 기록 단위의 온전한 판(점·선). 같은 대상은 점 하나로 합치고 조각마다 선을 잇는다. */
+/** 모델 → 기록 단위의 온전한 판(점·선). 같은 대상은 점 하나로 합치고 조각마다 선을 잇는다. 이미 짠 판이면 그대로. */
 export function buildNetGraph(input: NetInput): NetGraph {
+  if ("graph" in input) return input.graph;
   const { model } = input;
   const nodes: NetNode[] = [];
   const edges: NetEdge[] = [];
@@ -137,8 +138,9 @@ export function summaryGraph(g: NetGraph): NetGraph {
 }
 
 const graphCache = new WeakMap<NetInput, NetGraph>();
-/** 기록 단위 판 — 같은 입력은 한 번만 짠다(이웃·기록 찾기는 보기가 요약이어도 이것을 본다). */
+/** 기록 단위 판 — 같은 입력은 한 번만 짠다(이웃·기록 찾기는 보기가 요약이어도 이것을 본다). 이미 짠 판은 그대로 돌려준다. */
 export function fullGraphOf(input: NetInput): NetGraph {
+  if ("graph" in input) return input.graph;
   let g = graphCache.get(input);
   if (!g) graphCache.set(input, (g = buildNetGraph(input)));
   return g;
@@ -158,7 +160,7 @@ export function netNeighbors(input: NetInput, id: string): NetNeighbor[] {
       .filter((e) => e.from === id)
       .map((e) => byId.get(e.to)!)
       .filter(Boolean)
-      .map((n) => ({ id: n.id, title: n.label ?? n.title, rel: n.kind === "group" ? "" : (n.detail?.split(" · ")[0] ?? ""), tone: n.tone, date: n.date ?? null, ...(n.level ? { unit: UNIT[n.level] } : {}) }));
+      .map((n) => ({ id: n.id, title: n.label ?? n.title, rel: n.kind === "group" ? "" : (n.detail?.split(" · ")[0] ?? ""), tone: n.tone, date: n.date ?? null, ...(n.level ? { unit: n.unit ?? UNIT[n.level] } : {}) }));
   const out: NetNeighbor[] = [];
   for (const e of g.edges) {
     const other = e.from === id ? e.to : e.to === id ? e.from : null;

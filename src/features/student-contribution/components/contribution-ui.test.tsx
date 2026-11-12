@@ -7,7 +7,7 @@ import { EmbedProvider } from "@/components/workspace/embed-context";
 /** 학생 순위표는 눌러서 연다(원장 2026-10-29 요약 먼저) — 목록을 다루는 테스트는 먼저 펼친다. */
 const openList = () => { const button = screen.queryByRole("button", { name: /학생 목록 보기/ }); if (button) fireEvent.click(button); };
 const m = vi.hoisted(() => ({ refresh: vi.fn(), save: vi.fn(), recalc: vi.fn(), search: vi.fn(), link: vi.fn(), recent: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: m.refresh }), useSearchParams: () => new URLSearchParams(window.location.search) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: m.refresh }), useSearchParams: () => new URLSearchParams(window.location.search), usePathname: () => window.location.pathname }));
 vi.mock("../server/actions", () => ({ saveContributionSettings: m.save, refreshContribution: m.recalc }));
 vi.mock("../server/recent-action", () => ({ readContributionRecent: m.recent }));
 vi.mock("../server/referral-actions", () => ({ searchReviewedReferrers: m.search, linkReviewedReferral: m.link }));

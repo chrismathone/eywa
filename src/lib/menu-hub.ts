@@ -14,7 +14,7 @@ import {
   type MenuGroupLayout,
   type MenuLayout,
 } from "@/features/owner/menu-layout";
-import { canManageParentAccountsRole, SHUTTLE_PARENTS_PATH } from "@/features/shuttle/parent-accounts/parent-access";
+import { SHUTTLE_PARENTS_PATH } from "@/features/shuttle/parent-accounts/parent-access";
 import { SEAT_NAME, USABLE_SEAT_KEYS } from "@/features/attendance/seat/seat";
 
 /**
@@ -49,10 +49,11 @@ export type HubDest = {
    */
   genericOnly?: boolean;
   /**
-   * 원장·관리자(+총괄) 전용 목적지(예: 학부모 관리 현황) — 판정은 화면·서버와 같은
-   * `canManageParentAccountsRole` 한 벌이다. 메뉴 권한(menuKey)은 그대로 먼저 본다.
+   * `menuKey` 권한에 **더해** 이 권한도 열려 있어야 선다 — 셔틀 관리자 화면(`shuttle_admin`)은 셔틀 권한 위 조건이다(원장 2026-11-10).
+   * 판정은 서버 문(`canOpenShuttleAdmin`)과 같은 두 권한 — 부모(셔틀)를 못 보는 사람에게 대신 입구로도 서지 않는다(`standInsOf`가 이 판정을 지난다).
+   * (전에는 `adminOnly` — 코드의 원장·관리자 역할 비교였다. 2026-11-10 권한 줄로 바꿨다.)
    */
-  adminOnly?: boolean;
+  alsoNeeds?: MenuKey;
   /** 업체리스트 지정자 전용(학원 설정 '개인별 기능 권한 · 업체리스트') — 판정은 `canViewVendorsNow` 한 벌(레이아웃이 계산해 넘긴다). */
   vendorsOnly?: boolean;
   /** 부차 도구 — 큰 버튼이 아니라 아래 작은 줄로 그린다(자주 쓰는 것과 가끔 쓰는 것을 가른다). */
@@ -121,10 +122,12 @@ export const HUB_GROUPS: HubGroup[] = [
     kind: "direct",
     items: keep([fromMenu("dashboard")]),
   },
-  // 시안(aywa-next 이식): 스키마·지식그래프 — 경영 분석 화면의 한 면(원장·관리자만, 페이지가 다시 막는다).
+  // 시안(aywa-next 이식): 스키마·지식그래프 — 경영 분석 화면의 한 면. 권한 = '경영 분석·지식그래프'(management · 2026-11-09 권한 줄 정비 —
+  // 전엔 대시보드 권한 + 코드의 원장·관리자 판정이었다). 페이지도 같은 권한으로 막는다(features/mockup/access.ts).
+  // ⚠️ 시안 키들은 메뉴 정의(NAV_GROUPS)가 없다 — 그림을 `MENU_ICON.<키>`로 받는다(문자열로 적으면 menu-glyph 중복 검사가 같은 그림을 두 번 센다).
   {
     id: "knowledge-model", label: "스키마·지식그래프", icon: MENU_ICON.dashboard, kind: "direct",
-    items: keep([face("dashboard", "/dashboard/management/knowledge", "스키마·지식그래프", "시트 설계 사전·실제 관계 지도·미입력 점검", { icon: "merge", adminOnly: true })]),
+    items: keep([face("dashboard", "/dashboard/management/knowledge", "스키마·지식그래프", "시트 설계 사전·실제 관계 지도·미입력 점검", { icon: MENU_ICON.management, menuKey: "management" })]),
   },
   // 🔴 **캘린더는 메뉴에 세우지 않는다** (원장 2026-09-10: *"캘린더 탭은 메뉴에서 제외시켜. 그냥 내부
   //    구글 달력용으로 사용할예정임."* → *"즉, 동기화하지만 외부로 보여주지않고 내부 끌어오기 참고용으로만 할것"*).
@@ -221,20 +224,21 @@ export const HUB_GROUPS: HubGroup[] = [
       face("inventory", "/inventory?tab=vendors", "업체리스트", "거래처 연락처", { vendorsOnly: true }),
       // 학부모 관리 현황 — 원장·관리자 전용. 셔틀 탭 줄에는 없고 입구는 여기 하나다(navigation.ts 주석).
       // ⚠️ 아이콘을 따로 안 준다 — 남은 스티커 중 '학부모'에 맞는 그림이 없어 셔틀 그림을 물려받는다.
-      face("shuttle", SHUTTLE_PARENTS_PATH, "학부모 관리 현황", "학부모 계정·연결 원생", { tool: true, adminOnly: true }),
+      face("shuttle", SHUTTLE_PARENTS_PATH, "학부모 관리 현황", "학부모 계정·연결 원생", { tool: true, menuKey: "shuttle_admin", alsoNeeds: "shuttle" }),
     ]),
   },
-  // 시안(aywa-next 이식): 조직·OKR · 홍보·마케팅.
+  // 시안(aywa-next 이식): 조직·OKR · 홍보·마케팅. 권한 = 제 키(okr · marketing — 2026-11-09 권한 줄 정비. 전엔 대시보드 권한으로 메뉴만 세우고
+  // 페이지는 코드의 원장·관리자·매니저 판정이라 상담·회계·열람은 메뉴를 눌러도 대시보드로 돌아갔다). 페이지도 같은 권한(organization-okr/access.ts · marketing/sample-access.ts).
   {
     id: "organization", label: "조직·OKR", icon: SAMPLE_GROUP_ICON.organization, kind: "direct",
-    items: keep([face("dashboard", "/organization/okr", "조직·OKR", "조직 목표·내 핵심결과·실행·주간 점검·피드백", { icon: "target" })]),
+    items: keep([face("dashboard", "/organization/okr", "조직·OKR", "조직 목표·내 핵심결과·실행·주간 점검·피드백", { icon: MENU_ICON.okr, menuKey: "okr" })]),
   },
   {
     id: "marketing", label: "홍보·마케팅", icon: SAMPLE_GROUP_ICON.marketing, kind: "hub",
     note: "연간 홍보·행사 기록부터 채널 성과와 학생 유입까지 연결합니다.",
     items: keep([
-      face("dashboard", "/marketing", "연간 운영계획", "행사 기획·준비 일정·담당 업무·초대와 참석·회고", { icon: "send" }),
-      face("dashboard", "/billing/management/marketing", "홍보·마케팅", "연간 마케팅 지도·행사 기록·채널별 성과", { icon: "barChart", adminOnly: true }),
+      face("dashboard", "/marketing?view=annual", "3개년 비교·신년 기획", "과거 기록 비교·행사 기획·준비 업무", { icon: "send", menuKey: "marketing" }),
+      face("dashboard", "/marketing", "홍보·마케팅 통합 관리", "행사 히스토리·채널 집행·원생 연결·비용·회고", { icon: MENU_ICON.marketing, menuKey: "marketing" }),
     ]),
   },
   // 🔴 **회의록은 업무군에 넣지 않고 왼쪽 탭 한 줄로 세운다** (원장 2026-09-10:
@@ -256,7 +260,8 @@ export const HUB_GROUPS: HubGroup[] = [
     note: "기록과 결재 문서입니다.",
     items: keep([
       fromMenu("approvals", "기안·결재함"),
-      face("documents", "/work-records", "업무 작성센터", "내 계정으로 수업·상담·업무 서식 작성", { icon: "filePlus" }),
+      // 업무 작성센터(시안) — 권한 = 제 키(work_records · 2026-11-09). 전엔 메뉴는 데이터베이스 권한, 페이지는 대시보드 권한이라 둘이 갈렸다.
+      face("documents", "/work-records", "업무 작성센터", "내 계정으로 수업·상담·업무 서식 작성", { icon: MENU_ICON.work_records, menuKey: "work_records" }),
       fromMenu("documents", "서식·문서 저장소"),
     ]),
   },
@@ -310,15 +315,16 @@ export const INNER_TABS: { parent: string; items: HubDest[] }[] = [
   {
     parent: "/shuttle",
     items: keep([
-      // 탑승 학생 시간표(2026-10-27) — 노선 편성 바로 뒤 · 🔒 원장·관리자·총괄 전용(화면은 isShuttleAdmin 404).
-      face("shuttle", "/shuttle/classes", "탑승 학생 시간표", undefined, { icon: "layers", adminOnly: true }),
+      // 탑승 학생 시간표(2026-10-27) — 노선 편성 바로 뒤 · 🔒 '셔틀 관리자 화면' 권한(shuttle_admin · 셔틀 권한 위 조건 — 화면은 isShuttleAdmin 404).
+      face("shuttle", "/shuttle/classes", "탑승 학생 시간표", undefined, { icon: "layers", menuKey: "shuttle_admin", alsoNeeds: "shuttle" }),
       face("shuttle", "/shuttle/week", "주간 시간표", undefined, { icon: "calendarClock" }),
       face("shuttle", "/shuttle/today", "오늘 등하원", undefined, { icon: "busStop" }),
       face("shuttle", "/shuttle/parent-rides", "학부모 등하원"),
       face("shuttle", "/shuttle/live", "운행 현황", undefined, { icon: "steering" }),
-      face("shuttle", "/shuttle/track", "실시간 위치", undefined, { icon: "mapPin" }),
-      // 가까운 노선 찾기(2026-10-27) — 학부모 탭 4와 같은 화면 · 🔒 원장·관리자·총괄 전용(화면은 isShuttleAdmin 404).
-      face("shuttle", "/shuttle/nearby", "가까운 노선 찾기", undefined, { icon: "search", adminOnly: true }),
+      // 실시간 위치 — 같은 '셔틀 관리자 화면' 권한(전엔 표식이 없어 검색에 셔틀을 보는 모두에게 섰다가 눌러도 404였다).
+      face("shuttle", "/shuttle/track", "실시간 위치", undefined, { icon: "mapPin", menuKey: "shuttle_admin", alsoNeeds: "shuttle" }),
+      // 가까운 노선 찾기(2026-10-27) — 학부모 탭 4와 같은 화면 · 🔒 '셔틀 관리자 화면' 권한(화면은 isShuttleAdmin 404).
+      face("shuttle", "/shuttle/nearby", "가까운 노선 찾기", undefined, { icon: "search", menuKey: "shuttle_admin", alsoNeeds: "shuttle" }),
     ]),
   },
 ];
@@ -441,8 +447,8 @@ function allowed(dest: HubDest, gate: Gate): boolean {
   if (dest.masterOnly && !gate.isMaster) return false;
   if (dest.genericOnly && !gate.isGenericTenant) return false;
   if (dest.vendorsOnly && !gate.canViewVendors) return false;
-  // isMaster = master ∪ 총괄 — 총괄을 넘기는 자리가 그것뿐이라 그대로 싣는다.
-  if (dest.adminOnly && !canManageParentAccountsRole(gate.systemRole, !!gate.isMaster)) return false;
+  // 셔틀 관리자 화면 = 셔틀 권한 위 조건(서버 canOpenShuttleAdmin과 같은 두 권한).
+  if (dest.alsoNeeds && !canAccess(gate.systemRole, dest.alsoNeeds, gate.permMatrix)) return false;
   // 🔴 권한 **뒤에** 본다 — 순서를 바꿔도 결과는 같지만, "권한이 먼저 거른다"가 이 설정의 정의다.
   if (isMenuHiddenByLayout(dest.href, gate.menuLayout)) return false;
   return true;

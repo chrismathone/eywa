@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { assignedPanelState, detailPanelsFor } from "./detail-panels";
+import { assignedPanelState, detailPanelsFor, showBriefCard } from "./detail-panels";
 import { BOARD_STAGES, stageOfCard } from "./board-stages";
 
 const DETAIL_DIR = "src/app/(shell)/enrollment/[id]";
@@ -46,6 +46,28 @@ describe("detailPanelsFor — 브리프는 '상담 전'에만 제 자리에 선�
   });
 });
 
+describe("showBriefCard — 상세와 수정 화면이 같은 판정으로 브리프 자리를 그린다", () => {
+  it("만들어 둔 브리프는 어느 칸에서든 남는다", () => {
+    for (const past of [false, true]) {
+      for (const status of [null, "failed", "generating"] as const) {
+        expect(showBriefCard({ hasBrief: true, status, past })).toBe(true);
+      }
+    }
+  });
+
+  it("상담 전에는 브리프가 없어도 안내 카드(만들기)를 그린다", () => {
+    for (const status of [null, "failed", "generating"] as const) {
+      expect(showBriefCard({ hasBrief: false, status, past: false })).toBe(true);
+    }
+  });
+
+  it("🔴 지난 건은 만드는 중일 때만 — 실패만 남은 카드·소개문은 안 그린다", () => {
+    expect(showBriefCard({ hasBrief: false, status: "generating", past: true })).toBe(true);
+    expect(showBriefCard({ hasBrief: false, status: "failed", past: true })).toBe(false);
+    expect(showBriefCard({ hasBrief: false, status: null, past: true })).toBe(false);
+  });
+});
+
 describe("assignedPanelState — 조회 실패와 '배정 없음'은 다른 사실", () => {
   it("🔴 실패는 학생·건수와 무관하게 error(‘배정 없음’으로 위장 금지)", () => {
     expect(assignedPanelState({ ok: false, hasStudent: true, count: 0 })).toBe("error");
@@ -80,8 +102,28 @@ describe("배선 — 상세 화면은 board-stages 단일 소스만 본다", () 
     expect(page).toMatch(/showAssigned/);
   });
 
+  it("상세와 수정 화면이 같은 판정(showBriefCard)으로 브리프를 그린다", () => {
+    expect(read("page.tsx")).toContain("showBriefCard(");
+    const edit = read("edit/page.tsx");
+    expect(edit).toContain("detailPanelsFor(");
+    expect(edit).toContain("showBriefCard(");
+    expect(edit).toMatch(/<PrepBriefSection\s+pinned/);
+  });
+
+  it("🔴 수정 화면의 브리프는 상담 폼 밖(폼 앞)에 있다 — 폼 안 폼·초안 자동저장 오염 방지", () => {
+    const edit = read("edit/page.tsx");
+    expect(edit.indexOf("<PrepBriefSection")).toBeGreaterThan(-1);
+    expect(edit.indexOf("<PrepBriefSection")).toBeLessThan(edit.indexOf("<ConsultationFullForm"));
+  });
+
+  it("🔴 브리프 단추가 있는 두 화면은 같은 maxDuration — 생성 액션이 중간에 죽지 않게", () => {
+    for (const f of ["page.tsx", "edit/page.tsx"]) {
+      expect(read(f), f).toMatch(/export const maxDuration = 300;/);
+    }
+  });
+
   it('🔴 상세 화면 파일에 `outcome === "…"` 직접 비교가 없다', () => {
-    for (const f of ["page.tsx", "prep-brief-section.tsx", "assigned-classes-section.tsx"]) {
+    for (const f of ["page.tsx", "edit/page.tsx", "prep-brief-section.tsx", "prep-brief-body.tsx", "assigned-classes-section.tsx"]) {
       expect(read(f), f).not.toMatch(/outcome\s*===\s*["']/);
     }
   });
@@ -89,7 +131,8 @@ describe("배선 — 상세 화면은 board-stages 단일 소스만 본다", () 
   it("🔴 '다시 작성'(브리프 재생성)은 past가 아닐 때만 — AI 호출은 명시 버튼일 때만이라는 규약", () => {
     const sec = read("prep-brief-section.tsx");
     // 재생성 버튼을 켜는 식은 한 곳(showRegenerate)이고 거기에 `!past`가 들어 있어야 한다.
-    expect(sec).toMatch(/const showRegenerate\s*=\s*canWrite\s*&&\s*!generating\s*&&\s*!past/);
+    // 생성 중엔 숨기되 멈춘 작업(240초 · s2_0068)이면 다시 연다 — `!past`는 언제나.
+    expect(sec).toMatch(/const showRegenerate\s*=\s*canWrite\s*&&\s*!past\s*&&\s*\(!generating\s*\|\|\s*stalled\)/);
     // 그리고 버튼은 **오직 그 값**으로만 렌더된다(canWrite 단독 조건이 남아 있으면 past에서 되살아난다).
     const guards = sec.match(/\{[^{}]*\?\s*<PrepBriefButton/g) ?? [];
     expect(guards.length).toBeGreaterThan(0);

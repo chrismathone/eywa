@@ -12,6 +12,7 @@ import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode"
 import { visibleConsultationSummary } from "../internal-link";
 import type { ClassSource } from "../class-mapping";
 import { classSchemaWorthTrying, isMissingClassSchema, noteClassSchema } from "./class-support";
+import { isMissingFunction } from "@/lib/supabase/db-error";
 import { annotateAutoClasses } from "./list-classes";
 
 export { followUpUrgency, type FollowUpUrgency };
@@ -51,6 +52,8 @@ export type StudentConsultationRow = {
   studentId: string;
   studentName: string;
   studentGrade: string | null;
+  /** 학교(목록 '학교학년' 칸 — `schoolGradeLabel`로 "경명여중1"처럼 압축). 옛 호출부와의 호환으로 선택 칸. */
+  studentSchool?: string | null;
   counselorName: string | null;
   consultedAt: string;
   category: StudentConsultationCategory | null;
@@ -92,7 +95,7 @@ export type StudentConsultationDetail = StudentConsultationRow & {
 const SELECT_COLUMNS = `id, consulted_at, summary, follow_up_action,
   follow_up_date, follow_up_done, category, subject, audience, counselor_id,
   processing_status, audio_path, ai_summary, sync_added_at,
-  student:student_id ( id, name, grade ),
+  student:student_id ( id, name, grade, school ),
   counselor:counselor_id ( display_name )`;
 
 /**
@@ -130,7 +133,7 @@ function mapRow(r: {
   counselor: unknown;
 }): StudentConsultationRow {
   const student = (Array.isArray(r.student) ? r.student[0] : r.student) as
-    | { id: string; name: string; grade: string | null }
+    | { id: string; name: string; grade: string | null; school?: string | null }
     | undefined;
   const counselor = (Array.isArray(r.counselor) ? r.counselor[0] : r.counselor) as
     | { display_name?: string }
@@ -142,6 +145,7 @@ function mapRow(r: {
     studentId: student?.id ?? "",
     studentName: student?.name ?? "?",
     studentGrade: student?.grade ?? null,
+    studentSchool: student?.school ?? null,
     counselorName: counselor?.display_name ?? null,
     consultedAt: r.consulted_at,
     category: r.category as StudentConsultationCategory | null,
@@ -281,6 +285,17 @@ export type ConsultationListFilters = {
   subjectLabel?: string | null;
 };
 
+/** s2_0043 검색 함수가 있나 — 없으면 1분 동안 종전 경로(매 요청 실패+재시도 왕복을 피한다 · class-support와 같은 방식). */
+let searchRpcKnown = false;
+let searchRpcMissingUntil = 0;
+function searchRpcWorthTrying(): boolean {
+  return searchRpcKnown || Date.now() >= searchRpcMissingUntil;
+}
+function noteSearchRpc(present: boolean): void {
+  searchRpcKnown = present;
+  if (!present) searchRpcMissingUntil = Date.now() + 60_000;
+}
+
 /**
  * 필터 적용 + 서버 페이지네이션. urgency는 followUpUrgency() 로직을 SQL로 표현,
  * 검색은 요약(base) OR 학생명(조인 id 해석)으로 처리. {rows,total} 반환.
@@ -289,35 +304,37 @@ export async function getStudentConsultationsPage(
   filters: ConsultationListFilters,
   page = 1,
   pageSize = 50,
-): Promise<{ rows: StudentConsultationRow[]; total: number; classSupported: boolean }> {
+): Promise<{ rows: StudentConsultationRow[]; total: number; classSupported: boolean; failed: boolean }> {
   const supabase = await createClient();
 
   // 강사 스코프: teacher면 **본인이 등록한 상담(counselor_id=나)** 만 — 담당 학생이어도 남이 쓴 상담은 제외.
   // (사용자 요청 "내가 한 것만 보이게". 담당 학생 기준이던 것에서 작성자 기준으로 전환.)
   const teacherId = await effectiveTeacherId();
 
-  // 검색 — 요약(base) OR 학생명(조인). 학생명은 id 해석 후 in.(...)으로 OR. (재시도해도 같은 값이라 한 번만 푼다.)
+  // 검색 — 요약 OR 학생 이름. DB 함수(s2_0043 `search_student_consultations`)가 둘을 잇고 표 모양 그대로 돌려줘
+  // 필터·정렬·페이지·count·반 임베드가 종전처럼 얹힌다(B3 — 예전엔 이름이 맞는 학생 id **전부**를 주소에 실어 '김'처럼
+  // 흔한 글자면 주소가 넘쳐 실패했고, 실패가 "상담 0건"으로 보였다). 함수가 아직 없으면(#95) 종전 경로.
   const term = filters.q?.trim();
+  let searchRpc = !!term && searchRpcWorthTrying();
   let orClause: string | null = null;
-  if (term) {
-    const { data: stu } = await supabase
-      .from("students")
-      .select("id")
-      .ilike("name", `%${term}%`);
+  const legacyOr = async (): Promise<string> => {
+    const { data: stu, error: stuErr } = await supabase.from("students").select("id").ilike("name", `%${term}%`);
+    if (stuErr) console.error("[consultations] 학생 이름 검색 실패 — 요약에서만 찾습니다:", stuErr);
     const ids = (stu ?? []).map((s) => s.id);
-    const safe = term.replace(/[(),]/g, " "); // PostgREST .or 파서 보호
+    const safe = term!.replace(/[(),]/g, " "); // PostgREST .or 파서 보호
     const orParts = [`summary.ilike.%${safe}%`];
     if (ids.length) orParts.push(`student_id.in.(${ids.join(",")})`);
-    orClause = orParts.join(",");
-  }
+    return orParts.join(",");
+  };
+  if (term && !searchRpc) orClause = await legacyOr();
 
   const from = (page - 1) * pageSize;
   const build = (withClass: boolean) => {
-    let qb = filteredConsultations(
-      supabase.from("student_consultations").select(`${SELECT_COLUMNS}${withClass ? CLASS_COLUMNS : ""}`, { count: "exact" }),
-      filters,
-      teacherId,
-    );
+    const cols = `${SELECT_COLUMNS}${withClass ? CLASS_COLUMNS : ""}`;
+    const source = searchRpc
+      ? supabase.rpc("search_student_consultations", { p_term: term! }, { count: "exact" }).select(cols)
+      : supabase.from("student_consultations").select(cols, { count: "exact" });
+    let qb = filteredConsultations(source, filters, teacherId);
     if (orClause) qb = qb.or(orClause);
     return qb.order("consulted_at", { ascending: false }).range(from, from + pageSize - 1);
   };
@@ -325,17 +342,27 @@ export async function getStudentConsultationsPage(
   // 반 칸(0318a)이 없으면 그 조각을 빼고 다시 묻는다([[#95]] — 목록은 '반 이름' 열만 숨긴다).
   let classSupported = classSchemaWorthTrying();
   let { data, count, error } = await build(classSupported);
+  if (searchRpc && error && isMissingFunction(error, "search_student_consultations")) {
+    noteSearchRpc(false);
+    searchRpc = false;
+    orClause = await legacyOr();
+    ({ data, count, error } = await build(classSupported));
+  } else if (searchRpc && !error) noteSearchRpc(true);
   if (classSupported && error && isMissingClassSchema(error)) {
     noteClassSchema(false);
     classSupported = false;
     ({ data, count, error } = await build(false));
   } else if (classSupported && !error) noteClassSchema(true);
-  if (error) console.error("[consultations] 목록 조회 실패:", error.message);
+  // 🔴 실패는 "0건"이 아니다 — `failed`로 알려 화면이 안내 줄을 띄운다(B3). 나머지 화면(수치·필터)은 그대로 산다.
+  if (error) {
+    console.error("[consultations] 목록 조회 실패:", error);
+    return { rows: [], total: 0, classSupported, failed: true };
+  }
 
   const rows = ((data ?? []) as unknown as Parameters<typeof mapRow>[0][]).map(mapRow);
   // 아직 판정 안 한 옛 행(class_source 비어 있음)은 화면에서만 판정해 보여 준다 — 쪽 하나를 RPC 한 번으로(N+1 없음).
   const shown = classSupported ? await annotateAutoClasses(rows) : rows;
-  return { rows: shown, total: count ?? 0, classSupported };
+  return { rows: shown, total: count ?? 0, classSupported, failed: false };
 }
 
 /**

@@ -11,6 +11,7 @@ import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-emai
 import { isLoginEmailTakenElsewhere } from "./login-email-taken";
 import { REPORT_NAME_MAX } from "@/features/onescreen/report-author-name";
 import { resolveReportAuthorSettings } from "@/features/onescreen/server/report-author-name";
+import { authPasswordErrorMessage } from "@/lib/auth/auth-password-error";
 
 // 본인 계정 자기관리(원장 지시 2026-07-29) — 시트에서 넘어온 임시 로그인 주소로 들어와
 // **본인이 직접** 실제 이메일과 비밀번호로 갈아끼운다. 대상은 언제나 로그인한 자기 자신(auth.uid())뿐 —
@@ -86,7 +87,7 @@ export async function updateMyPassword(_prev: MeAccountState, formData: FormData
 
   const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({ password });
-  if (error) return { error: `비밀번호 변경 실패 — ${error.message}` };
+  if (error) return { error: authPasswordErrorMessage(error) ?? explainDbError(error, { scope: "staff.me-actions.updateMyPassword", fallback: "비밀번호 변경 실패 — 잠시 후 다시 시도해 주세요" }).message };
 
   await logAction({
     action: "self_password_change",

@@ -91,7 +91,7 @@ describe("분석 축", () => {
     expect(items).toEqual([
       { value: "math", label: "수학", count: 2 },
       { value: "english", label: "영어", count: 1 },
-      { value: FACET_NONE, label: "과목 미상", count: 1 },
+      { value: FACET_NONE, label: "과목 미상(메이크에듀)", count: 1 },
     ]);
   });
 
@@ -175,19 +175,16 @@ describe("분석 축", () => {
   });
 });
 
-describe("강사 가리기 — 시간표 X와 같은 순서(과목마다 퇴원율이 센 달 → 그 달 그 학생을 센 선생님)", () => {
+describe("강사 가리기 — 시간표 X와 같은 판정(과목마다 그만둘 때 다니던 반의 그날 담임)", () => {
   const row = (key: string, over: Partial<{ date: string | null; subjects: string[]; systemBulk: boolean; cleanup: boolean }> = {}) => ({
     key, studentId: `s-${key}`, date: "2026-09-10", subjects: ["math"], systemBulk: false, cleanup: false, ...over,
   });
   const calls: string[] = [];
   const judge = {
-    endedOf: (studentId: string, subject: string, date: string) => {
+    homeroomOf: (studentId: string, subject: string, date: string) => {
       calls.push(`${studentId}|${subject}|${date}`);
-      // 수강종료로 남았다 늦게 퇴원 처리된 학생 — 퇴원율은 수강이 끝난 6월에 셌다.
-      return { endMonth: studentId === "s-late" ? "2026-06" : date.slice(0, 7) };
+      return studentId === "s-late" ? ["june"] : subject === "math" ? ["kim"] : subject === "english" ? ["lee"] : [];
     },
-    teachersOf: (studentId: string, subject: string, month: string) =>
-      month === "2026-06" ? ["june"] : subject === "math" ? ["kim"] : subject === "english" ? ["lee"] : [],
   };
   const opts = { from: "2025-10-01", today: "2026-10-15" };
   it("🔴 줄의 모든 과목을 과목마다 판정해 둔다 — 걸린 과목은 읽는 쪽이 고른다(과목 카드가 과목마다 다시 물어도 같은 답)", () => {
@@ -198,8 +195,9 @@ describe("강사 가리기 — 시간표 X와 같은 순서(과목마다 퇴원�
     // 과목 미상(빈 배열) = 담당 미반영 · 걸린 범위 밖(null) = 어느 칸에도 없음.
     expect(teacherFacetsIn(out.get("a")!, [])).toEqual([FACET_NONE]);
     expect(teacherFacetsIn(out.get("a")!, null)).toBeNull();
-    // 퇴원율이 센 달(줄의 달과 다를 수 있다)로 찾는다.
+    // 판정에는 줄의 날짜를 그대로 넘긴다.
     expect(teacherFacetsIn(out.get("late")!, ["math"])).toEqual(["june"]);
+    expect(calls).toContain("s-a|english|2026-09-10");
   });
   it("🔴 한 과목만 센 줄 = 그 선생님 + 담당 미반영 — 과목마다 물은 답(과목 카드)과 합친 답(명단)이 같다", () => {
     const per = new Map([["math", ["kim"]], ["english", []]]);
@@ -207,11 +205,11 @@ describe("강사 가리기 — 시간표 X와 같은 순서(과목마다 퇴원�
     expect(teacherFacetsIn(per, ["math"])).toEqual(["kim"]);
     expect(teacherFacetsIn(per, ["english"])).toEqual([FACET_NONE]);
   });
-  it("🔴 장부 정리 · 날짜 미상 · 날짜 없는 줄 = 모든 과목 담당 미반영 — 판정하지 않는다", () => {
+  it("🔴 날짜 미상 · 날짜 없는 줄 = 모든 과목 담당 미반영 — 판정하지 않는다 · 장부 정리는 판정한다(퇴원생 관리 차트와 같이)", () => {
     calls.length = 0;
     const out = attributeTeachers([row("c", { cleanup: true }), row("b", { systemBulk: true }), row("n", { date: null })], judge, opts);
-    expect(["c", "b", "n"].map((k) => teacherFacetsIn(out.get(k)!, ["math"]))).toEqual([[FACET_NONE], [FACET_NONE], [FACET_NONE]]);
-    expect(calls).toEqual([]);
+    expect(["c", "b", "n"].map((k) => teacherFacetsIn(out.get(k)!, ["math"]))).toEqual([["kim"], [FACET_NONE], [FACET_NONE]]);
+    expect(calls).toEqual(["s-c|math|2026-09-10"]);
   });
   it("판정 폭 밖(가장 이른 날 앞 · 오늘 뒤) 줄은 결과에 없다 — 화면이 '가리지 않은 줄'로 따로 센다", () => {
     const out = attributeTeachers([row("old", { date: "2024-01-05" }), row("future", { date: "2026-11-01" })], judge, opts);

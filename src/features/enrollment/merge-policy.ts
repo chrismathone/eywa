@@ -24,7 +24,7 @@ export const ATOMIC_SETS = {
     "assemblyai_transcript_id",
   ],
   // 사전 브리프 스냅샷 + 생성 상태.
-  prep: ["prep_brief", "prep_brief_at", "prep_brief_status", "prep_brief_error"],
+  prep: ["prep_brief", "prep_brief_at", "prep_brief_status", "prep_brief_error", "prep_brief_job_at"],
   // 결제 사실 — 금액만 가져오고 날짜를 두면 "언제 낸 27만원인지" 모르는 행이 된다.
   // ⚠️ `registration_status`("영수등록"·"등록완료"·"미등록")는 여기 넣지 말 것 — 금액이 없는 행도
   //    상태는 갖고 있어서, 한 세트로 묶으면 **결제 기록이 한쪽에만 있는데도** 세트가 양쪽 다 살아 있는

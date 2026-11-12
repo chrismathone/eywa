@@ -61,7 +61,7 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toMatch(/원인을 말하기 전에 먼저 쪼갠다/);
     expect(prompt).toMatch(/영어를 하나로 합치지 않는다/);
     expect(prompt).toMatch(/결론이 기간 선택에 기대지 않는지/);
-    expect(prompt).toMatch(/'원인이 아니다'는 비교군/);
+    expect(prompt).toMatch(/'원인이 아니다'로 단정하지 않는다 — 비교군/);
     expect(prompt).toMatch(/전향 검증/);
     expect(prompt).toMatch(/'청구 끊김'.*퇴원이 아니다/);
     expect(prompt).toMatch(/그 일보다 먼저 나간 학생을 넣지 않는다/);
@@ -76,6 +76,20 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toMatch(/일을 안 해도 좋아지는 지표를 쓰지 않는다/);
     expect(prompt).toMatch(/'완료'로 처리하면 그 날\(실행일/);
   });
+  it("멘트 시험 반영(2026-11-11) — 숫자의 기간·대상 · 기록 없음 ≠ 안 함 · 사람 평가 · 크기 · 표는 결과 전부 · why는 근거만 · 판단 질문 · 묻는 사람", () => {
+    expect(prompt).toMatch(/숫자는 그 숫자를 낸 조회의 기간·대상 그대로 쓴다/);
+    expect(prompt).toMatch(/기록이 없는 것은 일이 없었다는 뜻이 아니다/);
+    expect(prompt).toMatch(/한 사람을 문제로 지목하지 않는다/);
+    expect(prompt).toMatch(/보고서 크기는 질문 크기에 맞춘다/);
+    expect(prompt).toMatch(/가리킨 조회 결과를 \*\*전부\*\* 그린다/);
+    expect(prompt).toMatch(/KPI 이름\(label\)의 기간·대상은 ref가 가리키는 줄과 같아야 한다/);
+    expect(prompt).toMatch(/결과를 미리 판정하는 문장은 쓰지 않는다/);
+    expect(prompt).not.toMatch(/효과가 난 것인지/);
+    expect(prompt).not.toMatch(/효과가 없었다는 뜻이다/);
+    expect(prompt).toMatch(/'무엇부터 · 어디에 먼저 · A와 B 중' 판단 질문/);
+    expect(prompt).toMatch(/'원장님'으로 부르지 않는다/);
+    expect(prompt).toMatch(/다른 교시·다른 반의 기록을 근거로 '채워 달라'고 하지 않는다/);
+  });
   it("바뀌는 값(오늘 날짜)이 없다 — 캐시가 깨지지 않게", () => {
     expect(prompt).not.toMatch(/20\d\d-\d\d-\d\d/);
     expect(buildSystemPrompt("x")).toBe(buildSystemPrompt("x"));
@@ -85,6 +99,11 @@ describe("buildSystemPrompt", () => {
 describe("questionMessage · pastAnswerText", () => {
   it("오늘(한국 시간)을 질문에 붙인다", () => {
     expect(questionMessage("재원생은?", new Date("2026-11-06T15:30:00Z"))).toBe("오늘은 2026-11-07(토) · 지금 00:30(한국 시간)\n\n질문: 재원생은?");
+  });
+  it("묻는 사람의 역할을 붙인다(멘트 시험 2026-11-11 — 관리자에게도 '원장님') · 비면 붙이지 않는다", () => {
+    const at = new Date("2026-11-06T15:30:00Z");
+    expect(questionMessage("재원생은?", at, "관리자")).toBe("오늘은 2026-11-07(토) · 지금 00:30(한국 시간) · 묻는 사람: 관리자\n\n질문: 재원생은?");
+    expect(questionMessage("재원생은?", at, " ")).toBe(questionMessage("재원생은?", at));
   });
   it("지난 답은 요약·비서 의견·조회만 짧게", () => {
     const text = pastAnswerText({

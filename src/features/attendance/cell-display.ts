@@ -9,6 +9,7 @@ import { COUNTABLE_STATUSES, formatSessionUnits } from "./session-units";
 // 화면 문구는 사전 단일 소스 — 인자를 안 주면 한국어라 기존 호출부는 그대로다.
 import { sheetTf } from "@/features/teacher-view/i18n";
 import { ATT_VIVID } from "./status-color";
+import { round1 } from "@/lib/guards";
 
 export type AttendanceMark = "present" | "absent" | "late" | "excused" | "makeup" | "early_leave";
 
@@ -207,9 +208,6 @@ export type DayRollup = {
 };
 
 /** 0.1 단위 반올림 — 1.5를 여러 번 더할 때 생기는 부동소수 꼬리를 자른다(totals.ts와 같은 규약). */
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
-}
 
 /**
  * 하루치 교시 기록들을 **한 칸**으로 접는다(출석부는 학생×날짜 격자라 칸이 하나뿐이다).

@@ -31,6 +31,9 @@ export type CheckRowInput = {
   itemKey: string;
   doneOn: string | null;
   subject?: string | null;
+  /** 완료 메모('수행: … / 결과: …') · 연결 상담 — 표시용(판정에 안 쓴다). */
+  memo?: string | null;
+  consultationId?: string | null;
 };
 
 /**
@@ -156,4 +159,11 @@ export function collapseChecks(
 /** 과목 키 모양 — 0256a CHECK와 같은 규칙. 화면이 보낸 과목 문자열을 서버가 한 번 더 거른다. */
 export function isSubjectKey(v: unknown): v is string {
   return typeof v === "string" && /^[a-z][a-z0-9_]{0,31}$/.test(v);
+}
+
+/** 과목 행의 완료 메모·연결 상담 — 과목 무관('') 기록 위에 그 과목 기록이 덮는다(effectiveChecks와 같은 우선순위). */
+export function checkDetailsOf(rows: CheckRowInput[], studentId: string, subject: string | null): Record<string, { memo: string | null; consultationId: string | null }> {
+  const mine = rows.filter((r) => r.studentId === studentId && (!(r.subject ?? "") || r.subject === subject))
+    .sort((a, b) => Number(!!a.subject) - Number(!!b.subject));
+  return Object.fromEntries(mine.map((r) => [r.itemKey, { memo: r.memo ?? null, consultationId: r.consultationId ?? null }]));
 }

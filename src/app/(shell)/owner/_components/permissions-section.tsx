@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { cycleSkipsScoped, nextPermissionAccess, sparseRoleOverrides } from "@/features/owner/permission-edit";
+import { sparseRoleOverrides } from "@/features/owner/permission-edit";
 import { editablePermissionRowGroups, type PermissionNavigation } from "@/features/owner/permission-rows";
 import { TEACHER_TOGGLE_KEYS, teacherToggleOnAccess } from "@/features/owner/teacher-toggle-rows";
 import { SETTINGS_ROLE_KEYS, type SettingsRoleKey } from "@/lib/settings-role-catalog";
@@ -14,7 +14,6 @@ import {
   SCOPED_FORBIDDEN_MESSAGE,
   SYSTEM_ROLES,
   isConnectedAppMenu,
-  isPermissionLocked,
   resolveMatrix,
   type Access,
   type AccessMatrix,
@@ -25,12 +24,18 @@ import {
 import { ACCESS_LABEL, ROLE_LABEL } from "./permission-ui";
 import { ConnectedAppPermissionsCard, type ConnectedAppPermissionRow } from "./connected-app-permissions-card";
 import { RoleMatrixTable } from "./role-matrix-table";
+import { LinkedGrantDialog } from "./linked-grant-dialog";
+import { useMatrixCycle } from "./use-matrix-cycle";
+import { LinkGapNotice } from "./link-gap-notice";
 import { SectionForm } from "./section-form";
 import { SettingsCard } from "./settings-card";
 import { SpecialAccessEditor } from "./special-access-editor";
 import { TeacherMenuToggles } from "./teacher-menu-toggles";
 import { UserOverrideEditor } from "./user-override-editor";
 import { useSectionDraft } from "./use-section-draft";
+
+/** 숨길 메뉴 줄이 없을 때의 기본값 — 렌더마다 새 배열을 만들면 줄 목록 계산이 매번 다시 돈다. */
+const NO_MENU_KEYS: readonly MenuKey[] = [];
 
 /** 이 면이 고치는 세 칸 — 저장도 셋을 함께 보낸다(한 칸만 따로 저장하는 길은 없다). */
 type PermissionsDraft = {
@@ -59,9 +64,11 @@ export function PermissionsSection({
   hiddenUserIds = [],
   generic = false,
   hiddenSettingKeys = [],
+  hiddenMenuKeys = NO_MENU_KEYS,
   connectedApps = [],
   baselineToken,
   baselineVersion,
+  marketingArchive = false,
 }: {
   /** 서버가 **방금 읽은** 역할·권한(page.tsx) — 설정 캐시의 값이 아니다. */
   initial: PermissionsSettings;
@@ -73,6 +80,8 @@ export function PermissionsSection({
   hiddenUserIds?: string[];
   generic?: boolean;
   hiddenSettingKeys?: readonly SettingsRoleKey[];
+  /** 이 지점에서 꺼진 기능의 메뉴 줄(지점 AI가 꺼지면 학원 비서) — 표 · 개인별 메뉴 권한 고르기에 세우지 않는다(저장값은 그대로 실린다). */
+  hiddenMenuKeys?: readonly MenuKey[];
   /** 이 지점에서 켠 연결 앱 — 역할별 표 아래 '연결 앱 권한' 표의 줄(없으면 카드도 없다). */
   connectedApps?: readonly ConnectedAppPermissionRow[];
   /**
@@ -82,6 +91,8 @@ export function PermissionsSection({
   baselineToken?: string;
   /** 이 값을 읽은 문서의 저장 순번 — 내 저장보다 먼저 읽힌 값이 뒤늦게 내려와도 받지 않는다(useSectionDraft). */
   baselineVersion?: number;
+  /** 행사 자료를 옮겨 둔 학원인가 — 홍보·마케팅 → 수납관리 짝은 그 학원에서만(`permission-links.ts`). */
+  marketingArchive?: boolean;
 }) {
   // 🔴 세 칸은 **한 묶음**으로 다룬다 — 서버가 새 값을 내려보내면 깨끗할 때만 셋을 함께 받고, 수정 중이면 셋 다 그대로 둔다.
   //    (전에는 표가 화면을 연 때의 값에 머물러, 대화상자로 바꾼 직급을 다음 저장이 되돌렸다.)
@@ -91,7 +102,13 @@ export function PermissionsSection({
   const { matrix, userOverrides, specialAccess } = draft;
   const setMatrix = (next: (m: AccessMatrix) => AccessMatrix) => setDraft((d) => ({ ...d, matrix: next(d.matrix) }));
   const overrides = useMemo(() => sparseRoleOverrides(matrix), [matrix]);
-  const groups = useMemo(() => editablePermissionRowGroups(navigation, { generic }), [navigation, generic]);
+  const groups = useMemo(
+    () =>
+      editablePermissionRowGroups(navigation, { generic })
+        .map((group) => ({ ...group, rows: group.rows.filter((row) => !hiddenMenuKeys.includes(row.menu)) }))
+        .filter((group) => group.rows.length > 0),
+    [navigation, generic, hiddenMenuKeys],
+  );
   const isSetting = (menu: MenuKey) => (SETTINGS_ROLE_KEYS as readonly string[]).includes(menu);
   const menuGroups = groups.map((group) => ({ ...group, rows: group.rows.filter((row) => !isSetting(row.menu)) })).filter((group) => group.rows.length > 0);
   const settingGroups = [{
@@ -121,20 +138,17 @@ export function PermissionsSection({
   const changes = [...shownMenus, ...MENU_KEYS.filter((menu) => !shownMenus.includes(menu) && !isConnectedAppMenu(menu))].flatMap((menu) => SYSTEM_ROLES.flatMap((role) =>
     matrix[menu][role] === savedMatrix[menu][role] ? [] : [{ menu, role, before: savedMatrix[menu][role], after: matrix[menu][role] }],
   ));
-  const staffName = (id: string) => staffOptions.find((s) => s.id === id)?.name || userOverrideNames[id] || `${id.slice(0, 8)}…`;
+  // 이름을 못 찾는 사람 = 직원 표에 없는 계정(완전 삭제된 직원 등) — 내부 번호 대신 '(삭제된 직원)'으로 적는다(리뷰 r1 F4 · raw 코드 노출 금지).
+  const staffName = (id: string) => staffOptions.find((s) => s.id === id)?.name || userOverrideNames[id] || "(삭제된 직원)";
 
   // 강사보다 낮은 직급(열람·아르바이트) 칸에서 '담당'을 건너뛰었으면 그 칸과 까닭을 알린다 — 말없이 건너뛰지 않는다
   // (원장 2026-11-05 *"무조건적으로 안되게하지말고 알림메시지도 배선"*). 다른 칸을 누르거나 닫기·저장하면 사라진다.
   // 서버 값으로 표를 갈아끼우면(`adoptions`) 그 안내는 이미 지난 표의 것이라 함께 지운다(렌더에서 파생 — effect 안 setState 금지).
   const [skipState, setScopedSkip] = useState<{ menu: MenuKey; role: SystemRole; to: Access; adoptions: number } | null>(null);
   const scopedSkip = skipState && skipState.adoptions === adoptions ? skipState : null;
-  function cycle(menu: MenuKey, role: SystemRole) {
-    const current = matrix[menu][role];
-    const next = nextPermissionAccess(menu, role, current);
-    if (isPermissionLocked(menu, role, next)) return; // 가드레일 셀은 변경 거부
-    setScopedSkip(cycleSkipsScoped(menu, role, current) ? { menu, role, to: next, adoptions } : null);
-    setMatrix((m) => ({ ...m, [menu]: { ...m[menu], [role]: next } }));
-  }
+  // 칸 누름 + 연동된 권한 묻기(원장 2026-11-12 — `use-matrix-cycle.ts` · `permission-links.ts`).
+  const linkCtx = { marketingArchive };
+  const { cycle, link } = useMatrixCycle({ matrix, setMatrix, adoptions, linkCtx, onScopedSkip: setScopedSkip });
   /**
    * 이 표(카드)의 칸에서 건너뛴 것만 그 표 **아래**에 — 메뉴 표와 설정 표가 같은 `cycle`을 쓴다.
    * 🔴 표 위에 두면 표가 길어(메뉴 표 30여 줄) 아래쪽 줄을 누를 때 안내가 화면 밖에 떠 결국 '말없이 건너뜀'이 됐다(리뷰 2026-11-05).
@@ -243,6 +257,7 @@ export function PermissionsSection({
             </details>
           ) : null}
           <RoleMatrixTable groups={menuGroups} matrix={matrix} savedMatrix={savedMatrix} onCycle={cycle} />
+          <LinkGapNotice matrix={matrix} groups={menuGroups} ctx={linkCtx} />
           </div>
           {scopedSkipNotice(menuGroups)}
         </SettingsCard>
@@ -262,6 +277,9 @@ export function PermissionsSection({
           nameOf={staffName}
           groups={individualGroups}
           onChange={(next) => setDraft((d) => ({ ...d, userOverrides: next(d.userOverrides) }))}
+          linkCtx={linkCtx}
+          onLinkedAsk={link.ask}
+          linkBusy={link.busy}
         />
         <SpecialAccessEditor
           value={specialAccess}
@@ -271,6 +289,7 @@ export function PermissionsSection({
           onChange={(next) => setDraft((d) => ({ ...d, specialAccess: next(d.specialAccess) }))}
         />
       </>
+      <LinkedGrantDialog pending={link.pending} onClose={link.close} />
     </SectionForm>
   );
 }

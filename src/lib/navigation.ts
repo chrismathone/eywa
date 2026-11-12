@@ -121,10 +121,10 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
     // 회차를 펼쳐 한 줄씩 다루는 게 아니라 차 전체를 한눈에 보고 이상한 것만 짚는다.
     { label: "운행 현황", href: "/shuttle/live" },
     // ⚠️ '학부모 관리 현황'(/shuttle/parents)은 **여기 두지 않는다** — 이 배열은 셔틀을 보는 모든 역할의
-    //    탭 줄(shuttleFaces)이 되는데, 그 면은 원장·관리자 전용이다. 입구는 학원운영 메뉴판(menu-hub
-    //    `adminOnly`) 하나이고, 그 화면에서만 탭 줄에 끼워 넣는다.
+    //    탭 줄(shuttleFaces)이 되는데, 그 면은 '셔틀 관리자 화면' 권한(shuttle_admin · 기본 원장·관리자) 전용이다. 입구는 학원운영 메뉴판(menu-hub
+    //    `menuKey: shuttle_admin`) 하나이고, 그 화면에서만 탭 줄에 끼워 넣는다.
     // 실시간 위치(2026-09-03) — 🔒 2026-10-08부터 **원장·관리자·총괄 전용**. 여기(창 식별·경로 면의 단일 소스)엔 그대로 두고,
-    //    탭 줄(`shuttleFaces`)이 관리자가 아니면 빼고, 메뉴판은 `adminOnly`, 화면은 `isShuttleAdmin`(404)이 막는다.
+    //    탭 줄(`shuttleFaces`)이 '셔틀 관리자 화면' 권한(shuttle_admin — 2026-11-10)이 없으면 빼고, 메뉴판은 같은 권한, 화면은 `isShuttleAdmin`(404)이 막는다.
     { label: "실시간 위치", href: "/shuttle/track" },
     // 가까운 노선 찾기(2026-10-26) — 학부모 탭 4와 같은 화면을 관리자가 본다(상담·안내용). 🔒 실시간 위치와 같은 관리자 전용 규칙.
     { label: "가까운 노선 찾기", href: "/shuttle/nearby" },

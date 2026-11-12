@@ -110,6 +110,10 @@
       "schedule": "*/30 * * * *"
     },
     {
+      "path": "/api/cron/consultation-ratings",
+      "schedule": "12,42 * * * *"
+    },
+    {
       "path": "/api/cron/dashboard-secretary",
       "schedule": "0 4,16 * * *"
     },

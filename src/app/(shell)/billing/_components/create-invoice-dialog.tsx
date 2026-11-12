@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { createInvoice, type CreateInvoiceState } from "@/features/billing/server/actions";
 import type { StudentOption } from "@/features/billing/server/textbook-queries";
+import { Field } from "@/components/form-field";
 
 const inputCls =
   "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
@@ -25,16 +26,6 @@ function SubmitBtn() {
       {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
       만들기
     </Button>
-  );
-}
-
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <span className="text-foreground block text-sm font-medium">{label}</span>
-      {children}
-      {error ? <p className="text-danger text-xs">{error}</p> : null}
-    </div>
   );
 }
 

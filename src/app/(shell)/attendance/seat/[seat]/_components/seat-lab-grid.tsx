@@ -214,7 +214,7 @@ function SeatClassSection({
    *    보조 글자(인원·종료시각)를 옅은 회색 토큰 대신 **같은 글자색의 투명도**로 낮춘다(회색은 반 색 위에서 안 읽힌다).
    */
   const headColor = r.bgColor
-    ? { background: r.bgColor, color: r.textColor ?? "#121212" }
+    ? { background: r.bgColor, color: r.textColor ?? "var(--ink)" }
     : undefined;
   const subText = headColor ? "opacity-75" : "text-text-faint";
 

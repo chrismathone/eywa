@@ -1,13 +1,9 @@
-import { SampleBanner } from "@/features/mockup/sample";
-import { requireSampleViewer } from "@/features/marketing/sample-access";
-import { sampleOperations } from "@/features/marketing/sample-data-operations";
-import { OperationsWorkspace } from "@/features/marketing/operations-workspace";
-
-export const metadata = { title: "연간 운영계획 · 홍보마케팅 — 에이와" };
-
-/** 연간 운영계획 시안 — 🔴 DB를 읽지 않는다(예시 값). 저장은 안내만 띄운다. */
-export default async function Page({ searchParams }: { searchParams: Promise<{ event?: string; view?: string; year?: string }> }) {
-  await requireSampleViewer();
-  const p = await searchParams;
-  return <><SampleBanner/><OperationsWorkspace key={p.event ?? "annual"} data={sampleOperations(p.event)} initialView={p.view} initialYear={p.year}/></>;
+import { notFound, unstable_rethrow } from "next/navigation";
+import { loadArchive } from "@/features/marketing-archive/server";
+import { ArchiveWorkspace } from "@/features/marketing-archive/workspace";
+export const metadata={title:"홍보·마케팅 통합 관리 — 에이와"};
+export const dynamic="force-dynamic";
+export default async function Page({searchParams}:{searchParams:Promise<{view?:string}>}){
+  const p=await searchParams;let data;try{data=await loadArchive();}catch(e){unstable_rethrow(e);notFound();}
+  return <ArchiveWorkspace data={data} initialView={p.view}/>;
 }

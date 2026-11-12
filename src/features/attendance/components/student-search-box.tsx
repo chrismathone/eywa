@@ -9,20 +9,18 @@ import { useSheetLang } from "@/features/teacher-view/lang-context";
  *    열리면 "출석부가 비었다"로 읽힌다.
  * ⚠️ 서버 왕복 0 — URL 파라미터도 아니다(라우팅하면 표가 통째로 다시 그려져 즉시성이 사라진다).
  */
-import { useRef, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
-import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
+import { CONTROL_H } from "@/components/ui/control-scale";
 import { isSearchActive } from "../student-search";
 import { HeaderSearchSlot } from "@/components/header-search-slot";
 
 /**
- * **클라 상태 검색의 토글** — 평소엔 '검색' 글자 하나, 누르면 위 입력칸(+걸린 필터 표기)이 펼쳐진다.
- *
- * 지시서 §10 "검색은 필요할 때만 나타나게(단축키 또는 토글)". 공용 [`SearchToggle`](@/components/search-toggle)은 URL(`?q=`)
- * 검색용이라, 서버 왕복 0의 클라 필터(시간표·월별 출석부·오늘 출결·좌석표)는 이 토글을 쓴다. 규약은 같다:
- * · 검색어가 걸려 있으면 **언제나** 펼친 채(무엇으로 걸러졌는지 보여야 한다) — `chip`(N/M 표기)이 그 옆에 선다.
- * · 빈 채로 열었으면 '닫기'로 되돌린다.
- * · 포커스는 **누른 그 순간에만**(`inputRef`) — autoFocus는 remount마다 커서를 훔친다(위 주석).
+ * **클라 상태 검색칸** — 늘 펼친 입력칸 + 검색어가 걸려 있으면 그 옆에 결과 표기(`chip`, N/M).
+ * 원장 2026-11-11 *"전체 웹앱에서 '검색' 옆에 '닫기' 제거. 닫을 필요가 없지 않나? 항상 열려있는데"* — 2026-11-10 기본값을 펼침으로 바꾼 뒤 남아 있던
+ * '닫기'와 접힌 상태('검색' 글자 하나)를 없앴다(공용 [`SearchToggle`](@/components/search-toggle)과 같다). 🔴 다시 접는 단추를 두지 말 것.
+ * 공용 SearchToggle은 URL(`?q=`) 검색용이라, 서버 왕복 0의 클라 필터(시간표·월별 출석부·오늘 출결·좌석표)는 이 칸을 쓴다.
+ * 커서는 화면을 열 때 가져가지 않는다(autoFocus 없음 — 아래 StudentSearchBox 주석).
  * ⚠️ 부르는 쪽이 "검색할 게 없을 때"(편집 모드·행 0개)는 이 컴포넌트를 아예 안 그린다 — 여기서는 판단하지 않는다.
  */
 export function StudentSearchToggle({
@@ -43,54 +41,17 @@ export function StudentSearchToggle({
   ariaLabel?: string;
 }) {
   const lang = useSheetLang();
-  const [opened, setOpened] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const active = isSearchActive(value);
-  const open = opened || active;
-  // 씨앗(URL `?q=`)으로 펼쳐진 채 X·Esc로 지우면 **그대로 펼친 채** 둔다('닫기'가 선다) — 지우는 순간 상자가 사라지면
-  // 커서 아래에서 입력칸이 증발하고, 방금 지운 자리에 다시 치려던 손이 갈 곳을 잃는다.
-  const change = (v: string) => {
-    if (!opened && !isSearchActive(v)) setOpened(true);
-    onChange(v);
-  };
-  // 그리는 자리 = 화면 머리 동작 줄 맨 앞(공용 SearchToggle과 같은 규약, 원장 2026-10-19). 버튼 = 학원 색 채움 + 흰 굵은 글씨.
-  if (!open) {
-    return (
-      <HeaderSearchSlot>
-        <button
-          type="button"
-          onClick={() => {
-            setOpened(true);
-            requestAnimationFrame(() => inputRef.current?.focus());
-          }}
-          className={`${CONTROL_H} ${CONTROL_LABEL} bg-primary text-primary-foreground hover:bg-primary/90 inline-flex shrink-0 items-center rounded-lg px-2.5 font-bold whitespace-nowrap transition`}
-        >
-          {lang === "en" ? "Search" : "검색"}
-        </button>
-      </HeaderSearchSlot>
-    );
-  }
+  // 그리는 자리 = 화면 머리 동작 줄 맨 앞(공용 SearchToggle과 같은 규약, 원장 2026-10-19).
   return (
     <HeaderSearchSlot>
       <StudentSearchBox
         value={value}
-        onChange={change}
+        onChange={onChange}
         placeholder={lang === "en" && (placeholder === undefined || placeholder === "학생 이름") ? "Student name" : placeholder}
         inputWidth={inputWidth}
-        inputRef={inputRef}
         ariaLabel={ariaLabel}
       />
-      {active ? (
-        chip
-      ) : (
-        <button
-          type="button"
-          onClick={() => setOpened(false)}
-          className={`${CONTROL_H} ${CONTROL_LABEL} text-text-faint hover:text-foreground inline-flex shrink-0 items-center px-1 whitespace-nowrap transition`}
-        >
-          {lang === "en" ? "Close" : "닫기"}
-        </button>
-      )}
+      {isSearchActive(value) ? chip : null}
     </HeaderSearchSlot>
   );
 }

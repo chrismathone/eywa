@@ -3,12 +3,14 @@
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { formatSettingChange, type SettingChange } from "@/features/owner/settings-diff";
 import { SECTION_LABELS } from "@/features/owner/settings-types";
+import { PERSON_FIELD_LABEL, type PersonFieldKey } from "@/features/owner/retired-people";
 import { STEP_DECISION_LABEL, STEP_DECISIONS, type StepDecision } from "@/features/approvals/types";
 import { formatSignedDays } from "@/features/leave/balance";
 import { formatLeaveDays } from "@/features/leave/request-days";
 import { STUDENT_STATUS_LABEL } from "@/features/students/status/status-labels";
 import { STATUS_TEXT } from "@/features/attendance/cell-display";
 import { ONBOARDING_ITEMS } from "@/features/newcomers/onboarding-items";
+import { managerDefaultSubjectLabel } from "@/features/newcomers/manager-defaults";
 import { reasonDisplay } from "@/features/withdrawals/types";
 import { reasonDetailOf } from "@/features/withdrawals/reason-detail";
 import {
@@ -69,6 +71,8 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   user: "직원",
   users: "직원",
   student: "학생",
+  // 신규생 과목 기본 담당(s2_0066 트리거가 남긴다 — 2026-11-11) · '대상' 이름 = 과목(과목 키를 과목 이름으로 접는다 — auditTargetLabel).
+  newcomer_default_manager: "신규생 기본 담당",
   academy_documents: "서식 문서",
   invoice: "청구서",
   textbook_order: "교재 신청",
@@ -80,6 +84,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   class: "반",
   classroom: "강의실",
   tenant_settings: "학원 설정",
+  management_collection_devices: "경영 분석 PC 수집기",
   staff_resume: "직원 이력서",
   intake_token: "QR 접수 링크",
   notice_popup: "팝업 공지",
@@ -395,6 +400,8 @@ export function auditTargetLabel(
   const label = str(targetLabel);
   if (!label) return null;
   if (UUID_RE.test(label)) return null;
+  // 신규생 과목 기본 담당(DB 트리거 s2_0066) — 대상 칸은 그때의 과목 이름이다. 이름을 못 찾아 과목 키로 남은 줄만 과목 이름으로 접는다(EiE는 과목 목록에 없는 프로그램 이름).
+  if (targetType === "newcomer_default_manager") return managerDefaultSubjectLabel(label, ctx.subjectLabel);
   if (targetType !== "tenant_settings") return label;
   const section = (SECTION_LABELS as Record<string, string>)[label];
   if (section) return section;
@@ -695,6 +702,8 @@ export function auditDetail(
     }
     case "sync_agent_manage":
       return str(m.summary) ?? "연동 PC 설정 변경";
+    case "management_collector_manage":
+      return [str(m.summary) ?? "PC 수집기 설정 변경", str(m.name)].filter(Boolean).join(" · ");
     case "integration_sync_toggle":
     case "integration_sheets_toggle":
       return m.enabled === true ? "켜기" : m.enabled === false ? "끄기" : null;
@@ -870,6 +879,12 @@ export function auditDetail(
         unavailable: "요약 조건 미충족", input_limit: "입력량 제한", source_changed: "원본 변경으로 저장 중단" } as Record<string, string>)[str(m.outcome) ?? ""] ?? "결과 확인 필요";
       return join(outcome, m.providerRequested === true ? "AI 요청함" : "AI 요청 전", num(m.itemCount) === null ? null : `발췌 ${num(m.itemCount)}건`, str(m.model) || null);
     }
+    case "student_contribution_factor_save": {
+      // 원생 기여 요인 기록(P0-3b) — 달·상태·판. 근거 글은 싣지 않는다(이력 표에 있다). 모르는 상태 값은 싣지 않는다.
+      const state = ({ measured: "값 기록", na: "해당 없음", reset: "되돌림" } as Record<string, string>)[str(m.state) ?? ""] ?? null;
+      const version = num(m.version);
+      return join(str(m.month), state, version === null ? null : `v${version}`);
+    }
     case "student_contribution_signal_cancel":
     case "student_contribution_signal_rejudge":
       return typeof m.reason === "string" ? m.reason : null;
@@ -895,6 +910,12 @@ export function auditDetail(
       const closed = num(m.closedRows);
       const open = num(m.openRows);
       return join(months.length ? `${months[0]} ~ ${months.at(-1)}` : null, closed === null ? null : `마감 ${closed}행`, open ? `집계 중 ${open}행` : null);
+    }
+    case "teacher_portfolio_homeroom_fix": {
+      const months = Array.isArray(m.months) ? m.months.filter((v): v is string => typeof v === "string") : [];
+      const revised = num(m.revised);
+      const removed = num(m.removed);
+      return join(months.length ? `${months[0]} ~ ${months.at(-1)}` : null, revised === null ? null : `고침 ${revised}행`, removed ? `입사 전·퇴사 뒤 ${removed}행 지움` : null);
     }
     case "teacher_portfolio_rule_patch": {
       const months = Array.isArray(m.months) ? m.months.filter((v): v is string => typeof v === "string") : [];
@@ -958,6 +979,25 @@ export function auditDetail(
       // 스크립트 삭제 행은 role 대신 함께 지운 문서 수를 남긴다 — 데이터가 사라진 사실이라 꼭 보인다.
       const docs = num(m.docs);
       return join(r ? `삭제 당시 역할: ${r}` : null, docs ? `문서 ${docs}건 함께 삭제` : null);
+    }
+    case "staff_permission_cleanup": {
+      // 퇴사자 권한 정리 — 뺀 칸(주는 값) · 마지막 한 명이라 남긴 칸(퇴원보고서 승인자 — 비우면 '지정 없음'으로 넓어진다) · 정리 실패(리뷰 r1 F8).
+      const names = (v: unknown) => arr(v).flatMap((k) => (typeof k === "string" && k in PERSON_FIELD_LABEL ? [PERSON_FIELD_LABEL[k as PersonFieldKey]] : []));
+      const removed = names(m.removed);
+      const kept = names(m.kept);
+      const why = m.reason === "reactivate" ? "다시 재직으로 돌림" : m.reason === "delete" ? "완전 삭제" : "퇴사";
+      // 실패 안내는 경우마다 다르다(리뷰 r2 N-a): 퇴사자는 면이 거른 값으로 열려 저장하면 빠지지만, 완전 삭제는 계정이 없어 거르지 않고
+      // ('(삭제된 직원)'으로 남는다) 다시 재직은 퇴사자가 아니라 걸러지지 않는다 — 둘은 손으로 지워야 한다.
+      if (m.failed) {
+        const fix = m.reason === "delete"
+          ? "역할·권한 면에서 '(삭제된 직원)' 항목을 지워 주세요"
+          : m.reason === "reactivate"
+            ? "역할·권한 면에서 이 직원의 개인별 권한을 확인해 지워 주세요"
+            : "역할·권한 면을 열어 확인한 뒤 한 번 저장하면 정리됩니다";
+        return `${why} — 권한 정리를 하지 못함(${fix})`;
+      }
+      const parts = [removed.length ? `${removed.join(" · ")}에서 뺌` : null, kept.length ? `${kept.join(" · ")}는 마지막 지정자라 남김` : null].filter(Boolean);
+      return parts.length ? `${why} — ${parts.join(" / ")}` : null;
     }
     case "staff_protected_refused": {
       const what = m.attempt === "role" ? "역할 변경" : m.attempt === "delete" ? "삭제" : "재직 상태 변경";
@@ -1345,6 +1385,17 @@ export function auditDetail(
         str(m.processedOn) ? `처리일 ${str(m.processedOn)}` : null,
         future && future > 0 ? `시작 전 수강 ${future}건은 시작일로 종료` : null,
         m.uncertain === true ? "응답을 받지 못함(적용 여부 미확인)" : m.partial === true ? "중간에 멈춤" : null,
+      );
+    }
+    case "newcomer_default_manager_update": {
+      // DB 트리거(s2_0066)가 남긴 줄 — 과목 키 · 그때의 과목 이름 · 이전/새 담당자(id + 그때의 이름). 새 줄이면 이전 담당이 없다.
+      // 과목 이름은 그때 남긴 이름이 먼저다(과목을 지운 뒤에도 읽힌다) — 없으면(과목 목록을 저장한 적 없는 학원) 키를 지금 과목 이름으로 접는다.
+      const subject = str(m.subject);
+      const to = str(m.toName) ?? ctx.nameOf(m.toManagerId);
+      const from = str(m.fromName) ?? ctx.nameOf(m.fromManagerId);
+      return join(
+        str(m.subjectLabel) ?? (subject ? managerDefaultSubjectLabel(subject, ctx.subjectLabel) : null),
+        `${from ?? (m.fromManagerId ? "이전 담당" : "지정 없음")} → ${to ?? "새 담당"}`,
       );
     }
     case "newcomer_check":

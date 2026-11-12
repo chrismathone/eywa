@@ -446,7 +446,8 @@ describe("배선", () => {
     expect(page.indexOf("<DataFace ")).toBeGreaterThan(fieldsetEnd);
     expect(page.indexOf("<DuplicatesFace ")).toBeGreaterThan(fieldsetEnd);
     // 설정 '읽기 전용' 안내도 이 면에는 서지 않는다(면이 자기 안내를 한다) — 자체 판정 면의 목록에 들어 있다.
-    expect(page).toContain("!canEditSettings && !showsOperations && !SELF_GATED_TABS.has(tab)");
+    // 조건에 다른 예외(FACE_WRITES_OWN_NOTE 등)가 더해져도 이 면은 그 목록으로 빠진다(2026-11-05 권한 면 개편 뒤 모양).
+    expect(page).toMatch(/!canEditSettings && [^?]*!SELF_GATED_TABS\.has\(tab\)/);
     expect(page).toMatch(/const SELF_GATED_TABS[^=]*= new Set\(\[[^\]]*"data"/);
   });
 

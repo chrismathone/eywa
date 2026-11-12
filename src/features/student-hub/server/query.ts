@@ -16,7 +16,10 @@ import { getContributionStudent } from "@/features/student-contribution/server/s
 import { getStudentRecordSummary } from "@/features/student-contribution/server/summary-query";
 import { scoreRaws, sumRaws } from "@/features/student-contribution/model/calc";
 import { getStudentCareGraph } from "@/features/student-care/server/graph";
+import { studentOnboardingSection } from "@/features/newcomers/server/followup-query";
+import { studentJourneySection } from "@/features/enrollment/journey/server";
 import { sectionResult, type LiveSection } from "@/features/students/ontology/live-contract";
+import { studentKnowledgeSection } from "@/features/academy-knowledge/server-records";
 import { hubNodeId, studentHubGraph, type HubAnalysis, type HubCoverage } from "../model";
 
 const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
@@ -76,11 +79,19 @@ export const getStudentHub = cache(async (studentId: string, requestedMonth?: st
       evidence: [{ source: "enrollment_consultations", id: r.id, studentId, href: `${base}?tab=consultations` }],
     })), result.rows.length);
   });
-  // 🔴 시안: 현장 관찰·유입 경로·신입생 적응 피드백·전화·방문·등록 기록은 aywa-next 전용 표라 이 DB에 없다.
-  //    조회하지 않고 '연결 전'으로 밝힌다(빈 결과를 '기록 없음'으로 위장하지 않는다).
-  for (const [key, label] of [["field-observations", "현장 관찰·후속 조치"], ["marketing", "유입 경로·홍보·행사 참여"], ["onboardingFeedback", "신입생 적응·담임 피드백"], ["admissionJourney", "전화·방문·등록 확인 기록"]] as const)
+  const onboarding = readSection("onboardingFeedback", "신입생 적응·담임 피드백", `/newcomers?student=${studentId}`, async () => {
+    if (!await canAccessTenant(user.systemRole, "newcomers")) return unavailableSection("onboardingFeedback", "신입생 적응·담임 피드백", base, "forbidden");
+    return studentOnboardingSection(studentId);
+  });
+  // 현장 관찰·후속 조치 = academy_knowledge_records(s2_0049 · 2026-11-11) — 업무 작성센터 권한·담당 학생 범위 안에서만(권한 없으면 '열람 제한').
+  const fieldObservations = readSection("field-observations", "현장 관찰·후속 조치", `/work-records/knowledge?student=${studentId}`, () => studentKnowledgeSection(studentId));
+  // 아직 연결되지 않은 다른 원본은 빈 결과로 위장하지 않는다.
+  for (const [key, label] of [["marketing", "유입 경로·홍보·행사 참여"]] as const)
     coverage.push({ key, label, state: "schema_missing", note: "이 기록 표가 아직 연결되지 않았습니다(시안). 0건으로 해석하지 않습니다." });
-  sections.push(...await Promise.all([billing, intake]));
+  // 전화·방문·등록 확인 기록(s2_0063) — 그 학생에게 이어진 상담의 기록만. 권한은 그 기능의 게이트가 본다(없으면 null → '권한 없음').
+  const admissionJourney = readSection("admissionJourney", "전화·방문·등록 확인 기록", "/enrollment/visits", async () =>
+    await studentJourneySection(studentId) ?? unavailableSection("admissionJourney", "전화·방문·등록 확인 기록", "/enrollment/visits", "forbidden"));
+  sections.push(...await Promise.all([billing, intake, onboarding, fieldObservations, admissionJourney]));
   const care = careRead.ok && careRead.value.graph ? careRead.value.graph : null;
   const commitments = care?.nodes.filter((n) => n.kind === "commitment") ?? [];
   if (care) sections.push({ ...sectionResult("commitments", "입학 약속·이행", `${base}/care`, commitments.map((n) => ({

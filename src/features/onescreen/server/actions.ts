@@ -125,7 +125,8 @@ const VIDEO_HW_CANCELLED_ERROR = "이 영상 숙제는 영상 제출 현황에�
 import { classBoardLiveForStudent, explainBoardMissing, resolveMakeupSendClass } from "./send-class";
 import { captureReportJj } from "./jj-capture";
 import type { OneScreenStudent, PrevReport } from "../types";
-import { humanizeDbError, logDbError } from "@/lib/supabase/db-error";
+import { humanizeDbError, logDbError, explainDbError } from "@/lib/supabase/db-error";
+import { writeUiPrefsNs } from "@/lib/ui-prefs/write";
 
 
 /**
@@ -2067,35 +2068,12 @@ export async function setMyOnescreenFontSize(
   if (!(ONESCREEN_FONT_SIZES as readonly string[]).includes(size))
     return { ok: false, error: "잘못된 글씨 크기입니다" };
 
-  const admin = createAdminClient();
-  const { data: row, error: readErr } = await admin
-    .from("users")
-    .select("ui_prefs")
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId)
-    .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
-
-  const raw =
-    row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
-      ? (row.ui_prefs as Record<string, unknown>)
-      : {};
-  const ns =
-    raw.onescreen && typeof raw.onescreen === "object" && !Array.isArray(raw.onescreen)
-      ? { ...(raw.onescreen as Record<string, unknown>) }
-      : {};
-  if (size === DEFAULT_ONESCREEN_FONT_SIZE) delete ns.fontSize;
-  else ns.fontSize = size;
-
-  const merged = { ...raw };
-  if (Object.keys(ns).length === 0) delete merged.onescreen;
-  else merged.onescreen = ns;
-
-  const { error } = await admin
-    .from("users")
-    .update({ ui_prefs: merged })
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId);
+  const { error } = await writeUiPrefsNs(
+    createAdminClient(),
+    { userId: user.id, tenantId: user.tenantId },
+    "onescreen",
+    size === DEFAULT_ONESCREEN_FONT_SIZE ? { unset: ["fontSize"] } : { set: { fontSize: size } },
+  );
   if (error) return { ok: false, error: humanizeDbError(error.message, "저장") };
   return { ok: true };
 }
@@ -2124,25 +2102,17 @@ export async function setMyLastReportTemplate(
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
+  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "onescreen.actions.setMyLastReportTemplate", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   const raw =
     row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
       ? (row.ui_prefs as Record<string, unknown>)
       : {};
-  const ns =
-    raw.onescreen && typeof raw.onescreen === "object" && !Array.isArray(raw.onescreen)
-      ? { ...(raw.onescreen as Record<string, unknown>) }
-      : {};
   const prev = readTemplatePrefs(raw);
   if (prev.last === templateId && (!classId || prev.byClass[classId] === templateId)) return { ok: true };
   const next = rememberTemplate(prev, templateId, classId);
-  ns[LAST_TEMPLATE_PREF] = next.last;
-  ns[LAST_TEMPLATE_BY_CLASS_PREF] = next.byClass;
-  const { error } = await admin
-    .from("users")
-    .update({ ui_prefs: { ...raw, onescreen: ns } })
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId);
+  const { error } = await writeUiPrefsNs(admin, { userId: user.id, tenantId: user.tenantId }, "onescreen", {
+    set: { [LAST_TEMPLATE_PREF]: next.last, [LAST_TEMPLATE_BY_CLASS_PREF]: next.byClass },
+  });
   if (error) return { ok: false, error: humanizeDbError(error.message, "저장") };
   return { ok: true };
 }
@@ -2185,21 +2155,13 @@ export async function setMyTrendOptOut(input: {
     row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
       ? (row.ui_prefs as Record<string, unknown>)
       : {};
-  const ns =
-    raw.onescreen && typeof raw.onescreen === "object" && !Array.isArray(raw.onescreen)
-      ? { ...(raw.onescreen as Record<string, unknown>) }
-      : {};
   const next = nextTrendOptOut(readTrendOptOut(raw), key, input.on);
-  if (next.length === 0) delete ns[TREND_OPTOUT_PREF];
-  else ns[TREND_OPTOUT_PREF] = next;
-  const merged = { ...raw };
-  if (Object.keys(ns).length === 0) delete merged.onescreen;
-  else merged.onescreen = ns;
-  const { error } = await admin
-    .from("users")
-    .update({ ui_prefs: merged })
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId);
+  const { error } = await writeUiPrefsNs(
+    admin,
+    { userId: user.id, tenantId: user.tenantId },
+    "onescreen",
+    next.length === 0 ? { unset: [TREND_OPTOUT_PREF] } : { set: { [TREND_OPTOUT_PREF]: next } },
+  );
   if (error) {
     logDbError(error, "onescreen.setMyTrendOptOut");
     return { ok: false, error: "설정을 저장하지 못했습니다" };

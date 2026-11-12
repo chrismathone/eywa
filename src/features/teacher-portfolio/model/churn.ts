@@ -164,6 +164,8 @@ export function churnResult(input: ChurnInput): ChurnResult {
   const subjects = new Set([...base].flatMap((id) => [...(prevSubjects.get(id) ?? [])]));
   return { subjects, exits, metric: {
     raw, base: base.size, need, counted: counted.size, detail: rows,
+    // 지난달 담당 학생이 없다(새로 맡은 선생님) — 퇴원율이 없어도 0점이 아니라 합계에서 제외(원장 2026-11-11 · 급여 비율의 새 선생님과 같다).
+    ...(base.size ? {} : { newcomer: true }),
     basis: base.size ? `그만둠 ${counted.size} / 지난달 담당 ${base.size}명` : "지난달 담당 학생 없음",
     reason: `지난달(${Number(prevEnd.slice(5, 7))}월) 이 선생님이 정규 수업으로 ${need}일 이상 맡은 학생(담임·교시 담당 모두) ${base.size}명 중 이 달에 그 선생님 반이나 가르친 과목을 그만둔(퇴원·수강종료) 학생의 비율입니다. 다른 반으로 옮긴 뒤 그 과목을 그만두면 셉니다. 원장이 고른 사유·반 이동·수업이 끝남·끝난 특강·같은 과목의 다른 반을 계속 다니는 경우(어느 선생님 반이든 — 반 이동처럼)는 제외하고, 한 학생은 한 번만 셉니다.`,
   } };

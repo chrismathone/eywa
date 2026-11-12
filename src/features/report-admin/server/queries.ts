@@ -978,7 +978,7 @@ export type ReportFilterOptions = {
  * 소비처가 자유입력 없는 <select>라 그 강사의 보고서는 어떤 경로로도 필터할 수 없었다(2026-07-21).
  * distinct = 집계이므로 group-by RPC(0126a)로 내린다 — 4,010행 스캔 → 17행 반환.
  *
- * 반(class) 옵션은 **별도 RPC(0147a)** 를 병렬로 부른다(B4). 0126a에 컬럼을 더하지 않은 이유는
+ * 반(class) 옵션은 **별도 RPC(0147a — 운영엔 빠져 있어 s2_0045로 다시 만든다)** 를 병렬로 부른다(B4). 0126a에 컬럼을 더하지 않은 이유는
  * 0147a 마이그레이션 주석 참조(반환 타입 변경 = DROP 필요 + distinct 조합 폭증).
  * ⚠️ 반 옵션은 **fail-soft**다 — 0147a 적용 전에 코드가 먼저 배포돼도 반 드롭다운만 비고
  *    강사·과목 필터와 목록은 그대로 동작한다(배포 순서 제약 제거).
@@ -998,7 +998,7 @@ export async function getReportFilterOptions(): Promise<ReportFilterOptions> {
   // 반 옵션 실패는 본 옵션을 죽이지 않는다(마이그레이션 미적용 = 함수 없음이 정상 시나리오).
   const classes: { id: string; name: string }[] = [];
   if (cls.error) {
-    console.error("[report-admin] 반 필터 옵션 조회 실패(0147a 미적용?)", cls.error);
+    console.error("[report-admin] 반 필터 옵션 조회 실패(s2_0045 미적용?)", cls.error);
   } else {
     for (const r of (cls.data ?? []) as { class_id: string | null; class_name: string | null }[]) {
       if (r.class_id && r.class_name) classes.push({ id: r.class_id, name: r.class_name });

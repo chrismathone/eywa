@@ -544,16 +544,6 @@ export async function getAttendanceInputRows(
   return [...rosterRows.sort(byName), ...makeupRows.sort(byName)];
 }
 
-export async function getMostRecentAttendanceDate(): Promise<string | null> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("attendance_records")
-    .select("session_date")
-    .order("session_date", { ascending: false })
-    .limit(1);
-  return data?.[0]?.session_date ?? null;
-}
-
 // ─────────────────── ijw 스타일 월 매트릭스 ───────────────────
 
 export type MatrixDay = {
@@ -1230,7 +1220,10 @@ export async function getMonthlyAttendanceMatrix(
     const otherIds = [...new Set(monthSplits.flatMap((x) => [x.sourceClassId, x.targetClassId]))];
     const cls = await fetchInChunks<Cls>(otherIds, (chunk) =>
       supabase.from("classes").select("id, class_name, teacher:teacher_id ( display_name )").in("id", chunk),
-    ).catch(() => [] as Cls[]);
+    ).catch((e: unknown) => {
+      console.error("[attendance] 나눔 상대 반 이름 조회 실패 — 이름 없이 표식만 세웁니다:", e); // B16
+      return [] as Cls[];
+    });
     for (const c of cls) {
       const t = Array.isArray(c.teacher) ? c.teacher[0] : c.teacher;
       splitClassNames.set(c.id, { name: c.class_name, teacherName: t?.display_name ?? null });

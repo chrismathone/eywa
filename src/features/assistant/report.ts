@@ -9,9 +9,11 @@
  */
 import { z } from "zod";
 import { labelCodeColumns } from "./code-labels";
+import { chartXProblem, kpiPeriodProblem, kpiRefTypeProblem, legendOf, rawCodeProblem, unitFix } from "./report-checks";
 import { plainRich } from "./rich-text";
 import { ADVICE_METHODS, ADVICE_TOPICS, AdviceCheckSchema, CHECK_FAILED, checkTemplateProblem, type AdviceView } from "./advice";
 import { AdviceTargetsSchema, checkIntegrityProblem } from "./advice-targets";
+import { isRecord } from "@/lib/guards";
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 /**
@@ -38,7 +40,7 @@ export const QueryRefSchema = z.object({ query: z.string(), row: z.number().int(
 export const KpiItemSchema = z.object({
   label: text(30),
   value: z.union([z.string().trim().min(1).max(40), z.number()]),
-  unit: z.string().trim().max(10).optional(),
+  unit: z.string().trim().max(10).optional().describe("화면 단위 — 한국어(명·건·개·회·원·%) · 영어 단위는 서버가 바꾸거나 뺀다"),
   /** 비교 값(지난달 대비 등) — 숫자면 화면이 ▲▼로 그린다. */
   delta: z.number().optional(),
   deltaLabel: z.string().trim().max(30).optional(),
@@ -59,7 +61,7 @@ export const ReportBlockSchema = z.discriminatedUnion("type", [
     query: z.string(),
     x: z.string(),
     series: z.array(z.object({ column: z.string(), label: text(30) })).min(1).max(6),
-    unit: z.string().trim().max(10).optional(),
+    unit: z.string().trim().max(10).optional().describe("화면 단위 — 한국어(명·건·개·회·원·%) · 영어 단위는 서버가 바꾸거나 뺀다"),
   }),
   z.object({
     type: z.literal("table"),
@@ -168,10 +170,15 @@ export const REPORT_TOOL_SCHEMA = z.toJSONSchema(ReportSchema, { target: "draft-
  * AI가 낸 보고서를 검증하고 조회 결과와 맞춘다. 틀리면 AI에게 돌려줄 이유 목록.
  * - 차트·표: 가리킨 조회가 있고, 칸이 그 결과에 있어야 한다.
  * - KPI `ref`: 그 칸 값으로 `value`를 바꾼다(AI가 옮겨 적다 틀려도 화면엔 DB 값).
+ * - 멘트 시험 2026-11-11(report-checks.ts): KPI 이름의 달 ≠ 그 줄의 달 · KPI가 글자 칸을 가리킴 · 표·차트 칸의 영어 코드 값은 돌려보내고,
+ *   영어 단위는 고치거나 빼고, 칸 이름에 붙인 코드표는 값을 바꾼 뒤 이름을 다듬는다.
+ * `lenient`(마무리 중 — 조회가 막혀 고칠 길이 없다): 돌려보내는 대신 틀린 KPI·칸이 어긋난 차트와 표는 빼고, 코드 값은 그대로 둔다(답을 잃지 않게 · 재리뷰 2026-11-11).
+ * 그래도 돌려보내는 것 = 형식 오류(스키마)와 비서 의견 블록 개수 — 고칠 조회가 필요 없다.
  */
 export function settleReport(
   input: unknown,
   results: ReadonlyMap<string, QueryResult>,
+  opts: { lenient?: boolean } = {},
 ): { ok: true; report: SettledReport } | { ok: false; errors: string[] } {
   const parsed = ReportSchema.safeParse(looseAdvice(input));
   if (!parsed.success) {
@@ -192,31 +199,138 @@ export function settleReport(
     used.add(query);
     for (const c of columns) if (!r.columns.includes(c)) errors.push(`${where}: ${query}에 칸 ${c}가 없습니다(칸: ${r.columns.join(", ")})`);
   };
-  const blocks = parsed.data.blocks.map((raw, i): ReportBlock => {
+  /** 칸 이름에 붙인 코드표를 그 칸 값에 적용한다(같은 조회를 가리키는 다른 블록도 같은 값을 본다). */
+  const applyLegend = (query: string, column: string, map: ReadonlyMap<string, string>) => {
+    const r = results.get(query);
+    if (!r || !r.columns.includes(column)) return;
+    labeled.set(
+      query,
+      rowsOf(r).map((row) => {
+        const v = row[column];
+        return typeof v === "string" && map.has(v) ? { ...row, [column]: map.get(v)! } : row;
+      }),
+    );
+  };
+  /** 화면에 그리는 칸에 영어 코드 값이 남았나(마무리 중이면 보지 않는다). 코드표를 붙인 칸은 남은 코드가 하나라도 있으면. */
+  const codeCheck = (where: string, query: string, columns: ReadonlyArray<{ column: string; label: string }>) => {
+    const r = results.get(query);
+    if (opts.lenient || !r) return;
+    const rows = rowsOf(r);
+    for (const c of columns) {
+      // 이름·아이디·계정 칸의 소문자 값(kim_minsu)은 CASE로 고칠 수 없다 — 보지 않는다(재리뷰 2026-11-11).
+      // 상태·구분·여부를 말하는 칸('계정 상태')은 건너뛰지 않는다(재리뷰 2026-11-11).
+      const ident = `${c.label} ${c.column}`;
+      if (!r.columns.includes(c.column) || (/이름|아이디|계정|로그인|메일|(^|[^a-z])(id|login|email|username)($|[^a-z])/i.test(ident) && !/상태|구분|여부|종류|status|state|kind|type/i.test(ident))) continue;
+      const problem = rawCodeProblem(c.label, rows.map((row) => row[c.column]), { anyLeft: legended.has(`${query}\u0000${c.column}`) });
+      if (problem) errors.push(`${where}: ${problem}`);
+    }
+  };
+  // 코드표는 블록을 보기 전에 한 번에 — 차트·KPI가 표보다 앞에 있어도 같은 값을 본다(최종 리뷰 2026-11-11).
+  // 코드표의 열쇠가 그 칸 값에 실제로 있을 때만 바꾸고 이름을 다듬는다('출석률(n=25)'의 괄호는 남는다).
+  const legended = new Set<string>();
+  const legendLabel = new Map<string, string>();
+  for (const original of parsed.data.blocks) {
+    const raw = plainTitles(original);
+    if (raw.type !== "table") continue;
+    const r = results.get(raw.query);
+    if (!r) continue;
+    for (const c of raw.columns) {
+      const legend = legendOf(c.label);
+      if (!legend || !r.columns.includes(c.column)) continue;
+      // 원래 값에서 찾는다 — 코드 안전망(code-labels)이 먼저 '출석'으로 바꾼 칸도 머리의 코드표를 다듬어야 한다(재리뷰 2026-11-11).
+      const values = new Set(r.rows.map((row) => row[c.column]));
+      if (![...legend.map.keys()].some((k) => values.has(k))) continue;
+      applyLegend(raw.query, c.column, legend.map);
+      legended.add(`${raw.query}\u0000${c.column}`);
+      legendLabel.set(c.label, legend.label);
+    }
+  }
+  const blocks: ReportBlock[] = [];
+  for (const [i, raw] of parsed.data.blocks.entries()) {
     const block = plainTitles(raw);
     const where = `blocks.${i}(${block.type})`;
-    if (block.type === "chart") need(where, block.query, [block.x, ...block.series.map((s) => s.column)]);
-    if (block.type === "table") need(where, block.query, [...block.columns.map((c) => c.column), ...(block.totals ?? [])]);
-    if (block.type === "kpi") {
-      return {
-        ...block,
-        items: block.items.map((item, j) => {
-          if (!item.ref) return item;
-          const r = results.get(item.ref.query);
-          const row = r ? rowsOf(r)[item.ref.row] : undefined;
-          // Object.hasOwn — `in`은 `constructor` 같은 프로토타입 이름도 맞춘다(적대 리뷰 2026-11-06).
-          if (!r || !row || !Object.hasOwn(row, item.ref.column)) {
-            errors.push(`${where}.items.${j}: ref ${item.ref.query}[${item.ref.row}].${item.ref.column}이(가) 없습니다`);
-            return item;
-          }
-          used.add(item.ref.query);
-          const actual = row[item.ref.column];
-          return actual === null || actual === undefined ? item : { ...item, value: typeof actual === "number" ? actual : String(actual) };
-        }),
-      };
+    // 마무리 중에는 칸·조회가 어긋난 블록을 빼고 나머지로 답한다 — 돌려보내도 다시 조회할 수 없다(최종 리뷰 2026-11-11).
+    const mark = errors.length;
+    const dropIfLenient = () => {
+      if (!opts.lenient || errors.length === mark) return false;
+      errors.length = mark;
+      return true;
+    };
+    if (block.type === "chart") {
+      need(where, block.query, [block.x, ...block.series.map((s) => s.column)]);
+      if (dropIfLenient()) continue;
+      codeCheck(where, block.query, [{ column: block.x, label: block.x }]);
+      const xr = results.get(block.query);
+      if (xr && !opts.lenient) {
+        const problem = chartXProblem(block.x, xr.rows.map((row) => row[block.x]));
+        if (problem) errors.push(`${where}: ${problem}`);
+      }
+      const chart = { ...block };
+      const unit = unitFix(block.unit);
+      if (unit) chart.unit = unit;
+      else delete chart.unit;
+      blocks.push(chart);
+      continue;
     }
-    return block;
-  });
+    if (block.type === "table") {
+      need(where, block.query, block.columns.map((c) => c.column));
+      if (dropIfLenient()) continue;
+      // 합계 칸만 틀렸으면 마무리 중에는 합계만 뺀다(표는 남긴다).
+      const tr = results.get(block.query);
+      let totals = block.totals;
+      if (totals && tr) {
+        const missing = totals.filter((c) => !tr.columns.includes(c));
+        if (missing.length && opts.lenient) totals = totals.filter((c) => tr.columns.includes(c));
+        else for (const c of missing) errors.push(`${where}: ${block.query}에 칸 ${c}가 없습니다(칸: ${tr.columns.join(", ")})`);
+      }
+      const columns = block.columns.map((c) => {
+        const label = legended.has(`${block.query}\u0000${c.column}`) ? legendLabel.get(c.label) : undefined;
+        return label ? { ...c, label } : c;
+      });
+      codeCheck(where, block.query, columns);
+      const table = { ...block, columns };
+      if (totals?.length) table.totals = totals;
+      else delete table.totals;
+      blocks.push(table);
+      continue;
+    }
+    if (block.type === "kpi") {
+      const items: Array<(typeof block.items)[number]> = [];
+      for (const [j, rawItem] of block.items.entries()) {
+        const item = { ...rawItem };
+        const unit = unitFix(rawItem.unit);
+        if (unit) item.unit = unit;
+        else delete item.unit;
+        if (!item.ref) {
+          items.push(item);
+          continue;
+        }
+        const r = results.get(item.ref.query);
+        const row = r ? rowsOf(r)[item.ref.row] : undefined;
+        // Object.hasOwn — `in`은 `constructor` 같은 프로토타입 이름도 맞춘다(적대 리뷰 2026-11-06).
+        if (!r || !row || !Object.hasOwn(row, item.ref.column)) {
+          // 마무리 중이면 그 KPI만 뺀다(가리킨 값을 확인할 수 없는 숫자는 싣지 않는다).
+          if (!opts.lenient) {
+            errors.push(`${where}.items.${j}: ref ${item.ref.query}[${item.ref.row}].${item.ref.column}이(가) 없습니다`);
+            items.push(item);
+          }
+          continue;
+        }
+        const actual = row[item.ref.column];
+        const problem = kpiPeriodProblem(item.label, row, item.ref) ?? kpiRefTypeProblem(item.label, item.value, actual, item.ref);
+        if (problem) {
+          // 마무리 중이면 틀린 숫자를 싣지 않고 그 KPI만 뺀다 — 돌려보내도 다시 조회할 수 없다.
+          if (!opts.lenient) errors.push(`${where}.items.${j}: ${problem}`);
+          continue;
+        }
+        used.add(item.ref.query);
+        items.push(actual === null || actual === undefined ? item : { ...item, value: typeof actual === "number" ? actual : String(actual) });
+      }
+      if (items.length) blocks.push({ ...block, items });
+      continue;
+    }
+    blocks.push(block);
+  }
   const advice = blocks.filter((b) => b.type === "advice").length;
   if (advice === 0) errors.push("비서 의견(advice) 블록이 없습니다 — 원장이 무엇을 하면 좋을지 1~5개를 근거와 함께 넣어 주세요");
   if (advice > 1) errors.push("비서 의견(advice) 블록은 하나만 넣어 주세요");
@@ -282,7 +396,6 @@ function looseAdvice(input: unknown): unknown {
   };
 }
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /**
  * 제목·이름 칸(보고서·차트·표 제목 · 계열·칸 이름 · KPI 이름·값·단위 · 목록 제목 · 담당)은 강조 표시를 벗긴다 —

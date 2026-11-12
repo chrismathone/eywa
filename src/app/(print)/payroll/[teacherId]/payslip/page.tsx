@@ -104,7 +104,7 @@ export default async function PayslipPrintPage({
 
   return (
     <>
-      <div className="print-portrait payslip-doc mx-auto max-w-[210mm] bg-white px-12 py-10 text-black print:p-0">
+      <div className="print-portrait mx-auto max-w-[210mm] bg-white px-12 py-10 text-black print:p-0">
         <PrintActions embedded={embedded} />
         {canManage ? <AdjustmentsEditor
           teacherId={teacherId}

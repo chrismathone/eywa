@@ -153,22 +153,27 @@ describe("시간표 줄 — 원래 반엔 →, 받는 반엔 ←", () => {
   });
 });
 
-// 기능이 꺼져 있으면(원장 2026-10-06) 누구도 못 나눈다 — 아래 판정은 켜졌을 때의 규칙이다.
-describe.skipIf(!CLASS_SPLIT_ENABLED)("권한 — 원장 역할 + 학원 설정에서 지정한 사람(원장 2026-10-06)", () => {
+// 기능이 꺼져 있으면(원장 2026-10-06) 누구도 못 나눈다 — 아래 판정은 켜졌을 때의 규칙(스위치를 주입해 늘 돌린다).
+describe("권한 — 원장 역할 + 학원 설정에서 지정한 사람(원장 2026-10-06)", () => {
+  // 스위치를 주입해 켜진 규칙을 늘 돌린다(꺼 둔 동안 깨진 것이 다시 켜는 날 한꺼번에 드러나지 않게 — 리뷰 A7).
+  it("스위치가 꺼져 있으면(기본값) 누구도 못 나눈다", () => {
+    expect(canSplitClass({ id: "x", systemRole: "master" }, { isSuperAdmin: true, splitterIds: ["x"] }, false)).toBe(false);
+    expect(canSplitClass({ id: "x", systemRole: "master" }, { isSuperAdmin: true, splitterIds: ["x"] })).toBe(CLASS_SPLIT_ENABLED);
+  });
   const policy = { isSuperAdmin: false, splitterIds: ["picked"] };
   it("원장 역할은 지정 없이 연다", () => {
-    expect(canSplitClass({ id: "x", systemRole: "master" }, { isSuperAdmin: false, splitterIds: [] })).toBe(true);
+    expect(canSplitClass({ id: "x", systemRole: "master" }, { isSuperAdmin: false, splitterIds: [] }, true)).toBe(true);
   });
   it("그 밖의 역할은 지정된 사람만", () => {
-    expect(canSplitClass({ id: "picked", systemRole: "admin" }, policy)).toBe(true);
+    expect(canSplitClass({ id: "picked", systemRole: "admin" }, policy, true)).toBe(true);
     for (const role of ["admin", "manager", "teacher", "counselor", "accountant", "viewer"] as const) {
-      expect(canSplitClass({ id: "someone", systemRole: role }, policy)).toBe(false);
+      expect(canSplitClass({ id: "someone", systemRole: role }, policy, true)).toBe(false);
     }
     // 저장값이 목록이 아니면(손으로 넣은 값) 지정된 사람이 없는 것으로 본다.
-    expect(canSplitClass({ id: "picked", systemRole: "admin" }, { isSuperAdmin: false, splitterIds: "xpickedx" as unknown as string[] })).toBe(false);
+    expect(canSplitClass({ id: "picked", systemRole: "admin" }, { isSuperAdmin: false, splitterIds: "xpickedx" as unknown as string[] }, true)).toBe(false);
   });
   it("운영 계정은 지정 없이 통과", () => {
-    expect(canSplitClass({ id: "someone", systemRole: "teacher" }, { isSuperAdmin: true, splitterIds: [] })).toBe(true);
+    expect(canSplitClass({ id: "someone", systemRole: "teacher" }, { isSuperAdmin: true, splitterIds: [] }, true)).toBe(true);
   });
 });
 

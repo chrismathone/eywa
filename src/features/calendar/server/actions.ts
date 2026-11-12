@@ -9,7 +9,7 @@ import { normalizeCalendarColor } from "../color";
 import { googleEventKey } from "../google-import";
 import type { CalendarEvent } from "../types";
 import { getCalendarEventById } from "./queries";
-import { logDbError } from "@/lib/supabase/db-error";
+import { logDbError, explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * 캘린더 쓰기 — 일정 등록·수정·삭제. 게이트는 화면과 같은 `canWriteTenant("calendar")`(사무실 full,
@@ -208,7 +208,7 @@ export async function saveCalendarEvent(
       .eq("tenant_id", user.tenantId)
       .select("id")
       .maybeSingle();
-    if (error) return { error: `일정 수정 실패 — ${error.message}` };
+    if (error) return { error: explainDbError(error, { scope: "calendar.actions.saveCalendarEvent", fallback: "일정 수정 실패 — 잠시 후 다시 시도해 주세요" }).message };
     if (!data) return { error: "수정할 일정을 찾을 수 없습니다" };
   } else if (repeated) {
     // 반복 = 실체화(0222a) — 회차 전부를 한 번에 insert, series_id 공통.
@@ -306,7 +306,7 @@ export async function deleteCalendarEvent(
       .eq("tenant_id", user.tenantId)
       .eq("series_id", seriesId)
       .select("id, title, google_calendar_id, google_event_id");
-    if (error) return { error: `삭제 실패 — ${error.message}` };
+    if (error) return { error: explainDbError(error, { scope: "calendar.actions.deleteCalendarEvent", fallback: "삭제 실패 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
     if (!data || data.length === 0) return { error: "삭제할 반복 일정을 찾을 수 없습니다" };
 
     const keys = googleKeysOf(data);
@@ -327,7 +327,7 @@ export async function deleteCalendarEvent(
     .eq("tenant_id", user.tenantId)
     .select("title, start_date, google_calendar_id, google_event_id")
     .maybeSingle();
-  if (error) return { error: `삭제 실패 — ${error.message}` };
+  if (error) return { error: explainDbError(error, { scope: "calendar.actions.deleteCalendarEvent", fallback: "삭제 실패 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
   if (!data) return { error: "삭제할 일정을 찾을 수 없습니다" };
 
   const keys = googleKeysOf([data]);
@@ -418,7 +418,7 @@ export async function deleteCalendarTag(
     .eq("tenant_id", user.tenantId)
     .select("name")
     .maybeSingle();
-  if (error) return { error: `태그 삭제 실패 — ${error.message}` };
+  if (error) return { error: explainDbError(error, { scope: "calendar.actions.deleteCalendarTag", fallback: "태그 삭제 실패 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
   if (!data) return { error: "삭제할 태그를 찾을 수 없습니다" };
 
   await logAction({

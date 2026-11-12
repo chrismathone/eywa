@@ -106,6 +106,13 @@ export const TOGGLE_FEATURES = [
   // 수업보고서 평점 정기 처리 — 켠 지점만 새로 발송된 보고서를 밤 배치(Haiku 5.5)로 매겨 목록 '평점' 열에 싣는다(2026-10-26 크레딧 MVP).
   // 보고서 글이 AI로 나가고 비용이 들어 기본 꺼짐. 읽는 곳 = features/report-rating/server/queue.ts(cron이 부른다 · 0455a 필요).
   { key: "report_rating", label: "수업보고서 평점 정기 처리", defaultOn: false },
+  // 원생상담 평점 정기 처리 — 켠 지점만 새·고친 상담을 배치(Haiku 5.5)로 매겨 원생상담 목록 '상담 평점' 열에 싣는다(원장 2026-11-11).
+  // 상담 글이 AI로 나가고 비용이 들어 기본 꺼짐. 읽는 곳 = features/consultation-rating/server/queue.ts(cron이 부른다 · s2_0044 필요) + 원생상담 목록 열.
+  { key: "consult_rating", label: "원생상담 평점 정기 처리", defaultOn: false },
+  // 경영 분석의 ECOUNT 회계 자료 가져오기 — 계정코드 분류표(`features/management/ecount-ledger.ts`)가 그 지점의 계정과목표와 맞는지
+  // 확인한 지점만 켠다(지금 분류표는 첫 학원 것 하나 — 같은 코드가 다른 지점에서는 다른 계정일 수 있다, 2026-11-11).
+  // 읽는 곳 = features/management/server/accounting-scope.ts(회계 자료 미리보기·저장 · ECOUNT 월별 대조 · 화면의 올리기 칸).
+  { key: "ecount_accounting", label: "ECOUNT 회계 자료 가져오기(계정 분류표 확인된 지점)", defaultOn: false },
 ] as const;
 
 /**

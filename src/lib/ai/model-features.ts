@@ -48,10 +48,13 @@ export const FIXED_MODEL_FEATURES: Readonly<Record<string, string>> = {
   ment_prompt_preview: "멘트 미리보기는 학부모 멘트 자동작성과 같은 모델을 씁니다.",
   // 평점 하네스(체크리스트 + 코드 규칙 7차)는 Claude Haiku 5.5에 맞춰 Codex 대조로 조였다 — 다른 모델이면 그 대조를 다시 해야 한다.
   lesson_report_rating: "수업보고서 평점은 Claude Haiku 5.5에 맞춰 검증한 판정 방식이라 모델을 고르지 않습니다.",
+  student_consultation_rating: "원생상담 평점은 같은 기준을 구독 CLI와 배치로 매긴 값을 맞춰 본 Claude 판정이라 모델을 고르지 않습니다.",
   // 영상 설명 AI 참고 메모(2026-10-20) — 학생 영상 화면은 Claude에만 보내도록 승인했고, 판정 Haiku · 확인 Sonnet 조합으로 시험을 통과했다.
   video_review_judge: "영상 설명 판정은 Claude 전용입니다(학생 영상 화면 전송 승인 범위 · 시험을 통과한 조합).",
   video_review_verify: "영상 설명 오류 확인은 Claude 전용입니다(학생 영상 화면 전송 승인 범위 · 시험을 통과한 조합).",
   // 학원 비서(2026-11-06) — 원장이 대화창에서 적음·보통·강함(Haiku·Sonnet·Opus 5.5)을 고른다. 지점 전체 자료를 읽는 기능이라 다른 회사 모델로 바꾸지 않는다.
+  // 경영 분석 AI 검토(2026-11-10 · aywa-next 이식) — 학원 재무 집계만 보내는 원장 전용 기능이라 다른 회사로 보내지 않는다.
+  management_analysis: "경영 분석 AI 검토는 집계 지표만 사용하는 Claude 전용 기능입니다.",
   academy_assistant: "학원 비서는 Claude 전용입니다 — 추론 강도(적음·보통·강함)는 원장이 대화창에서 고릅니다.",
 };
 
@@ -71,6 +74,6 @@ export function modelChoicesFor(key: string) {
  */
 export function waitsForAnswer(feature?: string | null): boolean {
   const key = modelFeatureOf(feature);
-  if (key === "student_ontology_summary") return true;
+  if (key === "student_ontology_summary" || key === "management_analysis") return true;
   return TENANT_MODEL_FEATURES.some((f) => f.key === key && f.waits === true);
 }

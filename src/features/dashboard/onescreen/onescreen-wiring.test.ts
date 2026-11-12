@@ -22,12 +22,11 @@ const code = (p: string) =>
     .join("\n");
 
 const CARE_CELLS = "src/features/newcomers/care-cells.ts";
-const PRIORITY = "src/features/dashboard/onescreen/priority-lines.ts";
 const SERVER_QUERIES = "src/features/dashboard/onescreen/server/queries.ts";
 const REPORT_ACTIONS = "src/features/report-admin/server/actions.ts";
-const ONE_SCREEN = "src/app/(shell)/dashboard/_onescreen/one-screen.tsx";
 const NEWCOMERS_FILTERS = "src/features/newcomers/board-model.ts";
 
+// 옛 한 화면 대시보드(`_onescreen/`)·우선 확인(`priority-lines`)은 2026-11-10 화면과 함께 지웠다(P3-D) — 남은 것은 살아 있는 조회·신규생 단일 소스 배선.
 describe("한 화면 대시보드 배선", () => {
   it("케어 칸의 기한 판정은 신규생 단일 소스(`statusOf`)를 그대로 부른다", () => {
     const src = read(CARE_CELLS);
@@ -40,21 +39,6 @@ describe("한 화면 대시보드 배선", () => {
   it("칸을 센 조건과 목록 필터가 같은 함수다 — 목록이 `careCellMatches`를 실제로 부른다", () => {
     expect(read(NEWCOMERS_FILTERS)).toContain("careCellMatches(");
     expect(read(CARE_CELLS)).toContain("export function careCellMatches");
-  });
-
-  it("'우선 확인'은 결석 위험 조회를 직접 읽지 않는다 — 사전 통보 제외를 두 번 판정하지 않기 위해", () => {
-    const src = code(PRIORITY);
-    // 🔴 스포트라이트(브리핑 payload)가 사전 통보 제외를 이미 적용한 배열이다.
-    expect(src).not.toContain("getAbsenceRiskCached");
-    expect(src).not.toContain("unexplainedAbsences");
-    expect(src).toContain("spotlights");
-  });
-
-  it("'우선 확인'은 점수를 매기지 않는다 — 고정 버킷 순서뿐", () => {
-    const src = read(PRIORITY);
-    expect(src).toContain("PRIORITY_BUCKETS");
-    // LLM·AI를 부르는 경로가 없어야 한다(이름이 `AI PRIORITY`인 외부 PRD를 그대로 옮기지 않았다).
-    expect(src).not.toContain("generateJSON");
   });
 
   it("보고서 집계의 과목 축은 학원설정에서 오고, fail-closed 발송 게이트를 쓰지 않는다", () => {
@@ -83,21 +67,4 @@ describe("한 화면 대시보드 배선", () => {
     expect(src).not.toMatch(/if \(error\) return \{/);
   });
 
-  it("신규생 재료를 두 번 긁지 않는다 — '오늘 할 일'의 같은 신호를 이 화면에선 끈다", () => {
-    expect(read(ONE_SCREEN)).toContain("newcomers: false");
-  });
-
-  // 🔴 2026-09-10 뒤집힘 — 옛 가드는 "차트는 둘뿐이다"였다. 원장이 참고 이미지를 두 번 제시하고
-  //    *"디자인을 너무 무시한거 아냐"* + *"이 공간낭비 어쩔꺼야"*라고 지적해 차트 격자로 채웠다.
-  //    이제 잠그는 것은 **개수가 아니라 무게**다 — 차트 라이브러리를 들이면 바탕화면의 첫 페인트가
-  //    그 청크를 기다린다(B5). 순수 SVG·div로만 그린다는 약속을 대신 잠근다.
-  it("차트에 라이브러리를 들이지 않는다 — 순수 SVG·div로만 그린다", () => {
-    // 주석엔 "recharts를 쓰지 않는다"는 사연이 적혀 있다 — 코드만 본다.
-    const src = code("src/app/(shell)/dashboard/_onescreen/charts.tsx");
-    for (const lib of ["recharts", "chart.js", "d3", "victory", "nivo"]) {
-      expect(src).not.toContain(lib);
-    }
-    // 도넛·파이 금지(각도는 눈으로 비교가 안 된다).
-    expect(src).not.toContain("<circle");
-  });
 });

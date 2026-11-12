@@ -372,8 +372,9 @@ function AdviceCard({ block, views }: { block: AdviceBlock; views?: AdviceView[]
 
 /**
  * 확인한 자료 범위 — 원장 2026-11-06 *"DB 전체 조회하고 답변하는거 맞아? … 하나도 빠짐없이 남김없이"*.
- * 전수 조회(서버)가 센 표 중 자료가 있는 표마다: 기간 건수 · 최근 날짜 · 이번 답이 자세히 봤나(✓) / 건수만 셌나 — 빠진 것을 원장이 직접 본다.
- * 표 이름은 한국어 라벨로(마우스를 올리면 실제 표 이름). 기본은 접힘 — 머리 줄에 '표 N개 확인 · 자료 있는 표 M개 · 자세히 본 표 K개'.
+ * 전수 조회(서버)가 센 표 중 자료가 있는 표마다: 기간 건수 · 최근 날짜 · 이번 답이 그 표의 내용을 조회했나(✓) / 건수만 셌나 — 빠진 것을 원장이 직접 본다.
+ * '내용 조회' = 성공한 조회가 그 표를 읽었다는 뜻일 뿐 분석을 마쳤다는 뜻이 아니다(멘트 시험 2026-11-11 — 옛 이름 '자세히 봄'이 다 본 것처럼 읽혔다).
+ * 표 이름은 한국어 라벨로(마우스를 올리면 실제 표 이름). 기본은 접힘 — 머리 줄에 '표 N개 확인 · 자료 있는 표 M개 · 내용을 조회한 표 K개'.
  */
 function Coverage({ coverage }: { coverage: NonNullable<SettledReport["coverage"]> }) {
   return (
@@ -388,7 +389,7 @@ function Coverage({ coverage }: { coverage: NonNullable<SettledReport["coverage"
               <EyIcon name="listChecks" size={16} />
               <span className="font-bold">확인한 자료 범위</span>
               <span className="min-w-0 break-words">{`${s.target} ${s.name} · ${s.from}~${s.to}`}</span>
-              <span className="num">{`표 ${s.checked}개 확인 · 자료 있는 표 ${withData.length}개 · 자세히 본 표 ${seen}개${failed ? ` · 세지 못한 표 ${failed}개` : ""}`}</span>
+              <span className="num">{`표 ${s.checked}개 확인 · 자료 있는 표 ${withData.length}개 · 내용을 조회한 표 ${seen}개${failed ? ` · 세지 못한 표 ${failed}개` : ""}`}</span>
               <EyIcon name="chevronDown" size={16} className="ml-auto transition-transform group-open:rotate-180 motion-reduce:transition-none" />
             </summary>
             <ul className="border-line space-y-1 border-t px-4 py-3 text-sm">
@@ -406,7 +407,7 @@ function Coverage({ coverage }: { coverage: NonNullable<SettledReport["coverage"
                     </span>
                   )}
                   {!t.failed ? (
-                    <span className={`ml-auto text-xs font-bold whitespace-nowrap ${t.examined ? "text-green" : "text-text-faint"}`}>{t.examined ? "✓ 자세히 봄" : "건수만 셈"}</span>
+                    <span className={`ml-auto text-xs font-bold whitespace-nowrap ${t.examined ? "text-green" : "text-text-faint"}`}>{t.examined ? <span className="inline-flex items-center gap-0.5"><EyIcon name="check" size={12} />내용 조회</span> : "건수만 셈"}</span>
                   ) : null}
                 </li>
               ))}

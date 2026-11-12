@@ -75,7 +75,7 @@ const PROGRESS_STEPS: { key: keyof ProgressCounts; label: string }[] = [
   { key: "started", label: "수업 시작" },
 ];
 /** 단계 색 — 수업 시작은 초록(멈춘 상담 빨강과 갈리게 · 리뷰 2026-10-21). 순서 = `PROGRESS_STEPS`. */
-const PROGRESS_COLORS = ["var(--color-primary)", "var(--color-blue)", "var(--color-amber)", "var(--color-purple)", "#9aa3ad", "var(--color-green)"];
+const PROGRESS_COLORS = ["var(--color-primary)", "var(--color-blue)", "var(--color-amber)", "var(--color-purple)", "color-mix(in srgb, var(--neutral-fill) 70%, var(--card))", "var(--color-green)"];
 
 // 전 목록 공통(표·카드) — 변경 시 학생·수납 등 다른 목록과 함께 바꿀 것.
 const PAGE_SIZE = 50;

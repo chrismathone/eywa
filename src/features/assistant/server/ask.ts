@@ -10,6 +10,8 @@ import { anthropicUsage, isCreditExhaustedError, recordUsage, requireAiLicense }
 import { keyGroupOf, keyLabelOf, resolveKeyEnv } from "@/lib/ai/models";
 import { logActionAs } from "@/features/audit/server/log";
 import { reportError } from "@/lib/observability/report-error";
+import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
+import { displayRoleFor, getSuperAdminIds } from "@/lib/auth/super-admin";
 import { ASSISTANT_LEVEL_LABEL, type AssistantLevel } from "../levels";
 import { ASSISTANT_HARD_DEADLINE_MS, type AskEvent, type AskStep } from "../protocol";
 import type { QueryResult, SettledReport } from "../report";
@@ -121,7 +123,8 @@ export async function prepareAsk(
       });
       try {
         if (!db) throw new AssistantError("비서 DB에 연결하지 못했습니다. 잠시 뒤 다시 물어봐 주세요");
-        const history = started.created ? [] : await pastTurns(owner, started.threadId);
+        // 서로 기다릴 까닭이 없는 두 조회(B4).
+        const [history, asker] = await Promise.all([started.created ? [] : pastTurns(owner, started.threadId), askerLabel(viewer.user.id, viewer.user.systemRole)]);
         const out = await runAssistantAgent({
           client: getAnthropic("default", group),
           model,
@@ -129,6 +132,7 @@ export async function prepareAsk(
           db,
           docs: ASSISTANT_DOCS,
           question: input.question,
+          asker,
           history,
           // 마무리 시각 = 고정 기한에서 보고서 쓸 시간(200초 — 15만 토큰을 읽고 긴 보고서를 쓰는 '강함'도 넉넉히 · 적대 리뷰 2026-11-09)을 뺀 것.
           // 이 루프가 시작한 때부터 잰다(앞서 쓴 준비 시간을 뺀다). 마무리 시각이 차례 도중에 오면 agent가 그 응답을 끊고 곧장 보고서를 부탁한다.
@@ -239,4 +243,13 @@ export async function prepareAsk(
       emit(report ? { type: "report", messageId: started.messageId, report } : { type: "error", message: failure ?? "답을 만들지 못했습니다", messageId: started.messageId });
     },
   };
+}
+
+/**
+ * 묻는 사람의 역할 이름(질문 메시지 '묻는 사람') — 지점 화면과 같은 표시 역할(운영 계정은 '관리자' · `displayRoleFor`).
+ * 2026-11-11 멘트 시험: 관리자가 물어도 '원장님'으로 불렀다. 운영 계정 명단을 못 읽으면 실제 역할 이름 그대로.
+ */
+async function askerLabel(userId: string, role: Parameters<typeof displayRoleFor>[1]): Promise<string> {
+  const superAdminIds = await getSuperAdminIds().catch(() => new Set<string>());
+  return ROLE_LABEL[displayRoleFor(userId, role, superAdminIds)] ?? ROLE_LABEL[role] ?? "원장";
 }

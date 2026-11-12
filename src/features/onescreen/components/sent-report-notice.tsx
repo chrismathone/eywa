@@ -9,7 +9,7 @@ export function SentReportNotice({ count }: { count: number }) {
   const tf = useSheetTf();
   if (hidden || count <= 0) return null;
   return (
-    <aside className="border-primary/30 bg-primary-soft/40 text-text rounded-md border px-3 py-1.5 text-xs">
+    <aside className="border-primary/30 bg-primary-soft/40 text-foreground rounded-md border px-3 py-1.5 text-xs">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <span>{tf("os.sentNotice.summary", { n: count })}</span>
         <button type="button" className="text-text-dim shrink-0 underline underline-offset-2"

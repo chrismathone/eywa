@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyUserOverrides, CONNECTED_APP_ACCESS_MESSAGE, isScopedForbiddenRole, MENU_ACCESS, resolveMatrix, SCOPED_FORBIDDEN_MESSAGE } from "@/lib/permissions";
+import { applyUserOverrides, CONNECTED_APP_ACCESS_MESSAGE, isScopedForbiddenRole, MENU_ACCESS, onOffAccessMessage, resolveMatrix, SCOPED_FORBIDDEN_MESSAGE } from "@/lib/permissions";
 import { sparseRoleOverrides } from "../permission-edit";
 import { resolveSettings } from "../resolve";
 import { applySettingRoles, settingRoleSelection } from "../setting-roles";
@@ -771,5 +771,124 @@ describe("연결 앱 권한 — 전체·없음만(원장 2026-11-05) · 저장�
     expect(stored().overrides.some((o) => o.menu === "app_todays_math")).toBe(false);
     expect(stored().userOverrides).toEqual([{ userId: STAFF_A, menu: "app_todays_math", access: "readonly" }]);
     expect(applyUserOverrides(resolveMatrix(stored().overrides), STAFF_A, "admin", stored().userOverrides).app_todays_math.admin).toBe(MENU_ACCESS.app_todays_math.admin);
+  });
+});
+
+describe("학원 비서 권한 — 전체·없음만 · 강사 칸 잠금(2026-11-09)", () => {
+  const asForm = (p: PermissionsSettings) => ({ overrides: sparseRoleOverrides(resolveMatrix(p.overrides)), userOverrides: p.userOverrides, specialAccess: p.specialAccess });
+
+  it.each(["chinsan", "generic"] as const)("🔴 %s: 요청에 실린 학원 비서 '담당'·'읽기'는 학원 비서 문구로 거절(역할 칸 · 새 개인 줄)", async (preset) => {
+    seed(preset, { overrides: [], userOverrides: [] });
+    const w = openWindow();
+    for (const access of ["scoped", "readonly"] as const) {
+      expect((await w.save({ ...asForm(w.draft), overrides: [{ menu: "assistant", role: "admin", access }] }))?.error, access).toBe(onOffAccessMessage("assistant"));
+      expect((await w.save({ ...asForm(w.draft), userOverrides: [{ userId: STAFF_A, menu: "assistant", access }] }))?.error, access).toBe(onOffAccessMessage("assistant"));
+    }
+    expect(onOffAccessMessage("assistant")).toBe("학원 비서 권한은 전체·없음 중에서 선택해 주세요");
+    expect(m.writes).toBe(0);
+    // 전체·없음은 된다(역할 칸 · 개인 줄).
+    const res = await w.save({ ...asForm(w.draft), overrides: [{ menu: "assistant", role: "admin", access: "full" }], userOverrides: [{ userId: STAFF_A, menu: "assistant", access: "full" }] });
+    expect(res?.ok, JSON.stringify(res)).toBe(true);
+  });
+
+  it.each(["chinsan", "generic"] as const)("🔴 %s: 강사에게 새로 주는 개인 줄은 잠금 문구로 거절 — 강사 화면엔 비서 단추가 없다", async (preset) => {
+    seed(preset, { overrides: [], userOverrides: [] });
+    m.staff = [{ id: STAFF_A, system_role: "teacher", status: "active" }];
+    const w = openWindow();
+    expect((await w.save({ ...asForm(w.draft), userOverrides: [{ userId: STAFF_A, menu: "assistant", access: "full" }] }))?.error).toBe("이 역할에서 잠긴 메뉴 권한은 변경할 수 없습니다");
+    expect(m.writes).toBe(0);
+  });
+
+  it.each(["chinsan", "generic"] as const)("%s: 그 뒤 강사가 된 사람의 저장된 학원 비서 줄이 있어도 이 면은 저장된다 — 그 줄은 적용하지 않는다", async (preset) => {
+    seed(preset, { overrides: [], userOverrides: [{ userId: STAFF_A, menu: "assistant", access: "full" }] });
+    m.staff = [{ id: STAFF_A, system_role: "teacher", status: "active" }];
+    const w = openWindow();
+    const res = await w.save(asForm(w.draft));
+    expect(res?.ok, JSON.stringify(res)).toBe(true);
+    expect(applyUserOverrides(resolveMatrix(stored().overrides), STAFF_A, "teacher", stored().userOverrides).assistant.teacher).toBe("none");
+  });
+});
+
+/**
+ * 조직·OKR · 업무 작성센터 — 직원 역할 여섯만 쓰는 화면이라 열람·아르바이트 칸을 잠근다(2026-11-11 · permissions.ts `isStaffRecordLocked`).
+ * 잠금을 더해도 **이미 저장된 설정이 이 면의 저장을 막지 않는다** — 침산이 배포 뒤 저장할 다섯 칸도 그대로 저장된다.
+ */
+describe("조직·OKR · 업무 작성센터 — 열람·아르바이트 칸 잠금(2026-11-11) · 저장된 값이 이 면을 막지 않는다", () => {
+  const asForm = (p: PermissionsSettings) => ({ overrides: sparseRoleOverrides(resolveMatrix(p.overrides)), userOverrides: p.userOverrides, specialAccess: p.specialAccess });
+  const PART = { id: STAFF_A, system_role: "parttime", status: "active" };
+
+  it.each(["chinsan", "generic"] as const)("%s: 배포 뒤 저장할 다섯 칸(조직·OKR·업무 작성센터 × 관리자·매니저 '전체' · 신규생 관리 × 강사 '담당')은 저장되고 그대로 적용된다", async (preset) => {
+    seed(preset, { overrides: [{ menu: "documents", role: "teacher", access: "none" }], userOverrides: [] });
+    const w = openWindow();
+    const wanted = [
+      ...(["okr", "work_records"] as const).flatMap((menu) => (["admin", "manager"] as const).map((role) => ({ menu, role, access: "full" as const }))),
+      { menu: "newcomers" as const, role: "teacher" as const, access: "scoped" as const },
+    ];
+    const res = await w.save({ ...asForm(w.draft), overrides: [...asForm(w.draft).overrides, ...wanted] });
+    expect(res?.ok, JSON.stringify(res)).toBe(true);
+    const after = resolveMatrix(stored().overrides);
+    for (const c of wanted) expect(after[c.menu][c.role], `${c.menu}·${c.role}`).toBe(c.access);
+    // 손대지 않은 칸은 그대로다(코드 기본값 · 이미 저장돼 있던 칸).
+    expect(after.okr.teacher).toBe("none");
+    expect(after.work_records.viewer).toBe("none");
+    expect(after.management).toEqual(MENU_ACCESS.management);
+    expect(after.documents.teacher).toBe("none");
+  });
+
+  it.each(["chinsan", "generic"] as const)("🔴 %s: 저장돼 있던 열람·아르바이트 칸(손으로 넣은 값)이 있어도 화면 그대로 저장된다 — 그 칸은 적용하지 않고 정리된다", async (preset) => {
+    seed(preset, { overrides: [{ menu: "okr", role: "viewer", access: "readonly" }, { menu: "work_records", role: "parttime", access: "full" }, { menu: "okr", role: "admin", access: "full" }], userOverrides: [] });
+    expect(resolveMatrix(stored().overrides).okr.viewer).toBe("none");
+    const w = openWindow();
+    const res = await w.save(asForm(w.draft));
+    expect(res?.ok, JSON.stringify(res)).toBe(true);
+    expect(stored().overrides).toEqual([{ menu: "okr", role: "admin", access: "full" }]);
+  });
+
+  it.each(["chinsan", "generic"] as const)("🔴 %s: 열람·아르바이트 **역할 칸**을 새로 여는 요청도 거절한다(화면은 그 칸을 '고정'으로 세운다 — 만든 요청만 온다) · 직원 역할 칸은 된다", async (preset) => {
+    seed(preset, { overrides: [], userOverrides: [] });
+    const w = openWindow();
+    const form = asForm(w.draft);
+    for (const cell of [
+      { menu: "okr", role: "viewer", access: "full" },
+      { menu: "work_records", role: "parttime", access: "readonly" },
+      { menu: "okr", role: "parttime", access: "none" },
+      // '담당'이어도 잠금 문구다 — '읽기를 고르라'는 안내를 내면 다시 보낸 '읽기'도 거절된다.
+      { menu: "work_records", role: "viewer", access: "scoped" },
+    ] as const) {
+      expect((await w.save({ ...form, overrides: [...form.overrides, cell] }))?.error, `${cell.menu}·${cell.role}`).toBe("이 역할에서 잠긴 메뉴 권한은 변경할 수 없습니다");
+    }
+    expect(m.writes).toBe(0);
+    expect(stored().overrides).toEqual([]);
+    // 직원 역할 여섯의 칸은 그대로 된다(상담·회계도 서버가 받는 역할이다).
+    const ok = await w.save({ ...form, overrides: [...form.overrides, { menu: "okr", role: "counselor", access: "scoped" }, { menu: "work_records", role: "accountant", access: "full" }] });
+    expect(ok?.ok, JSON.stringify(ok)).toBe(true);
+  });
+
+  it.each(["chinsan", "generic"] as const)("🔴 %s: 열람·아르바이트에게 새로 주는 개인 줄은 잠금 문구로 거절 — 서버가 그 역할을 받지 않는 화면이다", async (preset) => {
+    seed(preset, { overrides: [], userOverrides: [] });
+    m.staff = [PART];
+    const w = openWindow();
+    for (const menu of ["okr", "work_records"] as const) {
+      for (const access of ["full", "scoped", "readonly"] as const) {
+        expect((await w.save({ ...asForm(w.draft), userOverrides: [{ userId: STAFF_A, menu, access }] }))?.error, `${menu}·${access}`).toBe("이 역할에서 잠긴 메뉴 권한은 변경할 수 없습니다");
+      }
+    }
+    expect(m.writes).toBe(0);
+    // 강사·관리자에게 주는 개인 줄은 된다.
+    m.staff = [{ id: STAFF_A, system_role: "teacher", status: "active" }];
+    expect((await w.save({ ...asForm(w.draft), userOverrides: [{ userId: STAFF_A, menu: "okr", access: "scoped" }] }))?.ok).toBe(true);
+  });
+
+  it.each(["chinsan", "generic"] as const)("%s: 준 뒤 열람·아르바이트가 된 사람의 저장된 줄이 있어도 이 면은 저장된다 — 그 줄은 적용하지 않는다", async (preset) => {
+    seed(preset, { overrides: [], userOverrides: [{ userId: STAFF_A, menu: "work_records", access: "scoped" }] });
+    m.staff = [PART];
+    const w = openWindow();
+    const res = await w.save({ ...asForm(w.draft), overrides: [{ menu: "okr", role: "admin", access: "full" }] });
+    expect(res?.ok, JSON.stringify(res)).toBe(true);
+    expect(stored().userOverrides).toEqual([{ userId: STAFF_A, menu: "work_records", access: "scoped" }]);
+    expect(applyUserOverrides(resolveMatrix(stored().overrides), STAFF_A, "parttime", stored().userOverrides).work_records.parttime).toBe("none");
+    // 그 줄을 다른 값으로 바꾸는 것은 막는다(저장돼 있던 그대로만 둘 수 있다).
+    const again = openWindow();
+    expect((await again.save({ ...asForm(again.draft), userOverrides: [{ userId: STAFF_A, menu: "work_records", access: "full" }] }))?.error).toBe("이 역할에서 잠긴 메뉴 권한은 변경할 수 없습니다");
   });
 });

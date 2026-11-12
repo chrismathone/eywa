@@ -1,5 +1,5 @@
 import { fullGraphOf, summaryGraph } from "./graph";
-import { netRootId, type NetBoard, type NetCam, type NetGraph, type NetGroupLevel, type NetInput, type NetNode, type NetPoint, type NetSize, type NetViewMode } from "./types";
+import { netCenterOf, type NetBoard, type NetCam, type NetGraph, type NetGroupLevel, type NetInput, type NetNode, type NetPoint, type NetSize, type NetViewMode } from "./types";
 
 /**
  * 네트워크 판 배치(시안 `netLayout` · `netRadius` · `netFitView`) — 순수 함수. 영역은 맨 위부터 고르게(반지름 250 + 기록 수), 영역에 바로 붙은
@@ -12,7 +12,7 @@ import { netRootId, type NetBoard, type NetCam, type NetGraph, type NetGroupLeve
 
 /** 처음 펼쳐 둘 묶음 단계 — 연도는 펼침(월이 보인다) · 월·일자는 접힘. */
 export const GROUP_OPEN_DEFAULT: Record<NetGroupLevel, boolean> = { year: true, month: false, day: false };
-export const isGroupOpen = (n: NetNode, toggled?: ReadonlySet<string>): boolean => GROUP_OPEN_DEFAULT[n.level ?? "month"] !== !!toggled?.has(n.id);
+export const isGroupOpen = (n: NetNode, toggled?: ReadonlySet<string>): boolean => (n.expanded ?? GROUP_OPEN_DEFAULT[n.level ?? "month"]) !== !!toggled?.has(n.id);
 
 /** 보이는 점·선만 — 위 묶음 중 하나라도 접혀 있으면 그 아래는 뺀다. */
 export function visibleGraph(g: NetGraph, toggled?: ReadonlySet<string>): NetGraph {
@@ -43,7 +43,7 @@ const GROUP_GAP = 36;
 export function netLayout(input: NetInput, view: NetViewMode, toggled?: ReadonlySet<string>, keep?: { from: Record<string, NetPoint>; around: string } | null): NetBoard {
   const full = fullGraphOf(input);
   const { nodes, edges } = view === "summary" ? summaryGraph(full) : visibleGraph(full, toggled);
-  const centerId = netRootId(input.model.center);
+  const centerId = netCenterOf(input).id;
   const pos: Record<string, NetPoint> = { [centerId]: { x: 0, y: 0 } };
   const kids = new Map<string, NetNode[]>();
   for (const n of nodes) {

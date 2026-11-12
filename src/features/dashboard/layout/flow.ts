@@ -10,7 +10,6 @@
 import { GRID_COLS, isHeadingId, isKpiId, type Item, type Placed } from "./types";
 
 export type Breakpoint = "desktop" | "medium" | "mobile";
-export const BREAKPOINTS: readonly Breakpoint[] = ["desktop", "medium", "mobile"];
 
 const overlaps = (a: Placed, b: Placed) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 

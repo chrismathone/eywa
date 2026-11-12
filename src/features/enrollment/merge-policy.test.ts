@@ -34,7 +34,7 @@ const DB_COLUMNS = [
   "non_registration_reason", "subject_details", "from_public_intake", "intake_token_id", "makeedu_id",
   "sync_added_at", "counselor", "received_date", "student_type", "siblings_details", "consultation_date",
   "makeedu_pushed_at", "intake_checklist", "prep_brief", "prep_brief_at", "prep_brief_status",
-  "prep_brief_error", "receiver", "legacy_key", "legacy_source",
+  "prep_brief_error", "prep_brief_job_at", "receiver", "legacy_key", "legacy_source",
   // 0362a 소개한 사람
   "referrer_student_id", "referrer_staff_id", "referrer_name",
 ] as const;

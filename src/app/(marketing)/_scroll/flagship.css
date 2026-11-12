@@ -1,0 +1,98 @@
+.lp { --flag-lime:#ddfc68; --flag-ink:#182012; }
+.lp .nav { height:90px; background:var(--flag-lime); border-color:rgba(24,32,18,.12); backdrop-filter:none; }
+.lp .nav .in { width:min(1460px,86%); }
+.lp .nav .wm { color:var(--flag-ink); font-size:22px; }
+.lp .nav nav a { color:var(--flag-ink); }
+.lp .nav .btn { border-radius:0; background:var(--flag-ink); color:var(--flag-lime); }
+.lp .flag-hero { position:relative; min-height:calc(100vh - 90px); overflow:hidden; background:var(--flag-lime); color:var(--flag-ink); }
+.lp .flag-hero-art { object-fit:cover; object-position:center; }
+.lp .flag-hero-shade { position:absolute; inset:0; background:linear-gradient(90deg,rgba(221,252,104,.94),rgba(221,252,104,.66) 46%,rgba(221,252,104,.08)); }
+.lp .flag-hero-content { position:relative; z-index:2; width:min(1460px,86%); margin:auto; padding-top:clamp(36px,7vh,80px); }
+.lp .flag-overline { font-size:13px; letter-spacing:.08em; font-weight:700; }
+.lp .flag-hero h1 { font-size:clamp(80px,8.9vw,170px); line-height:1.09; font-weight:900; letter-spacing:-.08em; margin:48px 0 32px; }
+/* 가변 글꼴에 외곽선만 씌우면 획이 겹치는 안쪽 선이 드러난다 → 선을 먼저 긋고 같은 색 면으로 덮는다(바깥 2px만 남음). */
+.lp .flag-hero h1 span { color:var(--flag-lime); -webkit-text-stroke:4px var(--flag-ink); paint-order:stroke fill; }
+.lp .flag-lead { font-size:clamp(16px,1.15vw,20px); line-height:1.9; }
+.lp .flag-hero-actions { display:flex; align-items:center; gap:26px; margin-top:28px; }
+.lp .flag-button { display:inline-flex; align-items:center; justify-content:center; min-height:56px; padding:0 24px; background:var(--flag-ink); color:var(--flag-lime); font-weight:800; }
+.lp .flag-login { color:var(--flag-ink); font-weight:700; border-bottom:1px solid currentColor; padding:8px 0; }
+.lp .demo-caption { font-size:14px; line-height:1.5; color:var(--ink2); }
+.lp .light .demo-caption { color:rgba(255,255,255,.75); }
+.lp .strip-caption { margin-bottom:18px; }
+.lp .flag-hero-preview { position:absolute; z-index:2; right:7%; bottom:40px; width:min(40%,760px); }
+.lp .flag-art-note { position:absolute; right:2%; bottom:12px; font-size:11px; color:#4b5635; }
+/* 화면 예시 = 똑바로 세운 액자(기울기·큰 번짐 그림자 없음) + 잉크 테두리와 짧은 단단한 그림자 */
+.lp .flag-screen { background:white; color:#253348; border:1.5px solid var(--flag-ink); overflow:hidden; box-shadow:8px 8px 0 rgba(24,32,18,.16); }
+.lp .flag-screen-head { min-height:42px; display:flex; align-items:center; gap:14px; padding:9px 16px; font-size:14px; border-bottom:1px solid rgba(24,32,18,.14); }
+.lp .flag-screen-head span { font-size:12px; color:#6b7563; margin-left:auto; }
+.lp .flag-screen img { display:block; width:100%; height:auto; }
+.lp .flag-marquee { background:var(--flag-lime); border-top:1px solid rgba(24,32,18,.16); border-bottom:1px solid rgba(24,32,18,.16); display:flex; gap:4vw; justify-content:center; align-items:center; padding:25px; overflow:hidden; white-space:nowrap; font-size:18px; font-weight:800; color:var(--flag-ink); }
+.lp .flag-marquee i { font-style:normal; opacity:.35; }
+.lp .flag-story { background:var(--flag-lime); color:var(--flag-ink); padding:120px 12%; }
+.lp .flag-story p { font-size:clamp(34px,4vw,72px); font-weight:800; line-height:1.35; letter-spacing:-.05em; }
+.lp .flag-story span { display:block; margin-top:42px; font-size:16px; }
+.lp .flag-showroom { --showroom-offset:0%; --showroom-bar:0%; height:300vh; }
+.lp .flag-showroom-sticky { position:sticky; top:0; height:100vh; overflow:hidden; }
+.lp .flag-track { display:flex; height:100%; width:300%; transform:translateX(var(--showroom-offset)); }
+.lp .flag-slide { flex:0 0 33.333333%; display:flex; flex-direction:column; justify-content:space-between; padding:90px 7vw 58px; color:#24332c; background:#f6f7f2; }
+.lp .flag-slide-1 { background:#d9d1f4; color:#44345e; }
+.lp .flag-slide-2 { background:#f4be8c; color:#4d3524; }
+.lp .flag-slide-top,.lp .flag-slide-bottom { display:flex; justify-content:space-between; font-size:14px; }
+.lp .flag-slide-bottom { border-top:1px solid rgba(0,0,0,.15); padding-top:22px; }
+.lp .flag-slide-main { display:grid; grid-template-columns:.7fr 1.3fr; gap:6vw; align-items:center; margin:30px 0; }
+/* 고정 쇼룸은 한 화면 높이라 세로로 긴 제품 화면(부원장AI 1380×1140)이 아래가 잘리고 주소 줄까지 밀려났다 → 화면 높이에서 상한 */
+@media (min-width:901px) {
+  .lp .flag-slide .flag-screen img { max-height:calc(100vh - 340px); max-height:calc(100svh - 340px); object-fit:cover; object-position:top; }
+  /* 에이와 화면은 이미지가 아니라 HTML 모형(dmk-wrap) — 같은 상한을 걸고 아래를 자른다 */
+  .lp .flag-slide .dmk-wrap { max-height:calc(100vh - 340px); max-height:calc(100svh - 340px); overflow:hidden; }
+}
+/* 부원장AI 캡처는 파란 패널 아래 다음 구역 글자가 걸쳐 보였다 → 패널 바로 아래에서 자르는 비율로 고정(Codex 4차) */
+.lp .flag-slide-1 .flag-screen img { aspect-ratio:1380/975; object-fit:cover; object-position:top; }
+.lp .flag-product-copy > p:first-child { font-size:15px; font-weight:700; }
+.lp .flag-wm { display:flex; align-items:baseline; font-size:clamp(56px,5.6vw,104px); font-weight:900; line-height:1; letter-spacing:-.075em; margin:24px 0; white-space:nowrap; }
+.lp .wm-aywa i { display:inline-block; width:.2em; height:.2em; margin-left:.07em; background:var(--flag-lime); box-shadow:inset 0 0 0 .035em var(--flag-ink); }
+.lp .wm-deputy span { font-size:.6em; letter-spacing:-.02em; margin-left:.1em; padding:.05em .14em .09em; background:#2c2340; color:#d9d1f4; }
+.lp .wm-srs span { font-weight:300; letter-spacing:.02em; margin-left:.06em; }
+.lp .flag-product-copy > p { font-size:18px; line-height:1.8; max-width:32rem; }
+.lp .flag-tags { display:flex; flex-wrap:wrap; gap:8px; margin:28px 0; }
+.lp .flag-tags span { border:1px solid currentColor; border-radius:999px; padding:7px 12px; font-size:14px; }
+.lp .flag-product-copy > a { display:inline-block; border-bottom:1px solid currentColor; padding:8px 0; font-weight:700; }
+.lp .flag-progress { position:absolute; bottom:0; width:100%; height:4px; background:rgba(0,0,0,.1); }
+.lp .flag-progress i { display:block; width:var(--showroom-bar); height:100%; background:var(--flag-ink); }
+.lp:not(.js) .flag-showroom { height:auto; }
+.lp:not(.js) .flag-showroom-sticky { position:static; height:auto; overflow:visible; }
+.lp:not(.js) .flag-track { display:block; width:auto; height:auto; transform:none; }
+.lp:not(.js) .flag-slide { min-height:80vh; }
+.lp:not(.js) .flag-progress { display:none; }
+.lp .flag-compare { background:#f6f7f2; color:#24332c; display:grid; grid-template-columns:.75fr 1.25fr; align-items:center; gap:7vw; padding:120px 7vw; }
+.lp .flag-compare-copy > p:first-child { font-size:15px; font-weight:700; }
+.lp .flag-compare-copy h2 { font-size:clamp(46px,4vw,72px); font-weight:700; line-height:1.2; letter-spacing:-.06em; margin:26px 0; }
+.lp .flag-compare-copy > p:last-child { color:#69756a; line-height:1.8; }
+/* 비교판 본체(판·손잡이·양쪽 예시)는 flagship-new.css '운영 현황 비교판' */
+.lp .flag-compare-note { margin-top:14px; color:#69756a; font-size:13px; }
+@media (max-width:900px), (prefers-reduced-motion:reduce) {
+  .lp .flag-showroom { height:auto; }
+  .lp .flag-showroom-sticky { position:static; height:auto; overflow:visible; }
+  .lp .flag-track { display:block; width:auto; height:auto; transform:none; }
+  .lp .flag-slide { min-height:80vh; }
+  .lp .flag-progress { display:none; }
+}
+@media (max-width:900px) {
+  .lp .nav { height:64px; }
+  .lp .nav .in { width:calc(100% - 40px); }
+  .lp .flag-hero { min-height:0; padding-bottom:64px; }
+  .lp .flag-hero h1 { font-size:clamp(64px,11vw,100px); margin-top:35px; }
+  /* 좁은 화면에선 화면 예시를 버튼 아래 흐름으로 — 겹쳐 띄우면 '제품 살펴보기'를 덮는다. */
+  .lp .flag-hero-preview { position:relative; right:auto; bottom:auto; width:min(88%,600px); margin:48px auto 0; }
+  .lp .flag-slide-main { grid-template-columns:1fr; gap:40px; }
+  .lp .flag-story { padding:80px 7%; }
+  .lp .flag-compare { grid-template-columns:1fr; padding:80px 7%; }
+}
+@media (max-width:520px) {
+  .lp .flag-hero-content { width:calc(100% - 40px); }
+  .lp .flag-hero h1 { font-size:clamp(56px,13vw,70px); }
+  .lp .flag-hero h1 span { -webkit-text-stroke-width:3px; letter-spacing:-.03em; }
+  .lp .flag-hero-preview { width:92%; }
+  .lp .flag-marquee { justify-content:flex-start; font-size:14px; }
+  .lp .flag-slide { padding:45px 6%; }
+}

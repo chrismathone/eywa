@@ -75,7 +75,8 @@ function AudioConsultationFormInner({ students, recordingOwner, initialStudentId
   //    버튼은 다시 열지 않는다 — 다시 누르면 같은 상담이 하나 더 생긴다(전사·분석 비용도 두 번).
   useEffect(() => {
     if (!leaveHref) return;
-    window.location.assign(leaveHref);
+    // leaveHref는 이미 창이면 embed가 실린 값이다 — withEmbed는 멱등이라 한 번 더 거쳐도 같고, 가드가 이 자리에서 확인한다.
+    window.location.assign(inFrame ? withEmbed(leaveHref) : leaveHref);
     let timer: number | null = window.setTimeout(() => setStalledHref(leaveHref), LEAVE_FALLBACK_MS);
     const onHide = () => {
       if (timer !== null) window.clearTimeout(timer);
@@ -92,7 +93,7 @@ function AudioConsultationFormInner({ students, recordingOwner, initialStudentId
       window.removeEventListener("pagehide", onHide);
       window.removeEventListener("pageshow", onShow);
     };
-  }, [leaveHref]);
+  }, [leaveHref, inFrame]);
 
   async function startRec() {
     setError(null);

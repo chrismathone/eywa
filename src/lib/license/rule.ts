@@ -28,7 +28,7 @@ export function licenseAllows(row: LicenseRow, now: Date = new Date()): boolean 
  * 외부 앱 연결(오늘 수학)처럼 "이 지점이 계약한 것"만 열어야 하는 기능은 행이 없으면 **꺼짐**이다
  * (행 없음 = 허용으로 두면 새 지점마다 남의 앱 메뉴와 데이터 반출이 저절로 열린다).
  */
-export type OptInFeature = "todays_math" | "slack" | "laboratory" | "video_review" | "report_rating";
+export type OptInFeature = "todays_math" | "slack" | "laboratory" | "video_review" | "report_rating" | "consult_rating" | "ecount_accounting";
 
 export function licenseExplicitlyOn(row: LicenseRow, now: Date = new Date()): boolean {
   return row !== null && licenseAllows(row, now);

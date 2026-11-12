@@ -1,56 +1,56 @@
 @scope (.timetable-workspace) {
 .view-option { white-space: nowrap; }
-.view-option[aria-pressed=true] { background: #e3edfa; }
-.schedule-scroll { color: #121212; background: #fff; }
+.view-option[aria-pressed=true] { background: var(--primary-soft); }
+.schedule-scroll { color: var(--ink); background: #fff; }
 /* 아래 여백은 맨 끝 시각 눈금(끝나는 선 바로 밑에 적힌다)이 들어갈 자리다. */
 .teacher-week-grid { display: grid; width: max-content; isolation: isolate; padding-bottom: 18px; }
-.week-time-heading { grid-row: 1 / 3; position: sticky; left: 0; top: 0; z-index: 9; background: #f3f3f3; display: grid; place-items: center; border-bottom: 1px solid #999; }
-.week-teacher-heading { position: sticky; top: 0; z-index: 7; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: 700; border: 1px solid #777; border-left-width: 2px; }
-.week-day-heading { position: sticky; top: 30px; z-index: 6; height: 30px; background: #fafafa; display: grid; place-items: center; border-right: 1px solid #bdbdbd; border-bottom: 1px solid #888; }
-.teacher-start { border-left: 2px solid #777; }
-.time-axis { background: #fafafa; border-right: 0; border-bottom: 1px solid #888; }
-.time-axis span { font-size: 12px; right: 5px; line-height: 1; color: #444; }
+.week-time-heading { grid-row: 1 / 3; position: sticky; left: 0; top: 0; z-index: 9; background: var(--bg-soft); display: grid; place-items: center; border-bottom: 1px solid var(--line-strong); }
+.week-teacher-heading { position: sticky; top: 0; z-index: 7; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: 700; border: 1px solid var(--neutral-fill); border-left-width: 2px; }
+.week-day-heading { position: sticky; top: 30px; z-index: 6; height: 30px; background: #fafafa; display: grid; place-items: center; border-right: 1px solid var(--line-strong); border-bottom: 1px solid var(--neutral-fill); }
+.teacher-start { border-left: 2px solid var(--neutral-fill); }
+.time-axis { background: #fafafa; border-right: 0; border-bottom: 1px solid var(--neutral-fill); }
+.time-axis span { font-size: 12px; right: 5px; line-height: 1; color: var(--ink); }
 /* 가로선은 칸마다 위쪽에만 그어진다 — 맨 끝 시각의 선은 아래 테두리로 닫는다. */
-.schedule-lane { border-right: 1px solid #bdbdbd; border-bottom: 1px solid #888; background-image: linear-gradient(to bottom, #12121240 1px, transparent 1px); }
-.period-rule { position: absolute; left: 0; right: 0; border-top: 2px solid #666; pointer-events: none; }
-.teacher-break { position: absolute; inset-inline: 0; pointer-events: none; background: #eeeeee; font-size: 12px; display: grid; place-items: center; }
-.lesson-block { border: 1px solid #12121266; border-radius: 0; padding: 2px; justify-content: center; align-items: center; gap: 2px; text-align: center; z-index: 1; }
+.schedule-lane { border-right: 1px solid var(--line-strong); border-bottom: 1px solid var(--neutral-fill); background-image: linear-gradient(to bottom, color-mix(in srgb, var(--ink) 25%, transparent) 1px, transparent 1px); }
+.period-rule { position: absolute; left: 0; right: 0; border-top: 2px solid var(--neutral-fill); pointer-events: none; }
+.teacher-break { position: absolute; inset-inline: 0; pointer-events: none; background: var(--bg-soft); font-size: 12px; display: grid; place-items: center; }
+.lesson-block { border: 1px solid color-mix(in srgb, var(--ink) 40%, transparent); border-radius: 0; padding: 2px; justify-content: center; align-items: center; gap: 2px; text-align: center; z-index: 1; }
 .lesson-block strong { display: block; font-size: 14px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
 .lesson-block span { line-height: 1.2; }
 .lesson-block:hover { filter: brightness(.97); }
-.lesson-block.has-conflict, .mini-cell-items .has-conflict { border-color: #ac4d13; outline: 2px solid #c96824; outline-offset: -2px; }
-.lesson-block.is-selected, .mini-cell-items .is-selected { outline: 2px solid #216dde; outline-offset: -2px; box-shadow: none; z-index: 3; }
+.lesson-block.has-conflict, .mini-cell-items .has-conflict { border-color: var(--amber); outline: 2px solid var(--gold-bright); outline-offset: -2px; }
+.lesson-block.is-selected, .mini-cell-items .is-selected { outline: 2px solid var(--primary); outline-offset: -2px; box-shadow: none; z-index: 3; }
 .conflict-dot { position: absolute; top: 1px; right: 1px; width: 13px; height: 13px; line-height: 13px; font-size: 11px; border: 1px solid #fff; }
-.off-axis { position: absolute; top: 0; left: 0; border-top: 7px solid #c53232; border-right: 7px solid transparent; filter: drop-shadow(1px 1px 0 white); pointer-events: none; }
+.off-axis { position: absolute; top: 0; left: 0; border-top: 7px solid var(--danger); border-right: 7px solid transparent; filter: drop-shadow(1px 1px 0 white); pointer-events: none; }
 .drag-preview { padding: 3px 0; text-align: center; overflow: hidden; }
 .integrated-board { width: max-content; min-width: 100%; }
 .integrated-board[data-periods-hidden] .homeroom-row, .integrated-board[data-periods-hidden] .class-day-row, .integrated-board[data-periods-hidden] .class-period-grid, .integrated-board[data-periods-hidden] .class-period-row { display: none; }
-.integrated-group { display: flex; width: max-content; border-bottom: 3px solid #12121273; }
-.integrated-class { flex: none; border-right: 2px solid #12121273; }
-.period-rail { flex: 0 0 104px; width: 104px; position: sticky; left: 0; z-index: 5; background: #fafafa; border-right: 1px solid #aaa; text-align: center; }
-.class-name-row { height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 0; border-bottom: 1px solid #ccc; border-radius: 0; width: 100%; padding: 2px 4px; line-height: 1.25; color: inherit; }
+.integrated-group { display: flex; width: max-content; border-bottom: 3px solid color-mix(in srgb, var(--ink) 45%, transparent); }
+.integrated-class { flex: none; border-right: 2px solid color-mix(in srgb, var(--ink) 45%, transparent); }
+.period-rail { flex: 0 0 104px; width: 104px; position: sticky; left: 0; z-index: 5; background: #fafafa; border-right: 1px solid var(--line-strong); text-align: center; }
+.class-name-row { height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 0; border-bottom: 1px solid var(--line-strong); border-radius: 0; width: 100%; padding: 2px 4px; line-height: 1.25; color: inherit; }
 .class-name-row strong { font-size: 16px; max-height: 40px; overflow: hidden; }
 .class-name-row small { font-size: 14px; }
-.homeroom-row { height: 24px; display: flex; align-items: center; justify-content: center; font-weight: 700; border-bottom: 1px solid #bbb; white-space: nowrap; overflow: hidden; }
-.class-day-row { height: 22px; display: grid; align-items: stretch; text-align: center; border-bottom: 1px solid #bbb; }
-.class-day-row span { border-right: 1px solid #ccc; }
-.class-period-row { height: 32px; border-bottom: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; font-size: 14px; }
+.homeroom-row { height: 24px; display: flex; align-items: center; justify-content: center; font-weight: 700; border-bottom: 1px solid var(--line-strong); white-space: nowrap; overflow: hidden; }
+.class-day-row { height: 22px; display: grid; align-items: stretch; text-align: center; border-bottom: 1px solid var(--line-strong); }
+.class-day-row span { border-right: 1px solid var(--line-strong); }
+.class-period-row { height: 32px; border-bottom: 1px solid var(--line-strong); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; font-size: 14px; }
 .class-period-row small { font-size: 12px; margin-top: 2px; }
-.class-period-grid { display: grid; height: 32px; border-bottom: 1px solid #ccc; }
-.mini-cell-shell { position: relative; min-width: 0; border-right: 1px solid #ccc; }
+.class-period-grid { display: grid; height: 32px; border-bottom: 1px solid var(--line-strong); }
+.mini-cell-shell { position: relative; min-width: 0; border-right: 1px solid var(--line-strong); }
 .mini-cell-items { display: flex; height: 100%; }
 .mini-cell-items button { position: relative; padding: 0 1px; border: 0; border-radius: 0; flex: 1; min-width: 0; font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; }
 .moved-mini-cell { position: absolute; inset-inline: 0; z-index: 2; background: #fff; }
 .integrated-roster { padding: 3px 0; }
-.integrated-roster button, .student-out { display: flex; align-items: center; justify-content: space-between; gap: 6px; text-align: left; min-height: 22px; line-height: 18px; padding: 2px 6px; font-size: 14px; color: #121212; border: 0; border-radius: 0; width: 100%; }
-.integrated-roster small { color: #646d72; font-size: 11px; line-height: 16px; text-align: right; }
-.roster-transfers:has(button), .roster-transfers:has(.student-out) { border-top: 1px solid #ddd2ef; margin-top: 5px; padding-top: 3px; }
-.roster-transfers h3 { margin: 0; padding: 2px 6px; font-size: 11px; color: #6b3b99; }
+.integrated-roster button, .student-out { display: flex; align-items: center; justify-content: space-between; gap: 6px; text-align: left; min-height: 22px; line-height: 18px; padding: 2px 6px; font-size: 14px; color: var(--ink); border: 0; border-radius: 0; width: 100%; }
+.integrated-roster small { color: var(--foreground); font-size: 11px; line-height: 16px; text-align: right; }
+.roster-transfers:has(button), .roster-transfers:has(.student-out) { border-top: 1px solid color-mix(in srgb, var(--purple) 30%, var(--card)); margin-top: 5px; padding-top: 3px; }
+.roster-transfers h3 { margin: 0; padding: 2px 6px; font-size: 11px; color: var(--purple); }
 .transfer-tag { font-size: 10px; }
-.integrated-roster .student-out { color: #6b3b99; background: #f5f0fa; }
+.integrated-roster .student-out { color: var(--purple); background: var(--bg-soft); }
 .integrated-roster > span { display: block; padding: 4px 8px; }
 .roster-label { padding: 8px 0; }
-.practice-colors { margin-top: 20px; border-block: 1px solid #d7dfe8; padding: 10px 0; }
+.practice-colors { margin-top: 20px; border-block: 1px solid var(--line); padding: 10px 0; }
 .practice-colors summary { cursor: pointer; font-weight: 700; }
 .practice-colors form + form { margin-top: 16px; }
 .practice-colors input[type=color] { width: 56px; height: 30px; padding: 2px; }

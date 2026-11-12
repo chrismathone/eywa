@@ -1,3 +1,4 @@
+import { round1 } from "@/lib/guards";
 // 시수(정규 수업 1회 기준 배수) 파싱·정규화 — 순수 함수(Vitest).
 // 구 출석부(D:\attendance) 관행: 2시간 수업 기준 정규 출석 1, 3시간 1.5, 보강 4시간 2 (0.5 단위 관행, 0.1 허용).
 // 저장 규칙: null = 기본 배수 1(대부분의 셀). 1을 입력해도 null로 정규화해 노이즈를 줄인다.
@@ -52,9 +53,7 @@ export function effectiveUnits(sessionUnits: number | null | undefined): number 
  * ⚠️ 합을 **화면·감사로그에 적는 쪽**은 반드시 이걸 통과시킬 것 — `1.1+1.1+1.1`은 3.3000000000000003이라
  *    비교가 어긋나고(안 바뀐 저장에도 로그가 남는다) 그 숫자가 그대로 화면에 찍힌다(적대 리뷰 2026-09-14).
  */
-export function round1(n: number): number {
-  return Math.round(n * 10) / 10;
-}
+export { round1 } from "@/lib/guards";
 
 /**
  * **그날 합계 시수 → 교시별 시수**(합이 정확히 total).

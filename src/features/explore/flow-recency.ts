@@ -1,4 +1,4 @@
-import { kstDateOf } from "@/lib/date-kst";
+import { kstDateOf, diffDays } from "@/lib/date-kst";
 import type { FlowDirection } from "./flow-insight";
 
 /**
@@ -29,9 +29,8 @@ export function isFutureBasis(coveredThrough: string | null, today: string): boo
 
 /** 두 날짜(YYYY-MM-DD) 사이 날수(to − from). 형식이 틀리면 null. */
 export function daysBetween(from: string, to: string): number | null {
-  const a = Date.parse(`${from}T00:00:00Z`);
-  const b = Date.parse(`${to}T00:00:00Z`);
-  return Number.isNaN(a) || Number.isNaN(b) ? null : Math.round((b - a) / 86_400_000);
+  const n = diffDays(from, to);
+  return Number.isNaN(n) ? null : n;
 }
 
 /** 경과 표기 — 오늘 · N일 전(60일 미만) · 약 N개월 전(한 달 = 30일) · 앞날이면 N일 뒤. */

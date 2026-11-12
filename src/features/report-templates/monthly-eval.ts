@@ -12,6 +12,7 @@
  * 🔴 줄 **전체**가 이 모양일 때만 자리다 — 문장 속 글자는 그냥 글자.
  */
 import { AREA_KEYS, areaMaxOf, parseAreas, type AreaKey } from "@/features/grades/area-scores";
+import { round1 } from "@/lib/guards";
 
 /** 시트의 영역 순서(위 → 아래) = Writing · Speaking · Reading · Listening. */
 export const MONTHLY_AREA_ORDER: readonly AreaKey[] = ["writing", "speaking", "reading", "listening"];
@@ -36,7 +37,6 @@ export type MonthlyEval = {
   areas: Record<AreaKey, MonthlyAreaScore>;
 };
 
-const round1 = (n: number) => Math.round(n * 10) / 10;
 const num = (v: number | null) => (v == null ? "-" : String(v));
 
 /** 글에 남는 한 줄. */

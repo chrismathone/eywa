@@ -1,9 +1,9 @@
 "use client";
-import { Fragment, useState } from "react";
+import { Fragment, useState, useTransition } from "react";
 import { StageBar } from "./stage-bar";
+import a from "@/components/analytics/analytics.module.css";
 import { useRouter } from "next/navigation";
 import { kstDateOf } from "@/lib/date-kst";
-import a from "@/components/analytics/analytics.module.css";
 import { EmbedLink as Link } from "@/components/embed-link";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { useSubjectMaps } from "@/features/owner/operations-context";
@@ -12,24 +12,30 @@ import type { NewcomersView } from "./server/queries";
 import type { BoardFilters } from "./board-model";
 import { ONBOARDING_ITEMS, dueDateOf, statusOf } from "./onboarding-items";
 import { CONDITIONS, FOLLOWUP_STAGES, callSummary, currentStage, followupOpen, needsReview, studentAttention, managersOf, hasUnassignedSubject, needsEnrollmentLink, subjectStudent, type FollowupView, type FollowupStudent, type FollowupReport } from "./followup-model";
-import { SampleBanner, SAMPLE_SAVE_MESSAGE } from "@/features/mockup/sample";
+import { assignNewcomerManager, submitNewcomerFeedback, reviewNewcomerFeedback } from "./server/followup-actions";
+import { setOnboardingCheck } from "./server/actions";
 import { CompletionForm } from "./completion-form";
 import css from "./followup-workspace.module.css";
+import { PageHeader } from "@/components/page-header";
+import { BigStat } from "@/components/atoms/big-stat";
+import { Toolbar, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
+import { Button } from "@/components/ui/button";
 import { FollowupVisuals } from "./followup-visuals";
 import { EnrollmentSyncNote, type EnrollmentSyncInfo } from "./enrollment-sync-note";
+import { managerDefaultSubjectLabel } from "./manager-defaults";
+import { ManagerDefaultsButton } from "./manager-defaults-dialog";
 
-/**
- * 신규생 90일 정착 관리 — aywa-next(375d27df4) `followup-workspace.tsx`를 옮긴 시안.
- * 🔴 학생별 정착 관리·담당자별 점검 탭은 **예시 값**(담당 배정·피드백 표가 이 DB에 없다)이고 저장하지 않는다.
- *    '전체 완료 체크표' 탭만 실제 기록(main의 NewcomerBoard 그대로)이다.
- */
+// '과목 기본 담당' 선택지는 그 과목에 기본 담당이 정해져 있을 때만 낸다(누구인지 이름과 함께) — 없는 기본값을 고르게 하지 않는다.
+// 이미 기본 담당을 따르던 학생인데 그 기본 담당이 없어졌으면 '따름 · 지금 기본 담당 없음'으로 보인다(그대로 저장해도 '미지정'으로 굳지 않게).
+// '전체 완료 체크표' 쓰기는 `canWriteChecks`를 본다 — 정착 관리 자료 조회가 실패해도(canManage가 꺼져도) 종전 체크표는 잠그지 않는다.
+// '기본 관리 담당' 띠 = 지금 과목 + EiE 줄(서버가 거른 값 · manager-defaults.ts). 고치는 단추('기본 담당 설정')는 `canManage`일 때만 선다 —
+// 기본 담당이 아직 없는 학원에서도 지정할 수 있게 그때는 띠를 세운다(2026-11-11). 대화상자는 manager-defaults-dialog.tsx.
 const CALLS = [{ key: "month1_call", label: "30일 콜" }, { key: "month2_call", label: "60일 콜", optional: true }, { key: "month3_call", label: "90일 콜" }];
 const short = (date: string | null) => kstDateOf(date)?.slice(5,10).replace("-", ".") ?? "미정";
 const reviewLabel = { pending: "확인 대기", confirmed: "확인 완료", revision: "보완 요청" };
 type SaveResult = { ok: boolean; error?: string };
-const sampleSave = async (): Promise<SaveResult> => ({ ok: false, error: SAMPLE_SAVE_MESSAGE });
 
-export function FollowupWorkspace({ data, legacy, canWriteChecks, initialFilters, initialStudent, syncInfo }: { data: FollowupView; legacy: NewcomersView; canWriteChecks: boolean; initialFilters: BoardFilters; initialStudent?: string; syncInfo?: EnrollmentSyncInfo }) {
+export function FollowupWorkspace({ data, legacy, initialFilters, initialStudent, syncInfo }: { data: FollowupView; legacy: NewcomersView; initialFilters: BoardFilters; initialStudent?: string; syncInfo?: EnrollmentSyncInfo }) {
   const { labelOf } = useSubjectMaps();
   const router = useRouter();
   const [tab, setTab] = useState<"students" | "owners" | "checks">(initialFilters.item || initialFilters.bucket || initialFilters.status !== "all" || initialFilters.subject !== "all" ? "checks" : "students");
@@ -38,9 +44,9 @@ export function FollowupWorkspace({ data, legacy, canWriteChecks, initialFilters
   const [selected, setSelected] = useState<string | null>(initialStudent ?? null);
   const [panel, setPanel] = useState<"calls" | "reports">(initialStudent ? "reports" : "calls");
   const [task, setTask] = useState("month1_call"), [subject, setSubject] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false), [pending, startTransition] = useTransition();
   const [error, setError] = useState(""), [notice, setNotice] = useState("");
-  const saving = busy, known = !data.error;
+  const saving = busy || pending, known = !data.error;
   const current = data.students.find(s => s.row.studentId === selected);
   const activeSubject = current?.subjects.find(s => (s.subject ?? "") === subject) ?? current?.subjects[0];
   const activeManager = current?.managers.find(a=>a.subject===(activeSubject?.subject??""));
@@ -64,13 +70,14 @@ export function FollowupWorkspace({ data, legacy, canWriteChecks, initialFilters
   });
   const people = [...new Map(data.students.flatMap(s => [...managersOf(s), ...s.homerooms]).map(p => [p.id, p])).values()].sort((a, b) => a.name.localeCompare(b.name, "ko"));
 
-  /** 시안: 서버로 보내지 않고 안내만 띄운다(담당·피드백·완료 기록 표가 연결되기 전). */
   async function run(action: () => Promise<SaveResult>) {
     if (saving) return;
     setBusy(true); setError(""); setNotice("");
     try {
       const result = await action();
       if (!result.ok) throw Error(result.error || "저장하지 못했습니다");
+      setNotice("저장했습니다. 최신 기록을 반영합니다.");
+      startTransition(() => router.refresh());
     } catch (e) { setError(e instanceof Error ? e.message : "저장하지 못했습니다"); }
     finally { setBusy(false); }
   }
@@ -80,24 +87,21 @@ export function FollowupWorkspace({ data, legacy, canWriteChecks, initialFilters
   }
 
   return <div className={`${css.root} ${a.dashboard}`}>
-    <SampleBanner />
-    <header className={css.hero}>
-      <div><p className={css.eyebrow}>신규생 관리 · 90일 정착</p><h1>신입생이 자리 잡을 때까지</h1><p>관리자는 연락을 챙기고, 담임은 적응을 살피고, 피드백은 다음 행동으로 이어집니다.</p></div>
-      <div className={css.heroDate}><span>오늘의 관리 기준</span><strong>{data.today.replaceAll("-", ".")}</strong><Link href="/students/care">입학 약속·이행 보기 ↗</Link></div>
-    </header>
-    <nav className={css.nav} aria-label="신입생 관리 보기">
-      {([['students','학생별 정착 관리'],['owners','담당자별 점검'],['checks','전체 완료 체크표 (실제 기록)']] as const).map(([key,label]) => <button key={key} type="button" aria-pressed={tab === key} onClick={() => setTab(key)}>{label}</button>)}
-      <span>등록 → 첫 적응 → 30일 → 60일 → 90일 → 장기재원</span>
-    </nav>
-    {data.defaults?.length?<aside className={css.defaultRules} aria-label="과목별 기본 관리자"><b>기본 관리 담당</b>{data.defaults.map(d=><span key={d.subject}>{d.subject==="eie"?"EiE":labelOf(d.subject)} · {d.manager?.name??"재지정 필요"}</span>)}<small>기존 개별 배정은 유지 · 동시 수강은 각 과목별 기록</small></aside>:null}
+    <PageHeader title="신규생 관리" description="신입생이 자리 잡을 때까지 — 관리자는 연락을 챙기고, 담임은 적응을 살피고, 피드백은 다음 행동으로 이어집니다." actions={<Button variant="outline" render={<Link href="/students/care"/>}>입학 약속·이행 보기 ↗</Button>}/>
+    <Toolbar className="mt-4 mb-3">
+      <ToolbarSegment>{([['students','학생별 정착 관리'],['owners','담당자별 점검'],['checks','전체 완료 체크표']] as const).map(([key,label]) => <ToolbarSegmentItem key={key} active={tab === key} onClick={() => setTab(key)}>{label}</ToolbarSegmentItem>)}</ToolbarSegment>
+      <span className={css.stages}>등록 → 첫 적응 → 30일 → 60일 → 90일 → 장기재원</span>
+      <span className={css.asOf}>관리 기준 <b>{data.today.replaceAll("-", ".")}</b></span>
+    </Toolbar>
+    {data.defaults?.length||data.canManage?<aside className={css.defaultRules} aria-label="과목별 기본 관리자"><b>기본 관리 담당</b>{data.defaults?.length?data.defaults.map(d=><span key={d.subject}>{managerDefaultSubjectLabel(d.subject,labelOf)} · {d.manager?.name??"재지정 필요"}</span>):<span>아직 지정 없음</span>}<small>기존 개별 배정은 유지 · 동시 수강은 각 과목별 기록</small>{data.canManage?<ManagerDefaultsButton defaults={data.defaults??[]} staff={data.staff} className={css.defaultEdit}/>:null}</aside>:null}
     {data.error ? <p role="alert" className={css.error}>{data.error} <button type="button" onClick={() => router.refresh()}>다시 조회</button></p> : null}
     <EnrollmentSyncNote info={syncInfo} editing={!!selected || saving}/>
-    {tab === "checks" ? <><p className={css.realNote}>이 탭은 실제 신규생 기록입니다. 위 예시 학생과 연결되지 않습니다.</p><NewcomerBoard view={legacy} canWrite={canWriteChecks} initialFilters={initialFilters} /></> : <>
-      <section className={css.metrics} aria-label="신입생 관리 요약">
-        <button type="button" onClick={() => setFilter("all")}><span>집중 관리 학생</span><strong>{data.students.length}<small>명</small></strong><em>학생 한 명 기준으로 관리</em></button>
-        <button type="button" onClick={() => setFilter(unlinked > 0 ? "unlinked" : "unassigned")}><span>담당·수강 연결 확인</span><strong data-alert={unassigned + unlinked > 0}>{known ? unassigned + unlinked : "—"}<small>명</small></strong><em>{known ? `담당 미지정 ${unassigned}명 · 수강 연결 필요 ${unlinked}명` : "조회 확인 필요"}</em></button>
-        <button type="button" onClick={() => setFilter("reports")}><span>확인할 피드백</span><strong data-alert={unseen > 0}>{known ? unseen : "—"}<small>건</small></strong><em>확인 대기·보완 요청</em></button>
-        <button type="button" onClick={() => setFilter("attention")}><span>기한 지난 후속 조치</span><strong data-alert={lateFollowups > 0}>{known ? lateFollowups : "—"}<small>건</small></strong><em>처리 결과까지 남겨야 종료</em></button>
+    {tab === "checks" ? <NewcomerBoard view={legacy} canWrite={data.canWriteChecks} initialFilters={initialFilters} /> : <>
+      <section className="mb-3 grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="신입생 관리 요약">
+        <BigStat label="집중 관리 학생" value={data.students.length} unit="명" sub="학생 한 명 기준으로 관리" onClick={() => setFilter("all")}/>
+        <BigStat label="담당·수강 연결 확인" value={known ? unassigned + unlinked : "—"} unit="명" valueClass={unassigned + unlinked > 0 ? "text-danger" : undefined} sub={known ? `담당 미지정 ${unassigned}명 · 수강 연결 필요 ${unlinked}명` : "조회 확인 필요"} onClick={() => setFilter(unlinked > 0 ? "unlinked" : "unassigned")}/>
+        <BigStat label="확인할 피드백" value={known ? unseen : "—"} unit="건" valueClass={unseen > 0 ? "text-danger" : undefined} sub="확인 대기·보완 요청" onClick={() => setFilter("reports")}/>
+        <BigStat label="기한 지난 후속 조치" value={known ? lateFollowups : "—"} unit="건" valueClass={lateFollowups > 0 ? "text-danger" : undefined} sub="처리 결과까지 남겨야 종료" onClick={() => setFilter("attention")}/>
       </section>
       <FollowupVisuals data={data}/>
       {tab === "owners" ? <section className={css.ownerGrid} aria-label="담당자별 이행 점검">
@@ -119,8 +123,8 @@ export function FollowupWorkspace({ data, legacy, canWriteChecks, initialFilters
             const assignment=s.managers.find(a=>a.subject===subjectKey), subjectReports=s.reports.filter(r=>r.subject===(subjectKey||"general")), latest=subjectReports[0];
             const teachers=s.homerooms.filter(t=>t.subject===row.subject);
             return <tr key={row.rowKey} className={index===0?css.studentStart:css.subjectContinuation}>
-              {index===0?<td rowSpan={s.subjects.length} className={css.studentCell}><button type="button" className={css.studentName} onClick={()=>open(s)}>{s.row.name}</button><span>{[s.row.school,s.row.grade].filter(Boolean).join(" ")}</span><span className={css.stage}>{s.row.elapsedDays>90?"90일 후속 관리":`${FOLLOWUP_STAGES[stage]} 구간`} · {s.row.elapsedDays<0?"등록 예정":`${s.row.elapsedDays}일째`}</span><StageBar elapsed={s.row.elapsedDays} label={`${s.row.name} 90일 정착`}/><span>{s.subjects.map(r=>r.subject?labelOf(r.subject):"과목 미정").join(" · ")}</span>{s.openPromises?<span>미완료 약속 {s.openPromises}건</span>:null}</td>:null}
-              <td><b className={css.subjectBadge}>{subjectName}</b>{!row.subject ? <><span className={css.missing}>수강반 연결 확인</span><span>수강 과목이 확인되면 기본 관리자가 연결됩니다.</span></> : <><button type="button" className={assignment?.manager?css.manager:css.missing} onClick={()=>open(s,"calls","month1_call",subjectKey)} aria-label={`${s.row.name} ${subjectName} 관리 담당자`}>{known?assignment?.manager?.name??"+ 담당자 지정":"조회 확인 필요"}</button><span>{assignment?.source==="default"?"과목 기본 담당":assignment?.source==="legacy"?"기존 배정 유지":"과목별 관리 콜 책임자"}</span></>}</td>
+              {index===0?<td rowSpan={s.subjects.length} className={css.studentCell}><button type="button" className={css.studentName} onClick={()=>open(s)}>{s.row.name}</button><span>{[s.row.school,s.row.grade].filter(Boolean).join(" ")}</span><span className={css.stage}>{s.row.elapsedDays>90?"90일 후속 관리":`${FOLLOWUP_STAGES[stage]} 구간`} · {s.row.elapsedDays<0?"등록 예정":`${s.row.elapsedDays}일째`}</span><StageBar elapsed={s.row.elapsedDays} label={`${s.row.name} 90일 정착`}/><span>{s.subjects.map(r=>r.subject?labelOf(r.subject):"과목 미정").join(" · ")}</span>{s.openPromises?<Link href={`/students/${s.row.studentId}/care`}>미완료 약속 {s.openPromises}건 ↗</Link>:null}</td>:null}
+              <td><b className={css.subjectBadge}>{subjectName}</b>{!row.subject ? <><Link className={css.missing} href={`/students/${s.row.studentId}`}>수강반 연결 확인 ↗</Link><span>수강 과목이 확인되면 기본 관리자가 연결됩니다.</span></> : <><button type="button" className={assignment?.manager?css.manager:css.missing} onClick={()=>open(s,"calls","month1_call",subjectKey)} aria-label={`${s.row.name} ${subjectName} 관리 담당자`}>{known?assignment?.manager?.name??"+ 담당자 지정":"조회 확인 필요"}</button><span>{assignment?.source==="default"?"과목 기본 담당":assignment?.source==="legacy"?"기존 배정 유지":"과목별 관리 콜 책임자"}</span></>}</td>
               <td><div className={css.calls}>{CALLS.map(c=>{const status=callSummary(subjectStudent(s,row.subject),c.key,data.today,data.checksKnown);return <button type="button" key={c.key} data-state={status.state} onClick={()=>open(s,"calls",c.key,subjectKey)} aria-label={`${s.row.name} ${subjectName} ${c.label} ${status.label}`}><b>{c.label}{c.optional?<small>필요시</small>:null}</b><strong>{status.label}</strong><span>{short(status.state==="done"?status.doneOn:status.due)}{status.state==="done"?" 수행":" 예정"}</span>{status.actors.length?<span>{status.actors.join(" · ")}</span>:null}</button>;})}</div></td>
               <td>{teachers.length?teachers.map(t=><div className={css.teacher} key={t.id}><span>{t.name}{t.upcoming?" (예정)":""}</span></div>):<span className={css.missing}>담임 배정 확인</span>}<button type="button" className={css.textButton} onClick={()=>open(s,"reports","month1_call",subjectKey)}>{subjectName} 적응 보고 {subjectReports.length}건 →</button></td>
               <td>{!known?<span>피드백 조회 확인 필요</span>:latest?<><span className={css.condition} data-condition={latest.condition}>{CONDITIONS[latest.condition]} · {reviewLabel[latest.review_state]}</span><p className={css.summary}>{latest.summary}</p><span>{latest.authorName} · {short(latest.created_at)}</span>{subjectReports.some(followupOpen)?<b className={css.next}>후속 조치 {subjectReports.filter(followupOpen).length}건 남음</b>:null}</>:<p className={css.muted}>{subjectName} 관찰·관리 기록을 기다립니다.</p>}<div className={css.rowAction}><button type="button" className={css.openButton} onClick={()=>open(s,"reports","month1_call",subjectKey)} aria-label={`${s.row.name} ${subjectName} 피드백·점검`}>피드백·점검</button>{data.checksKnown&&row.progress.overdue>0?<span className={css.overdue}>첫 적응·관리 업무 확인</span>:null}</div></td>
@@ -134,8 +138,8 @@ export function FollowupWorkspace({ data, legacy, canWriteChecks, initialFilters
       {current ? <><SheetHeader><SheetTitle>{current.row.name} · 90일 정착 관리</SheetTitle><SheetDescription>{[current.row.school,current.row.grade].filter(Boolean).join(" ")} · 등록 {current.row.enrolledOn} · {current.row.elapsedDays}일째</SheetDescription></SheetHeader>
         <div className={css.drawerBody}>
           <div className={css.subjectTabs} role="group" aria-label="학생 과목 선택">{current.subjects.map(row=><button type="button" key={row.rowKey} aria-pressed={subject!=="general"&&(activeSubject?.subject??"")===(row.subject??"")} onClick={()=>{setSubject(row.subject??"");setError("");setNotice("");}}>{row.subject?labelOf(row.subject):"과목 미정"}</button>)}{(data.canManage||current.reports.some(r=>r.subject==="general"))&&current.subjects.some(r=>r.subject)?<button type="button" aria-pressed={subject==="general"} onClick={()=>{setSubject("general");setPanel("reports");}}>생활·종합</button>:null}</div>
-          {subject!=="general"?<section className={css.assignment}><h3>{activeSubject?.subject?labelOf(activeSubject.subject):"과목 미정"} 관리 담당자</h3>{data.canManage?<form key={`${selected}:${activeSubject?.subject}:${activeManager?.version??0}`} onSubmit={e=>{e.preventDefault();const value=String(new FormData(e.currentTarget).get("manager")??"");void value; void run(sampleSave);}}>
-            <select name="manager" aria-label="30·60·90일 콜 관리 담당자" defaultValue={activeManager?.source==="default"?"default":activeManager?.manager?.id??""} disabled={saving}><option value="default">과목 기본 담당 · {activeManager?.defaultManager?.name??"설정 없음"}</option><option value="">미지정</option>{data.staff.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><button type="submit" disabled={saving}>담당 저장</button>
+          {subject!=="general"?<section className={css.assignment}><h3>{activeSubject?.subject?labelOf(activeSubject.subject):"과목 미정"} 관리 담당자</h3>{data.canManage?<form key={`${selected}:${activeSubject?.subject}:${activeManager?.version??0}`} onSubmit={e=>{e.preventDefault();const value=String(new FormData(e.currentTarget).get("manager")??"");void run(()=>assignNewcomerManager({studentId:selected,subject:activeSubject?.subject??"",mode:value==="default"?"default":"manual",managerId:value==="default"?null:value||null,version:activeManager?.version??0}));}}>
+            <select name="manager" aria-label="30·60·90일 콜 관리 담당자" defaultValue={activeManager?.source==="default"?"default":activeManager?.manager?.id??""} disabled={saving}>{activeManager?.defaultManager?<option value="default">과목 기본 담당 · {activeManager.defaultManager.name}</option>:activeManager?.source==="default"?<option value="default">과목 기본 담당 따름 · 지금 기본 담당 없음</option>:null}<option value="">미지정</option>{data.staff.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><button type="submit" disabled={saving}>담당 저장</button>
           </form>:<strong>{known?activeManager?.manager?.name??"관리 담당자 미지정":"조회 확인 필요"}</strong>}<p>이 과목만 변경됩니다. 다른 과목의 담당자와 기록은 유지됩니다.</p><p>{current.homerooms.filter(t=>t.subject===activeSubject?.subject).map(t=>`담임 ${t.name}`).join(" · ")||"담임 배정을 확인해 주세요"}</p></section>:null}
           <div className={css.panelTabs} role="group" aria-label="학생 관리 기록 종류"><button type="button" aria-pressed={panel === "calls"} onClick={() => {setPanel("calls");if(subject==="general")setSubject(activeSubject?.subject??"");}}>관리 콜·첫 적응</button><button type="button" aria-pressed={panel === "reports"} onClick={() => setPanel("reports")}>담임 피드백·후속 조치</button></div>
           {error ? <p role="alert" className={css.error}>{error}</p> : null}<p role="status" className={css.notice}>{notice}</p>
@@ -145,15 +149,15 @@ export function FollowupWorkspace({ data, legacy, canWriteChecks, initialFilters
             <h3>{item.label}</h3><p>예정 {dueDateOf(item,activeSubject) ?? "첫 수업일 확인 필요"} · 관리 담당 {activeManager?.manager?.name ?? "미지정"}</p>
             {activeSubject.checks[task] ? <p className={css.completed}>완료 {activeSubject.checks[task]} · 실제 처리자 {evidence?.doneByName ?? "이전 기록·처리자 확인 필요"}</p> : <p className={css.muted}>{statusOf(item,activeSubject,null,data.today) === "overdue" ? "기한이 지났습니다. 실제 연락 결과를 확인해 주세요." : "실제 액션과 결과를 기록하면 완료로 반영됩니다."}</p>}
             <CompletionForm key={`${selected}:${activeSubject.subject}:${task}:${activeSubject.checks[task] ?? "open"}`} done={!!activeSubject.checks[task]} canWrite={data.canManage && data.checksKnown} busy={saving} today={data.today} memo={evidence?.memo} consultationId={evidence?.consultationId}
-              onSave={() => void run(sampleSave)} />
+              onSave={(done,completion,doneOn) => void run(() => setOnboardingCheck({ studentId: current.row.studentId, subject: activeSubject.subject, itemKey: task, done, completion, doneOn }))} />
           </section> : null}
           {panel === "reports" ? <>
-            {data.canReport ? <FeedbackForm key={`${selected}:${subject}:${current.reports.length}`} subject={subject==="general"?"general":activeSubject?.subject||"general"} student={current} data={data} busy={saving} onSubmit={() => run(sampleSave)} /> : <p className={css.muted}>담당 담임은 자신의 학생·과목에 적응 피드백을 남길 수 있습니다.</p>}
+            {data.canReport ? <FeedbackForm key={`${selected}:${subject}:${current.reports.length}`} subject={subject==="general"?"general":activeSubject?.subject||"general"} student={current} data={data} busy={saving} onSubmit={v => run(() => submitNewcomerFeedback(v))} /> : <p className={css.muted}>담당 담임은 자신의 학생·과목에 적응 피드백을 남길 수 있습니다.</p>}
             <h3>이 과목의 보고·확인 이력 <small>{activeReports.length}건</small></h3>
             {!activeReports.length ? <p className={css.empty}>아직 적응 보고가 없습니다. 미등록을 ‘문제 없음’으로 해석하지 않습니다.</p> : null}
-            {activeReports.map(report => <ReportCard key={`${report.id}:${report.version}`} report={report} data={data} busy={saving} onSave={() => run(sampleSave)} />)}
+            {activeReports.map(report => <ReportCard key={`${report.id}:${report.version}`} report={report} data={data} busy={saving} onSave={v => run(() => reviewNewcomerFeedback(v))} />)}
           </> : null}
-          <div className={css.links}><span>입학 약속·인수·이행 증거 · 학생 통합정보는 실제 학생과 연결한 뒤 열립니다.</span><Link href="/students/care">입학 약속·이행 보기 ↗</Link></div>
+          <div className={css.links}><Link href={`/students/${current.row.studentId}/care`}>입학 약속·인수·이행 증거 ↗</Link><Link href={`/students/${current.row.studentId}`}>학생 통합정보·지식그래프 ↗</Link></div>
         </div>
       </> : null}
     </SheetContent></Sheet>

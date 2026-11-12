@@ -9,6 +9,7 @@ import {
   sensitiveSkipReason,
   type NoticeSource,
 } from "../translate-rules";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * 팝업 공지 **영문 번역 만들기**(0249a 캐시에 저장) — 원장 2026-09-03 *"공지사항도 영어로 보이도록"*.
@@ -101,7 +102,7 @@ export async function buildNoticeTranslation(
       },
       { onConflict: "notice_id,lang" },
     );
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: explainDbError(error, { scope: "notices.translate.buildNoticeTranslation", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
     return { ok: true, skipped: true, reason: skip };
   }
 
@@ -146,6 +147,6 @@ export async function buildNoticeTranslation(
     },
     { onConflict: "notice_id,lang" },
   );
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "notices.translate.buildNoticeTranslation", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }

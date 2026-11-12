@@ -2,8 +2,8 @@
  * 원래 수치 → 점수. 원장 설정(`config.ts`)의 규칙을 그대로 적용하는 순수 함수(화면 미리보기·집계가 같이 쓴다).
  */
 import type { Band, MetricSetting, Scoring } from "./config";
+import { round1 } from "@/lib/guards";
 
-const round1 = (n: number) => Math.round(n * 10) / 10;
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 const UNCAPPED = 100_000;

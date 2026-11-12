@@ -7,6 +7,7 @@ import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { teacherOwnsStudent } from "@/features/onescreen/server/scope";
 import { logAction } from "@/features/audit/server/log";
 import { canResolveProgressAnomaly } from "../anomaly-gate";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 type Result = { ok: boolean; error?: string };
 
@@ -32,7 +33,7 @@ export async function setProgressAnomalyResolved(eventId: string, resolved: bool
     .select("id, student_id, event_type")
     .eq("id", eventId)
     .maybeSingle();
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "progress.anomaly-actions.setProgressAnomalyResolved", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   if (!event) return { ok: false, error: "기록을 찾을 수 없습니다" };
   if (!["jump_error", "overlap_error"].includes(event.event_type as string)) {
     return { ok: false, error: "확인 대상이 아닌 기록입니다" };
@@ -51,7 +52,7 @@ export async function setProgressAnomalyResolved(eventId: string, resolved: bool
         : { resolved_at: null, resolved_by: null }, // 되돌리기는 확인자까지 함께 비운다(반쪽 상태 금지)
     )
     .eq("id", eventId);
-  if (updateError) return { ok: false, error: updateError.message };
+  if (updateError) return { ok: false, error: explainDbError(updateError, { scope: "progress.anomaly-actions.setProgressAnomalyResolved", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   // 감사로그 — 경고 신호를 끄는(또는 되살리는) 판단이라 누가 했는지 남긴다. 학생 이름은 뷰어가 metadata.studentId로 푼다.
   await logAction({

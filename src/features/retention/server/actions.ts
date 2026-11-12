@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 export type LogActionState = { ok?: boolean; error?: string } | undefined;
 
@@ -44,7 +45,7 @@ export async function logRetentionAction(
     follow_up_date: followUpDate,
     follow_up_done: false,
   }).select("id").single();
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "retention.actions.logRetentionAction", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   // 🔴 요약 본문은 담지 않는다(상담 내용 금지) — 학생상담 기록(student_consultation_create)과 같은 규약.
   //    대상 열의 학생 이름은 metadata.studentId를 뷰어가 해석한다(auditTargetName).
@@ -85,7 +86,7 @@ export async function campaignAdd(studentId: string): Promise<CampaignResult> {
     counselor_id: user.id,
     trigger_reason: "renewal_risk",
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "retention.actions.campaignAdd", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   await logAction({
     action: "retention_campaign_add",
     targetType: "campaign_target",
@@ -111,7 +112,7 @@ export async function campaignSetStatus(targetId: string, status: string): Promi
     .update(patch)
     .eq("id", targetId)
     .select("student_id"); // 추가 왕복 없이 로그용 학생 id 확보 + 0행이면 안 남긴다
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "retention.actions.campaignSetStatus", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   if (updated?.length) {
     await logAction({
       action: "retention_campaign_status",
@@ -136,7 +137,7 @@ export async function campaignRemove(targetId: string): Promise<CampaignResult> 
     .delete()
     .eq("id", targetId)
     .select("student_id, status");
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: explainDbError(error, { scope: "retention.actions.campaignRemove", fallback: "삭제하지 못했습니다 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
   const gone = removed?.[0];
   if (gone) {
     // 🔴 학생 이름을 그 자리에서 굳힌다 — 나중에 그 학생이 삭제되면 id로는 아무것도 못 읽는다.

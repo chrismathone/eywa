@@ -22,6 +22,7 @@ import { loadMonthRoster, type MonthRoster } from "./month-roster";
 import { MATERIALIZE_ERROR, materializeVirtualTerms } from "./term-materialize";
 import { autoReallocateAfterConfirm } from "./auto-reallocate";
 import { applyCarrySync, carryBreaksAfter, loadCarryOutStates, syncCarrySessionsAfter } from "./carry-session-sync";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 const DOW: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 
@@ -193,11 +194,11 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
     const { error } = await supabase
       .from("invoice_session_terms")
       .upsert(upserts.slice(i, i + 200), { onConflict: "tenant_id,invoice_id,class_id" });
-    if (error) return { error: `계획 저장 실패: ${error.message}` };
+    if (error) return { error: explainDbError(error, { scope: "billing.session-terms.actions.refreshPlannedTerms", fallback: "계획 저장 실패 — 잠시 후 다시 시도해 주세요" }).message };
   }
   for (let i = 0; i < staleUnconfirmed.length; i += 200) {
     const { error } = await supabase.from("invoice_session_terms").delete().in("id", staleUnconfirmed.slice(i, i + 200)).is("confirmed_sessions", null).is("allocation_line_index", null).or("allocation_amount.is.null,allocation_amount.eq.0");
-    if (error) return { error: `정리 실패: ${error.message}` };
+    if (error) return { error: explainDbError(error, { scope: "billing.session-terms.actions.refreshPlannedTerms", fallback: "정리 실패 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
   }
 
   const removedIds = new Set(staleUnconfirmed);
@@ -220,7 +221,7 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
   for (const [ids, value, label] of [[staleRetained, 0, "종료반"], [visitorNull, null, "보강 방문 줄"]] as const) {
     for (let i = 0; i < ids.length; i += 200) {
       const { error } = await supabase.from("invoice_session_terms").update({ planned_sessions: value }).in("id", ids.slice(i, i + 200));
-      if (error) return { error: `${label} 계획 저장 실패: ${error.message}` };
+      if (error) return { error: explainDbError(error, { scope: "billing.session-terms.actions.refreshPlannedTerms", fallback: `${label} 계획 저장 실패 — 잠시 후 다시 시도해 주세요` }).message };
     }
   }
 
@@ -281,7 +282,7 @@ export async function confirmClassTerms(
   // 이 반의 그 청구월 term만 — invoices inner join으로 period 필터(RLS가 테넌트 격리).
   const { data: cls, error: classError } = await supabase.from("classes")
     .select("subject, english_track").eq("id", classId).maybeSingle();
-  if (classError) return { error: classError.message };
+  if (classError) return { error: explainDbError(classError, { scope: "billing.session-terms.actions.confirmClassTerms", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   if (!cls) return { error: "반을 찾을 수 없습니다" };
   const pricingMode: SessionPricingMode = isEieMonthlyClass(cls.subject, cls.english_track) ? "monthly" : "per_session";
   if (pricingMode === "per_session" && override === null) return { error: "일괄 확정할 회차를 입력해 주세요. 단가만 입력하면 미확정 상태로 유지됩니다" };
@@ -308,7 +309,7 @@ export async function confirmClassTerms(
     readTerms(),
     visibleTermIds === undefined ? loadMonthRoster(supabase, period, { classIds: [classId] }) : Promise.resolve(undefined),
   ]);
-  if (first.error) return { error: first.error.message };
+  if (first.error) return { error: explainDbError(first.error, { scope: "billing.session-terms.actions.confirmClassTerms", fallback: "회차 목록을 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   let data = (first.data ?? []) as ClassTermRow[];
 
   // 🔴 이 반의 출석부 줄인데 회차 행이 없는 학생을 **먼저** 만든다 — 그래야 아래 대상 선정이 출석부와 같은 줄을 본다
@@ -342,7 +343,7 @@ export async function confirmClassTerms(
       if (visible) visible = visible.map((id) => made.ids.get(id) ?? id);
       if (made.ids.size > 0) {
         const again = await readTerms();
-        if (again.error) return { error: again.error.message };
+        if (again.error) return { error: explainDbError(again.error, { scope: "billing.session-terms.actions.confirmClassTerms", fallback: "회차 목록을 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
         data = (again.data ?? []) as ClassTermRow[];
       }
     }
@@ -405,7 +406,7 @@ export async function confirmClassTerms(
       })
       .in("id", ids)
       .select("id");
-    if (uerr) return { error: uerr.message };
+    if (uerr) return { error: explainDbError(uerr, { scope: "billing.session-terms.actions.confirmClassTerms", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
     for (const row of saved ?? []) terms.push({ id: row.id, confirmedSessions: n, unitPrice, pricingMode, amount: sessionPricingAmount(pricingMode, n, unitPrice), confirmedAt: now, quantityBasis: "attendance_units" });
     confirmed += saved?.length ?? 0;
   }
@@ -483,7 +484,7 @@ export async function confirmSessionTerm(
       .maybeSingle(),
     loadCarryOutStates(supabase, [id]),
   ]);
-  if (readError) return { error: readError.message };
+  if (readError) return { error: explainDbError(readError, { scope: "billing.session-terms.actions.confirmSessionTerm", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   if (!before) return { error: "대상을 찾을 수 없습니다" };
   const cls = Array.isArray(before.class) ? before.class[0] : before.class;
   const pricingMode: SessionPricingMode = isEieMonthlyClass(before.subject, cls?.english_track) ? "monthly" : "per_session";
@@ -502,7 +503,7 @@ export async function confirmSessionTerm(
       confirmed_at: confirmedAt,
     })
     .eq("id", id).select("id").maybeSingle();
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.session-terms.actions.confirmSessionTerm", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   if (!saved) return { error: "확정할 대상을 찾을 수 없습니다" };
   await autoReallocateAfterConfirm(supabase, [id], "confirm");
   // 받은 금액 이월이 실린 줄은 확정 시수를 그만큼 맞춘다(원장 2026-10-07) — 사람이 '해제 → 시수 올림 → 다시 확정'하던 일.
@@ -559,13 +560,13 @@ export async function unconfirmSessionTerm(
       .maybeSingle(),
     loadCarryOutStates(supabase, [id]),
   ]);
-  if (readError) return { error: readError.message };
+  if (readError) return { error: explainDbError(readError, { scope: "billing.session-terms.actions.unconfirmSessionTerm", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   if (!before) return { error: "대상을 찾을 수 없습니다" };
   const { data: saved, error } = await supabase
     .from("invoice_session_terms")
     .update({ confirmed_sessions: null, unit_price: null, amount: null, confirmed_by: null, confirmed_at: null })
     .eq("id", id).select("id").maybeSingle();
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.session-terms.actions.unconfirmSessionTerm", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   if (!saved) return { error: "해제할 대상을 찾을 수 없습니다" };
 
   finishTermMutation({
@@ -629,7 +630,7 @@ export async function setSessionTermCarryover(
     )
     .eq("id", id)
     .maybeSingle();
-  if (termErr) return { error: termErr.message };
+  if (termErr) return { error: explainDbError(termErr, { scope: "billing.session-terms.actions.setSessionTermCarryover", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   if (!term) return { error: "대상을 찾을 수 없습니다" };
   if (term.pricing_mode === "monthly") return { error: "월 고정 수강료는 회차를 이월하지 않습니다" };
   const out = rawOut === null ? (Number(term.carryover_out) || 0) : Number(String(rawOut).trim());
@@ -643,7 +644,7 @@ export async function setSessionTermCarryover(
 
   // 실측 회차(출석 일수, 0263a) — 검증 화면과 같은 RPC를 써서 판정이 갈리지 않게 한다.
   const { data: att, error: attErr } = await supabase.rpc("session_term_attendance", { p_period: period });
-  if (attErr) return { error: attErr.message };
+  if (attErr) return { error: explainDbError(attErr, { scope: "billing.session-terms.actions.setSessionTermCarryover", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   const actual =
     (att as { invoice_id: string; class_id: string; consumed: number | string }[] | null)?.find(
       (a) => a.invoice_id === term.invoice_id && a.class_id === term.class_id,
@@ -695,7 +696,7 @@ export async function setSessionTermCarryover(
       carryover_note: note || null,
     })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.session-terms.actions.setSessionTermCarryover", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   // 이월은 **급여 상한을 올리는 유일한 근거**라 누가·언제·왜가 남아야 한다. 행에도 carryover_by/at/note가
   // 박히지만 그건 **마지막 한 번만** 남는다 — 값을 두 번 고치면 앞 기록이 덮이므로 이력은 여기에만 남는다.

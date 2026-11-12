@@ -124,6 +124,16 @@ describe("계산 대상 강사", () => {
     d.enrollments = [];
     expect(buildPortfolio(d, { openMonths: new Map([["teacher", ["2026-10"]]]) }).teachers.map((t) => t.periods.length)).toEqual([1]);
   });
+  it("🔴 그 달 전체가 입사 전·퇴사 뒤면 평가 달을 만들지 않는다 — 입사한 달부터(정정 계획만 keepOutsideTenure로 계산)", () => {
+    const d = fixture();
+    d.users[0].hire_date = "2026-08-17";
+    const periods = (o = {}) => buildPortfolio(d, o).teachers.find((t) => t.id === "teacher")!.periods.map((w) => w.month);
+    expect(periods()).toEqual(["2026-10", "2026-09", "2026-08"]);
+    expect(periods({ keepOutsideTenure: true })).toHaveLength(7);
+    d.users[0].hire_date = "2026-01-16";
+    d.users[0].resign_date = "2023-02-28"; // 재입사 전 옛 퇴사일은 보지 않는다
+    expect(periods()).toHaveLength(7);
+  });
 });
 
 describe("직원 평가", () => {

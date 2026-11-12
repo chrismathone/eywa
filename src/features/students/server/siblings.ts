@@ -1,3 +1,4 @@
+import { isMissingRelation } from "@/lib/supabase/db-error";
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -29,7 +30,8 @@ const CANDIDATE_CAP = 100;
 
 const quoted = (v: string) => `"${v}"`;
 const plain = (s: string) => s.replace(/["\\%_*,()]/g, "");
-const missingTable = (msg: string) => /PGRST205|42P01|does not exist|Could not find the table/i.test(msg);
+// 형제 표 이름 + 없음 코드(공용 판정, P1-E) — 예전엔 `does not exist`만 봐서 다른 표·칸이 없어도 형제 연결을 숨겼다.
+const missingTable = (error: unknown) => isMissingRelation(error, "student_siblings");
 
 /** 자동 판정 — 같은 학원 원생 중 학부모 휴대폰·이름이 맞는 원생(시험용·중복 병합된 원생 제외). */
 export async function findAutoSiblings(
@@ -71,7 +73,7 @@ export async function loadSiblingLinks(tenantId: string, studentId: string): Pro
     .eq("tenant_id", tenantId)
     .or(`student_a.eq.${quoted(studentId)},student_b.eq.${quoted(studentId)}`);
   if (error) {
-    if (missingTable(error.message)) return { ready: false, links: new Map() };
+    if (missingTable(error)) return { ready: false, links: new Map() };
     throw error;
   }
   const links = new Map<string, boolean>();

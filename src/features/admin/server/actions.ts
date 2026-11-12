@@ -549,7 +549,7 @@ export async function bulkDeleteStudents(
   const withInvoice = new Set<string>();
   for (const part of chunkIds(ids)) {
     const { data, error } = await supabase.from("invoices").select("student_id").in("student_id", part);
-    if (error) return { error: error.message };
+    if (error) return { error: explainDbError(error, { scope: "admin.actions.bulkDeleteStudents", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
     (data ?? []).forEach((r) => withInvoice.add(r.student_id as string));
   }
 
@@ -579,7 +579,7 @@ export async function bulkDeleteStudents(
       .select("id");
     if (error) {
       await writeBulkLog();
-      return { error: error.message };
+      return { error: explainDbError(error, { scope: "admin.actions.bulkDeleteStudents", fallback: "삭제하지 못했습니다 — 잠시 후 다시 시도해 주세요", op: "delete" }).message };
     }
     done.push(...(deleted ?? []).map((r) => r.id as string));
   }

@@ -3,7 +3,7 @@
   "compilerOptions": {
     "paths": {
       "@/*": ["../../src/*"],
-      "server-only": ["../_oneoff/_server-only-shim.ts"]
+      "server-only": ["../../tests/support/server-only-shim.ts"]
     }
   }
 }

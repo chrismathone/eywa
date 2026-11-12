@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { freshSavedFilters } from "@/lib/filter-reset/server";
 import { parseClassListPrefs, type ClassListPrefs } from "../list-prefs";
+import { explainDbError } from "@/lib/supabase/db-error";
+import { writeUiPrefsNs } from "@/lib/ui-prefs/write";
 
 /**
  * `users.ui_prefs.classes`만 **필드 단위로** 갱신 — 수업목록 보기 설정(과목·담임·요일·정렬·보기).
@@ -24,17 +26,13 @@ export async function saveClassListPrefs(next: Partial<ClassListPrefs>): Promise
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
+  if (readErr) return { ok: false, error: explainDbError(readErr, { scope: "classes.list-prefs.saveClassListPrefs", fallback: "확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   const raw =
     row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs) ? (row.ui_prefs as Record<string, unknown>) : {};
   // 클라가 보낸 값을 그대로 믿지 않는다 — 파서를 한 번 태운다.
   const merged = parseClassListPrefs({ ...parseClassListPrefs(raw.classes), ...next });
-  const { error } = await admin
-    .from("users")
-    .update({ ui_prefs: { ...raw, classes: merged } })
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId);
-  if (error) return { ok: false, error: error.message };
+  const { error } = await writeUiPrefsNs(admin, { userId: user.id, tenantId: user.tenantId }, "classes", { replace: merged });
+  if (error) return { ok: false, error: explainDbError(error, { scope: "classes.list-prefs.saveClassListPrefs", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
   return { ok: true };
 }
 

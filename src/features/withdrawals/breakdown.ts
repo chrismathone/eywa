@@ -29,6 +29,8 @@ export function parseBreakdownAxis(raw: unknown): BreakdownAxis {
 
 /** 값이 없는 줄(학년·학교 미기재 · 담당 미반영)을 고르는 주소 값. */
 export const FACET_NONE = "none";
+/** 과목을 모르는 퇴원 칸의 이름 — 출처(메이크에듀 이관분)를 함께 밝힌다. */
+export const UNKNOWN_SUBJECT_LABEL = "과목 미상(메이크에듀)";
 
 /** 주소 값 정리 — 빈 값은 필터 없음. 지나치게 긴 값은 버린다(주소를 손으로 고친 것 — 사유 글은 길 수 있어 넉넉히). */
 export function parseFacet(raw: unknown): string | null {
@@ -50,7 +52,9 @@ export function subjectItems(rows: readonly Pick<Row, "subjects">[], labelOf: (k
   const counts = new Map<string, number>();
   for (const r of rows) for (const s of r.subjects.length ? r.subjects : [FACET_NONE]) counts.set(s, (counts.get(s) ?? 0) + 1);
   return [...counts]
-    .map(([value, count]) => ({ value, label: value === FACET_NONE ? "과목 미상" : labelOf(value), count }))
+    // 과목 미상 = 에이와에 수강 기록이 없는 퇴원(2025년 메이크에듀에서 이름·퇴원일만 넘어온 학생 — 2026-01~10은 퇴원생 관리 차트가 과목을 준다)
+    // · 원장 2026-11-11 *"과목미상(메이크에듀)로 해주고"*.
+    .map(([value, count]) => ({ value, label: value === FACET_NONE ? UNKNOWN_SUBJECT_LABEL : labelOf(value), count }))
     .sort((a, b) => Number(a.value === FACET_NONE) - Number(b.value === FACET_NONE) || byCount(a, b));
 }
 
@@ -228,22 +232,29 @@ export function reasonFacetLabel(value: string): string | null {
 
 // ─────────────────────────────── 강사 가리기 ───────────────────────────────
 
-/** 판정 한 벌(`server/exit-teacher-judge.ts`)에서 쓰는 두 가지 — 순수 함수로 시험할 수 있게 모양만 받는다. */
+/** 판정 한 벌(`server/exit-teacher-judge.ts`)에서 쓰는 것 — 순수 함수로 시험할 수 있게 모양만 받는다. */
 export type TeacherJudge = {
-  endedOf(studentId: string, subject: string, date: string): { endMonth: string };
-  teachersOf(studentId: string, subject: string, month: string): string[];
+  /** 그만둘 때 다니던 반의 그날 담임(`exit-homeroom.ts` — 퇴원생 관리 차트의 '담당선생님'과 같은 기준). */
+  homeroomOf(studentId: string, subject: string, date: string): string[];
+  /** 퇴원생 관리 차트의 담당(과거 달) — 있으면 이것이 이긴다(`sheet-teachers.ts`). */
+  sheetTeachersOf?(name: string, subject: string, months: readonly string[]): string[] | null;
 };
 
-type JudgeRow = { key: string; studentId: string; date: string | null; subjects: readonly string[]; systemBulk: boolean; cleanup: boolean };
+type JudgeRow = {
+  key: string; studentId: string; date: string | null; subjects: readonly string[]; systemBulk: boolean; cleanup: boolean;
+  /** 시트 줄 찾기 재료 — 이름과 센 달(퇴원월). 없으면 시트를 보지 않는다. */
+  name?: string; countDate?: string | null;
+};
 
 /** 줄 하나의 판정 — 과목 → 그 과목 퇴원을 퇴원율에 센 선생님 id(빈 배열 = 그 과목은 담당 미반영). */
 export type RowTeachers = ReadonlyMap<string, readonly string[]>;
 
 /**
- * 줄 → 과목마다 그 퇴원을 퇴원율에 센 선생님 id. 시간표 X와 같은 순서다: 과목마다 퇴원율이 센 달(`endedOf`)을 찾고 그 달 퇴원율에서
- * 이 학생·과목을 넣은 선생님(`teachersOf`)을 모은다. 🔑 줄의 **모든 과목**을 판정해 둔다 — 걸린 과목 필터는 읽는 쪽이
+ * 줄 → 과목마다 그 과목을 그만둘 때 다니던 반의 그날 담임 id(시간표 X와 같은 판정 `homeroomOf`). 🔴 강사평가 퇴원율이 센 선생님이
+ * 아니다(원장 2026-11-11 — 퇴원율은 지난달 담당·교시 담당까지 붙어 퇴원생 관리 차트와 어긋났다). 🔑 줄의 **모든 과목**을 판정해 둔다 — 걸린 과목 필터는 읽는 쪽이
  * 고른다(`teacherFacetsIn` — 과목 카드가 과목마다 다시 물어도 같은 판정이라 칸 숫자 = 눌러 거른 명단 수).
- * - 장부 정리 · 날짜 미상(시스템 정리) · 날짜 없는 줄 = 모든 과목 빈 배열('담당 미반영' — X도 이 줄을 세지 않는다)
+ * - 날짜 미상(시스템 정리) · 날짜 없는 줄 = 모든 과목 빈 배열('담당 미반영')
+ * - 장부 정리(일괄 퇴원 메모)도 판정한다(원장 2026-11-11 — 퇴원생 관리 차트는 그 학생들을 담임 앞으로 적는다 · 사유 통계에서만 뺀다)
  * - `from`(가장 이른 날)보다 앞 · 오늘 뒤 줄 = 판정하지 않는다(결과에 없음 — 화면이 '강사를 가리지 않은 줄'로 따로 센다)
  */
 export function attributeTeachers<R extends JudgeRow>(
@@ -253,13 +264,15 @@ export function attributeTeachers<R extends JudgeRow>(
 ): Map<string, RowTeachers> {
   const out = new Map<string, RowTeachers>();
   for (const r of rows) {
-    if (r.cleanup || r.systemBulk || !r.date) {
+    if (r.systemBulk || !r.date) {
       out.set(r.key, new Map(r.subjects.map((s) => [s, []])));
       continue;
     }
     if (r.date < opts.from || r.date > opts.today) continue;
     const date = r.date;
-    out.set(r.key, new Map(r.subjects.map((s) => [s, judge.teachersOf(r.studentId, s, judge.endedOf(r.studentId, s, date).endMonth)])));
+    const months = [...new Set([r.countDate, date].filter((d): d is string => !!d).map((d) => d.slice(0, 7)))];
+    const sheetOf = (s: string) => (r.name && judge.sheetTeachersOf ? judge.sheetTeachersOf(r.name, s, months) : null);
+    out.set(r.key, new Map(r.subjects.map((s) => [s, sheetOf(s) ?? judge.homeroomOf(r.studentId, s, date)])));
   }
   return out;
 }

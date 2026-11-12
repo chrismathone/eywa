@@ -45,12 +45,16 @@ const LEGACY_VISIBLE_GLYPHS = [
   "🌳",
 ] as const;
 const APPROVED_INLINE_SVG = [
+  // 2026-11-10 차트 셋(P0-3b 정리) — 원생상담 담임 게이지(role="img"+aria-label) · 과목 성적 추이 선(aria-hidden, 점·라벨은 HTML) ·
+  // 공용 분석 차트(도넛·추이, role="img"+aria-label — 숫자 카드 머리 아이콘은 EyIcon). 데이터 그림이지 아이콘 대용이 아니다.
+  "src/app/(shell)/consultations/_components/stats/stats-homeroom-gauge.tsx",
+  "src/app/(shell)/exams/_components/subject-trend-chart.tsx",
+  "src/components/analytics/charts.tsx",
   // 2026-11-05 연결 탐색 도넛(조각 경로·글자)과 네트워크 판(점·선을 엔진이 그린다) — 데이터 그림이지 아이콘 대용이 아니다.
   "src/features/explore/components/donut.tsx",
   "src/features/explore/components/network/explore-network.tsx",
   // 2026-09-23 통합 성적관리 월별 추이 선(role="img"+aria-label, 선만 SVG·점·라벨은 HTML) — 차트이지 아이콘이 아니다.
   "src/app/(shell)/exams/_components/trend-chart.tsx",
-  "src/app/(shell)/dashboard/_components/sparkline.tsx",
   "src/features/onescreen/components/report-trend-graph.tsx",
   // 2026-09-11 인재원 학습분석지(wide)의 시험 점수 추이 선 — 차트(report-trend-graph와 같은 성격).
   "src/features/ijw/components/jj-study-parts.tsx",
@@ -89,6 +93,9 @@ const APPROVED_INLINE_SVG = [
   "src/features/timetable-memo/ui/border-picker.tsx",
   "src/features/timetable-memo/ui/grid-base.tsx",
   "src/features/timetable-memo/ui/grid-overlay.tsx",
+  // 2026-11-11 퇴원관리 강사별 퇴원율 **차트 보기**(강사마다 작은 선 · aria-hidden, 점·눈금·값은 HTML · 칸은 role="group"+aria-label · 고른 달은 글로) —
+  // 차트이지 아이콘이 아니다(trend-chart와 같은 성격).
+  "src/app/(shell)/withdrawals/_components/teacher-churn-chart.tsx",
 ] as const;
 
 // 이 파일의 검사 3개가 각각 src/ 전체를 훑는다 — 디렉터리 워크는 파일 목록이 같으므로 한 번만 한다

@@ -5,7 +5,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: m.fro
 vi.mock("@/lib/auth/perm-matrix", () => ({ canAccessTenant: m.menu }));
 vi.mock("@/features/class-sheets/server/access", () => ({ requireEcsClassAccess: m.ecs }));
 vi.mock("@/features/math-sheets/server/access", () => ({ requireMcsClassAccess: m.mcs }));
-vi.mock("@/lib/date-kst", () => ({ kstToday: () => "2026-11-01" }));
+vi.mock("@/lib/date-kst", async (orig) => ({ ...(await orig<typeof import("@/lib/date-kst")>()), kstToday: () => "2026-11-01" }));
 import { resolveSheetEvidence, hasSheetProgress, sheetReferences } from "./sheet-evidence";
 const user = { id: "user", tenantId: "tenant", systemRole: "teacher" } as CurrentUser;
 const id = "00000000-0000-4000-8000-000000000001";

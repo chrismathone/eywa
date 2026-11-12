@@ -43,6 +43,7 @@ import {
   type MakeeduSyncLock,
   type MakeeduWorker,
 } from "@/features/integrations/server/makeedu-sync";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 // 트리거 직후 버튼을 즉시 잠글 락(요청/실행 행이 아직 커밋 전이어도 눌린 사용자 버튼이 바로 비활성).
 function freshBusyLock(): MakeeduSyncLock {
@@ -184,7 +185,7 @@ export async function setSheetsExportEnabled(
     },
     { onConflict: "tenant_id,provider" },
   );
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "integrations.actions.setSheetsExportEnabled", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   // 🔴 연동 설정은 **외부로 데이터가 나가는 문**이라 누가 언제 열고 닫았는지가 남아야 한다
   //    (2026-08-27 점검 전까지 이 계열은 감사로그가 통째로 없었고, user_integrations엔 updated_by도 없다).
@@ -226,7 +227,7 @@ export async function setSubjectSheetTarget(
     },
     { onConflict: "tenant_id,provider" },
   );
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "integrations.actions.setSubjectSheetTarget", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   // ⚠️ 시트 ID(외부 문서 식별자)는 **값을 남기지 않는다** — 지정/해제 사실만.
   await logAction({
@@ -264,7 +265,7 @@ export async function setMakeeduSyncEnabled(enabled: boolean): Promise<ToggleSta
     },
     { onConflict: "tenant_id,provider" },
   );
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "integrations.actions.setMakeeduSyncEnabled", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
 
   await logAction({
     action: "integration_sync_toggle",
@@ -410,7 +411,7 @@ async function enqueueSyncRequest(tenantId: string, userId: string): Promise<Tri
       .eq("tenant_id", tenantId)
       .in("status", ["pending", "running"])
       .limit(1);
-    if (selErr) return { error: `동기화 요청 확인 실패: ${selErr.message}` };
+    if (selErr) return { error: explainDbError(selErr, { scope: "integrations.actions.enqueueSyncRequest", fallback: "동기화 요청 확인 실패 — 잠시 후 다시 시도해 주세요" }).message };
     if (existing && existing.length > 0) {
       // 다른 사용자(또는 다른 탭)가 이미 눌러 처리 중 — 같은 시각까지 이 버튼도 잠근다(공유 lock).
       return {
@@ -428,7 +429,7 @@ async function enqueueSyncRequest(tenantId: string, userId: string): Promise<Tri
     const { error: insErr } = await admin
       .from("makeedu_sync_requests")
       .insert({ tenant_id: tenantId, requested_by: userId });
-    if (insErr) return { error: `동기화 요청 접수 실패: ${insErr.message}` };
+    if (insErr) return { error: explainDbError(insErr, { scope: "integrations.actions.enqueueSyncRequest", fallback: "동기화 요청 접수 실패 — 잠시 후 다시 시도해 주세요" }).message };
     return {
       ok: true,
       message:
@@ -471,7 +472,7 @@ export async function enqueueConsultationPush(ids: string[]): Promise<PushState>
     .is("makeedu_id", null)
     .is("makeedu_pushed_at", null)
     .in("id", clean);
-  if (selErr) return { error: `대상 확인 실패: ${selErr.message}` };
+  if (selErr) return { error: explainDbError(selErr, { scope: "integrations.actions.enqueueConsultationPush", fallback: "대상 확인 실패 — 잠시 후 다시 시도해 주세요" }).message };
   const validIds = (valid ?? [])
     .filter((r) => {
       const s = Array.isArray(r.student) ? r.student[0] : r.student;
@@ -500,7 +501,7 @@ export async function enqueueConsultationPush(ids: string[]): Promise<PushState>
   const { error: insErr } = await admin.from("makeedu_push_requests").insert(
     toQueue.map((cid) => ({ tenant_id: user.tenantId, consultation_id: cid, requested_by: user.id })),
   );
-  if (insErr) return { error: `전송 요청 접수 실패: ${insErr.message}` };
+  if (insErr) return { error: explainDbError(insErr, { scope: "integrations.actions.enqueueConsultationPush", fallback: "전송 요청 접수 실패 — 잠시 후 다시 시도해 주세요" }).message };
 
   // 🔴 **외부(makeedu)로 학생·상담이 나가는 경로**라 누가 몇 건을 보냈는지 남긴다.
   await logAction({

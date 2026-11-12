@@ -17,7 +17,7 @@ export function kstDateOf(iso: string | null | undefined): string | null {
 export const dowOf = (day: string): string => AXIS_DOW[weekdayIndexOf(day)];
 export const between = (value: string | null | undefined, from: string, to: string): boolean =>
   Boolean(value) && (value as string) >= from && (value as string) <= to;
-export const round1 = (n: number): number => Math.round(n * 10) / 10;
+export { round1 } from "@/lib/guards";
 
 export function daysBetween(start: string, end: string): string[] {
   const days: string[] = [];

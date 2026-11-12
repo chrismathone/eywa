@@ -26,6 +26,8 @@ vi.mock("@/lib/auth/current-user", () => ({
   getCurrentUser: async (o?: { teacherView?: boolean }) => (o?.teacherView && m.target ? m.target : A),
 }));
 vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => false }));
+// 권한표 = 코드 기본값(셔틀 관리자 화면 = 원장·관리자 — 2026-11-10 권한 줄). 실제 getUserPermMatrix는 강사뷰면 대상 값으로 덮지만, 대상 X는 강사라 기본값에서도 닫힌다.
+vi.mock("@/lib/auth/perm-matrix", async () => ({ getUserPermMatrix: async () => (await import("@/lib/permissions")).resolveMatrix([]) }));
 vi.mock("@/lib/auth/view-as", () => ({
   readonlyTeacherViewError: async () => { m.readonlyCalls++; return m.readonly; },
 }));

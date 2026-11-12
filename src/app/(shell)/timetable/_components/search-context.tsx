@@ -221,11 +221,8 @@ export function useSearchTone(student: TimetableSearchStudent, tone: string): st
 }
 
 /**
- * 툴바 검색 **토글** — 평소엔 '검색' 글자 하나, 누르면 입력칸(+지금 걸린 필터 표기)이 펼쳐진다.
- *
- * 지시서 §10 "검색은 필요할 때만 나타나게(단축키 또는 토글)" — 공용 [`SearchToggle`](@/components/search-toggle)과 같은 모양이되
- * 이 검색은 URL이 아니라 클라 상태라 그쪽 부품(SearchForm = router.push)을 못 쓴다. 규약은 같다: 검색어가 걸려 있으면 **언제나**
- * 펼친 채(무엇으로 걸러졌는지 보여야 한다) · 빈 채로 열었으면 '닫기'로 되돌린다.
+ * 툴바 검색칸 — 늘 펼친 입력칸(+지금 걸린 필터 표기). 원장 2026-11-11 '닫기' 제거(공용 [`SearchToggle`](@/components/search-toggle)과 같다).
+ * 이 검색은 URL이 아니라 클라 상태라 그쪽 부품(SearchForm = router.push)을 못 쓰고 [`StudentSearchToggle`](@/features/attendance/components/student-search-box)을 쓴다.
  * ⚠️ 입력칸이 숨는 상황(편집 모드·반 0개)엔 통째로 사라진다 — 구분선을 따로 안 그리는 이유.
  */
 export function TimetableSearchToggle() {

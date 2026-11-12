@@ -1,0 +1,12 @@
+import { beforeEach,describe,it,expect,vi } from "vitest";
+import { render,screen,fireEvent,waitFor,cleanup } from "@testing-library/react";
+const refresh=vi.hoisted(()=>vi.fn());vi.mock("next/navigation",()=>({useRouter:()=>({refresh}),usePathname:()=>"/marketing",useSearchParams:()=>new URLSearchParams()}));
+import { ArchiveWorkspace } from "./workspace";
+import {blankEvent} from "./model";
+import type {ArchiveData} from "./server";
+const data:ArchiveData={today:"2026-11-10",canWrite:true,staff:[],sources:[],edges:[],links:[],events:[{id:"00000000-0000-4000-8000-000000000001",version:1,updated_at:"2026-11-10",document:{...blankEvent(),title:"250207 EiE 설명회",date:"2025-02-07",reservationRaw:"13",attendanceRaw:"6명 (취소 7명)",actualCost:254114,costReference:"비용표",raw:{"설명회명 및 날짜":"250207 EiE 설명회"}}}]};
+describe("unified marketing workspace",()=>{
+ beforeEach(()=>{cleanup();vi.clearAllMocks();Element.prototype.scrollIntoView=vi.fn();vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>({record:{id:"saved"}})}));});
+ it("keeps raw reported attendance separate from confirmed counts and preserves source fields on save",async()=>{render(<ArchiveWorkspace data={data}/>);fireEvent.click(screen.getByRole("button",{name:"250207 EiE 설명회"}));fireEvent.click(screen.getByRole("button",{name:"③ 참석·비용·성과"}));expect(screen.getByLabelText("확인한 실제 참석 인원")).toHaveValue(null);fireEvent.change(screen.getByLabelText("확인한 실제 참석 인원"),{target:{value:"6"}});fireEvent.click(screen.getByRole("button",{name:"프로젝트 저장"}));await waitFor(()=>expect(fetch).toHaveBeenCalled());const request=JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string);expect(request.document.attendees).toBe(6);expect(request.document.attendanceRaw).toBe("6명 (취소 7명)");expect(request.document.raw).toEqual(data.events[0].document.raw);});
+ it("creates a next-year plan from history without copying actuals",async()=>{render(<ArchiveWorkspace data={data}/>);fireEvent.click(screen.getByRole("button",{name:"3개년 비교·신년 기획"}));fireEvent.click(screen.getByRole("button",{name:"이 기록으로 2027 기획"}));fireEvent.click(screen.getByRole("button",{name:"프로젝트 저장"}));await waitFor(()=>expect(fetch).toHaveBeenCalled());const request=JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string);expect(request.document.referenceEventId).toBe(data.events[0].id);expect(request.document.state).toBe("planned");expect(request.document.actualCost).toBeNull();expect(request.document.attendanceRaw).toBe("");expect(request.document.raw).toEqual({});});
+});

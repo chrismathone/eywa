@@ -51,7 +51,6 @@ describe("F1 겹침 배선", () => {
       { file: "app/(shell)/attendance/page.tsx", slug: "attendance" },
       { file: "app/(shell)/attendance/_components/matrix-table.tsx", slug: "attendance" },
       { file: "app/(shell)/students/page.tsx", slug: "students" },
-      { file: "app/(shell)/dashboard/_overview/kpi-strip.tsx", slug: "dashboard" },
       { file: "features/onescreen/components/top-bar.tsx", slug: "onescreen" },
       { file: "app/(shell)/help/page.tsx", slug: "help" },
       { file: "app/(shell)/help/_help-browser.tsx", slug: "help" },
@@ -76,16 +75,7 @@ describe("F1 겹침 배선", () => {
     expect(read("components/help/screen-help-overlay.tsx")).toContain("teacher_view_lang");
   });
 
-  it("운영실 kpi-strip 의 helpKey 는 dashboard manuals 키다", () => {
-    const keys = new Set(
-      MANUALS.find((m) => m.slug === "dashboard")?.callouts.map((c) => c.key).filter(Boolean),
-    );
-    const used = [...read("app/(shell)/dashboard/_overview/kpi-strip.tsx").matchAll(/helpKey="([^"]+)"/g)].map(
-      (m) => m[1]!,
-    );
-    expect(used.length).toBeGreaterThan(5);
-    for (const k of used) expect(keys.has(k), k).toBe(true);
-  });
+  // 운영실 KPI 띠(옛 kpi-strip)의 F1 키 가드는 옛 운영실 화면과 함께 걷었다(2026-11-10 P3-D) — 새 대시보드엔 F1 표식이 아직 없다(11-09부터).
 
   it("모델 A: 캡션 껍데기·모달·알약은 measure 를 다시 안 부른다", () => {
     const overlay = read("components/help/screen-help-overlay.tsx");

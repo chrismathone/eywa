@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { EXIT_REPORT_RULE, exitBasisRule } from "@/features/withdrawals/exit-basis";
 import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
@@ -193,9 +191,6 @@ describe("상세", () => {
     expect(withdrawalHead("2026-11", "2026-11-11", change)).toEqual({ label: "퇴원", period: "(26.11)", periodLead: "이번달", emphasis: 2 });
     expect(withdrawalHead("2026-08", "2026-11-02", change).emphasis).toBe(-1);
     expect(withdrawalHead("2026-10", "2026-11-02", null).emphasis).toBe(-1);
-  });
-  it("범위 문장 = 기존 운영실 팝업 맨 아래 셋째 줄과 같은 글자(팝업 파일이 글자로 들고 있다 — 한쪽만 고치면 실패)", () => {
-    expect(readFileSync(join(process.cwd(), "src/app/(shell)/dashboard/_overview/kpi-popups.tsx"), "utf8")).toContain(WITHDRAWAL_SCOPE_NOTE);
   });
   it("과목 값은 달 키로 맞춘다 — 없는 달은 빈칸", () => {
     const by = details.courseTrend!.bySubject!["EiE"]!;

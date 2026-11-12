@@ -9,7 +9,6 @@ export const GRID_COLS = 24;
 /** 카드 하나가 차지할 수 있는 고정 격자 행 수. */
 export const MAX_ROW_SPAN = 256;
 export const MAX_GRID_Y = 4096;
-export const GRID_ROW_PX = 64;
 export const MAX_ITEMS = 80;
 
 /** 역할 묶음 — 설계 메모(2026-10-01)의 판정 + 그 밖에 운영실을 여는 계정(상담·회계·열람·아르바이트). */

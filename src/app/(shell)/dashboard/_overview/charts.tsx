@@ -1,18 +1,18 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import type { Distribution } from "@/features/dashboard/overview/model";
 import { dashboardDate } from "@/features/dashboard/overview/display";
 import { DetailPopup } from "./detail-popup";
 import s from "./overview.module.css";
 
+/** 계열 색 = 테마 변수(차콜 테마·기본 팔레트를 함께 따른다 — 2026-11-09 색감 통일). 순서: 기본 · 정보 · 완료 · 주의 · 예외 · 중립. */
 export const COLORS = [
-  "#363c41",
-  "#485055",
-  "#0d7743",
-  "#bc7f26",
-  "#8666a5",
-  "#84909e",
+  "var(--primary)",
+  "var(--blue)",
+  "var(--green)",
+  "var(--amber)",
+  "var(--purple)",
+  "var(--neutral-fill)",
 ];
 export const number = (n: number) => n.toLocaleString("ko-KR");
 export const money = (n: number) => `${number(Math.round(n / 10_000))}만원`;
@@ -160,7 +160,7 @@ export function Donut({
           cy="80"
           r="61"
           fill="none"
-          stroke="#edf0f4"
+          stroke="var(--bg-soft)"
           strokeWidth="20"
         />
         {data.map((d, i) => {
@@ -275,7 +275,7 @@ export function Columns({
               x2={width - right}
               y1={y(v)}
               y2={y(v)}
-              stroke="#e2e7ed"
+              stroke="var(--line)"
               strokeDasharray={v ? "3 4" : undefined}
             />
             <text x={left - 8} y={y(v) + 4} textAnchor="end" className={s.axis}>
@@ -301,7 +301,7 @@ export function Columns({
                     const below = lowest && y(value) + 16 <= top + plot - 2;
                     return (
                       <g key={label}>
-                        <circle cx={cx(i)} cy={y(value)} r="3.5" fill="white" stroke={v.color} strokeWidth="2">
+                        <circle cx={cx(i)} cy={y(value)} r="3.5" fill="var(--card)" stroke={v.color} strokeWidth="2">
                           <title>{`${label} ${v.name}: ${number(value)}${unit}`}</title>
                         </circle>
                         {show && !tie && (
@@ -409,19 +409,8 @@ export function AttendanceHistory({
   const bar = Math.min(26, step * 0.6);
   const x = (i: number) => left + step * (i + 0.5);
   const y = (n: number) => top + ((100 - n) / 100) * plotHeight;
-  const heat = [
-    "#b94141",
-    "#bd553c",
-    "#b96a34",
-    "#a77c30",
-    "#938b32",
-    "#809539",
-    "#639642",
-    "#448b47",
-    "#298146",
-    "#177748",
-    "#0d7743",
-  ];
+  // 등원율 0%(주의 빨강) → 100%(완료 초록) 11단계 — 두 의미색을 섞어 만든다(테마를 따른다).
+  const heat = Array.from({ length: 11 }, (_, i) => `color-mix(in srgb, var(--green) ${i * 10}%, var(--danger))`);
   return (
     <>
       <svg
@@ -438,7 +427,7 @@ export function AttendanceHistory({
               x2={width - 12}
               y1={y(v)}
               y2={y(v)}
-              stroke="#e2e7ed"
+              stroke="var(--line)"
               strokeDasharray="3 4"
             />
             <text x={left - 7} y={y(v) + 4} textAnchor="end" className={s.axis}>
@@ -514,35 +503,5 @@ export function AttendanceHistory({
         </div>
       </DetailPopup>
     </>
-  );
-}
-
-export function Stack({
-  data,
-  label,
-}: {
-  data: (Distribution[number] & { color: string })[];
-  label: string;
-}) {
-  const total = data.reduce((sum, item) => sum + item.value, 0);
-  return (
-    <div
-      className={s.stack}
-      role="img"
-      aria-label={`${label}: ${data.map((d) => `${d.label} ${d.value}`).join(", ")}`}
-    >
-      {data
-        .filter((d) => d.value > 0)
-        .map((d) => (
-          <span
-            key={d.label}
-            style={{
-              width: `${(d.value / total) * 100}%`,
-              background: d.color,
-            }}
-            title={`${d.label} ${d.value}`}
-          />
-        ))}
-    </div>
   );
 }

@@ -56,7 +56,7 @@ export function JjExamPicker({
   return (
     <details className="border-line rounded-lg border text-xs">
       <summary className="flex cursor-pointer flex-wrap items-center gap-1.5 px-2 py-1.5 select-none">
-        <span className="text-text font-bold">{t("os.tpl.jjPickTitle")}</span>
+        <span className="text-foreground font-bold">{t("os.tpl.jjPickTitle")}</span>
         <span
           className={pick && !count ? "text-amber font-bold" : "text-text-dim"}
         >
@@ -83,7 +83,7 @@ export function JjExamPicker({
                       }
                     />
                     <span
-                      className="text-text min-w-0 flex-1 overflow-hidden font-bold text-ellipsis whitespace-nowrap"
+                      className="text-foreground min-w-0 flex-1 overflow-hidden font-bold text-ellipsis whitespace-nowrap"
                       title={o.deck}
                     >
                       {o.deck}

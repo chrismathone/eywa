@@ -83,6 +83,8 @@ export async function loadCheckRows(
   supabase: Supabase,
   studentIds: readonly string[],
   scope: ScopeFn = identity,
+  /** 완료 메모·연결 상담까지 읽나 — 신규생 관리 화면만(운영실 신호는 날짜만 쓴다 · 창마다 도는 경로에 메모를 싣지 않는다). */
+  withDetails = false,
 ): Promise<{ ok: true; rows: CheckRowInput[]; subjectAware: boolean } | { ok: false; error: unknown }> {
   if (studentIds.length === 0) return { ok: true, rows: [], subjectAware: true };
   try {
@@ -92,18 +94,23 @@ export async function loadCheckRows(
       item_key: string;
       done_on: string | null;
       subject: string | null;
+      memo?: string | null;
+      consultation_id?: string | null;
     }>([...studentIds], (chunk, from, to) =>
       scope(
         supabase
           .from("student_onboarding_checks")
-          .select("student_id, item_key, done_on, subject")
+          .select((withDetails ? "student_id, item_key, done_on, subject, memo, consultation_id" : "student_id, item_key, done_on, subject") as "student_id, item_key, done_on, subject")
           .in("student_id", chunk),
       ).order("id").range(from, to),
     );
     return {
       ok: true,
       subjectAware: true,
-      rows: rows.map((r) => ({ studentId: r.student_id, itemKey: r.item_key, doneOn: r.done_on, subject: r.subject })),
+      rows: rows.map((r) => ({
+        studentId: r.student_id, itemKey: r.item_key, doneOn: r.done_on, subject: r.subject,
+        memo: r.memo ?? null, consultationId: r.consultation_id ?? null,
+      })),
     };
   } catch (e) {
     if (!isMissingSubjectColumn(e)) return { ok: false, error: e };

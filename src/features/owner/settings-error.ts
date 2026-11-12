@@ -1,4 +1,5 @@
 import { settingFieldLabel } from "./settings-diff";
+import { isRecord } from "@/lib/guards";
 
 /**
  * 학원 설정 저장의 **화면용 오류 문구** — 순수(Vitest). 일반 지점 화면에 내부 식별자를 내보내지 않는다.
@@ -68,6 +69,13 @@ const VALIDATION_ONLY_LABELS: Record<string, Record<string, string>> = {
 
 /** 칸 안쪽의 이름 — 어느 섹션에서든 같은 뜻으로 쓰이는 키만(허용 목록). 없는 키는 문구에 싣지 않는다. */
 const NESTED_LABELS: Record<string, string> = {
+  // 상담 준비 브리프 운영 안내(2026-11-12) — 주제 라벨은 brief-facts.ts와 같다.
+  reportCycle: "보고·학부모 상담 주기",
+  homework: "과제·오답 관리",
+  makeup: "보강",
+  placement: "레벨테스트·반 배정·첫 수업",
+  trial: "체험 수업",
+  discount: "할인",
   label: "이름",
   name: "이름",
   title: "제목",
@@ -90,7 +98,6 @@ const NESTED_LABELS: Record<string, string> = {
   number: "계좌번호",
 };
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /**
  * 이름 표에서 **제 속성인 문자열만** 꺼낸다 — 키는 사용자가 보낸 경로에서 온다. `constructor`·`toString` 같은 키로

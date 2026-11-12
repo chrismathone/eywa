@@ -10,6 +10,8 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { isModuleEnabled } from "@/lib/modules";
+import { isFeatureOptedIn } from "@/lib/license/server";
+import { loadConsultationRatings } from "@/features/consultation-rating/server/ratings";
 import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import {
   getConsultationCounselorOptions,
@@ -95,7 +97,7 @@ export default async function ConsultationsPage({
     subject: subject || undefined,
     subjectLabel: subject ? subjects.labelOf(subject) : null,
   };
-  const [{ rows: items, total, classSupported }, counts, counselorOptions, canImportExcel, teacherId, canWrite] = await Promise.all([
+  const [{ rows: items, total, classSupported, failed: listFailed }, counts, counselorOptions, canImportExcel, teacherId, canWrite, ratingSwitch] = await Promise.all([
     getStudentConsultationsPage(filters, page, size),
     getStudentConsultationCounts(),
     getConsultationCounselorOptions(),
@@ -104,7 +106,11 @@ export default async function ConsultationsPage({
     effectiveTeacherId(),
     // '상담 추가' = 저장 게이트(createStudentConsultation)와 같은 판정 — 읽기 권한이면 단추를 그리지 않는다(원장 2026-11-05).
     canWriteTenant(user.systemRole, "consultations"),
+    // '상담 평점' 열 = 지점 스위치(consult_rating)가 켜진 지점만 — 꺼진 지점엔 열이 있었는지조차 모르게(요청마다 한 번 캐시).
+    isFeatureOptedIn(user.tenantId, "consult_rating"),
   ]);
+  // 상담자의 기록을 평가한 값 — 스위치가 켜져 있어도 상담 쓰기 권한이 있는 사람에게만 내려보낸다(수업보고서 평점과 같은 게이트 · #77).
+  const ratings = ratingSwitch && canWrite ? await loadConsultationRatings(user.tenantId, items.map((c) => c.id)) : null;
   const totalPages = Math.max(1, Math.ceil(total / size));
   const { thisMonth, lastWeek, pendingFollowUps, overdueFollowUps } = counts;
   const listParams: ConsultationListParams = { range, cat, urg, who, subject, q, size, page };
@@ -186,7 +192,12 @@ export default async function ConsultationsPage({
 
       {/* 목록 — 화면 폭을 다 쓴다(넓으면 2단, 좁으면 1단 · consultation-list.tsx). 통계는 옆 패널이 아니라 '통계 보기' 전용 화면(원장 2026-10-01). */}
       <div data-autopage-root="">
-        {total === 0 ? (
+        {listFailed ? (
+          // 조회 실패는 "상담 0건"이 아니다(B3) — 없다고 말하지 않고 다시 시도를 안내한다.
+          <p role="alert" className="border-danger/30 bg-danger-soft text-danger rounded-xl border px-4 py-2.5 text-sm">
+            상담 목록을 불러오지 못했습니다 — 잠시 뒤 새로 고쳐 주세요.
+          </p>
+        ) : total === 0 ? (
           <div className="mx-auto max-w-xl py-4">
             <PhotoCard
               src="/photos/consultations-hero.webp"
@@ -199,7 +210,14 @@ export default async function ConsultationsPage({
           </div>
         ) : (
           <>
-            <ConsultationList items={items} size={size} pageSizeKey={PAGE_SIZE_KEY} classOn={classSupported} />
+            {/* 과목 칸은 키(`math`)와 한글 라벨이 섞여 저장된다 — 학원 설정 이름으로 바꿔 넘긴다(상세 화면과 같은 labelOf · 원문 코드 노출 금지). */}
+            <ConsultationList
+              items={items.map((c) => (c.subject ? { ...c, subject: subjects.labelOf(c.subject) } : c))}
+              size={size}
+              pageSizeKey={PAGE_SIZE_KEY}
+              classOn={classSupported}
+              ratings={ratings}
+            />
             <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
           </>
         )}

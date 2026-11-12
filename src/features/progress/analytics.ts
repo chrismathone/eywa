@@ -3,6 +3,7 @@
  * 속도(forward-only·수업일 기준) / 또래 백분위 / 미래 예측. DB 접근 없음(입력은 배열). Vitest 대상.
  */
 import { TOTAL_LESSONS } from "./curriculum-position";
+import { diffDays } from "@/lib/date-kst";
 
 /** UTC 기준 날짜 파싱(TZ 무관) — "YYYY-MM-DD" */
 function ymdToUtc(iso: string): number {
@@ -12,10 +13,6 @@ function ymdToUtc(iso: string): number {
 function shiftDays(iso: string, delta: number): string {
   return new Date(ymdToUtc(iso) + delta * 86400000).toISOString().slice(0, 10);
 }
-function daysBetween(a: string, b: string): number {
-  return Math.round((ymdToUtc(b) - ymdToUtc(a)) / 86400000);
-}
-
 export type ProgressEntry = { globalPosition: number; entryDate: string }; // entryDate = "YYYY-MM-DD"
 
 export type SpeedStats = {
@@ -47,7 +44,7 @@ export function computeSpeedStats(entries: ProgressEntry[], sinceDays: number, t
   }
   // 창이 하루 이내(같은 날짜만)면 span=0 → 일당 속도 산출 불가 → 0(edutrix days<=0 가드).
   // Math.max(1,…)로 span을 1일로 깔면 하루치 전진을 매일 반복으로 외삽해 허위 예측이 난다.
-  const span = daysBetween(win[0]!.entryDate, win[win.length - 1]!.entryDate);
+  const span = diffDays(win[0]!.entryDate, win[win.length - 1]!.entryDate);
   return {
     advancement,
     lessonDays,

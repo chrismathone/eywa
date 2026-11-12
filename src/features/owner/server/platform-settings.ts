@@ -5,6 +5,7 @@ import { normalizeDashboard } from "@/features/dashboard/layout/normalize";
 import { sameItems } from "@/features/dashboard/layout/engine";
 import { permissionsSchema, SPECIAL_ACCESS_ID_LISTS, type PermissionsSettings } from "../settings-types";
 import { effectivePayslipManagerIds } from "../payslip-permissions";
+import { isRecord } from "@/lib/guards";
 
 /** 지점 설정 대상에서 운영자 계정을 제외한다. 조회 실패는 빈 명단으로 취급하지 않는다. */
 export async function platformAccountIds(ids: readonly string[]): Promise<Set<string>> {
@@ -16,7 +17,6 @@ export async function platformAccountIds(ids: readonly string[]): Promise<Set<st
   return new Set(rows.map((row) => row.id));
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
  * 역할·권한 설정에 이름이 올라 있는 계정 전부(개인별 메뉴 권한 + 개인별 기능 권한의 네 칸).

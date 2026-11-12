@@ -28,6 +28,27 @@ const SKIP_DIRS = ["(marketing)", "(print)"];
  * 이유를 못 적겠으면 넣지 말고 띠를 뺄 것. 각 항목은 **실제로 한 줄 이상에 걸려야** 한다(죽은 항목 금지).
  */
 const ALLOWED: { file: string; line: RegExp; reason: string }[] = [
+  // ── 2026-11-10 P0-3b 정리 — 띠가 아닌 네 줄(강사 허브 갈래 줄기선은 같은 날 색감 통일에서 선 자체를 뺐다 — 세 칸 가로 줄 옆 세로선이 왼쪽 띠로 읽혔다) ──
+  {
+    file: "app/(shell)/dashboard/_instruments/instruments.css",
+    line: /\.tree-toggle::before \{ content: ''; display: block; width: 0; height: 0;/,
+    reason: "폴더 펼침 삼각형 — 폭·높이 0인 요소의 테두리로 그리는 도형이지 띠가 아니다",
+  },
+  {
+    file: "app/(shell)/dashboard/_instruments/work/work.css",
+    line: /\.picker-group summary::before \{ content: ''; width: 0; height: 0;/,
+    reason: "묶음 펼침 삼각형 — 폭·높이 0인 요소의 테두리로 그리는 도형이지 띠가 아니다",
+  },
+  {
+    file: "features/onescreen/components/monthly-report-sheet.module.css",
+    line: /^\s*border-left: 14px solid var\(--eie-red\);/,
+    reason: "EiE 월간 보고서 지면의 양쪽 테두리(오른쪽도 같은 굵기) — 시트를 본뜬 종이 틀이지 카드의 왼쪽 강조 띠가 아니다",
+  },
+  {
+    file: "features/student-contribution/components/loyalty-ranking.module.css",
+    line: /\.dropTarget\{box-shadow:inset 3px 0 0 /,
+    reason: "열을 끌어 옮길 때 '여기에 끼워진다'는 삽입 위치 표시 — 끄는 동안에만 선다(teacher-head-cell과 같은 성격)",
+  },
   {
     file: "app/(shell)/timetable/_components/weekday-group-tables.tsx",
     line: /GROUP_DIVIDER = "border-l-2/,
@@ -45,7 +66,7 @@ const ALLOWED: { file: string; line: RegExp; reason: string }[] = [
   },
   {
     file: "features/timetable-lab/editor/timetable-views.css",
-    line: /\.teacher-start \{ border-left: 2px solid #777/,
+    line: /\.teacher-start \{ border-left: 2px solid var\(--neutral-fill\)/,
     reason: "시간표 편집기에서 강사가 바뀌는 첫 요일 칸의 경계선 — 칸과 칸 사이를 가르는 구조선",
   },
   {
