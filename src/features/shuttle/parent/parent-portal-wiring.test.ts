@@ -13,7 +13,15 @@ describe("학부모 포털 이용 가능 상태 배선", () => {
       "src/app/(parent)/parent/classes/page.tsx",
       "src/app/(parent)/parent/rides/page.tsx",
     ]) {
-      expect(read(path), path).toContain("parentPortalAvailable");
+      const source = read(path);
+      // 판정(3상태 또는 켜짐 여부)이 데이터 조회·이동보다 먼저 온다 — 페이지는 빈 본문(null) 대신 같은 종착 화면을 그린다.
+      const gate = source.search(/parentPortal(State|Available)\(viewer\)/);
+      expect(gate, path).toBeGreaterThan(-1);
+      expect(source, path).not.toContain("return null;");
+      for (const later of ['redirect("/parent/rides")', "await load", "loadParent"]) {
+        const at = source.indexOf(later, source.indexOf("export default"));
+        if (at > -1 && !path.endsWith("layout.tsx")) expect(gate, `${path} · ${later}`).toBeLessThan(at);
+      }
     }
   });
 

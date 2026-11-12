@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 
 import { formatKoreanDate, kstMinutesOfDay, kstToday } from "@/lib/date-kst";
-import { parentPortalAvailable } from "@/features/shuttle/parent/server/parent-availability";
+import { parentPortalAvailable, parentPortalState } from "@/features/shuttle/parent/server/parent-availability";
 import { getParentViewer } from "@/features/shuttle/parent/server/parent-viewer";
+import { ParentPortalUnavailable } from "../_components/parent-portal-unavailable";
 import { loadParentRideLegsFor } from "@/features/shuttle/parent/server/parent-ride-data";
 import { AbsentButton } from "@/features/shuttle/parent/components/absent-button";
 import { KstClock } from "@/features/shuttle/components/kst-clock";
@@ -41,7 +42,9 @@ export default async function ParentRidesPage({
 }) {
   const viewer = await getParentViewer();
   if (!viewer) redirect("/home");
-  if (!(await parentPortalAvailable(viewer))) return null;
+  // 화면을 연 채로 기능이 꺼지면 탭 이동에 레이아웃이 다시 그려지지 않는다 — 빈 본문 대신 같은 종착 화면.
+  const portal = await parentPortalState(viewer);
+  if (portal !== "on") return <ParentPortalUnavailable state={portal} />;
   const { day, view, edit, month, kid, date, dates, fixed } = await searchParams;
   const wantEdit = edit === "1";
 

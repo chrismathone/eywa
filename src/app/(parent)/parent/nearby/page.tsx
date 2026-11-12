@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 
 import { getParentViewer } from "@/features/shuttle/parent/server/parent-viewer";
-import { parentPortalAvailable } from "@/features/shuttle/parent/server/parent-availability";
+import { ParentPortalUnavailable } from "../_components/parent-portal-unavailable";
+import { parentPortalAvailable, parentPortalState } from "@/features/shuttle/parent/server/parent-availability";
 import { loadParentNearbyNetwork } from "@/features/shuttle/parent/server/nearby-data";
 import { ACADEMY_LOCATION } from "@/features/shuttle/map/academy-location";
 import { NearbyView } from "./_components/nearby-view";
@@ -21,7 +22,9 @@ const KAKAO_MAP_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY ?? "";
 export default async function ParentNearbyPage() {
   const viewer = await getParentViewer();
   if (!viewer) redirect("/home");
-  if (!(await parentPortalAvailable(viewer))) return null;
+  // 화면을 연 채로 기능이 꺼지면 탭 이동에 레이아웃이 다시 그려지지 않는다 — 빈 본문 대신 같은 종착 화면.
+  const portal = await parentPortalState(viewer);
+  if (portal !== "on") return <ParentPortalUnavailable state={portal} />;
   const { stops, runs } = await loadParentNearbyNetwork(viewer);
   return (
     <>

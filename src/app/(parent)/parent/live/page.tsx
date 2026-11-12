@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 
 import { kstMinutesOfDay } from "@/lib/date-kst";
-import { parentPortalAvailable } from "@/features/shuttle/parent/server/parent-availability";
+import { parentPortalAvailable, parentPortalState } from "@/features/shuttle/parent/server/parent-availability";
 import { getParentViewer } from "@/features/shuttle/parent/server/parent-viewer";
+import { ParentPortalUnavailable } from "../_components/parent-portal-unavailable";
 import { loadParentLiveData } from "@/features/shuttle/map/server/parent-live-data";
 import { nearestLegKey } from "@/features/shuttle/map/parent-live";
 import { ACADEMY_LOCATION } from "@/features/shuttle/map/academy-location";
@@ -26,7 +27,9 @@ const KAKAO_MAP_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY ?? "";
 export default async function ParentLivePage() {
   const viewer = await getParentViewer();
   if (!viewer) redirect("/home");
-  if (!(await parentPortalAvailable(viewer))) return null;
+  // 화면을 연 채로 기능이 꺼지면 탭 이동에 레이아웃이 다시 그려지지 않는다 — 빈 본문 대신 같은 종착 화면.
+  const portal = await parentPortalState(viewer);
+  if (portal !== "on") return <ParentPortalUnavailable state={portal} />;
   const { legs } = await loadParentLiveData(viewer);
 
   return (

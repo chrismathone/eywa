@@ -4,8 +4,9 @@ import { redirect } from "next/navigation";
 import { formatKoreanDate, kstToday } from "@/lib/date-kst";
 import { loadParentTimetables } from "@/features/classes/server/parent-timetable-data";
 import type { TimetableDayRow } from "@/features/classes/parent-timetable";
-import { parentPortalAvailable } from "@/features/shuttle/parent/server/parent-availability";
+import { parentPortalAvailable, parentPortalState } from "@/features/shuttle/parent/server/parent-availability";
 import { getParentViewer } from "@/features/shuttle/parent/server/parent-viewer";
+import { ParentPortalUnavailable } from "../_components/parent-portal-unavailable";
 import { loadAcademyHolidays, restDayName } from "@/features/shuttle/parent/server/rest-days";
 import { weekDates } from "@/features/shuttle/parent/parent-rides";
 import { dayLabel, type DayCode } from "@/features/shuttle/types";
@@ -26,7 +27,9 @@ export async function generateMetadata() {
 export default async function ParentClassesPage() {
   const viewer = await getParentViewer();
   if (!viewer) redirect("/home");
-  if (!(await parentPortalAvailable(viewer))) return null;
+  // 화면을 연 채로 기능이 꺼지면 탭 이동에 레이아웃이 다시 그려지지 않는다 — 빈 본문 대신 같은 종착 화면.
+  const portal = await parentPortalState(viewer);
+  if (portal !== "on") return <ParentPortalUnavailable state={portal} />;
   const today = kstToday();
   const week = weekDates(today);
   const [tables, academyHolidays] = await Promise.all([
