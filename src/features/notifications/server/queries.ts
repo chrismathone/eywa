@@ -3,7 +3,10 @@ import { notificationInbox } from "./inbox";
 import { NOTIFICATION_LIST_LIMIT, NOTIFICATION_LIST_MAX, type NotificationItem } from "../types";
 import { presentNotification } from "../presentation";
 import { myTaskSummary, notificationTaskBadges } from "@/features/staff-tasks/server/bell";
-import type { StaffTaskSummary } from "@/features/staff-tasks/kinds";
+import { taskKindLabel, type StaffTaskSummary } from "@/features/staff-tasks/kinds";
+import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { hiddenNotificationTypes } from "../module-visibility";
+import { hiddenStaffTaskKinds } from "@/features/staff-tasks/task-visibility";
 
 /** 클라가 보낸 목록 크기를 믿지 않고 20~100 사이로 맞춘다. */
 export function clampNotificationLimit(limit: unknown): number {
@@ -44,10 +47,13 @@ export async function getMyNotifications(
   // 보기 쿠키가 남아 있는데 보기가 아닌 요청(끝났다 · 확인하지 못했다)도 같다 — 그 브라우저에는 보기 띠를 단 탭이 남아 있을 수 있다.
   const inbox = await notificationInbox();
   if (!inbox) return { unread: 0, items: [] };
+  const settings = await getTenantSettingsByTenantId(inbox.tenantId);
+  const hiddenTypes = hiddenNotificationTypes(settings);
+  const hiddenTaskKinds = hiddenStaffTaskKinds(settings);
+  // 같은 설정 판정을 넘긴다 — 목록 한 번에 설정을 세 번 다시 읽지 않게(B6).
+  const summaryPromise = myTaskSummary(hiddenTaskKinds);
   // 받는 사람 · 지점을 **늘 명시**한다 — '다른 강사 뷰'는 관리 연결(RLS 없음)로 대상 강사 알림을 읽는다(inbox.ts).
   const mine = () => inbox.db.from("notifications");
-  // 내 할 일 수(0377a)는 목록과 상관없다 — 먼저 띄워 두고 함께 기다린다(B4).
-  const summaryPromise = myTaskSummary();
   // 기한 초과 업무 요약은 **가장 최근 한 장만** 받은함 · 배지에 둔다(원장 2026-11-02 *"너무 알림이 정신없음"* — 숫자만 다른 같은 카드가
   // 매일 한 장씩 쌓여 받은함 위를 덮었다). 받은함 목록 · 수에서는 요약을 빼고, 보관 안 한 가장 최근 요약 한 장을 **함께** 읽어 끼운다(B4 —
   // 기다리는 차례를 늘리지 않는다). 지난 요약은 지우지도 읽음으로 바꾸지도 않고 받은함에서만 가린다(30일 정리 0447a 그대로) — 보이는 요약을
@@ -59,13 +65,14 @@ export async function getMyNotifications(
   //    서버에서 나눠 읽어야 '더 보기'(상한을 늘려 다시 읽음)를 해도 순서가 흔들리지 않는다.
   const cap = clampNotificationLimit(limit);
   const page = (read: boolean, size: number) => {
-    const base = mine()
+    let base = mine()
       .select(COLS)
       .eq("tenant_id", inbox.tenantId)
       .eq("recipient_id", inbox.recipientId)
       .neq("type", "daily_briefing") // 폐지된 브리핑 알림은 목록 상한을 적용하기 전에 제외한다.
       .order("created_at", { ascending: false })
       .limit(size);
+    if (hiddenTypes.length) base = base.not("type", "in", `(${hiddenTypes.join(",")})`);
     const q = collapse ? base.neq("type", DIGEST_TYPE) : base;
     const scoped = view === "archived" ? q.not("archived_at", "is", null) : q.is("archived_at", null);
     return read ? scoped.not("read_at", "is", null) : scoped.is("read_at", null);
@@ -79,11 +86,12 @@ export async function getMyNotifications(
     return readPage.error ? { ...unreadPage, data: first } : { ...readPage, data: [...first, ...(readPage.data ?? [])] };
   });
   const countPromise = (() => {
-    const base = mine()
+    let base = mine()
       .select("*", { count: "exact", head: true })
       .eq("tenant_id", inbox.tenantId)
       .eq("recipient_id", inbox.recipientId)
       .neq("type", "daily_briefing"); // 보이지 않는 알림 때문에 배지가 남지 않도록 같은 기준 사용.
+    if (hiddenTypes.length) base = base.not("type", "in", `(${hiddenTypes.join(",")})`);
     return base.neq("type", DIGEST_TYPE).is("read_at", null).is("archived_at", null);
   })();
   const digestPromise = mine().select(COLS).eq("tenant_id", inbox.tenantId).eq("recipient_id", inbox.recipientId).eq("type", DIGEST_TYPE).is("archived_at", null)
@@ -92,7 +100,13 @@ export async function getMyNotifications(
   // 목록 · 안읽음 카운트 · 최근 요약은 서로 독립 → 병렬(B4). 카운트는 head:true로 행 미수신.
   const [listed, { count }, digest] = await Promise.all([listPromise, countPromise, digestPromise]);
   // 요약을 못 읽으면 이번엔 요약 없이 낸다(목록 · 배지는 그대로 — 다음 갱신에 다시 읽는다).
-  const latest = !digest.error ? ((digest.data as Row | null) ?? null) : null;
+  const latestCandidate = !digest.error ? ((digest.data as Row | null) ?? null) : null;
+  // 모듈을 끄기 전에 만든 요약은 본문에 감춘 종류 이름이 남는다. 그 한 장은 통째로 빼고,
+  // 다음 아침부터는 digest.ts가 보이는 종류만 다시 요약한다.
+  const hiddenDigestLabels = hiddenTaskKinds.map(taskKindLabel);
+  const latest = latestCandidate && hiddenDigestLabels.some((label) => latestCandidate.body?.includes(label))
+    ? null
+    : latestCandidate;
   const data = latest && collapse && !listed.error ? withDigest((listed.data ?? []) as Row[], latest, cap) : listed.data;
 
   const items: NotificationItem[] = (data ?? []).map((n) => ({
@@ -105,7 +119,10 @@ export async function getMyNotifications(
     createdAt: n.created_at,
   }));
   // 할 일(0377a) — 이 알림들의 처리 상태 · 내 할 일 수. 실패해도 목록은 그대로 낸다(벨이 비면 안 된다).
-  const [badges, summary] = await Promise.all([notificationTaskBadges(items.map((i) => i.id)), summaryPromise]);
+  const [badges, summary] = await Promise.all([
+    notificationTaskBadges(items.map((i) => i.id), hiddenTaskKinds),
+    summaryPromise,
+  ]);
   return {
     unread: (count ?? 0) + (latest && latest.read_at === null ? 1 : 0),
     items: items.map((i) => {
