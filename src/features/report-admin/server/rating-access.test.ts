@@ -61,4 +61,10 @@ describe("평점 공통 문 배선", () => {
     expect(actions).toContain("canViewReportRatings(user.tenantId, user.systemRole)");
     expect(duties).toContain("canViewReportRatings(viewer.tenantId, viewer.systemRole)");
   });
+
+  it("업무 완성도는 공통 문 위에 수업보고서 '전체' 권한을 더 요구한다(공통 문의 쓰기 권한은 '담당'도 참 — 모든 선생님의 평균·등수 노출 방지)", () => {
+    const duties = read("src/features/duties/server/admin.ts");
+    const gate = duties.slice(duties.indexOf("const seeRatings"), duties.indexOf("canViewReportRatings(viewer.tenantId"));
+    expect(gate).toMatch(/accessLevelTenant\(viewer\.systemRole, "lesson_reports"\)\) === "full"/);
+  });
 });

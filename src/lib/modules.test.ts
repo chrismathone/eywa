@@ -4,6 +4,7 @@
  *   ② 꺼진 모듈의 메뉴는 전 역할 none — 다른 메뉴는 안 건드린다
  *   ③ 모듈이 가리키는 메뉴키는 실제 권한 표에 있는 키다(오타면 조용히 안 닫힌다)
  */
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { MENU_ACCESS, type AccessMatrix } from "@/lib/permissions";
 import {
@@ -18,6 +19,7 @@ import {
   moduleOfMenuKey,
   normalizeDisabledModules,
   effectiveDisabledModulesFromStored,
+  type ModuleId,
 } from "./modules";
 
 const MATRIX = MENU_ACCESS as unknown as AccessMatrix;
@@ -134,5 +136,18 @@ describe("menuLayoutWithModules", () => {
       { href: "/billing?tab=verify", hidden: true },
       { href: "/billing?tab=payroll", hidden: true },
     ]);
+  });
+});
+
+describe("모듈 이름 타입 — 선언 파일이 무시되면 string으로 무너져 오타가 '켜짐'으로 샌다(2026-11-12 검토)", () => {
+  it("선언 파일(.d.mts)의 기준 목록 = 실제 목록", () => {
+    const decl = readFileSync("src/lib/module-state.d.mts", "utf8");
+    const block = decl.slice(decl.indexOf("MODULE_BASELINE_V1"), decl.indexOf("];"));
+    expect([...block.matchAll(/"([a-z_]+)"/g)].map((m) => m[1])).toEqual([...MODULE_BASELINE_V1]);
+  });
+  it("없는 모듈 이름은 타입 오류다(타입 검사가 이 줄을 잡는다)", () => {
+    // @ts-expect-error — ModuleId가 리터럴 합집합이면 오류, string으로 무너지면 이 지시가 '쓰이지 않음'으로 실패한다.
+    const typo: ModuleId = "classnot_typo";
+    expect(typo).toBe("classnot_typo");
   });
 });

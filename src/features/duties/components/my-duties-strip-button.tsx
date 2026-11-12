@@ -96,7 +96,8 @@ export function MyDutiesStripButton({ summary: initial, tenantId = null, classNa
       <span className="bg-bg-soft h-1.5 w-24 shrink-0 overflow-hidden rounded-full" aria-hidden><span className={`block h-full rounded-full ${pct(today) === 100 ? "bg-green" : "bg-primary"}`} style={{ width: `${pct(today)}%` }} /></span>
       <span className="text-text-dim text-xs font-medium">{lang === "en" ? "Open ›" : "열기 ›"}</span>
     </button>
-    <div className={`grid gap-2 px-3 pb-3 sm:grid-cols-2 ${newcomerShown === false ? "lg:grid-cols-4" : "lg:grid-cols-5"}`}>
+    {/* 칸 다섯(신규생 켬 · 침산)은 종전 배치 그대로(sm 3열) — 넷일 때만 2 · 4열로 맞춘다. */}
+    <div className={`grid gap-2 px-3 pb-3 ${newcomerShown === false ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3 lg:grid-cols-5"}`}>
       <Tile label="오늘 완료도" value={`${today.done}`} unit={`/ ${today.total}`} pct={pct(today)} tone={today.total && pct(today) === 100 ? "green" : "primary"} onClick={() => setView("today")} />
       <Tile label="미처리" value={`${lateAll}`} tone={lateAll ? "danger" : "muted"} onClick={() => setView(today.late ? "today" : "month")} />
       <Tile label={`${mm}월 학생 상담`} value={`${counsel.done}`} unit={`/ ${counsel.total}`} pct={pct(counsel)} tone={counsel.total && pct(counsel) === 100 ? "green" : counsel.late ? "danger" : "primary"} onClick={() => setView("month")} />
