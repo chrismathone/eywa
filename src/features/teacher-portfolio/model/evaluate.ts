@@ -3,7 +3,8 @@
  * 계산 코드는 수치만 내고, 몇 점인지는 여기서 설정이 정한다(원장 2026-10-13 *"가능한 모든것을 커스터마이징"*).
  *
  * - 자료가 없으면(`raw` null) 지표의 '자료가 없을 때' 규칙: 0점(기본) · 만점 · 합계에서 제외.
- *   예외 = 급여 비율의 새로 온 선생님(지난달 담당 반 없음 · `newcomer`)은 규칙과 상관없이 합계에서 제외(원장 2026-10-15).
+ *   예외 = 급여 비율의 새로 온 선생님(지난달 담당 반 없음 · `newcomer`)은 규칙과 상관없이 합계에서 제외(원장 2026-10-15) ·
+ *   퇴원율도 지난달 담당 학생이 없으면 같다(원장 2026-11-11 — 입사·인계 첫 달이 '자료 없음 0점'으로 20점씩 깎이던 것).
  * - 끈 지표는 저장은 하되(설정 미리보기가 그 수치를 쓴다) 화면·합계엔 없다.
  * - 총점 = 합계에 든 점수의 합, 만점 = 그 지표들 만점의 합 — 100점이 아니어도 된다.
  */
@@ -32,7 +33,8 @@ export function indexEntries(rows: readonly ManualEntryRow[]): (teacherId: strin
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
-function scoreItem<M extends Metric>(m: M, s: MetricSetting): M {
+/** 한 항목에 설정 하나를 얹는다(점수·만점·이름·끔) — 마감 달 정정(`revision.ts`)도 그 달 저장 설정으로 이 함수를 부른다. */
+export function scoreItem<M extends Metric>(m: M, s: MetricSetting): M {
   m.label = s.label;
   m.max = s.max;
   m.off = !s.enabled || undefined;

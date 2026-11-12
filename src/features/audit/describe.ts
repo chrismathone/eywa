@@ -910,6 +910,12 @@ export function auditDetail(
       const open = num(m.openRows);
       return join(months.length ? `${months[0]} ~ ${months.at(-1)}` : null, closed === null ? null : `마감 ${closed}행`, open ? `집계 중 ${open}행` : null);
     }
+    case "teacher_portfolio_homeroom_fix": {
+      const months = Array.isArray(m.months) ? m.months.filter((v): v is string => typeof v === "string") : [];
+      const revised = num(m.revised);
+      const removed = num(m.removed);
+      return join(months.length ? `${months[0]} ~ ${months.at(-1)}` : null, revised === null ? null : `고침 ${revised}행`, removed ? `입사 전·퇴사 뒤 ${removed}행 지움` : null);
+    }
     case "teacher_portfolio_rule_patch": {
       const months = Array.isArray(m.months) ? m.months.filter((v): v is string => typeof v === "string") : [];
       const rows = num(m.rows);

@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isSpecialLecture } from "@/features/classes/special-lecture";
 import { buildChurnModel } from "@/features/teacher-portfolio/model/churn-model";
 import { buildHomeroomOwner } from "@/features/teacher-portfolio/model/context";
+import { buildEmployedOn } from "@/features/teacher-portfolio/model/homeroom-history";
 import { buildStudentTracking } from "@/features/teacher-portfolio/model/students";
 import { loadChurnSource } from "@/features/teacher-portfolio/server/churn-source";
 import { isKoreanTeacherName } from "@/features/timetable/lib/teacher-label";
@@ -79,8 +80,10 @@ export async function loadExitTeacherJudge(
     if (!id) continue;
     (reports.get(r.class_id) ?? reports.set(r.class_id, []).get(r.class_id)!).push({ teacherId: id, date: String(r.report_date).slice(0, 10) });
   }
-  const owner = buildHomeroomOwner(source.classes, source.transitions);
-  const tracking = buildStudentTracking({ from: source.from, end: source.end, classes: source.classes, schedules: source.schedules, enrollments: source.enrollments, owner });
+  // 담임 이력·재직 기간은 강사평가 스냅숏과 같은 재료·같은 함수(감사로그 + activity_log · 입사 전·퇴사 뒤 제외 — 2026-11-11).
+  const owner = buildHomeroomOwner(source.classes, source.transitions, { teacherChanges: source.teacherChanges, tenure: source.tenure, aliases: source.aliases });
+  const employed = buildEmployedOn(source.tenure);
+  const tracking = buildStudentTracking({ from: source.from, end: source.end, classes: source.classes, schedules: source.schedules, enrollments: source.enrollments, owner, employed });
   const churn = buildChurnModel({ source: tracking.churnSource, classes: source.classes, options: source.options, futureEnrollments: source.futureEnrollments, studentReasons: source.studentReasons });
   const months = new Map<string, ChurnMonth>();
   const view: ChurnView = {
@@ -159,6 +162,7 @@ export async function loadExitTeacherJudge(
         },
         isKorean: (id) => korean.has(id),
         reportsOf: (id) => reports.get(id) ?? [],
+        employed,
       }),
     teachersOf: (studentId, subject, month) => churnTeachersOf(view, studentId, subject, month),
     zeroIdsOf: (subject, month) => churnZeroIds(view, subject, month),

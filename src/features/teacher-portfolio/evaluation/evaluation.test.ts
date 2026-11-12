@@ -130,6 +130,14 @@ describe("한 달에 설정 얹기", () => {
     expect([previewScore(raws, DEFAULT_EVALUATION_CONFIG).points.payRatio, previewScore(raws, DEFAULT_EVALUATION_CONFIG).points.churn]).toEqual([null, 0]);
     expect(previewScore({ payRatio: null }, DEFAULT_EVALUATION_CONFIG).points.payRatio).toBe(0);
   });
+  it("🔴 퇴원율도 지난달 담당 학생이 없으면(새로 맡은 선생님) 합계에서 뺀다 — 담당이 있는데 자료가 없을 때만 설정 규칙(원장 2026-11-11)", () => {
+    const p = period();
+    p.items.push({ ...item("churn", null), newcomer: true } as Metric);
+    applyEvaluation(p, DEFAULT_EVALUATION_CONFIG);
+    const churn = p.items.find((m) => m.id === "churn");
+    expect([churn?.value, churn?.missing]).toEqual([null, true]);
+    expect(p.knownMax).toBe(p.items.filter((m) => !m.off && m.value !== null).reduce((n, m) => n + m.max, 0));
+  });
   it("직접 만든 지표는 그 강사·그 달에 넣은 값으로 매기고, 입력이 없으면 '자료가 없을 때' 규칙", () => {
     const c = v1();
     c.manual = [{ key: "sns", label: "SNS 칭찬", unit: "건", description: "", enabled: true, max: 10, scoring: { mode: "perUnit", points: 2, cap: true }, missing: "zero" }];

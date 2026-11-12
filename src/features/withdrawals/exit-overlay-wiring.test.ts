@@ -46,6 +46,10 @@ describe("시간표 X 겹침 배선", () => {
       expect(src).toContain("nonRealStudents(admin, tenantId)");
       expect(src).toContain("transitions: toTransitions(transitions)");
       expect(src).toContain("studentReasonRows(admin, tenantId)");
+      // 담임 이력 보강(activity_log)·재직 기간도 같은 함수로 읽는다(2026-11-11).
+      expect(src).toContain("loadTeacherChanges(admin, tenantId)");
+      expect(src).toContain("loadTenure(admin, tenantId)");
+      expect(src).toContain("loadTeacherAliases(admin, tenantId)");
     }
     expect(SNAPSHOT).toContain('inTenant("enrollments", ENROLLMENT_COLUMNS).lte("start_date", billingEnd).order("id")');
     expect(CHURN_SOURCE).toContain('inTenant("enrollments", ENROLLMENT_COLUMNS).lte("start_date", end).or(`end_date.is.null,end_date.gte.${from}`).order("id")');
@@ -55,15 +59,15 @@ describe("시간표 X 겹침 배선", () => {
     expect(CHURN_SOURCE).toContain("loadEvaluationConfig(admin, tenantId)");
     expect(CHURN_SOURCE).toContain("options: evaluation.config.metrics.churn.churn ?? DEFAULT_CHURN_OPTIONS");
     // 그날 담임 — 강사평가 전 지표와 한 함수.
-    expect(CONTEXT).toContain("const owner = buildHomeroomOwner(d.classes, d.transitions);");
-    expect(JUDGE).toContain("const owner = buildHomeroomOwner(source.classes, source.transitions);");
+    expect(CONTEXT).toContain("const owner = buildHomeroomOwner(d.classes, d.transitions, { teacherChanges: d.teacherChanges, tenure, aliases: aliasesOf(d.teacherAliases) });");
+    expect(JUDGE).toContain("const owner = buildHomeroomOwner(source.classes, source.transitions, { teacherChanges: source.teacherChanges, tenure: source.tenure, aliases: source.aliases });");
     // 계산 — 강사평가가 부르는 것과 같은 명단(`buildStudentTracking`) · 같은 계산기(`buildChurnModel`) · 같은 입력 모양.
     // 강사평가는 배정·유지 감점에 쓰는 사유를 더 넘긴다(명단·수강 끝은 그대로 — 겹침은 명단만 읽는다).
-    expect(BUILD).toContain("from: d.from, end: d.end, classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, owner: ctx.owner,");
+    expect(BUILD).toContain("from: d.from, end: d.end, classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, owner: ctx.owner, employed: ctx.employed,");
     expect(BUILD).toContain("reasons: { studentReasons: d.studentReasons, excludeReasons: churnOptions.excludeReasons, futureEnrollments: d.futureEnrollments },");
     // 사유 없이 끝난 줄의 학생 퇴원 사유 = 그 퇴원과 함께 끝난 수강인가 — 겹침과 같은 `endedWithExit` · 같은 폭.
     expect(read("src/features/teacher-portfolio/model/exit-reason.ts")).toContain("endedWithExit(rows, withdrawnDay, ref, OVERLAY_LOOKBACK_DAYS)");
-    expect(JUDGE).toContain("buildStudentTracking({ from: source.from, end: source.end, classes: source.classes, schedules: source.schedules, enrollments: source.enrollments, owner })");
+    expect(JUDGE).toContain("buildStudentTracking({ from: source.from, end: source.end, classes: source.classes, schedules: source.schedules, enrollments: source.enrollments, owner, employed })");
     expect(BUILD).toContain("const churnOptions = config.metrics.churn.churn ?? DEFAULT_CHURN_OPTIONS;");
     expect(BUILD).toContain("buildChurnModel({ source: students.churnSource, classes: d.classes, options: churnOptions, futureEnrollments: d.futureEnrollments, studentReasons: d.studentReasons })");
     expect(JUDGE).toContain("buildChurnModel({ source: tracking.churnSource, classes: source.classes, options: source.options, futureEnrollments: source.futureEnrollments, studentReasons: source.studentReasons })");
