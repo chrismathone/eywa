@@ -40,10 +40,13 @@ describe("관리자 직접 작성 발송 — 재클릭 경합 방어(배선)", (
   it("발송 대기 적재는 조건부이고, 0행이면 다시 올리지 않고 상태를 돌려준다", () => {
     const at = COMPOSE.indexOf('classnote_status: allowed ? "queued" : "too_old"');
     expect(at).toBeGreaterThan(-1);
-    const stmt = COMPOSE.slice(at, at + 400);
+    const end = COMPOSE.indexOf("if (!queuedRows?.length)", at);
+    expect(end).toBeGreaterThan(at);
+    const stmt = COMPOSE.slice(at, end);
     expect(stmt).toContain(".or(CLASSNOTE_REQUEUE_OK)");
     expect(stmt).toContain('.select("id")');
-    expect(COMPOSE.slice(at, at + 700)).toContain("if (!queuedRows?.length) return await unqueuedStatus(");
+    expect(COMPOSE.slice(end, end + 150)).toContain("if (!queuedRows?.length) return await unqueuedStatus(");
+    expect(stmt).toContain('queueQuery.eq("makeup_class_id", saved.makeupClassId)');
     // 0행의 답 = 지금 상태 그대로(처리 중 / 이미 발송) · 그 밖은 지어내지 않고 오류
     const helper = COMPOSE.slice(COMPOSE.indexOf("async function unqueuedStatus("));
     expect(helper.slice(0, 900)).toMatch(/st === "processing" \|\| st === "success"[\s\S]*already_sent[\s\S]*ok: false/);

@@ -135,19 +135,22 @@ export function useSendCore({
     // 반별 발송인데 보강 보고서의 보낼 반을 서버가 못 정했다(또는 보강 추가한 반에 반 보드가 없어 다른 반으로 가야 한다 —
     // 경고 한 줄과 함께 묻는다) — 강사가 고르면 그 반으로 다시 보낸다(저장은 이미 끝났다).
     if (res.status === "needs_class" && res.candidates?.length) {
+      const deliveryOnly = !!res.deliveryOnly;
       const picked = await askSendClass({
         studentName: student.name,
         candidates: res.candidates,
         defaultId: res.defaultClassId ?? null,
         makeupClassName: res.makeupClassName ?? null,
+        deliveryOnly,
       });
-      // 🔴 고른 반 = **새 보강 반**(원장 2026-09-30 *"보고서 반 = 출석부 반"*) — 저장이 출석부 칸도 그 반으로 옮기고 그 반으로 보낸다.
-      //    '보낼 반'만 따로 적는 길(`classnoteClassId`)은 없앴다 — 보고서 반과 출석부 반이 갈렸다.
+      // 기존 보강은 전달 경로만 고른다. 반 미정 보강일 때만 고른 반을 수업 반으로 정한다.
       if (picked) {
         const pickedName = res.candidates.find((c) => c.id === picked)?.name ?? null;
-        res = await saveAndQueueClassnote({ ...built.input, makeupClassId: picked });
+        res = await saveAndQueueClassnote(deliveryOnly
+          ? { ...built.input, deliveryClassId: picked }
+          : { ...built.input, makeupClassId: picked });
         // 저장이 받아들였을 때만(반을 거절하면 오류 문장만 돌아온다 — id가 없거나 ok=false + 그 문장) 카드의 보강 반을 바꾼다.
-        if (res.ok || (res.id && res.status !== undefined)) {
+        if (!deliveryOnly && (res.ok || (res.id && res.status !== undefined))) {
           patch(student.id, (s) => ({
             ...s,
             subjects: s.subjects.map((x) =>

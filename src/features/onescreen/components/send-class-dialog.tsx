@@ -15,6 +15,8 @@ export type SendClassAsk = {
   makeupClassName?: string | null;
   /** 반만 바꾸고 보내지는 않는 자리(보강 반 고르기) — 확인 버튼 글자를 '이 반으로 정하기'로. */
   pickOnly?: boolean;
+  /** 보고서 전달 경로만 고른다. 보강 반과 출결은 그대로 둔다. */
+  deliveryOnly?: boolean;
   resolve: (classId: string | null) => void;
 };
 
@@ -38,13 +40,13 @@ export function SendClassDialog({ ask, onClose }: { ask: SendClassAsk; onClose: 
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {t("os.sendClass.title")} · {ask.studentName}
+            {t(ask.deliveryOnly ? "os.sendClass.deliveryTitle" : "os.sendClass.title")} · {ask.studentName}
           </DialogTitle>
-          <DialogDescription>{t("os.sendClass.desc")}</DialogDescription>
+          <DialogDescription>{t(ask.deliveryOnly ? "os.sendClass.deliveryDesc" : "os.sendClass.desc")}</DialogDescription>
         </DialogHeader>
         {ask.makeupClassName ? (
           <p role="alert" className="bg-amber-soft text-foreground rounded-lg px-3 py-2 text-sm font-bold">
-            {tf("os.sendClass.makeupMismatch", { name: ask.makeupClassName })}
+            {tf(ask.deliveryOnly ? "os.sendClass.deliveryMismatch" : "os.sendClass.makeupMismatch", { name: ask.makeupClassName })}
           </p>
         ) : null}
         <div className="flex flex-col gap-1.5">
@@ -70,7 +72,7 @@ export function SendClassDialog({ ask, onClose }: { ask: SendClassAsk; onClose: 
             {t("os.sendClass.cancel")}
           </Button>
           <Button type="button" disabled={!pick} onClick={() => finish(pick)}>
-            {ask.pickOnly ? t("os.sendClass.pick") : t("os.sendClass.send")}
+            {ask.pickOnly ? t("os.sendClass.pick") : t(ask.deliveryOnly ? "os.sendClass.deliverySend" : "os.sendClass.send")}
           </Button>
         </div>
       </DialogContent>

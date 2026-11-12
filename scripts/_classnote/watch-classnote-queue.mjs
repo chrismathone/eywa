@@ -202,6 +202,7 @@ function noteResult(key, value) {
 
 // 심장박동(0084a) — 이 PC가 발송 담당·살아있음을 매 폴마다 기록. best-effort(실패해도 처리 계속).
 async function heartbeat(tenant, driveSetting) {
+  WORKER_CAPS.makeupDelivery = true;
   const s = db();
   // env 진단(logDir·recent)을 함께 실어 보낸다 — 연동 PC가 물리적으로 다른 컴퓨터라, 웹에서 못 보면
   // 원인 추적이 불가능해진다(2026-07-21 로그 미생성 사고에서 실제로 막혔다).
