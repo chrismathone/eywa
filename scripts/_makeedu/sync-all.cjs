@@ -135,6 +135,10 @@ async function finishRun(status, { failed = [], error = null, reasons = {} } = {
   let skipped = false;
   await withDb(async (sql) => {
     tenantIdG = await L.resolveTenantId(sql);
+    if (!(await L.isMakeeduModuleEnabled(sql, tenantIdG))) {
+      skipped = true;
+      return;
+    }
     const [row] = await sql`
       select sync_enabled from user_integrations
       where tenant_id = ${tenantIdG} and provider = 'makeedu' limit 1`;
@@ -157,7 +161,7 @@ async function finishRun(status, { failed = [], error = null, reasons = {} } = {
     console.log("▶  makeedu 동기화 시작 — tenant:", tenantIdG, "| trigger:", TRIGGER);
   });
   if (skipped) {
-    console.log("⏸  makeedu 동기화 OFF (user_integrations.sync_enabled=false) — 스킵.");
+    console.log("⏸  makeedu 동기화가 꺼져 있어 건너뜁니다.");
     return;
   }
 

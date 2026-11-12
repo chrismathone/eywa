@@ -210,6 +210,12 @@ async function heartbeat() {
       }
       // 0) 심장박동 — 담당 PC 생존 신호(웹 표시용). best-effort라 실패해도 요청 처리 계속.
       await beat();
+      // 꺼진 동안에는 요청·예약·주간 적재·역동기화를 집지 않고, 다시 켜면 이어서 처리한다.
+      if (!(await L.isMakeeduModuleEnabled(db(), await tenantOfWorker()))) {
+        await managedWorker.activity(null);
+        await new Promise((r) => setTimeout(r, POLL_MS));
+        continue;
+      }
       // 1) 정방향 동기화 요청.
       const claimed = await claimPending();
       if (claimed.length) {

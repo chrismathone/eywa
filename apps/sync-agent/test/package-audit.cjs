@@ -3,6 +3,8 @@ const fs=require('node:fs');const path=require('node:path');const assert=require
 const asar=require('@electron/asar');
 const root=path.resolve(__dirname,'../../..'),app=path.resolve(__dirname,'..'),bundle=path.join(app,'dist/win-unpacked');
 const manifest=require('../../../scripts/_sync-agent/runtime-manifest.json');
+for(const required of ['scripts/_shared/module-state.mjs','src/lib/module-state.mjs','scripts/_makeedu/seat-limit-alert.cjs'])
+  assert.ok(manifest.sources.includes(required),`Required worker source missing: ${required}`);
 // Git may check text sources out as CRLF on Windows. Packaged LF is equivalent,
 // while every other character must still match the source.
 const textContents=buffer=>buffer.toString('utf8').replace(/\r\n/g,'\n');
