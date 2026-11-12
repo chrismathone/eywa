@@ -1,8 +1,9 @@
 /**
  * '강사별 퇴원율 추이' 카드의 **표 | 차트** 보기(원장 2026-11-11 *"차트로 전환도 가능하게 표/차트"*) — 순수(Vitest).
  *
- * 차트 = 강사마다 작은 선 차트를 나란히(small multiples · Claude·Codex 협의 2026-11-11) — 강사 15~20명을 한 판에 겹치면
- * 누가 누군지 읽히지 않는다. 🔴 모든 강사가 **같은 세로 눈금**(0 ~ 보이는 값의 최댓값 올림)이라 칸끼리 높이로 견준다.
+ * 차트 = **모든 강사를 한 차트에**(원장 2026-11-12 *"전체 선생님을 하나의 차트에 … 따로 차트 두지말고 비교가능하게"* — 11-11의
+ * 강사별 작은 차트 격자를 뒤집음). 선이 15~20개라 나머지는 옅은 회색, 강조는 셋까지(고른 강사 · 없으면 마지막 달 퇴원율 높은 3명 —
+ * Claude·Codex 협의). 세로 눈금 하나(0 ~ 보이는 값의 최댓값 올림).
  * 🔴 값은 표 칸과 같다 — 마감한 달의 퇴원율만 점(진행 중인 달·마감 전·담당 없음·확인 불가·재직 밖 = 점 없음, 0으로 그리지 않는다).
  * ⚠️ 일반 모듈 — 서버(초기값)와 클라(카드)가 함께 쓴다([[#61]]).
  */
@@ -69,4 +70,53 @@ export function monthBrief(row: Pick<ChurnTeacherRow, "hireDate" | "resignDate">
   }
   const body = c.state === "unreadable" ? "확인 불가" : c.state === "noBase" ? "담당 없음" : `${rateText(c.rate!)} · ${c.counted}/${c.base}명`;
   return c.closed ? body : `${body} · 마감 전`;
+}
+
+/** 같은 이름의 강사가 둘이면 뒤 사람에 번호(선 이름표·목록·범례가 겹치지 않게). */
+export function dupName(rows: readonly { name: string }[], i: number): string {
+  const same = rows.slice(0, i).filter((r) => r.name === rows[i]!.name).length;
+  return same ? `${rows[i]!.name} (${same + 1})` : rows[i]!.name;
+}
+
+/** 저절로 강조하는 사람 수 — 계기판 색(차콜·노랑·회색) 셋과 같다. */
+export const AUTO_EMPHASIS = 3;
+/**
+ * 고른 강사가 없을 때 강조할 강사 — `month`(차트의 마지막 달 = 표 '퇴원율 높은 순'의 기준 달)에 마감한 퇴원율이 높은 순 셋.
+ * 0%는 강조하지 않는다(모두 0%면 아무도 아니다) · 같은 값이면 이름순(늘 같은 사람이 뽑히게).
+ */
+export function autoEmphasis(rows: readonly ChurnTeacherRow[], month: string, n = AUTO_EMPHASIS): string[] {
+  const scored: { id: string; name: string; rate: number }[] = [];
+  for (const r of rows) {
+    const c = r.cells[month];
+    if (c && c.closed && c.state === "ok" && c.rate !== null && c.rate > 0) scored.push({ id: r.id, name: r.name, rate: c.rate });
+  }
+  scored.sort((a, b) => b.rate - a.rate || a.name.localeCompare(b.name, "ko"));
+  return scored.slice(0, n).map((s) => s.id);
+}
+
+/** 마우스 자리(`target` %)에서 가장 가까운 선 — `maxDist`(%p)보다 멀면 null. 같은 거리면 앞 줄(목록 차례). */
+export function nearestAt(values: readonly { id: string; rate: number | null }[], target: number, maxDist: number): string | null {
+  let best: string | null = null;
+  let bestDist = maxDist;
+  for (const v of values) {
+    if (v.rate === null) continue;
+    const d = Math.abs(v.rate - target);
+    if (d < bestDist || (best === null && d <= maxDist)) { best = v.id; bestDist = d; }
+  }
+  return best;
+}
+
+/**
+ * 선 끝 이름표의 세로 자리(0=위 · 100=아래, %) — 값이 가까운 이름표끼리 `gap`만큼 벌린다(겹쳐 읽히지 않게).
+ * 차례는 원래 높이 순 그대로 · 아래 끝을 넘으면 위로 되민다 · 위 끝 아래로는 못 간다.
+ */
+export function spreadLabels(items: readonly { id: string; y: number }[], gap: number, lo = 0, hi = 100): Map<string, number> {
+  const sorted = [...items].sort((a, b) => a.y - b.y);
+  const ys = sorted.map((it) => Math.min(hi, Math.max(lo, it.y)));
+  for (let i = 1; i < ys.length; i++) ys[i] = Math.max(ys[i]!, ys[i - 1]! + gap);
+  if (ys.length && ys.at(-1)! > hi) {
+    ys[ys.length - 1] = hi;
+    for (let i = ys.length - 2; i >= 0; i--) ys[i] = Math.min(ys[i]!, ys[i + 1]! - gap);
+  }
+  return new Map(sorted.map((it, i) => [it.id, Math.max(lo, ys[i]!)]));
 }

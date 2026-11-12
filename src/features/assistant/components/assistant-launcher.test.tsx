@@ -174,6 +174,39 @@ describe("AssistantLauncher", () => {
     expect(within(again).getByRole("heading", { name: "반별 미납 보고서" })).toBeInTheDocument();
   });
 
+  it("'적음'으로 받은 답 아래 '추론 강도를 올려서 다시 물어보시겠습니까?' → 누르면 같은 질문을 그 강도로 · 약한 답은 이력에서 뺀다(redoOf · 2026-11-12)", async () => {
+    let n = 0;
+    routes["POST /api/assistant/ask"] = () => {
+      n += 1;
+      return {
+        ok: true,
+        status: 200,
+        body: ndjson([
+          ...(n === 1 ? [{ type: "thread", threadId: "T1", title: "반별 미납" } as AskEvent] : []),
+          { type: "report", messageId: `M${n}`, report: { ...report, title: n === 1 ? "적음 답" : "강함 답" } },
+        ]),
+        json: async () => ({}),
+      };
+    };
+    render(<AssistantLauncher />);
+    fireEvent.click(screen.getByRole("button", { name: /비서/ }));
+    const dialog = await findDialog();
+    fireEvent.click(within(dialog).getByRole("radio", { name: "적음" }));
+    const input = within(dialog).getByRole("textbox", { name: "질문" });
+    fireEvent.change(input, { target: { value: "미납 몇 건" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(await within(dialog).findByRole("heading", { name: "적음 답" })).toBeInTheDocument();
+    const ASK = "마음에 들지 않으면 추론 강도를 올려서 다시 물어보시겠습니까?";
+    expect(within(dialog).getByText(ASK)).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /강함으로 다시 묻기/ }));
+    expect(await within(dialog).findByRole("heading", { name: "강함 답" })).toBeInTheDocument();
+    const second = calls.filter((c) => c.method === "POST")[1];
+    expect(second?.body).toMatchObject({ threadId: "T1", question: "미납 몇 건", level: "high", redoOf: "M1" });
+    // 마지막 답(강함)에는 권하지 않고, 지난 '적음' 답에도 더는 붙지 않는다
+    expect(within(dialog).queryByText(ASK)).toBeNull();
+  });
+
   it("답을 만드는 동안 — 단계 타임라인(같은 id는 덮어쓴다 · 표 칩) · 멈추기", async () => {
     let push: (e: AskEvent) => void = () => {};
     routes["POST /api/assistant/ask"] = (_url, init) => {

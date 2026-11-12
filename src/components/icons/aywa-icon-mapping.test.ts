@@ -79,9 +79,6 @@ const APPROVED_INLINE_SVG = [
   // 2026-09-30 원생상담 통계 패널 분해 줄의 **작은 막대 12칸**(최근 12개월/12주 건수, aria-hidden) — 0부터 세는 막대라
   // 운영실 선 스파크라인(최솟값~최댓값 정규화)을 못 쓴다. 차트이지 아이콘이 아니다(sparkline과 같은 성격).
   "src/app/(shell)/consultations/_components/stats/stats-breakdown.tsx",
-  // 2026-09-29 공개 랜딩의 대시보드 **개념도**(연결선 지도·추이 선, 둘 다 aria-hidden) — 장식 그림이지 아이콘이 아니다.
-  // eb3787b2가 이 목록을 안 고쳐 가드가 빨갰다(보안 감사 푸시에 함께 고침).
-  "src/app/(marketing)/_scroll/dashboard-mock.tsx",
   // 2026-10-13 직원 포트폴리오의 **총점 원 그래프**(/100, 바탕 원 + 값 호 · aria-hidden, 점수는 버튼의 aria-label과 HTML 숫자) —
   // 차트이지 아이콘이 아니다(vk-score와 같은 성격).
   "src/app/(shell)/class-review/_components/portfolio/score-hero.tsx",
@@ -96,6 +93,10 @@ const APPROVED_INLINE_SVG = [
   // 2026-11-11 퇴원관리 강사별 퇴원율 **차트 보기**(강사마다 작은 선 · aria-hidden, 점·눈금·값은 HTML · 칸은 role="group"+aria-label · 고른 달은 글로) —
   // 차트이지 아이콘이 아니다(trend-chart와 같은 성격).
   "src/app/(shell)/withdrawals/_components/teacher-churn-chart.tsx",
+  // 2026-11-10 홍보·마케팅 통합 관리의 **연도별 월간 행사 막대그래프**와 **행사 중심 연결 지도**(둘 다 role="img"+aria-label) —
+  // 차트·도식이지 아이콘이 아니다. 0913cd02c·1257474f6이 이 목록을 안 고쳐 가드가 빨갰다(2026-11-12 옛 파일 정리 때 함께 고침).
+  "src/features/marketing-archive/monthly-year-chart.tsx",
+  "src/features/marketing-archive/workspace.tsx",
 ] as const;
 
 // 이 파일의 검사 3개가 각각 src/ 전체를 훑는다 — 디렉터리 워크는 파일 목록이 같으므로 한 번만 한다
