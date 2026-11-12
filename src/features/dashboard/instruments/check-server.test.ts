@@ -81,7 +81,7 @@ describe("새 대시보드 할 일 판", () => {
 
     const result = await loadTaskBoard();
     expect(result?.kinds).toEqual([{ kind: "followup_due", open: 1, late: 1 }]);
-    expect(result?.people[0]?.items.map((item) => item.id)).toEqual(["visible"]);
+    expect(result?.people?.[0]?.items.map((item) => item.id)).toEqual(["visible"]);
     expect(m.hiddenPassed).toEqual(["approval_turn", "unsent_report", "report_send_failed"]);
   });
 
