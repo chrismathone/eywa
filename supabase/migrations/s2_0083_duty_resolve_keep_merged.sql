@@ -1,9 +1,10 @@
--- s2_0045 — 의무 장부: void → void로 까닭만 바뀌어도 받아 적는다 (2026-11-10)
+-- s2_0083 — 업무 완성도: 맞춤이 '발송 의무로 합쳐진 작성 의무'(merged)를 되살리지 않는다 (2026-11-11)
 --
--- 왜: 결석으로 빠진 보고서 칸을 "결석"이라 적으려고(원장 2026-11-10 *"의무 없음 → 결석"*) 생성기가 void('absent') 행을 넘기는데,
---   s2_0043의 duty_resolve_items는 **상태가 같으면 건너뛰어** 먼저 'not_due'로 void된 행의 까닭이 그대로 남았다(운영 확인: 11/9 3행).
--- 고침: status가 같아도 void이고 source(까닭)가 다르면 void_reason을 갱신. done의 done_source는 처음 것을 지킨다(종전과 같다).
--- 되돌리기: duty_resolve_items를 s2_0043 본문으로.
+-- 왜(Codex 종합 리뷰 2026-11-11): 보고서를 발송까지 한 업무로 합치며(2026-11-10) 같은 열쇠의 옛 작성 의무를 void(`merged`)로 정리했다.
+--   그런데 `duty_resolve_items`(s2_0078)는 면제(`waived`)만 지키고 `merged`는 지키지 않아, 작성 의무 초안을 아직 내는 쪽(옛 판 앱 · 되돌린 코드)이
+--   한 번이라도 맞추면 그 행이 되살아나 작성 · 발송이 다시 두 번 세진다.
+-- 무엇: `duty_resolve_items` — `merged`도 건드리지 않는다. 그 밖은 s2_0078 본문 그대로.
+-- 되돌리기: s2_0078의 duty_resolve_items 본문으로.
 begin;
 
 create or replace function public.duty_resolve_items(p_tenant uuid, p_updates jsonb) returns jsonb
@@ -30,6 +31,7 @@ begin
            updated_at = now()
       from src s
      where d.tenant_id = p_tenant and d.kind = s.kind and d.subject_key = s.subject_key and d.cycle = s.cycle
+       and coalesce(d.void_reason, '') not in ('waived', 'merged')
        and (d.status is distinct from s.status
             or (s.status = 'void' and s.source is not null and d.void_reason is distinct from s.source))
     returning d.status
@@ -40,5 +42,4 @@ begin
 end;
 $fn$;
 
-notify pgrst, 'reload schema';
 commit;

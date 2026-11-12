@@ -1,4 +1,4 @@
--- s2_0067 — 업무 완성도: 퇴원보고서 작성 차례를 '참고 열'로 (2026-11-11)
+-- s2_0093 — 업무 완성도: 퇴원보고서 작성 차례를 '참고 열'로 (2026-11-11)
 --
 -- 왜: 원장 *"선생님별 업무가 추가될 경우 관리자 화면에서 체크할 수 있나? 퇴원보고서 작성 요청 등"* → Codex와 협의:
 --   퇴원보고서 작성(할 일 `withdrawal_step` · cycle `write:<담임>`)만 먼저, 등급 · 전체에는 넣지 않고 참고 열로 본다.
@@ -17,7 +17,7 @@
 --   취소(퇴원 요청 취소 · 차례 바뀜)는 분모에서 뺀다 — 선생님 책임이 아니다. 만료는 이 종류에 없다(자동 만료를 새로 걸지 않는다).
 --   기간 = 기한이 든 날(KST · 기한이 자정 정각이면 그 전날 — `due_at - 1ms`, 건별 업무의 달 귀속과 같다).
 -- 실행권: 앱 service_role만(관리 화면 집계와 같다). 연동 PC 역할은 이 표 · 함수를 쓰지 않는다.
--- 되돌리기: scripts/_oneoff/revert-s2_0067-duty-withdrawal-write-turns.sql(트리거 · 함수만 내린다 — 모인 차례 기록은 지우지 않는다).
+-- 되돌리기: scripts/_oneoff/revert-s2_0093-duty-withdrawal-write-turns.sql(트리거 · 함수만 내린다 — 모인 차례 기록은 지우지 않는다).
 begin;
 
 create table if not exists public.withdrawal_write_turns (

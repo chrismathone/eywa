@@ -18,7 +18,7 @@ import { loadLatestNotes } from "./notes";
 import type { AbsentRow, ClassInfo, Counts, DutyAdminData, DutyAdminScope, LateItem, OwnerInfo, OwnerLoadRow, RollupClass, RollupOwnerKind, RollupStudent, StudentInfo } from "../view-admin";
 
 /**
- * 업무 완성도 관리자 화면의 조회 — 장부는 서버 전용 표(정책 0개)라 관리 키로 읽고, **모든 조회에 지점 조건**. 집계는 DB(s2_0049 · B2).
+ * 업무 완성도 관리자 화면의 조회 — 장부는 서버 전용 표(정책 0개)라 관리 키로 읽고, **모든 조회에 지점 조건**. 집계는 DB(s2_0075 · B2).
  * 과목 범위 = 운영실과 같은 판정(`loadViewerBundle` — 원장·총괄 = 전체 · 과목 관리자 = 담당 과목 묶음). 담당 과목을 못 읽으면 넓히지 않고 빈 범위.
  */
 export async function resolveDutyAdminScope(viewer: CurrentUser): Promise<DutyAdminScope> {
@@ -48,13 +48,13 @@ export async function resolveDutyAdminScope(viewer: CurrentUser): Promise<DutyAd
 const num = (v: unknown) => Number(v ?? 0);
 type CountRow = { total: number; done: number; due: number; ontime: number; late_done: number; open_late: number; expired: number; over7: number };
 const counts = (r: CountRow): Counts => ({ total: num(r.total), done: num(r.done), due: num(r.due), ontime: num(r.ontime), lateDone: num(r.late_done), late: num(r.open_late), expired: num(r.expired), over7: num(r.over7) });
-/** 볼 수 있는 첫 날(s2_0061)로 기간의 시작을 당긴다 — 관리 화면의 모든 조회(집계 · 학생 · 업무 목록)가 같은 시작을 쓴다(한 곳만 당기면 날이 낀 주에서 숫자가 어긋난다). */
+/** 볼 수 있는 첫 날(s2_0087)로 기간의 시작을 당긴다 — 관리 화면의 모든 조회(집계 · 학생 · 업무 목록)가 같은 시작을 쓴다(한 곳만 당기면 날이 낀 주에서 숫자가 어긋난다). */
 export async function clampDutyFrom(tenantId: string, from: string): Promise<string> {
   const { viewFrom } = await loadDutySettings(tenantId);
   return viewFrom && from < viewFrom ? viewFrom : from;
 }
 
-/** 지점의 장부 설정(s2_0050) — 평가 시작(live_from: 이보다 앞선 기한은 '이관') · 마지막 맞춤 시각. 줄이 없으면 둘 다 null. */
+/** 지점의 장부 설정(s2_0076) — 평가 시작(live_from: 이보다 앞선 기한은 '이관') · 마지막 맞춤 시각. 줄이 없으면 둘 다 null. */
 async function loadDutySettings(tenantId: string): Promise<{ liveFrom: string | null; syncedAt: string | null; viewFrom: string | null }> {
   const { data, error } = await createAdminClient().from("duty_settings").select("live_from,last_sync_at,view_from").eq("tenant_id", tenantId).maybeSingle();
   if (error) throw new Error(`장부 설정: ${error.message}`);
@@ -65,7 +65,7 @@ async function loadDutySettings(tenantId: string): Promise<{ liveFrom: string | 
 export async function loadDutyAdmin(tenantId: string, from: string, to: string, scope: DutyAdminScope, periods: string[] | null): Promise<DutyAdminData> {
   const admin = createAdminClient();
   const settings = await loadDutySettings(tenantId);
-  // 볼 수 있는 첫 날(s2_0061) 전은 세지 않는다 — 에이와에 기록을 적기 전의 달은 수치가 실제 업무를 말하지 않는다(원장 2026-11-11).
+  // 볼 수 있는 첫 날(s2_0087) 전은 세지 않는다 — 에이와에 기록을 적기 전의 달은 수치가 실제 업무를 말하지 않는다(원장 2026-11-11).
   const args = { p_tenant: tenantId, p_from: settings.viewFrom && from < settings.viewFrom ? settings.viewFrom : from, p_to: to, p_subjects: scope.subjects, p_periods: periods, p_owner: scope.ownerId };
   const [ok, cls, lateRaw, ownerLoad, ratings, withdrawal] = await Promise.all([
     fetchAllPaged<CountRow & { owner_id: string | null; subject: string | null; kind: string; period: DutyPeriod }>((a, b) =>
@@ -73,7 +73,7 @@ export async function loadDutyAdmin(tenantId: string, from: string, to: string, 
     fetchAllPaged<CountRow & { class_id: string | null; owner_id: string | null; subject: string | null }>((a, b) =>
       admin.rpc("duty_rollup_class", args).order("class_id").order("owner_id").order("subject").range(a, b)),
     loadLateItems(tenantId, scope, settings.liveFrom),
-    // 담당 반 수 · 학생 수(s2_0053) — 함수가 아직 없으면(#95) 빈 값(화면은 반 수만 센다).
+    // 담당 반 수 · 학생 수(s2_0079) — 함수가 아직 없으면(#95) 빈 값(화면은 반 수만 센다).
     admin.rpc("duty_rollup_owner_load", args).then(({ data, error }): OwnerLoadRow[] => {
       if (error) { if (error.code === "PGRST202" || error.code === "42883") return []; throw new Error(`담당 반·학생 수: ${error.message}`); }
       return ((data ?? []) as { owner_id: string | null; subject: string | null; classes: number; students: number }[]).map((r) => ({ ownerId: r.owner_id, subject: r.subject, classes: num(r.classes), students: num(r.students) }));
@@ -135,14 +135,14 @@ export type DutyStudentsData = { rows: RollupStudent[]; students: StudentInfo; c
 /** 학생 × 반 × 종류 — 드릴다운(담당자·종류·반 중 아무거나) · '학생별' 보기(필터 없음 · 페이지 넘겨 전건). */
 export async function loadDutyStudents(tenantId: string, from: string, to: string, scope: DutyAdminScope, periods: string[] | null, f: StudentFilter): Promise<DutyStudentsData> {
   const admin = createAdminClient();
-  // 원어민 담당 몫은 합치기 전에 뺀다(s2_0062) — 선생님 · 반 집계와 같은 숫자가 되게.
+  // 원어민 담당 몫은 합치기 전에 뺀다(s2_0088) — 선생님 · 반 집계와 같은 숫자가 되게.
   // 평가 개시일은 결석 조회의 범위에 쓴다(집계 · 칸 목록과 같은 조건) — 원어민 목록과 서로 무관하니 함께 읽는다(B4).
   // 🔴 개시일을 못 읽으면 결석 수를 세지 않는다(범위를 모르는 채 세면 개시 전 날까지 넓게 센다 — 칸 목록은 같은 실패에서 오류를 던진다 · 3차 리뷰).
   const [native, liveRow] = await Promise.all([tenantNativeIds(tenantId), admin.from("duty_settings").select("live_from").eq("tenant_id", tenantId).maybeSingle()]);
   const liveKnown = !liveRow.error;
   const live = (liveRow.data?.live_from as string | null) ?? null;
   const raw = await fetchAllPaged<CountRow & { student_id: string | null; class_id: string | null; kind: string; last_due: string | null }>((a, b) =>
-    admin.rpc("duty_rollup_student_ex", { p_exclude_owners: native, /* 빈 목록이어도 넘긴다 — 담당 없는 업무를 함께 뺀다(s2_0064) */ p_tenant: tenantId, p_from: from, p_to: to, p_subjects: scope.subjects, p_periods: periods, p_owner: scope.ownerId ?? (f.ownerNone ? null : f.owner ?? null), p_kind: f.kind ?? null, p_class: f.classId ?? null, p_subject: f.subject ?? null, p_student: f.studentId ?? null, p_subject_none: f.subjectNone ?? false, p_owner_none: !scope.ownerId && (f.ownerNone ?? false) })
+    admin.rpc("duty_rollup_student_ex", { p_exclude_owners: native, /* 빈 목록이어도 넘긴다 — 담당 없는 업무를 함께 뺀다(s2_0090) */ p_tenant: tenantId, p_from: from, p_to: to, p_subjects: scope.subjects, p_periods: periods, p_owner: scope.ownerId ?? (f.ownerNone ? null : f.owner ?? null), p_kind: f.kind ?? null, p_class: f.classId ?? null, p_subject: f.subject ?? null, p_student: f.studentId ?? null, p_subject_none: f.subjectNone ?? false, p_owner_none: !scope.ownerId && (f.ownerNone ?? false) })
       .order("student_id").order("class_id").order("kind").range(a, b));
   // 결석으로 빠진 일간 의무(void · absent) — 집계에는 없지만 칸에 '결석'이라고 적으려고 같은 범위로 따로 읽는다(하루 · 한 주 · 한 달 안의 수업일).
   // 🔴 평가 개시일 조건도 집계 · 칸 목록과 같게 건다 — 안 걸면 칸은 '결석 5'인데 눌러 연 목록은 '결석 2건'이 된다(2차 리뷰 2026-11-11).

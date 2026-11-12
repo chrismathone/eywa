@@ -9,7 +9,7 @@ import type { WithdrawalItem } from "../withdrawal-write";
 const missing = (e: unknown) => /PGRST202|42883|duty_withdrawal_write/.test(e instanceof Error ? e.message : String(e)) && /function|schema cache|does not exist/i.test(e instanceof Error ? e.message : String(e));
 
 /**
- * 퇴원보고서 작성 차례(s2_0067) — 업무 완성도 선생님 표의 참고 열. 등급 · 전체 · 등수에는 들지 않는다.
+ * 퇴원보고서 작성 차례(s2_0093) — 업무 완성도 선생님 표의 참고 열. 등급 · 전체 · 등수에는 들지 않는다.
  * 기한이 고른 기간에 든 차례(KST)만 · 취소는 빠진다 · 합계는 DB에서(B2). 과목 범위 = 보고서 과목과 겹치면.
  * ⚠️ 참고 값이라 화면을 막지 않는다 — 함수가 없거나 읽지 못하면 로그만 남기고 열이 안 선다(평점 열과 같은 규칙).
  */

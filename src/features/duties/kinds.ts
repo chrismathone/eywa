@@ -1,5 +1,5 @@
 /**
- * 의무 장부(duty_items, s2_0043) — 종류·주기·문구의 한 곳(클라·서버 공용 · server-only 없음).
+ * 의무 장부(duty_items, s2_0069) — 종류·주기·문구의 한 곳(클라·서버 공용 · server-only 없음).
  *
  * 한 행 = 학생(또는 반) × 종류 × 회차의 **해야 할 일**. 생성기가 분모를 미리 적고, 원 표의 사실로 닫힌다(사람이 누르는 버튼 아님 —
  * 할 일 0377a와 같은 원칙). 운영실 '강사별 업무 현황'·직원 포트폴리오와 **같은 판정 함수**를 써서 숫자가 어긋나지 않는다.
@@ -62,7 +62,7 @@ export const NEWCOMER_ITEM_LABEL: Record<string, string> = {
 /**
  * 관리 화면에 **보이기 시작하는** 시각(ms) — 일간 업무는 그 수업이 끝난 뒤부터 보인다(원장 2026-11-11 *"수업시간이 지났을때 반영할것"*):
  * 출결 기한 = 수업 끝 · 보고서 기한 = 수업 끝 + 24시간. 월간 · 건별 업무는 그 기간 내내 보인다(늘 과거).
- * 집계 SQL(s2_0064 `rollup_rows`의 걸러내기)과 같은 규칙이다 — 한쪽만 바꾸지 말 것.
+ * 집계 SQL(s2_0090 `rollup_rows`의 걸러내기)과 같은 규칙이다 — 한쪽만 바꾸지 말 것.
  */
 export function dutyOpensAt(kind: string, period: string, dueAt: string): number {
   if (period !== "daily") return Number.NEGATIVE_INFINITY;
@@ -71,7 +71,7 @@ export function dutyOpensAt(kind: string, period: string, dueAt: string): number
 }
 /**
  * **등급 · %에 들기 시작하는** 시각(ms) — '때가 된 업무'의 그 때: 일간 = 수업이 끝난 뒤(`dutyOpensAt`) · 월간 · 건별 = 기한이 지난 뒤(원장 *"추천으로 진행"*).
- * 집계 SQL(s2_0065 `rollup_rows`의 `f_due`)과 같은 규칙이다 — 한쪽만 바꾸지 말 것.
+ * 집계 SQL(s2_0091 `rollup_rows`의 `f_due`)과 같은 규칙이다 — 한쪽만 바꾸지 말 것.
  */
 export function dutyJudgedAt(kind: string, period: string, dueAt: string): number {
   return period === "daily" ? dutyOpensAt(kind, period, dueAt) : Date.parse(dueAt);

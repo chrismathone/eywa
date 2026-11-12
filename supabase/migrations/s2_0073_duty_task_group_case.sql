@@ -1,10 +1,21 @@
--- s2_0046 — 의무 장부 → 할 일(duty_late)의 본문에 **무슨 업무인지**를 적는다 (2026-11-10)
+-- s2_0073 — 건별(case) 의무의 늦음 할 일은 **담당자 × 종류에 하나**(항목마다 쪼개지 않는다) (2026-11-10)
 --
--- 왜: 할 일 창은 굵은 줄에 `detail ?? title`을 쓴다(staff-task-dialog.tsx). s2_0043~0043의 duty_escalate는 detail에 학생 이름만 넣어
---   "김지유A · 전유슬 / 할 일 · 26.11.09 22:12"처럼 **어떤 업무가 기한을 넘겼는지가 안 보였다**(원장 2026-11-10 *"어떤 업무를 기한 초과 했는지 하나도 알 수가 없음"*).
--- 고침: detail = "<종류> 기한 초과 N건 · 11/09 — 이름 · 이름"(title + 이름). title은 그대로. 열린 할 일은 open_task가 글만 새로 맞춘다.
--- 되돌리기: duty_escalate를 s2_0044 본문으로.
+-- 왜: 신규생 정착 콜은 회차(cycle)가 체크리스트 항목 키(pre_call · ojt · month1_call …)라, s2_0072까지의 묶음(담당자 × 종류 × 회차)이
+--   항목마다 할 일을 하나씩 열어 같은 학생 이름이 든 "신규생 정착 콜 기한 초과 4건"이 네 줄로 보였다(원장 2026-11-10 *"똑같은 기한 초과가 중복으로"*).
+-- 고침: period = 'case'면 묶음 열쇠의 회차를 ''로 — 담당자 × 종류에 하나. 본문은 "이름(항목) · 이름(항목)". 일간·월간은 그대로(날짜·달마다 하나).
+--   항목별로 열려 있던 옛 할 일은 늦은 의무가 새 묶음으로 옮겨가며 'cancelled'(duties_moved_or_void)로 닫히고, 새 할 일 하나가 선다(한 번뿐).
+-- 되돌리기: duty_escalate를 s2_0072 본문으로.
+-- 연동 역할 실행권 확인: duties_private 함수는 장부 맞춤(앱 service_role)만 부른다 — 연동 PC 질의·RLS 정책이 지나지 않는다.
 begin;
+
+create or replace function duties_private.cycle_label(p_kind text, p_cycle text) returns text
+language sql immutable
+as $fn$
+  select case when p_kind = 'newcomer_call' then
+    case p_cycle when 'pre_call' then '사전 콜' when 'first_class_guide' then '첫 수업 안내' when 'ojt' then 'OJT' when 'after_first_call' then '첫 수업 후 콜'
+                 when 'month1_call' then '1개월 콜' when 'month2_call' then '2개월 콜' when 'month3_call' then '3개월 콜' else p_cycle end
+  else p_cycle end;
+$fn$;
 
 create or replace function public.duty_escalate(p_tenant uuid, p_manager_days int default 3, p_owner_days int default 7, p_expire_days int default 7) returns jsonb
 language plpgsql security definer set search_path = public
@@ -30,29 +41,30 @@ begin
   update public.duty_items set escalation = 3, updated_at = v_now
    where tenant_id = p_tenant and status = 'open' and escalation < 3 and due_at + make_interval(days => p_owner_days) < v_now;
 
+  -- 묶음 = 담당자 × 종류 × (일간·월간은 회차 · 건별은 '') — 열쇠 md5는 닫기 루프와 같은 식.
   for g in
-    select d.owner_id, d.kind, d.cycle, d.period, count(*) as n, min(d.due_at) as first_due,
-           md5(p_tenant::text || ':' || coalesce(d.owner_id::text, 'none') || ':' || d.kind || ':' || d.cycle)::uuid as subject,
+    select d.owner_id, d.kind, d.period, (case when d.period = 'case' then '' else d.cycle end) as grp_cycle,
+           count(*) as n, min(d.due_at) as first_due,
+           md5(p_tenant::text || ':' || coalesce(d.owner_id::text, 'none') || ':' || d.kind || ':' || (case when d.period = 'case' then '' else d.cycle end))::uuid as subject,
            array_agg(d.id) as ids
       from public.duty_items d
      where d.tenant_id = p_tenant and d.status = 'open' and d.due_at < v_now
-     group by d.owner_id, d.kind, d.cycle, d.period
+     group by d.owner_id, d.kind, d.period, (case when d.period = 'case' then '' else d.cycle end)
   loop
-    select string_agg(st.name, ' · ' order by st.name) into v_names
+    select string_agg(st.name || case when g.period = 'case' then '(' || duties_private.cycle_label(d.kind, d.cycle) || ')' else '' end, ' · ' order by st.name, d.due_at) into v_names
       from public.duty_items d join public.students st on st.id = d.student_id
      where d.id = any(g.ids);
     select bool_or(d.subject = 'english') into v_english from public.duty_items d where d.id = any(g.ids);
     select exists (select 1 from public.users u where u.id = g.owner_id and u.tenant_id = p_tenant and u.status = 'active') into v_active;
     v_title := duties_private.kind_label(g.kind) || ' 기한 초과 ' || g.n || '건'
-      || case when g.period = 'daily' then ' · ' || to_char(g.cycle::date, 'MM/DD') when g.period = 'monthly' then ' · ' || g.cycle else '' end;
+      || case when g.period = 'daily' then ' · ' || to_char(g.grp_cycle::date, 'MM/DD') when g.period = 'monthly' then ' · ' || g.grp_cycle else '' end;
     v_task := staff_tasks_private.open_task(
       p_tenant, 'duty_late', g.subject, '',
       v_title,
-      left(v_title || coalesce(' — ' || v_names, ''), 400),
+      left(v_title || coalesce(' — ' || v_names, ''), 600),
       case when g.kind in ('attendance', 'report_write', 'report_send', 'video_check') then (case when coalesce(v_english, false) then '/ecs' else '/onescreen' end)
-           when g.kind = 'counsel_monthly' then '/consultations/new'
-           when g.kind = 'exam_monthly' then '/grades'
-           when g.kind = 'newcomer_call' then '/newcomers' else null end,
+           when g.kind in ('counsel_monthly', 'newcomer_call') then '/consultations/new'
+           when g.kind = 'exam_monthly' then '/exams/input' else null end,
       g.first_due + interval '1 day',
       case when g.owner_id is null or not v_active then staff_tasks_private.master_ids(p_tenant) else array[g.owner_id] end,
       null);
@@ -69,7 +81,7 @@ begin
        and not exists (
          select 1 from public.duty_items d
           where d.tenant_id = p_tenant and d.status = 'open' and d.due_at < v_now
-            and md5(p_tenant::text || ':' || coalesce(d.owner_id::text, 'none') || ':' || d.kind || ':' || d.cycle)::uuid = t.subject_id)
+            and md5(p_tenant::text || ':' || coalesce(d.owner_id::text, 'none') || ':' || d.kind || ':' || (case when d.period = 'case' then '' else d.cycle end))::uuid = t.subject_id)
   loop
     v_closed := v_closed + staff_tasks_private.close_task(p_tenant, 'duty_late', g.subject_id, '',
       case when g.any_done then 'done' when g.any_expired then 'expired' else 'cancelled' end,
@@ -79,5 +91,7 @@ begin
 end;
 $fn$;
 
+revoke all on all functions in schema duties_private from public, anon, authenticated;
+grant execute on all functions in schema duties_private to service_role;
 notify pgrst, 'reload schema';
 commit;

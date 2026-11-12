@@ -425,7 +425,7 @@ function EcsTodayFace({
           <TodayAttendanceStrip />
         </Suspense>
       )}
-      {/* 오늘 내 업무(s2_0043) — 원스크린과 같은 한 줄(영어는 반 알림장 · 출결). */}
+      {/* 오늘 내 업무(s2_0069) — 원스크린과 같은 한 줄(영어는 반 알림장 · 출결). */}
       <Suspense fallback={null}>
         <MyDutiesStrip />
       </Suspense>

@@ -25,7 +25,7 @@ const REFRESH_MS = 60_000;
  * '내 업무' — 머리 한 줄(오늘 완료/전체 · 기한 초과 · 막대) + 완료도 칸 다섯. 칸이나 머리를 누르면 **오버레이 창**(원장 2026-11-09 *"페이지 확장이 아닌 오버레이창"* ·
  * 할 일 창과 같은 Dialog)에 오늘 / 이번 주 / 이번 달 보기. 숫자는 보일 때 60초마다 GET `/api/duties/summary`(셸 자동 호출은 서버 액션 금지 #137).
  */
-export function MyDutiesStripButton({ summary: initial, tenantId = null, className = "" }: { summary: DutyStripSummary; /** 저장 순간의 신호를 들을 지점(s2_0054). */ tenantId?: string | null; className?: string }) {
+export function MyDutiesStripButton({ summary: initial, tenantId = null, className = "" }: { summary: DutyStripSummary; /** 저장 순간의 신호를 들을 지점(s2_0080). */ tenantId?: string | null; className?: string }) {
   const [summary, setSummary] = useState(initial);
   const { date, month, today, counsel, exam, newcomer, lang } = summary;
   // 모두 접기/펼치기 — 패널을 다시 그려(key) 처음 상태를 바꾼다(원장 2026-11-10: 단추는 오늘/이번 주/이번 달 줄 맨 오른쪽).

@@ -5,12 +5,12 @@ import { DUTY_KIND_KEYS, dutyKindLabel, type DutyItemView, type DutyPeriod, DUTY
 import { weekDaysOf } from "./view";
 
 /**
- * 업무 완성도 **관리자 화면**(과목 관리자 · 원장)의 순수 조립 — DB 집계(s2_0049 rollup 3종)를 선생님 × 종류 매트릭스 · 반별 줄 ·
+ * 업무 완성도 **관리자 화면**(과목 관리자 · 원장)의 순수 조립 — DB 집계(s2_0075 rollup 3종)를 선생님 × 종류 매트릭스 · 반별 줄 ·
  * 학생별 줄 · '오늘 확인할 것'으로 접는다. 숫자는 장부(duty_items) 그대로 — 강사 홈 '내 업무'와 같은 행을 센다.
  * 과목 관리자는 담당 과목 키만 받는다(서버가 `p_subjects`로 거른다) · 원장은 전 과목 + 과목 칩(여기서 subject 열로 거른다).
  */
 /**
- * 한 묶음의 셈(s2_0050) — total·done = 진척(장부 전체) · due = 기한이 온 것 · ontime = 그중 제때 끝낸 것 · lateDone = 늦게 끝낸 것 ·
+ * 한 묶음의 셈(s2_0076) — total·done = 진척(장부 전체) · due = 기한이 온 것 · ontime = 그중 제때 끝낸 것 · lateDone = 늦게 끝낸 것 ·
  * late = **지금 지연**(열린 채 기한 지남 — 아직 손쓸 수 있는 것) · expired = 미이행 확정(일간 7일 뒤) · over7 = 7일 넘게 열린 지연.
  * due = ontime + lateDone + late + expired. 기한 전 의무는 total에만 든다.
  */
@@ -24,11 +24,11 @@ export type StudentInfo = Record<string, { name: string; school: string | null; 
 /** 과목 범위 — null = 전 과목(원장). 배열 = 그 과목 키만(과목 관리자 — 비어 있으면 아무것도 안 보인다). labels = 키 → 학원 설정 라벨(raw 키 노출 금지). */
 export type DutyAdminScope = { subjects: string[] | null; labels: Record<string, string>; /** '담당' 권한이면 본인 의무만(null = 전원). */ ownerId: string | null; /** 관리 기록(확인 · 사유 · 면제)을 남길 수 있나 — 전체 권한만. 서버 액션이 같은 판정을 한 번 더 한다. */ canNote?: boolean; /** 수업보고서 평점을 볼 수 있나 — 수업보고서 쓰기 권한(평점 열람과 같은 문 · 0450a). 본인만 보는 사람에게는 없다. */ seeRatings?: boolean };
 /** 열린 채 기한이 지난 의무 한 건. inherited = 평가 시작(live_from) 전 기한 — 집계·판정에 안 들고 '이관된 미확인'으로 따로 묶는다. */
-/** note = 가장 최근 관리 기록(확인 · 사유 — s2_0052). 면제한 의무는 지연에서 빠져 여기 오지 않는다. */
+/** note = 가장 최근 관리 기록(확인 · 사유 — s2_0078). 면제한 의무는 지연에서 빠져 여기 오지 않는다. */
 export type LateItem = DutyItemView & { ownerId: string | null; inherited: boolean; note?: DutyNote | null };
 /** syncedAt = 장부를 마지막으로 맞춘 시각(없으면 null) — 화면의 '기준 시각'. */
 export type DutyAdminData = { ownerKind: RollupOwnerKind[]; classes: RollupClass[]; late: LateItem[]; owners: OwnerInfo; classInfo: ClassInfo; syncedAt: string | null; /** 담당 반 수 · 학생 수(없으면 반 수만 트리에서 센다). */ ownerLoad?: OwnerLoadRow[]; /** 관리자 역할(원장 · 관리자)인 담당자 — 맡은 반이 없으면 선생님 목록·등수에서 뺀다. */ managerIds?: string[]; /** 평가 개시 시각(없으면 null) — 고른 기간이 통째로 그 전이면 화면이 '참고 기록'이라고 밝힌다. */ liveFrom?: string | null; /** 볼 수 있는 첫 날(없으면 제한 없음) — 이보다 앞선 기간으로는 가지 않는다. */ viewFrom?: string | null; /** 작성자 × 과목의 수업보고서 평점(볼 수 있는 사람에게만 · 없으면 열이 없다). */ ratings?: RatingRow[];
-  /** 퇴원보고서 작성 차례(s2_0067 · 달 보기에서만 · 함수가 없으면 없다) — 등급 · 전체에 넣지 않는 참고 열. */ withdrawal?: WithdrawalRow[] };
+  /** 퇴원보고서 작성 차례(s2_0093 · 달 보기에서만 · 함수가 없으면 없다) — 등급 · 전체에 넣지 않는 참고 열. */ withdrawal?: WithdrawalRow[] };
 
 /**
  * 기간 열쇠 — `d:YYYY-MM-DD`(하루) · `w:YYYY-MM-DD`(그 주의 월요일) · `m:YYYY-MM`(달). 원장 2026-11-11 *"달력 추가해서 날짜 이동 가능하게"* —
@@ -94,7 +94,7 @@ export const MATRIX_COLUMNS: { kind: string; label: string }[] = [
 ];
 /**
  * pct = **기한 내 완료율** — **때가 된 업무**(`due`) 가운데 기한 안에 끝낸 것(`ontime`)의 비율(내림 — 남은 것이 있으면 100%가 아니다). 때가 된 업무가 없으면 null.
- * '때'는 집계 SQL이 가른다(s2_0064 · s2_0065 — 앱에서는 `kinds.ts`의 `dutyOpensAt`(보이기 시작) · `dutyJudgedAt`(등급에 들기 시작)이 같은 규칙):
+ * '때'는 집계 SQL이 가른다(s2_0090 · s2_0091 — 앱에서는 `kinds.ts`의 `dutyOpensAt`(보이기 시작) · `dutyJudgedAt`(등급에 들기 시작)이 같은 규칙):
  *   · 일간(출결 · 보고서) = **그 수업이 끝난 뒤부터**(원장 2026-11-11 *"수업시간이 지났을때 반영할것 … 수업시간이 되지도 않았는데 벌써부터 0%임"*). 아직 열리지 않은 수업의 업무는 집계에 없다.
  *     보고서는 수업이 끝나면 들어와 기한(+24시간) 전까지 '남음'으로 분모에 든다(*"남음이 있는데 100%는 말도 안됨"*).
  *   · 월간(학생 상담 · 월말평가) · 건별(신규생 관리) = **그 기한이 지난 뒤부터**(원장 *"추천으로 진행"* — 달 초부터 분모에 넣으면 잘하는 선생님도 달 내내 5~7등급이었다).
@@ -235,13 +235,13 @@ export const addRating = (a: Rating | undefined, b: Rating | undefined): Rating 
 /** 평점을 매기는 최소 건수 — 그 아래는 등수에서 뺀다. */
 export const MIN_RATED = 5;
 /**
- * 퇴원보고서 작성 차례(s2_0067) — 맡은 사람 × 과목(보고서 과목마다) 또는 `subject: null` = 맡은 사람 하나로 접은 줄(여러 과목 보고서를 한 번만 센다).
+ * 퇴원보고서 작성 차례(s2_0093) — 맡은 사람 × 과목(보고서 과목마다) 또는 `subject: null` = 맡은 사람 하나로 접은 줄(여러 과목 보고서를 한 번만 센다).
  * 칸 모양은 업무와 같다(기한 내 · 기한 후 완료 · 미처리) — 그러나 **등급 · 전체 · 등수에 넣지 않는 참고 열**이다(Codex 협의 2026-11-11: 건수가 적고 취소가 잦다).
  */
 export type WithdrawalRow = Counts & { ownerId: string; subject: string | null };
 export const WITHDRAWAL_LABEL = "퇴원보고서 작성";
 export type MatrixRow = { ownerId: string; name: string; /** 수업보고서 평점(있을 때만). */ rating?: Rating; /** 퇴원보고서 작성(참고 · 있을 때만). */ withdrawal?: Cell; /** 이름 옆 글(과목 · 반 수 · 학생 수). */ meta?: string; cells: Record<string, Cell>; all: Cell };
-/** 담당자 × 과목의 담당 반 수 · 학생 수(s2_0053 — 고른 기간의 장부에서 겹침 없이). */
+/** 담당자 × 과목의 담당 반 수 · 학생 수(s2_0079 — 고른 기간의 장부에서 겹침 없이). */
 export type OwnerLoadRow = { ownerId: string | null; subject: string | null; classes: number; students: number };
 /** 보이는 줄의 합(전체 줄) — '지연만'으로 거른 뒤에도 그 줄들의 합이다. */
 export function foldMatrixRows(rows: readonly MatrixRow[]): MatrixRow | null {

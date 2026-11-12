@@ -15,7 +15,7 @@ export async function GET() {
   try {
     const viewer = await getStaffTaskViewer();
     if (!viewer) return NextResponse.json({ error: "로그인이 필요합니다" }, { status: 401, headers: NO_STORE });
-    await flushDuties(viewer.user.tenantId); // 방금 저장한 것을 먼저 장부에 맞춘다(s2_0051)
+    await flushDuties(viewer.user.tenantId); // 방금 저장한 것을 먼저 장부에 맞춘다(s2_0077)
     return NextResponse.json(await loadDutySummary(viewer.user.tenantId, viewer.user.id), { headers: NO_STORE });
   } catch (error) {
     reportError(error, { scope: "api.duties.summary" });

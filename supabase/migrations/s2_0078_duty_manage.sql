@@ -1,4 +1,4 @@
--- s2_0052 — 업무 완성도: 관리 이력(확인 · 사유 · 면제) + 지연의 실제 배정(3일 → 과목 관리자 · 7일 → 원장) + 평가 개시 전 기간의 집계 (2026-11-10)
+-- s2_0078 — 업무 완성도: 관리 이력(확인 · 사유 · 면제) + 지연의 실제 배정(3일 → 과목 관리자 · 7일 → 원장) + 평가 개시 전 기간의 집계 (2026-11-10)
 --
 -- 왜(원장 2026-11-10 *"3일·7일 배정이랑 관리 이력 이어서 만들어"* · *"10월 기록을 총 동원해서 지난달 것도 만들어볼것"*):
 --   ① 관리자가 지연을 보고도 남길 수 있는 것이 없었다(봤는지 · 왜 늦었는지 · 안 해도 되는지). ② '3일·7일 이상 지연'은 숫자일 뿐 누구에게도 가지 않았다.
@@ -7,13 +7,13 @@
 --   · `duty_notes` — 의무마다 남기는 관리 기록(ack 확인 · reason 사유 · waive 면제). 지우거나 고치지 않고 덧붙이기만 한다.
 --   · `duty_note_add` — 한 번에 여러 의무에 같은 기록을 남긴다. 대상은 **열려 있거나 미이행으로 확정된** 의무만 · 과목 범위(p_subjects) 밖이 섞이면 통째로 거절.
 --     면제(waive)는 그 의무를 void('waived')로 — 분모·지연·할 일에서 빠진다(집계는 expired가 아닌 void를 원래 세지 않는다).
---   · `duty_resolve_items` — 면제한 의무는 맞춤이 되살리지 않는다(사람이 내린 결정이 30분 뒤 맞춤에 뒤집히지 않게). 그 밖은 s2_0045 본문 그대로.
+--   · `duty_resolve_items` — 면제한 의무는 맞춤이 되살리지 않는다(사람이 내린 결정이 30분 뒤 맞춤에 뒤집히지 않게). 그 밖은 s2_0071 본문 그대로.
 --   · `duty_escalate_up` — 늦음 할 일 스위치(late_tasks_on)가 켜져 있을 때만: 기한 뒤 3일이 지난 열린 의무를 **선생님 × 과목**으로 묶어 그 과목 관리자에게,
 --     7일이 지난 것(+ 미이행으로 확정된 지 한 주 안의 것 — 일간은 7일째에 확정돼 열린 채로는 못 온다)을 **과목**으로 묶어 원장에게 할 일(`duty_late_up`)로 연다. 과목 관리자 명단은 앱이 넘긴다(판정이 앱의 운영실 배정이라 SQL로 옮기지 않는다).
 --     과목 관리자가 없거나 지연한 사람 본인뿐이면 원장에게. 묶음이 사라지면(처리 · 면제 · 확정) 닫는다. 스위치가 꺼지면 전부 닫는다.
 --   · `duties_private.rollup_rows` — 고른 기간이 **통째로 평가 개시(live_from) 전**이면 개시 전 기한도 센다(지난달 기록을 참고로 본다). 개시일이 든 기간은 종전대로 뺀다.
 --     인자·돌려주는 열은 그대로(공개 집계 함수 셋은 건드리지 않는다).
--- service_role 전용. 되돌리기: duty_escalate_up · duty_note_add를 지우고 duty_notes를 지운 뒤 duty_resolve_items는 s2_0045, rollup_rows는 s2_0050 본문으로.
+-- service_role 전용. 되돌리기: duty_escalate_up · duty_note_add를 지우고 duty_notes를 지운 뒤 duty_resolve_items는 s2_0071, rollup_rows는 s2_0076 본문으로.
 begin;
 
 create table if not exists public.duty_notes (
@@ -62,7 +62,7 @@ begin
 end;
 $fn$;
 
--- s2_0045 본문 + 면제한 의무는 건드리지 않는다(한 줄).
+-- s2_0071 본문 + 면제한 의무는 건드리지 않는다(한 줄).
 create or replace function public.duty_resolve_items(p_tenant uuid, p_updates jsonb) returns jsonb
 language plpgsql security definer set search_path = public
 as $fn$
@@ -174,7 +174,7 @@ begin
 end;
 $fn$;
 
--- s2_0050 본문 + 고른 기간이 통째로 평가 개시 전이면 개시 전 기한도 센다(한 줄). 인자·열은 그대로.
+-- s2_0076 본문 + 고른 기간이 통째로 평가 개시 전이면 개시 전 기한도 센다(한 줄). 인자·열은 그대로.
 create or replace function duties_private.rollup_rows(p_tenant uuid, p_from date, p_to date, p_subjects text[], p_periods text[], p_owner uuid)
 returns table (owner_id uuid, subject text, kind text, period text, class_id uuid, student_id uuid, due_at timestamptz,
                f_done int, f_due int, f_ontime int, f_late_done int, f_open_late int, f_expired int, f_over7 int)

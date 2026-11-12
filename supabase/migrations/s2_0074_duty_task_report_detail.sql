@@ -1,21 +1,10 @@
--- s2_0047 — 건별(case) 의무의 늦음 할 일은 **담당자 × 종류에 하나**(항목마다 쪼개지 않는다) (2026-11-10)
+-- s2_0074 — duty_late 할 일 본문을 보고서처럼: 한 줄에 한 학생 "이름 — 항목 · 항목" (2026-11-10)
 --
--- 왜: 신규생 정착 콜은 회차(cycle)가 체크리스트 항목 키(pre_call · ojt · month1_call …)라, s2_0046까지의 묶음(담당자 × 종류 × 회차)이
---   항목마다 할 일을 하나씩 열어 같은 학생 이름이 든 "신규생 정착 콜 기한 초과 4건"이 네 줄로 보였다(원장 2026-11-10 *"똑같은 기한 초과가 중복으로"*).
--- 고침: period = 'case'면 묶음 열쇠의 회차를 ''로 — 담당자 × 종류에 하나. 본문은 "이름(항목) · 이름(항목)". 일간·월간은 그대로(날짜·달마다 하나).
---   항목별로 열려 있던 옛 할 일은 늦은 의무가 새 묶음으로 옮겨가며 'cancelled'(duties_moved_or_void)로 닫히고, 새 할 일 하나가 선다(한 번뿐).
--- 되돌리기: duty_escalate를 s2_0046 본문으로.
--- 연동 역할 실행권 확인: duties_private 함수는 장부 맞춤(앱 service_role)만 부른다 — 연동 PC 질의·RLS 정책이 지나지 않는다.
+-- 왜: s2_0073의 본문 "이름(항목) · 이름(항목) · …" 한 덩어리가 읽히지 않았다(원장 2026-11-10 *"나열하지말고 제목 내용 등등 보고서처럼 정리"*).
+-- 고침: detail = 줄바꿈(chr(10))으로 학생마다 한 줄 — 건별(신규생 콜)은 "이름 — 사전 콜 · OJT", 일간·월간은 "이름"(반 이름이 있으면 "이름 · 반"). 제목은 그대로.
+--   앱(할 일 창)은 duty_late의 목록 줄엔 제목만, 상세에선 본문을 줄바꿈 그대로 보인다.
+-- 되돌리기: duty_escalate를 s2_0073 본문으로.
 begin;
-
-create or replace function duties_private.cycle_label(p_kind text, p_cycle text) returns text
-language sql immutable
-as $fn$
-  select case when p_kind = 'newcomer_call' then
-    case p_cycle when 'pre_call' then '사전 콜' when 'first_class_guide' then '첫 수업 안내' when 'ojt' then 'OJT' when 'after_first_call' then '첫 수업 후 콜'
-                 when 'month1_call' then '1개월 콜' when 'month2_call' then '2개월 콜' when 'month3_call' then '3개월 콜' else p_cycle end
-  else p_cycle end;
-$fn$;
 
 create or replace function public.duty_escalate(p_tenant uuid, p_manager_days int default 3, p_owner_days int default 7, p_expire_days int default 7) returns jsonb
 language plpgsql security definer set search_path = public
@@ -26,7 +15,7 @@ declare
   v_closed int := 0;
   v_task uuid;
   g record;
-  v_names text;
+  v_body text;
   v_title text;
   v_english boolean;
   v_active boolean;
@@ -41,7 +30,6 @@ begin
   update public.duty_items set escalation = 3, updated_at = v_now
    where tenant_id = p_tenant and status = 'open' and escalation < 3 and due_at + make_interval(days => p_owner_days) < v_now;
 
-  -- 묶음 = 담당자 × 종류 × (일간·월간은 회차 · 건별은 '') — 열쇠 md5는 닫기 루프와 같은 식.
   for g in
     select d.owner_id, d.kind, d.period, (case when d.period = 'case' then '' else d.cycle end) as grp_cycle,
            count(*) as n, min(d.due_at) as first_due,
@@ -51,9 +39,15 @@ begin
      where d.tenant_id = p_tenant and d.status = 'open' and d.due_at < v_now
      group by d.owner_id, d.kind, d.period, (case when d.period = 'case' then '' else d.cycle end)
   loop
-    select string_agg(st.name || case when g.period = 'case' then '(' || duties_private.cycle_label(d.kind, d.cycle) || ')' else '' end, ' · ' order by st.name, d.due_at) into v_names
-      from public.duty_items d join public.students st on st.id = d.student_id
-     where d.id = any(g.ids);
+    -- 본문: 학생마다 한 줄. 건별은 "이름 — 항목 · 항목", 그 밖은 "이름 · 반".
+    select string_agg(line, chr(10) order by line) into v_body from (
+      select st.name || case when g.period = 'case'
+                               then ' — ' || string_agg(duties_private.cycle_label(d.kind, d.cycle), ' · ' order by d.due_at)
+                               else coalesce(' · ' || min(c.class_name), '') end as line
+        from public.duty_items d join public.students st on st.id = d.student_id left join public.classes c on c.id = d.class_id
+       where d.id = any(g.ids)
+       group by st.id, st.name
+    ) lines;
     select bool_or(d.subject = 'english') into v_english from public.duty_items d where d.id = any(g.ids);
     select exists (select 1 from public.users u where u.id = g.owner_id and u.tenant_id = p_tenant and u.status = 'active') into v_active;
     v_title := duties_private.kind_label(g.kind) || ' 기한 초과 ' || g.n || '건'
@@ -61,7 +55,7 @@ begin
     v_task := staff_tasks_private.open_task(
       p_tenant, 'duty_late', g.subject, '',
       v_title,
-      left(v_title || coalesce(' — ' || v_names, ''), 600),
+      left(coalesce(v_body, ''), 1200),
       case when g.kind in ('attendance', 'report_write', 'report_send', 'video_check') then (case when coalesce(v_english, false) then '/ecs' else '/onescreen' end)
            when g.kind in ('counsel_monthly', 'newcomer_call') then '/consultations/new'
            when g.kind = 'exam_monthly' then '/exams/input' else null end,
@@ -91,7 +85,5 @@ begin
 end;
 $fn$;
 
-revoke all on all functions in schema duties_private from public, anon, authenticated;
-grant execute on all functions in schema duties_private to service_role;
 notify pgrst, 'reload schema';
 commit;

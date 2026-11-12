@@ -10,7 +10,7 @@ import { adminRange, parseAdminPeriod } from "@/features/duties/view-admin";
 import { reportError } from "@/lib/observability/report-error";
 
 /**
- * 퇴원보고서 작성(참고 열) 칸을 눌렀을 때(GET) — 그 선생님의 작성 차례 목록(s2_0067). 문 · 과목 범위는 `/api/duties/admin`과 같다.
+ * 퇴원보고서 작성(참고 열) 칸을 눌렀을 때(GET) — 그 선생님의 작성 차례 목록(s2_0093). 문 · 과목 범위는 `/api/duties/admin`과 같다.
  * 🔴 학생 이름이 나가는 목록이라 **퇴원보고서 메뉴 권한**도 본다 — 업무 완성도 권한만으로 누가 퇴원하는지 보이면 안 된다(칸의 숫자는 그대로 보인다).
  */
 export const dynamic = "force-dynamic";

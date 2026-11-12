@@ -6,7 +6,7 @@ import { OWNER_RUBRIC_ID } from "@/features/report-rating/harness/owner";
 import type { RatingRow } from "../view-admin";
 
 /**
- * 선생님별 수업보고서 평점 평균(s2_0063) — 업무 완성도 선생님 표의 참고 열(원장 2026-11-11). 준수율 · 등급에는 들지 않는다.
+ * 선생님별 수업보고서 평점 평균(s2_0089) — 업무 완성도 선생님 표의 참고 열(원장 2026-11-11). 준수율 · 등급에는 들지 않는다.
  *
  * 🔴 평점은 선생님 보고서를 평가한 값이다 — 호출부가 **수업보고서 쓰기 권한**을 확인한 사람에게만 부른다(평점 열람과 같은 문 · `report-ratings.ts`).
  * 🔴 지금 기준(`OWNER_RUBRIC_ID`)으로 매긴 줄만 · 합계는 DB에서(B2).

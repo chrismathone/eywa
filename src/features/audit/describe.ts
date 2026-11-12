@@ -2268,7 +2268,7 @@ export function auditDetail(
       const students = num(m.students);
       return join(assignees ? `담당 ${assignees}명` : null, students ? `학생 ${students}명` : null);
     }
-    // 업무 완성도 관리 기록(s2_0052) — 대상 열이 "업무 면제 3건". 사유 글만 덧붙인다.
+    // 업무 완성도 관리 기록(s2_0078) — 대상 열이 "업무 면제 3건". 사유 글만 덧붙인다.
     case "duty_note_add":
       return str(m.note) || null;
     case "work_request_act": {

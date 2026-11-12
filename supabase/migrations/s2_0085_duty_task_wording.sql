@@ -1,9 +1,9 @@
--- s2_0059 — 업무 완성도: 윗단계 할 일 제목의 낱말을 화면과 같게('지연' → '기한 초과') (2026-11-11)
+-- s2_0085 — 업무 완성도: 윗단계 할 일 제목의 낱말을 화면과 같게('지연' → '기한 초과') (2026-11-11)
 --
 -- 왜: 원장 2026-11-11 *"지연과 기한 초과가 다른말인가? 같은 말이면 기한 초과로 통일"* — 화면은 '기한 초과'로 통일했다. 과목 관리자 · 원장에게 가는
 --   할 일(`duty_escalate_up`)의 제목만 '3일 이상 지연 N건'이었다. 선생님 몫 할 일(`duty_escalate`)의 제목은 원래 '기한 초과'다.
--- 무엇: `duty_escalate_up` — 제목 두 곳의 낱말만. 그 밖은 s2_0052 본문 그대로(늦음 할 일 스위치가 꺼져 있어 지금 열린 할 일은 없다).
--- 되돌리기: s2_0052의 duty_escalate_up 본문으로.
+-- 무엇: `duty_escalate_up` — 제목 두 곳의 낱말만. 그 밖은 s2_0078 본문 그대로(늦음 할 일 스위치가 꺼져 있어 지금 열린 할 일은 없다).
+-- 되돌리기: s2_0078의 duty_escalate_up 본문으로.
 begin;
 
 create or replace function public.duty_escalate_up(p_tenant uuid, p_subjects jsonb, p_manager_days int default 3, p_owner_days int default 7) returns jsonb

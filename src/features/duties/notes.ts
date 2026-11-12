@@ -1,4 +1,4 @@
-/** 관리 기록(s2_0052 `duty_notes`) — 관리자가 지연·미이행 의무에 남기는 것. 클라·서버 공용(server-only 없음). */
+/** 관리 기록(s2_0078 `duty_notes`) — 관리자가 지연·미이행 의무에 남기는 것. 클라·서버 공용(server-only 없음). */
 export type DutyNoteAction = "ack" | "reason" | "waive";
 export const DUTY_NOTE_ACTIONS: readonly DutyNoteAction[] = ["ack", "reason", "waive"];
 export const DUTY_NOTE_LABEL: Record<DutyNoteAction, string> = { ack: "확인", reason: "사유", waive: "면제" };

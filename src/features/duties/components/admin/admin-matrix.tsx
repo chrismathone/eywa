@@ -80,7 +80,7 @@ export function AdminMatrix({ rows, total, avg = null, grade = true, title = "�
   rows: MatrixRow[]; total: MatrixRow | null; avg?: Avg | null; /** 첫 열 머리(과목별로 나눈 표는 과목 이름). */ title?: string;
   /** 한 종류만 보기(항목 필터) — 다른 종류 열은 자리를 둔 채 감춘다. */ kind?: string | null; /** 등급 열을 세울지 — 하루 보기에는 없다. */ grade?: boolean;
   /** 세울 종류 열(없으면 이 표에 있는 종류). */ columns?: readonly { kind: string; label: string }[]; /** 수업보고서 평점 열을 세울지. */ rated?: boolean;
-  /** 퇴원보고서 작성 참고 열(s2_0067) — 있으면 열을 세우고, 칸을 누르면 이 함수로 그 선생님의 작성 차례 목록. 등급 · 전체에는 안 든다. */
+  /** 퇴원보고서 작성 참고 열(s2_0093) — 있으면 열을 세우고, 칸을 누르면 이 함수로 그 선생님의 작성 차례 목록. 등급 · 전체에는 안 든다. */
   withdrawal?: (ownerId: string) => void;
   onCell: (ownerId: string, kind: string | null) => void;
 }) {

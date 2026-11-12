@@ -11,7 +11,7 @@ const md = (iso: string) => { const d = new Date(Date.parse(iso) + 9 * 3_600_000
 const historyOf = (items: readonly LateItem[]) => [...new Map(items.flatMap((it) => (it.note ? [[`${it.note.at}|${it.note.action}|${it.note.by}`, it.note] as const] : []))).values()].sort((a, b) => b.at.localeCompare(a.at));
 
 /**
- * 관리 기록 단추 + 창 — 그 줄(선생님 · 반 · 학생 묶음)의 의무 전부에 확인 · 사유 · 면제를 남긴다(s2_0052).
+ * 관리 기록 단추 + 창 — 그 줄(선생님 · 반 · 학생 묶음)의 의무 전부에 확인 · 사유 · 면제를 남긴다(s2_0078).
  * 단추 글 = 기록이 없으면 '기록', 있으면 가장 최근 기록('확인 11/10' — 묶음 일부에만 있으면 건수). 면제는 그 의무를 집계와 지연에서 뺀다(되돌리는 길이 없어 사유가 필수).
  * 저장하면 부모가 화면을 다시 받는다(`onSaved`).
  */

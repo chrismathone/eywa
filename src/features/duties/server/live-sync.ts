@@ -12,7 +12,7 @@ import { syncMonthlyDuties } from "./monthly-sync";
 export type DutyClaim = { locked: boolean; token: string; days: string[]; monthly: boolean; full: boolean };
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
-/** 맞출 것을 가져간다(s2_0051 `duty_sync_claim`) — force = 크론. SQL이 아직 없으면(#95) 잠기지 않은 것으로 본다(크론은 종전대로 돈다). */
+/** 맞출 것을 가져간다(s2_0077 `duty_sync_claim`) — force = 크론. SQL이 아직 없으면(#95) 잠기지 않은 것으로 본다(크론은 종전대로 돈다). */
 export async function claimDutySync(tenantId: string, force = false): Promise<DutyClaim & { missing?: boolean }> {
   const { data, error } = await createAdminClient().rpc("duty_sync_claim", { p_tenant: tenantId, p_force: force });
   if (error) {
@@ -35,7 +35,7 @@ export async function finishDutySync(tenantId: string, claim: Pick<DutyClaim, "t
 
 /**
  * 화면이 장부를 **읽기 직전**에 부른다 — 저장 즉시 반영(원장 2026-11-10 *"출결이나 상담같이 실시간 체크 가능한것들은 실시간 반영 … 오해를 사지 않게"*).
- * 원 표의 트리거(s2_0051)가 적어 둔 "바뀐 날"만 기존 맞춤 함수로 다시 맞춘다(판정은 크론과 같은 함수 한 벌 — 새 규칙을 만들지 않는다 · 날은 오늘과 최근 7일만 `syncDays`).
+ * 원 표의 트리거(s2_0077)가 적어 둔 "바뀐 날"만 기존 맞춤 함수로 다시 맞춘다(판정은 크론과 같은 함수 한 벌 — 새 규칙을 만들지 않는다 · 날은 오늘과 최근 7일만 `syncDays`).
  * 적힌 것이 없고 마지막 전체 맞춤이 30분 안이면 RPC 한 번으로 끝난다. 전체 맞춤이 오래됐으면(크론이 없는 환경 · 크론 실패) 오늘 치와 월간까지 스스로 맞춘다
  * (기한 지난 열린 날을 훑는 일은 크론 몫 — 그런 날도 원 표가 바뀌면 변경 기록으로 들어온다).
  * 다른 요청이나 크론이 맞추는 중이면 기다리지 않고 지금 장부를 그대로 읽는다(그 요청이 끝나면 다음 갱신에 반영).

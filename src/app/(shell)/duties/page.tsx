@@ -12,7 +12,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 export const metadata = { title: "업무 완성도 — 에이와" };
 
 /**
- * 업무 완성도(관리자) — 의무 장부(s2_0043)를 선생님별 × 종류 · 반별 · 학생별로 본다(원장 2026-11-10 *"관리자 화면 구축"* · 시안 ② 과목 관리자).
+ * 업무 완성도(관리자) — 의무 장부(s2_0069)를 선생님별 × 종류 · 반별 · 학생별로 본다(원장 2026-11-10 *"관리자 화면 구축"* · 시안 ② 과목 관리자).
  * 과목 범위는 운영실과 같은 판정 — 과목 관리자는 담당 과목만, 원장은 전 과목 + 과목 칩. 첫 그리기는 '이번 달', 나머지 기간·드릴다운은 GET으로.
  */
 export default async function DutiesPage() {

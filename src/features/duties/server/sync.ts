@@ -91,7 +91,7 @@ export async function syncDailyDuties(tenantId: string, date: string, settings: 
  * 초안을 장부에 쓴다 — 열기(upsert) → 명단에서 빠진 것 void(종류 × 회차마다 · 보고서·상담처럼 열쇠에 담당이 든 종류는 rekey 정리) → 사실로 닫거나 되살림.
  * `kinds`를 주면 초안이 하나도 없는 종류도 그 회차들을 정리한다(예: 신규생이 0명이 된 날).
  */
-export async function writeDrafts(tenantId: string, drafts: readonly DutyDraft[], options: { rekey: boolean; /** 초안이 비어도 정리할 종류 → 회차. 건별(case) 종류는 회차 목록 대신 열린 회차를 DB에서 찾는다. */ cyclesOf?: Readonly<Record<string, readonly string[]>>; /** 이미 있는 행의 완료만 맞춘다 — 새로 열지도 · 빼지도 · 담당을 옮기지도 않는다(지난 달 재맞춤). */ resolveOnly?: boolean; /** 지난 달 다시 만들기 — 닫힌 행의 담당도 초안대로 다시 적는다(평가 개시 전 행만 · s2_0064 `duty_reown_items`). */ reown?: boolean } = { rekey: false }): Promise<{ inserted: number; done: number; voided: number }> {
+export async function writeDrafts(tenantId: string, drafts: readonly DutyDraft[], options: { rekey: boolean; /** 초안이 비어도 정리할 종류 → 회차. 건별(case) 종류는 회차 목록 대신 열린 회차를 DB에서 찾는다. */ cyclesOf?: Readonly<Record<string, readonly string[]>>; /** 이미 있는 행의 완료만 맞춘다 — 새로 열지도 · 빼지도 · 담당을 옮기지도 않는다(지난 달 재맞춤). */ resolveOnly?: boolean; /** 지난 달 다시 만들기 — 닫힌 행의 담당도 초안대로 다시 적는다(평가 개시 전 행만 · s2_0090 `duty_reown_items`). */ reown?: boolean } = { rekey: false }): Promise<{ inserted: number; done: number; voided: number }> {
   const admin = createAdminClient();
   let inserted = 0, done = 0, voided = 0;
   for (let i = 0; !options.resolveOnly && i < drafts.length; i += 500) {
@@ -150,7 +150,7 @@ export async function openPastCycles(tenantId: string): Promise<string[]> {
 }
 
 /**
- * 늦음 사다리(할 일 열기·닫기 · escalation 단계) + 윗단계 배정(3일 → 과목 관리자 · 7일 → 원장 · s2_0052 `duty_escalate_up`) + 일별 스냅숏. 맞춤 뒤에 부른다.
+ * 늦음 사다리(할 일 열기·닫기 · escalation 단계) + 윗단계 배정(3일 → 과목 관리자 · 7일 → 원장 · s2_0078 `duty_escalate_up`) + 일별 스냅숏. 맞춤 뒤에 부른다.
  * 과목 관리자 명단은 앱의 판정(운영실 배정)이라 여기서 읽어 넘긴다. 윗단계 함수가 아직 없으면(#95) 그 몫만 건너뛴다.
  */
 export async function escalateAndSnapshot(tenantId: string, days: readonly string[], settings: TenantSettings): Promise<{ taskOpened: number; taskClosed: number }> {

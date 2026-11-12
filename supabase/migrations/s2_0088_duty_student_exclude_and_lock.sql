@@ -1,15 +1,15 @@
--- s2_0062 — 업무 완성도: 학생 집계에서 담당 빼기 · 맞춤 잠금 6분 (2026-11-11 · Claude + Codex 합의)
+-- s2_0088 — 업무 완성도: 학생 집계에서 담당 빼기 · 맞춤 잠금 6분 (2026-11-11 · Claude + Codex 합의)
 --
 -- 왜:
 --   ① 원어민 담당 몫은 관리 화면에서 뺀다(원장 2026-11-11). 선생님 · 반 집계는 앱이 줄을 걸러 뺐지만, 학생 집계(`duty_rollup_student`)는 결과에 담당 칸이 없어
 --      합친 뒤에는 뺄 수 없다 — 같은 학생의 숫자가 표마다 달랐다. 합치기 전에 빼야 한다.
 --   ② 맞춤 잠금이 3분인데 크론은 최대 5분 돈다 — 긴 맞춤 도중 잠금이 풀려 두 번째 맞춤이 끼어들 수 있었다.
 -- 무엇:
---   ① `duty_rollup_student_ex` — `duty_rollup_student`(s2_0050)와 같은 본문 + `p_exclude_owners uuid[]`(그 담당의 의무는 세지 않는다). 옛 함수는 그대로 둔다
+--   ① `duty_rollup_student_ex` — `duty_rollup_student`(s2_0076)와 같은 본문 + `p_exclude_owners uuid[]`(그 담당의 의무는 세지 않는다). 옛 함수는 그대로 둔다
 --      (옛 앱이 부른다 — 앱이 다 넘어간 뒤 따로 치운다).
---   ② `duty_sync_claim` — 잠금 3분 → 6분. 그 밖은 s2_0051 본문 그대로.
+--   ② `duty_sync_claim` — 잠금 3분 → 6분. 그 밖은 s2_0077 본문 그대로.
 -- 연동 역할 실행권 확인: 관리 화면 집계 · 장부 맞춤은 앱 service_role만 부른다 — 연동 PC 질의·RLS 정책이 지나지 않는다.
--- 되돌리기: ① 새 함수를 지운다(앱을 먼저 되돌린다) ② s2_0051의 duty_sync_claim 본문으로.
+-- 되돌리기: ① 새 함수를 지운다(앱을 먼저 되돌린다) ② s2_0077의 duty_sync_claim 본문으로.
 begin;
 
 create or replace function public.duty_rollup_student_ex(p_tenant uuid, p_from date, p_to date, p_subjects text[], p_periods text[], p_owner uuid, p_kind text, p_class uuid, p_subject text, p_student uuid, p_subject_none boolean, p_owner_none boolean, p_exclude_owners uuid[])

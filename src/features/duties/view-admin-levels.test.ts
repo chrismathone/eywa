@@ -190,7 +190,7 @@ describe("mixPercents — 판정 줄의 %", () => {
   });
 });
 
-describe("퇴원보고서 작성(참고 열 · s2_0067)", () => {
+describe("퇴원보고서 작성(참고 열 · s2_0093)", () => {
   it("🔴 과목 단계 = 그 과목 몫 · 전체 단계 = 선생님 전체 줄(두 과목 보고서를 두 번 세지 않는다) · 선생님 줄 '전체' 칸 · 등급에는 안 든다", () => {
     const rows = [ok({ ownerId: "t2", subject: "math" }), ok({ ownerId: "t2", subject: "english" })];
     const w = [

@@ -13,7 +13,7 @@ import { syncDays } from "@/features/duties/model/sync-window";
 import { backfillDutyMonth } from "@/features/duties/server/backfill";
 
 /**
- * 의무 장부 30분 맞춤(s2_0043) — 지점마다 **오늘**의 일간 의무를 만들고(시간표·명단 · AI 없음) 원 표의 사실로 닫는다.
+ * 의무 장부 30분 맞춤(s2_0069) — 지점마다 **오늘**의 일간 의무를 만들고(시간표·명단 · AI 없음) 원 표의 사실로 닫는다.
  * 어제는 새벽 3시 전까지 함께, 그 뒤로도 **기한이 지났는데 열린 의무가 남은 지난 날**(최근 7일)은 다시 맞춘다 — 다음 날 아침에 보낸 보고서 ·
  * 늦게 찍은 출결이 닫히게(안 그러면 늦음 할 일이 영영 안 닫힌다). 그 뒤 늦음 사다리(할 일)와 일별 스냅숏. 한 지점이 실패해도 나머지는 돈다 · 실패는 500.
  */
@@ -39,7 +39,7 @@ export async function GET(req: Request) {
   let drafts = 0, taskOpened = 0, taskClosed = 0, failed = 0, skipped = 0;
   const synced: Record<string, number> = {};
   for (const tenantId of new Set(users.map((u) => u.tenant_id))) {
-    // 화면의 맞춤(`flushDuties`)과 같은 잠금을 쓴다(s2_0051). 화면이 맞추는 중이면 잠깐 기다렸다 다시 잡는다(화면의 맞춤은 몇 초) — 그래도 못 잡으면 이번 차례는 건너뛴다.
+    // 화면의 맞춤(`flushDuties`)과 같은 잠금을 쓴다(s2_0077). 화면이 맞추는 중이면 잠깐 기다렸다 다시 잡는다(화면의 맞춤은 몇 초) — 그래도 못 잡으면 이번 차례는 건너뛴다.
     // 트리거가 적어 둔 날도 함께 맞춘다(지난 날의 정정 · 오늘과 최근 7일만).
     let claim: DutyClaim | null = null;
     try {
@@ -52,14 +52,14 @@ export async function GET(req: Request) {
       resetOwnerAsOf(tenantId);
       for (const day of days) drafts += (await syncDailyDuties(tenantId, day, settings)).drafts;
       if (monthlyTurn || got.monthly) { const m = await syncMonthlyDuties(tenantId, today, settings); drafts += m.counsel + m.exam + m.newcomer; }
-      // 달 초 한 주 동안은 지난 달 월간(학생 상담 · 월말평가)도 한 번 더 맞춘다 — 말일의 일을 다음 날 입력한 것이 닫히게. 그 뒤엔 사다리가 열린 것을 미이행으로 확정한다(s2_0056).
+      // 달 초 한 주 동안은 지난 달 월간(학생 상담 · 월말평가)도 한 번 더 맞춘다 — 말일의 일을 다음 날 입력한 것이 닫히게. 그 뒤엔 사다리가 열린 것을 미이행으로 확정한다(s2_0082).
       if (monthlyTurn && Number(today.slice(8, 10)) <= 7) { const m = await syncMonthlyDuties(tenantId, addDays(`${today.slice(0, 7)}-01`, -1), settings, { skipNewcomers: true, resolveOnly: true }); drafts += m.counsel + m.exam; }
       const r = await escalateAndSnapshot(tenantId, days, settings);
       taskOpened += r.taskOpened;
       taskClosed += r.taskClosed;
       synced[tenantId] = days.length;
       if (claim) { await finishDutySync(tenantId, claim, true, true); claim = null; }
-      // s2_0051이 아직 없는 곳 — 종전대로 기준 시각만 적는다(관리자 화면의 '기준 시각').
+      // s2_0077이 아직 없는 곳 — 종전대로 기준 시각만 적는다(관리자 화면의 '기준 시각').
       else {
         const stamp = await db.from("duty_settings").upsert({ tenant_id: tenantId, last_sync_at: new Date().toISOString() }, { onConflict: "tenant_id" });
         if (stamp.error && stamp.error.code !== "42P01" && stamp.error.code !== "PGRST205") throw new Error(`장부 맞춤 기준 시각: ${stamp.error.message}`);

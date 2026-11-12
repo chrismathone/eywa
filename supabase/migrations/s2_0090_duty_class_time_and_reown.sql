@@ -1,4 +1,4 @@
--- s2_0064 — 업무 완성도: 수업 시간이 지난 업무만 센다 · 담당 없는 업무는 학생 집계에서도 뺀다 · 다시 만든 지난 달의 담당 바로잡기 (2026-11-11)
+-- s2_0090 — 업무 완성도: 수업 시간이 지난 업무만 센다 · 담당 없는 업무는 학생 집계에서도 뺀다 · 다시 만든 지난 달의 담당 바로잡기 (2026-11-11)
 --
 -- 왜:
 --   ① 원장 2026-11-11 *"수업시간이 지났을때 반영할것. … JJ수업은 수요일 수업시간이 되지도 않았는데 벌써부터 0%임"* — 관리 화면의 %는 '기한 안에 끝낸 것 ÷ 그 기간의 전체'인데,
@@ -13,10 +13,10 @@
 -- 무엇:
 --   · `duties_private.rollup_rows(…, p_include_future boolean)` 새 겹침 — 종전 본문 + 일간 업무의 수업 시각 조건. 종전 6칸 함수는 이것을 `false`로 부른다(집계 넷이 그대로 따라온다).
 --   · `duty_rollup_owner_load` — 수업 전 업무까지 포함해 센다(`true`).
---   · `duty_rollup_student_ex` — `p_exclude_owners`가 널이 아니면 담당 없는 행도 뺀다(본문 그 밖은 s2_0062 그대로).
+--   · `duty_rollup_student_ex` — `p_exclude_owners`가 널이 아니면 담당 없는 행도 뺀다(본문 그 밖은 s2_0088 그대로).
 --   · `duty_reown_items` — 평가 개시 전에 기한이 지난 **닫힌** 행의 담당 · 담당 근거만 초안대로 다시 적는다(상태 · 기한 · 완료 시각은 건드리지 않는다). 개시일이 없는 지점은 0건.
 -- 연동 역할 실행권 확인: 관리 화면 집계 · 지난 달 다시 만들기는 앱 service_role만 부른다 — 연동 PC 질의·RLS 정책이 지나지 않는다(rollup_rows는 duties_private 안쪽 함수).
--- 되돌리기: ① 6칸 rollup_rows를 s2_0052 본문으로 · owner_load를 s2_0053 본문으로 ② student_ex를 s2_0062 본문으로 ③ duty_reown_items를 지운다(앱을 먼저 되돌린다).
+-- 되돌리기: ① 6칸 rollup_rows를 s2_0078 본문으로 · owner_load를 s2_0079 본문으로 ② student_ex를 s2_0088 본문으로 ③ duty_reown_items를 지운다(앱을 먼저 되돌린다).
 begin;
 
 create or replace function duties_private.rollup_rows(p_tenant uuid, p_from date, p_to date, p_subjects text[], p_periods text[], p_owner uuid, p_include_future boolean)

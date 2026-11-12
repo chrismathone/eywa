@@ -24,7 +24,7 @@ import { saveDutyOntimeOnly } from "../../server/prefs-actions";
 
 /** now = 서버가 이 재료를 만든 시각(지난 날 수·기준 시각 비교에 쓴다 — 그리는 중에 시계를 읽지 않는다). */
 export type Loaded = { period: AdminPeriod; today: string; now: string; range: { from: string; to: string; label: string }; data: DutyAdminData };
-// 저장 순간의 신호(s2_0054 `useDutyPing`)가 바로 다시 받게 한다 — 이 주기는 실시간 연결이 끊겼을 때의 받침이다.
+// 저장 순간의 신호(s2_0080 `useDutyPing`)가 바로 다시 받게 한다 — 이 주기는 실시간 연결이 끊겼을 때의 받침이다.
 const REFRESH_MS = 60_000;
 /** 장부를 맞춘 지 이보다 오래면 '최신이 아님'을 알린다(맞춤은 30분마다 + 화면을 열 때). */
 const STALE_MS = 90 * 60_000;
@@ -38,7 +38,7 @@ const kstStamp = (iso: string) => { const d = new Date(Date.parse(iso) + 9 * 3_6
  * 평가 시작(live_from) 전 기한의 의무(이관)는 **화면에 보이지 않는다**(원장 2026-11-10 *"그런거 표시하지마"* — 판정·지연 수·할 일에도 안 든다 · 장부에는 남는다).
  * 고른 자리(`Sel`)는 **지금 기간의 트리에 맞춰 바로잡는다** — 없는 과목은 전체로, 없는 선생님·반은 그 위 단계로(기간을 바꿔도 화면이 어긋나지 않게).
  */
-export function DutyAdmin({ initial, scope, managers = null, tenantId = null, ontimeOnly: ontimeOnly0 = false }: { initial: Loaded; scope: DutyAdminScope; /** '기한 내만 보기'의 저장값(계정 귀속). */ ontimeOnly?: boolean; /** 저장 순간의 신호를 들을 지점(s2_0054). */ tenantId?: string | null; /** 과목 키 → 과목 관리자 이름(학원 전체를 보는 사람에게만 — 원장 첫 화면의 '과목 관리자별 현황'). */ managers?: Record<string, string[]> | null }) {
+export function DutyAdmin({ initial, scope, managers = null, tenantId = null, ontimeOnly: ontimeOnly0 = false }: { initial: Loaded; scope: DutyAdminScope; /** '기한 내만 보기'의 저장값(계정 귀속). */ ontimeOnly?: boolean; /** 저장 순간의 신호를 들을 지점(s2_0080). */ tenantId?: string | null; /** 과목 키 → 과목 관리자 이름(학원 전체를 보는 사람에게만 — 원장 첫 화면의 '과목 관리자별 현황'). */ managers?: Record<string, string[]> | null }) {
   const [period, setPeriod] = useState<AdminPeriod>(initial.period);
   const [loaded, setLoaded] = useState<Partial<Record<AdminPeriod, Loaded>>>({ [initial.period]: initial });
   const [failed, setFailed] = useState<Partial<Record<AdminPeriod, true>>>({});
