@@ -55,6 +55,7 @@ export const FORWARD_EVENT_OPTIONS: readonly ForwardEventOption[] = [
   { type: "help_question", label: "도움말 질문", group: "도움말·연동" },
   { type: "help_answer", label: "도움말 답변", group: "도움말·연동" },
   { type: "makeedu_login_failed", label: "makeedu 로그인 실패", group: "도움말·연동" },
+  { type: "student_seat_limit_exceeded", label: "재원생 좌석 한도 초과", group: "도움말·연동" },
   { type: "sync_agent_offline", label: "연동 PC 신호 끊김", group: "도움말·연동" },
   { type: "support_answer", label: "개선요청 답변", group: "도움말·연동" },
   { type: "slack_broken", label: "슬랙 발송 멈춤", group: "도움말·연동" },
@@ -68,7 +69,7 @@ export function forwardEventOptionsFor(availability: ForwardEventAvailability): 
   return FORWARD_EVENT_OPTIONS.filter((option) => {
     if (CLASSNOTE_EVENTS.has(option.type)) return availability.classnote;
     if (APPROVAL_EVENTS.has(option.type)) return availability.approvals;
-    if (option.type === "makeedu_login_failed") return availability.makeedu;
+    if (option.type === "makeedu_login_failed" || option.type === "student_seat_limit_exceeded") return availability.makeedu;
     if (option.type === "todays_math_exam_report") return availability.todaysMath;
     if (VIDEO_EVENTS.has(option.type)) return availability.videoReview;
     return true;

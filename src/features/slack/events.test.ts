@@ -24,6 +24,7 @@ describe("슬랙 알림 종류 목록", () => {
       "approval_requested",
       "classnote_parent_post",
       "makeedu_login_failed",
+      "student_seat_limit_exceeded",
       "todays_math_exam_report",
       "video_homework_submitted",
     ]));

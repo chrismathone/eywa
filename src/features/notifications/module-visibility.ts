@@ -15,6 +15,7 @@ export function hiddenNotificationTypes(settings: TenantSettings): string[] {
   return [
     ...(!isModuleEnabled(settings.modules.disabled, "approvals") ? APPROVAL_TYPES : []),
     ...(!isModuleEnabled(settings.modules.disabled, "classnote") ? CLASSNOTE_TYPES : []),
+    ...(!isModuleEnabled(settings.modules.disabled, "makeedu") ? ["student_seat_limit_exceeded"] : []),
     ...(!isModuleEnabled(settings.modules.disabled, "retention") ? ["grade_drop"] : []),
   ];
 }

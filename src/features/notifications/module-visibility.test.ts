@@ -3,6 +3,12 @@ import { DEFAULT_SETTINGS } from "@/features/owner/defaults";
 import { hiddenNotificationTypes } from "./module-visibility";
 
 describe("기능별 벨 알림 숨김", () => {
+  it("makeedu를 끄면 이미 쌓인 좌석 초과 알림도 감춘다", () => {
+    expect(hiddenNotificationTypes({
+      ...DEFAULT_SETTINGS,
+      modules: { ...DEFAULT_SETTINGS.modules, disabled: ["makeedu"] },
+    })).toEqual(["student_seat_limit_exceeded"]);
+  });
   it("침산판(모듈 전부 켬)은 기존 알림을 감추지 않는다", () => {
     expect(hiddenNotificationTypes(DEFAULT_SETTINGS)).toEqual([]);
   });
