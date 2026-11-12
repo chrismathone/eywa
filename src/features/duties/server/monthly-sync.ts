@@ -11,6 +11,7 @@ import { loadCheckRows, loadEnrollmentSubjects } from "@/features/newcomers/serv
 import { buildSubjectAnchors, indexChecks } from "@/features/newcomers/subject-rows";
 import { newcomerWindowStart } from "@/features/newcomers/onboarding-items";
 import { gradeKind } from "@/features/grades/unified/server/normalize";
+import { isModuleEnabled } from "@/lib/modules";
 import { buildCounselDuties, buildExamDuties, buildNewcomerDuties, type CounselPair } from "../model/monthly";
 import { kstToday } from "@/lib/date-kst";
 import { loadOwnerAsOf } from "./owner-as-of";
@@ -28,6 +29,9 @@ export async function syncMonthlyDuties(tenantId: string, today: string, setting
   const admin = createAdminClient();
   const month = today.slice(0, 7);
   const monthStart = `${month}-01`;
+  const newcomersOn = isModuleEnabled(settings.modules.disabled, "newcomers");
+  // 지난달 재맞춤은 신규생 의무를 건드리지 않는다. 평소 맞춤에서 기능이 꺼졌다면 반이 하나도 없어 아래에서 일찍 끝나더라도 열린 의무부터 정리한다.
+  if (!opts.skipNewcomers && !newcomersOn) await writeDrafts(tenantId, [], { rekey: false, cyclesOf: { newcomer_call: [] } });
   // 지난 달(다시 만들기 · 달 초 재맞춤)은 **그 달 말 기준**으로 본다(원장 2026-11-11) — 그때의 담임 · 그때 재직 여부 · 그 뒤 종강한 반 · 그 뒤 퇴원한 학생.
   const past = today < kstToday();
   const asOf = await loadOwnerAsOf(tenantId);
@@ -90,6 +94,7 @@ export async function syncMonthlyDuties(tenantId: string, today: string, setting
   await writeDrafts(tenantId, examDrafts, { rekey: true, cyclesOf: { exam_monthly: [month] }, resolveOnly: opts.resolveOnly, reown: opts.reown });
 
   if (opts.skipNewcomers) return { counsel: counselDrafts.length, exam: examDrafts.length, newcomer: 0, skipped: "newcomers_skipped" };
+  if (!newcomersOn) return { counsel: counselDrafts.length, exam: examDrafts.length, newcomer: 0, skipped: "newcomers_disabled" };
   // ── 신규생 정착 콜 — 신규생 탭·운영실 신호와 같은 재료(cohort.ts).
   const scope = <T,>(q: T): T => (q as unknown as { eq(c: string, v: string): T }).eq("tenant_id", tenantId);
   const newcomers = await fetchAllPaged<{ id: string; enrolled_at: string | null; is_test: boolean | null }>((from, to) =>

@@ -12,7 +12,7 @@ import { useOpenDutyWork } from "./duty-work-context";
  * 숫자는 장부 그대로(상담 의무 = 강사평가·원생상담 통계와 같은 판정 · 월말평가 = 담임 반 명단 응시). 완료된 줄은 누를 수 없다.
  */
 type Tab = "counsel" | "exam";
-export function MyDutiesMonth({ items, now, month }: { items: DutyItemView[]; now: number; month: string }) {
+export function MyDutiesMonth({ items, now, month, newcomerShown = true }: { items: DutyItemView[]; now: number; month: string; newcomerShown?: boolean }) {
   const [tab, setTab] = useState<Tab>("counsel");
   const { counsel, exam, newcomer } = buildMonthRows(items, now);
   const mm = Number(month.slice(5));
@@ -23,7 +23,7 @@ export function MyDutiesMonth({ items, now, month }: { items: DutyItemView[]; no
     </ToolbarSegment>
     {tab === "counsel" ? <>
       <Section title="학생 상담" count={foldRows(counsel)} rows={counsel} empty="상담 대상 학생 없음" />
-      <Section title="신규생 관리" count={foldRows(newcomer)} rows={newcomer} empty="담당 신규생 없음" hideSingleGroup />
+      {newcomerShown ? <Section title="신규생 관리" count={foldRows(newcomer)} rows={newcomer} empty="담당 신규생 없음" hideSingleGroup /> : null}
     </> : <Section title="월말평가 응시" count={foldRows(exam)} rows={exam} empty="월말평가 대상 없음" />}
   </div>;
 }

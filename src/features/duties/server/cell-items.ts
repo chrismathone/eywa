@@ -18,6 +18,7 @@ type Row = { id: string; kind: string; period: string; cycle: string; status: st
  * 바로가기 = 실제 기록이 있는 화면(출결 → 그날 그 반 출석부 · 끝낸 월 상담 → 그 상담 기록 · 월말평가 → 성적 입력 칸). 갈 화면이 마땅치 않으면 null(줄만).
  */
 export async function loadDutyCellItems(tenantId: string, from: string, to: string, scope: DutyAdminScope, periods: string[] | null, f: CellFilter): Promise<CellItem[]> {
+  if (scope.newcomerShown === false && f.kind === "newcomer_call") return [];
   const admin = createAdminClient();
   const { data: st, error: stError } = await admin.from("duty_settings").select("live_from").eq("tenant_id", tenantId).maybeSingle();
   if (stError) throw new Error(`장부 설정: ${stError.message}`);
@@ -36,6 +37,7 @@ export async function loadDutyCellItems(tenantId: string, from: string, to: stri
     if (scope.subjects) q = q.in("subject", scope.subjects);
     if (scope.ownerId) q = q.eq("owner_id", scope.ownerId); else if (f.ownerNone) q = q.is("owner_id", null); else if (f.owner) q = q.eq("owner_id", f.owner);
     if (f.kind) q = q.eq("kind", f.kind);
+    else if (scope.newcomerShown === false) q = q.neq("kind", "newcomer_call");
     if (f.classNone) q = q.is("class_id", null); else if (f.classId) q = q.eq("class_id", f.classId);
     if (f.subjectNone) q = q.is("subject", null); else if (f.subject) q = q.eq("subject", f.subject);
     return q.order("due_at").order("id").range(a, b);

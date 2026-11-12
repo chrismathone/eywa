@@ -48,6 +48,42 @@ describe("업무 완성도 — 저장 즉시 반영 배선", () => {
   it("월 상담은 분석 중인 임시 행만 뺀다(전사에 실패한 녹음 상담도 한 상담이다)", () => {
     expect(read("src/features/duties/server/monthly-sync.ts")).toContain('.not("processing_status", "in", "(uploaded,transcribing,analyzing)")');
   });
+  it("🔴 신규생 관리가 꺼지면 반이 없어도 열린 의무부터 닫고, 지난달 재맞춤은 신규생을 건드리지 않는다", () => {
+    const monthly = read("src/features/duties/server/monthly-sync.ts");
+    const cleanup = monthly.indexOf("if (!opts.skipNewcomers && !newcomersOn) await writeDrafts");
+    expect(cleanup).toBeGreaterThan(0);
+    expect(cleanup).toBeLessThan(monthly.indexOf("if (!ids.length) return"));
+    expect(monthly.indexOf('skipped: "newcomers_skipped"')).toBeLessThan(monthly.indexOf('skipped: "newcomers_disabled"'));
+    expect(monthly.indexOf('skipped: "newcomers_disabled"')).toBeLessThan(monthly.indexOf('select("id,enrolled_at,is_test")'));
+  });
+  it("신규생 모듈 판정은 서버가 내려보내고, 강사·관리자 화면과 등급 분모는 그 종류를 함께 뺀다", () => {
+    const admin = read("src/features/duties/server/admin.ts");
+    expect(admin).toContain('isModuleEnabled(settings.modules.disabled, "newcomers")');
+    expect(admin).toContain('r.kind !== "newcomer_call"');
+    expect(admin).toContain("withoutNewcomerClassCounts");
+    expect(admin).toContain("p_owner_none: ownerId === null");
+    const summary = read("src/features/duties/server/summary.ts");
+    expect(summary).toContain("newcomerShown");
+    const mine = read("src/app/api/duties/mine/route.ts");
+    expect(mine).toContain("newcomerShown");
+    for (const component of ["src/features/duties/components/my-duties-strip-button.tsx", "src/features/duties/components/my-duties-month.tsx"]) {
+      const ui = read(component);
+      expect(ui).toContain("newcomerShown");
+      expect(ui).not.toContain("isModuleEnabled");
+    }
+  });
+  it("신규생 의무 정리는 열린 행만 void하고, 다음 늦음 사다리가 연결 할 일·상위 할 일을 닫는다", () => {
+    const ledger = readMigration("s2_0069_duty_ledger.sql");
+    const stale = ledger.slice(ledger.indexOf("function public.duty_void_stale"), ledger.indexOf("function public.duty_open_cycles"));
+    expect(stale).toContain("d.status = 'open'");
+    expect(stale).toContain("set status = 'void'");
+    const escalation = readMigration("s2_0092_duty_wording_unify.sql");
+    expect(escalation).toMatch(/staff_tasks t[\s\S]*t\.kind = 'duty_late'[\s\S]*not exists[\s\S]*d\.status = 'open'/);
+    expect(escalation).toContain("'duties_moved_or_void'");
+    const up = readMigration("s2_0078_duty_manage.sql");
+    expect(up).toMatch(/t\.kind = 'duty_late_up'[\s\S]*not \(t\.subject_id = any\(v_keep\)\)/);
+    expect(up).toContain("'duties_cleared'");
+  });
   it("🔴 지난달 다시 만들기는 평가 개시 전에 끝난 달만 · 윗단계 할 일은 '처리됨'으로 단정해 닫지 않는다 · 면제는 맞춤이 되살리지 않는다", () => {
     expect(read("src/features/duties/server/backfill.ts")).toContain("if (!liveDay || `${nextMonth(month)}-01` >= liveDay) return");
     expect(readMigration("s2_0083_duty_resolve_keep_merged.sql")).toContain("not in ('waived', 'merged')");
