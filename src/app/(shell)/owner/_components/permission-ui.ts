@@ -19,8 +19,8 @@ export function isCellLocked(menu: MenuKey, role: SystemRole): boolean {
   if (menu === "teacher_onescreen" || menu === "my_learning") return true;
   if (role === "student") return true;
   if (menu === "dashboard" && role === "teacher") return true;
-  // 학원 비서 — 강사 화면엔 단추가 없고 지점 자료 전부를 읽는다(isPermissionLocked와 같은 규칙).
-  if (menu === "assistant" && role === "teacher") return true;
+  // 학원 비서 — 지금은 원장만(2026-11-12 임시 · 권한 범위 조회가 끝날 때까지 · isPermissionLocked와 같은 규칙).
+  if (menu === "assistant" && role !== "master") return true;
   // 셔틀 관리자 화면 — 원장·관리자 칸만(학부모 계정 DB 정책 0320a와 같은 두 역할 · isPermissionLocked와 같은 규칙).
   if (menu === "shuttle_admin" && !(SHUTTLE_ADMIN_ROLES as readonly SystemRole[]).includes(role)) return true;
   // 조직·OKR · 업무 작성센터 — 직원 역할 여섯만 쓰는 화면이라 열람·아르바이트 칸은 고정(isPermissionLocked와 같은 함수).
