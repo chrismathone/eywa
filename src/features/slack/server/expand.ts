@@ -5,7 +5,7 @@ import { activityChange } from "../activity-change";
 import { contentLine } from "../activity-detail";
 import type { ActivityFacts } from "../activity-facts";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isFeatureOptedInFresh } from "@/lib/license/server";
+import { getFeatureOptInStateFresh, isFeatureOptedInFresh } from "@/lib/license/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
@@ -166,7 +166,7 @@ export async function expandInbox(tenantId: string, conn: SlackConnection, appUr
     if (upErr) throw new Error(`slack outbox upsert: ${upErr.message}`); // 인박스를 처리됨으로 넘기지 않는다 → 다음 실행이 다시 펼친다
   }
   // 끄기 정리와 아웃박스 insert가 엇갈려 정리 뒤에 생긴 줄도 닫는다. 자동 만료면 기존 대기는 건드리지 않고 이번 후보만 취소한다.
-  if (!(await isFeatureOptedInFresh(tenantId, "slack"))) {
+  if ((await getFeatureOptInStateFresh(tenantId, "slack")) === "disabled") {
     const dedupeKeys = rows.map((row) => String(row.dedupe_key));
     for (let i = 0; i < dedupeKeys.length; i += 100) {
       await admin
