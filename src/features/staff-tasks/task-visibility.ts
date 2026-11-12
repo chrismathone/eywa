@@ -1,4 +1,4 @@
-import { classnoteSendOn } from "@/features/owner/classnote-gate";
+import { classnoteModuleOn } from "@/features/owner/classnote-gate";
 import type { TenantSettings } from "@/features/owner/settings-types";
 import { isModuleEnabled } from "@/lib/modules";
 
@@ -6,6 +6,6 @@ import { isModuleEnabled } from "@/lib/modules";
 export function hiddenStaffTaskKinds(settings: TenantSettings): string[] {
   const hidden: string[] = [];
   if (!isModuleEnabled(settings.modules.disabled, "approvals")) hidden.push("approval_turn");
-  if (!classnoteSendOn(settings)) hidden.push("unsent_report");
+  if (!classnoteModuleOn(settings)) hidden.push("unsent_report", "report_send_failed");
   return hidden;
 }

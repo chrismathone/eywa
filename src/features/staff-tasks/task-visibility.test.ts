@@ -10,18 +10,18 @@ describe("기능별 할 일 숨김", () => {
     })).toEqual([]);
   });
 
-  it("전자결재와 ClassNote 발송을 끄면 닫을 수 없는 할 일을 감춘다", () => {
+  it("전자결재와 ClassNote 모듈을 끄면 닫을 수 없는 할 일을 감춘다", () => {
     expect(hiddenStaffTaskKinds({
       ...DEFAULT_SETTINGS,
       modules: { ...DEFAULT_SETTINGS.modules, disabled: ["approvals", "classnote"] },
       report: { ...DEFAULT_SETTINGS.report, classnoteSendEnabled: true },
-    })).toEqual(["approval_turn", "unsent_report"]);
+    })).toEqual(["approval_turn", "unsent_report", "report_send_failed"]);
   });
 
-  it("ClassNote 모듈이 켜져도 실제 발송이 꺼져 있으면 미발송 재촉을 감춘다", () => {
+  it("ClassNote 모듈이 켜져 있으면 실제 발송 스위치가 꺼져도 기존 할 일을 보인다", () => {
     expect(hiddenStaffTaskKinds({
       ...DEFAULT_SETTINGS,
       report: { ...DEFAULT_SETTINGS.report, classnoteSendEnabled: false },
-    })).toEqual(["unsent_report"]);
+    })).toEqual([]);
   });
 });

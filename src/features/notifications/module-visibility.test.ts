@@ -7,16 +7,20 @@ describe("기능별 벨 알림 숨김", () => {
     expect(hiddenNotificationTypes(DEFAULT_SETTINGS)).toEqual([]);
   });
 
-  it("전자결재와 ClassNote를 끄면 그 기능에서 온 기존 알림을 모두 감춘다", () => {
+  it("전자결재·ClassNote·이탈 방어를 끄면 그 기능에서 온 기존 알림을 모두 감춘다", () => {
     expect(hiddenNotificationTypes({
       ...DEFAULT_SETTINGS,
-      modules: { ...DEFAULT_SETTINGS.modules, disabled: ["approvals", "classnote"] },
+      modules: { ...DEFAULT_SETTINGS.modules, disabled: ["approvals", "classnote", "retention"] },
     })).toEqual([
       "approval_requested",
       "approval_decided",
       "approval_comment",
       "classnote_parent_post",
       "classnote_parent_comment",
+      "unsent_report",
+      "report_send_failed",
+      "notice_send_failed",
+      "grade_drop",
     ]);
   });
 });
