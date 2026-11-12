@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { fetchVideoSubmitLine, reportPostContent, sameReportContent } from "./report-video-line.mjs";
 import { shareUrlVariants } from "./share-bases.mjs";
 
@@ -9,7 +10,7 @@ vi.mock("@playwright/test", () => ({ chromium: {} }));
 const { findChildReportId } = await import("./classnote-admin-core.mjs");
 const { crossCheckOthers } = await import("./classnote-class-route.mjs");
 
-const DIR = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
+const DIR = path.dirname(fileURLToPath(import.meta.url));
 const SHARE = "https://www.aywa.co.kr/r/0d6f1c3e-5c1b-4f5e-9a7d-1b2c3d4e5f60";
 const TOKEN = "A".repeat(20) + "-_" + "b".repeat(21);
 const VIDEO = `https://www.aywa.co.kr/v/${TOKEN}`;

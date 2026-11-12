@@ -120,6 +120,6 @@ describe("배선 — 전송 직전 재조회가 댓글이 달린 글의 토큰�
   it("판정은 학생이 하나로 정해졌을 때만 보고서를 묻는다", () => {
     const route = flat("./video-teacher-route.mjs");
     expect(route).toContain("const report = studentIds.length === 1 ? await loadCommentedReport(sql, tenantId, video, studentIds[0]) : null;");
-    expect(route).toContain("return chooseVideoTeacher({ video, tenantId, studentIds, boardClassIds, classes, student, report });");
+    expect(route).toContain("return chooseVideoTeacher({ video, tenantId, studentIds, boardClassIds, classes, student, report, homeworkClassIds });");
   });
 });

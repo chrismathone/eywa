@@ -208,3 +208,22 @@ describe("퇴원보고서 작성(참고 열 · s2_0093)", () => {
     expect(root.cell.total).toBe(20);
   });
 });
+
+describe("영상 숙제(참고 열 · s2_0094)", () => {
+  it("과목 단계는 그 과목 몫 · 전체 단계는 전 과목 합 · 회수율은 판정 대상 기준(마감 전은 빼고)", async () => {
+    const { buildTree, rootOfTree } = await import("./view-admin-levels");
+    const { videoPct } = await import("./view-admin");
+    const ok = [
+      { ownerId: "t1", subject: "math", kind: "attendance", period: "daily" as const, total: 2, done: 2, due: 2, ontime: 2, lateDone: 0, late: 0, expired: 0, over7: 0 },
+      { ownerId: "t1", subject: "english", kind: "attendance", period: "daily" as const, total: 1, done: 1, due: 1, ontime: 1, lateDone: 0, late: 0, expired: 0, over7: 0 },
+    ];
+    const video = [{ ownerId: "t1", subject: "math", issued: 10, judged: 8, collected: 6 }, { ownerId: "t1", subject: "english", issued: 4, judged: 4, collected: 4 }];
+    const tree = buildTree(ok, [], { t1: "가" }, {}, { math: "수학", english: "영어" }, { video });
+    expect(tree.find((s) => s.subject === "math")!.owners[0]!.video).toEqual({ issued: 10, judged: 8, collected: 6 });
+    const root = rootOfTree(tree).owners[0]!.video!;
+    expect(root).toEqual({ issued: 14, judged: 12, collected: 10 });
+    expect(videoPct(root)).toBe(83);
+    expect(videoPct({ issued: 3, judged: 0, collected: 0 })).toBeNull();
+  });
+});
+

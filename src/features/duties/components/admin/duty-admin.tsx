@@ -96,7 +96,7 @@ export function DutyAdmin({ initial, scope, managers = null, tenantId = null, on
   // 볼 수 있는 첫 날 — 한 번 받은 값을 계속 쓴다(불러오는 동안에도 앞쪽 이동을 막는다).
   const viewFrom = cur?.data.viewFrom ?? Object.values(loaded).find((l) => l?.data.viewFrom)?.data.viewFrom ?? null;
   const nowMs = cur ? Date.parse(cur.now) : 0;
-  const tree = cur ? buildTree(cur.data.ownerKind, cur.data.classes, cur.data.owners, cur.data.classInfo, scope.labels, { load: cur.data.ownerLoad, managerIds: cur.data.managerIds, ratings: cur.data.ratings, withdrawal: cur.data.withdrawal }) : [];
+  const tree = cur ? buildTree(cur.data.ownerKind, cur.data.classes, cur.data.owners, cur.data.classInfo, scope.labels, { load: cur.data.ownerLoad, managerIds: cur.data.managerIds, ratings: cur.data.ratings, withdrawal: cur.data.withdrawal, video: cur.data.video }) : [];
   const multi = tree.length > 1;
   // 고른 자리 바로잡기 — 과목이 하나면 늘 그 과목 · 트리에 없는 과목은 전체 · 없는 선생님·반은 위 단계로. 학생은 단계와 무관하게 연다(지연 목록에서 바로 들어온다).
   const subject0: Sel["subject"] = !multi ? (tree[0]?.subject ?? null) : rawSel.subject !== undefined && !tree.some((s) => s.subject === rawSel.subject) ? undefined : rawSel.subject;

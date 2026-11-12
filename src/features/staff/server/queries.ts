@@ -261,6 +261,8 @@ export type StaffDetail = {
   deskAttendanceOptin: boolean;
   /** 셔틀 담당 — 켜면 로그인 착지가 오늘 등하원이고 승·하차를 찍을 수 있다. 편성 수정은 불가(0227a). */
   shuttleDuty: boolean;
+  /** 원어민 선생님(s2_0094) — 업무 완성도 관리에서 뺀다. 컬럼 미적용이면 false. */
+  nativeTeacher: boolean;
   /** '강사뷰 접근'(0224a) — 다른 강사의 강사뷰 열람(열람 전용) 허용. 편집은 master(+super_admin)만. */
   teacherViewAccess: boolean;
   /**
@@ -273,6 +275,13 @@ export type StaffDetail = {
   department: string | null; // 0147a — 이력서 프리필·상세 표시용
   employmentType: string | null;
 };
+
+/** '원어민 선생님'(s2_0094) — 컬럼 미적용이면 에러 없이 false(#95: 본 select에 싣지 말 것). */
+async function getNativeTeacherFlag(id: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("users").select("native_teacher").eq("id", id).maybeSingle();
+  return !error && data?.native_teacher === true;
+}
 
 /** '셔틀 담당'(0227a) — 컬럼 미적용이면 에러 없이 false(#95: getStaffById 본 select에 싣지 말 것). */
 async function getShuttleDutyFlag(id: string): Promise<boolean> {
@@ -335,12 +344,13 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
 
   // 자리·셔틀 담당, 데스크 알림, 강사뷰 접근 컬럼은 0209a/0212a/0224a/0227a 이후.
   // 없으면 빈 값으로 — 직원 상세를 죽이지 않는다(#95). 넷 다 독립이라 함께 받는다(B4).
-  const [duties, deskOptin, teacherViewAccess, shuttleDuty, teacherViewLang] = await Promise.all([
+  const [duties, deskOptin, teacherViewAccess, shuttleDuty, teacherViewLang, nativeTeacher] = await Promise.all([
     getSeatDuties(id),
     getDeskAttendanceOptin(id),
     getTeacherViewAccessFlag(id),
     getShuttleDutyFlag(id),
     getTeacherViewLangValue(id),
+    getNativeTeacherFlag(id),
   ]);
 
   return {
@@ -352,6 +362,7 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
     seatJjDuty: duties.jj,
     deskAttendanceOptin: deskOptin,
     shuttleDuty,
+    nativeTeacher,
     teacherViewAccess,
     teacherViewLang,
     email: data.email,

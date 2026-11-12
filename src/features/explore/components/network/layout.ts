@@ -1,5 +1,5 @@
 import { fullGraphOf, summaryGraph } from "./graph";
-import { netCenterOf, type NetBoard, type NetCam, type NetGraph, type NetGroupLevel, type NetInput, type NetNode, type NetPoint, type NetSize, type NetViewMode } from "./types";
+import { netCenterOf, type NetBoard, type NetCam, type NetEdge, type NetGraph, type NetGroupLevel, type NetInput, type NetNode, type NetPoint, type NetSize, type NetViewMode } from "./types";
 
 /**
  * 네트워크 판 배치(시안 `netLayout` · `netRadius` · `netFitView`) — 순수 함수. 영역은 맨 위부터 고르게(반지름 250 + 기록 수), 영역에 바로 붙은
@@ -14,7 +14,7 @@ import { netCenterOf, type NetBoard, type NetCam, type NetGraph, type NetGroupLe
 export const GROUP_OPEN_DEFAULT: Record<NetGroupLevel, boolean> = { year: true, month: false, day: false };
 export const isGroupOpen = (n: NetNode, toggled?: ReadonlySet<string>): boolean => (n.expanded ?? GROUP_OPEN_DEFAULT[n.level ?? "month"]) !== !!toggled?.has(n.id);
 
-/** 보이는 점·선만 — 위 묶음 중 하나라도 접혀 있으면 그 아래는 뺀다. */
+/** 보이는 점·선만 — 위 묶음 중 하나라도 접혀 있으면 그 아래는 뺀다. 묶음 사이 모은 선(`bundle`)은 접힌 끝을 보이는 위 묶음으로 올려 합친다. */
 export function visibleGraph(g: NetGraph, toggled?: ReadonlySet<string>): NetGraph {
   const byId = new Map(g.nodes.map((n) => [n.id, n]));
   const hidden = (n: NetNode) => {
@@ -23,7 +23,27 @@ export function visibleGraph(g: NetGraph, toggled?: ReadonlySet<string>): NetGra
   };
   const nodes = g.nodes.filter((n) => !hidden(n));
   const ids = new Set(nodes.map((n) => n.id));
-  return { nodes, edges: g.edges.filter((e) => ids.has(e.from) && ids.has(e.to)) };
+  return { nodes, edges: [...g.edges.filter((e) => !e.bundle && ids.has(e.from) && ids.has(e.to)), ...liftBundles(g.edges, ids, byId)] };
+}
+
+/** '묶기' 선 — 끝이 접힌 묶음 안이면 보이는 위 점으로 올리고 같은 두 점끼리 굵기(w)를 더한다. 입력 선은 고치지 않는다(새 객체). */
+function liftBundles(edges: NetEdge[], ids: ReadonlySet<string>, byId: ReadonlyMap<string, NetNode>): NetEdge[] {
+  const up = (id: string) => {
+    let n = byId.get(id);
+    while (n && !ids.has(n.id)) n = byId.get(n.parent ?? n.hub ?? "");
+    return n?.id;
+  };
+  const out = new Map<string, NetEdge>();
+  for (const e of edges) {
+    if (!e.bundle) continue;
+    const a = up(e.from);
+    const b = up(e.to);
+    if (!a || !b || a === b) continue;
+    const [from, to] = a < b ? [a, b] : [b, a];
+    const got = out.get(`${from}|${to}`);
+    out.set(`${from}|${to}`, got ? { ...got, w: (got.w ?? 1) + (e.w ?? 1) } : from === e.from && to === e.to ? e : { ...e, from, to });
+  }
+  return [...out.values()];
 }
 
 const GOLD = Math.PI * (3 - Math.sqrt(5));
@@ -108,6 +128,7 @@ export function netLayout(input: NetInput, view: NetViewMode, toggled?: Readonly
   if (keep) keepPlaces(nodes, pos, keep.from, keep.around);
   const adjacency = new Map(nodes.map((n) => [n.id, new Set<string>()]));
   for (const e of edges) {
+    if (e.bundle && (e.from.startsWith("hub:") || e.to.startsWith("hub:"))) continue; // 영역 점 크기(이웃 수)가 '묶기'로 바뀌지 않게
     adjacency.get(e.from)?.add(e.to);
     adjacency.get(e.to)?.add(e.from);
   }

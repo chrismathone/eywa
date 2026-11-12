@@ -3,21 +3,24 @@ import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { isKoreanTeacherName } from "@/features/timetable/lib/teacher-label";
 
 /**
- * 원어민은 업무 완성도 관리에서 뺀다(원장 2026-11-11 *"원어민은 관리에서 제외시킬것"*). 판정은 앱 공용 한 곳(`isKoreanTeacherName` — 이름에 한글이 없으면 원어민).
- * 이름이 빈 계정은 원어민으로 보지 않는다(모르는 것을 빼지 않는다).
+ * 원어민은 업무 완성도 관리에서 뺀다(원장 2026-11-11 *"원어민은 관리에서 제외시킬것"*). 판정 = 근무 설정 '원어민 선생님' 토글(s2_0094 `users.native_teacher` —
+ * 한글 이름의 원어민, 원장 2026-11-12 *"김태건 선생님도 원어민"*) **또는** 이름에 한글이 없음(앱 공용 `isKoreanTeacherName`).
+ * 이름이 빈 계정은 이름으로는 원어민으로 보지 않는다(모르는 것을 빼지 않는다).
  */
 export const isNativeName = (name: string | null | undefined): boolean => !!name?.trim() && !isKoreanTeacherName(name);
+const isNative = (r: { display_name: string | null; native_teacher?: boolean | null }) => r.native_teacher === true || isNativeName(r.display_name);
+type NativeRow = { id: string; display_name: string | null; native_teacher?: boolean | null };
 
 /** 주어진 담당 가운데 원어민 id. */
 export async function nativeOwnerIds(tenantId: string, ids: readonly string[]): Promise<Set<string>> {
   const uniq = [...new Set(ids)];
   if (!uniq.length) return new Set();
-  const rows = await fetchInChunks<{ id: string; display_name: string | null }>(uniq, (chunk) => createAdminClient().from("users").select("id,display_name").eq("tenant_id", tenantId).in("id", chunk));
-  return new Set(rows.filter((r) => isNativeName(r.display_name)).map((r) => r.id));
+  const rows = await fetchInChunks<NativeRow>(uniq, (chunk) => createAdminClient().from("users").select("id,display_name,native_teacher").eq("tenant_id", tenantId).in("id", chunk));
+  return new Set(rows.filter(isNative).map((r) => r.id));
 }
 
 /** 그 지점의 원어민 계정 전부 — 학생 집계가 합치기 전에 뺀다. 역할을 가리지 않는다(선생님 · 반 집계와 같은 판정). 직원 수만큼만 읽는다. */
 export async function tenantNativeIds(tenantId: string): Promise<string[]> {
-  const rows = await fetchAllPaged<{ id: string; display_name: string | null }>((a, b) => createAdminClient().from("users").select("id,display_name").eq("tenant_id", tenantId).order("id").range(a, b));
-  return rows.filter((r) => isNativeName(r.display_name)).map((r) => r.id);
+  const rows = await fetchAllPaged<NativeRow>((a, b) => createAdminClient().from("users").select("id,display_name,native_teacher").eq("tenant_id", tenantId).order("id").range(a, b));
+  return rows.filter(isNative).map((r) => r.id);
 }

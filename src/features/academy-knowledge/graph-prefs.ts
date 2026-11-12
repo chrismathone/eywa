@@ -11,13 +11,15 @@ export type KgGraphPrefs = {
   colored: boolean;
   /** 범례 '이름 표시'. */
   labels: boolean;
+  /** 도구줄 '묶기' — 묶음 사이 기록 관계를 한 줄로(kg-net-bundle.ts · 원장 2026-11-12). 기본 끔. */
+  bundle: boolean;
 };
-export const DEFAULT_KG_GRAPH_PREFS: KgGraphPrefs = { netView: "records", colored: false, labels: false };
+export const DEFAULT_KG_GRAPH_PREFS: KgGraphPrefs = { netView: "records", colored: false, labels: false, bundle: false };
 
 /** 저장된 원본(무엇이든) → 설정. 모르는 값은 기본값. */
 export function parseKgGraphPrefs(raw: unknown): KgGraphPrefs {
   const o = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
-  return { netView: o.net_view === "summary" ? "summary" : "records", colored: o.colored === true, labels: o.labels === true };
+  return { netView: o.net_view === "summary" ? "summary" : "records", colored: o.colored === true, labels: o.labels === true, bundle: o.bundle === true };
 }
 
 /** 설정 일부 → 저장할 키(기본값이면 undefined = 지운다). */
@@ -26,5 +28,6 @@ export function toKgPrefPatch(p: Partial<KgGraphPrefs>): Record<string, unknown>
   if (p.netView !== undefined) out.net_view = p.netView === "summary" ? "summary" : undefined;
   if (p.colored !== undefined) out.colored = p.colored ? true : undefined;
   if (p.labels !== undefined) out.labels = p.labels ? true : undefined;
+  if (p.bundle !== undefined) out.bundle = p.bundle ? true : undefined;
   return out;
 }

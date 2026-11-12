@@ -54,6 +54,8 @@ export const TENANT_VIEW_READ_RPCS: ReadonlySet<string> = new Set([
   // 퇴원보고서 작성 차례 집계 · 목록(s2_0093) — 업무 완성도 참고 열 · 칸 목록. 서버가 관리 키로 부르는 읽기 전용.
   "duty_withdrawal_write_rollup",
   "duty_withdrawal_write_items",
+  // 영상 숙제 출제 · 회수(s2_0094) — 업무 완성도 참고 열. 읽기 전용 group-by.
+  "duty_video_homework_rollup",
   // 출결 통계 등원율 추이(0387a) — 읽기 전용 group-by.
   "attendance_rate_buckets",
   // 원생 기여도 학생별 합계(0443a) — 읽기 전용 집계(stable). 지점 보기에서도 기여도 화면이 같은 값을 읽게.

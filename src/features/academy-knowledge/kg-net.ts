@@ -1,5 +1,6 @@
 import { entities, type Entity } from "./catalog";
 import { degrees, relationLabel } from "./kg-net-rules";
+import { kgBundleEdges } from "./kg-net-bundle";
 import { categoryTree, kgCategorized, studentStatusBuckets, type KgCategoryAt, type KgCategoryCtx } from "./kg-net-groups";
 import type { Graph, Node } from "./graph";
 import { nodeHealth } from "./studio-model";
@@ -72,8 +73,8 @@ const dateOf = (n: Node): string | null => {
   return PERIOD_IS_EVENT_DATE.has(n.type) && typeof p === "string" && SINGLE_DATE.test(p) && recordYmd(p) ? p : null;
 };
 
-/** 지식그래프 + 가운데(점 id · 없으면 학원 전체) → 네트워크 판. */
-export function kgNetBoard(graph: Graph, centerId?: string | null, cats?: KgCategoryCtx): KgBoard {
+/** 지식그래프 + 가운데(점 id · 없으면 학원 전체) → 네트워크 판. `bundle` = 도구줄 '묶기'(묶음 사이 모은 선을 더한다 · kg-net-bundle.ts). */
+export function kgNetBoard(graph: Graph, centerId?: string | null, cats?: KgCategoryCtx, bundle = false): KgBoard {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const isAcademy = (id: string) => byId.get(id)?.type === "Academy";
   const pick = centerId ? byId.get(centerId) : undefined;
@@ -188,6 +189,7 @@ export function kgNetBoard(graph: Graph, centerId?: string | null, cats?: KgCate
   //    처음 판은 뼈대(가운데 → 영역 → 묶음 → 기록) + **가운데 기록의 직접 관계선**(기록이 가운데인 판에서 1단계·2단계를 가르는 선 — 가운데는 고른 점이 될 수 없어 늘 그린다).
   //    이웃 강조·요약 판 집계는 그대로 이 선을 쓴다.
   for (const p of pairs.values()) link(p.from, p.to, [...p.rels].join(" · "), p.from !== rootId && p.to !== rootId);
+  if (bundle) edges.push(...kgBundleEdges(nodes, edges));
 
   return { graph: { nodes, edges }, center: { id: rootId, name: focus ? focus.label : ACADEMY_TITLE }, academy: !focus, shown: nodes.filter((n) => n.kind === "record").length, total };
 }

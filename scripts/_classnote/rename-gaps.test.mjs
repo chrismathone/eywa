@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { classBoardKeys, classBoardStudentOf } from "./class-board-keys.mjs";
 import { homonymPhoneGate } from "./homonym-phone-gate.mjs";
 import { createLocalWorkerLock, decideWorkerLease } from "./worker-lease.mjs";
@@ -11,7 +12,9 @@ import { randomUUID } from "node:crypto";
 vi.mock("@playwright/test", () => ({ chromium: {} }));
 const { findChildReportId } = await import("./classnote-admin-core.mjs");
 
-const DIR = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
+const DIR = path.dirname(fileURLToPath(import.meta.url));
+// OS 잠금은 Windows·Linux만 지원(worker-lease.mjs) — 그 밖의 OS에서는 잠금 시험을 건너뛴다.
+const OS_LOCK = process.platform === "win32" || process.platform === "linux";
 const read = (f) => fs.readFileSync(path.join(DIR, f), "utf8");
 
 describe("G3 — 중복 확인은 보드를 가리지 않는다(cls:null)", () => {
@@ -105,7 +108,7 @@ describe("G6 — 실게시 워커는 지점당 한 대", () => {
       .map((item) => ({ ...item, instance_id: "dry-instance" }));
     expect(decideWorkerLease({ rows, instanceId: "dry-instance" }).owner).toBe(false);
   });
-  it("같은 PC 두 번째 워커는 OS 소유권 해제 후에만 이어받는다", async () => {
+  it.skipIf(!OS_LOCK)("같은 PC 두 번째 워커는 OS 소유권 해제 후에만 이어받는다", async () => {
     const scope = `rename-audit:${randomUUID()}`;
     const first = createLocalWorkerLock(scope), next = createLocalWorkerLock(scope);
     const missing = createLocalWorkerLock(null);
@@ -117,7 +120,7 @@ describe("G6 — 실게시 워커는 지점당 한 대", () => {
       expect(await missing.acquire()).toBe(false);
     } finally { await Promise.all([first.release(), next.release(), missing.release()]); }
   });
-  it("시계가 앞으로 뛰어도 살아 있는 OS 잠금을 빼앗지 않는다", async () => {
+  it.skipIf(!OS_LOCK)("시계가 앞으로 뛰어도 살아 있는 OS 잠금을 빼앗지 않는다", async () => {
     const scope = `rename-clock:${randomUUID()}`;
     const first = createLocalWorkerLock(scope), next = createLocalWorkerLock(scope);
     const later = Date.now() + 24 * 60 * 60_000;
