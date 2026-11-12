@@ -1,5 +1,5 @@
 /**
- * 개발 전용 — AI 호출을 학원 API 키 대신 **내부 요금제 Claude CLI(`claude -p`)**로 돌린다(원장 2026-10-21 "개발서버도 -p 이용하면 되잖아").
+ * 개발 전용 — AI 호출을 학원 API 키 대신 내부 요금제 CLI(Claude `claude -p` · GPT `codex exec`)로 돌린다.
  * 실제 앱 경로(관문·하네스·단계 흐름)를 비용 없이 개발 서버에서 확인하려는 것이다.
  *
  * 🔴 운영에서는 절대 켜지지 않는다 — `AI_DEV_CLAUDE_CLI=1` + `NODE_ENV !== "production"` + Vercel 아님, 셋 다일 때만.
@@ -8,7 +8,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -18,6 +18,7 @@ type Env = Record<string, string | undefined>;
 export type DevCliTrace = {
   requestedModel: string;
   models: string[];
+  cliVersion: string | null;
   durationMs: number | null;
   inputTokens: number | null;
   outputTokens: number | null;
@@ -45,11 +46,41 @@ export function parseCliEnvelope(stdout: string, requestedModel: string): { text
   return {
     text: env.result,
     trace: {
-      requestedModel, models, durationMs: n(env.duration_ms),
+      requestedModel, models, cliVersion: null, durationMs: n(env.duration_ms),
       inputTokens: n(env.usage?.input_tokens), outputTokens: n(env.usage?.output_tokens),
       cacheReadTokens: n(env.usage?.cache_read_input_tokens), cacheWriteTokens: n(env.usage?.cache_creation_input_tokens),
       listCostUsd: n(env.total_cost_usd),
     },
+  };
+}
+
+/** `codex exec --json` JSONL에서 토큰을 모은다. 형식이 늘어나도 알 수 없는 이벤트는 건너뛴다. */
+export function parseCodexJsonl(stdout: string, requestedModel: string, durationMs: number, cliVersion: string | null = null): DevCliTrace {
+  let inputTokens: number | null = null;
+  let outputTokens: number | null = null;
+  let cacheReadTokens: number | null = null;
+  for (const line of stdout.split(/\r?\n/).filter(Boolean)) {
+    try {
+      const event = JSON.parse(line) as { usage?: Record<string, unknown> };
+      const usage = event.usage;
+      if (!usage) continue;
+      inputTokens = typeof usage.input_tokens === "number" ? usage.input_tokens : inputTokens;
+      outputTokens = typeof usage.output_tokens === "number" ? usage.output_tokens : outputTokens;
+      cacheReadTokens = typeof usage.cached_input_tokens === "number" ? usage.cached_input_tokens : cacheReadTokens;
+    } catch {
+      // JSONL이 아닌 진단 한 줄은 결과 파싱에 영향을 주지 않는다.
+    }
+  }
+  return {
+    requestedModel,
+    models: [requestedModel],
+    cliVersion,
+    durationMs,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens: null,
+    listCostUsd: null,
   };
 }
 
@@ -62,6 +93,8 @@ export type DevCliInput = {
   prompt: string;
   system?: string;
   images?: { mediaType: string; dataBase64: string; label?: string }[];
+  /** 비교 시험에서 운영 호출의 Claude 추론 강도를 그대로 넘길 때만 사용한다. 미지정이면 기존 CLI 기본값 그대로다. */
+  reasoningEffort?: "low" | "medium" | "high";
 };
 
 const SAFE_NAME = /[^A-Za-z0-9_-]/g;
@@ -87,6 +120,77 @@ export function cliEnv(env: Env = process.env): Env {
   return out;
 }
 
+/** Codex 요금제 실행에는 OpenAI API 키를 넘기지 않는다(키가 있으면 API 과금 경로와 섞일 수 있다). */
+export function codexCliEnv(env: Env = process.env): Env {
+  const out: Env = { ...env };
+  for (const k of Object.keys(out)) if (/^OPENAI_(API_KEY|BASE_URL)/.test(k)) delete out[k];
+  return out;
+}
+
+export type CodexCliInvocation = {
+  command: string;
+  prefixArgs: string[];
+  binary: string;
+};
+
+/** Windows에서는 PATH의 오래된 codex.exe보다 npm의 codex.cmd를 명시해 같은 내부요금제 CLI 판을 쓴다. */
+export function codexCliInvocation(env: Env = process.env, platform: NodeJS.Platform = process.platform): CodexCliInvocation {
+  const configured = env.AYWA_CODEX_BIN?.trim();
+  const binary = configured || (platform === "win32" ? "codex.cmd" : "codex");
+  if (platform === "win32" && /\.(?:cmd|bat)$/i.test(binary)) {
+    return {
+      command: env.ComSpec?.trim() || env.COMSPEC?.trim() || "cmd.exe",
+      prefixArgs: ["/d", "/s", "/c", binary],
+      binary,
+    };
+  }
+  return { command: binary, prefixArgs: [], binary };
+}
+
+/** MCP 경고가 실제 API 오류를 가리지 않게 마지막 ERROR 줄을 우선 보여 준다. */
+export function summarizeCodexCliError(stderr: string, maxChars = 1_000): string {
+  const lines = stderr
+    .replace(/\u001b\[[0-9;]*m/g, "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !/rmcp::/i.test(line));
+  const errorLine = [...lines].reverse().find((line) => /\bERROR\b/i.test(line));
+  const detail = errorLine ?? lines.at(-1) ?? "표준 오류 내용 없음";
+  return detail.length > maxChars ? `${detail.slice(0, maxChars - 1)}…` : detail;
+}
+
+let codexVersionCache: { key: string; value: Promise<string> } | null = null;
+
+/** 선택한 Codex 실행 파일의 판을 모델 호출 전에 한 번 확인하고 이후 호출에서 재사용한다. */
+export async function getCodexCliVersion(): Promise<string> {
+  const invocation = codexCliInvocation();
+  const key = JSON.stringify(invocation);
+  if (codexVersionCache?.key === key) return codexVersionCache.value;
+  const value = (async () => {
+    try {
+      const { stdout } = await promisify(execFile)(invocation.command, [...invocation.prefixArgs, "--version"], {
+        env: codexCliEnv() as NodeJS.ProcessEnv,
+        timeout: 30_000,
+        windowsHide: true,
+      });
+      const version = String(stdout).trim().split(/\r?\n/).filter(Boolean).at(-1) ?? "";
+      if (!version) throw new Error("버전 출력이 비었습니다");
+      return version;
+    } catch (error) {
+      const e = error as Error & { stderr?: string | Buffer };
+      const detail = e.stderr ? summarizeCodexCliError(String(e.stderr)) : e.message;
+      throw new Error(`개발용 Codex CLI 판 확인 실패(${invocation.binary}): ${detail}`);
+    }
+  })();
+  codexVersionCache = { key, value };
+  try {
+    return await value;
+  } catch (error) {
+    if (codexVersionCache?.value === value) codexVersionCache = null;
+    throw error;
+  }
+}
+
 /**
  * 🔴 CLI가 **구독 로그인(claude.ai)**으로 돌 때만 쓴다 — 사용자 설정의 `env.ANTHROPIC_API_KEY`·`apiKeyHelper`는 환경변수를 지워도
  * 남아 로그인보다 먼저 쓰인다(적대 리뷰 2026-10-21 재현). **호출마다** 확인하고(로그인이 중간에 바뀌어도 잡게), 아니면 던진다.
@@ -110,7 +214,11 @@ export async function runDevCli(input: DevCliInput): Promise<string> {
     // 프롬프트는 표준 입력으로 — 명령 인자로 넘기면 긴 판정 자료가 OS 인자 한도(E2BIG)에 걸린다(적대 리뷰 2026-10-21).
     const prompt = devCliPrompt(input, files);
     const observe = devCliTrace.getStore();
-    const args = ["-p", "--model", input.model, "--output-format", observe ? "json" : "text", "--allowedTools", "Read", "--add-dir", dir];
+    const args = [
+      "-p", "--model", input.model,
+      ...(input.reasoningEffort ? ["--effort", input.reasoningEffort] : []),
+      "--output-format", observe ? "json" : "text", "--allowedTools", "Read", "--add-dir", dir,
+    ];
     return await new Promise<string>((resolve, reject) => {
       const child = spawn("claude", args, { cwd: dir, env: cliEnv() as NodeJS.ProcessEnv, stdio: ["pipe", "pipe", "pipe"] });
       // 자식이 입력을 받기 전에 끝나면 EPIPE가 stdin에서 난다 — 여기서 받지 않으면 개발 서버 프로세스가 죽는다(결과는 close가 알린다).
@@ -135,6 +243,55 @@ export async function runDevCli(input: DevCliInput): Promise<string> {
         }
       });
     });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+/** OpenAI가 첫 후보인 개발 호출을 Codex 내부요금제로 실행하고 마지막 답만 돌려준다. */
+export async function runCodexCli(
+  input: DevCliInput & { reasoningEffort: "low" | "medium" | "high" },
+): Promise<string> {
+  if (input.images?.length) throw new Error("개발용 Codex CLI는 이미지 첨부를 지원하지 않습니다");
+  const invocation = codexCliInvocation();
+  const cliVersion = await getCodexCliVersion();
+  const dir = await mkdtemp(join(tmpdir(), "aywa-codex-cli-"));
+  const outputPath = join(dir, "last-message.txt");
+  try {
+    const prompt = devCliPrompt(input, []);
+    const observe = devCliTrace.getStore();
+    const args = [
+      "exec", "-s", "read-only", "--skip-git-repo-check", "--ephemeral",
+      "-m", input.model, "-c", `model_reasoning_effort=\"${input.reasoningEffort}\"`,
+      ...(observe ? ["--json"] : []),
+      "--output-last-message", outputPath, "-",
+    ];
+    const startedAt = Date.now();
+    let stdout = "";
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(invocation.command, [...invocation.prefixArgs, ...args], {
+        cwd: dir,
+        env: codexCliEnv() as NodeJS.ProcessEnv,
+        stdio: ["pipe", "pipe", "pipe"],
+        windowsHide: true,
+      });
+      child.stdin.on("error", () => {});
+      child.stdin.end(prompt);
+      let err = "";
+      const timer = setTimeout(() => { child.kill("SIGTERM"); reject(new Error("개발용 Codex CLI 응답 시간 초과")); }, TIMEOUT_MS);
+      child.stdout.on("data", (c: Buffer) => { stdout += c.toString(); });
+      child.stderr.on("data", (c: Buffer) => { err += c.toString(); });
+      child.on("error", (e) => { clearTimeout(timer); reject(new Error(`개발용 Codex CLI 실행 실패: ${e.message}`)); });
+      child.on("close", (code) => {
+        clearTimeout(timer);
+        if (code !== 0) reject(new Error(`개발용 Codex CLI 실패(코드 ${code}): ${summarizeCodexCliError(err)}`));
+        else resolve();
+      });
+    });
+    const answer = (await readFile(outputPath, "utf8")).trim();
+    if (!answer) throw new Error("개발용 Codex CLI가 마지막 답을 남기지 않았습니다");
+    observe?.(parseCodexJsonl(stdout, input.model, Date.now() - startedAt, cliVersion));
+    return answer;
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

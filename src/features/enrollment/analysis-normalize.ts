@@ -2,7 +2,7 @@
 // (화면에 그릴 때의 후보정은 report-normalize.ts `normalizeAiListText` — 그건 그대로 두고, 여기는 저장되는 값을 맞춘다.)
 // 순수 함수(⚠️ server-only 금지 [[#61]] — Vitest 대상). 규칙 원문 = consultation-analysis.ts 프롬프트의 '출력 형식 규칙'.
 import { cleanRoleMap, normalizeSection, sectionSource, toText, type SectionRules } from "@/lib/ai/section-normalize";
-import type { ConsultationReport13, ConversationFlowNode } from "./server/consultation-analysis";
+import type { ConsultationReport13, ConversationFlowNode } from "./consultation-analysis-prompt";
 
 /** 산문 섹션(프롬프트: '- ' 불릿 금지, 자연스러운 문장). */
 const PROSE_KEYS = ["consultationType", "summary", "familyBackground", "parentSatisfaction"] as const;
@@ -89,7 +89,7 @@ function fixQuestions(text: string): string {
 /**
  * 추출 학생 이름이 입력 이름에서 **성만 빠진 꼴**('도현' ↔ 입력 '김도현')이면 입력 이름으로(2026-10-26).
  * Claude는 지침 '발화에 명시되지 않으면 null'을 글자대로 따라 전사에서 불린 이름만 적는다 — 이 값이 인쇄본 '학생명'
- * (`print_payload.prospect.name`)에 그대로 나간다(시험 15건 중 5건 — 기존 DeepSeek 저장본은 입력 이름).
+ * (`print_payload.prospect.name`)에 그대로 나간다(시험 15건 중 5건 — 기존 저장본은 입력 이름).
  * 🔴 입력 이름의 끝과 정확히 같고 앞에 빠진 것이 한두 글자(성)일 때만 — 다른 이름(동명이인·ASR 오인식)은 손대지 않는다.
  *    동명이인 구분 글자('김근우A')는 떼고 견주되, 바꿀 때는 입력 이름 그대로 쓴다.
  */

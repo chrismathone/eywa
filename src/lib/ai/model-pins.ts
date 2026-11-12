@@ -1,42 +1,88 @@
 // 기능별 모델 고정 — 코드 기본(`FEATURE_MODELS`) · 운영 콘솔에서 고를 수 있는 모델(`AI_MODEL_CHOICES`) · 그 둘의 우선순위.
 // **순수**(서버·클라 공용 — 운영 콘솔 화면도 읽는다). 고정값을 후보 사다리에 세우는 일은 models.ts `resolveModelChain`.
-import type { AiProvider } from "./models";
+import { AI_MODELS, type AiProvider } from "./models";
 
 /** 한 기능을 특정 모델로 고정한 값 — 그 회사가 막히면(키·잔액) 평소 폴백 사다리로 넘어간다. */
 export type ModelPin = { provider: AiProvider; model: string };
 
+export type OpenAIReasoningEffort = "low" | "medium" | "high";
+export type OpenAIFeatureProfile = { model: string; reasoningEffort: OpenAIReasoningEffort };
+
+/**
+ * 기능별 GPT 폴백 모델·추론 강도의 단일 표(원장 2026-11-12).
+ * Claude 요청은 이 표를 읽지 않아 기존 모델·강도·프롬프트가 그대로다.
+ */
+export const OPENAI_FEATURE_PROFILES: Readonly<Record<string, OpenAIFeatureProfile>> = {
+  // 사람이 화면에서 기다림 — 지연을 줄이는 것이 우선.
+  classnote_ment: { model: AI_MODELS.fast.openai, reasoningEffort: "low" },
+  ment_prompt_preview: { model: AI_MODELS.fast.openai, reasoningEffort: "low" },
+  english_ment: { model: AI_MODELS.fast.openai, reasoningEffort: "low" },
+  student_care: { model: AI_MODELS.fast.openai, reasoningEffort: "low" },
+  dashboard_secretary: { model: AI_MODELS.fast.openai, reasoningEffort: "low" },
+  love_note_draft: { model: AI_MODELS.fast.openai, reasoningEffort: "low" },
+  // 판정·분류.
+  parent_attendance_intent: { model: AI_MODELS.fast.openai, reasoningEffort: "medium" },
+  parent_satisfaction: { model: AI_MODELS.fast.openai, reasoningEffort: "medium" },
+  // 전사·심층 분석.
+  enrollment_analysis: { model: AI_MODELS.balanced.openai, reasoningEffort: "high" },
+  enrollment_form_extract: { model: AI_MODELS.balanced.openai, reasoningEffort: "high" },
+  meeting_analysis: { model: AI_MODELS.balanced.openai, reasoningEffort: "high" },
+  consultation_analysis: { model: AI_MODELS.balanced.openai, reasoningEffort: "high" },
+  enrollment_prep_brief: { model: AI_MODELS.balanced.openai, reasoningEffort: "high" },
+  student_flow_consultations: { model: AI_MODELS.balanced.openai, reasoningEffort: "high" },
+  student_flow_timeline: { model: AI_MODELS.balanced.openai, reasoningEffort: "high" },
+  // 번역·요약·말투 정리.
+  notice_translate: { model: AI_MODELS.balanced.openai, reasoningEffort: "medium" },
+  attendance_recap: { model: AI_MODELS.balanced.openai, reasoningEffort: "medium" },
+  ment_style_profile: { model: AI_MODELS.balanced.openai, reasoningEffort: "medium" },
+  daily_briefing: { model: AI_MODELS.balanced.openai, reasoningEffort: "medium" },
+};
+
+/** 표에 없는 일반 호출은 호출부 티어와 강도를 보존하되, OpenAI에는 명시된 세 단계만 보낸다. */
+export function openAIProfileFor(
+  feature: string | null | undefined,
+  tier: "fast" | "balanced",
+  requested?: "minimal" | OpenAIReasoningEffort,
+): OpenAIFeatureProfile {
+  const listed = feature ? OPENAI_FEATURE_PROFILES[feature] : undefined;
+  return {
+    model: listed?.model ?? AI_MODELS[tier].openai!,
+    reasoningEffort: requested === "minimal" ? "low" : requested ?? listed?.reasoningEffort ?? (tier === "fast" ? "medium" : "high"),
+  };
+}
+
 /**
  * 기능별 **코드 기본 모델** — 티어 표와 다른 모델을 쓰는 기능만 적는다(나머지는 호출부의 tier·provider 그대로).
- * 🔴 2026-10-26 원장 *"딥시크로 바꾼거 다 클로드로 전환"* · *"전사 분석은 전부 sonnet 5.5로 돌리고, 간단하고 빠르게 작성해야하는
+ * 🔴 2026-10-26 원장 결정 · *"전사 분석은 전부 sonnet 5.5로 돌리고, 간단하고 빠르게 작성해야하는
  *    수업보고서 멘트는 haiku 5.5로"* (Anthropic API 크레딧 지원) — 전사 분석 셋(폼 자동입력 · 콜&상담 분석 · 회의록)을 Sonnet 5.5로 고정.
- *    (그 전 2026-10-19엔 블라인드 비교로 DeepSeek V4.1 flash였다 — 형식 차이를 맞추던 저장 전 후처리
+ *    (그 전 공급자 비교에서 생긴 형식 차이를 맞추던 저장 전 후처리
  *    enrollment/analysis-normalize · enrollment/form-normalize · meetings/analysis-normalize는 그대로 둔다(Claude 결과엔 할 일이 거의 없다).)
- *    Claude가 막히면(키·잔액) 평소 사다리로 DeepSeek에 넘어간다(`FALLBACK_LADDER`).
+ *    Claude가 막히면(키·잔액) 평소 사다리로 OpenAI에 넘어간다(`FALLBACK_LADDER`).
  * 지점마다 다른 모델을 쓰게 하는 것은 운영 콘솔의 'AI 모델' 탭(`tenant_ai_models`, 0375a)이 이 값보다 먼저다.
  */
 export const FEATURE_MODELS: Readonly<Record<string, ModelPin>> = {
-  enrollment_form_extract: { provider: "anthropic", model: "claude-sonnet-5-5" },
-  enrollment_analysis: { provider: "anthropic", model: "claude-sonnet-5-5" },
-  meeting_analysis: { provider: "anthropic", model: "claude-sonnet-5-5" },
+  enrollment_form_extract: { provider: "anthropic", model: AI_MODELS.balanced.anthropic },
+  enrollment_analysis: { provider: "anthropic", model: AI_MODELS.balanced.anthropic },
+  meeting_analysis: { provider: "anthropic", model: AI_MODELS.balanced.anthropic },
   // 영상 설명 AI 참고 메모(2026-10-20 하네스 6차) — 판정 = Haiku 5.5 · 실수 확인 = Sonnet 5.5.
   // Haiku 확인자는 진짜 오류를 '애매'로 떨어뜨리고 도형 오탐을 '확정'해 확인만 Sonnet으로 둔다(26개 기준 정답 실측).
-  video_review_judge: { provider: "anthropic", model: "claude-haiku-5-5" },
-  video_review_verify: { provider: "anthropic", model: "claude-sonnet-5-5" },
+  video_review_judge: { provider: "anthropic", model: AI_MODELS.fast.anthropic },
+  video_review_verify: { provider: "anthropic", model: AI_MODELS.balanced.anthropic },
   // 원생 흐름 분석(2026-11-03) — 상담·타임라인 기록을 읽고 방향을 판단하는 전사 분석류라 Sonnet 5.5.
-  student_flow_consultations: { provider: "anthropic", model: "claude-sonnet-5-5" },
-  student_flow_timeline: { provider: "anthropic", model: "claude-sonnet-5-5" },
+  student_flow_consultations: { provider: "anthropic", model: AI_MODELS.balanced.anthropic },
+  student_flow_timeline: { provider: "anthropic", model: AI_MODELS.balanced.anthropic },
 };
 
 /**
  * 운영 콘솔에서 지점·기능별로 **고를 수 있는 모델**(원장 2026-10-19 *"지점별로 ai모델 바꿀 수 있게"*). 이 목록 밖의 값은
- * 저장도 적용도 하지 않는다(DB에 이상한 값이 들어가도 무시 = 코드 기본). 회사는 Claude · DeepSeek 둘(Solar는 2026-10-19 뺐다).
- * `slow` = 추론이 길어 사람이 화면에서 기다리는 기능엔 못 고른다(멘트 폴백에 v4-pro를 걸었다가 86초 — 2026-08-28 실측).
+ * 저장도 적용도 하지 않는다(DB에 이상한 값이 들어가도 무시 = 코드 기본). 회사는 Claude · ChatGPT(OpenAI) 둘이다.
+ * `slow` = 추론이 길어 사람이 화면에서 기다리는 기능엔 못 고른다.
  */
 export const AI_MODEL_CHOICES = [
-  { model: "claude-haiku-5-5", provider: "anthropic", label: "Claude Haiku 5.5", slow: false },
-  { model: "claude-sonnet-5-5", provider: "anthropic", label: "Claude Sonnet 5.5", slow: false },
-  { model: "deepseek-flash", provider: "deepseek", label: "DeepSeek V4.1 flash", slow: false },
-  { model: "deepseek-v4-pro", provider: "deepseek", label: "DeepSeek v4-pro", slow: true },
+  { model: AI_MODELS.fast.anthropic, provider: "anthropic", label: "Claude Haiku 5.5", slow: false },
+  { model: AI_MODELS.balanced.anthropic, provider: "anthropic", label: "Claude Sonnet 5.5", slow: false },
+  { model: AI_MODELS.tenantChoices.openaiFast, provider: "openai", label: "ChatGPT 5.6 Luna", slow: false },
+  { model: AI_MODELS.tenantChoices.openaiBalanced, provider: "openai", label: "ChatGPT 5.6 Terra", slow: false },
 ] as const satisfies readonly { model: string; provider: AiProvider; label: string; slow: boolean }[];
 
 /** 고른 모델 id → 고정값(목록 밖이면 null). */

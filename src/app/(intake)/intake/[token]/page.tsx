@@ -10,7 +10,7 @@ import { expiredLinkHref } from "@/features/link-expired/kinds";
 export const metadata = { title: "입학 상담 신청" };
 
 /**
- * ⚠️ 제출 액션이 `after()`로 상담 브리프를 자동 생성한다(DeepSeek 실측 ~70초). 기본 15초면 플랫폼이
+ * ⚠️ 제출 액션이 `after()`로 상담 브리프를 자동 생성한다(심층 분석 실측 ~70초). 기본 15초면 플랫폼이
  * 백그라운드 작업을 죽여 브리프가 'generating'에 멈춘다 — 학부모 응답 자체는 즉시 끝나므로
  * 이 상한은 대기 시간이 아니라 백그라운드 여유다.
  */

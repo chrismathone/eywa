@@ -1,10 +1,10 @@
 import "server-only";
 /**
- * 어제 출결 요약의 **AI 정리** 생성·저장 (원장 2026-08-19: *"필요하면 deepseek api 사용해서 정리할것"*).
+ * 어제 출결 요약의 **AI 정리** 생성·저장 (원장 2026-08-19 승인 · 2026-11-12 Claude·ChatGPT 정책으로 변경).
  *
  * 🔴 페이지 로드는 이 파일을 절대 부르지 않는다 — 명시 버튼(server action)만(CLAUDE.md AI 정책).
  *    마지막 결과는 표에 남아 다시 누르기 전까지 그대로 표시된다.
- * 🔴 provider는 **Claude 우선**(2026-10-26 원장 *"딥시크로 바꾼거 다 클로드로"* — 그 전엔 DeepSeek). 키가 없으면 generateJSON이 무중단으로
+ * 🔴 provider는 **Claude 우선**(2026-10-26 원장 결정). 키가 없으면 generateJSON이 무중단으로
  *    다른 provider로 폴백한다 — 여기서 키 유무를 따로 검사하지 않는다.
  * 🔑 숫자·명단의 진실은 결정론 다이제스트다. LLM 출력은 `validateRecapBrief` 통과분만 저장하고,
  *    탈락하면 `error`에 한글 사유를 남긴다(화면은 결정론 표를 그대로 그리므로 손실이 없다).
@@ -45,7 +45,7 @@ export async function runRecapGeneration(
     const { data, model } = await generateJSON<unknown>({
       prompt: buildRecapPrompt(recap, subjectLabel),
       maxTokens: MAX_TOKENS,
-      provider: "anthropic", // 2026-10-26 원장 "딥시크로 바꾼거 다 클로드로" — Sonnet 5.5(기본 등급)
+      provider: "anthropic", // 2026-10-26 원장 결정 — Sonnet 5.5(기본 등급)
       meta: { tenantId, feature: "attendance_recap" },
     });
     const checked = validateRecapBrief(data, recap, subjectLabel);

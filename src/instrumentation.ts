@@ -43,8 +43,9 @@ export function register() {
       reportWarning(`[env] 권장 환경변수 미설정: ${key} (${why})`, { scope: "instrumentation.register" });
     }
   }
-  if (!process.env.ANTHROPIC_API_KEY && !process.env.DEEPSEEK_API_KEY) {
-    reportWarning("[env] AI 키 없음: ANTHROPIC_API_KEY/DEEPSEEK_API_KEY 둘 다 미설정 → AI 분석 비활성", {
+  const hasAiKey = Object.keys(process.env).some((name) => /^(?:ANTHROPIC|OPENAI)_API_KEY(?:_|$)/.test(name));
+  if (!hasAiKey) {
+    reportWarning("[env] AI 키 없음: ANTHROPIC_API_KEY*/OPENAI_API_KEY* 모두 미설정 → AI 분석 비활성", {
       scope: "instrumentation.register",
     });
   }
