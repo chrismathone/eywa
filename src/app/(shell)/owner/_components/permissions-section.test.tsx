@@ -433,9 +433,15 @@ describe("개인별 메뉴 권한 — 역할 표 아래에서 주고 거둔다(�
     expect(groups).toContain("학원 비서");
   });
 
-  it("🔴 학원 비서 줄 — 위험 안내를 줄 아래 작은 글로 · 칸은 전체·없음만 · 강사 칸은 고정", () => {
+  it("🔴 학원 비서 줄 — 위험 안내는 마우스를 올리면 카드로(줄 아래에 펼치지 않음 · 2026-11-12) · 칸은 전체·없음만 · 강사 칸은 고정", () => {
     render(<PermissionsSection initial={EMPTY} staffOptions={staff} />);
-    expect(screen.getAllByText(/지점 자료 전부\(급여·계약·연락처·계좌 포함\)/).length).toBeGreaterThan(0);
+    const info = screen.getByRole("button", { name: `‘${MENU_LABEL.assistant}’ 설명 보기` });
+    expect(info.closest("[data-tip]")?.getAttribute("data-tip")).toContain("지점 자료 전부(급여·계약·연락처·계좌 포함)");
+    expect(screen.queryAllByText(/지점 자료 전부/)).toHaveLength(0); // 줄 아래 글자로는 펼쳐 두지 않는다
+    fireEvent.click(info); // 터치·키보드는 눌러서 그 줄 아래에 펼친다
+    expect(screen.getByText(/지점 자료 전부\(급여·계약·연락처·계좌 포함\)/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: `‘${MENU_LABEL.assistant}’ 설명 접기` }));
+    expect(screen.queryAllByText(/지점 자료 전부/)).toHaveLength(0);
     const cell = (role: keyof typeof ROLE_LABEL) => screen.getByRole("button", { name: new RegExp(`^${MENU_LABEL.assistant} · ${ROLE_LABEL[role]}:`) });
     expect(cell("teacher")).toBeDisabled();
     // 관리자 칸: 없음 → 전체 → (담당·읽기를 건너뛰고) 없음.
@@ -447,9 +453,46 @@ describe("개인별 메뉴 권한 — 역할 표 아래에서 주고 거둔다(�
     expect(admin()).toHaveTextContent("없음");
   });
 
+  it("연동된 권한 — '강사별 퇴원율'을 열 때 '퇴원관리'가 없음이면 묻고, 승인하면 함께 연다 · 거절하면 누른 칸만(2026-11-12)", () => {
+    render(<PermissionsSection initial={EMPTY} staffOptions={staff} />);
+    const cellOf = (menu: "withdrawals" | "withdrawals_churn", role: keyof typeof ROLE_LABEL) =>
+      screen.getByRole("button", { name: new RegExp(`^${MENU_LABEL[menu]} · ${ROLE_LABEL[role]}:`) });
+    // 상담 칸: 퇴원관리 없음 · 강사별 퇴원율 없음(기본값)
+    const parent = cellOf("withdrawals", "counselor");
+    while (!/없음/.test(parent.textContent ?? "")) fireEvent.click(parent);
+    expect(cellOf("withdrawals_churn", "counselor")).toHaveTextContent("없음");
+    fireEvent.click(cellOf("withdrawals_churn", "counselor"));
+    const dialog = screen.getByRole("alertdialog");
+    expect(dialog).toHaveTextContent("‘퇴원관리’ 권한이 함께 있어야 열립니다");
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "함께 허용" }));
+    fireEvent.click(screen.getByRole("button", { name: "함께 허용" }));
+    expect(cellOf("withdrawals_churn", "counselor")).not.toHaveTextContent("없음");
+    expect(cellOf("withdrawals", "counselor")).toHaveTextContent("읽기");
+    // 취소·바깥 누름·Esc = 아무것도 바꾸지 않는다(혼자 열어 봐야 화면이 안 열린다 · 적대 리뷰)
+    vi.useFakeTimers();
+    try {
+      vi.advanceTimersByTime(500);
+      while (!/없음/.test(cellOf("withdrawals_churn", "counselor").textContent ?? "")) fireEvent.click(cellOf("withdrawals_churn", "counselor"));
+      while (!/없음/.test(cellOf("withdrawals", "counselor").textContent ?? "")) fireEvent.click(cellOf("withdrawals", "counselor"));
+      fireEvent.click(cellOf("withdrawals_churn", "counselor"));
+      fireEvent.click(screen.getByRole("button", { name: "취소(바꾸지 않음)" }));
+      expect(cellOf("withdrawals_churn", "counselor")).toHaveTextContent("없음");
+      vi.advanceTimersByTime(500);
+      fireEvent.click(cellOf("withdrawals_churn", "counselor"));
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+      // 막 닫은 직후의 칸 누름은 받지 않는다(창 단추 두 번 누름이 창 뒤 칸을 바꾸지 않게)
+      fireEvent.click(cellOf("withdrawals_churn", "counselor"));
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+      expect(cellOf("withdrawals_churn", "counselor")).toHaveTextContent("없음");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("지점 AI가 꺼져 있으면(페이지가 hiddenMenuKeys로 넘긴다) 학원 비서 줄이 표·개인별 메뉴 고르기 어디에도 없다", () => {
     render(<PermissionsSection initial={EMPTY} staffOptions={staff} hiddenMenuKeys={["assistant"]} />);
-    expect(screen.queryAllByText(/지점 자료 전부/)).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: /학원 비서’ 설명/ })).toBeNull();
     const groups = [...screen.getByLabelText("메뉴 선택").querySelectorAll("optgroup")].map((g) => g.label);
     expect(groups).not.toContain("학원 비서");
   });
@@ -489,7 +532,7 @@ describe("역할별 메뉴 권한 표 — 줄은 왼쪽 탭과 그 내부 메뉴
     // 전체 권한에서 메뉴에 없는 화면(캘린더 · 관리자 도구)과 역할 전용 화면 둘, 연결 앱(아래 '연결 앱 권한' 표)을 뺀 수.
     expect(rows).toHaveLength(editablePermissionRowGroups().flatMap((g) => g.rows).filter((row) => !(SETTINGS_ROLE_KEYS as readonly string[]).includes(row.menu)).length);
     expect(rows).toHaveLength(Object.keys(MENU_LABEL).length - 4 - CONNECTED_APP_MENU_KEYS.length - SETTINGS_ROLE_KEYS.length);
-    for (const tr of rows) expect(tr.querySelectorAll("button")).toHaveLength(SYSTEM_ROLES.length);
+    for (const tr of rows) expect(tr.querySelectorAll("button[data-perm-cell]")).toHaveLength(SYSTEM_ROLES.length);
   });
 
   it("🔴 숨긴 줄의 저장값은 저장해도 지워지지 않는다 — 표는 줄을 안 세울 뿐 값 전체를 들고 저장한다", () => {

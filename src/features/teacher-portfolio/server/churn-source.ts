@@ -7,6 +7,7 @@ import { DEFAULT_CHURN_OPTIONS } from "../evaluation/config";
 import { kstDateOf } from "../model/dates";
 import type { SnapshotClass, SnapshotEnrollment, SnapshotSchedule, SnapshotTransition } from "../model/types";
 import { loadEvaluationConfig } from "./evaluation-store";
+import { loadTeacherAliases, loadTenure, loadTeacherChanges } from "./tenure";
 
 /**
  * 강사평가 스냅숏(`snapshot.ts`)과 시간표 X 겹침이 **같은 조회 정의**로 읽는 퇴원율 재료 — 한쪽만 바꾸면 같은 퇴원이 화면마다
@@ -58,7 +59,7 @@ export const studentReasonRows = (admin: Admin, tenantId: string) =>
 export async function loadChurnSource(admin: Admin, tenantId: string, input: { from: string; end: string }) {
   const { from, end } = input;
   const inTenant = (name: string, columns: string) => admin.from(name).select(columns).eq("tenant_id", tenantId);
-  const [test, classes, liveSchedules, endedSchedules, enrollments, transitions, futureEnrollments, studentReasons, evaluation] = await Promise.all([
+  const [test, classes, liveSchedules, endedSchedules, enrollments, transitions, futureEnrollments, studentReasons, evaluation, teacherChanges, tenure, aliases] = await Promise.all([
     nonRealStudents(admin, tenantId),
     paged<SnapshotClass>((a, b) => inTenant("classes", CLASS_COLUMNS).order("id").range(a, b)),
     paged<SnapshotSchedule>((a, b) => inTenant("class_schedules", SCHEDULE_COLUMNS).lte("valid_from", end).is("valid_to", null).order("id").range(a, b)),
@@ -68,10 +69,15 @@ export async function loadChurnSource(admin: Admin, tenantId: string, input: { f
     futureEnrollmentRows(admin, tenantId, end),
     studentReasonRows(admin, tenantId),
     loadEvaluationConfig(admin, tenantId),
+    // 강사평가 스냅숏과 같은 담임 이력 보강 · 재직 기간(같은 함수 — 화면마다 담당이 갈리지 않게).
+    loadTeacherChanges(admin, tenantId),
+    loadTenure(admin, tenantId),
+    loadTeacherAliases(admin, tenantId),
   ]);
   const real = (rows: SnapshotEnrollment[]) => rows.filter((e) => !test.has(e.student_id));
   return {
     from, end, classes, schedules: byId(liveSchedules, endedSchedules), enrollments: real(enrollments), transitions: toTransitions(transitions),
     futureEnrollments: real(futureEnrollments), studentReasons, options: evaluation.config.metrics.churn.churn ?? DEFAULT_CHURN_OPTIONS,
+    teacherChanges, tenure, aliases,
   };
 }

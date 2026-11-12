@@ -14,6 +14,7 @@ import {
   byId, CLASS_COLUMNS, ENROLLMENT_COLUMNS, futureEnrollmentRows, nonRealStudents, paged, SCHEDULE_COLUMNS, studentReasonRows, toTransitions, transitionRows,
 } from "./churn-source";
 import { fetchEvaluationSourceRows, toEvaluationSources } from "./evaluation-sources";
+import { loadTeacherAliases, loadTenure, loadTeacherChanges } from "./tenure";
 import { isMixedEmployment, parseWorkDays } from "@/features/staff/employment";
 
 /**
@@ -110,7 +111,7 @@ export async function loadPortfolioSnapshot(
   const [
     tenantRes, testStudents, users, classes, liveSchedules, endedSchedules, enrollments, attendance, reportsByDate,
     reportsByCover, followUps, consulted, reviewDocs, transitions, delegations, invoices, makeupByAbsence, makeupByDate,
-    futureEnrollments, studentReasons, referrals, touches, sourceRows, salaryDays,
+    futureEnrollments, studentReasons, referrals, touches, sourceRows, salaryDays, teacherChanges, tenure, aliases,
   ] = await Promise.all([
     table("tenants").select("id, name").eq("id", tenantId).maybeSingle(),
     nonRealStudents(admin, tenantId),
@@ -153,6 +154,10 @@ export async function loadPortfolioSnapshot(
     // 혼합 계약의 근로 요일(출석부 비율표 `workDays` — 원장 2026-10-16) — 근태가 세는 요일. 선생님마다 한 줄이라 적다.
     paged<{ teacher_id: string; work_days: unknown }>((a, b) => inTenant("attendance_salary_rates", "teacher_id, work_days:rates->workDays")
       .order("teacher_id").range(a, b)),
+    // 담임 이력 보강(감사로그에 안 남는 담임 변경) · 재직 기간(입사 전·퇴사 뒤는 담임·교시 담당이 아니다) — 원장 2026-11-11 · `homeroom-history.ts`.
+    loadTeacherChanges(admin, tenantId),
+    loadTenure(admin, tenantId),
+    loadTeacherAliases(admin, tenantId),
   ]);
   if (tenantRes.error || !tenantRes.data) throw new Error(`지점 조회 실패: ${tenantRes.error?.message ?? "없는 지점"}`);
 
@@ -176,7 +181,11 @@ export async function loadPortfolioSnapshot(
     from, end,
     settings: input.settings,
     preRecord: preRecordPolicy(from, firstReport, firstAttendance),
-    users: withWorkDays(users, salaryDays),
+    users: withWorkDays(users, salaryDays).map((u) => {
+      const t = tenure.get(u.id);
+      return t ? { ...u, hire_date: t.hireDate, resign_date: t.resignDate } : u;
+    }),
+    teacherChanges, teacherAliases: Object.fromEntries(aliases),
     classes,
     schedules: byId(liveSchedules, endedSchedules),
     enrollments: real(enrollments),

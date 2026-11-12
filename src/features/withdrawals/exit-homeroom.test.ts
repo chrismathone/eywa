@@ -91,4 +91,20 @@ describe("reportWriterOn — 담임 이력이 빈 반만", () => {
       reportsOf: () => [{ teacherId: "hwa", date: "2026-06-30" }],
     })).toEqual(["lee"]);
   });
+  it("🔴 재직 밖(입사 전) 선생님은 칸 다수·보고서 작성자 후보에서도 빠진다 — 강사평가 담임 판정과 같은 재직 기간", () => {
+    const base = {
+      rows: [{ classId: "top", startDate: "2026-03-01", endDate: "2026-09-04", transferred: false }],
+      date: "2026-09-04", lookbackDays: 120,
+      classOf: (id: string) => classes[id], owner: () => null, isKorean: (id: string) => id !== "native",
+    };
+    // 9월 칸의 정은지가 그날 재직 밖이면 칸으로 못 정한다 → 담임 이력도 없으면 보고서 작성자(재직 중인 사람만).
+    const employed = (id: string, day: string) => id !== "jung" || day >= "2026-10-01";
+    expect(exitHomeroomIds({ ...base, slotsOf: (id) => slots[id] ?? [], employed })).toEqual([]);
+    expect(exitHomeroomIds({
+      ...base, slotsOf: () => [], employed,
+      reportsOf: () => [{ teacherId: "jung", date: "2026-09-01" }, { teacherId: "jung", date: "2026-09-02" }, { teacherId: "kim", date: "2026-09-03" }],
+    })).toEqual(["kim"]);
+    // 판정을 안 넘기면 종전과 같다.
+    expect(exitHomeroomIds({ ...base, slotsOf: (id) => slots[id] ?? [] })).toEqual(["jung"]);
+  });
 });

@@ -6,6 +6,8 @@
  */
 export type SnapshotUser = {
   id: string; display_name: string; status: string; subjects: string[] | null; employment_type?: string | null; work_days?: string[] | null;
+  /** 재직 기간(2026-11-11) — 입사일 · 퇴사일(퇴사 상태일 때 퇴사 메모 → 퇴사 처리 기록). 이 밖의 날은 담임·교시 담당이 아니다. 옛 스냅숏엔 없다. */
+  hire_date?: string | null; resign_date?: string | null;
 };
 export type SnapshotClass = {
   id: string; class_name: string; subject: string; english_track: string | null; teacher_id: string | null;
@@ -61,6 +63,8 @@ export type SnapshotReview = {
 export type SnapshotTransition = {
   class_id: string | null; target_label: string | null; teacher_id: string; previous_teacher_id: string | null; date: string;
 };
+/** activity_log의 담임 변경 한 줄(감사로그에 안 남는 경로까지 — `homeroom-history.ts`). */
+export type { ActivityTeacherChange } from "./homeroom-history";
 export type SnapshotDelegation = { class_id: string; delegate_user_id: string; from_date: string; to_date: string };
 export type SnapshotInvoice = {
   id: string; student_id: string; period: string; amount_total: number | string; amount_discount: number | string | null;

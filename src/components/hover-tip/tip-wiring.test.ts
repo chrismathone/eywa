@@ -42,6 +42,8 @@ const CARD_SURFACES: [string, string][] = [
   ["app/(shell)/withdrawal-reports/_components/report-list.tsx", "tipProps(r.reason.note)"],
   ["app/(shell)/lesson-reports/_components/rating-cell.tsx", "tipProps(ratingTipCard(rating))"],
   ["app/(shell)/withdrawals/_components/report-date-badge.tsx", 'title: "퇴원보고서 날짜"'],
+  // 역할·권한 표 줄 설명(2026-11-12 — 줄 아래에 펼쳐 두던 것을 카드로)
+  ["app/(shell)/owner/_components/role-matrix-table.tsx", "tipProps({ title: item.label, lines: [item.note]"],
 ];
 
 /**
