@@ -15,6 +15,7 @@ const fs = require("fs");
 const path = require("path");
 const postgres = require("postgres");
 const L = require("./lib.cjs");
+const { notifySeatLimitExceeded } = require("./seat-limit-alert.cjs");
 
 const APPLY = process.argv.includes("--apply");
 const OUT = process.env.MAKEEDU_OUT || path.resolve(__dirname, "..", "..", ".makeedu-tmp");
@@ -153,7 +154,7 @@ function statusFrom(v) {
     // 먼저 지난 실행의 신규 표시를 전부 클리어한다 → 라벨이 "다음 동기화까지만" 유지되고 이번엔 사라진다(0061a).
     const cleared = await sql`update students set sync_added_at = null where tenant_id = ${tenantId} and sync_added_at is not null`;
 
-    let linked = 0, inserted = 0;
+    let linked = 0, inserted = 0, insertedEnrolled = 0;
     for (const t of toLink) {
       const res = await sql`update students set makeedu_id = ${t.makeedu_id}, updated_at = now() where id = ${t.id} and makeedu_id is null`;
       linked += res.count;
@@ -168,12 +169,20 @@ function statusFrom(v) {
           values (${tenantId}, ${r.makeedu_id}, ${r.name}, ${r.gender}, ${r.attendance_code}, ${r.school}, ${r.grade},
             ${r.student_phone}, ${r.parent_phone}, ${r.parent_name}, ${r.birth_date}, ${r.enrolled_at}, ${r.status}, now(), ${r.name !== r.baseName})`;
         inserted++;
+        if (r.status === "enrolled") insertedEnrolled++;
       } catch (e) {
         if (/ux_students_active_natural_key|unique|duplicate/i.test(e.message)) { skippedDup++; continue; }
         throw e;
       }
     }
     await L.recordSync(sql, tenantId, "students", linked + inserted);
+    // 외부 장부 반영은 막지 않는다. 좌석 한도를 넘겼으면 기존 원장 벨 알림 경로로 사실만 남긴다(발송 아님).
+    try {
+      const notified = await notifySeatLimitExceeded(sql, tenantId, insertedEnrolled);
+      if (notified) console.log(`  좌석 한도 초과 알림: 원장 ${notified}명`);
+    } catch (e) {
+      console.warn(`  좌석 한도 초과 알림 기록 실패(학생 가져오기는 완료): ${e.message}`);
+    }
     console.log(`  라벨 클리어(지난 신규): ${cleared.count} → 이번 신규 라벨: ${inserted}`);
     console.log(`\nbackfilled makeedu_id: ${linked} | inserted new: ${inserted}` + (skippedDup ? ` | skipped(자연키 중복): ${skippedDup}` : ""));
   } finally {
