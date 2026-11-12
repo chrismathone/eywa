@@ -86,13 +86,20 @@ async function recordTenant(admin: Admin, tenantId: string, today: string): Prom
     // 강좌수 = 운영실 '강좌수' 칸과 같은 판정(영어 = 인재원 영어 · EiE 따로 — 원장 2026-10-30, EiE 모듈 켜진 지점).
     splitEnglish: isModuleEnabled(settings.modules.disabled, "eie"),
   });
+  const opsModules = {
+    calendar: isModuleEnabled(settings.modules.disabled, "calendar"),
+    newcomers: isModuleEnabled(settings.modules.disabled, "newcomers"),
+  };
   // 상담 진행 · 신규생(2026-10-21) — 같은 줄에 함께 싣는다. 부분 실패는 그 칸만 빠진다(재원생 기록은 그대로 쓴다).
-  const ops: OpsDaily = await buildOpsDaily(admin, tenantId, today, settings.operations.subjects).catch((e: unknown) => {
+  const ops: OpsDaily = await buildOpsDaily(admin, tenantId, today, settings.operations.subjects, opsModules).catch((e: unknown) => {
     console.error(JSON.stringify({ level: "error", scope: "student-daily-stats.ops", tenantId, message: e instanceof Error ? e.message : String(e) }));
     return {};
   });
   // 같은 날 다시 돌 때(재시도) 이번에 실패한 칸은 앞서 쓴 그날 값을 남긴다 — 줄을 통째로 갈아끼우므로 안 그러면 지워진다.
   const kept = ops.consult && ops.newcomers ? {} : await keptOps(admin, tenantId, today);
+  // 기능을 끈 뒤 같은 날 재실행해도 먼저 쓴 옛 값이 합쳐져 되살아나지 않게 한다.
+  if (!opsModules.calendar) delete kept.consult;
+  if (!opsModules.newcomers) delete kept.newcomers;
   const merged: OpsDaily = { ...kept, ...ops };
   const row = Object.keys(merged).length ? { ...data, ops: merged } : data;
   const { error } = await admin

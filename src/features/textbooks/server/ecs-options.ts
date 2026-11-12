@@ -2,6 +2,7 @@ import "server-only";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTextbookOptions } from "./queries";
 import type { TextbookOptionItem } from "../textbook-options-context";
+import { isModuleOnForTenant } from "@/features/owner/server/modules";
 
 /**
  * ECS 화면이 쓰는 **교재 제안 목록** 한 줄 진입점 — 주간 시트·월간·오늘 면이 같은 값을 본다.
@@ -18,6 +19,7 @@ export async function loadEcsTextbookOptions(subject: string = "english"): Promi
   try {
     const user = await getCurrentUser();
     if (!user) return [];
+    if (!(await isModuleOnForTenant(user.tenantId, "textbooks"))) return [];
     return await getTextbookOptions(user.tenantId, subject);
   } catch {
     return [];

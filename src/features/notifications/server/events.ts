@@ -40,6 +40,7 @@ import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import { stripTextbookPages } from "@/features/onescreen/textbook-carry";
 import type { TodaysMathFillRow } from "@/features/onescreen/todays-math-fill-rules";
 import { isFeatureOptedIn } from "@/lib/license/server";
+import { isModuleOnForTenant } from "@/features/owner/server/modules";
 import {
   absenceDigestBody,
   absenceNotificationLink,
@@ -473,6 +474,9 @@ async function detectEnrollmentFollowup(admin: SupabaseClient, tenantId: string)
  * 동일 180일 창에서 (학생,과목)별 최신 2건 비교. bucket=최신 gradeId라 새 점수 1회만 알린다.
  */
 async function detectGradeDrop(admin: SupabaseClient, tenantId: string): Promise<number> {
+  // 성적 기록 알림이 아니라 이탈 방어의 위험 신호다: retention 기준을 재사용하고 확인 화면도 /retention 하나다.
+  // 기능을 끈 지점에는 후보 조회·이벤트 시드·알림을 모두 남기지 않는다.
+  if (!(await isModuleOnForTenant(tenantId, "retention"))) return 0;
   const today = kstToday();
   const since = new Date(Date.parse(`${today}T00:00:00Z`) - 180 * 86_400_000).toISOString().slice(0, 10);
   const rows = await fetchAllPaged<{
