@@ -12,6 +12,8 @@ import {
 } from "../parent-rides";
 import { dayCodeOf, type RideException } from "../../roster";
 import { isMissingNotifyColumn } from "../notify-column";
+import { parentPortalAvailable } from "./parent-availability";
+import type { ParentViewer } from "./parent-viewer";
 import {
   isBoardingStatus,
   isDirection,
@@ -38,6 +40,24 @@ export type ParentRideData = {
 const EMPTY = (): ParentRideData => ({ legs: new Map(), fleet: [], regular: [] });
 
 type Admin = ReturnType<typeof createAdminClient>;
+
+/**
+ * 학부모 경로 전용 읽기 문 — 포털 이용 가능 상태와 **이 학부모에게 연결된 아이**를 다시 확인한 뒤 공용 조립기로 간다.
+ * 직원 셔틀 화면도 아래 `loadRideLegsFor`를 쓰므로 그 함수에 학부모 신원 문을 섞지 않는다.
+ */
+export async function loadParentRideLegsFor(
+  viewer: ParentViewer,
+  studentIds: readonly string[],
+  ymd: string,
+  season: Season,
+  live: boolean,
+  withVehicleRoutes = false,
+): Promise<ParentRideData> {
+  if (studentIds.length === 0 || !(await parentPortalAvailable(viewer))) return EMPTY();
+  const linked = new Set(viewer.children.map((child) => child.id));
+  if (studentIds.some((studentId) => !linked.has(studentId))) return EMPTY();
+  return loadRideLegsFor(viewer.tenantId, [...studentIds], ymd, season, live, withVehicleRoutes);
+}
 
 /**
  * 학부모 뷰 재료 — **주어진 아이들의 셔틀만** service_role로 읽는다.

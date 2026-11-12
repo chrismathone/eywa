@@ -349,6 +349,8 @@ export function diffSettingsSection(section: string, before: unknown, after: unk
   const changes: SettingChange[] = [];
   let others = 0;
   for (const key of Object.keys(after)) {
+    // 저장 당시 서버가 알던 모듈 목록은 옛 화면 호환용 메타데이터다. 사람이 고르는 값이 아니므로 감사 변경에서 뺀다.
+    if (section === "modules" && key === "known") continue;
     const a = after[key];
     // 강사뷰 구성(2026-09-22)은 옛 행에 키 자체가 없다 — 없음을 빈 목록으로 읽는다. 관리자뷰만 고쳐 저장해 빈 목록이
     // 처음 실리는 것은 변경이 아니고(아래 비교에서 같음), 처음 정하면 "없음 → 변경됨"이 아니라 "0개 → N개"로 적힌다.
@@ -408,6 +410,7 @@ export function diffSettingsSection(section: string, before: unknown, after: unk
   }
   // ⚠️ **사라진 키**도 변경이다(선택 필드를 비우면 키 자체가 없어진다) — after만 훑으면 조용히 놓친다.
   for (const key of Object.keys(before)) {
+    if (section === "modules" && key === "known") continue;
     if (key in after) continue;
     const label = labels[key];
     if (!label || changes.length >= MAX_CHANGES) {

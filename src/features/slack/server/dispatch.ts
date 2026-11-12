@@ -9,6 +9,7 @@ import { deliverDue } from "./deliver";
 import { expandInbox } from "./expand";
 import { reconcileInbox } from "./reconcile";
 import { loadConnection } from "./store";
+import { acquireSlackMaintenanceLease, releaseSlackMaintenanceLease } from "./license-transition";
 
 /**
  * 슬랙 발송기 — 지점 하나를 한 번 돌린다(인박스 펼치기 → 보낼 것 보내기). 두 곳에서 부른다:
@@ -33,8 +34,25 @@ export async function drainTenant(tenantId: string, opts: { reconcile?: boolean 
   if (loaded.status !== "ok" || !loaded.value?.botToken) return null;
   if (!(await isFeatureOptedIn(tenantId, "slack"))) return null;
   if (loaded.value.status !== "active") {
-    // 끊긴 동안엔 보내지 않지만, 유실 대조(인박스 채우기)는 계속 — 끊김이 30분을 넘어도 트리거가 놓친 사건이 남는다(codex 3차).
-    if (opts.reconcile) await reconcileInbox(tenantId, new Date()).catch((e) => reportError(e, { scope: "slack.reconcile_broken", tenantId }));
+    // 끊긴 동안에도 유실 대조는 하되, 켜기 정리가 잡은 리스와 겹치지 않는다. 리스를 못 잡으면 다음 cron에 맡긴다.
+    if (opts.reconcile) {
+      const now = new Date();
+      const lease = await acquireSlackMaintenanceLease(tenantId, now).catch((e) => {
+        reportError(e, { scope: "slack.reconcile_broken_lease", tenantId });
+        return { leaseId: null };
+      });
+      if (lease.leaseId) {
+        try {
+          await reconcileInbox(tenantId, now);
+        } catch (e) {
+          reportError(e, { scope: "slack.reconcile_broken", tenantId });
+        } finally {
+          await releaseSlackMaintenanceLease(tenantId, lease.leaseId).catch((e) =>
+            reportError(e, { scope: "slack.reconcile_broken_release", tenantId }),
+          );
+        }
+      }
+    }
     return null;
   }
   const conn = loaded.value;

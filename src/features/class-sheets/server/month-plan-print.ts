@@ -2,6 +2,7 @@ import "server-only";
 import type { MonthPlanTexts } from "@/features/owner/month-plan-texts";
 import { getMonthPlanChrome } from "./month-plan-chrome";
 import { getClassSheetMonth, type ClassSheetMonthData } from "./month-queries";
+import { eieModuleOn } from "./eie-on";
 
 /**
  * 월간 계획서(MP) **인쇄물**의 재료 — 화면과 **같은 조회·같은 게이트**를 통과한 뒤 인쇄에만 필요한
@@ -21,7 +22,9 @@ export type MonthPlanPrintData = {
   periodRange: string;
 };
 
-export type MonthPlanPrintResult = { ok: true; data: MonthPlanPrintData } | { ok: false; error: string };
+export type MonthPlanPrintResult =
+  | { ok: true; data: MonthPlanPrintData }
+  | { ok: false; error: string; reason?: "module_disabled" };
 
 export async function getMonthPlanPrint(
   classId: string,
@@ -30,8 +33,12 @@ export async function getMonthPlanPrint(
   periodRaw: unknown = null,
 ): Promise<MonthPlanPrintResult> {
   // 🔴 화면과 **같은 조회**(같은 게이트·같은 기간 해석) — 인쇄만 따로 창을 정하면 화면과 종이가 다른 날짜를 담는다.
-  const res = await getClassSheetMonth(classId, monthRaw, { period: periodRaw });
+  const [res, moduleOn] = await Promise.all([
+    getClassSheetMonth(classId, monthRaw, { period: periodRaw }),
+    eieModuleOn(),
+  ]);
   if (!res.ok) return { ok: false, error: res.error };
+  if (!moduleOn) return { ok: false, error: "월간 계획서를 사용할 수 없습니다.", reason: "module_disabled" };
   if (!res.data.isEie) return { ok: false, error: "월간 계획서는 EiE 반에서만 사용합니다" };
 
   const chrome = await getMonthPlanChrome({

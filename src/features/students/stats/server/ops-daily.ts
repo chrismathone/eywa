@@ -23,7 +23,13 @@ type Admin = ReturnType<typeof createAdminClient>;
  * 관리 키라 모든 조회에 지점을 건다([[#104]] · 각 함수의 `deps`/`tenantId`). 이름은 싣지 않는다(건수만).
  * 두 부분은 따로 실패한다(실패한 부분은 빠지고 경고만 남는다 — 0으로 적지 않는다).
  */
-export async function buildOpsDaily(admin: Admin, tenantId: string, today: string, subjects: readonly SubjectSetting[]): Promise<OpsDaily> {
+export async function buildOpsDaily(
+  admin: Admin,
+  tenantId: string,
+  today: string,
+  subjects: readonly SubjectSetting[],
+  modules: { calendar: boolean; newcomers: boolean },
+): Promise<OpsDaily> {
   const deps = { db: admin, tenantId };
   const since = shiftDate(today, -CONSULTATION_LINK_WINDOW_DAYS);
   const programSubjects = subjects.map((s) => ({ key: s.key, label: s.label }));
@@ -36,24 +42,28 @@ export async function buildOpsDaily(admin: Admin, tenantId: string, today: strin
       const [rows, calendar] = await Promise.all([
         admissionsConsultationCandidates(since, deps),
         // 일정을 못 읽으면 입테만 '모름'(운영실 카드와 같다).
-        getDateRangeEvents(since, monthAheadWindow(today).end, deps).catch(() => null),
+        modules.calendar
+          ? getDateRangeEvents(since, monthAheadWindow(today).end, deps).catch(() => null)
+          : Promise.resolve(null),
       ]);
       const notNames = Object.values(subjectLabelRecord([...subjects]));
       const { list, levelTestKnown } = await consultProgressList(rows, calendar?.ready ? calendar.events : null, notNames, since, today, deps);
       const summary = summarizeProgress(list, today, levelTestKnown);
       return { from: summary.from, counts: summary.counts, stalled: summary.stalled.length };
     })().catch(warn("상담 진행")),
-    (async () => {
-      const view = await loadNewcomers(admin, today, tenantId);
-      const care = buildCareSummary(view.rows, view.rows, programSubjects, view.checksAvailable && !view.checksError, today);
-      return {
-        total: care.total,
-        stages: care.stages.map((s) => ({ label: s.label, value: s.value })),
-        checksAvailable: care.checksAvailable,
-        // 학생 이름(`needs`)은 남기지 않는다 — 건수만.
-        items: care.items.map((i) => ({ label: i.label, optional: i.optional, done: i.done, overdue: i.overdue, due: i.due, upcoming: i.upcoming, pending: i.pending, waived: i.waived })),
-      };
-    })().catch(warn("신규생")),
+    modules.newcomers
+      ? (async () => {
+          const view = await loadNewcomers(admin, today, tenantId);
+          const care = buildCareSummary(view.rows, view.rows, programSubjects, view.checksAvailable && !view.checksError, today);
+          return {
+            total: care.total,
+            stages: care.stages.map((s) => ({ label: s.label, value: s.value })),
+            checksAvailable: care.checksAvailable,
+            // 학생 이름(`needs`)은 남기지 않는다 — 건수만.
+            items: care.items.map((i) => ({ label: i.label, optional: i.optional, done: i.done, overdue: i.overdue, due: i.due, upcoming: i.upcoming, pending: i.pending, waived: i.waived })),
+          };
+        })().catch(warn("신규생"))
+      : Promise.resolve(undefined),
   ]);
   return { ...(consult ? { consult } : {}), ...(newcomers ? { newcomers } : {}) };
 }

@@ -26,7 +26,7 @@ export default async function StaffPayrollPage({
   searchParams: Promise<{ period?: string }>;
 }) {
   const user = await requireAccess("staff");
-  if (!isPayrollEnabled(await getTenantSettings())) redirect("/staff");
+  if (!isPayrollEnabled(await getTenantSettings())) notFound();
   // 급여 읽기 = 쓰기와 같은 역할 게이트(payrollReadScope와 동일) — 직원관리 개인 예외만으로는 급여를 못 연다.
   const isSuperAdmin = await isCurrentUserSuperAdmin();
   if (!canManageStaff(user.systemRole) && !isSuperAdmin) redirect("/staff");

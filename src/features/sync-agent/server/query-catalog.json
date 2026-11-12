@@ -9255,6 +9255,26 @@
       "classId"
     ]
   },
+  "e217242cff15b71cebec5621d52737d814f43e451b78095edb2efbcccc2cab5d": {
+    "parts": [
+      "select data->'preset' as preset, data->'modules' as modules\n    from tenant_settings where tenant_id=",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/classnote-core.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant"
+    ]
+  },
   "e3ee7cdb5744e1599482b9edbf0ef643e7500ecbba2ac4da00ec872529f952ef": {
     "parts": [
       "\n          insert into students (tenant_id, makeedu_id, name, gender, attendance_code, school, grade,\n            student_phone, parent_phone, parent_name, birth_date, enrolled_at, status, sync_added_at, dup_suspect)\n          values (",

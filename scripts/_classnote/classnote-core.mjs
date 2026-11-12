@@ -32,6 +32,7 @@ import { decideRoute, pickRouteClass, ROUTE_BLOCKED_MESSAGE } from "./class-rout
 import { crossCheckOthers, isClassRouteEligible, resolveClassTargets } from "./classnote-class-route.mjs";
 import { classRouteHaltReason, haltClassRoute } from "./class-route-halt.mjs";
 import { englishAnchorClass, isMissingTable, loadEnglishClassBoard, resolveEnglishClassTargets } from "./english-class-route.mjs";
+import { isRawModuleEnabled } from "../_shared/module-state.mjs";
 
 /**
  * 🔴 게시 엔진 = **워커 내장(내부 API) 단일 경로**. Cloud Run(edutrix Firebase `submitToClassNoteV2`) 분기는
@@ -176,17 +177,15 @@ export async function isClassnoteSendEnabled(sql, tenant) {
 
 /**
  * 이 학원에 ClassNote 기능(모듈)이 켜져 있나 — 앱 `isModuleEnabled(settings.modules.disabled, "classnote")`와 같은 판정.
- * 저장은 `data.modules.disabled`(끈 것만). 칸이 없으면 프리셋을 따른다: 일반판(`preset:"generic"`)은 전부 꺼진 채
- * 태어나고(GENERIC_DISABLED_MODULES), 그 밖(침산)은 전부 켜짐. 행이 없으면 침산 = 켜짐(앱 resolve와 같은 쪽으로 기운다).
+ * 저장은 `data.modules.disabled`(끈 것만)와 저장 당시 목록 `known`. 일반판은 저장 뒤 추가된 모듈도 끈 것으로 보고,
+ * 칸이 없으면 전부 꺼진 채 태어난다(GENERIC_DISABLED_MODULES). 그 밖(침산)은 `known`을 무시하고 전부 켜며,
+ * 행이 없으면 침산 = 켜짐(앱 resolve와 같은 쪽으로 기운다).
  * 꺼져 있으면 데몬은 이 학원의 ClassNote 일(발송·공지·회수·동기화·피드·읽음)을 **전부** 건너뛴다.
  */
 export async function isClassnoteModuleEnabled(sql, tenant) {
-  const [row] = await sql`select case
-      when jsonb_typeof(data->'modules'->'disabled') = 'array' then (data->'modules'->'disabled') ? 'classnote'
-      else coalesce(data->>'preset', '') = 'generic'
-    end as off
+  const [row] = await sql`select data->'preset' as preset, data->'modules' as modules
     from tenant_settings where tenant_id=${tenant}`;
-  return row?.off !== true;
+  return isRawModuleEnabled(row, "classnote");
 }
 
 /**

@@ -2,10 +2,12 @@
 
 import { signOut } from "@/app/(auth)/login/actions";
 import { getPublicBrandingByTenantId } from "@/features/owner/server/public-branding";
+import { parentPortalState } from "@/features/shuttle/parent/server/parent-availability";
 import { getParentViewer } from "@/features/shuttle/parent/server/parent-viewer";
 import { loadParentNotices } from "@/features/shuttle/parent/server/parent-departure";
 import { DepartureNoticeList } from "@/features/shuttle/parent/components/departure-notice-list";
 import { ParentTabs } from "./_components/parent-tabs";
+import { ParentPortalUnavailable } from "./_components/parent-portal-unavailable";
 
 /**
  * 학부모 화면 공통 머리 — 학원명·학부모 이름·로그아웃 + 셔틀 알림 줄(출발·탑승) + 가로 탭(5칸). 섹션(실시간 차량·변경·확인·
@@ -17,6 +19,10 @@ import { ParentTabs } from "./_components/parent-tabs";
 export default async function ParentSectionLayout({ children }: { children: React.ReactNode }) {
   const viewer = await getParentViewer();
   if (!viewer) redirect("/home");
+  const state = await parentPortalState(viewer);
+  // `/home`은 학부모 신원만 보고 다시 `/parent`로 보낸다. 여기서 홈·로그인으로 돌리면 순환하거나 로그인 화면에
+  // 갇히므로, 꺼진 기능의 이름을 말하지 않는 종착 화면을 직접 그린다.
+  if (state !== "on") return <ParentPortalUnavailable state={state} />;
   const [branding, notices] = await Promise.all([getPublicBrandingByTenantId(viewer.tenantId), loadParentNotices(viewer)]);
   const academy = branding?.settings.profile.name ?? "";
 

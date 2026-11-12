@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { ROLE_PRESETS, withoutCoveredKeys } from "@/features/slack/role-presets";
+import { filterPresetNotifications, ROLE_PRESETS, withoutCoveredKeys } from "@/features/slack/role-presets";
+import type { ForwardEventOption } from "@/features/slack/events";
 import type { ActivityOption } from "@/features/slack/activity-catalog";
 import { emptyRule, RULE_PRESETS, SLACK_MAX_RULES, type SlackRule } from "@/features/slack/rules";
 import { listSlackChannels } from "@/features/slack/server/connection-actions";
@@ -23,10 +24,12 @@ export function RulesSection({
   initialRules,
   staff,
   activityOptions,
+  forwardEventOptions,
 }: {
   initialRules: SlackRule[];
   staff: { id: string; name: string }[];
   activityOptions: ActivityOption[];
+  forwardEventOptions: readonly ForwardEventOption[];
 }) {
   const [rows, setRows] = useState<Row[]>(() => initialRules.map((r) => ({ key: r.id, rule: r })));
   const [channels, setChannels] = useState<ChannelOption[]>([]);
@@ -81,7 +84,7 @@ export function RulesSection({
             <DropdownMenuSeparator />
             <DropdownMenuLabel>역할별 기본 세팅</DropdownMenuLabel>
             {ROLE_PRESETS.map((p) => (
-              <DropdownMenuItem key={p.id} onClick={() => addMany(p.build(activityOptions))}>
+              <DropdownMenuItem key={p.id} onClick={() => addMany(filterPresetNotifications(p.build(activityOptions), forwardEventOptions))}>
                 {p.label}
               </DropdownMenuItem>
             ))}
@@ -106,6 +109,7 @@ export function RulesSection({
           channels={channels}
           staff={staff}
           activityOptions={activityOptions}
+          forwardEventOptions={forwardEventOptions}
           onSaved={(saved) => setRows((prev) => prev.map((r) => (r.key === row.key ? { key: row.key, rule: saved } : r)))}
           onDeleted={() => {
             setNote(null);

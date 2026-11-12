@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { activityCategoryOf, activityGradeOf, buildActivityOptions } from "./activity-catalog";
+import { activityCategoryOf, activityGradeOf, availableActivityOptions, buildActivityOptions } from "./activity-catalog";
 
 /** log.ts는 server-only라 import 대신 텍스트로 읽는다(actions-registry.test와 같은 방식). */
 function auditActions(): Record<string, string> {
@@ -13,6 +13,27 @@ function auditActions(): Record<string, string> {
 }
 
 describe("슬랙 활동 분류", () => {
+  it("모든 스위치가 켜진 지점은 기존 선택지를 유지하고, 꺼진 기능의 활동만 숨긴다", () => {
+    const labels = {
+      student_create: "학생 등록",
+      approval_request: "결재 요청",
+      classnote_send: "ClassNote 발송",
+      todays_math_exam_upload: "오늘 수학 성적표",
+      video_homework_submit: "영상 숙제 제출",
+      management_collector_run: "경영 수집",
+    };
+    const allOn = { moduleOn: () => true, todaysMath: true, videoReview: true, collector: true };
+    expect(availableActivityOptions(labels, allOn)).toEqual(buildActivityOptions(labels));
+
+    const visible = availableActivityOptions(labels, {
+      moduleOn: () => false,
+      todaysMath: false,
+      videoReview: false,
+      collector: false,
+    });
+    expect(visible.map((option) => option.key)).toEqual(["student_create"]);
+  });
+
   it("🔴 모든 감사로그 액션이 분류돼 있다(새 액션은 activity-catalog.ts RULES에 한 줄)", () => {
     const keys = Object.keys(auditActions());
     expect(keys.length).toBeGreaterThan(300);

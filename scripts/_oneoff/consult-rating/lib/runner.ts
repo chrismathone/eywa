@@ -15,7 +15,7 @@ export const RESULT_ROOT = join(homedir(), "eywa-data", "consult-rating");
 export const USAGE_LEDGER = join(RESULT_ROOT, "02-harness", "usage.jsonl");
 export const MODELS = { haiku: "claude-haiku-5-5", sonnet: "claude-sonnet-5-5" } as const;
 export type ModelKey = keyof typeof MODELS;
-const FORBIDDEN_ENV = /^(DATABASE_URL|SUPABASE_|NEXT_PUBLIC_SUPABASE_|DEEPSEEK_API_KEY|ANTHROPIC_)/;
+const FORBIDDEN_ENV = /^(DATABASE_URL|SUPABASE_|NEXT_PUBLIC_SUPABASE_|DEEPSEEK_API_KEY|OPENAI_API_KEY|ANTHROPIC_)/;
 
 export function assertEvalEnv(): void {
   const bad = Object.keys(process.env).filter((k) => FORBIDDEN_ENV.test(k));

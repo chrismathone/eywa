@@ -11,11 +11,11 @@ import { countOpenTasks, taskBadgesFor } from "./queries";
  * 벨이 붙이는 할 일 정보(0377a). 60초 폴링마다 도니 목록 조회와 나란히(B4) · 집계는 DB에서.
  * 🔴 실패하면 null / 빈 표(벨 목록은 그대로) — 이 기능 때문에 전원의 벨이 비면 안 된다([[#95]] 계열).
  */
-export async function myTaskSummary(): Promise<StaffTaskSummary | null> {
+export async function myTaskSummary(hiddenKinds?: readonly string[]): Promise<StaffTaskSummary | null> {
   try {
     const viewer = await getStaffTaskViewer();
     if (!viewer) return null;
-    const mine = (await countOpenTasks(viewer.user.tenantId, viewer.user.id)).get(viewer.user.id) ?? { open: 0, late: 0 };
+    const mine = (await countOpenTasks(viewer.user.tenantId, viewer.user.id, hiddenKinds)).get(viewer.user.id) ?? { open: 0, late: 0 };
     return { open: mine.open, late: mine.late, canMonitor: viewer.canMonitor };
   } catch (error) {
     reportError(error, { scope: "notifications.task-summary" });
@@ -24,7 +24,10 @@ export async function myTaskSummary(): Promise<StaffTaskSummary | null> {
 }
 
 /** 목록 알림 줄 → 그 알림이 알린 할 일의 지금 상태(내가 맡은 할 일만). 묶음 알림은 연결표(0378a)로 여러 건을 모은다. */
-export async function notificationTaskBadges(notificationIds: readonly string[]): Promise<Map<string, NotificationTaskBadge>> {
+export async function notificationTaskBadges(
+  notificationIds: readonly string[],
+  hiddenKinds?: readonly string[],
+): Promise<Map<string, NotificationTaskBadge>> {
   const badges = new Map<string, NotificationTaskBadge>();
   if (!notificationIds.length) return badges;
   try {
@@ -52,7 +55,7 @@ export async function notificationTaskBadges(notificationIds: readonly string[])
       byNotification.set(p.notification_id, list);
     }
     if (!byNotification.size) return badges;
-    const states = await taskBadgesFor(tenantId, viewer.user.id, [...byNotification.values()].flat());
+    const states = await taskBadgesFor(tenantId, viewer.user.id, [...byNotification.values()].flat(), hiddenKinds);
     for (const [notificationId, taskIds] of byNotification) {
       const mine = taskIds.flatMap((id) => {
         const s = states.get(id);

@@ -10,7 +10,7 @@ const slot = (over: Partial<DutySchedule> & { class_id: string }): DutySchedule 
 const enroll = (classId: string, studentId: string, over: Partial<DailyInput["enrollments"][number]> = {}) =>
   ({ class_id: classId, student_id: studentId, start_date: "2026-09-01", end_date: null, on_hold: false, is_transferred: false, attendance_days: null, ...over });
 const base = (over: Partial<DailyInput> = {}): DailyInput => ({
-  date: DATE, holidays: new Set(), classnoteOn: true,
+  date: DATE, holidays: new Set(), classnoteSendOn: true,
   classes: [math, eng],
   schedules: [slot({ class_id: "c-math" }), slot({ class_id: "c-eng", start_time: "17:00", teacher_id: "t3" })],
   enrollments: [enroll("c-math", "s1"), enroll("c-math", "s2"), enroll("c-eng", "s3")],
@@ -62,6 +62,11 @@ describe("buildDailyDuties — 출결 입력", () => {
 });
 
 describe("buildDailyDuties — 보고서 발송(작성 · 발송을 한 업무로)", () => {
+  it("🔴 침산 조건(모듈·실제 발송 켬)은 종전 의무 종류와 건수를 유지한다", () => {
+    const rows = buildDailyDuties(base({ classnoteSendOn: true }));
+    expect(rows.reduce<Record<string, number>>((acc, row) => ({ ...acc, [row.kind]: (acc[row.kind] ?? 0) + 1 }), {}))
+      .toEqual({ attendance: 3, report_send: 3 });
+  });
   it("🔴 보고서는 발송까지가 한 업무 — 발송하는 반에는 작성 의무가 따로 없고, 안 썼어도 · 써 놓고 안 보냈어도 발송 의무가 열린 채다(끝 시각을 모르면 기한 = 다음 날 자정)", () => {
     const rows = buildDailyDuties(base({ reports: [report("s1")] }));
     expect(rows.some((r) => r.kind === "report_write")).toBe(false);
@@ -74,8 +79,8 @@ describe("buildDailyDuties — 보고서 발송(작성 · 발송을 한 업무�
     expect(pick(rows, "report_send", "s2")).toMatchObject({ status: "void", source: "recalled" });
     expect(pick(buildDailyDuties(base({ reports: [report("s1", "too_old")] })), "report_send", "s1")).toMatchObject({ status: "open", source: null });
   });
-  it("ClassNote를 안 쓰는 지점(발송 길이 없음)은 종전대로 작성 의무 — 쓰면 done(시각 = created_at) · 발송 의무는 없다", () => {
-    const rows = buildDailyDuties(base({ classnoteOn: false, reports: [report("s1")] }));
+  it("ClassNote 실제 발송을 끈 지점은 작성 의무 — 쓰면 done(시각 = created_at) · 학생별 발송 의무는 없다", () => {
+    const rows = buildDailyDuties(base({ classnoteSendOn: false, reports: [report("s1")] }));
     expect(rows.some((r) => r.kind === "report_send" && r.classId === "c-math")).toBe(false);
     expect(pick(rows, "report_write", "s1")).toMatchObject({ status: "done", source: "lesson_report", doneAt: `${DATE}T09:00:00Z` });
     expect(pick(rows, "report_write", "s2")).toMatchObject({ status: "open", dueAt: kstDueAt(DATE, 2, 0) }); // 끝 시각을 모를 때 = 발송과 같은 기한(출결 기한 + 24시간)
@@ -105,6 +110,9 @@ describe("buildDailyDuties — 보고서 발송(작성 · 발송을 한 업무�
     expect(pick(rows, "report_send", null, "c-eng")).toMatchObject({ status: "done", studentId: null, classId: "c-eng", source: "class_post", doneAt: `${DATE}T12:00:00+09:00`, dueAt: kstDueAt(DATE, 2, 0) });
     expect(rows.some((r) => r.kind === "report_write")).toBe(false);
     expect(pick(buildDailyDuties(base({})), "report_send", null, "c-eng")).toMatchObject({ status: "open" });
+    // 영어 강사는 ClassNote에 직접 쓰므로 aywa 실제 발송 스위치를 내려도 반 게시글 의무와 완료 판정은 유지한다.
+    expect(pick(buildDailyDuties(base({ classnoteSendOn: false, posts: [{ boardName: "중2 영어A", postedOn: DATE }] })), "report_send", null, "c-eng"))
+      .toMatchObject({ status: "done", source: "class_post" });
   });
 });
 

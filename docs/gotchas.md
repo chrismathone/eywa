@@ -1688,7 +1688,7 @@ IJW 1교시(16:20) 칸에 가 있었다. 함께 제보된 두 번째 증상 — 
   Anthropic=400 + `credit balance` / DeepSeek=**402** `Insufficient Balance` / OpenAI 호환=429 `insufficient_quota`
   → **상태코드와 문구를 둘 다** 본다. 오탐의 대가는 "다음 provider 한 번 더 시도"뿐이라 넉넉히 잡는다.
 - 사다리를 **anthropic → deepseek → upstage(Solar)** 로 명시(`FALLBACK_LADDER`, 원장 2026-08-28).
-  → 지금 사다리 = **anthropic → deepseek**(Solar는 2026-10-19 뺐다) (2026-11-10 CLAUDE.md 색인에서 옮김)
+  → 지금 사다리 = **anthropic → openai**(Solar 2026-10-19 · DeepSeek 2026-11-12 뺐다 · OpenAI 소진 모양 = 402 또는 429 `insufficient_quota`) (2026-11-10 CLAUDE.md 색인에서 옮김)
 - 마지막 후보까지 막히면 `rethrowAi`가 **한글로** "AI 잔액 소진 … 크레딧을 충전해야 합니다"(429의 "잠시 후
   다시"와 섞으면 관리자가 기다리기만 한다).
 - 폴백 템플릿이 특이사항을 **원문 그대로**(줄 단위, `flatten` 금지 — 나열형이라 ", "로 이으면 뭉개진다) 싣고

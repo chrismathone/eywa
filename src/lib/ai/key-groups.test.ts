@@ -19,9 +19,9 @@ vi.mock("./anthropic", () => ({
     return { messages: { create: anthropicCreate } };
   },
 }));
-vi.mock("./deepseek", () => ({
-  getDeepseek: (...args: unknown[]) => {
-    clientCalls.push(["deepseek", ...args]);
+vi.mock("./openai", () => ({
+  getOpenAI: (...args: unknown[]) => {
+    clientCalls.push(["openai", ...args]);
     return { chat: { completions: { create: vi.fn() } } };
   },
 }));
@@ -34,8 +34,8 @@ const KEYS = [
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_API_KEY_MENT",
   "ANTHROPIC_API_KEY_CONSULTATIONS",
-  "DEEPSEEK_API_KEY",
-  "DEEPSEEK_API_KEY_MEETING",
+  "OPENAI_API_KEY",
+  "OPENAI_API_KEY_MEETING",
   "SUPABASE_SERVICE_ROLE_KEY",
   "NEXT_PUBLIC_SUPABASE_URL",
 ];
@@ -82,9 +82,9 @@ describe("resolveKeyEnv — 그룹 키 → 옛 버킷 → 기본 키", () => {
   });
   it("그룹 키가 없으면 기본 키로 넘어간다 — 키를 하나씩 넣는 동안 멈추는 기능이 없게", () => {
     process.env.ANTHROPIC_API_KEY = "a";
-    process.env.DEEPSEEK_API_KEY = "d";
+    process.env.OPENAI_API_KEY = "d";
     expect(resolveKeyEnv("anthropic", "default", "ment")).toBe("ANTHROPIC_API_KEY");
-    expect(resolveKeyEnv("deepseek", "default", "meeting")).toBe("DEEPSEEK_API_KEY");
+    expect(resolveKeyEnv("openai", "default", "meeting")).toBe("OPENAI_API_KEY");
   });
   it("🔴 Anthropic 상담 키가 없어도 기본 키로 넘어간다(2026-09-15 규칙 변경 — 예전엔 Claude를 건너뛰었다)", () => {
     process.env.ANTHROPIC_API_KEY = "a";
@@ -97,7 +97,7 @@ describe("resolveKeyEnv — 그룹 키 → 옛 버킷 → 기본 키", () => {
     expect(resolveKeyEnv("anthropic", "consultations", null)).toBe("ANTHROPIC_API_KEY_CONSULTATIONS");
   });
   it("키가 하나도 없으면 null", () => {
-    expect(resolveKeyEnv("deepseek", "default", "ment")).toBeNull();
+    expect(resolveKeyEnv("openai", "default", "ment")).toBeNull();
   });
 });
 
@@ -115,8 +115,8 @@ describe("keyLabelOf — 사용량 표에 남는 이름", () => {
   it("env 이름 → 짧은 이름", () => {
     expect(keyLabelOf("anthropic", "ANTHROPIC_API_KEY_MENT")).toBe("ment");
     expect(keyLabelOf("anthropic", "ANTHROPIC_API_KEY")).toBe("default");
-    expect(keyLabelOf("deepseek", "DEEPSEEK_API_KEY_CONSULTATIONS")).toBe("consultations");
-    expect(keyLabelOf("deepseek", null)).toBe("none");
+    expect(keyLabelOf("openai", "OPENAI_API_KEY_CONSULTATIONS")).toBe("consultations");
+    expect(keyLabelOf("openai", null)).toBe("none");
   });
 });
 
@@ -146,22 +146,19 @@ describe("generateJSON 배선 — 호출부 이름이 키 그룹으로 클라이
   });
 });
 
-describe("🔴 오늘 프로덕션 키 조합에서 라우팅이 그대로다(그룹 키 0개)", () => {
-  // Vercel Production에 있던 AI 키는 넷이었다(2026-09-15 실측): ANTHROPIC_API_KEY ·
-  // ANTHROPIC_API_KEY_CONSULTATIONS · DEEPSEEK_API_KEY · UPSTAGE_API_KEY(2026-10-19 Solar를 빼서 이제 안 쓴다).
-  // 이 상태에서 **모든 호출부가 예전과 같은 env를 골라야** 배포 순간 AI 라우팅이 안 바뀐다.
+describe("🔴 기본 키 조합에서 라우팅이 일정하다(그룹 키 0개)", () => {
   beforeEach(() => {
     process.env.AI_PROVIDER = "anthropic";
     process.env.ANTHROPIC_API_KEY = "a";
     process.env.ANTHROPIC_API_KEY_CONSULTATIONS = "ac";
-    process.env.DEEPSEEK_API_KEY = "d";
+    process.env.OPENAI_API_KEY = "d";
   });
 
   // 🔴 호출부 목록을 **코드에서 읽는다**(feature·keyName 둘 다) — 손으로 적은 복사본은 나중에 호출부가
   // 바뀌어도 초록인 채 이미 일어나지 않는 라우팅을 계속 보증한다(적대적 리뷰 2026-09-15).
   const CASES = callSites().sites;
 
-  /** 옛 규칙을 **그대로 다시 구현**한 것 — 새 코드가 이것과 같은 답을 내야 한다(비교 대상이 있어야 회귀 테스트다). */
+  /** Anthropic의 기존 키 선택 규칙 — Claude 경로가 이것과 같은 답을 내야 한다. */
   const oldEnv = (base: string, keyName: "default" | "consultations") =>
     keyName === "default" ? base : `${base}_${keyName.toUpperCase()}`;
 
@@ -176,24 +173,32 @@ describe("🔴 오늘 프로덕션 키 조합에서 라우팅이 그대로다(�
     ]);
   });
 
-  it("Anthropic 키는 상담 둘만 전용 키, 나머지는 기본 키(예전과 동일)", () => {
+  it("Anthropic 키는 상담 계열만 전용 키, 나머지는 기본 키(기존과 동일)", () => {
     for (const { feature, keyName } of CASES) {
       expect(resolveKeyEnv("anthropic", keyName, keyGroupOf(feature)), feature).toBe(oldEnv("ANTHROPIC_API_KEY", keyName));
     }
   });
 
-  it("DeepSeek은 전용 키가 없으니 전부 기본 키(예전 폴백과 동일)", () => {
+  it("OpenAI는 전용 키가 없으면 전부 기본 키", () => {
     for (const { feature, keyName } of CASES) {
-      expect(resolveKeyEnv("deepseek", keyName, keyGroupOf(feature)), feature).toBe("DEEPSEEK_API_KEY");
+      expect(resolveKeyEnv("openai", keyName, keyGroupOf(feature)), feature).toBe("OPENAI_API_KEY");
     }
   });
 
-  it("체인(회사 순서) — anthropic → deepseek 둘뿐(2026-10-19 Solar 제거 · Solar 키가 남아 있어도 안 선다)", () => {
+  it("침산처럼 Anthropic 키만 있으면 모든 기능의 첫 후보·모델은 종전 Claude", () => {
+    delete process.env.OPENAI_API_KEY;
+    for (const { feature, keyName } of CASES) {
+      const chain = resolveModelChain("balanced", keyName, undefined, keyGroupOf(feature));
+      expect(chain.map((c) => `${c.provider}:${c.model}`), feature).toEqual(["anthropic:claude-sonnet-5-5"]);
+    }
+  });
+
+  it("체인(회사 순서) — anthropic → openai 둘뿐(2026-10-19 Solar 제거 · Solar 키가 남아 있어도 안 선다)", () => {
     process.env.UPSTAGE_API_KEY = "u";
     for (const { feature, keyName } of CASES) {
       expect(resolveModelChain("balanced", keyName, undefined, keyGroupOf(feature)).map((c) => c.provider), feature).toEqual([
         "anthropic",
-        "deepseek",
+        "openai",
       ]);
     }
     delete process.env.UPSTAGE_API_KEY;
@@ -318,12 +323,12 @@ describe("가드 — 모든 AI 호출부는 키 그룹이 있다", () => {
   });
 });
 
-describe("가드 — CLAUDE.md의 9그룹 표가 코드와 같다", () => {
+describe("가드 — CLAUDE.md의 12그룹 표가 코드와 같다", () => {
   // 이 리포의 다른 배선 가드와 같은 결 — 문서만 조용히 뒤처지는 것을 막는다(적대적 리뷰 2026-09-15).
   // 🔴 **그 절만** 본다 — 문서 전체에서 찾으면 다른 절에 한 번 더 나오는 이름(`classnote_ment`는 fast 티어
   // 표에도 있다)이 9그룹 표에서 빠져도 초록이 된다.
   const whole = readFileSync(join(process.cwd(), "CLAUDE.md"), "utf8");
-  const from = whole.indexOf("### 키 분리 = 기능별 9그룹");
+  const from = whole.indexOf("### 키 분리 = 기능별 12그룹");
   const doc = from < 0 ? "" : whole.slice(from, whole.indexOf("\n## ", from) + 1 || undefined);
 
   it("그 절을 찾았다(제목이 바뀌면 빈 문자열로 통과하지 않게)", () => {
@@ -331,7 +336,7 @@ describe("가드 — CLAUDE.md의 9그룹 표가 코드와 같다", () => {
     expect(doc.length).toBeGreaterThan(500);
   });
 
-  it("그룹 9개가 전부 문서에 있다", () => {
+  it("그룹 12개가 전부 문서에 있다", () => {
     // 표가 그룹 이름을 홑따옴표 코드로 적는다(`MENT`) — 그대로 찾는다. 맨 대문자로 찾으면
     // `MENT`가 `ENROLLMENT` 안에 들어 있어 빠진 그룹도 통과한다.
     const groups = [...new Set(Object.values(FEATURE_KEY_GROUP))];

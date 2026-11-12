@@ -103,9 +103,10 @@ export const TOGGLE_FEATURES = [
   // 영상 숙제 설명 AI 참고 메모 — 켠 지점만 수학 영상을 밤 배치로 판정하고 영상 제출 현황 재생 창에 메모가 선다(원장 2026-10-20).
   // 학생 영상 화면·목소리가 AI로 나가므로 기본 꺼짐. 읽는 곳 = features/video-review/server/{gate,queue,queries}.ts.
   { key: "video_review", label: "영상 설명 AI 참고 메모", defaultOn: false },
-  // 수업보고서 평점 정기 처리 — 켠 지점만 새로 발송된 보고서를 밤 배치(Haiku 5.5)로 매겨 목록 '평점' 열에 싣는다(2026-10-26 크레딧 MVP).
-  // 보고서 글이 AI로 나가고 비용이 들어 기본 꺼짐. 읽는 곳 = features/report-rating/server/queue.ts(cron이 부른다 · 0455a 필요).
-  { key: "report_rating", label: "수업보고서 평점 정기 처리", defaultOn: false },
+  // 수업보고서 평점 — 켠 지점만 새로 발송된 보고서를 밤 배치(Haiku 5.5)로 매기고, 목록 '평점' 열·평점 정렬·업무 완성도 평균평점에 보인다(2026-10-26 크레딧 MVP · 11-12 표시까지).
+  // 🔴 끄면 처리뿐 아니라 이미 매긴 평점의 표시도 닫힌다. 보고서 글이 AI로 나가고 비용이 들어 기본 꺼짐.
+  // 읽는 곳 = features/report-rating/server/queue.ts(cron · 0455a 필요) + features/report-admin/server/rating-access.ts(화면 표시 공통 문).
+  { key: "report_rating", label: "수업보고서 평점(정기 처리 · 화면 표시)", defaultOn: false },
   // 원생상담 평점 정기 처리 — 켠 지점만 새·고친 상담을 배치(Haiku 5.5)로 매겨 원생상담 목록 '상담 평점' 열에 싣는다(원장 2026-11-11).
   // 상담 글이 AI로 나가고 비용이 들어 기본 꺼짐. 읽는 곳 = features/consultation-rating/server/queue.ts(cron이 부른다 · s2_0044 필요) + 원생상담 목록 열.
   { key: "consult_rating", label: "원생상담 평점 정기 처리", defaultOn: false },
@@ -207,7 +208,14 @@ export function auditDetail(action: string, metadata: Record<string, unknown> | 
     case "toggle_license": {
       // 화면 방식 변경은 셋 중 무엇으로 바꿨는지가 사실이다(켬/끔으로는 안 읽힌다).
       if (m.feature === "window_mode" && isShellMode(m.mode)) return `화면 방식 → ${SHELL_MODE_LABEL[m.mode]}`;
-      return `${featureLabel(m.feature)} ${m.active === true ? "켬" : "끔"}`;
+      const base = `${featureLabel(m.feature)} ${m.active === true ? "켬" : "끔"}`;
+      if (m.feature !== "slack") return base;
+      return [
+        base,
+        typeof m.inboxSkipped === "number" ? `인박스 ${m.inboxSkipped.toLocaleString("ko-KR")}건 건너뜀` : null,
+        typeof m.outboxCancelled === "number" ? `발송 대기 ${m.outboxCancelled.toLocaleString("ko-KR")}건 취소` : null,
+        typeof m.rulesReset === "number" ? `규칙 ${m.rulesReset.toLocaleString("ko-KR")}개 시작 시각 갱신` : null,
+      ].filter(Boolean).join(" · ");
     }
     case "set_ai_model": {
       // 원시 id 대신 화면 이름으로(원문 노출 금지). 지금 목록에 없는 옛 모델(Sonnet 5 등)은 탭과 같은 라벨 함수로, 그래도 모르면 '기타'.

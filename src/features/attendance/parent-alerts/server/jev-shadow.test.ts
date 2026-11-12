@@ -10,7 +10,7 @@ const messageId = "22222222-2222-4222-8222-222222222222";
 const request = { tenantId, messageId, course: "수학" };
 const row = { id: messageId, tenant_id: tenantId, student_id: "student", child_id: 23, classnote_post_id: 42,
   content: "아까 결석 취소요. 지각합니다", posted_at: "2026-10-01T15:15:00Z", created_at: "2026-10-01T15:16:00Z",
-  category: "late", starts_on: "2026-10-02", ends_on: "2026-10-02", model: "deepseek-test" };
+  category: "late", starts_on: "2026-10-02", ends_on: "2026-10-02", model: "claude-test" };
 // Read-only query double. Mutation methods deliberately don't exist.
 function query(data: unknown, error: unknown = null) {
   const builder = {

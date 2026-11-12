@@ -30,9 +30,7 @@ export const TENANT_MODEL_FEATURES: readonly TenantModelFeature[] = [
   { key: "attendance_recap", label: "출결 요약", area: "출결" },
   { key: "parent_attendance_intent", label: "학부모 결석 문자 판별", area: "출결" },
   { key: "parent_satisfaction", label: "학부모 글 만족도 판정", area: "강사평가" },
-  { key: "student_positive_signal", label: "원생 긍정 신호 판정", area: "원생 로열티" },
   { key: "notice_translate", label: "공지 번역", area: "공지" },
-  { key: "staff_contract_pdf", label: "계약서 글자 추출", area: "직원" },
 ];
 
 /**
@@ -42,12 +40,14 @@ export const TENANT_MODEL_FEATURES: readonly TenantModelFeature[] = [
  * - 멘트 미리보기: 운영 자동작성(`classnote_ment`)을 그대로 따른다(`modelFeatureOf`).
  */
 export const FIXED_MODEL_FEATURES: Readonly<Record<string, string>> = {
+  student_positive_signal: "원생 긍정 신호 판정은 Claude 전용으로 검증한 밤 판정입니다.",
   student_ontology_summary: "학생 기록 요약은 Claude 전용입니다. 현재 fast/low 발췌 요약을 사용합니다.",
+  staff_contract_pdf: "직원 계약서는 Claude 전용 승인 범위입니다.",
   staff_contract_pdf_ocr: "계약서 스캔 인식은 Claude 전용입니다(스캔 이미지 전송 승인 범위).",
   parent_attendance_jev_shadow: "Jev 비교는 TypeSafe 판정이라 모델을 고르지 않습니다.",
   ment_prompt_preview: "멘트 미리보기는 학부모 멘트 자동작성과 같은 모델을 씁니다.",
   // 사랑의 한마디 초안(원스크린 버튼) — 아직 지점 선택 줄이 없다. 고를 수 있게 하려면 TENANT_MODEL_FEATURES로 옮기고 waits를 단다.
-  love_note_draft: "사랑의 한마디 초안은 빠른 모델(Claude Haiku 5.5 · 막히면 DeepSeek)을 씁니다.",
+  love_note_draft: "사랑의 한마디 초안은 빠른 Claude 모델을 먼저 쓰고, 막히면 ChatGPT로 넘어갑니다.",
   // 평점 하네스(체크리스트 + 코드 규칙 7차)는 Claude Haiku 5.5에 맞춰 Codex 대조로 조였다 — 다른 모델이면 그 대조를 다시 해야 한다.
   lesson_report_rating: "수업보고서 평점은 Claude Haiku 5.5에 맞춰 검증한 판정 방식이라 모델을 고르지 않습니다.",
   student_consultation_rating: "원생상담 평점은 같은 기준을 구독 CLI와 배치로 매긴 값을 맞춰 본 Claude 판정이라 모델을 고르지 않습니다.",

@@ -3,14 +3,17 @@ import { ConnectionSection } from "./slack/connection-section";
 import { PeopleSection } from "./slack/people-section";
 import { RulesSection } from "./slack/rules-section";
 import { ScheduleSection } from "./slack/schedule-section";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { tenantSlackCatalog } from "@/features/slack/server/catalog";
 
 /**
  * 슬랙 연동 카드(학원 설정 '연동' 면) — 슈퍼관리자가 '슬랙 알림 연결'을 켠 지점에만 선다.
  * aywa에서 일어나는 일(알림·활동 기록)을 규칙대로 슬랙 채널·1:1로 보낸다(2026-09-28, codex·grok 합의 설계).
  */
 export async function SlackCard({ canEdit = true }: { canEdit?: boolean }) {
-  const state = await getSlackCardState();
+  const [state, user] = await Promise.all([getSlackCardState(), getCurrentUser()]);
   if (state.kind === "off") return null;
+  const catalog = state.kind === "ready" && state.connected && user ? await tenantSlackCatalog(user.tenantId) : null;
   // 🔴 연동 설정이 '읽기'면(설정 액션 = slackGate(write) — canEdit과 같은 판정, page.tsx) 연결·발송 시간·규칙·사람 연결 편집부를
   //    **그리지 않고** 지금 상태만 글로 보인다(원장 2026-11-05 — 잠긴 단추·칸을 늘어놓지 않는다).
   if (state.kind !== "readonly" && state.kind !== "missing_table" && state.kind !== "error" && !canEdit) {
@@ -51,10 +54,10 @@ export async function SlackCard({ canEdit = true }: { canEdit?: boolean }) {
             lastErrorCode={state.lastErrorCode}
             health={state.health}
           />
-          {state.connected ? (
+          {state.connected && catalog ? (
             <>
               <ScheduleSection initial={state.schedule} />
-              <RulesSection initialRules={state.rules} staff={state.staff} activityOptions={state.activityOptions} />
+              <RulesSection initialRules={state.rules} staff={state.staff} {...catalog} />
               {/* 사람 연결 명단(직원 전원)은 길다 — 접어 두고 필요할 때 연다(원장 2026-09-28 "세로 스크롤이 너무 길어짐"). */}
               <details className="border-border rounded-xl border">
                 <summary className="text-foreground hover:bg-bg-soft/60 cursor-pointer rounded-xl px-4 py-2.5 text-sm font-bold">

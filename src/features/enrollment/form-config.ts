@@ -81,6 +81,10 @@ export const ENGLISH_TEST_TYPES = [
   { value: "eie", label: "EiE" },
 ] as const;
 
+export function englishTestTypesFor(eieOn: boolean) {
+  return eieOn ? ENGLISH_TEST_TYPES : ENGLISH_TEST_TYPES.filter((type) => type.value !== "eie");
+}
+
 export const ENGLISH_GROUPS: Record<string, FieldGroup[]> = {
   ai: [
     {
@@ -164,6 +168,11 @@ export const ENGLISH_GROUPS: Record<string, FieldGroup[]> = {
     },
   ],
 };
+
+export function englishGroupsFor(testType: string, eieOn: boolean): FieldGroup[] {
+  if (!eieOn && testType === "eie") return ENGLISH_GROUPS.ai ?? [];
+  return ENGLISH_GROUPS[testType] ?? [];
+}
 
 const LEVEL_GROUPS: FieldGroup[] = [
   { title: "레벨테스트", cols: 1, fields: [{ key: "levelTestScore", label: "레벨테스트 점수" }] },

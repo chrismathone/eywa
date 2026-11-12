@@ -2,6 +2,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import { createHash } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
+import { kakaoLicenseActive } from "@/lib/messaging/kakao-license";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { isModuleEnabled } from "@/lib/modules";
@@ -106,7 +107,7 @@ export async function getRecentNotifications(limit = 20): Promise<NotificationRo
 export type KakaoChannelStatus = {
   configured: boolean; // pfId + 등하원 템플릿 모두 있음
   isActive: boolean; // 채널 행 활성
-  licenseActive: boolean; // tenant_licenses 'kakao_messaging' ON
+  licenseActive: boolean; // tenant_licenses 'kakao_messaging'가 켜져 있고 만료되지 않음
   live: boolean; // 실제 실발송 조건 충족(=configured && isActive && licenseActive)
   pfId: string | null;
   checkinTemplateId: string | null;
@@ -125,17 +126,17 @@ export async function getKakaoChannelStatus(): Promise<KakaoChannelStatus> {
       .maybeSingle(),
     supabase
       .from("tenant_licenses")
-      .select("is_active")
+      .select("is_active, expires_at")
       .eq("feature", "kakao_messaging")
       .maybeSingle(),
   ]);
-  if (chErr || licErr) throw new Error(`kakao_channels: ${(chErr ?? licErr)?.message}`);
+  if (chErr) throw new Error(`kakao_channels: ${chErr.message}`);
   const pfId = ch?.pf_id ?? null;
   const checkinTemplateId = ch?.checkin_template_id ?? null;
   const checkoutTemplateId = ch?.checkout_template_id ?? null;
   const configured = Boolean(pfId && checkinTemplateId && checkoutTemplateId);
   const isActive = ch?.is_active ?? false;
-  const licenseActive = lic?.is_active ?? false;
+  const licenseActive = kakaoLicenseActive(lic, !!licErr);
   return {
     configured,
     isActive,
@@ -169,7 +170,7 @@ export async function getAttendanceCodeStats(): Promise<{ withCode: number; tota
  * 키오스크 페이지용 — 현재 기기 쿠키가 유효한 등록 기기인지 검증하고 학원명을 돌려준다.
  * service_role로 조회(키오스크 페이지는 비로그인이라 RLS 컨텍스트가 없음).
  */
-export async function resolveKioskDevice(): Promise<{ tenantId: string; academyName: string; deviceName: string } | null> {
+export async function resolveKioskDevice(): Promise<{ state: "ready"; tenantId: string; academyName: string; deviceName: string } | { state: "off" } | null> {
   const jar = await cookies();
   const token = jar.get(KIOSK_COOKIE)?.value;
   if (!token) return null;
@@ -186,11 +187,12 @@ export async function resolveKioskDevice(): Promise<{ tenantId: string; academyN
   const settings = await getTenantSettingsByTenantId(device.tenant_id);
   // 출석 키오스크 모듈이 꺼진 학원(새 학원 기본)은 등록된 기기가 남아 있어도 체크인을 받지 않는다(2026-09-22 방향 B).
   // 같은 설정 조회를 쓰므로 추가 왕복 없음 · 침산은 켜져 있어 종전과 같다.
-  if (!isModuleEnabled(settings.modules.disabled, "kiosk")) return null;
-  if (!(await isLaboratoryMenuAvailable(device.tenant_id, "kiosk_settings"))) return null;
+  if (!isModuleEnabled(settings.modules.disabled, "kiosk")) return { state: "off" };
+  if (!(await isLaboratoryMenuAvailable(device.tenant_id, "kiosk_settings"))) return { state: "off" };
   const academyName = settings.profile.name || "학원";
 
   return {
+    state: "ready",
     tenantId: device.tenant_id,
     academyName,
     deviceName: device.name,

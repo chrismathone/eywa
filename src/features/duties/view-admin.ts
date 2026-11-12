@@ -22,7 +22,7 @@ export type OwnerInfo = Record<string, string>;
 export type ClassInfo = Record<string, { name: string; subject: string | null; teacherId: string | null }>;
 export type StudentInfo = Record<string, { name: string; school: string | null; grade: string | null }>;
 /** 과목 범위 — null = 전 과목(원장). 배열 = 그 과목 키만(과목 관리자 — 비어 있으면 아무것도 안 보인다). labels = 키 → 학원 설정 라벨(raw 키 노출 금지). */
-export type DutyAdminScope = { subjects: string[] | null; labels: Record<string, string>; /** '담당' 권한이면 본인 의무만(null = 전원). */ ownerId: string | null; /** 관리 기록(확인 · 사유 · 면제)을 남길 수 있나 — 전체 권한만. 서버 액션이 같은 판정을 한 번 더 한다. */ canNote?: boolean; /** 수업보고서 평점을 볼 수 있나 — 수업보고서 쓰기 권한(평점 열람과 같은 문 · 0450a). 본인만 보는 사람에게는 없다. */ seeRatings?: boolean };
+export type DutyAdminScope = { subjects: string[] | null; labels: Record<string, string>; /** '담당' 권한이면 본인 의무만(null = 전원). */ ownerId: string | null; /** 신규생 관리 모듈이 보이나 — 서버 판정을 클라이언트와 후속 GET이 그대로 쓴다. 옛 응답은 켜짐으로 본다. */ newcomerShown?: boolean; /** 관리 기록(확인 · 사유 · 면제)을 남길 수 있나 — 전체 권한만. 서버 액션이 같은 판정을 한 번 더 한다. */ canNote?: boolean; /** 수업보고서 평점을 볼 수 있나 — 수업보고서 쓰기 권한(평점 열람과 같은 문 · 0450a). 본인만 보는 사람에게는 없다. */ seeRatings?: boolean };
 /** 열린 채 기한이 지난 의무 한 건. inherited = 평가 시작(live_from) 전 기한 — 집계·판정에 안 들고 '이관된 미확인'으로 따로 묶는다. */
 /** note = 가장 최근 관리 기록(확인 · 사유 — s2_0078). 면제한 의무는 지연에서 빠져 여기 오지 않는다. */
 export type LateItem = DutyItemView & { ownerId: string | null; inherited: boolean; note?: DutyNote | null };

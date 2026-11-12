@@ -12,7 +12,6 @@ import {
   students,
   tenantSettings,
 } from "@/lib/db/schema";
-import { MODULE_IDS } from "@/lib/modules";
 import { buildDashboardWorld, classKey } from "./dashboard-world.mjs";
 import {
   insertChecks,
@@ -23,12 +22,11 @@ import {
   insertStudentConsultations,
 } from "./dashboard-rows";
 import { writeDemoWeekdayGrouping } from "./demo-weekday";
+import { demoModulesWithNewcomers, type DemoModuleChange } from "./demo-modules";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type Plan = Parameters<typeof buildDashboardWorld>[0];
 type World = ReturnType<typeof buildDashboardWorld>;
-
-const DISABLED_WITH_NEWCOMERS = MODULE_IDS.filter((id) => id !== "newcomers");
 
 async function writeChunks<T>(rows: T[], write: (part: T[]) => Promise<void>) {
   for (let i = 0; i < rows.length; i += 200) await write(rows.slice(i, i + 200));
@@ -43,9 +41,9 @@ export async function insertDashboardSatellite(
   classId: Map<object, string>,
   studentId: Map<object, string>,
   today: string,
-) {
+): Promise<DemoModuleChange> {
   const world = buildDashboardWorld(plan, today);
-  await enableNewcomers(tx, tenantId, typeof plan.id === "string" ? plan.id : "");
+  const moduleChange = await enableNewcomers(tx, tenantId, typeof plan.id === "string" ? plan.id : "");
   await deleteMarkers(tx, tenantId);
   const classOf = new Map(plan.classes.map((cls) => [classKey(cls), classId.get(cls)!]));
   const studentOf = new Map(plan.students.map((student) => [student.code, studentId.get(student)!]));
@@ -58,59 +56,40 @@ export async function insertDashboardSatellite(
   await insertOps(tx, tenantId, world);
   await insertMakeup(tx, tenantId, world, classOf, studentOf);
   await insertChecks(tx, tenantId, world, studentOf);
+  return moduleChange;
 }
 
-async function enableNewcomers(tx: Tx, tenantId: string, scenarioId: string) {
+async function enableNewcomers(tx: Tx, tenantId: string, scenarioId: string): Promise<DemoModuleChange> {
   const [row] = await tx
-    .select({ tenantId: tenantSettings.tenantId })
+    .select({ data: tenantSettings.data })
     .from(tenantSettings)
-    .where(eq(tenantSettings.tenantId, tenantId));
+    .where(eq(tenantSettings.tenantId, tenantId))
+    .for("update");
+  const moduleChange = demoModulesWithNewcomers(row?.data);
+  const stored = row?.data && typeof row.data === "object" && !Array.isArray(row.data)
+    ? row.data as Record<string, unknown>
+    : {};
+  const nextData = {
+    ...stored,
+    version: 1,
+    preset: "generic",
+    modules: moduleChange.section,
+    profile: stored.profile && typeof stored.profile === "object" && !Array.isArray(stored.profile) ? stored.profile : {},
+    operations: stored.operations && typeof stored.operations === "object" && !Array.isArray(stored.operations) ? stored.operations : {},
+  };
   if (!row) {
     await tx.insert(tenantSettings).values({
       tenantId,
-      data: {
-        version: 1,
-        preset: "generic",
-        modules: { disabled: DISABLED_WITH_NEWCOMERS },
-        profile: {},
-        operations: {},
-      },
+      data: nextData,
     });
+  } else {
+    await tx.update(tenantSettings).set({
+      data: nextData,
+      updatedAt: sql`greatest(now(), ${tenantSettings.updatedAt} + interval '1 millisecond')`,
+    }).where(eq(tenantSettings.tenantId, tenantId));
   }
-  await tx.execute(sql`
-    update tenant_settings
-    set updated_at = greatest(now(), updated_at + interval '1 millisecond'), data = jsonb_set(
-      jsonb_set(
-        coalesce(data, '{}'::jsonb),
-        '{modules}',
-        coalesce(data->'modules', '{}'::jsonb),
-        true
-      ),
-      '{modules,disabled}',
-      jsonb_build_array(${sql.join(
-        DISABLED_WITH_NEWCOMERS.map((id) => sql`${id}::text`),
-        sql`, `,
-      )}),
-      true
-    )
-    where tenant_id = ${tenantId}
-  `);
-  await tx.execute(sql`
-    update tenant_settings
-    set updated_at = greatest(now(), updated_at + interval '1 millisecond'), data = jsonb_set(
-      jsonb_set(
-        coalesce(data, '{}'::jsonb),
-        '{profile}',
-        coalesce(data->'profile', '{}'::jsonb),
-        true
-      ),
-      '{operations}',
-      coalesce(data->'operations', '{}'::jsonb),
-      true
-    )
-    where tenant_id = ${tenantId}
-  `);
   await writeDemoWeekdayGrouping(tx, tenantId, scenarioId);
+  return moduleChange;
 }
 
 async function deleteMarkers(tx: Tx, tenantId: string) {

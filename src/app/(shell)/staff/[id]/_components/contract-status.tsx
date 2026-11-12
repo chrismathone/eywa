@@ -12,6 +12,7 @@ import type { ContractFileRow } from "@/features/staff/contract/server/contract-
 import { ContractPdfPicker } from "./contract-pdf-picker";
 import { ContractFiles } from "./contract-files";
 import { ContractHistory } from "./contract-history";
+import { useLicenseOn } from "@/features/owner/operations-context";
 import {
   currentContract,
   daysUntil,
@@ -54,6 +55,7 @@ export function ContractStatus({
   today: string;
   canWrite: boolean;
 }) {
+  const aiOn = useLicenseOn("ai_analysis");
   const [open, setOpen] = useState(false);
   // 기간·조건 칸은 컨트롤드 — PDF에서 읽은 값을 여기에 채워 넣어야 하기 때문(uncontrolled면 못 덮는다).
   const [start, setStart] = useState("");
@@ -170,14 +172,14 @@ export function ContractStatus({
             <p className="micro">{next.seq}차 계약 기입</p>
             {/* 계약서 PDF에서 기간·조건을 읽어 아래 칸을 채우고, 파일은 아래 '계약서 파일'에 함께 보관된다.
                 **저장은 사람이** — 돈 정보라 확인 단계를 둔다. */}
-            <ContractPdfPicker
+            {aiOn ? <ContractPdfPicker
               userId={userId}
               onExtract={(d) => {
                 if (d.startDate) setStart(d.startDate);
                 if (d.endDate) setEnd(d.endDate);
                 if (d.terms) setTerms(d.terms);
               }}
-            />
+            /> : null}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -230,7 +232,7 @@ export function ContractStatus({
 
       {/* 계약서 파일 보관 — 원본 PDF를 직원에게 붙여 둔다(2026-08-03). 올리기는 보관만(원장 2026-08-05
           역할 분리) — 추출·폼 채움은 위 기입 폼의 '계약서 PDF 불러오기'(ContractPdfPicker)가 전담. */}
-      <ContractFiles userId={userId} files={files} canWrite={canWrite} />
+      <ContractFiles userId={userId} files={files} canWrite={canWrite} aiOn={aiOn} />
 
       {/* 히스토리 — 전 줄 수정·삭제 가능(2026-08-03). */}
       <ContractHistory userId={userId} rows={rows} canWrite={canWrite} />

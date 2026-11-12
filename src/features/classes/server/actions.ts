@@ -43,12 +43,13 @@ import {
   subjectWeekdayPeriods,
   subjectWeekendPeriods,
 } from "@/features/timetable/lib/periods";
-import { normalizeEnglishTrack } from "../english-track";
+import { eieTrackWriteError, normalizeEnglishTrack } from "../english-track";
 import { readFreeClosedNameRequest, type ClassNameConflict } from "../class-name-conflict";
 import { freedLeftNotice, rollbackFreedClassName, writeWithClassNameGuard } from "./class-name-guard";
 import { ClassTermError, endClassWithName, reopenClassWithSchedules } from "./class-term-store";
 import { explainDbError, logDbError } from "@/lib/supabase/db-error";
 import { classFlagChanges } from "../class-flag-changes";
+import { isModuleEnabled } from "@/lib/modules";
 
 export type ClassFormState =
   | {
@@ -108,8 +109,7 @@ const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 const LEGACY_SUBJECTS = ["math", "english", "korean", "science", "arts", "etc"] as const;
 
 /** 저장 허용 과목 key 집합 = owner 설정 과목 ∪ 레거시 기본. (설정에 추가한 과목도 반에 저장 가능.) */
-async function allowedSubjectSet(): Promise<ReadonlySet<string>> {
-  const settings = await getTenantSettings();
+function allowedSubjectSet(settings: Awaited<ReturnType<typeof getTenantSettings>>): ReadonlySet<string> {
   return new Set<string>([
     ...LEGACY_SUBJECTS,
     ...settings.operations.subjects.map((s) => s.key),
@@ -254,10 +254,16 @@ export async function createClass(
   const { user, error: gateError } = await requireClassManage();
   if (gateError || !user) return { error: gateError };
 
-  const allowed = await allowedSubjectSet();
+  const settings = await getTenantSettings();
+  const allowed = allowedSubjectSet(settings);
   const input = readForm(formData, allowed);
   const fieldErrors = validate(input);
   if (fieldErrors) return { fieldErrors };
+  const trackError = eieTrackWriteError(
+    isModuleEnabled(settings.modules.disabled, "eie"),
+    input.englishTrack,
+  );
+  if (trackError) return { error: trackError };
 
   const supabase = await createClient();
 
@@ -401,7 +407,8 @@ export async function updateClass(
   const { user, error: gateError } = await requireClassWrite(id);
   if (gateError || !user) return { error: gateError };
 
-  const allowed = await allowedSubjectSet();
+  const settings = await getTenantSettings();
+  const allowed = allowedSubjectSet(settings);
   const input = readForm(formData, allowed);
   const fieldErrors = validate(input);
   if (fieldErrors) return { fieldErrors };
@@ -413,19 +420,16 @@ export async function updateClass(
   // 독립 조회 2건은 병렬(B4) — 겹침 진단과 "delete 전에 기존 스케줄 읽어두기"는 서로 안 쓴다.
   // 교시마다 고른 강의실의 이름 — 강의실을 바꾼 교시의 라벨을 새 강의실로 맞춘다(schedule-preserve `resolveSlotRoomLabel`).
   const slotRoomIds = [...new Set(input.schedules.map((s) => s.classroomId).filter((v): v is string => !!v))];
-  const [overlaps, priorRes, beforeRes, settingsForPeriods, slotRoomRes] = await Promise.all([
+  const [overlaps, priorRes, beforeRes, slotRoomRes] = await Promise.all([
     collectOverlaps(supabase, input, id),
     loadCurrentSlots(supabase, id, today),
     // 감사로그용 **변경 전 스냅샷** — 무엇이 바뀌었는지는 바꾸기 전에만 알 수 있다(독립 조회라 병렬, B4).
     // 특강·수업보고서 미발송도 함께 읽는다 — 켜고 끈 기록이 없어 누가 미발송으로 바꿨는지 몰랐다(2026-11-04 사고).
     supabase
       .from("classes")
-      .select("class_name, subject, teacher_id, classroom_id, is_special, report_optout")
+      .select("class_name, subject, teacher_id, classroom_id, is_special, report_optout, english_track")
       .eq("id", id)
       .maybeSingle(),
-    // 교시표 — "폼이 보낸 종료시각을 믿어도 되나" 판정에 쓴다(schedule-preserve `formEndTimeWins`).
-    // 캐시된 조회지만 저장 경로에 직렬 왕복을 얹지 않으려고 여기서 함께 받는다(B4).
-    getTenantSettings(),
     slotRoomIds.length > 0
       ? supabase.from("classrooms").select("id, name").in("id", slotRoomIds)
       : Promise.resolve(null),
@@ -441,8 +445,19 @@ export async function updateClass(
         classroom_id: string | null;
         is_special: boolean | null;
         report_optout: boolean | null;
+        english_track: string | null;
       }
     | null;
+  // 폼에서 프로그램 구분을 보낸 경우만 검사한다. 꺼진 지점도 기존 EiE 반의 hidden 보존값은 통과시키되,
+  // 현재값을 못 읽었거나 다른 구분인 반을 EiE로 만드는 요청은 첫 쓰기 전에 거절한다.
+  if (input.trackProvided) {
+    const trackError = eieTrackWriteError(
+      isModuleEnabled(settings.modules.disabled, "eie"),
+      input.englishTrack,
+      before?.english_track === "eie" ? "eie" : before?.english_track === "injaewon" ? "injaewon" : null,
+    );
+    if (trackError) return { error: trackError };
+  }
   // ⚠️ 승계 자료를 못 읽었으면 **아무것도 쓰기 전에** 멈춘다 — 빈 배열로 진행하면 delete 뒤 재insert가
   // 라벨·기간을 전부 null로 덮어쓰는데 그땐 복구가 불가능하다(규칙 B3: error를 `?? []`로 삼키지 않는다).
   if (priorRes.error || !priorRes.rows) return { error: priorRes.error ?? SAVE_FAILED };
@@ -527,7 +542,7 @@ export async function updateClass(
   //    함께 실어 왕복을 늘리지 않는다 — delete가 이미 끝났으므로 이 insert가 유일한 복원 지점이다.
   // 교시표의 (시작,종료) 짝 — **과목이 바뀌는 저장**도 있으므로 이전 과목·새 과목 표를 합집합으로 본다
   // (그리드는 마운트 시점 과목 표로 기존 슬롯을 복원하고, 제출은 화면의 현재 과목 표로 만든다).
-  const periodPairs = buildPeriodPairs(settingsForPeriods, [before?.subject, input.subject]);
+  const periodPairs = buildPeriodPairs(settings, [before?.subject, input.subject]);
   const archiveRows = planSlotArchives({
     incoming: input.schedules,
     prior,
@@ -758,6 +773,31 @@ async function collectOverlaps(
 
 export type ArchiveClassState = { error?: string } | undefined;
 
+async function classRestoreCheck(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tenantId: string,
+  classId: string,
+) {
+  const [{ data: klass, error }, settings] = await Promise.all([
+    supabase
+      .from("classes")
+      .select("class_name, english_track")
+      .eq("tenant_id", tenantId)
+      .eq("id", classId)
+      .maybeSingle(),
+    getTenantSettings(),
+  ]);
+  if (error) {
+    logDbError(error, "classes.actions.classRestoreCheck");
+    return { klass: null, error: "반 정보를 확인하지 못해 다시 운영하지 않았습니다. 잠시 뒤 다시 시도해 주세요." };
+  }
+  const track = klass?.english_track === "eie" ? "eie" : klass?.english_track === "injaewon" ? "injaewon" : null;
+  return {
+    klass,
+    error: eieTrackWriteError(isModuleEnabled(settings.modules.disabled, "eie"), track),
+  };
+}
+
 /**
  * 반 폐지/재운영 토글.
  * 폐지 = is_active=false + **그 반 활성 수강을 오늘로 종료**(reason='반 폐지'). 재운영 = 되돌림.
@@ -797,11 +837,8 @@ export async function archiveClass(
   }
 
   const supabase = await createClient();
-  const { data: klass } = await supabase
-    .from("classes")
-    .select("class_name")
-    .eq("id", id)
-    .maybeSingle();
+  const restore = await classRestoreCheck(supabase, user.tenantId, id);
+  if (restore.error) return { error: restore.error };
 
   const { error } = await supabase
     .from("classes")
@@ -817,7 +854,7 @@ export async function archiveClass(
   await logAction({
     action: "class_unarchive",
     targetType: "class",
-    targetLabel: klass?.class_name,
+    targetLabel: restore.klass?.class_name,
     metadata: { classId: id, affectedStudents: sync.studentIds.length },
   });
 
@@ -867,6 +904,9 @@ export async function reopenClassTerm(_prev: ClassTermState, formData: FormData)
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "반 ID가 누락되었습니다" };
+
+  const restore = await classRestoreCheck(await createClient(), user.tenantId, id);
+  if (restore.error) return { error: restore.error };
 
   // 종강일 비우기 · 종강이 닫은 시간표 배치 · 종강이 끝낸 수강 · 재개강 기록을 한 거래로(확인 창의 "시간표·일정에
   // 다시 표시됩니다"). 되살릴 산 배치가 없으면 막는다 — 그 밤 정리가 수강을 다시 닫는다(class-term-store.ts).

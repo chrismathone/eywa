@@ -80,8 +80,13 @@ describe("라이선스 배선 가드", () => {
         "src/features/integrations/server/actions.ts",
         "src/features/timetable/server/import-actions.ts",
         "src/features/staff/resume/server/resume-roster-sheet.ts",
+        "src/features/withdrawals/server/withdrawal-sheet.ts",
       ]),
     );
+    // 퇴원 차트의 읽기 경로는 네 기능을 한 번에 읽는 캐시 표를 써서 위 정규식에 잡히지 않는다.
+    const sheetTeachers = SRC.find((f) => f.path === "src/features/withdrawals/server/sheet-teachers.ts")!.src;
+    expect(sheetTeachers).toMatch(/getLicenseFlags\(tenantId\)/);
+    expect(sheetTeachers).toMatch(/licenseFlags\.google_sheets/);
     expect(consumersOf("kakao_messaging")).toContain("src/lib/messaging/provider.ts");
     expect(consumersOf("slack")).toEqual(
       expect.arrayContaining([
@@ -115,5 +120,6 @@ describe("라이선스 배선 가드", () => {
     expect(seatCalls("src/features/withdrawals/server/actions.ts")).toBe(1); // 퇴원 복구
     expect(seatCalls("src/features/enrollment/server/actions.ts")).toBe(1); // 상담 → 원생 전환
     expect(seatCalls("src/features/excel-import/importers/students.ts")).toBe(2); // 엑셀 가져오기(미리보기 + 반영)
+    expect(seatCalls("src/features/timetable-lab/server/apply-store.ts")).toBe(1); // 시간표 연습본 실제 반영
   });
 });

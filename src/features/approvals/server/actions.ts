@@ -13,6 +13,7 @@ import { notifyUsers } from "@/features/notifications/server/notify";
 import { leavePeriodLabel, resolveLeavePeriod } from "@/features/leave/accrual";
 import { applyLeaveGrantOverride } from "@/features/leave/test-grants";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleOnForTenant } from "@/features/owner/server/modules";
 import { isChinsanTenant } from "@/features/owner/preset";
 import {
   countLeaveDays,
@@ -127,12 +128,16 @@ async function requireApprovalWriter() {
  * 결재·회수용 게이트 — **메뉴를 보지 않는다.** 결재 자격의 근거는 명단이 아니라 동결된 결재선 +
  * current_step(결정 로그)이고, 후보 풀이 전 직원이라(원장 2026-08-14) 전자결재 메뉴가 없는 직원도 자기
  * 차례의 문서는 벨 알림 링크로 들어와 결재해야 한다. 실제 자격 판정(내 차례인가/내 기안인가)은
- * 각 액션 본문이 문서·결재선 행으로 한다 — 여기는 로그인 확인만.
+ * 각 액션 본문이 문서·결재선 행으로 한다. 다만 지점이 전자결재 기능을 끈 뒤에는 화면도 닫히므로,
+ * 직접 서버 호출로 진행 중 문서를 바꾸지 못하게 모듈 판정을 함께 한다.
  * (강사 역할은 문서 화면 자체가 전자결재 권한을 요구한다 — 강사 화면의 가드가 그 주소를 메뉴로 판정한다.)
  */
 async function requireSignedIn() {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" as const };
+  if (!(await isModuleOnForTenant(user.tenantId, "approvals"))) {
+    return { error: "전자결재 기능을 사용할 수 없습니다" as const };
+  }
   // '다른 강사 뷰' 중에는 결재 · 회수를 하지 않는다 — 결재는 본인 서명이다(메뉴도 닫혀 있다 — perm-matrix.ts TEACHER_VIEW_CLOSED_MENUS).
   // 이 문은 메뉴를 보지 않으므로 여기서 따로 막는다(벨 링크 · 직접 호출).
   if (await viewAsTeacher()) return { error: TEACHER_VIEW_APPROVAL_ERROR };

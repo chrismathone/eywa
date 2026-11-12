@@ -4,12 +4,17 @@ import { redirect } from "next/navigation";
 import { formatKoreanDate, kstToday } from "@/lib/date-kst";
 import { loadParentTimetables } from "@/features/classes/server/parent-timetable-data";
 import type { TimetableDayRow } from "@/features/classes/parent-timetable";
+import { parentPortalAvailable, parentPortalState } from "@/features/shuttle/parent/server/parent-availability";
 import { getParentViewer } from "@/features/shuttle/parent/server/parent-viewer";
+import { ParentPortalUnavailable } from "../_components/parent-portal-unavailable";
 import { loadAcademyHolidays, restDayName } from "@/features/shuttle/parent/server/rest-days";
 import { weekDates } from "@/features/shuttle/parent/parent-rides";
 import { dayLabel, type DayCode } from "@/features/shuttle/types";
 
-export const metadata = { title: "수업 시간표" };
+export async function generateMetadata() {
+  const viewer = await getParentViewer();
+  return { title: viewer && (await parentPortalAvailable(viewer)) ? "수업 시간표" : "학부모" };
+}
 
 /**
  * 학부모 탭 3 '수업 시간표' — 연결된 아이마다 **이번 주 월~금, 수업이 몇 시에 시작하고 끝나는지**(사용자 2026-10-02).
@@ -22,10 +27,13 @@ export const metadata = { title: "수업 시간표" };
 export default async function ParentClassesPage() {
   const viewer = await getParentViewer();
   if (!viewer) redirect("/home");
+  // 화면을 연 채로 기능이 꺼지면 탭 이동에 레이아웃이 다시 그려지지 않는다 — 빈 본문 대신 같은 종착 화면.
+  const portal = await parentPortalState(viewer);
+  if (portal !== "on") return <ParentPortalUnavailable state={portal} />;
   const today = kstToday();
   const week = weekDates(today);
   const [tables, academyHolidays] = await Promise.all([
-    loadParentTimetables(viewer.tenantId, viewer.children.map((c) => c.id), week),
+    loadParentTimetables(viewer, viewer.children.map((c) => c.id), week),
     loadAcademyHolidays(viewer.tenantId),
   ]);
 

@@ -90,12 +90,7 @@ export default async function PublicSeatPage({
   // PIN 쿠키가 남아 있어도 그 지점이 자습실(자리) 모듈을 껐으면 명단을 그리지 않는다(2026-09-22 방향 B).
   // 침산은 켜져 있어 종전과 같다. 쿠키가 없거나 다른 자리면 판정할 지점이 없으니 그대로 PIN 폼으로.
   if (session && session.seat === seat && !(await isModuleOnForTenant(session.tenantId, "seat_attendance"))) {
-    return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center">
-        <p className="text-foreground text-lg font-bold">지금은 이 화면을 쓸 수 없습니다</p>
-        <p className="text-text-dim max-w-sm text-sm">관리자에게 문의해 주세요.</p>
-      </main>
-    );
+    notFound();
   }
 
   if (!session || session.seat !== seat) {

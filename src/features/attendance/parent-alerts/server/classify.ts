@@ -102,7 +102,7 @@ export async function classifyPendingParentMessages(tenantId?: string): Promise<
     let model = "";
     try {
       const res = await generateJSON<ModelResult>({
-        provider: "anthropic", // 2026-10-26 원장 "딥시크로 바꾼거 다 클로드로" — Sonnet 5.5(기본 등급). 막히면 사다리로 DeepSeek
+        provider: "anthropic", // 2026-10-26 원장 결정 — Sonnet 5.5(기본 등급). 막히면 사다리로 ChatGPT
         maxTokens: 4096,
         // 배치는 지점별로 끊겨 있어 첫 행의 지점이 곧 배치의 지점이다. 비면 generateJSON이 거절 → 이 배치만 실패로 남는다.
         meta: { feature: "parent_attendance_intent", tenantId: batch[0]?.tenant_id ?? "" },

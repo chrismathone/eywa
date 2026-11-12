@@ -16,6 +16,7 @@ import { addDays, kstDateOf, kstLocalToIso, kstToday } from "@/lib/date-kst";
 import { stripPastedMarkup } from "../paste-cleanup";
 import { consultationSubject } from "../subject";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isFeatureLicensed } from "@/lib/license/server";
 import { subjectLabelRecord } from "@/features/owner/subjects";
 import {
   canConsultStudent,
@@ -312,6 +313,7 @@ function classAudit(decision: ClassDecision | null): Record<string, unknown> {
  */
 function scheduleFlowRefresh(tenantId: string, studentId: string) {
   after(async () => {
+    if (!(await isFeatureLicensed(tenantId, "ai_analysis"))) return;
     const r = await refreshFlowInsight({ tenantId, studentId, kind: "consultations", reason: "consultation_saved" });
     if (r.status === "failed") console.error(`[consultations] 상담 흐름 분석 갱신 실패(${studentId}): ${r.error}`);
   });

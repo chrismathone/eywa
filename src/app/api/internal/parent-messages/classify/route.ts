@@ -18,7 +18,7 @@ import { reportWarning } from "@/lib/observability/report-error";
  * ⚠️ 이 라우트는 **AI를 실제로 호출**한다 → 페이지에서 부르지 말 것(명시 트리거 원칙).
  */
 export const dynamic = "force-dynamic";
-// ⚠️ 60초로는 모자란다 — 한 번에 최대 60건을 12건씩 5묶음으로 DeepSeek(추론형, Sonnet 대비 ~1.2배 느림)에
+// ⚠️ 60초로는 모자란다 — 한 번에 최대 60건을 12건씩 5묶음으로 AI 판정 모델에
 // 물어보므로 60초를 넘길 수 있고, 넘으면 함수가 **중간에 죽는다**. 행 단위로 즉시 저장하므로 죽어도
 // 진행분은 남고 나머지는 다음 킥이 이어받지만, 굳이 반복해서 죽일 이유가 없다.
 export const maxDuration = 300;

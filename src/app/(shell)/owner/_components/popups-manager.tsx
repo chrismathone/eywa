@@ -26,6 +26,7 @@ import type { AdminPopup } from "@/features/notices/server/queries";
 import { MenuMentionEditor } from "@/components/editor/menu-mention-editor";
 import { kstDateTimeLocal, kstShortStamp } from "@/lib/date-kst";
 import { writeLockedNote } from "@/lib/write-lock";
+import { useLicenseOn } from "@/features/owner/operations-context";
 
 const INPUT = "border-border bg-card text-foreground min-w-0 w-full rounded-md border px-2.5 py-1.5 text-sm";
 const LABEL = "text-text-dim text-xs font-medium";
@@ -239,6 +240,7 @@ function PopupImageField({ value, onChange }: { value: string; onChange: (v: str
 const EN_STATUS_LABEL: Record<AdminPopup["enStatus"], string> = { none: "영문 없음", stale: "옛 원문", ready: "영문 있음", skipped: "건너뜀" };
 
 export function PopupsManager({ items, canWrite = true }: { items: AdminPopup[]; canWrite?: boolean }) {
+  const aiOn = useLicenseOn("ai_analysis");
   const [editing, setEditing] = useState<AdminPopup | null>(null);
   const [imageUrl, setImageUrl] = useState("");
   const [formKey, setFormKey] = useState(0);
@@ -385,7 +387,7 @@ export function PopupsManager({ items, canWrite = true }: { items: AdminPopup[];
                 </div>
                 {canWrite ? (
                   <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2.5 pt-0.5">
-                    <EnglishForm id={p.id} status={p.enStatus} skipReason={p.enSkipReason} />
+                    {aiOn ? <EnglishForm id={p.id} status={p.enStatus} skipReason={p.enSkipReason} /> : null}
                     <ToggleForm id={p.id} isActive={p.isActive} />
                     <button type="button" onClick={() => startEdit(p)} aria-label="수정" className="text-text-dim hover:text-foreground inline-flex items-center transition">
                       <Pencil className="size-3.5" />
@@ -395,7 +397,7 @@ export function PopupsManager({ items, canWrite = true }: { items: AdminPopup[];
                 ) : (
                   // 읽기 권한 — 노출 여부·영문 상태는 글로만(누르는 칩이 아니다).
                   <div className="text-text-faint flex max-w-full shrink-0 flex-wrap items-center gap-2.5 pt-0.5 text-xs">
-                    <span>{EN_STATUS_LABEL[p.enStatus]}</span>
+                    {aiOn ? <span>{EN_STATUS_LABEL[p.enStatus]}</span> : null}
                     <span className={p.isActive ? "text-primary font-bold" : undefined}>{p.isActive ? "노출 중" : "꺼짐"}</span>
                   </div>
                 )}

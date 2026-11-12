@@ -10,7 +10,7 @@ import { homeworkDueText } from "@/features/video-homework/due";
 import { appendVideoReceiptComment } from "@/features/video-homework/receipt-comment";
 import { getVideoReceiptComment } from "@/features/video-homework/server/receipt-comment";
 import { detectClassNotices, splitNoticeFromNote } from "../class-notice";
-import { mentMaxTokens, mentSections, readMentResponse, type MentTemplates } from "../ment-assembly";
+import { mentMaxTokens, mentSections, readMentResponse, stripSubjectLabel, type MentTemplates } from "../ment-assembly";
 import { formatMentPreview } from "../ment-preview-format";
 import {
   classNoteRows,
@@ -48,11 +48,6 @@ const SESSION_COLS = "class_id, updated_by, subject_progress, special_note";
 function must<T = Row>(res: { data: unknown; error: { message: string } | null }, what: string): T | null {
   if (res.error) throw new Error(`${what}을(를) 읽지 못했습니다`);
   return (res.data as T | null) ?? null;
-}
-
-/** 저장된 진도("수학 2-4-3 …")의 맨 앞 과목 라벨을 뗀다 — 운영 자동작성 입력과 같은 모양. */
-function stripSubjectLabel(progress: string, label: string): string {
-  return label && progress.startsWith(`${label} `) ? progress.slice(label.length + 1) : progress;
 }
 
 async function loadTemplates(db: SupabaseClient, tenantId: string, edited: PromptType, text: string): Promise<MentTemplates> {
