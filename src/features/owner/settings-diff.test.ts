@@ -71,6 +71,17 @@ describe("diffSettingsSection — 배열(과목·학년 등)", () => {
   });
 });
 
+describe("diffSettingsSection — 기능 저장 메타데이터", () => {
+  it("known은 사람이 고르는 값이 아니므로 추가·변경·삭제 모두 감사 변경에서 뺀다", () => {
+    expect(diffSettingsSection("modules", { disabled: [] }, { disabled: [], known: ["eie"] }))
+      .toEqual({ changes: [], others: 0 });
+    expect(diffSettingsSection("modules", { disabled: [], known: ["eie"] }, { disabled: [], known: ["eie", "classnote"] }))
+      .toEqual({ changes: [], others: 0 });
+    expect(diffSettingsSection("modules", { disabled: [], known: ["eie"] }, { disabled: [] }))
+      .toEqual({ changes: [], others: 0 });
+  });
+});
+
 describe("diffSettingsSection — 권한(역할×메뉴 한 칸 단위)", () => {
   it("역할 권한이 열리면 무엇이 어떻게 열렸는지 남는다", () => {
     const d = diffSettingsSection(
