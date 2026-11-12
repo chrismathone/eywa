@@ -51,10 +51,16 @@ const fakeDb = (kind: string) => {
           filters.push((row) => row[key] === value);
           return query;
         },
-        // `col.op.value,col.op.value` — 하나라도 맞으면(eq · neq만).
+        // `col.op.value,col.op.value` — 하나라도 맞으면.
         or: (expr: string) => {
-          const parts = expr.split(",").map((p) => { const [k, op, ...v] = p.split("."); return { k: k as keyof Row, op, v: v.join(".") }; });
-          filters.push((row) => parts.some(({ k, op, v }) => (op === "eq" ? String(row[k]) === v : String(row[k]) !== v)));
+          const parts = expr.split(",").map((p) => { const [k, op, ...v] = p.split("."); return { k: k as keyof Row, op, v }; });
+          filters.push((row) => parts.some(({ k, op, v }) => {
+            if (op === "eq") return String(row[k]) === v.join(".");
+            if (op === "neq") return String(row[k]) !== v.join(".");
+            if (op === "is" && v[0] === "null") return row[k] === null;
+            if (op === "not" && v[0] === "ilike") return !String(row[k] ?? "").includes(v.slice(1).join(".").replace(/^%|%$/g, ""));
+            return false;
+          }));
           return query;
         },
         maybeSingle: () => ({
@@ -184,6 +190,16 @@ describe("notification list and badge", () => {
     const result = await getMyNotifications();
     expect(result.items.map((item) => item.id)).toEqual(["other"]);
     expect(result.unread).toBe(1);
+  });
+  it("보관함에서도 꺼진 기능 이름이 남은 옛 업무 요약은 빠진다", async () => {
+    mocks.disabledModules = ["approvals"];
+    mocks.rows = [
+      row("hidden-digest", "staff_task_digest", { archived_at: "2026-11-10", body: "전자결재 차례 2 · 상담 후속조치 1" }),
+      row("visible-digest", "staff_task_digest", { archived_at: "2026-11-09", body: "상담 후속조치 1" }),
+      row("other", "followup_due", { archived_at: "2026-11-08", body: "전자결재 차례를 별도 문장으로 설명" }),
+    ];
+    const result = await getMyNotifications("archived");
+    expect(result.items.map((item) => item.id)).toEqual(["visible-digest", "other"]);
   });
 });
 
