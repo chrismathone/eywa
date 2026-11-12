@@ -16,7 +16,7 @@ import { baseSettingsFor, isGenericTenant, prepareSectionForSave, presetOfStored
 import { resolveSettings } from "./resolve";
 import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
 import { settingsToPeriodsConfig, weekdayTableFor, isPerPeriodSubject } from "@/features/timetable/lib/periods";
-import { MODULE_BASELINE_V1, MODULE_IDS, isModuleEnabled } from "@/lib/modules";
+import { GENERIC_DISABLED_MODULES, MODULE_BASELINE_V1, MODULE_IDS, isModuleEnabled } from "@/lib/modules";
 import { isRawModuleEnabled } from "../../../scripts/_shared/module-state.mjs";
 
 /** 침산 저장 행의 모양 — 09-22 읽기 전용 실측의 **섹션 구성**(값은 대표 몇 칸). preset·modules 키가 없다. */
@@ -223,6 +223,7 @@ describe("일반판 — 새로 연 학원", () => {
   });
 
   it("모듈은 꺼진 채 태어나고, 보강은 독립 운영 모드로 꺼져 있으며 수업 규칙은 중립", () => {
+    expect(g.modules.disabled).toEqual(GENERIC_DISABLED_MODULES);
     expect([...g.modules.disabled].sort()).toEqual(MODULE_IDS.filter(id => id !== "makeups").sort());
     expect(g.makeups.mode).toBe("off");
     expect(DEFAULT_SETTINGS.makeups.mode).toBe("off");
