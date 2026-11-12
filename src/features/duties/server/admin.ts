@@ -4,7 +4,7 @@ import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, readonlyViewErasedScope } from "@/lib/auth/perm-matrix";
 import { isReadonlyTeacherView, viewAsTeacher } from "@/lib/auth/view-as";
-import { REPORT_RATING_VISIBLE } from "@/features/report-admin/report-rating";
+import { canViewReportRatings } from "@/features/report-admin/server/rating-access";
 import { loadViewerBundle } from "@/features/dashboard/layout/viewer-server";
 import { sliceGroupsOf } from "@/features/dashboard/layout/slices";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -34,8 +34,8 @@ export async function resolveDutyAdminScope(viewer: CurrentUser): Promise<DutyAd
   const canNote = level === "full" && !ownerId;
   // 평점은 수업보고서 쓰기 권한자에게만(평점 열람과 같은 문) — 본인 줄만 보는 사람에게는 내려보내지 않는다.
   //   🔴 '담당' 권한은 안 된다 — 수업보고서 목록에서 담당 권한자는 자기 보고서의 평점만 보는데(RLS), 여기서는 모든 선생님의 평균 · 등수가 나간다(리뷰 2026-11-11).
-  //   표시 스위치(`REPORT_RATING_VISIBLE`)가 꺼지면 권한자에게도 내려보내지 않는다(목록과 같다).
-  const seeRatings = REPORT_RATING_VISIBLE && !ownerId && (await accessLevelTenant(viewer.systemRole, "lesson_reports")) === "full";
+  //   코드 표시 스위치·지점 report_rating·쓰기 권한 중 하나라도 꺼지면 내려보내지 않는다(목록과 같은 단일 문).
+  const seeRatings = !ownerId && await canViewReportRatings(viewer.tenantId, viewer.systemRole);
   if (!bundle.subjectScoped) return { subjects: null, labels, ownerId, canNote, seeRatings };
   // 담당 과목은 자유 글자일 수 있다(키·라벨·'EiE'…) — 운영실과 같은 읽기(`sliceGroupsOf`)로 묶음을 읽고, 그 묶음에 드는 설정 과목 키를 전부 허용한다.
   const programs = programSubjectsOf(labels);

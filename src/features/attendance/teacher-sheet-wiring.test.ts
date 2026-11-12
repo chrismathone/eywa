@@ -95,8 +95,10 @@ describe("강사 전체 보기 조립 — 화면과 명세서가 같은 호출�
       expect(src).toContain("salaryBilledCap(");
       expect(src).toContain("sumSalaryAmounts(");
     }
-    // 회차 정산이 꺼진 학원은 두 곳 모두 단가·등록 차수를 싣지 않는다.
-    expect(flat(page)).toContain("confirmedPricesByRow={sessionBillingOn ? classBilledAmounts.confirmedPrices : {}}");
+    // 회차 정산이 꺼진 학원은 화면 prop을 undefined로 보내 단가 열 자체를 세우지 않고, 명세서 계산도 빈 재료를 쓴다.
+    expect(flat(page)).toContain("confirmedPricesByRow={sessionBillingOn ? classBilledAmounts.confirmedPrices : undefined}");
+    expect(flat(page)).toContain("termSessionsByRow={sessionBillingOn ? classBilledAmounts.confirmedSessions : undefined}");
+    expect(flat(page)).toContain("priceConfirmedRows={sessionBillingOn ? classBilledAmounts.priceConfirmed : undefined}");
     expect(flat(sheet)).toContain("prices: sheet.sessionBillingOn ? sheet.billing.confirmedPrices : {}");
   });
 });

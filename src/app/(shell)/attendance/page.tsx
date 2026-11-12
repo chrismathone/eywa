@@ -1367,9 +1367,9 @@ export default async function AttendancePage({
               {showActualAmount && salaryConfig.needsLevels ? <span className="text-danger text-xs break-keep">{sheetT(lang, "att.actualSalary.needsLevels")}</span>
                 : showActualAmount ? <SalaryVisibleButton key={`${salaryConfig.teacherId}:${month}`} teacherId={salaryConfig.teacherId} month={month} checked={salaryConfig.visible} canEdit={salaryConfig.canEdit} /> : null}
             </> : undefined}
-            termSessionsByRow={sessionBillingOn ? classBilledAmounts.confirmedSessions : {}}
-            confirmedPricesByRow={sessionBillingOn ? classBilledAmounts.confirmedPrices : {}}
-            priceConfirmedRows={sessionBillingOn ? classBilledAmounts.priceConfirmed : []}
+            termSessionsByRow={sessionBillingOn ? classBilledAmounts.confirmedSessions : undefined}
+            confirmedPricesByRow={sessionBillingOn ? classBilledAmounts.confirmedPrices : undefined}
+            priceConfirmedRows={sessionBillingOn ? classBilledAmounts.priceConfirmed : undefined}
             noInvoiceRows={noInvoiceRows}
             money={money}
             moneyNote={moneyNote}
