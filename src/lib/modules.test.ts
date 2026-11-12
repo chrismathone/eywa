@@ -8,13 +8,16 @@ import { describe, expect, it } from "vitest";
 import { MENU_ACCESS, type AccessMatrix } from "@/lib/permissions";
 import {
   MODULES,
+  MODULE_BASELINE_V1,
   MODULE_IDS,
   capDisabledModules,
   disabledMenuKeysOf,
   isModuleEnabled,
+  isModuleTurningOff,
   menuLayoutWithModules,
   moduleOfMenuKey,
   normalizeDisabledModules,
+  effectiveDisabledModulesFromStored,
 } from "./modules";
 
 const MATRIX = MENU_ACCESS as unknown as AccessMatrix;
@@ -27,6 +30,38 @@ describe("normalizeDisabledModules", () => {
     expect(normalizeDisabledModules(undefined)).toEqual([]);
     expect(normalizeDisabledModules("shuttle")).toEqual([]);
     expect(normalizeDisabledModules({})).toEqual([]);
+  });
+});
+
+describe("모듈 저장 기준 목록", () => {
+  it("v1 기준 20개는 글자와 순서를 고정한다", () => {
+    expect(MODULE_BASELINE_V1).toEqual([
+      "ecs", "mcs", "makeups", "seat_attendance", "textbooks", "shuttle", "inventory", "kiosk", "newcomers", "retention",
+      "approvals", "class_review", "calendar", "classnote", "makeedu", "sheet_sync", "eie", "session_billing", "payroll", "staff_leaves",
+    ]);
+  });
+
+  it("일반판 옛 저장 행과 섹션 없는 행은 나중에 추가된 모듈을 끄고, 침산은 그대로다", () => {
+    const futureIds = [...MODULE_IDS, "future_module"];
+    expect(effectiveDisabledModulesFromStored(
+      { preset: "generic", modules: { disabled: ["shuttle"] } },
+      futureIds,
+    )).toEqual(["shuttle", "future_module"]);
+    expect(effectiveDisabledModulesFromStored({ preset: "generic" }, futureIds)).toEqual(
+      futureIds.filter((id) => id !== "makeups"),
+    );
+    expect(effectiveDisabledModulesFromStored({}, futureIds)).toEqual([]);
+    expect(effectiveDisabledModulesFromStored(
+      { modules: { disabled: ["shuttle"], known: [] } },
+      futureIds,
+    )).toEqual(["shuttle"]);
+  });
+
+  it("known 누락·변조가 보강을 실효 목록에만 끼워 넣지 못한다", () => {
+    expect(effectiveDisabledModulesFromStored({ preset: "generic", modules: { disabled: [], known: ["bogus"] } }))
+      .not.toContain("makeups");
+    expect(effectiveDisabledModulesFromStored({ preset: "generic", modules: { disabled: [] } }))
+      .not.toContain("makeups");
   });
 });
 
@@ -76,6 +111,8 @@ describe("모듈 정의", () => {
     expect(isModuleEnabled([], "shuttle")).toBe(true);
     expect(isModuleEnabled(["shuttle"], "shuttle")).toBe(false);
     expect(isModuleEnabled(undefined, "eie")).toBe(true);
+    expect(isModuleTurningOff([], ["eie"], "eie")).toBe(true);
+    expect(isModuleTurningOff(["eie"], ["eie"], "eie")).toBe(false);
   });
 });
 

@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { isRawModuleEnabled } from "../_shared/module-state.mjs";
 
 export const REPO = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1")), "../..");
 export const require = createRequire(path.join(REPO, "package.json"));
@@ -109,5 +110,5 @@ export const RESOLVERS = {
 export async function moduleEnabled(admin, tenantId, module) {
   if (!module) return true;
   const { data } = await admin.from("tenant_settings").select("data").eq("tenant_id", tenantId).maybeSingle();
-  return !(data?.data?.modules?.disabled ?? []).includes(module);
+  return isRawModuleEnabled(data?.data, module);
 }

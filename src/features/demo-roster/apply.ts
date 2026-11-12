@@ -7,6 +7,7 @@ import { insertDashboardSatellite } from "./dashboard-apply";
 import { buildDashboardWorld } from "./dashboard-world.mjs";
 import { ensureDemoStaff } from "./demo-staff";
 import { buildScenario, SCENARIOS } from "./plan.mjs";
+import type { DemoModuleChange } from "./demo-modules";
 
 const ROOM_NAMES = ["1강의실", "2강의실", "3강의실", "4강의실"] as const;
 const NOTE_PREFIX = "demo-roster:";
@@ -25,7 +26,7 @@ class NotDemoError extends Error {
 export async function replaceDemoRoster(
   tenantId: string,
   scenarioId: string,
-): Promise<{ label: string; students: number } | { error: string }> {
+): Promise<{ label: string; students: number; modules: DemoModuleChange } | { error: string }> {
   // 🔴 DB에 직접 접속해 쓴다 — Supabase 요청을 보는 쓰기 차단을 지나지 않으므로, 운영 콘솔의 '지점 보기'(읽기 전용)는 여기서 따로 멈춘다(tenant-view-outbound.ts).
   await assertTenantViewOutboundAllowed();
   if (!(scenarioId in SCENARIOS)) return { error: "없는 구성입니다" };
@@ -160,9 +161,9 @@ export async function replaceDemoRoster(
         ),
       );
 
-      await insertDashboardSatellite(tx, tenantId, plan, note, classId, studentId, today);
+      const modules = await insertDashboardSatellite(tx, tenantId, plan, note, classId, studentId, today);
 
-      return { label: plan.scenario.title as string, students: plan.stats.students as number };
+      return { label: plan.scenario.title as string, students: plan.stats.students as number, modules };
     });
   } catch (err) {
     if (err instanceof NotDemoError) return { error: "데모 지점에서만 바꿀 수 있습니다" };

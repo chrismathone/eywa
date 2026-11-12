@@ -12,7 +12,7 @@
 //    배치할 칸이 없다. 대시보드 '시작하기'가 원장에게 교시부터 확인하게 한다.
 import { DEFAULT_SETTINGS } from "./defaults";
 import type { TenantSettings } from "./settings-types";
-import { GENERIC_DISABLED_MODULES } from "@/lib/modules";
+import { GENERIC_DISABLED_MODULES, MODULE_BASELINE_V1 } from "@/lib/modules";
 
 const GENERIC_PRIVACY_TERMS = `1. 수집하는 개인정보 항목: 학생 성명·학교·학년·연락처, 보호자 성명·연락처
 2. 수집·이용 목적: 입학 상담과 상담 결과 안내 연락
@@ -55,6 +55,6 @@ export const GENERIC_SETTINGS: TenantSettings = {
   report: { ...DEFAULT_SETTINGS.report },
   permissions: { overrides: [], userOverrides: [], specialAccess: { payslipViewerIds: [], payslipManagerIds: [], leaveAdjusterIds: [], classSplitterIds: [], enrollmentDateEditorIds: [], studentStatusManagerIds: [], staffTaskMonitorIds: [], vendorViewerIds: [], jjReportManagerIds: [], beforeClassReportIds: [], withdrawalApproverIds: [], withdrawalDeskIds: [], staffSubjectScopes: [] } },
   navigation: { menus: [], teacherMenus: [], groups: [], teacherGroups: [] },
-  modules: { disabled: [...GENERIC_DISABLED_MODULES] },
+  modules: { disabled: [...GENERIC_DISABLED_MODULES], known: [...MODULE_BASELINE_V1] },
   dashboard: { version: 1, layouts: [], assignments: [] },
 };

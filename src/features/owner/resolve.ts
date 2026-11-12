@@ -2,7 +2,7 @@
 // 배열·원시는 저장값이 있으면 교체, 객체는 재귀 병합. 기본 객체는 절대 변형하지 않는다(공유 참조).
 // 프리셋(preset.ts): 침산 = DEFAULT_SETTINGS(오늘과 같다), 새 학원 = GENERIC_SETTINGS.
 import { baseSettingsFor, presetOfStored } from "./preset";
-import { normalizeDisabledModules } from "@/lib/modules";
+import { effectiveDisabledModulesFromStored, knownModulesFromStored, type ModuleId } from "@/lib/modules";
 import { normalizeNavigationSettings } from "./normalize-navigation";
 import { normalizeDashboard } from "@/features/dashboard/layout/normalize";
 import type { AccountSetting, BillingSettings, SubjectSetting, TenantSettings } from "./settings-types";
@@ -143,8 +143,11 @@ export function resolveSettings(stored: unknown, tenant: { name: string }): Tena
     },
     billing: normalizeBilling(merged.billing),
     navigation: normalizeNavigationSettings(merged.navigation),
-    // 모르는 모듈 id는 버린다(유령 id가 게이트를 흔들지 않게).
-    modules: { disabled: normalizeDisabledModules(merged.modules.disabled) },
+    // 일반판의 옛 저장 행은 그때 없던 새 모듈을 자동으로 켜지 않는다. 침산은 known을 보지 않아 종전과 같다.
+    modules: {
+      disabled: effectiveDisabledModulesFromStored(stored) as ModuleId[],
+      known: knownModulesFromStored(stored) as ModuleId[],
+    },
     makeups: normalizeMakeupSettings(merged.makeups),
     // 운영실 배치 — 판 번호가 다르거나 깨진 역할 배치는 버려 기본 배치로 돌아가고, 모르는 카드·이탈 좌표는 걸러 낸다.
     dashboard: normalizeDashboard(merged.dashboard),
