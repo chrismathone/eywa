@@ -10,6 +10,7 @@ import { ToolbarButton } from "@/components/toolbar";
 import { deleteVendor } from "@/features/inventory/server/vendor-actions";
 import { matchesVendorCategory, matchesVendorQuery, NO_CATEGORY, telHref, vendorCategoryChips } from "@/features/inventory/vendor";
 import type { InventoryVendor } from "@/features/inventory/types";
+import { phoneLabel } from "@/lib/format/phone";
 import { DashCell } from "./cell-bits";
 import { useSubmit } from "./form-bits";
 import { ListToolbar } from "./list-toolbar";
@@ -24,7 +25,8 @@ const ALL = "__all__";
  * 번호 칸 — 번호를 누르면 전화(폰에선 바로 걸린다), 옆 아이콘은 복사(PC에서 받아 적을 때).
  * 🔑 둘 다 `a`/`button`이라 표의 "행 클릭 = 수정"이 가로채지 않는다(sortable-table이 거른다).
  */
-function PhoneCell({ v }: { v: string | null }) {
+function PhoneCell({ v: raw }: { v: string | null }) {
+  const v = phoneLabel(raw);
   if (!v) return <DashCell v={null} />;
   const href = telHref(v);
   const copy = () => {
