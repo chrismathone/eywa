@@ -410,6 +410,9 @@ export async function resetStuckClassnote(): Promise<{
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "lesson_reports"))) return { ok: false, error: "보고서 관리 권한이 없습니다" };
+  // 발송 안전 스위치·ClassNote 모듈(재발송·최초 발송과 같은 판정) — 꺼진 지점은 어떤 행도 큐에 되돌리지 않는다(검토 2026-11-12).
+  const settings = await getTenantSettings();
+  if (!classnoteSendOn(settings)) return { ok: true, reset: 0, noClass: 0 };
   const supabase = await createClient();
   const cutoff = new Date(Date.now() - STUCK_MINUTES * 60_000).toISOString();
   // 보낼 반 게이트(미발송 일괄 발송·재발송과 같은 함수) — 반별 발송인데 보낼 반이 없는 멈춘 행은 queued로 되돌리지 않고
@@ -422,7 +425,6 @@ export async function resetStuckClassnote(): Promise<{
     .lt("classnote_processing_at", cutoff)
     .limit(500);
   if (sErr) return { ok: false, error: humanizeDbError(sErr.message, "복구") };
-  const settings = await getTenantSettings();
   const routeRows = (stuck ?? []).filter((r) => isSendClassRouteRow(settings, r));
   // 보강 반으로 '보낼 반'을 적은 행(감사로그 — 원장 2026-09-30).
   const gateOut = { rewritten: [] as string[] };

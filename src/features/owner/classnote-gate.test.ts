@@ -75,4 +75,12 @@ describe("꺼진 기능 가드", () => {
     expect(work).toContain("const deliveryShown = classnoteSendOn(settings)");
     expect(work).toMatch(/english && classnoteModuleOn\(settings\) \? "classnote"/);
   });
+
+  it("멈춘 발송 복구도 재발송·최초 발송과 같은 발송 판정을 행을 읽기 전에 지난다(꺼진 지점에서 큐로 되돌리지 않는다)", () => {
+    const actions = readFileSync(path.join(ROOT, "src/features/report-admin/server/actions.ts"), "utf8");
+    const fn = actions.slice(actions.indexOf("export async function resetStuckClassnote"));
+    const gate = fn.indexOf("if (!classnoteSendOn(settings)) return { ok: true, reset: 0, noClass: 0 };");
+    expect(gate).toBeGreaterThan(-1);
+    expect(gate).toBeLessThan(fn.indexOf('.eq("classnote_status", "processing")'));
+  });
 }, 60_000);
