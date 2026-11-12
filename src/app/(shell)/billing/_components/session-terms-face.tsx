@@ -20,6 +20,7 @@ import { SessionPanels } from "./session-panels";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { writeLockedNote } from "@/lib/write-lock";
+import { isModuleEnabled } from "@/lib/modules";
 
 const PAGE_SIZE = 25; // 반(그룹) 단위 페이지
 
@@ -71,6 +72,7 @@ export async function SessionTermsFace({
   // JJ실 줄 재료는 표 조회와 독립이라 나란히 읽는다(B4) — 권한이 없거나 못 읽으면 null(줄만 안 선다).
   const [view, settings, seatShare] = await Promise.all([getSessionTermsView(p, undefined, { lastMonth: true }), getTenantSettings(), loadSeatShareSummary(p)]);
   const subjects = buildSubjectMaps(settings.operations.subjects);
+  const eieEnabled = isModuleEnabled(settings.modules.disabled, "eie");
 
   const allRows = view.rows.map((r) => ({ ...r, subjectLabel: subjects.labelOf(r.subject) }));
   // 과목·검색·보기 필터(미확정·미배분·몫 조정한 반) = 엑셀과 같은 한 벌(filterSessionTermRows, 감사 N2). 페이저는 검색 결과 기준.
@@ -255,7 +257,7 @@ export async function SessionTermsFace({
       ) : (
         <>
           {/* 검색·과목·미배분·미확정 필터로 한 반의 일부만 보일 때도 반 일괄 확정은 보이는 학생에게만(안 보이는 확정값을 덮지 않게 — 리뷰 2026-09-17). */}
-          <SessionTermGroups key={p} groups={groups} catalog={view.catalog} period={p} seatShare={seatShare} visibleOnly={pendingOnly || openOnly || query !== "" || activeSubject !== null} canWrite={canWrite} />
+          <SessionTermGroups key={p} groups={groups} catalog={view.catalog} period={p} seatShare={seatShare} visibleOnly={pendingOnly || openOnly || query !== "" || activeSubject !== null} canWrite={canWrite} eieEnabled={eieEnabled} />
           <Pagination page={curPage} totalPages={totalPages} total={allGroups.length} hrefForPage={pageHref} />
         </>
       )}

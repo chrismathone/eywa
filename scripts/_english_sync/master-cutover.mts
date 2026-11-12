@@ -45,6 +45,9 @@ import {
 } from "../../src/features/timetable/import/roster/roster-diff";
 import { norm } from "../../src/features/timetable/import/match";
 import { enrollmentOnHoldForStatus } from "../../src/features/enrollments/eligibility";
+import { resolveSettings } from "../../src/features/owner/resolve";
+import { isModuleEnabled } from "../../src/lib/modules";
+import { eieTrackWriteError } from "../../src/features/classes/english-track";
 
 /** 기본 마스터(`2026 영어시간표_인재원 본원`) — `--sheet`로 다른 스프레드시트를 넣을 수 있다. */
 const DEFAULT_MASTER_ID = "1-1JHCw36iWPku782DXMhqYbEMBUFL7bElfJjSQekoWA";
@@ -491,6 +494,22 @@ const rosterParsed = ROSTER_TAB
 
 // ── 2. 신설 반 생성(화이트리스트만) ───────────────────────────────────────────
 const sheetNames = new Set(parsed.slots.map((s) => s.className));
+const newClassSpecs = (ROSTER_ONLY ? [] : [...NEW_CLASSES_TO_CREATE, ...EXTRA_NEW_CLASSES]).map(parseNewClass);
+const requestedNewClasses = newClassSpecs.filter(({ name }) => sheetNames.has(name));
+const requestedEieNames = requestedNewClasses.filter(({ track }) => track === "eie").map(({ name }) => name);
+if (requestedEieNames.length > 0) {
+  // 🔴 일반판 기본값은 저장 JSON에 `modules`가 없을 수 있다. raw 배열만 읽지 말고 앱과 같은 프리셋 병합을 거쳐야
+  // `{ preset: "generic" }`인 지점을 침산(전부 켬)으로 잘못 판정하지 않는다.
+  const [stored] = await sql<{ data: unknown }[]>`
+    select data from tenant_settings where tenant_id = ${TENANT}`;
+  const settings = resolveSettings(stored?.data ?? null, { name: "" });
+  const trackError = eieTrackWriteError(isModuleEnabled(settings.modules.disabled, "eie"), "eie");
+  if (trackError) {
+    console.error(`❌ 대상 지점의 EiE 모듈이 꺼져 있어 :eie 반 구분을 적용할 수 없습니다(아무것도 쓰지 않음): ${requestedEieNames.join(" · ")}`);
+    await sql.end();
+    process.exit(1);
+  }
+}
 // 드라이런에서 "만들었을 반" — 🔴 미리보기가 **사실을 말하게** 하려면 이게 필요하다. 신설 반은 --apply
 // 에서만 실제로 생기므로, 넣지 않으면 드라이런의 ctx에 그 반이 없어 명단 블록이 통째로 제외되고
 // (그 반으로 갈 학생들이 안 보인다) 원래 반에 남은 것으로 읽혀 **종료후보가 부풀려진다**(실측 9명·+9건).
@@ -500,8 +519,7 @@ const dryRevived: { id: string; name: string }[] = [];
 const touchedClassIds: string[] = [];
 for (const w of parsed.warnings) console.log(`  · ${w}`);
 // --roster-only는 반을 만들지 않는다 — 명단만 맞추는 모드에서 반이 새로 생기면 놀란다.
-for (const entry of ROSTER_ONLY ? [] : [...NEW_CLASSES_TO_CREATE, ...EXTRA_NEW_CLASSES]) {
-  const { name, track } = parseNewClass(entry);
+for (const { name, track } of newClassSpecs) {
   if (!sheetNames.has(name)) {
     console.log(`  ⏭ 신설 예정 반 "${name}"이 이 탭에 없음 — 건너뜀`);
     continue;
