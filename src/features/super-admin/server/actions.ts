@@ -555,6 +555,8 @@ export async function toggleTenantLicense(
   });
   updateTag(licenseFlagsTag(tenantId)); // 셸 표시용 라이선스 캐시(창 모드·꺼진 기능 버튼)
   revalidatePath(`/super-admin/tenants/${tenantId}`);
-  if (slackPending.error) return { error: `슬랙은 껐지만 ${slackPending.error} — 다시 시도해 주세요` };
+  if (slackPending.error) {
+    return { error: `슬랙은 꺼졌습니다. ${slackPending.error}. 남은 발송 대기는 다시 켜기 전에 정리됩니다` };
+  }
   return { ok: true };
 }
