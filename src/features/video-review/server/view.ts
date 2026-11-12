@@ -1,10 +1,9 @@
 import "server-only";
 import { canViewLinkedHomeworkVideo, loadViewableVideo } from "@/features/students/server/homework-video-stream";
 import { modelDisplayLabel } from "@/lib/ai/model-label";
-import { stageView, toResultView, type ReviewView } from "../view";
+import { canRerunReview, stageView, toResultView, type ReviewView } from "../view";
 import type { ReviewResult, ReviewStage } from "../types";
-import { RUNNABLE_NOW } from "./run-now";
-import { db, videoReviewEnabled } from "./rows";
+import { aiAnalysisEnabled, db, videoReviewEnabled } from "./rows";
 
 export type ViewAccess = { ok: true; tenantId: string; userId: string } | { ok: false; status: number };
 
@@ -34,11 +33,12 @@ export async function reviewViewFor(tenantId: string, videoId: string): Promise<
   const stage = data.stage as ReviewStage;
   const result = (data.result as ReviewResult | null) ?? null;
   const { state, message } = stageView(stage, !!result);
+  const aiEnabled = await aiAnalysisEnabled(tenantId);
   return {
     state,
     message,
     result: result ? toResultView(result) : null,
     judgeModelLabel: modelDisplayLabel(result?.judgeModel ?? null),
-    canRerun: (RUNNABLE_NOW as readonly string[]).includes(stage) && !!data.transcript_id && !!data.assets,
+    canRerun: canRerunReview(stage, !!data.transcript_id, !!data.assets, aiEnabled),
   };
 }

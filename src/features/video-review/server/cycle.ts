@@ -4,7 +4,7 @@ import { reportWarning } from "@/lib/observability/report-error";
 import { collectJudgeBatches, collectVerifyBatches, submitJudgeBatch, submitVerifyBatch } from "./batch";
 import { enqueueNewVideos } from "./queue";
 import { reconcileTranscriptions, submitTranscriptions } from "./transcribe";
-import { db, errorText, videoReviewEnabled } from "./rows";
+import { aiAnalysisEnabled, db, errorText, videoReviewEnabled } from "./rows";
 
 /** 판정 배치를 보내는 밤 시간(KST 21시~다음 날 6시) — 낮엔 추출·전사만 미리 해 둔다(원장 2026-10-20 "즉시 분석할 필요는 없음"). */
 export function inJudgeWindow(now: Date): boolean {
@@ -39,26 +39,30 @@ async function recoverStuck(tenantId: string): Promise<void> {
 export type CycleReport = Record<string, number | string>;
 
 /**
- * 지점 하나의 한 바퀴 — 스위치가 꺼진 지점은 아무것도 하지 않는다(대기열도 만들지 않는다).
+ * 지점 하나의 한 바퀴 — 영상 메모가 꺼진 지점은 아무것도 하지 않는다(대기열도 만들지 않는다).
+ * AI 분석만 꺼졌으면 새 대기열·전사·판정/확인 제출은 멈추고, 이미 외부에 제출한 작업의 수거는 계속한다.
  * 단계마다 따로 감싼다 — 한 단계 실패(배치 조회 장애 등)가 뒤 단계(전송)를 막지 않게. 실패한 단계는 보고서에 한글로.
  */
 export async function runVideoReviewCycle(tenantId: string, now: Date = new Date()): Promise<CycleReport | null> {
   if (!(await videoReviewEnabled(tenantId))) return null;
+  const canSubmitAi = await aiAnalysisEnabled(tenantId);
   const report: CycleReport = {};
   const step = async (name: string, fn: () => Promise<number | void>) => {
     try { const n = await fn(); if (typeof n === "number") report[name] = n; }
     catch (e) { report[name] = `실패: ${errorText(e)}`.slice(0, 200); reportWarning("영상 메모 단계 실패", { scope: `video-review.${name}`, tenantId, error: errorText(e) }); }
   };
-  await step("enqueued", () => enqueueNewVideos(tenantId));
-  // 개발 CLI 경로는 한 바퀴가 길어(판정을 그 자리에서 돌린다) 전사 제출을 한 번에 더 많이 — 운영은 기본 20(cron 10분 · 함수 시간 제한 안).
-  await step("transcribing", () => submitTranscriptions(tenantId, devCliEnabled() ? 300 : undefined));
+  if (canSubmitAi) {
+    await step("enqueued", () => enqueueNewVideos(tenantId));
+    // 개발 CLI 경로는 한 바퀴가 길어(판정을 그 자리에서 돌린다) 전사 제출을 한 번에 더 많이 — 운영은 기본 20(cron 10분 · 함수 시간 제한 안).
+    await step("transcribing", () => submitTranscriptions(tenantId, devCliEnabled() ? 300 : undefined));
+  }
   await step("transcribed", () => reconcileTranscriptions(tenantId));
   await step("recovered", () => recoverStuck(tenantId));
   await step("judged", () => collectJudgeBatches(tenantId));
   await step("verified", () => collectVerifyBatches(tenantId));
-  await step("verifySent", () => submitVerifyBatch(tenantId));
+  if (canSubmitAi) await step("verifySent", () => submitVerifyBatch(tenantId));
   // 개발 CLI(내부 요금제)로 돌 때는 배치 할인도 밤도 의미가 없다 — 낮에도 보낸다(원장 2026-10-21 밀린 영상 전부 분석). 운영에선 devCliEnabled()가 늘 false.
-  if (inJudgeWindow(now) || devCliEnabled()) {
+  if (canSubmitAi && (inJudgeWindow(now) || devCliEnabled())) {
     await step("judgeSent", async () => {
       let total = 0;
       for (let i = 0; i < MAX_JUDGE_BATCHES; i++) { const n = await submitJudgeBatch(tenantId); total += n; if (n === 0) break; }

@@ -42,6 +42,12 @@ export const SCORE_LABEL: Record<ScoreKey, string> = {
   accuracy: "정확성", order: "순서", reasoning: "이유 설명", terms: "용어", delivery: "전달력",
 };
 
+/** 전사까지 끝나 다시 분석할 수 있는 단계. AI 분석이 꺼졌으면 버튼 자체를 내리지 않는다. */
+export const RUNNABLE_NOW = ["judge", "done", "failed"] as const;
+export function canRerunReview(stage: ReviewStage, hasTranscript: boolean, hasAssets: boolean, aiEnabled: boolean): boolean {
+  return aiEnabled && (RUNNABLE_NOW as readonly string[]).includes(stage) && hasTranscript && hasAssets;
+}
+
 /** 단계 → 화면 상태와 한 줄(순수). `error`는 실패 사유 원문이 아니라 한글 요약만 쓴다. */
 export function stageView(stage: ReviewStage, hasResult: boolean): { state: ReviewViewState; message: string } {
   switch (stage) {

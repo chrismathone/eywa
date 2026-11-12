@@ -1,7 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isFeatureOptedIn } from "@/lib/license/server";
+import { isFeatureLicensed, isFeatureOptedIn } from "@/lib/license/server";
 import type { ReviewAssets, ReviewResult, ReviewStage, ReviewTranscript } from "../types";
 
 /** 0390a `homework_video_reviews` 한 줄(서버 전용 — 전사·판정 원문을 담는다, 화면으로 내보내지 않는다). */
@@ -35,6 +35,11 @@ export const db = () => createAdminClient();
 /** 지점 스위치(운영 콘솔 라이선스 `video_review`, 기본 꺼짐). 꺼진 지점은 대기열·작업·화면 전부 없는 것처럼. */
 export function videoReviewEnabled(tenantId: string): Promise<boolean> {
   return isFeatureOptedIn(tenantId, "video_review");
+}
+
+/** 외부 AI로 새 작업을 보낼 수 있는가. 이미 낸 전사·배치의 수거는 이 값과 무관하게 계속한다. */
+export function aiAnalysisEnabled(tenantId: string): Promise<boolean> {
+  return isFeatureLicensed(tenantId, "ai_analysis");
 }
 
 /** 단계 이름 말고도 같아야 하는 칸 — 배치 번호·실행 토큰(늦게 도착한 옛 수거가 새 분석을 덮지 않게, 적대 리뷰 2026-10-20). */

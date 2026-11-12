@@ -1,6 +1,6 @@
 import "server-only";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
-import { db } from "./rows";
+import { aiAnalysisEnabled, db } from "./rows";
 
 type Candidate = { id: string; route: unknown };
 
@@ -12,6 +12,7 @@ type Candidate = { id: string; route: unknown };
  * 🔴 후보 전건을 페이지로 읽는다(B2) — 앞쪽 상한으로 자르면 이미 넣은 영상이 상한을 채워 뒤 영상이 영영 안 들어간다(적대 리뷰 2026-10-20).
  */
 export async function enqueueNewVideos(tenantId: string): Promise<number> {
+  if (!(await aiAnalysisEnabled(tenantId))) return 0;
   const all = await fetchAllPaged<Candidate>((from, to) => db().from("homework_video_ledger_videos")
     .select("id,route")
     .eq("tenant_id", tenantId).eq("status", "uploaded").eq("subject", "math")
