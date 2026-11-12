@@ -1,6 +1,10 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
 
+## 2026-11-12 — 퇴원관리 '강사별 퇴원율 추이' 차트 = 모든 강사를 한 차트에(원장 *"전체 선생님을 하나의 차트에 … 따로 차트 두지말고 비교가능하게"*)
+
+- 11-11의 강사별 작은 차트 격자를 한 차트로 바꿨다(`teacher-churn-chart.tsx` + 오른쪽 목록 `teacher-churn-chart-list.tsx` · 선 색 한 곳 `teacher-churn-colors.ts`). 나머지 강사 = 옅은 회색 · 강조 셋 = 고른 강사(표와 같은 고르기·같은 색) 또는 마지막 달 퇴원율 높은 3명 · 선 끝 이름 · 달마다 연한 세로 점선 · 마우스 = 그 달 + 가장 가까운 선 · 오른쪽 목록 = 고른 달의 모든 강사 값. 순수 함수 `autoEmphasis`·`nearestAt`·`spreadLabels`·`dupName`(`teacher-churn-view.ts`, Vitest). 값·판정은 그대로(표 칸과 같은 값). 결정 = [`decisions/students.md`](decisions/students.md) 2026-11-11 '모양'. SQL 없음.
+
 ## 2026-11-12 — 상담 준비 브리프: 학원 운영 안내 설정(원장 "운영 사실 설정은 코덱스와 협의해서 추천대로 진행해")
 
 - 학원 설정 → 상담 양식에 '상담 준비 브리프 — 학원 운영 안내' 카드(보고·학부모 상담 주기 · 과제·오답 관리 · 보강 · 레벨테스트·반 배정·첫 수업 · 체험 수업 · 할인, 각 200자 · 기본 빈칸). 적은 원문이 브리프 화면·`/prep` 인쇄에 그대로 실린다(`policy.operations` 스냅샷 · 다시 작성부터). AI 검증은 풀지 않고 원문은 검증 근거(숫자·시각·인원)에서도 뺀다(조건 빠진 약속 방지) · 원문 가리키기 넘김은 그 주제가 설정된 지점에서만 · AI 라이선스 꺼진 지점엔 카드 없음 · 옛 폼·부분 저장이 원문을 지우지 않음 · 감사로그 주제별 전후 · Codex 합의 9개 · 적대 리뷰 4회 · 시험(가상 안내 20건) 폴백 0. 결정 = [`decisions/students.md`](decisions/students.md) · 배선 = [`decisions/settings-wiring.md`](decisions/settings-wiring.md). SQL 없음.
