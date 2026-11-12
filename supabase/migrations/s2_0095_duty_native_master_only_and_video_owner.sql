@@ -7,6 +7,7 @@
 --   · duty_video_homework_rollup의 낸 사람을 영상 숙제 장부(`own-homework.ts`)와 같게: 보고서 = 작성 계정(`created_by`)만 · 따로 낸 숙제 = `teacher_id`만.
 --     지금 담임으로 메우지 않는다(지난 날은 그날 사람 — 모르면 세지 않는다) · 한 칸을 보고서 작성자와 따로 낸 선생님이 둘 다 냈으면 둘 다 센다(장부도 두 사람 칸).
 -- 실행권: 그대로(service_role만).
+-- 연동 역할 실행권 확인: duty_video_homework_rollup은 업무 완성도 관리 화면(앱 service_role)만 부른다 — 연동 PC 역할(eywa_sync_agent)의 RLS · 질의 경로에 없다(s2_0094에서 처음부터 PUBLIC 실행권이 없었다).
 
 begin;
 

@@ -378,7 +378,7 @@ export const MENU_ACCESS: AccessMatrix = {
   // 체크하는 사람(전체)·보는 사람(읽기)은 학원 설정 → 역할·권한 → 개인별 메뉴 권한으로 연다. 표는 서버 전용(정책 0개).
   before_class_checklist: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // 학원 비서(원장 2026-11-09 *"역할에 '비서 추가' 권한은 없네. 기본 디폴트로 원장하고 나머지 비활성화"*) — 새 키 규칙 그대로.
-  // 칸은 전체·없음만(isOnOffMenu) · 강사 칸은 잠근다(강사 화면엔 비서 단추가 없다 — isPermissionLocked).
+  // 칸은 전체·없음만(isOnOffMenu) · 🔴 2026-11-12부터 임시로 원장 외 칸 잠금(권한 범위 조회가 끝날 때까지 — isPermissionLocked).
   // 🔴 비서는 **지점 자료 전부**(급여·계약·연락처·계좌 포함)를 읽는다 — 다른 역할에 열면 그 사람도 전부를 묻고 본다(권한 표 줄 설명이 같은 말을 한다).
   //    판정 = assistantViewer()(src/features/assistant/server/gate.ts) 한 곳 — 서버 라우트 전부와 셸 레이아웃의 단추·단축키가 같은 함수를 지난다.
   assistant: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
@@ -593,9 +593,10 @@ export function isPermissionLocked(menu: MenuKey, role: SystemRole, access: Acce
   if (isStaffRecordLocked(menu, role)) return true;
   // 연결 앱은 링크를 세우나 마나뿐이다 — 담당·읽기는 뜻이 없다(전체 = 보임 · 없음 = 안 보임). 학원 비서도 같다(isOnOffMenu).
   if (isOnOffMenu(menu) && (access === "scoped" || access === "readonly")) return true;
-  // 학원 비서는 강사에게 열 수 없다 — 강사 화면(미니셸)엔 비서 단추·단축키가 없어 열어도 쓸 곳이 없고(저장만 되는 칸),
-  // 비서는 담당 범위 없이 지점 자료 전부를 읽는다(아래 대시보드 강사 잠금과 같은 결).
-  if (menu === "assistant" && role === "teacher") return true;
+  // 학원 비서는 지금 **원장만**(2026-11-12 임시 · Codex 합의 C) — 비서는 지점 자료 전부를 읽는다. 묻는 사람의 권한 범위로 좁혀 조회하는
+  // 기능(앱 + DB 범위 강제 · 원장 *"각 역할에 맞는 답변만 출력되게"*)이 끝나면 역할별로 연다. 그때까지 다른 역할 칸·개인 줄은 적용되지 않는다
+  // (resolveMatrix·applyUserOverrides가 잠긴 칸을 건너뛴다). 강사는 그 뒤에도 잠근다(강사 화면엔 비서 단추가 없다).
+  if (menu === "assistant" && role !== "master") return true;
   // 셔틀 관리자 화면은 원장·관리자 칸만 — 학부모 관리 현황의 학부모 계정(로그인 이메일·연락처)은 DB 정책(0320a)이 이 두 역할에게만 읽기를 연다.
   // 다른 역할에 열려면 그 정책을 먼저 넓혀야 한다(화면은 열리는데 목록이 비는 일이 없게).
   if (menu === "shuttle_admin" && !(SHUTTLE_ADMIN_ROLES as readonly SystemRole[]).includes(role)) return true;

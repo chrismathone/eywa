@@ -319,13 +319,14 @@ describe("학원 비서 권한(assistant · 원장 2026-11-09 *\"기본 디폴�
     expect(applyUserOverrides(MENU_ACCESS, "u-1", "manager", [{ userId: "u-1", menu: "assistant", access: "readonly" }]).assistant.manager).toBe("none");
   });
 
-  it("🔴 강사 칸은 잠근다 — 강사 화면엔 비서 단추가 없다(열어도 쓸 곳이 없는 칸) · 원장 아닌 사무실 역할은 원장이 연다", () => {
+  it("🔴 지금은 원장만(2026-11-12 임시 — 권한 범위 조회가 끝날 때까지) · 다른 역할 칸·개인 줄은 적용되지 않는다", () => {
     for (const access of ["full", "none"] as const) expect(isPermissionLocked("assistant", "teacher", access), access).toBe(true);
     expect(resolveMatrix([{ menu: "assistant", role: "teacher", access: "full" }]).assistant.teacher).toBe("none");
     expect(applyUserOverrides(MENU_ACCESS, "t-1", "teacher", [{ userId: "t-1", menu: "assistant", access: "full" }]).assistant.teacher).toBe("none");
     for (const role of ["admin", "manager", "counselor", "accountant", "viewer", "parttime"] as const) {
-      expect(isPermissionLocked("assistant", role, "full"), role).toBe(false);
-      expect(resolveMatrix([{ menu: "assistant", role, access: "full" }]).assistant[role], role).toBe("full");
+      expect(isPermissionLocked("assistant", role, "full"), role).toBe(true);
+      expect(resolveMatrix([{ menu: "assistant", role, access: "full" }]).assistant[role], role).toBe("none");
+      expect(applyUserOverrides(MENU_ACCESS, "u-1", role, [{ userId: "u-1", menu: "assistant", access: "full" }]).assistant[role], role).toBe("none");
     }
     // 원장이 스스로 끌 수도 있다(설정·대시보드처럼 잠근 칸이 아니다 — 학원 설정은 계속 열려 다시 켤 수 있다).
     expect(isPermissionLocked("assistant", "master", "none")).toBe(false);

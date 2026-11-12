@@ -326,20 +326,20 @@ export async function reportStaff(options: { forRequest?: boolean } = {}) {
 }
 /**
  * 작성 요청·바로 처리 창의 학생 선택지 — 재원·휴원 · 퇴원 예약 없음 · 시험 학생 제외.
+ * `studentId`를 주면 그 학생 하나만(원생 화면 입구가 '다른 과목은 요청할 수 있나'를 볼 때 — 창과 같은 판정).
  * 지금 다니는 반이 없는 학생도 싣는다(`courses: []`) — 강사 작성 요청은 담임이 없어 못 하지만 **관리자 바로 처리**(퇴원만)는 된다
  * (원장 2026-10-23 · 창이 요청 모드에선 반 있는 학생만 보인다). 과목 범위가 걸린 사람에겐 담당 과목 반이 있는 학생만.
  */
-export async function requestStudents() {
+export async function requestStudents(studentId?: string) {
   const viewer = await reportViewer();
   if (!viewer?.request) return [] as StudentOption[];
   const db = createAdminClient();
   const result: StudentOption[] = [];
   // 진행 중인 보고서를 못 읽어도 창은 연다 — 같은 과목 요청은 DB가 거절한다.
-  const openReports = loadOpenReportScopes(viewer.user.tenantId).catch((e: unknown) => { console.error("[withdrawal-open-reports]", e); return new Map<string, OpenReportScope>(); });
+  const openReports = loadOpenReportScopes(viewer.user.tenantId, studentId).catch((e: unknown) => { console.error("[withdrawal-open-reports]", e); return new Map<string, OpenReportScope>(); });
   for (let offset = 0; ; offset += 400) {
-    const { data, error } = await db.from("students")
-      .select(`id,name,school,grade,enrollments(${COURSE_COLUMNS})`)
-      .eq("tenant_id", viewer.user.tenantId).eq("is_test", false).in("status", ["enrolled", "on_hold"]).is("withdrawn_at", null)
+    const base = db.from("students").select(`id,name,school,grade,enrollments(${COURSE_COLUMNS})`).eq("tenant_id", viewer.user.tenantId);
+    const { data, error } = await (studentId ? base.eq("id", studentId) : base).eq("is_test", false).in("status", ["enrolled", "on_hold"]).is("withdrawn_at", null)
       .eq("enrollments.tenant_id", viewer.user.tenantId).eq("enrollments.classes.tenant_id", viewer.user.tenantId).eq("enrollments.classes.teacher.tenant_id", viewer.user.tenantId)
       .order("id").range(offset, offset + 399);
     if (error) throw new Error("학생의 수강 정보를 불러오지 못했습니다.");
@@ -365,6 +365,8 @@ export const directProcessingReady = cache(async (tenantId: string): Promise<boo
 
 /**
  * 원생 화면의 '퇴원보고서' 입구(원장 2026-10-23 퇴원은 퇴원보고서로만) — 그 학생에게 진행 중인 보고서가 있으면 그 보고서로, 없으면 요청 창으로.
+ * 🔴 과목이 다르면 따로 요청한다(s2_0014) — 진행 중인 보고서가 있어도 **다른 과목 반이 남아 있으면** `canRequest`(요청 창과 같은 판정
+ *    `requestStudents(studentId)`). 2026-11-12 원장 제보: 영어 보고서가 진행 중인 학생의 수학 보고서를 원생 화면에서 못 열었다(입구가 영어 보고서로만 보냈다).
  * null = 퇴원보고서를 못 여는 사람(메뉴 권한·실험실 배정). `readable` = 진행 중인 보고서를 이 사람이 열 수 있는가(참여자·원장 — 목록과 같은 판정).
  */
 export async function studentReportEntry(studentId: string): Promise<
@@ -381,7 +383,9 @@ export async function studentReportEntry(studentId: string): Promise<
   const rows = (data ?? []) as ReportListRow[];
   const mine = rows.find(r => canReadReport(r, viewer));
   const pending = mine ? { id: mine.id, readable: true } : rows[0] ? { id: rows[0].id, readable: false } : null;
-  return { pending, canRequest: viewer.request };
+  // 진행 중인 보고서가 없으면 종전대로(조회를 더하지 않는다). 있으면 다른 과목 반이 남았는지 창과 같은 판정으로 — 못 읽으면 입구만 접는다(DB가 거절한다).
+  const canRequest = viewer.request && (!rows.length || (await requestStudents(studentId).catch(() => [])).length > 0);
+  return { pending, canRequest };
 }
 
 export async function reportSubjectLabels() {

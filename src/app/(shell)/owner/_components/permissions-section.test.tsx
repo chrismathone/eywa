@@ -444,13 +444,9 @@ describe("개인별 메뉴 권한 — 역할 표 아래에서 주고 거둔다(�
     expect(screen.queryAllByText(/지점 자료 전부/)).toHaveLength(0);
     const cell = (role: keyof typeof ROLE_LABEL) => screen.getByRole("button", { name: new RegExp(`^${MENU_LABEL.assistant} · ${ROLE_LABEL[role]}:`) });
     expect(cell("teacher")).toBeDisabled();
-    // 관리자 칸: 없음 → 전체 → (담당·읽기를 건너뛰고) 없음.
-    const admin = () => cell("admin");
-    expect(admin()).toHaveTextContent("없음");
-    fireEvent.click(admin());
-    expect(admin()).toHaveTextContent("전체");
-    fireEvent.click(admin());
-    expect(admin()).toHaveTextContent("없음");
+    // 지금은 원장만(2026-11-12 임시) — 관리자 칸도 잠겨 있다.
+    expect(cell("admin")).toBeDisabled();
+    expect(cell("admin")).toHaveTextContent("없음");
   });
 
   it("연동된 권한 — '강사별 퇴원율'을 열 때 '퇴원관리'가 없음이면 묻고, 승인하면 함께 연다 · 거절하면 누른 칸만(2026-11-12)", () => {

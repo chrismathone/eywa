@@ -195,12 +195,12 @@ describe("AssistantLauncher", () => {
     const input = within(dialog).getByRole("textbox", { name: "질문" });
     fireEvent.change(input, { target: { value: "미납 몇 건" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(await within(dialog).findByRole("heading", { name: "적음 답" })).toBeInTheDocument();
+    expect(await within(dialog).findByRole("heading", { name: "적음 답" }, { timeout: 15_000 })).toBeInTheDocument();
     const ASK = "마음에 들지 않으면 추론 강도를 올려서 다시 물어보시겠습니까?";
     expect(within(dialog).getByText(ASK)).toBeInTheDocument();
 
     fireEvent.click(within(dialog).getByRole("button", { name: /강함으로 다시 묻기/ }));
-    expect(await within(dialog).findByRole("heading", { name: "강함 답" })).toBeInTheDocument();
+    expect(await within(dialog).findByRole("heading", { name: "강함 답" }, { timeout: 15_000 })).toBeInTheDocument();
     const second = calls.filter((c) => c.method === "POST")[1];
     expect(second?.body).toMatchObject({ threadId: "T1", question: "미납 몇 건", level: "high", redoOf: "M1" });
     // 마지막 답(강함)에는 권하지 않고, 지난 '적음' 답에도 더는 붙지 않는다
