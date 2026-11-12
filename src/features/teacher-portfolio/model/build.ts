@@ -24,6 +24,7 @@ import { applyPreRecord, scoreTotals, type WorkingPeriod } from "./pre-record";
 import { buildRevenue } from "./revenue";
 import { buildSourceItems } from "./source-items";
 import { buildStudentTracking } from "./students";
+import { outsideTenure } from "./revision";
 import {
   METRIC_MAX, type ChurnMetric, type Metric, type PayRatioMetric, type PeriodWindow, type PortfolioPeriod, type PortfolioResult, type PortfolioSnapshot,
   type PortfolioTeacher, type SnapshotUser,
@@ -129,6 +130,8 @@ export function buildPortfolio(d: PortfolioSnapshot, opts: {
   openMonths?: ReadonlyMap<string, readonly string[]>;
   /** 강사평가 설정과 직접 만든 지표의 입력값 · 매출 대비 급여(강사|달 → 비율, 마감하지 않은 달만 — 서버가 출석부로 낸다). */
   evaluation?: { config: EvaluationConfig; entries?: readonly ManualEntryRow[] }; pay?: ReadonlyMap<string, PayResult>;
+  /** 마감 달 정정 계획(scripts/_oneoff/portfolio-revision)만 — 재직 밖 달도 계산해 활동이 남았는지 본다. */
+  keepOutsideTenure?: boolean;
 } = {}): PortfolioResult {
   const ctx = buildContext(d);
   const classes = new Map(d.classes.map((c) => [c.id, c]));
@@ -137,7 +140,7 @@ export function buildPortfolio(d: PortfolioSnapshot, opts: {
   const churnOptions = config.metrics.churn.churn ?? DEFAULT_CHURN_OPTIONS;
   // 학생 배정·유지도 강사 탓이 아닌 사유(퇴원율 세는 법의 사유 목록)로 그만둔 것은 감점하지 않는다(원장 2026-10-14 "사유 규칙 적용").
   const students = buildStudentTracking({
-    from: d.from, end: d.end, classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, owner: ctx.owner,
+    from: d.from, end: d.end, classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, owner: ctx.owner, employed: ctx.employed,
     reasons: { studentReasons: d.studentReasons, excludeReasons: churnOptions.excludeReasons, futureEnrollments: d.futureEnrollments },
   });
   // 퇴원율 — 시간표 X 겹침도 이 계산기를 같은 모양으로 부른다(withdrawals/server/exit-overlay.ts · 가드 exit-overlay-wiring.test).
@@ -148,7 +151,7 @@ export function buildPortfolio(d: PortfolioSnapshot, opts: {
     ctx,
     revenue: buildRevenue({
       classes: d.classes, schedules: d.schedules, enrollments: d.enrollments, invoices: d.invoices, terms: d.terms,
-      holidays: ctx.holidays, subjectLabel: (key) => labels[key] ?? key, owner: ctx.owner,
+      holidays: ctx.holidays, subjectLabel: (key) => labels[key] ?? key, owner: ctx.owner, employed: ctx.employed,
     }),
     students,
     churn: (teacherId, w) => ({ id: "churn", max: METRIC_MAX.churn, value: null, ...churn.period(teacherId, w) }),
@@ -173,7 +176,11 @@ export function buildPortfolio(d: PortfolioSnapshot, opts: {
     .filter((u) => teaching(u) || open.has(u.id))
     .sort((a, b) => a.display_name.localeCompare(b.display_name, "ko"))
     .flatMap((user) => {
-      const monthly = windows.map((w) => teacherPeriod(d, models, user, w));
+      // 그 달 전체가 재직 밖(입사 전 · 퇴사 뒤)이면 평가 달이 아니다(원장 2026-11-11 *"실제 선생님이 입사한 날부터"* — 퇴원관리 카드와 같은 기준).
+      // 재직 정보가 없으면 자르지 않는다.
+      const tenure = { hireDate: user.hire_date ?? null, resignDate: user.resign_date ?? null };
+      const inWindow = opts.keepOutsideTenure ? windows : windows.filter((w) => !outsideTenure(w, tenure));
+      const monthly = inWindow.map((w) => teacherPeriod(d, models, user, w));
       if (d.preRecord) applyPreRecord(monthly, d.preRecord);
       for (const w of monthly) applyEvaluation(w, config, entriesOf(user.id, w.month));
       const all = monthly.map(withoutDuty);

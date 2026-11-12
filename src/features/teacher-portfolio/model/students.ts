@@ -44,6 +44,8 @@ export function buildStudentTracking(input: {
   from: string; end: string;
   classes: readonly SnapshotClass[]; schedules: readonly SnapshotSchedule[]; enrollments: readonly SnapshotEnrollment[];
   owner: (c: SnapshotClass, day: string) => string | null;
+  /** 그날 재직 중인가(입사 전·퇴사 뒤는 교시 담당이 아니다 — 담임은 `owner`가 이미 거른다). 없으면 거르지 않는다. */
+  employed?: (teacherId: string, day: string) => boolean;
   /** 강사 탓이 아닌 사유 — 학생 퇴원 사유와 원장이 고른 사유(퇴원율 세는 법). 없으면 사유를 보지 않는다(시간표 X는 명단만 읽는다). */
   reasons?: { studentReasons?: readonly StudentReason[]; excludeReasons: readonly string[]; futureEnrollments?: readonly SnapshotEnrollment[] };
 }) {
@@ -68,6 +70,7 @@ export function buildStudentTracking(input: {
     for (const s of schedules.get(c.id) ?? []) {
       if (!s.teacher_id || s.valid_from > day || (s.valid_to && s.valid_to < day)
         || !enrollmentAttendsOnDay(e.attendance_days, s.day_of_week)) continue;
+      if (input.employed && !input.employed(s.teacher_id, day)) continue;
       if (!roles.has(s.teacher_id)) roles.set(s.teacher_id, "부담임");
     }
     return roles;

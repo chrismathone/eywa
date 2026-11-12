@@ -237,7 +237,7 @@ describe("차례 = 왼쪽 탭 → 그 탭의 내부 메뉴", () => {
     expect(read("app", "(shell)", "billing", "management", "marketing", "inputs", "page.tsx")).toMatch(/<SampleBanner\s*\/>/);
   });
 
-  it("🔴 학원 비서 = 탭 묶음 맨 뒤(도움말 다음) 제 줄 · 다른 역할에 열 때의 위험을 줄 아래에 적는다(원장 2026-11-09)", () => {
+  it("🔴 학원 비서 = 탭 묶음 맨 뒤(도움말 다음) 제 줄 · 다른 역할에 열 때의 위험을 줄 설명 카드에 적는다(원장 2026-11-09 · 카드 2026-11-12)", () => {
     const shown = editablePermissionRowGroups();
     const at = shown.findIndex((g) => g.id === `${SIDEBAR_TOOL_GROUP_PREFIX}assistant`);
     expect(at).toBeGreaterThan(0);

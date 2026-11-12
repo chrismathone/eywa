@@ -4,11 +4,12 @@ import { useEffect, useState, type ReactNode } from "react";
 import { tipProps } from "@/components/hover-tip/tip";
 import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
-import { ASSISTANT_LEVEL_LABEL } from "@/features/assistant/levels";
+import { ASSISTANT_LEVEL_LABEL, type AssistantLevel } from "@/features/assistant/levels";
 import type { AskStep, QuerySummary } from "@/features/assistant/protocol";
 import { kstTimeOf } from "@/lib/date-kst";
 import { formatDuration, stepSummaryText, stepTrouble, type Turn } from "./assistant-state";
 import { ReportView } from "./report-view";
+import { RaiseLevel } from "./raise-level";
 
 /**
  * 질문 한 차례 — 오른쪽 질문 말풍선 + 그 아래 답.
@@ -21,6 +22,7 @@ export function AssistantTurn({
   turn,
   canRetry,
   onRetry,
+  onRetryAt,
   onReload,
   onControl,
 }: {
@@ -28,6 +30,8 @@ export function AssistantTurn({
   /** 다시 묻기를 지금 할 수 있나(다른 답을 받는 중이면 못 한다). */
   canRetry: boolean;
   onRetry: (turn: Turn) => void;
+  /** 추론 강도를 올려 같은 질문을 다시 묻기 — 주면 '적음'으로 끝난 답 아래에 권한다(대화의 마지막 답에만 준다). */
+  onRetryAt?: (turn: Turn, level: AssistantLevel) => void;
   /** 저장본 다시 읽기(아직 만드는 중 · 끊김). */
   onReload: () => void;
   /** 이 화면이 받지 않는 도는 질문(다른 탭 · 새로 고친 뒤)을 멈추거나 바로 결과 보기 — 서버가 그 질문을 찾았나. */
@@ -45,7 +49,7 @@ export function AssistantTurn({
           {time ? <span className="num">{` · ${time}`}</span> : null}
         </p>
       </div>
-      <Answer turn={turn} canRetry={canRetry} onRetry={onRetry} onReload={onReload} onControl={onControl} />
+      <Answer turn={turn} canRetry={canRetry} onRetry={onRetry} onRetryAt={onRetryAt} onReload={onReload} onControl={onControl} />
     </div>
   );
 }
@@ -54,12 +58,14 @@ function Answer({
   turn,
   canRetry,
   onRetry,
+  onRetryAt,
   onReload,
   onControl,
 }: {
   turn: Turn;
   canRetry: boolean;
   onRetry: (t: Turn) => void;
+  onRetryAt?: (t: Turn, level: AssistantLevel) => void;
   onReload: () => void;
   onControl?: (turn: Turn, action: "stop" | "finish") => Promise<boolean>;
 }) {
@@ -69,6 +75,7 @@ function Answer({
         <div className="space-y-4">
           {turn.steps.length ? <ProcessDetails steps={turn.steps} settled /> : null}
           {turn.report ? <ReportView report={turn.report} /> : null}
+          {turn.report && onRetryAt ? <RaiseLevel turn={turn} disabled={!canRetry} onRetryAt={onRetryAt} /> : null}
         </div>
       );
     case "streaming":

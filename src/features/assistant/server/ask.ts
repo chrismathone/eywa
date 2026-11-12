@@ -39,7 +39,7 @@ import {
 /** 보고서를 쓸 시간 — 고정 기한에서 이만큼 앞이 마무리 시각이다. */
 const REPORT_RESERVE_MS = 200_000;
 
-export type AskInput = { threadId?: string | null; question: string; level: AssistantLevel; clientRef?: string | null };
+export type AskInput = { threadId?: string | null; question: string; level: AssistantLevel; clientRef?: string | null; redoOf?: string | null };
 
 /** 사람에게 보일 오류 문장(한국어가 아닌 원문은 내지 않는다). */
 export function assistantErrorMessage(error: unknown): string {
@@ -124,7 +124,7 @@ export async function prepareAsk(
       try {
         if (!db) throw new AssistantError("비서 DB에 연결하지 못했습니다. 잠시 뒤 다시 물어봐 주세요");
         // 서로 기다릴 까닭이 없는 두 조회(B4).
-        const [history, asker] = await Promise.all([started.created ? [] : pastTurns(owner, started.threadId), askerLabel(viewer.user.id, viewer.user.systemRole)]);
+        const [history, asker] = await Promise.all([started.created ? [] : pastTurns(owner, started.threadId, input.redoOf ?? null), askerLabel(viewer.user.id, viewer.user.systemRole)]);
         const out = await runAssistantAgent({
           client: getAnthropic("default", group),
           model,

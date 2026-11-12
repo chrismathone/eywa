@@ -36,6 +36,10 @@ export type PortfolioSnapshot = {
   consultations: SnapshotConsultation[];
   reviews: SnapshotReview[];
   transitions: SnapshotTransition[];
+  /** activity_log의 담임 변경(2026-11-11) — 감사로그 전이와 합쳐 담임 이력을 만든다(`buildHomeroomOwner`). 옛 스냅숏엔 없다. */
+  teacherChanges?: import("./homeroom-history").ActivityTeacherChange[];
+  /** 지운 옛 계정 id → 지금 계정 id(같은 사람 — `loadTeacherAliases`). 옛 스냅숏엔 없다. */
+  teacherAliases?: Record<string, string>;
   delegations: SnapshotDelegation[];
   invoices: SnapshotInvoice[];
   terms: SnapshotTerm[];
@@ -143,7 +147,8 @@ export type PunctualityMetric = MetricCommon<"punctuality", PunctualityRow> & {
 /** 퇴원율의 그만둔 학생 한 줄 — 셌는지(counted)와 뺀 까닭(note). */
 export type ChurnRow = { studentId: string; day: string; type: "퇴원" | "수강종료"; className: string; reason: string; counted: boolean; note: string | null };
 /** base = 지난달 담당 학생(그 달 절반 이상) · need = 절반 일수 · counted = 센 학생 수. */
-export type ChurnMetric = MetricCommon<"churn", ChurnRow> & { base: number; need: number; counted: number };
+/** 퇴원율 — `newcomer` = 지난달 담당 학생 없음(새로 맡은 선생님 · 합계에서 제외 — 원장 2026-11-11). */
+export type ChurnMetric = MetricCommon<"churn", ChurnRow> & { base: number; need: number; counted: number; newcomer?: boolean };
 /** 매출 대비 급여 — 비율·출처·학생 수·반 수·반별 비중만(금액 없음). 계산 전 달은 `uncounted`라 출처 칸이 없다. `newcomer` = 지난달 담당 반 없음(합계에서 제외). */
 export type PayRatioMetric = MetricCommon<"payRatio", PayClassRow> & {
   source?: string | null; students?: number; classes?: number; enrollments?: number; newcomer?: boolean;

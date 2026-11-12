@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import { PERMISSION_ACCESS_CYCLE, permissionAccessOptions } from "@/features/owner/permission-edit";
 import type { PermissionRowGroup } from "@/features/owner/permission-rows";
 import {
+  applyUserOverrides,
   isConnectedAppMenu,
   isOnOffMenu,
   isPermissionLocked,
@@ -19,6 +20,8 @@ import {
   type UserPermissionOverride,
 } from "@/lib/permissions";
 import { SettingsCard } from "./settings-card";
+import type { PendingLinkedGrant } from "./linked-grant-dialog";
+import { linkedGrants, type LinkContext } from "@/features/owner/permission-links";
 import { ACCESS_LABEL, ROLE_LABEL } from "./permission-ui";
 
 type StaffOption = { id: string; name: string; role: string };
@@ -33,7 +36,7 @@ const MAX_ROWS = 80;
  * 🔴 화면에 안 보이는 줄(`hiddenUserIds`)은 손대지 않고 그대로 둔다 — 지우거나 바꾸는 요청은 저장이 거절한다.
  * ⚠️ 메뉴 고르기의 차례·묶음은 위 표와 같다(`groups` — 왼쪽 탭과 그 내부 메뉴 순).
  */
-export function UserOverrideEditor({ overrides, roleMatrix, hiddenUserIds, staffOptions, nameOf, groups, onChange }: {
+export function UserOverrideEditor({ overrides, roleMatrix, hiddenUserIds, staffOptions, nameOf, groups, onChange, linkCtx, onLinkedAsk, linkBusy }: {
   /** 저장되는 줄 전부(안 보이는 줄 포함). */
   overrides: readonly UserPermissionOverride[];
   /** 위 역할 표(편집 중인 값) — 옛 '담당' 줄이 실제로 어떤 값으로 적용되는지 적는 데 쓴다(그 사람 역할 칸이 '없음'이면 '없음'). */
@@ -43,6 +46,11 @@ export function UserOverrideEditor({ overrides, roleMatrix, hiddenUserIds, staff
   nameOf: (userId: string) => string;
   groups: readonly PermissionRowGroup[];
   onChange: (next: (rows: UserPermissionOverride[]) => UserPermissionOverride[]) => void;
+  /** 연동된 권한(원장 2026-11-12) — 하위 권한을 줄 때 그 사람에게 필요한 권한이 모자라면 묻는다(역할 표와 같은 판정 · `permission-links.ts`). */
+  linkCtx?: LinkContext;
+  onLinkedAsk?: (p: PendingLinkedGrant) => void;
+  /** 묻는 중 · 막 닫은 창 뒤 누름을 받지 않는다(창 단추 두 번 누름이 추가·삭제를 누르지 않게). */
+  linkBusy?: () => boolean;
 }) {
   const [pickedUser, setPickedUser] = useState("");
   const [wantedMenu, setWantedMenu] = useState<MenuKey>("staff");
@@ -65,9 +73,38 @@ export function UserOverrideEditor({ overrides, roleMatrix, hiddenUserIds, staff
   // 강사보다 낮은 직급(열람·아르바이트)에게 '담당'을 고르면 단추만 꺼 두지 않고 까닭을 바로 아래에 알린다(원장 2026-11-05 "알림메시지도 배선").
   const scopedForbidden = !!pickedRole && pickedAccess === "scoped" && isScopedForbiddenRole(pickedRole);
 
+  /**
+   * 한 사람의 칸을 바꾼다 — 그 사람(역할 + 개인 줄)에게 함께 필요한 권한이 모자라면 먼저 묻고, 승인하면 그 권한의 개인 줄도 함께 넣는다.
+   * 취소하면 아무것도 바꾸지 않는다(혼자 줘 봐야 화면이 열리지 않는다).
+   */
+  function setWithLinks(userId: string, menu: MenuKey, access: Access, write: (rows: UserPermissionOverride[]) => UserPermissionOverride[]) {
+    if (linkBusy?.()) return;
+    const role = roleOf(userId);
+    // 그 사람의 실제 값 = 적용하는 쪽과 같은 함수(옛 '담당' 줄을 '읽기'·'없음'으로 내리는 규칙 포함 · 재리뷰).
+    const applied = role ? applyUserOverrides(roleMatrix, userId, role, overrides) : null;
+    const accessOf = (m: MenuKey): Access => (applied && role ? applied[m][role] : "none");
+    const grants = role && onLinkedAsk ? linkedGrants(menu, role, access, accessOf, linkCtx, accessOf(menu)) : null;
+    if (!grants || grants.length === 0) return onChange(write);
+    onLinkedAsk!({
+      menu,
+      who: nameOf(userId),
+      grants,
+      onConfirm: () =>
+        onChange((rows) =>
+          grants.reduce(
+            (acc, g) => [...acc.filter((r) => r.userId !== userId || r.menu !== g.menu), { userId, menu: g.menu, access: g.access }],
+            write(rows),
+          ),
+        ),
+    });
+  }
+
   function add() {
     if (blocked) return;
-    onChange((rows) => [...rows.filter((r) => r.userId !== pickedUser || r.menu !== pickedMenu), { userId: pickedUser, menu: pickedMenu, access: pickedAccess }]);
+    setWithLinks(pickedUser, pickedMenu, pickedAccess, (rows) => [
+      ...rows.filter((r) => r.userId !== pickedUser || r.menu !== pickedMenu),
+      { userId: pickedUser, menu: pickedMenu, access: pickedAccess },
+    ]);
   }
 
   const select = "border-border bg-card rounded border px-2 py-1.5 text-xs";
@@ -149,7 +186,10 @@ export function UserOverrideEditor({ overrides, roleMatrix, hiddenUserIds, staff
                   aria-label={`${name} ${MENU_LABEL[row.menu]} 권한`}
                   aria-describedby={demoted || inertApp ? noteId : undefined}
                   value={row.access}
-                  onChange={(e) => onChange((rows) => rows.map((r) => (r === row ? { ...r, access: e.target.value as Access } : r)))}
+                  onChange={(e) => {
+                    const access = e.target.value as Access;
+                    setWithLinks(row.userId, row.menu, access, (rows) => rows.map((r) => (r === row ? { ...r, access } : r)));
+                  }}
                   className="border-border bg-card min-h-8 w-full rounded border px-2 py-1 text-xs"
                 >
                   {/* 그 사람의 역할에서 잠긴 수준은 고를 수 없다(지금 값은 남긴다 — 사라지면 다른 값으로 보인다 · 그 메뉴의 선택지에 없는 값이어도). */}
@@ -173,7 +213,7 @@ export function UserOverrideEditor({ overrides, roleMatrix, hiddenUserIds, staff
                   type="button"
                   aria-label={`${name} ${MENU_LABEL[row.menu]} 권한 제거`}
                   title="제거"
-                  onClick={() => onChange((rows) => rows.filter((r) => r !== row))}
+                  onClick={() => !linkBusy?.() && onChange((rows) => rows.filter((r) => r !== row))}
                   className="text-text-dim hover:bg-bg-soft hover:text-danger flex size-8 items-center justify-center rounded text-sm leading-none"
                 >
                   ×

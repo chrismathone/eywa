@@ -40,6 +40,7 @@ import { SameNameFace } from "./_components/same-name-face";
 import { AuditFace } from "./_components/audit-face";
 import { IntegrationsFace } from "./_components/integrations-face";
 import { isFeatureLicensed } from "@/lib/license/server";
+import { ARCHIVE_TENANT } from "@/features/marketing-archive/model";
 import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
 import { PopupsFace } from "./_components/popups-face";
 import { ImportHubFace } from "./_components/import-hub-face";
@@ -355,6 +356,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
               connectedApps={connectedApps}
               baselineToken={permissionsToken(permissionsSource)}
               baselineVersion={editable?.versions.permissions}
+              marketingArchive={viewer.tenantId === ARCHIVE_TENANT}
             />
           ) : null
         ) : (

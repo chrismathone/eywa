@@ -29,6 +29,8 @@ export function buildRevenue(input: {
   holidays: ReadonlySet<string>;
   subjectLabel: (key: string) => string;
   owner: (c: SnapshotClass, day: string) => string | null;
+  /** 그날 재직 중인가(2026-11-11) — 아니면 그 교시는 담당 미확인(시간표 이관이 교시 담당 시작일을 입사 전으로 적은 줄). 없으면 자르지 않는다. */
+  employed?: (teacherId: string, day: string) => boolean;
 }) {
   const { holidays, owner } = input;
   const classes = new Map(input.classes.map((c) => [c.id, c]));
@@ -64,7 +66,10 @@ export function buildRevenue(input: {
         lessons = teacherLessonsOn({ date: day, schedules: slots, homeroomTeacherId: owner(c, day), englishTrack: c.english_track ?? null, className: c.class_name });
         lessonCache.set(k, lessons);
       }
-      for (const l of lessons) out.push({ day, teacherId: l.owner, classId, weight: l.units });
+      for (const l of lessons) {
+        const teacherId = l.owner && input.employed && !input.employed(l.owner, day) ? "" : l.owner;
+        out.push({ day, teacherId, classId, weight: l.units });
+      }
     }
     return out;
   }

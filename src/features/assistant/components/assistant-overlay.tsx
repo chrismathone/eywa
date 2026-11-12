@@ -171,6 +171,26 @@ export function AssistantOverlay({
     void assistant.ask({ convKey: current.key, threadId: current.threadId, question: turn.question, level: turn.level, onBusy: onBusy(current.key, turn.question) });
     requestAnimationFrame(() => scrollToLastTurn(scrollBehavior()));
   };
+  /**
+   * 추론 강도를 올려 같은 질문을 다시 묻기(원장 2026-11-12) — 새 질문으로 대화에 이어 붙고, 서버가 그 약한 답을 이력에서 뺀다(`redoOf`).
+   * 입력칸의 강도 선택은 바꾸지 않는다 → 자리가 없어 거절되면 글을 입력칸에 되돌리지 않고 안내만(되돌리면 '적음'으로 다시 나간다 · 적대 리뷰).
+   * 누른 단추가 사라지므로 초점은 입력칸으로(폰은 자판이 뜨지 않게 빼고).
+   */
+  const retryAt = (turn: Turn, level: AssistantLevel) => {
+    if (!canAskHere) return;
+    setBusyNotice(null);
+    const key = current.key;
+    void assistant.ask({
+      convKey: key,
+      threadId: current.threadId,
+      question: turn.question,
+      level,
+      redoOf: turn.messageId,
+      onBusy: (message) => setBusyNotice({ key, text: message, seq: threadsSeqRef.current }),
+    });
+    if (!isPhone()) inputRef.current?.focus();
+    requestAnimationFrame(() => scrollToLastTurn(scrollBehavior()));
+  };
 
   const startNew = () => {
     setShowAdvice(false);
@@ -374,6 +394,7 @@ export function AssistantOverlay({
                     canAsk={canAskHere}
                     onSuggest={(q) => send(q, false)}
                     onRetry={retry}
+                    onRetryAt={retryAt}
                     onReload={() => current.threadId && void assistant.loadConversation(current.threadId, { quiet: current.turns.length > 0 })}
                     onControl={(turn, action) => (turn.messageId ? assistant.controlSaved(action, turn.messageId) : Promise.resolve(false))}
                     today={today}
@@ -433,6 +454,7 @@ function ConversationBody({
   canAsk,
   onSuggest,
   onRetry,
+  onRetryAt,
   onReload,
   onControl,
   today,
@@ -447,6 +469,7 @@ function ConversationBody({
   canAsk: boolean;
   onSuggest: (q: string) => void;
   onRetry: (t: Turn) => void;
+  onRetryAt: (t: Turn, level: AssistantLevel) => void;
   onReload: () => void;
   /** 이 화면이 받지 않는(다른 탭 · 새로 고친 뒤) 도는 질문을 멈추거나 바로 결과 보기. */
   onControl: (turn: Turn, action: "stop" | "finish") => Promise<boolean>;
@@ -513,7 +536,15 @@ function ConversationBody({
       <ol className="space-y-10">
         {conv.turns.map((turn) => (
           <li key={turn.key} data-turn="" className="scroll-mt-4">
-            <AssistantTurn turn={turn} canRetry={canAsk} onRetry={onRetry} onReload={onReload} onControl={onControl} />
+            <AssistantTurn
+              turn={turn}
+              canRetry={canAsk}
+              onRetry={onRetry}
+              // 강도를 올려 다시 묻기는 이 화면에서 방금 받은 마지막 답에만 권한다(지난 답·다시 연 대화엔 붙이지 않는다 · 원장 2026-11-12).
+              onRetryAt={turn.live && turn === conv.turns[conv.turns.length - 1] ? onRetryAt : undefined}
+              onReload={onReload}
+              onControl={onControl}
+            />
           </li>
         ))}
       </ol>

@@ -293,19 +293,46 @@ export async function renameThread(owner: Owner, threadId: string, title: string
   return (data ?? []).length > 0 ? clean : null;
 }
 
-/** 다음 질문에 붙일 지난 차례(끝난 것만 · 최근 6). */
-export async function pastTurns(owner: Owner, threadId: string): Promise<PastTurn[]> {
+const LEVEL_RANK: Record<AssistantLevel, number> = { low: 1, normal: 2, high: 3 };
+
+/**
+ * 이력에 남길 차례(최신순으로 받아 최신순으로 돌려준다) — ① 지금 다시 묻는 원래 답(`exclude`) ② 같은 질문 글을 **더 높은 강도로 다시 물은**
+ * 앞 답은 뺀다(마음에 들지 않은 약한 답이 다음 이어 묻기부터 다시 근거가 되고, 수치가 다른 두 답이 맥락에 나란히 서던 것 · 적대 리뷰 2026-11-12).
+ * SQL 없이 질문 글 + 강도로 가른다(다시 묻기는 같은 질문 글을 그대로 보낸다).
+ */
+export function keepHistoryTurns<T extends { id: string; question: string; level: string; status?: string }>(rowsNewestFirst: readonly T[], exclude: string | null): T[] {
+  const best = new Map<string, number>();
+  const out: T[] = [];
+  for (const m of rowsNewestFirst) {
+    if (m.id === exclude) continue;
+    const rank = LEVEL_RANK[level(m.level)];
+    const later = best.get(m.question) ?? 0;
+    if (later > rank) continue;
+    // 실제로 답이 나온 차례만 앞 답을 밀어낸다 — 멈춘·실패한 다시 묻기가 유일한 실제 답(적음)을 지우지 않게(재리뷰).
+    if (m.status === undefined || m.status === "done") best.set(m.question, Math.max(later, rank));
+    out.push(m);
+  }
+  return out;
+}
+
+/**
+ * 다음 질문에 붙일 지난 차례(끝난 것만 · 최근 6). `exclude` = 추론 강도를 올려 다시 묻는 원래 질문 — 그 답을 이력에서 뺀다
+ * (강한 모델이 마음에 들지 않은 약한 답의 조회·해석을 이어 가지 않게 · 적대 리뷰 2026-11-12).
+ */
+export async function pastTurns(owner: Owner, threadId: string, exclude: string | null = null): Promise<PastTurn[]> {
   const { data, error } = await createAdminClient()
     .from(MESSAGES)
-    .select("question, report_title:report->>title, report_blocks:report->blocks, queries, status, created_at")
+    .select("id, question, level, report_title:report->>title, report_blocks:report->blocks, queries, status, created_at")
     .eq("thread_id", threadId)
     .eq("tenant_id", owner.tenantId)
     .eq("user_id", owner.userId)
     .in("status", ["done", "failed"])
     .order("created_at", { ascending: false })
-    .limit(HISTORY_TURNS);
+    // 걸러 낼 몫(다시 묻는 원래 답 · 같은 질문을 더 높은 강도로 다시 물은 앞 답)까지 넉넉히 읽고 6칸으로 자른다(빼고 나서 5칸이 되지 않게).
+    .limit(HISTORY_TURNS * 2);
   if (error) throw new Error(error.message);
-  return ((data ?? []) as unknown as Array<Pick<MessageRow, "question" | "report_title" | "report_blocks" | "queries" | "status">>)
+  return keepHistoryTurns((data ?? []) as unknown as Array<Pick<MessageRow, "id" | "question" | "level" | "report_title" | "report_blocks" | "queries" | "status">>, exclude)
+    .slice(0, HISTORY_TURNS)
     .reverse()
     .map((m) => ({
       question: m.question,

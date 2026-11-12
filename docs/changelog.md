@@ -1,5 +1,20 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-11-12 — 강사평가 담임 판정 정정(감사로그 + activity_log) · 마감 4~10월 정정 적용 · 첫 달 퇴원율 합계 제외
+
+- 원장 *"모든 곳에서 일치하는 데이터가 출력되어야해"* → *"추천방식으로 시작"* → 적용 · 첫 달 퇴원율 '합계에서 제외'. 결정 본문 = [`decisions/staff.md`](decisions/staff.md) 2026-11-12.
+- 코드(main 75bc16ce4): `teacher-portfolio/model/homeroom-history.ts`(감사로그 + activity_log · 짝지은 인계의 이전 담임 채우기 · 지운 계정 잇기 · 재직 밖 제외) · `server/tenure.ts` · 판정 배선(context·students·snapshot·churn-source·exit-teacher-judge) · 퇴원 담당 후보 재직(`exit-homeroom.ts`) · 매출 교시 재직 · 평가 달 = 재직 기간 · 퇴원율 newcomer.
+- 데이터: `scripts/_oneoff/portfolio-revision/` 적용(2026-11-12 13:16 KST · 고침 79 · 지움 25 · 감사로그 `teacher_portfolio_homeroom_fix`) · 다시 계산한 값 = 저장값 69/69 일치 확인.
+- 남은 것: 출석부 강사 축·급여 조립 담임 이력(`classes/teacher-as-of.ts`) · 원생상담 담임 담당은 옛 규칙 — 원장 결정 대기.
+
+
+## 2026-11-12 — 역할·권한 표: 줄 설명은 마우스를 올리면 카드 · 연동된 권한은 함께 열지 묻는다
+
+- 줄 아래에 펼치던 설명(`ROW_NOTE`)을 줄 이름 hover 카드로(이름 옆 ⓘ 단추 = 터치·키보드는 눌러 펼침). 하위 권한을 열 때 필요한 권한이 모자라면 '함께 허용할까요?'(역할 표 · 개인별 권한 모두 · 승인 = 가장 좁은 값으로 함께 · 취소 = 그대로) · 효과 없는 칸은 표 아래 알림 · 짝 다섯은 `permission-links.ts`. 결정 = [`decisions/staff.md`](decisions/staff.md). SQL 없음.
+
+## 2026-11-12 — 학원 비서: '적음'으로 받은 답 아래 '추론 강도를 올려서 다시 물어보시겠습니까?'
+
+- 이 화면에서 방금 받은 마지막 답이 '적음'이면 문구 + '보통으로 다시 묻기'·'강함으로 다시 묻기'(같은 질문을 새 질문으로 · 그 약한 답은 이력에서 뺀다 `redoOf` · 다음 이어 묻기에서도 더 높은 강도로 다시 물은 앞 답은 뺀다 · 다른 답을 받는 중엔 잠김). 본문 = [`features/academy-assistant.md`](features/academy-assistant.md). SQL 없음.
 
 ## 2026-11-12 — 퇴원관리 '강사별 퇴원율 추이' 차트 = 모든 강사를 한 차트에(원장 *"전체 선생님을 하나의 차트에 … 따로 차트 두지말고 비교가능하게"*)
 
