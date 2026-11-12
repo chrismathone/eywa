@@ -42,7 +42,7 @@ export type PermissionRow = {
   hiddenInMenu: boolean;
   /** 메뉴 버튼 없이 다른 화면 **안에서** 쓰는 권한 — 그 화면의 줄 바로 아래에 들여 세운다. */
   inner: boolean;
-  /** 다른 역할에 열기 전에 알아야 할 것 — 줄 아래 작은 글([`ROW_NOTE`](./permission-row-notes.ts)). 없으면 비운다. */
+  /** 다른 역할에 열기 전에 알아야 할 것 — 줄 이름에 마우스를 올리면 뜨는 카드([`ROW_NOTE`](./permission-row-notes.ts)). 없으면 비운다. */
   note?: string;
 };
 
