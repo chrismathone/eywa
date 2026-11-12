@@ -80,6 +80,7 @@ describe("라이선스 배선 가드", () => {
         "src/features/integrations/server/actions.ts",
         "src/features/timetable/server/import-actions.ts",
         "src/features/staff/resume/server/resume-roster-sheet.ts",
+        "src/features/withdrawals/server/sheet-teachers.ts",
       ]),
     );
     expect(consumersOf("kakao_messaging")).toContain("src/lib/messaging/provider.ts");
