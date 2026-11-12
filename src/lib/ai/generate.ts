@@ -503,7 +503,8 @@ async function callProvider(
     text: res.content.map((b) => (b.type === "text" ? b.text : "")).join(""),
     usage: anthropicUsage(res.usage),
     truncated: res.stop_reason === "max_tokens",
-    model: res.model,
+    // 🔴 Claude는 모델 이름을 돌려주지 않는다 — 호출한 쪽이 요청한 이름(`claude-haiku-5-5`)을 그대로 기록·반환한다(main과 같음 ·
+    //    응답의 날짜 붙은 이름이 분석 기록·사용 기록·'AI 모델' 탭 라벨을 바꾸지 않게 — 검토 2026-11-12). GPT만 응답 이름을 쓴다.
   };
 }
 

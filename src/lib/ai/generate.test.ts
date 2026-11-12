@@ -392,6 +392,12 @@ describe("generateJSON 폴백", () => {
     expect(anthropicCreate.mock.calls[0][0].max_tokens).toBe(OUTPUT_TOKEN_FLOOR.anthropic);
   });
 
+  it("🔴 Claude가 날짜 붙은 모델 이름으로 답해도 요청한 이름을 그대로 돌려준다(main과 같음 — 분석 기록·사용 기록·라벨 불변)", async () => {
+    anthropicCreate.mockResolvedValueOnce({ ...anthropicOk('{"ok":true}'), model: "claude-sonnet-5-5-20261019" });
+    const { model } = await generateJSON<{ ok: boolean }>({ meta: TEST_META, prompt: "JSON 주세요", maxTokens: 100, provider: "anthropic" });
+    expect(model).toBe("claude-sonnet-5-5");
+  });
+
   it("fast tier = Haiku 5.5 · 멘트의 reasoningEffort 'minimal' → effort low", async () => {
     anthropicCreate.mockResolvedValueOnce(anthropicOk('{"ok":true}'));
     const { model } = await generateJSON<{ ok: boolean }>({ meta: TEST_META,

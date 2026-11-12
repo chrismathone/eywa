@@ -38,7 +38,11 @@ export const OPENAI_FEATURE_PROFILES: Readonly<Record<string, OpenAIFeatureProfi
   daily_briefing: { model: AI_MODELS.balanced.openai, reasoningEffort: "medium" },
 };
 
-/** 표에 없는 일반 호출은 호출부 티어와 강도를 보존하되, OpenAI에는 명시된 세 단계만 보낸다. */
+/**
+ * 표에 있는 기능은 **표의 강도가 먼저**다 — 호출부가 넘기는 강도는 Claude용이라 GPT 표를 덮으면 안 된다
+ * (업무 비서가 Claude에 medium을 넘겨 표의 low가 무시되던 것 — 검토 2026-11-12). 표에 없는 일반 호출은
+ * 호출부 티어와 강도를 보존하되, OpenAI에는 명시된 세 단계만 보낸다.
+ */
 export function openAIProfileFor(
   feature: string | null | undefined,
   tier: "fast" | "balanced",
@@ -47,7 +51,7 @@ export function openAIProfileFor(
   const listed = feature ? OPENAI_FEATURE_PROFILES[feature] : undefined;
   return {
     model: listed?.model ?? AI_MODELS[tier].openai!,
-    reasoningEffort: requested === "minimal" ? "low" : requested ?? listed?.reasoningEffort ?? (tier === "fast" ? "medium" : "high"),
+    reasoningEffort: listed?.reasoningEffort ?? (requested === "minimal" ? "low" : requested) ?? (tier === "fast" ? "medium" : "high"),
   };
 }
 

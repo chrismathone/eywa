@@ -120,10 +120,15 @@ export function cliEnv(env: Env = process.env): Env {
   return out;
 }
 
-/** Codex 요금제 실행에는 OpenAI API 키를 넘기지 않는다(키가 있으면 API 과금 경로와 섞일 수 있다). */
+/**
+ * Codex 요금제 실행 환경 = **허용 목록만** 넘긴다(검토 2026-11-12). `codex exec -s read-only`도 셸 명령은 돌릴 수 있어,
+ * 개발 서버의 비밀값(`ANTHROPIC_API_KEY*`·`SUPABASE_SERVICE_ROLE_KEY`·`DATABASE_URL` 등)을 통째로 넘기면 전사문·학부모 글에
+ * 심긴 지시로 결과에 섞일 수 있다. OpenAI API 키도 넘기지 않는다(요금제가 아니라 API로 과금될 수 있다).
+ */
+const CODEX_ENV_ALLOW = /^(PATH|PATHEXT|SYSTEMROOT|WINDIR|COMSPEC|SYSTEMDRIVE|TEMP|TMP|TMPDIR|HOME|USERPROFILE|HOMEDRIVE|HOMEPATH|APPDATA|LOCALAPPDATA|PROGRAMDATA|PROGRAMFILES|PROGRAMFILES\(X86\)|PROGRAMW6432|COMMONPROGRAMFILES|COMMONPROGRAMFILES\(X86\)|USERNAME|USER|LOGNAME|SHELL|TERM|LANG|LANGUAGE|LC_[A-Z_]+|TZ|NO_COLOR|XDG_[A-Z_]+|CODEX_HOME|AYWA_CODEX_BIN|HTTPS?_PROXY|NO_PROXY|NUMBER_OF_PROCESSORS|PROCESSOR_ARCHITECTURE|OS)$/i;
 export function codexCliEnv(env: Env = process.env): Env {
-  const out: Env = { ...env };
-  for (const k of Object.keys(out)) if (/^OPENAI_(API_KEY|BASE_URL)/.test(k)) delete out[k];
+  const out: Env = {};
+  for (const [k, v] of Object.entries(env)) if (CODEX_ENV_ALLOW.test(k)) out[k] = v;
   return out;
 }
 

@@ -25,6 +25,10 @@ describe("개발 전용 Claude CLI 갈래", () => {
   it("🔴 Codex CLI에는 OpenAI 키를 넘기지 않는다(요금제 로그인으로만 돈다)", () => {
     const env = codexCliEnv({ OPENAI_API_KEY: "k", OPENAI_BASE_URL: "https://example.invalid", PATH: "/bin" });
     expect(env).toEqual({ PATH: "/bin" });
+    // 🔴 허용 목록만 — 학원 비밀값은 Codex 자식 프로세스로 넘어가지 않는다(검토 2026-11-12).
+    const full = codexCliEnv({ Path: "C:\bin", APPDATA: "a", CODEX_HOME: "c", ANTHROPIC_API_KEY: "x", ANTHROPIC_API_KEY_MENT: "x",
+      SUPABASE_SERVICE_ROLE_KEY: "x", DATABASE_URL: "postgres://x", OPENAI_API_KEY_MENT: "x", SLACK_SIGNING_SECRET: "x" });
+    expect(full).toEqual({ Path: "C:\bin", APPDATA: "a", CODEX_HOME: "c" });
   });
   it("Windows 기본값은 npm codex.cmd이고 명시한 실행 파일은 그대로 따른다", () => {
     expect(codexCliInvocation({ ComSpec: "C:\\Windows\\System32\\cmd.exe" }, "win32")).toEqual({

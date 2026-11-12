@@ -64,6 +64,17 @@ describe("기능별 GPT 폴백 모델·추론 강도", () => {
     expect(openAIProfileFor("meeting_analysis", "balanced")).toEqual({ model: "gpt-6.1-terra", reasoningEffort: "high" });
     expect(openAIProfileFor("notice_translate", "balanced")).toEqual({ model: "gpt-6.1-terra", reasoningEffort: "medium" });
   });
+
+  it("표에 있는 기능은 호출부가 Claude용으로 넘긴 강도보다 표가 먼저다(업무 비서 medium → 표 low)", () => {
+    expect(openAIProfileFor("dashboard_secretary", "fast", "medium")).toEqual({ model: "gpt-6-luna", reasoningEffort: "low" });
+    expect(openAIProfileFor("classnote_ment", "fast", "minimal")).toEqual({ model: "gpt-6-luna", reasoningEffort: "low" });
+  });
+
+  it("표에 없는 기능은 호출부 강도를 보존하고 minimal은 low로", () => {
+    expect(openAIProfileFor("unlisted_feature", "balanced", "medium")).toEqual({ model: "gpt-6.1-terra", reasoningEffort: "medium" });
+    expect(openAIProfileFor("unlisted_feature", "fast", "minimal")).toEqual({ model: "gpt-6-luna", reasoningEffort: "low" });
+    expect(openAIProfileFor(null, "fast")).toEqual({ model: "gpt-6-luna", reasoningEffort: "medium" });
+  });
 });
 
 describe("featurePin — 지점 선택 > 코드 기본 > 없음", () => {

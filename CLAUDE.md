@@ -160,7 +160,7 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 | `ATTENDANCE` | attendance_recap · parent_attendance_intent · parent_attendance_jev_shadow · parent_satisfaction | Claude(요약·결석 판별 Sonnet 5.5 · 만족도 Haiku 5.5) · TypeSafe(비교 전용) |
 | `STUDENT_ONTOLOGY` | student_positive_signal · student_ontology_summary | 긍정 신호 밤 판정 / 명시 버튼의 최근 기록 발췌 요약 · Claude 전용 키 · fast/low · 다른 회사 폴백 없음 |
 | `NOTICE` | notice_translate | Claude(Sonnet 5.5) |
-| `STAFF` | staff_contract_pdf · staff_contract_pdf_ocr | Claude(OCR은 **Claude 전용**) |
+| `STAFF` | staff_contract_pdf · staff_contract_pdf_ocr | **Claude 전용**(글자 추출 · 스캔 OCR 모두 — 2026-11-12) |
 | `VIDEO` | video_review_judge · video_review_verify | Claude(판정 Haiku · 확인 Sonnet · 밤 배치) |
 | `ASSISTANT` | academy_assistant(학원 비서 — 원장 자연어 질의 · 자체 도구 루프라 `recordUsage`로 센다, 2026-11-06) | Claude 전용(강도 적음 Haiku · 보통 Sonnet · 강함 Opus 5.5) |
 | `MANAGEMENT` | management_analysis(경영 분석 'AI 검토' — 원장 전용 · 명시 버튼 · 선택 월 집계 지표만 · 결과는 `management_ai_reviews`에 보관, 2026-11-10) | Claude 전용(Sonnet 5.5 · 폴백 없음) |
