@@ -820,6 +820,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **#154** '다른 강사 뷰'는 **권한표만 갈아 끼운다** — 담당·본인 판정·기록 명의는 `getCurrentUser({ teacherView: true })` · `=== "scoped"` 읽기는 `readonlyViewErasedScope`도 본다 · 확인 못 한 강사뷰는 읽기 전용
 - **#155** PUBLIC 실행권을 거두면 **앱 밖 역할**이 막힌다(s2_0031 → 연동 PC `eywa_sync_agent` 42501, ClassNote 발송 1시간 40분 정지) — 🔑 거두기 전에 anon·authenticated·service_role 밖 역할을 센다
 - **#156** node_modules 정션은 Turbopack dev에서 panic — 워크트리 dev 서버는 실제 `pnpm install`(정션은 typecheck/lint까지만 · 옛 #81 중복 번호)
+- **#157** 정적 import한 `spawn`·`execFile`에 **변수 명령**을 넘기면 Turbopack이 프로젝트 전체를 서버 함수에 싣는다 → 로컬 build는 통과·Vercel만 250MB 초과로 실패 · 빌드 경고 `Encountered unexpected file in NFT list`가 예고 · 개발 전용 실행은 `process.getBuiltinModule`
 - **#82** postgres.js에서 `${JSON.stringify(v)}::jsonb` = **이중 인코딩**(`"#153e75"` 9자 저장 → 검증 실패 → 설정 침묵 무시). 스칼라는 `to_jsonb(${v}::text)`·객체는 `sql.json(obj)`, 검증은 **길이까지** (⚠️ 눈으로 따옴표 구분 안 됨)
 
 ## 🎨 디자인 규칙 인덱스 (상세는 `docs/design-conventions.md`)

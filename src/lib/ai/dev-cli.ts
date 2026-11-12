@@ -166,6 +166,15 @@ export function summarizeCodexCliError(stderr: string, maxChars = 1_000): string
 
 let codexVersionCache: { key: string; value: Promise<string> } | null = null;
 
+/**
+ * 🔴 Codex 실행은 명령이 실행 중에 정해진다(`codex.cmd`·`AYWA_CODEX_BIN`). 정적 import한 `spawn`·`execFile`에 그런 명령을 넘기면
+ * Turbopack이 인자를 파일 참조로 읽어 **프로젝트 전체를 서버 함수에 싣는다**(2026-11-12 배포 실패 — 'enrollment' 함수 254MB > 한도 250MB ·
+ * 경고 'Encountered unexpected file in NFT list'). 개발 전용 경로라 실행할 때만 내장 모듈을 꺼낸다 — 정적 import로 되돌리지 말 것.
+ */
+function devChildProcess() {
+  return process.getBuiltinModule("node:child_process");
+}
+
 /** 선택한 Codex 실행 파일의 판을 모델 호출 전에 한 번 확인하고 이후 호출에서 재사용한다. */
 export async function getCodexCliVersion(): Promise<string> {
   const invocation = codexCliInvocation();
@@ -173,7 +182,7 @@ export async function getCodexCliVersion(): Promise<string> {
   if (codexVersionCache?.key === key) return codexVersionCache.value;
   const value = (async () => {
     try {
-      const { stdout } = await promisify(execFile)(invocation.command, [...invocation.prefixArgs, "--version"], {
+      const { stdout } = await promisify(devChildProcess().execFile)(invocation.command, [...invocation.prefixArgs, "--version"], {
         env: codexCliEnv() as NodeJS.ProcessEnv,
         timeout: 30_000,
         windowsHide: true,
@@ -274,7 +283,7 @@ export async function runCodexCli(
     const startedAt = Date.now();
     let stdout = "";
     await new Promise<void>((resolve, reject) => {
-      const child = spawn(invocation.command, [...invocation.prefixArgs, ...args], {
+      const child = devChildProcess().spawn(invocation.command, [...invocation.prefixArgs, ...args], {
         cwd: dir,
         env: codexCliEnv() as NodeJS.ProcessEnv,
         stdio: ["pipe", "pipe", "pipe"],
