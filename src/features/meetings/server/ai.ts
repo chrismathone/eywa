@@ -84,7 +84,7 @@ export type MeetingAnalysisContext = {
 export async function analyzeMeeting(
   formattedTranscript: string,
   ctx: MeetingAnalysisContext,
-  provider: AiProvider = "anthropic", // 전사 분석 = Claude Sonnet 5.5(2026-10-26 원장). 막히면 무중단 폴백(DeepSeek).
+  provider: AiProvider = "anthropic", // 전사 분석 = Claude Sonnet 5.5(2026-10-26 원장). 막히면 무중단 폴백(ChatGPT).
 ): Promise<{ report: MeetingReport; speakerRoles: Record<string, string>; model: string }> {
   const notepad = (ctx.notepad ?? "").trim();
   const hasTranscript = formattedTranscript.trim().length > 0;
@@ -105,7 +105,7 @@ export async function analyzeMeeting(
     MeetingReport & { speakerRoles?: Record<string, string> }
   >({
     // 16000 = Claude 5 계열을 고르거나 폴백으로 넘어가도 생각 토큰까지 들어가게(폼 추출이 4,096에서 잘리던 것과 같은 함정, 2026-10-19).
-    // 딥시크는 generate.ts 하한(32000)이 이미 더 크다. 상한일 뿐 쓴 만큼만 과금된다.
+    // 폴백 모델도 generate.ts의 공통 바닥을 적용한다. 상한일 뿐 쓴 만큼만 과금된다.
     maxTokens: 16000,
     meta: { feature: "meeting_analysis", tenantId: ctx.tenantId },
     provider,

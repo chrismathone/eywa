@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cliEnv, devCliEnabled, devCliPrompt, parseCliEnvelope } from "./dev-cli";
+import { cliEnv, codexCliEnv, devCliEnabled, devCliPrompt, parseCliEnvelope, parseCodexJsonl } from "./dev-cli";
 
 describe("개발 전용 Claude CLI 갈래", () => {
   it("🔴 운영·Vercel에서는 절대 켜지지 않는다", () => {
@@ -11,6 +11,10 @@ describe("개발 전용 Claude CLI 갈래", () => {
   });
   it("🔴 CLI에는 Anthropic 키를 넘기지 않는다(요금제 로그인으로만 돈다)", () => {
     const env = cliEnv({ ANTHROPIC_API_KEY: "k", ANTHROPIC_API_KEY_VIDEO: "g", ANTHROPIC_AUTH_TOKEN: "t", PATH: "/bin" });
+    expect(env).toEqual({ PATH: "/bin" });
+  });
+  it("🔴 Codex CLI에는 OpenAI 키를 넘기지 않는다(요금제 로그인으로만 돈다)", () => {
+    const env = codexCliEnv({ OPENAI_API_KEY: "k", OPENAI_BASE_URL: "https://example.invalid", PATH: "/bin" });
     expect(env).toEqual({ PATH: "/bin" });
   });
   it("화면 파일 경로와 이름을 프롬프트에 싣는다", () => {
@@ -32,5 +36,12 @@ describe("개발 전용 Claude CLI 갈래", () => {
   it("오류 봉투는 답으로 넘기지 않는다", () => {
     expect(() => parseCliEnvelope(JSON.stringify({ is_error: true, result: "rate limited", api_error_status: 429 }), "m")).toThrow("429");
     expect(() => parseCliEnvelope(JSON.stringify({ is_error: false }), "m")).toThrow();
+  });
+  it("Codex JSONL에서 모델·토큰 기록을 꺼낸다", () => {
+    const trace = parseCodexJsonl([
+      JSON.stringify({ type: "thread.started", thread_id: "t" }),
+      JSON.stringify({ type: "turn.completed", usage: { input_tokens: 11, cached_input_tokens: 3, output_tokens: 7 } }),
+    ].join("\n"), "gpt-6-luna", 1234);
+    expect(trace).toMatchObject({ models: ["gpt-6-luna"], durationMs: 1234, inputTokens: 11, cacheReadTokens: 3, outputTokens: 7 });
   });
 });

@@ -99,12 +99,25 @@ describe("groundContractExtract", () => {
 });
 
 describe("maskResidentRegNo", () => {
-  it("주민번호 뒤 7자리를 가린다(공백·다른 대시 포함)", () => {
+  it("주민번호 뒤 7자리를 가린다(하이픈·공백·붙인 13자리)", () => {
     expect(maskResidentRegNo("주민등록번호 900101-1234567 임")).toBe("주민등록번호 900101-******* 임");
     expect(maskResidentRegNo("900101 - 1234567")).toBe("900101-*******");
+    expect(maskResidentRegNo("9001011234567 / 900101 1234567")).toBe("900101-******* / 900101-*******");
+  });
+  it("문서에서 쓰는 여러 대시·물결·점을 모두 가린다", () => {
+    for (const separator of ["—", "‐", "‑", "−", "~", ".", "–"]) {
+      expect(maskResidentRegNo(`900101 ${separator} 1234567`), separator).toBe("900101-*******");
+    }
+  });
+  it("앞뒤 숫자에 붙은 13자리 일부를 잘못 가리지 않는다", () => {
+    expect(maskResidentRegNo("19001011234567")).toBe("19001011234567");
+    expect(maskResidentRegNo("90010112345678")).toBe("90010112345678");
   });
   it("전화번호·날짜는 건드리지 않는다", () => {
     expect(maskResidentRegNo("010-0000-9101 / 2026-08-03")).toBe("010-0000-9101 / 2026-08-03");
+  });
+  it("13자리 계좌·전화가 섞여도 덜 가리는 것보다 안전하게 가린다", () => {
+    expect(maskResidentRegNo("계좌 1234561234567")).toBe("계좌 123456-*******");
   });
 });
 

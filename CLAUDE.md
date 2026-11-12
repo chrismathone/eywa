@@ -90,7 +90,7 @@ aywa는 메뉴=플로팅 창=same-origin iframe이라 **창마다 셸 레이아�
 TypeSafe Jev의 제한된 선택지 판정도 `generateJSON({ mode: "decision", state, questions, meta })`를 사용한다.
 문장 생성 provider/폴백에는 넣지 않는다. `TYPESAFE_API_KEY_<그룹>` → `TYPESAFE_API_KEY` 순서이며,
 현재 `parent_attendance_jev_shadow`는 수동 비교 전용이다. 지점 allowlist가 없으면 꺼져 있고 분류 변경·발송은 하지 않는다.
-직접 `getAnthropic`/`getDeepseek`를 부르지 말 것 — provider 라우팅·파싱·폴백이 한 곳에 모여 있다.
+직접 `getAnthropic`/`getOpenAI`를 부르지 말 것 — provider 라우팅·파싱·폴백이 한 곳에 모여 있다.
 **예외 하나 = 학원 비서**(원장 2026-11-06 · [`agent.ts`](src/features/assistant/server/agent.ts)) — 도구를 여러 번 부르는 루프라 Claude 스트림을 직접 쓴다.
 대신 같은 관문을 손으로 다 지난다: 라이선스 `requireAiLicense` · 사용량 `recordUsage`(feature `academy_assistant` · 키 그룹 `ASSISTANT`) · 사실 원칙 `withFactGuard`(시스템 프롬프트 맨 앞 · 가드 `prompt.test.ts`). Claude 전용(다른 회사로 바꾸지 않는다).
 
@@ -121,34 +121,32 @@ TypeSafe Jev의 제한된 선택지 판정도 `generateJSON({ mode: "decision", 
 
 provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어×provider) + `resolveModel()`:
 
-| Tier | Anthropic | DeepSeek | 용도 |
+| Tier | Anthropic | OpenAI(ChatGPT) | 용도 |
 |---|---|---|---|
-| `fast` | **`claude-haiku-5-5`**(2026-10-16 4.5→5.5 · 1/10 값 · temperature 미전송·effort low는 `generate.ts` `isClaude5Model`이 흡수) | `deepseek-flash`(V4.1 · 옛 이름 `deepseek-v4-flash`는 2026-10-19 교체 — 딥시크가 은퇴로 적음) | **학부모 멘트** `classnote_ment` + **학부모 글 만족도 판정** `parent_satisfaction`(강사평가 · 문구로 애매한 글만 · Claude Haiku 5.5 먼저 2026-10-26 — 그 전 10-13~ DeepSeek flash 먼저). 🔴 deepseek 폴백은 **v4-flash**(원장 2026-08-28 *"haiku -> 폴백 deepseek v4 flash"*) — v4-pro를 걸었더니 자동작성 한 번에 **86초**(추론 6,505토큰)라 폴백이 또 다른 장애가 됐다. flash는 7.3초. **되돌리지 말 것**(같은 날 *"flash 말고 v4 pro"*를 실측 보고 뒤집은 것). |
-| `balanced` | **`claude-sonnet-5-5`**(2026-10-19 5→5.5 · 같은 값) | `deepseek-v4-pro`(폴백) | 경량 호출 기본값 + **전사 분석**(재원생 상담 분석 · 콜&상담 분석·폼 자동입력·회의록은 아래 고정) · 상담 준비 브리프 · 결석 문자 판별 · 출결 요약 · 공지 번역 — 전부 Claude 먼저(2026-10-26). |
+| `fast` | **`claude-haiku-5-5`**(2026-10-16 4.5→5.5 · temperature 미전송) | **`gpt-6-luna`** | 화면에서 기다리는 멘트·케어는 GPT low, 판정·분류는 GPT medium. Claude 선택·프롬프트·추론 강도는 기존 그대로다. |
+| `balanced` | **`claude-sonnet-5-5`**(2026-10-19 5→5.5) | **`gpt-6.1-terra`** | 전사·심층 분석은 GPT high, 번역·요약은 GPT medium. 기능별 값은 `OPENAI_FEATURE_PROFILES` 한 곳. |
 | `reasoning` | `claude-opus-4-7` | — | **금지** (명시 요청 시만). reasoning은 Anthropic 고정. |
 
-- **AI 회사는 둘 = Claude · DeepSeek.** 🔴 Upstage(Solar)는 뺐다(원장 2026-10-19 *"솔라는 빼버려. 두개면 충분"* — 품질 A/B 탈락으로 맨 뒤 예비였고 그날 키도 잔액 정지). 클라이언트·사다리·모델 칸 전부 지웠다 — 되살리지 말 것. 옛 기록의 `solar-pro3` 라벨만 남긴다.
-- **폴백 사다리 = anthropic → deepseek** ([`FALLBACK_LADDER`](src/lib/ai/models.ts), 원장 2026-08-28). 한 provider가 **인증·한도·잔액 소진**으로 막히면 다른 쪽으로 넘어간다 — 🔴 **크레딧 소진은 400이라 예전엔 사다리를 안 탔다**([[#118]]: 2026-08-27 멘트 AI가 이틀간 전건 실패). ⚠️ 새 provider 오류 모양(402·`insufficient_quota` 등)을 만나면 `isCreditExhaustedError`에 추가할 것.
-- **응답 길이 상한 바닥 = 64,000**(Claude 5 계열·DeepSeek) — [`OUTPUT_TOKEN_FLOOR`](src/lib/ai/generate.ts)(원장 2026-10-19 *"응답 길이 한도도 팍팍 늘려"*). 호출부 값이 작아도 이 값으로 보낸다(쓴 만큼만 과금 · Claude는 상한이 분당 출력 한도에 안 든다 · 생각 토큰도 상한에 들어 작으면 답 전에 잘린다). 사람이 화면에서 기다리는 기능(멘트·원생 AI 케어 — `waitsForAnswer`)만 Claude 16,000 · DeepSeek 32,000(`WAITING_OUTPUT_TOKEN_FLOOR` — 끝없이 이어지는 응답에 몇 분씩 기다리지 않게 · 옛 바닥보다 낮은 곳은 없다). 🔴 [`anthropic.ts`](src/lib/ai/anthropic.ts)의 `timeout`을 지우지 말 것 — 없으면 SDK가 상한 21,333 넘는 비스트리밍 요청을 "스트리밍 필요"로 던진다.
+- **AI 회사는 둘 = Claude · ChatGPT(OpenAI).** 원장 2026-11-12 결정으로 DeepSeek 실행 경로를 제거했다. Upstage(Solar)도 2026-10-19부터 없다. 옛 분석 기록을 읽는 `DeepSeek …`·`Solar Pro 3` 친화 라벨만 남긴다.
+- **폴백 사다리 = anthropic → openai** ([`FALLBACK_LADDER`](src/lib/ai/models.ts), 원장 2026-11-12 *"CLAUDE를 메인으로, 폴백은 GPT로"*). 한 provider가 **인증·한도·잔액 소진**으로 막히면 다음 회사로 넘어간다. OpenAI 키가 없는 환경은 후보에서 빠져 Claude만 돌며 기능은 종전대로다.
+- **응답 길이 상한 바닥 = 64,000**(Claude 5 계열·GPT) — [`OUTPUT_TOKEN_FLOOR`](src/lib/ai/generate.ts). 생각 토큰도 같은 상한을 쓰므로 답 전에 잘리지 않게 한다. 사람이 화면에서 기다리는 기능은 두 회사 모두 16,000(`WAITING_OUTPUT_TOKEN_FLOOR`). GPT는 `max_completion_tokens`만 보내고 `temperature`를 보내지 않으며, 잘림(`finish_reason: length`)은 JSON 오류와 따로 알린다. 🔴 [`anthropic.ts`](src/lib/ai/anthropic.ts)의 `timeout`을 지우지 말 것.
 - **전역 기본 provider = Anthropic Claude Sonnet 5.5** (`AI_PROVIDER=anthropic`, 2026-07-13~ · 2026-10-19 5→5.5) — 품질 A/B에서 Solar가
   상담 분석의 warnings를 통째로 놓치고 잡담(주식 등)을 섞어 전환. 코드 기본값(env 미설정·옛 값 `upstage`)도 Claude다(2026-10-19 Solar 제거 뒤).
-  DeepSeek을 기본으로 = `AI_PROVIDER=deepseek`.
-- 🔴 **AI 1순위 = Claude · DeepSeek은 폴백만**(원장 2026-10-26 *"딥시크로 바꾼거 다 클로드로 전환"* · *"전사 분석은 전부 sonnet 5.5로 돌리고, 간단하고 빠르게
-  작성해야하는 수업보고서 멘트는 haiku 5.5로"* · *"폴백으로 딥시크 남겨놔"* — Anthropic API 크레딧 지원). **전사 분석**(콜&상담 분석·폼 자동입력·회의록 =
+  `AI_PROVIDER` 옛 값은 더 이상 1순위를 바꾸지 않는다. 코드 기본은 언제나 Claude다.
+- 🔴 **AI 1순위 = Claude · ChatGPT는 폴백만**(원장 2026-11-12). **전사 분석**(콜&상담 분석·폼 자동입력·회의록 =
   [`FEATURE_MODELS`](src/lib/ai/model-pins.ts) Sonnet 5.5 고정 · 재원생 상담 분석) · 상담 준비 브리프 · 결석 문자 판별 · 출결 요약 · 공지 번역 = **Sonnet 5.5**(추론 강도는 호출부가 안 정해 모델 기본 high) ·
-  학부모 멘트 = **Haiku 5.5**(effort low) · 만족도 판정 = Haiku 5.5(기본 medium). 가드 [`claude-first.test.ts`](src/lib/ai/claude-first.test.ts) — 기능 코드가 DeepSeek을 먼저 고르면 실패.
+  학부모 멘트 = **Haiku 5.5**(effort low) · 만족도 판정 = Haiku 5.5(기본 medium). 가드 [`claude-first.test.ts`](src/lib/ai/claude-first.test.ts) — 기능 코드가 OpenAI를 먼저 고르면 실패.
   저장 전 후처리([`analysis-normalize`](src/features/enrollment/analysis-normalize.ts) · [회의록](src/features/meetings/analysis-normalize.ts) · [`form-normalize`](src/features/enrollment/form-normalize.ts))는 그대로 둔다(폴백 결과도 같은 모양).
   옛 결정(07-16 전사 분석 v4-pro · 10-19 V4.1 flash 블라인드 비교 수치)은 [`docs/decisions/reports-ai.md`](docs/decisions/reports-ai.md)에.
-- **지점별 선택** = 운영 콘솔 학원 상세 **'AI 모델' 탭**(`tenant_ai_models`, 0375a) — 지점 선택 > 코드 기본 > 호출부 tier·provider
-  (`featurePin`). 고른 회사가 막히면 평소 사다리로 넘어간다(고정한 모델 이름이 없으면 같은 회사 기본 모델로 한 번 더). 계약서 스캔 OCR은 고를 수 없다(Claude 전용 승인) · 멘트·원생 AI 케어(사람이 기다리는 기능)엔 느린 v4-pro를 고를 수 없다. 🔴 시험 안 한 기능을 코드 기본에 넣지 말 것.
+- **지점별 선택** = 운영 콘솔 학원 상세 **'AI 모델' 탭**(`tenant_ai_models`, 0375a) — Claude Haiku 5.5 · Claude Sonnet 5.5 · ChatGPT 5.6 Luna · ChatGPT 5.6 Terra. 저장값이 이 목록 밖(옛 DeepSeek 포함)이면 선택 없음으로 읽는다. 계약서 추출·긍정 신호 판정 등 Claude 전용 기능은 `FIXED_MODEL_FEATURES`라 고를 수 없다.
 
 ### 녹음·회의 처리 (Solar 후보정 하네스 · 재처리 2종 · 회의 화자) → [`docs/decisions/ai-recording.md`](docs/decisions/ai-recording.md)
 - 폼 자동입력 = `buildFormPatch` 후보정 하네스(grounding·echo·잡음 가드) — 새 "AI 추출→폼/DB 자동기입"도 이 가드를 통과한 값만.
 - 회의 재처리 = 기둥 A '분석 다시 생성'(텍스트) / 기둥 B '전사부터 다시'(오디오, Supabase 서명 — Firebase 의존 0). 화자 = `ai_speaker_roles`(표시) + `speaker_staff`(직원 연결).
-- DeepSeek = OpenAI 호환(JSON mode, 프롬프트에 "JSON" 필수) · 2026-10-26부터 **폴백 전용**(1순위는 Claude · Solar는 2026-10-19 뺐다).
+- OpenAI = 공식 SDK · JSON mode(프롬프트에 "JSON" 필수) · 기능별 GPT 모델·추론 강도는 `OPENAI_FEATURE_PROFILES` 한 곳.
 
-### 키 분리 = 기능별 9그룹 (원장 2026-09-15 *"기능별로 키를 발급받아서 사용량 체크를 하려고"*)
-**env 이름 = `<회사>_API_KEY_<그룹>`**(회사 = `ANTHROPIC`·`DEEPSEEK`). 그룹은 호출부 식별자(`meta.feature`)에서
+### 키 분리 = 기능별 12그룹 (원장 2026-09-15 *"기능별로 키를 발급받아서 사용량 체크를 하려고"*)
+**env 이름 = `<회사>_API_KEY_<그룹>`**(회사 = `ANTHROPIC`·`OPENAI`). 그룹은 호출부 식별자(`meta.feature`)에서
 [`FEATURE_KEY_GROUP`](src/lib/ai/models.ts)이 도출한다 — 🔴 **새 AI 호출부를 만들면 그 표에 한 줄**을 더할 것(가드
 [`key-groups.test.ts`](src/lib/ai/key-groups.test.ts)가 빠진 것·죽은 것을 잡는다).
 
@@ -169,12 +167,12 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 
 - **키 고르는 순서 = 그룹 키 → 옛 버킷 키(`_CONSULTATIONS`) → 기본 키**(`resolveKeyEnv`). 그룹 키가 아직 없어도
   기본 키로 돌아 **멈추는 기능이 없다**(키를 하나씩 넣는 동안의 안전장치).
-- 🔴🔴 **기본 키 둘(`ANTHROPIC_API_KEY`·`DEEPSEEK_API_KEY`)은 절대 지우지 말 것**(`UPSTAGE_API_KEY`는 2026-10-19부터 안 쓴다) — 그룹 키를
+- 🔴🔴 **기본 키 둘(`ANTHROPIC_API_KEY`·`OPENAI_API_KEY`)은 절대 지우지 말 것** — 그룹 키를
   다 넣었어도 **표에 없는 기능·`meta`를 안 넘긴 새 호출부의 유일한 안전망**이다. 지우면 그 호출이 에러가 아니라
   **조용히 다음 회사로** 넘어가 모델과 품질이 바뀐다(환경변수를 정리할 때 "이제 그룹 키가 있으니 기본 키는 중복"으로
   읽히기 쉬운 자리라 못박는다).
 - 🔴 **2026-09-15부터 Anthropic도 기본 키로 넘어간다** — 예전엔 `ANTHROPIC_API_KEY_CONSULTATIONS`가 없으면 Claude를
-  통째로 건너뛰었는데(빌링 분리), 그 규칙이면 키가 아직 없는 기능이 **조용히 DeepSeek으로 바뀐다**(멘트 품질이 달라진다).
+  통째로 건너뛰었는데(빌링 분리), 그 규칙이면 키가 아직 없는 기능이 **조용히 ChatGPT로 바뀐다**(멘트 품질이 달라진다).
 - **어느 키로 불렸는지는 `ai_usage_logs.key_name`**에 남는다(`ment`·`consultations`·`default`). 기본 키로 넘어간 호출은
   `default`로 찍히니 **빠진 키가 표에서 드러난다**. 기능별 토큰·비용은 이 표가 이미 기능 단위로 쌓고 있고, 키를 나누는 것은
   각 회사 콘솔에서도 기능별 청구액을 보기 위해서다.
@@ -542,8 +540,8 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - 영어 수업보고서 = 원스크린 영어 행 '템플릿 모드' · 인재원 학습 데이터 = pull API
 - 발송 기한(오늘 포함 7일)이 지난 보고서도 원장이 지정한 건은 보낸다
 - ClassNote 테스트 학생 '학원이'는 aywa에서 아무에게도 배정하지 않는다 — 배정은 ClassNote 쪽에서 전 강사에게
-- AI provider 전역 기본 = Anthropic Claude Sonnet 5.5(2026-10-19 5→5.5) · 응답 길이 상한 바닥 64,000 · AI 회사는 Claude·DeepSeek 둘(Solar 제거)
-- AI 1순위 = Claude · DeepSeek은 폴백만(2026-10-26 · Anthropic 크레딧) · 전사 분석(콜&상담 분석·폼 자동입력·회의록·재원생 상담)·브리프·결석 문자·출결 요약·번역 = Sonnet 5.5 · 멘트·만족도 = Haiku 5.5 · 가드 `claude-first.test.ts` · 지점별 모델 = 운영 콘솔 'AI 모델' 탭(0375a) · ~~10-19 V4.1 flash · 07-16 v4-pro~~
+- AI provider 전역 기본 = Anthropic Claude Sonnet 5.5 · 응답 길이 상한 바닥 64,000 · AI 회사는 Claude·ChatGPT(OpenAI) 둘(Solar·DeepSeek 실행 경로 제거)
+- AI 1순위 = Claude · ChatGPT는 폴백만(2026-11-12) · 기능별 GPT 모델·추론 강도 = `OPENAI_FEATURE_PROFILES` · 가드 `claude-first.test.ts` · 지점별 모델 = 운영 콘솔 'AI 모델' 탭(0375a)
 - 음성 전사 엔진 = AssemblyAI `universal-2` 유지
 - 학부모 보고서 제목 = 과목 보고서('수학 보고서' · 설정 제목이 기본값일 때 · `reportTitleText` 한 곳)
 - 수업보고서 테스트 표기 = "N문제 중 M개 맞음" 하나뿐

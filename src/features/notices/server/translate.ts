@@ -33,7 +33,7 @@ type TranslateOutcome =
 type TranslatedJson = { title?: string; body?: string; linkLabel?: string };
 
 function buildPrompt(src: NoticeSource): string {
-  // ⚠️ DeepSeek JSON mode는 프롬프트에 "JSON" 낱말이 필요하다 — 아래 문구가 그 조건을 충족한다.
+  // ⚠️ OpenAI JSON mode는 프롬프트에 "JSON" 낱말이 필요하다 — 아래 문구가 그 조건을 충족한다.
   return [
     "학원 관리 시스템의 **팝업 공지**를 한국어에서 영어로 번역한다. 읽는 사람은 이 학원의 원어민 영어 강사다.",
     "",
@@ -109,13 +109,13 @@ export async function buildNoticeTranslation(
   let out: TranslatedJson;
   let model: string;
   try {
-    // 🔴 tier는 `balanced`(= Claude Sonnet 5.5 · 2026-10-26 원장 "딥시크로 바꾼거 다 클로드로" — 그 전엔 DeepSeek v4-pro).
+    // 🔴 tier는 `balanced`(= Claude Sonnet 5.5 · 2026-10-26 원장 결정).
     //    저장 시점 백그라운드라 느려도 상관없다. 키가 없으면 사다리로 무중단 폴백.
     const res = await generateJSON<TranslatedJson>({
       prompt: buildPrompt(src),
       maxTokens: 2000,
       tier: "balanced",
-      provider: "anthropic", // 2026-10-26 원장 "딥시크로 바꾼거 다 클로드로" — Sonnet 5.5
+      provider: "anthropic", // 2026-10-26 원장 결정 — Sonnet 5.5
       meta: { feature: "notice_translate", tenantId },
     });
     out = res.data;

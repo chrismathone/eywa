@@ -3,11 +3,12 @@ import { withFactGuard } from "./fact-guard";
 import { assertTenantViewOutboundAllowed } from "@/lib/auth/tenant-view-outbound";
 import { AI_TENANT_MISSING_MESSAGE, LICENSE_BLOCKED_MESSAGE } from "@/lib/license/rule";
 import { getAnthropic } from "./anthropic";
-import { getDeepseek } from "./deepseek";
+import { getOpenAI } from "./openai";
 import { waitsForAnswer } from "./model-features";
-import { featurePin } from "./model-pins";
+import { featurePin, openAIProfileFor } from "./model-pins";
 import {
   AI_MODELS,
+  FALLBACK_LADDER,
   keyGroupOf,
   keyLabelOf,
   resolveKeyEnv,
@@ -20,25 +21,25 @@ import {
 } from "./models";
 import { reportWarning } from "@/lib/observability/report-error";
 import { callJev, JevError, JEV_MODEL, type DecisionQuestions, type DecisionResult } from "./jev";
-import { devCliEnabled, runDevCli } from "./dev-cli";
+import { devCliEnabled, runCodexCli, runDevCli } from "./dev-cli";
 
 /**
  * 응답 길이 상한(max_tokens)의 **바닥** — 호출부 값이 이보다 작으면 이 값으로 올려 보낸다(원장 2026-10-19 *"응답 길이 한도도 팍팍 늘려"*).
  * 상한은 넘지 못하는 선일 뿐 쓴 만큼만 값을 낸다. 생각(추론) 토큰도 상한에 들어가 작게 잡으면 답 전에 잘린다
  * (Sonnet 5 폼 추출이 4,096에서 7일 57건 중 21건 잘림 · 회의록 v4-pro 30일 최대 26,893 — 옛 바닥 32,000에 닿을 뻔).
- * 실측(2026-10-19 우리 키): Claude 5 계열 모델 상한 128,000 · DeepSeek 입력 6.5만 + 64,000 통과.
+ * Claude와 GPT 모두 추론 토큰이 이 상한을 함께 쓴다. 분석 호출은 답 전에 잘리지 않도록 64,000을 보장한다.
  * - 64,000 위는 의미가 없다 — 라우트 기한(300초) 안에 그만큼 만들어 내지 못한다.
  * - Claude는 상한이 분당 출력 한도 계산에 안 든다(공식 rate-limits 문서) — 크게 잡아도 막히지 않는다. 비스트리밍 SDK 검사는
  *   `anthropic.ts`의 시간 제한 지정으로 건넌다.
  * - Claude 4.x 이하(reasoning 티어 Opus 4.7)는 호출부 값 그대로(생각이 기본으로 켜지지 않는다).
  */
-export const OUTPUT_TOKEN_FLOOR: Readonly<Record<AiProvider, number>> = { anthropic: 64_000, deepseek: 64_000 };
+export const OUTPUT_TOKEN_FLOOR: Readonly<Record<AiProvider, number>> = { anthropic: 64_000, openai: 64_000 };
 /**
  * 사람이 화면에서 기다리는 호출(멘트·원생 AI 케어 — `waitsForAnswer`)의 바닥. 옛 Claude 4,096이 사실상 한 호출의 **시간 상한**
  * (Haiku 20~30초) 노릇도 했다 — 64,000이면 응답이 끝없이 이어지는 드문 경우 선생님이 몇 분을 기다린다(2026-10-19 리뷰).
- * Claude 16,000 = 옛 바닥의 4배 · 실측 최대(2,067)의 8배. DeepSeek은 옛 바닥 32,000 그대로 — **어디서도 예전보다 낮추지 않는다.**
+ * Claude와 GPT 모두 16,000 — 실측 최대(2,067)의 약 8배이면서 화면 대기 호출의 비정상 장문을 제한한다.
  */
-export const WAITING_OUTPUT_TOKEN_FLOOR: Readonly<Record<AiProvider, number>> = { anthropic: 16_000, deepseek: 32_000 };
+export const WAITING_OUTPUT_TOKEN_FLOOR: Readonly<Record<AiProvider, number>> = { anthropic: 16_000, openai: 16_000 };
 
 /** 실제로 보내는 max_tokens — 호출과 '잘림' 오류 문구가 같은 값을 쓴다. */
 export function sentMaxTokens(provider: AiProvider, model: string, requested: number, feature?: string | null): number {
@@ -49,7 +50,7 @@ export function sentMaxTokens(provider: AiProvider, model: string, requested: nu
 
 /**
  * ```json 펜스 제거 + 첫 {…} 객체 추출 + JSON.parse. 5개 AI 호출지점에 흩어져 있던 파싱 로직을
- * 한 곳으로 통합. 순수함수(Vitest 단위테스트). JSON mode(DeepSeek)·평문(Anthropic)·마크다운 펜스·
+ * 한 곳으로 통합. 순수함수(Vitest 단위테스트). JSON mode(OpenAI)·평문(Anthropic)·마크다운 펜스·
  * 앞뒤 잡설 섞인 응답 모두 견딘다.
  */
 export function parseJsonLoose<T = unknown>(text: string): T {
@@ -145,7 +146,7 @@ export type GenerateJSONOptions = {
   temperature?: number;
   /**
    * 생각 깊이(이름은 예전 Solar `reasoning_effort` 표기 그대로 · 멘트="minimal"). Claude 5 계열에만 `output_config.effort`로
-   * 전한다(minimal → low, ANTHROPIC_EFFORT). DeepSeek·그 밖의 Anthropic 모델엔 보내지 않는다.
+   * 전한다(minimal → low, ANTHROPIC_EFFORT). GPT에는 기능별 표의 low/medium/high로 옮기며, 그 밖의 Anthropic 모델엔 보내지 않는다.
    */
   reasoningEffort?: "minimal" | "low" | "medium" | "high";
   /**
@@ -173,7 +174,7 @@ export type GenerateJSONOptions = {
  * provider 응답의 토큰 usage(제공 안 하면 null). Anthropic의 input_tokens는 캐시에서 읽은 토큰을 **뺀** 값이라
  * 캐시 읽기(정가의 10%)·쓰기(125%)를 따로 든다 — 없으면 캐시를 켠 기능의 비용이 실제보다 적게 보인다.
  */
-type ProviderUsage = { inputTokens: number | null; outputTokens: number | null; cacheReadTokens?: number | null; cacheWriteTokens?: number | null } | null;
+export type ProviderUsage = { inputTokens: number | null; outputTokens: number | null; cacheReadTokens?: number | null; cacheWriteTokens?: number | null } | null;
 
 /** Anthropic usage → ProviderUsage(즉시 호출·배치 수거가 같은 변환을 쓴다). */
 export function anthropicUsage(u: { input_tokens?: number | null; output_tokens?: number | null; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null } | null | undefined): ProviderUsage {
@@ -185,7 +186,7 @@ export function anthropicUsage(u: { input_tokens?: number | null; output_tokens?
  * 파싱이 깨지는데, 그 실패가 `Expected ',' or ']' after array element`로만 보이면 원인을 못 찾는다
  * (2026-07-31 브리핑 실측: 실패한 날의 output_tokens가 전부 정확히 한도값이었다). 사유를 한글로 표면화한다.
  */
-type ProviderCall = { text: string; usage: ProviderUsage; truncated: boolean };
+type ProviderCall = { text: string; usage: ProviderUsage; truncated: boolean; model?: string };
 
 /**
  * ai_usage_logs에 호출 1건 기록 — **best-effort**: env 미설정(테스트·로컬)이면 조용히 스킵, 실패는
@@ -234,8 +235,8 @@ export async function recordUsage(entry: {
 }
 
 /**
- * 모든 AI(JSON) 호출의 단일 진입점. `resolveModelChain`으로 provider(Claude · DeepSeek)를
- * 고르고 → DeepSeek(OpenAI 호환, JSON mode) 또는 Anthropic을 호출 → 응답 텍스트를 `parseJsonLoose<T>`.
+ * 모든 AI(JSON) 호출의 단일 진입점. `resolveModelChain`으로 provider(Claude · ChatGPT)를
+ * 고르고 → OpenAI(JSON mode) 또는 Anthropic을 호출 → 응답 텍스트를 `parseJsonLoose<T>`.
  * 실패 시 throw — 호출부의 기존 stub/error 폴백을 그대로 유지한다.
  *
  * @returns `data`(파싱된 T) + `model`(실제 사용 모델 id — model_version 문자열 재료).
@@ -246,7 +247,7 @@ export async function recordUsage(entry: {
  * (silent provider 폴백은 의도적으로 안 함 — 키가 무효면 표면에 드러나야 한다.)
  */
 function rethrowAi(provider: AiProvider, err: unknown): never {
-  const label = provider === "deepseek" ? "DeepSeek" : "Anthropic(Claude)";
+  const label = provider === "openai" ? "OpenAI(ChatGPT)" : "Anthropic(Claude)";
   const status =
     typeof err === "object" && err !== null && "status" in err
       ? Number((err as { status?: unknown }).status)
@@ -280,8 +281,10 @@ function rethrowAi(provider: AiProvider, err: unknown): never {
  */
 function providerErrorText(err: unknown): string {
   if (err instanceof Error) return err.message;
-  if (typeof err === "object" && err !== null && "message" in err)
-    return String((err as { message?: unknown }).message ?? "");
+  if (typeof err === "object" && err !== null) {
+    const value = err as { message?: unknown; code?: unknown; error?: { message?: unknown; code?: unknown } };
+    return [value.message, value.code, value.error?.message, value.error?.code].filter(Boolean).join(" ");
+  }
   return String(err);
 }
 
@@ -300,14 +303,14 @@ function providerErrorStatus(err: unknown): number | undefined {
  *    ("Your credit balance is too low to access the Anthropic API")라 401/403/429만 보던
  *    `isRetryableProviderError`를 **통과하지 못해 다른 provider로 넘어가지 않았고**, 호출부는 곧장
  *    폴백 템플릿으로 떨어져 특이사항("내일 4시에 보강입니다")이 빠진 문구가 학부모 49명에게 나갔다.
- *    폴백 사다리(anthropic→deepseek→solar)는 그때도 있었다 — **이 판정 하나가 없어서 안 탔다.**
+ *    폴백 사다리는 그때도 있었다 — **이 판정 하나가 없어서 안 탔다.**
  *
- * ⚠️ provider마다 모양이 다르다: Anthropic=400 + "credit balance", DeepSeek=402 "Insufficient Balance",
- *    OpenAI 호환(Upstage)=429 + `insufficient_quota`. 그래서 **상태코드와 문구를 둘 다** 본다.
+ * ⚠️ provider마다 모양이 다르다: Anthropic=400 + "credit balance", OpenAI=429 + `insufficient_quota`.
+ *    그래서 **상태코드와 문구를 둘 다** 본다.
  * ⚠️ 오탐의 대가는 작다(다음 provider로 한 번 더 시도할 뿐) — 미탐은 이번처럼 기능이 조용히 죽는다.
  */
 export function isCreditExhaustedError(err: unknown): boolean {
-  if (providerErrorStatus(err) === 402) return true; // Payment Required(DeepSeek 잔액 0)
+  if (providerErrorStatus(err) === 402) return true; // 일부 결제 게이트웨이의 Payment Required
   return /credit balance|insufficient[\s_-]*(balance|quota|funds?|credits?)|(exceed|exceeded).{0,20}quota|purchase credits|payment required/i.test(
     providerErrorText(err),
   );
@@ -324,7 +327,7 @@ export function isRetryableProviderError(err: unknown): boolean {
 
 /**
  * 그 모델 이름이 없다는 오류인가 — 기능에 고정한 모델(`featurePin`)의 이름이 바뀌거나 거둬졌을 때(2026-10-19).
- * DeepSeek = 400 "Model Not Exist" · Anthropic = 404 not_found_error "model: …" · OpenAI 호환 = 404 `model_not_found`.
+ * Anthropic = 404 not_found_error "model: …" · OpenAI = 404 `model_not_found`.
  */
 export function isModelNotFoundError(err: unknown): boolean {
   const text = providerErrorText(err);
@@ -375,7 +378,7 @@ export class AnthropicRefusalError extends Error {
 }
 
 /**
- * 글만 받는 경로(DeepSeek · 개발 CLI 즉시 호출)의 사용자 본문 — cachePrefix는 Anthropic 캐시 표시일 뿐이라 같은 글을 prompt 앞에
+ * 글만 받는 경로(OpenAI · 개발 CLI 즉시 호출)의 사용자 본문 — cachePrefix는 Anthropic 캐시 표시일 뿐이라 같은 글을 prompt 앞에
  * 그대로 잇는다(자료가 사라지지 않게 · 적대 리뷰 2026-10-21: '다시 분석'의 확인 자료 누락). 배치의 개발 경로는 블록에서 같은 차례로 푼다(devInput).
  */
 export function textPrompt(opts: Pick<GenerateJSONOptions, "prompt" | "cachePrefix">): string {
@@ -436,6 +439,22 @@ export function anthropicRequestParams(model: string, opts: GenerateJSONOptions,
   };
 }
 
+/** OpenAI 요청 본문 — GPT 계열 규칙(max_completion_tokens · temperature 미전송 · JSON mode)을 한 곳에서 만든다. */
+export function openAIRequestParams(model: string, opts: GenerateJSONOptions, maxCompletionTokens?: number) {
+  const tier = opts.tier === "fast" ? "fast" : "balanced";
+  const profile = openAIProfileFor(opts.meta?.feature, tier, opts.reasoningEffort);
+  return {
+    model,
+    max_completion_tokens: maxCompletionTokens ?? sentMaxTokens("openai", model, opts.maxTokens, opts.meta?.feature),
+    response_format: { type: "json_object" as const },
+    reasoning_effort: profile.reasoningEffort,
+    messages: [
+      ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
+      { role: "user" as const, content: textPrompt(opts) },
+    ],
+  };
+}
+
 /** provider별 1회 호출 — 응답 텍스트+usage 반환(throw는 generateJSON 루프가 처리). */
 async function callProvider(
   provider: AiProvider,
@@ -443,35 +462,23 @@ async function callProvider(
   keyName: AiKeyName,
   group: AiKeyGroup | null,
   opts: GenerateJSONOptions,
+  smokeMaxCompletionTokens?: number,
 ): Promise<ProviderCall> {
   const callOptions: [] | [{ signal: AbortSignal }] = opts.signal ? [{ signal: opts.signal }] : [];
-  if (provider === "deepseek") {
-    const client = getDeepseek(keyName, group);
-    // DeepSeek도 OpenAI 호환 — JSON mode 사용(프롬프트에 "JSON" 단어 필수, 현 호출부 충족). reasoning_effort는
-    // DeepSeek 파라미터가 아니라 미부착. v4-pro(추론형)는 답을 content에, 사고과정을 reasoning_content에
-    // 분리하므로 content 우선 + 비면 reasoning_content 폴백(빈 문자열이면 parseJsonLoose가 표면화).
-    // ⚠️ **reasoning_content가 max_tokens를 함께 소모**한다(2026-07-16 실측: 등록상담 프롬프트에서 추론만
-    // ~8k tok → 호출부 8192면 답변 JSON이 truncate돼 finish_reason=length → 파싱 실패 → 재분석 실패).
-    // 그래서 추론+답변이 모두 들어가도록 바닥(OUTPUT_TOKEN_FLOOR)으로 올려 보낸다 — 상한일 뿐 쓴 만큼만 과금된다.
+  if (provider === "openai") {
+    const client = getOpenAI(keyName, group);
+    // GPT-5/6 계열은 생각 토큰과 답변 토큰이 max_completion_tokens를 함께 쓴다. `finish_reason=length`는
+    // JSON 파싱 오류로 감추지 않고 아래 호출 루프에서 별도 잘림 오류로 바꾼다.
     const res = await client.chat.completions.create({
-      model,
-      max_tokens: sentMaxTokens("deepseek", model, opts.maxTokens, opts.meta?.feature),
-      response_format: { type: "json_object" as const },
-      ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
-      messages: [
-        ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
-        { role: "user" as const, content: textPrompt(opts) },
-      ],
+      ...openAIRequestParams(model, opts, smokeMaxCompletionTokens),
     }, ...callOptions);
-    const msg = res.choices[0]?.message as
-      | { content?: string | null; reasoning_content?: string | null }
-      | undefined;
     return {
-      text: (msg?.content?.trim() ? msg.content : msg?.reasoning_content) ?? "",
+      text: res.choices[0]?.message.content ?? "",
       usage: res.usage
         ? { inputTokens: res.usage.prompt_tokens ?? null, outputTokens: res.usage.completion_tokens ?? null }
         : null,
       truncated: res.choices[0]?.finish_reason === "length",
+      model: res.model,
     };
   }
   const client = getAnthropic(keyName, group);
@@ -496,7 +503,65 @@ async function callProvider(
     text: res.content.map((b) => (b.type === "text" ? b.text : "")).join(""),
     usage: anthropicUsage(res.usage),
     truncated: res.stop_reason === "max_tokens",
+    model: res.model,
   };
+}
+
+/**
+ * DB·라이선스·지점 모델 조회·사용 기록을 건너뛰는 1회 시험 진입점.
+ * 실제 API 연결 확인 스크립트만 쓰며, 운영과 같은 프롬프트 조립·사실 원칙·JSON 파싱·잘림 판정을 지난다.
+ */
+export async function callProviderForSmoke<T>(input: {
+  provider: AiProvider;
+  model: string;
+  keyName?: AiKeyName;
+  options: Omit<GenerateJSONOptions, "meta"> & { meta?: GenerateJSONOptions["meta"] };
+  /** 연결 확인 전용 작은 상한. 운영 generateJSON에서는 지정할 수 없다. */
+  maxCompletionTokens?: number;
+}): Promise<{ data: T; raw: string; model: string; usage: ProviderUsage; durationMs: number }> {
+  const opts: GenerateJSONOptions = {
+    ...input.options,
+    meta: input.options.meta ?? { tenantId: "oneoff-no-db", feature: "provider_connectivity" },
+    prompt: withFactGuard(input.options.prompt),
+  };
+  const startedAt = Date.now();
+  const call = await callProvider(input.provider, input.model, input.keyName ?? "default", keyGroupOf(opts.meta.feature), opts, input.maxCompletionTokens);
+  if (call.truncated) {
+    const sent = input.maxCompletionTokens ?? sentMaxTokens(input.provider, input.model, opts.maxTokens, opts.meta.feature);
+    throw new Error(`AI 응답이 최대 길이(${sent} 토큰)에서 잘렸습니다.`);
+  }
+  return {
+    data: parseJsonLoose<T>(call.text),
+    raw: call.text,
+    model: call.model ?? input.model,
+    usage: call.usage,
+    durationMs: Date.now() - startedAt,
+  };
+}
+
+/** DB 없는 연결 시험에서 Anthropic 실패를 합성하고 실제 사다리 순서로 OpenAI 어댑터까지 넘긴다. */
+export async function callSyntheticFallbackForSmoke<T>(input: {
+  syntheticAnthropicError: unknown;
+  openAIModel: string;
+  options: Omit<GenerateJSONOptions, "meta"> & { meta?: GenerateJSONOptions["meta"] };
+  maxCompletionTokens?: number;
+}): Promise<{ data: T; raw: string; model: string; usage: ProviderUsage; durationMs: number; attemptedProviders: AiProvider[] }> {
+  const attemptedProviders: AiProvider[] = [];
+  for (const provider of FALLBACK_LADDER) {
+    attemptedProviders.push(provider);
+    if (provider === "anthropic") {
+      if (!isRetryableProviderError(input.syntheticAnthropicError)) throw input.syntheticAnthropicError;
+      continue;
+    }
+    const result = await callProviderForSmoke<T>({
+      provider,
+      model: input.openAIModel,
+      options: input.options,
+      maxCompletionTokens: input.maxCompletionTokens,
+    });
+    return { ...result, attemptedProviders };
+  }
+  throw input.syntheticAnthropicError;
 }
 
 export type GenerateDecisionOptions = {
@@ -587,16 +652,32 @@ export async function generateJSON(rawOpts: GenerateJSONOptions | GenerateDecisi
   const chain = resolveModelChain(tier, keyName, opts.provider, group, pin);
   // 키가 하나도 없으면 기존 동작 보존: 모델 있는 첫 candidate로 시도(클라 생성 시 키 없음 throw → rethrowAi).
   let candidates = chain.length > 0 ? chain : [resolveModel(tier, keyName, opts.provider, group, pin)];
+  if (tier !== "reasoning") {
+    const profile = openAIProfileFor(opts.meta.feature, tier, opts.reasoningEffort);
+    // 운영 콘솔에서 고른 GPT-5.6 모델은 그대로 두고, 공통 폴백 후보만 기능별 표의 GPT 모델로 맞춘다.
+    candidates = candidates.map((candidate) =>
+      candidate.provider === "openai" && !(pin?.provider === "openai" && candidate.model === pin.model)
+        ? { ...candidate, model: profile.model }
+        : candidate,
+    );
+  }
   if (opts.allowedProviders) {
     candidates = candidates.filter((c) => opts.allowedProviders!.includes(c.provider));
     if (!candidates.length) throw new Error("지정한 AI 제공자의 API 키를 확인해 주세요.");
   }
   // 개발 전용 — 관문(사실 원칙·라이선스·모델 고정)을 다 지난 뒤 호출만 내부 요금제 CLI로(dev-cli.ts · 운영에선 꺼짐).
-  // 첫 후보가 Claude일 때만(DeepSeek 고정 기능은 평소대로) · 이미지는 Claude 전용이라 그대로 · 문서(PDF)는 평소 경로. API 키 확인보다 앞에 둔다.
-  if (devCliEnabled() && !opts.document && (opts.images?.length || candidates[0]?.provider === "anthropic")) {
-    const model = candidates.find((c) => c.provider === "anthropic")?.model ?? (pin?.provider === "anthropic" ? pin.model : null) ?? AI_MODELS[tier].anthropic ?? "claude-sonnet-5-5";
-    const text = await runDevCli({ model, prompt: textPrompt(opts), system: opts.system, images: opts.images });
-    await recordUsage({ meta: opts.meta, provider: "anthropic", model, keyName: "dev-cli", ok: true });
+  // 첫 후보 회사와 같은 내부요금제를 쓴다. 이미지는 Claude 전용이며 문서(PDF)는 평소 API 경로다.
+  if (devCliEnabled() && !opts.document && candidates[0] && (!opts.images?.length || candidates.some((c) => c.provider === "anthropic"))) {
+    if (opts.images?.length || candidates[0].provider === "anthropic") {
+      const model = candidates.find((c) => c.provider === "anthropic")?.model ?? (pin?.provider === "anthropic" ? pin.model : null) ?? AI_MODELS[tier].anthropic ?? "claude-sonnet-5-5";
+      const text = await runDevCli({ model, prompt: textPrompt(opts), system: opts.system, images: opts.images });
+      await recordUsage({ meta: opts.meta, provider: "anthropic", model, keyName: "dev-cli", ok: true });
+      return { data: parseJsonLoose(text), model };
+    }
+    const profile = openAIProfileFor(opts.meta.feature, tier === "fast" ? "fast" : "balanced", opts.reasoningEffort);
+    const model = candidates[0].model;
+    const text = await runCodexCli({ model, prompt: textPrompt(opts), system: opts.system, reasoningEffort: profile.reasoningEffort });
+    await recordUsage({ meta: opts.meta, provider: "openai", model, keyName: "dev-codex", ok: true });
     return { data: parseJsonLoose(text), model };
   }
   if (opts.document || opts.images?.length) {
@@ -651,9 +732,10 @@ export async function generateJSON(rawOpts: GenerateJSONOptions | GenerateDecisi
     }
     if (!call) continue; // 도달 불가(위 catch는 continue 또는 throw) — 타입 안전용
     // provider 호출 성공 = 토큰은 이미 소비됨 — 파싱 실패 여부와 무관하게 usage를 기록.
-    await recordUsage({ meta: opts.meta, provider, model, keyName: keyLabel(provider), usage: call.usage, ok: true });
+    const actualModel = call.model ?? model;
+    await recordUsage({ meta: opts.meta, provider, model: actualModel, keyName: keyLabel(provider), usage: call.usage, ok: true });
     try {
-      return { data: parseJsonLoose(call.text), model };
+      return { data: parseJsonLoose(call.text), model: actualModel };
     } catch (e) {
       // 잘린 응답의 파싱 실패는 "모델이 이상한 걸 뱉었다"가 아니라 "한도가 모자랐다"이다 —
       // 원인을 라우트·화면 오류 문구까지 그대로 들고 가야 max_tokens를 올릴 생각을 한다.

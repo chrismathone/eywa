@@ -42,8 +42,8 @@ const AUDIENCE_LABEL: Record<string, string> = {
 
 /**
  * 전사/메모 텍스트 + 학생 컨텍스트로 7섹션 분석 생성. {report, model} 반환. 호출부가 try/catch.
- * `provider` 기본 = Claude Sonnet 5.5(2026-10-26 원장 *"전사 분석은 전부 sonnet 5.5로"* — 그 전 07-16~ DeepSeek v4-pro).
- * Claude가 막히면 무중단 폴백(DeepSeek). 다른 모델로 되돌리려면 호출부에서 provider 오버라이드.
+ * `provider` 기본 = Claude Sonnet 5.5(2026-10-26 원장 *"전사 분석은 전부 sonnet 5.5로"*).
+ * Claude가 막히면 무중단 폴백(ChatGPT). 다른 모델로 바꾸려면 호출부에서 provider 오버라이드.
  */
 export async function analyzeStudentConsultation(
   text: string,
