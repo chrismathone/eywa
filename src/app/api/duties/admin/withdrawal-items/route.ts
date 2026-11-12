@@ -30,12 +30,13 @@ export async function GET(request: Request) {
     // 퇴원보고서를 '담당'(자기 보고서)만 보는 사람은 남의 차례 목록(학생 이름)을 받지 않는다 — 평점 열과 같은 함정(리뷰 2026-11-11).
     //   읽기 강사뷰가 '담당'을 지운 경우도 담당으로 본다(`readonlyViewErasedScope`).
     //   강사뷰 대상을 확인하지 못한 요청은 거절한다(권한이 낮춰져 '담당'이 '읽기'로 보인다 — 재리뷰 2026-11-11) · '본인' = 강사뷰면 그 강사(#154).
-    const [level, erased, ro, as, effective] = await Promise.all([accessLevelTenant(viewer.user.systemRole, "withdrawal_reports"), readonlyViewErasedScope("withdrawal_reports"), isReadonlyTeacherView(), viewAsTeacher(), getCurrentUser({ teacherView: true })]);
+    const range = adminRange(period, today);
+    // 권한 판정과 시작일 맞춤은 서로 독립(B4) — 같이 읽는다.
+    const [level, erased, ro, as, effective, from] = await Promise.all([accessLevelTenant(viewer.user.systemRole, "withdrawal_reports"), readonlyViewErasedScope("withdrawal_reports"), isReadonlyTeacherView(), viewAsTeacher(), getCurrentUser({ teacherView: true }), clampDutyFrom(viewer.user.tenantId, range.from)]);
     if (ro && !as) return NextResponse.json({ error: "강사뷰 대상을 확인하지 못했습니다 — 잠시 뒤 새로고침해 주세요" }, { status: 403, headers: NO_STORE });
     const whole = (level === "full" || level === "readonly") && !erased;
     if (level === "none" || (!whole && owner !== (viewer.scope.ownerId ?? effective?.id ?? viewer.user.id))) return NextResponse.json({ error: "퇴원보고서 열람 권한이 필요합니다" }, { status: 403, headers: NO_STORE });
-    const range = adminRange(period, today);
-    const items = await loadWithdrawalWriteItems(viewer.user.tenantId, await clampDutyFrom(viewer.user.tenantId, range.from), range.to, viewer.scope, owner,
+    const items = await loadWithdrawalWriteItems(viewer.user.tenantId, from, range.to, viewer.scope, owner,
       subjectRaw && /^[a-z0-9_]{1,40}$/.test(subjectRaw) ? subjectRaw : null);
     return NextResponse.json({ items, now: new Date().toISOString() }, { headers: NO_STORE });
   } catch (error) {

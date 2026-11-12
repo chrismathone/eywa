@@ -41,6 +41,9 @@ export const TENANT_VIEW_READ_RPCS: ReadonlySet<string> = new Set([
   "duty_rollup_owner_load",
   // 선생님별 수업보고서 평점 평균(s2_0063) — 읽기 전용 group-by(지점 보기에서는 평점 권한이 없어 부르지 않는다 · 목록 규약상 여기 둔다).
   "duty_report_rating_by_owner",
+  // 퇴원보고서 작성 차례 집계 · 목록(s2_0067) — 업무 완성도 참고 열 · 칸 목록. 서버가 관리 키로 부르는 읽기 전용.
+  "duty_withdrawal_write_rollup",
+  "duty_withdrawal_write_items",
   // 출결 통계 등원율 추이(0387a) — 읽기 전용 group-by.
   "attendance_rate_buckets",
   // 원생 기여도 학생별 합계(0443a) — 읽기 전용 집계(stable). 지점 보기에서도 기여도 화면이 같은 값을 읽게.

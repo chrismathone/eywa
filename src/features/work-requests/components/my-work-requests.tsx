@@ -23,12 +23,16 @@ function Strip({ className }: { className: string }) {
   const { board, failed, today, open, refresh } = useWork();
   const [listing, setListing] = useState(false);
   const c = receivedCounts(board.items, board.me);
+  // 꺼진 지점 · 지점 보기(서버가 '없음'으로 답함)는 다시 묻지 않는다 — 첫 조회가 실패했을 때만 계속 묻는다.
+  //   숨긴 창은 셸이 창 문서의 visibilityState를 '숨김'으로 덮는다(frame-visibility.ts) — 아래 판정 그대로 멈춘다.
+  const live = board.enabled || failed;
   useEffect(() => {
+    if (!live) return;
     const bump = () => { if (document.visibilityState === "visible") void refresh(); };
     const timer = setInterval(bump, refreshMsOf(c.total));
     document.addEventListener("visibilitychange", bump);
     return () => { clearInterval(timer); document.removeEventListener("visibilitychange", bump); };
-  }, [refresh, c.total]);
+  }, [live, refresh, c.total]);
   // 받은 것이 없으면 줄을 세우지 않는다(실패도 '0건'으로 그리지 않는다 — 다음 갱신에 다시 묻는다).
   if (!board.enabled || !c.total) return null;
   const label = c.open ? `받은 업무 요청 — 내 차례 ${c.turn} · 진행 중 ${c.open}` : "받은 업무 요청 — 진행 중 없음";
