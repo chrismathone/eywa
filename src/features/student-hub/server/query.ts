@@ -23,7 +23,8 @@ import { studentKnowledgeSection } from "@/features/academy-knowledge/server-rec
 import { hubNodeId, studentHubGraph, type HubAnalysis, type HubCoverage } from "../model";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isModuleEnabled } from "@/lib/modules";
-import { isFeatureLicensed } from "@/lib/license/server";
+import { isFeatureLicensed, isFeatureOptedIn } from "@/lib/license/server";
+import { pendingStudentCoverageLabels } from "@/features/students/coverage-switches";
 
 const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
 export const hubMonth = (value?: string) => monthSchema.safeParse(value).success ? value! : kstMonth();
@@ -40,10 +41,11 @@ export const getStudentHub = cache(async (studentId: string, requestedMonth?: st
   if (!student) return null;
   const month = hubMonth(requestedMonth), checkedAt = new Date().toISOString(), today = kstToday();
   const base = `/students/${studentId}`;
-  const [contextRead, careRead, contributionRead, summaryRead, billingAllowed, enrollmentAllowed, settings, aiOn] = await Promise.all([
+  const [contextRead, careRead, contributionRead, summaryRead, billingAllowed, enrollmentAllowed, settings, aiOn, slackOn, ecountOn] = await Promise.all([
     attempt(() => getLiveContext(studentId)), attempt(() => getStudentCareGraph(studentId)),
     attempt(() => getContributionStudent(studentId, month)), attempt(() => getStudentRecordSummary(studentId)),
     canAccessTenant(user.systemRole, "billing"), canSeeStudentEnrollment(user.systemRole, studentId), getTenantSettings(), isFeatureLicensed(user.tenantId, "ai_analysis"),
+    isFeatureOptedIn(user.tenantId, "slack"), isFeatureOptedIn(user.tenantId, "ecount_accounting"),
   ]);
   const newcomersOn = isModuleEnabled(settings.modules.disabled, "newcomers");
   const classnoteOn = isModuleEnabled(settings.modules.disabled, "classnote");
@@ -129,12 +131,13 @@ export const getStudentHub = cache(async (studentId: string, requestedMonth?: st
   if (summary?.state === "ready") for (const item of summary.items) analyses.push({ id: `summary:${item.itemId}`, title: item.title,
     body: item.summary ?? item.excerpt, basis: "ai", generatedAt: summary.generatedAt, href: item.href,
     evidence: sections.flatMap(s => s.items.filter(i => `${s.key}:${i.id}` === item.itemId).flatMap(i => i.evidence.map(e => hubNodeId(user.tenantId, e.source, e.id)))), state: summary.partial ? "partial" : "ready" });
+  const pendingCoverage = pendingStudentCoverageLabels({ slackOn, ecountOn });
   coverage.push(...sections.map((s) => ({ key: s.key, label: s.label, state: s.state,
     note: s.note ?? (s.total === null ? "전체 건수 확인 전" : `${s.total}건 중 ${s.items.length}건의 연결을 불러왔습니다.`) })),
     { key: "contribution", label: "기여도·설명회·소개 근거", state: selected ? "ready" : contribution ? "pending" : "unavailable", note: selected ? `${month} 근거 ${facts.length}건. 월별 점수 이력과 현재 원본의 시점은 구분합니다.` : "선택한 월의 분석 근거가 없거나 열람할 수 없습니다." },
     ...(aiOn ? [{ key: "summary", label: "근거 기반 AI 요약", state: summary?.state ?? "unavailable", note: summary?.state === "ready" ? "현재 권한과 원본을 다시 확인한 저장 요약입니다." : "유효한 저장 요약이 없습니다. 분석이 없는 것을 이상 없음으로 판단하지 않습니다." } as HubCoverage] : []),
-    { key: "external", label: "Google Drive·Notion·카카오톡/Slack", state: "pending", note: "학생별 문서·메시지 연결이 아직 준비되지 않았습니다. 이름이 같다는 이유만으로 자동 연결하지 않습니다." },
-    { key: "finance", label: "ECOUNT·학생별 수익 분석", state: "pending", note: "학원 회계자료는 경영 화면에 있습니다. 학생별 원가·이익은 배분 기준과 수강 관계를 연결한 뒤 계산합니다." },
+    { key: "external", label: pendingCoverage.external, state: "pending", note: "학생별 문서·메시지 연결이 아직 준비되지 않았습니다. 이름이 같다는 이유만으로 자동 연결하지 않습니다." },
+    { key: "finance", label: pendingCoverage.finance, state: "pending", note: "학원 회계자료는 경영 화면에 있습니다. 학생별 원가·이익은 배분 기준과 수강 관계를 연결한 뒤 계산합니다." },
     { key: "risk", label: "통합 이탈·성장 분석", state: "pending", note: "출결·성적·소통·약속·수납을 함께 판단하는 새 분석은 준비 중입니다." });
   const profile = { id: student.id, name: student.name, school: student.school, grade: student.grade, studentCode: student.studentCode,
     englishName: student.englishName, classnoteName: classnoteOn ? student.classnoteName : null, status: student.status,

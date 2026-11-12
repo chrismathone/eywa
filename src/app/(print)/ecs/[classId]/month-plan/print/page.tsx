@@ -31,7 +31,8 @@ export default async function EcsMonthPlanPrintPage({
   const res = await getMonthPlanPrint(classId, month ?? null, period ?? null);
   const embedded = (await headers()).get("x-embed") === "1";
 
-  if (!res.ok) notFound();
+  if (!res.ok && res.reason === "module_disabled") notFound();
+  if (!res.ok) return <p className="m-6 text-sm">{res.error}</p>;
 
   return (
     // ⚠️ 인쇄에선 바깥 여백을 0으로 — 여백은 `@page`가 한 번만 준다(두 번 주면 한 장에 안 들어간다).

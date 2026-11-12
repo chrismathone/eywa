@@ -311,9 +311,9 @@ function classAudit(decision: ClassDecision | null): Record<string, unknown> {
  * 상담을 저장한 뒤 그 학생의 **상담 흐름 분석**을 이전 분석에 합산한다(원장 2026-11-03 *"새 상담 올릴때마다 상담 분석 돌릴것"*).
  * 응답을 보낸 뒤(`after`) 돌고, 실패해도 상담 저장엔 영향이 없다(결과는 연결 탐색 왼쪽 '흐름 분석' 카드에 저장된 것만 보인다).
  */
-async function scheduleFlowRefresh(tenantId: string, studentId: string) {
-  if (!(await isFeatureLicensed(tenantId, "ai_analysis"))) return;
+function scheduleFlowRefresh(tenantId: string, studentId: string) {
   after(async () => {
+    if (!(await isFeatureLicensed(tenantId, "ai_analysis"))) return;
     const r = await refreshFlowInsight({ tenantId, studentId, kind: "consultations", reason: "consultation_saved" });
     if (r.status === "failed") console.error(`[consultations] 상담 흐름 분석 갱신 실패(${studentId}): ${r.error}`);
   });
@@ -413,7 +413,7 @@ export async function createStudentConsultation(
 
   revalidatePath("/consultations");
   revalidatePath(`/students/${input.studentId}`);
-  await scheduleFlowRefresh(user.tenantId, input.studentId);
+  scheduleFlowRefresh(user.tenantId, input.studentId);
   // redirect 대신 결과 반환 — 클라가 성공 확정(nonce) 후 초안 삭제·이동(B-2).
   // (제출 시점 무조건 clear는 서버 검증 실패 시 입력 유실 위험 → 성공 확정 기반으로 전환.)
   return { ok: true, redirectTo: "/consultations", nonce: Date.now() };
@@ -582,7 +582,7 @@ export async function updateStudentConsultation(
 
   revalidatePath("/consultations");
   revalidatePath(`/students/${input.studentId}`);
-  await scheduleFlowRefresh(user.tenantId, input.studentId);
+  scheduleFlowRefresh(user.tenantId, input.studentId);
   // redirect 대신 결과 반환 — 클라가 성공 확정(nonce) 후 초안 삭제·이동(B-2).
   return { ok: true, redirectTo: "/consultations", nonce: Date.now() };
 }

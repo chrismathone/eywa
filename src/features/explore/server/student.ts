@@ -11,6 +11,7 @@ import { KIND_LABEL as GRADE_KIND_LABEL, scoreUnit, type UnifiedRow } from "@/fe
 import { getStudentUnifiedRows } from "@/features/grades/unified/server/student-records";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isFeatureLicensed } from "@/lib/license/server";
+import { failedModuleConnectionCoverage } from "@/features/students/coverage-switches";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { memoCategoryLabel } from "@/features/students/detail/memo-category";
 import { studentStatusMeta } from "@/features/students/status/status-labels";
@@ -284,7 +285,7 @@ export async function loadStudentCenter(id: string): Promise<ExploreLoad> {
       label: "90일 점검",
       state: careChecks.state === "denied" ? ("restricted" as const) : careChecks.state === "error" ? ("failed" as const) : careChecks.state === "unavailable" ? ("pending" as const) : ("connected" as const),
     }]),
-    ...(coverageExtras.ok ? coverageExtras.value : [{ key: "extras", label: "클래스노트·셔틀", state: "failed" as const }]),
+    ...(coverageExtras.ok ? coverageExtras.value : failedModuleConnectionCoverage(settings.modules.disabled)),
   ];
   const aside = buildStudentAside({
     student,
