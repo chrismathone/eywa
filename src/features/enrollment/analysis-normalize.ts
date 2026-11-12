@@ -2,7 +2,7 @@
 // (화면에 그릴 때의 후보정은 report-normalize.ts `normalizeAiListText` — 그건 그대로 두고, 여기는 저장되는 값을 맞춘다.)
 // 순수 함수(⚠️ server-only 금지 [[#61]] — Vitest 대상). 규칙 원문 = consultation-analysis.ts 프롬프트의 '출력 형식 규칙'.
 import { cleanRoleMap, normalizeSection, sectionSource, toText, type SectionRules } from "@/lib/ai/section-normalize";
-import type { ConsultationReport13, ConversationFlowNode } from "./server/consultation-analysis";
+import type { ConsultationReport13, ConversationFlowNode } from "./consultation-analysis-prompt";
 
 /** 산문 섹션(프롬프트: '- ' 불릿 금지, 자연스러운 문장). */
 const PROSE_KEYS = ["consultationType", "summary", "familyBackground", "parentSatisfaction"] as const;

@@ -64,10 +64,19 @@ export function compareMentRuns(a: MentQualityMetrics, b: MentQualityMetrics): S
 export type AnalysisQualityMetrics = {
   fieldFillRate: number;
   missingFields: string[];
+  mustCaptureRate: number;
+  missedMustCapture: string[];
   warningsMissing: boolean;
   normalizationPassed: boolean;
   chatterMixed: boolean;
 };
+
+export type MustCaptureFact = { label: string; anyOf: string[] };
+
+const captureText = (value: unknown) => JSON.stringify(value ?? "")
+  .normalize("NFKC")
+  .toLocaleLowerCase("ko-KR")
+  .replace(/[\s\p{P}\p{S}]+/gu, "");
 
 /** 분석 JSON의 칸 채움·warnings 누락·후처리·잡담 혼입을 공통 계산한다. */
 export function measureAnalysisQuality(input: {
@@ -75,21 +84,34 @@ export function measureAnalysisQuality(input: {
   expectedFields: readonly string[];
   raw: string;
   normalize?: (value: unknown) => unknown;
+  mustCapture?: readonly MustCaptureFact[];
 }): AnalysisQualityMetrics {
   const filled = input.expectedFields.filter((field) => {
     const value = input.data[field];
     return Array.isArray(value) ? value.length > 0 : value != null && String(value).trim() !== "";
   });
   let normalizationPassed = true;
+  let normalized: unknown = input.data;
   try {
-    input.normalize?.(input.data);
+    normalized = input.normalize?.(input.data) ?? input.data;
   } catch {
     normalizationPassed = false;
   }
+  const haystack = captureText(normalized);
+  const normalizedRecord = normalized && typeof normalized === "object" && !Array.isArray(normalized)
+    ? normalized as Record<string, unknown>
+    : input.data;
+  const warnings = normalizedRecord.warnings;
+  const missedMustCapture = (input.mustCapture ?? [])
+    .filter((fact) => !fact.anyOf.some((term) => haystack.includes(captureText(term))))
+    .map((fact) => fact.label);
+  const mustCaptureCount = input.mustCapture?.length ?? 0;
   return {
     fieldFillRate: input.expectedFields.length ? Number((filled.length / input.expectedFields.length).toFixed(3)) : 1,
     missingFields: input.expectedFields.filter((field) => !filled.includes(field)),
-    warningsMissing: input.expectedFields.includes("warnings") && !("warnings" in input.data),
+    mustCaptureRate: mustCaptureCount ? Number(((mustCaptureCount - missedMustCapture.length) / mustCaptureCount).toFixed(3)) : 1,
+    missedMustCapture,
+    warningsMissing: input.expectedFields.includes("warnings") && (warnings == null || String(warnings).trim() === ""),
     normalizationPassed,
     chatterMixed: !input.raw.trim().startsWith("{") || /```/.test(input.raw),
   };

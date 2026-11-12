@@ -11,13 +11,18 @@ import { openAIProfileFor } from "../../src/lib/ai/model-pins";
 import { parseJsonLoose } from "../../src/lib/ai/generate";
 import { mentSections, readMentResponse, stripSubjectLabel, type MentAssembly } from "../../src/features/onescreen/ment-assembly";
 import { assembleCombined } from "../../src/features/onescreen/prompt-defaults";
+import { normalizeIntent } from "../../src/features/attendance/parent-alerts/intent";
+import { normalizeStudentConsultationReport, type StudentConsultationReport } from "../../src/features/consultations/analysis-prompt";
 import { normalizeConsultationReport } from "../../src/features/enrollment/analysis-normalize";
+import { normalizeExtractedForm } from "../../src/features/enrollment/form-normalize";
+import { applyParentAddress, validatePrepBrief, type PrepFacts } from "../../src/features/enrollment/prep-brief";
 import { normalizeMeetingAnalysis } from "../../src/features/meetings/analysis-normalize";
 import { groundContractExtract, type RawContractExtract } from "../../src/features/staff/contract/contract-extract";
+import { BUILT_IN_ANALYSIS_CASES, buildAnalysisCase, type AnalysisSeed } from "./ai-provider-cases";
 import { compareMentRuns, measureAnalysisQuality, measureMentQuality } from "./ai-provider-metrics";
 
 type Mode = "internal" | "claude-cli" | "codex-cli" | "openai-connectivity";
-type Kind = "ment" | "consultation" | "classification" | "translation" | "meeting" | "contract";
+type Kind = "ment" | "consultation" | "form" | "classification" | "translation" | "meeting" | "studentConsultation" | "prep" | "contract";
 type Case = {
   id: string;
   feature: string;
@@ -29,11 +34,16 @@ type Case = {
   expectedFields: string[];
   claudeOnly?: boolean;
   mentMode?: "A" | "B";
+  mustCapture?: AnalysisSeed["mustCapture"];
+  inputName?: string;
+  multi?: boolean;
+  messageDates?: Record<string, string>;
+  prepFacts?: PrepFacts;
 };
 type InputFile = {
   version: 1;
   ment?: Array<{ id: string; input: MentAssembly["input"] & { storedProgress?: string }; mode?: "A" | "B" }>;
-  analyses?: Case[];
+  analyses?: AnalysisSeed[];
 };
 type Row = {
   feature: string;
@@ -98,28 +108,7 @@ function mentCase(id: string, raw: MentAssembly["input"] & { storedProgress?: st
 
 const builtIn: Case[] = [
   mentCase("parent-ment", fakeMentInput),
-  {
-    id: "consultation", feature: "enrollment_analysis", kind: "consultation", tier: "balanced", claudeEffort: "high",
-    sourceFacts: "[화자 A] 가명학생B는 수학 진단 60점입니다. [화자 B] 주 3회 수업을 원합니다.",
-    expectedFields: ["consultationType", "summary", "parentConcerns", "teacherResponse", "warnings", "extracted"],
-    prompt: '가명 처리된 등록상담 전사만 근거로 분석해 JSON으로 답하라. 필드: {"consultationType":"","summary":"","parentConcerns":"","teacherResponse":"","warnings":"","extracted":{}}. 전사: [화자 A] 가명학생B는 수학 진단 60점입니다. [화자 B] 주 3회 수업을 원합니다.',
-  },
-  {
-    id: "absence", feature: "parent_attendance_intent", kind: "classification", tier: "balanced", claudeEffort: "medium",
-    sourceFacts: "가명학생C가 감기로 오늘 결석합니다.", expectedFields: ["results"],
-    prompt: '학부모 문자에서 결석 의도를 판정해 JSON {"results":[{"intent":"absence|other","reason":""}]}로 답하라. 문자: 가명학생C가 감기로 오늘 결석합니다.',
-  },
-  {
-    id: "notice", feature: "notice_translate", kind: "translation", tier: "balanced", claudeEffort: "medium",
-    sourceFacts: "11월 20일 오후 4시 휴강", expectedFields: ["title", "body"],
-    prompt: '다음 공지를 영어로 번역해 JSON {"title":"","body":""}로 답하라. 제목: 휴강 안내. 본문: 11월 20일 오후 4시 수업은 휴강입니다.',
-  },
-  {
-    id: "meeting", feature: "meeting_analysis", kind: "meeting", tier: "balanced", claudeEffort: "high",
-    sourceFacts: "가명직원A: 11월 15일까지 교재 목록 정리. 가명직원B: 확인하겠습니다.",
-    expectedFields: ["meetingType", "summary", "agendaDiscussion", "decisions", "actionItems", "speakerSummary", "concerns", "nextSteps"],
-    prompt: '회의 전사만 근거로 8칸 회의록 JSON을 작성하라. 필드: {"meetingType":"","summary":"","agendaDiscussion":"","decisions":"","actionItems":"","speakerSummary":"","concerns":"","nextSteps":""}. 전사: 가명직원A: 11월 15일까지 교재 목록 정리. 가명직원B: 확인하겠습니다.',
-  },
+  ...BUILT_IN_ANALYSIS_CASES,
   {
     id: "contract", feature: "staff_contract_pdf", kind: "contract", tier: "balanced", claudeEffort: "high", claudeOnly: true,
     sourceFacts: "가명직원D 계약기간 2026-11-01부터 2027-10-31, 정규직, 월급 3,000,000원",
@@ -135,7 +124,7 @@ async function loadCases(): Promise<Case[]> {
   if (input.version !== 1) throw new Error("입력 파일 version은 1이어야 합니다");
   return [
     ...(input.ment ?? []).map((item) => mentCase(item.id, item.input, item.mode)),
-    ...(input.analyses ?? []),
+    ...(input.analyses ?? []).map(buildAnalysisCase),
   ];
 }
 
@@ -146,10 +135,38 @@ function postprocess(c: Case, raw: string): { data: Record<string, unknown>; met
     return { data: { comment: read.comment }, metrics: measureMentQuality(read.comment, c.sourceFacts) };
   }
   let normalize: ((value: unknown) => unknown) | undefined;
-  if (c.kind === "consultation") normalize = (value) => normalizeConsultationReport(value, { inputName: "가명학생B" });
-  if (c.kind === "meeting") normalize = normalizeMeetingAnalysis;
+  if (c.kind === "consultation") normalize = (value) => normalizeConsultationReport(value, { inputName: c.inputName, multi: c.multi });
+  if (c.kind === "form") normalize = normalizeExtractedForm;
+  if (c.kind === "classification") {
+    normalize = (value) => {
+      const results = Array.isArray((value as { results?: unknown })?.results) ? (value as { results: Array<Record<string, unknown>> }).results : [];
+      const byId = new Map(results.map((item) => [String(item.id ?? ""), item]));
+      return {
+        results: Object.entries(c.messageDates ?? {}).map(([id, messageDate]) => ({
+          id,
+          ...normalizeIntent(byId.get(id) ?? {}, { messageDate }),
+        })),
+      };
+    };
+  }
+  if (c.kind === "translation") normalize = (value) => Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, typeof item === "string" ? item.trim() : item]),
+  );
+  if (c.kind === "meeting") normalize = (value) => normalizeMeetingAnalysis(value).report;
+  if (c.kind === "studentConsultation") normalize = (value) => normalizeStudentConsultationReport(value as Partial<StudentConsultationReport>);
+  if (c.kind === "prep") {
+    normalize = (value) => {
+      if (!c.prepFacts) throw new Error("상담 준비 브리프 사실 입력이 없습니다");
+      const checked = validatePrepBrief(value, c.prepFacts);
+      if (!checked.ok) throw new Error(checked.reason);
+      return applyParentAddress(checked.value, c.prepFacts);
+    };
+  }
   if (c.kind === "contract") normalize = (value) => groundContractExtract(value as RawContractExtract, c.sourceFacts);
-  return { data: parsed, metrics: measureAnalysisQuality({ data: parsed, expectedFields: c.expectedFields, raw, normalize }) };
+  return {
+    data: parsed,
+    metrics: measureAnalysisQuality({ data: parsed, expectedFields: c.expectedFields, raw, normalize, mustCapture: c.mustCapture }),
+  };
 }
 
 async function cliCall(c: Case, provider: "claude-cli" | "codex-cli"): Promise<Row> {
@@ -237,6 +254,9 @@ async function main() {
     }
   }
   console.table(rows.map((row) => ({
+    mustCaptureRate: row.metrics && typeof row.metrics === "object" && "mustCaptureRate" in row.metrics
+      ? (row.metrics as ReturnType<typeof measureAnalysisQuality>).mustCaptureRate
+      : null,
     feature: row.feature, provider: row.provider, run: row.run, status: row.status,
     model: row.model, effort: row.effort, cliVersion: row.cliVersion, durationMs: row.durationMs,
     inputTokens: row.inputTokens, outputTokens: row.outputTokens,
@@ -257,7 +277,9 @@ async function main() {
     } else {
       const a = claude.metrics as ReturnType<typeof measureAnalysisQuality>;
       const b = gpt.metrics as ReturnType<typeof measureAnalysisQuality>;
-      if (b.fieldFillRate < a.fieldFillRate) qualityFindings.push(`${gpt.feature}: 칸 채움률 하락`);
+      if (b.mustCaptureRate < a.mustCaptureRate) qualityFindings.push(`${gpt.feature}: 필수 사실 포착률 하락(${a.mustCaptureRate}→${b.mustCaptureRate})`);
+      if (b.missedMustCapture.length) qualityFindings.push(`${gpt.feature}: 필수 사실 누락(${b.missedMustCapture.join(", ")})`);
+      if (b.fieldFillRate < a.fieldFillRate) qualityFindings.push(`${gpt.feature}: 참고 지표인 칸 채움률 하락`);
       if (b.warningsMissing && !a.warningsMissing) qualityFindings.push(`${gpt.feature}: warnings 누락`);
       if (!b.normalizationPassed && a.normalizationPassed) qualityFindings.push(`${gpt.feature}: 후처리 실패`);
       if (b.chatterMixed && !a.chatterMixed) qualityFindings.push(`${gpt.feature}: JSON 밖 잡담 혼입`);
