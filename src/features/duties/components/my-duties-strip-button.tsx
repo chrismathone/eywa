@@ -15,8 +15,8 @@ import { useDutyPing } from "./use-duty-ping";
 import { MyDutiesMonth } from "./my-duties-month";
 
 type Count = { total: number; done: number; late: number };
-export type DutyStripSummary = { overdue?: number; date: string; month: string; today: Count; week: Count; byKind: DutyKindCount[]; counsel: Count; exam: Count; newcomer: Count; lang: "ko" | "en" };
-export type DutyPayload = { date: string; days: string[]; items: DutyItemView[]; week: DutyWeekCell[]; month: DutyItemView[]; /** 반 → 수업 요일(mon…sun) */ classDays?: Record<string, string[]>; /** `<학생>|<반>` → 등원 요일 */ studentDays?: Record<string, string[]> };
+export type DutyStripSummary = { overdue?: number; date: string; month: string; today: Count; week: Count; byKind: DutyKindCount[]; counsel: Count; exam: Count; newcomer: Count; /** 서버가 판정한 신규생 관리 표시 여부. */ newcomerShown?: boolean; lang: "ko" | "en" };
+export type DutyPayload = { date: string; days: string[]; items: DutyItemView[]; week: DutyWeekCell[]; month: DutyItemView[]; /** 서버가 판정한 신규생 관리 표시 여부. */ newcomerShown?: boolean; /** 반 → 수업 요일(mon…sun) */ classDays?: Record<string, string[]>; /** `<학생>|<반>` → 등원 요일 */ studentDays?: Record<string, string[]> };
 type View = "today" | "week" | "month";
 const VIEWS: { key: View; label: string }[] = [{ key: "today", label: "오늘" }, { key: "week", label: "이번 주" }, { key: "month", label: "이번 달" }];
 const REFRESH_MS = 60_000;
@@ -27,7 +27,7 @@ const REFRESH_MS = 60_000;
  */
 export function MyDutiesStripButton({ summary: initial, tenantId = null, className = "" }: { summary: DutyStripSummary; /** 저장 순간의 신호를 들을 지점(s2_0080). */ tenantId?: string | null; className?: string }) {
   const [summary, setSummary] = useState(initial);
-  const { date, month, today, counsel, exam, newcomer, lang } = summary;
+  const { date, month, today, counsel, exam, newcomer, newcomerShown, lang } = summary;
   // 모두 접기/펼치기 — 패널을 다시 그려(key) 처음 상태를 바꾼다(원장 2026-11-10: 단추는 오늘/이번 주/이번 달 줄 맨 오른쪽).
   const [fold, setFold] = useState<{ closed: boolean; v: number }>({ closed: false, v: 0 });
   const [view, setView] = useState<View | null>(null);
@@ -96,12 +96,12 @@ export function MyDutiesStripButton({ summary: initial, tenantId = null, classNa
       <span className="bg-bg-soft h-1.5 w-24 shrink-0 overflow-hidden rounded-full" aria-hidden><span className={`block h-full rounded-full ${pct(today) === 100 ? "bg-green" : "bg-primary"}`} style={{ width: `${pct(today)}%` }} /></span>
       <span className="text-text-dim text-xs font-medium">{lang === "en" ? "Open ›" : "열기 ›"}</span>
     </button>
-    <div className="grid gap-2 px-3 pb-3 sm:grid-cols-3 lg:grid-cols-5">
+    <div className={`grid gap-2 px-3 pb-3 sm:grid-cols-2 ${newcomerShown === false ? "lg:grid-cols-4" : "lg:grid-cols-5"}`}>
       <Tile label="오늘 완료도" value={`${today.done}`} unit={`/ ${today.total}`} pct={pct(today)} tone={today.total && pct(today) === 100 ? "green" : "primary"} onClick={() => setView("today")} />
       <Tile label="미처리" value={`${lateAll}`} tone={lateAll ? "danger" : "muted"} onClick={() => setView(today.late ? "today" : "month")} />
       <Tile label={`${mm}월 학생 상담`} value={`${counsel.done}`} unit={`/ ${counsel.total}`} pct={pct(counsel)} tone={counsel.total && pct(counsel) === 100 ? "green" : counsel.late ? "danger" : "primary"} onClick={() => setView("month")} />
       <Tile label={`${mm}월 월말평가`} value={`${exam.done}`} unit={`/ ${exam.total}`} pct={pct(exam)} tone={exam.total && pct(exam) === 100 ? "green" : exam.late ? "danger" : "primary"} onClick={() => setView("month")} />
-      <Tile label="신규생 관리" value={`${newcomer.done}`} unit={`/ ${newcomer.total}`} pct={pct(newcomer)} tone={newcomer.late ? "danger" : newcomer.total && pct(newcomer) === 100 ? "green" : "primary"} onClick={() => setView("month")} />
+      {newcomerShown === false ? null : <Tile label="신규생 관리" value={`${newcomer.done}`} unit={`/ ${newcomer.total}`} pct={pct(newcomer)} tone={newcomer.late ? "danger" : newcomer.total && pct(newcomer) === 100 ? "green" : "primary"} onClick={() => setView("month")} />}
     </div>
     {/* z-[70]: 미니셸 헤더가 z-[60](공지 팝업 위)이라 기본 z-50 창은 헤더에 덮인다(원장 제보 2026-11-09). 창 안엔 셀렉트·팝오버가 없어 올려도 된다. */}
     {view ? <Dialog open onOpenChange={(open) => (!open ? (work ? closeWork() : setView(null)) : undefined)}>
@@ -134,7 +134,7 @@ export function MyDutiesStripButton({ summary: initial, tenantId = null, classNa
                 : !loaded ? <p className="text-text-dim mt-2 text-sm">불러오는 중…</p>
                 : view === "today" ? <MyDutiesPanel key={`t-${fold.v}`} loaded={loaded} defaultClosed={fold.closed} />
                 : view === "week" ? <MyDutiesWeek key={`w-${fold.v}`} week={loaded.payload.week} days={loaded.payload.days} today={date} classDays={loaded.payload.classDays ?? {}} studentDays={loaded.payload.studentDays ?? {}} defaultClosed={fold.closed} />
-                : <MyDutiesMonth items={loaded.payload.month} now={loaded.at} month={month} />}
+                : <MyDutiesMonth items={loaded.payload.month} now={loaded.at} month={month} newcomerShown={loaded.payload.newcomerShown} />}
             </div>
           </DutyWorkContext.Provider>
         </>}

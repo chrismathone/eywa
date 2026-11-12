@@ -64,4 +64,15 @@ describe("꺼진 기능 가드", () => {
     expect(read("src/app/api/cron/sheets-sync/route.ts")).toMatch(/"sheet_sync"/);
     expect(read("src/features/newcomers/server/consult-link.ts")).toMatch(/"newcomers"/);
   });
+
+  it("업무 완성도와 운영실은 실제 발송만 발송 의무·발송 줄로 세고, 영어 직접 작성 집계는 모듈 판정을 유지한다", () => {
+    const read = (p: string) => readFileSync(path.join(ROOT, p), "utf8");
+    const sync = read("src/features/duties/server/sync.ts");
+    expect(sync).toContain("const classnoteSending = classnoteSendOn(settings)");
+    expect(sync).toContain("classnoteSendOn: classnoteSending");
+    expect(sync).toMatch(/void_reason: "send_disabled"[\s\S]*?\.eq\("kind", "report_send"\)[\s\S]*?\.eq\("status", "open"\)/);
+    const work = read("src/features/dashboard/overview/teacher-work-server.ts");
+    expect(work).toContain("const deliveryShown = classnoteSendOn(settings)");
+    expect(work).toMatch(/english && classnoteModuleOn\(settings\) \? "classnote"/);
+  });
 }, 60_000);
