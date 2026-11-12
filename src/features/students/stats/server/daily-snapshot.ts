@@ -8,6 +8,7 @@ import { buildDailySnapshot } from "../daily-snapshot";
 import { recordAywaHistory } from "./history";
 import { buildOpsDaily } from "./ops-daily";
 import type { OpsDaily } from "../ops-daily";
+import { filterKeptOps } from "./kept-ops";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -96,10 +97,9 @@ async function recordTenant(admin: Admin, tenantId: string, today: string): Prom
     return {};
   });
   // 같은 날 다시 돌 때(재시도) 이번에 실패한 칸은 앞서 쓴 그날 값을 남긴다 — 줄을 통째로 갈아끼우므로 안 그러면 지워진다.
-  const kept = ops.consult && ops.newcomers ? {} : await keptOps(admin, tenantId, today);
-  // 기능을 끈 뒤 같은 날 재실행해도 먼저 쓴 옛 값이 합쳐져 되살아나지 않게 한다.
-  if (!opsModules.calendar) delete kept.consult;
-  if (!opsModules.newcomers) delete kept.newcomers;
+  const kept = ops.consult && ops.newcomers
+    ? {}
+    : filterKeptOps(await keptOps(admin, tenantId, today), opsModules);
   const merged: OpsDaily = { ...kept, ...ops };
   const row = Object.keys(merged).length ? { ...data, ops: merged } : data;
   const { error } = await admin

@@ -1,7 +1,7 @@
 import "server-only";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import type { StaffTaskEvent, StaffTaskFilter, StaffTaskItem, StaffTaskList, StaffTaskPerson, StaffTaskStatus } from "../kinds";
 import { hiddenStaffTaskKinds } from "../task-visibility";
 
@@ -28,7 +28,7 @@ export async function countOpenTasks(
     admin.rpc("staff_task_counts", { p_tenant: tenantId, p_user: userId ?? null }),
     hiddenKinds
       ? Promise.resolve([...hiddenKinds])
-      : getTenantSettingsByTenantId(tenantId).then(hiddenStaffTaskKinds),
+      : getTenantSettings().then(hiddenStaffTaskKinds),
   ]);
   if (error) throw new Error(`할 일 집계: ${error.message}`);
   const out = new Map<string, { open: number; late: number }>();
@@ -80,7 +80,7 @@ export async function listTasks(args: {
 }): Promise<StaffTaskList> {
   const admin = createAdminClient();
   const page = Math.max(0, Math.floor(args.page));
-  const hidden = hiddenStaffTaskKinds(await getTenantSettingsByTenantId(args.tenantId));
+  const hidden = hiddenStaffTaskKinds(await getTenantSettings());
   if (args.kind && hidden.includes(args.kind)) return { items: [], total: 0, page, pageSize: TASK_PAGE_SIZE };
   const embed = args.assigneeId ? ", staff_task_assignees!staff_task_assignees_task_id_fkey!inner(user_id)" : "";
   let q = admin.from("staff_tasks").select(`${COLUMNS}${embed}`, { count: "exact" }).eq("tenant_id", args.tenantId);
@@ -114,14 +114,14 @@ export async function listTasks(args: {
 /** 할 일 하나 + 이력. 볼 수 없으면 null(맡은 사람이 아니고 현황 권한도 없음 · 다른 지점 · 없는 id). */
 export async function taskDetail(tenantId: string, taskId: string, viewer: { userId: string; canMonitor: boolean }): Promise<{ item: StaffTaskItem; events: StaffTaskEvent[] } | null> {
   const admin = createAdminClient();
-  const hidden = hiddenStaffTaskKinds(await getTenantSettingsByTenantId(tenantId));
-  let taskQuery = admin.from("staff_tasks").select(COLUMNS).eq("tenant_id", tenantId).eq("id", taskId);
-  if (hidden.length) taskQuery = taskQuery.not("kind", "in", `(${hidden.join(",")})`);
-  const [{ data: row, error }, { data: links, error: linkError }, { data: events, error: eventError }] = await Promise.all([
-    taskQuery.maybeSingle(),
+  const [hidden, { data: links, error: linkError }, { data: events, error: eventError }] = await Promise.all([
+    getTenantSettings().then(hiddenStaffTaskKinds),
     admin.from("staff_task_assignees").select("user_id").eq("tenant_id", tenantId).eq("task_id", taskId),
     admin.from("staff_task_events").select("at, event, actor_id").eq("tenant_id", tenantId).eq("task_id", taskId).order("at").order("id").limit(200),
   ]);
+  let taskQuery = admin.from("staff_tasks").select(COLUMNS).eq("tenant_id", tenantId).eq("id", taskId);
+  if (hidden.length) taskQuery = taskQuery.not("kind", "in", `(${hidden.join(",")})`);
+  const { data: row, error } = await taskQuery.maybeSingle();
   if (error || linkError || eventError) throw new Error(`할 일 상세: ${(error ?? linkError ?? eventError)!.message}`);
   if (!row) return null;
   const assigneeIds = (links ?? []).map((l) => l.user_id as string);
@@ -149,7 +149,7 @@ export async function taskBadgesFor(
 ): Promise<Map<string, { status: StaffTaskStatus; dueAt: string | null }>> {
   const ids = [...new Set(taskIds)];
   if (!ids.length) return new Map();
-  const hidden = hiddenKinds ? [...hiddenKinds] : hiddenStaffTaskKinds(await getTenantSettingsByTenantId(tenantId));
+  const hidden = hiddenKinds ? [...hiddenKinds] : hiddenStaffTaskKinds(await getTenantSettings());
   // 묶음 알림이 여럿이면 할 일 id가 수백 개일 수 있다 — 청크로(B3).
   const admin = createAdminClient();
   const rows = await fetchInChunks<{ id: string; status: StaffTaskStatus; due_at: string | null }>(ids, (chunk) => {

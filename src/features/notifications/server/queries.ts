@@ -4,7 +4,7 @@ import { NOTIFICATION_LIST_LIMIT, NOTIFICATION_LIST_MAX, type NotificationItem }
 import { presentNotification } from "../presentation";
 import { myTaskSummary, notificationTaskBadges } from "@/features/staff-tasks/server/bell";
 import { taskKindLabel, type StaffTaskSummary } from "@/features/staff-tasks/kinds";
-import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import { hiddenNotificationTypes } from "../module-visibility";
 import { hiddenStaffTaskKinds } from "@/features/staff-tasks/task-visibility";
 
@@ -45,11 +45,11 @@ export async function getMyNotifications(
   // 운영 콘솔의 '지점 보기'(읽기 전용) 중에는 벨을 비운다 — 알림은 지점이 아니라 **받는 사람**으로 걸러지는 표라
   // 그대로 읽으면 운영자 본인이 자기 지점에서 받은 알림이 보는 지점 화면에 뜬다(inbox.ts가 null).
   // 보기 쿠키가 남아 있는데 보기가 아닌 요청(끝났다 · 확인하지 못했다)도 같다 — 그 브라우저에는 보기 띠를 단 탭이 남아 있을 수 있다.
-  const inbox = await notificationInbox();
+  const [inbox, settings] = await Promise.all([notificationInbox(), getTenantSettings()]);
   if (!inbox) return { unread: 0, items: [] };
-  const settings = await getTenantSettingsByTenantId(inbox.tenantId);
   const hiddenTypes = hiddenNotificationTypes(settings);
   const hiddenTaskKinds = hiddenStaffTaskKinds(settings);
+  const hiddenDigestLabels = hiddenTaskKinds.map(taskKindLabel);
   // 같은 설정 판정을 넘긴다 — 목록 한 번에 설정을 세 번 다시 읽지 않게(B6).
   const summaryPromise = myTaskSummary(hiddenTaskKinds);
   // 받는 사람 · 지점을 **늘 명시**한다 — '다른 강사 뷰'는 관리 연결(RLS 없음)로 대상 강사 알림을 읽는다(inbox.ts).
@@ -73,6 +73,11 @@ export async function getMyNotifications(
       .order("created_at", { ascending: false })
       .limit(size);
     if (hiddenTypes.length) base = base.not("type", "in", `(${hiddenTypes.join(",")})`);
+    // 보관함은 요약을 접지 않으므로, 기능을 끄기 전에 만든 요약도 목록 쿼리에서 거른다.
+    // 각 조건은 (요약 아님 OR 본문 없음 OR 이 라벨 없음)이고 여러 라벨 조건은 AND로 쌓인다.
+    for (const label of hiddenDigestLabels) {
+      base = base.or(`type.neq.${DIGEST_TYPE},body.is.null,body.not.ilike.%${label}%`);
+    }
     const q = collapse ? base.neq("type", DIGEST_TYPE) : base;
     const scoped = view === "archived" ? q.not("archived_at", "is", null) : q.is("archived_at", null);
     return read ? scoped.not("read_at", "is", null) : scoped.is("read_at", null);
@@ -103,7 +108,6 @@ export async function getMyNotifications(
   const latestCandidate = !digest.error ? ((digest.data as Row | null) ?? null) : null;
   // 모듈을 끄기 전에 만든 요약은 본문에 감춘 종류 이름이 남는다. 그 한 장은 통째로 빼고,
   // 다음 아침부터는 digest.ts가 보이는 종류만 다시 요약한다.
-  const hiddenDigestLabels = hiddenTaskKinds.map(taskKindLabel);
   const latest = latestCandidate && hiddenDigestLabels.some((label) => latestCandidate.body?.includes(label))
     ? null
     : latestCandidate;
