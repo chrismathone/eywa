@@ -113,7 +113,7 @@
 
 - **인쇄 서식 30건 / 8파일**(`src/app/(print)/**`의 `gray`·`slate`·`amber` 등). 종이는 화면 팔레트와 별개라
   이 규칙에서 뺄지 아직 정하지 않았다.
-- **랜딩 목업 SVG 23건**(`src/app/(marketing)/_scroll/dashboard-mock.tsx`). 자체 팔레트로 그린 그림이다.
+- ~~**랜딩 목업 SVG 23건**(`src/app/(marketing)/_scroll/dashboard-mock.tsx`)~~ → 2026-11-12 파일째 지움(진입점에서 안 닿던 옛 목업 · 남은 보류는 인쇄 서식 30건).
 
 ## 한계
 
