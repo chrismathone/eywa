@@ -121,6 +121,7 @@ export function ComposeFace({
                 blockedReason: res.blockedReason ?? null,
                 requestable: !!res.requestable,
                 viaMakeup: !!res.viaMakeup,
+                deliveryOnly: !!res.deliveryOnly,
                 makeupClassName: res.makeupClassName ?? null,
               }
             : null;
@@ -275,7 +276,8 @@ export function ComposeFace({
       // 멘트 작성 방식(0214a) — 자동작성 스냅샷과 비교(서버가 기존 라벨과 합쳐 최종 확정).
       mentSource: computeClientMentSource(body, autoBody),
       // 보낼 반(원장 2026-09-30) — 반별 발송에서 보고서 반에 반 보드가 없을 때만. 서버가 후보 안인지 다시 확인한다.
-      classnoteClassId: sendOpt?.applies && sendOpt.needed && sendClassId ? sendClassId : null,
+      classnoteClassId: sendOpt?.applies && sendOpt.needed && !sendOpt.deliveryOnly && sendClassId ? sendClassId : null,
+      deliveryClassId: sendOpt?.applies && sendOpt.needed && sendOpt.deliveryOnly && sendClassId ? sendClassId : null,
     };
   }
 
@@ -405,6 +407,7 @@ export function ComposeFace({
           candidates: res.candidates,
           defaultId: res.defaultClassId ?? null,
           makeupClassName: res.makeupClassName ?? null,
+          deliveryOnly: !!res.deliveryOnly,
           blockedReason: null,
           requestable: false, // 이제 반을 골라야 한다 — 잠금 해제 값이 남아 반 없이 열리지 않게
         });

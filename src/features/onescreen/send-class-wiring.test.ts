@@ -53,11 +53,13 @@ describe("반별 발송 '보낼 반' — 세 발송 경로", () => {
 
   it("🔴 보강 추가한 반(makeup_class_id)이 먼저 — 원스크린·관리자 직접 작성·일괄 게이트·워커가 모두 본다(원장 2026-09-30)", () => {
     // 원스크린 = saveLessonReport가 확인해 **저장한** 앵커(클라 값을 그대로 믿지 않는다 — prepareMakeupAnchor → acceptMakeupAnchor)
-    expect(ONESCREEN).toContain("resolveMakeupSendClass(user.tenantId, input.studentId, reportDate, input.subject, saved.makeupClassId ?? null)");
+    expect(ONESCREEN).toContain("saved.makeupClassId ?? null, input.deliveryClassId ?? saved.deliveryClassId)");
     expect(ONESCREEN).toContain("prepareMakeupAnchor(supabase, {");
     expect(ONESCREEN).toContain("makeup_class_id: makeupAnchor,");
     // 🔴 '보낼 반'은 앵커의 복사본 — 저장이 같은 값으로 적는다(따로 고른 반을 적는 길 없음)
-    expect(ONESCREEN).toContain("{ classnote_class_id: makeupAnchor }");
+    expect(ONESCREEN).toContain("classnote_class_id: makeupDeliveryOnSave(");
+    expect(ONESCREEN).toContain("classnote_class_id: sendClassPick.classId");
+    expect(ONESCREEN).toContain("queueQuery.eq(\"makeup_class_id\", saved.makeupClassId)");
     expect(ONESCREEN).not.toContain("update({ classnote_class_id: pick.classId })");
     // 관리자 직접 작성 = 같은 앵커 함수 + 반 고르기 재료는 저장된 앵커
     expect(COMPOSE).toContain("prepareMakeupAnchor(supabase, {");
@@ -65,7 +67,7 @@ describe("반별 발송 '보낼 반' — 세 발송 경로", () => {
     expect(COMPOSE.match(/reportMakeupClassId\(user\.tenantId/g)?.length).toBe(1);
     const server = read("src/features/onescreen/server/send-class.ts");
     expect(server).toContain("decideSendClass(");
-    expect(server).toContain('.select("id, classnote_class_id, makeup_class_id, classnote_sent_at")'); // 일괄 게이트
+    expect(server).toContain('.select("id, classnote_class_id, makeup_class_id, classnote_sent_at, report_date, subject")');
     expect(server).toContain("sendClassGateRow(");
     expect(server).toContain('.is("classnote_sent_at", null)'); // 게시된 행의 '보낼 반'을 덮지 않는다
     // 일괄 경로 넷 모두 적은 행을 감사로그에

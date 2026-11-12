@@ -20,12 +20,10 @@ const HINT: Record<ShellMode, string> = {
  */
 export function WindowModeRow({
   tenantId,
-  tenantName,
   windowModeRow,
   keepaliveRow,
 }: {
   tenantId: string;
-  tenantName: string;
   windowModeRow?: TenantLicenseRow;
   keepaliveRow?: TenantLicenseRow;
 }) {
@@ -40,7 +38,6 @@ export function WindowModeRow({
         <span className="text-foreground text-sm font-bold">화면 방식(PC 관리자뷰)</span>
         <form action={action} className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="화면 방식">
           <input type="hidden" name="tenantId" value={tenantId} />
-          <input type="hidden" name="tenantName" value={tenantName} />
           {SHELL_MODES.map((m) => (
             <button
               key={m}

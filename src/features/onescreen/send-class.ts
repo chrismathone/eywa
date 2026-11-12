@@ -1,9 +1,8 @@
 /**
  * 반 정보 없는 보강 보고서의 **'ClassNote로 보낼 반'** 판정(순수 · Vitest).
  *
- * 🔴 2026-09-30 원장 결정 이후: **보강 보고서의 발송 반 = 보강 반(`makeup_class_id`) = 출석부 칸의 반** — 따로 고르지 않는다
- *    ([`makeup-anchor.ts`](./makeup-anchor.ts) 불변식). 아래 옛 설명의 '메인 수업 자동 고르기'는 이제 **반 미정 보강의 기본 선택**으로만
- *    쓰이고, 강사가 고르면 그 반이 보강 반이 된다(출석부 칸도 함께 옮겨진다 — `changeMakeupAnchor`).
+ * 2026-11-12: 보강 수업 반(`makeup_class_id`)과 출결은 함께 유지하고, 전달 반(`classnote_class_id`)은 검증 후 따로 고를 수 있다.
+ *    메인 수업은 선택창의 기본값일 뿐이다. 반 미정 보강은 먼저 수업 반을 정한다.
  *    정규 보고서의 반 보드가 없어지면 다른 반으로 보내지 않고 막는다(`BOARD_MISSING_ERROR`).
  *
  * 원장 2026-09-29: 수학 반별 발송이면 보고서의 반 = ClassNote 반 보드인데, 보강 보고서는 반이 비어 있다.
@@ -299,11 +298,11 @@ export function pickMainClass(
 }
 
 /**
- * 보강 보고서의 **'보낼 반' 최종 판정**(순수) — 🔴 원장 2026-09-30: 보고서 반 = 출석부 반 = 발송 반.
+ * 전달 경로를 아직 정하지 않은 보강의 기본 반·선택창 판정(순수).
  * 보강 보고서의 발송 반은 **보강 반(앵커) 그 자체**다. 따로 고른 반·메인 수업으로 **자동으로** 보내지 않는다.
  *  1. 앵커가 있고 이 학생의 **살아 있는 반 보드**가 있으면 그 반 — 묻지 않는다.
  *  2. 앵커가 있는데 보드가 없거나(`makeupMismatch`), 앵커가 없으면('반 미정') **묻는다** — 강사가 고른 반이
- *     **새 보강 반**이 된다(저장이 출석부 칸을 그 반으로 함께 옮긴다). 기본 선택 = 메인 수업(`main`, 앵커 반 제외).
+ *     전달 반이 된다(수업 반이 미정일 때만 새 보강 반으로도 사용). 기본 선택 = 메인 수업(`main`, 앵커 반 제외).
  *  3. 고를 후보가 없으면 `none`(발송 불가).
  * ⚠️ 옛 '고른 반(chosen)만 적고 보내기'·'메인 수업 자동 발송'은 없앴다 — 보고서 반과 출석부 반이 갈리는 길이었다(C1·C9).
  */
@@ -344,8 +343,8 @@ export function isSendCandidateClass(
 /**
  * 관리자 일괄 경로의 **보낼 반 게이트 한 행**(순수 — 서버 `blockedForNoSendClass`). 워커 `pickRouteClass`와 **같은 판정**:
  *  · 정규 보고서(반 있음) = 그 반 보드가 살아 있을 때만 통과. 죽었으면 막는다(다른 반으로 보내지 않는다 — 원장 결정 4).
- *  · 보강 보고서 = **보강 반(앵커)**의 보드가 살아 있을 때만 통과. 적힌 '보낼 반'이 앵커와 다르면 막는다(보고서 반 ≠ 발송 반).
- *    통과하면 `rewriteTo` = 앵커 — '보낼 반'을 앵커로 적어 둔다(보강 반을 모르는 옛 워커도 같은 반으로 가게).
+ *  · 보강 보고서 = 수업 반은 필수. 다른 전달 반이 있으면 storedLive(수강·과목·배정 검증 결과)를 따른다.
+ *    전달 반이 없으면 기본 전달 반을 앵커로 적는다. 출결은 이동하지 않는다.
  *  · 반 미정 보강(앵커 없음) = 막는다(반 없는 발송을 만들지 않는다).
  * 🔴 **이미 어딘가 게시된 행(`sentAt`)은 다시 적지 않는다** — 옛 위치 기록이 지워지면 회수가 글을 못 찾는다.
  */
@@ -353,6 +352,7 @@ export function sendClassGateRow(r: {
   classId: string | null;
   classLive: boolean;
   storedId: string | null;
+  /** 다른 전달 반이면 보고서 날짜의 수강·같은 과목·종강 전·원아 배정까지 검증한 결과. */
   storedLive: boolean;
   makeupClassId: string | null;
   makeupLive: boolean;
@@ -360,7 +360,7 @@ export function sendClassGateRow(r: {
 }): { pass: boolean; rewriteTo: string | null } {
   if (r.classId) return { pass: r.classLive, rewriteTo: null };
   if (!r.makeupClassId) return { pass: false, rewriteTo: null };
-  if (r.storedId && r.storedId !== r.makeupClassId) return { pass: false, rewriteTo: null };
+  if (r.storedId && r.storedId !== r.makeupClassId) return { pass: r.storedLive, rewriteTo: null };
   if (!r.makeupLive) return { pass: false, rewriteTo: null };
   return { pass: true, rewriteTo: r.sentAt || r.storedId === r.makeupClassId ? null : r.makeupClassId };
 }

@@ -5384,6 +5384,61 @@
       "today"
     ]
   },
+  "8be14486500ed467dd444a24dfdf8d57f8a9ff4716a95e35f9698ea25f559860": {
+    "parts": [
+      "select 1 as ok from classes c\n    where c.tenant_id = ",
+      " and c.id = ",
+      " and c.subject = ",
+      "\n      and (c.closed_at is null or c.closed_at::date >= ",
+      "::date)\n      and exists (select 1 from enrollments e where e.tenant_id = c.tenant_id and e.class_id = c.id\n        and e.student_id = ",
+      " and not coalesce(e.on_hold, false)\n        and (e.start_date is null or e.start_date <= ",
+      "::date)\n        and (e.end_date is null or e.end_date > ",
+      "::date\n          or (e.end_date = ",
+      "::date and not coalesce(e.is_transferred, false))))\n    limit 1"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/classnote-class-route.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant",
+      "classId",
+      "report.subject",
+      "report.report_date",
+      "report.student_id",
+      "report.report_date",
+      "report.report_date",
+      "report.report_date"
+    ]
+  },
   "8bf1ba572acf39a284231b48df34638be01ed2c4befe6dbf3cf567a93b367a4f": {
     "parts": [
       "\n        update makeedu_push_requests set status = 'running', started_at = now()\n        where status = 'pending' and tenant_id = ",

@@ -6,6 +6,7 @@ import { requestClassnoteBoardSync } from "@/features/report-admin/server/classn
 import { runAsAutoSyncRequest } from "@/features/report-admin/server/classnote-sync-auto";
 import { loadSyncRows } from "@/features/report-admin/server/classnote-sync-core";
 import { kstToday } from "@/lib/date-kst";
+import { makeupDeliveryWorkersReady } from "../makeup-delivery";
 import {
   boardMissingNotice,
   boardMissingPreview,
@@ -160,15 +161,15 @@ async function liveBoardClassIds(tenantId: string, studentId: string, classIds: 
 }
 
 export type SendClassResolution =
-  | { ok: true; classId: string; via: "makeup" }
+  | { ok: true; classId: string; via: "makeup" | "delivery" }
   | {
       ok: false;
       reason: "choose" | "none";
-      /** 고를 수 있는 반 — 고르면 그 반이 **새 보강 반**이 된다(출석부 칸도 함께 옮겨진다). */
+      /** 전달 가능한 반. 보강 반이 이미 있으면 출결을 옮기지 않는다. */
       candidates: { id: string; name: string }[];
       /** 물을 때 처음 골라 둘 반(메인 수업) — 없으면 null. */
       defaultId: string | null;
-      /** 보강 반이 있는데 이 학생의 반 보드가 없어 **반을 바꿔야 할 때** 그 반(화면 경고 한 줄). */
+      /** 보강 반으로 전달할 수 없을 때 원래 보강 반(화면 안내용). */
       makeupClass: { id: string; name: string } | null;
     };
 
@@ -240,14 +241,9 @@ export async function loadSendClassCandidates(
 }
 
 /**
- * 보강 보고서의 'ClassNote로 보낼 반' — 🔴 원장 2026-09-30: **발송 반 = 보강 반**(출석부 칸의 반과 같다).
- *
- * 판정 = 순수 [`decideSendClass`](../send-class.ts) (워커 `pickRouteClass`·일괄 게이트 `sendClassGateRow`와 한 규칙):
- *  1. 보강 반(`makeupClassId`, 0171a)에 이 학생의 살아 있는 반 보드가 있으면 그 반 — 묻지 않는다.
- *  2. 보강 반 보드가 없거나 보강 반이 없으면('반 미정') **묻는다** — 강사가 고른 반이 새 보강 반이 되고, 저장이 출석부 칸을
- *     그 반으로 함께 옮긴다(`changeMakeupAnchor` 규칙). 기본 선택 = 메인 수업(보낸 보고서 → 출결이 가장 많은 반).
- *  3. 후보가 없으면 `none`(발송 불가).
- * ⚠️ 예전의 '고른 반을 `classnote_class_id`에만 적고 보내기'·'메인 수업 자동 발송'은 없앴다 — 보고서 반과 출석부 반이 갈리는 길이었다.
+ * 보강 보고서의 전달 반(2026-11-12). 보강 앵커가 있으면 출결 반은 그대로 유지한다.
+ * 선택·저장된 전달 반은 같은 과목 수강과 원아 배정이 확인된 후보여야 한다. 자동으로 다른 반을 선택하지 않는다.
+ * 전달 반이 없으면 보강 반으로 보내고, 그 반으로 못 보내면 후보를 묻는다. 반 미정 보강은 먼저 수업 반을 정한다.
  * ⚠️ admin 클라이언트 + tenant 필터 — 강사 RLS로는 다른 강사 반의 보고서·출결 수가 안 보여 메인 수업을 잘못 고른다.
  *    돌려주는 것은 그 학생의 반 이름뿐이다(보고서·출결 내용은 안 나간다).
  */
@@ -257,11 +253,13 @@ export async function resolveMakeupSendClass(
   reportDate: string,
   subject: string | null | undefined,
   makeupClassId: string | null,
+  deliveryClassId?: string | null,
 ): Promise<SendClassResolution> {
   const admin = createAdminClient();
   // 1. 보강 반에 살아 있는 반 보드가 있으면 후보를 읽을 것도 없다(조회 실패는 throw → 호출부 fail-closed).
   const makeupLive = makeupClassId ? (await liveBoardClassIds(tenantId, studentId, [makeupClassId])).has(makeupClassId) : false;
-  if (makeupClassId && makeupLive) return { ok: true, classId: makeupClassId, via: "makeup" };
+  if (makeupClassId && makeupLive && (!deliveryClassId || deliveryClassId === makeupClassId))
+    return { ok: true, classId: makeupClassId, via: "makeup" };
 
   const [all, makeupClass] = await Promise.all([
     loadSendClassCandidates(tenantId, studentId, reportDate, subject),
@@ -281,6 +279,12 @@ export async function resolveMakeupSendClass(
   // 보드가 없는 보강 반을 다시 고르게 하지 않는다.
   const candidates = all.filter((c) => c.id !== makeupClassId);
   const ids = candidates.map((c) => c.id);
+  // 발송할 반만 고른다. 보강 앵커·출결·시수·담당자는 바꾸지 않는다.
+  // 학생의 같은 과목 수강과 원아 배정이 모두 확인된 후보만 받는다.
+  if (makeupClassId && deliveryClassId && deliveryClassId !== makeupClassId) {
+    if (!ids.includes(deliveryClassId)) throw new Error("이 학생의 보고서를 보낼 수 있는 반을 다시 선택해 주세요");
+    return { ok: true, classId: deliveryClassId, via: "delivery" };
+  }
 
   // 메인 수업(기본 선택) — 후보가 둘 이상일 때만 센다(하나면 그 반, 없으면 발송 불가).
   let main: string | null = ids.length === 1 ? ids[0]! : null;
@@ -316,13 +320,19 @@ export async function resolveMakeupSendClass(
   return { ok: false, reason: "choose", candidates, defaultId: d.defaultId, makeupClass: mk };
 }
 
+export async function makeupDeliveryWorkerReady(tenantId: string): Promise<boolean> {
+  const { data, error } = await createAdminClient().from("classnote_workers")
+    .select("last_seen, last_results").eq("tenant_id", tenantId);
+  return !error && makeupDeliveryWorkersReady(data ?? [], Date.now());
+}
+
 /**
  * 관리자 일괄 경로(미발송 일괄 발송·재발송·멈춤 복구·대량 작성)의 **보낼 반 게이트** — 원스크린·직접 작성과 같은 규칙을 행 묶음에.
  * 막을 행 id를 돌려준다(호출부가 반별 발송 대상 수학 행만 넘긴다). 한 행 판정 = 순수 [`sendClassGateRow`](../send-class.ts)
- * (워커 `pickRouteClass`와 같은 판정 — 원장 2026-09-30 *"보고서 반 = 출석부 반"*):
+ * (워커 `pickRouteClass`와 같은 판정):
  *  · 정규 보고서 = 보고서 반에 이 학생의 살아 있는 반 보드가 있을 때만 통과(없으면 막는다 — 다른 반으로 보내지 않는다)
- *  · 보강 보고서 = 보강 반(0171a `makeup_class_id`)이 살아 있고 적힌 '보낼 반'이 그 반과 같거나 비었을 때만 통과.
- *    ⚠️ 이때 '보낼 반'을 보강 반으로 **적는다**(부수 효과 · `out.rewritten`에 id) — 보강 반을 모르는 옛 워커도 같은 반으로 가게.
+ *  · 보강 보고서 = 수업 반이 있어야 한다. 다른 전달 반이 저장돼 있으면 수강·과목·원아 배정·워커 지원을 검증한다.
+ *    전달 반이 비었을 때만 기본 전달 반을 보강 반으로 적는다(`out.rewritten`). 출결은 바꾸지 않는다.
  *    🔴 이미 어딘가 게시된 행(`classnote_sent_at`)은 다시 적지 않는다(옛 위치 기록 보존 — 회수가 글을 찾는 자리).
  *  · 반 미정 보강(보강 반 없음) = 막는다(반 없는 발송을 만들지 않는다)
  * 🔴 조회 실패는 throw — 호출부가 대상 행 전부를 막는다(fail-closed). '보낼 반'을 못 적은 행은 막는다.
@@ -337,11 +347,11 @@ export async function blockedForNoSendClass(
   if (!rows.length) return blocked;
   const admin = createAdminClient();
   // '보낼 반'은 따로 읽는다(0303a 칸이 없는 스키마에서도 호출부 조회가 죽지 않게, #95). 칸이 없으면 throw → 전부 막음.
-  const extra = new Map<string, { stored: string | null; makeup: string | null; sentAt: string | null }>();
+  const extra = new Map<string, { stored: string | null; makeup: string | null; sentAt: string | null; date: string; subject: string | null }>();
   for (let i = 0; i < rows.length; i += 100) {
     const { data, error } = await admin
       .from("lesson_reports")
-      .select("id, classnote_class_id, makeup_class_id, classnote_sent_at")
+      .select("id, classnote_class_id, makeup_class_id, classnote_sent_at, report_date, subject")
       .eq("tenant_id", tenantId)
       .in("id", rows.slice(i, i + 100).map((r) => r.id));
     if (error) throw new Error(error.message);
@@ -350,6 +360,8 @@ export async function blockedForNoSendClass(
         stored: (d.classnote_class_id as string | null) ?? null,
         makeup: (d.makeup_class_id as string | null) ?? null,
         sentAt: (d.classnote_sent_at as string | null) ?? null,
+        date: d.report_date as string,
+        subject: (d.subject as string | null) ?? null,
       });
   }
   // 학생별로 한 번에(반 수가 적다) — 25명씩(B4).
@@ -369,12 +381,16 @@ export async function blockedForNoSendClass(
         ];
         const live = await liveBoardClassIds(tenantId, sid, ids);
         for (const r of list) {
-          const x = extra.get(r.id) ?? { stored: null, makeup: null, sentAt: null };
+          const x = extra.get(r.id) ?? { stored: null, makeup: null, sentAt: null, date: "", subject: null };
+          const alternate = !!x.stored && !!x.makeup && x.stored !== x.makeup && !r.classId;
+          const deliveryValid = alternate && !!x.date && !!x.subject
+            && (await loadSendClassCandidates(tenantId, sid, x.date, x.subject)).some(c => c.id === x.stored)
+            && (await makeupDeliveryWorkerReady(tenantId));
           const g = sendClassGateRow({
             classId: r.classId,
             classLive: !!r.classId && live.has(r.classId),
             storedId: x.stored,
-            storedLive: !!x.stored && live.has(x.stored),
+            storedLive: alternate ? deliveryValid : !!x.stored && live.has(x.stored),
             makeupClassId: x.makeup,
             makeupLive: !!x.makeup && live.has(x.makeup),
             sentAt: x.sentAt,

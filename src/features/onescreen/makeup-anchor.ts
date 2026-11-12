@@ -6,9 +6,9 @@
  *  4. 정규 보고서의 반 보드가 없어지면 발송을 막고 안내한다(다른 반으로 보내지 않는다).
  *
  * 🔴 불변식(이 파일이 이름을 붙이고 테스트가 잠근다):
- *    **같은 학생·날짜·과목의 보강 보고서 반(`makeup_class_id`) = 보강 출결 행의 반 = 발송 반(`classnote_class_id`·워커가 올리는 반).**
- *    단일 소스 = `lesson_reports.makeup_class_id` — 발송 반·출석부 반·귀속은 전부 여기서 파생한다.
- *    반을 바꾸는 문은 서버 한 곳(`changeMakeupAnchor`)뿐이고, 그 문이 세 값을 **함께** 옮긴다.
+ *    **같은 학생·날짜·과목의 보강 보고서 반(`makeup_class_id`) = 보강 출결 행의 반.**
+ *    2026-11-12: `classnote_class_id`는 학부모에게 전달하는 경로다. 학생의 같은 과목 수강·원아 배정을 검증해
+ *    별도로 고를 수 있으며 출결·시수·결석분·지도 강사를 바꾸지 않는다. 실제 수업 반 변경만 `changeMakeupAnchor`를 지난다.
  */
 import { isClassOpenOn } from "@/features/attendance/makeup-host";
 import { isRecallInFlight } from "@/features/report-admin/report-recall";
@@ -59,11 +59,10 @@ export function isMakeupReportRow(r: { makeup?: boolean | null; classId?: string
 }
 
 /**
- * 보강 보고서의 **발송 반**(파생) — 앵커가 곧 발송 반이다. 정규 보고서(반 있음)는 null(보고서 반 그대로).
- * 적힌 '보낼 반'(`classnote_class_id`)은 이 값의 **복사본**일 뿐이라 판정에 쓰지 않는다.
+ * 보강 보고서의 저장된 전달 반(없으면 보강 반). 실제 게시 전에 수강·원아 배정을 별도로 검증한다.
  */
-export function makeupSendClassOf(r: { makeup?: boolean | null; classId?: string | null; makeupClassId?: string | null }): string | null {
-  return isMakeupReportRow(r) ? (r.makeupClassId ?? null) : null;
+export function makeupSendClassOf(r: { makeup?: boolean | null; classId?: string | null; makeupClassId?: string | null; classnoteClassId?: string | null }): string | null {
+  return isMakeupReportRow(r) ? (r.classnoteClassId ?? r.makeupClassId ?? null) : null;
 }
 
 /** 불변식 위반 종류 — 드라이런 스크립트·경로 테스트가 같은 이름을 쓴다. */
@@ -74,7 +73,7 @@ export type MakeupInvariantViolation =
   | "no_cell_in_anchor"
   /** 앵커가 아닌 반(보이지 않는 보강 반 등)에 보강 칸이 따로 있다. */
   | "cell_outside_anchor"
-  /** 적힌 '보낼 반'이 앵커와 다르다. */
+  /** @deprecated 전달 반은 별도 검증한다. 출결 검사에서는 더 이상 발생하지 않는다. */
   | "send_class_differs";
 
 /**
@@ -97,7 +96,7 @@ export function makeupInvariantViolations(input: {
   }
   if (!input.cells.some((c) => c.classId === anchor)) out.push("no_cell_in_anchor");
   if (input.cells.some((c) => c.classId !== anchor && c.status === "makeup")) out.push("cell_outside_anchor");
-  if (r.classnoteClassId && r.classnoteClassId !== anchor) out.push("send_class_differs");
+  // 전달 경로는 출결 불변식과 별개다. 수강·원아 배정 검증은 발송 게이트가 담당한다.
   return out;
 }
 
@@ -150,7 +149,7 @@ export function planMakeupCellMove(input: {
 /** `blocked` 사유 → 화면 문장(한국어 — 서버·화면 한 벌). */
 export const MOVE_BLOCKED_MESSAGE: Record<"regular_cell_in_old_class" | "target_has_cell", string> = {
   regular_cell_in_old_class:
-    "옛 반의 정규 칸에 합쳐 둔 보강이라 반을 옮길 수 없습니다 — 원스크린 '보강 빼기'로 지운 뒤 새 반으로 다시 추가해 주세요",
+    "보강 반에 보강 전용이 아닌 출결 기록이 있어 자동으로 옮길 수 없습니다 — 출석부에서 해당 기록을 확인해 주세요",
   target_has_cell:
     "새 반에 그날 이 학생 출결 칸이 이미 있어 보강을 옮길 수 없습니다 — 출석부에서 그 칸을 먼저 확인해 주세요",
 };

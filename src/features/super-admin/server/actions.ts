@@ -21,6 +21,7 @@ import {
   type SlackPendingClose,
 } from "@/features/slack/server/license-transition";
 import { SYSTEM_ROLES, type SystemRole } from "@/lib/permissions";
+import { NEW_TENANT_LICENSE_OPTIONS, newTenantLicenseSelection } from "../new-tenant-licenses";
 import { SEAT_FEATURES, TOGGLE_FEATURES, WINDOW_KEEPALIVE_KEY } from "../labels";
 import { logSuperAdminAction } from "./audit";
 import { logDbError, explainDbError } from "@/lib/supabase/db-error";
@@ -34,12 +35,47 @@ export type CreateTenantState =
 // env `PUBLIC_BRAND_TENANT_SLUG`·스크립트 `--tenant=`가 가리킨다).
 const SLUG_RE = /^[a-z][a-z0-9-]{0,38}[a-z0-9]$/;
 
+type AdminClient = ReturnType<typeof createAdminClient>;
+
+async function rollbackCreatedTenant(admin: AdminClient, tenantId: string, failedAt: string): Promise<boolean> {
+  const { data, error } = await admin
+    .from("tenants")
+    .delete()
+    .eq("id", tenantId)
+    .select("id")
+    .maybeSingle();
+  updateTag(PUBLIC_BRANDING_TENANTS_TAG);
+  if (error || data?.id !== tenantId) {
+    logDbError(error ?? new Error("롤백할 학원 행을 확인하지 못했습니다"), "super-admin.actions.createTenantWithMaster.rollback", {
+      tenantId,
+      failedAt,
+    });
+    return false;
+  }
+  return true;
+}
+
+async function readTenantNameForAudit(
+  admin: AdminClient,
+  tenantId: string,
+  scope: string,
+): Promise<{ name: string } | { error: string }> {
+  const { data, error } = await admin.from("tenants").select("name").eq("id", tenantId).maybeSingle();
+  if (error) {
+    logDbError(error, `super-admin.actions.${scope}.tenant`, { tenantId });
+    return { error: "학원 정보를 읽지 못했습니다 — 잠시 후 다시 시도해 주세요" };
+  }
+  const name = typeof data?.name === "string" ? data.name.trim() : "";
+  return name ? { name } : { error: "학원을 찾을 수 없습니다 — 새로고침 후 다시 시도해 주세요" };
+}
+
 /**
  * 신규 학원(tenant) + 원장(master) 동시 생성.
  *
  * 1) tenants INSERT (uuid 미리 생성)
- * 2) auth.users 생성 (admin API). app_metadata에 { tenant_id, system_role: 'master' } 주입.
- * 3) tg_sync_user_from_auth 트리거가 public.users에 자동 mirror.
+ * 2) 일반판 설정 + 고른 기능의 명시 라이선스 행 생성
+ * 3) auth.users 생성 (admin API). app_metadata에 { tenant_id, system_role: 'master' } 주입.
+ * 4) tg_sync_user_from_auth 트리거가 public.users에 자동 mirror.
  *
  * 실패 시 1)의 tenant row는 cascade로 정리되지 않으므로 명시적으로 롤백.
  */
@@ -55,6 +91,7 @@ export async function createTenantWithMaster(
   const masterPassword = String(formData.get("masterPassword") ?? "");
   const displayName = String(formData.get("displayName") ?? "").trim();
   const plan = String(formData.get("plan") ?? "free").trim() || "free";
+  const licenses = newTenantLicenseSelection(formData);
 
   const fieldErrors: Record<string, string> = {};
   if (!slug || !SLUG_RE.test(slug)) {
@@ -74,7 +111,7 @@ export async function createTenantWithMaster(
   const { data: tenantRow, error: tenantErr } = await admin
     .from("tenants")
     .insert({ slug, name, plan })
-    .select("id")
+    .select("id, name")
     .single();
   if (tenantErr) {
     if (tenantErr.code === "23505") {
@@ -83,6 +120,7 @@ export async function createTenantWithMaster(
     return { error: explainDbError(tenantErr, { scope: "super-admin.actions.createTenantWithMaster", fallback: "학원 생성 실패 — 잠시 후 다시 시도해 주세요" }).message };
   }
   const tenantId = tenantRow.id as string;
+  const tenantName = tenantRow.name as string;
 
   // 1-1) 새 학원 = 일반판 프리셋(원장 2026-09-22 방향 B). 🔴 일반판은 **이 표식이 있어야만** 켜진다(preset.ts —
   //      표식 없는 학원은 침산 규칙으로 돈다). 그래서 표식을 못 남기면 학원 생성 자체를 되돌린다(조용히 침산 규칙을 받은
@@ -92,12 +130,29 @@ export async function createTenantWithMaster(
     .from("tenant_settings")
     .insert({ tenant_id: tenantId, data: { version: 1, preset: "generic", permissions: { specialAccess: { studentStatusManagerIds: [] } } } });
   if (settingsErr) {
-    await admin.from("tenants").delete().eq("id", tenantId);
-    updateTag(PUBLIC_BRANDING_TENANTS_TAG);
+    if (!(await rollbackCreatedTenant(admin, tenantId, "tenant_settings"))) {
+      return { error: "학원 설정 생성에 실패했고, 만들어진 학원도 되돌리지 못했습니다 — 학원 목록을 확인해 주세요" };
+    }
     return { error: explainDbError(settingsErr, { scope: "super-admin.actions.createTenantWithMaster", fallback: "학원 설정 생성 실패 — 잠시 후 다시 시도해 주세요" }).message };
   }
 
-  // 2) auth.users 생성
+  // 1-2) 행 없음=허용인 기존 지점 규칙은 그대로 두고, 새 학원만 세 기능의 선택값을 명시 행으로 고정한다.
+  const { error: licensesErr } = await admin.from("tenant_licenses").insert(
+    NEW_TENANT_LICENSE_OPTIONS.map(({ key }) => ({
+      tenant_id: tenantId,
+      feature: key,
+      is_active: licenses[key],
+      expires_at: null,
+    })),
+  );
+  if (licensesErr) {
+    if (!(await rollbackCreatedTenant(admin, tenantId, "tenant_licenses"))) {
+      return { error: "기능 설정 생성에 실패했고, 만들어진 학원도 되돌리지 못했습니다 — 학원 목록을 확인해 주세요" };
+    }
+    return { error: explainDbError(licensesErr, { scope: "super-admin.actions.createTenantWithMaster", fallback: "기능 설정 생성 실패 — 잠시 후 다시 시도해 주세요" }).message };
+  }
+
+  // 3) auth.users 생성
   const { error: authErr } = await admin.auth.admin.createUser({
     email: masterEmail,
     password: masterPassword,
@@ -107,8 +162,9 @@ export async function createTenantWithMaster(
   });
   if (authErr) {
     // rollback tenant — insert~delete 사이에 단일 테넌트 판정이 캐시됐을 수 있어 롤백 후에도 비운다.
-    await admin.from("tenants").delete().eq("id", tenantId);
-    updateTag(PUBLIC_BRANDING_TENANTS_TAG);
+    if (!(await rollbackCreatedTenant(admin, tenantId, "auth_user"))) {
+      return { error: "원장 계정 생성에 실패했고, 만들어진 학원도 되돌리지 못했습니다 — 학원 목록을 확인해 주세요" };
+    }
     if (isEmailTakenAuthError(authErr)) return { error: `master 계정 생성 실패 — ${EMAIL_TAKEN_MESSAGE}` };
     return { error: authPasswordErrorMessage(authErr) ?? explainDbError(authErr, { scope: "super-admin.actions.createTenantWithMaster", fallback: "원장 계정 생성 실패 — 잠시 후 다시 시도해 주세요" }).message };
   }
@@ -125,8 +181,8 @@ export async function createTenantWithMaster(
     actorEmail: sa.email,
     action: "create_tenant",
     targetTenantId: tenantId,
-    targetLabel: name,
-    metadata: { slug, masterEmail, plan },
+    targetLabel: tenantName,
+    metadata: { slug, masterEmail, plan, ...licenses },
   });
 
   revalidatePath("/super-admin/tenants");
@@ -381,7 +437,6 @@ export async function upsertTenantLicense(
   const tenantId = String(formData.get("tenantId") ?? "").trim();
   const feature = String(formData.get("feature") ?? "").trim();
   const maxSeatsRaw = String(formData.get("maxSeats") ?? "").trim();
-  const tenantName = String(formData.get("tenantName") ?? "").trim();
   if (!tenantId || !feature) return { error: "필수 값 누락" };
   if (!SEAT_FEATURES.some((item) => item.key === feature)) return { error: "지원하지 않는 좌석 기능입니다" };
   const maxSeats = maxSeatsRaw === "" ? null : Number(maxSeatsRaw);
@@ -390,6 +445,8 @@ export async function upsertTenantLicense(
   }
 
   const admin = createAdminClient();
+  const tenant = await readTenantNameForAudit(admin, tenantId, "upsertTenantLicense");
+  if ("error" in tenant) return { error: tenant.error };
   const { error } = await admin
     .from("tenant_licenses")
     .upsert(
@@ -403,7 +460,7 @@ export async function upsertTenantLicense(
     actorEmail: sa.email,
     action: "grant_license",
     targetTenantId: tenantId,
-    targetLabel: tenantName || null,
+    targetLabel: tenant.name,
     metadata: { feature, maxSeats },
   });
   updateTag(licenseFlagsTag(tenantId)); // 셸 표시용 라이선스 캐시(창 모드·꺼진 기능 버튼)
@@ -419,13 +476,14 @@ export async function upsertTenantLicense(
 export async function setTenantWindowMode(_prev: LicenseState, formData: FormData): Promise<LicenseState> {
   const sa = await requireSuperAdmin();
   const tenantId = String(formData.get("tenantId") ?? "").trim();
-  const tenantName = String(formData.get("tenantName") ?? "").trim();
   const mode = String(formData.get("mode") ?? "");
   if (!tenantId) return { error: "필수 값 누락" };
   if (!isShellMode(mode)) return { error: "지원하지 않는 화면 방식입니다" };
   const { windowMode, keepalive } = flagsFromMode(mode);
 
   const admin = createAdminClient();
+  const tenant = await readTenantNameForAudit(admin, tenantId, "setTenantWindowMode");
+  if ("error" in tenant) return { error: tenant.error };
   // 만료일도 지운다 — 만료된 행을 켜 봐야 판정(`licenseAllows`)은 여전히 막아 카드만 켜진 척한다(토글과 같은 이유).
   const { error } = await admin.from("tenant_licenses").upsert(
     [
@@ -441,7 +499,7 @@ export async function setTenantWindowMode(_prev: LicenseState, formData: FormDat
     actorEmail: sa.email,
     action: "toggle_license",
     targetTenantId: tenantId,
-    targetLabel: tenantName || null,
+    targetLabel: tenant.name,
     metadata: { feature: "window_mode", active: windowMode, mode },
   });
   updateTag(licenseFlagsTag(tenantId)); // 셸 표시용 라이선스 캐시(화면 방식)
@@ -458,11 +516,12 @@ export async function toggleTenantLicense(
   const tenantId = String(formData.get("tenantId") ?? "").trim();
   const feature = String(formData.get("feature") ?? "").trim();
   const nextActive = String(formData.get("nextActive") ?? "") === "true";
-  const tenantName = String(formData.get("tenantName") ?? "").trim();
   if (!tenantId || !feature) return { error: "필수 값 누락" };
   if (!TOGGLE_FEATURES.some((item) => item.key === feature)) return { error: "지원하지 않는 기능입니다" };
 
   const admin = createAdminClient();
+  const tenant = await readTenantNameForAudit(admin, tenantId, "toggleTenantLicense");
+  if ("error" in tenant) return { error: tenant.error };
   const changedAt = new Date();
   const changedAtIso = changedAt.toISOString();
   let previousSlackOn: boolean | null = null;
@@ -538,7 +597,7 @@ export async function toggleTenantLicense(
     actorEmail: sa.email,
     action: "toggle_license",
     targetTenantId: tenantId,
-    targetLabel: tenantName || null,
+    targetLabel: tenant.name,
     metadata: {
       feature,
       active: nextActive,

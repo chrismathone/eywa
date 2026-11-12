@@ -31,6 +31,9 @@ describe("pickRouteClass — 🔴 보고서 반 = 출석부 반 = 발송 반(원
     expect(pickRouteClass({ route: "needs_class", classId: null, classEligible: false, sendClassId: "m", makeupClassId: "m", makeupEligible: true }).classId).toBe("m"));
   it("🔴 적힌 '보낼 반'이 보강 반과 다르면 막는다(C9 — 예전엔 적힌 값이 이겼다)", () =>
     expect(pickRouteClass({ route: "needs_class", classId: null, classEligible: false, sendClassId: "c2", makeupClassId: "m", makeupEligible: true })).toMatchObject({ route: "blocked", reason: "send_class_differs" }));
+  it("보강 출결 반이 미발송 반이어도 검증된 전달 반을 사용할 수 있다", () =>
+    expect(pickRouteClass({ route: "needs_class", classId: null, classEligible: false, sendClassId: "MS", makeupClassId: "JJ", makeupEligible: false, sendEligible: true }))
+      .toEqual({ route: "class", classId: "MS", via: "delivery" }));
   it("🔴 보강 반 보드가 없으면 막는다", () =>
     expect(pickRouteClass({ route: "needs_class", classId: null, classEligible: false, makeupClassId: "m", makeupEligible: false })).toMatchObject({ route: "blocked", reason: "board_missing" }));
   it("🔴 반 미정 보강(보강 반 없음)은 적힌 '보낼 반'이 있어도 막는다 — 반을 추측하지 않는다", () => {

@@ -16,12 +16,10 @@ import { licenseAllows, seatLimitOf } from "@/lib/license/rule";
  */
 export function LicenseSection({
   tenantId,
-  tenantName,
   licenses,
   enrolledCount,
 }: {
   tenantId: string;
-  tenantName: string;
   licenses: TenantLicenseRow[];
   /** 지금 재원생 수 — 좌석 게이트(`seatBlockReason`)와 같은 기준(status = enrolled). `used_seats` 칸은 아무도 안 채워 늘 0이라 안 쓴다. */
   enrolledCount: number;
@@ -35,7 +33,6 @@ export function LicenseSection({
           <SeatRow
             key={f.key}
             tenantId={tenantId}
-            tenantName={tenantName}
             feature={f.key}
             label={f.label}
             license={byFeature.get(f.key)}
@@ -48,7 +45,6 @@ export function LicenseSection({
             <WindowModeRow
               key={f.key}
               tenantId={tenantId}
-              tenantName={tenantName}
               windowModeRow={byFeature.get("window_mode")}
               keepaliveRow={byFeature.get(WINDOW_KEEPALIVE_KEY)}
             />
@@ -56,7 +52,6 @@ export function LicenseSection({
             <ToggleRow
               key={f.key}
               tenantId={tenantId}
-              tenantName={tenantName}
               feature={f.key}
               label={f.label}
               license={byFeature.get(f.key)}
@@ -69,9 +64,9 @@ export function LicenseSection({
   );
 }
 
-type RowProps = { tenantId: string; tenantName: string; feature: string; label: string; license?: TenantLicenseRow };
+type RowProps = { tenantId: string; feature: string; label: string; license?: TenantLicenseRow };
 
-function SeatRow({ tenantId, tenantName, feature, label, license, enrolledCount }: RowProps & { enrolledCount: number }) {
+function SeatRow({ tenantId, feature, label, license, enrolledCount }: RowProps & { enrolledCount: number }) {
   const [state, action, pending] = useActionState(upsertTenantLicense, undefined);
   // 한도 판정 = 게이트와 같은 함수(`seatLimitOf` — 행 없음·끔·비어 있음 = 제한 없음).
   const limit = seatLimitOf(license ? { is_active: license.isActive, max_seats: license.maxSeats } : null);
@@ -88,7 +83,6 @@ function SeatRow({ tenantId, tenantName, feature, label, license, enrolledCount 
       </div>
       <form action={action} className="flex items-center gap-1.5">
         <input type="hidden" name="tenantId" value={tenantId} />
-        <input type="hidden" name="tenantName" value={tenantName} />
         <input type="hidden" name="feature" value={feature} />
         <Input
           type="number"
@@ -108,7 +102,7 @@ function SeatRow({ tenantId, tenantName, feature, label, license, enrolledCount 
   );
 }
 
-function ToggleRow({ tenantId, tenantName, feature, label, license, defaultOn }: RowProps & { defaultOn: boolean }) {
+function ToggleRow({ tenantId, feature, label, license, defaultOn }: RowProps & { defaultOn: boolean }) {
   const [state, action, pending] = useActionState(toggleTenantLicense, undefined);
   // 스위치는 **실제 동작**을 그린다 — 행이 없으면 기능별 기본값, 있으면 게이트와 같은 판정(끔·만료 = 꺼짐).
   const isOn = license ? licenseAllows({ is_active: license.isActive, expires_at: license.expiresAt }) : defaultOn;
@@ -117,7 +111,6 @@ function ToggleRow({ tenantId, tenantName, feature, label, license, defaultOn }:
       <span className="text-foreground text-sm font-bold">{label}</span>
       <form action={action} className="flex items-center gap-2">
         <input type="hidden" name="tenantId" value={tenantId} />
-        <input type="hidden" name="tenantName" value={tenantName} />
         <input type="hidden" name="feature" value={feature} />
         <input type="hidden" name="nextActive" value={(!isOn).toString()} />
         <span className={`text-sm font-medium ${isOn ? "text-green" : "text-foreground"}`}>

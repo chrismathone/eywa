@@ -3753,13 +3753,23 @@ export const SHEET_DICT = {
     en: "This student has no class in this subject to record the make-up in",
   },
   "os.sendClass.title": { ko: "보강 반 선택", en: "Choose the make-up class" },
+  "os.sendClass.deliveryTitle": { ko: "보고서를 보낼 반 선택", en: "Choose where to send the report" },
+  "os.sendClass.deliveryDesc": {
+    ko: "이 학생의 보고서를 전달할 반을 골라 주세요. 보강 반과 출결·시수 기록은 그대로 유지됩니다.",
+    en: "Choose a class to deliver this student's report through. The make-up class, attendance and lesson units stay as recorded.",
+  },
+  "os.sendClass.deliveryMismatch": {
+    ko: "보강 반({name})으로는 이 학생의 보고서를 보낼 수 없습니다. 학생의 ClassNote 배정이 확인된 다른 반으로 전달할 수 있습니다.",
+    en: "This student's report cannot be sent through the make-up class ({name}). You can deliver it through another class with a verified ClassNote assignment.",
+  },
+  "os.sendClass.deliverySend": { ko: "이 반으로 보고서 보내기", en: "Send the report to this class" },
   "os.sendClass.desc": {
     ko: "이 보강을 어느 반 수업으로 기록할지 골라 주세요. 고른 반으로 보고서가 발송되고 출석부 보강 칸도 그 반에 섭니다.",
     en: "Choose which class this make-up belongs to. The report goes to that class and the make-up is recorded in that class's attendance.",
   },
   "os.sendClass.makeupMismatch": {
-    ko: "보강 반({name})에 이 학생의 ClassNote 반 보드가 없습니다. 고른 반이 새 보강 반이 되고 출석부 칸도 함께 옮겨집니다.",
-    en: "The make-up class ({name}) has no ClassNote board for this student. The class you pick becomes the make-up class and the attendance moves with it.",
+    ko: "보강 반({name})으로는 이 학생의 보고서를 보낼 수 없습니다. 반 설정과 학생의 ClassNote 반 보드 연결을 확인해 주세요. 고른 반이 새 보강 반이 되고 출석부 칸도 함께 옮겨집니다.",
+    en: "The report cannot be sent for this student through the make-up class ({name}). Check the class settings and the student's ClassNote board connection. The class you pick becomes the make-up class and the attendance moves with it.",
   },
   "os.sendClass.send": { ko: "이 반으로 기록하고 보내기", en: "Record in this class and send" },
   "os.sendClass.pick": { ko: "이 반으로 정하기", en: "Use this class" },
