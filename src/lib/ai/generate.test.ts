@@ -541,13 +541,14 @@ describe("openAIRequestParams — GPT 요청 규칙과 Claude 프롬프트 동�
     reasoningEffort: "minimal" as const,
   };
 
-  it("temperature·max_tokens 없이 max_completion_tokens·JSON mode·추론 강도를 보낸다", () => {
+  it("temperature·max_tokens 없이 max_completion_tokens·JSON mode·기능별 추론 강도를 보낸다", () => {
     const params = openAIRequestParams("gpt-6.1-terra", opts);
     expect(params).not.toHaveProperty("temperature");
     expect(params).not.toHaveProperty("max_tokens");
     expect(params.max_completion_tokens).toBe(OUTPUT_TOKEN_FLOOR.openai);
     expect(params.response_format).toEqual({ type: "json_object" });
-    expect(params.reasoning_effort).toBe("low");
+    // notice_translate는 기능별 GPT 표가 medium이다. Claude용 minimal이 그 값을 덮지 않는다.
+    expect(params.reasoning_effort).toBe("medium");
   });
 
   it("GPT에도 Claude와 같은 system·user 본문을 보낸다(전용 지시문 없음)", () => {

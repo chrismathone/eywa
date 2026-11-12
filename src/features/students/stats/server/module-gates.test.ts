@@ -16,7 +16,9 @@ describe("원생 매일 기록의 기능 판정", () => {
 
   it("같은 날의 옛 기록도 꺼진 기능 값은 다시 합치지 않는다", () => {
     const snapshot = read("src", "features", "students", "stats", "server", "daily-snapshot.ts");
-    expect(snapshot).toContain("if (!opsModules.calendar) delete kept.consult");
-    expect(snapshot).toContain("if (!opsModules.newcomers) delete kept.newcomers");
+    expect(snapshot).toContain("filterKeptOps(await keptOps(admin, tenantId, today), opsModules)");
+    const kept = read("src", "features", "students", "stats", "server", "kept-ops.ts");
+    expect(kept).toContain("filtered.consult.counts.levelTest = null");
+    expect(kept).toContain("delete filtered.newcomers");
   });
 });

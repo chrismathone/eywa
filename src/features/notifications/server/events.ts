@@ -24,7 +24,6 @@ import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { notifyUsers, type NotifyInput } from "./notify";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { isModuleEnabled } from "@/lib/modules";
 import {
   classnoteMinDate,
   classnoteRetryDeadline,
@@ -501,7 +500,8 @@ export async function detectGradeDrop(admin: SupabaseClient, tenantId: string): 
 
   const settings = await getTenantSettingsByTenantId(tenantId);
   const subjects = buildSubjectMaps(settings.operations.subjects);
-  const gradeDropLink = isModuleEnabled(settings.modules.disabled, "retention") ? "/retention" : null;
+  // 무발송 시드와 링크가 같은 판정을 쓴다. 설정을 다시 풀어 서로 다른 순간의 값을 섞지 않는다.
+  const gradeDropLink = retentionOn ? "/retention" : null;
   const gradeRows: GradeRow[] = rows.map((row) => {
     const student = (Array.isArray(row.student) ? row.student[0] : row.student) as { name?: string } | undefined;
     const score = row.score == null ? null : Number(row.score);
