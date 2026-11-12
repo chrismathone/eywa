@@ -115,6 +115,7 @@ import {
   isReportOptoutRow,
   rowInClass,
 } from "../grid";
+import { gridEnglishFieldsOf } from "./grid-english-fields";
 import { planQuickPresent } from "../quick-attendance";
 import {
   DEFAULT_ONESCREEN_FONT_SIZE,
@@ -1819,6 +1820,10 @@ export function OneScreenClient({
               canRemoveMakeupRow(reports[studentId]?.[subjectName]?.classnoteStatus ?? null),
             // 영어 행 경고 칩 — 카드 칸·발송 확인과 같은 판정(english-draft.ts).
             englishFlagsOf: englishRowFlags,
+            // 영어 행 템플릿 칸(다음 시간 테스트·단어 테스트·영상) — 카드와 같은 setter(원장 2026-11-12). 열람 전용이면 안 넘긴다.
+            ...(readonlyView
+              ? {}
+              : { englishFieldsOf: gridEnglishFieldsOf({ findTemplate, uploadingAttKey, setNextTestFor, setWordFeedbackFor, setWordRetestFor, addAttachmentsFor }) }),
           }}
           bulkActions={{
             onSaveAll: saveAllVisible,

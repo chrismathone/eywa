@@ -73,6 +73,7 @@ import { isMathBookRow, useMathBookListId } from "./math-book-list";
 import { JjBookPicker } from "./jj-book-picker";
 import { isJjSheetDraft, isJjSheetReport, isProgressOptionalReport } from "../jj-books";
 import { LoveNoteDraftButton } from "./love-note-draft-button";
+import { GridEnglishFields, type GridEnglishFieldsHandlers, type GridEnglishFieldsState } from "./grid-english-fields";
 
 const TD_BASE = "px-2 py-1.5 align-top";
 // 학생 묶음 구분선 — 묶음 첫 행(참고행이 꺼져 있을 때는 이 행)의 위쪽만 굵고 진한 회색.
@@ -169,6 +170,12 @@ export type GridRowActions = {
     subject: Subject,
     rep: SubjectReport | undefined,
   ) => { stale: boolean; aiStale: boolean; nameMissing: boolean; needsAi: boolean };
+  /** 영어 행 템플릿 칸(다음 시간 테스트·단어 테스트·영상) — 카드 칸과 같은 setter(원장 2026-11-12). 없으면 칸을 안 그린다. */
+  englishFieldsOf?: (
+    student: OneScreenStudent,
+    subject: Subject,
+    rep: SubjectReport | undefined,
+  ) => { state: GridEnglishFieldsState; handlers: GridEnglishFieldsHandlers };
 };
 
 /** 표 표시 설정(학원 설정 유래). */
@@ -354,6 +361,7 @@ export function GridBodyRow({
   const trendHidden = fields.trendHidden?.(student.id, subject.name) ?? false;
   // 영어 행 경고 셋 — 판정은 부모가 넘긴 함수(카드·발송 확인과 같은 english-draft.ts). 없으면(테스트 등) 안 그린다.
   const englishFlags = isEnglishRow ? actions.englishFlagsOf?.(student, subject, rep) : undefined;
+  const englishFields = isEnglishRow ? actions.englishFieldsOf?.(student, subject, rep) : undefined;
   const mentWarnings = isEnglishRow ? [] : checkMentConsistency({
     ment: rep?.draft ?? "",
     progress: subject.today ?? "",
@@ -996,6 +1004,11 @@ export function GridBodyRow({
                 </span>
               ) : null}
             </div>
+          ) : null}
+          {englishFields ? (
+            <fieldset disabled={rowLocked} className={LOCK_FS}>
+              <GridEnglishFields state={englishFields.state} handlers={englishFields.handlers} studentName={student.name} />
+            </fieldset>
           ) : null}
           {isEnglishRow ? null : (
             // 추세 칸 **오른쪽**에 '학습 추세 미발송'(원장 2026-09-18 *"오른쪽에 보기좋은 자리"*).
