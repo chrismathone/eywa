@@ -2702,7 +2702,7 @@ export const SHEET_DICT = {
   "os.col.homework": { ko: "과제 수행률", en: "Homework done" },
   // 수학 보고서 시범 행의 같은 칸 — 원장 2026-10-23 *"과제 → 숙제완성도로 이름 변경"*(보고서 항목 제목과 같은 말, 값은 그대로 지난 과제 수행률).
   "os.col.homeworkPilot": { ko: "숙제 완성도", en: "Homework completion" },
-  "os.col.book": { ko: "교재명 · 보강 · 과제", en: "Book · makeup · homework" },
+  "os.col.book": { ko: "교재명 · 오늘 과제", en: "Book · today's homework" },
   "os.col.ment": { ko: "학부모 문구", en: "Parent message" },
   "os.col.send": { ko: "발송 · 편집", en: "Send · edit" },
   "os.row.up": { ko: "{name} 위로", en: "Move {name} up" },
@@ -3714,6 +3714,7 @@ export const SHEET_DICT = {
     ko: "영상 1개(mp4·mov, 100MB까지) — ClassNote 글에 영상으로 붙고 보고서 그림은 그 아래에 붙습니다",
     en: "One video (mp4/mov, up to 100MB) — it goes on the ClassNote post as a video, with the report image below",
   },
+  "os.video.hasShort": { ko: "영상 있음", en: "Video attached" },
   "os.video.has": {
     ko: "영상이 들어 있습니다 — 바꾸려면 아래 첨부에서 지운 뒤 다시 넣으세요",
     en: "A video is attached — delete it below to add a different one",
