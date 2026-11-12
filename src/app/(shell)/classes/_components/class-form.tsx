@@ -33,7 +33,7 @@ import { CUSTOM_SLOTS_ANCHOR_ID, CustomTimeSlots } from "./custom-time-slots";
 import { OverlapNotice } from "./overlap-notice";
 import { ClassNameConflictNotice } from "./class-name-conflict-notice";
 import { FREE_CLOSED_NAME_FIELDS } from "@/features/classes/class-name-conflict";
-import { useSubjectMaps } from "@/features/owner/operations-context";
+import { useModuleOn, useSubjectMaps } from "@/features/owner/operations-context";
 import { writeLockedNote, writeLockedPlaceholder } from "@/lib/write-lock";
 
 type Schedule = {
@@ -147,6 +147,7 @@ export function ClassForm({
   // 🔴 과목 선택지는 학원설정 단일 소스 — 서버 부모가 안 주면 셸의 `OperationsProvider`에서 읽는다
   //    (옛 `DEFAULT_SUBJECT_OPTIONS` 하드코딩 폐기, 감사 D9 · CLAUDE.md "운영 enum 하드코딩 금지").
   const subjectMaps = useSubjectMaps();
+  const seatsOn = useModuleOn("seat_attendance");
   const subjects = subjectOptions ?? subjectMaps.options;
   const action = mode === "create" ? createClass : updateClass;
   const [state, formAction, pending] = useActionState<ClassFormState, FormData>(action, undefined);
@@ -513,9 +514,9 @@ export function ClassForm({
           teacherOptions={teacherOptions}
           classroomOptions={classroomOptions.map((c) => ({ id: c.id, name: c.name }))}
           bgColor={bgColor || null}
-          allowSeats={subject === "english"}
+          allowSeats={subject === "english" && seatsOn}
           // 생성 폼엔 표식을 안 연다 — 새 반 저장(createClass)은 자리 라벨 자체를 아직 안 쓴다.
-          labSeparateEnabled={mode === "edit" && defaults?.labSeparateKnown === true}
+          labSeparateEnabled={seatsOn && mode === "edit" && defaults?.labSeparateKnown === true}
           outsideCount={customCount}
           onJumpToOutside={() =>
             document

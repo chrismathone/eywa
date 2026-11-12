@@ -210,6 +210,27 @@ export function activityGradeOf(action: string): ActivityGrade {
 }
 
 export type ActivityOption = { key: string; label: string; category: string; grade: ActivityGrade };
+export type ActivityAvailability = {
+  moduleOn: (id: "approvals" | "class_review" | "classnote" | "ecs" | "kiosk" | "makeedu" | "makeups" | "mcs" | "newcomers" | "payroll" | "seat_attendance" | "sheet_sync" | "shuttle" | "staff_leaves") => boolean;
+  todaysMath: boolean;
+  videoReview: boolean;
+  collector: boolean;
+};
+
+export function activityAvailable(key: string, availability: ActivityAvailability): boolean {
+  const modulePrefixes: readonly [Parameters<ActivityAvailability["moduleOn"]>[0], readonly string[]][] = [
+    ["approvals", ["approval_"]], ["class_review", ["class_review_", "teacher_portfolio_", "teacher_evaluation_"]],
+    ["classnote", ["classnote_"]], ["ecs", ["ecs_", "class_sheet_"]], ["kiosk", ["kiosk_"]],
+    ["makeedu", ["makeedu_"]], ["makeups", ["makeup_"]], ["mcs", ["mcs_", "progress_", "math_textbook_", "math_book_", "school_exam_"]],
+    ["newcomers", ["newcomer_", "student_care_"]], ["payroll", ["payroll_", "payslip_", "teacher_comp_", "class_salary_", "session_splits_"]],
+    ["seat_attendance", ["seat_"]], ["sheet_sync", ["sheets_sync_"]], ["shuttle", ["shuttle_", "parent_account_"]], ["staff_leaves", ["leave_", "staff_leave_"]],
+  ];
+  for (const [module, prefixes] of modulePrefixes) if (prefixes.some((prefix) => key.startsWith(prefix))) return availability.moduleOn(module);
+  if (key.startsWith("todays_math_")) return availability.todaysMath;
+  if (key.startsWith("video_") || key.startsWith("homework_video_")) return availability.videoReview;
+  if (key.startsWith("management_collector_")) return availability.collector;
+  return true;
+}
 
 /** 서버가 `AUDIT_ACTIONS`(키→라벨)로 만든다. 순서 = 분류 순 → 원래 등록 순. */
 export function buildActivityOptions(labels: Readonly<Record<string, string>>): ActivityOption[] {
@@ -218,4 +239,8 @@ export function buildActivityOptions(labels: Readonly<Record<string, string>>): 
     .map(([key, label]) => ({ key, label, category: activityCategoryOf(key) ?? "", grade: activityGradeOf(key) }))
     .filter((o) => o.category)
     .sort((a, b) => (order.get(a.category) ?? 99) - (order.get(b.category) ?? 99));
+}
+
+export function availableActivityOptions(labels: Readonly<Record<string, string>>, availability: ActivityAvailability): ActivityOption[] {
+  return buildActivityOptions(labels).filter((option) => activityAvailable(option.key, availability));
 }

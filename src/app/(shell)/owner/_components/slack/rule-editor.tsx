@@ -5,7 +5,7 @@ import { Loader2 } from "@/components/icons/aywa-icon-compat";
 import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { Button } from "@/components/ui/button";
 import { ACTIVITY_CATEGORIES, type ActivityOption } from "@/features/slack/activity-catalog";
-import { FORWARD_EVENT_OPTIONS } from "@/features/slack/events";
+import type { ForwardEventOption } from "@/features/slack/events";
 import { targetLabel, type SlackRule } from "@/features/slack/rules";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { deleteSlackRule, saveSlackRule, sendSlackRuleSample } from "@/features/slack/server/rule-actions";
@@ -20,9 +20,6 @@ import { TargetPicker, type ChannelOption } from "./target-picker";
  * 펼친 칸 = 이름·보낼 거리 · 무엇을 · 누가 · 어디로 · 모양 · 언제 · 빼기 · 미리보기 · 저장/샘플/삭제. 새 규칙은 펼친 채로 시작한다.
  * 접힌 줄의 켜기 스위치는 **바로 저장**한다(편집 칸을 열지 않고 끄고 켜게) — 저장 안 된 변경이 있으면 편집 칸에서 함께 저장.
  */
-const NOTIF_GROUPS = [...new Set(FORWARD_EVENT_OPTIONS.map((o) => o.group))].map((g) => ({ id: g, label: g }));
-const NOTIF_OPTIONS = FORWARD_EVENT_OPTIONS.map((o) => ({ key: o.type, label: o.label, group: o.group }));
-
 function Switch({ on, onChange, label, disabled }: { on: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
   return (
     <button
@@ -44,11 +41,12 @@ type Props = {
   channels: ChannelOption[];
   staff: { id: string; name: string }[];
   activityOptions: ActivityOption[];
+  forwardEventOptions: readonly ForwardEventOption[];
   onSaved: (rule: SlackRule) => void;
   onDeleted: () => void;
 };
 
-export function RuleEditor({ initial, channels, staff, activityOptions, onSaved, onDeleted }: Props) {
+export function RuleEditor({ initial, channels, staff, activityOptions, forwardEventOptions, onSaved, onDeleted }: Props) {
   const [rule, setRule] = useState(initial);
   const [open, setOpen] = useState(!initial.id);
   const bodyId = useId();
@@ -97,12 +95,16 @@ export function RuleEditor({ initial, channels, staff, activityOptions, onSaved,
   };
 
   const isNotif = rule.source === "notification";
-  const groups = isNotif ? NOTIF_GROUPS : ACTIVITY_CATEGORIES;
-  const options = isNotif ? NOTIF_OPTIONS : activityOptions.map((o) => ({ key: o.key, label: o.label, group: o.category, locked: o.grade === "forbid" }));
+  const notifGroups = [...new Set(forwardEventOptions.map((o) => o.group))].map((g) => ({ id: g, label: g }));
+  const notifOptions = forwardEventOptions.map((o) => ({ key: o.type, label: o.label, group: o.group }));
+  const groups = isNotif ? notifGroups : ACTIVITY_CATEGORIES;
+  const options = isNotif ? notifOptions : activityOptions.map((o) => ({ key: o.key, label: o.label, group: o.category, locked: o.grade === "forbid" }));
   const labelOf = new Map(options.map((o) => [o.key, o.label]));
+  const visibleTypeKeys = rule.typeKeys.filter((key) => labelOf.has(key));
+  const visibleRule = visibleTypeKeys.length === rule.typeKeys.length ? rule : { ...rule, typeKeys: visibleTypeKeys };
 
   const summary = [
-    rule.typeKeys.length ? `${isNotif ? "알림" : "활동"} ${rule.typeKeys.length}종` : "고른 것 없음",
+    visibleTypeKeys.length ? `${isNotif ? "알림" : "활동"} ${visibleTypeKeys.length}종` : "고른 것 없음",
     ...(rule.actorIds.length ? [`누가 ${rule.actorIds.length}명`] : []),
     rule.targets.length ? rule.targets.map(targetLabel).join(", ") : "보낼 곳 없음",
     // 방해금지는 '바로' 보낼 때만 적용된다(expand.ts `quiet = honorDnd && immediate`).
@@ -157,7 +159,7 @@ export function RuleEditor({ initial, channels, staff, activityOptions, onSaved,
       <div className="space-y-3 px-4 py-3">
         <Row label="무엇을">
           <ChipField
-            items={rule.typeKeys.map((k) => ({ key: k, label: labelOf.get(k) ?? k }))}
+            items={visibleTypeKeys.map((k) => ({ key: k, label: labelOf.get(k)! }))}
             onRemove={(k) => patch({ typeKeys: rule.typeKeys.filter((x) => x !== k) })}
             empty="아직 고르지 않음"
             addLabel={isNotif ? "알림 고르기" : "활동 고르기"}
@@ -168,8 +170,8 @@ export function RuleEditor({ initial, channels, staff, activityOptions, onSaved,
                 : "에이와에서 누가 무엇을 했는지(감사로그). 급여·이력서·근로계약·비밀번호는 보낼 수 없고, 돈 관련은 누가·무엇을만 보냅니다.",
               groups,
               options,
-              picked: rule.typeKeys,
-              onApply: (keys) => patch({ typeKeys: keys }),
+              picked: visibleTypeKeys,
+              onApply: (keys) => patch({ typeKeys: [...keys, ...rule.typeKeys.filter((key) => !labelOf.has(key))] }),
             }}
           />
         </Row>
@@ -178,7 +180,7 @@ export function RuleEditor({ initial, channels, staff, activityOptions, onSaved,
           <TargetPicker targets={rule.targets} onChange={(t) => patch({ targets: t })} channels={channels} staff={staff} allowRecipient={isNotif} />
         </Row>
         <RuleOptions rule={rule} patch={patch} staff={staff} />
-        <MessagePreview rule={rule} activityOptions={activityOptions} />
+        <MessagePreview rule={visibleRule} activityOptions={activityOptions} />
       </div>
 
       <footer className="border-line flex flex-wrap items-center gap-2 border-t px-4 py-2.5">

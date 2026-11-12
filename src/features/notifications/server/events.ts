@@ -24,6 +24,7 @@ import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { notifyUsers, type NotifyInput } from "./notify";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
+import { isModuleEnabled } from "@/lib/modules";
 import {
   classnoteMinDate,
   classnoteRetryDeadline,
@@ -498,8 +499,9 @@ async function detectGradeDrop(admin: SupabaseClient, tenantId: string): Promise
   );
   if (rows.length === 0) return 0;
 
-  const { operations } = await getTenantSettingsByTenantId(tenantId);
-  const subjects = buildSubjectMaps(operations.subjects);
+  const settings = await getTenantSettingsByTenantId(tenantId);
+  const subjects = buildSubjectMaps(settings.operations.subjects);
+  const gradeDropLink = isModuleEnabled(settings.modules.disabled, "retention") ? "/retention" : null;
   const gradeRows: GradeRow[] = rows.map((row) => {
     const student = (Array.isArray(row.student) ? row.student[0] : row.student) as { name?: string } | undefined;
     const score = row.score == null ? null : Number(row.score);
@@ -531,14 +533,14 @@ async function detectGradeDrop(admin: SupabaseClient, tenantId: string): Promise
   const masterBody = gradeDropDigestBody(withoutTeacher(fresh, studentTeachers));
   if (masterBody) {
     for (const recipientId of await activeMasterIds(admin, tenantId)) {
-      items.push({ tenantId, recipientId, type: "grade_drop", title: "성적 급락(담당 강사 없음)", body: masterBody, link: "/retention", actorId: null });
+      items.push({ tenantId, recipientId, type: "grade_drop", title: "성적 급락(담당 강사 없음)", body: masterBody, link: gradeDropLink, actorId: null });
     }
   }
   // 담당 강사 = 자기 학생 성적 급락만(결석 v2와 동일 tenant 격리 역매핑 재사용).
   for (const [teacherId, teacherEvents] of groupEventsByTeacher(fresh, studentTeachers)) {
     const body = gradeDropDigestBody(teacherEvents);
     if (!body) continue;
-    items.push({ tenantId, recipientId: teacherId, type: "grade_drop", title: "담당 학생 성적 급락", body, link: "/retention", actorId: null });
+    items.push({ tenantId, recipientId: teacherId, type: "grade_drop", title: "담당 학생 성적 급락", body, link: gradeDropLink, actorId: null });
   }
   await notifyUsers(items);
   return fresh.length;

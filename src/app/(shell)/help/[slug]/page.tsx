@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getShellView } from "@/lib/auth/view-mode";
-import { helpManualOpens } from "@/features/help/access";
+import { helpManualForTenant, helpManualOpens } from "@/features/help/access";
 import { MANUALS, manualBySlug } from "@/features/help/manuals";
 import { HelpAllowProvider } from "../_components/help-text";
 import { ManualArticle } from "../_components/manual-article";
@@ -26,15 +26,16 @@ export default async function HelpManualPage({ params }: { params: Promise<{ slu
   if (!open) notFound();
 
   const allOpen = await Promise.all(MANUALS.map((m) => helpManualOpens(m, user.systemRole, view)));
-  const visible = MANUALS.filter((_, i) => allOpen[i]);
-  const related = manual.related
+  const visible = await Promise.all(MANUALS.filter((_, i) => allOpen[i]).map((item) => helpManualForTenant(item, user.tenantId)));
+  const visibleManual = await helpManualForTenant(manual, user.tenantId);
+  const related = visibleManual.related
     .map((s) => visible.find((m) => m.slug === s))
     .filter((m) => m !== undefined);
   const slugs = visible.map((m) => m.slug);
 
   return (
     <HelpAllowProvider slugs={slugs}>
-      <ManualArticle manual={manual} related={related} />
+      <ManualArticle manual={visibleManual} related={related} />
     </HelpAllowProvider>
   );
 }

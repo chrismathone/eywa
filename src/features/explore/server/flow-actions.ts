@@ -25,7 +25,7 @@ export async function requestFlowInsight(studentId: string, kind: FlowKind): Pro
     targetType: "student",
     metadata: { studentId, kind, status: result.status },
   });
-  if (result.status === "failed") return { ok: false, error: result.error.includes("라이선스") || result.error.includes("license") ? "이 학원은 AI 분석을 쓸 수 없습니다" : `분석하지 못했습니다: ${result.error}` };
+  if (result.status === "failed") return { ok: false, error: result.error.startsWith("AI 기능 꺼짐:") ? "이 학원은 AI 분석을 쓸 수 없습니다" : `분석하지 못했습니다: ${result.error}` };
   revalidatePath(`/explore/student/${studentId}`);
   return { ok: true, status: result.status };
 }

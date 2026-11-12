@@ -52,8 +52,8 @@ import {
   BLOOD_OPTIONS,
   COMMON_FIELDS,
   CONSULTATION_PATHS,
-  ENGLISH_GROUPS,
-  ENGLISH_TEST_TYPES,
+  englishGroupsFor,
+  englishTestTypesFor,
   GENDER_OPTIONS,
   RELATION_OPTIONS,
   SIBLINGS_OPTIONS,
@@ -188,6 +188,7 @@ export function ConsultationFullForm({
   const inFrame = useInFrame();
   const isCreate = mode === "create";
   const shuttleOn = useModuleOn("shuttle");
+  const eieOn = useModuleOn("eie");
   const recordingOn = useLicenseOn("meeting_recording");
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioRecoveryId, setAudioRecoveryId] = useState<string | null>(null);
@@ -282,6 +283,7 @@ export function ConsultationFullForm({
   const setField = (subj: string, key: string, val: string) =>
     setDetails((d) => ({ ...d, [subj]: { ...(d[subj] ?? {}), [key]: val } }));
   const englishType = details.english?.testType ?? "ai";
+  const visibleEnglishType = !eieOn && englishType === "eie" ? "ai" : englishType;
 
   // 상담 내용 '✨ AI 제안' — uncontrolled textarea라 ref로 값 주입 + input 이벤트 dispatch(초안/동시편집 가드 포착).
   const parentRequestRef = useRef<HTMLTextAreaElement>(null);
@@ -920,17 +922,17 @@ export function ConsultationFullForm({
               <div className="space-y-3">
                 <L label="테스트 유형" icon={BookOpen}>
                   <select
-                    value={englishType}
+                    value={visibleEnglishType}
                     onChange={(e) => setField("english", "testType", e.target.value)}
                     className={`${input} max-w-xs`}
                     {...lockC}
                   >
-                    {ENGLISH_TEST_TYPES.map((t) => (
+                    {englishTestTypesFor(eieOn).map((t) => (
                       <option key={t.value} value={t.value}>{t.label}</option>
                     ))}
                   </select>
                 </L>
-                {[...(ENGLISH_GROUPS[englishType] ?? []), COMMON_FIELDS].map((g, i) => (
+                {[...englishGroupsFor(visibleEnglishType, eieOn), COMMON_FIELDS].map((g, i) => (
                   <GroupInputs key={i} group={g} subjectKey="english" details={details} onChange={setField} readOnly={readOnly} />
                 ))}
               </div>

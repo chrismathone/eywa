@@ -4,10 +4,12 @@ import { getLiveContext } from "./live-context";
 import { getSummaryInput } from "./summary-input";
 import { readSavedSummary } from "./summary-store";
 import { SUMMARY_VERSION, LEGACY_SUMMARY_VERSION, validateRecentSummary, validateGroundedSummary } from "@/features/students/ontology/summary";
+import { isFeatureLicensed } from "@/lib/license/server";
 
 export async function getStudentRecordSummary(studentId: string) {
   const [gate, context] = await Promise.all([getContributionGate(), getLiveContext(studentId)]);
   if (!gate || !context) return null;
+  if (!(await isFeatureLicensed(gate.tenantId, "ai_analysis"))) return null;
   try {
     const saved = await readSavedSummary({ tenant: gate.tenantId, studentId, userId: gate.userId });
     if (!saved.ready) return null;

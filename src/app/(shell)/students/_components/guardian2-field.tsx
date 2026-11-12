@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { GUARDIAN2_NAME_MAX, GUARDIAN_RELATIONS } from "@/features/students/guardian";
 import { Field, inputClass } from "./student-form-field";
+import { useModuleOn } from "@/features/owner/operations-context";
 
 /** 보호자2 칸 이름(s2_0022) — 서버 `readForm`이 같은 이름을 읽는다. */
 export const GUARDIAN2_FIELD_NAMES = ["parent2Name", "parent2Phone", "parent2Relation"] as const;
@@ -20,6 +21,7 @@ export type Guardian2Errors = { name?: string; phone?: string; relation?: string
  *    자리가 있다. 숨은 칸에 값이 들어오면(초안 되살리기) 줄을 연다 — 보이지 않는 값이 저장되지 않게.
  */
 export function Guardian2Field({ initial, errors = {} }: { initial: Guardian2Value; errors?: Guardian2Errors }) {
+  const classnoteOn = useModuleOn("classnote");
   const filled = !!(initial.name || initial.phone || initial.relation);
   const [open, setOpen] = useState(filled);
   // 칸 오류는 줄이 닫혀 있어도 보이게 연다 — 단 '삭제'를 누른 뒤엔 닫는다(다음 제출의 폼 리셋에서 풀린다).
@@ -108,8 +110,8 @@ export function Guardian2Field({ initial, errors = {} }: { initial: Guardian2Val
         {/* 안내(원장 2026-11-05 — 지금 해당 0명이지만 혹시 모를 경우): 형제 판정·중복 후보는 보호자2 번호도 본다(siblings.ts
             `guardianPhoneKeys`), 보호자2를 원아 대조에 쓰는 연동 PC 판도 준비 중이다. */}
         <p className="text-text-dim text-xs leading-relaxed">
-          보호자2에는 이 아이 집의 보호자 번호를 적어 주세요. 다른 집 아이와 함께 쓰는 번호(예: 사촌을 함께 돌보는 할머니 번호)를 적으면
-          그 아이와 형제로 묶이고, ClassNote 원아 연결도 헷갈릴 수 있습니다.
+          보호자2에는 이 아이 집의 보호자 번호를 적어 주세요. 다른 집 아이와 함께 쓰는 번호(예: 사촌을 함께 돌보는 할머니 번호)를 적으면{" "}
+          {classnoteOn ? "그 아이와 형제로 묶이고, ClassNote 원아 연결도 헷갈릴 수 있습니다." : "그 아이와 형제로 묶일 수 있습니다."}
         </p>
         <div className="flex justify-end">
           <Button type="button" variant="ghost" size="sm" onClick={remove} aria-label="보호자2 삭제">

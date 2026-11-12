@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ROLE_PRESETS, withoutCoveredKeys } from "./role-presets";
-import { sanitizeForwardEventTypes } from "./events";
+import { filterPresetNotifications, ROLE_PRESETS, withoutCoveredKeys } from "./role-presets";
+import { FORWARD_EVENT_OPTIONS, forwardEventOptionsFor, sanitizeForwardEventTypes } from "./events";
 import type { ActivityOption } from "./activity-catalog";
 
 const OPTIONS: ActivityOption[] = [
@@ -12,6 +12,19 @@ const OPTIONS: ActivityOption[] = [
 ];
 
 describe("슬랙 역할별 기본 세팅(원장 2026-09-28)", () => {
+  it("모든 기능이 켜지면 프리셋을 보존하고, 꺼진 기능의 알림 종류만 뺀다", () => {
+    const master = ROLE_PRESETS.find((preset) => preset.id === "master")!.build(OPTIONS);
+    expect(filterPresetNotifications(master, FORWARD_EVENT_OPTIONS)).toEqual(master);
+
+    const visible = forwardEventOptionsFor({ approvals: false, classnote: false, makeedu: false, todaysMath: false, videoReview: false });
+    const filtered = filterPresetNotifications(master, visible);
+    const keys = filtered.flatMap((rule) => rule.typeKeys);
+    expect(keys).not.toContain("approval_requested");
+    expect(keys).not.toContain("makeedu_login_failed");
+    expect(keys).not.toContain("report_send_failed");
+    expect(keys).toContain("grade_drop");
+  });
+
   it("다섯 역할 — 원장·관리자·매니저·선생님·셔틀", () => {
     expect(ROLE_PRESETS.map((p) => p.id)).toEqual(["master", "admin", "manager", "teacher", "shuttle"]);
   });

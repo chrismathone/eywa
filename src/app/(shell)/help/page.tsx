@@ -6,7 +6,7 @@ import { SearchToggle } from "@/components/search-toggle";
 import { WindowLink } from "@/components/workspace/window-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getShellView } from "@/lib/auth/view-mode";
-import { helpManualOpens } from "@/features/help/access";
+import { helpManualForTenant, helpManualOpens } from "@/features/help/access";
 import { canAskHelpBoard } from "@/features/help/board/access";
 import { getHelpPostsPage } from "@/features/help/board/server/queries";
 import { helpAttr } from "@/features/help/help-attr";
@@ -33,7 +33,7 @@ export default async function HelpPage({
     canAskHelpBoard(user.systemRole),
     getHelpPostsPage({ q: q || undefined, page, pageSize: PAGE_SIZE }),
   ]);
-  const visibleManuals = MANUALS.filter((_, i) => manualOpens[i]);
+  const visibleManuals = await Promise.all(MANUALS.filter((_, i) => manualOpens[i]).map((manual) => helpManualForTenant(manual, user.tenantId)));
   const allowed = visibleManuals.map((m) => m.slug);
   // 🔴 검색 한 칸이 셋을 함께 거른다 — 설명서·Q&A는 여기(서버)서, 게시판은 위 조회가 이미 q로 걸렀다.
   // 칸을 따로 두면 어느 쪽에 치는 건지 사람이 매번 헷갈린다(원장 2026-09-15 "합치기").

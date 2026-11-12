@@ -6,10 +6,14 @@ import { learningSheetHref } from "@/features/math-progress-map/learning-map";
 import { sectionResult, type LiveItem } from "@/features/students/ontology/live-contract";
 import { readSection, unavailableSection, type LiveContext } from "./live-context";
 import { readLiveSection } from "./live-query";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
 
 export function readLiveLearningPlan(c: LiveContext) {
   const href = `/students/${c.studentId}?tab=progress`;
   return readSection("learning-plan", "수학 학습 계획·진도", href, async () => {
+    const settings = await getTenantSettings();
+    if (!isModuleEnabled(settings.modules.disabled, "mcs")) return unavailableSection("learning-plan", "수학 학습 계획·진도", href, "off");
     if (!(await canAccessTenant(c.role, "mcs"))) return unavailableSection("learning-plan", "수학 학습 계획·진도", href, "forbidden");
     const enrollment = await readLiveSection("classes", c);
     if (enrollment.state !== "ready" && enrollment.state !== "partial") return unavailableSection("learning-plan", "수학 학습 계획·진도", href, enrollment.state);

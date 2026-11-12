@@ -4,6 +4,8 @@ export type ConsultationFormPromptContext = {
   studentName: string;
   grade?: string | null;
   school?: string | null;
+  /** 셔틀이 꺼진 지점에서는 셔틀 칸 자체를 추출 프롬프트에 넣지 않는다(빈 값 = 켜짐 — 침산 프롬프트 불변). */
+  shuttleOn?: boolean;
 };
 
 /** 등록상담 전사 → 폼 자동입력 운영 프롬프트의 단일 소스. */
@@ -36,7 +38,7 @@ export function buildConsultationFormPrompt(
     '  "careerGoal": "희망 진로",',
     '  "siblings": "형제관계 (예: 외동, 형 1명 등)",',
     '  "safetyNotes": "안전/주의사항 (알레르기·건강 등)",',
-    '  "shuttleBusRequest": "셔틀 신청 여부 (true/false)",',
+    ...(ctx.shuttleOn === false ? [] : ['  "shuttleBusRequest": "셔틀 신청 여부 (true/false)",']),
     '  "subject": "주요 상담 과목 (수학/영어/국어/과학/기타 중 하나)",',
     '  "parentRequest": "학부모 요구사항 (학부모가 직접 요청한 것만 2~4문장 요약)",',
     '  "prevAcademy": "다녔거나 지금 다니는 학원 이름만 — 전사 표기 그대로, 여럿이면 쉼표로(기간·과목·다닌 사정은 subjectDetails의 academyHistory에) · 이름이 안 나왔으면 \\\"\\\"",',

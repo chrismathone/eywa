@@ -382,6 +382,16 @@ export const BUILTIN_ENGLISH_TEMPLATES: readonly ReportTemplate[] = [
   BUILTIN_EIE_MONTHLY_TEMPLATE,
 ];
 
+const EIE_BUILTIN_TEMPLATE_IDS: ReadonlySet<string> = new Set([BUILTIN_EIE_DAILY_TEMPLATE_ID, BUILTIN_EIE_MONTHLY_TEMPLATE_ID]);
+
+export function isEieBuiltinTemplate(id: string | null | undefined): boolean {
+  return !!id && EIE_BUILTIN_TEMPLATE_IDS.has(id);
+}
+
+export function builtinEnglishTemplates(eieOn: boolean): readonly ReportTemplate[] {
+  return eieOn ? BUILTIN_ENGLISH_TEMPLATES : BUILTIN_ENGLISH_TEMPLATES.filter((template) => !isEieBuiltinTemplate(template.id));
+}
+
 /**
  * 고르는 목록에서 **숨긴** 기본 템플릿(원장 2026-11-06 *"ecs 자동 · ecs 자동 + 인재원 결과지를 템플릿에서 일단 숨김"*).
  * 🔑 지우지 않는다 — 이미 이 템플릿으로 쓴 행은 그대로 찾아 그리고(findTemplateIn은 BUILTIN_ENGLISH_TEMPLATES 전체),
