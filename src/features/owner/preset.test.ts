@@ -262,10 +262,10 @@ describe("일반판 — 새로 연 학원", () => {
     expect(on.modules.known).toEqual(MODULE_BASELINE_V1);
   });
 
-  it("새 폼은 서버의 현재 목록을 저장하고, known 없는 옛 폼은 기존 값 또는 v1 기준을 보존한다", () => {
+  it("폼이 보낸 known만 정규화하고, known 없는 옛 폼은 기존 값 또는 v1 기준을 보존한다", () => {
     const parsed = { disabled: ["shuttle"], known: [] };
-    const current = prepareSectionForSave("generic", "modules", { disabled: ["shuttle"], known: ["bogus"] }, parsed, {}) as Record<string, unknown>;
-    expect(current.known).toEqual(MODULE_IDS);
+    const current = prepareSectionForSave("generic", "modules", { disabled: ["shuttle"], known: ["shuttle", "bogus"] }, parsed, {}) as Record<string, unknown>;
+    expect(current.known).toEqual(MODULE_BASELINE_V1);
 
     const oldWithStored = prepareSectionForSave(
       "generic",
