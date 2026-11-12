@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { add, cellOf, cellTextOf, cellTitle, EMPTY, MATRIX_COLUMNS, WITHDRAWAL_LABEL, type Cell, type MatrixRow, addRating, MIN_RATED, type Rating } from "../../view-admin";
+import { add, cellOf, cellTextOf, cellTitle, EMPTY, MATRIX_COLUMNS, WITHDRAWAL_LABEL, VIDEO_LABEL, addVideo, videoPct, type VideoCell, type Cell, type MatrixRow, addRating, MIN_RATED, type Rating } from "../../view-admin";
 import { judge, type Avg } from "../../view-admin-levels";
 import { MixBar, useOntimeOnly } from "./admin-mix";
 import { VerdictBadge } from "./admin-verdict";
@@ -76,12 +76,13 @@ export function NameCell({ name, meta, badge, onClick }: { name: string; meta?: 
  * 둘째 열 = 등급(`judge` — 전체 업무의 **기한 내 완료율** = '전체' 막대의 초록 몫으로 매긴다). 마지막 줄 = 전체(누르지 않는다).
  * 열(`columns`)과 평점 열(`rated`)은 **부모가 정한다** — 과목마다 표를 나눠 세워도 열이 같아야 세로줄이 맞는다.
  */
-export function AdminMatrix({ rows, total, avg = null, grade = true, title = "선생님", kind = null, columns, rated = false, withdrawal, onCell }: {
+export function AdminMatrix({ rows, total, avg = null, grade = true, title = "선생님", shown = null, columns, rated = false, withdrawal, video = false, onCell }: {
   rows: MatrixRow[]; total: MatrixRow | null; avg?: Avg | null; /** 첫 열 머리(과목별로 나눈 표는 과목 이름). */ title?: string;
-  /** 한 종류만 보기(항목 필터) — 다른 종류 열은 자리를 둔 채 감춘다. */ kind?: string | null; /** 등급 열을 세울지 — 하루 보기에는 없다. */ grade?: boolean;
+  /** 고른 종류만 보기(항목 필터 · 여럿) — 다른 종류 열은 자리를 둔 채 감춘다. null = 전부. */ shown?: readonly string[] | null; /** 등급 열을 세울지 — 하루 보기에는 없다. */ grade?: boolean;
   /** 세울 종류 열(없으면 이 표에 있는 종류). */ columns?: readonly { kind: string; label: string }[]; /** 수업보고서 평점 열을 세울지. */ rated?: boolean;
   /** 퇴원보고서 작성 참고 열(s2_0093) — 있으면 열을 세우고, 칸을 누르면 이 함수로 그 선생님의 작성 차례 목록. 등급 · 전체에는 안 든다. */
   withdrawal?: (ownerId: string) => void;
+  /** 영상 숙제 출제 · 회수 참고 열(s2_0094)을 세울지 — 등급 · 전체에 안 든다. */ video?: boolean;
   onCell: (ownerId: string, kind: string | null) => void;
 }) {
   if (!rows.length) return <p className="text-text-dim px-3 py-6 text-center text-sm">해당 기간 업무 없음</p>;
@@ -89,9 +90,10 @@ export function AdminMatrix({ rows, total, avg = null, grade = true, title = "�
   const cols = columns ?? MATRIX_COLUMNS.filter((c) => rows.some((r) => r.cells[c.kind]?.total));
   // 항목 필터는 표를 다시 짜지 않는다 — 다른 항목 열을 잠시 감출 뿐이라 자리와 크기가 그대로다(원장 2026-11-11 *"창이 변경되거나 하지말고 그냥 잠시 해당 항목을 숨기는 효과"*).
   //   감추는 것은 칸(td · th)이 아니라 그 안의 내용이다 — 칸이 구분선을 긋기 때문에 칸째 감추면 선이 끊긴다.
-  const off = (k: string) => (kind && k !== kind ? "invisible" : undefined);
+  const off = (k: string) => (shown && !shown.includes(k) ? "invisible" : undefined);
   // 수업보고서 평점 — 준수율과 섞지 않는 참고 열(볼 수 있는 사람에게만 내려온다).
-  const count = cols.length + 1 + (rated ? 1 : 0) + (withdrawal ? 1 : 0);
+  const count = cols.length + 1 + (rated ? 1 : 0) + (withdrawal ? 1 : 0) + (video ? 1 : 0);
+  const vTotal = video ? rows.reduce<VideoCell | undefined>((acc, r) => addVideo(acc, r.video), undefined) : undefined;
   const wTotal = withdrawal ? rows.reduce<Cell | null>((acc, r) => (r.withdrawal ? cellOf(add(acc ?? EMPTY, r.withdrawal)) : acc), null) : null;
   return <GridWrap>
     <GridTable count={count} grade={grade}>
@@ -102,7 +104,8 @@ export function AdminMatrix({ rows, total, avg = null, grade = true, title = "�
         {/* 평균평점은 종류 열 바로 뒤 · '전체'가 맨 오른쪽(원장 2026-11-11). */}
         {rated ? <th className={TH}>보고서 평균평점</th> : null}
         {/* 퇴원보고서 작성 = 참고(등급 · 전체에 안 든다 — 머리에 밝힌다). */}
-        {withdrawal ? <th className={TH} title="등급 · 전체에 들지 않는 참고 열입니다">{WITHDRAWAL_LABEL}<span className="text-text-dim ml-1 text-xs font-medium">참고</span></th> : null}
+        {withdrawal ? <th className={TH} title="등급 · 전체에 들지 않는 참고 열입니다">{WITHDRAWAL_LABEL}</th> : null}
+        {video ? <th className={TH} title="영상 숙제를 낸 건수 중 학생 영상이 들어온 비율 — 등급 · 전체에 들지 않는 참고 열입니다">{VIDEO_LABEL}</th> : null}
         <th className={TH}>전체</th>
       </tr></thead>
       <tbody>
@@ -112,6 +115,7 @@ export function AdminMatrix({ rows, total, avg = null, grade = true, title = "�
           {cols.map((c) => <td key={c.kind} className={TD}><div className={off(c.kind)}><CountBox cell={r.cells[c.kind] ?? null} onClick={r.cells[c.kind] ? () => onCell(r.ownerId, c.kind) : undefined} /></div></td>)}
           {rated ? <td className={TD}><RatingBox rating={r.rating} /></td> : null}
           {withdrawal ? <td className={TD}><CountBox cell={r.withdrawal ?? null} onClick={r.withdrawal ? () => withdrawal(r.ownerId) : undefined} /></td> : null}
+          {video ? <td className={TD}><VideoBox v={r.video} /></td> : null}
           <td className={TD}><CountBox cell={r.all} onClick={() => onCell(r.ownerId, null)} /></td>
         </tr>)}
         {/* 합계 줄 — 줄 배경 없이 윗선 하나로 가른다(원장 2026-11-11 · 다른 줄보다 한 단계 진한 선 — 표 틀의 `data-total`). 칸은 위와 같은 막대다(숫자만으로는 기한 내 · 기한 후가 갈리지 않는다). */}
@@ -121,6 +125,7 @@ export function AdminMatrix({ rows, total, avg = null, grade = true, title = "�
           {cols.map((c) => <td key={c.kind} className={TD}><div className={off(c.kind)}><CountBox cell={total.cells[c.kind] ?? null} /></div></td>)}
           {rated ? <td className={TD}><RatingBox rating={rows.reduce<Rating | undefined>((acc, r) => addRating(acc, r.rating), undefined)} plain /></td> : null}
           {withdrawal ? <td className={TD}><CountBox cell={wTotal} /></td> : null}
+          {video ? <td className={TD}><VideoBox v={vTotal} plain /></td> : null}
           <td className={TD}><CountBox cell={total.all} /></td>
         </tr> : null}
       </tbody>
@@ -137,6 +142,19 @@ export const BOX = "@container flex h-10 w-full flex-col items-center justify-ce
 /** 막대 없는 칸(— · 결석 · 평점)의 글자 — 막대 자리만큼 비워 옆 칸의 숫자와 같은 높이에 선다. */
 export function BoxText({ className = "", title, children }: { className?: string; title?: string; children: ReactNode }) {
   return <span className={`${BOX} ${className}`} title={title}><span className="flex min-h-0 flex-1 items-center whitespace-nowrap">{children}</span><span className="h-1.5 shrink-0" aria-hidden /></span>;
+}
+
+/**
+ * 영상 숙제 칸(참고) — 회수율(영상이 들어온 숙제 ÷ 판정 대상: 들어왔거나 마감이 지난 것) + 아래 작게 '출제 n'. 막대 · 색 없이(뜻이 '기한 내 · 미처리'가 아니다).
+ * 판정 대상이 아직 없으면(모두 마감 전) 출제 수만. 올리면 출제 · 회수 · 마감 전 건수.
+ */
+export function VideoBox({ v, plain }: { v: VideoCell | undefined; plain?: boolean }) {
+  if (!v || !v.issued) return <BoxText className="text-text-placeholder font-semibold">—</BoxText>;
+  const pct = videoPct(v);
+  const title = `출제 ${n(v.issued)}건 · 회수 ${n(v.collected)}건${v.issued > v.judged ? ` · 마감 전 ${n(v.issued - v.judged)}건` : ""}`;
+  return <BoxText className={plain ? "font-bold" : "font-semibold"} title={title}>
+    <span className="flex flex-col items-start leading-tight">{pct === null ? <span className="text-text-dim">—</span> : <span>{pct}%</span>}<span className="text-text-dim text-xs font-medium">출제 {n(v.issued)}</span></span>
+  </BoxText>;
 }
 
 /**

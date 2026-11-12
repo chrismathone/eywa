@@ -30,7 +30,7 @@ export function WithdrawalItemsDialog({ pick, period, tick = 0, onClose, onWork 
     return () => { alive = false; };
   }, [period, tick, pick.owner, pick.subject]);
   const { items, now, error } = state;
-  const title = `${pick.name} · 퇴원보고서 작성`;
+  const title = `${pick.name} · 퇴원보고서`;
   return <Dialog open onOpenChange={(o) => (!o ? onClose() : undefined)}>
     <DialogContent className="flex max-h-[min(720px,90dvh)] w-[min(94vw,560px)] flex-col gap-3 sm:max-w-[560px]">
       <DialogHeader><DialogTitle>{title}{items ? <span className="text-text-dim ml-1.5 text-sm font-medium">{items.length}건 · 참고(등급에 안 듦)</span> : null}</DialogTitle></DialogHeader>

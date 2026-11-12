@@ -46,6 +46,8 @@ export const FIXED_MODEL_FEATURES: Readonly<Record<string, string>> = {
   staff_contract_pdf_ocr: "계약서 스캔 인식은 Claude 전용입니다(스캔 이미지 전송 승인 범위).",
   parent_attendance_jev_shadow: "Jev 비교는 TypeSafe 판정이라 모델을 고르지 않습니다.",
   ment_prompt_preview: "멘트 미리보기는 학부모 멘트 자동작성과 같은 모델을 씁니다.",
+  // 사랑의 한마디 초안(원스크린 버튼) — 아직 지점 선택 줄이 없다. 고를 수 있게 하려면 TENANT_MODEL_FEATURES로 옮기고 waits를 단다.
+  love_note_draft: "사랑의 한마디 초안은 빠른 모델(Claude Haiku 5.5 · 막히면 DeepSeek)을 씁니다.",
   // 평점 하네스(체크리스트 + 코드 규칙 7차)는 Claude Haiku 5.5에 맞춰 Codex 대조로 조였다 — 다른 모델이면 그 대조를 다시 해야 한다.
   lesson_report_rating: "수업보고서 평점은 Claude Haiku 5.5에 맞춰 검증한 판정 방식이라 모델을 고르지 않습니다.",
   student_consultation_rating: "원생상담 평점은 같은 기준을 구독 CLI와 배치로 매긴 값을 맞춰 본 Claude 판정이라 모델을 고르지 않습니다.",

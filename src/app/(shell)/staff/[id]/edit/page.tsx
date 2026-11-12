@@ -90,6 +90,7 @@ export default async function EditStaffPage({
         scope={`staff:${id}`}
         assignableRoleOptions={[]}
         canGrantTeacherView={canGrantTeacherView}
+        canSetNative={canAssignTarget}
         initialValue={{
           id: staff.id,
           displayName: staff.displayName,
@@ -108,6 +109,7 @@ export default async function EditStaffPage({
           seatJjDuty: staff.seatJjDuty,
           deskAttendanceOptin: staff.deskAttendanceOptin,
           shuttleDuty: staff.shuttleDuty,
+          nativeTeacher: staff.nativeTeacher,
           teacherViewAccess: staff.teacherViewAccess,
           teacherViewLang: staff.teacherViewLang,
         }}

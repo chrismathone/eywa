@@ -151,6 +151,16 @@
               "title": "AI 멘트"
             }
           ]
+        },
+        {
+          "slug": "before-class",
+          "title": "비포클래스체크리스트",
+          "faces": [
+            {
+              "slug": "before-class",
+              "title": "비포클래스체크리스트"
+            }
+          ]
         }
       ]
     },
@@ -175,6 +185,10 @@
           "slug": "student-contribution",
           "title": "원생 기여도",
           "faces": [
+            {
+              "slug": "ranking",
+              "title": "원생 로열티"
+            },
             {
               "slug": "student-contribution",
               "title": "원생 기여도"

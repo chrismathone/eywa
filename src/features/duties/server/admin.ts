@@ -13,7 +13,8 @@ import { programSubjectsOf, subjectGroupOf } from "@/features/students/enrollmen
 import type { DutyPeriod, DutyStatus } from "../kinds";
 import { loadReportRatingRows } from "./ratings";
 import { loadWithdrawalWriteRows } from "./withdrawal-write";
-import { isNativeName, tenantNativeIds } from "./native";
+import { nativeOwnerIds, tenantNativeIds } from "./native";
+import { loadVideoHomeworkRows } from "./video-homework";
 import { loadLatestNotes } from "./notes";
 import type { AbsentRow, ClassInfo, Counts, DutyAdminData, DutyAdminScope, LateItem, OwnerInfo, OwnerLoadRow, RollupClass, RollupOwnerKind, RollupStudent, StudentInfo } from "../view-admin";
 
@@ -67,7 +68,7 @@ export async function loadDutyAdmin(tenantId: string, from: string, to: string, 
   const settings = await loadDutySettings(tenantId);
   // 볼 수 있는 첫 날(s2_0087) 전은 세지 않는다 — 에이와에 기록을 적기 전의 달은 수치가 실제 업무를 말하지 않는다(원장 2026-11-11).
   const args = { p_tenant: tenantId, p_from: settings.viewFrom && from < settings.viewFrom ? settings.viewFrom : from, p_to: to, p_subjects: scope.subjects, p_periods: periods, p_owner: scope.ownerId };
-  const [ok, cls, lateRaw, ownerLoad, ratings, withdrawal] = await Promise.all([
+  const [ok, cls, lateRaw, ownerLoad, ratings, withdrawal, video] = await Promise.all([
     fetchAllPaged<CountRow & { owner_id: string | null; subject: string | null; kind: string; period: DutyPeriod }>((a, b) =>
       admin.rpc("duty_rollup_owner_kind", args).order("owner_id").order("subject").order("kind").order("period").range(a, b)),
     fetchAllPaged<CountRow & { class_id: string | null; owner_id: string | null; subject: string | null }>((a, b) =>
@@ -81,6 +82,8 @@ export async function loadDutyAdmin(tenantId: string, from: string, to: string, 
     scope.seeRatings ? loadReportRatingRows(tenantId, args.p_from, to, scope.subjects) : Promise.resolve(undefined),
     // 퇴원보고서 작성(참고 열) — 달 보기에서만(하루 · 한 주 표는 일간 업무만 다룬다).
     periods === null ? loadWithdrawalWriteRows(tenantId, args.p_from, to, scope) : Promise.resolve(undefined),
+    // 영상 숙제 출제 · 회수(참고 열 · s2_0094) — 기간 = 숙제일.
+    loadVideoHomeworkRows(tenantId, args.p_from, to, scope),
   ]);
   const liveMs = settings.liveFrom ? Date.parse(settings.liveFrom) : null;
   const notes = await loadLatestNotes(tenantId, lateRaw.map((it) => it.id));
@@ -89,12 +92,13 @@ export async function loadDutyAdmin(tenantId: string, from: string, to: string, 
   const classes = cls.map((r): RollupClass => ({ classId: r.class_id, ownerId: r.owner_id, subject: r.subject, ...counts(r) }));
   const ownerIds = [...new Set([...ownerKind.map((r) => r.ownerId), ...classes.map((r) => r.ownerId), ...late.map((r) => r.ownerId)].filter((id): id is string => !!id))];
   const classIds = [...new Set(classes.map((r) => r.classId).filter((id): id is string => !!id))];
-  const [owners, classInfo] = await Promise.all([loadOwners(tenantId, ownerIds), loadClasses(tenantId, classIds)]);
+  // 원어민 판정은 참고 열(평점 · 퇴원보고서 · 영상 숙제)의 담당까지 함께 본다 — 그 열에만 있는 원어민이 남지 않게.
+  const allOwners = [...new Set([...ownerIds, ...(ratings ?? []).map((r) => r.ownerId), ...(withdrawal ?? []).map((r) => r.ownerId), ...(video ?? []).map((r) => r.ownerId)].filter((id): id is string => !!id))];
+  const [owners, classInfo, native] = await Promise.all([loadOwners(tenantId, ownerIds), loadClasses(tenantId, classIds), nativeOwnerIds(tenantId, allOwners)]);
   // 원어민 담당 몫은 집계 · 기한 초과 목록 · 반/학생 수에서 통째로 뺀다 — 줄만 숨기면 과목 합계와 줄의 합이 어긋난다(합계는 남은 줄로 다시 선다).
-  const native = new Set(Object.entries(owners.names).filter(([, name]) => isNativeName(name)).map(([id]) => id));
   // 담당 없는 업무('담당 미정')도 세우지 않는다(원장 2026-11-11 *"담당 미정 … 노출되지 않도록 숨길것 (원어민처럼)"*) — 장부에는 남는다.
   const kept = <T extends { ownerId: string | null }>(rows: T[]): T[] => rows.filter((r) => !!r.ownerId && !native.has(r.ownerId));
-  return { ownerKind: kept(ownerKind), classes: kept(classes), late: kept(late), owners: owners.names, classInfo, syncedAt: settings.syncedAt, liveFrom: settings.liveFrom, viewFrom: settings.viewFrom, ratings: ratings ? kept(ratings) : undefined, withdrawal: withdrawal ? kept(withdrawal) : undefined, ownerLoad: kept(ownerLoad), managerIds: owners.managerIds };
+  return { ownerKind: kept(ownerKind), classes: kept(classes), late: kept(late), owners: owners.names, classInfo, syncedAt: settings.syncedAt, liveFrom: settings.liveFrom, viewFrom: settings.viewFrom, ratings: ratings ? kept(ratings) : undefined, withdrawal: withdrawal ? kept(withdrawal) : undefined, video: video ? kept(video) : undefined, ownerLoad: kept(ownerLoad), managerIds: owners.managerIds };
 }
 
 type LateRow = { id: string; kind: string; period: DutyPeriod; cycle: string; status: DutyStatus; due_at: string; done_at: string | null; void_reason: string | null; owner_id: string | null;

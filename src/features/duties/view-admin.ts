@@ -28,7 +28,8 @@ export type DutyAdminScope = { subjects: string[] | null; labels: Record<string,
 export type LateItem = DutyItemView & { ownerId: string | null; inherited: boolean; note?: DutyNote | null };
 /** syncedAt = 장부를 마지막으로 맞춘 시각(없으면 null) — 화면의 '기준 시각'. */
 export type DutyAdminData = { ownerKind: RollupOwnerKind[]; classes: RollupClass[]; late: LateItem[]; owners: OwnerInfo; classInfo: ClassInfo; syncedAt: string | null; /** 담당 반 수 · 학생 수(없으면 반 수만 트리에서 센다). */ ownerLoad?: OwnerLoadRow[]; /** 관리자 역할(원장 · 관리자)인 담당자 — 맡은 반이 없으면 선생님 목록·등수에서 뺀다. */ managerIds?: string[]; /** 평가 개시 시각(없으면 null) — 고른 기간이 통째로 그 전이면 화면이 '참고 기록'이라고 밝힌다. */ liveFrom?: string | null; /** 볼 수 있는 첫 날(없으면 제한 없음) — 이보다 앞선 기간으로는 가지 않는다. */ viewFrom?: string | null; /** 작성자 × 과목의 수업보고서 평점(볼 수 있는 사람에게만 · 없으면 열이 없다). */ ratings?: RatingRow[];
-  /** 퇴원보고서 작성 차례(s2_0093 · 달 보기에서만 · 함수가 없으면 없다) — 등급 · 전체에 넣지 않는 참고 열. */ withdrawal?: WithdrawalRow[] };
+  /** 퇴원보고서 작성 차례(s2_0093 · 달 보기에서만 · 함수가 없으면 없다) — 등급 · 전체에 넣지 않는 참고 열. */ withdrawal?: WithdrawalRow[];
+  /** 영상 숙제 출제 · 회수(s2_0094 · 함수가 없으면 없다) — 등급 · 전체에 넣지 않는 참고 열. */ video?: VideoRow[] };
 
 /**
  * 기간 열쇠 — `d:YYYY-MM-DD`(하루) · `w:YYYY-MM-DD`(그 주의 월요일) · `m:YYYY-MM`(달). 원장 2026-11-11 *"달력 추가해서 날짜 이동 가능하게"* —
@@ -239,8 +240,19 @@ export const MIN_RATED = 5;
  * 칸 모양은 업무와 같다(기한 내 · 기한 후 완료 · 미처리) — 그러나 **등급 · 전체 · 등수에 넣지 않는 참고 열**이다(Codex 협의 2026-11-11: 건수가 적고 취소가 잦다).
  */
 export type WithdrawalRow = Counts & { ownerId: string; subject: string | null };
-export const WITHDRAWAL_LABEL = "퇴원보고서 작성";
-export type MatrixRow = { ownerId: string; name: string; /** 수업보고서 평점(있을 때만). */ rating?: Rating; /** 퇴원보고서 작성(참고 · 있을 때만). */ withdrawal?: Cell; /** 이름 옆 글(과목 · 반 수 · 학생 수). */ meta?: string; cells: Record<string, Cell>; all: Cell };
+export const WITHDRAWAL_LABEL = "퇴원보고서";
+/**
+ * 영상 숙제(s2_0094 · 참고 열 — 원장 2026-11-12 *"영상숙제 출제와 회수를 기준으로"* · *"출제하지 않은 선생님이 유리할 수도 있으니 … 불이익 당하지않게"*):
+ * 낸 선생님 × 과목의 출제(학생 × 숙제) · 판정 대상(회수됐거나 마감이 지난 것) · 회수(영상이 들어와 완료). 🔴 등급 · 전체 · 등수에 넣지 않는다.
+ */
+export type VideoCell = { issued: number; judged: number; collected: number };
+export type VideoRow = VideoCell & { ownerId: string; subject: string | null };
+export const VIDEO_LABEL = "영상 숙제";
+export const addVideo = (a: VideoCell | undefined, b: VideoCell | undefined): VideoCell | undefined =>
+  !a ? b : !b ? a : { issued: a.issued + b.issued, judged: a.judged + b.judged, collected: a.collected + b.collected };
+/** 회수율(내림) — 판정 대상이 없으면 null(마감 전이라 아직 말할 수 없다). */
+export const videoPct = (v: VideoCell): number | null => (v.judged ? Math.floor((v.collected / v.judged) * 100) : null);
+export type MatrixRow = { ownerId: string; name: string; /** 수업보고서 평점(있을 때만). */ rating?: Rating; /** 퇴원보고서 작성(참고 · 있을 때만). */ withdrawal?: Cell; /** 영상 숙제(참고 · 있을 때만). */ video?: VideoCell; /** 이름 옆 글(과목 · 반 수 · 학생 수). */ meta?: string; cells: Record<string, Cell>; all: Cell };
 /** 담당자 × 과목의 담당 반 수 · 학생 수(s2_0079 — 고른 기간의 장부에서 겹침 없이). */
 export type OwnerLoadRow = { ownerId: string | null; subject: string | null; classes: number; students: number };
 /** 보이는 줄의 합(전체 줄) — '지연만'으로 거른 뒤에도 그 줄들의 합이다. */
