@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { cliEnv, codexCliEnv, devCliEnabled, devCliPrompt, parseCliEnvelope, parseCodexJsonl } from "./dev-cli";
+import {
+  cliEnv,
+  codexCliEnv,
+  codexCliInvocation,
+  devCliEnabled,
+  devCliPrompt,
+  parseCliEnvelope,
+  parseCodexJsonl,
+  summarizeCodexCliError,
+} from "./dev-cli";
 
 describe("개발 전용 Claude CLI 갈래", () => {
   it("🔴 운영·Vercel에서는 절대 켜지지 않는다", () => {
@@ -16,6 +25,31 @@ describe("개발 전용 Claude CLI 갈래", () => {
   it("🔴 Codex CLI에는 OpenAI 키를 넘기지 않는다(요금제 로그인으로만 돈다)", () => {
     const env = codexCliEnv({ OPENAI_API_KEY: "k", OPENAI_BASE_URL: "https://example.invalid", PATH: "/bin" });
     expect(env).toEqual({ PATH: "/bin" });
+  });
+  it("Windows 기본값은 npm codex.cmd이고 명시한 실행 파일은 그대로 따른다", () => {
+    expect(codexCliInvocation({ ComSpec: "C:\\Windows\\System32\\cmd.exe" }, "win32")).toEqual({
+      command: "C:\\Windows\\System32\\cmd.exe",
+      prefixArgs: ["/d", "/s", "/c", "codex.cmd"],
+      binary: "codex.cmd",
+    });
+    expect(codexCliInvocation({ AYWA_CODEX_BIN: "C:\\tools\\codex.exe" }, "win32")).toEqual({
+      command: "C:\\tools\\codex.exe",
+      prefixArgs: [],
+      binary: "C:\\tools\\codex.exe",
+    });
+    expect(codexCliInvocation({ AYWA_CODEX_BIN: "C:\\tools with space\\codex.cmd" }, "win32")).toMatchObject({
+      command: "cmd.exe",
+      prefixArgs: ["/d", "/s", "/c", "C:\\tools with space\\codex.cmd"],
+    });
+    expect(codexCliInvocation({}, "linux")).toEqual({ command: "codex", prefixArgs: [], binary: "codex" });
+  });
+  it("Codex 실패는 rmcp 경고 대신 마지막 ERROR 원인을 보여 준다", () => {
+    expect(summarizeCodexCliError([
+      "WARN rmcp::transport: 연결 경고",
+      "ERROR: 첫 오류",
+      "rmcp::client 경고",
+      "ERROR: {\"error\":{\"code\":\"model_not_found\",\"message\":\"gpt-6-luna 미지원\"}}",
+    ].join("\n"))).toBe('ERROR: {"error":{"code":"model_not_found","message":"gpt-6-luna 미지원"}}');
   });
   it("화면 파일 경로와 이름을 프롬프트에 싣는다", () => {
     const p = devCliPrompt({ model: "m", prompt: "판정", system: "지침" }, [{ label: "f01_00m05s", path: "/tmp/a.jpg" }]);
@@ -41,7 +75,7 @@ describe("개발 전용 Claude CLI 갈래", () => {
     const trace = parseCodexJsonl([
       JSON.stringify({ type: "thread.started", thread_id: "t" }),
       JSON.stringify({ type: "turn.completed", usage: { input_tokens: 11, cached_input_tokens: 3, output_tokens: 7 } }),
-    ].join("\n"), "gpt-6-luna", 1234);
-    expect(trace).toMatchObject({ models: ["gpt-6-luna"], durationMs: 1234, inputTokens: 11, cacheReadTokens: 3, outputTokens: 7 });
+    ].join("\n"), "gpt-6-luna", 1234, "codex-cli 0.167.1");
+    expect(trace).toMatchObject({ models: ["gpt-6-luna"], cliVersion: "codex-cli 0.167.1", durationMs: 1234, inputTokens: 11, cacheReadTokens: 3, outputTokens: 7 });
   });
 });

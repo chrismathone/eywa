@@ -27,6 +27,11 @@ export type MentAssembly = {
   extraDirective?: string;
 };
 
+/** 저장 진도("수학 2-4-3 …")를 운영 자동작성 입력처럼 과목과 진도로 다시 나눈다. */
+export function stripSubjectLabel(progress: string, label: string): string {
+  return label && progress.startsWith(`${label} `) ? progress.slice(label.length + 1) : progress;
+}
+
 /** 멘트(모드 A 단일 · B 두 문단) + 추세 섹션. 사실 없는 문단은 뺀다. */
 export function mentSections(a: MentAssembly): PromptSection[] {
   const withTeacherStyle = (body: string) => (a.styleBlock ? `${body}\n\n${a.styleBlock}` : body);

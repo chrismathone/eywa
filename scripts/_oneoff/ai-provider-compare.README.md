@@ -10,6 +10,8 @@ pnpm tsx scripts/_oneoff/ai-provider-smoke.mts --mode=internal --input=scripts/_
 
 `--mode=claude-cli` 또는 `--mode=codex-cli`로 한쪽만 실행할 수 있다. API 연결 확인은 원장 승인 범위에서 `pnpm tsx scripts/_oneoff/ai-provider-smoke.mts --mode=openai-connectivity`로 따로 실행한다. `--input`을 생략하면 가짜 이름만 든 내장 6개 사례를 쓴다.
 
+Windows에서는 PATH의 `codex.exe`가 아니라 npm 설치본 `codex.cmd`를 고르며, 다른 실행 파일을 써야 할 때만 `AYWA_CODEX_BIN`에 경로를 지정한다. 실행기는 모델 호출 전에 `codex --version`을 한 번 확인해 표와 결과 JSON의 `cliVersion`에 남긴다.
+
 ## 가명 입력 파일 형식
 
 ```json
@@ -23,7 +25,7 @@ pnpm tsx scripts/_oneoff/ai-provider-smoke.mts --mode=internal --input=scripts/_
         "studentName": "가명학생A",
         "subject": "수학",
         "progress": "일차방정식 2단원",
-        "storedProgress": "수학: 일차방정식 2단원",
+        "storedProgress": "수학 2-6-1 일차방정식 2단원",
         "dailyTest": "10문제 중 8개 맞음",
         "checkTest": "",
         "attitude": "차분히 풀이함",
@@ -42,4 +44,4 @@ pnpm tsx scripts/_oneoff/ai-provider-smoke.mts --mode=internal --input=scripts/_
 
 분석 사례는 `id`, `feature`, `kind`, `tier`, `claudeEffort`, `prompt`, `sourceFacts`, `expectedFields`가 필요하다. 등록상담은 가명 전사·폼 칸(`학생 가명`, 학년, 학교 가명, 학부모 가명, 전화번호는 삭제 또는 `입력됨`)을, 회의는 가명 전사·메모·제목·일자를, 계약서는 주민번호를 제거한 가짜 본문을 넣는다. 실제 학생 이름·전화번호·주민번호는 파일에 넣지 않는다.
 
-표에는 기능, 경로, 실행 차수, 통과 여부, 실제/요청 모델, 추론 강도, 시간, 입력·출력 토큰이 나온다. 결과 JSON에는 종결형 섞임, 입력 숫자 보존·없는 숫자, 단원/퍼센트, 과목명 접두, 금지 표현, 길이, 고유명사 의심, 두 실행의 문장 수·종결형·길이 차이와 분석 칸 채움률, `warnings` 누락, normalize 통과, 잡담 혼입이 함께 저장된다. 계약서 사례는 Codex 호출을 하지 않고 `거절(Claude 전용)`으로 남아야 정상이다.
+표에는 기능, 경로, 실행 차수, 통과 여부, 실제/요청 모델, Codex CLI 판, 추론 강도, 시간, 입력·출력 토큰이 나온다. 결과 JSON에는 종결형 섞임, 입력 숫자 보존·없는 숫자, 단원/퍼센트, 과목명 접두, 금지 표현, 길이, 고유명사 의심, 두 실행의 문장 수·종결형·길이 차이와 분석 칸 채움률, `warnings` 누락, normalize 통과, 잡담 혼입이 함께 저장된다. 계약서 사례는 Codex 호출을 하지 않고 `거절(Claude 전용)`으로 남아야 정상이다.

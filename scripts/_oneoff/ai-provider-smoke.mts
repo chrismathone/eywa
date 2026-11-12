@@ -4,12 +4,12 @@
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { devCliTrace, runCodexCli, runDevCli, type DevCliTrace } from "../../src/lib/ai/dev-cli";
+import { devCliTrace, getCodexCliVersion, runCodexCli, runDevCli, type DevCliTrace } from "../../src/lib/ai/dev-cli";
 import { withFactGuard } from "../../src/lib/ai/fact-guard";
 import { AI_MODELS, type AiTier } from "../../src/lib/ai/models";
 import { openAIProfileFor } from "../../src/lib/ai/model-pins";
 import { parseJsonLoose } from "../../src/lib/ai/generate";
-import { mentSections, readMentResponse, type MentAssembly } from "../../src/features/onescreen/ment-assembly";
+import { mentSections, readMentResponse, stripSubjectLabel, type MentAssembly } from "../../src/features/onescreen/ment-assembly";
 import { assembleCombined } from "../../src/features/onescreen/prompt-defaults";
 import { normalizeConsultationReport } from "../../src/features/enrollment/analysis-normalize";
 import { normalizeMeetingAnalysis } from "../../src/features/meetings/analysis-normalize";
@@ -42,6 +42,7 @@ type Row = {
   status: string;
   model: string;
   effort: string;
+  cliVersion: string | null;
   durationMs: number | null;
   inputTokens: number | null;
   outputTokens: number | null;
@@ -69,8 +70,8 @@ const fakeMentInput: MentAssembly["input"] = {
 };
 
 function mentCase(id: string, raw: MentAssembly["input"] & { storedProgress?: string }, mode: "A" | "B" = "A"): Case {
-  // 저장 보고서 칸은 "수학: …"처럼 과목 라벨이 붙을 수 있지만 운영 자동작성 재료는 과목과 진도를 따로 넘긴다(#145).
-  const progress = String(raw.storedProgress ?? raw.progress).replace(new RegExp(`^${raw.subject}\\s*[:：-]\\s*`), "");
+  // 저장 보고서 칸은 "수학 2-6-1 …"처럼 과목 라벨이 붙지만 운영 자동작성 재료는 과목과 진도를 따로 넘긴다(#145).
+  const progress = stripSubjectLabel(String(raw.storedProgress ?? raw.progress), raw.subject);
   const input = { ...raw, progress };
   delete (input as { storedProgress?: string }).storedProgress;
   const assembly: MentAssembly = {
@@ -152,8 +153,19 @@ function postprocess(c: Case, raw: string): { data: Record<string, unknown>; met
 }
 
 async function cliCall(c: Case, provider: "claude-cli" | "codex-cli"): Promise<Row> {
+  let cliVersion: string | null = null;
+  if (provider === "codex-cli") {
+    try {
+      cliVersion = await getCodexCliVersion();
+    } catch (error) {
+      return {
+        feature: c.feature, provider, run: 1, status: `실패: ${error instanceof Error ? error.message : String(error)}`,
+        model: "-", effort: "-", cliVersion: null, durationMs: null, inputTokens: null, outputTokens: null,
+      };
+    }
+  }
   if (provider === "codex-cli" && c.claudeOnly) {
-    return { feature: c.feature, provider, run: 1, status: "거절(Claude 전용)", model: "-", effort: "-", durationMs: null, inputTokens: null, outputTokens: null };
+    return { feature: c.feature, provider, run: 1, status: "거절(Claude 전용)", model: "-", effort: "-", cliVersion, durationMs: null, inputTokens: null, outputTokens: null };
   }
   const profile = openAIProfileFor(c.feature, c.tier);
   const model = provider === "claude-cli" ? AI_MODELS[c.tier].anthropic : profile.model;
@@ -170,13 +182,14 @@ async function cliCall(c: Case, provider: "claude-cli" | "codex-cli"): Promise<R
     const processed = postprocess(c, raw);
     return {
       feature: c.feature, provider, run: 1, status: "통과", model: trace?.models.join(",") || model, effort,
+      cliVersion: trace?.cliVersion ?? cliVersion,
       durationMs: trace?.durationMs ?? Date.now() - started, inputTokens: trace?.inputTokens ?? null,
       outputTokens: trace?.outputTokens ?? null, metrics: processed.metrics, raw,
     };
   } catch (error) {
     return {
       feature: c.feature, provider, run: 1, status: `실패: ${error instanceof Error ? error.message : String(error)}`,
-      model, effort, durationMs: Date.now() - started, inputTokens: null, outputTokens: null,
+      model, effort, cliVersion, durationMs: Date.now() - started, inputTokens: null, outputTokens: null,
     };
   }
 }
@@ -195,7 +208,7 @@ async function connectivity(): Promise<Row[]> {
   if (result.attemptedProviders.join("→") !== "anthropic→openai") throw new Error("Claude → OpenAI 사다리를 타지 않았습니다");
   return [{
     feature: "synthetic_anthropic_failure_fallback", provider: "openai-api", run: 1, status: result.data.ok ? "통과" : "응답 확인 필요",
-    model: result.model, effort: "low", durationMs: result.durationMs,
+    model: result.model, effort: "low", cliVersion: null, durationMs: result.durationMs,
     inputTokens: result.usage?.inputTokens ?? null, outputTokens: result.usage?.outputTokens ?? null,
   }];
 }
@@ -225,7 +238,7 @@ async function main() {
   }
   console.table(rows.map((row) => ({
     feature: row.feature, provider: row.provider, run: row.run, status: row.status,
-    model: row.model, effort: row.effort, durationMs: row.durationMs,
+    model: row.model, effort: row.effort, cliVersion: row.cliVersion, durationMs: row.durationMs,
     inputTokens: row.inputTokens, outputTokens: row.outputTokens,
   })));
   const bad = rows.filter((row) => row.status !== "통과" && !row.status.startsWith("거절"));

@@ -18,6 +18,7 @@ type Env = Record<string, string | undefined>;
 export type DevCliTrace = {
   requestedModel: string;
   models: string[];
+  cliVersion: string | null;
   durationMs: number | null;
   inputTokens: number | null;
   outputTokens: number | null;
@@ -45,7 +46,7 @@ export function parseCliEnvelope(stdout: string, requestedModel: string): { text
   return {
     text: env.result,
     trace: {
-      requestedModel, models, durationMs: n(env.duration_ms),
+      requestedModel, models, cliVersion: null, durationMs: n(env.duration_ms),
       inputTokens: n(env.usage?.input_tokens), outputTokens: n(env.usage?.output_tokens),
       cacheReadTokens: n(env.usage?.cache_read_input_tokens), cacheWriteTokens: n(env.usage?.cache_creation_input_tokens),
       listCostUsd: n(env.total_cost_usd),
@@ -54,7 +55,7 @@ export function parseCliEnvelope(stdout: string, requestedModel: string): { text
 }
 
 /** `codex exec --json` JSONL에서 토큰을 모은다. 형식이 늘어나도 알 수 없는 이벤트는 건너뛴다. */
-export function parseCodexJsonl(stdout: string, requestedModel: string, durationMs: number): DevCliTrace {
+export function parseCodexJsonl(stdout: string, requestedModel: string, durationMs: number, cliVersion: string | null = null): DevCliTrace {
   let inputTokens: number | null = null;
   let outputTokens: number | null = null;
   let cacheReadTokens: number | null = null;
@@ -73,6 +74,7 @@ export function parseCodexJsonl(stdout: string, requestedModel: string, duration
   return {
     requestedModel,
     models: [requestedModel],
+    cliVersion,
     durationMs,
     inputTokens,
     outputTokens,
@@ -123,6 +125,70 @@ export function codexCliEnv(env: Env = process.env): Env {
   const out: Env = { ...env };
   for (const k of Object.keys(out)) if (/^OPENAI_(API_KEY|BASE_URL)/.test(k)) delete out[k];
   return out;
+}
+
+export type CodexCliInvocation = {
+  command: string;
+  prefixArgs: string[];
+  binary: string;
+};
+
+/** Windows에서는 PATH의 오래된 codex.exe보다 npm의 codex.cmd를 명시해 같은 내부요금제 CLI 판을 쓴다. */
+export function codexCliInvocation(env: Env = process.env, platform: NodeJS.Platform = process.platform): CodexCliInvocation {
+  const configured = env.AYWA_CODEX_BIN?.trim();
+  const binary = configured || (platform === "win32" ? "codex.cmd" : "codex");
+  if (platform === "win32" && /\.(?:cmd|bat)$/i.test(binary)) {
+    return {
+      command: env.ComSpec?.trim() || env.COMSPEC?.trim() || "cmd.exe",
+      prefixArgs: ["/d", "/s", "/c", binary],
+      binary,
+    };
+  }
+  return { command: binary, prefixArgs: [], binary };
+}
+
+/** MCP 경고가 실제 API 오류를 가리지 않게 마지막 ERROR 줄을 우선 보여 준다. */
+export function summarizeCodexCliError(stderr: string, maxChars = 1_000): string {
+  const lines = stderr
+    .replace(/\u001b\[[0-9;]*m/g, "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !/rmcp::/i.test(line));
+  const errorLine = [...lines].reverse().find((line) => /\bERROR\b/i.test(line));
+  const detail = errorLine ?? lines.at(-1) ?? "표준 오류 내용 없음";
+  return detail.length > maxChars ? `${detail.slice(0, maxChars - 1)}…` : detail;
+}
+
+let codexVersionCache: { key: string; value: Promise<string> } | null = null;
+
+/** 선택한 Codex 실행 파일의 판을 모델 호출 전에 한 번 확인하고 이후 호출에서 재사용한다. */
+export async function getCodexCliVersion(): Promise<string> {
+  const invocation = codexCliInvocation();
+  const key = JSON.stringify(invocation);
+  if (codexVersionCache?.key === key) return codexVersionCache.value;
+  const value = (async () => {
+    try {
+      const { stdout } = await promisify(execFile)(invocation.command, [...invocation.prefixArgs, "--version"], {
+        env: codexCliEnv() as NodeJS.ProcessEnv,
+        timeout: 30_000,
+        windowsHide: true,
+      });
+      const version = String(stdout).trim().split(/\r?\n/).filter(Boolean).at(-1) ?? "";
+      if (!version) throw new Error("버전 출력이 비었습니다");
+      return version;
+    } catch (error) {
+      const e = error as Error & { stderr?: string | Buffer };
+      const detail = e.stderr ? summarizeCodexCliError(String(e.stderr)) : e.message;
+      throw new Error(`개발용 Codex CLI 판 확인 실패(${invocation.binary}): ${detail}`);
+    }
+  })();
+  codexVersionCache = { key, value };
+  try {
+    return await value;
+  } catch (error) {
+    if (codexVersionCache?.value === value) codexVersionCache = null;
+    throw error;
+  }
 }
 
 /**
@@ -187,6 +253,8 @@ export async function runCodexCli(
   input: DevCliInput & { reasoningEffort: "low" | "medium" | "high" },
 ): Promise<string> {
   if (input.images?.length) throw new Error("개발용 Codex CLI는 이미지 첨부를 지원하지 않습니다");
+  const invocation = codexCliInvocation();
+  const cliVersion = await getCodexCliVersion();
   const dir = await mkdtemp(join(tmpdir(), "aywa-codex-cli-"));
   const outputPath = join(dir, "last-message.txt");
   try {
@@ -201,7 +269,12 @@ export async function runCodexCli(
     const startedAt = Date.now();
     let stdout = "";
     await new Promise<void>((resolve, reject) => {
-      const child = spawn("codex", args, { cwd: dir, env: codexCliEnv() as NodeJS.ProcessEnv, stdio: ["pipe", "pipe", "pipe"] });
+      const child = spawn(invocation.command, [...invocation.prefixArgs, ...args], {
+        cwd: dir,
+        env: codexCliEnv() as NodeJS.ProcessEnv,
+        stdio: ["pipe", "pipe", "pipe"],
+        windowsHide: true,
+      });
       child.stdin.on("error", () => {});
       child.stdin.end(prompt);
       let err = "";
@@ -211,13 +284,13 @@ export async function runCodexCli(
       child.on("error", (e) => { clearTimeout(timer); reject(new Error(`개발용 Codex CLI 실행 실패: ${e.message}`)); });
       child.on("close", (code) => {
         clearTimeout(timer);
-        if (code !== 0) reject(new Error(`개발용 Codex CLI 실패(코드 ${code}): ${err.slice(0, 200)}`));
+        if (code !== 0) reject(new Error(`개발용 Codex CLI 실패(코드 ${code}): ${summarizeCodexCliError(err)}`));
         else resolve();
       });
     });
     const answer = (await readFile(outputPath, "utf8")).trim();
     if (!answer) throw new Error("개발용 Codex CLI가 마지막 답을 남기지 않았습니다");
-    observe?.(parseCodexJsonl(stdout, input.model, Date.now() - startedAt));
+    observe?.(parseCodexJsonl(stdout, input.model, Date.now() - startedAt, cliVersion));
     return answer;
   } finally {
     await rm(dir, { recursive: true, force: true });
