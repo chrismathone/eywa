@@ -4,7 +4,7 @@ import { NOTIFICATION_LIST_LIMIT, NOTIFICATION_LIST_MAX, type NotificationItem }
 import { presentNotification } from "../presentation";
 import { myTaskSummary, notificationTaskBadges } from "@/features/staff-tasks/server/bell";
 import { taskKindLabel, type StaffTaskSummary } from "@/features/staff-tasks/kinds";
-import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import { hiddenNotificationTypes } from "../module-visibility";
 import { hiddenStaffTaskKinds } from "@/features/staff-tasks/task-visibility";
 
@@ -45,9 +45,8 @@ export async function getMyNotifications(
   // 운영 콘솔의 '지점 보기'(읽기 전용) 중에는 벨을 비운다 — 알림은 지점이 아니라 **받는 사람**으로 걸러지는 표라
   // 그대로 읽으면 운영자 본인이 자기 지점에서 받은 알림이 보는 지점 화면에 뜬다(inbox.ts가 null).
   // 보기 쿠키가 남아 있는데 보기가 아닌 요청(끝났다 · 확인하지 못했다)도 같다 — 그 브라우저에는 보기 띠를 단 탭이 남아 있을 수 있다.
-  const inbox = await notificationInbox();
+  const [inbox, settings] = await Promise.all([notificationInbox(), getTenantSettings()]);
   if (!inbox) return { unread: 0, items: [] };
-  const settings = await getTenantSettingsByTenantId(inbox.tenantId);
   const hiddenTypes = hiddenNotificationTypes(settings);
   const hiddenTaskKinds = hiddenStaffTaskKinds(settings);
   // 같은 설정 판정을 넘긴다 — 목록 한 번에 설정을 세 번 다시 읽지 않게(B6).

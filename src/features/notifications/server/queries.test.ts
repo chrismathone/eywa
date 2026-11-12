@@ -26,7 +26,7 @@ vi.mock("@/lib/auth/current-user", () => ({
 vi.mock("@/lib/auth/view-as", () => ({ viewAsTeacher: async () => mocks.viewAs }));
 vi.mock("@/lib/auth/tenant-view", () => ({ isTenantViewWriteBlocked: async () => false }));
 vi.mock("@/features/owner/server/queries", () => ({
-  getTenantSettingsByTenantId: async () => ({
+  getTenantSettings: async () => ({
     modules: { disabled: mocks.disabledModules },
     report: { classnoteSendEnabled: true },
   }),
