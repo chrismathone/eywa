@@ -517,6 +517,26 @@ describe("교재 배정 — 반 배정 탭은 읽기 전용", () => {
     expect(saveBody.slice(0, 600)).toContain("textbooksModuleOff(");
     const month = read("src", "app", "(shell)", "ecs", "[classId]", "month", "page.tsx");
     expect(month).toContain('isModuleEnabled(settings.modules.disabled, "textbooks")');
+
+    const mathAction = read("src", "features", "textbooks", "server", "math-assignment-actions.ts");
+    expect(mathAction).toContain('isModuleOnForTenant(tenantId, "textbooks")');
+    const mathMonth = read("src", "app", "(shell)", "mcs", "[classId]", "month", "page.tsx");
+    expect(mathMonth).toContain('const textbooksOn = isModuleEnabled(settings.modules.disabled, "textbooks")');
+    expect(mathMonth).toContain("user && textbooksOn ? getMathClassTextbooks");
+    expect(mathMonth).toContain("{textbooksOn ? (");
+    expect(mathMonth).toContain("<MathTextbookProvider");
+
+    const ecs = read("src", "app", "(shell)", "ecs", "page.tsx");
+    const ecsOptions = read("src", "features", "textbooks", "server", "ecs-options.ts");
+    expect(ecs).toContain("textbooksOn ? loadEcsTextbookOptions() : Promise.resolve([])");
+    expect(ecsOptions).toContain('isModuleOnForTenant(user.tenantId, "textbooks")');
+  });
+
+  it("수학 반 배정 표는 MCS가 꺼지면 강사 시트 링크를 만들지 않는다", () => {
+    const page = read("src", "app", "(shell)", "textbooks", "page.tsx");
+    const mathFace = read("src", "app", "(shell)", "textbooks", "_components", "math-plans-face.tsx");
+    expect(page).toContain('mcsOn={isModuleEnabled(settings.modules.disabled, "mcs")}');
+    expect(mathFace).toContain("mcsOn ? (");
   });
 
   it("배정 목록은 500건에서 자르지 않는다(T9)", () => {

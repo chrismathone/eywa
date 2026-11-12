@@ -14,6 +14,7 @@ import type { TextbookTableStatus } from "@/features/textbooks/types";
 import { BooksFace } from "./_components/books-face";
 import { NotReadyBanner } from "./_components/not-ready-banner";
 import { PlansFace } from "./_components/plans-face";
+import { isModuleEnabled } from "@/lib/modules";
 
 type Sp = Record<string, string | undefined>;
 
@@ -121,7 +122,11 @@ export default async function TextbooksPage({ searchParams }: { searchParams: Pr
         ariaLabel="교재목록 면 전환"
       />
       {tab === "plans" && mathPlans ? (
-        <MathPlansFace status={mathPlans.status} rows={mathPlans.rows} />
+        <MathPlansFace
+          status={mathPlans.status}
+          rows={mathPlans.rows}
+          mcsOn={isModuleEnabled(settings.modules.disabled, "mcs")}
+        />
       ) : tab === "plans" ? (
         <PlansFace rows={plans.rows} skillAreas={skillAreas} deletableClassIds={deletableClassIds} />
       ) : (
