@@ -530,7 +530,8 @@ describe("교재 배정 — 반 배정 탭은 읽기 전용", () => {
   it("수학 반 배정 표는 MCS가 꺼지면 강사 시트 링크를 만들지 않는다", () => {
     const page = read("src", "app", "(shell)", "textbooks", "page.tsx");
     const mathFace = read("src", "app", "(shell)", "textbooks", "_components", "math-plans-face.tsx");
-    expect(page).toContain('mcsOn={isModuleEnabled(settings.modules.disabled, "mcs")}');
+    expect(page).toContain('const mcsOn = isModuleEnabled(settings.modules.disabled, "mcs");');
+    expect(page).toContain("mcsOn={mcsOn}");
     expect(mathFace).toContain("mcsOn ? (");
   });
 
