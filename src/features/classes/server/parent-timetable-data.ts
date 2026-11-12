@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report-error";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { parentPortalAvailable } from "@/features/shuttle/parent/server/parent-availability";
+import type { ParentViewer } from "@/features/shuttle/parent/server/parent-viewer";
 import {
   buildChildTimetable,
   classBlocksByDate,
@@ -26,17 +28,17 @@ import {
  * ⚠️ 실패하면 null(달력은 표시 없이 그대로 산다 — 등하원 달력을 수업 조회가 멈추게 하지 않는다).
  */
 export async function loadParentClassDates(
-  tenantId: string,
+  viewer: ParentViewer,
   studentId: string,
   dates: readonly { day: string; ymd: string }[],
 ): Promise<Map<string, TimetableBlock[]> | null> {
   if (dates.length === 0) return new Map();
-  const tables = await loadParentTimetables(tenantId, [studentId], dates, "dates");
+  const tables = await loadParentTimetables(viewer, [studentId], dates, "dates");
   return tables === null ? null : new Map((tables.get(studentId) ?? []).map((r) => [r.ymd, r.blocks]));
 }
 
 export async function loadParentTimetables(
-  tenantId: string,
+  viewer: ParentViewer,
   studentIds: readonly string[],
   week: readonly { day: string; ymd: string }[],
   /** "dates" = 요일 한 줄씩이 아니라 **수업 있는 날짜마다 한 행** — 월별 달력용. 조회는 같은 한 벌을 쓴다. */
@@ -44,6 +46,10 @@ export async function loadParentTimetables(
 ): Promise<Map<string, TimetableDayRow[]> | null> {
   const out = new Map<string, TimetableDayRow[]>();
   if (studentIds.length === 0 || week.length === 0) return out;
+  if (!(await parentPortalAvailable(viewer))) return out;
+  const linked = new Set(viewer.children.map((child) => child.id));
+  if (studentIds.some((studentId) => !linked.has(studentId))) return out;
+  const tenantId = viewer.tenantId;
   const ymds = week.map((w) => w.ymd).sort();
   const from = ymds[0]!;
   const to = ymds[ymds.length - 1]!;

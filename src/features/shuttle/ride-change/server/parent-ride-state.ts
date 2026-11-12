@@ -6,6 +6,7 @@ import { addDays, kstToday, weekdayIndexOf } from "@/lib/date-kst";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dayCodeOf } from "../../roster";
 import { isDirection, type Direction } from "../../types";
+import { PARENT_PORTAL_UNAVAILABLE_MESSAGE, parentPortalAvailable } from "../../parent/server/parent-availability";
 import { getParentViewer } from "../../parent/server/parent-viewer";
 
 /**
@@ -43,6 +44,8 @@ export const otherDirection = (d: Direction): Direction => (d === "in" ? "out" :
 export async function parentGate(input: { studentId: string; onDate: string; ioKind: string }): Promise<Ctx | { error: string }> {
   const viewer = await getParentViewer();
   if (!viewer) return { error: "학부모 로그인이 필요해요" };
+  // 탑승 변경·결석·정기 변경 쓰기는 모두 이 문을 공유한다. 화면을 감추는 것만으로는 직접 액션 호출을 못 막는다.
+  if (!(await parentPortalAvailable(viewer))) return { error: PARENT_PORTAL_UNAVAILABLE_MESSAGE };
   const child = viewer.children.find((c) => c.id === input.studentId);
   if (!child) return { error: "연결된 자녀가 아니에요" };
   if (!isDirection(input.ioKind)) return { error: "등원/하원을 확인해 주세요" };

@@ -1,13 +1,17 @@
 import { redirect } from "next/navigation";
 
 import { kstMinutesOfDay } from "@/lib/date-kst";
+import { parentPortalAvailable } from "@/features/shuttle/parent/server/parent-availability";
 import { getParentViewer } from "@/features/shuttle/parent/server/parent-viewer";
 import { loadParentLiveData } from "@/features/shuttle/map/server/parent-live-data";
 import { nearestLegKey } from "@/features/shuttle/map/parent-live";
 import { ACADEMY_LOCATION } from "@/features/shuttle/map/academy-location";
 import { ParentLiveView } from "./_components/parent-live-view";
 
-export const metadata = { title: "실시간 차량" };
+export async function generateMetadata() {
+  const viewer = await getParentViewer();
+  return { title: viewer && (await parentPortalAvailable(viewer)) ? "실시간 차량" : "학부모" };
+}
 
 /** 빌드에 박히는 값 — 키가 없으면 지도 대신 안내만 그린다(지도 청크도 안 받는다). */
 const KAKAO_MAP_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY ?? "";
@@ -22,6 +26,7 @@ const KAKAO_MAP_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY ?? "";
 export default async function ParentLivePage() {
   const viewer = await getParentViewer();
   if (!viewer) redirect("/home");
+  if (!(await parentPortalAvailable(viewer))) return null;
   const { legs } = await loadParentLiveData(viewer);
 
   return (

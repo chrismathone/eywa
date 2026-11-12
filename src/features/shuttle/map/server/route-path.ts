@@ -3,7 +3,8 @@
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
 import { isShuttleAdmin } from "../../server/access";
-import { loadRideLegsFor } from "../../parent/server/parent-ride-data";
+import { PARENT_PORTAL_UNAVAILABLE_MESSAGE, parentPortalAvailable } from "../../parent/server/parent-availability";
+import { loadParentRideLegsFor } from "../../parent/server/parent-ride-data";
 import { getParentViewer } from "../../parent/server/parent-viewer";
 import { computeRunRoadPath, type RunRoadPath } from "./route-path-core";
 
@@ -22,7 +23,8 @@ export async function getRunRoadPath(runId: string): Promise<RunRoadPath> {
 export async function getParentRunRoadPath(runId: string): Promise<RunRoadPath> {
   const viewer = await getParentViewer();
   if (!viewer || viewer.children.length === 0) return { ok: false, error: "권한이 없습니다" };
-  const { legs } = await loadRideLegsFor(viewer.tenantId, viewer.children.map((c) => c.id), kstToday(), "term", true);
+  if (!(await parentPortalAvailable(viewer))) return { ok: false, error: PARENT_PORTAL_UNAVAILABLE_MESSAGE };
+  const { legs } = await loadParentRideLegsFor(viewer, viewer.children.map((c) => c.id), kstToday(), "term", true);
   const mine = [...legs.values()].some((list) => list.some((l) => l.runId === runId && !l.skipped));
   if (!mine) return { ok: false, error: "오늘 우리 아이가 타는 회차가 아닙니다" };
   return computeRunRoadPath(viewer.tenantId, runId);

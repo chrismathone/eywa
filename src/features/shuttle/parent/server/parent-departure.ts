@@ -4,7 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report-error";
 import { kstToday } from "@/lib/date-kst";
 import { noticeAckId, parentNotices, type ParentNotice } from "../departure-notices";
-import { loadRideLegsFor } from "./parent-ride-data";
+import { loadParentRideLegsFor } from "./parent-ride-data";
+import { parentPortalAvailable } from "./parent-availability";
 import type { ParentViewer } from "./parent-viewer";
 
 /**
@@ -16,12 +17,12 @@ import type { ParentViewer } from "./parent-viewer";
  * 실패하면 빈 목록 — 알림 때문에 학부모 화면을 죽이지 않는다.
  */
 export async function loadParentNotices(viewer: ParentViewer): Promise<ParentNotice[]> {
-  if (viewer.children.length === 0) return [];
+  if (viewer.children.length === 0 || !(await parentPortalAvailable(viewer))) return [];
   const today = kstToday();
   try {
     const admin = createAdminClient();
     const [{ legs }, acks] = await Promise.all([
-      loadRideLegsFor(viewer.tenantId, viewer.children.map((c) => c.id), today, "term", true),
+      loadParentRideLegsFor(viewer, viewer.children.map((c) => c.id), today, "term", true),
       admin
         .from("parent_departure_acks")
         .select("run_id, notice_key")

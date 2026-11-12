@@ -6,7 +6,8 @@ import { reportError } from "@/lib/observability/report-error";
 import { kstToday } from "@/lib/date-kst";
 import { checkReport, type PositionReport, type VehiclePosition } from "../vehicle-position";
 import { isShuttleAdmin } from "../../server/access";
-import { loadRideLegsFor } from "../../parent/server/parent-ride-data";
+import { parentPortalAvailable } from "../../parent/server/parent-availability";
+import { loadParentRideLegsFor } from "../../parent/server/parent-ride-data";
 import { getParentViewer } from "../../parent/server/parent-viewer";
 import { canRecordBoarding } from "../../server/record-gate";
 import { loadRunningPositions } from "./vehicle-position-core";
@@ -76,9 +77,9 @@ export async function getStaffVehiclePositions(): Promise<VehiclePosition[]> {
  */
 export async function getParentVehiclePositions(): Promise<VehiclePosition[]> {
   const viewer = await getParentViewer();
-  if (!viewer || viewer.children.length === 0) return [];
+  if (!viewer || viewer.children.length === 0 || !(await parentPortalAvailable(viewer))) return [];
   const ymd = kstToday();
-  const { legs } = await loadRideLegsFor(viewer.tenantId, viewer.children.map((c) => c.id), ymd, "term", true);
+  const { legs } = await loadParentRideLegsFor(viewer, viewer.children.map((c) => c.id), ymd, "term", true);
   const runIds = [...new Set([...legs.values()].flatMap((list) => list.filter((l) => !l.skipped).map((l) => l.runId)))];
   return loadRunningPositions(viewer.tenantId, ymd, runIds);
 }

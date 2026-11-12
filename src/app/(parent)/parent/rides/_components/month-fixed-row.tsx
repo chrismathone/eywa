@@ -1,7 +1,7 @@
 import { addDays } from "@/lib/date-kst";
 import { RegularRideDialog } from "@/features/shuttle/parent/components/regular-ride-dialog";
 import { dayCodeOf } from "@/features/shuttle/roster";
-import { loadRideLegsFor } from "@/features/shuttle/parent/server/parent-ride-data";
+import { loadParentRideLegsFor } from "@/features/shuttle/parent/server/parent-ride-data";
 import type { ParentViewer } from "@/features/shuttle/parent/server/parent-viewer";
 import { dayLabel, type DayCode } from "@/features/shuttle/types";
 
@@ -32,7 +32,7 @@ export async function MonthFixedRow({
   const picked = WEEKDAYS.find((d) => d === fixed) ?? null;
   // 그 요일의 가장 가까운 날(오늘 포함) — 서버 액션과 같은 기준('오늘이면 지난 회차 잠금' 판정용).
   const onDate = picked ? [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(today, i)).find((d) => dayCodeOf(d) === picked)! : null;
-  const data = onDate ? await loadRideLegsFor(viewer.tenantId, [kid.id], onDate, "term", false, true) : null;
+  const data = onDate ? await loadParentRideLegsFor(viewer, [kid.id], onDate, "term", false, true) : null;
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-1.5 text-xs">
