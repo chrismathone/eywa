@@ -12,7 +12,7 @@ import { TEACHER_NAV_GROUPS, TEACHER_DEFAULT_GROUP } from "@/lib/teacher-navigat
 // 보관 가능한 배치 수는 **화면도 읽는 값**이라 zod 없는 순수 모듈에 산다(클라 번들에 zod 유입 방지).
 import { MAX_GROUP_PRESETS } from "@/features/timetable/lib/group-presets";
 import { DEFAULT_EIE_MONTHLY_PRICE, DEFAULT_SESSION_PRICES } from "@/features/billing/session-pricing";
-import { MODULE_IDS } from "@/lib/modules";
+import { MODULE_IDS, normalizeKnownModuleIds, type ModuleId } from "@/lib/modules";
 import { makeupSettingsSchema } from "@/features/makeups/config";
 import { BUNDLES, DASHBOARD_VERSION, GRID_COLS, MAX_ITEMS, MAX_ROW_SPAN, MAX_GRID_Y } from "@/features/dashboard/layout/types";
 import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
@@ -797,11 +797,15 @@ export const navigationSchema = z
 export type NavigationSettings = z.infer<typeof navigationSchema>;
 
 /**
- * 기능 켜기·끄기 — **끈 모듈만** 담는다(비면 전부 켜짐). 모듈 정의·게이트는 `lib/modules.ts`.
+ * 기능 켜기·끄기 — `disabled`에는 **끈 모듈만**, `known`에는 저장 당시 서버가 알던 모듈을 담는다.
+ * 일반판에서 `disabled`가 비어도 `known` 뒤에 생긴 모듈은 꺼진 것으로 푼다. 모듈 정의·게이트는 `lib/modules.ts`.
  * 배열 그릇인 이유는 navigation과 같다(deepMerge가 base 키만 돌아 record 새 키가 탈락한다 — 배열은 통째 교체).
  */
 export const modulesSchema = z.object({
   disabled: z.array(z.enum(MODULE_IDS)).max(MODULE_IDS.length),
+  // 배포 전에 열어 둔 옛 폼은 이 칸을 보내지 않는다. 서버는 존재 여부만 보고 현재 목록으로 다시 쓴다.
+  // 알 수 없는 id는 버려 새 코드가 옛·조작된 값을 유령 모듈로 해석하지 않게 한다.
+  known: z.array(z.string()).max(200).transform((ids) => normalizeKnownModuleIds(ids) as ModuleId[]).optional(),
 });
 export type ModulesSettings = z.infer<typeof modulesSchema>;
 

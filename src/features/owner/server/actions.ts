@@ -41,6 +41,8 @@ import { hasDuplicateRoleCells } from "../permissions-canonical";
 import { specialAccessTargets } from "../special-access";
 import { payslipRefreshRequired } from "../payslip-permissions";
 import { studentStatusRefreshRequired } from "../student-status-permissions";
+import { isModuleTurningOff, normalizeDisabledModules } from "@/lib/modules";
+import { kstToday } from "@/lib/date-kst";
 
 /**
  * `operations` = 운영 섹션 저장이 확정한 상태(면별 기준 token · 과목 삭제는 그 면의 값도) — 화면이 다음 저장의 기준으로 쓴다.
@@ -201,6 +203,34 @@ export async function saveOwnerSection(
   // (받으면 owner 쓰기를 위임받은 사람이 요청을 만들어 침산 모듈을 끌 수 있고, 침산엔 되돌릴 화면이 없다.)
   if (section === "modules" && preset !== "generic") {
     return { error: "이 학원은 기능 켜기·끄기를 쓰지 않습니다" };
+  }
+  if (section === "modules" && result) {
+    const before = resolveSettings(existing?.data ?? null, { name: "" }).modules.disabled;
+    const requested = normalizeDisabledModules((result.data as { disabled?: unknown }).disabled);
+    // EiE 표식은 정산·출석·강사 몫 산식이 계속 읽는다. 반을 남긴 채 모듈만 끄면 화면에서 표식만 감춰져
+    // 사람이 정리할 길이 사라지므로, 실제로 켜짐→꺼짐이 되는 저장만 서버에서 막는다.
+    if (isModuleTurningOff(before, requested, "eie")) {
+      const today = kstToday();
+      const { data: eieClasses, count, error: eieError } = await supabase
+        .from("classes")
+        .select("class_name", { count: "exact" })
+        .eq("tenant_id", actor.tenantId)
+        .eq("english_track", "eie")
+        .or(`is_active.eq.true,closed_at.is.null,closed_at.gte.${today}`)
+        .order("class_name")
+        .limit(4);
+      if (eieError) {
+        logDbError(eieError, "owner.saveOwnerSection.eieClasses");
+        return { error: "EiE 반을 확인하지 못해 기능을 끄지 않았습니다. 잠시 뒤 다시 시도해 주세요." };
+      }
+      const classCount = count ?? eieClasses?.length ?? 0;
+      if (classCount > 0) {
+        const names = (eieClasses ?? []).map((row) => row.class_name).filter(Boolean).join(", ");
+        return {
+          error: `EiE 반 ${classCount}개를 먼저 '인재원 영어'로 바꾸거나 정리하세요${names ? ` (${names}${classCount > (eieClasses?.length ?? 0) ? " 외" : ""})` : ""}.`,
+        };
+      }
+    }
   }
   // 화면을 연 뒤 역할·권한이 바뀌었으면(역할별 · 개인별 · 담당자 중 무엇이든) 저장하지 않는다.
   if (section === "permissions" && permissionsBaseline !== permissionsToken(resolveSettings(existing?.data ?? null, { name: "" }).permissions)) {

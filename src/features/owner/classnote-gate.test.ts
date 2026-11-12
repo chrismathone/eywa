@@ -41,7 +41,7 @@ describe("꺼진 기능 가드", () => {
     const core = readFileSync(path.join(ROOT, "scripts/_classnote/classnote-core.mjs"), "utf8");
     const send = core.slice(core.indexOf("export async function isClassnoteSendEnabled"));
     expect(send.slice(0, send.indexOf("\n}\n"))).toMatch(/isClassnoteModuleEnabled\(sql, tenant\)/);
-    expect(core).toMatch(/modules'->'disabled'\) \? 'classnote'/);
+    expect(core).toMatch(/isRawModuleEnabled\(row\?\.data, "classnote"\)/);
     const watch = readFileSync(path.join(ROOT, "scripts/_classnote/watch-classnote-queue.mjs"), "utf8");
     expect(watch).toMatch(/if \(!\(await isClassnoteModuleEnabled\(db\(\), tenant\)\)\)/);
   });

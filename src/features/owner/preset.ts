@@ -15,6 +15,7 @@ import { DEFAULT_SETTINGS } from "./defaults";
 import { GENERIC_SETTINGS } from "./generic-defaults";
 import type { TenantPreset, TenantSettings } from "./settings-types";
 import { effectivePayslipManagerIds } from "./payslip-permissions";
+import { MODULE_BASELINE_V1, MODULE_IDS, normalizeDisabledModules, normalizeKnownModuleIds } from "@/lib/modules";
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -63,6 +64,23 @@ export function prepareSectionForSave(
   parsed: unknown,
   storedSection: unknown,
 ): unknown {
+  if (section === "modules" && isPlainObject(parsed)) {
+    const out: Record<string, unknown> = {
+      ...parsed,
+      disabled: normalizeDisabledModules(parsed.disabled),
+    };
+    if (isPlainObject(rawInput) && Object.hasOwn(rawInput, "known")) {
+      // 새 폼이 보낸 목록 내용은 믿지 않고, 이 서버가 실제로 아는 전체 목록으로 다시 쓴다.
+      out.known = [...MODULE_IDS];
+    } else {
+      // 배포 전부터 열려 있던 옛 폼은 새 모듈을 본 적이 없다. 기존 known, 없으면 v1 기준을 유지한다.
+      const storedKnown = isPlainObject(storedSection) && Object.hasOwn(storedSection, "known")
+        ? storedSection.known
+        : MODULE_BASELINE_V1;
+      out.known = normalizeKnownModuleIds(storedKnown);
+    }
+    return out;
+  }
   if (section === "permissions" && isPlainObject(parsed)) {
     const out: Record<string, unknown> = { ...parsed };
     if (!isPlainObject(rawInput) || !("userOverrides" in rawInput)) {
