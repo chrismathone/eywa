@@ -31,6 +31,23 @@ export async function isClassRouteEligible(sql, tenant, classId, studentId) {
   return !!row;
 }
 
+/** 보강 전달 경로: 앱 loadSendClassCandidates와 동일한 수강·과목·종강·원아 배정 확인. */
+export async function isMakeupDeliveryEligible(sql, tenant, report) {
+  const classId = report.classnote_class_id;
+  if (!classId || !report.makeup_class_id || report.class_id) return false;
+  if (!(await isClassRouteEligible(sql, tenant, classId, report.student_id))) return false;
+  const [row] = await sql`select 1 as ok from classes c
+    where c.tenant_id = ${tenant} and c.id = ${classId} and c.subject = ${report.subject}
+      and (c.closed_at is null or c.closed_at::date >= ${report.report_date}::date)
+      and exists (select 1 from enrollments e where e.tenant_id = c.tenant_id and e.class_id = c.id
+        and e.student_id = ${report.student_id} and not coalesce(e.on_hold, false)
+        and (e.start_date is null or e.start_date <= ${report.report_date}::date)
+        and (e.end_date is null or e.end_date > ${report.report_date}::date
+          or (e.end_date = ${report.report_date}::date and not coalesce(e.is_transferred, false))))
+    limit 1`;
+  return !!row;
+}
+
 /**
  * 반 보드 대상 확정. 실패는 전부 **결정적**(재시도해도 같은 답) — 호출부가 failed로 고정하고 사유를 남긴다.
  * ⚠️ 0302a 표가 없으면(SQL 미적용) 조회가 throw한다 → 호출부가 잡아 1인 보드로 보내지 않고 실패로 둔다

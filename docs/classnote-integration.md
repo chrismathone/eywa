@@ -1,5 +1,7 @@
 # ClassNote 연동 (수업보고서 발송) — 구조 · 운영 · 트러블슈팅
 
+> **현재 연동 PC 배포 방식:** 2026-10-13부터 수동 워커 전달을 폐기했다. 워커 수정도 [AywaSync 정식 릴리스 절차](../apps/sync-agent/README.md)에 따라 앱 버전·순번을 올려 전달한다. SQL 변경은 서버 허용 질의 목록을 갱신해 웹/API부터 반영한다. 아래 과거 날짜의 운영 이력은 현재 배포 지침이 아니다.
+
 > 수업보고서(lesson_reports)를 학부모 앱 **ClassNote**(클래스노트, 키즈노트/카카오 계열)로 발송하는
 > 전체 파이프라인의 단일 참조 문서. 2026-07-10 멀티에이전트 코드 전수 분석 + 실브라우저(기관설정 포함)
 > 탐사 + 실발송 E2E로 검증된 내용. 코드를 만지기 전 이 문서를 먼저 읽을 것.
@@ -104,7 +106,7 @@ SQL 적용이나 발송 PC 교체는 필요 없다. [검수 기록과 화면 증
 | **인바운드**(학부모 글) | [classnote-feed-core.mjs](../scripts/_classnote/classnote-feed-core.mjs) `pollParentPostsOnce` + 순수 [parent-post-filter.mjs](../scripts/_classnote/parent-post-filter.mjs) | 피드 폴링(읽기 전용)→학부모 새 글→담당 강사 `notifications`. 워터마크 0108a. **세션 유지 필수**(§3) |
 | 워커 실행 | [scripts/_classnote/watch-classnote-queue.mjs](../scripts/_classnote/watch-classnote-queue.mjs)(데몬)·[process-classnote-queue.mjs](../scripts/_classnote/process-classnote-queue.mjs)(1회) | 데몬=15초 폴+heartbeat(`classnote_workers` upsert) |
 | PC 운영 | [scripts/_classnote/setup-classnote-pc.ps1](../scripts/_classnote/setup-classnote-pc.ps1) + 발송PC-{지정,상태확인,해제,주소수정}.bat | 작업 스케줄러 등록(conhost --headless·10분 부활)·해제·env 오타 수정 |
-| 이관 안내 | [scripts/_classnote/연동PC-이관-안내.md](../scripts/_classnote/연동PC-이관-안내.md) | zip 물리이관 절차(연동 PC는 git pull 아님) |
+| 설치·업데이트 | [apps/sync-agent/README.md](../apps/sync-agent/README.md) | AywaSync 앱 버전·순번을 올려 정식 업데이트로 전달 |
 | 실게시 함수 | **`D:\edutrix\functions\index.js`** `exports.submitToClassNoteV2` | ⚠️ **repo 밖**. Firebase Functions v2 → Cloud Run `https://submittoclassnotev2-q4dmdhnkvq-uc.a.run.app` |
 | 마이그 | 0082a(report 필드)·0083a(classnote 큐 컬럼+유니크)·0084a(classnote_workers)·0087a(attachments)·0088a(students.classnote_name)·0099a(classnote_notices)·**0108a(classnote_feed_state=인바운드 워터마크)** | ⚠️ 같은 번호의 활동로그 계열 마이그와 **번호 중복 공존**(병렬 세션 산물) |
 
@@ -613,7 +615,7 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
    (math·subject_1→수학 보드, english→영어 보드 — [classnote-guard.ts](../src/features/onescreen/classnote-guard.ts), Vitest 10)
    + 워커 `subjectLabel`도 동일 화이트리스트(매핑 없는 과목 = 즉시 failed + 명확 에러, boardClassName throw)
    + 원장 발송 과목 칩을 화이트리스트 과목만 노출(report-section.tsx).
-   ⚠️ **워커 파일(classnote-core.mjs)은 연동 PC 자기 복사본으로 실행** — 코드 배포와 별개로 zip 재전달 필요
+   ⚠️ **워커는 설치된 AywaSync 런타임으로 실행** — 웹 배포와 별개로 새 AywaSync 버전 게시·앱 업데이트가 필요
    (주소수정 zip에 동봉, 앱 측 게이트 ⓐⓑ는 Vercel 배포만으로 유효).
 2. **Edutrix 쪽 수학 발송 중지** — 발송은 Vercel cron이 아니라 **로컬 상주 봇**(classnote-bot-student.ts, 30초 폴)이 담당. 봇 PC에서 봇 종료(process-ai cron이 큐를 계속 채우므로 재가동 금지).
 3. aywa `classnoteSubjects=['math']` → `classnoteSendEnabled` ON → 첫날 소량 표본 육안 확인.
@@ -699,7 +701,7 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
    ✅ **옵션 B 완료(2026-07-29): 코드에서 Cloud Run 분기를 제거**했다.
    워커는 내부 API 경로 하나로만 게시하고 env 스위치(`CLASSNOTE_PUBLISH_MODE`)도 없앴다 — 폴백이 남아 있으면
    env 한 줄이 빠지는 순간 삭제된 함수를 불러 전 발송이 실패한다(적대 검증 P1).
-   - 🔴 **삭제 전 필수 관문**: 연동 PC에 **새 zip 이관 완료**. 구워커는 코드가 바뀌어도 계속 Cloud Run을 부르고,
+   - 🔴 **삭제 전 필수 관문**: 연동 PC의 **AywaSync 앱 업데이트 완료**. 구워커는 웹 코드가 바뀌어도 계속 Cloud Run을 부르고,
      앱·DB와 호환돼 **화면상 정상으로 보인다**. 판정 = 발송 콘솔 워커 카드에 **"구버전 워커(옛 서버로 게시)"
      경고가 사라졌는지**(하트비트 `caps.nativePublish`). 경고가 남아 있는 동안 Firebase를 지우면 발송 전멸.
    - 옛 옵션 A(함수를 aywa 소유 GCP로 재배포)는 폐기 — 이중 관리만 남는다.
@@ -858,7 +860,7 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 - **권한**: 보고서 쓰기(원장·관리자·매니저) + **강사**(원스크린 '보낼 반' 고르기에서 필요가 생긴다 — 요청은 새벽과 같은 가드·상한·쿨다운이라 안전). '다른 강사 뷰'(열람 전용)는 막는다.
 - **자리 4곳**: 보고서 설정 '수학 반 보드'(옛 '수학 발송 경로' 자리) · 발송 관리 'ClassNote 발송 큐' 관리 버튼 줄 · 반 단체 공지(새 반은 연결 뒤에야 목록에 뜬다) · 원스크린 '보낼 반' 고르기 창. 원스크린의 '보낼 반이 없어 발송할 수 없습니다' 알림(토스트)·원스크린 C.N 아이콘(툴팁)·관리자 직접 작성 '보낼 반' 칸에는 **아직 없다**(같은 날 보강 경로 작업이 그 파일들을 고치는 중이라 병합 뒤에 붙인다). 다만 2026-10-03부터 **정규 보고서가 반 보드 배정 전이라 막히면 버튼 없이도 그 자리에서 요청이 나간다**(같은 요청 함수 · `source: "send_blocked"` — 까닭이 '배정 중'·'새 반'·'가입 대기 보류'일 때만 — 그 밖의 보류·반을 떠난 학생은 요청하지 않는다. 상세 [`decisions/reports-ai.md`](decisions/reports-ai.md)).
 - **감사로그**: `classnote_board_sync_request`(누른 사람 — 합류 포함) · `classnote_board_sync_run`(연동 PC 직접 insert, 실행자 `system:classnote-sync-now` — 반·배정·보류·남은 반 수, 실패 사유).
-- ⚠️ **워커 zip 교체 필요** — 옛 워커엔 `caps.syncRequests`가 없어 앱이 요청을 받지 않는다(버튼이 '연동 PC가 꺼져 있거나 옛 버전' 사유로 잠김).
+- ⚠️ **AywaSync 앱 업데이트 필요** — 옛 워커엔 `caps.syncRequests`가 없어 앱이 요청을 받지 않는다(버튼이 '연동 PC가 꺼져 있거나 옛 버전' 사유로 잠김).
 
 
 ### 10.7-a 반 보드 자동 동기화 — 2026-10-03 (SQL 없음)

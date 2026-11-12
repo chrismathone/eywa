@@ -101,6 +101,7 @@ export type MakeupReportRow = {
   reportDate: string;
   subject: string | null;
   makeupClassId: string | null;
+  deliveryClassId?: string | null;
   classnoteStatus: string | null;
   classnoteSentAt: string | null;
   /** 소유 강사(보강 반의 주인·귀속) — 저장된 행의 `created_by`. */
@@ -241,7 +242,7 @@ export async function changeMakeupAnchor(input: {
       // 칸을 못 옮겼으면 보고서도 되돌린다 — 둘이 갈린 채로 두지 않는다(되돌리기 실패는 드라이런이 센다).
       await admin
         .from("lesson_reports")
-        .update({ makeup_class_id: r.makeupClassId, classnote_class_id: r.makeupClassId })
+        .update({ makeup_class_id: r.makeupClassId, classnote_class_id: r.deliveryClassId ?? r.makeupClassId })
         .eq("tenant_id", input.tenantId)
         .eq("id", r.id)
         .eq("makeup_class_id", input.toClassId)
@@ -264,10 +265,11 @@ export async function claimMakeupAnchorChange(input: {
   from: string | null;
   /** 새 반 — upsert가 실패해 되돌릴 때는 옛 값(null일 수 있다). */
   to: string | null;
+  deliveryClassId?: string | null;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   let q = createAdminClient()
     .from("lesson_reports")
-    .update({ makeup_class_id: input.to, classnote_class_id: input.to })
+    .update({ makeup_class_id: input.to, classnote_class_id: input.deliveryClassId ?? input.to })
     .eq("tenant_id", input.tenantId)
     .eq("id", input.reportId)
     .is("classnote_sent_at", null)
@@ -364,6 +366,7 @@ export async function finishMakeupAnchor(
     subject: string;
     anchor: string;
     priorAnchor: string | null;
+    priorDelivery?: string | null;
     move: { plan: MoveCellsPlan; fromClassId: string | null } | null;
     ownerId: string | null;
     via: "report_save" | "admin_compose";
@@ -397,7 +400,7 @@ export async function finishMakeupAnchor(
     if (input.move)
       await createAdminClient()
         .from("lesson_reports")
-        .update({ makeup_class_id: input.priorAnchor, classnote_class_id: input.priorAnchor })
+        .update({ makeup_class_id: input.priorAnchor, classnote_class_id: input.priorDelivery ?? input.priorAnchor })
         .eq("tenant_id", input.tenantId)
         .eq("id", input.reportId)
         .eq("makeup_class_id", input.anchor)

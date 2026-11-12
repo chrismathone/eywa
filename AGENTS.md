@@ -4,6 +4,12 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+## 연동 PC 배포 원칙 (사용자 지시 2026-10-13, 재확인 2026-11-12)
+
+- 수동 워커 ZIP 전달·압축 해제·스크립트 덮어쓰기 방식은 폐기했다. 워커 코드 변경도 **AywaSync 앱의 버전·릴리스 순번을 올려 정식 업데이트**로 전달한다.
+- 현재 절차의 기준은 `apps/sync-agent/README.md`이다. 예전 ClassNote 문서·주석의 ZIP 이관 안내보다 이 규칙을 우선한다. 앱이 내부에서 사용하는 서명된 업데이트 아카이브는 수동 워커 전달과 별개다.
+- 워커 SQL을 바꾸면 `scripts/_sync-agent/build-query-catalog.cjs`로 서버 허용 질의 목록을 갱신하고 실제 원격 어댑터·서버 컴파일러를 통한 검증을 한다. 웹/API를 먼저 반영한 뒤 새 앱 버전을 게시한다.
+
 ## 검증 범위 원칙 (사용자 지시, 2026-10-22)
 
 - 간단한 문구·라벨·스타일·배치 수정에 프로젝트 전체 타입 검사나 전체 테스트를 실행하지 않는다.

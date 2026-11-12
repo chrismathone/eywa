@@ -24,18 +24,18 @@ export function decideRoute(report) {
 }
 
 /**
- * 반별 경로에서 **실제로 올릴 반 보드** 고르기 — 🔴 원장 2026-09-30: 보고서 반 = 출석부 반 = 발송 반.
+ * 반별 경로에서 실제로 올릴 반 보드 고르기. 보강 출결 반과 전달 경로는 별도로 보존한다.
  * 앱 [`sendClassGateRow`](../../src/features/onescreen/send-class.ts)와 **같은 판정**(앱·워커 일치 표가 잠근다):
  * - 정규 보고서(`class_id` 있음) = 그 반 보드가 살아 있으면 그 반. 죽었으면 **막는다**(`board_missing`) — 다른 반·1인 보드로
  *   보내지 않는다(원장 결정 4 · 반 보드 동기화가 필요하다).
- * - 보강 보고서(반 없음) = **보강 반**(0171a `makeup_class_id`)이 곧 발송 반이다.
- *   · 적힌 '보낼 반'(0303a `classnote_class_id`)이 보강 반과 다르면 **막는다**(`send_class_differs`) — 보고서 반 ≠ 발송 반.
+ * - 보강 보고서(반 없음): 보강 반은 출결 앵커이며 전달 반은 별도다(2026-11-12).
+ *   · 전달 반이 다르면 수강·과목·배정 확인(sendEligible)을 통과해야 한다. 확인 못 하면 막는다.
  *   · 보강 반 보드가 살아 있으면 그 반. 죽었으면 막는다(`board_missing`).
  *   · 보강 반이 없으면('반 미정') 막는다(`no_anchor`) — 반을 추측하지 않는다.
  * 막힌 행은 워커가 failed + 한국어 사유로 둔다(`ROUTE_BLOCKED_MESSAGE`).
  * @param {{ route: "personal"|"class"|"needs_class", classId: string|null, classEligible: boolean,
- *           sendClassId?: string|null, makeupClassId?: string|null, makeupEligible?: boolean }} a
- * @returns {{ route: "personal"|"class"|"blocked", classId: string|null, via: "personal"|"class"|"makeup"|"blocked",
+ *           sendClassId?: string|null, makeupClassId?: string|null, makeupEligible?: boolean, sendEligible?: boolean }} a
+ * @returns {{ route: "personal"|"class"|"blocked", classId: string|null, via: "personal"|"class"|"makeup"|"delivery"|"blocked",
  *             reason?: "board_missing"|"send_class_differs"|"no_anchor" }}
  */
 export function pickRouteClass(a) {
@@ -47,7 +47,9 @@ export function pickRouteClass(a) {
   }
   if (!a.makeupClassId) return { route: "blocked", classId: null, via: "blocked", reason: "no_anchor" };
   if (a.sendClassId && a.sendClassId !== a.makeupClassId)
-    return { route: "blocked", classId: a.makeupClassId, via: "blocked", reason: "send_class_differs" };
+    return a.sendEligible === true
+      ? { route: "class", classId: a.sendClassId, via: "delivery" }
+      : { route: "blocked", classId: a.makeupClassId, via: "blocked", reason: "send_class_differs" };
   return a.makeupEligible
     ? { route: "class", classId: a.makeupClassId, via: "makeup" }
     : { route: "blocked", classId: a.makeupClassId, via: "blocked", reason: "board_missing" };
@@ -56,6 +58,6 @@ export function pickRouteClass(a) {
 /** 막힌 행의 사유(한국어) — 발송 콘솔·원스크린 C.N 카드가 그대로 보여 준다. */
 export const ROUTE_BLOCKED_MESSAGE = {
   board_missing: "반 보드가 없어 발송하지 않았습니다(다른 반으로 보내지 않습니다) — '지금 반 보드 동기화'(수업보고서 발송 큐)를 누른 뒤 다시 보내 주세요",
-  send_class_differs: "보낼 반이 보강 반과 달라 발송하지 않았습니다 — 원스크린에서 보강 반을 확인해 주세요",
+  send_class_differs: "선택한 반으로 이 학생의 보강 보고서를 보낼 수 없습니다 — 수강과 ClassNote 반 배정을 확인한 뒤 보낼 반을 다시 선택해 주세요",
   no_anchor: "보강 반이 정해지지 않아 발송하지 않았습니다 — 원스크린에서 보강 반을 골라 주세요",
 };
