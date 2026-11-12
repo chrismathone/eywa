@@ -41,6 +41,31 @@ export const ENGLISH_TRACK_OPTIONS: { value: EnglishTrack; label: string }[] = [
  */
 export const DEFAULT_ENGLISH_TRACK: EnglishTrack = "injaewon";
 
+/**
+ * EiE 구분을 쓸 수 없는 지점에서 조작한 폼이 `englishTrack=eie`를 보내도 서버가 돌려줄 사유.
+ * 꺼진 기능의 이름은 일반 지점 화면에 드러내지 않는다.
+ */
+export const EIE_TRACK_UNAVAILABLE_MESSAGE = "현재 사용할 수 없는 반 구분입니다";
+
+/**
+ * 새 EiE 반이 생기는 쓰기만 막는다.
+ *
+ * - 새 반·다른 구분 → EiE: 모듈이 꺼져 있으면 거절.
+ * - 이미 EiE인 반 → EiE: 다른 칸을 고치는 값 보존 요청이므로 허용.
+ * - 모듈이 켜진 지점(침산): 종전처럼 모두 허용.
+ *
+ * `previous`를 읽지 못한 요청은 기존 EiE라고 증명할 수 없으므로 새 지정과 같이 막힌다.
+ */
+export function eieTrackWriteError(
+  eieEnabled: boolean,
+  next: EnglishTrack | null,
+  previous?: EnglishTrack | null,
+): string | null {
+  return !eieEnabled && next === "eie" && previous !== "eie"
+    ? EIE_TRACK_UNAVAILABLE_MESSAGE
+    : null;
+}
+
 /** 보기 필터 값(계정 설정에 저장). */
 export type EnglishTrackFilter = "all" | EnglishTrack;
 export const ENGLISH_TRACK_FILTERS: EnglishTrackFilter[] = ["all", "eie", "injaewon"];

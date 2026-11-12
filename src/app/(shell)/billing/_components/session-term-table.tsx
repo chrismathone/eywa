@@ -712,6 +712,7 @@ export function SessionTermGroups({
   visibleOnly = false,
   seatShare = null,
   canWrite,
+  eieEnabled = true,
 }: {
   groups: ClassGroup[];
   catalog: Catalog;
@@ -721,6 +722,8 @@ export function SessionTermGroups({
    * 읽기 권한이면 반 일괄 입력·확정·전체 해제·선택 체크, 행의 확정·해제·삭제·배분·이월·메모 편집을 그리지 않는다(원장 2026-11-05).
    */
   canWrite: boolean;
+  /** 꺼진 지점에 과거 EiE 반이 남았는지 진단하는 표시용 값. 돈 산식(`monthlyPrice`)은 바꾸지 않는다. */
+  eieEnabled?: boolean;
   /** 필터(보기 필터의 미확정·미배분 · 검색)로 좁혀 보는 중 — 반 일괄 확정을 보이는 학생에게만. */
   visibleOnly?: boolean;
   /**
@@ -879,6 +882,9 @@ export function SessionTermGroups({
                           {monthlyPrice !== null ? " · 월 수강료" : ""} · 확정{" "}<span className={allDone ? "text-chart-2" : confirmable.length === 0 ? "text-text-dim" : "text-amber"}>{confirmed}/{confirmable.length}</span>
                           {lockedCount > 0 ? ` · 청구서 없음 ${lockedCount}` : ""}
                         </span>
+                        {!eieEnabled && monthlyPrice !== null ? (
+                          <span role="status" className="text-amber text-xs font-bold">이 반은 월정액으로 확정됩니다</span>
+                        ) : null}
                       </div>
                       {/* 불투명(반 머리 줄과 같은 색) — 좁은 창에서 왼쪽 반 정보 위로 겹칠 때 글자가 섞이지 않게.
                           확정할 수 있는 줄이 하나도 없는 반(청구서 없음·취소뿐)엔 일괄 입력·확정 자체가 없다. */}
