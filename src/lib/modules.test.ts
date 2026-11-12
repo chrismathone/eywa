@@ -18,6 +18,7 @@ import {
   menuLayoutWithModules,
   moduleOfMenuKey,
   normalizeDisabledModules,
+  normalizeKnownModuleIds,
   effectiveDisabledModulesFromStored,
   type ModuleId,
 } from "./modules";
@@ -64,6 +65,18 @@ describe("모듈 저장 기준 목록", () => {
       .not.toContain("makeups");
     expect(effectiveDisabledModulesFromStored({ preset: "generic", modules: { disabled: [] } }))
       .not.toContain("makeups");
+  });
+
+  it("옛 폼이 모르는 새 모듈은 disabled에 없어도 저장 뒤 꺼짐을 유지한다", () => {
+    const futureIds = [...MODULE_IDS, "future_module"];
+    const oldFormKnown = normalizeKnownModuleIds(MODULE_BASELINE_V1, futureIds);
+    const saved = {
+      preset: "generic",
+      modules: { disabled: [], known: oldFormKnown },
+    };
+
+    expect(oldFormKnown).not.toContain("future_module");
+    expect(effectiveDisabledModulesFromStored(saved, futureIds)).toContain("future_module");
   });
 });
 
