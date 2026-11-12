@@ -20,7 +20,8 @@ import { IMPORT_FILTER, UNSENT_FILTER, reportOrderSpecs, sortByRating, type Repo
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { getClassnoteQueue, type ClassnoteQueueView } from "./queries";
 import { loadRatingPoints, loadReportRatings } from "./report-ratings";
-import { REPORT_RATING_VISIBLE, type ReportRating } from "../report-rating";
+import type { ReportRating } from "../report-rating";
+import { canViewReportRatings } from "./rating-access";
 import { isSendClassRouteRow, sendClassRow } from "@/features/onescreen/send-class";
 import { blockedForNoSendClass } from "@/features/onescreen/server/send-class";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
@@ -512,7 +513,7 @@ const STUDENT_SEARCH_CAP = 100;
  */
 export async function listReports(
   filters: ReportListFilters,
-): Promise<{ ok: boolean; rows?: ReportListRow[]; total?: number; page?: number; pageSize?: number; error?: string }> {
+): Promise<{ ok: boolean; rows?: ReportListRow[]; total?: number; page?: number; pageSize?: number; showRating?: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canAccessTenant(user.systemRole, "lesson_reports"))) {
@@ -521,12 +522,11 @@ export async function listReports(
   const supabase = await createClient();
   const page = Math.max(0, filters.page ?? 0);
   // ment_source(0214a) 적용 여부 — 미적용이면 select·필터에서 빼서 목록이 죽지 않게(#95, probe 캐시 왕복 0).
-  // 평점(0450a)은 선생님 보고서를 평가한 참고 값이라 **쓰기(발송) 권한자에게만** 싣는다 — 화면의 canSend와 같은
-  // 판정을 서버가 다시 한다(#77). 권한이 없으면 표를 읽지도 않고 행에 평점 칸 자체가 없다.
-  // 표시 스위치(REPORT_RATING_VISIBLE)가 꺼져 있으면 권한자에게도 같다(2026-10-26 원장 — 새 기준 검증 전까지 감춤).
+  // 평점(0450a)은 서버 공통 문(코드 표시 스위치 ∧ 지점 report_rating ∧ 쓰기 권한)을 통과할 때만 싣는다.
+  // 꺼진 지점·권한 없는 사람은 표를 읽지도 않고 행에 평점 칸 자체가 없다(#77).
   const [mentReady, canSeeRatings] = await Promise.all([
     mentSourceColumnReady(supabase),
-    REPORT_RATING_VISIBLE ? canWriteTenant(user.systemRole, "lesson_reports") : Promise.resolve(false),
+    canViewReportRatings(user.tenantId, user.systemRole),
   ]);
 
   // 학생 이름 검색 — 이름은 이 표에 없는 값(students 조인)이라 **먼저 id로 해석**한 뒤 거른다.
@@ -544,7 +544,7 @@ export async function listReports(
     const sids = (matched ?? []).map((s) => s.id as string);
     if (sids.length > STUDENT_SEARCH_CAP)
       return { ok: false, error: `"${term}"에 해당하는 학생이 너무 많습니다 — 이름을 더 입력해 주세요` };
-    if (!sids.length) return { ok: true, rows: [], total: 0, page, pageSize: REPORT_PAGE_SIZE };
+    if (!sids.length) return { ok: true, rows: [], total: 0, page, pageSize: REPORT_PAGE_SIZE, showRating: canSeeRatings };
     studentIds = sids;
   }
   // 반 필터(0134a class_id) — 옵션은 0147a RPC가 "실제 보고서가 붙은 반"만 준다.
@@ -652,7 +652,7 @@ export async function listReports(
     const sorted = sortByRating(order, points, filters.dir ?? "asc");
     total = sorted.length;
     const pageIds = sorted.slice(page * REPORT_PAGE_SIZE, page * REPORT_PAGE_SIZE + REPORT_PAGE_SIZE).map((r) => r.id);
-    if (!pageIds.length) return { ok: true, rows: [], total, page, pageSize: REPORT_PAGE_SIZE };
+    if (!pageIds.length) return { ok: true, rows: [], total, page, pageSize: REPORT_PAGE_SIZE, showRating: canSeeRatings };
     const { data, error } = await filtered(listCols).in("id", pageIds);
     if (error) return { ok: false, error: humanizeDbError(error.message, "조회") };
     const at = new Map(pageIds.map((id, i) => [id, i]));
@@ -704,5 +704,5 @@ export async function listReports(
     mentSource: (r as { ment_source?: string | null }).ment_source ?? null,
     ...(canSeeRatings ? { rating: ratingById.get(r.id) ?? null } : {}),
   }));
-  return { ok: true, rows, total, page, pageSize: REPORT_PAGE_SIZE };
+  return { ok: true, rows, total, page, pageSize: REPORT_PAGE_SIZE, showRating: canSeeRatings };
 }

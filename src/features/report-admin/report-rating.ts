@@ -11,7 +11,8 @@
 import type { TipCard, TipRow } from "@/components/hover-tip/tip";
 
 /**
- * 평점 표시 스위치 — 꺼지면 목록의 '평점' 열이 없고 서버(listReports)도 평점 표를 읽지 않는다.
+ * 평점 표시 스위치 — 서버 공통 문(`server/rating-access.ts`)이 지점 `report_rating`·쓰기 권한과 함께 본다.
+ * 꺼지면 목록의 '평점' 열이 없고 서버(listReports)도 평점 표를 읽지 않는다.
  * 2026-10-26 원장 *"이게 4.0이라고?"* · *"전혀 신뢰안가는 점수"*로 한 번 껐다(옛 기준 v4: 다섯 항목 평균인데 '믿음' 91.5%·'알기 쉬움' 62.5%가
  * 만점이라 판에 박힌 글도 4.0) → 원장 점수표 44건에 맞춘 기준 v6(report-rating/harness/owner.ts)으로 다시 매기고 다시 켰다(*"진행해"*, 정렬 함께).
  * 🔴 화면은 **지금 기준(v6)으로 매긴 평점만** 보여 준다(옛 기준 값은 표에 남아도 읽지 않는다 — server/report-ratings.ts).

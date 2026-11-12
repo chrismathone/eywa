@@ -135,6 +135,7 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
                   total: firstPage.total ?? 0,
                   page: firstPage.page ?? 0,
                   pageSize: firstPage.pageSize ?? 30,
+                  showRating: firstPage.showRating ?? false,
                 },
               }));
 

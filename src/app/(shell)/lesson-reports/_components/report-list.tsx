@@ -28,7 +28,6 @@ import type { ReportFilterOptions } from "@/features/report-admin/server/queries
 import { ReportViewSettings } from "./report-view-settings";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { RatingCell } from "./rating-cell";
-import { REPORT_RATING_VISIBLE } from "@/features/report-admin/report-rating";
 import { tipProps, type TipCard } from "@/components/hover-tip/tip";
 import { useUnsentReasonCards } from "./use-unsent-reasons";
 
@@ -115,7 +114,7 @@ function MentSourceCell({ value }: { value: string | null | undefined }) {
   );
 }
 
-type Result = { rows: ReportListRow[]; total: number; page: number; pageSize: number };
+type Result = { rows: ReportListRow[]; total: number; page: number; pageSize: number; showRating: boolean };
 
 /**
  * 목록 줄에서 재발송을 권할 상태(N4, 2026-09-23 감사) — 재발송은 3일 창 발송 큐 카드에만 있어, 그 창을 지난
@@ -158,8 +157,15 @@ export function ReportList({
     setChecked(new Set()); // 페이지·필터 전환 시 선택 초기화 — 화면 밖 행 발송 방지
     start(async () => {
       const res = await listReports(next);
-      if (res.ok) setResult({ rows: res.rows ?? [], total: res.total ?? 0, page: res.page ?? 0, pageSize: res.pageSize ?? 30 });
-      else toast.error(res.error ?? "목록을 불러오지 못했습니다");
+      if (res.ok) {
+        setResult({
+          rows: res.rows ?? [],
+          total: res.total ?? 0,
+          page: res.page ?? 0,
+          pageSize: res.pageSize ?? 30,
+          showRating: res.showRating ?? false,
+        });
+      } else toast.error(res.error ?? "목록을 불러오지 못했습니다");
     });
   }
   const set = (patch: Partial<ReportListFilters>) => run({ ...filters, ...patch, page: 0 });
@@ -205,7 +211,7 @@ export function ReportList({
     window.open(url, "_blank", "noopener");
   };
 
-  const { rows, total, page, pageSize } = result;
+  const { rows, total, page, pageSize, showRating } = result;
   // '미발송' 칸 카드 — 이 페이지 미발송 줄만 목록이 그려진 뒤 따로 읽는다(첫 페인트를 막지 않는다). 발송 상태 열이 있을 때만.
   const unsentCards = useUnsentReasonCards(rows, classnoteOn);
   const maxPage = Math.max(0, Math.ceil(total / pageSize) - 1);
@@ -213,10 +219,6 @@ export function ReportList({
   const allChecked = sendable.length > 0 && sendable.every((r) => checked.has(r.id));
   // 멘트 작성 방식 열(0214a) — 마이그레이션 전엔 전 행 "—"뿐이라 열 자체를 숨긴다(뷰 설정 필터와 같은 게이트).
   const showMent = options.mentSourceReady ?? false;
-  // 평점 열(참고용, 0450a) — 서버도 쓰기 권한자에게만 평점을 싣는다(listReports). 화면은 같은 판정으로 열만 감춘다.
-  // 표시 스위치가 꺼져 있으면 열 자체가 없다(2026-10-26 원장 — 새 기준 검증 전까지).
-  const showRating = REPORT_RATING_VISIBLE && canSend;
-
   const toggle = (id: string) =>
     setChecked((prev) => {
       const n = new Set(prev);
