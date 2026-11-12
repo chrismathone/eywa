@@ -93,4 +93,43 @@ describe("영상 AI 메모 배치 제출 거절", () => {
       { lock_token: "lock" },
     );
   });
+
+  it("판정 배치의 일반 거절은 종전 재시도 횟수에 포함한다", async () => {
+    fakes.claimRows.mockResolvedValue({ token: "lock", rows: [row] });
+    fakes.submitJSONBatch.mockResolvedValue({ batchId: "", models: {}, rejected: [
+      { customId: "j_11111111111111111111111111111111", error: "429 Too Many Requests" },
+    ] });
+
+    await expect(submitJudgeBatch("tenant")).resolves.toBe(0);
+
+    expect(fakes.moveStage).not.toHaveBeenCalled();
+    expect(fakes.failOrRetry).toHaveBeenCalledWith(row, "judge", "429 Too Many Requests", 3, { lock_token: "lock" });
+  });
+
+  it("확인 배치 제출 예외도 일반 오류면 종전 재시도 횟수에 포함한다", async () => {
+    const verifying = { ...row, stage: "verifying" };
+    fakes.claimRows.mockResolvedValue({ token: "lock", rows: [verifying] });
+    fakes.submitJSONBatch.mockRejectedValue(new Error("잔액 부족"));
+
+    await expect(submitVerifyBatch("tenant")).resolves.toBe(0);
+
+    expect(fakes.moveStage).not.toHaveBeenCalled();
+    expect(fakes.failOrRetry).toHaveBeenCalledWith(verifying, "verify", "확인 배치 보내기 실패: Error: 잔액 부족", 3, { lock_token: "lock" });
+  });
+
+  it("제출 사이에 AI 분석이 꺼지면 일반 오류도 횟수 없이 되돌린다", async () => {
+    fakes.aiAnalysisEnabled.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    fakes.claimRows.mockResolvedValue({ token: "lock", rows: [row] });
+    fakes.submitJSONBatch.mockRejectedValue(new Error("일시 오류"));
+
+    await expect(submitJudgeBatch("tenant")).resolves.toBe(0);
+
+    expect(fakes.failOrRetry).not.toHaveBeenCalled();
+    expect(fakes.moveStage).toHaveBeenCalledWith(
+      row,
+      "judging",
+      { stage: "judge", lock_token: null, locked_at: null, error: "판정 배치 보내기 실패: Error: 일시 오류" },
+      { lock_token: "lock" },
+    );
+  });
 });

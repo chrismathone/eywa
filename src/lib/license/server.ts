@@ -43,8 +43,10 @@ export const isFeatureLicensed = cache(async (tenantId: string, feature: License
  * 🔴 조회가 실패하면 **꺼짐**(fail-closed) — 위 `isFeatureLicensed`와 반대다. 이 기능들은 멈춰도 원내 업무가 서지 않고
  *    (링크 하나·외부 반출), 잘못 열리면 계약하지 않은 지점의 데이터가 나간다.
  */
-async function readFeatureOptedIn(tenantId: string, feature: OptInFeature): Promise<boolean> {
-  if (!tenantId) return false;
+export type FeatureOptInState = "enabled" | "disabled" | "unknown";
+
+async function readFeatureOptInState(tenantId: string, feature: OptInFeature): Promise<FeatureOptInState> {
+  if (!tenantId) return "disabled";
   try {
     const { data, error } = await createAdminClient()
       .from("tenant_licenses")
@@ -54,13 +56,17 @@ async function readFeatureOptedIn(tenantId: string, feature: OptInFeature): Prom
       .maybeSingle();
     if (error) {
       console.error("[license] 조회 실패 — 꺼짐으로 둔다", feature, error.message);
-      return false;
+      return "unknown";
     }
-    return licenseExplicitlyOn(data);
+    return licenseExplicitlyOn(data) ? "enabled" : "disabled";
   } catch (e) {
     console.error("[license] 조회 예외 — 꺼짐으로 둔다", feature, e);
-    return false;
+    return "unknown";
   }
+}
+
+async function readFeatureOptedIn(tenantId: string, feature: OptInFeature): Promise<boolean> {
+  return (await readFeatureOptInState(tenantId, feature)) === "enabled";
 }
 
 export const isFeatureOptedIn = cache(readFeatureOptedIn);
@@ -71,6 +77,11 @@ export const isFeatureOptedIn = cache(readFeatureOptedIn);
  */
 export async function isFeatureOptedInFresh(tenantId: string, feature: OptInFeature): Promise<boolean> {
   return readFeatureOptedIn(tenantId, feature);
+}
+
+/** 비캐시 opt-in 판정의 성공·실패를 구분해야 하는 정리 경로용. 기존 boolean 판정 동작은 바꾸지 않는다. */
+export async function getFeatureOptInStateFresh(tenantId: string, feature: OptInFeature): Promise<FeatureOptInState> {
+  return readFeatureOptInState(tenantId, feature);
 }
 
 /**

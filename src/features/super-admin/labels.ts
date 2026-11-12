@@ -210,10 +210,12 @@ export function auditDetail(action: string, metadata: Record<string, unknown> | 
       if (m.feature === "window_mode" && isShellMode(m.mode)) return `화면 방식 → ${SHELL_MODE_LABEL[m.mode]}`;
       const base = `${featureLabel(m.feature)} ${m.active === true ? "켬" : "끔"}`;
       if (m.feature !== "slack") return base;
-      const skipped = typeof m.inboxSkipped === "number" ? m.inboxSkipped : 0;
-      const cancelled = typeof m.outboxCancelled === "number" ? m.outboxCancelled : 0;
-      const reset = typeof m.rulesReset === "number" ? m.rulesReset : 0;
-      return `${base} · 인박스 ${skipped.toLocaleString("ko-KR")}건 건너뜀 · 발송 대기 ${cancelled.toLocaleString("ko-KR")}건 취소 · 규칙 ${reset.toLocaleString("ko-KR")}개 시작 시각 갱신`;
+      return [
+        base,
+        typeof m.inboxSkipped === "number" ? `인박스 ${m.inboxSkipped.toLocaleString("ko-KR")}건 건너뜀` : null,
+        typeof m.outboxCancelled === "number" ? `발송 대기 ${m.outboxCancelled.toLocaleString("ko-KR")}건 취소` : null,
+        typeof m.rulesReset === "number" ? `규칙 ${m.rulesReset.toLocaleString("ko-KR")}개 시작 시각 갱신` : null,
+      ].filter(Boolean).join(" · ");
     }
     case "set_ai_model": {
       // 원시 id 대신 화면 이름으로(원문 노출 금지). 지금 목록에 없는 옛 모델(Sonnet 5 등)은 탭과 같은 라벨 함수로, 그래도 모르면 '기타'.

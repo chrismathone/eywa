@@ -25,15 +25,17 @@ export async function reviewAccess(videoId: string): Promise<ViewAccess> {
 
 /** 화면 모양 — 행이 없으면 null(아직 대기열에 없는 영상 · 과목이 수학이 아닌 영상). */
 export async function reviewViewFor(tenantId: string, videoId: string): Promise<ReviewView | null> {
-  const { data, error } = await db().from("homework_video_reviews")
-    .select("stage,result,models,transcript_id,assets")
-    .eq("tenant_id", tenantId).eq("video_id", videoId).maybeSingle();
+  const [{ data, error }, aiEnabled] = await Promise.all([
+    db().from("homework_video_reviews")
+      .select("stage,result,models,transcript_id,assets")
+      .eq("tenant_id", tenantId).eq("video_id", videoId).maybeSingle(),
+    aiAnalysisEnabled(tenantId),
+  ]);
   if (error) throw error;
   if (!data) return null;
   const stage = data.stage as ReviewStage;
   const result = (data.result as ReviewResult | null) ?? null;
   const { state, message } = stageView(stage, !!result);
-  const aiEnabled = await aiAnalysisEnabled(tenantId);
   return {
     state,
     message,
