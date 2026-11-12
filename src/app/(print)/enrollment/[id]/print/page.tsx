@@ -48,7 +48,7 @@ export default async function EnrollmentPrintPage({
   ]);
   const contactLine = [
     profile.representativeName ? `대표 ${profile.representativeName}` : "",
-    profile.phone,
+    phoneLabel(profile.phone),
     profile.email,
   ]
     .filter(Boolean)

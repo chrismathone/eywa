@@ -1,6 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { phoneLabel } from "@/lib/format/phone";
 import { autoStaffEmail, EMAIL_RE } from "@/features/staff/email";
 import { subjectsFromDepartment } from "../../department/department-subjects";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
@@ -118,7 +119,7 @@ export async function submitPublicStaffIntake(
       display_name: data.personal.name,
       system_role: tok.role,
       status: "active",
-      phone: data.personal.phone || null,
+      phone: phoneLabel(data.personal.phone),
       hire_date: data.contract.startDate || null,
       department: data.contract.division || null,
       employment_type: data.contract.employmentType || null,
