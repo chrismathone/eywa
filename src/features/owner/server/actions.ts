@@ -216,7 +216,8 @@ export async function saveOwnerSection(
         .select("class_name", { count: "exact" })
         .eq("tenant_id", actor.tenantId)
         .eq("english_track", "eie")
-        .or(`is_active.eq.true,closed_at.is.null,closed_at.gte.${today}`)
+        .eq("is_active", true)
+        .or(`closed_at.is.null,closed_at.gte.${today}`)
         .order("class_name")
         .limit(4);
       if (eieError) {
@@ -227,7 +228,7 @@ export async function saveOwnerSection(
       if (classCount > 0) {
         const names = (eieClasses ?? []).map((row) => row.class_name).filter(Boolean).join(", ");
         return {
-          error: `EiE 반 ${classCount}개를 먼저 '인재원 영어'로 바꾸거나 정리하세요${names ? ` (${names}${classCount > (eieClasses?.length ?? 0) ? " 외" : ""})` : ""}.`,
+          error: `운영 중인 EiE 반 ${classCount}개를 먼저 종강하거나 '인재원 영어'로 바꾸세요${names ? ` (${names}${classCount > (eieClasses?.length ?? 0) ? " 외" : ""})` : ""}.`,
         };
       }
     }
