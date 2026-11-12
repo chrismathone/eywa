@@ -26,7 +26,7 @@ describe("학습 추세 — 생성 경로", () => {
   it("오늘 날짜를 넘기고, 생성 뒤 금지 표현 검사에 걸리면 싣지 않고 화면에 알린다", () => {
     expect(actions).toContain("buildTrendInput(history, { today: anchorDate })");
     // 검사는 미리보기와 같은 공용 함수(ment-assembly.ts `readMentResponse`, 2026-10-16) — 운영이 그 결과로 추세를 버린다
-    expect(actions).toContain("readMentResponse(data, mode, trendInput)");
+    expect(actions).toContain("readMentResponse(data, mode, trendInput");
     expect(read("features", "onescreen", "ment-assembly.ts")).toContain("findTrendViolations(rawTrend)");
     expect(actions).toContain("trendDropped: true");
   });

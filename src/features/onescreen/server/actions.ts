@@ -1986,7 +1986,9 @@ export async function generateReportComment(
       meta: { feature: "classnote_ment", tenantId: user.tenantId },
       ...MENT_AI_TUNING,
     });
-    const res = readMentResponse(data, mode, trendInput);
+    const res = readMentResponse(data, mode, trendInput, [safeInput.specialNote, safeInput.classNotice, lessonMemo].filter((x): x is string => !!x));
+    if (res.leaks.length)
+      console.warn(JSON.stringify({ level: "warn", scope: "generateReportComment.leak", dropped: res.leaks, message: "AI 혼잣말·찌꺼기 문장을 학부모 글에서 뺐음" }));
     if (!res.comment) return { ok: false, error: "빈 응답" };
     const body = prependParentAddress(appendVideoReceiptComment(res.comment, videoReceipt), parentAddress);
     // 시범 대상 — 항목별 글(진도 → 테스트 → 태도 → 과제 → 이해도(AI) → 오늘 과제 → 선생님 한마디).
