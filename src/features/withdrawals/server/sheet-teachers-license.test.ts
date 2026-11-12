@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getSheetsApi: vi.fn(),
-  isFeatureLicensed: vi.fn(),
+  getLicenseFlags: vi.fn(),
   isSheetTenant: vi.fn(),
   spreadsheetIdOf: vi.fn(),
 }));
@@ -15,7 +15,7 @@ vi.mock("react", async (importOriginal) => ({
 }));
 vi.mock("next/cache", () => ({ unstable_cache: (fn: unknown) => fn }));
 vi.mock("@/features/integrations/google-sheets", () => ({ getSheetsApi: mocks.getSheetsApi }));
-vi.mock("@/lib/license/server", () => ({ isFeatureLicensed: mocks.isFeatureLicensed }));
+vi.mock("@/lib/license/server", () => ({ getLicenseFlags: mocks.getLicenseFlags }));
 vi.mock("./withdrawal-sheet", () => ({
   isSheetTenant: mocks.isSheetTenant,
   spreadsheetIdOf: mocks.spreadsheetIdOf,
@@ -38,7 +38,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.spreadsheetIdOf.mockReturnValue("sheet-id");
   mocks.isSheetTenant.mockResolvedValue(true);
-  mocks.isFeatureLicensed.mockResolvedValue(true);
+  mocks.getLicenseFlags.mockResolvedValue({ google_sheets: true });
   mocks.getSheetsApi.mockResolvedValue(sheetsApi());
 });
 
@@ -49,10 +49,10 @@ afterEach(() => {
 
 describe("퇴원생 차트 구글 시트 라이선스", () => {
   it("라이선스가 꺼지면 시트를 읽지 않고 null로 돌아간다", async () => {
-    mocks.isFeatureLicensed.mockResolvedValue(false);
+    mocks.getLicenseFlags.mockResolvedValue({ google_sheets: false });
 
     await expect(loadSheetExits("demo")).resolves.toBeNull();
-    expect(mocks.isFeatureLicensed).toHaveBeenCalledWith("demo", "google_sheets");
+    expect(mocks.getLicenseFlags).toHaveBeenCalledWith("demo");
     expect(mocks.getSheetsApi).not.toHaveBeenCalled();
   });
 
@@ -63,13 +63,13 @@ describe("퇴원생 차트 구글 시트 라이선스", () => {
 
   it("침산도 라이선스가 켜진 경우 종전처럼 시트를 읽는다", async () => {
     await expect(loadSheetExits("cs")).resolves.toEqual([]);
-    expect(mocks.isFeatureLicensed).toHaveBeenCalledWith("cs", "google_sheets");
+    expect(mocks.getLicenseFlags).toHaveBeenCalledWith("cs");
     expect(mocks.getSheetsApi).toHaveBeenCalledOnce();
   });
 
   it("라이선스 조회 실패를 허용으로 접은 결과는 시트 읽기를 계속한다", async () => {
-    // isFeatureLicensed의 조회 실패 정책은 true 반환이다. 이 입구가 그 결과를 다시 막지 않는지 고정한다.
-    mocks.isFeatureLicensed.mockResolvedValue(true);
+    // getLicenseFlags의 조회 실패 정책은 전부 true 반환이다. 이 입구가 그 결과를 다시 막지 않는지 고정한다.
+    mocks.getLicenseFlags.mockResolvedValue({ google_sheets: true });
 
     await expect(loadSheetExits("tenant-id")).resolves.toEqual([]);
     expect(mocks.getSheetsApi).toHaveBeenCalledOnce();
