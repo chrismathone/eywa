@@ -22,6 +22,16 @@ describe("전자결재 메뉴 — 역할 권한이 기본, 개인에게는 저�
     expect(source).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
     expect(source).not.toMatch(/pilot/i);
   });
+
+  it("결재·후결·회수·댓글 액션은 공통 로그인 문에서 지점 모듈도 확인한다", () => {
+    const source = readFileSync(join(process.cwd(), "src", "features", "approvals", "server", "actions.ts"), "utf8");
+    const gate = source.slice(source.indexOf("async function requireSignedIn()"), source.indexOf("const TEACHER_VIEW_APPROVAL_ERROR"));
+    expect(gate).toContain('isModuleOnForTenant(user.tenantId, "approvals")');
+    for (const name of ["decideDocument", "confirmDeferredStep", "withdrawDocument", "addApprovalComment", "deleteApprovalComment"]) {
+      const action = source.slice(source.indexOf(`export async function ${name}`));
+      expect(action.slice(0, 500)).toContain("requireSignedIn()");
+    }
+  });
 });
 
 // ⚠️ 결재자 후보 풀은 더 이상 코드 상수가 아니다 — **활성 직원 전원**(원장 2026-08-14 "결재자랑
