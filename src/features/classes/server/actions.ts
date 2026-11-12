@@ -773,6 +773,31 @@ async function collectOverlaps(
 
 export type ArchiveClassState = { error?: string } | undefined;
 
+async function classRestoreCheck(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tenantId: string,
+  classId: string,
+) {
+  const [{ data: klass, error }, settings] = await Promise.all([
+    supabase
+      .from("classes")
+      .select("class_name, english_track")
+      .eq("tenant_id", tenantId)
+      .eq("id", classId)
+      .maybeSingle(),
+    getTenantSettings(),
+  ]);
+  if (error) {
+    logDbError(error, "classes.actions.classRestoreCheck");
+    return { klass: null, error: "반 정보를 확인하지 못해 다시 운영하지 않았습니다. 잠시 뒤 다시 시도해 주세요." };
+  }
+  const track = klass?.english_track === "eie" ? "eie" : klass?.english_track === "injaewon" ? "injaewon" : null;
+  return {
+    klass,
+    error: eieTrackWriteError(isModuleEnabled(settings.modules.disabled, "eie"), track),
+  };
+}
+
 /**
  * 반 폐지/재운영 토글.
  * 폐지 = is_active=false + **그 반 활성 수강을 오늘로 종료**(reason='반 폐지'). 재운영 = 되돌림.
@@ -812,11 +837,8 @@ export async function archiveClass(
   }
 
   const supabase = await createClient();
-  const { data: klass } = await supabase
-    .from("classes")
-    .select("class_name")
-    .eq("id", id)
-    .maybeSingle();
+  const restore = await classRestoreCheck(supabase, user.tenantId, id);
+  if (restore.error) return { error: restore.error };
 
   const { error } = await supabase
     .from("classes")
@@ -832,7 +854,7 @@ export async function archiveClass(
   await logAction({
     action: "class_unarchive",
     targetType: "class",
-    targetLabel: klass?.class_name,
+    targetLabel: restore.klass?.class_name,
     metadata: { classId: id, affectedStudents: sync.studentIds.length },
   });
 
@@ -882,6 +904,9 @@ export async function reopenClassTerm(_prev: ClassTermState, formData: FormData)
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "반 ID가 누락되었습니다" };
+
+  const restore = await classRestoreCheck(await createClient(), user.tenantId, id);
+  if (restore.error) return { error: restore.error };
 
   // 종강일 비우기 · 종강이 닫은 시간표 배치 · 종강이 끝낸 수강 · 재개강 기록을 한 거래로(확인 창의 "시간표·일정에
   // 다시 표시됩니다"). 되살릴 산 배치가 없으면 막는다 — 그 밤 정리가 수강을 다시 닫는다(class-term-store.ts).
