@@ -12,7 +12,8 @@ import { pickCnForRoster } from "@/features/onescreen/classnote-match";
 import { parseView } from "@/features/onescreen/view";
 import { OneScreenClient } from "@/features/onescreen/components/onescreen-client";
 import { TodayAttendanceStrip } from "@/features/attendance/live/components/today-strip";
-import { MyTasksStrip } from "@/features/staff-tasks/components/my-tasks-strip";
+import { MyDutiesStrip } from "@/features/duties/components/my-duties-strip";
+import { MyWorkRequestsStrip } from "@/features/work-requests/components/my-work-requests-strip";
 import { VideoHomeworkProvider } from "@/features/video-homework/components/video-homework-provider";
 import { getVideoHomeworkMarks } from "@/features/video-homework/server/queries";
 import { getOthersReportKeys, getVideoHomeworkAssignments } from "@/features/video-homework/server/assignments";
@@ -183,9 +184,13 @@ export default async function OneScreenPage({
       <Suspense fallback={null}>
         <TodayAttendanceStrip className="mb-4" />
       </Suspense>
-      {/* 내 할 일(0377a) — 열린 할 일이 있을 때만 한 줄. 첫 페인트를 막지 않는다(B7). */}
+      {/* 오늘 내 업무(s2_0069 의무 장부) — 오늘 출결·보고서·발송 의무의 완료도. 의무가 있을 때만 · 첫 페인트를 막지 않는다(B7). */}
       <Suspense fallback={null}>
-        <MyTasksStrip className="mb-4" />
+        <MyDutiesStrip className="mb-4" />
+      </Suspense>
+      {/* 받은 업무 요청(관리자 '처리 요청' 등) — 받은 것이 있을 때만 선다 · 의무 줄과 따로(의무 없는 날 · 읽기 강사뷰에도) · 첫 페인트를 막지 않는다(B7). */}
+      <Suspense fallback={null}>
+        <MyWorkRequestsStrip className="mb-4" />
       </Suspense>
       {/* key=대상 날짜 — 날짜 이동(searchParam) 시 클라 상태를 새 날짜 로스터로 재초기화(useState는 최초 1회만). */}
       {/* key=대상 날짜 — 공급자는 검사 기록을 처음 한 번만 읽는다. 날짜를 옮겼는데 옛 날짜 기록이 남으면 일괄 검사가

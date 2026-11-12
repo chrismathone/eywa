@@ -97,6 +97,7 @@ const RULES: readonly [string, string][] = [
   ["approval_", "staff"],
   // 업무 요청(s2_0018) — 요청 → 보고 → 검토. 아직 미리보기 단계라 슬랙으로는 안 흘린다(FORBID_KEYS · SQL 머리말 약속).
   ["work_request_", "staff"],
+  ["duty_note_", "staff"],
   ["leave_", "staff"],
   ["self_", "staff"],
   ["resume_", "staff"],
@@ -177,6 +178,8 @@ const FORBID_KEYS = new Set([
   // 업무 요청 · 업무 비서 — 슬랙과 잇지 않는다(업무 요청 SQL 머리말 · 미리보기 단계).
   "work_request_create",
   "work_request_act",
+  // 업무 완성도 관리 기록 — 사유 글에 학생·직원 사정이 들 수 있다. 슬랙으로 내보내지 않는다.
+  "duty_note_add",
   "dashboard_secretary_run",
   // 학원 비서 — 질문 글(대상 문구)에 원생 이름·금액이 그대로 들 수 있다. 슬랙으로 내보내지 않는다.
   "assistant_ask",

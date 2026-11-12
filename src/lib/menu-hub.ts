@@ -154,6 +154,7 @@ export const HUB_GROUPS: HubGroup[] = [
       fromMenu("lesson_reports", "목록·작성률·발송 관리", { section: "3. 수업 후 · 검토·전달" }),
       fromMenu("makeups", "보강 일정·실시 검토·미처리 업무", { section: "3. 수업 후 · 검토·전달" }),
       fromMenu("class_review", "수업 참관·평가 기록", { section: "3. 수업 후 · 검토·전달" }),
+      fromMenu("duties", "선생님별·반별 업무 완성도 · 기한 초과", { section: "3. 수업 후 · 검토·전달" }),
       // 출석부의 다른 면 — 자주 쓰는 자리는 위 버튼이고, 나머지는 작은 줄로. 설명도 둔다 — 탭 및 메뉴 구성에서 묶음을 바꾸면 큰 카드로 서는데
       // 설명이 없으면 빈 줄이 남는다(점검 2026-10-19).
       face("attendance", "/attendance/quick", "출결 모드", "내 반 빠른 출결", { tool: true, teacherOnly: true, icon: "listChecks" }),

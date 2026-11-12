@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { kstShortStamp } from "@/lib/date-kst";
+
+/** 목록·상세는 날짜만, 이력만 시각까지(원장 2026-11-10). */
+const shortDate = (v: unknown) => kstShortStamp(v)?.slice(0, 8) ?? null;
 import { TASK_FILTERS, TASK_FILTER_LABEL, closeReasonLabel, taskKindLabel, taskState, type StaffTaskFilter, type StaffTaskItem } from "../kinds";
 import { fetchTaskList, type TaskScope } from "../fetch";
 import { TaskDetail } from "./task-detail";
@@ -17,26 +20,32 @@ export type StaffTaskDialogTarget = TaskScope & { filter?: StaffTaskFilter; pers
  * `scope: "all"`은 업무 처리 현황 권한이 있을 때만 부른다(라우트가 다시 막는다).
  */
 export function StaffTaskDialog({ target, onClose }: { target: StaffTaskDialogTarget; onClose: () => void }) {
-  const [filter, setFilter] = useState<StaffTaskFilter>(target.filter ?? "open");
-  const [taskId, setTaskId] = useState<string | null>(target.taskId ?? null);
   const all = target.scope === "all";
+  // 원장 2026-11-10: 제목 1.5배 · 설명 줄 없음. '내 할 일'은 강사 홈 '내 업무' 창의 둘째 탭으로도 선다(StaffTaskPane).
   const title = all ? (target.personName ? `${target.personName} 선생님의 할 일` : "업무 처리 현황") : "내 할 일";
   return (
     <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <DialogContent className="flex h-[min(640px,88dvh)] flex-col gap-3 sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>처리 여부는 원래 기록(보고서 발송 · 후속조치 완료)으로 저절로 확인됩니다.</DialogDescription>
+          <DialogTitle className="text-2xl">{title}</DialogTitle>
         </DialogHeader>
-        {taskId ? <TaskDetail taskId={taskId} onBack={() => setTaskId(null)} onNavigate={onClose} /> : <>
-          <ToolbarSegment>
-            {TASK_FILTERS.map((f) => <ToolbarSegmentItem key={f} active={f === filter} onClick={() => setFilter(f)}>{TASK_FILTER_LABEL[f]}</ToolbarSegmentItem>)}
-          </ToolbarSegment>
-          <TaskList key={filter} scope={target} filter={filter} showPeople={all && !target.personName} onPick={setTaskId} />
-        </>}
+        <StaffTaskPane target={target} onNavigate={onClose} />
       </DialogContent>
     </Dialog>
   );
+}
+
+/** 할 일 창의 속(필터 · 목록 → 상세) — 창 없이도 쓴다(강사 홈 '내 업무' 창의 '내 할 일' 탭 · 원장 2026-11-10). */
+export function StaffTaskPane({ target, onNavigate }: { target: StaffTaskDialogTarget; onNavigate: () => void }) {
+  const [filter, setFilter] = useState<StaffTaskFilter>(target.filter ?? "open");
+  const [taskId, setTaskId] = useState<string | null>(target.taskId ?? null);
+  const all = target.scope === "all";
+  return taskId ? <TaskDetail taskId={taskId} onBack={() => setTaskId(null)} onNavigate={onNavigate} /> : <>
+    <ToolbarSegment>
+      {TASK_FILTERS.map((f) => <ToolbarSegmentItem key={f} active={f === filter} onClick={() => setFilter(f)}>{TASK_FILTER_LABEL[f]}</ToolbarSegmentItem>)}
+    </ToolbarSegment>
+    <TaskList key={filter} scope={target} filter={filter} showPeople={all && !target.personName} onPick={setTaskId} />
+  </>;
 }
 
 function TaskList({ scope, filter, showPeople, onPick }: { scope: TaskScope; filter: StaffTaskFilter; showPeople: boolean; onPick: (id: string) => void }) {
@@ -70,9 +79,9 @@ function TaskList({ scope, filter, showPeople, onPick }: { scope: TaskScope; fil
               <button type="button" onClick={() => onPick(t.id)} className="hover:bg-bg-soft flex w-full items-start gap-3 px-1 py-2.5 text-left">
                 <TaskStateChip state={state} />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-bold break-keep">{t.detail ?? t.title}</span>
+                  <span className="block text-sm font-bold break-keep">{t.kind.startsWith("duty_late") ? t.title : (t.detail ?? t.title)}</span>
                   <span className="text-text-dim block text-xs break-keep">
-                    {taskKindLabel(t.kind)} · {kstShortStamp(t.openedAt)}
+                    {taskKindLabel(t.kind)} · {shortDate(t.openedAt)}
                     {showPeople && t.assignees.length ? ` · ${t.assignees.map((a) => a.name).join(", ")}` : ""}
                     {closed ? ` · ${closed}` : ""}
                   </span>

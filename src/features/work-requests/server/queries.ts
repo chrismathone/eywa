@@ -43,21 +43,30 @@ export type WorkRows = { reqs: Req[]; steps: Step[]; links: Link[]; events: Even
  * 보이는 업무의 행 — 내가 요청했거나 · 맡았거나 · 검토하는 것. 업무 처리 현황 권한이 있으면 전부.
  * 진행 중은 전부, 끝난 것은 최근 60일만(지난 업무 탭). 표는 서버 전용이라 관리 키로 읽되 지점 조건을 늘 건다.
  * 🔴 끝까지 페이지로 읽는다(B2) — 상한으로 자르면 오래된 진행 중 요청 · 내가 맡은 요청이 조용히 빠져 보고를 못 한다.
+ * 현황 권한이 없으면 지점 전체 머리를 훑지 않고 **내 것만** 먼저 좁힌다(강사 홈이 보일 때마다 다시 읽는다 — 요청이 쌓여도 내 몫만큼만).
  * 표가 아직 없으면(SQL 적용 전 — #95) null.
  */
 export async function fetchWork(tenantId: string, me: string, monitor: boolean, today: string): Promise<WorkRows | null> {
   const admin = createAdminClient();
   const since = new Date(Date.parse(`${today}T00:00:00Z`) - 60 * 86_400_000).toISOString();
   try {
-    // 누가 볼 수 있나만 먼저(내용은 볼 것만 읽는다) ‖ 내가 맡은 요청 — 서로 독립(B4).
-    const [heads, mine] = await Promise.all([
-      fetchAllPaged<Pick<Req, "id" | "requested_by" | "reviewer_id">>((from, to) => admin.from("work_requests").select("id, requested_by, reviewer_id")
-        .eq("tenant_id", tenantId).or(`status.in.(working,review),closed_at.gte.${since}`).order("id").range(from, to)),
-      monitor ? Promise.resolve([] as { request_id: string }[]) : fetchAllPaged<{ request_id: string }>((from, to) => admin.from("work_request_assignees").select("request_id")
-        .eq("tenant_id", tenantId).eq("user_id", me).order("request_id").range(from, to)),
-    ]);
-    const assigned = new Set(mine.map((r) => r.request_id));
-    const ids = heads.filter((r) => monitor || r.requested_by === me || r.reviewer_id === me || assigned.has(r.id)).map((r) => r.id);
+    // 볼 업무의 id만 먼저(내용은 볼 것만 읽는다). 진행 중 전부 + 최근 60일에 끝난 것.
+    const live = `status.in.(working,review),closed_at.gte.${since}`;
+    let ids: string[];
+    if (monitor) {
+      ids = (await fetchAllPaged<{ id: string }>((from, to) => admin.from("work_requests").select("id").eq("tenant_id", tenantId).or(live).order("id").range(from, to))).map((r) => r.id);
+    } else {
+      // 내가 요청한 것 ‖ 검토하는 것 ‖ 맡은 것 — 서로 독립(B4). 맡은 것은 기간 조건을 요청 표에서 한 번 더 건다.
+      const byCol = (col: "requested_by" | "reviewer_id") => fetchAllPaged<{ id: string }>((from, to) => admin.from("work_requests").select("id").eq("tenant_id", tenantId).eq(col, me).or(live).order("id").range(from, to));
+      const [requested, reviewing, mine] = await Promise.all([
+        byCol("requested_by"), byCol("reviewer_id"),
+        fetchAllPaged<{ request_id: string }>((from, to) => admin.from("work_request_assignees").select("request_id").eq("tenant_id", tenantId).eq("user_id", me).order("request_id").range(from, to)),
+      ]);
+      const own = [...requested, ...reviewing];
+      const assigned = await fetchAllPagedInChunks<{ id: string }>([...new Set(mine.map((r) => r.request_id))], (chunk, from, to) =>
+        admin.from("work_requests").select("id").eq("tenant_id", tenantId).in("id", chunk).or(live).order("id").range(from, to));
+      ids = [...new Set([...own, ...assigned].map((r) => r.id))];
+    }
     const [reqs, steps, links, events] = await Promise.all([
       fetchAllPagedInChunks<Req>(ids, (chunk, from, to) => admin.from("work_requests").select(REQ_COLS).eq("tenant_id", tenantId).in("id", chunk).order("id").range(from, to)),
       // 청크 안에서도 1,000행에 닿을 수 있다(요청 100건 × 사건 10줄) — 청크 × 페이징(B2).

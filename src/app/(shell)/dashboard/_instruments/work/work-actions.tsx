@@ -10,7 +10,7 @@ import { useWork } from "./work-context";
 const templateOf = (links: readonly WorkLink[]) => links.map((l) => `- ${l.label}: `).join("\n");
 
 export function WorkActions({ item, me, links }: { item: WorkItem; me: string | null; links: readonly WorkLink[] }) {
-  const { refresh } = useWork();
+  const { board, refresh } = useWork();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<WorkOutcome>("done");
@@ -36,6 +36,8 @@ export function WorkActions({ item, me, links }: { item: WorkItem; me: string | 
     await refresh();
   };
 
+  // 강사뷰('다른 강사 뷰') — 처리 칸 대신 한 줄(서버도 막는다 · 막힐 단추를 내밀지 않는다 · 그 강사 대신 보고하지 않는다).
+  if (board.readonly) return open ? <p className="drawer-note">강사뷰에서는 보기만 합니다 — 확인 · 보고는 이 선생님 계정에서 합니다.</p> : null;
   const parts: ReactNode[] = [];
   if (item.status === "working" && mine && mine.state !== "reported") {
     parts.push(

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ChurnCell, ChurnMonth, ChurnTeacherRow } from "./teacher-churn";
-import { chartCeil, chartMonths, monthBrief, parseChurnView, pointsOf, segmentsOf, tenureBand } from "./teacher-churn-view";
+import {
+  autoEmphasis, chartCeil, chartMonths, dupName, monthBrief, nearestAt, parseChurnView, pointsOf, segmentsOf, spreadLabels, tenureBand,
+} from "./teacher-churn-view";
 
 const ok = (rate: number, base = 40, counted = 2, closed = true): ChurnCell => ({ state: "ok", rate, base, counted, closed, end: "" });
 const row = (cells: Record<string, ChurnCell>, hireDate: string | null = null, resignDate: string | null = null): ChurnTeacherRow =>
@@ -88,5 +90,54 @@ describe("monthBrief — 고른 달 한 줄(표 칸과 같은 상태 이름)", (
     expect(monthBrief(r, "2026-09", { state: "noBase", rate: null, base: 0, counted: 0, closed: true, end: "" })).toBe("담당 없음");
     expect(monthBrief(r, "2026-09", { state: "unreadable", rate: null, base: 0, counted: 0, closed: true, end: "" })).toBe("확인 불가");
     expect(monthBrief(r, "2026-10", { state: "unreadable", rate: null, base: 0, counted: 0, closed: false, end: "" })).toBe("확인 불가 · 마감 전");
+  });
+});
+
+describe("autoEmphasis — 고른 강사가 없을 때 강조할 셋", () => {
+  const t = (id: string, name: string, cell?: ChurnCell): ChurnTeacherRow =>
+    ({ ...row(cell ? { "2026-10": cell } : {}), id, name });
+  it("마지막 달 마감한 퇴원율 높은 순 셋 · 같은 값이면 이름순", () => {
+    const rows = [t("a", "다", ok(5)), t("b", "가", ok(9)), t("c", "나", ok(5)), t("d", "라", ok(2)), t("e", "마", ok(5))];
+    expect(autoEmphasis(rows, "2026-10")).toEqual(["b", "c", "a"]);
+  });
+  it("0% · 마감 전 · 담당 없음 · 칸 없음은 강조하지 않는다", () => {
+    const rows = [
+      t("a", "가", ok(0)), t("b", "나", ok(8, 40, 3, false)), t("c", "다", { state: "noBase", rate: null, base: 0, counted: 0, closed: true, end: "" }),
+      t("d", "라"), t("e", "마", ok(4)),
+    ];
+    expect(autoEmphasis(rows, "2026-10")).toEqual(["e"]);
+  });
+});
+
+describe("nearestAt — 마우스에서 가장 가까운 선", () => {
+  const vals = [{ id: "a", rate: 2 }, { id: "b", rate: null }, { id: "c", rate: 6 }, { id: "d", rate: 6 }];
+  it("거리 안에서 가장 가까운 것 · 같은 거리면 앞 줄", () => {
+    expect(nearestAt(vals, 5, 2)).toBe("c");
+    expect(nearestAt(vals, 2.4, 1)).toBe("a");
+  });
+  it("모두 멀면 null · 값 없는 선은 보지 않는다", () => {
+    expect(nearestAt(vals, 4, 1)).toBeNull();
+    expect(nearestAt([{ id: "b", rate: null }], 0, 100)).toBeNull();
+  });
+});
+
+describe("spreadLabels — 선 끝 이름표가 겹치지 않게", () => {
+  it("가까운 이름표를 차례 그대로 벌린다", () => {
+    const m = spreadLabels([{ id: "a", y: 50 }, { id: "b", y: 52 }, { id: "c", y: 10 }], 6);
+    expect(m.get("c")).toBe(10);
+    expect(m.get("a")).toBe(50);
+    expect(m.get("b")).toBe(56);
+  });
+  it("아래 끝을 넘으면 위로 되민다", () => {
+    const m = spreadLabels([{ id: "a", y: 98 }, { id: "b", y: 100 }], 6);
+    expect(m.get("b")).toBe(100);
+    expect(m.get("a")).toBe(94);
+  });
+});
+
+describe("dupName — 같은 이름은 뒤 사람에 번호", () => {
+  it("둘째부터 (2)", () => {
+    const rows = [{ name: "김" }, { name: "이" }, { name: "김" }];
+    expect([0, 1, 2].map((i) => dupName(rows, i))).toEqual(["김", "이", "김 (2)"]);
   });
 });

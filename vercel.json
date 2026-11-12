@@ -26,6 +26,10 @@
       "schedule": "*/30 * * * *"
     },
     {
+      "path": "/api/cron/duties",
+      "schedule": "5,35 * * * *"
+    },
+    {
       "path": "/api/cron/todays-math-sync",
       "schedule": "*/30 * * * *"
     },

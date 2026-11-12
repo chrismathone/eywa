@@ -1,0 +1,32 @@
+"use client";
+
+import { cellTextOf, earlyDoneOf, leftOf, missedOf, pendingOf } from "../../view-admin";
+import type { KindStatus } from "../../view-admin-levels";
+import { MixBar, useOntimeOnly } from "./admin-mix";
+
+/**
+ * 종류별 상태 — 출결 · 보고서 발송 · 학생 상담 · 월말평가 · 신규생 관리 칸(업무가 있는 종류만). 한 칸 = 표의 칸과 같은 숫자(`cellTextOf`) · 같은 막대 ·
+ * 그 아래 건수(기한 내 완료 n/전체 · 기한 초과 · 기한 후 완료 · 미처리 확정 · 남음). 학생 단계가 쓴다.
+ */
+export function KindStatusStrip({ statuses, only = null }: { statuses: KindStatus[]; only?: string | null }) {
+  const ontimeOnly = useOntimeOnly();
+  const list = only ? statuses.filter((s) => s.kind === only) : statuses;
+  if (!list.length) return <p className="text-text-dim text-sm">해당 기간 업무 없음</p>;
+  return <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(min(100%,168px),1fr))]">
+    {list.map((s) => <div key={s.kind} className="border-line bg-card rounded-xl border px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-bold">{s.label}</span>
+        {/* 때가 된 업무가 있으면 완료율 · 없으면 진행(흐린 숫자 · 옅은 막대) — 표의 칸과 같은 규칙(`cellTextOf` · `MixBar`). */}
+        <span className={`text-sm font-bold tabular-nums ${cellTextOf(s.cell, ontimeOnly)?.judged ? "" : "opacity-60"}`}>{cellTextOf(s.cell, ontimeOnly)?.judged ? <span className="mr-1 text-xs font-medium">{ontimeOnly ? "기한 내" : "완료율"}</span> : null}{cellTextOf(s.cell, ontimeOnly)?.pct ?? 0}%</span>
+      </div>
+      <MixBar cell={s.cell} ontimeOnly={ontimeOnly} className="mt-1 h-1.5" />
+      <div className="mt-1 flex flex-wrap gap-x-2 text-xs font-semibold tabular-nums">
+        {s.cell.due ? <span className="text-text-dim">기한 내 완료 {s.cell.ontime}/{s.cell.due}</span> : null}
+        {s.cell.lateDone ? <span>기한 후 완료 {s.cell.lateDone}</span> : null}
+        {missedOf(s.cell) ? <span className="font-bold">미처리 {missedOf(s.cell)}{s.cell.expired ? `(확정 ${s.cell.expired})` : ""}</span> : null}
+        {leftOf(s.cell) ? <span className="text-text-dim">남음 {leftOf(s.cell)}</span> : null}
+        {pendingOf(s.cell) ? <span className="text-text-dim">진행 {earlyDoneOf(s.cell)}/{pendingOf(s.cell)}</span> : null}
+      </div>
+    </div>)}
+  </div>;
+}

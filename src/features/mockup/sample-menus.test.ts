@@ -9,7 +9,9 @@ import { canOpenShuttleAdmin } from "@/features/shuttle/admin-access";
  *  · 시안 넷(경영 분석·지식그래프 · 조직·OKR · 연간 운영계획·홍보·마케팅 · 업무 작성센터) = 원장만 — 메뉴 버튼 · 운영실 핵심 업무 칸 · 페이지 문.
  *  · 셔틀 관리자 화면(학부모 관리 현황 · 탑승 학생 시간표 · 가까운 노선 찾기 · 실시간 위치) = 원장·관리자 · 셔틀 권한 위 조건.
  */
-const SAMPLE_HREFS = ["/dashboard/management/knowledge", "/organization/okr", "/marketing", "/billing/management/marketing", "/work-records"];
+// 연간 운영계획 단추 = `/marketing?view=annual`(02ece628a 11-10 — 옛 주소 `/billing/management/marketing`은 `/marketing`으로 넘기는 경로만 남고
+// 메뉴 단추가 이 주소로 바뀌었다. 이 시험은 그보다 먼저 써서 옛 주소를 찾다 빨갰다).
+const SAMPLE_HREFS = ["/dashboard/management/knowledge", "/organization/okr", "/marketing", "/marketing?view=annual", "/work-records"];
 const SHUTTLE_ADMIN_HREFS = ["/shuttle/parents", "/shuttle/classes", "/shuttle/nearby", "/shuttle/track"];
 const hrefsFor = (role: SystemRole, matrix = MENU_ACCESS) => {
   const groups = hubGroupsFor(HUB_GROUPS, { systemRole: role, permMatrix: matrix, isMaster: role === "master" });

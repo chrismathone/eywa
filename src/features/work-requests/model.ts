@@ -44,11 +44,16 @@ export type WorkBoard = {
   me: string | null;
   canCreate: boolean;
   canMonitor: boolean;
+  /**
+   * 읽기 전용으로 보는 중('다른 강사 뷰' — 읽기든 전체든) — 그 강사의 업무를 보여 주되 확인 · 보고 · 승인 · 취소 칸을 그리지 않는다
+   * (서버 액션도 막는다 — actions.ts `gate`. 화면은 막힐 단추를 내밀지 않을 뿐이다).
+   */
+  readonly: boolean;
   items: WorkItem[];
   /** 담당자·검토자 고르기(만들 수 있을 때만). */
   staff: WorkPerson[];
 };
-export const NO_WORK: WorkBoard = { enabled: false, me: null, canCreate: false, canMonitor: false, items: [], staff: [] };
+export const NO_WORK: WorkBoard = { enabled: false, me: null, canCreate: false, canMonitor: false, readonly: false, items: [], staff: [] };
 
 export type WorkDraft = {
   category: WorkCategory; title: string; body: string; criteria: string; dueOn: string | null;
@@ -97,6 +102,15 @@ export function linksByAssignee<T extends { assigneeId: string | null }>(links: 
     out.set(key, [...(out.get(key) ?? []), l]);
   }
   return out;
+}
+/**
+ * 내가 담당자로 받은 업무(강사 홈 '받은 업무 요청') — 요청자 · 검토자로만 엮인 것은 아니다.
+ * `open` = 그중 진행 중(검토 대기 포함) · `turn` = 내 확인 · 보고가 남은 것(남이 아직 안 했다고 내 몫이 남은 것처럼 세지 않는다).
+ */
+export const receivedBy = (items: readonly WorkItem[], me: string | null) => (me ? items.filter((i) => i.steps.some((s) => s.user.id === me)) : []);
+export function receivedCounts(items: readonly WorkItem[], me: string | null) {
+  const mine = receivedBy(items, me);
+  return { total: mine.length, open: mine.filter(isOpen).length, turn: mine.filter((i) => myTurn(i, me) === "report").length };
 }
 export const reportedCount = (item: Pick<WorkItem, "steps">) => item.steps.filter((s) => s.state === "reported").length;
 

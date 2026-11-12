@@ -2,15 +2,15 @@
 
 import { useState } from "react";
 import { SeriesChart } from "@/components/analytics/charts";
-import { palette } from "@/components/analytics/chart-math";
 import { HrefSelect } from "@/components/href-select";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { saveWithdrawalTrendPrefs } from "@/features/withdrawals/server/trend-prefs-actions";
 import {
   HEAT_CAP, SMALL_BASE, comparePair, sortTeachers, subjectsTaught, visibleTeachers, yyMm, type ChurnSort, type TeacherChurnData,
 } from "@/features/withdrawals/teacher-churn";
-import { chartCeil, chartMonths, type ChurnView } from "@/features/withdrawals/teacher-churn-view";
+import { chartCeil, chartMonths, dupName, type ChurnView } from "@/features/withdrawals/teacher-churn-view";
 import { TeacherChurnChart } from "./teacher-churn-chart";
+import { CONTEXT_COLOR, LINE_COLORS } from "./teacher-churn-colors";
 import { AFTER_RESIGN_BG, BEFORE_HIRE_BG, TeacherChurnTable } from "./teacher-churn-table";
 
 const SEG = "text-xs px-2 py-0.5 transition";
@@ -20,24 +20,18 @@ const SORTS: readonly { key: ChurnSort; label: string }[] = [{ key: "recent", la
 const VIEWS: readonly { key: ChurnView; label: string }[] = [{ key: "table", label: "표" }, { key: "chart", label: "차트" }];
 /** 처음 보이는 기간 — 받은 달 중 최근 12개월. */
 const DEFAULT_SPAN = 12;
-/** 차트에 함께 그릴 강사 수 — 계기판 색(차콜·노랑·회색) 셋까지. 넷째를 고르면 가장 먼저 고른 강사가 빠진다. */
+/** 고를 수 있는 강사 수 — 계기판 색(차콜·노랑·회색) 셋까지. 넷째를 고르면 가장 먼저 고른 강사가 빠진다. */
 const MAX_PICK = 3;
-const LINE_COLORS = [palette[0]!, palette[1]!, palette[2]!];
 /** 정렬·보기 저장은 누른 차례대로 — 빠르게 두 번 바꿔도 앞 요청이 늦게 끝나 옛 값으로 덮지 않게. 표시 취향이라 실패는 화면만 그대로. */
 let saving: Promise<unknown> = Promise.resolve();
 const savePrefs = (p: { churnSort?: ChurnSort; churnView?: ChurnView }) => {
   saving = saving.then(() => saveWithdrawalTrendPrefs(p)).catch(() => undefined);
 };
 
-/** 선 이름 — 같은 이름의 강사를 함께 고르면 차트의 범례·선 열쇠가 겹치니 뒤 사람에 번호를 붙인다. */
-function seriesLabel(rows: readonly { name: string }[], i: number): string {
-  const same = rows.slice(0, i).filter((r) => r.name === rows[i]!.name).length;
-  return same ? `${rows[i]!.name} (${same + 1})` : rows[i]!.name;
-}
-
 /**
  * 퇴원관리 **강사별 퇴원율 추이** 카드(원장 2026-11-11) — 모든 강사를 달마다 한 표(히트맵)로 견주고, 이름을 누른 강사(셋까지)는
- * 아래 차트에서 선으로 견준다. **차트 보기**(같은 날 *"차트로 전환도 가능하게 표/차트"*) = 강사마다 작은 선 차트 격자(`TeacherChurnChart`) —
+ * 아래 차트에서 선으로 견준다. **차트 보기**(같은 날 *"차트로 전환도 가능하게 표/차트"*) = 모든 강사를 한 차트에(`TeacherChurnChart` ·
+ * 원장 2026-11-12 *"전체 선생님을 하나의 차트에"* — 강사별 작은 차트 격자를 뒤집음) — 고른 강사는 두 보기가 같은 값·같은 색이다.
  * 과목·기간·퇴사자 숨김·정렬은 두 보기가 같은 줄(`rows`)을 쓴다. 값은 강사평가가 저장한 퇴원율 그대로(`teacher-churn.ts`) ·
  * 권한 '강사별 퇴원율'이 열린 사람만(서버가 문을 지난 뒤에만 그린다).
  * 과목·기간은 카드 안에서 바로 거른다(받은 달 안 · 퇴원관리의 다른 필터처럼 저장하지 않는다 — 새로 열면 전체 과목 · 최근 12개월).
@@ -122,7 +116,8 @@ export function TeacherChurnCard({ data, initialSort, initialView }: { data: Tea
       {!rows.length ? (
         <p className="bg-bg-soft rounded-lg px-4 py-3 text-sm" role="status">고른 과목·기간에 퇴원율이 있는 강사가 없습니다.</p>
       ) : view === "chart" ? (
-        <TeacherChurnChart rows={rows} months={months} pair={pair} ceil={ceil} portfolioLink={data.portfolioLink} />
+        <TeacherChurnChart rows={rows} months={months} ceil={ceil} picked={pickedRows.map((t) => t.id)} onPick={pick}
+          onClearPicks={() => setPicked([])} portfolioLink={data.portfolioLink} />
       ) : (
         <TeacherChurnTable rows={rows} months={months} pair={pair} picked={pickedRows.map((t) => t.id)} colorOf={colorOf} onPick={pick} portfolioLink={data.portfolioLink} />
       )}
@@ -134,9 +129,12 @@ export function TeacherChurnCard({ data, initialSort, initialView }: { data: Tea
             <>
               <span>세로 0~{ceil}% · 마감한 달만</span>
               <span className="inline-flex items-center gap-1.5">
-                <i aria-hidden className="border-primary bg-card inline-block size-2.5 rounded-full border-2" />담당 {SMALL_BASE}명 미만
+                <i aria-hidden className="inline-block h-0.5 w-4 rounded-full" style={{ background: CONTEXT_COLOR }} />나머지 강사
               </span>
-              {pair ? <span>오른쪽 위 = {yyMm(pair[1])} 퇴원율 · {yyMm(pair[0])} 대비</span> : null}
+              <span className="inline-flex items-center gap-1.5">
+                <i aria-hidden className="bg-card inline-block size-2.5 rounded-full border-2" style={{ borderColor: LINE_COLORS[0] }} />담당 {SMALL_BASE}명 미만(＊)
+              </span>
+              <span>입사 전·퇴사 뒤·값 없는 달은 선을 끊습니다</span>
             </>
           ) : null
         ) : (
@@ -147,24 +145,24 @@ export function TeacherChurnCard({ data, initialSort, initialView }: { data: Tea
             {HEAT_CAP}% 이상 (마감한 값만 색칠)
           </span>
         )}
-        <span className="inline-flex items-center gap-1.5">
-          <i aria-hidden className="border-line inline-block size-3 rounded-sm border" style={{ background: BEFORE_HIRE_BG }} />입사 전
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <i aria-hidden className="border-line inline-block size-3 rounded-sm border" style={{ background: AFTER_RESIGN_BG }} />퇴사 뒤
-        </span>
         {view === "table" ? (
           <>
+            <span className="inline-flex items-center gap-1.5">
+              <i aria-hidden className="border-line inline-block size-3 rounded-sm border" style={{ background: BEFORE_HIRE_BG }} />입사 전
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <i aria-hidden className="border-line inline-block size-3 rounded-sm border" style={{ background: AFTER_RESIGN_BG }} />퇴사 뒤
+            </span>
             <span>＊ 담당 {SMALL_BASE}명 미만 — 한 명이 그만둬도 10%p 넘게 오릅니다</span>
             <span>칸 = 퇴원율 · 그만둔 학생/지난달 담당</span>
           </>
         ) : null}
       </div>
 
-      {/* 이름을 눌러 고른 강사의 선 비교는 표 보기에만 — 차트 보기는 격자 자체가 비교 화면이다(Codex 협의). */}
+      {/* 이름을 눌러 고른 강사의 선 비교는 표 보기에만 — 차트 보기는 한 차트에서 고른 강사를 강조한다. */}
       {view === "table" && pickedRows.length ? (
         <div className="mt-4">
-          <SeriesChart points={points} unit="%" series={pickedRows.map((t, i) => ({ label: seriesLabel(pickedRows, i), color: LINE_COLORS[i]! }))} />
+          <SeriesChart points={points} unit="%" series={pickedRows.map((t, i) => ({ label: dupName(pickedRows, i), color: LINE_COLORS[i]! }))} />
         </div>
       ) : null}
     </section>

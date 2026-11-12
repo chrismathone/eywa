@@ -3,10 +3,12 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { EyIcon } from "@/components/icons/aywa-icons";
+import { useWorkRaised } from "./work-context";
 
 /** 업무 창 껍데기 — 상세 창과 같은 모양(오른쪽에서 열림 · Esc로 닫힘 · 닫으면 연 자리로 초점). */
 export function WorkPanel({ eyebrow, title, onClose, children }: { eyebrow: string; title: string; onClose: () => void; children: ReactNode }) {
   const panel = useRef<HTMLElement>(null);
+  const raised = useWorkRaised();
   useEffect(() => {
     const from = document.activeElement as HTMLElement | null;
     const frame = requestAnimationFrame(() => panel.current?.focus({ preventScroll: true }));
@@ -15,7 +17,8 @@ export function WorkPanel({ eyebrow, title, onClose, children }: { eyebrow: stri
     return () => { cancelAnimationFrame(frame); document.removeEventListener("keydown", onKey); if (from?.isConnected) from.focus({ preventScroll: true }); };
   }, [onClose]);
   return createPortal(
-    <div className="aywa-instruments">
+    // `work-layer` = 강사 홈에서만 셸 머리글(미니셸 z-60) 위로(work.css) — 운영실 · 업무 완성도는 종전 층(사이드바 · 공지 팝업과의 위아래 그대로).
+    <div className={raised ? "aywa-instruments work-layer" : "aywa-instruments"}>
       <div className="drawer-root is-open">
         <div className="drawer-scrim" onClick={onClose} />
         <aside ref={panel} className="drawer work-drawer" role="dialog" aria-modal="true" aria-labelledby="work-title" tabIndex={-1}>

@@ -11,7 +11,7 @@ const step = (user: WorkPerson, state: WorkStep["state"], extra: Partial<WorkSte
 const base = { body: "", criteria: "", source: null, reviewer: null, reviewNote: null, closedAt: null, closedBy: null, links: [], events: [] } satisfies Partial<WorkItem>;
 
 export const FIXTURE_WORK: WorkBoard = {
-  enabled: true, me: "u0", canCreate: true, canMonitor: true,
+  enabled: true, me: "u0", canCreate: true, canMonitor: true, readonly: false,
   staff: [ME, KIM, LEE, T1, T2],
   items: [
     {

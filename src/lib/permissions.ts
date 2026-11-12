@@ -70,6 +70,7 @@ export const MENU_KEYS = [
   "meetings",
   "documents",
   "class_review",
+  "duties",
   "approvals",
   "calendar",
   "shuttle",
@@ -172,6 +173,7 @@ export const MENU_LABEL: Record<MenuKey, string> = {
   meetings: "회의록",
   documents: "데이터베이스",
   class_review: "직원 평가",
+  duties: "업무 완성도",
   approvals: "전자결재",
   calendar: "캘린더",
   shuttle: "셔틀",
@@ -319,6 +321,8 @@ export const MENU_ACCESS: AccessMatrix = {
   // 예전 명단 스크립트(scripts/staff-access/grant-class-review.mjs)는 다시 돌리지 말 것 — 거둔 명단이 되살아난다.
   // ⚠️ 개인 예외는 CRUD뿐 아니라 **실명 열람·문항 세트 편집**까지 연다(getReviewPrivileges) — 명단은 최소로.
   class_review: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  // 업무 완성도(의무 장부 s2_0069 · 관리자 화면 2026-11-10) — 원장만 기본 전체. 과목 관리자(admin)에게는 원장이 역할·권한 면에서 연다(화면은 담당 과목만 보인다).
+  duties: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // 캘린더(학원 공용 일정, 원장 2026-08-18 "일단 캘린더 탭으로 일정부터 관리") — 일정 등록·수정은
   // 사무실(full), 강사·상담·회계·뷰어는 열람(readonly). 학원 일정은 전 직원이 봐야 의미가 있다.
   calendar: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "readonly", accountant: "readonly", viewer: "readonly", parttime: "none", student: "none" },
@@ -502,6 +506,7 @@ const PATH_SEGMENT_TO_MENU: Record<string, MenuKey> = {
   meetings: "meetings",
   documents: "documents",
   "class-review": "class_review",
+  duties: "duties",
   approvals: "approvals",
   calendar: "calendar",
   shuttle: "shuttle",
