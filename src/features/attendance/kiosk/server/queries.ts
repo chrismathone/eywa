@@ -2,6 +2,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import { createHash } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
+import { kakaoLicenseActive } from "@/lib/messaging/kakao-license";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { isModuleEnabled } from "@/lib/modules";
@@ -106,7 +107,7 @@ export async function getRecentNotifications(limit = 20): Promise<NotificationRo
 export type KakaoChannelStatus = {
   configured: boolean; // pfId + 등하원 템플릿 모두 있음
   isActive: boolean; // 채널 행 활성
-  licenseActive: boolean; // tenant_licenses 'kakao_messaging' ON
+  licenseActive: boolean; // tenant_licenses 'kakao_messaging'가 켜져 있고 만료되지 않음
   live: boolean; // 실제 실발송 조건 충족(=configured && isActive && licenseActive)
   pfId: string | null;
   checkinTemplateId: string | null;
@@ -125,17 +126,17 @@ export async function getKakaoChannelStatus(): Promise<KakaoChannelStatus> {
       .maybeSingle(),
     supabase
       .from("tenant_licenses")
-      .select("is_active")
+      .select("is_active, expires_at")
       .eq("feature", "kakao_messaging")
       .maybeSingle(),
   ]);
-  if (chErr || licErr) throw new Error(`kakao_channels: ${(chErr ?? licErr)?.message}`);
+  if (chErr) throw new Error(`kakao_channels: ${chErr.message}`);
   const pfId = ch?.pf_id ?? null;
   const checkinTemplateId = ch?.checkin_template_id ?? null;
   const checkoutTemplateId = ch?.checkout_template_id ?? null;
   const configured = Boolean(pfId && checkinTemplateId && checkoutTemplateId);
   const isActive = ch?.is_active ?? false;
-  const licenseActive = lic?.is_active ?? false;
+  const licenseActive = kakaoLicenseActive(lic, !!licErr);
   return {
     configured,
     isActive,
