@@ -80,9 +80,13 @@ describe("라이선스 배선 가드", () => {
         "src/features/integrations/server/actions.ts",
         "src/features/timetable/server/import-actions.ts",
         "src/features/staff/resume/server/resume-roster-sheet.ts",
-        "src/features/withdrawals/server/sheet-teachers.ts",
+        "src/features/withdrawals/server/withdrawal-sheet.ts",
       ]),
     );
+    // 퇴원 차트의 읽기 경로는 네 기능을 한 번에 읽는 캐시 표를 써서 위 정규식에 잡히지 않는다.
+    const sheetTeachers = SRC.find((f) => f.path === "src/features/withdrawals/server/sheet-teachers.ts")!.src;
+    expect(sheetTeachers).toMatch(/getLicenseFlags\(tenantId\)/);
+    expect(sheetTeachers).toMatch(/licenseFlags\.google_sheets/);
     expect(consumersOf("kakao_messaging")).toContain("src/lib/messaging/provider.ts");
     expect(consumersOf("slack")).toEqual(
       expect.arrayContaining([
