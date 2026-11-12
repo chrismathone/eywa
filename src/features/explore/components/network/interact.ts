@@ -44,7 +44,7 @@ export function attachPointer(E: NetEngine): () => void {
     if (!n || !E.board) return void (card.hidden = true);
     const [title, text] = [card.firstElementChild, card.lastElementChild];
     if (title) title.textContent = n.title;
-    if (text) text.textContent = hoverText(n, E.board);
+    if (text) text.textContent = hoverText(n, E.morph?.end ?? E.board); // 전환 중엔 끝 판으로(사라지는 선·새 선을 함께 세지 않게)
     card.hidden = false;
   };
   const down = (e: PointerEvent) => {

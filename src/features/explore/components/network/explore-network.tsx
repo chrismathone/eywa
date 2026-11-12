@@ -174,6 +174,7 @@ export function ExploreNetwork(props: ExploreNetworkProps): JSX.Element {
         onFit={onFit}
         onCenter={onCenter}
         onWide={() => props.onWideChange(!wide)}
+        bundle={props.onBundleChange ? { on: !!props.bundle, onChange: props.onBundleChange } : undefined}
       />
       <div className={styles.stage}>
         <svg ref={svgRef} tabIndex={0} role="img" aria-label="지식그래프" />

@@ -40,6 +40,11 @@ export function lastOpened(E: NetEngine): string | null {
 }
 
 const line = (xs: (string | null | undefined | false)[]) => xs.filter(Boolean).join(" · ");
+/** '묶기' 선이 있으면(묶음 점만) — '다른 묶음·영역 3곳과 관계 42건'(묶음 밖 기록의 선은 영역 점에 닿는다). */
+const tiesText = (id: string, B: NetBoard) => {
+  const ties = B.edges.filter((e) => e.bundle && (e.from === id || e.to === id));
+  return ties.length ? `다른 묶음·영역 ${ties.length}곳과 관계 ${ties.reduce((s, e) => s + (e.w ?? 1), 0).toLocaleString()}건` : null;
+};
 const OPEN_TEXT = { absorb: "더블클릭 = 흡수", link: "더블클릭 = 원본 화면 열기" } as const;
 
 /**
@@ -63,7 +68,7 @@ export function hoverText(n: NetNode, B: NetBoard): string {
   if (n.kind === "group") {
     const hub = B.nodes.find((x) => x.id === n.hub);
     const open = B.nodes.some((x) => x.parent === n.id);
-    return line([`${hub?.title ?? "기록"} ${n.tally ?? 0}건`, `더블클릭 = ${open ? "접기" : "펼치기"}`]);
+    return line([`${hub?.title ?? "기록"} ${n.tally ?? 0}건`, tiesText(n.id, B), `더블클릭 = ${open ? "접기" : "펼치기"}`]);
   }
   // 대상이 있는 사실(형제 원생) = 그 원생이 중심(화면이 연다) · 다른 사실은 자세히(오른쪽 패널).
   if (n.kind === "fact") return `온톨로지 사실 · ${n.detail ?? ""} · 더블클릭 = ${n.target ? "그 원생이 중심" : "자세히"}`;

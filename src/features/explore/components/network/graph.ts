@@ -126,6 +126,7 @@ export function summaryGraph(g: NetGraph): NetGraph {
   const nodes = g.nodes.filter((n) => n.kind === "root" || n.kind === "hub" || n.kind === "analysis").map((n) => (n.kind === "hub" ? { ...n, count: (count[n.id] ?? 0) + (n.moved ?? 0) + (n.self ? 1 : 0) } : n));
   const pair = new Map<string, NetEdge>();
   for (const e of g.edges) {
+    if (e.bundle) continue; // 묶음 사이 모은 선 = 기록 사이 선을 다시 센 것
     const a = hubOf[e.from] ?? e.from;
     const b = hubOf[e.to] ?? e.to;
     if (a === b) continue;
@@ -157,7 +158,7 @@ export function netNeighbors(input: NetInput, id: string): NetNeighbor[] {
   const me = byId.get(id);
   if (me?.kind === "group")
     return g.edges
-      .filter((e) => e.from === id)
+      .filter((e) => e.from === id && !e.bundle)
       .map((e) => byId.get(e.to)!)
       .filter(Boolean)
       .map((n) => ({ id: n.id, title: n.label ?? n.title, rel: n.kind === "group" ? "" : (n.detail?.split(" · ")[0] ?? ""), tone: n.tone, date: n.date ?? null, ...(n.level ? { unit: n.unit ?? UNIT[n.level] } : {}) }));
@@ -190,7 +191,7 @@ export const netHeadOf = (g: Pick<NetBoard, "mode" | "nodes" | "edges">, name: s
     mode: g.mode,
     nodes: (full ?? g).nodes.filter((n) => n.kind === "record" || n.kind === "target" || n.kind === "analysis" || n.kind === "fact" || n.self).length,
     hubs: g.nodes.filter((n) => n.kind === "hub").length,
-    edges: src.edges.length,
+    edges: src.edges.filter((e) => !e.bundle).length, // '묶기' 선은 기록 사이 선을 모은 것 — 따로 세지 않는다
     name,
   };
 };
