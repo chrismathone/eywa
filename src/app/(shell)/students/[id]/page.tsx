@@ -228,14 +228,18 @@ export default async function StudentDetailPage({
     readsAllNewcomers(),
   ]);
   // 진행 중인 보고서를 열 수 없는 사람에게는 '진행 중' 글을 원생 상태를 다루는 사람에게만 보인다(참여자가 아닌 강사에게 새지 않게).
+  // 다른 과목 반이 남아 있으면 진행 중인 보고서 옆에 '다른 과목 퇴원보고서'도(과목이 다르면 따로 요청 — 원장 2026-11-12).
+  const requestHref = reportInfo?.canRequest ? `/withdrawal-reports?request=${student.id}` : null;
   const reportEntry: ReportEntry | null = reportInfo?.pending
     ? reportInfo.pending.readable
-      ? { kind: "pending", href: `/withdrawal-reports/${reportInfo.pending.id}` }
+      ? { kind: "pending", href: `/withdrawal-reports/${reportInfo.pending.id}`, requestHref }
       : canManageStatus
-        ? { kind: "pending", href: null }
-        : null
-    : reportInfo?.canRequest
-      ? { kind: "request", href: `/withdrawal-reports?request=${student.id}` }
+        ? { kind: "pending", href: null, requestHref }
+        : requestHref
+          ? { kind: "request", href: requestHref }
+          : null
+    : requestHref
+      ? { kind: "request", href: requestHref }
       : reportable && canManageStatus
         ? { kind: "note" }
         : null;
