@@ -1,5 +1,5 @@
 import "server-only";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { landingPath } from "@/lib/auth/teacher-home";
@@ -7,6 +7,7 @@ import { canAccess } from "@/lib/permissions";
 import { getShuttleDuty } from "./duty";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { canOpenShuttleAdmin } from "../admin-access";
+import { isModuleOnForTenant } from "@/features/owner/server/modules";
 
 /**
  * 셔틀 화면 **열람** 게이트 — 메뉴 권한(`shuttle`) **또는** 직원 '셔틀 담당' 토글(0227a).
@@ -23,6 +24,7 @@ import { canOpenShuttleAdmin } from "../admin-access";
 export async function requireShuttleView(): Promise<CurrentUser> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) redirect("/login");
+  if (!(await isModuleOnForTenant(user.tenantId, "shuttle"))) notFound();
   const matrix = await getUserPermMatrix();
   if (canAccess(user.systemRole, "shuttle", matrix)) return user;
   if (await getShuttleDuty(user.id, user.tenantId)) return user;

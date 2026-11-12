@@ -16,6 +16,8 @@ import { getMathBookTargets, getRecentReportsAllClasses } from "@/features/textb
 import { getSchoolExamPeriods } from "@/features/textbooks/server/school-exam-queries";
 import { normalizeSchoolName } from "@/features/schools/school-name";
 import { learningClassDates } from "@/features/math-sheets/lib/learning-class-dates";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
 
 export const metadata: Metadata = { title: "수학 강사 시트 · 월간 — 에이와" };
 
@@ -64,18 +66,19 @@ export default async function McsMonthPage({
   // 같은 반 학생 전환은 이미 조회한 자료를 사용한다.
   // 셋 다 시트 조회(게이트 통과) 뒤의 독립 조회 — 함께 받는다(B4).
   // 교재 배정은 시트 게이트(`getMathSheetMonth` 안 `requireMcsClassAccess`)를 이미 지난 반만 읽는다.
-  const user = await getCurrentUser();
+  const [user, settings] = await Promise.all([getCurrentUser(), getTenantSettings()]);
+  const textbooksOn = isModuleEnabled(settings.modules.disabled, "textbooks");
   const studentIds = data.students.map((s) => s.studentId);
   const [learning, canResetGoals, textbooks, targets, allReports, schoolExams] = await Promise.all([
     getMathLearningData(classId, data, { allRecords: true }),
     // 전체 목표 '초기화'(배정 취소)는 **원장 이상급**(원장 2026-09-18) — 화면과 서버가 같은 함수를 본다([[#77]]).
     canResetMathLearningGoals(user),
-    user ? getMathClassTextbooks(user.tenantId, classId, studentIds) : null,
+    user && textbooksOn ? getMathClassTextbooks(user.tenantId, classId, studentIds) : null,
     // 교재 전체 목표 — 사람이 고른 목표 권 · 다른 반(수요일 개별심화) 교재 기록. 둘 다 실패해도 화면은 산다.
-    user ? getMathBookTargets(user.tenantId, studentIds) : null,
-    user ? getRecentReportsAllClasses(user.tenantId, studentIds) : null,
+    user && textbooksOn ? getMathBookTargets(user.tenantId, studentIds) : null,
+    user && textbooksOn ? getRecentReportsAllClasses(user.tenantId, studentIds) : null,
     // 학교별 내신기간(없으면 기본표) — 실패해도 기본표로 계산한다.
-    user ? getSchoolExamPeriods(user.tenantId, data.students.map((s) => s.school)) : null,
+    user && textbooksOn ? getSchoolExamPeriods(user.tenantId, data.students.map((s) => s.school)) : null,
   ]);
   // 🔴 줄 수를 "학생 N명"이라 적지 않는다 — 행에는 이 달 중 나간 사람과 아직 안 들어온 사람이
   //    섞여 있다(카드와 **같은 함수**로 센다).
@@ -109,6 +112,19 @@ export default async function McsMonthPage({
       if (p.roadmaps[0]) windows[s.studentId] = p.roadmaps[0].window;
     }
   }
+  const overview = (
+    <LearningOverview
+      // 달·반이 바뀌면 클라 상태(보기·목표 편집 큐)를 새로 세운다 — 옛 달의 목표가 남으면
+      // 새 달 화면에 남의 값이 잠깐 비친다.
+      key={`${classId}:${data.month}:${student ?? ""}`}
+      data={data}
+      learning={learning}
+      initialStudentId={student}
+      initialQuery={initialQuery}
+      classOptions={classOptions}
+      canResetGoals={canResetGoals}
+    />
+  );
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="shrink-0 compact-chrome:hidden">
@@ -124,34 +140,28 @@ export default async function McsMonthPage({
         />
       </div>
       <div className="min-h-0 flex-1">
-        <MathTextbookProvider
-          value={{
-            classId,
-            status: textbooks?.status ?? "failed",
-            classBook: textbooks?.classBook ?? null,
-            byStudent: textbooks?.byStudent ?? {},
-            choices: textbooks?.choices ?? [],
-            now: textbooks?.now ?? {},
-            windows,
-            plans,
-            targetStatus: targets?.status ?? "failed",
-            schoolExams: { status: schoolExams?.status ?? "failed", rows: schoolExams?.rows ?? [] },
-            // 배정 쓰기 = 목표 쓰기와 같은 게이트(서버 액션이 같은 함수로 다시 본다).
-            canWrite: data.canEdit,
-          }}
-        >
-        <LearningOverview
-          // 달·반이 바뀌면 클라 상태(보기·목표 편집 큐)를 새로 세운다 — 옛 달의 목표가 남으면
-          // 새 달 화면에 남의 값이 잠깐 비친다.
-          key={`${classId}:${data.month}:${student ?? ""}`}
-          data={data}
-          learning={learning}
-          initialStudentId={student}
-          initialQuery={initialQuery}
-          classOptions={classOptions}
-          canResetGoals={canResetGoals}
-        />
-        </MathTextbookProvider>
+        {textbooksOn ? (
+          <MathTextbookProvider
+            value={{
+              classId,
+              status: textbooks?.status ?? "failed",
+              classBook: textbooks?.classBook ?? null,
+              byStudent: textbooks?.byStudent ?? {},
+              choices: textbooks?.choices ?? [],
+              now: textbooks?.now ?? {},
+              windows,
+              plans,
+              targetStatus: targets?.status ?? "failed",
+              schoolExams: { status: schoolExams?.status ?? "failed", rows: schoolExams?.rows ?? [] },
+              // 배정 쓰기 = 목표 쓰기와 같은 게이트(서버 액션이 같은 함수로 다시 본다).
+              canWrite: data.canEdit,
+            }}
+          >
+            {overview}
+          </MathTextbookProvider>
+        ) : (
+          overview
+        )}
       </div>
     </div>
   );

@@ -11,6 +11,7 @@ import { KioskKeypad } from "./_components/keypad";
 // 쿠키가 유효한 등록 기기가 아니면 안내만 노출(체크인 불가).
 export default async function KioskPage() {
   const device = await resolveKioskDevice();
+  if (device?.state === "off") notFound();
 
   if (!device) {
     // 로그인한 사람의 학원이 키오스크 기능을 꺼 두었으면 **없는 주소**(원장 2026-09-30 "꺼지면 있었는지조차 모르게").

@@ -1976,8 +1976,8 @@ export async function generateReportComment(
     if (sections.length === 0) return { ok: false, error: "생성할 내용이 없습니다" };
 
     // 통합 1회 호출 — 멘트(·추세)를 한 번에 {comment|p1|p2, trend}로 생성. temp 0.3·reasoning minimal(Solar 후보정) 적용.
-    // 보고서 멘트·추세는 **fast tier**(Claude Haiku 5.5 — 2026-10-16 4.5에서 올림 / 키 죽으면 DeepSeek flash 폴백) — 사실 서술형이라 Sonnet 불요, 비용 절감(원장 결정 2026-07-14).
-    // ⚠️ 이 tier 지정은 **멘트 호출에만** — 다른 AI는 balanced(Sonnet 5.5 · 기능별 고정은 model-pins.ts). Haiku도 Anthropic 키가 살아야 동작(아니면 DeepSeek).
+    // 보고서 멘트·추세는 **fast tier**(Claude Haiku 5.5 — 2026-10-16 4.5에서 올림 / 키가 막히면 ChatGPT Luna 폴백) — 사실 서술형이라 Sonnet 불요, 비용 절감(원장 결정 2026-07-14).
+    // ⚠️ 이 tier 지정은 **멘트 호출에만** — 다른 AI는 balanced(Sonnet 5.5 · 기능별 고정은 model-pins.ts). Anthropic 키가 없으면 ChatGPT로 넘어간다.
     const { data } = await generateJSON<Record<string, unknown>>({
       prompt: assembleCombined(sections),
       maxTokens: mentMaxTokens(safeInput),
@@ -1986,7 +1986,9 @@ export async function generateReportComment(
       meta: { feature: "classnote_ment", tenantId: user.tenantId },
       ...MENT_AI_TUNING,
     });
-    const res = readMentResponse(data, mode, trendInput);
+    const res = readMentResponse(data, mode, trendInput, [safeInput.specialNote, safeInput.classNotice, lessonMemo].filter((x): x is string => !!x));
+    if (res.leaks.length)
+      console.warn(JSON.stringify({ level: "warn", scope: "generateReportComment.leak", dropped: res.leaks, message: "AI 혼잣말·찌꺼기 문장을 학부모 글에서 뺐음" }));
     if (!res.comment) return { ok: false, error: "빈 응답" };
     const body = prependParentAddress(appendVideoReceiptComment(res.comment, videoReceipt), parentAddress);
     // 시범 대상 — 항목별 글(진도 → 테스트 → 태도 → 과제 → 이해도(AI) → 오늘 과제 → 선생님 한마디).

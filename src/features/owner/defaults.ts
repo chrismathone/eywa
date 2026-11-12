@@ -12,6 +12,7 @@ import { DEFAULT_MAKEUP_SETTINGS } from "@/features/makeups/config";
 import { EMPTY_BRIEF_FACTS } from "@/features/enrollment/brief-facts";
 import { DEFAULT_EIE_MONTHLY_PRICE, DEFAULT_SESSION_PRICES } from "@/features/billing/session-pricing";
 import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
+import { MODULE_BASELINE_V1 } from "@/lib/modules";
 
 // 평일 표준 교시(8교시·55분) — periods.ts MATH_PERIODS 이식.
 const WEEKDAY_PERIODS = [
@@ -254,7 +255,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
   // 한쪽을 잊으면 새 메뉴가 조용히 안 보인다(이 기능이 애초에 풀려던 문제 그 자체).
   navigation: { menus: [], teacherMenus: [], groups: [], teacherGroups: [] },
   // 기능 켜기·끄기도 sparse — 침산 프리셋은 **아무것도 끄지 않는다**(오늘과 같다). 일반판은 generic-defaults.ts.
-  modules: { disabled: [] },
+  modules: { disabled: [], known: [...MODULE_BASELINE_V1] },
   makeups: DEFAULT_MAKEUP_SETTINGS,
   // 운영실 배치 — 저장값 없음 = 역할마다 코드의 기본 배치(features/dashboard/layout/defaults.ts). 원장은 지금 운영실 그대로.
   dashboard: { version: 1, layouts: [], assignments: [] },

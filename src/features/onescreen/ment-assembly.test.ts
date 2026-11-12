@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mentMaxTokens, mentSections, readMentResponse, type MentAssembly } from "./ment-assembly";
+import { mentMaxTokens, mentSections, readMentResponse, stripSubjectLabel, type MentAssembly } from "./ment-assembly";
 import { formatMentPreview, trendPreviewLine } from "./ment-preview-format";
 import { commentStyleDirective } from "./prompt-defaults";
 import type { ReportCommentInput } from "./report-comment";
@@ -37,6 +37,11 @@ const base: MentAssembly = {
 };
 
 describe("mentSections — 운영·미리보기 공용 조립", () => {
+  it("저장 진도의 공백 과목 접두를 운영 입력처럼 떼고 다른 시작은 보존한다", () => {
+    expect(stripSubjectLabel("수학 2-6-1 일차방정식", "수학")).toBe("2-6-1 일차방정식");
+    expect(stripSubjectLabel("수학: 2-6-1 일차방정식", "수학")).toBe("수학: 2-6-1 일차방정식");
+    expect(stripSubjectLabel("2-6-1 일차방정식", "수학")).toBe("2-6-1 일차방정식");
+  });
   it("모드 A = 멘트 하나 + 결 변형 · 말투 지침은 맨 뒤 · 추세엔 어조만", () => {
     expect(trend?.facts.length).toBeGreaterThan(0);
     const s = mentSections({ ...base, styleBlock: "@@말투@@", toneBlock: "@@어조@@", trend });

@@ -5,6 +5,7 @@ import { activityChange } from "../activity-change";
 import { contentLine } from "../activity-detail";
 import type { ActivityFacts } from "../activity-facts";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getFeatureOptInStateFresh, isFeatureOptedInFresh } from "@/lib/license/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
@@ -15,6 +16,7 @@ import { renderActivity, renderNotification, type Rendered } from "../render";
 import type { SlackRule } from "../rules";
 import { planDelivery } from "../schedule";
 import { activityKeySet, activityLabel } from "./catalog";
+import { SLACK_LICENSE_CLOSE_REASON } from "./license-transition";
 import { loadLinks, loadRules, type SlackConnection, type SlackLink } from "./store";
 
 /**
@@ -157,9 +159,24 @@ export async function expandInbox(tenantId: string, conn: SlackConnection, appUr
     }
   }
 
+  // drain 시작 때 켜져 있었어도 펼치는 동안 꺼졌거나 만료될 수 있다. 아웃박스 쓰기 직전에 DB를 다시 본다.
+  if (!(await isFeatureOptedInFresh(tenantId, "slack"))) return 0;
   for (let i = 0; i < rows.length; i += 200) {
     const { error: upErr } = await admin.from("slack_outbox").upsert(rows.slice(i, i + 200), { onConflict: "dedupe_key", ignoreDuplicates: true });
     if (upErr) throw new Error(`slack outbox upsert: ${upErr.message}`); // 인박스를 처리됨으로 넘기지 않는다 → 다음 실행이 다시 펼친다
+  }
+  // 끄기 정리와 아웃박스 insert가 엇갈려 정리 뒤에 생긴 줄도 닫는다. 자동 만료면 기존 대기는 건드리지 않고 이번 후보만 취소한다.
+  if ((await getFeatureOptInStateFresh(tenantId, "slack")) === "disabled") {
+    const dedupeKeys = rows.map((row) => String(row.dedupe_key));
+    for (let i = 0; i < dedupeKeys.length; i += 100) {
+      await admin
+        .from("slack_outbox")
+        .update({ status: "cancelled", last_error_code: SLACK_LICENSE_CLOSE_REASON })
+        .eq("tenant_id", tenantId)
+        .eq("status", "pending")
+        .in("dedupe_key", dedupeKeys.slice(i, i + 100));
+    }
+    return 0;
   }
   const ids = inbox.map((r) => r.id as number);
   for (let i = 0; i < ids.length; i += 100) {

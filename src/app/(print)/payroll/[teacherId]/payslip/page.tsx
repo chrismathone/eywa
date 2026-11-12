@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { landingPath } from "@/lib/auth/teacher-home";
 import { getPayslipData } from "@/features/payroll/server/payslip-queries";
@@ -15,6 +15,7 @@ import { loadTeacherSheet } from "@/features/attendance/server/teacher-sheet";
 import { TeacherSheetError } from "@/features/attendance/teacher-sheet-error";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
 
 export const metadata = { title: "급여명세서 — 에이와" };
 
@@ -38,9 +39,12 @@ export default async function PayslipPrintPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const [canView, settings] = await Promise.all([canViewPayslipNow(user), getTenantSettings()]);
+  // 급여 기능 자체가 없는 지점의 인쇄 주소만 404다. 기능이 있는 지점의 권한 거절은 종전 착지를 유지한다.
+  if (!isModuleEnabled(settings.modules.disabled, "payroll")) notFound();
   // ⚠️ 착지는 `landingPath` 단일 소스로 — roleHome은 과목 축이 없어 영어 전담 강사를 빈 원스크린에 떨어뜨린다
   //    (teacher-home-wiring.test.ts가 착지 지점 목록을 잠근다 — 새 지점은 거기에도 추가).
-  if (!(await canViewPayslipNow(user))) redirect(await landingPath(user.systemRole));
+  if (!canView) redirect(await landingPath(user.systemRole));
 
   const { teacherId } = await params;
   const sp = await searchParams;
@@ -69,7 +73,7 @@ export default async function PayslipPrintPage({
    *    아직 발행 전이면 본문이 '산정 불가'와 사유를 이미 보이지만, **발행본**은 본문이 동결 금액 그대로라(스냅샷 — 출석부를
    *    다시 조립하지 않는다) 안내가 없으면 별지만 빠진 종이가 말없이 인쇄된다(재리뷰 2026-10-06). 그 밖의 오류는 그대로 던진다.
    */
-  const [appendixResult, settings, canManage] = await Promise.all([
+  const [appendixResult, canManage] = await Promise.all([
     data.tuitionBasis === "sheet"
       ? loadTeacherSheet(user.tenantId, teacherId, period).then(
           (sheet) => ({ groups: sheet.groups.map((g) => ({ classId: g.classId, className: g.className, isSpecial: g.isSpecial, matrix: g.matrix })), missing: false }),
@@ -85,7 +89,6 @@ export default async function PayslipPrintPage({
             matrix: await getMonthlyAttendanceMatrix(period, c.id, "month"),
           })),
         ).then((groups) => ({ groups, missing: false })),
-    getTenantSettings(),
     canManagePayslipNow(),
   ]);
   // 대상 학년을 좁힌 선생님 — 별지도 수업료와 같은 학년 학생만 싣는다(학년을 모르는 학생은 남긴다 — 본문이 '빠진 줄'로 알린다).

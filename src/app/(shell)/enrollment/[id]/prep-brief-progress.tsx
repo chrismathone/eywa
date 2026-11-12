@@ -9,7 +9,7 @@ import { PREP_BRIEF_STALL_MS } from "@/features/enrollment/prep-stall";
 /**
  * 브리프 생성 진행 UI — 진행바 + 단계 문구 + 자동 새로고침 watcher.
  *
- * LLM 생성은 실제 진행률을 알 수 없어 **시간 기반 근사**로 그린다: DeepSeek v4-pro(추론형) 실측
+ * LLM 생성은 실제 진행률을 알 수 없어 **시간 기반 근사**로 그린다: 심층 분석 모델 실측
  * 20~60초를 기준으로 90%까지 감속 진행하고, 완료는 watcher가 페이지를 새로고침하며 컴포넌트째
  * 사라진다(가짜 100% 고정 화면이 없다). ConsultationStatusWatcher와 동일한 realtime+5초 폴링.
  */

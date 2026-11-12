@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { kstToday } from "@/lib/date-kst";
 import { loadParentNotices } from "./parent-departure";
+import { PARENT_PORTAL_UNAVAILABLE_MESSAGE, parentPortalAvailable } from "./parent-availability";
 import { getParentViewer } from "./parent-viewer";
 
 type AckState = { ok: true } | { error: string };
@@ -19,6 +20,7 @@ type AckState = { ok: true } | { error: string };
 export async function ackParentNotice(runId: string, noticeKey: string): Promise<AckState> {
   const viewer = await getParentViewer();
   if (!viewer) return { error: "로그인이 필요합니다" };
+  if (!(await parentPortalAvailable(viewer))) return { error: PARENT_PORTAL_UNAVAILABLE_MESSAGE };
   if (!runId || !noticeKey) return { error: "알림을 찾지 못했습니다" };
 
   const notices = await loadParentNotices(viewer);

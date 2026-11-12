@@ -6,7 +6,7 @@ import type { TextbookTableStatus } from "@/features/textbooks/types";
  * 교재목록 · 반 배정 면(수학) — 반 교재·학생 교재 배정 목록. **읽기 전용**이다.
  * 배정은 수학 강사 시트(반 월간 화면)에서 한다 — 영어 반 배정 면과 같은 규약(고르는 곳은 시트, 여기는 보는 곳).
  */
-export function MathPlansFace({ status, rows }: { status: TextbookTableStatus; rows: MathAssignmentListRow[] }) {
+export function MathPlansFace({ status, rows, mcsOn }: { status: TextbookTableStatus; rows: MathAssignmentListRow[]; mcsOn: boolean }) {
   if (status !== "ok") {
     return (
       <p className="text-text-dim px-1 py-8 text-center text-xs">
@@ -19,7 +19,7 @@ export function MathPlansFace({ status, rows }: { status: TextbookTableStatus; r
   if (rows.length === 0) {
     return (
       <p className="text-text-dim px-1 py-8 text-center text-xs">
-        아직 배정된 수학 교재가 없습니다. 수학 강사 시트의 반 화면에서 반 교재·학생 교재를 배정합니다.
+        아직 배정된 수학 교재가 없습니다.{mcsOn ? " 수학 강사 시트의 반 화면에서 반 교재·학생 교재를 배정합니다." : ""}
       </p>
     );
   }
@@ -44,9 +44,13 @@ export function MathPlansFace({ status, rows }: { status: TextbookTableStatus; r
           {rows.map((r) => (
             <tr key={r.id} className="border-line-faint border-b last:border-0">
               <td className="truncate py-1.5 pl-2">
-                <Link href={`/mcs/${r.classId}/month`} className="hover:text-primary font-bold">
-                  {r.className}
-                </Link>
+                {mcsOn ? (
+                  <Link href={`/mcs/${r.classId}/month`} className="hover:text-primary font-bold">
+                    {r.className}
+                  </Link>
+                ) : (
+                  <strong>{r.className}</strong>
+                )}
               </td>
               <td className="truncate py-1.5 pl-2">
                 {r.studentName ?? <span className="text-text-dim">반 전체</span>}

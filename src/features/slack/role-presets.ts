@@ -1,6 +1,7 @@
 import type { ActivityOption } from "./activity-catalog";
 import type { NotificationType } from "@/features/notifications/types";
 import { emptyRule, type SlackRule } from "./rules";
+import type { ForwardEventOption } from "./events";
 
 /**
  * **역할별 기본 세팅** — '규칙 추가'에서 역할 하나를 고르면 그 역할에 맞는 규칙 1~2개가 한꺼번에 생긴다
@@ -99,6 +100,15 @@ export const ROLE_PRESETS: readonly RolePreset[] = [
     ],
   },
 ];
+
+export function filterPresetNotifications(rules: readonly SlackRule[], options: readonly ForwardEventOption[]): SlackRule[] {
+  const allowed = new Set(options.map((option) => option.type));
+  return rules.flatMap((rule) => {
+    if (rule.source !== "notification") return [rule];
+    const typeKeys = rule.typeKeys.filter((key) => allowed.has(key as NotificationType));
+    return typeKeys.length > 0 ? [{ ...rule, typeKeys }] : [];
+  });
+}
 
 const isRecipientNotif = (r: SlackRule) => r.source === "notification" && r.targets.some((t) => t.kind === "recipient_dm");
 

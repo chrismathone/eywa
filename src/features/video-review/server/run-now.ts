@@ -3,13 +3,11 @@ import { randomUUID } from "node:crypto";
 import { generateJSON } from "@/lib/ai/generate";
 import { claimsFrom, verifyTargets } from "../harness/result";
 import { parseVerdict, type VerifyVerdict } from "../harness/prompt-verify";
+import { RUNNABLE_NOW } from "../view";
 import { finalizeReview } from "./finalize";
 import { loadMaterial } from "./material";
 import { judgeRequest, verifyRequest } from "./requests";
 import { REVIEW_COLUMNS, db, errorText, moveStage, type ReviewRow } from "./rows";
-
-/** 즉시 분석이 들어설 수 있는 단계 — 전사까지 끝난 줄(판정 대기·끝남·실패). 배치에 실려 있는 줄은 기다린다. */
-export const RUNNABLE_NOW = ["judge", "done", "failed"] as const;
 
 /**
  * '다시 분석'(일반 호출 · 정가) — 같은 요청(requests.ts)을 즉시 돌린다. 전사는 다시 하지 않는다.

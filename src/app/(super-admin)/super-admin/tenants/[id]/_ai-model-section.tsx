@@ -22,7 +22,7 @@ function defaultLabel(feature: string): string {
 
 /**
  * 운영 콘솔 학원 상세 'AI 모델' 탭 — 지점마다 AI 기능별 모델을 고른다(원장 2026-10-19). 고르면 바로 저장된다.
- * 고른 회사가 키·잔액으로 막히면 평소 순서(Claude → DeepSeek)대로 다음 회사로 넘어간다 — 기능이 멈추지 않는다.
+ * 고른 회사가 키·잔액으로 막히면 평소 순서(Claude → ChatGPT)대로 다음 회사로 넘어간다 — 기능이 멈추지 않는다.
  */
 export function AiModelSection({ tenantId, state }: { tenantId: string; state: TenantAiModelState }) {
   const areas = [...new Set(TENANT_MODEL_FEATURES.map((f) => f.area))];

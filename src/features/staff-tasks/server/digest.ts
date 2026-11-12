@@ -5,6 +5,7 @@ import { kstToday } from "@/lib/date-kst";
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { taskKindLabel } from "../kinds";
+import { hiddenStaffTaskKinds } from "../task-visibility";
 
 /**
  * 늦은 할 일 아침 요약(0377a 3단계) — 매일 아침 알림 점검 cron이 지점마다 한 번. 늦은 할 일이 있을 때만,
@@ -13,19 +14,23 @@ import { taskKindLabel } from "../kinds";
  * 하루 한 번 = notification_events(지점 · 날짜)로 막는다(같은 날 cron이 두 번 돌아도 한 번).
  */
 export async function sendStaffTaskDigest(admin: SupabaseClient, tenantId: string): Promise<number> {
+  const settingsPromise = getTenantSettingsByTenantId(tenantId);
   // 세기 전에 원래 기록과 맞춘다 — 밤사이 처리된 일이 '늦음'으로 요약에 실리지 않게(30분 맞춤을 기다리지 않는다).
   const { error: syncError } = await admin.rpc("staff_tasks_sync", { p_tenant: tenantId });
   if (syncError) throw new Error(`요약 전 맞춤: ${syncError.message}`);
   const nowIso = new Date().toISOString();
-  const late = await fetchAllPaged<{ id: string; kind: string }>((from, to) => admin.from("staff_tasks").select("id, kind")
-    .eq("tenant_id", tenantId).eq("status", "open").lt("due_at", nowIso).order("id").range(from, to));
+  const settings = await settingsPromise;
+  const hidden = hiddenStaffTaskKinds(settings);
+  const late = await fetchAllPaged<{ id: string; kind: string }>((from, to) => {
+    let q = admin.from("staff_tasks").select("id, kind")
+      .eq("tenant_id", tenantId).eq("status", "open").lt("due_at", nowIso);
+    if (hidden.length) q = q.not("kind", "in", `(${hidden.join(",")})`);
+    return q.order("id").range(from, to);
+  });
   if (!late.length) return 0;
 
-  const [links, settings] = await Promise.all([
-    fetchInChunks<{ task_id: string; user_id: string }>(late.map((t) => t.id), (ids) =>
-      admin.from("staff_task_assignees").select("task_id, user_id").eq("tenant_id", tenantId).in("task_id", ids)),
-    getTenantSettingsByTenantId(tenantId),
-  ]);
+  const links = await fetchInChunks<{ task_id: string; user_id: string }>(late.map((t) => t.id), (ids) =>
+    admin.from("staff_task_assignees").select("task_id, user_id").eq("tenant_id", tenantId).in("task_id", ids));
   const monitorIds = settings.permissions.specialAccess.staffTaskMonitorIds ?? [];
   const { data: monitors, error: monitorError } = monitorIds.length
     ? await admin.from("users").select("id").eq("tenant_id", tenantId).eq("status", "active").in("id", monitorIds)

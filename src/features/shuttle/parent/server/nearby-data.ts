@@ -4,6 +4,16 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report-error";
 import { isDirection, runShortTitle } from "../../types";
 import type { NetRun, NetStop } from "../nearby";
+import { parentPortalAvailable } from "./parent-availability";
+import type { ParentViewer } from "./parent-viewer";
+
+const EMPTY_NETWORK = { stops: [], runs: [] };
+
+/** 학부모 전용 노선망 읽기 — 직원 가까운 노선 화면과 달리 포털 이용 가능 상태를 먼저 본다. */
+export async function loadParentNearbyNetwork(viewer: ParentViewer): Promise<{ stops: NetStop[]; runs: NetRun[] }> {
+  if (!(await parentPortalAvailable(viewer))) return EMPTY_NETWORK;
+  return loadNearbyNetwork(viewer.tenantId);
+}
 
 /**
  * 학부모 '가까운 노선 찾기'의 재료 — **좌표 있는 정류장 + 학기중 회차(정류장·시각)**(사용자 2026-10-22).
@@ -14,7 +24,6 @@ import type { NetRun, NetStop } from "../nearby";
  * ⚠️ 실패해도 화면은 산다 — 빈 노선망이면 "찾을 수 있는 노선이 없어요"로 보인다.
  */
 export async function loadNearbyNetwork(tenantId: string): Promise<{ stops: NetStop[]; runs: NetRun[] }> {
-  const empty = { stops: [], runs: [] };
   try {
     const admin = createAdminClient();
     const [stopsRes, runsRes, vehiclesRes] = await Promise.all([
@@ -72,6 +81,6 @@ export async function loadNearbyNetwork(tenantId: string): Promise<{ stops: NetS
     return { stops, runs };
   } catch (e) {
     reportError(e, { scope: "shuttle.parentNearby" });
-    return empty;
+    return EMPTY_NETWORK;
   }
 }

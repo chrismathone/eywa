@@ -16,6 +16,10 @@ export function modelDisplayLabel(modelVersion: string | null | undefined): stri
   // 새 이름(2026-10-19~) — V4.1-Flash. 옛 이름으로 저장된 분석은 위 줄이 그대로 'v4-flash'로 보인다.
   if (id.includes("deepseek-flash")) return "DeepSeek V4.1 flash";
   if (id.includes("deepseek")) return "DeepSeek";
+  if (id.includes("gpt-6.1-terra")) return "ChatGPT 6.1 Terra";
+  if (id.includes("gpt-6-luna")) return "ChatGPT 6 Luna";
+  if (id.includes("gpt-5.6-terra")) return "ChatGPT 5.6 Terra";
+  if (id.includes("gpt-5.6-luna")) return "ChatGPT 5.6 Luna";
   // 5.5(2026-10-19~)를 먼저 — 그 전에 저장된 분석('claude-sonnet-5-날짜')은 그대로 'Sonnet 5'로 보인다.
   if (id.includes("sonnet-5-5")) return "Claude Sonnet 5.5";
   if (id.includes("sonnet")) return "Claude Sonnet 5";
@@ -24,6 +28,6 @@ export function modelDisplayLabel(modelVersion: string | null | undefined): stri
   if (id.includes("claude")) return "Claude";
   if (id.includes("solar")) return "Solar Pro 3";
   if (id.includes("gemini")) return "Gemini";
-  if (id.includes("gpt")) return "GPT";
+  if (id.includes("gpt")) return "ChatGPT";
   return null;
 }

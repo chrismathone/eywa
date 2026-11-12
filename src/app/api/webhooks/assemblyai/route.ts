@@ -10,6 +10,7 @@ import {
 } from "@/features/meetings/server/ai";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
 import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
 import { reportError } from "@/lib/observability/report-error";
 import { analyzeStudentConsultation } from "@/features/consultations/server/ai";
@@ -718,6 +719,8 @@ async function analyzeConsultationAndPersist(
   opts: { multi: boolean; analyzedIds?: string[] },
 ) {
   let extracted: ExtractedConsultationForm | null = null;
+  const tenantSettings = await getTenantSettingsByTenantId(consult.tenant_id).catch(() => null);
+  const shuttleOn = tenantSettings ? isModuleEnabled(tenantSettings.modules.disabled, "shuttle") : true;
 
   // 13섹션 심층분석 + 폼 필드 추출을 병렬 실행(ijw processRegistrationRecording 패턴).
   // 분석은 필수(실패 시 failed), 폼 추출은 best-effort(실패해도 분석은 살린다).
@@ -729,6 +732,7 @@ async function analyzeConsultationAndPersist(
       grade: consult.prospect_grade,
       school: consult.prospect_school,
       tenantId: consult.tenant_id,
+      shuttleOn,
     }),
   ]);
 
@@ -883,12 +887,10 @@ async function analyzeConsultationAndPersist(
     // 후보정 하네스에 전사·학생명 전달 → 환각 고유명사·학생이름 echo 차단(약한 모델 방어).
     // 학교명 저장 별칭은 그 상담 학원의 설정 값(침산 = 일중→대구일중, 새 학원 = 없음). 조회 자체가 던지면
     // 이 작업 전과 같은 별칭(침산 목록)으로 — 웹훅을 멈출 이유가 아니고, 침산은 실패해도 종전과 같아야 한다.
-    const schoolAliases = await getTenantSettingsByTenantId(consult.tenant_id)
-      .then((s) => s.operations.schoolSaveAliases)
-      .catch(() => CHINSAN_SCHOOL_SAVE_ALIASES);
+    const schoolAliases = tenantSettings?.operations.schoolSaveAliases ?? CHINSAN_SCHOOL_SAVE_ALIASES;
     Object.assign(
       patch,
-      buildFormPatch(extracted, current, { studentName: consult.prospect_name, transcript: formatted, schoolAliases }),
+      buildFormPatch(extracted, current, { studentName: consult.prospect_name, transcript: formatted, schoolAliases, shuttleOn }),
     );
   }
 

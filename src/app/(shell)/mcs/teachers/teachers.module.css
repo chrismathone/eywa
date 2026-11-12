@@ -25,6 +25,7 @@
 .group ul { list-style: none; margin: 0; padding: 0; }
 .group li + li { border-top: 1px solid var(--line-faint); }
 .row { display: grid; grid-template-columns: minmax(0, 1fr) 150px 92px 10px; align-items: center; gap: 14px; padding: 11px 15px; text-decoration: none; color: inherit; }
+.rowNoTextbooks { grid-template-columns: minmax(0, 1fr) 10px; }
 .row:hover { background: color-mix(in srgb, var(--primary) 4%, var(--card)); }
 .row:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; }
 .who { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
@@ -49,5 +50,6 @@
   .surface { padding: 16px; }
   .groups { grid-template-columns: 1fr; }
   .row { grid-template-columns: minmax(0, 1fr) 110px 10px; min-height: 44px; }
+  .rowNoTextbooks { grid-template-columns: minmax(0, 1fr) 10px; }
   .status { display: none; }
 }

@@ -12,6 +12,11 @@ const mocks = vi.hoisted(() => ({
   createAdminClient: vi.fn(),
   logSuperAdminAction: vi.fn(),
   redirect: vi.fn(),
+  acquireLease: vi.fn(),
+  closePending: vi.fn(),
+  releaseLease: vi.fn(),
+  resetWindows: vi.fn(),
+  transition: vi.fn(),
   revalidatePath: vi.fn(),
   updateTag: vi.fn(),
 }));
@@ -19,8 +24,16 @@ vi.mock("@/lib/auth/super-admin", () => ({
   requireSuperAdmin: vi.fn().mockResolvedValue({ id: "super-admin", email: "admin@example.test" }),
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: mocks.createAdminClient }));
+vi.mock("@/features/slack/server/license-transition", () => ({
+  acquireSlackMaintenanceLease: mocks.acquireLease,
+  closePendingSlackWork: mocks.closePending,
+  releaseSlackMaintenanceLease: mocks.releaseLease,
+  resetEnabledRuleWindows: mocks.resetWindows,
+  slackLicenseTransition: mocks.transition,
+}));
 vi.mock("./audit", () => ({ logSuperAdminAction: mocks.logSuperAdminAction }));
-vi.mock("next/cache", () => ({
+vi.mock("next/cache", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/cache")>()),
   revalidatePath: mocks.revalidatePath,
   unstable_cache: (fn: (...args: unknown[]) => unknown) => fn,
   updateTag: mocks.updateTag,
@@ -96,7 +109,11 @@ function licenseMutationAdmin() {
   const tenantMaybeSingle = vi.fn().mockResolvedValue({ data: { name: "DB 학원" }, error: null });
   const tenantEq = vi.fn().mockReturnValue({ maybeSingle: tenantMaybeSingle });
   const tenantSelect = vi.fn().mockReturnValue({ eq: tenantEq });
-  const licenseUpsert = vi.fn().mockResolvedValue({ error: null });
+  const licenseSingle = vi.fn().mockResolvedValue({ data: { updated_at: "2026-11-12T03:00:00.000Z" }, error: null });
+  // 좌석·화면 방식은 upsert를 바로 기다리고, 기능 켜고 끄기는 저장 시각까지 읽는다(.select().single()).
+  const licenseUpsert = vi.fn(() =>
+    Object.assign(Promise.resolve({ error: null }), { select: vi.fn(() => ({ single: licenseSingle })) }),
+  );
   const from = vi.fn((table: string) => {
     if (table === "tenants") return { select: tenantSelect };
     if (table === "tenant_licenses") return { upsert: licenseUpsert };
@@ -105,8 +122,44 @@ function licenseMutationAdmin() {
   return { admin: { from }, licenseUpsert };
 }
 
+function licenseAdmin(previous: { is_active: boolean; expires_at: string | null } | null, updatedAt = "2026-11-12T03:00:00.000Z") {
+  const read = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn() };
+  read.select.mockReturnValue(read);
+  read.eq.mockReturnValue(read);
+  read.maybeSingle.mockResolvedValue({ data: previous, error: null });
+  // 감사 기록의 학원 이름은 서버가 tenants에서 읽는다(폼 이름 무시).
+  const tenant = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn() };
+  tenant.select.mockReturnValue(tenant);
+  tenant.eq.mockReturnValue(tenant);
+  tenant.maybeSingle.mockResolvedValue({ data: { name: "DB 학원" }, error: null });
+
+  const save = { upsert: vi.fn(), select: vi.fn(), single: vi.fn() };
+  save.upsert.mockReturnValue(save);
+  save.select.mockReturnValue(save);
+  save.single.mockResolvedValue({ data: { updated_at: updatedAt }, error: null });
+
+  let calls = 0;
+  const admin = {
+    from: vi.fn((table: string) => {
+      if (table === "tenants") return tenant;
+      if (table !== "tenant_licenses") throw new Error(`예상하지 않은 표: ${table}`);
+      return calls++ === 0 ? read : save;
+    }),
+  };
+  return { admin, save };
+}
+
 beforeEach(() => {
+  vi.clearAllMocks();
   for (const mock of Object.values(mocks)) mock.mockReset();
+  mocks.transition.mockImplementation((previousOn: boolean, nextOn: boolean) =>
+    previousOn === nextOn ? "unchanged" : nextOn ? "enable" : "disable",
+  );
+  mocks.acquireLease.mockResolvedValue({ leaseId: "lease" });
+  mocks.closePending.mockResolvedValue({ inboxSkipped: 2, outboxCancelled: 3 });
+  mocks.resetWindows.mockResolvedValue({ rulesReset: 4 });
+  mocks.releaseLease.mockResolvedValue(undefined);
+  mocks.logSuperAdminAction.mockResolvedValue(undefined);
 });
 
 describe("superadmin mutation boundaries", () => {
@@ -129,6 +182,69 @@ describe("superadmin mutation boundaries", () => {
       expect(result?.error).toBe("좌석 수가 올바르지 않습니다");
     }
     expect(mocks.createAdminClient).not.toHaveBeenCalled();
+  });
+
+  it("슬랙을 켤 때 옛 대기를 닫은 뒤 저장 시각으로 규칙 시작 시각을 재설정한다", async () => {
+    const { admin, save } = licenseAdmin(null);
+    mocks.createAdminClient.mockReturnValue(admin);
+
+    const result = await toggleTenantLicense(undefined, fields({
+      tenantId: "tenant",
+      tenantName: "테스트 지점",
+      feature: "slack",
+      nextActive: "true",
+    }));
+
+    expect(result).toEqual({ ok: true });
+    expect(mocks.acquireLease).toHaveBeenCalledWith("tenant", expect.any(Date));
+    expect(mocks.closePending).toHaveBeenCalledWith("tenant", expect.any(String));
+    expect(save.upsert).toHaveBeenCalledWith(
+      { tenant_id: "tenant", feature: "slack", is_active: true, expires_at: null },
+      { onConflict: "tenant_id,feature" },
+    );
+    expect(mocks.resetWindows).toHaveBeenCalledWith("tenant", "2026-11-12T03:00:00.000Z");
+    expect(mocks.closePending.mock.invocationCallOrder[0]).toBeLessThan(mocks.resetWindows.mock.invocationCallOrder[0]);
+    expect(mocks.releaseLease).toHaveBeenCalledWith("tenant", "lease");
+  });
+
+  it("침산처럼 슬랙이 켜진 채면 전환 정리와 규칙 시작 시각 재설정을 하지 않는다", async () => {
+    const { admin } = licenseAdmin({ is_active: true, expires_at: null });
+    mocks.createAdminClient.mockReturnValue(admin);
+
+    const result = await toggleTenantLicense(undefined, fields({
+      tenantId: "cs",
+      tenantName: "인재원 침산",
+      feature: "slack",
+      nextActive: "true",
+    }));
+
+    expect(result).toEqual({ ok: true });
+    expect(mocks.transition).toHaveBeenCalledWith(true, true);
+    expect(mocks.acquireLease).not.toHaveBeenCalled();
+    expect(mocks.closePending).not.toHaveBeenCalled();
+    expect(mocks.resetWindows).not.toHaveBeenCalled();
+    expect(mocks.releaseLease).not.toHaveBeenCalled();
+  });
+
+  it("슬랙 끄기 정리가 실패해도 꺼진 사실과 다음 켜기 전 정리를 안내한다", async () => {
+    const { admin } = licenseAdmin({ is_active: true, expires_at: null });
+    mocks.createAdminClient.mockReturnValue(admin);
+    mocks.closePending.mockResolvedValue({
+      inboxSkipped: 2,
+      outboxCancelled: 0,
+      error: "슬랙 발송 대기를 정리하지 못했습니다",
+    });
+
+    const result = await toggleTenantLicense(undefined, fields({
+      tenantId: "tenant",
+      feature: "slack",
+      nextActive: "false",
+    }));
+
+    expect(result).toEqual({
+      error: "슬랙은 꺼졌습니다. 슬랙 발송 대기를 정리하지 못했습니다. 남은 발송 대기는 다시 켜기 전에 정리됩니다",
+    });
+    expect(mocks.resetWindows).not.toHaveBeenCalled();
   });
 });
 

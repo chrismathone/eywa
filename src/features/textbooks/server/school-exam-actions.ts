@@ -14,6 +14,7 @@ import { fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
 import { requireMcsClassAccess } from "@/features/math-sheets/server/access";
+import { isModuleOnForTenant } from "@/features/owner/server/modules";
 import { normalizeSchoolName } from "@/features/schools/school-name";
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -45,6 +46,9 @@ export async function saveSchoolExamPeriods(input: z.input<typeof inputSchema>):
   const gate = await requireMcsClassAccess(classId, { write: true });
   if (!gate.ok) return { ok: false, error: gate.error };
   const { tenantId, user, className } = gate.access;
+  if (!(await isModuleOnForTenant(tenantId, "textbooks"))) {
+    return { ok: false, error: "이 학원은 교재목록 기능이 꺼져 있습니다" };
+  }
   const admin = createAdminClient();
 
   // 그 반 학생의 학교인지 — 수강 학생들의 학교 매칭 키 안에 있어야 한다.

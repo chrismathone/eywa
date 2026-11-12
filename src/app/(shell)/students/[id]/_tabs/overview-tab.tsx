@@ -28,6 +28,7 @@ import { classNameFor } from "@/features/teacher-view/class-name";
 import { getStudentSiblings } from "@/features/students/server/siblings";
 import { ProfileSiblings } from "../_components/profile-siblings";
 import { phoneLabel } from "@/lib/format/phone";
+import { isModuleEnabled } from "@/lib/modules";
 
 const won = (n: number) => n.toLocaleString();
 
@@ -103,7 +104,7 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
             {student.englishName ? <Field label="영문명" value={student.englishName} /> : null}
             {student.nickname ? <Field label="닉네임" value={student.nickname} /> : null}
             {student.studentCode ? <Field label="원생번호" value={student.studentCode} mono /> : null}
-            {student.attendanceCode ? (
+            {student.attendanceCode && isModuleEnabled(settings.modules.disabled, "kiosk") ? (
               <Field label="출결번호" value={student.attendanceCode} mono />
             ) : null}
             {student.gender ? (

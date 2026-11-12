@@ -10,7 +10,16 @@ import { PUBLIC_BRANDING_TENANTS_TAG } from "@/features/owner/server/public-bran
 import { tenantSettingsTag } from "@/features/owner/server/queries";
 import { dropPersonFromSettings } from "@/features/owner/server/retired-people";
 import { licenseFlagsTag } from "@/lib/license/server";
+import { licenseExplicitlyOn } from "@/lib/license/rule";
 import { flagsFromMode, isShellMode } from "@/lib/license/shell-mode";
+import {
+  acquireSlackMaintenanceLease,
+  closePendingSlackWork,
+  releaseSlackMaintenanceLease,
+  resetEnabledRuleWindows,
+  slackLicenseTransition,
+  type SlackPendingClose,
+} from "@/features/slack/server/license-transition";
 import { SYSTEM_ROLES, type SystemRole } from "@/lib/permissions";
 import { NEW_TENANT_LICENSE_OPTIONS, newTenantLicenseSelection } from "../new-tenant-licenses";
 import { SEAT_FEATURES, TOGGLE_FEATURES, WINDOW_KEEPALIVE_KEY } from "../labels";
@@ -513,7 +522,38 @@ export async function toggleTenantLicense(
   const admin = createAdminClient();
   const tenant = await readTenantNameForAudit(admin, tenantId, "toggleTenantLicense");
   if ("error" in tenant) return { error: tenant.error };
-  const { error } = await admin
+  const changedAt = new Date();
+  const changedAtIso = changedAt.toISOString();
+  let previousSlackOn: boolean | null = null;
+  let slackTransition: ReturnType<typeof slackLicenseTransition> | null = null;
+  let slackPending: SlackPendingClose = { inboxSkipped: 0, outboxCancelled: 0 };
+  let slackRulesReset = 0;
+  let slackLeaseId: string | null = null;
+  if (feature === "slack") {
+    // 요청 캐시가 아닌 지금 DB 값으로 전환을 판정한다. 만료된 켜짐 행도 실제로는 꺼짐이다.
+    const previous = await admin
+      .from("tenant_licenses")
+      .select("is_active, expires_at")
+      .eq("tenant_id", tenantId)
+      .eq("feature", "slack")
+      .maybeSingle();
+    if (previous.error) return { error: "현재 슬랙 사용 상태를 확인하지 못해 바꾸지 않았습니다 — 잠시 후 다시 시도해 주세요" };
+    previousSlackOn = licenseExplicitlyOn(previous.data, changedAt);
+    slackTransition = slackLicenseTransition(previousSlackOn, nextActive);
+
+    // 켜기 전부터 리스를 잡고 옛 대기를 닫는다. 실제 저장 시각을 규칙 하한으로 쓸 때까지 발송기가 끼어들지 못한다.
+    if (slackTransition === "enable") {
+      const lease = await acquireSlackMaintenanceLease(tenantId, changedAt);
+      if (lease.error) return { error: `${lease.error} — 슬랙을 켜지 않았습니다` };
+      slackLeaseId = lease.leaseId;
+      slackPending = await closePendingSlackWork(tenantId, changedAtIso);
+      if (slackPending.error) {
+        await releaseSlackMaintenanceLease(tenantId, slackLeaseId);
+        return { error: `${slackPending.error} — 슬랙을 켜지 않았습니다` };
+      }
+    }
+  }
+  const saved = await admin
     .from("tenant_licenses")
     .upsert(
       // 켤 때는 만료일도 지운다 — 만료된 행을 켜 봐야 게이트(`licenseAllows`)는 여전히 막아 스위치만 켜진 척한다.
@@ -521,8 +561,36 @@ export async function toggleTenantLicense(
         ? { tenant_id: tenantId, feature, is_active: true, expires_at: null }
         : { tenant_id: tenantId, feature, is_active: false },
       { onConflict: "tenant_id,feature" },
-    );
-  if (error) return { error: explainDbError(error, { scope: "super-admin.actions.toggleTenantLicense", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
+    )
+    .select("updated_at")
+    .single();
+  if (saved.error) {
+    await releaseSlackMaintenanceLease(tenantId, slackLeaseId);
+    return { error: explainDbError(saved.error, { scope: "super-admin.actions.toggleTenantLicense", fallback: "저장하지 못했습니다 — 잠시 후 다시 시도해 주세요" }).message };
+  }
+
+  if (feature === "slack" && slackTransition === "enable") {
+    const enabledAt = (saved.data?.updated_at as string | null) ?? new Date().toISOString();
+    const reset = await resetEnabledRuleWindows(tenantId, enabledAt);
+    slackRulesReset = reset.rulesReset;
+    if (reset.error) {
+      const rollback = await admin
+        .from("tenant_licenses")
+        .upsert({ tenant_id: tenantId, feature: "slack", is_active: false }, { onConflict: "tenant_id,feature" });
+      await releaseSlackMaintenanceLease(tenantId, slackLeaseId);
+      return {
+        error: rollback.error
+          ? `${reset.error} · 슬랙 사용 상태도 되돌리지 못했습니다 — 즉시 다시 꺼 주세요`
+          : `${reset.error} — 슬랙을 다시 꺼 두었습니다`,
+      };
+    }
+    await releaseSlackMaintenanceLease(tenantId, slackLeaseId);
+  }
+
+  // 끄기를 먼저 저장한 뒤 대기를 닫는다. 발송기의 직전 재확인이 새 발송을 막는 동안 여기서 남은 줄을 끝낸다.
+  if (feature === "slack" && slackTransition === "disable") {
+    slackPending = await closePendingSlackWork(tenantId, changedAtIso);
+  }
 
   await logSuperAdminAction({
     actorId: sa.id,
@@ -530,9 +598,24 @@ export async function toggleTenantLicense(
     action: "toggle_license",
     targetTenantId: tenantId,
     targetLabel: tenant.name,
-    metadata: { feature, active: nextActive },
+    metadata: {
+      feature,
+      active: nextActive,
+      ...(feature === "slack"
+        ? {
+            previousActive: previousSlackOn,
+            inboxSkipped: slackPending.inboxSkipped,
+            outboxCancelled: slackPending.outboxCancelled,
+            rulesReset: slackRulesReset,
+            ...(slackPending.error ? { pendingCleanupFailed: true } : {}),
+          }
+        : {}),
+    },
   });
   updateTag(licenseFlagsTag(tenantId)); // 셸 표시용 라이선스 캐시(창 모드·꺼진 기능 버튼)
   revalidatePath(`/super-admin/tenants/${tenantId}`);
+  if (slackPending.error) {
+    return { error: `슬랙은 꺼졌습니다. ${slackPending.error}. 남은 발송 대기는 다시 켜기 전에 정리됩니다` };
+  }
   return { ok: true };
 }

@@ -1,15 +1,17 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ gate: vi.fn(), context: vi.fn(), input: vi.fn(), saved: vi.fn() }));
+const m = vi.hoisted(() => ({ gate: vi.fn(), context: vi.fn(), input: vi.fn(), saved: vi.fn(), licensed: vi.fn() }));
 vi.mock("./access", () => ({ getContributionGate: m.gate }));
 vi.mock("./live-context", () => ({ getLiveContext: m.context }));
 vi.mock("./summary-input", () => ({ getSummaryInput: m.input }));
 vi.mock("./summary-store", () => ({ readSavedSummary: m.saved }));
+vi.mock("@/lib/license/server", () => ({ isFeatureLicensed: m.licensed }));
 import { SUMMARY_VERSION, LEGACY_SUMMARY_VERSION } from "@/features/students/ontology/summary";
 import { getStudentRecordSummary } from "./summary-query";
 const source = { itemId: "consultations:1", section: "상담", text: "학생이 영어를 계속 배우고 싶다고 말했다.", evidence: [{ href: "/consultations/1" }] };
 const row = { input_hash: "hash", contract_version: SUMMARY_VERSION, result: { items: [{ itemId: source.itemId, summary: "상담 당시 학생은 영어를 계속 배우고 싶다고 했습니다.", excerpt: source.text }] }, generated_at: "2026-10-23", model_label: "Claude" };
 beforeEach(() => {
   vi.resetAllMocks(); m.gate.mockResolvedValue({ tenantId: "t", userId: "u", canWrite: true }); m.context.mockResolvedValue({ studentId: "s" });
+  m.licensed.mockResolvedValue(true);
   m.input.mockResolvedValue({ hash: "hash", sources: [source], partial: false }); m.saved.mockResolvedValue({ ready: true, row });
 });
 it("only loads this tenant/student/requester's saved result", async () => {
@@ -18,6 +20,11 @@ it("only loads this tenant/student/requester's saved result", async () => {
 });
 it("does not read saved content after source access is revoked", async () => {
   m.context.mockResolvedValue(null); expect(await getStudentRecordSummary("s")).toBeNull(); expect(m.saved).not.toHaveBeenCalled();
+});
+it("AI 분석 라이선스가 꺼지면 저장된 요약도 읽지 않는다", async () => {
+  m.licensed.mockResolvedValue(false);
+  expect(await getStudentRecordSummary("s")).toBeNull();
+  expect(m.saved).not.toHaveBeenCalled();
 });
 it("does not display old summaries after source changes", async () => {
   m.input.mockResolvedValue({ hash: "changed", sources: [] });

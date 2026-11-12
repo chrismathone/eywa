@@ -15,6 +15,8 @@ import { SENT_REPORT_OR } from "../lib/sent-reports";
 import { NO_HOMEROOM_LABEL } from "../landing-tracks";
 import { mcsVisibleClassFilter } from "./access";
 import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
 
 /**
  * MCS **선생님별 보기** — 선생님이 맡은 학생 목록과 학생마다 교재 3개월 진행(원장 2026-10-20 *"뷰를 선생님 별로해서
@@ -44,11 +46,13 @@ export type TeacherGroup = { teacherName: string; students: TeacherStudentRow[] 
 
 const REPORT_LOOKBACK_DAYS = 180;
 
-export async function getMathTeacherRoster(): Promise<{ ok: true; groups: TeacherGroup[]; today: string } | { ok: false; error: string }> {
+export async function getMathTeacherRoster(): Promise<{ ok: true; groups: TeacherGroup[]; today: string; textbooksOn: boolean } | { ok: false; error: string }> {
   const user = await getCurrentUser({ teacherView: true });
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  if ((await accessLevelTenant(user.systemRole, "mcs")) === "none") return { ok: false, error: "접근 권한이 없습니다" };
+  const [access, settings] = await Promise.all([accessLevelTenant(user.systemRole, "mcs"), getTenantSettings()]);
+  if (access === "none") return { ok: false, error: "접근 권한이 없습니다" };
   const tenantId = user.tenantId;
+  const textbooksOn = isModuleEnabled(settings.modules.disabled, "textbooks");
   const today = kstToday();
   const admin = createAdminClient();
 
@@ -62,7 +66,7 @@ export async function getMathTeacherRoster(): Promise<{ ok: true; groups: Teache
     return { ok: false, error: "반 목록을 불러오지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
   }
   const classes = (classRes.data ?? []).filter((c) => !filter || filter(String(c.id)));
-  if (classes.length === 0) return { ok: true, groups: [], today };
+  if (classes.length === 0) return { ok: true, groups: [], today, textbooksOn };
   const classIds = classes.map((c) => String(c.id));
   const teacherIds = [...new Set(classes.map((c) => c.teacher_id).filter(Boolean).map(String))];
 
@@ -73,24 +77,32 @@ export async function getMathTeacherRoster(): Promise<{ ok: true; groups: Teache
           .in("class_id", chunk).or(`end_date.is.null,end_date.gte.${today}`).order("id").range(f, t)),
       fetchInChunks<{ id: string; display_name: string | null }>(teacherIds, (chunk) =>
         admin.from("users").select("id, display_name").eq("tenant_id", tenantId).in("id", chunk)),
-      getMathCatalogBooks(tenantId),
+      textbooksOn ? getMathCatalogBooks(tenantId) : Promise.resolve([]),
     ]);
     // end_date 조건은 프리필터일 뿐 — 반이동(반열림)은 그날 이미 새 반이라 같은 함수로 다시 본다([[#125]]).
     const current = enrRows.filter((e) => (!e.start_date || e.start_date.slice(0, 10) <= today)
       && !isEnrollmentEndedOn(e.end_date?.slice(0, 10), today, e.is_transferred === true));
     const studentIds = [...new Set(current.map((e) => String(e.student_id)))];
-    const [students, orders, reports, targets, schoolExams] = await Promise.all([
+    const [students, textbookData] = await Promise.all([
       fetchInChunks<{ id: string; name: string; school: string | null; grade: string | null; withdrawn_at: string | null }>(studentIds, (chunk) =>
         admin.from("students").select("id, name, school, grade, withdrawn_at").eq("tenant_id", tenantId).in("id", chunk)),
-      getStudentBookOrders(tenantId, studentIds),
-      fetchAllPagedInChunks<{ student_id: string; class_id: string | null; report_date: string; textbook: string | null; progress: string | null }>(studentIds, (chunk, f, t) =>
-        admin.from("lesson_reports").select("id, student_id, class_id, report_date, textbook, progress").eq("tenant_id", tenantId)
-          .in("student_id", chunk).or(SENT_REPORT_OR).is("revoked_at", null)
-          .gte("report_date", addDays(today, -REPORT_LOOKBACK_DAYS)).order("id").range(f, t)),
-      getMathBookTargets(tenantId, studentIds),
-      // 학교별 내신기간 — 학원 전체를 받아 나란히(B4). 실패해도 기본표로 계산한다.
-      getAllSchoolExamPeriods(tenantId),
+      textbooksOn
+        ? Promise.all([
+            getStudentBookOrders(tenantId, studentIds),
+            fetchAllPagedInChunks<{ student_id: string; class_id: string | null; report_date: string; textbook: string | null; progress: string | null }>(studentIds, (chunk, f, t) =>
+              admin.from("lesson_reports").select("id, student_id, class_id, report_date, textbook, progress").eq("tenant_id", tenantId)
+                .in("student_id", chunk).or(SENT_REPORT_OR).is("revoked_at", null)
+                .gte("report_date", addDays(today, -REPORT_LOOKBACK_DAYS)).order("id").range(f, t)),
+            getMathBookTargets(tenantId, studentIds),
+            // 학교별 내신기간 — 학원 전체를 받아 나란히(B4). 실패해도 기본표로 계산한다.
+            getAllSchoolExamPeriods(tenantId),
+          ])
+        : Promise.resolve(null),
     ]);
+    const orders = textbookData?.[0] ?? null;
+    const reports = textbookData?.[1] ?? [];
+    const targets = textbookData?.[2] ?? null;
+    const schoolExams = textbookData?.[3] ?? null;
     const studentById = new Map(students.filter((s) => !s.withdrawn_at || s.withdrawn_at.slice(0, 10) > today).map((s) => [String(s.id), s]));
     const teacherName = new Map(teachers.map((t) => [String(t.id), t.display_name]));
     const classById = new Map(classes.map((c) => [String(c.id), c]));
@@ -110,7 +122,7 @@ export async function getMathTeacherRoster(): Promise<{ ok: true; groups: Teache
       const teacher = (cls.teacher_id && teacherName.get(String(cls.teacher_id))) || NO_HOMEROOM_LABEL;
       const rows = groups.get(teacher) ?? new Map<string, TeacherStudentRow>();
       if (rows.has(s.id)) continue;
-      const plans = buildStudentBookPlans({
+      const plans = textbooksOn && targets && schoolExams ? buildStudentBookPlans({
         orders: orders?.get(s.id) ?? [],
         catalog: catalog ?? [],
         reports: reportsByKey.get(`${s.id}|${cls.id}`) ?? [],
@@ -119,8 +131,8 @@ export async function getMathTeacherRoster(): Promise<{ ok: true; groups: Teache
         examOverrides: schoolExams.byKey.get(normalizeSchoolName(s.school)) ?? [],
         referenceDate: today,
         today,
-      });
-      const r = plans.roadmaps[0];
+      }) : null;
+      const r = plans?.roadmaps[0];
       const w = r?.window;
       rows.set(s.id, {
         studentId: s.id, name: s.name, school: s.school, grade: s.grade, classId: String(cls.id), className: String(cls.class_name),
@@ -128,13 +140,14 @@ export async function getMathTeacherRoster(): Promise<{ ok: true; groups: Teache
         bookName: r?.position?.title ?? w?.books[0]?.title ?? null,
         status: r?.status ?? null,
         difference: r?.difference ?? null,
-        bookCount: plans.roadmaps.length,
+        bookCount: plans?.roadmaps.length ?? 0,
       });
       groups.set(teacher, rows);
     }
     return {
       ok: true,
       today,
+      textbooksOn,
       groups: [...groups.entries()]
         .map(([teacherName, rows]) => ({ teacherName, students: [...rows.values()].sort((a, b) => a.name.localeCompare(b.name, "ko")) }))
         .sort((a, b) => (a.teacherName === NO_HOMEROOM_LABEL ? 1 : b.teacherName === NO_HOMEROOM_LABEL ? -1 : a.teacherName.localeCompare(b.teacherName, "ko"))),

@@ -6,9 +6,12 @@ import { absenceClassOf } from "@/features/attendance/makeup-reservation";
 import { sectionResult, type LiveItem } from "@/features/students/ontology/live-contract";
 import { fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { readSection, unavailableSection, type LiveContext } from "./live-context";
+import { isModuleEnabled } from "@/lib/modules";
 
-export function readLegacyMakeups(c: LiveContext) {
+export async function readLegacyMakeups(c: LiveContext) {
   const href = `/students/${c.studentId}?tab=attendance`;
+  const settings = await getTenantSettings();
+  if (!isModuleEnabled(settings.modules.disabled, "makeups")) return unavailableSection("reservations", "기존 보강 예약", href, "off");
   if (!c.attendance) return Promise.resolve(unavailableSection("reservations", "기존 보강 예약", href, "forbidden"));
   return readSection("reservations", "기존 보강 예약", href, async () => {
     const { data, count, error } = await c.db.from("makeup_reservations")
@@ -37,6 +40,7 @@ export function readNativeMakeups(c: LiveContext) {
   return readSection("makeups", "새 보강관리 장부", href, async () => {
     const settings = await getTenantSettings();
     if (foldedReason(settings)) return unavailableSection("makeups", "새 보강관리 장부", href, "failed");
+    if (!isModuleEnabled(settings.modules.disabled, "makeups")) return unavailableSection("makeups", "새 보강관리 장부", href, "off");
     if (settings.makeups.mode === "off") return unavailableSection("makeups", "새 보강관리 장부", href, "off");
     if (!c.makeups) return unavailableSection("makeups", "새 보강관리 장부", href, "forbidden");
     const result = await getMakeupCases({ student_id: c.studentId, page: 1, page_size: 5 });

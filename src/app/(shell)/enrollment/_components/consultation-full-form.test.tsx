@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { BOARD_STAGES } from "@/features/enrollment/board-stages";
+import { OperationsProvider } from "@/features/owner/operations-context";
 
 /**
  * 콜&상담 수정 저장 뒤 — 서버 액션 직후라 풀 문서 이동(#102)이고, 이동 대기 중엔 폼 전체를 잠근다(inert).
@@ -382,5 +383,34 @@ describe("읽기 권한 — 칸 잠금 · 쓰기 단추 없음", () => {
     expect(container.querySelector('[name="prospectName"]')).toBeEnabled();
     expect(container.querySelector('[name="parentRequest"]')).toHaveAttribute("placeholder", "학부모 요구사항 / 관찰");
     expect(screen.getByRole("button", { name: /저장하고 상세로/ })).toBeInTheDocument();
+  });
+});
+
+describe("지점 라이선스가 꺼진 상담 기능의 흔적", () => {
+  it("회의 녹음이 꺼지면 녹음·파일 첨부 영역을 통째로 감춘다", () => {
+    render(
+      <OperationsProvider subjects={[]} gradeLevels={[]} licenses={{ meeting_recording: false }}>
+        <ConsultationFullForm mode="create" recordingOwner={{ tenantId: "t1", userId: "u1" }} />
+      </OperationsProvider>,
+    );
+    expect(screen.queryByText(/상담 녹음·파일 첨부/)).toBeNull();
+    expect(screen.queryByText("테스트 녹음 선택")).toBeNull();
+  });
+
+  it("AI 분석만 꺼지면 녹음·전사는 남기되 AI 이름과 제안을 감춘다", () => {
+    render(
+      <OperationsProvider subjects={[]} gradeLevels={[]} licenses={{ meeting_recording: true, ai_analysis: false }}>
+        <ConsultationFullForm
+          mode="edit"
+          recordingOwner={{ tenantId: "t1", userId: "u1" }}
+          initial={{ id: "c1", prospectName: "홍길동" }}
+          aiSuggestedParentRequest="분석 제안"
+        />
+      </OperationsProvider>,
+    );
+    expect(screen.getByText(/상담 녹음·파일 첨부/)).toBeInTheDocument();
+    expect(screen.getByText("선택 · 저장 후 전사")).toBeInTheDocument();
+    expect(screen.queryByText(/AI 분석/)).toBeNull();
+    expect(screen.queryByText(/AI 제안/)).toBeNull();
   });
 });

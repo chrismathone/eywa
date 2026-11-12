@@ -9,34 +9,27 @@
  *
  * 🔴 꺼진 모듈의 메뉴는 권한 매트릭스 **맨 끝**에서 전원 `none`이 된다(perm-matrix.ts `capDisabledModules`) —
  *    원장 override·개인 예외·super_admin 병합으로도 열리지 않는다(기능이 없는 학원이다).
- * 🔴 저장은 `tenant_settings.data.modules.disabled`(끈 것만). 침산 프리셋은 빈 목록 = 전부 켜짐(오늘과 같다),
- *    일반판 프리셋은 `GENERIC_DISABLED_MODULES`(침산 전용 기능)를 끈 채 태어난다.
+ * 🔴 저장은 `tenant_settings.data.modules.disabled`(끈 것만) + 저장 당시 목록 `known`. 침산은 `known`을 무시해
+ *    빈 목록 = 전부 켜짐(오늘과 같다), 일반판은 저장 뒤 추가된 모듈도 끈 것으로 푼다.
  * ⚠️ 순수 상수 모듈 — 서버·클라가 같이 import한다(`server-only` 금지, #61·#81).
  */
 import type { Access, AccessMatrix, MenuKey, SystemRole } from "@/lib/permissions";
+import {
+  MODULE_BASELINE_V1,
+  MODULE_IDS,
+  effectiveDisabledModulesFromStored,
+  knownModulesFromStored,
+  normalizeKnownModuleIds,
+  normalizeModuleIds,
+} from "@/lib/module-state.mjs";
 
-export const MODULE_IDS = [
-  "ecs",
-  "mcs",
-  "makeups",
-  "seat_attendance",
-  "textbooks",
-  "shuttle",
-  "inventory",
-  "kiosk",
-  "newcomers",
-  "retention",
-  "approvals",
-  "class_review",
-  "calendar",
-  "classnote",
-  "makeedu",
-  "sheet_sync",
-  "eie",
-  "session_billing",
-  "payroll",
-  "staff_leaves",
-] as const;
+export {
+  MODULE_BASELINE_V1,
+  MODULE_IDS,
+  effectiveDisabledModulesFromStored,
+  knownModulesFromStored,
+  normalizeKnownModuleIds,
+};
 export type ModuleId = (typeof MODULE_IDS)[number];
 
 export type ModuleDef = {
@@ -180,19 +173,23 @@ export const MODULES: Readonly<Record<ModuleId, ModuleDef>> = {
 // 보강은 별도의 안전한 운영 모드로 켠다. 두 활성 스위치가 서로 어긋나지 않게 한다.
 export const GENERIC_DISABLED_MODULES: readonly ModuleId[] = MODULE_IDS.filter(id => id !== "makeups");
 
-const MODULE_ID_SET: ReadonlySet<string> = new Set(MODULE_IDS);
-
 /** 저장값(jsonb)에서 알 수 있는 모듈 id만 — 모르는 값은 버린다(스키마가 바뀌어도 유령 id가 게이트를 흔들지 않게). */
 export function normalizeDisabledModules(raw: unknown): ModuleId[] {
-  if (!Array.isArray(raw)) return [];
-  const out: ModuleId[] = [];
-  for (const v of raw) if (typeof v === "string" && MODULE_ID_SET.has(v) && !out.includes(v as ModuleId)) out.push(v as ModuleId);
-  return out;
+  return normalizeModuleIds(raw) as ModuleId[];
 }
 
 /** 이 모듈이 켜져 있나. */
 export function isModuleEnabled(disabled: readonly ModuleId[] | undefined, id: ModuleId): boolean {
   return !(disabled ?? []).includes(id);
+}
+
+/** 저장 전후를 비교해 이번 요청이 실제로 모듈을 켜짐→꺼짐으로 바꾸는지 판정한다. */
+export function isModuleTurningOff(
+  before: readonly ModuleId[] | undefined,
+  after: readonly ModuleId[] | undefined,
+  id: ModuleId,
+): boolean {
+  return isModuleEnabled(before, id) && !isModuleEnabled(after, id);
 }
 
 /** 꺼진 모듈들이 닫는 메뉴키 집합. */

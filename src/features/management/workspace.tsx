@@ -29,6 +29,7 @@ export function ManagementWorkspace({ data, reportIndex, months, aiReview, aiEna
   // 이번 달 = **서버가 준 목록의 끝**(page.tsx: 최근 36개월이 늘 들어가고 미래 월은 빠진다 → 끝 = 서버 기준 이번 달).
   // 클라 렌더에서 kstMonth()를 다시 부르면 월말 자정 무렵 서버와 값이 갈려 하이드레이션이 깨진다(React #418).
   const at = months.indexOf(data.month), nowMonth = months.at(-1) ?? data.month, monthHref = (m: string) => `?month=${m}`;
+  const visibleSources = data.sources.filter((source) => accountingImport || !/ECOUNT/i.test(source.name));
   return <div className="space-y-5">
     <PageHeader title="경영 분석" description="운영 현황부터 수익 구조까지. 지표를 살펴보고 근거와 다음 할 일을 연결하세요."/>
     <Toolbar>
@@ -53,10 +54,10 @@ export function ManagementWorkspace({ data, reportIndex, months, aiReview, aiEna
     <AccountingPanel key={`accounting:${data.month}`} data={data} reportIndex={reportIndex} importAllowed={accountingImport}/>
     <section id="people" className={s.columns}><article className={s.panel}><h2>강사별 담당 규모</h2><p>현재 담당 반 기준입니다. 담당 변경 이력·학생의 출발 성적·수업 기간을 보정하기 전에는 강사의 성과 점수로 사용하지 않습니다.</p><div className={s.tableScroll}><table><thead><tr><th>강사</th><th>수강 학생</th><th>수강 건수</th></tr></thead><tbody>{data.teachers.filter(t => t.courses > 0).map(t => <tr key={t.id}><td>{t.label}</td><td>{t.students}명</td><td>{t.courses}건</td></tr>)}</tbody></table></div><Link href="/staff">강사·담당 반 확인 →</Link><p><Link href="/class-review/knowledge">강사별 기록·성과·배정 여력 →</Link></p></article>
       <article className={s.panel}><h2>유입경로별 상담</h2><p>{data.month} 상담 접수 건수입니다. 학생이 연결된 상담은 등록 확정과 같지 않으며, 광고의 순증 효과로 해석할 수 없습니다.</p><table><thead><tr><th>기록된 경로</th><th>상담 건수</th><th>학생 연결</th></tr></thead><tbody>{data.channels.map(c => <tr key={c.label}><td>{c.label}</td><td>{c.inquiries}</td><td>{c.registered}</td></tr>)}</tbody></table>{!data.channels.length ? <p>선택 월의 유입경로 기록이 없습니다.</p> : null}<h3>광고 효과 측정에 필요한 다음 기록</h3><p>전단지·현수막·엘리베이터별 캠페인, 기간, 비용, 대상 학교·지역, QR·전용 문의 경로, 최초·보조 유입을 함께 기록해야 합니다.</p><Link href="/enrollment">신규 상담에서 확인 →</Link></article></section>
-    <section id="knowledge" className={s.panel}><div className={s.sectionTitle}><h2>근거를 연결하는 경영 지식그래프</h2><Link className={s.secondary} href={`/dashboard/management/knowledge?month=${data.month}`}>통합 지식그래프 열기 ↗</Link></div><div className={s.graph} aria-label="경영 지식그래프 연결 구조"><span>MakeEdu 학생 ID</span><b>→</b><span>에이와 학생</span><b>→</b><span>수강 · 반 · 강사</span><b>→</b><span>청구 · 경영 지표</span><b>←</b><span>ECOUNT 기간 손익</span></div><p>원본 ID·기간·산식을 함께 보관합니다. 그래프의 연결은 원인으로 확정된 관계가 아닙니다.</p>
+    <section id="knowledge" className={s.panel}><div className={s.sectionTitle}><h2>근거를 연결하는 경영 지식그래프</h2><Link className={s.secondary} href={`/dashboard/management/knowledge?month=${data.month}`}>통합 지식그래프 열기 ↗</Link></div><div className={s.graph} aria-label="경영 지식그래프 연결 구조"><span>MakeEdu 학생 ID</span><b>→</b><span>에이와 학생</span><b>→</b><span>수강 · 반 · 강사</span><b>→</b><span>청구 · 경영 지표</span>{accountingImport ? <><b>←</b><span>ECOUNT 기간 손익</span></> : null}</div><p>원본 ID·기간·산식을 함께 보관합니다. 그래프의 연결은 원인으로 확정된 관계가 아닙니다.</p>
       {aiEnabled ? <AiReviewPanel key={`ai:${data.month}`} month={data.month} metrics={data.metrics} initial={aiReview}/> : null}
     </section>
-    <section id="sources" className={s.panel}><h2>데이터 연결 상태</h2><table><thead><tr><th>소스</th><th>상태</th><th>확인 사항</th></tr></thead><tbody>{data.sources.map(x => <tr key={x.name}><td>{x.name}</td><td>{x.state}{x.updatedAt ? <small>{new Date(x.updatedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</small> : null}</td><td>{x.note}</td></tr>)}</tbody></table></section>
+    <section id="sources" className={s.panel}><h2>데이터 연결 상태</h2><table><thead><tr><th>소스</th><th>상태</th><th>확인 사항</th></tr></thead><tbody>{visibleSources.map(x => <tr key={x.name}><td>{x.name}</td><td>{x.state}{x.updatedAt ? <small>{new Date(x.updatedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</small> : null}</td><td>{x.note}</td></tr>)}</tbody></table></section>
     </div>
   </div>;
 }

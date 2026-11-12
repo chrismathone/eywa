@@ -18,7 +18,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
  */
 export async function GET(request: Request) {
   await requireAccess("billing");
-  if (await sessionBillingOff()) return new NextResponse("이 지점은 회차 정산 기능을 사용하지 않습니다", { status: 404 });
+  if (await sessionBillingOff()) return new NextResponse("찾을 수 없습니다", { status: 404 });
 
   const url = new URL(request.url);
   const raw = url.searchParams.get("period") ?? "";

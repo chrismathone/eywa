@@ -37,8 +37,8 @@ export type DailyInput = {
   date: string; holidays: ReadonlySet<string>;
   classes: readonly DutyClass[]; schedules: readonly DutySchedule[]; enrollments: readonly WorkEnrollment[];
   attendance: readonly DutyAttendance[]; reports: readonly DutyReport[]; posts: readonly ClassPostDay[];
-  /** ClassNote 발송이 켜진 지점만 '보고서 발송' 의무를 만든다(꺼진 지점엔 흔적 없이). */
-  classnoteOn: boolean;
+  /** ClassNote 실제 발송이 켜진 지점만 학생별 '보고서 발송' 의무를 만든다. 영어 반 게시글은 직접 작성이라 이 스위치와 무관하다. */
+  classnoteSendOn: boolean;
   /** 재직이 아닌 사람(퇴사) — 담당에서 비운다. 담임·교시 담당 모두 포함해 넘길 것. */
   inactiveTeacherIds?: ReadonlySet<string>;
 };
@@ -123,7 +123,7 @@ export function buildDailyDuties(input: DailyInput): DutyDraft[] {
   const obligations = reportWorkObligations({ classes, schedules: input.schedules, enrollments: input.enrollments, attendance: input.attendance,
     reports: input.reports, posts: input.posts, from: date, to: date, nowMinutes: 24 * 60, holidays: [...input.holidays] });
   const reportOf = new Map(input.reports.map((r) => [`${r.classId}|${r.studentId}|${r.date}`, r]));
-  const sends = (cls: DutyClass | undefined) => input.classnoteOn && cls?.reportSource === "lesson";
+  const sends = (cls: DutyClass | undefined) => input.classnoteSendOn && cls?.reportSource === "lesson";
   for (const ob of obligations) {
     const cls = byId.get(ob.classId);
     const classPost = ob.studentId === "class-post";

@@ -117,7 +117,7 @@ export default async function EcsLandingPage({
     const [todayRes, myTeacherId, textbookOptions] = await Promise.all([
       getEcsToday(date ?? null),
       effectiveTeacherId(),
-      loadEcsTextbookOptions(),
+      textbooksOn ? loadEcsTextbookOptions() : Promise.resolve([]),
     ]);
     let sheets: TodaySheet[] | null = null;
     if (mode === "sheet" && todayRes.ok && todayRes.cards.length > 0) {

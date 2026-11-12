@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_ENGLISH_TRACK,
+  EIE_TRACK_UNAVAILABLE_MESSAGE,
   ENGLISH_TRACK_LABEL,
+  eieTrackWriteError,
   keepEnglishTrack,
   matchesEnglishTrackFilter,
   normalizeEnglishTrack,
@@ -74,5 +76,22 @@ describe("english-track — 폼 입력 정규화", () => {
   it("라벨은 한글(raw 코드 노출 금지)", () => {
     expect(ENGLISH_TRACK_LABEL.injaewon).toBe("인재원 영어");
     expect(ENGLISH_TRACK_LABEL.eie).toBe("EiE");
+  });
+});
+
+describe("english-track — 꺼진 지점의 새 EiE 지정 차단", () => {
+  it("꺼진 지점은 새 반 생성과 다른 구분에서 EiE로 바꾸기를 거절한다", () => {
+    expect(eieTrackWriteError(false, "eie")).toBe(EIE_TRACK_UNAVAILABLE_MESSAGE);
+    expect(eieTrackWriteError(false, "eie", "injaewon")).toBe(EIE_TRACK_UNAVAILABLE_MESSAGE);
+  });
+
+  it("꺼진 지점도 기존 EiE 반의 값 보존 수정은 허용한다", () => {
+    expect(eieTrackWriteError(false, "eie", "eie")).toBeNull();
+    expect(eieTrackWriteError(false, "injaewon", "eie")).toBeNull();
+  });
+
+  it("켜진 지점(침산)은 생성·변경 모두 종전처럼 허용한다", () => {
+    expect(eieTrackWriteError(true, "eie")).toBeNull();
+    expect(eieTrackWriteError(true, "eie", "injaewon")).toBeNull();
   });
 });

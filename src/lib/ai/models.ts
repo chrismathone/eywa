@@ -5,39 +5,33 @@
 // 기능별 모델 고정(코드 기본 · 운영 콘솔 선택지)은 model-pins.ts.
 import type { ModelPin } from "./model-pins";
 
-// 회사는 둘 — Claude(anthropic) · DeepSeek. 🔴 Upstage(Solar)는 뺐다(원장 2026-10-19 *"솔라는 빼버려. 두개면 충분"* —
-// 품질 시험 탈락으로 맨 뒤 예비였고, 그날 키도 잔액 부족으로 정지돼 있었다). 되살리지 말 것.
-export type AiProvider = "anthropic" | "deepseek";
+// 회사는 둘 — Claude(anthropic) · ChatGPT(OpenAI). 원장 2026-11-12 결정:
+// Claude를 1순위로 두고, 인증·한도·잔액 문제일 때만 OpenAI로 넘어간다.
+export type AiProvider = "anthropic" | "openai";
 export type AiTier = "fast" | "balanced" | "reasoning";
 export type AiKeyName = "default" | "consultations";
 
-// 티어 → provider별 모델 id. reasoning은 Anthropic 전용(평소 금지 정책).
-// deepseek: v4-pro(고품질 추론, 전사 분석 기본)·v4-flash(경량). v4-pro는 balanced로 라우팅(reasoning 티어는
-// Anthropic 고정 정책 유지 — deepseek reasoning 슬롯은 null로 미사용). 실측 A/B(2026-07-16): v4-pro가
-// 등록상담 warnings를 Sonnet급으로 생성(경량 v4-flash/chat·Solar는 warnings 붕괴). 배경 = docs/changelog.
-// 🔴 fast tier의 deepseek = **v4-flash**(원장 2026-08-28 *"haiku -> 폴백 deepseek v4 flash"* — 같은 날
-//    *"flash 말고 v4 pro"*에서 **프로덕션 실측을 보고 뒤집은 것**이라 되돌리지 말 것).
-//    근거: v4-pro를 폴백에 걸었더니 강사가 자동작성 한 번에 **86초**를 기다렸다(실측 20:34:27 anthropic 실패
-//    → 20:35:53 v4-pro 성공, output 6,505 토큰이 거의 전부 추론). 멘트 호출은 멘트+추세 통합 1회라
-//    프롬프트가 길어 추론이 더 붇는다. v4-flash는 같은 조건 7.3초.
-//    ⚠️ **폴백이 느리면 폴백이 아니라 또 다른 장애다** — 크레딧이 빈 동안은 전건이 이 경로로 오기 때문이다.
-//    ⚠️ v4-flash가 전사 분석 A/B에서 warnings를 붕괴시킨 건 사실이나 그건 **balanced tier(등록상담·회의록)**
-//    이야기다. 거긴 지금도 v4-pro이고, 여기는 사실 나열형 한 단락이라 급이 다르다.
-export const AI_MODELS: Record<AiTier, Record<AiProvider, string | null>> = {
+// 모델 id의 단일 소스. tier 모델과 운영 콘솔 선택 모델·개발 Codex CLI 모델 모두 이 객체에서만 읽는다.
+// reasoning은 Anthropic 전용(평소 금지 정책)이다.
+export const AI_MODELS = {
   // Haiku 5.5(원장 2026-10-16 *"운영 모델도 5.5로 올려"*) — 4.5의 1/10 값. 5 계열 제약(temperature 400 · 생각 기본 켜짐)은
   // generate.ts `isClaude5Model`이 흡수한다. 구독으로 같은 입력 9건 비교 뒤 적용(추세 날짜·진도 단원 코드 대응 포함).
-  // deepseek = `deepseek-flash`(V4.1-Flash-1017) — 옛 이름 `deepseek-v4-flash`는 딥시크가 "은퇴"로 적고 같은 모델로 돌리는 중이라
-  // (공식 가격표 2026-10-19 · 우리 키 `/models`엔 새 이름만 나온다) 이름을 지우기 전에 옮겼다.
-  fast: { anthropic: "claude-haiku-5-5", deepseek: "deepseek-flash" },
+  fast: { anthropic: "claude-haiku-5-5", openai: "gpt-6-luna" },
   // Sonnet 5.5(원장 2026-10-19 *"소넷 5 -> 소넷 5.5가 출시되었으니 폴백 모델도 버전업"*) — 5와 같은 값($2/$10)·같은 토크나이저.
   // 바뀐 점 중 우리에게 닿는 것: 생각 끄기(`thinking: disabled`)가 400(우리는 thinking을 안 보낸다) · 생각 깊이 기본 high가 다시 맞춰졌다.
-  balanced: { anthropic: "claude-sonnet-5-5", deepseek: "deepseek-v4-pro" },
-  reasoning: { anthropic: "claude-opus-4-7", deepseek: null },
+  balanced: { anthropic: "claude-sonnet-5-5", openai: "gpt-6.1-terra" },
+  reasoning: { anthropic: "claude-opus-4-7", openai: null },
+  tenantChoices: {
+    openaiFast: "gpt-5.6-luna",
+    openaiBalanced: "gpt-5.6-terra",
+  },
+} as const satisfies Record<AiTier, Record<AiProvider, string | null>> & {
+  tenantChoices: { openaiFast: string; openaiBalanced: string };
 };
 
 /**
- * 기능별 키 그룹 — 원장 2026-09-15 *"기능별로 키를 발급받아서 사용량 체크를 하려고"*(video · student_ontology 포함 10그룹).
- * env 이름 = `<회사>_API_KEY_<그룹 대문자>`(예 `ANTHROPIC_API_KEY_MENT` · `DEEPSEEK_API_KEY_MEETING`).
+ * 기능별 키 그룹 — 원장 2026-09-15 *"기능별로 키를 발급받아서 사용량 체크를 하려고"*(assistant · management 포함 12그룹).
+ * env 이름 = `<회사>_API_KEY_<그룹 대문자>`(예 `ANTHROPIC_API_KEY_MENT` · `OPENAI_API_KEY_MEETING`).
  * 옛 `consultations` 버킷과 env 이름이 같게 두어(`ANTHROPIC_API_KEY_CONSULTATIONS`) 이미 있는 키를 그대로 쓴다.
  */
 export type AiKeyGroup =
@@ -115,14 +109,14 @@ export function keyGroupOf(feature?: string | null): AiKeyGroup | null {
 
 const PROVIDER_KEY_ENV: Record<AiProvider, string> = {
   anthropic: "ANTHROPIC_API_KEY",
-  deepseek: "DEEPSEEK_API_KEY",
+  openai: "OPENAI_API_KEY",
 };
 
 /**
  * 실제로 쓸 키의 **env 이름**(없으면 null). 순서 = 기능 그룹 키 → 옛 버킷 키(`consultations`) → 기본 키.
  * 🔴 2026-09-15부터 **Anthropic도 기본 키로 넘어간다.** 예전엔 consultations 키가 없으면 Claude를 통째로
  * 건너뛰었는데(빌링 분리), 그 규칙을 기능 그룹에 그대로 쓰면 원장이 키를 하나씩 넣는 동안 키가 아직 없는
- * 기능이 **조용히 DeepSeek으로 바뀐다**(멘트 품질이 달라진다). 넘어간 호출은 ai_usage_logs.key_name이
+ * 기능이 **조용히 OpenAI로 바뀐다**(모델과 품질이 달라진다). 넘어간 호출은 ai_usage_logs.key_name이
  * 'default'로 남아 빠진 키가 드러난다.
  */
 export function resolveKeyEnv(provider: AiProvider, keyName: AiKeyName, group?: AiKeyGroup | null): string | null {
@@ -150,25 +144,25 @@ export function keyLabelOf(provider: AiProvider, envName: string | null): string
 }
 
 /**
- * env AI_PROVIDER로 기본 provider 선택 — `deepseek`이면 DeepSeek, 그 밖(미설정·옛 값 `upstage` 포함)은 Claude.
- * (2026-10-19 Solar를 빼기 전에는 미설정 = Solar였다 — env가 안 걸리면 운영이 Solar로 돌던 함정이 함께 사라졌다.)
+ * 코드 기본 provider는 언제나 Claude. OpenAI가 먼저 서는 경우는 호출부가 명시했거나
+ * 운영 콘솔에서 그 기능의 ChatGPT 모델을 고른 경우뿐이다.
  */
 export function defaultProvider(): AiProvider {
-  return process.env.AI_PROVIDER === "deepseek" ? "deepseek" : "anthropic";
+  return "anthropic";
 }
 
 export type ResolvedModel = { provider: AiProvider; model: string; keyName: AiKeyName };
 
 /**
- * 폴백 사다리 — **anthropic → deepseek**(원장 2026-08-28 *"anthropic -> deepseek"* · 2026-10-19 *"솔라는 빼버려. 두개면 충분"*).
+ * 폴백 사다리 — **anthropic → openai**(원장 2026-11-12 *"CLAUDE를 메인으로, 폴백은 GPT로"*).
  * 이 배열 순서가 곧 사다리라, 순서를 바꾸면 폴백 대상이 바뀐다.
  */
-const FALLBACK_LADDER: readonly AiProvider[] = ["anthropic", "deepseek"];
+export const FALLBACK_LADDER: readonly AiProvider[] = ["anthropic", "openai"];
 
 /**
- * 후보 provider 순서(reasoning=Anthropic 고정, 그 외 AI_PROVIDER 기본을 맨 앞, 나머지는 폴백, prefer를 최우선).
+ * 후보 provider 순서(reasoning=Anthropic 고정, 그 외 Claude 기본 뒤 OpenAI 폴백, prefer를 최우선).
  * resolveModelChain이 이 순서에서 "모델+키가 실제 있는" 후보만 남기므로, 선호/기본 provider 키가 없어도
- * 다른 provider로 무중단 폴백된다(전사 분석은 prefer:"deepseek" → 키 없으면 anthropic으로).
+ * 다른 provider로 무중단 폴백된다.
  */
 function providerOrder(tier: AiTier, prefer?: AiProvider): AiProvider[] {
   const def = defaultProvider();

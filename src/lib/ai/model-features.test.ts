@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FIXED_MODEL_FEATURES, TENANT_MODEL_FEATURES, modelChoicesFor } from "./model-features";
-import { AI_MODEL_CHOICES, FEATURE_MODELS, choicePin, featurePin, modelFeatureOf } from "./model-pins";
+import { AI_MODEL_CHOICES, FEATURE_MODELS, choicePin, featurePin, modelFeatureOf, openAIProfileFor } from "./model-pins";
 import { AI_MODELS, FEATURE_KEY_GROUP, resolveModelChain } from "./models";
 import { modelDisplayLabel } from "./model-label";
 import { isModelNotFoundError } from "./generate";
@@ -20,6 +20,21 @@ describe("운영 콘솔 'AI 모델' 줄 = AI 기능 전부(가드)", () => {
   });
   it("계약서 스캔 인식은 고를 수 없다(Claude 전용 승인 범위)", () => {
     expect(keys()).not.toContain("staff_contract_pdf_ocr");
+    expect(keys()).not.toContain("staff_contract_pdf");
+    expect(FIXED_MODEL_FEATURES.staff_contract_pdf).toBe("직원 계약서는 Claude 전용 승인 범위입니다.");
+  });
+  it("Claude 전용 긍정 신호 판정은 고를 수 없다", () => {
+    expect(keys()).not.toContain("student_positive_signal");
+    expect(FIXED_MODEL_FEATURES.student_positive_signal).toBeDefined();
+  });
+  it("Claude 전용 호출과 같은 모양의 기능은 모두 고정 목록에 있다", () => {
+    for (const feature of [
+      "lesson_report_rating", "student_consultation_rating", "management_analysis",
+      "staff_contract_pdf", "staff_contract_pdf_ocr", "student_ontology_summary", "student_positive_signal",
+    ]) {
+      expect(FIXED_MODEL_FEATURES[feature], feature).toBeDefined();
+      expect(keys(), feature).not.toContain(feature);
+    }
   });
 });
 const keys = () => TENANT_MODEL_FEATURES.map((f) => f.key);
@@ -29,15 +44,36 @@ describe("고를 수 있는 모델", () => {
     const known = new Set(Object.values(AI_MODELS).flatMap((t) => Object.values(t)).filter(Boolean));
     expect(AI_MODEL_CHOICES.filter((c) => !known.has(c.model))).toEqual([]);
   });
-  it("선생님이 기다리는 기능(멘트)엔 느린 v4-pro를 고를 수 없다(86초 실측)", () => {
-    expect(modelChoicesFor("classnote_ment").map((c) => c.model)).not.toContain("deepseek-v4-pro");
-    expect(modelChoicesFor("english_ment").map((c) => c.model)).not.toContain("deepseek-v4-pro");
-    expect(modelChoicesFor("meeting_analysis").map((c) => c.model)).toContain("deepseek-v4-pro");
+  it("운영 콘솔 선택지는 Claude 둘·ChatGPT 둘", () => {
+    expect(modelChoicesFor("classnote_ment").map((c) => c.model)).toEqual([
+      "claude-haiku-5-5", "claude-sonnet-5-5", "gpt-5.6-luna", "gpt-5.6-terra",
+    ]);
   });
   it("목록 밖의 값은 고정하지 않는다", () => {
     expect(choicePin("gpt-9")).toBeNull();
     expect(choicePin(undefined)).toBeNull();
-    expect(choicePin("deepseek-flash")).toEqual({ provider: "deepseek", model: "deepseek-flash" });
+    expect(choicePin("gpt-5.6-luna")).toEqual({ provider: "openai", model: "gpt-5.6-luna" });
+    expect(choicePin("deepseek-flash")).toBeNull();
+  });
+});
+
+describe("기능별 GPT 폴백 모델·추론 강도", () => {
+  it("대기·분류·심층·번역을 표대로 고른다", () => {
+    expect(openAIProfileFor("classnote_ment", "fast")).toEqual({ model: "gpt-6-luna", reasoningEffort: "low" });
+    expect(openAIProfileFor("parent_attendance_intent", "balanced")).toEqual({ model: "gpt-6-luna", reasoningEffort: "medium" });
+    expect(openAIProfileFor("meeting_analysis", "balanced")).toEqual({ model: "gpt-6.1-terra", reasoningEffort: "high" });
+    expect(openAIProfileFor("notice_translate", "balanced")).toEqual({ model: "gpt-6.1-terra", reasoningEffort: "medium" });
+  });
+
+  it("표에 있는 기능은 호출부가 Claude용으로 넘긴 강도보다 표가 먼저다(업무 비서 medium → 표 low)", () => {
+    expect(openAIProfileFor("dashboard_secretary", "fast", "medium")).toEqual({ model: "gpt-6-luna", reasoningEffort: "low" });
+    expect(openAIProfileFor("classnote_ment", "fast", "minimal")).toEqual({ model: "gpt-6-luna", reasoningEffort: "low" });
+  });
+
+  it("표에 없는 기능은 호출부 강도를 보존하고 minimal은 low로", () => {
+    expect(openAIProfileFor("unlisted_feature", "balanced", "medium")).toEqual({ model: "gpt-6.1-terra", reasoningEffort: "medium" });
+    expect(openAIProfileFor("unlisted_feature", "fast", "minimal")).toEqual({ model: "gpt-6-luna", reasoningEffort: "low" });
+    expect(openAIProfileFor(null, "fast")).toEqual({ model: "gpt-6-luna", reasoningEffort: "medium" });
   });
 });
 
@@ -52,7 +88,7 @@ describe("featurePin — 지점 선택 > 코드 기본 > 없음", () => {
     }
   });
   it("지점이 고르면 그게 먼저 · 이상한 값은 무시하고 코드 기본", () => {
-    expect(featurePin("meeting_analysis", "deepseek-flash")).toEqual({ provider: "deepseek", model: "deepseek-flash" });
+    expect(featurePin("meeting_analysis", "gpt-5.6-terra")).toEqual({ provider: "openai", model: "gpt-5.6-terra" });
     // 5.5로 올리기 전 이름이 남아 있어도 목록 밖 = 코드 기본(2026-10-19)
     expect(featurePin("meeting_analysis", "claude-sonnet-5")).toEqual({ provider: "anthropic", model: "claude-sonnet-5-5" });
     expect(featurePin("meeting_analysis", "없는모델")).toEqual({ provider: "anthropic", model: "claude-sonnet-5-5" });
@@ -67,35 +103,37 @@ describe("featurePin — 지점 선택 > 코드 기본 > 없음", () => {
 describe("resolveModelChain — 고정 모델", () => {
   const envBackup = { ...process.env };
   const setKeys = (keys: Record<string, string | undefined>) => {
-    for (const k of ["ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "AI_PROVIDER"]) delete process.env[k];
+    for (const k of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "AI_PROVIDER"]) delete process.env[k];
     Object.assign(process.env, keys);
   };
   it("고정한 회사가 맨 앞에 그 모델로, 나머지는 평소 사다리", () => {
-    setKeys({ ANTHROPIC_API_KEY: "a", DEEPSEEK_API_KEY: "d", AI_PROVIDER: "anthropic" });
-    const chain = resolveModelChain("balanced", "default", undefined, null, { provider: "deepseek", model: "deepseek-flash" });
-    expect(chain.map((c) => `${c.provider}:${c.model}`)).toEqual(["deepseek:deepseek-flash", "anthropic:claude-sonnet-5-5"]);
+    setKeys({ ANTHROPIC_API_KEY: "a", OPENAI_API_KEY: "d", AI_PROVIDER: "anthropic" });
+    const chain = resolveModelChain("balanced", "default", undefined, null, { provider: "openai", model: "gpt-5.6-terra" });
+    expect(chain.map((c) => `${c.provider}:${c.model}`)).toEqual(["openai:gpt-5.6-terra", "anthropic:claude-sonnet-5-5"]);
     process.env = { ...envBackup };
   });
   it("고정한 회사 키가 없으면 평소 사다리 그대로(기능이 멈추지 않는다)", () => {
     setKeys({ ANTHROPIC_API_KEY: "a", AI_PROVIDER: "anthropic" });
-    const chain = resolveModelChain("balanced", "default", "deepseek", null, { provider: "deepseek", model: "deepseek-flash" });
+    const chain = resolveModelChain("balanced", "default", "openai", null, { provider: "openai", model: "gpt-5.6-terra" });
     expect(chain.map((c) => c.model)).toEqual(["claude-sonnet-5-5"]);
     process.env = { ...envBackup };
   });
   it("reasoning 티어엔 고정을 걸지 않는다", () => {
-    setKeys({ ANTHROPIC_API_KEY: "a", DEEPSEEK_API_KEY: "d" });
-    const chain = resolveModelChain("reasoning", "default", undefined, null, { provider: "deepseek", model: "deepseek-flash" });
+    setKeys({ ANTHROPIC_API_KEY: "a", OPENAI_API_KEY: "d" });
+    const chain = resolveModelChain("reasoning", "default", undefined, null, { provider: "openai", model: "gpt-5.6-terra" });
     expect(chain.map((c) => c.provider)).toEqual(["anthropic"]);
     process.env = { ...envBackup };
   });
-  it("fast 티어 딥시크 = 새 이름 deepseek-flash(옛 이름은 은퇴)", () => {
-    expect(AI_MODELS.fast.deepseek).toBe("deepseek-flash");
+  it("GPT 티어 모델은 단일 레지스트리에 있다", () => {
+    expect(AI_MODELS.fast.openai).toBe("gpt-6-luna");
+    expect(AI_MODELS.balanced.openai).toBe("gpt-6.1-terra");
+    expect(AI_MODELS.reasoning.openai).toBeNull();
   });
 });
 
 describe("isModelNotFoundError — 고정 모델 이름이 없을 때 같은 회사 기본 모델로", () => {
   it("회사별 '모델 없음' 모양", () => {
-    expect(isModelNotFoundError({ status: 400, message: "Model Not Exist" })).toBe(true); // DeepSeek
+    expect(isModelNotFoundError({ status: 400, message: "Model Not Exist" })).toBe(true); // OpenAI
     expect(isModelNotFoundError({ status: 404, message: "not_found_error: model: claude-x" })).toBe(true); // Anthropic
     expect(isModelNotFoundError(new Error('{"code":"model_not_found"}'))).toBe(true);
   });
@@ -108,6 +146,9 @@ describe("isModelNotFoundError — 고정 모델 이름이 없을 때 같은 회
 
 describe("모델 라벨", () => {
   it("새 이름 · 옛 이름 둘 다 원시 id 없이", () => {
+    expect(modelDisplayLabel("gpt-6-luna")).toBe("ChatGPT 6 Luna");
+    expect(modelDisplayLabel("gpt-6.1-terra")).toBe("ChatGPT 6.1 Terra");
+    expect(modelDisplayLabel("gpt-5.6-luna")).toBe("ChatGPT 5.6 Luna");
     expect(modelDisplayLabel("deepseek-flash-2026-10-19")).toBe("DeepSeek V4.1 flash");
     expect(modelDisplayLabel("deepseek-v4-flash")).toBe("DeepSeek v4-flash");
     expect(modelDisplayLabel("deepseek-v4-pro-2026-07-16")).toBe("DeepSeek v4-pro");

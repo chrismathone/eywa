@@ -1688,7 +1688,7 @@ IJW 1교시(16:20) 칸에 가 있었다. 함께 제보된 두 번째 증상 — 
   Anthropic=400 + `credit balance` / DeepSeek=**402** `Insufficient Balance` / OpenAI 호환=429 `insufficient_quota`
   → **상태코드와 문구를 둘 다** 본다. 오탐의 대가는 "다음 provider 한 번 더 시도"뿐이라 넉넉히 잡는다.
 - 사다리를 **anthropic → deepseek → upstage(Solar)** 로 명시(`FALLBACK_LADDER`, 원장 2026-08-28).
-  → 지금 사다리 = **anthropic → deepseek**(Solar는 2026-10-19 뺐다) (2026-11-10 CLAUDE.md 색인에서 옮김)
+  → 지금 사다리 = **anthropic → openai**(Solar 2026-10-19 · DeepSeek 2026-11-12 뺐다 · OpenAI 소진 모양 = 402 또는 429 `insufficient_quota`) (2026-11-10 CLAUDE.md 색인에서 옮김)
 - 마지막 후보까지 막히면 `rethrowAi`가 **한글로** "AI 잔액 소진 … 크레딧을 충전해야 합니다"(429의 "잠시 후
   다시"와 섞으면 관리자가 기다리기만 한다).
 - 폴백 템플릿이 특이사항을 **원문 그대로**(줄 단위, `flatten` 금지 — 나열형이라 ", "로 이으면 뭉개진다) 싣고
@@ -2458,3 +2458,10 @@ ECS 월간 날짜 칸의 button 안에 미루기·당기기 button이 들어 있
 - 고침(s2_0032 · 운영 적용 19:16): 거둔 11개를 `eywa_sync_agent`에 명시로 준다(= 그날 오후까지 이 역할이 갖던 실행권 · PUBLIC 회수는 유지해 비서 역할은 여전히 못 부른다). 19:17:06 첫 재발송 · 19:24 대기 0(38건 · 실패 0).
 - 🔑 PUBLIC 실행권(PUBLIC에 걸린 무엇이든)을 거둘 땐 **anon · authenticated · service_role 밖의 역할**을 센다 — `eywa_sync_agent`(연동 PC) · `student_status_lifecycle`(학생 상태 함수 소유자 — authenticated 구성원 **상속**으로 실행권을 얻는다 · 상속을 끊으면 같은 42501) · `supabase_*` 내부 역할. 확인 순서 = ① 역할별 `has_function_privilege` ② 표 권한 · BYPASSRLS ③ 정책 → 겉함수 → 속함수 · 호출자 트리거 · 보기 · 기본값 사슬 ④ SET ROLE이 되는 역할만 explain(postgres는 `supabase_privileged_role` 말고는 `supabase_*` 역할로 SET ROLE 할 수 없다). 같은 계열 세 번째 — 0406a(겉함수 실행권) · 2026-10-10 메이크에듀 수납 42501(`receipt-relink-definer.test.ts`) · 이번.
 - ⚠️ 남은 구멍: ① 이 11개 중 하나를 나중에 DROP하고 다시 만들면 명시 실행권(이 역할 · anon 등)과 PUBLIC 회수가 함께 사라진다 — 다시 만드는 SQL은 실행권을 다시 적을 것(가드 없음). ② 연동 PC가 멈춰도 따로 알림이 없다 — 발송 큐 화면의 '워커 오프라인'은 누가 보고 있어야 안다(이번엔 1시간 40분 동안 아무도 몰랐다).
+
+## #157 정적 import한 `spawn`·`execFile`에 **실행 중에 정해지는 명령**을 넘기면 Turbopack이 프로젝트 전체를 서버 함수에 싣는다 — 배포만 실패한다 (2026-11-12)
+- **증상**: 로컬 `pnpm build`는 종료 0인데 Vercel 배포가 `The Vercel Function "enrollment" is 254.12mb uncompressed which exceeds the maximum uncompressed size limit of 250mb`로 실패(운영은 직전 배포 그대로). 빌드 로그에 `Turbopack build encountered 1 warnings: ./next.config.ts · Encountered unexpected file in NFT list` 한 줄이 먼저 떠 있었다.
+- **원인**: 개발 전용 Codex CLI 실행(`src/lib/ai/dev-cli.ts`)이 `spawn(invocation.command, …)`·`execFile(invocation.command, …)`로 명령을 변수로 넘겼다. Turbopack은 child_process 호출 인자를 파일 참조로 분석해, 값을 모르면 **프로젝트 전체**(`next.config.ts`·docs·src 전부)를 그 경로의 추적 목록에 넣는다 — video-review cron 하나가 9,304파일. 같은 파일의 `"claude"`처럼 **고정 글자** 명령은 괜찮았다. `join(/* turbopackIgnore: true */ …)`를 읽기 경로에 다는 것으로는 안 사라졌다(원인이 파일 읽기가 아니었다).
+- **고침**: 개발 전용 경로라 실행할 때만 `process.getBuiltinModule("node:child_process")`로 꺼낸다(`devChildProcess()`) → 경고 사라짐 · 같은 경로 2,103파일 · 전 경로 362개 중 `next.config.ts` 포함 0.
+- 🔑 **판별**: 빌드 로그의 `Encountered unexpected file in NFT list`는 **경고지만 배포 실패의 예고**다 — 보이면 push 전에 고칠 것. 확인 = `.next/server/**/*.nft.json`에 `next.config.ts`가 들어간 경로가 0인지. 로컬 빌드는 함수 크기 한도를 안 본다.
+- ⚠️ 배포 확인은 초록색이 아니라 `gh api …/commits/<sha>/status`([[#85]]) — 이번엔 실패가 거기서 바로 보였다.

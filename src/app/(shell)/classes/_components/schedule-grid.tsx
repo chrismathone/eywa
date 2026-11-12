@@ -166,6 +166,10 @@ export function ScheduleGrid({
   // 자리(LAB·JJ)면 그 이름 그대로 — users에 없으니 이름 조회는 실패한다(셀이 빈 채로 보임).
   const teacherNameOf = (id: string | null | undefined) =>
     id ? (parseSeatValue(id) ?? teacherOptions.find((t) => t.id === id)?.name ?? null) : null;
+  const visibleTeacherValue = (key: string) => {
+    const value = slotTeacher[key] ?? "";
+    return !allowSeats && parseSeatValue(value) ? "" : value;
+  };
   const homeTeacherName = teacherNameOf(teacherId);
   const classroomNameOf = (id: string | null | undefined) =>
     id ? (classroomOptions.find((c) => c.id === id)?.name ?? null) : null;
@@ -329,7 +333,7 @@ export function ScheduleGrid({
                   {days.map((d) => {
                     const k = cellKey(d.key, p.id);
                     const on = activeSet.has(k);
-                    const override = slotTeacher[k];
+                    const override = visibleTeacherValue(k);
                     const eff = override ? teacherNameOf(override) : homeTeacherName;
                     const fill = on ? cellFill(k) : null;
                     return (
@@ -455,7 +459,7 @@ export function ScheduleGrid({
                 </span>
                 <SearchableSelect
                   className="w-40"
-                  value={slotTeacher[r.key] ?? ""}
+                  value={visibleTeacherValue(r.key)}
                   onValueChange={(v) => setTeacher(r.key, v)}
                   options={teacherSelectOptions}
                   ariaLabel={`${DAY_LABEL[r.day]} ${r.name} 강사`}

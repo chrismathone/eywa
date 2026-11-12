@@ -121,6 +121,7 @@ export async function extractContractFromPdf(
         ].join("\n"),
         maxTokens: OCR_MAX_TOKENS,
         provider: "anthropic",
+        allowedProviders: ["anthropic"],
         document: { mediaType: "application/pdf", dataBase64: Buffer.from(buf).toString("base64") },
         meta: { feature: "staff_contract_pdf_ocr", tenantId: gate.user.tenantId },
       });
@@ -163,6 +164,8 @@ export async function extractContractFromPdf(
         body.slice(0, TEXT_LIMIT),
       ].join("\n"),
       maxTokens: 900, // 구조 필드 포함 짧은 JSON — 넉넉하되 절단(#89)이 안 나는 선.
+      provider: "anthropic",
+      allowedProviders: ["anthropic"],
       meta: { feature: "staff_contract_pdf", tenantId: gate.user.tenantId },
     });
     raw = out.data ?? {};
