@@ -183,8 +183,9 @@ export async function isClassnoteSendEnabled(sql, tenant) {
  * 꺼져 있으면 데몬은 이 학원의 ClassNote 일(발송·공지·회수·동기화·피드·읽음)을 **전부** 건너뛴다.
  */
 export async function isClassnoteModuleEnabled(sql, tenant) {
-  const [row] = await sql`select data from tenant_settings where tenant_id=${tenant}`;
-  return isRawModuleEnabled(row?.data, "classnote");
+  const [row] = await sql`select data->'preset' as preset, data->'modules' as modules
+    from tenant_settings where tenant_id=${tenant}`;
+  return isRawModuleEnabled(row, "classnote");
 }
 
 /**
