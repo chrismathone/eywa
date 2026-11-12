@@ -17,3 +17,12 @@ export const DEFAULT_ASSISTANT_LEVEL: AssistantLevel = "normal";
 export function isAssistantLevel(v: unknown): v is AssistantLevel {
   return typeof v === "string" && (ASSISTANT_LEVELS as readonly string[]).includes(v);
 }
+
+/**
+ * 답이 끝난 뒤 '추론 강도를 올려 다시 묻기'를 권할 강도 — **적음**으로 받은 답에만(원장 2026-11-12 *"추론 강도를 낮은 단계로 했을때 답변이
+ * 모두 나왔을때, 마음에 들지 않으면 추론 강도를 올려서 다시 물어보시겠습니까? 라고 할것"*). 보통은 기본값이라 매번 권하지 않는다.
+ * 돌려주는 값 = 올려 물을 수 있는 강도(낮은 것부터).
+ */
+export function raiseLevelsFor(level: AssistantLevel): AssistantLevel[] {
+  return level === "low" ? ASSISTANT_LEVELS.filter((l) => l !== "low") : [];
+}
