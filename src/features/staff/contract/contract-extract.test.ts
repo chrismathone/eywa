@@ -109,6 +109,11 @@ describe("maskResidentRegNo", () => {
       expect(maskResidentRegNo(`900101 ${separator} 1234567`), separator).toBe("900101-*******");
     }
   });
+  it("대시로 이은 꼴은 앞뒤에 숫자가 붙어 있어도 종전처럼 늘 가린다(덜 가리면 사고 — 리뷰 2026-11-12)", () => {
+    expect(maskResidentRegNo("1900101-1234567")).toBe("1900101-*******");
+    expect(maskResidentRegNo("900101-12345678")).toBe("900101-*******8");
+    expect(maskResidentRegNo("|900101 — 1234567|")).toBe("|900101-*******|");
+  });
   it("앞뒤 숫자에 붙은 13자리 일부를 잘못 가리지 않는다", () => {
     expect(maskResidentRegNo("19001011234567")).toBe("19001011234567");
     expect(maskResidentRegNo("90010112345678")).toBe("90010112345678");

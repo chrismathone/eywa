@@ -103,9 +103,11 @@ export function isEmptyExtract(e: ContractExtract): boolean {
 export function maskResidentRegNo(text: string): string {
   const digit = "[0-9０-９]";
   const gap = "[\\s\\u00A0\\u200B-\\u200D]*";
-  const separator = `(?:[-–—‐‑−~.－]${gap})?`;
-  const pattern = new RegExp(`(?<!${digit})(${digit}{6})${gap}${separator}${digit}{7}(?!${digit})`, "g");
-  return String(text ?? "").replace(pattern, "$1-*******");
+  // ① 대시로 이은 꼴은 앞뒤에 숫자가 붙어 있어도 **늘** 가린다(종전 규칙 — OCR이 표 테두리·옆 숫자를 붙여 읽은 글자도 덜 가리면 사고).
+  const dashed = new RegExp(`(${digit}{6})${gap}[-–—‐‑−－]${gap}${digit}{7}`, "g");
+  // ② 붙여 쓴 13자리·물결·점으로 이은 꼴은 다른 긴 숫자(계좌·금액 범위·소수)를 자르지 않게 앞뒤가 숫자가 아닐 때만.
+  const loose = new RegExp(`(?<!${digit})(${digit}{6})${gap}(?:[~.]${gap})?${digit}{7}(?!${digit})`, "g");
+  return String(text ?? "").replace(dashed, "$1-*******").replace(loose, "$1-*******");
 }
 
 // ── 구조화 조건(원장 지시 2026-08-03: "정규직·알바·프리랜서별로 다르게, 우다다 인용 금지") ──────

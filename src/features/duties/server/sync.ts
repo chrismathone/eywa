@@ -84,6 +84,19 @@ export async function syncDailyDuties(tenantId: string, date: string, settings: 
     if (error) throw new Error(`의무 장부 정리(발송 → 작성): ${error.message}`);
   }
   const written = await writeDrafts(tenantId, drafts, { rekey: true, cyclesOf: Object.fromEntries(DAILY_KINDS.map((k) => [k, [date]])), reown: opts.reown });
+  // 반대 방향도 같은 원칙 — 발송을 끄기 전에 이미 끝났거나 미이행으로 확정된 발송 의무가 있는 열쇠는 그 줄이 그 회차의 한 업무다.
+  // 새로 선 작성 의무를 함께 세면 한 보고서가 두 번 잡히고(완료 2건), 확정된 미이행이 작성 완료로 덮인다(리뷰 2026-11-12).
+  for (let i = 0; i < writeKeys.length; i += 100) {
+    const { data: settled, error: settledErr } = await admin.from("duty_items").select("subject_key")
+      .eq("tenant_id", tenantId).eq("kind", "report_send").eq("cycle", date).in("subject_key", writeKeys.slice(i, i + 100))
+      .or("status.eq.done,void_reason.eq.expired");
+    if (settledErr) throw new Error(`의무 장부 정리(끝난 발송 확인): ${settledErr.message}`);
+    const settledKeys = [...new Set((settled ?? []).map((r) => r.subject_key as string))];
+    if (!settledKeys.length) continue;
+    const { error } = await admin.from("duty_items").update({ status: "void", void_reason: "merged", task_id: null, updated_at: new Date().toISOString() })
+      .eq("tenant_id", tenantId).eq("kind", "report_write").eq("cycle", date).in("subject_key", settledKeys).or("status.neq.void,void_reason.eq.expired");
+    if (error) throw new Error(`의무 장부 정리(끝난 발송 → 작성 합침): ${error.message}`);
+  }
   // 보고서는 발송까지가 한 업무가 됐다(2026-11-10) — 같은 열쇠의 발송 의무가 선 날에 남은 옛 작성 의무(끝난 것 · 미이행 확정 포함)는 집계에서 뺀다.
   // (맞춤의 회차 정리는 열린 것만 지워서, 이미 끝난 작성 의무가 발송 의무와 함께 두 번 세졌다.)
   const sendKeys = [...new Set(drafts.filter((d) => d.kind === "report_send").map((d) => d.subjectKey))];
