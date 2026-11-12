@@ -1,40 +1,40 @@
-.lp { --flag-lime:#ddfc68; --flag-ink:#182012; }
-.lp .nav { height:90px; background:var(--flag-lime); border-color:rgba(24,32,18,.12); backdrop-filter:none; }
+.lp { --flag-accent:#ffd25b; --flag-ink:#1f1b14; }
+.lp .nav { height:90px; background:var(--flag-accent); border-color:rgba(31,27,20,.12); backdrop-filter:none; }
 .lp .nav .in { width:min(1460px,86%); }
 .lp .nav .wm { color:var(--flag-ink); font-size:22px; }
 .lp .nav nav a { color:var(--flag-ink); }
-.lp .nav .btn { border-radius:0; background:var(--flag-ink); color:var(--flag-lime); }
-.lp .flag-hero { position:relative; min-height:calc(100vh - 90px); overflow:hidden; background:var(--flag-lime); color:var(--flag-ink); }
+.lp .nav .btn { border-radius:0; background:var(--flag-ink); color:var(--flag-accent); }
+.lp .flag-hero { position:relative; min-height:calc(100vh - 90px); overflow:hidden; background:var(--flag-accent); color:var(--flag-ink); }
 .lp .flag-hero-art { object-fit:cover; object-position:center; }
-.lp .flag-hero-shade { position:absolute; inset:0; background:linear-gradient(90deg,rgba(221,252,104,.94),rgba(221,252,104,.66) 46%,rgba(221,252,104,.08)); }
+.lp .flag-hero-shade { position:absolute; inset:0; background:linear-gradient(90deg,rgba(255,210,91,.94),rgba(255,210,91,.66) 46%,rgba(255,210,91,.08)); }
 .lp .flag-hero-content { position:relative; z-index:2; width:min(1460px,86%); margin:auto; padding-top:clamp(36px,7vh,80px); }
 .lp .flag-overline { font-size:13px; letter-spacing:.08em; font-weight:700; }
 .lp .flag-hero h1 { font-size:clamp(80px,8.9vw,170px); line-height:1.09; font-weight:900; letter-spacing:-.08em; margin:48px 0 32px; }
 /* 가변 글꼴에 외곽선만 씌우면 획이 겹치는 안쪽 선이 드러난다 → 선을 먼저 긋고 같은 색 면으로 덮는다(바깥 2px만 남음). */
-.lp .flag-hero h1 span { color:var(--flag-lime); -webkit-text-stroke:4px var(--flag-ink); paint-order:stroke fill; }
+.lp .flag-hero h1 span { color:var(--flag-accent); -webkit-text-stroke:4px var(--flag-ink); paint-order:stroke fill; }
 .lp .flag-lead { font-size:clamp(16px,1.15vw,20px); line-height:1.9; }
 .lp .flag-hero-actions { display:flex; align-items:center; gap:26px; margin-top:28px; }
-.lp .flag-button { display:inline-flex; align-items:center; justify-content:center; min-height:56px; padding:0 24px; background:var(--flag-ink); color:var(--flag-lime); font-weight:800; }
+.lp .flag-button { display:inline-flex; align-items:center; justify-content:center; min-height:56px; padding:0 24px; background:var(--flag-ink); color:var(--flag-accent); font-weight:800; }
 .lp .flag-login { color:var(--flag-ink); font-weight:700; border-bottom:1px solid currentColor; padding:8px 0; }
 .lp .demo-caption { font-size:14px; line-height:1.5; color:var(--ink2); }
 .lp .light .demo-caption { color:rgba(255,255,255,.75); }
 .lp .strip-caption { margin-bottom:18px; }
 .lp .flag-hero-preview { position:absolute; z-index:2; right:7%; bottom:40px; width:min(40%,760px); }
-.lp .flag-art-note { position:absolute; right:2%; bottom:12px; font-size:11px; color:#4b5635; }
+.lp .flag-art-note { position:absolute; right:2%; bottom:12px; font-size:11px; color:#5c513b; }
 /* 화면 예시 = 똑바로 세운 액자(기울기·큰 번짐 그림자 없음) + 잉크 테두리와 짧은 단단한 그림자 */
-.lp .flag-screen { background:white; color:#253348; border:1.5px solid var(--flag-ink); overflow:hidden; box-shadow:8px 8px 0 rgba(24,32,18,.16); }
-.lp .flag-screen-head { min-height:42px; display:flex; align-items:center; gap:14px; padding:9px 16px; font-size:14px; border-bottom:1px solid rgba(24,32,18,.14); }
-.lp .flag-screen-head span { font-size:12px; color:#6b7563; margin-left:auto; }
+.lp .flag-screen { background:white; color:#253348; border:1.5px solid var(--flag-ink); overflow:hidden; box-shadow:8px 8px 0 rgba(31,27,20,.16); }
+.lp .flag-screen-head { min-height:42px; display:flex; align-items:center; gap:14px; padding:9px 16px; font-size:14px; border-bottom:1px solid rgba(31,27,20,.14); }
+.lp .flag-screen-head span { font-size:12px; color:#6d6556; margin-left:auto; }
 .lp .flag-screen img { display:block; width:100%; height:auto; }
-.lp .flag-marquee { background:var(--flag-lime); border-top:1px solid rgba(24,32,18,.16); border-bottom:1px solid rgba(24,32,18,.16); display:flex; gap:4vw; justify-content:center; align-items:center; padding:25px; overflow:hidden; white-space:nowrap; font-size:18px; font-weight:800; color:var(--flag-ink); }
+.lp .flag-marquee { background:var(--flag-accent); border-top:1px solid rgba(31,27,20,.16); border-bottom:1px solid rgba(31,27,20,.16); display:flex; gap:4vw; justify-content:center; align-items:center; padding:25px; overflow:hidden; white-space:nowrap; font-size:18px; font-weight:800; color:var(--flag-ink); }
 .lp .flag-marquee i { font-style:normal; opacity:.35; }
-.lp .flag-story { background:var(--flag-lime); color:var(--flag-ink); padding:120px 12%; }
+.lp .flag-story { background:var(--flag-accent); color:var(--flag-ink); padding:120px 12%; }
 .lp .flag-story p { font-size:clamp(34px,4vw,72px); font-weight:800; line-height:1.35; letter-spacing:-.05em; }
 .lp .flag-story span { display:block; margin-top:42px; font-size:16px; }
 .lp .flag-showroom { --showroom-offset:0%; --showroom-bar:0%; height:300vh; }
 .lp .flag-showroom-sticky { position:sticky; top:0; height:100vh; overflow:hidden; }
 .lp .flag-track { display:flex; height:100%; width:300%; transform:translateX(var(--showroom-offset)); }
-.lp .flag-slide { flex:0 0 33.333333%; display:flex; flex-direction:column; justify-content:space-between; padding:90px 7vw 58px; color:#24332c; background:#f6f7f2; }
+.lp .flag-slide { flex:0 0 33.333333%; display:flex; flex-direction:column; justify-content:space-between; padding:90px 7vw 58px; color:#2a2419; background:#f8f6f0; }
 .lp .flag-slide-1 { background:#d9d1f4; color:#44345e; }
 .lp .flag-slide-2 { background:#f4be8c; color:#4d3524; }
 .lp .flag-slide-top,.lp .flag-slide-bottom { display:flex; justify-content:space-between; font-size:14px; }
@@ -50,7 +50,7 @@
 .lp .flag-slide-1 .flag-screen img { aspect-ratio:1380/975; object-fit:cover; object-position:top; }
 .lp .flag-product-copy > p:first-child { font-size:15px; font-weight:700; }
 .lp .flag-wm { display:flex; align-items:baseline; font-size:clamp(56px,5.6vw,104px); font-weight:900; line-height:1; letter-spacing:-.075em; margin:24px 0; white-space:nowrap; }
-.lp .wm-aywa i { display:inline-block; width:.2em; height:.2em; margin-left:.07em; background:var(--flag-lime); box-shadow:inset 0 0 0 .035em var(--flag-ink); }
+.lp .wm-aywa i { display:inline-block; width:.2em; height:.2em; margin-left:.07em; background:var(--flag-accent); box-shadow:inset 0 0 0 .035em var(--flag-ink); }
 .lp .wm-deputy span { font-size:.6em; letter-spacing:-.02em; margin-left:.1em; padding:.05em .14em .09em; background:#2c2340; color:#d9d1f4; }
 .lp .wm-srs span { font-weight:300; letter-spacing:.02em; margin-left:.06em; }
 .lp .flag-product-copy > p { font-size:18px; line-height:1.8; max-width:32rem; }
@@ -64,7 +64,7 @@
 .lp:not(.js) .flag-track { display:block; width:auto; height:auto; transform:none; }
 .lp:not(.js) .flag-slide { min-height:80vh; }
 .lp:not(.js) .flag-progress { display:none; }
-.lp .flag-compare { background:#f6f7f2; color:#24332c; display:grid; grid-template-columns:.75fr 1.25fr; align-items:center; gap:7vw; padding:120px 7vw; }
+.lp .flag-compare { background:#f8f6f0; color:#2a2419; display:grid; grid-template-columns:.75fr 1.25fr; align-items:center; gap:7vw; padding:120px 7vw; }
 .lp .flag-compare-copy > p:first-child { font-size:15px; font-weight:700; }
 .lp .flag-compare-copy h2 { font-size:clamp(46px,4vw,72px); font-weight:700; line-height:1.2; letter-spacing:-.06em; margin:26px 0; }
 .lp .flag-compare-copy > p:last-child { color:#69756a; line-height:1.8; }

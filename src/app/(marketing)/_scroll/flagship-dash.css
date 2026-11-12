@@ -6,7 +6,7 @@
 .lp .dmk-head{display:flex;justify-content:space-between;align-items:flex-end}
 .lp .dmk-head b{display:block;font-size:3cqw;font-weight:800;letter-spacing:-.045em}
 .lp .dmk-fresh{display:inline-flex;align-items:center;gap:.6cqw;font-size:1.5cqw;font-weight:700;color:var(--k-ink2)}
-.lp .dmk-fresh i{width:.8cqw;height:.8cqw;border-radius:50%;background:#3f8f5f}
+.lp .dmk-fresh i{width:.8cqw;height:.8cqw;border-radius:50%;background:#f0b429}
 .lp .dmk-switch{display:flex;width:max-content;border:1px solid var(--k-line);border-radius:.8cqw;overflow:hidden;background:#fff}
 .lp .dmk-switch span{padding:.8cqw 1.8cqw;font-size:1.55cqw;font-weight:750;color:var(--k-ink2)}
 .lp .dmk-switch span+span{border-left:1px solid var(--k-line)}
