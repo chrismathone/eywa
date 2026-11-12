@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { EyIcon } from "@/components/icons/aywa-icons";
+import { tipProps } from "@/components/hover-tip/tip";
 import { SYSTEM_ROLES, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
 import type { PermissionRow, PermissionRowGroup } from "@/features/owner/permission-rows";
 import { ACCESS_CLS, ACCESS_LABEL, isCellLocked, ROLE_LABEL } from "./permission-ui";
@@ -53,6 +55,8 @@ export function RoleMatrixTable({ groups, matrix, savedMatrix, onCycle, rowHeade
   /** 머리 줄 첫 칸 이름 — 연결 앱 권한 표는 '앱'(줄이 메뉴가 아니다). */
   rowHeader?: string;
 }) {
+  // 터치·키보드로 펼친 설명(한 번에 한 줄) — 마우스는 카드로 본다.
+  const [openNote, setOpenNote] = useState<MenuKey | null>(null);
   const headRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   // 본문을 가로로 밀면 머리 줄도 같은 만큼 민다(스크롤 이벤트는 위로 번지지 않아 잡는 단계에서 듣는다).
@@ -71,17 +75,34 @@ export function RoleMatrixTable({ groups, matrix, savedMatrix, onCycle, rowHeade
   const row = (item: PermissionRow, group: PermissionRowGroup, tab: boolean, top: boolean) => (
     <tr key={item.menu} className={top ? undefined : "border-border border-t"}>
       <td className={`bg-card sticky left-0 z-10 py-1.5 pr-3 ${tab ? "pl-3" : item.inner ? "pl-9" : "pl-6"} ${EDGE}`}>
-        <span className="flex min-w-0 items-baseline gap-1.5">
+        {/* 다른 역할에 열기 전에 알아야 할 것(permission-row-notes.ts ROW_NOTE)은 줄 아래에 펼쳐 두지 않고 **마우스를 올리면 카드**로 — 펼쳐 두니
+            줄 높이가 너무 커졌다(원장 2026-11-12 *"권한에서 상세 설명 제거하고 마우스 오버시 상세 설명 나오게"*). 이름 옆 ⓘ는 단추다 —
+            터치·키보드(카드는 마우스에만 뜬다)는 눌러서 그 줄 아래에 펼친다(적대 리뷰: 급여·계좌 같은 위험 문구를 폰에서 볼 길이 없었다). */}
+        <span className="flex min-w-0 items-baseline gap-1.5" {...(item.note ? tipProps({ title: item.label, lines: [item.note], wide: true }) : {})}>
           {item.inner ? <span aria-hidden className="text-text-faint">└</span> : null}
-          <span className={`truncate ${tab ? "font-bold" : "font-medium"}`} title={item.label}>{item.label}</span>
+          {/* 잘린 같은 이름을 펼치는 title — 설명 카드가 있는 줄엔 달지 않는다(회색 상자가 카드와 겹친다). */}
+          <span className={`truncate ${tab ? "font-bold" : "font-medium"}`} title={item.note ? undefined : item.label}>{item.label}</span>
+          {item.note ? (
+            <button
+              type="button"
+              aria-expanded={openNote === item.menu}
+              aria-controls={openNote === item.menu ? `perm-note-${item.menu}` : undefined}
+              aria-label={`‘${item.label}’ 설명 ${openNote === item.menu ? "접기" : "보기"}`}
+              onClick={() => setOpenNote((cur) => (cur === item.menu ? null : item.menu))}
+              className="text-text-faint hover:text-foreground focus-visible:ring-primary/40 -my-1 flex size-6 shrink-0 items-center justify-center self-center rounded focus-visible:ring-2"
+            >
+              <EyIcon name="info" size={14} />
+            </button>
+          ) : null}
           {item.hiddenInMenu || (tab && group.hiddenInMenu) ? <span className="text-text-dim shrink-0">관리자뷰에서 감춤</span> : null}
         </span>
+        {item.note && openNote === item.menu ? (
+          <span id={`perm-note-${item.menu}`} className="text-text-dim mt-0.5 block leading-snug font-normal">{item.note}</span>
+        ) : null}
         {item.covers.length > 0 ? (
           // 메뉴 구성에서 이름을 바꾼 화면의 바뀐 이름(그 밖엔 비어 있다 — 줄은 탭 이름 한 줄 · 원장 2026-11-05). 자르지 않고 접어 적는다.
           <span className="text-text-dim block leading-snug">{item.covers.join(" · ")}</span>
         ) : null}
-        {/* 다른 역할에 열기 전에 알아야 할 것(학원 비서가 읽는 범위 · 조직·OKR·업무 작성센터의 전체/담당 · 잠긴 칸의 까닭 — permission-row-notes.ts ROW_NOTE). 자르지 않고 접어 적는다. */}
-        {item.note ? <span className="text-text-dim mt-0.5 block leading-snug font-normal">{item.note}</span> : null}
       </td>
       {SYSTEM_ROLES.map((role) => {
         const access = matrix[item.menu][role];
