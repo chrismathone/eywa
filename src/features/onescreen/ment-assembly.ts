@@ -1,6 +1,7 @@
 import { commentBody, commentP1Body, commentP2Body, type ReportCommentInput } from "./report-comment";
 import { commentStyleDirective, type PromptSection } from "./prompt-defaults";
 import { findImpossibleScaleSpans, findTrendContradictions, findTrendViolations, trendBody, type TrendInput } from "./trend-comment";
+import { stripMentLeaks } from "./ment-leak";
 
 /**
  * 자동작성 프롬프트 조립 · 응답 읽기 — **운영 자동작성(`generateReportComment`)과 AI 멘트 탭 미리보기가 같은 함수**를 쓴다.
@@ -73,6 +74,8 @@ export type MentResponse = {
   violations: string[];
   /** 추세를 맡겼는데 모델이 **비워 보냈다**(본문과 같은 말뿐 · 오늘 값과 어긋남). 키가 아예 없으면 false(대체 provider가 계약을 빠뜨림). */
   quietByModel: boolean;
+  /** 혼잣말·찌꺼기로 걸려 뺀 문장(`ment-leak.ts`) — 운영 로그로만. */
+  leaks: string[];
 };
 
 /**
@@ -84,21 +87,36 @@ export function readMentResponse(
   data: Record<string, unknown>,
   mode: "A" | "B",
   trendInput: Pick<TrendInput, "streakEnded"> | null,
+  /** 선생님이 직접 적어 글에 들어갈 수 있는 말 — 이 말이 든 문장은 혼잣말 검사로 빼지 않는다. */
+  keep: readonly string[] = [],
 ): MentResponse {
-  const pick = (k: string) => (typeof data[k] === "string" ? (data[k] as string) : "").trim();
+  const leaks: string[] = [];
+  // 🔴 학부모 글에 AI 혼잣말·지시 되받기·형식 찌꺼기가 실리지 않게 — 걸린 문장은 통째로 뺀다(원장 2026-11-12, `ment-leak.ts`).
+  const pick = (k: string) => {
+    const raw = (typeof data[k] === "string" ? (data[k] as string) : "").trim();
+    const { text, dropped } = stripMentLeaks(raw, keep);
+    leaks.push(...dropped);
+    return text;
+  };
   const comment = mode === "B" ? [pick("p1"), pick("p2")].filter(Boolean).join("\n\n") : pick("comment");
   const hasTrend = !!trendInput;
+  // 🔴 모델이 쓴 추세가 혼잣말 검사로 **다 빠졌으면** 버린 것으로 센다 — 비운 채 넘기면 화면이 지난 자동작성 추세를 그대로 둬 발송된다.
+  const written = hasTrend && typeof data.trend === "string" ? data.trend.trim() : "";
   const rawTrend = hasTrend ? pick("trend") || undefined : undefined;
   const badSpans = rawTrend ? findImpossibleScaleSpans(rawTrend) : [];
   const violations = rawTrend ? [...findTrendViolations(rawTrend), ...(trendInput ? findTrendContradictions(trendInput, rawTrend) : [])] : [];
+  // 미리보기에 그대로 보이는 한글 라벨(영문 코드 금지) — 무엇이 걸렸는지는 '모델이 쓴 글'(검사 전 원문)로 본다.
+  if (written && !rawTrend) violations.push("지시를 되받은 문장");
   const dropped = badSpans.length > 0 || violations.length > 0;
   return {
     comment,
-    rawTrend,
+    // 모델이 쓴 추세 그대로(검사 전) — 미리보기가 '모델이 쓴 글'로 보인다.
+    rawTrend: written || undefined,
     trend: dropped ? undefined : rawTrend,
     dropped,
     badSpans,
     violations,
     quietByModel: hasTrend && typeof data.trend === "string" && !data.trend.trim(),
+    leaks,
   };
 }

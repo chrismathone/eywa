@@ -17,6 +17,7 @@ import { skipStatusOf } from "./progress-status";
 import { asProgressMode } from "./progress-mode";
 import { asVariety, pickVariant, type Variety } from "./ment-variants";
 import { NO_HABITS, type TeacherHabits } from "./teacher-habits";
+import { hasMentLeak } from "./ment-leak";
 
 /**
  * 이 학생·과목 행이 새 수학 보고서 대상인가 — **수학 전원**(원장 2026-10-26 *"수학보고서 디자인 전체로 반영"* → *"지금 바로 전원"*).
@@ -492,7 +493,10 @@ export function understandingBandText(score: number): string {
   return "어려워함";
 }
 
-/** 모델이 규칙을 어기고 남긴 문장 — 점수 숫자 · 규칙에 대한 혼잣말("금지 표현이니 제외하고 다시 쓰겠습니다"). */
+/**
+ * 모델이 규칙을 어기고 남긴 문장 — 점수 숫자 · 규칙에 대한 혼잣말("금지 표현이니 제외하고 다시 쓰겠습니다"). 지시 되받기("…말은 쓰지
+ * 않겠습니다" — 2026-11-12 실례)는 모든 AI 멘트가 같이 쓰는 관문(`ment-leak.ts` `hasMentLeak`)이 잡는다 — 여기는 이 항목만의 숫자 규칙.
+ */
 const LEAK = /\d+\s*점|만점|점수|금지 표현|다시 쓰|제외하고|규칙을|지침을|지침에/;
 
 /**
@@ -529,11 +533,15 @@ export function cleanPilotUnderstanding(
   const memo = (opts?.memo ?? "").trim();
   // 메모에 선생님이 적은 점수(예 '월말고사 92점')는 새는 숫자가 아니다 — 걸린 글자가 모두 메모에 그대로 있으면 둔다.
   const leaks = (sen: string) => {
+    // 혼잣말·지시 되받기·찌꺼기(공용 관문 `ment-leak.ts`) — 선생님 메모에 있는 말이 든 문장은 남긴다.
+    if (hasMentLeak(sen, memo ? [memo] : [])) return true;
     if (!memo) return LEAK.test(sen);
     const hits = sen.match(new RegExp(LEAK.source, "g")) ?? [];
     return hits.some((h) => !memo.includes(h));
   };
+  // 모델이 줄바꿈을 글자(역슬래시 + n)로 남기는 때가 있다(2026-11-12 실례 "…않겠습니다.\n" 글자 그대로) — 띄어쓰기로 접는다.
   const out = text
+    .replace(/\\r\\n|\\n|\\t|\\r/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .split(/(?<=[.!?])\s+/)

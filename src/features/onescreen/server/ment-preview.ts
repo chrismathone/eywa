@@ -181,7 +181,8 @@ export async function runMentPreview(
     meta: { feature: "ment_prompt_preview", tenantId },
     ...MENT_AI_TUNING,
   });
-  const res = readMentResponse(data, mode, trendInput);
+  // 운영(actions.ts generateReportComment)과 같은 검사 — 선생님 특이사항·공지는 혼잣말 검사에서 지킨다.
+  const res = readMentResponse(data, mode, trendInput, [safeInput.specialNote, safeInput.classNotice].filter((x): x is string => !!x));
   return {
     ok: true,
     output: formatMentPreview({
