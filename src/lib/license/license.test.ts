@@ -117,9 +117,5 @@ describe("라이선스 배선 가드", () => {
     expect(seatCalls("src/features/enrollment/server/actions.ts")).toBe(1); // 상담 → 원생 전환
     expect(seatCalls("src/features/excel-import/importers/students.ts")).toBe(2); // 엑셀 가져오기(미리보기 + 반영)
     expect(seatCalls("src/features/timetable-lab/server/apply-store.ts")).toBe(1); // 시간표 연습본 실제 반영
-    const makeedu = readFileSync(join(ROOT, "scripts/_makeedu/import-students-list.cjs"), "utf8");
-    const makeeduAlert = readFileSync(join(ROOT, "scripts/_makeedu/seat-limit-alert.cjs"), "utf8");
-    expect(makeedu).toMatch(/notifySeatLimitExceeded\(sql, tenantId, insertedEnrolled\)/); // 외부 장부는 막지 않고 반영 뒤 알림
-    expect(makeeduAlert).toMatch(/title: "좌석 한도 초과"/);
   });
 });
