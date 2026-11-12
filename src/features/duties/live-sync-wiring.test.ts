@@ -114,4 +114,13 @@ describe("업무 완성도 — 저장 즉시 반영 배선", () => {
     expect(code).toContain("' — 미처리 7일 이상 · 미처리 확정 '");
     expect(code).not.toMatch(/'[^'\n]*(기한 초과|미이행)[^'\n]*'/);
   });
+  it("🔴 발송을 끈 날 = 한 보고서 한 업무 — 이미 끝났거나 미처리 확정된 발송 의무가 있는 열쇠의 새 작성 의무는 merged로 닫는다(작성 → 발송과 대칭 · 검토 2026-11-12)", () => {
+    const sync = read("src/features/duties/server/sync.ts");
+    const write = sync.indexOf("await writeDrafts(tenantId, drafts");
+    const settled = sync.indexOf('.or("status.eq.done,void_reason.eq.expired")');
+    expect(settled).toBeGreaterThan(write);
+    const block = sync.slice(settled, sync.indexOf("의무 장부 정리(끝난 발송 → 작성 합침)"));
+    expect(block).toContain('.eq("kind", "report_write").eq("cycle", date).in("subject_key", settledKeys)');
+    expect(block).toContain('void_reason: "merged"');
+  });
 });

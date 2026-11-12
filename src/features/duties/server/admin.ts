@@ -24,8 +24,10 @@ import type { AbsentRow, ClassInfo, Counts, DutyAdminData, DutyAdminScope, LateI
  * 과목 범위 = 운영실과 같은 판정(`loadViewerBundle` — 원장·총괄 = 전체 · 과목 관리자 = 담당 과목 묶음). 담당 과목을 못 읽으면 넓히지 않고 빈 범위.
  */
 export async function resolveDutyAdminScope(viewer: CurrentUser): Promise<DutyAdminScope> {
-  const [bundle, settings, level, erased, effective, unverified] = await Promise.all([loadViewerBundle(viewer), getTenantSettings(), accessLevelTenant(viewer.systemRole, "duties"), readonlyViewErasedScope("duties"), getCurrentUser({ teacherView: true }),
-    Promise.all([isReadonlyTeacherView(), viewAsTeacher()]).then(([ro, as]) => ro && !as)]);
+  const [bundle, settings, level, erased, effective, unverified, reportsLevel, ratingsOpen] = await Promise.all([loadViewerBundle(viewer), getTenantSettings(), accessLevelTenant(viewer.systemRole, "duties"), readonlyViewErasedScope("duties"), getCurrentUser({ teacherView: true }),
+    Promise.all([isReadonlyTeacherView(), viewAsTeacher()]).then(([ro, as]) => ro && !as),
+    // 평점 문의 재료 둘도 같은 묶음에서(B4 — 관리자 GET마다 직렬 왕복이 붙지 않게 · 검토 2026-11-12).
+    accessLevelTenant(viewer.systemRole, "lesson_reports"), canViewReportRatings(viewer.tenantId, viewer.systemRole)]);
   const labels = subjectLabelRecord(settings.operations.subjects);
   const newcomerShown = isModuleEnabled(settings.modules.disabled, "newcomers");
   // '담당'(scoped) 권한 = 본인 의무만 — 역할 표에서 선생님·매니저에게 '담당'으로 열면 자기 줄만 본다(전체는 학원 전체).
@@ -38,9 +40,7 @@ export async function resolveDutyAdminScope(viewer: CurrentUser): Promise<DutyAd
   //   🔴 '담당' 권한은 안 된다 — 수업보고서 목록에서 담당 권한자는 자기 보고서의 평점만 보는데(RLS), 여기서는 모든 선생님의 평균 · 등수가 나간다(리뷰 2026-11-11).
   //   코드 표시 스위치·지점 report_rating·쓰기 권한 중 하나라도 꺼지면 내려보내지 않는다(목록과 같은 단일 문).
   //   🔴 공용 문(`canViewReportRatings`)은 '담당'도 통과시키므로(목록은 RLS가 본인 것만 준다) 여기서는 '전체'를 따로 더 요구한다.
-  const seeRatings = !ownerId
-    && (await accessLevelTenant(viewer.systemRole, "lesson_reports")) === "full"
-    && await canViewReportRatings(viewer.tenantId, viewer.systemRole);
+  const seeRatings = !ownerId && reportsLevel === "full" && ratingsOpen;
   if (!bundle.subjectScoped) return { subjects: null, labels, ownerId, newcomerShown, canNote, seeRatings };
   // 담당 과목은 자유 글자일 수 있다(키·라벨·'EiE'…) — 운영실과 같은 읽기(`sliceGroupsOf`)로 묶음을 읽고, 그 묶음에 드는 설정 과목 키를 전부 허용한다.
   const programs = programSubjectsOf(labels);
@@ -118,7 +118,9 @@ export async function loadDutyAdmin(tenantId: string, from: string, to: string, 
     // 영상 숙제 출제 · 회수(참고 열 · s2_0094) — 기간 = 숙제일.
     loadVideoHomeworkRows(tenantId, args.p_from, to, scope),
   ]);
-  const cls = scope.newcomerShown === false ? await withoutNewcomerClassCounts(args, clsRaw) : clsRaw;
+  // 신규생 의무는 건별(case) 기간이라, 고른 기간에 case가 없으면(하루 · 한 주 보기) 뺄 몫이 없다 — RPC를 부르지 않는다(검토 2026-11-12).
+  const caseInView = !periods || periods.includes("case");
+  const cls = scope.newcomerShown === false && caseInView ? await withoutNewcomerClassCounts(args, clsRaw) : clsRaw;
   const liveMs = settings.liveFrom ? Date.parse(settings.liveFrom) : null;
   const notes = await loadLatestNotes(tenantId, lateRaw.map((it) => it.id));
   const late = lateRaw.filter((it) => scope.newcomerShown !== false || it.kind !== "newcomer_call")

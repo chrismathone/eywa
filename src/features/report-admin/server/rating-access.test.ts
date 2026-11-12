@@ -64,7 +64,9 @@ describe("평점 공통 문 배선", () => {
 
   it("업무 완성도는 공통 문 위에 수업보고서 '전체' 권한을 더 요구한다(공통 문의 쓰기 권한은 '담당'도 참 — 모든 선생님의 평균·등수 노출 방지)", () => {
     const duties = read("src/features/duties/server/admin.ts");
-    const gate = duties.slice(duties.indexOf("const seeRatings"), duties.indexOf("canViewReportRatings(viewer.tenantId"));
-    expect(gate).toMatch(/accessLevelTenant\(viewer\.systemRole, "lesson_reports"\)\) === "full"/);
+    // 수업보고서 권한 단계는 같은 Promise.all에서 읽고(B4), 평점 문은 그 값이 'full'일 때만 연다.
+    expect(duties).toMatch(/reportsLevel, ratingsOpen\] = await Promise\.all\(/);
+    expect(duties).toContain('accessLevelTenant(viewer.systemRole, "lesson_reports"), canViewReportRatings(viewer.tenantId, viewer.systemRole)]');
+    expect(duties).toContain('const seeRatings = !ownerId && reportsLevel === "full" && ratingsOpen;');
   });
 });
