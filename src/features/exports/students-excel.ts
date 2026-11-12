@@ -1,4 +1,5 @@
 import "server-only";
+import { phoneLabel } from "@/lib/format/phone";
 import ExcelJS from "exceljs";
 import type { StudentListRow } from "@/features/students/server/queries";
 
@@ -45,7 +46,7 @@ export async function buildStudentsWorkbook(
       status: STATUS_LABEL[s.status] ?? s.status,
       subjects: s.subjects.map((sub) => subjectLabelOf(sub)).join(", "),
       teacher: s.teacherNames.length > 0 ? s.teacherNames.join(", ") : "—",
-      parentPhone: s.parentPhone ?? "—",
+      parentPhone: phoneLabel(s.parentPhone) ?? "—",
       enrolledAt: s.enrolledAt ?? "—",
     });
   }

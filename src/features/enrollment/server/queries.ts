@@ -7,6 +7,7 @@ import { kstMonth, kstMonthStartIso, kstYear, shiftMonth } from "@/lib/date-kst"
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
+import { phoneLabel } from "@/lib/format/phone";
 import type { ExtractedConsultationForm } from "../form-fill";
 import type { IntakeChecklist } from "../intake-checklist";
 import type { PrepBriefRecord } from "../prep-brief";
@@ -339,7 +340,7 @@ export async function getEnrollmentConsultations(
       prospectName: c.prospect_name,
       prospectGrade: c.prospect_grade,
       prospectSchool: c.prospect_school,
-      parentPhone: c.parent_phone,
+      parentPhone: phoneLabel(c.parent_phone),
       parentRequest: c.parent_request,
       consultantName: consultant?.display_name ?? null,
       counselorText: (c as { counselor?: string | null }).counselor?.trim() || null,
@@ -452,7 +453,7 @@ export async function getEnrollmentConsultationsPage(
         prospectName: c.prospect_name,
         prospectGrade: c.prospect_grade,
         prospectSchool: c.prospect_school,
-        parentPhone: c.parent_phone,
+        parentPhone: phoneLabel(c.parent_phone),
         parentRequest: c.parent_request,
         consultantName: consultant?.display_name ?? null,
         counselorText: (c as { counselor?: string | null }).counselor?.trim() || null,
@@ -739,7 +740,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     prospectGrade: c.prospect_grade,
     prospectSchool: c.prospect_school,
     parentName: c.parent_name,
-    parentPhone: c.parent_phone,
+    parentPhone: phoneLabel(c.parent_phone),
     parentRequest: c.parent_request,
     learningHistory: c.learning_history as LearningHistory | null,
     consultantName: consultant?.display_name ?? null,
@@ -806,8 +807,8 @@ function mapFullFields(c: Record<string, unknown>, assignedClassCount: number): 
     gender: s(c.gender),
     bloodType: s(c.blood_type),
     birthDate: s(c.birth_date),
-    studentPhone: s(c.student_phone),
-    homePhone: s(c.home_phone),
+    studentPhone: phoneLabel(s(c.student_phone)),
+    homePhone: phoneLabel(s(c.home_phone)),
     parentRelation: s(c.parent_relation),
     address: s(c.address),
     zipCode: s(c.zip_code),

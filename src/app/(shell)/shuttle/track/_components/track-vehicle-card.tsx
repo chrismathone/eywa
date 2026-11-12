@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { phoneLabel } from "@/lib/format/phone";
 import { Pill } from "@/components/atoms/pill";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
 import { runTitle } from "@/features/shuttle/types";
@@ -48,7 +49,7 @@ export function TrackVehicleCard({
                 href={`tel:${vehicle.driverPhone}`}
                 className="text-primary ml-1 font-bold underline"
               >
-                {vehicle.driverPhone}
+                {phoneLabel(vehicle.driverPhone)}
               </a>
             )}
           </span>

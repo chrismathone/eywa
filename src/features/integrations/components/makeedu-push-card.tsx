@@ -11,6 +11,7 @@ import type { UnpushedIntakeConsultation } from "@/features/integrations/server/
 import { isPushInFlight } from "@/features/integrations/push-eligibility";
 import { outcomePill } from "@/features/enrollment/outcome-meta";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
+import { phoneLabel } from "@/lib/format/phone";
 
 /**
  * 역동기화(aywa→makeedu) 카드 — QR 공개접수로 들어온 신규 상담 중 makeedu에 아직 없는 것을
@@ -146,7 +147,7 @@ export function MakeeduPushCard({
                   </td>
                   <td className="text-text-dim px-3 py-2 whitespace-nowrap">
                     {c.parentName ?? "—"}
-                    {c.parentPhone ? <span className="text-text-faint"> · {c.parentPhone}</span> : null}
+                    {c.parentPhone ? <span className="text-text-faint"> · {phoneLabel(c.parentPhone)}</span> : null}
                   </td>
                   <td className="text-text-dim px-3 py-2 whitespace-nowrap">{c.consultationPath ?? "—"}</td>
                   <td className="px-3 py-2 whitespace-nowrap">

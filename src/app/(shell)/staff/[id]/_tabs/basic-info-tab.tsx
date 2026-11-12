@@ -19,6 +19,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { ResumePhotoSlide } from "../_components/resume-photo-slide";
 import { ContractStatus } from "../_components/contract-status";
 import { AccountActions } from "../_components/account-actions";
+import { phoneLabel } from "@/lib/format/phone";
 
 // 기본정보 = 이력서 view(원장 지시 2026-07-28): **구조는 이력서**(인적→계약→학력→경력→자격증→서류),
 // **디자인은 앱**(헤더 달린 카드 구획, 페이지 폭 활용 — 종이 서식 중앙 배치 아님). 수정은 이력서 편집으로.
@@ -111,7 +112,7 @@ export async function BasicInfoTab({
   const c = d?.contract;
   // 연락처·직급·입사일·근무부서·근무형태는 **이력서가 단일 소스**다(원장 지시 2026-08-25 — 근무 설정
   // 폼에서 이 칸들을 뺐다). users 값은 이력서가 아직 없는 직원(임포트분)을 위한 폴백으로만 남는다.
-  const phone = p?.phone || staff.phone || "";
+  const phone = phoneLabel(p?.phone || staff.phone) ?? "";
   const jobTitle = c?.jobTitle || staff.jobTitle || "";
   const department = c?.division || staff.department || "";
   const employmentType = c?.employmentType || staff.employmentType || "";

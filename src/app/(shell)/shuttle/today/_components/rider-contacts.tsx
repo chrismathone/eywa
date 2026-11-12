@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
+import { phoneLabel } from "@/lib/format/phone";
 import type { RiderContact } from "@/features/shuttle/server/rider-contacts";
 
 /**
@@ -20,7 +21,7 @@ function Phone({ label, phone }: { label: string; phone: string | null }) {
       <span className="text-text-dim">{label}</span>
       {phone ? (
         <a href={`tel:${phone.replace(/[^\d+]/g, "")}`} className="num text-primary font-bold underline-offset-2 hover:underline">
-          {phone}
+          {phoneLabel(phone)}
         </a>
       ) : (
         <span className="text-text-faint">—</span>

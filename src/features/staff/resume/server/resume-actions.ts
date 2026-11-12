@@ -28,6 +28,7 @@ import { canViewResume, RESUME_LOCKED_MSG } from "./resume-access";
 import { canSeeStaffMember } from "../../department/server/subject-scope";
 import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
 import { appendResumeToRoster } from "./resume-roster-sheet";
+import { phoneLabel } from "@/lib/format/phone";
 
 // 직원 이력서(웹 작성 폼) 변경 액션 — 게이트 2단: ① 역할(canWriteTenant("staff") = 사무실)
 // ② 대상 이력서 열람 자격(canViewResume — 작성 본인·원장·재인증 토큰). ②가 없으면 화면에선 잠긴
@@ -198,7 +199,7 @@ async function registerStaffFromResume(
   }
   const derivedSubjects = await subjectsForDivision(data.contract.division);
   const profile = {
-    phone: data.personal.phone || null,
+    phone: phoneLabel(data.personal.phone),
     hire_date: data.contract.startDate || null,
     department: data.contract.division || null,
     employment_type: data.contract.employmentType || null,
@@ -384,7 +385,7 @@ export async function saveStaffResume(
       if (differs(data.contract.division, "department")) sync.department = data.contract.division;
       if (differs(data.contract.employmentType, "employment_type")) sync.employment_type = data.contract.employmentType;
       if (differs(data.contract.jobTitle, "job_title")) sync.job_title = data.contract.jobTitle;
-      if (differs(data.personal.phone, "phone")) sync.phone = data.personal.phone;
+      if (differs(phoneLabel(data.personal.phone) ?? "", "phone")) sync.phone = phoneLabel(data.personal.phone);
       if (differs(data.contract.startDate, "hire_date")) sync.hire_date = data.contract.startDate;
       // 담당 과목은 부서에서 파생(별도 입력 없음, 2026-07-29). 부서를 바꾸면 과목도 따라간다.
       // 교과가 아닌 부서(파생 0건)면 손대지 않는다 — 겸임(경영팀이면서 수업)의 수동 지정 보존.

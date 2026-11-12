@@ -1,3 +1,5 @@
+import { phoneLabel } from "@/lib/format/phone";
+
 /**
  * 업체리스트(거래처 연락처) — 순수 규칙. 화면 검색·분류 칩·저장 시 번호 다듬기가 같은 함수를 읽는다.
  *
@@ -64,17 +66,11 @@ export function matchesVendorCategory(row: { category: string | null }, key: str
 }
 
 /**
- * 전화번호 다듬기 — 숫자(와 하이픈·공백·점·괄호)만 있으면 한국 번호 모양으로 하이픈을 넣는다.
+ * 전화번호 다듬기 — 앱 공용 하이픈 표기(`phoneLabel`)와 같은 규칙.
  * 모양을 모르는 길이·다른 글자가 섞인 입력은 **그대로** 돌려준다.
  */
 export function formatPhone(raw: string): string {
-  const s = raw.trim();
-  if (!/^[\d\s\-.()]+$/.test(s)) return s;
-  const d = digits(s);
-  if (/^02\d{7,8}$/.test(d)) return d.length === 9 ? `02-${d.slice(2, 5)}-${d.slice(5)}` : `02-${d.slice(2, 6)}-${d.slice(6)}`;
-  if (/^0\d{2}\d{7,8}$/.test(d)) return d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}` : `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
-  if (/^1\d{7}$/.test(d)) return `${d.slice(0, 4)}-${d.slice(4)}`; // 1588-1234 같은 대표번호
-  return s;
+  return phoneLabel(raw) ?? raw.trim();
 }
 
 /** 사업자등록번호 — 숫자 10자리면 `000-00-00000`, 아니면 그대로. */

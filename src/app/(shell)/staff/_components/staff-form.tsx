@@ -19,6 +19,7 @@ import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
 import { useModuleOn, useSubjectMaps } from "@/features/owner/operations-context";
 import { SUBJECT_SOFT } from "@/features/owner/subjects";
+import { phoneLabel } from "@/lib/format/phone";
 
 type Mode = "create" | "edit";
 
@@ -285,7 +286,7 @@ export function StaffForm({
                 id="phone"
                 name="phone"
                 type="tel"
-                defaultValue={v.phone ?? ""}
+                defaultValue={phoneLabel(v.phone) ?? ""}
                 placeholder="예: 010-1234-5678"
                 className={`${inputClass} num`}
               />

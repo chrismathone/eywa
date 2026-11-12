@@ -31,6 +31,7 @@ import { classnoteModuleOn } from "@/features/owner/classnote-gate";
 import { SlackLinkCard } from "./_components/slack-link-card";
 import { getMySlackState } from "@/features/slack/server/queries";
 import { PAGE_TITLE_SUFFIX } from "@/lib/config/site-metadata";
+import { phoneLabel } from "@/lib/format/phone";
 
 // 탭 제목도 화면 언어를 따른다 — 강사가 창을 여럿 열어 두면 제목이 유일한 구분이다.
 export async function generateMetadata() {
@@ -86,7 +87,7 @@ export default async function MyPage() {
     data.personal.name = me.displayName;
     data.personal.nameEn = me.englishName ?? "";
     data.personal.email = placeholder ? "" : me.email;
-    data.personal.phone = me.phone ?? "";
+    data.personal.phone = phoneLabel(me.phone) ?? "";
     data.contract.startDate = me.hireDate ?? "";
     data.contract.division = me.department ?? "";
     data.contract.employmentType = me.employmentType ?? "";

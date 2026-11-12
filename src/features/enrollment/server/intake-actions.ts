@@ -11,6 +11,7 @@ import { explainDbError } from "@/lib/supabase/db-error";
 import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { canonicalSchoolName } from "@/features/schools/school-name";
+import { phoneLabel } from "@/lib/format/phone";
 import { completeSchoolKind } from "@/features/schools/server/complete-kind";
 import { generatePrepBriefOnIntake } from "@/features/enrollment/server/prep-generate";
 import { logAction, logActionAs } from "@/features/audit/server/log";
@@ -295,9 +296,9 @@ export async function submitPublicIntake(
     ),
     gender,
     blood_type: bloodType,
-    student_phone: clip(formData.get("studentPhone"), 20) || null,
+    student_phone: phoneLabel(clip(formData.get("studentPhone"), 20)),
     parent_name: parentName,
-    parent_phone: parentPhone,
+    parent_phone: phoneLabel(parentPhone),
     parent_relation: parentRelation,
     address: clip(formData.get("address"), 120) || null,
     consultation_path: consultationPath,

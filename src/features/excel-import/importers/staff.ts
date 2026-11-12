@@ -16,6 +16,7 @@ import { isStaffInSubjectScope } from "@/features/staff/department/subject-scope
 import { IMPORT_META } from "../kinds";
 import { duplicateKeyIssues, type ColumnSpec, type ImportPreviewRow, type SheetSpec } from "../spec";
 import type { ImporterDef } from "../server/types";
+import { phoneLabel } from "@/lib/format/phone";
 
 /**
  * 직원 가져오기 — 체크리스트 3번 "직원·계정". 새 직원은 **로그인 계정까지** 만든다(createStaff와 같은 순서:
@@ -126,7 +127,7 @@ const def: ImporterDef<Plan> = {
           subjects: maps.options.map((o) => o.label),
         }),
         rows: visible.map((u) => ({
-          email: u.email ?? "", name: u.display_name ?? "", role: ROLE_LABEL[u.system_role] ?? "", phone: u.phone ?? "",
+          email: u.email ?? "", name: u.display_name ?? "", role: ROLE_LABEL[u.system_role] ?? "", phone: phoneLabel(u.phone) ?? "",
           jobTitle: u.job_title ?? "", department: u.department ?? "", employmentType: u.employment_type ?? "",
           subjects: (u.subjects ?? []).map((k) => maps.labelOf(k)).join(", "), hireDate: u.hire_date?.slice(0, 10) ?? "",
           englishName: u.english_name ?? "", memo: u.memo ?? "",

@@ -32,6 +32,7 @@ import { isLoginEmailTakenElsewhere } from "./login-email-taken";
 import { getActiveAssistSlotClasses } from "./queries";
 import { setStaffLoginBlocked } from "./auth-ban";
 import { cleanupPersonSettings } from "@/features/owner/server/retired-people";
+import { phoneLabel } from "@/lib/format/phone";
 
 /** 직원 저장의 DB 오류 → 이유(+이메일 중복이면 그 칸) + 로그([[#138]]). 보호 트리거(42501·P0001)의 한글 이유는 그대로 보인다. */
 function staffSaveError(error: unknown, scope: string): StaffFormState {
@@ -61,7 +62,7 @@ function readBaseForm(formData: FormData) {
   return {
     displayName: get("displayName"),
     email: get("email"),
-    phone: get("phone") || null,
+    phone: phoneLabel(get("phone")),
     hireDate: get("hireDate") || null,
     jobTitle: get("jobTitle") || null,
     // 영어 닉네임 — 비우면 null(이름을 그대로 쓴다). 영어 시간표 임포트가 시트 라벨을 강사에 붙이는 키.

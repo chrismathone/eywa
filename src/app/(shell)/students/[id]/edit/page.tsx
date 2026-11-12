@@ -9,6 +9,7 @@ import { StudentForm } from "../../_components/student-form";
 import { isModuleEnabled } from "@/lib/modules";
 import { getStudentSiblings } from "@/features/students/server/siblings";
 import { siblingHint } from "@/features/students/siblings";
+import { phoneLabel } from "@/lib/format/phone";
 
 export const metadata = { title: "학생 수정 — 에이와" };
 
@@ -61,14 +62,14 @@ export default async function EditStudentPage({
           zipCode: student.zipCode,
           addressDetail: student.addressDetail,
           email: student.email,
-          studentPhone: student.studentPhone,
-          homePhone: student.homePhone,
-          otherPhone: student.otherPhone,
+          studentPhone: phoneLabel(student.studentPhone),
+          homePhone: phoneLabel(student.homePhone),
+          otherPhone: phoneLabel(student.otherPhone),
           parentName: student.parentName,
-          parentPhone: student.parentPhone,
+          parentPhone: phoneLabel(student.parentPhone),
           parentRelation: student.parentRelation,
           parent2Name: student.parent2Name,
-          parent2Phone: student.parent2Phone,
+          parent2Phone: phoneLabel(student.parent2Phone),
           parent2Relation: student.parent2Relation,
           status: student.status,
           enrolledAt: student.enrolledAt,

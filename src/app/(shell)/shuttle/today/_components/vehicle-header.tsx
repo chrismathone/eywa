@@ -1,6 +1,7 @@
 "use client";
 
 import { progressState, type Progress, type VehicleGroup } from "@/features/shuttle/today/today-board";
+import { phoneLabel } from "@/lib/format/phone";
 
 /**
  * 호차 머리 — 폰에서 **스크롤 중에도 붙어 있다**(sticky). 차가 여럿일 때 "지금 몇 호차를 보는지"를
@@ -30,7 +31,7 @@ export function VehicleHeader({
           기사 {group.driverName}
           {group.driverPhone && (
             <a href={`tel:${group.driverPhone}`} className="text-primary ml-1 font-bold underline">
-              {group.driverPhone}
+              {phoneLabel(group.driverPhone)}
             </a>
           )}
         </span>

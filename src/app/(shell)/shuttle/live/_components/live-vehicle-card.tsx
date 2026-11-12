@@ -1,6 +1,7 @@
 "use client";
 
 import { Pill } from "@/components/atoms/pill";
+import { phoneLabel } from "@/lib/format/phone";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
 import { kstTimeOf } from "@/lib/date-kst";
@@ -51,7 +52,7 @@ export function LiveVehicleCard({
             기사 {vehicle.driverName}
             {vehicle.driverPhone && (
               <a href={`tel:${vehicle.driverPhone}`} className="text-primary ml-1 font-bold underline">
-                {vehicle.driverPhone}
+                {phoneLabel(vehicle.driverPhone)}
               </a>
             )}
           </span>

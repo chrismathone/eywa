@@ -61,6 +61,7 @@ import {
   type ResumeActionState,
 } from "@/features/staff/resume/server/resume-actions";
 import { DeleteResumeButton, PrintResumeButton } from "./resume-buttons";
+import { phoneLabel } from "@/lib/format/phone";
 
 // 종이 서식("인재원 이력서") 레이아웃을 재현한 시트 — 읽기(뷰) ↔ 인라인 편집(칸에 바로 타이핑) 한 컴포넌트.
 // 화면·A4 인쇄 공용. "수정"을 누르면 별도 폼으로 넘어가지 않고 이 종이 칸들이 그대로 입력칸이 된다(WYSIWYG).
@@ -701,7 +702,7 @@ export function ResumeSheet({
           </tr>
           <tr>
             <th className={head}><P k="res.f.phone" /></th>
-            <td className={`${cell} num`}>{field("p_phone", p.phone, { ph: "010-0000-0000" })}</td>
+            <td className={`${cell} num`}>{field("p_phone", phoneLabel(p.phone) ?? "", { ph: "010-0000-0000" })}</td>
             <th className={head}>E-mail</th>
             <td className={cell}>
               {field("p_email", p.email, { ph: "email@example.com", type: "email" })}

@@ -71,6 +71,7 @@ import {
 import { EnrolledStatCard } from "./_components/enrolled-stat-card";
 import { SortArrow } from "@/components/sort-arrow";
 import { PAGE_TITLE_SUFFIX } from "@/lib/config/site-metadata";
+import { phoneLabel } from "@/lib/format/phone";
 
 export async function generateMetadata() {
   return { title: `${sheetT(await getTeacherViewLang(), "stu.title")}${PAGE_TITLE_SUFFIX}` };
@@ -668,7 +669,7 @@ export default async function StudentsPage({
                           표 오른쪽 끝에 홀로 매달린다. 열 제목과 같은 축(가운데 — 원장 2026-09-18)에 둔다.
                           ⚠️ `num`(고정폭 숫자)은 남긴다 — 자릿수가 같아야 번호가 위아래로 줄을 이룬다. */}
                       <td className="text-text-dim num whitespace-nowrap" data-empty={s.parentPhone ? undefined : "true"}>
-                        {s.parentPhone ?? "—"}
+                        {phoneLabel(s.parentPhone) ?? "—"}
                       </td>
                     </tr>
                   );

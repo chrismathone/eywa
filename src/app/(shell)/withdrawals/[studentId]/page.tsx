@@ -25,6 +25,7 @@ import { LinkedReportsCard } from "../_components/linked-reports-card";
 import { ReactivateButton } from "../_components/reactivate-button";
 import { WithdrawalReasonCard } from "../_components/reason-card";
 import { ReportDateBadge } from "../_components/report-date-badge";
+import { phoneLabel } from "@/lib/format/phone";
 
 export const metadata = { title: "퇴원 상세 — 에이와" };
 
@@ -80,7 +81,7 @@ export default async function WithdrawalDetailPage({
                 <span>
                   학생{" "}
                   <a href={`tel:${detail.studentPhone}`} className="text-foreground num hover:underline">
-                    {detail.studentPhone}
+                    {phoneLabel(detail.studentPhone)}
                   </a>
                 </span>
               ) : null}
@@ -88,7 +89,7 @@ export default async function WithdrawalDetailPage({
                 <span>
                   · 학부모{detail.parentName ? `(${detail.parentName})` : ""}{" "}
                   <a href={`tel:${detail.parentPhone}`} className="text-foreground num hover:underline">
-                    {detail.parentPhone}
+                    {phoneLabel(detail.parentPhone)}
                   </a>
                 </span>
               ) : null}
