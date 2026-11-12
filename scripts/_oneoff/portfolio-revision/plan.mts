@@ -94,7 +94,9 @@ const numericLeaves = (v: unknown, path: string, top: boolean): string[] => {
   return [];
 };
 const content = (m: unknown) => numericLeaves(m, "", true).sort();
+const s0 = (a: { teacherId: string; month: string }) => storedOf.get(`${a.teacherId}|${a.month}`)!.payload;
 const drifted = (a: Extract<RevisionAction, { kind: "revise" }>, c: string) => {
+  if (c === "churn:newcomer") return false;
   const s = storedOf.get(`${a.teacherId}|${a.month}`)!.payload, b = beforeOf(a.teacherId, a.month)!;
   const si = s.items.find((m) => m.id === c), bi = b.items.find((m) => m.id === c);
   return si || bi ? JSON.stringify(content(si)) !== JSON.stringify(content(bi))
@@ -119,6 +121,7 @@ for (const [id, list] of [...byTeacher].sort((a, b) => (names.get(a[0]) ?? "").l
     if (a.kind === "skip") { lines.push(`- ${a.month} 손대지 않음(${a.reason})`); continue; }
     if (a.kind !== "revise") continue;
     const parts = a.changed.map((c) => {
+      if (c === "churn:newcomer") return `churn 지난달 담당 없음 ${fmtItem(itemOf(s0(a), "churn"))} → 합계 제외`;
       const o = itemOf(s.payload, c), n = itemOf(a.payload, c);
       const mark = drifted(a, c) ? "⚠" : "";
       if (mark) driftCount++;

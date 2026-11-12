@@ -81,6 +81,23 @@ describe("planRevision — 판정이 바꾼 자리만", () => {
   });
 });
 
+describe("새로 맡은 선생님의 퇴원율 = 합계에서 제외(원장 2026-11-11)", () => {
+  it("판정이 안 바뀐 달도 지난달 담당 학생이 없는 퇴원율(0점)을 합계에서 뺀다", () => {
+    const stored = period({ items: [churn(null, 0, 0, 0), report(80, 8)] });
+    expect(stored.total).toBe(8);
+    const [a] = plan([{ teacherId: "t", month: "2026-07", payload: stored }], structuredClone(stored), structuredClone(stored));
+    expect(a!.kind === "revise" && a!.changed).toEqual(["churn:newcomer"]);
+    if (a!.kind !== "revise") return;
+    const c = a.payload.items.find((m) => m.id === "churn") as Metric & { newcomer?: boolean };
+    expect([c.value, c.newcomer]).toEqual([null, true]);
+    expect([a.payload.total, a.payload.knownMax]).toEqual([8, 10]);
+  });
+  it("담당 학생이 있는 퇴원율·이미 표식이 있는 퇴원율은 그대로", () => {
+    const p = period({ items: [churn(5, 20, 1, 16)] });
+    expect(plan([{ teacherId: "t", month: "2026-07", payload: p }], p, structuredClone(p))[0]!.kind).toBe("same");
+  });
+});
+
 describe("outsideTenure", () => {
   const july = { start: "2026-07-01", end: "2026-07-31" };
   it("입사가 그 달 안이면 재직 밖이 아니다", () => {

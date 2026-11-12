@@ -9,6 +9,8 @@
  *   직접 만든 지표(`manual:*`)는 판정과 무관해 늘 그대로.
  * - 위 칸(과목·반·학생 수·본인 기록 수·휴일·날별 통계): before ≠ after면 after · 같으면 저장값.
  * - 합계: 고친 항목으로 다시(`applyEvaluation` 꼬리와 같은 식).
+ * - 규칙(원장 2026-11-11): 지난달 담당 학생이 없는 퇴원율(새로 맡은 선생님)은 0점이 아니라 합계에서 제외 — 판정이 안 바뀐 달에도 얹는다
+ *   (같은 상황이 달마다 다른 점수가 되지 않게 · 10-14 '마감 달 규칙 반영'과 같은 길). 표시는 `changed`의 `churn:newcomer`.
  * - before·after 어느 하나라도 없으면 손대지 않고 알린다(새 판정을 못 보면 활동 여부도 모른다 — 지우지도 않는다).
  * - 그 달 전체가 재직 밖(입사 전 · 퇴사 뒤)이면 줄을 지운다 — 단 새 판정에도 그 사람의 활동(반·학생·본인 보고서)이 남으면
  *   입사일이 틀렸을 수 있어 지우지 않고 알린다(반대 증거가 있으면 손대지 않는다).
@@ -86,6 +88,15 @@ export function planRevision(input: {
       if (!setting) return stored;
       changed.push(stored.id);
       return scoreItem(clone(a), setting);
+    });
+    // 지난달 담당 학생이 없는 퇴원율 = 새로 맡은 선생님 — 합계에서 제외(저장값이든 새 값이든).
+    next.items = next.items.map((m): Metric => {
+      const c = m as Metric & { base?: number; newcomer?: boolean };
+      if (c.id !== "churn" || c.raw !== null || c.base !== 0 || c.newcomer) return m;
+      const setting = config.metrics.churn;
+      if (!setting) return m;
+      if (!changed.includes("churn")) changed.push("churn:newcomer");
+      return scoreItem({ ...clone(c), newcomer: true } as Metric, setting);
     });
     for (const f of REVISABLE_FIELDS) {
       if (same(before[f], after[f])) continue;
