@@ -43,7 +43,7 @@ export const isFeatureLicensed = cache(async (tenantId: string, feature: License
  * 🔴 조회가 실패하면 **꺼짐**(fail-closed) — 위 `isFeatureLicensed`와 반대다. 이 기능들은 멈춰도 원내 업무가 서지 않고
  *    (링크 하나·외부 반출), 잘못 열리면 계약하지 않은 지점의 데이터가 나간다.
  */
-export const isFeatureOptedIn = cache(async (tenantId: string, feature: OptInFeature): Promise<boolean> => {
+async function readFeatureOptedIn(tenantId: string, feature: OptInFeature): Promise<boolean> {
   if (!tenantId) return false;
   try {
     const { data, error } = await createAdminClient()
@@ -61,7 +61,17 @@ export const isFeatureOptedIn = cache(async (tenantId: string, feature: OptInFea
     console.error("[license] 조회 예외 — 꺼짐으로 둔다", feature, e);
     return false;
   }
-});
+}
+
+export const isFeatureOptedIn = cache(readFeatureOptedIn);
+
+/**
+ * 같은 요청 안에서도 DB를 다시 읽는 opt-in 판정. 외부 발송처럼 시작 때의 판정만으로는 부족한 경합 구간에서 쓴다.
+ * 조회 실패는 일반 판정과 같이 꺼짐이다 — 확인하지 못한 상태로 외부에 자료를 보내지 않는다.
+ */
+export async function isFeatureOptedInFresh(tenantId: string, feature: OptInFeature): Promise<boolean> {
+  return readFeatureOptedIn(tenantId, feature);
+}
 
 /**
  * 화면(클라)에 내려 보내는 라이선스 표 — 켜고 끄는 기능 넷 + **창 모드의 '이전 화면 유지'**(`window_keepalive`).

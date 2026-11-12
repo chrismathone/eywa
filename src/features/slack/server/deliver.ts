@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isFeatureOptedInFresh } from "@/lib/license/server";
 import { SLACK_AGGREGATE_THRESHOLD, slackErrorKind } from "../format";
 import { renderAggregate, renderDigest } from "../render";
 import { isQuietAt, nextAwakeAt, type QuietConfig } from "../schedule";
@@ -69,6 +70,8 @@ export async function deliverDue(tenantId: string, token: string, now: Date, dea
 
     for (const p of posts) {
       if (sent >= MAX_POSTS || Date.now() > deadline) break;
+      // drain 시작 때의 요청 캐시를 믿지 않는다. 끄기·만료가 발송 도중 생겼으면 HTTP 요청 직전에 멈춘다.
+      if (!(await isFeatureOptedInFresh(tenantId, "slack"))) return { sent, authError: null };
       const res =
         target.kind === "channel" && target.channelId
           ? await slackPostMessage(token, target.channelId, p.text)
@@ -128,6 +131,12 @@ async function retryOrGiveUp(tenantId: string, rows: Row[], now: Date, code: str
 async function update(tenantId: string, ids: string[], patch: Record<string, unknown>) {
   const admin = createAdminClient();
   for (let i = 0; i < ids.length; i += 100) {
-    await admin.from("slack_outbox").update(patch).eq("tenant_id", tenantId).in("id", ids.slice(i, i + 100));
+    // 끄기·규칙 삭제가 먼저 취소한 줄을 늦은 HTTP 결과가 sent/dead로 되살리지 않는다.
+    await admin
+      .from("slack_outbox")
+      .update(patch)
+      .eq("tenant_id", tenantId)
+      .eq("status", "pending")
+      .in("id", ids.slice(i, i + 100));
   }
 }
