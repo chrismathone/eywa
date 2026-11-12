@@ -473,10 +473,10 @@ async function detectEnrollmentFollowup(admin: SupabaseClient, tenantId: string)
  * ⚠️ injaewon은 현재 성적 0건이라 미발화 — 학원이 성적 입력 시작 시 작동(거짓 알림 0). retention과
  * 동일 180일 창에서 (학생,과목)별 최신 2건 비교. bucket=최신 gradeId라 새 점수 1회만 알린다.
  */
-async function detectGradeDrop(admin: SupabaseClient, tenantId: string): Promise<number> {
+export async function detectGradeDrop(admin: SupabaseClient, tenantId: string): Promise<number> {
   // 성적 기록 알림이 아니라 이탈 방어의 위험 신호다: retention 기준을 재사용하고 확인 화면도 /retention 하나다.
-  // 기능을 끈 지점에는 후보 조회·이벤트 시드·알림을 모두 남기지 않는다.
-  if (!(await isModuleOnForTenant(tenantId, "retention"))) return 0;
+  // 기능을 끈 동안에도 후보를 본 것으로 기록하되 알림은 만들지 않는다. 그래야 다시 켠 첫 실행에 밀린 급락이 쏟아지지 않는다.
+  const retentionOn = await isModuleOnForTenant(tenantId, "retention");
   const today = kstToday();
   const since = new Date(Date.parse(`${today}T00:00:00Z`) - 180 * 86_400_000).toISOString().slice(0, 10);
   const rows = await fetchAllPaged<{
@@ -517,8 +517,8 @@ async function detectGradeDrop(admin: SupabaseClient, tenantId: string): Promise
 
   const candidates = buildGradeDropEvents(gradeRows);
   const cold = await isColdStart(admin, tenantId, "grade_drop");
-  const fresh = (await recordNew(admin, tenantId, "grade_drop", candidates, cold)) as GradeDropEvent[];
-  if (cold || fresh.length === 0) return 0;
+  const fresh = (await recordNew(admin, tenantId, "grade_drop", candidates, cold || !retentionOn)) as GradeDropEvent[];
+  if (!retentionOn || cold || fresh.length === 0) return 0;
 
   const items: NotifyInput[] = [];
   const studentTeachers = await getStudentActiveTeachers(
