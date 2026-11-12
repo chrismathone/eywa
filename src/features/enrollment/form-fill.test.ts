@@ -65,6 +65,10 @@ describe("buildFormPatch — 셔틀 boolean", () => {
       buildFormPatch({ shuttleBusRequest: "true" }, { shuttleBusRequest: true }),
     ).not.toHaveProperty("shuttle_bus_request");
   });
+  it("셔틀 모듈이 꺼지면 추출값을 저장하지 않고, 미지정 호출은 기존처럼 동작한다", () => {
+    expect(buildFormPatch({ shuttleBusRequest: true }, {}, { shuttleOn: false })).not.toHaveProperty("shuttle_bus_request");
+    expect(buildFormPatch({ shuttleBusRequest: true }, {})).toHaveProperty("shuttle_bus_request", true);
+  });
 });
 
 describe("buildFormPatch — learning_history jsonb 병합", () => {

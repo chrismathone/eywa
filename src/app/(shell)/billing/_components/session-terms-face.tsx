@@ -20,6 +20,7 @@ import { SessionPanels } from "./session-panels";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { writeLockedNote } from "@/lib/write-lock";
+import { isModuleEnabled } from "@/lib/modules";
 
 const PAGE_SIZE = 25; // 반(그룹) 단위 페이지
 
@@ -71,6 +72,7 @@ export async function SessionTermsFace({
   // JJ실 줄 재료는 표 조회와 독립이라 나란히 읽는다(B4) — 권한이 없거나 못 읽으면 null(줄만 안 선다).
   const [view, settings, seatShare] = await Promise.all([getSessionTermsView(p, undefined, { lastMonth: true }), getTenantSettings(), loadSeatShareSummary(p)]);
   const subjects = buildSubjectMaps(settings.operations.subjects);
+  const eieOn = isModuleEnabled(settings.modules.disabled, "eie");
 
   const allRows = view.rows.map((r) => ({ ...r, subjectLabel: subjects.labelOf(r.subject) }));
   // 과목·검색·보기 필터(미확정·미배분·몫 조정한 반) = 엑셀과 같은 한 벌(filterSessionTermRows, 감사 N2). 페이저는 검색 결과 기준.
@@ -223,7 +225,7 @@ export async function SessionTermsFace({
           학원 설정 → 수납·청구
         </Link>
         에서 등록·수정할 수 있습니다. 수학·영어는 같은 목록을 쓰며, 같은 금액은 한 번만 표시됩니다.
-        {" "}EiE는 <b>월 금액</b>으로 확정합니다(회차를 곱하지 않음).
+        {eieOn ? <>{" "}EiE는 <b>월 금액</b>으로 확정합니다(회차를 곱하지 않음).</> : null}
         출석 회차가 달라도 월 기준액은 같으며, 설정 변경 전 확정 내역은 해제·재확정 전까지 유지됩니다.
       </FaceNote>
 

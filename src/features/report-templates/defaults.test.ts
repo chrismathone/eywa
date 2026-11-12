@@ -6,12 +6,21 @@ import {
   ENGLISH_TEMPLATE_TOKEN_KEYS,
   TEMPLATE_BODY_MAX,
   TEMPLATE_DECORATION_TOKENS,
+  builtinEnglishTemplates,
   builtinTemplateLabelKey,
 } from "./defaults";
 import { fillReportTemplate, templateTokens } from "./fill";
 import { splitImageSlots } from "./image-slots";
 
 describe("기본 영어 템플릿", () => {
+  it("EiE가 켜지면 기존 목록을 유지하고, 꺼지면 EiE 템플릿만 숨긴다", () => {
+    expect(builtinEnglishTemplates(true)).toEqual(BUILTIN_ENGLISH_TEMPLATES);
+    expect(builtinEnglishTemplates(false).map((template) => template.id)).not.toEqual(
+      expect.arrayContaining(["builtin:eie-daily", "builtin:eie-monthly"]),
+    );
+    expect(builtinEnglishTemplates(false).map((template) => template.id)).toContain("builtin:english-sheet");
+  });
+
   it("쓰는 토큰이 전부 토큰 목록에 있다(모르는 토큰이면 그 줄이 조용히 빠진다)", () => {
     const unknown = templateTokens(BUILTIN_ENGLISH_TEMPLATE.body).filter(
       (t) => !(ENGLISH_TEMPLATE_TOKEN_KEYS as readonly string[]).includes(t),

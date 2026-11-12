@@ -9,7 +9,7 @@ import { kstMonth, kstToday } from "@/lib/date-kst";
 import { getStudentById, getStudentEnrollmentConsultations } from "@/features/students/server/queries";
 import { canSeeStudentEnrollment } from "@/features/students/server/enrollment-gate";
 import { getLiveContext, readSection, unavailableSection } from "@/features/student-contribution/server/live-context";
-import { liveSectionReaders } from "@/features/student-contribution/server/live-query";
+import { liveReadersFor } from "@/features/student-contribution/server/live-query";
 import { getStudentLearningConnections } from "@/features/student-contribution/server/learning-actions";
 import { getStudentCommunicationConnections } from "@/features/student-contribution/server/communication-actions";
 import { getContributionStudent } from "@/features/student-contribution/server/student-query";
@@ -21,6 +21,9 @@ import { studentJourneySection } from "@/features/enrollment/journey/server";
 import { sectionResult, type LiveSection } from "@/features/students/ontology/live-contract";
 import { studentKnowledgeSection } from "@/features/academy-knowledge/server-records";
 import { hubNodeId, studentHubGraph, type HubAnalysis, type HubCoverage } from "../model";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
+import { isFeatureLicensed } from "@/lib/license/server";
 
 const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
 export const hubMonth = (value?: string) => monthSchema.safeParse(value).success ? value! : kstMonth();
@@ -37,23 +40,25 @@ export const getStudentHub = cache(async (studentId: string, requestedMonth?: st
   if (!student) return null;
   const month = hubMonth(requestedMonth), checkedAt = new Date().toISOString(), today = kstToday();
   const base = `/students/${studentId}`;
-  const [contextRead, careRead, contributionRead, summaryRead, billingAllowed, enrollmentAllowed] = await Promise.all([
+  const [contextRead, careRead, contributionRead, summaryRead, billingAllowed, enrollmentAllowed, settings, aiOn] = await Promise.all([
     attempt(() => getLiveContext(studentId)), attempt(() => getStudentCareGraph(studentId)),
     attempt(() => getContributionStudent(studentId, month)), attempt(() => getStudentRecordSummary(studentId)),
-    canAccessTenant(user.systemRole, "billing"), canSeeStudentEnrollment(user.systemRole, studentId),
+    canAccessTenant(user.systemRole, "billing"), canSeeStudentEnrollment(user.systemRole, studentId), getTenantSettings(), isFeatureLicensed(user.tenantId, "ai_analysis"),
   ]);
+  const newcomersOn = isModuleEnabled(settings.modules.disabled, "newcomers");
+  const classnoteOn = isModuleEnabled(settings.modules.disabled, "classnote");
   const context = contextRead.ok ? contextRead.value : null;
   const sections: LiveSection[] = [];
   const coverage: HubCoverage[] = [];
   if (context) {
     const [basic, learning, communication] = await Promise.all([
-      Promise.all(liveSectionReaders.map((r) => readSection(r.key, r.label, base, () => r.read(context)))),
+      Promise.all(liveReadersFor(settings.modules.disabled).map((r) => readSection(r.key, r.label, base, () => r.read(context)))),
       attempt(() => getStudentLearningConnections(studentId)), attempt(() => getStudentCommunicationConnections(studentId)),
     ]);
-    sections.push(...basic);
-    if (learning.ok && learning.value.sections) sections.push(...learning.value.sections);
+    sections.push(...basic.filter((section) => section.state !== "off"));
+    if (learning.ok && learning.value.sections) sections.push(...learning.value.sections.filter((section) => section.state !== "off"));
     else coverage.push({ key: "learning", label: "학습 기록", state: "failed", note: "학습 기록을 불러오지 못했습니다." });
-    if (communication.ok && communication.value.sections) sections.push(...communication.value.sections);
+    if (communication.ok && communication.value.sections) sections.push(...communication.value.sections.filter((section) => section.state !== "off"));
     else coverage.push({ key: "communication", label: "소통 이력", state: "failed", note: "소통 이력을 불러오지 못했습니다." });
   } else coverage.push({ key: "live", label: "원본 기록 통합", state: contextRead.ok ? "forbidden" : "failed", note: "통합 조회 권한 또는 연결 상태를 확인해 주세요. 각 상세 탭에서 허용된 자료를 확인할 수 있습니다." });
 
@@ -79,10 +84,10 @@ export const getStudentHub = cache(async (studentId: string, requestedMonth?: st
       evidence: [{ source: "enrollment_consultations", id: r.id, studentId, href: `${base}?tab=consultations` }],
     })), result.rows.length);
   });
-  const onboarding = readSection("onboardingFeedback", "신입생 적응·담임 피드백", `/newcomers?student=${studentId}`, async () => {
+  const onboarding = newcomersOn ? readSection("onboardingFeedback", "신입생 적응·담임 피드백", `/newcomers?student=${studentId}`, async () => {
     if (!await canAccessTenant(user.systemRole, "newcomers")) return unavailableSection("onboardingFeedback", "신입생 적응·담임 피드백", base, "forbidden");
     return studentOnboardingSection(studentId);
-  });
+  }) : null;
   // 현장 관찰·후속 조치 = academy_knowledge_records(s2_0049 · 2026-11-11) — 업무 작성센터 권한·담당 학생 범위 안에서만(권한 없으면 '열람 제한').
   const fieldObservations = readSection("field-observations", "현장 관찰·후속 조치", `/work-records/knowledge?student=${studentId}`, () => studentKnowledgeSection(studentId));
   // 아직 연결되지 않은 다른 원본은 빈 결과로 위장하지 않는다.
@@ -91,7 +96,7 @@ export const getStudentHub = cache(async (studentId: string, requestedMonth?: st
   // 전화·방문·등록 확인 기록(s2_0063) — 그 학생에게 이어진 상담의 기록만. 권한은 그 기능의 게이트가 본다(없으면 null → '권한 없음').
   const admissionJourney = readSection("admissionJourney", "전화·방문·등록 확인 기록", "/enrollment/visits", async () =>
     await studentJourneySection(studentId) ?? unavailableSection("admissionJourney", "전화·방문·등록 확인 기록", "/enrollment/visits", "forbidden"));
-  sections.push(...await Promise.all([billing, intake, onboarding, fieldObservations, admissionJourney]));
+  sections.push(...await Promise.all([billing, intake, ...(onboarding ? [onboarding] : []), fieldObservations, admissionJourney]));
   const care = careRead.ok && careRead.value.graph ? careRead.value.graph : null;
   const commitments = care?.nodes.filter((n) => n.kind === "commitment") ?? [];
   if (care) sections.push({ ...sectionResult("commitments", "입학 약속·이행", `${base}/care`, commitments.map((n) => ({
@@ -118,25 +123,24 @@ export const getStudentHub = cache(async (studentId: string, requestedMonth?: st
       basis: "rule", generatedAt: checkedAt, href: `${base}/care`, evidence: commitments.map((n) => hubNodeId(user.tenantId, "commitment", n.sourceId)),
       state: careRead.ok && careRead.value.status === "partial" ? "partial" : "ready" });
   }
-  if (student.aiCareSummary) analyses.push({ id: "stored-care", title: "기존 AI 케어 분석", body: student.aiCareSummary,
+  if (aiOn && student.aiCareSummary) analyses.push({ id: "stored-care", title: "기존 AI 케어 분석", body: student.aiCareSummary,
     basis: "ai", generatedAt: student.aiCareGeneratedAt, href: `${base}?tab=overview`, evidence: [], state: "historical" });
   const summary = summaryRead.ok ? summaryRead.value : null;
   if (summary?.state === "ready") for (const item of summary.items) analyses.push({ id: `summary:${item.itemId}`, title: item.title,
     body: item.summary ?? item.excerpt, basis: "ai", generatedAt: summary.generatedAt, href: item.href,
     evidence: sections.flatMap(s => s.items.filter(i => `${s.key}:${i.id}` === item.itemId).flatMap(i => i.evidence.map(e => hubNodeId(user.tenantId, e.source, e.id)))), state: summary.partial ? "partial" : "ready" });
-  if (context && !sections.some(s => s.key === "parentMessages")) coverage.push({ key: "parentMessages", label: "클래스노트 학부모 소통", state: "off", note: "현재 설정에서 학부모 글 연결을 사용하지 않습니다. 전체 메시지가 통합되었다는 뜻은 아닙니다." });
   coverage.push(...sections.map((s) => ({ key: s.key, label: s.label, state: s.state,
     note: s.note ?? (s.total === null ? "전체 건수 확인 전" : `${s.total}건 중 ${s.items.length}건의 연결을 불러왔습니다.`) })),
     { key: "contribution", label: "기여도·설명회·소개 근거", state: selected ? "ready" : contribution ? "pending" : "unavailable", note: selected ? `${month} 근거 ${facts.length}건. 월별 점수 이력과 현재 원본의 시점은 구분합니다.` : "선택한 월의 분석 근거가 없거나 열람할 수 없습니다." },
-    { key: "summary", label: "근거 기반 AI 요약", state: summary?.state ?? "unavailable", note: summary?.state === "ready" ? "현재 권한과 원본을 다시 확인한 저장 요약입니다." : "유효한 저장 요약이 없습니다. 분석이 없는 것을 이상 없음으로 판단하지 않습니다." },
+    ...(aiOn ? [{ key: "summary", label: "근거 기반 AI 요약", state: summary?.state ?? "unavailable", note: summary?.state === "ready" ? "현재 권한과 원본을 다시 확인한 저장 요약입니다." : "유효한 저장 요약이 없습니다. 분석이 없는 것을 이상 없음으로 판단하지 않습니다." } as HubCoverage] : []),
     { key: "external", label: "Google Drive·Notion·카카오톡/Slack", state: "pending", note: "학생별 문서·메시지 연결이 아직 준비되지 않았습니다. 이름이 같다는 이유만으로 자동 연결하지 않습니다." },
     { key: "finance", label: "ECOUNT·학생별 수익 분석", state: "pending", note: "학원 회계자료는 경영 화면에 있습니다. 학생별 원가·이익은 배분 기준과 수강 관계를 연결한 뒤 계산합니다." },
     { key: "risk", label: "통합 이탈·성장 분석", state: "pending", note: "출결·성적·소통·약속·수납을 함께 판단하는 새 분석은 준비 중입니다." });
   const profile = { id: student.id, name: student.name, school: student.school, grade: student.grade, studentCode: student.studentCode,
-    englishName: student.englishName, classnoteName: student.classnoteName, status: student.status,
+    englishName: student.englishName, classnoteName: classnoteOn ? student.classnoteName : null, status: student.status,
     parentName: student.parentName, parentPhone: student.parentPhone, studentPhone: student.studentPhone,
     enrolledAt: student.enrolledAt, withdrawnAt: student.withdrawnAt };
   const graph = studentHubGraph({ tenant: user.tenantId, studentId, name: student.name, profile, checkedAt, month, sections, facts, care, analyses, coverage });
   return { student: profile,
-    month, checkedAt, sections, analyses, coverage, monthly, graph, billingAllowed };
+    month, checkedAt, sections, analyses, coverage, monthly, graph, billingAllowed, classnoteOn };
 });

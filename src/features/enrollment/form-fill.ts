@@ -123,6 +123,8 @@ export function buildFormPatch(
     transcript?: string | null;
     /** 학교명 저장 별칭(학원설정 `operations.schoolSaveAliases`) — 호출부가 그 학원 값을 넘긴다. */
     schoolAliases?: readonly SchoolSaveAlias[];
+    /** 셔틀 모듈이 꺼진 지점은 추출값을 저장하지 않는다. 미지정은 옛 호출부 호환을 위해 켜짐. */
+    shuttleOn?: boolean;
   },
 ): Record<string, unknown> {
   const p: Record<string, unknown> = {};
@@ -201,7 +203,7 @@ export function buildFormPatch(
   fill("non_registration_reason", cur.nonRegistrationReason, clean(ex.nonRegistrationReason));
 
   // 셔틀 — 기본 false라 "비어있음"이 모호. 추출이 명확히 true일 때만 켜고, 절대 끄지 않음.
-  if (asBoolTrue(ex.shuttleBusRequest) && cur.shuttleBusRequest !== true) {
+  if (opts?.shuttleOn !== false && asBoolTrue(ex.shuttleBusRequest) && cur.shuttleBusRequest !== true) {
     p.shuttle_bus_request = true;
   }
 

@@ -169,7 +169,7 @@ export async function getAttendanceCodeStats(): Promise<{ withCode: number; tota
  * 키오스크 페이지용 — 현재 기기 쿠키가 유효한 등록 기기인지 검증하고 학원명을 돌려준다.
  * service_role로 조회(키오스크 페이지는 비로그인이라 RLS 컨텍스트가 없음).
  */
-export async function resolveKioskDevice(): Promise<{ tenantId: string; academyName: string; deviceName: string } | null> {
+export async function resolveKioskDevice(): Promise<{ state: "ready"; tenantId: string; academyName: string; deviceName: string } | { state: "off" } | null> {
   const jar = await cookies();
   const token = jar.get(KIOSK_COOKIE)?.value;
   if (!token) return null;
@@ -186,11 +186,12 @@ export async function resolveKioskDevice(): Promise<{ tenantId: string; academyN
   const settings = await getTenantSettingsByTenantId(device.tenant_id);
   // 출석 키오스크 모듈이 꺼진 학원(새 학원 기본)은 등록된 기기가 남아 있어도 체크인을 받지 않는다(2026-09-22 방향 B).
   // 같은 설정 조회를 쓰므로 추가 왕복 없음 · 침산은 켜져 있어 종전과 같다.
-  if (!isModuleEnabled(settings.modules.disabled, "kiosk")) return null;
-  if (!(await isLaboratoryMenuAvailable(device.tenant_id, "kiosk_settings"))) return null;
+  if (!isModuleEnabled(settings.modules.disabled, "kiosk")) return { state: "off" };
+  if (!(await isLaboratoryMenuAvailable(device.tenant_id, "kiosk_settings"))) return { state: "off" };
   const academyName = settings.profile.name || "학원";
 
   return {
+    state: "ready",
     tenantId: device.tenant_id,
     academyName,
     deviceName: device.name,

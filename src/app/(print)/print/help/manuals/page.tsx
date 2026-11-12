@@ -1,6 +1,6 @@
 import { requireAccess } from "@/lib/auth/require-access";
 import { getShellView } from "@/lib/auth/view-mode";
-import { helpManualOpens } from "@/features/help/access";
+import { helpManualForTenant, helpManualOpens } from "@/features/help/access";
 import { MANUALS } from "@/features/help/manuals";
 import type { HelpGroup, HelpManual } from "@/features/help/types";
 import { kstToday } from "@/lib/date-kst";
@@ -53,7 +53,7 @@ function ManualSection({ manual, number }: { manual: HelpManual; number: number 
 export default async function ManualBundlePage() {
   const [user, view] = await Promise.all([requireAccess("help"), getShellView()]);
   const opens = await Promise.all(MANUALS.map((manual) => helpManualOpens(manual, user.systemRole, view)));
-  const visible = MANUALS.filter((_, index) => opens[index]);
+  const visible = await Promise.all(MANUALS.filter((_, index) => opens[index]).map((manual) => helpManualForTenant(manual, user.tenantId)));
   const groups = [...GROUP_ORDER, ...new Set(visible.map((manual) => manual.group).filter((group) => !GROUP_ORDER.includes(group)))];
   const manuals = groups.flatMap((group) => visible.filter((manual) => manual.group === group));
   const referenceDate = kstToday();

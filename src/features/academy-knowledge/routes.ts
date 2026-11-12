@@ -7,10 +7,17 @@ const RENAMED: Record<string, string> = { "/class-review/knowledge": "/class-rev
 const MISSING = ["/api/"];
 const LIVE = ["/marketing", "/organization/okr", "/dashboard", "/work-records", "/billing", "/students", "/staff", "/classes", "/consultations", "/newcomers", "/withdrawals", "/enrollment", "/timetable", "/student-contribution", "/owner", "/class-review", "/ecs", "/mcs", "/onescreen", "/lesson-reports", "/meetings", "/approvals", "/documents"];
 
-export function liveHref(href: string | undefined | null): string | null {
+export type KnowledgeRouteSwitches = Partial<Record<"approvals" | "class_review" | "classnote" | "ecs" | "mcs" | "newcomers", boolean>>;
+const MODULE_PATHS: readonly [keyof KnowledgeRouteSwitches, string][] = [
+  ["approvals", "/approvals"], ["class_review", "/class-review"], ["classnote", "/lesson-reports"],
+  ["ecs", "/ecs"], ["mcs", "/mcs"], ["newcomers", "/newcomers"],
+];
+
+export function liveHref(href: string | undefined | null, switches: KnowledgeRouteSwitches = {}): string | null {
   if (!href) return null;
   if (href.startsWith("#")) return href;
   const path = href.split(/[?#]/)[0]!;
+  if (MODULE_PATHS.some(([module, prefix]) => switches[module] === false && (path === prefix || path.startsWith(`${prefix}/`)))) return null;
   if (RENAMED[path]) return RENAMED[path] + href.slice(path.length);
   if (MISSING.some(p => path === p || path.startsWith(p.endsWith("/") ? p : `${p}/`))) return null;
   return LIVE.some(p => path === p || path.startsWith(`${p}/`)) ? href : null;

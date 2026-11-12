@@ -111,8 +111,8 @@ export function classChips(items: readonly DutyItemView[], now: number): DutyCla
 }
 
 /** 칸을 누르면 가는 곳 — 수학 등 보고서 반은 원스크린의 그 학생 줄, 영어 반 알림장은 ECS 홈. */
-export function dutyHref(it: Pick<DutyItemView, "studentId" | "classId" | "cycle" | "subject">): string {
-  if (!it.studentId) return "/ecs";
+export function dutyHref(it: Pick<DutyItemView, "studentId" | "classId" | "cycle" | "subject">, ecsOn = true): string | null {
+  if (!it.studentId) return ecsOn ? "/ecs" : null;
   const q = new URLSearchParams({ date: it.cycle });
   if (it.classId) q.set("class", it.classId);
   q.set("student", it.studentId);

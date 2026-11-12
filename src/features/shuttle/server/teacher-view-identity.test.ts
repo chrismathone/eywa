@@ -15,15 +15,17 @@ const X = { id: "x-teacher", tenantId: "t1", email: "", displayName: "강사X", 
 const m = vi.hoisted(() => ({
   user: vi.fn(), readonly: vi.fn(), readonlyView: vi.fn(), canWrite: vi.fn(), superAdmin: vi.fn(), recordDuty: vi.fn(), viewDuty: vi.fn(),
   userMatrix: vi.fn(), baseMatrix: vi.fn(), redirect: vi.fn((to: string) => { throw new Error(`redirect:${to}`); }),
+  moduleOn: vi.fn(), notFound: vi.fn(() => { throw new Error("not-found"); }),
   rows: {} as Record<string, unknown[]>,
 }));
 vi.mock("react", () => ({ cache: (fn: unknown) => fn }));
-vi.mock("next/navigation", () => ({ redirect: m.redirect }));
+vi.mock("next/navigation", () => ({ redirect: m.redirect, notFound: m.notFound }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: m.user }));
 vi.mock("@/lib/auth/view-as", () => ({ readonlyTeacherViewError: m.readonly, isReadonlyTeacherView: m.readonlyView }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: m.canWrite, getUserPermMatrix: m.userMatrix, getPermMatrix: m.baseMatrix }));
 vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: m.superAdmin }));
 vi.mock("@/lib/auth/teacher-home", () => ({ landingPath: vi.fn(async () => "/onescreen") }));
+vi.mock("@/features/owner/server/modules", () => ({ isModuleOnForTenant: m.moduleOn }));
 vi.mock("./duty", () => ({ hasShuttleRecordDuty: m.recordDuty, getShuttleDuty: m.viewDuty }));
 vi.mock("@/lib/observability/report-error", () => ({ reportError: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({
@@ -56,6 +58,7 @@ beforeEach(() => {
   m.superAdmin.mockResolvedValue(false); // 강사뷰 중에는 운영 계정 우회도 꺼진다(팀장 공통 수정)
   m.recordDuty.mockImplementation(async (id: string) => id === X.id);
   m.viewDuty.mockImplementation(async (id: string) => id === X.id);
+  m.moduleOn.mockResolvedValue(true);
   // 실제 getUserPermMatrix는 A·X 역할 줄을 같은 값으로 덮지만, 여기선 **누구의 줄을 보는지** 가르려고 일부러 다르게 둔다.
   m.userMatrix.mockResolvedValue(shuttleMatrix({ master: "full", teacher: "none" }));
   m.baseMatrix.mockResolvedValue(resolveMatrix([])); // 지점 기본: 강사 셔틀 = 열람(쓰기 없음)
@@ -86,6 +89,13 @@ describe("등하원 기록 자격(canRecordBoarding)", () => {
 });
 
 describe("셔틀 화면 열람(requireShuttleView) — 메뉴 갈래와 토글 갈래 둘 다", () => {
+  it("셔틀 모듈이 꺼지면 권한·담당 여부보다 먼저 없는 주소로 처리한다", async () => {
+    m.moduleOn.mockResolvedValue(false);
+    await expect(requireShuttleView()).rejects.toThrow("not-found");
+    expect(m.userMatrix).not.toHaveBeenCalled();
+    expect(m.viewDuty).not.toHaveBeenCalled();
+  });
+
   it("메뉴 갈래: 대상 X 역할 줄이 셔틀을 열면 토글을 묻지 않고 X를 돌려준다", async () => {
     m.userMatrix.mockResolvedValue(shuttleMatrix({ master: "none", teacher: "readonly" }));
     expect(await requireShuttleView()).toEqual(X);
