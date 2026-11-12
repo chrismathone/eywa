@@ -51,7 +51,7 @@ export const GENERIC_SETTINGS: TenantSettings = {
     privacyTerms: GENERIC_PRIVACY_TERMS,
     serviceTerms: "",
   },
-  consultations: { templates: DEFAULT_SETTINGS.consultations.templates.map((t) => ({ ...t })) },
+  consultations: { templates: DEFAULT_SETTINGS.consultations.templates.map((t) => ({ ...t })), briefFacts: { ...DEFAULT_SETTINGS.consultations.briefFacts } },
   report: { ...DEFAULT_SETTINGS.report },
   permissions: { overrides: [], userOverrides: [], specialAccess: { payslipViewerIds: [], payslipManagerIds: [], leaveAdjusterIds: [], classSplitterIds: [], enrollmentDateEditorIds: [], studentStatusManagerIds: [], staffTaskMonitorIds: [], vendorViewerIds: [], jjReportManagerIds: [], beforeClassReportIds: [], withdrawalApproverIds: [], withdrawalDeskIds: [], staffSubjectScopes: [] } },
   navigation: { menus: [], teacherMenus: [], groups: [], teacherGroups: [] },

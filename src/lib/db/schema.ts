@@ -664,6 +664,8 @@ export const enrollmentConsultations = pgTable(
     // 생성 백그라운드화(0153b): NULL=대기/완료 · generating · failed. 진행바·watcher 근거.
     prepBriefStatus: text("prep_brief_status"),
     prepBriefError: text("prep_brief_error"),
+    // 생성 작업 시작 시각 — 끝날 때 같은 값일 때만 결과를 쓴다(s2_0068).
+    prepBriefJobAt: timestamp("prep_brief_job_at", { withTimezone: true }),
     // QR 공개접수 출처(0047a)
     fromPublicIntake: boolean("from_public_intake").notNull().default(false),
     intakeTokenId: uuid("intake_token_id").references(() => intakeTokens.id, { onDelete: "set null" }),

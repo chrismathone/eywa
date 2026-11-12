@@ -9,7 +9,7 @@ import { loadChurnSource } from "@/features/teacher-portfolio/server/churn-sourc
 import { isKoreanTeacherName } from "@/features/timetable/lib/teacher-label";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { endedWithExit } from "../reason-key";
-import { SHEET_TEACHER_PREFIX, sheetTeachersFor } from "../sheet-teachers";
+import { SHEET_TEACHER_PREFIX, sheetTeacherName, sheetTeachersFor } from "../sheet-teachers";
 import { loadSheetTeacherIndex } from "./sheet-teachers";
 import { exitHomeroomIds, type HomeroomReport, type HomeroomRow, type HomeroomSlot } from "../exit-homeroom";
 import { withdrawalMonthWindow } from "../window";
@@ -137,7 +137,12 @@ export async function loadExitTeacherJudge(
     },
     sheetTeachersOf: (name, subject, months) => {
       const hit = sheetIndex ? sheetTeachersFor(sheetIndex, { name, subject, months }) : null;
-      return hit ? hit.map((n) => byName.get(n) ?? `${SHEET_TEACHER_PREFIX}${n}`) : null;
+      return hit
+        ? [...new Set(hit.map((raw) => {
+            const n = sheetTeacherName(raw);
+            return byName.get(n) ?? `${SHEET_TEACHER_PREFIX}${n}`;
+          }))]
+        : null;
     },
     homeroomOf: (studentId, subject, date) =>
       exitHomeroomIds({

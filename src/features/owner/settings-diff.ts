@@ -14,6 +14,7 @@
  *  · 비밀·긴 문자열(발신키·시트ID·약관 본문)은 **값 대신 "변경됨"** — 감사로그가 자격증명 사본이 되면 안 된다.
  *  · 최대 `MAX_CHANGES`개까지만 담고 나머지는 `others`로 — metadata가 무한정 커지지 않게.
  */
+import { BRIEF_FACT_TOPICS } from "@/features/enrollment/brief-facts";
 import { MENU_LABEL } from "@/lib/permissions";
 import { TEACHER_NAV_GROUPS } from "@/lib/teacher-navigation";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
@@ -84,6 +85,7 @@ const FIELD_LABELS: Record<string, Record<string, string>> = {
   },
   consultations: {
     templates: "상담 양식",
+    briefFacts: "상담 준비 브리프 운영 안내",
   },
   navigation: {
     // 기본 메뉴 표로 이름을 복원한다. 주소·그룹 식별자를 감사로그 표시 문구에 그대로 싣지 않는다.
@@ -202,6 +204,8 @@ function isFirstSaveOfNewDefault(section: string, key: string, after: unknown): 
   if (section === "operations" && key === "periodStyle") return after === "chinsan" || after === "plain";
   // 학부모 글 답글·공감(2026-10-01) — 옛 행엔 칸이 없다. 다른 칸을 고쳐 저장하며 기본값(끔)이 처음 실리는 것은 변경이 아니다.
   if (section === "report" && key === "classnoteParentReplyMode") return after === "off";
+  // 상담 준비 브리프 운영 안내(2026-11-12) — 옛 행엔 칸이 없다. 양식만 고쳐 저장하며 빈칸 기본값이 처음 실리는 것은 변경이 아니다.
+  if (section === "consultations" && key === "briefFacts") return isObj(after) && Object.values(after).every((v) => v === "");
   return false;
 }
 
@@ -380,6 +384,18 @@ export function diffSettingsSection(section: string, before: unknown, after: unk
         continue;
       }
       changes.push(diffArray(label, b, a));
+      continue;
+    }
+    // 운영 안내는 학부모에게 읽어 주는 원문이라 주제별로 전후를 남긴다(누가 무엇을 무엇으로 바꿨는지 · 적대 리뷰).
+    if (section === "consultations" && key === "briefFacts" && (isObj(a) || isObj(b))) {
+      const before = isObj(b) ? b : {};
+      const after = isObj(a) ? a : {};
+      for (const t of BRIEF_FACT_TOPICS) {
+        if ((before[t.key] ?? "") === (after[t.key] ?? "") || changes.length >= MAX_CHANGES) continue;
+        // 학부모에게 읽어 주는 원문이라 40자로 자르지 않는다(칸 상한 200자 그대로 · 재리뷰).
+        const full = (v: unknown) => (typeof v === "string" && v ? v : "없음");
+        changes.push({ label: `${label} · ${t.label}`, from: full(before[t.key]), to: full(after[t.key]) });
+      }
       continue;
     }
     if (OPAQUE_FIELDS.has(key) || isObj(a) || isObj(b)) {

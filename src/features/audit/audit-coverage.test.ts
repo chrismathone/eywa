@@ -83,7 +83,6 @@ const EXEMPT: Record<string, string> = {
   "src/features/attendance/recap/server/actions.ts#generateRecapSummary": AI_CACHE,
   // 사랑의 한마디 초안 기록(다음 초안이 고친 방식을 배우는 재료) — 강사가 실제로 저장한 보고서는 그쪽에서 남는다(원장 2026-10-29 점검).
   "src/features/onescreen/server/love-note-actions.ts#suggestLoveNote": AI_CACHE,
-  "src/features/enrollment/server/prep-actions.ts#generatePrepBrief": AI_CACHE,
   // 자체 기록
   // 90일 관리: 운영 DB의 audit_onboarding_followup 트리거가 같은 트랜잭션에서
   // 학생·과목·변경된 값·updated_by를 student_onboarding_followup_events에 남긴다.

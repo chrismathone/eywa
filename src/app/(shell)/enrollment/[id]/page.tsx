@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isFeatureLicensed } from "@/lib/license/server";
 import { notFound, redirect } from "next/navigation";
 import {
   AlertCircle, ClipboardCheck, ClipboardList, ExternalLink, Loader2, Mic, Pencil, Printer, Sparkles,
@@ -89,7 +90,7 @@ export default async function EnrollmentDetailPage({
 }) {
   const user = await requireAccess("enrollment");
   const { id } = await params;
-  const [consult, allClasses, settings, siblings, canWrite, canRequestTextbook, referrer, canReadCare] = await Promise.all([
+  const [consult, allClasses, settings, siblings, canWrite, canRequestTextbook, referrer, canReadCare, aiOn] = await Promise.all([
     getEnrollmentConsultationById(id),
     getClassesList({ active: "active" }),
     getTenantSettings(),
@@ -104,6 +105,8 @@ export default async function EnrollmentDetailPage({
     createClient().then((db) => loadConsultationReferrer(db as unknown as SupabaseClient, id)),
     // 상담 약속·인계(2026-11-05 AX 이식) 입구 — 약속 전체를 보는 신규생 관리 권한('전체' · '읽기' — 담당 범위 계정에게는 세우지 않는다 · 판정 한 곳 = scope.ts).
     readsAllNewcomers(),
+    // 브리프 카드는 AI 라이선스가 켜진 지점만(꺼지면 흔적 없이 · 검수 2026-11-11).
+    isFeatureLicensed(user.tenantId, "ai_analysis"),
   ]);
   if (!consult) {
     // 🔴 병합으로 사라진 상담이면 **404 대신 남은 쪽으로 보낸다**(원장 2026-09-01 제보) — 병합
@@ -164,12 +167,14 @@ export default async function EnrollmentDetailPage({
    * 그릴지는 수정 화면과 같은 판정(`showBriefCard` — 지난 건의 실패만 남은 카드는 안 그린다).
    */
   const briefNode =
-    showBriefCard({ hasBrief: !!consult.prepBrief, status: consult.prepBriefStatus, past: pastBrief }) ? (
+    showBriefCard({ hasBrief: !!consult.prepBrief, status: consult.prepBriefStatus, past: pastBrief, aiOn }) ? (
       <PrepBriefSection
         consultationId={id}
         record={consult.prepBrief}
         status={consult.prepBriefStatus}
         errorText={consult.prepBriefError}
+        stalled={consult.prepBriefStalled}
+        jobAt={consult.prepBriefJobAt}
         canWrite={canWrite}
         past={pastBrief}
       />

@@ -44,7 +44,13 @@ export function showBriefCard(input: {
   status: "generating" | "failed" | null;
   /** `detailPanelsFor(...).pastBrief` */
   past: boolean;
+  /**
+   * 지점 AI 라이선스(`ai_analysis`) — 꺼진 지점엔 브리프 카드 자체가 없다("꺼지면 흔적 없이" 2026-09-30 · 검수 2026-11-11:
+   * 예전엔 단추만 숨기고 카드·안내는 남았다). 빠뜨리면 켜진 것으로 본다(호출부 두 곳이 늘 넘긴다).
+   */
+  aiOn?: boolean;
 }): boolean {
+  if (input.aiOn === false) return false;
   return input.hasBrief || input.status === "generating" || !input.past;
 }
 

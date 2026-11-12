@@ -131,7 +131,8 @@ describe("배선 — 상세 화면은 board-stages 단일 소스만 본다", () 
   it("🔴 '다시 작성'(브리프 재생성)은 past가 아닐 때만 — AI 호출은 명시 버튼일 때만이라는 규약", () => {
     const sec = read("prep-brief-section.tsx");
     // 재생성 버튼을 켜는 식은 한 곳(showRegenerate)이고 거기에 `!past`가 들어 있어야 한다.
-    expect(sec).toMatch(/const showRegenerate\s*=\s*canWrite\s*&&\s*!generating\s*&&\s*!past/);
+    // 생성 중엔 숨기되 멈춘 작업(240초 · s2_0068)이면 다시 연다 — `!past`는 언제나.
+    expect(sec).toMatch(/const showRegenerate\s*=\s*canWrite\s*&&\s*!past\s*&&\s*\(!generating\s*\|\|\s*stalled\)/);
     // 그리고 버튼은 **오직 그 값**으로만 렌더된다(canWrite 단독 조건이 남아 있으면 past에서 되살아난다).
     const guards = sec.match(/\{[^{}]*\?\s*<PrepBriefButton/g) ?? [];
     expect(guards.length).toBeGreaterThan(0);

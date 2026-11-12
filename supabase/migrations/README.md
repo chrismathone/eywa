@@ -12,6 +12,10 @@
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
 
+## 2026-11-11 상담 준비 브리프 — 생성 작업 시각 (`s2_0068_prep_brief_job_at.sql` · ✅ 운영 적용 2026-11-11 · 앱보다 먼저 · CLI 직결(node · 한 거래) · 시험 거래(ROLLBACK) 뒤)
+
+브리프 적대적 검수(Claude·Codex 합의)의 운영 결함 둘 — '생성 중'에 멈추면 빠져나갈 길이 없음 · 늦게 끝난 옛 작업이 새 결과를 덮음. `enrollment_consultations.prep_brief_job_at timestamptz` 칸 하나(추가만 · 기존 행 null). 작업을 열 때 시각을 적고 끝날 때 같은 시각일 때만 결과·상태를 쓴다 · 240초가 지나면 새 작업 허용(`prep-stall.ts`). 결정 = [`docs/decisions/students.md`](../../docs/decisions/students.md) 끝. 되돌리기 = `scripts/_oneoff/revert-s2_0068-prep-brief-job-at.sql`(앱을 먼저 되돌린 뒤).
+
 ## 2026-11-11 학원 비서 — 주민번호 가림 (`s2_0067_assistant_mask_resident_no.sql` · ✅ 운영 적용 2026-11-11 · CLI 직결(node · 한 거래) · 시험 거래(ROLLBACK) 뒤 · 사후 확인 통과)
 
 원장 *"주민번호 앞자리 6개 및 뒷자리 1개만 보내. 나머진 됐고"* — s2_0031 가림 칸 표(`assistant_private.masked_columns`)에 두 줄: `academy_documents.form_data`(이력서 `personal.residentId` + 서식 어디든 `######-#######` 꼴) · `payslips.print_payload`(`teacher.residentRegNo` + 같은 꼴) → `891003-1******`. 보기를 바로 다시 만든다. 가림식은 pg_catalog 함수만(실행 계획 검사). 운영 전수 확인: 주민번호 꼴 = 이력서 47건뿐(다른 표의 13자리 일치는 해시·id · 명세서 지표의 긴 소수). 시험 거래: 보기로 본 이력서 = `######-#******` · 남은 꼴 0 · 실행 계획 속 다른 스키마 함수 = `bound_tenant`뿐. 되돌리기 = `scripts/_oneoff/revert-s2_0067-assistant-mask-resident-no.sql`(원장 승인 없이 돌리지 말 것).

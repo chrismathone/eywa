@@ -2,11 +2,12 @@
 
 import type { CSSProperties } from "react";
 import { WindowLink } from "@/components/workspace/window-link";
-import { tipProps } from "@/components/hover-tip/tip";
 import {
-  SMALL_BASE, countsFrom, deltaOf, deltaText, heatMix, rateText, yyMm,
+  SMALL_BASE, deltaOf, deltaText, heatMix, rateText, yyMm,
   type ChurnCell, type ChurnMonth, type ChurnTeacherRow,
 } from "@/features/withdrawals/teacher-churn";
+import { tenureBand } from "@/features/withdrawals/teacher-churn-view";
+import { churnTip, md } from "./teacher-churn-tip";
 
 /** 칸 배경 — 노랑(`--gold-bright`)을 퇴원율에 비례해 섞는다. 진행 중·마감 전 값은 칠하지 않는다(아직 바뀌는 값이라 색으로 견주지 않는다). */
 const heat = (c: ChurnCell, open: boolean): CSSProperties | undefined => {
@@ -26,49 +27,29 @@ export const AFTER_RESIGN_BG = "color-mix(in srgb, var(--foreground) 14%, var(--
 const NAME_COL = "9.5rem";
 const MIN_COL = "5.75rem";
 
-/** "2026-11-10" → "11/10". */
-const md = (ymd: string) => (ymd ? `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}` : "");
+/** 재직 밖 띠의 배경 — 표 칸 · 차트 칸 · 범례가 같은 값. */
+export const bandBg = (band: "before" | "after" | null): CSSProperties | undefined =>
+  band === "before" ? { background: BEFORE_HIRE_BG } : band === "after" ? { background: AFTER_RESIGN_BG } : undefined;
+
 /** 진행 중인 달 머리 — 강사마다 반영한 날이 다르면 범위로(가장 늦은 날 하나로 뭉뚱그리지 않는다). */
 const throughText = (ends: readonly string[]) =>
   !ends.length ? "" : ends.length === 1 ? `${md(ends[0]!)}까지` : `${md(ends[0]!)}~${md(ends.at(-1)!)}까지(강사마다 다름)`;
 
 function Cell({ c, month, partial, row }: { c: ChurnCell | undefined; month: ChurnMonth; partial: boolean; row: ChurnTeacherRow }) {
-  const label = `${row.name} · ${yyMm(month.month)}`;
   if (!c) {
     // 재직 밖 달은 빈칸(0%·담당 없음으로 적지 않는다 — 원장 2026-11-11 "실제 선생님이 입사한 날부터. 0%하지말고").
-    const from = countsFrom(row.hireDate);
-    const before = from !== null && month.month < from;
-    const after = !before && !!row.resignDate && month.month > row.resignDate.slice(0, 7);
-    const why = before
-      ? `입사 ${row.hireDate!.slice(0, 10)} — 퇴원율은 지난달 담당 학생 기준이라 입사 다음 달부터 셉니다`
-      : after
-        ? `퇴사 ${row.resignDate!.slice(0, 10)} — 근무한 달까지만 셉니다`
-        : "그 달은 강사평가 대상이 아니었습니다(담당 반 없음 등)";
+    // 판정은 차트 띠와 같은 `tenureBand`(재입사 전 옛 퇴사일은 보지 않는다).
+    const band = tenureBand(row, month.month);
     return (
-      <td className="text-center" style={before ? { background: BEFORE_HIRE_BG } : after ? { background: AFTER_RESIGN_BG } : undefined}
-        aria-label={before ? "입사 전" : after ? "퇴사 뒤" : undefined} {...tipProps({ title: label, lines: [why] })} />
+      <td className="text-center" style={bandBg(band)}
+        aria-label={band === "before" ? "입사 전" : band === "after" ? "퇴사 뒤" : undefined} {...churnTip(row, month, c)} />
     );
   }
   // 아직 바뀌는 값 — 진행 중인 달이거나, 그 강사의 그 달이 마감 대기다.
   const open = partial || !c.closed;
   const small = c.state === "ok" && c.base < SMALL_BASE;
-  const tip = tipProps({
-    title: label,
-    meta: partial ? `진행 중 · ${md(c.end)}까지 반영` : !c.closed ? "마감 전" : null,
-    rows: [
-      c.state === "ok" ? ["퇴원율", rateText(c.rate!)] : null,
-      c.state !== "unreadable" ? ["그만둔 학생", `${c.counted}명`] : null,
-      c.state !== "unreadable" ? ["지난달 담당", `${c.base}명`] : null,
-    ],
-    lines: [
-      c.state === "noBase" ? "지난달 이 강사가 절반 이상 맡은 학생이 없어 퇴원율이 없습니다" : null,
-      c.state === "unreadable" ? "저장된 강사평가에서 퇴원율을 읽지 못했습니다 — 직원 포트폴리오에서 확인해 주세요" : null,
-      small ? `담당이 ${SMALL_BASE}명 미만이라 한 명이 그만둬도 10%p 넘게 오릅니다` : null,
-      open ? "아직 마감 전 — 다음 집계에서 바뀔 수 있습니다" : null,
-    ],
-  });
   return (
-    <td className={`px-1.5 py-1.5 text-center ${open ? "bg-bg-soft" : ""}`} style={heat(c, open)} {...tip}>
+    <td className={`px-1.5 py-1.5 text-center ${open ? "bg-bg-soft" : ""}`} style={heat(c, open)} {...churnTip(row, month, c)}>
       {c.state === "ok" ? (
         <>
           <span className="num block text-sm leading-tight font-bold">

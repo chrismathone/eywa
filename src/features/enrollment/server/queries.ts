@@ -1,4 +1,5 @@
 import "server-only";
+import { PREP_BRIEF_STALL_MS } from "@/features/enrollment/prep-stall";
 import { samePersonGroups } from "../same-person";
 import { findSamePersonConsultations } from "./same-person-query";
 import { auditScoped, systemAuditScope } from "@/features/audit/server/system-read";
@@ -610,6 +611,10 @@ export type ConsultationDetail = ConsultationListRow & {
   prepBriefStatus: "generating" | "failed" | null;
   /** 생성 실패 사유(한글 요약) — status=failed일 때만. */
   prepBriefError: string | null;
+  /** 생성 작업 시작 시각(s2_0068 · generating일 때). */
+  prepBriefJobAt: string | null;
+  /** 240초 넘게 '생성 중' — 멈춘 작업(화면이 '다시 작성'을 보인다). */
+  prepBriefStalled: boolean;
   studentId: string | null;
   fields: FullConsultationFields;
 };
@@ -629,7 +634,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
        subject, career_goal, siblings, safety_notes,
        payment_amount, payment_date, registrar, follow_up_date, follow_up_content,
        non_registration_reason, shuttle_bus_request, privacy_agreement,
-       installment_agreement, subject_details, intake_checklist, prep_brief, prep_brief_status, prep_brief_error,
+       installment_agreement, subject_details, intake_checklist, prep_brief, prep_brief_status, prep_brief_error, prep_brief_job_at,
        counselor, received_date, student_type, siblings_details, consultation_date,
        consultant:consultant_id ( display_name )`,
     )
@@ -779,6 +784,11 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
         ? c.prep_brief_status
         : null,
     prepBriefError: (c.prep_brief_error as string | null) ?? null,
+    // 생성 작업 시작 시각(s2_0068) · 240초 넘게 '생성 중'이면 멈춘 것 — 화면이 '다시 작성'을 보인다(검수 2026-11-11).
+    prepBriefJobAt: (c.prep_brief_job_at as string | null) ?? null,
+    prepBriefStalled:
+      c.prep_brief_status === "generating" &&
+      (!c.prep_brief_job_at || Date.now() - Date.parse(c.prep_brief_job_at as string) > PREP_BRIEF_STALL_MS),
     studentId: linkedStudentId,
     assignedClassCount,
     personConsultCount: 1, // 상세는 목록 카드 배지를 안 씀 — 타입 충족용(상세의 '다른 상담'은 getSiblingConsultations로 별도 조회).

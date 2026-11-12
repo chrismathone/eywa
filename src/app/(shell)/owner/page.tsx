@@ -213,6 +213,8 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   // 개인별 권한에 이름이 올라 있는 계정의 이름 — 역할·권한 편집 폼이 설 때만 로드(다른 면 진입 비용 0). 폼과 같은 값에서 뽑는다.
   // 메뉴 권한뿐 아니라 기능 권한(담당자 · 과목 범위)의 사람도 함께 푼다 — 퇴직해 선택지에서 빠진 사람도 이름으로 보여야 거둘 수 있다.
   const permissionPeople = permissionsSource ? permissionAccountIds(permissionsSource) : [];
+  // 상담 준비 브리프(AI)가 이 지점에서 도는가 — 꺼진 지점엔 상담 양식 면의 운영 안내 카드를 세우지 않는다(브리프 카드와 같은 라이선스).
+  const briefOn = tab === "consultations" ? await isFeatureLicensed(viewer.tenantId, "ai_analysis") : false;
   const hiddenSettingKeys: SettingsRoleKey[] = [];
   // 지점 AI가 꺼져 있으면 AI 멘트 칸과 학원 비서 줄을 세우지 않는다(꺼진 기능은 있었는지조차 모르게 — 판정은 perm-matrix capSettingFeatures와 같은 라이선스).
   const hiddenMenuKeys: MenuKey[] = [];
@@ -335,7 +337,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         <BillingSection initial={settings.billing} showEie={isModuleEnabled(settings.modules.disabled, "eie")} readOnly={!canEditSettings} />
       ) : null}
       {tab === "notifications" ? <NotificationsSection initial={settings.notifications} readOnly={!canEditSettings} /> : null}
-      {tab === "consultations" ? <ConsultationsSection initial={settings.consultations} readOnly={!canEditSettings} /> : null}
+      {tab === "consultations" ? <ConsultationsSection initial={settings.consultations} readOnly={!canEditSettings} briefOn={briefOn} /> : null}
       {tab === "permissions" ? (
         isMaster ? (
           // 못 읽었으면(permissionsSource 없음) 위의 '불러오지 못했습니다' 안내만 선다.

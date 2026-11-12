@@ -10,6 +10,7 @@
 //    표식이 이미 있는 행은 저장(saveOwnerSection)이 섹션만 바꾸므로 그대로 남는다.
 // 🔴 이 값을 읽는 곳은 여기와 수업 규칙 프로필뿐이다 — 다른 코드는 풀린 설정·모듈만 본다(가드 preset-guard.test.ts).
 //    "if 침산" 분기가 화면마다 번지면 두 경로를 영영 못 합친다.
+import { BRIEF_FACT_MAX, BRIEF_FACT_TOPICS } from "@/features/enrollment/brief-facts";
 import { DEFAULT_SETTINGS } from "./defaults";
 import { GENERIC_SETTINGS } from "./generic-defaults";
 import type { TenantPreset, TenantSettings } from "./settings-types";
@@ -131,6 +132,30 @@ export function prepareSectionForSave(
             ...(old?.groupId ? { groupId: old.groupId } : {}), ...next };
         }).filter((row) => Object.keys(row).length > 1);
       }
+    }
+    return out;
+  }
+  // 배포 전에 열어 둔 상담 양식 폼은 운영 안내(briefFacts · 2026-11-12)를 보내지 않는다. 스키마 기본값(빈칸)으로
+  // 저장된 원문을 덮지 않도록, 요청에 없던 칸은 기존 저장값을 유지한다(report와 같은 방어 · 적대 리뷰).
+  if (section === "consultations" && isPlainObject(parsed)) {
+    const out: Record<string, unknown> = { ...parsed };
+    const stored = isPlainObject(storedSection) && isPlainObject(storedSection.briefFacts) ? storedSection.briefFacts : null;
+    const sent = isPlainObject(rawInput) && isPlainObject(rawInput.briefFacts) ? rawInput.briefFacts : null;
+    if (!sent) {
+      if (stored) out.briefFacts = stored;
+      else delete out.briefFacts;
+      return out;
+    }
+    // 일부 주제만 보낸 요청은 보낸 주제만 바꾼다(나머지를 빈칸으로 덮지 않는다). 남기는 저장값도 주제 칸·글자·상한을 다시 본다
+    // (손상된 값·옛 키를 그대로 두지 않는다 · 재리뷰).
+    if (stored && isPlainObject(parsed.briefFacts)) {
+      const incoming = parsed.briefFacts as Record<string, unknown>;
+      const next: Record<string, string> = {};
+      for (const { key } of BRIEF_FACT_TOPICS) {
+        const old = stored[key];
+        next[key] = key in sent ? String(incoming[key] ?? "") : typeof old === "string" && old.trim().length <= BRIEF_FACT_MAX ? old.trim() : "";
+      }
+      out.briefFacts = next;
     }
     return out;
   }
