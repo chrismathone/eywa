@@ -94,6 +94,9 @@ export default async function TextbooksPage({ searchParams }: { searchParams: Pr
   const { labelOf } = buildSubjectMaps(settings.operations.subjects);
   const subjectOptions = TEXTBOOK_SUBJECTS.map((key) => ({ key, label: labelOf(key) }));
 
+  // 꺼진 강사 시트(MCS·ECS)는 안내 문구에도 이름을 남기지 않는다(침산 = 둘 다 켬 → 종전 문구 그대로 · 검토 2026-11-12).
+  const mcsOn = isModuleEnabled(settings.modules.disabled, "mcs");
+  const ecsOn = isModuleEnabled(settings.modules.disabled, "ecs");
   return (
     <div className="flex min-h-full w-full flex-col gap-4 p-3 md:px-5 md:py-4">
       <PageHeader
@@ -101,8 +104,8 @@ export default async function TextbooksPage({ searchParams }: { searchParams: Pr
         title="교재목록"
         description={
           subject === "math"
-            ? "교재 한 권 = 페이지/시간·차수. 수학 강사 시트에서 반 교재나 학생별 교재로 배정합니다."
-            : "교재 한 권 = 구분·페이지/시간·차수. 차수별 진도·과제를 적어 두면 영어 강사 시트의 월간계획에 차수대로 뜹니다."
+            ? mcsOn ? "교재 한 권 = 페이지/시간·차수. 수학 강사 시트에서 반 교재나 학생별 교재로 배정합니다." : "교재 한 권 = 페이지/시간·차수."
+            : ecsOn ? "교재 한 권 = 구분·페이지/시간·차수. 차수별 진도·과제를 적어 두면 영어 강사 시트의 월간계획에 차수대로 뜹니다." : "교재 한 권 = 구분·페이지/시간·차수. 차수별 진도·과제를 적어 둡니다."
         }
         embedLabel="교재 · 차수별 진도·과제 · 반 배정"
       />
@@ -125,7 +128,7 @@ export default async function TextbooksPage({ searchParams }: { searchParams: Pr
         <MathPlansFace
           status={mathPlans.status}
           rows={mathPlans.rows}
-          mcsOn={isModuleEnabled(settings.modules.disabled, "mcs")}
+          mcsOn={mcsOn}
         />
       ) : tab === "plans" ? (
         <PlansFace rows={plans.rows} skillAreas={skillAreas} deletableClassIds={deletableClassIds} />

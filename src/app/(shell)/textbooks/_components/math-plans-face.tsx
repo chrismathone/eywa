@@ -19,7 +19,7 @@ export function MathPlansFace({ status, rows, mcsOn }: { status: TextbookTableSt
   if (rows.length === 0) {
     return (
       <p className="text-text-dim px-1 py-8 text-center text-xs">
-        아직 배정된 수학 교재가 없습니다. 수학 강사 시트의 반 화면에서 반 교재·학생 교재를 배정합니다.
+        아직 배정된 수학 교재가 없습니다.{mcsOn ? " 수학 강사 시트의 반 화면에서 반 교재·학생 교재를 배정합니다." : ""}
       </p>
     );
   }
