@@ -1,6 +1,6 @@
 /**
- * 학원 비서 AI 루프 — Claude가 `describe_table`·`run_sql`로 이 지점 DB를 확인하고 `render_report`로 보고서를 낸다.
- * DB·Claude 클라이언트·이벤트는 밖에서 받는다(시험이 가짜를 넣는다). 권한·라이선스·저장·사용량 장부는 부르는 쪽(`ask.ts`) 몫.
+ * 학원 비서 AI 루프 — Terra low가 `describe_table`·`run_sql`로 이 지점 DB를 확인하고 `render_report`로 보고서를 낸다.
+ * DB·모델 클라이언트·이벤트는 밖에서 받는다(시험이 가짜를 넣는다). 권한·라이선스·저장·사용량 장부는 부르는 쪽(`ask.ts`) 몫.
  *
  * - 진행 단계(`step` 이벤트)를 실시간으로 내보낸다 — 원장 *"진짜 Ai 대화하는것처럼 어떤 db를 조회중이고 어떤 프로그레스중인지 단계가 표시"*.
  *   AI가 도구 입력을 쓰기 시작하는 순간(스트림의 content_block_start) 단계를 열고, 입력이 들어오는 대로(inputJson) 목적을 붙인다.
@@ -9,6 +9,9 @@
  * - 조회는 한 연결에서 차례로(병렬 도구 호출도 순서대로 실행).
  */
 import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
+import type { AssistantClient, AssistantMessage, AssistantUsage } from "./model-client";
+import { ASSISTANT_MODEL } from "./models";
 import { z } from "zod";
 import { REPORT_TOOL_SCHEMA, settleReport, type QueryResult, type ReportBlock, type SettledReport } from "../report";
 import { baselineWindow, fillWindow, formatCheckValue, readCheckRow, type AdviceCheck, type AdviceCheckResult } from "../advice";
@@ -34,7 +37,7 @@ import {
 
 /**
  * 🔴 조회 횟수·차례 수 한도는 두지 않는다(원장 2026-11-06 *"한도 두지마" · "굳이 한도를 두면 알 수 없는 분석이 나올 확률이 더 높지 않나?
- *    … 분석이 정확하지않으면 하나도 의미가 없어"* — 12번 한도에 막혀 PS3A 반 분석이 영상 숙제를 못 봤다). 추론 강도는 모델·생각 깊이로 나뉜다.
+ *    … 분석이 정확하지않으면 하나도 의미가 없어"* — 12번 한도에 막혀 PS3A 반 분석이 영상 숙제를 못 봤다). 모든 질문은 같은 모델·강도로 처리한다.
  * 남는 것은 물리적 한계 둘뿐 — ① 실행 시간: 이 시각(`softDeadlineMs`, 기본값 아래)이 지나면 더 조회하지 말고 보고서를 내라고 한다
  * (고정 기한은 부르는 쪽이 signal로 끊는다 · protocol.ts ASSISTANT_HARD_DEADLINE_MS) ② AI가 한 번에 읽는 분량: 직전 차례 입력이
  * `CONTEXT_WRAP_TOKENS`를 넘으면 같은 마무리. 마무리를 부탁한 뒤에도 `WRAP_ROUNDS` 차례 안에 보고서가 없으면 멈춘다(끝없이 돌지 않게).
@@ -90,12 +93,10 @@ export type AssistantDb = {
 };
 
 export type AgentEvent = { type: "step"; step: AskStep };
-export type AgentUsage = { model: string; usage: Anthropic.Usage };
+export type AgentUsage = { model: string; usage: AssistantUsage };
 
 export type AgentInput = {
-  client: Pick<Anthropic, "messages">;
-  model: string;
-  effort: "low" | "medium" | "high";
+  client: AssistantClient;
   db: AssistantDb;
   docs: readonly AssistantTableDoc[];
   question: string;
@@ -109,8 +110,7 @@ export type AgentInput = {
   /** 마무리 시각(질문 시작부터 ms) — 부르는 쪽이 고정 기한에서 보고서 쓸 시간을 빼서 준다. 없으면 SOFT_DEADLINE_MS. */
   softDeadlineMs?: number;
   /**
-   * 이 분량(직전 차례 입력 토큰)을 넘으면 마무리 — 없으면 CONTEXT_WRAP_TOKENS. '적음'(Haiku)은 입력 10만 토큰을 넘으면 단가가 5배라
-   * 부르는 쪽이 더 낮게 준다(적대 리뷰 2026-11-09).
+   * 이 분량(직전 차례 입력 토큰)을 넘으면 마무리 — 없으면 CONTEXT_WRAP_TOKENS.
    */
   contextWrapTokens?: number;
   /** 원장이 누른 '여기서 끝내고 결과 보기' — 끊기면 더 조회하지 않고 지금까지의 결과로 보고서를 쓴다(`signal`은 질문을 버리는 멈춤). */
@@ -452,17 +452,15 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
     const msLeft = softDeadline - (now() - started);
     const wrapTimer = wrapNow || msLeft <= 0 ? null : setTimeout(() => cut("time"), msLeft);
 
-    let message: Anthropic.Message;
+    let message: AssistantMessage;
     /** 끝까지 못 받은 응답의 사용량을 읽을 곳 — 흐름은 try 안에서 만든다(동기로 던져도 타이머·리스너가 finally에서 풀린다 · 재리뷰 2026-11-09). */
-    let partialOf: { readonly currentMessage?: Anthropic.Message | undefined } | undefined;
+    let partialOf: { readonly currentMessage?: AssistantMessage | undefined } | undefined;
     try {
       const stream = input.client.messages.stream(
         {
-          model: input.model,
+          model: ASSISTANT_MODEL.model,
           max_tokens: 32_000,
-          thinking: { type: "adaptive" },
-          output_config: { effort: input.effort },
-          // 대화 기록(앞 차례의 조회 결과 — 각 최대 2만 자) 캐시 — 마지막 블록에 표시가 자동으로 붙는다. 시스템 앞부분은 위에서 따로 캐시.
+          // 내부 메시지 계약의 호환 힌트. Terra 어댑터는 보내지 않으며 Responses의 자동 접두 캐시를 쓴다.
           cache_control: { type: "ephemeral" },
           system,
           tools: ASSISTANT_TOOLS,
@@ -509,7 +507,7 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
       close(thinking);
       // 끝까지 못 받은 차례도 쓴 토큰은 적는다(멈춤·끊김·도구 입력 JSON 재시도 — 적대 리뷰 2026-11-06).
       const partial = partialOf?.currentMessage;
-      if (partial?.usage) await input.onUsage({ model: partial.model || input.model, usage: partial.usage });
+      if (partial?.usage) await input.onUsage({ model: partial.model || ASSISTANT_MODEL.model, usage: partial.usage });
       if (forWrap) {
         // 끊은 응답은 기록에 넣지 않는다(덧붙이기만 — 생각 블록이 어긋나지 않는다). 다음 차례 시작에서 마지막 사람 차례에 마무리 부탁을 붙인다.
         // 까닭은 여기서 정한다 — 타이머가 1ms 일찍 울면 '시각이 지났나' 판정이 아직 거짓이라 다음 차례가 보통 차례로 돌았다(재리뷰 2026-11-09).
@@ -520,7 +518,7 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
         if (wrapRounds++ >= WRAP_ROUNDS) throw new AssistantError("자료를 다 모았지만 보고서를 정리하지 못했습니다. 다시 물어봐 주세요");
         continue;
       }
-      if (error instanceof Anthropic.APIError || jsonRetries++ >= 2) throw error;
+      if (error instanceof Anthropic.APIError || error instanceof OpenAI.APIError || jsonRetries++ >= 2) throw error;
       continue; // 도구 입력 JSON을 끝까지 읽지 못한 차례 — 다시 묻는다
     } finally {
       if (wrapTimer) clearTimeout(wrapTimer);
@@ -528,7 +526,7 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
       input.wrapSignal?.removeEventListener("abort", onWrap);
     }
     close(thinking);
-    await input.onUsage({ model: message.model || input.model, usage: message.usage });
+    await input.onUsage({ model: message.model || ASSISTANT_MODEL.model, usage: message.usage });
     lastInputTokens = (message.usage.input_tokens ?? 0) + (message.usage.cache_read_input_tokens ?? 0) + (message.usage.cache_creation_input_tokens ?? 0);
 
     if (message.stop_reason === "refusal") throw new AssistantError("AI가 이 질문에는 답하지 않았습니다. 질문을 바꿔 다시 물어봐 주세요");

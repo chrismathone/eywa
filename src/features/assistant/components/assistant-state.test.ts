@@ -227,7 +227,7 @@ describe("저장본 읽기", () => {
     expect(turnFromMessage(message({ running: true })).status).toBe("running");
     expect(turnFromMessage(message({ error: "시간 초과" }))).toMatchObject({ status: "error", error: "시간 초과" });
     expect(turnFromMessage(message({}))).toMatchObject({ status: "error", error: "답을 받지 못했습니다." });
-    expect(turnFromMessage(message({ level: "weird" as never })).level).toBe("normal");
+    expect(turnFromMessage(message({ level: "weird" as never })).level).toBe("low");
     expect(turnFromMessage(message({ report, steps: [step("s1", { state: "done" })] })).steps).toHaveLength(1);
     expect(turnFromMessage({ ...message({}), steps: undefined as never }).steps).toEqual([]);
   });

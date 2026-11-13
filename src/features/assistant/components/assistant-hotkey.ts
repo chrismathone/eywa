@@ -14,6 +14,8 @@
 export const ASSISTANT_TOGGLE_MESSAGE = "eywa:toggle-assistant";
 /** 같은 문서 안 어디서든 비서를 **연다**(`window.dispatchEvent(new Event(ASSISTANT_OPEN_EVENT))` — 사이드바·모바일 메뉴 버튼). */
 export const ASSISTANT_OPEN_EVENT = "eywa:open-assistant";
+/** 보고서의 내부 상세 링크로 이동할 때 판만 닫는다. 대화·입력·생성 중인 답은 런처에 남는다. */
+export const ASSISTANT_NAVIGATE_EVENT = "eywa:assistant-navigate";
 
 /** 같은 문서의 런처를 연다 — 사이드바·모바일 메뉴 같은 다른 자리의 버튼이 부른다(런처는 레이아웃에 하나만 둔다). */
 export function openAssistant(): void {

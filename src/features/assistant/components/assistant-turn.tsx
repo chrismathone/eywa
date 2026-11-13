@@ -4,7 +4,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import { tipProps } from "@/components/hover-tip/tip";
 import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
-import { ASSISTANT_LEVEL_LABEL } from "@/features/assistant/levels";
 import type { AskStep, QuerySummary } from "@/features/assistant/protocol";
 import { kstTimeOf } from "@/lib/date-kst";
 import { formatDuration, stepSummaryText, stepTrouble, type Turn } from "./assistant-state";
@@ -40,10 +39,7 @@ export function AssistantTurn({
         <p className="bg-primary-soft text-foreground max-w-[min(85%,44rem)] rounded-2xl rounded-br-md px-4 py-2.5 text-base leading-relaxed break-words whitespace-pre-wrap">
           {turn.question}
         </p>
-        <p className="px-1 text-xs">
-          {`추론 ${ASSISTANT_LEVEL_LABEL[turn.level]}`}
-          {time ? <span className="num">{` · ${time}`}</span> : null}
-        </p>
+        {time ? <p className="num px-1 text-xs">{time}</p> : null}
       </div>
       <Answer turn={turn} canRetry={canRetry} onRetry={onRetry} onReload={onReload} onControl={onControl} />
     </div>

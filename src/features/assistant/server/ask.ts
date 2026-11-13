@@ -4,15 +4,13 @@ import "server-only";
  * 비서 DB 연결(이 지점으로 묶음) → AI 루프 → 답 저장 · 감사 기록 · 사용량 장부. 진행은 `emit`으로 흘려보낸다.
  * 🔴 화면 연결이 끊겨도 끝까지 돌고 저장한다(화면은 대화를 다시 읽는다) — 그래서 `signal`은 사람이 '멈춤'을 눌렀을 때만 쓴다.
  */
-import Anthropic from "@anthropic-ai/sdk";
-import { getAnthropic } from "@/lib/ai/anthropic";
+import OpenAI from "openai";
 import { anthropicUsage, isCreditExhaustedError, recordUsage, requireAiLicense } from "@/lib/ai/generate";
-import { keyGroupOf, keyLabelOf, resolveKeyEnv } from "@/lib/ai/models";
 import { logActionAs } from "@/features/audit/server/log";
 import { reportError } from "@/lib/observability/report-error";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { displayRoleFor, getSuperAdminIds } from "@/lib/auth/super-admin";
-import { ASSISTANT_LEVEL_LABEL, type AssistantLevel } from "../levels";
+import { DEFAULT_ASSISTANT_LEVEL, type AssistantLevel } from "../levels";
 import { ASSISTANT_HARD_DEADLINE_MS, type AskEvent, type AskStep } from "../protocol";
 import type { QueryResult, SettledReport } from "../report";
 import type { AdviceCheckResult } from "../advice";
@@ -23,6 +21,7 @@ import { saveAdvice } from "./advice-store";
 import { openAssistantDb } from "./executor";
 import { assistantViewer, isGateFailure } from "./gate";
 import { ASSISTANT_FEATURE, ASSISTANT_MODEL } from "./models";
+import { assistantKeyEnv, getTerraClient } from "./terra-client";
 import {
   admission,
   BUSY_FULL_MESSAGE,
@@ -39,15 +38,15 @@ import {
 /** 보고서를 쓸 시간 — 고정 기한에서 이만큼 앞이 마무리 시각이다. */
 const REPORT_RESERVE_MS = 200_000;
 
-export type AskInput = { threadId?: string | null; question: string; level: AssistantLevel; clientRef?: string | null };
+export type AskInput = { threadId?: string | null; question: string; /** 옛 호출 호환용이며 모델 선택에 사용하지 않는다. */ level?: AssistantLevel; clientRef?: string | null };
 
 /** 사람에게 보일 오류 문장(한국어가 아닌 원문은 내지 않는다). */
 export function assistantErrorMessage(error: unknown): string {
   if (error instanceof AssistantError) return error.message;
   if (isCreditExhaustedError(error)) return "AI 사용 한도가 찼습니다. 관리자에게 알려 주세요";
-  if (error instanceof Anthropic.RateLimitError) return "AI 요청이 잠시 몰렸습니다. 1분 뒤 다시 물어봐 주세요";
-  if (error instanceof Anthropic.APIConnectionError) return "AI에 연결하지 못했습니다. 잠시 뒤 다시 물어봐 주세요";
-  if (error instanceof Anthropic.APIError && (error.status ?? 0) >= 500) return "AI 서버가 잠시 응답하지 않습니다. 잠시 뒤 다시 물어봐 주세요";
+  if (error instanceof OpenAI.RateLimitError) return "AI 요청이 잠시 몰렸습니다. 1분 뒤 다시 물어봐 주세요";
+  if (error instanceof OpenAI.APIConnectionError) return "AI에 연결하지 못했습니다. 잠시 뒤 다시 물어봐 주세요";
+  if (error instanceof OpenAI.APIError && (error.status ?? 0) >= 500) return "AI 서버가 잠시 응답하지 않습니다. 잠시 뒤 다시 물어봐 주세요";
   if (error instanceof Error && /[가-힣]/.test(error.message)) return error.message;
   return "답을 만들지 못했습니다. 잠시 뒤 다시 물어봐 주세요";
 }
@@ -68,9 +67,15 @@ export async function prepareAsk(
   } catch (error) {
     return { error: assistantErrorMessage(error), status: 403 };
   }
+  let client: ReturnType<typeof getTerraClient>;
+  try {
+    client = getTerraClient();
+  } catch (error) {
+    return { error: assistantErrorMessage(error), status: 503 };
+  }
   const blocked = await admission(owner, input.threadId);
   if (blocked) return { error: blocked.error, status: 429, code: blocked.code };
-  const started = await startMessage(owner, input);
+  const started = await startMessage(owner, { ...input, level: DEFAULT_ASSISTANT_LEVEL });
   if (started === "no_thread") return { error: "대화를 찾지 못했습니다. 새 질문으로 물어봐 주세요", status: 404 };
   if (started === "busy") return { error: BUSY_FULL_MESSAGE, status: 429, code: "busy" };
   if (started === "busy_thread") return { error: BUSY_THREAD_MESSAGE, status: 429, code: "busy" };
@@ -107,9 +112,8 @@ export async function prepareAsk(
       );
       emit({ type: "started", messageId: started.messageId });
       if (started.created) emit({ type: "thread", threadId: started.threadId, title: started.title });
-      const { model, effort } = ASSISTANT_MODEL[input.level];
-      const group = keyGroupOf(ASSISTANT_FEATURE);
-      const keyName = keyLabelOf("anthropic", resolveKeyEnv("anthropic", "default", group));
+      const { model, effort } = ASSISTANT_MODEL;
+      const keyName = assistantKeyEnv() === "OPENAI_API_KEY_ASSISTANT" ? "assistant" : assistantKeyEnv() ? "default" : "none";
       const usage: Usage[] = [];
       const steps = new Map<string, AskStep>();
       let report: SettledReport | null = null;
@@ -126,9 +130,7 @@ export async function prepareAsk(
         // 서로 기다릴 까닭이 없는 두 조회(B4).
         const [history, asker] = await Promise.all([started.created ? [] : pastTurns(owner, started.threadId), askerLabel(viewer.user.id, viewer.user.systemRole)]);
         const out = await runAssistantAgent({
-          client: getAnthropic("default", group),
-          model,
-          effort,
+          client,
           db,
           docs: ASSISTANT_DOCS,
           question: input.question,
@@ -137,9 +139,6 @@ export async function prepareAsk(
           // 마무리 시각 = 고정 기한에서 보고서 쓸 시간(200초 — 15만 토큰을 읽고 긴 보고서를 쓰는 '강함'도 넉넉히 · 적대 리뷰 2026-11-09)을 뺀 것.
           // 이 루프가 시작한 때부터 잰다(앞서 쓴 준비 시간을 뺀다). 마무리 시각이 차례 도중에 오면 agent가 그 응답을 끊고 곧장 보고서를 부탁한다.
           softDeadlineMs: Math.max(60_000, ASSISTANT_HARD_DEADLINE_MS - REPORT_RESERVE_MS - (Date.now() - begun)),
-          // '적음'(Haiku)은 입력 10만 토큰을 넘으면 단가가 5배 — 그 앞에서 마무리(적대 리뷰 2026-11-09). 판정은 직전 차례 입력이라
-          // 한 차례 조회 결과(각 최대 2만 자)가 더 붙어도 10만을 넘지 않게 3만 여유를 둔다(재리뷰 2026-11-09).
-          ...(input.level === "low" ? { contextWrapTokens: 70_000 } : {}),
           emit: (event) => {
             steps.set(event.step.id, event.step);
             emit(event);
@@ -154,7 +153,7 @@ export async function prepareAsk(
               cacheRead: u.usage.cache_read_input_tokens ?? 0,
               cacheWrite: u.usage.cache_creation_input_tokens ?? 0,
             });
-            await recordUsage({ meta: { tenantId: owner.tenantId, feature: "academy_assistant" }, provider: "anthropic", model: u.model, keyName, usage: anthropicUsage(u.usage), ok: true });
+            await recordUsage({ meta: { tenantId: owner.tenantId, feature: "academy_assistant" }, provider: "openai", model: u.model, keyName, usage: anthropicUsage(u.usage), ok: true });
           },
         });
         // 흘려보내는 답과 저장본을 같게 — 긴 글 칸·큰 자료를 줄인다(store.ts compactReport).
@@ -172,10 +171,10 @@ export async function prepareAsk(
         if (!(error instanceof AssistantError) && !stoppedBy) reportError(error, { scope: "assistant.ask", tenantId: owner.tenantId });
         // 사람이 누른 멈춤은 실패가 아니다 — 장부에 실패로 남기지 않는다(쓴 토큰은 agent가 차례마다 이미 적었다).
         // 고정 기한은 늘 실패로 적는다 — 조회 도중 걸리면 agent가 다음 차례 시작에서 AssistantError로 끝내므로 오류 종류로 가리지 않는다(재리뷰 2026-11-06).
-        // ⚠️ 끊긴 차례의 사용량은 message_start 시점 값이라 출력 토큰이 거의 0으로 적힌다(알려진 한계 — agent.ts).
+        // 제공자가 사용량을 보고하기 전에 끊긴 차례는 토큰 수를 추정하지 않는다(완료·실패 이벤트에 있던 값만 agent가 기록).
         if (stoppedBy === "deadline" || (!(error instanceof AssistantError) && !stoppedBy)) {
           const reason = stoppedBy === "deadline" ? "hard deadline" : error instanceof Error ? error.message : String(error);
-          await recordUsage({ meta: { tenantId: owner.tenantId, feature: "academy_assistant" }, provider: "anthropic", model, keyName, ok: false, error: clipText(reason, 300) });
+          await recordUsage({ meta: { tenantId: owner.tenantId, feature: "academy_assistant" }, provider: "openai", model, keyName, ok: false, error: clipText(reason, 300) });
         }
       } finally {
         clearInterval(poll);
@@ -192,7 +191,7 @@ export async function prepareAsk(
       // 저장 — 흘려보낸 답과 저장본이 어긋나지 않게(재리뷰 2026-11-06): 실패하면 표·차트 자료를 뺀 보고서로 한 번 더,
       // 그래도 안 되면 상태만 '실패'로 닫고 화면에도 실패로 보낸다(화면에 보인 답이 다시 열면 사라지거나 다음 질문이 맥락을 잃지 않게).
       const save = (r: SettledReport | null) =>
-        finishMessage(owner, { threadId: started.threadId, messageId: started.messageId, level: input.level, report: r, error: failure, queries, steps: [...steps.values()], usage });
+        finishMessage(owner, { threadId: started.threadId, messageId: started.messageId, level: DEFAULT_ASSISTANT_LEVEL, report: r, error: failure, queries, steps: [...steps.values()], usage });
       try {
         await save(report);
       } catch (error) {
@@ -227,8 +226,8 @@ export async function prepareAsk(
         targetType: "assistant",
         targetLabel: started.title,
         metadata: {
-          level: input.level,
-          levelLabel: ASSISTANT_LEVEL_LABEL[input.level],
+          model,
+          effort,
           question: clipText(input.question, 80),
           queries: queries.length,
           advice: adviceCount,

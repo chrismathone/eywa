@@ -6,7 +6,7 @@
  *    바뀌므로, 진행 중인 흐름이 대화 키를 들고 있으면 그 순간 갈 곳을 잃는다.
  */
 import type { AssistantLevel } from "@/features/assistant/levels";
-import { isAssistantLevel } from "@/features/assistant/levels";
+import { DEFAULT_ASSISTANT_LEVEL, isAssistantLevel } from "@/features/assistant/levels";
 import { ASSISTANT_MAX_RUNNING, type AskEvent, type AskStep, type QuerySummary, type ThreadDetailResponse, type ThreadMessage, type ThreadSummary } from "@/features/assistant/protocol";
 import type { SettledReport } from "@/features/assistant/report";
 import { addDays, kstDateOf, kstTimeOf, monthDayLabel } from "@/lib/date-kst";
@@ -124,7 +124,7 @@ export function turnFromMessage(m: ThreadMessage): Turn {
     key: `m:${m.id}`,
     messageId: m.id,
     question: m.question,
-    level: isAssistantLevel(m.level) ? m.level : "normal",
+    level: isAssistantLevel(m.level) ? m.level : DEFAULT_ASSISTANT_LEVEL,
     createdAt: m.createdAt,
     status,
     steps: Array.isArray(m.steps) ? m.steps : [],

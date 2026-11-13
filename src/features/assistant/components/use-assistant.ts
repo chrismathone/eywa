@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useReducer, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import type { AssistantLevel } from "@/features/assistant/levels";
+import { DEFAULT_ASSISTANT_LEVEL } from "@/features/assistant/levels";
 import { clipText } from "@/features/assistant/text";
 import {
   ASSISTANT_QUESTION_MAX,
@@ -188,7 +188,7 @@ export function useAssistant({ open }: { open: boolean }) {
    * 화면이 보낸 글을 입력칸에 되돌린다 · 원장 2026-11-06 *"정상적인 동작으로 인식되게"*). 다른 탭에서 도는 대화를 알게 목록도 다시 읽는다.
    */
   const ask = useCallback(
-    async (input: { convKey: string; threadId: string | null; question: string; level: AssistantLevel; onBusy?: (message: string) => void }) => {
+    async (input: { convKey: string; threadId: string | null; question: string; onBusy?: (message: string) => void }) => {
       const question = clipText(input.question.trim(), ASSISTANT_QUESTION_MAX);
       if (!question) return;
       const s = stateRef.current;
@@ -217,7 +217,7 @@ export function useAssistant({ open }: { open: boolean }) {
           key: turnKey,
           messageId: null,
           question,
-          level: input.level,
+          level: DEFAULT_ASSISTANT_LEVEL,
           createdAt: new Date().toISOString(),
           status: "streaming",
           steps: [],
@@ -231,7 +231,7 @@ export function useAssistant({ open }: { open: boolean }) {
       /** 끝 이벤트(report·error)를 받았거나 이유가 확정됐나 — 아니면 끊긴 것이다. */
       let settled = false;
       try {
-        const body: AskBody = { threadId, question, level: input.level, clientRef: run.clientRef };
+        const body: AskBody = { threadId, question, clientRef: run.clientRef };
         const res = await fetch(`${API}/ask`, {
           method: "POST",
           headers: { "content-type": "application/json", accept: "application/x-ndjson" },

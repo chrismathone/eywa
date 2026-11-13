@@ -4,6 +4,7 @@ import { useId, useRef, useState } from "react";
 import { TOOLBAR_SEG_BOX, TOOLBAR_SEG_ITEM, TOOLBAR_SEG_OFF, TOOLBAR_SEG_ON_PRIMARY } from "@/components/toolbar-controls";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { EmbedAnchor } from "@/components/embed-link";
 import { TONE_SOFT } from "@/lib/design/semantic-color";
 import { addDays, kstToday } from "@/lib/date-kst";
 import {
@@ -22,6 +23,7 @@ import {
 import { VERDICT_LABEL } from "../advice-outcome";
 import { newerAdvice, rememberAdvice, useLatestAdvice } from "./advice-latest";
 import { PlanLine } from "./advice-lines";
+import { adviceRequest } from "./advice-request";
 
 const ACTIONS: AdviceStatus[] = ["adopted", "done", "on_hold", "declined"];
 const SAVED_TEXT: Record<AdviceStatus, string> = {
@@ -51,6 +53,7 @@ export function AdviceStatusPanel({ initial, onChange }: { initial: AdviceView; 
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsLogin, setNeedsLogin] = useState(false);
   const [announce, setAnnounce] = useState("");
 
   const setView = (next: AdviceView) => {
@@ -64,10 +67,11 @@ export function AdviceStatusPanel({ initial, onChange }: { initial: AdviceView; 
     busyRef.current = true;
     setBusy(true);
     setError(null);
+    setNeedsLogin(false);
     const timeout = new AbortController();
     const timer = window.setTimeout(() => timeout.abort(), 15_000);
     try {
-      const res = await fetch(`/api/assistant/advice/${encodeURIComponent(view.id)}`, {
+      const res = await adviceRequest(`/api/assistant/advice/${encodeURIComponent(view.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status, statusAt: view.statusAt, ...extra }),
@@ -75,7 +79,8 @@ export function AdviceStatusPanel({ initial, onChange }: { initial: AdviceView; 
       });
       const body = (await res.json().catch(() => null)) as { advice?: AdviceView; error?: unknown } | null;
       if (!res.ok || !body?.advice) {
-        setError(typeof body?.error === "string" ? body.error : "처리를 저장하지 못했습니다. 다시 눌러 주세요");
+        setNeedsLogin(res.status === 401);
+        setError(res.status === 401 ? "로그인 상태를 확인하지 못했습니다. 다시 로그인한 뒤 처리해 주세요" : typeof body?.error === "string" ? body.error : "처리를 저장하지 못했습니다. 다시 눌러 주세요");
         return;
       }
       setView(body.advice);
@@ -205,6 +210,7 @@ export function AdviceStatusPanel({ initial, onChange }: { initial: AdviceView; 
       {error ? (
         <p role="alert" className="text-danger text-sm font-medium break-words">
           {error}
+          {needsLogin ? <EmbedAnchor href={`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`} className="ml-2 underline underline-offset-4">로그인하기</EmbedAnchor> : null}
         </p>
       ) : null}
     </div>

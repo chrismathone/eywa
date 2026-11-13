@@ -19,6 +19,29 @@ const q1: QueryResult = {
 const results = new Map([["q1", q1]]);
 
 describe("settleReport", () => {
+  it("표의 이름 링크는 같은 조회의 종류별 ID 칸을 요구한다", () => {
+    const block = { type: "table", title: "학생", query: "q1", columns: [{ column: "월", label: "이름", link: { entity: "student", idColumn: "student_id" } }] };
+    const advice = { type: "advice", items: [{ action: "이름을 눌러 학생 정보를 확인하세요", why: "확인된 명단입니다" }] };
+    const missing = settleReport({ title: "학생", blocks: [block, advice] }, results);
+    expect(!missing.ok && missing.errors.join()).toContain("student_id");
+    const data: QueryResult = { ...q1, columns: [...q1.columns, "student_id"], rows: q1.rows.map(r => ({ ...r, student_id: "11111111-1111-4111-8111-111111111111" })) };
+    const valid = settleReport({ title: "학생", blocks: [block, advice] }, new Map([["q1", data]]));
+    expect(valid.ok && valid.report.blocks[0]).toMatchObject({ columns: [{ link: { entity: "student", idColumn: "student_id" } }] });
+    const wrong = settleReport({ title: "학생", blocks: [{ ...block, columns: [{ ...block.columns[0], link: { entity: "student", idColumn: "퇴원" } }] }, advice] }, results);
+    expect(!wrong.ok && wrong.errors.join()).toContain("해당 종류");
+  });
+
+  it("학생 학교·학년·반 명단의 담당 누락을 돌려보내고 미배정 표시는 허용한다", () => {
+    const data: QueryResult = { ...q1, columns: ["학생", "학교", "학년", "수강반", "담당"], rows: [{ 학생: "민수", 학교: "가초", 학년: "초5", 수강반: "A", 담당: "미배정" }] };
+    const block = { type: "table", title: "수학만 듣는 학생", query: "q1", columns: data.columns.slice(0, 4).map(column => ({ column, label: column })) };
+    const advice = { type: "advice", items: [{ action: "담당 배정을 검토해 주세요", why: "현재 미배정입니다" }] };
+    const missing = settleReport({ title: "학생", blocks: [block, advice] }, new Map([["q1", data]]));
+    expect(!missing.ok && missing.errors.join()).toContain("담당 열도");
+    const valid = settleReport({ title: "학생", blocks: [{ ...block, columns: data.columns.map(column => ({ column, label: column })) }, advice] }, new Map([["q1", data]]));
+    expect(valid.ok).toBe(true);
+    expect(settleReport({ title: "학생", blocks: [block, advice] }, new Map([["q1", data]]), { lenient: true }).ok).toBe(true);
+  });
+
   it("차트·표가 가리킨 조회만 datasets에 싣는다", () => {
     const r = settleReport(
       {

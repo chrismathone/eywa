@@ -20,7 +20,10 @@ export const ONTOLOGY_DOCS: readonly AssistantTableDoc[] = [
     label: "원생(규칙)",
     ko: "원생 한 사람 한 줄 + 세는 규칙(병합·테스트·장부 정리 퇴원 판정)을 칸으로 미리 계산한 보기",
     notes:
-      "원생 수·퇴원 수는 이 보기로 센다. 🔴 현재 재원생 = counted=true이면서 status_label='재원'(둘 다 — 휴원생까지 넣으면 그 사실을 밝힌다). counted=true만 집계(테스트 원생·중복 병합으로 흡수된 원생·수업 기록 없는 장부 정리 퇴원 제외). status_label = 예비·상담완료·재원·휴원·퇴원. exit_kind = real(실제 퇴원) · bookkeeping(장부 정리, 퇴원으로 안 셈·언급 안 함 — counted=false · 끝난 수강이 있어도 출결·수업료 청구가 0이라 표식된 정리 퇴원 포함) · system_bulk(시스템 일괄 처리 날짜 미상 — 월별 퇴원 추이에서 뺀다) · scheduled(퇴원 예정) · null(퇴원 아님). withdrawn_on = 퇴원일(날짜). 월별 퇴원 추이 = exit_kind='real' and counted로 withdrawn_on을 달로 묶는다.",
+      "원생 수·퇴원 수는 이 보기로 센다. 🔴 현재 재원생 = counted=true이면서 status_label='재원'(둘 다 — 휴원생까지 넣으면 그 사실을 밝힌다). counted=true만 집계(테스트 원생·중복 병합으로 흡수된 원생·수업 기록 없는 장부 정리 퇴원 제외). status_label = 예비·상담완료·재원·휴원·퇴원. exit_kind = real(실제 퇴원) · bookkeeping(장부 정리, 퇴원으로 안 셈·언급 안 함 — counted=false · 끝난 수강이 있어도 출결·수업료 청구가 0이라 표식된 정리 퇴원 포함) · system_bulk(시스템 일괄 처리 날짜 미상 — 월별 퇴원 추이에서 뺀다) · scheduled(퇴원 예정) · null(퇴원 아님). withdrawn_on = 퇴원일(날짜). " +
+      "퇴원일 기준 추이 = exit_kind='real' and counted로 withdrawn_on을 달로 묶는다. 🔴 이 숫자를 운영실·퇴원관리의 월별 퇴원 수라고 말하지 않는다. " +
+      "운영실·퇴원관리의 퇴원월은 퇴원일이 속한 달 이하에서 수업료를 낸 마지막 달이다(낸 기록이 없으면 퇴원일의 달). 수업료 순수납이 양수인 달만 인정하고 취소·전액 환불은 뺀다. 청구만 있는 달은 낸 달이 아니다. " +
+      "화면과 같은 월별 수를 물으면 청구·수납·환불도 확인해 같은 기준으로 세고, 그 기준으로 세지 못했으면 퇴원일 기준임과 화면 수를 확인하지 못했음을 짧게 밝힌다.",
     columns: {
       counted: "집계에 넣는 원생인가",
       is_merged: "중복 병합으로 다른 원생에 흡수됨",

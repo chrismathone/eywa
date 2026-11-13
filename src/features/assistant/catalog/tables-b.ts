@@ -498,7 +498,8 @@ export const TABLES_B: readonly AssistantTableDoc[] = [
     name: "students", label: "원생",
     ko: "원생 — 학생 한 명당 한 줄(상태·학교·학년·보호자 연락처·등록일·퇴원일)",
     notes:
-      "status: enrolled=재원 · on_hold=휴원 · withdrawn=퇴원 · prospect=예비 · consulted=상담완료. 신규 = enrolled_at(등록일), 퇴원 = withdrawn_at(퇴원일) — 둘 다 한국 날짜. 퇴원이 아닌데 withdrawn_at이 있으면 퇴원 예약(그날 퇴원 처리). 집계에서 뺄 것: is_test=true · notes가 '중복 병합:'으로 시작(병합으로 흡수된 쪽) · withdrawal_metadata->>'memo'가 '데이터 정리 일괄 퇴원'이거나 '수강 반 없음 일괄 퇴원 처리'로 시작(장부 정리) — 끝난 수강이 없거나 withdrawal_metadata->>'noClassRecord'='true'(출결·청구 0)면 퇴원으로 세지도 말하지도 않는다(onto_students.exit_kind='bookkeeping'). 앱의 월 퇴원 수는 퇴원월을 수업료를 낸 마지막 달로 보정해 단순 집계와 조금 다를 수 있다. 반·과목은 enrollments.",
+      "status: enrolled=재원 · on_hold=휴원 · withdrawn=퇴원 · prospect=예비 · consulted=상담완료. 신규 = enrolled_at(등록일), 퇴원 = withdrawn_at(퇴원일) — 둘 다 한국 날짜. 퇴원이 아닌데 withdrawn_at이 있으면 퇴원 예약(그날 퇴원 처리). 집계에서 뺄 것: is_test=true · notes가 '중복 병합:'으로 시작(병합으로 흡수된 쪽) · withdrawal_metadata->>'memo'가 '데이터 정리 일괄 퇴원'이거나 '수강 반 없음 일괄 퇴원 처리'로 시작(장부 정리) — 끝난 수강이 없거나 withdrawal_metadata->>'noClassRecord'='true'(출결·청구 0)면 퇴원으로 세지도 말하지도 않는다(onto_students.exit_kind='bookkeeping'). " +
+      "앱 운영실·퇴원관리의 퇴원월은 퇴원일의 달 이하에서 수업료를 낸 마지막 달(낸 기록이 없으면 퇴원일의 달)이다. withdrawn_at을 달로 묶은 값은 '퇴원일 기준'이며 앱 월 집계와 같다고 하지 않는다. 수업료 순수납·환불을 반영하는 기준은 onto_students 설명을 따른다. 반·과목은 enrollments.",
     columns: {
       grade: "학년 원문(예: 중2)",
       school: "학교 이름 원문",
@@ -714,7 +715,7 @@ export const TABLES_B: readonly AssistantTableDoc[] = [
     name: "withdrawal_reports", label: "퇴원보고서",
     ko: "퇴원보고서 — 강사가 쓰고 관리자가 승인하는 퇴원·과목 종료 보고서",
     notes:
-      "exit_kind: withdrawal=퇴원 · subject_end=과목 수강 종료. status: requested=작성 요청 · revision=반려·수정 요청 · manager_pending=관리자 승인 요청 · director_pending=원장 승인 대기 · approved=승인 완료(다른 보고서 대기) · scheduled=처리 예약 · completed=처리 완료 · blocked=수강 변경·재검토 필요 · canceled=요청 취소. 사유 = body->>'reason'(students 퇴원 사유 키와 같다). effective_date = 퇴원(종료)일, applied_at = 학생에 반영된 시각. teacher_id = 작성 강사. 과목마다 보고서가 여러 장이라 '퇴원 몇 명'은 students로 센다.",
+      "exit_kind: withdrawal=퇴원 · subject_end=과목 수강 종료. status: requested=작성 요청 · revision=반려·수정 요청 · manager_pending=관리자 승인 요청 · director_pending=원장 승인 대기(2026-11-03 전 옛 보고서에만 남음) · approved=승인 완료(다른 보고서 대기) · scheduled=처리 예약 · completed=처리 완료 · blocked=수강 변경·재검토 필요 · canceled=요청 취소. 사유 = body->>'reason'(students 퇴원 사유 키와 같다). effective_date = 퇴원(종료)일, applied_at = 학생에 반영된 시각. teacher_id = 작성 강사. 과목마다 보고서가 여러 장이라 '퇴원 몇 명'은 students로 센다.",
     columns: {
       direct: "관리자가 강사 작성 없이 바로 처리한 보고서",
       group_id: "묶음(withdrawal_report_groups)",

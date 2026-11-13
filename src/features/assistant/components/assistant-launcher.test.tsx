@@ -4,7 +4,7 @@ import { ASSISTANT_SUGGESTIONS, type AskEvent, type ThreadDetailResponse, type T
 import { kstToday } from "@/lib/date-kst";
 import type { SettledReport } from "@/features/assistant/report";
 import { AssistantLauncher } from "./assistant-launcher";
-import { ASSISTANT_OPEN_EVENT, ASSISTANT_TOGGLE_MESSAGE } from "./assistant-hotkey";
+import { ASSISTANT_OPEN_EVENT, ASSISTANT_NAVIGATE_EVENT, ASSISTANT_TOGGLE_MESSAGE } from "./assistant-hotkey";
 
 vi.mock("./report-chart", () => ({ ReportChart: () => <div data-testid="chart" /> }));
 
@@ -77,7 +77,19 @@ describe("AssistantLauncher", () => {
     expect(within(dialog).getByText("무엇이 궁금하세요?")).toBeInTheDocument();
     expect(await within(dialog).findByRole("button", { name: /미납 현황을 반별로 정리해 줘/ })).toBeInTheDocument();
     await waitFor(() => expect(calls.some((c) => c.url === "/api/assistant/threads")).toBe(true));
-    expect(within(dialog).getByRole("radio", { name: "보통" })).toHaveAttribute("aria-checked", "true");
+    expect(within(dialog).queryByRole("radiogroup")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("추론 강도")).not.toBeInTheDocument();
+  });
+
+  it("상세 링크 이동은 판만 닫고 다시 열면 쓰던 질문이 남는다", async () => {
+    render(<AssistantLauncher />);
+    fireEvent.click(screen.getByRole("button", { name: /비서/ }));
+    const dialog = await findDialog();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "질문" }), { target: { value: "이어서 물을 질문" } });
+    act(() => window.dispatchEvent(new Event(ASSISTANT_NAVIGATE_EVENT)));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: /비서/ }));
+    expect(within(await findDialog()).getByRole("textbox", { name: "질문" })).toHaveValue("이어서 물을 질문");
   });
 
   it("추천 질문 — 추세 질문·근거 · 직전 묶음에 없던 주제만 NEW(숫자만 바뀐 질문은 아님) · 같은 날 다시 열면 서버에 묻지 않는다 · 새로 고침", async () => {
@@ -156,7 +168,7 @@ describe("AssistantLauncher", () => {
 
     expect(await within(dialog).findByRole("heading", { name: "반별 미납 보고서" })).toBeInTheDocument();
     const ask = calls.find((c) => c.method === "POST");
-    expect(ask?.body).toEqual({ threadId: null, question: "미납 현황을 반별로", level: "normal", clientRef: expect.stringMatching(/^[0-9a-f-]{36}$/) });
+    expect(ask?.body).toEqual({ threadId: null, question: "미납 현황을 반별로", clientRef: expect.stringMatching(/^[0-9a-f-]{36}$/) });
     expect(input).toHaveValue("");
     // 과정은 한 줄로 접혀서 남는다 — "조회 1번 · 표 1개 · 1.2초 — 과정 보기"
     expect(within(dialog).getByText("조회 1번 · 표 1개 · 1.2초")).toBeInTheDocument();
@@ -439,7 +451,7 @@ describe("AssistantLauncher", () => {
     const dialog = await findDialog();
     fireEvent.click(await within(dialog).findByRole("button", { name: /^지난 질문/ }));
     expect(await within(dialog).findByText("지난 질문 본문")).toBeInTheDocument();
-    expect(within(dialog).getByText(/추론 강함/)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/추론 강함/)).not.toBeInTheDocument();
     // 대화 머리에는 지우기가 없다(목록으로 옮김)
     expect(within(dialog).queryByRole("button", { name: "대화 지우기" })).toBeNull();
     // x → 확인(초점은 '취소') → Esc는 확인만 닫고 판은 그대로 · 초점은 다시 x로

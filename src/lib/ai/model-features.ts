@@ -55,7 +55,7 @@ export const FIXED_MODEL_FEATURES: Readonly<Record<string, string>> = {
   // 학원 비서(2026-11-06) — 원장이 대화창에서 적음·보통·강함(Haiku·Sonnet·Opus 5.5)을 고른다. 지점 전체 자료를 읽는 기능이라 다른 회사 모델로 바꾸지 않는다.
   // 경영 분석 AI 검토(2026-11-10 · aywa-next 이식) — 학원 재무 집계만 보내는 원장 전용 기능이라 다른 회사로 보내지 않는다.
   management_analysis: "경영 분석 AI 검토는 집계 지표만 사용하는 Claude 전용 기능입니다.",
-  academy_assistant: "학원 비서는 Claude 전용입니다 — 추론 강도(적음·보통·강함)는 원장이 대화창에서 고릅니다.",
+  academy_assistant: "학원 비서는 검증한 고정 모델로 답합니다 — 대화창에서 모델이나 추론 강도를 선택하지 않습니다.",
 };
 
 export function isTenantModelFeature(key: unknown): key is string {

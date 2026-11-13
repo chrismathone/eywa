@@ -1,7 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { prepareAsk } from "@/features/assistant/server/ask";
-import { ASSISTANT_LEVELS } from "@/features/assistant/levels";
 import { ASSISTANT_QUESTION_MAX, type AskEvent } from "@/features/assistant/protocol";
 import { reportError } from "@/lib/observability/report-error";
 
@@ -15,7 +14,6 @@ export const maxDuration = 800;
 const Body = z.object({
   threadId: z.string().uuid().nullish(),
   question: z.string().trim().min(1).max(ASSISTANT_QUESTION_MAX),
-  level: z.enum(ASSISTANT_LEVELS),
   // 화면이 보낼 때 만든 번호 — 질문 번호를 받기 전에 누른 멈춤·마무리가 이 질문을 찾는다(SQL s2_0034).
   clientRef: z.string().uuid().nullish(),
 });

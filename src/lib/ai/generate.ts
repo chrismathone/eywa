@@ -196,7 +196,7 @@ type ProviderCall = { text: string; usage: ProviderUsage; truncated: boolean };
  */
 export async function recordUsage(entry: {
   meta?: GenerateJSONOptions["meta"];
-  provider: AiProvider | "typesafe";
+  provider: AiProvider | "typesafe" | "openai";
   model: string;
   /** 실제로 불린 키의 짧은 이름('ment' · 'consultations' · 'default') — 기본 키로 넘어간 호출이 드러난다. */
   keyName: string;

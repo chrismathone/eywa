@@ -4,12 +4,11 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { tipProps } from "@/components/hover-tip/tip";
 import { Button } from "@/components/ui/button";
-import { DEFAULT_ASSISTANT_LEVEL, type AssistantLevel } from "@/features/assistant/levels";
 import { isHelpHotkey } from "@/features/help/overlay-hotkey";
 import { kstToday } from "@/lib/date-kst";
 import { isPaletteHotkey } from "@/lib/palette-hotkey";
 import { AssistantBadge } from "./assistant-badge";
-import { ASSISTANT_OPEN_EVENT, ASSISTANT_TOGGLE_MESSAGE, assistantHotkeyLabel, isAssistantHotkey, setAssistantBusy } from "./assistant-hotkey";
+import { ASSISTANT_OPEN_EVENT, ASSISTANT_NAVIGATE_EVENT, ASSISTANT_TOGGLE_MESSAGE, assistantHotkeyLabel, isAssistantHotkey, setAssistantBusy } from "./assistant-hotkey";
 import { runningThreadKeys } from "./assistant-state";
 import { useAssistant } from "./use-assistant";
 
@@ -30,7 +29,7 @@ function useHotkeyLabel(): string {
  * **학원 비서 런처** — 위쪽 바의 '✦ 비서' 버튼 + 어디서나 여는 오버레이(원장 2026-11-06 *"어디서나 오버레이로 열 수 있게 다른 화면 위에"*).
  *
  * - 셸 레이아웃에 **한 번만** 둔다(두 벌이면 단축키가 두 번 토글돼 열리자마자 닫힌다). 레이아웃은 화면을 옮겨도 남으므로
- *   열림·지금 대화·받던 답·입력 중인 글·추론 강도가 이 컴포넌트에 살아 있다.
+ *   열림·지금 대화·받던 답·입력 중인 글이 이 컴포넌트에 살아 있다.
  * - 처음 열 때 지난 대화(`GET /api/assistant/threads`)를 읽고, 그 뒤로는 열 때마다 조용히 새로 고친다.
  * - 단축키 Ctrl/⌘+J(열기·닫기) — 창(iframe) 안에서는 `AssistantHotkeyForward`가 넘겨 준다. 다른 곳의 버튼은
  *   `window.dispatchEvent(new Event(ASSISTANT_OPEN_EVENT))`로 연다(사이드바·모바일 메뉴 등 — 런처는 하나로 둔 채).
@@ -45,7 +44,6 @@ export function AssistantLauncher({ trigger = true, className }: { trigger?: boo
   const [everOpened, setEverOpened] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [listOpen, setListOpen] = useState(true);
-  const [level, setLevel] = useState<AssistantLevel>(DEFAULT_ASSISTANT_LEVEL);
   const [draft, setDraft] = useState("");
   const [today, setToday] = useState("");
   const assistant = useAssistant({ open });
@@ -96,14 +94,20 @@ export function AssistantLauncher({ trigger = true, className }: { trigger?: boo
       if (e.origin !== window.location.origin) return;
       if ((e.data as { type?: unknown } | null)?.type === ASSISTANT_TOGGLE_MESSAGE) toggle();
     };
+    const onNavigate = () => {
+      skipFocusRef.current = true;
+      setOpen(false);
+    };
     // 캡처 단계 — 판 안의 입력·다른 화면 단축키보다 먼저 본다.
     window.addEventListener("keydown", onKey, true);
     window.addEventListener("message", onMessage);
     window.addEventListener(ASSISTANT_OPEN_EVENT, openOverlay);
+    window.addEventListener(ASSISTANT_NAVIGATE_EVENT, onNavigate);
     return () => {
       window.removeEventListener("keydown", onKey, true);
       window.removeEventListener("message", onMessage);
       window.removeEventListener(ASSISTANT_OPEN_EVENT, openOverlay);
+      window.removeEventListener(ASSISTANT_NAVIGATE_EVENT, onNavigate);
     };
   }, [open, toggle, openOverlay]);
 
@@ -150,8 +154,6 @@ export function AssistantLauncher({ trigger = true, className }: { trigger?: boo
           keepMounted
           finalFocus={finalFocus}
           assistant={assistant}
-          level={level}
-          onLevelChange={setLevel}
           draft={draft}
           onDraftChange={setDraft}
           expanded={expanded}

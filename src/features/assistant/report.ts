@@ -9,11 +9,12 @@
  */
 import { z } from "zod";
 import { labelCodeColumns } from "./code-labels";
-import { chartXProblem, kpiPeriodProblem, kpiRefTypeProblem, legendOf, rawCodeProblem, unitFix } from "./report-checks";
+import { chartXProblem, kpiPeriodProblem, kpiRefTypeProblem, legendOf, rawCodeProblem, rosterOwnerMissing, unitFix } from "./report-checks";
 import { plainRich } from "./rich-text";
 import { ADVICE_METHODS, ADVICE_TOPICS, AdviceCheckSchema, CHECK_FAILED, checkTemplateProblem, type AdviceView } from "./advice";
 import { AdviceTargetsSchema, checkIntegrityProblem } from "./advice-targets";
 import { isRecord } from "@/lib/guards";
+import { entityIdColumn } from "./entity-links";
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 /**
@@ -50,6 +51,10 @@ export const KpiItemSchema = z.object({
 });
 
 export const ColumnFormatSchema = z.enum(["text", "number", "won", "percent", "date", "datetime"]);
+const EntityLinkSchema = z.object({
+  entity: z.enum(["student", "staff", "class"]),
+  idColumn: z.string().describe("같은 조회 행의 student_id·staff_id(teacher_id)·class_id 칸. 실제 UUID를 조회하고 ID 칸 자체는 표시 열에서 뺀다. URL·이름으로 만들지 않는다."),
+});
 
 export const ReportBlockSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("summary"), text: richText(800) }),
@@ -67,7 +72,7 @@ export const ReportBlockSchema = z.discriminatedUnion("type", [
     type: z.literal("table"),
     title: text(60),
     query: z.string(),
-    columns: z.array(z.object({ column: z.string(), label: text(30), format: ColumnFormatSchema.optional() })).min(1).max(12),
+    columns: z.array(z.object({ column: z.string(), label: text(30), format: ColumnFormatSchema.optional(), link: EntityLinkSchema.optional() })).min(1).max(12),
     /** 합계 줄을 낼 칸(숫자 칸만). */
     totals: z.array(z.string()).max(12).optional(),
   }),
@@ -273,7 +278,8 @@ export function settleReport(
       continue;
     }
     if (block.type === "table") {
-      need(where, block.query, block.columns.map((c) => c.column));
+      need(where, block.query, block.columns.flatMap((c) => [c.column, ...(c.link ? [c.link.idColumn] : [])]));
+      for (const c of block.columns) if (c.link && !entityIdColumn(c.link)) errors.push(`${where}: ${c.label}의 링크에는 해당 종류의 student_id·staff_id(teacher_id)·class_id 칸을 사용하세요`);
       if (dropIfLenient()) continue;
       // 합계 칸만 틀렸으면 마무리 중에는 합계만 뺀다(표는 남긴다).
       const tr = results.get(block.query);
@@ -287,6 +293,7 @@ export function settleReport(
         const label = legended.has(`${block.query}\u0000${c.column}`) ? legendLabel.get(c.label) : undefined;
         return label ? { ...c, label } : c;
       });
+      if (!opts.lenient && rosterOwnerMissing(columns)) errors.push(`${where}: 학생의 학교·학년·반 명단에는 담당 열도 함께 조회해 표시하세요. 여러 반이면 반별 담당, 미배정이면 '미배정'으로 구별하세요`);
       codeCheck(where, block.query, columns);
       const table = { ...block, columns };
       if (totals?.length) table.totals = totals;

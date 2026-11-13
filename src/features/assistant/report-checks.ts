@@ -8,6 +8,13 @@
  * 🔴 마무리 중(조회가 막힌 뒤)에 돌려보내면 고칠 길이 없어 답을 잃는다 — 돌려보내는 검사는 모두 `lenient`(마무리)에서 꺼진다.
  */
 
+/** 학생의 학교·학년·반 명단에 빠진 담당. 예전 답·시간 제한 답은 화면에서 미확인으로 표시한다. */
+export function rosterOwnerMissing(columns: readonly { column: string; label: string }[]): boolean {
+  const labels = columns.map(c => `${c.column} ${c.label}`);
+  return labels.some(s => /학생|원생|이름|성명/.test(s)) && labels.some(s => /학교/.test(s)) && labels.some(s => /학년/.test(s)) && labels.some(s => /반/.test(s))
+    && !labels.some(s => /담당|담임/.test(s) && !/학생|원생|인원|비율|비중|학생수|반수/.test(s));
+}
+
 /** 단위 바꿈표 — 뜻이 하나인 것만. 프로토타입 이름(`__proto__`)에 걸리지 않게 Map(재리뷰 2026-11-11). */
 const UNIT_ALIAS = new Map<string, string>([
   ["won", "원"],

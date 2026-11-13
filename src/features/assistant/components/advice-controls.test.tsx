@@ -6,6 +6,7 @@ import { monthDayLabel, type AdviceView } from "../advice";
 import type { SettledReport } from "../report";
 import { AdviceStatusPanel } from "./advice-controls";
 import { ReportView } from "./report-view";
+vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({ auth: { refreshSession: async () => ({ data: { session: null }, error: new Error("expired") }) } }) }));
 
 const VIEW: AdviceView = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -49,6 +50,18 @@ let seq = 0;
 const fresh = (over: Partial<AdviceView> = {}): AdviceView => ({ ...VIEW, id: `11111111-1111-4111-8111-${String(++seq).padStart(12, "0")}`, ...over });
 
 describe("비서 의견 처리", () => {
+  it("세션을 회복하지 못하면 처리 완료로 꾸미지 않고 재로그인 경로와 작성한 메모를 남긴다", async () => {
+    stubFetch(() => ({ status: 401, json: { error: "로그인이 필요합니다" } }));
+    render(<AdviceStatusPanel initial={fresh()} />);
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "해 본 내용(선택)" }), { target: { value: "상담 완료 메모" } });
+    fireEvent.click(screen.getByRole("button", { name: "완료로 저장" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("로그인 상태를 확인하지 못했습니다"));
+    expect(screen.getByRole("link", { name: "로그인하기" }).getAttribute("href")).toMatch(/^\/login\?next=/);
+    expect(screen.getByRole("textbox", { name: "해 본 내용(선택)" })).toHaveValue("상담 완료 메모");
+    expect(screen.queryByText("완료로 저장했습니다")).toBeNull();
+  });
+
   it("확인 지표 줄 — 기준값 · 표본 · 기간 · 좋아지는 쪽 · 다시 잴 날(재측정 기다림)", () => {
     render(<AdviceStatusPanel initial={fresh()} />);
     expect(screen.getByText(/A반 최근 14일 결석률/).textContent).toBe(

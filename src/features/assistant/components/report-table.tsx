@@ -1,12 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { CONTROL_H_SM } from "@/components/ui/control-scale";
 import type { ColumnFormat, SettledReport } from "@/features/assistant/report";
 import { tipProps } from "@/components/hover-tip/tip";
 import { kstToday } from "@/lib/date-kst";
+import { entityHref, inferredEntityLink, type ReportEntityLink } from "../entity-links";
+import { ASSISTANT_NAVIGATE_EVENT } from "./assistant-hotkey";
+import { rosterOwnerMissing } from "../report-checks";
 import { fitColumn, mayOverflow, oneLine, tableMinWidth } from "./report-columns";
 import {
   columnAlign,
@@ -22,11 +26,12 @@ import {
 } from "./report-format";
 
 type Dataset = SettledReport["datasets"][string];
-export type ReportTableColumn = { column: string; label: string; format?: ColumnFormat };
+export type ReportTableColumn = { column: string; label: string; format?: ColumnFormat; link?: ReportEntityLink };
 
 /** 처음 보이는 행 수 · '더 보기' 한 번에 늘리는 행 수. */
 const FIRST_ROWS = 20;
 const MORE_ROWS = 50;
+const OWNER_UNCONFIRMED = "__assistant_owner_unconfirmed";
 
 const ALIGN_TEXT: Record<Align, string> = { left: "text-left", center: "text-center", right: "text-right" };
 const ALIGN_FLEX: Record<Align, string> = { left: "justify-start", center: "justify-center", right: "justify-end" };
@@ -55,22 +60,25 @@ export function ReportTable({
 }) {
   const [sort, setSort] = useState<{ column: string; dir: SortDir } | null>(null);
   const [shown, setShown] = useState(FIRST_ROWS);
+  const ownerMissing = rosterOwnerMissing(columns);
+  // 예전 답·시간 제한 답에도 담당 칸은 남긴다. 원본 조회를 바꾸거나 '담당 없음'으로 단정하지 않는다.
+  const sourceRows = useMemo<Dataset["rows"]>(() => ownerMissing ? dataset.rows.map(row => ({ ...row, [OWNER_UNCONFIRMED]: "미확인" })) : dataset.rows, [ownerMissing, dataset.rows]);
 
   const cols = useMemo(
     () =>
-      columns.map((c) => {
-        const values = dataset.rows.map((r) => r[c.column]);
+      (ownerMissing ? [...columns, { column: OWNER_UNCONFIRMED, label: "담당" } as ReportTableColumn] : columns).map((c) => {
+        const values = sourceRows.map((r) => r[c.column]);
         const format = effectiveFormat(c.format, values);
         return { ...c, format, align: columnAlign(format, values), texts: values.map((v) => formatCell(v, format)) };
       }),
-    [columns, dataset.rows],
+    [columns, ownerMissing, sourceRows],
   );
   const rows = useMemo(() => {
-    if (!sort) return dataset.rows;
+    if (!sort) return sourceRows;
     const col = cols.find((c) => c.column === sort.column);
-    return col ? sortRows(dataset.rows, sort.column, sort.dir, col.format) : dataset.rows;
-  }, [cols, dataset.rows, sort]);
-  const sums = useMemo(() => (totals?.length ? columnTotals(dataset.rows, cols, totals) : null), [cols, dataset.rows, totals]);
+    return col ? sortRows(sourceRows, sort.column, sort.dir, col.format) : sourceRows;
+  }, [cols, sourceRows, sort]);
+  const sums = useMemo(() => (totals?.length ? columnTotals(sourceRows, cols, totals) : null), [cols, sourceRows, totals]);
   // 열 폭 — 값 · 머리 · 합계 줄 글까지 한 줄로 들어가게(합계가 칸 밖으로 새지 않게).
   const fits = useMemo(
     () =>
@@ -173,6 +181,8 @@ export function ReportTable({
                   {cols.map((c, ci) => {
                     const numeric = c.format === "number" || c.format === "won" || c.format === "percent";
                     const text = formatCell(row[c.column], c.format);
+                    const link = c.link ?? inferredEntityLink(c.column, c.label, downloadTitle, dataset.columns);
+                    const href = link && c.format === "text" && typeof row[c.column] === "string" && text.trim() ? entityHref(link, row) : null;
                     // 한 줄 고정 — 넘칠 수 있는 칸만 원문 전체를 마우스 오버 카드로(문서마다 한 장인 레이어 · 글자로만 그린다).
                     const tip = mayOverflow(text, fits[ci]!) ? tipProps({ lines: [text], wide: text.length > 60 }) : {};
                     return (
@@ -181,7 +191,7 @@ export function ReportTable({
                         {...tip}
                         className={`h-10 overflow-hidden px-3 py-0 align-middle text-ellipsis whitespace-nowrap ${ALIGN_TEXT[c.align]} ${numeric ? "num" : ""}`}
                       >
-                        {oneLine(text)}
+                        {href ? <Link href={href} prefetch={false} onNavigate={() => window.dispatchEvent(new Event(ASSISTANT_NAVIGATE_EVENT))} className="text-primary rounded-sm font-medium underline decoration-primary/40 underline-offset-4 hover:decoration-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">{oneLine(text)}</Link> : oneLine(text)}
                       </td>
                     );
                   })}

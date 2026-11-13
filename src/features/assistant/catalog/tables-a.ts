@@ -41,7 +41,7 @@ export const TABLES_A: readonly AssistantTableDoc[] = [
     label: "AI 사용량",
     ko: "AI 호출 사용량 장부 — 호출 1건마다 기능·모델·토큰",
     notes:
-      "feature=호출한 기능(예 daily_briefing·classnote_ment·enrollment_analysis), provider=회사(예 anthropic), ok=false면 실패(error). input_tokens에는 캐시 토큰이 들어 있지 않다 — cache_read_tokens(정가 10%)·cache_write_tokens(정가 125%)를 따로 더한다. 금액 칸은 없다. 언제 = created_at.",
+      "feature=호출한 기능(예 daily_briefing·classnote_ment·enrollment_analysis), provider=회사(예 anthropic·openai), ok=false면 실패(error). input_tokens에는 캐시 토큰이 들어 있지 않다 — cache_read_tokens·cache_write_tokens를 따로 더한다. 캐시 단가는 모델·보관 시간에 따라 다르며 금액 칸은 없다. 토큰 수를 그대로 청구 금액으로 쓰지 않는다. 언제 = created_at.",
     columns: {
       key_name: "과금 키 묶음(예 default·consultations)",
     },

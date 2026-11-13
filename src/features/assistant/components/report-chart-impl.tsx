@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { Area, Bar, CartesianGrid, ComposedChart, LabelList, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { ReportBlock, SettledReport } from "@/features/assistant/report";
+import { chartLayout } from "./chart-layout";
 import {
   CHART_COLORS,
   chartPoints,
@@ -66,16 +67,22 @@ export function ReportChartImpl({ block, dataset }: ReportChartProps) {
   const yWidth = Math.min(110, Math.max(40, textWidth(tick(max * 1.1)) + 14, textWidth(tick(min * 1.1)) + 14));
   const decimals = values.some((v) => !Number.isInteger(v));
   const lineLike = block.kind === "line" || block.kind === "area";
+  const layout = chartLayout(block.kind, points.map(p => p.label), series.length);
+  const horizontal = layout.horizontal;
   const dots = points.length <= 24;
   // 막대 위 값 — 시리즈 하나 · 칸이 넉넉할 때(12칸 이하)만. 그 밖은 툴팁이 말한다(점마다 숫자를 세우지 않는다).
   const barLabels = !lineLike && !stacked && series.length === 1 && points.length <= 12;
 
   return (
     <div className="space-y-2">
-      <div style={{ height: CHART_HEIGHT }} className="w-full">
+      <div style={{ height: layout.height }} className="w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={points} margin={MARGIN} barGap={2} barCategoryGap="24%">
-            <CartesianGrid stroke="var(--color-line)" strokeDasharray="3 4" vertical={false} />
+          <ComposedChart data={points} layout={horizontal ? "vertical" : "horizontal"} margin={horizontal ? { ...MARGIN, right: barLabels ? 52 : 16 } : MARGIN} barGap={2} barCategoryGap="24%" accessibilityLayer>
+            <CartesianGrid stroke="var(--color-line)" strokeDasharray="3 4" vertical={horizontal} horizontal={!horizontal} />
+            {horizontal ? <>
+              <XAxis type="number" tick={TICK} tickLine={false} axisLine={AXIS_LINE} domain={min < 0 ? ["auto", "auto"] : [0, "auto"]} allowDecimals={decimals} tickFormatter={tick} />
+              <YAxis type="category" dataKey="key" width={layout.labelWidth} interval={0} tick={TICK} tickLine={false} axisLine={false} tickFormatter={(k: string) => short(points[Number(k)]?.label ?? "", 20)} />
+            </> : <>
             <XAxis
               dataKey="key"
               tickFormatter={(k: string) => short(points[Number(k)]?.label ?? "")}
@@ -97,6 +104,7 @@ export function ReportChartImpl({ block, dataset }: ReportChartProps) {
               axisLine={false}
               tickFormatter={(n: number) => tick(n)}
             />
+            </>}
             <Tooltip
               cursor={lineLike ? { stroke: "var(--color-line-strong)", strokeWidth: 1 } : { fill: "var(--color-bg-soft)", opacity: 0.6 }}
               content={<ValueBox series={series} unit={unit} stacked={stacked} />}
@@ -147,7 +155,7 @@ export function ReportChartImpl({ block, dataset }: ReportChartProps) {
                   name={s.name}
                   fill={s.color}
                   stackId={stacked ? "stack" : undefined}
-                  radius={top ? [4, 4, 0, 0] : 0}
+                  radius={top ? (horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0]) : 0}
                   // 쌓은 조각 사이 2px 면 틈 — 같은 색 계열이 붙어도 경계가 보인다.
                   stroke={stacked ? "var(--color-card)" : undefined}
                   strokeWidth={stacked ? 1.5 : 0}
@@ -156,7 +164,7 @@ export function ReportChartImpl({ block, dataset }: ReportChartProps) {
                   animationDuration={450}
                 >
                   {barLabels ? (
-                    <LabelList dataKey={s.key} position="top" fontSize={FONT} fill="var(--color-foreground)" formatter={(v: unknown) => (typeof v === "number" ? tick(v) : "")} />
+                    <LabelList dataKey={s.key} position={horizontal ? "right" : "top"} fontSize={FONT} fill="var(--color-foreground)" formatter={(v: unknown) => (typeof v === "number" ? tick(v) : "")} />
                   ) : null}
                 </Bar>
               );

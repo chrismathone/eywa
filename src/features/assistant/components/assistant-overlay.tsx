@@ -7,7 +7,6 @@ import { tipProps } from "@/components/hover-tip/tip";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { AssistantLevel } from "@/features/assistant/levels";
 import { ASSISTANT_MAX_RUNNING } from "@/features/assistant/protocol";
 import { monthDayLabel } from "@/lib/date-kst";
 import { isConversationRunningElsewhere, liveTurnOf, runningThreadKeys, type Conversation, type Turn } from "./assistant-state";
@@ -35,7 +34,7 @@ const scrollBehavior = (): ScrollBehavior => (window.matchMedia("(prefers-reduce
  * 학원 비서 오버레이 — 어느 화면 위에서나 오른쪽에서 열리는 넓은 판(약 1120px · 전체 화면으로 키울 수 있다 · 폰은 늘 전체 화면).
  * 왼쪽 지난 대화(접힘 · 폰은 서랍) · 가운데 대화(질문 + 보고서) · 아래 입력.
  *
- * 🔑 z-[80] — 셸 머리(z-60)·공지 팝업(z-55)·드롭다운(z-60) 위, 카드 툴팁 레이어(z-9999) 아래(그래서 강도 설명 카드가 판 위에 뜬다).
+ * 🔑 z-[80] — 셸 머리(z-60)·공지 팝업(z-55)·드롭다운(z-60) 위, 카드 툴팁 레이어(z-9999) 아래.
  *    🔴 그래서 판 안에는 **포털로 뜨는 공용 팝업**(ui/tooltip z-50 · dropdown-menu·select z-60)을 쓰지 않는다 — 판 뒤에 깔린다.
  * 🔑 판은 최상위 문서에만 있다(창 = iframe 위에 덮인다). 상태는 런처가 든다 — 닫아도 대화·받던 답이 그대로다.
  */
@@ -45,8 +44,6 @@ export function AssistantOverlay({
   keepMounted,
   finalFocus,
   assistant,
-  level,
-  onLevelChange,
   draft,
   onDraftChange,
   expanded,
@@ -63,8 +60,6 @@ export function AssistantOverlay({
   /** 닫을 때 초점을 돌려줄 곳(검색 팰릿으로 넘어갈 땐 false). */
   finalFocus: () => boolean | HTMLElement | null;
   assistant: Assistant;
-  level: AssistantLevel;
-  onLevelChange: (l: AssistantLevel) => void;
   draft: string;
   onDraftChange: (v: string) => void;
   expanded: boolean;
@@ -160,7 +155,7 @@ export function AssistantOverlay({
     setBusyNotice(null);
     // 이 대화의 지우기 확인을 열어 둔 채 물으면 확인은 닫는다(답이 끝난 뒤 되살아나 초점을 빼앗지 않게).
     if (confirmDelete && confirmDelete === current.threadId) setConfirmDelete(null);
-    void assistant.ask({ convKey: current.key, threadId: current.threadId, question, level, onBusy: onBusy(current.key, question) });
+    void assistant.ask({ convKey: current.key, threadId: current.threadId, question, onBusy: onBusy(current.key, question) });
     // 보낸 질문이 판 맨 위에 오게 — 진행 상황과 보고서가 그 아래로 자란다.
     requestAnimationFrame(() => scrollToLastTurn(scrollBehavior()));
   };
@@ -168,7 +163,7 @@ export function AssistantOverlay({
   const retry = (turn: Turn) => {
     if (!canAskHere) return;
     setBusyNotice(null);
-    void assistant.ask({ convKey: current.key, threadId: current.threadId, question: turn.question, level: turn.level, onBusy: onBusy(current.key, turn.question) });
+    void assistant.ask({ convKey: current.key, threadId: current.threadId, question: turn.question, onBusy: onBusy(current.key, turn.question) });
     requestAnimationFrame(() => scrollToLastTurn(scrollBehavior()));
   };
 
@@ -401,8 +396,6 @@ export function AssistantOverlay({
                   <AssistantComposer
                     value={draft}
                     onChange={onDraftChange}
-                    level={level}
-                    onLevelChange={onLevelChange}
                     onSend={() => send(draft, true)}
                     onStop={() => live && assistant.stop(live.key)}
                     onFinish={() => live && assistant.finish(live.key)}

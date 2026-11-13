@@ -63,6 +63,31 @@ const report: SettledReport = {
 };
 
 describe("ReportView", () => {
+  it("담당이 빠진 예전 학생 명단에도 담당 열을 미확인으로 표시하고 원본을 바꾸지 않는다", () => {
+    const rows = [{ 이름: "민수", 학교: "가초", 학년: "초5", 반: "A반" }];
+    render(<ReportView report={{ title: "학생 명단", blocks: [{ type: "table", title: "학생 명단", query: "old", columns: Object.keys(rows[0]!).map(column => ({ column, label: column })) }], datasets: { old: { columns: Object.keys(rows[0]!), rows, truncated: false, purpose: "명단" } } }} />);
+    expect(screen.getByRole("columnheader", { name: "담당" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "미확인" })).toBeInTheDocument();
+    expect(Object.keys(rows[0]!)).toEqual(["이름", "학교", "학년", "반"]);
+  });
+
+  it("동명이인도 정렬된 원래 행의 ID로 연결하고 ID 없는 이름·외부 주소는 링크로 만들지 않는다", () => {
+    const ids = ["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"];
+    const linked: SettledReport = {
+      title: "학생 명단", blocks: [{ type: "table", title: "학생 명단", query: "names", columns: [{ column: "이름", label: "이름", link: { entity: "student", idColumn: "student_id" } }, { column: "학년", label: "학년" }] }],
+      datasets: { names: { columns: ["이름", "학년", "student_id"], rows: [{ 이름: "동명이인", 학년: "초5", student_id: ids[0]! }, { 이름: "동명이인", 학년: "중1", student_id: ids[1]! }, { 이름: "연결 없음", 학년: "초4", student_id: "https://example.com" }], truncated: false, purpose: "명단" } },
+    };
+    render(<ReportView report={linked} />);
+    expect(screen.getAllByRole("link", { name: "동명이인" }).map(e => e.getAttribute("href"))).toEqual(ids.map(id => `/students/${id}`));
+    fireEvent.click(screen.getByRole("button", { name: "학년" }));
+    for (const row of screen.getAllByRole("row").slice(1)) {
+      const link = within(row).queryByRole("link");
+      if (link) expect(link.getAttribute("href")).toBe(`/students/${row.textContent?.includes("초5") ? ids[0] : ids[1]}`);
+    }
+    expect(screen.queryByRole("link", { name: "연결 없음" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "student_id" })).toBeNull();
+  });
+
   it("모든 블록을 그린다 — 제목·요약·KPI·차트·표·주의·목록·비서 의견·근거", () => {
     render(<ReportView report={report} />);
     expect(screen.getByRole("heading", { name: "11월 미납 현황" })).toBeInTheDocument();
