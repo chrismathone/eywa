@@ -92,9 +92,10 @@ export function TeacherChurnCard({ data, initialSort, initialView }: { data: Tea
       <header className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <h2 className="text-foreground text-base font-bold">강사별 퇴원율 추이</h2>
-          {/* 세는 기준을 숫자 옆에 — 위 퇴원 수·필터와 다른 잣대라 같은 화면에서 숫자가 갈려 보일 수 있다. */}
+          {/* 세는 기준을 숫자 옆에 — 퇴원 수·필터와 다른 잣대라 같은 화면에서 숫자가 갈려 보일 수 있다.
+              카드는 필터 툴바 위에 있다(page.tsx) — 방향('위 필터')을 적지 말 것. */}
           <p className="text-text-faint mt-0.5 text-xs">
-            강사평가 퇴원율 · 지난달 절반 이상 맡은 학생 중 그 달 그만둔 비율 · 입사 다음 달부터 퇴사한 달까지 · 위 필터·퇴원 수와 따로 셉니다
+            강사평가 퇴원율 · 지난달 절반 이상 맡은 학생 중 그 달 그만둔 비율 · 입사 다음 달부터 퇴사한 달까지 · 필터·퇴원 수와 따로 셉니다
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
