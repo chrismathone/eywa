@@ -5,6 +5,7 @@ import { SequentialPhotoCapture } from "./sequential-photo-capture";
 
 const take = vi.hoisted(() => vi.fn());
 vi.mock("../resize-image", () => ({ resizeImageForUpload: (file: File) => Promise.resolve(file) }));
+vi.mock("./photo-markup-editor", () => ({ PhotoMarkupEditor: ({ onApply }: { onApply: (file: File) => void }) => <button onClick={() => onApply(new File(["edited"], "edited.jpg", { type: "image/jpeg" }))}>편집 적용</button> }));
 vi.mock("./photo-camera-panel", () => ({ PhotoCameraPanel: ({ entry, index, onPhoto, onMove, onReview }: {
   entry: PhotoEntry; index: number; onPhoto: (fn: () => Promise<File>) => void; onMove: (index: number) => void; onReview: () => void;
 }) => <div><p>{entry.target.name}</p><button onClick={() => onPhoto(take)}>촬영</button><button onClick={() => onMove(index + 1)}>건너뛰기</button><button onClick={onReview}>사진 확인</button></div> }));
@@ -88,4 +89,21 @@ it("부분 실패는 확인 화면에 남고 재시도 때 성공 사진을 중�
   fireEvent.click(screen.getByRole("button", { name: "확인한 사진 1장 첨부" }));
   await screen.findByText("사진 2장을 학생별로 첨부했습니다.");
   expect(attach.mock.calls.map(([t]) => t.studentId)).toEqual(["a", "b", "b"]);
+});
+
+it("같은 사진 파일을 두 번 추가해도 꾸미기는 선택한 한 장만 바꾸고 수정본을 첨부한다", async () => {
+  const original = file("original.jpg");
+  take.mockResolvedValue(original);
+  setup([target("a")]);
+  fireEvent.click(screen.getByRole("button", { name: "촬영" }));
+  await screen.findByText("1개 수업 · 첨부할 사진 1장");
+  fireEvent.click(screen.getByRole("button", { name: "추가 촬영" }));
+  fireEvent.click(screen.getByRole("button", { name: "촬영" }));
+  await screen.findByText("1개 수업 · 첨부할 사진 2장");
+  fireEvent.click(screen.getAllByRole("button", { name: "사진 꾸미기" })[0]);
+  fireEvent.click(await screen.findByRole("button", { name: "편집 적용" }));
+  attach.mockResolvedValue(1);
+  fireEvent.click(screen.getByRole("button", { name: "확인한 사진 2장 첨부" }));
+  await screen.findByText("사진 2장을 학생별로 첨부했습니다.");
+  expect(attach.mock.calls.map(([, files]) => files[0].name)).toEqual(["edited.jpg", "original.jpg"]);
 });

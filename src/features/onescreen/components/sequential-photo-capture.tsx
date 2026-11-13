@@ -96,6 +96,7 @@ export function SequentialPhotoCapture({ targets, onAttach, onUploadingChange, o
       {completed ? <p role="status" className="py-8 text-center font-bold">{tf("os.photo.completeCount", { n: entries.reduce((n, e) => n + e.added, 0) })}</p> : <>
         <div ref={bodyRef} className="min-h-0 overflow-y-auto overscroll-contain">
           {review ? <PhotoReview entries={entries} busy={uploading} onCapture={(index, replace) => { setMode({ index, replace, reviewAfter: true }); setReview(false); setError(false); }}
+            onReplace={(index, photo, original, edited) => setEntries(prev => prev.map((entry, i) => i === index ? { ...entry, files: entry.files.map((file, p) => p === photo && file === original ? edited : file) } : entry))}
             onRemove={(index, photo) => setEntries(prev => prev.map((entry, i) => i === index ? { ...entry, error: false, files: entry.files.filter((_, p) => p !== photo) } : entry))} />
             : <PhotoCameraPanel entry={entries[mode.index]} index={mode.index} total={entries.length} busy={busy} retake={mode.replace !== undefined} reviewAfter={mode.reviewAfter} onPhoto={capture => void take(capture)} onMove={move} onReview={() => setReview(true)} />}
         </div>

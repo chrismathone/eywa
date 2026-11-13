@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import type { PhotoEntry } from "../sequential-photo";
+
+const PhotoMarkupEditor = dynamic(() => import("./photo-markup-editor").then(module => module.PhotoMarkupEditor), { ssr: false });
 
 function PhotoThumbnail({ file, name }: { file: File; name: string }) {
   const [url, setUrl] = useState("");
@@ -17,14 +20,16 @@ function PhotoThumbnail({ file, name }: { file: File; name: string }) {
   return url ? <img src={url} alt={name} className="h-28 w-full rounded-lg bg-bg-soft object-contain" /> : null;
 }
 
-export function PhotoReview({ entries, busy, onCapture, onRemove }: {
+export function PhotoReview({ entries, busy, onCapture, onRemove, onReplace }: {
   entries: PhotoEntry[]; busy: boolean;
   onCapture: (index: number, replace?: number) => void;
   onRemove: (index: number, photo: number) => void;
+  onReplace: (index: number, photo: number, original: File, edited: File) => void;
 }) {
   const t = useSheetT();
   const tf = useSheetTf();
-  return <div className="flex flex-col divide-y divide-line">
+  const [editing, setEditing] = useState<{ index: number; photo: number; file: File; name: string } | null>(null);
+  return <><div className="flex flex-col divide-y divide-line">
     {entries.map((entry, index) => <section key={entry.target.key} className="py-3">
       <div className="mb-2 flex items-start justify-between gap-3">
         <div><p className="font-bold">{index + 1}. {entry.target.name}</p><p className="text-text-dim text-xs">{entry.target.className}</p></div>
@@ -35,7 +40,8 @@ export function PhotoReview({ entries, busy, onCapture, onRemove }: {
         <div className="grid grid-cols-2 gap-2">
           {entry.files.map((file, photo) => <div key={`${file.name}-${photo}`}>
             <PhotoThumbnail file={file} name={`${entry.target.name} ${photo + 1}`} />
-            <div className="flex justify-center gap-1">
+            <div className="flex flex-wrap justify-center gap-1">
+              <Button variant="outline" size="sm" disabled={busy} onClick={() => setEditing({ index, photo, file, name: entry.target.name })}>{t("os.photo.edit")}</Button>
               <Button variant="ghost" size="sm" disabled={busy} onClick={() => onCapture(index, photo)}>{t("os.photo.retake")}</Button>
               <Button variant="ghost" size="sm" disabled={busy} onClick={() => onRemove(index, photo)}>{t("os.photo.remove")}</Button>
             </div>
@@ -45,5 +51,7 @@ export function PhotoReview({ entries, busy, onCapture, onRemove }: {
         {entry.files.length + entry.added < entry.target.capacity ? <Button variant="outline" size="sm" className="mt-2" disabled={busy} onClick={() => onCapture(index)}>{t("os.photo.more")}</Button> : null}
       </>}
     </section>)}
-  </div>;
+  </div>
+    {editing ? <PhotoMarkupEditor file={editing.file} name={editing.name} onClose={() => setEditing(null)} onApply={file => { onReplace(editing.index, editing.photo, editing.file, file); setEditing(null); }} /> : null}
+  </>;
 }
