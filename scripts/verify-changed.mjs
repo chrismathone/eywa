@@ -11,11 +11,14 @@
  *   ④ 커버리지 — vitest.config.ts `coverage.thresholds`에 적힌 계산 파일이 바뀌었으면 관련 테스트로 재서 그 임계값을 강제(P0-5)
  *
  * 쓰는 법: `pnpm verify` (기준 = origin/main과의 merge-base) · `pnpm verify <기준>` · `--skip-tests` · `--all-types`
+ *   🔴 node_modules가 **정션·링크인 작업본**(공유 트리를 빌려 쓰는 워크트리)에선 `node scripts/verify-changed.mjs …`로 부를 것 —
+ *      `pnpm verify`는 실행 전에 설치를 시도해 공용 `node_modules/.bin`을 그 작업본 경로로 다시 쓴다(2026-11-11 실측).
+ * 윈도·맥·리눅스 모두 돈다 — 도구는 `.bin` 셸 스크립트가 아니라 패키지 JS 진입점을 node로 띄운다(`binEntry` · 2026-11-13).
  * 결과 한 줄은 `.verify/log.txt`에 커밋 sha와 함께 남는다(gitignore).
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, appendFileSync, writeFileSync, rmSync, readFileSync } from "node:fs";
-import { compareWithBase, failuresOf, sweepAppleDouble } from "./verify-baseline.mjs";
+import { binEntry, compareWithBase, failuresOf, sweepAppleDouble } from "./verify-baseline.mjs";
 import { reverseDependents } from "./verify-deps.mjs";
 import path from "node:path";
 
@@ -26,7 +29,8 @@ process.chdir(root);
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
 const baseArg = args.find((a) => !a.startsWith("--"));
-const bin = (name) => path.join(root, "node_modules", ".bin", name);
+// 🔴 `.bin/<이름>`을 띄우지 않는다 — 윈도에선 셸 스크립트·`.cmd`라 spawnSync가 못 띄워 "실행 자체가 실패"였다. 진입점을 node로.
+const tool = (pkg) => [process.execPath, binEntry(root, pkg)];
 const tscJs = path.join(root, "node_modules", "typescript", "bin", "tsc");
 const REVERSE_LIMIT = 60;
 const TEST_GLOBS = ["*.test.ts", "*.test.tsx", "*.test.mjs"];
@@ -77,7 +81,10 @@ const run = (label, cmd, cmdArgs) => {
 };
 
 // ① 린트
-if (code.length) run("린트", bin("eslint"), ["--no-warn-ignored", ...code]);
+if (code.length) {
+  const [node, eslintJs] = tool("eslint");
+  run("린트", node, [eslintJs, "--no-warn-ignored", ...code]);
+}
 
 // ② 타입 — 역의존: 바뀐 TS 파일 **전부**와 사라진 TS 경로를 import하는 파일(`verify-deps.mjs` — export 줄만 보면 여러 줄 시그니처가 빠진다)
 const reverse = reverseDependents([...ts.filter((f) => !isTest(f)), ...[...gone].filter((g) => /\.(m)?tsx?$/.test(g))]);
@@ -116,6 +123,7 @@ if (!flag("--skip-tests")) {
   // 🔴 설정은 **상대 경로**로(위에서 root로 chdir했다) — 절대 경로(한글·공백이 든 외장 SSD 경로)를 주면 `vitest related`가 import 그래프를
   //    못 따라가 관련 테스트를 1개만 돌렸다(31개 중 · P0-5 리뷰 실측). 그동안 ③도 덜 돌고 있었다.
   const APPLEDOUBLE = ["--config", "scripts/verify-vitest.config.mts", "--exclude", "**/._*"];
+  const [node, vitestJs] = tool("vitest");
   const srcChanged = code.filter((f) => !isTest(f) && /\.(m)?(t|j)sx?$/.test(f));
   const tests = new Set(changed.filter(isTest));
   // 이름 언급 — 코드뿐 아니라 SQL·CSS·JSON도(#139 시즌2 파일 이름 가드 같은 것). `server/actions.ts`처럼 이름이 흔하면
@@ -138,7 +146,7 @@ if (!flag("--skip-tests")) {
     const json = path.join(".verify", `${name}.json`);
     rmSync(json, { force: true });
     console.log(`\n━━ ${label} ━━`);
-    spawnSync(bin("vitest"), [...vitestArgs, "--reporter=default", "--reporter=json", `--outputFile.json=${json}`], { stdio: "inherit" });
+    spawnSync(node, [vitestJs, ...vitestArgs, "--reporter=default", "--reporter=json", `--outputFile.json=${json}`], { stdio: "inherit" });
     const got = failuresOf(json, root);
     if (got === null) failures.push({ file: "(vitest)", title: label, message: "결과 파일이 없다 — 실행 자체가 실패" });
     else failures.push(...got);
@@ -159,7 +167,7 @@ if (!flag("--skip-tests")) {
   if (failedFiles.length) {
     const json = path.join(".verify", "retry.json");
     rmSync(json, { force: true });
-    spawnSync(bin("vitest"), ["run", ...APPLEDOUBLE, "--reporter=json", `--outputFile=${json}`, ...failedFiles], { stdio: "ignore" });
+    spawnSync(node, [vitestJs, "run", ...APPLEDOUBLE, "--reporter=json", `--outputFile=${json}`, ...failedFiles], { stdio: "ignore" });
     const again = failuresOf(json, root) ?? failures;
     const key = (f) => `${f.file}\u0000${f.title}`;
     const still = new Set(again.map(key));
@@ -191,7 +199,8 @@ if (!flag("--skip-tests")) {
   const covered = code.filter((f) => !isTest(f) && globs.some((g) => toRe(g).test(f)));
   if (covered.length) {
     console.log(`\n━━ 커버리지(임계값 걸린 계산 파일 ${covered.length}개) ━━`);
-    const r = spawnSync(bin("vitest"), ["related", "--run", "--config", "scripts/verify-vitest.config.mts", "--exclude", "**/._*",
+    const [node, vitestJs] = tool("vitest");
+    const r = spawnSync(node, [vitestJs, "related", "--run", "--config", "scripts/verify-vitest.config.mts", "--exclude", "**/._*",
       "--coverage.enabled", ...covered.flatMap((f) => ["--coverage.include", f]), "--coverage.reporter=text", ...covered], { stdio: "inherit" });
     // ⚠️ 종료 코드만 본다 — 관련 테스트가 (기준에서도) 실패해도 여기서 실패로 잡힌다. 위 출력에서 ERROR(임계값)인지 테스트 실패인지 볼 것.
     note(r.status === 0 ? "커버리지 통과" : "커버리지 단계 실패(임계값 미달 또는 관련 테스트 실패 — 위 출력)", r.status === 0);
