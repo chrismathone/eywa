@@ -15,6 +15,7 @@ import { getConsultationTotalCount } from "@/features/enrollment/server/poll-act
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { requireAccess } from "@/lib/auth/require-access";
+import { prefersStatsFirst } from "@/lib/auth/stats-first";
 import { canAccessTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import {
@@ -166,7 +167,9 @@ export default async function EnrollmentPage({
   // 고른 보기는 아래 RememberPrefs가 저장한다. 🔴 툴바 링크는 칸반도 `view=kanban`으로 적는다(enrollment-query.ts) —
   //    안 적으면 저장이 끝나기 전 다음 클릭이 옛 저장값으로 돌아간다.
   const savedView = savedEnrollmentView(uiPrefs);
-  const view: EnrollmentView = parseEnrollmentView(viewParam) ?? savedView;
+  // 원장·관리자가 메뉴로 그냥 열면 통계가 먼저(stats-first.ts) — 이 기본값은 '마지막 보기'로 저장하지 않는다(아래 RememberPrefs).
+  const statsFirst = !parseEnrollmentView(viewParam) && (await prefersStatsFirst(user.systemRole, sp, "/enrollment"));
+  const view: EnrollmentView = parseEnrollmentView(viewParam) ?? (statsFirst ? "stats" : savedView);
   // 통계 연도 = 주소의 `year` → 계정에 남은 여러 해 묶음(2·3개년) → 올해(검수 2026-10-22 — 아래 추이 카드처럼 기억한다).
   // 여기엔 "최대 1년" 상한이 없다(집계라 행을 안 가져온다 — 칸반·목록의 상한은 행 로딩 때문이라 여기와 무관).
   const savedSpan = savedStatsSpan(uiPrefs);
@@ -348,7 +351,7 @@ export default async function EnrollmentPage({
       {/* QR 접수가 들어오면 새로고침 없이 목록이 갱신된다(20초 건수 폴링). 알림 줄은 도착 후에만 렌더. */}
       <NewConsultationWatcher initialCount={totalCount ?? 0} />
       {/* 운영실 ↗로 온 방문(`from=dashboard`)은 보기를 저장하지 않는다 — 카드가 연 보기가 사람이 고른 마지막 보기를 덮지 않게(원생목록과 같은 규약). */}
-      {sp.from === "dashboard" ? null : <RememberPrefs current={{ view, statsSpan: currentSpan }} saved={{ view: savedView, statsSpan: savedSpan }} save={saveEnrollmentViewPref} />}
+      {sp.from === "dashboard" ? null : <RememberPrefs current={{ view: statsFirst ? savedView : view, statsSpan: currentSpan }} saved={{ view: savedView, statsSpan: savedSpan }} save={saveEnrollmentViewPref} />}
 
       <PageHeader
         eyebrow="신규 콜&상담"

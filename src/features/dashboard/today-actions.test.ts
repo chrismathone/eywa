@@ -402,7 +402,7 @@ describe("buildTodayActions", () => {
       expect.arrayContaining([
         expect.objectContaining({ count: 1, href: "/meetings", menuKey: "meetings", requiredAccess: "write" }),
         expect.objectContaining({ count: 3, href: "/enrollment?view=kanban", menuKey: "enrollment", requiredAccess: "write" }),
-        expect.objectContaining({ count: 2, href: "/consultations", menuKey: "consultations", requiredAccess: "write" }),
+        expect.objectContaining({ count: 2, href: "/consultations?list=1", menuKey: "consultations", requiredAccess: "write" }),
       ]),
     );
   });
@@ -603,7 +603,7 @@ describe("신규생 관리 기한 경과", () => {
     expect(item).toBeDefined();
     expect(item!.count).toBe(4);
     expect(item!.unit).toBe("명");
-    expect(item!.href).toBe("/newcomers");
+    expect(item!.href).toBe("/newcomers?list=1");
     expect(item!.menuKey).toBe("newcomers");
     // 재촉 기준을 적어 둔다 — "무엇이 지연인지" 없이 숫자만 세우면 무슨 조치를 할지 알 수 없다.
     expect(item!.note).toContain("사전 콜");

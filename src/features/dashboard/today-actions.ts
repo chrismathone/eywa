@@ -421,7 +421,7 @@ export function buildTodayActions(
       detail: nameList(raw.newcomerOverdue.names, 3, raw.newcomerOverdue.count),
       note: "사전 콜·첫 수업 안내·OJT·만족도 콜 기준",
       bySubject: [],
-      href: "/newcomers",
+      href: "/newcomers?list=1",
       menuKey: "newcomers",
       requiredAccess: "read",
     });
@@ -476,7 +476,7 @@ export function buildTodayActions(
       key: "failed-analysis-consultations",
       count: raw.failedAnalysis.consultations,
       label: "학생상담 녹음 분석 실패",
-      href: "/consultations",
+      href: "/consultations?list=1",
       menuKey: "consultations",
       requiredAccess: "write",
     },

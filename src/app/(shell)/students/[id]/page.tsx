@@ -101,7 +101,7 @@ export default async function StudentDetailPage({
   // 그 창이 원생목록으로 바뀌어 신규생 관리로 못 돌아갔다). 목록마다 링크에 `?back=<경로>`를 달면 된다.
   // 🔴 여기서 **서버가 검증**한다 — 값을 그대로 `location.replace`에 넘기므로 `//evil.com`·`https://…`
   //    같은 외부 주소가 들어오면 열린 리다이렉트가 된다. 앱 내부 절대경로 한 갈래만 통과시킨다.
-  const backHref = isInternalPath(backParam) ? backParam : "/students";
+  const backHref = isInternalPath(backParam) ? backParam : "/students?list=1";
 
   // '수납' 탭은 학생(students) 권한이 아니라 **수납(billing) 권한**으로 잠근다 — 학생 상세는 강사(scoped)·
   // 뷰어(readonly)도 열 수 있어서, 탭 하나가 billing=none 역할에게 청구·납입 금액을 통째로 노출하고 있었다.
@@ -136,7 +136,7 @@ export default async function StudentDetailPage({
     if (studentsLevel === "scoped" || (studentsLevel === "readonly" && (await readonlyViewErasedScope("students")))) {
       return (
         <div className="space-y-6">
-          <BackLink href="/students" label="원생목록으로" />
+          <BackLink href="/students?list=1" label="원생목록으로" />
           <div className="bg-card border-line rounded-2xl border p-6">
             <p className="text-foreground text-sm font-bold"><SheetText value={"담당 학생만 열람할 수 있어요"} /></p>
             <p className="text-text-dim mt-1 text-sm">
@@ -249,7 +249,7 @@ export default async function StudentDetailPage({
 
   return (
     <div className="space-y-6">
-      <BackLink href="/students" label="원생목록으로" />
+      <BackLink href="/students?list=1" label="원생목록으로" />
 
       <header className="border-border flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1.5">

@@ -51,7 +51,7 @@ export default async function EditConsultationPage({
           <ConsultationDeleteButton
             id={item.id}
             studentId={item.studentId}
-            redirectTo="/consultations"
+            redirectTo="/consultations?list=1"
           />
         ) : null}
       </header>
