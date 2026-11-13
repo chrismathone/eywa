@@ -308,6 +308,7 @@
 /* 계기판(viz-gauge.js). 다이얼 이미지는 값을 담지 않는다. */
 .aywa-instruments .gauge-asset .g-base { filter: drop-shadow(0 5px 7px rgba(24, 28, 31, .3)); }
 .aywa-instruments .gauge-asset .g-lit { filter: drop-shadow(0 0 2.5px rgba(253, 184, 17, .55)); }
+.aywa-instruments .gauge-asset .g-low { filter: hue-rotate(-45deg) saturate(1.1); }
 .aywa-instruments .gauge-asset .g-tick { stroke: #e9ecea; stroke-linecap: butt; }
 .aywa-instruments .gauge-asset .g-major { stroke-width: 2; stroke: #fff; }
 .aywa-instruments .gauge-asset .g-middle { stroke-width: 1.3; }
