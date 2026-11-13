@@ -1,5 +1,7 @@
 #!/bin/sh
-# 선택 설치 pre-push — 로컬 게이트(`pnpm verify`)를 push 직전에 한 번 돌린다(수정 계획 P4 · CI는 꺼져 있다).
+# 선택 설치 pre-push — 로컬 게이트(`pnpm verify`와 같은 `scripts/verify-changed.mjs`)를 push 직전에 한 번 돌린다(수정 계획 P4 · CI는 꺼져 있다).
+# 🔴 pnpm을 거치지 않고 node로 부른다 — node_modules가 정션·링크인 워크트리에서 pnpm은 실행 전에 설치를 시도해
+#    공용 node_modules/.bin을 그 워크트리 경로로 다시 쓴다(2026-11-11 실측). 윈도에서도 같게 돈다(2026-11-13).
 # 설치: `cp scripts/git-hooks/pre-push "$(git rev-parse --git-common-dir)/hooks/pre-push" && chmod +x …`(워크트리는 hooks를 공유한다)
 # 건너뛰기: `AYWA_SKIP_VERIFY=1 git push …` · 검사만 한다(파일을 고치지 않는다).
 # ⚠️ 시험은 기준선과 비교해 새 실패만 막지만, 린트·타입은 바뀐 파일·그 import의 **원래 있던 오류**로도 멈출 수 있다 — 그땐 확인 뒤 건너뛰기.
@@ -15,7 +17,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   case "$local_ref" in refs/tags/*) continue ;; esac   # 태그(주석 태그 sha는 HEAD와 다르다) — 코드 검사 대상 아님
   if [ "$local_sha" != "$head" ]; then
     echo "[pre-push] push 대상($local_sha)이 지금 HEAD($head)가 아닙니다 — 게이트가 그 커밋을 검사할 수 없어 멈춥니다."
-    echo "           그 커밋을 체크아웃해 pnpm verify를 돌리거나, 확인했으면 AYWA_SKIP_VERIFY=1로 push하세요."
+    echo "           그 커밋을 체크아웃해 node scripts/verify-changed.mjs를 돌리거나, 확인했으면 AYWA_SKIP_VERIFY=1로 push하세요."
     exit 1
   fi
 done
@@ -24,5 +26,5 @@ if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then  # 새 파�
   exit 1
 fi
 git fetch -q origin main 2>/dev/null || echo "[pre-push] origin을 받지 못했습니다 — 마지막으로 받은 origin/main 기준으로 검사합니다"
-echo "[pre-push] pnpm verify …"
-exec pnpm verify
+echo "[pre-push] node scripts/verify-changed.mjs …"
+exec node scripts/verify-changed.mjs
