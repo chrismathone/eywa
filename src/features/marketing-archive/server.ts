@@ -17,10 +17,13 @@ export async function archiveGate(write = false) {
   return user;
 }
 export type ArchiveData = Awaited<ReturnType<typeof loadArchive>>;
+type StoredEvent = EventRow & { deleted_at: string | null };
+export type DeletedEvent = Pick<EventRow, "id" | "version"> & { title: string; schedule: string | null; deletedAt: string };
+
 export async function loadArchive() {
   const user = await archiveGate(), db = createAdminClient(), tenant = user.tenantId;
   const [events, sources, edges, links, staff, canWrite] = await Promise.all([
-    fetchAllPaged<EventRow>((a,b) => db.from("marketing_archive_events").select("id,version,document,updated_at").eq("tenant_id",tenant).order("id").range(a,b)),
+    fetchAllPaged<StoredEvent>((a,b) => db.from("marketing_archive_events").select("id,version,document,updated_at,deleted_at").eq("tenant_id",tenant).order("id").range(a,b)),
     fetchAllPaged<SourceRow>((a,b) => db.from("marketing_source_inbox").select("id,version,document,review_status,review_note,ingested_at").eq("tenant_id",tenant).order("id").range(a,b)),
     fetchAllPaged<{event_id:string;source_id:string}>((a,b) => db.from("marketing_archive_sources").select("event_id,source_id").eq("tenant_id",tenant).order("event_id").order("source_id").range(a,b)),
     fetchAllPaged<LinkRow>((a,b) => db.from("marketing_archive_students").select("id,version,event_id,student_id,document").eq("tenant_id",tenant).order("id").range(a,b)),
@@ -28,12 +31,26 @@ export async function loadArchive() {
     canWriteTenant(user.systemRole,"marketing" as MenuKey),
   ]);
   if (staff.error) throw Error("담당자 목록을 확인하지 못했습니다");
-  return { events: events.map(e=>({...e,document:eventSchema.parse(e.document)})), sources, edges, links, staff:staff.data??[], canWrite:canWrite && ["master","admin"].includes(user.systemRole) && await canWriteTenant(user.systemRole,"billing"), today:kstToday() };
+  const writable = canWrite && ["master","admin"].includes(user.systemRole) && await canWriteTenant(user.systemRole,"billing");
+  const active = events.filter(e => !e.deleted_at).map(({id, version, updated_at, document}) => ({
+    id, version, updated_at, document: eventSchema.parse(document),
+  }));
+  const activeIds = new Set(active.map(e => e.id));
+  const deletedEvents: DeletedEvent[] = writable ? events.flatMap(({id, version, document, deleted_at}) => deleted_at
+    ? [{id, version, title: document.title, schedule: document.date ?? document.period, deletedAt: deleted_at}]
+    : []).sort((a, b) => b.deletedAt.localeCompare(a.deletedAt)) : [];
+  return {
+    events: active, deletedEvents, sources,
+    edges: edges.filter(edge => activeIds.has(edge.event_id)),
+    links: links.filter(link => activeIds.has(link.event_id)),
+    staff: staff.data ?? [], canWrite: writable, today: kstToday(),
+  };
 }
 export const requestSchema = z.discriminatedUnion("kind", [
   z.object({kind:z.literal("event"),id:z.uuid().nullable(),version:z.number().int().min(0),document:eventSchema}).strict(),
   z.object({kind:z.literal("student"),id:z.uuid().nullable(),version:z.number().int().min(0),document:linkSchema}).strict(),
   z.object({kind:z.literal("source"),id:z.uuid(),version:z.number().int().positive(),document:z.object({status:z.enum(["review","reference","excluded","linked"]),eventId:z.uuid().nullable(),note:z.string().trim().min(2).max(2000)}).strict()}).strict(),
+  z.object({kind:z.literal("event_visibility"),id:z.uuid(),version:z.number().int().positive(),document:z.object({deleted:z.boolean()}).strict()}).strict(),
 ]);
 export async function saveArchive(raw: unknown) {
   const user = await archiveGate(true), input = requestSchema.parse(raw);

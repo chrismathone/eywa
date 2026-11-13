@@ -50,9 +50,13 @@ export function fromNotion(row: Record<string, unknown>): EventDocument {
   });
 }
 export function blankEvent(): EventDocument { return { title: "", type: "설명회", date: null, period:null,state: "review", time: "", location: "", speakers: "", gift: "", ownerId: null, reservationRaw: "", attendanceRaw: "", compositionRaw: "", reservations: null, attendees: null, budget: null, actualCost: null, costReference: "", retrospective: "", nextAction: "", dateResolution: "", referenceEventId: null, raw: {},objective:"acquisition",audience:"",purpose:"",brief:"",enrollmentGoal:null,executions:[],work:[] }; }
+export function archiveMonth(event: EventRow): string | null {
+  return dateConflict(event.document) ? null : (event.document.date ?? event.document.period)?.slice(0, 7) ?? null;
+}
 export function planNextYear(event: EventRow, year: number): EventDocument {
   const date = event.document.date ? `${year}${event.document.date.slice(4)}` : null;
-  return { ...blankEvent(), title: plain(event.document.title).replace(/^\d{6}\s*/, ""), type: event.document.type, date: date && z.iso.date().safeParse(date).success ? date : null, period:event.document.period?`${year}${event.document.period.slice(4)}`:null,state: "planned", referenceEventId: event.id };
+  const month = archiveMonth(event);
+  return { ...blankEvent(), title: plain(event.document.title).replace(/^\d{6}\s*/, ""), type: event.document.type, date: date && z.iso.date().safeParse(date).success ? date : null, period:month?`${year}${month.slice(4)}`:null,state: "planned", referenceEventId: event.id };
 }
 export function summary(events: EventRow[], links: LinkRow[]) {
   return { total: events.length, conflicts: events.filter(e => dateConflict(e.document)).length, held: events.filter(e => e.document.state === "held").length, linkedStudents: new Set(links.map(l => l.student_id)).size, costKnown: events.filter(e => e.document.actualCost !== null).length };

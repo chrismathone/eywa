@@ -1,12 +1,11 @@
-import { dateConflict, type EventRow } from "./model";
+import { archiveMonth, type EventRow } from "./model";
 import s from "./monthly-year-chart.module.css";
 
 export const COMPARISON_YEARS = [2023, 2024, 2025, 2026] as const;
 export function monthlyYearSeries(events: EventRow[]) {
   const series = COMPARISON_YEARS.map(year => ({ year, months: Array<number>(12).fill(0) }));
   for (const event of events) {
-    if (dateConflict(event.document)) continue;
-    const period = event.document.date ?? event.document.period;
+    const period = archiveMonth(event);
     if (!period) continue;
     const row = series.find(row => row.year === Number(period.slice(0, 4)));
     if (row) row.months[Number(period.slice(5, 7)) - 1] += 1;

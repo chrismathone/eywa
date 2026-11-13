@@ -187,17 +187,17 @@ export const TABLES_EXTRA: readonly AssistantTableDoc[] = [
   {
     name: "marketing_archive_events",
     label: "홍보 행사",
-    ko: "홍보·마케팅 행사 기록(설명회·학원행사·전단배부·특수마케팅 등) — 행사마다 최신 한 줄",
+    ko: "홍보·마케팅 행사 기록(설명회·학원행사·전단배부·특수마케팅 등) — 행사마다 최신 한 줄. 일반 조회·집계는 deleted_at IS NULL 조건을 적용한다.",
     notes:
       "document(jsonb): title · type(설명회·학원행사·전단배부·특수마케팅·기타) · date(진행일) · period('YYYY-MM') · state(review 확인 필요 · planned 예정 · held 진행 확인 · cancelled 취소) · ownerId(담당 직원 users.id) · objective(acquisition 신규 모집 · retention 재원 관계·유지 · cross_subject 영수 동시수강 확대 · brand 인지도) · reservations·attendees(예약·참석 인원 — null=정확한 수를 모름, 원문은 reservationRaw·attendanceRaw) · budget·actualCost(원 · actualCost가 있으면 costReference=지급·배부 근거) · enrollmentGoal(등록 목표) · executions[](채널별 집행 — channel 전단·현수막·문자·블로그·SNS 등 · ownerId 담당 직원 · plannedQuantity·actualQuantity · budget·actualCost) · work[](준비 업무 — ownerId 담당 직원 · state todo·doing·done) · referenceEventId(참고한 지난 행사) · raw(가져온 원본 값). 진행된 행사 = document->>'state' = 'held'. 🔴 총비용(화면 계산과 같게): 채널별 집행(executions)이 **하나라도 있으면** 행사 actualCost는 쓰지 않고 채널 actualCost의 합 — 단 모든 채널에 actualCost가 있을 때만 합을 내고, 하나라도 비어 있으면 '비용 모름'(부분 합을 총비용으로 답하지 않는다). 채널이 없으면 행사 actualCost(없으면 모름). version = 고친 횟수. 변경 이력은 marketing_archive_audit.",
-    columns: { source_key: "가져온 원본 열쇠(직접 만든 행사는 비어 있다)", document: "행사 내용(jsonb)", version: "버전", updated_by: "마지막으로 고친 직원" },
+    columns: { source_key: "가져온 원본 열쇠(직접 만든 행사는 비어 있다)", document: "행사 내용(jsonb)", version: "버전", updated_by: "마지막으로 고친 직원", deleted_at: "삭제 시각. 일반 조회·집계는 NULL인 행만 사용" },
   },
   {
     name: "marketing_archive_students",
     label: "행사 참여 학생",
-    ko: "홍보 행사에 초대·예약·참석·상담한 원생 기록(행사 × 원생 × 종류 × 날짜마다 한 줄)",
+    ko: "홍보 행사에 초대·예약·참석·상담한 원생 기록(행사 × 원생 × 종류 × 날짜마다 한 줄).",
     notes:
-      "event_id → marketing_archive_events · student_id → students. document->>'kind': invited 초대 · reserved 참석 예약 · attended 참석 · no_show 불참 · test_reserved 입학테스트 예약 · consulted 상담 완료 · date(그 일이 있던 날) · reference(근거) · result · nextAction. 행사가 등록으로 이어졌는지는 참석(attended)·상담 완료(consulted) 기록과 그 원생의 등록일을 함께 봐야 한다(기록만으로 등록을 단정하지 않는다).",
+      "event_id → marketing_archive_events · student_id → students. 행사 성과 집계는 marketing_archive_events.deleted_at IS NULL인 행사만 포함한다. document->>'kind': invited 초대 · reserved 참석 예약 · attended 참석 · no_show 불참 · test_reserved 입학테스트 예약 · consulted 상담 완료 · date(그 일이 있던 날) · reference(근거) · result · nextAction. 행사가 등록으로 이어졌는지는 참석(attended)·상담 완료(consulted) 기록과 그 원생의 등록일을 함께 봐야 한다(기록만으로 등록을 단정하지 않는다).",
     columns: { document: "참여 내용(jsonb · kind로 종류 구분)", version: "버전", updated_by: "마지막으로 고친 직원" },
   },
   {

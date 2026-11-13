@@ -1,0 +1,66 @@
+.heading, .yearHeader, .plan {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.heading h2, .heading h3, .yearHeader h3 { margin: 0; }
+.heading p { margin-top: 5px; }
+.yearSelect { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 16px 0 8px; }
+.legend span { display: flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; }
+.months { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 4px; }
+.month {
+  display: grid;
+  grid-template-rows: 47px auto;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  cursor: pointer;
+  font-size: var(--text-xs);
+  text-align: center;
+}
+.month:hover { background: var(--bg-soft); }
+.month[aria-pressed="true"] {
+  border-color: var(--cat-purple);
+  box-shadow: inset 0 0 0 1px var(--cat-purple);
+  background: color-mix(in srgb, var(--cat-purple) 12%, var(--card));
+}
+.bars { display: flex; justify-content: center; align-items: end; gap: 3px; }
+.barSlot { position: relative; width: min(20px, 28%); height: 65%; display: flex; flex-direction: column; justify-content: end; }
+.barCount { position: absolute; bottom: 100%; inset-inline: 0; font-variant-numeric: tabular-nums; }
+.bar { width: 100%; border-radius: 3px 3px 0 0; }
+.note { margin: 8px 0 18px; font-size: var(--text-xs); }
+.years { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.yearCard { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
+.yearHeader { padding: 12px; }
+.yearHeader span, .eventMeta { font-size: var(--text-xs); }
+.event { padding: 12px; border-top: 1px solid var(--line-faint); }
+.eventMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 4px; }
+.eventMeta span { background: var(--bg-soft); border-radius: var(--radius-lg); padding: 2px 6px; }
+button.eventTitle:where(:not([data-slot])) {
+  display: inline;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-weight: 700;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+button.eventTitle:hover { text-decoration: underline; text-underline-offset: 3px; }
+.event p, .plan p { margin-top: 4px; overflow-wrap: anywhere; }
+.feedback { white-space: pre-line; }
+.eventActions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 8px; }
+.empty { padding: 14px 12px; font-size: var(--text-sm); }
+.plans { margin-top: 20px; padding: 12px; border-radius: var(--radius-lg); background: var(--bg-soft); }
+.plan { padding: 8px 0; border-top: 1px solid var(--line); }
+.plans > p { margin-top: 8px; }
+@media (max-width: 900px) { .months { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+@media (max-width: 650px) { .years { grid-template-columns: 1fr; } }
