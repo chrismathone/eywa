@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { UserMenu } from "@/components/user-menu";
-import { EyIcon, MENU_ICON } from "@/components/icons/aywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
 import { AssistantNavButton } from "@/features/assistant/components/assistant-nav-button";
@@ -17,6 +17,8 @@ import { type AccessMatrix, type SystemRole } from "@/lib/permissions";
 import { groupStatsEntry } from "@/lib/auth/stats-first-rule";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useShellHome } from "@/components/workspace/shell-home";
+import { TeacherViewSwitcher } from "@/components/other-teacher-view";
+import { MobileConnectedApps } from "@/components/mobile-connected-apps";
 
 /**
  * 좁은 폭·터치(= 데스크톱이 아닌 모든 화면)에서 좌측 사이드바 대신 쓰는 **단일 상단 바**.
@@ -40,6 +42,8 @@ export function MobileTopNav({
   permMatrix,
   menuLayout,
   canTeacherView = false,
+  canOtherTeacherView = false,
+  displayName = "",
   isSuperAdmin = false,
   isGenericTenant = false,
   canViewVendors = false,
@@ -61,6 +65,8 @@ export function MobileTopNav({
    */
   menuLayout?: MenuLayout;
   canTeacherView?: boolean;
+  canOtherTeacherView?: boolean;
+  displayName?: string;
   isSuperAdmin?: boolean;
   isGenericTenant?: boolean;
   /** 업체리스트 지정자 — 학원운영 판의 '업체리스트' 입구(menu-hub `vendorsOnly`). */
@@ -142,6 +148,11 @@ export function MobileTopNav({
           140px이면 375·412px 폰 모두 2열(라벨 예산 141~160px ≥ 102px) — 대가는 격자가 5행→7행으로 길어지는 것뿐. */}
       {open ? (
       <div className="max-h-[70dvh] space-y-3 overflow-y-auto overscroll-contain px-3 py-3">
+        {canTeacherView || canOtherTeacherView ? (
+          <div className="border-line rounded-lg border [&_button]:min-h-11">
+            <TeacherViewSwitcher expanded motion={false} selfName={displayName} canSelf={canTeacherView} canOthers={canOtherTeacherView} />
+          </div>
+        ) : null}
         {groups.map((group) => {
           const statsEntry = groupStatsEntry(group, systemRole);
           return <section key={group.id} aria-label={group.label}>
@@ -157,23 +168,7 @@ export function MobileTopNav({
             </ul>
           </section>;
         })}
-        <ul className="grid grid-cols-2 gap-1">
-        {connectedApps.map((a) => (
-          <li key={a.feature}>
-            <a
-              href={a.launchPath}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => setOpen(false)}
-              className="text-text-dim hover:text-foreground hover:bg-bg-soft flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-bold transition"
-            >
-              <EyIcon name={MENU_ICON[a.permission]} size={14} strokeWidth={1.8} />
-              <span className="truncate">{a.label}</span>
-              <EyIcon name="externalLink" size={12} strokeWidth={1.8} className="shrink-0 opacity-70" />
-            </a>
-          </li>
-        ))}
-        </ul>
+        <MobileConnectedApps apps={connectedApps} onNavigate={() => setOpen(false)} />
       </div>
       ) : null}
     </nav>

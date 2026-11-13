@@ -3,6 +3,7 @@
 import { registerMakeupEntries } from "../server/makeup-register-actions";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { photoBlock, resolvePhotoTarget } from "../sequential-photo";
 import { markWrite, withWriteOrigin } from "../write-timing-store";
 import type { WriteField, WriteView } from "../write-timing";
 import { useRouter } from "next/navigation";
@@ -1748,6 +1749,18 @@ export function OneScreenClient({
 
   const reportGrid = (
 <OneScreenGrid
+          sequentialAttach={{
+            date: activeDate,
+            busy: !!bulkBusy || bulkGen || !!uploadingAttKey,
+            onUploadingChange: (busy) => setBulkBusy(busy ? "save" : null),
+            onAttach: async (target, files) => {
+              if (readonlyBlocked()) return 0;
+              // Revalidate the frozen identity against live state; a photo never moves to another class/date.
+              const row = resolvePhotoTarget(target, studentsRef.current, activeDate);
+              if (!row || photoBlock(row, reportsRef.current[row.student.id]?.[row.subject.name])) return 0;
+              return addAttachmentsFor(row.student, row.subject.name, files, { silent: true });
+            },
+          }}
           readonlyView={readonlyView}
           students={visible}
           bulkPresent={bulkPresentProps}

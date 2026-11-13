@@ -25,6 +25,8 @@ import { useSubmitLinkMode, useVideoHomeworkDueReady, useVideoHomeworkPolicy, us
 import { isVideoHomeworkEnabled } from "@/features/video-homework/policy";
 import { countCheckOverwrites, hasVideoCheckCell, planBulkVideoCheck, type BulkCheckRow } from "@/features/video-homework/bulk-check";
 import { submitLinkChoosable } from "@/features/video-submit/link-choice";
+import { SequentialAttachButton } from "./sequential-attach-button";
+import type { SequentialAttach } from "../sequential-photo";
 
 // 열 제목은 **가운데 정렬**(원장 2026-08-05) — 본문 값은 좌측 정렬 그대로다(읽는 흐름 유지).
 const TH = "text-text-faint px-2 py-2 text-center text-xs font-bold whitespace-nowrap";
@@ -55,6 +57,7 @@ export function OneScreenGrid({
   bulkGen,
   uploadingAttKey,
   bulkPresent,
+  sequentialAttach,
 }: {
   students: OneScreenStudent[]; // 현재 필터(반)로 보이는 학생만
   reports: Record<string, Record<string, SubjectReport>>; // studentId → 과목명 → 발송상태
@@ -82,6 +85,7 @@ export function OneScreenGrid({
    * ([planQuickPresent](../quick-attendance.ts)) — 두 화면이 다른 수를 말하면 안 된다.
    */
   bulkPresent?: BulkPresentProps;
+  sequentialAttach?: SequentialAttach;
 }) {
   const { options, change } = useDisplayOptions();
   const rows = orderReportRows(buildGridRows(students).filter((r) => rowInClass(r.subject, classFilter)), options.sort, classOrder);
@@ -275,6 +279,7 @@ export function OneScreenGrid({
         bulkGen={bulkGen}
         locked={orderMode || readonlyView} // 열람 전용 — 일괄 발송·저장·자동작성·가져오기 전부 잠금
         navHint={config.dailyEnabled || config.checkEnabled}
+        trailing={sequentialAttach && !readonlyView ? <SequentialAttachButton rows={displayRows} reports={reports} attachment={sequentialAttach} disabled={orderMode || !!bulkGen || !!uploadingAttKey} /> : undefined}
       >
         {orderMode ? (
           <>

@@ -6,6 +6,7 @@ import type { ComponentProps } from "react";
 import type { OneScreenStudent, Subject } from "../types";
 
 afterEach(cleanup);
+vi.mock("./sequential-attach-button", () => ({ SequentialAttachButton: ({ rows }: { rows: { key: string }[] }) => <span data-testid="camera-order">{rows.map(r => r.key).join(",")}</span> }));
 const subject = (className: string): Subject => ({ name: `수학 · ${className}`, subjectLabel: "수학", className, classId: className, prev: "", today: "", subjectKey: "math" });
 const student = (id: string, name: string, classes: string[]): OneScreenStudent => ({
   id, name, grade: "중3", tag: classes[0], attendance: "출석", subjects: classes.map(subject),
@@ -46,4 +47,11 @@ it("반 필터의 인원과 행 선택은 다른 반을 포함하지 않는다",
   render(<OneScreenGrid {...props} classFilter="오후반" />);
   expect(screen.getByText(/학생 1명 · 보고서 1건/)).toBeTruthy();
   expect(screen.queryByText("김두나")).toBeNull();
+});
+
+it("연속 첨부에 화면의 이름 정렬·반 필터를 거친 실제 행 순서를 넘긴다", () => {
+  render(<DisplayOptionsProvider value={{ options: { sort: "name", hidePrevious: true }, change: vi.fn(), readonly: false }}>
+    <OneScreenGrid {...props} classFilter="오전반" sequentialAttach={{ date: "2026-11-13", busy: false, onAttach: vi.fn(), onUploadingChange: vi.fn() }} />
+  </DisplayOptionsProvider>);
+  expect(screen.getByTestId("camera-order").textContent).toBe("b::수학 · 오전반,a::수학 · 오전반");
 });

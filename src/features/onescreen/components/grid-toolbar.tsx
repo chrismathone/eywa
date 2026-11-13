@@ -50,6 +50,7 @@ export function GridToolbar({
   locked,
   navHint,
   children,
+  trailing,
 }: {
   // sendable=진도+결석 제외(발송·자동작성 대상), saveable=진도만(저장 대상 — 결석 포함, 2-3 작업별 분리).
   counts: {
@@ -71,6 +72,7 @@ export function GridToolbar({
   locked?: boolean; // 순서 모드 중 — 선택이 ↑↓로 가려져 있어 일괄 액션 버튼을 잠근다(#24)
   navHint?: boolean; // 점수·교재 칸 Enter/↑↓ 세로 이동 힌트 노출(#21)
   children?: ReactNode;
+  trailing?: ReactNode;
 }) {
   const { total, sendable, sendReady, saveable, selectedSendReady, selectedSaveable, autoWritable, selectedAutoWritable } =
     counts;
@@ -224,6 +226,7 @@ export function GridToolbar({
             : t("os.send.all")}
         </Button>
         ) : null}
+        {trailing ? <div className="ml-auto empty:hidden">{trailing}</div> : null}
       </div>
     </div>
   );
