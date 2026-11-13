@@ -325,9 +325,9 @@ export function RouteWindow({ win }: { win: Win }) {
         ref={iframeRef}
         src={frameSrc}
         title={displayTitle}
-        // 창 안 폼이 브라우저 마이크로 바로 녹음(회의록·등록상담·학생상담)할 수 있게 권한 위임.
+        // 창 안 녹음·원스크린 연속 촬영에 필요한 기기 권한 위임(실제 사용 시 브라우저가 허용을 묻는다).
         // same-origin이라도 일부 브라우저는 getUserMedia에 iframe allow를 요구 → 명시.
-        allow="microphone"
+        allow="microphone; camera"
         className="h-full w-full border-0"
         // 🔴 숨길 때만 값을 준다 — `visible`을 못박으면 조상이 `visibility:hidden`(이전 화면 유지 방식의 숨은 화면)이어도 이 iframe만
         //    남아 그려진다(자식의 visible이 이긴다). 안 줘도 기본은 상속이라 종전 모양은 그대로다.
