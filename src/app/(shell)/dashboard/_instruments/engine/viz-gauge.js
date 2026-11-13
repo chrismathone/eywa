@@ -1,8 +1,9 @@
-/* 240도 원형 계기판. 다이얼은 Blender 정사영 렌더 두 장(빈 창 / 노란 창)이고 값은 이미지에 들어 있지 않다.
-   값 v 하나에서 각도를 얻어 ① 노란 창을 드러내는 부채꼴 ② 바늘 ③ 판독 숫자를 그리므로 셋은 어긋날 수 없다. */
+/* 240도 원형 계기판. 빈 창 위에 실제 값까지 색을 드러내며, 첫 20% 구간은 붉게 표시한다.
+   값 v 하나에서 각도를 얻어 ① 채움 부채꼴 ② 바늘 ③ 판독 숫자를 그리므로 셋은 어긋날 수 없다. */
 import { GAUGE_GEOM as G } from './gauge-geometry';
 import { V } from './viz-core';
 const { start: START, span: SPAN } = G.sweep;
+const clampValue = (v) => Number.isFinite(v) ? Math.max(0, Math.min(100, v)) : 0;
 
 /* 값 → 수학 각도 */
 const degOf = (v) => START - (v / 100) * SPAN;
@@ -13,7 +14,7 @@ const at = (cx, cy, r, deg) => {
 };
 const pt = ([x, y]) => `${V.px(x)} ${V.px(y)}`;
 
-/* 노란 창을 드러내는 고리 부채꼴. 앞날 각도는 값의 각도와 같다.
+/* 채워진 창을 드러내는 고리 부채꼴. 앞날 각도는 값의 각도와 같다.
    양 끝은 창 밖으로 1도 넉넉히 잡아 끝 창이 안티앨리어싱으로 깎이지 않게 한다. */
 function wedge(cx, cy, R, v) {
   if (v <= 0) return '';
@@ -71,6 +72,7 @@ function glass(cx, cy, R, id) {
 
 /* maxR: 판 반지름 상한(px). 칸이 작으면 비례해서 줄지만 가로세로 비는 변하지 않는다. */
 V.gauge = (w, h, { value, label, caption = '', maxR = 80, align = 'center' }) => {
+  value = clampValue(value);
   const img = G.image;
   const R = Math.floor(Math.min(maxR, (w - 2) / 2, (h - 2) / 2));
   const cx = align === 'left' ? R + 1 : Math.round(w / 2);
@@ -86,10 +88,13 @@ V.gauge = (w, h, { value, label, caption = '', maxR = 80, align = 'center' }) =>
   return `<svg class="chart gauge-asset" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${V.esc(label)} ${value}%"`
     + ` data-gauge="${value}" data-label="${V.esc(label)}" data-cx="${cx}" data-cy="${cy}" data-r="${R}">`
     + `<defs><clipPath id="${id}"><path class="g-wedge" d="${wedge(cx, cy, R, value)}"/></clipPath>`
+    + `<clipPath id="${id}-low"><path d="${wedge(cx, cy, R, 20)}"/></clipPath>`
     + `<radialGradient id="${id}-hub" cx="38%" cy="32%" r="78%"><stop offset="0" stop-color="#8d979d"/><stop offset=".55" stop-color="#3a4147"/><stop offset="1" stop-color="#16191c"/></radialGradient>`
     + `<linearGradient id="${id}-glass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".17"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>`
     + `<image class="g-layer g-base" href="/dashboard-instruments/gauge-empty${sm}.webp" ${box}/>`
-    + `<g class="g-lit"><image class="g-layer" href="/dashboard-instruments/gauge-lit${sm}.webp" ${box} clip-path="url(#${id})"/></g>`
+    + `<g class="g-lit" clip-path="url(#${id})">`
+    + `<image class="g-layer" href="/dashboard-instruments/gauge-lit${sm}.webp" ${box}/>`
+    + `<image class="g-layer g-low" href="/dashboard-instruments/gauge-lit${sm}.webp" ${box} clip-path="url(#${id}-low)"/></g>`
     + scale(cx, cy, R, fontSize)
     + `<text class="g-read" x="${V.px(cx)}" y="${V.px(readY)}" style="font-size:${bigSize}px"><tspan class="g-read-num">${value}</tspan><tspan class="g-read-unit" style="font-size:${unitSize}px" dx="1">%</tspan></text>`
     + (caption ? `<text class="g-cap" x="${V.px(cx)}" y="${V.px(cy + G.readout.labelCy * R)}" style="font-size:${capSize}px">${V.esc(caption)}</text>` : '')
@@ -101,6 +106,7 @@ V.gauge = (w, h, { value, label, caption = '', maxR = 80, align = 'center' }) =>
 
 /* 같은 수식으로 값만 바꾼다. 슬라이더와 진입 움직임이 함께 쓴다. */
 V.setGauge = (svg, v) => {
+  v = clampValue(v);
   const cx = Number(svg.dataset.cx);
   const cy = Number(svg.dataset.cy);
   const R = Number(svg.dataset.r);
