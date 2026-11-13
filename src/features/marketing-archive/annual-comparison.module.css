@@ -33,7 +33,7 @@
 }
 .bars { display: flex; justify-content: center; align-items: end; gap: 3px; }
 .barSlot { position: relative; width: min(20px, 28%); height: 65%; display: flex; flex-direction: column; justify-content: end; }
-.barCount { position: absolute; bottom: 100%; inset-inline: 0; font-variant-numeric: tabular-nums; }
+.barCount { position: absolute; bottom: 100%; inset-inline: 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .bar { width: 100%; border-radius: 3px 3px 0 0; }
 .note { margin: 8px 0 18px; font-size: var(--text-xs); }
 .years { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start; }
@@ -64,3 +64,4 @@ button.eventTitle:hover { text-decoration: underline; text-underline-offset: 3px
 .plans > p { margin-top: 8px; }
 @media (max-width: 900px) { .months { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
 @media (max-width: 650px) { .years { grid-template-columns: 1fr; } }
+@media (max-width: 480px) { .months { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
