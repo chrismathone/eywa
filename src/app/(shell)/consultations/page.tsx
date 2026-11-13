@@ -7,6 +7,7 @@ import { StatStrip } from "@/components/atoms/stat-strip";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { requireAccess } from "@/lib/auth/require-access";
+import { redirectStatsFirst } from "@/lib/auth/stats-first";
 import { canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { isModuleEnabled } from "@/lib/modules";
@@ -73,6 +74,8 @@ export default async function ConsultationsPage({
 }) {
   const user = await requireAccess("consultations");
   const sp = await searchParams;
+  // 원장·관리자가 메뉴로 열면 통계가 먼저(stats-first.ts) — 필터·탭이 실린 주소와 '목록으로'(list=1)는 그대로 목록.
+  await redirectStatsFirst(user.systemRole, sp, "/consultations");
   const range: RangeKey = (sp.range as RangeKey) ?? "all";
   const cat: CategoryKey = (sp.cat as CategoryKey) ?? "all";
   const urg: UrgencyKey = (sp.urg as UrgencyKey) ?? "all";

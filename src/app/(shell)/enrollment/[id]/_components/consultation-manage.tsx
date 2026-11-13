@@ -170,7 +170,7 @@ export function ConsultationDeleteButton({ id }: { id: string }) {
   return (
     <form action={action} className="flex items-center gap-2">
       <input type="hidden" name="id" value={id} />
-      <input type="hidden" name="redirectTo" value="/enrollment" />
+      <input type="hidden" name="redirectTo" value="/enrollment?list=1" />
       <DeleteSubmit />
       <Button type="button" variant="ghost" onClick={() => setArmed(false)}>
         취소

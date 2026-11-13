@@ -60,7 +60,7 @@ export default async function ConsultationDetailPage({
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <BackLink href="/consultations" label="원생상담으로" />
+      <BackLink href="/consultations?list=1" label="원생상담으로" />
 
       <header className="border-border flex flex-wrap items-end justify-between gap-3 border-b pb-5">
         <div className="min-w-0 space-y-1.5">
@@ -112,7 +112,7 @@ export default async function ConsultationDetailPage({
             <ConsultationDeleteButton
               id={item.id}
               studentId={item.studentId}
-              redirectTo="/consultations"
+              redirectTo="/consultations?list=1"
             />
           </div>
         ) : null}

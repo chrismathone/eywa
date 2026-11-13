@@ -27,7 +27,7 @@ import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-ch
 export function DeleteStudentButton({
   studentId,
   studentName,
-  backHref = "/students",
+  backHref = "/students?list=1",
 }: {
   studentId: string;
   studentName: string;

@@ -37,7 +37,7 @@ type TermRow = Parameters<typeof attendanceClassConfirmedSessions>[2][number] & 
 /** A read-only bulk query. Every admin query is tenant-scoped; no client-supplied class/student IDs. */
 export async function loadUnitsMaster(requestedMonth: string): Promise<UnitsMaster> {
   const user = await requireAccess("attendance");
-  if (!canViewUnitsMaster(user.systemRole, await effectiveTeacherId())) redirect("/attendance");
+  if (!canViewUnitsMaster(user.systemRole, await effectiveTeacherId())) redirect("/attendance?list=1");
   const month = /^(20\d{2})-(0[1-9]|1[0-2])$/.test(requestedMonth) ? requestedMonth : kstMonth();
   const asOf = kstDateTimeLocal();
   const db = createAdminClient();

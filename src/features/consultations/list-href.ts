@@ -47,7 +47,9 @@ export function consultationsHref(
   defaultSize: number,
   patch: Partial<ConsultationListParams> = {},
 ): string {
-  return buildHref("/consultations", p, defaultSize, patch);
+  const href = buildHref("/consultations", p, defaultSize, patch);
+  // 값이 하나도 없으면 목록 표식 — 원장·관리자는 빈 주소면 통계로 간다(stats-first.ts).
+  return href === "/consultations" ? "/consultations?list=1" : href;
 }
 
 /**

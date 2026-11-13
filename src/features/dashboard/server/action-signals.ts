@@ -752,7 +752,7 @@ export async function getTodayActionSignals(
       {
         key: "attendance-today",
         label: "오늘 출결",
-        href: "/attendance",
+        href: "/attendance?list=1",
         menuKey: "attendance",
         requiredAccess: "read",
       },
@@ -806,7 +806,7 @@ export async function getTodayActionSignals(
       {
         key: "consultation-analysis",
         label: "학생상담 분석",
-        href: "/consultations",
+        href: "/consultations?list=1",
         menuKey: "consultations",
         requiredAccess: "write",
       },
@@ -933,7 +933,7 @@ export async function getTodayActionSignals(
       {
         key: "unassigned-enrolled",
         label: "반 미배정 재원생",
-        href: "/students",
+        href: "/students?list=1",
         menuKey: "students",
         requiredAccess: "write",
       },
@@ -1019,7 +1019,7 @@ export async function getTodayActionSignals(
       {
         key: "day-arrivals",
         label: "오늘 첫·마지막 수업",
-        href: "/students",
+        href: "/students?list=1",
         menuKey: "students",
         requiredAccess: "read",
       },
@@ -1048,7 +1048,7 @@ export async function getTodayActionSignals(
       {
         key: "newcomer-overdue",
         label: "신규생 관리 기한 경과",
-        href: "/newcomers",
+        href: "/newcomers?list=1",
         menuKey: "newcomers",
         requiredAccess: "read",
       },

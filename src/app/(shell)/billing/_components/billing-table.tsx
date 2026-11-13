@@ -70,7 +70,7 @@ function buildSortHref(
   if (col !== "status") params.set("sort", col);
   if (nextDesc) params.set("desc", "1");
   const s = params.toString();
-  return s ? `/billing?${s}` : "/billing";
+  return s ? `/billing?${s}` : "/billing?list=1";
 }
 
 function SortHeader({

@@ -194,7 +194,7 @@ export default async function EnrollmentDetailPage({
         initialStatus={consult.processingStatus}
       />
 
-      <BackLink href="/enrollment" label="신규 콜&상담으로" />
+      <BackLink href="/enrollment?list=1" label="신규 콜&상담으로" />
 
       <header className="border-border flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1.5">

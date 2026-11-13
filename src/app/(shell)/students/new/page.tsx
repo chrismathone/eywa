@@ -12,12 +12,12 @@ export const metadata = { title: "학생 등록 — 에이와" };
 export default async function NewStudentPage() {
   const user = await requireAccess("students");
   // 강사(scoped)는 학생 열람 전용(원장 지시 2026-08-18) — 등록 폼도 강제 URL 차단(#77).
-  if ((await accessLevelTenant(user.systemRole, "students")) !== "full") redirect("/students");
+  if ((await accessLevelTenant(user.systemRole, "students")) !== "full") redirect("/students?list=1");
   const { operations, modules } = await getTenantSettings();
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <BackLink href="/students" label="원생목록으로" />
+      <BackLink href="/students?list=1" label="원생목록으로" />
 
       <header className="border-border space-y-1 border-b pb-5">
         <p className="eyebrow">학생 등록</p>

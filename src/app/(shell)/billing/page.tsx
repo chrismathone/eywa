@@ -1,5 +1,6 @@
 import { canReadSalary } from "@/features/payroll/server/salary-access";
 import { requireAccess } from "@/lib/auth/require-access";
+import { redirectStatsFirst } from "@/lib/auth/stats-first";
 import { isModuleEnabled } from "@/lib/modules";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { BillingContent } from "./_components/billing-content";
@@ -38,7 +39,7 @@ function resolveTab(sp: Sp): BillingTab {
 
 // 교재 단가표는 교재 면과 수강료 계산기 면의 "내부탭"으로 들어가 두 곳에서 쓰인다(최상위 면 아님).
 const FACES: Face[] = [
-  { key: "billing", label: "수납", href: "/billing" },
+  { key: "billing", label: "수납", href: "/billing?list=1" },
   { key: "textbooks", label: "교재", href: "/billing?tab=textbooks" },
   { key: "expenses", label: "지출", href: "/billing?tab=expenses" },
   { key: "calculator", label: "수강료 계산기", href: "/billing?tab=calculator" },
@@ -85,6 +86,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   // 강사 정산 탭은 원장(master)·총괄(super_admin)에게만 노출(감사 D6 — 총괄은 게이트 자동 통과). 그 밖이 URL로 오면 수납 면으로 폴백.
   const isMaster = await canReadSalary();
   const canBilling = await canAccessTenant(user.systemRole, "billing");
+  // 원장·관리자가 메뉴로 열면 통계가 먼저(stats-first.ts) — 필터·탭이 실린 주소와 '목록으로'(list=1)는 그대로 목록.
+  if (canBilling) await redirectStatsFirst(user.systemRole, sp, "/billing");
   // 회차 정산 모듈(회차 확정·시수 검증·강사 정산) — 꺼진 학원(새 학원 기본)은 면을 세우지 않고 주소도 수납으로 떨군다.
   // 침산은 켜져 있어 종전과 같다(2026-09-22 방향 B).
   const sessionOn = isModuleEnabled((await getTenantSettings()).modules.disabled, "session_billing");

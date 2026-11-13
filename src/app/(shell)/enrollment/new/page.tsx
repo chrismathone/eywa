@@ -30,7 +30,7 @@ export default async function NewEnrollmentPage({
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <BackLink href="/enrollment" label="신규 콜&상담으로" />
+      <BackLink href="/enrollment?list=1" label="신규 콜&상담으로" />
 
       <header className="border-border space-y-1 border-b pb-5">
         <p className="eyebrow">신규 콜&상담</p>
