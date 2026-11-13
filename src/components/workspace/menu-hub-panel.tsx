@@ -7,6 +7,7 @@ import { useEffect } from "react";
 
 import { HubGrid, useOpenMenu } from "./menu-hub-grid";
 import { HUB_GROUPS, SUPPORT_GROUPS, hubGroupsFor } from "@/lib/menu-hub";
+import { groupStatsEntry } from "@/lib/auth/stats-first-rule";
 import type { MenuLayout } from "@/features/owner/menu-layout";
 import type { AccessMatrix, SystemRole } from "@/lib/permissions";
 import { railWidth } from "./use-sidebar-resize";
@@ -69,7 +70,8 @@ export function MenuHubPanel({
   }).find((g) => g.id === groupId);
   if (!group) return null;
 
-  const main = group.items.filter((d) => !d.tool);
+  const stats = groupStatsEntry(group, systemRole);
+  const main = group.items.filter((d) => !d.tool).map((dest) => stats?.href === `${dest.href}/stats` ? stats : dest);
   const tools = group.items.filter((d) => d.tool);
   // 설정처럼 목적지가 많은 허브는 묶음 제목으로 나눈다(순서는 정의 순서 그대로).
   // 묶음 제목은 모든 메뉴에 붙어 있을 때만 쓴다 — 학원 설정에서 옮긴 줄은 묶음이 지워져, 섞이면 일부만 묶음에 서고 나머지가 흩어진다.

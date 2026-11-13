@@ -14,6 +14,7 @@ import { useNavigationSettings, useMenuPresentation } from "@/features/owner/nav
 import { type MenuLayout } from "@/features/owner/menu-layout";
 import type { ConnectedApp } from "@/features/connected-apps/apps";
 import { type AccessMatrix, type SystemRole } from "@/lib/permissions";
+import { groupStatsEntry } from "@/lib/auth/stats-first-rule";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useShellHome } from "@/components/workspace/shell-home";
 
@@ -79,7 +80,11 @@ export function MobileTopNav({
     isMaster: systemRole === "master" || isSuperAdmin, isGenericTenant, canViewVendors,
   });
   const currentDest = hubDestinationForPath(currentHref, groups.flatMap((g) => g.items));
-  const currentLabel = presentation(currentHref)?.label ?? findNavItem(pathname)?.label ?? null;
+  const currentGroup = currentDest && groups.find(group => group.items.includes(currentDest));
+  const currentStats = currentGroup && groupStatsEntry(currentGroup, systemRole);
+  const currentLabel = currentStats?.href === pathname
+    ? currentStats.label
+    : presentation(currentHref)?.label ?? findNavItem(pathname)?.label ?? null;
 
   const [open, setOpen] = useState(false);
 
@@ -137,15 +142,21 @@ export function MobileTopNav({
           140px이면 375·412px 폰 모두 2열(라벨 예산 141~160px ≥ 102px) — 대가는 격자가 5행→7행으로 길어지는 것뿐. */}
       {open ? (
       <div className="max-h-[70dvh] space-y-3 overflow-y-auto overscroll-contain px-3 py-3">
-        {groups.map((group) => <section key={group.id} aria-label={group.label}>
-          <h2 className="text-text-dim mb-1 flex items-center gap-2 text-xs font-bold"><MenuGlyph name={group.icon} size={16} />{group.label}</h2>
-          <ul className="grid grid-cols-2 gap-1">
-            {group.items.map((item) => <li key={item.href}><Link href={item.href} onClick={() => setOpen(false)} aria-current={currentDest?.href === item.href ? "page" : undefined}
-              className={`flex min-h-11 items-center gap-2 rounded-lg px-2 py-2 text-sm font-medium ${currentDest?.href === item.href ? "bg-primary text-primary-foreground" : "hover:bg-bg-soft"}`}>
-              <MenuGlyph name={item.icon} size={18} /><span className="min-w-0 break-words">{item.label}</span>
-            </Link></li>)}
-          </ul>
-        </section>)}
+        {groups.map((group) => {
+          const statsEntry = groupStatsEntry(group, systemRole);
+          return <section key={group.id} aria-label={group.label}>
+            <h2 className="text-text-dim mb-1 flex items-center gap-2 text-xs font-bold"><MenuGlyph name={group.icon} size={16} />{group.label}</h2>
+            <ul className="grid grid-cols-2 gap-1">
+              {group.items.map((item) => {
+                const stats = statsEntry?.href === `${item.href}/stats` ? statsEntry : undefined;
+                return <li key={item.href}><Link href={stats?.href ?? item.href} onClick={() => setOpen(false)} aria-current={currentDest?.href === item.href ? "page" : undefined}
+                  className={`flex min-h-11 items-center gap-2 rounded-lg px-2 py-2 text-sm font-medium ${currentDest?.href === item.href ? "bg-primary text-primary-foreground" : "hover:bg-bg-soft"}`}>
+                  <MenuGlyph name={item.icon} size={18} /><span className="min-w-0 break-words">{stats?.label ?? item.label}</span>
+                </Link></li>;
+              })}
+            </ul>
+          </section>;
+        })}
         <ul className="grid grid-cols-2 gap-1">
         {connectedApps.map((a) => (
           <li key={a.feature}>
