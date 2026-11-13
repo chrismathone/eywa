@@ -1,4 +1,4 @@
-/* 240도 원형 계기판. 빈 창 위에 실제 값까지 색을 드러내며, 첫 20% 구간은 붉게 표시한다.
+/* 240도 원형 계기판. 실제 값까지 채우며, 값이 20% 미만일 때만 채워진 창 전체를 붉게 표시한다.
    값 v 하나에서 각도를 얻어 ① 채움 부채꼴 ② 바늘 ③ 판독 숫자를 그리므로 셋은 어긋날 수 없다. */
 import { GAUGE_GEOM as G } from './gauge-geometry';
 import { V } from './viz-core';
@@ -88,13 +88,11 @@ V.gauge = (w, h, { value, label, caption = '', maxR = 80, align = 'center' }) =>
   return `<svg class="chart gauge-asset" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${V.esc(label)} ${value}%"`
     + ` data-gauge="${value}" data-label="${V.esc(label)}" data-cx="${cx}" data-cy="${cy}" data-r="${R}">`
     + `<defs><clipPath id="${id}"><path class="g-wedge" d="${wedge(cx, cy, R, value)}"/></clipPath>`
-    + `<clipPath id="${id}-low"><path d="${wedge(cx, cy, R, 20)}"/></clipPath>`
     + `<radialGradient id="${id}-hub" cx="38%" cy="32%" r="78%"><stop offset="0" stop-color="#8d979d"/><stop offset=".55" stop-color="#3a4147"/><stop offset="1" stop-color="#16191c"/></radialGradient>`
     + `<linearGradient id="${id}-glass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".17"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>`
     + `<image class="g-layer g-base" href="/dashboard-instruments/gauge-empty${sm}.webp" ${box}/>`
     + `<g class="g-lit" clip-path="url(#${id})">`
-    + `<image class="g-layer" href="/dashboard-instruments/gauge-lit${sm}.webp" ${box}/>`
-    + `<image class="g-layer g-low" href="/dashboard-instruments/gauge-lit${sm}.webp" ${box} clip-path="url(#${id}-low)"/></g>`
+    + `<image class="g-layer${value < 20 ? ' g-low' : ''}" href="/dashboard-instruments/gauge-lit${sm}.webp" ${box}/></g>`
     + scale(cx, cy, R, fontSize)
     + `<text class="g-read" x="${V.px(cx)}" y="${V.px(readY)}" style="font-size:${bigSize}px"><tspan class="g-read-num">${value}</tspan><tspan class="g-read-unit" style="font-size:${unitSize}px" dx="1">%</tspan></text>`
     + (caption ? `<text class="g-cap" x="${V.px(cx)}" y="${V.px(cy + G.readout.labelCy * R)}" style="font-size:${capSize}px">${V.esc(caption)}</text>` : '')
@@ -111,6 +109,7 @@ V.setGauge = (svg, v) => {
   const cy = Number(svg.dataset.cy);
   const R = Number(svg.dataset.r);
   const shown = Math.round(v);
+  svg.querySelector('.g-lit .g-layer').classList.toggle('g-low', v < 20);
   svg.querySelector('.g-wedge').setAttribute('d', wedge(cx, cy, R, v));
   svg.querySelector('.g-needle').setAttribute('transform', `rotate(${V.px(-degOf(v))} ${cx} ${cy})`);
   svg.querySelector('.g-read-num').textContent = String(shown);
