@@ -532,7 +532,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
       {/* 데스크톱이 아니면(좁은 폭·터치) 상단 horizontal nav / 데스크톱(≥1240 + 마우스, `desk:`): 숨김 */}
       <HideInFrame>
-        <MobileTopNav systemRole={user.systemRole} email={user.email} brand={brand} logoSrc={logoSrc} permMatrix={permMatrix} menuLayout={menuLayout} canTeacherView={canTeacherView} isSuperAdmin={isSuperAdmin} isGenericTenant={genericTenant} canViewVendors={vendorsVisible} connectedApps={connectedApps} canUseAssistant={canUseAssistant} className="desk:hidden" />
+        <MobileTopNav systemRole={user.systemRole} email={user.email} displayName={user.displayName} brand={brand} logoSrc={logoSrc} permMatrix={permMatrix} menuLayout={menuLayout} canTeacherView={canTeacherView} canOtherTeacherView={canOtherTeacherView} isSuperAdmin={isSuperAdmin} isGenericTenant={genericTenant} canViewVendors={vendorsVisible} connectedApps={connectedApps} canUseAssistant={canUseAssistant} className="desk:hidden" />
       </HideInFrame>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden print:overflow-visible">
