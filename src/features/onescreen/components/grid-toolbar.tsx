@@ -226,8 +226,8 @@ export function GridToolbar({
             : t("os.send.all")}
         </Button>
         ) : null}
+        {trailing ? <div className="ml-auto empty:hidden">{trailing}</div> : null}
       </div>
-      {trailing ? <div className="flex w-full justify-end empty:hidden">{trailing}</div> : null}
     </div>
   );
 }
